@@ -1750,6 +1750,9 @@ static int __init ide_init(void)
 	if (probe_qd65xx)
 		(void)qd65xx_init();
 #endif
+#ifdef CONFIG_BLK_DEV_ALTCF
+	(void) altcf_init();
+#endif
 
 	/* Probe for special PCI and other "known" interface chipsets. */
 	probe_for_hwifs();

@@ -351,9 +351,9 @@ irqreturn_t rs_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static void do_softint(void *private)
+static void do_softint(struct work_struct *work)
 {
-	struct NIOS_serial	*info = (struct NIOS_serial *) private;
+	struct NIOS_serial	*info = container_of(work,struct NIOS_serial, tqueue);
 	struct tty_struct	*tty;
 
 	tty = info->tty;
@@ -371,9 +371,9 @@ static void do_softint(void *private)
  * 	do_serial_hangup() -> tty->hangup() -> rs_hangup()
  *
  */
-static void do_serial_hangup(void *private_)
+static void do_serial_hangup(struct work_struct *work_)
 {
-	struct NIOS_serial	*info = (struct NIOS_serial *) private_;
+	struct NIOS_serial	*info = container_of(work_,struct NIOS_serial, tqueue_hangup);
 	struct tty_struct	*tty;
 
 	tty = info->tty;

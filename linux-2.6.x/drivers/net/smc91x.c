@@ -1918,6 +1918,12 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr)
 	/* Get the MAC address */
 	SMC_SELECT_BANK(1);
 	SMC_GET_MAC_ADDR(dev->dev_addr);
+#ifdef CONFIG_EXCALIBUR
+	{
+		extern unsigned char *excalibur_enet_hwaddr;
+		memcpy(dev->dev_addr, excalibur_enet_hwaddr, 6);
+	}
+#endif
 
 	/* now, reset the chip, and put it into a known state */
 	smc_reset(dev);
