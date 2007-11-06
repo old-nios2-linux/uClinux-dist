@@ -1223,6 +1223,9 @@ extern int ht6560b_init(void);
 extern int probe_qd65xx;
 extern int qd65xx_init(void);
 #endif
+#ifdef CONFIG_BLK_DEV_ALTCF
+extern int altcf_init(void);
+#endif /* CONFIG_BLK_DEV_ALTCF */
 
 static int __initdata is_chipset_set[MAX_HWIFS];
 
