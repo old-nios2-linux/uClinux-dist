@@ -42,10 +42,6 @@ extern unsigned int saa7146_debug;
 #define DEB_INT(x)  if (0!=(DEBUG_VARIABLE&0x20)) { DEBUG_PROLOG; printk x; } /* interrupt debug messages */
 #define DEB_CAP(x)  if (0!=(DEBUG_VARIABLE&0x40)) { DEBUG_PROLOG; printk x; } /* capture debug messages */
 
-#define SAA7146_IER_DISABLE(x,y) \
-	saa7146_write(x, IER, saa7146_read(x, IER) & ~(y));
-#define SAA7146_IER_ENABLE(x,y) \
-	saa7146_write(x, IER, saa7146_read(x, IER) | (y));
 #define SAA7146_ISR_CLEAR(x,y) \
 	saa7146_write(x, ISR, (y));
 
@@ -62,6 +58,7 @@ struct saa7146_pgtable {
 	unsigned long	offset;
 	/* used for custom pagetables (used for example by budget dvb cards) */
 	struct scatterlist *slist;
+	int		nents;
 };
 
 struct saa7146_pci_extension_data {
@@ -117,7 +114,7 @@ struct saa7146_dev
 	struct mutex			lock;
 
 	unsigned char			__iomem *mem;		/* pointer to mapped IO memory */
-	int				revision;	/* chip revision; needed for bug-workarounds*/
+	u32				revision;	/* chip revision; needed for bug-workarounds*/
 
 	/* pci-device & irq stuff*/
 	char				name[32];
@@ -160,7 +157,8 @@ struct saa7146_format* format_by_fourcc(struct saa7146_dev *dev, int fourcc);
 int saa7146_pgtable_alloc(struct pci_dev *pci, struct saa7146_pgtable *pt);
 void saa7146_pgtable_free(struct pci_dev *pci, struct saa7146_pgtable *pt);
 int saa7146_pgtable_build_single(struct pci_dev *pci, struct saa7146_pgtable *pt, struct scatterlist *list, int length );
-char *saa7146_vmalloc_build_pgtable(struct pci_dev *pci, long length, struct saa7146_pgtable *pt);
+void *saa7146_vmalloc_build_pgtable(struct pci_dev *pci, long length, struct saa7146_pgtable *pt);
+void saa7146_vfree_destroy_pgtable(struct pci_dev *pci, void *mem, struct saa7146_pgtable *pt);
 void saa7146_setgpio(struct saa7146_dev *dev, int port, u32 data);
 int saa7146_wait_for_debi_done(struct saa7146_dev *dev, int nobusyloop);
 
@@ -440,5 +438,21 @@ int saa7146_wait_for_debi_done(struct saa7146_dev *dev, int nobusyloop);
 #define SAA7146_I2C_BUS_BIT_RATE_120	(0x000)
 #define SAA7146_I2C_BUS_BIT_RATE_80	(0x200)
 #define SAA7146_I2C_BUS_BIT_RATE_60	(0x300)
+
+static inline void SAA7146_IER_DISABLE(struct saa7146_dev *x, unsigned y)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&x->int_slock, flags);
+	saa7146_write(x, IER, saa7146_read(x, IER) & ~y);
+	spin_unlock_irqrestore(&x->int_slock, flags);
+}
+
+static inline void SAA7146_IER_ENABLE(struct saa7146_dev *x, unsigned y)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&x->int_slock, flags);
+	saa7146_write(x, IER, saa7146_read(x, IER) | y);
+	spin_unlock_irqrestore(&x->int_slock, flags);
+}
 
 #endif

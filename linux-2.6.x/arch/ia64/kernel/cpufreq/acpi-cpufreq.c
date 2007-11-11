@@ -68,7 +68,8 @@ processor_get_pstate (
 
 	dprintk("processor_get_pstate\n");
 
-	retval = ia64_pal_get_pstate(&pstate_index);
+	retval = ia64_pal_get_pstate(&pstate_index,
+	                             PAL_GET_PSTATE_TYPE_INSTANT);
 	*value = (u32) pstate_index;
 
 	if (retval)
@@ -91,7 +92,7 @@ extract_clock (
 	dprintk("extract_clock\n");
 
 	for (i = 0; i < data->acpi_data.state_count; i++) {
-		if (value >= data->acpi_data.states[i].control)
+		if (value == data->acpi_data.states[i].status)
 			return data->acpi_data.states[i].core_frequency;
 	}
 	return data->acpi_data.states[i-1].core_frequency;
@@ -112,23 +113,17 @@ processor_get_freq (
 
 	saved_mask = current->cpus_allowed;
 	set_cpus_allowed(current, cpumask_of_cpu(cpu));
-	if (smp_processor_id() != cpu) {
-		ret = -EAGAIN;
+	if (smp_processor_id() != cpu)
 		goto migrate_end;
-	}
 
-	/*
-	 * processor_get_pstate gets the average frequency since the
-	 * last get. So, do two PAL_get_freq()...
-	 */
-	ret = processor_get_pstate(&value);
+	/* processor_get_pstate gets the instantaneous frequency */
 	ret = processor_get_pstate(&value);
 
 	if (ret) {
 		set_cpus_allowed(current, saved_mask);
 		printk(KERN_WARNING "get performance failed with error %d\n",
 		       ret);
-		ret = -EAGAIN;
+		ret = 0;
 		goto migrate_end;
 	}
 	clock_freq = extract_clock(data, value, cpu);
@@ -279,11 +274,9 @@ acpi_cpufreq_cpu_init (
 
 	dprintk("acpi_cpufreq_cpu_init\n");
 
-	data = kmalloc(sizeof(struct cpufreq_acpi_io), GFP_KERNEL);
+	data = kzalloc(sizeof(struct cpufreq_acpi_io), GFP_KERNEL);
 	if (!data)
 		return (-ENOMEM);
-
-	memset(data, 0, sizeof(struct cpufreq_acpi_io));
 
 	acpi_io_data[cpu] = data;
 

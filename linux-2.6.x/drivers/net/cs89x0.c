@@ -88,8 +88,8 @@
  
   Evan Stawnyczy    : Customized for use on MC68VZ328 platform.
 
-  Daniel Potts      : uClinux sleep support, ucDimm
-  Mark McChrystal   : uClinux sleep support, ucSimm
+  Daniel Potts      : uClinux sleep support, uCdimm
+  Mark McChrystal   : uClinux sleep support, uCsimm
 
   Oskar Schirmer    : oskar@scara.com
                     : HiCO.SH4 (superh) support added (irq#1, cs89x0_media=)
@@ -110,6 +110,8 @@
   Dmitry Pervushin  : dpervushin@ru.mvista.com
                     : PNX010X platform support
 
+  David Wu          : Feburary 2007 <www.ArcturusNetworks.com> 
+                    : MCF527x support added for uCdimm
 */
 
 /* Always include 'config.h' first in case the user wants to turn on
@@ -285,10 +287,10 @@ static void reset_chip(struct net_device *dev);
 static int set_mac_address(struct net_device *dev, void *addr);
 static void count_rx_errors(int status, struct net_local *lp);
 static void write_irq(struct net_device *dev, int chip_type, int irq);
-static int readreg(struct net_device *dev, int portno);
-static void writereg(struct net_device *dev, int portno, int value);
-static int readword(struct net_device *dev, int portno);
-static void writeword(struct net_device *dev, int portno, int value);
+static u16 readreg(struct net_device *dev, u16 regno);
+static void writereg(struct net_device *dev, u16 regno, u16 value);
+static u16 readword(unsigned long base_addr, int portno);
+static void writeword(unsigned long base_addr, int portno, u16 value);
 #ifndef NO_EPROM
 static int get_eeprom_data(struct net_device *dev, int off, int len, int *buffer);
 static int get_eeprom_cksum(int off, int len, int *buffer);
@@ -645,10 +647,10 @@ cs89x0_probe1(struct net_device *dev, int ioaddr, int modular)
 				goto out2;
 			}
 	}
-	printk(KERN_DEBUG "PP_addr at %x[%x]: 0x%x\n",
-			ioaddr, ADD_PORT, readword(ioaddr, ADD_PORT));
 
 	ioaddr &= ~3;
+	printk(KERN_DEBUG "PP_addr at %x[%x]: 0x%x\n",
+			ioaddr, ADD_PORT, readword(ioaddr, ADD_PORT));
 	writeword(ioaddr, ADD_PORT, PP_ChipID);
 
 	tmp = readword(ioaddr, DATA_PORT);
@@ -1075,7 +1077,6 @@ skip_this_frame:
 		return;
 	}
 	skb_reserve(skb, 2);	/* longword align L3 header */
-	skb->dev = dev;
 
 	if (bp + length > lp->end_dma_buff) {
 		int semi_cnt = lp->end_dma_buff - bp;
@@ -1679,6 +1680,12 @@ static irqreturn_t net_interrupt(int irq, void *dev_id)
 	int ioaddr, status;
  	int handled = 0;
 
+#if defined (CONFIG_UC5272)
+        /* clear INT1  */
+        volatile unsigned long  *icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
+        *icrp = (*icrp & 0x77777777) | 0x80000000;
+#endif
+
 	ioaddr = dev->base_addr;
 	lp = netdev_priv(dev);
 
@@ -1806,7 +1813,6 @@ net_rx(struct net_device *dev)
 		return;
 	}
 	skb_reserve(skb, 2);	/* longword align L3 header */
-	skb->dev = dev;
 
 	readwords(ioaddr, RX_FRAME_PORT, skb_put(skb, length), length >> 1);
 	if (length & 1)
@@ -1850,6 +1856,12 @@ net_close(struct net_device *dev)
 	writereg(dev, PP_BufCFG, 0);
 	writereg(dev, PP_BusCTL, 0);
 
+#if defined (CONFIG_UC5272) /* disable irq */
+	{
+        	volatile unsigned long  *icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
+        	*icrp = (*icrp & 0x07777777) | (0x80000000);  /* don't generate interrupts */
+	}
+#endif
 	free_irq(dev->irq, dev);
 
 #if ALLOW_DMA
@@ -2030,11 +2042,17 @@ int __init init_module(void)
 	dev->irq = irq;
 	dev->base_addr = io;
 #ifdef HW_INIT_HOOK
-	if (cs89x_hw_init_hook(dev, -1) != 0) {
+	if (cs89x_hw_init_hook(dev, 0) != 0) {
 		ret = -ENODEV;
 		goto out;
+	} else {  /* we want to use those in cs89x_hw_init_hook if avaliable */
+		io = dev->base_addr;
+		irq = dev->irq;
 	}
 #endif
+#if defined(CONFIG_UC5272)
+	ret = cs89x0_probe1(dev, io, 0);
+#else
 	lp = netdev_priv(dev);
 
 #if ALLOW_DMA
@@ -2078,6 +2096,7 @@ int __init init_module(void)
 	}
 #endif
 	ret = cs89x0_probe1(dev, io, 1);
+#endif
 	if (ret)
 		goto out;
 
@@ -2088,7 +2107,7 @@ out:
 	return ret;
 }
 
-void
+void __exit
 cleanup_module(void)
 {
 	unregister_netdev(dev_cs89x0);

@@ -59,7 +59,7 @@ extern int errno;
 #endif
 
 extern char *version_string;
-extern LARGE_INT total_downloaded_bytes;
+extern SUM_SIZE_INT total_downloaded_bytes;
 
 extern struct hash_table *dl_url_file_map;
 extern struct hash_table *downloaded_html_set;
@@ -87,8 +87,7 @@ struct url_queue {
 static struct url_queue *
 url_queue_new (void)
 {
-  struct url_queue *queue = xmalloc (sizeof (*queue));
-  memset (queue, '\0', sizeof (*queue));
+  struct url_queue *queue = xnew0 (struct url_queue);
   return queue;
 }
 
@@ -108,7 +107,7 @@ static void
 url_enqueue (struct url_queue *queue,
 	     const char *url, const char *referer, int depth, int html_allowed)
 {
-  struct queue_element *qel = xmalloc (sizeof (*qel));
+  struct queue_element *qel = xnew (struct queue_element);
   qel->url = url;
   qel->referer = referer;
   qel->depth = depth;
@@ -223,7 +222,7 @@ retrieve_tree (const char *start_url)
       int descend = 0;
       char *url, *referer, *file = NULL;
       int depth, html_allowed;
-      boolean dash_p_leaf_HTML = FALSE;
+      int dash_p_leaf_HTML = 0;
 
       if (opt.quota && total_downloaded_bytes > opt.quota)
 	break;
@@ -305,7 +304,7 @@ retrieve_tree (const char *start_url)
 		 one, but we allow one more level so that the leaf
 		 pages that contain frames can be loaded
 		 correctly.  */
-	      dash_p_leaf_HTML = TRUE;
+	      dash_p_leaf_HTML = 1;
 	    }
 	  else
 	    {
@@ -383,8 +382,8 @@ retrieve_tree (const char *start_url)
 	}
 
       xfree (url);
-      FREE_MAYBE (referer);
-      FREE_MAYBE (file);
+      xfree_null (referer);
+      xfree_null (file);
     }
 
   /* If anything is left of the queue due to a premature exit, free it
@@ -396,7 +395,7 @@ retrieve_tree (const char *start_url)
 			(const char **)&d1, (const char **)&d2, &d3, &d4))
       {
 	xfree (d1);
-	FREE_MAYBE (d2);
+	xfree_null (d2);
       }
   }
   url_queue_delete (queue);
@@ -517,13 +516,21 @@ download_child_p (const struct urlpos *upos, struct url *parent, int depth,
     }
 
   /* 6. Check for acceptance/rejection rules.  We ignore these rules
-     for directories (no file name to match) and for HTML documents,
-     which might lead to other files that do need to be downloaded.
-     That is, unless we've exhausted the recursion depth anyway.  */
+     for directories (no file name to match) and for non-leaf HTMLs,
+     which can lead to other files that do need to be downloaded.  (-p
+     automatically implies non-leaf because with -p we can, if
+     necesary, overstep the maximum depth to get the page requisites.)  */
   if (u->file[0] != '\0'
       && !(has_html_suffix_p (u->file)
-	   && depth != INFINITE_RECURSION
-	   && depth < opt.reclevel - 1))
+	   /* The exception only applies to non-leaf HTMLs (but -p
+	      always implies non-leaf because we can overstep the
+	      maximum depth to get the requisites): */
+	   && (/* non-leaf */
+	       opt.reclevel == INFINITE_RECURSION
+	       /* also non-leaf */
+	       || depth < opt.reclevel - 1
+	       /* -p, which implies non-leaf (see above) */
+	       || opt.page_requisites)))
     {
       if (!acceptable (u->file))
 	{
@@ -605,8 +612,7 @@ descend_redirect_p (const char *redirected, const char *original, int depth,
   new_parsed = url_parse (redirected, NULL);
   assert (new_parsed != NULL);
 
-  upos = xmalloc (sizeof (struct urlpos));
-  memset (upos, 0, sizeof (*upos));
+  upos = xnew0 (struct urlpos);
   upos->url = new_parsed;
 
   success = download_child_p (upos, orig_parsed, depth,

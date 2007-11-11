@@ -1,9 +1,9 @@
 /*
- * $Id: digest.h,v 1.6 2003/03/12 15:30:50 janakj Exp $
+ * $Id: digest.h,v 1.7 2004/08/24 09:01:29 janakj Exp $
  *
  * Digest credentials parser interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

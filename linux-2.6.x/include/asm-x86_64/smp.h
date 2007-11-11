@@ -7,12 +7,12 @@
 #include <linux/threads.h>
 #include <linux/cpumask.h>
 #include <linux/bitops.h>
+#include <linux/init.h>
 extern int disable_apic;
 
-#include <asm/fixmap.h>
 #include <asm/mpspec.h>
-#include <asm/io_apic.h>
 #include <asm/apic.h>
+#include <asm/io_apic.h>
 #include <asm/thread_info.h>
 
 #ifdef CONFIG_SMP
@@ -37,7 +37,6 @@ extern void lock_ipi_call_lock(void);
 extern void unlock_ipi_call_lock(void);
 extern int smp_num_siblings;
 extern void smp_send_reschedule(int cpu);
-void smp_stop_cpu(void);
 
 extern cpumask_t cpu_sibling_map[NR_CPUS];
 extern cpumask_t cpu_core_map[NR_CPUS];
@@ -58,21 +57,21 @@ static inline int num_booting_cpus(void)
 
 #define raw_smp_processor_id() read_pda(cpunumber)
 
+extern int __cpu_disable(void);
+extern void __cpu_die(unsigned int cpu);
+extern void prefill_possible_map(void);
+extern unsigned num_processors;
+extern unsigned __cpuinitdata disabled_cpus;
+
+#define NO_PROC_ID		0xFF		/* No processor magic marker */
+
+#endif /* CONFIG_SMP */
+
 static inline int hard_smp_processor_id(void)
 {
 	/* we don't want to mark this access volatile - bad code generation */
 	return GET_APIC_ID(*(unsigned int *)(APIC_BASE+APIC_ID));
 }
-
-extern int __cpu_disable(void);
-extern void __cpu_die(unsigned int cpu);
-extern void prefill_possible_map(void);
-extern unsigned num_processors;
-extern unsigned disabled_cpus;
-
-#define NO_PROC_ID		0xFF		/* No processor magic marker */
-
-#endif
 
 /*
  * Some lowlevel functions might want to know about
@@ -81,11 +80,6 @@ extern unsigned disabled_cpus;
 extern u8 x86_cpu_to_apicid[NR_CPUS];	/* physical ID */
 extern u8 x86_cpu_to_log_apicid[NR_CPUS];
 extern u8 bios_cpu_apicid[];
-
-static inline unsigned int cpu_mask_to_apicid(cpumask_t cpumask)
-{
-	return cpus_addr(cpumask)[0];
-}
 
 static inline int cpu_present_to_apicid(int mps_cpu)
 {
@@ -118,13 +112,6 @@ static __inline int logical_smp_processor_id(void)
 #define cpu_physical_id(cpu)		x86_cpu_to_apicid[cpu]
 #else
 #define cpu_physical_id(cpu)		boot_cpu_id
-static inline int smp_call_function_single(int cpuid, void (*func) (void *info),
-				void *info, int retry, int wait)
-{
-	/* Disable interrupts here? */
-	func(info);
-	return 0;
-}
 #endif /* !CONFIG_SMP */
 #endif
 

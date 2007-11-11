@@ -1,5 +1,5 @@
 /*
- * $Id: parse_to.h,v 1.3 2003/03/30 20:33:29 janakj Exp $
+ * $Id: parse_to.h,v 1.5 2004/09/27 04:02:25 jiri Exp $
  *
  * Copyright (C) 2001-2003 Fhg Fokus
  *
@@ -47,6 +47,7 @@ struct to_body{
 	int error;                    /* Error code */
 	str body;                     /* The whole header field body */
 	str uri;                      /* URI */
+	str display;				  /* Display Name */
 	str tag_value;                /* Value of tag */
 	struct to_param *param_lst;   /* Linked list of parameters */
 	struct to_param *last_param;  /* Last parameter in the list */

@@ -1,9 +1,9 @@
 /*
  * Presence Agent, reply building
  *
- * $Id: reply.c,v 1.6.2.1.2.1 2003/11/26 16:44:27 bogdan Exp $
+ * $Id: reply.c,v 1.10 2004/08/24 09:00:33 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

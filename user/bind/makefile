@@ -19,12 +19,12 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/bin/nsupdate/.libs/nsupdate /bin/nsupdate
 	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/bin/rndc/.libs/rndc /bin/rndc
 	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/bin/rndc/.libs/rndc-confgen /bin/rndc-confgen
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isc/.libs/libisc.so.11.0.1 /lib/libisc.so.11
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isccc/.libs/libisccc.so.0.2.1 /lib/libisccc.so.0
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isccfg/.libs/libisccfg.so.1.0.6 /lib/libisccfg.so.1
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/dns/.libs/libdns.so.21.0.1 /lib/libdns.so.21
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/bind9/.libs/libbind9.so.0.0.7 /lib/libbind9.so.0
-	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/lwres/.libs/liblwres.so.9.1.1 /lib/liblwres.so.9
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isc/.libs/libisc.so.32.0.3 /lib/libisc.so.32
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isccc/.libs/libisccc.so.30.0.1 /lib/libisccc.so.30
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/isccfg/.libs/libisccfg.so.30.0.2 /lib/libisccfg.so.30
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/dns/.libs/libdns.so.32.1.1 /lib/libdns.so.32
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/bind9/.libs/libbind9.so.30.0.3 /lib/libbind9.so.30
+	$(ROMFSINST) -e CONFIG_USER_BIND_BIND builddir/lib/lwres/.libs/liblwres.so.30.0.4 /lib/liblwres.so.30
 
 builddir: makefile
 	rm -rf builddir

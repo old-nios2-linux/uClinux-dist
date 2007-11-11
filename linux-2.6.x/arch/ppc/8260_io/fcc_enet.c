@@ -29,7 +29,6 @@
 #include <linux/ioport.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
-#include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/netdevice.h>
@@ -385,6 +384,7 @@ struct fcc_enet_private {
 	phy_info_t	*phy;
 	struct work_struct phy_relink;
 	struct work_struct phy_display_config;
+	struct net_device *dev;
 
 	uint	sequence_done;
 
@@ -733,11 +733,10 @@ for (;;) {
 			cep->stats.rx_dropped++;
 		}
 		else {
-			skb->dev = dev;
 			skb_put(skb,pkt_len);	/* Make room */
-			eth_copy_and_sum(skb,
+			skb_copy_to_linear_data(skb,
 				(unsigned char *)__va(bdp->cbd_bufaddr),
-				pkt_len, 0);
+				pkt_len);
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 		}
@@ -1391,10 +1390,11 @@ static phy_info_t *phy_info[] = {
 	NULL
 };
 
-static void mii_display_status(void *data)
+static void mii_display_status(struct work_struct *work)
 {
-	struct net_device *dev = data;
-	volatile struct fcc_enet_private *fep = dev->priv;
+	volatile struct fcc_enet_private *fep =
+		container_of(work, struct fcc_enet_private, phy_relink);
+	struct net_device *dev = fep->dev;
 	uint s = fep->phy_status;
 
 	if (!fep->link && !fep->old_link) {
@@ -1428,10 +1428,12 @@ static void mii_display_status(void *data)
 	printk(".\n");
 }
 
-static void mii_display_config(void *data)
+static void mii_display_config(struct work_struct *work)
 {
-	struct net_device *dev = data;
-	volatile struct fcc_enet_private *fep = dev->priv;
+	volatile struct fcc_enet_private *fep =
+		container_of(work, struct fcc_enet_private,
+			     phy_display_config);
+	struct net_device *dev = fep->dev;
 	uint s = fep->phy_status;
 
 	printk("%s: config: auto-negotiation ", dev->name);
@@ -1758,8 +1760,9 @@ static int __init fec_enet_init(void)
 		cep->phy_id_done = 0;
 		cep->phy_addr = fip->fc_phyaddr;
 		mii_queue(dev, mk_mii_read(MII_PHYSID1), mii_discover_phy);
-		INIT_WORK(&cep->phy_relink, mii_display_status, dev);
-		INIT_WORK(&cep->phy_display_config, mii_display_config, dev);
+		INIT_WORK(&cep->phy_relink, mii_display_status);
+		INIT_WORK(&cep->phy_display_config, mii_display_config);
+		cep->dev = dev;
 #endif	/* CONFIG_USE_MDIO */
 
 		fip++;
@@ -1887,10 +1890,10 @@ init_fcc_param(fcc_info_t *fip, struct net_device *dev,
 	/* Allocate space for the buffer descriptors from regular memory.
 	 * Initialize base addresses for the buffer descriptors.
 	 */
-	cep->rx_bd_base = (cbd_t *)kmalloc(sizeof(cbd_t) * RX_RING_SIZE,
+	cep->rx_bd_base = kmalloc(sizeof(cbd_t) * RX_RING_SIZE,
 			GFP_KERNEL | GFP_DMA);
 	ep->fen_genfcc.fcc_rbase = __pa(cep->rx_bd_base);
-	cep->tx_bd_base = (cbd_t *)kmalloc(sizeof(cbd_t) * TX_RING_SIZE,
+	cep->tx_bd_base = kmalloc(sizeof(cbd_t) * TX_RING_SIZE,
 			GFP_KERNEL | GFP_DMA);
 	ep->fen_genfcc.fcc_tbase = __pa(cep->tx_bd_base);
 

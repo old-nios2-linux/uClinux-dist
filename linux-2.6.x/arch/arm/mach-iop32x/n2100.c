@@ -25,6 +25,7 @@
 #include <linux/serial_core.h>
 #include <linux/serial_8250.h>
 #include <linux/mtd/physmap.h>
+#include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
 #include <asm/hardware.h>
@@ -37,6 +38,7 @@
 #include <asm/mach-types.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/arch/time.h>
 
 /*
  * N2100 timer tick configuration.
@@ -44,12 +46,12 @@
 static void __init n2100_timer_init(void)
 {
 	/* 33.000 MHz crystal.  */
-	iop3xx_init_time(198000000);
+	iop_init_time(198000000);
 }
 
 static struct sys_timer n2100_timer = {
 	.init		= n2100_timer_init,
-	.offset		= iop3xx_gettimeoffset,
+	.offset		= iop_gettimeoffset,
 };
 
 
@@ -75,7 +77,7 @@ void __init n2100_map_io(void)
 /*
  * N2100 PCI.
  */
-static inline int __init
+static int __init
 n2100_pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	int irq;
@@ -119,6 +121,20 @@ static struct hw_pci n2100_pci __initdata = {
 	.scan		= iop3xx_pci_scan_bus,
 	.map_irq	= n2100_pci_map_irq,
 };
+
+/*
+ * Both r8169 chips on the n2100 exhibit PCI parity problems.  Set
+ * the ->broken_parity_status flag for both ports so that the r8169
+ * driver knows it should ignore error interrupts.
+ */
+static void n2100_fixup_r8169(struct pci_dev *dev)
+{
+	if (dev->bus->number == 0 &&
+	    (dev->devfn == PCI_DEVFN(1, 0) ||
+	     dev->devfn == PCI_DEVFN(2, 0)))
+		dev->broken_parity_status = 1;
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, PCI_ANY_ID, n2100_fixup_r8169);
 
 static int __init n2100_pci_init(void)
 {
@@ -184,6 +200,12 @@ static struct platform_device n2100_serial_device = {
 	.resource	= &n2100_uart_resource,
 };
 
+static struct i2c_board_info __initdata n2100_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("rtc-rs5c372", 0x32),
+		.type = "rs5c372b",
+	},
+};
 
 /*
  * Pull PCA9532 GPIO #8 low to power off the machine.
@@ -230,6 +252,11 @@ static void __init n2100_init_machine(void)
 	platform_device_register(&iop3xx_i2c0_device);
 	platform_device_register(&n2100_flash_device);
 	platform_device_register(&n2100_serial_device);
+	platform_device_register(&iop3xx_dma_0_channel);
+	platform_device_register(&iop3xx_dma_1_channel);
+
+	i2c_register_board_info(0, n2100_i2c_devices,
+		ARRAY_SIZE(n2100_i2c_devices));
 
 	pm_power_off = n2100_power_off;
 

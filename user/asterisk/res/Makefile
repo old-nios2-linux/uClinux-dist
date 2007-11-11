@@ -1,64 +1,31 @@
 #
 # Asterisk -- A telephony toolkit for Linux.
 # 
-# Makefile for CDR backends (dynamically loaded)
+# Makefile for resource modules
 #
-# Copyright (C) 1999, Mark Spencer
-#
-# Mark Spencer <markster@linux-support.net>
+# Copyright (C) 1999-2006, Digium, Inc.
 #
 # This program is free software, distributed under the terms of
 # the GNU General Public License
 #
 
-MODS=res_adsi.so res_features.so res_crypto.so res_musiconhold.so res_indications.so res_monitor.so \
-     res_agi.so
-MODS+=$(shell if [ -f "/usr/include/odbcinst.h" ]; then echo "res_odbc.so res_config_odbc.so"; fi)
-MODS+=$(shell if [ -f "/usr/local/include/odbcinst.h" ]; then echo "res_odbc.so res_config_odbc.so"; fi)
-MODS+=$(shell if [ -f "/usr/include/osp/osp.h" ]; then echo "res_osp.so"; fi)
+-include ../menuselect.makeopts ../menuselect.makedeps
 
-CRYPTO_LIBS=-lssl -lcrypto
+C_MODS:=$(filter-out $(MENUSELECT_RES),$(patsubst %.c,%,$(wildcard res_*.c)))
+CC_MODS:=$(filter-out $(MENUSELECT_RES),$(patsubst %.cc,%,$(wildcard res_*.cc)))
 
-CFLAGS+=
-CFLAGS+=$(shell [ -f /usr/include/linux/zaptel.h ] && echo " -DZAPATA_MOH")
-CFLAGS+=$(shell [ -f /usr/local/include/zaptel.h ] && echo " -DZAPATA_MOH")
-#
-# Work around buggy RedHat 9.0
-#
-CFLAGS+=-DOPENSSL_NO_KRB5 -fPIC
-OSPLIB=/usr/lib/libosp.a
+LOADABLE_MODS:=$(C_MODS) $(CC_MODS)
 
-all: depend $(MODS)
-
-install: all
-	rm -f $(DESTDIR)$(ASTHEADERDIR)/parking.h
-	rm -f $(DESTDIR)$(MODULES_DIR)/app_agi.so 
-	rm -f $(DESTDIR)$(MODULES_DIR)/res_parking.so
-	for x in $(MODS); do $(INSTALL) -m 755 $$x $(DESTDIR)$(MODULES_DIR) ; done
-
-res_crypto.so: res_crypto.o
-	$(CC) $(SOLINK) -o $@ $< $(CRYPTO_LIBS)
-
-clean:
-	rm -f *.so *.o .depend
-
-res_odbc.so: res_odbc.o
-	$(CC) $(SOLINK) -o $@ $< -lodbc
-
-res_osp.so: res_osp.o $(OSPLIB)
-	$(CC) $(SOLINK) -o $@ $< $(OSPLIB)
-
-%.so : %.o
-	$(CC) $(SOLINK) -o $@ $<
-
-ifneq ($(wildcard .depend),)
-include .depend
+ifneq ($(findstring res,$(MENUSELECT_EMBED)),)
+  EMBEDDED_MODS:=$(LOADABLE_MODS)
+  LOADABLE_MODS:=
 endif
 
-depend: .depend
+all: _all
 
-.depend:
-	../mkdep $(CFLAGS) `ls *.c`
+include $(ASTTOPDIR)/Makefile.moddir_rules
 
-env:
-	env
+$(if $(filter res_snmp,$(EMBEDDED_MODS)),modules.link,res_snmp.so): snmp/agent.o
+
+clean::
+	rm -f snmp/*.o

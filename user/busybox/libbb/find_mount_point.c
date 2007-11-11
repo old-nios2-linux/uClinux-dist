@@ -4,27 +4,12 @@
  *
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <string.h>
 #include "libbb.h"
-
-
 #include <mntent.h>
+
 /*
  * Given a block device, find the mount table entry if that block device
  * is mounted.
@@ -34,7 +19,7 @@
  *
  * Ignores rootfs 
  */
-extern struct mntent *find_mount_point(const char *name, const char *table)
+struct mntent *find_mount_point(const char *name, const char *table)
 {
 	struct stat s;
 	dev_t mountDevice;
@@ -51,33 +36,27 @@ extern struct mntent *find_mount_point(const char *name, const char *table)
 		mountDevice = s.st_dev;
 
 
-	if ((mountTable = setmntent(table, "r")) == 0)
+	mountTable = setmntent(table ? table : bb_path_mtab_file, "r");
+	if (!mountTable)
 		return 0;
 
 	while (!found && (mountEntry = getmntent(mountTable)) != 0) {
 		if (strcmp(name, mountEntry->mnt_dir) == 0
-			|| strcmp(name, mountEntry->mnt_fsname) == 0) /* String match. */
+		 || strcmp(name, mountEntry->mnt_fsname) == 0
+		) { /* String match. */
 			found = 1;
-		else if (stat(mountEntry->mnt_fsname, &s) == 0 && s.st_rdev == mountDevice)	/* Match the device. */
+		}
+		if (stat(mountEntry->mnt_fsname, &s) == 0 && s.st_rdev == mountDevice)	/* Match the device. */
 			found = 1;
-		else if (stat(mountEntry->mnt_dir, &s) == 0 && s.st_dev == mountDevice)	/* Match the directory's mount point. */
+		if (stat(mountEntry->mnt_dir, &s) == 0 && s.st_dev == mountDevice)	/* Match the directory's mount point. */
 			found = 1;
 
 		if (strcmp(mountEntry->mnt_fsname, "rootfs") == 0) {
 			/* rootfs is not a real filesystem */
 			found = 0;
 		}
+
 	}
 	endmntent(mountTable);
 	return mountEntry;
 }
-
-
-/* END CODE */
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

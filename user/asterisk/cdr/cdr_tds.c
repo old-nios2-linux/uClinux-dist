@@ -1,11 +1,30 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * FreeTDS CDR logger
+ * Copyright (C) 2004 - 2006, Digium, Inc.
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License.
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
  *
+ * \brief FreeTDS CDR logger
+ *
+ * See also
+ * \arg \ref Config_cdr
+ * \arg http://www.freetds.org/
+ * \ingroup cdr_drivers
+ */
+
+/*! \verbatim
  *
  * Table Structure for `cdr`
  *
@@ -32,17 +51,19 @@ CREATE TABLE [dbo].[cdr] (
 	[uniqueid] [varchar] (32) NULL
 ) ON [PRIMARY]
 
+\endverbatim
+
 */
 
-#include <sys/types.h>
-#include <asterisk/config.h>
-#include <asterisk/options.h>
-#include <asterisk/channel.h>
-#include <asterisk/cdr.h>
-#include <asterisk/module.h>
-#include <asterisk/logger.h>
-#include "../asterisk.h"
+/*** MODULEINFO
+	<depend>freetds</depend>
+ ***/
 
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 69392 $")
+
+#include <sys/types.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -54,21 +75,26 @@ CREATE TABLE [dbo].[cdr] (
 #include <tdsconvert.h>
 #include <ctype.h>
 
-#if !defined(TDS_INT_EXIT) 
-#define TDS_PRE_0_62
+#include "asterisk/config.h"
+#include "asterisk/options.h"
+#include "asterisk/channel.h"
+#include "asterisk/cdr.h"
+#include "asterisk/module.h"
+#include "asterisk/logger.h"
+
+#ifdef FREETDS_PRE_0_62
 #warning "You have older TDS, you should upgrade!"
 #endif
 
 #define DATE_FORMAT "%Y/%m/%d %T"
 
-static char *desc = "MSSQL CDR Backend";
 static char *name = "mssql";
 static char *config = "cdr_tds.conf";
 
 static char *hostname = NULL, *dbname = NULL, *dbuser = NULL, *password = NULL, *charset = NULL, *language = NULL;
+static char *table = NULL;
 
 static int connected = 0;
-static time_t connect_time = 0;
 
 AST_MUTEX_DEFINE_STATIC(tds_lock);
 
@@ -76,7 +102,6 @@ static TDSSOCKET *tds;
 static TDSLOGIN *login;
 static TDSCONTEXT *context;
 
-static char *stristr(const char*, const char*);
 static char *anti_injection(const char *, int);
 static void get_date(char *, struct timeval);
 
@@ -89,7 +114,7 @@ static int tds_log(struct ast_cdr *cdr)
 	char *accountcode, *src, *dst, *dcontext, *clid, *channel, *dstchannel, *lastapp, *lastdata, *uniqueid;
 	int res = 0;
 	int retried = 0;
-#ifdef TDS_PRE_0_62
+#ifdef FREETDS_PRE_0_62
 	TDS_INT result_type;
 #endif
 
@@ -114,7 +139,7 @@ static int tds_log(struct ast_cdr *cdr)
 
 	sprintf(
 		sqlcmd,
-		"INSERT INTO cdr "
+		"INSERT INTO %s "
 		"("
 			"accountcode, "
 			"src, "
@@ -148,12 +173,13 @@ static int tds_log(struct ast_cdr *cdr)
 			"%s, "		/* start */
 			"%s, "		/* answer */
 			"%s, "		/* end */
-			"%i, "		/* duration */
-			"%i, "		/* billsec */
+			"%ld, "		/* duration */
+			"%ld, "		/* billsec */
 			"'%s', "	/* disposition */
 			"'%s', "	/* amaflags */
 			"'%s'"		/* uniqueid */
 		")",
+		table,
 		accountcode,
 		src,
 		dst,
@@ -183,7 +209,7 @@ static int tds_log(struct ast_cdr *cdr)
 			retried = 1;	/* note that we have now tried */
 		}
 
-#ifdef TDS_PRE_0_62
+#ifdef FREETDS_PRE_0_62
 		if (!connected || (tds_submit_query(tds, sqlcmd) != TDS_SUCCEED) || (tds_process_simple_query(tds, &result_type) != TDS_SUCCEED || result_type != TDS_CMD_SUCCEED))
 #else
 		if (!connected || (tds_submit_query(tds, sqlcmd) != TDS_SUCCEED) || (tds_process_simple_query(tds) != TDS_SUCCEED))
@@ -209,119 +235,6 @@ static int tds_log(struct ast_cdr *cdr)
 	ast_mutex_unlock(&tds_lock);
 
 	return res;
-}
-
-/* Return the offset of one string within another.
-   Copyright (C) 1994, 1996, 1997, 2000, 2001 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
-
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library; if not, write to the Free
-   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-   02111-1307 USA.  */
-
-/*
- * My personal strstr() implementation that beats most other algorithms.
- * Until someone tells me otherwise, I assume that this is the
- * fastest implementation of strstr() in C.
- * I deliberately chose not to comment it.  You should have at least
- * as much fun trying to understand it, as I had to write it :-).
- *
- * Stephen R. van den Berg, berg@pool.informatik.rwth-aachen.de	*/
-
-static char *
-stristr (phaystack, pneedle)
-     const char *phaystack;
-     const char *pneedle;
-{
-  typedef unsigned chartype;
-
-  const unsigned char *haystack, *needle;
-  chartype b;
-  const unsigned char *rneedle;
-
-  haystack = (const unsigned char *) phaystack;
-
-  if ((b = toupper(*(needle = (const unsigned char *) pneedle))))
-    {
-      chartype c;
-      haystack--;		/* possible ANSI violation */
-
-      {
-	chartype a;
-	do
-	  if (!(a = toupper(*++haystack)))
-	    goto ret0;
-	while (a != b);
-      }
-
-      if (!(c = toupper(*++needle)))
-	goto foundneedle;
-      ++needle;
-      goto jin;
-
-      for (;;)
-	{
-	  {
-	    chartype a;
-	    if (0)
-	    jin:{
-		if ((a = toupper(*++haystack)) == c)
-		  goto crest;
-	      }
-	    else
-	      a = toupper(*++haystack);
-	    do
-	      {
-		for (; a != b; a = toupper(*++haystack))
-		  {
-		    if (!a)
-		      goto ret0;
-		    if ((a = toupper(*++haystack)) == b)
-		      break;
-		    if (!a)
-		      goto ret0;
-		  }
-	      }
-	    while ((a = toupper(*++haystack)) != c);
-	  }
-	crest:
-	  {
-	    chartype a;
-	    {
-	      const unsigned char *rhaystack;
-	      if (toupper(*(rhaystack = haystack-- + 1)) == (a = toupper(*(rneedle = needle))))
-		do
-		  {
-		    if (!a)
-		      goto foundneedle;
-		    if (toupper(*++rhaystack) != (a = toupper(*++needle)))
-		      break;
-		    if (!a)
-		      goto foundneedle;
-		  }
-		while (toupper(*++rhaystack) == (a = toupper(*++needle)));
-	      needle = rneedle;	/* took the register-poor aproach */
-	    }
-	    if (!a)
-	      break;
-	  }
-	}
-    }
-foundneedle:
-  return (char *) haystack;
-ret0:
-  return 0;
 }
 
 static char *anti_injection(const char *str, int len)
@@ -354,7 +267,7 @@ static char *anti_injection(const char *str, int len)
 	/* Erase known bad input */
 	for (idx=0; *known_bad[idx]; idx++)
 	{
-		while((srh_ptr = stristr(buf, known_bad[idx]))) /* fix me! */
+		while((srh_ptr = strcasestr(buf, known_bad[idx])))
 		{
 			memmove(srh_ptr, srh_ptr+strlen(known_bad[idx]), strlen(srh_ptr+strlen(known_bad[idx]))+1);
 		}
@@ -370,10 +283,10 @@ static void get_date(char *dateField, struct timeval tv)
 	char buf[80];
 
 	/* To make sure we have date variable if not insert null to SQL */
-	if (tv.tv_sec && tv.tv_usec)
+	if (!ast_tvzero(tv))
 	{
 		t = tv.tv_sec;
-		localtime_r(&t, &tm);
+		ast_localtime(&t, &tm, NULL);
 		strftime(buf, 80, DATE_FORMAT, &tm);
 		sprintf(dateField, "'%s'", buf);
 	}
@@ -381,11 +294,6 @@ static void get_date(char *dateField, struct timeval tv)
 	{
 		strcpy(dateField, "null");
 	}
-}
-
-char *description(void)
-{
-	return desc;
 }
 
 static int mssql_disconnect(void)
@@ -412,7 +320,11 @@ static int mssql_disconnect(void)
 
 static int mssql_connect(void)
 {
+#if (defined(FREETDS_0_63) || defined(FREETDS_0_64))
+	TDSCONNECTION *connection = NULL;
+#else
 	TDSCONNECTINFO *connection = NULL;
+#endif
 	char query[128];
 
 	/* Connect to M$SQL Server */
@@ -427,14 +339,18 @@ static int mssql_connect(void)
 	tds_set_passwd(login, password);
 	tds_set_app(login, "TSQL");
 	tds_set_library(login, "TDS-Library");
-#ifndef TDS_PRE_0_62
+#ifndef FREETDS_PRE_0_62
 	tds_set_client_charset(login, charset);
 #endif
 	tds_set_language(login, language);
 	tds_set_packet(login, 512);
 	tds_set_version(login, 7, 0);
 
+#ifdef FREETDS_0_64
+	if (!(context = tds_alloc_context(NULL)))
+#else
 	if (!(context = tds_alloc_context()))
+#endif
 	{
 		ast_log(LOG_ERROR, "tds_alloc_context() failed.\n");
 		goto connect_fail;
@@ -457,15 +373,23 @@ static int mssql_connect(void)
 	{
 		ast_log(LOG_ERROR, "Failed to connect to MSSQL server.\n");
 		tds = NULL;	/* freed by tds_connect() on error */
+#if (defined(FREETDS_0_63) || defined(FREETDS_0_64))
+		tds_free_connection(connection);
+#else
 		tds_free_connect(connection);
+#endif
 		connection = NULL;
 		goto connect_fail;
 	}
+#if (defined(FREETDS_0_63) || defined(FREETDS_0_64))
+	tds_free_connection(connection);
+#else
 	tds_free_connect(connection);
+#endif
 	connection = NULL;
 
 	sprintf(query, "USE %s", dbname);
-#ifdef TDS_PRE_0_62
+#ifdef FREETDS_PRE_0_62
 	if ((tds_submit_query(tds, query) != TDS_SUCCEED) || (tds_process_simple_query(tds, &result_type) != TDS_SUCCEED || result_type != TDS_CMD_SUCCEED))
 #else
 	if ((tds_submit_query(tds, query) != TDS_SUCCEED) || (tds_process_simple_query(tds) != TDS_SUCCEED))
@@ -483,7 +407,7 @@ connect_fail:
 	return -1;
 }
 
-int unload_module(void)
+static int tds_unload_module(void)
 {
 	mssql_disconnect();
 
@@ -495,21 +419,22 @@ int unload_module(void)
 	if (password) free(password);
 	if (charset) free(charset);
 	if (language) free(language);
+	if (table) free(table);
 
 	return 0;
 }
 
-int load_module(void)
+static int tds_load_module(void)
 {
 	int res = 0;
 	struct ast_config *cfg;
 	struct ast_variable *var;
-	char *ptr = NULL;
-#ifdef TDS_PRE_0_62
+	const char *ptr = NULL;
+#ifdef FREETDS_PRE_0_62
 	TDS_INT result_type;
 #endif
 
-	cfg = ast_load(config);
+	cfg = ast_config_load(config);
 	if (!cfg) {
 		ast_log(LOG_NOTICE, "Unable to load config for MSSQL CDR's: %s\n", config);
 		return 0;
@@ -555,12 +480,19 @@ int load_module(void)
 	else
 		language = strdup("us_english");
 
-	ast_destroy(cfg);
+	ptr = ast_variable_retrieve(cfg,"global","table");
+	if (ptr == NULL) {
+		ast_log(LOG_DEBUG,"cdr_tds: table not specified.  Assuming cdr\n");
+		ptr = "cdr";
+	}
+	table = strdup(ptr);
+
+	ast_config_destroy(cfg);
 
 	mssql_connect();
 
 	/* Register MSSQL CDR handler */
-	res = ast_cdr_register(name, desc, tds_log);
+	res = ast_cdr_register(name, ast_module_info->description, tds_log);
 	if (res)
 	{
 		ast_log(LOG_ERROR, "Unable to register MSSQL CDR handling\n");
@@ -569,24 +501,27 @@ int load_module(void)
 	return res;
 }
 
-int reload(void)
+static int reload(void)
 {
-	unload_module();
-	return load_module();
+	tds_unload_module();
+	return tds_load_module();
 }
 
-int usecount(void)
+static int load_module(void)
 {
-	/* Simplistic use count */
-	if (ast_mutex_trylock(&tds_lock)) {
-		return 1;
-	} else {
-		ast_mutex_unlock(&tds_lock);
-		return 0;
-	}
+	if(!tds_load_module())
+		return AST_MODULE_LOAD_DECLINE;
+	else 
+		return AST_MODULE_LOAD_SUCCESS;
 }
 
-char *key()
+static int unload_module(void)
 {
-	return ASTERISK_GPL_KEY;
+	return tds_unload_module();
 }
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "MSSQL CDR Backend",
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload,
+	       );

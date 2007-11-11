@@ -48,6 +48,7 @@
 #include <asm/arch/mmc.h>
 
 #include "generic.h"
+#include "devices.h"
 
 
 #define LUB_MISC_WR		__LUB_REG(LUBBOCK_FPGA_PHYS + 0x080)
@@ -85,7 +86,7 @@ static struct irq_chip lubbock_irq_chip = {
 	.unmask		= lubbock_unmask_irq,
 };
 
-static void lubbock_irq_handler(unsigned int irq, struct irqdesc *desc)
+static void lubbock_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	unsigned long pending = LUB_IRQ_SET_CLR & lubbock_irq_enabled;
 	do {
@@ -103,12 +104,12 @@ static void __init lubbock_init_irq(void)
 {
 	int irq;
 
-	pxa_init_irq();
+	pxa25x_init_irq();
 
 	/* setup extra lubbock irqs */
 	for (irq = LUBBOCK_IRQ(0); irq <= LUBBOCK_LAST_IRQ; irq++) {
 		set_irq_chip(irq, &lubbock_irq_chip);
-		set_irq_handler(irq, do_level_IRQ);
+		set_irq_handler(irq, handle_level_irq);
 		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 	}
 
@@ -220,7 +221,7 @@ static struct resource pxa_ssp_resources[] = {
 
 static struct pxa2xx_spi_master pxa_ssp_master_info = {
 	.ssp_type	= PXA25x_SSP,
-	.clock_enable	= CKEN3_SSP,
+	.clock_enable	= CKEN_SSP,
 	.num_chipselect	= 0,
 };
 

@@ -75,10 +75,6 @@ static LIST_HEAD(unconfirmed);
 struct notifier_block *ip_conntrack_chain;
 #endif /* CONFIG_IP_NF_CONNTRACK_EVENTS */
 
-#ifdef CONFIG_IP_NF_CONNTRACK_EVENTS
-struct notifier_block *ip_conntrack_chain;
-#endif /* CONFIG_IP_NF_CONNTRACK_EVENTS */
-
 extern struct ip_conntrack_protocol ip_conntrack_generic_protocol;
 
 static inline int proto_cmpfn(const struct ip_conntrack_protocol *curr,
@@ -460,7 +456,7 @@ ip_conntrack_get(struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 
 /* Confirm a connection given skb->nfct; places it in hash table */
 int
-__ip_conntrack_confirm(struct sk_buff *skb)
+__ip_conntrack_confirm(unsigned int hooknum, struct sk_buff *skb)
 {
 	unsigned int hash, repl_hash;
 	struct ip_conntrack *ct;
@@ -474,6 +470,17 @@ __ip_conntrack_confirm(struct sk_buff *skb)
 	   expected connection, IP_CT_RELATED. */
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL)
 		return NF_ACCEPT;
+
+#ifdef CONFIG_IP_NF_CT_DEV
+	if (hooknum == NF_IP_POST_ROUTING) {
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+		if (skb->nf_bridge && skb->nf_bridge->physoutdev)
+			strcpy(ct->outdev, skb->nf_bridge->physoutdev->name);
+		else
+#endif
+			strcpy(ct->outdev, skb->dev->name);
+	}
+#endif
 
 	hash = hash_conntrack(&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
 	repl_hash = hash_conntrack(&ct->tuplehash[IP_CT_DIR_REPLY].tuple);
@@ -726,6 +733,17 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 	memset(conntrack, 0, sizeof(*conntrack));
 	atomic_set(&conntrack->ct_general.use, 1);
 	conntrack->ct_general.destroy = destroy_conntrack;
+#ifdef CONFIG_IP_NF_CT_DEV
+	if (hooknum == NF_IP_PRE_ROUTING) {
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+		if (skb->nf_bridge && skb->nf_bridge->physindev)
+			strcpy(conntrack->indev,
+			       skb->nf_bridge->physindev->name);
+		else
+#endif
+			strcpy(conntrack->indev, skb->dev->name);
+	}
+#endif
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *tuple;
 	conntrack->tuplehash[IP_CT_DIR_ORIGINAL].ctrack = conntrack;
 	conntrack->tuplehash[IP_CT_DIR_REPLY].tuple = repl_tuple;
@@ -1412,6 +1430,7 @@ getorigdst(struct sock *sk, int optval, void *user, int *len)
 			.tuple.dst.u.tcp.port;
 		sin.sin_addr.s_addr = h->ctrack->tuplehash[IP_CT_DIR_ORIGINAL]
 			.tuple.dst.ip;
+		memset(sin.sin_zero, 0, sizeof(sin.sin_zero));
 
 		DEBUGP("SO_ORIGINAL_DST: %u.%u.%u.%u %u\n",
 		       NIPQUAD(sin.sin_addr.s_addr), ntohs(sin.sin_port));

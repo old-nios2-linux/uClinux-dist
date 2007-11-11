@@ -33,13 +33,6 @@
 #define MAX_HWIFS	1
 #endif
 
-#define IDE_ARCH_OBSOLETE_INIT
-#define IDE_ARCH_OBSOLETE_DEFAULTS
-#define ide_default_io_base(i)		((unsigned long)na_ide_ide)
-#define ide_default_irq(b)			(na_ide_ide_irq)
-#define ide_init_default_irq(base)	ide_default_irq(base)
-#define ide_default_io_ctl(base)	((base) + (0xE*4))
-
 #include <asm-generic/ide_iops.h>
 
 #endif /* __KERNEL__ */

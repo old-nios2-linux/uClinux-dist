@@ -32,7 +32,6 @@
 #include <linux/initrd.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
-#include <linux/ide.h>
 #include <linux/pci.h>
 #include <linux/adb.h>
 #include <linux/cuda.h>
@@ -60,7 +59,9 @@
 #include <asm/of_device.h>
 #include <asm/lmb.h>
 #include <asm/mpic.h>
+#include <asm/rtas.h>
 #include <asm/udbg.h>
+#include <asm/nvram.h>
 
 #include "maple.h"
 
@@ -112,8 +113,8 @@ static void maple_restart(char *cmd)
 		printk(KERN_EMERG "Maple: Unable to find Service Processor\n");
 		goto fail;
 	}
-	maple_nvram_offset = get_property(sp, "restart-addr", NULL);
-	maple_nvram_command = get_property(sp, "restart-value", NULL);
+	maple_nvram_offset = of_get_property(sp, "restart-addr", NULL);
+	maple_nvram_command = of_get_property(sp, "restart-value", NULL);
 	of_node_put(sp);
 
 	/* send command */
@@ -139,8 +140,8 @@ static void maple_power_off(void)
 		printk(KERN_EMERG "Maple: Unable to find Service Processor\n");
 		goto fail;
 	}
-	maple_nvram_offset = get_property(sp, "power-off-addr", NULL);
-	maple_nvram_command = get_property(sp, "power-off-value", NULL);
+	maple_nvram_offset = of_get_property(sp, "power-off-addr", NULL);
+	maple_nvram_command = of_get_property(sp, "power-off-value", NULL);
 	of_node_put(sp);
 
 	/* send command */
@@ -166,6 +167,16 @@ struct smp_ops_t maple_smp_ops = {
 };
 #endif /* CONFIG_SMP */
 
+static void __init maple_use_rtas_reboot_and_halt_if_present(void)
+{
+	if (rtas_service_present("system-reboot") &&
+	    rtas_service_present("power-off")) {
+		ppc_md.restart = rtas_restart;
+		ppc_md.power_off = rtas_power_off;
+		ppc_md.halt = rtas_halt;
+	}
+}
+
 void __init maple_setup_arch(void)
 {
 	/* init to some ~sane value until calibrate_delay() runs */
@@ -181,8 +192,11 @@ void __init maple_setup_arch(void)
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
+	maple_use_rtas_reboot_and_halt_if_present();
 
 	printk(KERN_DEBUG "Using native/NAP idle loop\n");
+
+	mmio_nvram_init();
 }
 
 /* 
@@ -217,7 +231,7 @@ static void __init maple_init_IRQ(void)
 	 */
 
 	for_each_node_by_type(np, "interrupt-controller")
-		if (device_is_compatible(np, "open-pic")) {
+		if (of_device_is_compatible(np, "open-pic")) {
 			mpic_node = np;
 			break;
 		}
@@ -234,24 +248,23 @@ static void __init maple_init_IRQ(void)
 
 	/* Find address list in /platform-open-pic */
 	root = of_find_node_by_path("/");
-	naddr = prom_n_addr_cells(root);
-	opprop = get_property(root, "platform-open-pic", &opplen);
+	naddr = of_n_addr_cells(root);
+	opprop = of_get_property(root, "platform-open-pic", &opplen);
 	if (opprop != 0) {
 		openpic_addr = of_read_number(opprop, naddr);
 		has_isus = (opplen > naddr);
 		printk(KERN_DEBUG "OpenPIC addr: %lx, has ISUs: %d\n",
 		       openpic_addr, has_isus);
 	}
-	of_node_put(root);
 
 	BUG_ON(openpic_addr == 0);
 
 	/* Check for a big endian MPIC */
-	if (get_property(np, "big-endian", NULL) != NULL)
+	if (of_get_property(np, "big-endian", NULL) != NULL)
 		flags |= MPIC_BIG_ENDIAN;
 
 	/* XXX Maple specific bits */
-	flags |= MPIC_BROKEN_U3 | MPIC_WANTS_RESET;
+	flags |= MPIC_U3_HT_IRQS | MPIC_WANTS_RESET;
 	/* All U3/U4 are big-endian, older SLOF firmware doesn't encode this */
 	flags |= MPIC_BIG_ENDIAN;
 
@@ -312,7 +325,7 @@ define_machine(maple_md) {
 	.setup_arch		= maple_setup_arch,
 	.init_early		= maple_init_early,
 	.init_IRQ		= maple_init_IRQ,
-	.pcibios_fixup		= maple_pcibios_fixup,
+	.pci_irq_fixup		= maple_pci_irq_fixup,
 	.pci_get_legacy_ide_irq	= maple_pci_get_legacy_ide_irq,
 	.restart		= maple_restart,
 	.power_off		= maple_power_off,

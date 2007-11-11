@@ -656,22 +656,11 @@ static int nmclan_config(struct pcmcia_device *link)
   struct net_device *dev = link->priv;
   mace_private *lp = netdev_priv(dev);
   tuple_t tuple;
-  cisparse_t parse;
   u_char buf[64];
   int i, last_ret, last_fn;
   kio_addr_t ioaddr;
 
   DEBUG(0, "nmclan_config(0x%p)\n", link);
-
-  tuple.Attributes = 0;
-  tuple.TupleData = buf;
-  tuple.TupleDataMax = 64;
-  tuple.TupleOffset = 0;
-  tuple.DesiredTuple = CISTPL_CONFIG;
-  CS_CHECK(GetFirstTuple, pcmcia_get_first_tuple(link, &tuple));
-  CS_CHECK(GetTupleData, pcmcia_get_tuple_data(link, &tuple));
-  CS_CHECK(ParseTuple, pcmcia_parse_tuple(link, &tuple, &parse));
-  link->conf.ConfigBase = parse.config.base;
 
   CS_CHECK(RequestIO, pcmcia_request_io(link, &link->io));
   CS_CHECK(RequestIRQ, pcmcia_request_irq(link, &link->irq));
@@ -686,6 +675,7 @@ static int nmclan_config(struct pcmcia_device *link)
   tuple.TupleData = buf;
   tuple.TupleDataMax = 64;
   tuple.TupleOffset = 0;
+  tuple.Attributes = 0;
   CS_CHECK(GetFirstTuple, pcmcia_get_first_tuple(link, &tuple));
   CS_CHECK(GetTupleData, pcmcia_get_tuple_data(link, &tuple));
   memcpy(dev->dev_addr, tuple.TupleData, ETHER_ADDR_LEN);
@@ -1006,7 +996,7 @@ static irqreturn_t mace_interrupt(int irq, void *dev_id)
 {
   struct net_device *dev = (struct net_device *) dev_id;
   mace_private *lp = netdev_priv(dev);
-  kio_addr_t ioaddr = dev->base_addr;
+  kio_addr_t ioaddr;
   int status;
   int IntrCnt = MACE_MAX_IR_ITERATIONS;
 
@@ -1015,6 +1005,8 @@ static irqreturn_t mace_interrupt(int irq, void *dev_id)
 	  irq);
     return IRQ_NONE;
   }
+
+  ioaddr = dev->base_addr;
 
   if (lp->tx_irq_disabled) {
     printk(
@@ -1192,12 +1184,10 @@ static int mace_rx(struct net_device *dev, unsigned char RxCnt)
       skb = dev_alloc_skb(pkt_len+2);
 
       if (skb != NULL) {
-	skb->dev = dev;
-
 	skb_reserve(skb, 2);
 	insw(ioaddr + AM2150_RCV, skb_put(skb, pkt_len), pkt_len>>1);
 	if (pkt_len & 1)
-	    *(skb->tail-1) = inb(ioaddr + AM2150_RCV);
+	    *(skb_tail_pointer(skb) - 1) = inb(ioaddr + AM2150_RCV);
 	skb->protocol = eth_type_trans(skb, dev);
 	
 	netif_rx(skb); /* Send the packet to the upper (protocol) layers. */

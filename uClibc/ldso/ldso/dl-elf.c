@@ -3,7 +3,7 @@
  * This file contains the helper routines to load an ELF shared
  * library into memory and add the symbol table info to the chain.
  *
- * Copyright (C) 2000-2004 by Erik Andersen <andersen@codepoet.org>
+ * Copyright (C) 2000-2006 by Erik Andersen <andersen@codepoet.org>
  * Copyright (c) 1994-2000 Eric Youngdale, Peter MacDonald,
  *				David Engel, Hongjiu Lu and Mitch D'Souza
  *
@@ -57,11 +57,11 @@ int _dl_map_cache(void)
 	}
 
 	_dl_cache_size = st.st_size;
-	_dl_cache_addr = (caddr_t) _dl_mmap(0, _dl_cache_size, PROT_READ, MAP_SHARED, fd, 0);
+	_dl_cache_addr = _dl_mmap(0, _dl_cache_size, PROT_READ, LDSO_CACHE_MMAP_FLAGS, fd, 0);
 	_dl_close(fd);
 	if (_dl_mmap_check_error(_dl_cache_addr)) {
-		_dl_dprintf(2, "%s: can't map cache '%s'\n",
-				_dl_progname, LDSO_CACHE);
+		_dl_dprintf(2, "%s:%i: can't map '%s'\n",
+				_dl_progname, __LINE__, LDSO_CACHE);
 		return -1;
 	}
 
@@ -115,17 +115,13 @@ int _dl_unmap_cache(void)
 #endif
 
 
-void 
+void
 _dl_protect_relro (struct elf_resolve *l)
 {
-	ElfW(Addr) start = ((l->loadaddr + l->relro_addr)
-			    & ~(_dl_pagesize - 1));
-	ElfW(Addr) end = ((l->loadaddr + l->relro_addr + l->relro_size)
-			  & ~(_dl_pagesize - 1));
-#if defined (__SUPPORT_LD_DEBUG__)
-	if (_dl_debug)
-		_dl_dprintf(2, "RELRO protecting %s:  start:%x, end:%x\n", l->libname, start, end);
-#endif
+	ElfW(Addr) base = (ElfW(Addr)) DL_RELOC_ADDR(l->loadaddr, l->relro_addr);
+	ElfW(Addr) start = (base & ~(_dl_pagesize - 1));
+	ElfW(Addr) end = ((base + l->relro_size) & ~(_dl_pagesize - 1));
+	_dl_if_debug_dprint("RELRO protecting %s:  start:%x, end:%x\n", l->libname, start, end);
 	if (start != end &&
 	    _dl_mprotect ((void *) start, end - start, PROT_READ) < 0) {
 		_dl_dprintf(2, "%s: cannot apply additional memory protection after relocation", l->libname);
@@ -139,114 +135,63 @@ static struct elf_resolve *
 search_for_named_library(const char *name, int secure, const char *path_list,
 	struct dyn_elf **rpnt)
 {
-	int i, count = 1;
-	char *path, *path_n;
-	char mylibname[2050];
-	struct elf_resolve *tpnt1;
+	char *path, *path_n, *mylibname;
+	struct elf_resolve *tpnt;
+	int done;
 
 	if (path_list==NULL)
 		return NULL;
 
-	/* We need a writable copy of this string */
-	path = _dl_strdup(path_list);
-	if (!path) {
+	/* We need a writable copy of this string, but we don't
+	 * need this allocated permanently since we don't want
+	 * to leak memory, so use alloca to put path on the stack */
+	done = _dl_strlen(path_list);
+	path = alloca(done + 1);
+
+	/* another bit of local storage */
+	mylibname = alloca(2050);
+
+	/* gcc inlines alloca using a single instruction adjusting
+	 * the stack pointer and no stack overflow check and thus
+	 * no NULL error return.  No point leaving in dead code... */
+#if 0
+	if (!path || !mylibname) {
 		_dl_dprintf(2, "Out of memory!\n");
 		_dl_exit(0);
 	}
+#endif
 
+	_dl_memcpy(path, path_list, done+1);
 
 	/* Unlike ldd.c, don't bother to eliminate double //s */
 
-
-	/* Replace colons with zeros in path_list and count them */
-	for(i=_dl_strlen(path); i > 0; i--) {
-		if (path[i]==':') {
-			path[i]=0;
-			count++;
-		}
-	}
-
+	/* Replace colons with zeros in path_list */
+	/* : at the beginning or end of path maps to CWD */
+	/* :: anywhere maps CWD */
+	/* "" maps to CWD */
+	done = 0;
 	path_n = path;
-	for (i = 0; i < count; i++) {
-		_dl_strcpy(mylibname, path_n);
-		_dl_strcat(mylibname, "/");
-		_dl_strcat(mylibname, name);
-		if ((tpnt1 = _dl_load_elf_shared_library(secure, rpnt, mylibname)) != NULL)
-		{
-			return tpnt1;
+	do {
+		if (*path == 0) {
+			*path = ':';
+			done = 1;
 		}
-		path_n += (_dl_strlen(path_n) + 1);
-	}
+		if (*path == ':') {
+			*path = 0;
+			if (*path_n)
+				_dl_strcpy(mylibname, path_n);
+			else
+				_dl_strcpy(mylibname, "."); /* Assume current dir if empty path */
+			_dl_strcat(mylibname, "/");
+			_dl_strcat(mylibname, name);
+			if ((tpnt = _dl_load_elf_shared_library(secure, rpnt, mylibname)) != NULL)
+				return tpnt;
+			path_n = path+1;
+		}
+		path++;
+	} while (!done);
 	return NULL;
 }
-
-/* Check if the named library is already loaded... */
-struct elf_resolve *_dl_check_if_named_library_is_loaded(const char *full_libname,
-		int trace_loaded_objects)
-{
-	const char *pnt, *pnt1;
-	struct elf_resolve *tpnt1;
-	const char *libname, *libname2;
-	static const char libc[] = "libc.so.";
-	static const char aborted_wrong_lib[] = "%s: aborted attempt to load %s!\n";
-
-	pnt = libname = full_libname;
-
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug)
-		_dl_dprintf(_dl_debug_file, "Checking if '%s' is already loaded\n", full_libname);
-#endif
-	/* quick hack to ensure mylibname buffer doesn't overflow.  don't
-	   allow full_libname or any directory to be longer than 1024. */
-	if (_dl_strlen(full_libname) > 1024)
-		return NULL;
-
-	/* Skip over any initial initial './' and '/' stuff to
-	 * get the short form libname with no path garbage */
-	pnt1 = _dl_strrchr(pnt, '/');
-	if (pnt1) {
-		libname = pnt1 + 1;
-	}
-
-	/* Make sure they are not trying to load the wrong C library!
-	 * This sometimes happens esp with shared libraries when the
-	 * library path is somehow wrong! */
-#define isdigit(c)  (c >= '0' && c <= '9')
-	if ((_dl_strncmp(libname, libc, 8) == 0) &&  _dl_strlen(libname) >=8 &&
-			isdigit(libname[8]))
-	{
-		/* Abort attempts to load glibc, libc5, etc */
-		if ( libname[8]!='0') {
-			if (!trace_loaded_objects) {
-				_dl_dprintf(2, aborted_wrong_lib, libname, _dl_progname);
-				_dl_exit(1);
-			}
-			return NULL;
-		}
-	}
-
-	/* Critical step!  Weed out duplicates early to avoid
-	 * function aliasing, which wastes memory, and causes
-	 * really bad things to happen with weaks and globals. */
-	for (tpnt1 = _dl_loaded_modules; tpnt1; tpnt1 = tpnt1->next) {
-
-		/* Skip over any initial initial './' and '/' stuff to
-		 * get the short form libname with no path garbage */
-		libname2 = tpnt1->libname;
-		pnt1 = _dl_strrchr(libname2, '/');
-		if (pnt1) {
-			libname2 = pnt1 + 1;
-		}
-
-		if (_dl_strcmp(libname2, libname) == 0) {
-			/* Well, that was certainly easy */
-			return tpnt1;
-		}
-	}
-
-	return NULL;
-}
-
 
 /* Used to return error codes back to dlopen et. al.  */
 unsigned long _dl_error_number;
@@ -255,7 +200,7 @@ unsigned long _dl_internal_error_number;
 struct elf_resolve *_dl_load_shared_library(int secure, struct dyn_elf **rpnt,
 	struct elf_resolve *tpnt, char *full_libname, int __attribute__((unused)) trace_loaded_objects)
 {
-	char *pnt, *pnt1;
+	char *pnt;
 	struct elf_resolve *tpnt1;
 	char *libname;
 
@@ -269,66 +214,59 @@ struct elf_resolve *_dl_load_shared_library(int secure, struct dyn_elf **rpnt,
 
 	/* Skip over any initial initial './' and '/' stuff to
 	 * get the short form libname with no path garbage */
-	pnt1 = _dl_strrchr(libname, '/');
-	if (pnt1) {
-		libname = pnt1 + 1;
+	pnt = _dl_strrchr(libname, '/');
+	if (pnt) {
+		libname = pnt + 1;
 	}
-#if 0
-	/* Critical step!  Weed out duplicates early to avoid
-	 * function aliasing, which wastes memory, and causes
-	 * really bad things to happen with weaks and globals. */
-	if ((tpnt1=_dl_check_if_named_library_is_loaded(libname, trace_loaded_objects))!=NULL)
-		return tpnt1;
-#endif
 
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tfind library='%s'; searching\n", libname);
-#endif
+	_dl_if_debug_dprint("\tfind library='%s'; searching\n", libname);
 	/* If the filename has any '/', try it straight and leave it at that.
 	   For IBCS2 compatibility under linux, we substitute the string
 	   /usr/i486-sysv4/lib for /usr/lib in library names. */
 
 	if (libname != full_libname) {
-#if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug) _dl_dprintf(_dl_debug_file, "\ttrying file='%s'\n", full_libname);
-#endif
+		_dl_if_debug_dprint("\ttrying file='%s'\n", full_libname);
 		tpnt1 = _dl_load_elf_shared_library(secure, rpnt, full_libname);
 		if (tpnt1) {
 			return tpnt1;
 		}
-		//goto goof;
 	}
 
 	/*
-	 * The ABI specifies that RPATH is searched before LD_*_PATH or
+	 * The ABI specifies that RPATH is searched before LD_LIBRARY_PATH or
 	 * the default path of /usr/lib.  Check in rpath directories.
 	 */
-	for (tpnt = _dl_loaded_modules; tpnt; tpnt = tpnt->next) {
-		if (tpnt->libtype == elf_executable) {
-			pnt = (char *) tpnt->dynamic_info[DT_RPATH];
-			if (pnt) {
-				pnt += (unsigned long) tpnt->loadaddr + tpnt->dynamic_info[DT_STRTAB];
-#if defined (__SUPPORT_LD_DEBUG__)
-				if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tsearching RPATH='%s'\n", pnt);
-#endif
-				if ((tpnt1 = search_for_named_library(libname, secure, pnt, rpnt)) != NULL)
-				{
-					return tpnt1;
-				}
-			}
-		}
+#ifdef __LDSO_RUNPATH__
+	pnt = (tpnt ? (char *) tpnt->dynamic_info[DT_RPATH] : NULL);
+	if (pnt) {
+		pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
+		_dl_if_debug_dprint("\tsearching RPATH='%s'\n", pnt);
+		if ((tpnt1 = search_for_named_library(libname, secure, pnt, rpnt)) != NULL)
+			return tpnt1;
 	}
+#endif
 
 	/* Check in LD_{ELF_}LIBRARY_PATH, if specified and allowed */
 	if (_dl_library_path) {
-#if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tsearching LD_LIBRARY_PATH='%s'\n", _dl_library_path);
-#endif
+		_dl_if_debug_dprint("\tsearching LD_LIBRARY_PATH='%s'\n", _dl_library_path);
 		if ((tpnt1 = search_for_named_library(libname, secure, _dl_library_path, rpnt)) != NULL)
 		{
 			return tpnt1;
 		}
 	}
+
+	/*
+	 * The ABI specifies that RUNPATH is searched after LD_LIBRARY_PATH.
+	 */
+#ifdef __LDSO_RUNPATH__
+	pnt = (tpnt ? (char *)tpnt->dynamic_info[DT_RUNPATH] : NULL);
+	if (pnt) {
+		pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
+		_dl_if_debug_dprint("\tsearching RUNPATH='%s'\n", pnt);
+		if ((tpnt1 = search_for_named_library(libname, secure, pnt, rpnt)) != NULL)
+			return tpnt1;
+	}
+#endif
 
 	/*
 	 * Where should the cache be searched?  There is no such concept in the
@@ -342,9 +280,7 @@ struct elf_resolve *_dl_load_shared_library(int secure, struct dyn_elf **rpnt,
 		libentry_t *libent = (libentry_t *) & header[1];
 		char *strs = (char *) &libent[header->nlibs];
 
-#if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tsearching cache='%s'\n", LDSO_CACHE);
-#endif
+		_dl_if_debug_dprint("\tsearching cache='%s'\n", LDSO_CACHE);
 		for (i = 0; i < header->nlibs; i++) {
 			if ((libent[i].flags == LIB_ELF ||
 						libent[i].flags == LIB_ELF_LIBC0 ||
@@ -359,9 +295,7 @@ struct elf_resolve *_dl_load_shared_library(int secure, struct dyn_elf **rpnt,
 
 	/* Look for libraries wherever the shared library loader
 	 * was installed */
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tsearching ldso dir='%s'\n", _dl_ldsopath);
-#endif
+	_dl_if_debug_dprint("\tsearching ldso dir='%s'\n", _dl_ldsopath);
 	if ((tpnt1 = search_for_named_library(libname, secure, _dl_ldsopath, rpnt)) != NULL)
 	{
 		return tpnt1;
@@ -370,9 +304,7 @@ struct elf_resolve *_dl_load_shared_library(int secure, struct dyn_elf **rpnt,
 
 	/* Lastly, search the standard list of paths for the library.
 	   This list must exactly match the list in uClibc/ldso/util/ldd.c */
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug) _dl_dprintf(_dl_debug_file, "\tsearching full lib path list\n");
-#endif
+	_dl_if_debug_dprint("\tsearching full lib path list\n");
 	if ((tpnt1 = search_for_named_library(libname, secure,
 					UCLIBC_RUNTIME_PREFIX "lib:"
 					UCLIBC_RUNTIME_PREFIX "usr/lib"
@@ -391,9 +323,7 @@ goof:
 		_dl_error_number = _dl_internal_error_number;
 	else
 		_dl_error_number = LD_ERROR_NOFILE;
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug) _dl_dprintf(2, "Bummer: could not find '%s'!\n", libname);
-#endif
+	_dl_if_debug_dprint("Bummer: could not find '%s'!\n", libname);
 	return NULL;
 }
 
@@ -409,7 +339,7 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 {
 	ElfW(Ehdr) *epnt;
 	unsigned long dynamic_addr = 0;
-	Elf32_Dyn *dpnt;
+	ElfW(Dyn) *dpnt;
 	struct elf_resolve *tpnt;
 	ElfW(Phdr) *ppnt;
 	char *status, *header;
@@ -420,58 +350,46 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 	int i, flags, piclib, infile;
 	ElfW(Addr) relro_addr = 0;
 	size_t relro_size = 0;
+	struct stat st;
+	DL_LOADADDR_TYPE lib_loadaddr;
+	DL_INIT_LOADADDR_EXTRA_DECLS
 
-	/* If this file is already loaded, skip this step */
-	tpnt = _dl_check_hashed_files(libname);
-	if (tpnt) {
-		if (*rpnt) {
-			(*rpnt)->next = (struct dyn_elf *) _dl_malloc(sizeof(struct dyn_elf));
-			_dl_memset((*rpnt)->next, 0, sizeof(struct dyn_elf));
-			(*rpnt)->next->prev = (*rpnt);
-			*rpnt = (*rpnt)->next;
-			(*rpnt)->dyn = tpnt;
-			tpnt->symbol_scope = _dl_symbol_tables;
-		}
-		tpnt->usage_count++;
-		tpnt->libtype = elf_lib;
-#if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug) _dl_dprintf(2, "file='%s';  already loaded\n", libname);
-#endif
-		return tpnt;
-	}
-
-	/* If we are in secure mode (i.e. a setu/gid binary using LD_PRELOAD),
-	   we don't load the library if it isn't setuid. */
-
-	if (secure) {
-		struct stat st;
-
-		if (_dl_stat(libname, &st) || !(st.st_mode & S_ISUID))
-			return NULL;
-	}
-
-	libaddr = 0;
 	infile = _dl_open(libname, O_RDONLY, 0);
 	if (infile < 0) {
-#if 0
-		/*
-		 * NO!  When we open shared libraries we may search several paths.
-		 * it is inappropriate to generate an error here.
-		 */
-		_dl_dprintf(2, "%s: can't open '%s'\n", _dl_progname, libname);
-#endif
 		_dl_internal_error_number = LD_ERROR_NOFILE;
 		return NULL;
 	}
 
+	if (_dl_fstat(infile, &st) < 0) {
+		_dl_internal_error_number = LD_ERROR_NOFILE;
+		_dl_close(infile);
+		return NULL;
+	}
+	/* If we are in secure mode (i.e. a setu/gid binary using LD_PRELOAD),
+	   we don't load the library if it isn't setuid. */
+	if (secure)
+		if (!(st.st_mode & S_ISUID)) {
+			_dl_close(infile);
+			return NULL;
+		}
+
+	/* Check if file is already loaded */
+	for (tpnt = _dl_loaded_modules; tpnt; tpnt = tpnt->next) {
+		if (tpnt->st_dev == st.st_dev && tpnt->st_ino == st.st_ino) {
+			/* Already loaded */
+			tpnt->usage_count++;
+			_dl_close(infile);
+			return tpnt;
+		}
+	}
 	header = _dl_mmap((void *) 0, _dl_pagesize, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (_dl_mmap_check_error(header)) {
-		_dl_dprintf(2, "%s: can't map '%s'\n", _dl_progname, libname);
+		_dl_dprintf(2, "%s:%i: can't map '%s'\n", _dl_progname, __LINE__, libname);
 		_dl_internal_error_number = LD_ERROR_MMAP_FAILED;
 		_dl_close(infile);
 		return NULL;
-	};
+	}
 
 	_dl_read(infile, header, _dl_pagesize);
 	epnt = (ElfW(Ehdr) *) (intptr_t) header;
@@ -486,7 +404,7 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 		_dl_close(infile);
 		_dl_munmap(header, _dl_pagesize);
 		return NULL;
-	};
+	}
 
 	if ((epnt->e_type != ET_DYN) || (epnt->e_machine != MAGIC1
 #ifdef MAGIC2
@@ -501,7 +419,7 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 		_dl_close(infile);
 		_dl_munmap(header, _dl_pagesize);
 		return NULL;
-	};
+	}
 
 	ppnt = (ElfW(Phdr) *)(intptr_t) & header[epnt->e_phoff];
 
@@ -513,7 +431,7 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 				_dl_dprintf(2, "%s: '%s' has more than one dynamic section\n",
 						_dl_progname, libname);
 			dynamic_addr = ppnt->p_vaddr;
-		};
+		}
 
 		if (ppnt->p_type == PT_LOAD) {
 			/* See if this is a PIC library. */
@@ -529,7 +447,7 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 			}
 		}
 		ppnt++;
-	};
+	}
 
 	maxvma = (maxvma + ADDR_ALIGN) & ~ADDR_ALIGN;
 	minvma = minvma & ~0xffffU;
@@ -541,17 +459,19 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 	status = (char *) _dl_mmap((char *) (piclib ? 0 : minvma),
 			maxvma - minvma, PROT_NONE, flags | MAP_ANONYMOUS, -1, 0);
 	if (_dl_mmap_check_error(status)) {
-		_dl_dprintf(2, "%s: can't map %s\n", _dl_progname, libname);
+		_dl_dprintf(2, "%s:%i: can't map '%s'\n", _dl_progname, __LINE__, libname);
 		_dl_internal_error_number = LD_ERROR_MMAP_FAILED;
 		_dl_close(infile);
 		_dl_munmap(header, _dl_pagesize);
 		return NULL;
-	};
+	}
 	libaddr = (unsigned long) status;
 	flags |= MAP_FIXED;
 
 	/* Get the memory to store the library */
 	ppnt = (ElfW(Phdr) *)(intptr_t) & header[epnt->e_phoff];
+
+	DL_INIT_LOADADDR(lib_loadaddr, libaddr, ppnt, epnt->e_phnum);
 
 	for (i = 0; i < epnt->e_phnum; i++) {
 		if (ppnt->p_type == PT_GNU_RELRO) {
@@ -566,8 +486,6 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 				/* flags |= MAP_FIXED; */
 			}
 
-
-
 			if (ppnt->p_flags & PF_W) {
 				unsigned long map_size;
 				char *cpnt;
@@ -578,14 +496,14 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 						ppnt->p_offset & OFFS_ALIGN);
 
 				if (_dl_mmap_check_error(status)) {
-					_dl_dprintf(2, "%s: can't map '%s'\n",
-							_dl_progname, libname);
+					_dl_dprintf(2, "%s:%i: can't map '%s'\n",
+							_dl_progname, __LINE__, libname);
 					_dl_internal_error_number = LD_ERROR_MMAP_FAILED;
 					_dl_munmap((char *) libaddr, maxvma - minvma);
 					_dl_close(infile);
 					_dl_munmap(header, _dl_pagesize);
 					return NULL;
-				};
+				}
 
 				/* Pad the last page with zeroes. */
 				cpnt = (char *) (status + (ppnt->p_vaddr & ADDR_ALIGN) +
@@ -612,26 +530,26 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 						ppnt->p_filesz, LXFLAGS(ppnt->p_flags), flags,
 						infile, ppnt->p_offset & OFFS_ALIGN);
 			if (_dl_mmap_check_error(status)) {
-				_dl_dprintf(2, "%s: can't map '%s'\n", _dl_progname, libname);
+				_dl_dprintf(2, "%s:%i: can't map '%s'\n", _dl_progname, __LINE__, libname);
 				_dl_internal_error_number = LD_ERROR_MMAP_FAILED;
 				_dl_munmap((char *) libaddr, maxvma - minvma);
 				_dl_close(infile);
 				_dl_munmap(header, _dl_pagesize);
 				return NULL;
-			};
+			}
 
-			/* if(libaddr == 0 && piclib) {
+			/* if (libaddr == 0 && piclib) {
 			   libaddr = (unsigned long) status;
 			   flags |= MAP_FIXED;
-			   }; */
-		};
+			   } */
+		}
 		ppnt++;
-	};
+	}
 	_dl_close(infile);
 
 	/* For a non-PIC library, the addresses are all absolute */
 	if (piclib) {
-		dynamic_addr += (unsigned long) libaddr;
+		dynamic_addr = (unsigned long) DL_RELOC_ADDR(lib_loadaddr, dynamic_addr);
 	}
 
 	/*
@@ -649,9 +567,9 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 		return NULL;
 	}
 
-	dpnt = (Elf32_Dyn *) dynamic_addr;
+	dpnt = (ElfW(Dyn) *) dynamic_addr;
 	_dl_memset(dynamic_info, 0, sizeof(dynamic_info));
-	_dl_parse_dynamic_info(dpnt, dynamic_info, NULL);
+	_dl_parse_dynamic_info(dpnt, dynamic_info, NULL, lib_loadaddr);
 	/* If the TEXTREL is set, this means that we need to make the pages
 	   writable before we perform relocations.  Do this now. They get set
 	   back again later. */
@@ -672,11 +590,13 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 #endif
 	}
 
-	tpnt = _dl_add_elf_hash_table(libname, (char *) libaddr, dynamic_info,
+	tpnt = _dl_add_elf_hash_table(libname, lib_loadaddr, dynamic_info,
 			dynamic_addr, 0);
 	tpnt->relro_addr = relro_addr;
 	tpnt->relro_size = relro_size;
-	tpnt->ppnt = (ElfW(Phdr) *)(intptr_t) (tpnt->loadaddr + epnt->e_phoff);
+	tpnt->st_dev = st.st_dev;
+	tpnt->st_ino = st.st_ino;
+	tpnt->ppnt = (ElfW(Phdr) *) DL_RELOC_ADDR(tpnt->loadaddr, epnt->e_phoff);
 	tpnt->n_phent = epnt->e_phnum;
 
 	/*
@@ -687,9 +607,19 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 		_dl_memset((*rpnt)->next, 0, sizeof(struct dyn_elf));
 		(*rpnt)->next->prev = (*rpnt);
 		*rpnt = (*rpnt)->next;
-		(*rpnt)->dyn = tpnt;
-		tpnt->symbol_scope = _dl_symbol_tables;
 	}
+#ifndef SHARED
+	/* When statically linked, the first time we dlopen a DSO
+	 * the *rpnt is NULL, so we need to allocate memory for it,
+	 * and initialize the _dl_symbol_table.
+	 */ 
+	else {
+		*rpnt = _dl_symbol_tables = (struct dyn_elf *) _dl_malloc(sizeof(struct dyn_elf));
+		_dl_memset(*rpnt, 0, sizeof(struct dyn_elf));
+	}
+#endif
+	(*rpnt)->dyn = tpnt;
+	tpnt->symbol_scope = _dl_symbol_tables;
 	tpnt->usage_count++;
 	tpnt->libtype = elf_lib;
 
@@ -702,48 +632,40 @@ struct elf_resolve *_dl_load_elf_shared_library(int secure,
 	lpnt = (unsigned long *) dynamic_info[DT_PLTGOT];
 
 	if (lpnt) {
-		lpnt = (unsigned long *) (dynamic_info[DT_PLTGOT] +
-				((int) libaddr));
+		lpnt = (unsigned long *) (dynamic_info[DT_PLTGOT]);
 		INIT_GOT(lpnt, tpnt);
-	};
-
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug) {
-		_dl_dprintf(2, "\n\tfile='%s';  generating link map\n", libname);
-		_dl_dprintf(2, "\t\tdynamic: %x  base: %x\n",
-				dynamic_addr, libaddr);
-		_dl_dprintf(2, "\t\t  entry: %x  phdr: %x  phnum: %x\n\n",
-				epnt->e_entry + libaddr, tpnt->ppnt, tpnt->n_phent);
-
 	}
-#endif
+
+	_dl_if_debug_dprint("\n\tfile='%s';  generating link map\n", libname);
+	_dl_if_debug_dprint("\t\tdynamic: %x  base: %x\n", dynamic_addr, DL_LOADADDR_BASE(lib_loadaddr));
+	_dl_if_debug_dprint("\t\t  entry: %x  phdr: %x  phnum: %x\n\n",
+			DL_RELOC_ADDR(lib_loadaddr, epnt->e_entry), tpnt->ppnt, tpnt->n_phent);
+
 	_dl_munmap(header, _dl_pagesize);
 
 	return tpnt;
 }
+
 /* now_flag must be RTLD_NOW or zero */
 int _dl_fixup(struct dyn_elf *rpnt, int now_flag)
 {
 	int goof = 0;
 	struct elf_resolve *tpnt;
-	unsigned long reloc_size;
+	ElfW(Word) reloc_size, relative_count;
+	ElfW(Addr) reloc_addr;
 
 	if (rpnt->next)
-		goof += _dl_fixup(rpnt->next, now_flag);
+		goof = _dl_fixup(rpnt->next, now_flag);
+	if (goof)
+		return goof;
 	tpnt = rpnt->dyn;
 
-#if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug && !(tpnt->init_flag & RELOCS_DONE)) 
-		_dl_dprintf(_dl_debug_file,"\nrelocation processing: %s\n", tpnt->libname);
-#endif
+	if (!(tpnt->init_flag & RELOCS_DONE))
+		_dl_if_debug_dprint("relocation processing: %s\n", tpnt->libname);
 
 	if (unlikely(tpnt->dynamic_info[UNSUPPORTED_RELOC_TYPE])) {
-#if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug) {
-			_dl_dprintf(2, "%s: can't handle %s relocation records\n",
-					_dl_progname, UNSUPPORTED_RELOC_STR);
-		}
-#endif
+		_dl_if_debug_dprint("%s: can't handle %s relocation records\n",
+				_dl_progname, UNSUPPORTED_RELOC_STR);
 		goof++;
 		return goof;
 	}
@@ -756,18 +678,24 @@ int _dl_fixup(struct dyn_elf *rpnt, int now_flag)
 #endif
 	if (tpnt->dynamic_info[DT_RELOC_TABLE_ADDR] &&
 	    !(tpnt->init_flag & RELOCS_DONE)) {
-		tpnt->init_flag |= RELOCS_DONE;
+		reloc_addr = tpnt->dynamic_info[DT_RELOC_TABLE_ADDR];
+		relative_count = tpnt->dynamic_info[DT_RELCONT_IDX];
+		if (relative_count) { /* Optimize the XX_RELATIVE relocations if possible */
+			reloc_size -= relative_count * sizeof(ELF_RELOC);
+			elf_machine_relative(tpnt->loadaddr, reloc_addr, relative_count);
+			reloc_addr += relative_count * sizeof(ELF_RELOC);
+		}
 		goof += _dl_parse_relocation_information(rpnt,
-				tpnt->dynamic_info[DT_RELOC_TABLE_ADDR],
+				reloc_addr,
 				reloc_size);
+		tpnt->init_flag |= RELOCS_DONE;
 	}
 	if (tpnt->dynamic_info[DT_BIND_NOW])
 		now_flag = RTLD_NOW;
 	if (tpnt->dynamic_info[DT_JMPREL] &&
 	    (!(tpnt->init_flag & JMP_RELOCS_DONE) ||
 	     (now_flag && !(tpnt->rtld_flags & now_flag)))) {
-		tpnt->rtld_flags |= now_flag; 
-		tpnt->init_flag |= JMP_RELOCS_DONE;
+		tpnt->rtld_flags |= now_flag;
 		if (!(tpnt->rtld_flags & RTLD_NOW)) {
 			_dl_parse_lazy_relocation_information(rpnt,
 					tpnt->dynamic_info[DT_JMPREL],
@@ -777,6 +705,7 @@ int _dl_fixup(struct dyn_elf *rpnt, int now_flag)
 					tpnt->dynamic_info[DT_JMPREL],
 					tpnt->dynamic_info[DT_PLTRELSZ]);
 		}
+		tpnt->init_flag |= JMP_RELOCS_DONE;
 	}
 	return goof;
 }
@@ -784,10 +713,17 @@ int _dl_fixup(struct dyn_elf *rpnt, int now_flag)
 /* Minimal printf which handles only %s, %d, and %x */
 void _dl_dprintf(int fd, const char *fmt, ...)
 {
+#if __WORDSIZE > 32
+	long int num;
+#else
 	int num;
+#endif
 	va_list args;
 	char *start, *ptr, *string;
 	static char *buf;
+
+	if (!fmt)
+		return;
 
 	buf = _dl_mmap((void *) 0, _dl_pagesize, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -797,9 +733,6 @@ void _dl_dprintf(int fd, const char *fmt, ...)
 	}
 
 	start = ptr = buf;
-
-	if (!fmt)
-		return;
 
 	if (_dl_strlen(fmt) >= (_dl_pagesize - 1)) {
 		_dl_write(fd, "overflow\n", 11);
@@ -832,8 +765,11 @@ void _dl_dprintf(int fd, const char *fmt, ...)
 				case 'd':
 					{
 						char tmp[22];
+#if __WORDSIZE > 32
+						num = va_arg(args, long int);
+#else
 						num = va_arg(args, int);
-
+#endif
 						string = _dl_simple_ltoa(tmp, num);
 						_dl_write(fd, string, _dl_strlen(string));
 						break;
@@ -842,8 +778,11 @@ void _dl_dprintf(int fd, const char *fmt, ...)
 				case 'X':
 					{
 						char tmp[22];
+#if __WORDSIZE > 32
+						num = va_arg(args, long int);
+#else
 						num = va_arg(args, int);
-
+#endif
 						string = _dl_simple_ltoahex(tmp, num);
 						_dl_write(fd, string, _dl_strlen(string));
 						break;
@@ -874,12 +813,16 @@ char *_dl_strdup(const char *string)
 	return retval;
 }
 
-void _dl_parse_dynamic_info(Elf32_Dyn *dpnt, unsigned long dynamic_info[], void *debug_addr)
+void _dl_parse_dynamic_info(ElfW(Dyn) *dpnt, unsigned long dynamic_info[],
+                            void *debug_addr, DL_LOADADDR_TYPE load_off)
 {
-	__dl_parse_dynamic_info(dpnt, dynamic_info, debug_addr);
+	__dl_parse_dynamic_info(dpnt, dynamic_info, debug_addr, load_off);
 }
+
+/* we want this in ldso.so and libdl.a but nowhere else */
 #ifdef __USE_GNU
-#if ! defined LIBDL || (! defined PIC && ! defined __PIC__)
+#if defined IS_IN_rtld || (defined IS_IN_libdl && ! defined SHARED)
+extern __typeof(dl_iterate_phdr) __dl_iterate_phdr;
 int
 __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void *data), void *data)
 {
@@ -898,6 +841,6 @@ __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void
 	}
 	return ret;
 }
-strong_alias(__dl_iterate_phdr, dl_iterate_phdr);
+strong_alias(__dl_iterate_phdr, dl_iterate_phdr)
 #endif
 #endif

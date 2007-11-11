@@ -34,6 +34,7 @@
 
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/sched.h>
 
 #include <asm/io.h>
 
@@ -116,11 +117,16 @@ static void mthca_arbel_init_srq_context(struct mthca_dev *dev,
 					 struct mthca_srq *srq,
 					 struct mthca_arbel_srq_context *context)
 {
-	int logsize;
+	int logsize, max;
 
 	memset(context, 0, sizeof *context);
 
-	logsize = long_log2(srq->max) + srq->wqe_shift;
+	/*
+	 * Put max in a temporary variable to work around gcc bug
+	 * triggered by ilog2() on sparc64.
+	 */
+	max = srq->max;
+	logsize = ilog2(max);
 	context->state_logsize_srqn = cpu_to_be32(logsize << 24 | srq->srqn);
 	context->lkey = cpu_to_be32(srq->mr.ibmr.lkey);
 	context->db_index = cpu_to_be32(srq->db_index);
@@ -213,7 +219,7 @@ int mthca_alloc_srq(struct mthca_dev *dev, struct mthca_pd *pd,
 	if (!mthca_is_memfree(dev) && (ds > dev->limits.max_desc_sz))
 		return -EINVAL;
 
-	srq->wqe_shift = long_log2(ds);
+	srq->wqe_shift = ilog2(ds);
 
 	srq->srqn = mthca_alloc(&dev->srq_table.alloc);
 	if (srq->srqn == -1)
@@ -537,20 +543,12 @@ int mthca_tavor_post_srq_recv(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 		}
 
 		for (i = 0; i < wr->num_sge; ++i) {
-			((struct mthca_data_seg *) wqe)->byte_count =
-				cpu_to_be32(wr->sg_list[i].length);
-			((struct mthca_data_seg *) wqe)->lkey =
-				cpu_to_be32(wr->sg_list[i].lkey);
-			((struct mthca_data_seg *) wqe)->addr =
-				cpu_to_be64(wr->sg_list[i].addr);
+			mthca_set_data_seg(wqe, wr->sg_list + i);
 			wqe += sizeof (struct mthca_data_seg);
 		}
 
-		if (i < srq->max_gs) {
-			((struct mthca_data_seg *) wqe)->byte_count = 0;
-			((struct mthca_data_seg *) wqe)->lkey = cpu_to_be32(MTHCA_INVAL_LKEY);
-			((struct mthca_data_seg *) wqe)->addr = 0;
-		}
+		if (i < srq->max_gs)
+			mthca_set_data_seg_inval(wqe);
 
 		((struct mthca_next_seg *) prev_wqe)->nda_op =
 			cpu_to_be32((ind << srq->wqe_shift) | 1);
@@ -656,20 +654,12 @@ int mthca_arbel_post_srq_recv(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 		}
 
 		for (i = 0; i < wr->num_sge; ++i) {
-			((struct mthca_data_seg *) wqe)->byte_count =
-				cpu_to_be32(wr->sg_list[i].length);
-			((struct mthca_data_seg *) wqe)->lkey =
-				cpu_to_be32(wr->sg_list[i].lkey);
-			((struct mthca_data_seg *) wqe)->addr =
-				cpu_to_be64(wr->sg_list[i].addr);
+			mthca_set_data_seg(wqe, wr->sg_list + i);
 			wqe += sizeof (struct mthca_data_seg);
 		}
 
-		if (i < srq->max_gs) {
-			((struct mthca_data_seg *) wqe)->byte_count = 0;
-			((struct mthca_data_seg *) wqe)->lkey = cpu_to_be32(MTHCA_INVAL_LKEY);
-			((struct mthca_data_seg *) wqe)->addr = 0;
-		}
+		if (i < srq->max_gs)
+			mthca_set_data_seg_inval(wqe);
 
 		srq->wrid[ind]  = wr->wr_id;
 		srq->first_free = next_ind;
@@ -715,7 +705,7 @@ int mthca_max_srq_sge(struct mthca_dev *dev)
 		     sizeof (struct mthca_data_seg));
 }
 
-int __devinit mthca_init_srq_table(struct mthca_dev *dev)
+int mthca_init_srq_table(struct mthca_dev *dev)
 {
 	int err;
 

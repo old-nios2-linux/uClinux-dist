@@ -4,7 +4,7 @@
  * details.  THERE IS ABSOLUTELY NO WARRANTY FOR THIS SOFTWARE.
  */
 
-/* $Header: /usr/cvsroot/asterisk/codecs/gsm/src/code.c,v 1.18 2003/10/27 20:00:41 markster Exp $ */
+/* $Header$ */
 
 #include	"config.h"
 
@@ -61,10 +61,6 @@ void Gsm_Coder P8((S,s,LARc,Nc,bc,Mc,xmaxc,xMc),
 	static word e[50];
 
 	word	so[160];
-
-#if !(defined(__GNUC__) && defined(__i386__))
-	longword ltmp;
-#endif
 
 	Gsm_Preprocess			(S, s, so);
 	Gsm_LPC_Analysis		(S, so, LARc);

@@ -62,6 +62,7 @@ CONFIG_COLDFIRE=y
 # CONFIG_CLOCK_64MHz is not set
 CONFIG_CLOCK_66MHz=y
 # CONFIG_CLOCK_70MHz is not set
+# CONFIG_CLOCK_80MHz is not set
 # CONFIG_CLOCK_100MHz is not set
 # CONFIG_CLOCK_140MHz is not set
 # CONFIG_CLOCK_150MHz is not set
@@ -76,6 +77,8 @@ CONFIG_M5272C3=y
 # CONFIG_GILBARCONAP is not set
 # CONFIG_BOARD_MOD5272 is not set
 # CONFIG_BOARD_UC5272 is not set
+# CONFIG_UCBOOTSTRAP is not set
+# CONFIG_ROMFS_IMAGE is not set
 # CONFIG_COBRA5272 is not set
 # CONFIG_PPCBOOT is not set
 # CONFIG_CANCam is not set

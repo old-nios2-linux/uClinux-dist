@@ -1,9 +1,9 @@
 /* 
- * $Id: case_user.h,v 1.1 2003/08/05 11:13:01 bogdan Exp $ 
+ * $Id: case_user.h,v 1.2 2004/08/24 09:01:25 janakj Exp $ 
  *
  * User-Agent Header Field Name Parsing Macros
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

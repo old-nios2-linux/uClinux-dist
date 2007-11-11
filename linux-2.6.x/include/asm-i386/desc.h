@@ -4,8 +4,6 @@
 #include <asm/ldt.h>
 #include <asm/segment.h>
 
-#define CPU_16BIT_STACK_SIZE 1024
-
 #ifndef __ASSEMBLY__
 
 #include <linux/preempt.h>
@@ -14,30 +12,24 @@
 
 #include <asm/mmu.h>
 
-extern struct desc_struct cpu_gdt_table[GDT_ENTRIES];
-
-DECLARE_PER_CPU(unsigned char, cpu_16bit_stack[CPU_16BIT_STACK_SIZE]);
-
 struct Xgt_desc_struct {
 	unsigned short size;
 	unsigned long address __attribute__((packed));
 	unsigned short pad;
 } __attribute__ ((packed));
 
-extern struct Xgt_desc_struct idt_descr;
-DECLARE_PER_CPU(struct Xgt_desc_struct, cpu_gdt_descr);
-
+struct gdt_page
+{
+	struct desc_struct gdt[GDT_ENTRIES];
+} __attribute__((aligned(PAGE_SIZE)));
+DECLARE_PER_CPU(struct gdt_page, gdt_page);
 
 static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)
 {
-	return (struct desc_struct *)per_cpu(cpu_gdt_descr, cpu).address;
+	return per_cpu(gdt_page, cpu).gdt;
 }
 
-/*
- * This is the ldt that every process will get unless we need
- * something other than this.
- */
-extern struct desc_struct default_ldt[];
+extern struct Xgt_desc_struct idt_descr;
 extern struct desc_struct idt_table[];
 extern void set_intr_gate(unsigned int irq, void * addr);
 
@@ -64,40 +56,92 @@ static inline void pack_gate(__u32 *a, __u32 *b,
 #define DESCTYPE_DPL3	0x60	/* DPL-3 */
 #define DESCTYPE_S	0x10	/* !system */
 
-#define load_TR_desc() __asm__ __volatile__("ltr %w0"::"q" (GDT_ENTRY_TSS*8))
-#define load_LDT_desc() __asm__ __volatile__("lldt %w0"::"q" (GDT_ENTRY_LDT*8))
-
-#define load_gdt(dtr) __asm__ __volatile("lgdt %0"::"m" (*dtr))
-#define load_idt(dtr) __asm__ __volatile("lidt %0"::"m" (*dtr))
+#ifdef CONFIG_PARAVIRT
+#include <asm/paravirt.h>
+#else
+#define load_TR_desc() native_load_tr_desc()
+#define load_gdt(dtr) native_load_gdt(dtr)
+#define load_idt(dtr) native_load_idt(dtr)
 #define load_tr(tr) __asm__ __volatile("ltr %0"::"m" (tr))
 #define load_ldt(ldt) __asm__ __volatile("lldt %0"::"m" (ldt))
 
-#define store_gdt(dtr) __asm__ ("sgdt %0":"=m" (*dtr))
-#define store_idt(dtr) __asm__ ("sidt %0":"=m" (*dtr))
-#define store_tr(tr) __asm__ ("str %0":"=m" (tr))
+#define store_gdt(dtr) native_store_gdt(dtr)
+#define store_idt(dtr) native_store_idt(dtr)
+#define store_tr(tr) (tr = native_store_tr())
 #define store_ldt(ldt) __asm__ ("sldt %0":"=m" (ldt))
 
-#if TLS_SIZE != 24
-# error update this code.
-#endif
-
-static inline void load_TLS(struct thread_struct *t, unsigned int cpu)
-{
-#define C(i) get_cpu_gdt_table(cpu)[GDT_ENTRY_TLS_MIN + i] = t->tls_array[i]
-	C(0); C(1); C(2);
-#undef C
-}
-
-static inline void write_dt_entry(void *dt, int entry, __u32 entry_a, __u32 entry_b)
-{
-	__u32 *lp = (__u32 *)((char *)dt + entry*8);
-	*lp = entry_a;
-	*(lp+1) = entry_b;
-}
+#define load_TLS(t, cpu) native_load_tls(t, cpu)
+#define set_ldt native_set_ldt
 
 #define write_ldt_entry(dt, entry, a, b) write_dt_entry(dt, entry, a, b)
 #define write_gdt_entry(dt, entry, a, b) write_dt_entry(dt, entry, a, b)
 #define write_idt_entry(dt, entry, a, b) write_dt_entry(dt, entry, a, b)
+#endif
+
+static inline void write_dt_entry(struct desc_struct *dt,
+				  int entry, u32 entry_low, u32 entry_high)
+{
+	dt[entry].a = entry_low;
+	dt[entry].b = entry_high;
+}
+
+static inline void native_set_ldt(const void *addr, unsigned int entries)
+{
+	if (likely(entries == 0))
+		__asm__ __volatile__("lldt %w0"::"q" (0));
+	else {
+		unsigned cpu = smp_processor_id();
+		__u32 a, b;
+
+		pack_descriptor(&a, &b, (unsigned long)addr,
+				entries * sizeof(struct desc_struct) - 1,
+				DESCTYPE_LDT, 0);
+		write_gdt_entry(get_cpu_gdt_table(cpu), GDT_ENTRY_LDT, a, b);
+		__asm__ __volatile__("lldt %w0"::"q" (GDT_ENTRY_LDT*8));
+	}
+}
+
+
+static inline void native_load_tr_desc(void)
+{
+	asm volatile("ltr %w0"::"q" (GDT_ENTRY_TSS*8));
+}
+
+static inline void native_load_gdt(const struct Xgt_desc_struct *dtr)
+{
+	asm volatile("lgdt %0"::"m" (*dtr));
+}
+
+static inline void native_load_idt(const struct Xgt_desc_struct *dtr)
+{
+	asm volatile("lidt %0"::"m" (*dtr));
+}
+
+static inline void native_store_gdt(struct Xgt_desc_struct *dtr)
+{
+	asm ("sgdt %0":"=m" (*dtr));
+}
+
+static inline void native_store_idt(struct Xgt_desc_struct *dtr)
+{
+	asm ("sidt %0":"=m" (*dtr));
+}
+
+static inline unsigned long native_store_tr(void)
+{
+	unsigned long tr;
+	asm ("str %0":"=r" (tr));
+	return tr;
+}
+
+static inline void native_load_tls(struct thread_struct *t, unsigned int cpu)
+{
+	unsigned int i;
+	struct desc_struct *gdt = get_cpu_gdt_table(cpu);
+
+	for (i = 0; i < GDT_ENTRY_TLS_ENTRIES; i++)
+		gdt[GDT_ENTRY_TLS_MIN + i] = t->tls_array[i];
+}
 
 static inline void _set_gate(int gate, unsigned int type, void *addr, unsigned short seg)
 {
@@ -115,14 +159,6 @@ static inline void __set_tss_desc(unsigned int cpu, unsigned int entry, const vo
 	write_gdt_entry(get_cpu_gdt_table(cpu), entry, a, b);
 }
 
-static inline void set_ldt_desc(unsigned int cpu, void *addr, unsigned int entries)
-{
-	__u32 a, b;
-	pack_descriptor(&a, &b, (unsigned long)addr,
-			entries * sizeof(struct desc_struct) - 1,
-			DESCTYPE_LDT, 0);
-	write_gdt_entry(get_cpu_gdt_table(cpu), GDT_ENTRY_LDT, a, b);
-}
 
 #define set_tss_desc(cpu,addr) __set_tss_desc(cpu, GDT_ENTRY_TSS, addr)
 
@@ -153,35 +189,22 @@ static inline void set_ldt_desc(unsigned int cpu, void *addr, unsigned int entri
 
 static inline void clear_LDT(void)
 {
-	int cpu = get_cpu();
-
-	set_ldt_desc(cpu, &default_ldt[0], 5);
-	load_LDT_desc();
-	put_cpu();
+	set_ldt(NULL, 0);
 }
 
 /*
  * load one particular LDT into the current CPU
  */
-static inline void load_LDT_nolock(mm_context_t *pc, int cpu)
+static inline void load_LDT_nolock(mm_context_t *pc)
 {
-	void *segments = pc->ldt;
-	int count = pc->size;
-
-	if (likely(!count)) {
-		segments = &default_ldt[0];
-		count = 5;
-	}
-		
-	set_ldt_desc(cpu, segments, count);
-	load_LDT_desc();
+	set_ldt(pc->ldt, pc->size);
 }
 
 static inline void load_LDT(mm_context_t *pc)
 {
-	int cpu = get_cpu();
-	load_LDT_nolock(pc, cpu);
-	put_cpu();
+	preempt_disable();
+	load_LDT_nolock(pc);
+	preempt_enable();
 }
 
 static inline unsigned long get_desc_base(unsigned long *desc)
@@ -192,6 +215,29 @@ static inline unsigned long get_desc_base(unsigned long *desc)
 		(desc[1] & 0xff000000);
 	return base;
 }
+
+#else /* __ASSEMBLY__ */
+
+/*
+ * GET_DESC_BASE reads the descriptor base of the specified segment.
+ *
+ * Args:
+ *    idx - descriptor index
+ *    gdt - GDT pointer
+ *    base - 32bit register to which the base will be written
+ *    lo_w - lo word of the "base" register
+ *    lo_b - lo byte of the "base" register
+ *    hi_b - hi byte of the low word of the "base" register
+ *
+ * Example:
+ *    GET_DESC_BASE(GDT_ENTRY_ESPFIX_SS, %ebx, %eax, %ax, %al, %ah)
+ *    Will read the base address of GDT_ENTRY_ESPFIX_SS and put it into %eax.
+ */
+#define GET_DESC_BASE(idx, gdt, base, lo_w, lo_b, hi_b) \
+	movb idx*8+4(gdt), lo_b; \
+	movb idx*8+7(gdt), hi_b; \
+	shll $16, base; \
+	movw idx*8+2(gdt), lo_w;
 
 #endif /* !__ASSEMBLY__ */
 

@@ -785,8 +785,14 @@ void SegmentCleanTraverse(Stream *s)
             /* Break out if we hit the packet where we stopped because
              * of a gap.  The rest will be cleaned when we reassemble
              * after the gap. */
-            if (s4data.seq_gap && (savspd->seq_num > s4data.stop_seq))
-                break;
+            if (s4data.seq_gap)
+            {
+                /* SEQ_GT to handle wrapped seq */
+                if  (SEQ_GT(savspd->seq_num, s4data.stop_seq))
+                {
+                    break;
+                }
+            }
 
             foo = RemoveSpd(s, savspd);
             StreamSegmentSub(s, foo->payload_size);
@@ -913,8 +919,8 @@ void Stream4Init(u_char *args)
    
     /* parse the argument list from the rules file */
     ParseStream4Args(args);
-    
-    snprintf(logfile, STD_BUF, "%s/%s", pv.log_dir, "session.log");
+
+    SnortSnprintf(logfile, STD_BUF, "%s/%s", pv.log_dir, "session.log");
     
     if(s4data.track_stats_flag)
     {
@@ -1126,8 +1132,7 @@ void ParseStream4Args(char *args)
                 else if(!strcasecmp(stoks[1], "binary"))
                 {
                     s4data.track_stats_flag = STATS_BINARY;
-                    stats_log = (StatsLog *) calloc(sizeof(StatsLog), 
-                                                    sizeof(char));
+                    stats_log = (StatsLog *)SnortAlloc(sizeof(StatsLog));
                     stats_log->filename = strdup("snort-unified.stats");
                     OpenStatsFile();
                 } 
@@ -1491,7 +1496,7 @@ void Stream4InitExternalOptions(u_char *args)
         }
         else if(!strcasecmp(stoks[0], "overlap_limit"))
         {
-            if ((s_toks == 2) && isdigit((int)stoks[1][0]))
+            if ((s_toks == 2) && stoks[1] && isdigit((int)stoks[1][0]))
             {
                 s4data.overlap_limit = atoi(stoks[1]);
             }
@@ -1505,7 +1510,7 @@ void Stream4InitExternalOptions(u_char *args)
         }
         else if(!strcasecmp(stoks[0], "server_inspect_limit"))
         {
-            if ((s_toks == 2) && isdigit((int)stoks[1][0]))
+            if ((s_toks == 2) && stoks[1] && isdigit((int)stoks[1][0]))
             {
                 s4data.server_inspect_limit = atoi(stoks[1]);
             }
@@ -1518,7 +1523,7 @@ void Stream4InitExternalOptions(u_char *args)
         }
         else if(!strcasecmp(stoks[0], "max_sessions"))
         {
-            if(isdigit((int)stoks[1][0]))
+            if((s_toks == 2) && stoks[1] && isdigit((int)stoks[1][0]))
             {
                 s4data.max_sessions = atoi(stoks[1]);
 
@@ -1556,7 +1561,7 @@ void Stream4InitExternalOptions(u_char *args)
         }
         else if(!strcasecmp(stoks[0], "max_udp_sessions"))
         {
-            if(isdigit((int)stoks[1][0]))
+            if((s_toks == 2) && stoks[1] && isdigit((int)stoks[1][0]))
             {
                 s4data.max_udp_sessions = atoi(stoks[1]);
 
@@ -1646,8 +1651,8 @@ void Stream4InitExternalOptions(u_char *args)
 void Stream4InitReassembler(u_char *args)
 {
     char buf[STD_BUF+1];
-    char **toks;
-    char **stoks;
+    char **toks = NULL;
+    char **stoks = NULL;
     int num_toks = 0;
     int num_args;
     int i;
@@ -2812,7 +2817,7 @@ void ReassembleStream4(Packet *p, void *context)
             struct in_addr tmpAddr;
             char srcAddr[17];
             tmpAddr.s_addr = p->iph->ip_src.s_addr;
-            strcpy(srcAddr, inet_ntoa(tmpAddr));
+            SnortStrncpy(srcAddr, inet_ntoa(tmpAddr), sizeof(srcAddr));
             tmpAddr.s_addr = p->iph->ip_dst.s_addr;
 
             DEBUG_WRAP(DebugMessage(DEBUG_STREAM,
@@ -4420,9 +4425,11 @@ void FlushDeletedStream(Session *ssn, Stream *s)
         PurgeFlushStream(ssn, s);
     }
 }
+
 void DropSession(Session *ssn)
 {
     Stream *s;
+    StreamApplicationData *application_data;
     DEBUG_WRAP(DebugMessage(DEBUG_STREAM,  "Dropping session %p\n", ssn););
 
     if(ssn == NULL)
@@ -4450,11 +4457,18 @@ void DropSession(Session *ssn)
         ssn->client.pkt_count = 0;
     }
 
-    if (ssn->preproc_free)
+    application_data = ssn->application_data;
+    while (application_data)
     {
-        ssn->preproc_free(ssn->preproc_data);
-        ssn->preproc_data = NULL;
-        ssn->preproc_free = NULL;
+        StreamApplicationData *tmp = application_data;
+        application_data = application_data->next;
+        if (tmp->preproc_free)
+        {
+            tmp->preproc_free(tmp->preproc_data);
+            tmp->preproc_data = NULL;
+            tmp->preproc_free = NULL;
+        }
+        free(tmp);
     }
 
     DEBUG_WRAP(DebugMessage(DEBUG_STREAM, "[F] Freeing %d byte session\n", 
@@ -4909,7 +4923,7 @@ void StoreStreamPkt2(Session *ssn, Packet *p, u_int32_t pkt_seq)
     }
 
     /* check for retransmissions of data that's already been ack'd */
-    if((pkt_seq < s->last_ack) && (s->last_ack > 0) && 
+    if(SEQ_LT(pkt_seq, s->last_ack) && (s->last_ack > 0) && 
        (direction == FROM_CLIENT))
     {
         DEBUG_WRAP(DebugMessage(DEBUG_STREAM,"EVASIVE RETRANS: pkt seq: 0x%X "
@@ -5475,7 +5489,7 @@ void FlushStream(Stream *s, Packet *p, int direction)
                     {
                         s->base_seq = s->last_ack;
                     }
-                    if (s->seglist->chuck == SEG_PARTIAL)
+                    if (s->seglist && (s->seglist->chuck == SEG_PARTIAL))
                     {
                         /* only part of the 1st packet was used because it
                          * extended beyond the current ack.  Stop here. */
@@ -5518,7 +5532,7 @@ void FlushStream(Stream *s, Packet *p, int direction)
                     {
                         /* zero sized packet because of gap. */
 
-                        if (s->seglist->chuck == SEG_PARTIAL)
+                        if (s->seglist && (s->seglist->chuck == SEG_PARTIAL))
                         {
                             /* only part of the 1st packet was used because it
                              * extended beyond the current ack.  Stop here. */
@@ -5803,6 +5817,10 @@ void InitStream4Pkt()
                               ETHERNET_HEADER_LEN +
                               SPARC_TWIDDLE + IP_MAXPACKET,
                               sizeof(char));
+    if (stream_pkt->pkth == NULL)
+    {
+        FatalError("InitStream4Pkt() => Failed to allocate memory\n");
+    }
 
     stream_pkt->pkt = ((u_int8_t *)stream_pkt->pkth) + sizeof(SnortPktHeader);
     stream_pkt->eh = (EtherHdr *)((u_int8_t *)stream_pkt->pkt + SPARC_TWIDDLE);
@@ -5830,7 +5848,7 @@ void InitStream4Pkt()
     SET_TCP_OFFSET(stream_pkt->tcph,0x5);
     stream_pkt->tcph->th_flags = TH_PUSH|TH_ACK;
 
-    stream_pkt->preprocessor_bits = calloc(sizeof(BITOP), 1);
+    stream_pkt->preprocessor_bits = (BITOP *)SnortAlloc(sizeof(BITOP));
     boInitBITOP(stream_pkt->preprocessor_bits, num_preprocs + 1);
 }
 
@@ -5894,37 +5912,33 @@ int BuildPacket(Stream *s, u_int32_t stream_size, Packet *p, int direction)
             {
                 if (spd->next)
                 {
+                    /* PERFORMANCE */
+                    /* If the next packet isn't the one immediately
+                     * following, we have a missing packet.  Stop the
+                     * reassembly here and process what we've got. */
                     if ((spd->seq_num + spd->payload_size)
-                            != spd->next->seq_num)
+                                != spd->next->seq_num)
                     {
-                        /* PERFORMANCE */
-                        /* If the next packet isn't the one immediately
-                         * following, we have a missing packet.  Stop the
-                         * reassembly here and process what we've got. */
-                        if ((spd->seq_num + spd->payload_size)
-                                    != spd->next->seq_num)
-                        {
-                            s4data.seq_gap = 1;
-                            /* Set these to recalculate the size of the
-                             * Rebuilt packet */
-                            s4data.stop_traverse = 1;
-                            s4data.stop_seq = spd->seq_num + spd->payload_size;
-                            stream_pkt->dsize = 0;
+                        s4data.seq_gap = 1;
+                        /* Set these to recalculate the size of the
+                         * Rebuilt packet */
+                        s4data.stop_traverse = 1;
+                        s4data.stop_seq = spd->seq_num + spd->payload_size;
+                        stream_pkt->dsize = 0;
 
-                            /* If this packet ends before the ACK we're
-                             * using, mark it as used.
-                             */
-                            if (s4data.stop_seq <= s->last_ack)
-                            {
-                                spd->chuck = SEG_FULL;
-                            }
-                            else if (spd->seq_num < s->last_ack)
-                            {
-                                spd->chuck = SEG_PARTIAL;
-                            }
-                            PREPROC_PROFILE_END(stream4BuildPerfStats);
-                            return 0;
+                        /* If this packet ends before the ACK we're
+                         * using, mark it as used.
+                         */
+                        if (s4data.stop_seq <= s->last_ack)
+                        {
+                            spd->chuck = SEG_FULL;
                         }
+                        else if (spd->seq_num < s->last_ack)
+                        {
+                            spd->chuck = SEG_PARTIAL;
+                        }
+                        PREPROC_PROFILE_END(stream4BuildPerfStats);
+                        return 0;
                     }
                 }
                 else
@@ -5944,15 +5958,12 @@ int BuildPacket(Stream *s, u_int32_t stream_size, Packet *p, int direction)
                         PREPROC_PROFILE_END(stream4BuildPerfStats);
                         return 0;
                     }
-                    else
-                    {
-                        s->flags |= FIRST_FLUSH_DONE;
-                    }
                 }
             }
 
             TraverseFunc(spd, &bd);
             last_seq = spd->seq_num + spd->payload_size;
+            s->flags |= FIRST_FLUSH_DONE;
             if (spd->next)
             {
                 /* PERFORMANCE */
@@ -6068,8 +6079,19 @@ int BuildPacket(Stream *s, u_int32_t stream_size, Packet *p, int direction)
     {
         if(p->eh != NULL)
         {
+            /* Set reassembled ethernet header since it may have been
+             * removed earlier for different stream. */
+            stream_pkt->eh = (EtherHdr *)((u_int8_t *)stream_pkt->pkt + SPARC_TWIDDLE);
             memcpy(stream_pkt->eh->ether_dst, p->eh->ether_src, 6);
             memcpy(stream_pkt->eh->ether_src, p->eh->ether_dst, 6);
+        }
+        else
+        {
+            /* No ether header in original packets, remove it from the
+             * reassembled one. */
+            stream_pkt->eh = NULL;
+            stream_pkt->pkth->caplen -= ETHERNET_HEADER_LEN;
+            stream_pkt->pkth->len -= ETHERNET_HEADER_LEN;
         }
 
         stream_pkt->tcph->th_sport = p->tcph->th_dport;
@@ -6084,8 +6106,19 @@ int BuildPacket(Stream *s, u_int32_t stream_size, Packet *p, int direction)
     {
         if(p->eh != NULL)
         {
+            /* Set reassembled ethernet header since it may have been
+             * removed earlier for different stream. */
+            stream_pkt->eh = (EtherHdr *)((u_int8_t *)stream_pkt->pkt + SPARC_TWIDDLE);
             memcpy(stream_pkt->eh->ether_dst, p->eh->ether_dst, 6);
             memcpy(stream_pkt->eh->ether_src, p->eh->ether_src, 6);
+        }
+        else
+        {
+            /* No ether header in original packets, remove it from the
+             * reassembled one. */
+            stream_pkt->eh = NULL;
+            stream_pkt->pkth->caplen -= ETHERNET_HEADER_LEN;
+            stream_pkt->pkth->len -= ETHERNET_HEADER_LEN;
         }
 
         stream_pkt->tcph->th_sport = p->tcph->th_sport;
@@ -6211,13 +6244,13 @@ void OpenStatsFile()
     curr_time = time(NULL);
 
     if(stats_log->filename[0] == '/')
-        value = snprintf(logdir, STD_BUF, "%s.%lu", stats_log->filename, 
+        value = SnortSnprintf(logdir, STD_BUF, "%s.%lu", stats_log->filename, 
                          (unsigned long)curr_time);
     else
-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
+        value = SnortSnprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
                          stats_log->filename, (unsigned long)curr_time);
 
-    if(value == -1)
+    if(value != SNORT_SNPRINTF_SUCCESS)
     {
         FatalError("ERROR: log file logging path and file name are "
                    "too long, aborting!\n");
@@ -6983,12 +7016,18 @@ static u_int32_t Stream4SetSessionFlags(void *ssnptr, u_int32_t flags)
 static void * Stream4GetApplicationData(void *ssnptr, u_int32_t protocol)
 {
     Session *ssn;
+    StreamApplicationData *application_data;
 
     if(ssnptr)
     {
         ssn = (Session*)ssnptr;
-        if (ssn->preproc_proto == protocol)
-            return ssn->preproc_data;
+        application_data = ssn->application_data;
+        while (application_data)
+        {
+            if (application_data->preproc_proto == protocol)
+                return application_data->preproc_data;
+            application_data = application_data->next;
+        }
     }
     return NULL;
 }
@@ -6999,23 +7038,44 @@ static void Stream4SetApplicationData(void *ssnptr,
                                       StreamAppDataFree free_func)
 {
     Session *ssn;
+    StreamApplicationData *application_data;
     if(ssnptr)
     {
         ssn = (Session*) ssnptr;
+        application_data = ssn->application_data;
 
-        /* Different protocol or different data pointer */
-        if ((ssn->preproc_proto != protocol) ||
-            (ssn->preproc_data != data))
+        while (application_data)
         {
-            if (ssn->preproc_free)
+            /* If same protocol */
+            if (application_data->preproc_proto == protocol)
             {
-                ssn->preproc_free(ssn->preproc_data);
+                if ((application_data->preproc_free) &&
+                    (application_data->preproc_data != data))
+                {
+                    /* Free the old data pointer if different */
+                    application_data->preproc_free(application_data->preproc_data);
+                }
+                else
+                {
+                    break;
+                }
+                application_data->preproc_data = NULL;
+                break;
             }
+            application_data = application_data->next;
         }
 
-        ssn->preproc_proto = (char)protocol;
-        ssn->preproc_data = data;
-        ssn->preproc_free = free_func;
+        if (!application_data)
+        {
+            /* There isn't one for this protocol */
+            application_data = SnortAlloc(sizeof(StreamApplicationData));
+            application_data->next = ssn->application_data;
+            ssn->application_data = application_data;
+        }
+
+        application_data->preproc_proto = (char)protocol;
+        application_data->preproc_data = data;
+        application_data->preproc_free = free_func;
     }
 }
 

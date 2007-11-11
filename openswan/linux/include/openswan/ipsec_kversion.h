@@ -14,7 +14,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
  * License for more details.
  *
- * RCSID $Id: ipsec_kversion.h,v 1.15.2.9 2006/07/29 05:00:40 paul Exp $
+ * RCSID $Id: ipsec_kversion.h,v 1.15.2.11 2007/02/20 03:53:16 paul Exp $
  */
 #define	_OPENSWAN_KVERSIONS_H	/* seen it, no need to see it again */
 
@@ -142,6 +142,32 @@
 #define HAVE_NEW_SKB_LINEARIZE
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
+/* skb->nfmark changed to skb->mark in 2.6.20 */
+#define nfmark mark
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22)
+/* need to include ip.h early, no longer pick it up in skbuff.h */
+#include <linux/ip.h>
+#define HAVE_KERNEL_TSTAMP
+#else
+/* internals of struct skbuff changed */
+#define	HAVE_DEV_NEXT
+#define ip_hdr(skb) (skb)->nh.iph
+#define skb_network_header(skb) (skb)->nh.raw
+#define skb_set_network_header(skb,off) ((skb)->nh.raw = (skb)->data + (off))
+#define tcp_hdr(skb) (skb)->h.th
+#define udp_hdr(skb) (skb)->h.uh
+#define skb_transport_header(skb) (skb)->h.raw
+#define skb_set_transport_header(skb,off) ((skb)->h.raw = (skb)->data + (off))
+#define skb_mac_header(skb) (skb)->mac.raw
+#define skb_set_mac_header(skb,off) ((skb)->mac.raw = (skb)->data + (off))
+#define ktime_to_timeval(ts) (ts)
+#endif
+/* turn a pointer into an offset for above macros */
+#define ipsec_skb_offset(skb, ptr) (((unsigned char *)(ptr)) - (skb)->data)
+
 #ifdef NET_21
 #  include <linux/in6.h>
 #else
@@ -246,6 +272,12 @@
 
 /*
  * $Log: ipsec_kversion.h,v $
+ * Revision 1.15.2.11  2007/02/20 03:53:16  paul
+ * Added comment, made layout consistent with other checks.
+ *
+ * Revision 1.15.2.10  2007/02/16 19:08:12  paul
+ * Fix for compiling on 2.6.20 (nfmark is now called mark in sk_buff)
+ *
  * Revision 1.15.2.9  2006/07/29 05:00:40  paul
  * Added HAVE_NEW_SKB_LINEARIZE for 2.6.18+ kernels where skb_linearize
  * only takes 1 argument.

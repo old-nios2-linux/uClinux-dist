@@ -1,4 +1,4 @@
-/* $Id: xemaclite.h,v 1.2 2006/11/14 06:50:45 gerg Exp $ */
+/* $Id: xemaclite.h,v 1.2 2004/05/24 20:48:12 meinelte Exp $ */
 /******************************************************************************
 *
 *       XILINX IS PROVIDING THIS DESIGN, CODE, OR INFORMATION "AS IS"

@@ -1,5 +1,5 @@
 /*
- * $Id: parse_to.c,v 1.17 2003/09/10 12:07:43 bogdan Exp $
+ * $Id: parse_to.c,v 1.20.2.1 2005/07/20 17:11:52 andrei Exp $
  *
  * Copyright (C) 2001-2003 Fhg Fokus
  *
@@ -496,11 +496,14 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 	int status;
 	int saved_status;
 	char  *tmp,*foo;
-
+	
+	saved_status=START_TO; /* fixes gcc 4.x warning */
 	status=START_TO;
 	to_b->error=PARSE_OK;
 	to_b->uri.len = 0;
 	to_b->uri.s= 0;
+	to_b->display.len = 0;
+	to_b->display.s = 0;
 	foo=0;
 
 	for( tmp=buffer; tmp<end; tmp++)
@@ -599,14 +602,8 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 				switch (status)
 				{
 					case DISPLAY_QUOTED:
-						switch (*(tmp+1))
-						{
-							case '\n':
-							case '\r':
-								break;
-							default:
-								tmp++;
-						}
+						tmp++; /* jump over next char */
+						break;
 					default:
 						LOG( L_ERR , "ERROR: parse_to : unexpected char [%c] "
 							"in status %d: <<%.*s>> .\n",
@@ -624,9 +621,12 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 					case DISPLAY_QUOTED:
 						break;
 					case E_DISPLAY_QUOTED:
+						status = S_URI_ENCLOSED;
+						break;
 					case URI_OR_TOKEN:
 					case DISPLAY_TOKEN: 
 					case MAYBE_URI_END:
+						to_b->display.len=foo-to_b->display.s;
 						status = S_URI_ENCLOSED;
 						break;
 					case F_CRLF:
@@ -669,10 +669,12 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 				{
 					case START_TO:
 						to_b->body.s = tmp;
+						to_b->display.s = tmp;
 						status = DISPLAY_QUOTED;
 						break;
 					case DISPLAY_QUOTED:
 						status = E_DISPLAY_QUOTED;
+						to_b->display.len = tmp-to_b->display.s+1;
 						break;
 					case F_CRLF:
 					case F_LF:
@@ -717,7 +719,8 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 				{
 					case START_TO:
 						to_b->uri.s = to_b->body.s = tmp;
-						status = URI_OR_TOKEN;;
+						status = URI_OR_TOKEN;
+						to_b->display.s=tmp;
 						break;
 					case S_URI_ENCLOSED:
 						to_b->uri.s=tmp;
@@ -744,6 +747,7 @@ char* parse_to(char* buffer, char *end, struct to_body *to_b)
 	}/*for*/
 
 endofheader:
+	if (to_b->display.len==0) to_b->display.s=0;
 	status=saved_status;
 	DBG("end of header reached, state=%d\n", status);
 	/* check if error*/
@@ -779,6 +783,3 @@ void free_to(struct to_body* tb)
 	}
 	pkg_free(tb);
 }
-
-
-

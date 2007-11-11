@@ -1116,7 +1116,10 @@ int prmAddByteRuleNC( BYTE_RULE_MAP * p, int dport, RULE_PTR rd )
 int prmFindRuleGroup( PORT_RULE_MAP * p, int dport, int sport, PORT_GROUP ** src, PORT_GROUP **dst , PORT_GROUP ** gen)
 {
     int stat= 0;
-
+    
+    if(!p)
+       return 0;
+    
     if( (dport != ANYPORT && dport < MAX_PORTS) && p->prmDstPort[dport] )
     {
          *dst  = p->prmDstPort[dport];

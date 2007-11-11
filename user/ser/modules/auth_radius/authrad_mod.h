@@ -1,9 +1,9 @@
 /*
- * $Id: authrad_mod.h,v 1.3.8.1 2004/07/18 22:56:23 sobomax Exp $
+ * $Id: authrad_mod.h,v 1.6.2.4 2005/07/20 17:11:51 andrei Exp $
  *
  * Digest Authentication - Radius support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,11 +36,11 @@
 #define AUTHRAD_MOD_H
 
 #include "../auth/api.h"
+#include "../../modules/acc/dict.h" /* attr & val */
 
 extern struct attr attrs[];
 extern struct val vals[];
 extern void *rh;
-extern int ciscopec;
 
 extern pre_auth_f pre_auth_func;
 extern post_auth_f post_auth_func;

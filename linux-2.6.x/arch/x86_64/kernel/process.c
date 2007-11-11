@@ -23,6 +23,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/fs.h>
 #include <linux/elfcore.h>
 #include <linux/smp.h>
 #include <linux/slab.h>
@@ -36,6 +37,7 @@
 #include <linux/random.h>
 #include <linux/notifier.h>
 #include <linux/kprobes.h>
+#include <linux/kdebug.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -46,7 +48,6 @@
 #include <asm/mmu_context.h>
 #include <asm/pda.h>
 #include <asm/prctl.h>
-#include <asm/kdebug.h>
 #include <asm/desc.h>
 #include <asm/proto.h>
 #include <asm/ia32.h>
@@ -108,17 +109,19 @@ void exit_idle(void)
  */
 static void default_idle(void)
 {
-	local_irq_enable();
-
 	current_thread_info()->status &= ~TS_POLLING;
-	smp_mb__after_clear_bit();
-	while (!need_resched()) {
-		local_irq_disable();
-		if (!need_resched())
-			safe_halt();
-		else
-			local_irq_enable();
-	}
+	/*
+	 * TS_POLLING-cleared state must be visible before we
+	 * test NEED_RESCHED:
+	 */
+	smp_mb();
+	local_irq_disable();
+	if (!need_resched()) {
+		/* Enables interrupts one instruction before HLT.
+		   x86 special cases this so there is no race. */
+		safe_halt();
+	} else
+		local_irq_enable();
 	current_thread_info()->status |= TS_POLLING;
 }
 
@@ -130,15 +133,7 @@ static void default_idle(void)
 static void poll_idle (void)
 {
 	local_irq_enable();
-
-	asm volatile(
-		"2:"
-		"testl %0,%1;"
-		"rep; nop;"
-		"je 2b;"
-		: :
-		"i" (_TIF_NEED_RESCHED),
-		"m" (current_thread_info()->flags));
+	cpu_relax();
 }
 
 void cpu_idle_wait(void)
@@ -219,6 +214,12 @@ void cpu_idle (void)
 				idle = default_idle;
 			if (cpu_is_offline(smp_processor_id()))
 				play_dead();
+			/*
+			 * Idle routines should keep interrupts disabled
+			 * from here on, until they go to idle.
+			 * Otherwise, idle callbacks can misfire.
+			 */
+			local_irq_disable();
 			enter_idle();
 			idle();
 			/* In many cases the interrupt that ended idle
@@ -256,9 +257,16 @@ void mwait_idle_with_hints(unsigned long eax, unsigned long ecx)
 /* Default MONITOR/MWAIT with no hints, used for default C1 state */
 static void mwait_idle(void)
 {
-	local_irq_enable();
-	while (!need_resched())
-		mwait_idle_with_hints(0,0);
+	if (!need_resched()) {
+		__monitor((void *)&current_thread_info()->flags, 0, 0);
+		smp_mb();
+		if (!need_resched())
+			__sti_mwait(0, 0);
+		else
+			local_irq_enable();
+	} else {
+		local_irq_enable();
+	}
 }
 
 void __cpuinit select_idle_routine(const struct cpuinfo_x86 *c)
@@ -271,7 +279,7 @@ void __cpuinit select_idle_routine(const struct cpuinfo_x86 *c)
 		 */
 		if (!pm_idle) {
 			if (!printed) {
-				printk("using mwait in idle threads.\n");
+				printk(KERN_INFO "using mwait in idle threads.\n");
 				printed = 1;
 			}
 			pm_idle = mwait_idle;
@@ -281,21 +289,24 @@ void __cpuinit select_idle_routine(const struct cpuinfo_x86 *c)
 
 static int __init idle_setup (char *str)
 {
-	if (!strncmp(str, "poll", 4)) {
+	if (!strcmp(str, "poll")) {
 		printk("using polling idle threads.\n");
 		pm_idle = poll_idle;
-	}
+	} else if (!strcmp(str, "mwait"))
+		force_mwait = 1;
+	else
+		return -1;
 
 	boot_option_idle_override = 1;
-	return 1;
+	return 0;
 }
-
-__setup("idle=", idle_setup);
+early_param("idle", idle_setup);
 
 /* Prints also some state that isn't saved in the pt_regs */ 
 void __show_regs(struct pt_regs * regs)
 {
 	unsigned long cr0 = 0L, cr2 = 0L, cr3 = 0L, cr4 = 0L, fs, gs, shadowgs;
+	unsigned long d0, d1, d2, d3, d6, d7;
 	unsigned int fsindex,gsindex;
 	unsigned int ds,cs,es; 
 
@@ -331,15 +342,24 @@ void __show_regs(struct pt_regs * regs)
 	rdmsrl(MSR_GS_BASE, gs); 
 	rdmsrl(MSR_KERNEL_GS_BASE, shadowgs); 
 
-	asm("movq %%cr0, %0": "=r" (cr0));
-	asm("movq %%cr2, %0": "=r" (cr2));
-	asm("movq %%cr3, %0": "=r" (cr3));
-	asm("movq %%cr4, %0": "=r" (cr4));
+	cr0 = read_cr0();
+	cr2 = read_cr2();
+	cr3 = read_cr3();
+	cr4 = read_cr4();
 
 	printk("FS:  %016lx(%04x) GS:%016lx(%04x) knlGS:%016lx\n", 
 	       fs,fsindex,gs,gsindex,shadowgs); 
 	printk("CS:  %04x DS: %04x ES: %04x CR0: %016lx\n", cs, ds, es, cr0); 
 	printk("CR2: %016lx CR3: %016lx CR4: %016lx\n", cr2, cr3, cr4);
+
+	get_debugreg(d0, 0);
+	get_debugreg(d1, 1);
+	get_debugreg(d2, 2);
+	printk("DR0: %016lx DR1: %016lx DR2: %016lx\n", d0, d1, d2);
+	get_debugreg(d3, 3);
+	get_debugreg(d6, 6);
+	get_debugreg(d7, 7);
+	printk("DR3: %016lx DR6: %016lx DR7: %016lx\n", d3, d6, d7);
 }
 
 void show_regs(struct pt_regs *regs)
@@ -375,14 +395,17 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	struct task_struct *tsk = current;
-	struct thread_info *t = current_thread_info();
 
-	if (t->flags & _TIF_ABI_PENDING) {
-		t->flags ^= (_TIF_ABI_PENDING | _TIF_IA32);
-		if (t->flags & _TIF_IA32)
+	if (test_tsk_thread_flag(tsk, TIF_ABI_PENDING)) {
+		clear_tsk_thread_flag(tsk, TIF_ABI_PENDING);
+		if (test_tsk_thread_flag(tsk, TIF_IA32)) {
+			clear_tsk_thread_flag(tsk, TIF_IA32);
+		} else {
+			set_tsk_thread_flag(tsk, TIF_IA32);
 			current_thread_info()->status |= TS_COMPAT;
+		}
 	}
-	t->flags &= ~_TIF_DEBUG;
+	clear_tsk_thread_flag(tsk, TIF_DEBUG);
 
 	tsk->thread.debugreg0 = 0;
 	tsk->thread.debugreg1 = 0;

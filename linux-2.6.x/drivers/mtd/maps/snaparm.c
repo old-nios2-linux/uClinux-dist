@@ -41,7 +41,7 @@ extern unsigned long phys_initrd_start;
 /****************************************************************************/
 
 /* First the fixed-configuration platforms */
-#if defined(CONFIG_MACH_SE5100)
+#if defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_SG8100)
 #define FLASH_ADDR 0x50000000
 #define FLASH_SIZE 0x02000000
 #define FLASH_WIDTH 2
@@ -61,93 +61,11 @@ extern unsigned long phys_initrd_start;
 #define	ROOTFS_SIZE	(FLASH_SIZE - BOOT_SIZE - KERNEL_SIZE - CONFIG_SIZE - \
 			 NG_CONFIG_SIZE - NG_VAR_SIZE - RECOVER_SIZE)
 
-static struct mtd_partition sg_partitions[] = {
-	/*
-	 * if you change the names of these,  check the table below
-	 * for unlocking the flash as well
-	 */
-	{
-		name: "SnapGear kernel",
-		offset: KERNEL_OFFSET,
-		size: KERNEL_SIZE,
-	},
-	{
-		name: "SnapGear filesystem",
-		offset: KERNEL_OFFSET + KERNEL_SIZE,
-		size: ROOTFS_SIZE,
-	},
-	{
-		name: "SnapGear config",
-		offset: KERNEL_OFFSET + KERNEL_SIZE + ROOTFS_SIZE,
-		size: CONFIG_SIZE
-	},
-	{
-		name: "SnapGear Extra config",
-		offset: KERNEL_OFFSET + KERNEL_SIZE + ROOTFS_SIZE + CONFIG_SIZE,
-		size: NG_CONFIG_SIZE
-	},
-	{
-		name: "SnapGear Extra var",
-		offset: KERNEL_OFFSET + KERNEL_SIZE + ROOTFS_SIZE + CONFIG_SIZE + NG_CONFIG_SIZE,
-		size: NG_VAR_SIZE
-	},
-	{
-		name: "SnapGear image partition",
-		offset: KERNEL_OFFSET,
-		size: KERNEL_SIZE + ROOTFS_SIZE,
-	},
-	{
-		name: "SnapGear BIOS config",
-		offset: BOOT_SIZE / 2,
-		size: BOOT_SIZE / 2,
-	},
-	{
-		name: "SnapGear BIOS",
-		offset: 0,
-		size: BOOT_SIZE,
-	},
-	{
-		name: "SnapGear Recover",
-		offset: RECOVER_OFFSET,
-		size: RECOVER_SIZE,
-	},
-	{
-		name: "SnapGear Intel/StrataFlash",
-		offset: 0
-	},
-};
-
 #elif defined(CONFIG_MACH_IPD)
 
 #define FLASH_ADDR 0x00000000
 #define FLASH_SIZE 0x01000000
 #define FLASH_WIDTH 2
-
-static struct mtd_partition sg_partitions[] = {
-	{
-		name: "SnapGear Boot Loader",
-		offset: 0,
-		size: 0x00020000
-	},
-	{
-		name: "SnapGear System Data",
-		offset: 0x00020000,
-		size: 0x00020000
-	},
-	{
-		name: "SnapGear non-volatile configuration",
-		offset: 0x00040000,
-		size: 0x00020000
-	},
-	{
-		name: "SnapGear image",
-		offset: 0x00060000,
-	},
-	{
-		name: "SnapGear Intel/StrataFlash",
-		offset: 0
-	},
-};
 
 #elif defined(CONFIG_MACH_CM4008)
 
@@ -478,7 +396,7 @@ static struct mtd_partition sg_partitions[] = {
 
 #define	VENDOR	"SnapGear"
 
-#if defined(CONFIG_MACH_SE5100)
+#if defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_SG8100)
 #define	VENDOR_ROOTFS	"SnapGear filesystem"
 #else
 #define	VENDOR_ROOTFS	"SnapGear image"
@@ -506,7 +424,7 @@ static unsigned long flash_addr;
 #endif
 
 /* Define the flash layout */
-#if defined(CONFIG_MACH_SE5100)
+#if defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_SG8100)
 static struct mtd_partition sg_partitions[] = {
 	/*
 	 * if you change the names of these,  check the table below
@@ -682,7 +600,7 @@ static int sg_getmtdindex(char *name)
 	index = -1;
 	for (i = 0; (i < MAX_MTD_DEVICES); i++) {
 		mtd = get_mtd_device(NULL, i);
-		if (mtd) {
+		if (!IS_ERR(mtd)) {
 			if (strcmp(mtd->name, name) == 0)
 				index = mtd->index;
 			put_mtd_device(mtd);
@@ -745,6 +663,10 @@ int __init sg_init(void)
 	val |= IXP4XX_FLASH_WRITABLE;
 	*IXP4XX_EXP_CS0 = val;
 }
+#endif
+#if defined(CONFIG_MACH_SE5100) || defined(CONFIG_MACH_SG8100)
+        /* Enable full 32MB of flash */
+        *IXP4XX_EXP_CS1 = *IXP4XX_EXP_CS0;
 #endif
 
 	sg_res = request_mem_region(FLASH_ADDR, sg_map.size, VENDOR " FLASH");

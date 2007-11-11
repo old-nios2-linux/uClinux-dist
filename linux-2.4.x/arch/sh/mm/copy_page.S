@@ -41,9 +41,9 @@ ENTRY(copy_page)
 	mov.l	@r11+,r5
 	mov.l	@r11+,r6
 	mov.l	@r11+,r7
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 	mov.l	r0,@r10
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	movca.l	r0,@r10
 	mov	r10,r0
 #endif
@@ -55,7 +55,7 @@ ENTRY(copy_page)
 	mov.l	r3,@-r10
 	mov.l	r2,@-r10
 	mov.l	r1,@-r10
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	ocbwb	@r0
 #endif
 	cmp/eq	r11,r8
@@ -68,7 +68,7 @@ ENTRY(copy_page)
 	rts
 	 nop
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 /*
  * __copy_user_page
  * @to: P1 address (with same color)

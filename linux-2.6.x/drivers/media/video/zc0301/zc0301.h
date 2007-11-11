@@ -1,7 +1,7 @@
 /***************************************************************************
- * V4L2 driver for ZC0301 Image Processor and Control Chip                 *
+ * V4L2 driver for ZC0301[P] Image Processor and Control Chip              *
  *                                                                         *
- * Copyright (C) 2006 by Luca Risolia <luca.risolia@studio.unibo.it>       *
+ * Copyright (C) 2006-2007 by Luca Risolia <luca.risolia@studio.unibo.it>  *
  *                                                                         *
  * This program is free software; you can redistribute it and/or modify    *
  * it under the terms of the GNU General Public License as published by    *
@@ -36,6 +36,7 @@
 #include <linux/rwsem.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
+#include <linux/kref.h>
 
 #include "zc0301_sensor.h"
 
@@ -98,7 +99,7 @@ struct zc0301_module_param {
 	u16 frame_timeout;
 };
 
-static DECLARE_RWSEM(zc0301_disconnect);
+static DECLARE_RWSEM(zc0301_dev_lock);
 
 struct zc0301_device {
 	struct video_device* v4ldev;
@@ -121,12 +122,14 @@ struct zc0301_device {
 
 	struct zc0301_module_param module_param;
 
+	struct kref kref;
 	enum zc0301_dev_state state;
 	u8 users;
 
-	struct mutex dev_mutex, fileop_mutex;
+	struct completion probe;
+	struct mutex open_mutex, fileop_mutex;
 	spinlock_t queue_lock;
-	wait_queue_head_t open, wait_frame, wait_stream;
+	wait_queue_head_t wait_open, wait_frame, wait_stream;
 };
 
 /*****************************************************************************/
@@ -156,8 +159,8 @@ do {                                                                          \
 		else if ((level) == 2)                                        \
 			dev_info(&cam->usbdev->dev, fmt "\n", ## args);       \
 		else if ((level) >= 3)                                        \
-			dev_info(&cam->usbdev->dev, "[%s:%d] " fmt "\n",      \
-				 __FUNCTION__, __LINE__ , ## args);           \
+			dev_info(&cam->usbdev->dev, "[%s:%s:%d] " fmt "\n",   \
+				 __FILE__, __FUNCTION__, __LINE__ , ## args); \
 	}                                                                     \
 } while (0)
 #	define KDBG(level, fmt, args...)                                      \
@@ -166,8 +169,8 @@ do {                                                                          \
 		if ((level) == 1 || (level) == 2)                             \
 			pr_info("zc0301: " fmt "\n", ## args);                \
 		else if ((level) == 3)                                        \
-			pr_debug("zc0301: [%s:%d] " fmt "\n", __FUNCTION__,   \
-				 __LINE__ , ## args);                         \
+			pr_debug("sn9c102: [%s:%s:%d] " fmt "\n", __FILE__,   \
+				 __FUNCTION__, __LINE__ , ## args);           \
 	}                                                                     \
 } while (0)
 #	define V4LDBG(level, name, cmd)                                       \
@@ -183,8 +186,8 @@ do {                                                                          \
 
 #undef PDBG
 #define PDBG(fmt, args...)                                                    \
-dev_info(&cam->usbdev->dev, "[%s:%d] " fmt "\n",                              \
-	 __FUNCTION__, __LINE__ , ## args)
+dev_info(&cam->usbdev->dev, "[%s:%s:%d] " fmt "\n", __FILE__, __FUNCTION__,   \
+	 __LINE__ , ## args)
 
 #undef PDBGG
 #define PDBGG(fmt, args...) do {;} while(0) /* placeholder */

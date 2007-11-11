@@ -1,5 +1,5 @@
 /*
- * Distributed under the terms of the GNU General Public License v2
+ * Distributed under the terms of the GNU Lesser General Public License
  * $Header: $
  *
  * This is a modified version of Hiroaki Etoh's stack smashing routines
@@ -12,112 +12,116 @@
  * Peter S. Mazinger - <ps.m[@]gmx.net>
  * Yoann Vandoorselaere - <yoann[@]prelude-ids.org>
  * Robert Connolly - <robert[@]linuxfromscratch.org>
- * Cory Visi <cory@visi.name>
- *
+ * Cory Visi <cory[@]visi.name>
+ * Mike Frysinger <vapier[@]gentoo.org>
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include <stdio.h>
-#include <string.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <sys/syslog.h>
-#include <sys/time.h>
-#ifdef HAVE_DEV_ERANDOM
-#include <sys/sysctl.h>
+#if defined __SSP__ || defined __SSP_ALL__
+#error "file must not be compiled with stack protection enabled on it. Use -fno-stack-protector"
 #endif
 
 #ifdef __PROPOLICE_BLOCK_SEGV__
-#define SSP_SIGTYPE SIGSEGV
-#elif __PROPOLICE_BLOCK_KILL__
-#define SSP_SIGTYPE SIGKILL
+# define SSP_SIGTYPE SIGSEGV
 #else
-#define SSP_SIGTYPE SIGABRT
+# define SSP_SIGTYPE SIGABRT
 #endif
 
-unsigned long __guard = 0UL;
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/syslog.h>
 
-void __guard_setup(void)
+libc_hidden_proto(memset)
+libc_hidden_proto(strlen)
+libc_hidden_proto(sigaction)
+libc_hidden_proto(sigfillset)
+libc_hidden_proto(sigdelset)
+libc_hidden_proto(sigprocmask)
+libc_hidden_proto(write)
+libc_hidden_proto(openlog)
+libc_hidden_proto(syslog)
+libc_hidden_proto(closelog)
+libc_hidden_proto(kill)
+libc_hidden_proto(getpid)
+libc_hidden_proto(_exit)
+
+static void block_signals(void)
 {
-	size_t size;
-	struct timeval tv;
-
-#ifdef HAVE_DEV_ERANDOM
-	int mib[3];
-#endif
-
-	if (__guard != 0UL)
-		return;
-
-#ifndef __SSP_QUICK_CANARY__
-#ifdef HAVE_DEV_ERANDOM
-	/* Random is another depth in Linux, hence an array of 3. */
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_RANDOM;
-	mib[2] = RANDOM_ERANDOM;
-
-	size = sizeof(unsigned long);
-	if (__sysctl(mib, 3, &__guard, &size, NULL, 0) != (-1))
-		if (__guard != 0UL)
-			return;
-#endif
-	/* 
-	 * Attempt to open kernel pseudo random device if one exists before 
-	 * opening urandom to avoid system entropy depletion.
-	 */
-	{
-		int fd;
-
-#ifdef HAVE_DEV_ERANDOM
-		if ((fd = open("/dev/erandom", O_RDONLY)) == (-1))
-#endif
-			fd = open("/dev/urandom", O_RDONLY);
-		if (fd != (-1)) {
-			size = read(fd, (char *) &__guard, sizeof(__guard));
-			close(fd);
-			if (size == sizeof(__guard))
-				return;
-		}
-	}
-#endif
-	/* If sysctl was unsuccessful, use the "terminator canary". */
-	__guard = 0xFF0A0D00UL;
-
-	/* Everything failed? Or we are using a weakened model of the 
-	 * terminator canary */
-
-	gettimeofday(&tv, NULL);
-	__guard ^= tv.tv_usec ^ tv.tv_sec;
-}
-
-void __stack_smash_handler(char func[], int damaged)
-{
-	extern char *__progname;
-	const char message[] = ": stack smashing attack in function ";
 	struct sigaction sa;
 	sigset_t mask;
 
 	sigfillset(&mask);
 
 	sigdelset(&mask, SSP_SIGTYPE);	/* Block all signal handlers */
-	sigprocmask(SIG_BLOCK, &mask, NULL);	/* except SIGABRT */
+	sigprocmask(SIG_BLOCK, &mask, NULL);	/* except SSP_SIGTYPE */
 
-	/* print error message to stderr and syslog */
-	fprintf(stderr, "%s%s%s()\n", __progname, message, func);
-	syslog(LOG_INFO, "%s%s%s()", __progname, message, func);
-
-	/* Make sure the default handler is associated with the our signal handler */
+	/* Make the default handler associated with the signal handler */
 	memset(&sa, 0, sizeof(struct sigaction));
 	sigfillset(&sa.sa_mask);	/* Block all signals */
 	sa.sa_flags = 0;
 	sa.sa_handler = SIG_DFL;
 	sigaction(SSP_SIGTYPE, &sa, NULL);
+}
+
+static void ssp_write(int fd, const char *msg1, const char *msg2, const char *msg3)
+{
+	write(fd, msg1, strlen(msg1));
+	write(fd, msg2, strlen(msg2));
+	write(fd, msg3, strlen(msg3));
+	write(fd, "()\n", 3);
+	openlog("ssp", LOG_CONS | LOG_PID, LOG_USER);
+	syslog(LOG_INFO, "%s%s%s()", msg1, msg2, msg3);
+	closelog();
+}
+
+static attribute_noreturn void terminate(void)
+{
 	(void) kill(getpid(), SSP_SIGTYPE);
 	_exit(127);
 }
+
+void __stack_smash_handler(char func[], int damaged __attribute__ ((unused))) attribute_noreturn;
+void __stack_smash_handler(char func[], int damaged)
+{
+	static const char message[] = ": stack smashing attack in function ";
+
+	block_signals();
+
+	ssp_write(STDERR_FILENO, __uclibc_progname, message, func);
+
+	/* The loop is added only to keep gcc happy. */
+	while(1)
+		terminate();
+}
+
+void __stack_chk_fail(void) attribute_noreturn;
+void __stack_chk_fail(void)
+{
+	static const char msg1[] = "stack smashing detected: ";
+	static const char msg3[] = " terminated";
+
+	block_signals();
+
+	ssp_write(STDERR_FILENO, msg1, __uclibc_progname, msg3);
+
+	/* The loop is added only to keep gcc happy. */
+	while(1)
+		terminate();
+}
+
+#if 0
+void __chk_fail(void) attribute_noreturn;
+void __chk_fail(void)
+{
+	static const char msg1[] = "buffer overflow detected: ";
+	static const char msg3[] = " terminated";
+
+	block_signals();
+
+	ssp_write(STDERR_FILENO, msg1, __uclibc_progname, msg3);
+
+	/* The loop is added only to keep gcc happy. */
+	while(1)
+		terminate();
+}
+#endif

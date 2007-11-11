@@ -10,10 +10,18 @@
 ;
 [general]
 ;
-; Should hardware accelleration be enabled?  May not be changed
+; Should hardware acceleration be enabled?  May not be changed
 ; on a reload.
 ;
 ;accelerate=yes
+;
+; Defines the token format that Asterisk can validate. 
+; 0 - signed tokens only 
+; 1 - unsigned tokens only 
+; 2 - both signed and unsigned
+; The defaults to 0, i.e. the Asterisk can validate signed tokens only.
+;
+;tokenformat=0
 
 ;[default]
 ;
@@ -54,3 +62,11 @@
 ; Set the "source" for requesting authorization
 ;
 ;source=foo
+;
+; Set the authentication policy.  
+; 0 - NO 
+; 1 - YES
+; 2 - EXCLUSIVE
+; Default is 1, validate token but allow no token.
+;
+;authpolicy=1

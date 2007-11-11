@@ -134,7 +134,7 @@ SSHInit( u_char* argp )
 {
     if(!_dpd.streamAPI) 
     {
-        _dpd.fatalMsg("SetupSSH(): The Stream preprocessor must be enabled.\n");
+        DynamicPreprocessorFatalMessage("SetupSSH(): The Stream preprocessor must be enabled.\n");
     }
 
 	_dpd.addPreproc( ProcessSSH, PRIORITY_APPLICATION, PP_SSH );
@@ -176,7 +176,7 @@ ParseSSHArgs( u_char* argp )
 
 	if ( !argcpyp )
 	{
-		_dpd.fatalMsg("Could not allocate memory to parse SSH options.\n");
+        DynamicPreprocessorFatalMessage("Could not allocate memory to parse SSH options.\n");
 		return;
 	}
 
@@ -194,8 +194,8 @@ ParseSSHArgs( u_char* argp )
 			cur_tokenp = strtok( NULL, " ");
 			if (( !cur_tokenp ) || ( cur_tokenp[0] != '{' ))
 			{
-				_dpd.fatalMsg("Bad value specified for %s.\n",
-					SSH_SERVERPORTS_KEYWORD);
+                DynamicPreprocessorFatalMessage("Bad value specified for %s.\n",
+                                                SSH_SERVERPORTS_KEYWORD);
                 free(argcpyp);
                 return;
 			}
@@ -205,7 +205,7 @@ ParseSSHArgs( u_char* argp )
 			{
 				if ( !isdigit( cur_tokenp[0] ))
 				{
-					_dpd.fatalMsg("Bad port %s.\n", cur_tokenp );
+                    DynamicPreprocessorFatalMessage("Bad port %s.\n", cur_tokenp );
                     free(argcpyp);
                     return;
 				}
@@ -214,7 +214,7 @@ ParseSSHArgs( u_char* argp )
                     port = atoi( cur_tokenp );
                     if( port < 0 || port > MAX_PORTS ) 
                     {
-					    _dpd.fatalMsg("Port value illegitimate: %s\n", cur_tokenp);
+                        DynamicPreprocessorFatalMessage("Port value illegitimate: %s\n", cur_tokenp);
                         free(argcpyp);
                         return;
                     }
@@ -299,7 +299,7 @@ ParseSSHArgs( u_char* argp )
         }
         else
         {
-		    _dpd.fatalMsg("Invalid argument: %s\n", cur_tokenp);
+            DynamicPreprocessorFatalMessage("Invalid argument: %s\n", cur_tokenp);
     		return;
         }
 
@@ -670,7 +670,7 @@ CheckSSHPort( u_int16_t port )
 static inline int SSHCheckStrlen(char *str, int max) {
     while(*(str++) && max--) ;
 
-    if(max) return 0;   /* str size is <= max bytes */
+    if(max > 0) return 0;   /* str size is <= max bytes */
 
     return 1;
 }

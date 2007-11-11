@@ -36,10 +36,6 @@
 #include <asm/hw_irq.h>
 #include <asm/uaccess.h>
 
-#ifdef CONFIG_KDB
-# include <linux/kdb.h>
-#endif
-
 #undef SIMSERIAL_DEBUG	/* define this to get some debug information */
 
 #define KEYBOARD_INTR	3	/* must match with simulator! */
@@ -209,7 +205,7 @@ static void do_serial_bh(void)
 }
 #endif
 
-static void do_softint(void *private_)
+static void do_softint(struct work_struct *private_)
 {
 	printk(KERN_ERR "simserial: do_softint called\n");
 }
@@ -488,7 +484,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 
 #define RELEVANT_IFLAG(iflag) (iflag & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
 
-static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
+static void rs_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	unsigned int cflag = tty->termios->c_cflag;
 
@@ -684,12 +680,11 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 		*ret_info = sstate->info;
 		return 0;
 	}
-	info = kmalloc(sizeof(struct async_struct), GFP_KERNEL);
+	info = kzalloc(sizeof(struct async_struct), GFP_KERNEL);
 	if (!info) {
 		sstate->count--;
 		return -ENOMEM;
 	}
-	memset(info, 0, sizeof(struct async_struct));
 	init_waitqueue_head(&info->open_wait);
 	init_waitqueue_head(&info->close_wait);
 	init_waitqueue_head(&info->delta_msr_wait);
@@ -698,7 +693,7 @@ static int get_async_struct(int line, struct async_struct **ret_info)
 	info->flags = sstate->flags;
 	info->xmit_fifo_size = sstate->xmit_fifo_size;
 	info->line = line;
-	INIT_WORK(&info->work, do_softint, info);
+	INIT_WORK(&info->work, do_softint);
 	info->state = sstate;
 	if (sstate->info) {
 		kfree(info);

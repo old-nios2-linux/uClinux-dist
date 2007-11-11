@@ -1,9 +1,9 @@
 /*
- *$Id: ut.h,v 1.29 2003/04/26 20:28:46 jiri Exp $
+ *$Id: ut.h,v 1.32.2.2 2005/11/29 19:39:45 andrei Exp $
  *
  * - various general purpose functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,6 +36,7 @@
  * 2003-02-28 scratchpad compatibility abandoned (jiri)
  * 2003-03-30 str2int and str2float added (janakj)
  * 2003-04-26 ZSW (jiri)
+ * 2004-03-08 updated int2str (64 bits, INT2STR_MAX_LEN used) (andrei)
  */
 
 
@@ -153,16 +154,16 @@ static inline int btostr( char *p,  unsigned char val)
 }
 
 
-#define INT2STR_MAX_LEN 11 /* 10 digits + 0 */
+#define INT2STR_MAX_LEN  (19+1+1) /* 2^64~= 16*10^18 => 19+1 digits + \0 */
 
 /* returns a pointer to a static buffer containing l in asciiz & sets len */
-static inline char* int2str(unsigned int l, int* len)
+static inline char* int2str(unsigned long l, int* len)
 {
 	static char r[INT2STR_MAX_LEN];
 	int i;
 	
-	i=9;
-	r[10]=0; /* null terminate */
+	i=INT2STR_MAX_LEN-2;
+	r[INT2STR_MAX_LEN-1]=0; /* null terminate */
 	do{
 		r[i]=l%10+'0';
 		i--;
@@ -171,7 +172,7 @@ static inline char* int2str(unsigned int l, int* len)
 	if (l && (i<0)){
 		LOG(L_CRIT, "BUG: int2str: overflow\n");
 	}
-	if (len) *len=9-i;
+	if (len) *len=(INT2STR_MAX_LEN-2)-i;
 	return &r[i+1];
 }
 
@@ -190,25 +191,25 @@ static inline char* q_memchr(char* p, int c, unsigned int size)
 }
 	
 
-inline static int reverse_hex2int( char *c, int len )
+/* returns -1 on error, 1! on success (consistent with int2reverse_hex) */
+inline static int reverse_hex2int( char *c, int len, unsigned int* res)
 {
 	char *pc;
-	int r;
 	char mychar;
 
-	r=0;
+	*res=0;
 	for (pc=c+len-1; len>0; pc--, len--) {
-		r <<= 4 ;
+		*res <<= 4 ;
 		mychar=*pc;
-		if ( mychar >='0' && mychar <='9') r+=mychar -'0';
-		else if (mychar >='a' && mychar <='f') r+=mychar -'a'+10;
-		else if (mychar  >='A' && mychar <='F') r+=mychar -'A'+10;
+		if ( mychar >='0' && mychar <='9') *res+=mychar -'0';
+		else if (mychar >='a' && mychar <='f') *res+=mychar -'a'+10;
+		else if (mychar  >='A' && mychar <='F') *res+=mychar -'A'+10;
 		else return -1;
 	}
-	return r;
+	return 1;
 }
 
-inline static int int2reverse_hex( char **c, int *size, int nr )
+inline static int int2reverse_hex( char **c, int *size, unsigned int nr )
 {
 	unsigned short digit;
 
@@ -260,7 +261,7 @@ inline static int string2hex(
 inline static void sleep_us( unsigned int nusecs )
 {
 	struct timeval tval;
-	tval.tv_sec=nusecs/100000;
+	tval.tv_sec =nusecs/1000000;
 	tval.tv_usec=nusecs%1000000;
 	select(0, NULL, NULL, NULL, &tval );
 }
@@ -302,9 +303,9 @@ inline static int hex2int(char hex_digit)
    shorter (if escaped characters occur) or same-long
    as the original one).
 
-   only printeable characters are permitted
+   only printable characters are permitted
 
-	<0 is returned on an uneascaping error, length of the
+	<0 is returned on an unescaping error, length of the
 	unescaped string otherwise
 */
 inline static int un_escape(str *user, str *new_user ) 
@@ -394,37 +395,6 @@ static inline int str2int(str* _s, unsigned int* _r)
 		}
 	}
 	
-	return 0;
-}
-
-
-/*
- * Convert a str to float
- */
-static inline int str2float(str* _s, float* _r)
-{
-	int i, dot = 0;
-	float order = 0.1;
-
-	*_r = 0;
-	for(i = 0; i < _s->len; i++) {
-		if (_s->s[i] == '.') {
-			if (dot) return -1;
-			dot = 1;
-			continue;
-		}
-		if ((_s->s[i] >= '0') && (_s->s[i] <= '9')) {
-			if (dot) {
-				*_r += (_s->s[i] - '0') * order;
-				order /= 10;
-			} else {
-				*_r *= 10;
-				*_r += _s->s[i] - '0';
-			}
-		} else {
-			return -2;
-		}
-	}
 	return 0;
 }
 

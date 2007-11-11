@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,9 +14,15 @@
 static char rcsid[] = "$NetBSD: k_standard.c,v 1.6 1995/05/10 20:46:35 jtc Exp $";
 #endif
 
-#include "math.h"
+#include <math.h>
 #include "math_private.h"
 #include <errno.h>
+
+#ifndef _IEEE_LIBM
+
+libm_hidden_proto(copysign)
+libm_hidden_proto(matherr)
+libm_hidden_proto(rint)
 
 #ifndef _USE_WRITE
 #include <stdio.h>			/* fputs(), stderr */
@@ -33,7 +39,7 @@ static const double zero = 0.0;	/* used as const */
 static double zero = 0.0;	/* used as const */
 #endif
 
-/* 
+/*
  * Standard conformance (non-IEEE) on exception cases.
  * Mapping:
  *	1 -- acos(|x|>1)
@@ -58,7 +64,7 @@ static double zero = 0.0;	/* used as const */
  *	20-- pow(0.0,0.0)
  *	21-- pow(x,y) overflow
  *	22-- pow(x,y) underflow
- *	23-- pow(0,negative) 
+ *	23-- pow(0,negative)
  *	24-- pow(neg,non-integral)
  *	25-- sinh(finite) overflow
  *	26-- sqrt(negative)
@@ -82,14 +88,14 @@ static double zero = 0.0;	/* used as const */
 
 
 #ifdef __STDC__
-	double __kernel_standard(double x, double y, int type) 
+	double __kernel_standard(double x, double y, int type)
 #else
-	double __kernel_standard(x,y,type) 
+	double __kernel_standard(x,y,type)
 	double x,y; int type;
 #endif
 {
 	struct exception exc;
-#ifndef HUGE_VAL	/* this is the only routine that uses HUGE_VAL */ 
+#ifndef HUGE_VAL	/* this is the only routine that uses HUGE_VAL */
 #define HUGE_VAL inf
 	double inf = 0.0;
 
@@ -469,7 +475,7 @@ static double zero = 0.0;	/* used as const */
 		/* 0**neg */
 		exc.type = DOMAIN;
 		exc.name = type < 100 ? "pow" : "powf";
-		if (_LIB_VERSION == _SVID_) 
+		if (_LIB_VERSION == _SVID_)
 		  exc.retval = zero;
 		else
 		  exc.retval = -HUGE_VAL;
@@ -487,11 +493,11 @@ static double zero = 0.0;	/* used as const */
 		/* neg**non-integral */
 		exc.type = DOMAIN;
 		exc.name = type < 100 ? "pow" : "powf";
-		if (_LIB_VERSION == _SVID_) 
+		if (_LIB_VERSION == _SVID_)
 		    exc.retval = zero;
-		else 
+		else
 		    exc.retval = zero/zero;	/* X/Open allow NaN */
-		if (_LIB_VERSION == _POSIX_) 
+		if (_LIB_VERSION == _POSIX_)
 		   errno = EDOM;
 		else if (!matherr(&exc)) {
 		  if (_LIB_VERSION == _SVID_) {
@@ -649,7 +655,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 35:
 	    case 135:
@@ -665,7 +671,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 36:
 	    case 136:
@@ -681,7 +687,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 37:
 	    case 137:
@@ -697,7 +703,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 38:
 	    case 138:
@@ -713,7 +719,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 39:
 	    case 139:
@@ -729,7 +735,7 @@ static double zero = 0.0;	/* used as const */
                                 (void) WRITE2(": TLOSS error\n", 14);
                         }
                         errno = ERANGE;
-                }        
+                }
 		break;
 	    case 40:
 	    case 140:
@@ -778,5 +784,6 @@ static double zero = 0.0;	/* used as const */
 		}
 		break;
 	}
-	return exc.retval; 
+	return exc.retval;
 }
+#endif /* _IEEE_LIBM */

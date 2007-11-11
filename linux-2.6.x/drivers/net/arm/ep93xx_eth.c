@@ -255,11 +255,10 @@ static int ep93xx_rx(struct net_device *dev, int *budget)
 
 		skb = dev_alloc_skb(length + 2);
 		if (likely(skb != NULL)) {
-			skb->dev = dev;
 			skb_reserve(skb, 2);
 			dma_sync_single(NULL, ep->descs->rdesc[entry].buf_addr,
 						length, DMA_FROM_DEVICE);
-			eth_copy_and_sum(skb, ep->rx_buf[entry], length, 0);
+			skb_copy_to_linear_data(skb, ep->rx_buf[entry], length);
 			skb_put(skb, length);
 			skb->protocol = eth_type_trans(skb, dev);
 
@@ -780,12 +779,10 @@ static struct ethtool_ops ep93xx_ethtool_ops = {
 struct net_device *ep93xx_dev_alloc(struct ep93xx_eth_data *data)
 {
 	struct net_device *dev;
-	struct ep93xx_priv *ep;
 
 	dev = alloc_etherdev(sizeof(struct ep93xx_priv));
 	if (dev == NULL)
 		return NULL;
-	ep = netdev_priv(dev);
 
 	memcpy(dev->dev_addr, data->dev_addr, ETH_ALEN);
 
@@ -840,9 +837,9 @@ static int ep93xx_eth_probe(struct platform_device *pdev)
 	struct ep93xx_priv *ep;
 	int err;
 
-	data = pdev->dev.platform_data;
 	if (pdev == NULL)
 		return -ENODEV;
+	data = pdev->dev.platform_data;
 
 	dev = ep93xx_dev_alloc(data);
 	if (dev == NULL) {

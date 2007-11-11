@@ -598,7 +598,7 @@ struct rtl8139_private {
 	u32 rx_config;
 	struct rtl_extra_stats xstats;
 
-	struct work_struct thread;
+	struct delayed_work thread;
 
 	struct mii_if_info mii;
 	unsigned int regs_len;
@@ -640,8 +640,8 @@ static struct net_device_stats *rtl8139_get_stats (struct net_device *dev);
 static void rtl8139_set_rx_mode (struct net_device *dev);
 static void __set_rx_mode (struct net_device *dev);
 static void rtl8139_hw_start (struct net_device *dev);
-static void rtl8139_thread (void *_data);
-static void rtl8139_tx_timeout_task(void *_data);
+static void rtl8139_thread (struct work_struct *work);
+static void rtl8139_tx_timeout_task(struct work_struct *work);
 static const struct ethtool_ops rtl8139_ethtool_ops;
 
 /* write MMIO register, with flush */
@@ -935,7 +935,6 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 	int i, addr_len, option;
 	void __iomem *ioaddr;
 	static int board_idx = -1;
-	u8 pci_rev;
 
 	assert (pdev != NULL);
 	assert (ent != NULL);
@@ -953,13 +952,11 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 	}
 #endif
 
-	pci_read_config_byte(pdev, PCI_REVISION_ID, &pci_rev);
-
 	if (pdev->vendor == PCI_VENDOR_ID_REALTEK &&
-	    pdev->device == PCI_DEVICE_ID_REALTEK_8139 && pci_rev >= 0x20) {
+	    pdev->device == PCI_DEVICE_ID_REALTEK_8139 && pdev->revision >= 0x20) {
 		dev_info(&pdev->dev,
 			   "This (id %04x:%04x rev %02x) is an enhanced 8139C+ chip\n",
-		       	   pdev->vendor, pdev->device, pci_rev);
+		       	   pdev->vendor, pdev->device, pdev->revision);
 		dev_info(&pdev->dev,
 			   "Use the \"8139cp\" driver for improved performance and stability.\n");
 	}
@@ -1020,7 +1017,7 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 		(debug < 0 ? RTL8139_DEF_MSG_ENABLE : ((1 << debug) - 1));
 	spin_lock_init (&tp->lock);
 	spin_lock_init (&tp->rx_lock);
-	INIT_WORK(&tp->thread, rtl8139_thread, dev);
+	INIT_DELAYED_WORK(&tp->thread, rtl8139_thread);
 	tp->mii.dev = dev;
 	tp->mii.mdio_read = mdio_read;
 	tp->mii.mdio_write = mdio_write;
@@ -1118,6 +1115,8 @@ static void __devexit rtl8139_remove_one (struct pci_dev *pdev)
 	struct net_device *dev = pci_get_drvdata (pdev);
 
 	assert (dev != NULL);
+
+	flush_scheduled_work();
 
 	unregister_netdev (dev);
 
@@ -1606,24 +1605,28 @@ static inline void rtl8139_thread_iter (struct net_device *dev,
 		 RTL_R8 (Config1));
 }
 
-static void rtl8139_thread (void *_data)
+static void rtl8139_thread (struct work_struct *work)
 {
-	struct net_device *dev = _data;
-	struct rtl8139_private *tp = netdev_priv(dev);
+	struct rtl8139_private *tp =
+		container_of(work, struct rtl8139_private, thread.work);
+	struct net_device *dev = tp->mii.dev;
 	unsigned long thr_delay = next_tick;
+
+	rtnl_lock();
+
+	if (!netif_running(dev))
+		goto out_unlock;
 
 	if (tp->watchdog_fired) {
 		tp->watchdog_fired = 0;
-		rtl8139_tx_timeout_task(_data);
-	} else if (rtnl_trylock()) {
-		rtl8139_thread_iter (dev, tp, tp->mmio_addr);
-		rtnl_unlock ();
-	} else {
-		/* unlikely race.  mitigate with fast poll. */
-		thr_delay = HZ / 2;
-	}
+		rtl8139_tx_timeout_task(work);
+	} else
+		rtl8139_thread_iter(dev, tp, tp->mmio_addr);
 
-	schedule_delayed_work(&tp->thread, thr_delay);
+	if (tp->have_thread)
+		schedule_delayed_work(&tp->thread, thr_delay);
+out_unlock:
+	rtnl_unlock ();
 }
 
 static void rtl8139_start_thread(struct rtl8139_private *tp)
@@ -1635,17 +1638,9 @@ static void rtl8139_start_thread(struct rtl8139_private *tp)
 		return;
 
 	tp->have_thread = 1;
+	tp->watchdog_fired = 0;
 
 	schedule_delayed_work(&tp->thread, next_tick);
-}
-
-static void rtl8139_stop_thread(struct rtl8139_private *tp)
-{
-	if (tp->have_thread) {
-		cancel_rearming_delayed_work(&tp->thread);
-		tp->have_thread = 0;
-	} else
-		flush_scheduled_work();
 }
 
 static inline void rtl8139_tx_clear (struct rtl8139_private *tp)
@@ -1656,10 +1651,11 @@ static inline void rtl8139_tx_clear (struct rtl8139_private *tp)
 	/* XXX account for unsent Tx packets in tp->stats.tx_dropped */
 }
 
-static void rtl8139_tx_timeout_task (void *_data)
+static void rtl8139_tx_timeout_task (struct work_struct *work)
 {
-	struct net_device *dev = _data;
-	struct rtl8139_private *tp = netdev_priv(dev);
+	struct rtl8139_private *tp =
+		container_of(work, struct rtl8139_private, thread.work);
+	struct net_device *dev = tp->mii.dev;
 	void __iomem *ioaddr = tp->mmio_addr;
 	int i;
 	u8 tmp8;
@@ -1704,12 +1700,11 @@ static void rtl8139_tx_timeout (struct net_device *dev)
 {
 	struct rtl8139_private *tp = netdev_priv(dev);
 
+	tp->watchdog_fired = 1;
 	if (!tp->have_thread) {
-		INIT_WORK(&tp->thread, rtl8139_tx_timeout_task, dev);
+		INIT_DELAYED_WORK(&tp->thread, rtl8139_thread);
 		schedule_delayed_work(&tp->thread, next_tick);
-	} else
-		tp->watchdog_fired = 1;
-
+	}
 }
 
 static int rtl8139_start_xmit (struct sk_buff *skb, struct net_device *dev)
@@ -1921,10 +1916,10 @@ static __inline__ void wrap_copy(struct sk_buff *skb, const unsigned char *ring,
 	u32 left = RX_BUF_LEN - offset;
 
 	if (size > left) {
-		memcpy(skb->data, ring + offset, left);
-		memcpy(skb->data+left, ring, size - left);
+		skb_copy_to_linear_data(skb, ring + offset, left);
+		skb_copy_to_linear_data_offset(skb, left, ring, size - left);
 	} else
-		memcpy(skb->data, ring + offset, size);
+		skb_copy_to_linear_data(skb, ring + offset, size);
 }
 #endif
 
@@ -2035,12 +2030,11 @@ no_early_rx:
 
 		skb = dev_alloc_skb (pkt_size + 2);
 		if (likely(skb)) {
-			skb->dev = dev;
 			skb_reserve (skb, 2);	/* 16 byte align the IP fields. */
 #if RX_BUF_IDX == 3
 			wrap_copy(skb, rx_ring, ring_offset+4, pkt_size);
 #else
-			eth_copy_and_sum (skb, &rx_ring[ring_offset + 4], pkt_size, 0);
+			skb_copy_to_linear_data (skb, &rx_ring[ring_offset + 4], pkt_size);
 #endif
 			skb_put (skb, pkt_size);
 
@@ -2149,14 +2143,15 @@ static int rtl8139_poll(struct net_device *dev, int *budget)
 	}
 
 	if (done) {
+		unsigned long flags;
 		/*
 		 * Order is important since data can get interrupted
 		 * again when we think we are done.
 		 */
-		local_irq_disable();
+		local_irq_save(flags);
 		RTL_W16_F(IntrMask, rtl8139_intr_mask);
 		__netif_rx_complete(dev);
-		local_irq_enable();
+		local_irq_restore(flags);
 	}
 	spin_unlock(&tp->rx_lock);
 
@@ -2249,8 +2244,6 @@ static int rtl8139_close (struct net_device *dev)
 	unsigned long flags;
 
 	netif_stop_queue (dev);
-
-	rtl8139_stop_thread(tp);
 
 	if (netif_msg_ifdown(tp))
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was 0x%4.4x.\n",
@@ -2479,7 +2472,6 @@ static const struct ethtool_ops rtl8139_ethtool_ops = {
 	.get_strings		= rtl8139_get_strings,
 	.get_stats_count	= rtl8139_get_stats_count,
 	.get_ethtool_stats	= rtl8139_get_ethtool_stats,
-	.get_perm_addr		= ethtool_op_get_perm_addr,
 };
 
 static int netdev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)

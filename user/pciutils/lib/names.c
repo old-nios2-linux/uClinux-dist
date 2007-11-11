@@ -22,7 +22,7 @@ struct nl_entry {
   struct nl_entry *next;
   word id1, id2, id3, id4;
   int cat;
-  byte *name;
+  char *name;
 };
 
 #define NL_VENDOR 0
@@ -57,7 +57,7 @@ static struct nl_entry *nl_lookup(struct pci_access *a, int num, int cat, int id
   return n;
 }
 
-static int nl_add(struct pci_access *a, int cat, int id1, int id2, int id3, int id4, byte *text)
+static int nl_add(struct pci_access *a, int cat, int id1, int id2, int id3, int id4, char *text)
 {
   unsigned int h = nl_calc_hash(cat, id1, id2, id3, id4);
   struct nl_entry *n = a->nl_hash[h];
@@ -87,8 +87,8 @@ err_name_list(struct pci_access *a, char *msg)
 static void
 parse_name_list(struct pci_access *a)
 {
-  byte *p = a->nl_list;
-  byte *q, *r;
+  char *p = a->nl_list;
+  char *q, *r;
   int lino = 0;
   unsigned int id1=0, id2=0, id3=0, id4=0;
   int cat = -1;

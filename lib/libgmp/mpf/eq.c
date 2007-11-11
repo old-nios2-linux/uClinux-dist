@@ -1,41 +1,33 @@
 /* mpf_eq -- Compare two floats up to a specified bit #.
 
-Copyright (C) 1993, 1995, 1996 Free Software Foundation, Inc.
+Copyright 1993, 1995, 1996, 2001, 2002 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 int
-#if __STDC__
 mpf_eq (mpf_srcptr u, mpf_srcptr v, unsigned long int n_bits)
-#else
-mpf_eq (u, v, n_bits)
-     mpf_srcptr u;
-     mpf_srcptr v;
-     unsigned long int n_bits;
-#endif
 {
   mp_srcptr up, vp;
   mp_size_t usize, vsize, size, i;
   mp_exp_t uexp, vexp;
-  int usign;
 
   uexp = u->_mp_exp;
   vexp = v->_mp_exp;
@@ -61,8 +53,6 @@ mpf_eq (u, v, n_bits)
     }
 
   /* U and V have the same sign and are both non-zero.  */
-
-  usign = usize >= 0 ? 1 : -1;
 
   /* 2. Are the exponents different?  */
   if (uexp > vexp)
@@ -90,13 +80,13 @@ mpf_eq (u, v, n_bits)
 
   if (usize > vsize)
     {
-      if (vsize * BITS_PER_MP_LIMB < n_bits)
+      if (vsize * GMP_NUMB_BITS < n_bits)
 	return 0;		/* surely too different */
       size = vsize;
     }
   else if (vsize > usize)
     {
-      if (usize * BITS_PER_MP_LIMB < n_bits)
+      if (usize * GMP_NUMB_BITS < n_bits)
 	return 0;		/* surely too different */
       size = usize;
     }
@@ -105,8 +95,8 @@ mpf_eq (u, v, n_bits)
       size = usize;
     }
 
-  if (size > (n_bits + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB)
-    size = (n_bits + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB;
+  if (size > (n_bits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS)
+    size = (n_bits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
 
   up += usize - size;
   vp += vsize - size;

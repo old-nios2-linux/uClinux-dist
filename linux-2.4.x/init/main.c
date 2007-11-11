@@ -88,12 +88,16 @@ extern int irda_device_init(void);
 #endif
 #endif
 
+/*
+ * gcc >= 4 is not supported by kernel 2.4
+ */
+
 #ifdef CONFIG_FRV
 extern const char _stext[], _etext[];
 #else
-extern const char _stext, _etext;
+extern char _stext, _etext;
 #endif
-extern char linux_banner[];
+extern const char linux_banner[];
 
 static int init(void *);
 

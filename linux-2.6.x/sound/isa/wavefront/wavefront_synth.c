@@ -1068,7 +1068,7 @@ wavefront_send_sample (snd_wavefront_t *dev,
 			blocksize = max_blksize;
 		} else {
 			/* round to nearest 16-byte value */
-			blocksize = ((length-written+7)&~0x7);
+			blocksize = ALIGN(length - written, 8);
 		}
 
 		if (snd_wavefront_cmd (dev, WFC_DOWNLOAD_BLOCK, NULL, NULL)) {
@@ -1780,7 +1780,7 @@ wavefront_should_cause_interrupt (snd_wavefront_t *dev,
 	outb (val,port);
 	spin_unlock_irq(&dev->irq_lock);
 	while (1) {
-		if ((timeout = schedule_timeout_interruptible(timeout)) == 0)
+		if ((timeout = schedule_timeout(timeout)) == 0)
 			return;
 		if (dev->irq_ok)
 			return;

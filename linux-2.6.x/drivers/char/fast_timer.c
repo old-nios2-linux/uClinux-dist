@@ -120,7 +120,7 @@ static struct ctl_table_header *sysctl_header;
 
 static void __init init_sysctl(void)
 {
-	sysctl_header = register_sysctl_table(root_table, 0);
+	sysctl_header = register_sysctl_table(root_table);
 }
 
 static void __exit cleanup_sysctl(void)

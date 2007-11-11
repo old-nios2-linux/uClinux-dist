@@ -2,9 +2,8 @@
  *  Copyright (C) 2004 - 2005 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,14 +12,23 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
+
+#if HAVE_CONFIG_H
+#include "clamav-config.h"
+#endif
+
+#include <stdio.h>
 
 #include "clamav.h"
 #include "memory.h"
 #include "others.h"
 #include "cltypes.h"
 #include "matcher.h"
+#include "matcher-bm.h"
+#include "filetypes.h"
 
 /* TODO: Check prefix regularity and automatically transfer some signatures
  *	 to AC
@@ -30,16 +38,14 @@
 /* #define BM_TEST_OFFSET	5 */
 #define BM_BLOCK_SIZE	3
 
-#define MIN(a,b) (a < b) ? a : b
-#define HASH(a,b,c) 211 * (unsigned char) a + 37 * (unsigned char) b + (unsigned char) c
-#define DHASH(a,b,c) 211 * a + 37 * b + c
+#define HASH(a,b,c) (211 * a + 37 * b + c)
 
 
-int cli_bm_addpatt(struct cl_node *root, struct cli_bm_patt *pattern)
+int cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern)
 {
 	int i;
 	uint16_t idx;
-	const char *pt = pattern->pattern;
+	const unsigned char *pt = pattern->pattern;
 	struct cli_bm_patt *prev, *next = NULL;
 
 
@@ -76,10 +82,10 @@ int cli_bm_addpatt(struct cl_node *root, struct cli_bm_patt *pattern)
     return 0;
 }
 
-int cli_bm_init(struct cl_node *root)
+int cli_bm_init(struct cli_matcher *root)
 {
 	unsigned int i;
-	unsigned int size = DHASH(256, 256, 256);
+	unsigned int size = HASH(256, 256, 256);
 
 
     cli_dbgmsg("in cli_bm_init()\n");
@@ -99,11 +105,11 @@ int cli_bm_init(struct cl_node *root)
     return 0;
 }
 
-void cli_bm_free(struct cl_node *root)
+void cli_bm_free(struct cli_matcher *root)
 {
 	struct cli_bm_patt *b1, *b2;
 	unsigned int i;
-	unsigned int size = DHASH(256, 256, 256);
+	unsigned int size = HASH(256, 256, 256);
 
 
     if(root->bm_shift)
@@ -128,13 +134,15 @@ void cli_bm_free(struct cl_node *root)
     }
 }
 
-int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virname, const struct cl_node *root, unsigned long int offset, unsigned short ftype, int fd)
+int cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_matcher *root, uint32_t offset, cli_file_t ftype, int fd)
 {
 	unsigned int i, j, shift, off, found = 0;
+	int idxtest;
 	uint16_t idx;
 	struct cli_bm_patt *p;
-	const char *bp;
-	char prefix;
+	const unsigned char *bp;
+	unsigned char prefix;
+	struct cli_target_info info;
 
 
     if(!root->bm_shift)
@@ -142,6 +150,8 @@ int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virnam
 
     if(length < BM_MIN_LENGTH)
 	return CL_CLEAN;
+
+    memset(&info, 0, sizeof(info));
 
     for(i = BM_MIN_LENGTH - BM_BLOCK_SIZE; i < length - BM_BLOCK_SIZE + 1; ) {
 	idx = HASH(buffer[i], buffer[i + 1], buffer[i + 2]);
@@ -167,6 +177,14 @@ int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virnam
 		}
 #endif
 
+		idxtest = MIN (p->length, length - off ) - 1;
+		if(idxtest >= 0) {
+		    if(bp[idxtest] != p->pattern[idxtest]) {
+			p = p->next;
+			continue;
+		    }
+		}
+
 		found = 1;
 		for(j = 0; j < p->length && off < length; j++, off++) {
 		    if(bp[j] != p->pattern[j]) {
@@ -180,7 +198,7 @@ int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virnam
 		    if(p->target || p->offset) {
 			off = offset + i - BM_MIN_LENGTH + BM_BLOCK_SIZE;
 
-			if((fd == -1 && !ftype) || !cli_validatesig(p->target, ftype, p->offset, off, fd, p->virname)) {
+			if((fd == -1 && !ftype) || !cli_validatesig(ftype, p->offset, off, &info, fd, p->virname)) {
 			    p = p->next;
 			    continue;
 			}
@@ -188,6 +206,9 @@ int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virnam
 
 		    if(virname)
 			*virname = p->virname;
+
+		    if(info.exeinfo.section)
+			free(info.exeinfo.section);
 
 		    return CL_VIRUS;
 		}
@@ -201,5 +222,8 @@ int cli_bm_scanbuff(const char *buffer, unsigned int length, const char **virnam
 	i += shift;
     }
 
-    return 0;
+    if(info.exeinfo.section)
+	free(info.exeinfo.section);
+
+    return CL_CLEAN;
 }

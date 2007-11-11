@@ -52,8 +52,10 @@ enum ip_conntrack_status {
 	IPS_DESTROYED = (1 << IPS_DESTROYED_BIT),
 
 	/* Connection should be logged. */
-	IPS_LOG_BIT = 10,
-	IPS_LOG = (1 << IPS_LOG_BIT),
+	IPS_LOG_CONFIRM_BIT = 10,
+	IPS_LOG_CONFIRM = (1 << IPS_LOG_CONFIRM_BIT),
+	IPS_LOG_DESTROY_BIT = 11,
+	IPS_LOG_DESTROY = (1 << IPS_LOG_DESTROY_BIT),
 };
 
 /* Connection tracking event bits */
@@ -205,6 +207,11 @@ struct ip_conntrack
 	/* Usage count in here is 1 for hash table/destruct timer, 1 per skb,
            plus 1 for any connection(s) we are `master' for */
 	struct nf_conntrack ct_general;
+
+#ifdef CONFIG_IP_NF_CT_DEV
+	char indev[IFNAMSIZ];
+	char outdev[IFNAMSIZ];
+#endif
 
 	/* These are my tuples; original and reply */
 	struct ip_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];

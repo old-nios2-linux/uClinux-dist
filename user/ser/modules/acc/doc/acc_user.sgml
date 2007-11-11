@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.1.4.1.4.1 $</revnumber>
-		<date>$Date: 2004/07/18 22:56:23 $</date>
+		<revnumber>$Revision: 1.7.2.1 $</revnumber>
+		<date>$Date: 2005/06/22 23:12:00 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -71,7 +71,7 @@
 		<listitem>
 		    <para>
 			A single INVITE may produce multiple accounting reports -- that's
-			due to SIP's forking feature
+			due to SIP forking feature
 		    </para>
 		</listitem>
 		<listitem>
@@ -86,7 +86,7 @@
 		    <para>
 			There is no session accounting -- ser maintains no sessions. If one needs to
 			correlate INVITEs with BYEs for example for purpose of billing, then it is
-			better done in the entity which collects accounting infromation. Otherwise,
+			better done in the entity which collects accounting information. Otherwise,
 			SIP server would have to become sessions-stateful, which would very badly
 			impact its scalability.
 		    </para>
@@ -118,7 +118,7 @@
 	<para>
 	    Both mysql and radius libraries must be dynamically linkable. You need to configure your
 	    OS so that SER, when started, will find them. Typically, you do so by manipulating
-	    LD_LIBRARY_PATH environment variable or condiguring ld.so.
+	    LD_LIBRARY_PATH environment variable or configuring ld.so.
 	</para>
 	<section>
 	    <title>General Example</title>
@@ -291,7 +291,7 @@ modparam("acc", "report_ack", 0)
 	    <para>
 		By default, CANCEL reporting is disabled -- most accounting
 		applications are happy to see INVITE's cancellation status.
-		Turn on if you explicitely want to account CANCEL transactions.
+		Turn on if you explicitly want to account CANCEL transactions.
 	    </para>
 	    <para>
 		Default value is 0 (no).
@@ -412,6 +412,255 @@ modparam("acc", "db_missed_flag", 3)
 </programlisting>
 	    </example>
 	</section>
+
+	<section>
+	    <title><varname>diameter_flag</varname> (integer)</title>
+	    <para>
+		Request flag which needs to be set to account a transaction -- DIAMETER specific.
+	    </para>
+	    <para>
+		Default value is 1.
+	    </para>
+	    <example>
+		<title>diameter_flag example</title>
+		<programlisting format="linespecific">
+modparam("acc", "diameter_flag", 2)
+</programlisting>
+	    </example>
+	</section>
+	<section>
+	    <title><varname>diameter_missed_flag</varname> (integer)</title>
+	    <para>
+		Request flag which needs to be set to account missed calls -- DIAMETER specific.
+	    </para>
+	    <para>
+		Default value is 2.
+	    </para>
+	    <example>
+		<title>diameter_missed_flag example</title>
+		<programlisting format="linespecific">
+modparam("acc", "diameter_missed_flag", 3)
+</programlisting>
+	    </example>
+	</section>
+	<section>
+	    <title><varname>diameter_client_host</varname> (string)</title>
+	    <para>
+		Hostname of the machine where the DIAMETER Client is running -- DIAMETER specific.
+	    </para>
+	    <para>
+		Default value is <quote>localhost</quote>.
+	    </para>
+	    <example>
+		<title>diameter_client_host example</title>
+		<programlisting format="linespecific">
+modparam("acc", "diameter_client_host", "iptel.org")
+</programlisting>
+	    </example>
+	</section>
+	<section>
+	    <title><varname>diameter_client_port</varname> (int)</title>
+	    <para>
+		Port number where the Diameter Client is listening -- DIAMETER specific.
+	    </para>
+	    <para>
+		Default value is 3000.
+	    </para>
+	    <example>
+		<title>diameter_client_host example</title>
+		<programlisting format="linespecific">
+modparam("acc", "diameter_client_port", 3000)
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>db_table_acc</varname> (string)</title>
+	    <para>
+		Name of the table containing accounting information.
+	    </para>
+	    <para>
+		Default value is "acc".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>db_table_missed_calls</varname> (string)</title>
+	    <para>
+		Name of the table containing accounting information about
+		missed calls.
+	    </para>
+	    <para>
+		Default value is "missed_calls".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>db_localtime</varname> (int)</title>
+	    <para>
+		The parameter controls how date and time information for
+		accounted transactions will be stored in database. When set to
+		1 all time-related information will be based on the local time
+		zone. When set to 0 then acc module will use UTC.
+	    </para>
+	    <para>
+		Default value is 0 (use UTC).
+	    </para>
+	</section>
+	
+	<section>
+	    <title><varname>acc_sip_from_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the contents of From header field.
+	    </para>
+	    <para>
+		Default value is "sip_from".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_sip_to_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the contents of To header field.
+	    </para>
+	    <para>
+		Default value is "sip_to".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_sip_status_column</varname> (string)</title>
+	    <para>
+		Name of the column containing status code of SIP replies.
+	    </para>
+	    <para>
+		Default value is "sip_status".
+	    </para>
+	</section>	
+	
+	<section>
+	    <title><varname>acc_sip_method_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the SIP method of the request.
+	    </para>
+	    <para>
+		Default value is "sip_method".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_i_uri_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the inbound Request-URI of the
+		acccounted SIP message. This is the URI that SER received.
+	    </para>
+	    <para>
+		Default value is "i_uri".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_o_uri_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the outbound Request-URI of the
+		accounted SIP message. This is the final URI, after applying
+		all modifications from the configuration file. This is what the
+		downstream element will receive in the Request-URI of the
+		message forwarded by SER.
+	    </para>
+	    <para>
+		Default value is "o_uri".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_sip_callid_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the contents of Call-ID header field.
+	    </para>
+	    <para>
+		Default value is "sip_callid".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_user_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the username from digest credentials.
+	    </para>
+	    <para>
+		Default value is "username".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_time_column</varname> (string)</title>
+	    <para>
+		Date and time of arrival of the final reply that finished the
+		transaction.
+	    </para>
+	    <para>
+		Default value is "time".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_from_uri_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the SIP URI extracted from the
+		From header field. This is usually the part enclosed in angle
+		brackets.
+	    </para>
+	    <para>
+		Default value is "from_uri".
+	    </para>
+	</section>		
+
+	<section>
+	    <title><varname>acc_to_uri_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the SIP URI extracted from the
+		To header field. This is usually the part enclosed in angle
+		brackets.
+	    </para>
+	    <para>
+		Default value is "to_uri".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_totag_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the value of the To header field
+		tag parameter.
+	    </para>
+	    <para>
+		Default value is "totag".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_fromtag_column</varname> (string)</title>
+	    <para>
+		Name of the column containing the value of the From header
+		field tag parameter.
+	    </para>
+	    <para>
+		Default value is "fromtag".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>acc_domain_column</varname> (string)</title>
+	    <para>
+		The name of the column containing the name of domain. This is
+		used when SER is operated in multi-domain mode.
+	    </para>
+	    <para>
+		Default value is "domain".
+	    </para>
+	</section>
+	
     </section>
     <section>
 	<title>Exported Functions</title>
@@ -420,7 +669,7 @@ modparam("acc", "db_missed_flag", 3)
 	    <para>
 		<function moreinfo="none">acc_request</function> reports on a request, for example,
 		it can be used to report on missed calls to off-line users who are replied 404. To
-		avoid multiple reports on UDP request retranmission, you would need to embed the
+		avoid multiple reports on UDP request retransmission, you would need to embed the
 		action in stateful processing.
 	    </para> 
 	    <para>
@@ -472,7 +721,7 @@ acc_log_request("Some comment", "Some table");
 	    <title><function moreinfo="none">acc_rad_request(comment)</function></title>
 	    <para>
 		Like <function moreinfo="none">acc_log_request</function>, 
-		<function moreinfo="none">acc_rad_requst</function> reports on a request. It
+		<function moreinfo="none">acc_rad_request</function> reports on a request. It
 		reports to radius server as configured in <quote>radius_config</quote>.
 	    </para> 
 	    <para>
@@ -488,6 +737,30 @@ acc_log_request("Some comment", "Some table");
 		<programlisting format="linespecific">
 ...
 acc_rad_request("Some comment");
+...
+</programlisting>
+	    </example>
+	</section>
+	<section>
+	    <title><function moreinfo="none">acc_diam_request(comment)</function></title>
+	    <para>
+		Like <function moreinfo="none">acc_log_request</function>, 
+		<function moreinfo="none">acc_diam_request</function> reports on a request. It
+		reports to Diameter server.
+	    </para> 
+	    <para>
+		Meaning of the parameters is as follows:</para>
+	    <itemizedlist>
+		<listitem>
+		    <para><emphasis>comment</emphasis> - Comment to be appended.
+		    </para>
+		</listitem>
+	    </itemizedlist>
+	    <example>
+		<title>acc_diam_request usage</title>
+		<programlisting format="linespecific">
+...
+acc_diam_request("Some comment");
 ...
 </programlisting>
 	    </example>

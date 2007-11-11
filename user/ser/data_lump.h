@@ -1,9 +1,9 @@
 /*
- * $Id: data_lump.h,v 1.8.6.1 2003/11/24 14:00:34 janakj Exp $
+ * $Id: data_lump.h,v 1.11 2004/08/24 08:45:10 janakj Exp $
  *
  * adding/removing headers or any other data chunk from a message
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -76,5 +76,9 @@ struct lump* anchor_lump(struct sip_msg* msg, int offset, int len, int type);
 struct lump* dup_lump_list( struct lump *l );
 /* frees a shallowly duplicated lump list */
 void free_duped_lump_list(struct lump* l);
+
+
+/* remove all non-SHMEM lumps from the list */
+void del_nonshm_lump( struct lump** lump_list );
 
 #endif

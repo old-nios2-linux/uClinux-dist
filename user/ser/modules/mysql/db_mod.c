@@ -1,9 +1,9 @@
 /* 
- * $Id: db_mod.c,v 1.18 2003/10/08 13:07:21 janakj Exp $ 
+ * $Id: db_mod.c,v 1.25 2004/10/28 23:36:14 danp Exp $ 
  *
  * MySQL module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,51 +33,50 @@
  *  2003-03-16  flags export parameter added (janakj)
  */
 
-#include <stdio.h>
 #include "../../sr_module.h"
 #include "dbase.h"
+#include "db_mod.h"
+
+int ping_interval = 5 * 60; /* Default is 5 minutes */
+int auto_reconnect = 1;     /* Default is enabled */
 
 MODULE_VERSION
-
-
-static int mod_init(void);
 
 
 /*
  * MySQL database module interface
  */
-
-
-static cmd_export_t cmds[]={
-	{"db_use_table",  (cmd_function)use_table,     2, 0, 0},
-	{"db_init",       (cmd_function)db_init,       1, 0, 0},
-	{"db_close",      (cmd_function)db_close,      2, 0, 0},
-	{"db_query",      (cmd_function)db_query,      2, 0, 0},
-	{"db_raw_query",  (cmd_function)db_raw_query,  2, 0, 0},
-	{"db_free_query", (cmd_function)db_free_query, 2, 0, 0},
-	{"db_insert",     (cmd_function)db_insert,     2, 0, 0},
-	{"db_delete",     (cmd_function)db_delete,     2, 0, 0},
-	{"db_update",     (cmd_function)db_update,     2, 0, 0},
-	{0,0,0,0,0}
+static cmd_export_t cmds[] = {
+	{"db_use_table",   (cmd_function)use_table,      2, 0, 0},
+	{"db_init",        (cmd_function)db_init,        1, 0, 0},
+	{"db_close",       (cmd_function)db_close,       2, 0, 0},
+	{"db_query",       (cmd_function)db_query,       2, 0, 0},
+	{"db_raw_query",   (cmd_function)db_raw_query,   2, 0, 0},
+	{"db_free_result", (cmd_function)db_free_result, 2, 0, 0},
+	{"db_insert",      (cmd_function)db_insert,      2, 0, 0},
+	{"db_delete",      (cmd_function)db_delete,      2, 0, 0},
+	{"db_update",      (cmd_function)db_update,      2, 0, 0},
+	{0, 0, 0, 0, 0}
 };
 
+
+/*
+ * Exported parameters
+ */
+static param_export_t params[] = {
+	{"ping_interval", INT_PARAM, &ping_interval},
+	{"auto_reconnect", INT_PARAM, &auto_reconnect},
+	{0, 0, 0}
+};
 
 
 struct module_exports exports = {	
 	"mysql",
 	cmds,
-	0,   /*  module paramers */
-
-	mod_init, /* module initialization function */
-	0,        /* response function*/
-	0,        /* destroy function */
-	0,        /* oncancel function */
-	0         /* per-child init function */
+	params, /*  module parameters */
+	0,      /* module initialization function */
+	0,      /* response function*/
+	0,      /* destroy function */
+	0,      /* oncancel function */
+	0       /* per-child init function */
 };
-
-
-static int mod_init(void)
-{
-	DBG("mysql - initializing\n");
-	return 0;
-}

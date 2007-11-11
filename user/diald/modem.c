@@ -236,13 +236,15 @@ void fork_dialer(char *program, int fd)
 	/* FIXME: direct the stderr to the console? */
         dup2(0, 2);
 
+#ifndef __uClinux__
+	setenv("MODEM",current_dev,1);	/* set the current device */
+	if (fifoname)		/* set the current command FIFO (if any) */
+	    setenv("FIFO",fifoname,1);
+#endif
 #ifdef EMBED
         execuc(program);
         syslog(LOG_ERR, "could not exec dialer: errno=%d", errno);
 #else
-	setenv("MODEM",current_dev,1);	/* set the current device */
-	if (fifoname)		/* set the current command FIFO (if any) */
-	    setenv("FIFO",fifoname,1);
         execl("/bin/sh", "sh", "-c", program, (char *)0);
         syslog(LOG_ERR, "could not exec /bin/sh: %m");
 #endif

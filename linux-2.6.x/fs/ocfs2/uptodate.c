@@ -69,7 +69,7 @@ struct ocfs2_meta_cache_item {
 	sector_t	c_block;
 };
 
-static kmem_cache_t *ocfs2_uptodate_cachep = NULL;
+static struct kmem_cache *ocfs2_uptodate_cachep = NULL;
 
 void ocfs2_metadata_cache_init(struct inode *inode)
 {
@@ -548,7 +548,7 @@ int __init init_ocfs2_uptodate_cache(void)
 {
 	ocfs2_uptodate_cachep = kmem_cache_create("ocfs2_uptodate",
 				  sizeof(struct ocfs2_meta_cache_item),
-				  0, SLAB_HWCACHE_ALIGN, NULL, NULL);
+				  0, SLAB_HWCACHE_ALIGN, NULL);
 	if (!ocfs2_uptodate_cachep)
 		return -ENOMEM;
 

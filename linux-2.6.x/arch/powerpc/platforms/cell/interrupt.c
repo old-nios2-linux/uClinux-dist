@@ -227,7 +227,7 @@ void iic_request_IPIs(void)
 
 static int iic_host_match(struct irq_host *h, struct device_node *node)
 {
-	return device_is_compatible(node,
+	return of_device_is_compatible(node,
 				    "IBM,CBEA-Internal-Interrupt-Controller");
 }
 
@@ -256,12 +256,12 @@ static int iic_host_xlate(struct irq_host *h, struct device_node *ct,
 	unsigned int node, ext, unit, class;
 	const u32 *val;
 
-	if (!device_is_compatible(ct,
+	if (!of_device_is_compatible(ct,
 				     "IBM,CBEA-Internal-Interrupt-Controller"))
 		return -ENODEV;
 	if (intsize != 1)
 		return -ENODEV;
-	val = get_property(ct, "#interrupt-cells", NULL);
+	val = of_get_property(ct, "#interrupt-cells", NULL);
 	if (val == NULL || *val != 1)
 		return -ENODEV;
 
@@ -324,10 +324,10 @@ static int __init setup_iic(void)
 
 	for (dn = NULL;
 	     (dn = of_find_node_by_name(dn,"interrupt-controller")) != NULL;) {
-		if (!device_is_compatible(dn,
+		if (!of_device_is_compatible(dn,
 				     "IBM,CBEA-Internal-Interrupt-Controller"))
 			continue;
-		np = get_property(dn, "ibm,interrupt-server-ranges", NULL);
+		np = of_get_property(dn, "ibm,interrupt-server-ranges", NULL);
 		if (np == NULL) {
 			printk(KERN_WARNING "IIC: CPU association not found\n");
 			of_node_put(dn);
@@ -395,4 +395,20 @@ void __init iic_init_IRQ(void)
 
 	/* Enable on current CPU */
 	iic_setup_cpu();
+}
+
+void iic_set_interrupt_routing(int cpu, int thread, int priority)
+{
+	struct cbe_iic_regs __iomem *iic_regs = cbe_get_cpu_iic_regs(cpu);
+	u64 iic_ir = 0;
+	int node = cpu >> 1;
+
+	/* Set which node and thread will handle the next interrupt */
+	iic_ir |= CBE_IIC_IR_PRIO(priority) |
+		  CBE_IIC_IR_DEST_NODE(node);
+	if (thread == 0)
+		iic_ir |= CBE_IIC_IR_DEST_UNIT(CBE_IIC_IR_PT_0);
+	else
+		iic_ir |= CBE_IIC_IR_DEST_UNIT(CBE_IIC_IR_PT_1);
+	out_be64(&iic_regs->iic_ir, iic_ir);
 }

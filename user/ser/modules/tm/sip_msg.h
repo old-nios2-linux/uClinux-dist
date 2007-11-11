@@ -1,7 +1,7 @@
 /*
- * $Id: sip_msg.h,v 1.14.6.1 2004/02/28 02:13:47 bogdan Exp $
+ * $Id: sip_msg.h,v 1.16 2004/08/24 09:00:42 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -40,7 +40,7 @@
 #define  sip_msg_free_unsafe(_p_msg) shm_free_unsafe( (_p_msg) )
 
 
-struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len);
+struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len );
 
 
 #endif

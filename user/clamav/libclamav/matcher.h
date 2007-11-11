@@ -1,10 +1,9 @@
 /*
- *  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,20 +12,63 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __MATCHER_H
 #define __MATCHER_H
 
+#include <sys/types.h>
+
 #include "clamav.h"
+#include "filetypes.h"
+#include "others.h"
+#include "execs.h"
+#include "cltypes.h"
+#include "md5.h"
 
-int cli_scandesc(int desc, const char **virname, unsigned long int *scanned, const struct cl_node *root, short otfrec, unsigned short ftype);
+#include "matcher-ac.h"
+#include "matcher-bm.h"
 
-int cli_scanbuff(const char *buffer, unsigned int length, const char **virname, const struct cl_node *root, unsigned short ftype);
+#define CLI_MATCH_WILDCARD	0xff00
+#define CLI_MATCH_IGNORE	0x0100
+#define CLI_MATCH_ALTERNATIVE	0x0200
+#define CLI_MATCH_NIBBLE_HIGH	0x0300
+#define CLI_MATCH_NIBBLE_LOW	0x0400
 
-int cli_validatesig(unsigned short target, unsigned short ftype, const char *offstr, unsigned long int fileoff, int desc, const char *virname);
+struct cli_matcher {
+    uint16_t maxpatlen;
+    uint8_t ac_only;
 
-int cli_checkfp(int fd, const struct cl_node *root);
+    /* Extended Boyer-Moore */
+    int32_t *bm_shift;
+    struct cli_bm_patt **bm_suffix;
+    uint32_t *soff, soff_len; /* for PE section sigs */
+
+    /* Extended Aho-Corasick */
+    uint8_t ac_mindepth, ac_maxdepth;
+    struct cli_ac_node *ac_root, **ac_nodetable;
+    struct cli_ac_patt **ac_pattable;
+    uint32_t ac_partsigs, ac_nodes, ac_patterns;
+};
+
+#define CL_TARGET_TABLE_SIZE 7
+
+struct cli_target_info {
+    off_t fsize;
+    struct cli_exe_info exeinfo;
+    int8_t status; /* 0 == not initialised, 1 == initialised OK, -1 == error */
+};
+
+int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cl_engine *engine, cli_file_t ftype);
+
+int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset);
+
+int cli_validatesig(cli_file_t ftype, const char *offstr, off_t fileoff, struct cli_target_info *info, int desc, const char *virname);
+
+struct cli_md5_node *cli_vermd5(const unsigned char *md5, const struct cl_engine *engine);
+
+off_t cli_caloff(const char *offstr, struct cli_target_info *info, int fd, cli_file_t ftype, int *ret, unsigned int *maxshift);
 
 #endif

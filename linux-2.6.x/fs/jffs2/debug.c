@@ -1,15 +1,14 @@
 /*
  * JFFS2 -- Journalling Flash File System, Version 2.
  *
- * Copyright (C) 2001-2003 Red Hat, Inc.
+ * Copyright © 2001-2007 Red Hat, Inc.
  *
  * Created by David Woodhouse <dwmw2@infradead.org>
  *
  * For licensing information, see the file 'LICENCE' in this directory.
  *
- * $Id: debug.c,v 1.12 2005/11/07 11:14:39 gleixner Exp $
- *
  */
+
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pagemap.h>
@@ -178,8 +177,8 @@ __jffs2_dbg_acct_paranoia_check_nolock(struct jffs2_sb_info *c,
 	while (ref2) {
 		uint32_t totlen = ref_totlen(c, jeb, ref2);
 
-		if (ref2->flash_offset < jeb->offset ||
-				ref2->flash_offset > jeb->offset + c->sector_size) {
+		if (ref_offset(ref2) < jeb->offset ||
+				ref_offset(ref2) > jeb->offset + c->sector_size) {
 			JFFS2_ERROR("node_ref %#08x shouldn't be in block at %#08x.\n",
 				ref_offset(ref2), jeb->offset);
 			goto error;

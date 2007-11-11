@@ -1,7 +1,7 @@
 /*
- * $Id: t_lookup.h,v 1.10.6.3 2004/02/11 02:43:26 jiri Exp $
+ * $Id: t_lookup.h,v 1.15 2004/08/24 09:00:43 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,6 +29,7 @@
  * --------
  *  2003-02-24  s/T_NULL/T_NULL_CELL/ to avoid redefinition conflict w/
  *               nameser_compat.h (andrei)
+ *  2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
  */
 
 
@@ -70,6 +71,7 @@ int t_unref( struct sip_msg *p_msg);
  */
 int t_check( struct sip_msg* , int *branch );
 
+typedef struct cell * (*tgett_f)(void);
 struct cell *get_t();
 
 /* use carefully or better not at all -- current transaction is 

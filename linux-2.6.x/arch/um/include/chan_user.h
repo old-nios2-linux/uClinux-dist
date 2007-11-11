@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright (C) 2000, 2001 Jeff Dike (jdike@karaya.com)
  * Licensed under the GPL
  */
@@ -9,11 +9,9 @@
 #include "init.h"
 
 struct chan_opts {
-	void (*announce)(char *dev_name, int dev);
+	void (*const announce)(char *dev_name, int dev);
 	char *xterm_title;
-	int raw;
-	unsigned long tramp_stack;
-	int in_kernel;
+	const int raw;
 };
 
 enum chan_init_pri { INIT_STATIC, INIT_ALL, INIT_ONE };
@@ -44,7 +42,8 @@ extern void generic_free(void *data);
 
 struct tty_struct;
 extern void register_winch(int fd,  struct tty_struct *tty);
-extern void register_winch_irq(int fd, int tty_fd, int pid, struct tty_struct *tty);
+extern void register_winch_irq(int fd, int tty_fd, int pid,
+			       struct tty_struct *tty, unsigned long stack);
 
 #define __channel_help(fn, prefix) \
 __uml_help(fn, prefix "[0-9]*=<channel description>\n" \
@@ -54,14 +53,3 @@ __uml_help(fn, prefix "[0-9]*=<channel description>\n" \
 );
 
 #endif
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-file-style: "linux"
- * End:
- */

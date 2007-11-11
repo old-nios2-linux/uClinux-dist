@@ -1,8 +1,8 @@
 /*
- * $Id: clients.h,v 1.1 2002/11/22 18:40:16 bogdan Exp $
+ * $Id: clients.h,v 1.2 2004/08/24 08:58:29 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

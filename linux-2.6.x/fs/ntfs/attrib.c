@@ -1272,7 +1272,7 @@ ntfs_attr_search_ctx *ntfs_attr_get_search_ctx(ntfs_inode *ni, MFT_RECORD *mrec)
 {
 	ntfs_attr_search_ctx *ctx;
 
-	ctx = kmem_cache_alloc(ntfs_attr_ctx_cache, SLAB_NOFS);
+	ctx = kmem_cache_alloc(ntfs_attr_ctx_cache, GFP_NOFS);
 	if (ctx)
 		ntfs_attr_init_search_ctx(ctx, ni, mrec);
 	return ctx;
@@ -1921,7 +1921,7 @@ s64 ntfs_attr_extend_allocation(ntfs_inode *ni, s64 new_alloc_size,
 	u32 attr_len = 0; /* Silence stupid gcc warning. */
 	bool mp_rebuilt;
 
-#ifdef NTFS_DEBUG
+#ifdef DEBUG
 	read_lock_irqsave(&ni->size_lock, flags);
 	allocated_size = ni->allocated_size;
 	read_unlock_irqrestore(&ni->size_lock, flags);
@@ -2532,14 +2532,7 @@ int ntfs_attr_set(ntfs_inode *ni, const s64 ofs, const s64 cnt, const u8 val)
 		page = read_mapping_page(mapping, idx, NULL);
 		if (IS_ERR(page)) {
 			ntfs_error(vol->sb, "Failed to read first partial "
-					"page (sync error, index 0x%lx).", idx);
-			return PTR_ERR(page);
-		}
-		wait_on_page_locked(page);
-		if (unlikely(!PageUptodate(page))) {
-			ntfs_error(vol->sb, "Failed to read first partial page "
-					"(async error, index 0x%lx).", idx);
-			page_cache_release(page);
+					"page (error, index 0x%lx).", idx);
 			return PTR_ERR(page);
 		}
 		/*
@@ -2602,14 +2595,7 @@ int ntfs_attr_set(ntfs_inode *ni, const s64 ofs, const s64 cnt, const u8 val)
 		page = read_mapping_page(mapping, idx, NULL);
 		if (IS_ERR(page)) {
 			ntfs_error(vol->sb, "Failed to read last partial page "
-					"(sync error, index 0x%lx).", idx);
-			return PTR_ERR(page);
-		}
-		wait_on_page_locked(page);
-		if (unlikely(!PageUptodate(page))) {
-			ntfs_error(vol->sb, "Failed to read last partial page "
-					"(async error, index 0x%lx).", idx);
-			page_cache_release(page);
+					"(error, index 0x%lx).", idx);
 			return PTR_ERR(page);
 		}
 		kaddr = kmap_atomic(page, KM_USER0);

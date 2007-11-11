@@ -13,16 +13,25 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
+
+#ifdef	_MSC_VER
+#include <windows.h>
+#endif
 
 #include "clamav-config.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#ifndef	C_WINDOWS
 #include <netinet/in.h>
+#endif
 #include <string.h>
 
 #include "clamav.h"
@@ -30,29 +39,11 @@
 #include "cltypes.h"
 #include "special.h"
 
-#define FALSE (0)
-#define TRUE (1)
-
 /* NOTE: Photoshop stores data in BIG ENDIAN format, this is the opposite
 	to virtually everything else */
-#if WORDS_BIGENDIAN == 0
-static uint16_t special_endian_convert_16(uint16_t v)
-{
-        return ((v >> 8) + (v << 8));
-}
-#else
-#define special_endian_convert_16(v)       (v)
-#endif
 
-#if WORDS_BIGENDIAN == 0
-static uint32_t special_endian_convert_32(uint32_t v)
-{
-        return ((v >> 24) | ((v & 0x00FF0000) >> 8) |
-                ((v & 0x0000FF00) << 8) | (v << 24));
-}
-#else
-#define special_endian_convert_32(v)    (v)
-#endif
+#define special_endian_convert_16(v) be16_to_host(v)
+#define special_endian_convert_32(v) be32_to_host(v)
 
 int cli_check_mydoom_log(int desc, const char **virname)
 {
@@ -69,13 +60,13 @@ int cli_check_mydoom_log(int desc, const char **virname)
 
 	/* Decode the key */
 	record[0] = ~ntohl(record[0]);
-	cli_dbgmsg("Mydoom: key: %lu\n", record[0]);
+	cli_dbgmsg("Mydoom: key: %d\n", record[0]);
 	check = 0;
 	for (i=1 ; i<8; i++) {
 	    record[i] = ntohl(record[i]) ^ record[0];
 	    check += record[i];
 	}
-	cli_dbgmsg("Mydoom: check: %lu\n", ~check);
+	cli_dbgmsg("Mydoom: check: %d\n", ~check);
 	if ((~check) != record[0]) {
 	    return CL_CLEAN;
 	}
@@ -148,7 +139,7 @@ static int jpeg_check_photoshop_8bim(int fd)
 
 	retval = cli_check_jpeg_exploit(fd);
 	if (retval == 1) {
-		cli_dbgmsg("Exploit found in thumbnail\n", retval);
+		cli_dbgmsg("Exploit found in thumbnail\n");
 	}
 	lseek(fd, offset+size, SEEK_SET);
 
@@ -248,21 +239,10 @@ int cli_check_jpeg_exploit(int fd)
 
 static uint32_t riff_endian_convert_32(uint32_t value, int big_endian)
 {
-	if (big_endian) {
-#if WORDS_BIGENDIAN == 0
-		return ((value >> 24) | ((value & 0x00FF0000) >> 8) |
-			((value & 0x0000FF00) << 8) | (value << 24));
-#else
-		return value;
-#endif
-	} else {
-#if WORDS_BIGENDIAN == 0
-		return value;
-#else
-		return ((value >> 24) | ((value & 0x00FF0000) >> 8) |
-			((value & 0x0000FF00) << 8) | (value << 24));
-#endif
-        }
+	if (big_endian)
+		return be32_to_host(value);
+	else
+		return le32_to_host(value);
 }
 
 static int riff_read_chunk(int fd, int big_endian, int rec_level)

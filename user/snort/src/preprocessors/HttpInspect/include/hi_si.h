@@ -74,7 +74,13 @@ typedef struct s_HI_SESSION
     */
     HTTPINSPECT_GLOBAL_CONF *global_conf;
 
+    /* Necessary for switching on and off some checks 
+     * during normalization. */
+    u_int32_t norm_flags;
+
 } HI_SESSION;
+
+#define HI_BODY 1 
 
 /**
 **  The HI_SI_INPUT structure holds the information that the Session

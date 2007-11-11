@@ -3,9 +3,8 @@
  *  With enhancements from Thomas Lamy <Thomas.Lamy@in-online.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -25,14 +25,23 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/types.h>
+#ifdef	HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 
 #include "clamav.h"
 #include "filetypes.h"
 #include "others.h"
 #include "readdb.h"
+#include "matcher-ac.h"
+#include "str.h"
+
+#include "htmlnorm.h"
+#include "entconv.h"
 
 struct cli_magic_s {
-    int offset;
+    size_t offset;
     const char *magic;
     size_t length;
     const char *descr;
@@ -50,6 +59,7 @@ static const struct cli_magic_s cli_magic[] = {
     /* Executables */
 
     {0,  "MZ",				2,  "DOS/W32 executable/library/driver", CL_TYPE_MSEXE},
+    {0,	 "\177ELF",			4,  "ELF",		CL_TYPE_ELF},
 
     /* Archives */
 
@@ -61,6 +71,7 @@ static const struct cli_magic_s cli_magic[] = {
     {0,	    "SZDD",			4,  "compress.exe'd",	CL_TYPE_MSSZDD},
     {0,	    "MSCF",			4,  "MS CAB",		CL_TYPE_MSCAB},
     {0,	    "ITSF",			4,  "MS CHM",           CL_TYPE_MSCHM},
+    {8,	    "\x19\x04\x00\x10",		4,  "SIS",		CL_TYPE_SIS},
     {0,     "#@~^",			4,  "SCRENC",		CL_TYPE_SCRENC},
     {0,     "(This file must be converted with BinHex 4.0)",
 				       45, "BinHex",		CL_TYPE_BINHEX},
@@ -95,10 +106,7 @@ static const struct cli_magic_s cli_magic[] = {
     {0,  "Hi. This is the qmail-send",  26, "Qmail bounce",	  CL_TYPE_MAIL},
     {0,  "\170\237\076\042",		 4, "TNEF",               CL_TYPE_TNEF},
 
-    /* Others */
-
-    {0,  "\320\317\021\340\241\261\032\341",
-	                    8, "OLE2 container",  CL_TYPE_MSOLE2},
+    {0,  "begin ",			6,  "UUencoded",	  CL_TYPE_UUENCODED},
 
     /* Graphics (may contain exploits against MS systems) */
 
@@ -111,6 +119,13 @@ static const struct cli_magic_s cli_magic[] = {
     {0,  "RIFF",                         4, "RIFF",         CL_TYPE_RIFF},
     {0,  "RIFX",                         4, "RIFX",         CL_TYPE_RIFF},
 
+    /* Others */
+
+    {0,  "\320\317\021\340\241\261\032\341", 8, "OLE2 container", CL_TYPE_MSOLE2},
+    {0,  "%PDF-",			 5, "PDF document", CL_TYPE_PDF},
+    {0,  "\266\271\254\256\376\377\377\377", 8, "CryptFF", CL_TYPE_CRYPTFF},
+    {0,  "{\\rtf",                           5, "RTF", CL_TYPE_RTF}, 
+
     /* Ignored types */
 
     {0,  "\000\000\001\263",             4, "MPEG video stream",  CL_TYPE_DATA},
@@ -118,12 +133,11 @@ static const struct cli_magic_s cli_magic[] = {
     {0,  "OggS",                         4, "Ogg Stream",         CL_TYPE_DATA},
     {0,  "ID3",				 3, "MP3",		  CL_TYPE_DATA},
     {0,  "\377\373\220",		 3, "MP3",		  CL_TYPE_DATA},
-    {0,  "\%PDF-",			 5, "PDF document",	  CL_TYPE_DATA},
-    {0,  "\%!PS-Adobe-",		11, "PostScript",	  CL_TYPE_DATA},
+    {0,  "%!PS-Adobe-",			11, "PostScript",	  CL_TYPE_DATA},
     {0,  "\060\046\262\165\216\146\317", 7, "WMA/WMV/ASF",	  CL_TYPE_DATA},
     {0,  ".RMF" ,			 4, "Real Media File",	  CL_TYPE_DATA},
 
-    {-1, NULL,				 0, NULL,		  CL_TYPE_UNKNOWN_DATA}
+    {0, NULL,				 0, NULL,		  CL_TYPE_UNKNOWN_DATA}
 };
 
 static const struct cli_smagic_s cli_smagic[] = {
@@ -169,6 +183,15 @@ static const struct cli_smagic_s cli_smagic[] = {
     {"3c4f424a454354", "HTML data", CL_TYPE_HTML},      /* <OBJECT */
     {"3c696672616d65", "HTML data", CL_TYPE_HTML},      /* <iframe */
     {"3c494652414d45", "HTML data", CL_TYPE_HTML},      /* <IFRAME */
+    {"3c7461626c65",   "HTML data", CL_TYPE_HTML},	/* <table */
+    {"3c5441424c45",   "HTML data", CL_TYPE_HTML},	/* <TABLE */
+
+    {"526172211a0700", "RAR-SFX", CL_TYPE_RARSFX},
+    {"504b0304", "ZIP-SFX", CL_TYPE_ZIPSFX},
+    {"4d534346", "CAB-SFX", CL_TYPE_CABSFX},
+    {"efbeadde4e756c6c736f6674496e7374", "NSIS", CL_TYPE_NULSFT},
+
+    {"4d5a{60-300}50450000", "PE", CL_TYPE_MSEXE},
 
     {NULL,  NULL,   CL_TYPE_UNKNOWN_DATA}
 };
@@ -193,9 +216,9 @@ static char internat[256] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1   /* 0xfX */
 };
 
-cli_file_t cli_filetype(const char *buf, size_t buflen)
+cli_file_t cli_filetype(const unsigned char *buf, size_t buflen)
 {
-	int i, ascii = 1, len;
+	int i, text = 1, len;
 
 
     for(i = 0; cli_magic[i].magic; i++) {
@@ -207,29 +230,99 @@ cli_file_t cli_filetype(const char *buf, size_t buflen)
 	}
     }
 
+/* improve or drop this code
+ * https://wwws.clamav.net/bugzilla/show_bug.cgi?id=373
+ *
     buflen < 25 ? (len = buflen) : (len = 25);
     for(i = 0; i < len; i++)
 	if(!iscntrl(buf[i]) && !isprint(buf[i]) && !internat[buf[i] & 0xff]) {
-	    ascii = 0;
+	    text = 0;
 	    break;
 	}
-
-    return ascii ? CL_TYPE_UNKNOWN_TEXT : CL_TYPE_UNKNOWN_DATA;
+*/
+    return text ? CL_TYPE_UNKNOWN_TEXT : CL_TYPE_UNKNOWN_DATA;
 }
 
-int is_tar(unsigned char *buf, int nbytes);
+int is_tar(unsigned char *buf, unsigned int nbytes);
 
-cli_file_t cli_filetype2(int desc)
+cli_file_t cli_filetype2(int desc, const struct cl_engine *engine)
 {
-	char smallbuff[MAGIC_BUFFER_SIZE + 1];
-	unsigned char *bigbuff;
-	int bread;
+	unsigned char smallbuff[MAGIC_BUFFER_SIZE + 1], *decoded, *bigbuff;
+	int bread, sret;
 	cli_file_t ret = CL_TYPE_UNKNOWN_DATA;
+	struct cli_matcher *root;
+	struct cli_ac_data mdata;
 
 
     memset(smallbuff, 0, sizeof(smallbuff));
     if((bread = read(desc, smallbuff, MAGIC_BUFFER_SIZE)) > 0)
 	ret = cli_filetype(smallbuff, bread);
+
+    if(engine && ret == CL_TYPE_UNKNOWN_TEXT) {
+	root = engine->root[0];
+	if(!root)
+	    return ret;
+
+	if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+	    return ret;
+
+	sret = cli_ac_scanbuff(smallbuff, bread, NULL, engine->root[0], &mdata, 1, 0, 0, -1, NULL);
+
+	cli_ac_freedata(&mdata);
+
+	if(sret >= CL_TYPENO) {
+	    ret = sret;
+	} else {
+	    if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+		return ret;
+
+	    decoded = (unsigned char *) cli_utf16toascii((char *) smallbuff, bread);
+	    if(decoded) {
+		sret = cli_ac_scanbuff(decoded, strlen((char *) decoded), NULL, engine->root[0], &mdata, 1, 0, 0, -1, NULL);
+		free(decoded);
+		if(sret == CL_TYPE_HTML)
+		    ret = CL_TYPE_HTML_UTF16;
+	    }
+	    cli_ac_freedata(&mdata);
+
+	    if((((struct cli_dconf*) engine->dconf)->phishing & PHISHING_CONF_ENTCONV) && ret != CL_TYPE_HTML_UTF16) {
+		    struct entity_conv conv;
+		    const size_t conv_size = 2*bread < 256 ? 256 : 2*bread;
+
+		if(init_entity_converter(&conv,UNKNOWN,conv_size) == 0) {
+			int end = 0;
+			m_area_t area;
+			area.buffer = (unsigned char *) smallbuff;
+			area.length = bread;
+			area.offset = 0;
+
+		    while(!end) {
+			if(cli_ac_initdata(&mdata, root->ac_partsigs, AC_DEFAULT_TRACKLEN))
+			    return ret;
+
+			decoded =  encoding_norm_readline(&conv, NULL, &area, bread);
+
+			if(decoded) {
+			    sret = cli_ac_scanbuff(decoded, strlen((const char *) decoded), NULL, engine->root[0], &mdata, 1, 0, 0, -1, NULL);
+			    free(decoded);
+			    if(sret == CL_TYPE_HTML) {
+				ret = CL_TYPE_HTML;
+				end = 1;
+			    }
+			} else
+			    end = 1;
+
+			cli_ac_freedata(&mdata);
+		    }
+
+		    entity_norm_done(&conv);
+
+		} else {
+		    cli_warnmsg("cli_filetype2: Error initializing entity converter\n");
+		}
+	    }
+	}
+    }
 
     if(ret == CL_TYPE_UNKNOWN_DATA || ret == CL_TYPE_UNKNOWN_TEXT) {
 
@@ -270,13 +363,34 @@ cli_file_t cli_filetype2(int desc)
     return ret;
 }
 
-int cli_addtypesigs(struct cl_node *root)
+int cli_addtypesigs(struct cl_engine *engine)
 {
 	int i, ret;
+	struct cli_matcher *root;
+
+
+    if(!engine->root[0]) {
+	cli_dbgmsg("cli_addtypesigs: Need to allocate AC trie in engine->root[0]\n");
+	root = engine->root[0] = (struct cli_matcher *) cli_calloc(1, sizeof(struct cli_matcher));
+	if(!root) {
+	    cli_errmsg("cli_addtypesigs: Can't initialise AC pattern matcher\n");
+	    return CL_EMEM;
+	}
+
+	if((ret = cli_ac_init(root, AC_DEFAULT_MIN_DEPTH, AC_DEFAULT_MAX_DEPTH))) {
+	    /* No need to free previously allocated memory here - all engine
+	     * elements will be properly freed by cl_free()
+	     */
+	    cli_errmsg("cli_addtypesigs: Can't initialise AC pattern matcher\n");
+	    return ret;
+	}
+    } else {
+	root = engine->root[0];
+    }
 
     for(i = 0; cli_smagic[i].sig; i++) {
 	if((ret = cli_parse_add(root, cli_smagic[i].descr, cli_smagic[i].sig, cli_smagic[i].type, NULL, 0))) {
-	    cli_errmsg("cli_addtypesigs(): Problem adding signature for %s\n", cli_smagic[i].descr);
+	    cli_errmsg("cli_addtypesigs: Problem adding signature for %s\n", cli_smagic[i].descr);
 	    return ret;
 	}
     }

@@ -1,9 +1,9 @@
 /*
- * $Id: rpid.c,v 1.3.2.3.2.1 2003/11/24 14:00:34 janakj Exp $
+ * $Id: rpid.c,v 1.8.2.6 2005/06/21 17:52:13 andrei Exp $
  *
  * Remote-Party-ID related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -50,14 +50,16 @@
 #define RPID_HF_NAME_LEN (sizeof(RPID_HF_NAME)-1)
 
 
-static str rpid;                /* rpid, stored in a backend authentication module */
+static char rpid_buffer[MAX_RPID_LEN];
+static str rpid = {rpid_buffer,  0};	/* rpid, stored in a backend 
+										   authentication module */
 static int rpid_is_e164;        /* 1 - yes, 0 - unknown, -1 - no */
 
 
 /*
  * Copy of is_e164 from enum module
  */
-static int is_e164(str* _user)
+static inline int is_e164(str* _user)
 {
 	int i;
 	char c;
@@ -76,7 +78,7 @@ static int is_e164(str* _user)
 /* 
  * Copy of append_hf_helper from textops.
  */
-static int append_rpid_helper(struct sip_msg* _m, str *_s)
+static inline int append_rpid_helper(struct sip_msg* _m, str *_s)
 {
 	struct lump* anchor;
 	char *s;
@@ -246,14 +248,13 @@ int is_rpid_user_e164(struct sip_msg* _m, char* _s1, char* _s2)
  */
 void save_rpid(str* _rpid)
 {
-	rpid.s = 0;
 	rpid.len = rpid_is_e164 = 0;
 
 	if (!_rpid) {
 		return;
 	}
-	
-	rpid.s = _rpid->s;
+
+	memcpy(rpid.s, _rpid->s, _rpid->len);
 	rpid.len = _rpid->len;
 	DBG("save_rpid(): rpid value is '%.*s'\n", _rpid->len, ZSW(_rpid->s));
 }

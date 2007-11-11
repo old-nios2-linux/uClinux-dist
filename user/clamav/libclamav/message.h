@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef	_MESSAGE_H
@@ -28,18 +29,20 @@ typedef struct message {
 	char	**mimeArguments;
 	char	*mimeDispositionType;	/* probably attachment */
 	text	*body_first, *body_last;
+	cli_ctx	*ctx;
 
 	char	base64_1, base64_2, base64_3;
 	int	base64chars;
+	unsigned	int	isInfected : 1;
+
 	/*
 	 * Markers for the start of various non MIME messages that could
 	 * be included within this message
 	 */
-	const text	*bounce;	/* start of a bounced message */
-	const text	*binhex;	/* start of a binhex message */
-	const text	*uuencode;	/* start of a uuencoded message */
-	const text	*yenc;		/* start of a yEnc message */
-	const text	*encoding;	/* is the non MIME message encoded? */
+	text	*bounce;	/* start of a bounced message */
+	text	*binhex;	/* start of a binhex message */
+	text	*yenc;		/* start of a yEnc message */
+	text	*encoding;	/* is the non MIME message encoded? */
 	const text	*dedupedThisFar;
 } message;
 
@@ -54,24 +57,26 @@ void	messageSetDispositionType(message *m, const char *disptype);
 const	char	*messageGetDispositionType(const message *m);
 void	messageAddArgument(message *m, const char *arg);
 void	messageAddArguments(message *m, const char *arg);
-const	char	*messageFindArgument(const message *m, const char *variable);
+char	*messageFindArgument(const message *m, const char *variable);
 void	messageSetEncoding(message *m, const char *enctype);
 encoding_type	messageGetEncoding(const message *m);
 int	messageAddLine(message *m, line_t *line);
 int	messageAddStr(message *m, const char *data);
 int	messageAddStrAtTop(message *m, const char *data);
-const	text	*messageGetBody(const message *m);
+text	*messageGetBody(message *m);
 void	messageClean(message *m);
-fileblob	*messageToFileblob(message *m, const char *dir);
-blob	*messageToBlob(message *m);
+unsigned	char	*base64Flush(message *m, unsigned char *buf);
+fileblob	*messageToFileblob(message *m, const char *dir, int destroy);
+blob	*messageToBlob(message *m, int destroy);
 text	*messageToText(message *m);
-const	text	*binhexBegin(const message *m);
-const	text	*uuencodeBegin(const message *m);
-const	text	*yEncBegin(const message *m);
-const	text	*bounceBegin(const message *m);
-const	text	*encodingLine(const message *m);
+text	*binhexBegin(message *m);
+text	*yEncBegin(message *m);
+text	*bounceBegin(message *m);
+text	*encodingLine(message *m);
 void	messageClearMarkers(message *m);
 unsigned char	*decodeLine(message *m, encoding_type enctype, const char *line, unsigned char *buf, size_t buflen);
 int	isuuencodebegin(const char *line);
+void	messageSetCTX(message *m, cli_ctx *ctx);
+int	messageContainsVirus(const message *m);
 
 #endif	/*_MESSAGE_H*/

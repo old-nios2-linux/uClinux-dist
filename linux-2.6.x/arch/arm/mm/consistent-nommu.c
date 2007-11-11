@@ -80,9 +80,9 @@ __dma_alloc(struct device *dev, size_t size, dma_addr_t *handle, gfp_t gfp,
 	 * kernel direct-mapped region for device DMA.
 	 */
 	{
-		unsigned long kaddr = (unsigned long)page_address(page);
-		memset(page_address(page), 0, size);
-		dmac_flush_range(kaddr, kaddr + size);
+		void *ptr = page_address(page);
+		memset(ptr, 0, size);
+		dmac_flush_range(ptr, ptr + size);
 	}
 
 	/*
@@ -190,10 +190,9 @@ EXPORT_SYMBOL(dma_free_coherent);
 /*
  * Make an area consistent for devices.
  */
-void consistent_sync(void *vaddr, size_t size, int direction)
+void consistent_sync(const void *start, size_t size, int direction)
 {
-	unsigned long start = (unsigned long)vaddr;
-	unsigned long end   = start + size;
+	const void *end = start + size;
 
 	switch (direction) {
 	case DMA_FROM_DEVICE:		/* invalidate only */

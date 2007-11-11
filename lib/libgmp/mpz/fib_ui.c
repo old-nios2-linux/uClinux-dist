@@ -1,162 +1,144 @@
-/* mpz_fib_ui(result, n) -- Set RESULT to the Nth Fibonacci number.
+/* mpz_fib_ui -- calculate Fibonacci numbers.
 
-Copyright (C) 1998, 1999, 2000 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2005 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
+#include <stdio.h>
 #include "gmp.h"
 #include "gmp-impl.h"
+#include "longlong.h"
 
-/* This is fast, but could be made somewhat faster and neater.
-   The timing is somewhat fluctuating for even/odd sizes because
-   of the extra hair used to save variables and operations.  Here
-   are a few things one might want to address:
-     1. Avoid using 4 intermediate variables in mpz_fib_bigcase.
-     2. Call mpn functions directly.  Straightforward for these functions.
-     3. Merge the three functions into one.
 
-Said by Kevin Ryde:
-   Consider using the Lucas numbers L[n] as an auxiliary sequence, making
-   it possible to do the "doubling" operation in mpz_fib_bigcase with two
-   squares rather than two multiplies.  The formulas are a little more
-   complicated, something like the following (untested).
+/* change to "#define TRACE(x) x" to get some traces */
+#define TRACE(x)
 
-       F[2n] = ((F[n]+L[n])^2 - 6*F[n]^2 - 4*(-1)^n) / 2
-       L[2n] = 5*F[n]^2 + 2*(-1)^n
 
-       F[2n+1] = (F[2n] + L[2n]) / 2
-       L[2n+1] = (5*F[2n] + L[2n]) / 2
+/* In the F[2k+1] below for k odd, the -2 won't give a borrow from the low
+   limb because the result F[2k+1] is an F[4m+3] and such numbers are always
+   == 1, 2 or 5 mod 8, whereas an underflow would leave 6 or 7.  (This is
+   the same as in mpn_fib2_ui.)
 
-   The Lucas number that comes for free here could even be returned.
+   In the F[2k+1] for k even, the +2 won't give a carry out of the low limb
+   in normal circumstances.  This is an F[4m+1] and we claim that F[3*2^b+1]
+   == 1 mod 2^b is the first F[4m+1] congruent to 0 or 1 mod 2^b, and hence
+   if n < 2^GMP_NUMB_BITS then F[n] cannot have a low limb of 0 or 1.  No
+   proof for this claim, but it's been verified up to b==32 and has such a
+   nice pattern it must be true :-).  Of interest is that F[3*2^b] == 0 mod
+   2^(b+1) seems to hold too.
 
-   Maybe there's formulas with two squares using just F[n], but I don't
-   know of any.
-*/
-
-/* Determine the needed storage for Fib(n).  */
-#define FIB_SIZE(n) (((mp_size_t) ((n)*0.695)) / BITS_PER_MP_LIMB + 2)
-
-static void mpz_fib_bigcase _PROTO ((mpz_t, mpz_t, unsigned long int));
-static void mpz_fib_basecase _PROTO ((mpz_t, mpz_t, unsigned long int));
-
-#define FIB_THRES 60
+   When n >= 2^GMP_NUMB_BITS, which can arise in a nails build, then the low
+   limb of F[4m+1] can certainly be 1, and an mpn_add_1 must be used.  */
 
 void
-#if __STDC__
-mpz_fib_ui (mpz_t r, unsigned long int n)
-#else
-mpz_fib_ui (r, n)
-     mpz_t r;
-     unsigned long int n;
-#endif
+mpz_fib_ui (mpz_ptr fn, unsigned long n)
 {
-  if (n == 0)
-    mpz_set_ui (r, 0);
+  mp_ptr         fp, xp, yp;
+  mp_size_t      size, xalloc;
+  unsigned long  n2;
+  mp_limb_t      c, c2;
+  TMP_DECL;
+
+  if (n <= FIB_TABLE_LIMIT)
+    {
+      PTR(fn)[0] = FIB_TABLE (n);
+      SIZ(fn) = (n != 0);      /* F[0]==0, others are !=0 */
+      return;
+    }
+
+  n2 = n/2;
+  xalloc = MPN_FIB2_SIZE (n2) + 1;
+  MPZ_REALLOC (fn, 2*xalloc+1);
+  fp = PTR (fn);
+
+  TMP_MARK;
+  TMP_ALLOC_LIMBS_2 (xp,xalloc, yp,xalloc);
+  size = mpn_fib2_ui (xp, yp, n2);
+
+  TRACE (printf ("mpz_fib_ui last step n=%lu size=%ld bit=%lu\n",
+                 n >> 1, size, n&1);
+         mpn_trace ("xp", xp, size);
+         mpn_trace ("yp", yp, size));
+
+  if (n & 1)
+    {
+      /* F[2k+1] = (2F[k]+F[k-1])*(2F[k]-F[k-1]) + 2*(-1)^k  */
+      mp_size_t  xsize, ysize;
+
+#if HAVE_NATIVE_mpn_addsub_n
+      xp[size] = mpn_lshift (xp, xp, size, 1);
+      yp[size] = 0;
+      ASSERT_NOCARRY (mpn_addsub_n (xp, yp, xp, yp, size+1));
+      xsize = size + (xp[size] != 0);
+      ysize = size + (yp[size] != 0);
+#else
+      c2 = mpn_lshift (fp, xp, size, 1);
+      c = c2 + mpn_add_n (xp, fp, yp, size);
+      xp[size] = c;
+      xsize = size + (c != 0);
+      c2 -= mpn_sub_n (yp, fp, yp, size);
+      yp[size] = c2;
+      ASSERT (c2 <= 1);
+      ysize = size + c2;
+#endif
+
+      size = xsize + ysize;
+      c = mpn_mul (fp, xp, xsize, yp, ysize);
+
+#if GMP_NUMB_BITS >= BITS_PER_ULONG
+      /* no overflow, see comments above */
+      ASSERT (n & 2 ? fp[0] >= 2 : fp[0] <= GMP_NUMB_MAX-2);
+      fp[0] += (n & 2 ? -CNST_LIMB(2) : CNST_LIMB(2));
+#else
+      if (n & 2)
+        {
+          ASSERT (fp[0] >= 2);
+          fp[0] -= 2;
+        }
+      else
+        {
+          ASSERT (c != GMP_NUMB_MAX); /* because it's the high of a mul */
+          c += mpn_add_1 (fp, fp, size-1, CNST_LIMB(2));
+          fp[size-1] = c;
+        }
+#endif
+    }
   else
     {
-      mpz_t t1;
-      mpz_init (t1);
-      if (n < FIB_THRES)
-	mpz_fib_basecase (t1, r, n);
-      else
-	mpz_fib_bigcase (t1, r, n);
-      mpz_clear (t1);
-    }
-}
+      /* F[2k] = F[k]*(F[k]+2F[k-1]) */
 
-static void
-#if __STDC__
-mpz_fib_basecase (mpz_t t1, mpz_t t2, unsigned long int n)
-#else
-mpz_fib_basecase (t1, t2, n)
-     mpz_t t1;
-     mpz_t t2;
-     unsigned long int n;
-#endif
-{
-  unsigned long int m, i;
-
-  mpz_set_ui (t1, 0);
-  mpz_set_ui (t2, 1);
-  m = n/2;
-  for (i = 0; i < m; i++)
-    {
-      mpz_add (t1, t1, t2);
-      mpz_add (t2, t1, t2);
-    }
-  if ((n & 1) == 0)
-    {
-      mpz_sub (t1, t2, t1);
-      mpz_sub (t2, t2, t1);	/* trick: recover t1 value just overwritten */
-    }
-}
-
-static void
-#if __STDC__
-mpz_fib_bigcase (mpz_t t1, mpz_t t2, unsigned long int n)
-#else
-mpz_fib_bigcase (t1, t2, n)
-     mpz_t t1;
-     mpz_t t2;
-     unsigned long int n;
-#endif
-{
-  unsigned long int n2;
-  int ni, i;
-  mpz_t x1, x2, u1, u2;
-
-  ni = 0;
-  for (n2 = n; n2 > FIB_THRES; n2 /= 2)
-    ni++;
-
-  mpz_fib_basecase (t1, t2, n2);
-
-  mpz_init (x1);
-  mpz_init (x2);
-  mpz_init (u1);
-  mpz_init (u2);
-
-  for (i = ni - 1; i >= 0; i--)
-    {
-      mpz_mul_2exp (x1, t1, 1);
-      mpz_mul_2exp (x2, t2, 1);
-
-      mpz_add (x1, x1, t2);
-      mpz_sub (x2, x2, t1);
-
-      mpz_mul (u1, t2, x1);
-      mpz_mul (u2, t1, x2);
-
-      if (((n >> i) & 1) == 0)
-	{
-	  mpz_sub (t1, u1, u2);
-	  mpz_set (t2, u1);
-	}
-      else
-	{
-	  mpz_set (t1, u1);
-	  mpz_mul_2exp (t2, u1, 1);
-	  mpz_sub (t2, t2, u2);
-	}
+      mp_size_t  xsize, ysize;
+      c = mpn_lshift (yp, yp, size, 1);
+      c += mpn_add_n (yp, yp, xp, size);
+      yp[size] = c;
+      xsize = size;
+      ysize = size + (c != 0);
+      size += ysize;
+      c = mpn_mul (fp, yp, ysize, xp, xsize);
     }
 
-  mpz_clear (x1);
-  mpz_clear (x2);
-  mpz_clear (u1);
-  mpz_clear (u2);
+  /* one or two high zeros */
+  size -= (c == 0);
+  size -= (fp[size-1] == 0);
+  SIZ(fn) = size;
+
+  TRACE (printf ("done special, size=%ld\n", size);
+         mpn_trace ("fp ", fp, size));
+
+  TMP_FREE;
 }

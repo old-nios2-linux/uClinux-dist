@@ -6,12 +6,14 @@ NLOBJ=ll_map.o libnetlink.o
 all: libnetlink.a libip2util.a
 
 libnetlink.a: $(NLOBJ)
-	$(CROSS)ar rcs $@ $(NLOBJ)
+	$(AR) rcs $@ $(NLOBJ)
 
 libip2util.a: $(UTILOBJ) $(ADDLIB)
-	$(CROSS)ar rcs $@ $(UTILOBJ) $(ADDLIB)
+	$(AR) rcs $@ $(UTILOBJ) $(ADDLIB)
 
 romfs:
+
+install:
 
 clean:
 	rm -f $(NLOBJ) $(UTILOBJ) $(ADDLIB) libnetlink.a libip2util.a

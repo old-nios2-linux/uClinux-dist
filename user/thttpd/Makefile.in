@@ -1,6 +1,7 @@
 # Makefile.in for thttpd
 #
-# Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+# Copyright © 1995,1998 by Jef Poskanzer <jef@mail.acme.com>.
+# All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -26,6 +27,9 @@
 # Various configurable paths (remember to edit Makefile.in, not Makefile)
 
 # Top level hierarchy.
+srcdir = @srcdir@
+top_srcdir = @top_srcdir@
+top_builddir = .
 prefix = @prefix@
 exec_prefix = @exec_prefix@
 # Pathname of directory to install the binary.
@@ -34,6 +38,7 @@ BINDIR = @sbindir@
 MANDIR = @mandir@
 # Pathname of directory to install the CGI programs.
 WEBDIR = $(prefix)/www
+VPATH = @srcdir@
 
 # CONFIGURE: The group that the web directory belongs to.  This is so that
 # the makeweb program can be installed set-group-id to that group, and make
@@ -48,7 +53,7 @@ CGIBINDIR =	$(WEBDIR)/cgi-bin
 CC =		@CC@
 CCOPT =		@V_CCOPT@
 DEFS =		@DEFS@
-INCLS =		-I.
+INCLS =		-I. -I$(top_srcdir) -I$(top_builddir)
 CFLAGS =	$(CCOPT) $(DEFS) $(INCLS)
 LDFLAGS =	@LDFLAGS@
 LIBS =		@LIBS@
@@ -59,9 +64,9 @@ INSTALL =	@INSTALL@
 
 .c.o:
 	@rm -f $@
-	$(CC) $(CFLAGS) -c $*.c
+	$(CC) $(CFLAGS) -c $<
 
-SRC =		thttpd.c libhttpd.c mmc.c timers.c match.c tdate_parse.c syslog.c
+SRC =		thttpd.c libhttpd.c fdwatch.c mmc.c timers.c match.c tdate_parse.c
 
 OBJ =		$(SRC:.c=.o) @LIBOBJS@
 
@@ -69,7 +74,7 @@ ALL =		thttpd
 
 GENHDR =	mime_encodings.h mime_types.h
 
-CLEANFILES =	$(ALL) $(OBJ) $(GENSRC) $(GENHDR) tags
+CLEANFILES =	$(ALL) $(OBJ) $(GENSRC) $(GENHDR)
 
 SUBDIRS =	cgi-src extras
 
@@ -80,19 +85,17 @@ thttpd: $(OBJ)
 	@rm -f $@
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LIBS) $(NETLIBS)
 
-libhttpd.o:		mime_encodings.h
-mime_encodings.h:	mime_encodings.txt
+mime_encodings.h:	@srcdir@/mime_encodings.txt
 	rm -f mime_encodings.h
-	sed < mime_encodings.txt > mime_encodings.h \
+	sed < @srcdir@/mime_encodings.txt > mime_encodings.h \
 	  -e 's/#.*//' -e 's/[ 	]*$$//' -e '/^$$/d' \
-	  -e 's/[ 	][ 	]*/", "/' -e 's/^/{ "/' -e 's/$$/" },/'
+	  -e 's/[ 	][ 	]*/", 0, "/' -e 's/^/{ "/' -e 's/$$/", 0 },/'
 
-libhttpd.o:	mime_types.h
-mime_types.h:	mime_types.txt
+mime_types.h:	@srcdir@/mime_types.txt
 	rm -f mime_types.h
-	sed < mime_types.txt > mime_types.h \
+	sed < @srcdir@/mime_types.txt > mime_types.h \
 	  -e 's/#.*//' -e 's/[ 	]*$$//' -e '/^$$/d' \
-	  -e 's/[ 	][ 	]*/", "/' -e 's/^/{ "/' -e 's/$$/" },/'
+	  -e 's/[ 	][ 	]*/", 0, "/' -e 's/^/{ "/' -e 's/$$/", 0 },/'
 
 
 subdirs:
@@ -110,9 +113,11 @@ subdirs:
 install:	installthis install-man installsubdirs
 
 installthis:
+	-mkdir -p $(DESTDIR)$(BINDIR)
 	$(INSTALL) -m 555 -o bin -g bin thttpd $(DESTDIR)$(BINDIR)
 
 install-man:
+	-mkdir -p $(DESTDIR)$(MANDIR)/man8
 	$(INSTALL) -m 444 -o bin -g bin thttpd.8 $(DESTDIR)$(MANDIR)/man8
 
 installsubdirs:
@@ -132,7 +137,7 @@ clean:		cleansubdirs
 	rm -f $(CLEANFILES)
 
 distclean:	distcleansubdirs
-	rm -f $(CLEANFILES) Makefile config.cache config.log config.status
+	rm -f $(CLEANFILES) Makefile config.cache config.log config.status tags
 
 cleansubdirs:
 	for i in $(SUBDIRS) ; do ( \
@@ -156,15 +161,17 @@ tar:
 	  rm -rf $$name ; \
 	  mkdir $$name ; \
 	  tar cf - `cat FILES` | ( cd $$name ; tar xfBp - ) ; \
-	  chmod 644 $$name/Makefile.in $$name/config.h ; \
+	  chmod 644 $$name/Makefile.in $$name/config.h $$name/mime_encodings.txt $$name/mime_types.txt ; \
+	  chmod 755 $$name/cgi-bin $$name/cgi-src $$name/contrib $$name/contrib/redhat-rpm $$name/extras $$name/scripts ; \
 	  tar cf $$name.tar $$name ; \
 	  rm -rf $$name ; \
-	  compress $$name.tar
+	  gzip $$name.tar
 
-thttpd.o:	config.h version.h libhttpd.h mmc.h timers.h match.h
+thttpd.o:	config.h version.h libhttpd.h fdwatch.h mmc.h timers.h match.h
 libhttpd.o:	config.h version.h libhttpd.h mime_encodings.h mime_types.h \
 		mmc.h timers.h match.h tdate_parse.h
-mmc.o:		mmc.h
+fdwatch.o:	fdwatch.h
+mmc.o:		mmc.h libhttpd.h
 timers.o:	timers.h
 match.o:	match.h
 tdate_parse.o:	tdate_parse.h

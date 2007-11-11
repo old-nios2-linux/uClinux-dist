@@ -169,6 +169,9 @@
  * the number of uncopied bytes.
  * memcpy sets v0 to dst.
  */
+
+#ifndef CONFIG_RTL865X
+
 	.align	5
 LEAF(memcpy)					/* a0=dst a1=src a2=len */
 	move	v0, dst				/* return value */
@@ -394,6 +397,129 @@ done:
 	jr	ra
 	 nop
 	END(memcpy)
+
+#else /* CONFIG_RTL865X */
+
+	/*
+	 * an older version that doesn't use lw.l and friends
+	 */
+	.align	5
+LEAF(memcpy)					/* a0=dst a1=src a2=len */
+	move	v0, dst				/* return value */
+__memcpy:
+FEXPORT(__copy_user)
+	/*
+	 * Note: dst & src may be unaligned, len may be 0
+	 * Temps
+	 */
+#define rem t8
+
+	/*
+	 * The "issue break"s below are very approximate.
+	 * Issue delays for dcache fills will perturb the schedule, as will
+	 * load queue full replay traps, etc.
+	 *
+	 * If len < NBYTES use byte operations.
+	 */
+	sltu	t2, len, NBYTES
+	and	t1, dst, ADDRMASK
+	bnez	t2, copy_bytes_checklen
+	and t2, src, ADDRMASK
+	bnez t1, copy_bytes_checklen
+	nop
+	bnez t2, copy_bytes_checklen
+	nop
+
+
+	/*
+	 * use delay slot for fall-through
+	 * src and dst are aligned; need to compute rem
+	 */
+both_aligned:
+	 SRL	t0, len, LOG_NBYTES+3    # +3 for 8 units/iter
+	beqz	t0, cleanup_both_aligned # len < 8*NBYTES
+	 and	rem, len, (8*NBYTES-1)	 # rem = len % (8*NBYTES)
+	.align	4
+1:
+EXC(	LOAD	t0, UNIT(0)(src),	l_exc)
+EXC(	LOAD	t1, UNIT(1)(src),	l_exc_copy)
+EXC(	LOAD	t2, UNIT(2)(src),	l_exc_copy)
+EXC(	LOAD	t3, UNIT(3)(src),	l_exc_copy)
+	SUB	len, len, 8*NBYTES
+EXC(	LOAD	t4, UNIT(4)(src),	l_exc_copy)
+EXC(	LOAD	t7, UNIT(5)(src),	l_exc_copy)
+EXC(	STORE	t0, UNIT(0)(dst),	s_exc_p8u)
+EXC(	STORE	t1, UNIT(1)(dst),	s_exc_p7u)
+EXC(	LOAD	t0, UNIT(6)(src),	l_exc_copy)
+EXC(	LOAD	t1, UNIT(7)(src),	l_exc_copy)
+	ADD	src, src, 8*NBYTES
+	ADD	dst, dst, 8*NBYTES
+EXC(	STORE	t2, UNIT(-6)(dst),	s_exc_p6u)
+EXC(	STORE	t3, UNIT(-5)(dst),	s_exc_p5u)
+EXC(	STORE	t4, UNIT(-4)(dst),	s_exc_p4u)
+EXC(	STORE	t7, UNIT(-3)(dst),	s_exc_p3u)
+EXC(	STORE	t0, UNIT(-2)(dst),	s_exc_p2u)
+EXC(	STORE	t1, UNIT(-1)(dst),	s_exc_p1u)
+	bne	len, rem, 1b
+	 nop
+
+	/*
+	 * len == rem == the number of bytes left to copy < 8*NBYTES
+	 */
+cleanup_both_aligned:
+	beqz	len, done
+	 sltu	t0, len, 4*NBYTES
+	bnez	t0, less_than_4units
+	 and	rem, len, (NBYTES-1)	# rem = len % NBYTES
+	/*
+	 * len >= 4*NBYTES
+	 */
+EXC(	LOAD	t0, UNIT(0)(src),	l_exc)
+EXC(	LOAD	t1, UNIT(1)(src),	l_exc_copy)
+EXC(	LOAD	t2, UNIT(2)(src),	l_exc_copy)
+EXC(	LOAD	t3, UNIT(3)(src),	l_exc_copy)
+	SUB	len, len, 4*NBYTES
+	ADD	src, src, 4*NBYTES
+EXC(	STORE	t0, UNIT(0)(dst),	s_exc_p4u)
+EXC(	STORE	t1, UNIT(1)(dst),	s_exc_p3u)
+EXC(	STORE	t2, UNIT(2)(dst),	s_exc_p2u)
+EXC(	STORE	t3, UNIT(3)(dst),	s_exc_p1u)
+	beqz	len, done
+	 ADD	dst, dst, 4*NBYTES
+less_than_4units:
+	/*
+	 * rem = len % NBYTES
+	 */
+	beq	rem, len, copy_bytes
+	 nop
+1:
+EXC(	LOAD	 t0, 0(src),		l_exc)
+	ADD	src, src, NBYTES
+	SUB	len, len, NBYTES
+EXC(	STORE	t0, 0(dst),		s_exc)
+	bne	rem, len, 1b
+	 ADD	dst, dst, NBYTES
+
+copy_bytes_checklen:
+	beqz	len, done
+	 nop
+copy_bytes:
+1:
+	beqz	len, done
+	nop
+EXC(	lb  t0, 0(src), l_exc)
+	SUB len, len, 1
+EXC(	sb	t0, 0(dst), s_exc_p1)
+	ADD	dst,	dst, 1
+	ADD src,	src, 1
+	bnez	len, 1b 
+	nop
+done:
+	jr	ra
+	 nop
+	 END(memcpy)
+
+#endif /* CONFIG_RTL865X */
 
 l_exc_copy:
 	/*

@@ -247,6 +247,12 @@ void Stream4ProcessUdp(Packet *p)
                 ssn->session_flags = SSNFLAG_SEEN_SENDER | SSNFLAG_MIDSTREAM;
                 ssn->start_time = p->pkth->ts.tv_sec;
             }
+            else
+            {
+                DEBUG_WRAP(DebugMessage((DEBUG_STREAM|DEBUG_STREAM_STATE),
+                                        "Couldn't get a new udp session\n"););
+                return;
+            }
         }
         else
         {
@@ -269,7 +275,7 @@ void Stream4ProcessUdp(Packet *p)
         ssn->last_session_time = p->pkth->ts.tv_sec;
 
         /* Check if stream is to be ignored per session flags */
-        if (ssn && ssn->ignore_flag )
+        if ( ssn->ignore_flag )
         {
             DEBUG_WRAP(DebugMessage(DEBUG_STREAM, 
                     "Nothing to do -- stream is set to be ignored.\n"););
@@ -283,7 +289,7 @@ void Stream4ProcessUdp(Packet *p)
                 struct in_addr tmpAddr;
                 char srcAddr[17];
                 tmpAddr.s_addr = p->iph->ip_src.s_addr;
-                strcpy(srcAddr, (char *)inet_ntoa(tmpAddr));
+                SnortStrncpy(srcAddr, (char *)inet_ntoa(tmpAddr), sizeof(srcAddr));
                 tmpAddr.s_addr = p->iph->ip_dst.s_addr;
 
                 DEBUG_WRAP(DebugMessage(DEBUG_STREAM,

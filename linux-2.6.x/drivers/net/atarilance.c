@@ -1047,7 +1047,6 @@ static int lance_rx( struct net_device *dev )
 						   pkt_len );
 				}
 
-				skb->dev = dev;
 				skb_reserve( skb, 2 );	/* 16 byte align */
 				skb_put( skb, pkt_len );	/* Make room */
 				lp->memcpy_f( skb->data, PKTBUF_ADDR(head), pkt_len );
@@ -1179,7 +1178,7 @@ static int lance_set_mac_address( struct net_device *dev, void *addr )
 #ifdef MODULE
 static struct net_device *atarilance_dev;
 
-int init_module(void)
+int __init init_module(void)
 {
 	atarilance_dev = atarilance_probe(-1);
 	if (IS_ERR(atarilance_dev))
@@ -1187,7 +1186,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(atarilance_dev);
 	free_irq(atarilance_dev->irq, atarilance_dev);

@@ -162,7 +162,12 @@ static int TelnetStatefulSessionInspection(SFSnortPacket *p,
     /*
      * If not, create a new one, and initialize it.
      */
-    NewSession = malloc(sizeof(TELNET_SESSION));
+    NewSession = (TELNET_SESSION *)calloc(1, sizeof(TELNET_SESSION));
+    if (NewSession == NULL)
+    {
+        DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate memory for new Telnet session\n",
+                                        *(_dpd.config_file), *(_dpd.config_line));
+    }
     
     TelnetResetSession(NewSession);
 
@@ -571,35 +576,6 @@ static int FTPInitConf(SFSnortPacket *p, FTPTELNET_GLOBAL_CONF *GlobalConf,
     return iRet;
 }
 
-#ifdef MAINTAIN_DIR_STATE
-/*
- * Function: FTPFreeDirectory(FTP_DIR_NODE *directory)
- *
- * Purpose: This function frees the memory associated with a FTP Directory
- * 
- * Arugments: directory     => pointer to the directory node to free
- * 
- * Returns: None
- * 
- */
-void FTPFreeDirectory(FTP_DIR_NODE *directory)
-{
-    if (directory == NULL)
-        return;
-
-    if (directory->name)
-        free(directory->name);
-
-    if (directory->next)
-    {
-        FTPFreeDirectory(directory->next);
-        directory->next = NULL;
-    }
-
-    free(directory);
-}
-#endif
-
 /*
  * Function: FTPFreeSession(void *preproc_session)
  *
@@ -614,16 +590,6 @@ static void FTPFreeSession(void *preproc_session)
     FTP_SESSION *FtpSession = preproc_session;
     if (FtpSession)
     {
-#ifdef MAINTAIN_USER_STATE
-        if (FtpSession->user)
-            free(FtpSession->user);
-#endif
-#ifdef MAINTAIN_DIR_STATE
-        if (FtpSession->head_directory)
-            FTPFreeDirectory(FtpSession->head_directory);
-        if (FtpSession->dir_adjust)
-            free(FtpSession->dir_adjust);
-#endif
         free(FtpSession);
     }
 }
@@ -661,21 +627,6 @@ static INLINE int FTPResetSession(FTP_SESSION *FtpSession, int first)
     FtpSession->data_chan_state = NO_STATE;
     FtpSession->data_chan_index = -1;
     FtpSession->data_xfer_index = -1;
-
-#ifdef MAINTAIN_USER_STATE
-    if (FtpSession->user && !first)
-        free(FtpSession->user);
-    FtpSession->user = NULL;
-    FtpSession->user_state = NO_STATE;
-#endif
-
-#ifdef MAINTAIN_DIR_STATE
-    if (FtpSession->head_directory && !first)
-        FTPFreeDirectory(FtpSession->head_directory);
-    FtpSession->head_directory = NULL;
-    FtpSession->curr_directory = NULL;
-    FtpSession->dir_state = NO_STATE;
-#endif
 
     FtpSession->event_list.stack_count = 0;
 
@@ -741,8 +692,12 @@ static int FTPStatefulSessionInspection(SFSnortPacket *p,
 
     if (*piInspectMode)
     {
-        NewSession = malloc(sizeof(FTP_SESSION));
-        memset(NewSession, 0, sizeof(FTP_SESSION));
+        NewSession = (FTP_SESSION *)calloc(1, sizeof(FTP_SESSION));
+        if (NewSession == NULL)
+        {
+            DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate memory for new FTP session\n",
+                                            *(_dpd.config_file), *(_dpd.config_line));
+        }
 
         FTPResetSession(NewSession, 1);
 

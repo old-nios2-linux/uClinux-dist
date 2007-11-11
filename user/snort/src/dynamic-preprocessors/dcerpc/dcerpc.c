@@ -25,6 +25,7 @@
 
 #include "debug.h"
 #include "sf_snort_packet.h"
+#include "bounds.h"
 
 #include "smb_structs.h"
 #include "snort_dcerpc.h"
@@ -42,6 +43,7 @@ extern u_int8_t        _debug_print;
 int IsCompleteDCERPCMessage(u_int8_t *data, u_int16_t size)
 {
     DCERPC_HDR     *dcerpc;
+    u_int16_t       frag_length;
 
     /* Check to see if this is a valid DCE/RPC packet */
     dcerpc = (DCERPC_HDR *) data;
@@ -60,8 +62,10 @@ int IsCompleteDCERPCMessage(u_int8_t *data, u_int16_t size)
         return 0;
     }
 
+    frag_length = dcerpc_ntohs(dcerpc->byte_order, dcerpc->frag_length);
+
     /* Wait until we have the whole DCE/RPC message */
-    if ( dcerpc->frag_length > size )
+    if ( frag_length > size )
         return 0;
     
     return 1;
@@ -91,7 +95,7 @@ int ProcessDCERPCMessage(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t size)
 
         if ( DCERPC_Fragmentation(current_data, current_size, &frag_length) == 1 )
         {
-            ReassembleDCERPCRequest(smb_hdr, current_data, current_size);
+            ReassembleDCERPCRequest(smb_hdr, current_data);
         }
 
         /* Sanity checks */
@@ -115,9 +119,9 @@ int ProcessDCERPCMessage(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t size)
 int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_length)
 {
     DCERPC_HDR     *dcerpc_hdr;
-    u_int16_t       frag_size;
+    int ret = 0;
 
-    if ( _dcerpc->state && STATE_IS_DCERPC )
+    if ( _dcerpc->state == STATE_IS_DCERPC )
     {
         if ( data_size < sizeof(DCERPC_REQ) )
         {
@@ -129,18 +133,22 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
 
         if ( _disable_dcerpc_fragmentation )
         {
-            *frag_length = dcerpc_hdr->frag_length;
-            return 1;
+            *frag_length = dcerpc_ntohs(dcerpc_hdr->byte_order, dcerpc_hdr->frag_length);
+            return 0;
+        }
+
+        if ( dcerpc_hdr->frag_length < sizeof(DCERPC_REQ) )
+        {
+            DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Invalid frag length in DCERPC request.\n"););
+            return -1;
         }
 
         /* Return length out of function */
-        *frag_length = frag_size = dcerpc_hdr->frag_length;
+        *frag_length = dcerpc_ntohs(dcerpc_hdr->byte_order, dcerpc_hdr->frag_length);
 
-        frag_size = dcerpc_hdr->frag_length - sizeof(DCERPC_REQ);
-
-        if ( frag_size > _max_frag_size )
+        if ( *frag_length > _max_frag_size )
         {
-            frag_size = _max_frag_size;
+            *frag_length = _max_frag_size;
         }
         
         if ( !(_dcerpc->fragmentation & SUSPEND_FRAGMENTATION) )
@@ -153,7 +161,25 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
                     u_int16_t    dcerpc_len;
                     u_int16_t    old_buf_size = _dcerpc->dcerpc_req_buf_size;
 
-                    dcerpc_len = frag_size;
+                    dcerpc_len = *frag_length - sizeof(DCERPC_REQ);
+
+                    if ( _dcerpc->dcerpc_req_buf_size >= (0xFFFF - dcerpc_len) )
+                    {
+                        DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "DCE/RPC fragmentation overflow.\n"););
+
+                        DCERPC_FragFree(_dcerpc->dcerpc_req_buf, 0);
+                        _dcerpc->dcerpc_req_buf_len = 0;
+                        _dcerpc->dcerpc_req_buf_size = 0;
+                        _dcerpc->dcerpc_req_buf = NULL;
+                        _dcerpc->fragmentation |= SUSPEND_FRAGMENTATION;
+
+                        return 0;
+                    }
+
+                    if ( dcerpc_len > (data_size - sizeof(DCERPC_REQ)) )
+                    {
+                        dcerpc_len = data_size - sizeof(DCERPC_REQ);
+                    }
 
                     if ( _dcerpc->dcerpc_req_buf_size < (_dcerpc->dcerpc_req_buf_len + dcerpc_len) )
                     {
@@ -171,20 +197,20 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
                         }
 
                         if ( _dcerpc->dcerpc_req_buf_size > _dpd.altBufferLen )
-                            _dcerpc->dcerpc_req_buf_size = _dpd.altBufferLen;
+                            _dcerpc->dcerpc_req_buf_size = (u_int16_t) _dpd.altBufferLen;
 
                         _dcerpc->dcerpc_req_buf = DCERPC_FragAlloc(_dcerpc->dcerpc_req_buf, old_buf_size,
                                                                             &_dcerpc->dcerpc_req_buf_size);
 
-                        if ( !_dcerpc->dcerpc_req_buf )
-                            _dpd.fatalMsg("Failed to allocate space for DCE/RPC fragmented request\n");
-                        
                         if ( _dcerpc->dcerpc_req_buf_size == old_buf_size )
                         {
                             DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Memcap reached, suspending DCE/RPC fragmentation reassembly.\n"););
 
                             _dcerpc->fragmentation |= SUSPEND_FRAGMENTATION;
                         }
+
+                        if ( !_dcerpc->dcerpc_req_buf )
+                            DynamicPreprocessorFatalMessage("Failed to reallocate space for DCE/RPC fragmented request\n");
                     }
 
                     if ( _dcerpc->dcerpc_req_buf_len < _dcerpc->dcerpc_req_buf_size )
@@ -194,7 +220,21 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
                             dcerpc_len = _dcerpc->dcerpc_req_buf_size - _dcerpc->dcerpc_req_buf_len;
                         }
 
-                        memcpy(_dcerpc->dcerpc_req_buf + _dcerpc->dcerpc_req_buf_len, data + sizeof(DCERPC_REQ), dcerpc_len);
+                        ret = SafeMemcpy(_dcerpc->dcerpc_req_buf + _dcerpc->dcerpc_req_buf_len,
+                                         data + sizeof(DCERPC_REQ), dcerpc_len,
+                                         _dcerpc->dcerpc_req_buf, _dcerpc->dcerpc_req_buf + _dcerpc->dcerpc_req_buf_size);
+
+                        if (ret == 0)
+                        {
+                            DCERPC_FragFree(_dcerpc->dcerpc_req_buf, 0);
+                            _dcerpc->dcerpc_req_buf_len = 0;
+                            _dcerpc->dcerpc_req_buf_size = 0;
+                            _dcerpc->dcerpc_req_buf = NULL;
+                            _dcerpc->fragmentation |= SUSPEND_FRAGMENTATION;
+
+                            return 0;
+                        }
+
                         _dcerpc->dcerpc_req_buf_len += dcerpc_len;
 
                         if ( _debug_print )
@@ -209,15 +249,18 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
                 {
                     u_int16_t  alloc_size = DCERPC_FRAG_ALLOC;
 
-                    _dcerpc->dcerpc_req_buf_len = frag_size;
+                    _dcerpc->dcerpc_req_buf_len = *frag_length - sizeof(DCERPC_REQ);
+
+                    if ( _dcerpc->dcerpc_req_buf_len > (data_size - sizeof(DCERPC_REQ)) )
+                    {
+                        _dcerpc->dcerpc_req_buf_len = data_size - sizeof(DCERPC_REQ);
+                    }
+
                     if ( _dcerpc->dcerpc_req_buf_len > DCERPC_FRAG_ALLOC )
                     {
                         alloc_size = _dcerpc->dcerpc_req_buf_len;
                     }
                     _dcerpc->dcerpc_req_buf = (u_int8_t *) DCERPC_FragAlloc(NULL, 0, &alloc_size);
-
-                    if ( !_dcerpc->dcerpc_req_buf )
-                        _dpd.fatalMsg("Failed to allocate space for DCE/RPC fragmented request\n");
 
                     if ( alloc_size == 0 )
                     {
@@ -225,26 +268,42 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
 
                         DCERPC_FragFree(_dcerpc->dcerpc_req_buf, 0);
                         _dcerpc->dcerpc_req_buf_len = 0;
+                        _dcerpc->dcerpc_req_buf_size = 0;
                         _dcerpc->dcerpc_req_buf = NULL;
-                        _dcerpc->fragmentation |= RPC_FRAGMENTATION;
+                        _dcerpc->fragmentation |= SUSPEND_FRAGMENTATION;
+
                         return 0;
                     }
-                    else
+
+                    if ( !_dcerpc->dcerpc_req_buf )
+                        DynamicPreprocessorFatalMessage("Failed to allocate space for first DCE/RPC fragmented request\n");
+
+
+                    if ( _dcerpc->dcerpc_req_buf_len > alloc_size )
                     {
-                        if ( _dcerpc->dcerpc_req_buf_len > alloc_size )
-                        {
-                            _dcerpc->dcerpc_req_buf_len = alloc_size;
-                        }
-
-                        _dcerpc->dcerpc_req_buf_size = alloc_size;
-             
-                        memcpy(_dcerpc->dcerpc_req_buf, data + sizeof(DCERPC_REQ), _dcerpc->dcerpc_req_buf_len);
-            
-                        _dcerpc->fragmentation |= RPC_FRAGMENTATION;
-
-                        if ( _debug_print )
-                            PrintBuffer("DCE/RPC fragment", data + sizeof(DCERPC_REQ), _dcerpc->dcerpc_req_buf_len);                
+                        _dcerpc->dcerpc_req_buf_len = alloc_size;
                     }
+
+                    _dcerpc->dcerpc_req_buf_size = alloc_size;
+
+                    ret = SafeMemcpy(_dcerpc->dcerpc_req_buf, data + sizeof(DCERPC_REQ), _dcerpc->dcerpc_req_buf_len,
+                                     _dcerpc->dcerpc_req_buf, _dcerpc->dcerpc_req_buf + _dcerpc->dcerpc_req_buf_size);
+
+                    if (ret == 0)
+                    {
+                        DCERPC_FragFree(_dcerpc->dcerpc_req_buf, 0);
+                        _dcerpc->dcerpc_req_buf_len = 0;
+                        _dcerpc->dcerpc_req_buf_size = 0;
+                        _dcerpc->dcerpc_req_buf = NULL;
+                        _dcerpc->fragmentation |= SUSPEND_FRAGMENTATION;
+
+                        return 0;
+                    }
+
+                    _dcerpc->fragmentation |= RPC_FRAGMENTATION;
+
+                    if ( _debug_print )
+                        PrintBuffer("DCE/RPC fragment", data + sizeof(DCERPC_REQ), _dcerpc->dcerpc_req_buf_len);                
                 }
                 else
                 {
@@ -263,26 +322,34 @@ int DCERPC_Fragmentation(u_int8_t *data, u_int16_t data_size, u_int16_t *frag_le
     return 0;
 }
 
-void ReassembleDCERPCRequest(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t data_size)
+void ReassembleDCERPCRequest(u_int8_t *smb_hdr, u_int8_t *data)
 {
     DCERPC_REQ      fake_req;
     u_int16_t       smb_hdr_len = 0;
     unsigned int    dcerpc_req_len= sizeof(DCERPC_REQ);
+    int             ret;
 
     if ( smb_hdr )
     {
-        smb_hdr_len = data - smb_hdr;
+        smb_hdr_len = (u_int16_t) (data - smb_hdr);
     }
 
     /* Make sure we have room to fit into alternate buffer */
-    if ( (smb_hdr_len + dcerpc_req_len + _dcerpc->dcerpc_req_buf_len) > _dpd.altBufferLen )
+    if ( (smb_hdr_len + dcerpc_req_len + _dcerpc->dcerpc_req_buf_len) > (u_int16_t) _dpd.altBufferLen )
     {
-        _dpd.logMsg("Reassembled DCE/RPC packet greater than %d bytes, skipping.", _dpd.altBufferLen);
+        DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Reassembled DCE/RPC packet greater than %d bytes, skipping.", _dpd.altBufferLen));
         return;
     }
    
     /* Mock up header */
-    memcpy(&fake_req, data, dcerpc_req_len);
+    ret = SafeMemcpy(&fake_req, data, dcerpc_req_len, &fake_req, (u_int8_t *)&fake_req + dcerpc_req_len);
+    
+    if (ret == 0)
+    {
+        DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Failed to copy DCERPC header, skipping DCERPC reassembly."));
+        goto dcerpc_frag_free;
+    }
+
     fake_req.dcerpc_hdr.frag_length = dcerpc_req_len + _dcerpc->dcerpc_req_buf_len;
     fake_req.dcerpc_hdr.flags &= ~DCERPC_FIRST_FRAG;
     fake_req.dcerpc_hdr.flags &= ~DCERPC_LAST_FRAG;
@@ -293,24 +360,49 @@ void ReassembleDCERPCRequest(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t data_s
 
     if ( smb_hdr )
     {
-        memcpy(_dpd.altBuffer, _dcerpc_pkt->payload, sizeof(NBT_HDR));
+        ret = SafeMemcpy(_dpd.altBuffer, _dcerpc_pkt->payload, sizeof(NBT_HDR),
+                                                    _dpd.altBuffer, _dpd.altBuffer + _dpd.altBufferLen);
+        if ( ret == 0 )
+        {
+            DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Failed to copy DCERPC header, skipping DCERPC reassembly."));
+            goto dcerpc_frag_free;
+        }
         _dcerpc_pkt->normalized_payload_size = sizeof(NBT_HDR);
-        memcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, smb_hdr, smb_hdr_len);
+        ret = SafeMemcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, smb_hdr, smb_hdr_len,
+                                                    _dpd.altBuffer, _dpd.altBuffer + _dpd.altBufferLen);
+        if ( ret == 0 )
+        {
+            DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Failed to copy DCERPC header, skipping DCERPC reassembly."));
+            goto dcerpc_frag_free;
+        }
         _dcerpc_pkt->normalized_payload_size += smb_hdr_len;
     }
 
-    memcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, &fake_req, dcerpc_req_len);
+    ret = SafeMemcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, &fake_req, dcerpc_req_len,
+                                                    _dpd.altBuffer, _dpd.altBuffer + _dpd.altBufferLen);
+    if ( ret == 0 )
+    {
+        DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Failed to copy DCERPC header, skipping DCERPC reassembly."));
+        goto dcerpc_frag_free;
+    }
     _dcerpc_pkt->normalized_payload_size += dcerpc_req_len;
 
     /* Copy data into buffer */
-    memcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, _dcerpc->dcerpc_req_buf, _dcerpc->dcerpc_req_buf_len);
+    ret = SafeMemcpy(_dpd.altBuffer + _dcerpc_pkt->normalized_payload_size, _dcerpc->dcerpc_req_buf, _dcerpc->dcerpc_req_buf_len,
+                                                    _dpd.altBuffer, _dpd.altBuffer + _dpd.altBufferLen);
+    if ( ret == 0 )
+    {
+        DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Failed to copy DCERPC data, skipping DCERPC reassembly."));
+        goto dcerpc_frag_free;
+    }
     _dcerpc_pkt->normalized_payload_size += _dcerpc->dcerpc_req_buf_len;
 
     _dcerpc_pkt->flags |= FLAG_ALT_DECODE;
 
     if ( _debug_print )
-        PrintBuffer("DCE/RPC reassembled fragment", _dpd.altBuffer, _dcerpc_pkt->normalized_payload_size);
+        PrintBuffer("DCE/RPC reassembled fragment", (u_int8_t *)_dpd.altBuffer, _dcerpc_pkt->normalized_payload_size);
 
+dcerpc_frag_free:    
     /* Get ready for next write */
     DCERPC_FragFree(_dcerpc->dcerpc_req_buf, _dcerpc->dcerpc_req_buf_size);
     _dcerpc->dcerpc_req_buf = NULL;

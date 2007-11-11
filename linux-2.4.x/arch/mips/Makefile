@@ -30,8 +30,6 @@ endif
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
-check_gcc = $(shell if $(CC) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi)
-
 #
 #
 # GCC uses -G 0 -mabicalls -fpic as default.  We don't want PIC in the kernel
@@ -653,6 +651,33 @@ SUBDIRS		+= arch/mips/sgi-ip22 arch/mips/arc
 # 8kb aligned or the handling of the current variable will break.
 #
 LOADADDR	:= 0x88002000
+endif
+
+#
+# Realtek 865XB
+#
+ifdef CONFIG_RTL865XB
+CORE_FILES	+= arch/mips/realtek/rtl865x/rtl865x.o
+SUBDIRS		+= arch/mips/realtek/rtl865x
+LOADADDR	:= $(CONFIG_RTL865X_RUNTIME_ADDRESS)
+endif
+
+#
+# Realtek 865XC
+#
+ifdef CONFIG_RTL865XC
+CORE_FILES	+= arch/mips/realtek/rtl865x/rtl865x.o
+SUBDIRS		+= arch/mips/realtek/rtl865x
+LOADADDR	:= $(CONFIG_RTL865X_RUNTIME_ADDRESS)
+endif
+
+#
+# Realtek 8186
+#
+ifdef CONFIG_RTL8186
+CORE_FILES	+= arch/mips/realtek/rtl8186/rtl8186.o
+SUBDIRS		+= arch/mips/realtek/rtl8186
+LOADADDR	:= $(CONFIG_RTL865X_RUNTIME_ADDRESS)
 endif
 
 #

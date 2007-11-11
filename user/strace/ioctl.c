@@ -27,12 +27,12 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: ioctl.c,v 1.8 2001/08/03 21:52:13 wichert Exp $
+ *	$Id: ioctl.c,v 1.14 2005/02/02 20:32:13 roland Exp $
  */
 
 #include "defs.h"
 
-struct ioctlent ioctlent0[] = {
+const struct ioctlent ioctlent0[] = {
 /*
  * `ioctlent.h' may be generated from `ioctlent.raw' by the auxiliary
  * program `ioctlsort', such that the list is sorted by the `code' field.
@@ -47,25 +47,25 @@ struct ioctlent ioctlent0[] = {
 #include <asm/ioctl.h>
 #endif
 
-int nioctlents0 = sizeof ioctlent0 / sizeof ioctlent0[0];
+const int nioctlents0 = sizeof ioctlent0 / sizeof ioctlent0[0];
 
 #if SUPPORTED_PERSONALITIES >= 2
-struct ioctlent ioctlent1[] = {
+const struct ioctlent ioctlent1[] = {
 #include "ioctlent1.h"
 };
 
-int nioctlents1 = sizeof ioctlent1 / sizeof ioctlent1[0];
+const int nioctlents1 = sizeof ioctlent1 / sizeof ioctlent1[0];
 #endif /* SUPPORTED_PERSONALITIES >= 2 */
 
 #if SUPPORTED_PERSONALITIES >= 3
-struct ioctlent ioctlent2[] = {
+const struct ioctlent ioctlent2[] = {
 #include "ioctlent2.h"
 };
 
-int nioctlents1 = sizeof ioctlent2 / sizeof ioctlent2[0];
+const int nioctlents2 = sizeof ioctlent2 / sizeof ioctlent2[0];
 #endif /* SUPPORTED_PERSONALITIES >= 3 */
 
-struct ioctlent *ioctlent;
+const struct ioctlent *ioctlent;
 int nioctlents;
 
 static int
@@ -78,7 +78,7 @@ const void *b;
 	return (code1 > code2) ? 1 : (code1 < code2) ? -1 : 0;
 }
 
-char *
+const struct ioctlent *
 ioctl_lookup(code)
 long code;
 {
@@ -90,7 +90,24 @@ long code;
 #endif
 	iop = (struct ioctlent *) bsearch((char *) &ioent, (char *) ioctlent,
 			nioctlents, sizeof(struct ioctlent), compare);
-	return iop ? iop->symbol : NULL;
+	while (iop > ioctlent)
+		if ((--iop)->code != ioent.code) {
+			iop++;
+			break;
+		}
+	return iop;
+}
+
+const struct ioctlent *
+ioctl_next_match(iop)
+const struct ioctlent *iop;
+{
+	long code;
+
+	code = (iop++)->code;
+	if (iop < ioctlent + nioctlents && iop->code == code)
+		return iop;
+	return NULL;
 }
 
 int
@@ -100,7 +117,7 @@ long code, arg;
 {
 	switch ((code >> 8) & 0xff) {
 #ifdef LINUX
-#ifdef ALPHA
+#if defined(ALPHA) || defined(POWERPC)
 	case 'f': case 't': case 'T':
 #else /* !ALPHA */
 	case 0x54:
@@ -113,9 +130,9 @@ long code, arg;
 	case 0x89:
 #else /* !LINUX */
 	case 'r': case 's': case 'i':
-#ifndef FREEBSD		
+#ifndef FREEBSD
 	case 'p':
-#endif		
+#endif
 #endif /* !LINUX */
 		return sock_ioctl(tcp, code, arg);
 #ifdef USE_PROCFS
@@ -124,7 +141,7 @@ long code, arg;
 	case 'q':
 #else
 	case 'p':
-#endif		
+#endif
 		return proc_ioctl(tcp, code, arg);
 #endif
 #endif /* USE_PROCFS */
@@ -132,6 +149,10 @@ long code, arg;
 	case 'S':
 		return stream_ioctl(tcp, code, arg);
 #endif /* HAVE_SYS_STREAM_H */
+#ifdef LINUX
+	case 'p':
+		return rtc_ioctl(tcp, code, arg);
+#endif
 	default:
 		break;
 	}
@@ -185,4 +206,3 @@ long code, arg;
  *
  * End of Registry
  */
-

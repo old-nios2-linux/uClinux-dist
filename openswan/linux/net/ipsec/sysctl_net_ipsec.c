@@ -20,6 +20,7 @@
  * Initiated April 3, 1998, Richard Guy Briggs <rgb@conscoop.ottawa.on.ca>
  */
 
+#include <linux/version.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 
@@ -130,7 +131,11 @@ static struct ctl_table_header *ipsec_table_header;
 
 int ipsec_sysctl_register(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,21)
+        ipsec_table_header = register_sysctl_table(ipsec_root_table);
+#else
         ipsec_table_header = register_sysctl_table(ipsec_root_table, 0);
+#endif
         if (!ipsec_table_header) {
                 return -ENOMEM;
 	}

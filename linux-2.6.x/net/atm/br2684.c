@@ -23,7 +23,6 @@ Author: Marcell GAL, 2000, XDSL Ltd, Hungary
 #include <linux/atmbr2684.h>
 
 #include "common.h"
-#include "ipcommon.h"
 
 /*
  * Define this to use a version of the code which interacts with the higher
@@ -174,7 +173,7 @@ static int br2684_xmit_vcc(struct sk_buff *skb, struct br2684_dev *brdev,
 	}
 	skb_push(skb, minheadroom);
 	if (brvcc->encaps == e_llc)
-		memcpy(skb->data, llc_oui_pid_pad, 10);
+		skb_copy_to_linear_data(skb, llc_oui_pid_pad, 10);
 	else
 		memset(skb->data, 0, 2);
 #endif /* FASTER_VERSION */
@@ -183,7 +182,7 @@ static int br2684_xmit_vcc(struct sk_buff *skb, struct br2684_dev *brdev,
 	ATM_SKB(skb)->vcc = atmvcc = brvcc->atmvcc;
 	DPRINTK("atm_skb(%p)->vcc(%p)->dev(%p)\n", skb, atmvcc, atmvcc->dev);
 	if (!atm_may_send(atmvcc, skb->truesize)) {
-		/* we free this here for now, because we cannot know in a higher 
+		/* we free this here for now, because we cannot know in a higher
 			layer whether the skb point it supplied wasn't freed yet.
 			now, it always is.
 		*/
@@ -372,15 +371,15 @@ static int br2684_setfilt(struct atm_vcc *atmvcc, void __user *arg)
 
 /* Returns 1 if packet should be dropped */
 static inline int
-packet_fails_filter(u16 type, struct br2684_vcc *brvcc, struct sk_buff *skb)
+packet_fails_filter(__be16 type, struct br2684_vcc *brvcc, struct sk_buff *skb)
 {
 	if (brvcc->filter.netmask == 0)
 		return 0;			/* no filter in place */
-	if (type == __constant_htons(ETH_P_IP) &&
+	if (type == htons(ETH_P_IP) &&
 	    (((struct iphdr *) (skb->data))->daddr & brvcc->filter.
 	     netmask) == brvcc->filter.prefix)
 		return 0;
-	if (type == __constant_htons(ETH_P_ARP))
+	if (type == htons(ETH_P_ARP))
 		return 0;
 	/* TODO: we should probably filter ARPs too.. don't want to have
 	 *   them returning values that don't make sense, or is that ok?
@@ -459,13 +458,9 @@ static void br2684_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 	/* FIXME: tcpdump shows that pointer to mac header is 2 bytes earlier,
 	   than should be. What else should I set? */
 	skb_pull(skb, plen);
-	skb->mac.raw = ((char *) (skb->data)) - ETH_HLEN;
+	skb_set_mac_header(skb, -ETH_HLEN);
 	skb->pkt_type = PACKET_HOST;
-#ifdef CONFIG_BR2684_FAST_TRANS
-	skb->protocol = ((u16 *) skb->data)[-1];
-#else				/* some protocols might require this: */
 	skb->protocol = br_type_trans(skb, net_dev);
-#endif /* CONFIG_BR2684_FAST_TRANS */
 #else
 	skb_pull(skb, plen - ETH_HLEN);
 	skb->protocol = eth_type_trans(skb, net_dev);
@@ -500,11 +495,12 @@ Note: we do not have explicit unassign, but look at _push()
 */
 	int err;
 	struct br2684_vcc *brvcc;
-	struct sk_buff_head copy;
 	struct sk_buff *skb;
+	struct sk_buff_head *rq;
 	struct br2684_dev *brdev;
 	struct net_device *net_dev;
 	struct atm_backend_br2684 be;
+	unsigned long flags;
 
 	if (copy_from_user(&be, arg, sizeof be))
 		return -EFAULT;
@@ -554,12 +550,30 @@ Note: we do not have explicit unassign, but look at _push()
 	brvcc->old_push = atmvcc->push;
 	barrier();
 	atmvcc->push = br2684_push;
-	skb_queue_head_init(&copy);
-	skb_migrate(&sk_atm(atmvcc)->sk_receive_queue, &copy);
-	while ((skb = skb_dequeue(&copy)) != NULL) {
+
+	rq = &sk_atm(atmvcc)->sk_receive_queue;
+
+	spin_lock_irqsave(&rq->lock, flags);
+	if (skb_queue_empty(rq)) {
+		skb = NULL;
+	} else {
+		/* NULL terminate the list.  */
+		rq->prev->next = NULL;
+		skb = rq->next;
+	}
+	rq->prev = rq->next = (struct sk_buff *)rq;
+	rq->qlen = 0;
+	spin_unlock_irqrestore(&rq->lock, flags);
+
+	while (skb) {
+		struct sk_buff *next = skb->next;
+
+		skb->next = skb->prev = NULL;
 		BRPRIV(skb->dev)->stats.rx_bytes -= skb->len;
 		BRPRIV(skb->dev)->stats.rx_packets--;
 		br2684_push(atmvcc, skb);
+
+		skb = next;
 	}
 	__module_get(THIS_MODULE);
 	return 0;
@@ -681,28 +695,13 @@ static struct atm_ioctl br2684_ioctl_ops = {
 #ifdef CONFIG_PROC_FS
 static void *br2684_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	loff_t offs = 0;
-	struct br2684_dev *brd;
-
 	read_lock(&devs_lock);
-
-	list_for_each_entry(brd, &br2684_devs, br2684_devs) {
-		if (offs == *pos)
-			return brd;
-		++offs;
-	}
-	return NULL;
+	return seq_list_start(&br2684_devs, *pos);
 }
 
 static void *br2684_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	struct br2684_dev *brd = v;
-
-	++*pos;
-
-	brd = list_entry(brd->br2684_devs.next, 
-			 struct br2684_dev, br2684_devs);
-	return (&brd->br2684_devs != &br2684_devs) ? brd : NULL;
+	return seq_list_next(v, &br2684_devs, pos);
 }
 
 static void br2684_seq_stop(struct seq_file *seq, void *v)
@@ -712,7 +711,8 @@ static void br2684_seq_stop(struct seq_file *seq, void *v)
 
 static int br2684_seq_show(struct seq_file *seq, void *v)
 {
-	const struct br2684_dev *brdev = v;
+	const struct br2684_dev *brdev = list_entry(v, struct br2684_dev,
+			br2684_devs);
 	const struct net_device *net_dev = brdev->net_dev;
 	const struct br2684_vcc *brvcc;
 
@@ -754,7 +754,7 @@ static int br2684_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static struct seq_operations br2684_seq_ops = {
+static const struct seq_operations br2684_seq_ops = {
 	.start = br2684_seq_start,
 	.next  = br2684_seq_next,
 	.stop  = br2684_seq_stop,
@@ -766,7 +766,7 @@ static int br2684_proc_open(struct inode *inode, struct file *file)
 	return seq_open(file, &br2684_seq_ops);
 }
 
-static struct file_operations br2684_proc_ops = {
+static const struct file_operations br2684_proc_ops = {
 	.owner   = THIS_MODULE,
 	.open    = br2684_proc_open,
 	.read    = seq_read,

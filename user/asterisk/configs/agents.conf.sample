@@ -1,8 +1,27 @@
 ;
 ; Agent configuration
 ;
+
+[general]
 ;
+; Define whether callbacklogins should be stored in astdb for
+; persistence. Persistent logins will be reloaded after
+; Asterisk restarts.
+;
+persistentagents=yes
+
+;enable or disable a single extension from longing in as multiple
+;agents, defaults to enabled
+;multiplelogin=yes
+
 [agents]
+;
+; Define maxlogintries to allow agent to try max logins before
+; failed.
+; default to 3
+;
+;maxlogintries=5
+;
 ;
 ; Define autologoff times if appropriate.  This is how long
 ; the phone has to ring with no answer before the agent is
@@ -10,10 +29,22 @@
 ;
 ;autologoff=15
 ;
-; Define ackcall to require an acknowledgement by '#' when
-; an agent logs in using agentcallbacklogin.  Default is "yes".
+; Define autologoffunavail to have agents automatically logged
+; out when the extension that they are at returns a CHANUNAVAIL
+; status when a call is attempted to be sent there.
+; Default is "no". 
 ;
-;ackcall=yes
+;autologoffunavail=yes
+;
+; Define ackcall to require an acknowledgement by '#' when
+; an agent logs in using agentcallbacklogin.  Default is "no".
+;
+;ackcall=no
+;
+; Define endcall to allow an agent to hangup a call by '*'.
+; Default is "yes". Set this to "no" to ignore '*'. 
+;
+;endcall=yes
 ;
 ; Define wrapuptime.  This is the minimum amount of time when
 ; after disconnecting before the caller can receive a new call
@@ -25,6 +56,11 @@
 ; musiconhold => music_class
 ;
 ;musiconhold => default
+;
+; Define the default good bye sound file for agents
+; default to vm-goodbye
+;
+;agentgoodbye => goodbye_file
 ;
 ; Define updatecdr. This is whether or not to change the source 
 ; channel in the CDR record for this call to agent/agent_id so 
@@ -48,10 +84,6 @@
 ; The format to be used to record the calls: wav, gsm, wav49.
 ; By default its "wav".
 ;recordformat=gsm
-;
-; Insert into CDR userfield a name of the the created recording 
-; By default it's turned off. 
-;createlink=yes
 ;
 ; The text to be added to the name of the recording. Allows forming a url link.
 ;urlprefix=http://localhost/calls/

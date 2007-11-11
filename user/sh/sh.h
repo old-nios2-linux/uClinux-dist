@@ -166,8 +166,8 @@ extern	char	*flag;
 extern	char	*null;	/* null value for variable */
 extern	int	intr;	/* interrupt pending */
 
-Extern	char	*trap[NSIG+1];
-Extern	char	ourtrap[NSIG+1];
+Extern	char	*trap[_NSIG+1];
+Extern	char	ourtrap[_NSIG+1];
 Extern	int	trapset;	/* trap pending */
 
 extern	int	heedint;	/* heed interrupt signals */
@@ -195,7 +195,7 @@ _PROTOTYPE(char *space , (int n ));
 _PROTOTYPE(char *strsave , (char *s , int a ));
 _PROTOTYPE(char *evalstr , (char *cp , int f ));
 _PROTOTYPE(char *putn , (int n ));
-_PROTOTYPE(char *my_itoa , (unsigned u , int n ));
+_PROTOTYPE(char *itoa , (unsigned u , int n ));
 _PROTOTYPE(char *unquote , (char *as ));
 _PROTOTYPE(struct var *lookup , (char *n ));
 _PROTOTYPE(int rlookup , (char *n ));
@@ -207,6 +207,8 @@ _PROTOTYPE(int setstatus , (int s ));
 _PROTOTYPE(int waitfor , (int lastpid , int canintr ));
 
 _PROTOTYPE(void onintr , (int s )); /* SIGINT handler */
+_PROTOTYPE(void catchint, ()); /* new SIGINT handler */
+_PROTOTYPE(void catchquit, ()); /* SIGQUIT handler */
 
 _PROTOTYPE(int newenv , (int f ));
 _PROTOTYPE(void quitenv , (void));
@@ -337,7 +339,7 @@ _PROTOTYPE(int readc , (void));
 _PROTOTYPE(void unget , (int c ));
 _PROTOTYPE(void ioecho , (int c ));
 _PROTOTYPE(void prs , (char *s ));
-_PROTOTYPE(void putc , (int c ));
+_PROTOTYPE(void myputc , (int c ));
 _PROTOTYPE(void prn , (unsigned u ));
 _PROTOTYPE(void closef , (int i ));
 _PROTOTYPE(void closeall , (void));
@@ -380,6 +382,7 @@ _PROTOTYPE(void garbage , (void));
 _PROTOTYPE(void setarea , (char *cp , int a ));
 _PROTOTYPE(int getarea , (char *cp ));
 _PROTOTYPE(void freearea , (int a ));
+_PROTOTYPE(void myfreearea, (int a ));
 _PROTOTYPE(void freecell , (char *cp ));
 
 Extern	int	areanum;	/* current allocation area */

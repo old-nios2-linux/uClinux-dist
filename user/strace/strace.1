@@ -25,7 +25,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$Id: strace.1,v 1.7 1999/12/23 14:20:15 wichert Exp $
+.\"	$Id: strace.1,v 1.15 2006/04/25 07:48:03 roland Exp $
 .\"
 .de CW
 .sp
@@ -37,7 +37,7 @@
 .fi
 .sp
 ..
-.TH STRACE 1 "99/06/11"
+.TH STRACE 1 "2003-01-21"
 .SH NAME
 strace \- trace system calls and signals
 .SH SYNOPSIS
@@ -65,6 +65,14 @@ strace \- trace system calls and signals
 [
 .BI \-u username
 ]
+[
+.BI \-E var=val
+]
+\&...
+[
+.BI \-E var
+]
+\&...
 [
 .I command
 [
@@ -109,7 +117,7 @@ option.
 .LP
 .B strace
 is a useful diagnostic, instructional, and debugging tool.
-System adminstrators, diagnosticians and trouble-shooters will find
+System administrators, diagnosticians and trouble-shooters will find
 it invaluable for solving problems with
 programs for which the source is not readily available since
 they do not need to be recompiled in order to trace them.
@@ -140,7 +148,7 @@ sigsuspend([] <unfinished ...>
 +++ killed by SIGINT +++
 .CE
 Arguments are printed in symbolic form with a passion.
-This example shows the shell peforming ``>>xyzzy'' output redirection:
+This example shows the shell performing ``>>xyzzy'' output redirection:
 .CW
 open("xyzzy", O_WRONLY|O_APPEND|O_CREAT, 0666) = 3
 .CE
@@ -210,8 +218,10 @@ Here the second argument represents the full set of all signals.
 .TP 12
 .TP
 .B \-c
-Count time, calls, and errors for each system call and report a
-summary on program exit.
+Count time, calls, and errors for each system call and report a summary on
+program exit.  On Linux, this attempts to show system time (CPU time spent
+running in the kernel) independent of wall clock time.  If -c is used with
+-f or -F (below), only aggregate totals for all traced processes are kept.
 .TP
 .B \-d
 Show some debugging output of
@@ -245,13 +255,14 @@ If the
 option is in effect, each processes trace is written to
 .I filename.pid
 where pid is the numeric process id of each process.
+This is incompatible with -c, since no per-process counts are kept.
 .TP
 .B \-F
 Attempt to follow
 .BR vfork s.
 (On SunOS 4.x, this is accomplished with
-some dynamic linking trickery.  On Linux, it requires some kernel
-functionality not yet in the standard kernel.)  Otherwise,
+some dynamic linking trickery.)
+Otherwise,
 .BR vfork s
 will
 not be followed even if
@@ -387,6 +398,9 @@ Trace all signal related system calls.
 .B "\-e trace=ipc"
 Trace all IPC related system calls.
 .TP
+.B "\-e trace=desc"
+Trace all file descriptor related system calls.
+.TP
 .BI "\-e abbrev=" set
 Abbreviate the output from printing each member of large structures.
 The default is
@@ -402,7 +416,7 @@ default is
 .BR verbose=all .
 .TP
 .BI "\-e raw=" set
-Print raw, undecoded arguments for the specifed set of system calls.
+Print raw, undecoded arguments for the specified set of system calls.
 This option has the effect of causing all arguments to be printed
 in hexadecimal.  This is mostly useful if you don't trust the
 decoding or you need to know the actual numeric value of an
@@ -459,7 +473,7 @@ This is useful for overriding the default heuristic for guessing
 how much time is spent in mere measuring when timing system calls using
 the
 .B \-c
-option.  The acuracy of the heuristic can be gauged by timing a given
+option.  The accuracy of the heuristic can be gauged by timing a given
 program run without tracing (using
 .BR time (1))
 and comparing the accumulated
@@ -493,7 +507,7 @@ full.
 .BI "\-S " sortby
 Sort the output of the histogram printed by the
 .B \-c
-option by the specified critereon.  Legal values are
+option by the specified criterion.  Legal values are
 .BR time ,
 .BR calls ,
 .BR name ,
@@ -510,6 +524,17 @@ This option is only useful when running as root and enables the
 correct execution of setuid and/or setgid binaries.
 Unless this option is used setuid and setgid programs are executed
 without effective privileges.
+.TP
+.BI "\-E " var=val
+Run command with
+.IR var=val
+in its list of environment variables.
+.TP
+.BI "\-E " var
+Remove
+.IR var
+from the inherited list of environment variables before passing it on to
+the command.
 .SH "SETUID INSTALLATION"
 If
 .B strace
@@ -537,11 +562,10 @@ a non-setuid version of
 .B strace
 for ordinary lusers to use.
 .SH "SEE ALSO"
-.BR ptrace (2),
-.BR proc (4),
+.BR ltrace (1),
 .BR time (1),
-.BR trace (1),
-.BR truss (1)
+.BR ptrace (2),
+.BR proc (5)
 .SH NOTES
 It is a pity that so much tracing clutter is produced by systems
 employing shared libraries.
@@ -634,6 +658,7 @@ and tired of writing about himself in the third person.
 .SH PROBLEMS
 Problems with
 .B strace
-should be reported to the current
+should be reported via the Debian Bug Tracking System,
+or to the
 .B strace
-maintainer, Wichert Akkerman, at <wakkerma@debian.org>.
+mailing list at <strace-devel@lists.sourceforge.net>.

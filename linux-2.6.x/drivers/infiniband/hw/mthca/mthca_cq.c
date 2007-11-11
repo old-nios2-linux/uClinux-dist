@@ -36,8 +36,8 @@
  * $Id: mthca_cq.c 1369 2004-12-20 16:17:07Z roland $
  */
 
-#include <linux/init.h>
 #include <linux/hardirq.h>
+#include <linux/sched.h>
 
 #include <asm/io.h>
 
@@ -53,6 +53,10 @@ enum {
 
 enum {
 	MTHCA_CQ_ENTRY_SIZE = 0x20
+};
+
+enum {
+	MTHCA_ATOMIC_BYTE_LEN = 8
 };
 
 /*
@@ -281,7 +285,7 @@ void mthca_cq_clean(struct mthca_dev *dev, struct mthca_cq *cq, u32 qpn,
 {
 	struct mthca_cqe *cqe;
 	u32 prod_index;
-	int nfreed = 0;
+	int i, nfreed = 0;
 
 	spin_lock_irq(&cq->lock);
 
@@ -318,6 +322,8 @@ void mthca_cq_clean(struct mthca_dev *dev, struct mthca_cq *cq, u32 qpn,
 	}
 
 	if (nfreed) {
+		for (i = 0; i < nfreed; ++i)
+			set_cqe_hw(get_cqe(cq, (cq->cons_index + i) & cq->ibcq.cqe));
 		wmb();
 		cq->cons_index += nfreed;
 		update_cons_index(dev, cq, nfreed);
@@ -531,7 +537,7 @@ static inline int mthca_poll_one(struct mthca_dev *dev,
 		}
 	}
 
-	entry->qp_num = (*cur_qp)->qpn;
+	entry->qp = &(*cur_qp)->ibqp;
 
 	if (is_send) {
 		wq = &(*cur_qp)->sq;
@@ -600,11 +606,11 @@ static inline int mthca_poll_one(struct mthca_dev *dev,
 			break;
 		case MTHCA_OPCODE_ATOMIC_CS:
 			entry->opcode    = IB_WC_COMP_SWAP;
-			entry->byte_len  = be32_to_cpu(cqe->byte_cnt);
+			entry->byte_len  = MTHCA_ATOMIC_BYTE_LEN;
 			break;
 		case MTHCA_OPCODE_ATOMIC_FA:
 			entry->opcode    = IB_WC_FETCH_ADD;
-			entry->byte_len  = be32_to_cpu(cqe->byte_cnt);
+			entry->byte_len  = MTHCA_ATOMIC_BYTE_LEN;
 			break;
 		case MTHCA_OPCODE_BIND_MW:
 			entry->opcode    = IB_WC_BIND_MW;
@@ -723,11 +729,12 @@ repoll:
 	return err == 0 || err == -EAGAIN ? npolled : err;
 }
 
-int mthca_tavor_arm_cq(struct ib_cq *cq, enum ib_cq_notify notify)
+int mthca_tavor_arm_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags)
 {
 	__be32 doorbell[2];
 
-	doorbell[0] = cpu_to_be32((notify == IB_CQ_SOLICITED ?
+	doorbell[0] = cpu_to_be32(((flags & IB_CQ_SOLICITED_MASK) ==
+				   IB_CQ_SOLICITED ?
 				   MTHCA_TAVOR_CQ_DB_REQ_NOT_SOL :
 				   MTHCA_TAVOR_CQ_DB_REQ_NOT)      |
 				  to_mcq(cq)->cqn);
@@ -740,7 +747,7 @@ int mthca_tavor_arm_cq(struct ib_cq *cq, enum ib_cq_notify notify)
 	return 0;
 }
 
-int mthca_arbel_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify notify)
+int mthca_arbel_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 {
 	struct mthca_cq *cq = to_mcq(ibcq);
 	__be32 doorbell[2];
@@ -752,7 +759,8 @@ int mthca_arbel_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify notify)
 
 	doorbell[0] = ci;
 	doorbell[1] = cpu_to_be32((cq->cqn << 8) | (2 << 5) | (sn << 3) |
-				  (notify == IB_CQ_SOLICITED ? 1 : 2));
+				  ((flags & IB_CQ_SOLICITED_MASK) ==
+				   IB_CQ_SOLICITED ? 1 : 2));
 
 	mthca_write_db_rec(doorbell, cq->arm_db);
 
@@ -763,7 +771,7 @@ int mthca_arbel_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify notify)
 	wmb();
 
 	doorbell[0] = cpu_to_be32((sn << 28)                       |
-				  (notify == IB_CQ_SOLICITED ?
+				  ((flags & IB_CQ_SOLICITED_MASK) == IB_CQ_SOLICITED ?
 				   MTHCA_ARBEL_CQ_DB_REQ_NOT_SOL :
 				   MTHCA_ARBEL_CQ_DB_REQ_NOT)      |
 				  cq->cqn);
@@ -970,7 +978,7 @@ void mthca_free_cq(struct mthca_dev *dev,
 	mthca_free_mailbox(dev, mailbox);
 }
 
-int __devinit mthca_init_cq_table(struct mthca_dev *dev)
+int mthca_init_cq_table(struct mthca_dev *dev)
 {
 	int err;
 

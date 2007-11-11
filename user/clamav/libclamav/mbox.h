@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 /* See RFC1521 */
@@ -26,7 +27,7 @@ typedef enum {
 } encoding_type;
 
 /* tk: shut up manager.c warning */
-#include <clamav.h>
+#include "clamav.h"
 
 /* classes supported by this system */
 typedef enum {
@@ -37,4 +38,12 @@ typedef enum {
 #define UNIX
 #endif
 
+#include "table.h"
+#include "blob.h"
+#include "line.h"
+#include "text.h"
+#include "message.h"
+#include "uuencode.h"
+
 size_t	strstrip(char *s);	/* remove trailing white space */
+int	cli_mbox(const char *dir, int desc, cli_ctx *ctx);

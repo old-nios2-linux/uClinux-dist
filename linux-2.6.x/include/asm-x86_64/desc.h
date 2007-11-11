@@ -9,63 +9,12 @@
 
 #include <linux/string.h>
 #include <linux/smp.h>
+#include <asm/desc_defs.h>
 
 #include <asm/segment.h>
 #include <asm/mmu.h>
 
-// 8 byte segment descriptor
-struct desc_struct { 
-	u16 limit0;
-	u16 base0;
-	unsigned base1 : 8, type : 4, s : 1, dpl : 2, p : 1;
-	unsigned limit : 4, avl : 1, l : 1, d : 1, g : 1, base2 : 8;
-} __attribute__((packed)); 
-
-struct n_desc_struct { 
-	unsigned int a,b;
-}; 	
-
 extern struct desc_struct cpu_gdt_table[GDT_ENTRIES];
-
-enum { 
-	GATE_INTERRUPT = 0xE, 
-	GATE_TRAP = 0xF, 	
-	GATE_CALL = 0xC,
-}; 	
-
-// 16byte gate
-struct gate_struct {          
-	u16 offset_low;
-	u16 segment; 
-	unsigned ist : 3, zero0 : 5, type : 5, dpl : 2, p : 1;
-	u16 offset_middle;
-	u32 offset_high;
-	u32 zero1; 
-} __attribute__((packed));
-
-#define PTR_LOW(x) ((unsigned long)(x) & 0xFFFF) 
-#define PTR_MIDDLE(x) (((unsigned long)(x) >> 16) & 0xFFFF)
-#define PTR_HIGH(x) ((unsigned long)(x) >> 32)
-
-enum { 
-	DESC_TSS = 0x9,
-	DESC_LDT = 0x2,
-}; 
-
-// LDT or TSS descriptor in the GDT. 16 bytes.
-struct ldttss_desc { 
-	u16 limit0;
-	u16 base0;
-	unsigned base1 : 8, type : 5, dpl : 2, p : 1;
-	unsigned limit1 : 4, zero0 : 3, g : 1, base2 : 8;
-	u32 base3;
-	u32 zero1; 
-} __attribute__((packed)); 
-
-struct desc_ptr {
-	unsigned short size;
-	unsigned long address;
-} __attribute__((packed)) ;
 
 #define load_TR_desc() asm volatile("ltr %w0"::"r" (GDT_ENTRY_TSS*8))
 #define load_LDT_desc() asm volatile("lldt %w0"::"r" (GDT_ENTRY_LDT*8))
@@ -158,16 +107,6 @@ static inline void set_ldt_desc(unsigned cpu, void *addr, int size)
 			      DESC_LDT, size * 8 - 1);
 }
 
-static inline void set_seg_base(unsigned cpu, int entry, void *base)
-{ 
-	struct desc_struct *d = &cpu_gdt(cpu)[entry];
-	u32 addr = (u32)(u64)base;
-	BUG_ON((u64)base >> 32); 
-	d->base0 = addr & 0xffff;
-	d->base1 = (addr >> 16) & 0xff;
-	d->base2 = (addr >> 24) & 0xff;
-} 
-
 #define LDT_entry_a(info) \
 	((((info)->base_addr & 0x0000ffff) << 16) | ((info)->limit & 0x0ffff))
 /* Don't allow setting of the lm bit. It is useless anyways because 
@@ -196,16 +135,13 @@ static inline void set_seg_base(unsigned cpu, int entry, void *base)
 	(info)->useable		== 0	&& \
 	(info)->lm		== 0)
 
-#if TLS_SIZE != 24
-# error update this code.
-#endif
-
 static inline void load_TLS(struct thread_struct *t, unsigned int cpu)
 {
+	unsigned int i;
 	u64 *gdt = (u64 *)(cpu_gdt(cpu) + GDT_ENTRY_TLS_MIN);
-	gdt[0] = t->tls_array[0];
-	gdt[1] = t->tls_array[1];
-	gdt[2] = t->tls_array[2];
+
+	for (i = 0; i < GDT_ENTRY_TLS_ENTRIES; i++)
+		gdt[i] = t->tls_array[i];
 } 
 
 /*

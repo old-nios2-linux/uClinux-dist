@@ -1,12 +1,12 @@
-#if 0
+/*
 ;  read.S  is
-Copyright 1999-2001 John Coffman.
+Copyright 1999-2006 John Coffman.
 All rights reserved.
 
 Licensed under the terms contained in the file 'COPYING' in the 
 source directory.
 
-#endif
+*/
 #define NEW_WRITE 1
 ;
 ; lba_read:      read using LBA
@@ -33,25 +33,23 @@ lba_read:       push    si              ;save some registers
                 xor     ah,ah           ;convert count to word
                 push    ax
 #endif
-#if 0
-;  This test is done in  lilo(geometry.c)  now; floppies are always C:H:S mode
-                or      dl,dl           ;test for HardDrive
-                jns     lba_small       ;floppy or small drive
-#endif
-		
                 push    cx              ;gotta ask about 32-bit addressing 
                 push    bx
-		mov     bl,dl           ;use BL for flag test
-		and     dl,#DEV_MASK    ;remove spurious flags (0x8F)
-		test    bl,#LBA32_FLAG
+#ifndef JRC_FLAGS_IN_DH
+		mov     dh,dl           ;use BL for flag test
+#endif
+		and     dl,#DEV_MASK_asm    ;remove spurious flags (0x8F)
+#ifndef JRC_MBR
+		test    dh,#LBA32_FLAG
 		jz	no_lba          ;linear will never use EDD calls
+#endif
 #ifndef JRC_NOCOMPACT
 	        cmp     al,#127		;test for LINEAR transfer too big
 		ja      no_lba          ; for LBA mode (127 is max)
                 push    ax
 #endif
                 mov     bx,#0x55AA      ;magic number
-                mov     ax,#0x4100      ;function call
+                mov     ah,#0x41        ;function call
                 int     0x13
 #ifndef JRC_NOCOMPACT
                 pop     ax
@@ -76,14 +74,7 @@ lba_avail:
 #ifndef JRC_DS_EQ_SS
                 push    ds              ;save DS
 #endif
-#ifndef LCF_M386
-                xor     si,si
-
-                push    si              ;  0L is pushed
-                push    si
-#else
 		push	dword #0		;  0L is pushed
-#endif
                 push    di              ;LBA hi word
                 push    cx              ;    lo word
                 push    es              ;ES:BX
@@ -91,19 +82,22 @@ lba_avail:
 #ifndef JRC_NOCOMPACT
                 push    ax
 #else
-                push    #1             ;count always 1
+                push    #1		;count always 1
 #endif
-                push    #16            ;size of parameter area  ;#
-                                       ;actually pushes a word
-                mov     si,sp
+                push    #16		;size of parameter area  ;#
+                         		;actually pushes a word
+                mov     si,sp		;DS:SI is param block pointer
 #ifndef JRC_DS_EQ_SS
                 push    ss
                 pop     ds              ;DS:SI points at param block
 #endif
-                mov     ax,#0x4200      ;read function   ;#
 #ifndef JRC_NOCOMPACT
+                mov     ax,#0x4200      ;read function -- must be AX
+					; as AL has meaning on WRITE
                 call    dsk_do_rw
 #else
+;;;		mov     ax,#0x4200      ;read function
+		mov	ah,#0x42	;read only -- AL matters not
                 int     0x13
 #endif
                 lea     sp,word ptr (si+16)      ;use lea so flags are not changed
@@ -148,13 +142,15 @@ lba_more_small:
                 mov     di,cx           ;DI saves it
                 pop     cx
 
-;;;                mov     al,dh 
-;;;                inc     al
 		shr	dx,#8
 		xchg	ax,dx		;AX <- DX
 		inc	ax		;AX is number of heads (256 allowed)
 
-                and     cx,#0x003f      ;CX is number of sectors
+; compensate for Davide BIOS bug
+		dec	cx		; 1..63 -> 0..62;  0->63
+		and	cx,#0x003f	;CX is number of sectors
+		inc	cx		; allow Sectors==0 to mean 64
+
                 mul     cx		; kills DX
                 xchg    ax,si           ;save in SI
 
@@ -220,18 +216,21 @@ lba_read_exit1:	jmp	lba_read_exit
 
 #if NEW_WRITE
 
-dsk_do_rw:	add	ah,#0		; 0=read, 1=write
+dsk_do_rw:	or	ah,#0		; 0=read, 1=write, 2=read-only test
 dsk_wrflag	equ	*-1		; byte data area is the immediate
 
 #else
-dsk_wrflag:     .byte   0               ; 0=read, 1=write
+dsk_wrflag:     .byte   0               ; 0=read, 1=write, 2=read-only test
 
 dsk_do_rw:
                 seg     cs
-                add     ah,dsk_wrflag
+                or	ah,dsk_wrflag
 #endif
 
 #else
+#if DEBUG_NEW
+dsk_wrflag:     .byte   0               ; 0=read, 1=write, 2=read-only test
+#endif
 dsk_do_rw:
 #endif
 
@@ -270,7 +269,6 @@ lba_read_exit_e:
                 pop     bx
 #endif
                 stc
-!!!		jmp     lba_read_exit
 lba_read_exit:
 #ifndef JRC_NOCOMPACT
                 pop     cx              ;return count in CX
@@ -278,5 +276,6 @@ lba_read_exit:
                 pop     bx
 #endif
                 pop     si
+#ifndef JRC_NORETURN
                 ret
-
+#endif

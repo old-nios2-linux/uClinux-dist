@@ -75,8 +75,8 @@ enum sctp_optname {
 #define SCTP_SET_PEER_PRIMARY_ADDR SCTP_SET_PEER_PRIMARY_ADDR
 	SCTP_PRIMARY_ADDR,
 #define SCTP_PRIMARY_ADDR SCTP_PRIMARY_ADDR
-	SCTP_ADAPTION_LAYER,      
-#define SCTP_ADAPTION_LAYER SCTP_ADAPTION_LAYER
+	SCTP_ADAPTATION_LAYER,
+#define SCTP_ADAPTATION_LAYER SCTP_ADAPTATION_LAYER
 	SCTP_DISABLE_FRAGMENTS,
 #define SCTP_DISABLE_FRAGMENTS SCTP_DISABLE_FRAGMENTS
 	SCTP_PEER_ADDR_PARAMS,
@@ -95,6 +95,14 @@ enum sctp_optname {
 #define SCTP_GET_PEER_ADDR_INFO SCTP_GET_PEER_ADDR_INFO
 	SCTP_DELAYED_ACK_TIME,
 #define SCTP_DELAYED_ACK_TIME SCTP_DELAYED_ACK_TIME
+	SCTP_CONTEXT,	/* Receive Context */
+#define SCTP_CONTEXT SCTP_CONTEXT
+	SCTP_FRAGMENT_INTERLEAVE,
+#define SCTP_FRAGMENT_INTERLEAVE SCTP_FRAGMENT_INTERLEAVE
+	SCTP_PARTIAL_DELIVERY_POINT,	/* Set/Get partial delivery point */
+#define SCTP_PARTIAL_DELIVERY_POINT SCTP_PARTIAL_DELIVERY_POINT
+	SCTP_MAX_BURST,		/* Set/Get max burst */
+#define SCTP_MAX_BURST SCTP_MAX_BURST
 
 	/* Internal Socket Options. Some of the sctp library functions are 
 	 * implemented using these socket options.
@@ -211,6 +219,7 @@ struct sctp_assoc_change {
 	__u16 sac_outbound_streams;
 	__u16 sac_inbound_streams;
 	sctp_assoc_t sac_assoc_id;
+	__u8 sac_info[0];
 };
 
 /*
@@ -259,6 +268,7 @@ enum sctp_spc_state {
 	SCTP_ADDR_REMOVED,
 	SCTP_ADDR_ADDED,
 	SCTP_ADDR_MADE_PRIM,
+	SCTP_ADDR_CONFIRMED,
 };
 
 
@@ -329,17 +339,17 @@ struct sctp_shutdown_event {
 };
 
 /*
- * 5.3.1.6 SCTP_ADAPTION_INDICATION
+ * 5.3.1.6 SCTP_ADAPTATION_INDICATION
  *
- *   When a peer sends a Adaption Layer Indication parameter , SCTP
+ *   When a peer sends a Adaptation Layer Indication parameter , SCTP
  *   delivers this notification to inform the application
- *   that of the peers requested adaption layer.
+ *   that of the peers requested adaptation layer.
  */
-struct sctp_adaption_event {
+struct sctp_adaptation_event {
 	__u16 sai_type;
 	__u16 sai_flags;
 	__u32 sai_length;
-	__u32 sai_adaption_ind;
+	__u32 sai_adaptation_ind;
 	sctp_assoc_t sai_assoc_id;
 };
 
@@ -372,7 +382,7 @@ struct sctp_event_subscribe {
 	__u8 sctp_peer_error_event;
 	__u8 sctp_shutdown_event;
 	__u8 sctp_partial_delivery_event;
-	__u8 sctp_adaption_layer_event;
+	__u8 sctp_adaptation_layer_event;
 };
 
 /*
@@ -393,7 +403,7 @@ union sctp_notification {
 	struct sctp_remote_error sn_remote_error;
 	struct sctp_send_failed sn_send_failed;
 	struct sctp_shutdown_event sn_shutdown_event;
-	struct sctp_adaption_event sn_adaption_event;
+	struct sctp_adaptation_event sn_adaptation_event;
 	struct sctp_pdapi_event sn_pdapi_event;
 };
 
@@ -410,7 +420,7 @@ enum sctp_sn_type {
 	SCTP_REMOTE_ERROR,
 	SCTP_SHUTDOWN_EVENT,
 	SCTP_PARTIAL_DELIVERY_EVENT,
-	SCTP_ADAPTION_INDICATION,
+	SCTP_ADAPTATION_INDICATION,
 };
 
 /* Notification error codes used to fill up the error fields in some
@@ -486,13 +496,13 @@ struct sctp_prim {
 } __attribute__((packed, aligned(4)));
 
 /*
- * 7.1.11 Set Adaption Layer Indicator (SCTP_ADAPTION_LAYER)
+ * 7.1.11 Set Adaptation Layer Indicator (SCTP_ADAPTATION_LAYER)
  *
- * Requests that the local endpoint set the specified Adaption Layer
+ * Requests that the local endpoint set the specified Adaptation Layer
  * Indication parameter for all future INIT and INIT-ACK exchanges.
  */
-struct sctp_setadaption {
-	__u32	ssb_adaption_ind;
+struct sctp_setadaptation {
+	__u32	ssb_adaptation_ind;
 };
 
 /*
@@ -506,16 +516,17 @@ struct sctp_setadaption {
  *   address's parameters:
  */
 enum  sctp_spp_flags {
-	SPP_HB_ENABLE = 1,		/*Enable heartbeats*/
-	SPP_HB_DISABLE = 2,		/*Disable heartbeats*/
+	SPP_HB_ENABLE = 1<<0,		/*Enable heartbeats*/
+	SPP_HB_DISABLE = 1<<1,		/*Disable heartbeats*/
 	SPP_HB = SPP_HB_ENABLE | SPP_HB_DISABLE,
-	SPP_HB_DEMAND = 4,		/*Send heartbeat immediately*/
-	SPP_PMTUD_ENABLE = 8,		/*Enable PMTU discovery*/
-	SPP_PMTUD_DISABLE = 16,		/*Disable PMTU discovery*/
+	SPP_HB_DEMAND = 1<<2,		/*Send heartbeat immediately*/
+	SPP_PMTUD_ENABLE = 1<<3,	/*Enable PMTU discovery*/
+	SPP_PMTUD_DISABLE = 1<<4,	/*Disable PMTU discovery*/
 	SPP_PMTUD = SPP_PMTUD_ENABLE | SPP_PMTUD_DISABLE,
-	SPP_SACKDELAY_ENABLE = 32,	/*Enable SACK*/
-	SPP_SACKDELAY_DISABLE = 64,	/*Disable SACK*/
+	SPP_SACKDELAY_ENABLE = 1<<5,	/*Enable SACK*/
+	SPP_SACKDELAY_DISABLE = 1<<6,	/*Disable SACK*/
 	SPP_SACKDELAY = SPP_SACKDELAY_ENABLE | SPP_SACKDELAY_DISABLE,
+	SPP_HB_TIME_IS_ZERO = 1<<7,	/* Set HB delay to 0 */
 };
 
 struct sctp_paddrparams {
@@ -528,7 +539,7 @@ struct sctp_paddrparams {
 	__u32			spp_flags;
 } __attribute__((packed, aligned(4)));
 
-/* 7.1.24. Delayed Ack Timer (SCTP_DELAYED_ACK_TIME)
+/* 7.1.23. Delayed Ack Timer (SCTP_DELAYED_ACK_TIME)
  *
  *   This options will get or set the delayed ack timer.  The time is set
  *   in milliseconds.  If the assoc_id is 0, then this sets or gets the

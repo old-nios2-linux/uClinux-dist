@@ -1,6 +1,15 @@
-# Path to parent kernel include files directory
-KERNEL_INCLUDE=$(ROOTDIR)/$(LINUXDIR)/include
-LIBC_INCLUDE=$(ROOTDIR)/include
+
+KERNEL_INCLUDE = $(ROOTDIR)/$(LINUXDIR)/include
+export KERNEL_INCLUDE
+
+DESTDIR=
+SBINDIR=/usr/sbin
+CONFDIR=/etc/iproute2
+DOCDIR=/usr/share/doc/iproute2
+MANDIR=/usr/share/man
+
+# Path to db_185.h include
+DBM_INCLUDE:=/usr/include
 
 DEFINES= -DRESOLVE_HOSTNAMES -DNO_DL
 
@@ -8,54 +17,69 @@ DEFINES= -DRESOLVE_HOSTNAMES -DNO_DL
 LDLIBS := -lresolv $(LDLIBS)
 ADDLIB=
 
-#options if you compile with libc5, and without a bind>=4.9.4 libresolv
-#LDLIBS=
-#ADDLIB=inet_ntop.o inet_pton.o
-
 #options for decnet
 ADDLIB+=dnet_ntop.o dnet_pton.o
 
 #options for ipx
 ADDLIB+=ipx_ntop.o ipx_pton.o
 
-ifeq ($(findstring uClibc,$(LIBCDIR)),)
-ifeq ($(LIBC_INCLUDE)/socketbits.h,$(wildcard $(LIBC_INCLUDE)/socketbits.h))
-  ifeq ($(LIBC_INCLUDE)/net/if_packet.h,$(wildcard $(LIBC_INCLUDE)/net/if_packet.h))
-    GLIBCFIX=-I../include-glibc -include ../include-glibc/glibc-bugs.h
-  endif
+ifdef not_defined
+CC = gcc
+HOSTCC = gcc
 endif
-ifeq ($(LIBC_INCLUDE)/bits/socket.h,$(wildcard $(LIBC_INCLUDE)/bits/socket.h))
-  GLIBCFIX=-I../include-glibc -include ../include-glibc/glibc-bugs.h
+CCOPTS = -D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall
+ifdef not_defined
+CFLAGS = $(CCOPTS) -I../include $(DEFINES)
+else
+CFLAGS += $(CCOPTS) -I../include -I$(ROOTDIR)/include $(DEFINES)
 endif
-endif
-
-# CC = gcc
-# CCOPTS = -D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall -Werror -g
-CFLAGS := $(CCOPTS) $(GLIBCFIX) -I$(KERNEL_INCLUDE) -I../include $(DEFINES) $(CFLAGS)
+YACCFLAGS = -d -t -v
 
 LDLIBS := -L../lib -lnetlink -lip2util $(LDLIBS)
 
-SUBDIRS=lib ip tc
+SUBDIRS=lib ip tc misc netem genl
 
 LIBNETLINK=../lib/libnetlink.a ../lib/libip2util.a
 
-all: check-kernel
+all: Config
 	@set -e; \
 	for i in $(SUBDIRS); \
-	do $(MAKE) -C $$i; done
+	do $(MAKE) $(MFLAGS) -C $$i; done
 
-check-kernel:
-ifeq ($(KERNEL_INCLUDE),)
-	@echo "Please, set correct KERNEL_INCLUDE"; false
-else
-	@set -e; \
-	if [ ! -r $(KERNEL_INCLUDE)/linux/autoconf.h ]; then \
-		echo "Please, Compile the kernel first"; false; fi
-endif
+Config:
+	sh configure $(KERNEL_INCLUDE)
+
+install: all
+	install -m 0755 -d $(DESTDIR)$(SBINDIR)
+	install -m 0755 -d $(DESTDIR)$(CONFDIR)
+	install -m 0755 -d $(DESTDIR)$(DOCDIR)/examples
+	install -m 0755 -d $(DESTDIR)$(DOCDIR)/examples/diffserv
+	install -m 0644 README.iproute2+tc $(shell find examples -maxdepth 1 -type f) \
+		$(DESTDIR)$(DOCDIR)/examples
+	install -m 0644 $(shell find examples/diffserv -maxdepth 1 -type f) \
+		$(DESTDIR)$(DOCDIR)/examples/diffserv
+	@for i in $(SUBDIRS) doc; do $(MAKE) -C $$i install; done
+	install -m 0644 $(shell find etc/iproute2 -maxdepth 1 -type f) $(DESTDIR)$(CONFDIR)
+	install -m 0755 -d $(DESTDIR)$(MANDIR)/man8
+	install -m 0644 $(shell find man/man8 -maxdepth 1 -type f) $(DESTDIR)$(MANDIR)/man8
+	ln -sf tc-pbfifo.8  $(DESTDIR)$(MANDIR)/man8/tc-bfifo.8
+	ln -sf tc-pbfifo.8  $(DESTDIR)$(MANDIR)/man8/tc-pfifo.8
+	install -m 0755 -d $(DESTDIR)$(MANDIR)/man3
+	install -m 0644 $(shell find man/man3 -maxdepth 1 -type f) $(DESTDIR)$(MANDIR)/man3
 
 clean:
-	for i in $(SUBDIRS) doc; \
-	do $(MAKE) -C $$i clean; done
+	rm -f cscope.*
+	@for i in $(SUBDIRS) doc; \
+	do $(MAKE) $(MFLAGS) -C $$i clean; done
+	rm -f Config
+
+clobber: clean
+	rm -f Config
+
+distclean: clobber
+
+cscope:
+	cscope -b -q -R -Iinclude -sip -slib -smisc -snetem -stc
 
 romfs:
 	$(ROMFSINST) etc /etc

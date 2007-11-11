@@ -1,9 +1,9 @@
 /*
- * $Id: authorize.c,v 1.11.2.1 2003/11/05 03:55:30 janakj Exp $
+ * $Id: authorize.c,v 1.21.2.3 2005/09/08 20:14:48 janakj Exp $
  *
  * Digest Authentication - Database support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,6 +30,8 @@
  * ---------
  * 2003-02-28 scratchpad compatibility abandoned
  * 2003-01-27 next baby-step to removing ZT - PRESERVE_ZT (jiri)
+ * 2004-06-06 updated to the new DB api, added auth_db_{init,bind,close,ver}
+ *             (andrei)
  */
 
 
@@ -40,32 +42,44 @@
 #include "../../dprint.h"
 #include "../../parser/digest/digest.h"
 #include "../../parser/hf.h"
+#include "../../parser/parser_f.h"
+#include "../../usr_avp.h"
+#include "../../mem/mem.h"
 #include "authdb_mod.h"
 #include "rfc2617.h"
 
 
 #define MESSAGE_500 "Server Internal Error"
 
-static char rpid_buffer[MAX_RPID_LEN];
-static str rpid = {rpid_buffer, 0};
+static db_con_t* db_handle=0; /* database connection handle */
+static db_func_t  auth_dbf;
 
-static inline int get_ha1(struct username* _username, str* _domain, char* _table, char* _ha1, str* _rpid)
+static inline int get_ha1(struct username* _username, str* _domain,
+    char* _table, char* _ha1, db_res_t** res)
 {
 	db_key_t keys[2];
 	db_val_t vals[2];
-	db_key_t col[2];
-	db_res_t* res;
+	db_key_t *col;
 	str result;
 	int n, nc;
 
-	keys[0] = user_column;
-	keys[1] = domain_column;
-	col[0] = (_username->domain.len && !calc_ha1) ? (pass_column_2) : (pass_column);	
-	col[1] = rpid_column;
+	col = pkg_malloc(sizeof(*col) * (avps_int_n + avps_str_n + 1));
+	if (col == NULL) {
+		LOG(L_ERR, "get_ha1(): Error while allocating memory\n");
+		return -1;
+	}
+
+	keys[0] = user_column.s;
+	keys[1] = domain_column.s;
+	col[0] = (_username->domain.len && !calc_ha1) ? (pass_column_2.s) : (pass_column.s);
+	for (n = 0; n < avps_int_n; n++)
+		col[1 + n] = avps_int[n].s;
+	for (n = 0; n < avps_str_n; n++)
+		col[1 + avps_int_n + n] = avps_str[n].s;
 
 	VAL_TYPE(vals) = VAL_TYPE(vals + 1) = DB_STR;
 	VAL_NULL(vals) = VAL_NULL(vals + 1) = 0;
-	
+
 	VAL_STR(vals).s = _username->user.s;
 	VAL_STR(vals).len = _username->user.len;
 
@@ -73,21 +87,27 @@ static inline int get_ha1(struct username* _username, str* _domain, char* _table
 	VAL_STR(vals + 1).len = _domain->len;
 
 	n = (use_domain ? 2 : 1);
-	nc = (use_rpid ? 2 : 1);
-	db_use_table(db_handle, _table);
-	if (db_query(db_handle, keys, 0, vals, col, n, nc, 0, &res) < 0) {
-		LOG(L_ERR, "get_ha1(): Error while querying database\n");
+	nc = 1 + avps_int_n + avps_str_n;
+	if (auth_dbf.use_table(db_handle, _table) < 0) {
+		LOG(L_ERR, "get_ha1(): Error in use_table\n");
+		pkg_free(col);
 		return -1;
 	}
 
-	if (RES_ROW_N(res) == 0) {
-		DBG("get_ha1(): no result for user \'%.*s@%.*s\'\n", 
+	if (auth_dbf.query(db_handle, keys, 0, vals, col, n, nc, 0, res) < 0) {
+		LOG(L_ERR, "get_ha1(): Error while querying database\n");
+		pkg_free(col);
+		return -1;
+	}
+	pkg_free(col);
+
+	if ((RES_ROW_N(*res) == 0) || VAL_NULL(ROW_VALUES(RES_ROWS(*res)))) {
+		DBG("get_ha1(): no result for user \'%.*s@%.*s\'\n",
 		    _username->user.len, ZSW(_username->user.s), (use_domain ? (_domain->len) : 0), ZSW(_domain->s));
-		db_free_query(db_handle, res);
 		return 1;
 	}
 
-        result.s = (char*)ROW_VALUES(RES_ROWS(res))[0].val.string_val;
+        result.s = (char*)ROW_VALUES(RES_ROWS(*res))[0].val.string_val;
 	result.len = strlen(result.s);
 
 	if (calc_ha1) {
@@ -100,19 +120,12 @@ static inline int get_ha1(struct username* _username, str* _domain, char* _table
 		_ha1[result.len] = '\0';
 	}
 
-	if (use_rpid && (VAL_NULL(&(res->rows[0].values[1])) == 0)) {
-		result.s = (char*)VAL_STRING(&(res->rows[0].values[1]));
-		_rpid->len = strlen(result.s);
-		memcpy(_rpid->s, result.s, _rpid->len);
-	}
-
-	db_free_query(db_handle, res);
 	return 0;
 }
 
 /*
  * Calculate the response and compare with the given response string
- * Authorization is successfull if this two strings are same
+ * Authorization is successful if this two strings are same
  */
 static inline int check_response(dig_cred_t* _cred, str* _method, char* _ha1)
 {
@@ -158,16 +171,19 @@ static inline int check_response(dig_cred_t* _cred, str* _method, char* _ha1)
 static inline int authorize(struct sip_msg* _m, str* _realm, char* _table, int _hftype)
 {
 	char ha1[256];
-	int res;
+	int res, i;
 	struct hdr_field* h;
 	auth_body_t* cred;
 	auth_result_t ret;
-	str domain;
+	str domain, value;
+	int_str iname, ivalue;
+	db_res_t* result;
+	str rpid;
 
 	domain = *_realm;
 
 	ret = pre_auth_func(_m, &domain, _hftype, &h);
-	
+
 	switch(ret) {
 	case ERROR:            return 0;
 	case NOT_AUTHORIZED:   return -1;
@@ -177,32 +193,72 @@ static inline int authorize(struct sip_msg* _m, str* _realm, char* _table, int _
 
 	cred = (auth_body_t*)h->parsed;
 
-		/* Clear the rpid buffer */
-	rpid.len = 0;
-	
-	res = get_ha1(&cred->digest.username, &domain, _table, ha1, &rpid);
+	res = get_ha1(&cred->digest.username, &domain, _table, ha1, &result);
         if (res < 0) {
 		     /* Error while accessing the database */
 		if (sl_reply(_m, (char*)500, MESSAGE_500) == -1) {
 			LOG(L_ERR, "authorize(): Error while sending 500 reply\n");
 		}
 		return 0;
-	} else if (res > 0) {
+	}
+	if (res > 0) {
 		     /* Username not found in the database */
+		auth_dbf.free_result(db_handle, result);
 		return -1;
 	}
 
-	     /* Recalculate response, it must be same to authorize sucessfully */
+	     /* Recalculate response, it must be same to authorize successfully */
         if (!check_response(&(cred->digest), &_m->first_line.u.request.method, ha1)) {
+		rpid.s = NULL;
+		rpid.len = 0;
+		for (i = 0; i < avps_str_n; i++) {
+			if (avps_str[i].len != 4
+					|| VAL_NULL(&(result->rows[0].values[1 + avps_int_n + i]))
+					|| memcmp(avps_str[i].s, "rpid", 4) != 0)
+				continue;
+			rpid.s = (char*)VAL_STRING(&(result->rows[0].values[1 + avps_int_n + i]));
+			if(rpid.s!=NULL)
+				rpid.len = strlen(rpid.s);
+		}
 		ret = post_auth_func(_m, h, &rpid);
 		switch(ret) {
-		case ERROR:          return 0;
-		case NOT_AUTHORIZED: return -1;
-		case AUTHORIZED:     return 1;
-		default:             return -1; 
+		case ERROR:
+			auth_dbf.free_result(db_handle, result);
+			return 0;
+		case NOT_AUTHORIZED:
+			auth_dbf.free_result(db_handle, result);
+			return -1;
+		case AUTHORIZED:
+			for (i = 0; i < avps_int_n; i++) {
+				if(VAL_NULL(&(result->rows[0].values[1 + i])))
+					continue;
+				iname.s = &(avps_int[i]);
+				ivalue.n = VAL_INT(&(result->rows[0].values[1 + i]));
+				add_avp(AVP_NAME_STR, iname, ivalue);
+				DBG("authorize(): set integer AVP \'%.*s = %d\'\n",
+				    iname.s->len, ZSW(iname.s->s), ivalue.n);
+			}
+			for (i = 0; i < avps_str_n; i++) {
+				value.s = (char*)VAL_STRING(&(result->rows[0].values[1 + avps_int_n + i]));
+				if(VAL_NULL(&(result->rows[0].values[1 + avps_int_n + i]))
+						|| value.s==NULL)
+					continue;
+				iname.s = &(avps_str[i]);
+				value.len = strlen(value.s);
+				ivalue.s = &value;
+				add_avp(AVP_NAME_STR | AVP_VAL_STR, iname, ivalue);
+				DBG("authorize(): set string AVP \'%.*s = %.*s\'\n",
+				    iname.s->len, ZSW(iname.s->s), value.len, ZSW(value.s));
+			}
+			auth_dbf.free_result(db_handle, result);
+			return 1;
+		default:
+			auth_dbf.free_result(db_handle, result);
+			return -1;
 		}
 	}
 
+	auth_dbf.free_result(db_handle, result);
 	return -1;
 }
 
@@ -223,4 +279,62 @@ int proxy_authorize(struct sip_msg* _m, char* _realm, char* _table)
 int www_authorize(struct sip_msg* _m, char* _realm, char* _table)
 {
 	return authorize(_m, (str*)_realm, _table, HDR_AUTHORIZATION);
+}
+
+
+
+int auth_db_init(char* db_url)
+{
+	if (auth_dbf.init==0){
+		LOG(L_CRIT, "BUG: auth_db_bind: null dbf\n");
+		goto error;
+	}
+	db_handle=auth_dbf.init(db_url);
+	if (db_handle==0){
+		LOG(L_ERR, "ERROR: auth_db_bind: unable to connect to the database\n");
+		goto error;
+	}
+	return 0;
+error:
+	return -1;
+}
+
+
+int auth_db_bind(char* db_url)
+{
+	if (bind_dbmod(db_url, &auth_dbf)<0){
+		LOG(L_ERR, "ERROR: auth_db_bind: unable to bind to the database"
+				" module\n");
+		return -1;
+	}
+	return 0;
+}
+
+
+void auth_db_close()
+{
+	if (db_handle && auth_dbf.close){
+		auth_dbf.close(db_handle);
+		db_handle=0;
+	}
+}
+
+
+int auth_db_ver(char* db_url, str* name)
+{
+	db_con_t* dbh;
+	int ver;
+
+	if (auth_dbf.init==0){
+		LOG(L_CRIT, "BUG: auth_db_ver: unbound database\n");
+		return -1;
+	}
+	dbh=auth_dbf.init(db_url);
+	if (dbh==0){
+		LOG(L_ERR, "ERROR: auth_db_ver: unable to open database connection\n");
+		return -1;
+	}
+	ver=table_version(&auth_dbf, dbh, name);
+	auth_dbf.close(dbh);
+	return ver;
 }

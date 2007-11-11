@@ -7,6 +7,8 @@
  *	Reiner Sailer <sailer@watson.ibm.com>
  *	Kylene Hall <kjhall@us.ibm.com>
  *
+ * Maintained by: <tpmdd-devel@lists.sourceforge.net>
+ *
  * Access to the eventlog extended by the TCG BIOS of PC platform
  *
  * This program is free software; you can redistribute it and/or
@@ -372,10 +374,8 @@ static int read_log(struct tpm_bios_log *log)
 	}
 
 	/* Find TCPA entry in RSDT (ACPI_LOGICAL_ADDRESSING) */
-	status = acpi_get_firmware_table(ACPI_TCPA_SIG, 1,
-					 ACPI_LOGICAL_ADDRESSING,
-					 (struct acpi_table_header **)
-					 &buff);
+	status = acpi_get_table(ACPI_SIG_TCPA, 1,
+				(struct acpi_table_header **)&buff);
 
 	if (ACPI_FAILURE(status)) {
 		printk(KERN_ERR "%s: ERROR - Could not get TCPA table\n",
@@ -409,7 +409,7 @@ static int read_log(struct tpm_bios_log *log)
 
 	log->bios_event_log_end = log->bios_event_log + len;
 
-	acpi_os_map_memory(start, len, (void *) &virt);
+	virt = acpi_os_map_memory(start, len);
 
 	memcpy(log->bios_event_log, virt, len);
 
@@ -429,7 +429,7 @@ static int tpm_ascii_bios_measurements_open(struct inode *inode,
 		return -ENOMEM;
 
 	if ((err = read_log(log)))
-		return err;
+		goto out_free;
 
 	/* now register seq file */
 	err = seq_open(file, &tpm_ascii_b_measurments_seqops);
@@ -437,13 +437,18 @@ static int tpm_ascii_bios_measurements_open(struct inode *inode,
 		seq = file->private_data;
 		seq->private = log;
 	} else {
-		kfree(log->bios_event_log);
-		kfree(log);
+		goto out_free;
 	}
+
+out:
 	return err;
+out_free:
+	kfree(log->bios_event_log);
+	kfree(log);
+	goto out;
 }
 
-struct file_operations tpm_ascii_bios_measurements_ops = {
+const struct file_operations tpm_ascii_bios_measurements_ops = {
 	.open = tpm_ascii_bios_measurements_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
@@ -462,7 +467,7 @@ static int tpm_binary_bios_measurements_open(struct inode *inode,
 		return -ENOMEM;
 
 	if ((err = read_log(log)))
-		return err;
+		goto out_free;
 
 	/* now register seq file */
 	err = seq_open(file, &tpm_binary_b_measurments_seqops);
@@ -470,13 +475,18 @@ static int tpm_binary_bios_measurements_open(struct inode *inode,
 		seq = file->private_data;
 		seq->private = log;
 	} else {
-		kfree(log->bios_event_log);
-		kfree(log);
+		goto out_free;
 	}
+
+out:
 	return err;
+out_free:
+	kfree(log->bios_event_log);
+	kfree(log);
+	goto out;
 }
 
-struct file_operations tpm_binary_bios_measurements_ops = {
+const struct file_operations tpm_binary_bios_measurements_ops = {
 	.open = tpm_binary_bios_measurements_open,
 	.read = seq_read,
 	.llseek = seq_lseek,

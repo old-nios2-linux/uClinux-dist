@@ -1,7 +1,7 @@
 /*
- * $Id: tcp_conn.h,v 1.17.2.2.2.1 2003/12/03 12:15:04 andrei Exp $
+ * $Id: tcp_conn.h,v 1.22 2004/08/24 08:45:10 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,6 +29,7 @@
  * --------
  *  2003-01-29  tcp buffer size ++-ed to allow for 0-terminator
  *  2003-06-30  added tcp_connection flags & state (andrei) 
+ *  2003-10-27  tcp port aliases support added (andrei)
  */
 
 
@@ -40,9 +41,11 @@
 #include "locking.h"
 
 
+#define TCP_CON_MAX_ALIASES 4 /* maximum number of port aliases */
+
 #define TCP_BUF_SIZE 65535
-#define TCP_CON_TIMEOUT 600 /* in  seconds */
-#define TCP_CON_SEND_TIMEOUT 600 /* timeout after a send */
+#define TCP_CON_TIMEOUT 120 /* in  seconds */
+#define TCP_CON_SEND_TIMEOUT 120 /* timeout after a send */
 #define DEFAULT_TCP_SEND_TIMEOUT 10 /* if a send can't write for more then 10s,
 									   timeout */
 #define DEFAULT_TCP_CONNECT_TIMEOUT 10 /* if a connect doesn't complete in this
@@ -81,7 +84,7 @@ struct tcp_req{
 	struct tcp_req* next;
 	/* sockaddr ? */
 	char buf[TCP_BUF_SIZE+1]; /* bytes read so far (+0-terminator)*/
-	char* start; /* where the message starts, after alll the empty lines are
+	char* start; /* where the message starts, after all the empty lines are
 					skipped*/
 	char* pos; /* current position in buf */
 	char* parsed; /* last parsed position */
@@ -94,6 +97,18 @@ struct tcp_req{
 	enum tcp_req_states state;
 };
 
+
+
+struct tcp_connection;
+
+/* tcp port alias structure */
+struct tcp_conn_alias{
+	struct tcp_connection* parent;
+	struct tcp_conn_alias* next;
+	struct tcp_conn_alias* prev;
+	unsigned short port; /* alias port */
+	unsigned short hash; /* hash index in the address hash */
+};
 
 
 
@@ -111,15 +126,16 @@ struct tcp_connection{
 	enum tcp_conn_states state; /* connection state */
 	void* extra_data; /* extra data associated to the connection, 0 for tcp*/
 	int timeout; /* connection timeout, after this it will be removed*/
-	unsigned addr_hash; /* hash indexes in the 2 tables */
-	unsigned id_hash;
-	struct tcp_connection* next; /* next, prev in hash table, used by "main" */
-	struct tcp_connection* prev;
+	unsigned id_hash; /* hash index in the id_hash */
+	int aliases; /* aliases number, at least 1 */
+	struct tcp_conn_alias con_aliases[TCP_CON_MAX_ALIASES];
 	struct tcp_connection* id_next; /* next, prev in id hash table */
 	struct tcp_connection* id_prev;
 	struct tcp_connection* c_next; /* child next prev (use locally) */
 	struct tcp_connection* c_prev;
 };
+
+
 
 
 
@@ -157,15 +173,15 @@ struct tcp_connection{
 #define TCPCONN_LOCK lock_get(tcpconn_lock);
 #define TCPCONN_UNLOCK lock_release(tcpconn_lock);
 
-#define TCP_ADDR_HASH_SIZE 1024
+#define TCP_ALIAS_HASH_SIZE 1024
 #define TCP_ID_HASH_SIZE 1024
 
 static inline unsigned tcp_addr_hash(struct ip_addr* ip, unsigned short port)
 {
-	if(ip->len==4) return (ip->u.addr32[0]^port)&(TCP_ADDR_HASH_SIZE-1);
+	if(ip->len==4) return (ip->u.addr32[0]^port)&(TCP_ALIAS_HASH_SIZE-1);
 	else if (ip->len==16) 
 			return (ip->u.addr32[0]^ip->u.addr32[1]^ip->u.addr32[2]^
-					ip->u.addr32[3]^port) & (TCP_ADDR_HASH_SIZE-1);
+					ip->u.addr32[3]^port) & (TCP_ALIAS_HASH_SIZE-1);
 	else{
 		LOG(L_CRIT, "tcp_addr_hash: BUG: bad len %d for an ip address\n",
 				ip->len);

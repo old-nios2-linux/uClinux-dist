@@ -1,9 +1,9 @@
 /*
- * $Id: dbase.h,v 1.8 2002/11/28 17:05:16 janakj Exp $
+ * $Id: dbase.h,v 1.12 2004/08/24 08:58:31 janakj Exp $
  *
  * MySQL module core functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,7 @@
 #ifndef DBASE_H
 #define DBASE_H
 
+
 #include "../../db/db_con.h"
 #include "../../db/db_res.h"
 #include "../../db/db_key.h"
@@ -51,15 +52,9 @@ void db_close(db_con_t* _h);
 
 
 /*
- * Return result of previous query
- */
-int get_result(db_con_t* _h, db_res_t** _r);
-
-
-/*
  * Free all memory allocated by get_result
  */
-int db_free_query(db_con_t* _h, db_res_t* _r);
+int db_free_result(db_con_t* _h, db_res_t* _r);
 
 
 /*
@@ -92,6 +87,13 @@ int db_delete(db_con_t* _h, db_key_t* _k, db_op_t* _o, db_val_t* _v, int _n);
  */
 int db_update(db_con_t* _h, db_key_t* _k, db_op_t* _o, db_val_t* _v,
 	      db_key_t* _uk, db_val_t* _uv, int _n, int _un);
+
+
+/*
+ * Store name of table that will be used by
+ * subsequent database functions
+ */
+int use_table(db_con_t* _h, const char* _t);
 
 
 #endif /* DBASE_H */

@@ -1,5 +1,5 @@
 /* Messages logging.
-   Copyright (C) 1998, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2005 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -29,19 +29,6 @@ so, delete this exception statement from your version.  */
 
 #include <config.h>
 
-/* This allows the architecture-specific .h files to specify the use
-   of stdargs regardless of __STDC__.  */
-#ifndef WGET_USE_STDARG
-/* Use stdarg only if the compiler supports ANSI C and stdarg.h is
-   present.  We check for both because there are configurations where
-   stdarg.h exists, but doesn't work. */
-# ifdef __STDC__
-#  ifdef HAVE_STDARG_H
-#   define WGET_USE_STDARG
-#  endif
-# endif
-#endif /* not WGET_USE_STDARG */
-
 #include <stdio.h>
 #ifdef HAVE_STRING_H
 # include <string.h>
@@ -62,6 +49,7 @@ so, delete this exception statement from your version.  */
 
 #include "wget.h"
 #include "utils.h"
+#include "log.h"
 
 #ifndef errno
 extern int errno;
@@ -232,7 +220,7 @@ saved_append_1 (const char *start, const char *end)
 	    {
 	      /* Allocate memory and concatenate the old and the new
                  contents. */
-	      ln->malloced_line = xmalloc (old_len + len + 1);
+	      ln->malloced_line = (char *)xmalloc (old_len + len + 1);
 	      memcpy (ln->malloced_line, ln->static_line,
 		      old_len);
 	      memcpy (ln->malloced_line + old_len, start, len);
@@ -327,7 +315,7 @@ logputs (enum log_options o, const char *s)
   FILE *fp;
 
   check_redirect_output ();
-  if (!(fp = get_log_fp ()))
+  if ((fp = get_log_fp ()) == NULL)
     return;
   CHECK_VERBOSE (o);
 
@@ -349,15 +337,20 @@ struct logvprintf_state {
 /* Print a message to the log.  A copy of message will be saved to
    saved_log, for later reusal by log_dump_context().
 
-   It is not possible to code this function in a "natural" way, using
-   a loop, because of the braindeadness of the varargs API.
-   Specifically, each call to vsnprintf() must be preceded by va_start
-   and followed by va_end.  And this is possible only in the function
-   that contains the `...' declaration.  The alternative would be to
-   use va_copy, but that's not portable.  */
+   Normally we'd want this function to loop around vsnprintf until
+   sufficient room is allocated, as the Linux man page recommends.
+   However each call to vsnprintf() must be preceded by va_start and
+   followed by va_end.  Since calling va_start/va_end is possible only
+   in the function that contains the `...' declaration, we cannot call
+   vsnprintf more than once.  Therefore this function saves its state
+   to logvprintf_state and signals the parent to call it again.
+
+   (An alternative approach would be to use va_copy, but that's not
+   portable.)  */
 
 static int
-logvprintf (struct logvprintf_state *state, const char *fmt, va_list args)
+log_vprintf_internal (struct logvprintf_state *state, const char *fmt,
+		      va_list args)
 {
   char smallmsg[128];
   char *write_ptr = smallmsg;
@@ -499,11 +492,11 @@ logprintf (enum log_options o, const char *fmt, ...)
     return;
   CHECK_VERBOSE (o);
 
-  memset (&lpstate, '\0', sizeof (lpstate));
+  xzero (lpstate);
   do
     {
       VA_START (args, fmt);
-      done = logvprintf (&lpstate, fmt, args);
+      done = log_vprintf_internal (&lpstate, fmt, args);
       va_end (args);
     }
   while (!done);
@@ -525,11 +518,11 @@ debug_logprintf (const char *fmt, ...)
       if (inhibit_logging)
 	return;
 
-      memset (&lpstate, '\0', sizeof (lpstate));
+      xzero (lpstate);
       do
 	{
 	  VA_START (args, fmt);
-	  done = logvprintf (&lpstate, fmt, args);
+	  done = log_vprintf_internal (&lpstate, fmt, args);
 	  va_end (args);
 	}
       while (!done);
@@ -547,7 +540,7 @@ log_init (const char *file, int appendp)
       logfp = fopen (file, appendp ? "a" : "w");
       if (!logfp)
 	{
-	  perror (opt.lfilename);
+	  fprintf (stderr, "%s: %s: %s\n", exec_name, file, strerror (errno));
 	  exit (1);
 	}
     }
@@ -561,16 +554,16 @@ log_init (const char *file, int appendp)
          easier on the user.  */
       logfp = stderr;
 
-      /* If the output is a TTY, enable storing, which will make Wget
-         remember the last several printed messages, to be able to
-         dump them to a log file in case SIGHUP or SIGUSR1 is received
-         (or Ctrl+Break is pressed under Windows).  */
       if (1
 #ifdef HAVE_ISATTY
 	  && isatty (fileno (logfp))
 #endif
 	  )
 	{
+	  /* If the output is a TTY, enable save context, i.e. store
+	     the most recent several messages ("context") and dump
+	     them to a log file in case SIGHUP or SIGUSR1 is received
+	     (or Ctrl+Break is pressed under Windows).  */
 	  save_context_p = 1;
 	}
     }
@@ -622,6 +615,180 @@ log_dump_context (void)
   fflush (fp);
 }
 
+/* String escape functions. */
+
+/* Return the number of non-printable characters in SOURCE.
+   Non-printable characters are determined as per safe-ctype.c.  */
+
+static int
+count_nonprint (const char *source)
+{
+  const char *p;
+  int cnt;
+  for (p = source, cnt = 0; *p; p++)
+    if (!ISPRINT (*p))
+      ++cnt;
+  return cnt;
+}
+
+/* Copy SOURCE to DEST, escaping non-printable characters.
+
+   Non-printable refers to anything outside the non-control ASCII
+   range (32-126) which means that, for example, CR, LF, and TAB are
+   considered non-printable along with ESC, BS, and other control
+   chars.  This is by design: it makes sure that messages from remote
+   servers cannot be easily used to deceive the users by mimicking
+   Wget's output.  Disallowing non-ASCII characters is another
+   necessary security measure, which makes sure that remote servers
+   cannot garble the screen or guess the local charset and perform
+   homographic attacks.
+
+   Of course, the above mandates that escnonprint only be used in
+   contexts expected to be ASCII, such as when printing host names,
+   URL components, HTTP headers, FTP server messages, and the like.
+
+   ESCAPE is the leading character of the escape sequence.  BASE
+   should be the base of the escape sequence, and must be either 8 for
+   octal or 16 for hex.
+
+   DEST must point to a location with sufficient room to store an
+   encoded version of SOURCE.  */
+
+static void
+copy_and_escape (const char *source, char *dest, char escape, int base)
+{
+  const char *from = source;
+  char *to = dest;
+  unsigned char c;
+
+  /* Copy chars from SOURCE to DEST, escaping non-printable ones. */
+  switch (base)
+    {
+    case 8:
+      while ((c = *from++) != '\0')
+	if (ISPRINT (c))
+	  *to++ = c;
+	else
+	  {
+	    *to++ = escape;
+	    *to++ = '0' + (c >> 6);
+	    *to++ = '0' + ((c >> 3) & 7);
+	    *to++ = '0' + (c & 7);
+	  }
+      break;
+    case 16:
+      while ((c = *from++) != '\0')
+	if (ISPRINT (c))
+	  *to++ = c;
+	else
+	  {
+	    *to++ = escape;
+	    *to++ = XNUM_TO_DIGIT (c >> 4);
+	    *to++ = XNUM_TO_DIGIT (c & 0xf);
+	  }
+      break;
+    default:
+      abort ();
+    }
+  *to = '\0';
+}
+
+#define RING_SIZE 3
+struct ringel {
+  char *buffer;
+  int size;
+};
+static struct ringel ring[RING_SIZE];	/* ring data */
+
+static const char *
+escnonprint_internal (const char *str, char escape, int base)
+{
+  static int ringpos;		        /* current ring position */
+  int nprcnt;
+
+  assert (base == 8 || base == 16);
+
+  nprcnt = count_nonprint (str);
+  if (nprcnt == 0)
+    /* If there are no non-printable chars in STR, don't bother
+       copying anything, just return STR.  */
+    return str;
+
+  {
+    /* Set up a pointer to the current ring position, so we can write
+       simply r->X instead of ring[ringpos].X. */
+    struct ringel *r = ring + ringpos;
+
+    /* Every non-printable character is replaced with the escape char
+       and three (or two, depending on BASE) *additional* chars.  Size
+       must also include the length of the original string and one
+       additional char for the terminating \0. */
+    int needed_size = strlen (str) + 1 + (base == 8 ? 3 * nprcnt : 2 * nprcnt);
+
+    /* If the current buffer is uninitialized or too small,
+       (re)allocate it.  */
+    if (r->buffer == NULL || r->size < needed_size)
+      {
+	r->buffer = xrealloc (r->buffer, needed_size);
+	r->size = needed_size;
+      }
+
+    copy_and_escape (str, r->buffer, escape, base);
+    ringpos = (ringpos + 1) % RING_SIZE;
+    return r->buffer;
+  }
+}
+
+/* Return a pointer to a static copy of STR with the non-printable
+   characters escaped as \ooo.  If there are no non-printable
+   characters in STR, STR is returned.  See copy_and_escape for more
+   information on which characters are considered non-printable.
+
+   DON'T call this function on translated strings because escaping
+   will break them.  Don't call it on literal strings from the source,
+   which are by definition trusted.  If newlines are allowed in the
+   string, escape and print it line by line because escaping the whole
+   string will convert newlines to \012.  (This is so that expectedly
+   single-line messages cannot use embedded newlines to mimic Wget's
+   output and deceive the user.)
+
+   escnonprint doesn't quote its escape character because it is notf
+   meant as a general and reversible quoting mechanism, but as a quick
+   way to defang binary junk sent by malicious or buggy servers.
+
+   NOTE: since this function can return a pointer to static data, be
+   careful to copy its result before calling it again.  However, to be
+   more useful with printf, it maintains an internal ring of static
+   buffers to return.  Currently the ring size is 3, which means you
+   can print up to three values in the same printf; if more is needed,
+   bump RING_SIZE.  */
+
+const char *
+escnonprint (const char *str)
+{
+  return escnonprint_internal (str, '\\', 8);
+}
+
+/* Return a pointer to a static copy of STR with the non-printable
+   characters escaped as %XX.  If there are no non-printable
+   characters in STR, STR is returned.
+
+   See escnonprint for usage details.  */
+
+const char *
+escnonprint_uri (const char *str)
+{
+  return escnonprint_internal (str, '%', 16);
+}
+
+void
+log_cleanup (void)
+{
+  int i;
+  for (i = 0; i < countof (ring); i++)
+    xfree_null (ring[i].buffer);
+}
+
 /* When SIGHUP or SIGUSR1 are received, the output is redirected
    elsewhere.  Such redirection is only allowed once. */
 enum { RR_NONE, RR_REQUESTED, RR_DONE } redirect_request = RR_NONE;
@@ -632,24 +799,25 @@ static const char *redirect_request_signal_name;
 static void
 redirect_output (void)
 {
-  char *logfile = unique_name (DEFAULT_LOGFILE, 0);
-  fprintf (stderr, _("\n%s received, redirecting output to `%s'.\n"),
-	   redirect_request_signal_name, logfile);
-  logfp = fopen (logfile, "w");
-  if (!logfp)
+  char *logfile;
+  logfp = unique_create (DEFAULT_LOGFILE, 0, &logfile);
+  if (logfp)
+    {
+      fprintf (stderr, _("\n%s received, redirecting output to `%s'.\n"),
+	       redirect_request_signal_name, logfile);
+      xfree (logfile);
+      /* Dump the context output to the newly opened log.  */
+      log_dump_context ();
+    }
+  else
     {
       /* Eek!  Opening the alternate log file has failed.  Nothing we
          can do but disable printing completely. */
+      fprintf (stderr, _("\n%s received.\n"), redirect_request_signal_name);
       fprintf (stderr, _("%s: %s; disabling logging.\n"),
 	       logfile, strerror (errno));
       inhibit_logging = 1;
     }
-  else
-    {
-      /* Dump the context output to the newly opened log.  */
-      log_dump_context ();
-    }
-  xfree (logfile);
   save_context_p = 0;
 }
 

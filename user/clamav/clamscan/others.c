@@ -2,9 +2,8 @@
  *  Copyright (C) 1999 - 2004 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,10 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- *  Sat May 18 15:20:26 CEST 2002: included detectCpu() from Magnus Ekdahl
- *  Sat Jun 29 12:19:26 CEST 2002: fixed non386 detectCpu (Magnus Ekdahl)
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  */
 
@@ -28,13 +25,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <errno.h>
+#ifdef HAVE_PWD_H
 #include <pwd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifndef C_WINDOWS
 #include <sys/wait.h>
 #include <sys/time.h>
+#endif
 #include <time.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -44,7 +47,7 @@
 #include <regex.h>
 #endif
 
-#include "output.h"
+#include "shared/output.h"
 #include "others.h"
 
 int fileinfo(const char *filename, short i)
@@ -67,11 +70,18 @@ int fileinfo(const char *filename, short i)
 	case 5: /* GID */
 	    return infostruct.st_gid;
 	default:
-	    mprintf("!fileinfo(): Unknown option.\n");
+	    logg("!fileinfo(): Unknown option.\n");
 	    exit(1);
     }
 }
 
+#ifdef C_WINDOWS
+/* FIXME: Handle users correctly */
+int checkaccess(const char *path, const char *username, int mode)
+{
+    return _access(path, mode);
+}
+#else
 int checkaccess(const char *path, const char *username, int mode)
 {
 	struct passwd *user;
@@ -116,6 +126,7 @@ int checkaccess(const char *path, const char *username, int mode)
 
     return ret;
 }
+#endif
 
 int match_regex(const char *filename, const char *pattern)
 {
@@ -128,7 +139,6 @@ int match_regex(const char *filename, const char *pattern)
 	flags = REG_EXTENDED | REG_ICASE; /* case insensitive on Windows */
 #endif	
 	if(regcomp(&reg, pattern, flags) != 0) {
-	    mprintf("!%s: Could not parse regular expression %s.\n", filename, pattern);
 	    logg("!%s: Could not parse regular expression %s.\n", filename, pattern);
 		return 2;
 	}

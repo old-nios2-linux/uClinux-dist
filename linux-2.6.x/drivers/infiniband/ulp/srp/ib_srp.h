@@ -87,7 +87,7 @@ struct srp_device {
 	struct ib_fmr_pool     *fmr_pool;
 	int			fmr_page_shift;
 	int			fmr_page_size;
-	unsigned long		fmr_page_mask;
+	u64			fmr_page_mask;
 };
 
 struct srp_host {
@@ -106,11 +106,6 @@ struct srp_request {
 	struct srp_iu	       *cmd;
 	struct srp_iu	       *tsk_mgmt;
 	struct ib_pool_fmr     *fmr;
-	/*
-	 * Fake scatterlist used when scmnd->use_sg==0.  Can be killed
-	 * when the SCSI midlayer no longer generates non-SG commands.
-	 */
-	struct scatterlist	fake_sg;
 	struct completion	done;
 	short			index;
 	u8			cmd_done;
@@ -129,6 +124,7 @@ struct srp_target_port {
 	unsigned int		scsi_id;
 
 	struct ib_sa_path_rec	path;
+	__be16			orig_dgid[8];
 	struct ib_sa_query     *path_query;
 	int			path_query_id;
 
@@ -158,10 +154,11 @@ struct srp_target_port {
 	struct completion	done;
 	int			status;
 	enum srp_target_state	state;
+	int			qp_in_error;
 };
 
 struct srp_iu {
-	dma_addr_t		dma;
+	u64			dma;
 	void		       *buf;
 	size_t			size;
 	enum dma_data_direction	direction;

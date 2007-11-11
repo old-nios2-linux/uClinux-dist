@@ -269,4 +269,90 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 		bus->resource[2]->end = bus->resource[2]->start - 1;
 	}
 }
+#elif defined(CONFIG_RTL865X)
+
+extern int rtl_pci_assign_resource();
+void __init pcibios_init(void)
+{
+	struct pci_channel *p;
+	struct pci_bus *bus;
+	int busno;
+
+	
+#ifndef CONFIG_RTL865X
+	#ifdef CONFIG_PCI_AUTO
+		/* assign resources */
+		busno=0;
+		for (p= mips_pci_channels; p->pci_ops != NULL; p++) {
+			busno = pciauto_assign_resources(busno, p) + 1;
+		}
+	#endif
+#endif /*CONFIG_RTL865X*/
+
+
+	/* scan the buses */
+	busno = 0;
+	for (p= mips_pci_channels; p->pci_ops != NULL; p++) {
+		bus = pci_scan_bus(busno, p->pci_ops, p);
+		busno = bus->subordinate+1;
+	}
+
+
+#ifndef CONFIG_RTL865X	
+	/* machine dependent fixups */
+	/* fixup irqs (board specific routines) */
+	pcibios_fixup_irqs();
+#endif
+}
+
+unsigned long __init pci_bridge_check_io(struct pci_dev *bridge)
+{
+	u16 io;
+
+	pci_read_config_word(bridge, PCI_IO_BASE, &io);
+	if (!io) {
+		pci_write_config_word(bridge, PCI_IO_BASE, 0xf0f0);
+		pci_read_config_word(bridge, PCI_IO_BASE, &io);
+		pci_write_config_word(bridge, PCI_IO_BASE, 0x0);
+	}
+	if (io)
+		return IORESOURCE_IO;
+	printk(KERN_WARNING "PCI: bridge %s does not support I/O forwarding!\n",
+				bridge->name);
+	return 0;
+}
+
+void __init pcibios_fixup_bus(struct pci_bus *bus)
+{
+	/* Propogate hose info into the subordinate devices.  */
+
+	struct pci_channel *hose = bus->sysdata;
+	struct pci_dev *dev = bus->self;
+
+	if (!dev) {
+		/* Root bus */
+		bus->resource[0] = hose->io_resource;
+		bus->resource[1] = hose->mem_resource;
+	} else {
+		/* This is a bridge. Do not care how it's initialized,
+		   just link its resources to the bus ones */
+		int i;
+
+		for(i=0; i<3; i++) {
+			bus->resource[i] =
+				&dev->resource[PCI_BRIDGE_RESOURCES+i];
+			bus->resource[i]->name = bus->name;
+		}
+		bus->resource[0]->flags |= pci_bridge_check_io(dev);
+		bus->resource[1]->flags |= IORESOURCE_MEM;
+		/* For now, propogate hose limits to the bus;
+		   we'll adjust them later. */
+		bus->resource[0]->end = hose->io_resource->end;
+		bus->resource[1]->end = hose->mem_resource->end;
+		/* Turn off downstream PF memory address range by default */
+		bus->resource[2]->start = 1024*1024;
+		bus->resource[2]->end = bus->resource[2]->start - 1;
+	}
+}
+
 #endif

@@ -1,9 +1,9 @@
 /*
  * Presence Agent, domain list
  *
- * $Id: dlist.c,v 1.6.2.1 2003/11/11 14:32:27 janakj Exp $
+ * $Id: dlist.c,v 1.10 2004/08/24 08:58:32 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,6 +36,7 @@
 #include "paerrno.h"
 #include <string.h>
 #include "ptime.h"
+#include "presentity.h"
 
 /*
  * List of all registered domains
@@ -108,12 +109,12 @@ static inline int new_dlist(str* _n, dlist_t** _d)
 	if ((_n->len == 9) && (!strncasecmp(_n->s, "registrar", 9))) {
 		reg = find_export("ul_register_watcher", 1, 0);
 		if (reg == 0) {
-			LOG(L_ERR, "new_dlist(): ul_register_watcher not found\n");
+			LOG(L_ERR, "new_dlist(): ~ul_register_watcher not found\n");
 			return -3;
 		}
 		unreg = find_export("ul_unregister_watcher", 1, 0);
 		if (unreg == 0) {
-			LOG(L_ERR, "new_dlist(): ul_unregister_watcher not found\n");
+			LOG(L_ERR, "new_dlist(): ~ul_unregister_watcher not found\n");
 			return -4;
 		}
 	} else if ((_n->len == 6) && (!strncasecmp(_n->s, "jabber", 6))) {
@@ -152,6 +153,7 @@ static inline int new_dlist(str* _n, dlist_t** _d)
  */
 int register_pdomain(const char* _n, pdomain_t** _d)
 {
+	pdomain_t *pdomain;
 	dlist_t* d;
 	str s;
 
@@ -168,14 +170,16 @@ int register_pdomain(const char* _n, pdomain_t** _d)
 		return -1;
 	} 
 
-	     /* Preload domain with data from database if we are gonna
-	      * to use database
-	      */
-
+	pdomain = d->d;
 	d->next = root;
 	root = d;
 	
-	*_d = d->d;
+	*_d = pdomain;
+
+	/* Preload domain with data from database if we are gonna
+	 * to use database
+	 */
+
 	return 0;
 }
 

@@ -39,7 +39,8 @@
 #define PORT_RSA	13
 #define PORT_NS16550A	14
 #define PORT_XSCALE	15
-#define PORT_MAX_8250	15	/* max port ID */
+#define PORT_RM9000	16	/* PMC-Sierra RM9xxx internal UART */
+#define PORT_MAX_8250	16	/* max port ID */
 
 /*
  * ARM specific type numbers.  These are not currently guaranteed
@@ -61,8 +62,9 @@
 /* NEC v850.  */
 #define PORT_V850E_UART	40
 
-/* DZ */
-#define PORT_DZ		47
+/* DEC */
+#define PORT_DZ		46
+#define PORT_ZS		47
 
 /* Parisc type numbers. */
 #define PORT_MUX	48
@@ -122,7 +124,7 @@
 /*Digi jsm */
 #define PORT_JSM        69
 
-#define PORT_IP3106	70
+#define PORT_PNX8XXX	70
 
 /* Hilscher netx */
 #define PORT_NETX	71
@@ -132,26 +134,34 @@
 
 #define PORT_S3C2412	73
 
-/* Motorola ColdFire */
-#define	PORT_MCF	74
+/* Xilinx uartlite */
+#define PORT_UARTLITE	74
+
+/* Blackfin bf5xx */
+#define PORT_BFIN	75
+
+/* Micrel KS8695 */
+#define PORT_KS8695	76
+
+/* Broadcom SB1250, etc. SOC */
+#define PORT_SB1250_DUART	77
+
+/* Freescale ColdFire */
+#define	PORT_MCF	78
 
 /* DCC(JTAG) emulation port types */
-#define PORT_DCC_JTAG1	75
+#define PORT_DCC_JTAG1	79
 
 /* Samsung S3C4510B */
-#define PORT_S3C4510B   76
+#define PORT_S3C4510B   80
 
-#define PORT_P2001	77
+#define PORT_P2001	81
 
 /* TI TMS320DM270 */
-#define PORT_DM270      78
-
-/* KS8695 */
-#define	PORT_KS8695	79
+#define PORT_DM270      82
 
 /* Alter Nios II UART */
-#define PORT_JTAG_UART	80
-
+#define PORT_JTAG_UART	83
 
 #ifdef __KERNEL__
 
@@ -162,6 +172,7 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/mutex.h>
+#include <linux/sysrq.h>
 
 struct uart_port;
 struct uart_info;
@@ -184,8 +195,8 @@ struct uart_ops {
 	void		(*break_ctl)(struct uart_port *, int ctl);
 	int		(*startup)(struct uart_port *);
 	void		(*shutdown)(struct uart_port *);
-	void		(*set_termios)(struct uart_port *, struct termios *new,
-				       struct termios *old);
+	void		(*set_termios)(struct uart_port *, struct ktermios *new,
+				       struct ktermios *old);
 	void		(*pm)(struct uart_port *, unsigned int state,
 			      unsigned int oldstate);
 	int		(*set_wake)(struct uart_port *, unsigned int state);
@@ -248,6 +259,8 @@ struct uart_port {
 #define UPIO_MEM32		(3)
 #define UPIO_AU			(4)			/* Au1x00 type IO */
 #define UPIO_TSI		(5)			/* Tsi108/109 type IO */
+#define UPIO_DWAPB		(6)			/* DesignWare APB UART */
+#define UPIO_RM9000		(7)			/* RM9000 type IO */
 
 	unsigned int		read_status_mask;	/* driver specific */
 	unsigned int		ignore_status_mask;	/* driver specific */
@@ -278,6 +291,7 @@ struct uart_port {
 #define UPF_CONS_FLOW		((__force upf_t) (1 << 23))
 #define UPF_SHARE_IRQ		((__force upf_t) (1 << 24))
 #define UPF_BOOT_AUTOCONF	((__force upf_t) (1 << 28))
+#define UPF_FIXED_PORT		((__force upf_t) (1 << 29))
 #define UPF_DEAD		((__force upf_t) (1 << 30))
 #define UPF_IOREMAP		((__force upf_t) (1 << 31))
 
@@ -290,10 +304,11 @@ struct uart_port {
 	const struct uart_ops	*ops;
 	unsigned int		custom_divisor;
 	unsigned int		line;			/* port index */
-	unsigned long		mapbase;		/* for ioremap */
+	resource_size_t		mapbase;		/* for ioremap */
 	struct device		*dev;			/* parent device */
 	unsigned char		hub6;			/* this should be in the 8250 driver */
 	unsigned char		unused[3];
+	void			*private_data;		/* generic platform data pointer */
 };
 
 /*
@@ -379,8 +394,8 @@ void uart_write_wakeup(struct uart_port *port);
  */
 void uart_update_timeout(struct uart_port *port, unsigned int cflag,
 			 unsigned int baud);
-unsigned int uart_get_baud_rate(struct uart_port *port, struct termios *termios,
-				struct termios *old, unsigned int min,
+unsigned int uart_get_baud_rate(struct uart_port *port, struct ktermios *termios,
+				struct ktermios *old, unsigned int min,
 				unsigned int max);
 unsigned int uart_get_divisor(struct uart_port *port, unsigned int baud);
 

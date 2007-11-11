@@ -19,7 +19,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.                */
 /* ------------------------------------------------------------------------- */
 
-/* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
+/* With some changes from KyÃ¶sti MÃ¤lkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
 #ifndef _LINUX_I2C_ALGO_PCF_H
@@ -31,7 +31,7 @@ struct i2c_algo_pcf_data {
 	int  (*getpcf) (void *data, int ctl);
 	int  (*getown) (void *data);
 	int  (*getclock) (void *data);
-	void (*waitforpin) (void);     
+	void (*waitforpin) (void);
 
 	/* local settings */
 	int udelay;
@@ -39,6 +39,5 @@ struct i2c_algo_pcf_data {
 };
 
 int i2c_pcf_add_bus(struct i2c_adapter *);
-int i2c_pcf_del_bus(struct i2c_adapter *);
 
 #endif /* _LINUX_I2C_ALGO_PCF_H */

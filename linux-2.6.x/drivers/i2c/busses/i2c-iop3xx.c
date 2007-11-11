@@ -36,7 +36,6 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
 
@@ -84,7 +83,7 @@ iop3xx_i2c_enable(struct i2c_algo_iop3xx_data *iop3xx_adap)
 	 * Every time unit enable is asserted, GPOD needs to be cleared
 	 * on IOP3XX to avoid data corruption on the bus.
 	 */
-#ifdef CONFIG_PLAT_IOP
+#if defined(CONFIG_ARCH_IOP32X) || defined(CONFIG_ARCH_IOP33X)
 	if (iop3xx_adap->id == 0) {
 		gpio_line_set(IOP3XX_GPIO_LINE(7), GPIO_LOW);
 		gpio_line_set(IOP3XX_GPIO_LINE(6), GPIO_LOW);
@@ -491,8 +490,9 @@ iop3xx_i2c_probe(struct platform_device *pdev)
 	memcpy(new_adapter->name, pdev->name, strlen(pdev->name));
 	new_adapter->id = I2C_HW_IOP3XX;
 	new_adapter->owner = THIS_MODULE;
-	new_adapter->class = I2C_CLASS_HWMON,
+	new_adapter->class = I2C_CLASS_HWMON;
 	new_adapter->dev.parent = &pdev->dev;
+	new_adapter->nr = pdev->id;
 
 	/*
 	 * Default values...should these come in from board code?
@@ -510,7 +510,7 @@ iop3xx_i2c_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, new_adapter);
 	new_adapter->algo_data = adapter_data;
 
-	i2c_add_adapter(new_adapter);
+	i2c_add_numbered_adapter(new_adapter);
 
 	return 0;
 

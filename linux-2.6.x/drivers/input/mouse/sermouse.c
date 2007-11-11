@@ -69,7 +69,8 @@ static void sermouse_process_msc(struct sermouse *sermouse, signed char data)
 	switch (sermouse->count) {
 
 		case 0:
-			if ((data & 0xf8) != 0x80) return;
+			if ((data & 0xf8) != 0x80)
+				return;
 			input_report_key(dev, BTN_LEFT,   !(data & 4));
 			input_report_key(dev, BTN_RIGHT,  !(data & 1));
 			input_report_key(dev, BTN_MIDDLE, !(data & 2));
@@ -107,7 +108,10 @@ static void sermouse_process_ms(struct sermouse *sermouse, signed char data)
 	struct input_dev *dev = sermouse->dev;
 	signed char *buf = sermouse->buf;
 
-	if (data & 0x40) sermouse->count = 0;
+	if (data & 0x40)
+		sermouse->count = 0;
+	else if (sermouse->count == 0)
+		return;
 
 	switch (sermouse->count) {
 
@@ -169,7 +173,8 @@ static void sermouse_process_ms(struct sermouse *sermouse, signed char data)
 
 		case 5:
 		case 7: /* Ignore anything besides MZ++ */
-			if (sermouse->type != SERIO_MZPP) break;
+			if (sermouse->type != SERIO_MZPP)
+				break;
 
 			switch (buf[1]) {
 
@@ -206,13 +211,16 @@ static irqreturn_t sermouse_interrupt(struct serio *serio,
 {
 	struct sermouse *sermouse = serio_get_drvdata(serio);
 
-	if (time_after(jiffies, sermouse->last + HZ/10)) sermouse->count = 0;
+	if (time_after(jiffies, sermouse->last + HZ/10))
+		sermouse->count = 0;
+
 	sermouse->last = jiffies;
 
 	if (sermouse->type > SERIO_SUN)
 		sermouse_process_ms(sermouse, data);
 	else
 		sermouse_process_msc(sermouse, data);
+
 	return IRQ_HANDLED;
 }
 
@@ -246,7 +254,7 @@ static int sermouse_connect(struct serio *serio, struct serio_driver *drv)
 	sermouse = kzalloc(sizeof(struct sermouse), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!sermouse || !input_dev)
-		goto fail;
+		goto fail1;
 
 	sermouse->dev = input_dev;
 	snprintf(sermouse->phys, sizeof(sermouse->phys), "%s/input0", serio->phys);
@@ -258,12 +266,11 @@ static int sermouse_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.vendor  = sermouse->type;
 	input_dev->id.product = c;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &serio->dev;
+	input_dev->dev.parent = &serio->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REL);
 	input_dev->keybit[LONG(BTN_MOUSE)] = BIT(BTN_LEFT) | BIT(BTN_RIGHT);
 	input_dev->relbit[0] = BIT(REL_X) | BIT(REL_Y);
-	input_dev->private = sermouse;
 
 	if (c & 0x01) set_bit(BTN_MIDDLE, input_dev->keybit);
 	if (c & 0x02) set_bit(BTN_SIDE, input_dev->keybit);
@@ -275,14 +282,17 @@ static int sermouse_connect(struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open(serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
-	input_register_device(sermouse->dev);
+	err = input_register_device(sermouse->dev);
+	if (err)
+		goto fail3;
 
 	return 0;
 
- fail:	serio_set_drvdata(serio, NULL);
-	input_free_device(input_dev);
+ fail3:	serio_close(serio);
+ fail2:	serio_set_drvdata(serio, NULL);
+ fail1:	input_free_device(input_dev);
 	kfree(sermouse);
 	return err;
 }
@@ -348,8 +358,7 @@ static struct serio_driver sermouse_drv = {
 
 static int __init sermouse_init(void)
 {
-	serio_register_driver(&sermouse_drv);
-	return 0;
+	return serio_register_driver(&sermouse_drv);
 }
 
 static void __exit sermouse_exit(void)

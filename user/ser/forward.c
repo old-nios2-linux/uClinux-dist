@@ -1,7 +1,7 @@
 /*
- * $Id: forward.c,v 1.90.6.1 2004/07/14 20:58:58 andrei Exp $
+ * $Id: forward.c,v 1.98.2.1 2005/11/29 19:39:45 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,9 +39,13 @@
  *  2003-04-03  added su_setport (andrei)
  *  2003-04-04  update_sock_struct_from_via now differentiates between
  *               local replies  & "normal" replies (andrei)
- *  2003-04-12  update_sock_struct_form via uses also FL_FORCE_RPORT for
+ *  2003-04-12  update_sock_struct_from via uses also FL_FORCE_RPORT for
  *               local replies (andrei)
  *  2003-08-21  check_self properly handles ipv6 addresses & refs   (andrei)
+ *  2003-10-21  check_self updated to handle proto (andrei)
+ *  2003-10-24  converted to the new socket_info lists (andrei)
+ *  2004-10-10  modified check_self to use grep_sock_info (andrei)
+ *  2004-11-08  added force_send_socket support in get_send_socket (andrei)
  */
 
 
@@ -70,10 +74,13 @@
 #include "ip_addr.h"
 #include "resolve.h"
 #include "name_alias.h"
+#include "socket_info.h"
 
 #ifdef DEBUG_DMALLOC
 #include <dmalloc.h>
 #endif
+
+
 
 /* return a socket_info_pointer to the sending socket; as opposed to
  * get_send_socket, which returns process's default socket, get_out_socket
@@ -86,15 +93,15 @@ struct socket_info* get_out_socket(union sockaddr_union* to, int proto)
 {
 	int temp_sock;
 	socklen_t len;
-	int r;
 	union sockaddr_union from; 
+	struct socket_info* si;
+	struct ip_addr ip;
 
 	if (proto!=PROTO_UDP) {
 		LOG(L_CRIT, "BUG: get_out_socket can only be called for UDP\n");
 		return 0;
 	}
-
-	r=-1;
+	
 	temp_sock=socket(to->s.sa_family, SOCK_DGRAM, 0 );
 	if (temp_sock==-1) {
 		LOG(L_ERR, "ERROR: get_out_socket: socket() failed: %s\n",
@@ -112,50 +119,61 @@ struct socket_info* get_out_socket(union sockaddr_union* to, int proto)
 				strerror(errno));
 		goto error;
 	}
-	for (r=0; r<sock_no; r++) {
-		switch(from.s.sa_family) {
-			case AF_INET:	
-						if (sock_info[r].address.af!=AF_INET)
-								continue;
-						if (memcmp(&sock_info[r].address.u,
-								&from.sin.sin_addr, 
-								sock_info[r].address.len)==0)
-							goto error; /* it is actually success */
-						break;
-#if defined(USE_IPV6)
-			case AF_INET6:	
-						if (sock_info[r].address.af!=AF_INET6)
-								continue;
-						if (memcmp(&sock_info[r].address.u,
-								&from.sin6.sin6_addr, len)==0)
-							goto error;
-						continue;
-#endif
-			default:	LOG(L_ERR, "ERROR: get_out_socket: "
-									"unknown family: %d\n",
-									from.s.sa_family);
-						r=-1;
-						goto error;
-		}
-	}
-	LOG(L_ERR, "ERROR: get_out_socket: no socket found\n");
-	r=-1;
-error:
+	su2ip_addr(&ip, &from);
+	si=find_si(&ip, 0, proto);
+	if (si==0) goto error;
 	close(temp_sock);
-	DBG("DEBUG: get_out_socket: socket determined: %d\n", r );
-	return r==-1? 0: &sock_info[r];
+	DBG("DEBUG: get_out_socket: socket determined: %p\n", si );
+	return si;
+error:
+	LOG(L_ERR, "ERROR: get_out_socket: no socket found\n");
+	close(temp_sock);
+	return 0;
 }
 
 
 
 /* returns a socket_info pointer to the sending socket or 0 on error
- * params: destination socket_union pointer
+ * params: sip msg (can be null), destination socket_union pointer, protocol
+ * if msg!=null and msg->force_send_socket, the force_send_socket will be
+ * used
  */
-struct socket_info* get_send_socket(union sockaddr_union* to, int proto)
+struct socket_info* get_send_socket(struct sip_msg *msg, 
+										union sockaddr_union* to, int proto)
 {
 	struct socket_info* send_sock;
+	
+	/* check if send interface is not forced */
+	if (msg && msg->force_send_socket){
+		if (msg->force_send_socket->proto!=proto){
+			DBG("get_send_socket: force_send_socket of different proto"
+					" (%d)!\n", proto);
+			msg->force_send_socket=find_si(&(msg->force_send_socket->address),
+											msg->force_send_socket->port_no,
+											proto);
+		}
+		if (msg->force_send_socket && (msg->force_send_socket->socket!=-1)) 
+			return msg->force_send_socket;
+		else{
+			if (msg->force_send_socket->socket==-1)
+				LOG(L_WARN, "WARNING: get_send_socket: not listening"
+						 " on the requested socket, no fork mode?\n");
+			else
+				LOG(L_WARN, "WARNING: get_send_socket: "
+						"protocol/port mismatch\n");
+		}
+	};
 
-	if (mhomed && proto==PROTO_UDP) return get_out_socket(to, proto);
+	if (mhomed && proto==PROTO_UDP){
+		send_sock=get_out_socket(to, proto);
+		if ((send_sock==0) || (send_sock->socket!=-1))
+			return send_sock; /* found or error*/
+		else if (send_sock->socket==-1){
+			LOG(L_WARN, "WARNING: get_send_socket: not listening on the"
+					" requested socket, no fork mode?\n");
+			/* continue: try to use some socket */
+		}
+	}
 
 	send_sock=0;
 	/* check if we need to change the socket (different address families -
@@ -211,90 +229,29 @@ struct socket_info* get_send_socket(union sockaddr_union* to, int proto)
 			}else send_sock=bind_address;
 			break;
 		default:
-			LOG(L_CRIT, "BUG: get_send_socket: unkown proto %d\n", proto);
+			LOG(L_CRIT, "BUG: get_send_socket: unknown proto %d\n", proto);
 	}
 	return send_sock;
 }
 
 
 
-/* checks if the host:port is one of the address we listen on;
+/* checks if the proto: host:port is one of the address we listen on;
  * if port==0, the  port number is ignored
+ * if proto==0 (PROTO_NONE) the protocol is ignored
  * returns 1 if true, 0 if false, -1 on error
  * WARNING: uses str2ip6 so it will overwrite any previous
  *  unsaved result of this function (static buffer)
  */
-int check_self(str* host, unsigned short port)
+int check_self(str* host, unsigned short port, unsigned short proto)
 {
-	int r;
-	char* hname;
-	int h_len;
-#ifdef USE_IPV6
-	struct ip_addr* ip6;
-#endif
-	
-	h_len=host->len;
-	hname=host->s;
-#ifdef USE_IPV6
-	if ((h_len>2)&&((*hname)=='[')&&(hname[h_len-1]==']')){
-		/* ipv6 reference, skip [] */
-		hname++;
-		h_len-=2;
+	if (grep_sock_info(host, port, proto)) goto found;
+	/* try to look into the aliases*/
+	if (grep_aliases(host->s, host->len, port, proto)==0){
+		DBG("check_self: host != me\n");
+		return 0;
 	}
-#endif
-	for (r=0; r<sock_no; r++){
-		DBG("check_self - checking if host==us: %d==%d && "
-				" [%.*s] == [%.*s]\n", 
-					h_len,
-					sock_info[r].name.len,
-					h_len, hname,
-					sock_info[r].name.len, sock_info[r].name.s
-			);
-		if (port) {
-			DBG("check_self - checking if port %d matches port %d\n", 
-					sock_info[r].port_no, port);
-#ifdef USE_TLS
-			if  ((sock_info[r].port_no!=port) && (tls_info[r].port_no!=port)) {
-#else
-			if (sock_info[r].port_no!=port) {
-#endif
-				continue;
-			}
-		}
-		if ( (h_len==sock_info[r].name.len) && 
-			(strncasecmp(hname, sock_info[r].name.s,
-				     sock_info[r].name.len)==0) /*slower*/)
-			/* comp. must be case insensitive, host names
-			 * can be written in mixed case, it will also match
-			 * ipv6 addresses if we are lucky*/
-			break;
-	/* check if host == ip address */
-#ifdef USE_IPV6
-		/* ipv6 case is uglier, host can be [3ffe::1] */
-		ip6=str2ip6(host);
-		if (ip6){
-			if (ip_addr_cmp(ip6, &sock_info[r].address))
-				break; /* match */
-			else
-				continue; /* no match, but this is an ipv6 address
-							 so no point in trying ipv4 */
-		}
-#endif
-		/* ipv4 */
-		if ( 	(!sock_info[r].is_ip) &&
-				(h_len==sock_info[r].address_str.len) && 
-			(memcmp(hname, sock_info[r].address_str.s, 
-								sock_info[r].address_str.len)==0)
-			)
-			break;
-	}
-	if (r==sock_no){
-		/* try to look into the aliases*/
-		if (grep_aliases(hname, h_len, port)==0){
-			DBG("check_self: host != me\n");
-			return 0;
-		}
-	}
+found:
 	return 1;
 }
 
@@ -335,10 +292,10 @@ int forward_request( struct sip_msg* msg, struct proxy_l * p, int proto)
 	p->tx_bytes+=len;
 	
 
-	send_sock=get_send_socket(to, proto);
+	send_sock=get_send_socket(msg, to, proto);
 	if (send_sock==0){
 		LOG(L_ERR, "forward_req: ERROR: cannot forward to af %d, proto %d "
-				"no coresponding listening socket\n", to->s.sa_family, proto);
+				"no corresponding listening socket\n", to->s.sa_family, proto);
 		ser_error=E_NO_SOCKET;
 		goto error1;
 	}
@@ -475,7 +432,7 @@ int forward_reply(struct sip_msg* msg)
 	unsigned int new_len;
 	struct sr_module *mod;
 	int proto;
-	int id; /* used only by tcp*/
+	unsigned int id; /* used only by tcp*/
 #ifdef USE_TCP
 	char* s;
 	int len;
@@ -487,7 +444,8 @@ int forward_reply(struct sip_msg* msg)
 	/*check if first via host = us */
 	if (check_via){
 		if (check_self(&msg->via1->host,
-					msg->via1->port?msg->via1->port:SIP_PORT)!=1){
+					msg->via1->port?msg->via1->port:SIP_PORT,
+					msg->via1->proto)!=1){
 			LOG(L_NOTICE, "ERROR: forward_reply: host in first via!=me :"
 					" %.*s:%d\n", msg->via1->host.len, msg->via1->host.s,
 									msg->via1->port);
@@ -495,7 +453,7 @@ int forward_reply(struct sip_msg* msg)
 			goto error;
 		}
 	}
-	/* quick hack, slower for mutliple modules*/
+	/* quick hack, slower for multiple modules*/
 	for (mod=modules;mod;mod=mod->next){
 		if ((mod->exports) && (mod->exports->response_f)){
 			DBG("forward_reply: found module %s, passing reply to it\n",
@@ -539,14 +497,18 @@ int forward_reply(struct sip_msg* msg)
 		if (msg->via1->i&&msg->via1->i->value.s){
 			s=msg->via1->i->value.s;
 			len=msg->via1->i->value.len;
-			DBG("forward_reply: i=%.*s\n",len, s);
-			id=reverse_hex2int(s, len);
+			DBG("forward_reply: i=%.*s\n",len, ZSW(s));
+			if (reverse_hex2int(s, len, &id)<0){
+				LOG(L_ERR, "ERROR: forward_reply: bad via i param \"%.*s\"\n",
+						len, ZSW(s));
+					id=0;
+			}
 			DBG("forward_reply: id= %x\n", id);
 		}		
 				
 	} 
 #endif
-	if (msg_send(0, proto, to, id, new_buf, new_len)<0) goto error;
+	if (msg_send(0, proto, to, (int)id, new_buf, new_len)<0) goto error;
 #ifdef STATS
 	STATS_TX_RESPONSE(  (msg->first_line.u.reply.statuscode/100) );
 #endif

@@ -4,8 +4,8 @@
  *  Copyright (C) 2004 Philips Semiconductors
  *
  */
-#ifndef __ASM_ARMNOMMU_ARCH_LPC22xx_KEYBOARD_H
-#define __ASM_ARMNOMMU_ARCH_LPC22xx_KEYBOARD_H
+#ifndef __ASM_ARMNOMMU_ARCH_LPC22XX_KEYBOARD_H
+#define __ASM_ARMNOMMU_ARCH_LPC22XX_KEYBOARD_H
 
 #define kbd_setkeycode(sc,kc) (-EINVAL)
 #define kbd_getkeycode(sc) (-EINVAL)
@@ -16,4 +16,4 @@
 #define kbd_enable_irq()
 #define kbd_disable_irq()
 
-#endif /* __ASM_ARMNOMMU_ARCH_LPC22xx_KEYBOARD_H */
+#endif /* __ASM_ARMNOMMU_ARCH_LPC22XX_KEYBOARD_H */

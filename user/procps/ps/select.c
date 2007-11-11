@@ -1,5 +1,5 @@
 /*
- * Copyright 1998 by Albert Cahalan; all rights resered.         
+ * Copyright 1998-2002 by Albert Cahalan; all rights resered.         
  * This file may be used subject to the terms and conditions of the
  * GNU Library General Public License Version 2, or any later version  
  * at your option, as published by the Free Software Foundation.
@@ -17,36 +17,44 @@
 #include "../proc/readproc.h"
 #include "../proc/procps.h"
 
-#define session_leader(p)       ((p)->session == (p)->pid)
-#define process_group_leader(p) ((p)->pgid    == (p)->pid)
-#define without_a_tty(p)        ((unsigned short)((p)->tty) == (unsigned short)-1)
-#define some_other_user(p)      ((p)->euid    != cached_euid)
+//#define process_group_leader(p) ((p)->pgid    == (p)->tgid)
+//#define some_other_user(p)      ((p)->euid    != cached_euid)
+#define has_our_euid(p)         ((unsigned)(p)->euid    == (unsigned)cached_euid)
+#define on_our_tty(p)           ((unsigned)(p)->tty == (unsigned)cached_tty)
 #define running(p)              (((p)->state=='R')||((p)->state=='D'))
-#define has_our_euid(p)         ((unsigned short)((p)->euid) == (unsigned short)cached_euid)
-#define on_our_tty(p)           ((unsigned short)((p)->tty)  == (unsigned short)cached_tty)
+#define session_leader(p)       ((p)->session == (p)->tgid)
+#define without_a_tty(p)        (!(p)->tty)
 
 static unsigned long select_bits = 0;
 
 /***** prepare select_bits for use */
 const char *select_bits_setup(void){
-  if(!simple_select){  /* don't want a 'g' added to this (or do we?) */
-    select_bits = 0xaa00;
+  int switch_val = 0;
+  /* don't want a 'g' screwing up simple_select */
+  if(!simple_select && !prefer_bsd_defaults){
+    select_bits = 0xaa00; /* the STANDARD selection */
     return NULL;
   }
-  /* For everybody but Sun, the 'g' option is a NOP */
-  if( !(personality & PER_SUN_MUTATE_a) && !(simple_select&(SS_U_a|SS_U_d)) )
-    simple_select |= SS_B_g;
-  switch(simple_select){
-  case SS_U_a | SS_U_d:
-  case          SS_B_x | SS_B_a:
+  /* For every BSD but SunOS, the 'g' option is a NOP. (enabled by default) */
+  if( !(personality & PER_NO_DEFAULT_g) && !(simple_select&(SS_U_a|SS_U_d)) )
+    switch_val = simple_select|SS_B_g;
+  else
+    switch_val = simple_select;
+  switch(switch_val){
+  /* UNIX options */
+  case SS_U_a | SS_U_d:           select_bits = 0x3f3f; break; /* 3333 or 3f3f */
+  case SS_U_a:                    select_bits = 0x0303; break; /* 0303 or 0f0f */
   case SS_U_d:                    select_bits = 0x3333; break;
-  case SS_U_a:                    select_bits = 0x0303; break;
-  case                   SS_B_a:  select_bits = 0x3300; break;
+  /* SunOS 4 only (others have 'g' enabled all the time) */
+  case 0:                         select_bits = 0x0202; break;
+  case                   SS_B_a:  select_bits = 0x0303; break;
   case          SS_B_x         :  select_bits = 0x2222; break;
-  case SS_B_g                  :  select_bits = 0xaa00; break;
-  case SS_B_g |          SS_B_a:  select_bits = 0x0f00; break;
+  case          SS_B_x | SS_B_a:  select_bits = 0x3333; break;
+  /* General BSD options */
+  case SS_B_g                  :  select_bits = 0x0a0a; break;
+  case SS_B_g |          SS_B_a:  select_bits = 0x0f0f; break;
   case SS_B_g | SS_B_x         :  select_bits = 0xaaaa; break;
-  case SS_B_g | SS_B_x | SS_B_a:
+  case SS_B_g | SS_B_x | SS_B_a:  /* convert to -e instead of using 0xffff */
     all_processes = 1;
     simple_select = 0;
     break;
@@ -67,40 +75,6 @@ static int table_accept(proc_t *buf){
   return (select_bits & (1<<proc_index));
 }
 
-#if 0
-/***** selected by simple option? */
-static int table_accept(proc_t *buf){
-  unsigned proc_index;
-#ifdef ACT_LIKE_SUNOS4
-  static unsigned table[] = {
-    0xfffffff0, 0xfffffff0, 0xccccccc0, 0xccccccc0,  /* process has some other tty */
-    0xfafafaf0, 0xfafafafa, 0xc8c8c8c0, 0xc8c8c8c8,  /* no tty, ps itself has one */
-    0xfffffff0, 0xffffffff, 0xccccccc0, 0xcccccccc,  /* process has same tty as ps */
-    0xfafafaf0, 0xfafafafa, 0xc8c8c8c0, 0xc8c8c8c8   /* nobody has a tty */
-  };
-#else
-  static unsigned table[] = {
-    0xfffffff0, 0xfffffff0, 0xffffccc0, 0xffffccc0,  /* process has some other tty */
-    0xfafafaf0, 0xfafafafa, 0xfafac8c0, 0xfafac8c8,  /* no tty, ps itself has one */
-    0xfffffff0, 0xffffffff, 0xffffccc0, 0xffffcccc,  /* process has same tty as ps */
-    0xfafafaf0, 0xfafafafa, 0xfafac8c0, 0xfafac8c8   /* nobody has a tty */
-  };
-#endif
-  proc_index = (has_our_euid(buf)    <<0)
-             | (session_leader(buf)  <<1)
-             | (without_a_tty(buf)   <<2)
-             | (on_our_tty(buf)      <<3);
-/*
-  printf("0x%08x 0x%08x 0x%08x %-8.8s\n",
-         table[proc_index],
-         (1<<simple_select),
-         table[proc_index] & (1<<simple_select),
-         buf->cmd);
-*/
-  return (table[proc_index] & (1<<simple_select));
-}
-#endif
-
 /***** selected by some kind of list? */
 static int proc_was_listed(proc_t *buf){
   selection_node *sn = selection_list;
@@ -113,7 +87,7 @@ static int proc_was_listed(proc_t *buf){
 
 #define return_if_match(foo,bar) \
         i=sn->n; while(i--) \
-        if((unsigned short )(buf->foo) == (unsigned short)(*(sn->u+i)).bar) \
+        if((unsigned)(buf->foo) == (unsigned)(*(sn->u+i)).bar) \
         return 1
 
     break; case SEL_RUID: return_if_match(ruid,uid);
@@ -127,13 +101,13 @@ static int proc_was_listed(proc_t *buf){
     break; case SEL_FGID: return_if_match(fgid,gid);
 
     break; case SEL_PGRP: return_if_match(pgrp,pid);
-    break; case SEL_PID : return_if_match(pid,pid);
+    break; case SEL_PID : return_if_match(tgid,pid);
+    break; case SEL_PPID: return_if_match(ppid,ppid);
     break; case SEL_TTY : return_if_match(tty,tty);
     break; case SEL_SESS: return_if_match(session,pid);
 
-    /* TODO Should use a long long cast for performance */
     break; case SEL_COMM: i=sn->n; while(i--)
-    if(!strncmp( buf->cmd, (*(sn->u+i)).cmd, 8 )) return 1;
+    if(!strncmp( buf->cmd, (*(sn->u+i)).cmd, 15 )) return 1;
 
 
 

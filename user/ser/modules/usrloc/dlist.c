@@ -1,9 +1,9 @@
 /*
- * $Id: dlist.c,v 1.15 2003/10/08 21:56:33 janakj Exp $
+ * $Id: dlist.c,v 1.20 2004/09/03 10:39:07 janakj Exp $
  *
  * List of registered domains
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -116,14 +116,26 @@ int get_all_ucontacts(void *buf, int len, unsigned int flags)
 				      */
 				if ((c->flags & flags) != flags)
 					continue;
-				if (len >= (int)(sizeof(c->c.len) + c->c.len)) {
-					memcpy(cp, &c->c.len, sizeof(c->c.len));
-					cp = (char*)cp + sizeof(c->c.len);
-					memcpy(cp, c->c.s, c->c.len);
-					cp = (char*)cp + c->c.len;
-					len -= sizeof(c->c.len) + c->c.len;
+				if (c->received.s) {
+					if (len >= (int)(sizeof(c->received.len) + c->received.len)) {
+						memcpy(cp, &c->received.len, sizeof(c->received.len));
+						cp = (char*)cp + sizeof(c->received.len);
+						memcpy(cp, c->received.s, c->received.len);
+						cp = (char*)cp + c->received.len;
+						len -= sizeof(c->received.len) + c->received.len;
+					} else {
+						shortage += sizeof(c->received.len) + c->received.len;
+					}
 				} else {
-					shortage += sizeof(c->c.len) + c->c.len;
+					if (len >= (int)(sizeof(c->c.len) + c->c.len)) {
+						memcpy(cp, &c->c.len, sizeof(c->c.len));
+						cp = (char*)cp + sizeof(c->c.len);
+						memcpy(cp, c->c.s, c->c.len);
+						cp = (char*)cp + c->c.len;
+						len -= sizeof(c->c.len) + c->c.len;
+					} else {
+						shortage += sizeof(c->c.len) + c->c.len;
+					}
 				}
 			}
 		}
@@ -198,6 +210,8 @@ int register_udomain(const char* _n, udomain_t** _d)
 {
 	dlist_t* d;
 	str s;
+	int ver;
+	db_con_t* con;
 
 	s.s = (char*)_n;
 	s.len = strlen(_n);
@@ -216,15 +230,29 @@ int register_udomain(const char* _n, udomain_t** _d)
 	      * to use database
 	      */
 	if (db_mode != NO_DB) {
-		if (preload_udomain(d->d) < 0) {
+		con = ul_dbf.init(db_url.s);
+		if (!con) {
+			LOG(L_ERR, "register_udomain(): Can not open database connection\n");
+			goto err;
+		}
+
+		ver = table_version(&ul_dbf, con, &s);
+
+		if (ver < 0) {
+			LOG(L_ERR, "register_udomain(): Error while querying table version\n");
+			goto err;
+		} else if (ver < TABLE_VERSION) {
+			LOG(L_ERR, "register_udomain(): Invalid table version (use ser_mysql.sh reinstall)\n");
+			goto err;
+		}
+		
+		if (preload_udomain(con, d->d) < 0) {
 			LOG(L_ERR, "register_udomain(): Error while preloading domain '%.*s'\n",
 			    s.len, ZSW(s.s));
-			
-			free_udomain(d->d);
-			shm_free(d->name.s);
-			shm_free(d);
-			return -2;
+			goto err;
 		}
+
+		ul_dbf.close(con);
 	}
 
 	d->next = root;
@@ -232,6 +260,13 @@ int register_udomain(const char* _n, udomain_t** _d)
 	
 	*_d = d->d;
 	return 0;
+
+ err:
+	if (con) ul_dbf.close(con);
+	free_udomain(d->d);
+	shm_free(d->name.s);
+	shm_free(d);
+	return -1;
 }
 
 
@@ -287,24 +322,6 @@ int synchronize_all_udomains(void)
 		ptr = ptr->next;
 	}
 	
-	return res;
-}
-
-
-/*
- * Preload content of all domains from database
- */
-int preload_all_udomains(void)
-{
-	dlist_t* ptr;
-	int res = 0;
-	
-	ptr = root;
-	while(ptr) {
-		res |= preload_udomain(ptr->d);
-		ptr = ptr->next;
-	}
-
 	return res;
 }
 

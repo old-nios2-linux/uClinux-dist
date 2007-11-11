@@ -53,9 +53,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
-#include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/timer.h>
@@ -63,7 +61,7 @@
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
 #include <linux/device.h>
-#include <linux/usb_ch9.h>
+#include <linux/usb/ch9.h>
 #include <linux/usb_gadget.h>
 
 #include <asm/byteorder.h>
@@ -448,100 +446,6 @@ net2280_free_request (struct usb_ep *_ep, struct usb_request *_req)
 	if (req->td)
 		pci_pool_free (ep->dev->requests, req->td, req->td_dma);
 	kfree (req);
-}
-
-/*-------------------------------------------------------------------------*/
-
-/*
- * dma-coherent memory allocation (for dma-capable endpoints)
- *
- * NOTE: the dma_*_coherent() API calls suck.  Most implementations are
- * (a) page-oriented, so small buffers lose big; and (b) asymmetric with
- * respect to calls with irqs disabled:  alloc is safe, free is not.
- * We currently work around (b), but not (a).
- */
-
-static void *
-net2280_alloc_buffer (
-	struct usb_ep		*_ep,
-	unsigned		bytes,
-	dma_addr_t		*dma,
-	gfp_t			gfp_flags
-)
-{
-	void			*retval;
-	struct net2280_ep	*ep;
-
-	ep = container_of (_ep, struct net2280_ep, ep);
-	if (!_ep)
-		return NULL;
-	*dma = DMA_ADDR_INVALID;
-
-	if (ep->dma)
-		retval = dma_alloc_coherent(&ep->dev->pdev->dev,
-				bytes, dma, gfp_flags);
-	else
-		retval = kmalloc(bytes, gfp_flags);
-	return retval;
-}
-
-static DEFINE_SPINLOCK(buflock);
-static LIST_HEAD(buffers);
-
-struct free_record {
-	struct list_head	list;
-	struct device		*dev;
-	unsigned		bytes;
-	dma_addr_t		dma;
-};
-
-static void do_free(unsigned long ignored)
-{
-	spin_lock_irq(&buflock);
-	while (!list_empty(&buffers)) {
-		struct free_record	*buf;
-
-		buf = list_entry(buffers.next, struct free_record, list);
-		list_del(&buf->list);
-		spin_unlock_irq(&buflock);
-
-		dma_free_coherent(buf->dev, buf->bytes, buf, buf->dma);
-
-		spin_lock_irq(&buflock);
-	}
-	spin_unlock_irq(&buflock);
-}
-
-static DECLARE_TASKLET(deferred_free, do_free, 0);
-
-static void
-net2280_free_buffer (
-	struct usb_ep *_ep,
-	void *address,
-	dma_addr_t dma,
-	unsigned bytes
-) {
-	/* free memory into the right allocator */
-	if (dma != DMA_ADDR_INVALID) {
-		struct net2280_ep	*ep;
-		struct free_record	*buf = address;
-		unsigned long		flags;
-
-		ep = container_of(_ep, struct net2280_ep, ep);
-		if (!_ep)
-			return;
-
-		ep = container_of (_ep, struct net2280_ep, ep);
-		buf->dev = &ep->dev->pdev->dev;
-		buf->bytes = bytes;
-		buf->dma = dma;
-
-		spin_lock_irqsave(&buflock, flags);
-		list_add_tail(&buf->list, &buffers);
-		tasklet_schedule(&deferred_free);
-		spin_unlock_irqrestore(&buflock, flags);
-	} else
-		kfree (address);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1040,6 +944,7 @@ net2280_queue (struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 
 	} /* else the irq handler advances the queue. */
 
+	ep->responded = 1;
 	if (req)
 		list_add_tail (&req->queue, &ep->queue);
 done:
@@ -1392,9 +1297,6 @@ static const struct usb_ep_ops net2280_ep_ops = {
 
 	.alloc_request	= net2280_alloc_request,
 	.free_request	= net2280_free_request,
-
-	.alloc_buffer	= net2280_alloc_buffer,
-	.free_buffer	= net2280_free_buffer,
 
 	.queue		= net2280_queue,
 	.dequeue	= net2280_dequeue,
@@ -2019,7 +1921,6 @@ int usb_gadget_register_driver (struct usb_gadget_driver *driver)
 	if (!driver
 			|| driver->speed != USB_SPEED_HIGH
 			|| !driver->bind
-			|| !driver->unbind
 			|| !driver->setup)
 		return -EINVAL;
 	if (!dev)
@@ -2106,7 +2007,7 @@ int usb_gadget_unregister_driver (struct usb_gadget_driver *driver)
 
 	if (!dev)
 		return -ENODEV;
-	if (!driver || driver != dev->driver)
+	if (!driver || driver != dev->driver || !driver->unbind)
 		return -EINVAL;
 
 	spin_lock_irqsave (&dev->lock, flags);
@@ -2188,7 +2089,8 @@ static void handle_ep_small (struct net2280_ep *ep)
 					ep->stopped = 1;
 					set_halt (ep);
 					mode = 2;
-				} else if (!req && !ep->stopped)
+				} else if (ep->responded &&
+						!req && !ep->stopped)
 					write_fifo (ep, NULL);
 			}
 		} else {
@@ -2203,7 +2105,7 @@ static void handle_ep_small (struct net2280_ep *ep)
 			} else if (((t & (1 << DATA_OUT_PING_TOKEN_INTERRUPT))
 					&& req
 					&& req->req.actual == req->req.length)
-					|| !req) {
+					|| (ep->responded && !req)) {
 				ep->dev->protocol_stall = 1;
 				set_halt (ep);
 				ep->stopped = 1;
@@ -2441,9 +2343,9 @@ static void handle_stat0_irqs (struct net2280 *dev, u32 stat)
 
 		tmp = 0;
 
-#define	w_value		le16_to_cpup (&u.r.wValue)
-#define	w_index		le16_to_cpup (&u.r.wIndex)
-#define	w_length	le16_to_cpup (&u.r.wLength)
+#define	w_value		le16_to_cpu(u.r.wValue)
+#define	w_index		le16_to_cpu(u.r.wIndex)
+#define	w_length	le16_to_cpu(u.r.wLength)
 
 		/* ack the irq */
 		writel (1 << SETUP_PACKET_INTERRUPT, &dev->regs->irqstat0);
@@ -2469,6 +2371,7 @@ static void handle_stat0_irqs (struct net2280 *dev, u32 stat)
 		/* we made the hardware handle most lowlevel requests;
 		 * everything else goes uplevel to the gadget code.
 		 */
+		ep->responded = 1;
 		switch (u.r.bRequest) {
 		case USB_REQ_GET_STATUS: {
 			struct net2280_ep	*e;
@@ -2537,6 +2440,7 @@ delegate:
 				u.r.bRequestType, u.r.bRequest,
 				w_value, w_index, w_length,
 				readl (&ep->regs->ep_cfg));
+			ep->responded = 0;
 			spin_unlock (&dev->lock);
 			tmp = dev->driver->setup (&dev->gadget, &u.r);
 			spin_lock (&dev->lock);
@@ -2799,13 +2703,7 @@ static void net2280_remove (struct pci_dev *pdev)
 {
 	struct net2280		*dev = pci_get_drvdata (pdev);
 
-	/* start with the driver above us */
-	if (dev->driver) {
-		/* should have been done already by driver model core */
-		WARN (dev, "pci remove, driver '%s' is still registered\n",
-				dev->driver->driver.name);
-		usb_gadget_unregister_driver (dev->driver);
-	}
+	BUG_ON(dev->driver);
 
 	/* then clean up the resources we allocated during probe() */
 	net2280_led_shutdown (dev);
@@ -2857,7 +2755,7 @@ static int net2280_probe (struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	/* alloc, and start init */
-	dev = kzalloc (sizeof *dev, SLAB_KERNEL);
+	dev = kzalloc (sizeof *dev, GFP_KERNEL);
 	if (dev == NULL){
 		retval = -ENOMEM;
 		goto done;
@@ -2969,7 +2867,7 @@ static int net2280_probe (struct pci_dev *pdev, const struct pci_device_id *id)
 			, &dev->pci->pcimstctl);
 	/* erratum 0115 shouldn't appear: Linux inits PCI_LATENCY_TIMER */
 	pci_set_master (pdev);
-	pci_set_mwi (pdev);
+	pci_try_set_mwi (pdev);
 
 	/* ... also flushes any posted pci writes */
 	dev->chiprev = get_idx_reg (dev->regs, REG_CHIPREV) & 0xffff;

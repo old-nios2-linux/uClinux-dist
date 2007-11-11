@@ -1,8 +1,8 @@
-/* $Id: f_malloc.h,v 1.8 2003/07/06 18:43:16 andrei Exp $
+/* $Id: f_malloc.h,v 1.14 2004/12/16 17:39:47 andrei Exp $
  *
  * simple, very fast, malloc library
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,6 +30,9 @@
  * --------
  *  2003-05-21  on sparc64 roundto 8 even in debugging mode (so malloc'ed
  *               long longs will be 64 bit aligned) (andrei)
+ *  2004-07-19  support for 64 bit (2^64 mem. block) and more info
+ *               for the future de-fragmentation support (andrei)
+ *  2004-11-10  support for > 4Gb mem., switched to long (andrei)
  */
 
 
@@ -41,7 +44,7 @@
 /* defs*/
 
 #ifdef DBG_F_MALLOC
-#ifdef __CPU_sparc64
+#if defined(__CPU_sparc64) || defined(__CPU_sparc)
 /* tricky, on sun in 32 bits mode long long must be 64 bits aligned
  * but long can be 32 bits aligned => malloc should return long long
  * aligned memory */
@@ -51,23 +54,23 @@
                       sizeof(fm_frag) must be multiple of ROUNDTO !*/
 #endif
 #else /* DBG_F_MALLOC */
-	#define ROUNDTO 8
+	#define ROUNDTO 8UL
 #endif
 #define MIN_FRAG_SIZE	ROUNDTO
 
 
 
-#define F_MALLOC_OPTIMIZE_FACTOR 11 /*used below */
-#define F_MALLOC_OPTIMIZE  (1<<F_MALLOC_OPTIMIZE_FACTOR)
+#define F_MALLOC_OPTIMIZE_FACTOR 14UL /*used below */
+#define F_MALLOC_OPTIMIZE  (1UL<<F_MALLOC_OPTIMIZE_FACTOR)
 								/* size to optimize for,
-									(most allocs < this size),
+									(most allocs <= this size),
 									must be 2^k */
 
 #define F_HASH_SIZE (F_MALLOC_OPTIMIZE/ROUNDTO + \
-		(32-F_MALLOC_OPTIMIZE_FACTOR)+1)
+		(sizeof(long)*8-F_MALLOC_OPTIMIZE_FACTOR)+1)
 
 /* hash structure:
- * 0 .... F_MALLOC_OPTIMIE/ROUNDTO  - small buckets, size increases with
+ * 0 .... F_MALLOC_OPTIMIZE/ROUNDTO  - small buckets, size increases with
  *                            ROUNDTO from bucket to bucket
  * +1 .... end -  size = 2^k, big buckets */
 
@@ -78,13 +81,17 @@ struct fm_frag{
 		long reserved;
 	}u;
 #ifdef DBG_F_MALLOC
-	char* file;
-	char* func;
+	const char* file;
+	const char* func;
 	unsigned long line;
 	unsigned long check;
 #endif
 };
 
+struct fm_frag_lnk{
+	struct fm_frag* first;
+	unsigned long no;
+};
 
 struct fm_block{
 	unsigned long size; /* total size */
@@ -97,32 +104,32 @@ struct fm_block{
 	struct fm_frag* first_frag;
 	struct fm_frag* last_frag;
 	
-	struct fm_frag* free_hash[F_HASH_SIZE];
+	struct fm_frag_lnk free_hash[F_HASH_SIZE];
 };
 
 
 
-struct fm_block* fm_malloc_init(char* address, unsigned int size);
+struct fm_block* fm_malloc_init(char* address, unsigned long size);
 
 #ifdef DBG_F_MALLOC
-void* fm_malloc(struct fm_block*, unsigned int size, char* file, char* func, 
-					unsigned int line);
+void* fm_malloc(struct fm_block*, unsigned long size,
+					const char* file, const char* func, unsigned int line);
 #else
-void* fm_malloc(struct fm_block*, unsigned int size);
+void* fm_malloc(struct fm_block*, unsigned long size);
 #endif
 
 #ifdef DBG_F_MALLOC
-void  fm_free(struct fm_block*, void* p, char* file, char* func, 
+void  fm_free(struct fm_block*, void* p, const char* file, const char* func, 
 				unsigned int line);
 #else
 void  fm_free(struct fm_block*, void* p);
 #endif
 
 #ifdef DBG_F_MALLOC
-void*  fm_realloc(struct fm_block*, void* p, unsigned int size, 
-					char* file, char* func, unsigned int line);
+void*  fm_realloc(struct fm_block*, void* p, unsigned long size, 
+					const char* file, const char* func, unsigned int line);
 #else
-void*  fm_realloc(struct fm_block*, void* p, unsigned int size);
+void*  fm_realloc(struct fm_block*, void* p, unsigned long size);
 #endif
 
 void  fm_status(struct fm_block*);

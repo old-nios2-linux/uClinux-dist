@@ -57,7 +57,7 @@ CC = @CC@
 CFLAGS = @CFLAGS@
 CPPFLAGS = @CPPFLAGS@
 DEFS = @DEFS@ -DSYSTEM_WGETRC=\"$(sysconfdir)/wgetrc\" -DLOCALEDIR=\"$(localedir)\"
-LIBS = @LIBS@
+LIBS = @LIBS@ @LIBSSL@
 LDFLAGS = @LDFLAGS@
 
 #
@@ -66,7 +66,6 @@ LDFLAGS = @LDFLAGS@
 #
 
 DISTNAME = wget-@VERSION@
-LIBTOOL_DEPS = @LIBTOOL_DEPS@
 RM = rm -f
 
 # These are used for maintenance only, so they are safe without
@@ -85,7 +84,7 @@ infodir='$(infodir)' mandir='$(mandir)' manext='$(manext)'
 SUBDIRS = src doc po util windows
 
 # default target
-all: libtool src/config.h Makefile $(SUBDIRS)
+all: src/config.h Makefile $(SUBDIRS)
 
 check: all
 
@@ -107,10 +106,6 @@ install.info uninstall.info install.man uninstall.man install.wgetrc:
 # Install `.mo' files
 install.mo:
 	cd po && $(MAKE) $(MAKEDEFS) $@
-
-# Regenerate libtool if ltconfig and/or ltmain are updated
-libtool: $(LIBTOOL_DEPS)
-	$(SHELL) ./config.status --recheck
 
 # Create configure.bat from configure.bat.in by DOS-ifying the lines.
 # This is invoked by `make dist' and deleted by `make realclean' (not
@@ -141,10 +136,7 @@ dist: $(srcdir)/configure $(srcdir)/configure.bat DISTFILES
 DISTFILES: FORCE
 	rm -rf $(DISTNAME)	
 	(cd $(srcdir); find . ! -type d -print) \
-	| sed '/\/\(CVS\|RCS\)\//d; \
-		/$@/d; \
-		/\.tar.*/d; \
-	  	s/^.\///; /^\.$$/d;' \
+	| sed '/\/\(CVS\|RCS\)\//d; /$@/d; /\.tar.*/d; s/^.\///; /^\.$$/d;' \
 	| sort | uniq > $@
 
 #
@@ -157,7 +149,6 @@ realclean:	realclean-recursive	realclean-top
 
 clean-top:
 	$(RM) *~ *.bak $(DISTNAME).tar.gz
-	$(RM) -r .libs
 
 distclean-top: clean-top
 	$(RM) Makefile config.status config.log config.cache libtool stamp-h
@@ -176,22 +167,23 @@ clean-recursive distclean-recursive realclean-recursive:
 # Dependencies for maintenance
 #
 
+$(srcdir)/configure: configure.in
+	cd $(srcdir) && autoconf
+
+# autoheader might not change config.h.in, so touch a stamp file.
+$(srcdir)/src/config.h.in: stamp-h.in
+$(srcdir)/stamp-h.in: configure.in
+	@true; # running autoheader here breaks: cd $(srcdir) && autoheader
+	echo timestamp > $(srcdir)/stamp-h.in
+
+src/config.h: stamp-h
+stamp-h: src/config.h.in config.status
+	./config.status
+
 Makefile: Makefile.in config.status
-	CONFIG_HEADERS= ./config.status
+	./config.status
 
 config.status: configure
 	./config.status --recheck
 
-configure: configure.in aclocal.m4
-	cd $(srcdir) && autoconf
-
-src/config.h: stamp-h
-stamp-h: src/config.h.in config.status
-	CONFIG_FILES= CONFIG_HEADERS=src/config.h ./config.status
-
-src/config.h.in: stamp-h.in
-stamp-h.in: configure.in aclocal.m4
-	echo timestamp > $@
-
 FORCE:
-

@@ -43,7 +43,6 @@ struct ocfs2_alloc_context {
 #define OCFS2_AC_USE_INODE 3
 #define OCFS2_AC_USE_META  4
 	u32    ac_which;
-	struct ocfs2_journal_handle *ac_handle;
 
 	/* these are used by the chain search */
 	u16    ac_chain;
@@ -60,49 +59,66 @@ static inline int ocfs2_alloc_context_bits_left(struct ocfs2_alloc_context *ac)
 }
 
 int ocfs2_reserve_new_metadata(struct ocfs2_super *osb,
-			       struct ocfs2_journal_handle *handle,
 			       struct ocfs2_dinode *fe,
 			       struct ocfs2_alloc_context **ac);
 int ocfs2_reserve_new_inode(struct ocfs2_super *osb,
-			    struct ocfs2_journal_handle *handle,
 			    struct ocfs2_alloc_context **ac);
 int ocfs2_reserve_clusters(struct ocfs2_super *osb,
-			   struct ocfs2_journal_handle *handle,
 			   u32 bits_wanted,
 			   struct ocfs2_alloc_context **ac);
 
 int ocfs2_claim_metadata(struct ocfs2_super *osb,
-			 struct ocfs2_journal_handle *handle,
+			 handle_t *handle,
 			 struct ocfs2_alloc_context *ac,
 			 u32 bits_wanted,
 			 u16 *suballoc_bit_start,
 			 u32 *num_bits,
 			 u64 *blkno_start);
 int ocfs2_claim_new_inode(struct ocfs2_super *osb,
-			  struct ocfs2_journal_handle *handle,
+			  handle_t *handle,
 			  struct ocfs2_alloc_context *ac,
 			  u16 *suballoc_bit,
 			  u64 *fe_blkno);
 int ocfs2_claim_clusters(struct ocfs2_super *osb,
-			 struct ocfs2_journal_handle *handle,
+			 handle_t *handle,
 			 struct ocfs2_alloc_context *ac,
 			 u32 min_clusters,
 			 u32 *cluster_start,
 			 u32 *num_clusters);
+/*
+ * Use this variant of ocfs2_claim_clusters to specify a maxiumum
+ * number of clusters smaller than the allocation reserved.
+ */
+int __ocfs2_claim_clusters(struct ocfs2_super *osb,
+			   handle_t *handle,
+			   struct ocfs2_alloc_context *ac,
+			   u32 min_clusters,
+			   u32 max_clusters,
+			   u32 *cluster_start,
+			   u32 *num_clusters);
 
-int ocfs2_free_dinode(struct ocfs2_journal_handle *handle,
+int ocfs2_free_suballoc_bits(handle_t *handle,
+			     struct inode *alloc_inode,
+			     struct buffer_head *alloc_bh,
+			     unsigned int start_bit,
+			     u64 bg_blkno,
+			     unsigned int count);
+int ocfs2_free_dinode(handle_t *handle,
 		      struct inode *inode_alloc_inode,
 		      struct buffer_head *inode_alloc_bh,
 		      struct ocfs2_dinode *di);
-int ocfs2_free_extent_block(struct ocfs2_journal_handle *handle,
-			    struct inode *eb_alloc_inode,
-			    struct buffer_head *eb_alloc_bh,
-			    struct ocfs2_extent_block *eb);
-int ocfs2_free_clusters(struct ocfs2_journal_handle *handle,
+int ocfs2_free_clusters(handle_t *handle,
 			struct inode *bitmap_inode,
 			struct buffer_head *bitmap_bh,
 			u64 start_blk,
 			unsigned int num_clusters);
+
+static inline u64 ocfs2_which_suballoc_group(u64 block, unsigned int bit)
+{
+	u64 group = block - (u64) bit;
+
+	return group;
+}
 
 static inline u32 ocfs2_cluster_from_desc(struct ocfs2_super *osb,
 					  u64 bg_blkno)

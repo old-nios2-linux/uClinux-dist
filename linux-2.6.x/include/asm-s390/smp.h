@@ -18,6 +18,7 @@
 
 #include <asm/lowcore.h>
 #include <asm/sigp.h>
+#include <asm/ptrace.h>
 
 /*
   s390 specific smp.c headers
@@ -30,9 +31,12 @@ typedef struct
 	__u16      cpu;
 } sigp_info;
 
+extern void machine_restart_smp(char *);
+extern void machine_halt_smp(void);
+extern void machine_power_off_smp(void);
+
 extern void smp_setup_cpu_possible_map(void);
-extern int smp_call_function_on(void (*func) (void *info), void *info,
-				int nonatomic, int wait, int cpu);
+
 #define NO_PROC_ID		0xFF		/* No processor magic marker */
 
 /*
@@ -48,9 +52,6 @@ extern int smp_call_function_on(void (*func) (void *info), void *info,
 #define PROC_CHANGE_PENALTY	20		/* Schedule penalty */
 
 #define raw_smp_processor_id()	(S390_lowcore.cpu_data.cpu_nr)
-
-extern int smp_get_cpu(cpumask_t cpu_map);
-extern void smp_put_cpu(int cpu);
 
 static inline __u16 hard_smp_processor_id(void)
 {
@@ -94,17 +95,16 @@ extern int __cpu_up (unsigned int cpu);
 #endif
 
 #ifndef CONFIG_SMP
-static inline int
-smp_call_function_on(void (*func) (void *info), void *info,
-		     int nonatomic, int wait, int cpu)
+static inline void smp_send_stop(void)
 {
-	func(info);
-	return 0;
+	/* Disable all interrupts/machine checks */
+	__load_psw_mask(psw_kernel_bits & ~PSW_MASK_MCHECK);
 }
+
+#define hard_smp_processor_id()		0
 #define smp_cpu_not_running(cpu)	1
-#define smp_get_cpu(cpu) ({ 0; })
-#define smp_put_cpu(cpu) ({ 0; })
 #define smp_setup_cpu_possible_map()	do { } while (0)
 #endif
 
+extern union save_area *zfcpdump_save_areas[NR_CPUS + 1];
 #endif

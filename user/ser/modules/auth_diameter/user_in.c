@@ -1,9 +1,9 @@
 /*
- * $Id: user_in.c,v 1.1.2.1.2.1 2004/07/02 15:32:55 andrei Exp $
+ * $Id: user_in.c,v 1.4.2.1 2005/07/20 17:11:50 andrei Exp $
  *
  * Digest Authentication - Diameter support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -126,6 +126,9 @@ int diameter_is_user_in(struct sip_msg* _m, char* _hf, char* _group)
 	int ret;
 	unsigned int tmp;
 
+	user_name.s=0; /* fixes a gcc 4.0 warning */
+	uri.s=0; 
+	uri.len=0; 
 	grp = (str*)_group; /* via fixup */
 
 	hf_type = (int)(long)_hf;

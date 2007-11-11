@@ -220,7 +220,10 @@ VOID SvcFormatMessage(LPSTR szString, int iCount)
                        NULL 
                      );
 
-        strncpy(szString, (LPCTSTR) lpMsgBuf, iCount);
+        strncpy(szString, (LPCTSTR) lpMsgBuf, iCount-1);
+        
+        szString[iCount-1]=0;
+        
         /* Free the buffer. */
         LocalFree( lpMsgBuf );
         lpMsgBuf = NULL;
@@ -275,8 +278,8 @@ VOID ReadServiceCommandLineParams( int * piArgCounter, char** * pargvDynamic )
 
     (*piArgCounter) = * ((int*)&byData);
 
-    (*pargvDynamic) = calloc( (*piArgCounter)+2, sizeof(char*) );
-    (*pargvDynamic)[0] = _strdup(g_lpszServiceName);
+    (*pargvDynamic) = SnortAlloc( ((*piArgCounter)+2) * sizeof(char*) );
+    (*pargvDynamic)[0] = SnortStrdup(g_lpszServiceName);
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Preparing to use the following command-line arguments:\n"););
 
@@ -375,11 +378,11 @@ void logmsg(char* msg)
     {
         if( msg != NULL )
         {
-            fprintf(pFile, msg);
+            fprintf(pFile,"%s",msg);
         }
         else
         {
-            fprintf(pFile, "Message String is NULL\n");
+            fprintf(pFile,"%s","Message String is NULL\n");
         }
         fclose(pFile);
         pFile = NULL;
@@ -647,13 +650,24 @@ VOID InstallSnortService(int argc, char* argv[])
         SvcFormatMessage(szMsg, sizeof(szMsg));
         FatalError(" [SNORT_SERVICE] Unable to determine current working directory. %s", szMsg); 
     }
-    if( buffer[strlen(buffer)-1] != '\\' )
+
+    if( buffer[strlen(buffer) - 1] != '\\' )
     {
-        strcat(buffer, "\\");
+        if (strlen(buffer) < _MAX_PATH)
+        {
+            int len = strlen(buffer);
+
+            buffer[len] = '\\';
+            buffer[len + 1] = '\0';
+        }
+        else
+        {
+            FatalError(" [SNORT_SERVICE] Unable to create full path to Snort binary."); 
+        }
     }
-    strcat(buffer, argv[0]);
-    strcat(buffer, " ");
-    strcat(buffer, SERVICE_CMDLINE_PARAM);
+
+    SnortSnprintfAppend(buffer, _MAX_PATH + 1, "%s ", argv[0]);
+    SnortSnprintfAppend(buffer, _MAX_PATH + 1, "%s", SERVICE_CMDLINE_PARAM);
     lpszBinaryPathName = buffer;
 
     printf("\n");

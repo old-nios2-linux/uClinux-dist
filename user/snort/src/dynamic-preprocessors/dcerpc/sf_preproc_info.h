@@ -29,7 +29,7 @@
 
 #define MAJOR_VERSION   1
 #define MINOR_VERSION   0
-#define BUILD_VERSION   1
+#define BUILD_VERSION   4
 #define PREPROC_NAME    "SF_DCERPC"
 
 #define DYNAMIC_PREPROC_SETUP SetupDCERPC

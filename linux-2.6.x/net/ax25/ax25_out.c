@@ -14,7 +14,6 @@
 #include <linux/in.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
 #include <linux/sockios.h>
@@ -70,11 +69,11 @@ ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax2
 	ax25->dest_addr   = *dest;
 
 	if (digi != NULL) {
-		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
+		ax25->digipeat = kmemdup(digi, sizeof(*digi), GFP_ATOMIC);
+		if (ax25->digipeat == NULL) {
 			ax25_cb_put(ax25);
 			return NULL;
 		}
-		memcpy(ax25->digipeat, digi, sizeof(ax25_digi));
 	}
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
@@ -149,8 +148,9 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 
 			if (ka9qfrag == 1) {
 				skb_reserve(skbn, frontlen + 2);
-				skbn->nh.raw = skbn->data + (skb->nh.raw - skb->data);
-				memcpy(skb_put(skbn, len), skb->data, len);
+				skb_set_network_header(skbn,
+						      skb_network_offset(skb));
+				skb_copy_from_linear_data(skb, skb_put(skbn, len), len);
 				p = skb_push(skbn, 2);
 
 				*p++ = AX25_P_SEGMENT;
@@ -162,8 +162,9 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 				}
 			} else {
 				skb_reserve(skbn, frontlen + 1);
-				skbn->nh.raw = skbn->data + (skb->nh.raw - skb->data);
-				memcpy(skb_put(skbn, len), skb->data, len);
+				skb_set_network_header(skbn,
+						      skb_network_offset(skb));
+				skb_copy_from_linear_data(skb, skb_put(skbn, len), len);
 				p = skb_push(skbn, 1);
 				*p = AX25_P_TEXT;
 			}
@@ -206,7 +207,7 @@ static void ax25_send_iframe(ax25_cb *ax25, struct sk_buff *skb, int poll_bit)
 	if (skb == NULL)
 		return;
 
-	skb->nh.raw = skb->data;
+	skb_reset_network_header(skb);
 
 	if (ax25->modulus == AX25_MODULUS) {
 		frame = skb_push(skb, 1);

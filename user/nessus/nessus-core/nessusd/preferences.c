@@ -145,7 +145,7 @@ int preferences_new(char * name)
  fprintf(fd, "slice_network_addresses = no\n\n");
  
  fprintf(fd, "# Should consider all the NASL scripts as being signed ? (unsafe if set to 'yes')\n");
- fprintf(fd, "nasl_no_signature_check = no\n\n");
+ fprintf(fd, "nasl_no_signature_check = yes\n\n");
  fprintf(fd, "#end.\n");
  
   fclose(fd);
@@ -275,7 +275,7 @@ int preferences_get_host_expansion(preferences)
  if(!pref)ret = HG_SUBNET;
  else
  {
- if(strstr(pref, "dns"))ret = ret | HG_DNS_AXFR;
+/* if(strstr(pref, "dns"))ret = ret | HG_DNS_AXFR; */
  if(strstr(pref, "nfs"))ret = ret | HG_NFS;
  if(strstr(pref, "ip"))ret = ret |  HG_SUBNET;
  }

@@ -10,6 +10,8 @@ O_TARGET := fs.o
 export-objs :=	filesystems.o open.o dcache.o buffer.o dquot.o
 mod-subdirs :=	nls
 
+export-objs +=	fcntl.o
+
 obj-y :=	open.o read_write.o devices.o file_table.o buffer.o \
 		super.o block_dev.o char_dev.o stat.o exec.o pipe.o namei.o \
 		fcntl.o ioctl.o readdir.o select.o fifo.o locks.o \

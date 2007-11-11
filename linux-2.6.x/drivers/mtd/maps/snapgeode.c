@@ -37,10 +37,10 @@ static struct mtd_info *sg_mtd;
  */
 
 static struct map_info sg_map = {
-	.name= "SnapGear Intel/StrataFlash",
-	.phys= 0xff800000,
-	.size= 0x800000,
-	.buswidth= 1,
+	.name =	"SnapGear Intel/StrataFlash",
+	.phys = 0xff800000,
+	.size = 0x800000,
+	.bankwidth= 1,
 };
 
 static struct mtd_partition sg_partitions[] = {
@@ -87,10 +87,10 @@ static struct mtd_partition sg_partitions[] = {
  */
 
 static struct map_info sg_map = {
-	.name= "SnapGear AMD/Flash",
-	.phys= 0xff800000,
-	.size= 0x800000,
-	.buswidth= 1,
+	.name = "SnapGear AMD/Flash",
+	.phys = 0xff800000,
+	.size = 0x800000,
+	.bankwidth = 1,
 };
 
 static struct mtd_partition sg_partitions[] = {
@@ -110,7 +110,7 @@ static struct mtd_partition sg_partitions[] = {
 	},
 };
 
-#define	PROBE	"jedec_probe"
+#define	PROBE	"cfi_probe"
 
 /****************************************************************************/
 #endif
@@ -156,7 +156,7 @@ int __init sg_init(void)
 	 *	On the GEODE the ROM CS stays mapped into high memory.
 	 *	So we look for it at the top of the 32bit address space.
 	 */
-	sg_map.virt = (unsigned long) ioremap(0xff800000, 0x800000);
+	sg_map.virt = ioremap(0xff800000, 0x800000);
 	if (sg_map.virt == 0) {
 		printk("SNAPGEAR: failed to ioremap() ROMCS\n");
 		return -EIO;

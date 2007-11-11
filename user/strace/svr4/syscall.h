@@ -24,7 +24,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: syscall.h,v 1.8 2001/04/18 15:11:52 hughesj Exp $
+ *	$Id: syscall.h,v 1.10 2002/05/17 11:37:50 hughesj Exp $
  */
 
 #include "dummy.h"
@@ -305,9 +305,11 @@ extern int sys_aclipc();
 extern int sys_door();
 #endif
 #if UNIXWARE >= 2
+extern int sys_sigwait();
 extern int sys_truncate();
 extern int sys_ftruncate();
 extern int sys_getksym ();
+extern int sys_procpriv();
 #endif
 #if UNIXWARE >= 7
 extern int sys_lseek64 ();

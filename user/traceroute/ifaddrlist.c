@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997
+ * Copyright (c) 1997, 1998, 1999, 2000
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-    "@(#) $Header: /cvs/sw/new-wave/user/traceroute/ifaddrlist.c,v 1.1.1.1 1999/11/22 03:48:05 christ Exp $ (LBL)";
+    "@(#) $Id: ifaddrlist.c,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)";
 #endif
 
 #include <sys/param.h>
@@ -67,17 +67,6 @@ struct rtentry;
 #endif
 
 #include "ifaddrlist.h"
-#include "savestr.h"
-
-
-/* Not all systems have IFF_LOOPBACK */
-#ifdef IFF_LOOPBACK
-#define ISLOOPBACK(p) ((p)->ifr_flags & IFF_LOOPBACK)
-#else
-#define ISLOOPBACK(p) (strcmp((p)->ifr_name, "lo0") == 0)
-#endif
-
-#define MAX_IPADDR 32
 
 /*
  * Return the interface list
@@ -93,9 +82,10 @@ ifaddrlist(register struct ifaddrlist **ipaddrp, register char *errbuf)
 	register struct sockaddr_in *sin;
 	register struct ifaddrlist *al;
 	struct ifconf ifc;
-	struct ifreq ibuf[MAX_IPADDR], ifr;
-	char device[sizeof(ifr.ifr_name) + 1];
+	struct ifreq ibuf[(32 * 1024) / sizeof(struct ifreq)], ifr;
+#define MAX_IPADDR (sizeof(ibuf) / sizeof(ibuf[0]))
 	static struct ifaddrlist ifaddrlist[MAX_IPADDR];
+	char device[sizeof(ifr.ifr_name) + 1];
 
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
@@ -107,7 +97,13 @@ ifaddrlist(register struct ifaddrlist **ipaddrp, register char *errbuf)
 
 	if (ioctl(fd, SIOCGIFCONF, (char *)&ifc) < 0 ||
 	    ifc.ifc_len < sizeof(struct ifreq)) {
-		(void)sprintf(errbuf, "SIOCGIFCONF: %s", strerror(errno));
+		if (errno == EINVAL)
+			(void)sprintf(errbuf,
+			    "SIOCGIFCONF: ifreq struct too small (%d bytes)",
+			    sizeof(ibuf));
+		else
+			(void)sprintf(errbuf, "SIOCGIFCONF: %s",
+			    strerror(errno));
 		(void)close(fd);
 		return (-1);
 	}
@@ -146,12 +142,18 @@ ifaddrlist(register struct ifaddrlist **ipaddrp, register char *errbuf)
 			return (-1);
 		}
 
-		/* Must be up and not the loopback */
-		if ((ifr.ifr_flags & IFF_UP) == 0 || ISLOOPBACK(&ifr))
+		/* Must be up */
+		if ((ifr.ifr_flags & IFF_UP) == 0)
 			continue;
+
 
 		(void)strncpy(device, ifr.ifr_name, sizeof(ifr.ifr_name));
 		device[sizeof(device) - 1] = '\0';
+#ifdef sun
+		/* Ignore sun virtual interfaces */
+		if (strchr(device, ':') != NULL)
+			continue;
+#endif
 		if (ioctl(fd, SIOCGIFADDR, (char *)&ifr) < 0) {
 			(void)sprintf(errbuf, "SIOCGIFADDR: %s: %s",
 			    device, strerror(errno));
@@ -159,9 +161,15 @@ ifaddrlist(register struct ifaddrlist **ipaddrp, register char *errbuf)
 			return (-1);
 		}
 
+		if (nipaddr >= MAX_IPADDR) {
+			(void)sprintf(errbuf, "Too many interfaces (%d)",
+			    MAX_IPADDR);
+			(void)close(fd);
+			return (-1);
+		}
 		sin = (struct sockaddr_in *)&ifr.ifr_addr;
 		al->addr = sin->sin_addr.s_addr;
-		al->device = savestr(device);
+		al->device = strdup(device);
 		++al;
 		++nipaddr;
 	}

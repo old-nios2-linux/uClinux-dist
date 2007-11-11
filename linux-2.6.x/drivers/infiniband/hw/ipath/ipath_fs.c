@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006 QLogic, Inc. All rights reserved.
+ * Copyright (c) 2006, 2007 QLogic Corporation. All rights reserved.
  * Copyright (c) 2006 PathScale, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -38,7 +38,6 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/namei.h>
-#include <linux/pci.h>
 
 #include "ipath_kernel.h"
 
@@ -47,7 +46,7 @@
 static struct super_block *ipath_super;
 
 static int ipathfs_mknod(struct inode *dir, struct dentry *dentry,
-			 int mode, struct file_operations *fops,
+			 int mode, const struct file_operations *fops,
 			 void *data)
 {
 	int error;
@@ -81,7 +80,7 @@ bail:
 
 static int create_file(const char *name, mode_t mode,
 		       struct dentry *parent, struct dentry **dentry,
-		       struct file_operations *fops, void *data)
+		       const struct file_operations *fops, void *data)
 {
 	int error;
 
@@ -105,7 +104,7 @@ static ssize_t atomic_stats_read(struct file *file, char __user *buf,
 				       sizeof ipath_stats);
 }
 
-static struct file_operations atomic_stats_ops = {
+static const struct file_operations atomic_stats_ops = {
 	.read = atomic_stats_read,
 };
 
@@ -118,7 +117,7 @@ static ssize_t atomic_counters_read(struct file *file, char __user *buf,
 	u16 i;
 	struct ipath_devdata *dd;
 
-	dd = file->f_dentry->d_inode->i_private;
+	dd = file->f_path.dentry->d_inode->i_private;
 
 	for (i = 0; i < NUM_COUNTERS; i++)
 		counters[i] = ipath_snap_cntr(dd, i);
@@ -127,7 +126,7 @@ static ssize_t atomic_counters_read(struct file *file, char __user *buf,
 				       sizeof counters);
 }
 
-static struct file_operations atomic_counters_ops = {
+static const struct file_operations atomic_counters_ops = {
 	.read = atomic_counters_read,
 };
 
@@ -138,7 +137,7 @@ static ssize_t atomic_node_info_read(struct file *file, char __user *buf,
 	struct ipath_devdata *dd;
 	u64 guid;
 
-	dd = file->f_dentry->d_inode->i_private;
+	dd = file->f_path.dentry->d_inode->i_private;
 
 	guid = be64_to_cpu(dd->ipath_guid);
 
@@ -166,7 +165,7 @@ static ssize_t atomic_node_info_read(struct file *file, char __user *buf,
 				       sizeof nodeinfo);
 }
 
-static struct file_operations atomic_node_info_ops = {
+static const struct file_operations atomic_node_info_ops = {
 	.read = atomic_node_info_read,
 };
 
@@ -177,7 +176,7 @@ static ssize_t atomic_port_info_read(struct file *file, char __user *buf,
 	u32 tmp, tmp2;
 	struct ipath_devdata *dd;
 
-	dd = file->f_dentry->d_inode->i_private;
+	dd = file->f_path.dentry->d_inode->i_private;
 
 	/* so we only initialize non-zero fields. */
 	memset(portinfo, 0, sizeof portinfo);
@@ -258,9 +257,14 @@ static ssize_t atomic_port_info_read(struct file *file, char __user *buf,
 		/* Notimpl InitType (actually, an SMA decision) */
 		/* VLHighLimit is 0 (only one VL) */
 		; /* VLArbitrationHighCap is 0 (only one VL) */
+	/*
+	 * Note: the chips support a maximum MTU of 4096, but the driver
+	 * hasn't implemented this feature yet, so set the maximum
+	 * to 2048.
+	 */
 	portinfo[10] = 	/* VLArbitrationLowCap is 0 (only one VL) */
 		/* InitTypeReply is SMA decision */
-		(5 << 16)	/* MTUCap 4096 */
+		(4 << 16)	/* MTUCap 2048 */
 		| (7 << 13)	/* VLStallCount */
 		| (0x1f << 8)	/* HOQLife */
 		| (1 << 4)
@@ -291,7 +295,7 @@ static ssize_t atomic_port_info_read(struct file *file, char __user *buf,
 				       sizeof portinfo);
 }
 
-static struct file_operations atomic_port_info_ops = {
+static const struct file_operations atomic_port_info_ops = {
 	.read = atomic_port_info_read,
 };
 
@@ -324,7 +328,7 @@ static ssize_t flash_read(struct file *file, char __user *buf,
 		goto bail;
 	}
 
-	dd = file->f_dentry->d_inode->i_private;
+	dd = file->f_path.dentry->d_inode->i_private;
 	if (ipath_eeprom_read(dd, pos, tmp, count)) {
 		ipath_dev_err(dd, "failed to read from flash\n");
 		ret = -ENXIO;
@@ -377,7 +381,7 @@ static ssize_t flash_write(struct file *file, const char __user *buf,
 		goto bail_tmp;
 	}
 
-	dd = file->f_dentry->d_inode->i_private;
+	dd = file->f_path.dentry->d_inode->i_private;
 	if (ipath_eeprom_write(dd, pos, tmp, count)) {
 		ret = -ENXIO;
 		ipath_dev_err(dd, "failed to write to flash\n");
@@ -394,7 +398,7 @@ bail:
 	return ret;
 }
 
-static struct file_operations flash_ops = {
+static const struct file_operations flash_ops = {
 	.read = flash_read,
 	.write = flash_write,
 };
@@ -451,11 +455,17 @@ bail:
 	return ret;
 }
 
-static void remove_file(struct dentry *parent, char *name)
+static int remove_file(struct dentry *parent, char *name)
 {
 	struct dentry *tmp;
+	int ret;
 
 	tmp = lookup_one_len(name, parent, strlen(name));
+
+	if (IS_ERR(tmp)) {
+		ret = PTR_ERR(tmp);
+		goto bail;
+	}
 
 	spin_lock(&dcache_lock);
 	spin_lock(&tmp->d_lock);
@@ -469,6 +479,14 @@ static void remove_file(struct dentry *parent, char *name)
 		spin_unlock(&tmp->d_lock);
 		spin_unlock(&dcache_lock);
 	}
+
+	ret = 0;
+bail:
+	/*
+	 * We don't expect clients to care about the return value, but
+	 * it's there if they need it.
+	 */
+	return ret;
 }
 
 static int remove_device_files(struct super_block *sb,
@@ -510,7 +528,7 @@ static int ipathfs_fill_super(struct super_block *sb, void *data,
 	int ret;
 
 	static struct tree_descr files[] = {
-		[1] = {"atomic_stats", &atomic_stats_ops, S_IRUGO},
+		[2] = {"atomic_stats", &atomic_stats_ops, S_IRUGO},
 		{""},
 	};
 

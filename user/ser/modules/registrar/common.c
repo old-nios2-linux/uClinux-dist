@@ -1,9 +1,9 @@
 /*
- * $Id: common.c,v 1.13.6.1 2004/04/27 21:21:52 jiri Exp $
+ * $Id: common.c,v 1.18 2004/11/04 18:26:01 janakj Exp $
  *
  * Common stuff
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -34,13 +34,13 @@
 */
 
 #include <string.h> 
-#include <ctype.h>
 #include "../../dprint.h"
 #include "../../ut.h"      /* q_memchr */
 #include "../../parser/parse_uri.h"
-#include "common.h"
 #include "rerrno.h"
 #include "reg_mod.h"
+#include "common.h"
+
 
 #define MAX_AOR_LEN 256
 
@@ -56,13 +56,13 @@ int extract_aor(str* _uri, str* _a)
 
 	if (parse_uri(_uri->s, _uri->len, &puri) < 0) {
 		rerrno = R_AOR_PARSE;
-		LOG(L_ERR, "extract_aor(): Error while parsing AOR, sending 400\n");
+		LOG(L_ERR, "extract_aor(): Error while parsing Address of Record\n");
 		return -1;
 	}
 	
 	if ((puri.user.len + puri.host.len + 1) > MAX_AOR_LEN) {
 		rerrno = R_AOR_LEN;
-		LOG(L_ERR, "extract_aor(): Address Of Record too long, sending 500\n");
+		LOG(L_ERR, "extract_aor(): Address Of Record too long\n");
 		return -2;
 	}
 
@@ -79,20 +79,19 @@ int extract_aor(str* _uri, str* _a)
 
 	if (use_domain) {
 		aor_buf[_a->len] = '@';
-
-	/* ** stripping patch ** -jiri
-		memcpy(aor_buf + _a->len + 1, puri.host.s, puri.host.len);
-		_a->len += 1 + puri.host.len;
-	*/
+		     /* ** stripping patch ** -jiri
+			memcpy(aor_buf + _a->len + 1, puri.host.s, puri.host.len);
+			_a->len += 1 + puri.host.len;
+		     */
 		if (realm_prefix.len && realm_prefix.len < puri.host.len &&
-				(memcmp(realm_prefix.s, puri.host.s, realm_prefix.len) == 0)) {
+		    (memcmp(realm_prefix.s, puri.host.s, realm_prefix.len) == 0)) {
 			memcpy(aor_buf + _a->len + 1, puri.host.s + realm_prefix.len, puri.host.len - realm_prefix.len);
 			_a->len += 1 + puri.host.len - realm_prefix.len;
 		} else {
-			 memcpy(aor_buf + _a->len + 1, puri.host.s, puri.host.len);
-			 _a->len += 1 + puri.host.len;
+			memcpy(aor_buf + _a->len + 1, puri.host.s, puri.host.len);
+			_a->len += 1 + puri.host.len;
 		}
-	/* end of stripptig patch */
+		     /* end of stripping patch */
 	}
 
 	if (case_sensitive) {

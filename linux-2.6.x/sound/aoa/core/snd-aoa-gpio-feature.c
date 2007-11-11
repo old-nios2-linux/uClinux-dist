@@ -55,7 +55,7 @@ static struct device_node *get_gpio(char *name,
 				    int *gpioactiveptr)
 {
 	struct device_node *np, *gpio;
-	u32 *reg;
+	const u32 *reg;
 	const char *audio_gpio;
 
 	*gpioptr = -1;
@@ -71,7 +71,7 @@ static struct device_node *get_gpio(char *name,
 		if (!gpio)
 			return NULL;
 		while ((np = of_get_next_child(gpio, np))) {
-			audio_gpio = get_property(np, "audio-gpio", NULL);
+			audio_gpio = of_get_property(np, "audio-gpio", NULL);
 			if (!audio_gpio)
 				continue;
 			if (strcmp(audio_gpio, name) == 0)
@@ -84,7 +84,7 @@ static struct device_node *get_gpio(char *name,
 			return NULL;
 	}
 
-	reg = (u32 *)get_property(np, "reg", NULL);
+	reg = of_get_property(np, "reg", NULL);
 	if (!reg)
 		return NULL;
 
@@ -96,7 +96,7 @@ static struct device_node *get_gpio(char *name,
 	if (*gpioptr < 0x50)
 		*gpioptr += 0x50;
 
-	reg = (u32 *)get_property(np, "audio-gpio-active-state", NULL);
+	reg = of_get_property(np, "audio-gpio-active-state", NULL);
 	if (!reg)
 		/* Apple seems to default to 1, but
 		 * that doesn't seem right at least on most
@@ -195,9 +195,10 @@ static void ftr_gpio_all_amps_restore(struct gpio_runtime *rt)
 	ftr_gpio_set_lineout(rt, (s>>2)&1);
 }
 
-static void ftr_handle_notify(void *data)
+static void ftr_handle_notify(struct work_struct *work)
 {
-	struct gpio_notification *notif = data;
+	struct gpio_notification *notif =
+		container_of(work, struct gpio_notification, work.work);
 
 	mutex_lock(&notif->mutex);
 	if (notif->notify)
@@ -253,12 +254,9 @@ static void ftr_gpio_init(struct gpio_runtime *rt)
 
 	ftr_gpio_all_amps_off(rt);
 	rt->implementation_private = 0;
-	INIT_WORK(&rt->headphone_notify.work, ftr_handle_notify,
-		  &rt->headphone_notify);
-	INIT_WORK(&rt->line_in_notify.work, ftr_handle_notify,
-		  &rt->line_in_notify);
-	INIT_WORK(&rt->line_out_notify.work, ftr_handle_notify,
-		  &rt->line_out_notify);
+	INIT_DELAYED_WORK(&rt->headphone_notify.work, ftr_handle_notify);
+	INIT_DELAYED_WORK(&rt->line_in_notify.work, ftr_handle_notify);
+	INIT_DELAYED_WORK(&rt->line_out_notify.work, ftr_handle_notify);
 	mutex_init(&rt->headphone_notify.mutex);
 	mutex_init(&rt->line_in_notify.mutex);
 	mutex_init(&rt->line_out_notify.mutex);
@@ -287,7 +285,7 @@ static irqreturn_t ftr_handle_notify_irq(int xx, void *data)
 {
 	struct gpio_notification *notif = data;
 
-	schedule_work(&notif->work);
+	schedule_delayed_work(&notif->work, 0);
 
 	return IRQ_HANDLED;
 }

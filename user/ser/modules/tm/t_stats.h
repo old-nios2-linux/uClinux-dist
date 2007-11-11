@@ -1,9 +1,9 @@
 /*
  *
- * $Id: t_stats.h,v 1.8 2003/05/20 16:53:16 andrei Exp $
+ * $Id: t_stats.h,v 1.9 2004/08/24 09:00:43 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

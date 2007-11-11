@@ -1,9 +1,9 @@
 /* 
- * $Id: parse_hname2.h,v 1.6 2002/11/18 19:08:16 janakj Exp $ 
+ * $Id: parse_hname2.h,v 1.7 2004/08/24 09:01:25 janakj Exp $ 
  *
  * Fast 32-bit Header Field Name Parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

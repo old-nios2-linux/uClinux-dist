@@ -1,10 +1,10 @@
 /*
- * $Id: xjab_worker.h,v 1.14.8.1 2004/07/26 23:18:35 andrei Exp $
+ * $Id: xjab_worker.h,v 1.18 2004/08/24 08:58:30 janakj Exp $
  *
  * eXtended JABber module
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -52,10 +52,10 @@ typedef struct _xj_jalias
 {
 	int size;	// number of aliases
 	str *jdm;	// Jabber domain
-	char dlm;	// user part delimitator
+	char dlm;	// user part delimiter
 	str *proxy; // outbound proxy
 	str *a;		// aliases
-	char *d;	// user part delimitator for aliases
+	char *d;	// user part delimiter for aliases
 } t_xj_jalias, *xj_jalias;
 
 typedef struct _xj_worker
@@ -75,7 +75,7 @@ typedef struct _xj_wlist
 	int delayt;
 	int sleept;
 	gen_lock_set_t	 *sems;	 // semaphores
-	xj_jalias	aliases; // addess aliases
+	xj_jalias	aliases; // added aliases
 	xj_worker	workers; // the list of workers
 } t_xj_wlist, *xj_wlist;
 
@@ -92,7 +92,7 @@ int  xj_wlist_set_aliases(xj_wlist, char *, char *, char *);
 int  xj_wlist_check_aliases(xj_wlist, str*);
 int  xj_wlist_clean_jobs(xj_wlist, int, int); 
 
-int xj_worker_process(xj_wlist, char*, int, int, db_con_t*);
+int xj_worker_process(xj_wlist, char*, int, int, db_con_t*, db_func_t*);
 
 int xj_address_translation(str *src, str *dst, xj_jalias als, int flag);
 int xj_manage_jab(char *buf, int len, int *pos, xj_jalias als, xj_jcon jbc);
@@ -103,8 +103,7 @@ void xj_sig_handler(int s);
 
 int xj_send_sip_msg(str *, str *, str *, str *, int *);
 int xj_send_sip_msgz(str *,str *, str *, char *, int *);
-void xj_tuac_callback(struct cell *, struct sip_msg *,
-			int, void *);
+void xj_tuac_callback( struct cell *t, int type, struct tmcb_params *ps);
 void xj_worker_check_jcons(xj_wlist, xj_jcon_pool, int, fd_set*);
 void xj_worker_check_qmsg(xj_wlist, xj_jcon_pool);
 void xj_worker_check_watcher(xj_wlist, xj_jcon_pool, xj_jcon, xj_sipmsg);

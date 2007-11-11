@@ -35,6 +35,19 @@
 
 #include "sf_dynamic_meta.h"
 
+/* specifies that a function does not return
+ * used for quieting Visual Studio warnings
+ */
+#ifdef WIN32
+#if _MSC_VER >= 1400
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN
+#endif
+#else
+#define NORETURN
+#endif
+
 /* Function prototype used to evaluate a special OTN */
 /* Parameters are packet pointer & rule info pointer */
 typedef int (*OTNCheckFunction)(void *, void *);
@@ -110,5 +123,10 @@ int InitDynamicEngines();
 void RemoveDuplicateEngines();
 
 int DumpDetectionLibRules();
+
+/* This was necessary because of static code analysis not recognizing that
+ * fatalMsg did not return - use instead of fatalMsg
+ */
+NORETURN void DynamicEngineFatalMessage(const char *format, ...);
 
 #endif /* _SF_DYNAMIC_ENGINE_H_ */

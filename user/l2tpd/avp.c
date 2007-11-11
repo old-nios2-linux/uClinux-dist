@@ -1107,13 +1107,15 @@ int challenge_avp (struct tunnel *t, struct call *c, void *data, int datalen)
              __FUNCTION__, size, MD_SIG_SIZE);
         return -EINVAL;
     } */
+    if (t->chal_us.challenge)
+    free(t->chal_us.challenge);
     t->chal_us.challenge = malloc(size+1);
     if (t->chal_us.challenge == NULL)
     {
         return -ENOMEM;
     }
-    memset(t->chal_us.challenge, 0, size+1);
     bcopy (&raw[3], (t->chal_us.challenge), size);
+    t->chal_us.chal_len = size;
     t->chal_us.state = STATE_CHALLENGED;
     if (debug_avp)
     {

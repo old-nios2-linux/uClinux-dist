@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.2.6.1 2003/11/24 14:00:34 janakj Exp $
+# $Id: Makefile,v 1.6 2004/03/09 12:12:57 sobomax Exp $
 #
 # print example module makefile
 #

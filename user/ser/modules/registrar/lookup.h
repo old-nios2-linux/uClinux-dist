@@ -1,9 +1,9 @@
 /*
- * $Id: lookup.h,v 1.3.8.1 2004/07/21 09:28:31 janakj Exp $
+ * $Id: lookup.h,v 1.9 2004/11/05 17:48:05 janakj Exp $
  *
  * Lookup contacts in usrloc
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

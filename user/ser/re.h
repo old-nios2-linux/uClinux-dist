@@ -1,9 +1,9 @@
 /*
- * $Id: re.h,v 1.2.2.1 2003/11/12 20:00:10 andrei Exp $
+ * $Id: re.h,v 1.6 2004/11/12 16:58:58 andrei Exp $
  *
  * regexp and regexp substitutions implementations
  * 
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,6 +30,7 @@
  * History:
  * --------
  *   2003-08-04  created by andrei
+ *   2004-11-12  minor api extension, added *count (andrei)
  */
 
 #ifndef _re_h
@@ -73,9 +74,10 @@ struct replace_lst{
 void subst_expr_free(struct subst_expr* se);
 void replace_lst_free(struct replace_lst* l);
 struct subst_expr*  subst_parser(str* subst);
-struct replace_lst* subst_run( struct subst_expr* se, char* input, 
-		                       struct sip_msg* msg);
-str* subst_str(char* input, struct sip_msg* msg, struct subst_expr* se);
+struct replace_lst* subst_run( struct subst_expr* se, const char* input, 
+		                       struct sip_msg* msg, int *count);
+str* subst_str(const char* input, struct sip_msg* msg,
+				struct subst_expr* se, int* count);
 
 
 

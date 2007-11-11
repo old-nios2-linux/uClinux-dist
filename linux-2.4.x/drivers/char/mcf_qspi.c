@@ -411,20 +411,21 @@ static int qspi_read(
 
         /* set the register with default values */
         QMR = QMR_MSTR |
-                (dev->dohie << 14) |
-                (dev->bits << 10) |
-                (dev->cpol << 9) |
-                (dev->cpha << 8) |
-                (dev->baud);
+                ((dev->dohie & 0x01) << 14) |
+                ((dev->bits  & 0x0f) << 10) |
+                ((dev->cpol  & 0x01) <<  9) |
+                ((dev->cpha  & 0x01) <<  8) |
+                 (dev->baud  & 0xff);
 
-        QDLYR = (dev->qcd << 8) | dev->dtl;
+        QDLYR = ((dev->qcd & 0x7f) << 8) | (dev->dtl & 0xff);
 
         if (dev->dsp_mod)
                 max_trans = 15;
         else
                 max_trans = 16;
 
-	qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
+	/* Clear QSPI_CS bit in the command register corresponding to the desired CS: */
+	qcr_cs = (~(1 << MINOR(filep->f_dentry->d_inode->i_rdev)) << 8) & 0xf00;
 
         bits = dev->bits % 0x10;
         if (bits == 0 || bits > 0x08)
@@ -476,7 +477,7 @@ static int qspi_read(
                 QWR = QWR_CSIV | ((n - 1) << 8);
 
                 /* check if we are using polling mode. Polling increases
-                 * performance for samll data transfers but is dangerous
+                 * performance for small data transfers but is dangerous
                  * if we stay too long here, locking other tasks!!
                  */
                 if (dev->poll_mod) {
@@ -551,8 +552,9 @@ static ssize_t qspi_write(struct file *filep, const char *buffer, size_t length,
         if (bits == 0 || bits > 0x08)
                 word = 1;       /* 9 to 16 bit transfers */
 
-	qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
-                                  /* next line was memcpy_fromfs()  */
+	/* Clear QSPI_CS bit in the command register corresponding to the desired CS: */
+	qcr_cs = (~(1 << MINOR(filep->f_dentry->d_inode->i_rdev)) << 8) & 0xf00;
+
         copy_from_user (dbuf, buffer, length);
 
 //      printk("data to write is %x  %x  %x  %X  \n",dbuf[0],dbuf[1],dbuf[2],dbuf[3]);

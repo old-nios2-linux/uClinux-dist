@@ -68,8 +68,6 @@ void ocfs2_dentry_lock_res_init(struct ocfs2_dentry_lock *dl,
 				u64 parent, struct inode *inode);
 void ocfs2_lock_res_free(struct ocfs2_lock_res *res);
 int ocfs2_create_new_inode_locks(struct inode *inode);
-int ocfs2_create_new_lock(struct ocfs2_super *osb,
-			  struct ocfs2_lock_res *lockres, int ex, int local);
 int ocfs2_drop_inode_locks(struct inode *inode);
 int ocfs2_data_lock_full(struct inode *inode,
 			 int write,
@@ -82,19 +80,23 @@ void ocfs2_data_unlock(struct inode *inode,
 		       int write);
 int ocfs2_rw_lock(struct inode *inode, int write);
 void ocfs2_rw_unlock(struct inode *inode, int write);
+int ocfs2_open_lock(struct inode *inode);
+int ocfs2_try_open_lock(struct inode *inode, int write);
+void ocfs2_open_unlock(struct inode *inode);
+int ocfs2_meta_lock_atime(struct inode *inode,
+			  struct vfsmount *vfsmnt,
+			  int *level);
 int ocfs2_meta_lock_full(struct inode *inode,
-			 struct ocfs2_journal_handle *handle,
 			 struct buffer_head **ret_bh,
 			 int ex,
 			 int arg_flags);
 int ocfs2_meta_lock_with_page(struct inode *inode,
-			      struct ocfs2_journal_handle *handle,
 			      struct buffer_head **ret_bh,
 			      int ex,
 			      struct page *page);
 /* 99% of the time we don't want to supply any additional flags --
  * those are for very specific cases only. */
-#define ocfs2_meta_lock(i, h, b, e) ocfs2_meta_lock_full(i, h, b, e, 0)
+#define ocfs2_meta_lock(i, b, e) ocfs2_meta_lock_full(i, b, e, 0)
 void ocfs2_meta_unlock(struct inode *inode,
 		       int ex);
 int ocfs2_super_lock(struct ocfs2_super *osb,
@@ -116,12 +118,5 @@ void ocfs2_process_blocked_lock(struct ocfs2_super *osb,
 
 struct ocfs2_dlm_debug *ocfs2_new_dlm_debug(void);
 void ocfs2_put_dlm_debug(struct ocfs2_dlm_debug *dlm_debug);
-
-/* aids in debugging and tracking lvbs */
-void ocfs2_dump_meta_lvb_info(u64 level,
-			      const char *function,
-			      unsigned int line,
-			      struct ocfs2_lock_res *lockres);
-#define mlog_meta_lvb(__level, __lockres) ocfs2_dump_meta_lvb_info(__level, __PRETTY_FUNCTION__, __LINE__, __lockres)
 
 #endif	/* DLMGLUE_H */

@@ -23,7 +23,7 @@ extern int sh_rtc_settimeofday(const struct timeval *tv);
 #define RCR2_RESET	0x02	/* Reset bit               */
 #define RCR2_START	0x01	/* Start bit               */
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /* SH-3 RTC */
 #define R64CNT  	0xfffffec0
 #define RSECCNT 	0xfffffec2
@@ -43,7 +43,7 @@ extern int sh_rtc_settimeofday(const struct timeval *tv);
 #define RCR2    	0xfffffede
 
 #define RTC_BIT_INVERTED	0	/* No bug on SH7708, SH7709A */
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 /* SH-4 RTC */
 #define R64CNT  	0xffc80000
 #define RSECCNT 	0xffc80004

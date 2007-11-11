@@ -30,6 +30,16 @@ Daniel-Constantin Mierla
               1.3.5. check_time (int)
               1.3.6. clean_period (int)
               1.3.7. use_contact (int)
+              1.3.8. use_contact (int)
+              1.3.9. sc_mid (string)
+              1.3.10. sc_from (string)
+              1.3.11. sc_to (string)
+              1.3.12. sc_uri_user (string)
+              1.3.13. sc_uri_host (string)
+              1.3.14. sc_body (string)
+              1.3.15. sc_ctype (string)
+              1.3.16. sc_exp_time (string)
+              1.3.17. sc_inc_time (string)
 
         1.4. Exported Functions
 
@@ -52,8 +62,10 @@ Daniel-Constantin Mierla
    1-5. Set the "check_time" parameter
    1-6. Set the "clean_period" parameter
    1-7. Set the "param_name" parameter
-   1-8. msilo sql script
-   1-9. SER config script - sample msilo usage
+   1-8. Set the "param_name" parameter
+   1-9. Set the "param_name" parameter
+   1-10. msilo sql script
+   1-11. SER config script - sample msilo usage
      _________________________________________________________
 
 Chapter 1. User's Guide
@@ -113,11 +125,11 @@ Chapter 1. User's Guide
 
    Database URL.
 
-   Default value is "sql://root@localhost/msilo". 
+   Default value is "mysql://root@localhost/msilo". 
 
    Example 1-1. Set the "db_url" parameter
 ...
-modparam("msilo", "db_url", "sql://user:passwd@host.com/dbname")
+modparam("msilo", "db_url", "mysql://user:passwd@host.com/dbname")
 ...
      _________________________________________________________
 
@@ -204,6 +216,96 @@ modparam("msilo", "use_contact", 0)
 ...
      _________________________________________________________
 
+1.3.8. use_contact (int)
+
+   Turns on/off the usage of the Contact address to send
+   notification back to sender whose message is stored by MSILO.
+
+   Default value is "1 (0 = off, 1 = on)". 
+
+   Example 1-8. Set the "param_name" parameter
+...
+modparam("msilo", "use_contact", 0)
+...
+     _________________________________________________________
+
+1.3.9. sc_mid (string)
+
+   Name of column in message silo table containing message id.
+
+   Default value is "mid". 
+     _________________________________________________________
+
+1.3.10. sc_from (string)
+
+   Name of column in message silo table containing the contents
+   of From header field from stored message.
+
+   Default value is "src_addr". 
+     _________________________________________________________
+
+1.3.11. sc_to (string)
+
+   Name of column in message silo table containing the contents
+   of To header field from stored message.
+
+   Default value is "dst_addr". 
+     _________________________________________________________
+
+1.3.12. sc_uri_user (string)
+
+   Name of column in message silo table containing the username
+   part extracted from the Request-URI of the stored message.
+
+   Default value is "username". 
+
+   Example 1-9. Set the "param_name" parameter
+...
+modparam("msilo", "use_contact", 0)
+...
+     _________________________________________________________
+
+1.3.13. sc_uri_host (string)
+
+   Name of column in message silo table containing the hostname
+   part extracted from the Request-URI of the stored message.
+
+   Default value is "domain". 
+     _________________________________________________________
+
+1.3.14. sc_body (string)
+
+   Name of column in message silo table containing the body
+   extracted from the stored message.
+
+   Default value is "body". 
+     _________________________________________________________
+
+1.3.15. sc_ctype (string)
+
+   Name of column in message silo table containing the value of
+   the Content-Type header field extracted from the stored
+   message.
+
+   Default value is "ctype". 
+     _________________________________________________________
+
+1.3.16. sc_exp_time (string)
+
+   Name of column in message silo table containing the expires
+   value of the stored message.
+
+   Default value is "exp_time". 
+     _________________________________________________________
+
+1.3.17. sc_inc_time (string)
+
+   Name of column in message silo table containing the date and
+   time of arrival of the stored message.
+
+   Default value is "inc_time". 
+     _________________________________________________________
+
 1.4. Exported Functions
 
 1.4.1. m_store(mode)
@@ -249,7 +351,7 @@ modparam("msilo", "use_contact", 0)
    be changed, but the name of the columns must be as they are in
    the next SQL script.
 
-   Example 1-8. msilo sql script
+   Example 1-10. msilo sql script
 ...
 
 -- SQL script for MSILO module
@@ -269,8 +371,12 @@ CREATE TABLE silo(
     src_addr VARCHAR(255) NOT NULL DEFAULT "",
       -- dst address - To URI
     dst_addr VARCHAR(255) NOT NULL DEFAULT "",
-      -- Request-URI
+      -- r-uri == username@domain (for compatibility with old version)
     r_uri VARCHAR(255) NOT NULL DEFAULT "",
+      -- username
+    username VARCHAR(64) NOT NULL DEFAULT "",
+      -- domain
+    domain VARCHAR(128) NOT NULL DEFAULT "",
       -- incoming time
     inc_time INTEGER NOT NULL DEFAULT 0,
       -- expiration time
@@ -289,7 +395,7 @@ CREATE TABLE silo(
 
    Next picture displays a sample usage of msilo.
 
-   Example 1-9. SER config script - sample msilo usage
+   Example 1-11. SER config script - sample msilo usage
 ...
 #
 # MSILO usage example
@@ -335,7 +441,7 @@ modparam("usrloc", "db_mode", 0)
 
 # -- msilo params --
 
-modparam("msilo","db_url","sql://user:xxx@127.0.0.1/msilo")
+modparam("msilo","db_url","mysql://user:xxx@127.0.0.1/msilo")
 modparam("msilo","registrar","sip:registrar@mydomain.com")
 
 # -- tm params --

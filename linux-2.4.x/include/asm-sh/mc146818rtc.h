@@ -12,7 +12,7 @@
 #undef  RTC_IRQ
 #define RTC_IRQ		0
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define RTC_PORT(n)		(R64CNT+(n)*2)
 #define CMOS_READ(addr)		__CMOS_READ(addr,b)
 #define CMOS_WRITE(val,addr)	__CMOS_WRITE(val,addr,b)
@@ -26,7 +26,7 @@
 extern unsigned char secureedge5410_cmos_read(int addr);
 extern void secureedge5410_cmos_write(unsigned char val, int addr);
 
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define RTC_PORT(n)		(R64CNT+(n)*4)
 #define CMOS_READ(addr)		__CMOS_READ(addr,w)
 #define CMOS_WRITE(val,addr)	__CMOS_WRITE(val,addr,w)

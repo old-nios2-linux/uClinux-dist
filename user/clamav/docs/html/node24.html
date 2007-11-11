@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>Clam daemon</TITLE>
-<META NAME="description" CONTENT="Clam daemon">
+<TITLE>Clamdscan</TITLE>
+<META NAME="description" CONTENT="Clamdscan">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -21,136 +21,62 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="next" HREF="node25.html">
 <LINK REL="previous" HREF="node23.html">
-<LINK REL="up" HREF="node23.html">
+<LINK REL="up" HREF="node22.html">
 <LINK REL="next" HREF="node25.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html887"
+<A NAME="tex2html497"
   HREF="node25.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html883"
-  HREF="node23.html">
+<A NAME="tex2html493"
+  HREF="node22.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html877"
+<A NAME="tex2html487"
   HREF="node23.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html885"
+<A NAME="tex2html495"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html888"
-  HREF="node25.html">Clamdscan</A>
-<B> Up:</B> <A NAME="tex2html884"
-  HREF="node23.html">Usage</A>
-<B> Previous:</B> <A NAME="tex2html878"
-  HREF="node23.html">Usage</A>
- &nbsp <B>  <A NAME="tex2html886"
+<B> Next:</B> <A NAME="tex2html498"
+  HREF="node25.html">Clamuko</A>
+<B> Up:</B> <A NAME="tex2html494"
+  HREF="node22.html">Usage</A>
+<B> Previous:</B> <A NAME="tex2html488"
+  HREF="node23.html">Clam daemon</A>
+ &nbsp <B>  <A NAME="tex2html496"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H2><A NAME="SECTION00061000000000000000"></A><A NAME="clamd"></A>
-<BR>
-Clam daemon
+<H2><A NAME="SECTION00062000000000000000">
+Clam<B>d</B>scan</A>
 </H2>
-    <code>clamd</code> is a multi-threaded daemon that uses <I>libclamav</I>
-    to scan files against viruses. It may work in one of the two network modes,
-    listening on a:
+    <code>clamdscan</code> is a simple <code>clamd</code> client. In many cases you can
+    use it as a <code>clamscan</code> replacement however you must remember that:
     
 <UL>
-<LI>Unix (local) socket
+<LI>it only depends on <code>clamd</code>
 </LI>
-<LI>TCP socket
-    
+<LI>although it accepts the same command line options as
+	      <code>clamscan</code> most of them are ignored because they must be
+	      enabled directly in <code>clamd</code>, i.e. <code>clamd.conf</code>
 </LI>
-</UL>
-    The daemon is fully configurable via the <code>clamd.conf</code> file
-    <A NAME="tex2html36"
-  HREF="footnode.html#foot274"><SUP>5</SUP></A>. <code>clamd</code> recognizes the following commands:
-    
-<UL>
-<LI><B>PING</B>
-<BR>
-Check daemon state (should reply with "PONG").
+<LI>scanned files must be accessible for <code>clamd</code>
 </LI>
-<LI><B>VERSION</B>
-<BR>
-Print program and database versions.
-</LI>
-<LI><B>RELOAD</B>
-<BR>
-Reload databases.
-</LI>
-<LI><B>SHUTDOWN</B>
-<BR>
-Perform a clean exit.
-</LI>
-<LI><B>SCAN file/directory</B>
-	    Scan file or directory (recursively) with archive support
-	    enabled (a full path is required).
-</LI>
-<LI><B>RAWSCAN file/directory</B>
-	    Scan file or directory (recursively) with archive support
-	    disabled (a full path is required).
-</LI>
-<LI><B>CONTSCAN file/directory</B>
-	    Scan file or directory (recursively) with archive support
-	    enabled and do not stop scanning if virus is found.
-</LI>
-<LI><B>STREAM</B>
-	    Scan stream: <code>clamd</code> will return a new port number you should
-	    connect to and send data to scan.
-</LI>
-<LI><B>SESSION, END</B>
-	    Start/end a <code>clamd</code> session - you can do multiple commands
-	    per TCP session (WARNING: due to the <code>clamd</code> implementation the
-	    <B>RELOAD</B> command will break the session).
-    
-</LI>
-</UL>
-    and reacts to the special signals:
-    
-<UL>
-<LI><B>SIGTERM</B> - perform a clean exit
-</LI>
-<LI><B>SIGHUP</B> - reopen a log file
-</LI>
-<LI><B>SIGUSR2</B> - reload the database
+<LI>it can't use external unpackers
     
 </LI>
 </UL>
 
 <P>
-<HR>
-<!--Navigation Panel-->
-<A NAME="tex2html887"
-  HREF="node25.html">
-<IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html883"
-  HREF="node23.html">
-<IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html877"
-  HREF="node23.html">
-<IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html885"
-  HREF="node1.html">
-<IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
-<BR>
-<B> Next:</B> <A NAME="tex2html888"
-  HREF="node25.html">Clamdscan</A>
-<B> Up:</B> <A NAME="tex2html884"
-  HREF="node23.html">Usage</A>
-<B> Previous:</B> <A NAME="tex2html878"
-  HREF="node23.html">Usage</A>
- &nbsp <B>  <A NAME="tex2html886"
-  HREF="node1.html">Contents</A></B> 
-<!--End of Navigation Panel-->
+<BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

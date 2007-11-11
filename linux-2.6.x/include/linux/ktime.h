@@ -43,7 +43,7 @@
  * plain scalar nanosecond based representation can be selected by the
  * config switch CONFIG_KTIME_SCALAR.
  */
-typedef union {
+union ktime {
 	s64	tv64;
 #if BITS_PER_LONG != 64 && !defined(CONFIG_KTIME_SCALAR)
 	struct {
@@ -54,10 +54,16 @@ typedef union {
 # endif
 	} tv;
 #endif
-} ktime_t;
+};
+
+typedef union ktime ktime_t;		/* Kill this */
 
 #define KTIME_MAX			((s64)~((u64)1 << 63))
-#define KTIME_SEC_MAX			(KTIME_MAX / NSEC_PER_SEC)
+#if (BITS_PER_LONG == 64)
+# define KTIME_SEC_MAX			(KTIME_MAX / NSEC_PER_SEC)
+#else
+# define KTIME_SEC_MAX			LONG_MAX
+#endif
 
 /*
  * ktime_t definitions when using the 64-bit scalar representation:
@@ -163,7 +169,7 @@ static inline ktime_t ktime_sub(const ktime_t lhs, const ktime_t rhs)
  * @add1:	addend1
  * @add2:	addend2
  *
- * Returns the sum of addend1 and addend2
+ * Returns the sum of @add1 and @add2.
  */
 static inline ktime_t ktime_add(const ktime_t add1, const ktime_t add2)
 {
@@ -189,7 +195,7 @@ static inline ktime_t ktime_add(const ktime_t add1, const ktime_t add2)
  * @kt:		addend
  * @nsec:	the scalar nsec value to add
  *
- * Returns the sum of kt and nsec in ktime_t format
+ * Returns the sum of @kt and @nsec in ktime_t format
  */
 extern ktime_t ktime_add_ns(const ktime_t kt, u64 nsec);
 
@@ -246,14 +252,42 @@ static inline struct timeval ktime_to_timeval(const ktime_t kt)
  * ktime_to_ns - convert a ktime_t variable to scalar nanoseconds
  * @kt:		the ktime_t variable to convert
  *
- * Returns the scalar nanoseconds representation of kt
+ * Returns the scalar nanoseconds representation of @kt
  */
-static inline u64 ktime_to_ns(const ktime_t kt)
+static inline s64 ktime_to_ns(const ktime_t kt)
 {
-	return (u64) kt.tv.sec * NSEC_PER_SEC + kt.tv.nsec;
+	return (s64) kt.tv.sec * NSEC_PER_SEC + kt.tv.nsec;
 }
 
 #endif
+
+/**
+ * ktime_equal - Compares two ktime_t variables to see if they are equal
+ * @cmp1:	comparable1
+ * @cmp2:	comparable2
+ *
+ * Compare two ktime_t variables, returns 1 if equal
+ */
+static inline int ktime_equal(const ktime_t cmp1, const ktime_t cmp2)
+{
+	return cmp1.tv64 == cmp2.tv64;
+}
+
+static inline s64 ktime_to_us(const ktime_t kt)
+{
+	struct timeval tv = ktime_to_timeval(kt);
+	return (s64) tv.tv_sec * USEC_PER_SEC + tv.tv_usec;
+}
+
+static inline s64 ktime_us_delta(const ktime_t later, const ktime_t earlier)
+{
+       return ktime_to_us(ktime_sub(later, earlier));
+}
+
+static inline ktime_t ktime_add_us(const ktime_t kt, const u64 usec)
+{
+	return ktime_add_ns(kt, usec * 1000);
+}
 
 /*
  * The resolution of the clocks. The resolution value is returned in
@@ -261,8 +295,7 @@ static inline u64 ktime_to_ns(const ktime_t kt)
  * idea of the (in)accuracy of timers. Timer values are rounded up to
  * this resolution values.
  */
-#define KTIME_REALTIME_RES	(ktime_t){ .tv64 = TICK_NSEC }
-#define KTIME_MONOTONIC_RES	(ktime_t){ .tv64 = TICK_NSEC }
+#define KTIME_LOW_RES		(ktime_t){ .tv64 = TICK_NSEC }
 
 /* Get the monotonic time in timespec format: */
 extern void ktime_get_ts(struct timespec *ts);

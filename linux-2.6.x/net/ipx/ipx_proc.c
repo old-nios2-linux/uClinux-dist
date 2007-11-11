@@ -286,21 +286,21 @@ out:
 	return 0;
 }
 
-static struct seq_operations ipx_seq_interface_ops = {
+static const struct seq_operations ipx_seq_interface_ops = {
 	.start  = ipx_seq_interface_start,
 	.next   = ipx_seq_interface_next,
 	.stop   = ipx_seq_interface_stop,
 	.show   = ipx_seq_interface_show,
 };
 
-static struct seq_operations ipx_seq_route_ops = {
+static const struct seq_operations ipx_seq_route_ops = {
 	.start  = ipx_seq_route_start,
 	.next   = ipx_seq_route_next,
 	.stop   = ipx_seq_route_stop,
 	.show   = ipx_seq_route_show,
 };
 
-static struct seq_operations ipx_seq_socket_ops = {
+static const struct seq_operations ipx_seq_socket_ops = {
 	.start  = ipx_seq_socket_start,
 	.next   = ipx_seq_socket_next,
 	.stop   = ipx_seq_interface_stop,
@@ -322,7 +322,7 @@ static int ipx_seq_socket_open(struct inode *inode, struct file *file)
 	return seq_open(file, &ipx_seq_socket_ops);
 }
 
-static struct file_operations ipx_seq_interface_fops = {
+static const struct file_operations ipx_seq_interface_fops = {
 	.owner		= THIS_MODULE,
 	.open           = ipx_seq_interface_open,
 	.read           = seq_read,
@@ -330,7 +330,7 @@ static struct file_operations ipx_seq_interface_fops = {
 	.release        = seq_release,
 };
 
-static struct file_operations ipx_seq_route_fops = {
+static const struct file_operations ipx_seq_route_fops = {
 	.owner		= THIS_MODULE,
 	.open           = ipx_seq_route_open,
 	.read           = seq_read,
@@ -338,7 +338,7 @@ static struct file_operations ipx_seq_route_fops = {
 	.release        = seq_release,
 };
 
-static struct file_operations ipx_seq_socket_fops = {
+static const struct file_operations ipx_seq_socket_fops = {
 	.owner		= THIS_MODULE,
 	.open           = ipx_seq_socket_open,
 	.read           = seq_read,
@@ -352,7 +352,7 @@ int __init ipx_proc_init(void)
 {
 	struct proc_dir_entry *p;
 	int rc = -ENOMEM;
-       
+
 	ipx_proc_dir = proc_mkdir("ipx", proc_net);
 
 	if (!ipx_proc_dir)

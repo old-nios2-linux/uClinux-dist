@@ -22,7 +22,7 @@
 /*
  * Note: we hold the dentry use count while the file is open.
  */
-static u32
+static __be32
 nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp)
 {
 	__be32		nfserr;
@@ -65,6 +65,7 @@ nlm_fclose(struct file *filp)
 static struct nlmsvc_binding	nfsd_nlm_ops = {
 	.fopen		= nlm_fopen,		/* open file for locking */
 	.fclose		= nlm_fclose,		/* close file */
+	.get_grace_period = get_nfs4_grace_period,
 };
 
 void

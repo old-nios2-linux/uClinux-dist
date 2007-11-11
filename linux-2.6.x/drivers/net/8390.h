@@ -79,6 +79,9 @@ struct ei_device {
 	u32 *reg_offset;		/* Register mapping table */
 	spinlock_t page_lock;		/* Page register locks */
 	unsigned long priv;		/* Private field to store bus IDs etc. */
+#ifdef AX88796_PLATFORM
+	unsigned char rxcr_base;	/* default value for RXCR */
+#endif
 };
 
 /* The maximum number of 8390 interrupt service routines called per IRQ. */
@@ -92,10 +95,18 @@ struct ei_device {
 /* Some generic ethernet register configurations. */
 #define E8390_TX_IRQ_MASK	0xa	/* For register EN0_ISR */
 #define E8390_RX_IRQ_MASK	0x5
+
+#ifdef AX88796_PLATFORM
+#define E8390_RXCONFIG		(ei_status.rxcr_base | 0x04)
+#define E8390_RXOFF		(ei_status.rxcr_base | 0x20)
+#else
 #define E8390_RXCONFIG		0x4	/* EN0_RXCR: broadcasts, no multicast,errors */
 #define E8390_RXOFF		0x20	/* EN0_RXCR: Accept no packets */
+#endif
+
 #define E8390_TXCONFIG		0x00	/* EN0_TXCR: Normal transmit mode */
 #define E8390_TXOFF		0x02	/* EN0_TXCR: Transmitter off */
+
 
 /*  Register accessed at EN_CMD, the 8390 base addr.  */
 #define E8390_STOP	0x01	/* Stop and reset the chip */
@@ -113,35 +124,14 @@ struct ei_device {
  *      - removed AMIGA_PCMCIA from this list, handled as ISA io now
  */
 
-#if defined(CONFIG_MAC) ||  \
-    defined(CONFIG_ZORRO8390) || defined(CONFIG_ZORRO8390_MODULE) || \
-    defined(CONFIG_HYDRA) || defined(CONFIG_HYDRA_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#undef inb
-#undef inb_p
-#undef outb
-#undef outb_p
+#ifndef ei_inb
+#define ei_inb(_p)	inb(_p)
+#define ei_outb(_v,_p)	outb(_v,_p)
+#define ei_inb_p(_p)	inb_p(_p)
+#define ei_outb_p(_v,_p) outb_p(_v,_p)
+#endif
 
-#define inb(port)   in_8(port)
-#define outb(val,port)  out_8(port,val)
-#define inb_p(port)   in_8(port)
-#define outb_p(val,port)  out_8(port,val)
-
-#elif defined(CONFIG_ARM_ETHERH) || defined(CONFIG_ARM_ETHERH_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#undef inb
-#undef inb_p
-#undef outb
-#undef outb_p
-
-#define inb(_p)		readb(_p)
-#define outb(_v,_p)	writeb(_v,_p)
-#define inb_p(_p)	inb(_p)
-#define outb_p(_v,_p)	outb(_v,_p)
-
-#elif defined(CONFIG_NE_H8300) || defined(CONFIG_NE_H8300_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#else
+#ifndef EI_SHIFT
 #define EI_SHIFT(x)	(x)
 #endif
 

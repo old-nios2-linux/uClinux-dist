@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.9 2003/06/02 15:41:21 dcm Exp $
+# $Id: Makefile,v 1.9.10.1 2005/06/03 00:56:22 andrei Exp $
 #
 # example module makefile
 #
@@ -14,7 +14,7 @@ DEFS+=-DXJ_EXTRA_DEBUG
 # -DHAVE_IHTTP
 
 # expat.h location
-DEFS+=-I$(LOCALBASE)/include -I/usr/pkg/include
-LIBS=-L$(LOCALBASE)/lib -L/usr/pkg/lib -lexpat
+DEFS+=-I$(LOCALBASE)/include
+LIBS=-L$(LOCALBASE)/lib -lexpat
 
 include ../../Makefile.modules

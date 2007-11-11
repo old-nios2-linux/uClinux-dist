@@ -650,6 +650,17 @@ static inline unsigned calc_divisor(unsigned baud_base, unsigned baud)
 {
 	unsigned quot, high, low;
 
+#ifdef CONFIG_RTL865X
+	/*
+	 * FIXME:
+	 * This is a bogus, it assumes only the internal serial ports
+	 * present. Too bad if you have extra 16550 based hardware attached.
+	 */
+        baud_base = GetSysClockRate(); /* yjlou: Divisor Latch is considered by SysClkRate. */
+#elif CONFIG_RTL8186
+       baud_base = 153600000;
+#endif
+
 	/* work out the divisor to give us the nearest higher baud rate */
 	quot =  baud_base / baud;
 
@@ -1144,7 +1155,7 @@ static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 			transmit_chars(info, 0);
 #endif
 		if (pass_counter++ > RS_ISR_PASS_LIMIT) {
-#if SERIAL_DEBUG_INTR
+#ifdef SERIAL_DEBUG_INTR
 			printk("rs_single loop break.\n");
 #endif
 			break;

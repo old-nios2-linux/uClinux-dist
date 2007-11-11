@@ -1,10 +1,10 @@
 /*
  * pptpd.c
  *
- * Grabs any command line argument and procecesses any further options in
+ * Grabs any command line argument and processes any further options in
  * the pptpd config file, before throwing over to pptpmanager.c.
  *
- * $Id: pptpd.c,v 1.14 2005/06/08 04:43:53 philipc Exp $
+ * $Id: pptpd.c,v 1.15 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -24,6 +24,7 @@
 #endif
 
 #include "our_syslog.h"
+#include "our_getopt.h"
 
 #include <fcntl.h>
 #include <netdb.h>
@@ -38,50 +39,64 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <getopt.h>
-
-#include <linux/autoconf.h>
 
 #include "configfile.h"
 #include "defaults.h"
 #include "compat.h"
 #include "pptpmanager.h"
 
+#ifdef CONFIG_NETtel
+#include <linux/ledman.h>
+#endif
+
 /* command line arg variables */
+char *ppp_binary = NULL;
 char *pppdoptstr = NULL;
 char *speedstr = NULL;
 char *bindaddr = NULL;
+#ifdef BCRELAY
+char *bcrelay = NULL;
+#endif
 int pptp_debug = 0;
+int pptp_noipparam = 0;
+int pptp_logwtmp = 0;
+int pptp_delegate = 0;
 
-#if !defined(PPPD_IP_ALLOC)
-int maxConnections = MAX_CONNECTIONS;
+int pptp_stimeout = STIMEOUT_DEFAULT;
 
-char localIP[MAX_CONNECTIONS][16];
-char remoteIP[MAX_CONNECTIONS][16];
+int pptp_connections = CONNECTIONS_DEFAULT;
 
 /* Local prototypes */
 static void processIPStr(int type, char *ipstr);
-#endif
 
 #ifndef HAVE_DAEMON
 static void my_daemon(int argc, char **argv);
 #endif
 
-static void bail(int unused);
-
-static void log_pid();
+static void log_pid(char *pid_file);
 static char *lookup(char *);
+
+#ifdef BCRELAY
+static void launch_bcrelay();
+static pid_t bcrelayfork;
+#endif
 
 static void showusage(char *prog)
 {
-	printf("\nPoPToP v%s\n", VERSION);
-	printf("The PPTP Server for Linux\n");
+	printf("\npptpd v%s\n", VERSION);
 	printf("Usage: pptpd [options], where options are:\n\n");
+#ifdef BCRELAY
+	printf(" [-b] [--bcrelay if]       Use broadcast relay for broadcasts comming from.\n");
+	printf("                           the specified interface (default is eth1).\n");
+#endif
 	printf(" [-c] [--conf file]        Specifies the config file to read default\n");
-	printf("                           settings from (default is /etc/pptpd.conf).\n");
+	printf("                           settings from (default is %s).\n", PPTPD_CONFIG_FILE_DEFAULT);
 	printf(" [-d] [--debug]            Turns on debugging (to syslog).\n");
+	printf(" [-e] [--ppp file]         Use alternate pppd binary, default %s.\n", PPP_BINARY);
 	printf(" [-f] [--fg]               Run in foreground.\n");
 	printf(" [-h] [--help]             Displays this help message.\n");
+	printf(" [-i] [--noipparam]        Suppress the passing of the client's IP address\n");
+	printf("                           to PPP, which is done by default otherwise.\n");
 	printf(" [-l] [--listen x.x.x.x]   Specifies IP of local interface to listen to.\n");
 #if !defined(BSDUSER_PPP)
 	printf(" [-o] [--option file]      Specifies the PPP options file to use\n");
@@ -93,18 +108,23 @@ static void showusage(char *prog)
 	printf(" [-s] [--speed baud]       Specifies the baud speed for the PPP daemon\n");
 	printf("                           (default is 115200).\n");
 #endif
-	printf(" [-v] [--version]          Displays the PoPToP version number.\n");
+	printf(" [-t] [--stimeout seconds] Specifies the timeout for the first packet. This is a DOS protection\n");
+	printf("                           (default is 10).\n");
+	printf(" [-v] [--version]          Displays the pptpd version number.\n");
+	printf(" [-w] [--logwtmp]          Update wtmp as users login.\n");
+	printf(" [-C] [--connections n]    Limit on number of connections.\n");
+	printf(" [-D] [--delegate]         Delegate IP allocation to pppd.\n");
 
 	printf("\n\nLogs and debugging go to syslog as DAEMON.");
 
 	printf("\n\nCommand line options will override any default settings and any settings\n");
-	printf("specified in the config file (default config file: /etc/pptpd.conf).\n\n");
+	printf("specified in the config file (default config file: %s).\n\n", PPTPD_CONFIG_FILE_DEFAULT);
 }
 
 
 static void showversion()
 {
-	printf("PoPToP v%s\n", VERSION);
+	printf("pptpd v%s\n", VERSION);
 }
 
 int main(int argc, char **argv)
@@ -123,90 +143,125 @@ int main(int argc, char **argv)
 	char tmp[MAX_CONFIG_STRING_SIZE], *tmpstr;
 
 	/* open a connection to the syslog daemon */
-	openlog("pptpd", LOG_PID, LOG_DAEMON);
+	openlog("pptpd", LOG_PID, PPTP_FACILITY);
 
-	setpgrp();
-
-	signal(SIGTERM, bail);
-
+	/* process command line options */
 	while (1) {
 		int option_index = 0;
+#ifdef BCRELAY
+		char *optstring = "b:c:de:fhil:o:p:s:t:vwC:D";
+#else
+		char *optstring = "c:de:fhil:o:p:s:t:vwC:D";
+#endif
 
 		static struct option long_options[] =
 		{
+#ifdef BCRELAY
+			{"bcrelay", 1, 0, 0},
+#endif
 			{"conf", 1, 0, 0},
 			{"debug", 0, 0, 0},
+			{"ppp", 1, 0, 0},
 			{"fg", 0, 0, 0},
 			{"help", 0, 0, 0},
+			{"noipparam", 0, 0, 0},
 			{"listen", 1, 0, 0},
 			{"option", 1, 0, 0},
 			{"pidfile", 1, 0, 0},
 			{"speed", 1, 0, 0},
+			{"stimeout", 1, 0, 0},
 			{"version", 0, 0, 0},
+			{"logwtmp", 0, 0, 0},
+			{"connections", 1, 0, 0},
+			{"delegate", 0, 0, 0},
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(argc, argv, "c:dfhl:o:p:s:v", long_options, &option_index);
+		c = getopt_long(argc, argv, optstring, long_options, &option_index);
 		if (c == -1)
 			break;
 		/* convert long options to short form */
 		if (c == 0)
-			c = "cdfhlopsv"[option_index];
+#ifdef BCRELAY
+			c = "bcdefhilopstvwCD"[option_index];
+#else
+			c = "cdefhilopstvwCD"[option_index];
+#endif
 		switch (c) {
-		case 'l':
+#ifdef BCRELAY
+		case 'b': /* --bcrelay */
+			if (bcrelay) free(bcrelay);
+			bcrelay = strdup(optarg);
+			break;
+#endif
+
+		case 'l': /* --listen */
 			tmpstr = lookup(optarg);
-			if(!tmpstr) {
+			if (!tmpstr) {
 				syslog(LOG_ERR, "MGR: Invalid listening address: %s!", optarg);
 				return 1;
 			}
-			if(bindaddr)
-				free(bindaddr);
+			if (bindaddr) free(bindaddr);
 			bindaddr = strdup(tmpstr);
 			break;
 
-		case 'h':
+		case 'h': /* --help */
 			showusage(argv[0]);
 			return 0;
 
-		case 'd':
+		case 'i': /* --noipparam */
+			pptp_noipparam = TRUE;
+			break;
+
+		case 'e': /* --ppp */
+			if (ppp_binary) free(ppp_binary);
+			ppp_binary = strdup(optarg);
+			break;
+
+		case 'd': /* --debug */
 			pptp_debug = TRUE;
 			break;
 
-		case 'f':
+		case 'f': /* --fg */
 			foreground = TRUE;
 			break;
 
-		case 'v':
+		case 'v': /* --version */
 			showversion();
 			return 0;
 
-		case 'o':
-			{
-				FILE *f;
-				if (!(f = fopen(optarg, "r"))) {
-					syslog(LOG_ERR, "MGR: PPP options file not found!");
-					return 1;
-				}
-				fclose(f);
-				if(pppdoptstr)
-					free(pppdoptstr);
-				pppdoptstr = strdup(optarg);
-				break;
-			}
+		case 'w': /* --logwtmp */
+		        pptp_logwtmp = TRUE;
+			break;
 
-		case 'p':
-			if(pid_file)
-				free(pid_file);
+		case 'C': /* --connections */
+		        pptp_connections = atoi(optarg);
+			break;
+
+		case 'D': /* --delegate */
+		        pptp_delegate = TRUE;
+			break;
+
+		case 'o': /* --option */
+			if (pppdoptstr) free(pppdoptstr);
+			pppdoptstr = strdup(optarg);
+			break;
+
+		case 'p': /* --pidfile */
+			if (pid_file) free(pid_file);
 			pid_file = strdup(optarg);
 			break;
 
-		case 's':
-			if(speedstr)
-				free(speedstr);
+		case 's': /* --speed */
+			if (speedstr) free(speedstr);
 			speedstr = strdup(optarg);
 			break;
 
-		case 'c':
+		case 't': /* --stimeout */
+			pptp_stimeout = atoi(optarg);
+			break;
+
+		case 'c': /* --conf */
 			{
 				FILE *f;
 				if (!(f = fopen(optarg, "r"))) {
@@ -214,8 +269,7 @@ int main(int argc, char **argv)
 					return 1;
 				}
 				fclose(f);
-				if(configFile)
-					free(configFile);
+				if(configFile) free(configFile);
 				configFile = strdup(optarg);
 				break;
 			}
@@ -234,19 +288,36 @@ int main(int argc, char **argv)
 	if (!configFile)
 		configFile = strdup(PPTPD_CONFIG_FILE_DEFAULT);
 
+	if (read_config_file(configFile, CONNECTIONS_KEYWORD, tmp) > 0) {
+		pptp_connections = atoi(tmp);
+		if (pptp_connections <= 0)
+			pptp_connections = CONNECTIONS_DEFAULT;
+	}
+
+	slot_init(pptp_connections);
+
 	if (!pptp_debug && read_config_file(configFile, DEBUG_KEYWORD, tmp) > 0)
 		pptp_debug = TRUE;
 
-	if (read_config_file(configFile, STIMEOUT_KEYWORD, tmp) > 0) {
+#ifdef BCRELAY
+	if (!bcrelay && read_config_file(configFile, BCRELAY_KEYWORD, tmp) > 0) 
+		bcrelay = strdup(tmp);
+#endif
+
+	if (!pptp_stimeout && read_config_file(configFile, STIMEOUT_KEYWORD, tmp) > 0) {
 		pptp_stimeout = atoi(tmp);
 		if (pptp_stimeout <= 0)
 			pptp_stimeout = STIMEOUT_DEFAULT;
 	}
 
+	if (!pptp_noipparam && read_config_file(configFile, NOIPPARAM_KEYWORD, tmp) > 0) {
+		pptp_noipparam = TRUE;
+	}
+
 	if (!bindaddr && read_config_file(configFile, LISTEN_KEYWORD, tmp) > 0) {
-		tmpstr = lookup(optarg);
+		tmpstr = lookup(tmp);
 		if(!tmpstr) {
-			syslog(LOG_ERR, "MGR: Invalid listening address: %s!", optarg);
+			syslog(LOG_ERR, "MGR: Invalid listening address: %s!", tmp);
 			return 1;
 		}
 		bindaddr = strdup(tmpstr);
@@ -256,45 +327,76 @@ int main(int argc, char **argv)
 		speedstr = strdup(tmp);
 
 	if (!pppdoptstr && read_config_file(configFile, PPPD_OPTION_KEYWORD, tmp) > 0) {
-		if (!(fopen(tmp, "r"))) {
-			syslog(LOG_ERR, "MGR: PPP options file not found!");
-			return 1;
-		}
 		pppdoptstr = strdup(tmp);
 	}
+
+	if (!ppp_binary && read_config_file(configFile, PPP_BINARY_KEYWORD, tmp) > 0) {
+		ppp_binary = strdup(tmp);
+	}
+
+	if (!pptp_logwtmp && read_config_file(configFile, LOGWTMP_KEYWORD, tmp) > 0) {
+		pptp_logwtmp = TRUE;
+	}
+
+	if (!pptp_delegate && read_config_file(configFile, DELEGATE_KEYWORD, tmp) > 0) {
+		pptp_delegate = TRUE;
+	}
+
 	if (!pid_file)
 		pid_file = strdup((read_config_file(configFile, PIDFILE_KEYWORD,
 					tmp) > 0) ? tmp : PIDFILE_DEFAULT);
 
-#if !defined(PPPD_IP_ALLOC)
-	/* NOTE: remote then local, reason can be seen at the end of processIPStr */
+	if (!pptp_delegate) {
+		/* NOTE: remote then local, reason can be seen at the end of processIPStr */
 
-	/* grab the remoteip string from the config file */
-	if (read_config_file(configFile, REMOTEIP_KEYWORD, tmp) <= 0) {
-		/* use "smart" defaults */
-		strlcpy(tmp, DEFAULT_REMOTE_IP_LIST, sizeof(tmp));
+		/* grab the remoteip string from the config file */
+		if (read_config_file(configFile, REMOTEIP_KEYWORD, tmp) <= 0) {
+			/* use "smart" defaults */
+			strlcpy(tmp, DEFAULT_REMOTE_IP_LIST, sizeof(tmp));
+		}
+		processIPStr(REMOTE, tmp);
+	
+		/* grab the localip string from the config file */
+		if (read_config_file(configFile, LOCALIP_KEYWORD, tmp) <= 0) {
+			/* use "smart" defaults */
+			strlcpy(tmp, DEFAULT_LOCAL_IP_LIST, sizeof(tmp));
+		}
+		processIPStr(LOCAL, tmp);
 	}
-	processIPStr(REMOTE, tmp);
-
-	/* grab the localip string from the config file */
-	if (read_config_file(configFile, LOCALIP_KEYWORD, tmp) <= 0) {
-		/* use "smart" defaults */
-		strlcpy(tmp, DEFAULT_LOCAL_IP_LIST, sizeof(tmp));
-	}
-	processIPStr(LOCAL, tmp);
-#endif
 
 	free(configFile);
+
+	/* if not yet set, adopt default PPP binary path */
+	if (!ppp_binary) ppp_binary = strdup(PPP_BINARY);
+	/* check that the PPP binary is executable */
+	if (access(ppp_binary, X_OK) < 0) {
+		syslog(LOG_ERR, "MGR: PPP binary %s not executable",
+		       ppp_binary);
+		return 1;
+	}
+	/* check that the PPP options file is readable */
+	if (pppdoptstr && access(pppdoptstr, R_OK) < 0) {
+		syslog(LOG_ERR, "MGR: PPP options file %s not readable",
+		       pppdoptstr);
+		return 1;
+	}
+#ifdef BCRELAY
+	/* check that the bcrelay binary is executable */
+	if (bcrelay && access(BCRELAY_BIN, X_OK) < 0) {
+		syslog(LOG_ERR, "MGR: bcrelay binary %s not executable", 
+		       BCRELAY_BIN);
+		return 1;
+	}
+#endif
 
 	if (!foreground) {
 #if HAVE_DAEMON
 		closelog();
 		freopen("/dev/null", "r", stdin);
-		/* set noclose, we want stdout/stderr still attached if we can */
-		daemon(0, 1);
+		daemon(0, 0);
 		/* returns to child only */
 		/* pid will have changed */
-		openlog("pptpd", LOG_PID, LOG_DAEMON);
+		openlog("pptpd", LOG_PID, PPTP_FACILITY);
 #else	/* !HAVE_DAEMON */
 		my_daemon(argc, argv);
 		/* returns to child if !HAVE_FORK
@@ -303,33 +405,62 @@ int main(int argc, char **argv)
 #endif
 	}
 
-	/* after we have our final pid... */
-	log_pid();
+#ifdef BCRELAY
+      if (bcrelay) {
+             syslog(LOG_DEBUG, "CTRL: BCrelay incoming interface is %s", bcrelay);
+             /* Launch BCrelay  */
+#ifndef HAVE_FORK
+             switch(bcrelayfork = vfork()){
+#else
+             switch(bcrelayfork = fork()){
+#endif
+             case -1:        /* fork() error */
+                   syslog(LOG_ERR, "CTRL: Error forking to exec bcrelay");
+                   _exit(1);
 
+             case 0:         /* child */
+                   syslog(LOG_DEBUG, "CTRL (BCrelay Launcher): Launching BCrelay with pid %i", bcrelayfork);
+                   launch_bcrelay();
+                   syslog(LOG_ERR, "CTRL (BCrelay Launcher): Failed to launch BCrelay.");
+                   _exit(1);
+             }
+       } /* End bcrelay */
+#endif
+
+#ifdef CONFIG_NETtel
+	/* turn the NETtel VPN LED on */
+	ledman_cmd(LEDMAN_CMD_ON, LEDMAN_VPN);
+#endif
+	/* after we have our final pid... */
+	log_pid(pid_file);
+
+	/* manage connections until SIGTERM */
 	pptp_manager(argc, argv);
-	return 1;
+	
+#ifdef BCRELAY
+	if (bcrelayfork > 0) {
+		syslog(LOG_DEBUG, "CTRL: Closing child BCrelay with pid %i", bcrelayfork);
+		kill(bcrelayfork, SIGTERM);
+	}
+#endif
+
+	slot_free();
+	return 0;
 }
 
-static void log_pid() {
+static void log_pid(char *pid_file) {
         FILE    *f;
         pid_t   pid;
-        char    *pidfile = "/var/run/pptpd.pid";
 
         pid = getpid();
-        if ((f = fopen(pidfile, "w")) == NULL) {
+        if ((f = fopen(pid_file, "w")) == NULL) {
                 syslog(LOG_ERR, "PPTPD: failed to open(%s), errno=%d\n",
-                        pidfile, errno);
+                        pid_file, errno);
                 return;
         }
         fprintf(f, "%d\n", pid);
         fclose(f);
 }
-
-#if HAVE_SETSID
-#define SETSIDPGRP setsid
-#else
-#define SETSIDPGRP setpgrp
-#endif
 
 #ifndef HAVE_DAEMON
 static void my_daemon(int argc, char **argv)
@@ -354,7 +485,6 @@ static void my_daemon(int argc, char **argv)
 		new_argv[0] = PPTPD_BIN;
 		new_argv[1] = "-f";
 		execve(PPTPD_BIN, new_argv, environ);
-		//syslog_perror("execvp");
 		_exit(1);
 	} else if (pid > 0) {
 		exit(0);
@@ -376,7 +506,7 @@ static void my_daemon(int argc, char **argv)
 	chdir("/");
 	umask(0);
 	/* pid will have changed */
-	openlog("pptpd", LOG_PID, LOG_DAEMON);
+	openlog("pptpd", LOG_PID, PPTP_FACILITY);
 #endif
 }
 #endif
@@ -401,8 +531,6 @@ static char *lookup(char *hostname)
 	memcpy(&hst_addr.s_addr, ent->h_addr, ent->h_length);
 	return inet_ntoa(hst_addr);
 }
-
-#if !defined(PPPD_IP_ALLOC)
 
 #define DEBUG_IP_PARSER 0
 
@@ -498,17 +626,17 @@ static void processIPStr(int type, char *ipstr)
 				syslog(LOG_ERR, "MGR: Bad IP address (%s) in config file!", tmpstr2);
 				exit(1);
 			}
-			if (num == MAX_CONNECTIONS) {
-				syslog(LOG_WARNING, "MGR: Max connections reached, extra IP addresses ignored");
+			if (num == pptp_connections) {
+				syslog(LOG_WARNING, "MGR: connections limit (%d) reached, extra IP addresses ignored", pptp_connections);
 				return;
 			}
 #if DEBUG_IP_PARSER
 			syslog(LOG_DEBUG, "MGR: Setting IP %d = %s", num, tmpstr7);
 #endif
 			if (type == LOCAL)
-				strlcpy(localIP[num], tmpstr7, 16);
+				slot_set_local(num, tmpstr7);
 			else
-				strlcpy(remoteIP[num], tmpstr7, 16);
+				slot_set_remote(num, tmpstr7);
 			num++;
 		} else {
 			/* Got a range;
@@ -614,33 +742,58 @@ static void processIPStr(int type, char *ipstr)
 					syslog(LOG_ERR, "MGR: Bad IP address (%s) in config file!", tmpstr5);
 					exit(1);
 				}
-				if (num == MAX_CONNECTIONS) {
-					syslog(LOG_WARNING, "MGR: Max connections reached, extra IP addresses ignored");
+				if (num == pptp_connections) {
+					syslog(LOG_WARNING, "MGR: connections limit (%d) reached, extra IP addresses ignored", pptp_connections);
 					return;
 				}
 #if DEBUG_IP_PARSER
 				syslog(LOG_DEBUG, "MGR: Setting IP %d = %s", num, tmpstr7);
 #endif
 				if (type == LOCAL)
-					strlcpy(localIP[num], tmpstr7, sizeof(localIP[num]));
+					slot_set_local(num, tmpstr7);
 				else
-					strlcpy(remoteIP[num], tmpstr7, sizeof(remoteIP[num]));
+					slot_set_remote(num, tmpstr7);
 				num++;
 			}
 		}
 	}
-	if (num == 1 && type == LOCAL && maxConnections > 1) {
+	if (num == 1 && type == LOCAL && pptp_connections > 1) {
 #if DEBUG_IP_PARSER
-		syslog(LOG_DEBUG, "MGR: Setting all %d local IPs to %s", maxConnections, localIP[0]);
+		syslog(LOG_DEBUG, "MGR: Setting all %d local IPs to %s", pptp_connections, slot_get_local(0));
 #endif
-		for (n = 1; n < maxConnections; n++)
-			strcpy(localIP[n], localIP[0]);
-	} else if (maxConnections > num)
-		maxConnections = num;
+		for (n = 1; n < pptp_connections; n++)
+			slot_set_local(n, slot_get_local(0));
+	} else if (pptp_connections > num) {
+		syslog(LOG_INFO, "MGR: Maximum of %d connections reduced to %d, not enough IP addresses given", 
+		       pptp_connections, num);
+		pptp_connections = num;
+	}
 }
-#endif
 
-static void bail(int unused)
-{
-	kill(-getpid(), SIGHUP);
+#ifdef BCRELAY
+/* launch_bcrelay
+ * Launches broadcast relay. Broadcast relay is responsible for relaying broadcasts to the clients
+ * retn: 0 on success, -1 on failure.
+ */
+static void launch_bcrelay() {
+  char *bcrelay_argv[8];
+  int an = 0;
+
+      if (bcrelay) {
+           syslog(LOG_DEBUG, "MGR: BCrelay incoming interface is %s", bcrelay);
+           syslog(LOG_DEBUG, "MGR: BCrelay outgoing interface is regexp ppp[0-9].*");
+
+	   bcrelay_argv[an++] = BCRELAY_BIN;
+	   bcrelay_argv[an++] = "-i";
+	   bcrelay_argv[an++] = bcrelay;
+	   bcrelay_argv[an++] = "-o";
+	   bcrelay_argv[an++] = "ppp[0-9].*";
+           if (!pptp_debug) {
+	         bcrelay_argv[an++] = "-n";
+           }
+	   bcrelay_argv[an++] = NULL;
+
+           execvp(bcrelay_argv[0], bcrelay_argv);
+      }
 }
+#endif

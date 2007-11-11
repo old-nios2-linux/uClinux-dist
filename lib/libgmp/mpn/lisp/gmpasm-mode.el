@@ -1,43 +1,43 @@
 ;;; gmpasm-mode.el -- GNU MP asm and m4 editing mode.
 
 
-;; Copyright (C) 1999, 2000 Free Software Foundation, Inc.
+;; Copyright 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
 ;;
 ;; This file is part of the GNU MP Library.
 ;;
 ;; The GNU MP Library is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU Library General Public License as published by
-;; the Free Software Foundation; either version 2 of the License, or (at your
+;; it under the terms of the GNU Lesser General Public License as published by
+;; the Free Software Foundation; either version 2.1 of the License, or (at your
 ;; option) any later version.
 ;;
 ;; The GNU MP Library is distributed in the hope that it will be useful, but
 ;; WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 ;; License for more details.
 ;;
-;; You should have received a copy of the GNU Library General Public License
+;; You should have received a copy of the GNU Lesser General Public License
 ;; along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-;; the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-;; MA 02111-1307, USA.
+;; the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+;; MA 02110-1301, USA.
 
 
 ;;; Commentary:
 ;;
-;; gmpasm-mode is an editing mode for m4 processed assembler code and m4
-;; macro files in GMP.  It's similar to m4-mode, but has a number of
+;; gmpasm-mode is a major mode for editing m4 processed assembler code and
+;; m4 macro files in GMP.  It's similar to m4-mode, but has a number of
 ;; settings better suited to GMP.
 ;;
 ;;
 ;; Install
 ;; -------
 ;;
-;; To make M-x gmpasm-mode available, put gmpasm-mode.el somewhere in the
-;; load-path and the following in .emacs
+;; To make M-x gmpasm-mode available, put gmpasm-mode.el somewhere in your
+;; load-path and the following in your .emacs
 ;;
 ;;	(autoload 'gmpasm-mode "gmpasm-mode" nil t)
 ;;
 ;; To use gmpasm-mode automatically on all .asm and .m4 files, put the
-;; following in .emacs
+;; following in your .emacs
 ;;
 ;;	(add-to-list 'auto-mode-alist '("\\.asm\\'" . gmpasm-mode))
 ;;	(add-to-list 'auto-mode-alist '("\\.m4\\'" . gmpasm-mode))
@@ -57,12 +57,9 @@
 ;; Emacsen
 ;; -------
 ;;
-;; FSF Emacs 20.x - gmpasm-mode is designed for this.
-;; XEmacs 20.x - seems to work.
-;;
-;; FSF Emacs 19.x - should work if replacements for some 20.x-isms are
-;;    available.  comment-region with "C" won't really do the right thing
-;;    though.
+;; GNU Emacs 20.x, 21.x and XEmacs 20.x all work well.  GNU Emacs 19.x
+;; should work if replacements for the various 20.x-isms are available,
+;; though comment-region with "C" doesn't do the right thing.
 
 
 ;;; Code:
@@ -77,9 +74,19 @@
   :type 'hook
   :group 'gmpasm)
 
-(defcustom gmpasm-comment-start-regexp "[#;!@C]"
+(defcustom gmpasm-comment-start-regexp "\\([#;!@*|C]\\|//\\)"
   "*Regexp matching possible comment styles.
-See `gmpasm-mode' docstring for how this is used."
+See `gmpasm-mode' docstring for how this is used.
+
+Commenting styles within GMP include
+  #   - alpha, i386, i960, vax, traditional unix
+  ;   - a29k, clipper, hppa, m88k, ppc
+  !   - sh, sparc, z8000
+  |   - m68k
+  @   - arm
+  *   - cray
+  C   - GMP m4, see mpn/asm-defs.m4
+  //  - ia64"
   :type 'regexp
   :group 'gmpasm)
 
@@ -106,28 +113,32 @@ the list elsewhere won't be affected."
 	   (list element)))))
 
 
-(defun gmpasm-delete-from-list (list-var element)
-  "(gmpasm-delete-from-list LIST-VAR ELEMENT)
+(defun gmpasm-remove-from-list (list-var element)
+  "(gmpasm-remove-from-list LIST-VAR ELEMENT)
 
-Delete ELEMENT from LIST-VAR, using `delete'.
-This is like `add-to-list', but the element is deleted from the list.
+Remove ELEMENT from LIST-VAR, using `copy-sequence' and `delete'.
+This is vaguely like `add-to-list', but the element is removed from the list.
 The list is copied rather than changed in-place, so references to it elsewhere
-won't be affected."
+aren't affected."
+
+;; Only the portion of the list up to the removed element needs to be
+;; copied, but there's no need to bother arranging that, since this function
+;; is only used for a couple of initializations.
 
   (set list-var (delete element (copy-sequence (symbol-value list-var)))))
 
 
 (defvar gmpasm-mode-map
   (let ((map (make-sparse-keymap)))
-    
+
     ;; assembler and dnl commenting
     (define-key map "\C-c\C-c" 'comment-region)
     (define-key map "\C-c\C-d" 'gmpasm-comment-region-dnl)
-    
+
     ;; kill an M-x compile, since it's not hard to put m4 into an infinite
     ;; loop
     (define-key map "\C-c\C-k" 'kill-compilation)
-    
+
     map)
   "Keymap for `gmpasm-mode'.")
 
@@ -135,7 +146,7 @@ won't be affected."
 (defvar gmpasm-mode-syntax-table
   (let ((table (make-syntax-table)))
     ;; underscore left as a symbol char, like C mode
-    
+
     ;; m4 quotes
     (modify-syntax-entry ?`  "('"  table)
     (modify-syntax-entry ?'  ")`"  table)
@@ -143,10 +154,17 @@ won't be affected."
     table)
   "Syntax table used in `gmpasm-mode'.
 
-m4 ignores quote marks in # comments at the top level, but inside quotes #
-isn't special and all quotes are active.  There seems no easy way to express
-this in the syntax table, so nothing is done for comments.  Usually this is
-best, since it picks up invalid apostrophes in comments inside quotes.")
+'#' and '\n' aren't set as comment syntax.  In m4 these are a comment
+outside quotes, but not inside.  Omitting a syntax entry ensures that when
+inside quotes emacs treats parentheses and apostrophes the same way that m4
+does.  When outside quotes this is not quite right, but having it right when
+nesting expressions is more important.
+
+'*', '!' or '|' aren't setup as comment syntax either, on CPUs which use
+these for comments.  The GMP macro setups don't set them in m4 changecom(),
+since that prevents them being used in eval() expressions, and on that basis
+they don't change the way quotes and parentheses are treated by m4 and
+should be treated by emacs.")
 
 
 (defvar gmpasm-font-lock-keywords
@@ -158,9 +176,12 @@ best, since it picks up invalid apostrophes in comments inside quotes.")
        (regexp-opt
 	'("deflit" "defreg" "defframe" "defframe_pushl"
 	  "define_not_for_expansion"
-	  "ASM_START" "ASM_END" "PROLOGUE" "EPILOGUE"
+	  "m4_error" "m4_warning"
+	  "ASM_START" "ASM_END"
+	  "PROLOGUE" "PROLOGUE_GP" "MULFUNC_PROLOGUE" "EPILOGUE"
+	  "DATASTART" "DATAEND"
 	  "forloop"
-	  "TEXT" "DATA" "ALIGN" "W32"
+	  "TEXT" "DATA" "ALIGN" "W32" "FLOAT64"
 	  "builtin" "changecom" "changequote" "changeword" "debugfile"
 	  "debugmode" "decr" "define" "defn" "divert" "divnum" "dumpdef"
 	  "errprint" "esyscmd" "eval" "__file__" "format" "gnu" "ifdef"
@@ -174,7 +195,7 @@ best, since it picks up invalid apostrophes in comments inside quotes.")
   "`font-lock-keywords' for `gmpasm-mode'.
 
 The keywords are m4 builtins and some of the GMP macros used in asm files.
-L and LF don't look good fontified, so they're omitted.
+L doesn't look good fontified, so it's omitted.
 
 The right assembler comment regexp is added dynamically buffer-local (with
 dnl too).")
@@ -193,6 +214,7 @@ dnl too).")
 (defun gmpasm-mode ()
   "A major mode for editing GNU MP asm and m4 files.
 
+\\{gmpasm-mode-map}
 `comment-start' and `comment-end' are set buffer-local to assembler
 commenting appropriate for the CPU by looking for something matching
 `gmpasm-comment-start-regexp' at the start of a line, or \"#\" is used if
@@ -211,9 +233,7 @@ the `C' in it is only matched as a whole word, not on something that happens
 to start with `C'.  Also it's only the particular `comment-start' determined
 that's added for filling etc, not the whole `gmpasm-comment-start-regexp'.
 
-`gmpasm-mode-hook' is run after initializations are complete.
-
-\\{gmpasm-mode-map}"
+`gmpasm-mode-hook' is run after initializations are complete."
 
   (interactive)
   (kill-all-local-variables)
@@ -245,24 +265,25 @@ that's added for filling etc, not the whole `gmpasm-comment-start-regexp'.
 
   ;; If comment-start ends in an alphanumeric then \b is used to match it
   ;; only as a separate word.  The test is for an alphanumeric rather than
-  ;; \w since we might try # or ! as \w characters but without wanting \b.
+  ;; \w since we might try # or ! as \w characters but without wanting \b on
+  ;; them.
   (let ((comment-regexp
 	 (concat (regexp-quote comment-start)
 		 (if (string-match "[a-zA-Z0-9]\\'" comment-start) "\\b"))))
-    
+
     ;; Whitespace is required before a comment-start so m4 $# doesn't match
     ;; when comment-start is "#".
-    ;; Only spaces or tabs match after, so newline isn't included in the
-    ;; font lock below.
     (set (make-local-variable 'comment-start-skip)
-	 (concat "\\(^\\|\\s-\\)" comment-regexp "[ \t]*"))
+	 (concat "\\(^\\|\\s-\\)\\(\\<dnl\\>\\|" comment-regexp "\\)[ \t]*"))
 
-    ;; Comment fontification based on comment-start, matching through to the
-    ;; end of the line.
+    ;; Comment fontification based on comment-start, and always with dnl.
+    ;; Same treatment of a space before "#" as in comment-start-skip, but
+    ;; don't fontify that space.
     (add-to-list (make-local-variable 'gmpasm-font-lock-keywords)
-		 (cons (concat
-			"\\(\\bdnl\\b\\|" comment-start-skip "\\).*$")
-		       'font-lock-comment-face))
+		 (list (concat "\\(^\\|\\s-\\)\\(\\(\\<dnl\\>\\|"
+			       comment-regexp
+			       "\\).*$\\)")
+		       2 'font-lock-comment-face))
 
     (set (make-local-variable 'font-lock-defaults)
 	 '(gmpasm-font-lock-keywords
@@ -277,7 +298,13 @@ that's added for filling etc, not the whole `gmpasm-comment-start-regexp'.
 	 (concat "[ \t\f]*\\(\\(" comment-regexp "\\|dnl\\)[ \t]*\\)*$"))
     (set (make-local-variable 'paragraph-start)
 	 (concat "\f\\|" paragraph-separate))
- 
+
+    ;; Some sort of "def...(" m4 define, possibly with ` for quoting.
+    ;; Could do something with PROLOGUE here, but in GMP the filename is
+    ;; enough, it's not normally necessary to say the function name.
+    (set (make-local-variable 'add-log-current-defun-header-regexp)
+	 "^def[a-z0-9_]+(`?\\([a-zA-Z0-9_]+\\)")
+
     ;; Adaptive fill gets dnl and comment-start as comment style prefixes on
     ;; top of the standard regexp (which has # and ; already actually).
     (set (make-local-variable 'adaptive-fill-regexp)
@@ -288,53 +315,51 @@ that's added for filling etc, not the whole `gmpasm-comment-start-regexp'.
 	 "\\`\\([ \t]*dnl\\)?[ \t]*\\'")
 
     (when (fboundp 'filladapt-mode)
-      (when (not gmpasm-filladapt-token-table)
+      (unless gmpasm-filladapt-token-table
 	(setq gmpasm-filladapt-token-table
 	      filladapt-token-table)
 	(setq gmpasm-filladapt-token-match-table
 	      filladapt-token-match-table)
 	(setq gmpasm-filladapt-token-conversion-table
 	      filladapt-token-conversion-table)
-	
+
 	;; Numbered bullet points like "2.1" get matched at the start of a
-	;; line when it's really something like "2.1 cycles/limb", so delete
+	;; line when it's really something like "2.1 cycles/limb", so remove
 	;; this from the list.  The regexp for "1.", "2." etc is left
 	;; though.
-	(gmpasm-delete-from-list 'gmpasm-filladapt-token-table
+	(gmpasm-remove-from-list 'gmpasm-filladapt-token-table
 				 '("[0-9]+\\(\\.[0-9]+\\)+[ \t]"
 				   bullet))
-	  
-	;; "%" as a comment prefix interferes with x86 register names
-	;; like %eax, so delete this.
-	(gmpasm-delete-from-list 'gmpasm-filladapt-token-table
+
+	;; "%" as a comment prefix interferes with register names on some
+	;; CPUs, like %eax on x86, so remove this.
+	(gmpasm-remove-from-list 'gmpasm-filladapt-token-table
 				 '("%+" postscript-comment))
-	
+
 	(add-to-list 'gmpasm-filladapt-token-match-table
 		     '(gmpasm-comment gmpasm-comment))
 	(add-to-list 'gmpasm-filladapt-token-conversion-table
-		     '(gmpasm-comment . exact))
-	)
-      
+		     '(gmpasm-comment . exact)))
+
       (set (make-local-variable 'filladapt-token-table)
 	   gmpasm-filladapt-token-table)
       (set (make-local-variable 'filladapt-token-match-table)
 	   gmpasm-filladapt-token-match-table)
       (set (make-local-variable 'filladapt-token-conversion-table)
 	   gmpasm-filladapt-token-conversion-table)
-    
+
       ;; Add dnl and comment-start as fill prefixes.
       ;; Comments in filladapt.el say filladapt-token-table must begin
       ;; with ("^" beginning-of-line), so put our addition second.
       (gmpasm-add-to-list-second 'filladapt-token-table
 				 (list (concat "dnl[ \t]\\|" comment-regexp)
-				       'gmpasm-comment))
-      ))
-  
+				       'gmpasm-comment))))
+
   (run-hooks 'gmpasm-mode-hook))
 
 
 (defun gmpasm-comment-region-dnl (beg end &optional arg)
-  "(gmpasm-comment-region BEG END &option ARG)
+  "(gmpasm-comment-region-dnl BEG END &optional ARG)
 
 Comment or uncomment each line in the region using `dnl'.
 With \\[universal-argument] prefix arg, uncomment each line in region.

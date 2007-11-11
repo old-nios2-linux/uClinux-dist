@@ -25,7 +25,7 @@
 #ifndef __SMTP_NORMALIZE_H__
 #define __SMTP_NORMALIZE_H__
 
-int SMTP_NeedNormalize(char *data);
+int SMTP_NeedNormalize(char *data, char *buf_end);
 int SMTP_Normalize(SFSnortPacket *p, int offset, int cmd_len);
 
 #endif  /* __SMTP_NORMALIZE_H__ */

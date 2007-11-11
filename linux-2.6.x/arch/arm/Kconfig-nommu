@@ -4,7 +4,7 @@
 # 
 
 config PROCESSOR_ID
-	hex 'Hard processor ID'
+	hex 'Hard wire the processor ID'
 	default 0x00007700
 	depends on !CPU_CP15
 	help

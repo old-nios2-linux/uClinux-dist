@@ -126,7 +126,7 @@ typedef struct _UnifiedLog
 typedef struct _UnifiedAlert
 {
     Event event;
-    struct timeval ts;         /* event timestamp */
+    struct pcap_timeval ts;    /* event timestamp */
     u_int32_t sip;             /* src ip */
     u_int32_t dip;             /* dest ip */
     u_int16_t sp;              /* src port */
@@ -295,13 +295,13 @@ static void UnifiedInitFile(UnifiedConfig *data)
         FatalError("SpoUnified: Unable to get context data\n");
 
     if(*(data->filename) == '/')
-        value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
-                (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
+                              (unsigned long)curr_time);
     else
-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
-                data->filename, (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
+                              data->filename, (unsigned long)curr_time);
 
-    if(value == -1)
+    if(value != SNORT_SNPRINTF_SUCCESS)
         FatalError("SpoUnified: filepath too long\n");
 
     //printf("Opening %s\n", logdir);
@@ -551,7 +551,11 @@ void RealUnifiedLogPacketAlert(Packet *p, char *msg, void *arg, Event *event,
          * this will have to be fixed when we transition to the pa_engine
          * code (p->pkth is libpcap specific)
          */ 
-        memcpy(&logheader.pkth, p->pkth, sizeof(SnortPktHeader));
+        logheader.pkth.ts.tv_sec = p->pkth->ts.tv_sec;
+        logheader.pkth.ts.tv_usec = p->pkth->ts.tv_usec;
+        logheader.pkth.caplen = p->pkth->caplen;
+        logheader.pkth.pktlen = p->pkth->len;
+
     }
     else
     {
@@ -918,13 +922,13 @@ void UnifiedInitAlertFile(UnifiedConfig *data)
     curr_time = time(NULL);
 
     if(data->filename[0] == '/')
-        value = snprintf(logdir, STD_BUF, "%s.%lu",  data->filename, 
-                (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s.%lu",  data->filename, 
+                              (unsigned long)curr_time);
     else
-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
-                data->filename, (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
+                              data->filename, (unsigned long)curr_time);
 
-    if(value == -1)
+    if(value != SNORT_SNPRINTF_SUCCESS)
     {
         FatalError("unified log file logging path and file name are "
                    "too long, aborting!\n");
@@ -1044,13 +1048,13 @@ void UnifiedInitLogFile(UnifiedConfig *data)
     }
 
     if(*(data->filename) == '/')
-        value = snprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
-                (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
+                              (unsigned long)curr_time);
     else
-        value = snprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
-                data->filename, (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir,  
+                              data->filename, (unsigned long)curr_time);
 
-    if(value == -1)
+    if(value != SNORT_SNPRINTF_SUCCESS)
     {
         FatalError("unified log file logging path and file name are "
                    "too long, aborting!\n");
@@ -1260,7 +1264,11 @@ void OldUnifiedLogPacketAlert(Packet *p, char *msg, void *arg, Event *event)
         {
             logheader.flags = p->packet_flags;
 
-            memcpy(&logheader.pkth, p->pkth, sizeof(SnortPktHeader));
+            logheader.pkth.ts.tv_sec = p->pkth->ts.tv_sec;
+            logheader.pkth.ts.tv_usec = p->pkth->ts.tv_usec;
+            logheader.pkth.caplen = p->pkth->caplen;
+            logheader.pkth.pktlen = p->pkth->len;
+
 
 #ifdef GIDS
             /*

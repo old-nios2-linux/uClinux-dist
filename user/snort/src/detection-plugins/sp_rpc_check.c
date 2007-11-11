@@ -161,7 +161,13 @@ void ParseRpc(char *data, OptTreeNode *otn)
         ds_ptr->flags|=RPC_CHECK_PROG;
         DEBUG_WRAP(DebugMessage(DEBUG_PLUGIN, "Set RPC program to %lu\n", ds_ptr->program););
     }
+    else
+    {
+        FatalError("%s(%d): Invalid applicaion number in rpc rule option\n",file_name,file_line);
+    }
+
     if(*tmp == '\0') return;
+
     data=++tmp;
     if(*data != '*')
     {

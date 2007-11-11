@@ -177,7 +177,6 @@ static char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 /*NEW_CHAIN*/ {'x','x','x','x','x',' ','x','x','x','x','x','x'},
 /*DEL_CHAIN*/ {'x','x','x','x','x',' ','x','x','x','x','x','x'},
 /*SET_POLICY*/{'x','x','x','x','x',' ','x','x','x','x','x','x'},
-/*CHECK*/     {'x','+','+','+','x',' ','x',' ',' ',' ','x','x'},
 /*RENAME*/    {'x','x','x','x','x',' ','x','x','x','x','x','x'}
 };
 
@@ -202,6 +201,9 @@ const char *program_name;
 char *lib_dir;
 
 int kernel_version;
+
+/* the path to command to load kernel module */
+const char *modprobe = NULL;
 
 /* Keeping track of external matches and targets: linked lists.  */
 struct iptables_match *iptables_matches = NULL;
@@ -231,10 +233,12 @@ struct pprot {
 static const struct pprot chain_protos[] = {
 	{ "tcp", IPPROTO_TCP },
 	{ "udp", IPPROTO_UDP },
+	{ "udplite", IPPROTO_UDPLITE },
 	{ "icmp", IPPROTO_ICMP },
 	{ "esp", IPPROTO_ESP },
 	{ "ah", IPPROTO_AH },
 	{ "sctp", IPPROTO_SCTP },
+	{ "all", 0 },
 };
 
 static char *
@@ -279,8 +283,13 @@ parse_port(const char *port, const char *proto)
 		   "invalid port/service `%s' specified", port);
 }
 
-struct in_addr *
-dotted_to_addr(const char *dotted)
+enum {
+	IPT_DOTTED_ADDR = 0,
+	IPT_DOTTED_MASK
+};
+
+static struct in_addr *
+__dotted_to_addr(const char *dotted, int type)
 {
 	static struct in_addr addr;
 	unsigned char *addrp;
@@ -296,8 +305,20 @@ dotted_to_addr(const char *dotted)
 
 	p = buf;
 	for (i = 0; i < 3; i++) {
-		if ((q = strchr(p, '.')) == NULL)
-			return (struct in_addr *) NULL;
+		if ((q = strchr(p, '.')) == NULL) {
+			if (type == IPT_DOTTED_ADDR) {
+				/* autocomplete, this is a network address */
+				if (string_to_number(p, 0, 255, &onebyte) == -1)
+					return (struct in_addr *) NULL;
+
+				addrp[i] = (unsigned char) onebyte;
+				while (i < 3)
+					addrp[++i] = 0;
+
+				return &addr;
+			} else
+				return (struct in_addr *) NULL;
+		}
 
 		*q = '\0';
 		if (string_to_number(p, 0, 255, &onebyte) == -1)
@@ -314,6 +335,18 @@ dotted_to_addr(const char *dotted)
 	addrp[3] = (unsigned char) onebyte;
 
 	return &addr;
+}
+
+struct in_addr *
+dotted_to_addr(const char *dotted)
+{
+	return __dotted_to_addr(dotted, IPT_DOTTED_ADDR);
+}
+
+struct in_addr *
+dotted_to_mask(const char *dotted)
+{
+	return __dotted_to_addr(dotted, IPT_DOTTED_MASK);
 }
 
 static struct in_addr *
@@ -613,34 +646,6 @@ addr_to_host(const struct in_addr *addr)
 	return (char *) NULL;
 }
 
-static void 
-pad_cidr(char *cidr)
-{
-	char *p, *q;
-	unsigned int onebyte;
-	int i, j;
-	char buf[20];
-
-	/* copy dotted string, because we need to modify it */
-	strncpy(buf, cidr, sizeof(buf) - 1);
-	buf[sizeof(buf) - 1] = '\0';
-
-	p = buf;
-	for (i = 0; i <= 3; i++) {
-		if ((q = strchr(p, '.')) == NULL)
-			break;
-		*q = '\0';
-		if (string_to_number(p, 0, 255, &onebyte) == -1)
-			return;
-		p = q + 1;
-	}
-
-	/* pad remaining octets with zeros */
-	for (j = i; j < 3; j++) {
-		strcat(cidr, ".0");
-	}
-}
-
 /*
  *	All functions starting with "parse" should succeed, otherwise
  *	the program fails.
@@ -680,7 +685,7 @@ parse_mask(char *mask)
 		maskaddr.s_addr = 0xFFFFFFFF;
 		return &maskaddr;
 	}
-	if ((addrp = dotted_to_addr(mask)) != NULL)
+	if ((addrp = dotted_to_mask(mask)) != NULL)
 		/* dotted_to_addr already returns a network byte order addr */
 		return addrp;
 	if (string_to_number(mask, 0, 32, &bits) == -1)
@@ -709,8 +714,6 @@ parse_hostnetworkmask(const char *name, struct in_addr **addrpp,
 	if ((p = strrchr(buf, '/')) != NULL) {
 		*p = '\0';
 		addrp = parse_mask(p + 1);
-		if (strrchr(p + 1, '.') == NULL)
-			pad_cidr(buf);
 	} else
 		addrp = parse_mask(NULL);
 	inaddrcpy(maskp, addrp);
@@ -891,7 +894,7 @@ void parse_interface(const char *arg, char *vianame, unsigned char *mask)
 			if (vianame[i] == ':' ||
 			    vianame[i] == '!' ||
 			    vianame[i] == '*') {
-				printf("Warning: wierd character in interface"
+				printf("Warning: weird character in interface"
 				       " `%s' (No aliases, :, ! or *).\n",
 				       vianame);
 				break;
@@ -1152,6 +1155,8 @@ static int compatible_revision(const char *name, u_int8_t revision, int opt)
 			strerror(errno));
 		exit(1);
 	}
+
+	load_iptables_ko(modprobe, 1);
 
 	strcpy(rev.name, name);
 	rev.revision = revision;
@@ -1819,10 +1824,10 @@ static char *get_modprobe(void)
 	return NULL;
 }
 
-int iptables_insmod(const char *modname, const char *modprobe)
+int iptables_insmod(const char *modname, const char *modprobe, int quiet)
 {
 	char *buf = NULL;
-	char *argv[3];
+	char *argv[4];
 	int status;
 
 	/* If they don't explicitly set it, read out of kernel */
@@ -1835,7 +1840,13 @@ int iptables_insmod(const char *modname, const char *modprobe)
 
 	argv[0] = (char *)modprobe;
 	argv[1] = (char *)modname;
-	argv[2] = NULL;
+	if (quiet) {
+		argv[2] = "-q";
+		argv[3] = NULL;
+	} else {
+		argv[2] = NULL;
+		argv[3] = NULL;
+	}
 
 #if __uClinux__
 	switch (vfork()) {
@@ -1859,6 +1870,19 @@ int iptables_insmod(const char *modname, const char *modprobe)
 	if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
 		return 0;
 	return -1;
+}
+
+int load_iptables_ko(const char *modprobe, int quiet)
+{
+	static int loaded = 0;
+	static int ret = -1;
+
+	if (!loaded) {
+		ret = iptables_insmod("ip_tables", modprobe, quiet);
+		loaded = (ret == 0);
+	}
+
+	return ret;
 }
 
 static struct ipt_entry *
@@ -1954,7 +1978,6 @@ int do_command(int argc, char *argv[], char **table, iptc_handle_t *handle)
 	struct iptables_target *t;
 	const char *jumpto = "";
 	char *protocol = NULL;
-	const char *modprobe = NULL;
 	int proto_used = 0;
 
 	memset(&fw, 0, sizeof(fw));
@@ -2449,7 +2472,7 @@ int do_command(int argc, char *argv[], char **table, iptc_handle_t *handle)
 		*handle = iptc_init(*table);
 
 	/* try to insmod the module if iptc_init failed */
-	if (!*handle && iptables_insmod("ip_tables", modprobe) != -1)
+	if (!*handle && load_iptables_ko(modprobe, 0) != -1)
 		*handle = iptc_init(*table);
 
 	if (!*handle)

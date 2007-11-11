@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.14.2.1.4.1 2004/07/18 22:56:23 sobomax Exp $
+# $Id: Makefile,v 1.19.2.4 2005/09/07 16:23:00 andrei Exp $
 #
 # acc module makefile
 #
@@ -6,6 +6,8 @@
 # WARNING: do not run this directly, it should be run by the master Makefile
 
 include ../../Makefile.defs
+include ../../Makefile.radius
+
 auto_gen=
 NAME=acc.so
 LIBS=
@@ -14,7 +16,10 @@ LIBS=
 #DEFS+=-DSQL_ACC
 
 # uncomment the next two lines if you wish to enable RADIUS accounting
-#DEFS+=-DRAD_ACC -I$(LOCALBASE)/include
-#LIBS=-L$(LOCALBASE)/lib -lradiusclient
+#DEFS+=-DRAD_ACC
+#include ../../Makefile.radius
+
+# uncomment the next two lines if you wish to enable DIAMETER accounting
+#DEFS+=-DDIAM_ACC
 
 include ../../Makefile.modules

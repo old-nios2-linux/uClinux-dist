@@ -67,6 +67,23 @@ config USB_EHCI_TT_NEWSCHED
 
 	  If unsure, say N.
 
+config USB_EHCI_BIG_ENDIAN_MMIO
+	bool
+	depends on USB_EHCI_HCD && (PPC_CELLEB || PPC_PS3 || 440EPX)
+	default y
+
+config USB_EHCI_BIG_ENDIAN_DESC
+	bool
+	depends on USB_EHCI_HCD && 440EPX
+	default y
+
+config USB_EHCI_FSL
+	bool
+	select USB_EHCI_ROOT_HUB_TT
+	default y if MPC834x || PPC_MPC831x
+	---help---
+	  Variation of ARC USB block used in some Freescale chips.
+
 config USB_ISP116X_HCD
 	tristate "ISP116X HCD support"
 	depends on USB
@@ -78,6 +95,16 @@ config USB_ISP116X_HCD
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called isp116x-hcd.
+
+config USB_ISP1362_HCD
+	tristate "ISP1362 HCD support"
+	depends on USB
+	default N
+	help
+	  Supports the Philips ISP1362 chip as a host controller
+	  This driver does not support isochronous transfers.
+	  To compile this driver as a module, choose M here: the
+	  module will be called isp1362-hcd.
 
 config USB_OHCI_HCD
 	tristate "OHCI HCD support"
@@ -101,21 +128,48 @@ config USB_OHCI_HCD_PPC_SOC
 	bool "OHCI support for on-chip PPC USB controller"
 	depends on USB_OHCI_HCD && (STB03xxx || PPC_MPC52xx)
 	default y
-	select USB_OHCI_BIG_ENDIAN
+	select USB_OHCI_BIG_ENDIAN_DESC
+	select USB_OHCI_BIG_ENDIAN_MMIO
 	---help---
 	  Enables support for the USB controller on the MPC52xx or
 	  STB03xxx processor chip.  If unsure, say Y.
 
+config USB_OHCI_HCD_PPC_OF
+	bool "OHCI support for PPC USB controller on OF platform bus"
+	depends on USB_OHCI_HCD && PPC_OF
+	default y
+	---help---
+	  Enables support for the USB controller PowerPC present on the
+	  OpenFirmware platform bus.
+
+config USB_OHCI_HCD_PPC_OF_BE
+	bool "Support big endian HC"
+	depends on USB_OHCI_HCD_PPC_OF
+	default y
+	select USB_OHCI_BIG_ENDIAN_DESC
+	select USB_OHCI_BIG_ENDIAN_MMIO
+
+config USB_OHCI_HCD_PPC_OF_LE
+	bool "Support little endian HC"
+	depends on USB_OHCI_HCD_PPC_OF
+	default n
+	select USB_OHCI_LITTLE_ENDIAN
+
 config USB_OHCI_HCD_PCI
 	bool "OHCI support for PCI-bus USB controllers"
-	depends on USB_OHCI_HCD && PCI && (STB03xxx || PPC_MPC52xx)
+	depends on USB_OHCI_HCD && PCI && (STB03xxx || PPC_MPC52xx || USB_OHCI_HCD_PPC_OF)
 	default y
 	select USB_OHCI_LITTLE_ENDIAN
 	---help---
 	  Enables support for PCI-bus plug-in USB controller cards.
 	  If unsure, say Y.
 
-config USB_OHCI_BIG_ENDIAN
+config USB_OHCI_BIG_ENDIAN_DESC
+	bool
+	depends on USB_OHCI_HCD
+	default n
+
+config USB_OHCI_BIG_ENDIAN_MMIO
 	bool
 	depends on USB_OHCI_HCD
 	default n
@@ -153,7 +207,7 @@ config USB_U132_HCD
 	  adapter will *NOT* work with PC cards that do not contain an OHCI
 	  controller.
 
-	  For those PC cards that contain multiple OHCI controllers only ther
+	  For those PC cards that contain multiple OHCI controllers only the
 	  first one is used.
 
 	  The driver consists of two modules, the "ftdi-elan" module is a
@@ -191,4 +245,16 @@ config USB_SL811_CS
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called "sl811_cs".
+
+config USB_R8A66597_HCD
+	tristate "R8A66597 HCD support"
+	depends on USB
+	help
+	  The R8A66597 is a USB 2.0 host and peripheral controller.
+
+	  Enable this option if your board has this chip, and you want
+	  to use it as a host controller.  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called r8a66597-hcd.
 

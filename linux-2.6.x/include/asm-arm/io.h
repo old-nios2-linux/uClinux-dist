@@ -56,13 +56,22 @@ extern void __raw_readsl(const void __iomem *addr, void *data, int longlen);
 
 /*
  * Architecture ioremap implementation.
- *
- * __ioremap takes CPU physical address.
- *
- * __ioremap_pfn takes a Page Frame Number and an offset into that page
  */
-extern void __iomem * __ioremap_pfn(unsigned long, unsigned long, size_t, unsigned long);
-extern void __iomem * __ioremap(unsigned long, size_t, unsigned long);
+#define MT_DEVICE		0
+#define MT_DEVICE_NONSHARED	1
+#define MT_DEVICE_CACHED	2
+#define MT_DEVICE_IXP2000	3
+/*
+ * types 4 onwards can be found in asm/mach/map.h and are undefined
+ * for ioremap
+ */
+
+/*
+ * __arm_ioremap takes CPU physical address.
+ * __arm_ioremap_pfn takes a Page Frame Number and an offset into that page
+ */
+extern void __iomem * __arm_ioremap_pfn(unsigned long, unsigned long, size_t, unsigned int);
+extern void __iomem * __arm_ioremap(unsigned long, size_t, unsigned int);
 extern void __iounmap(volatile void __iomem *addr);
 
 /*
@@ -74,14 +83,6 @@ extern void __readwrite_bug(const char *fn);
  * Now, pick up the machine-defined IO definitions
  */
 #include <asm/arch/io.h>
-
-#ifdef __io_pci
-#warning machine class uses buggy __io_pci
-#endif
-#if defined(__arch_putb) || defined(__arch_putw) || defined(__arch_putl) || \
-    defined(__arch_getb) || defined(__arch_getw) || defined(__arch_getl)
-#warning machine class uses old __arch_putw or __arch_getw
-#endif
 
 /*
  *  IO port access primitives
@@ -190,9 +191,6 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
 #define memcpy_fromio(a,c,l)	_memcpy_fromio((a),__mem_pci(c),(l))
 #define memcpy_toio(c,a,l)	_memcpy_toio(__mem_pci(c),(a),(l))
 
-#define eth_io_copy_and_sum(s,c,l,b) \
-				eth_copy_and_sum((s),__mem_pci(c),(l),(b))
-
 #elif !defined(readb)
 
 #define readb(c)			(__readwrite_bug("readb"),0)
@@ -201,8 +199,6 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
 #define writeb(v,c)			__readwrite_bug("writeb")
 #define writew(v,c)			__readwrite_bug("writew")
 #define writel(v,c)			__readwrite_bug("writel")
-
-#define eth_io_copy_and_sum(s,c,l,b)	__readwrite_bug("eth_io_copy_and_sum")
 
 #define check_signature(io,sig,len)	(0)
 
@@ -216,14 +212,14 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
  *
  */
 #ifndef __arch_ioremap
-#define ioremap(cookie,size)		__ioremap(cookie,size,0)
-#define ioremap_nocache(cookie,size)	__ioremap(cookie,size,0)
-#define ioremap_cached(cookie,size)	__ioremap(cookie,size,L_PTE_CACHEABLE)
+#define ioremap(cookie,size)		__arm_ioremap(cookie, size, MT_DEVICE)
+#define ioremap_nocache(cookie,size)	__arm_ioremap(cookie, size, MT_DEVICE)
+#define ioremap_cached(cookie,size)	__arm_ioremap(cookie, size, MT_DEVICE_CACHED)
 #define iounmap(cookie)			__iounmap(cookie)
 #else
-#define ioremap(cookie,size)		__arch_ioremap((cookie),(size),0)
-#define ioremap_nocache(cookie,size)	__arch_ioremap((cookie),(size),0)
-#define ioremap_cached(cookie,size)	__arch_ioremap((cookie),(size),L_PTE_CACHEABLE)
+#define ioremap(cookie,size)		__arch_ioremap((cookie), (size), MT_DEVICE)
+#define ioremap_nocache(cookie,size)	__arch_ioremap((cookie), (size), MT_DEVICE)
+#define ioremap_cached(cookie,size)	__arch_ioremap((cookie), (size), MT_DEVICE_CACHED)
 #define iounmap(cookie)			__arch_iounmap(cookie)
 #endif
 
@@ -263,9 +259,11 @@ extern void pci_iounmap(struct pci_dev *dev, void __iomem *addr);
 #define BIOVEC_MERGEABLE(vec1, vec2)	\
 	((bvec_to_phys((vec1)) + (vec1)->bv_len) == bvec_to_phys((vec2)))
 
+#ifdef CONFIG_MMU
 #define ARCH_HAS_VALID_PHYS_ADDR_RANGE
 extern int valid_phys_addr_range(unsigned long addr, size_t size);
 extern int valid_mmap_phys_addr_range(unsigned long pfn, size_t size);
+#endif
 
 /*
  * Convert a physical pointer to a virtual kernel pointer for /dev/mem

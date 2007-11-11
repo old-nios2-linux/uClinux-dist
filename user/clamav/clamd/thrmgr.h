@@ -13,14 +13,18 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __THRMGR_H__
 #define __THRMGR_H__
 
 #include <pthread.h>
+
+#ifndef C_WINDOWS
 #include <sys/time.h>
+#endif
 
 typedef struct work_item_tag {
 	struct work_item_tag *next;
@@ -37,7 +41,7 @@ typedef struct work_queue_tag {
 typedef enum {
 	POOL_INVALID,
 	POOL_VALID,
-	POOL_EXIT,
+	POOL_EXIT
 } pool_state_t;
 
 typedef struct threadpool_tag {

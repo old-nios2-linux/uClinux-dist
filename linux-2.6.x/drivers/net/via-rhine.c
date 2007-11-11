@@ -30,8 +30,8 @@
 */
 
 #define DRV_NAME	"via-rhine"
-#define DRV_VERSION	"1.4.2"
-#define DRV_RELDATE	"Sept-11-2006"
+#define DRV_VERSION	"1.4.3"
+#define DRV_RELDATE	"2007-03-06"
 
 
 /* A few user-configurable values.
@@ -42,7 +42,13 @@ static int max_interrupt_work = 20;
 
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1518 effectively disables this feature. */
+#if defined(__alpha__) || defined(__arm__) || defined(__hppa__) \
+       || defined(CONFIG_SPARC) || defined(__ia64__) \
+       || defined(__sh__) || defined(__mips__)
+static int rx_copybreak = 1518;
+#else
 static int rx_copybreak;
+#endif
 
 /* Work-around for broken BIOSes: they are unable to get the chip back out of
    power state D3 so PXE booting fails. bootparam(7): via-rhine.avoid_D3=1 */
@@ -105,6 +111,7 @@ static const int multicast_filter_limit = 32;
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
+#include <linux/dmi.h>
 
 /* These identify the driver base version and may not be removed. */
 static char version[] __devinitdata =
@@ -621,7 +628,6 @@ static int __devinit rhine_init_one(struct pci_dev *pdev,
 	struct net_device *dev;
 	struct rhine_private *rp;
 	int i, rc;
-	u8 pci_rev;
 	u32 quirks;
 	long pioaddr;
 	long memaddr;
@@ -641,27 +647,25 @@ static int __devinit rhine_init_one(struct pci_dev *pdev,
 		printk(version);
 #endif
 
-	pci_read_config_byte(pdev, PCI_REVISION_ID, &pci_rev);
-
 	io_size = 256;
 	phy_id = 0;
 	quirks = 0;
 	name = "Rhine";
-	if (pci_rev < VTunknown0) {
+	if (pdev->revision < VTunknown0) {
 		quirks = rqRhineI;
 		io_size = 128;
 	}
-	else if (pci_rev >= VT6102) {
+	else if (pdev->revision >= VT6102) {
 		quirks = rqWOL | rqForceReset;
-		if (pci_rev < VT6105) {
+		if (pdev->revision < VT6105) {
 			name = "Rhine II";
 			quirks |= rqStatusWBRace;	/* Rhine-II exclusive */
 		}
 		else {
 			phy_id = 1;	/* Integrated PHY, phy_id fixed to 1 */
-			if (pci_rev >= VT6105_B0)
+			if (pdev->revision >= VT6105_B0)
 				quirks |= rq6patterns;
-			if (pci_rev < VT6105M)
+			if (pdev->revision < VT6105M)
 				name = "Rhine III";
 			else
 				name = "Rhine III (Management Adapter)";
@@ -1485,16 +1489,15 @@ static int rhine_rx(struct net_device *dev, int limit)
 			   copying to a minimally-sized skbuff. */
 			if (pkt_len < rx_copybreak &&
 				(skb = dev_alloc_skb(pkt_len + 2)) != NULL) {
-				skb->dev = dev;
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
 				pci_dma_sync_single_for_cpu(rp->pdev,
 							    rp->rx_skbuff_dma[entry],
 							    rp->rx_buf_sz,
 							    PCI_DMA_FROMDEVICE);
 
-				eth_copy_and_sum(skb,
+				skb_copy_to_linear_data(skb,
 						 rp->rx_skbuff[entry]->data,
-						 pkt_len, 0);
+						 pkt_len);
 				skb_put(skb, pkt_len);
 				pci_dma_sync_single_for_device(rp->pdev,
 							       rp->rx_skbuff_dma[entry],
@@ -1808,7 +1811,6 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 	.set_wol		= rhine_set_wol,
 	.get_sg			= ethtool_op_get_sg,
 	.get_tx_csum		= ethtool_op_get_tx_csum,
-	.get_perm_addr		= ethtool_op_get_perm_addr,
 };
 
 static int netdev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
@@ -1995,6 +1997,23 @@ static struct pci_driver rhine_driver = {
 	.shutdown =	rhine_shutdown,
 };
 
+static struct dmi_system_id __initdata rhine_dmi_table[] = {
+	{
+		.ident = "EPIA-M",
+		.matches = {
+			DMI_MATCH(DMI_BIOS_VENDOR, "Award Software International, Inc."),
+			DMI_MATCH(DMI_BIOS_VERSION, "6.00 PG"),
+		},
+	},
+	{
+		.ident = "KV7",
+		.matches = {
+			DMI_MATCH(DMI_BIOS_VENDOR, "Phoenix Technologies, LTD"),
+			DMI_MATCH(DMI_BIOS_VERSION, "6.00 PG"),
+		},
+	},
+	{ NULL }
+};
 
 static int __init rhine_init(void)
 {
@@ -2002,6 +2021,16 @@ static int __init rhine_init(void)
 #ifdef MODULE
 	printk(version);
 #endif
+	if (dmi_check_system(rhine_dmi_table)) {
+		/* these BIOSes fail at PXE boot if chip is in D3 */
+		avoid_D3 = 1;
+		printk(KERN_WARNING "%s: Broken BIOS detected, avoid_D3 "
+				    "enabled.\n",
+		       DRV_NAME);
+	}
+	else if (avoid_D3)
+		printk(KERN_INFO "%s: avoid_D3 set.\n", DRV_NAME);
+
 	return pci_register_driver(&rhine_driver);
 }
 

@@ -1,7 +1,6 @@
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/init.h>
-
 #include <linux/interrupt.h>
 #include <asm/io.h>
 #include <asm/delay.h>
@@ -18,12 +17,12 @@
 #define	PHDR	0xa400012e
 #define SCPDR	0xa4000136
 
-static void do_softint(void *data);
+static void do_softint(struct work_struct *work);
 
 static struct input_dev *hp680_ts_dev;
-static DECLARE_WORK(work, do_softint, 0);
+static DECLARE_DELAYED_WORK(work, do_softint);
 
-static void do_softint(void *data)
+static void do_softint(struct work_struct *work)
 {
 	int absx = 0, absy = 0;
 	u8 scpdr;
@@ -76,38 +75,47 @@ static irqreturn_t hp680_ts_interrupt(int irq, void *dev)
 
 static int __init hp680_ts_init(void)
 {
+	int err;
+
 	hp680_ts_dev = input_allocate_device();
 	if (!hp680_ts_dev)
 		return -ENOMEM;
 
 	hp680_ts_dev->evbit[0] = BIT(EV_ABS) | BIT(EV_KEY);
-	hp680_ts_dev->absbit[0] = BIT(ABS_X) | BIT(ABS_Y);
 	hp680_ts_dev->keybit[LONG(BTN_TOUCH)] = BIT(BTN_TOUCH);
 
-	hp680_ts_dev->absmin[ABS_X] = HP680_TS_ABS_X_MIN;
-	hp680_ts_dev->absmin[ABS_Y] = HP680_TS_ABS_Y_MIN;
-	hp680_ts_dev->absmax[ABS_X] = HP680_TS_ABS_X_MAX;
-	hp680_ts_dev->absmax[ABS_Y] = HP680_TS_ABS_Y_MAX;
+	input_set_abs_params(hp680_ts_dev, ABS_X,
+		HP680_TS_ABS_X_MIN, HP680_TS_ABS_X_MAX, 0, 0);
+	input_set_abs_params(hp680_ts_dev, ABS_Y,
+		HP680_TS_ABS_Y_MIN, HP680_TS_ABS_Y_MAX, 0, 0);
 
 	hp680_ts_dev->name = "HP Jornada touchscreen";
 	hp680_ts_dev->phys = "hp680_ts/input0";
-
-	input_register_device(hp680_ts_dev);
 
 	if (request_irq(HP680_TS_IRQ, hp680_ts_interrupt,
 			IRQF_DISABLED, MODNAME, 0) < 0) {
 		printk(KERN_ERR "hp680_touchscreen.c: Can't allocate irq %d\n",
 		       HP680_TS_IRQ);
-		input_unregister_device(hp680_ts_dev);
-		return -EBUSY;
+		err = -EBUSY;
+		goto fail1;
 	}
 
+	err = input_register_device(hp680_ts_dev);
+	if (err)
+		goto fail2;
+
 	return 0;
+
+ fail2:	free_irq(HP680_TS_IRQ, NULL);
+	cancel_delayed_work(&work);
+	flush_scheduled_work();
+ fail1:	input_free_device(hp680_ts_dev);
+	return err;
 }
 
 static void __exit hp680_ts_exit(void)
 {
-	free_irq(HP680_TS_IRQ, 0);
+	free_irq(HP680_TS_IRQ, NULL);
 	cancel_delayed_work(&work);
 	flush_scheduled_work();
 	input_unregister_device(hp680_ts_dev);

@@ -13,16 +13,14 @@
 #ifndef __ASM_ARM_MMU_CONTEXT_H
 #define __ASM_ARM_MMU_CONTEXT_H
 
-#ifndef CONFIG_MMU
-#include "nommu_context.h"
-#else /* !CONFIG_MMU */
 #include <linux/compiler.h>
 #include <asm/cacheflush.h>
 #include <asm/proc-fns.h>
+#include <asm-generic/mm_hooks.h>
 
 void __check_kvm_seq(struct mm_struct *mm);
 
-#if __LINUX_ARM_ARCH__ >= 6
+#ifdef CONFIG_CPU_HAS_ASID
 
 /*
  * On ARMv6, we have the following structure in the Context ID:
@@ -38,8 +36,9 @@ void __check_kvm_seq(struct mm_struct *mm);
  * The context ID is used by debuggers and trace logic, and
  * should be unique within all running processes.
  */
-#define ASID_BITS	8
-#define ASID_MASK	((~0) << ASID_BITS)
+#define ASID_BITS		8
+#define ASID_MASK		((~0) << ASID_BITS)
+#define ASID_FIRST_VERSION	(1 << ASID_BITS)
 
 extern unsigned int cpu_last_asid;
 
@@ -59,11 +58,13 @@ static inline void check_context(struct mm_struct *mm)
 
 #else
 
+#ifdef CONFIG_MMU
 static inline void check_context(struct mm_struct *mm)
 {
 	if (unlikely(mm->context.kvm_seq != init_mm.context.kvm_seq))
 		__check_kvm_seq(mm);
 }
+#endif /* CONFIG_MMU */
 
 #define init_new_context(tsk,mm)	0
 
@@ -98,8 +99,7 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #ifdef CONFIG_MMU
 	unsigned int cpu = smp_processor_id();
 
-	if (prev != next) {
-		cpu_set(cpu, next->cpu_vm_mask);
+	if (!cpu_test_and_set(cpu, next->cpu_vm_mask) || prev != next) {
 		check_context(next);
 		cpu_switch_mm(next->pgd, next);
 		if (cache_is_vivt())
@@ -111,5 +111,4 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #define deactivate_mm(tsk,mm)	do { } while (0)
 #define activate_mm(prev,next)	switch_mm(prev, next, NULL)
 
-#endif /* CONFIG_MMU */
 #endif

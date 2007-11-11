@@ -81,7 +81,7 @@ static struct ctl_table appldata_dir_table[] = {
 /*
  * Timer
  */
-DEFINE_PER_CPU(struct vtimer_list, appldata_timer);
+static DEFINE_PER_CPU(struct vtimer_list, appldata_timer);
 static atomic_t appldata_expire_count = ATOMIC_INIT(0);
 
 static DEFINE_SPINLOCK(appldata_timer_lock);
@@ -92,8 +92,8 @@ static int appldata_timer_active;
  * Work queue
  */
 static struct workqueue_struct *appldata_wq;
-static void appldata_work_fn(void *data);
-static DECLARE_WORK(appldata_work, appldata_work_fn, NULL);
+static void appldata_work_fn(struct work_struct *work);
+static DECLARE_WORK(appldata_work, appldata_work_fn);
 
 
 /*
@@ -125,7 +125,7 @@ static void appldata_timer_function(unsigned long data)
  *
  * call data gathering function for each (active) module
  */
-static void appldata_work_fn(void *data)
+static void appldata_work_fn(struct work_struct *work)
 {
 	struct list_head *lh;
 	struct appldata_ops *ops;
@@ -173,7 +173,7 @@ int appldata_diag(char record_nr, u16 function, unsigned long buffer,
 /*
  * appldata_mod_vtimer_wrap()
  *
- * wrapper function for mod_virt_timer(), because smp_call_function_on()
+ * wrapper function for mod_virt_timer(), because smp_call_function_single()
  * accepts only one parameter.
  */
 static void __appldata_mod_vtimer_wrap(void *p) {
@@ -208,9 +208,9 @@ __appldata_vtimer_setup(int cmd)
 					  num_online_cpus()) * TOD_MICRO;
 		for_each_online_cpu(i) {
 			per_cpu(appldata_timer, i).expires = per_cpu_interval;
-			smp_call_function_on(add_virt_timer_periodic,
-					     &per_cpu(appldata_timer, i),
-					     0, 1, i);
+			smp_call_function_single(i, add_virt_timer_periodic,
+						 &per_cpu(appldata_timer, i),
+						 0, 1);
 		}
 		appldata_timer_active = 1;
 		P_INFO("Monitoring timer started.\n");
@@ -236,8 +236,8 @@ __appldata_vtimer_setup(int cmd)
 			} args;
 			args.timer = &per_cpu(appldata_timer, i);
 			args.expires = per_cpu_interval;
-			smp_call_function_on(__appldata_mod_vtimer_wrap,
-					     &args, 0, 1, i);
+			smp_call_function_single(i, __appldata_mod_vtimer_wrap,
+						 &args, 0, 1);
 		}
 	}
 }
@@ -506,7 +506,7 @@ int appldata_register_ops(struct appldata_ops *ops)
 
 	ops->ctl_table[3].ctl_name = 0;
 
-	ops->sysctl_header = register_sysctl_table(ops->ctl_table,1);
+	ops->sysctl_header = register_sysctl_table(ops->ctl_table);
 
 	P_INFO("%s-ops registered!\n", ops->name);
 	return 0;
@@ -535,8 +535,7 @@ void appldata_unregister_ops(struct appldata_ops *ops)
 
 /******************************* init / exit *********************************/
 
-static void
-appldata_online_cpu(int cpu)
+static void __cpuinit appldata_online_cpu(int cpu)
 {
 	init_virt_timer(&per_cpu(appldata_timer, cpu));
 	per_cpu(appldata_timer, cpu).function = appldata_timer_function;
@@ -561,16 +560,17 @@ appldata_offline_cpu(int cpu)
 	spin_unlock(&appldata_timer_lock);
 }
 
-#ifdef CONFIG_HOTPLUG_CPU
 static int __cpuinit
 appldata_cpu_notify(struct notifier_block *self,
 		    unsigned long action, void *hcpu)
 {
 	switch (action) {
 	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
 		appldata_online_cpu((long) hcpu);
 		break;
 	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
 		appldata_offline_cpu((long) hcpu);
 		break;
 	default:
@@ -579,10 +579,9 @@ appldata_cpu_notify(struct notifier_block *self,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block appldata_nb = {
+static struct notifier_block __cpuinitdata appldata_nb = {
 	.notifier_call = appldata_cpu_notify,
 };
-#endif
 
 /*
  * appldata_init()
@@ -608,7 +607,7 @@ static int __init appldata_init(void)
 	/* Register cpu hotplug notifier */
 	register_hotcpu_notifier(&appldata_nb);
 
-	appldata_sysctl_header = register_sysctl_table(appldata_dir_table, 1);
+	appldata_sysctl_header = register_sysctl_table(appldata_dir_table);
 #ifdef MODULE
 	appldata_dir_table[0].de->owner = THIS_MODULE;
 	appldata_table[0].de->owner = THIS_MODULE;
@@ -670,45 +669,7 @@ EXPORT_SYMBOL_GPL(appldata_register_ops);
 EXPORT_SYMBOL_GPL(appldata_unregister_ops);
 EXPORT_SYMBOL_GPL(appldata_diag);
 
-#ifdef MODULE
-/*
- * Kernel symbols needed by appldata_mem and appldata_os modules.
- * However, if this file is compiled as a module (for testing only), these
- * symbols are not exported. In this case, we define them locally and export
- * those.
- */
-void si_swapinfo(struct sysinfo *val)
-{
-	val->freeswap = -1ul;
-	val->totalswap = -1ul;
-}
-
-unsigned long avenrun[3] = {-1 - FIXED_1/200, -1 - FIXED_1/200,
-				-1 - FIXED_1/200};
-int nr_threads = -1;
-
-void get_full_page_state(struct page_state *ps)
-{
-	memset(ps, -1, sizeof(struct page_state));
-}
-
-unsigned long nr_running(void)
-{
-	return -1;
-}
-
-unsigned long nr_iowait(void)
-{
-	return -1;
-}
-
-/*unsigned long nr_context_switches(void)
-{
-	return -1;
-}*/
-#endif /* MODULE */
 EXPORT_SYMBOL_GPL(si_swapinfo);
 EXPORT_SYMBOL_GPL(nr_threads);
 EXPORT_SYMBOL_GPL(nr_running);
 EXPORT_SYMBOL_GPL(nr_iowait);
-//EXPORT_SYMBOL_GPL(nr_context_switches);

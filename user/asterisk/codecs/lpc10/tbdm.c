@@ -1,6 +1,6 @@
 /*
 
-$Log: tbdm.c,v $
+$Log$
 Revision 1.15  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 
@@ -35,19 +35,19 @@ extern int tbdm_(real *speech, integer *lpita, integer *tau, integer *ltau, real
 
 /* 	TBDM Version 49 */
 
-/* $Log: tbdm.c,v $
-/* Revision 1.15  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:40  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.15  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:40  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.1  1996/08/19  22:30:26  jaf
  * Initial revision
  * */
@@ -121,7 +121,7 @@ extern int tbdm_(real *speech, integer *lpita, integer *tau, integer *ltau, real
     difmag_(&speech[1], lpita, &tau[1], ltau, &tau[*ltau], &amdf[1], minptr, 
 	    maxptr);
     *mintau = tau[*minptr];
-    minamd = amdf[*minptr];
+    minamd = (integer)amdf[*minptr];
 /*   Build table containing all lags within +/- 3 of the AMDF minimum */
 /*    excluding all that have already been computed */
     ltau2 = 0;
@@ -147,7 +147,7 @@ extern int tbdm_(real *speech, integer *lpita, integer *tau, integer *ltau, real
 		maxp2);
 	if (amdf2[minp2 - 1] < (real) minamd) {
 	    *mintau = tau2[minp2 - 1];
-	    minamd = amdf2[minp2 - 1];
+	    minamd = (integer)amdf2[minp2 - 1];
 	}
     }
 /*   Check one octave up, if there are any lags not yet computed */
@@ -165,7 +165,7 @@ extern int tbdm_(real *speech, integer *lpita, integer *tau, integer *ltau, real
 		maxp2);
 	if (amdf2[minp2 - 1] < (real) minamd) {
 	    *mintau = tau2[minp2 - 1];
-	    minamd = amdf2[minp2 - 1];
+	    minamd = (integer)amdf2[minp2 - 1];
 	    *minptr += -20;
 	}
     }

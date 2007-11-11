@@ -34,15 +34,11 @@
  * bypassing some hardware (and driver) issues.  UML could help too.
  */
 
-#define DEBUG
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
-#include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/timer.h>
@@ -499,38 +495,6 @@ dummy_free_request (struct usb_ep *_ep, struct usb_request *_req)
 	kfree (req);
 }
 
-static void *
-dummy_alloc_buffer (
-	struct usb_ep *_ep,
-	unsigned bytes,
-	dma_addr_t *dma,
-	gfp_t mem_flags
-) {
-	char			*retval;
-	struct dummy_ep		*ep;
-	struct dummy		*dum;
-
-	ep = usb_ep_to_dummy_ep (_ep);
-	dum = ep_to_dummy (ep);
-
-	if (!dum->driver)
-		return NULL;
-	retval = kmalloc (bytes, mem_flags);
-	*dma = (dma_addr_t) retval;
-	return retval;
-}
-
-static void
-dummy_free_buffer (
-	struct usb_ep *_ep,
-	void *buf,
-	dma_addr_t dma,
-	unsigned bytes
-) {
-	if (bytes)
-		kfree (buf);
-}
-
 static void
 fifo_complete (struct usb_ep *ep, struct usb_request *req)
 {
@@ -661,10 +625,6 @@ static const struct usb_ep_ops dummy_ep_ops = {
 	.alloc_request	= dummy_alloc_request,
 	.free_request	= dummy_free_request,
 
-	.alloc_buffer	= dummy_alloc_buffer,
-	.free_buffer	= dummy_free_buffer,
-	/* map, unmap, ... eventually hook the "generic" dma calls */
-
 	.queue		= dummy_queue,
 	.dequeue	= dummy_dequeue,
 
@@ -779,7 +739,7 @@ usb_gadget_register_driver (struct usb_gadget_driver *driver)
 		return -EINVAL;
 	if (dum->driver)
 		return -EBUSY;
-	if (!driver->bind || !driver->unbind || !driver->setup
+	if (!driver->bind || !driver->setup
 			|| driver->speed == USB_SPEED_UNKNOWN)
 		return -EINVAL;
 
@@ -837,7 +797,8 @@ usb_gadget_register_driver (struct usb_gadget_driver *driver)
 err_bind_driver:
 	driver_unregister (&driver->driver);
 err_register:
-	driver->unbind (&dum->gadget);
+	if (driver->unbind)
+		driver->unbind (&dum->gadget);
 	spin_lock_irq (&dum->lock);
 	dum->pullup = 0;
 	set_link_state (dum);
@@ -857,7 +818,7 @@ usb_gadget_unregister_driver (struct usb_gadget_driver *driver)
 
 	if (!dum)
 		return -ENODEV;
-	if (!driver || driver != dum->driver)
+	if (!driver || driver != dum->driver || !driver->unbind)
 		return -EINVAL;
 
 	dev_dbg (udc_dev(dum), "unregister gadget driver '%s'\n",
@@ -1785,8 +1746,7 @@ static int dummy_bus_resume (struct usb_hcd *hcd)
 
 	spin_lock_irq (&dum->lock);
 	if (!test_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags)) {
-		dev_warn (&hcd->self.root_hub->dev, "HC isn't running!\n");
-		rc = -ENODEV;
+		rc = -ESHUTDOWN;
 	} else {
 		dum->rh_state = DUMMY_RH_RUNNING;
 		set_link_state (dum);

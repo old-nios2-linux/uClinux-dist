@@ -1,9 +1,9 @@
 /* 
- * $Id: group_mod.c,v 1.10 2003/04/27 18:17:24 jiri Exp $ 
+ * $Id: group_mod.c,v 1.14 2004/08/24 08:58:29 janakj Exp $ 
  *
  * Group membership - module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,7 +32,8 @@
  *  2003-03-11 - New module interface (janakj)
  *  2003-03-16 - flags export parameter added (janakj)
  *  2003-03-19  all mallocs/frees replaced w/ pkg_malloc/pkg_free
- *  2003-04-05 default_uri #define used (jiri)
+ *  2003-04-05  default_uri #define used (jiri)
+ *  2004-06-07  updated to the new DB api: calls to group_db_* (andrei)
  */
 
 
@@ -49,6 +50,7 @@
 
 MODULE_VERSION
 
+#define TABLE_VERSION 2
 
 /*
  * Module destroy function prototype
@@ -72,18 +74,29 @@ static int mod_init(void);
 static int hf_fixup(void** param, int param_no);
 
 
+#define TABLE "grp"
+#define TABLE_LEN (sizeof(TABLE) - 1)
+
+#define USER_COL "username"
+#define USER_COL_LEN (sizeof(USER_COL) - 1)
+
+#define DOMAIN_COL "domain"
+#define DOMAIN_COL_LEN (sizeof(DOMAIN_COL) - 1)
+
+#define GROUP_COL "grp"
+#define GROUP_COL_LEN (sizeof(GROUP_COL) - 1)
+
+
 /*
  * Module parameter variables
  */
-char* db_url       = DEFAULT_RODB_URL;
+static str db_url        = {DEFAULT_RODB_URL, DEFAULT_RODB_URL_LEN};
+str table         = {TABLE, TABLE_LEN};         /* Table name where group definitions are stored */
+str user_column   = {USER_COL, USER_COL_LEN};
+str domain_column = {DOMAIN_COL, DOMAIN_COL_LEN};
+str group_column  = {GROUP_COL, GROUP_COL_LEN};
+int use_domain    = 0;
 
-char* table         = "grp";    /* Table name where group definitions are stored */
-char* user_column   = "username";
-char* domain_column = "domain";
-char* group_column  = "grp";
-int   use_domain    = 0;
-
-db_con_t* db_handle = 0;   /* Database connection handle */
 
 
 /*
@@ -99,11 +112,11 @@ static cmd_export_t cmds[] = {
  * Exported parameters
  */
 static param_export_t params[] = {
-	{"db_url",        STR_PARAM, &db_url       },
-	{"table",         STR_PARAM, &table        },
-	{"user_column",   STR_PARAM, &user_column  },
-	{"domain_column", STR_PARAM, &domain_column},
-	{"group_column",  STR_PARAM, &group_column },
+	{"db_url",        STR_PARAM, &db_url.s       },
+	{"table",         STR_PARAM, &table.s        },
+	{"user_column",   STR_PARAM, &user_column.s  },
+	{"domain_column", STR_PARAM, &domain_column.s},
+	{"group_column",  STR_PARAM, &group_column.s },
 	{"use_domain",    INT_PARAM, &use_domain},
 	{0, 0, 0}
 };
@@ -126,35 +139,44 @@ struct module_exports exports = {
 
 static int child_init(int rank)
 {
-	db_handle = db_init(db_url);
-	if (!db_handle) {
-		LOG(L_ERR, "group:init_child(): Unable to connect database\n");
-		return -1;
-	}
-
-	return 0;
+	return group_db_init(db_url.s);
 }
 
 
 static int mod_init(void)
 {
+	int ver;
+
 	DBG("group module - initializing\n");
-	
+
+	     /* Calculate lengths */
+	db_url.len = strlen(db_url.s);
+	table.len = strlen(table.s);
+	user_column.len = strlen(user_column.s);
+	domain_column.len = strlen(domain_column.s);
+	group_column.len = strlen(group_column.s);
+
 	     /* Find a database module */
-	if (bind_dbmod()) {
-		LOG(L_ERR, "mod_init(): Unable to bind database module\n");
+	if (group_db_bind(db_url.s)) {
 		return -1;
 	}
-
+	ver = group_db_ver(db_url.s, &table);
+	if (ver < 0) {
+		LOG(L_ERR, "group:mod_init(): Error while querying table version\n");
+		return -1;
+	} else if (ver < TABLE_VERSION) {
+		LOG(L_ERR, "group:mod_init(): Invalid table version "
+				"(use ser_mysql.sh reinstall)\n");
+		return -1;
+	}
+	
 	return 0;
 }
 
 
 static void destroy(void)
 {
-	if (db_handle) {
-		db_close(db_handle);
-	}
+	group_db_close();
 }
 
 

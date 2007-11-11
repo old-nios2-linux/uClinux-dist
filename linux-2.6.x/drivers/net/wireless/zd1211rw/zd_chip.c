@@ -49,8 +49,9 @@ void zd_chip_clear(struct zd_chip *chip)
 	ZD_MEMCLEAR(chip, sizeof(*chip));
 }
 
-static int scnprint_mac_oui(const u8 *addr, char *buffer, size_t size)
+static int scnprint_mac_oui(struct zd_chip *chip, char *buffer, size_t size)
 {
+	u8 *addr = zd_usb_to_netdev(&chip->usb)->dev_addr;
 	return scnprintf(buffer, size, "%02x-%02x-%02x",
 		         addr[0], addr[1], addr[2]);
 }
@@ -61,17 +62,18 @@ static int scnprint_id(struct zd_chip *chip, char *buffer, size_t size)
 	int i = 0;
 
 	i = scnprintf(buffer, size, "zd1211%s chip ",
-		      chip->is_zd1211b ? "b" : "");
+		      zd_chip_is_zd1211b(chip) ? "b" : "");
 	i += zd_usb_scnprint_id(&chip->usb, buffer+i, size-i);
 	i += scnprintf(buffer+i, size-i, " ");
-	i += scnprint_mac_oui(chip->e2p_mac, buffer+i, size-i);
+	i += scnprint_mac_oui(chip, buffer+i, size-i);
 	i += scnprintf(buffer+i, size-i, " ");
 	i += zd_rf_scnprint_id(&chip->rf, buffer+i, size-i);
-	i += scnprintf(buffer+i, size-i, " pa%1x %c%c%c%c", chip->pa_type,
+	i += scnprintf(buffer+i, size-i, " pa%1x %c%c%c%c%c", chip->pa_type,
 		chip->patch_cck_gain ? 'g' : '-',
 		chip->patch_cr157 ? '7' : '-',
 		chip->patch_6m_band_edge ? '6' : '-',
-		chip->new_phy_layout ? 'N' : '-');
+		chip->new_phy_layout ? 'N' : '-',
+		chip->al2230s_bit ? 'S' : '-');
 	return i;
 }
 
@@ -82,6 +84,18 @@ static void print_id(struct zd_chip *chip)
 	scnprint_id(chip, buffer, sizeof(buffer));
 	buffer[sizeof(buffer)-1] = 0;
 	dev_info(zd_chip_dev(chip), "%s\n", buffer);
+}
+
+static zd_addr_t inc_addr(zd_addr_t addr)
+{
+	u16 a = (u16)addr;
+	/* Control registers use byte addressing, but everything else uses word
+	 * addressing. */
+	if ((a & 0xf000) == CR_START)
+		a += 2;
+	else
+		a += 1;
+	return (zd_addr_t)a;
 }
 
 /* Read a variable number of 32-bit values. Parameter count is not allowed to
@@ -101,8 +115,8 @@ int zd_ioread32v_locked(struct zd_chip *chip, u32 *values, const zd_addr_t *addr
 
 	/* Allocate a single memory block for values and addresses. */
 	count16 = 2*count;
-	a16 = (zd_addr_t *)kmalloc(count16 * (sizeof(zd_addr_t) + sizeof(u16)),
-		                   GFP_NOFS);
+	a16 = (zd_addr_t *) kmalloc(count16 * (sizeof(zd_addr_t) + sizeof(u16)),
+		                   GFP_KERNEL);
 	if (!a16) {
 		dev_dbg_f(zd_chip_dev(chip),
 			  "error ENOMEM in allocation of a16\n");
@@ -114,7 +128,7 @@ int zd_ioread32v_locked(struct zd_chip *chip, u32 *values, const zd_addr_t *addr
 	for (i = 0; i < count; i++) {
 		int j = 2*i;
 		/* We read the high word always first. */
-		a16[j] = zd_inc_word(addr[i]);
+		a16[j] = inc_addr(addr[i]);
 		a16[j+1] = addr[i];
 	}
 
@@ -151,7 +165,7 @@ int _zd_iowrite32v_locked(struct zd_chip *chip, const struct zd_ioreq32 *ioreqs,
 
 	/* Allocate a single memory block for values and addresses. */
 	count16 = 2*count;
-	ioreqs16 = kmalloc(count16 * sizeof(struct zd_ioreq16), GFP_NOFS);
+	ioreqs16 = kmalloc(count16 * sizeof(struct zd_ioreq16), GFP_KERNEL);
 	if (!ioreqs16) {
 		r = -ENOMEM;
 		dev_dbg_f(zd_chip_dev(chip),
@@ -163,7 +177,7 @@ int _zd_iowrite32v_locked(struct zd_chip *chip, const struct zd_ioreq32 *ioreqs,
 		j = 2*i;
 		/* We write the high word always first. */
 		ioreqs16[j].value   = ioreqs[i].value >> 16;
-		ioreqs16[j].addr    = zd_inc_word(ioreqs[i].addr);
+		ioreqs16[j].addr    = inc_addr(ioreqs[i].addr);
 		ioreqs16[j+1].value = ioreqs[i].value;
 		ioreqs16[j+1].addr  = ioreqs[i].addr;
 	}
@@ -325,6 +339,7 @@ static int read_pod(struct zd_chip *chip, u8 *rf_type)
 	chip->patch_cr157 = (value >> 13) & 0x1;
 	chip->patch_6m_band_edge = (value >> 21) & 0x1;
 	chip->new_phy_layout = (value >> 31) & 0x1;
+	chip->al2230s_bit = (value >> 7) & 0x1;
 	chip->link_led = ((value >> 4) & 1) ? LED1 : LED2;
 	chip->supports_tx_led = 1;
 	if (value & (1 << 24)) { /* LED scenario */
@@ -352,64 +367,9 @@ error:
 	return r;
 }
 
-static int _read_mac_addr(struct zd_chip *chip, u8 *mac_addr,
-	                  const zd_addr_t *addr)
-{
-	int r;
-	u32 parts[2];
-
-	r = zd_ioread32v_locked(chip, parts, (const zd_addr_t *)addr, 2);
-	if (r) {
-		dev_dbg_f(zd_chip_dev(chip),
-			"error: couldn't read e2p macs. Error number %d\n", r);
-		return r;
-	}
-
-	mac_addr[0] = parts[0];
-	mac_addr[1] = parts[0] >>  8;
-	mac_addr[2] = parts[0] >> 16;
-	mac_addr[3] = parts[0] >> 24;
-	mac_addr[4] = parts[1];
-	mac_addr[5] = parts[1] >>  8;
-
-	return 0;
-}
-
-static int read_e2p_mac_addr(struct zd_chip *chip)
-{
-	static const zd_addr_t addr[2] = { E2P_MAC_ADDR_P1, E2P_MAC_ADDR_P2 };
-
-	ZD_ASSERT(mutex_is_locked(&chip->mutex));
-	return _read_mac_addr(chip, chip->e2p_mac, (const zd_addr_t *)addr);
-}
-
 /* MAC address: if custom mac addresses are to to be used CR_MAC_ADDR_P1 and
  *              CR_MAC_ADDR_P2 must be overwritten
  */
-void zd_get_e2p_mac_addr(struct zd_chip *chip, u8 *mac_addr)
-{
-	mutex_lock(&chip->mutex);
-	memcpy(mac_addr, chip->e2p_mac, ETH_ALEN);
-	mutex_unlock(&chip->mutex);
-}
-
-static int read_mac_addr(struct zd_chip *chip, u8 *mac_addr)
-{
-	static const zd_addr_t addr[2] = { CR_MAC_ADDR_P1, CR_MAC_ADDR_P2 };
-	return _read_mac_addr(chip, mac_addr, (const zd_addr_t *)addr);
-}
-
-int zd_read_mac_addr(struct zd_chip *chip, u8 *mac_addr)
-{
-	int r;
-
-	dev_dbg_f(zd_chip_dev(chip), "\n");
-	mutex_lock(&chip->mutex);
-	r = read_mac_addr(chip, mac_addr);
-	mutex_unlock(&chip->mutex);
-	return r;
-}
-
 int zd_write_mac_addr(struct zd_chip *chip, const u8 *mac_addr)
 {
 	int r;
@@ -430,12 +390,6 @@ int zd_write_mac_addr(struct zd_chip *chip, const u8 *mac_addr)
 
 	mutex_lock(&chip->mutex);
 	r = zd_iowrite32a_locked(chip, reqs, ARRAY_SIZE(reqs));
-#ifdef DEBUG
-	{
-		u8 tmp[ETH_ALEN];
-		read_mac_addr(chip, tmp);
-	}
-#endif /* DEBUG */
 	mutex_unlock(&chip->mutex);
 	return r;
 }
@@ -466,7 +420,8 @@ static int read_values(struct zd_chip *chip, u8 *values, size_t count,
 
 	ZD_ASSERT(mutex_is_locked(&chip->mutex));
 	for (i = 0;;) {
-		r = zd_ioread32_locked(chip, &v, e2p_addr+i/2);
+		r = zd_ioread32_locked(chip, &v,
+			               (zd_addr_t)((u16)e2p_addr+i/2));
 		if (r)
 			return r;
 		v -= guard;
@@ -578,16 +533,16 @@ int zd_chip_unlock_phy_regs(struct zd_chip *chip)
 	return r;
 }
 
-/* CR157 can be optionally patched by the EEPROM */
+/* CR157 can be optionally patched by the EEPROM for original ZD1211 */
 static int patch_cr157(struct zd_chip *chip)
 {
 	int r;
-	u32 value;
+	u16 value;
 
 	if (!chip->patch_cr157)
 		return 0;
 
-	r = zd_ioread32_locked(chip, &value, E2P_PHY_REG);
+	r = zd_ioread16_locked(chip, &value, E2P_PHY_REG);
 	if (r)
 		return r;
 
@@ -600,15 +555,23 @@ static int patch_cr157(struct zd_chip *chip)
  * Vendor driver says: for FCC regulation, enabled per HWFeature 6M band edge
  * bit (for AL2230, AL2230S)
  */
-static int patch_6m_band_edge(struct zd_chip *chip, int channel)
+static int patch_6m_band_edge(struct zd_chip *chip, u8 channel)
+{
+	ZD_ASSERT(mutex_is_locked(&chip->mutex));
+	if (!chip->patch_6m_band_edge)
+		return 0;
+
+	return zd_rf_patch_6m_band_edge(&chip->rf, channel);
+}
+
+/* Generic implementation of 6M band edge patching, used by most RFs via
+ * zd_rf_generic_patch_6m() */
+int zd_chip_generic_patch_6m_band(struct zd_chip *chip, int channel)
 {
 	struct zd_ioreq16 ioreqs[] = {
 		{ CR128, 0x14 }, { CR129, 0x12 }, { CR130, 0x10 },
 		{ CR47,  0x1e },
 	};
-
-	if (!chip->patch_6m_band_edge || !chip->rf.patch_6m_band_edge)
-		return 0;
 
 	/* FIXME: Channel 11 is not the edge for all regulatory domains. */
 	if (channel == 1 || channel == 11)
@@ -669,17 +632,17 @@ static int zd1211_hw_reset_phy(struct zd_chip *chip)
 		{ CR111, 0x27 }, { CR112, 0x27 }, { CR113, 0x27 },
 		{ CR114, 0x27 }, { CR115, 0x26 }, { CR116, 0x24 },
 		{ CR117, 0xfc }, { CR118, 0xfa }, { CR120, 0x4f },
-		{ CR123, 0x27 }, { CR125, 0xaa }, { CR127, 0x03 },
-		{ CR128, 0x14 }, { CR129, 0x12 }, { CR130, 0x10 },
-		{ CR131, 0x0C }, { CR136, 0xdf }, { CR137, 0x40 },
-		{ CR138, 0xa0 }, { CR139, 0xb0 }, { CR140, 0x99 },
-		{ CR141, 0x82 }, { CR142, 0x54 }, { CR143, 0x1c },
-		{ CR144, 0x6c }, { CR147, 0x07 }, { CR148, 0x4c },
-		{ CR149, 0x50 }, { CR150, 0x0e }, { CR151, 0x18 },
-		{ CR160, 0xfe }, { CR161, 0xee }, { CR162, 0xaa },
-		{ CR163, 0xfa }, { CR164, 0xfa }, { CR165, 0xea },
-		{ CR166, 0xbe }, { CR167, 0xbe }, { CR168, 0x6a },
-		{ CR169, 0xba }, { CR170, 0xba }, { CR171, 0xba },
+		{ CR125, 0xaa }, { CR127, 0x03 }, { CR128, 0x14 },
+		{ CR129, 0x12 }, { CR130, 0x10 }, { CR131, 0x0C },
+		{ CR136, 0xdf }, { CR137, 0x40 }, { CR138, 0xa0 },
+		{ CR139, 0xb0 }, { CR140, 0x99 }, { CR141, 0x82 },
+		{ CR142, 0x54 }, { CR143, 0x1c }, { CR144, 0x6c },
+		{ CR147, 0x07 }, { CR148, 0x4c }, { CR149, 0x50 },
+		{ CR150, 0x0e }, { CR151, 0x18 }, { CR160, 0xfe },
+		{ CR161, 0xee }, { CR162, 0xaa }, { CR163, 0xfa },
+		{ CR164, 0xfa }, { CR165, 0xea }, { CR166, 0xbe },
+		{ CR167, 0xbe }, { CR168, 0x6a }, { CR169, 0xba },
+		{ CR170, 0xba }, { CR171, 0xba },
 		/* Note: CR204 must lead the CR203 */
 		{ CR204, 0x7d },
 		{ },
@@ -777,11 +740,6 @@ static int zd1211b_hw_reset_phy(struct zd_chip *chip)
 		goto out;
 
 	r = zd_iowrite16a_locked(chip, ioreqs, ARRAY_SIZE(ioreqs));
-	if (r)
-		goto unlock;
-
-	r = patch_cr157(chip);
-unlock:
 	t = zd_chip_unlock_phy_regs(chip);
 	if (t && !r)
 		r = t;
@@ -791,54 +749,25 @@ out:
 
 static int hw_reset_phy(struct zd_chip *chip)
 {
-	return chip->is_zd1211b ? zd1211b_hw_reset_phy(chip) :
+	return zd_chip_is_zd1211b(chip) ? zd1211b_hw_reset_phy(chip) :
 		                  zd1211_hw_reset_phy(chip);
 }
 
 static int zd1211_hw_init_hmac(struct zd_chip *chip)
 {
 	static const struct zd_ioreq32 ioreqs[] = {
-		{ CR_ACK_TIMEOUT_EXT,		0x20 },
-		{ CR_ADDA_MBIAS_WARMTIME,	0x30000808 },
 		{ CR_ZD1211_RETRY_MAX,		0x2 },
-		{ CR_SNIFFER_ON,		0 },
-		{ CR_RX_FILTER,			STA_RX_FILTER },
-		{ CR_GROUP_HASH_P1,		0x00 },
-		{ CR_GROUP_HASH_P2,		0x80000000 },
-		{ CR_REG1,			0xa4 },
-		{ CR_ADDA_PWR_DWN,		0x7f },
-		{ CR_BCN_PLCP_CFG,		0x00f00401 },
-		{ CR_PHY_DELAY,			0x00 },
-		{ CR_ACK_TIMEOUT_EXT,		0x80 },
-		{ CR_ADDA_PWR_DWN,		0x00 },
-		{ CR_ACK_TIME_80211,		0x100 },
-		{ CR_RX_PE_DELAY,		0x70 },
-		{ CR_PS_CTRL,			0x10000000 },
-		{ CR_RTS_CTS_RATE,		0x02030203 },
 		{ CR_RX_THRESHOLD,		0x000c0640 },
-		{ CR_AFTER_PNP,			0x1 },
-		{ CR_WEP_PROTECT,		0x114 },
 	};
-
-	int r;
 
 	dev_dbg_f(zd_chip_dev(chip), "\n");
 	ZD_ASSERT(mutex_is_locked(&chip->mutex));
-	r = zd_iowrite32a_locked(chip, ioreqs, ARRAY_SIZE(ioreqs));
-#ifdef DEBUG
-	if (r) {
-		dev_err(zd_chip_dev(chip),
-			"error in zd_iowrite32a_locked. Error number %d\n", r);
-	}
-#endif /* DEBUG */
-	return r;
+	return zd_iowrite32a_locked(chip, ioreqs, ARRAY_SIZE(ioreqs));
 }
 
 static int zd1211b_hw_init_hmac(struct zd_chip *chip)
 {
 	static const struct zd_ioreq32 ioreqs[] = {
-		{ CR_ACK_TIMEOUT_EXT,		0x20 },
-		{ CR_ADDA_MBIAS_WARMTIME,	0x30000808 },
 		{ CR_ZD1211B_RETRY_MAX,		0x02020202 },
 		{ CR_ZD1211B_TX_PWR_CTL4,	0x007f003f },
 		{ CR_ZD1211B_TX_PWR_CTL3,	0x007f003f },
@@ -847,6 +776,20 @@ static int zd1211b_hw_init_hmac(struct zd_chip *chip)
 		{ CR_ZD1211B_AIFS_CTL1,		0x00280028 },
 		{ CR_ZD1211B_AIFS_CTL2,		0x008C003C },
 		{ CR_ZD1211B_TXOP,		0x01800824 },
+		{ CR_RX_THRESHOLD,		0x000c0eff, },
+	};
+
+	dev_dbg_f(zd_chip_dev(chip), "\n");
+	ZD_ASSERT(mutex_is_locked(&chip->mutex));
+	return zd_iowrite32a_locked(chip, ioreqs, ARRAY_SIZE(ioreqs));
+}
+
+static int hw_init_hmac(struct zd_chip *chip)
+{
+	int r;
+	static const struct zd_ioreq32 ioreqs[] = {
+		{ CR_ACK_TIMEOUT_EXT,		0x20 },
+		{ CR_ADDA_MBIAS_WARMTIME,	0x30000808 },
 		{ CR_SNIFFER_ON,		0 },
 		{ CR_RX_FILTER,			STA_RX_FILTER },
 		{ CR_GROUP_HASH_P1,		0x00 },
@@ -861,26 +804,17 @@ static int zd1211b_hw_init_hmac(struct zd_chip *chip)
 		{ CR_RX_PE_DELAY,		0x70 },
 		{ CR_PS_CTRL,			0x10000000 },
 		{ CR_RTS_CTS_RATE,		0x02030203 },
-		{ CR_RX_THRESHOLD,		0x000c0eff, },
 		{ CR_AFTER_PNP,			0x1 },
 		{ CR_WEP_PROTECT,		0x114 },
+		{ CR_IFS_VALUE,			IFS_VALUE_DEFAULT },
 	};
 
-	int r;
-
-	dev_dbg_f(zd_chip_dev(chip), "\n");
 	ZD_ASSERT(mutex_is_locked(&chip->mutex));
 	r = zd_iowrite32a_locked(chip, ioreqs, ARRAY_SIZE(ioreqs));
-	if (r) {
-		dev_dbg_f(zd_chip_dev(chip),
-			"error in zd_iowrite32a_locked. Error number %d\n", r);
-	}
-	return r;
-}
+	if (r)
+		return r;
 
-static int hw_init_hmac(struct zd_chip *chip)
-{
-	return chip->is_zd1211b ?
+	return zd_chip_is_zd1211b(chip) ?
 		zd1211b_hw_init_hmac(chip) : zd1211_hw_init_hmac(chip);
 }
 
@@ -974,14 +908,12 @@ static int hw_init(struct zd_chip *chip)
 	if (r)
 		return r;
 
-	/* Although the vendor driver defaults to a different value during
-	 * init, it overwrites the IFS value with the following every time
-	 * the channel changes. We should aim to be more intelligent... */
-	r = zd_iowrite32_locked(chip, IFS_VALUE_DEFAULT, CR_IFS_VALUE);
-	if (r)
-		return r;
-
 	return set_beacon_interval(chip, 100);
+}
+
+static zd_addr_t fw_reg_addr(struct zd_chip *chip, u16 offset)
+{
+	return (zd_addr_t)((u16)chip->fw_regs_base + offset);
 }
 
 #ifdef DEBUG
@@ -1018,9 +950,11 @@ static int test_init(struct zd_chip *chip)
 
 static void dump_fw_registers(struct zd_chip *chip)
 {
-	static const zd_addr_t addr[4] = {
-		FW_FIRMWARE_VER, FW_USB_SPEED, FW_FIX_TX_RATE,
-		FW_LINK_STATUS
+	const zd_addr_t addr[4] = {
+		fw_reg_addr(chip, FW_REG_FIRMWARE_VER),
+		fw_reg_addr(chip, FW_REG_USB_SPEED),
+		fw_reg_addr(chip, FW_REG_FIX_TX_RATE),
+		fw_reg_addr(chip, FW_REG_LED_LINK_STATUS),
 	};
 
 	int r;
@@ -1046,7 +980,8 @@ static int print_fw_version(struct zd_chip *chip)
 	int r;
 	u16 version;
 
-	r = zd_ioread16_locked(chip, &version, FW_FIRMWARE_VER);
+	r = zd_ioread16_locked(chip, &version,
+		fw_reg_addr(chip, FW_REG_FIRMWARE_VER));
 	if (r)
 		return r;
 
@@ -1076,6 +1011,31 @@ static int set_mandatory_rates(struct zd_chip *chip, enum ieee80211_std std)
 	return zd_iowrite32_locked(chip, rates, CR_MANDATORY_RATE_TBL);
 }
 
+int zd_chip_set_rts_cts_rate_locked(struct zd_chip *chip,
+	u8 rts_rate, int preamble)
+{
+	int rts_mod = ZD_RX_CCK;
+	u32 value = 0;
+
+	/* Modulation bit */
+	if (ZD_CS_TYPE(rts_rate) == ZD_CS_OFDM)
+		rts_mod = ZD_RX_OFDM;
+
+	dev_dbg_f(zd_chip_dev(chip), "rts_rate=%x preamble=%x\n",
+		rts_rate, preamble);
+
+	value |= rts_rate << RTSCTS_SH_RTS_RATE;
+	value |= rts_mod << RTSCTS_SH_RTS_MOD_TYPE;
+	value |= preamble << RTSCTS_SH_RTS_PMB_TYPE;
+	value |= preamble << RTSCTS_SH_CTS_PMB_TYPE;
+
+	/* We always send 11M self-CTS messages, like the vendor driver. */
+	value |= ZD_CCK_RATE_11M << RTSCTS_SH_CTS_RATE;
+	value |= ZD_RX_CCK << RTSCTS_SH_CTS_MOD_TYPE;
+
+	return zd_iowrite32_locked(chip, value, CR_RTS_CTS_RATE);
+}
+
 int zd_chip_enable_hwint(struct zd_chip *chip)
 {
 	int r;
@@ -1101,7 +1061,30 @@ int zd_chip_disable_hwint(struct zd_chip *chip)
 	return r;
 }
 
-int zd_chip_init_hw(struct zd_chip *chip, u8 device_type)
+static int read_fw_regs_offset(struct zd_chip *chip)
+{
+	int r;
+
+	ZD_ASSERT(mutex_is_locked(&chip->mutex));
+	r = zd_ioread16_locked(chip, (u16*)&chip->fw_regs_base,
+		               FWRAW_REGS_ADDR);
+	if (r)
+		return r;
+	dev_dbg_f(zd_chip_dev(chip), "fw_regs_base: %#06hx\n",
+		  (u16)chip->fw_regs_base);
+
+	return 0;
+}
+
+/* Read mac address using pre-firmware interface */
+int zd_chip_read_mac_addr_fw(struct zd_chip *chip, u8 *addr)
+{
+	dev_dbg_f(zd_chip_dev(chip), "\n");
+	return zd_usb_read_fw(&chip->usb, E2P_MAC_ADDR_P1, addr,
+		ETH_ALEN);
+}
+
+int zd_chip_init_hw(struct zd_chip *chip)
 {
 	int r;
 	u8 rf_type;
@@ -1109,7 +1092,6 @@ int zd_chip_init_hw(struct zd_chip *chip, u8 device_type)
 	dev_dbg_f(zd_chip_dev(chip), "\n");
 
 	mutex_lock(&chip->mutex);
-	chip->is_zd1211b = (device_type == DEVICE_ZD1211B) != 0;
 
 #ifdef DEBUG
 	r = test_init(chip);
@@ -1120,7 +1102,7 @@ int zd_chip_init_hw(struct zd_chip *chip, u8 device_type)
 	if (r)
 		goto out;
 
-	r = zd_usb_init_hw(&chip->usb);
+	r = read_fw_regs_offset(chip);
 	if (r)
 		goto out;
 
@@ -1164,10 +1146,6 @@ int zd_chip_init_hw(struct zd_chip *chip, u8 device_type)
 	if (r)
 		goto out;
 #endif /* DEBUG */
-
-	r = read_e2p_mac_addr(chip);
-	if (r)
-		goto out;
 
 	r = read_cal_int_tables(chip);
 	if (r)
@@ -1217,10 +1195,13 @@ static int update_channel_integration_and_calibration(struct zd_chip *chip,
 {
 	int r;
 
+	if (!zd_rf_should_update_pwr_int(&chip->rf))
+		return 0;
+
 	r = update_pwr_int(chip, channel);
 	if (r)
 		return r;
-	if (chip->is_zd1211b) {
+	if (zd_chip_is_zd1211b(chip)) {
 		static const struct zd_ioreq16 ioreqs[] = {
 			{ CR69, 0x28 },
 			{},
@@ -1247,7 +1228,7 @@ static int patch_cck_gain(struct zd_chip *chip)
 	int r;
 	u32 value;
 
-	if (!chip->patch_cck_gain)
+	if (!chip->patch_cck_gain || !zd_rf_should_patch_cck_gain(&chip->rf))
 		return 0;
 
 	ZD_ASSERT(mutex_is_locked(&chip->mutex));
@@ -1300,15 +1281,15 @@ u8 zd_chip_get_channel(struct zd_chip *chip)
 
 int zd_chip_control_leds(struct zd_chip *chip, enum led_status status)
 {
-	static const zd_addr_t a[] = {
-		FW_LINK_STATUS,
+	const zd_addr_t a[] = {
+		fw_reg_addr(chip, FW_REG_LED_LINK_STATUS),
 		CR_LED,
 	};
 
 	int r;
 	u16 v[ARRAY_SIZE(a)];
 	struct zd_ioreq16 ioreqs[ARRAY_SIZE(a)] = {
-		[0] = { FW_LINK_STATUS },
+		[0] = { fw_reg_addr(chip, FW_REG_LED_LINK_STATUS) },
 		[1] = { CR_LED },
 	};
 	u16 other_led;
@@ -1355,17 +1336,12 @@ out:
 	return r;
 }
 
-int zd_chip_set_basic_rates(struct zd_chip *chip, u16 cr_rates)
+int zd_chip_set_basic_rates_locked(struct zd_chip *chip, u16 cr_rates)
 {
-	int r;
+	ZD_ASSERT((cr_rates & ~(CR_RATES_80211B | CR_RATES_80211G)) == 0);
+	dev_dbg_f(zd_chip_dev(chip), "%x\n", cr_rates);
 
-	if (cr_rates & ~(CR_RATES_80211B|CR_RATES_80211G))
-		return -EINVAL;
-
-	mutex_lock(&chip->mutex);
-	r = zd_iowrite32_locked(chip, cr_rates, CR_BASIC_RATE_TBL);
-	mutex_unlock(&chip->mutex);
-	return r;
+	return zd_iowrite32_locked(chip, cr_rates, CR_BASIC_RATE_TBL);
 }
 
 static int ofdm_qual_db(u8 status_quality, u8 rate, unsigned int size)
@@ -1652,4 +1628,17 @@ int zd_rfwritev_cr_locked(struct zd_chip *chip,
 	}
 
 	return 0;
+}
+
+int zd_chip_set_multicast_hash(struct zd_chip *chip,
+	                       struct zd_mc_hash *hash)
+{
+	struct zd_ioreq32 ioreqs[] = {
+		{ CR_GROUP_HASH_P1, hash->low },
+		{ CR_GROUP_HASH_P2, hash->high },
+	};
+
+	dev_dbg_f(zd_chip_dev(chip), "hash l 0x%08x h 0x%08x\n",
+		ioreqs[0].value, ioreqs[1].value);
+	return zd_iowrite32a(chip, ioreqs, ARRAY_SIZE(ioreqs));
 }

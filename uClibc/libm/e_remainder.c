@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -15,16 +15,18 @@ static char rcsid[] = "$NetBSD: e_remainder.c,v 1.8 1995/05/10 20:46:05 jtc Exp 
 #endif
 
 /* __ieee754_remainder(x,p)
- * Return :                  
- * 	returns  x REM p  =  x - [x/p]*p as if in infinite 
- * 	precise arithmetic, where [x/p] is the (infinite bit) 
+ * Return :
+ * 	returns  x REM p  =  x - [x/p]*p as if in infinite
+ * 	precise arithmetic, where [x/p] is the (infinite bit)
  *	integer nearest x/p (in half way case choose the even one).
- * Method : 
+ * Method :
  *	Based on fmod() return x-[x/p]chopped*p exactlp.
  */
 
 #include "math.h"
 #include "math_private.h"
+
+libm_hidden_proto(fabs)
 
 #ifdef __STDC__
 static const double zero = 0.0;
@@ -34,9 +36,9 @@ static double zero = 0.0;
 
 
 #ifdef __STDC__
-	double __ieee754_remainder(double x, double p)
+	double attribute_hidden __ieee754_remainder(double x, double p)
 #else
-	double __ieee754_remainder(x,p)
+	double attribute_hidden __ieee754_remainder(x,p)
 	double x,p;
 #endif
 {

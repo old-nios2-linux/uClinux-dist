@@ -50,14 +50,14 @@
  */
 #define JBD_DEFAULT_MAX_COMMIT_AGE 5
 
-#ifdef CONFIG_JBD_DEBUG
+#ifdef CONFIG_JBD2_DEBUG
 /*
  * Define JBD_EXPENSIVE_CHECKING to enable more expensive internal
  * consistency checks.  By default we don't do this unless
- * CONFIG_JBD_DEBUG is on.
+ * CONFIG_JBD2_DEBUG is on.
  */
 #define JBD_EXPENSIVE_CHECKING
-extern int jbd2_journal_enable_debug;
+extern u8 jbd2_journal_enable_debug;
 
 #define jbd_debug(n, f, a...)						\
 	do {								\
@@ -848,7 +848,6 @@ struct journal_s
  */
 
 /* Filing buffers */
-extern void __jbd2_journal_temp_unlink_buffer(struct journal_head *jh);
 extern void jbd2_journal_unfile_buffer(journal_t *, struct journal_head *);
 extern void __jbd2_journal_unfile_buffer(struct journal_head *);
 extern void __jbd2_journal_refile_buffer(struct journal_head *);
@@ -958,7 +957,7 @@ void jbd2_journal_put_journal_head(struct journal_head *jh);
 /*
  * handle management
  */
-extern kmem_cache_t *jbd2_handle_cache;
+extern struct kmem_cache *jbd2_handle_cache;
 
 static inline handle_t *jbd_alloc_handle(gfp_t gfp_flags)
 {

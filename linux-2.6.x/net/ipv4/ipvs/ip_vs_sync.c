@@ -67,6 +67,11 @@ struct ip_vs_sync_conn_options {
 	struct ip_vs_seq        out_seq;        /* outgoing seq. struct */
 };
 
+struct ip_vs_sync_thread_data {
+	struct completion *startup;
+	int state;
+};
+
 #define IP_VS_SYNC_CONN_TIMEOUT (3*60*HZ)
 #define SIMPLE_CONN_SIZE  (sizeof(struct ip_vs_sync_conn))
 #define FULL_CONN_SIZE  \
@@ -657,7 +662,7 @@ static void sync_master_loop(void)
 		if (stop_master_sync)
 			break;
 
-		ssleep(1);
+		msleep_interruptible(1000);
 	}
 
 	/* clean up the sync_buff queue */
@@ -714,7 +719,7 @@ static void sync_backup_loop(void)
 		if (stop_backup_sync)
 			break;
 
-		ssleep(1);
+		msleep_interruptible(1000);
 	}
 
 	/* release the sending multicast socket */
@@ -751,6 +756,7 @@ static int sync_thread(void *startup)
 	mm_segment_t oldmm;
 	int state;
 	const char *name;
+	struct ip_vs_sync_thread_data *tinfo = startup;
 
 	/* increase the module use count */
 	ip_vs_use_count_inc();
@@ -789,7 +795,14 @@ static int sync_thread(void *startup)
 	add_wait_queue(&sync_wait, &wait);
 
 	set_sync_pid(state, current->pid);
-	complete((struct completion *)startup);
+	complete(tinfo->startup);
+
+	/*
+	 * once we call the completion queue above, we should
+	 * null out that reference, since its allocated on the
+	 * stack of the creating kernel thread
+	 */
+	tinfo->startup = NULL;
 
 	/* processing master/backup loop here */
 	if (state == IP_VS_STATE_MASTER)
@@ -801,6 +814,14 @@ static int sync_thread(void *startup)
 	remove_wait_queue(&sync_wait, &wait);
 
 	/* thread exits */
+
+	/*
+	 * If we weren't explicitly stopped, then we
+	 * exited in error, and should undo our state
+	 */
+	if ((!stop_master_sync) && (!stop_backup_sync))
+		ip_vs_sync_state -= tinfo->state;
+
 	set_sync_pid(state, 0);
 	IP_VS_INFO("sync thread stopped!\n");
 
@@ -812,6 +833,11 @@ static int sync_thread(void *startup)
 	set_stop_sync(state, 0);
 	wake_up(&stop_sync_wait);
 
+	/*
+	 * we need to free the structure that was allocated
+	 * for us in start_sync_thread
+	 */
+	kfree(tinfo);
 	return 0;
 }
 
@@ -826,7 +852,7 @@ static int fork_sync_thread(void *startup)
 	if ((pid = kernel_thread(sync_thread, startup, 0)) < 0) {
 		IP_VS_ERR("could not create sync_thread due to %d... "
 			  "retrying.\n", pid);
-		ssleep(1);
+		msleep_interruptible(1000);
 		goto repeat;
 	}
 
@@ -838,10 +864,18 @@ int start_sync_thread(int state, char *mcast_ifn, __u8 syncid)
 {
 	DECLARE_COMPLETION_ONSTACK(startup);
 	pid_t pid;
+	struct ip_vs_sync_thread_data *tinfo;
 
 	if ((state == IP_VS_STATE_MASTER && sync_master_pid) ||
 	    (state == IP_VS_STATE_BACKUP && sync_backup_pid))
 		return -EEXIST;
+
+	/*
+	 * Note that tinfo will be freed in sync_thread on exit
+	 */
+	tinfo = kmalloc(sizeof(struct ip_vs_sync_thread_data), GFP_KERNEL);
+	if (!tinfo)
+		return -ENOMEM;
 
 	IP_VS_DBG(7, "%s: pid %d\n", __FUNCTION__, current->pid);
 	IP_VS_DBG(7, "Each ip_vs_sync_conn entry need %Zd bytes\n",
@@ -849,18 +883,23 @@ int start_sync_thread(int state, char *mcast_ifn, __u8 syncid)
 
 	ip_vs_sync_state |= state;
 	if (state == IP_VS_STATE_MASTER) {
-		strlcpy(ip_vs_master_mcast_ifn, mcast_ifn, sizeof(ip_vs_master_mcast_ifn));
+		strlcpy(ip_vs_master_mcast_ifn, mcast_ifn,
+			sizeof(ip_vs_master_mcast_ifn));
 		ip_vs_master_syncid = syncid;
 	} else {
-		strlcpy(ip_vs_backup_mcast_ifn, mcast_ifn, sizeof(ip_vs_backup_mcast_ifn));
+		strlcpy(ip_vs_backup_mcast_ifn, mcast_ifn,
+			sizeof(ip_vs_backup_mcast_ifn));
 		ip_vs_backup_syncid = syncid;
 	}
 
+	tinfo->state = state;
+	tinfo->startup = &startup;
+
   repeat:
-	if ((pid = kernel_thread(fork_sync_thread, &startup, 0)) < 0) {
+	if ((pid = kernel_thread(fork_sync_thread, tinfo, 0)) < 0) {
 		IP_VS_ERR("could not create fork_sync_thread due to %d... "
 			  "retrying.\n", pid);
-		ssleep(1);
+		msleep_interruptible(1000);
 		goto repeat;
 	}
 
@@ -880,7 +919,8 @@ int stop_sync_thread(int state)
 
 	IP_VS_DBG(7, "%s: pid %d\n", __FUNCTION__, current->pid);
 	IP_VS_INFO("stopping sync thread %d ...\n",
-		   (state == IP_VS_STATE_MASTER) ? sync_master_pid : sync_backup_pid);
+		   (state == IP_VS_STATE_MASTER) ?
+		   sync_master_pid : sync_backup_pid);
 
 	__set_current_state(TASK_UNINTERRUPTIBLE);
 	add_wait_queue(&stop_sync_wait, &wait);

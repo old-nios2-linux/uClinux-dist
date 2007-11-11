@@ -1,5 +1,5 @@
 /*
- * $Id: parse_event.h,v 1.3 2002/09/23 13:42:56 janakj Rel $
+ * $Id: parse_event.h,v 1.6 2004/08/24 09:01:25 janakj Exp $
  *
  * Event header field body parser
  * This parser was written for Presence Agent module only.
@@ -7,7 +7,7 @@
  * It should be replaced by a more generic parser if subpackages or
  * parameters should be parsed too.
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -38,9 +38,11 @@
 #include "../str.h"
 #include "hf.h"
 
-#define EVENT_OTHER    0
-#define EVENT_PRESENCE 1
-
+#define EVENT_OTHER          0
+#define EVENT_PRESENCE       1
+#define EVENT_PRESENCE_WINFO 2
+#define EVENT_XCAP_CHANGE    3
+#define EVENT_LOCATION       4
 
 typedef struct event {
 	str text;       /* Original string representation */

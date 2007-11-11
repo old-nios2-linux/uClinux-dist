@@ -589,7 +589,7 @@ void __init trap_init(void)
 #endif
 
 #ifdef	CONFIG_UCBOOTSTRAP
-	*(volatile unsigned int *)4 = 0xE59FF038;
+	*(volatile unsigned int *)((int)(vectors_base()) + 4) = 0xE59FF038;
 #endif
 
 }

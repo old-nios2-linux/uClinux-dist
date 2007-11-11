@@ -73,10 +73,6 @@ static void  ParseDNSArgs( u_char* );
 static void ProcessDNS( void*, void* );
 static void DNSConfigCheck( void );
 static inline int CheckDNSPort( u_int16_t );
-static int ProcessDNSProtocolVersionExchange( DNSSessionData*, SFSnortPacket*, 
-                                             u_int8_t, u_int8_t );
-static int ProcessDNSKeyExchange( DNSSessionData*, SFSnortPacket*, u_int8_t );
-static int ProcessDNSKeyInitExchange( DNSSessionData*, SFSnortPacket*, u_int8_t );
 
 /* Ultimately calls SnortEventqAdd */
 /* Arguments are: gid, sid, rev, classification, priority, message, rule_info */
@@ -116,6 +112,8 @@ void SetupDNS()
      * in the preprocessor list.
      */
     _dpd.registerPreproc( "dns", DNSInit );
+
+    memset(dns_config.ports, 0, sizeof(char) * (MAX_PORTS/8));
 }
 
 /* Initializes the DNS preprocessor module and registers
@@ -150,8 +148,8 @@ static void DNSConfigCheck( void )
 {
     if ((!_dpd.streamAPI) || (_dpd.streamAPI->version < STREAM_API_VERSION4))
     {
-        _dpd.fatalMsg("DNSConfigCheck() Streaming & reassembly must be "
-            "enabled\n");
+        DynamicPreprocessorFatalMessage("DNSConfigCheck() Streaming & reassembly must be "
+                                        "enabled\n");
     }
 }
 
@@ -184,7 +182,7 @@ static void ParseDNSArgs( u_char* argp )
     
     if ( !argcpyp )
     {
-        _dpd.fatalMsg("Could not allocate memory to parse DNS options.\n");
+        DynamicPreprocessorFatalMessage("Could not allocate memory to parse DNS options.\n");
         return;
     }
     
@@ -202,10 +200,10 @@ static void ParseDNSArgs( u_char* argp )
             cur_tokenp = strtok( NULL, " ");
             if (( !cur_tokenp ) || ( strcmp(cur_tokenp, "{" )))
             {
-                _dpd.fatalMsg("%s(%d) Bad value specified for %s.  Must start "
-                    "with '{' and be space seperated.\n",
-                    *(_dpd.config_file), *(_dpd.config_line),
-                    DNS_PORTS_KEYWORD);
+                DynamicPreprocessorFatalMessage("%s(%d) Bad value specified for %s.  Must start "
+                                                "with '{' and be space seperated.\n",
+                                                *(_dpd.config_file), *(_dpd.config_line),
+                                                DNS_PORTS_KEYWORD);
                 free(argcpyp);
                 return;
             }
@@ -215,8 +213,8 @@ static void ParseDNSArgs( u_char* argp )
             {
                 if ( !isdigit( cur_tokenp[0] ))
                 {
-                    _dpd.fatalMsg("%s(%d) Bad port %s.\n", 
-                        *(_dpd.config_file), *(_dpd.config_line), cur_tokenp );
+                    DynamicPreprocessorFatalMessage("%s(%d) Bad port %s.\n", 
+                                                    *(_dpd.config_file), *(_dpd.config_line), cur_tokenp );
                     free(argcpyp);
                     return;
                 }
@@ -225,9 +223,9 @@ static void ParseDNSArgs( u_char* argp )
                     port = atoi( cur_tokenp );
                     if( port < 0 || port > MAX_PORTS ) 
                     {
-                        _dpd.fatalMsg("%s(%d) Port value illegitimate: %s\n",
-                            *(_dpd.config_file), *(_dpd.config_line),
-                            cur_tokenp );
+                        DynamicPreprocessorFatalMessage("%s(%d) Port value illegitimate: %s\n",
+                                                        *(_dpd.config_file), *(_dpd.config_line),
+                                                        cur_tokenp );
                         free(argcpyp);
                         return;
                     }
@@ -258,7 +256,7 @@ static void ParseDNSArgs( u_char* argp )
 #endif
         else
         {
-            _dpd.fatalMsg("Invalid argument: %s\n", cur_tokenp);
+            DynamicPreprocessorFatalMessage("Invalid argument: %s\n", cur_tokenp);
             return;
         }
         
@@ -278,7 +276,6 @@ static void ParseDNSArgs( u_char* argp )
 static void PrintDNSConfig()
 {
     int index;
-    int newline;
     
     _dpd.logMsg("DNS config: \n");
 #if 0
@@ -297,7 +294,6 @@ static void PrintDNSConfig()
         "ACTIVE" : "INACTIVE" );
     
     /* Printing ports */
-    newline = 1;
     _dpd.logMsg("    Ports:"); 
     for(index = 0; index < MAX_PORTS; index++) 
     {
@@ -379,13 +375,10 @@ DNSSessionData* GetDNSSessionData( SFSnortPacket* p )
     
     if ( !dnsSessionData )
     {
-        dnsSessionData = malloc( sizeof( DNSSessionData ));
+        dnsSessionData = calloc( 1, sizeof( DNSSessionData ));
         
         if ( !dnsSessionData )
             return NULL;
-        
-        /* Initialize to known state. */
-        bzero( dnsSessionData, sizeof( DNSSessionData ));
         
         /*Register the new DNS data block in the stream session. */
         _dpd.streamAPI->set_application_data( 
@@ -438,6 +431,11 @@ static u_int16_t ParseDNSHeader(unsigned char *data,
                                 u_int16_t bytes_unused,
                                 DNSSessionData *dnsSessionData)
 {
+    if (bytes_unused == 0)
+    {
+        return bytes_unused;
+    }
+
     switch (dnsSessionData->state)
     {
     case DNS_RESP_STATE_LENGTH:
@@ -688,6 +686,12 @@ static u_int16_t ParseDNSQuestion(unsigned char *data,
 {
     u_int16_t bytes_used = 0;
     u_int16_t new_bytes_unused = 0;
+
+    if (bytes_unused == 0)
+    {
+        return bytes_unused;
+    }
+
     if (dnsSessionData->curr_rec_state < DNS_RESP_STATE_Q_NAME_COMPLETE)
     {
         new_bytes_unused = ParseDNSName(data, bytes_unused, dnsSessionData);
@@ -699,6 +703,12 @@ static u_int16_t ParseDNSQuestion(unsigned char *data,
             bzero(&dnsSessionData->curr_txt, sizeof(DNSNameState));
             data = data + bytes_used;
             bytes_unused = new_bytes_unused;
+
+            if (bytes_unused == 0)
+            {
+                /* ran out of data */
+                return bytes_unused;
+            }
         }
         else
         {
@@ -764,6 +774,12 @@ u_int16_t ParseDNSAnswer(unsigned char *data,
 {
     u_int16_t bytes_used = 0;
     u_int16_t new_bytes_unused = 0;
+
+    if (bytes_unused == 0)
+    {
+        return bytes_unused;
+    }
+
     if (dnsSessionData->curr_rec_state < DNS_RESP_STATE_RR_NAME_COMPLETE)
     {
         new_bytes_unused = ParseDNSName(data, bytes_unused, dnsSessionData);
@@ -1013,6 +1029,11 @@ u_int16_t ParseDNSRData(SFSnortPacket *p,
                         u_int16_t bytes_unused,
                         DNSSessionData *dnsSessionData)
 {
+    if (bytes_unused == 0)
+    {
+        return bytes_unused;
+    }
+
     switch (dnsSessionData->curr_rr.type)
     {
     case DNS_RR_TYPE_TXT:
@@ -1346,7 +1367,7 @@ static void ProcessDNS( void* packetPtr, void* context )
     u_int8_t src = 0;
     u_int8_t dst = 0;
     u_int8_t known_port = 0;
-    u_int8_t direction; 
+    u_int8_t direction = 0; 
     SFSnortPacket* p;
     PROFILE_VARS;
     

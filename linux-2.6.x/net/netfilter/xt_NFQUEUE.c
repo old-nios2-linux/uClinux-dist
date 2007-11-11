@@ -3,9 +3,9 @@
  * (C) 2005 by Harald Welte <laforge@netfilter.org>
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as 
+ * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
- * 
+ *
  */
 
 #include <linux/module.h>
@@ -36,7 +36,7 @@ target(struct sk_buff **pskb,
 	return NF_QUEUE_NR(tinfo->queuenum);
 }
 
-static struct xt_target xt_nfqueue_target[] = {
+static struct xt_target xt_nfqueue_target[] __read_mostly = {
 	{
 		.name		= "NFQUEUE",
 		.family		= AF_INET,

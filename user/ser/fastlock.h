@@ -1,11 +1,11 @@
 /*
- * fast arhitecture specific locking
+ * fast architecture specific locking
  *
- * $Id: fastlock.h,v 1.20 2003/01/17 16:24:51 andrei Exp $
+ * $Id: fastlock.h,v 1.25.2.2 2005/06/06 16:27:32 andrei Exp $
  *
  * 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,9 +30,17 @@
  */
 /*
  *
- *
+ *History:
+ *--------
+ *  2002-02-05  created by andrei
  *  2003-01-16  added PPC locking code contributed by Dinos Dorkofikis
  *               <kdor@intranet.gr>
+ *  2004-09-12  added MIPS locking for ISA>=2 (>r3000)  (andrei)
+ *  2004-12-16  for now use the same locking code for sparc32 as for sparc64
+ *               (it will work only if NOSMP is defined) (andrei)
+ *  2005-04-27  added alpha locking code (andrei)
+ *  2005-06-06  ppc locking code enabled also for ppc64, note however
+ *               that the version in HEAD might be more reliable (andrei)
  *
  */
 
@@ -62,7 +70,7 @@ inline static int tsl(fl_lock_t* lock)
 {
 	int val;
 
-#ifdef __CPU_i386
+#if defined(__CPU_i386) || defined(__CPU_x86_64)
 
 #ifdef NOSMP
 	val=0;
@@ -77,7 +85,7 @@ inline static int tsl(fl_lock_t* lock)
 		" xchg %b1, %0" : "=q" (val), "=m" (*lock) : "0" (val) : "memory"
 	);
 #endif /*NOSMP*/
-#elif defined __CPU_sparc64
+#elif defined(__CPU_sparc64) || defined(__CPU_sparc)
 	asm volatile(
 			"ldstub [%1], %0 \n\t"
 #ifndef NOSMP
@@ -94,7 +102,7 @@ inline static int tsl(fl_lock_t* lock)
 			: "r"(1), "r" (lock) : "memory"
 	);
 	
-#elif defined __CPU_ppc
+#elif defined(__CPU_ppc) || defined(__CPU_ppc64)
 	asm volatile(
 			"1: lwarx  %0, 0, %2\n\t"
 			"   cmpwi  %0, 0\n\t"
@@ -106,8 +114,43 @@ inline static int tsl(fl_lock_t* lock)
 			: "r"(1), "b" (lock) :
 			"memory", "cc"
         );
+#elif defined __CPU_mips2
+	long tmp;
+	tmp=1; /* just to kill a gcc 2.95 warning */
+	
+	asm volatile(
+		".set noreorder\n\t"
+		"1:  ll %1, %2   \n\t"
+		"    li %0, 1 \n\t"
+		"    sc %0, %2  \n\t"
+		"    beqz %0, 1b \n\t"
+		"    nop \n\t"
+		".set reorder\n\t"
+		: "=&r" (tmp), "=&r" (val), "=m" (*lock) 
+		: "0" (tmp), "2" (*lock) 
+		: "cc"
+	);
+#elif defined __CPU_alpha
+	long tmp;
+	tmp=0;
+	/* lock low bit set to 1 when the lock is hold and to 0 otherwise */
+	asm volatile(
+		"1:  ldl %0, %1   \n\t"
+		"    blbs %0, 2f  \n\t"  /* optimization if locked */
+		"    ldl_l %0, %1 \n\t"
+		"    blbs %0, 2f  \n\t" 
+		"    lda %2, 1    \n\t"  /* or: or $31, 1, %2 ??? */
+		"    stl_c %2, %1 \n\t"
+		"    beq %2, 1b   \n\t"
+		"    mb           \n\t"
+		"2:               \n\t"
+		:"=&r" (val), "=m"(*lock), "=r"(tmp)
+		:"1"(*lock)  /* warning on gcc 3.4: replace it with m or remove
+						it and use +m in the input line ? */
+		: "memory"
+	);
 #else
-#error "unknown arhitecture"
+#error "unknown architecture"
 #endif
 	return val;
 }
@@ -135,14 +178,14 @@ inline static void get_lock(fl_lock_t* lock)
 
 inline static void release_lock(fl_lock_t* lock)
 {
-#ifdef __CPU_i386
+#if defined(__CPU_i386) || defined(__CPU_x86_64)
 	char val;
 	val=0;
 	asm volatile(
 		" movb $0, (%0)" : /*no output*/ : "r"(lock): "memory"
 		/*" xchg %b0, %1" : "=q" (val), "=m" (*lock) : "0" (val) : "memory"*/
 	); 
-#elif defined __CPU_sparc64
+#elif defined(__CPU_sparc64) || defined(__CPU_sparc)
 	asm volatile(
 #ifndef NOSMP
 			"membar #LoadStore | #StoreStore \n\t" /*is this really needed?*/
@@ -159,17 +202,31 @@ inline static void release_lock(fl_lock_t* lock)
 		: "r"(0), "r"(lock)
 		: "memory"
 	);
-#elif defined __CPU_ppc
+#elif defined(__CPU_ppc) || defined(__CPU_ppc64)
 	asm volatile(
 			"sync\n\t"
 			"stw %0, 0(%1)\n\t"
 			: /* no output */
 			: "r"(0), "b" (lock)
 			: "memory"
-        );
+	);
 	*lock = 0;
+#elif defined __CPU_mips2
+	asm volatile(
+		".set noreorder \n\t"
+		"    sync \n\t"
+		"    sw $0, %0 \n\t"
+		".set reorder \n\t"
+		: /*no output*/  : "m" (*lock) : "memory"
+	);
+#elif defined __CPU_alpha
+	asm volatile(
+		"    mb          \n\t"
+		"    stl $31, %0 \n\t"
+		: "=m"(*lock) :/* no input*/ : "memory"  /* because of the mb */
+	);  
 #else
-#error "unknown arhitecture"
+#error "unknown architecture"
 #endif
 }
 

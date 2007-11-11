@@ -54,7 +54,7 @@
 #define TMU1_TCR_INIT	0x0000	/* Clock/4, rising edge; no interrupt */
 #define TMU1_TSTR_INIT  0x02	/* Bit to turn on TMU1 */
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #if defined(CONFIG_CPU_SUBTYPE_SH7300)
 #define TMU_TSTR        0xA412FE92      /* Byte access */
 
@@ -81,7 +81,7 @@
 
 #define FRQCR		0xffffff80
 #endif
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define TMU_TOCR	0xffd80000	/* Byte access */
 #define TMU_TSTR	0xffd80004	/* Byte access */
 
@@ -105,7 +105,7 @@
 #define CLOCKGEN_MEMCLKCR 0xbb040038
 #define MEMCLKCR_RATIO_MASK 0x7
 #endif /* CONFIG_CPU_SUBTYPE_ST40 */
-#endif /* __sh3__ or __SH4__ */
+#endif /* CONFIG_CPU_SH3 or CONFIG_CPU_SH4 */
 
 extern rwlock_t xtime_lock;
 extern unsigned long wall_jiffies;
@@ -363,7 +363,7 @@ void __init time_init(void)
 	unsigned int timer_freq;
 	unsigned short frqcr, ifc, pfc, bfc;
 	unsigned long interval;
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #if defined(CONFIG_CPU_SUBTYPE_SH7300)
 	static int pfc_table[] = { 1, 2, 3, 4, 6 };
 #else
@@ -371,7 +371,7 @@ void __init time_init(void)
 	static int pfc_table[] = { 1, 2, 4, 1, 3, 6, 1, 1 };
 	static int stc_table[] = { 1, 2, 4, 8, 3, 6, 1, 1 };
 #endif
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	static int ifc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
 #define bfc_table ifc_table	/* Same */
 	static int pfc_table[] = { 2, 3, 4, 6, 8, 2, 2, 2 };
@@ -450,7 +450,7 @@ void __init time_init(void)
 		module_clock = timer_freq * 4;
 	}
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 	{
 		unsigned short tmp;
 
@@ -472,7 +472,7 @@ void __init time_init(void)
 		pfc = pfc_table[tmp];
 #endif
 	}
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	{
 #ifdef CONFIG_CPU_SUBTYPE_ST40
 		unsigned long pvr;

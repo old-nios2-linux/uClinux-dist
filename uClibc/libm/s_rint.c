@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -30,13 +30,14 @@ static char rcsid[] = "$NetBSD: s_rint.c,v 1.8 1995/05/10 20:48:04 jtc Exp $";
 #ifdef __STDC__
 static const double
 #else
-static double 
+static double
 #endif
 TWO52[2]={
   4.50359962737049600000e+15, /* 0x43300000, 0x00000000 */
  -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
 };
 
+libm_hidden_proto(rint)
 #ifdef __STDC__
 	double rint(double x)
 #else
@@ -51,7 +52,7 @@ TWO52[2]={
 	sx = (i0>>31)&1;
 	j0 = ((i0>>20)&0x7ff)-0x3ff;
 	if(j0<20) {
-	    if(j0<0) { 	
+	    if(j0<0) {
 		if(((i0&0x7fffffff)|i1)==0) return x;
 		i1 |= (i0&0x0fffff);
 		i0 &= 0xfffe0000;
@@ -84,3 +85,4 @@ TWO52[2]={
 	w = TWO52[sx]+x;
 	return w-TWO52[sx];
 }
+libm_hidden_def(rint)

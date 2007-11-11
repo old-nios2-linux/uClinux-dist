@@ -1,9 +1,9 @@
 /* 
- * $Id: uri_mod.c,v 1.12.6.2 2004/02/20 00:39:55 jiri Exp $ 
+ * $Id: uri_mod.c,v 1.20 2004/08/24 09:00:45 janakj Exp $ 
  *
  * Various URI related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,6 +32,9 @@
  *  2003-03-16: flags export parameter added (janakj)
  *  2003-03-19  replaces all mallocs/frees w/ pkg_malloc/pkg_free (andrei)
  *  2003-04-05: default_uri #define used (jiri)
+ *  2004-03-20: has_totag introduced (jiri)
+ *  2004-04-14: uri_param and add_uri_param introduced (jih)
+ *  2004-05-03: tel2sip introduced (jih)
  */
 
 
@@ -49,28 +52,8 @@
 MODULE_VERSION
 
 
-static void destroy(void);       /* Module destroy function */
-static int child_init(int rank); /* Per-child initialization function */
-static int mod_init(void);       /* Module initialization function */
-
 static int str_fixup(void** param, int param_no);
-
-
-/*
- * Module parameter variables
- */
-char* db_url                = DEFAULT_RODB_URL;
-char* uri_table             = "uri";        /* Name of URI table */
-char* uri_user_col          = "username";   /* Name of username column in URI table */
-char* uri_domain_col        = "domain";     /* Name of domain column in URI table */
-char* uri_uriuser_col       = "uri_user";   /* Name of uri_user column in URI table */
-char* subscriber_table      = "subscriber"; /* Name of subscriber table */
-char* subscriber_user_col   = "username";   /* Name of user column in subscriber table */
-char* subscriber_domain_col = "domain";     /* Name of domain column in subscriber table */
-int   use_domain            = 1;            /* Should does_uri_exist honor the domain part ? */
-
-int use_uri_table = 0;     /* Should uri table be used */
-db_con_t* db_handle = 0;   /* Database connection handle */
+static int uri_fixup(void** param, int param_no);
 
 
 /*
@@ -78,10 +61,11 @@ db_con_t* db_handle = 0;   /* Database connection handle */
  */
 static cmd_export_t cmds[] = {
 	{"is_user",        is_user,        1, str_fixup, REQUEST_ROUTE},
-	{"check_to",       check_to,       0, 0,         REQUEST_ROUTE},
-	{"check_from",     check_from,     0, 0,         REQUEST_ROUTE},
-	{"does_uri_exist", does_uri_exist, 0, 0,         REQUEST_ROUTE},
-	{"has_totag",	   has_totag,     0, 0, 		 REQUEST_ROUTE},
+	{"has_totag", 	   has_totag,      0, 0,         REQUEST_ROUTE},
+	{"uri_param",      uri_param_1,    1, str_fixup, REQUEST_ROUTE},
+	{"uri_param",      uri_param_2,    2, uri_fixup, REQUEST_ROUTE},
+	{"add_uri_param",  add_uri_param,  1, str_fixup, REQUEST_ROUTE},
+	{"tel2sip",        tel2sip,        0, 0,         REQUEST_ROUTE},
 	{0, 0, 0, 0, 0}
 };
 
@@ -90,16 +74,6 @@ static cmd_export_t cmds[] = {
  * Exported parameters
  */
 static param_export_t params[] = {
-	{"db_url",                   STR_PARAM, &db_url               },
-	{"uri_table",                STR_PARAM, &uri_table            },
-	{"uri_user_column",          STR_PARAM, &uri_user_col         },
-	{"uri_domain_column",        STR_PARAM, &uri_domain_col       },
-	{"uri_uriuser_column",       STR_PARAM, &uri_uriuser_col      },
-	{"subscriber_table",         STR_PARAM, &subscriber_table     },
-	{"subscriber_user_column",   STR_PARAM, &subscriber_user_col  },
-	{"subscriber_domain_column", STR_PARAM, &subscriber_domain_col},
-	{"use_uri_table",            INT_PARAM, &use_uri_table        },
-	{"use_domain",               INT_PARAM, &use_domain           },
 	{0, 0, 0}
 };
 
@@ -111,51 +85,12 @@ struct module_exports exports = {
 	"uri", 
 	cmds,      /* Exported functions */
 	params,    /* Exported parameters */
-	mod_init,  /* module initialization function */
+	0,         /* module initialization function */
 	0,         /* response function */
-	destroy,   /* destroy function */
+        0,         /* destroy function */
 	0,         /* oncancel function */
-	child_init /* child initialization function */
+	0          /* child initialization function */
 };
-
-
-/*
- * Module initialization function calle in each child separately
- */
-static int child_init(int rank)
-{
-	db_handle = db_init(db_url);
-	if (!db_handle) {
-		LOG(L_ERR, "uri:init_child(%d): Unable to connect database\n", rank);
-		return -1;
-	}
-	return 0;
-
-}
-
-
-/*
- * Module initialization function that is called before the main process forks
- */
-static int mod_init(void)
-{
-	DBG("uri - initializing\n");
-
-	if (bind_dbmod()) {
-		LOG(L_ERR, "uri:mod_init(): No database module found\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-
-static void destroy(void)
-{
-	if (db_handle) {
-		db_close(db_handle);
-	}
-}
 
 
 /*
@@ -178,4 +113,18 @@ static int str_fixup(void** param, int param_no)
 	}
 	
 	return 0;
+}
+
+
+/*
+ * Convert both uri_param parameters to str* representation
+ */
+static int uri_fixup(void** param, int param_no)
+{
+       if (param_no == 1) {
+               return str_fixup(param, 1);
+       } else if (param_no == 2) {
+               return str_fixup(param, 1);
+       }
+       return 0;
 }

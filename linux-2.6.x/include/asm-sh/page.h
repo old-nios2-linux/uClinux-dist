@@ -13,9 +13,18 @@
    [ P4 control   ]		0xE0000000
  */
 
+#ifdef __KERNEL__
 
 /* PAGE_SHIFT determines the page size */
-#define PAGE_SHIFT	12
+#if defined(CONFIG_PAGE_SIZE_4KB)
+# define PAGE_SHIFT	12
+#elif defined(CONFIG_PAGE_SIZE_8KB)
+# define PAGE_SHIFT	13
+#elif defined(CONFIG_PAGE_SIZE_64KB)
+# define PAGE_SHIFT	16
+#else
+# error "Bogus kernel page size?"
+#endif
 
 #ifdef __ASSEMBLY__
 #define PAGE_SIZE	(1 << PAGE_SHIFT)
@@ -28,8 +37,14 @@
 
 #if defined(CONFIG_HUGETLB_PAGE_SIZE_64K)
 #define HPAGE_SHIFT	16
+#elif defined(CONFIG_HUGETLB_PAGE_SIZE_256K)
+#define HPAGE_SHIFT	18
 #elif defined(CONFIG_HUGETLB_PAGE_SIZE_1MB)
 #define HPAGE_SHIFT	20
+#elif defined(CONFIG_HUGETLB_PAGE_SIZE_4MB)
+#define HPAGE_SHIFT	22
+#elif defined(CONFIG_HUGETLB_PAGE_SIZE_64MB)
+#define HPAGE_SHIFT	26
 #endif
 
 #ifdef CONFIG_HUGETLB_PAGE
@@ -38,13 +53,14 @@
 #define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT-PAGE_SHIFT)
 #endif
 
-#ifdef __KERNEL__
 #ifndef __ASSEMBLY__
 
 extern void (*clear_page)(void *to);
 extern void (*copy_page)(void *to, void *from);
 
 extern unsigned long shm_align_mask;
+extern unsigned long max_low_pfn, min_low_pfn;
+extern unsigned long memory_start, memory_end;
 
 #ifdef CONFIG_MMU
 extern void clear_page_slow(void *to);
@@ -69,15 +85,25 @@ extern void __copy_user_page(void *to, void *from, void *orig_to);
 /*
  * These are used to make use of C type-checking..
  */
-typedef struct { unsigned long pte; } pte_t;
-typedef struct { unsigned long pgd; } pgd_t;
+#ifdef CONFIG_X2TLB
+typedef struct { unsigned long pte_low, pte_high; } pte_t;
+typedef struct { unsigned long long pgprot; } pgprot_t;
+#define pte_val(x) \
+	((x).pte_low | ((unsigned long long)(x).pte_high << 32))
+#define __pte(x) \
+	({ pte_t __pte = {(x), ((unsigned long long)(x)) >> 32}; __pte; })
+#else
+typedef struct { unsigned long pte_low; } pte_t;
 typedef struct { unsigned long pgprot; } pgprot_t;
+#define pte_val(x)	((x).pte_low)
+#define __pte(x) ((pte_t) { (x) } )
+#endif
 
-#define pte_val(x)	((x).pte)
+typedef struct { unsigned long pgd; } pgd_t;
+
 #define pgd_val(x)	((x).pgd)
 #define pgprot_val(x)	((x).pgprot)
 
-#define __pte(x) ((pte_t) { (x) } )
 #define __pgd(x) ((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
@@ -100,17 +126,18 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define PAGE_OFFSET		CONFIG_PAGE_OFFSET
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+#define pfn_to_kaddr(pfn)	__va((pfn) << PAGE_SHIFT)
 
-#define MAP_NR(addr)		(((unsigned long)(addr)-PAGE_OFFSET) >> PAGE_SHIFT)
-
-#define phys_to_page(phys)	(mem_map + (((phys)-__MEMORY_START) >> PAGE_SHIFT))
-#define page_to_phys(page)	(((page - mem_map) << PAGE_SHIFT) + __MEMORY_START)
+#define phys_to_page(phys)	(pfn_to_page(phys >> PAGE_SHIFT))
+#define page_to_phys(page)	(page_to_pfn(page) << PAGE_SHIFT)
 
 /* PFN start number, because of __MEMORY_START */
 #define PFN_START		(__MEMORY_START >> PAGE_SHIFT)
 #define ARCH_PFN_OFFSET		(PFN_START)
 #define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
-#define pfn_valid(pfn)		(((pfn) - PFN_START) < max_mapnr)
+#ifdef CONFIG_FLATMEM
+#define pfn_valid(pfn)		((pfn) >= min_low_pfn && (pfn) < max_low_pfn)
+#endif
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
 
 #define VM_DATA_DEFAULT_FLAGS	(VM_READ | VM_WRITE | VM_EXEC | \
@@ -123,6 +150,13 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #ifdef CONFIG_VSYSCALL
 #define __HAVE_ARCH_GATE_AREA
 #endif
+
+/*
+ * Slub defaults to 8-byte alignment, we're only interested in 4.
+ * Slab defaults to BYTES_PER_WORD, which ends up being the same anyways.
+ */
+#define ARCH_KMALLOC_MINALIGN	4
+#define ARCH_SLAB_MINALIGN	4
 
 #endif /* __KERNEL__ */
 #endif /* __ASM_SH_PAGE_H */

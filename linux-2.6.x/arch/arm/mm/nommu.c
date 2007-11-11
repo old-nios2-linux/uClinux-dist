@@ -6,10 +6,12 @@
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
+#include <linux/bootmem.h>
 
 #include <asm/cacheflush.h>
 #include <asm/io.h>
 #include <asm/page.h>
+#include <asm/mach/arch.h>
 
 #include "mm.h"
 
@@ -60,45 +62,23 @@ void flush_dcache_page(struct page *page)
 }
 EXPORT_SYMBOL(flush_dcache_page);
 
-void __iomem *__ioremap_pfn(unsigned long pfn, unsigned long offset,
-			    size_t size, unsigned long flags)
+void __iomem *__arm_ioremap_pfn(unsigned long pfn, unsigned long offset,
+				size_t size, unsigned int mtype)
 {
 	if (pfn >= (0x100000000ULL >> PAGE_SHIFT))
 		return NULL;
 	return (void __iomem *) (offset + (pfn << PAGE_SHIFT));
 }
-EXPORT_SYMBOL(__ioremap_pfn);
+EXPORT_SYMBOL(__arm_ioremap_pfn);
 
-void __iomem *__ioremap(unsigned long phys_addr, size_t size,
-			unsigned long flags)
+void __iomem *__arm_ioremap(unsigned long phys_addr, size_t size,
+			    unsigned int mtype)
 {
 	return (void __iomem *)phys_addr;
 }
-EXPORT_SYMBOL(__ioremap);
+EXPORT_SYMBOL(__arm_ioremap);
 
 void __iounmap(volatile void __iomem *addr)
 {
 }
 EXPORT_SYMBOL(__iounmap);
-
-/*
- * You really shouldn't be using read() or write() on /dev/mem.  This
- * might go away in the future.
- */
-int valid_phys_addr_range(unsigned long addr, size_t size)
-{
-	if (addr + size > __pa(high_memory))
-		return 0;
-
-	return 1;
-}
-
-/*
- * We don't use supersection mappings for mmap() on /dev/mem, which
- * means that we can't map the memory area above the 4G barrier into
- * userspace.
- */
-int valid_mmap_phys_addr_range(unsigned long pfn, size_t size)
-{
-	return !(pfn + (size >> PAGE_SHIFT) > 0x00100000);
-}

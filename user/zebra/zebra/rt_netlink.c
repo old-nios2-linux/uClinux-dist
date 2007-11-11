@@ -39,10 +39,6 @@
 #include "zebra/interface.h"
 #include "zebra/debug.h"
 
-/* Hack for kernels 2.6.19+ which have removed some parts
- * we need from the kernel headers. */
-#include "../../iproute2/ip/netdevice.h"
-
 /* Socket interface to kernel */
 struct nlsock
 {

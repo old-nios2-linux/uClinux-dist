@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/lm_interface.h>
+#include <linux/freezer.h>
 
 #include "gfs2.h"
 #include "incore.h"
@@ -49,6 +50,8 @@ int gfs2_scand(void *data)
 	while (!kthread_should_stop()) {
 		gfs2_scand_internal(sdp);
 		t = gfs2_tune_get(sdp, gt_scand_secs) * HZ;
+		if (freezing(current))
+			refrigerator();
 		schedule_timeout_interruptible(t);
 	}
 
@@ -74,6 +77,8 @@ int gfs2_glockd(void *data)
 		wait_event_interruptible(sdp->sd_reclaim_wq,
 					 (atomic_read(&sdp->sd_reclaim_count) ||
 					 kthread_should_stop()));
+		if (freezing(current))
+			refrigerator();
 	}
 
 	return 0;
@@ -93,6 +98,8 @@ int gfs2_recoverd(void *data)
 	while (!kthread_should_stop()) {
 		gfs2_check_journals(sdp);
 		t = gfs2_tune_get(sdp,  gt_recoverd_secs) * HZ;
+		if (freezing(current))
+			refrigerator();
 		schedule_timeout_interruptible(t);
 	}
 
@@ -112,6 +119,7 @@ int gfs2_logd(void *data)
 	struct gfs2_sbd *sdp = data;
 	struct gfs2_holder ji_gh;
 	unsigned long t;
+	int need_flush;
 
 	while (!kthread_should_stop()) {
 		/* Advance the log tail */
@@ -120,8 +128,10 @@ int gfs2_logd(void *data)
 		    gfs2_tune_get(sdp, gt_log_flush_secs) * HZ;
 
 		gfs2_ail1_empty(sdp, DIO_ALL);
-
-		if (time_after_eq(jiffies, t)) {
+		gfs2_log_lock(sdp);
+		need_flush = sdp->sd_log_num_buf > gfs2_tune_get(sdp, gt_incore_log_blocks);
+		gfs2_log_unlock(sdp);
+		if (need_flush || time_after_eq(jiffies, t)) {
 			gfs2_log_flush(sdp, NULL);
 			sdp->sd_log_flush_time = jiffies;
 		}
@@ -138,6 +148,8 @@ int gfs2_logd(void *data)
 		}
 
 		t = gfs2_tune_get(sdp, gt_logd_secs) * HZ;
+		if (freezing(current))
+			refrigerator();
 		schedule_timeout_interruptible(t);
 	}
 
@@ -188,6 +200,8 @@ int gfs2_quotad(void *data)
 		gfs2_quota_scan(sdp);
 
 		t = gfs2_tune_get(sdp, gt_quotad_secs) * HZ;
+		if (freezing(current))
+			refrigerator();
 		schedule_timeout_interruptible(t);
 	}
 

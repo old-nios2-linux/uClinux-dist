@@ -32,3 +32,13 @@
 #ifdef CONFIG_MACH_DM270
 #include <asm/arch/cs89x0_fct.h>
 #endif
+
+#ifdef CONFIG_M5272
+#include <asm/coldfire.h>
+#include <asm/mcfsim.h>
+#include <asm/cs89x0_fct.h>
+#define NO_EPROM
+#define MONO_IRQ_MAP
+#define NO_REQUEST_REGION
+#endif
+

@@ -16,6 +16,7 @@
 #include <linux/uio.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
+#include <linux/audit.h>
 
 #include <asm/uaccess.h>
 #include <asm/ioctls.h>
@@ -163,6 +164,20 @@ static void anon_pipe_buf_release(struct pipe_inode_info *pipe,
 		page_cache_release(page);
 }
 
+/**
+ * generic_pipe_buf_map - virtually map a pipe buffer
+ * @pipe:	the pipe that the buffer belongs to
+ * @buf:	the buffer that should be mapped
+ * @atomic:	whether to use an atomic map
+ *
+ * Description:
+ *	This function returns a kernel virtual address mapping for the
+ *	passed in @pipe_buffer. If @atomic is set, an atomic map is provided
+ *	and the caller has to be careful not to fault before calling
+ *	the unmap function.
+ *
+ *	Note that this function occupies KM_USER0 if @atomic != 0.
+ */
 void *generic_pipe_buf_map(struct pipe_inode_info *pipe,
 			   struct pipe_buffer *buf, int atomic)
 {
@@ -174,6 +189,15 @@ void *generic_pipe_buf_map(struct pipe_inode_info *pipe,
 	return kmap(buf->page);
 }
 
+/**
+ * generic_pipe_buf_unmap - unmap a previously mapped pipe buffer
+ * @pipe:	the pipe that the buffer belongs to
+ * @buf:	the buffer that should be unmapped
+ * @map_data:	the data that the mapping function returned
+ *
+ * Description:
+ *	This function undoes the mapping that ->map() provided.
+ */
 void generic_pipe_buf_unmap(struct pipe_inode_info *pipe,
 			    struct pipe_buffer *buf, void *map_data)
 {
@@ -184,11 +208,28 @@ void generic_pipe_buf_unmap(struct pipe_inode_info *pipe,
 		kunmap(buf->page);
 }
 
+/**
+ * generic_pipe_buf_steal - attempt to take ownership of a @pipe_buffer
+ * @pipe:	the pipe that the buffer belongs to
+ * @buf:	the buffer to attempt to steal
+ *
+ * Description:
+ *	This function attempts to steal the @struct page attached to
+ *	@buf. If successful, this function returns 0 and returns with
+ *	the page locked. The caller may then reuse the page for whatever
+ *	he wishes, the typical use is insertion into a different file
+ *	page cache.
+ */
 int generic_pipe_buf_steal(struct pipe_inode_info *pipe,
 			   struct pipe_buffer *buf)
 {
 	struct page *page = buf->page;
 
+	/*
+	 * A reference of one is golden, that means that the owner of this
+	 * page is the only one holding a reference to it. lock the page
+	 * and return OK.
+	 */
 	if (page_count(page) == 1) {
 		lock_page(page);
 		return 0;
@@ -197,21 +238,41 @@ int generic_pipe_buf_steal(struct pipe_inode_info *pipe,
 	return 1;
 }
 
-void generic_pipe_buf_get(struct pipe_inode_info *info, struct pipe_buffer *buf)
+/**
+ * generic_pipe_buf_get - get a reference to a @struct pipe_buffer
+ * @pipe:	the pipe that the buffer belongs to
+ * @buf:	the buffer to get a reference to
+ *
+ * Description:
+ *	This function grabs an extra reference to @buf. It's used in
+ *	in the tee() system call, when we duplicate the buffers in one
+ *	pipe into another.
+ */
+void generic_pipe_buf_get(struct pipe_inode_info *pipe, struct pipe_buffer *buf)
 {
 	page_cache_get(buf->page);
 }
 
-int generic_pipe_buf_pin(struct pipe_inode_info *info, struct pipe_buffer *buf)
+/**
+ * generic_pipe_buf_confirm - verify contents of the pipe buffer
+ * @info:	the pipe that the buffer belongs to
+ * @buf:	the buffer to confirm
+ *
+ * Description:
+ *	This function does nothing, because the generic pipe code uses
+ *	pages that are always good when inserted into the pipe.
+ */
+int generic_pipe_buf_confirm(struct pipe_inode_info *info,
+			     struct pipe_buffer *buf)
 {
 	return 0;
 }
 
-static struct pipe_buf_operations anon_pipe_buf_ops = {
+static const struct pipe_buf_operations anon_pipe_buf_ops = {
 	.can_merge = 1,
 	.map = generic_pipe_buf_map,
 	.unmap = generic_pipe_buf_unmap,
-	.pin = generic_pipe_buf_pin,
+	.confirm = generic_pipe_buf_confirm,
 	.release = anon_pipe_buf_release,
 	.steal = generic_pipe_buf_steal,
 	.get = generic_pipe_buf_get,
@@ -222,7 +283,7 @@ pipe_read(struct kiocb *iocb, const struct iovec *_iov,
 	   unsigned long nr_segs, loff_t pos)
 {
 	struct file *filp = iocb->ki_filp;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pipe_inode_info *pipe;
 	int do_wakeup;
 	ssize_t ret;
@@ -243,7 +304,7 @@ pipe_read(struct kiocb *iocb, const struct iovec *_iov,
 		if (bufs) {
 			int curbuf = pipe->curbuf;
 			struct pipe_buffer *buf = pipe->bufs + curbuf;
-			struct pipe_buf_operations *ops = buf->ops;
+			const struct pipe_buf_operations *ops = buf->ops;
 			void *addr;
 			size_t chars = buf->len;
 			int error, atomic;
@@ -251,7 +312,7 @@ pipe_read(struct kiocb *iocb, const struct iovec *_iov,
 			if (chars > total_len)
 				chars = total_len;
 
-			error = ops->pin(pipe, buf);
+			error = ops->confirm(pipe, buf);
 			if (error) {
 				if (!ret)
 					error = ret;
@@ -335,7 +396,7 @@ pipe_write(struct kiocb *iocb, const struct iovec *_iov,
 	    unsigned long nr_segs, loff_t ppos)
 {
 	struct file *filp = iocb->ki_filp;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pipe_inode_info *pipe;
 	ssize_t ret;
 	int do_wakeup;
@@ -365,14 +426,14 @@ pipe_write(struct kiocb *iocb, const struct iovec *_iov,
 		int lastbuf = (pipe->curbuf + pipe->nrbufs - 1) &
 							(PIPE_BUFFERS-1);
 		struct pipe_buffer *buf = pipe->bufs + lastbuf;
-		struct pipe_buf_operations *ops = buf->ops;
+		const struct pipe_buf_operations *ops = buf->ops;
 		int offset = buf->offset + buf->len;
 
 		if (ops->can_merge && offset + chars <= PAGE_SIZE) {
 			int error, atomic = 1;
 			void *addr;
 
-			error = ops->pin(pipe, buf);
+			error = ops->confirm(pipe, buf);
 			if (error)
 				goto out;
 
@@ -520,7 +581,7 @@ static int
 pipe_ioctl(struct inode *pino, struct file *filp,
 	   unsigned int cmd, unsigned long arg)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pipe_inode_info *pipe;
 	int count, buf, nrbufs;
 
@@ -548,7 +609,7 @@ static unsigned int
 pipe_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int mask;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pipe_inode_info *pipe = inode->i_pipe;
 	int nrbufs;
 
@@ -601,7 +662,7 @@ pipe_release(struct inode *inode, int decr, int decw)
 static int
 pipe_read_fasync(int fd, struct file *filp, int on)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	int retval;
 
 	mutex_lock(&inode->i_mutex);
@@ -618,7 +679,7 @@ pipe_read_fasync(int fd, struct file *filp, int on)
 static int
 pipe_write_fasync(int fd, struct file *filp, int on)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	int retval;
 
 	mutex_lock(&inode->i_mutex);
@@ -635,7 +696,7 @@ pipe_write_fasync(int fd, struct file *filp, int on)
 static int
 pipe_rdwr_fasync(int fd, struct file *filp, int on)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct pipe_inode_info *pipe = inode->i_pipe;
 	int retval;
 
@@ -756,7 +817,7 @@ const struct file_operations rdwr_fifo_fops = {
 	.fasync		= pipe_rdwr_fasync,
 };
 
-static struct file_operations read_pipe_fops = {
+static const struct file_operations read_pipe_fops = {
 	.llseek		= no_llseek,
 	.read		= do_sync_read,
 	.aio_read	= pipe_read,
@@ -768,7 +829,7 @@ static struct file_operations read_pipe_fops = {
 	.fasync		= pipe_read_fasync,
 };
 
-static struct file_operations write_pipe_fops = {
+static const struct file_operations write_pipe_fops = {
 	.llseek		= no_llseek,
 	.read		= bad_pipe_r,
 	.write		= do_sync_write,
@@ -780,7 +841,7 @@ static struct file_operations write_pipe_fops = {
 	.fasync		= pipe_write_fasync,
 };
 
-static struct file_operations rdwr_pipe_fops = {
+static const struct file_operations rdwr_pipe_fops = {
 	.llseek		= no_llseek,
 	.read		= do_sync_read,
 	.aio_read	= pipe_read,
@@ -830,11 +891,28 @@ void free_pipe_info(struct inode *inode)
 static struct vfsmount *pipe_mnt __read_mostly;
 static int pipefs_delete_dentry(struct dentry *dentry)
 {
-	return 1;
+	/*
+	 * At creation time, we pretended this dentry was hashed
+	 * (by clearing DCACHE_UNHASHED bit in d_flags)
+	 * At delete time, we restore the truth : not hashed.
+	 * (so that dput() can proceed correctly)
+	 */
+	dentry->d_flags |= DCACHE_UNHASHED;
+	return 0;
+}
+
+/*
+ * pipefs_dname() is called from d_path().
+ */
+static char *pipefs_dname(struct dentry *dentry, char *buffer, int buflen)
+{
+	return dynamic_dname(dentry, buffer, buflen, "pipe:[%lu]",
+				dentry->d_inode->i_ino);
 }
 
 static struct dentry_operations pipefs_dentry_operations = {
 	.d_delete	= pipefs_delete_dentry,
+	.d_dname	= pipefs_dname,
 };
 
 static struct inode * get_pipe_inode(void)
@@ -880,8 +958,7 @@ struct file *create_write_pipe(void)
 	struct inode *inode;
 	struct file *f;
 	struct dentry *dentry;
-	char name[32];
-	struct qstr this;
+	struct qstr name = { .name = "" };
 
 	f = get_empty_filp();
 	if (!f)
@@ -891,19 +968,21 @@ struct file *create_write_pipe(void)
 	if (!inode)
 		goto err_file;
 
-	sprintf(name, "[%lu]", inode->i_ino);
-	this.name = name;
-	this.len = strlen(name);
-	this.hash = inode->i_ino; /* will go */
 	err = -ENOMEM;
-	dentry = d_alloc(pipe_mnt->mnt_sb->s_root, &this);
+	dentry = d_alloc(pipe_mnt->mnt_sb->s_root, &name);
 	if (!dentry)
 		goto err_inode;
 
 	dentry->d_op = &pipefs_dentry_operations;
-	d_add(dentry, inode);
-	f->f_vfsmnt = mntget(pipe_mnt);
-	f->f_dentry = dentry;
+	/*
+	 * We dont want to publish this dentry into global dentry hash table.
+	 * We pretend dentry is already hashed, by unsetting DCACHE_UNHASHED
+	 * This permits a working /proc/$pid/fd/XXX on pipes
+	 */
+	dentry->d_flags &= ~DCACHE_UNHASHED;
+	d_instantiate(dentry, inode);
+	f->f_path.mnt = mntget(pipe_mnt);
+	f->f_path.dentry = dentry;
 	f->f_mapping = inode->i_mapping;
 
 	f->f_flags = O_WRONLY;
@@ -923,8 +1002,9 @@ struct file *create_write_pipe(void)
 
 void free_write_pipe(struct file *f)
 {
-	mntput(f->f_vfsmnt);
-	dput(f->f_dentry);
+	free_pipe_info(f->f_dentry->d_inode);
+	dput(f->f_path.dentry);
+	mntput(f->f_path.mnt);
 	put_filp(f);
 }
 
@@ -935,9 +1015,9 @@ struct file *create_read_pipe(struct file *wrf)
 		return ERR_PTR(-ENFILE);
 
 	/* Grab pipe from the writer */
-	f->f_vfsmnt = mntget(wrf->f_vfsmnt);
-	f->f_dentry = dget(wrf->f_dentry);
-	f->f_mapping = wrf->f_dentry->d_inode->i_mapping;
+	f->f_path.mnt = mntget(wrf->f_path.mnt);
+	f->f_path.dentry = dget(wrf->f_path.dentry);
+	f->f_mapping = wrf->f_path.dentry->d_inode->i_mapping;
 
 	f->f_pos = 0;
 	f->f_flags = O_RDONLY;
@@ -972,6 +1052,10 @@ int do_pipe(int *fd)
 		goto err_fdr;
 	fdw = error;
 
+	error = audit_fd_pair(fdr, fdw);
+	if (error < 0)
+		goto err_fdw;
+
 	fd_install(fdr, fr);
 	fd_install(fdw, fw);
 	fd[0] = fdr;
@@ -979,9 +1063,13 @@ int do_pipe(int *fd)
 
 	return 0;
 
+ err_fdw:
+	put_unused_fd(fdw);
  err_fdr:
 	put_unused_fd(fdr);
  err_read_pipe:
+	dput(fr->f_dentry);
+	mntput(fr->f_vfsmnt);
 	put_filp(fr);
  err_write_pipe:
 	free_write_pipe(fw);

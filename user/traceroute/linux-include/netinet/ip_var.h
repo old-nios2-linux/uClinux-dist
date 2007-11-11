@@ -39,8 +39,7 @@
  * Overlay for ip header used by other protocols (tcp, udp).
  */
 struct ipovly {
-	caddr_t	ih_next, ih_prev;	/* for protocol sequence q's */
-	u_char	ih_x1;			/* (unused) */
+	u_char	ih_x1[9];		/* (unused) */
 	u_char	ih_pr;			/* protocol */
 	short	ih_len;			/* protocol length */
 	struct	in_addr ih_src;		/* source internet address */
@@ -104,30 +103,30 @@ struct ipoption {
 };
 
 struct	ipstat {
-	u_long	ips_total;		/* total packets received */
-	u_long	ips_badsum;		/* checksum bad */
-	u_long	ips_tooshort;		/* packet too short */
-	u_long	ips_toosmall;		/* not enough data */
-	u_long	ips_badhlen;		/* ip header length < data size */
-	u_long	ips_badlen;		/* ip length < ip header length */
-	u_long	ips_fragments;		/* fragments received */
-	u_long	ips_fragdropped;	/* frags dropped (dups, out of space) */
-	u_long	ips_fragtimeout;	/* fragments timed out */
-	u_long	ips_forward;		/* packets forwarded */
-	u_long	ips_cantforward;	/* packets rcvd for unreachable dest */
-	u_long	ips_redirectsent;	/* packets forwarded on same net */
-	u_long	ips_noproto;		/* unknown or unsupported protocol */
-	u_long	ips_delivered;		/* datagrams delivered to upper level*/
-	u_long	ips_localout;		/* total ip packets generated here */
-	u_long	ips_odropped;		/* lost packets due to nobufs, etc. */
-	u_long	ips_reassembled;	/* total packets reassembled ok */
-	u_long	ips_fragmented;		/* datagrams sucessfully fragmented */
-	u_long	ips_ofragments;		/* output fragments created */
-	u_long	ips_cantfrag;		/* don't fragment flag was set, etc. */
-	u_long	ips_badoptions;		/* error in option processing */
-	u_long	ips_noroute;		/* packets discarded due to no route */
-	u_long	ips_badvers;		/* ip version != 4 */
-	u_long	ips_rawout;		/* total raw ip packets generated */
+	n_long	ips_total;		/* total packets received */
+	n_long	ips_badsum;		/* checksum bad */
+	n_long	ips_tooshort;		/* packet too short */
+	n_long	ips_toosmall;		/* not enough data */
+	n_long	ips_badhlen;		/* ip header length < data size */
+	n_long	ips_badlen;		/* ip length < ip header length */
+	n_long	ips_fragments;		/* fragments received */
+	n_long	ips_fragdropped;	/* frags dropped (dups, out of space) */
+	n_long	ips_fragtimeout;	/* fragments timed out */
+	n_long	ips_forward;		/* packets forwarded */
+	n_long	ips_cantforward;	/* packets rcvd for unreachable dest */
+	n_long	ips_redirectsent;	/* packets forwarded on same net */
+	n_long	ips_noproto;		/* unknown or unsupported protocol */
+	n_long	ips_delivered;		/* datagrams delivered to upper level*/
+	n_long	ips_localout;		/* total ip packets generated here */
+	n_long	ips_odropped;		/* lost packets due to nobufs, etc. */
+	n_long	ips_reassembled;	/* total packets reassembled ok */
+	n_long	ips_fragmented;		/* datagrams sucessfully fragmented */
+	n_long	ips_ofragments;		/* output fragments created */
+	n_long	ips_cantfrag;		/* don't fragment flag was set, etc. */
+	n_long	ips_badoptions;		/* error in option processing */
+	n_long	ips_noroute;		/* packets discarded due to no route */
+	n_long	ips_badvers;		/* ip version != 4 */
+	n_long	ips_rawout;		/* total raw ip packets generated */
 };
 
 #ifdef KERNEL
@@ -142,7 +141,7 @@ struct	ipq	ipq;			/* ip reass. queue */
 u_short	ip_id;				/* ip packet ctr, for ids */
 int	ip_defttl;			/* default IP ttl */
 
-int	 in_control __P((struct socket *, u_long, caddr_t, struct ifnet *));
+int	 in_control __P((struct socket *, n_long, caddr_t, struct ifnet *));
 int	 ip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
 void	 ip_deq __P((struct ipasfrag *));
 int	 ip_dooptions __P((struct mbuf *));
@@ -167,12 +166,12 @@ void	 ip_slowtimo __P((void));
 struct mbuf *
 	 ip_srcroute __P((void));
 void	 ip_stripoptions __P((struct mbuf *, struct mbuf *));
-int	 ip_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
+int	 ip_sysctl __P((int *, n_long, void *, size_t *, void *, size_t));
 void	 ipintr __P((void));
 int	 rip_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
 void	 rip_init __P((void));
 void	 rip_input __P((struct mbuf *));
-int	 rip_output __P((struct mbuf *, struct socket *, u_long));
+int	 rip_output __P((struct mbuf *, struct socket *, n_long));
 int	 rip_usrreq __P((struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *));
 #endif

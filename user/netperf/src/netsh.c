@@ -1,5 +1,5 @@
 char	netsh_id[]="\
-@(#)netsh.c (c) Copyright 1993-2004 Hewlett-Packard Company. Version 2.4.0";
+@(#)netsh.c (c) Copyright 1993-2004 Hewlett-Packard Company. Version 2.4.3";
 
 
 /****************************************************************/
@@ -81,9 +81,6 @@ double atof(const char *);
 #include "nettest_sctp.h"
 #endif
 
-#ifdef DO_DNS
-#include "nettest_dns.h"
-#endif /* DO_DNS */
 
 /************************************************************************/
 /*									*/
@@ -94,7 +91,7 @@ double atof(const char *);
  /* Some of the args take optional parameters. Since we are using */
  /* getopt to parse the command line, we will tell getopt that they do */
  /* not take parms, and then look for them ourselves */
-#define GLOBAL_CMD_LINE_ARGS "A:a:b:CcdDf:F:H:hi:I:l:L:n:O:o:P:p:t:T:v:W:w:46"
+#define GLOBAL_CMD_LINE_ARGS "A:a:b:B:CcdDf:F:H:hi:I:k:K:l:L:n:NO:o:P:p:t:T:v:W:w:46"
 
 /************************************************************************/
 /*									*/
@@ -137,6 +134,12 @@ int
   print_headers,		/* do/don't display headers */
   verbosity;		/* verbosity level */
 
+/* When specified with -B, this will be displayed at the end of the line
+   for output that does not include the test header.  mostly this is
+   to help identify a specific netperf result when concurrent netperfs
+   are run. raj 2006-02-01 */
+char *result_brand = NULL;
+
 /* cpu variables */
 int
   local_cpu_usage,	/* you guessed it			*/
@@ -169,23 +172,21 @@ int
   remote_send_offset = 0,
   remote_recv_offset = 0;
 
-#ifdef WANT_INTERVALS
+#if defined(WANT_INTERVALS) || defined(WANT_DEMO)
 int
   interval_usecs,
   interval_wate,
   interval_burst;
-#endif /* WANT_INTERVALS */
 
-#ifdef WANT_DEMO
-int demo_mode;               /* are we actually in demo mode? */
+int demo_mode;                    /* are we actually in demo mode? */
 double demo_interval = 1000000.0; /* what is the desired interval to
 				     display interval results. default
 				     is one second in units of
 				     microseconds */
-double demo_units = 0.0;     /* what is our current best guess as to
-				how many work units must be done to be
-				near the desired reporting
-				interval? */ 
+double demo_units = 0.0;          /* what is our current best guess as
+				     to how many work units must be
+				     done to be near the desired
+				     reporting interval? */ 
 
 double units_this_tick;
 #endif
@@ -213,6 +214,12 @@ int     recv_width;
 /* address family */
 int	af = AF_INET;
 
+/* did someone request processor affinity? */
+int cpu_binding_requested = 0;
+
+/* are we not establishing a control connection? */
+int no_control = 0;
+
 char netserver_usage[] = "\n\
 Usage: netserver [options] \n\
 \n\
@@ -230,12 +237,13 @@ Options:\n\
    compiler happy when compiling for x86_32.  fix from Spencer
    Frink.  */
 
-char netperf_usage[] = "\n\
+char netperf_usage1[] = "\n\
 Usage: netperf [global options] -- [test options] \n\
 \n\
 Global options:\n\
     -a send,recv      Set the local send,recv buffer alignment\n\
     -A send,recv      Set the remote send,recv buffer alignment\n\
+    -B brandstr       Specify a string to be emitted with brief output\n\
     -c [cpu_rate]     Report local CPU usage\n\
     -C [cpu_rate]     Report remote CPU usage\n\
     -d                Increase debugging output\n\
@@ -253,13 +261,15 @@ Global options:\n\
     -o send,recv      Set the local send,recv buffer offsets\n\
     -O send,recv      Set the remote send,recv buffer offset\n\
     -n numcpu         Set the number of processors for CPU util\n\
+    -N                Establish no control connection, do 'send' side only\n\
     -p port,lport*    Specify netserver port number and/or local port\n\
     -P 0|1            Don't/Do display test headers\n\
     -t testname       Specify test to perform\n\
     -T lcpu,rcpu      Request netperf/netserver be bound to local/remote cpu\n\
     -v verbosity      Specify the verbosity level\n\
-    -W send,recv      Set the number of send,recv buffers\n\
-\n\
+    -W send,recv      Set the number of send,recv buffers\n";
+
+char netperf_usage2[] = "\n\
 For those options taking two parms, at least one must be specified;\n\
 specifying one value without a comma will set both parms to that\n\
 value, specifying a value with a leading comma will set just the second\n\
@@ -424,6 +434,7 @@ set_defaults()
   iteration_max = 1;
   interval = 0.05; /* five percent? */
 
+  no_control = 0;
   strcpy(fill_file,"");
 }
      
@@ -438,7 +449,8 @@ print_netserver_usage()
 void
 print_netperf_usage()
 {
-  fwrite(netperf_usage, sizeof(char), strlen(netperf_usage),  stderr);
+  fwrite(netperf_usage1, sizeof(char), strlen(netperf_usage1),  stderr);
+  fwrite(netperf_usage2, sizeof(char), strlen(netperf_usage2),  stderr);
 }
 
 void
@@ -598,6 +610,9 @@ scan_cmd_line(int argc, char *argv[])
     case 'n':
       shell_num_cpus = atoi(optarg);
       break;
+    case 'N':
+      no_control = 1;
+      break;
     case 'o':
       /* set the local offsets */
       break_args(optarg,arg1,arg2);
@@ -629,10 +644,12 @@ scan_cmd_line(int argc, char *argv[])
       break_args(optarg,arg1,arg2);
       if (arg1[0]) {
 	local_proc_affinity = convert(arg1);
-	bind_to_specific_processor(local_proc_affinity);
+	bind_to_specific_processor(local_proc_affinity,0);
       }
-      if (arg2[0])
+      if (arg2[0]) {
 	remote_proc_affinity = convert(arg2);
+      }
+      cpu_binding_requested = 1;
       break;
     case 'W':
       /* set the "width" of the user space data buffer ring. This will */
@@ -695,8 +712,8 @@ scan_cmd_line(int argc, char *argv[])
       /* second, and that the packet rate is */
       /* expressed in packets per millisecond. */
 #ifdef WANT_INTERVALS
-      interval_wate  = convert(optarg);
-      interval_usecs = interval_wate * 1000;
+      interval_usecs = convert_timespec(optarg);
+      interval_wate  = interval_usecs / 1000;
 #else
       fprintf(where,
 	      "Packet rate control is not compiled in.\n");
@@ -711,6 +728,16 @@ scan_cmd_line(int argc, char *argv[])
       fprintf(where,
 	      "Packet burst size is not compiled in. \n");
 #endif /* WANT_INTERVALS */
+      break;
+    case 'B':
+      result_brand = malloc(strlen(optarg)+1);
+      if (NULL != result_brand) {
+	strcpy(result_brand,optarg);
+      }
+      else {
+	fprintf(where,
+		"Unable to malloc space for result brand\n");
+      }
       break;
     case '4':
       address_family = AF_INET;
@@ -802,6 +829,18 @@ scan_cmd_line(int argc, char *argv[])
     }
   }
 
+  /* so, if we aren't even going to establish a control connection we
+     should set certain "remote" settings to reflect this, regardless
+     of what else may have been set on the command line */
+  if (no_control) {
+    remote_recv_align = -1;
+    remote_send_align = -1;
+    remote_send_offset = -1;
+    remote_recv_offset = -1;
+    remote_cpu_rate = (float)-1.0;
+    remote_cpu_usage = 0;
+  }
+
   /* parsing test-specific options used to be conditional on there
     being a "--" in the option stream.  however, some of the tests
     have other initialization happening in their "scan" routines so we
@@ -868,13 +907,6 @@ scan_cmd_line(int argc, char *argv[])
       scan_sctp_args(argc, argv);
     }
 #endif
-
-#ifdef DO_DNS
-    else if (strcasecmp(test_name,"DNS_RR") == 0)
-      {
-	scan_dns_args(argc, argv);
-      }
-#endif /* DO_DNS */
 
 }
 

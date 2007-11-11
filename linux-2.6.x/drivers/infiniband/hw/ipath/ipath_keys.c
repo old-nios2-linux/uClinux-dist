@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006 QLogic, Inc. All rights reserved.
+ * Copyright (c) 2006, 2007 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -61,7 +61,7 @@ int ipath_alloc_lkey(struct ipath_lkey_table *rkt, struct ipath_mregion *mr)
 		r = (r + 1) & (rkt->max - 1);
 		if (r == n) {
 			spin_unlock_irqrestore(&rkt->lock, flags);
-			ipath_dbg(KERN_INFO "LKEY table full\n");
+			ipath_dbg("LKEY table full\n");
 			ret = 0;
 			goto bail;
 		}
@@ -133,8 +133,14 @@ int ipath_lkey_ok(struct ipath_qp *qp, struct ipath_sge *isge,
 	 * being reversible by calling bus_to_virt().
 	 */
 	if (sge->lkey == 0) {
+		struct ipath_pd *pd = to_ipd(qp->ibqp.pd);
+
+		if (pd->user) {
+			ret = 0;
+			goto bail;
+		}
 		isge->mr = NULL;
-		isge->vaddr = bus_to_virt(sge->addr);
+		isge->vaddr = (void *) sge->addr;
 		isge->length = sge->length;
 		isge->sge_length = sge->length;
 		ret = 1;
@@ -202,12 +208,18 @@ int ipath_rkey_ok(struct ipath_qp *qp, struct ipath_sge_state *ss,
 	int ret;
 
 	/*
-	 * We use RKEY == zero for physical addresses
-	 * (see ipath_get_dma_mr).
+	 * We use RKEY == zero for kernel virtual addresses
+	 * (see ipath_get_dma_mr and ipath_dma.c).
 	 */
 	if (rkey == 0) {
+		struct ipath_pd *pd = to_ipd(qp->ibqp.pd);
+
+		if (pd->user) {
+			ret = 0;
+			goto bail;
+		}
 		sge->mr = NULL;
-		sge->vaddr = phys_to_virt(vaddr);
+		sge->vaddr = (void *) vaddr;
 		sge->length = len;
 		sge->sge_length = len;
 		ss->sg_list = NULL;

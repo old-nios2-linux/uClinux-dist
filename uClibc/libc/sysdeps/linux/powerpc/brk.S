@@ -17,19 +17,32 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
+#include <features.h>
 #include "ppc_asm.h"
 #define _ERRNO_H	1
 #include <bits/errno.h>
 #include <sys/syscall.h>
 
 #ifdef __NR_brk
-	.comm	__curbrk,4,4
-	.section ".text"
-.globl      __brk;
-.type      __brk, @function;
-.align  2;
 
-__brk:
+#ifdef __PIC__
+.section .bss
+	.align 4
+	.globl __curbrk
+	.hidden __curbrk
+__curbrk: .skip 4
+	.type __curbrk,@object
+	.size __curbrk,4
+#else
+.comm __curbrk, 4,4
+#endif
+
+	.text
+	.globl	brk
+	.type	brk,@function
+	.align	2
+
+brk:
 	stwu    r1,-16(r1)
 	stw	r3,8(r1)
 	li 0, __NR_brk;   
@@ -37,8 +50,15 @@ __brk:
 	lwz     r6,8(r1)
 #ifdef __PIC__
 	mflr    r4
+# ifdef HAVE_ASM_PPC_REL16
+	bcl	20,31,1f
+1:	mflr	r5
+	addis	r5,r5,_GLOBAL_OFFSET_TABLE_-1b@ha
+	addi	r5,r5,_GLOBAL_OFFSET_TABLE_-1b@l
+# else	
 	bl      _GLOBAL_OFFSET_TABLE_@local-4
 	mflr    r5
+# endif
 	lwz     r5,__curbrk@got(r5)
 	mtlr    r4
 	stw     r3,0(r5)
@@ -51,13 +71,10 @@ __brk:
 	li	r3,0
 	blelr+
 	li      r3,ENOMEM
-#ifdef __PIC__
-	b	__syscall_error@plt
-#else
-	b	__syscall_error
-#endif
-.size __brk,.-__brk
 
-.weak brk;
-brk=__brk        
-#endif	
+	b	__syscall_error
+
+	.size brk,.-brk
+
+libc_hidden_def(brk)
+#endif

@@ -15,7 +15,6 @@
 #include <asm/sn/pcidev.h>
 #include <asm/sn/pcibus_provider_defs.h>
 #include <asm/sn/tioce_provider.h>
-#include <asm/sn/sn2/sn_hwperf.h>
 
 /*
  * 1/26/2006
@@ -257,9 +256,9 @@ pcidev_to_tioce(struct pci_dev *pdev, struct tioce __iomem **base,
  * @ct_addr: the coretalk address to map
  * @len: number of bytes to map
  *
- * Given the addressing type, set up various paramaters that define the
+ * Given the addressing type, set up various parameters that define the
  * ATE pool to use.  Search for a contiguous block of entries to cover the
- * length, and if enough resources exist, fill in the ATE's and construct a
+ * length, and if enough resources exist, fill in the ATEs and construct a
  * tioce_dmamap struct to track the mapping.
  */
 static u64
@@ -582,8 +581,8 @@ tioce_do_dma_map(struct pci_dev *pdev, u64 paddr, size_t byte_count,
 	 */
 	if (!mapaddr && !barrier && dma_mask >= 0xffffffffffUL) {
 		/*
-		 * We have two options for 40-bit mappings:  16GB "super" ATE's
-		 * and 64MB "regular" ATE's.  We'll try both if needed for a
+		 * We have two options for 40-bit mappings:  16GB "super" ATEs
+		 * and 64MB "regular" ATEs.  We'll try both if needed for a
 		 * given mapping but which one we try first depends on the
 		 * size.  For requests >64MB, prefer to use a super page with
 		 * regular as the fallback. Otherwise, try in the reverse order.
@@ -688,8 +687,8 @@ tioce_error_intr_handler(int irq, void *arg)
 }
 
 /**
- * tioce_reserve_m32 - reserve M32 ate's for the indicated address range
- * @tioce_kernel: TIOCE context to reserve ate's for
+ * tioce_reserve_m32 - reserve M32 ATEs for the indicated address range
+ * @tioce_kernel: TIOCE context to reserve ATEs for
  * @base: starting bus address to reserve
  * @limit: last bus address to reserve
  *
@@ -764,7 +763,7 @@ tioce_kern_init(struct tioce_common *tioce_common)
 
 	/*
 	 * Set PMU pagesize to the largest size available, and zero out
-	 * the ate's.
+	 * the ATEs.
 	 */
 
 	tioce_mmr = (struct tioce __iomem *)tioce_common->ce_pcibus.bs_base;
@@ -785,7 +784,7 @@ tioce_kern_init(struct tioce_common *tioce_common)
 	}
 
 	/*
-	 * Reserve ATE's corresponding to reserved address ranges.  These
+	 * Reserve ATEs corresponding to reserved address ranges.  These
 	 * include:
 	 *
 	 *	Memory space covered by each PPB mem base/limit register
@@ -990,8 +989,6 @@ tioce_target_interrupt(struct sn_irq_info *sn_irq_info)
 static void *
 tioce_bus_fixup(struct pcibus_bussoft *prom_bussoft, struct pci_controller *controller)
 {
-	int my_nasid;
-	cnodeid_t my_cnode, mem_cnode;
 	struct tioce_common *tioce_common;
 	struct tioce_kernel *tioce_kern;
 	struct tioce __iomem *tioce_mmr;
@@ -1005,7 +1002,9 @@ tioce_bus_fixup(struct pcibus_bussoft *prom_bussoft, struct pci_controller *cont
 		return NULL;
 
 	memcpy(tioce_common, prom_bussoft, sizeof(struct tioce_common));
-	tioce_common->ce_pcibus.bs_base |= __IA64_UNCACHED_OFFSET;
+	tioce_common->ce_pcibus.bs_base = (unsigned long)
+		ioremap(REGION_OFFSET(tioce_common->ce_pcibus.bs_base),
+			sizeof(struct tioce_common));
 
 	tioce_kern = tioce_kern_init(tioce_common);
 	if (tioce_kern == NULL) {
@@ -1035,21 +1034,7 @@ tioce_bus_fixup(struct pcibus_bussoft *prom_bussoft, struct pci_controller *cont
 		       tioce_common->ce_pcibus.bs_persist_segment,
 		       tioce_common->ce_pcibus.bs_persist_busnum);
 
-	/*
-	 * identify closest nasid for memory allocations
-	 */
-
-	my_nasid = NASID_GET(tioce_common->ce_pcibus.bs_base);
-	my_cnode = nasid_to_cnodeid(my_nasid);
-
-	if (sn_hwperf_get_nearest_node(my_cnode, &mem_cnode, NULL) < 0) {
-		printk(KERN_WARNING "tioce_bus_fixup: failed to find "
-		       "closest node with MEM to TIO node %d\n", my_cnode);
-		mem_cnode = (cnodeid_t)-1; /* use any node */
-	}
-
-	controller->node = mem_cnode;
-
+	sn_set_err_irq_affinity(SGI_PCIASIC_ERROR);
 	return tioce_common;
 }
 

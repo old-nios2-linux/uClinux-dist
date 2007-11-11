@@ -93,7 +93,7 @@ static int gpio_i2c_remove(struct platform_device *plat_dev)
 
 	platform_set_drvdata(plat_dev, NULL);
 
-	i2c_bit_del_bus(&drv_data->adapter);
+	i2c_del_adapter(&drv_data->adapter);
 
 	kfree(drv_data);
 

@@ -573,11 +573,11 @@ i2c_ioctl(struct inode *inode, struct file *file,
 	return 0;
 }
 
-static struct file_operations i2c_fops = {
-	owner:    THIS_MODULE,
-	ioctl:    i2c_ioctl,
-	open:     i2c_open,
-	release:  i2c_release,
+static const struct file_operations i2c_fops = {
+	.owner =    THIS_MODULE,
+	.ioctl =    i2c_ioctl,
+	.open =     i2c_open,
+	.release =  i2c_release,
 };
 
 int __init

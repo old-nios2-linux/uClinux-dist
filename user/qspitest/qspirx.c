@@ -42,126 +42,98 @@
 #include <stdint.h>
 #include <getopt.h>
 
-#ifdef __uClinux__
 #include <asm/coldfire.h>
 #include <asm/mcfqspi.h>
 #include <asm/mcfsim.h>
-#endif
 
-uint8_t  port = 1;
-uint32_t cpol = 0;
-uint32_t cpha = 0;
-int      chan = 0;
-int      N    = 1;
+#include "qspi.h"
+
+/****** storage declaration: *************************************************/
 
 int32_t serialPort;
-char * programName;
+char *programName;
 
+unsigned short *buf;
 
+/****** main program: ********************************************************/
 
-int spiRead(uint8_t registerIndex)
+int main(int argc, char **argv)
 {
-	int registerValue = 0;
-	uint32_t count;
+	int i;
+	unsigned int j;
+	unsigned int baud_divider;
 
-#ifdef __uClinux__
-	qspi_read_data readData;
+	init_options();
+	decode_args(argc, argv);
 
-	/* readData.buf[0] = 3; */ /* 2r11 is the read command */
+	serialPort = open(opt_port, O_RDWR);
+	if (serialPort < 0) {
+		perror("open");
+		exit(1);
+	} else
+		printf("%s opened for read\n", opt_port);
 
-	if (chan == 0)
-	  readData.buf[0] = 0xc0 >> 3; /* channel 0 */
-	else if (chan == 1)
-	  readData.buf[0] = 0xe0 >> 3; /* channel 1 */
-
-	readData.buf[1] = registerIndex;
-	readData.length = 4;
-	readData.loop = 0;
-	if (ioctl(serialPort, QSPIIOCS_READDATA, &readData)) perror("QSPIIOCS_READDATA"); 
-	count = read(serialPort, &registerValue, 4);
-	if(count != 4) perror("read");
-#endif
-	return registerValue;
-}
-
-
-
-static int32_t parse_args(int argc, char **argv) {
-	static const struct option options[] = {
-		{"port", 1, 0, 'p'},
-		{"cpol", 1, 0, 'l'},
-		{"cpha", 1, 0, 'a'},
-		{"chan", 1, 0, 'c'},
-		{"iter", 1, 0, 'n'},
-		{ 0, 0, 0, 0 }
- 	};
-
- 	int32_t c, index, consumedArgs = 0;
-				 
- 	while((c = getopt_long(argc, argv, "p:l:a:c:n:", options, &index)) != -1) {
- 		switch(c) {
-			case 'p': port = atoi(optarg); consumedArgs+=2; break;
-			case 'l': cpol = (atoi(optarg) != 0); consumedArgs+=2; break;
-			case 'a': cpha = (atoi(optarg) != 0); consumedArgs+=2; break;
-			case 'c': chan = (atoi(optarg) != 0); consumedArgs+=2; break;
-			case 'n': N    = atoi(optarg); consumedArgs+=2; break;
-			default:
-				printf("unknown option\n");
-				break;
-		}
+	if (ioctl(serialPort, QSPIIOCS_DOUT_HIZ, 0)) {
+		perror("QSPIIOCS_DOUT_HIZ");
+		exit(-EINVAL);
 	}
-	return consumedArgs;
-}
-	 
-int main (int argc, char** argv)
-{
-    int32_t baudRate;
-    int32_t lessArgc;
-    char*   commandName;
-    char    devicePath[BUFSIZ];
-    int     i;
-    unsigned int j;
-    unsigned short  *buf;
+	if (ioctl(serialPort, QSPIIOCS_BITS, opt_bits)) {
+		perror("QSPIIOCS_BITS");
+		exit(-EINVAL);
+	}
+	if (ioctl(serialPort, QSPIIOCS_CPOL, opt_polarity)) {
+		perror("QSPIIOCS_CPOL");
+		exit(-EINVAL);
+	}
+	if (ioctl(serialPort, QSPIIOCS_CPHA, opt_phase)) {
+		perror("QSPIIOCS_CPHA");
+		exit(-EINVAL);
+	}
+	baud_divider =
+	    (int)(((double)MCF_CLK / (2.0 * (double)opt_baud)) + 0.5);
+	if (ioctl(serialPort, QSPIIOCS_BAUD, baud_divider)) {
+		perror("QSPIIOCS_BAUD");
+		exit(-EINVAL);
+	}
+	PRINTV("baud rate divider = %d; actual baud rate: %d bps\n",
+	       baud_divider, MCF_CLK / (2 * baud_divider));
 
-    programName = argv[0];
+	/* QSPIIOCS_QCD: QSPI_CS to QSPI_CLK setup */
+	/* QSPIIOCS_DTL: QSPI_CLK to QSPI_CS hold */
+	/* QSPIIOCS_CONT */
+	/* QSPIIOCS_DSP_MOD */
+	/* QSPIIOCS_ODD_MOD */
+	/* QSPIIOCS_POLL_MOD */
 
-    lessArgc = parse_args(argc, argv);
+	buf = malloc(opt_N * sizeof(short));
+	if (buf == NULL) {
+		perror("Error allocating read buffer");
+		exit(-ENOMEM);
+	}
 
-    sprintf(devicePath, "/dev/qspi1");
+	for (i = 0; i < opt_N; i++) {
+		j = spiRead(serialPort, 0);
+		j = j >> opt_ret_shift;
+		buf[i] = (unsigned short)(j & 0x00000fff);
 
-    // printf("%s --port %d --cpol %d --cpha %d\n", argv[0], port, cpol, cpha);
+		if (opt_continuous)
+			/* printf ("   0x%03X%s", buf[i], ((i+1)%4)?"":"\n"); */
+			printf("   0x%03x%s", buf[i],
+			       ((i + 1) % 4) ? "" : "\n");
+	}
+	printf("\n");
 
-#ifdef __uClinux__
-    serialPort = open(devicePath, O_RDWR);
-    if(serialPort < 0) {
-      perror("open");
-      exit(1);
-    }
+	printf("%d measurements were made from from ADC Channel %i:\n\n", opt_N,
+	       opt_channel);
 
-    if(ioctl(serialPort, QSPIIOCS_DOUT_HIZ, 0)) perror("QSPIIOCS_DOUT_HIZ");
-    if(ioctl(serialPort, QSPIIOCS_BITS, 16)) perror("QSPIIOCS_BITS");
-    if(ioctl(serialPort, QSPIIOCS_CPOL, cpol)) perror("QSPIIOCS_CPOL");
-    if(ioctl(serialPort, QSPIIOCS_CPHA, cpha)) perror("QSPIIOCS_CPHA");
-    /* baudRate = 8; */ /* (MCF_CLK / (2 * 5000000)) = 4.8, rounded up to 8 */
-    baudRate = 66; /* (MCF_CLK / (2 * 5e5)) = 66 */
-    if(ioctl(serialPort, QSPIIOCS_BAUD, baudRate)) perror("QSPIIOCS_BAUD");
-#endif
+	if (!opt_continuous) {
+		for (i = 0; i < opt_N; i++)
+			printf("   0x%03X%s", buf[i],
+			       ((i + 1) % 4) ? "" : "\n");
+	}
 
-    buf = malloc (N * sizeof (short));
+	printf("\n\n");
 
-    /* Note that the shift value below was
-     * arrived at by trial and error... */
-    for (i=0;i<N;i++) {
-      j = spiRead (0);
-      j = j >> 12;
-      buf[i] = (unsigned short)j;
-    }
-
-    printf ("%d measurements were made from from ADC Channel %i:\n\n", N, chan);
-    for (i=0;i<N;i++)
-      printf ("   0x%03X%s", buf[i], ((i+1)%4)?"":"\n");
-    printf ("\n\n");
-
-    free (buf);
-    return 0;
+	free(buf);
+	return 0;
 }

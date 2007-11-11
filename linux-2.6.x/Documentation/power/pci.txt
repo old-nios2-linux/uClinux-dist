@@ -102,31 +102,28 @@ pci_save_state
 --------------
 
 Usage:
-	pci_save_state(dev, buffer);
+	pci_save_state(struct pci_dev *dev);
 
 Description:
-	Save first 64 bytes of PCI config space. Buffer must be allocated by
-	caller.
+	Save first 64 bytes of PCI config space, along with any additional
+	PCI-Express or PCI-X information.
 
 
 pci_restore_state
 -----------------
 
 Usage:
-	pci_restore_state(dev, buffer);
+	pci_restore_state(struct pci_dev *dev);
 
 Description:
-	Restore previously saved config space. (First 64 bytes only);
-
-	If buffer is NULL, then restore what information we know about the
-	device from bootup: BARs and interrupt line.
+	Restore previously saved config space.
 
 
 pci_set_power_state
 -------------------
 
 Usage:
-	pci_set_power_state(dev, state);
+	pci_set_power_state(struct pci_dev *dev, pci_power_t state);
 
 Description:
 	Transition device to low power state using PCI PM Capabilities
@@ -142,7 +139,7 @@ pci_enable_wake
 ---------------
 
 Usage:
-	pci_enable_wake(dev, state, enable);
+	pci_enable_wake(struct pci_dev *dev, pci_power_t state, int enable);
 
 Description:
 	Enable device to generate PME# during low power state using PCI PM 
@@ -153,7 +150,7 @@ Description:
 	events, which is implicit if it doesn't even support it in the first
 	place).
 
-	Note that the PMC Register in the device's PM Capabilties has a bitmask
+	Note that the PMC Register in the device's PM Capabilities has a bitmask
 	of the states it supports generating PME# from. D3hot is bit 3 and
 	D3cold is bit 4. So, while a value of 4 as the state may not seem
 	semantically correct, it is. 
@@ -167,7 +164,6 @@ struct pci_driver:
 
         int  (*suspend) (struct pci_dev *dev, pm_message_t state);
         int  (*resume) (struct pci_dev *dev);
-        int  (*enable_wake) (struct pci_dev *dev, pci_power_t state, int enable);
 
 
 suspend
@@ -206,7 +202,7 @@ resume
 
 Usage:
 
-if (dev->driver && dev->driver->suspend)
+if (dev->driver && dev->driver->resume)
 	dev->driver->resume(dev)
 
 The resume callback may be called from any power state, and is always meant to
@@ -253,42 +249,6 @@ ensure correct (and speedy) operation.
 The driver should update the current_state field in its pci_dev structure in
 this function, except for PM-capable devices when pci_set_power_state is used.
 
-
-enable_wake
------------
-
-Usage:
-
-if (dev->driver && dev->driver->enable_wake)
-	dev->driver->enable_wake(dev,state,enable);
-
-This callback is generally only relevant for devices that support the PCI PM
-spec and have the ability to generate a PME# (Power Management Event Signal)
-to wake the system up. (However, it is possible that a device may support 
-some non-standard way of generating a wake event on sleep.)
-
-Bits 15:11 of the PMC (Power Mgmt Capabilities) Register in a device's
-PM Capabilties describe what power states the device supports generating a 
-wake event from:
-
-+------------------+
-|  Bit  |  State   |
-+------------------+
-|  11   |   D0     |
-|  12   |   D1     |
-|  13   |   D2     |
-|  14   |   D3hot  |
-|  15   |   D3cold |
-+------------------+
-
-A device can use this to enable wake events:
-
-	 pci_enable_wake(dev,state,enable);
-
-Note that to enable PME# from D3cold, a value of 4 should be passed to 
-pci_enable_wake (since it uses an index into a bitmask). If a driver gets
-a request to enable wake events from D3, two calls should be made to 
-pci_enable_wake (one for both D3hot and D3cold).
 
 
 A reference implementation

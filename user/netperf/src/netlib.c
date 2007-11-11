@@ -1,5 +1,6 @@
 char    netlib_id[]="\
-@(#)netlib.c (c) Copyright 1993-2004 Hewlett-Packard Company. Version 2.3pl2";
+@(#)netlib.c (c) Copyright 1993-2007 Hewlett-Packard Company. Version 2.4.3";
+
 
 /****************************************************************/
 /*                                                              */
@@ -69,6 +70,9 @@ char    netlib_id[]="\
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#ifdef HAVE_ENDIAN_H
+#include <endian.h>
+#endif
 
 
 #ifndef WIN32
@@ -101,8 +105,10 @@ char    netlib_id[]="\
 #define netperf_socklen_t socklen_t
 #include <windows.h>
 
-/* there should be another way to decide to include the ws2 file */
-#ifdef DO_IPV6
+/* the only time someone should need to define DONT_IPV6 in the
+   "sources" file is if they are trying to compile on Windows 2000 or
+   NT4 and I suspect this may not be their only problem :) */
+#ifndef DONT_IPV6
 #include <ws2tcpip.h>
 #endif
 
@@ -140,6 +146,10 @@ char    netlib_id[]="\
 #endif /* __osf__ */
 #endif /* WANT_DLPI */
 
+#ifdef HAVE_MPCTL
+#include <sys/mpctl.h>
+#endif
+
 #if !defined(HAVE_GETADDRINFO) || !defined(HAVE_GETNAMEINFO)
 # include "missing/getaddrinfo.h"
 #endif
@@ -170,6 +180,7 @@ struct  timezone {
         } ;
 #ifndef __VMS
 SOCKET     win_kludge_socket = INVALID_SOCKET;
+SOCKET     win_kludge_socket2 = INVALID_SOCKET;
 #endif /* __VMS */
 #endif /* WIN32 || __VMS */
 
@@ -199,6 +210,7 @@ float   lib_elapsed,
         lib_remote_cpu_util;
 
 float   lib_local_per_cpu_util[MAXCPUS];
+int     lib_cpu_map[MAXCPUS];
 
 int     *request_array;
 int     *response_array;
@@ -312,7 +324,7 @@ stop_itimer()
   new_interval.it_value.tv_usec = 0;  
   if (setitimer(ITIMER_REAL,&new_interval,&old_interval) != 0) {
     /* there was a problem arming the interval timer */ 
-    perror("clusterperf: cluster_root: setitimer");
+    perror("netperf: setitimer");
     exit(1);
   }
   return;
@@ -546,7 +558,16 @@ ntohd(double net_double)
     conv_rec.bytes[i] = conv_rec.bytes[7-i];
     conv_rec.bytes[7-i] = scratch;
   }
-  
+
+#if defined(__FLOAT_WORD_ORDER) && defined(__BYTE_ORDER)
+  if (__FLOAT_WORD_ORDER != __BYTE_ORDER) {
+    /* Fixup mixed endian floating point machines */
+    unsigned int scratch = conv_rec.words[0];
+    conv_rec.words[0] = conv_rec.words[1];
+    conv_rec.words[1] = scratch;
+  }
+#endif
+
   return(conv_rec.whole_thing);
   
 }
@@ -581,6 +602,15 @@ htond(double host_double)
     conv_rec.bytes[7-i] = scratch;
   }
   
+#if defined(__FLOAT_WORD_ORDER) && defined(__BYTE_ORDER)
+  if (__FLOAT_WORD_ORDER != __BYTE_ORDER) {
+    /* Fixup mixed endian floating point machines */
+    unsigned int scratch = conv_rec.words[0];
+    conv_rec.words[0] = conv_rec.words[1];
+    conv_rec.words[1] = scratch;
+  }
+#endif
+
   /* we know that in the message passing routines htonl will */
   /* be called on the 32 bit quantities. we need to set things up so */
   /* that when this happens, the proper order will go out on the */
@@ -659,10 +689,16 @@ get_num_cpus()
 }  
 
 #ifdef WIN32
+#ifdef __GNUC__
+  #define S64_SUFFIX(x) x##LL
+#else
+  #define S64_SUFFIX(x) x##i64
+#endif
+
 /*
  * Number of 100 nanosecond units from 1/1/1601 to 1/1/1970
  */
-#define EPOCH_BIAS  116444736000000000i64
+#define EPOCH_BIAS  S64_SUFFIX(116444736000000000)
 
 /*
  * Union to facilitate converting from FILETIME to unsigned __int64
@@ -680,9 +716,9 @@ gettimeofday( struct timeval *tv , struct timezone *not_used )
 
         GetSystemTimeAsFileTime( &(nt_time.ft_struct) );
 
-        UnixTime = ((nt_time.ft_scalar - EPOCH_BIAS) / 10i64);
-        tv->tv_sec = (long)(time_t)(UnixTime / 1000000i64);
-        tv->tv_usec = (unsigned long)(UnixTime % 1000000i64);
+        UnixTime = ((nt_time.ft_scalar - EPOCH_BIAS) / S64_SUFFIX(10));
+        tv->tv_sec = (long)(time_t)(UnixTime / S64_SUFFIX(1000000));
+        tv->tv_usec = (unsigned long)(UnixTime % S64_SUFFIX(1000000));
 }
 #endif /* WIN32 */
 
@@ -734,7 +770,7 @@ catcher(int sig)
         fflush(where);
       }
       times_up = 1;
-#ifdef WANT_INTERVALS
+#if defined(WANT_INTERVALS) && !defined(WANT_SPIN)
       stop_itimer();
 #endif /* WANT_INTERVALS */
       break;
@@ -757,16 +793,6 @@ catcher(int sig)
         scp->sc_syscall_action = SIG_RESTART;
       }
 #endif /* __hpux */
-      if (demo_mode) {
-        /* spit-out what the performance was in units/s. based on our */
-        /* knowledge of the interval length we do not need to call */
-        /* gettimeofday() raj 2/95 */
-        fprintf(where,"%g\n",(units_this_tick * 
-                              (double) 1000000 / 
-                              (double) usec_per_itvl));
-        fflush(where);
-        units_this_tick = (double) 0.0;
-      }
 #else /* WANT_INTERVALS */
       fprintf(where,
               "catcher: interval timer running unexpectedly!\n");
@@ -853,6 +879,9 @@ emulate_alarm( int seconds )
 
         if (win_kludge_socket != INVALID_SOCKET) {
           closesocket(win_kludge_socket);
+        }
+        if (win_kludge_socket2 != INVALID_SOCKET) {
+          closesocket(win_kludge_socket2);
         }
 	}
 }
@@ -963,8 +992,7 @@ stop_timer()
  /* should detect the presence of POSIX.4 timer_* routines one of */
  /* these days */
 void
-start_itimer( interval_len_msec )
-     unsigned int interval_len_msec;
+start_itimer(unsigned int interval_len_msec )
 {
 
   unsigned int ticks_per_itvl;
@@ -1015,11 +1043,42 @@ start_itimer( interval_len_msec )
   new_interval.it_value.tv_usec = usec_per_itvl % 1000000;  
   if (setitimer(ITIMER_REAL,&new_interval,&old_interval) != 0) {
     /* there was a problem arming the interval timer */ 
-    perror("clusterperf: cluster_root: setitimer");
+    perror("netperf: setitimer");
     exit(1);
   }
 }
 #endif /* WANT_INTERVALS */
+
+void
+netlib_init_cpu_map() {
+
+  int i;
+#ifdef HAVE_MPCTL
+  int num;
+  i = 0;
+  /* I go back and forth on whether this should be the system-wide set
+     of calls, or if the processor set versions (sans the _SYS) should
+     be used.  at the moment I believe that the system-wide version
+     should be used. raj 2006-04-03 */
+  num = mpctl(MPC_GETNUMSPUS_SYS,0,0);
+  lib_cpu_map[i] = mpctl(MPC_GETFIRSTSPU_SYS,0,0);
+  for (i = 1;((i < num) && (i < MAXCPUS)); i++) {
+    lib_cpu_map[i] = mpctl(MPC_GETNEXTSPU_SYS,lib_cpu_map[i-1],0);
+  }
+  /* from here, we set them all to -1 because if we launch more
+     loopers than actual CPUs, well, I'm not sure why :) */
+  for (; i < MAXCPUS; i++) {
+    lib_cpu_map[i] = -1;
+  }
+
+#else
+  /* we assume that there is indeed a contiguous mapping */
+  for (i = 0; i < MAXCPUS; i++) {
+    lib_cpu_map[i] = i;
+  }
+#endif
+}
+
 
 /****************************************************************/
 /*                                                              */
@@ -1042,6 +1101,16 @@ netlib_init()
   for (i = 0; i < MAXCPUS; i++) {
     lib_local_per_cpu_util[i] = 0.0;
   }
+
+  /* on those systems where we know that CPU numbers may not start at
+     zero and be contiguous, we provide a way to map from a
+     contiguous, starting from 0 CPU id space to the actual CPU ids.
+     at present this is only used for the netcpu_looper stuff because
+     we ass-u-me that someone setting processor affinity from the
+     netperf commandline will provide a "proper" CPU identifier. raj
+     2006-04-03 */
+
+  netlib_init_cpu_map();
 
   if (debug) {
     fprintf(where,
@@ -1089,6 +1158,38 @@ convert(char *string)
   return(base);
 }
 
+/* this routine is like convert, but it is used for an interval time
+   specification instead of stuff like socket buffer or send sizes.
+   it converts everything to microseconds for internal use.  if there
+   is an 'm' at the end it assumes the user provided milliseconds, s
+   will imply seconds, u will imply microseconds.  in the future n
+   will imply nanoseconds but for now it will be ignored. if there is
+   no suffix or an unrecognized suffix, it will be assumed the user
+   provided milliseconds, which was the long-time netperf default. one
+   of these days, we should probably revisit that nanosecond business
+   wrt the return value being just an int rather than a uint64_t or
+   something.  raj 2006-02-06 */
+
+unsigned int
+convert_timespec(char *string) {
+
+  unsigned int base;
+  base = atoi(string);
+  if (strstr(string,"m")) {
+    base *= 1000;
+  }
+  else if (strstr(string,"u")) {
+    base *= (1);
+  }
+  else if (strstr(string,"s")) {
+    base *= (1000 * 1000);
+  }
+  else {
+    base *= (1000);
+  }
+  return(base);
+}
+
 
  /* this routine will allocate a circular list of buffers for either */
  /* send or receive operations. each of these buffers will be aligned */
@@ -1113,6 +1214,8 @@ allocate_buffer_ring(int width, int buffer_size, int alignment, int offset)
   int do_fill;
 
   FILE *fill_source;
+  char default_fill[] = "netperf";
+  int  fill_cursor = 0;
 
   malloc_size = buffer_size + alignment + offset;
 
@@ -1163,17 +1266,35 @@ allocate_buffer_ring(int width, int buffer_size, int alignment, int offset)
     temp_link->buffer_ptr += offset;
     /* is where the buffer fill code goes. */
     if (do_fill) {
+      char *bufptr = temp_link->buffer_ptr;
       bytes_left = buffer_size;
       while (bytes_left) {
-        if (((bytes_read = (int)fread(temp_link->buffer_ptr,
-                                 1,
-                                 bytes_left,
-                                 fill_source)) == 0) &&
+        if (((bytes_read = (int)fread(bufptr,
+				      1,
+				      bytes_left,
+				      fill_source)) == 0) &&
             (feof(fill_source))){
           rewind(fill_source);
         }
+	bufptr += bytes_read;
         bytes_left -= bytes_read;
       }
+    }
+    else {
+      /* use the default fill to ID our data traffic on the
+	 network. it ain't exactly pretty, but it should work */
+      int j;
+      char *bufptr = temp_link->buffer_ptr;
+      for (j = 0; j < buffer_size; j++) {
+	bufptr[j] = default_fill[fill_cursor];
+	fill_cursor += 1;
+	/* the Windows DDK compiler with an x86_64 target wants a cast
+	   here */
+	if (fill_cursor >  (int)strlen(default_fill)) {
+	  fill_cursor = 0;
+	}
+      }
+
     }
     temp_link->next = prev_link;
     prev_link = temp_link;
@@ -1185,6 +1306,45 @@ allocate_buffer_ring(int width, int buffer_size, int alignment, int offset)
   return(first_link); /* it's a circle, doesn't matter which we return */
 }
 
+/* this routine will dirty the first dirty_count bytes of the
+   specified buffer and/or read clean_count bytes from the buffer. it
+   will go N bytes at a time, the only question is how large should N
+   be and if we should be going continguously, or based on some
+   assumption of cache line size */
+
+void
+access_buffer(char *buffer_ptr,int length, int dirty_count, int clean_count) {
+
+  char *temp_buffer;
+  char *limit;
+  int  i, dirty_totals;
+
+  temp_buffer = buffer_ptr;
+  limit = temp_buffer + length;
+  dirty_totals = 0;
+
+  for (i = 0; 
+       ((i < dirty_count) && (temp_buffer < limit));
+       i++) {
+    *temp_buffer += (char)i;
+    dirty_totals += *temp_buffer;
+    temp_buffer++;
+  }
+
+  for (i = 0; 
+       ((i < clean_count) && (temp_buffer < limit));
+       i++) {
+    dirty_totals += *temp_buffer;
+    temp_buffer++;
+  }
+
+  if (debug > 100) {
+    fprintf(where,
+	    "This was here to try to avoid dead-code elimination %d\n",
+	    dirty_totals);
+    fflush(where);
+  }
+}
 
 
 #ifdef HAVE_ICSC_EXS
@@ -1576,6 +1736,9 @@ format_cpu_method(int method)
   case SYSCTL:
     method_char = 'C';
     break;
+  case OSX:
+    method_char = 'O';
+    break;
   default:
     method_char = '?';
   }
@@ -1689,63 +1852,87 @@ shutdown_control()
   2004/12/13 */
 
 void
-bind_to_specific_processor(int processor_affinity)
+bind_to_specific_processor(int processor_affinity, int use_cpu_map)
 {
 
-  printf("bind_to_specific_processor: enter\n");
+  int mapped_affinity;
+
+  /* this is in place because the netcpu_looper processor affinity
+     ass-u-me-s a contiguous CPU id space starting with 0. for the
+     regular netperf/netserver affinity, we ass-u-me the user has used
+     a suitable CPU id even when the space is not contiguous and
+     starting from zero */
+  if (use_cpu_map) {
+    mapped_affinity = lib_cpu_map[processor_affinity];
+  }
+  else {
+    mapped_affinity = processor_affinity;
+  }
+
 #ifdef HAVE_MPCTL
-#include <sys/mpctl.h>
   /* indeed, at some point it would be a good idea to check the return
      status and pass-along notification of error... raj 2004/12/13 */
-  mpctl(MPC_SETPROCESS_FORCE, processor_affinity, getpid());
+  mpctl(MPC_SETPROCESS_FORCE, mapped_affinity, getpid());
 #elif HAVE_PROCESSOR_BIND
 #include <sys/types.h>
 #include <sys/processor.h>
 #include <sys/procset.h>
-  processor_bind(P_PID,P_MYID,processor_affinity,NULL);
+  processor_bind(P_PID,P_MYID,mapped_affinity,NULL);
+#elif HAVE_BINDPROCESSOR
+#include <sys/processor.h>
+  /* this is the call on AIX.  It takes a "what" of BINDPROCESS or
+     BINDTHRAD, then "who" and finally "where" which is a CPU number
+     or it seems PROCESSOR_CLASS_ANY there also seems to be a mycpu()
+     call to return the current CPU assignment.  this is all based on
+     the sys/processor.h include file.  from empirical testing, it
+     would seem that the my_cpu() call returns the current CPU on
+     which we are running rather than the CPU binding, so it's return
+     value will not tell you if you are bound vs unbound. */
+  bindprocessor(BINDPROCESS,getpid(),(cpu_t)mapped_affinity);
 #elif HAVE_SCHED_SETAFFINITY
- printf("bind_to_specific_processor: sched_setaffinity\n");
-#define _GNU_SOURCE
-  /* follow the bouncing interface... oy */
-#if __GNUC__ > 3 || \
-    (__GNUC__ == 3 && (__GNUC_MINOR__ > 2 || \
-                       (__GNUC_MINOR__ == 2 && __GNUC_PATCHLEVEL__ > 3)))
-#define USE_CPU_SET                     /* Defined if the affinity call
-                                         * interface (sched_setaffinity,
-                                         * sched_getaffinity) uses cpu_set_t
-                                         * parameters
-                                         */
-#endif
-#undef _GNU_SOURCE
-#ifdef USE_CPU_SET
 #include <sched.h>
-  cpu_set_t           cpu_set;
-  printf("bind_to_specific_processor: USE_CPU_SET %p %d\n",&cpu_set,sizeof(cpu_\
-set));
-  __CPU_ZERO(&cpu_set);
-  printf("zeroed");
-  __CPU_SET(processor_affinity, &cpu_set);
-  printf("set");
-  if (sched_setaffinity(getpid(), &cpu_set)) {
-    fprintf(stderr, "failed to set PID %d's CPU affinity errno %d\n",
-            getpid(),errno);
-    fflush(stderr);
-  }
+  /* in theory this should cover systems with more CPUs than bits in a
+     long, without having to specify __USE_GNU.  we "cheat" by taking
+     defines from /usr/include/bits/sched.h, which we ass-u-me is
+     included by <sched.h>.  If they are not there we will just
+     fall-back on what we had before, which is to use just the size of
+     an unsigned long. raj 2006-09-14 */
+
+#if defined(__CPU_SETSIZE)
+#define NETPERF_CPU_SETSIZE __CPU_SETSIZE
+#define NETPERF_CPU_SET(cpu, cpusetp)  __CPU_SET(cpu, cpusetp)
+#define NETPERF_CPU_ZERO(cpusetp)      __CPU_ZERO (cpusetp)
+  typedef cpu_set_t netperf_cpu_set_t;
 #else
-#undef __USE_GNU
-#include <sched.h>
-#define __USE_GNU
-  unsigned long       this_mask;
-  unsigned int        len = sizeof(this_mask);
-  printf("masking\n");
-  this_mask = 1 << processor_affinity;
-  printf("masked\n");
-  if (sched_setaffinity(getpid(), len, &this_mask)) {
-    fprintf(stderr, "failed to set PID %d's CPU affinity errno %d\n",
-            getpid(),errno);
-    fflush(stderr);
-  }
+#define NETPERF_CPU_SETSIZE sizeof(unsigned long)
+#define NETPERF_CPU_SET(cpu, cpusetp) *cpusetp = 1 << cpu
+#define NETPERF_CPU_ZERO(cpusetp) *cpusetp = (unsigned long)0
+  typedef unsigned long netperf_cpu_set_t;
 #endif
+
+  netperf_cpu_set_t   netperf_cpu_set;
+  unsigned int        len = sizeof(netperf_cpu_set);
+
+  if (mapped_affinity < 8*sizeof(netperf_cpu_set)) {
+    NETPERF_CPU_ZERO(&netperf_cpu_set);
+    NETPERF_CPU_SET(mapped_affinity,&netperf_cpu_set);
+    
+    if (sched_setaffinity(getpid(), len, &netperf_cpu_set)) {
+      if (debug) {
+	fprintf(stderr, "failed to set PID %d's CPU affinity errno %d\n",
+		getpid(),errno);
+	fflush(stderr);
+      }
+    }
+  }
+  else {
+    if (debug) {
+	fprintf(stderr,
+		"CPU number larger than pre-compiled limits. Consider a recompile.\n");
+	fflush(stderr);
+      }
+  }
+      
 #elif HAVE_BIND_TO_CPU_ID
   /* this is the one for Tru64 */
 #include <sys/types.h>
@@ -1755,7 +1942,7 @@ set));
   /* really should be checking a return code one of these days. raj
      2005/08/31 */ 
 
-  bind_to_cpu_id(getpid(), processor_affinity,0);
+  bind_to_cpu_id(getpid(), mapped_affinity,0);
 
 #elif WIN32
 
@@ -1764,10 +1951,10 @@ set));
     ULONG_PTR ProcessAffinityMask;
     ULONG_PTR SystemAffinityMask;
     
-    if ((processor_affinity < 0) || 
-	(processor_affinity > MAXIMUM_PROCESSORS)) {
+    if ((mapped_affinity < 0) || 
+	(mapped_affinity > MAXIMUM_PROCESSORS)) {
       fprintf(where,
-	      "Invalid processor_affinity specified: %d\n", processor_affinity);      fflush(where);
+	      "Invalid processor_affinity specified: %d\n", mapped_affinity);      fflush(where);
       return;
     }
     
@@ -1781,7 +1968,7 @@ set));
 	exit(1);
       }
     
-    AffinityMask = (ULONG_PTR)1 << processor_affinity;
+    AffinityMask = (ULONG_PTR)1 << mapped_affinity;
     
     if (AffinityMask & ProcessAffinityMask) {
       if (!SetThreadAffinityMask( GetCurrentThread(), AffinityMask)) {
@@ -1790,7 +1977,7 @@ set));
       }
     } else if (debug) {
       fprintf(where,
-	      "Processor affinity set to CPU# %d\n", processor_affinity);
+	      "Processor affinity set to CPU# %d\n", mapped_affinity);
       fflush(where);
     }
   }
@@ -1801,6 +1988,21 @@ set));
 	    "Processor affinity not available for this platform!\n");
     fflush(where);
   }
+#endif
+}
+
+
+/*
+ * Sets a socket to non-blocking operation.
+ */
+int
+set_nonblock (SOCKET sock)
+{
+#ifdef WIN32
+  unsigned long flags = 1;
+  return (ioctlsocket(sock, FIONBIO, &flags) != SOCKET_ERROR);
+#else
+  return (fcntl(sock, F_SETFL, O_NONBLOCK) != -1);
 #endif
 }
 
@@ -2018,7 +2220,7 @@ if (tot_bytes_recvd < buflen) {
   local_proc_affinity = netperf_request.content.dummy;
 
   if (local_proc_affinity != -1) {
-    bind_to_specific_processor(local_proc_affinity);
+    bind_to_specific_processor(local_proc_affinity,0);
   } 
 
 }
@@ -2588,7 +2790,7 @@ get_id()
 	static char id_string[80];
 #ifdef WIN32
 char                    system_name[MAX_COMPUTERNAME_LENGTH+1] ;
-int                     name_len = MAX_COMPUTERNAME_LENGTH + 1 ;
+DWORD                   name_len = MAX_COMPUTERNAME_LENGTH + 1 ;
 #else
 struct  utsname         system_name;
 #endif /* WIN32 */
@@ -2596,7 +2798,7 @@ struct  utsname         system_name;
 #ifdef WIN32
  SYSTEM_INFO SystemInfo;
  GetSystemInfo( &SystemInfo ) ;
- if ( !GetComputerName(system_name , &(DWORD)name_len) )
+ if ( !GetComputerName(system_name , &name_len) )
    strcpy(system_name , "no_name") ;
 #else
  if (uname(&system_name) <0) {
@@ -3064,7 +3266,7 @@ output_row(FILE *fd, char *title, int *row){
 
 int
 sum_row(int *row) {
-  int sum;
+  int sum = 0;
   int i;
   for (i = 0; i < 10; i++) sum += row[i];
   return(sum);
@@ -3092,9 +3294,9 @@ HIST_report(HIST h){
 
 #endif
 
-/* we split these out so we can use HIST_timestamp and delta_micro for
-   _either_  WANT_HISTOGRAM, or WANT_DEMO modes. raj 2005-04-06 */
-#if defined(WANT_HISTOGRAM) || defined(WANT_DEMO)
+/* with the advent of sit-and-spin intervals support, we might as well
+   make these things available all the time, not just for demo or
+   histogram modes. raj 2006-02-06 */
 #ifdef HAVE_GETHRTIME
 
 void
@@ -3109,6 +3311,50 @@ delta_micro(hrtime_t *begin, hrtime_t *end)
   long nsecs;
   nsecs = (*end) - (*begin);
   return(nsecs/1000);
+}
+
+#elif defined(HAVE_GET_HRT)
+#include "hrt.h"
+
+void
+HIST_timestamp(hrt_t *timestamp)
+{
+  *timestamp = get_hrt();
+}
+
+int
+delta_micro(hrt_t *begin, hrt_t *end)
+{
+
+  return((int)get_hrt_delta(*end,*begin));
+
+}
+#elif defined(WIN32)
+void HIST_timestamp(LARGE_INTEGER *timestamp)
+{
+	QueryPerformanceCounter(timestamp);
+}
+
+int delta_micro(LARGE_INTEGER *begin, LARGE_INTEGER *end)
+{
+	LARGE_INTEGER DeltaTimestamp;
+	static LARGE_INTEGER TickHz = {0,0};
+
+	if (TickHz.QuadPart == 0) 
+	{
+		QueryPerformanceFrequency(&TickHz);
+	}
+
+	/*+*+ Rick; this will overflow after ~2000 seconds, is that
+	  good enough? Spencer: Yes, that should be more than good
+	  enough for histogram support */
+
+	DeltaTimestamp.QuadPart = (end->QuadPart - begin->QuadPart) * 
+	  1000000/TickHz.QuadPart;
+	assert((DeltaTimestamp.HighPart == 0) && 
+	       ((int)DeltaTimestamp.LowPart >= 0));
+
+	return (int)DeltaTimestamp.LowPart;
 }
 
 #else
@@ -3142,7 +3388,7 @@ delta_micro(struct timeval *begin,struct timeval *end)
 
 }
 #endif /* HAVE_GETHRTIME */
-#endif /* WANT_HISTOGRAM */
+
 
 #ifdef WANT_DLPI
 
@@ -3246,7 +3492,7 @@ dl_bind(int fd, int sap, int mode, char *dlsap_ptr, int *dlsap_len)
 }
 
 int
-dl_connect(int fd, unsigned char *rem_addr, int rem_addr_len)
+dl_connect(int fd, unsigned char *remote_addr, int remote_addr_len)
 {
   dl_connect_req_t *connection_req = (dl_connect_req_t *)control_data;
   dl_connect_con_t *connection_con = (dl_connect_con_t *)control_data;
@@ -3265,19 +3511,19 @@ dl_connect(int fd, unsigned char *rem_addr, int rem_addr_len)
   data_message.buf = (char *)data_area;
 
   connection_req->dl_primitive = DL_CONNECT_REQ;
-  connection_req->dl_dest_addr_length = rem_addr_len;
+  connection_req->dl_dest_addr_length = remote_addr_len;
   connection_req->dl_dest_addr_offset = sizeof(dl_connect_req_t);
   connection_req->dl_qos_length = 0;
   connection_req->dl_qos_offset = 0;
-  bcopy (rem_addr, 
+  bcopy (remote_addr, 
          (unsigned char *)control_data + sizeof(dl_connect_req_t),
-         rem_addr_len);
+         remote_addr_len);
 
   /* well, I would call the put_control routine here, but the sequence */
   /* of connection stuff with DLPI is a bit screwey with all this */
   /* message passing - Toto, I don't think were in Berkeley anymore. */
 
-  control_message.len = sizeof(dl_connect_req_t) + rem_addr_len;
+  control_message.len = sizeof(dl_connect_req_t) + remote_addr_len;
   if ((error = putmsg(fd,&control_message,0,0)) !=0) {
     fprintf(where,"dl_connect: putmsg failure, errno = %d, error 0x%x \n",
             errno,error);
@@ -3316,10 +3562,10 @@ dl_connect(int fd, unsigned char *rem_addr, int rem_addr_len)
 }
 
 int
-dl_accept(fd, rem_addr, rem_addr_len)
+dl_accept(fd, remote_addr, remote_addr_len)
      int fd;
-     unsigned char *rem_addr;
-     int rem_addr_len;
+     unsigned char *remote_addr;
+     int remote_addr_len;
 {
   dl_connect_ind_t *connect_ind = (dl_connect_ind_t *)control_data;
   dl_connect_res_t *connect_res = (dl_connect_res_t *)control_data;

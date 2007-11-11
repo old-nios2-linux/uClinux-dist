@@ -1,9 +1,9 @@
 /* 
- * $Id: grouprad_mod.c,v 1.6.8.1 2004/07/18 22:56:24 sobomax Exp $ 
+ * $Id: grouprad_mod.c,v 1.10.2.1 2005/06/17 11:26:36 janakj Exp $ 
  *
  * Group membership - module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,7 +35,13 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include <radiusclient.h>
+
+#ifdef RADIUSCLIENT_NG_4
+#  include <radiusclient.h>
+#else
+#  include <radiusclient-ng.h>
+#endif
+
 #include "../../error.h"
 #include "../../dprint.h"
 #include "../../sr_module.h"
@@ -58,7 +64,7 @@ static int hf_fixup(void** param, int param_no); /* Header field fixup */
  * Module parameter variables
  */
 static char* radius_config = "/usr/local/etc/radiusclient/radiusclient.conf";
-int use_domain = 1;  /* By default we use domain */
+int use_domain = 0;  /* By default we use domain */
 
 
 /*
@@ -103,6 +109,7 @@ static int mod_init(void)
 	memset(attrs, 0, sizeof(vals));
 	attrs[A_SERVICE_TYPE].n	= "Service-Type";
 	attrs[A_USER_NAME].n	= "User-Name";
+	attrs[A_SIP_GROUP].n    = "Sip-Group";
 	vals[V_GROUP_CHECK].n	= "Group-Check";
 
 	if ((rh = rc_read_config(radius_config)) == NULL) {

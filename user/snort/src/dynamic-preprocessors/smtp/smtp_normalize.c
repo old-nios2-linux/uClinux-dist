@@ -34,6 +34,7 @@
 #include <string.h>
 #include "preprocids.h"
 #include "snort_smtp.h"
+#include "bounds.h"
 
 /*
  *  Externs
@@ -50,7 +51,7 @@
  * @retval  1           line needs normalization
  * @retval  0           line does not need normalization
  */
-int SMTP_NeedNormalize(char *data)
+int SMTP_NeedNormalize(char *data, char *buf_end)
 {
     int num_spaces = 0;
 
@@ -61,9 +62,12 @@ int SMTP_NeedNormalize(char *data)
         if ( num_spaces > 1 )
             return 1;
         data++;
+
+        if (data > buf_end)
+            break;
     }
 
-    return 1;
+    return 0;
 }
 
 /*
@@ -84,11 +88,23 @@ int SMTP_Normalize(SFSnortPacket *p, int offset, int cmd_len)
     char *data;
     int   past_spaces = 0;
     int   first_space = 1;
-   
+    char *startBuffer = &_dpd.altBuffer[0];
+    char *endBuffer = startBuffer + _dpd.altBufferLen;
+    int ret;
+
     data = p->payload + offset;
     datalen = p->payload_size - offset;
 
-    memcpy(_dpd.altBuffer + p->normalized_payload_size, data, cmd_len);
+    //memcpy(_dpd.altBuffer + p->normalized_payload_size, data, cmd_len);
+    ret = SafeMemcpy(startBuffer + p->normalized_payload_size, data, cmd_len,
+                     startBuffer, endBuffer);
+
+    //if (ret == SAFEMEM_ERROR)
+    //{
+    //    DEBUG_WRAP(_dpd.debugMsg(DEBUG_SMTP, "SMTP_Normalize() => SafeMemcpy failed\n"););
+    //    return -1;
+    //}
+
     data += cmd_len;
     i += cmd_len;
     p->normalized_payload_size += cmd_len;
@@ -104,6 +120,10 @@ int SMTP_Normalize(SFSnortPacket *p, int offset, int cmd_len)
         {
             *(_dpd.altBuffer + p->normalized_payload_size) = *data;
             p->normalized_payload_size++;
+            if (p->normalized_payload_size > _dpd.altBufferLen)
+            {
+                break;
+            }
             first_space = 0;
         }
     }    

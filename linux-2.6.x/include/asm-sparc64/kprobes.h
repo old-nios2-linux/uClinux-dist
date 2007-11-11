@@ -10,10 +10,13 @@ typedef u32 kprobe_opcode_t;
 #define BREAKPOINT_INSTRUCTION_2 0x91d02071 /* ta 0x71 */
 #define MAX_INSN_SIZE 2
 
-#define JPROBE_ENTRY(pentry)	(kprobe_opcode_t *)pentry
 #define arch_remove_kprobe(p)	do {} while (0)
 #define  ARCH_INACTIVE_KPROBE_COUNT 0
-#define flush_insn_slot(p)	do { } while (0)
+
+#define flush_insn_slot(p)		\
+do { 	flushi(&(p)->ainsn.insn[0]);	\
+	flushi(&(p)->ainsn.insn[1]);	\
+} while (0)
 
 /* Architecture specific copy of original instruction*/
 struct arch_specific_insn {
@@ -23,7 +26,7 @@ struct arch_specific_insn {
 
 struct prev_kprobe {
 	struct kprobe *kp;
-	unsigned int status;
+	unsigned long status;
 	unsigned long orig_tnpc;
 	unsigned long orig_tstate_pil;
 };
@@ -33,13 +36,11 @@ struct kprobe_ctlblk {
 	unsigned long kprobe_status;
 	unsigned long kprobe_orig_tnpc;
 	unsigned long kprobe_orig_tstate_pil;
-	long *jprobe_saved_esp;
 	struct pt_regs jprobe_saved_regs;
-	struct pt_regs *jprobe_saved_regs_location;
-	struct sparc_stackf jprobe_saved_stack;
 	struct prev_kprobe prev_kprobe;
 };
 
 extern int kprobe_exceptions_notify(struct notifier_block *self,
 				    unsigned long val, void *data);
+extern int kprobe_fault_handler(struct pt_regs *regs, int trapnr);
 #endif /* _SPARC64_KPROBES_H */

@@ -41,9 +41,11 @@ NGcopy_user_page:	/* %o0=dest, %o1=src, %o2=vaddr */
 	subcc		%g7, 64, %g7
 	bne,pt		%xcc, 1b
 	 add		%o0, 32, %o0
+	membar		#Sync
 	retl
 	 nop
 
+	.globl		NGclear_page, NGclear_user_page
 NGclear_page:		/* %o0=dest */
 NGclear_user_page:	/* %o0=dest, %o1=vaddr */
 	mov		8, %g1
@@ -63,6 +65,7 @@ NGclear_user_page:	/* %o0=dest, %o1=vaddr */
 	subcc		%g7, 64, %g7
 	bne,pt		%xcc, 1b
 	 add		%o0, 32, %o0
+	membar		#Sync
 	retl
 	 nop
 

@@ -16,13 +16,14 @@
 
 #include <linux/netfilter_ipv6/ip6t_owner.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
+#include <linux/netfilter/x_tables.h>
 
 MODULE_AUTHOR("Marc Boucher <marc@mbsi.ca>");
 MODULE_DESCRIPTION("IP6 tables owner matching module");
 MODULE_LICENSE("GPL");
 
 
-static int
+static bool
 match(const struct sk_buff *skb,
       const struct net_device *in,
       const struct net_device *out,
@@ -30,29 +31,27 @@ match(const struct sk_buff *skb,
       const void *matchinfo,
       int offset,
       unsigned int protoff,
-      int *hotdrop)
+      bool *hotdrop)
 {
 	const struct ip6t_owner_info *info = matchinfo;
 
 	if (!skb->sk || !skb->sk->sk_socket || !skb->sk->sk_socket->file)
-		return 0;
+		return false;
 
-	if (info->match & IP6T_OWNER_UID) {
+	if (info->match & IP6T_OWNER_UID)
 		if ((skb->sk->sk_socket->file->f_uid != info->uid) ^
 		    !!(info->invert & IP6T_OWNER_UID))
-			return 0;
-	}
+			return false;
 
-	if (info->match & IP6T_OWNER_GID) {
+	if (info->match & IP6T_OWNER_GID)
 		if ((skb->sk->sk_socket->file->f_gid != info->gid) ^
 		    !!(info->invert & IP6T_OWNER_GID))
-			return 0;
-	}
+			return false;
 
-	return 1;
+	return true;
 }
 
-static int
+static bool
 checkentry(const char *tablename,
 	   const void *ip,
 	   const struct xt_match *match,
@@ -64,13 +63,14 @@ checkentry(const char *tablename,
 	if (info->match & (IP6T_OWNER_PID | IP6T_OWNER_SID)) {
 		printk("ipt_owner: pid and sid matching "
 		       "not supported anymore\n");
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
 }
 
-static struct ip6t_match owner_match = {
+static struct xt_match owner_match __read_mostly = {
 	.name		= "owner",
+	.family		= AF_INET6,
 	.match		= match,
 	.matchsize	= sizeof(struct ip6t_owner_info),
 	.hooks		= (1 << NF_IP6_LOCAL_OUT) | (1 << NF_IP6_POST_ROUTING),
@@ -80,12 +80,12 @@ static struct ip6t_match owner_match = {
 
 static int __init ip6t_owner_init(void)
 {
-	return ip6t_register_match(&owner_match);
+	return xt_register_match(&owner_match);
 }
 
 static void __exit ip6t_owner_fini(void)
 {
-	ip6t_unregister_match(&owner_match);
+	xt_unregister_match(&owner_match);
 }
 
 module_init(ip6t_owner_init);

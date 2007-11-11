@@ -54,11 +54,10 @@ int gen_pool_add(struct gen_pool *pool, unsigned long addr, size_t size,
 	int nbytes = sizeof(struct gen_pool_chunk) +
 				(nbits + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
 
-	chunk = kmalloc_node(nbytes, GFP_KERNEL, nid);
+	chunk = kmalloc_node(nbytes, GFP_KERNEL | __GFP_ZERO, nid);
 	if (unlikely(chunk == NULL))
 		return -1;
 
-	memset(chunk, 0, nbytes);
 	spin_lock_init(&chunk->lock);
 	chunk->start_addr = addr;
 	chunk->end_addr = addr + size;
@@ -148,7 +147,7 @@ unsigned long gen_pool_alloc(struct gen_pool *pool, size_t size)
 			addr = chunk->start_addr +
 					    ((unsigned long)start_bit << order);
 			while (nbits--)
-				__set_bit(start_bit++, &chunk->bits);
+				__set_bit(start_bit++, chunk->bits);
 			spin_unlock_irqrestore(&chunk->lock, flags);
 			read_unlock(&pool->lock);
 			return addr;
@@ -187,7 +186,7 @@ void gen_pool_free(struct gen_pool *pool, unsigned long addr, size_t size)
 			spin_lock_irqsave(&chunk->lock, flags);
 			bit = (addr - chunk->start_addr) >> order;
 			while (nbits--)
-				__clear_bit(bit++, &chunk->bits);
+				__clear_bit(bit++, chunk->bits);
 			spin_unlock_irqrestore(&chunk->lock, flags);
 			break;
 		}

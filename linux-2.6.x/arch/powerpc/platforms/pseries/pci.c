@@ -25,11 +25,10 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 
+#include <asm/eeh.h>
 #include <asm/pci-bridge.h>
 #include <asm/prom.h>
 #include <asm/ppc-pci.h>
-
-static int __devinitdata s7a_workaround = -1;
 
 #if 0
 void pcibios_name_device(struct pci_dev *dev)
@@ -41,7 +40,7 @@ void pcibios_name_device(struct pci_dev *dev)
 	 */
 	dn = pci_device_to_OF_node(dev);
 	if (dn) {
-		char *loc_code = get_property(dn, "ibm,loc-code", 0);
+		const char *loc_code = of_get_property(dn, "ibm,loc-code", 0);
 		if (loc_code) {
 			int loc_len = strlen(loc_code);
 			if (loc_len < sizeof(dev->dev.name)) {
@@ -56,39 +55,6 @@ void pcibios_name_device(struct pci_dev *dev)
 }   
 DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pcibios_name_device);
 #endif
-
-static void __devinit check_s7a(void)
-{
-	struct device_node *root;
-	const char *model;
-
-	s7a_workaround = 0;
-	root = of_find_node_by_path("/");
-	if (root) {
-		model = get_property(root, "model", NULL);
-		if (model && !strcmp(model, "IBM,7013-S7A"))
-			s7a_workaround = 1;
-		of_node_put(root);
-	}
-}
-
-void __devinit pSeries_irq_bus_setup(struct pci_bus *bus)
-{
-	struct pci_dev *dev;
-
-	if (s7a_workaround < 0)
-		check_s7a();
-	list_for_each_entry(dev, &bus->devices, bus_list) {
-		pci_read_irq_line(dev);
-		if (s7a_workaround) {
-			if (dev->irq > 16) {
-				dev->irq -= 3;
-				pci_write_config_byte(dev, PCI_INTERRUPT_LINE,
-					dev->irq);
-			}
-		}
-	}
-}
 
 static void __init pSeries_request_regions(void)
 {
@@ -112,7 +78,7 @@ void __init pSeries_final_fixup(void)
 
 /*
  * Assume the winbond 82c105 is the IDE controller on a
- * p610.  We should probably be more careful in case
+ * p610/p615/p630. We should probably be more careful in case
  * someone tries to plug in a similar adapter.
  */
 static void fixup_winbond_82c105(struct pci_dev* dev)
@@ -133,6 +99,10 @@ static void fixup_winbond_82c105(struct pci_dev* dev)
 		if (dev->resource[i].flags & IORESOURCE_IO
 		    && dev->bus->number == 0 && dev->devfn == 0x81)
 			dev->resource[i].flags &= ~IORESOURCE_IO;
+		if (dev->resource[i].start == 0 && dev->resource[i].end) {
+			dev->resource[i].flags = 0;
+			dev->resource[i].end = 0;
+		}
 	}
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105,

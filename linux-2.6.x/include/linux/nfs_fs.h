@@ -11,14 +11,6 @@
 
 #include <linux/magic.h>
 
-/*
- * Enable debugging support for nfs client.
- * Requires RPC_DEBUG.
- */
-#ifdef RPC_DEBUG
-# define NFS_DEBUG
-#endif
-
 /* Default timeout values */
 #define NFS_MAX_UDP_TIMEOUT	(60*HZ)
 #define NFS_MAX_TCP_TIMEOUT	(600*HZ)
@@ -33,11 +25,14 @@
 #define FLUSH_HIGHPRI		16	/* high priority memory reclaim flush */
 #define FLUSH_NOCOMMIT		32	/* Don't send the NFSv3/v4 COMMIT */
 #define FLUSH_INVALIDATE	64	/* Invalidate the page cache */
+#define FLUSH_NOWRITEPAGE	128	/* Don't call writepage() */
 
 #ifdef __KERNEL__
 
 #include <linux/in.h>
+#include <linux/kref.h>
 #include <linux/mm.h>
+#include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/rbtree.h>
 #include <linux/rwsem.h>
@@ -77,8 +72,7 @@ struct nfs_access_entry {
 struct nfs4_state;
 struct nfs_open_context {
 	atomic_t count;
-	struct vfsmount *vfsmnt;
-	struct dentry *dentry;
+	struct path path;
 	struct rpc_cred *cred;
 	struct nfs4_state *state;
 	fl_owner_t lockowner;
@@ -162,13 +156,9 @@ struct nfs_inode {
 	/*
 	 * This is the list of dirty unwritten pages.
 	 */
-	spinlock_t		req_lock;
-	struct list_head	dirty;
-	struct list_head	commit;
 	struct radix_tree_root	nfs_page_tree;
 
-	unsigned int		ndirty,
-				ncommit,
+	unsigned long		ncommit,
 				npages;
 
 	/* Open contexts for shared mmap writes */
@@ -194,6 +184,7 @@ struct nfs_inode {
 #define NFS_INO_INVALID_ACCESS	0x0008		/* cached access cred invalid */
 #define NFS_INO_INVALID_ACL	0x0010		/* cached acls are invalid */
 #define NFS_INO_REVAL_PAGECACHE	0x0020		/* must revalidate pagecache */
+#define NFS_INO_REVAL_FORCED	0x0040		/* force revalidation ignoring a delegation */
 
 /*
  * Bit offsets in flags field
@@ -307,6 +298,7 @@ extern int nfs_attribute_timeout(struct inode *inode);
 extern int nfs_revalidate_inode(struct nfs_server *server, struct inode *inode);
 extern int __nfs_revalidate_inode(struct nfs_server *, struct inode *);
 extern int nfs_revalidate_mapping(struct inode *inode, struct address_space *mapping);
+extern int nfs_revalidate_mapping_nolock(struct inode *inode, struct address_space *mapping);
 extern int nfs_setattr(struct dentry *, struct iattr *);
 extern void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr);
 extern void nfs_begin_attr_update(struct inode *);
@@ -318,7 +310,7 @@ extern void put_nfs_open_context(struct nfs_open_context *ctx);
 extern struct nfs_open_context *nfs_find_open_context(struct inode *inode, struct rpc_cred *cred, int mode);
 
 /* linux/net/ipv4/ipconfig.c: trims ip addr off front of name, too. */
-extern u32 root_nfs_parse_addr(char *name); /*__init*/
+extern __be32 root_nfs_parse_addr(char *name); /*__init*/
 
 static inline void nfs_fattr_init(struct nfs_fattr *fattr)
 {
@@ -329,9 +321,9 @@ static inline void nfs_fattr_init(struct nfs_fattr *fattr)
 /*
  * linux/fs/nfs/file.c
  */
-extern struct inode_operations nfs_file_inode_operations;
+extern const struct inode_operations nfs_file_inode_operations;
 #ifdef CONFIG_NFS_V3
-extern struct inode_operations nfs3_file_inode_operations;
+extern const struct inode_operations nfs3_file_inode_operations;
 #endif /* CONFIG_NFS_V3 */
 extern const struct file_operations nfs_file_operations;
 extern const struct address_space_operations nfs_file_aops;
@@ -378,9 +370,9 @@ extern ssize_t nfs_file_direct_write(struct kiocb *iocb,
 /*
  * linux/fs/nfs/dir.c
  */
-extern struct inode_operations nfs_dir_inode_operations;
+extern const struct inode_operations nfs_dir_inode_operations;
 #ifdef CONFIG_NFS_V3
-extern struct inode_operations nfs3_dir_inode_operations;
+extern const struct inode_operations nfs3_dir_inode_operations;
 #endif /* CONFIG_NFS_V3 */
 extern const struct file_operations nfs_dir_operations;
 extern struct dentry_operations nfs_dentry_operations;
@@ -390,7 +382,7 @@ extern int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fh, struct nfs_
 /*
  * linux/fs/nfs/symlink.c
  */
-extern struct inode_operations nfs_symlink_inode_operations;
+extern const struct inode_operations nfs_symlink_inode_operations;
 
 /*
  * linux/fs/nfs/sysctl.c
@@ -407,39 +399,43 @@ extern void nfs_unregister_sysctl(void);
  * linux/fs/nfs/namespace.c
  */
 extern struct list_head nfs_automount_list;
-extern struct inode_operations nfs_mountpoint_inode_operations;
-extern struct inode_operations nfs_referral_inode_operations;
+extern const struct inode_operations nfs_mountpoint_inode_operations;
+extern const struct inode_operations nfs_referral_inode_operations;
 extern int nfs_mountpoint_expiry_timeout;
 extern void nfs_release_automount_timer(void);
 
 /*
  * linux/fs/nfs/unlink.c
  */
-extern int  nfs_async_unlink(struct dentry *);
-extern void nfs_complete_unlink(struct dentry *);
+extern int  nfs_async_unlink(struct inode *dir, struct dentry *dentry);
+extern void nfs_complete_unlink(struct dentry *dentry, struct inode *);
 
 /*
  * linux/fs/nfs/write.c
  */
+extern int  nfs_congestion_kb;
 extern int  nfs_writepage(struct page *page, struct writeback_control *wbc);
 extern int  nfs_writepages(struct address_space *, struct writeback_control *);
 extern int  nfs_flush_incompatible(struct file *file, struct page *page);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned int, unsigned int);
 extern int nfs_writeback_done(struct rpc_task *, struct nfs_write_data *);
 extern void nfs_writedata_release(void *);
-
-#if defined(CONFIG_NFS_V3) || defined(CONFIG_NFS_V4)
-struct nfs_write_data *nfs_commit_alloc(void);
-void nfs_commit_free(struct nfs_write_data *p);
-#endif
+extern int nfs_set_page_dirty(struct page *);
 
 /*
  * Try to write back everything synchronously (but check the
  * return value!)
  */
-extern int  nfs_sync_inode_wait(struct inode *, unsigned long, unsigned int, int);
+extern long nfs_sync_mapping_wait(struct address_space *, struct writeback_control *, int);
+extern int nfs_sync_mapping_range(struct address_space *, loff_t, loff_t, int);
+extern int nfs_wb_all(struct inode *inode);
+extern int nfs_wb_page(struct inode *inode, struct page* page);
+extern int nfs_wb_page_priority(struct inode *inode, struct page* page, int how);
+extern int nfs_wb_page_cancel(struct inode *inode, struct page* page);
 #if defined(CONFIG_NFS_V3) || defined(CONFIG_NFS_V4)
 extern int  nfs_commit_inode(struct inode *, int);
+extern struct nfs_write_data *nfs_commit_alloc(void);
+extern void nfs_commit_free(struct nfs_write_data *wdata);
 extern void nfs_commit_release(void *wdata);
 #else
 static inline int
@@ -455,32 +451,10 @@ nfs_have_writebacks(struct inode *inode)
 	return NFS_I(inode)->npages != 0;
 }
 
-static inline int
-nfs_wb_all(struct inode *inode)
-{
-	int error = nfs_sync_inode_wait(inode, 0, 0, 0);
-	return (error < 0) ? error : 0;
-}
-
-/*
- * Write back all requests on one page - we do this before reading it.
- */
-static inline int nfs_wb_page_priority(struct inode *inode, struct page* page, int how)
-{
-	int error = nfs_sync_inode_wait(inode, page->index, 1,
-			how | FLUSH_STABLE);
-	return (error < 0) ? error : 0;
-}
-
-static inline int nfs_wb_page(struct inode *inode, struct page* page)
-{
-	return nfs_wb_page_priority(inode, page, 0);
-}
-
 /*
  * Allocate nfs_write_data structures
  */
-extern struct nfs_write_data *nfs_writedata_alloc(size_t len);
+extern struct nfs_write_data *nfs_writedata_alloc(unsigned int npages);
 
 /*
  * linux/fs/nfs/read.c
@@ -494,7 +468,7 @@ extern void nfs_readdata_release(void *data);
 /*
  * Allocate nfs_read_data structures
  */
-extern struct nfs_read_data *nfs_readdata_alloc(size_t len);
+extern struct nfs_read_data *nfs_readdata_alloc(unsigned int npages);
 
 /*
  * linux/fs/nfs3proc.c
@@ -521,21 +495,18 @@ static inline void nfs3_forget_cached_acls(struct inode *inode)
 
 /*
  * linux/fs/mount_clnt.c
- * (Used only by nfsroot module)
  */
-extern int  nfsroot_mount(struct sockaddr_in *, char *, struct nfs_fh *,
-		int, int);
+extern int  nfs_mount(struct sockaddr *, size_t, char *, char *,
+		      int, int, struct nfs_fh *);
 
 /*
  * inline functions
  */
 
-static inline loff_t
-nfs_size_to_loff_t(__u64 size)
+static inline loff_t nfs_size_to_loff_t(__u64 size)
 {
-	loff_t maxsz = (((loff_t) ULONG_MAX) << PAGE_CACHE_SHIFT) + PAGE_CACHE_SIZE - 1;
-	if (size > maxsz)
-		return maxsz;
+	if (size > (__u64) OFFSET_MAX - 1)
+		return OFFSET_MAX - 1;
 	return (loff_t) size;
 }
 
@@ -582,9 +553,19 @@ extern void * nfs_root_data(void);
 #define NFSDBG_ROOT		0x0080
 #define NFSDBG_CALLBACK		0x0100
 #define NFSDBG_CLIENT		0x0200
+#define NFSDBG_MOUNT		0x0400
 #define NFSDBG_ALL		0xFFFF
 
 #ifdef __KERNEL__
+
+/*
+ * Enable debugging support for nfs client.
+ * Requires RPC_DEBUG.
+ */
+#ifdef RPC_DEBUG
+# define NFS_DEBUG
+#endif
+
 # undef ifdebug
 # ifdef NFS_DEBUG
 #  define ifdebug(fac)		if (unlikely(nfs_debug & NFSDBG_##fac))

@@ -1,6 +1,6 @@
 /*
- * $Id: dlg.h,v 1.5 2003/07/08 16:38:51 dcm Exp $
- * Copyright (C) 2001-2003 Fhg Fokus
+ * $Id: dlg.h,v 1.6 2004/08/24 09:00:40 janakj Exp $
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -69,7 +69,7 @@ typedef struct dlg_id {
 
 
 /*
- * It is neccessary to analyze the dialog data to find out
+ * It is necessary to analyze the dialog data to find out
  * what URI put into the Record-Route, where the message
  * should be really sent and how to construct the route
  * set of the message. This structure stores this information
@@ -101,7 +101,7 @@ typedef struct dlg {
 	rr_t* route_set;        /* Route set */
 	dlg_hooks_t hooks;      /* Various hooks used to store information that
 				 * can be reused when building a message (to
-				 * prevent repeated analysing of the dialog data
+				 * prevent repeated analyzing of the dialog data
 				 */
 } dlg_t;
 

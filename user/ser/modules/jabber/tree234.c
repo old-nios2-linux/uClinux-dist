@@ -1,5 +1,5 @@
 /*
- * $Id: tree234.c,v 1.6 2003/06/02 15:42:21 dcm Exp $
+ * $Id: tree234.c,v 1.7.2.1 2005/07/20 17:11:51 andrei Exp $
  *
  * tree234.c: reasonably generic counted 2-3-4 tree routines.
  * 
@@ -154,6 +154,7 @@ static void *add234_internal(tree234 *t, void *e, int index) {
     void *orig_e = e;
     int c, lcount, rcount;
 
+	n=0; /* warning fix */
     LOG123(("adding node %p to tree %p\n", e, t));
     if (t->root == NULL) {
 	t->root = mknew(node234);
@@ -710,8 +711,8 @@ static void *delpos234_internal(tree234 *t, int index) {
 		} else {
 		    /*
 		     * Case 3b. ki has only one element, and has no
-		     * neighbour with more than one. So pick a
-		     * neighbour and merge it with ki, taking an
+		     * neighbor with more than one. So pick a
+		     * neighbor and merge it with ki, taking an
 		     * element down from n to go in the middle.
 		     *
 		     *      . B .                .

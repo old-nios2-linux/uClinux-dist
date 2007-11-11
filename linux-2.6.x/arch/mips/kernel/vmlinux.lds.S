@@ -27,7 +27,7 @@ SECTIONS
   /* read-only */
   _text = .;			/* Text and read-only data */
   .text : {
-    *(.text)
+    TEXT_TEXT
     SCHED_TEXT
     LOCK_TEXT
     *(.fixup)
@@ -44,6 +44,8 @@ SECTIONS
   __start___dbe_table = .;	/* Exception table for data bus errors */
   __dbe_table : { *(__dbe_table) }
   __stop___dbe_table = .;
+
+  NOTES
 
   RODATA
 
@@ -62,7 +64,7 @@ SECTIONS
     . = ALIGN(_PAGE_SIZE);
     *(.data.init_task)
 
-    *(.data)
+    DATA_DATA
 
     CONSTRUCTORS
   }
@@ -112,14 +114,14 @@ SECTIONS
     /* .exit.text is discarded at runtime, not link time, to deal with
      references from .rodata */
   .exit.text : { *(.exit.text) }
+  .exit.data : { *(.exit.data) }
+#if defined(CONFIG_BLK_DEV_INITRD)
   . = ALIGN(_PAGE_SIZE);
   __initramfs_start = .;
   .init.ramfs : { *(.init.ramfs) }
   __initramfs_end = .;
-  . = ALIGN(32);
-  __per_cpu_start = .;
-  .data.percpu  : { *(.data.percpu) }
-  __per_cpu_end = .;
+#endif
+  PERCPU(_PAGE_SIZE)
   . = ALIGN(_PAGE_SIZE);
   __init_end = .;
   /* freed after init ends here */
@@ -139,18 +141,18 @@ SECTIONS
 
   /* Sections to be discarded */
   /DISCARD/ : {
-        *(.exit.data)
         *(.exitcall.exit)
 
 	/* ABI crap starts here */
-	*(.comment)
 	*(.MIPS.options)
-	*(.note)
 	*(.options)
 	*(.pdr)
 	*(.reginfo)
-	*(.mdebug*)
   }
+
+  /* These mark the ABI of the kernel for debuggers.  */
+  .mdebug.abi32 : { KEEP(*(.mdebug.abi32)) }
+  .mdebug.abi64 : { KEEP(*(.mdebug.abi64)) }
 
   /* This is the MIPS specific mdebug section.  */
   .mdebug : { *(.mdebug) }

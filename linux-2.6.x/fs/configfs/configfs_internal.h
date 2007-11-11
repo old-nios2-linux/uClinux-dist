@@ -29,10 +29,11 @@
 
 struct configfs_dirent {
 	atomic_t		s_count;
+	int			s_dependent_count;
 	struct list_head	s_sibling;
 	struct list_head	s_children;
 	struct list_head	s_links;
-	void 			* s_element;
+	void			* s_element;
 	int			s_type;
 	umode_t			s_mode;
 	struct dentry		* s_dentry;
@@ -41,15 +42,15 @@ struct configfs_dirent {
 
 #define CONFIGFS_ROOT		0x0001
 #define CONFIGFS_DIR		0x0002
-#define CONFIGFS_ITEM_ATTR 	0x0004
-#define CONFIGFS_ITEM_LINK 	0x0020
+#define CONFIGFS_ITEM_ATTR	0x0004
+#define CONFIGFS_ITEM_LINK	0x0020
 #define CONFIGFS_USET_DIR	0x0040
 #define CONFIGFS_USET_DEFAULT	0x0080
 #define CONFIGFS_USET_DROPPING	0x0100
 #define CONFIGFS_NOT_PINNED	(CONFIGFS_ITEM_ATTR)
 
 extern struct vfsmount * configfs_mount;
-extern kmem_cache_t *configfs_dir_cachep;
+extern struct kmem_cache *configfs_dir_cachep;
 
 extern int configfs_is_root(struct config_item *item);
 
@@ -75,8 +76,8 @@ extern struct super_block * configfs_sb;
 extern const struct file_operations configfs_dir_operations;
 extern const struct file_operations configfs_file_operations;
 extern const struct file_operations bin_fops;
-extern struct inode_operations configfs_dir_inode_operations;
-extern struct inode_operations configfs_symlink_inode_operations;
+extern const struct inode_operations configfs_dir_inode_operations;
+extern const struct inode_operations configfs_symlink_inode_operations;
 
 extern int configfs_symlink(struct inode *dir, struct dentry *dentry,
 			    const char *symname);

@@ -47,7 +47,6 @@ struct ehca_shca;
 
 #include <linux/interrupt.h>
 #include <linux/types.h>
-#include <asm/atomic.h>
 
 int ehca_error_data(struct ehca_shca *shca, void *data, u64 resource);
 
@@ -56,6 +55,7 @@ void ehca_tasklet_neq(unsigned long data);
 
 irqreturn_t ehca_interrupt_eq(int irq, void *dev_id);
 void ehca_tasklet_eq(unsigned long data);
+void ehca_process_eq(struct ehca_shca *shca, int is_irq);
 
 struct ehca_cpu_comp_task {
 	wait_queue_head_t wait_queue;

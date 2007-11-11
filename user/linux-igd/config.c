@@ -1,40 +1,53 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
 #include <sys/stat.h>
+#include "globals.h"
 
+#define NMATCH 3
 
-#define CONF_FILE "/etc/config/upnpd.conf"
-#define MAX_CONFIG_LINE 256
-#define IPTABLES_DEFAULT_FORWARD_CHAIN "FORWARD"
-#define IPTABLES_DEFAULT_PREROUTING_CHAIN "PREROUTING"
-#define IPTABLES_DEFAULT_UPSTREAM_BITRATE "0"
-#define IPTABLES_DEFAULT_DOWNSTREAM_BITRATE "0"
-#define DESC_DOC_DEFAULT "gatedesc.xml"
-#define XML_PATH_DEFAULT "/etc/linuxigd"
-
-int getConfigOptionArgument(char string[],char line[], regmatch_t *submatch) 
+int getConfigOptionArgument(char var[],int varlen, char line[], regmatch_t *submatch) 
 {
-    int match_length;
-    match_length=submatch[1].rm_eo-submatch[1].rm_so;
-    // Make sure we don't write past the end of string[]
-    if (sizeof(string) >= match_length) {
-	match_length = sizeof(string) - 1;
-    }
-    strncpy(string,&line[submatch[1].rm_so],match_length);
-    // Make sure string[] is null terminated
-    strcpy(string + match_length,"");
+    /* bound buffer operations to varlen - 1 */
+    int match_length = min(submatch[1].rm_eo-submatch[1].rm_so, varlen - 1);
+
+    strncpy(var,&line[submatch[1].rm_so],match_length);
+    // Make sure var[] is null terminated
+    var[match_length] = '\0';
     return 0;
 }
 
-int parseConfigFile(int *insert_forward_rules, int *debug_mode, char iptables_location[],
-		    char forward_chain_name[], char prerouting_chain_name[],
-		    char upstream_bitrate[], char downstream_bitrate[],
-		    char desc_doc[], char xml_path[])
+int getConfigOptionDuration(long int *duration,char line[], regmatch_t *submatch) 
+{
+  long int dur;
+  int absolute_time = submatch[1].rm_eo-submatch[1].rm_so; // >0 if @ was present
+  char num[NUM_LEN];
+  char *p;
+
+  /* bound buffer operations to NUM_LEN - 1 */
+  unsigned int len = min(submatch[2].rm_eo-submatch[2].rm_so, NUM_LEN - 1);
+
+  strncpy(num, &line[submatch[2].rm_so], len);
+  num[len] = '\0';
+  if ((p=index(num,':'))==NULL) {
+    dur = atol(num);
+  }
+  else {
+    *p++ = '\0';
+    dur = atol(num)*3600 + atol(p)*60;
+  }
+  if (absolute_time)
+    dur *= -1;
+  *duration = dur;
+  return 0;
+}
+
+int parseConfigFile(globals_p vars)
 {
     FILE *conf_file;
-    regmatch_t submatch[2]; // Stores the regex submatch start end end index
+    regmatch_t submatch[NMATCH]; // Stores the regex submatch start and end index
     
     regex_t re_comment;
     regex_t re_empty_row;
@@ -45,32 +58,35 @@ int parseConfigFile(int *insert_forward_rules, int *debug_mode, char iptables_lo
     regex_t re_prerouting_chain_name;
     regex_t re_upstream_bitrate;
     regex_t re_downstream_bitrate;
+    regex_t re_duration;
     regex_t re_desc_doc;
     regex_t re_xml_path;
 
     // Make sure all vars are 0 or \0 terminated
-    *debug_mode = 0;
-    *insert_forward_rules = 0;
-    strcpy(iptables_location,"");
-    strcpy(forward_chain_name,"");
-    strcpy(prerouting_chain_name,"");
-    strcpy(upstream_bitrate,"");
-    strcpy(downstream_bitrate,"");
-    strcpy(desc_doc,"");
-    strcpy(xml_path,"");
+    vars->debug = 0;
+    vars->forwardRules = 0;
+    strcpy(vars->iptables,"");
+    strcpy(vars->forwardChainName,"");
+    strcpy(vars->preroutingChainName,"");
+    strcpy(vars->upstreamBitrate,"");
+    strcpy(vars->downstreamBitrate,"");
+    vars->duration = DEFAULT_DURATION;
+    strcpy(vars->descDocName,"");
+    strcpy(vars->xmlPath,"");
 
     // Regexp to match a comment line
     regcomp(&re_comment,"^[[:blank:]]*#",0);
     regcomp(&re_empty_row,"^[[:blank:]]*\r?\n$",REG_EXTENDED);
-    regcomp(&re_iptables_location,"iptables_location[[:blank:]]*=[[:blank:]]*([[:alpha:]/_]+)",REG_EXTENDED);
-    // Regexps to match debug_mode, insert_forward_rules, forward_chain_name
+
+    // Regexps to match configuration file settings
+    regcomp(&re_iptables_location,"iptables_location[[:blank:]]*=[[:blank:]]*\"([^\"]+)\"",REG_EXTENDED);
     regcomp(&re_debug_mode,"debug_mode[[:blank:]]*=[[:blank:]]*([[:digit:]])",REG_EXTENDED);
     regcomp(&re_insert_forward_rules_yes,"insert_forward_rules[[:blank:]]*=[[:blank:]]*yes",REG_ICASE);
     regcomp(&re_forward_chain_name,"forward_chain_name[[:blank:]]*=[[:blank:]]*([[:alpha:]_-]+)",REG_EXTENDED);
     regcomp(&re_prerouting_chain_name,"prerouting_chain_name[[:blank:]]*=[[:blank:]]([[:alpha:]_-]+)",REG_EXTENDED);
     regcomp(&re_upstream_bitrate,"upstream_bitrate[[:blank:]]*=[[:blank:]]*([[:digit:]]+)",REG_EXTENDED);
     regcomp(&re_downstream_bitrate,"downstream_bitrate[[:blank:]]*=[[:blank:]]*([[:digit:]]+)",REG_EXTENDED);
-    
+    regcomp(&re_duration,"duration[[:blank:]]*=[[:blank:]]*(@?)([[:digit:]]+|[[:digit:]]+{2}:[[:digit:]]+{2})",REG_EXTENDED);
     regcomp(&re_desc_doc,"description_document_name[[:blank:]]*=[[:blank:]]*([[:alpha:].]{1,20})",REG_EXTENDED);
     regcomp(&re_xml_path,"xml_document_path[[:blank:]]*=[[:blank:]]*([[:alpha:]_/.]{1,50})",REG_EXTENDED);
 
@@ -85,47 +101,50 @@ int parseConfigFile(int *insert_forward_rules, int *debug_mode, char iptables_lo
 		 (0 != regexec(&re_empty_row,line,0,NULL,0))  )
 	    {
 		// Chec if iptables_location
-		if (0 == regexec(&re_iptables_location,line,2,submatch,0))
+		if (regexec(&re_iptables_location,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(iptables_location,line,submatch);
+		  getConfigOptionArgument(vars->iptables, PATH_LEN, line, submatch);
 		}
 		
 		// Check is insert_forward_rules
-		else if (0 == regexec(&re_insert_forward_rules_yes,line,0,NULL,0))
+		else if (regexec(&re_insert_forward_rules_yes,line,0,NULL,0) == 0)
 		{
-		    *insert_forward_rules = 1;
+		    vars->forwardRules = 1;
 		}
 		// Check forward_chain_name
-		else if (0 == regexec(&re_forward_chain_name,line,2,submatch,0))
+		else if (regexec(&re_forward_chain_name,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(forward_chain_name,line,submatch);
+		  getConfigOptionArgument(vars->forwardChainName, CHAIN_NAME_LEN, line, submatch);
 		}
-		else if (0 == regexec(&re_debug_mode,line,2,submatch,0) )
+		else if (regexec(&re_debug_mode,line,NMATCH,submatch,0) == 0)
 		{
-		    char tmp[2];
-		    sprintf(tmp,"0");
-		    strncpy(tmp,&line[submatch[1].rm_so],1);
-		    *debug_mode = atoi(tmp);
+		  char tmp[2];
+		  getConfigOptionArgument(tmp,sizeof(tmp),line,submatch);
+		  vars->debug = atoi(tmp);
 		}
-		else if (0 == regexec(&re_prerouting_chain_name,line,2,submatch,0))
+		else if (regexec(&re_prerouting_chain_name,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(prerouting_chain_name,line,submatch);
+		  getConfigOptionArgument(vars->preroutingChainName, CHAIN_NAME_LEN, line, submatch);
 		}
-		else if (0 == regexec(&re_upstream_bitrate,line,2,submatch,0))
+		else if (regexec(&re_upstream_bitrate,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(upstream_bitrate,line,submatch);
+		  getConfigOptionArgument(vars->upstreamBitrate, BITRATE_LEN, line, submatch);
 		}
-		else if (0 == regexec(&re_downstream_bitrate,line,2,submatch,0))
+		else if (regexec(&re_downstream_bitrate,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(downstream_bitrate,line,submatch);
+		  getConfigOptionArgument(vars->downstreamBitrate, BITRATE_LEN, line, submatch);
 		}
-		else if (0 == regexec(&re_desc_doc,line,2,submatch,0))
+		else if (regexec(&re_duration,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(desc_doc,line,submatch);
+		  getConfigOptionDuration(&vars->duration,line,submatch);
 		}
-		else if (0 == regexec(&re_xml_path,line,2,submatch,0))
+		else if (regexec(&re_desc_doc,line,NMATCH,submatch,0) == 0)
 		{
-		    getConfigOptionArgument(xml_path,line,submatch);
+		  getConfigOptionArgument(vars->descDocName, PATH_LEN, line, submatch);
+		}
+		else if (regexec(&re_xml_path,line,NMATCH,submatch,0) == 0)
+		{
+		  getConfigOptionArgument(vars->xmlPath, PATH_LEN, line, submatch);
 		}
 		else
 		{
@@ -138,44 +157,46 @@ int parseConfigFile(int *insert_forward_rules, int *debug_mode, char iptables_lo
     }
     regfree(&re_comment);
     regfree(&re_empty_row);
+    regfree(&re_iptables_location);
     regfree(&re_debug_mode);	
     regfree(&re_insert_forward_rules_yes);	
     regfree(&re_forward_chain_name);
     regfree(&re_prerouting_chain_name);
     regfree(&re_upstream_bitrate);
     regfree(&re_downstream_bitrate);
+    regfree(&re_duration);
     regfree(&re_desc_doc);
     regfree(&re_xml_path);
     // Set default values for options not found in config file
-    if (0 == strlen(forward_chain_name))
+    if (strnlen(vars->forwardChainName, CHAIN_NAME_LEN) == 0)
     {
 	// No forward chain name was set in conf file, set it to default
-	sprintf(forward_chain_name,IPTABLES_DEFAULT_FORWARD_CHAIN);
+	snprintf(vars->forwardChainName, CHAIN_NAME_LEN, IPTABLES_DEFAULT_FORWARD_CHAIN);
     }
-    if (0 == strlen(prerouting_chain_name))
+    if (strnlen(vars->preroutingChainName, CHAIN_NAME_LEN) == 0)
     {
 	// No prerouting chain name was set in conf file, set it to default
-	sprintf(prerouting_chain_name,IPTABLES_DEFAULT_PREROUTING_CHAIN);
+	snprintf(vars->preroutingChainName, CHAIN_NAME_LEN, IPTABLES_DEFAULT_PREROUTING_CHAIN);
     }
-    if (0 == strlen(upstream_bitrate))
+    if (strnlen(vars->upstreamBitrate, BITRATE_LEN) == 0)
     {
 	// No upstream_bitrate was found in the conf file, set it to default
-	sprintf(upstream_bitrate,IPTABLES_DEFAULT_UPSTREAM_BITRATE);
+	snprintf(vars->upstreamBitrate, BITRATE_LEN, DEFAULT_UPSTREAM_BITRATE);
     }
-    if (0 == strlen(downstream_bitrate))
+    if (strnlen(vars->downstreamBitrate, BITRATE_LEN) == 0)
     {
 	// No downstream bitrate was found in the conf file, set it to default
-	sprintf(downstream_bitrate,IPTABLES_DEFAULT_DOWNSTREAM_BITRATE);
+	snprintf(vars->downstreamBitrate, BITRATE_LEN, DEFAULT_DOWNSTREAM_BITRATE);
     }
-    if (0 == strlen(desc_doc))
+    if (strnlen(vars->descDocName, PATH_LEN) == 0)
     {
-	sprintf(desc_doc,DESC_DOC_DEFAULT);
+	snprintf(vars->descDocName, PATH_LEN, DESC_DOC_DEFAULT);
     }
-    if (0 == strlen(xml_path))
+    if (strnlen(vars->xmlPath, PATH_LEN) == 0)
     {
-	sprintf(xml_path,XML_PATH_DEFAULT);
+	snprintf(vars->xmlPath, PATH_LEN, XML_PATH_DEFAULT);
     }
-    if (0 == strlen(iptables_location)) {
+    if (strnlen(vars->iptables, PATH_LEN) == 0) {
 	// Can't find the iptables executable, return -1 to 
 	// indicate en error
 	return -1;
@@ -185,35 +206,3 @@ int parseConfigFile(int *insert_forward_rules, int *debug_mode, char iptables_lo
 	return 0;
     }
 }
-/*
-int main (int argc, char** argv)
-{
-    int insert_forward_rules;
-    int debug_mode;
-    char iptables[30]="";
-    char forward_chain_name[20]="";
-    char prerouting_chain_name[20]="";
-    char upstream_bitrate[10]="";
-    char downstream_bitrate[10]="";
-    char desc_doc[10]="";
-    char xml_path[50]="";
-    if (-1 == parseConfigFile(&insert_forward_rules, &debug_mode, iptables, forward_chain_name,
-			      prerouting_chain_name, upstream_bitrate, downstream_bitrate,
-			      desc_doc, xml_path) )
-    {
-	printf("Error: can't find iptables executable");
-    }
-    printf("\nForward = %d\n",insert_forward_rules);
-    printf("Forward chain = %s\n",forward_chain_name);
-    printf("Debug-mode = %d\n",debug_mode);
-    printf("iptables= %s\n",iptables);
-    printf("prerouting chain=%s\n",prerouting_chain_name);
-    printf("upstream bitrate=%s\n",upstream_bitrate);
-    printf("downstream bitrate=%s\n",downstream_bitrate);
-    printf("desc_doc=%s\n",desc_doc);
-    printf("xml_path=%s\n",xml_path);
-    printf("\n");
-    return 0;
-}
-
-*/

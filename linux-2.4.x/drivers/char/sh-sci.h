@@ -322,7 +322,7 @@ struct sci_port {
     SCI_OUT(sci_size, sci_offset, value);				\
   }
 
-#ifdef __sh3__
+#ifdef CONFIG_CPU_SH3
 #if defined(CONFIG_CPU_SUBTYPE_SH7300)
 #define SCIF_FNS(name, scif_offset, scif_size) \
   CPU_SCIF_FNS(name, scif_offset, scif_size)

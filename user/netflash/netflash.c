@@ -19,6 +19,7 @@
 
 /****************************************************************************/
 
+#define __USE_GNU 1
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -57,7 +58,7 @@
 #else 
 #include <linux/mtd/mtd.h>
 #endif
-#else
+#elif defined(CONFIG_BLK_DEV_BLKMEM)
 #include <linux/blkmem.h>
 #endif
 #ifdef CONFIG_LEDMAN
@@ -102,7 +103,7 @@
 #define SETSRC_OPTIONS
 #endif
 
-#define CMD_LINE_OPTIONS "bc:Cd:fFhiHjkKlno:pr:sStuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS
+#define CMD_LINE_OPTIONS "bc:Cd:efFhiHjkKlno:pr:sStuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS
 
 #define PID_DIR "/var/run"
 #define DHCPCD_PID_FILE "dhcpcd-"
@@ -115,7 +116,7 @@
 
 /****************************************************************************/
 
-char *version = "2.1.4";
+char *version = "2.1.5";
 
 int exitstatus = 0;
 
@@ -132,17 +133,19 @@ unsigned int calc_checksum = 0;
 int _block_len = 8192;
 
 int dothrow = 0;		/* Check version info of image; no program */
-int dolock, dounlock;	/* do we lock/unlock segments as we go */
-int checkimage;			/* Compare with current flash contents; no program */
+int dolock, dounlock;		/* do we lock/unlock segments as we go */
+int checkimage;			/* Compare with current flash contents */
+int checkblank;			/* Do not erase if already blank */
+char *check_buf = NULL;
 #if CONFIG_USER_NETFLASH_WATCHDOG
 int watchdog = 1;		/* tickle watchdog while writing to flash */
-int watchdog_fd = -1;   /* ensure this is initalised to an invalid fd */
+int watchdog_fd = -1;   	/* ensure this is initalised to an invalid fd */
 #endif
 int preserveconfig;		/* Preserve special bits of flash such as config fs */
 int preserve = 0;		/* Preserve and portions of flash not written to */
 int offset = 0;			/* Offset to start writing at */
 int stop_early = 0;		/* stop at end of input data, do not write full dev. */
-int nostop_early = 0;	/* no stop at end of input data, do write full dev. */
+int nostop_early = 0;		/* no stop at end of input data, do write full dev. */
 int dojffs2;			/* Write the jffs2 magic to unused segments */
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
 int doinflate;			/* Decompress the image */
@@ -1432,8 +1435,7 @@ static int get_segment(int rd, char *sgdata, int sgpos, int sgsize)
 	return sglength;
 }
 
-static void check_segment(int rd, char *sgdata, int sgpos, int sglength,
-		char *check_buf)
+static void check_segment(int rd, char *sgdata, int sgpos, int sglength)
 {
 	if (lseek(rd, sgpos, SEEK_SET) != sgpos) {
 		error("lseek(%x) failed", sgpos);
@@ -1457,6 +1459,39 @@ static void check_segment(int rd, char *sgdata, int sgpos, int sglength,
 }
 
 #if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
+static int erase_segment(int rd, erase_info_t *ei)
+{
+	if (checkblank) {
+		int i, blank;
+
+		if (read(rd, check_buf, ei->length) != ei->length) {
+			error("pre segment read(%x) failed", ei->start);
+			return -1;
+		}
+		if (lseek(rd, ei->start, SEEK_SET) != ei->start) {
+			error("lseek(%x) failed", ei->start);
+			return -1;
+		}
+
+		for (blank = 1, i = 0; (i < ei->length); i++) {
+			if (check_buf[i] != 0xff) {
+				blank = 0;
+				break;
+			}
+		}
+
+		if (blank)
+			return 0;
+	}
+
+	if (ioctl(rd, MEMERASE, ei) < 0) {
+		error("ioctl(MEMERASE) failed, errno=%d", errno);
+		return -1;
+	}
+
+	return 0;
+}
+
 static void program_mtd_segment(int rd, char *sgdata,
 		int sgpos, int sglength, int sgsize)
 {
@@ -1476,8 +1511,7 @@ static void program_mtd_segment(int rd, char *sgdata,
 	if (lseek(rd, sgpos, SEEK_SET) != sgpos) {
 		error("lseek(%x) failed", sgpos);
 		exitstatus = BAD_SEG_SEEK;
-	} else if (ioctl(rd, MEMERASE, &erase_info) < 0) {
-		error("ioctl(MEMERASE) failed, errno=%d", errno);
+	} else if (erase_segment(rd, &erase_info) < 0) {
 		exitstatus = ERASE_FAIL;
 	} else if (sglength > 0) {
 		if (lseek(rd, sgpos, SEEK_SET) != sgpos) {
@@ -1565,7 +1599,7 @@ static void program_mtd_segment(int rd, char *sgdata,
 		}
 	}
 }
-#else
+#elif defined(CONFIG_BLK_DEV_BLKMEM)
 static void program_blkmem_segment(int rd, char *sgdata, int sgpos,
 	int sglength, int sgsize)
 {
@@ -1613,8 +1647,7 @@ static void program_generic_segment(int rd, char *sgdata,
 }
 #endif
 
-static void program_flash(int rd, int devsize, char *sgdata, int sgsize,
-		char *check_buf)
+static void program_flash(int rd, int devsize, char *sgdata, int sgsize)
 {
 	int sgpos, sglength;
 	unsigned long total;
@@ -1645,7 +1678,7 @@ static void program_flash(int rd, int devsize, char *sgdata, int sgsize,
 		}
 
 		if (checkimage) {
-			check_segment(rd, sgdata, sgpos, sglength, check_buf);
+			check_segment(rd, sgdata, sgpos, sglength);
 		}
 		else
 #if defined(CONFIG_MTD_NETtel)
@@ -1687,7 +1720,7 @@ static void program_flash(int rd, int devsize, char *sgdata, int sgsize,
 
 int usage(int rc)
 {
-  printf("usage: netflash [-bCfFhijklntuv"
+  printf("usage: netflash [-bCfFehijklntuv"
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
 	"z"
 #endif
@@ -1703,6 +1736,7 @@ int usage(int rc)
 	"\t-b\tdon't reboot hardware when done\n"
 	"\t-C\tcheck that image was written correctly\n"
 	"\t-f\tuse FTP as load protocol\n"
+	"\t-e\tdo not erase flash segments if they are already blank\n"
 	"\t-F\tforce overwrite (do not preserve special regions)\n"
   	"\t-h\tprint help\n"
 	"\t-i\tignore any version information\n"
@@ -1740,8 +1774,10 @@ int usage(int rc)
  * not logd !
  */
 
-#define __NR_raw_reboot __NR_reboot
-static _syscall3(int, raw_reboot, int, magic, int, magic2, int, flag);
+static inline int raw_reboot(int magic, int magic2, int flag)
+{
+	return syscall(__NR_reboot, magic, magic2, flag);
+}
 
 /****************************************************************************/
 
@@ -1749,7 +1785,7 @@ int netflashmain(int argc, char *argv[])
 {
 	char *srvname, *filename;
 	char *rdev, *console;
-	char *sgdata, *check_buf = NULL;
+	char *sgdata;
 	int rd, rc, tmpfd;
 	int delay;
 	int dochecksum, dokill, dokillpartial, doreboot, doftp;
@@ -1781,6 +1817,7 @@ int netflashmain(int argc, char *argv[])
 	dopreserve = 1;
 	preserveconfig = 0;
 	checkimage = 0;
+	checkblank = 0;
 	dojffs2 = 0;
 	doremoveversion = 1;
 
@@ -1860,6 +1897,9 @@ int netflashmain(int argc, char *argv[])
 			break;
 		case 'C':
 			checkimage = 1;
+			break;
+		case 'e':
+			checkblank = 1;
 			break;
 		case 'd':
 			delay = (atoi(optarg));
@@ -2077,7 +2117,7 @@ int netflashmain(int argc, char *argv[])
 				close(tmpfd);
 			}
 		}
-#else
+#elif defined(CONFIG_BLK_DEV_BLKMEM)
 		program_segment = program_blkmem_segment;
 
 		if (ioctl(rd, BMGETSIZEB, &devsize) != 0) {
@@ -2106,10 +2146,10 @@ int netflashmain(int argc, char *argv[])
 		exit_failed(NO_MEMORY);
 	}
 
-	if (checkimage) {
+	if (checkimage || checkblank) {
 		check_buf = malloc(sgsize);
 		if (!check_buf) {
-			error("Insufficient memory for image!");
+			error("Insufficient memory for check buffer!");
 			exit_failed(NO_MEMORY);
 		}
 	}
@@ -2186,7 +2226,7 @@ int netflashmain(int argc, char *argv[])
 	 * Side effect: this also checks whether version information is present,
 	 * and if so, removes it, since it doesn't need to get written to flash.
 	 */
-	if (doversion || doremoveversion)
+	if (doversion || dohardwareversion || doremoveversion)
 		rc = check_vendor();
 
 #ifdef CONFIG_USER_NETFLASH_VERSION
@@ -2284,12 +2324,6 @@ int netflashmain(int argc, char *argv[])
 #endif
 #if defined(CONFIG_USER_MOUNT_UMOUNT) || defined(CONFIG_USER_BUSYBOX_UMOUNT)
 	if (doreboot) {
-#if defined(CONFIG_USER_FLATFSD_USE_FLASH_FS) && defined(CONFIG_PROP_LOGD_LOGD)
-		/* Log the reboot to /etc/config before it's umounted */
-		char	tmp[50];
-		sprintf(tmp, "/bin/logd reboot %d: %s", getpid(), basename(argv[0]));	
-		system(tmp);
-#endif
 		umount_all();
 	}
 #endif
@@ -2311,7 +2345,7 @@ int netflashmain(int argc, char *argv[])
 	notice("programming FLASH device %s", rdev);
 
 #ifndef TEST_NO_DEVICE
-	program_flash(rd, devsize, sgdata, sgsize, check_buf);
+	program_flash(rd, devsize, sgdata, sgsize);
 #endif /* TEST_NO_DEVICE */
 
 	if (doreboot) {

@@ -1,7 +1,7 @@
 /*
- *  $Id: config.h,v 1.53.4.2 2004/04/27 20:28:59 jiri Exp $
+ *  $Id: config.h,v 1.61.2.2 2005/11/29 19:39:45 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,6 +28,7 @@
  * --------
  * 2003-04-05  DEFAULT_*_URL introduced (jiri)
  * 2003-07-04  fixed SRV lookup prefix for TLS/sips (andrei)
+ * 2005-04-25  MAX_BRANCH_PARAM_LEN too small, fixed (andrei)
  */
 
 
@@ -67,7 +68,7 @@
 #define MAX_URI_SIZE 1024	/* used when rewriting URIs */
 
 #define MY_VIA "Via: SIP/2.0/UDP "
-#define MY_VIA_LEN 17
+#define MY_VIA_LEN (sizeof(MY_VIA) - 1)
 
 #define CONTENT_LENGTH "Content-Length: "
 #define CONTENT_LENGTH_LEN (sizeof(CONTENT_LENGTH)-1)
@@ -83,35 +84,37 @@
 #define MAX_WARNING_LEN  256
 		
 #define MY_BRANCH ";branch="
-#define MY_BRANCH_LEN 8
-
+#define MY_BRANCH_LEN (sizeof(MY_BRANCH) - 1)
 
 #define MAX_PORT_LEN 7 /* ':' + max 5 letters + \0 */
 #define CRLF "\r\n"
-#define CRLF_LEN 2
+#define CRLF_LEN (sizeof(CRLF) - 1)
 
 #define RECEIVED        ";received="
-#define RECEIVED_LEN 10
+#define RECEIVED_LEN (sizeof(RECEIVED) - 1)
 
 #define TRANSPORT_PARAM ";transport="
-#define TRANSPORT_PARAM_LEN 11
+#define TRANSPORT_PARAM_LEN (sizeof(TRANSPORT_PARAM) - 1)
 
 #define TOTAG_TOKEN ";tag="
 #define TOTAG_TOKEN_LEN (sizeof(TOTAG_TOKEN)-1)
 
 #define RPORT ";rport="
-#define RPORT_LEN 7
+#define RPORT_LEN (sizeof(RPORT) - 1)
 
 #define ID_PARAM ";i="
-#define ID_PARAM_LEN 3
+#define ID_PARAM_LEN (sizeof(ID_PARAM) - 1)
 
 #define SRV_UDP_PREFIX "_sip._udp."
+#define SRV_UDP_PREFIX_LEN (sizeof(SRV_UDP_PREFIX) - 1)
+
 #define SRV_TCP_PREFIX "_sip._tcp."
+#define SRV_TCP_PREFIX_LEN (sizeof(SRV_TCP_PREFIX) - 1)
+
 #define SRV_TLS_PREFIX "_sips._tcp."
-#define SRV_UDP_PREFIX_LEN 10
-#define SRV_TCP_PREFIX_LEN 10
-#define SRV_TLS_PREFIX_LEN 11
-#define SRV_MAX_PREFIX_LEN 11
+#define SRV_TLS_PREFIX_LEN (sizeof(SRV_TLS_PREFIX) - 1)
+
+#define SRV_MAX_PREFIX_LEN SRV_TLS_PREFIX_LEN
 
 /*used only if PKG_MALLOC is defined*/
 #define PKG_MEM_POOL_SIZE 1024*1024
@@ -151,12 +154,11 @@
 /* buffer dimensions for FIFO server */
 #define MAX_CONSUME_BUFFER 1024
 /* where reply pipes may be opened */
-#define FIFO_DIR "/tmp/"
-#define FIFO_DIR_LEN 5
+#define DEFAULT_FIFO_DIR "/tmp/"
 /* max length of the text of fifo 'print' command */
 #define MAX_PRINT_TEXT 256
 
-/* maximum length of Contact heder field in redirection replies */
+/* maximum length of Contact header field in redirection replies */
 #define MAX_REDIRECTION_LEN 512
 
 /* used by FIFO statistics in module to terminate line;
@@ -175,18 +177,29 @@
 #define MCOOKIE "z9hG4bK"
 #define MCOOKIE_LEN (sizeof(MCOOKIE)-1)
 /* Maximum length of values appended to Via-branch parameter */
-#define MAX_BRANCH_PARAM_LEN  (MCOOKIE_LEN+48)
+#define MAX_BRANCH_PARAM_LEN  (MCOOKIE_LEN+8 /*int2hex*/ + 1 /*sep*/ + \
+								MD5_LEN /* max(int2hex, MD5_LEN) */ \
+								+ 1 /*sep*/ + 8 /*int2hex*/ + \
+								1 /*extra space, needed by t_calc_branch*/)
 
 
 /* maximum path length */
 #define PATH_MAX_GUESS	1024
 
-#define DEFAULT_DB_URL "sql://ser:heslo@localhost/ser"
-#define DEFAULT_RODB_URL "sql://serro:47serro11@localhost/ser"
+#define DEFAULT_DB_URL "mysql://ser:heslo@localhost/ser"
+#define DEFAULT_DB_URL_LEN (sizeof(DEFAULT_DB_URL) - 1)
 
+#define DEFAULT_RODB_URL "mysql://serro:47serro11@localhost/ser"
+#define DEFAULT_RODB_URL_LEN (sizeof(DEFAULT_RODB_URL) - 1)
+
+/* table holding versions of other ser tables */
+#define VERSION_TABLE "version"
+#define VERSION_COLUMN "table_version"
+#define TABLENAME_COLUMN "table_name"
 
 /* minimum packet size; smaller packets will be dropped silently */
 #define MIN_UDP_PACKET        32
+
 
 
 #endif

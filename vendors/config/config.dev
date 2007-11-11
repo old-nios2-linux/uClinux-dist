@@ -134,7 +134,7 @@ ifdef CONFIG_OCF_OCF
 	DEVICES += $(DEVICE_CRYPTO) crypto,c,10,70
 endif
 
-ifneq ($(CONFIG_RTC_DRV_SH)$(CONFIG_RTC_DRV_DS1302),)
+ifneq ($(CONFIG_RTC_INTF_DEV)$(CONFIG_RTC_DRV_SH)$(CONFIG_RTC_DRV_DS1302),)
 	DEVICES += $(DEVICE_PRIVATE) rtc,c,254,0
 else 
 ifneq ($(CONFIG_RTC)$(CONFIG_M41T11M6)$(CONFIG_SENSORS_M41T11)$(CONFIG_NVRAM)$(CONFIG_SH_RTC),)
@@ -348,6 +348,9 @@ romfs_dev:
 	[ -d $(ROMFSDIR)/dev ] || mkdir -p $(ROMFSDIR)/dev
 ifdef CONFIG_USER_UDEV
 	[ -d $(ROMFSDIR)/lib/udev/devices ] || mkdir -p $(ROMFSDIR)/lib/udev/devices
+endif
+ifdef CONFIG_OPROFILE
+	[ -d $(ROMFSDIR)/dev/oprofile ] || mkdir -p $(ROMFSDIR)/dev/oprofile
 endif
 	for i in -reset $(DEVICES) $(DEVICE_SYSTEM) $(patsubst %,flash/%,$(FLASH_DEVICES));	\
 	do									\

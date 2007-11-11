@@ -16,36 +16,37 @@
 #include <net/route.h>
 
 #include <linux/netfilter_ipv4/ipt_addrtype.h>
-#include <linux/netfilter_ipv4/ip_tables.h>
+#include <linux/netfilter/x_tables.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Patrick McHardy <kaber@trash.net>");
 MODULE_DESCRIPTION("iptables addrtype match");
 
-static inline int match_type(__be32 addr, u_int16_t mask)
+static inline bool match_type(__be32 addr, u_int16_t mask)
 {
 	return !!(mask & (1 << inet_addr_type(addr)));
 }
 
-static int match(const struct sk_buff *skb,
-		 const struct net_device *in, const struct net_device *out,
-		 const struct xt_match *match, const void *matchinfo,
-		 int offset, unsigned int protoff, int *hotdrop)
+static bool match(const struct sk_buff *skb,
+		  const struct net_device *in, const struct net_device *out,
+		  const struct xt_match *match, const void *matchinfo,
+		  int offset, unsigned int protoff, bool *hotdrop)
 {
 	const struct ipt_addrtype_info *info = matchinfo;
-	const struct iphdr *iph = skb->nh.iph;
-	int ret = 1;
+	const struct iphdr *iph = ip_hdr(skb);
+	bool ret = true;
 
 	if (info->source)
 		ret &= match_type(iph->saddr, info->source)^info->invert_source;
 	if (info->dest)
 		ret &= match_type(iph->daddr, info->dest)^info->invert_dest;
-	
+
 	return ret;
 }
 
-static struct ipt_match addrtype_match = {
+static struct xt_match addrtype_match __read_mostly = {
 	.name		= "addrtype",
+	.family		= AF_INET,
 	.match		= match,
 	.matchsize	= sizeof(struct ipt_addrtype_info),
 	.me		= THIS_MODULE
@@ -53,12 +54,12 @@ static struct ipt_match addrtype_match = {
 
 static int __init ipt_addrtype_init(void)
 {
-	return ipt_register_match(&addrtype_match);
+	return xt_register_match(&addrtype_match);
 }
 
 static void __exit ipt_addrtype_fini(void)
 {
-	ipt_unregister_match(&addrtype_match);
+	xt_unregister_match(&addrtype_match);
 }
 
 module_init(ipt_addrtype_init);

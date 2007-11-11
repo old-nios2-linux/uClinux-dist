@@ -60,14 +60,11 @@ static struct dentry *ocfs2_get_dentry(struct super_block *sb, void *vobjp)
 
 	inode = ocfs2_iget(OCFS2_SB(sb), handle->ih_blkno, 0);
 
-	if (IS_ERR(inode)) {
-		mlog_errno(PTR_ERR(inode));
+	if (IS_ERR(inode))
 		return (void *)inode;
-	}
 
 	if (handle->ih_generation != inode->i_generation) {
 		iput(inode);
-		mlog_errno(-ESTALE);
 		return ERR_PTR(-ESTALE);
 	}
 
@@ -100,7 +97,7 @@ static struct dentry *ocfs2_get_parent(struct dentry *child)
 	mlog(0, "find parent of directory %llu\n",
 	     (unsigned long long)OCFS2_I(dir)->ip_blkno);
 
-	status = ocfs2_meta_lock(dir, NULL, NULL, 0);
+	status = ocfs2_meta_lock(dir, NULL, 0);
 	if (status < 0) {
 		if (status != -ENOENT)
 			mlog_errno(status);
@@ -143,7 +140,7 @@ bail:
 	return parent;
 }
 
-static int ocfs2_encode_fh(struct dentry *dentry, __be32 *fh, int *max_len,
+static int ocfs2_encode_fh(struct dentry *dentry, u32 *fh_in, int *max_len,
 			   int connectable)
 {
 	struct inode *inode = dentry->d_inode;
@@ -151,6 +148,7 @@ static int ocfs2_encode_fh(struct dentry *dentry, __be32 *fh, int *max_len,
 	int type = 1;
 	u64 blkno;
 	u32 generation;
+	__le32 *fh = (__force __le32 *) fh_in;
 
 	mlog_entry("(0x%p, '%.*s', 0x%p, %d, %d)\n", dentry,
 		   dentry->d_name.len, dentry->d_name.name,
@@ -202,7 +200,7 @@ bail:
 	return type;
 }
 
-static struct dentry *ocfs2_decode_fh(struct super_block *sb, __be32 *fh,
+static struct dentry *ocfs2_decode_fh(struct super_block *sb, u32 *fh_in,
 				      int fh_len, int fileid_type,
 				      int (*acceptable)(void *context,
 						        struct dentry *de),
@@ -210,6 +208,7 @@ static struct dentry *ocfs2_decode_fh(struct super_block *sb, __be32 *fh,
 {
 	struct ocfs2_inode_handle handle, parent;
 	struct dentry *ret = NULL;
+	__le32 *fh = (__force __le32 *) fh_in;
 
 	mlog_entry("(0x%p, 0x%p, %d, %d, 0x%p, 0x%p)\n",
 		   sb, fh, fh_len, fileid_type, acceptable, context);

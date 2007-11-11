@@ -1,7 +1,7 @@
 /* 
- * $Id: db_res.h,v 1.3 2002/09/19 12:23:53 jku Rel $ 
+ * $Id: db_res.h,v 1.5 2004/08/24 08:45:12 janakj Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,13 +29,10 @@
 #ifndef DB_RES_H
 #define DB_RES_H
 
+
 #include "db_row.h"
 #include "db_key.h"
 #include "db_val.h"
-#include "db_con.h"
-
-
-struct db_row;
 
 
 typedef struct db_res {
@@ -54,24 +51,6 @@ typedef struct db_res {
 #define RES_COL_N(re) ((re)->col.n)
 #define RES_ROWS(re)  ((re)->rows)
 #define RES_ROW_N(re) ((re)->n)
-
-
-/*
- * Create a new result structure 
- */
-db_res_t* new_result(void);
-
-
-/*
- * Fill the structure with data from database
- */
-int convert_result(db_con_t* _h, db_res_t* _r);
-
-
-/*
- * Free all memory allocated by the structure
- */
-int free_result(db_res_t* _r);
 
 
 #endif /* DB_RES_H */

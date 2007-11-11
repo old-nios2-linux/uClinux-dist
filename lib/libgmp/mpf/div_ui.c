@@ -1,37 +1,31 @@
 /* mpf_div_ui -- Divide a float with an unsigned integer.
 
-Copyright (C) 1993, 1994, 1996, 2000 Free Software Foundation, Inc.
+Copyright 1993, 1994, 1996, 2000, 2001, 2002, 2004, 2005 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
 void
-#if __STDC__
 mpf_div_ui (mpf_ptr r, mpf_srcptr u, unsigned long int v)
-#else
-mpf_div_ui (r, u, v)
-     mpf_ptr r;
-     mpf_srcptr u;
-     unsigned long int v;
-#endif
 {
   mp_srcptr up;
   mp_ptr rp, tp, rtp;
@@ -41,7 +35,22 @@ mpf_div_ui (r, u, v)
   mp_size_t prec;
   mp_limb_t q_limb;
   mp_exp_t rexp;
-  TMP_DECL (marker);
+  TMP_DECL;
+
+#if BITS_PER_ULONG > GMP_NUMB_BITS  /* avoid warnings about shift amount */
+  if (v > GMP_NUMB_MAX)
+    {
+      mpf_t vf;
+      mp_limb_t vl[2];
+      SIZ(vf) = 2;
+      EXP(vf) = 2;
+      PTR(vf) = vl;
+      vl[0] = v & GMP_NUMB_MASK;
+      vl[1] = v >> GMP_NUMB_BITS;
+      mpf_div (r, u, vf);
+      return;
+    }
+#endif
 
   usize = u->_mp_size;
   sign_quotient = usize;
@@ -58,7 +67,7 @@ mpf_div_ui (r, u, v)
       return;
     }
 
-  TMP_MARK (marker);
+  TMP_MARK;
 
   rp = r->_mp_d;
   up = u->_mp_d;
@@ -88,5 +97,5 @@ mpf_div_ui (r, u, v)
   rexp = u->_mp_exp - (q_limb == 0);
   r->_mp_size = sign_quotient >= 0 ? rsize : -rsize;
   r->_mp_exp = rexp;
-  TMP_FREE (marker);
+  TMP_FREE;
 }

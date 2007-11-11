@@ -1,10 +1,10 @@
 /*
  *
- * $Id: ul_fifo.h,v 1.8 2002/09/19 12:23:55 jku Rel $
+ * $Id: ul_fifo.h,v 1.9 2004/08/24 09:00:47 janakj Exp $
  *
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

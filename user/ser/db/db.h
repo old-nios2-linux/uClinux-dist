@@ -1,7 +1,7 @@
 /*
- * $Id: db.h,v 1.6 2002/11/28 16:53:03 janakj Exp $
+ * $Id: db.h,v 1.14 2004/09/14 12:49:29 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,6 +24,11 @@
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+/*
+ * History:
+ * --------
+ *  2004-06-06  removed db_* macros and global dbf (andrei)
+ */
 
 
 #ifndef DB_H
@@ -35,6 +40,7 @@
 #include "db_con.h"
 #include "db_row.h"
 #include "db_res.h"
+#include "db_cap.h"
 
 
 /*
@@ -88,7 +94,7 @@ typedef int (*db_raw_query_f) (db_con_t* _h, char* _s, db_res_t** _r);
  * _h: structure representing database connection
  * _r: db_res structure
  */
-typedef int (*db_free_query_f) (db_con_t* _h, db_res_t* _r);
+typedef int (*db_free_result_f) (db_con_t* _h, db_res_t* _r);
 
 
 /*
@@ -128,17 +134,19 @@ typedef int (*db_update_f) (db_con_t* _h, db_key_t* _k, db_op_t* _o, db_val_t* _
 
 
 
-typedef struct db_func{
-	db_use_table_f  use_table;   /* Specify table name */
-	db_init_f       init;        /* Initialize dabase connection */
-	db_close_f      close;       /* Close database connection */
-	db_query_f      query;       /* query a table */
-	db_raw_query_f  raw_query;   /* Raw query - SQL */
-	db_free_query_f free_query;  /* Free a query result */
-	db_insert_f     insert;      /* Insert into table */
-	db_delete_f     delete;      /* Delete from table */ 
-	db_update_f     update;      /* Update table */
+typedef struct db_func {
+	unsigned int     cap;          /* Capability vector of the database transport */
+	db_use_table_f   use_table;    /* Specify table name */
+	db_init_f        init;         /* Initialize database connection */
+	db_close_f       close;        /* Close database connection */
+	db_query_f       query;        /* query a table */
+	db_raw_query_f   raw_query;    /* Raw query - SQL */
+	db_free_result_f free_result;  /* Free a query result */
+	db_insert_f      insert;       /* Insert into table */
+	db_delete_f      delete;       /* Delete from table */ 
+	db_update_f      update;       /* Update table */
 } db_func_t;
+
 
 
 /*
@@ -146,22 +154,15 @@ typedef struct db_func{
  * returns TRUE if everything went OK
  * FALSE otherwise
  */
-
-extern db_func_t dbf;
-
-
-#define db_use_table  (dbf.use_table)
-#define db_init       (dbf.init)
-#define db_close      (dbf.close)
-#define db_query      (dbf.query)
-#define db_raw_query  (dbf.raw_query)
-#define db_free_query (dbf.free_query)
-#define db_insert     (dbf.insert)
-#define db_delete     (dbf.delete)
-#define db_update     (dbf.update)
+int bind_dbmod(char* mod, db_func_t* dbf);
 
 
-int bind_dbmod(void);
- 
+/*
+ * Get the version of the given table. If there is
+ * no row for the table then the function returns
+ * version 0. -1 is returned on error.
+ */
+int table_version(db_func_t* dbf, db_con_t* con, const str* table);
+
 
 #endif /* DB_H */

@@ -2,7 +2,7 @@ include ../nasl.tmpl
 NESSUS_CFLAGS= -I../include $(OPTIMIZE) -DNESSUS_ON_SSL -DHAVE_SSL -DNESSUS_EXTENSIONS
 NESSUS_CFLAGS+= -I$(ROOTDIR)/user/nessus/nessus-libraries/include
 NESSUS_LIBS := $(LIBS) -lnessus -lhosts_gatherer $(LIBPCAP) -lutil -lnsl $(LIBRESOLV) $(LIBSSL) $(LIBCRYPTO) -ldl
-NESSUS_LIBS += -L$(ROOTDIR)/user/nessus/lib
+NESSUS_LIBS += -L$(ROOTDIR)/user/nessus/build/lib
 
 NESSUS_INCLUDE=`sh ./cflags` 
 

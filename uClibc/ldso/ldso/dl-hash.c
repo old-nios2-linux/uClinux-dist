@@ -4,7 +4,7 @@
  * after resolving ELF shared library symbols
  *
  * Copyright (C) 2004 by Joakim Tjernlund <joakim.tjernlund@lumentis.se>
- * Copyright (C) 2000-2004 by Erik Andersen <andersen@codepoet.org>
+ * Copyright (C) 2000-2006 by Erik Andersen <andersen@codepoet.org>
  * Copyright (c) 1994-2000 Eric Youngdale, Peter MacDonald,
  *				David Engel, Hongjiu Lu and Mitch D'Souza
  *
@@ -57,33 +57,24 @@ struct dyn_elf *_dl_handles = NULL;
 /* This is the hash function that is used by the ELF linker to generate the
  * hash table that each executable and library is required to have.  We need
  * it to decode the hash table.  */
-unsigned long _dl_elf_hash(const unsigned char *name)
+static inline Elf_Symndx _dl_elf_hash(const unsigned char *name)
 {
-	unsigned long hash = 0;
+	unsigned long hash=0;
 	unsigned long tmp;
 
 	while (*name) {
 		hash = (hash << 4) + *name++;
-		if ((tmp = hash & 0xf0000000))
-			hash ^= tmp >> 24;
-		hash &= ~tmp;
+		tmp = hash & 0xf0000000;
+		/* The algorithm specified in the ELF ABI is as follows:
+		   if (tmp != 0)
+		       hash ^= tmp >> 24;
+		   hash &= ~tmp;
+		   But the following is equivalent and a lot
+		   faster, especially on modern processors. */
+		hash ^= tmp;
+		hash ^= tmp >> 24;
 	}
 	return hash;
-}
-
-/* Check to see if a library has already been added to the hash chain.  */
-struct elf_resolve *_dl_check_hashed_files(const char *libname)
-{
-	struct elf_resolve *tpnt;
-	int len = _dl_strlen(libname);
-
-	for (tpnt = _dl_loaded_modules; tpnt; tpnt = tpnt->next) {
-		if (_dl_strncmp(tpnt->libname, libname, len) == 0 &&
-				(tpnt->libname[len] == '\0' || tpnt->libname[len] == '.'))
-			return tpnt;
-	}
-
-	return NULL;
 }
 
 /*
@@ -92,10 +83,10 @@ struct elf_resolve *_dl_check_hashed_files(const char *libname)
  * externals properly.
  */
 struct elf_resolve *_dl_add_elf_hash_table(const char *libname,
-	char *loadaddr, unsigned long *dynamic_info, unsigned long dynamic_addr,
-	unsigned long dynamic_size)
+	DL_LOADADDR_TYPE loadaddr, unsigned long *dynamic_info, unsigned long dynamic_addr,
+	attribute_unused unsigned long dynamic_size)
 {
-	unsigned long *hash_addr;
+	Elf_Symndx *hash_addr;
 	struct elf_resolve *tpnt;
 	int i;
 
@@ -119,14 +110,14 @@ struct elf_resolve *_dl_add_elf_hash_table(const char *libname,
 	tpnt->libtype = loaded_file;
 
 	if (dynamic_info[DT_HASH] != 0) {
-		hash_addr = (unsigned long *) (intptr_t)(dynamic_info[DT_HASH] + loadaddr);
+		hash_addr = (Elf_Symndx*)dynamic_info[DT_HASH];
 		tpnt->nbucket = *hash_addr++;
 		tpnt->nchain = *hash_addr++;
 		tpnt->elf_buckets = hash_addr;
 		hash_addr += tpnt->nbucket;
 		tpnt->chains = hash_addr;
 	}
-	tpnt->loadaddr = (ElfW(Addr))loadaddr;
+	tpnt->loadaddr = loadaddr;
 	for (i = 0; i < DYNAMIC_SIZE; i++)
 		tpnt->dynamic_info[i] = dynamic_info[i];
 	return tpnt;
@@ -142,13 +133,13 @@ char *_dl_find_hash(const char *name, struct dyn_elf *rpnt, struct elf_resolve *
 	struct elf_resolve *tpnt;
 	int si;
 	char *strtab;
-	Elf32_Sym *symtab;
+	ElfW(Sym) *symtab;
 	unsigned long elf_hash_number, hn;
 	const ElfW(Sym) *sym;
 	char *weak_result = NULL;
 
-	elf_hash_number = _dl_elf_hash(name);
-	   
+	elf_hash_number = _dl_elf_hash((const unsigned char *)name);
+
 	for (; rpnt; rpnt = rpnt->next) {
 		tpnt = rpnt->dyn;
 
@@ -172,8 +163,8 @@ char *_dl_find_hash(const char *name, struct dyn_elf *rpnt, struct elf_resolve *
 
 		/* Avoid calling .urem here. */
 		do_rem(hn, elf_hash_number, tpnt->nbucket);
-		symtab = (Elf32_Sym *) (intptr_t) (tpnt->dynamic_info[DT_SYMTAB] + tpnt->loadaddr);
-		strtab = (char *) (tpnt->dynamic_info[DT_STRTAB] + tpnt->loadaddr);
+		symtab = (ElfW(Sym) *) tpnt->dynamic_info[DT_SYMTAB];
+		strtab = (char *) (tpnt->dynamic_info[DT_STRTAB]);
 
 		for (si = tpnt->elf_buckets[hn]; si != STN_UNDEF; si = tpnt->chains[si]) {
 			sym = &symtab[si];
@@ -184,20 +175,20 @@ char *_dl_find_hash(const char *name, struct dyn_elf *rpnt, struct elf_resolve *
 				continue;
 			if (sym->st_value == 0)
 				continue;
-			if (ELF32_ST_TYPE(sym->st_info) > STT_FUNC)
+			if (ELF_ST_TYPE(sym->st_info) > STT_FUNC)
 				continue;
 
-			switch (ELF32_ST_BIND(sym->st_info)) {
+			switch (ELF_ST_BIND(sym->st_info)) {
 			case STB_WEAK:
 #if 0
 /* Perhaps we should support old style weak symbol handling
  * per what glibc does when you export LD_DYNAMIC_WEAK */
 				if (!weak_result)
-					weak_result = (char *)tpnt->loadaddr + sym->st_value;
+					weak_result = (char *) DL_RELOC_ADDR(tpnt->loadaddr, sym->st_value);
 				break;
 #endif
 			case STB_GLOBAL:
-				return (char*)tpnt->loadaddr + sym->st_value;
+				return (char*) DL_RELOC_ADDR(tpnt->loadaddr, sym->st_value);
 			default:	/* Local symbols not handled here */
 				break;
 			}

@@ -1,7 +1,7 @@
 /*
- * $Id: memtest.c,v 1.5 2002/09/19 12:23:53 jku Rel $
+ * $Id: memtest.c,v 1.6 2004/08/24 08:58:23 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -78,7 +78,7 @@ void memtest()
 
 	mem_block=MY_INIT( tst_mem, TEST_SIZE );
 
-	/* coalesing test w/big fragments */
+	/* coalescing test w/big fragments */
 	p0=ma(8194);
 	p1=ma(8194);
 	p2=ma(8194);

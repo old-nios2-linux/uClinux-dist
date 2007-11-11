@@ -26,6 +26,7 @@ ROMFS_DIRS = \
 	etc etc/config etc/default \
 	home home/httpd home/httpd/cgi-bin \
 	lib lib/modules \
+	boot \
 	mnt \
 	proc \
 	sbin \

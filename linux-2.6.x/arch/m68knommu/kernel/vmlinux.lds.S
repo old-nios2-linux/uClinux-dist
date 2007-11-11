@@ -60,8 +60,9 @@ SECTIONS {
 #endif
 
 	.text : {
+		_text = .;
 		_stext = . ;
-        	*(.text)
+		TEXT_TEXT
 		SCHED_TEXT
         	*(.text.lock)
 
@@ -132,7 +133,7 @@ SECTIONS {
 	.data DATA_ADDR : {
 		. = ALIGN(4);
 		_sdata = . ;
-		*(.data)
+		DATA_DATA
 		. = ALIGN(8192) ;
 		*(.data.init_task)
 		_edata = . ;
@@ -158,10 +159,12 @@ SECTIONS {
 		__security_initcall_start = .;
 		*(.security_initcall.init)
 		__security_initcall_end = .;
+#ifdef CONFIG_BLK_DEV_INITRD
 		. = ALIGN(4);
 		__initramfs_start = .;
 		*(.init.ramfs)
 		__initramfs_end = .;
+#endif
 		. = ALIGN(4096);
 		__init_end = .;
 	} > INIT

@@ -76,7 +76,7 @@ static char	EXIT[] = "exit";
  */
 STATIC void
 xfs_bmbt_trace_enter(
-	char		*func,
+	const char	*func,
 	xfs_btree_cur_t	*cur,
 	char		*s,
 	int		type,
@@ -117,7 +117,7 @@ xfs_bmbt_trace_enter(
  */
 STATIC void
 xfs_bmbt_trace_argbi(
-	char		*func,
+	const char	*func,
 	xfs_btree_cur_t	*cur,
 	xfs_buf_t	*b,
 	int		i,
@@ -134,7 +134,7 @@ xfs_bmbt_trace_argbi(
  */
 STATIC void
 xfs_bmbt_trace_argbii(
-	char		*func,
+	const char	*func,
 	xfs_btree_cur_t	*cur,
 	xfs_buf_t	*b,
 	int		i0,
@@ -153,7 +153,7 @@ xfs_bmbt_trace_argbii(
  */
 STATIC void
 xfs_bmbt_trace_argfffi(
-	char			*func,
+	const char		*func,
 	xfs_btree_cur_t		*cur,
 	xfs_dfiloff_t		o,
 	xfs_dfsbno_t		b,
@@ -172,7 +172,7 @@ xfs_bmbt_trace_argfffi(
  */
 STATIC void
 xfs_bmbt_trace_argi(
-	char		*func,
+	const char	*func,
 	xfs_btree_cur_t	*cur,
 	int		i,
 	int		line)
@@ -188,7 +188,7 @@ xfs_bmbt_trace_argi(
  */
 STATIC void
 xfs_bmbt_trace_argifk(
-	char			*func,
+	const char		*func,
 	xfs_btree_cur_t		*cur,
 	int			i,
 	xfs_fsblock_t		f,
@@ -206,7 +206,7 @@ xfs_bmbt_trace_argifk(
  */
 STATIC void
 xfs_bmbt_trace_argifr(
-	char			*func,
+	const char		*func,
 	xfs_btree_cur_t		*cur,
 	int			i,
 	xfs_fsblock_t		f,
@@ -235,7 +235,7 @@ xfs_bmbt_trace_argifr(
  */
 STATIC void
 xfs_bmbt_trace_argik(
-	char			*func,
+	const char		*func,
 	xfs_btree_cur_t		*cur,
 	int			i,
 	xfs_bmbt_key_t		*k,
@@ -255,7 +255,7 @@ xfs_bmbt_trace_argik(
  */
 STATIC void
 xfs_bmbt_trace_cursor(
-	char		*func,
+	const char	*func,
 	xfs_btree_cur_t	*cur,
 	char		*s,
 	int		line)
@@ -274,21 +274,21 @@ xfs_bmbt_trace_cursor(
 }
 
 #define	XFS_BMBT_TRACE_ARGBI(c,b,i)	\
-	xfs_bmbt_trace_argbi(fname, c, b, i, __LINE__)
+	xfs_bmbt_trace_argbi(__FUNCTION__, c, b, i, __LINE__)
 #define	XFS_BMBT_TRACE_ARGBII(c,b,i,j)	\
-	xfs_bmbt_trace_argbii(fname, c, b, i, j, __LINE__)
+	xfs_bmbt_trace_argbii(__FUNCTION__, c, b, i, j, __LINE__)
 #define	XFS_BMBT_TRACE_ARGFFFI(c,o,b,i,j)	\
-	xfs_bmbt_trace_argfffi(fname, c, o, b, i, j, __LINE__)
+	xfs_bmbt_trace_argfffi(__FUNCTION__, c, o, b, i, j, __LINE__)
 #define	XFS_BMBT_TRACE_ARGI(c,i)	\
-	xfs_bmbt_trace_argi(fname, c, i, __LINE__)
+	xfs_bmbt_trace_argi(__FUNCTION__, c, i, __LINE__)
 #define	XFS_BMBT_TRACE_ARGIFK(c,i,f,s)	\
-	xfs_bmbt_trace_argifk(fname, c, i, f, s, __LINE__)
+	xfs_bmbt_trace_argifk(__FUNCTION__, c, i, f, s, __LINE__)
 #define	XFS_BMBT_TRACE_ARGIFR(c,i,f,r)	\
-	xfs_bmbt_trace_argifr(fname, c, i, f, r, __LINE__)
+	xfs_bmbt_trace_argifr(__FUNCTION__, c, i, f, r, __LINE__)
 #define	XFS_BMBT_TRACE_ARGIK(c,i,k)	\
-	xfs_bmbt_trace_argik(fname, c, i, k, __LINE__)
+	xfs_bmbt_trace_argik(__FUNCTION__, c, i, k, __LINE__)
 #define	XFS_BMBT_TRACE_CURSOR(c,s)	\
-	xfs_bmbt_trace_cursor(fname, c, s, __LINE__)
+	xfs_bmbt_trace_cursor(__FUNCTION__, c, s, __LINE__)
 #else
 #define	XFS_BMBT_TRACE_ARGBI(c,b,i)
 #define	XFS_BMBT_TRACE_ARGBII(c,b,i,j)
@@ -318,9 +318,6 @@ xfs_bmbt_delrec(
 	xfs_fsblock_t		bno;		/* fs-relative block number */
 	xfs_buf_t		*bp;		/* buffer for block */
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_delrec";
-#endif
 	int			i;		/* loop counter */
 	int			j;		/* temp state */
 	xfs_bmbt_key_t		key;		/* bmap btree key */
@@ -678,47 +675,6 @@ error0:
 	return error;
 }
 
-#ifdef DEBUG
-/*
- * Get the data from the pointed-to record.
- */
-int
-xfs_bmbt_get_rec(
-	xfs_btree_cur_t		*cur,
-	xfs_fileoff_t		*off,
-	xfs_fsblock_t		*bno,
-	xfs_filblks_t		*len,
-	xfs_exntst_t		*state,
-	int			*stat)
-{
-	xfs_bmbt_block_t	*block;
-	xfs_buf_t		*bp;
-#ifdef DEBUG
-	int			error;
-#endif
-	int			ptr;
-	xfs_bmbt_rec_t		*rp;
-
-	block = xfs_bmbt_get_block(cur, 0, &bp);
-	ptr = cur->bc_ptrs[0];
-#ifdef DEBUG
-	if ((error = xfs_btree_check_lblock(cur, block, 0, bp)))
-		return error;
-#endif
-	if (ptr > be16_to_cpu(block->bb_numrecs) || ptr <= 0) {
-		*stat = 0;
-		return 0;
-	}
-	rp = XFS_BMAP_REC_IADDR(block, ptr, cur);
-	*off = xfs_bmbt_disk_get_startoff(rp);
-	*bno = xfs_bmbt_disk_get_startblock(rp);
-	*len = xfs_bmbt_disk_get_blockcount(rp);
-	*state = xfs_bmbt_disk_get_state(rp);
-	*stat = 1;
-	return 0;
-}
-#endif
-
 /*
  * Insert one record/level.  Return information to the caller
  * allowing the next level up to proceed if necessary.
@@ -735,9 +691,6 @@ xfs_bmbt_insrec(
 	xfs_bmbt_block_t	*block;		/* bmap btree block */
 	xfs_buf_t		*bp;		/* buffer for block */
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_insrec";
-#endif
 	int			i;		/* loop index */
 	xfs_bmbt_key_t		key;		/* bmap btree key */
 	xfs_bmbt_key_t		*kp=NULL;	/* pointer to bmap btree key */
@@ -922,9 +875,6 @@ xfs_bmbt_killroot(
 #ifdef DEBUG
 	int			error;
 #endif
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_killroot";
-#endif
 	int			i;
 	xfs_bmbt_key_t		*kp;
 	xfs_inode_t		*ip;
@@ -1014,9 +964,6 @@ xfs_bmbt_log_keys(
 	int		kfirst,
 	int		klast)
 {
-#ifdef XFS_BMBT_TRACE
-	static char	fname[] = "xfs_bmbt_log_keys";
-#endif
 	xfs_trans_t	*tp;
 
 	XFS_BMBT_TRACE_CURSOR(cur, ENTRY);
@@ -1053,9 +1000,6 @@ xfs_bmbt_log_ptrs(
 	int		pfirst,
 	int		plast)
 {
-#ifdef XFS_BMBT_TRACE
-	static char	fname[] = "xfs_bmbt_log_ptrs";
-#endif
 	xfs_trans_t	*tp;
 
 	XFS_BMBT_TRACE_CURSOR(cur, ENTRY);
@@ -1096,9 +1040,6 @@ xfs_bmbt_lookup(
 	xfs_daddr_t		d;
 	xfs_sfiloff_t		diff;
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char	fname[] = "xfs_bmbt_lookup";
-#endif
 	xfs_fsblock_t		fsbno=0;
 	int			high;
 	int			i;
@@ -1236,9 +1177,6 @@ xfs_bmbt_lshift(
 	int			*stat)		/* success/failure */
 {
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_lshift";
-#endif
 #ifdef DEBUG
 	int			i;		/* loop counter */
 #endif
@@ -1372,9 +1310,6 @@ xfs_bmbt_rshift(
 	int			*stat)		/* success/failure */
 {
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_rshift";
-#endif
 	int			i;		/* loop counter */
 	xfs_bmbt_key_t		key;		/* bmap btree key */
 	xfs_buf_t		*lbp;		/* left buffer pointer */
@@ -1533,9 +1468,6 @@ xfs_bmbt_split(
 {
 	xfs_alloc_arg_t		args;		/* block allocation args */
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_split";
-#endif
 	int			i;		/* loop counter */
 	xfs_fsblock_t		lbno;		/* left sibling block number */
 	xfs_buf_t		*lbp;		/* left buffer pointer */
@@ -1682,9 +1614,6 @@ xfs_bmbt_updkey(
 #ifdef DEBUG
 	int			error;
 #endif
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_updkey";
-#endif
 	xfs_bmbt_key_t		*kp;
 	int			ptr;
 
@@ -1731,9 +1660,9 @@ xfs_bmdr_to_bmbt(
 	rblock->bb_leftsib = cpu_to_be64(NULLDFSBNO);
 	rblock->bb_rightsib = cpu_to_be64(NULLDFSBNO);
 	dmxr = (int)XFS_BTREE_BLOCK_MAXRECS(dblocklen, xfs_bmdr, 0);
-	fkp = XFS_BTREE_KEY_ADDR(dblocklen, xfs_bmdr, dblock, 1, dmxr);
+	fkp = XFS_BTREE_KEY_ADDR(xfs_bmdr, dblock, 1);
 	tkp = XFS_BMAP_BROOT_KEY_ADDR(rblock, 1, rblocklen);
-	fpp = XFS_BTREE_PTR_ADDR(dblocklen, xfs_bmdr, dblock, 1, dmxr);
+	fpp = XFS_BTREE_PTR_ADDR(xfs_bmdr, dblock, 1, dmxr);
 	tpp = XFS_BMAP_BROOT_PTR_ADDR(rblock, 1, rblocklen);
 	dmxr = be16_to_cpu(dblock->bb_numrecs);
 	memcpy(tkp, fkp, sizeof(*fkp) * dmxr);
@@ -1753,9 +1682,6 @@ xfs_bmbt_decrement(
 	xfs_bmbt_block_t	*block;
 	xfs_buf_t		*bp;
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_decrement";
-#endif
 	xfs_fsblock_t		fsbno;
 	int			lev;
 	xfs_mount_t		*mp;
@@ -1826,9 +1752,6 @@ xfs_bmbt_delete(
 	int		*stat)		/* success/failure */
 {
 	int		error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char	fname[] = "xfs_bmbt_delete";
-#endif
 	int		i;
 	int		level;
 
@@ -1862,7 +1785,7 @@ xfs_bmbt_delete(
  * xfs_bmbt_get_startblock, xfs_bmbt_get_blockcount and xfs_bmbt_get_state.
  */
 
-STATIC __inline__ void
+STATIC_INLINE void
 __xfs_bmbt_get_all(
 		__uint64_t l0,
 		__uint64_t l1,
@@ -2016,30 +1939,6 @@ xfs_bmbt_disk_get_blockcount(
 }
 
 /*
- * Extract the startblock field from an on disk bmap extent record.
- */
-xfs_fsblock_t
-xfs_bmbt_disk_get_startblock(
-	xfs_bmbt_rec_t	*r)
-{
-#if XFS_BIG_BLKNOS
-	return (((xfs_fsblock_t)INT_GET(r->l0, ARCH_CONVERT) & XFS_MASK64LO(9)) << 43) |
-	       (((xfs_fsblock_t)INT_GET(r->l1, ARCH_CONVERT)) >> 21);
-#else
-#ifdef DEBUG
-	xfs_dfsbno_t	b;
-
-	b = (((xfs_dfsbno_t)INT_GET(r->l0, ARCH_CONVERT) & XFS_MASK64LO(9)) << 43) |
-	    (((xfs_dfsbno_t)INT_GET(r->l1, ARCH_CONVERT)) >> 21);
-	ASSERT((b >> 32) == 0 || ISNULLDSTARTBLOCK(b));
-	return (xfs_fsblock_t)b;
-#else	/* !DEBUG */
-	return (xfs_fsblock_t)(((xfs_dfsbno_t)INT_GET(r->l1, ARCH_CONVERT)) >> 21);
-#endif	/* DEBUG */
-#endif	/* XFS_BIG_BLKNOS */
-}
-
-/*
  * Extract the startoff field from a disk format bmap extent record.
  */
 xfs_fileoff_t
@@ -2048,17 +1947,6 @@ xfs_bmbt_disk_get_startoff(
 {
 	return ((xfs_fileoff_t)INT_GET(r->l0, ARCH_CONVERT) &
 		 XFS_MASK64LO(64 - BMBT_EXNTFLAG_BITLEN)) >> 9;
-}
-
-xfs_exntst_t
-xfs_bmbt_disk_get_state(
-	xfs_bmbt_rec_t  *r)
-{
-	int	ext_flag;
-
-	ext_flag = (int)((INT_GET(r->l0, ARCH_CONVERT)) >> (64 - BMBT_EXNTFLAG_BITLEN));
-	return xfs_extent_state(xfs_bmbt_disk_get_blockcount(r),
-				ext_flag);
 }
 #endif /* XFS_NATIVE_HOST */
 
@@ -2076,9 +1964,6 @@ xfs_bmbt_increment(
 	xfs_bmbt_block_t	*block;
 	xfs_buf_t		*bp;
 	int			error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_increment";
-#endif
 	xfs_fsblock_t		fsbno;
 	int			lev;
 	xfs_mount_t		*mp;
@@ -2156,9 +2041,6 @@ xfs_bmbt_insert(
 	int		*stat)		/* success/failure */
 {
 	int		error;		/* error return value */
-#ifdef XFS_BMBT_TRACE
-	static char	fname[] = "xfs_bmbt_insert";
-#endif
 	int		i;
 	int		level;
 	xfs_fsblock_t	nbno;
@@ -2218,9 +2100,6 @@ xfs_bmbt_log_block(
 	int			fields)
 {
 	int			first;
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_log_block";
-#endif
 	int			last;
 	xfs_trans_t		*tp;
 	static const short	offsets[] = {
@@ -2257,9 +2136,6 @@ xfs_bmbt_log_recs(
 {
 	xfs_bmbt_block_t	*block;
 	int			first;
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_log_recs";
-#endif
 	int			last;
 	xfs_bmbt_rec_t		*rp;
 	xfs_trans_t		*tp;
@@ -2321,9 +2197,6 @@ xfs_bmbt_newroot(
 	xfs_bmbt_key_t		*ckp;		/* child key pointer */
 	xfs_bmbt_ptr_t		*cpp;		/* child ptr pointer */
 	int			error;		/* error return code */
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_newroot";
-#endif
 #ifdef DEBUG
 	int			i;		/* loop counter */
 #endif
@@ -2684,9 +2557,9 @@ xfs_bmbt_to_bmdr(
 	dblock->bb_numrecs = rblock->bb_numrecs;
 	dmxr = (int)XFS_BTREE_BLOCK_MAXRECS(dblocklen, xfs_bmdr, 0);
 	fkp = XFS_BMAP_BROOT_KEY_ADDR(rblock, 1, rblocklen);
-	tkp = XFS_BTREE_KEY_ADDR(dblocklen, xfs_bmdr, dblock, 1, dmxr);
+	tkp = XFS_BTREE_KEY_ADDR(xfs_bmdr, dblock, 1);
 	fpp = XFS_BMAP_BROOT_PTR_ADDR(rblock, 1, rblocklen);
-	tpp = XFS_BTREE_PTR_ADDR(dblocklen, xfs_bmdr, dblock, 1, dmxr);
+	tpp = XFS_BTREE_PTR_ADDR(xfs_bmdr, dblock, 1, dmxr);
 	dmxr = be16_to_cpu(dblock->bb_numrecs);
 	memcpy(tkp, fkp, sizeof(*fkp) * dmxr);
 	memcpy(tpp, fpp, sizeof(*fpp) * dmxr);
@@ -2706,9 +2579,6 @@ xfs_bmbt_update(
 	xfs_bmbt_block_t	*block;
 	xfs_buf_t		*bp;
 	int			error;
-#ifdef XFS_BMBT_TRACE
-	static char		fname[] = "xfs_bmbt_update";
-#endif
 	xfs_bmbt_key_t		key;
 	int			ptr;
 	xfs_bmbt_rec_t		*rp;

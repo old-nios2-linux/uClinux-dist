@@ -10,9 +10,6 @@
  *
 */
 
-
-//#define DEBUG
-
 #include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -31,7 +28,7 @@
 #include <asm/hardware.h>
 
 #include <asm/arch/regs-gpio.h>
-#include <asm/arch/regs-spi.h>
+#include <asm/plat-s3c24xx/regs-spi.h>
 #include <asm/arch/spi.h>
 
 struct s3c24xx_spi {
@@ -43,6 +40,9 @@ struct s3c24xx_spi {
 	int			 irq;
 	int			 len;
 	int			 count;
+
+	void			(*set_cs)(struct s3c2410_spi_info *spi,
+					  int cs, int pol);
 
 	/* data buffers */
 	const unsigned char	*tx;
@@ -64,6 +64,11 @@ static inline struct s3c24xx_spi *to_hw(struct spi_device *sdev)
 	return spi_master_get_devdata(sdev->master);
 }
 
+static void s3c24xx_spi_gpiocs(struct s3c2410_spi_info *spi, int cs, int pol)
+{
+	s3c2410_gpio_setpin(spi->pin_cs, pol);
+}
+
 static void s3c24xx_spi_chipsel(struct spi_device *spi, int value)
 {
 	struct s3c24xx_spi *hw = to_hw(spi);
@@ -72,10 +77,7 @@ static void s3c24xx_spi_chipsel(struct spi_device *spi, int value)
 
 	switch (value) {
 	case BITBANG_CS_INACTIVE:
-		if (hw->pdata->set_cs)
-			hw->pdata->set_cs(hw->pdata, value, cspol);
-		else
-			s3c2410_gpio_setpin(hw->pdata->pin_cs, cspol ^ 1);
+		hw->set_cs(hw->pdata, spi->chip_select, cspol^1);
 		break;
 
 	case BITBANG_CS_ACTIVE:
@@ -96,14 +98,9 @@ static void s3c24xx_spi_chipsel(struct spi_device *spi, int value)
 		/* write new configration */
 
 		writeb(spcon, hw->regs + S3C2410_SPCON);
-
-		if (hw->pdata->set_cs)
-			hw->pdata->set_cs(hw->pdata, value, cspol);
-		else
-			s3c2410_gpio_setpin(hw->pdata->pin_cs, cspol);
+		hw->set_cs(hw->pdata, spi->chip_select, cspol);
 
 		break;
-
 	}
 }
 
@@ -149,6 +146,9 @@ static int s3c24xx_spi_setupxfer(struct spi_device *spi,
 	return 0;
 }
 
+/* the spi->mode bits understood by this driver: */
+#define MODEBITS (SPI_CPOL | SPI_CPHA | SPI_CS_HIGH)
+
 static int s3c24xx_spi_setup(struct spi_device *spi)
 {
 	int ret;
@@ -156,8 +156,11 @@ static int s3c24xx_spi_setup(struct spi_device *spi)
 	if (!spi->bits_per_word)
 		spi->bits_per_word = 8;
 
-	if ((spi->mode & SPI_LSB_FIRST) != 0)
+	if (spi->mode & ~MODEBITS) {
+		dev_dbg(&spi->dev, "setup: unsupported mode bits %x\n",
+			spi->mode & ~MODEBITS);
 		return -EINVAL;
+	}
 
 	ret = s3c24xx_spi_setupxfer(spi, NULL);
 	if (ret < 0) {
@@ -174,7 +177,7 @@ static int s3c24xx_spi_setup(struct spi_device *spi)
 
 static inline unsigned int hw_txbyte(struct s3c24xx_spi *hw, int count)
 {
-	return hw->tx ? hw->tx[count] : 0xff;
+	return hw->tx ? hw->tx[count] : 0;
 }
 
 static int s3c24xx_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
@@ -330,9 +333,12 @@ static int s3c24xx_spi_probe(struct platform_device *pdev)
 	/* setup any gpio we can */
 
 	if (!hw->pdata->set_cs) {
+		hw->set_cs = s3c24xx_spi_gpiocs;
+
 		s3c2410_gpio_setpin(hw->pdata->pin_cs, 1);
 		s3c2410_gpio_cfgpin(hw->pdata->pin_cs, S3C2410_GPIO_OUTPUT);
-	}
+	} else
+		hw->set_cs = hw->pdata->set_cs;
 
 	/* register our spi controller */
 
@@ -341,8 +347,6 @@ static int s3c24xx_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register SPI master\n");
 		goto err_register;
 	}
-
-	dev_dbg(hw->dev, "shutdown=%d\n", hw->bitbang.shutdown);
 
 	/* register all the devices associated */
 
@@ -423,6 +427,7 @@ static int s3c24xx_spi_resume(struct platform_device *pdev)
 #define s3c24xx_spi_resume  NULL
 #endif
 
+MODULE_ALIAS("s3c2410_spi");			/* for platform bus hotplug */
 static struct platform_driver s3c24xx_spidrv = {
 	.probe		= s3c24xx_spi_probe,
 	.remove		= s3c24xx_spi_remove,

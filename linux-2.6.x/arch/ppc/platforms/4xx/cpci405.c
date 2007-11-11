@@ -23,6 +23,7 @@
 #include <asm/todc.h>
 #include <linux/serial.h>
 #include <linux/serial_core.h>
+#include <linux/serial_8250.h>
 #include <asm/ocp.h>
 #include <asm/ibm_ocp_pci.h>
 #include <platforms/4xx/ibm405gp.h>
@@ -126,6 +127,7 @@ cpci405_setup_arch(void)
 void __init
 bios_fixup(struct pci_controller *hose, struct pcil0_regs *pcip)
 {
+#ifdef CONFIG_PCI
 	unsigned int bar_response, bar;
 
 	/* Disable region first */
@@ -167,6 +169,7 @@ bios_fixup(struct pci_controller *hose, struct pcil0_regs *pcip)
 					PCI_FUNC(hose->first_busno), bar,
 					&bar_response);
 	}
+#endif
 }
 
 void __init

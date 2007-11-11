@@ -336,7 +336,7 @@ static unsigned int ip_confirm(unsigned int hooknum,
 			       int (*okfn)(struct sk_buff *))
 {
 	/* We've seen it coming out the other side: confirm it */
-	return ip_conntrack_confirm(*pskb);
+	return ip_conntrack_confirm(hooknum, *pskb);
 }
 
 static unsigned int ip_refrag(unsigned int hooknum,
@@ -660,3 +660,6 @@ EXPORT_SYMBOL(ip_conntrack_lock);
 EXPORT_SYMBOL(ip_conntrack_hash);
 EXPORT_SYMBOL_GPL(ip_conntrack_find_get);
 EXPORT_SYMBOL_GPL(ip_conntrack_put);
+#ifdef CONFIG_IP_NF_CONNTRACK_EVENTS
+EXPORT_SYMBOL(ip_conntrack_chain);
+#endif

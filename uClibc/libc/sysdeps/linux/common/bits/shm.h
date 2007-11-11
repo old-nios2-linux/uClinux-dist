@@ -1,4 +1,4 @@
-/* Copyright (C) 1995, 1996, 1997, 2000, 2002 Free Software Foundation, Inc.
+/* Copyright (C) 1995,1996,1997,2000,2002,2004 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -41,26 +41,27 @@ __BEGIN_DECLS
 #define SHMLBA		(__getpagesize ())
 extern int __getpagesize (void) __THROW __attribute__ ((__const__));
 
-__END_DECLS
-
 
 /* Type to count number of attaches.  */
-typedef unsigned short shmatt_t;
+typedef unsigned long int shmatt_t;
 
 /* Data structure describing a set of semaphores.  */
-struct shmid_ds {
-    struct ipc_perm	shm_perm;	/* operation perms */
-    int			shm_segsz;	/* size of segment (bytes) */
-    __kernel_time_t	shm_atime;	/* last attach time */
-    __kernel_time_t	shm_dtime;	/* last detach time */
-    __kernel_time_t	shm_ctime;	/* last change time */
-    __kernel_ipc_pid_t	shm_cpid;	/* pid of creator */
-    __kernel_ipc_pid_t	shm_lpid;	/* pid of last operator */
-    unsigned short	shm_nattch;	/* no. of current attaches */
-    unsigned short 	shm_unused;	/* compatibility */
-    void 		*shm_unused2;	/* ditto - used by DIPC */
-    void		*shm_unused3;	/* unused */
-};
+struct shmid_ds
+  {
+    struct ipc_perm shm_perm;		/* operation permission struct */
+    size_t shm_segsz;			/* size of segment in bytes */
+    __time_t shm_atime;			/* time of last shmat() */
+    unsigned long int __unused1;
+    __time_t shm_dtime;			/* time of last shmdt() */
+    unsigned long int __unused2;
+    __time_t shm_ctime;			/* time of last change by shmctl() */
+    unsigned long int __unused3;
+    __pid_t shm_cpid;			/* pid of creator */
+    __pid_t shm_lpid;			/* pid of last shmop */
+    shmatt_t shm_nattch;		/* number of current attaches */
+    unsigned long int __unused4;
+    unsigned long int __unused5;
+  };
 
 #ifdef __USE_MISC
 
@@ -72,22 +73,31 @@ struct shmid_ds {
 # define SHM_DEST	01000	/* segment will be destroyed on last detach */
 # define SHM_LOCKED	02000   /* segment will not be swapped */
 # define SHM_HUGETLB	04000	/* segment is mapped via hugetlb */
+# define SHM_NORESERVE	010000	/* don't check for reservations */
 
-struct  shminfo {
-    int shmmax;
-    int shmmin;
-    int shmmni;
-    int shmseg;
-    int shmall;
-};
+struct	shminfo
+  {
+    unsigned long int shmmax;
+    unsigned long int shmmin;
+    unsigned long int shmmni;
+    unsigned long int shmseg;
+    unsigned long int shmall;
+    unsigned long int __unused1;
+    unsigned long int __unused2;
+    unsigned long int __unused3;
+    unsigned long int __unused4;
+  };
 
-struct shm_info {
+struct shm_info
+  {
     int used_ids;
-    unsigned long shm_tot;  /* total allocated shm */
-    unsigned long shm_rss;  /* total resident shm */
-    unsigned long shm_swp;  /* total swapped shm */
-    unsigned long swap_attempts;
-    unsigned long swap_successes;
-};
+    unsigned long int shm_tot;	/* total allocated shm */
+    unsigned long int shm_rss;	/* total resident shm */
+    unsigned long int shm_swp;	/* total swapped shm */
+    unsigned long int swap_attempts;
+    unsigned long int swap_successes;
+  };
 
 #endif /* __USE_MISC */
+
+__END_DECLS

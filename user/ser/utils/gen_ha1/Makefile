@@ -1,16 +1,16 @@
+# $Id: Makefile,v 1.2 2004/09/06 14:53:41 andrei Exp $
+#
+#  gen_ha1 Makefile
+# 
 
-all: gen_ha1
+include ../../Makefile.defs
 
-gen_ha1: gen_ha1.o calc.o ../../md5.o
-	$(CC) $(LDFLAGS) $(LDLIBS) -o gen_ha1 gen_ha1.o calc.o ../../md5.o
-
-gen_ha1.o: gen_ha1.c
-	$(CC) $(CFLAGS) -c gen_ha1.c
-
-calc.o: calc.c calc.h
-	$(CC) $(CFLAGS) -c calc.c
+auto_gen=
+NAME=gen_ha1
+LIBS=../../md5.o
 
 
-clean:
-	rm -f *~ *.o gen_ha1
+include ../../Makefile.sources
+include ../../Makefile.rules
 
+modules:

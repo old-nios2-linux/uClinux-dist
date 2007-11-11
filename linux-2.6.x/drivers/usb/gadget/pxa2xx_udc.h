@@ -54,8 +54,6 @@ struct pxa2xx_ep {
 	const struct usb_endpoint_descriptor	*desc;
 	struct list_head			queue;
 	unsigned long				pio_irqs;
-	unsigned long				dma_irqs;
-	short					dma; 
 
 	unsigned short				fifo_size;
 	u8					bEndpointAddress;
@@ -63,7 +61,7 @@ struct pxa2xx_ep {
 
 	unsigned				stopped : 1;
 	unsigned				dma_fixup : 1;
-							 
+
 	/* UDCCS = UDC Control/Status for this EP
 	 * UBCR = UDC Byte Count Remaining (contents of OUT fifo)
 	 * UDDR = UDC Endpoint Data Register (the fifo)
@@ -72,12 +70,6 @@ struct pxa2xx_ep {
 	volatile u32				*reg_udccs;
 	volatile u32				*reg_ubcr;
 	volatile u32				*reg_uddr;
-#ifdef USE_DMA
-	volatile u32			*reg_drcmr;
-#define	drcmr(n)  .reg_drcmr = & DRCMR ## n ,
-#else
-#define	drcmr(n)  
-#endif
 };
 
 struct pxa2xx_request {
@@ -85,7 +77,7 @@ struct pxa2xx_request {
 	struct list_head			queue;
 };
 
-enum ep0_state { 
+enum ep0_state {
 	EP0_IDLE,
 	EP0_IN_DATA_PHASE,
 	EP0_OUT_DATA_PHASE,
@@ -108,7 +100,6 @@ struct udc_stats {
 
 #ifdef CONFIG_USB_PXA2XX_SMALL
 /* when memory's tight, SMALL config saves code+data.  */
-#undef	USE_DMA
 #define	PXA_UDC_NUM_ENDPOINTS	3
 #endif
 
@@ -144,53 +135,9 @@ struct pxa2xx_udc {
 #ifdef CONFIG_ARCH_LUBBOCK
 #include <asm/arch/lubbock.h>
 /* lubbock can also report usb connect/disconnect irqs */
-
-#ifdef DEBUG
-#define HEX_DISPLAY(n)	if (machine_is_lubbock()) { LUB_HEXLED = (n); }
 #endif
-
-#endif
-
-/*-------------------------------------------------------------------------*/
-
-/* LEDs are only for debug */
-#ifndef HEX_DISPLAY
-#define HEX_DISPLAY(n)		do {} while(0)
-#endif
-
-#ifdef DEBUG
-#include <asm/leds.h>
-
-#define LED_CONNECTED_ON	leds_event(led_green_on)
-#define LED_CONNECTED_OFF	do { \
-					leds_event(led_green_off); \
-					HEX_DISPLAY(0); \
-				} while(0)
-#endif
-
-#ifndef LED_CONNECTED_ON
-#define LED_CONNECTED_ON	do {} while(0)
-#define LED_CONNECTED_OFF	do {} while(0)
-#endif
-
-/*-------------------------------------------------------------------------*/
 
 static struct pxa2xx_udc *the_controller;
-
-static inline int pxa_gpio_get(unsigned gpio)
-{
-	return (GPLR(gpio) & GPIO_bit(gpio)) != 0;
-}
-
-static inline void pxa_gpio_set(unsigned gpio, int is_on)
-{
-	int mask = GPIO_bit(gpio);
-
-	if (is_on)
-		GPSR(gpio) = mask;
-	else
-		GPCR(gpio) = mask;
-}
 
 /*-------------------------------------------------------------------------*/
 
@@ -219,7 +166,7 @@ static const char *state_name[] = {
 #    define UDC_DEBUG DBG_NORMAL
 #endif
 
-static void __attribute__ ((__unused__))
+static void __maybe_unused
 dump_udccr(const char *label)
 {
 	u32	udccr = UDCCR;
@@ -235,7 +182,7 @@ dump_udccr(const char *label)
 		(udccr & UDCCR_UDE) ? " ude" : "");
 }
 
-static void __attribute__ ((__unused__))
+static void __maybe_unused
 dump_udccs0(const char *label)
 {
 	u32		udccs0 = UDCCS0;
@@ -252,7 +199,7 @@ dump_udccs0(const char *label)
 		(udccs0 & UDCCS0_OPR) ? " opr" : "");
 }
 
-static void __attribute__ ((__unused__))
+static void __maybe_unused
 dump_state(struct pxa2xx_udc *dev)
 {
 	u32		tmp;

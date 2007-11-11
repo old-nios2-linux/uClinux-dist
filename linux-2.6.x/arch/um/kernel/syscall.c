@@ -7,6 +7,7 @@
 #include "linux/file.h"
 #include "linux/smp_lock.h"
 #include "linux/mm.h"
+#include "linux/fs.h"
 #include "linux/utsname.h"
 #include "linux/msg.h"
 #include "linux/shm.h"
@@ -18,7 +19,6 @@
 #include "asm/mman.h"
 #include "asm/uaccess.h"
 #include "kern_util.h"
-#include "user_util.h"
 #include "sysdep/syscalls.h"
 #include "mode_kern.h"
 #include "choose-mode.h"
@@ -147,22 +147,6 @@ long sys_olduname(struct oldold_utsname __user * name)
 	error = error ? -EFAULT : 0;
 
 	return error;
-}
-
-DEFINE_SPINLOCK(syscall_lock);
-
-static int syscall_index = 0;
-
-int next_syscall_index(int limit)
-{
-	int ret;
-
-	spin_lock(&syscall_lock);
-	ret = syscall_index;
-	if(++syscall_index == limit)
-		syscall_index = 0;
-	spin_unlock(&syscall_lock);
-	return(ret);
 }
 
 int kernel_execve(const char *filename, char *const argv[], char *const envp[])

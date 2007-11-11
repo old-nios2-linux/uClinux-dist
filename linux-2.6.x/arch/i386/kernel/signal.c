@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -21,6 +20,7 @@
 #include <linux/suspend.h>
 #include <linux/ptrace.h>
 #include <linux/elf.h>
+#include <linux/binfmts.h>
 #include <asm/processor.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
@@ -129,7 +129,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext __user *sc, int *peax
 			 X86_EFLAGS_AF | X86_EFLAGS_PF | X86_EFLAGS_CF)
 
 	GET_SEG(gs);
-	GET_SEG(fs);
+	COPY_SEG(fs);
 	COPY_SEG(es);
 	COPY_SEG(ds);
 	COPY(edi);
@@ -199,6 +199,13 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 	return eax;
 
 badframe:
+	if (show_unhandled_signals && printk_ratelimit())
+		printk("%s%s[%d] bad frame in sigreturn frame:%p eip:%lx"
+		       " esp:%lx oeax:%lx\n",
+		    current->pid > 1 ? KERN_INFO : KERN_EMERG,
+		    current->comm, current->pid, frame, regs->eip,
+		    regs->esp, regs->orig_eax);
+
 	force_sig(SIGSEGV, current);
 	return 0;
 }	
@@ -244,11 +251,9 @@ setup_sigcontext(struct sigcontext __user *sc, struct _fpstate __user *fpstate,
 {
 	int tmp, err = 0;
 
-	tmp = 0;
+	err |= __put_user(regs->xfs, (unsigned int __user *)&sc->fs);
 	savesegment(gs, tmp);
 	err |= __put_user(tmp, (unsigned int __user *)&sc->gs);
-	savesegment(fs, tmp);
-	err |= __put_user(tmp, (unsigned int __user *)&sc->fs);
 
 	err |= __put_user(regs->xes, (unsigned int __user *)&sc->es);
 	err |= __put_user(regs->xds, (unsigned int __user *)&sc->ds);
@@ -351,7 +356,10 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 			goto give_sigsegv;
 	}
 
-	restorer = (void *)VDSO_SYM(&__kernel_sigreturn);
+	if (current->binfmt->hasvdso)
+		restorer = (void *)VDSO_SYM(&__kernel_sigreturn);
+	else
+		restorer = (void *)&frame->retcode;
 	if (ka->sa.sa_flags & SA_RESTORER)
 		restorer = ka->sa.sa_restorer;
 

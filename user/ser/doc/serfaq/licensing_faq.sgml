@@ -1,4 +1,4 @@
-<!-- $Id: licensing_faq.sgml,v 1.1 2003/08/28 20:50:58 janakj Exp $ -->
+<!-- $Id: licensing_faq.sgml,v 1.2 2004/08/24 08:45:13 janakj Exp $ -->
 
 <chapter>
     <title>Licensing</title>
@@ -6,7 +6,7 @@
 	<qandaentry>
 	    <question>
 		<simpara>
-		    Is the &sername; (&ser;) free ? Or do we need to pay ? Becaure my boss worry
+		    Is the &sername; (&ser;) free ? Or do we need to pay ? Because my boss worry
 		    about that, please help me.
 		</simpara>
 	    </question>

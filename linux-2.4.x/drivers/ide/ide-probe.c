@@ -443,6 +443,9 @@ static int do_probe (ide_drive_t *drive, u8 cmd)
 {
 	int rc;
 	ide_hwif_t *hwif = HWIF(drive);
+#if defined(CONFIG_COLDFIRE) || defined(CONFIG_MACH_IPD)
+	static unsigned char settled = 0;
+#endif
 
 	if (drive->present) {
 		/* avoid waiting for inappropriate probes */
@@ -467,11 +470,17 @@ static int do_probe (ide_drive_t *drive, u8 cmd)
 	 *  ColdFire platforms boot up so quick that most hard drives
 	 *  have not completed there own self tests. Pause here for
 	 *  a couple of seconds if it looks like there is a drive
-	 *  present...
+	 *  present...  A couple of seconds here is up to 15 seconds.
+	 *  We have had drives that take circa 10 seconds to settle down.
+	 *
+	 *  We also need to be a little careful here, since we don't want to
+	 *  perform this delay needlessly several times in the absence of
+	 *  a plugged in device or with a device that doesn't behave itself.
 	 */
-	if (hwif->INB(IDE_SELECT_REG) != drive->select.all) {
+	if (! settled && hwif->INB(IDE_SELECT_REG) != drive->select.all) {
 		printk("IDE: waiting for drives to settle...\n");
-		for (rc = 0; (rc < 400); rc++) {
+		settled = 1;
+		for (rc = 0; (rc < 300); rc++) {
 			SELECT_DRIVE(drive);
 			ide_delay_50ms();
 			if (hwif->INB(IDE_SELECT_REG) == drive->select.all)

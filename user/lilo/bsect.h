@@ -1,17 +1,35 @@
 /* bsect.h  -  Boot sector handling */
+/*
+Copyright 1992-1998 Werner Almesberger.
+Copyright 1999-2004 John Coffman.
+All rights reserved.
 
-/* Copyright 1992-1995 Werner Almesberger. See file COPYING for details. */
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
 
 
 #ifndef BSECT_H
 #define BSECT_H
+#include "common.h"
+
+char *pw_input(void);
+void bmp_do_timer(char *cp, MENUTABLE *menu);
+void bmp_do_table(char *cp, MENUTABLE *menu);
+void bmp_do_colors(char *cp, MENUTABLE *menu);
+
+
+#ifdef LCF_BUILTIN
+BUILTIN_FILE *select_loader(void);
+/* return the pointer to the selected built-in secondary loader */
+#endif
 
 void bsect_read(char *boot_dev,BOOT_SECTOR *buffer);
-
 /* Read the boot sector stored on BOOT_DEV into BUFFER. */
 
 void bsect_open(char *boot_dev,char *map_file,char *install,int delay,
-  int timeout, long raid_offset);
+  int timeout, int raid_offset);
 
 /* Loads the boot sector of the specified device and merges it with a new
    boot sector (if install != NULL). Sets the boot delay to 'delay' 1/10 sec.
@@ -19,19 +37,29 @@ void bsect_open(char *boot_dev,char *map_file,char *install,int delay,
    temporary map file. */
 
 int bsect_number(void);
-
 /* Returns the number of successfully defined boot images. */
 
-void check_fallback(void);
+#ifdef LCF_VIRTUAL
+void check_vmdefault(void);
+/* Verify existence of vmdefault image, if vmdefault is used */
+#endif
 
+#ifdef LCF_NOKEYBOARD
+void check_nokbdefault(void);
+/* Verify existence of nokbdefault image, if nokbdefault is used */
+#endif
+
+void check_fallback(void);
 /* Verifies that all fallback options specify valid images. */
 
-void bsect_update(char *backup_file, int force_backup, int pass);
+void check_unattended(void);
+/* checks that unattended won't hang up on password */
 
+void bsect_update(char *backup_file, int force_backup, int pass);
 /* Updates the boot sector and the map file. */
 
-void bsect_raid_update(char *boot_dev, unsigned long raid_offset, 
-	char *backup_file, int force_backup, int pass);
+void bsect_raid_update(char *boot_dev, unsigned int raid_offset, 
+	char *backup_file, int force_backup, int pass, int mask);
 
 /* Update the boot sector and the map file, with RAID considerations */
 

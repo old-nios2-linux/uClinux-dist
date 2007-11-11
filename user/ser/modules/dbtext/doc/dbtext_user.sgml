@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.2.6.1 $</revnumber>
-		<date>$Date: 2004/01/20 18:20:39 $</date>
+		<revnumber>$Revision: 1.4 $</revnumber>
+		<date>$Date: 2004/11/30 15:28:05 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -34,11 +34,17 @@
 			<listitem>
 			    <para>
 				a database is represented by a directory in the local file
-				system. NOTE: when you use <emphasis>dbtext</emphasis> in &ser;
+				system.
+				NOTE: when you use <emphasis>dbtext</emphasis> in &ser;,
 				the	database URL for modules must be the path to the directory
-				where the table-files are located, e.g., 
-				<quote>/var/dbtext/ser</quote>. If the path to database is not
-				absolute, then it is prefixed with <quote>CFG_DIR/</quote>.
+				where the table-files are located, prefixed by 
+				<quote>dbtext://</quote>, e.g., 
+				<quote>dbtext:///var/dbtext/ser</quote>. If there is no
+				<quote>/</quote> after <quote>dbtext://</quote> then
+				<quote>CFG_DIR/</quote> is inserted at the beginning of the
+				database path. So, either you provide an absolute path to
+				database directory or a relative one to <quote>CFG_DIR</quote>
+				directory.
 				</para>
 			</listitem>
 			<listitem>
@@ -68,6 +74,12 @@
 			</listitem>
 			<listitem>
 			    <para>
+				between two column definitions must be a white space, e.g., 
+				<quote>first_name(str) last_name(str)</quote>.
+				</para>
+			</listitem>
+			<listitem>
+			    <para>
 				the type of a column can be: 
 			    	<itemizedlist>
 					<listitem>
@@ -77,7 +89,8 @@
 					</listitem>
 					<listitem>
 			    	<para>
-					<emphasis>double</emphasis> - real numbers with two decimals.
+					<emphasis>double</emphasis> - real numbers with two
+					decimals.
 					</para>
 					</listitem>
 					<listitem>
@@ -222,11 +235,15 @@ suser:supasswd:xxx:iptel.org:xxx
 		Compile the module and load it instead of mysql or other DB modules.
 		</para>
 		<para>
-		REMINDER: when you use <emphasis>dbtext</emphasis> in &ser;
+		REMINDER: when you use <emphasis>dbtext</emphasis> in &ser;,
 		the	database URL for modules must be the path to the directory
-		where the table-files are located, e.g., 
-		<quote>/var/dbtext/ser</quote>. If the path to database is not
-		absolute, then it is prefixed with <quote>CFG_DIR/</quote>.
+		where the table-files are located, prefixed by
+		<quote>dbtext://</quote>, e.g., 
+		<quote>dbtext:///var/dbtext/ser</quote>. If there is no <quote>/</quote>
+		after <quote>dbtext://</quote> then <quote>CFG_DIR/</quote> is inserted
+		at the beginning of the database path. So, either you provide an
+		absolute path to database directory or a relative one to 
+		<quote>CFG_DIR</quote> directory.
 		</para>
 		<example>
 		<title>Load the dbtext module</title>
@@ -238,6 +255,54 @@ modparam("module_name", "database_URL", "/path/to/dbtext/database")
 ...
 </programlisting>
 		</example>
+		<section>
+	    	<title>Using dbtext with basic SER configuration</title>
+		<para>
+		Here are the definitions for most important table as well as a basic configuration
+		file to use dbtext with &ser;. The table structures may change in time and you
+		will have to adjust next examples. These are know to work with upcoming &ser; v0.9.0
+		</para>
+		<para>
+		You have to populate the table 'subscriber' by hand with user profiles in order to
+		have authentication. To use with the given configuration
+		file, the table files must be placed in the '/tmp/serdb' directory.
+		</para>
+		<example>
+		<title>Definition of 'subscriber' table (one line)</title>
+<programlisting format="linespecific">
+...
+username(str) domn(str) password(str) first_name(str) last_name(str) phone(str) email_address(str) datetime_created(int) datetime_modified(int) confirmation(str) flag(str) sendnotification(str) greeting(str) ha1(str) ha1b(str) perms(str) allow_find(str) timezone(str,null) rpid(str,null) uuid(str,null)
+...
+</programlisting>
+		</example>
+		<example>
+		<title>Definition of 'location' and 'aliases' tables (one line)</title>
+<programlisting format="linespecific">
+...
+username(str) domain(str,null) contact(str,null) expires(int,null) q(double,null) callid(str,null) cseq(int,null) last_modified(str) replicate(int,null) state(int,null) flags(int) user_agent(str) received(str)
+...
+</programlisting>
+		</example>
+		<example>
+		<title>Definition of 'version' table and sample records</title>
+<programlisting format="linespecific">
+...
+table_name(str) table_version(int)
+subscriber:3
+location:6
+aliases:6
+...
+</programlisting>
+		</example>
+		<example>
+		<title>Configuration file</title>
+<programlisting format="linespecific">
+...
+&dbtextsercfg;
+...
+</programlisting>
+		</example>
+		</section>
 	</section>
 </chapter>
 

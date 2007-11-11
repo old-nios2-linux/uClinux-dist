@@ -29,11 +29,11 @@
 
 #define DRIVER_NAME		"via"
 #define DRIVER_DESC		"VIA Unichrome / Pro"
-#define DRIVER_DATE		"20060529"
+#define DRIVER_DATE		"20070202"
 
 #define DRIVER_MAJOR		2
-#define DRIVER_MINOR		10
-#define DRIVER_PATCHLEVEL	0
+#define DRIVER_MINOR		11
+#define DRIVER_PATCHLEVEL	1
 
 #include "via_verifier.h"
 
@@ -79,7 +79,7 @@ typedef struct drm_via_private {
 	char pci_buf[VIA_PCI_BUF_SIZE];
 	const uint32_t *fire_offsets[VIA_FIRE_BUF_SIZE];
 	uint32_t num_fire_offsets;
-	int pro_group_a;
+	int chipset;
 	drm_via_irq_t via_irqs[VIA_NUM_IRQS];
 	unsigned num_irqs;
 	maskarray_t *irq_masks;
@@ -87,17 +87,19 @@ typedef struct drm_via_private {
 	uint32_t irq_pending_mask;
 	int *irq_map;
 	unsigned int idle_fault;
-	drm_sman_t sman;
+	struct drm_sman sman;
 	int vram_initialized;
 	int agp_initialized;
 	unsigned long vram_offset;
 	unsigned long agp_offset;
 	drm_via_blitq_t blit_queues[VIA_NUM_BLIT_ENGINES];
+	uint32_t dma_diff;
 } drm_via_private_t;
 
 enum via_family {
-	VIA_OTHER = 0,
-	VIA_PRO_GROUP_A,
+  VIA_OTHER = 0,     /* Baseline */
+  VIA_PRO_GROUP_A,   /* Another video engine and DMA commands */
+  VIA_DX9_0          /* Same video as pro_group_a, but 3D is unsupported */
 };
 
 /* VIA MMIO register access */
@@ -121,31 +123,31 @@ extern int via_wait_irq(DRM_IOCTL_ARGS);
 extern int via_dma_blit_sync( DRM_IOCTL_ARGS );
 extern int via_dma_blit( DRM_IOCTL_ARGS );
 
-extern int via_driver_load(drm_device_t *dev, unsigned long chipset);
-extern int via_driver_unload(drm_device_t *dev);
+extern int via_driver_load(struct drm_device *dev, unsigned long chipset);
+extern int via_driver_unload(struct drm_device *dev);
 
-extern int via_init_context(drm_device_t * dev, int context);
-extern int via_final_context(drm_device_t * dev, int context);
+extern int via_init_context(struct drm_device * dev, int context);
+extern int via_final_context(struct drm_device * dev, int context);
 
-extern int via_do_cleanup_map(drm_device_t * dev);
-extern int via_driver_vblank_wait(drm_device_t * dev, unsigned int *sequence);
+extern int via_do_cleanup_map(struct drm_device * dev);
+extern int via_driver_vblank_wait(struct drm_device * dev, unsigned int *sequence);
 
 extern irqreturn_t via_driver_irq_handler(DRM_IRQ_ARGS);
-extern void via_driver_irq_preinstall(drm_device_t * dev);
-extern void via_driver_irq_postinstall(drm_device_t * dev);
-extern void via_driver_irq_uninstall(drm_device_t * dev);
+extern void via_driver_irq_preinstall(struct drm_device * dev);
+extern void via_driver_irq_postinstall(struct drm_device * dev);
+extern void via_driver_irq_uninstall(struct drm_device * dev);
 
-extern int via_dma_cleanup(drm_device_t * dev);
+extern int via_dma_cleanup(struct drm_device * dev);
 extern void via_init_command_verifier(void);
-extern int via_driver_dma_quiescent(drm_device_t * dev);
+extern int via_driver_dma_quiescent(struct drm_device * dev);
 extern void via_init_futex(drm_via_private_t * dev_priv);
 extern void via_cleanup_futex(drm_via_private_t * dev_priv);
 extern void via_release_futex(drm_via_private_t * dev_priv, int context);
 
-extern void via_reclaim_buffers_locked(drm_device_t *dev, struct file *filp);
-extern void via_lastclose(drm_device_t *dev);
+extern void via_reclaim_buffers_locked(struct drm_device *dev, struct file *filp);
+extern void via_lastclose(struct drm_device *dev);
 
-extern void via_dmablit_handler(drm_device_t *dev, int engine, int from_irq);
-extern void via_init_dmablit(drm_device_t *dev);
+extern void via_dmablit_handler(struct drm_device *dev, int engine, int from_irq);
+extern void via_init_dmablit(struct drm_device *dev);
 
 #endif

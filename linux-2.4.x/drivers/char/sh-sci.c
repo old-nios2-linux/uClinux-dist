@@ -97,7 +97,7 @@ static void sci_init_pins_sci(struct sci_port* port, unsigned int cflag);
 #endif
 #ifndef SCI_ONLY
 static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag);
-#if defined(__sh3__) && !defined(CONFIG_CPU_SUBTYPE_SH7300)
+#if defined(CONFIG_CPU_SH3) && !defined(CONFIG_CPU_SUBTYPE_SH7300)
 static void sci_init_pins_irda(struct sci_port* port, unsigned int cflag);
 #endif
 #endif
@@ -411,7 +411,7 @@ static void sci_init_pins_sci(struct sci_port* port, unsigned int cflag)
 #endif
 
 #if defined(SCIF_ONLY) || defined(SCI_AND_SCIF)
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /* For SH7300, SH7707, SH7709, SH7709A, SH7729 */
 static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag)
 {
@@ -889,7 +889,7 @@ static inline void sci_receive_chars(struct sci_port *port,
 				char c = sci_in(port, SCxRDR);
 				status = sci_in(port, SCxSR);
 
-#if defined(__SH3__)
+#if defined(CONFIG_CPU_SH3)
 				/* Skip "chars" during break */
 				if (port->break_flag) {
 					if ((c == 0) &&
@@ -905,7 +905,7 @@ static inline void sci_receive_chars(struct sci_port *port,
 						continue;
 					}
 				}
-#endif /* __SH3__ */
+#endif /* CONFIG_CPU_SH3 */
 #if defined(CONFIG_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 				if (break_pressed && (port == sercons_port)) {
 					if (c != 0 &&
@@ -1010,7 +1010,7 @@ static inline int sci_handle_breaks(struct sci_port *port)
 	struct tty_struct *tty = port->gs.tty;
 
 	if (status&SCxSR_BRK(port) && tty->flip.count<TTY_FLIPBUF_SIZE) {
-#if defined(__SH3__)
+#if defined(CONFIG_CPU_SH3)
 		/* Debounce break */
 		if (port->break_flag)
 			goto break_continue;

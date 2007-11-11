@@ -15,7 +15,7 @@
  * contain a copyright notice related to this source.
  *
  * $Id: dict.c,v 1.3 2004/11/24 17:14:49 ajs Exp $
- * $Name: quagga_0_98_stable $
+ * $Name:  $
  */
 
 #include <stdlib.h>

@@ -1,4 +1,4 @@
-/* $Id: options.c,v 1.2 2000/03/01 14:17:43 matthewr Exp $
+/* $Id: options.c,v 1.3 2007/06/27 06:10:27 gerg Exp $
  *
  * dhcpcd - DHCP client daemon -
  * Copyright (C) 1996 - 1997 Yoichi Hariguchi <yoichi@fore.com>
@@ -156,7 +156,7 @@ parseDhcpMsg(u_char *optp[], dhcpMessage *msg)
 	if ( msg->xid != DhcpMsgSend.xid ) {
 		return 0;				/* NG */
 	}
-	if ( bcmp(msg->chaddr, DhcpMsgSend.chaddr, DhcpMsgSend.hlen) ) {
+	if ( memcmp(msg->chaddr, DhcpMsgSend.chaddr, DhcpMsgSend.hlen) ) {
 		return 0;				/* NG */
 	}
 	bzero((char *)opt, sizeof(opt));

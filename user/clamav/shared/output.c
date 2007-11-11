@@ -2,9 +2,8 @@
  *  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,15 +12,17 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
+#ifdef _MSC_VER
+#include <windows.h>
+#include <winsock.h>
+#endif
+
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
-#endif
-
-#ifdef CL_NOTHREADS
-#undef CL_THREAD_SAFE
 #endif
 
 #include <stdio.h>
@@ -29,13 +30,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <errno.h>
+#ifndef C_WINDOWS
 #include <sys/time.h>
 #include <sys/socket.h>
+#endif
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -45,20 +50,39 @@
 #endif
 
 #include "output.h"
-#include "memory.h"
+
+#ifdef CL_NOTHREADS
+#undef CL_THREAD_SAFE
+#endif
 
 #ifdef CL_THREAD_SAFE
 #include <pthread.h>
 pthread_mutex_t logg_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
-FILE *logg_fs = NULL;
+#if 0
+//#ifdef  C_LINUX
+#include <libintl.h>
+#include <locale.h>
 
-short int logg_verbose = 0, logg_lock = 1, logg_time = 0;
+#define gettext_noop(s) s
+#define _(s)    gettext(s)
+#define N_(s)   gettext_noop(s)
+
+#else
+
+#define _(s)    s
+#define N_(s)   s
+
+#endif
+
+FILE *logg_fd = NULL;
+
+short int logg_verbose = 0, logg_lock = 1, logg_time = 0, logg_foreground = 1;
 int logg_size = 0;
 const char *logg_file = NULL;
 #if defined(USE_SYSLOG) && !defined(C_AIX)
-short logg_syslog = 0;
+short logg_syslog;
 #endif
 
 short int mprintf_disabled = 0, mprintf_verbose = 0, mprintf_quiet = 0,
@@ -77,7 +101,7 @@ int mdprintf(int desc, const char *str, ...)
     if(bytes == -1)
 	return bytes;
 
-    if(bytes >= sizeof(buff))
+    if(bytes >= (int) sizeof(buff))
 	bytes = sizeof(buff) - 1;
 
     return send(desc, buff, bytes, 0);
@@ -88,9 +112,9 @@ void logg_close(void) {
 #ifdef CL_THREAD_SAFE
     pthread_mutex_lock(&logg_mutex);
 #endif
-    if (logg_fs) {
-	fclose(logg_fs);
-	logg_fs = NULL;
+    if (logg_fd) {
+	fclose(logg_fd);
+	logg_fd = NULL;
     }
 #ifdef CL_THREAD_SAFE
     pthread_mutex_unlock(&logg_mutex);
@@ -105,8 +129,10 @@ void logg_close(void) {
 
 int logg(const char *str, ...)
 {
-	va_list args, argscpy;
+	va_list args, argscpy, argsout;
+#ifdef F_WRLCK
 	struct flock fl;
+#endif
 	char *pt, *timestr, vbuff[1025];
 	time_t currtime;
 	struct stat sb;
@@ -116,14 +142,15 @@ int logg(const char *str, ...)
     va_start(args, str);
     /* va_copy is less portable so we just use va_start once more */
     va_start(argscpy, str);
+    va_start(argsout, str);
 
-    if(logg_file) {
 #ifdef CL_THREAD_SAFE
-	pthread_mutex_lock(&logg_mutex);
+    pthread_mutex_lock(&logg_mutex);
 #endif
-	if(!logg_fs) {
+    if(logg_file) {
+	if(!logg_fd) {
 	    old_umask = umask(0037);
-	    if((logg_fs = fopen(logg_file, "a")) == NULL) {
+	    if((logg_fd = fopen(logg_file, "at")) == NULL) {
 		umask(old_umask);
 #ifdef CL_THREAD_SAFE
 		pthread_mutex_unlock(&logg_mutex);
@@ -132,68 +159,67 @@ int logg(const char *str, ...)
 		return -1;
 	    } else umask(old_umask);
 
+#ifdef F_WRLCK
 	    if(logg_lock) {
 		memset(&fl, 0, sizeof(fl));
 		fl.l_type = F_WRLCK;
-		if(fcntl(fileno(logg_fs), F_SETLK, &fl) == -1) {
+		if(fcntl(fileno(logg_fd), F_SETLK, &fl) == -1) {
 #ifdef CL_THREAD_SAFE
 		    pthread_mutex_unlock(&logg_mutex);
 #endif
 		    return -1;
 		}
 	    }
-	}
-
-        /* Need to avoid logging time for verbose messages when logverbose
-           is not set or we get a bunch of timestamps in the log without
-           newlines... */
-	if(logg_time && ((*str != '*') || logg_verbose)) {
-	    time(&currtime);
-	    pt = ctime(&currtime);
-	    timestr = mcalloc(strlen(pt), sizeof(char));
-	    strncpy(timestr, pt, strlen(pt) - 1);
-	    fprintf(logg_fs, "%s -> ", timestr);
-	    free(timestr);
+#endif
 	}
 
 	if(logg_size) {
 	    if(stat(logg_file, &sb) != -1) {
 		if(sb.st_size > logg_size) {
 		    logg_file = NULL;
-		    fprintf(logg_fs, "Log size = %d, maximal = %d\n", (int) sb.st_size, logg_size);
-		    fprintf(logg_fs, "LOGGING DISABLED (Maximal log file size exceeded).\n");
-		    fclose(logg_fs);
-		    logg_fs = NULL;
-#ifdef CL_THREAD_SAFE
-		    pthread_mutex_unlock(&logg_mutex);
-#endif
-		    return 0;
+		    fprintf(logg_fd, "Log size = %d, maximal = %d\n", (int) sb.st_size, logg_size);
+		    fprintf(logg_fd, "LOGGING DISABLED (Maximal log file size exceeded).\n");
+		    fclose(logg_fd);
+		    logg_fd = NULL;
 		}
 	    }
 	}
 
+	if(logg_fd) {
+            /* Need to avoid logging time for verbose messages when logverbose
+               is not set or we get a bunch of timestamps in the log without
+               newlines... */
+	    if(logg_time && ((*str != '*') || logg_verbose)) {
+		time(&currtime);
+		pt = ctime(&currtime);
+		timestr = calloc(strlen(pt), 1);
+		strncpy(timestr, pt, strlen(pt) - 1);
+		fprintf(logg_fd, "%s -> ", timestr);
+		free(timestr);
+	    }
 
-	if(*str == '!') {
-	    fprintf(logg_fs, "ERROR: ");
-	    vfprintf(logg_fs, str + 1, args);
-	} else if(*str == '^') {
-	    fprintf(logg_fs, "WARNING: ");
-	    vfprintf(logg_fs, str + 1, args);
-	} else if(*str == '*') {
-	    if(logg_verbose)
-		vfprintf(logg_fs, str + 1, args);
-	} else vfprintf(logg_fs, str, args);
+	    _(str);
+	    if(*str == '!') {
+		fprintf(logg_fd, "ERROR: ");
+		vfprintf(logg_fd, str + 1, args);
+	    } else if(*str == '^') {
+		fprintf(logg_fd, "WARNING: ");
+		vfprintf(logg_fd, str + 1, args);
+	    } else if(*str == '*') {
+		if(logg_verbose)
+		    vfprintf(logg_fd, str + 1, args);
+	    } else if(*str == '#') {
+		vfprintf(logg_fd, str + 1, args);
+	    } else vfprintf(logg_fd, str, args);
 
 
-	fflush(logg_fs);
-
-#ifdef CL_THREAD_SAFE
-	pthread_mutex_unlock(&logg_mutex);
-#endif
+	    fflush(logg_fd);
+	}
     }
 
 #if defined(USE_SYSLOG) && !defined(C_AIX)
     if(logg_syslog) {
+        _(str);
 	vsnprintf(vbuff, 1024, str, argscpy);
 	vbuff[1024] = 0;
 
@@ -205,36 +231,40 @@ int logg(const char *str, ...)
 	    if(logg_verbose) {
 		syslog(LOG_DEBUG, "%s", vbuff + 1);
 	    }
+	} else if(vbuff[0] == '#') {
+	    syslog(LOG_INFO, "%s", vbuff + 1);
 	} else syslog(LOG_INFO, "%s", vbuff);
 
     }
 #endif
 
+    if(logg_foreground) {
+	_(str);
+        vsnprintf(vbuff, 1024, str, argsout);
+	vbuff[1024] = 0;
+	if(vbuff[0] != '#')
+	    mprintf("%s", vbuff);
+    }
+
+#ifdef CL_THREAD_SAFE
+    pthread_mutex_unlock(&logg_mutex);
+#endif
+
     va_end(args);
     va_end(argscpy);
+    va_end(argsout);
     return 0;
 }
 
 void mprintf(const char *str, ...)
 {
-	va_list args, argscpy;
+	va_list args;
 	FILE *fd;
-	char logbuf[512];
+	char buff[512];
 
 
-    if(mprintf_disabled) {
-	if(*str == '@') {
-	    va_start(args, str);
-#ifdef NO_SNPRINTF
-	    vsprintf(logbuf, ++str, args);
-#else
-	    vsnprintf(logbuf, sizeof(logbuf), ++str, args);
-#endif
-	    va_end(args);
-	    logg("ERROR: %s", logbuf);
-	}
+    if(mprintf_disabled) 
 	return;
-    }
 
     fd = stdout;
 
@@ -253,45 +283,31 @@ void mprintf(const char *str, ...)
  * quiet       stderr     no         no
  */
 
-
     va_start(args, str);
-    /* va_copy is less portable so we just use va_start once more */
-    va_start(argscpy, str);
+    vsnprintf(buff, sizeof(buff), str, args);
+    va_end(args);
 
-    if(*str == '!') {
+    if(buff[0] == '!') {
        if(!mprintf_stdout)
            fd = stderr;
-	fprintf(fd, "ERROR: ");
-	vfprintf(fd, ++str, args);
-    } else if(*str == '@') {
+	fprintf(fd, "ERROR: %s", &buff[1]);
+    } else if(buff[0] == '@') {
        if(!mprintf_stdout)
            fd = stderr;
-	fprintf(fd, "ERROR: ");
-	vfprintf(fd, ++str, args);
-#ifdef NO_SNPRINTF
-	vsprintf(logbuf, str, argscpy);
-#else
-	vsnprintf(logbuf, sizeof(logbuf), str, argscpy);
-#endif
-	logg("ERROR: %s", logbuf);
+	fprintf(fd, "ERROR: %s", &buff[1]);
     } else if(!mprintf_quiet) {
-	if(*str == '^') {
+	if(buff[0] == '^') {
            if(!mprintf_stdout)
                fd = stderr;
-	    fprintf(fd, "WARNING: ");
-	    vfprintf(fd, ++str, args);
-	} else if(*str == '*') {
+	    fprintf(fd, "WARNING: %s", &buff[1]);
+	} else if(buff[0] == '*') {
 	    if(mprintf_verbose)
-		vfprintf(fd, ++str, args);
-	} else vfprintf(fd, str, args);
+		fprintf(fd, "%s", &buff[1]);
+	} else fprintf(fd, "%s", buff);
     }
-
-    va_end(args);
-    va_end(argscpy);
 
     if(fd == stdout)
 	fflush(stdout);
-
 }
 
 struct facstruct {

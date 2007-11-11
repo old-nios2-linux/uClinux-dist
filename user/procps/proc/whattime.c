@@ -21,11 +21,11 @@
 #include <time.h>
 #include <utmp.h>
 #include <sys/ioctl.h>
-#include "proc/whattime.h"
-#include "proc/sysinfo.h"
+#include "whattime.h"
+#include "sysinfo.h"
 
 static char buf[128];
-double av[3];
+static double av[3];
 
 char *sprint_uptime(void) {
   struct utmp *utmpstruct;
@@ -40,9 +40,8 @@ char *sprint_uptime(void) {
 
   time(&realseconds);
   realtime = localtime(&realseconds);
-  pos = sprintf(buf, " %2d:%02d%s  ",
-		realtime->tm_hour%12 ? realtime->tm_hour%12 : 12,
-		realtime->tm_min, realtime->tm_hour > 11 ? "pm" : "am");
+  pos = sprintf(buf, " %02d:%02d:%02d ",
+    realtime->tm_hour, realtime->tm_min, realtime->tm_sec);
 
 /* read and calculate the amount of uptime */
 
@@ -83,7 +82,6 @@ char *sprint_uptime(void) {
   return buf;
 }
 
-void print_uptime(void)
-{
+void print_uptime(void) {
   printf("%s\n", sprint_uptime());
 }

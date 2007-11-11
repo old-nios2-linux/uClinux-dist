@@ -1,7 +1,7 @@
 /*
- *  $Id: forward.h,v 1.22 2003/07/01 20:23:51 andrei Exp $
+ *  $Id: forward.h,v 1.26 2004/11/22 22:51:17 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -53,9 +53,11 @@
 #endif
 
 
-struct socket_info* get_send_socket(union sockaddr_union* su, int proto);
+
+struct socket_info* get_send_socket(struct sip_msg* msg,
+									union sockaddr_union* su, int proto);
 struct socket_info* get_out_socket(union sockaddr_union* to, int proto);
-int check_self(str* host, unsigned short port);
+int check_self(str* host, unsigned short port, unsigned short proto);
 int forward_request( struct sip_msg* msg,  struct proxy_l* p, int proto);
 int update_sock_struct_from_via( union sockaddr_union* to,
 								 struct sip_msg* msg,
@@ -64,7 +66,7 @@ int update_sock_struct_from_via( union sockaddr_union* to,
 /* use src_ip, port=src_port if rport, via port if via port, 5060 otherwise */
 #define update_sock_struct_from_ip(  to, msg ) \
 	init_su((to), &(msg)->rcv.src_ip, \
-			(((msg)->via1->rport)||((msg)->msg_flags&&FL_FORCE_RPORT))? \
+			(((msg)->via1->rport)||((msg)->msg_flags&FL_FORCE_RPORT))? \
 							(msg)->rcv.src_port: \
 							((msg)->via1->port)?(msg)->via1->port: SIP_PORT )
 
@@ -78,7 +80,7 @@ int forward_reply( struct sip_msg* msg);
  *  to = destination,
  *  id - only used on tcp, it will force sending on connection "id" if id!=0 
  *       and the connection exists, else it will send to "to" 
- *       (usefull for sending replies on  the same connection as the request
+ *       (useful for sending replies on  the same connection as the request
  *       that generated them; use 0 if you don't want this)
  * returns: 0 if ok, -1 on error*/
 static inline int msg_send(	struct socket_info* send_sock, int proto,
@@ -87,7 +89,7 @@ static inline int msg_send(	struct socket_info* send_sock, int proto,
 {
 	
 	if (proto==PROTO_UDP){
-		if (send_sock==0) send_sock=get_send_socket(to, proto);
+		if (send_sock==0) send_sock=get_send_socket(0, to, proto);
 		if (send_sock==0){
 			LOG(L_ERR, "msg_send: ERROR: no sending socket found\n");
 			goto error;

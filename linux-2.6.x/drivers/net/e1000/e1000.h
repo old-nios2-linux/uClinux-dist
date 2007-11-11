@@ -59,14 +59,13 @@
 #include <linux/capability.h>
 #include <linux/in.h>
 #include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <net/pkt_sched.h>
 #include <linux/list.h>
 #include <linux/reboot.h>
-#ifdef NETIF_F_TSO
 #include <net/checksum.h>
-#endif
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
@@ -155,9 +154,6 @@ struct e1000_adapter;
 #define E1000_MNG_VLAN_NONE -1
 /* Number of packet split data buffers (not including the header buffer) */
 #define PS_PAGE_BUFFERS MAX_PS_BUFFERS-1
-
-/* only works for sizes that are powers of 2 */
-#define E1000_ROUNDUP(i, size) ((i) = (((i) + (size) - 1) & ~((size) - 1)))
 
 /* wrapper around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer */
@@ -254,6 +250,16 @@ struct e1000_adapter {
 	spinlock_t tx_queue_lock;
 #endif
 	atomic_t irq_sem;
+	unsigned int total_tx_bytes;
+	unsigned int total_tx_packets;
+	unsigned int total_rx_bytes;
+	unsigned int total_rx_packets;
+	/* Interrupt Throttle Rate */
+	uint32_t itr;
+	uint32_t itr_setting;
+	uint16_t tx_itr;
+	uint16_t rx_itr;
+
 	struct work_struct reset_task;
 	uint8_t fc_autoneg;
 
@@ -262,6 +268,7 @@ struct e1000_adapter {
 
 	/* TX */
 	struct e1000_tx_ring *tx_ring;      /* One per active queue */
+	unsigned int restart_queue;
 	unsigned long tx_queue_len;
 	uint32_t txd_cmd;
 	uint32_t tx_int_delay;
@@ -310,8 +317,6 @@ struct e1000_adapter {
 	uint64_t gorcl_old;
 	uint16_t rx_ps_bsize0;
 
-	/* Interrupt Throttle Rate */
-	uint32_t itr;
 
 	/* OS defined structs */
 	struct net_device *netdev;
@@ -328,16 +333,11 @@ struct e1000_adapter {
 	struct e1000_tx_ring test_tx_ring;
 	struct e1000_rx_ring test_rx_ring;
 
-
-	uint32_t *config_space;
 	int msg_enable;
-#ifdef CONFIG_PCI_MSI
 	boolean_t have_msi;
-#endif
+
 	/* to not mess up cache alignment, always add to the bottom */
-#ifdef NETIF_F_TSO
 	boolean_t tso_force;
-#endif
 	boolean_t smart_power_down;	/* phy smart power down */
 	boolean_t quad_port_a;
 	unsigned long flags;

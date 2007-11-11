@@ -9,9 +9,6 @@ DEFINES=
 LDLIBS+=-lresolv
 ADDLIB=
 
-# Seems like this is always needed for both glibc and uClibc
-GLIBCFIX=-Iinclude-glibc -include include-glibc/glibc-bugs.h
-
 #options if you compile with libc5, and without a bind>=4.9.4 libresolv
 # NOT AVAILABLE. Please, use libresolv.
 
@@ -19,7 +16,7 @@ GLIBCFIX=-Iinclude-glibc -include include-glibc/glibc-bugs.h
 # What a pity, all new gccs are buggy and -Werror does not work. Sigh.
 #CCOPT=-D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall -g -Werror
 CCOPT=-D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall -g
-CFLAGS:= $(GLIBCFIX) $(DEFINES) -DSOL_IPV6=41 -DSOL_ICMPV6=58 $(CFLAGS)
+CFLAGS=$(CCOPT) $(GLIBCFIX) $(DEFINES) 
 
 IPV4_TARGETS=tracepath ping clockdiff rdisc arping tftpd rarpd
 IPV6_TARGETS=tracepath6 traceroute6 ping6
@@ -57,7 +54,10 @@ ifneq ($(CONFIG_USER_IPUTILS_TRACEPATH6),y)
 TARGETS:=$(filter-out tracepath6, $(TARGETS))
 endif
 
-all: check-kernel $(TARGETS)
+LASTTAG:=`git-describe HEAD | sed -e 's/-.*//'`
+TAG:=`date +s%Y%m%d`
+
+all: $(TARGETS)
 
 tftpd: tftpd.o tftpsubs.o
 ping: ping.o ping_common.o
@@ -94,21 +94,20 @@ clean:
 	@$(MAKE) -C Modules clean
 	@$(MAKE) -C doc clean
 
-snapshot: clean
-	@if [ ! -e RELNOTES.xxyyzz ]; then echo "Where are RELNOTES?"; exit 1; fi
-	@if [ "`uname -n`" != "mops" ]; then echo "Not authorized to advance snapshot"; exit 1; fi
-	@if [ "`pwd`" != "/home/src/BH/hash/iputils" ]; then echo "Wrong place to do snapshot"; exit 1; fi
-	@if [ -e RELNOTES.bak ]; then echo "Not clean; check tree"; exit 1; fi
-	@cp RELNOTES RELNOTES.bak
-	@date "+[%y%m%d]" > RELNOTES
-	@cat RELNOTES.xxyyzz >> RELNOTES
-	@echo >> RELNOTES
-	@cat RELNOTES.bak >> RELNOTES
-	@date "+static char SNAPSHOT[] = \"%y%m%d\";" > SNAPSHOT.h
+snapshot:
+	@if [ "`uname -n`" != "berry" ]; then echo "Not authorized to advance snapshot"; exit 1; fi
+	@date "+[$(TAG)]" > RELNOTES.NEW
+	@echo >>RELNOTES.NEW
+	@git-log $(LASTTAG).. | git-shortlog >> RELNOTES.NEW
+	@echo >> RELNOTES.NEW
+	@cat RELNOTES >> RELNOTES.NEW
+	@mv RELNOTES.NEW RELNOTES
+	@date "+static char SNAPSHOT[] = \"$(TAG)\";" > SNAPSHOT.h
 	@$(MAKE) -C doc snapshot
-	@rm -f RELNOTES.xxyyzz RELNOTES.bak
-	@make man
-	@cd ..; tar c iputils | gzip -9c > `date +iputils-ss%y%m%d.tar.gz`
+	@$(MAKE) man
+	@git-commit -a -m "iputils-$(TAG)"
+	@git-tag -s -m "iputils-$(TAG)" $(TAG)
+	@git-tar-tree $(TAG) iputils-$(TAG) | bzip2 -9 > ../iputils-$(TAG).tar.bz2
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_IPUTILS_PING6 $(BINDIR)/ping6

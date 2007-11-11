@@ -49,11 +49,6 @@ static void ide_insw (unsigned long port, void *addr, u32 count)
 	insw(port, addr, count);
 }
 
-static u32 ide_inl (unsigned long port)
-{
-	return (u32) inl(port);
-}
-
 static void ide_insl (unsigned long port, void *addr, u32 count)
 {
 	insl(port, addr, count);
@@ -79,11 +74,6 @@ static void ide_outsw (unsigned long port, void *addr, u32 count)
 	outsw(port, addr, count);
 }
 
-static void ide_outl (u32 val, unsigned long port)
-{
-	outl(val, port);
-}
-
 static void ide_outsl (unsigned long port, void *addr, u32 count)
 {
 	outsl(port, addr, count);
@@ -94,12 +84,10 @@ void default_hwif_iops (ide_hwif_t *hwif)
 	hwif->OUTB	= ide_outb;
 	hwif->OUTBSYNC	= ide_outbsync;
 	hwif->OUTW	= ide_outw;
-	hwif->OUTL	= ide_outl;
 	hwif->OUTSW	= ide_outsw;
 	hwif->OUTSL	= ide_outsl;
 	hwif->INB	= ide_inb;
 	hwif->INW	= ide_inw;
-	hwif->INL	= ide_inl;
 	hwif->INSW	= ide_insw;
 	hwif->INSL	= ide_insl;
 }
@@ -121,11 +109,6 @@ static u16 ide_mm_inw (unsigned long port)
 static void ide_mm_insw (unsigned long port, void *addr, u32 count)
 {
 	__ide_mm_insw((void __iomem *) port, addr, count);
-}
-
-static u32 ide_mm_inl (unsigned long port)
-{
-	return (u32) readl((void __iomem *) port);
 }
 
 static void ide_mm_insl (unsigned long port, void *addr, u32 count)
@@ -153,11 +136,6 @@ static void ide_mm_outsw (unsigned long port, void *addr, u32 count)
 	__ide_mm_outsw((void __iomem *) port, addr, count);
 }
 
-static void ide_mm_outl (u32 value, unsigned long port)
-{
-	writel(value, (void __iomem *) port);
-}
-
 static void ide_mm_outsl (unsigned long port, void *addr, u32 count)
 {
 	__ide_mm_outsl((void __iomem *) port, addr, count);
@@ -170,12 +148,10 @@ void default_hwif_mmiops (ide_hwif_t *hwif)
 	   this one is controller specific! */
 	hwif->OUTBSYNC	= ide_mm_outbsync;
 	hwif->OUTW	= ide_mm_outw;
-	hwif->OUTL	= ide_mm_outl;
 	hwif->OUTSW	= ide_mm_outsw;
 	hwif->OUTSL	= ide_mm_outsl;
 	hwif->INB	= ide_mm_inb;
 	hwif->INW	= ide_mm_inw;
-	hwif->INL	= ide_mm_inl;
 	hwif->INSW	= ide_mm_insw;
 	hwif->INSL	= ide_mm_insl;
 }
@@ -589,51 +565,98 @@ int ide_wait_stat (ide_startstop_t *startstop, ide_drive_t *drive, u8 good, u8 b
 
 EXPORT_SYMBOL(ide_wait_stat);
 
+/**
+ *	ide_in_drive_list	-	look for drive in black/white list
+ *	@id: drive identifier
+ *	@drive_table: list to inspect
+ *
+ *	Look for a drive in the blacklist and the whitelist tables
+ *	Returns 1 if the drive is found in the table.
+ */
+
+int ide_in_drive_list(struct hd_driveid *id, const struct drive_list_entry *drive_table)
+{
+	for ( ; drive_table->id_model; drive_table++)
+		if ((!strcmp(drive_table->id_model, id->model)) &&
+		    (!drive_table->id_firmware ||
+		     strstr(id->fw_rev, drive_table->id_firmware)))
+			return 1;
+	return 0;
+}
+
+EXPORT_SYMBOL_GPL(ide_in_drive_list);
+
+/*
+ * Early UDMA66 devices don't set bit14 to 1, only bit13 is valid.
+ * We list them here and depend on the device side cable detection for them.
+ */
+static const struct drive_list_entry ivb_list[] = {
+	{ "QUANTUM FIREBALLlct10 05"	, "A03.0900"	},
+	{ NULL				, NULL		}
+};
+
 /*
  *  All hosts that use the 80c ribbon must use!
  *  The name is derived from upper byte of word 93 and the 80c ribbon.
  */
 u8 eighty_ninty_three (ide_drive_t *drive)
 {
-	if(HWIF(drive)->udma_four == 0)
-		return 0;
+	ide_hwif_t *hwif = drive->hwif;
+	struct hd_driveid *id = drive->id;
+	int ivb = ide_in_drive_list(id, ivb_list);
 
-	/* Check for SATA but only if we are ATA5 or higher */
-	if (drive->id->hw_config == 0 && (drive->id->major_rev_num & 0x7FE0))
+	if (hwif->cbl == ATA_CBL_PATA40_SHORT)
 		return 1;
-	if (!(drive->id->hw_config & 0x6000))
-		return 0;
-#ifndef CONFIG_IDEDMA_IVB
-	if(!(drive->id->hw_config & 0x4000))
-		return 0;
-#endif /* CONFIG_IDEDMA_IVB */
-	return 1;
-}
 
-EXPORT_SYMBOL(eighty_ninty_three);
+	if (ivb)
+		printk(KERN_DEBUG "%s: skipping word 93 validity check\n",
+				  drive->name);
+
+	if (hwif->cbl != ATA_CBL_PATA80 && !ivb)
+		goto no_80w;
+
+	if (ide_dev_is_sata(id))
+		return 1;
+
+	/*
+	 * FIXME:
+	 * - change master/slave IDENTIFY order
+	 * - force bit13 (80c cable present) check also for !ivb devices
+	 *   (unless the slave device is pre-ATA3)
+	 */
+#ifndef CONFIG_IDEDMA_IVB
+	if ((id->hw_config & 0x4000) || (ivb && (id->hw_config & 0x2000)))
+#else
+	if (id->hw_config & 0x6000)
+#endif
+		return 1;
+
+no_80w:
+	if (drive->udma33_warned == 1)
+		return 0;
+
+	printk(KERN_WARNING "%s: %s side 80-wire cable detection failed, "
+			    "limiting max speed to UDMA33\n",
+			    drive->name,
+			    hwif->cbl == ATA_CBL_PATA80 ? "drive" : "host");
+
+	drive->udma33_warned = 1;
+
+	return 0;
+}
 
 int ide_ata66_check (ide_drive_t *drive, ide_task_t *args)
 {
 	if ((args->tfRegister[IDE_COMMAND_OFFSET] == WIN_SETFEATURES) &&
 	    (args->tfRegister[IDE_SECTOR_OFFSET] > XFER_UDMA_2) &&
 	    (args->tfRegister[IDE_FEATURE_OFFSET] == SETFEATURES_XFER)) {
-#ifndef CONFIG_IDEDMA_IVB
-		if ((drive->id->hw_config & 0x6000) == 0) {
-#else /* !CONFIG_IDEDMA_IVB */
-		if (((drive->id->hw_config & 0x2000) == 0) ||
-		    ((drive->id->hw_config & 0x4000) == 0)) {
-#endif /* CONFIG_IDEDMA_IVB */
-			printk("%s: Speed warnings UDMA 3/4/5 is not "
-				"functional.\n", drive->name);
-			return 1;
-		}
-		if (!HWIF(drive)->udma_four) {
-			printk("%s: Speed warnings UDMA 3/4/5 is not "
-				"functional.\n",
-				HWIF(drive)->name);
+		if (eighty_ninty_three(drive) == 0) {
+			printk(KERN_WARNING "%s: UDMA speeds >UDMA33 cannot "
+					    "be set\n", drive->name);
 			return 1;
 		}
 	}
+
 	return 0;
 }
 
@@ -777,7 +800,7 @@ int ide_config_drive_speed (ide_drive_t *drive, u8 speed)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->ide_dma_check)	 /* check if host supports DMA */
-		hwif->ide_dma_host_off(drive);
+		hwif->dma_host_off(drive);
 #endif
 
 	/*
@@ -806,7 +829,7 @@ int ide_config_drive_speed (ide_drive_t *drive, u8 speed)
 		hwif->OUTB(drive->ctl | 2, IDE_CONTROL_REG);
 	hwif->OUTB(speed, IDE_NSECTOR_REG);
 	hwif->OUTB(SETFEATURES_XFER, IDE_FEATURE_REG);
-	hwif->OUTB(WIN_SETFEATURES, IDE_COMMAND_REG);
+	hwif->OUTBSYNC(drive, WIN_SETFEATURES, IDE_COMMAND_REG);
 	if ((IDE_CONTROL_REG) && (drive->quirk_list == 2))
 		hwif->OUTB(drive->ctl, IDE_CONTROL_REG);
 	udelay(1);
@@ -833,7 +856,7 @@ int ide_config_drive_speed (ide_drive_t *drive, u8 speed)
 	 */
 	for (i = 0; i < 10; i++) {
 		udelay(1);
-		if (OK_STAT((stat = hwif->INB(IDE_STATUS_REG)), DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT)) {
+		if (OK_STAT((stat = hwif->INB(IDE_STATUS_REG)), drive->ready_stat, BUSY_STAT|DRQ_STAT|ERR_STAT)) {
 			error = 0;
 			break;
 		}
@@ -854,9 +877,9 @@ int ide_config_drive_speed (ide_drive_t *drive, u8 speed)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (speed >= XFER_SW_DMA_0)
-		hwif->ide_dma_host_on(drive);
+		hwif->dma_host_on(drive);
 	else if (hwif->ide_dma_check)	/* check if host supports DMA */
-		hwif->ide_dma_off_quietly(drive);
+		hwif->dma_off_quietly(drive);
 #endif
 
 	switch(speed) {
@@ -907,6 +930,7 @@ static void __ide_set_handler (ide_drive_t *drive, ide_handler_t *handler,
 	hwgroup->handler	= handler;
 	hwgroup->expiry		= expiry;
 	hwgroup->timer.expires	= jiffies + timeout;
+	hwgroup->req_gen_timer = hwgroup->req_gen;
 	add_timer(&hwgroup->timer);
 }
 
@@ -947,6 +971,7 @@ void ide_execute_command(ide_drive_t *drive, task_ioreg_t cmd, ide_handler_t *ha
 	hwgroup->handler	= handler;
 	hwgroup->expiry		= expiry;
 	hwgroup->timer.expires	= jiffies + timeout;
+	hwgroup->req_gen_timer = hwgroup->req_gen;
 	add_timer(&hwgroup->timer);
 	hwif->OUTBSYNC(drive, cmd, IDE_COMMAND_REG);
 	/* Drive takes 400nS to respond, we must avoid the IRQ being
@@ -1066,12 +1091,12 @@ static void check_dma_crc(ide_drive_t *drive)
 {
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (drive->crc_count) {
-		(void) HWIF(drive)->ide_dma_off_quietly(drive);
+		drive->hwif->dma_off_quietly(drive);
 		ide_set_xfer_rate(drive, ide_auto_reduce_xfer(drive));
 		if (drive->current_speed >= XFER_SW_DMA_0)
 			(void) HWIF(drive)->ide_dma_on(drive);
 	} else
-		(void)__ide_dma_off(drive);
+		ide_dma_off(drive);
 #endif
 }
 
@@ -1112,6 +1137,9 @@ static void pre_reset(ide_drive_t *drive)
 	if (HWIF(drive)->pre_reset != NULL)
 		HWIF(drive)->pre_reset(drive);
 
+	if (drive->current_speed != 0xff)
+		drive->desired_speed = drive->current_speed;
+	drive->current_speed = 0xff;
 }
 
 /*

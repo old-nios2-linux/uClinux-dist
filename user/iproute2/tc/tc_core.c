@@ -23,23 +23,46 @@
 
 #include "tc_core.h"
 
-static __u32 t2us=1;
-static __u32 us2t=1;
 static double tick_in_usec = 1;
+static double clock_factor = 1;
 
-long tc_core_usec2tick(long usec)
+int tc_core_time2big(long time)
 {
-	return usec*tick_in_usec;
+	__u64 t = time;
+
+	t *= tick_in_usec;
+	return (t >> 32) != 0;
 }
 
-long tc_core_tick2usec(long tick)
+
+long tc_core_time2tick(long time)
+{
+	return time*tick_in_usec;
+}
+
+long tc_core_tick2time(long tick)
 {
 	return tick/tick_in_usec;
 }
 
+long tc_core_time2ktime(long time)
+{
+	return time * clock_factor;
+}
+
+long tc_core_ktime2time(long ktime)
+{
+	return ktime / clock_factor;
+}
+
 unsigned tc_calc_xmittime(unsigned rate, unsigned size)
 {
-	return tc_core_usec2tick(1000000*((double)size/rate));
+	return tc_core_time2tick(TIME_UNITS_PER_SEC*((double)size/rate));
+}
+
+unsigned tc_calc_xmitsize(unsigned rate, unsigned ticks)
+{
+	return ((double)rate*tc_core_tick2time(ticks))/TIME_UNITS_PER_SEC;
 }
 
 /*
@@ -50,6 +73,8 @@ int tc_calc_rtable(unsigned bps, __u32 *rtab, int cell_log, unsigned mtu,
 		   unsigned mpu)
 {
 	int i;
+	unsigned overhead = (mpu >> 8) & 0xFF;
+	mpu = mpu & 0xFF;
 
 	if (mtu == 0)
 		mtu = 2047;
@@ -61,25 +86,40 @@ int tc_calc_rtable(unsigned bps, __u32 *rtab, int cell_log, unsigned mtu,
 	}
 	for (i=0; i<256; i++) {
 		unsigned sz = (i<<cell_log);
+		if (overhead)
+			sz += overhead;
 		if (sz < mpu)
 			sz = mpu;
-		rtab[i] = tc_core_usec2tick(1000000*((double)sz/bps));
+		rtab[i] = tc_calc_xmittime(bps, sz);
 	}
 	return cell_log;
 }
 
 int tc_core_init()
 {
-	FILE *fp = fopen("/proc/net/psched", "r");
+	FILE *fp;
+	__u32 clock_res;
+	__u32 t2us;
+	__u32 us2t;
 
+	fp = fopen("/proc/net/psched", "r");
 	if (fp == NULL)
 		return -1;
 
-	if (fscanf(fp, "%08x%08x", &t2us, &us2t) != 2) {
+	if (fscanf(fp, "%08x%08x%08x", &t2us, &us2t, &clock_res) != 3) {
 		fclose(fp);
 		return -1;
 	}
 	fclose(fp);
-	tick_in_usec = (double)t2us/us2t;
+
+	/* compatibility hack: for old iproute binaries (ignoring
+	 * the kernel clock resolution) the kernel advertises a
+	 * tick multiplier of 1000 in case of nano-second resolution,
+	 * which really is 1. */
+	if (clock_res == 1000000000)
+		t2us = us2t;
+
+	clock_factor  = (double)clock_res / TIME_UNITS_PER_SEC;
+	tick_in_usec = (double)t2us / us2t * clock_factor;
 	return 0;
 }

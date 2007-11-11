@@ -34,6 +34,7 @@
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 #include <linux/mutex.h>
+#include <linux/jbd.h>
 
 #include "cluster/nodemanager.h"
 #include "cluster/heartbeat.h"
@@ -44,11 +45,6 @@
 #include "ocfs2_fs.h"
 #include "endian.h"
 #include "ocfs2_lockid.h"
-
-struct ocfs2_extent_map {
-	u32		em_clusters;
-	struct rb_root	em_extents;
-};
 
 /* Most user visible OCFS2 inodes will have very few pieces of
  * metadata, but larger files (including bitmaps, etc) must be taken
@@ -179,9 +175,9 @@ enum ocfs2_mount_options
 #define OCFS2_OSB_SOFT_RO	0x0001
 #define OCFS2_OSB_HARD_RO	0x0002
 #define OCFS2_OSB_ERROR_FS	0x0004
+#define OCFS2_DEFAULT_ATIME_QUANTUM	60
 
 struct ocfs2_journal;
-struct ocfs2_journal_handle;
 struct ocfs2_super
 {
 	struct task_struct *commit_task;
@@ -218,10 +214,12 @@ struct ocfs2_super
 	unsigned long osb_flags;
 
 	unsigned long s_mount_opt;
+	unsigned int s_atime_quantum;
 
 	u16 max_slots;
 	s16 node_num;
 	s16 slot_num;
+	s16 preferred_slot;
 	int s_sectsize_bits;
 	int s_clustersize;
 	int s_clustersize_bits;
@@ -283,7 +281,7 @@ struct ocfs2_super
 	/* Truncate log info */
 	struct inode			*osb_tl_inode;
 	struct buffer_head		*osb_tl_bh;
-	struct work_struct		osb_truncate_log_wq;
+	struct delayed_work		osb_truncate_log_wq;
 
 	struct ocfs2_node_map		osb_recovering_orphan_dirs;
 	unsigned int			*osb_orphan_wipes;
@@ -299,6 +297,26 @@ static inline int ocfs2_should_order_data(struct inode *inode)
 	if (OCFS2_SB(inode->i_sb)->s_mount_opt & OCFS2_MOUNT_DATA_WRITEBACK)
 		return 0;
 	return 1;
+}
+
+static inline int ocfs2_sparse_alloc(struct ocfs2_super *osb)
+{
+	if (osb->s_feature_incompat & OCFS2_FEATURE_INCOMPAT_SPARSE_ALLOC)
+		return 1;
+	return 0;
+}
+
+static inline int ocfs2_writes_unwritten_extents(struct ocfs2_super *osb)
+{
+	/*
+	 * Support for sparse files is a pre-requisite
+	 */
+	if (!ocfs2_sparse_alloc(osb))
+		return 0;
+
+	if (osb->s_feature_ro_compat & OCFS2_FEATURE_RO_COMPAT_UNWRITTEN)
+		return 1;
+	return 0;
 }
 
 /* set / clear functions because cluster events can make these happen
@@ -347,6 +365,11 @@ static inline int ocfs2_is_soft_readonly(struct ocfs2_super *osb)
 	return ret;
 }
 
+static inline int ocfs2_mount_local(struct ocfs2_super *osb)
+{
+	return (osb->s_feature_incompat & OCFS2_FEATURE_INCOMPAT_LOCAL_MOUNT);
+}
+
 #define OCFS2_IS_VALID_DINODE(ptr)					\
 	(!strcmp((ptr)->i_signature, OCFS2_INODE_SIGNATURE))
 
@@ -354,9 +377,9 @@ static inline int ocfs2_is_soft_readonly(struct ocfs2_super *osb)
 	typeof(__di) ____di = (__di);					\
 	ocfs2_error((__sb), 						\
 		"Dinode # %llu has bad signature %.*s",			\
-		(unsigned long long)(____di)->i_blkno, 7,		\
+		(unsigned long long)le64_to_cpu((____di)->i_blkno), 7, 	\
 		(____di)->i_signature);					\
-} while (0);
+} while (0)
 
 #define OCFS2_IS_VALID_EXTENT_BLOCK(ptr)				\
 	(!strcmp((ptr)->h_signature, OCFS2_EXTENT_BLOCK_SIGNATURE))
@@ -365,9 +388,9 @@ static inline int ocfs2_is_soft_readonly(struct ocfs2_super *osb)
 	typeof(__eb) ____eb = (__eb);					\
 	ocfs2_error((__sb), 						\
 		"Extent Block # %llu has bad signature %.*s",		\
-		(unsigned long long)(____eb)->h_blkno, 7,		\
+		(unsigned long long)le64_to_cpu((____eb)->h_blkno), 7,	\
 		(____eb)->h_signature);					\
-} while (0);
+} while (0)
 
 #define OCFS2_IS_VALID_GROUP_DESC(ptr)					\
 	(!strcmp((ptr)->bg_signature, OCFS2_GROUP_DESC_SIGNATURE))
@@ -376,9 +399,9 @@ static inline int ocfs2_is_soft_readonly(struct ocfs2_super *osb)
 	typeof(__gd) ____gd = (__gd);					\
 		ocfs2_error((__sb),					\
 		"Group Descriptor # %llu has bad signature %.*s",	\
-		(unsigned long long)(____gd)->bg_blkno, 7,		\
+		(unsigned long long)le64_to_cpu((____gd)->bg_blkno), 7, \
 		(____gd)->bg_signature);				\
-} while (0);
+} while (0)
 
 static inline unsigned long ino_from_blkno(struct super_block *sb,
 					   u64 blkno)
@@ -452,6 +475,49 @@ static inline u64 ocfs2_align_bytes_to_blocks(struct super_block *sb,
 static inline unsigned long ocfs2_align_bytes_to_sectors(u64 bytes)
 {
 	return (unsigned long)((bytes + 511) >> 9);
+}
+
+static inline unsigned int ocfs2_page_index_to_clusters(struct super_block *sb,
+							unsigned long pg_index)
+{
+	u32 clusters = pg_index;
+	unsigned int cbits = OCFS2_SB(sb)->s_clustersize_bits;
+
+	if (unlikely(PAGE_CACHE_SHIFT > cbits))
+		clusters = pg_index << (PAGE_CACHE_SHIFT - cbits);
+	else if (PAGE_CACHE_SHIFT < cbits)
+		clusters = pg_index >> (cbits - PAGE_CACHE_SHIFT);
+
+	return clusters;
+}
+
+/*
+ * Find the 1st page index which covers the given clusters.
+ */
+static inline pgoff_t ocfs2_align_clusters_to_page_index(struct super_block *sb,
+							u32 clusters)
+{
+	unsigned int cbits = OCFS2_SB(sb)->s_clustersize_bits;
+        pgoff_t index = clusters;
+
+	if (PAGE_CACHE_SHIFT > cbits) {
+		index = (pgoff_t)clusters >> (PAGE_CACHE_SHIFT - cbits);
+	} else if (PAGE_CACHE_SHIFT < cbits) {
+		index = (pgoff_t)clusters << (cbits - PAGE_CACHE_SHIFT);
+	}
+
+	return index;
+}
+
+static inline unsigned int ocfs2_pages_per_cluster(struct super_block *sb)
+{
+	unsigned int cbits = OCFS2_SB(sb)->s_clustersize_bits;
+	unsigned int pages_per_cluster = 1;
+
+	if (PAGE_CACHE_SHIFT < cbits)
+		pages_per_cluster = 1 << (cbits - PAGE_CACHE_SHIFT);
+
+	return pages_per_cluster;
 }
 
 #define ocfs2_set_bit ext2_set_bit

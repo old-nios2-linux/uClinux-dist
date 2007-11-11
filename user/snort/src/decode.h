@@ -566,7 +566,15 @@ struct enc_header {
 #define PKT_STATELESS        0x10000000  /* Packet has matched a stateless rule */
 #define PKT_INLINE_DROP      0x20000000
 #define PKT_OBFUSCATED       0x40000000  /* this packet has been obfuscated */
-#define PKT_LOGGED           0x80000000  /* this packet has been logged */
+#define PKT_NO_DETECT        0x80000000  /* this packet should not be preprocessed */
+
+#ifdef GRE
+    #ifndef IPPROTO_GRE
+        #define IPPROTO_GRE 47
+    #endif
+#endif
+
+
 /*  D A T A  S T R U C T U R E S  *********************************************/
 
 /* Start Token Ring Data Structures */
@@ -858,6 +866,66 @@ typedef struct _IPHdr
     struct in_addr ip_src;  /* source IP */
     struct in_addr ip_dst;  /* dest IP */
 }      IPHdr;
+
+#ifdef WIN32
+/* IPv6 address */
+#ifndef s6_addr
+struct in6_addr
+{
+    union
+    {
+        uint8_t u6_addr8[16];
+        uint16_t u6_addr16[8];
+        uint32_t u6_addr32[4];
+    } in6_u;
+#define s6_addr         in6_u.u6_addr8
+#define s6_addr16       in6_u.u6_addr16
+#define s6_addr32       in6_u.u6_addr32
+};
+#endif
+#endif
+
+typedef struct _IP6Hdr
+{
+    union
+    {
+        struct ip6_hdrctl
+        {
+            uint32_t ip6_un1_flow;   /* 4 bits version, 8 bits TC,
+                                        20 bits flow-ID */
+            uint16_t ip6_un1_plen;   /* payload length */
+            uint8_t  ip6_un1_nxt;    /* next header */
+            uint8_t  ip6_un1_hlim;   /* hop limit */
+        } ip6_un1;
+        uint8_t ip6_un2_vfc;       /* 4 bits version, top 4 bits tclass */
+    } ip6_ctlun;
+
+    struct in6_addr ip6_src;      /* source address */
+    struct in6_addr ip6_dst;      /* destination address */
+} IP6Hdr;
+
+#define ip6_vfc   ip6_ctlun.ip6_un2_vfc
+#define ip6_flow  ip6_ctlun.ip6_un1.ip6_un1_flow
+#define ip6_plen  ip6_ctlun.ip6_un1.ip6_un1_plen
+#define ip6_nxt   ip6_ctlun.ip6_un1.ip6_un1_nxt
+#define ip6_hlim  ip6_ctlun.ip6_un1.ip6_un1_hlim
+#define ip6_hops  ip6_ctlun.ip6_un1.ip6_un1_hlim
+
+/* Fragment header */
+typedef struct _IP6Frag
+{
+    uint8_t   ip6f_nxt;     /* next header */
+    uint8_t   ip6f_reserved;    /* reserved field */
+    uint16_t  ip6f_offlg;   /* offset, reserved, and flag */
+    uint32_t  ip6f_ident;   /* identification */
+} IP6Frag;
+
+
+typedef struct _ipv6_header_chain {
+    u_int8_t        next_header;
+    u_int8_t        length;
+} ipv6_header_chain;
+
 #ifdef _MSC_VER
   /* Visual C++ pragma to enable warning messages about nonstandard bit field type */
   #pragma warning( default : 4214 )
@@ -889,10 +957,12 @@ typedef struct _IPHdr
 #define GRE_SEQNO_FLAG    0x10
 #define GRE_SSR_FLAG      0x08   /* strict source route */
 
-typedef struct _GREHdr {
+typedef struct _GREHdr
+{
     u_int8_t flags;
     u_int8_t version;
     u_int16_t ether_type;
+
 } GREHdr;
 
 #endif
@@ -1099,6 +1169,10 @@ typedef struct _PPPoE_Tag
 #define URI_COUNT        5
 
 #define HTTPURI_PIPELINE_REQ 0x01
+
+#define HTTP_BUFFER_URI 0
+#define HTTP_BUFFER_CLIENT_BODY 1
+
 typedef struct _HttpUri
 {
     u_int8_t *uri;  /* static buffer for uri length */
@@ -1227,6 +1301,12 @@ typedef struct _DecoderFlags
     char drop_tcpopt_decode; /* Drop on alerts from decoder inconsistencies */
     char ipopt_decode;      /* alert on decoder inconsistencies */
     char drop_ipopt_decode; /* Drop on alerts from decoder inconsistencies */
+
+    /* To be moved to the frag preprocessor once it supports IPv6 */
+    char ipv6_bad_frag_pkt;
+    char bsd_icmp_frag;
+    char drop_bad_ipv6_frag;    
+
 } DecoderFlags;
 
 #define        ALERTMSG_LENGTH 256
@@ -1255,7 +1335,7 @@ void DecodeIP(u_int8_t *, const u_int32_t, Packet *);
 void DecodeARP(u_int8_t *, u_int32_t, Packet *);
 void DecodeEapol(u_int8_t *, u_int32_t, Packet *);
 void DecodeEapolKey(u_int8_t *, u_int32_t, Packet *);
-void DecodeIPV6(u_int8_t *, u_int32_t);
+void DecodeIPV6(u_int8_t *, u_int32_t, Packet *);
 void DecodeIPX(u_int8_t *, u_int32_t);
 void DecodeEthLoopback(u_int8_t *, u_int32_t);
 void DecodeTCP(u_int8_t *, const u_int32_t, Packet *);

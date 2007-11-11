@@ -58,6 +58,7 @@ int	prebuflimit;
 int	lcdfd = -1;
 int	gotsigusr1;
 char	key[128];
+static int onlytags;
 
 
 /*
@@ -290,6 +291,18 @@ void mkstring(char *str, char *buf, int size)
 
 /****************************************************************************/
 
+static void displaytags(void)
+{
+	if (mp3_gottag) {
+		printf("    Title:    %s\n", mp3_title);
+		printf("    Artist:   %s\n", mp3_artist);
+		printf("    Album:    %s\n", mp3_album );
+		printf("    Year:     %s\n", mp3_year);
+		printf("    Comments: %s\n", mp3_comments);
+		printf("    Genre:    %s\n", mp3_genre);
+	}
+}
+
 /*
  *	Get TAG info from mp3 file, if it is present. No point doing a
  *	fatal exit on errors, just assume no tag info is present.
@@ -326,6 +339,8 @@ void getmp3taginfo(void)
 		genre_table[mp3_tag.genre];
 
 	mp3_gottag = 1;
+	if (onlytags)
+		displaytags();
 }
 
 /****************************************************************************/
@@ -355,14 +370,7 @@ void printmp3info(void)
 	printf("    Decoding: Channels=%d Quality=%d Frequency=%dHz\n",
 		mps->dec_channels, mps->dec_quality, mps->dec_frequency ); 
 
-	if (mp3_gottag) {
-		printf("    Title:    %s\n", mp3_title);
-		printf("    Artist:   %s\n", mp3_artist);
-		printf("    Album:    %s\n", mp3_album );
-		printf("    Year:     %s\n", mp3_year);
-		printf("    Comments: %s\n", mp3_comments);
-		printf("    Genre:    %s\n", mp3_genre);
-	}
+	displaytags();
 }
 
 /****************************************************************************/
@@ -654,11 +662,12 @@ void flushpcm(int fd)
 
 void usage(int rc)
 {
-	printf("usage: mp3play [-hmvqz8RPTZ] [-g <quality>] [-s <time>] "
+	printf("usage: mp3play [-hmviqz8RPTZ] [-g <quality>] [-s <time>] "
 		"[-d <device>] [-w <filename>] [-B <prebuf>] "
 		"[-l <line> [-t]] mp3-files...\n\n"
 		"\t\t-h            this help\n"
 		"\t\t-v            verbose stdout output\n"
+		"\t\t-i            display file tags and exit\n"
 		"\t\t-q            quiet (don't print title)\n"
 		"\t\t-m            mix both channels (mono)\n"
 		"\t\t-8            play 8 bit samples\n"
@@ -708,8 +717,9 @@ int main(int argc, char *argv[])
 	prebuflimit = 64000;
 	device = "/dev/dsp";
 	dsphw = 1;
+	onlytags = 0;
 
-	while ((c = getopt(argc, argv, "?hmvqzt:8RZPTg:s:d:w:l:B:V")) >= 0) {
+	while ((c = getopt(argc, argv, "?himvqzt:8RZPTg:s:d:w:l:B:V")) >= 0) {
 		switch (c) {
 		case 'V':
 			printf("%s version 1.0\n", argv[0]);
@@ -780,6 +790,9 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			break;
+		case 'i':
+			onlytags = 1;
+			break;
 		case 'h':
 		case '?':
 			usage(0);
@@ -820,7 +833,7 @@ int main(int argc, char *argv[])
 
 	/* Make ourselves the top priority process! */
 	setpriority(PRIO_PROCESS, 0, -20);
-	srandom(time(NULL));
+	srandom(time(NULL) ^ getpid());
 
 	/* Open the audio playback device */
 	if ((dspfd = open(device, (O_WRONLY | O_CREAT | O_TRUNC), 0660)) < 0) {
@@ -887,6 +900,8 @@ nextfile:
 	}
 
 	getmp3taginfo();
+	if (onlytags)
+		return 0;
 
 	/* Get first part of the stream into a ram buffer */
 	getnextbuffer();

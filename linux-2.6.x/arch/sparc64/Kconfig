@@ -19,6 +19,18 @@ config SPARC64
 	  SPARC64 ports; its web page is available at
 	  <http://www.ultralinux.org/>.
 
+config GENERIC_TIME
+	bool
+	default y
+
+config GENERIC_CMOS_UPDATE
+	bool
+	default y
+
+config GENERIC_CLOCKEVENTS
+	bool
+	default y
+
 config 64BIT
 	def_bool y
 
@@ -26,7 +38,15 @@ config MMU
 	bool
 	default y
 
-config TIME_INTERPOLATION
+config QUICKLIST
+	bool
+	default y
+
+config STACKTRACE_SUPPORT
+	bool
+	default y
+
+config LOCKDEP_SUPPORT
 	bool
 	default y
 
@@ -34,9 +54,23 @@ config ARCH_MAY_HAVE_PC_FDC
 	bool
 	default y
 
+config ARCH_HAS_ILOG2_U32
+	bool
+	default n
+
+config ARCH_HAS_ILOG2_U64
+	bool
+	default n
+
 config AUDIT_ARCH
 	bool
 	default y
+
+config ARCH_NO_VIRT_TO_BUS
+	def_bool y
+
+config OF
+	def_bool y
 
 choice
 	prompt "Kernel page size"
@@ -84,6 +118,15 @@ config SECCOMP
 
 source kernel/Kconfig.hz
 
+config HOTPLUG_CPU
+	bool "Support for hot-pluggable CPUs"
+	depends on SMP
+	select HOTPLUG
+	---help---
+	  Say Y here to experiment with turning CPUs off and on.  CPUs
+	  can be controlled through /sys/devices/system/cpu/cpu#.
+	  Say N if you want to disable CPU hotplug.
+
 source "init/Kconfig"
 
 config SYSVIPC_COMPAT
@@ -96,6 +139,8 @@ config GENERIC_HARDIRQS
 	default y
 
 menu "General machine setup"
+
+source "kernel/time/Kconfig"
 
 config SMP
 	bool "Symmetric multi-processing support"
@@ -120,23 +165,11 @@ config SMP
 
 	  If you don't know what to do here, say N.
 
-config PREEMPT
-	bool "Preemptible Kernel"
-	help
-	  This option reduces the latency of the kernel when reacting to
-	  real-time or interactive events by allowing a low priority process to
-	  be preempted even if it is in kernel mode executing a system call.
-	  This allows applications to run more reliably even when the system is
-	  under load.
-
-	  Say Y here if you are building a kernel for a desktop, embedded
-	  or real-time system.  Say N if you are unsure.
-
 config NR_CPUS
-	int "Maximum number of CPUs (2-64)"
-	range 2 64
+	int "Maximum number of CPUs (2-1024)"
+	range 2 1024
 	depends on SMP
-	default "32"
+	default "64"
 
 source "drivers/cpufreq/Kconfig"
 
@@ -210,15 +243,9 @@ config ARCH_SPARSEMEM_ENABLE
 
 config ARCH_SPARSEMEM_DEFAULT
 	def_bool y
-
-config LARGE_ALLOCS
-	def_bool y
+	select SPARSEMEM_STATIC
 
 source "mm/Kconfig"
-
-config GENERIC_ISA_DMA
-	bool
-	default y
 
 config ISA
 	bool
@@ -297,8 +324,15 @@ config SUN_IO
 	bool
 	default y
 
+config SUN_LDOMS
+	bool "Sun Logical Domains support"
+	help
+	  Say Y here is you want to support virtual devices via
+	  Logical Domains.
+
 config PCI
 	bool "PCI support"
+	select ARCH_SUPPORTS_MSI
 	help
 	  Find out whether you have a PCI motherboard. PCI is the name of a
 	  bus system, i.e. the way the CPU talks to the other stuff inside
@@ -311,8 +345,10 @@ config PCI
 	  doesn't.
 
 config PCI_DOMAINS
-	bool
-	default PCI
+	def_bool PCI
+
+config PCI_SYSCALL
+	def_bool PCI
 
 source "drivers/pci/Kconfig"
 
@@ -386,6 +422,17 @@ config SCHED_SMT
 	  SMT scheduler support improves the CPU scheduler's decision making
 	  when dealing with UltraSPARC cpus at a cost of slightly increased
 	  overhead in some places. If unsure say N here.
+
+config SCHED_MC
+	bool "Multi-core scheduler support"
+	depends on SMP
+	default y
+	help
+	  Multi-core scheduler support improves the CPU scheduler's decision
+	  making when dealing with multi-core CPU chips at a cost of slightly
+	  increased overhead in some places. If unsure say N here.
+
+source "kernel/Kconfig.preempt"
 
 config CMDLINE_BOOL
 	bool "Default bootloader kernel arguments"

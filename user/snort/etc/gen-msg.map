@@ -127,6 +127,10 @@
 116 || 253 || snort_decoder: WARNING: ICMP Original IP Payload < 64 bits!"
 116 || 254 || snort_decoder: WARNING: ICMP Origianl IP Payload > 576 bytes!"
 116 || 255 || snort_decoder: WARNING: ICMP Original IP Fragmented and Offset Not 0!"
+116 || 270 || snort_decoder: IPV6 packet exceeded TTL limit
+116 || 271 || snort_decoder: IPv6 header claims to not be IPv6
+116 || 272 || snort_decoder: IPV6 truncated extension header
+116 || 273 || snort_decoder: IPV6 truncated header
 117 || 1 || spp_portscan2: Portscan detected!
 118 || 1 || spp_conversation: Bad IP protocol!
 119 || 1 || http_inspect: ASCII ENCODING
@@ -187,6 +191,8 @@
 123 || 6 || frag3: Bad fragment size, packet size is negative
 123 || 7 || frag3: Bad fragment size, packet size is greater than 65536
 123 || 8 || frag3: Fragmentation overlap
+123 || 9 || frag3: IPv6 BSD mbufs remote kernel buffer overflow
+123 || 10 || frag3: Bogus fragmentation packet. Possible BSD attack
 124 || 1 || smtp: Attempted command buffer overflow
 124 || 2 || smtp: Attempted data header buffer overflow
 124 || 3 || smtp: Attempted response buffer overflow

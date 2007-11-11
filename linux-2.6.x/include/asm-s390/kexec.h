@@ -26,15 +26,13 @@
 
 /* Maximum address we can use for the control pages */
 /* Not more than 2GB */
-#define KEXEC_CONTROL_MEMORY_LIMIT (1<<31)
+#define KEXEC_CONTROL_MEMORY_LIMIT (1UL<<31)
 
 /* Allocate one page for the pdp and the second for the code */
 #define KEXEC_CONTROL_CODE_SIZE 4096
 
 /* The native architecture */
 #define KEXEC_ARCH KEXEC_ARCH_S390
-
-#define MAX_NOTE_BYTES 1024
 
 /* Provide a dummy definition to avoid build failures. */
 static inline void crash_setup_regs(struct pt_regs *newregs,

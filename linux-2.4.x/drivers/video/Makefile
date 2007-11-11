@@ -149,6 +149,7 @@ obj-$(CONFIG_FB_E1356)            += epson1356fb.o
 obj-$(CONFIG_FB_PVR2)             += pvr2fb.o
 obj-$(CONFIG_FB_VOODOO1)          += sstfb.o
 obj-$(CONFIG_FB_MC68X328)         += mc68x328fb.o
+obj-$(CONFIG_FB_MC68X328)         += mc68x328lcd.o
 obj-$(CONFIG_FB_MQ1100)           += mq1100.o fbgen.o
 
 # ATTENTION! The implementation of the driver for the EPSON S1D13706

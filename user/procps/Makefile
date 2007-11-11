@@ -1,292 +1,320 @@
-# Makefile for procps.  Chuck Blake.
-# Portions of this are highly dependent upon features specific to GNU make
+# procps Makefile
+# Albert Cahalan, 2002-2004
+#
+# Recursive make is considered harmful:
+# http://google.com/search?q=%22recursive+make+considered+harmful%22
+#
+# For now this Makefile uses explicit dependencies. The project
+# hasn't grown big enough to need something complicated, and the
+# dependency tracking files are an ugly annoyance.
+#
+# This file includes */module.mk files which add on to variables:
+# FOO += bar/baz
+#
+#
+# Set (or uncomment) SKIP if you wish to avoid something.
+# For example, you may prefer the /bin/kill from util-linux or bsdutils.
 
-export PREFIX     =  #proc# prefix for program names
 
-export DESTDIR    = /
-export MANDIR     =  /usr/man
-export MAN1DIR    =  $(DESTDIR)$(MANDIR)/man1
-export MAN5DIR    =  $(DESTDIR)$(MANDIR)/man5
-export MAN8DIR    =  $(DESTDIR)$(MANDIR)/man8
-export BINDIR     =  $(DESTDIR)/bin
-export SBINDIR    =  $(DESTDIR)/sbin
-export XBINDIR    =  $(DESTDIR)/usr/X11R6/bin
-export USRBINDIR  =  $(DESTDIR)/bin
-export PROCDIR    =  $(DESTDIR)/bin# /usr/proc/bin for Solaris devotees
-export APPLNK     =  $(DESTDIR)/etc/X11/applnk/Utilities
-export OWNERGROUP =  --owner 0 --group 0
-export INSTALLBIN =  install --mode a=rx --strip
-export INSTALLSCT =  install --mode a=rx
-export INSTALLMAN =  install --mode a=r
+VERSION      := 3
+SUBVERSION   := 2
+MINORVERSION := 7
+TARVERSION   := $(VERSION).$(SUBVERSION).$(MINORVERSION)
 
-ALLPROG    = kill oldps uptime tload free w top vmstat watch skill snice pgrep pkill sysctl
-GDBPROGS := $(ALLPROG:%=%.gdb)
+############ vars
 
-BPROG      =  #					-> BINDIR
+# so you can disable them or choose alternates
+ldconfig := ldconfig
+ln_f     := ln -f
+ln_sf    := ln -sf
+install  := install -D --owner 0 --group 0
+
+# Lame x86-64 /lib64 and /usr/lib64 abomination:
+lib64    := lib$(shell [ -d /lib64 ] && echo 64)
+
+usr/bin                  := $(DESTDIR)/usr/bin/
+bin                      := $(DESTDIR)/bin/
+sbin                     := $(DESTDIR)/sbin/
+usr/proc/bin             := $(DESTDIR)/usr/bin/
+man1                     := $(DESTDIR)/usr/share/man/man1/
+man5                     := $(DESTDIR)/usr/share/man/man5/
+man8                     := $(DESTDIR)/usr/share/man/man8/
+lib                      := $(DESTDIR)/$(lib64)/
+usr/lib                  := $(DESTDIR)/usr/$(lib64)/
+usr/include              := $(DESTDIR)/usr/include/
+
+#SKIP     := $(bin)kill $(man1)kill.1
+
+#BINFILES := $(usr/bin)uptime $(usr/bin)tload $(usr/bin)free $(usr/bin)w \
+#            $(usr/bin)top $(usr/bin)vmstat $(usr/bin)watch $(usr/bin)skill \
+#            $(usr/bin)snice $(bin)kill $(sbin)sysctl $(usr/bin)pmap \
+#            $(usr/proc/bin)pgrep $(usr/proc/bin)pkill $(usr/bin)slabtop \
+#            $(usr/proc/bin)pwdx
+
+BINFILES  :=
 ifdef CONFIG_USER_PROCPS_KILL
-BPROG     +=  kill
+BINFILES  += $(bin)kill
 endif
-UPROG      =  # -> USRBINDIR
 ifdef CONFIG_USER_PROCPS_UPTIME
-UPROG     +=  uptime
+BINFILES  += $(usr/bin)uptime
 endif
 ifdef CONFIG_USER_PROCPS_TLOAD
-UPROG     +=  tload
+BINFILES  += $(usr/bin)tload
 endif
 ifdef CONFIG_USER_PROCPS_FREE
-UPROG     +=  free
+BINFILES  += $(usr/bin)free
 endif
 ifdef CONFIG_USER_PROCPS_W
-UPROG     +=  w
+BINFILES  += $(usr/bin)w
 endif
 ifdef CONFIG_USER_PROCPS_TOP
-UPROG     +=  top
+BINFILES  += $(usr/bin)top
 endif
 ifdef CONFIG_USER_PROCPS_VMSTAT
-UPROG     +=  vmstat
+BINFILES  += $(usr/bin)vmstat
 endif
 ifdef CONFIG_USER_PROCPS_WATCH
-UPROG     +=  watch
+BINFILES  += $(usr/bin)watch
 endif
 ifdef CONFIG_USER_PROCPS_SKILL
-UPROG     +=  skill
+BINFILES  += $(usr/bin)skill
 endif
 ifdef CONFIG_USER_PROCPS_SNICE
-UPROG     +=  snice
+BINFILES  += $(usr/bin)snice
 endif
-PPROG      =  # -> PROCDIR
 ifdef CONFIG_USER_PROCPS_PGREP
-PPROG     +=  pgrep
+BINFILES  += $(usr/proc/bin)pgrep
 endif
 ifdef CONFIG_USER_PROCPS_PKILL
-PPROG     +=  pkill
+BINFILES  += $(usr/proc/bin)pkill
 endif
-SPROG      =
 ifdef CONFIG_USER_PROCPS_SYSCTL
-SPROG     +=  sysctl
-endif
-MAN1       =  oldps.1 uptime.1 tload.1 free.1 w.1 top.1 watch.1 skill.1 kill.1 snice.1 pgrep.1 pkill.1
-MAN5       =  sysctl.conf.5
-MAN8       =  vmstat.8 sysctl.8 # psupdate.8
-DESKTOP    =  top.desktop
-XSCPT      =  XConsole # -> XBINDIR
-
-SUBDIRS    =  # sub-packages to build/install
-ifdef CONFIG_USER_PROCPS_PS
-SUBDIRS   +=  ps
+BINFILES  += $(sbin)sysctl
 endif
 
-# easy to command-line override
-#export INCDIRS    =  -I/usr/include/ncurses -I/usr/X11R6/include
-#INCDIRS += -I$(ROOTDIR)/glibc/build/ncurses/include
+MANFILES := $(man1)uptime.1 $(man1)tload.1 $(man1)free.1 $(man1)w.1 \
+            $(man1)top.1 $(man1)watch.1 $(man1)skill.1 $(man1)kill.1 \
+            $(man1)snice.1 $(man1)pgrep.1 $(man1)pkill.1 $(man1)pmap.1 \
+            $(man5)sysctl.conf.5 $(man8)vmstat.8 $(man8)sysctl.8 \
+            $(man1)slabtop.1 $(man1)pwdx.1
 
-#export CC         =  gcc #-ggdb # this gets compiling and linking :-)
-#export OPT        =  -O3
-export CFLAGS     +=  -D_GNU_SOURCE $(OPT) -I$(shell pwd) $(INCDIRS) -Wall -Wno-unused
+TARFILES := AUTHORS BUGS NEWS README TODO COPYING COPYING.LIB \
+            Makefile procps.lsm procps.spec v t README.top CodingStyle \
+            sysctl.conf minimal.c $(notdir $(MANFILES)) dummy.c \
+            uptime.c tload.c free.c w.c top.c vmstat.c watch.c skill.c \
+            sysctl.c pgrep.c top.h pmap.c slabtop.c pwdx.c
 
-ifndef CONFIG_UCLINUX
-export SHARED     =  y# build/install both a static and ELF shared library
+# Stuff (tests, temporary hacks, etc.) left out of the standard tarball
+# plus the top-level Makefile to make it work stand-alone.
+_TARFILES := Makefile
+
+#CURSES := -lncurses
+
+# This seems about right for the dynamic library stuff.
+# Something like this is probably needed to make the SE Linux
+# library loading not conflict with embedded systems stuff.
+#
+#ifeq ($(SHARED),1)
+#ldl := -ldl
+#LIBTYPE := -DSHAREDLIB
+#else
+#LIBTYPE := -DSTATICLIB
+#endif
+
+# Preprocessor flags.
+PKG_CPPFLAGS := -D_GNU_SOURCE -I proc
+#CPPFLAGS     := -I/usr/include/ncurses
+ALL_CPPFLAGS := $(PKG_CPPFLAGS) $(CPPFLAGS)
+
+# Left out -Wconversion due to noise in glibc headers.
+# Left out -Wunreachable-code and -Wdisabled-optimization
+# because gcc spews many useless warnings with them.
+#
+# Since none of the PKG_CFLAGS things are truly required
+# to compile procps, they might best be moved to CFLAGS.
+# On the other hand, they aren't normal -O -g things either.
+#
+# Note that -O2 includes -fomit-frame-pointer only if the arch
+# doesn't lose some debugging ability.
+#
+PKG_CFLAGS   := -fno-common -ffast-math \
+  -W -Wall -Wshadow -Wcast-align -Wredundant-decls \
+  -Wbad-function-cast -Wcast-qual -Wwrite-strings -Waggregate-return \
+  -Wstrict-prototypes -Wmissing-prototypes
+# Note that some stuff below is conditional on CFLAGS containing
+# an option that starts with "-g". (-g, -g2, -g3, -ggdb, etc.)
+CFLAGS       := -O2 -s
+CFLAGS       += -DTINY_TCAP
+ALL_CFLAGS   := $(PKG_CFLAGS) $(CFLAGS)
+
+PKG_LDFLAGS  := -Wl,-warn-common
+LDFLAGS      :=
+ALL_LDFLAGS  := $(PKG_LDFLAGS) $(LDFLAGS)
+
+############ Add some extra flags if gcc allows
+
+ifneq ($(MAKECMDGOALS),clean)
+ifneq ($(MAKECMDGOALS),tar)  
+ifneq ($(MAKECMDGOALS),extratar)
+ifneq ($(MAKECMDGOALS),beta)
+
+# Unlike the kernel one, this check_gcc goes all the way to
+# producing an executable. There might be a -m64 that works
+# until you go looking for a 64-bit curses library.
+check_gcc = $(shell if $(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) dummy.c $(ALL_LDFLAGS) $(1) -o /dev/null $(CURSES) > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi ;)
+
+# Be 64-bit if at all possible. In a cross-compiling situation, one may
+# do "make m64=-m32 lib64=lib" to produce 32-bit executables. DO NOT
+# attempt to use a 32-bit executable on a 64-bit kernel. Packagers MUST
+# produce separate executables for ppc and ppc64, s390 and s390x,
+# i386 and x86-64, mips and mips64, sparc and sparc64, and so on.
+# Failure to do so will cause data corruption.
+m64 := $(call check_gcc,-m64,$(call check_gcc,-mabi=64,))
+ALL_CFLAGS += $(m64)
+
+ALL_CFLAGS += $(call check_gcc,-Wdeclaration-after-statement,)
+ALL_CFLAGS += $(call check_gcc,-Wpadded,)
+ALL_CFLAGS += $(call check_gcc,-Wstrict-aliasing,)
+
+# Adding -fno-gcse might be good for those files which
+# use computed goto.
+#ALL_CFLAGS += $(call check_gcc,-fno-gcse,)
+
+# if not debugging, enable things that could confuse gdb
+ifeq (,$(findstring -g,$(filter -g%,$(CFLAGS))))
+ALL_CFLAGS += $(call check_gcc,-fweb,)
+ALL_CFLAGS += $(call check_gcc,-frename-registers,)
+ALL_CFLAGS += $(call check_gcc,-fomit-frame-pointer,)
 endif
-export SHLIBDIR   =  $(DESTDIR)/lib# where to install the shared library
 
-export LDFLAGS    +=  -Wl,-warn-common #-s	recommended for ELF systems
-#LDFLAGS    =  -qmagic -s#		recommended for a.out systems
-#LDFLAGS    =  -Xlinker -qmagic -s#	older a.out systems may need this
-#LDFLAGS    =  -N -s#			still older a.out systems use this
+# in case -O3 is enabled, avoid bloat
+ALL_CFLAGS += $(call check_gcc,-fno-inline-functions,)
 
-#BFD_CAPABLE = -DBFD_CAPABLE
-#AOUT_CAPABLE = #-DAOUT_CAPABLE 
-#ELF_CAPABLE = #-DELF_CAPABLE
-
-#LIBBFD = -lbfd -liberty
-LIBCURSES  =  -lncurses# watch is the only thing that needs this
-#LIBCURSES  =  -lcurses -ltermcap# BSD Curses requires termcap
-LIBTERMCAP =  -lncurses# provides perfectly good termcap support
-#LIBTERMCAP =  -ltermcap
-EXTRALIBS  =  # -lshadow
-
-ifeq ($(CONFIG_LIBCDIR),uClibc)
-CFLAGS += -DTINY_TCAP
-LIBTERMCAP :=
-TOPOBJS = tinytcap.o
+endif
+endif
+endif
 endif
 
-W_SHOWFROM =  -DW_SHOWFROM# show remote host users are logged in from.
+############ misc.
 
-#----------------------------------------------------#
-# End of user-configurable portion of the Makefile.  #
-# You should not need to modify anything below this. #
-#----------------------------------------------------#
-BUILD = $(BPROG) $(UPROG) $(PPROG) $(SPROG) $(SUBDIRS) $(DESKTOP)
+# free.c pmap.c sysctl.c uptime.c vmstat.c watch.c pgrep.c skill.c tload.c top.c w.c
+# utmp.c oldtop.c tmp-junk.c minimal.c
 
-# BUILD LIBRARIES + PROGRAMS
-all: $(BUILD)
+.SUFFIXES:
+.SUFFIXES: .a .o .c .s .h
 
-# INSTALL PROGRAMS + DOCS
-install: $(patsubst %,install_%,$(BUILD) $(XSCPT) $(MAN1) $(MAN5) $(MAN8))
-ifdef SHARED
-	install $(OWNERGROUP) --mode a=rx $(LIB_TGT) $(SHLIBDIR)
-endif
+.PHONY: all clean do_all install tar extratar beta
 
-# INSTALL LIBRARIES + HEADERS (OPTIONAL)
-libinstall:
-	$(MAKE) -C proc install $(LIBPROCPASS)
+ALL := $(notdir $(BINFILES))
+
+CLEAN := $(notdir $(BINFILES))
+
+DIRS :=
+
+INSTALL := $(BINFILES) $(MANFILES)
+
+# want this rule first, use := on ALL, and ALL not filled in yet
+all: do_all
+
+-include */module.mk
+
+do_all:    $(ALL)
+
+junk := DEADJOE *~ *.o core gmon.out
+
+# Remove $(junk) from all $(DIRS)
+CLEAN += $(junk) $(foreach dir,$(DIRS),$(addprefix $(dir), $(junk)))
+
+##########
+# not maintained because it isn't really needed:
+#
+#SRC :=
+#OBJ := $(patsubst %.c,%.o, $(filter %.c,$(SRC)))
+#
+#ifneq ($(MAKECMDGOALS),clean)
+#-include $(OBJ:.o=.d)
+#endif
+#
+#%.d: %.c
+#	depend.sh $(ALL_CPPFLAGS) $(ALL_CFLAGS) $< > $@
+############
+
+# don't want to type "make procps-$(TARVERSION).tar.gz"
+tar: $(TARFILES)
+	mkdir procps-$(TARVERSION)
+	(tar cf - $(TARFILES)) | (cd procps-$(TARVERSION) && tar xf -)
+	tar cf procps-$(TARVERSION).tar procps-$(TARVERSION)
+	gzip -9 procps-$(TARVERSION).tar
+
+extratar: $(_TARFILES)
+	mkdir procps-$(TARVERSION)
+	(tar cf - $(_TARFILES)) | (cd procps-$(TARVERSION) && tar xf -)
+	tar cf extra-$(TARVERSION).tar procps-$(TARVERSION)
+	gzip -9 extra-$(TARVERSION).tar
+
+beta: $(TARFILES) $(_TARFILES)
+	mkdir beta-$(TARVERSION)
+	(tar cf - $(TARFILES) $(_TARFILES)) | (cd beta-$(TARVERSION) && tar xf -)
+	tar cf beta-$(TARVERSION).tar beta-$(TARVERSION)
+	gzip -9 beta-$(TARVERSION).tar
 
 romfs:
-	if [ -f proc/libproc.so ]; then $(ROMFSINST) proc/libproc.so /lib/libproc.so.2.0.7; fi
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_FREE $(USRBINDIR)/free
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_KILL $(BINDIR)/kill
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_PGREP $(USRBINDIR)/pgrep
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_PKILL $(USRBINDIR)/pkill
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_PS ps/ps $(USRBINDIR)/ps
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_SKILL $(USRBINDIR)/skill
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_SNICE $(USRBINDIR)/snice
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_SYSCTL $(USRBINDIR)/sysctl
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_TLOAD $(USRBINDIR)/tload
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_TOP $(USRBINDIR)/top
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_UPTIME $(USRBINDIR)/uptime
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_VMSTAT $(USRBINDIR)/vmstat
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_W $(USRBINDIR)/w
-	$(ROMFSINST) -e CONFIG_USER_PROCPS_WATCH $(USRBINDIR)/watch
+	if [ -f proc/libproc-3.2.7.so ]; then $(ROMFSINST) proc/libproc-3.2.7.so /lib/libproc-3.2.7.so; fi
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_FREE $(bin)/free
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_KILL $(bin)/kill
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_PGREP $(bin)/pgrep
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_PKILL $(bin)/pkill
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_PS ps/ps $(bin)/ps
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_SKILL $(bin)/skill
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_SNICE $(bin)/snice
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_SYSCTL $(bin)/sysctl
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_TLOAD $(bin)/tload
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_TOP $(bin)/top
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_UPTIME $(bin)/uptime
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_VMSTAT $(bin)/vmstat
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_W $(bin)/w
+	$(ROMFSINST) -e CONFIG_USER_PROCPS_WATCH $(bin)/watch
 
 clean:
-	$(RM) -f $(OBJ) $(ALLPROG) $(GDBPROGS) \
-	      proc/signames.h proc/.depend
-	for i in proc $(SUBDIRS); do $(MAKE) -C $$i clean ; done
+	rm -f $(CLEAN)
 
-distclean: clean
-	for i in proc $(SUBDIRS); do $(MAKE) -C $$i clean; done
-	$(RM) -f $(OBJ) $(BPROG) $(UPROG) $(SPROG) \
-	      proc/signames.h proc/.depend
+###### install
 
+$(BINFILES) : all
+	$(install) --mode a=rx $(notdir $@) $@
 
-#-----------------------------------------------------#
-# End of user-callable make targets.                  #
-# You should not need to read anything below this.    #
-#-----------------------------------------------------#
+$(MANFILES) : all
+	$(install) --mode a=r $(notdir $@) $@
 
-.PHONY:	all install libinstall clean distclean
-.PHONY: $(patsubst %,install_%, $(BPROG) $(UPROG) $(SPROG))
-.PHONY: proc ps
-.PHONY: $(patsubst %,build_%, proc ps)
-.PHONY: $(patsubst %,install_%, proc ps)
+install: $(filter-out $(SKIP) $(addprefix $(DESTDIR),$(SKIP)),$(INSTALL))
+	cd $(usr/bin) && $(ln_f) skill snice
+	cd $(usr/proc/bin) && $(ln_f) pgrep pkill
 
-VERSION      = $(shell awk '/^%define major_version/ { print $$3 }' < procps.spec)
-SUBVERSION   = $(shell awk '/^%define minor_version/ { print $$3 }' < procps.spec)
-MINORVERSION = $(shell awk '/^%define revision/ { print $$3 }' < procps.spec)
+############ prog.c --> prog.o
 
-# Note: LIBVERSION may be less than $(VERSION).$(SUBVERSION).$(MINORVERSION)
-# LIBVERSION is only set to current $(VERSION).$(SUBVERSION).$(MINORVERSION)
-# when an incompatible change is made in libproc.
-LIBVERSION   =  2.0.7
-ifdef MINORVERSION
-LIBPROCPASS  =  SHARED=$(SHARED) SHLIBDIR=$(SHLIBDIR) VERSION=$(VERSION) SUBVERSION=$(SUBVERSION) MINORVERSION=$(MINORVERSION) LIBVERSION=$(LIBVERSION)
-else
-LIBPROCPASS  =  SHARED=$(SHARED) SHLIBDIR=$(SHLIBDIR) VERSION=$(VERSION) SUBVERSION=$(SUBVERSION) LIBVERSION=$(LIBVERSION)
-endif
-
-# libproc setup
-
-ifeq ($(SHARED),y)
-    LIB_TGT = proc/libproc.so.$(LIBVERSION)
-else
-    LIB_TGT = proc/libproc.a
-endif
-
-$(LIB_TGT): $(wildcard proc/*.[ch])
-	$(MAKE) -C proc `basename $(LIB_TGT)` $(LIBPROCPASS)
-
-# component package setup -- the pattern should be obvious: A build rule and
-# unified executable+documentation install rule. (An extra makefile rule is
-# needed for those packages which use Imake.)
-
-ps:              build_ps
-build_ps:		$(LIB_TGT)		; $(MAKE) -C ps
-install_ps:      ps		; $(MAKE) -C ps install
-
-# executable dependencies
-oldps kill skill snice top w uptime tload free vmstat utmp : $(LIB_TGT)
-
-# static pattern build/link rules:
+top.o : top.h
 
 %.o : %.c
-	$(strip $(CC) $(CFLAGS) -c $^)
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c -o $@ $<
 
-oldps w uptime tload free vmstat utmp pgrep: % : %.o
-	$(strip $(CC) $(LDFLAGS) -o $@ $< $(LIB_TGT) $(EXTRALIBS) $(LDLIBS$(LDLIBS_$@)))
+w.o:    w.c
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(W_SHOWFROM) -c $<
 
+############ prog.o --> prog
 
-# special instances of link rules (need extra libraries/objects)
+pmap w uptime tload free sysctl vmstat utmp pgrep skill pwdx: % : %.o $(LIBPROC)
+	$(CC) $(ALL_CFLAGS) $^ $(ALL_LDFLAGS) -o $@
 
-top:   % : %.o $(TOPOBJS)
-	$(strip $(CC)  $(LDFLAGS) -o $@ $^ $(LIB_TGT) $(LIBTERMCAP) $(EXTRALIBS) $(LDLIBS$(LDLIBS_$@)))
+slabtop top: % : %.o $(LIBPROC) tinytcap.o
+	$(CC) $(ALL_CFLAGS) $^ $(ALL_LDFLAGS) -o $@ $(CURSES)
 
-watch:	% : %.o
-	$(strip $(CC) $(LDFLAGS) -o $@ $< $(LIBCURSES) $(EXTRALIBS) $(LDLIBS$(LDLIBS_$@)))
+watch: % : %.o
+	$(CC) $(ALL_CFLAGS) $^ $(ALL_LDFLAGS) -o $@ $(CURSES)
 
+############ progX --> progY
 
-# special instances of compile rules (need extra defines)
-w.o:	w.c
-	$(strip $(CC) $(CFLAGS) $(W_SHOWFROM) -c $<)
+snice kill: skill
+	$(ln_f) skill $@
 
-top.o:	top.c
-	$(strip $(CC) $(CFLAGS) -fwritable-strings -c $<)
-
-skill.o:	skill.c
-	$(strip $(CC) $(CFLAGS) -DSYSV -c $<)
-
-snice:	skill
-	ln -f skill snice
-
-kill:	skill
-	ln -f skill kill
-
-pkill:	pgrep
-	ln -f pgrep pkill
-
-# static pattern installation rules
-
-$(patsubst %,install_%,$(BPROG)): install_%: %
-	$(INSTALLBIN) $< $(BINDIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(SPROG)): install_%: %
-	$(INSTALLBIN) $< $(SBINDIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(UPROG)): install_%: %
-	$(INSTALLBIN) $< $(USRBINDIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(PPROG)): install_%: %
-	$(INSTALLBIN) $< $(PROCDIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(XSCPT)): install_%: %
-	$(INSTALLSCT) $< $(XBINDIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(MAN1)) : install_%: %
-	$(INSTALLMAN) $< $(MAN1DIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(MAN5)) : install_%: %
-	$(INSTALLMAN) $< $(MAN5DIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(MAN8)) : install_%: %
-	$(INSTALLMAN) $< $(MAN8DIR)/$(PREFIX)$<
-$(patsubst %,install_%,$(DESKTOP)) : install_%: %
-	$(INSTALLSCT $< $(APPLNK)/$(PREFIX)$<
-
-# special case install rules
-#install_snice: snice install_skill
-#	cd $(USRBINDIR) && ln -f skill snice
-#install_kill: snice install_skill
-#	cd $(USRBINDIR) && ln -f skill kill
-#install_pkill: pgrep install_pgrep
-#	cd $(USRBINDIR) && ln -f pgrep pkill
-
-# Find all the source and object files in this directory
-
-SRC      =  $(sort $(wildcard *.c))
-OBJ      =  $(SRC:.c=.o)
-
-CVSTAG = ps_$(VERSION)_$(SUBVERSION)_$(MINORVERSION)
-FILEVERSION = $(VERSION).$(SUBVERSION).$(MINORVERSION)
-dist: archive
-archive:
-	@cvs -Q tag -F $(CVSTAG)
-	@rm -rf /tmp/procps
-	@cd /tmp; cvs -Q -d $(CVSROOT) export -r$(CVSTAG) procps || echo GRRRrrrrr -- ignore [export aborted]
-	@mv /tmp/procps /tmp/procps-$(FILEVERSION)
-	@cd /tmp; tar czSpf procps-$(FILEVERSION).tar.gz procps-$(FILEVERSION)
-	@cd /tmp; cp procps-$(FILEVERSION)/procps.lsm procps-$(FILEVERSION).lsm
-	@rm -rf /tmp/procps-$(FILEVERSION)
-	@echo "The final archive is /tmp/procps-$(FILEVERSION).tar.gz"
+pkill: pgrep
+	$(ln_f) pgrep pkill

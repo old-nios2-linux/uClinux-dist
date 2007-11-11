@@ -1,7 +1,290 @@
-2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+2005-08-26  Stepan Kasal  <kasal@ucw.cz>
 
-	* aclocal.m4 (WGET_FNMATCH): Check whether fnmatch.h is
-	includable.
+	* configure.in: Abort if --with-ssl given and OpenSSL unavailable.
+
+2005-08-11  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check for strtoll and strtoimax.
+
+2005-07-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check for timegm.
+
+2005-07-03  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* po/POTFILES.in: Include src/ptimer.c.
+
+2005-06-29  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Test for $LIBSSL instead of the old $ssl_success
+	when deciding which MD5 to use.
+
+2005-06-29  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Require Autoconf 2.59.
+
+2005-06-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Replace libtool with AC_LIB_HAVE_LINKFLAGS.
+	Modify makefiles accordingly.  (Imported from the trunk.)
+
+2005-06-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* util/dist-wget: Port to subversion.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* README.svn: Renamed to README.checkout.  Edited to mention the
+	autogen.sh script.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* autogen.sh: New file.
+
+	* Makefile.svn: Deleted, replaced with the even simpler (and more
+	standard) `autogen.sh' script.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* MAILING-LIST: Remove reference to the obsolete `wget-cvs'
+	mailing list.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* config.sub, config.guess: Updated from canonical location.
+
+2005-06-21  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* Makefile.cvs: Renamed to Makefile.svn.
+
+	* README.cvs: Renamed to README.svn.
+
+2005-05-10  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Test for OpenSSL includes we actually need.
+
+2005-05-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* Makefile.in ($(srcdir)/stamp-h.in): Don't print the line with
+	the comment about running autoheader.
+
+2005-05-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Set MAKEINFO to "true" so build doesn't fail for
+	users without either makeinfo or the pre-packaged info files.
+
+2005-05-02  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* INSTALL: Document environment variables affecting configure,
+	especially $CC.
+
+	* INSTALL: Mention that make install requires root.
+
+2005-04-29  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Don't set ipv6 to yes only because struct
+	sockaddr_in6 was found.  Stop the rest of the IPv6 checks when one
+	check fails.  Abort if IPv6 was explicitly requested, but not
+	found.
+
+2005-04-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/Makefile.top.bor: Use MAKEDIR for make clean too.
+
+2005-04-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/Makefile.src.bor: Don't delete executables other than
+	wget.exe.  Delete various auxilliary files created by the Borland
+	build process.
+
+2005-04-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* NEWS: Advertise new-style syntax for --no-dns-cache instead
+	of --dns-cache=off.
+
+2005-04-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/Makefile.src.bor: Don't suppress unreachable code
+	warning.
+
+2005-04-28  Herold Heiko  <Heiko.Herold@previnet.it>
+
+	* windows/wget.dep: Rename gen_sslfunc.c to openssl.c.
+
+2005-04-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* INSTALL: Mention --disable-ntlm.
+
+2005-04-27  Mauro Tortonesi  <mauro@ferrara.linux.it>
+
+	* NEWS: Mention the new --ftp-user, --ftp-password, --user and
+	--password options, the name changes for --http-passwd and
+	--proxy-passwd and the deprecation of login and passwd commands.
+
+2005-04-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* po/eo.po: Added Esperanto translation.
+
+2005-04-21  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* po/vi.po: Added Vietnamese translation.
+
+2005-04-18  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* MACHINES: Removed.
+
+2005-04-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: When checking for OpenSSL headers, check for all
+	the ones that Wget is using.
+
+2005-04-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/Makefile.src: Compile ptimer.c and http-ntlm.c.
+
+2005-04-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Use it.
+
+	* aclocal.m4 (WGET_POSIX_CLOCK): Check whether -lrt is needed to
+	use POSIX clock functions like clock_gettime.
+
+2005-04-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* Makefile.in ($(srcdir)/stamp-h.in): Don't attempt to run
+	autoheader automatically; it breaks things with fresh CVS builds.
+
+2005-04-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Allow the user to disable NTLM authorization.
+	Make sure NTLM is disabled if OpenSSL is unavailable.  If NTLM is
+	*explicitly* requested and OpenSSL is unavailable, abort.
+
+	* configure.in: Renamed USE_* to ENABLE_*.
+
+2005-03-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* po/POTFILES.in: Removed headers.c and rbuf.c.
+
+2005-03-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/Makefile.src.bor: Reenable warnings under Borland C,
+	disabling only specific warnings.  Generate Pentium Pro code by
+	default.
+
+2003-02-24  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Don't check for AI_ADDRCONFIG here, it is checked
+	for in the source directly.
+
+2003-02-25  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* libtool.m4, ltmain.sh, config.sub, config.guess: Upgrade to
+	libtool 1.5.14.
+
+2003-02-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* libtool.m4, ltmain.sh, config.sub, config.guess: Upgrade to
+	libtool 1.5.8.
+
+2005-02-20  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check for LFS.  Determine SIZEOF_OFF_T.
+	Check for ftello.
+
+2005-02-18  Marco Colombo  <m.colombo@ed.ac.uk>
+
+	* po/it.po: Updated Italian translation.
+
+2004-05-09  David Fritz  <zeroxdf@att.net>
+
+	* windows/Makefile.src.bor: Fix broken build rule.  Add clean target.
+
+	* windows/Makefile.top.bor: Use tabs instead of spaces.  Ignore
+	errors in clean rules.  Use lowercase filenames when building
+	distribution .zip archive.
+
+	* windows/config.h.bor:  Don't define HAVE_UINT32_T.
+
+	* windows/Makefile.doc: Fix remaining instance of build rules
+	indented with spaces instead of tabs.
+
+	* windows/Makefile.src: Update copyright year.
+
+	* windows/Makefile.top: Update copyright year.
+
+	* windows/config.h.mingw (WGET_USE_STDARG, HAVE_SIG_ATOMIC_T): Define.
+
+	* windows/config.h.ms (HAVE_STRPBRK, HAVE_LIMITS_H)
+	(HAVE_LOCALE_H): Define.
+
+	* windows/Makefile.watcom: Add /I. to CFLAGS.  Remove reference to
+	specific Wget version from linker flags.  Add missing
+	dependencies.
+
+2004-02-09  David Fritz  <zeroxdf@att.net>
+
+	* configure.bat.in: Don't clear the screen.
+
+	* windows/README: Add introductory paragraph.  Re-word a few
+	sentences.  Correct minor typographical errors.  Use consistent
+	capitalization of Wget, SSL, and OpenSSL.  Refer to Microsoft
+	Visual C++ as MSVC instead of VC++.  Mention the --msvc option to
+	configure.bat.  Reflow paragraphs.
+
+	* windows/Makefile.top: Use tabs instead of spaces.  Ignore errors
+	in clean rules.  Use lowercase filenames when building distribution
+	.zip archive.
+
+	* windows/Makefile.doc: Use tabs instead of spaces.  Ignore errors
+	in clean rules.
+
+	* windows/Makefile.src: Clean-up clean rules.  Use tabs instead of
+	spaces.  Link against gdi32.lib.  Don't define SYSTEM_WGETRC.
+	Remove unused macros.  Remove anachronistic and superfluous linker
+	flags.  Don't rename wget.exe to all upper-case.  Add
+	`preprocessor' conditionals for SSL and newer MSVC options.  Use
+	batch rules.  Don't suppress all warnings.
+
+2003-11-26  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* aclocal.m4: Don't check for AI_V4MAPPED and for AI_ALL, since
+	Wget doesn't need them.
+
+	* configure.in: Check for struct sockaddr_storage.
+
+2003-11-12  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Use a more standard checking message when checking
+	for md5.h.
+
+2003-11-12  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Tweak ansi2knr test, use : instead of true.
+
+2003-11-12  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check for limits.h.
+
+2003-11-10  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* aclocal.m4 (WGET_SOCKLEN_T): Use AC_COMPILE_IFELSE instead of
+	AC_TRY_COMPILE.
+
+2003-11-10  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* aclocal.m4 (WGET_STRUCT_UTIMBUF): Use AC_CHECK_TYPES instead of
+	AC_EGREP_CPP to check for struct utimbuf.
+
+2003-11-09  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* aclocal.m4 (WGET_WITH_NLS): Respect the user's setting of
+	LINGUAS, e.g. `LINGUAS="en bg ja" ./configure'.
+
+2003-11-09  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Don't attempt to use Emacs as a makeinfo
+	substitute.
 
 2003-11-07  Hrvoje Niksic  <hniksic@xemacs.org>
 
@@ -10,16 +293,82 @@
 
 2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
 
+	* libtool.m4, ltmain.sh, config.sub, config.guess: Upgrade to
+	libtool 1.5.
+
+2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
 	* windows/config.h.ms: MSVC doesn't have uint32_t.
 
+2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Remove the broken check for socks.
+
+2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Substitute ANSI2KNR and U, so we can compile.
+
+2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Use the Autoconf macro AC_C_PROTOTYPES instead of
+	the old AM_C_PROTOTYPES.
+
 2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Use the new form of AC_OUTPUT.
+
+	* Makefile.cvs (prep): Invoke autoheader.
+
+2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Require Autoconf 2.57.
+
+2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* aclocal.m4: Ditto.
+
+	* configure.in: Add description annotations to AC_DEFINE.
+
+	* Makefile.in: Update maintenance targets, preparing them for the
+	use of `autoheader'.
+
+2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Don't misuse AC_MSG_RESULT.  Use AC_MSG_NOTICE
+	where appropriate.
+
+2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check whether volatile is supported.  Don't check
+	for gethostname and uname, which are not used.
+
+2003-11-04  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Move some checks into aclocal.m4.  Check whether
+	fnmatch.h is includable.
 
 	* configure.in: Also check whether #include <md5.h> works before
 	deciding to use Solaris libmd5.
 
+	* configure.in: Use AC_MSG_NOTICE instead of echo.  Use
+	AC_MSG_ERROR for fatal errors.
+
+2003-11-03  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Look for nanosleep in -lrt and -lposix4, which is
+	where Solaris has them.
+
+2003-11-03  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Check for nanosleep.
+
 2003-03-09  Nicolas Schodet  <contact@ni.fr.eu.org>
 
 	* Makefile.in: Fixed bad configure.bat scrdir.
+
+2003-10-29  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* configure.in: Reenable IPv6 autodetection.
 
 2003-10-26  Hrvoje Niksic  <hniksic@xemacs.org>
 
@@ -39,6 +388,19 @@
 
 	* windows/Makefile.src.bor (OBJS): Use convert.c.
 
+	From Chin-yuan Kuo.
+
+2003-10-26  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* windows/config.h.mingw: Ditto.
+
+	* windows/Makefile.top.mingw: Ditto.
+
+	* windows/Makefile.src.mingw: New file.
+
+	* windows/wget.dep: Support convert.o.
+
+	* configure.bat.in: New option `--mingw'.
 	From Chin-yuan Kuo.
 
 2003-10-23  Hrvoje Niksic  <hniksic@xemacs.org>

@@ -1,26 +1,39 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Program Asterisk ADSI Scripts into phone
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Program Asterisk ADSI Scripts into phone
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
+ */
+
+/*** MODULEINFO
+	<depend>res_adsi</depend>
+ ***/
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 53780 $")
+
 #include <sys/types.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/adsi.h>
-#include <asterisk/options.h>
-#include <asterisk/utils.h>
-#include <asterisk/lock.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -30,10 +43,15 @@
 #include <stdio.h>
 #include <errno.h>
 
-#include "../asterisk.h"
-#include "../astconf.h"
-
-static char *tdesc = "Asterisk ADSI Programming Application";
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/adsi.h"
+#include "asterisk/options.h"
+#include "asterisk/utils.h"
+#include "asterisk/lock.h"
 
 static char *app = "ADSIProg";
 
@@ -42,13 +60,8 @@ static char *synopsis = "Load Asterisk ADSI Scripts into phone";
 /* #define DUMP_MESSAGES */
 
 static char *descrip =
-"  ADSIProg(script): Programs an ADSI Phone with the given script.\n"
-"If none is specified, the default is used.  Returns 0 unless CPE\n" 
-"is hungup.\n";
-
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
+"  ADSIProg(script): This application programs an ADSI Phone with the given\n"
+"script. If nothing is specified, the default script (asterisk.adsi) is used.\n";
 
 struct adsi_event {
 	int id;
@@ -159,9 +172,9 @@ struct adsi_script {
 	struct adsi_flag flags[7];
 
 	/* Stuff from adsi script */
-	char sec[5];
+	unsigned char sec[5];
 	char desc[19];
-	char fdn[5];
+	unsigned char fdn[5];
 	int ver;
 };
 
@@ -400,7 +413,7 @@ static struct adsi_flag *getflagbyname(struct adsi_script *state, char *name, ch
 		ast_log(LOG_WARNING, "No more flag space at line %d of %s\n", lineno, script);
 		return NULL;
 	}
-	strncpy(state->flags[state->numflags].vname, name, sizeof(state->flags[state->numflags].vname) - 1);
+	ast_copy_string(state->flags[state->numflags].vname, name, sizeof(state->flags[state->numflags].vname));
 	state->flags[state->numflags].id = state->numflags + 1;
 	state->numflags++;
 	return &state->flags[state->numflags-1];
@@ -503,7 +516,7 @@ static struct adsi_soft_key *getkeybyname(struct adsi_script *state, char *name,
 		ast_log(LOG_WARNING, "No more key space at line %d of %s\n", lineno, script);
 		return NULL;
 	}
-	strncpy(state->keys[state->numkeys].vname, name, sizeof(state->keys[state->numkeys].vname) - 1);
+	ast_copy_string(state->keys[state->numkeys].vname, name, sizeof(state->keys[state->numkeys].vname));
 	state->keys[state->numkeys].id = state->numkeys + 2;
 	state->numkeys++;
 	return &state->keys[state->numkeys-1];
@@ -519,7 +532,7 @@ static struct adsi_subscript *getsubbyname(struct adsi_script *state, char *name
 		ast_log(LOG_WARNING, "No more subscript space at line %d of %s\n", lineno, script);
 		return NULL;
 	}
-	strncpy(state->subs[state->numsubs].vname, name, sizeof(state->subs[state->numsubs].vname) - 1);
+	ast_copy_string(state->subs[state->numsubs].vname, name, sizeof(state->subs[state->numsubs].vname));
 	state->subs[state->numsubs].id = state->numsubs;
 	state->numsubs++;
 	return &state->subs[state->numsubs-1];
@@ -538,7 +551,7 @@ static struct adsi_state *getstatebyname(struct adsi_script *state, char *name, 
 		ast_log(LOG_WARNING, "No more state space at line %d of %s\n", lineno, script);
 		return NULL;
 	}
-	strncpy(state->states[state->numstates].vname, name, sizeof(state->states[state->numstates].vname) - 1);
+	ast_copy_string(state->states[state->numstates].vname, name, sizeof(state->states[state->numstates].vname));
 	state->states[state->numstates].id = state->numstates + 1;
 	state->numstates++;
 	return &state->states[state->numstates-1];
@@ -557,7 +570,7 @@ static struct adsi_display *getdisplaybyname(struct adsi_script *state, char *na
 		ast_log(LOG_WARNING, "No more display space at line %d of %s\n", lineno, script);
 		return NULL;
 	}
-	strncpy(state->displays[state->numdisplays].vname, name, sizeof(state->displays[state->numdisplays].vname) - 1);
+	ast_copy_string(state->displays[state->numdisplays].vname, name, sizeof(state->displays[state->numdisplays].vname));
 	state->displays[state->numdisplays].id = state->numdisplays + 1;
 	state->numdisplays++;
 	return &state->displays[state->numdisplays-1];
@@ -1043,7 +1056,7 @@ static int adsi_process(struct adsi_script *state, char *buf, char *script, int 
 					break;
 				}
 			} else {
-				strncpy(tmp2, tmp, sizeof(tmp2) - 1);
+				ast_copy_string(tmp2, tmp, sizeof(tmp2));
 			}
 			if (strlen(tmp2) > 18) {
 				ast_log(LOG_WARNING, "Truncating full name to 18 characters at line %d of %s\n", lineno, script);
@@ -1336,7 +1349,7 @@ static struct adsi_script *compile_script(char *script)
 	int x, err;
 	struct adsi_script *scr;
 	if (script[0] == '/')
-		strncpy(fn, script, sizeof(fn) - 1);
+		ast_copy_string(fn, script, sizeof(fn));
 	else
 		snprintf(fn, sizeof(fn), "%s/%s", (char *)ast_config_AST_CONFIG_DIR, script);
 	f = fopen(fn, "r");
@@ -1344,13 +1357,10 @@ static struct adsi_script *compile_script(char *script)
 		ast_log(LOG_WARNING, "Can't open file '%s'\n", fn);
 		return NULL;
 	}
-	scr = malloc(sizeof(struct adsi_script));
-	if (!scr) {
+	if (!(scr = ast_calloc(1, sizeof(*scr)))) {
 		fclose(f);
-		ast_log(LOG_WARNING, "Out of memory loading script '%s'\n", fn);
 		return NULL;
 	}
-	memset(scr, 0, sizeof(struct adsi_script));
 	/* Create "main" as first subroutine */
 	getsubbyname(scr, "main", NULL, 0);
 	while(!feof(f)) {
@@ -1425,18 +1435,18 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 {
 	struct adsi_script *scr;
 	int x;
-	char buf[1024];
+	unsigned char buf[1024];
 	int bytes;
 	scr = compile_script(script);
 	if (!scr) 
 		return -1;
 
 	/* Start an empty ADSI Session */
-	if (adsi_load_session(chan, NULL, 0, 1) < 1) 
+	if (ast_adsi_load_session(chan, NULL, 0, 1) < 1) 
 		return -1;
 
 	/* Now begin the download attempt */
-	if (adsi_begin_download(chan, scr->desc, scr->fdn, scr->sec, scr->ver)) {
+	if (ast_adsi_begin_download(chan, scr->desc, scr->fdn, scr->sec, scr->ver)) {
 		/* User rejected us for some reason */
 		if (option_verbose > 2)
 			ast_verbose(VERBOSE_PREFIX_3 "User rejected download attempt\n");
@@ -1450,7 +1460,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 	for (x=0;x<scr->numkeys;x++) {
 		if (bytes + scr->keys[x].retstrlen > 253) {
 			/* Send what we've collected so far */
-			if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+			if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 				ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 				return -1;
 			}
@@ -1463,7 +1473,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 #endif
 	}
 	if (bytes) {
-		if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+		if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 			ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 			return -1;
 		}
@@ -1474,7 +1484,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 	for (x=0;x<scr->numdisplays;x++) {
 		if (bytes + scr->displays[x].datalen > 253) {
 			/* Send what we've collected so far */
-			if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+			if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 				ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 				return -1;
 			}
@@ -1487,7 +1497,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 #endif
 	}
 	if (bytes) {
-		if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+		if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 			ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 			return -1;
 		}
@@ -1498,7 +1508,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 	for (x=0;x<scr->numsubs;x++) {
 		if (bytes + scr->subs[x].datalen > 253) {
 			/* Send what we've collected so far */
-			if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+			if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 				ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 				return -1;
 			}
@@ -1511,7 +1521,7 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 #endif
 	}
 	if (bytes) {
-		if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
+		if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DOWNLOAD)) {
 			ast_log(LOG_WARNING, "Unable to send chunk ending at %d\n", x);
 			return -1;
 		}
@@ -1519,11 +1529,11 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 
 
 	bytes = 0;
-	bytes += adsi_display(buf, ADSI_INFO_PAGE, 1, ADSI_JUST_LEFT, 0, "Download complete.", "");
-	bytes += adsi_set_line(buf, ADSI_INFO_PAGE, 1);
-	if (adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DISPLAY) < 0)
+	bytes += ast_adsi_display(buf, ADSI_INFO_PAGE, 1, ADSI_JUST_LEFT, 0, "Download complete.", "");
+	bytes += ast_adsi_set_line(buf, ADSI_INFO_PAGE, 1);
+	if (ast_adsi_transmit_message(chan, buf, bytes, ADSI_MSG_DISPLAY) < 0)
 		return -1;
-	if (adsi_end_download(chan)) {
+	if (ast_adsi_end_download(chan)) {
 		/* Download failed for some reason */
 		if (option_verbose > 2)
 			ast_verbose(VERBOSE_PREFIX_3 "Download attempt failed\n");
@@ -1532,18 +1542,21 @@ static int adsi_prog(struct ast_channel *chan, char *script)
 		return -1;
 	}
 	free(scr);
-	adsi_unload_session(chan);
+	ast_adsi_unload_session(chan);
 	return 0;
 }
 
 static int adsi_exec(struct ast_channel *chan, void *data)
 {
 	int res=0;
-	struct localuser *u;
-	if (!data || ast_strlen_zero(data))
+	struct ast_module_user *u;
+
+	u = ast_module_user_add(chan);
+	
+	if (ast_strlen_zero(data))
 		data = "asterisk.adsi";
-	LOCAL_USER_ADD(u);
-	if (!adsi_available(chan)) {
+	
+	if (!ast_adsi_available(chan)) {
 		if (option_verbose > 2)
 			ast_verbose(VERBOSE_PREFIX_3 "ADSI Unavailable on CPE.  Not bothering to try.\n");
 	} else {
@@ -1551,34 +1564,27 @@ static int adsi_exec(struct ast_channel *chan, void *data)
 			ast_verbose(VERBOSE_PREFIX_3 "ADSI Available on CPE.  Attempting Upload.\n");
 		res = adsi_prog(chan, data);
 	}
-	LOCAL_USER_REMOVE(u);
+
+	ast_module_user_remove(u);
+	
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	ast_module_user_hangup_all();
+
+	res = ast_unregister_application(app);	
+	
+
+	return res;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, adsi_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Asterisk ADSI Programming Application");

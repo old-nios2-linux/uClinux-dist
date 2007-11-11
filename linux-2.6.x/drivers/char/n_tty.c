@@ -45,6 +45,8 @@
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/bitops.h>
+#include <linux/audit.h>
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -76,6 +78,13 @@ static inline void free_buf(unsigned char *buf)
 		kfree(buf);
 	else
 		free_page((unsigned long) buf);
+}
+
+static inline int tty_put_user(struct tty_struct *tty, unsigned char x,
+			       unsigned char __user *ptr)
+{
+	tty_audit_add_data(tty, &x, 1);
+	return put_user(x, ptr);
 }
 
 /**
@@ -579,8 +588,8 @@ static void eraser(unsigned char c, struct tty_struct *tty)
  
 static inline void isig(int sig, struct tty_struct *tty, int flush)
 {
-	if (tty->pgrp > 0)
-		kill_pg(tty->pgrp, sig, 1);
+	if (tty->pgrp)
+		kill_pgrp(tty->pgrp, sig, 1);
 	if (flush || !L_NOFLSH(tty)) {
 		n_tty_flush_buffer(tty);
 		if (tty->driver->flush_buffer)
@@ -994,7 +1003,7 @@ int is_ignored(int sig)
  *	when the ldisc is closed.
  */
  
-static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)
+static void n_tty_set_termios(struct tty_struct *tty, struct ktermios * old)
 {
 	if (!tty)
 		return;
@@ -1151,9 +1160,9 @@ static int copy_from_read_buf(struct tty_struct *tty,
 	n = min(*nr, n);
 	spin_unlock_irqrestore(&tty->read_lock, flags);
 	if (n) {
-		mb();
 		retval = copy_to_user(*b, &tty->read_buf[tty->read_tail], n);
 		n -= retval;
+		tty_audit_add_data(tty, &tty->read_buf[tty->read_tail], n);
 		spin_lock_irqsave(&tty->read_lock, flags);
 		tty->read_tail = (tty->read_tail + n) & (N_TTY_BUF_SIZE-1);
 		tty->read_cnt -= n;
@@ -1185,13 +1194,14 @@ static int job_control(struct tty_struct *tty, struct file *file)
 	/* don't stop on /dev/console */
 	if (file->f_op->write != redirected_tty_write &&
 	    current->signal->tty == tty) {
-		if (tty->pgrp <= 0)
-			printk("read_chan: tty->pgrp <= 0!\n");
-		else if (process_group(current) != tty->pgrp) {
+		if (!tty->pgrp)
+			printk("read_chan: no tty->pgrp!\n");
+		else if (task_pgrp(current) != tty->pgrp) {
 			if (is_ignored(SIGTTIN) ||
-			    is_orphaned_pgrp(process_group(current)))
+			    is_current_pgrp_orphaned())
 				return -EIO;
-			kill_pg(process_group(current), SIGTTIN, 1);
+			kill_pgrp(task_pgrp(current), SIGTTIN, 1);
+			set_thread_flag(TIF_SIGPENDING);
 			return -ERESTARTSYS;
 		}
 	}
@@ -1279,7 +1289,7 @@ do_it_again:
 				break;
 			cs = tty->link->ctrl_status;
 			tty->link->ctrl_status = 0;
-			if (put_user(cs, b++)) {
+			if (tty_put_user(tty, cs, b++)) {
 				retval = -EFAULT;
 				b--;
 				break;
@@ -1321,7 +1331,7 @@ do_it_again:
 
 		/* Deal with packet mode. */
 		if (tty->packet && b == buf) {
-			if (put_user(TIOCPKT_DATA, b++)) {
+			if (tty_put_user(tty, TIOCPKT_DATA, b++)) {
 				retval = -EFAULT;
 				b--;
 				break;
@@ -1352,15 +1362,17 @@ do_it_again:
 				spin_unlock_irqrestore(&tty->read_lock, flags);
 
 				if (!eol || (c != __DISABLED_CHAR)) {
-					if (put_user(c, b++)) {
+					if (tty_put_user(tty, c, b++)) {
 						retval = -EFAULT;
 						b--;
 						break;
 					}
 					nr--;
 				}
-				if (eol)
+				if (eol) {
+					tty_audit_push(tty);
 					break;
+				}
 			}
 			if (retval)
 				break;
@@ -1538,28 +1550,26 @@ static unsigned int normal_poll(struct tty_struct * tty, struct file * file, pol
 		else
 			tty->minimum_to_wake = 1;
 	}
-	if (tty->driver->chars_in_buffer(tty) < WAKEUP_CHARS &&
+	if (!tty_is_writelocked(tty) &&
+			tty->driver->chars_in_buffer(tty) < WAKEUP_CHARS &&
 			tty->driver->write_room(tty) > 0)
 		mask |= POLLOUT | POLLWRNORM;
 	return mask;
 }
 
 struct tty_ldisc tty_ldisc_N_TTY = {
-	TTY_LDISC_MAGIC,	/* magic */
-	"n_tty",		/* name */
-	0,			/* num */
-	0,			/* flags */
-	n_tty_open,		/* open */
-	n_tty_close,		/* close */
-	n_tty_flush_buffer,	/* flush_buffer */
-	n_tty_chars_in_buffer,	/* chars_in_buffer */
-	read_chan,		/* read */
-	write_chan,		/* write */
-	n_tty_ioctl,		/* ioctl */
-	n_tty_set_termios,	/* set_termios */
-	normal_poll,		/* poll */
-	NULL,			/* hangup */
-	n_tty_receive_buf,	/* receive_buf */
-	n_tty_write_wakeup	/* write_wakeup */
+	.magic           = TTY_LDISC_MAGIC,
+	.name            = "n_tty",
+	.open            = n_tty_open,
+	.close           = n_tty_close,
+	.flush_buffer    = n_tty_flush_buffer,
+	.chars_in_buffer = n_tty_chars_in_buffer,
+	.read            = read_chan,
+	.write           = write_chan,
+	.ioctl           = n_tty_ioctl,
+	.set_termios     = n_tty_set_termios,
+	.poll            = normal_poll,
+	.receive_buf     = n_tty_receive_buf,
+	.write_wakeup    = n_tty_write_wakeup
 };
 

@@ -1,5 +1,5 @@
 /*
- * $Id: aug_alloc.c,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: aug_alloc.c,v 1.1.10.3 2005/07/20 17:26:16 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -40,10 +40,10 @@
 **
 **
 **                      $RCSfile: aug_alloc.c,v $
-**                     $Revision: 1.1 $
+**                     $Revision: 1.1.10.3 $
 **
-**             Last change $Date: 2003/04/08 01:25:35 $
-**           Last change $Author: lgfausak $
+**             Last change $Date: 2005/07/20 17:26:16 $
+**           Last change $Author: andrei $
 **                        $State: Exp $
 **                       $Locker:  $
 **
@@ -115,6 +115,7 @@ struct MemOpt
 static int mem_bad(MemHead *mem, char *where, char *file, int line)
 {
 	aug_abort(file, line, "Corrupted memory in %s", where);
+	return 0;
 }
 
 /*
@@ -158,7 +159,8 @@ static void mem_nomem(size_t size, char *func, char *file, int line)
 	else
 		fprintf(stderr, "FATAL: ");
 
-	fprintf(stderr, "%s failure allocating %lu bytes ", func, size);
+	fprintf(stderr, "%s failure allocating %lu bytes ", func, 
+			(unsigned long)size);
 
 	if(file && *file)
 		fprintf(stderr, "from +%d %s \r\n", line, file);
@@ -225,7 +227,7 @@ static void *mem_alloc(size_t size, void *parent, char *file, int line)
 
 	if(par)
 	{
-		if(mem->m.sibling = par->m.child)
+		if((mem->m.sibling = par->m.child))
 			mem->m.sibling->m.parent = mem;
 		par->m.child = mem;
 	}
@@ -373,7 +375,7 @@ augExport void *aug_realloc_loc(size_t size, void *prev, char *file, int line)
 	return alloc;
 }
 
-augExport void aug_free_loc(void *alloc, char *file, int line)
+augExport void aug_free_loc(const void *alloc, char *file, int line)
 {
 	MemHead *mem, *par;
 	DABNAME("aug_free");
@@ -485,7 +487,8 @@ augExport void aug_foster_loc(void *alloc, void *parent, char *file, int line)
 		mem->m.sibling = 0;
 }
 
-augExport char *aug_strdup_loc(char *str, void *parent, char *file, int line)
+augExport char *aug_strdup_loc(const char *str, void *parent, char *file,
+								int line)
 {
 	char *new;
 	size_t size;

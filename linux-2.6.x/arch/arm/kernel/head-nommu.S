@@ -16,7 +16,6 @@
 
 #include <asm/assembler.h>
 #include <asm/mach-types.h>
-#include <asm/procinfo.h>
 #include <asm/ptrace.h>
 #include <asm/asm-offsets.h>
 #include <asm/thread_info.h>
@@ -35,7 +34,7 @@
  * numbers for r1.
  *
  */
-	__INIT
+	.section ".text.head", "ax"
 	.type	stext, %function
 ENTRY(stext)
 	ldr	r1, =machine_arch_type		@ find the machine type

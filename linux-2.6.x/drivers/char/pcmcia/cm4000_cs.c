@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/delay.h>
+#include <linux/bitrev.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
@@ -194,41 +195,17 @@ static inline unsigned char xinb(unsigned short port)
 }
 #endif
 
-#define	b_0000	15
-#define	b_0001	14
-#define	b_0010	13
-#define	b_0011	12
-#define	b_0100	11
-#define	b_0101	10
-#define	b_0110	9
-#define	b_0111	8
-#define	b_1000	7
-#define	b_1001	6
-#define	b_1010	5
-#define	b_1011	4
-#define	b_1100	3
-#define	b_1101	2
-#define	b_1110	1
-#define	b_1111	0
-
-static unsigned char irtab[16] = {
-	b_0000, b_1000, b_0100, b_1100,
-	b_0010, b_1010, b_0110, b_1110,
-	b_0001, b_1001, b_0101, b_1101,
-	b_0011, b_1011, b_0111, b_1111
-};
+static inline unsigned char invert_revert(unsigned char ch)
+{
+	return bitrev8(~ch);
+}
 
 static void str_invert_revert(unsigned char *b, int len)
 {
 	int i;
 
 	for (i = 0; i < len; i++)
-		b[i] = (irtab[b[i] & 0x0f] << 4) | irtab[b[i] >> 4];
-}
-
-static unsigned char invert_revert(unsigned char ch)
-{
-	return (irtab[ch & 0x0f] << 4) | irtab[ch >> 4];
+		b[i] = invert_revert(b[i]);
 }
 
 #define	ATRLENCK(dev,pos) \
@@ -946,8 +923,7 @@ release_io:
 
 return_with_timer:
 	DEBUGP(7, dev, "<- monitor_card (returns with timer)\n");
-	dev->timer.expires = jiffies + dev->mdelay;
-	add_timer(&dev->timer);
+	mod_timer(&dev->timer, jiffies + dev->mdelay);
 	clear_bit(LOCK_MONITOR, &dev->flags);
 }
 
@@ -1115,7 +1091,7 @@ static ssize_t cmm_write(struct file *filp, const char __user *buf,
 	/*
 	 * wait for atr to become valid.
 	 * note: it is important to lock this code. if we dont, the monitor
-	 * could be run between test_bit and the the call the sleep on the
+	 * could be run between test_bit and the call to sleep on the
 	 * atr-queue.  if *then* the monitor detects atr valid, it will wake up
 	 * any process on the atr-queue, *but* since we have been interrupted,
 	 * we do not yet sleep on this queue. this would result in a missed
@@ -1406,12 +1382,9 @@ static void start_monitor(struct cm4000_dev *dev)
 	DEBUGP(3, dev, "-> start_monitor\n");
 	if (!dev->monitor_running) {
 		DEBUGP(5, dev, "create, init and add timer\n");
-		init_timer(&dev->timer);
+		setup_timer(&dev->timer, monitor_card, (unsigned long)dev);
 		dev->monitor_running = 1;
-		dev->timer.expires = jiffies;
-		dev->timer.data = (unsigned long) dev;
-		dev->timer.function = monitor_card;
-		add_timer(&dev->timer);
+		mod_timer(&dev->timer, jiffies);
 	} else
 		DEBUGP(5, dev, "monitor already running\n");
 	DEBUGP(3, dev, "<- start_monitor\n");
@@ -1656,7 +1629,7 @@ static int cmm_open(struct inode *inode, struct file *filp)
 {
 	struct cm4000_dev *dev;
 	struct pcmcia_device *link;
-	int rc, minor = iminor(inode);
+	int minor = iminor(inode);
 
 	if (minor >= CM4000_MAX_DEV)
 		return -ENODEV;
@@ -1695,7 +1668,6 @@ static int cmm_open(struct inode *inode, struct file *filp)
 	start_monitor(dev);
 
 	link->open = 1;		/* only one open per device */
-	rc = 0;
 
 	DEBUGP(2, dev, "<- cmm_open\n");
 	return nonseekable_open(inode, filp);
@@ -1764,28 +1736,10 @@ static int cm4000_config(struct pcmcia_device * link, int devno)
 	int rc;
 
 	/* read the config-tuples */
-	tuple.DesiredTuple = CISTPL_CONFIG;
 	tuple.Attributes = 0;
 	tuple.TupleData = buf;
 	tuple.TupleDataMax = sizeof(buf);
 	tuple.TupleOffset = 0;
-
-	if ((fail_rc = pcmcia_get_first_tuple(link, &tuple)) != CS_SUCCESS) {
-		fail_fn = GetFirstTuple;
-		goto cs_failed;
-	}
-	if ((fail_rc = pcmcia_get_tuple_data(link, &tuple)) != CS_SUCCESS) {
-		fail_fn = GetTupleData;
-		goto cs_failed;
-	}
-	if ((fail_rc =
-	     pcmcia_parse_tuple(link, &tuple, &parse)) != CS_SUCCESS) {
-		fail_fn = ParseTuple;
-		goto cs_failed;
-	}
-
-	link->conf.ConfigBase = parse.config.base;
-	link->conf.Present = parse.config.rmask[0];
 
 	link->io.BasePort2 = 0;
 	link->io.NumPorts2 = 0;
@@ -1841,8 +1795,6 @@ static int cm4000_config(struct pcmcia_device * link, int devno)
 
 	return 0;
 
-cs_failed:
-	cs_error(link, fail_fn, fail_rc);
 cs_release:
 	cm4000_release(link);
 	return -ENODEV;
@@ -1871,7 +1823,7 @@ static int cm4000_resume(struct pcmcia_device *link)
 
 static void cm4000_release(struct pcmcia_device *link)
 {
-	cmm_cm4000_release(link->priv);	/* delay release until device closed */
+	cmm_cm4000_release(link);	/* delay release until device closed */
 	pcmcia_disable_device(link);
 }
 
@@ -1905,8 +1857,11 @@ static int cm4000_probe(struct pcmcia_device *link)
 	init_waitqueue_head(&dev->readq);
 
 	ret = cm4000_config(link, i);
-	if (ret)
+	if (ret) {
+		dev_table[i] = NULL;
+		kfree(dev);
 		return ret;
+	}
 
 	class_device_create(cmm_class, NULL, MKDEV(major, i), NULL,
 			    "cmm%d", i);
@@ -1931,7 +1886,7 @@ static void cm4000_detach(struct pcmcia_device *link)
 	cm4000_release(link);
 
 	dev_table[devno] = NULL;
- 	kfree(dev);
+	kfree(dev);
 
 	class_device_destroy(cmm_class, MKDEV(major, devno));
 
@@ -1973,19 +1928,21 @@ static int __init cmm_init(void)
 	printk(KERN_INFO "%s\n", version);
 
 	cmm_class = class_create(THIS_MODULE, "cardman_4000");
-	if (!cmm_class)
-		return -1;
+	if (IS_ERR(cmm_class))
+		return PTR_ERR(cmm_class);
 
 	major = register_chrdev(0, DEVICE_NAME, &cm4000_fops);
 	if (major < 0) {
 		printk(KERN_WARNING MODULE_NAME
 			": could not get major number\n");
-		return -1;
+		class_destroy(cmm_class);
+		return major;
 	}
 
 	rc = pcmcia_register_driver(&cm4000_driver);
 	if (rc < 0) {
 		unregister_chrdev(major, DEVICE_NAME);
+		class_destroy(cmm_class);
 		return rc;
 	}
 

@@ -44,17 +44,15 @@ struct in6_addr
  * NOTE: Be aware the IN6ADDR_* constants and in6addr_* externals are defined
  * in network byte order, not in host byte order as are the IPv4 equivalents
  */
-#if 0
 extern const struct in6_addr in6addr_any;
 #define IN6ADDR_ANY_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
-#endif
 extern const struct in6_addr in6addr_loopback;
 #define IN6ADDR_LOOPBACK_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
 
 struct sockaddr_in6 {
 	unsigned short int	sin6_family;    /* AF_INET6 */
 	__be16			sin6_port;      /* Transport layer port # */
-	__u32			sin6_flowinfo;  /* IPv6 flow information */
+	__be32			sin6_flowinfo;  /* IPv6 flow information */
 	struct in6_addr		sin6_addr;      /* IPv6 address */
 	__u32			sin6_scope_id;  /* scope id (new in RFC2553) */
 };
@@ -72,7 +70,7 @@ struct ipv6_mreq {
 struct in6_flowlabel_req
 {
 	struct in6_addr	flr_dst;
-	__u32	flr_label;
+	__be32	flr_label;
 	__u8	flr_action;
 	__u8	flr_share;
 	__u16	flr_flags;
@@ -179,6 +177,7 @@ struct in6_flowlabel_req
 #define IPV6_PMTUDISC_DONT		0
 #define IPV6_PMTUDISC_WANT		1
 #define IPV6_PMTUDISC_DO		2
+#define IPV6_PMTUDISC_PROBE		3
 
 /* Flowlabel */
 #define IPV6_FLOWLABEL_MGR	32

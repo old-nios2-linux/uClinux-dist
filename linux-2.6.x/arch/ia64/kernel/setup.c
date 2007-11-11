@@ -43,6 +43,8 @@
 #include <linux/initrd.h>
 #include <linux/pm.h>
 #include <linux/cpufreq.h>
+#include <linux/kexec.h>
+#include <linux/crash_dump.h>
 
 #include <asm/ia32.h>
 #include <asm/machvec.h>
@@ -58,7 +60,7 @@
 #include <asm/smp.h>
 #include <asm/system.h>
 #include <asm/unistd.h>
-#include <asm/system.h>
+#include <asm/hpsim.h>
 
 #if defined(CONFIG_SMP) && (IA64_CPU_SIZE > PAGE_SIZE)
 # error "struct cpuinfo_ia64 too big!"
@@ -73,7 +75,6 @@ extern void ia64_setup_printk_clock(void);
 
 DEFINE_PER_CPU(struct cpuinfo_ia64, cpu_info);
 DEFINE_PER_CPU(unsigned long, local_per_cpu_offset);
-DEFINE_PER_CPU(unsigned long, ia64_phys_stacked_size_p8);
 unsigned long ia64_cycles_per_usec;
 struct ia64_boot_param *ia64_boot_param;
 struct screen_info screen_info;
@@ -89,8 +90,6 @@ static struct resource code_resource = {
 	.name	= "Kernel code",
 	.flags	= IORESOURCE_BUSY | IORESOURCE_MEM
 };
-extern void efi_initialize_iomem_resources(struct resource *,
-		struct resource *);
 extern char _text[], _end[], _etext[];
 
 unsigned long ia64_max_cacheline_size;
@@ -249,9 +248,56 @@ reserve_memory (void)
 	}
 #endif
 
+#ifdef CONFIG_PROC_VMCORE
+	if (reserve_elfcorehdr(&rsvd_region[n].start,
+			       &rsvd_region[n].end) == 0)
+		n++;
+#endif
+
 	efi_memmap_init(&rsvd_region[n].start, &rsvd_region[n].end);
 	n++;
 
+#ifdef CONFIG_KEXEC
+	/* crashkernel=size@offset specifies the size to reserve for a crash
+	 * kernel. If offset is 0, then it is determined automatically.
+	 * By reserving this memory we guarantee that linux never set's it
+	 * up as a DMA target.Useful for holding code to do something
+	 * appropriate after a kernel panic.
+	 */
+	{
+		char *from = strstr(boot_command_line, "crashkernel=");
+		unsigned long base, size;
+		if (from) {
+			size = memparse(from + 12, &from);
+			if (*from == '@')
+				base = memparse(from+1, &from);
+			else
+				base = 0;
+			if (size) {
+				if (!base) {
+					sort_regions(rsvd_region, n);
+					base = kdump_find_rsvd_region(size,
+							      	rsvd_region, n);
+					}
+				if (base != ~0UL) {
+					rsvd_region[n].start =
+						(unsigned long)__va(base);
+					rsvd_region[n].end =
+						(unsigned long)__va(base + size);
+					n++;
+					crashk_res.start = base;
+					crashk_res.end = base + size - 1;
+				}
+			}
+		}
+		efi_memmap_res.start = ia64_boot_param->efi_memmap;
+                efi_memmap_res.end = efi_memmap_res.start +
+                        ia64_boot_param->efi_memmap_size;
+                boot_param_res.start = __pa(ia64_boot_param);
+                boot_param_res.end = boot_param_res.start +
+                        sizeof(*ia64_boot_param);
+	}
+#endif
 	/* end of memory marker */
 	rsvd_region[n].start = ~0UL;
 	rsvd_region[n].end   = ~0UL;
@@ -262,6 +308,7 @@ reserve_memory (void)
 
 	sort_regions(rsvd_region, num_rsvd_regions);
 }
+
 
 /**
  * find_initrd - get initrd parameters from the boot parameter structure
@@ -343,10 +390,8 @@ early_console_setup (char *cmdline)
 	if (!efi_setup_pcdp_console(cmdline))
 		earlycons++;
 #endif
-#ifdef CONFIG_SERIAL_8250_CONSOLE
-	if (!early_serial_console_init(cmdline))
+	if (!simcons_register())
 		earlycons++;
-#endif
 
 	return (earlycons) ? 0 : -1;
 }
@@ -396,6 +441,45 @@ static __init int setup_nomca(char *s)
 }
 early_param("nomca", setup_nomca);
 
+#ifdef CONFIG_PROC_VMCORE
+/* elfcorehdr= specifies the location of elf core header
+ * stored by the crashed kernel.
+ */
+static int __init parse_elfcorehdr(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+        elfcorehdr_addr = memparse(arg, &arg);
+	return 0;
+}
+early_param("elfcorehdr", parse_elfcorehdr);
+
+int __init reserve_elfcorehdr(unsigned long *start, unsigned long *end)
+{
+	unsigned long length;
+
+	/* We get the address using the kernel command line,
+	 * but the size is extracted from the EFI tables.
+	 * Both address and size are required for reservation
+	 * to work properly.
+	 */
+
+	if (elfcorehdr_addr >= ELFCORE_ADDR_MAX)
+		return -EINVAL;
+
+	if ((length = vmcore_find_descriptor_size(elfcorehdr_addr)) == 0) {
+		elfcorehdr_addr = ELFCORE_ADDR_MAX;
+		return -EINVAL;
+	}
+
+	*start = (unsigned long)__va(elfcorehdr_addr);
+	*end = *start + length;
+	return 0;
+}
+
+#endif /* CONFIG_PROC_VMCORE */
+
 void __init
 setup_arch (char **cmdline_p)
 {
@@ -404,16 +488,21 @@ setup_arch (char **cmdline_p)
 	ia64_patch_vtop((u64) __start___vtop_patchlist, (u64) __end___vtop_patchlist);
 
 	*cmdline_p = __va(ia64_boot_param->command_line);
-	strlcpy(saved_command_line, *cmdline_p, COMMAND_LINE_SIZE);
+	strlcpy(boot_command_line, *cmdline_p, COMMAND_LINE_SIZE);
 
 	efi_init();
 	io_port_init();
 
-	parse_early_param();
-
 #ifdef CONFIG_IA64_GENERIC
-	machvec_init(NULL);
+	/* machvec needs to be parsed from the command line
+	 * before parse_early_param() is called to ensure
+	 * that ia64_mv is initialised before any command line
+	 * settings may cause console setup to occur
+	 */
+	machvec_init_from_cmdline(*cmdline_p);
 #endif
+
+	parse_early_param();
 
 	if (early_console_setup(*cmdline_p) == 0)
 		mark_bsp_online();
@@ -490,7 +579,7 @@ setup_arch (char **cmdline_p)
 }
 
 /*
- * Display cpu info for all cpu's.
+ * Display cpu info for all CPUs.
  */
 static int
 show_cpuinfo (struct seq_file *m, void *v)
@@ -510,34 +599,31 @@ show_cpuinfo (struct seq_file *m, void *v)
 		{ 1UL << 1, "spontaneous deferral"},
 		{ 1UL << 2, "16-byte atomic ops" }
 	};
-	char features[128], *cp, sep;
+	char features[128], *cp, *sep;
 	struct cpuinfo_ia64 *c = v;
 	unsigned long mask;
 	unsigned long proc_freq;
-	int i;
+	int i, size;
 
 	mask = c->features;
 
 	/* build the feature string: */
-	memcpy(features, " standard", 10);
+	memcpy(features, "standard", 9);
 	cp = features;
-	sep = 0;
-	for (i = 0; i < (int) ARRAY_SIZE(feature_bits); ++i) {
+	size = sizeof(features);
+	sep = "";
+	for (i = 0; i < ARRAY_SIZE(feature_bits) && size > 1; ++i) {
 		if (mask & feature_bits[i].mask) {
-			if (sep)
-				*cp++ = sep;
-			sep = ',';
-			*cp++ = ' ';
-			strcpy(cp, feature_bits[i].feature_name);
-			cp += strlen(feature_bits[i].feature_name);
+			cp += snprintf(cp, size, "%s%s", sep,
+				       feature_bits[i].feature_name),
+			sep = ", ";
 			mask &= ~feature_bits[i].mask;
+			size = sizeof(features) - (cp - features);
 		}
 	}
-	if (mask) {
-		/* print unknown features as a hex value: */
-		if (sep)
-			*cp++ = sep;
-		sprintf(cp, " 0x%lx", mask);
+	if (mask && size > 1) {
+		/* print unknown features as a hex value */
+		snprintf(cp, size, "%s0x%lx", sep, mask);
 	}
 
 	proc_freq = cpufreq_quick_get(cpunum);
@@ -553,10 +639,10 @@ show_cpuinfo (struct seq_file *m, void *v)
 		   "model name : %s\n"
 		   "revision   : %u\n"
 		   "archrev    : %u\n"
-		   "features   :%s\n"	/* don't change this---it _is_ right! */
+		   "features   : %s\n"
 		   "cpu number : %lu\n"
 		   "cpu regs   : %u\n"
-		   "cpu MHz    : %lu.%06lu\n"
+		   "cpu MHz    : %lu.%03lu\n"
 		   "itc MHz    : %lu.%06lu\n"
 		   "BogoMIPS   : %lu.%02lu\n",
 		   cpunum, c->vendor, c->family, c->model,
@@ -608,13 +694,17 @@ struct seq_operations cpuinfo_op = {
 	.show =		show_cpuinfo
 };
 
-static char brandname[128];
+#define MAX_BRANDS	8
+static char brandname[MAX_BRANDS][128];
 
 static char * __cpuinit
 get_model_name(__u8 family, __u8 model)
 {
+	static int overflow;
 	char brand[128];
+	int i;
 
+	memcpy(brand, "Unknown", 8);
 	if (ia64_pal_get_brand_info(brand)) {
 		if (family == 0x7)
 			memcpy(brand, "Merced", 7);
@@ -622,15 +712,19 @@ get_model_name(__u8 family, __u8 model)
 			case 0: memcpy(brand, "McKinley", 9); break;
 			case 1: memcpy(brand, "Madison", 8); break;
 			case 2: memcpy(brand, "Madison up to 9M cache", 23); break;
-		} else
-			memcpy(brand, "Unknown", 8);
+		}
 	}
-	if (brandname[0] == '\0')
-		return strcpy(brandname, brand);
-	else if (strcmp(brandname, brand) == 0)
-		return brandname;
-	else
-		return kstrdup(brand, GFP_KERNEL);
+	for (i = 0; i < MAX_BRANDS; i++)
+		if (strcmp(brandname[i], brand) == 0)
+			return brandname[i];
+	for (i = 0; i < MAX_BRANDS; i++)
+		if (brandname[i][0] == '\0')
+			return strcpy(brandname[i], brand);
+	if (overflow++ == 0)
+		printk(KERN_ERR
+		       "%s: Table overflow. Some processor model information will be missing\n",
+		       __FUNCTION__);
+	return "Unknown";
 }
 
 static void __cpuinit
@@ -670,7 +764,7 @@ identify_cpu (struct cpuinfo_ia64 *c)
 	c->cpu = smp_processor_id();
 
 	/* below default values will be overwritten  by identify_siblings() 
-	 * for Multi-Threading/Multi-Core capable cpu's
+	 * for Multi-Threading/Multi-Core capable CPUs
 	 */
 	c->threads_per_core = c->cores_per_socket = c->num_log = 1;
 	c->socket_id = -1;
@@ -695,7 +789,7 @@ identify_cpu (struct cpuinfo_ia64 *c)
 	c->unimpl_pa_mask = ~((1L<<63) | ((1L << phys_addr_size) - 1));
 }
 
-void
+void __init
 setup_per_cpu_areas (void)
 {
 	/* start_kernel() requires this... */
@@ -714,7 +808,6 @@ static void __cpuinit
 get_max_cacheline_size (void)
 {
 	unsigned long line_size, max = 1;
-	unsigned int cache_size = 0;
 	u64 l, levels, unique_caches;
         pal_cache_config_info_t cci;
         s64 status;
@@ -744,8 +837,6 @@ get_max_cacheline_size (void)
 		line_size = 1 << cci.pcci_line_size;
 		if (line_size > max)
 			max = line_size;
-		if (cache_size < cci.pcci_cache_size)
-			cache_size = cci.pcci_cache_size;
 		if (!cci.pcci_unified) {
 			status = ia64_pal_cache_config_info(l,
 						    /* cache_type (instruction)= */ 1,
@@ -762,9 +853,6 @@ get_max_cacheline_size (void)
 			ia64_i_cache_stride_shift = cci.pcci_stride;
 	}
   out:
-#ifdef CONFIG_SMP
-	max_cache_size = max(max_cache_size, cache_size);
-#endif
 	if (max > ia64_max_cacheline_size)
 		ia64_max_cacheline_size = max;
 }
@@ -777,6 +865,7 @@ void __cpuinit
 cpu_init (void)
 {
 	extern void __cpuinit ia64_mmu_init (void *);
+	static unsigned long max_num_phys_stacked = IA64_NUM_PHYS_STACK_REG;
 	unsigned long num_phys_stacked;
 	pal_vm_info_2_u_t vmi;
 	unsigned int max_ctx;
@@ -855,7 +944,7 @@ cpu_init (void)
 	ia32_cpu_init();
 #endif
 
-	/* Clear ITC to eliminiate sched_clock() overflows in human time.  */
+	/* Clear ITC to eliminate sched_clock() overflows in human time.  */
 	ia64_set_itc(0);
 
 	/* disable all local interrupt sources: */
@@ -867,6 +956,11 @@ cpu_init (void)
 
 	/* clear TPR & XTP to enable all interrupt classes: */
 	ia64_setreg(_IA64_REG_CR_TPR, 0);
+
+	/* Clear any pending interrupts left by SAL/EFI */
+	while (ia64_get_ivr() != IA64_SPURIOUS_INT_VECTOR)
+		ia64_eoi();
+
 #ifdef CONFIG_SMP
 	normal_xtp();
 #endif
@@ -890,18 +984,12 @@ cpu_init (void)
 		num_phys_stacked = 96;
 	}
 	/* size of physical stacked register partition plus 8 bytes: */
-	__get_cpu_var(ia64_phys_stacked_size_p8) = num_phys_stacked*8 + 8;
+	if (num_phys_stacked > max_num_phys_stacked) {
+		ia64_patch_phys_stack_reg(num_phys_stacked*8 + 8);
+		max_num_phys_stacked = num_phys_stacked;
+	}
 	platform_cpu_init();
 	pm_idle = default_idle;
-}
-
-/*
- * On SMP systems, when the scheduler does migration-cost autodetection,
- * it needs a way to flush as much of the CPU's caches as possible.
- */
-void sched_cacheflush(void)
-{
-	ia64_sal_cache_flush(3);
 }
 
 void __init

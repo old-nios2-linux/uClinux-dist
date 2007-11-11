@@ -1,24 +1,34 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Silly application to play an MP3 file -- uses mpg123
- * 
- * Copyright (C) 1999-2004, Digium, Inc.
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
  * Mark Spencer <markster@digium.com>
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Silly application to play an MP3 file -- uses mpg123
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/frame.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 48375 $")
+
 #include <string.h>
 #include <stdio.h>
 #include <signal.h>
@@ -27,35 +37,52 @@
 #include <fcntl.h>
 #include <sys/time.h>
 
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/frame.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/options.h"
+
 #define LOCAL_MPG_123 "/usr/local/bin/mpg123"
 #define MPG_123 "/usr/bin/mpg123"
-
-static char *tdesc = "Silly MP3 Application";
 
 static char *app = "MP3Player";
 
 static char *synopsis = "Play an MP3 file or stream";
 
 static char *descrip = 
-"  MP3Player(location) Executes mpg123 to play the given location\n"
-"which typically would be a  filename  or  a URL. Returns  -1  on\n"
-"hangup or 0 otherwise. User can exit by pressing any key\n.";
+"  MP3Player(location) Executes mpg123 to play the given location,\n"
+"which typically would be a filename or a URL. User can exit by pressing\n"
+"any key on the dialpad, or by hanging up."; 
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int mp3play(char *filename, int fd)
 {
 	int res;
 	int x;
+	sigset_t fullset, oldset;
+
+	sigfillset(&fullset);
+	pthread_sigmask(SIG_BLOCK, &fullset, &oldset);
+
 	res = fork();
 	if (res < 0) 
 		ast_log(LOG_WARNING, "Fork failed\n");
-	if (res)
+	if (res) {
+		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 		return res;
+	}
+	if (ast_opt_high_priority)
+		ast_set_priority(0);
+	signal(SIGPIPE, SIG_DFL);
+	pthread_sigmask(SIG_UNBLOCK, &fullset, NULL);
+
 	dup2(fd, STDOUT_FILENO);
-	for (x=0;x<256;x++) {
+	for (x=STDERR_FILENO + 1;x<256;x++) {
 		if (x != STDOUT_FILENO)
 			close(x);
 	}
@@ -77,7 +104,7 @@ static int mp3play(char *filename, int fd)
 	    execlp("mpg123", "mpg123", "-q", "-s", "-f", "8192", "--mono", "-r", "8000", filename, (char *)NULL);
 	}
 	ast_log(LOG_WARNING, "Execute of mpg123 failed\n");
-	return -1;
+	_exit(0);
 }
 
 static int timed_read(int fd, void *data, int datalen, int timeout)
@@ -98,66 +125,57 @@ static int timed_read(int fd, void *data, int datalen, int timeout)
 static int mp3_exec(struct ast_channel *chan, void *data)
 {
 	int res=0;
-	struct localuser *u;
+	struct ast_module_user *u;
 	int fds[2];
 	int ms = -1;
 	int pid = -1;
 	int owriteformat;
 	int timeout = 2000;
-	struct timeval now, next;
+	struct timeval next;
 	struct ast_frame *f;
 	struct myframe {
 		struct ast_frame f;
 		char offset[AST_FRIENDLY_OFFSET];
 		short frdata[160];
 	} myf;
-	if (!data) {
+	
+	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "MP3 Playback requires an argument (filename)\n");
 		return -1;
 	}
+
+	u = ast_module_user_add(chan);
+
 	if (pipe(fds)) {
 		ast_log(LOG_WARNING, "Unable to create pipe\n");
+		ast_module_user_remove(u);
 		return -1;
 	}
-	LOCAL_USER_ADD(u);
+	
 	ast_stopstream(chan);
 
 	owriteformat = chan->writeformat;
 	res = ast_set_write_format(chan, AST_FORMAT_SLINEAR);
 	if (res < 0) {
 		ast_log(LOG_WARNING, "Unable to set write format to signed linear\n");
+		ast_module_user_remove(u);
 		return -1;
 	}
 	
-	gettimeofday(&now, NULL);
 	res = mp3play((char *)data, fds[1]);
 	if (!strncasecmp((char *)data, "http://", 7)) {
 		timeout = 10000;
 	}
 	/* Wait 1000 ms first */
-	next = now;
+	next = ast_tvnow();
 	next.tv_sec += 1;
 	if (res >= 0) {
 		pid = res;
 		/* Order is important -- there's almost always going to be mp3...  we want to prioritize the
 		   user */
 		for (;;) {
-			gettimeofday(&now, NULL);
-			ms = (next.tv_sec - now.tv_sec) * 1000;
-			ms += (next.tv_usec - now.tv_usec) / 1000;
-#if 0
-			printf("ms: %d\n", ms);
-#endif			
+			ms = ast_tvdiff_ms(next, ast_tvnow());
 			if (ms <= 0) {
-#if 0
-				{
-					static struct timeval last;
-					struct timeval tv;
-					gettimeofday(&tv, NULL);
-					printf("Since last: %ld\n", (tv.tv_sec - last.tv_sec) * 1000 + (tv.tv_usec - last.tv_usec) / 1000);
-					last = tv;
-				}
-#endif
 				res = timed_read(fds[0], myf.frdata, sizeof(myf.frdata), timeout);
 				if (res > 0) {
 					myf.f.frametype = AST_FRAME_VOICE;
@@ -179,14 +197,7 @@ static int mp3_exec(struct ast_channel *chan, void *data)
 					res = 0;
 					break;
 				}
-				next.tv_usec += res / 2 * 125;
-				if (next.tv_usec >= 1000000) {
-					next.tv_usec -= 1000000;
-					next.tv_sec++;
-				}
-#if 0
-				printf("Next: %d\n", ms);
-#endif				
+				next = ast_tvadd(next, ast_samp2tv(myf.f.samples, 8000));
 			} else {
 				ms = ast_waitfor(chan, ms);
 				if (ms < 0) {
@@ -214,38 +225,31 @@ static int mp3_exec(struct ast_channel *chan, void *data)
 	}
 	close(fds[0]);
 	close(fds[1]);
-	LOCAL_USER_REMOVE(u);
+	
 	if (pid > -1)
 		kill(pid, SIGKILL);
 	if (!res && owriteformat)
 		ast_set_write_format(chan, owriteformat);
+
+	ast_module_user_remove(u);
+	
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+
+	ast_module_user_hangup_all();
+	
+	return res;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, mp3_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Silly MP3 Application");

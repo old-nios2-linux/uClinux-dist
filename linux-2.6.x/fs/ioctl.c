@@ -31,7 +31,7 @@ static long do_ioctl(struct file *filp, unsigned int cmd,
 		goto out;
 	} else if (filp->f_op->ioctl) {
 		lock_kernel();
-		error = filp->f_op->ioctl(filp->f_dentry->d_inode,
+		error = filp->f_op->ioctl(filp->f_path.dentry->d_inode,
 					  filp, cmd, arg);
 		unlock_kernel();
 	}
@@ -45,7 +45,7 @@ static int file_ioctl(struct file *filp, unsigned int cmd,
 {
 	int error;
 	int block;
-	struct inode * inode = filp->f_dentry->d_inode;
+	struct inode * inode = filp->f_path.dentry->d_inode;
 	int __user *p = (int __user *)arg;
 
 	switch (cmd) {
@@ -67,8 +67,6 @@ static int file_ioctl(struct file *filp, unsigned int cmd,
 			return put_user(res, p);
 		}
 		case FIGETBSZ:
-			if (inode->i_sb == NULL)
-				return -EBADF;
 			return put_user(inode->i_sb->s_blocksize, p);
 		case FIONREAD:
 			return put_user(i_size_read(inode) - filp->f_pos, p);
@@ -137,17 +135,17 @@ int vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd, unsigned lon
 			break;
 
 		case FIOQSIZE:
-			if (S_ISDIR(filp->f_dentry->d_inode->i_mode) ||
-			    S_ISREG(filp->f_dentry->d_inode->i_mode) ||
-			    S_ISLNK(filp->f_dentry->d_inode->i_mode)) {
-				loff_t res = inode_get_bytes(filp->f_dentry->d_inode);
+			if (S_ISDIR(filp->f_path.dentry->d_inode->i_mode) ||
+			    S_ISREG(filp->f_path.dentry->d_inode->i_mode) ||
+			    S_ISLNK(filp->f_path.dentry->d_inode->i_mode)) {
+				loff_t res = inode_get_bytes(filp->f_path.dentry->d_inode);
 				error = copy_to_user((loff_t __user *)arg, &res, sizeof(res)) ? -EFAULT : 0;
 			}
 			else
 				error = -ENOTTY;
 			break;
 		default:
-			if (S_ISREG(filp->f_dentry->d_inode->i_mode))
+			if (S_ISREG(filp->f_path.dentry->d_inode->i_mode))
 				error = file_ioctl(filp, cmd, arg);
 			else
 				error = do_ioctl(filp, cmd, arg);
@@ -176,11 +174,3 @@ asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
  out:
 	return error;
 }
-
-/*
- * Platforms implementing 32 bit compatibility ioctl handlers in
- * modules need this exported
- */
-#ifdef CONFIG_COMPAT
-EXPORT_SYMBOL(sys_ioctl);
-#endif

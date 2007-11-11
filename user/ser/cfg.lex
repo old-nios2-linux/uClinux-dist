@@ -1,9 +1,9 @@
 /*
- * $Id: cfg.lex,v 1.43.4.2 2004/02/12 16:17:48 bogdan Exp $
+ * $Id: cfg.lex,v 1.64 2004/11/30 16:28:23 andrei Exp $
  *
  * scanner for cfg files
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -41,7 +41,17 @@
  *  2003-10-02  added {,set_}advertised_{address,port} (andrei)
  *  2003-10-07  added hex and octal numbers support (andrei)
  *  2003-10-10  replaced len_gt w/ msg:len (andrei)
+ *  2003-10-13  added fifo_dir (andrei)
+ *  2003-10-28  added tcp_accept_aliases (andrei)
  *  2003-11-29  added {tcp_send, tcp_connect, tls_*}_timeout (andrei)
+ *  2004-03-30  added DISABLE_CORE and OPEN_FD_LIMIT (andrei)
+ *  2004-04-28  added sock_mode (replaces fifo_mode), sock_user &
+ *               sock_group  (andrei)
+ *  2004-05-03  applied multicast support patch from janakj
+ *              added MCAST_TTL (andrei)
+ *  2004-10-08  more escapes: \", \xHH, \nnn and minor optimizations (andrei)
+ *  2004-10-19  added FROM_URI and TO_URI (andrei)
+ *  2004-11-30  added force_send_socket
  */
 
 
@@ -61,15 +71,23 @@
 	#define COMMENT_LN_S	2
 	#define STRING_S		3
 
+	#define STR_BUF_ALLOC_UNIT	128
+	struct str_buf{
+		char* s;
+		char* crt;
+		int left;
+	};
+
 	
 	static int comment_nest=0;
 	static int state=0;
-	static char* tstr=0;
+	static struct str_buf s_buf;
 	int line=1;
 	int column=1;
 	int startcolumn=1;
 
-	static char* addstr(char*, char**);
+	static char* addchar(struct str_buf *, char);
+	static char* addstr(struct str_buf *, char*, int);
 	static void count();
 
 
@@ -93,6 +111,7 @@ ROUTE_FAILURE failure_route
 ROUTE_ONREPLY onreply_route
 EXEC	exec
 FORCE_RPORT		"force_rport"|"add_rport"
+FORCE_TCP_ALIAS		"force_tcp_alias"|"add_tcp_alias"
 SETFLAG		setflag
 RESETFLAG	resetflag
 ISFLAGSET	isflagset
@@ -111,6 +130,7 @@ IF				"if"
 ELSE			"else"
 SET_ADV_ADDRESS	"set_advertised_address"
 SET_ADV_PORT	"set_advertised_port"
+FORCE_SEND_SOCKET	"force_send_socket"
 
 /*ACTION LVALUES*/
 URIHOST			"uri:host"
@@ -121,11 +141,13 @@ MAX_LEN			"max_len"
 
 /* condition keywords */
 METHOD	method
-/* hack -- the second element in first line is referrable
+/* hack -- the second element in first line is referable
    as either uri or status; it only would makes sense to
    call it "uri" from route{} and status from onreply_route{}
 */
 URI		"uri"|"status"
+FROM_URI	"from_uri"
+TO_URI		"to_uri"
 SRCIP	src_ip
 SRCPORT	src_port
 DSTIP	dst_ip
@@ -146,6 +168,8 @@ MATCH	=~
 NOT		!|"not"
 AND		"and"|"&&"|"&"
 OR		"or"|"||"|"|"
+PLUS	"+"
+MINUS	"-"
 
 /* config vars. */
 DEBUG	debug
@@ -165,7 +189,14 @@ SYN_BRANCH syn_branch
 MEMLOG		"memlog"|"mem_log"
 SIP_WARNING sip_warning
 FIFO fifo
-FIFO_MODE fifo_mode
+FIFO_DIR  fifo_dir
+SOCK_MODE "fifo_mode"|"sock_mode"|"file_mode"
+SOCK_USER "fifo_user"|"sock_user"
+SOCK_GROUP "fifo_group"|"sock_group"
+FIFO_DB_URL fifo_db_url
+UNIX_SOCK unix_sock
+UNIX_SOCK_CHILDREN unix_sock_children
+UNIX_TX_TIMEOUT unix_tx_timeout
 SERVER_SIGNATURE server_signature
 REPLY_TO_VIA reply_to_via
 USER		"user"|"uid"
@@ -175,6 +206,7 @@ WDIR		"workdir"|"wdir"
 MHOMED		mhomed
 DISABLE_TCP		"disable_tcp"
 TCP_CHILDREN	"tcp_children"
+TCP_ACCEPT_ALIASES	"tcp_accept_aliases"
 TCP_SEND_TIMEOUT	"tcp_send_timeout"
 TCP_CONNECT_TIMEOUT	"tcp_connect_timeout"
 DISABLE_TLS		"disable_tls"
@@ -190,6 +222,10 @@ TLS_HANDSHAKE_TIMEOUT	"tls_handshake_timeout"
 TLS_SEND_TIMEOUT	"tls_send_timeout"
 ADVERTISED_ADDRESS	"advertised_address"
 ADVERTISED_PORT		"advertised_port"
+DISABLE_CORE		"disable_core_dump"
+OPEN_FD_LIMIT		"open_files_limit"
+MCAST_LOOPBACK		"mcast_loopback"
+MCAST_TTL			"mcast_ttl"
 
 LOADMODULE	loadmodule
 MODPARAM        modparam
@@ -228,6 +264,8 @@ RBRACE		\}
 LBRACK		\[
 RBRACK		\]
 COMMA		","
+COLON		":"
+STAR		\*
 DOT			\.
 CR			\n
 
@@ -276,7 +314,8 @@ EAT_ABLE	[\ \t\b\r]
 <INITIAL>{APPEND_BRANCH}	{ count(); yylval.strval=yytext; 
 								return APPEND_BRANCH; }
 <INITIAL>{FORCE_RPORT}	{ count(); yylval.strval=yytext; return FORCE_RPORT; }
-	
+<INITIAL>{FORCE_TCP_ALIAS}	{ count(); yylval.strval=yytext;
+								return FORCE_TCP_ALIAS; }
 <INITIAL>{IF}	{ count(); yylval.strval=yytext; return IF; }
 <INITIAL>{ELSE}	{ count(); yylval.strval=yytext; return ELSE; }
 
@@ -284,6 +323,8 @@ EAT_ABLE	[\ \t\b\r]
 										return SET_ADV_ADDRESS; }
 <INITIAL>{SET_ADV_PORT}	{ count(); yylval.strval=yytext;
 										return SET_ADV_PORT; }
+<INITIAL>{FORCE_SEND_SOCKET}	{	count(); yylval.strval=yytext;
+									return FORCE_SEND_SOCKET; }
 
 <INITIAL>{URIHOST}	{ count(); yylval.strval=yytext; return URIHOST; }
 <INITIAL>{URIPORT}	{ count(); yylval.strval=yytext; return URIPORT; }
@@ -292,6 +333,8 @@ EAT_ABLE	[\ \t\b\r]
 
 <INITIAL>{METHOD}	{ count(); yylval.strval=yytext; return METHOD; }
 <INITIAL>{URI}	{ count(); yylval.strval=yytext; return URI; }
+<INITIAL>{FROM_URI}	{ count(); yylval.strval=yytext; return FROM_URI; }
+<INITIAL>{TO_URI}	{ count(); yylval.strval=yytext; return TO_URI; }
 <INITIAL>{SRCIP}	{ count(); yylval.strval=yytext; return SRCIP; }
 <INITIAL>{SRCPORT}	{ count(); yylval.strval=yytext; return SRCPORT; }
 <INITIAL>{DSTIP}	{ count(); yylval.strval=yytext; return DSTIP; }
@@ -323,6 +366,8 @@ EAT_ABLE	[\ \t\b\r]
 <INITIAL>{MHOMED}	{ count(); yylval.strval=yytext; return MHOMED; }
 <INITIAL>{DISABLE_TCP}	{ count(); yylval.strval=yytext; return DISABLE_TCP; }
 <INITIAL>{TCP_CHILDREN}	{ count(); yylval.strval=yytext; return TCP_CHILDREN; }
+<INITIAL>{TCP_ACCEPT_ALIASES}	{ count(); yylval.strval=yytext;
+									return TCP_ACCEPT_ALIASES; }
 <INITIAL>{TCP_SEND_TIMEOUT}		{ count(); yylval.strval=yytext;
 									return TCP_SEND_TIMEOUT; }
 <INITIAL>{TCP_CONNECT_TIMEOUT}		{ count(); yylval.strval=yytext;
@@ -345,13 +390,28 @@ EAT_ABLE	[\ \t\b\r]
 <INITIAL>{TLS_SEND_TIMEOUT}	{ count(); yylval.strval=yytext;
 										return TLS_SEND_TIMEOUT; }
 <INITIAL>{FIFO}	{ count(); yylval.strval=yytext; return FIFO; }
-<INITIAL>{FIFO_MODE}	{ count(); yylval.strval=yytext; return FIFO_MODE; }
+<INITIAL>{FIFO_DIR}	{ count(); yylval.strval=yytext; return FIFO_DIR; }
+<INITIAL>{FIFO_DB_URL}	{ count(); yylval.strval=yytext; return FIFO_DB_URL; }
+<INITIAL>{SOCK_MODE}	{ count(); yylval.strval=yytext; return SOCK_MODE; }
+<INITIAL>{SOCK_USER}	{ count(); yylval.strval=yytext; return SOCK_USER; }
+<INITIAL>{SOCK_GROUP}	{ count(); yylval.strval=yytext; return SOCK_GROUP; }
+<INITIAL>{UNIX_SOCK} { count(); yylval.strval=yytext; return UNIX_SOCK; }
+<INITIAL>{UNIX_SOCK_CHILDREN} { count(); yylval.strval=yytext; return UNIX_SOCK_CHILDREN; }
+<INITIAL>{UNIX_TX_TIMEOUT} { count(); yylval.strval=yytext; return UNIX_TX_TIMEOUT; }
 <INITIAL>{SERVER_SIGNATURE}	{ count(); yylval.strval=yytext; return SERVER_SIGNATURE; }
 <INITIAL>{REPLY_TO_VIA}	{ count(); yylval.strval=yytext; return REPLY_TO_VIA; }
 <INITIAL>{ADVERTISED_ADDRESS}	{	count(); yylval.strval=yytext;
 									return ADVERTISED_ADDRESS; }
 <INITIAL>{ADVERTISED_PORT}		{	count(); yylval.strval=yytext;
 									return ADVERTISED_PORT; }
+<INITIAL>{DISABLE_CORE}		{	count(); yylval.strval=yytext;
+									return DISABLE_CORE; }
+<INITIAL>{OPEN_FD_LIMIT}		{	count(); yylval.strval=yytext;
+									return OPEN_FD_LIMIT; }
+<INITIAL>{MCAST_LOOPBACK}		{	count(); yylval.strval=yytext;
+									return MCAST_LOOPBACK; }
+<INITIAL>{MCAST_TTL}		{	count(); yylval.strval=yytext;
+									return MCAST_TTL; }
 <INITIAL>{LOADMODULE}	{ count(); yylval.strval=yytext; return LOADMODULE; }
 <INITIAL>{MODPARAM}     { count(); yylval.strval=yytext; return MODPARAM; }
 
@@ -366,6 +426,8 @@ EAT_ABLE	[\ \t\b\r]
 <INITIAL>{NOT}		{ count(); return NOT; }
 <INITIAL>{AND}		{ count(); return AND; }
 <INITIAL>{OR}		{ count(); return OR;  }
+<INITIAL>{PLUS}		{ count(); return PLUS; }
+<INITIAL>{MINUS}	{ count(); return MINUS; }
 
 
 
@@ -377,9 +439,9 @@ EAT_ABLE	[\ \t\b\r]
 							return NUMBER; }
 <INITIAL>{YES}			{ count(); yylval.intval=1; return NUMBER; }
 <INITIAL>{NO}			{ count(); yylval.intval=0; return NUMBER; }
-<INITIAL>{TCP}			{ count(); yylval.intval=PROTO_TCP; return NUMBER; }
-<INITIAL>{UDP}			{ count(); yylval.intval=PROTO_UDP; return NUMBER; }
-<INITIAL>{TLS}			{ count(); yylval.intval=PROTO_TLS; return NUMBER; }
+<INITIAL>{TCP}			{ count(); return TCP; }
+<INITIAL>{UDP}			{ count(); return UDP; }
+<INITIAL>{TLS}			{ count(); return TLS; }
 <INITIAL>{INET}			{ count(); yylval.intval=AF_INET; return NUMBER; }
 <INITIAL>{INET6}		{ count();
 						#ifdef USE_IPV6
@@ -395,6 +457,8 @@ EAT_ABLE	[\ \t\b\r]
 
 <INITIAL>{COMMA}		{ count(); return COMMA; }
 <INITIAL>{SEMICOLON}	{ count(); return SEMICOLON; }
+<INITIAL>{COLON}	{ count(); return COLON; }
+<INITIAL>{STAR}	{ count(); return STAR; }
 <INITIAL>{RPAREN}	{ count(); return RPAREN; }
 <INITIAL>{LPAREN}	{ count(); return LPAREN; }
 <INITIAL>{LBRACE}	{ count(); return LBRACE; }
@@ -413,30 +477,34 @@ EAT_ABLE	[\ \t\b\r]
 
 <STRING1>{QUOTES} { count(); state=INITIAL_S; BEGIN(INITIAL); 
 						yytext[yyleng-1]=0; yyleng--;
-						addstr(yytext, &tstr);
-						yylval.strval=tstr; tstr=0;
+						addstr(&s_buf, yytext, yyleng);
+						yylval.strval=s_buf.s;
+						memset(&s_buf, 0, sizeof(s_buf));
 						return STRING;
 					}
 <STRING2>{TICK}  { count(); state=INITIAL_S; BEGIN(INITIAL); 
 						yytext[yyleng-1]=0; yyleng--;
-						addstr(yytext, &tstr);
-						yylval.strval=tstr;
-						tstr=0;
+						addstr(&s_buf, yytext, yyleng);
+						yylval.strval=s_buf.s;
+						memset(&s_buf, 0, sizeof(s_buf));
 						return STRING;
 					}
 <STRING2>.|{EAT_ABLE}|{CR}	{ yymore(); }
 
-<STRING1>\\n		{ count(); yytext[yyleng-2]='\n';yytext[yyleng-1]=0; 
-						yyleng--; addstr(yytext, &tstr); }
-<STRING1>\\r		{ count(); yytext[yyleng-2]='\r';yytext[yyleng-1]=0; 
-						yyleng--; addstr(yytext, &tstr); }
-<STRING1>\\a		{ count(); yytext[yyleng-2]='\a';yytext[yyleng-1]=0; 
-						yyleng--; addstr(yytext, &tstr); }
-<STRING1>\\t		{ count(); yytext[yyleng-2]='\t';yytext[yyleng-1]=0; 
-						yyleng--; addstr(yytext, &tstr); }
-<STRING1>\\\\		{ count(); yytext[yyleng-2]='\\';yytext[yyleng-1]=0; 
-						yyleng--; addstr(yytext, &tstr); } 
-<STRING1>.|{EAT_ABLE}|{CR}	{ yymore(); }
+<STRING1>\\n		{ count(); addchar(&s_buf, '\n'); }
+<STRING1>\\r		{ count(); addchar(&s_buf, '\r'); }
+<STRING1>\\a		{ count(); addchar(&s_buf, '\a'); }
+<STRING1>\\t		{ count(); addchar(&s_buf, '\t'); }
+<STRING1>\\{QUOTES}	{ count(); addchar(&s_buf, '"');  }
+<STRING1>\\\\		{ count(); addchar(&s_buf, '\\'); } 
+<STRING1>\\x{HEX}{1,2}	{ count(); addchar(&s_buf, 
+											(char)strtol(yytext+2, 0, 16)); }
+ /* don't allow \[0-7]{1}, it will eat the backreferences from
+    subst_uri if allowed (although everybody should use '' in subt_uri) */
+<STRING1>\\[0-7]{2,3}	{ count(); addchar(&s_buf, 
+											(char)strtol(yytext+1, 0, 8));  }
+<STRING1>\\{CR}		{ count(); } /* eat escaped CRs */
+<STRING1>.|{EAT_ABLE}|{CR}	{ addchar(&s_buf, *yytext); }
 
 
 <INITIAL,COMMENT>{COM_START}	{ count(); comment_nest++; state=COMMENT_S;
@@ -451,8 +519,10 @@ EAT_ABLE	[\ \t\b\r]
 
 <INITIAL>{COM_LINE}.*{CR}	{ count(); } 
 
-<INITIAL>{ID}			{ count(); addstr(yytext, &tstr);
-						  yylval.strval=tstr; tstr=0; return ID; }
+<INITIAL>{ID}			{ count(); addstr(&s_buf, yytext, yyleng); 
+									yylval.strval=s_buf.s;
+									memset(&s_buf, 0, sizeof(s_buf));
+									return ID; }
 
 
 <<EOF>>							{
@@ -460,7 +530,11 @@ EAT_ABLE	[\ \t\b\r]
 										case STRING_S: 
 											LOG(L_CRIT, "ERROR: cfg. parser: unexpected EOF in"
 														" unclosed string\n");
-											if (tstr) {pkg_free(tstr);tstr=0;}
+											if (s_buf.s){
+												pkg_free(s_buf.s);
+												memset(&s_buf, 0,
+															sizeof(s_buf));
+											}
 											break;
 										case COMMENT_S:
 											LOG(L_CRIT, "ERROR: cfg. parser: unexpected EOF:"
@@ -476,28 +550,41 @@ EAT_ABLE	[\ \t\b\r]
 			
 %%
 
-static char* addstr(char * src, char ** dest)
+
+static char* addchar(struct str_buf* dst, char c)
+{
+	return addstr(dst, &c, 1);
+}
+
+
+
+static char* addstr(struct str_buf* dst_b, char* src, int len)
 {
 	char *tmp;
-	unsigned len1, len2;
+	unsigned size;
+	unsigned used;
 	
-	if (*dest==0){
-		len1 = strlen(src);
-		*dest = pkg_malloc(len1 + 1);
-		if (*dest == 0) goto error;
-		memcpy(*dest, src, len1 + 1);
-	}else{
-		len1=strlen(*dest);
-		len2=strlen(src);
-		tmp=pkg_malloc(len1+len2+1);
+	if (dst_b->left<(len+1)){
+		used=(unsigned)(dst_b->crt-dst_b->s);
+		size=used+len+1;
+		/* round up to next multiple */
+		size+= STR_BUF_ALLOC_UNIT-size%STR_BUF_ALLOC_UNIT;
+		tmp=pkg_malloc(size);
 		if (tmp==0) goto error;
-		memcpy(tmp, *dest, len1);
-		memcpy(tmp+len1, src, len2);
-		tmp[len1+len2]=0;
-		pkg_free(*dest);
-		*dest=tmp;
+		if (dst_b->s){
+			memcpy(tmp, dst_b->s, used); 
+			pkg_free(dst_b->s);
+		}
+		dst_b->s=tmp;
+		dst_b->crt=dst_b->s+used;
+		dst_b->left=size-used;
 	}
-	return *dest;
+	memcpy(dst_b->crt, src, len);
+	dst_b->crt+=len;
+	*(dst_b->crt)=0;
+	dst_b->left-=len;
+	
+	return dst_b->s;
 error:
 	LOG(L_CRIT, "ERROR:lex:addstr: memory allocation error\n");
 	return 0;

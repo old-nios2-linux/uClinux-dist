@@ -68,6 +68,9 @@ struct usb_hcd {
 
 	struct timer_list	rh_timer;	/* drives root-hub polling */
 	struct urb		*status_urb;	/* the current status urb */
+#ifdef CONFIG_PM
+	struct work_struct	wakeup_work;	/* for remote wakeup */
+#endif
 
 	/*
 	 * hardware info/state
@@ -308,10 +311,6 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 #define NS_TO_US(ns)	((ns + 500L) / 1000L)
 			/* convert & round nanoseconds to microseconds */
 
-extern void usb_claim_bandwidth (struct usb_device *dev, struct urb *urb,
-		int bustime, int isoc);
-extern void usb_release_bandwidth (struct usb_device *dev, struct urb *urb,
-		int isoc);
 
 /*
  * Full/low speed bandwidth allocation constants/support.
@@ -323,8 +322,6 @@ extern void usb_release_bandwidth (struct usb_device *dev, struct urb *urb,
 #define FRAME_TIME_BITS         12000L		/* frame = 1 millisecond */
 #define FRAME_TIME_MAX_BITS_ALLOC	(90L * FRAME_TIME_BITS / 100L)
 #define FRAME_TIME_MAX_USECS_ALLOC	(90L * FRAME_TIME_USECS / 100L)
-
-extern int usb_check_bandwidth (struct usb_device *dev, struct urb *urb);
 
 /*
  * Ceiling [nano/micro]seconds (typical) for that many bytes at high speed
@@ -367,22 +364,12 @@ extern int usb_find_interface_driver (struct usb_device *dev,
 #ifdef CONFIG_PM
 extern void usb_hcd_resume_root_hub (struct usb_hcd *hcd);
 extern void usb_root_hub_lost_power (struct usb_device *rhdev);
-extern int hcd_bus_suspend (struct usb_bus *bus);
-extern int hcd_bus_resume (struct usb_bus *bus);
+extern int hcd_bus_suspend(struct usb_device *rhdev);
+extern int hcd_bus_resume(struct usb_device *rhdev);
 #else
 static inline void usb_hcd_resume_root_hub(struct usb_hcd *hcd)
 {
 	return;
-}
-
-static inline int hcd_bus_suspend(struct usb_bus *bus)
-{
-	return 0;
-}
-
-static inline int hcd_bus_resume (struct usb_bus *bus)
-{
-	return 0;
 }
 #endif /* CONFIG_PM */
 

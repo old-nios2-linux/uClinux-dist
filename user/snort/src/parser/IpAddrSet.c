@@ -78,22 +78,34 @@ static char buffer[1024];
 void IpAddrSetPrint(char *prefix, IpAddrSet *ipAddrSet)
 {
     struct in_addr in;
-    size_t offset = 0;
+    int ret;
+    
     while(ipAddrSet)
     {
-        offset = 0;
+        buffer[0] = '\0';
+
         if(ipAddrSet->addr_flags & EXCEPT_IP)
-            offset += snprintf(buffer, 1024 - offset, "NOT ");
+        {
+            ret = SnortSnprintfAppend(&buffer[0], sizeof(buffer), "NOT ");
+            if (ret != SNORT_SNPRINTF_SUCCESS)
+                return;
+        }
+
         in.s_addr = ipAddrSet->ip_addr;
-        offset += snprintf(buffer + offset, 1024 - offset, "%s/", 
-                inet_ntoa(in));
+        ret = SnortSnprintfAppend(&buffer[0], sizeof(buffer), "%s/", inet_ntoa(in));
+        if (ret != SNORT_SNPRINTF_SUCCESS)
+            return;
+
         in.s_addr = ipAddrSet->netmask;
-        offset += snprintf(buffer + offset, 1024 - offset, "%s", inet_ntoa(in));
-        buffer[offset] = '\0';
+        ret = SnortSnprintfAppend(&buffer[0], sizeof(buffer), "%s", inet_ntoa(in));
+        if (ret != SNORT_SNPRINTF_SUCCESS)
+            return;
+
         if (prefix)
             LogMessage("%s%s\n", prefix, buffer);
         else
             LogMessage("%s%s\n", buffer);
+
         ipAddrSet = ipAddrSet->next;
     }
 }

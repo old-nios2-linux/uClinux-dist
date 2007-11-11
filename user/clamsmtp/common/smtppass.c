@@ -160,6 +160,7 @@ spthread_t;
 #define CFG_LISTENADDR      "Listen"
 #define CFG_HEADER      	"Header"
 #define CFG_TRANSPARENT     "TransparentProxy"
+#define CFG_PASSTHROUGH     "Passthrough"
 #define CFG_DIRECTORY       "TempDirectory"
 #define CFG_KEEPALIVES      "KeepAlives"
 #define CFG_USER            "User"
@@ -314,8 +315,11 @@ int sp_run(const char* configfile, const char* pidfile, int dbg_level)
         g_state.daemonized = 1;
 
         /* Open the system log */
-        openlog(g_state.name, 0, LOG_MAIL);
+        //openlog(g_state.name, 0, LOG_MAIL);
     }
+
+    /* Open the system log */
+    openlog(g_state.name, 0, LOG_MAIL);
 
     sp_messagex(NULL, LOG_DEBUG, "created socket: %s", g_state.listenname);
 
@@ -459,7 +463,11 @@ static void connection_loop(int sock)
     /* Now loop and accept the connections */
     while(!sp_is_quit())
     {
-        fd = accept(sock, NULL, NULL);
+	struct sockaddr_in peer_addr;
+	int addr_len = sizeof(peer_addr);
+        fd = accept(sock, &peer_addr, &addr_len);
+        sp_messagex(NULL, LOG_DEBUG, "Peer address is %s", inet_ntoa(peer_addr.sin_addr));
+
         if(fd == -1)
         {
             switch(errno)
@@ -718,7 +726,13 @@ static int make_connections(spctx_t* ctx, int client)
 
     /* Setup the incoming connection. This also fills in peeraddr for us */
     spio_attach(ctx, &(ctx->client), client, &peeraddr);
-    sp_messagex(ctx, LOG_INFO, "accepted connection from: %s", ctx->client.peername);
+
+    if (cb_check_client(ctx, &peeraddr) == -1) {
+        /* peeraddr is the address of the client */
+	spio_write_data(ctx, &(ctx->client), "554: Denied due to TrustedSource (see www.trustedsource.org <http://www.trustedsource.org/> for details)\n");
+        return -1;
+    }
+    sp_messagex(ctx, LOG_INFO, "client connection from %s accepted", inet_ntoa(peeraddr.s.in.sin_addr));
 
     /* Create the server connection address */
     outaddr = &(g_state.outaddr); 
@@ -877,9 +891,19 @@ static int smtp_passthru(spctx_t* ctx)
                  * Now go into avcheck mode. This also handles the eventual
                  * sending of the data to the server, making the av check
                  * transparent
+		 *
+		 * Unless we're in passthrough mode - then we go
+		 * straight to sp_done_data which feeds the client connection
+		 * through to the internal server
                  */
-                if(cb_check_data(ctx) == -1)
-                    RETURN(-1);
+		if (g_state.passthrough) {
+			if (sp_done_data(ctx) == -1) {
+				RETURN(-1);
+			}
+		} else {
+			if(cb_check_data(ctx) == -1)
+			    RETURN(-1);
+		}
 
                 /* Print the log out for this email */
                 sp_messagex(ctx, LOG_INFO, "%s", ctx->logline);
@@ -1478,21 +1502,27 @@ int sp_done_data(spctx_t* ctx)
     FILE* file = 0;
     int had_header = 0;
     int ret = 0;
-    char line[SP_LINE_LENGTH];
+    char buf[SP_LINE_LENGTH];
+    char *line = buf;
     char header[MAX_HEADER_LENGTH];
-    size_t header_len;
+    size_t header_len = 0;
+    char *cache_result = NULL;
+    int passthrough_result = 0;
 
-    ASSERT(ctx->cachename[0]);  /* Must still be around */
-    ASSERT(!ctx->cachefile);    /* File must be closed */
     
     memset(header, 0, sizeof(header));
 
-    /* Open the file */
-    file = fopen(ctx->cachename, "r");
-    if(file == NULL)
-    {
-        sp_message(ctx, LOG_ERR, "couldn't open cache file: %s", ctx->cachename);
-        RETURN(-1);
+    if (!g_state.passthrough) {
+        /* Open the file */
+        ASSERT(ctx->cachename[0]);  /* Must still be around */
+        ASSERT(!ctx->cachefile);    /* File must be closed */
+
+        file = fopen(ctx->cachename, "r");
+        if(file == NULL)
+        {
+            sp_message(ctx, LOG_ERR, "couldn't open cache file: %s", ctx->cachename);
+            RETURN(-1);
+        }
     }
         
     /* Ask the server for permission to send data */
@@ -1528,7 +1558,12 @@ int sp_done_data(spctx_t* ctx)
     }
 
     /* Transfer actual file data */    
-    while(fgets(line, SP_LINE_LENGTH, file) != NULL)
+    if (g_state.passthrough) {
+        passthrough_result = sp_read_data(ctx, &line);
+    } else {
+        cache_result = fgets(line, SP_LINE_LENGTH, file); 
+    }
+    while(cache_result != NULL || passthrough_result > 0)
     {
         /* 
          * If the line is <CRLF>.<CRLF> we need to change it so that 
@@ -1557,13 +1592,28 @@ int sp_done_data(spctx_t* ctx)
         
         if(spio_write_data_raw(ctx, &(ctx->server), line, strlen(line)) == -1)
             RETURN(-1);
+
+        /* read the next line */
+        if (g_state.passthrough) {
+            passthrough_result = sp_read_data(ctx, &line);
+        } else {
+            cache_result = fgets(line, SP_LINE_LENGTH, file); 
+        }
     }
     
-    if(ferror(file))
-        sp_message(ctx, LOG_ERR, "error reading cache file: %s", ctx->cachename);
-      
-    if(ferror(file) || spio_write_data(ctx, &(ctx->server), DATA_END_SIG) == -1)
-    {
+    if (!g_state.passthrough) {
+        if(ferror(file)) {
+            sp_message(ctx, LOG_ERR, "error reading cache file: %s", ctx->cachename);
+            RETURN(-1);
+        }
+    } else {
+        if(passthrough_result < 0) {
+            /* Client closed connection unexpectedly */
+            return -1; /* Message already printed */
+        }
+    }
+
+    if (spio_write_data(ctx, &(ctx->server), DATA_END_SIG) == -1) {
         /* Tell the client it went wrong */
         spio_write_data(ctx, &(ctx->client), SMTP_FAILED);
         RETURN(-1);
@@ -1737,9 +1787,9 @@ static void vmessage(spctx_t* ctx, int level, int err,
     }    
   
     /* Either to syslog or stderr */
-    if(g_state.daemonized)
+    //if(g_state.daemonized)
         vsyslog(level, msg, ap);
-    else
+    //else
         vwarnx(msg, ap);  
 }
 
@@ -1872,6 +1922,13 @@ int sp_parse_option(const char* name, const char* value)
     {
         if((g_state.transparent = strtob(value)) == -1)
             errx(2, "invalid value for " CFG_TRANSPARENT);            
+        ret = 1;
+    }
+
+    else if(strcasecmp(CFG_PASSTHROUGH, name) == 0)
+    {
+        if((g_state.passthrough = strtob(value)) == -1)
+            errx(2, "invalid value for " CFG_PASSTHROUGH);            
         ret = 1;
     }
  

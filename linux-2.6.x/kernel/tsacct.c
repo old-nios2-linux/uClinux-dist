@@ -22,8 +22,6 @@
 #include <linux/acct.h>
 #include <linux/jiffies.h>
 
-
-#define USEC_PER_TICK	(USEC_PER_SEC/HZ)
 /*
  * fill in basic accounting fields
  */
@@ -41,7 +39,7 @@ void bacct_add_tsk(struct taskstats *stats, struct task_struct *tsk)
 	ac_etime = timespec_to_ns(&ts);
 	do_div(ac_etime, NSEC_PER_USEC);
 	stats->ac_etime = ac_etime;
-	stats->ac_btime = xtime.tv_sec - ts.tv_sec;
+	stats->ac_btime = get_seconds() - ts.tv_sec;
 	if (thread_group_leader(tsk)) {
 		stats->ac_exitcode = tsk->exit_code;
 		if (tsk->flags & PF_FORKNOEXEC)
@@ -96,6 +94,15 @@ void xacct_add_tsk(struct taskstats *stats, struct task_struct *p)
 	stats->write_char	= p->wchar;
 	stats->read_syscalls	= p->syscr;
 	stats->write_syscalls	= p->syscw;
+#ifdef CONFIG_TASK_IO_ACCOUNTING
+	stats->read_bytes	= p->ioac.read_bytes;
+	stats->write_bytes	= p->ioac.write_bytes;
+	stats->cancelled_write_bytes = p->ioac.cancelled_write_bytes;
+#else
+	stats->read_bytes	= 0;
+	stats->write_bytes	= 0;
+	stats->cancelled_write_bytes = 0;
+#endif
 }
 #undef KB
 #undef MB

@@ -19,18 +19,18 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
-#include <linux/smp_lock.h>
 #include <linux/wait.h>
 #include <linux/suspend.h>
 #include <linux/kthread.h>
 #include <linux/moduleparam.h>
+#include <linux/freezer.h>
 
 #include <asm/prom.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/sections.h>
-#include <asm/of_device.h>
+#include <asm/of_platform.h>
 
 #undef DEBUG
 
@@ -47,11 +47,11 @@ static u8 FAN_SPD_SET[2] = {0x30, 0x31};
 
 static u8 default_limits_local[3] = {70, 50, 70};    /* local, sensor1, sensor2 */
 static u8 default_limits_chip[3] = {80, 65, 80};    /* local, sensor1, sensor2 */
-static const char *sensor_location[3] = {NULL, NULL, NULL};
+static const char *sensor_location[3];
 
-static int limit_adjust = 0;
+static int limit_adjust;
 static int fan_speed = -1;
-static int verbose = 0;
+static int verbose;
 
 MODULE_AUTHOR("Colin Leroy <colin@colino.net>");
 MODULE_DESCRIPTION("Driver for ADT746x thermostat in iBook G4 and "
@@ -335,6 +335,7 @@ static int monitor_task(void *arg)
 {
 	struct thermostat* th = arg;
 
+	set_freezable();
 	while(!kthread_should_stop()) {
 		try_to_freeze();
 		msleep_interruptible(2000);
@@ -559,20 +560,20 @@ thermostat_init(void)
 	np = of_find_node_by_name(NULL, "fan");
 	if (!np)
 		return -ENODEV;
-	if (device_is_compatible(np, "adt7460"))
+	if (of_device_is_compatible(np, "adt7460"))
 		therm_type = ADT7460;
-	else if (device_is_compatible(np, "adt7467"))
+	else if (of_device_is_compatible(np, "adt7467"))
 		therm_type = ADT7467;
 	else
 		return -ENODEV;
 
-	prop = get_property(np, "hwsensor-params-version", NULL);
+	prop = of_get_property(np, "hwsensor-params-version", NULL);
 	printk(KERN_INFO "adt746x: version %d (%ssupported)\n", *prop,
 			 (*prop == 1)?"":"un");
 	if (*prop != 1)
 		return -ENODEV;
 
-	prop = get_property(np, "reg", NULL);
+	prop = of_get_property(np, "reg", NULL);
 	if (!prop)
 		return -ENODEV;
 
@@ -590,9 +591,9 @@ thermostat_init(void)
 			 "limit_adjust: %d, fan_speed: %d\n",
 			 therm_bus, therm_address, limit_adjust, fan_speed);
 
-	if (get_property(np, "hwsensor-location", NULL)) {
+	if (of_get_property(np, "hwsensor-location", NULL)) {
 		for (i = 0; i < 3; i++) {
-			sensor_location[i] = get_property(np,
+			sensor_location[i] = of_get_property(np,
 					"hwsensor-location", NULL) + offset;
 
 			if (sensor_location[i] == NULL)

@@ -274,7 +274,7 @@ Tcl_SignalCmd(dummy, interp, argc, argv)
 
     if (argc == 1) {
         Tcl_AppendResult (interp, "bad # args: ", argv [0], 
-                          " handle|ignore|default|throw ?SIG...?", 0);
+                          " handle|ignore|default|throw ?SIG...?", (char *) NULL);
         return TCL_ERROR;
     }
 
@@ -284,7 +284,7 @@ Tcl_SignalCmd(dummy, interp, argc, argv)
 	    if (argc > 2) {
 		if ((sig = find_signal_by_name(argv[2])) < 0) {
 		    Tcl_AppendResult (interp, argv [0], 
-			      " unknown signal ", argv[2], 0);
+			      " unknown signal ", argv[2], (char *) NULL);
 		    return TCL_ERROR;
 		}
 	    }
@@ -333,7 +333,7 @@ Tcl_SignalCmd(dummy, interp, argc, argv)
         int sig = find_signal_by_name(argv[i]);
         if (sig < 0) {
             Tcl_AppendResult (interp, argv [0], 
-                              " unknown signal ", argv[i], 0);
+                              " unknown signal ", argv[i], (char *) NULL);
             return TCL_ERROR;
         }
         if (action != handling[sig]) {
@@ -383,14 +383,14 @@ Tcl_KillCmd(dummy, interp, argc, argv)
 
     if (argc != 3) {
         Tcl_AppendResult (interp, "bad # args: ", argv [0], 
-                          " SIG pid", 0);
+                          " SIG pid", (char *) NULL);
         return TCL_ERROR;
     }
 
     sig = find_signal_by_name(argv[1]);
     if (sig < 0) {
         Tcl_AppendResult (interp, argv[0], 
-                          " unknown signal ", argv[1], 0);
+                          " unknown signal ", argv[1], (char *) NULL);
         return TCL_ERROR;
     }
 
@@ -398,7 +398,7 @@ Tcl_KillCmd(dummy, interp, argc, argv)
         return TCL_OK;
     }
 
-    Tcl_AppendResult (interp, "Failed to deliver signal", 0);
+    Tcl_AppendResult (interp, "Failed to deliver signal", (char *) NULL);
     return TCL_ERROR;
 }
 

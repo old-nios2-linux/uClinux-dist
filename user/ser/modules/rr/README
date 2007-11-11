@@ -26,6 +26,7 @@ Jan Janak
               1.3.1. enable_full_lr (integer)
               1.3.2. append_fromtag (integer)
               1.3.3. enable_double_rr (integer)
+              1.3.4. add_username (integer)
 
         1.4. Exported Functions
 
@@ -41,10 +42,11 @@ Jan Janak
    1-1. Set enable_full_lr parameter
    1-2. Set append_fromtag parameter
    1-3. Set enable_double_rr parameter
-   1-4. loose_route usage
-   1-5. strict_route usage
-   1-6. record_route usage
-   1-7. record_route_preset usage
+   1-4. Set enable_double_rr parameter
+   1-5. loose_route usage
+   1-6. strict_route usage
+   1-7. record_route usage
+   1-8. record_route_preset usage
      _________________________________________________________
 
 Chapter 1. User's Guide
@@ -119,6 +121,22 @@ modparam("rr", "enable_double_rr", 0)
 ...
      _________________________________________________________
 
+1.3.4. add_username (integer)
+
+   This parameter controls whether Record-Route header fields
+   inserted by SER will contain the username part. When set to 0
+   then SER will produce Record-Route header fields without the
+   username part, when set to 1 then Record-Route header fields
+   will contain the username of the callee in the username part.
+
+   Default value is 0 (do not add username). 
+
+   Example 1-4. Set enable_double_rr parameter
+...
+modparam("rr", "enable_double_rr", 0)
+...
+     _________________________________________________________
+
 1.4. Exported Functions
 
 1.4.1. loose_route()
@@ -126,7 +144,7 @@ modparam("rr", "enable_double_rr", 0)
    The function performs loose routing as defined in RFC3261. See
    the RFC3261 for more details.
 
-   Example 1-4. loose_route usage
+   Example 1-5. loose_route usage
 ...
 loose_route();
 ...
@@ -138,7 +156,7 @@ loose_route();
    the first one, rewrites Request-URI with it's value and
    removes the first URI from Route HFs.
 
-   Example 1-5. strict_route usage
+   Example 1-6. strict_route usage
 ...
 strict_route();
 ...
@@ -150,7 +168,7 @@ strict_route();
    field will be inserted in the message before any other
    Record-Route header fields.
 
-   Example 1-6. record_route usage
+   Example 1-7. record_route usage
 ...
 record_route();
 ...
@@ -165,7 +183,7 @@ record_route();
 
      * string - String to be inserted into the header field.
 
-   Example 1-7. record_route_preset usage
+   Example 1-8. record_route_preset usage
 ...
 record_route_preset("1.2.3.4:5090");
 ...

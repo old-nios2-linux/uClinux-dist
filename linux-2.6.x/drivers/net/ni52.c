@@ -104,8 +104,6 @@ static int automatic_resume; /* experimental .. better should be zero */
 static int rfdadd;	/* rfdadd=1 may be better for 8K MEM cards */
 static int fifo=0x8;	/* don't change */
 
-/* #define REALLY_SLOW_IO */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -936,10 +934,9 @@ static void ni52_rcv_int(struct net_device *dev)
 					skb = (struct sk_buff *) dev_alloc_skb(totlen+2);
 					if(skb != NULL)
 					{
-						skb->dev = dev;
 						skb_reserve(skb,2);
 						skb_put(skb,totlen);
-						eth_copy_and_sum(skb,(char *) p->base+(unsigned long) rbd->buffer,totlen,0);
+						skb_copy_to_linear_data(skb,(char *) p->base+(unsigned long) rbd->buffer,totlen);
 						skb->protocol=eth_type_trans(skb,dev);
 						netif_rx(skb);
 						dev->last_rx = jiffies;
@@ -1185,7 +1182,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct net_device *dev)
 	else
 #endif
 	{
-		memcpy((char *)p->xmit_cbuffs[p->xmit_count],(char *)(skb->data),skb->len);
+		skb_copy_from_linear_data(skb, (char *) p->xmit_cbuffs[p->xmit_count], skb->len);
 		len = skb->len;
 		if (len < ETH_ZLEN) {
 			len = ETH_ZLEN;
@@ -1335,7 +1332,7 @@ int __init init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(dev_ni52);
 	release_region(dev_ni52->base_addr, NI52_TOTAL_SIZE);

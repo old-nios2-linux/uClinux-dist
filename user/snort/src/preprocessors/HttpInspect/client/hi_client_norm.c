@@ -33,38 +33,63 @@
 
 #define MAX_URI 4096
 
-static int UriNorm(HI_SESSION *Session)
+int hi_client_norm(HI_SESSION *Session)
 {
     static u_char UriBuf[MAX_URI];
+    static u_char PostBuf[MAX_URI];
     HI_CLIENT_REQ    *ClientReq;
     int iRet;
     int iUriBufSize = MAX_URI;
-    /*int iCtr;*/
+    int iPostBufSize = MAX_URI;
+
+    if(!Session || !Session->server_conf)
+    {
+        return HI_INVALID_ARG;
+    }
 
     ClientReq = &Session->client.request;
 
-    if((iRet = hi_norm_uri(Session, UriBuf, &iUriBufSize, ClientReq->uri,
-                           ClientReq->uri_size)))
+    /* Handle URI normalization */
+    if(ClientReq->uri_norm)
     {
-        /*
-        **  This means there was a problem while normalizing, so we don't
-        **  set anything.
-        */
-        ClientReq->uri_norm = NULL;
-        ClientReq->uri_norm_size = 0;
+        /* Enable checking for long dirs */
+        Session->norm_flags &= ~HI_BODY;
 
-        /*
-        **  We still return successful, and just inspect the unnormalized
-        **  URI.
-        */
-        return HI_SUCCESS;
+        if( (iRet = hi_norm_uri(Session, UriBuf, &iUriBufSize, 
+                           ClientReq->uri, ClientReq->uri_size)) )
+        {
+            /* There was a non-fatal problem normalizing */
+            ClientReq->uri_norm = NULL;
+            ClientReq->uri_norm_size = 0;
+        }
+        else 
+        {
+            /* Client code is expecting these to be set to non-NULL if 
+             * normalization occurred. */
+            ClientReq->uri_norm      = UriBuf;
+            ClientReq->uri_norm_size = iUriBufSize;
+        }
     }
 
-    /*
-    **  This is where we set up the normalized buffer and length.
-    */
-    ClientReq->uri_norm      = UriBuf;
-    ClientReq->uri_norm_size = iUriBufSize;
+    /* Handle normalization of post methods. 
+     * Note: posts go into a different buffer. */
+    if(ClientReq->post_norm)
+    {
+        /* Disable checking for long dirs in body */
+        Session->norm_flags |= HI_BODY;
+
+        if( (iRet = hi_norm_uri(Session, PostBuf, &iPostBufSize, 
+                           ClientReq->post_raw, ClientReq->post_raw_size)) )
+        {
+            ClientReq->post_norm = NULL;
+            ClientReq->post_norm_size = 0;
+        }
+        else 
+        {
+            ClientReq->post_norm      = PostBuf;
+            ClientReq->post_norm_size = iPostBufSize;
+        }
+    }
 
     /*
     printf("** uri_norm = |");
@@ -79,36 +104,6 @@ static int UriNorm(HI_SESSION *Session)
     }
     printf("| size = %u\n", ClientReq->uri_norm_size);
     */
-
-    return HI_SUCCESS;
-}
-
-int hi_client_norm(HI_SESSION *Session)
-{
-    int iRet;
-
-    if(!Session)
-    {
-        return HI_INVALID_ARG;
-    }
-
-    if(!Session->server_conf)
-    {
-        return HI_INVALID_ARG;
-    }
-
-    /*
-    **  We only normalize the URI right now.
-    **
-    **  Make sure that we have a uri to normalize.
-    */
-    if(Session->client.request.uri_norm)
-    {
-        if((iRet = UriNorm(Session)))
-        {
-            return iRet;
-        }
-    }
 
     return HI_SUCCESS;
 }

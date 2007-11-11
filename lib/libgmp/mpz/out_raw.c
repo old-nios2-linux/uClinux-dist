@@ -1,89 +1,164 @@
-/* mpz_out_raw -- Output a mpz_t in binary.  Use an endianess and word size
-   independent format.
+/* mpz_out_raw -- write an mpz_t in raw format.
 
-Copyright (C) 1995 Free Software Foundation, Inc.
+Copyright 2001, 2002 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include <stdio.h>
-
 #include "gmp.h"
 #include "gmp-impl.h"
+#include "longlong.h"
+
+
+/* HTON_LIMB_STORE takes a normal host byte order limb and stores it as
+   network byte order (ie. big endian). */
+
+#if HAVE_LIMB_BIG_ENDIAN
+#define HTON_LIMB_STORE(dst, limb)  do { *(dst) = (limb); } while (0)
+#endif
+
+#if HAVE_LIMB_LITTLE_ENDIAN
+#define HTON_LIMB_STORE(dst, limb)  BSWAP_LIMB_STORE (dst, limb)
+#endif
+
+#ifndef HTON_LIMB_STORE
+#define HTON_LIMB_STORE(dst, limb)                                      \
+  do {                                                                  \
+    mp_limb_t  __limb = (limb);                                         \
+    char      *__p = (char *) (dst);                                    \
+    int        __i;                                                     \
+    for (__i = 0; __i < BYTES_PER_MP_LIMB; __i++)                       \
+      __p[__i] = (char) (__limb >> ((BYTES_PER_MP_LIMB-1 - __i) * 8));  \
+  } while (0)
+#endif
+
 
 size_t
-#if __STDC__
-mpz_out_raw (FILE *stream, mpz_srcptr x)
-#else
-mpz_out_raw (stream, x)
-     FILE *stream;
-     mpz_srcptr x;
-#endif
+mpz_out_raw (FILE *fp, mpz_srcptr x)
 {
-  int i;
-  mp_size_t s;
-  mp_size_t xsize = ABS (x->_mp_size);
-  mp_srcptr xp = x->_mp_d;
-  mp_size_t out_bytesize;
-  mp_limb_t hi_limb;
-  int n_bytes_in_hi_limb;
+  mp_size_t   xsize, abs_xsize, bytes, i;
+  mp_srcptr   xp;
+  char        *tp, *bp;
+  mp_limb_t   xlimb;
+  int         zeros;
+  size_t      tsize, ssize;
 
-  if (stream == 0)
-    stream = stdout;
+  xsize = SIZ(x);
+  abs_xsize = ABS (xsize);
+  bytes = (abs_xsize * GMP_NUMB_BITS + 7) / 8;
+  tsize = ROUND_UP_MULTIPLE ((unsigned) 4, BYTES_PER_MP_LIMB) + bytes;
 
-  if (xsize == 0)
+  tp = __GMP_ALLOCATE_FUNC_TYPE (tsize, char);
+  bp = tp + ROUND_UP_MULTIPLE ((unsigned) 4, BYTES_PER_MP_LIMB);
+
+  if (bytes != 0)
     {
-      for (i = 4 - 1; i >= 0; i--)
-	fputc (0, stream);
-      return ferror (stream) ? 0 : 4;
+      bp += bytes;
+      xp = PTR (x);
+      i = abs_xsize;
+
+      if (GMP_NAIL_BITS == 0)
+        {
+          /* reverse limb order, and byte swap if necessary */
+#ifdef _CRAY
+          _Pragma ("_CRI ivdep");
+#endif
+          do
+            {
+              bp -= BYTES_PER_MP_LIMB;
+              xlimb = *xp;
+              HTON_LIMB_STORE ((mp_ptr) bp, xlimb);
+              xp++;
+            }
+          while (--i > 0);
+
+          /* strip high zero bytes (without fetching from bp) */
+          count_leading_zeros (zeros, xlimb);
+          zeros /= 8;
+          bp += zeros;
+          bytes -= zeros;
+        }
+      else
+        {
+          mp_limb_t  new_xlimb;
+          int        bits;
+          ASSERT_CODE (char *bp_orig = bp - bytes);
+
+          ASSERT_ALWAYS (GMP_NUMB_BITS >= 8);
+
+          bits = 0;
+          xlimb = 0;
+          for (;;)
+            {
+              while (bits >= 8)
+                {
+                  ASSERT (bp > bp_orig);
+                  *--bp = xlimb & 0xFF;
+                  xlimb >>= 8;
+                  bits -= 8;
+                }
+
+              if (i == 0)
+                break;
+
+              new_xlimb = *xp++;
+              i--;
+              ASSERT (bp > bp_orig);
+              *--bp = (xlimb | (new_xlimb << bits)) & 0xFF;
+              xlimb = new_xlimb >> (8 - bits);
+              bits += GMP_NUMB_BITS - 8;
+            }
+
+          if (bits != 0)
+            {
+              ASSERT (bp > bp_orig);
+              *--bp = xlimb;
+            }
+
+          ASSERT (bp == bp_orig);
+          while (*bp == 0)
+            {
+              bp++;
+              bytes--;
+            }
+        }
     }
 
-  hi_limb = xp[xsize - 1];
-  for (i = BYTES_PER_MP_LIMB - 1; i > 0; i--)
-    {
-      if ((hi_limb >> i * BITS_PER_CHAR) != 0)
-	break;
-    }
-  n_bytes_in_hi_limb = i + 1;
-  out_bytesize = BYTES_PER_MP_LIMB * (xsize - 1) + n_bytes_in_hi_limb;
-  if (x->_mp_size < 0)
-    out_bytesize = -out_bytesize;
+  /* total bytes to be written */
+  ssize = 4 + bytes;
 
-  /* Make the size 4 bytes on all machines, to make the format portable.  */
-  for (i = 4 - 1; i >= 0; i--)
-    fputc ((out_bytesize >> (i * BITS_PER_CHAR)) % (1 << BITS_PER_CHAR),
-	   stream);
+  /* twos complement negative for the size value */
+  bytes = (xsize >= 0 ? bytes : -bytes);
 
-  /* Output from the most significant limb to the least significant limb,
-     with each limb also output in decreasing significance order.  */
+  /* so we don't rely on sign extension in ">>" */
+  ASSERT_ALWAYS (sizeof (bytes) >= 4);
 
-  /* Output the most significant limb separately, since we will only
-     output some of its bytes.  */
-  for (i = n_bytes_in_hi_limb - 1; i >= 0; i--)
-    fputc ((hi_limb >> (i * BITS_PER_CHAR)) % (1 << BITS_PER_CHAR), stream);
+  bp[-4] = bytes >> 24;
+  bp[-3] = bytes >> 16;
+  bp[-2] = bytes >> 8;
+  bp[-1] = bytes;
+  bp -= 4;
 
-  /* Output the remaining limbs.  */
-  for (s = xsize - 2; s >= 0; s--)
-    {
-      mp_limb_t x_limb;
+  if (fp == 0)
+    fp = stdout;
+  if (fwrite (bp, ssize, 1, fp) != 1)
+    ssize = 0;
 
-      x_limb = xp[s];
-      for (i = BYTES_PER_MP_LIMB - 1; i >= 0; i--)
-	fputc ((x_limb >> (i * BITS_PER_CHAR)) % (1 << BITS_PER_CHAR), stream);
-    }
-  return ferror (stream) ? 0 : ABS (out_bytesize) + 4;
+  (*__gmp_free_func) (tp, tsize);
+  return ssize;
 }

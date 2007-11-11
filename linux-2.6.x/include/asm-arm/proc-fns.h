@@ -193,6 +193,14 @@
 #   define CPU_NAME cpu_v6
 #  endif
 # endif
+# ifdef CONFIG_CPU_V7
+#  ifdef CPU_NAME
+#   undef  MULTI_CPU
+#   define MULTI_CPU
+#  else
+#   define CPU_NAME cpu_v7
+#  endif
+# endif
 #endif
 
 #ifndef __ASSEMBLY__
@@ -209,7 +217,6 @@
 
 #define cpu_switch_mm(pgd,mm) cpu_do_switch_mm(virt_to_phys(pgd),mm)
 
-#ifdef CONFIG_MMU
 #define cpu_get_pgd()	\
 	({						\
 		unsigned long pg;			\
@@ -218,7 +225,6 @@
 		pg &= ~0x3fff;				\
 		(pgd_t *)phys_to_virt(pg);		\
 	})
-#endif
 
 #endif
 

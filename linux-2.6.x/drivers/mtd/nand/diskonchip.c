@@ -56,10 +56,7 @@ static unsigned long __initdata doc_locations[] = {
 #endif /*  CONFIG_MTD_DOCPROBE_HIGH */
 #elif defined(__PPC__)
 	0xe4000000,
-#elif defined(CONFIG_MOMENCO_OCELOT)
-	0x2f000000,
-	0xff000000,
-#elif defined(CONFIG_MOMENCO_OCELOT_G) || defined (CONFIG_MOMENCO_OCELOT_C)
+#elif defined(CONFIG_MOMENCO_OCELOT_G)
 	0xff000000,
 #else
 #warning Unknown architecture for DiskOnChip. No default probe locations defined
@@ -117,7 +114,7 @@ module_param(no_autopart, int, 0);
 static int show_firmware_partition = 0;
 module_param(show_firmware_partition, int, 0);
 
-#ifdef MTD_NAND_DISKONCHIP_BBTWRITE
+#ifdef CONFIG_MTD_NAND_DISKONCHIP_BBTWRITE
 static int inftl_bbt_write = 1;
 #else
 static int inftl_bbt_write = 0;
@@ -1772,13 +1769,12 @@ static int __init doc_probe(unsigned long physadr)
 
 	len = sizeof(struct mtd_info) +
 	    sizeof(struct nand_chip) + sizeof(struct doc_priv) + (2 * sizeof(struct nand_bbt_descr));
-	mtd = kmalloc(len, GFP_KERNEL);
+	mtd = kzalloc(len, GFP_KERNEL);
 	if (!mtd) {
 		printk(KERN_ERR "DiskOnChip kmalloc (%d bytes) failed!\n", len);
 		ret = -ENOMEM;
 		goto fail;
 	}
-	memset(mtd, 0, len);
 
 	nand			= (struct nand_chip *) (mtd + 1);
 	doc			= (struct doc_priv *) (nand + 1);

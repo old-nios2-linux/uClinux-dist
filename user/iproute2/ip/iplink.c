@@ -36,9 +36,14 @@ static void usage(void) __attribute__((noreturn));
 
 void iplink_usage(void)
 {
-	fprintf(stderr, "Usage: ip link set DEVICE { up | down | arp { on | off } |\n");
+	fprintf(stderr, "Usage: ip link set DEVICE { up | down |\n");
+	fprintf(stderr, "	                     arp { on | off } |\n");
 	fprintf(stderr, "	                     dynamic { on | off } |\n");
-	fprintf(stderr, "	                     multicast { on | off } | txqueuelen PACKETS |\n");
+	fprintf(stderr, "	                     multicast { on | off } |\n");
+	fprintf(stderr, "	                     allmulticast { on | off } |\n");
+	fprintf(stderr, "	                     promisc { on | off } |\n");
+	fprintf(stderr, "	                     trailers { on | off } |\n");
+	fprintf(stderr, "	                     txqueuelen PACKETS |\n");
 	fprintf(stderr, "	                     name NEWNAME |\n");
 	fprintf(stderr, "	                     address LLADDR | broadcast LLADDR |\n");
 	fprintf(stderr, "	                     mtu MTU }\n");
@@ -77,13 +82,13 @@ static int get_ctl_fd(void)
 	return -1;
 }
 
-static int do_chflags(char *dev, __u32 flags, __u32 mask)
+static int do_chflags(const char *dev, __u32 flags, __u32 mask)
 {
 	struct ifreq ifr;
 	int fd;
 	int err;
 
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
 	fd = get_ctl_fd();
 	if (fd < 0)
 		return -1;
@@ -104,14 +109,14 @@ static int do_chflags(char *dev, __u32 flags, __u32 mask)
 	return err;
 }
 
-static int do_changename(char *dev, char *newdev)
+static int do_changename(const char *dev, const char *newdev)
 {
 	struct ifreq ifr;
 	int fd;
 	int err;
 
-	strcpy(ifr.ifr_name, dev);
-	strcpy(ifr.ifr_newname, newdev);
+	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+	strncpy(ifr.ifr_newname, newdev, IFNAMSIZ);
 	fd = get_ctl_fd();
 	if (fd < 0)
 		return -1;
@@ -125,7 +130,7 @@ static int do_changename(char *dev, char *newdev)
 	return err;
 }
 
-static int set_qlen(char *dev, int qlen)
+static int set_qlen(const char *dev, int qlen)
 {
 	struct ifreq ifr;
 	int s;
@@ -135,8 +140,8 @@ static int set_qlen(char *dev, int qlen)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev); 
-	ifr.ifr_qlen = qlen; 
+	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+	ifr.ifr_qlen = qlen;
 	if (ioctl(s, SIOCSIFTXQLEN, &ifr) < 0) {
 		perror("SIOCSIFXQLEN");
 		close(s);
@@ -144,10 +149,10 @@ static int set_qlen(char *dev, int qlen)
 	}
 	close(s);
 
-	return 0; 
+	return 0;
 }
 
-static int set_mtu(char *dev, int mtu)
+static int set_mtu(const char *dev, int mtu)
 {
 	struct ifreq ifr;
 	int s;
@@ -157,8 +162,8 @@ static int set_mtu(char *dev, int mtu)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev); 
-	ifr.ifr_mtu = mtu; 
+	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+	ifr.ifr_mtu = mtu;
 	if (ioctl(s, SIOCSIFMTU, &ifr) < 0) {
 		perror("SIOCSIFMTU");
 		close(s);
@@ -166,24 +171,24 @@ static int set_mtu(char *dev, int mtu)
 	}
 	close(s);
 
-	return 0; 
+	return 0;
 }
 
-static int get_address(char *dev, int *htype)
+static int get_address(const char *dev, int *htype)
 {
 	struct ifreq ifr;
 	struct sockaddr_ll me;
-	int alen;
+	socklen_t alen;
 	int s;
 
 	s = socket(PF_PACKET, SOCK_DGRAM, 0);
-	if (s < 0) { 
+	if (s < 0) {
 		perror("socket(PF_PACKET)");
 		return -1;
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
-	strcpy(ifr.ifr_name, dev);
+	strncpy(ifr.ifr_name, dev, IFNAMSIZ);
 	if (ioctl(s, SIOCGIFINDEX, &ifr) < 0) {
 		perror("SIOCGIFINDEX");
 		close(s);
@@ -211,12 +216,13 @@ static int get_address(char *dev, int *htype)
 	return me.sll_halen;
 }
 
-static int parse_address(char *dev, int hatype, int halen, char *lla, struct ifreq *ifr)
+static int parse_address(const char *dev, int hatype, int halen,
+		char *lla, struct ifreq *ifr)
 {
 	int alen;
 
 	memset(ifr, 0, sizeof(*ifr));
-	strcpy(ifr->ifr_name, dev);
+	strncpy(ifr->ifr_name, dev, IFNAMSIZ);
 	ifr->ifr_hwaddr.sa_family = hatype;
 	alen = ll_addr_a2n(ifr->ifr_hwaddr.sa_data, 14, lla);
 	if (alen < 0)
@@ -225,7 +231,7 @@ static int parse_address(char *dev, int hatype, int halen, char *lla, struct ifr
 		fprintf(stderr, "Wrong address (%s) length: expected %d bytes\n", lla, halen);
 		return -1;
 	}
-	return 0; 
+	return 0;
 }
 
 static int set_address(struct ifreq *ifr, int brd)
@@ -241,7 +247,7 @@ static int set_address(struct ifreq *ifr, int brd)
 		return -1;
 	}
 	close(s);
-	return 0; 
+	return 0;
 }
 
 
@@ -298,6 +304,33 @@ static int do_set(int argc, char **argv)
 				flags &= ~IFF_MULTICAST;
 			} else
 				return on_off("multicast");
+		} else if (strcmp(*argv, "allmulticast") == 0) {
+			NEXT_ARG();
+			mask |= IFF_ALLMULTI;
+			if (strcmp(*argv, "on") == 0) {
+				flags |= IFF_ALLMULTI;
+			} else if (strcmp(*argv, "off") == 0) {
+				flags &= ~IFF_ALLMULTI;
+			} else
+				return on_off("allmulticast");
+		} else if (strcmp(*argv, "promisc") == 0) {
+			NEXT_ARG();
+			mask |= IFF_PROMISC;
+			if (strcmp(*argv, "on") == 0) {
+				flags |= IFF_PROMISC;
+			} else if (strcmp(*argv, "off") == 0) {
+				flags &= ~IFF_PROMISC;
+			} else
+				return on_off("promisc");
+		} else if (strcmp(*argv, "trailers") == 0) {
+			NEXT_ARG();
+			mask |= IFF_NOTRAILERS;
+			if (strcmp(*argv, "off") == 0) {
+				flags |= IFF_NOTRAILERS;
+			} else if (strcmp(*argv, "on") == 0) {
+				flags &= ~IFF_NOTRAILERS;
+			} else
+				return on_off("trailers");
 		} else if (strcmp(*argv, "arp") == 0) {
 			NEXT_ARG();
 			mask |= IFF_NOARP;
@@ -346,7 +379,7 @@ static int do_set(int argc, char **argv)
 		}
 		if (newbrd) {
 			if (parse_address(dev, htype, halen, newbrd, &ifr1) < 0)
-				return -1; 
+				return -1;
 		}
 	}
 
@@ -355,18 +388,18 @@ static int do_set(int argc, char **argv)
 			return -1;
 		dev = newname;
 	}
-	if (qlen != -1) { 
+	if (qlen != -1) {
 		if (set_qlen(dev, qlen) < 0)
-			return -1; 
+			return -1;
 	}
-	if (mtu != -1) { 
+	if (mtu != -1) {
 		if (set_mtu(dev, mtu) < 0)
-			return -1; 
+			return -1;
 	}
 	if (newaddr || newbrd) {
 		if (newbrd) {
 			if (set_address(&ifr1, 1) < 0)
-				return -1; 
+				return -1;
 		}
 		if (newaddr) {
 			if (set_address(&ifr0, 0) < 0)

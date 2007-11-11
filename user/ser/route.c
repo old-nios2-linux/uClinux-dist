@@ -1,10 +1,10 @@
 /*
- * $Id: route.c,v 1.39 2003/10/12 15:09:08 andrei Exp $
+ * $Id: route.c,v 1.43.2.1 2005/02/18 14:30:44 andrei Exp $
  *
  * SIP routing engine
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,6 +39,7 @@
  *  2003-05-23  comp_ip fixed, now it will resolve its operand and compare
  *              the ip with all the addresses (andrei)
  *  2003-10-10  added more operators support to comp_* (<,>,<=,>=,!=) (andrei)
+ *  2004-10-19  added from_uri & to_uri (andrei)
  */
 
  
@@ -60,7 +61,10 @@
 #include "sr_module.h"
 #include "ip_addr.h"
 #include "resolve.h"
+#include "socket_info.h"
 #include "parser/parse_uri.h"
+#include "parser/parse_from.h"
+#include "parser/parse_to.h"
 #include "mem/mem.h"
 
 
@@ -151,6 +155,9 @@ static int fix_actions(struct action* a)
 	cmd_export_t* cmd;
 	struct sr_module* mod;
 	str s;
+	struct hostent* he;
+	struct ip_addr ip;
+	struct socket_info* si;
 	
 	if (a==0){
 		LOG(L_CRIT,"BUG: fix_actions: null pointer\n");
@@ -239,7 +246,34 @@ static int fix_actions(struct action* a)
 						}
 					}
 				}
-			
+				break;
+			case FORCE_SEND_SOCKET_T:
+				if (t->p1_type!=SOCKID_ST){
+					LOG(L_CRIT, "BUG: fix_actions: invalid subtype"
+								"%d for force_send_socket\n",
+								t->p1_type);
+					return E_BUG;
+				}
+				he=resolvehost(((struct socket_id*)t->p1.data)->name);
+				if (he==0){
+					LOG(L_ERR, "ERROR: fix_actions: force_send_socket:"
+								" could not resolve %s\n",
+								((struct socket_id*)t->p1.data)->name);
+					return E_BAD_ADDRESS;
+				}
+				hostent2ip_addr(&ip, he, 0);
+				si=find_si(&ip, ((struct socket_id*)t->p1.data)->port,
+								((struct socket_id*)t->p1.data)->proto);
+				if (si==0){
+					LOG(L_ERR, "ERROR: fix_actions: bad force_send_socket"
+							" argument: %s:%d (ser doesn't listen on it)\n",
+							((struct socket_id*)t->p1.data)->name,
+							((struct socket_id*)t->p1.data)->port);
+					return E_BAD_ADDRESS;
+				}
+				t->p1.data=si;
+				t->p1_type=SOCKETINFO_ST;
+				break;
 		}
 	}
 	return 0;
@@ -376,7 +410,7 @@ inline static int check_self_op(int op, str* s, unsigned short p)
 {
 	int ret;
 	
-	ret=check_self(s, p);
+	ret=check_self(s, p, 0);
 	switch(op){
 		case EQUAL_OP:
 			break;
@@ -482,6 +516,7 @@ error_op:
 static int eval_elem(struct expr* e, struct sip_msg* msg)
 {
 
+	struct sip_uri uri;
 	int ret;
 	ret=E_BUG;
 	
@@ -515,6 +550,46 @@ static int eval_elem(struct expr* e, struct sip_msg* msg)
 						ret=comp_strstr(&msg->first_line.u.request.uri,
 										 e->r.param, e->op, e->subtype);
 					}
+				}
+				break;
+		case FROM_URI_O:
+				if (parse_from_header(msg)!=0){
+					LOG(L_ERR, "ERROR: eval_elem: bad or missing"
+								" From: header\n");
+					goto error;
+				}
+				if (e->subtype==MYSELF_ST){
+					if (parse_uri(get_from(msg)->uri.s, get_from(msg)->uri.len,
+									&uri) < 0){
+						LOG(L_ERR, "ERROR: eval_elem: bad uri in From:\n");
+						goto error;
+					}
+					ret=check_self_op(e->op, &uri.host,
+										uri.port_no?uri.port_no:SIP_PORT);
+				}else{
+					ret=comp_strstr(&get_from(msg)->uri,
+							e->r.param, e->op, e->subtype);
+				}
+				break;
+		case TO_URI_O:
+				if ((msg->to==0) && ((parse_headers(msg, HDR_TO, 0)==-1) ||
+							(msg->to==0))){
+					LOG(L_ERR, "ERROR: eval_elem: bad or missing"
+								" To: header\n");
+					goto error;
+				}
+				/* to content is parsed automatically */
+				if (e->subtype==MYSELF_ST){
+					if (parse_uri(get_to(msg)->uri.s, get_to(msg)->uri.len,
+									&uri) < 0){
+						LOG(L_ERR, "ERROR: eval_elem: bad uri in To:\n");
+						goto error;
+					}
+					ret=check_self_op(e->op, &uri.host,
+										uri.port_no?uri.port_no:SIP_PORT);
+				}else{
+					ret=comp_strstr(&get_to(msg)->uri,
+										e->r.param, e->op, e->subtype);
 				}
 				break;
 		case SRCIP_O:

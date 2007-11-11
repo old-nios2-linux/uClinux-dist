@@ -6,12 +6,13 @@
 #include "linux/slab.h"
 #include "linux/smp_lock.h"
 #include "linux/ptrace.h"
+#include "linux/fs.h"
 #include "asm/ptrace.h"
 #include "asm/pgtable.h"
 #include "asm/tlbflush.h"
 #include "asm/uaccess.h"
-#include "user_util.h"
 #include "kern_util.h"
+#include "as-layout.h"
 #include "mem_user.h"
 #include "kern.h"
 #include "irq_user.h"
@@ -39,12 +40,13 @@ static long execve1(char *file, char __user * __user *argv,
 		    char __user *__user *env)
 {
         long error;
-
 #ifdef CONFIG_TTY_LOG
+	struct tty_struct *tty;
+
 	mutex_lock(&tty_mutex);
-	task_lock(current);	/* FIXME:  is this needed ? */
-	log_exec(argv, current->signal->tty);
-	task_unlock(current);
+	tty = get_current_tty();
+	if (tty)
+		log_exec(argv, tty);
 	mutex_unlock(&tty_mutex);
 #endif
         error = do_execve(file, argv, env, &current->thread.regs);

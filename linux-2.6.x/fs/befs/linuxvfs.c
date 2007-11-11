@@ -61,14 +61,14 @@ static const struct super_operations befs_sops = {
 };
 
 /* slab cache for befs_inode_info objects */
-static kmem_cache_t *befs_inode_cachep;
+static struct kmem_cache *befs_inode_cachep;
 
 static const struct file_operations befs_dir_operations = {
 	.read		= generic_read_dir,
 	.readdir	= befs_readdir,
 };
 
-static struct inode_operations befs_dir_inode_operations = {
+static const struct inode_operations befs_dir_inode_operations = {
 	.lookup		= befs_lookup,
 };
 
@@ -78,7 +78,7 @@ static const struct address_space_operations befs_aops = {
 	.bmap		= befs_bmap,
 };
 
-static struct inode_operations befs_symlink_inode_operations = {
+static const struct inode_operations befs_symlink_inode_operations = {
 	.readlink	= generic_readlink,
 	.follow_link	= befs_follow_link,
 	.put_link	= befs_put_link,
@@ -212,7 +212,7 @@ befs_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd)
 static int
 befs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct super_block *sb = inode->i_sb;
 	befs_data_stream *ds = &BEFS_I(inode)->i_data.ds;
 	befs_off_t value;
@@ -222,7 +222,7 @@ befs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	char keybuf[BEFS_NAME_LEN + 1];
 	char *nlsname;
 	int nlsnamelen;
-	const char *dirname = filp->f_dentry->d_name.name;
+	const char *dirname = filp->f_path.dentry->d_name.name;
 
 	befs_debug(sb, "---> befs_readdir() "
 		   "name %s, inode %ld, filp->f_pos %Ld",
@@ -277,7 +277,7 @@ befs_alloc_inode(struct super_block *sb)
 {
         struct befs_inode_info *bi;
         bi = (struct befs_inode_info *)kmem_cache_alloc(befs_inode_cachep,
-							SLAB_KERNEL);
+							GFP_KERNEL);
         if (!bi)
                 return NULL;
         return &bi->vfs_inode;
@@ -289,14 +289,11 @@ befs_destroy_inode(struct inode *inode)
         kmem_cache_free(befs_inode_cachep, BEFS_I(inode));
 }
 
-static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
+static void init_once(void * foo, struct kmem_cache * cachep, unsigned long flags)
 {
         struct befs_inode_info *bi = (struct befs_inode_info *) foo;
-	
-	        if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-		            SLAB_CTOR_CONSTRUCTOR) {
-			inode_init_once(&bi->vfs_inode);
-		}
+
+	inode_init_once(&bi->vfs_inode);
 }
 
 static void
@@ -417,7 +414,7 @@ befs_read_inode(struct inode *inode)
 }
 
 /* Initialize the inode cache. Called at fs setup.
- * 
+ *
  * Taken from NFS implementation by Al Viro.
  */
 static int
@@ -427,7 +424,7 @@ befs_init_inodecache(void)
 					      sizeof (struct befs_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						SLAB_MEM_SPREAD),
-					      init_once, NULL);
+					      init_once);
 	if (befs_inode_cachep == NULL) {
 		printk(KERN_ERR "befs_init_inodecache: "
 		       "Couldn't initalize inode slabcache\n");

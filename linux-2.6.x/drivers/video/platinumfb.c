@@ -28,12 +28,12 @@
 #include <linux/interrupt.h>
 #include <linux/fb.h>
 #include <linux/init.h>
-#include <linux/pci.h>
 #include <linux/nvram.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pgtable.h>
 #include <asm/of_device.h>
+#include <asm/of_platform.h>
 
 #include "macmodes.h"
 #include "platinumfb.h"
@@ -52,7 +52,7 @@ struct fb_info_platinum {
 	struct {
 		__u8 red, green, blue;
 	}				palette[256];
-	u32				pseudo_palette[17];
+	u32				pseudo_palette[16];
 	
 	volatile struct cmap_regs	__iomem *cmap_regs;
 	unsigned long			cmap_regs_phys;
@@ -626,6 +626,9 @@ static int __devinit platinumfb_probe(struct of_device* odev,
 	
 	rc = platinum_init_fb(info);
 	if (rc != 0) {
+		iounmap(pinfo->frame_buffer);
+		iounmap(pinfo->platinum_regs);
+		iounmap(pinfo->cmap_regs);
 		dev_set_drvdata(&odev->dev, NULL);
 		framebuffer_release(info);
 	}
@@ -682,14 +685,14 @@ static int __init platinumfb_init(void)
 		return -ENODEV;
 	platinumfb_setup(option);
 #endif
-	of_register_driver(&platinum_driver);
+	of_register_platform_driver(&platinum_driver);
 
 	return 0;
 }
 
 static void __exit platinumfb_exit(void)
 {
-	of_unregister_driver(&platinum_driver);	
+	of_unregister_platform_driver(&platinum_driver);
 }
 
 MODULE_LICENSE("GPL");

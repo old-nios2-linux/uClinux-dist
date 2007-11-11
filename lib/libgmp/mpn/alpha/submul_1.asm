@@ -1,35 +1,38 @@
-dnl  Alpha __gmpn_submul_1 -- Multiply a limb vector with a limb and
-dnl  subtract the result from a second limb vector.
+dnl  Alpha mpn_submul_1 -- Multiply a limb vector with a limb and subtract
+dnl  the result from a second limb vector.
 
-dnl  Copyright (C) 1992, 1994, 1995, 2000 Free Software Foundation, Inc.
+dnl  Copyright 1992, 1994, 1995, 2000, 2002 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
 
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Library General Public License as published by
-dnl  the Free Software Foundation; either version 2 of the License, or (at your
-dnl  option) any later version.
+dnl  it under the terms of the GNU Lesser General Public License as published
+dnl  by the Free Software Foundation; either version 2.1 of the License, or (at
+dnl  your option) any later version.
 
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 dnl  License for more details.
 
-dnl  You should have received a copy of the GNU Library General Public License
-dnl  along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-dnl  the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-dnl  MA 02111-1307, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library; see the file COPYING.LIB.  If not, write
+dnl  to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+dnl  Boston, MA 02110-1301, USA.
 
 include(`../config.m4')
 
-dnl  INPUT PARAMETERS
-dnl  res_ptr	r16
-dnl  s1_ptr	r17
-dnl  size	r18
-dnl  s2_limb	r19
+C      cycles/limb
+C EV4:     42
+C EV5:     18
+C EV6:      7
 
-dnl  This code runs at 42 cycles/limb on EV4, 18 cycles/limb on EV5, and 7
-dnl  cycles/limb on EV6.
+C  INPUT PARAMETERS
+C  rp	r16
+C  up	r17
+C  n	r18
+C  limb	r19
+
 
 ASM_START()
 PROLOGUE(mpn_submul_1)

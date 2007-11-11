@@ -190,6 +190,7 @@ void ParseReact(char *data, OptTreeNode *otn, ReactData *rd)
     ReactData *idx;
     char *tok;      /* token buffer */
     u_int buf_size; 
+    int ret;
 
     char tmp_buf1[] = "<HTML><HEAD><TITLE>Snort</TITLE></HEAD><BODY BGCOLOR=\"#FFFFFF\"><CENTER><BR><H1>Snort!</H1>Version ";
     char tmp_buf2[] = "<H1><BR><BR><FONT COLOR=\"#FF0000\">You are not authorized to open this site!</FONT><BR><BR></H1><H2>";
@@ -287,19 +288,25 @@ void ParseReact(char *data, OptTreeNode *otn, ReactData *rd)
                 }
 
                 /* create html response buffer */
-                if((idx->html_resp_buf=(char *)malloc(sizeof(char)*buf_size))==NULL)
+                idx->html_resp_buf = (char *)SnortAlloc(sizeof(char) * buf_size);
+
+                if (idx->html_resp_size == 1)
                 {
-                    FatalError("ParseReact() html_resp_buf malloc filed!\n");
+                    ret = SnortSnprintf(idx->html_resp_buf, buf_size,
+                                        "%s%s%s%s%s",
+                                        tmp_buf1, VERSION, tmp_buf2, otn->sigInfo.message, tmp_buf3);
                 }
-                bzero((char *)idx->html_resp_buf, buf_size);
-                tok = strcat(idx->html_resp_buf, tmp_buf1);
-                tok = strcat(idx->html_resp_buf, VERSION);
-                tok = strcat(idx->html_resp_buf, tmp_buf2);      
-                if(idx->html_resp_size == 1)
+                else
                 {
-                    tok = strcat(idx->html_resp_buf, otn->sigInfo.message);     
+                    ret = SnortSnprintf(idx->html_resp_buf, buf_size,
+                                        "%s%s%s%s",
+                                        tmp_buf1, VERSION, tmp_buf2, tmp_buf3);
                 }
-                tok = strcat(idx->html_resp_buf, tmp_buf3);      
+
+                if (ret != SNORT_SNPRINTF_SUCCESS)
+                {
+                    FatalError("%s(%d): SnortSnprintf failed\n", file_name, file_line);
+                }
             }
         }
         else if(idx->reaction_flag == REACT_WARN)
@@ -323,19 +330,25 @@ void ParseReact(char *data, OptTreeNode *otn, ReactData *rd)
                 }
 
                 /* create html response buffer */
-                if((idx->html_resp_buf=(char *)malloc(sizeof(char)*buf_size))==NULL)
+                idx->html_resp_buf = (char *)SnortAlloc(sizeof(char) * buf_size);
+
+                if (idx->html_resp_size == 1)
                 {
-                    FatalError("ParseReact() html_resp_buf malloc filed!\n");
+                    ret = SnortSnprintf(idx->html_resp_buf, buf_size,
+                                        "%s%s%s%s%s",
+                                        tmp_buf4, VERSION, tmp_buf5, otn->sigInfo.message, tmp_buf6);
                 }
-                bzero((char *)idx->html_resp_buf, buf_size);
-                tok = strcat(idx->html_resp_buf, tmp_buf4);
-                tok = strcat(idx->html_resp_buf, VERSION);
-                tok = strcat(idx->html_resp_buf, tmp_buf5);      
-                if(idx->html_resp_size == 1)
+                else
                 {
-                    tok = strcat(idx->html_resp_buf, otn->sigInfo.message);     
+                    ret = SnortSnprintf(idx->html_resp_buf, buf_size,
+                                        "%s%s%s%s",
+                                        tmp_buf4, VERSION, tmp_buf5, tmp_buf6);
                 }
-                tok = strcat(idx->html_resp_buf, tmp_buf6);      
+
+                if (ret != SNORT_SNPRINTF_SUCCESS)
+                {
+                    FatalError("%s(%d): SnortSnprintf failed\n", file_name, file_line);
+                }
             }
         }
 

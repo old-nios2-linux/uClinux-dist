@@ -6,6 +6,7 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/module.h>
 
 #include <asm/fixmap.h>
 #include <asm/arch_hooks.h>
@@ -115,7 +116,7 @@ void __init pre_setup_arch_hook()
 
 static struct irqaction irq0 = {
 	.handler =	timer_interrupt,
-	.flags =	IRQF_DISABLED,
+	.flags =	IRQF_DISABLED | IRQF_IRQPOLL,
 	.name =		"timer",
 };
 
@@ -142,6 +143,8 @@ void __init time_init_hook(void)
 
 unsigned long sgivwfb_mem_phys;
 unsigned long sgivwfb_mem_size;
+EXPORT_SYMBOL(sgivwfb_mem_phys);
+EXPORT_SYMBOL(sgivwfb_mem_size);
 
 long long mem_size __initdata = 0;
 

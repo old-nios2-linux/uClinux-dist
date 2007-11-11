@@ -21,6 +21,7 @@ sf_snort_plugin_content.c \
 sf_snort_plugin_hdropts.c \
 sf_snort_plugin_loop.c \
 sf_snort_plugin_pcre.c \
+sf_snort_plugin_rc4.c \
 sfghash.c \
 sfhashfcn.c
 

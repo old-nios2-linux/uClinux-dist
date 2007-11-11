@@ -143,14 +143,13 @@ static int platram_probe(struct platform_device *pdev)
 
 	pdata = pdev->dev.platform_data;
 
-	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (info == NULL) {
 		dev_err(&pdev->dev, "no memory for flash info\n");
 		err = -ENOMEM;
 		goto exit_error;
 	}
 
-	memset(info, 0, sizeof(*info));
 	platform_set_drvdata(pdev, info);
 
 	info->dev = &pdev->dev;
@@ -166,7 +165,8 @@ static int platram_probe(struct platform_device *pdev)
 		goto exit_free;
 	}
 
-	dev_dbg(&pdev->dev, "got platform resource %p (0x%lx)\n", res, res->start);
+	dev_dbg(&pdev->dev, "got platform resource %p (0x%llx)\n", res,
+		(unsigned long long)res->start);
 
 	/* setup map parameters */
 

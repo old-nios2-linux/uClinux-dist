@@ -1,10 +1,10 @@
 /*
- * $Id: dprint.c,v 1.5.6.2 2004/02/12 20:56:51 bogdan Exp $
+ * $Id: dprint.c,v 1.8 2004/08/24 08:45:10 janakj Exp $
  *
  * debug print 
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

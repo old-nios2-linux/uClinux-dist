@@ -3,54 +3,51 @@
    using STATE as the random state previously initialized by a call to
    gmp_randinit().
 
-Copyright (C) 1999, 2000  Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002  Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpf_urandomb (mpf_t rop, gmp_randstate_t rstate, unsigned long int nbits)
-#else
-mpf_urandomb (rop, rstate, nbits)
-     mpf_t rop;
-     gmp_randstate_t rstate;
-     unsigned long int nbits;
-#endif
 {
   mp_ptr rp;
   mp_size_t nlimbs;
   mp_exp_t exp;
+  mp_size_t prec;
 
   rp = PTR (rop);
-  nlimbs = (nbits + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB;
+  nlimbs = BITS_TO_LIMBS (nbits);
+  prec = PREC (rop);
+
+  if (nlimbs > prec + 1 || nlimbs == 0)
+    {
+      nlimbs = prec + 1;
+      nbits = nlimbs * GMP_NUMB_BITS;
+    }
 
   _gmp_rand (rp, rstate, nbits);
 
-  /* If nbits isn't a multiple of BITS_PER_MP_LIMB, shift up.  */
-  if (nlimbs != 0)
-    {
-      if (nbits % BITS_PER_MP_LIMB != 0)
-	mpn_lshift (rp, rp, nlimbs,
-		    BITS_PER_MP_LIMB - nbits % BITS_PER_MP_LIMB);
-    }
+  /* If nbits isn't a multiple of GMP_NUMB_BITS, shift up.  */
+  if (nbits % GMP_NUMB_BITS != 0)
+    mpn_lshift (rp, rp, nlimbs, GMP_NUMB_BITS - nbits % GMP_NUMB_BITS);
 
   exp = 0;
   while (nlimbs != 0 && rp[nlimbs - 1] == 0)
@@ -60,5 +57,4 @@ mpf_urandomb (rop, rstate, nbits)
     }
   EXP (rop) = exp;
   SIZ (rop) = nlimbs;
-
 }

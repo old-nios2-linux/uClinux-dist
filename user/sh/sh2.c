@@ -468,27 +468,27 @@ struct res {
 	char	*r_name;
 	int	r_val;
 } restab[] = {
-	"for",		FOR,
-	"case",		CASE,
-	"esac",		ESAC,
-	"while",	WHILE,
-	"do",		DO,
-	"done",		DONE,
-	"if",		IF,
-	"in",		IN,
-	"then",		THEN,
-	"else",		ELSE,
-	"elif",		ELIF,
-	"until",	UNTIL,
-	"fi",		FI,
+	{"for",		FOR},
+	{"case",	CASE},
+	{"esac",	ESAC},
+	{"while",	WHILE},
+	{"do",		DO},
+	{"done",	DONE},
+	{"if",		IF},
+	{"in",		IN},
+	{"then",	THEN},
+	{"else",	ELSE},
+	{"elif",	ELIF},
+	{"until",	UNTIL},
+	{"fi",		FI},
 
-	";;",		BREAK,
-	"||",		LOGOR,
-	"&&",		LOGAND,
-	"{",		'{',
-	"}",		'}',
+	{";;",		BREAK},
+	{"||",		LOGOR},
+	{"&&",		LOGAND},
+	{"{",		'{'},
+	{"}",		'}'},
 
-	0,
+	{0},
 };
 
 int
@@ -720,7 +720,7 @@ pack:
 
 int
 collect(c, c1)
-register c, c1;
+register int c, c1;
 {
 	char s[2];
 
@@ -743,7 +743,7 @@ register c, c1;
 
 int
 dual(c)
-register c;
+register int c;
 {
 	char s[3];
 	register char *cp = s;

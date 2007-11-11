@@ -1,5 +1,5 @@
 /*
- * $Id: pam_radius_auth.c,v 1.31 2003/02/27 18:01:07 aland Exp $
+ * $Id: pam_radius_auth.c,v 1.39 2007/03/26 05:35:31 fcusack Exp $
  * pam_radius_auth
  *      Authenticate a user via a RADIUS session
  *
@@ -25,6 +25,8 @@
  *          no options.  Patch from Jon Nelson <jnelson@securepipe.com>
  * 1.3.14 - Don't use PATH_MAX, so it builds on GNU Hurd.
  * 1.3.15 - Implement retry option, miscellanous bug fixes.
+ * 1.3.16 - Miscellaneous fixes (see CVS for history)
+ * 1.3.17 - Security fixes
  *
  *
  *   This program is free software; you can redistribute it and/or modify
@@ -120,10 +122,11 @@ static int _pam_parse(int argc, CONST char **argv, radius_conf_t *conf)
     } else if (!strcmp(*argv, "skip_passwd")) {
       ctrl |= PAM_SKIP_PASSWD;
 
-    } else if (!strncmp(*argv,"retry=",6)) {
-      int i = atoi(*argv+6);
-      i &= 0x03;		/* keep the low 3 bits only */
-      ctrl |= (i << 4);
+    } else if (!strncmp(*argv, "retry=", 6)) {
+      conf->retries = atoi(*argv+6);
+
+    } else if (!strcmp(*argv, "localifdown")) {
+      conf->localifdown = 1;
 
     } else if (!strncmp(*argv, "client_id=", 10)) {
       if (conf->client_id) {
@@ -133,6 +136,9 @@ static int _pam_parse(int argc, CONST char **argv, radius_conf_t *conf)
       }
     } else if (!strcmp(*argv, "accounting_bug")) {
       conf->accounting_bug = TRUE;
+
+    } else if (!strcmp(*argv, "ruser")) {
+      ctrl |= PAM_RUSER_ARG;
 
     } else if (!strcmp(*argv, "debug")) {
       ctrl |= PAM_DEBUG_ARG;
@@ -758,7 +764,7 @@ build_radius_packet(AUTH_HDR *request, CONST char *user, CONST char *password, r
  */
 static int
 talk_radius(radius_conf_t *conf, AUTH_HDR *request, AUTH_HDR *response,
-	    char *password, char *old_password, int tries)
+            char *password, char *old_password, int tries)
 {
   int salen, total_length;
   fd_set set;
@@ -985,10 +991,15 @@ send:
 
   if (!server) {
     _pam_log(LOG_ERR, "All RADIUS servers failed to respond.");
-    return PAM_AUTHINFO_UNAVAIL;
+    if (conf->localifdown)
+      retval = PAM_IGNORE;
+    else
+      retval = PAM_AUTHINFO_UNAVAIL;
+  } else {
+    retval = PAM_SUCCESS;
   }
-  
-  return PAM_SUCCESS;
+
+  return retval;
 }
 
 /**************************************************************************
@@ -1051,6 +1062,7 @@ PAM_EXTERN int
 pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
 {
   CONST char *user;
+  CONST char **userinfo;
   char *password = NULL;
   CONST char *rhost;
   char *resp2challenge = NULL;
@@ -1062,10 +1074,8 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
   AUTH_HDR *request = (AUTH_HDR *) send_buffer;
   AUTH_HDR *response = (AUTH_HDR *) recv_buffer;
   radius_conf_t config;
-  int tries;
 
   ctrl = _pam_parse(argc, argv, &config);
-  tries = ((ctrl & PAM_RETRY) >> 4) + 1;
 
   /* grab the user name */
   retval = pam_get_user(pamh, &user, NULL);
@@ -1081,8 +1091,20 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
     DPRINT(LOG_DEBUG, "User name was NULL, or too long");
     return PAM_USER_UNKNOWN;
   }
-
   DPRINT(LOG_DEBUG, "Got user name %s", user);
+
+  if (ctrl & PAM_RUSER_ARG) {
+    retval = pam_get_item(pamh, PAM_RUSER, (CONST void **) &userinfo);
+    PAM_FAIL_CHECK;
+    DPRINT(LOG_DEBUG, "Got PAM_RUSER name %s", userinfo);
+
+    if (!strcmp("root", user)) {
+      user = userinfo;
+      DPRINT(LOG_DEBUG, "Username now %s from ruser", user);
+    } else {
+      DPRINT(LOG_DEBUG, "Skipping ruser for non-root auth");
+    };
+  };
 
   /*
    * Get the IP address of the authentication server
@@ -1152,7 +1174,8 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
 
   DPRINT(LOG_DEBUG, "Sending RADIUS request code %d", request->code);
 
-  retval = talk_radius(&config, request, response, password, NULL, tries);
+  retval = talk_radius(&config, request, response, password,
+                       NULL, config.retries + 1);
   PAM_FAIL_CHECK;
 
   DPRINT(LOG_DEBUG, "Got RADIUS response code %d", response->code);
@@ -1167,19 +1190,29 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
   while (response->code == PW_ACCESS_CHALLENGE) {
     attribute_t *a_state, *a_reply;
     char challenge[BUFFER_SIZE];
-    
+
     /* Now we do a bit more work: challenge the user, and get a response */
     if (((a_state = find_attribute(response, PW_STATE)) == NULL) ||
 	((a_reply = find_attribute(response, PW_REPLY_MESSAGE)) == NULL)) {
-      _pam_log(LOG_ERR, "RADIUS access-challenge received with State or Reply-Message missing");
+      /* Actually, State isn't required. */
+      _pam_log(LOG_ERR, "RADIUS Access-Challenge received with State or Reply-Message missing");
       retval = PAM_AUTHINFO_UNAVAIL;
       goto error;
     }
-    
+
+    /*
+     *	Security fixes.
+     */
+    if ((a_state->length <= 2) || (a_reply->length <= 2)) {
+      _pam_log(LOG_ERR, "RADIUS Access-Challenge received with invalid State or Reply-Message");
+      retval = PAM_AUTHINFO_UNAVAIL;
+      goto error;
+    }
+
     memcpy(challenge, a_reply->data, a_reply->length - 2);
     challenge[a_reply->length - 2] = 0;
-    
-    /* It's full challenge-response, we might as well have echo on */
+
+    /* It's full challenge-response, we should have echo on */
     retval = rad_converse(pamh, PAM_PROMPT_ECHO_ON, challenge, &resp2challenge);
 
     /* now that we've got a response, build a new radius packet */
@@ -1202,7 +1235,7 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
   } else {
     retval = PAM_AUTH_ERR;	/* authentication failure */
 
-  error:
+error:
     /* If there was a password pass it to the next layer */
     if (password && *password) {
       pam_set_item(pamh, PAM_AUTHTOK, password);

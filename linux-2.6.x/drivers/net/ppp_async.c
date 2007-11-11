@@ -159,12 +159,11 @@ ppp_asynctty_open(struct tty_struct *tty)
 	int err;
 
 	err = -ENOMEM;
-	ap = kmalloc(sizeof(*ap), GFP_KERNEL);
+	ap = kzalloc(sizeof(*ap), GFP_KERNEL);
 	if (ap == 0)
 		goto out;
 
 	/* initialize the asyncppp structure */
-	memset(ap, 0, sizeof(*ap));
 	ap->tty = tty;
 	ap->mru = PPP_MRU;
 	spin_lock_init(&ap->xmit_lock);
@@ -802,9 +801,9 @@ process_input_packet(struct asyncppp *ap)
 
 	/* check for address/control and protocol compression */
 	p = skb->data;
-	if (p[0] == PPP_ALLSTATIONS && p[1] == PPP_UI) {
+	if (p[0] == PPP_ALLSTATIONS) {
 		/* chop off address/control */
-		if (skb->len < 3)
+		if (p[1] != PPP_UI || skb->len < 3)
 			goto err;
 		p = skb_pull(skb, 2);
 	}

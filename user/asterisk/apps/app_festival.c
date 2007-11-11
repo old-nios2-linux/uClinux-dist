@@ -1,26 +1,35 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Connect to festival
- * 
  * Copyright (C) 2002, Christos Ricudis
  *
  * Christos Ricudis <ricudis@itc.auth.gr>
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Connect to festival
+ *
+ * \author Christos Ricudis <ricudis@itc.auth.gr>
+ * 
+ * \ingroup applications
+ */
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 65853 $")
+
 #include <sys/types.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/md5.h>
-#include <asterisk/config.h>
-#include <asterisk/utils.h>
-#include <asterisk/lock.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -37,10 +46,18 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/md5.h"
+#include "asterisk/config.h"
+#include "asterisk/utils.h"
+#include "asterisk/lock.h"
+#include "asterisk/options.h"
 
 #define FESTIVAL_CONFIG "festival.conf"
-
-static char *tdesc = "Simple Festival Interface";
 
 static char *app = "Festival";
 
@@ -51,9 +68,6 @@ static char *descrip =
 "play it to the user, allowing any given interrupt keys to immediately terminate and return\n"
 "the value, or 'any' to allow any number back (useful in dialplan)\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static char *socket_receive_file_to_buff(int fd,int *size)
 {
@@ -68,7 +82,10 @@ static char *socket_receive_file_to_buff(int fd,int *size)
     char c;
 
     bufflen = 1024;
-    buff = (char *)malloc(bufflen);
+    if (!(buff = ast_malloc(bufflen)))
+    {
+        /* TODO: Handle memory allocation failure */
+    }
     *size=0;
 
     for (k=0; file_stuff_key[k] != '\0';)
@@ -78,7 +95,10 @@ static char *socket_receive_file_to_buff(int fd,int *size)
         if ((*size)+k+1 >= bufflen)
         {   /* +1 so you can add a NULL if you want */
             bufflen += bufflen/4;
-            buff = (char *)realloc(buff,bufflen);
+            if (!(buff = ast_realloc(buff, bufflen)))
+            {
+                /* TODO: Handle memory allocation failure */
+            }
         }
         if (file_stuff_key[k] == c)
             k++;
@@ -110,17 +130,27 @@ static int send_waveform_to_fd(char *waveform, int length, int fd) {
 #ifdef __PPC__ 
 	char c;
 #endif
+	sigset_t fullset, oldset;
+
+	sigfillset(&fullset);
+	pthread_sigmask(SIG_BLOCK, &fullset, &oldset);
 
         res = fork();
         if (res < 0)
                 ast_log(LOG_WARNING, "Fork failed\n");
-        if (res)
+        if (res) {
+		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
                 return res;
+	}
         for (x=0;x<256;x++) {
                 if (x != fd)
                         close(x);
         }
-//IAS
+	if (ast_opt_high_priority)
+		ast_set_priority(0);
+	signal(SIGPIPE, SIG_DFL);
+	pthread_sigmask(SIG_UNBLOCK, &fullset, NULL);
+/*IAS */
 #ifdef __PPC__  
 	for( x=0; x<length; x+=2)
 	{
@@ -131,7 +161,6 @@ static int send_waveform_to_fd(char *waveform, int length, int fd) {
 #endif
 	
 	write(fd,waveform,length);
-	write(fd,"a",1);
 	close(fd);
 	exit(0);
 }
@@ -149,7 +178,9 @@ static int send_waveform_to_channel(struct ast_channel *chan, char *waveform, in
 		struct ast_frame f;
 		char offset[AST_FRIENDLY_OFFSET];
 		char frdata[2048];
-	} myf;
+	} myf = {
+		.f = { 0, },
+	};
 	
         if (pipe(fds)) {
                  ast_log(LOG_WARNING, "Unable to create pipe\n");
@@ -160,7 +191,8 @@ static int send_waveform_to_channel(struct ast_channel *chan, char *waveform, in
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
 	ast_stopstream(chan);
-
+	ast_indicate(chan, -1);
+	
 	owriteformat = chan->writeformat;
 	res = ast_set_write_format(chan, AST_FORMAT_SLINEAR);
 	if (res < 0) {
@@ -208,17 +240,18 @@ static int send_waveform_to_channel(struct ast_channel *chan, char *waveform, in
 					myf.f.subclass = AST_FORMAT_SLINEAR;
 					myf.f.datalen = res;
 					myf.f.samples = res / 2;
-					myf.f.mallocd = 0;
 					myf.f.offset = AST_FRIENDLY_OFFSET;
 					myf.f.src = __PRETTY_FUNCTION__;
 					myf.f.data = myf.frdata;
 					if (ast_write(chan, &myf.f) < 0) {
 						res = -1;
+						ast_frfree(f);
 						break;
 					}
-					if (res < needed) { // last frame
+					if (res < needed) { /* last frame */
 						ast_log(LOG_DEBUG, "Last frame\n");
 						res=0;
+						ast_frfree(f);
 						break;
 					}
 				} else {
@@ -231,8 +264,9 @@ static int send_waveform_to_channel(struct ast_channel *chan, char *waveform, in
 	}
 	close(fds[0]);
 	close(fds[1]);
-//	if (pid > -1)
-//		kill(pid, SIGKILL);
+
+/*	if (pid > -1) */
+/*		kill(pid, SIGKILL); */
 	if (!res && owriteformat)
 		ast_set_write_format(chan, owriteformat);
 	return res;
@@ -248,16 +282,16 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 {
 	int usecache;
 	int res=0;
-	struct localuser *u;
+	struct ast_module_user *u;
  	struct sockaddr_in serv_addr;
 	struct hostent *serverhost;
 	struct ast_hostent ahp;
 	int fd;
 	FILE *fs;
-	char *host;
-	char *cachedir;
-	char *temp;
-	char *festivalcommand;
+	const char *host;
+	const char *cachedir;
+	const char *temp;
+	const char *festivalcommand;
 	int port=1314;
 	int n;
 	char ack[4];
@@ -277,13 +311,22 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 	int fdesc = -1;
 	char buffer[16384];
 	int seekpos = 0;	
-	char data[256] = "";
+	char *data;	
 	char *intstr;
-	
 	struct ast_config *cfg;
-	cfg = ast_load(FESTIVAL_CONFIG);
+	char *newfestivalcommand;
+
+	if (ast_strlen_zero(vdata)) {
+		ast_log(LOG_WARNING, "festival requires an argument (text)\n");
+		return -1;
+	}
+
+	u = ast_module_user_add(chan);
+
+	cfg = ast_config_load(FESTIVAL_CONFIG);
 	if (!cfg) {
 		ast_log(LOG_WARNING, "No such configuration file %s\n", FESTIVAL_CONFIG);
+		ast_module_user_remove(u);
 		return -1;
 	}
 	if (!(host = ast_variable_retrieve(cfg, "general", "host"))) {
@@ -304,20 +347,34 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 	}
 	if (!(festivalcommand = ast_variable_retrieve(cfg, "general", "festivalcommand"))) {
 		festivalcommand = "(tts_textasterisk \"%s\" 'file)(quit)\n";
+	} else { /* This else parses the festivalcommand that we're sent from the config file for \n's, etc */
+		int i, j;
+		newfestivalcommand = alloca(strlen(festivalcommand) + 1);
+
+		for (i = 0, j = 0; i < strlen(festivalcommand); i++) {
+			if (festivalcommand[i] == '\\' && festivalcommand[i + 1] == 'n') {
+				newfestivalcommand[j++] = '\n';
+				i++;
+			} else if (festivalcommand[i] == '\\') {
+				newfestivalcommand[j++] = festivalcommand[i + 1];
+				i++;
+			} else
+				newfestivalcommand[j++] = festivalcommand[i];
+		}
+		newfestivalcommand[j] = '\0';
+		festivalcommand = newfestivalcommand;
 	}
-	if (!vdata || ast_strlen_zero(vdata)) {
-		ast_log(LOG_WARNING, "festival requires an argument (text)\n");
-		ast_destroy(cfg);
-		return -1;
-	}
-	strncpy(data, vdata, sizeof(data) - 1);
-	if ((intstr = strchr(data, '|'))) {
+	
+	data = ast_strdupa(vdata);
+
+	intstr = strchr(data, '|');
+	if (intstr) {	
 		*intstr = '\0';
 		intstr++;
 		if (!strcasecmp(intstr, "any"))
 			intstr = AST_DIGIT_ANY;
 	}
-	LOCAL_USER_ADD(u);
+	
 	ast_log(LOG_DEBUG, "Text passed to festival server : %s\n",(char *)data);
 	/* Connect to local festival server */
 	
@@ -325,7 +382,8 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 
     	if (fd < 0) {
 		ast_log(LOG_WARNING,"festival_client: can't get socket\n");
-		ast_destroy(cfg);
+		ast_config_destroy(cfg);
+		ast_module_user_remove(u);
         	return -1;
 	}
         memset(&serv_addr, 0, sizeof(serv_addr));
@@ -334,7 +392,8 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 	        serverhost = ast_gethostbyname(host, &ahp);
 	        if (serverhost == (struct hostent *)0) {
         	    	ast_log(LOG_WARNING,"festival_client: gethostbyname failed\n");
-			ast_destroy(cfg);
+			ast_config_destroy(cfg);
+			ast_module_user_remove(u);
 	            	return -1;
         	}
 	        memmove(&serv_addr.sin_addr,serverhost->h_addr, serverhost->h_length);
@@ -344,7 +403,8 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 
 	if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) != 0) {
 		ast_log(LOG_WARNING,"festival_client: connect to server failed\n");
-		ast_destroy(cfg);
+		ast_config_destroy(cfg);
+		ast_module_user_remove(u);
         	return -1;
     	}
     	
@@ -424,8 +484,23 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
 	/* This assumes only one waveform will come back, also LP is unlikely */
 	wave = 0;
 	do {
+               int read_data;
 		for (n=0; n < 3; )
-			n += read(fd,ack+n,3-n);
+               {
+                       read_data = read(fd,ack+n,3-n);
+                       /* this avoids falling in infinite loop
+                        * in case that festival server goes down
+                        * */
+                       if ( read_data == -1 )
+                       {
+                               ast_log(LOG_WARNING,"Unable to read from cache/festival fd\n");
+			       close(fd);
+			       ast_config_destroy(cfg);
+			       ast_module_user_remove(u);
+                               return -1;
+                       }
+                       n += read_data;
+               }
 		ack[3] = '\0';
 		if (strcmp(ack,"WV\n") == 0) {         /* receive a waveform */
 			ast_log(LOG_DEBUG,"Festival WV command\n");
@@ -447,37 +522,32 @@ static int festival_exec(struct ast_channel *chan, void *vdata)
     		}
 	} while (strcmp(ack,"OK\n") != 0);
 	close(fd);
-	ast_destroy(cfg);
-	LOCAL_USER_REMOVE(u);                                                                                
+	ast_config_destroy(cfg);
+	ast_module_user_remove(u);
 	return res;
 
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+
+	ast_module_user_hangup_all();
+
+	return res;
 }
 
-int load_module(void)
+static int load_module(void)
 {
-	
+	struct ast_config *cfg = ast_config_load(FESTIVAL_CONFIG);
+	if (!cfg) {
+		ast_log(LOG_WARNING, "No such configuration file %s\n", FESTIVAL_CONFIG);
+		return AST_MODULE_LOAD_DECLINE;
+	}
+	ast_config_destroy(cfg);
 	return ast_register_application(app, festival_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Simple Festival Interface");

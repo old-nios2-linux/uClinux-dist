@@ -62,7 +62,7 @@
 /*
  * Configuration options
  */
-#define OPT_PORTS                   "ports"
+#define OPT_PORTS               "ports"
 #define OPT_SMB_PORTS           "smb"
 #define OPT_RPC_PORTS           "dcerpc"
 #define OPT_AUTODETECT          "autodetect"
@@ -75,8 +75,8 @@
 
 #define PORT_STR_LEN	        512
 
-char SMBPorts[65536/8];
-char DCERPCPorts[65536/8];
+char SMBPorts[MAX_PORT_INDEX];
+char DCERPCPorts[MAX_PORT_INDEX];
 
 u_int16_t   _max_frag_size = DEFAULT_MAX_FRAG_SIZE;
 u_int32_t   _memcap = DEFAULT_MEMCAP*1024;
@@ -105,11 +105,12 @@ u_int8_t _disable_dcerpc_fragmentation = 0;
  */
 void InitializeDefaultSMBConfig()
 {
-    SMBPorts[(139/8)] |= 1<<(139%8);
+    memset(&SMBPorts[0], 0, sizeof(SMBPorts));
+    memset(&DCERPCPorts[0], 0, sizeof(DCERPCPorts));
 
-    SMBPorts[(445/8)] |= 1<<(445%8);
-
-    DCERPCPorts[(135/8)] |= 1<<(135%8);
+    SMBPorts[PORT_INDEX(139)] |= CONV_PORT(139);
+    SMBPorts[PORT_INDEX(445)] |= CONV_PORT(445);
+    DCERPCPorts[PORT_INDEX(135)] |= CONV_PORT(135);
 
 }
 
@@ -133,6 +134,14 @@ int SMBSetPorts(int type, char *ErrorString, int ErrStrLen)
     int portsSize = 0;
     char portstr[PORT_STR_LEN];
 
+    portstr[PORT_STR_LEN - 1] = '\0';
+
+    if (token == NULL)
+    {
+        snprintf(ErrorString, ErrStrLen, "DCE/RPC - invalid port list\n");
+        return -1;
+    }
+
     switch (type)
     {
         case TRANS_SMB:
@@ -145,6 +154,9 @@ int SMBSetPorts(int type, char *ErrorString, int ErrStrLen)
             portsSize = sizeof(DCERPCPorts);
             transportType = "DCE/RPC";
             break;
+        default:
+            snprintf(ErrorString, ErrStrLen, "Invalid type %d.", type);
+            return -1;
     }
     
     if (strcmp(token , START_PORT_LIST))
@@ -156,15 +168,21 @@ int SMBSetPorts(int type, char *ErrorString, int ErrStrLen)
 
     token = strtok(NULL, CONF_SEPARATORS);
 
+    if (token == NULL)
+    {
+        snprintf(ErrorString, ErrStrLen, "DCE/RPC - invalid port list\n");
+        return -1;
+    }
+
     if ( !strcmp(token,END_PORT_LIST) )
     {
-        _dpd.fatalMsg("ERROR %s(%d) => Empty port list.\n",
-                                *_dpd.config_file, *_dpd.config_line);
+        DynamicPreprocessorFatalMessage("ERROR %s(%d) => Empty port list.\n",
+                                        *_dpd.config_file, *_dpd.config_line);
     }
 
     while (token && strcmp(token,END_PORT_LIST))
     {
-        if(isdigit(token[0]))
+        if(isdigit((int)token[0]))
         {
             char *num_p = NULL; /* used to determine last position in string */
             long t_num;
@@ -173,13 +191,13 @@ int SMBSetPorts(int type, char *ErrorString, int ErrStrLen)
 
             if(*num_p != '\0')
             {
-                _dpd.fatalMsg("ERROR %s(%d) => Port Number invalid format: %s\n",
-                           *_dpd.config_file, *_dpd.config_line, token);
+                DynamicPreprocessorFatalMessage("ERROR %s(%d) => Port Number invalid format: %s\n",
+                                                *_dpd.config_file, *_dpd.config_line, token);
             }
             else if(t_num < 0 || t_num > 65535)
             {
-                _dpd.fatalMsg("ERROR %s(%d) => Port Number out of range: %ld\n",
-                           *_dpd.config_file, *_dpd.config_line, t_num);
+                DynamicPreprocessorFatalMessage("ERROR %s(%d) => Port Number out of range: %ld\n",
+                                                *_dpd.config_file, *_dpd.config_line, t_num);
             }
 
             /* user specified a legal port number and it should override the default
@@ -194,19 +212,20 @@ int SMBSetPorts(int type, char *ErrorString, int ErrStrLen)
             /* mark this port as being interesting using some portscan2-type voodoo,
                and also add it to the port list string while we're at it so we can
                later print out all the ports with a single LogMessage() */
-            ports[(t_num/8)] |= 1<<(t_num%8);
-            if ( (strlen(token) + 1) > ((PORT_STR_LEN - 1) - strlen(portstr)) )
+            ports[PORT_INDEX(t_num)] |= CONV_PORT(t_num);
+
+            snprintf(portstr + strlen(portstr), PORT_STR_LEN - strlen(portstr), "%s ", token);
+
+            if (portstr[PORT_STR_LEN - 1] != '\0')
             {
-                _dpd.fatalMsg("%s(%d) => Too many ports as of port %ld.\n",
-                           *_dpd.config_file, *_dpd.config_line, t_num);
+                DynamicPreprocessorFatalMessage("%s(%d) => Too many ports as of port %ld.\n",
+                                                *_dpd.config_file, *_dpd.config_line, t_num);
             }
-            strcat(portstr, token);
-            strcat(portstr, " ");
         }
         else
         {
-            _dpd.fatalMsg("ERROR %s(%d) => Non-numeric port number: %s\n",
-                *_dpd.config_file, *_dpd.config_line, token);
+            DynamicPreprocessorFatalMessage("ERROR %s(%d) => Non-numeric port number: %s\n",
+                                            *_dpd.config_file, *_dpd.config_line, token);
         }
         token = strtok(NULL, CONF_SEPARATORS);
     }
@@ -258,7 +277,7 @@ int DCERPCProcessConf(char *pcToken, char *ErrorString, int ErrStrLen)
             pcToken = strtok(NULL, CONF_SEPARATORS);
             if (!pcToken)
             {
-                sprintf(ErrorString, "Missing tokens from port list\n");
+                snprintf(ErrorString, ErrStrLen, "Missing tokens from port list\n");
                 return -1;
             }
 
@@ -299,8 +318,28 @@ int DCERPCProcessConf(char *pcToken, char *ErrorString, int ErrStrLen)
         }
         else if ( !strcmp(pcToken, OPT_MAX_FRAG_SIZE) )
         {
-            pcToken = strtok(NULL, CONF_SEPARATORS);
-            _max_frag_size = atoi(pcToken);
+             int max_frag_size;
+ 
+             pcToken = strtok(NULL, CONF_SEPARATORS);
+ 
+             if (pcToken == NULL || !isdigit((int)pcToken[0]))
+             {
+                 snprintf(ErrorString, ErrStrLen,
+                          "Frag size must be an integer between 0 and 65535\n");
+                 return -1;
+             }
+ 
+             max_frag_size = atoi(pcToken);
+ 
+             if (max_frag_size < 0 || max_frag_size > 65535)
+             {
+                 snprintf(ErrorString, ErrStrLen,
+                          "Frag size must be an integer between 0 and 65535\n");
+                 return -1;
+             }
+ 
+             _max_frag_size = max_frag_size;
+ 
             if ( _max_frag_size == 0 )
             {
                 _max_frag_size = DEFAULT_MAX_FRAG_SIZE;
@@ -314,8 +353,28 @@ int DCERPCProcessConf(char *pcToken, char *ErrorString, int ErrStrLen)
         }
         else if ( !strcmp(pcToken, OPT_MEMCAP) )
         {
+            int memcap;
+
             pcToken = strtok(NULL, CONF_SEPARATORS);
-            _memcap = atoi(pcToken);
+
+            if (pcToken == NULL || !isdigit((int)pcToken[0]))
+            {
+                snprintf(ErrorString, ErrStrLen,
+                         "Frag size must be an integer between 0 and 4194303\n");
+                return -1;
+            }
+
+            memcap = atoi(pcToken);
+
+            if (memcap < 0 || memcap > 4194303)
+            {
+                snprintf(ErrorString, ErrStrLen,
+                         "Frag size must be an integer between 0 and 4194303\n");
+                return -1;
+            }
+
+            _memcap = memcap;
+            
             if ( _memcap == 0 )
             {
                 _memcap = DEFAULT_MEMCAP;
@@ -326,6 +385,7 @@ int DCERPCProcessConf(char *pcToken, char *ErrorString, int ErrStrLen)
                 _memcap = DEFAULT_MEMCAP;
                 _dpd.logMsg("    WARNING: Memcap exceeded - setting to maximum.\n");
             }
+
             _memcap *= 1024;
         }
         else if ( !strcmp(pcToken, OPT_ALERT_MEMCAP) )

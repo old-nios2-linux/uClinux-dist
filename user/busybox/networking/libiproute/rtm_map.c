@@ -1,3 +1,4 @@
+/* vi: set sw=4 ts=4: */
 /*
  * rtm_map.c
  *
@@ -12,11 +13,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-
 #include "rt_names.h"
 #include "utils.h"
 
-char *rtnl_rtntype_n2a(int id, char *buf, int len)
+const char *rtnl_rtntype_n2a(int id, char *buf, int len)
 {
 	switch (id) {
 	case RTN_UNSPEC:
@@ -87,9 +87,9 @@ int rtnl_rtntype_a2n(int *id, char *arg)
 	return 0;
 }
 
-int get_rt_realms(__u32 *realms, char *arg)
+int get_rt_realms(uint32_t *realms, char *arg)
 {
-	__u32 realm = 0;
+	uint32_t realm = 0;
 	char *p = strchr(arg, '/');
 
 	*realms = 0;

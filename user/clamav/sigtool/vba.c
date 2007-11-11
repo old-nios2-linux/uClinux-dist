@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #include <stdio.h>
@@ -24,24 +25,24 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <clamav.h>
 #include <ctype.h>
 
-#include "../libclamav/vba_extract.h"
-#include "../libclamav/others.h"
-#include "../libclamav/cltypes.h"
-#include "../libclamav/ole2_extract.h"
+#include "libclamav/clamav.h"
+#include "libclamav/vba_extract.h"
+#include "libclamav/others.h"
+#include "libclamav/cltypes.h"
+#include "libclamav/ole2_extract.h"
 
 typedef struct mac_token_tag
 {
     unsigned char token;
-    char *str;
+    const char *str;
 } mac_token_t;
 
 typedef struct mac_token2_tag
 {
     uint16_t token;
-    char *str;
+    const char *str;
 
 } mac_token2_t;
 
@@ -76,7 +77,7 @@ static char *get_unicode_name (char *name, int size)
     return newname;
 }
 
-void output_token (unsigned char token)
+static void output_token (unsigned char token)
 {
     int i;
     mac_token_t mac_token[] = {
@@ -172,7 +173,7 @@ void output_token (unsigned char token)
     return;
 }
 
-void output_token67 (uint16_t token)
+static void output_token67 (uint16_t token)
 {
     int i;
     mac_token2_t mac_token[] = {
@@ -522,7 +523,7 @@ void output_token67 (uint16_t token)
     return;
 }
 
-void output_token73 (uint16_t token)
+static void output_token73 (uint16_t token)
 {
     int i;
     mac_token2_t mac_token[] = {
@@ -773,7 +774,7 @@ void output_token73 (uint16_t token)
     return;
 }
 
-void print_hex_buff (unsigned char *start, unsigned char *end, int hex_output)
+static void print_hex_buff (unsigned char *start, unsigned char *end, int hex_output)
 {
     if (!hex_output) {
 	return;
@@ -786,10 +787,10 @@ void print_hex_buff (unsigned char *start, unsigned char *end, int hex_output)
     printf ("]\n");
 }
 
-void wm_decode_macro (unsigned char *buff, uint32_t len, int hex_output)
+static void wm_decode_macro (unsigned char *buff, uint32_t len, int hex_output)
 {
-    int i, j;
-    uint8_t s_length;
+    uint32_t i;
+    uint8_t s_length, j;
     uint16_t w_length, int_val;
     unsigned char *tmp_buff, *tmp_name, *line_start;
 

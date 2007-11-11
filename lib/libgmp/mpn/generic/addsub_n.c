@@ -1,23 +1,23 @@
 /* mpn_addsub_n -- Add and Subtract two limb vectors of equal, non-zero length.
 
-Copyright (C) 1999, 2000 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -35,14 +35,7 @@ MA 02111-1307, USA. */
    All operands have n limbs.
    In-place operations allowed.  */
 mp_limb_t
-#if __STDC__
 mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
-#else
-mpn_addsub_n (r1p, r2p, s1p, s2p, n)
-     mp_ptr r1p, r2p;
-     mp_srcptr s1p, s2p;
-     mp_size_t n;
-#endif
 {
 #if HAVE_NATIVE_mpn_add_nc || !HAVE_NATIVE_mpn_add_n
   mp_limb_t       acyo;		/* carry for add */

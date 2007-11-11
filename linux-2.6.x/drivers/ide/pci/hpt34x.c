@@ -43,28 +43,10 @@
 
 #define HPT343_DEBUG_DRIVE_INFO		0
 
-static u8 hpt34x_ratemask (ide_drive_t *drive)
-{
-	return 1;
-}
-
-static void hpt34x_clear_chipset (ide_drive_t *drive)
-{
-	struct pci_dev *dev	= HWIF(drive)->pci_dev;
-	u32 reg1 = 0, tmp1 = 0, reg2 = 0, tmp2 = 0;
-
-	pci_read_config_dword(dev, 0x44, &reg1);
-	pci_read_config_dword(dev, 0x48, &reg2);
-	tmp1 = ((0x00 << (3*drive->dn)) | (reg1 & ~(7 << (3*drive->dn))));
-	tmp2 = (reg2 & ~(0x11 << drive->dn));
-	pci_write_config_dword(dev, 0x44, tmp1);
-	pci_write_config_dword(dev, 0x48, tmp2);
-}
-
 static int hpt34x_tune_chipset (ide_drive_t *drive, u8 xferspeed)
 {
 	struct pci_dev *dev	= HWIF(drive)->pci_dev;
-	u8 speed	= ide_rate_filter(hpt34x_ratemask(drive), xferspeed);
+	u8 speed = ide_rate_filter(drive, xferspeed);
 	u32 reg1= 0, tmp1 = 0, reg2 = 0, tmp2 = 0;
 	u8			hi_speed, lo_speed;
 
@@ -81,7 +63,7 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, u8 xferspeed)
 	pci_read_config_dword(dev, 0x44, &reg1);
 	pci_read_config_dword(dev, 0x48, &reg2);
 	tmp1 = ((lo_speed << (3*drive->dn)) | (reg1 & ~(7 << (3*drive->dn))));
-	tmp2 = ((hi_speed << drive->dn) | reg2);
+	tmp2 = ((hi_speed << drive->dn) | (reg2 & ~(0x11 << drive->dn)));
 	pci_write_config_dword(dev, 0x44, tmp1);
 	pci_write_config_dword(dev, 0x48, tmp2);
 
@@ -98,57 +80,21 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, u8 xferspeed)
 
 static void hpt34x_tune_drive (ide_drive_t *drive, u8 pio)
 {
-	pio = ide_get_best_pio_mode(drive, pio, 5, NULL);
-	hpt34x_clear_chipset(drive);
+	pio = ide_get_best_pio_mode(drive, pio, 5);
 	(void) hpt34x_tune_chipset(drive, (XFER_PIO_0 + pio));
-}
-
-/*
- * This allows the configuration of ide_pci chipset registers
- * for cards that learn about the drive's UDMA, DMA, PIO capabilities
- * after the drive is reported by the OS.  Initially for designed for
- * HPT343 UDMA chipset by HighPoint|Triones Technologies, Inc.
- */
-
-static int config_chipset_for_dma (ide_drive_t *drive)
-{
-	u8 speed = ide_dma_speed(drive, hpt34x_ratemask(drive));
-
-	if (!(speed))
-		return 0;
-
-	hpt34x_clear_chipset(drive);
-	(void) hpt34x_tune_chipset(drive, speed);
-	return ide_dma_enable(drive);
 }
 
 static int hpt34x_config_drive_xfer_rate (ide_drive_t *drive)
 {
-	ide_hwif_t *hwif	= HWIF(drive);
-	struct hd_driveid *id	= drive->id;
-
 	drive->init_speed = 0;
 
-	if (id && (id->capability & 1) && drive->autodma) {
+	if (ide_tune_dma(drive))
+		return -1;
 
-		if (ide_use_dma(drive)) {
-			if (config_chipset_for_dma(drive))
-#ifndef CONFIG_HPT34X_AUTODMA
-				return hwif->ide_dma_off_quietly(drive);
-#else
-				return hwif->ide_dma_on(drive);
-#endif
-		}
-
-		goto fast_ata_pio;
-
-	} else if ((id->capability & 8) || (id->field_valid & 2)) {
-fast_ata_pio:
+	if (ide_use_fast_pio(drive))
 		hpt34x_tune_drive(drive, 255);
-		return hwif->ide_dma_off_quietly(drive);
-	}
-	/* IORDY not supported */
-	return 0;
+
+	return -1;
 }
 
 /*
@@ -170,17 +116,10 @@ static unsigned int __devinit init_chipset_hpt34x(struct pci_dev *dev, const cha
 	pci_write_config_byte(dev, HPT34X_PCI_INIT_REG, 0x00);
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
-	if (cmd & PCI_COMMAND_MEMORY) {
-		if (pci_resource_start(dev, PCI_ROM_RESOURCE)) {
-			pci_write_config_dword(dev, PCI_ROM_ADDRESS,
-				dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
-			printk(KERN_INFO "HPT345: ROM enabled at 0x%08lx\n",
-				(unsigned long)dev->resource[PCI_ROM_RESOURCE].start);
-		}
+	if (cmd & PCI_COMMAND_MEMORY)
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
-	} else {
+	else
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
-	}
 
 	/*
 	 * Since 20-23 can be assigned and are R/W, we correct them.
@@ -209,7 +148,6 @@ static void __devinit init_hwif_hpt34x(ide_hwif_t *hwif)
 
 	hwif->tuneproc = &hpt34x_tune_drive;
 	hwif->speedproc = &hpt34x_tune_chipset;
-	hwif->no_dsc = 1;
 	hwif->drives[0].autotune = 1;
 	hwif->drives[1].autotune = 1;
 
@@ -218,9 +156,11 @@ static void __devinit init_hwif_hpt34x(ide_hwif_t *hwif)
 	if (!hwif->dma_base)
 		return;
 
+#ifdef CONFIG_HPT34X_AUTODMA
 	hwif->ultra_mask = 0x07;
 	hwif->mwdma_mask = 0x07;
 	hwif->swdma_mask = 0x07;
+#endif
 
 	hwif->ide_dma_check = &hpt34x_config_drive_xfer_rate;
 	if (!noautodma)
@@ -233,10 +173,10 @@ static ide_pci_device_t hpt34x_chipset __devinitdata = {
 	.name		= "HPT34X",
 	.init_chipset	= init_chipset_hpt34x,
 	.init_hwif	= init_hwif_hpt34x,
-	.channels	= 2,
 	.autodma	= NOAUTODMA,
 	.bootable	= NEVER_BOARD,
-	.extra		= 16
+	.extra		= 16,
+	.pio_mask	= ATA_PIO5,
 };
 
 static int __devinit hpt34x_init_one(struct pci_dev *dev, const struct pci_device_id *id)
@@ -265,7 +205,7 @@ static struct pci_driver driver = {
 	.probe		= hpt34x_init_one,
 };
 
-static int hpt34x_ide_init(void)
+static int __init hpt34x_ide_init(void)
 {
 	return ide_pci_register_driver(&driver);
 }

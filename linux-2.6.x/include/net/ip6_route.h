@@ -20,7 +20,7 @@ struct route_info {
 				route_pref:2,
 				reserved_h:3;
 #endif
-	__u32			lifetime;
+	__be32			lifetime;
 	__u8			prefix[0];	/* 0,8 or 16 */
 };
 
@@ -116,12 +116,7 @@ extern void			rt6_pmtu_discovery(struct in6_addr *daddr,
 						   struct net_device *dev,
 						   u32 pmtu);
 
-struct nlmsghdr;
 struct netlink_callback;
-extern int inet6_dump_fib(struct sk_buff *skb, struct netlink_callback *cb);
-extern int inet6_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
-extern int inet6_rtm_delroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
-extern int inet6_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 
 struct rt6_rtnl_dump_arg
 {

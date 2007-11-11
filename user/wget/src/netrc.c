@@ -84,7 +84,7 @@ search_netrc (const char *host, const char **acc, const char **passwd,
       if (home)
 	{
 	  int err;
-	  struct stat buf;
+	  struct_stat buf;
 	  char *path = (char *)alloca (strlen (home) + 1
 				       + strlen (NETRC_FILE_NAME) + 1);
 	  sprintf (path, "%s/%s", home, NETRC_FILE_NAME);
@@ -215,9 +215,9 @@ maybe_add_to_list (acc_t **newentry, acc_t **list)
   if (a && ! a->acc)
     {
       /* Free any allocated space.  */
-      xfree (a->host);
-      xfree (a->acc);
-      xfree (a->passwd);
+      xfree_null (a->host);
+      xfree_null (a->acc);
+      xfree_null (a->passwd);
     }
   else
     {
@@ -258,7 +258,8 @@ static acc_t *
 parse_netrc (const char *path)
 {
   FILE *fp;
-  char *line, *p, *tok, *premature_token;
+  char *line, *p, *tok;
+  const char *premature_token;
   acc_t *current, *retval;
   int ln, quote;
 
@@ -283,7 +284,7 @@ parse_netrc (const char *path)
   premature_token = NULL;
 
   /* While there are lines in the file...  */
-  while ((line = read_whole_line (fp)))
+  while ((line = read_whole_line (fp)) != NULL)
     {
       ln ++;
 
@@ -455,9 +456,9 @@ free_netrc(acc_t *l)
   while (l)
     {
       t = l->next;
-      FREE_MAYBE (l->acc);
-      FREE_MAYBE (l->passwd);
-      FREE_MAYBE (l->host);
+      xfree_null (l->acc);
+      xfree_null (l->passwd);
+      xfree_null (l->host);
       xfree (l);
       l = t;
     }
@@ -470,7 +471,7 @@ free_netrc(acc_t *l)
 int
 main (int argc, char **argv)
 {
-  struct stat sb;
+  struct_stat sb;
   char *program_name, *file, *target;
   acc_t *head, *a;
 

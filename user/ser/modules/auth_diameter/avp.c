@@ -1,7 +1,7 @@
 /*
- * $Id: avp.c,v 1.1.2.2 2003/11/21 12:50:58 andrei Exp $
+ * $Id: avp.c,v 1.3 2004/08/24 08:58:25 janakj Exp $
  *
- * Copyright (C) 2002-2003 Fhg Fokus
+ * Copyright (C) 2002-2003 FhG Fokus
  *
  * This file is part of disc, a free diameter server/client.
  *
@@ -165,7 +165,7 @@ AAAReturnCode  AAAAddAVPToMessage(
 	}
 
 	if (!position) {
-		/* insert at the begining */
+		/* insert at the beginning */
 		avp->next = msg->avpList.head;
 		avp->prev = 0;
 		msg->avpList.head = avp;

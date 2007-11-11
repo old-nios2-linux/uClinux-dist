@@ -25,6 +25,19 @@
 
 #include "sf_dynamic_meta.h"
 
+/* specifies that a function does not return
+ * used for quieting Visual Studio warnings
+ */
+#ifdef WIN32
+#if _MSC_VER >= 1400
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN
+#endif
+#else
+#define NORETURN
+#endif
+
 #ifdef PERF_PROFILING
 #ifndef PROFILE_PREPROCS_NOREDEF /* Don't redefine this from the main area */
 #ifdef PROFILING_PREPROCS
@@ -129,5 +142,10 @@ typedef int (*InitPreprocessorLibFunc)(DynamicPreprocessorData *);
 
 int InitDynamicPreprocessors();
 void RemoveDuplicatePreprocessorPlugins();
+
+/* This was necessary because of static code analysis not recognizing that
+ * fatalMsg did not return - use instead of fatalMsg
+ */
+NORETURN void DynamicPreprocessorFatalMessage(const char *format, ...);
 
 #endif /* _SF_DYNAMIC_PREPROCESSOR_H_ */

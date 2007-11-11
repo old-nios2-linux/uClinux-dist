@@ -41,6 +41,7 @@
 #include "debug.h"
 #include "stream.h"
 #include "log.h"
+#include "util.h"
 
 /* Stuff defined in stream4.c that we use */
 extern void DeleteSession(Session *, u_int32_t);
@@ -287,11 +288,12 @@ int CleanHashTable(SFXHASH *table, u_int32_t thetime, Session *save_me, int memC
          */
         while ((sfxhash_count(table) > 1) &&
                 ((memCheck && (stream4_memory_usage > s4data.memcap)) ||
-                 (table->count >
-                  (s4data.max_sessions - s4data.cache_clean_sessions))))
+                 (table->count > (s4data.max_sessions - s4data.cache_clean_sessions)) ||
+                 (pruned < s4data.cache_clean_sessions)))
         {
             u_int32_t i;
             idx = (Session *) sfxhash_lru(table);
+
             for (i=0;i<s4data.cache_clean_sessions && 
                      (sfxhash_count(table) > 1); i++)
             {
@@ -324,7 +326,7 @@ Session *GetNewSession(Packet *p)
 {
     Session *retSsn = NULL;
     SessionHashKey sessionKey;
-    SFXHASH_NODE *hnode;
+    SFXHASH_NODE *hnode = NULL;
     SFXHASH *table;
 
     if (!GetSessionKey(p, &sessionKey))
@@ -339,24 +341,29 @@ Session *GetNewSession(Packet *p)
         table = udpSessionHashTable;
     }
 
-    hnode = sfxhash_get_node(table, &sessionKey);
+    if (sfxhash_count(table) < s4data.max_sessions &&
+        stream4_memory_usage < s4data.memcap)
+    {
+        hnode = sfxhash_get_node(table, &sessionKey);
+    }
+
     if (!hnode)
     {
         DEBUG_WRAP(DebugMessage(DEBUG_STREAM, "HashTable full, clean it\n"););
+
         if (!CleanHashTable(table, p->pkth->ts.tv_sec, NULL, 0))
         {
             DEBUG_WRAP(DebugMessage(DEBUG_STREAM, "HashTable full, no timeouts, clean it\n"););
+
             CleanHashTable(table, 0, NULL, 0);
         }
 
         /* Should have some freed nodes now */
         hnode = sfxhash_get_node(table, &sessionKey);
-#ifdef DEBUG
         if (!hnode)
         {
             DEBUG_WRAP(DebugMessage(DEBUG_STREAM, "Problem, no freed nodes\n"););
         }
-#endif
     }
     if (hnode && hnode->data)
     {
@@ -369,6 +376,7 @@ Session *GetNewSession(Packet *p)
         memcpy(&(retSsn->hashKey), &sessionKey,
                         sizeof(SessionHashKey));
     }
+
     return retSsn;
 }
 
@@ -426,30 +434,32 @@ void InitSessionCache()
          * collisions.
          */
         int hashTableSize = sfxhash_calcrows((int)(s4data.max_sessions * 1.4));
-        int maxSessionMem = s4data.max_sessions * (
-                             sizeof(Session) +
-                             sizeof(SFXHASH_NODE) +
-                             sizeof(SessionHashKey) +
-                             sizeof (SFXHASH_NODE *));
-        int tableMem = (hashTableSize +1) * sizeof(SFXHASH_NODE*);
-        int maxMem = maxSessionMem + tableMem;
+        //int maxSessionMem = s4data.max_sessions * (
+        //                     sizeof(Session) +
+        //                     sizeof(SFXHASH_NODE) +
+        //                     sizeof(SessionHashKey) +
+        //                     sizeof (SFXHASH_NODE *));
+        //int tableMem = (hashTableSize +1) * sizeof(SFXHASH_NODE*);
+        //int maxMem = maxSessionMem + tableMem;
         sessionHashTable = sfxhash_new(hashTableSize,
                         sizeof(SessionHashKey),
-                        sizeof(Session), maxMem, 0, NULL, NULL, 1);
+                        //sizeof(Session), maxMem, 0, NULL, NULL, 1);
+                        sizeof(Session), 0, 0, NULL, NULL, 1);
 
 #ifdef STREAM4_UDP
         /* And create the udp one */
         hashTableSize = sfxhash_calcrows((int)(s4data.max_udp_sessions * 1.4));
-        maxSessionMem = s4data.max_udp_sessions * (
-                             sizeof(Session) +
-                             sizeof(SFXHASH_NODE) +
-                             sizeof(SessionHashKey) +
-                             sizeof (SFXHASH_NODE *));
-        tableMem = (hashTableSize +1) * sizeof(SFXHASH_NODE*);
-        maxMem = maxSessionMem + tableMem;
+        //maxSessionMem = s4data.max_udp_sessions * (
+        //                     sizeof(Session) +
+        //                     sizeof(SFXHASH_NODE) +
+        //                     sizeof(SessionHashKey) +
+        //                     sizeof (SFXHASH_NODE *));
+        //tableMem = (hashTableSize +1) * sizeof(SFXHASH_NODE*);
+        //maxMem = maxSessionMem + tableMem;
         udpSessionHashTable = sfxhash_new(hashTableSize,
                         sizeof(SessionHashKey),
-                        sizeof(Session), maxMem, 0, NULL, NULL, 1);
+                        //sizeof(Session), maxMem, 0, NULL, NULL, 1);
+                        sizeof(Session), 0, 0, NULL, NULL, 1);
 #endif
     }
 }

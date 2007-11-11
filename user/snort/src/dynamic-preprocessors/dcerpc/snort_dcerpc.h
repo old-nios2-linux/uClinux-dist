@@ -72,6 +72,13 @@ typedef struct _DCERPC
 #pragma pack(pop,snort_smb_hdrs,1)
 #endif
 
+#define MAX_PORT_INDEX 65536 / 8
+
+/* Convert port value into an index for the dns_config.ports array */
+#define PORT_INDEX(port) port / 8
+
+/* Convert port value into a value for bitwise operations */
+#define CONV_PORT(port) 1 << (port % 8)
     
 int  DCERPCProcessConf(char *pcToken, char *ErrorString, int ErrStrLen);
 int  DCERPCDecode(void *p);

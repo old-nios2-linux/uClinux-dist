@@ -108,6 +108,9 @@ int main(int argc, char *argv[])
 #ifdef ONLY_ALLOW_ROOT
 			&& strcmp(user, "root") == 0
 #endif
+#ifdef SECURITY_COUNTS
+			&& access__permitted(user)
+#endif
 			) {
 		int good = 0;
 

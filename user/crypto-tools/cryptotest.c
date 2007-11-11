@@ -29,7 +29,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $FreeBSD: src/tools/tools/crypto/cryptotest.c,v 1.6 2004/09/07 18:35:00 sam Exp $
+ * $FreeBSD: src/tools/tools/crypto/cryptotest.c,v 1.9 2007/03/21 03:42:51 sam Exp $
  */
 
 /*
@@ -40,6 +40,7 @@
  * Run count iterations of a crypt+decrypt or mac operation on a buffer of
  * size bytes.  A random key and iv are used.  Options:
  *	-c	check the results
+ *	-d dev	pin work on device dev
  *	-z	run all available algorithms on a variety of buffer sizes
  *	-v	be verbose
  *	-b	mark operations for batching
@@ -56,10 +57,15 @@
  *	aes192	rijndael/aes 192-bit cbc
  *	aes256	rijndael/aes 256-bit cbc
  *	md5	md5 hmac
- *	sha1	sha1 hmac
- *	sha256	256-bit sha2 hmac
- *	sha384	384-bit sha2 hmac
- *	sha512	512--bit sha2 hmac
+ *	md5	md5 hmac
+ *	sha1	sha1
+ *	sha1_hmac	sha1 hmac
+ *	sha256	256-bit sha2
+ *	sha256_hmac	256-bit sha2 hmac
+ *	sha384	384-bit sha2
+ *	sha384_hmac	384-bit sha2 hmac
+ *	sha512	512--bit sha2
+ *	sha512_hmac	512--bit sha2 hmac
  *
  * For a test of how fast a crypto card is, use something like:
  *	cryptotest -z 1024
@@ -92,8 +98,15 @@
 #include <sys/mman.h>
 #include <paths.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <err.h>
+
+#include <string.h>
+#include <err.h>
 
 #include <sys/sysctl.h>
+#include <time.h>
 #include <sys/time.h>
 #include <crypto/cryptodev.h>
 
@@ -106,6 +119,7 @@ void	hexdump(char *, int);
 int	verbose = 0;
 int	opflags = 0;
 int	verify = 0;
+int	crid = CRYPTO_FLAG_HARDWARE | CRYPTO_FLAG_SOFTWARE;
 
 int swap_iv = 0;
 int swap_key = 0;
@@ -132,47 +146,57 @@ struct alg {
 	int	blocksize;
 	int	minkeylen;
 	int	maxkeylen;
+	int	hashsize;
 	int	code;
 } algorithms[] = {
 #ifdef CRYPTO_NULL_CBC
-	{ "null",	0,	8,	1,	256,	CRYPTO_NULL_CBC },
+	{ "null",			0,	8,	1,	256,	0,	CRYPTO_NULL_CBC },
 #endif
-	{ "des",	0,	8,	8,	8,	CRYPTO_DES_CBC },
-	{ "3des",	0,	8,	24,	24,	CRYPTO_3DES_CBC },
-	{ "blf",	0,	8,	5,	56,	CRYPTO_BLF_CBC },
-	{ "cast",	0,	8,	5,	16,	CRYPTO_CAST_CBC },
-	{ "skj",	0,	8,	10,	10,	CRYPTO_SKIPJACK_CBC },
-	{ "aes",	0,	16,	16,	16,	CRYPTO_RIJNDAEL128_CBC},
-	{ "aes192",	0,	16,	24,	24,	CRYPTO_RIJNDAEL128_CBC},
-	{ "aes256",	0,	16,	32,	32,	CRYPTO_RIJNDAEL128_CBC},
+	{ "des",			0,	8,	8,	8,		0,	CRYPTO_DES_CBC },
+	{ "3des",			0,	8,	24,	24,		0,	CRYPTO_3DES_CBC },
+	{ "blf",			0,	8,	5,	56,		0,	CRYPTO_BLF_CBC },
+	{ "cast",			0,	8,	5,	16,		0,	CRYPTO_CAST_CBC },
+	{ "skj",			0,	8,	10,	10,		0,	CRYPTO_SKIPJACK_CBC },
+	{ "aes",			0,	16,	16,	16,		0,	CRYPTO_RIJNDAEL128_CBC},
+	{ "aes192",			0,	16,	24,	24,		0,	CRYPTO_RIJNDAEL128_CBC},
+	{ "aes256",			0,	16,	32,	32,		0,	CRYPTO_RIJNDAEL128_CBC},
 #ifdef notdef
-	{ "arc4",	0,	8,	1,	32,	CRYPTO_ARC4 },
+	{ "arc4",			0,	8,	1,	32,		0,	CRYPTO_ARC4 },
 #endif
-	{ "md5",	1,	8,	16,	16,	CRYPTO_MD5 },
-	{ "md5_hmac",	1,	8,	16,	16,	CRYPTO_MD5_HMAC },
-	{ "sha1",	1,	8,	20,	20,	CRYPTO_SHA1 },
-	{ "sha1_hmac",	1,	8,	20,	20,	CRYPTO_SHA1_HMAC },
-	{ "sha256",	1,	8,	32,	32,	CRYPTO_SHA2_HMAC },
-	{ "sha384",	1,	8,	48,	48,	CRYPTO_SHA2_HMAC },
-	{ "sha512",	1,	8,	64,	64,	CRYPTO_SHA2_HMAC },
+	{ "md5",			1,	8,	0,	0,		16,	CRYPTO_MD5 },
+	{ "md5_hmac",		1,	8,	1,	64,		16,	CRYPTO_MD5_HMAC },
+	{ "sha1",			1,	8,	0,	0,		20,	CRYPTO_SHA1 },
+	{ "sha1_hmac",		1,	1,	1,	64,		20,	CRYPTO_SHA1_HMAC },
+	{ "sha256",			1,	8,	0,	0,		32,	CRYPTO_SHA2_256 },
+	{ "sha256_hmac",	1,	1,	1,	64,		32,	CRYPTO_SHA2_256_HMAC },
+	{ "sha384",			1,	8,	0,	0,		48,	CRYPTO_SHA2_384 },
+	{ "sha384_hmac",	1,	1,	1,	64,		48,	CRYPTO_SHA2_384_HMAC },
+	{ "sha512",			1,	8,	0,	0,		64,	CRYPTO_SHA2_512 },
+	{ "sha512_hmac",	1,	1,	1,	64,		64,	CRYPTO_SHA2_512_HMAC },
 };
 
 static void
 usage(const char* cmd)
 {
-	printf("usage: %s [-c] [-z] [-s] [-b] [-v] [-a algorithm] [count] [size ...]\n",
+	printf("usage: %s [-czsbvVKD] [-d dev] [-a algorithm] [count] [size ...]\n",
 		cmd);
 	printf("where algorithm is one of:\n");
-	printf("    des 3des (default) blowfish cast skipjack\n");
+	printf("    des 3des (default) blf (blowfish) cast skj (skipjack)\n");
 	printf("    aes (aka rijndael) aes192 aes256 arc4\n");
+	printf("    md5 md5_hmac sha1 sha1_hmac sha256 sha256_hmac\n");
+	printf("    sha384 sha384_hmac sha512 sha512_hmac\n");
 	printf("count is the number of encrypt/decrypt ops to do\n");
 	printf("size is the number of bytes of text to encrypt+decrypt\n");
 	printf("\n");
 	printf("-c check the results (slows timing)\n");
+	printf("-d use specific device\n");
 	printf("-z run all available algorithms on a variety of sizes\n");
 	printf("-v be verbose\n");
 	printf("-b mark operations for batching\n");
 	printf("-p profile kernel crypto operation (must be root)\n");
+	printf("-V swap IV\n");
+	printf("-K swap KEY\n");
+	printf("-D swap DATA\n");
 	exit(-1);
 }
 
@@ -214,12 +238,36 @@ devcrypto(void)
 }
 
 static int
+crlookup(const char *devname)
+{
+	struct crypt_find_op find;
+
+	find.crid = -1;
+	strlcpy(find.name, devname, sizeof(find.name));
+	if (ioctl(devcrypto(), CIOCFINDDEV, &find) == -1)
+		err(1, "line %d:ioctl(CIOCFINDDEV)", __LINE__);
+	return find.crid;
+}
+
+static const char *
+crfind(int crid)
+{
+	static struct crypt_find_op find;
+
+	bzero(&find, sizeof(find));
+	find.crid = crid;
+	if (ioctl(devcrypto(), CRIOFINDDEV, &find) == -1)
+		err(1, "line %d:ioctl(CIOCFINDDEV): crid %d", __LINE__, crid);
+	return find.name;
+}
+
+static int
 crget(void)
 {
 	int fd;
 
 	if (ioctl(devcrypto(), CRIOGET, &fd) == -1)
-		err(1, "ioctl(CRIOGET)");
+		err(1, "line %d:ioctl(CRIOGET)", __LINE__);
 	if (fcntl(fd, F_SETFD, 1) == -1)
 		err(1, "fcntl(F_SETFD) (crget)");
 	return fd;
@@ -241,12 +289,12 @@ rdigit(void)
 }
 
 static void
-runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
+runtest(struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 {
 	int i, fd = crget();
-	struct timeval start, stop, dt;
-	char *cleartext, *ciphertext, *originaltext;
-	struct session_op sop;
+	struct timeval start, stop;
+	char *cleartext = NULL, *ciphertext = NULL, *originaltext = NULL;
+	struct session2_op sop;
 	struct crypt_op cop;
 	char iv[MAX_IV_SIZE];
 
@@ -272,8 +320,11 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 		if (swap_key)
 			swap_buf(sop.mackey, sop.mackeylen);
 	}
+	sop.crid = crid;
+	if (verbose)
+		printf(" crid = %x\n", crid);
 	if (ioctl(fd, cmd, &sop) < 0) {
-		if (cmd == CIOCGSESSION) {
+		if (cmd == CIOCGSESSION || cmd == CIOCGSESSION2) {
 			close(fd);
 			if (verbose) {
 				printf("cipher %s", alg->name);
@@ -291,7 +342,7 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 		err(1, "CIOCGSESSION");
 	}
 
-	originaltext = malloc(3*size);
+	originaltext = (char *)malloc((alg->hashsize ? 2 : 3)*size + alg->hashsize);
 	if (originaltext == NULL)
 		err(1, "malloc (text)");
 	cleartext = originaltext+size;
@@ -303,7 +354,9 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 		iv[i] = rdigit();
 
 	if (verbose) {
+		printf("alg = %s\n", alg->name);
 		printf("session = 0x%x\n", sop.ses);
+		printf("device = %s\n", crfind(sop.crid));
 		printf("count = %d, size = %d\n", count, size);
 		if (!alg->ishash) {
 			printf("iv:");
@@ -333,7 +386,7 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 				swap_buf(iv, N(iv));
 
 			if (ioctl(fd, CIOCCRYPT, &cop) < 0)
-				err(1, "ioctl(CIOCCRYPT)");
+				err(1, "line %d:ioctl(CIOCCRYPT)", __LINE__);
 
 			if (swap_data)
 				swap_buf(cleartext, size);
@@ -372,7 +425,7 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 				swap_buf(iv, N(iv));
 
 			if (ioctl(fd, CIOCCRYPT, &cop) < 0)
-				err(1, "ioctl(CIOCCRYPT)");
+				err(1, "line %d:ioctl(CIOCCRYPT)", __LINE__);
 
 			if (swap_data)
 				swap_buf(cleartext, size);
@@ -401,7 +454,7 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 			cop.iv = 0;
 
 			if (ioctl(fd, CIOCCRYPT, &cop) < 0)
-				err(1, "ioctl(CIOCCRYPT)");
+				err(1, "line %d:ioctl(CIOCCRYPT)", __LINE__);
 
 			if (verbose) {
 				printf("ciphertext:");
@@ -420,6 +473,10 @@ runtest(struct alg *alg, int count, int size, int cmd, struct timeval *tv)
 	}
 	timersub(&stop, &start, tv);
 
+	if (sop.key)
+		free(sop.key);
+	if (sop.mackey)
+		free(sop.mackey);
 	free(originaltext);
 
 	close(fd);
@@ -433,7 +490,7 @@ resetstats()
 	size_t slen;
 
 	slen = sizeof (stats);
-	if (sysctlbyname("kern.crypto_stats", &stats, &slen, NULL, NULL) < 0) {
+	if (sysctlbyname("kern.crypto_stats", &stats, &slen, NULL, 0) < 0) {
 		perror("kern.crypto_stats");
 		return;
 	}
@@ -465,14 +522,15 @@ printt(const char* tag, struct cryptotstat *ts)
 #endif
 
 static void
-runtests(struct alg *alg, int count, int size, int cmd, int threads, int profile)
+runtests(struct alg *alg, int count, int size, u_long cmd, int threads, int profile)
 {
 	int i, status;
 	double t;
 	void *region;
 	struct timeval *tvp;
-	struct timeval total;
+#ifdef __FreeBSD__
 	int otiming;
+#endif
 
 	if (size % alg->blocksize) {
 		if (verbose)
@@ -518,10 +576,17 @@ runtests(struct alg *alg, int count, int size, int cmd, int threads, int profile
 	if (t) {
 		int nops = alg->ishash ? count : 2*count;
 
+#if 0
 		t /= threads;
-		printf("%6.3lf sec, %7d %6s crypts, %7d bytes, %8.0lf byte/sec, %7.1lf Mb/sec\n",
+		printf("%6.3lf sec, %7d %6s crypts, %7d bytes, %8.0lf bytes/sec, %7.1lf Mbit/sec\n",
 		    t, nops, alg->name, size, (double)nops*size / t,
 		    (double)nops*size / t * 8 / 1024 / 1024);
+#else
+		nops *= threads;
+		printf("%8.3lf sec, %7d %6s crypts, %7d bytes, %8.0lf byte/sec, %7.1lf Mb/sec\n",
+		    t, nops, alg->name, size, (double)nops*size / t,
+		    (double)nops*size / t * 8 / 1024 / 1024);
+#endif
 	}
 #ifdef __FreeBSD__
 	if (profile) {
@@ -531,7 +596,7 @@ runtests(struct alg *alg, int count, int size, int cmd, int threads, int profile
 		if (sysctlbyname("debug.crypto_timing", NULL, NULL,
 				&otiming, sizeof (otiming)) < 0)
 			perror("debug.crypto_timing");
-		if (sysctlbyname("kern.crypto_stats", &stats, &slen, NULL, NULL) < 0)
+		if (sysctlbyname("kern.crypto_stats", &stats, &slen, NULL, 0) < 0)
 			perror("kern.cryptostats");
 		if (stats.cs_invoke.count) {
 			printt("dispatch->invoke", &stats.cs_invoke);
@@ -541,6 +606,9 @@ runtests(struct alg *alg, int count, int size, int cmd, int threads, int profile
 		}
 	}
 #endif
+	if (munmap(region, threads * sizeof (struct timeval)) != 0)
+		perror("munmap");
+
 	fflush(stdout);
 }
 
@@ -550,7 +618,7 @@ main(int argc, char **argv)
 	struct alg *alg = NULL;
 	int count = 1;
 	int sizes[128], nsizes = 0;
-	int cmd = CIOCGSESSION;
+	u_long cmd = CIOCGSESSION2;
 	int testall = 0;
 	int maxthreads = 1;
 	int profile = 0;
@@ -558,7 +626,7 @@ main(int argc, char **argv)
 
 	srandom(time(0));
 
-	while ((ch = getopt(argc, argv, "VKDcpzsva:bt:S:")) != -1) {
+	while ((ch = getopt(argc, argv, "cpzsva:bd:t:S:VKD")) != -1) {
 		switch (ch) {
 		case 'V': swap_iv = 1; break;
 		case 'K': swap_key = 1; break;
@@ -582,6 +650,9 @@ main(int argc, char **argv)
 			break;
 		case 'S':
 			srandom(atoi(optarg));
+			break;
+		case 'd':
+			crid = crlookup(optarg);
 			break;
 		case 't':
 			maxthreads = atoi(optarg);
@@ -620,8 +691,14 @@ main(int argc, char **argv)
 		else
 			sizes[nsizes++] = 8;
 		if (testall) {
-			while (sizes[nsizes-1] < 8*1024) {
+			/*
+			 * OCF is limited to CRYPTO_MAX_DATA_LEN, so make it 256 bytes less
+			 * for safety sakes.
+			 */
+			while (sizes[nsizes-1] < (CRYPTO_MAX_DATA_LEN - 256)) {
 				sizes[nsizes] = sizes[nsizes-1]<<1;
+				if (sizes[nsizes] > CRYPTO_MAX_DATA_LEN)
+					sizes[nsizes] -= 256;
 				nsizes++;
 			}
 		}

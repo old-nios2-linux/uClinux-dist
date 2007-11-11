@@ -108,53 +108,28 @@ so, delete this exception statement from your version.  */
 #endif
 #endif
 
-#ifdef __BEOS__
-# undef READ
-# undef WRITE
-# define READ(fd, buf, cnt) recv((fd), (buf), (cnt), 0)
-# define WRITE(fd, buf, cnt) send((fd), (buf), (cnt), 0)
+/* These are needed so we can #define struct_stat to struct _stati64
+   under Windows. */
+#ifndef struct_stat
+# define struct_stat struct stat
+#endif
+#ifndef struct_fstat
+# define struct_fstat struct stat
 #endif
 
-/* mswindows.h defines these.  */
-#ifndef READ
-# define READ(fd, buf, cnt) read ((fd), (buf), (cnt))
-#endif
-#ifndef WRITE
-# define WRITE(fd, buf, cnt) write ((fd), (buf), (cnt))
-#endif
-#ifndef REALCLOSE
-# define REALCLOSE(x) close (x)
+#ifdef HAVE_LIMITS_H
+# include <limits.h>
 #endif
 
-#define CLOSE(x)				\
-do {						\
-  REALCLOSE (x);				\
-  DEBUGP (("Closing fd %d\n", x));		\
-} while (0)
+#ifndef CHAR_BIT
+# define CHAR_BIT 8
+#endif
 
-/* Define a large integral type useful for storing large sizes that
-   exceed sizes of one download, such as when printing the sum of all
-   downloads.  Note that this has nothing to do with large file
-   support, yet.
-
-   We use a 64-bit integral type where available, `double' otherwise.
-   It's hard to print LARGE_INT's portably, but fortunately it's
-   rarely needed.  */
-
-#if SIZEOF_LONG >= 8
-/* Long is large enough: use it.  */
-typedef long LARGE_INT;
-# define LARGE_INT_FMT "%ld"
-#else
-# if SIZEOF_LONG_LONG >= 8
-/* Long long is large enough: use it.  */
-typedef long long LARGE_INT;
-#  define LARGE_INT_FMT "%lld"
-# else
-/* Large integer type unavailable; use `double' instead.  */
-typedef double LARGE_INT;
-#  define LARGE_INT_FMT "%.0f"
-# endif
+#ifndef LONG_MAX
+# define LONG_MAX ((long) ~((unsigned long)1 << (CHAR_BIT * sizeof (long) - 1)))
+#endif
+#ifndef LLONG_MAX
+# define LLONG_MAX ((long long) ~((unsigned long long)1 << (CHAR_BIT * sizeof (long long) - 1)))
 #endif
 
 /* These are defined in cmpt.c if missing, therefore it's generally
@@ -180,11 +155,11 @@ int snprintf ();
 #ifndef HAVE_VSNPRINTF
 int vsnprintf ();
 #endif
-#ifndef HAVE_USLEEP
-int usleep PARAMS ((unsigned long));
-#endif
 #ifndef HAVE_MEMMOVE
 void *memmove ();
+#endif
+#ifndef HAVE_TIMEGM
+time_t timegm (struct tm *);
 #endif
 
 /* SunOS brain damage -- for some reason, SunOS header files fail to
@@ -231,7 +206,7 @@ void *memcpy ();
 # ifdef solaris
 #  define SYSTEM_FNMATCH
 # endif
-#endif /* HAVE_FNMATCH_H */
+#endif /* HAVE_WORKING_FNMATCH_H */
 
 #ifdef SYSTEM_FNMATCH
 # include <fnmatch.h>
@@ -250,6 +225,11 @@ void *memcpy ();
 
 /* Declare the function minimally. */
 int fnmatch ();
+#endif
+
+/* Provide sig_atomic_t if the system doesn't.  */
+#ifndef HAVE_SIG_ATOMIC_T
+typedef int sig_atomic_t;
 #endif
 
 /* Provide uint32_t on the platforms that don't define it.  Although

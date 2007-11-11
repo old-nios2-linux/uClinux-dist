@@ -5,6 +5,11 @@
  * This tricks binfmt_elf.c into loading 32bit binaries using lots 
  * of ugly preprocessor tricks. Talk about very very poor man's inheritance.
  */ 
+#define __ASM_X86_64_ELF_H 1
+
+#undef ELF_CLASS
+#define ELF_CLASS ELFCLASS32
+
 #include <linux/types.h>
 #include <linux/stddef.h>
 #include <linux/rwsem.h>
@@ -33,10 +38,12 @@
 
 int sysctl_vsyscall32 = 1;
 
+#undef ARCH_DLINFO
 #define ARCH_DLINFO do {  \
 	if (sysctl_vsyscall32) { \
-	NEW_AUX_ENT(AT_SYSINFO, (u32)(u64)VSYSCALL32_VSYSCALL); \
-	NEW_AUX_ENT(AT_SYSINFO_EHDR, VSYSCALL32_BASE);    \
+		current->mm->context.vdso = (void *)VSYSCALL32_BASE;	\
+		NEW_AUX_ENT(AT_SYSINFO, (u32)(u64)VSYSCALL32_VSYSCALL); \
+		NEW_AUX_ENT(AT_SYSINFO_EHDR, VSYSCALL32_BASE);    \
 	}	\
 } while(0)
 
@@ -50,9 +57,6 @@ struct elf_phdr;
 #undef ELF_ARCH
 #define ELF_ARCH EM_386
 
-#undef ELF_CLASS
-#define ELF_CLASS ELFCLASS32
-
 #define ELF_DATA	ELFDATA2LSB
 
 #define USE_ELF_CORE_DUMP 1
@@ -63,55 +67,6 @@ typedef unsigned int elf_greg_t;
 
 #define ELF_NGREG (sizeof (struct user_regs_struct32) / sizeof(elf_greg_t))
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
-
-/*
- * These macros parameterize elf_core_dump in fs/binfmt_elf.c to write out
- * extra segments containing the vsyscall DSO contents.  Dumping its
- * contents makes post-mortem fully interpretable later without matching up
- * the same kernel and hardware config to see what PC values meant.
- * Dumping its extra ELF program headers includes all the other information
- * a debugger needs to easily find how the vsyscall DSO was being used.
- */
-#define ELF_CORE_EXTRA_PHDRS	(find_vma(current->mm, VSYSCALL32_BASE) ?     \
-    (VSYSCALL32_EHDR->e_phnum) : 0)
-#define ELF_CORE_WRITE_EXTRA_PHDRS					      \
-do {									      \
-	if (find_vma(current->mm, VSYSCALL32_BASE)) { 			      \
-		const struct elf32_phdr *const vsyscall_phdrs =		      \
-			(const struct elf32_phdr *) (VSYSCALL32_BASE	      \
-						   + VSYSCALL32_EHDR->e_phoff);\
-		int i;							      \
-		Elf32_Off ofs = 0;					      \
-		for (i = 0; i < VSYSCALL32_EHDR->e_phnum; ++i) {	      \
-			struct elf32_phdr phdr = vsyscall_phdrs[i];	      \
-			if (phdr.p_type == PT_LOAD) {			      \
-				BUG_ON(ofs != 0);			      \
-				ofs = phdr.p_offset = offset;		      \
-				phdr.p_memsz = PAGE_ALIGN(phdr.p_memsz);      \
-				phdr.p_filesz = phdr.p_memsz;		      \
-				offset += phdr.p_filesz;		      \
-			}						      \
-			else						      \
-				phdr.p_offset += ofs;			      \
-			phdr.p_paddr = 0; /* match other core phdrs */	      \
-			DUMP_WRITE(&phdr, sizeof(phdr));		      \
-		}							      \
-	}								      \
-} while (0)
-#define ELF_CORE_WRITE_EXTRA_DATA					      \
-do {									      \
-	if (find_vma(current->mm, VSYSCALL32_BASE)) { 			      \
-		const struct elf32_phdr *const vsyscall_phdrs =		      \
-			(const struct elf32_phdr *) (VSYSCALL32_BASE	      \
-						   + VSYSCALL32_EHDR->e_phoff);      \
-		int i;							      \
-		for (i = 0; i < VSYSCALL32_EHDR->e_phnum; ++i) {	      \
-			if (vsyscall_phdrs[i].p_type == PT_LOAD)	      \
-				DUMP_WRITE((void *) (u64) vsyscall_phdrs[i].p_vaddr,\
-				    PAGE_ALIGN(vsyscall_phdrs[i].p_memsz));   \
-		}							      \
-	}								      \
-} while (0)
 
 struct elf_siginfo
 {
@@ -185,7 +140,7 @@ struct elf_prpsinfo
 
 #define user user32
 
-#define __ASM_X86_64_ELF_H 1
+#undef elf_read_implies_exec
 #define elf_read_implies_exec(ex, executable_stack)     (executable_stack != EXSTACK_DISABLE_X)
 //#include <asm/ia32.h>
 #include <linux/elf.h>
@@ -279,9 +234,6 @@ do {							\
 #define load_elf_binary load_elf32_binary
 
 #define ELF_PLAT_INIT(r, load_addr)	elf32_init(r)
-#define setup_arg_pages(bprm, stack_top, exec_stack) \
-	ia32_setup_arg_pages(bprm, stack_top, exec_stack)
-int ia32_setup_arg_pages(struct linux_binprm *bprm, unsigned long stack_top, int executable_stack);
 
 #undef start_thread
 #define start_thread(regs,new_rip,new_rsp) do { \
@@ -304,8 +256,6 @@ MODULE_AUTHOR("Eric Youngdale, Andi Kleen");
 
 #undef MODULE_DESCRIPTION
 #undef MODULE_AUTHOR
-
-#define elf_addr_t __u32
 
 static void elf32_init(struct pt_regs *);
 
@@ -335,82 +285,35 @@ static void elf32_init(struct pt_regs *regs)
 	me->thread.es = __USER_DS;
 }
 
-int ia32_setup_arg_pages(struct linux_binprm *bprm, unsigned long stack_top,
-			 int executable_stack)
-{
-	unsigned long stack_base;
-	struct vm_area_struct *mpnt;
-	struct mm_struct *mm = current->mm;
-	int i, ret;
-
-	stack_base = stack_top - MAX_ARG_PAGES * PAGE_SIZE;
-	mm->arg_start = bprm->p + stack_base;
-
-	bprm->p += stack_base;
-	if (bprm->loader)
-		bprm->loader += stack_base;
-	bprm->exec += stack_base;
-
-	mpnt = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
-	if (!mpnt) 
-		return -ENOMEM; 
-
-	memset(mpnt, 0, sizeof(*mpnt));
-
-	down_write(&mm->mmap_sem);
-	{
-		mpnt->vm_mm = mm;
-		mpnt->vm_start = PAGE_MASK & (unsigned long) bprm->p;
-		mpnt->vm_end = stack_top;
-		if (executable_stack == EXSTACK_ENABLE_X)
-			mpnt->vm_flags = VM_STACK_FLAGS |  VM_EXEC;
-		else if (executable_stack == EXSTACK_DISABLE_X)
-			mpnt->vm_flags = VM_STACK_FLAGS & ~VM_EXEC;
-		else
-			mpnt->vm_flags = VM_STACK_FLAGS;
- 		mpnt->vm_page_prot = (mpnt->vm_flags & VM_EXEC) ? 
- 			PAGE_COPY_EXEC : PAGE_COPY;
-		if ((ret = insert_vm_struct(mm, mpnt))) {
-			up_write(&mm->mmap_sem);
-			kmem_cache_free(vm_area_cachep, mpnt);
-			return ret;
-		}
-		mm->stack_vm = mm->total_vm = vma_pages(mpnt);
-	} 
-
-	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
-		struct page *page = bprm->page[i];
-		if (page) {
-			bprm->page[i] = NULL;
-			install_arg_page(mpnt, page, stack_base);
-		}
-		stack_base += PAGE_SIZE;
-	}
-	up_write(&mm->mmap_sem);
-	
-	return 0;
-}
-EXPORT_SYMBOL(ia32_setup_arg_pages);
-
 #ifdef CONFIG_SYSCTL
 /* Register vsyscall32 into the ABI table */
 #include <linux/sysctl.h>
 
 static ctl_table abi_table2[] = {
-	{ 99, "vsyscall32", &sysctl_vsyscall32, sizeof(int), 0644, NULL,
-	  proc_dointvec },
-	{ 0, }
-}; 
+	{
+		.ctl_name	= 99,
+		.procname	= "vsyscall32",
+		.data		= &sysctl_vsyscall32,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+	{}
+};
 
-static ctl_table abi_root_table2[] = { 
-	{ .ctl_name = CTL_ABI, .procname = "abi", .mode = 0555, 
-	  .child = abi_table2 }, 
-	{ 0 }, 
-}; 
+static ctl_table abi_root_table2[] = {
+	{
+		.ctl_name = CTL_ABI,
+		.procname = "abi",
+		.mode = 0555,
+		.child = abi_table2
+	},
+	{}
+};
 
 static __init int ia32_binfmt_init(void)
 { 
-	register_sysctl_table(abi_root_table2, 1);
+	register_sysctl_table(abi_root_table2);
 	return 0;
 }
 __initcall(ia32_binfmt_init);

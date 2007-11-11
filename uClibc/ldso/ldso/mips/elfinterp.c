@@ -27,92 +27,18 @@
  * SUCH DAMAGE.
  */
 
-#if defined (__SUPPORT_LD_DEBUG__)
-static const char *_dl_reltypes_tab[] =
-{
-		[0]		"R_MIPS_NONE",	"R_MIPS_16",	"R_MIPS_32",
-		[3]		"R_MIPS_REL32",	"R_MIPS_26",	"R_MIPS_HI16",
-		[6]		"R_MIPS_LO16",	"R_MIPS_GPREL16",	"R_MIPS_LITERAL",
-		[9]		"R_MIPS_GOT16",	"R_MIPS_PC16",	"R_MIPS_CALL16",
-		[12]	"R_MIPS_GPREL32",
-		[16]	"R_MIPS_SHIFT5",	"R_MIPS_SHIFT6",	"R_MIPS_64",
-		[19]	"R_MIPS_GOT_DISP",	"R_MIPS_GOT_PAGE",	"R_MIPS_GOT_OFST",
-		[22]	"R_MIPS_GOT_HI16",	"R_MIPS_GOT_LO16",	"R_MIPS_SUB",
-		[25]	"R_MIPS_INSERT_A",	"R_MIPS_INSERT_B",	"R_MIPS_DELETE",
-		[28]	"R_MIPS_HIGHER",	"R_MIPS_HIGHEST",	"R_MIPS_CALL_HI16",
-		[31]	"R_MIPS_CALL_LO16",	"R_MIPS_SCN_DISP",	"R_MIPS_REL16",
-		[34]	"R_MIPS_ADD_IMMEDIATE",	"R_MIPS_PJUMP",	"R_MIPS_RELGOT",
-		[37]	"R_MIPS_JALR",
-};
+#include "ldso.h"
 
-static const char *
-_dl_reltypes(int type)
-{
-  static char buf[22];
-  const char *str;
-
-  if (type >= (int)(sizeof (_dl_reltypes_tab)/sizeof(_dl_reltypes_tab[0])) ||
-      NULL == (str = _dl_reltypes_tab[type]))
-  {
-    str =_dl_simple_ltoa( buf, (unsigned long)(type));
-  }
-  return str;
-}
-
-static
-void debug_sym(Elf32_Sym *symtab,char *strtab,int symtab_index)
-{
-  if(_dl_debug_symbols)
-  {
-    if(symtab_index){
-      _dl_dprintf(_dl_debug_file, "\n%s\n\tvalue=%x\tsize=%x\tinfo=%x\tother=%x\tshndx=%x",
-		  strtab + symtab[symtab_index].st_name,
-		  symtab[symtab_index].st_value,
-		  symtab[symtab_index].st_size,
-		  symtab[symtab_index].st_info,
-		  symtab[symtab_index].st_other,
-		  symtab[symtab_index].st_shndx);
-    }
-  }
-}
-
-static void debug_reloc(Elf32_Sym *symtab,char *strtab, ELF_RELOC *rpnt)
-{
-  if(_dl_debug_reloc)
-  {
-    int symtab_index;
-    const char *sym;
-    symtab_index = ELF32_R_SYM(rpnt->r_info);
-    sym = symtab_index ? strtab + symtab[symtab_index].st_name : "sym=0x0";
-
-  if(_dl_debug_symbols)
-	  _dl_dprintf(_dl_debug_file, "\n\t");
-  else
-	  _dl_dprintf(_dl_debug_file, "\n%s\n\t", sym);
-#ifdef ELF_USES_RELOCA
-    _dl_dprintf(_dl_debug_file, "%s\toffset=%x\taddend=%x",
-		_dl_reltypes(ELF32_R_TYPE(rpnt->r_info)),
-		rpnt->r_offset,
-		rpnt->r_addend);
-#else
-    _dl_dprintf(_dl_debug_file, "%s\toffset=%x\n",
-		_dl_reltypes(ELF32_R_TYPE(rpnt->r_info)),
-		rpnt->r_offset);
-#endif
-  }
-}
-#endif
-
-extern int _dl_linux_resolve(void);
+extern int _dl_runtime_resolve(void);
 
 #define OFFSET_GP_GOT 0x7ff0
 
-unsigned long _dl_linux_resolver(unsigned long sym_index,
+unsigned long __dl_runtime_resolve(unsigned long sym_index,
 	unsigned long old_gpreg)
 {
 	unsigned long *got = (unsigned long *) (old_gpreg - OFFSET_GP_GOT);
 	struct elf_resolve *tpnt = (struct elf_resolve *) got[1];
-	Elf32_Sym *sym;
+	ElfW(Sym) *sym;
 	char *strtab;
 	unsigned long local_gotno;
 	unsigned long gotsym;
@@ -124,8 +50,8 @@ unsigned long _dl_linux_resolver(unsigned long sym_index,
 	gotsym = tpnt->dynamic_info[DT_MIPS_GOTSYM_IDX];
 	local_gotno = tpnt->dynamic_info[DT_MIPS_LOCAL_GOTNO_IDX];
 
-	sym = ((Elf32_Sym *) (tpnt->dynamic_info[DT_SYMTAB] + tpnt->loadaddr)) + sym_index;
-	strtab = (char *) (tpnt->dynamic_info[DT_STRTAB] + tpnt->loadaddr);
+	sym = ((ElfW(Sym) *) tpnt->dynamic_info[DT_SYMTAB]) + sym_index;
+	strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
 	symname = strtab + sym->st_name;
 
 	new_addr = (unsigned long) _dl_find_hash(symname,
@@ -144,7 +70,7 @@ unsigned long _dl_linux_resolver(unsigned long sym_index,
 	if (_dl_debug_bindings)
 	{
 		_dl_dprintf(_dl_debug_file, "\nresolve function: %s", symname);
-		if(_dl_debug_detail) _dl_dprintf(_dl_debug_file,
+		if (_dl_debug_detail) _dl_dprintf(_dl_debug_file,
 				"\n\tpatched %x ==> %x @ %x\n", *got_addr, new_addr, got_addr);
 	}
 	if (!_dl_debug_nofixups) {
@@ -167,8 +93,8 @@ void _dl_parse_lazy_relocation_information(struct dyn_elf *rpnt,
 int _dl_parse_relocation_information(struct dyn_elf *xpnt,
 	unsigned long rel_addr, unsigned long rel_size)
 {
-	Elf32_Sym *symtab;
-	Elf32_Rel *rpnt;
+	ElfW(Sym) *symtab;
+	ElfW(Rel) *rpnt;
 	char *strtab;
 	unsigned long i;
 	unsigned long *got;
@@ -181,29 +107,33 @@ int _dl_parse_relocation_information(struct dyn_elf *xpnt,
 #endif
 
 	/* Now parse the relocation information */
-	rel_size = rel_size / sizeof(Elf32_Rel);
-	rpnt = (Elf32_Rel *) (rel_addr + tpnt->loadaddr);
+	rel_size = rel_size / sizeof(ElfW(Rel));
+	rpnt = (ElfW(Rel) *) rel_addr;
 
-	symtab = (Elf32_Sym *) (tpnt->dynamic_info[DT_SYMTAB] + tpnt->loadaddr);
-	strtab = (char *) (tpnt->dynamic_info[DT_STRTAB] + tpnt->loadaddr);
-	got = (unsigned long *) (tpnt->dynamic_info[DT_PLTGOT] + tpnt->loadaddr);
+	symtab = (ElfW(Sym) *) tpnt->dynamic_info[DT_SYMTAB];
+	strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
+	got = (unsigned long *) tpnt->dynamic_info[DT_PLTGOT];
 
 	for (i = 0; i < rel_size; i++, rpnt++) {
 		reloc_addr = (unsigned long *) (tpnt->loadaddr +
 			(unsigned long) rpnt->r_offset);
-		reloc_type = ELF32_R_TYPE(rpnt->r_info);
-		symtab_index = ELF32_R_SYM(rpnt->r_info);
+		reloc_type = ELF_R_TYPE(rpnt->r_info);
+		symtab_index = ELF_R_SYM(rpnt->r_info);
 		symbol_addr = 0;
 
-#if defined (__SUPPORT_LD_DEBUG__)
 		debug_sym(symtab,strtab,symtab_index);
 		debug_reloc(symtab,strtab,rpnt);
+#if defined (__SUPPORT_LD_DEBUG__)
 		if (reloc_addr)
 			old_val = *reloc_addr;
 #endif
 
 		switch (reloc_type) {
+#if _MIPS_SIM == _MIPS_SIM_ABI64
+		case (R_MIPS_64 << 8) | R_MIPS_REL32:
+#else	/* O32 || N32 */
 		case R_MIPS_REL32:
+#endif	/* O32 || N32 */
 			if (symtab_index) {
 				if (symtab_index < tpnt->dynamic_info[DT_MIPS_GOTSYM_IDX])
 					*reloc_addr +=
@@ -222,7 +152,6 @@ int _dl_parse_relocation_information(struct dyn_elf *xpnt,
 			break;
 		default:
 			{
-				int reloc_type = ELF32_R_TYPE(rpnt->r_info);
 				_dl_dprintf(2, "\n%s: ",_dl_progname);
 
 				if (symtab_index)
@@ -235,11 +164,11 @@ int _dl_parse_relocation_information(struct dyn_elf *xpnt,
 #endif
 				_dl_exit(1);
 			}
-		};
+		}
 
-	};
+	}
 #if defined (__SUPPORT_LD_DEBUG__)
-	if(_dl_debug_reloc && _dl_debug_detail && reloc_addr)
+	if (_dl_debug_reloc && _dl_debug_detail && reloc_addr)
 		_dl_dprintf(_dl_debug_file, "\tpatched: %x ==> %x @ %x\n", old_val, *reloc_addr, reloc_addr);
 #endif
 
@@ -249,7 +178,7 @@ int _dl_parse_relocation_information(struct dyn_elf *xpnt,
 /* Relocate the global GOT entries for the object */
 void _dl_perform_mips_global_got_relocations(struct elf_resolve *tpnt, int lazy)
 {
-	Elf32_Sym *sym;
+	ElfW(Sym) *sym;
 	char *strtab;
 	unsigned long i, tmp_lazy;
 	unsigned long *got_entry;
@@ -261,23 +190,21 @@ void _dl_perform_mips_global_got_relocations(struct elf_resolve *tpnt, int lazy)
 			continue;
 
 		/* Setup the loop variables */
-		got_entry = (unsigned long *) (tpnt->loadaddr +
-			tpnt->dynamic_info[DT_PLTGOT]) + tpnt->dynamic_info[DT_MIPS_LOCAL_GOTNO_IDX];
-		sym = (Elf32_Sym *) (tpnt->dynamic_info[DT_SYMTAB] +
-			(unsigned long) tpnt->loadaddr) + tpnt->dynamic_info[DT_MIPS_GOTSYM_IDX];
-		strtab = (char *) (tpnt->dynamic_info[DT_STRTAB] +
-			(unsigned long) tpnt->loadaddr);
+		got_entry = (unsigned long *) (tpnt->dynamic_info[DT_PLTGOT])
+			+ tpnt->dynamic_info[DT_MIPS_LOCAL_GOTNO_IDX];
+		sym = (ElfW(Sym) *) tpnt->dynamic_info[DT_SYMTAB] + tpnt->dynamic_info[DT_MIPS_GOTSYM_IDX];
+		strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
 		i = tpnt->dynamic_info[DT_MIPS_SYMTABNO_IDX] - tpnt->dynamic_info[DT_MIPS_GOTSYM_IDX];
 
 #if defined (__SUPPORT_LD_DEBUG__)
-		if(_dl_debug_reloc)
+		if (_dl_debug_reloc)
 			_dl_dprintf(2, "_dl_perform_mips_global_got_relocations for '%s'\n", tpnt->libname);
 #endif
 		tmp_lazy = lazy && !tpnt->dynamic_info[DT_BIND_NOW];
 		/* Relocate the global GOT entries for the object */
-		while(i--) {
+		while (i--) {
 			if (sym->st_shndx == SHN_UNDEF) {
-				if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC && sym->st_value && tmp_lazy) {
+				if (ELF_ST_TYPE(sym->st_info) == STT_FUNC && sym->st_value && tmp_lazy) {
 					*got_entry = sym->st_value + (unsigned long) tpnt->loadaddr;
 				}
 				else {
@@ -289,11 +216,11 @@ void _dl_perform_mips_global_got_relocations(struct elf_resolve *tpnt, int lazy)
 				*got_entry = (unsigned long) _dl_find_hash(strtab +
 					sym->st_name, tpnt->symbol_scope, tpnt, ELF_RTYPE_CLASS_PLT);
 			}
-			else if (ELF32_ST_TYPE(sym->st_info) == STT_FUNC &&
+			else if (ELF_ST_TYPE(sym->st_info) == STT_FUNC &&
 				*got_entry != sym->st_value && tmp_lazy) {
 				*got_entry += (unsigned long) tpnt->loadaddr;
 			}
-			else if (ELF32_ST_TYPE(sym->st_info) == STT_SECTION) {
+			else if (ELF_ST_TYPE(sym->st_info) == STT_SECTION) {
 				if (sym->st_other == 0)
 					*got_entry += (unsigned long) tpnt->loadaddr;
 			}

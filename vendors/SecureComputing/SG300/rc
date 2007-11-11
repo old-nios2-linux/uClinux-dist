@@ -6,7 +6,6 @@ watchdog /dev/watchdog
 hostname SG300
 echo "Mounting Filesystems ..."
 mount -t sysfs none /sys
-mount -t devpts devpts /dev/pts
 mount -t tmpfs -o size=256k tmpfs /var
 mount -t tmpfs -o size=256k tmpfs /etc/config
 mkdir -m 1777 /var/tmp
@@ -15,6 +14,7 @@ mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+mount -t devpts devpts /dev/pts
 echo "Processing Config Filesystem ..."
 flatfsd -r 
 echo "Loading network drivers."

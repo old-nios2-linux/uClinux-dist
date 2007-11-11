@@ -1,9 +1,9 @@
 /*
- * $Id: rerrno.h,v 1.5 2003/02/14 12:04:23 janakj Exp $
+ * $Id: rerrno.h,v 1.7 2004/11/14 22:21:31 janakj Exp $
  *
  * Registrar errno
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -57,7 +57,8 @@ typedef enum rerr {
 	R_STAR_CONT,  /* star and more contacts */
 	R_OOO,        /* Out-Of-Order request */
 	R_RETRANS,    /* Request is retransmission */
-	R_UNESCAPE    /* Error while unescaping username */
+	R_UNESCAPE,   /* Error while unescaping username */
+	R_TOO_MANY    /* Too many contacts */
 } rerr_t;
 
 

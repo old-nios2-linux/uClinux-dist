@@ -20,7 +20,7 @@ typedef enum {
 	INTREN			= (1 << 1),
 	RUN			= (1 << 0),
 
-	CMD0_CLEAR 		= 0x000F0F7F,   /* Command style register */	
+	CMD0_CLEAR 		= 0x000F0F7F,   /* Command style register */
 
 }CMD0_BITS;
 typedef enum {
@@ -57,26 +57,26 @@ typedef enum {
 	ASF_INIT_DONE_ALIAS	= (1 << 29),
 	/* VAL2 */
 	JUMBO			= (1 << 21),
-	VSIZE			= (1 << 20),	
+	VSIZE			= (1 << 20),
 	VLONLY			= (1 << 19),
-	VL_TAG_DEL		= (1 << 18),	
+	VL_TAG_DEL		= (1 << 18),
 	/* VAL1 */
-	EN_PMGR			= (1 << 14),			
+	EN_PMGR			= (1 << 14),
 	INTLEVEL		= (1 << 13),
-	FORCE_FULL_DUPLEX	= (1 << 12),	
-	FORCE_LINK_STATUS	= (1 << 11),	
-	APEP			= (1 << 10),	
-	MPPLBA			= (1 << 9),	
+	FORCE_FULL_DUPLEX	= (1 << 12),
+	FORCE_LINK_STATUS	= (1 << 11),
+	APEP			= (1 << 10),
+	MPPLBA			= (1 << 9),
 	/* VAL0 */
-	RESET_PHY_PULSE		= (1 << 2),	
-	RESET_PHY		= (1 << 1),	
-	PHY_RST_POL		= (1 << 0),	
+	RESET_PHY_PULSE		= (1 << 2),
+	RESET_PHY		= (1 << 1),
+	PHY_RST_POL		= (1 << 0),
 
 }CMD3_BITS;
 typedef enum {
 
 	INTR			= (1 << 31),
-	PCSINT			= (1 << 28), 
+	PCSINT			= (1 << 28),
 	LCINT			= (1 << 27),
 	APINT5			= (1 << 26),
 	APINT4			= (1 << 25),
@@ -130,10 +130,10 @@ typedef enum {
 
 	INTEN0_CLEAR 		= 0x1F7F7F1F, /* Command style register */
 
-}INTEN0_BITS;		
+}INTEN0_BITS;
 
 typedef enum {
-	
+
 	PMAT_DET		= (1 << 12),
 	MP_DET		        = (1 << 11),
 	LC_DET			= (1 << 10),
@@ -154,13 +154,13 @@ typedef enum {
 
 int amd8111e_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 {
-	
+
 	u32 *reg_buff = (u32 *)regs->data;
 	u32 reg;
 
 	fprintf(stdout, "Descriptor Registers\n");
 	fprintf(stdout, "---------------------\n");
-			
+
 	/* Transmit descriptor base address register */
 	reg = reg_buff[0];
 	fprintf(stdout,
@@ -170,7 +170,7 @@ int amd8111e_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	reg = reg_buff[1];
 	fprintf(stdout,
 		"0x00140: Transmit descriptor length register 0x%08X\n",reg);
-	
+
 	/* Receive descriptor base address register */
 	reg = reg_buff[2];
 	fprintf(stdout,
@@ -217,13 +217,13 @@ int amd8111e_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		reg & JUMBO  		? "Enabled"     : "Disabled",
 		reg &  VLONLY 		? "Yes"     : "No",
 		reg &  VL_TAG_DEL 		? "Yes"     : "No");
-		
+
 	/* Command 7 Register */
 	reg = reg_buff[7];
 	fprintf(stdout,
 		"0x00064: Command 7 register  0x%08X\n",
 		 reg);
-	
+
 	fprintf(stdout, "\n");
 	fprintf(stdout, "Interrupt Registers\n");
 	fprintf(stdout, "-------------------\n");
@@ -289,7 +289,7 @@ int amd8111e_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		reg &  LINK_STATS 		? "Valid"     : "Invalid",
 		reg &  AUTONEG_COMPLETE		? "Yes"	      : "No",
 		reg &  FULL_DPLX 		? "Full"      : "Half",
-		((reg & SPEED_MASK) >> 7 == PHY_SPEED_10) ? "10Mbits/ Sec": 
+		((reg & SPEED_MASK) >> 7 == PHY_SPEED_10) ? "10Mbits/ Sec":
 							"100Mbits/Sec");
 
 	}

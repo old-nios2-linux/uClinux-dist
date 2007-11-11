@@ -11,6 +11,7 @@
 
 #include <linux/timer.h>
 #include <linux/sunrpc/types.h>
+#include <linux/rcupdate.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
@@ -85,6 +86,7 @@ struct rpc_task {
 	union {
 		struct work_struct	tk_work;	/* Async task work queue */
 		struct rpc_wait		tk_wait;	/* RPC wait */
+		struct rcu_head		tk_rcu;		/* for task deletion */
 	} u;
 
 	unsigned short		tk_timeouts;	/* maj timeouts */
@@ -96,7 +98,6 @@ struct rpc_task {
 	unsigned short		tk_pid;		/* debugging aid */
 #endif
 };
-#define tk_auth			tk_client->cl_auth
 #define tk_xprt			tk_client->cl_xprt
 
 /* support walking a list of tasks on a wait queue */
@@ -107,11 +108,6 @@ struct rpc_task {
 #define	task_for_first(task, head) \
 	if (!list_empty(head) &&  \
 	    ((task=list_entry((head)->next, struct rpc_task, u.tk_wait.list)),1))
-
-/* .. and walking list of all tasks */
-#define	alltask_for_each(task, pos, head) \
-	list_for_each(pos, head) \
-		if ((task=list_entry(pos, struct rpc_task, tk_task)),1)
 
 typedef void			(*rpc_action)(struct rpc_task *);
 
@@ -148,10 +144,10 @@ struct rpc_call_ops {
 #define RPC_TASK_HAS_TIMER	3
 #define RPC_TASK_ACTIVE		4
 
-#define RPC_IS_RUNNING(t)	(test_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
-#define rpc_set_running(t)	(set_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
+#define RPC_IS_RUNNING(t)	test_bit(RPC_TASK_RUNNING, &(t)->tk_runstate)
+#define rpc_set_running(t)	set_bit(RPC_TASK_RUNNING, &(t)->tk_runstate)
 #define rpc_test_and_set_running(t) \
-				(test_and_set_bit(RPC_TASK_RUNNING, &(t)->tk_runstate))
+				test_and_set_bit(RPC_TASK_RUNNING, &(t)->tk_runstate)
 #define rpc_clear_running(t)	\
 	do { \
 		smp_mb__before_clear_bit(); \
@@ -159,8 +155,8 @@ struct rpc_call_ops {
 		smp_mb__after_clear_bit(); \
 	} while (0)
 
-#define RPC_IS_QUEUED(t)	(test_bit(RPC_TASK_QUEUED, &(t)->tk_runstate))
-#define rpc_set_queued(t)	(set_bit(RPC_TASK_QUEUED, &(t)->tk_runstate))
+#define RPC_IS_QUEUED(t)	test_bit(RPC_TASK_QUEUED, &(t)->tk_runstate)
+#define rpc_set_queued(t)	set_bit(RPC_TASK_QUEUED, &(t)->tk_runstate)
 #define rpc_clear_queued(t)	\
 	do { \
 		smp_mb__before_clear_bit(); \
@@ -177,14 +173,7 @@ struct rpc_call_ops {
 		smp_mb__after_clear_bit(); \
 	} while (0)
 
-#define RPC_IS_ACTIVATED(t)	(test_bit(RPC_TASK_ACTIVE, &(t)->tk_runstate))
-#define rpc_set_active(t)	(set_bit(RPC_TASK_ACTIVE, &(t)->tk_runstate))
-#define rpc_clear_active(t)	\
-	do { \
-		smp_mb__before_clear_bit(); \
-		clear_bit(RPC_TASK_ACTIVE, &(t)->tk_runstate); \
-		smp_mb__after_clear_bit(); \
-	} while(0)
+#define RPC_IS_ACTIVATED(t)	test_bit(RPC_TASK_ACTIVE, &(t)->tk_runstate)
 
 /*
  * Task priorities.
@@ -222,7 +211,7 @@ struct rpc_wait_queue {
 
 #ifndef RPC_DEBUG
 # define RPC_WAITQ_INIT(var,qname) { \
-		.lock = SPIN_LOCK_UNLOCKED, \
+		.lock = __SPIN_LOCK_UNLOCKED(var.lock), \
 		.tasks = { \
 			[0] = LIST_HEAD_INIT(var.tasks[0]), \
 			[1] = LIST_HEAD_INIT(var.tasks[1]), \
@@ -231,7 +220,7 @@ struct rpc_wait_queue {
 	}
 #else
 # define RPC_WAITQ_INIT(var,qname) { \
-		.lock = SPIN_LOCK_UNLOCKED, \
+		.lock = __SPIN_LOCK_UNLOCKED(var.lock), \
 		.tasks = { \
 			[0] = LIST_HEAD_INIT(var.tasks[0]), \
 			[1] = LIST_HEAD_INIT(var.tasks[1]), \
@@ -254,10 +243,11 @@ struct rpc_task *rpc_run_task(struct rpc_clnt *clnt, int flags,
 void		rpc_init_task(struct rpc_task *task, struct rpc_clnt *clnt,
 				int flags, const struct rpc_call_ops *ops,
 				void *data);
-void		rpc_release_task(struct rpc_task *);
+void		rpc_put_task(struct rpc_task *);
 void		rpc_exit_task(struct rpc_task *);
+void		rpc_release_calldata(const struct rpc_call_ops *, void *);
 void		rpc_killall_tasks(struct rpc_clnt *);
-int		rpc_execute(struct rpc_task *);
+void		rpc_execute(struct rpc_task *);
 void		rpc_init_priority_wait_queue(struct rpc_wait_queue *, const char *);
 void		rpc_init_wait_queue(struct rpc_wait_queue *, const char *);
 void		rpc_sleep_on(struct rpc_wait_queue *, struct rpc_task *,
@@ -268,7 +258,7 @@ struct rpc_task *rpc_wake_up_next(struct rpc_wait_queue *);
 void		rpc_wake_up_status(struct rpc_wait_queue *, int);
 void		rpc_delay(struct rpc_task *, unsigned long);
 void *		rpc_malloc(struct rpc_task *, size_t);
-void		rpc_free(struct rpc_task *);
+void		rpc_free(void *);
 int		rpciod_up(void);
 void		rpciod_down(void);
 int		__rpc_wait_for_completion_task(struct rpc_task *task, int (*)(void *));

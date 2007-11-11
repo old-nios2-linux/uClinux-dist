@@ -44,10 +44,8 @@
 #include <acpi/acpi_drivers.h>
 
 #define _COMPONENT		ACPI_PCI_COMPONENT
-ACPI_MODULE_NAME("pci_link")
+ACPI_MODULE_NAME("pci_link");
 #define ACPI_PCI_LINK_CLASS		"pci_irq_routing"
-#define ACPI_PCI_LINK_HID		"PNP0C0F"
-#define ACPI_PCI_LINK_DRIVER_NAME	"ACPI PCI Interrupt Link Driver"
 #define ACPI_PCI_LINK_DEVICE_NAME	"PCI Interrupt Link"
 #define ACPI_PCI_LINK_FILE_INFO		"info"
 #define ACPI_PCI_LINK_FILE_STATUS	"state"
@@ -55,10 +53,16 @@ ACPI_MODULE_NAME("pci_link")
 static int acpi_pci_link_add(struct acpi_device *device);
 static int acpi_pci_link_remove(struct acpi_device *device, int type);
 
+static struct acpi_device_id link_device_ids[] = {
+	{"PNP0C0F", 0},
+	{"", 0},
+};
+MODULE_DEVICE_TABLE(acpi, link_device_ids);
+
 static struct acpi_driver acpi_pci_link_driver = {
-	.name = ACPI_PCI_LINK_DRIVER_NAME,
+	.name = "pci_link",
 	.class = ACPI_PCI_LINK_CLASS,
-	.ids = ACPI_PCI_LINK_HID,
+	.ids = link_device_ids,
 	.ops = {
 		.add = acpi_pci_link_add,
 		.remove = acpi_pci_link_remove,
@@ -103,7 +107,7 @@ DEFINE_MUTEX(acpi_link_lock);
 static acpi_status
 acpi_pci_link_check_possible(struct acpi_resource *resource, void *context)
 {
-	struct acpi_pci_link *link = (struct acpi_pci_link *)context;
+	struct acpi_pci_link *link = context;
 	u32 i = 0;
 
 
@@ -307,11 +311,10 @@ static int acpi_pci_link_set(struct acpi_pci_link *link, int irq)
 	if (!link || !irq)
 		return -EINVAL;
 
-	resource = kmalloc(sizeof(*resource) + 1, irqs_disabled() ? GFP_ATOMIC: GFP_KERNEL);
+	resource = kzalloc(sizeof(*resource) + 1, irqs_disabled() ? GFP_ATOMIC: GFP_KERNEL);
 	if (!resource)
 		return -ENOMEM;
 
-	memset(resource, 0, sizeof(*resource) + 1);
 	buffer.length = sizeof(*resource) + 1;
 	buffer.pointer = resource;
 
@@ -514,7 +517,7 @@ int __init acpi_irq_penalty_init(void)
 		}
 	}
 	/* Add a penalty for the SCI */
-	acpi_irq_penalty[acpi_fadt.sci_int] += PIRQ_PENALTY_PCI_USING;
+	acpi_irq_penalty[acpi_gbl_FADT.sci_interrupt] += PIRQ_PENALTY_PCI_USING;
 
 	return 0;
 }
@@ -613,7 +616,7 @@ acpi_pci_link_allocate_irq(acpi_handle handle,
 		return -1;
 	}
 
-	link = (struct acpi_pci_link *)acpi_driver_data(device);
+	link = acpi_driver_data(device);
 	if (!link) {
 		printk(KERN_ERR PREFIX "Invalid link context\n");
 		return -1;
@@ -668,7 +671,7 @@ int acpi_pci_link_free_irq(acpi_handle handle)
 		return -1;
 	}
 
-	link = (struct acpi_pci_link *)acpi_driver_data(device);
+	link = acpi_driver_data(device);
 	if (!link) {
 		printk(KERN_ERR PREFIX "Invalid link context\n");
 		return -1;
@@ -718,10 +721,9 @@ static int acpi_pci_link_add(struct acpi_device *device)
 	if (!device)
 		return -EINVAL;
 
-	link = kmalloc(sizeof(struct acpi_pci_link), GFP_KERNEL);
+	link = kzalloc(sizeof(struct acpi_pci_link), GFP_KERNEL);
 	if (!link)
 		return -ENOMEM;
-	memset(link, 0, sizeof(struct acpi_pci_link));
 
 	link->device = device;
 	strcpy(acpi_device_name(device), ACPI_PCI_LINK_DEVICE_NAME);
@@ -736,7 +738,7 @@ static int acpi_pci_link_add(struct acpi_device *device)
 	/* query and set link->irq.active */
 	acpi_pci_link_get_current(link);
 
-	printk(PREFIX "%s [%s] (IRQs", acpi_device_name(device),
+	printk(KERN_INFO PREFIX "%s [%s] (IRQs", acpi_device_name(device),
 	       acpi_device_bid(device));
 	for (i = 0; i < link->irq.possible_count; i++) {
 		if (link->irq.active == link->irq.possible[i]) {
@@ -787,7 +789,7 @@ static int irqrouter_resume(struct sys_device *dev)
 
 
 	/* Make sure SCI is enabled again (Apple firmware bug?) */
-	acpi_set_register(ACPI_BITREG_SCI_ENABLE, 1, ACPI_MTX_DO_NOT_LOCK);
+	acpi_set_register(ACPI_BITREG_SCI_ENABLE, 1);
 
 	list_for_each(node, &acpi_link.entries) {
 		link = list_entry(node, struct acpi_pci_link, node);
@@ -808,7 +810,7 @@ static int acpi_pci_link_remove(struct acpi_device *device, int type)
 	if (!device || !acpi_driver_data(device))
 		return -EINVAL;
 
-	link = (struct acpi_pci_link *)acpi_driver_data(device);
+	link = acpi_driver_data(device);
 
 	mutex_lock(&acpi_link_lock);
 	list_del(&link->node);

@@ -1,5 +1,5 @@
 /*
- * $Id: aug_sysdep.h,v 1.2 2003/08/20 14:17:57 andrei Exp $
+ * $Id: aug_sysdep.h,v 1.3.2.1 2005/06/23 16:15:50 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -40,9 +40,9 @@
 **
 **
 **                      $RCSfile: aug_sysdep.h,v $
-**                     $Revision: 1.2 $
+**                     $Revision: 1.3.2.1 $
 **
-**             Last change $Date: 2003/08/20 14:17:57 $
+**             Last change $Date: 2005/06/23 16:15:50 $
 **           Last change $Author: andrei $
 **                        $State: Exp $
 **                       $Locker:  $
@@ -60,7 +60,7 @@
 #define AUG_SYSDEP_H
 
 /*
-**  As necessary, detect operating system, cpu, and compiler
+**  As necessary, detect operating system, CPU, and compiler
 **  combinations, and establish defines that describe the
 **  characteristics and requirements for the combination.
 **
@@ -73,7 +73,7 @@
 **	AUG_NO_xxxx	System doesn't have capability xxxx
 **	AUG_BAD_xxxx	System has xxxx, but it's broken
 **
-**  Every system gets AUG_CONFIGURATION so we can reject unconfigured
+**  Every system gets AUG_CONFIGURATION so we can reject misconfigured
 **  compiles.  This should be set to an os/cpu/compiler description.
 */
 #undef AUG_CONFIGURATION
@@ -158,6 +158,17 @@ typedef unsigned int augUInt32;
 typedef unsigned int augUInt32;
 
 #endif
+#if defined(x86_64) || defined(__x86_64)
+
+#if defined(__GNUC__)
+#define AUG_CONFIGURATION	"Sun Solaris x86_64 with GCC"
+#else
+#define AUG_CONFIGURATION	"Sun Solaris x86_64 with SUNpro C"
+#endif
+
+typedef unsigned int augUInt32;
+
+#endif
 
 #if defined(sparc) || defined(__sparc)
 #if defined(__svr4__) || defined(__SVR4)
@@ -204,7 +215,16 @@ typedef unsigned int augUInt32;
 
 typedef unsigned int augUInt32;
 
-#endif /* i386 */
+#endif /* x86 */
+#if defined(__x86_64)
+
+#if defined(__GNUC__)
+#define AUG_CONFIGURATION	"Linux x86_64 with GCC"
+#endif
+
+typedef unsigned int augUInt32;
+
+#endif /* x86-64 */
 #endif /* linux */
 
 /*
@@ -244,7 +264,16 @@ typedef unsigned int augUInt32;
 
 typedef unsigned int augUInt32;
 
-#endif /* i386 */
+#endif /* x86 */
+#if defined(__x86_64)
+
+#if defined(__GNUC__)
+#define AUG_CONFIGURATION	"FreeBSD x86_64 with GCC"
+#endif
+
+typedef unsigned int augUInt32;
+
+#endif /* x86_64 */
 #endif /* freebsd */
 
 /*
@@ -324,7 +353,7 @@ typedef unsigned int augUInt32;
 */
 
 #ifndef AUG_CONFIGURATION
-error: os/cpu/compiler combination not configured in $Source: /cvsroot/ser/sip_router/modules/postgres/aug_sysdep.h,v $ $Revision: 1.2 $
+#error: os/cpu/compiler combination not configured in $Source: /cvsroot/ser/sip_router/modules/postgres/Attic/aug_sysdep.h,v $ $Revision: 1.3.2.1 $
 #endif
 
 #endif /* AUG_SYSDEP_H */

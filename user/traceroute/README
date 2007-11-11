@@ -1,10 +1,10 @@
-@(#) $Header: /cvs/sw/new-wave/user/traceroute/README,v 1.1.1.1 1999/11/22 03:48:05 christ Exp $ (LBL)
+@(#) $Id: README,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)
 
 TRACEROUTE 1.4
 Lawrence Berkeley National Laboratory
 Network Research Group
 traceroute@ee.lbl.gov
-ftp://ftp.ee.lbl.gov/traceroute.tar.Z
+ftp://ftp.ee.lbl.gov/traceroute.tar.gz
 
 Traceroute is a system administrators utility to trace the route
 ip packets from the current system take in getting to some

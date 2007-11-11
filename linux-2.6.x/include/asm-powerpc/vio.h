@@ -45,7 +45,6 @@ struct iommu_table;
  * The vio_dev structure is used to describe virtual I/O devices.
  */
 struct vio_dev {
-	struct iommu_table *iommu_table;     /* vio_map_* uses this */
 	const char *name;
 	const char *type;
 	uint32_t unit_address;
@@ -81,6 +80,11 @@ extern const void *vio_get_attribute(struct vio_dev *vdev, char *which,
 extern struct vio_dev *vio_find_node(struct device_node *vnode);
 extern int vio_enable_interrupts(struct vio_dev *dev);
 extern int vio_disable_interrupts(struct vio_dev *dev);
+#else
+static inline int vio_enable_interrupts(struct vio_dev *dev)
+{
+	return 0;
+}
 #endif
 
 static inline struct vio_driver *to_vio_driver(struct device_driver *drv)

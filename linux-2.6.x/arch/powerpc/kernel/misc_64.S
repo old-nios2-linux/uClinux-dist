@@ -311,6 +311,46 @@ _GLOBAL(real_writeb)
 	blr
 #endif /* defined(CONFIG_PPC_PMAC) || defined(CONFIG_PPC_MAPLE) */
 
+#ifdef CONFIG_PPC_PASEMI
+
+/* No support in all binutils for these yet, so use defines */
+#define LBZCIX(RT,RA,RB)  .long (0x7c0006aa|(RT<<21)|(RA<<16)|(RB << 11))
+#define STBCIX(RS,RA,RB)  .long (0x7c0007aa|(RS<<21)|(RA<<16)|(RB << 11))
+
+
+_GLOBAL(real_205_readb)
+	mfmsr	r7
+	ori	r0,r7,MSR_DR
+	xori	r0,r0,MSR_DR
+	sync
+	mtmsrd	r0
+	sync
+	isync
+	LBZCIX(r3,0,r3)
+	isync
+	mtmsrd	r7
+	sync
+	isync
+	blr
+
+_GLOBAL(real_205_writeb)
+	mfmsr	r7
+	ori	r0,r7,MSR_DR
+	xori	r0,r0,MSR_DR
+	sync
+	mtmsrd	r0
+	sync
+	isync
+	STBCIX(r3,0,r4)
+	isync
+	mtmsrd	r7
+	sync
+	isync
+	blr
+
+#endif /* CONFIG_PPC_PASEMI */
+
+
 #ifdef CONFIG_CPU_FREQ_PMAC64
 /*
  * SCOM access functions for 970 (FX only for now)
@@ -606,6 +646,19 @@ _GLOBAL(kexec_sequence)
 	/* turn off mmu */
 	bl	real_mode
 
+	/* copy  0x100 bytes starting at start to 0 */
+	li	r3,0
+	mr	r4,r30		/* start, aka phys mem offset */
+	li	r5,0x100
+	li	r6,0
+	bl	.copy_and_flush	/* (dest, src, copy limit, start offset) */
+1:	/* assume normal blr return */
+
+	/* release other cpus to the new kernel secondary start at 0x60 */
+	mflr	r5
+	li	r6,1
+	stw	r6,kexec_flag-1b(5)
+
 	/* clear out hardware hash page table and tlb */
 	ld	r5,0(r27)		/* deref function descriptor */
 	mtctr	r5
@@ -636,19 +689,6 @@ _GLOBAL(kexec_sequence)
  *    are the boot cpu ?????
  *    other device tree differences (prop sizes, va vs pa, etc)...
  */
-
-	/* copy  0x100 bytes starting at start to 0 */
-	li	r3,0
-	mr	r4,r30
-	li	r5,0x100
-	li	r6,0
-	bl	.copy_and_flush	/* (dest, src, copy limit, start offset) */
-1:	/* assume normal blr return */
-
-	/* release other cpus to the new kernel secondary start at 0x60 */
-	mflr	r5
-	li	r6,1
-	stw	r6,kexec_flag-1b(5)
 	mr	r3,r25	# my phys cpu
 	mr	r4,r30	# start, aka phys mem offset
 	mtlr	4

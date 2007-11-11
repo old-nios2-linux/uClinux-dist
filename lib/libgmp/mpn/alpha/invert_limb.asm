@@ -1,39 +1,38 @@
 dnl  Alpha mpn_invert_limb -- Invert a normalized limb.
 
-dnl  Copyright (C) 1996, 2000 Free Software Foundation, Inc.
-
+dnl  Copyright 1996, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+dnl
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Library General Public License as published by
-dnl  the Free Software Foundation; either version 2 of the License, or (at your
-dnl  option) any later version.
-
+dnl  it under the terms of the GNU Lesser General Public License as published
+dnl  by the Free Software Foundation; either version 2.1 of the License, or (at
+dnl  your option) any later version.
+dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Library General Public License
-dnl  along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-dnl  the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-dnl  MA 02111-1307, USA.
-
-dnl 
-dnl  This is based on sophie:/gmp-stuff/dbg-inv-limb.c.
-dnl  The ideas are due to Peter L. Montgomery
-dnl 
-dnl  The table below uses 4096 bytes.  The file mentioned above has an
-dnl  alternative function that doesn't require the table, but it runs 50%
-dnl  slower than this.
+dnl
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library; see the file COPYING.LIB.  If not, write
+dnl  to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+dnl  Boston, MA 02110-1301, USA.
 
 include(`../config.m4')
+
+C      cycles/limb
+C EV4:    175
+C EV5:    125
+C EV6:     67
+
+C  This is based on ideas of Peter L. Montgomery.
 
 ASM_START()
 
 FLOAT64($C36,9223372036854775808.0)		C 2^63
 
-PROLOGUE_GP(mpn_invert_limb)
+PROLOGUE(mpn_invert_limb,gp)
 	lda	r30,-16(r30)
 	addq	r16,r16,r1
 	bne	r1,$73
@@ -44,17 +43,16 @@ $73:
 	stq	r1,0(r30)
 	ldt	f11,0(r30)
 	cvtqt	f11,f1
-	lda	r1,$C36
-	ldt	f10,0(r1)
-	divt	f10,f1,f10
-	lda	r2,$invtab-4096
-	srl	r16,52,r1
-	addq	r1,r1,r1
-	addq	r1,r2,r1
-	bic	r1,6,r2
-	ldq	r2,0(r2)
-	bic	r1,1,r1
-	extwl	r2,r1,r2
+	LEA(r1,$C36)
+	ldt	f10,0(r1)		C f10 = 2^63
+	divt	f10,f1,f10		C f10 = 2^63 / (u / 2)
+	LEA(r2,$invtab-4096)
+	srl	r16,52,r1		C extract high 8 bits
+	addq	r1,r1,r1		C align ...0000bbbbbbbb0
+	addq	r1,r2,r1		C compute array offset
+	ldq_u	r2,0(r1)		C load quadword containing our 16 bits
+bigend(`addq	r1,1,r1')
+	extwl	r2,r1,r2		C extract desired 16 bits
 	sll	r2,48,r0
 	umulh	r16,r0,r1
 	addq	r16,r1,r3
@@ -84,7 +82,7 @@ $Lend:
 	lda	r30,16(r30)
 	ret	r31,(r26),1
 EPILOGUE(mpn_invert_limb)
-DATASTART(`$invtab',4)
+DATASTART($invtab)
 	.word 0xffff,0xffc0,0xff80,0xff40,0xff00,0xfec0,0xfe81,0xfe41
 	.word 0xfe01,0xfdc2,0xfd83,0xfd43,0xfd04,0xfcc5,0xfc86,0xfc46
 	.word 0xfc07,0xfbc8,0xfb8a,0xfb4b,0xfb0c,0xfacd,0xfa8e,0xfa50

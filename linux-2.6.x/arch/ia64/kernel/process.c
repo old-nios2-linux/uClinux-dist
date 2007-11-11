@@ -20,20 +20,20 @@
 #include <linux/personality.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/stddef.h>
 #include <linux/thread_info.h>
 #include <linux/unistd.h>
 #include <linux/efi.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/kdebug.h>
 
 #include <asm/cpu.h>
 #include <asm/delay.h>
 #include <asm/elf.h>
 #include <asm/ia32.h>
 #include <asm/irq.h>
-#include <asm/kdebug.h>
+#include <asm/kexec.h>
 #include <asm/pgalloc.h>
 #include <asm/processor.h>
 #include <asm/sal.h>
@@ -155,7 +155,7 @@ show_regs (struct pt_regs *regs)
 }
 
 void
-do_notify_resume_user (sigset_t *oldset, struct sigscratch *scr, long in_syscall)
+do_notify_resume_user (sigset_t *unused, struct sigscratch *scr, long in_syscall)
 {
 	if (fsys_mode(current, &scr->pt)) {
 		/* defer signal-handling etc. until we return to privilege-level 0.  */
@@ -170,8 +170,8 @@ do_notify_resume_user (sigset_t *oldset, struct sigscratch *scr, long in_syscall
 #endif
 
 	/* deal with pending signal delivery */
-	if (test_thread_flag(TIF_SIGPENDING))
-		ia64_do_signal(oldset, scr, in_syscall);
+	if (test_thread_flag(TIF_SIGPENDING)||test_thread_flag(TIF_RESTORE_SIGMASK))
+		ia64_do_signal(scr, in_syscall);
 }
 
 static int pal_halt        = 1;
@@ -198,9 +198,13 @@ default_idle (void)
 {
 	local_irq_enable();
 	while (!need_resched()) {
-		if (can_do_pal_halt)
-			safe_halt();
-		else
+		if (can_do_pal_halt) {
+			local_irq_disable();
+			if (!need_resched()) {
+				safe_halt();
+			}
+			local_irq_enable();
+		} else
 			cpu_relax();
 	}
 }
@@ -236,6 +240,7 @@ void cpu_idle_wait(void)
 {
 	unsigned int cpu, this_cpu = get_cpu();
 	cpumask_t map;
+	cpumask_t tmp = current->cpus_allowed;
 
 	set_cpus_allowed(current, cpumask_of_cpu(this_cpu));
 	put_cpu();
@@ -257,6 +262,7 @@ void cpu_idle_wait(void)
 		}
 		cpus_and(map, map, cpu_online_map);
 	} while (!cpus_empty(map));
+	set_cpus_allowed(current, tmp);
 }
 EXPORT_SYMBOL_GPL(cpu_idle_wait);
 
@@ -268,10 +274,16 @@ cpu_idle (void)
 
 	/* endless idle loop with no priority at all */
 	while (1) {
-		if (can_do_pal_halt)
+		if (can_do_pal_halt) {
 			current_thread_info()->status &= ~TS_POLLING;
-		else
+			/*
+			 * TS_POLLING-cleared state must be visible before we
+			 * test NEED_RESCHED:
+			 */
+			smp_mb();
+		} else {
 			current_thread_info()->status |= TS_POLLING;
+		}
 
 		if (!need_resched()) {
 			void (*idle)(void);
@@ -491,7 +503,8 @@ copy_thread (int nr, unsigned long clone_flags,
 
 		/* Copy partially mapped page list */
 		if (!retval)
-			retval = ia32_copy_partial_page_list(p, clone_flags);
+			retval = ia32_copy_ia64_partial_page_list(p,
+								clone_flags);
 	}
 #endif
 
@@ -505,7 +518,8 @@ copy_thread (int nr, unsigned long clone_flags,
 static void
 do_copy_task_regs (struct task_struct *task, struct unw_frame_info *info, void *arg)
 {
-	unsigned long mask, sp, nat_bits = 0, ip, ar_rnat, urbs_end, cfm;
+	unsigned long mask, sp, nat_bits = 0, ar_rnat, urbs_end, cfm;
+	unsigned long uninitialized_var(ip);	/* GCC be quiet */
 	elf_greg_t *dst = arg;
 	struct pt_regs *pt;
 	char nat;
@@ -719,7 +733,7 @@ flush_thread (void)
 	ia64_drop_fpu(current);
 #ifdef CONFIG_IA32_SUPPORT
 	if (IS_IA32_PROCESS(task_pt_regs(current))) {
-		ia32_drop_partial_page_list(current);
+		ia32_drop_ia64_partial_page_list(current);
 		current->thread.task_size = IA32_PAGE_OFFSET;
 		set_fs(USER_DS);
 	}
@@ -745,7 +759,7 @@ exit_thread (void)
 		pfm_release_debug_registers(current);
 #endif
 	if (IS_IA32_PROCESS(task_pt_regs(current)))
-		ia32_drop_partial_page_list(current);
+		ia32_drop_ia64_partial_page_list(current);
 }
 
 unsigned long
@@ -754,6 +768,9 @@ get_wchan (struct task_struct *p)
 	struct unw_frame_info info;
 	unsigned long ip;
 	int count = 0;
+
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
 
 	/*
 	 * Note: p may not be a blocked task (it could be current or
@@ -765,6 +782,8 @@ get_wchan (struct task_struct *p)
 	 */
 	unw_init_from_blocked_task(&info, p);
 	do {
+		if (p->state == TASK_RUNNING)
+			return 0;
 		if (unw_unwind(&info) < 0)
 			return 0;
 		unw_get_ip(&info, &ip);
@@ -795,6 +814,21 @@ cpu_halt (void)
 
 	while (1)
 		ia64_pal_halt(min_power_state);
+}
+
+void machine_shutdown(void)
+{
+#ifdef CONFIG_HOTPLUG_CPU
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		if (cpu != smp_processor_id())
+			cpu_down(cpu);
+	}
+#endif
+#ifdef CONFIG_KEXEC
+	kexec_disable_iosapic();
+#endif
 }
 
 void

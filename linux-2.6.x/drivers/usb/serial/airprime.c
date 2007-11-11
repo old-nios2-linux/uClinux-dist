@@ -18,8 +18,6 @@
 
 static struct usb_device_id id_table [] = {
 	{ USB_DEVICE(0x0c88, 0x17da) }, /* Kyocera Wireless KPC650/Passport */
-	{ USB_DEVICE(0x1410, 0x1110) }, /* Novatel Wireless Merlin CDMA */
-	{ USB_DEVICE(0x1410, 0x1100) }, /* ExpressCard34 Qualcomm 3G CDMA */
 	{ },
 };
 MODULE_DEVICE_TABLE(usb, id_table);
@@ -40,7 +38,42 @@ struct airprime_private {
 	int outstanding_urbs;
 	int throttled;
 	struct urb *read_urbp[NUM_READ_URBS];
+
+	/* Settings for the port */
+	int rts_state;	/* Handshaking pins (outputs) */
+	int dtr_state;
+	int cts_state;	/* Handshaking pins (inputs) */
+	int dsr_state;
+	int dcd_state;
+	int ri_state;
 };
+
+static int airprime_send_setup(struct usb_serial_port *port)
+{
+	struct usb_serial *serial = port->serial;
+	struct airprime_private *priv;
+
+	dbg("%s", __FUNCTION__);
+
+	if (port->number != 0)
+		return 0;
+
+	priv = usb_get_serial_port_data(port);
+
+	if (port->tty) {
+		int val = 0;
+		if (priv->dtr_state)
+			val |= 0x01;
+		if (priv->rts_state)
+			val |= 0x02;
+
+		return usb_control_msg(serial->dev,
+				usb_rcvctrlpipe(serial->dev, 0),
+				0x22,0x21,val,0,NULL,0,USB_CTRL_SET_TIMEOUT);
+	}
+
+	return 0;
+}
 
 static void airprime_read_bulk_callback(struct urb *urb)
 {
@@ -48,17 +81,13 @@ static void airprime_read_bulk_callback(struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	struct tty_struct *tty;
 	int result;
+	int status = urb->status;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
-	if (urb->status) {
+	if (status) {
 		dbg("%s - nonzero read bulk status received: %d",
-		    __FUNCTION__, urb->status);
-		/* something happened, so free up the memory for this urb */
-		if (urb->transfer_buffer) {
-			kfree (urb->transfer_buffer);
-			urb->transfer_buffer = NULL;
-		}
+		    __FUNCTION__, status);
 		return;
 	}
 	usb_serial_debug_data(debug, &port->dev, __FUNCTION__, urb->actual_length, data);
@@ -80,6 +109,7 @@ static void airprime_write_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	struct airprime_private *priv = usb_get_serial_port_data(port);
+	int status = urb->status;
 	unsigned long flags;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
@@ -87,9 +117,9 @@ static void airprime_write_bulk_callback(struct urb *urb)
 	/* free up the transfer buffer, as usb_free_urb() does not do this */
 	kfree (urb->transfer_buffer);
 
-	if (urb->status)
+	if (status)
 		dbg("%s - nonzero write bulk status received: %d",
-		    __FUNCTION__, urb->status);
+		    __FUNCTION__, status);
 	spin_lock_irqsave(&priv->lock, flags);
 	--priv->outstanding_urbs;
 	spin_unlock_irqrestore(&priv->lock, flags);
@@ -119,6 +149,10 @@ static int airprime_open(struct usb_serial_port *port, struct file *filp)
 		usb_set_serial_port_data(port, priv);
 	}
 
+	/* Set some sane defaults */
+	priv->rts_state = 1;
+	priv->dtr_state = 1;
+
 	for (i = 0; i < NUM_READ_URBS; ++i) {
 		buffer = kmalloc(buffer_size, GFP_KERNEL);
 		if (!buffer) {
@@ -142,6 +176,8 @@ static int airprime_open(struct usb_serial_port *port, struct file *filp)
 				  airprime_read_bulk_callback, port);
 		result = usb_submit_urb(urb, GFP_KERNEL);
 		if (result) {
+			usb_free_urb(urb);
+			kfree(buffer);
 			dev_err(&port->dev,
 				"%s - failed submitting read urb %d for port %d, error %d\n",
 				__FUNCTION__, i, port->number, result);
@@ -150,33 +186,21 @@ static int airprime_open(struct usb_serial_port *port, struct file *filp)
 		/* remember this urb so we can kill it when the port is closed */
 		priv->read_urbp[i] = urb;
 	}
+
+	airprime_send_setup(port);
+
 	goto out;
 
  errout:
 	/* some error happened, cancel any submitted urbs and clean up anything that
 	   got allocated successfully */
 
-	for ( ; i >= 0; --i) {
+	while (i-- != 0) {
 		urb = priv->read_urbp[i];
-		if (urb) {
-			/* This urb was submitted successfully. So we have to
-			   cancel it.
-			   Unlinking the urb will invoke read_bulk_callback()
-			   with an error status, so its transfer buffer will
-			   be freed there */
-			if (usb_unlink_urb (urb) != -EINPROGRESS) {
-				/* comments in drivers/usb/core/urb.c say this
-				   can only happen if the urb was never submitted,
-				   or has completed already.
-				   Either way we may have to free the transfer
-				   buffer here. */
-				if (urb->transfer_buffer) {
-					kfree (urb->transfer_buffer);
-					urb->transfer_buffer = NULL;
-				}
-			}
-			usb_free_urb (urb);
-		}
+		buffer = urb->transfer_buffer;
+		usb_kill_urb (urb);
+		usb_free_urb (urb);
+		kfree (buffer);
 	}
 
  out:
@@ -190,10 +214,14 @@ static void airprime_close(struct usb_serial_port *port, struct file * filp)
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
-	/* killing the urb will invoke read_bulk_callback() with an error status,
-	   so the transfer buffer will be freed there */
+	priv->rts_state = 0;
+	priv->dtr_state = 0;
+
+	airprime_send_setup(port);
+
 	for (i = 0; i < NUM_READ_URBS; ++i) {
 		usb_kill_urb (priv->read_urbp[i]);
+		kfree (priv->read_urbp[i]->transfer_buffer);
 		usb_free_urb (priv->read_urbp[i]);
 	}
 
@@ -273,6 +301,7 @@ static struct usb_serial_driver airprime_device = {
 		.owner =	THIS_MODULE,
 		.name =		"airprime",
 	},
+	.usb_driver =		&airprime_driver,
 	.id_table =		id_table,
 	.num_interrupt_in =	NUM_DONT_CARE,
 	.num_bulk_in =		NUM_DONT_CARE,

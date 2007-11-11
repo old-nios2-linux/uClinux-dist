@@ -53,7 +53,7 @@ static int cbq_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct nl
 	struct tc_cbq_lssopt lss;
 	__u32 rtab[256];
 	unsigned mpu=0, avpkt=0, allot=0;
-	int cell_log=-1; 
+	int cell_log=-1;
 	int ewma_log=-1;
 	struct rtattr *tail;
 
@@ -70,7 +70,7 @@ static int cbq_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct nl
 			}
 		} else if (strcmp(*argv, "ewma") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&ewma_log, *argv, 0)) {
+			if (get_integer(&ewma_log, *argv, 0)) {
 				explain1("ewma");
 				return -1;
 			}
@@ -147,11 +147,11 @@ static int cbq_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct nl
 	if (ewma_log < 0)
 		ewma_log = TC_CBQ_DEF_EWMA;
 	lss.ewma_log = ewma_log;
-	lss.maxidle = tc_cbq_calc_maxidle(r.rate, r.rate, avpkt, lss.ewma_log, 0);
+	lss.maxidle = tc_calc_xmittime(r.rate, avpkt);
 	lss.change = TCF_CBQ_LSS_MAXIDLE|TCF_CBQ_LSS_EWMA|TCF_CBQ_LSS_AVPKT;
 	lss.avpkt = avpkt;
 
-	tail = (struct rtattr*)(((void*)n)+NLMSG_ALIGN(n->nlmsg_len));
+	tail = NLMSG_TAIL(n);
 	addattr_l(n, 1024, TCA_OPTIONS, NULL, 0);
 	addattr_l(n, 1024, TCA_CBQ_RATE, &r, sizeof(r));
 	addattr_l(n, 1024, TCA_CBQ_LSSOPT, &lss, sizeof(lss));
@@ -162,7 +162,7 @@ static int cbq_parse_opt(struct qdisc_util *qu, int argc, char **argv, struct nl
 			printf("%u ", rtab[i]);
 		printf("\n");
 	}
-	tail->rta_len = (((void*)n)+NLMSG_ALIGN(n->nlmsg_len)) - (void*)tail;
+	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
 }
 
@@ -176,7 +176,7 @@ static int cbq_parse_class_opt(struct qdisc_util *qu, int argc, char **argv, str
 	struct tc_cbq_ovl ovl;
 	__u32 rtab[256];
 	unsigned mpu=0;
-	int cell_log=-1; 
+	int cell_log=-1;
 	int ewma_log=-1;
 	unsigned bndw = 0;
 	unsigned minburst=0, maxburst=0;
@@ -236,7 +236,7 @@ static int cbq_parse_class_opt(struct qdisc_util *qu, int argc, char **argv, str
 			lss.change |= TCF_CBQ_LSS_FLAGS;
 		} else if (strcmp(*argv, "ewma") == 0) {
 			NEXT_ARG();
-			if (get_u32(&ewma_log, *argv, 0)) {
+			if (get_integer(&ewma_log, *argv, 0)) {
 				explain1("ewma");
 				return -1;
 			}
@@ -385,7 +385,7 @@ static int cbq_parse_class_opt(struct qdisc_util *qu, int argc, char **argv, str
 		lss.change |= TCF_CBQ_LSS_EWMA;
 	}
 
-	tail = (struct rtattr*)(((void*)n)+NLMSG_ALIGN(n->nlmsg_len));
+	tail = NLMSG_TAIL(n);
 	addattr_l(n, 1024, TCA_OPTIONS, NULL, 0);
 	if (lss.change) {
 		lss.change |= TCF_CBQ_LSS_FLAGS;
@@ -405,7 +405,7 @@ static int cbq_parse_class_opt(struct qdisc_util *qu, int argc, char **argv, str
 			printf("\n");
 		}
 	}
-	tail->rta_len = (((void*)n)+NLMSG_ALIGN(n->nlmsg_len)) - (void*)tail;
+	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
 }
 
@@ -418,12 +418,12 @@ static int cbq_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 	struct tc_cbq_wrropt *wrr = NULL;
 	struct tc_cbq_fopt *fopt = NULL;
 	struct tc_cbq_ovl *ovl = NULL;
+	SPRINT_BUF(b1);
 
 	if (opt == NULL)
 		return 0;
 
-	memset(tb, 0, sizeof(tb));
-	parse_rtattr(tb, TCA_CBQ_MAX, RTA_DATA(opt), RTA_PAYLOAD(opt));
+	parse_rtattr_nested(tb, TCA_CBQ_MAX, opt);
 
 	if (tb[TCA_CBQ_RATE]) {
 		if (RTA_PAYLOAD(tb[TCA_CBQ_RATE]) < sizeof(*r))
@@ -452,7 +452,8 @@ static int cbq_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 	if (tb[TCA_CBQ_OVL_STRATEGY]) {
 		if (RTA_PAYLOAD(tb[TCA_CBQ_OVL_STRATEGY]) < sizeof(*ovl))
 			fprintf(stderr, "CBQ: too short overlimit strategy %u/%u\n",
-				RTA_PAYLOAD(tb[TCA_CBQ_OVL_STRATEGY]), sizeof(*ovl));
+				(unsigned) RTA_PAYLOAD(tb[TCA_CBQ_OVL_STRATEGY]),
+				(unsigned) sizeof(*ovl));
 		else
 			ovl = RTA_DATA(tb[TCA_CBQ_OVL_STRATEGY]);
 	}
@@ -500,17 +501,17 @@ static int cbq_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 	if (lss && show_details) {
 		fprintf(f, "\nlevel %u ewma %u avpkt %ub ", lss->level, lss->ewma_log, lss->avpkt);
 		if (lss->maxidle) {
-			fprintf(f, "maxidle %luus ", tc_core_tick2usec(lss->maxidle>>lss->ewma_log));
+			fprintf(f, "maxidle %s ", sprint_ticks(lss->maxidle>>lss->ewma_log, b1));
 			if (show_raw)
 				fprintf(f, "[%08x] ", lss->maxidle);
 		}
 		if (lss->minidle!=0x7fffffff) {
-			fprintf(f, "minidle %luus ", tc_core_tick2usec(lss->minidle>>lss->ewma_log));
+			fprintf(f, "minidle %s ", sprint_ticks(lss->minidle>>lss->ewma_log, b1));
 			if (show_raw)
 				fprintf(f, "[%08x] ", lss->minidle);
 		}
 		if (lss->offtime) {
-			fprintf(f, "offtime %luus ", tc_core_tick2usec(lss->offtime));
+			fprintf(f, "offtime %s ", sprint_ticks(lss->offtime, b1));
 			if (show_raw)
 				fprintf(f, "[%08x] ", lss->offtime);
 		}
@@ -542,14 +543,12 @@ static int cbq_print_xstats(struct qdisc_util *qu, FILE *f, struct rtattr *xstat
 	return 0;
 }
 
-struct qdisc_util cbq_util = {
-	NULL,
-	"cbq",
-	cbq_parse_opt,
-	cbq_print_opt,
-	cbq_print_xstats,
-
-	cbq_parse_class_opt,
-	cbq_print_opt,
+struct qdisc_util cbq_qdisc_util = {
+	.id		= "cbq",
+	.parse_qopt	= cbq_parse_opt,
+	.print_qopt	= cbq_print_opt,
+	.print_xstats	= cbq_print_xstats,
+	.parse_copt	= cbq_parse_class_opt,
+	.print_copt	= cbq_print_opt,
 };
 

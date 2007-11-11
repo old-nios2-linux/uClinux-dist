@@ -1,3 +1,160 @@
+These are the Release Notes for Revision 2.4.3 of netperf:
+
+Things changed in this release:
+
+*) The UDP_STREAM test includes --enable-demo support, courtesy of
+   patches from Scott Weitzenkamp.
+
+*) The nettest_dns.* files have been removed from the release and the
+   repository.  Those wishing to perform DNS server tests should
+   migrate to netperf4 which has better support for DNS test.
+
+*) Fixes for compiling under Windows with Mingw/gcc courtesy of Gisle
+   Vanem.
+
+*) A new global option - -N - has been added. When specified, this
+   option will tell netperf to not bother to try to establish a
+   control connection with a remote netserver.  Instead, netperf will
+   only attempt to make a data connection to the remote system.  By
+   default, this will be to the "discard" service for a "STREAM" or
+   "SENDFILE" test, the "echo" service for a "RR" test and the
+   "chargen" service for a "MAERTS" test.  Any "remote" settings are
+   changed to reflect their being unused in the test, and a "no
+   control" tag is added to the test banner when -N is specified.
+
+   This still needs to be propagated to other test files - at least
+   for those for which it may make sense.
+
+*) The tests in nettest_bsd.c have been altered to not actually take
+   timestamps and deltas in --enable-histogram unless the verbosity
+   level has been set to actually display a histogram.  This reduces
+   the overhead measurably, even on systems with "fast" time calls,
+   which _may_ mean that a future release of netperf may have
+   histogram support enabled by default.
+
+   This still needs to be propagated to other test files.  Patches
+   from the community would be most welcome :)
+
+*) Eliminate a bogus fprintf from the signal catching routine which
+   was being executed when both intervals and demo mode were active at
+   the same time.
+
+*) The nettest_ipv6.* files are no longer included in the source
+   tar/zip file. IPv6 functionality has been subsumed into the
+   nettest_bsd.* files for some time now. 
+
+*) Use a higher resolution "time" source for HISTOGRAM support under
+   Windows, courtesy of Spencer Frink. Prior to this it had no better
+   than 10ms granularity which could lead to some rather strange
+   looking results :)
+
+*) A bug fix reporting recv_size rather than send_size in TCP_MAERTS
+   when CPU utilization was requested.
+
+*) A bug fix for buffer filling from a file to properly advance the
+   buffer pointer when the file is smaller than the send buffer.
+
+*) Enable certain UDP tests which previously used unconnected sockets 
+   to use connected sockets.  Courtesy of Shilpi Agarwal.
+
+*) The OSX CPU utilization code actually gets put into the tarball in
+   a make dist now :)
+
+*) The check to make sure that getaddrinfo returned ai_protocol and/or
+   ai_socktype's matching that which we requested is done for all socket
+   and/or protocol types and a warning is emitted if it returns any which
+   do not match.
+
+*) The linux CPU affinity code has been made capable of binding to
+   CPU's >=32 on a 32-bit compilation and >=64 on a 64-bit
+   compilation.
+
+*) More complete closing/redirecting of stdin/stdout/stderr/where in
+   netserver to make it easier to launch netserver at the far-end of a
+   remote shell.  Courtesy of Hans Blom.
+
+*) Sendfile changes for Solaris courtesy of Andrew Gallatin.
+
+*) "spec" file support to generate RPMs courtesy of Martin Brown
+
+These are the Release Notes for Revision 2.4.2 of netperf:
+
+Things changed in this release:
+
+*) Fixes for floating point format differences, courtesy of George
+   Davis.
+
+*) Additions for CPU util support on MacOS X, courtesy of Anonymous.
+
+*) Processor affinity is now supported on AIX 5.3 (perhaps earlier)
+   via the bindprocessor system call.
+
+*) Fixes for test lockups with TCP_CRR and TCP_CC under Windows
+   courtesy of Dikon Reed.
+
+*) Fixes to netcpu_looper.c to get it to actually compile :)
+
+*) Have netcpu_looper use the bind_to_specific_processor() call
+   provided by netlib since that knows about more platforms than the
+   code in netcpu_looper did. The looper CPU binding will use a
+   mapping to handle cases where the CPU id's on the system may not be
+   a contiguous space starting from zero.  At present, the code that
+   setups the mapping only knows about retrieving actual CPU ids under
+   HP-UX.
+
+*) The netcpu_sysctl method becomes calibration-free, courtesy of 
+   Andrew Gallatin
+
+These are the Release Notes for Revision 2.4.1 of netperf:
+
+Things changed in this release:
+
+*) There is now a -B global command-line argument that will append its
+   parameter as a string to the end of result lines when test banners
+   have been suppressed.  this is to make it easier to distinguish one
+   result from another when aggregate restults are being run in
+   parallel, without having to resort to having the individual results
+   shell redirected to a file. This has been done for some of the
+   tests in nettest_bsd.c, but not all of them, nor for the tests in
+   the other nettest_mumble.c files.
+
+*) There is now an --enable-spin configure option that will enable
+   intervals if not already enabled and will have the sender sit and
+   spin in a tight loop until time for the next interval rather than
+   wait for an interval timer to expire.  This means it should be
+   possible to have a much finer granularity on the interval, at the
+   expense of an EXTREME increase in CPU utilization.  (To the extent
+   I'm considering disabling measurement of local CPU utilization when
+   that mode is enabled, and bursts have been requested - your
+   feedback on that topic would be most appreciated) 
+
+   If only --enable-intervals is used with configure, the old set the
+   interval timer and wait method is still used.
+
+   If --enable-spin is configured, the test banner will include "spin
+   intervals" rather than the "intervals" from a plain
+   --enable-intervals.  The sit and spin will either use
+   gettimeofday(), or gethrtime() if gethrtime() is available.
+
+   This has been implemented in the tests of nettest_bsd.c but none of
+   the others.  Volunteers would be most welcome.  I would entertain
+   the notion of making the implementation a series of inline
+   functions in netlib. This holds true for the demo mode - why will
+   become clear when you look at nettest_bsd.c.  While things are
+   considerably cleaner than they were before, with reuse within
+   nettest_bsd.c, there is no resuse with the rest of the
+   nettest_mumble.c files.
+
+*) the -w option for the interval time now takes three optional
+   suffixes. if the suffix is 'm' (eg 10m) it will assume the user has
+   specified time in units of milliseconds.  if the suffix is 'u' it
+   will assume microseconds, and if 's' seconds. no suffix remains
+   milliseconds for backwards compatability with previous netperf
+   versions.
+
+*) It should be possible to successfully compile with
+   --enable-intervals.
+
 These are the Release Notes for Revision 2.4.1 of netperf:
 
 Things changed in this release:

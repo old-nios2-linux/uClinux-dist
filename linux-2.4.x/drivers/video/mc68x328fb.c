@@ -1,6 +1,9 @@
 /*
  *  linux/drivers/video/mc68x328fb.c -- DragonBall frame buffer device
  *
+ *   Copyright (C) 2006 Arcturus Networks Inc. 
+ *                 by David Wu <www.ArcturusNetworks.com>
+ *
  *	Copyright (C) 2003 Georges Menie
  *
  *  Support for the built in MC68x328 LCD Controller
@@ -19,6 +22,11 @@
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
  *  more details.
+ */
+
+/*  David Wu added the following function 
+	mc68x328fb_get_fb_unmapped_area
+    for MMUless system for 2.4.31 kernel.
  */
 
 #include <linux/module.h>
@@ -129,6 +137,13 @@ static int mc68x328fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static void do_install_cmap(int con, struct fb_info *info);
 
 
+#ifdef NO_MM
+static unsigned long
+mc68x328fb_get_fb_unmapped_area(struct file *file,
+                     unsigned long addr, unsigned long len,
+                     unsigned long pgoff, unsigned long flags);
+#endif
+
 static struct fb_ops mc68x328fb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	mc68x328fb_get_fix,
@@ -137,7 +152,26 @@ static struct fb_ops mc68x328fb_ops = {
 	fb_get_cmap:	mc68x328fb_get_cmap,
 	fb_set_cmap:	mc68x328fb_set_cmap,
 	fb_pan_display:	mc68x328fb_pan_display,
+#ifdef NO_MM
+	get_fb_unmapped_area: mc68x328fb_get_fb_unmapped_area,
+#endif
 };
+
+#ifdef NO_MM
+static unsigned long
+mc68x328fb_get_fb_unmapped_area(struct file *file,
+                     unsigned long addr, unsigned long len,
+                     unsigned long pgoff, unsigned long flags)
+{
+        unsigned long off = pgoff << PAGE_SHIFT;
+
+        if (off < videomemorysize)
+                if (len <= videomemorysize - off){
+                        return virt_to_phys(videomemory + off);
+		}
+        return -EINVAL;
+}
+#endif
 
     /*
      *  Get the Fixed Part of the Display

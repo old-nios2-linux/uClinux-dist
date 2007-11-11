@@ -5,10 +5,9 @@
  *
  * (C) Copyright 1995 1996 Linus Torvalds
  */
-#include <linux/io.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
-
+#include <linux/sched.h>
 #include <asm/cacheflush.h>
 #include <asm/pgtable.h>
 

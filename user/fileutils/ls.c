@@ -100,11 +100,13 @@ main(argc, argv)
 		cp = *(++argv) + 1;
 
 		while (*cp) switch (*cp++) {
+			case 'g':
 			case 'l':	flags |= LSF_LONG; break;
 			case 'd':	flags |= LSF_DIR; break;
 			case 'i':	flags |= LSF_INODE; break;
 			case 'a':	flags |= LSF_ALL; break;
 			case 'F':	flags |= LSF_CLASS; break;
+			case 'A':	break;
 			default:
 				fprintf(stderr, "Unknown option -%c\n", cp[-1]);
 				exit(1);

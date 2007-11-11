@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2004 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2004 - 2005 Tomasz Kojm <tkojm@clamav.net>
  *
  *  Implementation (header structures) based on the PE format description
  *  by B. Luevelsmeyer
@@ -16,14 +16,17 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __PE_H
 #define __PE_H
 
 #include "clamav.h"
-#include "rebuildpe.h"
+#include "execs.h"
+#include "others.h"
+#include "cltypes.h"
 
 struct pe_image_file_hdr {
     uint32_t Magic;
@@ -41,7 +44,7 @@ struct pe_image_data_dir {
     uint32_t Size;
 };
 
-struct pe_image_optional_hdr {
+struct pe_image_optional_hdr32 {
     uint16_t Magic;
     uint8_t  MajorLinkerVersion;		    /* unreliable */
     uint8_t  MinorLinkerVersion;		    /* unreliable */
@@ -75,8 +78,41 @@ struct pe_image_optional_hdr {
     struct pe_image_data_dir DataDirectory[16];
 };
 
+struct pe_image_optional_hdr64 {
+    uint16_t Magic;
+    uint8_t  MajorLinkerVersion;		    /* unreliable */
+    uint8_t  MinorLinkerVersion;		    /* unreliable */
+    uint32_t SizeOfCode;			    /* unreliable */
+    uint32_t SizeOfInitializedData;		    /* unreliable */
+    uint32_t SizeOfUninitializedData;		    /* unreliable */
+    uint32_t AddressOfEntryPoint;
+    uint32_t BaseOfCode;
+    uint64_t ImageBase;				    /* multiple of 64 KB */
+    uint32_t SectionAlignment;			    /* usually 32 or 4096 */
+    uint32_t FileAlignment;			    /* usually 32 or 512 */
+    uint16_t MajorOperatingSystemVersion;	    /* not used */
+    uint16_t MinorOperatingSystemVersion;	    /* not used */
+    uint16_t MajorImageVersion;			    /* unreliable */
+    uint16_t MinorImageVersion;			    /* unreliable */
+    uint16_t MajorSubsystemVersion;
+    uint16_t MinorSubsystemVersion;
+    uint32_t Win32VersionValue;			    /* ? */
+    uint32_t SizeOfImage;
+    uint32_t SizeOfHeaders;
+    uint32_t CheckSum;				    /* NT drivers only */
+    uint16_t Subsystem;
+    uint16_t DllCharacteristics;
+    uint64_t SizeOfStackReserve;
+    uint64_t SizeOfStackCommit;
+    uint64_t SizeOfHeapReserve;
+    uint64_t SizeOfHeapCommit;
+    uint32_t LoaderFlags;			    /* ? */
+    uint32_t NumberOfRvaAndSizes;		    /* unreliable */
+    struct pe_image_data_dir DataDirectory[16];
+};
+
 struct pe_image_section_hdr {
-    char Name[8];			    /* may not end with NULL */
+    uint8_t Name[8];			    /* may not end with NULL */
     /*
     union {
 	uint32_t PhysicalAddress;
@@ -94,14 +130,8 @@ struct pe_image_section_hdr {
     uint32_t Characteristics;
 };
 
-struct cli_pe_info {
-    uint32_t ep; /* raw entry point */
-    uint16_t nsections;
-    struct SECTION *section;
-};
+int cli_scanpe(int desc, cli_ctx *ctx);
 
-int cli_scanpe(int desc, const char **virname, unsigned long int *scanned, const struct cl_node *root, const struct cl_limits *limits, unsigned int options, unsigned int arec, unsigned int mrec);
-
-int cli_peheader(int desc, struct cli_pe_info *peinfo);
+int cli_peheader(int desc, struct cli_exe_info *peinfo);
 
 #endif

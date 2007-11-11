@@ -1,13 +1,13 @@
-
+/* vi: set sw=4 ts=4: */
 /*
  * Various assmbly language/system dependent  hacks that are required
  * so that we can minimize the amount of platform specific code.
+ * Copyright (C) 2000-2004 by Erik Andersen <andersen@codepoet.org>
  */
-#define LINUXBIN
 
 /* Define this if the system uses RELOCA.  */
 #define ELF_USES_RELOCA
-
+#include <elf.h>
 /*
  * Initialization sequence for a GOT.  For the Sparc, this points to the
  * PLT, and we need to initialize a couple of the slots.  The PLT should
@@ -31,19 +31,14 @@
 #undef  MAGIC2
 
 /* Used for error messages */
-#define ELF_TARGET "Sparc"
+#define ELF_TARGET "sparc"
 
-#ifndef COMPILE_ASM
-extern unsigned int _dl_linux_resolver(unsigned int reloc_entry,
-					unsigned int * i);
-#endif
+struct elf_resolve;
+unsigned long _dl_linux_resolver(struct elf_resolve * tpnt, int reloc_entry);
 
 /*
  * Define this if you want a dynamic loader that works on Solaris.
  */
-#ifndef __linux__
-#define SOLARIS_COMPATIBLE
-#endif
 
 #ifndef COMPILE_ASM
 /* Cheap modulo implementation, taken from arm/ld_sysdep.h. */
@@ -87,13 +82,6 @@ sparc_mod(unsigned long m, unsigned long p)
 #define do_rem(result, n, base) ((result) = sparc_mod(n, base))
 #endif
 
-/*
- * dbx wants the binder to have a specific name.  Mustn't disappoint it.
- */
-#ifdef SOLARIS_COMPATIBLE
-#define _dl_linux_resolve _elf_rtbndr
-#endif
-
 /* 4096 bytes alignment */
 /* ...but 8192 is required for mmap() on sparc64 kernel */
 #define PAGE_ALIGN 0xffffe000
@@ -110,3 +98,61 @@ sparc_mod(unsigned long m, unsigned long p)
 
 /* The SPARC overlaps DT_RELA and DT_PLTREL.  */
 #define ELF_MACHINE_PLTREL_OVERLAP 1
+
+/* We have to do this because elf_machine_{dynamic,load_address} can be
+   invoked from functions that have no GOT references, and thus the compiler
+   has no obligation to load the PIC register.  */
+#define LOAD_PIC_REG(PIC_REG)   \
+do {    register Elf32_Addr pc __asm("o7"); \
+        __asm("sethi %%hi(_GLOBAL_OFFSET_TABLE_-4), %1\n\t" \
+              "call 1f\n\t" \
+              "add %1, %%lo(_GLOBAL_OFFSET_TABLE_+4), %1\n" \
+              "1:\tadd %1, %0, %1" \
+              : "=r" (pc), "=r" (PIC_REG)); \
+} while (0)
+
+/* Return the link-time address of _DYNAMIC.  Conveniently, this is the
+   first element of the GOT.  This must be inlined in a function which
+   uses global data.  */
+static inline Elf32_Addr
+elf_machine_dynamic (void)
+{
+	register Elf32_Addr *got asm ("%l7");
+	
+	LOAD_PIC_REG (got);
+	
+	return *got;
+}
+
+/* Return the run-time load address of the shared object.  */
+static inline Elf32_Addr
+elf_machine_load_address (void)
+{
+	register Elf32_Addr *pc __asm ("%o7"), *got __asm ("%l7");
+	
+	__asm ("sethi %%hi(_GLOBAL_OFFSET_TABLE_-4), %1\n\t"
+	       "call 1f\n\t"
+	       " add %1, %%lo(_GLOBAL_OFFSET_TABLE_+4), %1\n\t"
+	       "call _DYNAMIC\n\t"
+	       "call _GLOBAL_OFFSET_TABLE_\n"
+	       "1:\tadd %1, %0, %1\n\t" : "=r" (pc), "=r" (got));
+	
+	/* got is now l_addr + _GLOBAL_OFFSET_TABLE_
+	 *got is _DYNAMIC
+	 pc[2]*4 is l_addr + _DYNAMIC - (long)pc - 8
+	 pc[3]*4 is l_addr + _GLOBAL_OFFSET_TABLE_ - (long)pc - 12  */
+	return (Elf32_Addr) got - *got + (pc[2] - pc[3]) * 4 - 4;
+}
+
+static inline void
+elf_machine_relative (Elf32_Addr load_off, const Elf32_Addr rel_addr,
+		      Elf32_Word relative_count)
+{
+	Elf32_Rela * rpnt = (void *)rel_addr;
+	--rpnt;
+	do {
+		Elf32_Addr *const reloc_addr = (void *) (load_off + (++rpnt)->r_offset);
+
+		*reloc_addr = load_off + rpnt->r_addend;
+	} while (--relative_count);
+}

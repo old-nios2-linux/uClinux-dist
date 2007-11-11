@@ -1,9 +1,9 @@
 /*
- * $Id: dbt_api.c,v 1.3.4.2.2.1 2004/01/20 18:20:39 dcm Exp $
+ * $Id: dbt_api.c,v 1.8 2004/10/29 13:59:57 dcm Exp $
  *
  * DBText library
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -123,9 +123,6 @@ int dbt_free_result(db_res_t* _r)
 
 int dbt_use_table(db_con_t* _h, const char* _t)
 {
-	char* ptr;
-	int l;
-			
 	if ((!_h) || (!_t))
 	{
 #ifdef DBT_EXTRA_DEBUG
@@ -133,19 +130,9 @@ int dbt_use_table(db_con_t* _h, const char* _t)
 #endif
 		return -1;
 	}
-
-	l = strlen(_t) + 1;
-	ptr = (char*)pkg_malloc(l);
-	if (!ptr) 
-	{
-		LOG(L_ERR, "DBT:dbt_use_table: No memory left\n");
-		return -2;
-	}
-	memcpy(ptr, _t, l);
-
-	if (CON_TABLE(_h))
-		pkg_free(CON_TABLE(_h));
-	CON_TABLE(_h) = ptr;
+	
+	CON_TABLE(_h) = _t;
+	
 	return 0;
 }
 
@@ -157,7 +144,7 @@ db_res_t* dbt_new_result(void)
 	db_res_t* r;
 	r = (db_res_t*)pkg_malloc(sizeof(db_res_t));
 	if (!r) {
-		LOG(L_ERR, "new_result(): No memory left\n");
+		LOG(L_ERR, "dbt_new_result(): No memory left\n");
 		return 0;
 	}
 	RES_NAMES(r) = 0;
@@ -181,8 +168,8 @@ int dbt_convert_result(db_con_t* _h, db_res_t* _r)
 		return -1;
 	}
 	if (dbt_get_columns(_h, _r) < 0) {
-		LOG(L_ERR, "DBT:dbt_convert_result: Error while getting"
-			" column names\n");
+		LOG(L_ERR, 
+			"DBT:dbt_convert_result: Error while getting column names\n");
 		return -2;
 	}
 
@@ -250,21 +237,21 @@ int dbt_get_columns(db_con_t* _h, db_res_t* _r)
 	n = DBT_CON_RESULT(_h)->nrcols;
 	if (!n) 
 	{
-		LOG(L_ERR, "DBT:get_columns: No columns\n");
+		LOG(L_ERR, "DBT:dbt_get_columns: No columns\n");
 		return -2;
 	}
 	
 	RES_NAMES(_r) = (db_key_t*)pkg_malloc(sizeof(db_key_t) * n);
 	if (!RES_NAMES(_r)) 
 	{
-		LOG(L_ERR, "DBT:get_columns: No memory left\n");
+		LOG(L_ERR, "DBT:dbt_get_columns: No memory left\n");
 		return -3;
 	}
 
 	RES_TYPES(_r) = (db_type_t*)pkg_malloc(sizeof(db_type_t) * n);
 	if (!RES_TYPES(_r)) 
 	{
-		LOG(L_ERR, "DBT:get_columns: No memory left\n");
+		LOG(L_ERR, "DBT:dbt_get_columns: No memory left\n");
 		pkg_free(RES_NAMES(_r));
 		return -4;
 	}
@@ -360,7 +347,7 @@ int dbt_convert_row(db_con_t* _h, db_res_t* _res, db_row_t* _r)
 		return -1;
 	}
 
-	ROW_VALUES(_r) = (db_val_t*)pkg_malloc(sizeof(db_val_t)*RES_COL_N(_res));
+	ROW_VALUES(_r) = (db_val_t*)pkg_malloc(sizeof(db_val_t) * RES_COL_N(_res));
 	ROW_N(_r) = RES_COL_N(_res);
 	if (!ROW_VALUES(_r)) 
 	{
@@ -424,4 +411,5 @@ int dbt_convert_row(db_con_t* _h, db_res_t* _res, db_row_t* _r)
 	}
 	return 0;
 }
+
 

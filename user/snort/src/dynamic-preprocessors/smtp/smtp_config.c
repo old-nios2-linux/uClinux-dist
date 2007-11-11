@@ -41,6 +41,7 @@
 #endif
 
 #include "snort_smtp.h"
+#include "bounds.h"
 
 #define CONF_SEPARATORS             " \t\n\r"
 #define PORTS                       "ports"
@@ -181,7 +182,7 @@ void SMTP_ParseArgs(u_char *args)
     SMTP_cmd *smtp_cmd;
 
     if ((!_dpd.streamAPI) || (_dpd.streamAPI->version < STREAM_API_VERSION4))
-            _dpd.fatalMsg("SMTP_ParseArgs(): Streaming & reassembly must be enabled\n");
+        DynamicPreprocessorFatalMessage("SMTP_ParseArgs(): Streaming & reassembly must be enabled\n");
 
     if ( args == NULL )
     {
@@ -215,8 +216,8 @@ void SMTP_ParseArgs(u_char *args)
         ret = AddAlertCmd(smtp_cmd->name, smtp_cmd->id, 0);
         if ( ret == -1 )
         {
-            _dpd.fatalMsg("%s(%d) => Error setting alert for cmd %s.\n", 
-                    *(_dpd.config_file), *(_dpd.config_line), smtp_cmd->name);
+            DynamicPreprocessorFatalMessage("%s(%d) => Error setting alert for cmd %s.\n", 
+                                            *(_dpd.config_file), *(_dpd.config_line), smtp_cmd->name);
             return;
         }
         smtp_cmd++;
@@ -354,8 +355,8 @@ void SMTP_ParseArgs(u_char *args)
         }
         else
         {
-            _dpd.fatalMsg("%s(%d) => Unknown SMTP configuration option %s\n", 
-                    *(_dpd.config_file), *(_dpd.config_line), arg);
+            DynamicPreprocessorFatalMessage("%s(%d) => Unknown SMTP configuration option %s\n", 
+                                            *(_dpd.config_file), *(_dpd.config_line), arg);
         }        
 
         /*  Get next token */
@@ -369,13 +370,13 @@ void SMTP_ParseArgs(u_char *args)
         */
         if(*errStr)
         {
-            _dpd.fatalMsg("%s(%d) => %s\n", 
-                    *(_dpd.config_file), *(_dpd.config_line), errStr);
+            DynamicPreprocessorFatalMessage("%s(%d) => %s\n", 
+                                            *(_dpd.config_file), *(_dpd.config_line), errStr);
         }
         else
         {
-            _dpd.fatalMsg("%s(%d) => Undefined Error.\n", 
-                        *(_dpd.config_file), *(_dpd.config_line));
+            DynamicPreprocessorFatalMessage("%s(%d) => Undefined Error.\n", 
+                                            *(_dpd.config_file), *(_dpd.config_line));
         }
     }
 
@@ -395,7 +396,10 @@ void SMTP_ConfigFree()
     {
         for ( i = 0; i < _smtp_config.cmd_size; i++ )
         {
-            free(_smtp_config.cmd[i].name);
+            if (_smtp_config.cmd[i].name)
+            {
+                free(_smtp_config.cmd[i].name);
+            }
         }
         free(_smtp_config.cmd);
     }
@@ -674,6 +678,7 @@ static int AddAlertCmd(char *name, u_int id, u_int alert)
 {
     int found = 0;
     int i;
+    int ret;
 
     /* Only add if name valid command name */
     if ( name == NULL )
@@ -682,6 +687,12 @@ static int AddAlertCmd(char *name, u_int id, u_int alert)
     /* See if command already in list */
     for ( i = 0; i < _smtp_config.cmd_size; i++ )
     {
+        if ( !_smtp_config.cmd[i].name )
+        {
+            /* No name... try next one */
+            continue;
+        }
+
         if ( strcmp(_smtp_config.cmd[i].name, name) == 0 )
         {
             found = 1;
@@ -697,7 +708,7 @@ static int AddAlertCmd(char *name, u_int id, u_int alert)
 
     if ( _smtp_config.cmd_size == 0 )
     {
-        _smtp_config.cmd = (SMTP_token *) malloc(2*sizeof(SMTP_token));
+        _smtp_config.cmd = (SMTP_token *) calloc(2, sizeof(SMTP_token));
          
         if ( _smtp_config.cmd == NULL )
             return -1;
@@ -706,11 +717,34 @@ static int AddAlertCmd(char *name, u_int id, u_int alert)
     }
     else
     {
+        SMTP_token *tmp;
+        u_int8_t *tmp_start, *tmp_end;
+
         _smtp_config.cmd_size++;
-        _smtp_config.cmd = (SMTP_token *) realloc(_smtp_config.cmd,
-                                   (1+_smtp_config.cmd_size)*sizeof(SMTP_token));
-        if ( _smtp_config.cmd == NULL )
+        tmp = (SMTP_token *) calloc((1 + _smtp_config.cmd_size), sizeof(SMTP_token));
+        if ( tmp == NULL )
+        {
+            /* failed to allocate, decrement size that was incremented above */
+            _smtp_config.cmd_size--;
             return -1;
+        }
+        else
+        {
+            /* Copy in the existing data... */
+            tmp_start = (u_int8_t*)tmp;
+            tmp_end = tmp_start + ((_smtp_config.cmd_size+1) * sizeof(SMTP_token));
+            ret = SafeMemcpy(tmp, _smtp_config.cmd, _smtp_config.cmd_size * sizeof(SMTP_token),
+                             tmp_start, tmp_end);
+
+            if (ret == SAFEMEM_ERROR)
+            {
+                _dpd.fatalMsg("%s(%d) => SafeMemcpy failed\n",
+                              *(_dpd.config_file), *(_dpd.config_line));
+            }
+
+            free(_smtp_config.cmd);
+            _smtp_config.cmd = tmp;
+        }
     }
     _smtp_config.cmd[_smtp_config.cmd_size-1].name  = strdup(name);
     if ( _smtp_config.cmd[_smtp_config.cmd_size-1].name == NULL )
@@ -781,6 +815,7 @@ static int ProcessAltMaxCmdLen(char *ErrorString, int ErrStrLen)
     int   iEndCmds = 0;
     int   ret;
     int   cmd_len;
+    char *pcLenEnd;
     
     /* Find number */
     pcLen = strtok(NULL, CONF_SEPARATORS);
@@ -801,7 +836,14 @@ static int ProcessAltMaxCmdLen(char *ErrorString, int ErrStrLen)
         return -1;
     }
     
-    cmd_len = atoi(pcLen);
+    cmd_len = strtoul(pcLen, &pcLenEnd, 10);
+    if (pcLenEnd == pcLen)
+    {
+        snprintf(ErrorString, ErrStrLen,
+                "Invalid format for alt_max_command_line_len (non-numeric).");
+
+        return -1;
+    }
 
     if(strcmp(START_LIST, pcToken))
     {

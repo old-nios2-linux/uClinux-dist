@@ -1,7 +1,7 @@
 /*
- * $Id: loc_set.h,v 1.5.4.3 2003/12/01 13:04:03 bogdan Exp $
+ * $Id: loc_set.h,v 1.9 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -61,9 +61,9 @@ static inline void free_location( struct location *loc)
 
 
 
-/* insert a new location into the set mantaining order by the prio val - the
+/* insert a new location into the set maintaining order by the prio val - the
  * list starts with the smallest prio!
- * For locations having the same prio val, the adding orser will be keept */
+ * For locations having the same prio val, the adding order will be kept */
 static inline int add_location(struct location **loc_set, str *uri,
 											unsigned int prio, int flags)
 {

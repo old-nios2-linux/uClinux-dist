@@ -19,9 +19,7 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/fs.h>
-#include <linux/smp_lock.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
@@ -44,7 +42,7 @@
 #include "vfc.h"
 #include <asm/vfc_ioctls.h>
 
-static struct file_operations vfc_fops;
+static const struct file_operations vfc_fops;
 struct vfc_dev **vfc_dev_lst;
 static char vfcstr[]="vfc";
 static unsigned char saa9051_init_array[VFC_SAA9051_NR] = {
@@ -250,6 +248,7 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, void __user *argp)
 					buffer,inout.len);
 
 		if (copy_to_user(argp,&inout,sizeof(inout))) {
+			vfc_unlock_device(dev);
 			kfree(buffer);
 			return -EFAULT;
 		}
@@ -260,11 +259,10 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, void __user *argp)
 		if (copy_from_user(&inout, argp, sizeof(inout)))
 			return -EFAULT;
 
-		buffer = kmalloc(inout.len, GFP_KERNEL);
+		buffer = kzalloc(inout.len, GFP_KERNEL);
 		if (buffer == NULL)
 			return -ENOMEM;
 
-		memset(buffer,0,inout.len);
 		vfc_lock_device(dev);
 		inout.ret=
 			vfc_i2c_recvbuf(dev,inout.addr & 0xff
@@ -610,7 +608,7 @@ static int vfc_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned int map_size, ret, map_offset;
 	struct vfc_dev *dev;
 	
-	dev = vfc_get_dev_ptr(iminor(file->f_dentry->d_inode));
+	dev = vfc_get_dev_ptr(iminor(file->f_path.dentry->d_inode));
 	if(dev == NULL)
 		return -ENODEV;
 
@@ -633,7 +631,7 @@ static int vfc_mmap(struct file *file, struct vm_area_struct *vma)
 }
 
 
-static struct file_operations vfc_fops = {
+static const struct file_operations vfc_fops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
 	.ioctl =	vfc_ioctl,
@@ -659,12 +657,9 @@ static int vfc_probe(void)
 	if (!cards)
 		return -ENODEV;
 
-	vfc_dev_lst = (struct vfc_dev **)kmalloc(sizeof(struct vfc_dev *) *
-						 (cards+1),
-						 GFP_KERNEL);
+	vfc_dev_lst = kcalloc(cards + 1, sizeof(struct vfc_dev*), GFP_KERNEL);
 	if (vfc_dev_lst == NULL)
 		return -ENOMEM;
-	memset(vfc_dev_lst, 0, sizeof(struct vfc_dev *) * (cards + 1));
 	vfc_dev_lst[cards] = NULL;
 
 	ret = register_chrdev(VFC_MAJOR, vfcstr, &vfc_fops);

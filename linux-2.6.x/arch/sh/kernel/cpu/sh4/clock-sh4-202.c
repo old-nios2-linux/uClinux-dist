@@ -82,7 +82,8 @@ static void shoc_clk_init(struct clk *clk)
 	for (i = 0; i < ARRAY_SIZE(frqcr3_divisors); i++) {
 		int divisor = frqcr3_divisors[i];
 
-		if (clk->ops->set_rate(clk, clk->parent->rate / divisor) == 0)
+		if (clk->ops->set_rate(clk, clk->parent->rate /
+						divisor, 0) == 0)
 			break;
 	}
 
@@ -97,7 +98,7 @@ static void shoc_clk_recalc(struct clk *clk)
 
 static int shoc_clk_verify_rate(struct clk *clk, unsigned long rate)
 {
-	struct clk *bclk = clk_get("bus_clk");
+	struct clk *bclk = clk_get(NULL, "bus_clk");
 	unsigned long bclk_rate = clk_get_rate(bclk);
 
 	clk_put(bclk);
@@ -110,7 +111,7 @@ static int shoc_clk_verify_rate(struct clk *clk, unsigned long rate)
 	return 0;
 }
 
-static int shoc_clk_set_rate(struct clk *clk, unsigned long rate)
+static int shoc_clk_set_rate(struct clk *clk, unsigned long rate, int algo_id)
 {
 	unsigned long frqcr3;
 	unsigned int tmp;
@@ -151,7 +152,7 @@ static struct clk *sh4202_onchip_clocks[] = {
 
 static int __init sh4202_clk_init(void)
 {
-	struct clk *clk = clk_get("master_clk");
+	struct clk *clk = clk_get(NULL, "master_clk");
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(sh4202_onchip_clocks); i++) {

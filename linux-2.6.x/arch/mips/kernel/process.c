@@ -25,8 +25,9 @@
 #include <linux/init.h>
 #include <linux/completion.h>
 #include <linux/kallsyms.h>
+#include <linux/random.h>
 
-#include <asm/abi.h>
+#include <asm/asm.h>
 #include <asm/bootinfo.h>
 #include <asm/cpu.h>
 #include <asm/dsp.h>
@@ -41,24 +42,22 @@
 #include <asm/isadep.h>
 #include <asm/inst.h>
 #include <asm/stacktrace.h>
-#ifdef CONFIG_MIPS_MT_SMTC
-#include <asm/mipsmtregs.h>
-extern void smtc_idle_loop_hook(void);
-#endif /* CONFIG_MIPS_MT_SMTC */
 
 /*
  * The idle thread. There's no useful work to be done, so just try to conserve
  * power and have a low exit latency (ie sit in a loop waiting for somebody to
  * say that they'd like to reschedule)
  */
-ATTRIB_NORET void cpu_idle(void)
+void __noreturn cpu_idle(void)
 {
 	/* endless idle loop with no priority at all */
 	while (1) {
 		while (!need_resched()) {
-#ifdef CONFIG_MIPS_MT_SMTC
+#ifdef CONFIG_SMTC_IDLE_HOOK_DEBUG
+			extern void smtc_idle_loop_hook(void);
+
 			smtc_idle_loop_hook();
-#endif /* CONFIG_MIPS_MT_SMTC */
+#endif
 			if (cpu_wait)
 				(*cpu_wait)();
 		}
@@ -67,38 +66,6 @@ ATTRIB_NORET void cpu_idle(void)
 		preempt_disable();
 	}
 }
-
-/*
- * Native o32 and N64 ABI without DSP ASE
- */
-struct mips_abi mips_abi = {
-	.do_signal	= do_signal,
-#ifdef CONFIG_TRAD_SIGNALS
-	.setup_frame	= setup_frame,
-#endif
-	.setup_rt_frame	= setup_rt_frame
-};
-
-#ifdef CONFIG_MIPS32_O32
-/*
- * o32 compatibility on 64-bit kernels, without DSP ASE
- */
-struct mips_abi mips_abi_32 = {
-	.do_signal	= do_signal32,
-	.setup_frame	= setup_frame_32,
-	.setup_rt_frame	= setup_rt_frame_32
-};
-#endif /* CONFIG_MIPS32_O32 */
-
-#ifdef CONFIG_MIPS32_N32
-/*
- * N32 on 64-bit kernels, without DSP ASE
- */
-struct mips_abi mips_abi_n32 = {
-	.do_signal	= do_signal,
-	.setup_rt_frame	= setup_rt_frame_n32
-};
-#endif /* CONFIG_MIPS32_N32 */
 
 asmlinkage void ret_from_fork(void);
 
@@ -110,7 +77,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	status = regs->cp0_status & ~(ST0_CU0|ST0_CU1|KU_MASK);
 #ifdef CONFIG_64BIT
 	status &= ~ST0_FR;
-	status |= (current->thread.mflags & MF_32BIT_REGS) ? 0 : ST0_FR;
+	status |= test_thread_flag(TIF_32BIT_REGS) ? 0 : ST0_FR;
 #endif
 	status |= KU_USER;
 	regs->cp0_status = status;
@@ -248,7 +215,7 @@ int dump_task_fpu (struct task_struct *t, elf_fpregset_t *fpr)
 /*
  * Create a kernel thread
  */
-ATTRIB_NORET void kernel_thread_helper(void *arg, int (*fn)(void *))
+static void __noreturn kernel_thread_helper(void *arg, int (*fn)(void *))
 {
 	do_exit(fn(arg));
 }
@@ -494,4 +461,16 @@ unsigned long get_wchan(struct task_struct *task)
 
 out:
 	return pc;
+}
+
+/*
+ * Don't forget that the stack pointer must be aligned on a 8 bytes
+ * boundary for 32-bits ABI and 16 bytes for 64-bits ABI.
+ */
+unsigned long arch_align_stack(unsigned long sp)
+{
+	if (!(current->personality & ADDR_NO_RANDOMIZE) && randomize_va_space)
+		sp -= get_random_int() & ~PAGE_MASK;
+
+	return sp & ALMASK;
 }

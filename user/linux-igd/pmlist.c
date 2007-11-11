@@ -1,23 +1,29 @@
 #include <stdlib.h>
-#include <syslog.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <upnp/upnp.h>
 #include "globals.h"
 #include "config.h"
 #include "pmlist.h"
 #include "gatedevice.h"
+#include "util.h"
 
 //for the CONFIG defines
 #include <config/autoconf.h>
 
-struct portMap* pmlist_NewNode(int enabled, int duration, char *remoteHost,
-         char *externalPort, char *internalPort,
-         char *protocol, char *internalClient, char *desc)
+#if HAVE_LIBIPTC
+#include "iptc.h"
+#endif
+
+struct portMap* pmlist_NewNode(int enabled, long int duration, char *remoteHost,
+			       char *externalPort, char *internalPort,
+			       char *protocol, char *internalClient, char *desc)
 {
-	struct portMap* temp;
-	temp = (struct portMap*) malloc(sizeof(struct portMap));
+	struct portMap* temp = (struct portMap*) malloc(sizeof(struct portMap));
+
 	temp->m_PortMappingEnabled = enabled;
-	temp->m_PortMappingLeaseDuration = duration;
 	
-	if (strlen(remoteHost) < sizeof(temp->m_RemoteHost)) strcpy(temp->m_RemoteHost, remoteHost);
+	if (remoteHost && strlen(remoteHost) < sizeof(temp->m_RemoteHost)) strcpy(temp->m_RemoteHost, remoteHost);
 		else strcpy(temp->m_RemoteHost, "");
 	if (strlen(externalPort) < sizeof(temp->m_ExternalPort)) strcpy(temp->m_ExternalPort, externalPort);
 		else strcpy(temp->m_ExternalPort, "");
@@ -29,6 +35,7 @@ struct portMap* pmlist_NewNode(int enabled, int duration, char *remoteHost,
 		else strcpy(temp->m_InternalClient, "");
 	if (strlen(desc) < sizeof(temp->m_PortMappingDescription)) strcpy(temp->m_PortMappingDescription, desc);
 		else strcpy(temp->m_PortMappingDescription, "");
+	temp->m_PortMappingLeaseDuration = duration;
 
 	temp->next = NULL;
 	temp->prev = NULL;
@@ -128,25 +135,19 @@ int pmlist_Size(void)
 
 int pmlist_FreeList(void)
 {
-	struct portMap* temp;
-	
-	temp = pmlist_Head;
-	if (temp) // We have a list
-	{
-		while(temp->next) // While there's another node left in the list
-		{
-	      pmlist_DeletePortMapping(temp->m_PortMappingProtocol, temp->m_ExternalPort,
-            temp->m_InternalClient, temp->m_InternalPort);
-			temp = temp->next; // Move to the next element.
- 			free(temp->prev);
-			temp->prev = NULL; // Probably unecessary, but i do it anyway. May remove.
-		}
-      pmlist_DeletePortMapping(temp->m_PortMappingProtocol, temp->m_ExternalPort,
-            temp->m_InternalClient, temp->m_InternalPort);
-		free(temp); // We're at the last element now, so delete ourselves.
-		pmlist_Head = pmlist_Tail = NULL;
-	}
-	return 1;
+  struct portMap *temp, *next;
+
+  temp = pmlist_Head;
+  while(temp) {
+    CancelMappingExpiration(temp->expirationEventId);
+    pmlist_DeletePortMapping(temp->m_PortMappingEnabled, temp->m_PortMappingProtocol, temp->m_ExternalPort,
+			     temp->m_InternalClient, temp->m_InternalPort);
+    next = temp->next;
+    free(temp);
+    temp = next;
+  }
+  pmlist_Head = pmlist_Tail = NULL;
+  return 1;
 }
 		
 int pmlist_PushBack(struct portMap* item)
@@ -167,11 +168,14 @@ int pmlist_PushBack(struct portMap* item)
 		item->prev = NULL;
 		item->next = NULL;
  		action_succeeded = 1;
+		trace(3, "appended %d %s %s %s %s %ld", item->m_PortMappingEnabled, 
+				    item->m_PortMappingProtocol, item->m_ExternalPort, item->m_InternalClient, item->m_InternalPort,
+				    item->m_PortMappingLeaseDuration);
 	}
 	if (action_succeeded == 1)
 	{
-		 pmlist_AddPortMapping(item->m_PortMappingProtocol,
-         item->m_ExternalPort, item->m_InternalClient, item->m_InternalPort);	
+		pmlist_AddPortMapping(item->m_PortMappingEnabled, item->m_PortMappingProtocol,
+				      item->m_ExternalPort, item->m_InternalClient, item->m_InternalPort);
 		return 1;
 	}
 	else
@@ -187,7 +191,8 @@ int pmlist_Delete(struct portMap* item)
 	temp = pmlist_Find(item->m_ExternalPort, item->m_PortMappingProtocol, item->m_InternalClient);
 	if (temp) // We found the item to delete
 	{
-		pmlist_DeletePortMapping(item->m_PortMappingProtocol, item->m_ExternalPort, 
+	  CancelMappingExpiration(temp->expirationEventId);
+		pmlist_DeletePortMapping(item->m_PortMappingEnabled, item->m_PortMappingProtocol, item->m_ExternalPort, 
 				item->m_InternalClient, item->m_InternalPort);
 		if (temp == pmlist_Head) // We are the head of the list
 		{
@@ -224,57 +229,139 @@ int pmlist_Delete(struct portMap* item)
 	else  // We're deleting something that's not there, so return 0
 		action_succeeded = 0;
 
-	if (action_succeeded == 1)
-	{
-		return 1;
-	}
-	else 
+	return action_succeeded;
+}
+
+int pmlist_AddPortMapping (int enabled, char *protocol, char *externalPort, char *internalClient, char *internalPort)
+{
+    if (enabled)
+    {
+#if HAVE_LIBIPTC
+	char *buffer = malloc(strlen(internalClient) + strlen(internalPort) + 2);
+	if (buffer == NULL) {
+		fprintf(stderr, "failed to malloc memory\n");
 		return 0;
-}
-
-int pmlist_AddPortMapping (char *protocol, char *externalPort, char *internalClient, char *internalPort)
-{
-	char command[500];
-	
-#ifdef CONFIG_USER_LINUXIGD_DEFAULT
-	sprintf(command, "%s -t nat -A %s -i %s -p %s --dport %s -j DNAT --to %s:%s", g_iptables, g_preroutingChainName, g_extInterfaceName, protocol, externalPort, internalClient, internalPort);
-#else 
-	//for better interaction on the SnapGear/CyberGuard firewalls, 
-	//let /bin/firewall specify the incoming interface in the chain definition. 
-	sprintf(command, "%s -t nat -A %s -p %s --dport %s -j DNAT --to %s:%s", g_iptables, g_preroutingChainName, protocol, externalPort, internalClient, internalPort);
-#endif
-	if (g_debug) syslog(LOG_DEBUG, command);
-	system (command);
-	if (g_forwardRules)
-	{
-	    sprintf(command,"%s -I %s -p %s -d %s --dport %s -j ACCEPT", g_iptables,g_forwardChainName, protocol, internalClient, internalPort);
-	    if (g_debug) syslog(LOG_DEBUG, command);
-	    system(command);
 	}
 
-	return 1;
-}
+	strcpy(buffer, internalClient);
+	strcat(buffer, ":");
+	strcat(buffer, internalPort);
 
-int pmlist_DeletePortMapping(char *protocol, char *externalPort, char *internalClient, char *internalPort)
-{
-	char command[500];
+	if (g_vars.forwardRules)
+		iptc_add_rule("filter", g_vars.forwardChainName, protocol, NULL, NULL, NULL, internalClient, NULL, internalPort, "ACCEPT", NULL, FALSE);
 
-#ifdef CONFIG_USER_LINUXIGD_DEFAULT
-	sprintf(command, "%s -t nat -D %s -i %s -p %s --dport %s -j DNAT --to %s:%s", g_iptables, g_preroutingChainName, g_extInterfaceName, protocol, externalPort, internalClient, internalPort);
+	iptc_add_rule("nat", g_vars.preroutingChainName, protocol, g_vars.extInterfaceName, NULL, NULL, NULL, NULL, externalPort, "DNAT", buffer, TRUE);
+	free(buffer);
 #else
-	//for better interaction on the SnapGear/CyberGuard firewalls, 
-	//let /bin/firewall specify the incoming interface in the chain definition. 
-	sprintf(command, "%s -t nat -D %s -p %s --dport %s -j DNAT --to %s:%s", g_iptables, g_preroutingChainName, protocol, externalPort, internalClient, internalPort);
-#endif
-	if (g_debug) syslog(LOG_DEBUG, command);
-	system(command);
-	if (g_forwardRules)
+	char command[COMMAND_LEN];
+	int status;
+	
 	{
-	    sprintf(command,"%s -D %s -p %s -d %s --dport %s -j ACCEPT", g_iptables, g_forwardChainName, protocol, internalClient, internalPort);
-	    if (g_debug) syslog(LOG_DEBUG, command);
-	    system(command);
+	  char dest[DEST_LEN];
+#ifdef CONFIG_USER_LINUXIGD_DEFAULT
+	  char *args[] = {"iptables", "-t", "nat", "-I", g_vars.preroutingChainName, "-i", g_vars.extInterfaceName, "-p", protocol, "--dport", externalPort, "-j", "DNAT", "--to", dest, NULL};
+
+	  snprintf(dest, DEST_LEN, "%s:%s", internalClient, internalPort);
+	  snprintf(command, COMMAND_LEN, "%s -t nat -I %s -i %s -p %s --dport %s -j DNAT --to %s:%s", g_vars.iptables, g_vars.preroutingChainName, g_vars.extInterfaceName, protocol, externalPort, internalClient, internalPort);
+#else
+	  //for better interaction on the SnapGear/CyberGuard firewalls,
+	  //let /bin/firewall specify the incoming interface in the chain definition.
+	  char *args[] = {"iptables", "-t", "nat", "-I", g_vars.preroutingChainName, "-p", protocol, "--dport", externalPort, "-j", "DNAT", "--to", dest, NULL};
+
+	  snprintf(dest, DEST_LEN, "%s:%s", internalClient, internalPort);
+	  snprintf(command, COMMAND_LEN, "%s -t nat -I %s -p %s --dport %s -j DNAT --to %s:%s", g_vars.iptables, g_vars.preroutingChainName, protocol, externalPort, internalClient, internalPort);
+#endif
+
+	  trace(3, "%s", command);
+	  if (!fork()) {
+	    int rc = execv(g_vars.iptables, args);
+	    exit(rc);
+	  } else {
+	    wait(&status);		
+	  }
 	}
-	return 1;
+
+	if (g_vars.forwardRules)
+	{
+	  char *args[] = {"iptables", "-A", g_vars.forwardChainName, "-p", protocol, "-d", internalClient, "--dport", internalPort, "-j", "ACCEPT", NULL};
+	  
+	  snprintf(command, COMMAND_LEN, "%s -A %s -p %s -d %s --dport %s -j ACCEPT", g_vars.iptables,g_vars.forwardChainName, protocol, internalClient, internalPort);
+	  trace(3, "%s", command);
+	  if (!fork()) {
+	    int rc = execv(g_vars.iptables, args);
+	    exit(rc);
+	  } else {
+	    wait(&status);		
+	  }
+	}
+#endif
+    }
+    return 1;
+}
+
+int pmlist_DeletePortMapping(int enabled, char *protocol, char *externalPort, char *internalClient, char *internalPort)
+{
+    if (enabled)
+    {
+#if HAVE_LIBIPTC
+	char *buffer = malloc(strlen(internalClient) + strlen(internalPort) + 2);
+	strcpy(buffer, internalClient);
+	strcat(buffer, ":");
+	strcat(buffer, internalPort);
+
+	if (g_vars.forwardRules)
+	    iptc_delete_rule("filter", g_vars.forwardChainName, protocol, NULL, NULL, NULL, internalClient, NULL, internalPort, "ACCEPT", NULL);
+
+	iptc_delete_rule("nat", g_vars.preroutingChainName, protocol, g_vars.extInterfaceName, NULL, NULL, NULL, NULL, externalPort, "DNAT", buffer);
+	free(buffer);
+#else
+	char command[COMMAND_LEN];
+	int status;
+	
+	{
+	  char dest[DEST_LEN];
+
+#ifdef CONFIG_USER_LINUXIGD_DEFAULT
+	  char *args[] = {"iptables", "-t", "nat", "-D", g_vars.preroutingChainName, "-i", g_vars.extInterfaceName, "-p", protocol, "--dport", externalPort, "-j", "DNAT", "--to", dest, NULL};
+
+	  snprintf(dest, DEST_LEN, "%s:%s", internalClient, internalPort);
+	  snprintf(command, COMMAND_LEN, "%s -t nat -D %s -i %s -p %s --dport %s -j DNAT --to %s:%s",
+		  g_vars.iptables, g_vars.preroutingChainName, g_vars.extInterfaceName, protocol, externalPort, internalClient, internalPort);
+#else
+	  //for better interaction on the SnapGear/CyberGuard firewalls,
+	  //let /bin/firewall specify the incoming interface in the chain definition.
+	  char *args[] = {"firewall", "-t", "nat", "-D", g_vars.preroutingChainName, "-p", protocol, "--dport", externalPort, "-j", "DNAT", "--to", dest, NULL};
+
+	  snprintf(dest, DEST_LEN, "%s:%s", internalClient, internalPort);
+	  snprintf(command, COMMAND_LEN, "%s -t nat -D %s -p %s --dport %s -j DNAT --to %s:%s",
+		  g_vars.iptables, g_vars.preroutingChainName, protocol, externalPort, internalClient, internalPort);
+#endif
+	  trace(3, "%s", command);
+	  
+	  if (!fork()) {
+	    int rc = execv(g_vars.iptables, args);
+	    exit(rc);
+	  } else {
+	    wait(&status);		
+	  }
+	}
+
+	if (g_vars.forwardRules)
+	{
+	  char *args[] = {"iptables", "-D", g_vars.forwardChainName, "-p", protocol, "-d", internalClient, "--dport", internalPort, "-j", "ACCEPT", NULL};
+	  
+	  snprintf(command, COMMAND_LEN, "%s -D %s -p %s -d %s --dport %s -j ACCEPT", g_vars.iptables, g_vars.forwardChainName, protocol, internalClient, internalPort);
+	  trace(3, "%s", command);
+	  if (!fork()) {
+	    int rc = execv(g_vars.iptables, args);
+	    exit(rc);
+	  } else {
+	    wait(&status);		
+	  }
+	}
+#endif
+    }
+    return 1;
 }
 
 //added 13/7/2004 toby@snapgear.com - recreate all the currently registered
@@ -287,11 +374,13 @@ int pmlist_RecreateAll(void) {
 	{
 		while(temp->next) // While there's another node left in the list
 		{
-			pmlist_AddPortMapping(temp->m_PortMappingProtocol, temp->m_ExternalPort,
+			pmlist_AddPortMapping(temp->m_PortMappingEnabled,
+					temp->m_PortMappingProtocol, temp->m_ExternalPort,
 					temp->m_InternalClient, temp->m_InternalPort);
 			temp = temp->next; // Move to the next element.
 		}
-		pmlist_AddPortMapping(temp->m_PortMappingProtocol, temp->m_ExternalPort,
+		pmlist_AddPortMapping(temp->m_PortMappingEnabled,
+				temp->m_PortMappingProtocol, temp->m_ExternalPort,
 				temp->m_InternalClient, temp->m_InternalPort);
 	}
 	return 1;

@@ -40,7 +40,7 @@ struct jfs_inode_info {
 	uint	mode2;		/* jfs-specific mode		*/
 	uint	saved_uid;	/* saved for uid mount option */
 	uint	saved_gid;	/* saved for gid mount option */
-	pxd_t   ixpxd;		/* inode extent descriptor	*/
+	pxd_t	ixpxd;		/* inode extent descriptor	*/
 	dxd_t	acl;		/* dxd describing acl	*/
 	dxd_t	ea;		/* dxd describing ea	*/
 	time_t	otime;		/* time created	*/
@@ -109,9 +109,11 @@ struct jfs_inode_info {
 
 #define JFS_ACL_NOT_CACHED ((void *)-1)
 
-#define IREAD_LOCK(ip)		down_read(&JFS_IP(ip)->rdwrlock)
+#define IREAD_LOCK(ip, subclass) \
+	down_read_nested(&JFS_IP(ip)->rdwrlock, subclass)
 #define IREAD_UNLOCK(ip)	up_read(&JFS_IP(ip)->rdwrlock)
-#define IWRITE_LOCK(ip)		down_write(&JFS_IP(ip)->rdwrlock)
+#define IWRITE_LOCK(ip, subclass) \
+	down_write_nested(&JFS_IP(ip)->rdwrlock, subclass)
 #define IWRITE_UNLOCK(ip)	up_write(&JFS_IP(ip)->rdwrlock)
 
 /*
@@ -125,6 +127,29 @@ enum cflags {
 	COMMIT_Dirtable,	/* commit changes to di_dirtable */
 	COMMIT_Stale,		/* data extent is no longer valid */
 	COMMIT_Synclist,	/* metadata pages on group commit synclist */
+};
+
+/*
+ * commit_mutex nesting subclasses:
+ */
+enum commit_mutex_class
+{
+	COMMIT_MUTEX_PARENT,
+	COMMIT_MUTEX_CHILD,
+	COMMIT_MUTEX_SECOND_PARENT,	/* Renaming */
+	COMMIT_MUTEX_VICTIM		/* Inode being unlinked due to rename */
+};
+
+/*
+ * rdwrlock subclasses:
+ * The dmap inode may be locked while a normal inode or the imap inode are
+ * locked.
+ */
+enum rdwrlock_class
+{
+	RDWRLOCK_NORMAL,
+	RDWRLOCK_IMAP,
+	RDWRLOCK_DMAP
 };
 
 #define set_cflag(flag, ip)	set_bit(flag, &(JFS_IP(ip)->cflag))
@@ -165,7 +190,7 @@ struct jfs_sb_info {
 	uint		gengen;		/* inode generation generator*/
 	uint		inostamp;	/* shows inode belongs to fileset*/
 
-        /* Formerly in ipbmap */
+	/* Formerly in ipbmap */
 	struct bmap	*bmap;		/* incore bmap descriptor	*/
 	struct nls_table *nls_tab;	/* current codepage		*/
 	struct inode *direct_inode;	/* metadata inode */

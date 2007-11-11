@@ -296,6 +296,7 @@ static void	TLan_SetMulticastList( struct net_device *);
 static int	TLan_ioctl( struct net_device *dev, struct ifreq *rq, int cmd);
 static int      TLan_probe1( struct pci_dev *pdev, long ioaddr, int irq, int rev, const struct pci_device_id *ent);
 static void	TLan_tx_timeout( struct net_device *dev);
+static void	TLan_tx_timeout_work(struct work_struct *work);
 static int 	tlan_init_one( struct pci_dev *pdev, const struct pci_device_id *ent);
 
 static u32	TLan_HandleInvalid( struct net_device *, u16 );
@@ -532,7 +533,6 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 
 	struct net_device  *dev;
 	TLanPrivateInfo    *priv;
-	u8		   pci_rev;
 	u16		   device_id;
 	int		   reg, rc = -ENODEV;
 
@@ -562,6 +562,7 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 	priv = netdev_priv(dev);
 
 	priv->pciDev = pdev;
+	priv->dev = dev;
 
 	/* Is this a PCI device? */
 	if (pdev) {
@@ -574,8 +575,6 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 			printk(KERN_ERR "TLAN: No suitable PCI mapping available.\n");
 			goto err_out_free_dev;
 		}
-
-		pci_read_config_byte ( pdev, PCI_REVISION_ID, &pci_rev);
 
 		for ( reg= 0; reg <= 5; reg ++ ) {
 			if (pci_resource_flags(pdev, reg) & IORESOURCE_IO) {
@@ -593,7 +592,7 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 
 		dev->base_addr = pci_io_base;
 		dev->irq = pdev->irq;
-		priv->adapterRev = pci_rev;
+		priv->adapterRev = pdev->revision;
 		pci_set_master(pdev);
 		pci_set_drvdata(pdev, dev);
 
@@ -634,7 +633,7 @@ static int __devinit TLan_probe1(struct pci_dev *pdev,
 
 	/* This will be used when we get an adapter error from
 	 * within our irq handler */
-	INIT_WORK(&priv->tlan_tqueue, (void *)(void*)TLan_tx_timeout, dev);
+	INIT_WORK(&priv->tlan_tqueue, TLan_tx_timeout_work);
 
 	spin_lock_init(&priv->lock);
 
@@ -1040,6 +1039,25 @@ static void TLan_tx_timeout(struct net_device *dev)
 }
 
 
+	/***************************************************************
+	 * 	TLan_tx_timeout_work
+	 *
+	 * 	Returns: nothing
+	 *
+	 * 	Params:
+	 * 		work	work item of device which timed out
+	 *
+	 **************************************************************/
+
+static void TLan_tx_timeout_work(struct work_struct *work)
+{
+	TLanPrivateInfo	*priv =
+		container_of(work, TLanPrivateInfo, tlan_tqueue);
+
+	TLan_tx_timeout(priv->dev);
+}
+
+
 
 	/***************************************************************
 	 *	TLan_StartTx
@@ -1091,7 +1109,7 @@ static int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 
 	if ( bbuf ) {
 		tail_buffer = priv->txBuffer + ( priv->txTail * TLAN_MAX_FRAME_SIZE );
-		memcpy( tail_buffer, skb->data, skb->len );
+		skb_copy_from_linear_data(skb, tail_buffer, skb->len);
 	} else {
 		tail_list->buffer[0].address = pci_map_single(priv->pciDev, skb->data, skb->len, PCI_DMA_TODEVICE);
 		TLan_StoreSKB(tail_list, skb);
@@ -1556,7 +1574,6 @@ u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 				printk(KERN_INFO "TLAN: Couldn't allocate memory for received data.\n");
 			else {
 				head_buffer = priv->rxBuffer + (priv->rxHead * TLAN_MAX_FRAME_SIZE);
-				skb->dev = dev;
 				skb_reserve(skb, 2);
 				t = (void *) skb_put(skb, frameSize);
 
@@ -1587,7 +1604,6 @@ u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 				skb->protocol = eth_type_trans( skb, dev );
 				netif_rx( skb );
 
-				new_skb->dev = dev;
 				skb_reserve( new_skb, 2 );
 				t = (void *) skb_put( new_skb, TLAN_MAX_FRAME_SIZE );
 				head_list->buffer[0].address = pci_map_single(priv->pciDev, new_skb->data, TLAN_MAX_FRAME_SIZE, PCI_DMA_FROMDEVICE);

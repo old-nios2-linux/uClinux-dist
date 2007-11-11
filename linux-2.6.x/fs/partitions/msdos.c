@@ -63,15 +63,25 @@ msdos_magic_present(unsigned char *p)
 #define AIX_LABEL_MAGIC4	0xC1
 static int aix_magic_present(unsigned char *p, struct block_device *bdev)
 {
+	struct partition *pt = (struct partition *) (p + 0x1be);
 	Sector sect;
 	unsigned char *d;
-	int ret = 0;
+	int slot, ret = 0;
 
-	if (p[0] != AIX_LABEL_MAGIC1 &&
-		p[1] != AIX_LABEL_MAGIC2 &&
-		p[2] != AIX_LABEL_MAGIC3 &&
-		p[3] != AIX_LABEL_MAGIC4)
+	if (!(p[0] == AIX_LABEL_MAGIC1 &&
+		p[1] == AIX_LABEL_MAGIC2 &&
+		p[2] == AIX_LABEL_MAGIC3 &&
+		p[3] == AIX_LABEL_MAGIC4))
 		return 0;
+	/* Assume the partition table is valid if Linux partitions exists */
+	for (slot = 1; slot <= 4; slot++, pt++) {
+		if (pt->sys_ind == LINUX_SWAP_PARTITION ||
+			pt->sys_ind == LINUX_RAID_PARTITION ||
+			pt->sys_ind == LINUX_DATA_PARTITION ||
+			pt->sys_ind == LINUX_LVM_PARTITION ||
+			is_extended_partition(pt))
+			return 0;
+	}
 	d = read_dev_sector(bdev, 7, &sect);
 	if (d) {
 		if (d[0] == '_' && d[1] == 'L' && d[2] == 'V' && d[3] == 'M')
@@ -155,7 +165,7 @@ parse_extended(struct parsed_partitions *state, struct block_device *bdev,
 
 			put_partition(state, state->next, next, size);
 			if (SYS_IND(p) == LINUX_RAID_PARTITION)
-				state->parts[state->next].flags = 1;
+				state->parts[state->next].flags = ADDPART_FLAG_RAID;
 			loopct = 0;
 			if (++state->next == state->limit)
 				goto done;
@@ -193,6 +203,7 @@ parse_solaris_x86(struct parsed_partitions *state, struct block_device *bdev,
 	Sector sect;
 	struct solaris_x86_vtoc *v;
 	int i;
+	short max_nparts;
 
 	v = (struct solaris_x86_vtoc *)read_dev_sector(bdev, offset+1, &sect);
 	if (!v)
@@ -208,7 +219,9 @@ parse_solaris_x86(struct parsed_partitions *state, struct block_device *bdev,
 		put_dev_sector(sect);
 		return;
 	}
-	for (i=0; i<SOLARIS_X86_NUMSLICE && state->next<state->limit; i++) {
+	/* Ensure we can handle previous case of VTOC with 8 entries gracefully */
+	max_nparts = le16_to_cpu (v->v_nparts) > 8 ? SOLARIS_X86_NUMSLICE : 8;
+	for (i=0; i<max_nparts && state->next<state->limit; i++) {
 		struct solaris_x86_slice *s = &v->v_slice[i];
 		if (s->s_size == 0)
 			continue;

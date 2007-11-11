@@ -1,5 +1,5 @@
 /*
- * $Id: sip_msg.c,v 1.75.4.5 2004/02/28 02:13:47 bogdan Exp $
+ * $Id: sip_msg.c,v 1.84.2.3 2006/01/11 00:28:18 janakj Exp $
  * 
  * cloning a message into shared memory (TM keeps a snapshot
  * of messages in memory); note that many operations, which
@@ -12,7 +12,7 @@
  * not only take lookup in fragment table but also a shmem lock
  * operation (the same for shm_free)
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -45,6 +45,7 @@
  *  2003-04-04  parsed uris are recalculated on cloning (jiri)
  *  2003-05-07  received, rport & i via shortcuts are also translated (andrei)
  *  2003-11-11  updated cloning of lump_rpl (bogdan)
+ *  2004-03-31  alias shortcuts are also translated (andrei)
  */
 
 #include "defs.h"
@@ -61,7 +62,7 @@
 
 
 /* rounds to the first 4 byte multiple on 32 bit archs 
- * and to the first 8 byte multipe on 64 bit archs */
+ * and to the first 8 byte multiple on 64 bit archs */
 #define ROUND4(s) \
 	(((s)+(sizeof(char*)-1))&(~(sizeof(char*)-1)))
 
@@ -136,7 +137,7 @@ inline struct via_body* via_body_cloner( char* new_buf,
 				new_vp->value.s=translate_pointer(new_buf,org_buf,vp->value.s);
 				new_vp->start=translate_pointer(new_buf,org_buf,vp->start);
 				
-				/* "translate" the shportcuts */
+				/* "translate" the shortcuts */
 				switch(new_vp->type){
 					case PARAM_BRANCH:
 							new_via->branch = new_vp;
@@ -149,6 +150,9 @@ inline struct via_body* via_body_cloner( char* new_buf,
 							break;
 					case PARAM_I:
 							new_via->i = new_vp;
+							break;
+					case PARAM_ALIAS:
+							new_via->alias = new_vp;
 							break;
 				}
 
@@ -174,6 +178,7 @@ inline struct via_body* via_body_cloner( char* new_buf,
 	return first_via;
 }
 
+
 static void uri_trans(char *new_buf, char *org_buf, struct sip_uri *uri)
 {
 	uri->user.s=translate_pointer(new_buf,org_buf,uri->user.s);
@@ -193,23 +198,37 @@ static inline struct auth_body* auth_body_cloner(char* new_buf, char *org_buf, s
 	memcpy(new_auth , auth , sizeof(struct auth_body));
 	(*p) += ROUND4(sizeof(struct auth_body));
 	
-	     /* authorized field must be cloned elsewhere */
-	new_auth->digest.username.whole.s = translate_pointer(new_buf, org_buf, auth->digest.username.whole.s);
-	new_auth->digest.username.user.s = translate_pointer(new_buf, org_buf, auth->digest.username.user.s);
-	new_auth->digest.username.domain.s = translate_pointer(new_buf, org_buf, auth->digest.username.domain.s);
-	new_auth->digest.realm.s = translate_pointer(new_buf, org_buf, auth->digest.realm.s);
-	new_auth->digest.nonce.s = translate_pointer(new_buf, org_buf, auth->digest.nonce.s);
-	new_auth->digest.uri.s = translate_pointer(new_buf, org_buf, auth->digest.uri.s);
-	new_auth->digest.response.s = translate_pointer(new_buf, org_buf, auth->digest.response.s);
-	new_auth->digest.alg.alg_str.s = translate_pointer(new_buf, org_buf, auth->digest.alg.alg_str.s);
-	new_auth->digest.cnonce.s = translate_pointer(new_buf, org_buf, auth->digest.cnonce.s);
-	new_auth->digest.opaque.s = translate_pointer(new_buf, org_buf, auth->digest.opaque.s);
-	new_auth->digest.qop.qop_str.s = translate_pointer(new_buf, org_buf, auth->digest.qop.qop_str.s);
-	new_auth->digest.nc.s = translate_pointer(new_buf, org_buf, auth->digest.nc.s);
+	/* authorized field must be cloned elsewhere */
+	new_auth->digest.username.whole.s =
+		translate_pointer(new_buf, org_buf, auth->digest.username.whole.s);
+	new_auth->digest.username.user.s =
+		translate_pointer(new_buf, org_buf, auth->digest.username.user.s);
+	new_auth->digest.username.domain.s =
+		translate_pointer(new_buf, org_buf, auth->digest.username.domain.s);
+	new_auth->digest.realm.s =
+		translate_pointer(new_buf, org_buf, auth->digest.realm.s);
+	new_auth->digest.nonce.s =
+		translate_pointer(new_buf, org_buf, auth->digest.nonce.s);
+	new_auth->digest.uri.s =
+		translate_pointer(new_buf, org_buf, auth->digest.uri.s);
+	new_auth->digest.response.s =
+		translate_pointer(new_buf, org_buf, auth->digest.response.s);
+	new_auth->digest.alg.alg_str.s =
+		translate_pointer(new_buf, org_buf, auth->digest.alg.alg_str.s);
+	new_auth->digest.cnonce.s =
+		translate_pointer(new_buf, org_buf, auth->digest.cnonce.s);
+	new_auth->digest.opaque.s =
+		translate_pointer(new_buf, org_buf, auth->digest.opaque.s);
+	new_auth->digest.qop.qop_str.s =
+		translate_pointer(new_buf, org_buf, auth->digest.qop.qop_str.s);
+	new_auth->digest.nc.s =
+		translate_pointer(new_buf, org_buf, auth->digest.nc.s);
 	return new_auth;
 }
 
-static inline void clone_authorized_hooks(struct sip_msg* new, struct sip_msg* old)
+
+static inline int clone_authorized_hooks(struct sip_msg* new,
+					 struct sip_msg* old)
 {
 	struct hdr_field* ptr, *new_ptr, *hook1, *hook2;
 	char stop = 0;
@@ -225,12 +244,22 @@ static inline void clone_authorized_hooks(struct sip_msg* new, struct sip_msg* o
 
 	while(ptr) {
 		if (ptr == hook1) {
-			((struct auth_body*)new->authorization->parsed)->authorized = new_ptr;
+			if (!new->authorization || !new->authorization->parsed) {
+				LOG(L_CRIT, "BUG: Error in message cloner (authorization)\n");
+				return -1;
+			}
+			((struct auth_body*)new->authorization->parsed)->authorized =
+				new_ptr;
 			stop |= 1;
 		}
 		
 		if (ptr == hook2) {
-			((struct auth_body*)new->proxy_auth->parsed)->authorized = new_ptr;
+			if (!new->proxy_auth || !new->proxy_auth->parsed) {
+				LOG(L_CRIT, "BUG: Error in message cloner (proxy_auth)\n");
+				return -1;
+			}
+			((struct auth_body*)new->proxy_auth->parsed)->authorized =
+				new_ptr;
 			stop |= 2;
 		}
 
@@ -239,14 +268,15 @@ static inline void clone_authorized_hooks(struct sip_msg* new, struct sip_msg* o
 		ptr = ptr->next;
 		new_ptr = new_ptr->next;
 	}
+	return 0;
 }
 
 
 #define AUTH_BODY_SIZE sizeof(struct auth_body)
 
+#define HOOK_SET(hook) (new_msg->hook != org_msg->hook)
 
-
-struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
+struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len )
 {
 	unsigned int      len;
 	struct hdr_field  *hdr,*new_hdr,*last_hdr;
@@ -255,7 +285,7 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 	struct to_param   *to_prm,*new_to_prm;
 	struct sip_msg    *new_msg;
 	struct lump_rpl   *rpl_lump, **rpl_lump_anchor;
-	char              *p,*foo;
+	char              *p;
 
 
 	/*computing the length of entire sip_msg structure*/
@@ -265,6 +295,9 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 	/*the new uri (if any)*/
 	if (org_msg->new_uri.s && org_msg->new_uri.len)
 		len+= ROUND4(org_msg->new_uri.len);
+	/*the dst uri (if any)*/
+	if (org_msg->dst_uri.s && org_msg->dst_uri.len)
+		len+= ROUND4(org_msg->dst_uri.len);
 	/*all the headers*/
 	for( hdr=org_msg->headers ; hdr ; hdr=hdr->next )
 	{
@@ -287,7 +320,7 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 				/* From header might be unparsed */
 				if (hdr->parsed) {
 					len+=ROUND4(sizeof(struct to_body));
-					/*to param*/
+					     /*to param*/
 					to_prm = ((struct to_body*)(hdr->parsed))->param_lst;
 					for(;to_prm;to_prm=to_prm->next)
 						len+=ROUND4(sizeof(struct to_param ));
@@ -305,7 +338,7 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 					len += ROUND4(AUTH_BODY_SIZE);
 				}
 				break;
-			
+
 			case HDR_CALLID:
 			case HDR_CONTACT:
 			case HDR_MAXFORWARDS:
@@ -327,6 +360,8 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 			case HDR_USERAGENT:
 			case HDR_ACCEPTDISPOSITION:
 			case HDR_CONTENTDISPOSITION:
+		        case HDR_DIVERSION:
+		        case HDR_RPID:
 				/* we ignore them for now even if they have something parsed*/
 				break;
 
@@ -342,7 +377,7 @@ struct sip_msg*  sip_msg_cloner( struct sip_msg *org_msg, int *sip_msg_len)
 	/* length of the data lump structures */
 #define LUMP_LIST_LEN(len, list) \
 do { \
-	struct lump* tmp, *chain; \
+        struct lump* tmp, *chain; \
 	chain = (list); \
 	while (chain) \
 	{ \
@@ -370,7 +405,7 @@ do { \
 	for(rpl_lump=org_msg->reply_lump;rpl_lump;rpl_lump=rpl_lump->next)
 			len+=ROUND4(sizeof(struct lump_rpl))+ROUND4(rpl_lump->text.len);
 
-	p=(char *)shm_malloc(len);foo=p;
+	p=(char *)shm_malloc(len);
 	if (!p)
 	{
 		LOG(L_ERR , "ERROR: sip_msg_cloner: cannot allocate memory\n" );
@@ -392,6 +427,13 @@ do { \
 		new_msg->new_uri.s = p;
 		memcpy( p , org_msg->new_uri.s , org_msg->new_uri.len);
 		p += ROUND4(org_msg->new_uri.len);
+	}
+	/* dst_uri */
+	if (org_msg->dst_uri.s && org_msg->dst_uri.len)
+	{
+		new_msg->dst_uri.s = p;
+		memcpy( p , org_msg->dst_uri.s , org_msg->dst_uri.len);
+		p += ROUND4(org_msg->dst_uri.len);
 	}
 	/* message buffers(org and scratch pad) */
 	memcpy( p , org_msg->buf, org_msg->len);
@@ -445,7 +487,7 @@ do { \
 			hdr->body.s);
 		/* by default, we assume we don't understand this header in TM
 		   and better set it to zero; if we do, we will set a specific
-		   valu in the following switch statement
+		   value in the following switch statement
 		*/
 		new_hdr->parsed=0;
 
@@ -495,14 +537,14 @@ do { \
 				((struct cseq_body*)new_hdr->parsed)->method.s =
 					translate_pointer(new_msg->buf ,org_msg->buf,
 					((struct cseq_body*)hdr->parsed)->method.s );
-				new_msg->cseq = new_hdr;
+				if (!HOOK_SET(cseq)) new_msg->cseq = new_hdr;
 				break;
 			case HDR_TO:
 			case HDR_FROM:
 				if (hdr->type == HDR_TO) {
-					new_msg->to = new_hdr;
+					if (!HOOK_SET(to)) new_msg->to = new_hdr;
 				} else {
-					new_msg->from = new_hdr;
+					if (!HOOK_SET(from)) new_msg->from = new_hdr;
 				}
 				/* From header might be unparsed */
 				if (!hdr->parsed) break;
@@ -545,83 +587,137 @@ do { \
 				}
 				break;
 			case HDR_CALLID:
-				new_msg->callid = new_hdr;
+				if (!HOOK_SET(callid)) {
+					new_msg->callid = new_hdr;
+				}
 				break;
 			case HDR_CONTACT:
-				new_msg->contact = new_hdr;
+				if (!HOOK_SET(contact)) {
+					new_msg->contact = new_hdr;
+				}
 				break;
 			case HDR_MAXFORWARDS :
-				new_msg->maxforwards = new_hdr;
+				if (!HOOK_SET(maxforwards)) {
+					new_msg->maxforwards = new_hdr;
+				}
 				break;
 			case HDR_ROUTE :
-				new_msg->route = new_hdr;
+				if (!HOOK_SET(route)) {
+					new_msg->route = new_hdr;
+				}
 				break;
 			case HDR_RECORDROUTE :
-				new_msg->record_route = new_hdr;
+				if (!HOOK_SET(record_route)) {
+					new_msg->record_route = new_hdr;
+				}
 				break;
 			case HDR_CONTENTTYPE :
-				new_msg->content_type = new_hdr;
-				new_msg->content_type->parsed = hdr->parsed;
+				if (!HOOK_SET(content_type)) {
+					new_msg->content_type = new_hdr;
+					new_msg->content_type->parsed = hdr->parsed;
+				}
 				break;
 			case HDR_CONTENTLENGTH :
-				new_msg->content_length = new_hdr;
-				new_msg->content_length->parsed = hdr->parsed;
+				if (!HOOK_SET(content_length)) {
+					new_msg->content_length = new_hdr;
+					new_msg->content_length->parsed = hdr->parsed;
+				}
 				break;
 			case HDR_AUTHORIZATION :
-				new_msg->authorization = new_hdr;
+				if (!HOOK_SET(authorization)) {
+					new_msg->authorization = new_hdr;
+				}
 				if (hdr->parsed) {
 					new_hdr->parsed = auth_body_cloner(new_msg->buf ,
 						org_msg->buf , (struct auth_body*)hdr->parsed , &p);
 				}
 				break;
 			case HDR_EXPIRES :
-				new_msg->expires = new_hdr;
+				if (!HOOK_SET(expires)) {
+					new_msg->expires = new_hdr;
+				}
 				break;
 			case HDR_PROXYAUTH :
-				new_msg->proxy_auth = new_hdr;
+				if (!HOOK_SET(proxy_auth)) {
+					new_msg->proxy_auth = new_hdr;
+				}
 				if (hdr->parsed) {
 					new_hdr->parsed = auth_body_cloner(new_msg->buf ,
 						org_msg->buf , (struct auth_body*)hdr->parsed , &p);
 				}
 				break;
 			case HDR_SUPPORTED :
-				new_msg->supported = new_hdr;
+				if (!HOOK_SET(supported)) {
+					new_msg->supported = new_hdr;
+				}
 				break;
 			case HDR_PROXYREQUIRE :
-				new_msg->proxy_require = new_hdr;
+				if (!HOOK_SET(proxy_require)) {
+					new_msg->proxy_require = new_hdr;
+				}
 				break;
 			case HDR_UNSUPPORTED :
-				new_msg->unsupported = new_hdr;
+				if (!HOOK_SET(unsupported)) {
+					new_msg->unsupported = new_hdr;
+				}
 				break;
 			case HDR_ALLOW :
-				new_msg->allow = new_hdr;	
+				if (!HOOK_SET(allow)) {
+					new_msg->allow = new_hdr;
+				}
 				break;
 			case HDR_EVENT:
-				new_msg->event = new_hdr;
+				if (!HOOK_SET(event)) {
+					new_msg->event = new_hdr;
+				}
 				break;
 			case HDR_ACCEPT:
-				new_msg->accept = new_hdr;
+				if (!HOOK_SET(accept)) {
+					new_msg->accept = new_hdr;
+				}
 				break;
 			case HDR_ACCEPTLANGUAGE:
-				new_msg->accept_language = new_hdr;
+				if (!HOOK_SET(accept_language)) {
+					new_msg->accept_language = new_hdr;
+				}
 				break;
 			case HDR_ORGANIZATION:
-				new_msg->organization = new_hdr;
+				if (!HOOK_SET(organization)) {
+					new_msg->organization = new_hdr;
+				}
 				break;
 			case HDR_PRIORITY:
-				new_msg->priority = new_hdr;
+				if (!HOOK_SET(priority)) {
+					new_msg->priority = new_hdr;
+				}
 				break;
 			case HDR_SUBJECT:
-				new_msg->subject = new_hdr;
+				if (!HOOK_SET(subject)) {
+					new_msg->subject = new_hdr;
+				}
 				break;
 			case HDR_USERAGENT:
-				new_msg->user_agent = new_hdr;
+				if (!HOOK_SET(user_agent)) {
+					new_msg->user_agent = new_hdr;
+				}
 				break;
 			case HDR_ACCEPTDISPOSITION:
-				new_msg->accept_disposition = new_hdr;
+				if (!HOOK_SET(accept_disposition)) {
+					new_msg->accept_disposition = new_hdr;
+				}
 				break;
 			case HDR_CONTENTDISPOSITION:
-				new_msg->content_disposition = new_hdr;
+				if (!HOOK_SET(content_disposition)) {
+					new_msg->content_disposition = new_hdr;
+				}
+			case HDR_DIVERSION:
+				if (!HOOK_SET(diversion)) {
+					new_msg->diversion = new_hdr;
+				}
+			case HDR_RPID:
+				if (!HOOK_SET(rpid)) {
+					new_msg->rpid = new_hdr;
+				}
 				break;
 		}/*switch*/
 
@@ -639,13 +735,13 @@ do { \
 		new_msg->last_header = last_hdr;
 	}
 
-	/* clonning data lump */
+	/* cloning data lump */
 #define CLONE_LUMP_LIST(anchor, list) \
 do { \
-        struct lump* lump_tmp, *l; \
-        struct lump** lump_anchor2, **a; \
-        a = (anchor); \
-        l = (list); \
+	struct lump* lump_tmp, *l; \
+	struct lump** lump_anchor2, **a; \
+	a = (anchor); \
+	l = (list); \
 	while (l) \
 	{ \
 		lump_clone( (*a) , l , p ); \
@@ -672,8 +768,8 @@ do { \
 	} \
 } while(0)
 
-        CLONE_LUMP_LIST(&(new_msg->add_rm), org_msg->add_rm);
-        CLONE_LUMP_LIST(&(new_msg->body_lumps), org_msg->body_lumps);
+	CLONE_LUMP_LIST(&(new_msg->add_rm), org_msg->add_rm);
+	CLONE_LUMP_LIST(&(new_msg->body_lumps), org_msg->body_lumps);
 
 	/*cloning reply lump structures*/
 	rpl_lump_anchor = &(new_msg->reply_lump);
@@ -691,7 +787,10 @@ do { \
 		rpl_lump_anchor = &((*rpl_lump_anchor)->next);
 	}
 
-	clone_authorized_hooks(new_msg, org_msg);
+	if (clone_authorized_hooks(new_msg, org_msg) < 0) {
+		shm_free(new_msg);
+		return 0;
+	}
 
 	return new_msg;
 }

@@ -56,8 +56,8 @@ MACHINE_END
 #endif
 
 #ifdef CONFIG_MACH_LITE300
-MACHINE_START(KS8695, "Secure Computing SG300")
-	/* Secure Computing Inc. */
+MACHINE_START(KS8695, "SecureComputing/SG300")
+	/* Secure Computing Corporation */
 	.phys_io	= KS8695_IO_BASE,
 	.io_pg_offst	= ((KS8695_IO_VIRT >> 18) & 0xfffc),
 	.map_io		= ks8695_map_io,
@@ -68,8 +68,8 @@ MACHINE_END
 #endif
 
 #ifdef CONFIG_MACH_SE4200
-MACHINE_START(KS8695, "Secure Computing SE4200")
-	/* Secure Computing Inc. */
+MACHINE_START(KS8695, "SecureComputing/SE4200")
+	/* Secure Computing Corporation */
 	.phys_io	= KS8695_IO_BASE,
 	.io_pg_offst	= ((KS8695_IO_VIRT >> 18) & 0xfffc),
 	.map_io		= ks8695_map_io,

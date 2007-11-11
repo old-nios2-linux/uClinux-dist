@@ -140,6 +140,9 @@ struct ipsec_xmit_state
 	int		next_state;
 #ifdef CONFIG_KLIPS_OCF
 	struct work_struct	workq;
+#ifdef DECLARE_TASKLET
+	struct tasklet_struct	tasklet;
+#endif
 #endif
 #ifdef CONFIG_KLIPS_ALG
 	struct ipsec_alg_auth *ixt_a;
@@ -166,7 +169,7 @@ enum ipsec_xmit_value
 ipsec_xmit_encap_bundle(struct ipsec_xmit_state *ixs);
 
 extern void ipsec_xsm(struct ipsec_xmit_state *ixs);
-extern kmem_cache_t *ipsec_ixs_cache;
+extern struct kmem_cache *ipsec_ixs_cache;
 extern int ipsec_ixs_max;
 extern atomic_t ipsec_ixs_cnt;
 

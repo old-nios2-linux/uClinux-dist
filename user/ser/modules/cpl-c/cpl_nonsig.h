@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_nonsig.h,v 1.3 2003/07/02 16:22:47 bogdan Exp $
+ * $Id: cpl_nonsig.h,v 1.5 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,7 @@
 #include <unistd.h>
 
 #include "../../str.h"
+#include "cpl_env.h"
 
 struct cpl_cmd {
 	unsigned int code;
@@ -50,9 +51,6 @@ struct cpl_cmd {
 #define MAX_LOG_DIR_SIZE    256
 
 
-extern int cpl_cmd_pipe[2];
-
-
 void cpl_aux_process( int cmd_out, char *log_dir);
 
 
@@ -65,7 +63,7 @@ static inline void write_cpl_cmd(unsigned int code, str *s1, str *s2, str *s3)
 	cmd.s2 = *s2;
 	cmd.s3 = *s3;
 
-	if (write( cpl_cmd_pipe[1], &cmd, sizeof(struct cpl_cmd) )==-1)
+	if (write( cpl_env.cmd_pipe[1], &cmd, sizeof(struct cpl_cmd) )==-1)
 		LOG(L_ERR,"ERROR:cpl_c:write_cpl_cmd: write ret: %s\n",
 			strerror(errno));
 }

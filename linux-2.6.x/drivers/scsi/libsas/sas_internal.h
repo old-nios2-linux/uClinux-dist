@@ -39,6 +39,9 @@
 #define SAS_DPRINTK(fmt, ...)
 #endif
 
+#define TO_SAS_TASK(_scsi_cmd)  ((void *)(_scsi_cmd)->host_scribble)
+#define ASSIGN_SAS_TASK(_sc, _t) do { (_sc)->host_scribble = (void *) _t; } while (0)
+
 void sas_scsi_recover_host(struct Scsi_Host *shost);
 
 int sas_show_class(enum sas_class class, char *buf);
@@ -60,11 +63,11 @@ void sas_shutdown_queue(struct sas_ha_struct *sas_ha);
 
 void sas_deform_port(struct asd_sas_phy *phy);
 
-void sas_porte_bytes_dmaed(void *);
-void sas_porte_broadcast_rcvd(void *);
-void sas_porte_link_reset_err(void *);
-void sas_porte_timer_event(void *);
-void sas_porte_hard_reset(void *);
+void sas_porte_bytes_dmaed(struct work_struct *work);
+void sas_porte_broadcast_rcvd(struct work_struct *work);
+void sas_porte_link_reset_err(struct work_struct *work);
+void sas_porte_timer_event(struct work_struct *work);
+void sas_porte_hard_reset(struct work_struct *work);
 
 int sas_notify_lldd_dev_found(struct domain_device *);
 void sas_notify_lldd_dev_gone(struct domain_device *);
@@ -75,12 +78,12 @@ int sas_smp_get_phy_events(struct sas_phy *phy);
 
 struct domain_device *sas_find_dev_by_rphy(struct sas_rphy *rphy);
 
-void sas_hae_reset(void *);
+void sas_hae_reset(struct work_struct *work);
 
 static inline void sas_queue_event(int event, spinlock_t *lock,
 				   unsigned long *pending,
 				   struct work_struct *work,
-				   struct Scsi_Host *shost)
+				   struct sas_ha_struct *sas_ha)
 {
 	unsigned long flags;
 
@@ -91,7 +94,12 @@ static inline void sas_queue_event(int event, spinlock_t *lock,
 	}
 	__set_bit(event, pending);
 	spin_unlock_irqrestore(lock, flags);
-	scsi_queue_work(shost, work);
+
+	spin_lock_irqsave(&sas_ha->state_lock, flags);
+	if (sas_ha->state != SAS_HA_UNREGISTERED) {
+		scsi_queue_work(sas_ha->core.shost, work);
+	}
+	spin_unlock_irqrestore(&sas_ha->state_lock, flags);
 }
 
 static inline void sas_begin_event(int event, spinlock_t *lock,

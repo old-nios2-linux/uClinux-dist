@@ -27,6 +27,7 @@
 #include <linux/idr.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/writeback.h>
@@ -508,7 +509,7 @@ void inotify_destroy(struct inotify_handle *ih)
 			mutex_unlock(&ih->mutex);
 			break;
 		}
-		watch = list_entry(watches->next, struct inotify_watch, h_list);
+		watch = list_first_entry(watches, struct inotify_watch, h_list);
 		get_inotify_watch(watch);
 		mutex_unlock(&ih->mutex);
 

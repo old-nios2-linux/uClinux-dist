@@ -10,8 +10,8 @@ free \- Display amount of free and used memory in the system
 .RB "] [" "\-t" "] [" "\-V" ]
 .SH DESCRIPTION
 \fBfree\fP displays the total amount of free and used physical and swap 
-memory in the system, as well as the shared memory and buffers used by
-the kernel.
+memory in the system, as well as the buffers used by the kernel.
+The shared memory column should be ignored; it is obsolete.
 .SS Options
 The \fB-b\fP switch displays the amount of memory in bytes; the 
 \fB-k\fP switch (set by default) displays it in kilobytes; the \fB-m\fP
@@ -19,9 +19,9 @@ switch displays it in megabytes.
 .PP
 The \fB-t\fP switch displays a line containing the totals.
 .PP
-The \fB-o\fP switch disables the display of a "buffer adjusted" line. Unless
-specified \fBfree\fP subtracts/adds buffer memory from/to the used/free memory
-reports (respectively!).
+The \fB-o\fP switch disables the display of a "buffer adjusted" line.
+If the -o option is not specified, \fBfree\fP subtracts buffer memory
+from the used memory and adds it to the free memory reported.
 .PP
 The \fB-s\fP switch activates continuous polling \fIdelay\fP seconds apart. You
 may actually specify any floating point number for \fIdelay\fP, 
@@ -36,10 +36,12 @@ The \fB\-V\fP displays version information.
 
 .SH "SEE ALSO"
 .BR ps (1),
+.BR slabtop (1),
+.BR vmstat (8),
 .BR top(1)
 
 .SH AUTHORS
 Written by Brian Edmonds. 
 
-Send bug reports to <procps-bugs@redhat.com>
+Send bug reports to <albert@users.sf.net>
 

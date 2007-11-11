@@ -43,37 +43,27 @@ int  ip_familysize( int family )  /* Use with stack allocated structures */
 
 int ip4_sprintx( char * s, int slen, void * ip4 )
 {
-     char stmp[256];
      int  rc;
      unsigned char * ip = (unsigned char *) ip4;
 
-     rc = snprintf(stmp,sizeof(stmp),"%d.%d.%d.%d",ip[3],ip[2],ip[1],ip[0]);
+     rc = SnortSnprintf(s, slen, "%d.%d.%d.%d", ip[3], ip[2], ip[1], ip[0]);
 
-     if( rc <= 0 ) return -1;
+     if( rc != SNORT_SNPRINTF_SUCCESS )
+         return -1;
 
-     if( (rc+1) > slen )
-          return -1;
-
-     strcpy(s,stmp);
-     
      return 0;
 }
 int ip6_sprintx( char * s, int slen, void * ip6 )
 {
-     char stmp[256];
      int  rc;
      unsigned short * ps = (unsigned short*) ip6;
 
-     rc = snprintf(stmp,sizeof(stmp),"%.1x:%.1x:%.1x:%.1x:%.1x:%.1x:%.1x:%.1x",
-             ps[7],ps[6],ps[5],ps[4],ps[3],ps[2],ps[1],ps[0]);
+     rc = SnortSnprintf(s, slen, "%.1x:%.1x:%.1x:%.1x:%.1x:%.1x:%.1x:%.1x",
+                        ps[7], ps[6], ps[5], ps[4], ps[3], ps[2], ps[1], ps[0]);
 
-     if( rc <= 0 ) return -1;
+     if( rc != SNORT_SNPRINTF_SUCCESS )
+         return -1;
 
-     if( (rc+1) > slen )
-          return -1;
-
-     strcpy(s,stmp);
-     
      return 0;
 }
 
@@ -133,12 +123,12 @@ IPADDRESS * ip_new ( int family )   /* Dynamic allocation */
 
    if( family == IPV4_FAMILY )
    {
-     p = malloc( sizeof(IPADDRESS) + IPV4_LEN - 1 );
+     p = ( IPADDRESS * )malloc( sizeof(IPADDRESS) + IPV4_LEN - 1 );
      ip_init( p, family );
    }
    else if( family == IPV6_FAMILY )
    {
-     p = malloc( sizeof(IPADDRESS) + IPV6_LEN - 1 );
+     p = ( IPADDRESS * )malloc( sizeof(IPADDRESS) + IPV6_LEN - 1 );
      ip_init( p, family );
    }
    return p;

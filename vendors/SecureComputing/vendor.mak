@@ -97,6 +97,11 @@ image.linuz:
 	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGEDIR)/linux.bin
 	gzip -c -9 < $(IMAGEDIR)/linux.bin >$(ZIMAGE)
 
+# Create ZIMAGE as vmlinux -> objcopy (include bss) -> $(ZIMAGE)
+image.bsslinuz:
+	$(CROSS)objcopy -O binary --set-section-flags .bss=load,contents $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGEDIR)/linux.bin
+	gzip -c -9 < $(IMAGEDIR)/linux.bin >$(ZIMAGE)
+
 # Create ZIMAGE as arm/arm/boot/zImage
 image.arm.zimage:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
@@ -124,7 +129,7 @@ image.squashfs7z: mksquashfs7z
 
 # Create (possibly) mbr + cramfs + zimage/linuz
 image.bin:
-	cat $(MBRIMG) $(ROMFSIMG) $(ZIMAGE) >$(IMAGE)
+	cat $(MBRIMG) $(ROMFSIMG) $(SHIM) $(ZIMAGE) >$(IMAGE)
 
 addr.txt: $(ROOTDIR)/$(LINUXDIR)/vmlinux
 	$(CROSS)nm $(ROOTDIR)/$(LINUXDIR)/vmlinux | \
@@ -221,6 +226,7 @@ romfs.no-ixp400-modules:
 romfs.ixp425-microcode:
 	$(ROMFSINST) -e CONFIG_IXP400_LIB_2_0 -d $(ROOTDIR)/modules/ixp425/ixp400-2.0/IxNpeMicrocode.dat /etc/IxNpeMicrocode.dat
 	$(ROMFSINST) -e CONFIG_IXP400_LIB_2_1 -d $(ROOTDIR)/modules/ixp425/ixp400-2.1/IxNpeMicrocode.dat /etc/IxNpeMicrocode.dat
+	$(ROMFSINST) -e CONFIG_IXP400_LIB_2_4 -d $(ROOTDIR)/modules/ixp425/ixp400-2.4/IxNpeMicrocode.dat /etc/IxNpeMicrocode.dat
 
 romfs.ixp425-boot:
 	-$(ROMFSINST) -d $(ROOTDIR)/boot/ixp425/bios.bin /boot/biosplus.bin

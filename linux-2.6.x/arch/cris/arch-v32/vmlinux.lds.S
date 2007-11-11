@@ -49,7 +49,7 @@ SECTIONS
 	___data_start = . ;
 	__Sdata = . ;
 	.data : {                     /* Data */
-		*(.data)
+		DATA_DATA
 	}
 	__edata = . ;		/* End of data section. */
 	_edata = . ;
@@ -91,10 +91,9 @@ SECTIONS
 	}
 	SECURITY_INIT
 
-	__per_cpu_start = .;
-	.data.percpu  : { *(.data.percpu) }
-	__per_cpu_end = .;
+	PERCPU(8192)
 
+#ifdef CONFIG_BLK_DEV_INITRD
 	.init.ramfs : {
 		__initramfs_start = .;
 		*(.init.ramfs)
@@ -107,6 +106,7 @@ SECTIONS
 		FILL (0);
 		. = ALIGN (8192);
 	}
+#endif
 
 	__vmlinux_end = .;	/* Last address of the physical file. */
   	__init_end = .;

@@ -16,19 +16,17 @@
 
 #include <asm-generic/vmlinux.lds.h>
 
-#define _NOCLANGUAGE
-#include <xtensa/config/core.h>
-#include <xtensa/config/system.h>
+#include <asm/variant/core.h>
 OUTPUT_ARCH(xtensa)
 ENTRY(_start)
 
-#if XCHAL_MEMORY_ORDER == XTHAL_BIGENDIAN
+#ifdef __XTENSA_EB__
 jiffies = jiffies_64 + 4;
 #else
 jiffies = jiffies_64;
 #endif
 
-#define KERNELOFFSET 0x1000
+#define KERNELOFFSET 0xd0001000
 
 /* Note: In the following macros, it would be nice to specify only the
    vector name and section kind and construct "sym" and "section" using
@@ -75,7 +73,7 @@ jiffies = jiffies_64;
 
 SECTIONS
 {
-  . = XCHAL_KSEG_CACHED_VADDR + KERNELOFFSET;
+  . = KERNELOFFSET;
   /* .text section */
 
   _text = .;
@@ -87,7 +85,6 @@ SECTIONS
     /* The .head.text section must be the first section! */
     *(.head.text)
     *(.literal .text)
-    *(.srom.text)
     VMLINUX_SYMBOL(__sched_text_start) = .;
     *(.sched.literal .sched.text)
     VMLINUX_SYMBOL(__sched_text_end) = .;
@@ -97,38 +94,13 @@ SECTIONS
 
   }
   _etext = .;
+  PROVIDE (etext = .);
 
   . = ALIGN(16);
 
   RODATA
 
   /*  Relocation table */
-
-  . = ALIGN(16);
-  __boot_reloc_table_start = ABSOLUTE(.);
-
-  __relocate : {
-
-    RELOCATE_ENTRY(_WindowVectors_text,
-		   .WindowVectors.text);
-#if 0
-    RELOCATE_ENTRY(_KernelExceptionVector_literal,
-		   .KernelExceptionVector.literal);
-#endif
-    RELOCATE_ENTRY(_KernelExceptionVector_text,
-		   .KernelExceptionVector.text);
-#if 0
-    RELOCATE_ENTRY(_UserExceptionVector_literal,
-		   .UserExceptionVector.literal);
-#endif
-    RELOCATE_ENTRY(_UserExceptionVector_text,
-		   .UserExceptionVector.text);
-    RELOCATE_ENTRY(_DoubleExceptionVector_literal,
-		   .DoubleExceptionVector.literal);
-    RELOCATE_ENTRY(_DoubleExceptionVector_text,
-		   .DoubleExceptionVector.text);
-  }
-  __boot_reloc_table_end = ABSOLUTE(.) ;
 
   .fixup   : { *(.fixup) }
 
@@ -146,7 +118,8 @@ SECTIONS
   _fdata = .;
   .data :
   {
-    *(.data) CONSTRUCTORS
+    DATA_DATA
+    CONSTRUCTORS
     . = ALIGN(XCHAL_ICACHE_LINESIZE);
     *(.data.cacheline_aligned)
   }
@@ -159,7 +132,7 @@ SECTIONS
 
   /* Initialization code and data: */
 
-  . = ALIGN(1<<XCHAL_MMU_MIN_PTE_PAGE_SIZE);
+  . = ALIGN(1 << 12);
   __init_begin = .;
   .init.text : {
   	_sinittext = .;
@@ -174,6 +147,22 @@ SECTIONS
     __tagtable_begin = .;
     *(.taglist)
     __tagtable_end = .;
+
+    . = ALIGN(16);
+    __boot_reloc_table_start = ABSOLUTE(.);
+
+    RELOCATE_ENTRY(_WindowVectors_text,
+		   .WindowVectors.text);
+    RELOCATE_ENTRY(_KernelExceptionVector_text,
+		   .KernelExceptionVector.text);
+    RELOCATE_ENTRY(_UserExceptionVector_text,
+		   .UserExceptionVector.text);
+    RELOCATE_ENTRY(_DoubleExceptionVector_literal,
+		   .DoubleExceptionVector.literal);
+    RELOCATE_ENTRY(_DoubleExceptionVector_text,
+		   .DoubleExceptionVector.text);
+  
+    __boot_reloc_table_end = ABSOLUTE(.) ;
   }
 
   . = ALIGN(XCHAL_ICACHE_LINESIZE);
@@ -194,21 +183,16 @@ SECTIONS
 
   SECURITY_INIT
 
-  . = ALIGN(4);
 
-  __start___ftr_fixup = .;
-  __ftr_fixup : { *(__ftr_fixup) }
-  __stop___ftr_fixup = .;
-
-  . = ALIGN(32);
-  __per_cpu_start = .;
-  .data.percpu  : { *(.data.percpu) }
-  __per_cpu_end = .;
-
+#ifdef CONFIG_BLK_DEV_INITRD
   . = ALIGN(4096);
   __initramfs_start =.;
   .init.ramfs : { *(.init.ramfs) }
   __initramfs_end = .;
+#endif
+
+  PERCPU(4096)
+
 
   /* We need this dummy segment here */
 
@@ -223,32 +207,32 @@ SECTIONS
 		  .dummy)
   SECTION_VECTOR (_DebugInterruptVector_literal,
 		  .DebugInterruptVector.literal,
-		  XCHAL_INTLEVEL_VECTOR_VADDR(XCHAL_DEBUGLEVEL) - 4,
+		  XCHAL_DEBUG_VECTOR_VADDR - 4,
 		  SIZEOF(.WindowVectors.text),
 		  .WindowVectors.text)
   SECTION_VECTOR (_DebugInterruptVector_text,
 		  .DebugInterruptVector.text,
-		  XCHAL_INTLEVEL_VECTOR_VADDR(XCHAL_DEBUGLEVEL),
+		  XCHAL_DEBUG_VECTOR_VADDR,
 		  4,
 		  .DebugInterruptVector.literal)
   SECTION_VECTOR (_KernelExceptionVector_literal,
 		  .KernelExceptionVector.literal,
-		  XCHAL_KERNELEXC_VECTOR_VADDR - 4,
+		  XCHAL_KERNEL_VECTOR_VADDR - 4,
 		  SIZEOF(.DebugInterruptVector.text),
 		  .DebugInterruptVector.text)
   SECTION_VECTOR (_KernelExceptionVector_text,
 		  .KernelExceptionVector.text,
-		  XCHAL_KERNELEXC_VECTOR_VADDR,
+		  XCHAL_KERNEL_VECTOR_VADDR,
 		  4,
 		  .KernelExceptionVector.literal)
   SECTION_VECTOR (_UserExceptionVector_literal,
 		  .UserExceptionVector.literal,
-		  XCHAL_USEREXC_VECTOR_VADDR - 4,
+		  XCHAL_USER_VECTOR_VADDR - 4,
 		  SIZEOF(.KernelExceptionVector.text),
 		  .KernelExceptionVector.text)
   SECTION_VECTOR (_UserExceptionVector_text,
 		  .UserExceptionVector.text,
-		  XCHAL_USEREXC_VECTOR_VADDR,
+		  XCHAL_USER_VECTOR_VADDR,
 		  4,
 		  .UserExceptionVector.literal)
   SECTION_VECTOR (_DoubleExceptionVector_literal,
@@ -263,7 +247,7 @@ SECTIONS
 		  .DoubleExceptionVector.literal)
 
   . = (LOADADDR( .DoubleExceptionVector.text ) + SIZEOF( .DoubleExceptionVector.text ) + 3) & ~ 3;
-  . = ALIGN(1<<XCHAL_MMU_MIN_PTE_PAGE_SIZE);
+  . = ALIGN(1 << 12);
 
   __init_end = .;
 
@@ -271,9 +255,9 @@ SECTIONS
 
   /* BSS section */
   _bss_start = .;
-  .sbss : { *(.sbss) *(.scommon) }
-  .bss : { *(COMMON) *(.bss) }
+  .bss : { *(.bss.page_aligned) *(.bss) }
   _bss_end = .;
+
   _end = .;
 
   /* only used by the boot loader  */
@@ -291,16 +275,16 @@ SECTIONS
     *(.ResetVector.text)
   }
 
-
   /* Sections to be discarded */
   /DISCARD/ :
   {
-        *(.text.exit)
-	*(.text.exit.literal)
-        *(.data.exit)
+  	*(.exit.literal .exit.text)
+  	*(.exit.data)
         *(.exitcall.exit)
   }
 
+  .xt.lit : { *(.xt.lit) }
+  .xt.prop : { *(.xt.prop) }
 
   .debug  0 :  { *(.debug) }
   .line  0 :  { *(.line) }

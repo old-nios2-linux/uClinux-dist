@@ -1,36 +1,30 @@
 /* mpf_sub -- Subtract two floats.
 
-Copyright (C) 1993, 1994, 1995, 1996, 1999 Free Software Foundation, Inc.
+Copyright 1993, 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005 Free
+Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpf_sub (mpf_ptr r, mpf_srcptr u, mpf_srcptr v)
-#else
-mpf_sub (r, u, v)
-     mpf_ptr r;
-     mpf_srcptr u;
-     mpf_srcptr v;
-#endif
 {
   mp_srcptr up, vp;
   mp_ptr rp, tp;
@@ -39,7 +33,7 @@ mpf_sub (r, u, v)
   mp_exp_t exp;
   mp_size_t ediff;
   int negate;
-  TMP_DECL (marker);
+  TMP_DECL;
 
   usize = u->_mp_size;
   vsize = v->_mp_size;
@@ -52,7 +46,8 @@ mpf_sub (r, u, v)
     }
   if (vsize == 0)
     {
-      mpf_set (r, u);
+      if (r != u)
+        mpf_set (r, u);
       return;
     }
 
@@ -67,7 +62,7 @@ mpf_sub (r, u, v)
       return;
     }
 
-  TMP_MARK (marker);
+  TMP_MARK;
 
   /* Signs are now known to be the same.  */
   negate = usize < 0;
@@ -110,26 +105,29 @@ mpf_sub (r, u, v)
 
 		  if (usize == 0)
 		    {
+                      /* u cancels high limbs of v, result is rest of v */
+		      negate ^= 1;
+                    cancellation:
+                      /* strip high zeros before truncating to prec */
+                      while (vsize != 0 && vp[vsize - 1] == 0)
+                        {
+                          vsize--;
+                          exp--;
+                        }
 		      if (vsize > prec)
 			{
 			  vp += vsize - prec;
 			  vsize = prec;
 			}
-		      rsize = vsize;
-		      tp = (mp_ptr) vp;
-		      negate ^= 1;
-		      goto normalize;
+                      MPN_COPY_INCR (rp, vp, vsize);
+                      rsize = vsize;
+                      goto done;
 		    }
 		  if (vsize == 0)
 		    {
-		      if (usize > prec)
-			{
-			  up += usize - prec;
-			  usize = prec;
-			}
-		      rsize = usize;
-		      tp = (mp_ptr) up;
-		      goto normalize;
+                      vp = up;
+                      vsize = usize;
+                      goto cancellation;
 		    }
 		}
 	      while (up[usize - 1] == vp[vsize - 1]);
@@ -141,8 +139,7 @@ mpf_sub (r, u, v)
 		 wouldn't have exited unless up[usize - 1] and vp[vsize - 1]
 		 were non-equal, this if-statement catches all cases where U
 		 is smaller than V.  */
-	      { mp_srcptr tp = up; up = vp; vp = tp; }
-	      { mp_size_t tsize = usize; usize = vsize; vsize = tsize; }
+	      MPN_SRCPTR_SWAP (up,usize, vp,vsize);
 	      negate ^= 1;
 	      /* negating ediff not necessary since it is 0.  */
 	    }
@@ -162,7 +159,7 @@ mpf_sub (r, u, v)
 	     1 00000000 ...
 	     0 ffffffff ... */
 
-	  if (up[usize - 1] != 1 || vp[vsize - 1] != ~(mp_limb_t) 0
+	  if (up[usize - 1] != 1 || vp[vsize - 1] != GMP_NUMB_MAX
 	      || (usize >= 2 && up[usize - 2] != 0))
 	    goto general_case;
 
@@ -172,7 +169,7 @@ mpf_sub (r, u, v)
 
       /* Skip sequences of 00000000/ffffffff */
       while (vsize != 0 && usize != 0 && up[usize - 1] == 0
-	     && vp[vsize - 1] == ~(mp_limb_t) 0)
+	     && vp[vsize - 1] == GMP_NUMB_MAX)
 	{
 	  usize--;
 	  vsize--;
@@ -181,7 +178,7 @@ mpf_sub (r, u, v)
 
       if (usize == 0)
 	{
-	  while (vsize != 0 && vp[vsize - 1] == ~(mp_limb_t) 0)
+	  while (vsize != 0 && vp[vsize - 1] == GMP_NUMB_MAX)
 	    {
 	      vsize--;
 	      exp--;
@@ -218,7 +215,7 @@ mpf_sub (r, u, v)
 	    mp_size_t size, i;
 	    size = vsize;
 	    for (i = 0; i < size; i++)
-	      tp[i] = ~vp[i];
+	      tp[i] = ~vp[i] & GMP_NUMB_MASK;
 	    cy_limb = 1 - mpn_add_1 (tp, tp, vsize, (mp_limb_t) 1);
 	    rsize = vsize;
 	    if (cy_limb == 0)
@@ -246,7 +243,7 @@ mpf_sub (r, u, v)
 	    mp_size_t size, i;
 	    size = vsize - usize;
 	    for (i = 0; i < size; i++)
-	      tp[i] = ~vp[i];
+	      tp[i] = ~vp[i] & GMP_NUMB_MASK;
 	    cy_limb = mpn_sub_n (tp + size, up, vp + size, usize);
 	    cy_limb+= mpn_sub_1 (tp + size, tp + size, usize, (mp_limb_t) 1);
 	    cy_limb-= mpn_add_1 (tp, tp, vsize, (mp_limb_t) 1);
@@ -345,9 +342,9 @@ general_case:
 		  /* vvvvvvv  */
 		  mp_size_t size, i;
 		  size = vsize - usize;
-		  tp[0] = -vp[0];
+		  tp[0] = -vp[0] & GMP_NUMB_MASK;
 		  for (i = 1; i < size; i++)
-		    tp[i] = ~vp[i];
+		    tp[i] = ~vp[i] & GMP_NUMB_MASK;
 		  mpn_sub_n (tp + size, up, vp + size, usize);
 		  mpn_sub_1 (tp + size, tp + size, usize, (mp_limb_t) 1);
 		  rsize = vsize;
@@ -371,9 +368,9 @@ general_case:
 		  /*   vvvvv  */
 		  mp_size_t size, i;
 		  size = vsize + ediff - usize;
-		  tp[0] = -vp[0];
+		  tp[0] = -vp[0] & GMP_NUMB_MASK;
 		  for (i = 1; i < size; i++)
-		    tp[i] = ~vp[i];
+		    tp[i] = ~vp[i] & GMP_NUMB_MASK;
 		  mpn_sub (tp + size, up, usize, vp + size, usize - ediff);
 		  mpn_sub_1 (tp + size, tp + size, usize, (mp_limb_t) 1);
 		  rsize = vsize + ediff;
@@ -386,11 +383,11 @@ general_case:
 	  /*      vv  */
 	  mp_size_t size, i;
 	  size = vsize + ediff - usize;
-	  tp[0] = -vp[0];
+	  tp[0] = -vp[0] & GMP_NUMB_MASK;
 	  for (i = 1; i < vsize; i++)
-	    tp[i] = ~vp[i];
+	    tp[i] = ~vp[i] & GMP_NUMB_MASK;
 	  for (i = vsize; i < size; i++)
-	    tp[i] = ~(mp_limb_t) 0;
+	    tp[i] = GMP_NUMB_MAX;
 	  mpn_sub_1 (tp + size, up, usize, (mp_limb_t) 1);
 	  rsize = size + usize;
 	}
@@ -407,6 +404,8 @@ general_case:
 
  done:
   r->_mp_size = negate ? -rsize : rsize;
+  if (rsize == 0)
+    exp = 0;
   r->_mp_exp = exp;
-  TMP_FREE (marker);
+  TMP_FREE;
 }

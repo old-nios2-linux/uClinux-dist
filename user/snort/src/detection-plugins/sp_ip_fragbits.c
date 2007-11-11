@@ -376,8 +376,7 @@ void FragOffsetInit(char *data, OptTreeNode *otn, int protocol)
 {
     /* allocate the data structure and attach it to the
        rule's data struct list */
-    otn->ds_list[PLUGIN_FRAG_OFFSET] = (FragOffsetData *) calloc(sizeof(FragOffsetData),
-							       sizeof(char));
+    otn->ds_list[PLUGIN_FRAG_OFFSET] = (FragOffsetData *)SnortAlloc(sizeof(FragOffsetData));
 
     /* this is where the keyword arguments are processed and placed into the 
        rule option's data structure */

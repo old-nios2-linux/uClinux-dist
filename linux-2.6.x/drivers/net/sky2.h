@@ -14,6 +14,8 @@ enum {
 	PCI_DEV_REG3	= 0x80,
 	PCI_DEV_REG4	= 0x84,
 	PCI_DEV_REG5    = 0x88,
+	PCI_CFG_REG_0	= 0x90,
+	PCI_CFG_REG_1	= 0x94,
 };
 
 enum {
@@ -28,10 +30,12 @@ enum {
 enum pci_dev_reg_1 {
 	PCI_Y2_PIG_ENA	 = 1<<31, /* Enable Plug-in-Go (YUKON-2) */
 	PCI_Y2_DLL_DIS	 = 1<<30, /* Disable PCI DLL (YUKON-2) */
+	PCI_SW_PWR_ON_RST= 1<<30, /* SW Power on Reset (Yukon-EX) */
 	PCI_Y2_PHY2_COMA = 1<<29, /* Set PHY 2 to Coma Mode (YUKON-2) */
 	PCI_Y2_PHY1_COMA = 1<<28, /* Set PHY 1 to Coma Mode (YUKON-2) */
 	PCI_Y2_PHY2_POWD = 1<<27, /* Set PHY 2 to Power Down (YUKON-2) */
 	PCI_Y2_PHY1_POWD = 1<<26, /* Set PHY 1 to Power Down (YUKON-2) */
+	PCI_Y2_PME_LEGACY= 1<<15, /* PCI Express legacy power management mode */
 };
 
 enum pci_dev_reg_2 {
@@ -64,6 +68,80 @@ enum pci_dev_reg_4 {
 	P_CLK_GATE_ROOT_COR_ENA	= 1<<0,	/* Enable Gate Root Core Clock */
 	P_ASPM_CONTROL_MSK	= P_FORCE_ASPM_REQUEST | P_ASPM_GPHY_LINK_DOWN
 				  | P_ASPM_CLKRUN_REQUEST | P_ASPM_INT_FIFO_EMPTY,
+};
+
+/*	PCI_OUR_REG_5		32 bit	Our Register 5 (Yukon-ECU only) */
+enum pci_dev_reg_5 {
+					/* Bit 31..27:	for A3 & later */
+	P_CTL_DIV_CORE_CLK_ENA	= 1<<31, /* Divide Core Clock Enable */
+	P_CTL_SRESET_VMAIN_AV	= 1<<30, /* Soft Reset for Vmain_av De-Glitch */
+	P_CTL_BYPASS_VMAIN_AV	= 1<<29, /* Bypass En. for Vmain_av De-Glitch */
+	P_CTL_TIM_VMAIN_AV_MSK	= 3<<27, /* Bit 28..27: Timer Vmain_av Mask */
+					 /* Bit 26..16: Release Clock on Event */
+	P_REL_PCIE_RST_DE_ASS	= 1<<26, /* PCIe Reset De-Asserted */
+	P_REL_GPHY_REC_PACKET	= 1<<25, /* GPHY Received Packet */
+	P_REL_INT_FIFO_N_EMPTY	= 1<<24, /* Internal FIFO Not Empty */
+	P_REL_MAIN_PWR_AVAIL	= 1<<23, /* Main Power Available */
+	P_REL_CLKRUN_REQ_REL	= 1<<22, /* CLKRUN Request Release */
+	P_REL_PCIE_RESET_ASS	= 1<<21, /* PCIe Reset Asserted */
+	P_REL_PME_ASSERTED	= 1<<20, /* PME Asserted */
+	P_REL_PCIE_EXIT_L1_ST	= 1<<19, /* PCIe Exit L1 State */
+	P_REL_LOADER_NOT_FIN	= 1<<18, /* EPROM Loader Not Finished */
+	P_REL_PCIE_RX_EX_IDLE	= 1<<17, /* PCIe Rx Exit Electrical Idle State */
+	P_REL_GPHY_LINK_UP	= 1<<16, /* GPHY Link Up */
+
+					/* Bit 10.. 0: Mask for Gate Clock */
+	P_GAT_PCIE_RST_ASSERTED	= 1<<10,/* PCIe Reset Asserted */
+	P_GAT_GPHY_N_REC_PACKET	= 1<<9, /* GPHY Not Received Packet */
+	P_GAT_INT_FIFO_EMPTY	= 1<<8, /* Internal FIFO Empty */
+	P_GAT_MAIN_PWR_N_AVAIL	= 1<<7, /* Main Power Not Available */
+	P_GAT_CLKRUN_REQ_REL	= 1<<6, /* CLKRUN Not Requested */
+	P_GAT_PCIE_RESET_ASS	= 1<<5, /* PCIe Reset Asserted */
+	P_GAT_PME_DE_ASSERTED	= 1<<4, /* PME De-Asserted */
+	P_GAT_PCIE_ENTER_L1_ST	= 1<<3, /* PCIe Enter L1 State */
+	P_GAT_LOADER_FINISHED	= 1<<2, /* EPROM Loader Finished */
+	P_GAT_PCIE_RX_EL_IDLE	= 1<<1, /* PCIe Rx Electrical Idle State */
+	P_GAT_GPHY_LINK_DOWN	= 1<<0,	/* GPHY Link Down */
+
+	PCIE_OUR5_EVENT_CLK_D3_SET = P_REL_GPHY_REC_PACKET |
+				     P_REL_INT_FIFO_N_EMPTY |
+				     P_REL_PCIE_EXIT_L1_ST |
+				     P_REL_PCIE_RX_EX_IDLE |
+				     P_GAT_GPHY_N_REC_PACKET |
+				     P_GAT_INT_FIFO_EMPTY |
+				     P_GAT_PCIE_ENTER_L1_ST |
+				     P_GAT_PCIE_RX_EL_IDLE,
+};
+
+#/*	PCI_CFG_REG_1			32 bit	Config Register 1 (Yukon-Ext only) */
+enum pci_cfg_reg1 {
+	P_CF1_DIS_REL_EVT_RST	= 1<<24, /* Dis. Rel. Event during PCIE reset */
+										/* Bit 23..21: Release Clock on Event */
+	P_CF1_REL_LDR_NOT_FIN	= 1<<23, /* EEPROM Loader Not Finished */
+	P_CF1_REL_VMAIN_AVLBL	= 1<<22, /* Vmain available */
+	P_CF1_REL_PCIE_RESET	= 1<<21, /* PCI-E reset */
+										/* Bit 20..18: Gate Clock on Event */
+	P_CF1_GAT_LDR_NOT_FIN	= 1<<20, /* EEPROM Loader Finished */
+	P_CF1_GAT_PCIE_RX_IDLE	= 1<<19, /* PCI-E Rx Electrical idle */
+	P_CF1_GAT_PCIE_RESET	= 1<<18, /* PCI-E Reset */
+	P_CF1_PRST_PHY_CLKREQ	= 1<<17, /* Enable PCI-E rst & PM2PHY gen. CLKREQ */
+	P_CF1_PCIE_RST_CLKREQ	= 1<<16, /* Enable PCI-E rst generate CLKREQ */
+
+	P_CF1_ENA_CFG_LDR_DONE	= 1<<8, /* Enable core level Config loader done */
+
+	P_CF1_ENA_TXBMU_RD_IDLE	= 1<<1, /* Enable TX BMU Read  IDLE for ASPM */
+	P_CF1_ENA_TXBMU_WR_IDLE	= 1<<0, /* Enable TX BMU Write IDLE for ASPM */
+
+	PCIE_CFG1_EVENT_CLK_D3_SET = P_CF1_DIS_REL_EVT_RST |
+					P_CF1_REL_LDR_NOT_FIN |
+					P_CF1_REL_VMAIN_AVLBL |
+					P_CF1_REL_PCIE_RESET |
+					P_CF1_GAT_LDR_NOT_FIN |
+					P_CF1_GAT_PCIE_RESET |
+					P_CF1_PRST_PHY_CLKREQ |
+					P_CF1_ENA_CFG_LDR_DONE |
+					P_CF1_ENA_TXBMU_RD_IDLE |
+					P_CF1_ENA_TXBMU_WR_IDLE,
 };
 
 
@@ -287,6 +365,9 @@ enum {
 		          | Y2_IS_CHK_TXA1 | Y2_IS_CHK_RX1,
 	Y2_IS_PORT_2	= Y2_IS_IRQ_PHY2 | Y2_IS_IRQ_MAC2
 			  | Y2_IS_CHK_TXA2 | Y2_IS_CHK_RX2,
+	Y2_IS_ERROR     = Y2_IS_HW_ERR |
+			  Y2_IS_IRQ_MAC1 | Y2_IS_CHK_TXA1 | Y2_IS_CHK_RX1 |
+			  Y2_IS_IRQ_MAC2 | Y2_IS_CHK_TXA2 | Y2_IS_CHK_RX2,
 };
 
 /*	B2_IRQM_HWE_MSK	32 bit	IRQ Moderation HW Error Mask */
@@ -360,6 +441,20 @@ enum {
 	TST_CFG_WRITE_OFF= 1<<0, /* Disable Config Reg WR */
 };
 
+/* 	B2_GPIO */
+enum {
+	GLB_GPIO_CLK_DEB_ENA = 1<<31,	/* Clock Debug Enable */
+	GLB_GPIO_CLK_DBG_MSK = 0xf<<26, /* Clock Debug */
+
+	GLB_GPIO_INT_RST_D3_DIS = 1<<15, /* Disable Internal Reset After D3 to D0 */
+	GLB_GPIO_LED_PAD_SPEED_UP = 1<<14, /* LED PAD Speed Up */
+	GLB_GPIO_STAT_RACE_DIS	= 1<<13, /* Status Race Disable */
+	GLB_GPIO_TEST_SEL_MSK	= 3<<11, /* Testmode Select */
+	GLB_GPIO_TEST_SEL_BASE	= 1<<11,
+	GLB_GPIO_RAND_ENA	= 1<<10, /* Random Enable */
+	GLB_GPIO_RAND_BIT_1	= 1<<9,  /* Random Bit 1 */
+};
+
 /*	B2_MAC_CFG		 8 bit	MAC Configuration / Chip Revision */
 enum {
 	CFG_CHIP_R_MSK	  = 0xf<<4,	/* Bit 7.. 4: Chip Revision */
@@ -370,22 +465,35 @@ enum {
 
 /*	B2_CHIP_ID		 8 bit 	Chip Identification Number */
 enum {
-	CHIP_ID_GENESIS	   = 0x0a, /* Chip ID for GENESIS */
-	CHIP_ID_YUKON	   = 0xb0, /* Chip ID for YUKON */
-	CHIP_ID_YUKON_LITE = 0xb1, /* Chip ID for YUKON-Lite (Rev. A1-A3) */
-	CHIP_ID_YUKON_LP   = 0xb2, /* Chip ID for YUKON-LP */
 	CHIP_ID_YUKON_XL   = 0xb3, /* Chip ID for YUKON-2 XL */
 	CHIP_ID_YUKON_EC_U = 0xb4, /* Chip ID for YUKON-2 EC Ultra */
+	CHIP_ID_YUKON_EX   = 0xb5, /* Chip ID for YUKON-2 Extreme */
 	CHIP_ID_YUKON_EC   = 0xb6, /* Chip ID for YUKON-2 EC */
  	CHIP_ID_YUKON_FE   = 0xb7, /* Chip ID for YUKON-2 FE */
-
+ 	CHIP_ID_YUKON_FE_P = 0xb8, /* Chip ID for YUKON-2 FE+ */
+};
+enum yukon_ec_rev {
 	CHIP_REV_YU_EC_A1    = 0,  /* Chip Rev. for Yukon-EC A1/A0 */
 	CHIP_REV_YU_EC_A2    = 1,  /* Chip Rev. for Yukon-EC A2 */
 	CHIP_REV_YU_EC_A3    = 2,  /* Chip Rev. for Yukon-EC A3 */
-
-	CHIP_REV_YU_EC_U_A0  = 0,
-	CHIP_REV_YU_EC_U_A1  = 1,
 };
+enum yukon_ec_u_rev {
+	CHIP_REV_YU_EC_U_A0  = 1,
+	CHIP_REV_YU_EC_U_A1  = 2,
+	CHIP_REV_YU_EC_U_B0  = 3,
+};
+enum yukon_fe_rev {
+	CHIP_REV_YU_FE_A1    = 1,
+	CHIP_REV_YU_FE_A2    = 2,
+};
+enum yukon_fe_p_rev {
+	CHIP_REV_YU_FE2_A0   = 0,
+};
+enum yukon_ex_rev {
+	CHIP_REV_YU_EX_A0    = 1,
+	CHIP_REV_YU_EX_B0    = 2,
+};
+
 
 /*	B2_Y2_CLK_GATE	 8 bit	Clock Gating (Yukon-2 only) */
 enum {
@@ -509,23 +617,15 @@ enum {
 enum {
 	B8_Q_REGS = 0x0400, /* base of Queue registers */
 	Q_D	= 0x00,	/* 8*32	bit	Current Descriptor */
-	Q_DA_L	= 0x20,	/* 32 bit	Current Descriptor Address Low dWord */
-	Q_DA_H	= 0x24,	/* 32 bit	Current Descriptor Address High dWord */
+	Q_VLAN  = 0x20, /* 16 bit	Current VLAN Tag */
+	Q_DONE	= 0x24,	/* 16 bit	Done Index */
 	Q_AC_L	= 0x28,	/* 32 bit	Current Address Counter Low dWord */
 	Q_AC_H	= 0x2c,	/* 32 bit	Current Address Counter High dWord */
 	Q_BC	= 0x30,	/* 32 bit	Current Byte Counter */
 	Q_CSR	= 0x34,	/* 32 bit	BMU Control/Status Register */
-	Q_F	= 0x38,	/* 32 bit	Flag Register */
-	Q_T1	= 0x3c,	/* 32 bit	Test Register 1 */
-	Q_T1_TR	= 0x3c,	/*  8 bit	Test Register 1 Transfer SM */
-	Q_T1_WR	= 0x3d,	/*  8 bit	Test Register 1 Write Descriptor SM */
-	Q_T1_RD	= 0x3e,	/*  8 bit	Test Register 1 Read Descriptor SM */
-	Q_T1_SV	= 0x3f,	/*  8 bit	Test Register 1 Supervisor SM */
-	Q_T2	= 0x40,	/* 32 bit	Test Register 2	*/
-	Q_T3	= 0x44,	/* 32 bit	Test Register 3	*/
+	Q_TEST	= 0x38,	/* 32 bit	Test/Control Register */
 
 /* Yukon-2 */
-	Q_DONE	= 0x24,	/* 16 bit	Done Index 		(Yukon-2 only) */
 	Q_WM	= 0x40,	/* 16 bit	FIFO Watermark */
 	Q_AL	= 0x42,	/*  8 bit	FIFO Alignment */
 	Q_RSP	= 0x44,	/* 16 bit	FIFO Read Shadow Pointer */
@@ -539,15 +639,16 @@ enum {
 };
 #define Q_ADDR(reg, offs) (B8_Q_REGS + (reg) + (offs))
 
-/*	Q_F				32 bit	Flag Register */
+/*	Q_TEST				32 bit	Test Register */
 enum {
-	F_ALM_FULL	= 1<<27, /* Rx FIFO: almost full */
-	F_EMPTY		= 1<<27, /* Tx FIFO: empty flag */
-	F_FIFO_EOF	= 1<<26, /* Tag (EOF Flag) bit in FIFO */
-	F_WM_REACHED	= 1<<25, /* Watermark reached */
+	/* Transmit */
+	F_TX_CHK_AUTO_OFF = 1<<31, /* Tx checksum auto calc off (Yukon EX) */
+	F_TX_CHK_AUTO_ON  = 1<<30, /* Tx checksum auto calc off (Yukon EX) */
+
+	/* Receive */
 	F_M_RX_RAM_DIS	= 1<<24, /* MAC Rx RAM Read Port disable */
-	F_FIFO_LEVEL	= 0x1fL<<16, /* Bit 23..16:	# of Qwords in FIFO */
-	F_WATER_MARK	= 0x0007ffL, /* Bit 10.. 0:	Watermark */
+
+	/* Hardware testbits not used */
 };
 
 /* Queue Prefetch Unit Offsets, use Y2_QADDR() to address (Yukon-2 only)*/
@@ -603,7 +704,7 @@ enum {
 	PHY_ADDR_MARV	= 0,
 };
 
-#define RB_ADDR(offs, queue) (B16_RAM_REGS + (queue) + (offs))
+#define RB_ADDR(offs, queue) ((u16) B16_RAM_REGS + (queue) + (offs))
 
 
 enum {
@@ -675,6 +776,7 @@ enum {
 			  BMU_FIFO_ENA | BMU_OP_ON,
 
 	BMU_WM_DEFAULT = 0x600,
+	BMU_WM_PEX     = 0x80,
 };
 
 /* Tx BMU Control / Status Registers (Yukon-2) */
@@ -734,6 +836,11 @@ enum {
 	TX_GMF_RP	= 0x0d70,/* 32 bit 	Tx GMAC FIFO Read Pointer */
 	TX_GMF_RSTP	= 0x0d74,/* 32 bit 	Tx GMAC FIFO Restart Pointer */
 	TX_GMF_RLEV	= 0x0d78,/* 32 bit 	Tx GMAC FIFO Read Level */
+
+	/* Threshold values for Yukon-EC Ultra and Extreme */
+	ECU_AE_THR	= 0x0070, /* Almost Empty Threshold */
+	ECU_TXFF_LEV	= 0x01a0, /* Tx BMU FIFO Level */
+	ECU_JUMBO_WM	= 0x0080, /* Jumbo Mode Watermark */
 };
 
 /* Descriptor Poll Timer Registers */
@@ -759,6 +866,24 @@ enum {
 
 	POLL_LIST_ADDR_LO= 0x0e28,/* 32 bit	Poll. List Start Addr (low) */
 	POLL_LIST_ADDR_HI= 0x0e2c,/* 32 bit	Poll. List Start Addr (high) */
+};
+
+enum {
+	SMB_CFG		 = 0x0e40, /* 32 bit	SMBus Config Register */
+	SMB_CSR		 = 0x0e44, /* 32 bit	SMBus Control/Status Register */
+};
+
+enum {
+	CPU_WDOG	 = 0x0e48, /* 32 bit	Watchdog Register  */
+	CPU_CNTR	 = 0x0e4C, /* 32 bit	Counter Register  */
+	CPU_TIM		 = 0x0e50,/* 32 bit	Timer Compare Register  */
+	CPU_AHB_ADDR	 = 0x0e54, /* 32 bit	CPU AHB Debug  Register  */
+	CPU_AHB_WDATA	 = 0x0e58, /* 32 bit	CPU AHB Debug  Register  */
+	CPU_AHB_RDATA	 = 0x0e5C, /* 32 bit	CPU AHB Debug  Register  */
+	HCU_MAP_BASE	 = 0x0e60, /* 32 bit	Reset Mapping Base */
+	CPU_AHB_CTRL	 = 0x0e64, /* 32 bit	CPU AHB Debug  Register  */
+	HCU_CCSR	 = 0x0e68, /* 32 bit	CPU Control and Status Register */
+	HCU_HCSR	 = 0x0e6C, /* 32 bit	Host Control and Status Register */
 };
 
 /* ASF Subsystem Registers (Yukon-2 only) */
@@ -831,33 +956,27 @@ enum {
 	GMAC_LINK_CTRL	= 0x0f10,/* 16 bit	Link Control Reg */
 
 /* Wake-up Frame Pattern Match Control Registers (YUKON only) */
-
-	WOL_REG_OFFS	= 0x20,/* HW-Bug: Address is + 0x20 against spec. */
-
 	WOL_CTRL_STAT	= 0x0f20,/* 16 bit	WOL Control/Status Reg */
 	WOL_MATCH_CTL	= 0x0f22,/*  8 bit	WOL Match Control Reg */
 	WOL_MATCH_RES	= 0x0f23,/*  8 bit	WOL Match Result Reg */
 	WOL_MAC_ADDR	= 0x0f24,/* 32 bit	WOL MAC Address */
-	WOL_PATT_PME	= 0x0f2a,/*  8 bit	WOL PME Match Enable (Yukon-2) */
-	WOL_PATT_ASFM	= 0x0f2b,/*  8 bit	WOL ASF Match Enable (Yukon-2) */
 	WOL_PATT_RPTR	= 0x0f2c,/*  8 bit	WOL Pattern Read Pointer */
 
 /* WOL Pattern Length Registers (YUKON only) */
-
 	WOL_PATT_LEN_LO	= 0x0f30,/* 32 bit	WOL Pattern Length 3..0 */
 	WOL_PATT_LEN_HI	= 0x0f34,/* 24 bit	WOL Pattern Length 6..4 */
 
 /* WOL Pattern Counter Registers (YUKON only) */
-
-
 	WOL_PATT_CNT_0	= 0x0f38,/* 32 bit	WOL Pattern Counter 3..0 */
 	WOL_PATT_CNT_4	= 0x0f3c,/* 24 bit	WOL Pattern Counter 6..4 */
 };
+#define WOL_REGS(port, x)	(x + (port)*0x80)
 
 enum {
 	WOL_PATT_RAM_1	= 0x1000,/*  WOL Pattern RAM Link 1 */
 	WOL_PATT_RAM_2	= 0x1400,/*  WOL Pattern RAM Link 2 */
 };
+#define WOL_PATT_RAM_BASE(port)	(WOL_PATT_RAM_1 + (port)*0x400)
 
 enum {
 	BASE_GMAC_1	= 0x2800,/* GMAC 1 registers */
@@ -1055,7 +1174,7 @@ enum {
 	PHY_M_PC_EN_DET_PLUS	= 3<<8, /* Energy Detect Plus (Mode 2) */
 };
 
-#define PHY_M_PC_MDI_XMODE(x)	(((x)<<5) & PHY_M_PC_MDIX_MSK)
+#define PHY_M_PC_MDI_XMODE(x)	(((u16)(x)<<5) & PHY_M_PC_MDIX_MSK)
 
 enum {
 	PHY_M_PC_MAN_MDI	= 0, /* 00 = Manual MDI configuration */
@@ -1125,7 +1244,7 @@ enum {
 	PHY_M_IS_JABBER		= 1<<0, /* Jabber */
 
 	PHY_M_DEF_MSK		= PHY_M_IS_LSP_CHANGE | PHY_M_IS_LST_CHANGE
-				 | PHY_M_IS_FIFO_ERROR,
+				 | PHY_M_IS_DUP_CHANGE,
 	PHY_M_AN_MSK	       = PHY_M_IS_AN_ERROR | PHY_M_IS_AN_COMPL,
 };
 
@@ -1151,13 +1270,13 @@ enum {
 	PHY_M_EC_TX_TIM_CT  = 1<<1, /* RGMII Tx Timing Control */
 	PHY_M_EC_TRANS_DIS  = 1<<0, /* Transmitter Disable (88E1111 only) */};
 
-#define PHY_M_EC_M_DSC(x)	((x)<<10 & PHY_M_EC_M_DSC_MSK)
+#define PHY_M_EC_M_DSC(x)	((u16)(x)<<10 & PHY_M_EC_M_DSC_MSK)
 					/* 00=1x; 01=2x; 10=3x; 11=4x */
-#define PHY_M_EC_S_DSC(x)	((x)<<8 & PHY_M_EC_S_DSC_MSK)
+#define PHY_M_EC_S_DSC(x)	((u16)(x)<<8 & PHY_M_EC_S_DSC_MSK)
 					/* 00=dis; 01=1x; 10=2x; 11=3x */
-#define PHY_M_EC_DSC_2(x)	((x)<<9 & PHY_M_EC_M_DSC_MSK2)
+#define PHY_M_EC_DSC_2(x)	((u16)(x)<<9 & PHY_M_EC_M_DSC_MSK2)
 					/* 000=1x; 001=2x; 010=3x; 011=4x */
-#define PHY_M_EC_MAC_S(x)	((x)<<4 & PHY_M_EC_MAC_S_MSK)
+#define PHY_M_EC_MAC_S(x)	((u16)(x)<<4 & PHY_M_EC_MAC_S_MSK)
 					/* 01X=0; 110=2.5; 111=25 (MHz) */
 
 /* for Yukon-2 Gigabit Ethernet PHY (88E1112 only) */
@@ -1168,7 +1287,7 @@ enum {
 };
 /* !!! Errata in spec. (1 = disable) */
 
-#define PHY_M_PC_DSC(x)			(((x)<<12) & PHY_M_PC_DSC_MSK)
+#define PHY_M_PC_DSC(x)			(((u16)(x)<<12) & PHY_M_PC_DSC_MSK)
 											/* 100=5x; 101=6x; 110=7x; 111=8x */
 enum {
 	MAC_TX_CLK_0_MHZ	= 2,
@@ -1198,7 +1317,7 @@ enum {
 	PHY_M_LEDC_TX_C_MSB	= 1<<0, /* Tx Control (MSB, 88E1111 only) */
 };
 
-#define PHY_M_LED_PULS_DUR(x)	(((x)<<12) & PHY_M_LEDC_PULS_MSK)
+#define PHY_M_LED_PULS_DUR(x)	(((u16)(x)<<12) & PHY_M_LEDC_PULS_MSK)
 
 /*****  PHY_MARV_PHY_STAT (page 3)16 bit r/w	Polarity Control Reg. *****/
 enum {
@@ -1228,7 +1347,7 @@ enum {
 	PULS_1300MS	= 7,/* 1.3 s to 2.7 s */
 };
 
-#define PHY_M_LED_BLINK_RT(x)	(((x)<<8) & PHY_M_LEDC_BL_R_MSK)
+#define PHY_M_LED_BLINK_RT(x)	(((u16)(x)<<8) & PHY_M_LEDC_BL_R_MSK)
 
 enum {
 	BLINK_42MS	= 0,/* 42 ms */
@@ -1238,21 +1357,18 @@ enum {
 	BLINK_670MS	= 4,/* 670 ms */
 };
 
-/*****  PHY_MARV_LED_OVER	16 bit r/w	Manual LED Override Reg *****/
-#define PHY_M_LED_MO_SGMII(x)	((x)<<14) /* Bit 15..14:  SGMII AN Timer */
-										/* Bit 13..12:	reserved */
-#define PHY_M_LED_MO_DUP(x)	((x)<<10) /* Bit 11..10:  Duplex */
-#define PHY_M_LED_MO_10(x)	((x)<<8) /* Bit  9.. 8:  Link 10 */
-#define PHY_M_LED_MO_100(x)	((x)<<6) /* Bit  7.. 6:  Link 100 */
-#define PHY_M_LED_MO_1000(x)	((x)<<4) /* Bit  5.. 4:  Link 1000 */
-#define PHY_M_LED_MO_RX(x)	((x)<<2) /* Bit  3.. 2:  Rx */
-#define PHY_M_LED_MO_TX(x)	((x)<<0) /* Bit  1.. 0:  Tx */
-
+/**** PHY_MARV_LED_OVER    16 bit r/w LED control */
 enum {
-	MO_LED_NORM	= 0,
-	MO_LED_BLINK	= 1,
-	MO_LED_OFF	= 2,
-	MO_LED_ON	= 3,
+	PHY_M_LED_MO_DUP  = 3<<10,/* Bit 11..10:  Duplex */
+	PHY_M_LED_MO_10	  = 3<<8, /* Bit  9.. 8:  Link 10 */
+	PHY_M_LED_MO_100  = 3<<6, /* Bit  7.. 6:  Link 100 */
+	PHY_M_LED_MO_1000 = 3<<4, /* Bit  5.. 4:  Link 1000 */
+	PHY_M_LED_MO_RX	  = 3<<2, /* Bit  3.. 2:  Rx */
+	PHY_M_LED_MO_TX	  = 3<<0, /* Bit  1.. 0:  Tx */
+
+	PHY_M_LED_ALL	  = PHY_M_LED_MO_DUP | PHY_M_LED_MO_10 
+			    | PHY_M_LED_MO_100 | PHY_M_LED_MO_1000
+			    | PHY_M_LED_MO_RX,
 };
 
 /*****  PHY_MARV_EXT_CTRL_2	16 bit r/w	Ext. PHY Specific Ctrl 2 *****/
@@ -1289,9 +1405,9 @@ enum {
 	PHY_M_FELP_LED0_MSK = 0xf, /* Bit  3.. 0: LED0 Mask (SPEED) */
 };
 
-#define PHY_M_FELP_LED2_CTRL(x)	(((x)<<8) & PHY_M_FELP_LED2_MSK)
-#define PHY_M_FELP_LED1_CTRL(x)	(((x)<<4) & PHY_M_FELP_LED1_MSK)
-#define PHY_M_FELP_LED0_CTRL(x)	(((x)<<0) & PHY_M_FELP_LED0_MSK)
+#define PHY_M_FELP_LED2_CTRL(x)	(((u16)(x)<<8) & PHY_M_FELP_LED2_MSK)
+#define PHY_M_FELP_LED1_CTRL(x)	(((u16)(x)<<4) & PHY_M_FELP_LED1_MSK)
+#define PHY_M_FELP_LED0_CTRL(x)	(((u16)(x)<<0) & PHY_M_FELP_LED0_MSK)
 
 enum {
 	LED_PAR_CTRL_COLX	= 0x00,
@@ -1547,8 +1663,8 @@ enum {
 	GM_SMI_CT_BUSY		= 1<<3,	/* Bit  3:	Busy (Operation in progress) */
 };
 
-#define GM_SMI_CT_PHY_AD(x)	(((x)<<11) & GM_SMI_CT_PHY_A_MSK)
-#define GM_SMI_CT_REG_AD(x)	(((x)<<6) & GM_SMI_CT_REG_A_MSK)
+#define GM_SMI_CT_PHY_AD(x)	(((u16)(x)<<11) & GM_SMI_CT_PHY_A_MSK)
+#define GM_SMI_CT_REG_AD(x)	(((u16)(x)<<6) & GM_SMI_CT_REG_A_MSK)
 
 /*	GM_PHY_ADDR				16 bit r/w	GPHY Address Register */
 enum {
@@ -1558,7 +1674,7 @@ enum {
 
 /* Receive Frame Status Encoding */
 enum {
-	GMR_FS_LEN	= 0xffff<<16, /* Bit 31..16:	Rx Frame Length */
+	GMR_FS_LEN	= 0x7fff<<16, /* Bit 30..16:	Rx Frame Length */
 	GMR_FS_VLAN	= 1<<13, /* VLAN Packet */
 	GMR_FS_JABBER	= 1<<12, /* Jabber Packet */
 	GMR_FS_UN_SIZE	= 1<<11, /* Undersize Packet */
@@ -1576,7 +1692,7 @@ enum {
 
 	GMR_FS_ANY_ERR	= GMR_FS_RX_FF_OV | GMR_FS_CRC_ERR |
 			  GMR_FS_FRAGMENT | GMR_FS_LONG_ERR |
-		  	  GMR_FS_MII_ERR | GMR_FS_GOOD_FC | GMR_FS_BAD_FC |
+		  	  GMR_FS_MII_ERR | GMR_FS_BAD_FC |
 			  GMR_FS_UN_SIZE | GMR_FS_JABBER,
 };
 
@@ -1586,6 +1702,16 @@ enum {
 	RX_TRUNC_OFF	= 1<<26, 	/* disable packet truncation */
 	RX_VLAN_STRIP_ON = 1<<25,	/* enable  VLAN stripping */
 	RX_VLAN_STRIP_OFF = 1<<24,	/* disable VLAN stripping */
+
+	RX_MACSEC_FLUSH_ON  = 1<<23,
+	RX_MACSEC_FLUSH_OFF = 1<<22,
+	RX_MACSEC_ASF_FLUSH_ON = 1<<21,
+	RX_MACSEC_ASF_FLUSH_OFF = 1<<20,
+
+	GMF_RX_OVER_ON      = 1<<19,	/* enable flushing on receive overrun */
+	GMF_RX_OVER_OFF     = 1<<18,	/* disable flushing on receive overrun */
+	GMF_ASF_RX_OVER_ON  = 1<<17,	/* enable flushing of ASF when overrun */
+	GMF_ASF_RX_OVER_OFF = 1<<16,	/* disable flushing of ASF when overrun */
 
 	GMF_WP_TST_ON	= 1<<14,	/* Write Pointer Test On */
 	GMF_WP_TST_OFF	= 1<<13,	/* Write Pointer Test Off */
@@ -1609,6 +1735,10 @@ enum {
 	GMF_RX_CTRL_DEF	= GMF_OPER_ON | GMF_RX_F_FL_ON,
 };
 
+/*	TX_GMF_EA		32 bit	Tx GMAC FIFO End Address */
+enum {
+	TX_DYN_WM_ENA	= 3,	/* Yukon-FE+ specific */
+};
 
 /*	TX_GMF_CTRL_T	32 bit	Tx GMAC FIFO Control/Test */
 enum {
@@ -1617,6 +1747,9 @@ enum {
 
 	TX_VLAN_TAG_ON	= 1<<25,/* enable  VLAN tagging */
 	TX_VLAN_TAG_OFF	= 1<<24,/* disable VLAN tagging */
+
+	TX_JUMBO_ENA	= 1<<23,/* PCI Jumbo Mode enable (Yukon-EC Ultra) */
+	TX_JUMBO_DIS	= 1<<22,/* PCI Jumbo Mode enable (Yukon-EC Ultra) */
 
 	GMF_WSP_TST_ON	= 1<<18,/* Write Shadow Pointer Test On */
 	GMF_WSP_TST_OFF	= 1<<17,/* Write Shadow Pointer Test Off */
@@ -1651,6 +1784,39 @@ enum {
 	Y2_ASF_CLR_ASFI = 1<<1,	/* Clear host IRQ */
 	Y2_ASF_HOST_IRQ = 1<<0,	/* Issue an IRQ to HOST system */
 };
+/*	HCU_CCSR	CPU Control and Status Register */
+enum {
+	HCU_CCSR_SMBALERT_MONITOR= 1<<27, /* SMBALERT pin monitor */
+	HCU_CCSR_CPU_SLEEP	= 1<<26, /* CPU sleep status */
+	/* Clock Stretching Timeout */
+	HCU_CCSR_CS_TO		= 1<<25,
+	HCU_CCSR_WDOG		= 1<<24, /* Watchdog Reset */
+
+	HCU_CCSR_CLR_IRQ_HOST	= 1<<17, /* Clear IRQ_HOST */
+	HCU_CCSR_SET_IRQ_HCU	= 1<<16, /* Set IRQ_HCU */
+
+	HCU_CCSR_AHB_RST	= 1<<9, /* Reset AHB bridge */
+	HCU_CCSR_CPU_RST_MODE	= 1<<8, /* CPU Reset Mode */
+
+	HCU_CCSR_SET_SYNC_CPU	= 1<<5,
+	HCU_CCSR_CPU_CLK_DIVIDE_MSK = 3<<3,/* CPU Clock Divide */
+	HCU_CCSR_CPU_CLK_DIVIDE_BASE= 1<<3,
+	HCU_CCSR_OS_PRSNT	= 1<<2, /* ASF OS Present */
+/* Microcontroller State */
+	HCU_CCSR_UC_STATE_MSK	= 3,
+	HCU_CCSR_UC_STATE_BASE	= 1<<0,
+	HCU_CCSR_ASF_RESET	= 0,
+	HCU_CCSR_ASF_HALTED	= 1<<1,
+	HCU_CCSR_ASF_RUNNING	= 1<<0,
+};
+
+/*	HCU_HCSR	Host Control and Status Register */
+enum {
+	HCU_HCSR_SET_IRQ_CPU	= 1<<16, /* Set IRQ_CPU */
+
+	HCU_HCSR_CLR_IRQ_HCU	= 1<<1, /* Clear IRQ_HCU */
+	HCU_HCSR_SET_IRQ_HOST	= 1<<0,	/* Set IRQ_HOST */
+};
 
 /*	STAT_CTRL		32 bit	Status BMU control register (Yukon-2 only) */
 enum {
@@ -1663,6 +1829,15 @@ enum {
 
 /*	GMAC_CTRL		32 bit	GMAC Control Reg (YUKON only) */
 enum {
+	GMC_SET_RST	    = 1<<15,/* MAC SEC RST */
+	GMC_SEC_RST_OFF     = 1<<14,/* MAC SEC RSt OFF */
+	GMC_BYP_MACSECRX_ON = 1<<13,/* Bypass macsec RX */
+	GMC_BYP_MACSECRX_OFF= 1<<12,/* Bypass macsec RX off */
+	GMC_BYP_MACSECTX_ON = 1<<11,/* Bypass macsec TX */
+	GMC_BYP_MACSECTX_OFF= 1<<10,/* Bypass macsec TX  off*/
+	GMC_BYP_RETR_ON	= 1<<9, /* Bypass retransmit FIFO On */
+	GMC_BYP_RETR_OFF= 1<<8, /* Bypass retransmit FIFO Off */
+
 	GMC_H_BURST_ON	= 1<<7,	/* Half Duplex Burst Mode On */
 	GMC_H_BURST_OFF	= 1<<6,	/* Half Duplex Burst Mode Off */
 	GMC_F_LOOPB_ON	= 1<<5,	/* FIFO Loopback On */
@@ -1675,28 +1850,6 @@ enum {
 
 /*	GPHY_CTRL		32 bit	GPHY Control Reg (YUKON only) */
 enum {
-	GPC_SEL_BDT	= 1<<28, /* Select Bi-Dir. Transfer for MDC/MDIO */
-	GPC_INT_POL_HI	= 1<<27, /* IRQ Polarity is Active HIGH */
-	GPC_75_OHM	= 1<<26, /* Use 75 Ohm Termination instead of 50 */
-	GPC_DIS_FC	= 1<<25, /* Disable Automatic Fiber/Copper Detection */
-	GPC_DIS_SLEEP	= 1<<24, /* Disable Energy Detect */
-	GPC_HWCFG_M_3	= 1<<23, /* HWCFG_MODE[3] */
-	GPC_HWCFG_M_2	= 1<<22, /* HWCFG_MODE[2] */
-	GPC_HWCFG_M_1	= 1<<21, /* HWCFG_MODE[1] */
-	GPC_HWCFG_M_0	= 1<<20, /* HWCFG_MODE[0] */
-	GPC_ANEG_0	= 1<<19, /* ANEG[0] */
-	GPC_ENA_XC	= 1<<18, /* Enable MDI crossover */
-	GPC_DIS_125	= 1<<17, /* Disable 125 MHz clock */
-	GPC_ANEG_3	= 1<<16, /* ANEG[3] */
-	GPC_ANEG_2	= 1<<15, /* ANEG[2] */
-	GPC_ANEG_1	= 1<<14, /* ANEG[1] */
-	GPC_ENA_PAUSE	= 1<<13, /* Enable Pause (SYM_OR_REM) */
-	GPC_PHYADDR_4	= 1<<12, /* Bit 4 of Phy Addr */
-	GPC_PHYADDR_3	= 1<<11, /* Bit 3 of Phy Addr */
-	GPC_PHYADDR_2	= 1<<10, /* Bit 2 of Phy Addr */
-	GPC_PHYADDR_1	= 1<<9,	 /* Bit 1 of Phy Addr */
-	GPC_PHYADDR_0	= 1<<8,	 /* Bit 0 of Phy Addr */
-						/* Bits  7..2:	reserved */
 	GPC_RST_CLR	= 1<<1,	/* Clear GPHY Reset */
 	GPC_RST_SET	= 1<<0,	/* Set   GPHY Reset */
 };
@@ -1712,14 +1865,17 @@ enum {
 	GM_IS_RX_COMPL	= 1<<0,	/* Frame Reception Complete */
 
 #define GMAC_DEF_MSK     GM_IS_TX_FF_UR
+};
 
 /*	GMAC_LINK_CTRL	16 bit	GMAC Link Control Reg (YUKON only) */
-						/* Bits 15.. 2:	reserved */
+enum {						/* Bits 15.. 2:	reserved */
 	GMLC_RST_CLR	= 1<<1,	/* Clear GMAC Link Reset */
 	GMLC_RST_SET	= 1<<0,	/* Set   GMAC Link Reset */
+};
 
 
 /*	WOL_CTRL_STAT	16 bit	WOL Control/Status Reg */
+enum {
 	WOL_CTL_LINK_CHG_OCC		= 1<<15,
 	WOL_CTL_MAGIC_PKT_OCC		= 1<<14,
 	WOL_CTL_PATTERN_OCC		= 1<<13,
@@ -1737,17 +1893,6 @@ enum {
 	WOL_CTL_ENA_PATTERN_UNIT	= 1<<1,
 	WOL_CTL_DIS_PATTERN_UNIT	= 1<<0,
 };
-
-#define WOL_CTL_DEFAULT				\
-	(WOL_CTL_DIS_PME_ON_LINK_CHG |	\
-	WOL_CTL_DIS_PME_ON_PATTERN |	\
-	WOL_CTL_DIS_PME_ON_MAGIC_PKT |	\
-	WOL_CTL_DIS_LINK_CHG_UNIT |		\
-	WOL_CTL_DIS_PATTERN_UNIT |		\
-	WOL_CTL_DIS_MAGIC_PKT_UNIT)
-
-/*	WOL_MATCH_CTL	 8 bit	WOL Match Control Reg */
-#define WOL_CTL_PATT_ENA(x)	(1 << (x))
 
 
 /* Control flags */
@@ -1778,9 +1923,13 @@ enum {
 	OP_ADDR64VLAN	= OP_ADDR64 | OP_VLAN,
 	OP_LRGLEN	= 0x24,
 	OP_LRGLENVLAN	= OP_LRGLEN | OP_VLAN,
+	OP_MSS		= 0x28,
+	OP_MSSVLAN	= OP_MSS | OP_VLAN,
+
 	OP_BUFFER	= 0x40,
 	OP_PACKET	= 0x41,
 	OP_LARGESEND	= 0x43,
+	OP_LSOV2	= 0x45,
 
 /* YUKON-2 STATUS opcodes defines */
 	OP_RXSTAT	= 0x60,
@@ -1791,6 +1940,19 @@ enum {
 	OP_RXTIMEVLAN	= OP_RXTIMESTAMP | OP_RXVLAN,
 	OP_RSS_HASH	= 0x65,
 	OP_TXINDEXLE	= 0x68,
+	OP_MACSEC	= 0x6c,
+	OP_PUTIDX	= 0x70,
+};
+
+enum status_css {
+	CSS_TCPUDPCSOK	= 1<<7,	/* TCP / UDP checksum is ok */
+	CSS_ISUDP	= 1<<6, /* packet is a UDP packet */
+	CSS_ISTCP	= 1<<5, /* packet is a TCP packet */
+	CSS_ISIPFRAG	= 1<<4, /* packet is a TCP/UDP frag, CS calc not done */
+	CSS_ISIPV6	= 1<<3, /* packet is a IPv6 packet */
+	CSS_IPV4CSUMOK	= 1<<2, /* IP v4: TCP header checksum is ok */
+	CSS_ISIPV4	= 1<<1, /* packet is a IPv4 packet */
+	CSS_LINK_BIT	= 1<<0, /* port number (legacy) */
 };
 
 /* Yukon 2 hardware interface */
@@ -1811,7 +1973,7 @@ struct sky2_rx_le {
 struct sky2_status_le {
 	__le32	status;	/* also checksum */
 	__le16	length;	/* also vlan tag */
-	u8	link;
+	u8	css;
 	u8	opcode;
 } __attribute((packed));
 
@@ -1846,6 +2008,7 @@ struct sky2_port {
 	struct sky2_tx_le    *tx_le;
 	u16		     tx_cons;		/* next le to check */
 	u16		     tx_prod;		/* next le to use */
+	u16		     tx_next;		/* debug only */
 	u32		     tx_addr64;
 	u16		     tx_pending;
 	u16		     tx_last_mss;
@@ -1864,6 +2027,14 @@ struct sky2_port {
 	u16		     rx_tag;
 	struct vlan_group    *vlgrp;
 #endif
+	struct {
+		unsigned long last;
+		u32	mac_rp;
+		u8	mac_lev;
+		u8	fifo_rp;
+		u8	fifo_lev;
+	} check;
+
 
 	dma_addr_t	     rx_le_map;
 	dma_addr_t	     tx_le_map;
@@ -1872,9 +2043,13 @@ struct sky2_port {
 	u8		     autoneg;	/* AUTONEG_ENABLE, AUTONEG_DISABLE */
 	u8		     duplex;	/* DUPLEX_HALF, DUPLEX_FULL */
 	u8		     rx_csum;
+	u8		     wol;
  	enum flow_control    flow_mode;
  	enum flow_control    flow_status;
 
+#ifdef CONFIG_SKY2_DEBUG
+	struct dentry	     *debugfs;
+#endif
 	struct net_device_stats net_stats;
 
 };
@@ -1883,8 +2058,16 @@ struct sky2_hw {
 	void __iomem  	     *regs;
 	struct pci_dev	     *pdev;
 	struct net_device    *dev[2];
+	unsigned long	     flags;
+#define SKY2_HW_USE_MSI		0x00000001
+#define SKY2_HW_FIBRE_PHY	0x00000002
+#define SKY2_HW_GIGABIT		0x00000004
+#define SKY2_HW_NEWER_PHY	0x00000008
+#define SKY2_HW_FIFO_HANG_CHECK	0x00000010
+#define SKY2_HW_NEW_LE		0x00000020	/* new LSOv2 format */
+#define SKY2_HW_AUTO_TX_SUM	0x00000040	/* new IP decode for Tx */
+#define SKY2_HW_ADV_POWER_CTL	0x00000080	/* additional PHY power regs */
 
-	int		     pm_cap;
 	u8	     	     chip_id;
 	u8		     chip_rev;
 	u8		     pmd_type;
@@ -1894,14 +2077,14 @@ struct sky2_hw {
 	u32		     st_idx;
 	dma_addr_t   	     st_dma;
 
-	struct timer_list    idle_timer;
-	int		     msi_detected;
+	struct timer_list    watchdog_timer;
+	struct work_struct   restart_work;
 	wait_queue_head_t    msi_wait;
 };
 
 static inline int sky2_is_copper(const struct sky2_hw *hw)
 {
-	return !(hw->pmd_type == 'L' || hw->pmd_type == 'S' || hw->pmd_type == 'P');
+	return !(hw->flags & SKY2_HW_FIBRE_PHY);
 }
 
 /* Register accessor for memory mapped device */

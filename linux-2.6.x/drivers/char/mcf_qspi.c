@@ -1,6 +1,6 @@
 /************************************************************************/
 /*                                                                      */
-/*  mcf_qspi.c - QSPI driver for MCF5272, MCF5235, MCF5282              */
+/*  mcf_qspi.c - QSPI driver for MCF5272, MCF5235, MCF528x              */
 /*                                                                      */
 /*  (C) Copyright 2001, Wayne Roberts (wroberts1@home.com)              */
 /*                                                                      */
@@ -36,7 +36,7 @@
 /*           chance to finish the current transfer before application   */
 /*           quits when typing '^C'. Otherwise a write collision will   */
 /*           most likely occur.                                         */
-/*   Added   safe_flags(); cli; and frestore_flags() according to        */
+/*   Added   safe_flags(); cli; and restore_flags() according to        */
 /*           gerg@snapgear.com. Otherwise in some cases (higher clock   */
 /*           rates) the transfer is finished before the current process */
 /*           is put to sleep and therefore never wakes up again.        */
@@ -136,7 +136,6 @@ auto-increments.
 #include <asm/semaphore.h>
 #include <asm/system.h>                 /* cli() and friends */
 #include <asm/uaccess.h>
-#include <linux/devfs_fs_kernel.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -158,7 +157,7 @@ auto-increments.
 #include <linux/modversions.h>
 #endif
 
-#include "mcf_qspi.h" 
+#include <asm/mcf_qspi.h> 
 
 
 #define DEVICE_NAME "qspi"
@@ -184,7 +183,7 @@ static DECLARE_MUTEX(sem);
 #endif
 
 
-irqreturn_t qspi_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+irqreturn_t qspi_interrupt(int irq, void *dev_id)
 {	
 	u16 qir = (QIR & (QIR_WCEF | QIR_ABRT | QIR_SPIF));
 
@@ -354,7 +353,8 @@ static int qspi_open(struct inode *inode, struct file *file)
 
         /* set default values */
         dev->read_data.length = 0;
-        dev->read_data.buf = 0;
+        dev->read_data.buf[0] = 0;
+        dev->read_data.buf[1] = 0;
         dev->read_data.loop = 0;
         dev->poll_mod = 0;              /* interrupt mode */
         dev->bits = 8;
@@ -414,21 +414,25 @@ static int qspi_read(
 
         /* set the register with default values */
         QMR = QMR_MSTR |
-                (dev->dohie << 14) |
-                (dev->bits << 10) |
-                (dev->cpol << 9) |
-                (dev->cpha << 8) |
-                (dev->baud);
+                ((dev->dohie & 0x01) << 14) |
+                ((dev->bits  & 0x0f) << 10) |
+                ((dev->cpol  & 0x01) <<  9) |
+                ((dev->cpha  & 0x01) <<  8) |
+                 (dev->baud  & 0xff);
 
-        QDLYR = (dev->qcd << 8) | dev->dtl;
+        QDLYR = ((dev->qcd & 0x7f) << 8) | (dev->dtl & 0xff);
 
         if (dev->dsp_mod)
                 max_trans = 15;
         else
                 max_trans = 16;
 
-	//qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
+#ifdef CONFIG_MCF_QSPI_ENCODED_CS
+	/* encode CS (qspi0 device not used) */
+	qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
+#else
  	qcr_cs = 0xf00 & ~(1 << (8 + MINOR(filep->f_dentry->d_inode->i_rdev))); 
+#endif
         
 	bits = dev->bits % 0x10;
         if (bits == 0 || bits > 0x08)
@@ -486,7 +490,7 @@ static int qspi_read(
                 QWR = QWR_CSIV | ((n - 1) << 8);
 
                 /* check if we are using polling mode. Polling increases
-                 * performance for samll data transfers but is dangerous
+                 * performance for small data transfers but is dangerous
                  * if we stay too long here, locking other tasks!!
                  */
                 if (dev->poll_mod) {
@@ -568,8 +572,12 @@ static ssize_t qspi_write(struct file *filep, const char *buffer, size_t length,
         if (bits == 0 || bits > 0x08)
                 word = 1;       /* 9 to 16 bit transfers */
 
-	//qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
+#ifdef CONFIG_MCF_QSPI_ENCODED_CS
+	/* encode CS (qspi0 device not used) */
+	qcr_cs = (~MINOR(filep->f_dentry->d_inode->i_rdev) << 8) & 0xf00;  /* CS for QCR */
+#else
  	qcr_cs = 0xf00 & ~(1 << (8 + MINOR(filep->f_dentry->d_inode->i_rdev))); 
+#endif
 	
 	/* next line was memcpy_fromfs()  */
         copy_from_user (dbuf, buffer, length);
@@ -733,7 +741,7 @@ static int init(void)
 		parp = (volatile unsigned char *)(MCF_MBAR + 0x10004A);
 		*parp = 0xFF;
 	}
-#elif (defined(CONFIG_M5282) || defined(CONFIG_M5280))
+#elif (defined(CONFIG_M528x))
         cp = (volatile u8 *) (MCF_IPSBAR + MCFICM_INTC0 + MCFINTC_ICR0 +
                               MCFINT_QSPI);
         *cp = (5 << 3) + 3;     /* level 5, priority 3 */
@@ -777,8 +785,8 @@ static int init(void)
         printk("MCF5249 QSPI driver ok\n");
 #elif defined(CONFIG_M523x)
 	printk("MCF5235 QSPI driver ok\n");
-#elif (defined(CONFIG_M5282) || defined(CONFIG_M5280))
-        printk("MCF5282 QSPI driver ok\n");
+#elif (defined(CONFIG_M528x))
+        printk("MCF528x QSPI driver ok\n");
 #else
         printk("MCF5272 QSPI driver ok\n");
 #endif
@@ -831,7 +839,7 @@ void __exit qspi_exit(void)      /* the __exit added by ron  */
 		parp = (volatile unsigned char *)(MCF_MBAR + 0x10004A);
 		*parp = 0x00;
 	}
-#elif (defined(CONFIG_M5282) || defined(CONFIG_M5280))
+#elif (defined(CONFIG_M528x))
         /* interrupt level 0, priority 0 */
         *(volatile u8 *) (MCF_IPSBAR + MCFICM_INTC0 +
                           MCFINTC_ICR0 + MCFINT_QSPI) = 0;

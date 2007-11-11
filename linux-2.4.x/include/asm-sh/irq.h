@@ -17,10 +17,10 @@
 #include <asm/machvec.h>
 #include <asm/ptrace.h>		/* for pt_regs */
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define INTC_IPRA  	0xfffffee2UL
 #define INTC_IPRB  	0xfffffee4UL
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define INTC_IPRA	0xffd00004UL
 #define INTC_IPRB	0xffd00008UL
 #define INTC_IPRC	0xffd0000cUL
@@ -39,7 +39,7 @@
 #define RTC_IPR_POS	 0
 #define RTC_PRIORITY	TIMER_PRIORITY
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define DMTE0_IRQ	48
 #define DMTE1_IRQ	49
 #define DMTE2_IRQ	50
@@ -47,7 +47,7 @@
 #define DMA_IPR_ADDR	INTC_IPRE
 #define DMA_IPR_POS	3
 #define DMA_PRIORITY	7
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define DMTE0_IRQ	34
 #define DMTE1_IRQ	35
 #define DMTE2_IRQ	36

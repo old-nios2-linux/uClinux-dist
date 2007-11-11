@@ -88,26 +88,26 @@ static const struct drive_list_entry dma_white_list [] = {
 /*
  * Hitachi
  */
-        { "HITACHI_DK14FA-20"    ,       "ALL"           },
-        { "HTS726060M9AT00"      ,       "ALL"           },
+        { "HITACHI_DK14FA-20"    ,       NULL            },
+        { "HTS726060M9AT00"      ,       NULL            },
 /*
  * Maxtor
  */
-        { "Maxtor 6E040L0"      ,       "ALL"           },
-        { "Maxtor 6Y080P0"      ,       "ALL"           },
-        { "Maxtor 6Y160P0"      ,       "ALL"           },
+        { "Maxtor 6E040L0"      ,       NULL            },
+        { "Maxtor 6Y080P0"      ,       NULL            },
+        { "Maxtor 6Y160P0"      ,       NULL            },
 /*
  * Seagate
  */
-        { "ST3120026A"          ,       "ALL"           },
-        { "ST320014A"           ,       "ALL"           },
-        { "ST94011A"            ,       "ALL"           },
-        { "ST340016A"           ,       "ALL"           },
+        { "ST3120026A"          ,       NULL            },
+        { "ST320014A"           ,       NULL            },
+        { "ST94011A"            ,       NULL            },
+        { "ST340016A"           ,       NULL            },
 /*
  * Western Digital
  */
-        { "WDC WD400UE-00HCT0"  ,       "ALL"           },
-        { "WDC WD400JB-00JJC0"  ,       "ALL"           },
+        { "WDC WD400UE-00HCT0"  ,       NULL            },
+        { "WDC WD400JB-00JJC0"  ,       NULL            },
         { NULL                  ,       NULL            }
 };
 
@@ -116,9 +116,9 @@ static const struct drive_list_entry dma_black_list [] = {
 /*
  * Western Digital
  */
-        { "WDC WD100EB-00CGH0"  ,       "ALL"           },
-        { "WDC WD200BB-00AUA1"  ,       "ALL"           },
-        { "WDC AC24300L"        ,       "ALL"           },
+        { "WDC WD100EB-00CGH0"  ,       NULL            },
+        { "WDC WD200BB-00AUA1"  ,       NULL            },
+        { "WDC AC24300L"        ,       NULL            },
         { NULL                  ,       NULL            }
 };
 #endif
@@ -140,40 +140,6 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed);
 static int auide_ddma_init( _auide_hwif *auide );
 static void auide_setup_ports(hw_regs_t *hw, _auide_hwif *ahwif);
 int __init auide_probe(void);
-
-#ifdef CONFIG_PM
-        int au1200ide_pm_callback( au1xxx_power_dev_t *dev,
-                                   au1xxx_request_t request, void *data);
-        static int au1xxxide_pm_standby( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_sleep( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_resume( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_getstatus( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_access( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_idle( au1xxx_power_dev_t *dev );
-        static int au1xxxide_pm_cleanup( au1xxx_power_dev_t *dev );
-#endif
-
-
-/*
- * Multi-Word DMA + DbDMA functions
- */
-#ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
-        static int auide_build_sglist(ide_drive_t *drive,  struct request *rq);
-        static int auide_build_dmatable(ide_drive_t *drive);
-        static int auide_dma_end(ide_drive_t *drive);
-        ide_startstop_t auide_dma_intr (ide_drive_t *drive);
-        static void auide_dma_exec_cmd(ide_drive_t *drive, u8 command);
-        static int auide_dma_setup(ide_drive_t *drive);
-        static int auide_dma_check(ide_drive_t *drive);
-        static int auide_dma_test_irq(ide_drive_t *drive);
-        static int auide_dma_host_off(ide_drive_t *drive);
-        static int auide_dma_host_on(ide_drive_t *drive);
-        static int auide_dma_lostirq(ide_drive_t *drive);
-        static int auide_dma_on(ide_drive_t *drive);
-        static void auide_ddma_tx_callback(int irq, void *param);
-        static void auide_ddma_rx_callback(int irq, void *param);
-        static int auide_dma_off_quietly(ide_drive_t *drive);
-#endif /* end CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA */
 
 /*******************************************************************************
 * PIO Mode timing calculation :                                                *

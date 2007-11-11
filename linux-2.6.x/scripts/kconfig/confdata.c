@@ -100,7 +100,7 @@ int conf_read_simple(const char *name, int def)
 		in = zconf_fopen(name);
 		if (in)
 			goto load;
-		sym_change_count++;
+		sym_add_change_count(1);
 		if (!sym_defconfig_list)
 			return 1;
 
@@ -312,7 +312,7 @@ int conf_read(const char *name)
 	struct expr *e;
 	int i, flags;
 
-	sym_change_count = 0;
+	sym_set_change_count(0);
 
 	if (conf_read_simple(name, S_DEF_USER))
 		return 1;
@@ -341,21 +341,11 @@ int conf_read(const char *name)
 		conf_unsaved++;
 		/* maybe print value in verbose mode... */
 	sym_ok:
-		if (sym_has_value(sym) && !sym_is_choice_value(sym)) {
-			if (sym->visible == no)
-				sym->flags &= ~SYMBOL_DEF_USER;
-			switch (sym->type) {
-			case S_STRING:
-			case S_INT:
-			case S_HEX:
-				if (!sym_string_within_range(sym, sym->def[S_DEF_USER].val))
-					sym->flags &= ~(SYMBOL_VALID|SYMBOL_DEF_USER);
-			default:
-				break;
-			}
-		}
 		if (!sym_is_choice(sym))
 			continue;
+		/* The choice symbol only has a set value (and thus is not new)
+		 * if all its visible childs have values.
+		 */
 		prop = sym_get_choice_prop(sym);
 		flags = sym->flags;
 		for (e = prop->expr; e; e = e->left.expr)
@@ -364,7 +354,32 @@ int conf_read(const char *name)
 		sym->flags &= flags | ~SYMBOL_DEF_USER;
 	}
 
-	sym_change_count += conf_warnings || conf_unsaved;
+	for_all_symbols(i, sym) {
+		if (sym_has_value(sym) && !sym_is_choice_value(sym)) {
+			/* Reset values of generates values, so they'll appear
+			 * as new, if they should become visible, but that
+			 * doesn't quite work if the Kconfig and the saved
+			 * configuration disagree.
+			 */
+			if (sym->visible == no && !conf_unsaved)
+				sym->flags &= ~SYMBOL_DEF_USER;
+			switch (sym->type) {
+			case S_STRING:
+			case S_INT:
+			case S_HEX:
+				/* Reset a string value if it's out of range */
+				if (sym_string_within_range(sym, sym->def[S_DEF_USER].val))
+					break;
+				sym->flags &= ~(SYMBOL_VALID|SYMBOL_DEF_USER);
+				conf_unsaved++;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	sym_add_change_count(conf_warnings || conf_unsaved);
 
 	return 0;
 }
@@ -432,7 +447,7 @@ int conf_write(const char *name)
 		     use_timestamp ? "# " : "",
 		     use_timestamp ? ctime(&now) : "");
 
-	if (!sym_change_count)
+	if (!conf_get_changed())
 		sym_clear_all_valid();
 
 	menu = rootmenu.list;
@@ -528,7 +543,7 @@ int conf_write(const char *name)
 		 "# configuration written to %s\n"
 		 "#\n"), newname);
 
-	sym_change_count = 0;
+	sym_set_change_count(0);
 
 	return 0;
 }
@@ -764,4 +779,31 @@ int conf_write_autoconf(void)
 		return 1;
 
 	return 0;
+}
+
+static int sym_change_count;
+static void (*conf_changed_callback)(void);
+
+void sym_set_change_count(int count)
+{
+	int _sym_change_count = sym_change_count;
+	sym_change_count = count;
+	if (conf_changed_callback &&
+	    (bool)_sym_change_count != (bool)count)
+		conf_changed_callback();
+}
+
+void sym_add_change_count(int count)
+{
+	sym_set_change_count(count + sym_change_count);
+}
+
+bool conf_get_changed(void)
+{
+	return sym_change_count;
+}
+
+void conf_set_changed_callback(void (*fn)(void))
+{
+	conf_changed_callback = fn;
 }

@@ -102,9 +102,13 @@ static const char *format_config =
 /* C:  #Ifs=dd Cfg#=dd Atr=xx MPwr=dddmA */
   "C:%c #Ifs=%2d Cfg#=%2d Atr=%02x MxPwr=%3dmA\n";
   
+static const char *format_iad =
+/* A:  FirstIf#=dd IfCount=dd Cls=xx(sssss) Sub=xx Prot=xx */
+  "A:  FirstIf#=%2d IfCount=%2d Cls=%02x(%-5s) Sub=%02x Prot=%02x\n";
+
 static const char *format_iface =
 /* I:  If#=dd Alt=dd #EPs=dd Cls=xx(sssss) Sub=xx Prot=xx Driver=xxxx*/
-  "I:  If#=%2d Alt=%2d #EPs=%2d Cls=%02x(%-5s) Sub=%02x Prot=%02x Driver=%s\n";
+  "I:%c If#=%2d Alt=%2d #EPs=%2d Cls=%02x(%-5s) Sub=%02x Prot=%02x Driver=%s\n";
 
 static const char *format_endpt =
 /* E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=D?s */
@@ -146,6 +150,7 @@ static const struct class_info clas_info[] =
 	{USB_CLASS_STILL_IMAGE,		"still"},
 	{USB_CLASS_CSCID,		"scard"},
 	{USB_CLASS_CONTENT_SEC,		"c-sec"},
+	{USB_CLASS_VIDEO,		"video"},
 	{-1,				"unk."}		/* leave as last */
 };
 
@@ -164,10 +169,10 @@ static const char *class_decode(const int class)
 	for (ix = 0; clas_info[ix].class != -1; ix++)
 		if (clas_info[ix].class == class)
 			break;
-	return (clas_info[ix].class_name);
+	return clas_info[ix].class_name;
 }
 
-static char *usb_dump_endpoint_descriptor (
+static char *usb_dump_endpoint_descriptor(
 	int speed,
 	char *start,
 	char *end,
@@ -175,12 +180,13 @@ static char *usb_dump_endpoint_descriptor (
 )
 {
 	char dir, unit, *type;
-	unsigned interval, in, bandwidth = 1;
+	unsigned interval, bandwidth = 1;
 
 	if (start > end)
 		return start;
-	in = (desc->bEndpointAddress & USB_DIR_IN);
-	dir = in ? 'I' : 'O';
+
+	dir = usb_endpoint_dir_in(desc) ? 'I' : 'O';
+
 	if (speed == USB_SPEED_HIGH) {
 		switch (le16_to_cpu(desc->wMaxPacketSize) & (0x03 << 11)) {
 		case 1 << 11:	bandwidth = 2; break;
@@ -204,16 +210,16 @@ static char *usb_dump_endpoint_descriptor (
 		break;
 	case USB_ENDPOINT_XFER_BULK:
 		type = "Bulk";
-		if (speed == USB_SPEED_HIGH && !in)	/* uframes per NAK */
+		if (speed == USB_SPEED_HIGH && dir == 'O') /* uframes per NAK */
 			interval = desc->bInterval;
 		else
 			interval = 0;
 		break;
 	case USB_ENDPOINT_XFER_INT:
 		type = "Int.";
-		if (speed == USB_SPEED_HIGH) {
+		if (speed == USB_SPEED_HIGH)
 			interval = 1 << (desc->bInterval - 1);
-		} else
+		else
 			interval = desc->bInterval;
 		break;
 	default:	/* "can't happen" */
@@ -241,15 +247,18 @@ static char *usb_dump_interface_descriptor(char *start, char *end,
 {
 	const struct usb_interface_descriptor *desc = &intfc->altsetting[setno].desc;
 	const char *driver_name = "";
+	int active = 0;
 
 	if (start > end)
 		return start;
-	down_read(&usb_bus_type.subsys.rwsem);
-	if (iface)
+	if (iface) {
 		driver_name = (iface->dev.driver
 				? iface->dev.driver->name
 				: "(none)");
+		active = (desc == &iface->cur_altsetting->desc);
+	}
 	start += sprintf(start, format_iface,
+			 active ? '*' : ' ',	/* mark active altsetting */
 			 desc->bInterfaceNumber,
 			 desc->bAlternateSetting,
 			 desc->bNumEndpoints,
@@ -258,7 +267,6 @@ static char *usb_dump_interface_descriptor(char *start, char *end,
 			 desc->bInterfaceSubClass,
 			 desc->bInterfaceProtocol,
 			 driver_name);
-	up_read(&usb_bus_type.subsys.rwsem);
 	return start;
 }
 
@@ -280,6 +288,21 @@ static char *usb_dump_interface(
 		start = usb_dump_endpoint_descriptor(speed,
 				start, end, &desc->endpoint[i].desc);
 	}
+	return start;
+}
+
+static char *usb_dump_iad_descriptor(char *start, char *end,
+	const struct usb_interface_assoc_descriptor *iad)
+{
+	if (start > end)
+		return start;
+	start += sprintf(start, format_iad,
+			 iad->bFirstInterface,
+			 iad->bInterfaceCount,
+			 iad->bFunctionClass,
+			 class_decode(iad->bFunctionClass),
+			 iad->bFunctionSubClass,
+			 iad->bFunctionProtocol);
 	return start;
 }
 
@@ -319,6 +342,12 @@ static char *usb_dump_config (
 	if (!config)		/* getting these some in 2.3.7; none in 2.3.6 */
 		return start + sprintf(start, "(null Cfg. desc.)\n");
 	start = usb_dump_config_descriptor(start, end, &config->desc, active);
+	for (i = 0; i < USB_MAXIADS; i++) {
+		if (config->intf_assoc[i] == NULL)
+			break;
+		start = usb_dump_iad_descriptor(start, end,
+					config->intf_assoc[i]);
+	}
 	for (i = 0; i < config->desc.bNumInterfaces; i++) {
 		intfc = config->intf_cache[i];
 		interface = config->interface[i];
@@ -342,7 +371,7 @@ static char *usb_dump_device_descriptor(char *start, char *end, const struct usb
 
 	if (start > end)
 		return start;
-	start += sprintf (start, format_device1,
+	start += sprintf(start, format_device1,
 			  bcdUSB >> 8, bcdUSB & 0xff,
 			  desc->bDeviceClass,
 			  class_decode (desc->bDeviceClass),
@@ -362,7 +391,7 @@ static char *usb_dump_device_descriptor(char *start, char *end, const struct usb
 /*
  * Dump the different strings that this device holds.
  */
-static char *usb_dump_device_strings (char *start, char *end, struct usb_device *dev)
+static char *usb_dump_device_strings(char *start, char *end, struct usb_device *dev)
 {
 	if (start > end)
 		return start;
@@ -394,7 +423,7 @@ static char *usb_dump_desc(char *start, char *end, struct usb_device *dev)
 	if (start > end)
 		return start;
 	
-	start = usb_dump_device_strings (start, end, dev);
+	start = usb_dump_device_strings(start, end, dev);
 
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 		if (start > end)
@@ -599,16 +628,17 @@ static unsigned int usb_device_poll(struct file *file, struct poll_table_struct 
 	lock_kernel();
 	if (!st) {
 		st = kmalloc(sizeof(struct usb_device_status), GFP_KERNEL);
-		if (!st) {
-			unlock_kernel();
-			return POLLIN;
-		}
 
 		/* we may have dropped BKL - need to check for having lost the race */
 		if (file->private_data) {
 			kfree(st);
 			st = file->private_data;
 			goto lost_race;
+		}
+		/* we haven't lost - check for allocation failure now */
+		if (!st) {
+			unlock_kernel();
+			return POLLIN;
 		}
 
 		/*

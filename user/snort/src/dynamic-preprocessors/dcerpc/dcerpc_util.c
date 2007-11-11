@@ -24,18 +24,30 @@
  */
 
 #include <stdio.h>
+#include <ctype.h>
 
 #include "snort_dcerpc.h"
 #include "dcerpc_util.h"
+#include "bounds.h"
 
 extern u_int32_t   _memcap;
 extern u_int8_t    _alert_memcap;
+extern u_int16_t   _max_frag_size;
 
 u_int32_t _total_memory = 0;
 
 void *DCERPC_FragAlloc(void *p, u_int16_t old_size, u_int16_t *new_size)
 {
-    u_int16_t add_size = *new_size - old_size;
+    u_int16_t add_size;
+    void *new_buf = NULL;
+
+    if (old_size >= *new_size)
+    {
+        *new_size = old_size;
+        return p;
+    }
+
+    add_size = *new_size - old_size;
 
     if ( (((u_int32_t) add_size) + _total_memory) > _memcap )
     {
@@ -48,15 +60,44 @@ void *DCERPC_FragAlloc(void *p, u_int16_t old_size, u_int16_t *new_size)
         add_size = (u_int16_t) (_memcap - _total_memory);
     }
 
-    _total_memory += add_size;
     *new_size = old_size + add_size;
 
-    if ( !p )
+    if (*new_size == old_size)
+        return p;
+
+    new_buf = calloc(*new_size, 1);
+
+    if (new_buf == NULL)
     {
-        return malloc(*new_size);
+        if (p != NULL)
+        {
+            DCERPC_FragFree(p, old_size);
+        }
+
+        return NULL;
     }
 
-    return realloc(p, *new_size);
+    if (p != NULL)
+    {
+        int ret;
+
+        ret = SafeMemcpy(new_buf, p, old_size, new_buf, (u_int8_t *)new_buf + *new_size);
+
+        if (ret == 0)
+        {
+            *new_size = old_size;
+            free(new_buf);
+            return p;
+        }
+
+        DCERPC_FragFree(p, old_size);
+    }
+
+    /* DCERPC_FragFree will decrement old_size from _total_memory so
+     * we add the *new_size */
+    _total_memory += *new_size;
+
+    return new_buf;
 }
 
 
@@ -83,9 +124,9 @@ void DCERPC_GenerateAlert(dcerpc_event_e event, char *msg)
 
 
 /* Print out given buffer in hex and ascii, for debugging */
-void PrintBuffer(u_int8_t * title, u_int8_t *buf, u_int16_t buf_len)
+void PrintBuffer(char * title, u_int8_t *buf, u_int16_t buf_len)
 {
-    u_int16_t i, j;
+    u_int16_t i, j = 0;
 
     printf("%s\n", title);
 

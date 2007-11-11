@@ -213,7 +213,7 @@ void LoadAllLibs(char *path, LoadLibraryFunc loadFunc)
             if (dirEntry->d_reclen &&
                 !fnmatch(EXT, dirEntry->d_name, FNM_PATHNAME | FNM_PERIOD))
             {
-                snprintf(path_buf, PATH_MAX, "%s%s%s", path, "/", dirEntry->d_name);
+                SnortSnprintf(path_buf, PATH_MAX, "%s%s%s", path, "/", dirEntry->d_name);
                 loadFunc(path_buf, 1);
                 count++;
             }
@@ -243,7 +243,9 @@ void LoadAllLibs(char *path, LoadLibraryFunc loadFunc)
     char *directory;
     int useDrive = 0;
 
-    strcpy(path_buf, path);
+    if (SnortStrncpy(path_buf, path, PATH_MAX) != SNORT_STRNCPY_SUCCESS)
+        FatalError("Path is too long: %s\n", path);
+
     pathLen = strlen(path);
     if ((path_buf[pathLen - 1] == '\\') ||
         (path_buf[pathLen - 1] == '/'))
@@ -289,7 +291,7 @@ void AddEnginePlugin(PluginHandle handle,
                      DynamicPluginMeta *meta)
 {
     DynamicEnginePlugin *newPlugin = NULL;
-    newPlugin = calloc(sizeof(DynamicEnginePlugin), 1);
+    newPlugin = (DynamicEnginePlugin *)SnortAlloc(sizeof(DynamicEnginePlugin));
     newPlugin->handle = handle;
 
     if (!loadedEngines)
@@ -411,7 +413,7 @@ void AddPreprocessorPlugin(PluginHandle handle,
                         DynamicPluginMeta *meta)
 {
     DynamicPreprocessorPlugin *newPlugin = NULL;
-    newPlugin = calloc(sizeof(DynamicPreprocessorPlugin), 1);
+    newPlugin = (DynamicPreprocessorPlugin *)SnortAlloc(sizeof(DynamicPreprocessorPlugin));
     newPlugin->handle = handle;
 
     if (!loadedPreprocessorPlugins)
@@ -435,7 +437,7 @@ void AddDetectionPlugin(PluginHandle handle,
                         DynamicPluginMeta *meta)
 {
     DynamicDetectionPlugin *newPlugin = NULL;
-    newPlugin = calloc(sizeof(DynamicDetectionPlugin), 1);
+    newPlugin = (DynamicDetectionPlugin *)SnortAlloc(sizeof(DynamicDetectionPlugin));
     newPlugin->handle = handle;
 
     if (!loadedDetectionPlugins)

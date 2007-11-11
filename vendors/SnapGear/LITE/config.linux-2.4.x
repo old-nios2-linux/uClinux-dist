@@ -60,6 +60,7 @@ CONFIG_COLDFIRE=y
 # CONFIG_CLOCK_64MHz is not set
 CONFIG_CLOCK_66MHz=y
 # CONFIG_CLOCK_70MHz is not set
+# CONFIG_CLOCK_80MHz is not set
 # CONFIG_CLOCK_100MHz is not set
 # CONFIG_CLOCK_140MHz is not set
 # CONFIG_CLOCK_150MHz is not set
@@ -74,6 +75,8 @@ CONFIG_CLOCK_66MHz=y
 # CONFIG_GILBARCONAP is not set
 # CONFIG_BOARD_MOD5272 is not set
 # CONFIG_BOARD_UC5272 is not set
+# CONFIG_UCBOOTSTRAP is not set
+# CONFIG_ROMFS_IMAGE is not set
 # CONFIG_COBRA5272 is not set
 # CONFIG_CANCam is not set
 # CONFIG_SCALES is not set
@@ -207,6 +210,7 @@ CONFIG_IP_NF_FTP=y
 # CONFIG_IP_NF_CT_PROTO_GRE is not set
 # CONFIG_IP_NF_PPTP is not set
 # CONFIG_IP_NF_CT_ACCT is not set
+# CONFIG_IP_NF_CT_DEV is not set
 # CONFIG_IP_NF_CONNTRACK_EVENTS is not set
 # CONFIG_IP_NF_QUEUE is not set
 CONFIG_IP_NF_IPTABLES=y

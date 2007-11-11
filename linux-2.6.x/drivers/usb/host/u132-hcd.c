@@ -40,9 +40,9 @@
 #include <linux/moduleparam.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/pci_ids.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/timer.h>
@@ -52,11 +52,19 @@
 #include <linux/workqueue.h>
 #include <linux/platform_device.h>
 #include <linux/pci_ids.h>
+#include <linux/mutex.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/byteorder.h>
 #include "../core/hcd.h"
+
+	/* FIXME ohci.h is ONLY for internal use by the OHCI driver.
+	 * If you're going to try stuff like this, you need to split
+	 * out shareable stuff (register declarations?) into its own
+	 * file, maybe name <linux/usb/ohci.h>
+	 */
+
 #include "ohci.h"
 #define OHCI_CONTROL_INIT OHCI_CTRL_CBSR
 #define OHCI_INTR_INIT (OHCI_INTR_MIE | OHCI_INTR_UE | OHCI_INTR_RD | \
@@ -71,12 +79,12 @@ static int distrust_firmware = 1;
 module_param(distrust_firmware, bool, 0);
 MODULE_PARM_DESC(distrust_firmware, "true to distrust firmware power/overcurren"
         "t setup");
-DECLARE_WAIT_QUEUE_HEAD(u132_hcd_wait);
+static DECLARE_WAIT_QUEUE_HEAD(u132_hcd_wait);
 /*
 * u132_module_lock exists to protect access to global variables
 *
 */
-static struct semaphore u132_module_lock;
+static struct mutex u132_module_lock;
 static int u132_exiting = 0;
 static int u132_instances = 0;
 static struct list_head u132_static_list;
@@ -163,7 +171,7 @@ struct u132_endp {
         u16 queue_next;
         struct urb *urb_list[ENDP_QUEUE_SIZE];
         struct list_head urb_more;
-        struct work_struct scheduler;
+        struct delayed_work scheduler;
 };
 struct u132_ring {
         unsigned in_use:1;
@@ -171,13 +179,8 @@ struct u132_ring {
         u8 number;
         struct u132 *u132;
         struct u132_endp *curr_endp;
-        struct work_struct scheduler;
+        struct delayed_work scheduler;
 };
-#define OHCI_QUIRK_AMD756 0x01
-#define OHCI_QUIRK_SUPERIO 0x02
-#define OHCI_QUIRK_INITRESET 0x04
-#define OHCI_BIG_ENDIAN 0x08
-#define OHCI_QUIRK_ZFMICRO 0x10
 struct u132 {
         struct kref kref;
         struct list_head u132_list;
@@ -198,31 +201,28 @@ struct u132 {
         u32 hc_roothub_portstatus[MAX_ROOT_PORTS];
         int flags;
         unsigned long next_statechange;
-        struct work_struct monitor;
+        struct delayed_work monitor;
         int num_endpoints;
         struct u132_addr addr[MAX_U132_ADDRS];
         struct u132_udev udev[MAX_U132_UDEVS];
         struct u132_port port[MAX_U132_PORTS];
         struct u132_endp *endp[MAX_U132_ENDPS];
 };
-int usb_ftdi_elan_read_reg(struct platform_device *pdev, u32 *data);
-int usb_ftdi_elan_read_pcimem(struct platform_device *pdev, u8 addressofs,
-        u8 width, u32 *data);
-int usb_ftdi_elan_write_pcimem(struct platform_device *pdev, u8 addressofs,
-        u8 width, u32 data);
+
 /*
-* these can not be inlines because we need the structure offset!!
+* these cannot be inlines because we need the structure offset!!
 * Does anyone have a better way?????
 */
+#define ftdi_read_pcimem(pdev, member, data) usb_ftdi_elan_read_pcimem(pdev, \
+        offsetof(struct ohci_regs, member), 0, data);
+#define ftdi_write_pcimem(pdev, member, data) usb_ftdi_elan_write_pcimem(pdev, \
+        offsetof(struct ohci_regs, member), 0, data);
 #define u132_read_pcimem(u132, member, data) \
         usb_ftdi_elan_read_pcimem(u132->platform_dev, offsetof(struct \
         ohci_regs, member), 0, data);
 #define u132_write_pcimem(u132, member, data) \
         usb_ftdi_elan_write_pcimem(u132->platform_dev, offsetof(struct \
         ohci_regs, member), 0, data);
-#define u132_write_pcimem_byte(u132, member, data) \
-        usb_ftdi_elan_write_pcimem(u132->platform_dev, offsetof(struct \
-        ohci_regs, member), 0x0e, data);
 static inline struct u132 *udev_to_u132(struct u132_udev *udev)
 {
         u8 udev_number = udev->udev_number;
@@ -259,10 +259,10 @@ static void u132_hcd_delete(struct kref *kref)
         struct platform_device *pdev = u132->platform_dev;
         struct usb_hcd *hcd = u132_to_hcd(u132);
         u132->going += 1;
-        down(&u132_module_lock);
+        mutex_lock(&u132_module_lock);
         list_del_init(&u132->u132_list);
         u132_instances -= 1;
-        up(&u132_module_lock);
+        mutex_unlock(&u132_module_lock);
         dev_warn(&u132->platform_dev->dev, "FREEING the hcd=%p and thus the u13"
                 "2=%p going=%d pdev=%p\n", hcd, u132, u132->going, pdev);
         usb_put_hcd(hcd);
@@ -314,7 +314,7 @@ static void u132_ring_requeue_work(struct u132 *u132, struct u132_ring *ring,
         if (delta > 0) {
                 if (queue_delayed_work(workqueue, &ring->scheduler, delta))
                         return;
-        } else if (queue_work(workqueue, &ring->scheduler))
+        } else if (queue_delayed_work(workqueue, &ring->scheduler, 0))
                 return;
         kref_put(&u132->kref, u132_hcd_delete);
         return;
@@ -393,12 +393,8 @@ static inline void u132_endp_init_kref(struct u132 *u132,
 static void u132_endp_queue_work(struct u132 *u132, struct u132_endp *endp,
         unsigned int delta)
 {
-        if (delta > 0) {
-                if (queue_delayed_work(workqueue, &endp->scheduler, delta))
-                        kref_get(&endp->kref);
-        } else if (queue_work(workqueue, &endp->scheduler))
-                kref_get(&endp->kref);
-        return;
+	if (queue_delayed_work(workqueue, &endp->scheduler, delta))
+		kref_get(&endp->kref);
 }
 
 static void u132_endp_cancel_work(struct u132 *u132, struct u132_endp *endp)
@@ -414,24 +410,14 @@ static inline void u132_monitor_put_kref(struct u132 *u132)
 
 static void u132_monitor_queue_work(struct u132 *u132, unsigned int delta)
 {
-        if (delta > 0) {
-                if (queue_delayed_work(workqueue, &u132->monitor, delta)) {
-                        kref_get(&u132->kref);
-                }
-        } else if (queue_work(workqueue, &u132->monitor))
-                kref_get(&u132->kref);
-        return;
+	if (queue_delayed_work(workqueue, &u132->monitor, delta))
+		kref_get(&u132->kref);
 }
 
 static void u132_monitor_requeue_work(struct u132 *u132, unsigned int delta)
 {
-        if (delta > 0) {
-                if (queue_delayed_work(workqueue, &u132->monitor, delta))
-                        return;
-        } else if (queue_work(workqueue, &u132->monitor))
-                return;
-        kref_put(&u132->kref, u132_hcd_delete);
-        return;
+	if (!queue_delayed_work(workqueue, &u132->monitor, delta))
+		kref_put(&u132->kref, u132_hcd_delete);
 }
 
 static void u132_monitor_cancel_work(struct u132 *u132)
@@ -493,9 +479,9 @@ static int read_roothub_info(struct u132 *u132)
         return 0;
 }
 
-static void u132_hcd_monitor_work(void *data)
+static void u132_hcd_monitor_work(struct work_struct *work)
 {
-        struct u132 *u132 = data;
+        struct u132 *u132 = container_of(work, struct u132, monitor.work);
         if (u132->going > 1) {
                 dev_err(&u132->platform_dev->dev, "device has been removed %d\n"
                         , u132->going);
@@ -1319,15 +1305,14 @@ static void u132_hcd_initial_setup_sent(void *data, struct urb *urb, u8 *buf,
         }
 }
 
-static void u132_hcd_ring_work_scheduler(void *data);
-static void u132_hcd_endp_work_scheduler(void *data);
 /*
 * this work function is only executed from the work queue
 *
 */
-static void u132_hcd_ring_work_scheduler(void *data)
+static void u132_hcd_ring_work_scheduler(struct work_struct *work)
 {
-        struct u132_ring *ring = data;
+        struct u132_ring *ring =
+		container_of(work, struct u132_ring, scheduler.work);
         struct u132 *u132 = ring->u132;
         down(&u132->scheduler_lock);
         if (ring->in_use) {
@@ -1386,10 +1371,11 @@ static void u132_hcd_ring_work_scheduler(void *data)
         }
 }
 
-static void u132_hcd_endp_work_scheduler(void *data)
+static void u132_hcd_endp_work_scheduler(struct work_struct *work)
 {
         struct u132_ring *ring;
-        struct u132_endp *endp = data;
+        struct u132_endp *endp =
+		container_of(work, struct u132_endp, scheduler.work);
         struct u132 *u132 = endp->u132;
         down(&u132->scheduler_lock);
         ring = endp->ring;
@@ -1534,11 +1520,14 @@ static void u132_hcd_endp_work_scheduler(void *data)
                 }
         }
 }
+#ifdef CONFIG_PM
 
 static void port_power(struct u132 *u132, int pn, int is_on)
 {
         u132->port[pn].power = is_on;
 }
+
+#endif
 
 static void u132_power(struct u132 *u132, int is_on)
 {
@@ -1592,59 +1581,12 @@ static char *hcfs2string(int state)
         return "?";
 }
 
-static int u132_usb_reset(struct u132 *u132)
-{
-        int retval;
-        retval = u132_read_pcimem(u132, control, &u132->hc_control);
-        if (retval)
-                return retval;
-        u132->hc_control &= OHCI_CTRL_RWC;
-        retval = u132_write_pcimem(u132, control, u132->hc_control);
-        if (retval)
-                return retval;
-        return 0;
-}
-
 static int u132_init(struct u132 *u132)
 {
         int retval;
         u32 control;
         u132_disable(u132);
-        u132->next_statechange =
-                jiffies; /* SMM owns the HC? not for long! */  {
-                u32 control;
-                retval = u132_read_pcimem(u132, control, &control);
-                if (retval)
-                        return retval;
-                if (control & OHCI_CTRL_IR) {
-                        u32 temp = 50;
-                        retval = u132_write_pcimem(u132, intrenable,
-                                OHCI_INTR_OC);
-                        if (retval)
-                                return retval;
-                        retval = u132_write_pcimem_byte(u132, cmdstatus,
-                                OHCI_OCR);
-                        if (retval)
-                                return retval;
-                      check:{
-                                retval = u132_read_pcimem(u132, control,
-                                        &control);
-                                if (retval)
-                                        return retval;
-                        }
-                        if (control & OHCI_CTRL_IR) {
-                                msleep(10);
-                                if (--temp == 0) {
-                                        dev_err(&u132->platform_dev->dev, "USB "
-                                                "HC takeover failed!(BIOS/SMM b"
-                                                "ug) control=%08X\n", control);
-                                        return -EBUSY;
-                                }
-                                goto check;
-                        }
-                        u132_usb_reset(u132);
-                }
-        }
+        u132->next_statechange = jiffies;
         retval = u132_write_pcimem(u132, intrdisable, OHCI_INTR_MIE);
         if (retval)
                 return retval;
@@ -1743,7 +1685,7 @@ static int u132_run(struct u132 *u132)
       retry:retval = u132_read_pcimem(u132, cmdstatus, &status);
         if (retval)
                 return retval;
-        retval = u132_write_pcimem_byte(u132, cmdstatus, OHCI_HCR);
+        retval = u132_write_pcimem(u132, cmdstatus, OHCI_HCR);
         if (retval)
                 return retval;
       extra:{
@@ -1800,7 +1742,7 @@ static int u132_run(struct u132 *u132)
         retval = u132_write_pcimem(u132, control, u132->hc_control);
         if (retval)
                 return retval;
-        retval = u132_write_pcimem_byte(u132, cmdstatus, OHCI_BLF);
+        retval = u132_write_pcimem(u132, cmdstatus, OHCI_BLF);
         if (retval)
                 return retval;
         retval = u132_read_pcimem(u132, cmdstatus, &cmdstatus);
@@ -1857,8 +1799,8 @@ static void u132_hcd_stop(struct usb_hcd *hcd)
 {
         struct u132 *u132 = hcd_to_u132(hcd);
         if (u132->going > 1) {
-                dev_err(&u132->platform_dev->dev, "device has been removed %d\n"
-                        , u132->going);
+                dev_err(&u132->platform_dev->dev, "u132 device %p(hcd=%p) has b"
+                        "een removed %d\n", u132, hcd, u132->going);
         } else if (u132->going > 0) {
                 dev_err(&u132->platform_dev->dev, "device hcd=%p is being remov"
                         "ed\n", hcd);
@@ -1947,7 +1889,7 @@ static int create_endpoint_and_queue_int(struct u132 *u132,
         if (!endp) {
                 return -ENOMEM;
         }
-        INIT_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler, (void *)endp);
+        INIT_DELAYED_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler);
         spin_lock_init(&endp->queue_lock.slock);
         INIT_LIST_HEAD(&endp->urb_more);
         ring = endp->ring = &u132->ring[0];
@@ -2036,7 +1978,7 @@ static int create_endpoint_and_queue_bulk(struct u132 *u132,
         if (!endp) {
                 return -ENOMEM;
         }
-        INIT_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler, (void *)endp);
+        INIT_DELAYED_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler);
         spin_lock_init(&endp->queue_lock.slock);
         INIT_LIST_HEAD(&endp->urb_more);
         endp->dequeueing = 0;
@@ -2121,7 +2063,7 @@ static int create_endpoint_and_queue_control(struct u132 *u132,
         if (!endp) {
                 return -ENOMEM;
         }
-        INIT_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler, (void *)endp);
+        INIT_DELAYED_WORK(&endp->scheduler, u132_hcd_endp_work_scheduler);
         spin_lock_init(&endp->queue_lock.slock);
         INIT_LIST_HEAD(&endp->urb_more);
         ring = endp->ring = &u132->ring[0];
@@ -2563,8 +2505,9 @@ static void u132_endpoint_disable(struct usb_hcd *hcd,
 {
         struct u132 *u132 = hcd_to_u132(hcd);
         if (u132->going > 2) {
-                dev_err(&u132->platform_dev->dev, "device has been removed %d\n"
-                        , u132->going);
+                dev_err(&u132->platform_dev->dev, "u132 device %p(hcd=%p hep=%p"
+                        ") has been removed %d\n", u132, hcd, hep,
+                        u132->going);
         } else {
                 struct u132_endp *endp = hep->hcpriv;
                 if (endp)
@@ -2808,7 +2751,6 @@ static int u132_hub_status_data(struct usb_hcd *hcd, char *buf)
         } else if (u132->going > 0) {
                 dev_err(&u132->platform_dev->dev, "device hcd=%p is being remov"
                         "ed\n", hcd);
-                dump_stack();
                 return -ESHUTDOWN;
         } else {
                 int i, changed = 0, length = 1;
@@ -3045,19 +2987,22 @@ static struct hc_driver u132_hc_driver = {
 * This function may be called by the USB core whilst the "usb_all_devices_rwsem"
 * is held for writing, thus this module must not call usb_remove_hcd()
 * synchronously - but instead should immediately stop activity to the
-* device and ansynchronously call usb_remove_hcd()
+* device and asynchronously call usb_remove_hcd()
 */
 static int __devexit u132_remove(struct platform_device *pdev)
 {
         struct usb_hcd *hcd = platform_get_drvdata(pdev);
         if (hcd) {
                 struct u132 *u132 = hcd_to_u132(hcd);
-                dump_stack();
                 if (u132->going++ > 1) {
+                        dev_err(&u132->platform_dev->dev, "already being remove"
+				"d\n");
                         return -ENODEV;
                 } else {
                         int rings = MAX_U132_RINGS;
                         int endps = MAX_U132_ENDPS;
+                        dev_err(&u132->platform_dev->dev, "removing device u132"
+				".%d\n", u132->sequence_num);
                         msleep(100);
                         down(&u132->sw_lock);
                         u132_monitor_cancel_work(u132);
@@ -3100,10 +3045,10 @@ static void u132_initialise(struct u132 *u132, struct platform_device *pdev)
                 ring->number = rings + 1;
                 ring->length = 0;
                 ring->curr_endp = NULL;
-                INIT_WORK(&ring->scheduler, u132_hcd_ring_work_scheduler,
-                        (void *)ring);
+                INIT_DELAYED_WORK(&ring->scheduler,
+				  u132_hcd_ring_work_scheduler);
         } down(&u132->sw_lock);
-        INIT_WORK(&u132->monitor, u132_hcd_monitor_work, (void *)u132);
+        INIT_DELAYED_WORK(&u132->monitor, u132_hcd_monitor_work);
         while (ports-- > 0) {
                 struct u132_port *port = &u132->port[ports];
                 port->u132 = u132;
@@ -3139,10 +3084,24 @@ static void u132_initialise(struct u132 *u132, struct platform_device *pdev)
 static int __devinit u132_probe(struct platform_device *pdev)
 {
         struct usb_hcd *hcd;
+        int retval;
+        u32 control;
+        u32 rh_a = -1;
+        u32 num_ports;
         msleep(100);
         if (u132_exiting > 0) {
                 return -ENODEV;
-        }                        /* refuse to confuse usbcore */
+        }
+        retval = ftdi_write_pcimem(pdev, intrdisable, OHCI_INTR_MIE);
+        if (retval)
+                return retval;
+        retval = ftdi_read_pcimem(pdev, control, &control);
+        if (retval)
+                return retval;
+        retval = ftdi_read_pcimem(pdev, roothub.a, &rh_a);
+        if (retval)
+                return retval;
+        num_ports = rh_a & RH_A_NDP;        /* refuse to confuse usbcore */
         if (pdev->dev.dma_mask) {
                 return -EINVAL;
         }
@@ -3156,10 +3115,10 @@ static int __devinit u132_probe(struct platform_device *pdev)
                 int retval = 0;
                 struct u132 *u132 = hcd_to_u132(hcd);
                 hcd->rsrc_start = 0;
-                down(&u132_module_lock);
+                mutex_lock(&u132_module_lock);
                 list_add_tail(&u132->u132_list, &u132_static_list);
                 u132->sequence_num = ++u132_instances;
-                up(&u132_module_lock);
+                mutex_unlock(&u132_module_lock);
                 u132_u132_init_kref(u132);
                 u132_initialise(u132, pdev);
                 hcd->product_desc = "ELAN U132 Host Controller";
@@ -3241,7 +3200,7 @@ static int u132_resume(struct platform_device *pdev)
 #define u132_resume NULL
 #endif
 /*
-* this driver is loaded explicitely by ftdi_u132
+* this driver is loaded explicitly by ftdi_u132
 *
 * the platform_driver struct is static because it is per type of module
 */
@@ -3261,7 +3220,7 @@ static int __init u132_hcd_init(void)
         INIT_LIST_HEAD(&u132_static_list);
         u132_instances = 0;
         u132_exiting = 0;
-        init_MUTEX(&u132_module_lock);
+        mutex_init(&u132_module_lock);
         if (usb_disabled())
                 return -ENODEV;
         printk(KERN_INFO "driver %s built at %s on %s\n", hcd_name, __TIME__,
@@ -3277,9 +3236,9 @@ static void __exit u132_hcd_exit(void)
 {
         struct u132 *u132;
         struct u132 *temp;
-        down(&u132_module_lock);
+        mutex_lock(&u132_module_lock);
         u132_exiting += 1;
-        up(&u132_module_lock);
+        mutex_unlock(&u132_module_lock);
         list_for_each_entry_safe(u132, temp, &u132_static_list, u132_list) {
                 platform_device_unregister(u132->platform_dev);
         } platform_driver_unregister(&u132_platform_driver);

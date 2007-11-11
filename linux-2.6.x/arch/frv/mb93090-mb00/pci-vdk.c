@@ -400,7 +400,8 @@ int __init pcibios_init(void)
 	__reg_MB86943_pci_sl_mem_base	= __region_CS2 + 0x08000000;
 	mb();
 
-	*(volatile unsigned long *)(__region_CS2+0x01300014) == 1;
+	/* enable PCI arbitration */
+	__reg_MB86943_pci_arbiter	= MB86943_PCIARB_EN;
 
 	ioport_resource.start	= (__reg_MB86943_sl_pci_io_base << 9) & 0xfffffc00;
 	ioport_resource.end	= (__reg_MB86943_sl_pci_io_range << 9) | 0x3ff;
@@ -466,6 +467,7 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
 
 	if ((err = pcibios_enable_resources(dev, mask)) < 0)
 		return err;
-	pcibios_enable_irq(dev);
+	if (!dev->msi_enabled)
+		pcibios_enable_irq(dev);
 	return 0;
 }

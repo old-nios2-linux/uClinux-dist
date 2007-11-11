@@ -234,6 +234,15 @@ static int ipv6_routing_header(struct sk_buff **skb_ptr, int nhoff)
 
 	hdr = (struct ipv6_rt_hdr *) skb->h.raw;
 
+	switch (hdr->type) {
+	case IPV6_SRCRT_TYPE_0:
+		kfree_skb(skb);
+		return -1;
+	default:
+		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, (&hdr->type) - skb->nh.raw);
+		return -1;
+	}
+
 	if ((ipv6_addr_type(&skb->nh.ipv6h->daddr)&IPV6_ADDR_MULTICAST) ||
 	    skb->pkt_type != PACKET_HOST) {
 		kfree_skb(skb);
@@ -249,11 +258,6 @@ looped_back:
 		return (&hdr->nexthdr) - skb->nh.raw;
 	}
 
-	if (hdr->type != IPV6_SRCRT_TYPE_0) {
-		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, (&hdr->type) - skb->nh.raw);
-		return -1;
-	}
-	
 	if (hdr->hdrlen & 0x01) {
 		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, (&hdr->hdrlen) - skb->nh.raw);
 		return -1;

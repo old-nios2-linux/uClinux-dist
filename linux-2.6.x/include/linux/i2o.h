@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>	/* work_struct */
 #include <linux/mempool.h>
+#include <linux/mutex.h>
 
 #include <asm/io.h>
 #include <asm/semaphore.h>	/* Needed for MUTEX init macros */
@@ -425,7 +426,7 @@ struct i2o_device {
 
 	struct device device;
 
-	struct semaphore lock;	/* device lock */
+	struct mutex lock;	/* device lock */
 };
 
 /*
@@ -461,7 +462,7 @@ struct i2o_driver {
 	int (*reply) (struct i2o_controller *, u32, struct i2o_message *);
 
 	/* Event handler */
-	void (*event) (struct i2o_event *);
+	work_func_t event;
 
 	struct workqueue_struct *event_queue;	/* Event queue */
 
@@ -490,7 +491,7 @@ struct i2o_dma {
  */
 struct i2o_pool {
 	char *name;
-	kmem_cache_t *slab;
+	struct kmem_cache *slab;
 	mempool_t *mempool;
 };
 
@@ -544,7 +545,7 @@ struct i2o_controller {
 	struct i2o_dma hrt;	/* HW Resource Table */
 	i2o_lct *lct;		/* Logical Config Table */
 	struct i2o_dma dlct;	/* Temp LCT */
-	struct semaphore lct_lock;	/* Lock for LCT updates */
+	struct mutex lct_lock;	/* Lock for LCT updates */
 	struct i2o_dma status_block;	/* IOP status block */
 
 	struct i2o_io base;	/* controller messaging unit */
@@ -945,8 +946,7 @@ static inline int i2o_pool_alloc(struct i2o_pool *pool, const char *name,
 	strcpy(pool->name, name);
 
 	pool->slab =
-	    kmem_cache_create(pool->name, size, 0, SLAB_HWCACHE_ALIGN, NULL,
-			      NULL);
+	    kmem_cache_create(pool->name, size, 0, SLAB_HWCACHE_ALIGN, NULL);
 	if (!pool->slab)
 		goto free_name;
 
@@ -986,7 +986,8 @@ extern void i2o_driver_unregister(struct i2o_driver *);
 
 /**
  *	i2o_driver_notify_controller_add - Send notification of added controller
- *					   to a single I2O driver
+ *	@drv: I2O driver
+ *	@c: I2O controller
  *
  *	Send notification of added controller to a single registered driver.
  */
@@ -998,8 +999,9 @@ static inline void i2o_driver_notify_controller_add(struct i2o_driver *drv,
 };
 
 /**
- *	i2o_driver_notify_controller_remove - Send notification of removed
- *					      controller to a single I2O driver
+ *	i2o_driver_notify_controller_remove - Send notification of removed controller
+ *	@drv: I2O driver
+ *	@c: I2O controller
  *
  *	Send notification of removed controller to a single registered driver.
  */
@@ -1011,8 +1013,9 @@ static inline void i2o_driver_notify_controller_remove(struct i2o_driver *drv,
 };
 
 /**
- *	i2o_driver_notify_device_add - Send notification of added device to a
- *				       single I2O driver
+ *	i2o_driver_notify_device_add - Send notification of added device
+ *	@drv: I2O driver
+ *	@i2o_dev: the added i2o_device
  *
  *	Send notification of added device to a single registered driver.
  */
@@ -1025,7 +1028,8 @@ static inline void i2o_driver_notify_device_add(struct i2o_driver *drv,
 
 /**
  *	i2o_driver_notify_device_remove - Send notification of removed device
- *					  to a single I2O driver
+ *	@drv: I2O driver
+ *	@i2o_dev: the added i2o_device
  *
  *	Send notification of removed device to a single registered driver.
  */
@@ -1148,7 +1152,7 @@ static inline void i2o_msg_post(struct i2o_controller *c,
 /**
  * 	i2o_msg_post_wait - Post and wait a message and wait until return
  *	@c: controller
- *	@m: message to post
+ *	@msg: message to post
  *	@timeout: time in seconds to wait
  *
  * 	This API allows an OSM to post a message and then be told whether or

@@ -25,13 +25,13 @@
 #include "via_drm.h"
 #include "via_drv.h"
 
-static int via_do_init_map(drm_device_t * dev, drm_via_init_t * init)
+static int via_do_init_map(struct drm_device * dev, drm_via_init_t * init)
 {
 	drm_via_private_t *dev_priv = dev->dev_private;
 
 	DRM_DEBUG("%s\n", __FUNCTION__);
 
-	DRM_GETSAREA();
+	dev_priv->sarea = drm_getsarea(dev);
 	if (!dev_priv->sarea) {
 		DRM_ERROR("could not find sarea!\n");
 		dev->dev_private = (void *)dev_priv;
@@ -68,7 +68,7 @@ static int via_do_init_map(drm_device_t * dev, drm_via_init_t * init)
 	return 0;
 }
 
-int via_do_cleanup_map(drm_device_t * dev)
+int via_do_cleanup_map(struct drm_device * dev)
 {
 	via_dma_cleanup(dev);
 
@@ -95,7 +95,7 @@ int via_map_init(DRM_IOCTL_ARGS)
 	return -EINVAL;
 }
 
-int via_driver_load(drm_device_t *dev, unsigned long chipset)
+int via_driver_load(struct drm_device *dev, unsigned long chipset)
 {
 	drm_via_private_t *dev_priv;
 	int ret = 0;
@@ -106,8 +106,7 @@ int via_driver_load(drm_device_t *dev, unsigned long chipset)
 
 	dev->dev_private = (void *)dev_priv;
 
-	if (chipset == VIA_PRO_GROUP_A)
-		dev_priv->pro_group_a = 1;
+	dev_priv->chipset = chipset;
 
 	ret = drm_sman_init(&dev_priv->sman, 2, 12, 8);
 	if (ret) {
@@ -116,7 +115,7 @@ int via_driver_load(drm_device_t *dev, unsigned long chipset)
 	return ret;
 }
 
-int via_driver_unload(drm_device_t *dev)
+int via_driver_unload(struct drm_device *dev)
 {
 	drm_via_private_t *dev_priv = dev->dev_private;
 

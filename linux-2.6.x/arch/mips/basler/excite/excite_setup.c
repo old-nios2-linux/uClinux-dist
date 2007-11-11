@@ -26,6 +26,7 @@
 #include <linux/tty.h>
 #include <linux/serial_core.h>
 #include <linux/serial.h>
+#include <linux/serial_8250.h>
 #include <linux/ioport.h>
 #include <linux/spinlock.h>
 #include <asm/bootinfo.h>
@@ -63,7 +64,7 @@ volatile void __iomem * const ocd_base = (void *) (EXCITE_ADDR_OCD);
 volatile void __iomem * const titan_base = (void *) (EXCITE_ADDR_TITAN);
 
 /* Protect access to shared GPI registers */
-spinlock_t titan_lock = SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(titan_lock);
 int titan_irqflags;
 
 
@@ -112,7 +113,7 @@ static int __init excite_init_console(void)
 	up.irq		= TITAN_IRQ;
 	up.uartclk	= TITAN_UART_CLK;
 	up.regshift	= 0;
-	up.iotype	= UPIO_MEM32;
+	up.iotype	= UPIO_RM9000;
 	up.type		= PORT_RM9000;
 	up.flags	= UPF_SHARE_IRQ;
 	up.line		= 0;

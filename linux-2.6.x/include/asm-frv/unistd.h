@@ -186,8 +186,8 @@
 #define __NR_rt_sigtimedwait	177
 #define __NR_rt_sigqueueinfo	178
 #define __NR_rt_sigsuspend	179
-#define __NR_pread		180
-#define __NR_pwrite		181
+#define __NR_pread64		180
+#define __NR_pwrite64		181
 #define __NR_chown		182
 #define __NR_getcwd		183
 #define __NR_capget		184
@@ -316,129 +316,25 @@
 #define __NR_faccessat		307
 #define __NR_pselect6		308
 #define __NR_ppoll		309
+#define __NR_unshare		310
+#define __NR_set_robust_list	311
+#define __NR_get_robust_list	312
+#define __NR_splice		313
+#define __NR_sync_file_range	314
+#define __NR_tee		315
+#define __NR_vmsplice		316
+#define __NR_move_pages		317
+#define __NR_getcpu		318
+#define __NR_epoll_pwait	319
+#define __NR_utimensat		320
+#define __NR_signalfd		321
+#define __NR_timerfd		322
+#define __NR_eventfd		323
+#define __NR_fallocate		324
 
 #ifdef __KERNEL__
 
-#define NR_syscalls 310
-#include <linux/err.h>
-
-/*
- * process the return value of a syscall, consigning it to one of two possible fates
- * - user-visible error numbers are in the range -1 - -4095: see <asm-frv/errno.h>
- */
-#undef __syscall_return
-#define __syscall_return(type, res)					\
-do {									\
-        unsigned long __sr2 = (res);					\
-	if (__builtin_expect(__sr2 >= (unsigned long)(-MAX_ERRNO), 0)) { \
-		errno = (-__sr2);					\
-		__sr2 = ~0UL;						\
-	}								\
-	return (type) __sr2;						\
-} while (0)
-
-/* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
-
-#undef _syscall0
-#define _syscall0(type,name)						\
-type name(void)								\
-{									\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);	\
-	register unsigned long __sc0 __asm__ ("gr8");			\
-	__asm__ __volatile__ ("tira gr0,#0"				\
-			      : "=r" (__sc0)				\
-			      : "r" (__scnum));				\
-	__syscall_return(type, __sc0);					\
-}
-
-#undef _syscall1
-#define _syscall1(type,name,type1,arg1)						\
-type name(type1 arg1)								\
-{										\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);		\
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;	\
-	__asm__ __volatile__ ("tira gr0,#0"					\
-			      : "+r" (__sc0)					\
-			      : "r" (__scnum));					\
-	__syscall_return(type, __sc0);						\
-}
-
-#undef _syscall2
-#define _syscall2(type,name,type1,arg1,type2,arg2)				\
-type name(type1 arg1,type2 arg2)						\
-{										\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);		\
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;	\
-	register unsigned long __sc1 __asm__ ("gr9") = (unsigned long) arg2;	\
-	__asm__ __volatile__ ("tira gr0,#0"					\
-			      : "+r" (__sc0)					\
-			      : "r" (__scnum), "r" (__sc1));			\
-	__syscall_return(type, __sc0);						\
-}
-
-#undef _syscall3
-#define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3)			\
-type name(type1 arg1,type2 arg2,type3 arg3)					\
-{										\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);		\
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;	\
-	register unsigned long __sc1 __asm__ ("gr9") = (unsigned long) arg2;	\
-	register unsigned long __sc2 __asm__ ("gr10") = (unsigned long) arg3;	\
-	__asm__ __volatile__ ("tira gr0,#0"					\
-			      : "+r" (__sc0)					\
-			      : "r" (__scnum), "r" (__sc1), "r" (__sc2));	\
-	__syscall_return(type, __sc0);						\
-}
-
-#undef _syscall4
-#define _syscall4(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4)		\
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4)				\
-{											\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);			\
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;		\
-	register unsigned long __sc1 __asm__ ("gr9") = (unsigned long) arg2;		\
-	register unsigned long __sc2 __asm__ ("gr10") = (unsigned long) arg3;		\
-	register unsigned long __sc3 __asm__ ("gr11") = (unsigned long) arg4;		\
-	__asm__ __volatile__ ("tira gr0,#0"						\
-			      : "+r" (__sc0)						\
-			      : "r" (__scnum), "r" (__sc1), "r" (__sc2), "r" (__sc3));	\
-	__syscall_return(type, __sc0);							\
-}
-
-#undef _syscall5
-#define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5)	\
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5)			\
-{											\
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);			\
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;		\
-	register unsigned long __sc1 __asm__ ("gr9") = (unsigned long) arg2;		\
-	register unsigned long __sc2 __asm__ ("gr10") = (unsigned long) arg3;		\
-	register unsigned long __sc3 __asm__ ("gr11") = (unsigned long) arg4;		\
-	register unsigned long __sc4 __asm__ ("gr12") = (unsigned long) arg5;		\
-	__asm__ __volatile__ ("tira gr0,#0"						\
-			      : "+r" (__sc0)						\
-			      : "r" (__scnum), "r" (__sc1), "r" (__sc2),		\
-			      "r" (__sc3), "r" (__sc4));				\
-	__syscall_return(type, __sc0);							\
-}
-
-#undef _syscall6
-#define _syscall6(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5, type6, arg6) \
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5, type6 arg6)		 \
-{												 \
-	register unsigned long __scnum __asm__ ("gr7") = (__NR_##name);				 \
-	register unsigned long __sc0 __asm__ ("gr8") = (unsigned long) arg1;			 \
-	register unsigned long __sc1 __asm__ ("gr9") = (unsigned long) arg2;			 \
-	register unsigned long __sc2 __asm__ ("gr10") = (unsigned long) arg3;			 \
-	register unsigned long __sc3 __asm__ ("gr11") = (unsigned long) arg4;			 \
-	register unsigned long __sc4 __asm__ ("gr12") = (unsigned long) arg5;			 \
-	register unsigned long __sc5 __asm__ ("gr13") = (unsigned long) arg6;			 \
-	__asm__ __volatile__ ("tira gr0,#0"							 \
-			      : "+r" (__sc0)							 \
-			      : "r" (__scnum), "r" (__sc1), "r" (__sc2),			 \
-			      "r" (__sc3), "r" (__sc4), "r" (__sc5));				 \
-	__syscall_return(type, __sc0);								 \
-}
+#define NR_syscalls 325
 
 #define __ARCH_WANT_IPC_PARSE_VERSION
 /* #define __ARCH_WANT_OLD_READDIR */

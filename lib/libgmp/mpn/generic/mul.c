@@ -6,28 +6,33 @@
    THAT THEY'LL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
 
 
-Copyright (C) 1991, 1993, 1994, 1996, 1997, 1999, 2000 Free Software
-Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 1997, 1999, 2000, 2001, 2002, 2003, 2005
+Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
+
+
+#ifndef MUL_BASECASE_MAX_UN
+#define MUL_BASECASE_MAX_UN 500
+#endif
 
 /* Multiply the natural numbers u (pointed to by UP, with UN limbs) and v
    (pointed to by VP, with VN limbs), and store the result at PRODP.  The
@@ -41,69 +46,18 @@ MA 02111-1307, USA. */
    2. PRODP != UP and PRODP != VP, i.e. the destination must be distinct from
       the multiplier and the multiplicand.  */
 
-void
-#if __STDC__
-mpn_sqr_n (mp_ptr prodp,
-         mp_srcptr up, mp_size_t un)
-#else
-mpn_sqr_n (prodp, up, un)
-     mp_ptr prodp;
-     mp_srcptr up;
-     mp_size_t un;
-#endif
-{
-  if (un < KARATSUBA_SQR_THRESHOLD)
-    { /* plain schoolbook multiplication */
-      if (un == 0)
-	return;
-      mpn_sqr_basecase (prodp, up, un);
-    }
-  else if (un < TOOM3_SQR_THRESHOLD)
-    { /* karatsuba multiplication */
-      mp_ptr tspace;
-      TMP_DECL (marker);
-      TMP_MARK (marker);
-      tspace = (mp_ptr) TMP_ALLOC (2 * (un + BITS_PER_MP_LIMB) * BYTES_PER_MP_LIMB);
-      mpn_kara_sqr_n (prodp, up, un, tspace);
-      TMP_FREE (marker);
-    }
-  else
-#if 0
-  if (un < FFT_SQR_THRESHOLD)
-#endif
-    { /* toom3 multiplication */
-      mp_ptr tspace;
-      TMP_DECL (marker);
-      TMP_MARK (marker);
-      tspace = (mp_ptr) TMP_ALLOC (2 * (un + BITS_PER_MP_LIMB) * BYTES_PER_MP_LIMB);
-      mpn_toom3_sqr_n (prodp, up, un, tspace);
-      TMP_FREE (marker);
-    }
-#if 0
-  else
-    {
-      /* schoenhage multiplication */
-    }
-#endif
-}
-
 mp_limb_t
-#if __STDC__
 mpn_mul (mp_ptr prodp,
 	 mp_srcptr up, mp_size_t un,
 	 mp_srcptr vp, mp_size_t vn)
-#else
-mpn_mul (prodp, up, un, vp, vn)
-     mp_ptr prodp;
-     mp_srcptr up;
-     mp_size_t un;
-     mp_srcptr vp;
-     mp_size_t vn;
-#endif
 {
-  mp_srcptr wp;
-  mp_size_t l, wn;
+  mp_size_t l;
   mp_limb_t c;
+
+  ASSERT (un >= vn);
+  ASSERT (vn >= 1);
+  ASSERT (! MPN_OVERLAP_P (prodp, un+vn, up, un));
+  ASSERT (! MPN_OVERLAP_P (prodp, un+vn, vp, vn));
 
   if (up == vp && un == vn)
     {
@@ -111,9 +65,73 @@ mpn_mul (prodp, up, un, vp, vn)
       return prodp[2 * un - 1];
     }
 
-  if (vn < KARATSUBA_MUL_THRESHOLD)
-    { /* long multiplication */
-      mpn_mul_basecase (prodp, up, un, vp, vn);
+  if (vn < MUL_KARATSUBA_THRESHOLD)
+    { /* plain schoolbook multiplication */
+      if (un <= MUL_BASECASE_MAX_UN)
+	mpn_mul_basecase (prodp, up, un, vp, vn);
+      else
+	{
+	  /* We have un >> MUL_BASECASE_MAX_UN > vn.  For better memory
+	     locality, split up[] into MUL_BASECASE_MAX_UN pieces and multiply
+	     these pieces with the vp[] operand.  After each such partial
+	     multiplication (but the last) we copy the most significant vn
+	     limbs into a temporary buffer since that part would otherwise be
+	     overwritten by the next multiplication.  After the next
+	     multiplication, we add it back.  This illustrates the situation:
+
+                                                    -->vn<--
+                                                      |  |<------- un ------->|
+                                                         _____________________|
+                                                        X                    /|
+                                                      /XX__________________/  |
+                                    _____________________                     |
+                                   X                    /                     |
+                                 /XX__________________/                       |
+               _____________________                                          |
+              /                    /                                          |
+            /____________________/                                            |
+	    ==================================================================
+
+	    The parts marked with X are the parts whose sums are copied into
+	    the temporary buffer.  */
+
+	  mp_limb_t tp[MUL_KARATSUBA_THRESHOLD_LIMIT];
+	  mp_limb_t cy;
+          ASSERT (MUL_KARATSUBA_THRESHOLD <= MUL_KARATSUBA_THRESHOLD_LIMIT);
+
+	  mpn_mul_basecase (prodp, up, MUL_BASECASE_MAX_UN, vp, vn);
+	  prodp += MUL_BASECASE_MAX_UN;
+	  MPN_COPY (tp, prodp, vn);		/* preserve high triangle */
+	  up += MUL_BASECASE_MAX_UN;
+	  un -= MUL_BASECASE_MAX_UN;
+	  while (un > MUL_BASECASE_MAX_UN)
+	    {
+	      mpn_mul_basecase (prodp, up, MUL_BASECASE_MAX_UN, vp, vn);
+	      cy = mpn_add_n (prodp, prodp, tp, vn); /* add back preserved triangle */
+	      mpn_incr_u (prodp + vn, cy);		/* safe? */
+	      prodp += MUL_BASECASE_MAX_UN;
+	      MPN_COPY (tp, prodp, vn);		/* preserve high triangle */
+	      up += MUL_BASECASE_MAX_UN;
+	      un -= MUL_BASECASE_MAX_UN;
+	    }
+	  if (un > vn)
+	    {
+	      mpn_mul_basecase (prodp, up, un, vp, vn);
+	    }
+	  else
+	    {
+	      ASSERT_ALWAYS (un > 0);
+	      mpn_mul_basecase (prodp, vp, vn, up, un);
+	    }
+	  cy = mpn_add_n (prodp, prodp, tp, vn); /* add back preserved triangle */
+	  mpn_incr_u (prodp + vn, cy);		/* safe? */
+	}
+      return prodp[un + vn - 1];
+    }
+
+  if (ABOVE_THRESHOLD (vn, MUL_FFT_THRESHOLD))
+    {
+      mpn_mul_fft_full (prodp, up, un, vp, vn);
       return prodp[un + vn - 1];
     }
 
@@ -121,29 +139,27 @@ mpn_mul (prodp, up, un, vp, vn)
   if (un != vn)
     { mp_limb_t t;
       mp_ptr ws;
-      TMP_DECL (marker);
-      TMP_MARK (marker);
+      TMP_DECL;
+      TMP_MARK;
 
       prodp += vn;
       l = vn;
       up += vn;
       un -= vn;
 
-      if (un < vn) 
+      if (un < vn)
 	{
 	  /* Swap u's and v's. */
-	  wp = up; up = vp; vp = wp;
-	  wn = un; un = vn; vn = wn;
+	  MPN_SRCPTR_SWAP (up,un, vp,vn);
 	}
 
-      ws = (mp_ptr) TMP_ALLOC (((vn >= KARATSUBA_MUL_THRESHOLD ? vn : un) + vn)
-			       * BYTES_PER_MP_LIMB);
+      ws = TMP_ALLOC_LIMBS ((vn >= MUL_KARATSUBA_THRESHOLD ? vn : un) + vn);
 
       t = 0;
-      while (vn >= KARATSUBA_MUL_THRESHOLD)
+      while (vn >= MUL_KARATSUBA_THRESHOLD)
 	{
 	  mpn_mul_n (ws, up, vp, vn);
-	  if (l <= 2*vn) 
+	  if (l <= 2*vn)
 	    {
 	      t += mpn_add_n (prodp, prodp, ws, l);
 	      if (l != 2*vn)
@@ -161,23 +177,22 @@ mpn_mul (prodp, up, un, vp, vn)
 	  l -= vn;
 	  up += vn;
 	  un -= vn;
-	  if (un < vn) 
+	  if (un < vn)
 	    {
 	      /* Swap u's and v's. */
-	      wp = up; up = vp; vp = wp;
-	      wn = un; un = vn; vn = wn;
+	      MPN_SRCPTR_SWAP (up,un, vp,vn);
 	    }
 	}
 
-      if (vn)
+      if (vn != 0)
 	{
 	  mpn_mul_basecase (ws, up, un, vp, vn);
-	  if (l <= un + vn) 
+	  if (l <= un + vn)
 	    {
 	      t += mpn_add_n (prodp, prodp, ws, l);
 	      if (l != un + vn)
 		t = mpn_add_1 (prodp + l, ws + l, un + vn - l, t);
-	    } 
+	    }
 	  else
 	    {
 	      c = mpn_add_n (prodp, prodp, ws, un + vn);
@@ -185,7 +200,7 @@ mpn_mul (prodp, up, un, vp, vn)
 	    }
 	}
 
-    TMP_FREE (marker);
-  }
+      TMP_FREE;
+    }
   return prodp[un + vn - 1];
 }

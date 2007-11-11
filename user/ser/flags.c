@@ -1,7 +1,7 @@
 /*
- * $Id: flags.c,v 1.5 2003/03/19 18:41:58 andrei Exp $
+ * $Id: flags.c,v 1.6 2004/08/24 08:45:10 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -89,7 +89,7 @@ static int fixup_t_flag(void** param, int param_no)
 
 	*code = 0;
 	c = *param;
-	while ( *c && (*c==' ' || *c=='\t')) c++; /* intial whitespaces */
+	while ( *c && (*c==' ' || *c=='\t')) c++; /* initial whitespaces */
 
 	token=1;
 	if (strcasecmp(c, "white")==0) *code=FL_WHITE;

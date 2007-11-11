@@ -1,9 +1,9 @@
 /*
- * $Id: rfc2617.c,v 1.1 2003/03/06 15:39:33 janakj Exp $
+ * $Id: rfc2617.c,v 1.2 2004/08/24 08:58:25 janakj Exp $
  *
  * Digest response calculation as per RFC2617
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

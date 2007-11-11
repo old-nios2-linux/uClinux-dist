@@ -23,6 +23,8 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/reboot.h>
+#include <linux/jiffies.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 #include <asm/irq_regs.h>
 

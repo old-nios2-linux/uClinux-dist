@@ -5,7 +5,7 @@
  * based on the old aacraid driver that is..
  * Adaptec aacraid device driver for Linux.
  *
- * Copyright (c) 2000 Adaptec, Inc. (aacraid@adaptec.com)
+ * Copyright (c) 2000-2007 Adaptec, Inc. (aacraid@adaptec.com)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,10 +39,8 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/dma-mapping.h>
 #include <linux/syscalls.h>
 #include <linux/delay.h>
-#include <linux/smp_lock.h>
 #include <linux/kthread.h>
 #include <asm/semaphore.h>
 
@@ -82,8 +80,6 @@ static LIST_HEAD(aac_devices);
 static int aac_cfg_major = -1;
 char aac_driver_version[] = AAC_DRIVER_FULL_VERSION;
 
-extern int expose_physicals;
-
 /*
  * Because of the way Linux names scsi devices, the order in this table has
  * become important.  Check for on-board Raid first, add-in cards second.
@@ -117,8 +113,8 @@ static struct pci_device_id aac_pci_tbl[] = {
 	{ 0x9005, 0x0286, 0x9005, 0x029b, 0, 0, 22 }, /* AAR-2820SA (Intruder) */
 	{ 0x9005, 0x0286, 0x9005, 0x029c, 0, 0, 23 }, /* AAR-2620SA (Intruder) */
 	{ 0x9005, 0x0286, 0x9005, 0x029d, 0, 0, 24 }, /* AAR-2420SA (Intruder) */
-	{ 0x9005, 0x0286, 0x9005, 0x029e, 0, 0, 25 }, /* ICP9024R0 (Lancer) */
-	{ 0x9005, 0x0286, 0x9005, 0x029f, 0, 0, 26 }, /* ICP9014R0 (Lancer) */
+	{ 0x9005, 0x0286, 0x9005, 0x029e, 0, 0, 25 }, /* ICP9024RO (Lancer) */
+	{ 0x9005, 0x0286, 0x9005, 0x029f, 0, 0, 26 }, /* ICP9014RO (Lancer) */
 	{ 0x9005, 0x0286, 0x9005, 0x02a0, 0, 0, 27 }, /* ICP9047MA (Lancer) */
 	{ 0x9005, 0x0286, 0x9005, 0x02a1, 0, 0, 28 }, /* ICP9087MA (Lancer) */
 	{ 0x9005, 0x0286, 0x9005, 0x02a3, 0, 0, 29 }, /* ICP5445AU (Hurricane44) */
@@ -137,15 +133,15 @@ static struct pci_device_id aac_pci_tbl[] = {
 	{ 0x9005, 0x0285, 0x9005, 0x0294, 0, 0, 41 }, /* ESD SO-DIMM PCI-X SATA ZCR (Prowler) */
 	{ 0x9005, 0x0285, 0x103C, 0x3227, 0, 0, 42 }, /* AAR-2610SA PCI SATA 6ch */
 	{ 0x9005, 0x0285, 0x9005, 0x0296, 0, 0, 43 }, /* ASR-2240S (SabreExpress) */
-	{ 0x9005, 0x0285, 0x9005, 0x0297, 0, 0, 44 }, /* ASR-4005SAS */
+	{ 0x9005, 0x0285, 0x9005, 0x0297, 0, 0, 44 }, /* ASR-4005 */
 	{ 0x9005, 0x0285, 0x1014, 0x02F2, 0, 0, 45 }, /* IBM 8i (AvonPark) */
 	{ 0x9005, 0x0285, 0x1014, 0x0312, 0, 0, 45 }, /* IBM 8i (AvonPark Lite) */
 	{ 0x9005, 0x0286, 0x1014, 0x9580, 0, 0, 46 }, /* IBM 8k/8k-l8 (Aurora) */
 	{ 0x9005, 0x0286, 0x1014, 0x9540, 0, 0, 47 }, /* IBM 8k/8k-l4 (Aurora Lite) */
-	{ 0x9005, 0x0285, 0x9005, 0x0298, 0, 0, 48 }, /* ASR-4000SAS (BlackBird) */
+	{ 0x9005, 0x0285, 0x9005, 0x0298, 0, 0, 48 }, /* ASR-4000 (BlackBird) */
 	{ 0x9005, 0x0285, 0x9005, 0x0299, 0, 0, 49 }, /* ASR-4800SAS (Marauder-X) */
 	{ 0x9005, 0x0285, 0x9005, 0x029a, 0, 0, 50 }, /* ASR-4805SAS (Marauder-E) */
-	{ 0x9005, 0x0286, 0x9005, 0x02a2, 0, 0, 51 }, /* ASR-3800SAS (Hurricane44) */
+	{ 0x9005, 0x0286, 0x9005, 0x02a2, 0, 0, 51 }, /* ASR-3800 (Hurricane44) */
 
 	{ 0x9005, 0x0285, 0x1028, 0x0287, 0, 0, 52 }, /* Perc 320/DC*/
 	{ 0x1011, 0x0046, 0x9005, 0x0365, 0, 0, 53 }, /* Adaptec 5400S (Mustang)*/
@@ -157,6 +153,7 @@ static struct pci_device_id aac_pci_tbl[] = {
 	{ 0x9005, 0x0285, 0x17aa, PCI_ANY_ID, 0, 0, 58 }, /* Legend Catchall */
 	{ 0x9005, 0x0285, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 59 }, /* Adaptec Catch All */
 	{ 0x9005, 0x0286, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 60 }, /* Adaptec Rocket Catch All */
+	{ 0x9005, 0x0288, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 61 }, /* Adaptec NEMER/ARK Catch All */
 	{ 0,}
 };
 MODULE_DEVICE_TABLE(pci, aac_pci_tbl);
@@ -193,8 +190,8 @@ static struct aac_driver_ident aac_drivers[] = {
 	{ aac_rkt_init, "aacraid",  "ADAPTEC ", "AAR-2820SA      ", 1 }, /* AAR-2820SA (Intruder) */
 	{ aac_rkt_init, "aacraid",  "ADAPTEC ", "AAR-2620SA      ", 1 }, /* AAR-2620SA (Intruder) */
 	{ aac_rkt_init, "aacraid",  "ADAPTEC ", "AAR-2420SA      ", 1 }, /* AAR-2420SA (Intruder) */
-	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9024R0       ", 2 }, /* ICP9024R0 (Lancer) */
-	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9014R0       ", 1 }, /* ICP9014R0 (Lancer) */
+	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9024RO       ", 2 }, /* ICP9024RO (Lancer) */
+	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9014RO       ", 1 }, /* ICP9014RO (Lancer) */
 	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9047MA       ", 1 }, /* ICP9047MA (Lancer) */
 	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP9087MA       ", 1 }, /* ICP9087MA (Lancer) */
 	{ aac_rkt_init, "aacraid",  "ICP     ", "ICP5445AU       ", 1 }, /* ICP5445AU (Hurricane44) */
@@ -212,25 +209,26 @@ static struct aac_driver_ident aac_drivers[] = {
 	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-2026ZCR     ", 1 }, /* ESD SO-DIMM PCI-X SATA ZCR (Prowler) */
 	{ aac_rx_init, "aacraid",  "ADAPTEC ", "AAR-2610SA      ", 1 }, /* SATA 6Ch (Bearcat) */
 	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-2240S       ", 1 }, /* ASR-2240S (SabreExpress) */
-	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4005SAS     ", 1 }, /* ASR-4005SAS */
+	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4005        ", 1 }, /* ASR-4005 */
 	{ aac_rx_init, "ServeRAID","IBM     ", "ServeRAID 8i    ", 1 }, /* IBM 8i (AvonPark) */
 	{ aac_rkt_init, "ServeRAID","IBM     ", "ServeRAID 8k-l8 ", 1 }, /* IBM 8k/8k-l8 (Aurora) */
 	{ aac_rkt_init, "ServeRAID","IBM     ", "ServeRAID 8k-l4 ", 1 }, /* IBM 8k/8k-l4 (Aurora Lite) */
-	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4000SAS     ", 1 }, /* ASR-4000SAS (BlackBird & AvonPark) */
+	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4000        ", 1 }, /* ASR-4000 (BlackBird & AvonPark) */
 	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4800SAS     ", 1 }, /* ASR-4800SAS (Marauder-X) */
 	{ aac_rx_init, "aacraid",  "ADAPTEC ", "ASR-4805SAS     ", 1 }, /* ASR-4805SAS (Marauder-E) */
-	{ aac_rkt_init, "aacraid",  "ADAPTEC ", "ASR-3800SAS     ", 1 }, /* ASR-3800SAS (Hurricane44) */
+	{ aac_rkt_init, "aacraid",  "ADAPTEC ", "ASR-3800        ", 1 }, /* ASR-3800 (Hurricane44) */
 
 	{ aac_rx_init, "percraid", "DELL    ", "PERC 320/DC     ", 2, AAC_QUIRK_31BIT | AAC_QUIRK_34SG }, /* Perc 320/DC*/
 	{ aac_sa_init, "aacraid",  "ADAPTEC ", "Adaptec 5400S   ", 4, AAC_QUIRK_34SG }, /* Adaptec 5400S (Mustang)*/
 	{ aac_sa_init, "aacraid",  "ADAPTEC ", "AAC-364         ", 4, AAC_QUIRK_34SG }, /* Adaptec 5400S (Mustang)*/
-	{ aac_sa_init, "percraid", "DELL    ", "PERCRAID        ", 4, AAC_QUIRK_31BIT | AAC_QUIRK_34SG }, /* Dell PERC2/QC */
+	{ aac_sa_init, "percraid", "DELL    ", "PERCRAID        ", 4, AAC_QUIRK_34SG }, /* Dell PERC2/QC */
 	{ aac_sa_init, "hpnraid",  "HP      ", "NetRAID         ", 4, AAC_QUIRK_34SG }, /* HP NetRAID-4M */
 
 	{ aac_rx_init, "aacraid",  "DELL    ", "RAID            ", 2, AAC_QUIRK_31BIT | AAC_QUIRK_34SG }, /* Dell Catchall */
 	{ aac_rx_init, "aacraid",  "Legend  ", "RAID            ", 2, AAC_QUIRK_31BIT | AAC_QUIRK_34SG }, /* Legend Catchall */
-	{ aac_rx_init, "aacraid",  "ADAPTEC ", "RAID            ", 2, AAC_QUIRK_31BIT | AAC_QUIRK_34SG }, /* Adaptec Catch All */
-	{ aac_rkt_init, "aacraid", "ADAPTEC ", "RAID            ", 2 } /* Adaptec Rocket Catch All */
+	{ aac_rx_init, "aacraid",  "ADAPTEC ", "RAID            ", 2 }, /* Adaptec Catch All */
+	{ aac_rkt_init, "aacraid", "ADAPTEC ", "RAID            ", 2 }, /* Adaptec Rocket Catch All */
+	{ aac_nark_init, "aacraid", "ADAPTEC ", "RAID            ", 2 } /* Adaptec NEMER/ARK Catch All */
 };
 
 /**
@@ -245,7 +243,19 @@ static struct aac_driver_ident aac_drivers[] = {
 
 static int aac_queuecommand(struct scsi_cmnd *cmd, void (*done)(struct scsi_cmnd *))
 {
+	struct Scsi_Host *host = cmd->device->host;
+	struct aac_dev *dev = (struct aac_dev *)host->hostdata;
+	u32 count = 0;
 	cmd->scsi_done = done;
+	for (; count < (host->can_queue + AAC_NUM_MGT_FIB); ++count) {
+		struct fib * fib = &dev->fibs[count];
+		struct scsi_cmnd * command;
+		if (fib->hw_fib_va->header.XferState &&
+		    ((command = fib->callback_data)) &&
+		    (command == cmd) &&
+		    (cmd->SCp.phase == AAC_OWNER_FIRMWARE))
+			return 0; /* Already owned by Adapter */
+	}
 	cmd->SCp.phase = AAC_OWNER_LOWLEVEL;
 	return (aac_scsi_cmd(cmd) ? FAILED : 0);
 } 
@@ -391,16 +401,16 @@ static int aac_biosparm(struct scsi_device *sdev, struct block_device *bdev,
 
 static int aac_slave_configure(struct scsi_device *sdev)
 {
-	if (sdev_channel(sdev) == CONTAINER_CHANNEL) {
-		sdev->skip_ms_page_8 = 1;
-		sdev->skip_ms_page_3f = 1;
-	}
 	if ((sdev->type == TYPE_DISK) &&
-			!expose_physicals &&
 			(sdev_channel(sdev) != CONTAINER_CHANNEL)) {
-		struct aac_dev *aac = (struct aac_dev *)sdev->host->hostdata;
-		if (!aac->raid_scsi_mode || (sdev_channel(sdev) != 2))
-			sdev->no_uld_attach = 1;
+		if (expose_physicals == 0)
+			return -ENXIO;
+		if (expose_physicals < 0) {
+			struct aac_dev *aac =
+				(struct aac_dev *)sdev->host->hostdata;
+			if (!aac->raid_scsi_mode || (sdev_channel(sdev) != 2))
+				sdev->no_uld_attach = 1;
+		}
 	}
 	if (sdev->tagged_supported && (sdev->type == TYPE_DISK) &&
 			(sdev_channel(sdev) == CONTAINER_CHANNEL)) {
@@ -434,10 +444,81 @@ static int aac_slave_configure(struct scsi_device *sdev)
 	return 0;
 }
 
+/**
+ *	aac_change_queue_depth		-	alter queue depths
+ *	@sdev:	SCSI device we are considering
+ *	@depth:	desired queue depth
+ *
+ *	Alters queue depths for target device based on the host adapter's
+ *	total capacity and the queue depth supported by the target device.
+ */
+
+static int aac_change_queue_depth(struct scsi_device *sdev, int depth)
+{
+	if (sdev->tagged_supported && (sdev->type == TYPE_DISK) &&
+	    (sdev_channel(sdev) == CONTAINER_CHANNEL)) {
+		struct scsi_device * dev;
+		struct Scsi_Host *host = sdev->host;
+		unsigned num = 0;
+
+		__shost_for_each_device(dev, host) {
+			if (dev->tagged_supported && (dev->type == TYPE_DISK) &&
+			    (sdev_channel(dev) == CONTAINER_CHANNEL))
+				++num;
+			++num;
+		}
+		if (num >= host->can_queue)
+			num = host->can_queue - 1;
+		if (depth > (host->can_queue - num))
+			depth = host->can_queue - num;
+		if (depth > 256)
+			depth = 256;
+		else if (depth < 2)
+			depth = 2;
+		scsi_adjust_queue_depth(sdev, MSG_ORDERED_TAG, depth);
+	} else
+		scsi_adjust_queue_depth(sdev, 0, 1);
+	return sdev->queue_depth;
+}
+
 static int aac_ioctl(struct scsi_device *sdev, int cmd, void __user * arg)
 {
 	struct aac_dev *dev = (struct aac_dev *)sdev->host->hostdata;
 	return aac_do_ioctl(dev, cmd, arg);
+}
+
+static int aac_eh_abort(struct scsi_cmnd* cmd)
+{
+	struct scsi_device * dev = cmd->device;
+	struct Scsi_Host * host = dev->host;
+	struct aac_dev * aac = (struct aac_dev *)host->hostdata;
+	int count;
+	int ret = FAILED;
+
+	printk(KERN_ERR "%s: Host adapter abort request (%d,%d,%d,%d)\n",
+		AAC_DRIVERNAME,
+		host->host_no, sdev_channel(dev), sdev_id(dev), dev->lun);
+	switch (cmd->cmnd[0]) {
+	case SERVICE_ACTION_IN:
+		if (!(aac->raw_io_interface) ||
+		    !(aac->raw_io_64) ||
+		    ((cmd->cmnd[1] & 0x1f) != SAI_READ_CAPACITY_16))
+			break;
+	case INQUIRY:
+	case READ_CAPACITY:
+	case TEST_UNIT_READY:
+		/* Mark associated FIB to not complete, eh handler does this */
+		for (count = 0; count < (host->can_queue + AAC_NUM_MGT_FIB); ++count) {
+			struct fib * fib = &aac->fibs[count];
+			if (fib->hw_fib_va->header.XferState &&
+			  (fib->callback_data == cmd)) {
+				fib->flags |= FIB_CONTEXT_FLAG_TIMED_OUT;
+				cmd->SCp.phase = AAC_OWNER_ERROR_HANDLER;
+				ret = SUCCESS;
+			}
+		}
+	}
+	return ret;
 }
 
 /*
@@ -451,12 +532,20 @@ static int aac_eh_reset(struct scsi_cmnd* cmd)
 	struct Scsi_Host * host = dev->host;
 	struct scsi_cmnd * command;
 	int count;
-	struct aac_dev * aac;
+	struct aac_dev * aac = (struct aac_dev *)host->hostdata;
 	unsigned long flags;
 
+	/* Mark the associated FIB to not complete, eh handler does this */
+	for (count = 0; count < (host->can_queue + AAC_NUM_MGT_FIB); ++count) {
+		struct fib * fib = &aac->fibs[count];
+		if (fib->hw_fib_va->header.XferState &&
+		  (fib->callback_data == cmd)) {
+			fib->flags |= FIB_CONTEXT_FLAG_TIMED_OUT;
+			cmd->SCp.phase = AAC_OWNER_ERROR_HANDLER;
+		}
+	}
 	printk(KERN_ERR "%s: Host adapter reset request. SCSI hang ?\n", 
 					AAC_DRIVERNAME);
-	aac = (struct aac_dev *)host->hostdata;
 
 	if ((count = aac_check_health(aac)))
 		return count;
@@ -490,7 +579,15 @@ static int aac_eh_reset(struct scsi_cmnd* cmd)
 		ssleep(1);
 	}
 	printk(KERN_ERR "%s: SCSI bus appears hung\n", AAC_DRIVERNAME);
-	return -ETIMEDOUT;
+	/*
+	 * This adapter needs a blind reset, only do so for Adapters that
+	 * support a register, instead of a commanded, reset.
+	 */
+	if ((aac->supplement_adapter_info.SupportedOptions2 &
+	  le32_to_cpu(AAC_OPTION_MU_RESET|AAC_OPTION_IGNORE_RESET)) ==
+	  le32_to_cpu(AAC_OPTION_MU_RESET))
+		aac_reset_adapter(aac, 2); /* Bypass wait for command quiesce */
+	return SUCCESS; /* Cause an immediate retry of the command with a ten second delay after successful tur */
 }
 
 /**
@@ -539,6 +636,8 @@ static int aac_cfg_open(struct inode *inode, struct file *file)
 static int aac_cfg_ioctl(struct inode *inode,  struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 	return aac_do_ioctl(file->private_data, cmd, (void __user *)arg);
 }
 
@@ -592,6 +691,8 @@ static int aac_compat_ioctl(struct scsi_device *sdev, int cmd, void __user *arg)
 
 static long aac_compat_cfg_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 {
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 	return aac_compat_do_ioctl((struct aac_dev *)file->private_data, cmd, arg);
 }
 #endif
@@ -673,15 +774,21 @@ static ssize_t aac_show_bios_version(struct class_device *class_dev,
 	return len;
 }
 
-static ssize_t aac_show_serial_number(struct class_device *class_dev,
-		char *buf)
+ssize_t aac_show_serial_number(struct class_device *class_dev, char *buf)
 {
 	struct aac_dev *dev = (struct aac_dev*)class_to_shost(class_dev)->hostdata;
 	int len = 0;
 
 	if (le32_to_cpu(dev->adapter_info.serial[0]) != 0xBAD0)
-		len = snprintf(buf, PAGE_SIZE, "%x\n",
+		len = snprintf(buf, PAGE_SIZE, "%06X\n",
 		  le32_to_cpu(dev->adapter_info.serial[0]));
+	if (len &&
+	  !memcmp(&dev->supplement_adapter_info.MfgPcbaSerialNo[
+	    sizeof(dev->supplement_adapter_info.MfgPcbaSerialNo)+2-len],
+	  buf, len))
+		len = snprintf(buf, PAGE_SIZE, "%.*s\n",
+		  (int)sizeof(dev->supplement_adapter_info.MfgPcbaSerialNo),
+		  dev->supplement_adapter_info.MfgPcbaSerialNo);
 	return len;
 }
 
@@ -697,6 +804,31 @@ static ssize_t aac_show_max_id(struct class_device *class_dev, char *buf)
 	  class_to_shost(class_dev)->max_id);
 }
 
+static ssize_t aac_store_reset_adapter(struct class_device *class_dev,
+		const char *buf, size_t count)
+{
+	int retval = -EACCES;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return retval;
+	retval = aac_reset_adapter((struct aac_dev*)class_to_shost(class_dev)->hostdata, buf[0] == '!');
+	if (retval >= 0)
+		retval = count;
+	return retval;
+}
+
+static ssize_t aac_show_reset_adapter(struct class_device *class_dev,
+		char *buf)
+{
+	struct aac_dev *dev = (struct aac_dev*)class_to_shost(class_dev)->hostdata;
+	int len, tmp;
+
+	tmp = aac_adapter_check_health(dev);
+	if ((tmp == 0) && dev->in_reset)
+		tmp = -EBUSY;
+	len = snprintf(buf, PAGE_SIZE, "0x%x\n", tmp);
+	return len;
+}
 
 static struct class_device_attribute aac_model = {
 	.attr = {
@@ -754,6 +886,14 @@ static struct class_device_attribute aac_max_id = {
 	},
 	.show = aac_show_max_id,
 };
+static struct class_device_attribute aac_reset = {
+	.attr = {
+		.name = "reset_host",
+		.mode = S_IWUSR|S_IRUGO,
+	},
+	.store = aac_store_reset_adapter,
+	.show = aac_show_reset_adapter,
+};
 
 static struct class_device_attribute *aac_attrs[] = {
 	&aac_model,
@@ -764,11 +904,12 @@ static struct class_device_attribute *aac_attrs[] = {
 	&aac_serial_number,
 	&aac_max_channel,
 	&aac_max_id,
+	&aac_reset,
 	NULL
 };
 
 
-static struct file_operations aac_cfg_fops = {
+static const struct file_operations aac_cfg_fops = {
 	.owner		= THIS_MODULE,
 	.ioctl		= aac_cfg_ioctl,
 #ifdef CONFIG_COMPAT
@@ -790,6 +931,8 @@ static struct scsi_host_template aac_driver_template = {
 	.bios_param     		= aac_biosparm,	
 	.shost_attrs			= aac_attrs,
 	.slave_configure		= aac_slave_configure,
+	.change_queue_depth		= aac_change_queue_depth,
+	.eh_abort_handler		= aac_eh_abort,
 	.eh_host_reset_handler		= aac_eh_reset,
 	.can_queue      		= AAC_NUM_IO_FIB,	
 	.this_id        		= MAXIMUM_NUM_CONTAINERS,
@@ -804,6 +947,13 @@ static struct scsi_host_template aac_driver_template = {
 	.emulated                       = 1,
 };
 
+static void __aac_shutdown(struct aac_dev * aac)
+{
+	kthread_stop(aac->thread);
+	aac_send_shutdown(aac);
+	aac_adapter_disable_int(aac);
+	free_irq(aac->pdev->irq, aac);
+}
 
 static int __devinit aac_probe_one(struct pci_dev *pdev,
 		const struct pci_device_id *id)
@@ -957,13 +1107,12 @@ static int __devinit aac_probe_one(struct pci_dev *pdev,
 	return 0;
 
  out_deinit:
-	kthread_stop(aac->thread);
-	aac_send_shutdown(aac);
-	aac_adapter_disable_int(aac);
-	free_irq(pdev->irq, aac);
+	__aac_shutdown(aac);
  out_unmap:
 	aac_fib_map_free(aac);
-	pci_free_consistent(aac->pdev, aac->comm_size, aac->comm_addr, aac->comm_phys);
+	if (aac->comm_addr)
+		pci_free_consistent(aac->pdev, aac->comm_size, aac->comm_addr,
+		  aac->comm_phys);
 	kfree(aac->queues);
 	aac_adapter_ioremap(aac, 0);
 	kfree(aac->fibs);
@@ -979,8 +1128,8 @@ static int __devinit aac_probe_one(struct pci_dev *pdev,
 static void aac_shutdown(struct pci_dev *dev)
 {
 	struct Scsi_Host *shost = pci_get_drvdata(dev);
-	struct aac_dev *aac = (struct aac_dev *)shost->hostdata;
-	aac_send_shutdown(aac);
+	scsi_block_requests(shost);
+	__aac_shutdown((struct aac_dev *)shost->hostdata);
 }
 
 static void __devexit aac_remove_one(struct pci_dev *pdev)
@@ -990,16 +1139,12 @@ static void __devexit aac_remove_one(struct pci_dev *pdev)
 
 	scsi_remove_host(shost);
 
-	kthread_stop(aac->thread);
-
-	aac_send_shutdown(aac);
-	aac_adapter_disable_int(aac);
+	__aac_shutdown(aac);
 	aac_fib_map_free(aac);
 	pci_free_consistent(aac->pdev, aac->comm_size, aac->comm_addr,
 			aac->comm_phys);
 	kfree(aac->queues);
 
-	free_irq(pdev->irq, aac);
 	aac_adapter_ioremap(aac, 0);
 	
 	kfree(aac->fibs);
@@ -1026,7 +1171,7 @@ static int __init aac_init(void)
 {
 	int error;
 	
-	printk(KERN_INFO "Adaptec %s driver (%s)\n",
+	printk(KERN_INFO "Adaptec %s driver %s\n",
 	  AAC_DRIVERNAME, aac_driver_version);
 
 	error = pci_register_driver(&aac_pci_driver);

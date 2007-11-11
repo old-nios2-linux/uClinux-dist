@@ -2,7 +2,6 @@
  *  linux/include/asm-arm/mach/arch.h
  *
  *  Copyright (C) 2000 Russell King
- *  Modified by Hyok S. Choi for uClinux, 2004
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -50,7 +49,7 @@ struct machine_desc {
  */
 #define MACHINE_START(_type,_name)			\
 static const struct machine_desc __mach_desc_##_type	\
- __attribute_used__					\
+ __used							\
  __attribute__((__section__(".arch.info.init"))) = {	\
 	.nr		= MACH_TYPE_##_type,		\
 	.name		= _name,

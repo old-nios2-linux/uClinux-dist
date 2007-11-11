@@ -1,4 +1,4 @@
-@(#) $Header: /cvs/sw/new-wave/user/traceroute/INSTALL,v 1.1.1.1 1999/11/22 03:48:05 christ Exp $ (LBL)
+@(#) $Id: INSTALL,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)
 
 Traceroute is known to build and run under SunOS 4.1.4 and Solaris 5.4.
 If you are running a really old kernel, see the instructions under the
@@ -84,7 +84,12 @@ config.guess	- autoconf support
 config.sub	- autoconf support
 configure	- configure script (run this first)
 configure.in	- configure script source
+findsaddr-generic.c - generic source address code
+findsaddr-linux.c - linux source address code
+findsaddr-socket.c - socket based soruce address code
+findsaddr.h	- source address prototypes
 ifaddrlist.c	- inet address routines
+ifaddrlist.h	- inet address prototypes
 install-sh	- BSD style install script
 lbl/gnuc.h	- gcc macros and defines
 lbl/os-*.h	- os dependent defines and prototypes
@@ -97,3 +102,4 @@ strerror.c	- emulation routine
 traceroute.8	- manual entry
 traceroute.c	- main program
 traceroute.h	- global prototypes
+usleep.c	- missing system call emulation

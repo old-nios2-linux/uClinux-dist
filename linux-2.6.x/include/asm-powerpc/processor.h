@@ -43,19 +43,7 @@ extern int _chrp_type;
 /* what kind of prep workstation we are */
 extern int _prep_type;
 
-/*
- * This is used to identify the board type from a given PReP board
- * vendor. Board revision is also made available. This will be moved
- * elsewhere soon
- */
-extern unsigned char ucBoardRev;
-extern unsigned char ucBoardRevMaj, ucBoardRevMin;
-
 #endif /* CONFIG_PPC_PREP */
-
-#ifndef CONFIG_PPC_MULTIPLATFORM
-#define _machine 0
-#endif /* CONFIG_PPC_MULTIPLATFORM */
 
 #endif /* defined(__KERNEL__) && defined(CONFIG_PPC32) */
 
@@ -137,7 +125,6 @@ struct thread_struct {
 	mm_segment_t	fs;		/* for get_fs() validation */
 #ifdef CONFIG_PPC32
 	void		*pgdir;		/* root of page-table tree */
-	signed long	last_syscall;
 #endif
 #if defined(CONFIG_4xx) || defined (CONFIG_BOOKE)
 	unsigned long	dbcr0;		/* debug control register values */

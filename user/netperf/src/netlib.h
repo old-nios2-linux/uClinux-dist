@@ -178,6 +178,9 @@
 #define         TCP_CC_RESPONSE            301
 #define         TCP_CC_RESULTS             302
 
+/* The DNS_RR test has been removed from netperf but we leave these
+   here for historical purposes.  Those wanting to do DNS_RR tests
+   should use netperf4 instead. */
 #define         DO_DNS_RR                  400
 #define         DNS_RR_RESPONSE            401
 #define         DNS_RR_RESULTS             402
@@ -373,6 +376,7 @@ struct sendfile_ring_elt {
 #define SYSCTL          9
 #define PERFSTAT       10
 #define KSTAT_10       11
+#define OSX            12
 
 #define BADCH ('?')
 
@@ -390,7 +394,7 @@ extern int optopt;		/* */
 
 #endif /* _GETOPT_ */
 
-extern  SOCKET     win_kludge_socket;
+extern  SOCKET     win_kludge_socket, win_kludge_socket2;
 #endif /* WIN32 */
 
 extern  int   local_proc_affinity, remote_proc_affinity;
@@ -476,7 +480,9 @@ extern  double  calc_thruput(double units_received);
 extern  double  calc_thruput_interval(double units_received,double elapsed);
 extern  float   calibrate_local_cpu(float local_cpu_rate);
 extern  float   calibrate_remote_cpu();
-extern  void    bind_to_specific_processor(int processor_affinity);
+extern  void    bind_to_specific_processor(int processor_affinity,int use_cpu_map);
+extern int      set_nonblock (SOCKET sock);
+
 #ifndef WIN32
 
 /* WIN32 requires that at least one of the file sets to select be
@@ -496,6 +502,11 @@ extern  void    catcher(int, siginfo_t *,void *);
 extern  void    catcher(int);
 #endif /* __hpux */
 extern  struct ring_elt *allocate_buffer_ring();
+extern void access_buffer(char *buffer_ptr,
+			  int length,
+			  int dirty_count,
+			  int clean_count);
+
 #ifdef HAVE_ICSC_EXS
 extern  struct ring_elt *allocate_exs_buffer_ring();
 #endif /* HAVE_ICSC_EXS */
@@ -503,13 +514,21 @@ extern  struct ring_elt *allocate_exs_buffer_ring();
 extern  struct sendfile_ring_elt *alloc_sendfile_buf_ring();
 #endif /* HAVE_SENDFILE */
 #ifdef WANT_DLPI
-extern  int     dl_connect(int fd, unsigned char *rem_addr, int rem_addr_len);
-extern  int     dl_bind(int fd, int sap, int mode, char *dlsap_ptr, int *dlsap_len);
+/* it seems that AIX in its finite wisdom has some bogus define in an
+   include file which defines "rem_addr" which then screws-up this extern
+   unless we change the names to protect the guilty. reported by Eric
+   Jones */
+extern int dl_connect(int fd, unsigned char *remote_addr, int remote_addr_len);
+extern int dl_bind(int fd, int sap, int mode, char *dlsap_ptr, int *dlsap_len);
 extern  int     dl_open(char devfile[], int ppa);
 #endif /* WANT_DLPI */
 extern  char    format_cpu_method(int method);
 extern unsigned int convert(char *string);
+extern unsigned int convert_timespec(char *string);
 
+#ifdef WANT_INTERVALS
+extern void start_itimer(unsigned int interval_len_msec);
+#endif
  /* these are all for the confidence interval stuff */
 extern double confidence;
 

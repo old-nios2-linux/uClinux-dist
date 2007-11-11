@@ -9,7 +9,6 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/skbuff.h>
-#include <linux/netdevice.h> /* for pkt_sched */
 #include <linux/rtnetlink.h>
 #include <net/pkt_sched.h>
 #include <net/dsfield.h>
@@ -68,7 +67,7 @@ static inline int dsmark_valid_indices(u16 indices)
 			return 0;
 		indices >>= 1;
 	}
- 
+
 	return 1;
 }
 
@@ -88,18 +87,19 @@ static int dsmark_graft(struct Qdisc *sch, unsigned long arg,
 		sch, p, new, old);
 
 	if (new == NULL) {
-		new = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops);
+		new = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops,
+					sch->handle);
 		if (new == NULL)
 			new = &noop_qdisc;
 	}
 
 	sch_tree_lock(sch);
 	*old = xchg(&p->q, new);
+	qdisc_tree_decrease_qlen(*old, (*old)->q.qlen);
 	qdisc_reset(*old);
-	sch->q.qlen = 0;
 	sch_tree_unlock(sch);
 
-        return 0;
+	return 0;
 }
 
 static struct Qdisc *dsmark_leaf(struct Qdisc *sch, unsigned long arg)
@@ -150,7 +150,7 @@ static int dsmark_change(struct Qdisc *sch, u32 classid, u32 parent,
 
 	if (tb[TCA_DSMARK_VALUE-1])
 		p->value[*arg-1] = RTA_GET_U8(tb[TCA_DSMARK_VALUE-1]);
-		
+
 	if (tb[TCA_DSMARK_MASK-1])
 		p->mask[*arg-1] = mask;
 
@@ -166,7 +166,7 @@ static int dsmark_delete(struct Qdisc *sch, unsigned long arg)
 
 	if (!dsmark_valid_index(p, arg))
 		return -EINVAL;
-	
+
 	p->mask[arg-1] = 0xff;
 	p->value[arg-1] = 0;
 
@@ -192,9 +192,9 @@ static void dsmark_walk(struct Qdisc *sch,struct qdisc_walker *walker)
 				break;
 			}
 		}
-ignore:		
+ignore:
 		walker->count++;
-        }
+	}
 }
 
 static struct tcf_proto **dsmark_find_tcf(struct Qdisc *sch,unsigned long cl)
@@ -215,17 +215,17 @@ static int dsmark_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 		/* FIXME: Safe with non-linear skbs? --RR */
 		switch (skb->protocol) {
 			case __constant_htons(ETH_P_IP):
-				skb->tc_index = ipv4_get_dsfield(skb->nh.iph)
+				skb->tc_index = ipv4_get_dsfield(ip_hdr(skb))
 					& ~INET_ECN_MASK;
 				break;
 			case __constant_htons(ETH_P_IPV6):
-				skb->tc_index = ipv6_get_dsfield(skb->nh.ipv6h)
+				skb->tc_index = ipv6_get_dsfield(ipv6_hdr(skb))
 					& ~INET_ECN_MASK;
 				break;
 			default:
 				skb->tc_index = 0;
 				break;
-		};
+		}
 	}
 
 	if (TC_H_MAJ(skb->priority) == sch->handle)
@@ -237,26 +237,24 @@ static int dsmark_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 		D2PRINTK("result %d class 0x%04x\n", result, res.classid);
 
 		switch (result) {
-#ifdef CONFIG_NET_CLS_POLICE
-			case TC_POLICE_SHOT:
-				kfree_skb(skb);
-				sch->qstats.drops++;
-				return NET_XMIT_POLICED;
-#if 0
-			case TC_POLICE_RECLASSIFY:
-				/* FIXME: what to do here ??? */
+#ifdef CONFIG_NET_CLS_ACT
+		case TC_ACT_QUEUED:
+		case TC_ACT_STOLEN:
+			kfree_skb(skb);
+			return NET_XMIT_SUCCESS;
+		case TC_ACT_SHOT:
+			kfree_skb(skb);
+			sch->qstats.drops++;
+			return NET_XMIT_BYPASS;
 #endif
-#endif
-			case TC_POLICE_OK:
-				skb->tc_index = TC_H_MIN(res.classid);
-				break;
-			case TC_POLICE_UNSPEC:
-				/* fall through */
-			default:
-				if (p->default_index != NO_DEFAULT_INDEX)
-					skb->tc_index = p->default_index;
-				break;
-		};
+		case TC_ACT_OK:
+			skb->tc_index = TC_H_MIN(res.classid);
+			break;
+		default:
+			if (p->default_index != NO_DEFAULT_INDEX)
+				skb->tc_index = p->default_index;
+			break;
+		}
 	}
 
 	err = p->q->enqueue(skb,p->q);
@@ -291,11 +289,11 @@ static struct sk_buff *dsmark_dequeue(struct Qdisc *sch)
 
 	switch (skb->protocol) {
 		case __constant_htons(ETH_P_IP):
-			ipv4_change_dsfield(skb->nh.iph, p->mask[index],
+			ipv4_change_dsfield(ip_hdr(skb), p->mask[index],
 					    p->value[index]);
 			break;
 		case __constant_htons(ETH_P_IPV6):
-			ipv6_change_dsfield(skb->nh.ipv6h, p->mask[index],
+			ipv6_change_dsfield(ipv6_hdr(skb), p->mask[index],
 					    p->value[index]);
 			break;
 		default:
@@ -307,9 +305,9 @@ static struct sk_buff *dsmark_dequeue(struct Qdisc *sch)
 			if (p->mask[index] != 0xff || p->value[index])
 				printk(KERN_WARNING "dsmark_dequeue: "
 				       "unsupported protocol %d\n",
-				       htons(skb->protocol));
+				       ntohs(skb->protocol));
 			break;
-	};
+	}
 
 	return skb;
 }
@@ -337,7 +335,7 @@ static unsigned int dsmark_drop(struct Qdisc *sch)
 {
 	struct dsmark_qdisc_data *p = PRIV(sch);
 	unsigned int len;
-	
+
 	DPRINTK("dsmark_reset(sch %p,[qdisc %p])\n", sch, p);
 
 	if (p->q->ops->drop == NULL)
@@ -387,7 +385,7 @@ static int dsmark_init(struct Qdisc *sch, struct rtattr *opt)
 	p->default_index = default_index;
 	p->set_tc_index = RTA_GET_FLAG(tb[TCA_DSMARK_SET_TC_INDEX-1]);
 
-	p->q = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops);
+	p->q = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops, sch->handle);
 	if (p->q == NULL)
 		p->q = &noop_qdisc;
 
@@ -411,16 +409,10 @@ static void dsmark_reset(struct Qdisc *sch)
 static void dsmark_destroy(struct Qdisc *sch)
 {
 	struct dsmark_qdisc_data *p = PRIV(sch);
-	struct tcf_proto *tp;
 
 	DPRINTK("dsmark_destroy(sch %p,[qdisc %p])\n", sch, p);
 
-	while (p->filter_list) {
-		tp = p->filter_list;
-		p->filter_list = tp->next;
-		tcf_destroy(tp);
-	}
-
+	tcf_destroy_chain(p->filter_list);
 	qdisc_destroy(p->q);
 	kfree(p->mask);
 }
@@ -505,7 +497,7 @@ static int __init dsmark_module_init(void)
 	return register_qdisc(&dsmark_qdisc_ops);
 }
 
-static void __exit dsmark_module_exit(void) 
+static void __exit dsmark_module_exit(void)
 {
 	unregister_qdisc(&dsmark_qdisc_ops);
 }

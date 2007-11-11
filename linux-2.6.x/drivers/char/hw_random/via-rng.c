@@ -26,7 +26,6 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/pci.h>
 #include <linux/hw_random.h>
 #include <asm/io.h>
 #include <asm/msr.h>
@@ -176,7 +175,7 @@ static void __exit mod_exit(void)
 	hwrng_unregister(&via_rng);
 }
 
-subsys_initcall(mod_init);
+module_init(mod_init);
 module_exit(mod_exit);
 
 MODULE_DESCRIPTION("H/W RNG driver for VIA chipsets");

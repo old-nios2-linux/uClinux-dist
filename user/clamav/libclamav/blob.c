@@ -13,12 +13,18 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
-static	char	const	rcsid[] = "$Id: blob.c,v 1.40 2005/04/04 13:52:46 nigelhorne Exp $";
+static	char	const	rcsid[] = "$Id: blob.c,v 1.64 2007/02/12 22:25:14 njh Exp $";
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
+#endif
+
+#ifdef	C_WINDOWS
+#include "stdafx.h"
+#include <io.h>
 #endif
 
 #include <stdio.h>
@@ -27,15 +33,21 @@ static	char	const	rcsid[] = "$Id: blob.c,v 1.40 2005/04/04 13:52:46 nigelhorne E
 #include <errno.h>
 #include <fcntl.h>
 
+#ifdef	HAVE_SYS_PARAM_H
 #include <sys/param.h>	/* for NAME_MAX */
+#endif
 
 #ifdef	C_DARWIN
 #include <sys/types.h>
 #endif
 
-#include "mbox.h"
-#include "blob.h"
+#ifdef	HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
 #include "others.h"
+#include "mbox.h"
+#include "matcher.h"
 
 #ifndef	CL_DEBUG
 #define	NDEBUG	/* map CLAMAV debug onto standard */
@@ -47,9 +59,17 @@ static	char	const	rcsid[] = "$Id: blob.c,v 1.40 2005/04/04 13:52:46 nigelhorne E
 
 #include <assert.h>
 
-#ifdef	C_MINGW
+#if	defined(C_MINGW) || defined(C_WINDOWS)
 #include <windows.h>
 #endif
+
+#define	MAX_SCAN_SIZE	20*1024	/*
+				 * The performance benefit of scanning
+				 * early disappears on medium and
+				 * large sized files
+				 */
+
+static	const	char	*blobGetFilename(const blob *b);
 
 blob *
 blobCreate(void)
@@ -114,13 +134,13 @@ blobSetFilename(blob *b, const char *dir, const char *filename)
 	if(b->name)
 		free(b->name);
 
-	b->name = strdup(filename);
+	b->name = cli_strdup(filename);
 
 	if(b->name)
 		sanitiseName(b->name);
 }
 
-const char *
+static const char *
 blobGetFilename(const blob *b)
 {
 	assert(b != NULL);
@@ -171,7 +191,8 @@ blobAddData(blob *b, const unsigned char *data, size_t len)
 	if(len >= (size_t)pagesize)
 		growth = ((len / pagesize) + 1) * pagesize;
 
-	/*printf("len %u, growth = %u\n", len, growth);*/
+	/*cli_dbgmsg("blobGrow: b->size %lu, b->len %lu, len %lu, growth = %u\n",
+		b->size, b->len, len, growth);*/
 
 	if(b->data == NULL) {
 		assert(b->len == 0);
@@ -179,7 +200,7 @@ blobAddData(blob *b, const unsigned char *data, size_t len)
 
 		b->size = growth;
 		b->data = cli_malloc(growth);
-	} else if(b->size < b->len + len) {
+	} else if(b->size < b->len + (off_t)len) {
 		unsigned char *p = cli_realloc(b->data, b->size + growth);
 
 		if(p == NULL)
@@ -221,16 +242,16 @@ blobGetData(const blob *b)
 
 	if(b->len == 0)
 		return NULL;
-	return(b->data);
+	return b->data;
 }
 
-unsigned long
+size_t
 blobGetDataSize(const blob *b)
 {
 	assert(b != NULL);
 	assert(b->magic == BLOBCLASS);
 
-	return(b->len);
+	return b->len;
 }
 
 void
@@ -240,7 +261,7 @@ blobClose(blob *b)
 	assert(b->magic == BLOBCLASS);
 
 	if(b->isClosed) {
-		cli_dbgmsg("Attempt to close a previously closed blob\n");
+		cli_warnmsg("Attempt to close a previously closed blob\n");
 		return;
 	}
 
@@ -252,8 +273,8 @@ blobClose(blob *b)
 		if(b->len == 0) {	/* Not likely */
 			free(b->data);
 			b->data = NULL;
-			cli_dbgmsg("blobClose: recovered all %u bytes\n",
-				b->size);
+			cli_dbgmsg("blobClose: recovered all %lu bytes\n",
+				(unsigned long)b->size);
 			b->size = 0;
 		} else {
 			unsigned char *ptr = cli_realloc(b->data, b->len);
@@ -261,8 +282,9 @@ blobClose(blob *b)
 			if(ptr == NULL)
 				return;
 
-			cli_dbgmsg("blobClose: recovered %u bytes from %u\n",
-				b->size - b->len, b->size);
+			cli_dbgmsg("blobClose: recovered %lu bytes from %lu\n",
+				(unsigned long)(b->size - b->len),
+				(unsigned long)b->size);
 			b->size = b->len;
 			b->data = ptr;
 		}
@@ -276,7 +298,7 @@ blobClose(blob *b)
 int
 blobcmp(const blob *b1, const blob *b2)
 {
-	unsigned long s1, s2;
+	size_t s1, s2;
 
 	assert(b1 != NULL);
 	assert(b2 != NULL);
@@ -306,7 +328,7 @@ blobGrow(blob *b, size_t len)
 	assert(b->magic == BLOBCLASS);
 
 	if(len == 0)
-		return 0;
+		return CL_SUCCESS;
 
 	if(b->isClosed) {
 		/*
@@ -332,7 +354,7 @@ blobGrow(blob *b, size_t len)
 		}
 	}
 
-	return (b->data) ? 0 : CL_EMEM;
+	return (b->data) ? CL_SUCCESS : CL_EMEM;
 }
 
 fileblob *
@@ -366,10 +388,13 @@ fileblobDestroy(fileblob *fb)
 
 		assert(fb->b.data == NULL);
 	} else if(fb->b.data) {
-		cli_errmsg("fileblobDestroy: file not saved: report to bugs@clamav.net\n");
 		free(fb->b.data);
-		if(fb->b.name)
+		if(fb->b.name) {
+			cli_errmsg("fileblobDestroy: %s not saved: report to http://bugs.clamav.net\n", fb->b.name);
 			free(fb->b.name);
+		} else
+			cli_errmsg("fileblobDestroy: file not saved (%lu bytes): report to http://bugs.clamav.net\n",
+				(unsigned long)fb->b.len);
 	}
 #ifdef	CL_DEBUG
 	fb->b.magic = INVALIDCLASS;
@@ -405,14 +430,40 @@ fileblobSetFilename(fileblob *fb, const char *dir, const char *filename)
 	 * can return ETOOLONG even when the file name isn't too long
 	 */
 	snprintf(fullname, sizeof(fullname), "%s/clamavtmpXXXXXXXXXXXXX", dir);
+#elif	defined(C_WINDOWS)
+	sprintf_s(fullname, sizeof(fullname) - 1, "%s\\%.*sXXXXXX", dir,
+		(int)(sizeof(fullname) - 9 - strlen(dir)), filename);
 #else
-	snprintf(fullname, sizeof(fullname) - 1, "%s/%.*sXXXXXX", dir,
+	sprintf(fullname, "%s/%.*sXXXXXX", dir,
 		(int)(sizeof(fullname) - 9 - strlen(dir)), filename);
 #endif
 
-#if    defined(C_LINUX) || defined(C_BSD) || defined(HAVE_MKSTEMP) || defined(C_SOLARIS) || defined(C_CYGWIN) || defined(C_QNX6) || defined(C_KFREEBSD_GNU)
+#if	defined(C_LINUX) || defined(C_BSD) || defined(HAVE_MKSTEMP) || defined(C_SOLARIS) || defined(C_CYGWIN) || defined(C_QNX6)
 	cli_dbgmsg("fileblobSetFilename: mkstemp(%s)\n", fullname);
 	fd = mkstemp(fullname);
+	if((fd < 0) && (errno == EINVAL)) {
+		/*
+		 * This happens with some Linux flavours when (mis)handling
+		 * filenames with foreign characters
+		 */
+		snprintf(fullname, sizeof(fullname), "%s/clamavtmpXXXXXXXXXXXXX", dir);
+		cli_dbgmsg("fileblobSetFilename: retry as mkstemp(%s)\n", fullname);
+		fd = mkstemp(fullname);
+	}
+#elif	defined(C_WINDOWS)
+	cli_dbgmsg("fileblobSetFilename: _mktemp_s(%s)\n", fullname);
+	if(_mktemp_s(fullname, strlen(fullname) + 1) != 0) {
+		char *name;
+
+		/* _mktemp_s only allows 26 files */
+		cli_dbgmsg("fileblobSetFilename: _mktemp_s(%s) failed: %s\n", fullname, strerror(errno));
+		name = cli_gentemp(dir);
+		if(name == NULL)
+			return;
+		fd = open(name, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
+		free(name);
+	} else
+		fd = open(fullname, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
 #else
 	cli_dbgmsg("fileblobSetFilename: mktemp(%s)\n", fullname);
 	(void)mktemp(fullname);
@@ -421,30 +472,29 @@ fileblobSetFilename(fileblob *fb, const char *dir, const char *filename)
 
 	if(fd < 0) {
 		cli_errmsg("Can't create temporary file %s: %s\n", fullname, strerror(errno));
-		cli_dbgmsg("%d %d\n", sizeof(fullname), strlen(fullname));
+		cli_dbgmsg("%lu %lu\n", (unsigned long)sizeof(fullname),
+			(unsigned long)strlen(fullname));
 		return;
 	}
 
-	cli_dbgmsg("Saving attachment as %s\n", fullname);
+	cli_dbgmsg("Creating %s\n", fullname);
 
 	fb->fp = fdopen(fd, "wb");
 
 	if(fb->fp == NULL) {
 		cli_errmsg("Can't create file %s: %s\n", fullname, strerror(errno));
-		cli_dbgmsg("%d %d\n", sizeof(fullname), strlen(fullname));
+		cli_dbgmsg("%lu %lu\n", (unsigned long)sizeof(fullname),
+			(unsigned long)strlen(fullname));
 		close(fd);
 
 		return;
 	}
-	if(fb->b.data) {
-		if(fwrite(fb->b.data, fb->b.len, 1, fb->fp) != 1)
-			cli_errmsg("fileblobSetFilename: Can't write to temporary file %s: %s\n", fullname, strerror(errno));
-		else
-			fb->isNotEmpty = 1;
-		free(fb->b.data);
-		fb->b.data = NULL;
-		fb->b.len = fb->b.size = 0;
-	}
+	if(fb->b.data)
+		if(fileblobAddData(fb, fb->b.data, fb->b.len) == 0) {
+			free(fb->b.data);
+			fb->b.data = NULL;
+			fb->b.len = fb->b.size = 0;
+		}
 }
 
 int
@@ -456,8 +506,36 @@ fileblobAddData(fileblob *fb, const unsigned char *data, size_t len)
 	assert(data != NULL);
 
 	if(fb->fp) {
+#if	defined(MAX_SCAN_SIZE) && (MAX_SCAN_SIZE > 0)
+		const cli_ctx *ctx = fb->ctx;
+
+		if(fb->isInfected)	/* pretend all was written */
+			return 0;
+		if(ctx) {
+			int do_scan = 1;
+
+			if(ctx->limits)
+				if(fb->bytes_scanned >= ctx->limits->maxfilesize)
+					do_scan = 0;
+
+			if(fb->bytes_scanned > MAX_SCAN_SIZE)
+				do_scan = 0;
+			if(do_scan) {
+				if(ctx->scanned)
+					*ctx->scanned += (unsigned long)len / CL_COUNT_PRECISION;
+				fb->bytes_scanned += (unsigned long)len;
+
+				if((len > 5) && (cli_scanbuff(data, (unsigned int)len, ctx->virname, ctx->engine, CL_TYPE_UNKNOWN_DATA) == CL_VIRUS)) {
+					cli_dbgmsg("fileblobAddData: found %s\n", *ctx->virname);
+					fb->isInfected = 1;
+				}
+			}
+		}
+#endif
+
 		if(fwrite(data, len, 1, fb->fp) != 1) {
-			cli_errmsg("fileblobAddData: Can't write %u bytes to temporary file %s: %s\n", len, fb->b.name, strerror(errno));
+			cli_errmsg("fileblobAddData: Can't write %lu bytes to temporary file %s: %s\n",
+				(unsigned long)len, fb->b.name, strerror(errno));
 			return -1;
 		}
 		fb->isNotEmpty = 1;
@@ -472,10 +550,22 @@ fileblobGetFilename(const fileblob *fb)
 	return blobGetFilename(&(fb->b));
 }
 
+void
+fileblobSetCTX(fileblob *fb, cli_ctx *ctx)
+{
+	fb->ctx = ctx;
+}
+
+int
+fileblobContainsVirus(const fileblob *fb)
+{
+	return fb->isInfected ? TRUE : FALSE;
+}
+
 /*
  * Different operating systems allow different characters in their filenames
  * FIXME: What does QNX want? There is no #ifdef C_QNX, but if there were
- *	it may be best to treat it like MSDOS
+ * it may be best to treat it like MSDOS
  */
 void
 sanitiseName(char *name)
@@ -485,8 +575,14 @@ sanitiseName(char *name)
 		*name &= '\177';
 #endif
 		/* Also check for tab - "Heinz Martin" <Martin@hemag.ch> */
-#if	defined(MSDOS) || defined(C_CYGWIN) || defined(WIN32) || defined(C_OS2)
-		if(strchr("/*?<>|\\\"+=,;:\t ", *name))
+#if	defined(MSDOS) || defined(C_OS2)
+		/*
+		 * Don't take it from this that ClamAV supports DOS, it doesn't
+		 * I don't know if spaces are legal in OS/2.
+		 */
+		if(strchr("%/*?<>|\\\"+=,;:\t ~", *name))
+#elif	defined(C_CYGWIN) || defined(C_WINDOWS)
+		if(strchr("%/*?<>|\\\"+=,;:\t~", *name))
 #else
 		if(*name == '/')
 #endif

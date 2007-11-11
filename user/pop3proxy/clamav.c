@@ -40,7 +40,7 @@
 #include "pop3.h"
 #include "lib.h"
 
-
+#include <config/autoconf.h>
 
 #define	IS_CLEAN		0
 #define	IS_VIRUS		1
@@ -317,6 +317,9 @@ int doscanmail(pop3_t *x)
 			p++;
 			get_word(&p, status, sizeof(status));
 			strupr(status);
+#ifdef CONFIG_PROP_STATSD_STATSD
+			system("statsd -a incr clamav-pop total");
+#endif
 			if (strcmp(status, "OK") == 0)
 				break;
 			else if (strcmp(status, "FOUND") == 0) {
@@ -332,6 +335,9 @@ int doscanmail(pop3_t *x)
 				addline(&x->clamav.header, line);
 
 				virulent = IS_VIRUS;
+#ifdef CONFIG_PROP_STATSD_STATSD
+				system("statsd -a incr clamav-pop infected");
+#endif
 				}
 			else
 				printerror(1, "-PROXY", "clamav protocol error: response= %s", line);

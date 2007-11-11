@@ -63,12 +63,12 @@ cflags-y		+= -mabi=64
 ifdef CONFIG_BUILD_ELF64
 cflags-y		+= $(call cc-option,-mno-explicit-relocs)
 else
-# -msym32 can not be used for modules since they are loaded into XKSEG
-CFLAGS_MODULE		+= $(call cc-option,-mno-explicit-relocs)
-CFLAGS_KERNEL		+= $(call cc-option,-msym32)
+cflags-y		+= $(call cc-option,-msym32)
 endif
 endif
 
+all-$(CONFIG_BOOT_ELF32)	:= $(vmlinux-32)
+all-$(CONFIG_BOOT_ELF64)	:= $(vmlinux-64)
 
 #
 # GCC uses -G 0 -mabicalls -fpic as default.  We don't want PIC in the kernel
@@ -94,7 +94,7 @@ cflags-y += -ffreestanding
 # when fed the toolchain default!
 #
 # Certain gcc versions upto gcc 4.1.1 (probably 4.2-subversion as of
-# 2006-10-10 don't properly change the the predefined symbols if -EB / -EL
+# 2006-10-10 don't properly change the predefined symbols if -EB / -EL
 # are used, so we kludge that here.  A bug has been filed at
 # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=29413.
 #
@@ -104,6 +104,8 @@ predef-be += -DMIPSEB -D_MIPSEB -D__MIPSEB -D__MIPSEB__
 predef-le += -DMIPSEL -D_MIPSEL -D__MIPSEL -D__MIPSEL__
 cflags-$(CONFIG_CPU_BIG_ENDIAN)		+= $(shell $(CC) -dumpmachine |grep -q 'mips.*el-.*' && echo -EB $(undef-all) $(predef-be))
 cflags-$(CONFIG_CPU_LITTLE_ENDIAN)	+= $(shell $(CC) -dumpmachine |grep -q 'mips.*el-.*' || echo -EL $(undef-all) $(predef-le))
+
+cflags-$(CONFIG_CPU_HAS_SMARTMIPS)	+= $(call cc-option,-msmartmips)
 
 cflags-$(CONFIG_SB1XXX_CORELIS)	+= $(call cc-option,-mno-sched-prolog) \
 				   -fno-omit-frame-pointer
@@ -118,6 +120,7 @@ cflags-$(CONFIG_CPU_R4300)	+= -march=r4300 -Wa,--trap
 cflags-$(CONFIG_CPU_VR41XX)	+= -march=r4100 -Wa,--trap
 cflags-$(CONFIG_CPU_R4X00)	+= -march=r4600 -Wa,--trap
 cflags-$(CONFIG_CPU_TX49XX)	+= -march=r4600 -Wa,--trap
+cflags-$(CONFIG_CPU_LOONGSON2)	+= -march=r4600 -Wa,--trap
 cflags-$(CONFIG_CPU_MIPS32_R1)	+= $(call cc-option,-march=mips32,-mips32 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
 			-Wa,-mips32 -Wa,--trap
 cflags-$(CONFIG_CPU_MIPS32_R2)	+= $(call cc-option,-march=mips32r2,-mips32r2 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
@@ -283,19 +286,18 @@ load-$(CONFIG_MACH_DECSTATION)	+= 0xffffffff80040000
 CLEAN_FILES			+= drivers/tc/lk201-map.c
 
 #
-# Galileo EV64120 Board
-#
-core-$(CONFIG_MIPS_EV64120)	+= arch/mips/gt64120/ev64120/
-core-$(CONFIG_MIPS_EV64120)	+= arch/mips/gt64120/common/
-cflags-$(CONFIG_MIPS_EV64120)	+= -Iinclude/asm-mips/mach-ev64120
-load-$(CONFIG_MIPS_EV64120)	+= 0xffffffff80100000
-
-#
 # Wind River PPMC Board (4KC + GT64120)
 #
 core-$(CONFIG_WR_PPMC)		+= arch/mips/gt64120/wrppmc/
 cflags-$(CONFIG_WR_PPMC)		+= -Iinclude/asm-mips/mach-wrppmc
 load-$(CONFIG_WR_PPMC)		+= 0xffffffff80100000
+
+#
+# lemote fulong mini-PC board
+#
+core-$(CONFIG_LEMOTE_FULONG) +=arch/mips/lemote/lm2e/
+load-$(CONFIG_LEMOTE_FULONG) +=0xffffffff80100000
+cflags-$(CONFIG_LEMOTE_FULONG) += -Iinclude/asm-mips/mach-lemote
 
 #
 # For all MIPS, Inc. eval boards
@@ -309,6 +311,7 @@ core-$(CONFIG_MIPS_ATLAS)	+= arch/mips/mips-boards/atlas/
 cflags-$(CONFIG_MIPS_ATLAS)	+= -Iinclude/asm-mips/mach-atlas
 cflags-$(CONFIG_MIPS_ATLAS)	+= -Iinclude/asm-mips/mach-mips
 load-$(CONFIG_MIPS_ATLAS)	+= 0xffffffff80100000
+all-$(CONFIG_MIPS_ATLAS)	:= vmlinux.srec
 
 #
 # MIPS Malta board
@@ -316,6 +319,7 @@ load-$(CONFIG_MIPS_ATLAS)	+= 0xffffffff80100000
 core-$(CONFIG_MIPS_MALTA)	+= arch/mips/mips-boards/malta/
 cflags-$(CONFIG_MIPS_MALTA)	+= -Iinclude/asm-mips/mach-mips
 load-$(CONFIG_MIPS_MALTA)	+= 0xffffffff80100000
+all-$(CONFIG_MIPS_MALTA)	:= vmlinux.srec
 
 #
 # MIPS SEAD board
@@ -323,41 +327,22 @@ load-$(CONFIG_MIPS_MALTA)	+= 0xffffffff80100000
 core-$(CONFIG_MIPS_SEAD)	+= arch/mips/mips-boards/sead/
 cflags-$(CONFIG_MIPS_SEAD)	+= -Iinclude/asm-mips/mach-mips
 load-$(CONFIG_MIPS_SEAD)	+= 0xffffffff80100000
+all-$(CONFIG_MIPS_SEAD)		:= vmlinux.srec
 
 #
 # MIPS SIM
 #
-core-$(CONFIG_MIPS_SIM)		+= arch/mips/mips-boards/sim/
-cflags-$(CONFIG_MIPS_SIM)	+= -Iinclude/asm-mips/mach-sim
+core-$(CONFIG_MIPS_SIM)		+= arch/mips/mipssim/
+cflags-$(CONFIG_MIPS_SIM)	+= -Iinclude/asm-mips/mach-mipssim
 load-$(CONFIG_MIPS_SIM)		+= 0x80100000
 
 #
-# Momentum Ocelot board
+# PMC-Sierra MSP SOCs
 #
-# The Ocelot setup.o must be linked early - it does the ioremap() for the
-# mips_io_port_base.
-#
-core-$(CONFIG_MOMENCO_OCELOT)	+= arch/mips/gt64120/common/ \
-				   arch/mips/gt64120/momenco_ocelot/
-cflags-$(CONFIG_MOMENCO_OCELOT)	+= -Iinclude/asm-mips/mach-ocelot
-load-$(CONFIG_MOMENCO_OCELOT)	+= 0xffffffff80100000
-
-#
-# Momentum Ocelot-G board
-#
-# The Ocelot-G setup.o must be linked early - it does the ioremap() for the
-# mips_io_port_base.
-#
-core-$(CONFIG_MOMENCO_OCELOT_G)	+= arch/mips/momentum/ocelot_g/
-load-$(CONFIG_MOMENCO_OCELOT_G)	+= 0xffffffff80100000
-
-#
-# Momentum Ocelot-C and -CS boards
-#
-# The Ocelot-C[S] setup.o must be linked early - it does the ioremap() for the
-# mips_io_port_base.
-core-$(CONFIG_MOMENCO_OCELOT_C)	+= arch/mips/momentum/ocelot_c/
-load-$(CONFIG_MOMENCO_OCELOT_C)	+= 0xffffffff80100000
+core-$(CONFIG_PMC_MSP)		+= arch/mips/pmc-sierra/msp71xx/
+cflags-$(CONFIG_PMC_MSP)	+= -Iinclude/asm-mips/pmc-sierra/msp71xx \
+					-mno-branch-likely
+load-$(CONFIG_PMC_MSP)		+= 0xffffffff80100000
 
 #
 # PMC-Sierra Yosemite
@@ -372,13 +357,7 @@ load-$(CONFIG_PMC_YOSEMITE)	+= 0xffffffff80100000
 core-$(CONFIG_QEMU)		+= arch/mips/qemu/
 cflags-$(CONFIG_QEMU)		+= -Iinclude/asm-mips/mach-qemu
 load-$(CONFIG_QEMU)		+= 0xffffffff80010000
-
-#
-# Momentum Ocelot-3
-#
-core-$(CONFIG_MOMENCO_OCELOT_3) 	+= arch/mips/momentum/ocelot_3/
-cflags-$(CONFIG_MOMENCO_OCELOT_3)	+= -Iinclude/asm-mips/mach-ocelot3
-load-$(CONFIG_MOMENCO_OCELOT_3) 	+= 0xffffffff80100000
+all-$(CONFIG_QEMU)		:= vmlinux.bin
 
 #
 # Basler eXcite
@@ -386,32 +365,6 @@ load-$(CONFIG_MOMENCO_OCELOT_3) 	+= 0xffffffff80100000
 core-$(CONFIG_BASLER_EXCITE)	+= arch/mips/basler/excite/
 cflags-$(CONFIG_BASLER_EXCITE)	+= -Iinclude/asm-mips/mach-excite
 load-$(CONFIG_BASLER_EXCITE)	+= 0x80100000
-
-#
-# Momentum Jaguar ATX
-#
-core-$(CONFIG_MOMENCO_JAGUAR_ATX)	+= arch/mips/momentum/jaguar_atx/
-cflags-$(CONFIG_MOMENCO_JAGUAR_ATX)	+= -Iinclude/asm-mips/mach-ja
-#ifdef CONFIG_JAGUAR_DMALOW
-#load-$(CONFIG_MOMENCO_JAGUAR_ATX)	+= 0xffffffff88000000
-#else
-load-$(CONFIG_MOMENCO_JAGUAR_ATX)	+= 0xffffffff80100000
-#endif
-
-#
-# NEC DDB
-#
-core-$(CONFIG_DDB5XXX_COMMON)	+= arch/mips/ddb5xxx/common/
-
-#
-# NEC DDB Vrc-5477
-#
-core-$(CONFIG_DDB5477)		+= arch/mips/ddb5xxx/ddb5477/
-load-$(CONFIG_DDB5477)		+= 0xffffffff80100000
-
-core-$(CONFIG_LASAT)		+= arch/mips/lasat/
-cflags-$(CONFIG_LASAT)		+= -Iinclude/asm-mips/mach-lasat
-load-$(CONFIG_LASAT)		+= 0xffffffff80000000
 
 #
 # Common VR41xx
@@ -464,6 +417,11 @@ cflags-$(CONFIG_SOC_PNX8550)	+= -Iinclude/asm-mips/mach-pnx8550
 libs-$(CONFIG_PNX8550_JBS)	+= arch/mips/philips/pnx8550/jbs/
 #cflags-$(CONFIG_PNX8550_JBS)	+= -Iinclude/asm-mips/mach-pnx8550
 load-$(CONFIG_PNX8550_JBS)	+= 0xffffffff80060000
+
+# Philips PNX8550 STB810 board
+#
+libs-$(CONFIG_PNX8550_STB810)	+= arch/mips/philips/pnx8550/stb810/
+load-$(CONFIG_PNX8550_STB810)	+= 0xffffffff80060000
 
 # NEC EMMA2RH boards
 #
@@ -525,25 +483,29 @@ cflags-$(CONFIG_SGI_IP32)	+= -Iinclude/asm-mips/mach-ip32
 load-$(CONFIG_SGI_IP32)		+= 0xffffffff80004000
 
 #
-# Sibyte SB1250 SOC
+# Sibyte SB1250/BCM1480 SOC
 #
 # This is a LIB so that it links at the end, and initcalls are later
 # the sequence; but it is built as an object so that modules don't get
 # removed (as happens, even if they have __initcall/module_init)
 #
 core-$(CONFIG_SIBYTE_BCM112X)	+= arch/mips/sibyte/sb1250/
+core-$(CONFIG_SIBYTE_BCM112X)	+= arch/mips/sibyte/common/
 cflags-$(CONFIG_SIBYTE_BCM112X)	+= -Iinclude/asm-mips/mach-sibyte \
 			-DSIBYTE_HDR_FEATURES=SIBYTE_HDR_FMASK_1250_112x_ALL
 
 core-$(CONFIG_SIBYTE_SB1250)	+= arch/mips/sibyte/sb1250/
+core-$(CONFIG_SIBYTE_SB1250)	+= arch/mips/sibyte/common/
 cflags-$(CONFIG_SIBYTE_SB1250)	+= -Iinclude/asm-mips/mach-sibyte \
 			-DSIBYTE_HDR_FEATURES=SIBYTE_HDR_FMASK_1250_112x_ALL
 
 core-$(CONFIG_SIBYTE_BCM1x55)	+= arch/mips/sibyte/bcm1480/
+core-$(CONFIG_SIBYTE_BCM1x55)	+= arch/mips/sibyte/common/
 cflags-$(CONFIG_SIBYTE_BCM1x55)	+= -Iinclude/asm-mips/mach-sibyte \
 			-DSIBYTE_HDR_FEATURES=SIBYTE_HDR_FMASK_1480_ALL
 
 core-$(CONFIG_SIBYTE_BCM1x80)	+= arch/mips/sibyte/bcm1480/
+core-$(CONFIG_SIBYTE_BCM1x80)	+= arch/mips/sibyte/common/
 cflags-$(CONFIG_SIBYTE_BCM1x80)	+= -Iinclude/asm-mips/mach-sibyte \
 			-DSIBYTE_HDR_FEATURES=SIBYTE_HDR_FMASK_1480_ALL
 
@@ -571,11 +533,12 @@ libs-$(CONFIG_SIBYTE_BIGSUR)	+= arch/mips/sibyte/swarm/
 load-$(CONFIG_SIBYTE_BIGSUR)	:= 0xffffffff80100000
 
 #
-# SNI RM200 PCI
+# SNI RM
 #
-core-$(CONFIG_SNI_RM200_PCI)	+= arch/mips/sni/
-cflags-$(CONFIG_SNI_RM200_PCI)	+= -Iinclude/asm-mips/mach-rm200
-load-$(CONFIG_SNI_RM200_PCI)	+= 0xffffffff80600000
+core-$(CONFIG_SNI_RM)		+= arch/mips/sni/
+cflags-$(CONFIG_SNI_RM)		+= -Iinclude/asm-mips/mach-rm
+load-$(CONFIG_SNI_RM)		+= 0xffffffff80600000
+all-$(CONFIG_SNI_RM)		:= vmlinux.ecoff
 
 #
 # Toshiba JMR-TX3927 board
@@ -591,6 +554,7 @@ load-$(CONFIG_TOSHIBA_JMR3927)	+= 0xffffffff80050000
 #
 core-$(CONFIG_TOSHIBA_RBTX4927)	+= arch/mips/tx4927/toshiba_rbtx4927/
 core-$(CONFIG_TOSHIBA_RBTX4927)	+= arch/mips/tx4927/common/
+cflags-$(CONFIG_TOSHIBA_RBTX4927) += -Iinclude/asm-mips/mach-tx49xx
 load-$(CONFIG_TOSHIBA_RBTX4927)	+= 0xffffffff80020000
 
 #
@@ -598,6 +562,7 @@ load-$(CONFIG_TOSHIBA_RBTX4927)	+= 0xffffffff80020000
 #
 core-$(CONFIG_TOSHIBA_RBTX4938) += arch/mips/tx4938/toshiba_rbtx4938/
 core-$(CONFIG_TOSHIBA_RBTX4938) += arch/mips/tx4938/common/
+cflags-$(CONFIG_TOSHIBA_RBTX4938) += -Iinclude/asm-mips/mach-tx49xx
 load-$(CONFIG_TOSHIBA_RBTX4938) += 0xffffffff80100000
 
 cflags-y			+= -Iinclude/asm-mips/mach-generic
@@ -614,13 +579,14 @@ JIFFIES			= jiffies_64
 endif
 
 AFLAGS		+= $(cflags-y)
-CFLAGS		+= $(cflags-y)
+CFLAGS		+= $(cflags-y) \
+			-D"VMLINUX_LOAD_ADDRESS=$(load-y)"
 
 LDFLAGS			+= -m $(ld-emul)
 
 ifdef CONFIG_MIPS
 CHECKFLAGS += $(shell $(CC) $(CFLAGS) -dM -E -xc /dev/null | \
-	egrep -vw '__GNUC_(MAJOR|MINOR|PATCHLEVEL)__' | \
+	egrep -vw '__GNUC_(|MINOR_|PATCHLEVEL_)_' | \
 	sed -e 's/^\#define /-D/' -e "s/ /='/" -e "s/$$/'/")
 ifdef CONFIG_64BIT
 CHECKFLAGS		+= -m64
@@ -644,17 +610,10 @@ CPPFLAGS_vmlinux.lds := \
 head-y := arch/mips/kernel/head.o arch/mips/kernel/init_task.o
 
 libs-y			+= arch/mips/lib/
-libs-$(CONFIG_32BIT)	+= arch/mips/lib-32/
-libs-$(CONFIG_64BIT)	+= arch/mips/lib-64/
 
 core-y			+= arch/mips/kernel/ arch/mips/mm/ arch/mips/math-emu/
 
 drivers-$(CONFIG_OPROFILE)	+= arch/mips/oprofile/
-
-ifdef CONFIG_LASAT
-rom.bin rom.sw: vmlinux
-	$(Q)$(MAKE) $(build)=arch/mips/lasat/image $@
-endif
 
 #
 # Some machines like the Indy need 32-bit ELF binaries for booting purposes.
@@ -673,33 +632,7 @@ vmlinux.64: vmlinux
 
 makeboot =$(Q)$(MAKE) $(build)=arch/mips/boot VMLINUX=$(vmlinux-32) $(1)
 
-ifdef CONFIG_BOOT_ELF32
-all:	$(vmlinux-32)
-endif
-
-ifdef CONFIG_BOOT_ELF64
-all:	$(vmlinux-64)
-endif
-
-ifdef CONFIG_MIPS_ATLAS
-all:	vmlinux.srec
-endif
-
-ifdef CONFIG_MIPS_MALTA
-all:	vmlinux.srec
-endif
-
-ifdef CONFIG_MIPS_SEAD
-all:	vmlinux.srec
-endif
-
-ifdef CONFIG_QEMU
-all:	vmlinux.bin
-endif
-
-ifdef CONFIG_SNI_RM200_PCI
-all:	vmlinux.ecoff
-endif
+all:	$(all-y)
 
 vmlinux.bin: $(vmlinux-32)
 	+@$(call makeboot,$@)
@@ -713,9 +646,26 @@ vmlinux.srec: $(vmlinux-32)
 CLEAN_FILES += vmlinux.ecoff \
 	       vmlinux.srec
 
+archprepare:
+ifdef CONFIG_MIPS32_N32
+	@echo '  Checking missing-syscalls for N32'
+	$(Q)$(MAKE) $(build)=. missing-syscalls EXTRA_CFLAGS="-mabi=n32"
+endif
+ifdef CONFIG_MIPS32_O32
+	@echo '  Checking missing-syscalls for O32'
+	$(Q)$(MAKE) $(build)=. missing-syscalls EXTRA_CFLAGS="-mabi=32"
+endif
+
 archclean:
 	@$(MAKE) $(clean)=arch/mips/boot
-	@$(MAKE) $(clean)=arch/mips/lasat
+
+define archhelp
+	echo '  vmlinux.ecoff        - ECOFF boot image'
+	echo '  vmlinux.bin          - Raw binary boot image'
+	echo '  vmlinux.srec         - SREC boot image'
+	echo
+	echo '  These will be default as apropriate for a configured platform.'
+endef
 
 CLEAN_FILES += vmlinux.32 \
 	       vmlinux.64 \

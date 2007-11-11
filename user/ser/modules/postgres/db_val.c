@@ -1,5 +1,5 @@
 /*
- * $Id: db_val.c,v 1.2 2003/04/14 18:52:47 janakj Exp $
+ * $Id: db_val.c,v 1.4.2.1 2005/07/20 17:11:52 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -188,6 +188,7 @@ int str2valp(db_type_t _t, db_val_t* _v, const char* _s, int _l, void *_p)
 
 	switch(_t) {
 	case DB_INT:
+	case DB_BITMAP:
 		sprintf(dbuf, "got int %s", _s);
 		DLOG("str2valp", dbuf);
 		if (str2int(_s, &VAL_INT(_v)) < 0) {
@@ -222,7 +223,7 @@ int str2valp(db_type_t _t, db_val_t* _v, const char* _s, int _l, void *_p)
 
 	case DB_STR:
 		VAL_STR(_v).s = aug_alloc(_l + 1, _p);
-		memcpy(_s, VAL_STR(_v).s, _l);
+		memcpy(VAL_STR(_v).s, _s,  _l);
 		VAL_STR(_v).s[_l] = (char) 0;
 		VAL_STR(_v).len = _l;
 		VAL_TYPE(_v) = DB_STR;
@@ -247,7 +248,7 @@ int str2valp(db_type_t _t, db_val_t* _v, const char* _s, int _l, void *_p)
 	case DB_BLOB:
 
 		VAL_STR(_v).s = aug_alloc(_l + 1, _p);
-		memcpy(_s, VAL_STR(_v).s, _l);
+		memcpy(VAL_STR(_v).s, _s,  _l);
 		VAL_STR(_v).s[_l] = (char) 0;
 		VAL_STR(_v).len = _l;
 		VAL_TYPE(_v) = DB_BLOB;
@@ -350,7 +351,7 @@ int val2str(db_val_t* _v, char* _s, int* _len)
 		break;
 
 	default:
-		DBG("val2str(): Unknow data type\n");
+		DBG("val2str(): Unknown data type\n");
 		return -7;
 	}
 	return -8;

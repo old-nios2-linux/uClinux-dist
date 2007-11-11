@@ -230,7 +230,6 @@ ENTRY(system_call)
 	CFI_REL_OFFSET rip,RIP-ARGOFFSET
 	GET_THREAD_INFO(%rcx)
 	testl $(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT|_TIF_SECCOMP),threadinfo_flags(%rcx)
-	CFI_REMEMBER_STATE
 	jnz tracesys
 	cmpq $__NR_syscall_max,%rax
 	ja badsys
@@ -241,7 +240,6 @@ ENTRY(system_call)
  * Syscall return path ending with SYSRET (fast path)
  * Has incomplete stack frame and undefined top of stack. 
  */		
-	.globl ret_from_sys_call
 ret_from_sys_call:
 	movl $_TIF_ALLWORK_MASK,%edi
 	/* edi:	flagmask */
@@ -251,8 +249,8 @@ sysret_check:
 	TRACE_IRQS_OFF
 	movl threadinfo_flags(%rcx),%edx
 	andl %edi,%edx
-	CFI_REMEMBER_STATE
 	jnz  sysret_careful 
+	CFI_REMEMBER_STATE
 	/*
 	 * sysretq will re-enable interrupts:
 	 */
@@ -265,10 +263,10 @@ sysret_check:
 	swapgs
 	sysretq
 
+	CFI_RESTORE_STATE
 	/* Handle reschedules */
 	/* edx:	work, edi: workmask */	
 sysret_careful:
-	CFI_RESTORE_STATE
 	bt $TIF_NEED_RESCHED,%edx
 	jnc sysret_signal
 	TRACE_IRQS_ON
@@ -284,7 +282,7 @@ sysret_careful:
 sysret_signal:
 	TRACE_IRQS_ON
 	sti
-	testl $(_TIF_SIGPENDING|_TIF_NOTIFY_RESUME|_TIF_SINGLESTEP),%edx
+	testl $(_TIF_SIGPENDING|_TIF_SINGLESTEP|_TIF_MCE_NOTIFY),%edx
 	jz    1f
 
 	/* Really a signal */
@@ -306,7 +304,6 @@ badsys:
 
 	/* Do syscall tracing */
 tracesys:			 
-	CFI_RESTORE_STATE
 	SAVE_REST
 	movq $-ENOSYS,RAX(%rsp)
 	FIXUP_TOP_OF_STACK %rdi
@@ -322,32 +319,13 @@ tracesys:
 	call *sys_call_table(,%rax,8)
 1:	movq %rax,RAX-ARGOFFSET(%rsp)
 	/* Use IRET because user could have changed frame */
-	jmp int_ret_from_sys_call
-	CFI_ENDPROC
-END(system_call)
 		
 /* 
  * Syscall return path ending with IRET.
  * Has correct top of stack, but partial stack frame.
- */ 	
-ENTRY(int_ret_from_sys_call)
-	CFI_STARTPROC	simple
-	CFI_SIGNAL_FRAME
-	CFI_DEF_CFA	rsp,SS+8-ARGOFFSET
-	/*CFI_REL_OFFSET	ss,SS-ARGOFFSET*/
-	CFI_REL_OFFSET	rsp,RSP-ARGOFFSET
-	/*CFI_REL_OFFSET	rflags,EFLAGS-ARGOFFSET*/
-	/*CFI_REL_OFFSET	cs,CS-ARGOFFSET*/
-	CFI_REL_OFFSET	rip,RIP-ARGOFFSET
-	CFI_REL_OFFSET	rdx,RDX-ARGOFFSET
-	CFI_REL_OFFSET	rcx,RCX-ARGOFFSET
-	CFI_REL_OFFSET	rax,RAX-ARGOFFSET
-	CFI_REL_OFFSET	rdi,RDI-ARGOFFSET
-	CFI_REL_OFFSET	rsi,RSI-ARGOFFSET
-	CFI_REL_OFFSET	r8,R8-ARGOFFSET
-	CFI_REL_OFFSET	r9,R9-ARGOFFSET
-	CFI_REL_OFFSET	r10,R10-ARGOFFSET
-	CFI_REL_OFFSET	r11,R11-ARGOFFSET
+ */
+	.globl int_ret_from_sys_call
+int_ret_from_sys_call:
 	cli
 	TRACE_IRQS_OFF
 	testl $3,CS-ARGOFFSET(%rsp)
@@ -394,12 +372,10 @@ int_very_careful:
 	popq %rdi
 	CFI_ADJUST_CFA_OFFSET -8
 	andl $~(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT|_TIF_SINGLESTEP),%edi
-	cli
-	TRACE_IRQS_OFF
 	jmp int_restore_rest
 	
 int_signal:
-	testl $(_TIF_NOTIFY_RESUME|_TIF_SIGPENDING|_TIF_SINGLESTEP),%edx
+	testl $(_TIF_SIGPENDING|_TIF_SINGLESTEP|_TIF_MCE_NOTIFY),%edx
 	jz 1f
 	movq %rsp,%rdi		# &ptregs -> arg1
 	xorl %esi,%esi		# oldset -> arg2
@@ -411,7 +387,7 @@ int_restore_rest:
 	TRACE_IRQS_OFF
 	jmp int_with_check
 	CFI_ENDPROC
-END(int_ret_from_sys_call)
+END(system_call)
 		
 /* 
  * Certain special system calls that need to save a complete full stack frame.
@@ -623,7 +599,7 @@ retint_careful:
 	jmp retint_check
 	
 retint_signal:
-	testl $(_TIF_SIGPENDING|_TIF_NOTIFY_RESUME|_TIF_SINGLESTEP),%edx
+	testl $(_TIF_SIGPENDING|_TIF_SINGLESTEP|_TIF_MCE_NOTIFY),%edx
 	jz    retint_swapgs
 	TRACE_IRQS_ON
 	sti
@@ -699,6 +675,9 @@ END(invalidate_interrupt\num)
 ENTRY(call_function_interrupt)
 	apicinterrupt CALL_FUNCTION_VECTOR,smp_call_function_interrupt
 END(call_function_interrupt)
+ENTRY(irq_move_cleanup_interrupt)
+	apicinterrupt IRQ_MOVE_CLEANUP_VECTOR,smp_irq_move_cleanup_interrupt
+END(irq_move_cleanup_interrupt)
 #endif
 
 ENTRY(apic_timer_interrupt)
@@ -722,6 +701,7 @@ END(spurious_interrupt)
 	CFI_ADJUST_CFA_OFFSET 8
 	pushq %rax	/* push real oldrax to the rdi slot */ 
 	CFI_ADJUST_CFA_OFFSET 8
+	CFI_REL_OFFSET rax,0
 	leaq  \sym(%rip),%rax
 	jmp error_entry
 	CFI_ENDPROC
@@ -731,6 +711,7 @@ END(spurious_interrupt)
 	XCPT_FRAME
 	pushq %rax
 	CFI_ADJUST_CFA_OFFSET 8
+	CFI_REL_OFFSET rax,0
 	leaq  \sym(%rip),%rax
 	jmp error_entry
 	CFI_ENDPROC
@@ -838,6 +819,7 @@ paranoid_schedule\trace:
  */ 		  				
 KPROBE_ENTRY(error_entry)
 	_frame RDI
+	CFI_REL_OFFSET rax,0
 	/* rdi slot contains rax, oldrax contains error code */
 	cld	
 	subq  $14*8,%rsp
@@ -845,6 +827,7 @@ KPROBE_ENTRY(error_entry)
 	movq %rsi,13*8(%rsp)
 	CFI_REL_OFFSET	rsi,RSI
 	movq 14*8(%rsp),%rsi	/* load rax from rdi slot */
+	CFI_REGISTER	rax,rsi
 	movq %rdx,12*8(%rsp)
 	CFI_REL_OFFSET	rdx,RDX
 	movq %rcx,11*8(%rsp)
@@ -878,6 +861,7 @@ error_swapgs:
 	swapgs
 error_sti:	
 	movq %rdi,RDI(%rsp) 	
+	CFI_REL_OFFSET	rdi,RDI
 	movq %rsp,%rdi
 	movq ORIG_RAX(%rsp),%rsi	/* get error code */ 
 	movq $-1,ORIG_RAX(%rsp)
@@ -1180,35 +1164,9 @@ ENTRY(call_softirq)
 	CFI_ENDPROC
 ENDPROC(call_softirq)
 
-#ifdef CONFIG_STACK_UNWIND
-ENTRY(arch_unwind_init_running)
+KPROBE_ENTRY(ignore_sysret)
 	CFI_STARTPROC
-	movq	%r15, R15(%rdi)
-	movq	%r14, R14(%rdi)
-	xchgq	%rsi, %rdx
-	movq	%r13, R13(%rdi)
-	movq	%r12, R12(%rdi)
-	xorl	%eax, %eax
-	movq	%rbp, RBP(%rdi)
-	movq	%rbx, RBX(%rdi)
-	movq	(%rsp), %rcx
-	movq	%rax, R11(%rdi)
-	movq	%rax, R10(%rdi)
-	movq	%rax, R9(%rdi)
-	movq	%rax, R8(%rdi)
-	movq	%rax, RAX(%rdi)
-	movq	%rax, RCX(%rdi)
-	movq	%rax, RDX(%rdi)
-	movq	%rax, RSI(%rdi)
-	movq	%rax, RDI(%rdi)
-	movq	%rax, ORIG_RAX(%rdi)
-	movq	%rcx, RIP(%rdi)
-	leaq	8(%rsp), %rcx
-	movq	$__KERNEL_CS, CS(%rdi)
-	movq	%rax, EFLAGS(%rdi)
-	movq	%rcx, RSP(%rdi)
-	movq	$__KERNEL_DS, SS(%rdi)
-	jmpq	*%rdx
+	mov $-ENOSYS,%eax
+	sysret
 	CFI_ENDPROC
-ENDPROC(arch_unwind_init_running)
-#endif
+ENDPROC(ignore_sysret)

@@ -1,8 +1,8 @@
 /*
- * $Id: t_reply.c,v 1.62.2.2.2.12.2.1 2004/07/21 13:41:53 bogdan Exp $
+ * $Id: t_reply.c,v 1.98.2.5 2005/09/01 13:53:01 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,7 +35,7 @@
  *  2003-02-28  scratchpad compatibility abandoned (jiri)
  *  2003-03-01  kr set through a function now (jiri)
  *  2003-03-06  saving of to-tags for ACK/200 matching introduced, 
- *              voicemail changes accepted, udpated to new callback
+ *              voicemail changes accepted, updated to new callback
  *              names (jiri)
  *  2003-03-10  fixed new to tag bug/typo (if w/o {})  (andrei)
  *  2003-03-16  removed _TOTAG (jiri)
@@ -52,19 +52,26 @@
  *  2003-11-05  flag context updated from failure/reply handlers back
  *              to transaction context (jiri)
  *  2003-11-11: build_lump_rpl() removed, add_lump_rpl() has flags (bogdan)
- *  2004-07-21  user avp(attribute value pair) added -> making avp list
- *              available in failure/on_reply routes (bogdan)
+ *  2003-12-04  global TM callbacks switched to per transaction callbacks
+ *              (bogdan)
+ *  2004-02-06: support for user pref. added - destroy_avps (bogdan)
+ *  2003-11-05  flag context updated from failure/reply handlers back
+ *              to transaction context (jiri)
+ *  2003-11-11: build_lump_rpl() removed, add_lump_rpl() has flags (bogdan)
+ *  2004-02-13: t->is_invite and t->local replaced with flags (bogdan)
+ *  2004-02-18  fifo_t_reply imported from vm module (bogdan)
+ *  2004-08-23  avp list is available from failure/on_reply routes (bogdan)
+ *  2004-10-01  added a new param.: restart_fr_on_each_reply (andrei)
+ *  2005-03-01  force for statefull replies the incoming interface of 
+ *              the request (bogdan)
+ *  2005-09-01  reverted to the old way of checking response.dst.send_sock
+ *               in t_retransmit_reply & reply_light (andrei)
  */
 
 
-#include <assert.h>
-#include "defs.h"
 
 #include "../../comp_defs.h"
-
 #include "../../hash_func.h"
-#include "t_funcs.h"
-#include "h_table.h"
 #include "../../dprint.h"
 #include "../../config.h"
 #include "../../parser/parser_f.h"
@@ -77,7 +84,11 @@
 #include "../../data_lump.h"
 #include "../../data_lump_rpl.h"
 #include "../../usr_avp.h"
+#include "../../fifo_server.h"
+#include "../../unixsock_server.h"
 
+#include "defs.h"
+#include "h_table.h"
 #include "t_hooks.h"
 #include "t_funcs.h"
 #include "t_reply.h"
@@ -87,6 +98,10 @@
 #include "t_fwd.h"
 #include "fix_lumps.h"
 #include "t_stats.h"
+
+
+/* restart fr timer on each provisional reply, default yes */
+int restart_fr_on_each_reply=1;
 
 /* are we processing original or shmemed request ? */
 enum route_mode rmode=MODE_REQUEST;
@@ -105,24 +120,42 @@ static int goto_on_negative=0;
 static int goto_on_reply=0;
 
 
+
 /* we store the reply_route # in private memory which is
    then processed during t_relay; we cannot set this value
    before t_relay creates transaction context or after
    t_relay when a reply may arrive after we set this
    value; that's why we do it how we do it, i.e.,
    *inside*  t_relay using hints stored in private memory
-   before t_reay is called
+   before t_relay is called
 */
-  
-  
+
+
 void t_on_negative( unsigned int go_to )
 {
-	goto_on_negative=go_to;
+	struct cell *t = get_t();
+
+	/* in MODE_REPLY and MODE_ONFAILURE T will be set to current transaction;
+	 * in MODE_REQUEST T will be set only if the transaction was already 
+	 * created; if not -> use the static variable */
+	if (!t || t==T_UNDEFINED )
+		goto_on_negative=go_to;
+	else
+		get_t()->on_negative = go_to;
 }
+
 
 void t_on_reply( unsigned int go_to )
 {
-	goto_on_reply=go_to;
+	struct cell *t = get_t();
+
+	/* in MODE_REPLY and MODE_ONFAILURE T will be set to current transaction;
+	 * in MODE_REQUEST T will be set only if the transaction was already 
+	 * created; if not -> use the static variable */
+	if (!t || t==T_UNDEFINED )
+		goto_on_reply=go_to;
+	else
+		get_t()->on_reply = go_to;
 }
 
 
@@ -151,7 +184,7 @@ int unmatched_totag(struct cell *t, struct sip_msg *ack)
 
 	if (parse_headers(ack, HDR_TO,0)==-1 || 
 				!ack->to ) {
-		LOG(L_ERR, "ERROR: ack_totag_set: To invalid\n");
+		LOG(L_ERR, "ERROR: unmatched_totag: To invalid\n");
 		return 1;
 	}
 	tag=&get_to(ack)->tag_value;
@@ -198,7 +231,7 @@ inline static int update_totag_set(struct cell *t, struct sip_msg *ok)
 	}
 	tag=&get_to(ok)->tag_value;
 	if (!tag->s) {
-		LOG(L_ERR, "ERROR: update_totag_set: no tag in to\n");
+		DBG("ERROR: update_totag_set: no tag in to\n");
 		return 0;
 	}
 
@@ -207,9 +240,9 @@ inline static int update_totag_set(struct cell *t, struct sip_msg *ok)
 				&& memcmp(i->tag.s, tag->s, tag->len) ==0 ){
 			/* to tag already recorded */
 #ifdef XL_DEBUG
-			LOG(L_CRIT, "DEBUG: update_totag_set: totag retranmission\n");
+			LOG(L_CRIT, "DEBUG: update_totag_set: totag retransmission\n");
 #else
-			DBG("DEBUG: update_totag_set: totag retranmission\n");
+			DBG("DEBUG: update_totag_set: totag retransmission\n");
 #endif
 			return 1;
 		}
@@ -243,15 +276,15 @@ static char *build_ack(struct sip_msg* rpl,struct cell *trans,int branch,
 {
 	str to;
 
-    if ( parse_headers(rpl,HDR_TO, 0)==-1 || !rpl->to ) {
-	    LOG(L_ERR, "ERROR: t_build_ACK: "
-		"cannot generate a HBH ACK if key HFs in reply missing\n");
-	    return NULL;
+    if (parse_headers(rpl,HDR_TO, 0)==-1 || !rpl->to ) {
+        LOG(L_ERR, "ERROR: build_ack: "
+            "cannot generate a HBH ACK if key HFs in reply missing\n");
+        return NULL;
     }
-    to.s=rpl->to->name.s;
-    to.len=rpl->to->len;
+	to.s=rpl->to->name.s;
+	to.len=rpl->to->len;
     return build_local( trans, branch, ret_len,
-			ACK, ACK_LEN, &to );
+        ACK, ACK_LEN, &to );
 }
 
 
@@ -275,11 +308,12 @@ static char *build_local_ack(struct sip_msg* rpl, struct cell *trans, int branch
 }
 
 
-/*
- * The function is used to send a localy generated ACK to INVITE
- * (tm generates the ACK on behalf of application using UAC
- */
-static int send_local_ack(str* next_hop, char* ack, int ack_len)
+     /*
+      * The function is used to send a localy generated ACK to INVITE
+      * (tm generates the ACK on behalf of application using UAC
+      */
+static int send_local_ack(struct sip_msg* msg, str* next_hop,
+							char* ack, int ack_len)
 {
 	struct socket_info* send_sock;
 	union sockaddr_union to_su;
@@ -288,13 +322,13 @@ static int send_local_ack(str* next_hop, char* ack, int ack_len)
 		LOG(L_ERR, "send_local_ack: Invalid parameter value\n");
 		return -1;
 	}
-
-	send_sock = uri2sock(next_hop, &to_su, PROTO_NONE);
+	
+	send_sock = uri2sock(msg, next_hop, &to_su, PROTO_NONE);
 	if (!send_sock) {
 		LOG(L_ERR, "send_local_ack: no socket found\n");
 		return -1;
-	}	
-
+	}
+	
 	return msg_send(send_sock, send_sock->proto, &to_su, 0, ack, ack_len);
 }
 
@@ -310,9 +344,9 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 
 	if (!buf)
 	{
-		DBG("DEBUG: t_reply: response building failed\n");
-		/* determine if there are some branches to be cancelled */
-		if (trans->is_invite) {
+		DBG("DEBUG: _reply_light: response building failed\n");
+		/* determine if there are some branches to be canceled */
+		if ( is_invite(trans) ) {
 			if (lock) LOCK_REPLIES( trans );
 			which_cancel(trans, &cancel_bitmap );
 			if (lock) UNLOCK_REPLIES( trans );
@@ -323,9 +357,9 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 
 	cancel_bitmap=0;
 	if (lock) LOCK_REPLIES( trans );
-	if (trans->is_invite) which_cancel(trans, &cancel_bitmap );
+	if ( is_invite(trans) ) which_cancel(trans, &cancel_bitmap );
 	if (trans->uas.status>=200) {
-		LOG( L_ERR, "ERROR: t_reply: can't generate %d reply"
+		LOG( L_ERR, "ERROR: _reply_light: can't generate %d reply"
 			" when a final %d was sent out\n", code, trans->uas.status);
 		goto error2;
 	}
@@ -339,7 +373,7 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 	rb->buffer = (char*)shm_resize( rb->buffer, buf_len );
 	/* puts the reply's buffer to uas.response */
 	if (! rb->buffer ) {
-			LOG(L_ERR, "ERROR: t_reply: cannot allocate shmem buffer\n");
+			LOG(L_ERR, "ERROR: _reply_light: cannot allocate shmem buffer\n");
 			goto error3;
 	}
 	update_local_tags(trans, bm, rb->buffer, buf);
@@ -357,17 +391,19 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 	/* do UAC cleanup procedures in case we generated
 	   a final answer whereas there are pending UACs */
 	if (code>=200) {
-		if (trans->local) {
+		if ( is_local(trans) ) {
 			DBG("DEBUG: local transaction completed from _reply\n");
-			callback_event( TMCB_LOCAL_COMPLETED, trans, FAKED_REPLY, code );
-			if (trans->completion_cb) 
-				trans->completion_cb( trans, FAKED_REPLY, code, trans->cbp);
+			if ( has_tran_tmcbs(trans, TMCB_LOCAL_COMPLETED) )
+				run_trans_callbacks( TMCB_LOCAL_COMPLETED, trans,
+					0, FAKED_REPLY, code);
 		} else {
-			callback_event( TMCB_RESPONSE_OUT, trans, FAKED_REPLY, code );
+			if ( has_tran_tmcbs(trans, TMCB_RESPONSE_OUT) )
+				run_trans_callbacks( TMCB_RESPONSE_OUT, trans,
+					trans->uas.request, FAKED_REPLY, code);
 		}
 
 		cleanup_uac_timers( trans );
-		if (trans->is_invite) cancel_uacs( trans, cancel_bitmap );
+		if (is_invite(trans)) cancel_uacs( trans, cancel_bitmap );
 		set_final_timer(  trans );
 	}
 
@@ -375,15 +411,22 @@ static int _reply_light( struct cell *trans, char* buf, unsigned int len,
 	/* first check if we managed to resolve topmost Via -- if
 	   not yet, don't try to retransmit
 	*/
+	/*
+	   response.dst.send_sock might be unset if the process that created
+	   the original transaction has not finished initialising the 
+	   retransmission buffer (see t_newtran/ init_rb).
+	   If reply_to_via is set and via contains a host name (and not an ip)
+	   the chances for this increase a lot.
+	 */
 	if (!trans->uas.response.dst.send_sock) {
-		LOG(L_ERR, "ERROR: _reply: no resolved dst to send reply to\n");
+		LOG(L_ERR, "ERROR: _reply_light: no resolved dst to send reply to\n");
 	} else {
 		SEND_PR_BUFFER( rb, buf, len );
 		DBG("DEBUG: reply sent out. buf=%p: %.9s..., shmem=%p: %.9s\n", 
 			buf, buf, rb->buffer, rb->buffer );
 	}
 	pkg_free( buf ) ;
-	DBG("DEBUG: t_reply: finished\n");
+	DBG("DEBUG: _reply_light: finished\n");
 	return 1;
 
 error3:
@@ -393,7 +436,7 @@ error2:
 error:
 	/* do UAC cleanup */
 	cleanup_uac_timers( trans );
-	if (trans->is_invite) cancel_uacs( trans, cancel_bitmap );
+	if ( is_invite(trans) ) cancel_uacs( trans, cancel_bitmap );
 	/* we did not succeed -- put the transaction on wait */
 	put_on_wait(trans);
 	return -1;
@@ -407,7 +450,7 @@ static int _reply( struct cell *trans, struct sip_msg* p_msg,
 	unsigned int code, char * text, int lock )
 {
 	unsigned int len;
-	char* buf, *dset;
+	char * buf, *dset;
 	struct bookmark bm;
 	int dset_len;
 
@@ -415,14 +458,14 @@ static int _reply( struct cell *trans, struct sip_msg* p_msg,
 	/* compute the buffer in private memory prior to entering lock;
 	 * create to-tag if needed */
 
-	     /* if that is a redirection message, dump current message set to it */
+	/* if that is a redirection message, dump current message set to it */
 	if (code>=300 && code<400) {
 		dset=print_dset(p_msg, &dset_len);
 		if (dset) {
 			add_lump_rpl(p_msg, dset, dset_len, LUMP_RPL_HDR);
 		}
 	}
-	
+
 	if (code>=180 && p_msg->to 
 				&& (get_to(p_msg)->tag_value.s==0 
 			    || get_to(p_msg)->tag_value.len==0)) {
@@ -440,168 +483,186 @@ static int _reply( struct cell *trans, struct sip_msg* p_msg,
 }
 
 
-/* create a temporary faked message environment in which a conserved
- * t->uas.request in shmem is partially duplicated to pkgmem
- * to allow pkg-based actions to use it; 
- *
- * if restore parameter is set, the environment is restored to the
- * original setting and return value is unsignificant (always 0); 
- * otherwise  a faked environment if created; if that fails,
- * false is returned
- */
-static int faked_env(struct sip_msg *fake, 
-				struct cell *_t,
-				struct sip_msg *shmem_msg,
-				int _restore )
+/*if msg is set -> it will fake the env. vars conforming with the msg; if NULL
+ * the env. will be restore to original */
+static inline void faked_env( struct cell *t,struct sip_msg *msg)
 {
 	static enum route_mode backup_mode;
 	static struct cell *backup_t;
 	static unsigned int backup_msgid;
 	static struct usr_avp **backup_list;
-	struct hdr_field *hdr;
+	static struct socket_info* backup_si;
 
-	if (_restore) goto restore;
+	if (msg) {
+		/* remember we are back in request processing, but process
+		 * a shmem-ed replica of the request; advertise it in rmode;
+		 * for example t_reply needs to know that
+		 */
+		backup_mode=rmode;
+		rmode=MODE_ONFAILURE;
+		/* also, tm actions look in beginning whether transaction is
+		 * set -- whether we are called from a reply-processing 
+		 * or a timer process, we need to set current transaction;
+		 * otherwise the actions would attempt to look the transaction
+		 * up (unnecessary overhead, refcounting)
+		 */
+		/* backup */
+		backup_t=get_t();
+		backup_msgid=global_msg_id;
+		/* fake transaction and message id */
+		global_msg_id=msg->id;
+		set_t(t);
+		/* make available the avp list from transaction */
+		backup_list = set_avp_list( &t->user_avps );
+		/* set default send address to the saved value */
+		backup_si=bind_address;
+		bind_address=t->uac[0].request.dst.send_sock;
+	} else {
+		/* restore original environment */
+		set_t(backup_t);
+		global_msg_id=backup_msgid;
+		rmode=backup_mode;
+		/* restore original avp list */
+		set_avp_list( backup_list );
+		bind_address=backup_si;
+	}
+}
 
-	/* 
-     on_negative_reply faked msg now copied from shmem msg (as opposed
-     to zero-ing) -- more "read-only" actions (exec in particular) will 
-     work from reply_route as they will see msg->from, etc.; caution, 
-     rw actions may append some pkg stuff to msg, which will possibly be 
-     never released (shmem is released in a single block)
-    */
-	memcpy( fake, shmem_msg, sizeof(struct sip_msg));
+
+static inline int fake_req(struct sip_msg *faked_req, 
+				struct sip_msg *shmem_msg)
+{
+	/* on_negative_reply faked msg now copied from shmem msg (as opposed
+	 * to zero-ing) -- more "read-only" actions (exec in particular) will
+	 * work from reply_route as they will see msg->from, etc.; caution,
+	 * rw actions may append some pkg stuff to msg, which will possibly be
+	 * never released (shmem is released in a single block) */
+	memcpy( faked_req, shmem_msg, sizeof(struct sip_msg));
 
 	/* if we set msg_id to something different from current's message
-       id, the first t_fork will properly clean new branch URIs
-	*/
-	fake->id=shmem_msg->id-1;
-	/* set items, which will be duped to pkg_mem, to zero, so that
-	 * "restore" called on error does not free the original items */
-	fake->add_rm=0;
-	fake->body_lumps=0;
-	fake->new_uri.s=0; fake->new_uri.len=0;
-	fake->parsed_uri_ok = 0;
-
-	/* remember we are back in request processing, but process
-	 * a shmem-ed replica of the request; advertise it in rmode;
-	 * for example t_reply needs to know that
-	 */
-	backup_mode=rmode;
-	rmode=MODE_ONFAILURE;
-	/* also, tm actions look in beginning whether tranaction is
-	 * set -- whether we are called from a reply-processing 
-	 * or a timer process, we need to set current transaction;
-	 * otherwise the actions would attempt to look the transaction
-	 * up (unnecessary overhead, refcounting)
-	 */
-	/* backup */
-	backup_t=get_t();
-	backup_msgid=global_msg_id;
-	/* fake transaction and message id */
-	global_msg_id=fake->id;
-	set_t(_t);
-
-	/* environment is set up now, try to fake the message */
+	 * id, the first t_fork will properly clean new branch URIs */
+	faked_req->id=shmem_msg->id-1;
+	/* msg->parsed_uri_ok must be reset since msg_parsed_uri is
+	 * not cloned (and cannot be cloned) */
+	faked_req->parsed_uri_ok = 0;
 
 	/* new_uri can change -- make a private copy */
 	if (shmem_msg->new_uri.s!=0 && shmem_msg->new_uri.len!=0) {
-		fake->new_uri.s=pkg_malloc(shmem_msg->new_uri.len+1);
-		if (!fake->new_uri.s) {
-			LOG(L_ERR, "ERROR: faked_env: no uri/pkg mem\n");
-			goto restore_err;
+		faked_req->new_uri.s=pkg_malloc(shmem_msg->new_uri.len+1);
+		if (!faked_req->new_uri.s) {
+			LOG(L_ERR, "ERROR: fake_req: no uri/pkg mem\n");
+			goto error00;
 		}
-		fake->new_uri.len=shmem_msg->new_uri.len;
-		memcpy( fake->new_uri.s, shmem_msg->new_uri.s, 
-			fake->new_uri.len);
-		fake->new_uri.s[fake->new_uri.len]=0;
-	} 
-
-	/* create a duplicated lump list to which actions can add
-	 * new pkg items 
-	 */
-	if (shmem_msg->add_rm) {
-		fake->add_rm=dup_lump_list(shmem_msg->add_rm);
-		if (!fake->add_rm) { /* non_emty->empty ... failure */
-			LOG(L_ERR, "ERROR:fake_env: lump dup failed\n");
-			goto restore_err;
+		faked_req->new_uri.len=shmem_msg->new_uri.len;
+		memcpy( faked_req->new_uri.s, shmem_msg->new_uri.s, 
+			faked_req->new_uri.len);
+		faked_req->new_uri.s[faked_req->new_uri.len]=0;
+	}
+	/* dst_uri can change ALSO!!! -- make a private copy */
+	if (shmem_msg->dst_uri.s!=0 && shmem_msg->dst_uri.len!=0) {
+		faked_req->dst_uri.s=pkg_malloc(shmem_msg->dst_uri.len+1);
+		if (!faked_req->dst_uri.s) {
+			LOG(L_ERR, "ERROR: fake_req: no uri/pkg mem\n");
+			goto error00;
 		}
+		faked_req->dst_uri.len=shmem_msg->dst_uri.len;
+		memcpy( faked_req->dst_uri.s, shmem_msg->dst_uri.s, 
+			faked_req->dst_uri.len);
+		faked_req->dst_uri.s[faked_req->dst_uri.len]=0;
 	}
 
-	if (shmem_msg->body_lumps) {
-		fake->body_lumps=dup_lump_list(shmem_msg->body_lumps);
-		if (!fake->body_lumps) { /* non_empty->empty ... failure */
-			LOG(L_ERR, "ERROR:fake_env: lump dup failed\n");
-			goto restore_err;
-		}
-	}
-
-	/* make available the avp list from transaction */
-	backup_list = set_avp_list( &_t->user_avps );
-
-	/* success */
 	return 1;
+error00:
+	return 0;
+}
 
-restore:
+void inline static free_faked_req(struct sip_msg *faked_req, struct cell *t)
+{
+	struct hdr_field *hdr;
+
+	if (faked_req->new_uri.s) {
+		pkg_free(faked_req->new_uri.s);
+		faked_req->new_uri.s = 0;
+	}
+
+	if (faked_req->dst_uri.s) {
+		pkg_free(faked_req->dst_uri.s);
+		faked_req->dst_uri.s = 0;
+	}
+
+	/* free all types of lump that were added in failure handlers */
+	del_nonshm_lump( &(faked_req->add_rm) );
+	del_nonshm_lump( &(faked_req->body_lumps) );
+	del_nonshm_lump_rpl( &(faked_req->reply_lump) );
+
 	/* free header's parsed structures that were added by failure handlers */
-	for( hdr=fake->headers ; hdr ; hdr=hdr->next ) {
+	for( hdr=faked_req->headers ; hdr ; hdr=hdr->next ) {
 		if ( hdr->parsed && hdr_allocs_parse(hdr) &&
-		(hdr->parsed<(void*)_t->uas.request ||
-		hdr->parsed>=(void*)_t->uas.end_request)) {
+		(hdr->parsed<(void*)t->uas.request ||
+		hdr->parsed>=(void*)t->uas.end_request)) {
 			/* header parsed filed doesn't point inside uas.request memory
 			 * chunck -> it was added by failure funcs.-> free it as pkg */
-			DBG("DBG:fake_env: removing hdr->parsed %d\n",
+			DBG("DBG:free_faked_req: removing hdr->parsed %d\n",
 					hdr->type);
 			clean_hdr_field(hdr);
 			hdr->parsed = 0;
 		}
 	}
-restore_err:
-	/* restore original environment and destroy faked message */
-	free_duped_lump_list(fake->add_rm);
-	free_duped_lump_list(fake->body_lumps);
-	if (fake->new_uri.s) pkg_free(fake->new_uri.s);
-	del_nonshm_lump_rpl( &(fake->reply_lump) );
-	set_t(backup_t);
-	global_msg_id=backup_msgid;
-	rmode=backup_mode;
-	/* if failure handler changed flag, update transaction context */
-	shmem_msg->flags=fake->flags;
-	/* restore original avp list */
-	set_avp_list( backup_list );
-	return 0;
 }
 
+
 /* return 1 if a failure_route processes */
-int failure_route(struct cell *t)
+static inline int run_failure_handlers(struct cell *t, struct sip_msg *rpl,
+																	int code)
 {
-	struct sip_msg faked_msg;
-	struct sip_msg *orig_request;
+	static struct sip_msg faked_req;
+	struct sip_msg *shmem_msg = t->uas.request;
+	int on_failure;
 
-	/* don't do anything if we don't have to */
-	if (!t->on_negative) return 0;
-	orig_request=t->uas.request;
 	/* failure_route for a local UAC? */
-	if (!orig_request) {
-		LOG(L_WARN, "Warning: failure_route: no UAC support\n");
+	if (!shmem_msg) {
+		LOG(L_WARN,"Warning: run_failure_handlers: no UAC support (%d, %d) \n",
+			t->on_negative, t->tmcb_hl.reg_types);
 		return 0;
 	}
 
-	/* if fake message creation failes, return error too */
-	if (!faked_env(&faked_msg, t, orig_request, 0 /* create fake */ )) {
-		LOG(L_ERR, "ERROR: on_negative_reply: faked_env failed\n");
-		return 0;
+	/* don't start faking anything if we don't have to */
+	if ( !has_tran_tmcbs( t, TMCB_ON_FAILURE) && !t->on_negative ) {
+		LOG(L_WARN, 
+			"Warning: run_failure_handlers: no negative handler (%d, %d)\n",
+			t->on_negative, 
+			t->tmcb_hl.reg_types);
+		return 1;
 	}
 
-	/* avoid recursion -- if failure_route forwards, and does not 
-	 * set next failure route, failure_route will not be rentered
-	 * on failure */
-	t_on_negative(0);
-	/* run a reply_route action if some was marked */
-	if (run_actions(failure_rlist[t->on_negative], &faked_msg)<0)
-		LOG(L_ERR, "ERROR: on_negative_reply: "
-			"Error in do_action\n");
-	/* restore original environment */
-	faked_env(&faked_msg, t, orig_request, 1 );
+	if (!fake_req(&faked_req, shmem_msg)) {
+		LOG(L_ERR, "ERROR: run_failure_handlers: fake_req failed\n");
+		return 0;
+	}
+	/* fake also the env. conforming to the fake msg */
+	faked_env( t, &faked_req);
+	/* DONE with faking ;-) -> run the failure handlers */
+
+	if ( has_tran_tmcbs( t, TMCB_ON_FAILURE) ) {
+		run_trans_callbacks( TMCB_ON_FAILURE, t, &faked_req, rpl, code);
+	}
+	if (t->on_negative) {
+		/* avoid recursion -- if failure_route forwards, and does not 
+		 * set next failure route, failure_route will not be reentered
+		 * on failure */
+		on_failure = t->on_negative;
+		t->on_negative=0;
+		/* run a reply_route action if some was marked */
+		if (run_actions(failure_rlist[on_failure], &faked_req)<0)
+			LOG(L_ERR, "ERROR: run_failure_handlers: Error in do_action\n");
+	}
+
+	/* restore original environment and free the fake msg */
+	faked_env( t, 0);
+	free_faked_req(&faked_req,t);
+
+	/* if failure handler changed flag, update transaction context */
+	shmem_msg->flags = faked_req.flags;
 	return 1;
 }
 
@@ -640,14 +701,14 @@ int t_pick_branch(int inc_branch, int inc_code, struct cell *t, int *res_code)
 	return lowest_b;
 }
 
-/* This is the neuralgical point of reply processing -- called
+/* This is the neurological point of reply processing -- called
  * from within a REPLY_LOCK, t_should_relay_response decides
  * how a reply shall be processed and how transaction state is
  * affected.
  *
  * Checks if the new reply (with new_code status) should be sent or not
  *  based on the current
- * transactin status.
+ * transaction status.
  * Returns 	- branch number (0,1,...) which should be relayed
  *         -1 if nothing to be relayed
  */
@@ -655,7 +716,6 @@ static enum rps t_should_relay_response( struct cell *Trans , int new_code,
 	int branch , int *should_store, int *should_relay,
 	branch_bm_t *cancel_bitmap, struct sip_msg *reply )
 {
-	
 	int branch_cnt;
 	int picked_branch;
 	int picked_code;
@@ -668,11 +728,11 @@ static enum rps t_should_relay_response( struct cell *Trans , int new_code,
 	   out
 	*/
 	DBG("->>>>>>>>> T_code=%d, new_code=%d\n",Trans->uas.status,new_code);
-	inv_through=new_code>=200 && new_code<300 && Trans->is_invite;
+	inv_through=new_code>=200 && new_code<300 && is_invite(Trans);
 	/* if final response sent out, allow only INVITE 2xx  */
 	if ( Trans->uas.status >= 200 ) {
 		if (inv_through) {
-			DBG("DBG: t_should_relay: 200 INV after final sent\n");
+			DBG("DBG: t_should_relay_response: 200 INV after final sent\n");
 			*should_store=0;
 			Trans->uac[branch].last_received=new_code;
 			*should_relay=branch;
@@ -686,7 +746,20 @@ static enum rps t_should_relay_response( struct cell *Trans , int new_code,
 	/* if final response received at this branch, allow only INVITE 2xx */
 	if (Trans->uac[branch].last_received>=200
 			&& !(inv_through && Trans->uac[branch].last_received<300)) {
-		LOG(L_ERR, "ERROR: t_should_relay: status rewrite by UAS: "
+		/* don't report on retransmissions */
+		if (Trans->uac[branch].last_received==new_code) {
+			DBG("DEBUG: final reply retransmission\n");
+			goto discard;
+		}
+		/* if you FR-timed-out, faked a local 408 and 487 came, don't
+		 * report on it either */
+		if (Trans->uac[branch].last_received==408 && new_code==487) {
+			DBG("DEBUG: 487 came for a timed-out branch\n");
+			goto discard;
+		}
+		/* this looks however how a very strange status rewrite attempt;
+		 * report on it */
+		LOG(L_ERR, "ERROR: t_should_relay_response: status rewrite by UAS: "
 			"stored: %d, received: %d\n",
 			Trans->uac[branch].last_received, new_code );
 		goto discard;
@@ -712,16 +785,17 @@ static enum rps t_should_relay_response( struct cell *Trans , int new_code,
 		}
 
 		/* no more pending branches -- try if that changes after
-		   a callback; save banch count to be able to determine
-		   later if new branches were initiated
-		*/
+		   a callback; save branch count to be able to determine
+		   later if new branches were initiated */
 		branch_cnt=Trans->nr_of_outgoings;
-		callback_event( TMCB_ON_FAILURE, Trans, 
-			picked_branch==branch?reply:Trans->uac[picked_branch].reply, 
-			picked_code);
-		/* here, we create a faked environment, from which we
-		 * return to request processing, if marked to do so */
-		failure_route(Trans);
+
+		/* run ON_FAILURE handlers ( route and callbacks) */
+		if ( has_tran_tmcbs( Trans, TMCB_ON_FAILURE_RO|TMCB_ON_FAILURE)
+		|| Trans->on_negative ) {
+			run_failure_handlers( Trans,
+				picked_branch==branch?reply:Trans->uac[picked_branch].reply, 
+				picked_code);
+		}
 
 		/* look if the callback perhaps replied transaction; it also
 		   covers the case in which a transaction is replied localy
@@ -791,6 +865,13 @@ int t_retransmit_reply( struct cell *t )
 	/* first check if we managed to resolve topmost Via -- if
 	   not yet, don't try to retransmit
 	*/
+	/*
+	   response.dst.send_sock might be unset if the process that created
+	   the original transaction has not finished initialising the 
+	   retransmission buffer (see t_newtran/ init_rb).
+	   If reply_to_via is set and via contains a host name (and not an ip)
+	   the chances for this increase a lot.
+	 */
 	if (!t->uas.response.dst.send_sock) {
 		LOG(L_WARN, "WARNING: t_retransmit_reply: "
 			"no resolved dst to retransmit\n");
@@ -846,7 +927,7 @@ int t_reply_unsafe( struct cell *t, struct sip_msg* p_msg, unsigned int code,
 
 void set_final_timer( /* struct s_table *h_table, */ struct cell *t )
 {
-	if ( !t->local && t->uas.request->REQ_METHOD==METHOD_INVITE ) {
+	if ( !is_local(t) && t->uas.request->REQ_METHOD==METHOD_INVITE ) {
 		/* crank timers for negative replies */
 		if (t->uas.status>=300) {
 			start_retr(&t->uas.response);
@@ -874,7 +955,7 @@ void cleanup_uac_timers( struct cell *t )
 		reset_timer( &t->uac[i].request.retr_timer );
 		reset_timer( &t->uac[i].request.fr_timer );
 	}
-	DBG("DEBUG: cleanup_uacs: RETR/FR timers reset\n");
+	DBG("DEBUG: cleanup_uac_timers: RETR/FR timers reset\n");
 }
 
 static int store_reply( struct cell *trans, int branch, struct sip_msg *rpl)
@@ -887,13 +968,13 @@ static int store_reply( struct cell *trans, int branch, struct sip_msg *rpl)
 #		endif
 
 		/* when we later do things such as challenge aggregation,
-	   	   we should parse the message here before we conservate
+	   	   we should parse the message here before we conserve
 		   it in shared memory; -jiri
 		*/
 		if (rpl==FAKED_REPLY)
 			trans->uac[branch].reply=FAKED_REPLY;
 		else
-			trans->uac[branch].reply = sip_msg_cloner( rpl, 0);
+			trans->uac[branch].reply = sip_msg_cloner( rpl, 0 );
 
 		if (! trans->uac[branch].reply ) {
 			LOG(L_ERR, "ERROR: store_reply: can't alloc' clone memory\n");
@@ -932,7 +1013,7 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 
 
 	/* remember, what was sent upstream to know whether we are
-	   forwarding a first final reply or not */
+	 * forwarding a first final reply or not */
 
 	/* *** store and relay message as needed *** */
 	reply_status = t_should_relay_response(t, msg_status, branch, 
@@ -949,19 +1030,19 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 
 	uas_rb = & t->uas.response;
 	if (relay >= 0 ) {
-
 		/* initialize sockets for outbound reply */
 		uas_rb->activ_type=msg_status;
 		/* only messages known to be relayed immediately will be
-		   be called on; we do not evoke this callback on messages
-		   stored in shmem -- they are fixed and one cannot change them
-		   anyway 
-        */
-		if (msg_status<300 && branch==relay) {
-			callback_event( TMCB_RESPONSE_FWDED, t, p_msg, msg_status );
+		 * be called on; we do not evoke this callback on messages
+		 * stored in shmem -- they are fixed and one cannot change them
+		 * anyway */
+		if (msg_status<300 && branch==relay
+		&& has_tran_tmcbs(t,TMCB_RESPONSE_FWDED) ) {
+			run_trans_callbacks( TMCB_RESPONSE_FWDED, t, t->uas.request,
+				p_msg, msg_status );
 		}
-		/* try bulding the outbound reply from either the current
-	       or a stored message */
+		/* try building the outbound reply from either the current
+		 * or a stored message */
 		relayed_msg = branch==relay ? p_msg :  t->uac[relay].reply;
 		if (relayed_msg==FAKED_REPLY) {
 			tm_stats->replied_localy++;
@@ -1003,7 +1084,7 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 
 		/* attempt to copy the message to UAS's shmem:
 		   - copy to-tag for ACK matching as well
-		   -  allocate little a bit more for provisionals as
+		   -  allocate little a bit more for provisional as
 		      larger messages are likely to follow and we will be 
 		      able to reuse the memory frag 
 		*/
@@ -1024,23 +1105,31 @@ enum rps relay_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 		t->uas.status = relayed_code;
 		t->relaied_reply_branch = relay;
 
-		if (t->is_invite && relayed_msg!=FAKED_REPLY
-				&& relayed_code>=200 && relayed_code < 300
-				&& (callback_array[TMCB_RESPONSE_OUT] ||
-						callback_array[TMCB_E2EACK_IN]))  {
+		if (is_invite(t) && relayed_msg!=FAKED_REPLY
+		&& relayed_code>=200 && relayed_code < 300
+		&& has_tran_tmcbs( t, TMCB_RESPONSE_OUT|TMCB_E2EACK_IN) ) {
 			totag_retr=update_totag_set(t, relayed_msg);
 		}
 	}; /* if relay ... */
 
 	UNLOCK_REPLIES( t );
 
+	     /* Setup retransmission timer _before_ the reply is sent
+	      * to avoid race conditions
+	      */
+	if (reply_status == RPS_COMPLETED) {
+		set_final_timer(t);
+	}
+
 	/* send it now (from the private buffer) */
 	if (relay >= 0) {
 		SEND_PR_BUFFER( uas_rb, buf, res_len );
 		DBG("DEBUG: reply relayed. buf=%p: %.9s..., shmem=%p: %.9s\n", 
 			buf, buf, uas_rb->buffer, uas_rb->buffer );
-		if (!totag_retr) 
-				callback_event( TMCB_RESPONSE_OUT, t, relayed_msg, relayed_code );
+		if (!totag_retr && has_tran_tmcbs(t, TMCB_RESPONSE_OUT) ) {
+			run_trans_callbacks( TMCB_RESPONSE_OUT, t, t->uas.request,
+				relayed_msg, relayed_code);
+		}
 		pkg_free( buf );
 	}
 
@@ -1058,10 +1147,9 @@ error02:
 error01:
 	t_reply_unsafe( t, t->uas.request, 500, "Reply processing error" );
 	UNLOCK_REPLIES(t);
-	if (t->is_invite) cancel_uacs( t, *cancel_bitmap );
-	/* a serious error occured -- attempt to send an error reply;
-	   it will take care of clean-ups 
-	*/
+	if (is_invite(t)) cancel_uacs( t, *cancel_bitmap );
+	/* a serious error occurred -- attempt to send an error reply;
+	   it will take care of clean-ups  */
 
 	/* failure */
 	return RPS_ERROR;
@@ -1109,22 +1197,19 @@ enum rps local_reply( struct cell *t, struct sip_msg *p_msg, int branch,
 		}
 		t->uas.status = winning_code;
 		update_reply_stats( winning_code );
-		if (t->is_invite && winning_msg!=FAKED_REPLY 
-				&& winning_code>=200 && winning_code <300
-				&& (callback_array[TMCB_RESPONSE_OUT] ||
-						callback_array[TMCB_E2EACK_IN]))  {
+		if (is_invite(t) && winning_msg!=FAKED_REPLY
+		&& winning_code>=200 && winning_code <300
+		&& has_tran_tmcbs(t,TMCB_RESPONSE_OUT|TMCB_E2EACK_IN) )  {
 			totag_retr=update_totag_set(t, winning_msg);
 		}
-		
 	}
 	UNLOCK_REPLIES(t);
 	if (local_winner>=0 && winning_code>=200 ) {
 		DBG("DEBUG: local transaction completed\n");
 		if (!totag_retr) {
-			callback_event( TMCB_LOCAL_COMPLETED, t, winning_msg, 
-				winning_code );
-			if (t->completion_cb) t->completion_cb( t, winning_msg, 
-						winning_code, t->cbp);
+			if ( has_tran_tmcbs(t,TMCB_LOCAL_COMPLETED) )
+				run_trans_callbacks( TMCB_LOCAL_COMPLETED, t, 0,
+					winning_msg, winning_code );
 		}
 	}
 	return reply_status;
@@ -1152,72 +1237,71 @@ error:
 int reply_received( struct sip_msg  *p_msg )
 {
 
-	int msg_status;
+	int msg_status, last_uac_status, branch, reply_status;
 	char *ack;
-	unsigned int ack_len;
-	int branch;
-	/* has the transaction completed now and we need to clean-up? */
-	int reply_status;
+	unsigned int ack_len, timer;
+	     /* has the transaction completed now and we need to clean-up? */
 	branch_bm_t cancel_bitmap;
 	struct ua_client *uac;
 	struct cell *t;
 	str next_hop;
 	struct usr_avp **backup_list;
 
-
-	/* make sure we know the assosociated transaction ... */
-	if (t_check( p_msg  , &branch )==-1)
-		return 1;
-	/*... if there is none, tell the core router to fwd statelessly */
-	t=get_t();
-	if ( (t==0)||(t==T_UNDEFINED)) return 1;
+	     /* make sure we know the associated transaction ... */
+	if (t_check(p_msg, &branch ) == -1) return 1;
+	
+	     /*... if there is none, tell the core router to fwd statelessly */
+	t = get_t();
+	if ((t == 0) || (t == T_UNDEFINED)) return 1;
 
 	cancel_bitmap=0;
 	msg_status=p_msg->REPLY_STATUS;
 
 	uac=&t->uac[branch];
-	DBG("DEBUG: t_on_reply: org. status uas=%d, "
+	DBG("DEBUG: reply_received: org. status uas=%d, "
 		"uac[%d]=%d local=%d is_invite=%d)\n",
 		t->uas.status, branch, uac->last_received, 
-		t->local, t->is_invite);
+		is_local(t), is_invite(t));
+	last_uac_status=uac->last_received;
 
-	/* it's a cancel ... ? */
-	if (get_cseq(p_msg)->method.len==CANCEL_LEN 
-		&& memcmp( get_cseq(p_msg)->method.s, CANCEL, CANCEL_LEN)==0
-		/* .. which is not e2e ? ... */
-		&& t->is_invite ) {
-			/* ... then just stop timers */
-			reset_timer( &uac->local_cancel.retr_timer);
-			if ( msg_status >= 200 )
+	     /* it's a cancel ... ? */
+	if (get_cseq(p_msg)->method.len == CANCEL_LEN 
+	    && memcmp( get_cseq(p_msg)->method.s, CANCEL, CANCEL_LEN) == 0
+		 /* .. which is not e2e ? ... */
+	    && is_invite(t) ) {
+		     /* ... then just stop timers */
+		reset_timer( &uac->local_cancel.retr_timer);
+		if ( msg_status >= 200 ) {
 				reset_timer( &uac->local_cancel.fr_timer);
-			DBG("DEBUG: reply to local CANCEL processed\n");
-			goto done;
+		}
+		DBG("DEBUG: reply to local CANCEL processed\n");
+		goto done;
 	}
 
-
-	/* *** stop timers *** */
-	/* stop retransmission */
-	reset_timer( &uac->request.retr_timer);
-	/* stop final response timer only if I got a final response */
-	if ( msg_status >= 200 )
+	     /* *** stop timers *** */
+	     /* stop retransmission */
+	reset_timer(&uac->request.retr_timer);
+	
+	     /* stop final response timer only if I got a final response */
+	if ( msg_status >= 200 ) {
 		reset_timer( &uac->request.fr_timer);
-        
-        /* acknowledge negative INVITE replies (do it before detailed
-           on_reply processing, which may take very long, like if it
-           is attempted to establish a TCP connection to a fail-over dst
-        */
-	if (t->is_invite) {
+	}
+
+	     /* acknowledge negative INVITE replies (do it before detailed
+	      * on_reply processing, which may take very long, like if it
+	      * is attempted to establish a TCP connection to a fail-over dst */
+	if (is_invite(t)) {
 		if (msg_status >= 300) {
 			ack = build_ack(p_msg, t, branch, &ack_len);
 			if (ack) {
 				SEND_PR_BUFFER(&uac->request, ack, ack_len);
 				shm_free(ack);
-			} 
-		} else if (t->local && msg_status >= 200) {
+			}
+		} else if (is_local(t) && msg_status >= 200) {
 			ack = build_local_ack(p_msg, t, branch, &ack_len, &next_hop);
 			if (ack) {
-				if (send_local_ack(&next_hop, ack, ack_len) < 0) {
-					LOG(L_ERR, "Error while seding local ACK\n");
+				if (send_local_ack(p_msg, &next_hop, ack, ack_len) < 0) {
+					LOG(L_ERR, "Error while sending local ACK\n");
 				}
 				shm_free(ack);
 			}
@@ -1226,60 +1310,84 @@ int reply_received( struct sip_msg  *p_msg )
 
 	     /* processing of on_reply block */
 	if (t->on_reply) {
-		rmode=MODE_ONREPLY;
-		/* transfer transaction flag to message context */
-		if (t->uas.request) p_msg->flags=t->uas.request->flags;
-		/* set the as avp_list the one from transaction */
-		backup_list = set_avp_list( &t->user_avps );
-	 	if (run_actions(onreply_rlist[t->on_reply], p_msg)<0) 
+		rmode = MODE_ONREPLY;
+		     /* transfer transaction flag to message context */
+		if (t->uas.request) p_msg->flags = t->uas.request->flags;
+		     /* set the as avp_list the one from transaction */
+		backup_list = set_avp_list(&t->user_avps);
+		if (run_actions(onreply_rlist[t->on_reply], p_msg)<0) {
 			LOG(L_ERR, "ERROR: on_reply processing failed\n");
-		/* transfer current message context back to t */
+		}
+		     /* transfer current message context back to t */
 		if (t->uas.request) t->uas.request->flags=p_msg->flags;
-		/* restore original avp list */
+		     /* restore original avp list */
 		set_avp_list( backup_list );
 	}
+	
 	LOCK_REPLIES( t );
-	if (t->local) {
-		reply_status=local_reply( t, p_msg, branch, msg_status, &cancel_bitmap );
+	if (is_local(t)) {
+		reply_status = local_reply(t, p_msg, branch, msg_status, &cancel_bitmap);
+		if (reply_status == RPS_COMPLETED) {
+			cleanup_uac_timers(t);
+			if (is_invite(t)) cancel_uacs(t, cancel_bitmap);
+			     /* There is no need to call set_final_timer because we know
+			      * that the transaction is local */
+			put_on_wait(t);
+		}
 	} else {
-		reply_status=relay_reply( t, p_msg, branch, msg_status, 
-			&cancel_bitmap );
+		reply_status = relay_reply(t, p_msg, branch, msg_status, &cancel_bitmap);
+		     /* clean-up the transaction when transaction completed */
+		if (reply_status == RPS_COMPLETED) {
+			     /* no more UAC FR/RETR (if I received a 2xx, there may
+			      * be still pending branches ...
+			      */
+			cleanup_uac_timers(t);	
+			if (is_invite(t)) cancel_uacs(t, cancel_bitmap);
+			     /* FR for negative INVITES, WAIT anything else */
+			
+			     /* Call to set_final_timer is embedded in relay_reply to avoid
+			      * race conditions when reply is sent out and an ACK to stop retransmissions
+			      * comes before retransmission timer is set 
+			      *
+			      * set_final_timer(t); 
+			      */
+		} 
 	}
+	
+	if (reply_status == RPS_ERROR) goto done;
+	
+	     /* update FR/RETR timers on provisional replies */
+	if (msg_status < 200 && (restart_fr_on_each_reply ||
+				 ((last_uac_status<msg_status) &&
+				  ((msg_status >= 180) || (last_uac_status == 0)))
+				 ) ) { /* provisional now */
+		if (is_invite(t)) {
+			     /* invite: change FR to longer FR_INV, do not
+			      * attempt to restart retransmission any more
+			      */
 
-	if (reply_status==RPS_ERROR)
-		goto done;
-
-	/* clean-up the transaction when transaction completed */
-	if (reply_status==RPS_COMPLETED) {
-		/* no more UAC FR/RETR (if I received a 2xx, there may
-		   be still pending branches ...
-		*/
-		cleanup_uac_timers( t );	
-		if (t->is_invite) cancel_uacs( t, cancel_bitmap );
-		/* FR for negative INVITES, WAIT anything else */
-		set_final_timer(  t );
-	} 
-
-	/* update FR/RETR timers on provisional replies */
-	if (msg_status<200) { /* provisional now */
-		if (t->is_invite) { 
-			/* invite: change FR to longer FR_INV, do not
-			   attempt to restart retransmission any more
-			*/
-			set_timer( & uac->request.fr_timer,
-				FR_INV_TIMER_LIST );
+			backup_list = set_avp_list(&t->user_avps);
+			if (!fr_inv_avp2timer(&timer)) {
+				DBG("reply_received: FR_INV_TIMER = %d\n", timer);
+				set_timer(&uac->request.fr_timer,
+					  FR_INV_TIMER_LIST, &timer);
+			} else {
+				set_timer(& uac->request.fr_timer, FR_INV_TIMER_LIST, 0);
+			}
+			set_avp_list(backup_list);
 		} else {
-			/* non-invite: restart retransmisssions (slow now) */
-			uac->request.retr_list=RT_T2;
-			set_timer(  & uac->request.retr_timer, RT_T2 );
+			     /* non-invite: restart retransmissions (slow now) */
+			uac->request.retr_list = RT_T2;
+			set_timer(&uac->request.retr_timer, RT_T2, 0);
 		}
 	} /* provisional replies */
-
-done:
-	/* don't try to relay statelessly neither on success
-       (we forwarded statefuly) nor on error; on troubles, 
-	   simply do nothing; that will make the other party to 
-	   retransmit; hopefuly, we'll then be better off */
+	
+ done:
+	     /* don't try to relay statelessly neither on success
+	      * (we forwarded statefully) nor on error; on troubles, 
+	      * simply do nothing; that will make the other party to 
+	      * retransmit; hopefuly, we'll then be better off 
+	      */
 	return 0;
 }
 
@@ -1303,12 +1411,17 @@ int t_reply_with_body( struct cell *trans, unsigned int code,
 	if (code>=200) set_kr(REQ_RPLD);
 
 	/* add the lumps for new_header and for body (by bogdan) */
-	hdr_lump = add_lump_rpl( trans->uas.request, new_header,
-		strlen(new_header), LUMP_RPL_HDR );
-	if ( !hdr_lump ) {
-		LOG(L_ERR,"ERROR:tm:t_reply_with_body: cannot add hdr lump\n");
-		goto error;
+	if (new_header && strlen(new_header)) {
+		hdr_lump = add_lump_rpl( trans->uas.request, new_header,
+					 strlen(new_header), LUMP_RPL_HDR );
+		if ( !hdr_lump ) {
+			LOG(L_ERR,"ERROR:tm:t_reply_with_body: cannot add hdr lump\n");
+			goto error;
+		}
+	} else {
+		hdr_lump = 0;
 	}
+
 	/* body lump */
 	if(body && strlen(body)) {
 		body_lump = add_lump_rpl( trans->uas.request, body, strlen(body),
@@ -1328,8 +1441,10 @@ int t_reply_with_body( struct cell *trans, unsigned int code,
 	/* since the msg (trans->uas.request) is a clone into shm memory, to avoid
 	 * memory leak or crashing (lumps are create in private memory) I will
 	 * remove the lumps by myself here (bogdan) */
-	unlink_lump_rpl( trans->uas.request, hdr_lump);
-	free_lump_rpl( hdr_lump );
+	if ( hdr_lump ) {
+		unlink_lump_rpl( trans->uas.request, hdr_lump);
+		free_lump_rpl( hdr_lump );
+	}
 	if( body_lump ) {
 		unlink_lump_rpl( trans->uas.request, body_lump);
 		free_lump_rpl( body_lump );
@@ -1346,16 +1461,330 @@ int t_reply_with_body( struct cell *trans, unsigned int code,
 	ret=_reply_light( trans, rpl.s, rpl.len, code, text, 
 		s_to_tag.s, s_to_tag.len, 1 /* lock replies */, &bm );
 	/* this is ugly hack -- the function caller may wish to continue with
-	 * transction and I unref; however, there is now only one use from
+	 * transaction and I unref; however, there is now only one use from
 	 * vm/fifo_vm_reply and I'm currently to lazy to export UNREF; -jiri
 	 */
 	UNREF(trans);
 
 	return ret;
 error_1:
-	unlink_lump_rpl( trans->uas.request, hdr_lump);
-	free_lump_rpl( hdr_lump );
+	if ( hdr_lump ) {
+		unlink_lump_rpl( trans->uas.request, hdr_lump);
+		free_lump_rpl( hdr_lump );
+	}
 error:
 	return -1;
 }
 
+
+
+/*
+  Syntax:
+
+  ":vm_reply:[response file]\n
+  code\n
+  reason\n
+  trans_id\n
+  to_tag\n
+  [new headers]\n
+  \n
+  [Body]\n
+  .\n
+  \n"
+ */
+int fifo_t_reply( FILE *stream, char *response_file )
+{
+	int ret;
+	struct cell *trans;
+	char code[16];
+	char reason[128];
+	char trans_id[128];
+	char new_headers[MAX_HEADER];
+	char body[MAX_BODY];
+	char to_tag[128];
+	str sc;       /*  code */
+	str sr;       /*  reason */
+	str sti;      /*  trans_id */
+	str snh;      /*  new_headers */
+	str sb;       /*  body */
+	str sttag;    /*  to-tag */
+	unsigned int hash_index,label,icode;
+
+	sc.s=code;
+	sr.s=reason;
+	sti.s=trans_id;
+	snh.s=new_headers; sb.s=body;
+	sttag.s=to_tag; sttag.len=0;
+
+
+	/*  get the infos from FIFO server */
+
+	DBG("DEBUG: fifo_t_reply: ############### begin ##############\n");
+
+	if (!read_line(sc.s, 16, stream, &sc.len)||sc.len==0) {
+		LOG(L_ERR, "ERROR: fifo_t_reply: code expected\n");
+		fifo_reply(response_file, "400 fifo_t_reply: code expected");
+		return -1;
+	}
+
+	icode = str2s(sc.s,sc.len,&ret);
+	if(ret){
+		LOG(L_ERR, "ERROR: fifo_t_reply: code(int) has wrong format\n");
+		fifo_reply(response_file, "400 fifo_t_reply: code(int) has"
+			" wrong format");
+		return -1;
+	}
+
+	if(!read_line(sr.s, 128, stream, &sr.len)||sr.len==0){
+		LOG(L_ERR, "ERROR: fifo_t_reply: reason expected\n");
+		fifo_reply(response_file, "400 fifo_t_reply: reason expected");
+		return -1;
+	}
+	sr.s[sr.len]='\0';
+
+	if (!read_line(sti.s, 128, stream, &sti.len)||sti.len==0) {
+		LOG(L_ERR, "ERROR: fifo_t_reply: trans_id expected\n");
+		fifo_reply(response_file, "400 fifo_t_reply: trans_id expected");
+		return -1;
+	}
+	sti.s[sti.len]='\0';
+	DBG("DEBUG: fifo_t_reply: trans_id=%.*s\n",sti.len,sti.s);
+
+	if(sscanf(sti.s,"%u:%u", &hash_index, &label) != 2){
+		LOG(L_ERR, "ERROR: fifo_t_reply: invalid trans_id (%s)\n",sti.s);
+		fifo_reply(response_file, "400 fifo_t_reply: invalid trans_id");
+		return -1;
+	}
+	DBG("DEBUG: fifo_t_reply: hash_index=%u label=%u\n",hash_index,label);
+
+	if( !read_line(sttag.s,64,stream,&sttag.len) || sttag.len==0 ){
+		LOG(L_ERR, "ERROR: fifo_t_reply: to-tag expected\n");
+		fifo_reply(response_file, "400 fifo_t_reply: to-ta expected");
+		return -1;
+	}
+	sttag.s[sttag.len]='\0';
+	DBG("DEBUG: fifo_t_reply: to-tag: %.*s\n",sttag.len,sttag.s);
+
+	/* read the new headers */
+	if (!read_line_set(snh.s, MAX_HEADER, stream, &snh.len)) {
+		LOG(L_ERR, "ERROR: fifo_t_reply: while reading new headers\n");
+		fifo_reply(response_file, "400 fifo_t_reply: while reading "
+			"new headers");
+		return -1;
+	}
+	snh.s[snh.len]='\0';
+	DBG("DEBUG: fifo_t_reply: new headers: %.*s\n", snh.len, snh.s);
+
+	/*  body can be empty ... */
+	read_body(sb.s, MAX_BODY, stream, &sb.len);
+	sb.s[sb.len]='\0';
+	DBG("DEBUG: fifo_t_reply: body: <%.*s>\n", sb.len, sb.s);
+
+	if( t_lookup_ident(&trans,hash_index,label)<0 ) {
+		LOG(L_ERR,"ERROR: fifo_t_reply: lookup failed\n");
+		fifo_reply(response_file, "481 fifo_t_reply: no such transaction");
+		return -1;
+	}
+
+	/* it's refcounted now, t_reply_with body unrefs for me -- I can 
+	 * continue but may not use T anymore  */
+	ret = t_reply_with_body(trans,icode,reason,body,new_headers,to_tag);
+
+	if (ret<0) {
+		LOG(L_ERR, "ERROR: fifo_t_reply: reply failed\n");
+		fifo_reply(response_file, "500 fifo_t_reply: reply failed");
+		return -1;
+	}
+
+	fifo_reply(response_file, "200 fifo_t_reply succeeded\n");
+	DBG("DEBUG: fifo_t_reply: ################ end ##############\n");
+	return 1;
+}
+
+
+static int parse_transid(str* s, unsigned int* index, unsigned int* label)
+{
+	char* buf;
+
+	if (!s || !index || !label) {
+		LOG(L_ERR, "parse_transid: Invalid parameter value\n");
+		return -1;
+	}
+
+	buf = (char*)pkg_malloc(s->len + 1);
+	if (!buf) {
+		LOG(L_ERR, "parse_transid: No memory left\n");
+		return -1;
+	}
+
+	memcpy(buf, s->s, s->len + 1);
+	buf[s->len] = '\0';
+	
+	if (sscanf(buf, "%u:%u", index, label) != 2) {
+		LOG(L_ERR, "parse_transid: Invalid trans_id (%s)\n", buf);
+		pkg_free(buf);
+		return -1;
+	}
+
+	DBG("parse_transid: hash_index=%u label=%u\n", *index, *label);
+	pkg_free(buf);
+	return 0;
+}
+
+
+
+static int send_reply(struct cell *trans, unsigned int code, str* text, str* body, str* headers, str* to_tag)
+{
+	struct lump_rpl *hdr_lump, *body_lump;
+	str rpl;
+	int ret;
+	struct bookmark bm;
+
+	     /* mark the transaction as replied */
+	if (code >= 200) set_kr(REQ_RPLD);
+
+	     /* add the lumps for new_header and for body (by bogdan) */
+	if (headers && headers->len) {
+		hdr_lump = add_lump_rpl(trans->uas.request, headers->s, headers->len, LUMP_RPL_HDR);
+		if (!hdr_lump) {
+			LOG(L_ERR, "send_reply: cannot add hdr lump\n");
+			goto sr_error;
+		}
+	} else {
+		hdr_lump = 0;
+	}
+
+	     /* body lump */
+	if (body && body->len) {
+		body_lump = add_lump_rpl(trans->uas.request, body->s, body->len, LUMP_RPL_BODY);
+		if (body_lump == 0) {
+			LOG(L_ERR,"send_reply: cannot add body lump\n");
+			goto sr_error_1;
+		}
+	} else {
+		body_lump = 0;
+	}
+
+	     /* We can safely zero-terminate the text here, because it is followed
+	      * by next line in the received message
+	      */
+	text->s[text->len] = '\0';
+	rpl.s = build_res_buf_from_sip_req(code, text->s, to_tag, trans->uas.request, (unsigned int*)&rpl.len, &bm);
+
+	     /* since the msg (trans->uas.request) is a clone into shm memory, to avoid
+	      * memory leak or crashing (lumps are create in private memory) I will
+	      * remove the lumps by myself here (bogdan) */
+	if (hdr_lump) {
+		unlink_lump_rpl(trans->uas.request, hdr_lump);
+		free_lump_rpl(hdr_lump);
+	}
+	if (body_lump) {
+		unlink_lump_rpl(trans->uas.request, body_lump);
+		free_lump_rpl(body_lump);
+	}
+
+	if (rpl.s == 0) {
+		LOG(L_ERR,"send_reply: failed in build_res_buf_from_sip_req\n");
+		goto sr_error;
+	}
+
+	ret = _reply_light(trans, rpl.s, rpl.len, code, text->s,  to_tag->s, to_tag->len, 1 /* lock replies */, &bm);
+	     /* this is ugly hack -- the function caller may wish to continue with
+	      * transaction and I unref; however, there is now only one use from
+	      * vm/fifo_vm_reply and I'm currently to lazy to export UNREF; -jiri
+	      */
+	UNREF(trans);
+	return ret;
+ sr_error_1:
+	if (hdr_lump) {
+		unlink_lump_rpl(trans->uas.request, hdr_lump);
+		free_lump_rpl(hdr_lump);
+	}
+ sr_error:
+	return -1;
+}
+
+
+
+int unixsock_t_reply(str* msg)
+{
+	int ret;
+	struct cell *trans;
+	static char new_headers[MAX_HEADER];
+	str code, reason, transid, headers, body, to_tag;
+	unsigned int hash_index, label, icode;
+
+	headers.s = new_headers;
+	headers.len = MAX_HEADER;
+
+	if (unixsock_read_line(&code, msg) != 0) {
+		unixsock_reply_asciiz("400 Reason code expected\n");
+		goto err;
+	}
+
+	icode = str2s(code.s, code.len, &ret);
+	if (ret) {
+		unixsock_reply_printf("400 Reason code has wrong format\n");
+		goto err;
+	}
+
+	if (unixsock_read_line(&reason, msg) != 0) {
+		unixsock_reply_asciiz("400 Reason phrase expected\n");
+		goto err;
+	}
+
+	if (unixsock_read_line(&transid, msg) != 0) {
+		unixsock_reply_asciiz("400 Transaction ID expected\n");
+		goto err;
+	}
+
+	if (parse_transid(&transid, &hash_index, &label) < 0) {
+		unixsock_reply_asciiz("400 Error while parsing transaction ID\n");
+		goto err;
+	}
+
+	if (unixsock_read_line(&to_tag, msg) != 0) {
+		unixsock_reply_asciiz("400 To tag expected\n");
+		goto err;
+	}
+
+	     /* read the new headers */
+	if (unixsock_read_lineset(&headers, msg) < 0) {
+		unixsock_reply_asciiz("400 Error while reading new headers\n");
+		goto err;
+	}
+
+	DBG("lineset: %.*s\n", headers.len, headers.s);
+	     
+	/*  body can be empty ... */
+	if (unixsock_read_body(&body, msg) < 0) {
+		unixsock_reply_asciiz("400 Error while reading body\n");
+		goto err;
+	}
+
+	DBG("body: %.*s\n", body.len, body.s);
+	
+	if (t_lookup_ident(&trans, hash_index, label) < 0) {
+		LOG(L_ERR,"unixsock_t_reply: lookup failed\n");
+		unixsock_reply_asciiz("481 No such transaction\n");
+		goto err;
+	}
+
+	     /* it's refcounted now, t_reply_with body unrefs for me -- I can 
+	      * continue but may not use T anymore  
+	      */
+	ret = send_reply(trans, icode, &reason, &body, &headers, &to_tag);
+	if (ret < 0) {
+		LOG(L_ERR, "unixsock_t_reply: reply failed\n");
+		unixsock_reply_asciiz("500 Reply failed\n");
+		goto err;
+	}
+
+	unixsock_reply_asciiz("200 Succeeded\n");
+	unixsock_reply_send();
+	return 1;
+
+ err:
+	unixsock_reply_send();
+	return -1;
+}

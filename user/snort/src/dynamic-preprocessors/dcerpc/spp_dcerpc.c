@@ -130,10 +130,12 @@ void SetupDCERPC()
 void DCERPCInit(u_char *args)
 {
     char ErrorString[ERRSTRLEN];
-    int  iErrStrLen = ERRSTRLEN;
+    int  iErrStrLen = ERRSTRLEN - 1;
 
     /* Initialize the tokenizer */
     char *token = strtok(args, CONF_SEPARATORS);
+
+    ErrorString[ERRSTRLEN - 1] = '\0';
 
     DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC,"Preprocessor: DCERPC Initialized\n"););
 
@@ -144,7 +146,7 @@ void DCERPCInit(u_char *args)
         /*
          * Fatal Error, log error and exit.
          */
-        _dpd.fatalMsg("%s(%d) => %s\n", *_dpd.config_file, *_dpd.config_line, ErrorString);
+        DynamicPreprocessorFatalMessage("%s(%d) => %s\n", *_dpd.config_file, *_dpd.config_line, ErrorString);
     }
 
     /* Set the preprocessor function into the function list */
@@ -182,9 +184,14 @@ void ProcessDCERPCPacket(void *pkt, void *context)
 {
 	SFSnortPacket *p = (SFSnortPacket *)pkt;
     int            detected = 0;
+    u_int32_t      session_flags = 0;
     PROFILE_VARS;
 
     DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC,"DCERPC packet with %d bytes\n", p->payload_size););
+
+    /* no data to inspect */
+    if (p->payload_size == 0)
+        return;
 
     /* check to make sure we're talking TCP and that the TWH has already
        completed before processing anything */
@@ -209,10 +216,31 @@ void ProcessDCERPCPacket(void *pkt, void *context)
         return;
     }
 
+    if ( !_dpd.streamAPI )
+	{
+		DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Error: Failed to get Stream API - Stream not enabled?\n"););
+        return;
+	}
+
+    if (p->stream_session_ptr == NULL)
+        return;
+
+    session_flags = _dpd.streamAPI->get_session_flags(p->stream_session_ptr);
+
+    if (session_flags & SSNFLAG_MIDSTREAM)
+        return;
+
+    if (!(session_flags & SSNFLAG_ESTABLISHED))
+        return;
+
     PREPROC_PROFILE_START(dcerpcPerfStats);
 
     /* Okay, do something with it... */
-    DCERPCDecode(p);
+    if (DCERPCDecode(p) == 0)
+    {
+        PREPROC_PROFILE_END(dcerpcPerfStats);
+        return;
+    }
 
     PREPROC_PROFILE_START(dcerpcDetectPerfStats);
 

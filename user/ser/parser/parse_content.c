@@ -1,8 +1,8 @@
 /*
- * $Id: parse_content.c,v 1.9.2.1 2003/11/12 18:11:20 andrei Exp $
+ * $Id: parse_content.c,v 1.11 2004/08/24 09:01:25 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -287,7 +287,7 @@ int parse_content_type_hdr( struct sip_msg *msg )
 	if (ret==0)
 		goto error;
 	if (ret!=end) {
-		LOG(L_ERR,"ERROR:parse_content_type_hdr: CONTENT_TYPE hdr containes "
+		LOG(L_ERR,"ERROR:parse_content_type_hdr: CONTENT_TYPE hdr contains "
 			"more then one mime type :-(!\n");
 		goto error;
 	}
@@ -343,7 +343,7 @@ int parse_accept_hdr( struct sip_msg *msg )
 		/* a new mime was found  -> put it into array */
 		if (nr_mimes==MAX_MIMES_NR) {
 			LOG(L_ERR,"ERROR:parse_accept_hdr: Accept hdr contains more than"
-				" %d mime type -> buffer ovrflow!!\n",MAX_MIMES_NR);
+				" %d mime type -> buffer overflow!!\n",MAX_MIMES_NR);
 			goto error;
 		}
 		mimes[nr_mimes++] = mime;

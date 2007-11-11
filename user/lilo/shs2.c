@@ -9,6 +9,7 @@
 
 */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 
@@ -237,7 +238,6 @@ void shsFinal(void)
 
    shsTransform ();
 }
-
 #endif	/* SHS_PASSWORDS */
 /* end shs2.c */
 

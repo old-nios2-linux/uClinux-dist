@@ -50,6 +50,7 @@
 #include "event_queue.h"
 #include "stream_api.h"
 #include "inline.h"
+#include <config/autoconf.h>
 
 /* XXX modularization violation */
 #include "preprocessors/spp_flow.h"
@@ -477,6 +478,13 @@ int Detect(Packet * p)
     detected = fpEvalPacket(p);
     PREPROC_PROFILE_END(detectPerfStats);
 
+#ifdef CONFIG_PROP_STATSD_STATSD
+	if (detected) {
+		InlineMode() ?	system("statsd -a incr ips blocked"):
+						system("statsd -a incr snort detected");
+	}
+#endif
+
     return detected;
 }
 
@@ -788,7 +796,7 @@ void IntegrityCheck(RuleTreeNode * rtn_head, char *rulename, char *listname)
 #ifdef DEBUG
     char chainname[STD_BUF];
 
-    snprintf(chainname, STD_BUF - 1, "%s %s", rulename, listname);
+    SnortSnprintf(chainname, STD_BUF, "%s %s", rulename, listname);
 
     if(!pv.quiet_flag)
         DebugMessage(DEBUG_DETECT, "%-20s: ", chainname);
@@ -1297,7 +1305,7 @@ ListHead *CreateRuleType(char *name, int mode, int rval, ListHead *head)
      */
     if(!RuleLists)
     {
-        RuleLists = (RuleListNode *)calloc(1, sizeof(RuleListNode));
+        RuleLists = (RuleListNode *)SnortAlloc(sizeof(RuleListNode));
         node = RuleLists;
     }
     else
@@ -1314,13 +1322,13 @@ ListHead *CreateRuleType(char *name, int mode, int rval, ListHead *head)
             node = node->next;
         }
 
-        node->next = (RuleListNode *) calloc(1, sizeof(RuleListNode));
+        node->next = (RuleListNode *)SnortAlloc(sizeof(RuleListNode));
         node = node->next;
     }
 
     if(!head)
     {
-        node->RuleList = (ListHead *)calloc(1, sizeof(ListHead));
+        node->RuleList = (ListHead *)SnortAlloc(sizeof(ListHead));
         node->RuleList->IpList = NULL;
         node->RuleList->TcpList = NULL;
         node->RuleList->UdpList = NULL;
@@ -1450,11 +1458,11 @@ void printRuleListOrder(RuleListNode * node)
 {
     char buf[STD_BUF+1];
 
-    snprintf(buf, STD_BUF, "Rule application order: ");
+    SnortSnprintf(buf, STD_BUF, "%s", "Rule application order: ");
 
     while( node != NULL )
     {
-        sfsnprintfappend(buf, STD_BUF, "->%s", node->name);
+        SnortSnprintfAppend(buf, STD_BUF, "->%s", node->name);
         node = node->next;
     }
 

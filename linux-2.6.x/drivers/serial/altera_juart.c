@@ -270,8 +270,8 @@ static void jtaguart_shutdown(struct uart_port *port)
 }
 
 static void
-jtaguart_set_termios(struct uart_port *port, struct termios *termios,
-		     struct termios *old)
+jtaguart_set_termios(struct uart_port *port, struct ktermios *termios,
+		     struct ktermios *old)
 {
 	port->read_status_mask = 0;
 	port->ignore_status_mask = 0;
@@ -474,7 +474,7 @@ static int __init jtaguart_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO "Serial: JTAG UART driver $Revision: 1.3 $\n");
+	printk(KERN_INFO "Serial: JTAG UART driver $Revision: 1.4 $\n");
 
 	ret = uart_register_driver(&juart_reg);
 	if (ret == 0) {

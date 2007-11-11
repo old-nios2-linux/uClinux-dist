@@ -43,7 +43,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/smp_lock.h>
+#include <linux/err.h>
 #include <linux/irq.h>
 #include <linux/bootmem.h>
 #include <linux/delay.h>
@@ -351,7 +351,7 @@ static void __init do_boot_cpu(int phys_id)
 	}
 }
 
-int __devinit __cpu_up(unsigned int cpu_id)
+int __cpuinit __cpu_up(unsigned int cpu_id)
 {
 	int timeout;
 

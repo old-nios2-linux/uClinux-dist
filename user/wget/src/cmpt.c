@@ -1,5 +1,5 @@
 /* Replacements for routines missing on some systems.
-   Copyright (C) 1995, 1996, 1997 Free Software Foundation, Inc.
+   Copyright (C) 1995-2005 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -121,8 +121,8 @@ strncasecmp (const char *s1, const char *s2, size_t n)
 #endif /* not HAVE_STRNCASECMP */
 
 #ifndef HAVE_STRSTR
-/* From GNU libc 2.0.6.  */
-/* Return the first ocurrence of NEEDLE in HAYSTACK.  */
+/* From GNU libc 2.3.5.  */
+
 /*
  * My personal strstr() implementation that beats most other algorithms.
  * Until someone tells me otherwise, I assume that this is the
@@ -131,90 +131,88 @@ strncasecmp (const char *s1, const char *s2, size_t n)
  * as much fun trying to understand it, as I had to write it :-).
  *
  * Stephen R. van den Berg, berg@pool.informatik.rwth-aachen.de	*/
+
 typedef unsigned chartype;
 
+#undef strstr
+
 char *
-strstr (phaystack, pneedle)
-     const char *phaystack;
-     const char *pneedle;
+strstr (const char *phaystack, const char *pneedle)
 {
-  register const unsigned char *haystack, *needle;
-  register chartype b, c;
+  const unsigned char *haystack, *needle;
+  chartype b;
+  const unsigned char *rneedle;
 
   haystack = (const unsigned char *) phaystack;
-  needle = (const unsigned char *) pneedle;
 
-  b = *needle;
-  if (b != '\0')
+  if ((b = *(needle = (const unsigned char *) pneedle)))
     {
-      haystack--;				/* possible ANSI violation */
-      do
-	{
-	  c = *++haystack;
-	  if (c == '\0')
-	    goto ret0;
-	}
-      while (c != b);
+      chartype c;
+      haystack--;		/* possible ANSI violation */
 
-      c = *++needle;
-      if (c == '\0')
+      {
+	chartype a;
+	do
+	  if (!(a = *++haystack))
+	    goto ret0;
+	while (a != b);
+      }
+
+      if (!(c = *++needle))
 	goto foundneedle;
       ++needle;
       goto jin;
 
       for (;;)
-        {
-          register chartype a;
-	  register const unsigned char *rhaystack, *rneedle;
-
-	  do
-	    {
+	{
+	  {
+	    chartype a;
+	    if (0)
+	    jin:{
+		if ((a = *++haystack) == c)
+		  goto crest;
+	      }
+	    else
 	      a = *++haystack;
-	      if (a == '\0')
-		goto ret0;
-	      if (a == b)
-		break;
-	      a = *++haystack;
-	      if (a == '\0')
-		goto ret0;
-shloop:	    }
-          while (a != b);
-
-jin:	  a = *++haystack;
-	  if (a == '\0')
-	    goto ret0;
-
-	  if (a != c)
-	    goto shloop;
-
-	  rhaystack = haystack-- + 1;
-	  rneedle = needle;
-	  a = *rneedle;
-
-	  if (*rhaystack == a)
 	    do
 	      {
-		if (a == '\0')
-		  goto foundneedle;
-		++rhaystack;
-		a = *++needle;
-		if (*rhaystack != a)
-		  break;
-		if (a == '\0')
-		  goto foundneedle;
-		++rhaystack;
-		a = *++needle;
+		for (; a != b; a = *++haystack)
+		  {
+		    if (!a)
+		      goto ret0;
+		    if ((a = *++haystack) == b)
+		      break;
+		    if (!a)
+		      goto ret0;
+		  }
 	      }
-	    while (*rhaystack == a);
-
-	  needle = rneedle;		/* took the register-poor approach */
-
-	  if (a == '\0')
-	    break;
-        }
+	    while ((a = *++haystack) != c);
+	  }
+	crest:
+	  {
+	    chartype a;
+	    {
+	      const unsigned char *rhaystack;
+	      if (*(rhaystack = haystack-- + 1) == (a = *(rneedle = needle)))
+		do
+		  {
+		    if (!a)
+		      goto foundneedle;
+		    if (*++rhaystack != (a = *++needle))
+		      break;
+		    if (!a)
+		      goto foundneedle;
+		  }
+		while (*++rhaystack == (a = *++needle));
+	      needle = rneedle;	/* took the register-poor aproach */
+	    }
+	    if (!a)
+	      break;
+	  }
+	}
     }
 foundneedle:
-  return (char*) haystack;
+  return (char *) haystack;
 ret0:
   return 0;
 }
@@ -792,7 +790,9 @@ strptime_internal (rp, fmt, tm, decided)
      struct tm *tm;
      enum locale_status *decided;
 {
+#ifdef _NL_CURRENT
   const char *rp_backup;
+#endif
   int cnt;
   size_t val;
   int have_I, is_pm;
@@ -832,8 +832,10 @@ strptime_internal (rp, fmt, tm, decided)
     start_over:
 #endif
 
+#ifdef _NL_CURRENT
       /* Make back up of current processing pointer.  */
       rp_backup = rp;
+#endif
 
       switch (*fmt++)
 	{
@@ -1431,30 +1433,6 @@ const unsigned short int __mon_yday[2][13] =
   };
 #endif
 
-#ifndef HAVE_USLEEP
-#ifndef WINDOWS
-
-/* A simple usleep implementation based on select().  For Unix and
-   Unix-like systems.  */
-
-int
-usleep (unsigned long usec)
-{
-  struct timeval tm;
-  tm.tv_sec = 0;
-  tm.tv_usec = usec;
-  select (0, NULL, NULL, NULL, &tm);
-  return 0;
-}
-
-#endif /* not WINDOWS */
-#endif /* not HAVE_USLEEP */
-
-
-/* Currently unused in Wget.  Uncomment if we start using memmove
-   again. */
-#if 0
-
 #ifndef HAVE_MEMMOVE
 void *
 memmove (char *dest, const char *source, unsigned length)
@@ -1473,8 +1451,6 @@ memmove (char *dest, const char *source, unsigned length)
   return (void *) d0;
 }
 #endif /* not HAVE_MEMMOVE */
-
-#endif /* 0 */
 
 /* fnmatch is a POSIX function, but we include an implementation for
    the sake of systems that don't have it.  Furthermore, according to
@@ -1652,3 +1628,173 @@ fnmatch (const char *pattern, const char *string, int flags)
 }
 
 #endif /* not SYSTEM_FNMATCH */
+
+#ifndef HAVE_TIMEGM
+/* timegm is a GNU extension, but lately also available on *BSD
+   systems and possibly elsewhere. */
+
+/* True if YEAR is a leap year. */
+#define ISLEAP(year)						\
+  ((year) % 4 == 0 && ((year) % 100 != 0 || (year) % 400 == 0))
+
+/* Number of leap years in the range [y1, y2). */
+#define LEAPYEARS(y1, y2)						\
+  ((y2-1)/4 - (y1-1)/4) - ((y2-1)/100 - (y1-1)/100) + ((y2-1)/400 - (y1-1)/400)
+
+/* Inverse of gmtime: converts struct tm to time_t, assuming the data
+   in tm is UTC rather than local timezone.  This implementation
+   returns the number of seconds elapsed since midnight 1970-01-01,
+   converted to time_t.  */
+
+time_t
+timegm (struct tm *t)
+{
+  static const unsigned short int month_to_days[][13] = {
+    { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 }, /* normal */
+    { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 }  /* leap */
+  };
+  const int year = 1900 + t->tm_year;
+  unsigned long secs;  /* until 2106-02-07 for 32-bit unsigned long */
+  int days;
+
+  if (year < 1970)
+    return (time_t) -1;
+
+  days = 365 * (year - 1970);
+  /* Take into account leap years between 1970 and YEAR, not counting
+     YEAR itself.  */
+  days += LEAPYEARS (1970, year);
+  if (t->tm_mon < 0 || t->tm_mon >= 12)
+    return (time_t) -1;
+  days += month_to_days[ISLEAP (year)][t->tm_mon];
+  days += t->tm_mday - 1;
+
+  secs = days * 86400 + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
+  return (time_t) secs;
+}
+#endif /* HAVE_TIMEGM */
+
+#ifdef NEED_STRTOLL
+/* strtoll is required by C99 and used by Wget only on systems with
+   LFS.  Unfortunately, some systems have LFS, but no strtoll or
+   equivalent.  These include HPUX 11.0 and Windows.
+
+   We use #ifdef NEED_STRTOLL instead of #ifndef HAVE_STRTOLL because
+   of the systems which have a suitable replacement (e.g. _strtoi64 on
+   Windows), on which Wget's str_to_wgint is instructed to use that
+   instead.  */
+
+static inline int
+char_value (char c, int base)
+{
+  int value;
+  if (c < '0')
+    return -1;
+  if ('0' <= c && c <= '9')
+    value = c - '0';
+  else if ('a' <= c && c <= 'z')
+    value = c - 'a' + 10;
+  else if ('A' <= c && c <= 'Z')
+    value = c - 'A' + 10;
+  else
+    return -1;
+  if (value >= base)
+    return -1;
+  return value;
+}
+
+#define LL strtoll_return	/* long long or __int64 */
+
+/* These constants assume 64-bit strtoll_return. */
+
+/* A roundabout way of writing 2**63-1 = 9223372036854775807 */
+#define STRTOLL_OVERFLOW (((LL) 1 << 62) - 1 + ((LL) 1 << 62))
+/* A roundabout way of writing -2**63 = -9223372036854775808 */
+#define STRTOLL_UNDERFLOW (-STRTOLL_OVERFLOW - 1)
+
+/* A strtoll replacement for systems that have LFS but don't supply
+   strtoll.  The headers typedef strtoll_return to long long or to
+   __int64.  */
+
+strtoll_return
+strtoll (const char *nptr, char **endptr, int base)
+{
+  strtoll_return result = 0;
+  int negative;
+
+  if (base != 0 && (base < 2 || base > 36))
+    {
+      errno = EINVAL;
+      return 0;
+    }
+
+  while (*nptr == ' ' || *nptr == '\t')
+    ++nptr;
+  if (*nptr == '-')
+    {
+      negative = 1;
+      ++nptr;
+    }
+  else if (*nptr == '+')
+    {
+      negative = 0;
+      ++nptr;
+    }
+  else
+    negative = 0;
+
+  /* If base is 0, determine the real base based on the beginning on
+     the number; octal numbers begin with "0", hexadecimal with "0x",
+     and the others are considered octal.  */
+  if (*nptr == '0')
+    {
+      if ((base == 0 || base == 16)
+	  &&
+	  (*(nptr + 1) == 'x' || *(nptr + 1) == 'X'))
+	{
+	  base = 16;
+	  nptr += 2;
+	}
+      else if (base == 0)
+	base = 8;
+    }
+  else if (base == 0)
+    base = 10;
+
+  if (!negative)
+    {
+      /* Parse positive number, checking for overflow. */
+      int val;
+      for (; (val = char_value (*nptr, base)) != -1; ++nptr)
+	{
+	  strtoll_return newresult = base * result + val;
+	  if (newresult < result)
+	    {
+	      result = STRTOLL_OVERFLOW;
+	      errno = ERANGE;
+	      break;
+	    }
+	  result = newresult;
+	}
+    }
+  else
+    {
+      /* Parse negative number, checking for underflow. */
+      int val;
+      for (; (val = char_value (*nptr, base)) != -1; ++nptr)
+	{
+	  strtoll_return newresult = base * result - val;
+	  if (newresult > result)
+	    {
+	      result = STRTOLL_UNDERFLOW;
+	      errno = ERANGE;
+	      break;
+	    }
+	  result = newresult;
+	}
+    }
+  if (endptr)
+    *endptr = (char *) nptr;
+  return result;
+}
+#endif	/* NEED_STRTOLL */

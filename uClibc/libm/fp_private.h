@@ -56,13 +56,13 @@
 
 //#define    Infinity(x)       ( x.hex.exponent & ExpMask ) == ExpMask
 #define      dInfinity(x)      ( x.hex.high & dExpMask ) == dExpMask
-#define      sInfinity(x)      ( ( x.hexsgl << 1 ) & sExpMask ) == sExpMask      
+#define      sInfinity(x)      ( ( x.hexsgl << 1 ) & sExpMask ) == sExpMask
 
 //#define    Exponent(x)       x.hex.exponent & ExpMask
 #define      dExponent(x)      x.hex.high & dExpMask
 #define      sExponent(x)      ( ( x.hexsgl << 1 ) & sExpMask )
 
-#define      sZero(x)          ( x.hexsgl & sSgnMask ) == 0 
+#define      sZero(x)          ( x.hexsgl & sSgnMask ) == 0
 //#define    Sign(x)           ( x.hex.exponent & SgnMask ) == SgnMask
 
 /*******************************************************************************
@@ -70,10 +70,11 @@
 *******************************************************************************/
 
 #include <stdint.h>
+#include <endian.h>
 
 typedef struct                   /*      Hex representation of a double.      */
       {
-#if defined(__BIG_ENDIAN__)
+#if (__BYTE_ORDER == __BIG_ENDIAN)
       uint32_t high;
       uint32_t low;
 #else

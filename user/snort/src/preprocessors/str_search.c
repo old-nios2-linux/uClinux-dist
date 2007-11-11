@@ -195,7 +195,7 @@ void SearchInstanceAdd( void*instance, char *pat, unsigned int pat_len, int id)
     if( search && search->mpse )
         mpseAddPattern( search->mpse, pat, pat_len, 1, 0, 0, (void *)(long) id, 0);
     
-    if ( pat_len > search->max_len )
+    if ( search && (pat_len > search->max_len) )
          search->max_len = pat_len;
     
 }

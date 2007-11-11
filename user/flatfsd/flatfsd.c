@@ -97,6 +97,7 @@ static int recv_usr2 = 0;	/* SIGUSR2 = erase flash and reboot */
 static int recv_pwr = 0;	/* SIGPWR = halt device */
 static int exit_flatfsd = 0;  /* SIGINT, SIGTERM, SIGQUIT */
 static int nowrite = 0;
+static char *configdir = DSTDIR;
 
 static void block_sig(int blp)
 {
@@ -156,7 +157,7 @@ static void save_config_to_flash(void)
 		system("/bin/logd writeconfig");
 #endif
 #if !defined(USING_FLASH_FILESYSTEM)
-		if ((rc = flat_savefs(fsver)) < 0)
+		if ((rc = flat_savefs(fsver, configdir)) < 0)
 			syslog(LOG_ERR, "Failed to write flatfs (%d): %m", rc);
 #endif
 #ifdef LOGGING
@@ -188,7 +189,7 @@ static void reset_config_fs(void)
 	 * Don't actually clean out the filesystem.
 	 * That will be done when we reboot
 	 */
-	if ((rc = flat_clean(0)) < 0) {
+	if ((rc = flat_requestinit()) < 0) {
 		syslog(LOG_ERR, "Failed to prepare flatfs for reset (%d): %m", rc);
 		exit(1);
 	}
@@ -308,10 +309,12 @@ skip_out:
 
 void usage(int rc)
 {
-	printf("usage: flatfsd [-bcrwnis123vh?]\n"
+	printf("usage: flatfsd [-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn123]\n"
 		"\t-b safely reboot the system\n"
 		"\t-H safely halt the system\n"
 		"\t-c check that the saved flatfs is valid\n"
+		"\t-d <dir> with -r to read from flash to an alternate filesystem\n"
+		"\t   and -s to save an alternate config to flash\n"
 		"\t-r read from flash, write to config filesystem\n"
 		"\t-w read from default, write to config filesystem\n"
 		"\t-n with -r or -w, do not write to flash\n"
@@ -338,12 +341,12 @@ static int saveconfig(void)
 {
 	/* Query PID file, and send USR1 to the running daemon */
 	int pid = readpidfile();
-	if(pid > 0) {
+	if(strcmp(configdir, DSTDIR) == 0 && pid > 0 && kill(pid, SIGUSR1) == 0)
 		printf("Saving configuration\n");
-		kill(pid, SIGUSR1);
-	} else {
+	else {
 		struct stat st_buf;
-		/* No daemon running, so save the config ourselves */
+		/* No daemon running or we are saving the config from an alternate
+		 * location, so save the config ourselves */
 		if (stat(IGNORE_FLASH_WRITE_FILE, &st_buf) < 0) {
 			save_config_to_flash();
 		} else {
@@ -410,7 +413,7 @@ static int reset_config(void)
 		 * Don't actually clean out the filesystem.
 		 * That will be done when we reboot.
 		 */
-		if ((rc = flat_clean(0)) < 0) {
+		if ((rc = flat_requestinit()) < 0) {
 			syslog(LOG_ERR, "Failed to prepare flatfs for reset (%d): %m", rc);
 			exit(1);
 		}
@@ -454,13 +457,13 @@ static void log_caller(char *prefix)
 int main(int argc, char *argv[])
 {
 	struct sigaction act;
-	int rc, rc1, rc2, readonly, clobbercfg;
+	int rc, rc1, rc2, readonly, clobbercfg, action = 0;
 
 	clobbercfg = readonly = 0;
 
 	openlog("flatfsd", LOG_PERROR, LOG_DAEMON);
 
-	while ((rc = getopt(argc, argv, "vcnribwH123hs?")) != EOF) {
+	while ((rc = getopt(argc, argv, "vcd:nribwH123hs?")) != EOF) {
 		switch (rc) {
 		case 'w':
 			clobbercfg++;
@@ -494,25 +497,23 @@ int main(int argc, char *argv[])
 			exit(0);
 #endif
 			break;
+		case 'd':
+			configdir = optarg;
+			if (access(configdir, R_OK | W_OK) < 0) {
+				printf("%s: directory does not exist or is not writeable\n",
+					   configdir);
+				exit(1);
+			}
+			break;
 		case 'v':
 			version();
 			exit(0);
 			break;
 		case 's':
-			log_caller("/bin/logd flatfsd-s");
-			exit(saveconfig());
-			break;
 		case 'b':
-			log_caller("/bin/logd flatfsd-b");
-			exit(reboot_system());
-			break;
 		case 'H':
-			log_caller("/bin/logd flatfsd-h");
-			exit(halt_system());
-			break;
 		case 'i':
-			log_caller("/bin/logd flatfsd-i");
-			exit(reset_config());
+			action = rc;
 			break;
 		case '1':
 			fsver = 1;
@@ -533,14 +534,33 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	switch (action) {
+		case 's':
+			log_caller("/bin/logd flatfsd-s");
+			exit(saveconfig());
+			break;
+		case 'b':
+			log_caller("/bin/logd flatfsd-b");
+			exit(reboot_system());
+			break;
+		case 'H':
+			log_caller("/bin/logd flatfsd-h");
+			exit(halt_system());
+			break;
+		case 'i':
+			log_caller("/bin/logd flatfsd-i");
+			exit(reset_config());
+			break;
+	}	
+
 	if (readonly) {
 		rc1 = rc2 = 0;
 
 		if (clobbercfg ||
 #if !defined(USING_FLASH_FILESYSTEM)
-			((rc = flat_restorefs()) < 0) ||
+			((rc = flat_restorefs(configdir)) < 0) ||
 #endif
-			(rc1 = flat_filecount()) <= 0 ||
+			(rc1 = flat_filecount(configdir)) <= 0 ||
 			(rc2 = flat_needinit())
 		) {
 #ifdef LOGGING
@@ -560,51 +580,49 @@ int main(int argc, char *argv[])
 
 			system(ecmd);
 #endif
+#ifdef CONFIG_USER_FLATFSD_EXTERNAL_INIT
+			syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), requesting new one...", rc);
+			flat_requestinit();
+#else
 			syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), creating new one...", rc);
-			flat_clean(1);
+			flat_clean();
 			if ((rc = flat_new(DEFAULTDIR)) < 0) {
 				syslog(LOG_ERR, "Failed to create new flatfs, err=%d errno=%d",
 					rc, errno);
 				exit(1);
 			}
 			save_config_to_flash();
+#endif
 		}
-		syslog(LOG_INFO, "Created %d configuration files (%d bytes)",
-			numfiles, numbytes);
 		exit(0);
 	}
 
 	creatpidfile();
 
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = sighup;
-	memset(&act.sa_mask, 0, sizeof(act.sa_mask));
 	act.sa_flags = SA_RESTART;
-	act.sa_restorer = 0;
 	sigaction(SIGHUP, &act, NULL);
 
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigusr1;
-	memset(&act.sa_mask, 0, sizeof(act.sa_mask));
 	act.sa_flags = SA_RESTART;
-	act.sa_restorer = 0;
 	sigaction(SIGUSR1, &act, NULL);
 
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigusr2;
-	memset(&act.sa_mask, 0, sizeof(act.sa_mask));
 	act.sa_flags = SA_RESTART;
-	act.sa_restorer = 0;
 	sigaction(SIGUSR2, &act, NULL);
 
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigpwr;
-	memset(&act.sa_mask, 0, sizeof(act.sa_mask));
 	act.sa_flags = SA_RESTART;
-	act.sa_restorer = 0;
 	sigaction(SIGPWR, &act, NULL);
 
 	/* Make sure we don't suddenly exit while we are writing */
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigexit;
-	memset(&act.sa_mask, 0, sizeof(act.sa_mask));
 	act.sa_flags = SA_RESTART;
-	act.sa_restorer = 0;
 	sigaction(SIGINT, &act, NULL);
 	sigaction(SIGTERM, &act, NULL);
 	sigaction(SIGQUIT, &act, NULL);

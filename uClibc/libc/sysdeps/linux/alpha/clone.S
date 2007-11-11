@@ -23,26 +23,17 @@
 #include <features.h>
 #define _ERRNO_H	1
 #include <bits/errno.h>
+#include <sys/syscall.h>
+#include <sys/regdef.h>
 
 /* int clone(int (*fn)(void *arg), void *child_stack, int flags, void *arg) */
 
-#define a0  $16
-#define a1  $17
-#define a2  $18
-#define a3  $19
-#define v0  $0
-#define fp  $15
-#define gp  $29
-#define ra  $26
-#define pv  $27
-#define zero  $31
-
-        .text
-.globl  __clone;
+.text
+.globl  clone;
 .align 3;
-.ent  __clone , 0;
+.ent  clone , 0;
 
-__clone:
+clone:
 	.frame $30 , 0, $26
 	.prologue 0
 
@@ -73,7 +64,7 @@ $error:
 1:	ldgp	gp,0(gp)
 	jmp	zero,__syscall_error
 
-.end __clone
+.end clone
 
 /* Load up the arguments to the function.  Put this block of code in
    its own function so that we can terminate the stack trace with our
@@ -96,13 +87,9 @@ thread_start:
 
 	/* Call _exit rather than doing it inline for breakpoint purposes */
 	mov	v0,a0
-	jsr	ra,_exit
+	jsr	ra,HIDDEN_JUMPTARGET(_exit)
 
 	/* Die horribly.  */
 	halt
 
 	.end thread_start
-
-.weak    clone;
-    clone    =   __clone
-

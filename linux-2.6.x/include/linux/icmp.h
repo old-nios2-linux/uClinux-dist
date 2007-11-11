@@ -68,7 +68,7 @@
 struct icmphdr {
   __u8		type;
   __u8		code;
-  __be16	checksum;
+  __sum16	checksum;
   union {
 	struct {
 		__be16	id;
@@ -81,6 +81,15 @@ struct icmphdr {
 	} frag;
   } un;
 };
+
+#ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+static inline struct icmphdr *icmp_hdr(const struct sk_buff *skb)
+{
+	return (struct icmphdr *)skb_transport_header(skb);
+}
+#endif
 
 /*
  *	constants for (set|get)sockopt

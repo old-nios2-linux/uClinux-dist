@@ -47,11 +47,12 @@ extern PreprocStats dcerpcIgnorePerfStats;
 extern int dcerpcDetectCalled;
 #endif
 
-extern char SMBPorts[65536/8];
-extern char DCERPCPorts[65536/8];
+extern char SMBPorts[MAX_PORT_INDEX];
+extern char DCERPCPorts[MAX_PORT_INDEX];
 
 extern u_int8_t _autodetect;
     
+static int DCERPC_Setup(void *pkt);
 
 /* Session structure */
 DCERPC    *_dcerpc;
@@ -60,16 +61,26 @@ SFSnortPacket *_dcerpc_pkt;
 
 
 
-int ProcessRawSMB(u_int8_t *data, u_int16_t size)
+int ProcessRawSMB(SFSnortPacket *p, u_int8_t *data, u_int16_t size)
 {
     /* Must remember to convert stuff to host order before using it... */
-    u_int16_t data_size;
     SMB_HDR *smbHdr;
+    u_int16_t nbt_data_size;
+    u_int8_t *smb_command;
+    u_int16_t smb_data_size;
 
-    // Raw SMB also has 4 bytes prepended to SMB data
-    data += sizeof(NBT_HDR);
-    smbHdr = (SMB_HDR *)data;
-    size -= sizeof(NBT_HDR);
+    /* Check for size enough for NBT_HDR and SMB_HDR */
+    if ( size <= (sizeof(NBT_HDR) + sizeof(SMB_HDR)) )
+    {
+        /* Not enough data */
+        return 0;
+    }
+
+    /* Raw SMB also has 4 bytes prepended to SMB data */
+    smbHdr = (SMB_HDR *)(data + sizeof(NBT_HDR));
+    nbt_data_size = size - sizeof(NBT_HDR);
+    smb_command = (u_int8_t *)smbHdr + sizeof(SMB_HDR);
+    smb_data_size = nbt_data_size - sizeof(SMB_HDR);
 
     if (memcmp(smbHdr->protocol, "\xffSMB", 4) != 0)
     {
@@ -77,20 +88,22 @@ int ProcessRawSMB(u_int8_t *data, u_int16_t size)
         return 0;
     }
 
-    if ( size < sizeof(SMB_HDR) )
+    if ( DCERPC_Setup(p) == 0 )
     {
-        /* Not enough data */
-        return 0;
+    	return 0;
     }
 
-    data_size = size - sizeof(SMB_HDR);
-
-    return ProcessNextSMBCommand(smbHdr->command, smbHdr, data + sizeof(SMB_HDR), data_size, size);
+    return ProcessNextSMBCommand(smbHdr->command, smbHdr, smb_command, smb_data_size, nbt_data_size);
 }
 
 
-inline int ProcessRawDCERPC(u_int8_t *data, u_int16_t size)
+inline int ProcessRawDCERPC(SFSnortPacket *p, u_int8_t *data, u_int16_t size)
 {
+    if ( DCERPC_Setup(p) == 0 )
+    {
+    	return 0;
+    }
+
     return ProcessDCERPCMessage(NULL, data, size);
 }
 
@@ -131,35 +144,23 @@ static int DCERPC_Setup(void *pkt)
 	SFSnortPacket *p = (SFSnortPacket *)pkt;
     DCERPC *x = NULL;
 
-	if ( !_dpd.streamAPI )
-	{
-		DEBUG_WRAP(_dpd.debugMsg(DEBUG_DCERPC, "Error: Failed to get Stream API - Stream not enabled?\n"););
-        return 0;
-	}
-
     /*  Get session pointer */
-    if ( p->stream_session_ptr != NULL )
-    {
-        x = _dpd.streamAPI->get_application_data(p->stream_session_ptr, PP_DCERPC);
-    }
+    x = (DCERPC *)_dpd.streamAPI->get_application_data(p->stream_session_ptr, PP_DCERPC);
 
     if ( x == NULL )
     {
-        int size = sizeof(DCERPC);
+        x = (DCERPC *)calloc(1, sizeof(DCERPC));
 
-        x = (DCERPC *) malloc(size);
         if ( x == NULL )
         {
-            _dpd.fatalMsg("%s(%d) => Failed to allocate for SMB session data\n", 
-                    _dpd.config_file, _dpd.config_line);
+            DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate for SMB session data\n", 
+                                            _dpd.config_file, _dpd.config_line);
             return 1;
         }
         else
         {
-            memset(x, 0, size);
-   
             _dpd.streamAPI->set_application_data(p->stream_session_ptr, PP_DCERPC,
-                                                    x, &DCERPC_SessionFree);        
+                                                 (void *)x, &DCERPC_SessionFree);        
         }
     }   
   
@@ -169,19 +170,18 @@ static int DCERPC_Setup(void *pkt)
 	return 1;
 }
 
-int DCERPC_AutoDetect(u_int8_t *data, u_int16_t size)
+int DCERPC_AutoDetect(SFSnortPacket *p, u_int8_t *data, u_int16_t size)
 {
     NBT_HDR *nbtHdr;
-    int is_smb = 0;
     SMB_HDR *smbHdr;
-    DCERPC_HDR     *dcerpc;
+    DCERPC_HDR *dcerpc;
 
     if ( !_autodetect )
     {
         return 0;
     }
 
-    if ( size >= (sizeof(NBT_HDR) + sizeof(SMB_HDR)) )
+    if ( size > (sizeof(NBT_HDR) + sizeof(SMB_HDR)) )
     {
         /* See if this looks like SMB */
         smbHdr = (SMB_HDR *) (data + sizeof(NBT_HDR));
@@ -194,63 +194,53 @@ int DCERPC_AutoDetect(u_int8_t *data, u_int16_t size)
 
             if (nbtHdr->type == SMB_SESSION )
             {
-                is_smb = 1;
+                ProcessRawSMB(p, data, size);            
+                return 1;
             }
-        }
-
-        if ( is_smb )
-        {
-            /* Process as SMB */
-            return ProcessRawSMB(data, size);            
         }
     }
 
     /* Might be DCE/RPC */
-
     /*  Make sure it's a reasonable size */
-    dcerpc = (DCERPC_HDR *) data;
-
-    if ( size < sizeof(DCERPC_REQ) )
+    if (size > sizeof(DCERPC_REQ))
     {
-        return 0;
+        dcerpc = (DCERPC_HDR *) data;
+
+        /*  Minimal DCE/RPC check - check for version and request */
+        if ( dcerpc->version == 5 && dcerpc->packet_type == DCERPC_REQUEST )
+        {
+            ProcessRawDCERPC(p, data, size);
+            return 1;
+        }
     }
 
-    /*  Minimal DCE/RPC check - check for version and request */
-    if ( dcerpc->version != 5 || dcerpc->packet_type != DCERPC_REQUEST )
-    {
-        return 0;
-    }
-
-    return ProcessRawDCERPC(data, size);
+    return 0;
 }
 
 int DCERPCDecode(void *pkt)
 {
     SFSnortPacket *p = (SFSnortPacket *) pkt;
 	
-    if ( DCERPC_Setup(p) == 0 )
-    {
-    	return 0;
-    }
-
     /* Don't examine if the packet is rebuilt 
         TODO:  Not a final solution! */
     if ( p->flags & FLAG_REBUILT_STREAM )
         return 0;
 
     if ( _autodetect )
-        return DCERPC_AutoDetect(p->payload, p->payload_size);
+        return DCERPC_AutoDetect(p, p->payload, p->payload_size);
     
     /* check the port list */
-    if ( SMBPorts[(p->dst_port/8)] & (1<<(p->dst_port%8)) )
+    if (SMBPorts[PORT_INDEX(p->dst_port)] & CONV_PORT(p->dst_port))
     {
         /* Raw SMB */
-        return ProcessRawSMB(p->payload, p->payload_size);
+        ProcessRawSMB(p, p->payload, p->payload_size);
+        return 1;
     }
 
-    if ( DCERPCPorts[(p->dst_port/8)] & (1<<(p->dst_port%8)) )
+    if (DCERPCPorts[PORT_INDEX(p->dst_port)] & CONV_PORT(p->dst_port))
     {
-        return ProcessRawDCERPC(p->payload, p->payload_size);
+        ProcessRawDCERPC(p, p->payload, p->payload_size);
+        return 1;
     }
 
     return 0;

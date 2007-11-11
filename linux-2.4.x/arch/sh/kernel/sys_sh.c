@@ -44,7 +44,7 @@ asmlinkage int sys_pipe(unsigned long r4, unsigned long r5,
 	return error;
 }
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 /*
  * To avoid cache alias, we map the shard page with same color.
  */

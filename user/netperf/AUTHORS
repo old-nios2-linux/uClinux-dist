@@ -101,7 +101,8 @@ Fabrice Bacchella
 for pointing-out that Solaris 9 has a copy of Linux sendfile()
 
 Andrew Gallatin 
-for assistance with the FreeBSD sysctl() stuff
+for assistance with the FreeBSD sysctl() stuff, and later making it
+calibration-free
 
 Mark Cooper
 pointing-out the need for -lresolv when compiling -DDO_DNS on RedHat
@@ -114,7 +115,7 @@ Fabrice Bacchella
 Fixes for -DHISTOGRAM and -DUNIX on Mac OS X, updates to usage strings
 
 Spencer Frink
-Fixes and Cleanup for WIN32
+Fixes and Cleanup for WIN32.  Many over many years.
 
 Nicholas Thomas
 Fixes for DLPI on SVR4 Streams under Linux
@@ -162,3 +163,35 @@ is > max UDP datagram size.
 Michael Dorff
 Getting netperf/netserver to compile under Windows with MS Visual
 Studio 2003
+
+George Davis
+Changes to deal with different floating-point formats.
+
+Anonymous
+Changes to retrieve CPU util on MacOS X.
+
+Dickon Reed
+Patches to attend to some windows in TCP_CRR and TCP_CC under Windows
+
+Bret McKee <bret@hp.com>
+Fixes to get netcpu_looper compiling and working after the "netcpu"
+split
+
+Hans Blom
+Improvements to closing/redirecting stdin/stdout/stderr in netserver
+
+Martin Brown
+RPM support in the form of netperf.spec.in and related configure.ac
+etc changes
+
+Shilpi Agarwal
+Changes to allow UDP_STREAM to use connected sockets on both sides.
+
+Steve Reinhardt <stever@eecs.umich.edu>
+Fixes for buffer filling.
+
+Gisle Vanem
+Fixes for Windows compilation under MingW/gcc.
+
+Scott Weitzenkamp
+Patches to enable demo mode in the UDP_STREAM test

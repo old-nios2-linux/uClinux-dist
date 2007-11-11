@@ -1,8 +1,16 @@
 #
 # This is a sample file that can be dumped in /var/spool/asterisk/outgoing
-# to generate a call.  Obviously, you MUST specify at least a channel in
-# the same format as you would for the "Dial" application.  Only one
-# channel name is permitted.
+# to generate a call.  
+#
+# Comments are indicated by a '#' character that begins a line, or follows
+# a space or tab character.  To be consistent with the configuration files
+# in Asterisk, comments can also be indicated by a semicolon.  However, the
+# multiline comments (;-- --;) used in Asterisk configuration files are not 
+# supported.  Semicolons can be escaped by a backslash.
+#
+
+# Obviously, you MUST specify at least a channel in the same format as you
+# would for the "Dial" application.  Only one channel name is permitted.
 #
 Channel: Zap/1
 #
@@ -28,7 +36,7 @@ Priority: 1
 # and its arguments to be run, instead of a context
 # extension and priority
 #
-#Application: VoiceMailMain
+#Application: VoicemailMain
 #Data: 1234
 
 #
@@ -37,13 +45,36 @@ Priority: 1
 #Callerid: Wakeup Call Service <(555) 555-5555>
 
 #
-# You can set channel variables that will be passed to the channel
+# An account code can be specified the following way:
 #
-#SetVar: file1=/tmp/to
-#SetVar: file2=/tmp/msg
-#SetVar: timestamp=20021023104500
+#Account: mysuperfunaccountcode
 
 #
-# You may specify an account to be passed to CDRs
+# Normally, a call file is always deleted after the call is successful
+# or the maximum number of tries is reached even if the modification
+# time of the call file was changed during the call to be in the
+# future.  By Setting AlwaysDelete to No the modification time of the
+# call file will be checked after the call is completed or the maximum
+# number of retries is reached.  If the modification time is in the
+# future, the call file will not be deleted.
 #
-#Account: markster
+#AlwaysDelete: Yes
+
+#
+# You can set channel variables that will be passed to the channel.
+# This includes writable dialplan functions. To set a writable dialplan
+# function, the module containing this function *must* be loaded.
+#
+#Set: file1=/tmp/to
+#Set: file2=/tmp/msg
+#Set: timestamp=20021023104500
+#Set: CDR(userfield|r)=42
+
+#
+# Setting Archive to yes the call file is never deleted, but is moved
+# in the subdir "outgoing_done" of the spool directory. In this case 
+# will be appended a line with "Status: value", where value can be 
+# Completed, Expired or Failed.
+#
+#Archive: yes
+

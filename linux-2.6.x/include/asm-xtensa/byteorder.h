@@ -11,10 +11,10 @@
 #ifndef _XTENSA_BYTEORDER_H
 #define _XTENSA_BYTEORDER_H
 
-#include <asm/processor.h>
 #include <asm/types.h>
+#include <linux/compiler.h>
 
-static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
+static __inline__ __attribute_const__ __u32 ___arch__swab32(__u32 x)
 {
     __u32 res;
     /* instruction sequence from Xtensa ISA release 2/2000 */
@@ -29,7 +29,7 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
     return res;
 }
 
-static __inline__ __const__ __u16 ___arch__swab16(__u16 x)
+static __inline__ __attribute_const__ __u16 ___arch__swab16(__u16 x)
 {
     /* Given that 'short' values are signed (i.e., can be negative),
      * we cannot assume that the upper 16-bits of the register are
@@ -79,4 +79,4 @@ static __inline__ __const__ __u16 ___arch__swab16(__u16 x)
 # error processor byte order undefined!
 #endif
 
-#endif /* __ASM_XTENSA_BYTEORDER_H */
+#endif /* _XTENSA_BYTEORDER_H */

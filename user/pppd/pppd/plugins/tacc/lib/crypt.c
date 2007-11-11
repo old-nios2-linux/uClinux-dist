@@ -56,15 +56,15 @@ u_char *_tac_md5_pad(int len, HDR *hdr)  {
     bp+=MD5_LEN;
   }
   
-  MD5Init(&mdcontext);
-  MD5Update(&mdcontext, buf, bp);
+  MD5_Init(&mdcontext);
+  MD5_Update(&mdcontext, buf, bp);
   /* this is because MD5 implementation has changed between
    * pppd versions 2.2.0g and 2.3.4
    */
 #if 1
-  MD5Final(pad+pp, &mdcontext); /* correct for pppd-2.3.4 */
+  MD5_Final(pad+pp, &mdcontext); /* correct for pppd-2.3.4 */
 #else
-  MD5Final(&mdcontext); /* correct for pppd-2.2.0g */
+  MD5_Final(&mdcontext); /* correct for pppd-2.2.0g */
   bcopy(&mdcontext.digest, pad+pp, MD5_LEN);
 #endif
    

@@ -50,6 +50,12 @@
 #define SPU_STOPPED_STATUS_P_I  8
 #define SPU_STOPPED_STATUS_R    9
 
+/*
+ * Definitions for software decrementer status flag.
+ */
+#define SPU_DECR_STATUS_RUNNING 0x1
+#define SPU_DECR_STATUS_WRAPPED 0x2
+
 #ifndef  __ASSEMBLY__
 /**
  * spu_reg128 - generic 128-bit register definition.
@@ -63,7 +69,7 @@ struct spu_reg128 {
  * @gprs: Array of saved registers.
  * @fpcr: Saved floating point status control register.
  * @decr: Saved decrementer value.
- * @decr_status: Indicates decrementer run status.
+ * @decr_status: Indicates software decrementer status flags.
  * @ppu_mb: Saved PPU mailbox data.
  * @ppuint_mb: Saved PPU interrupting mailbox data.
  * @tag_mask: Saved tag group mask.
@@ -151,7 +157,6 @@ struct spu_priv1_collapsed {
 	u64 mfc_fir_chkstp_enable_RW;
 	u64 smf_sbi_signal_sel;
 	u64 smf_ato_signal_sel;
-	u64 mfc_sdr_RW;
 	u64 tlb_index_hint_RO;
 	u64 tlb_index_W;
 	u64 tlb_vpn_RW;
@@ -222,8 +227,6 @@ struct spu_priv2_collapsed {
  * @spu_chnlcnt_RW: Array of saved channel counts.
  * @spu_chnldata_RW: Array of saved channel data.
  * @suspend_time: Time stamp when decrementer disabled.
- * @slb_esid_RW: Array of saved SLB esid entries.
- * @slb_vsid_RW: Array of saved SLB vsid entries.
  *
  * Structure representing the whole of the SPU
  * context save area (CSA).  This struct contains
@@ -238,6 +241,12 @@ struct spu_priv2_collapsed {
  */
 struct spu_state {
 	struct spu_lscsa *lscsa;
+#ifdef CONFIG_SPU_FS_64K_LS
+	int		use_big_pages;
+	/* One struct page per 64k page */
+#define SPU_LSCSA_NUM_BIG_PAGES	(sizeof(struct spu_lscsa) / 0x10000)
+	struct page	*lscsa_pages[SPU_LSCSA_NUM_BIG_PAGES];
+#endif
 	struct spu_problem_collapsed prob;
 	struct spu_priv1_collapsed priv1;
 	struct spu_priv2_collapsed priv2;
@@ -245,18 +254,19 @@ struct spu_state {
 	u64 spu_chnldata_RW[32];
 	u32 spu_mailbox_data[4];
 	u32 pu_mailbox_data[1];
+	u64 dar, dsisr;
 	unsigned long suspend_time;
-	u64 slb_esid_RW[8];
-	u64 slb_vsid_RW[8];
 	spinlock_t register_lock;
 };
 
-extern void spu_init_csa(struct spu_state *csa);
+extern int spu_init_csa(struct spu_state *csa);
 extern void spu_fini_csa(struct spu_state *csa);
 extern int spu_save(struct spu_state *prev, struct spu *spu);
 extern int spu_restore(struct spu_state *new, struct spu *spu);
 extern int spu_switch(struct spu_state *prev, struct spu_state *new,
 		      struct spu *spu);
+extern int spu_alloc_lscsa(struct spu_state *csa);
+extern void spu_free_lscsa(struct spu_state *csa);
 
 #endif /* !__SPU__ */
 #endif /* __KERNEL__ */

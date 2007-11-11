@@ -200,6 +200,8 @@ typedef struct s_FTP_SERVER_PROTO_CONF
 {
     /* Ports must be first */
     PROTO_CONF proto_ports;
+
+    char *serverAddr;
     
     unsigned int  def_max_param_len;
 
@@ -228,6 +230,7 @@ typedef struct s_FTP_BOUNCE_TO
  */
 typedef struct s_FTP_CLIENT_PROTO_CONF
 {
+    char *clientAddr;
     unsigned int  max_resp_len;
     int data_chan;
 

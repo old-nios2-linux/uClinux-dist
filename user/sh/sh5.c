@@ -67,7 +67,7 @@ eofc()
 int
 readc()
 {
-	register c;
+	register int c;
 
 	for (; e.iop >= e.iobase; e.iop--)
 		if ((c = e.iop->peekc) != '\0') {
@@ -269,6 +269,11 @@ register struct ioarg *ap;
 	return(c|QUOTE);
 }
 
+void breakread()
+{
+	catchint();
+}
+
 /*
  * Return the characters from a file.
  */
@@ -279,7 +284,8 @@ register struct ioarg *ap;
 	register int i;
 	char c;
 	struct iobuf *bp = ap->afbuf;
-
+	/* to break read() below, if catching interruption */
+	signal(SIGINT, breakread);
 	if (ap->afid != AFID_NOBUF) {
 	  if ((i = ap->afid != bp->id) || bp->bufp == bp->ebufp) {
 	    if (i)
@@ -392,7 +398,7 @@ register char *s;
 }
 
 void
-putc(c)
+myputc(c)
 char c;
 {
 	write(2, &c, sizeof c);
@@ -402,7 +408,7 @@ void
 prn(u)
 unsigned u;
 {
-	prs(my_itoa(u, 0));
+	prs(itoa(u, 0));
 }
 
 void
@@ -416,7 +422,7 @@ register int i;
 void
 closeall()
 {
-	register u;
+	register int u;
 
 	for (u=NUFILE; u<NOFILE;)
 		close(u++);
@@ -544,7 +550,7 @@ int ec;
 {
 	int tf;
 	char tname[30];
-	register c;
+	register int c;
 	jmp_buf ev;
 	char line [LINELIM+1];
 	char *next;
@@ -596,7 +602,12 @@ herein(hname, xdoll)
 char *hname;
 int xdoll;
 {
-	register hf, tf;
+	int hf, tf;
+
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &tf;
+#endif
 
 	if (hname == 0)
 		return(-1);

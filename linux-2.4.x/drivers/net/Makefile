@@ -25,6 +25,18 @@ ifeq ($(CONFIG_TULIP),y)
   obj-y += tulip/tulip.o
 endif
 
+ifeq ($(CONFIG_RTL865X),y)
+  ifneq ($(CONFIG_RTL865X_MODULE_ROMEDRV),y)
+  obj-y += re865x/re865x.o
+  else
+  CFLAGS_re865x/rtl_glue.o =  -DRTL865X_OVER_KERNEL -DRTL865X_OVER_LINUX -D__KERNEL__ -Wno-implicit -Werror -DEXPORT_SYMTAB -DCONFIG_RTL865X_MODULE_INTERNAL
+  obj-y += re865x/rtl_glue.o
+  CFLAGS_re865x/rtl_module.o =  -DRTL865X_OVER_KERNEL -DRTL865X_OVER_LINUX -D__KERNEL__ -Wno-implicit -Werror -DEXPORT_SYMTAB -DCONFIG_RTL865X_MODULE_INTERNAL
+  obj-y += re865x/rtl_module.o
+  endif
+endif
+obj-$(CONFIG_RTL8186) += rtl8186/rtl8186.o
+
 obj-$(CONFIG_OCP_NET) += ibm_emac/ocp.o
 
 ifeq ($(CONFIG_E1000),y)
@@ -55,6 +67,8 @@ subdir-$(CONFIG_ARCNET) += arcnet
 subdir-$(CONFIG_DEV_APPLETALK) += appletalk
 subdir-$(CONFIG_SK98LIN) += sk98lin
 subdir-$(CONFIG_SKFP) += skfp
+subdir-$(CONFIG_RTL865X) += re865x
+subdir-$(CONFIG_RTL8186) += rtl8186
 subdir-$(CONFIG_E100) += e100
 subdir-$(CONFIG_E1000) += e1000
 subdir-$(CONFIG_BONDING) += bonding

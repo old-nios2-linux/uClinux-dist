@@ -18,13 +18,21 @@ config MACH_NSLU2
 	  NSLU2 NAS device. For more information on this platform,
 	  see http://www.nslu2-linux.org
 
-config ARCH_AVILA
+config MACH_AVILA
 	bool "Avila"
 	select PCI
 	help
 	  Say 'Y' here if you want your kernel to support the Gateworks
 	  Avila Network Platform. For more information on this platform,
 	  see <file:Documentation/arm/IXP4xx>.
+
+config MACH_LOFT
+    bool "Loft"
+    depends on MACH_AVILA
+    help
+	  Say 'Y' here if you want your kernel to support the Giant
+	  Shoulder Inc Loft board (a minor variation on the standard
+	  Gateworks Avila Network Platform).
 
 config ARCH_ADI_COYOTE
 	bool "Coyote"
@@ -33,6 +41,22 @@ config ARCH_ADI_COYOTE
 	  Say 'Y' here if you want your kernel to support the ADI 
 	  Engineering Coyote Gateway Reference Platform. For more
 	  information on this platform, see <file:Documentation/arm/IXP4xx>.
+
+config MACH_GATEWAY7001
+	bool "Gateway 7001"
+	select PCI
+	help
+	  Say 'Y' here if you want your kernel to support Gateway's
+	  7001 Access Point. For more information on this platform,
+	  see http://openwrt.org
+
+config MACH_WG302V2
+	bool "Netgear WG302 v2 / WAG302 v2"
+	select PCI
+	help
+	  Say 'Y' here if you want your kernel to support Netgear's
+	  WG302 v2 or WAG302 v2 Access Points. For more information
+	  on this platform, see http://openwrt.org
 
 config ARCH_IXDP425
 	bool "IXDP425"
@@ -55,6 +79,12 @@ config MACH_IXDP465
 	  IXDP465 Development Platform (Also known as BMP).
 	  For more information on this platform, see <file:Documentation/arm/IXP4xx>.
 
+config MACH_KIXRP435
+	bool "KIXRP435"
+	help
+	  Say 'Y' here if you want your kernel to support Intel's
+	  KIXRP435 Reference Platform.
+	  For more information on this platform, see <file:Documentation/arm/IXP4xx>.
 
 #
 # IXCDP1100 is the exact same HW as IXDP425, but with a different machine 
@@ -157,14 +187,18 @@ config MACH_NAS100D
 	  NAS 100d device. For more information on this platform,
 	  see http://www.nslu2-linux.org/wiki/NAS100d/HomePage
 
-#
-# Avila and IXDP share the same source for now. Will change in future
-#
+config MACH_DSMG600
+	bool
+	prompt "D-Link DSM-G600 RevA"
+	select PCI
+	help
+	  Say 'Y' here if you want your kernel to support D-Link's
+	  DSM-G600 RevA device. For more information on this platform,
+	  see http://www.nslu2-linux.org/wiki/DSMG600/HomePage
+
 config	ARCH_IXDP4XX
 	bool
-	depends on ARCH_IXDP425 || ARCH_AVILA || MACH_IXDP465
-	select DMABOUNCE
-	select PCI
+	depends on ARCH_IXDP425 || MACH_IXDP465 || MACH_KIXRP435
 	default y
 
 #
@@ -173,6 +207,11 @@ config	ARCH_IXDP4XX
 config CPU_IXP46X
 	bool
 	depends on MACH_IXDP465 || MACH_SG590 || MACH_SG720
+	default y
+
+config CPU_IXP43X
+	bool
+	depends on MACH_KIXRP435
 	default y
 
 config MACH_GTWX5715
@@ -211,7 +250,7 @@ config IXP4XX_INDIRECT_PCI
              into the kernel and we can use the standard read[bwl]/write[bwl]
              macros. This is the preferred method due to speed but it
              limits the system to just 64MB of PCI memory. This can be 
-             problamatic if using video cards and other memory-heavy devices.
+             problematic if using video cards and other memory-heavy devices.
           
           2) If > 64MB of memory space is required, the IXP4xx can be 
 	     configured to use indirect registers to access PCI This allows 
@@ -243,6 +282,16 @@ config IXP4XX_CLOCK
 	  you get accurate kernel timing. For example some platforms use a
 	  66MHz crystal instead of a 66.666666MHz.
 
+config IXP4XX_DEBUG_FIQ
+	bool "Select IXP4XX button FIQ debug support"
+	default n
+	help
+	  Enable the Factory "Erase" switch on the SnapGear hardware
+	  platforms to be a debug FIQ. When pushed it will dump the
+	  PC address that it interrupted. Useful for debugging hang and
+	  lockup conditions since the FIQ can and will interrupt on top
+	  of standard interrupts and when standard interrupts are locked
+	  out.
 endmenu
 
 endif

@@ -55,11 +55,11 @@ static void fastcall __page_cache_release(struct page *page)
 
 static void put_compound_page(struct page *page)
 {
-	page = (struct page *)page_private(page);
+	page = compound_head(page);
 	if (put_page_testzero(page)) {
-		void (*dtor)(struct page *page);
+		compound_page_dtor *dtor;
 
-		dtor = (void (*)(struct page *))page[1].lru.next;
+		dtor = get_compound_page_dtor(page);
 		(*dtor)(page);
 	}
 }
@@ -216,7 +216,7 @@ void lru_add_drain(void)
 }
 
 #ifdef CONFIG_NUMA
-static void lru_add_drain_per_cpu(void *dummy)
+static void lru_add_drain_per_cpu(struct work_struct *dummy)
 {
 	lru_add_drain();
 }
@@ -226,7 +226,7 @@ static void lru_add_drain_per_cpu(void *dummy)
  */
 int lru_add_drain_all(void)
 {
-	return schedule_on_each_cpu(lru_add_drain_per_cpu, NULL);
+	return schedule_on_each_cpu(lru_add_drain_per_cpu);
 }
 
 #else
@@ -488,7 +488,7 @@ static int cpu_swap_callback(struct notifier_block *nfb,
 	long *committed;
 
 	committed = &per_cpu(committed_space, (long)hcpu);
-	if (action == CPU_DEAD) {
+	if (action == CPU_DEAD || action == CPU_DEAD_FROZEN) {
 		atomic_add(*committed, &vm_committed_space);
 		*committed = 0;
 		__lru_add_drain((long)hcpu);
@@ -514,5 +514,7 @@ void __init swap_setup(void)
 	 * Right now other parts of the system means that we
 	 * _really_ don't want to cluster much more
 	 */
+#ifdef CONFIG_HOTPLUG_CPU
 	hotcpu_notifier(cpu_swap_callback, 0);
+#endif
 }

@@ -50,7 +50,7 @@ ifndef CONFIG_PROP_IFMOND_IPSEC
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/manual/manual /bin/manual
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/_plutoload/_plutoload /bin/_plutoload
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/_realsetup/_realsetup /bin/_realsetup
-	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/send-pr/send-pr /bin/send-pr
+	-$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/send-pr/send-pr /bin/send-pr
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/_updown_x509/_updown_x509 /bin/_updown_x509
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/barf/barf /bin/barf
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OPENSWAN_DIR)/programs/ikeping/ikeping /bin/ikeping

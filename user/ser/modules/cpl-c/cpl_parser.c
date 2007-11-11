@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_parser.c,v 1.27.4.1 2003/11/28 13:21:07 bogdan Exp $
+ * $Id: cpl_parser.c,v 1.32 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -62,7 +62,7 @@ enum {EMAIL_TO,EMAIL_HDR_NAME,EMAIL_KNOWN_HDR_BODY,EMAIL_UNKNOWN_HDR_BODY};
 #define FOR_ALL_ATTR(_node,_attr) \
 	for( (_attr)=(_node)->properties ; (_attr) ; (_attr)=(_attr)->next)
 
-/* right and left space triming */
+/* right and left space trimming */
 #define trimlr(_s_) \
 	do{\
 		for(;(_s_).s[(_s_).len-1]==' ';(_s_).s[--(_s_).len]=0);\
@@ -263,7 +263,7 @@ static inline char *decode_mail_url(char *p, char *p_end, char *url,
 						if (*len==URL_MAILTO_LEN &&
 						!strncasecmp(p-(*len),URL_MAILTO_STR,(*len))) {
 							DBG("DEBUG:cpl_c:decode_mail_url: MAILTO: found at"
-								" the begining of TO -> removed\n");
+								" the beginning of TO -> removed\n");
 							p -= (*len);
 							*len = 0;
 						}
@@ -442,7 +442,7 @@ static inline int encode_lang_attr(xmlNodePtr  node, char *node_ptr, char *buf_e
 		val.s = val_bk = (char*)xmlGetProp(node,attr->name);
 		/* parse the language-tag */
 		for(end=val.s,val.len=0;;end++) {
-			/* trim all spaces from the begining of the tag */
+			/* trim all spaces from the beginning of the tag */
 			if (!val.len && (*end==' ' || *end=='\t')) continue;
 			/* we cannot have more than 2 attrs - LANG_TAG and LANG_SUBTAG */
 			if ((*nr_attr)>=2) goto lang_error;
@@ -804,15 +804,15 @@ static inline int encode_lookup_attr(xmlNodePtr  node, char *node_ptr,
 	FOR_ALL_ATTR(node,attr) {
 		/* get attribute's value */
 		get_attr_val( attr->name , val, error);
-		if ( !strcasecmp(attr->name,"source") ) {
+		if ( !strcasecmp((const char*)attr->name,"source") ) {
 			/* this param will not be copied, since it has only one value ;-)*/
 			if ( val.len!=SOURCE_REG_STR_LEN ||
 			strncasecmp( val.s, SOURCE_REG_STR, val.len) ) {
-				LOG(L_ERR,"ERROR:cpl_c:encode_location_attr: unsupported value"
+				LOG(L_ERR,"ERROR:cpl_c:encode_lookup_attr: unsupported value"
 					" <%.*s> in SOURCE param\n",val.len,val.s);
 				goto error;
 			}
-		} else if ( !strcasecmp(attr->name,"clear") ) {
+		} else if ( !strcasecmp((const char*)attr->name,"clear") ) {
 			(*nr_attr)++;
 			set_attr_type(p, CLEAR_ATTR, buf_end, error);
 			if ( val.len==3 && !strncasecmp(val.s,"yes",3) )
@@ -820,15 +820,15 @@ static inline int encode_lookup_attr(xmlNodePtr  node, char *node_ptr,
 			else if ( val.len==2 && !strncasecmp(val.s,"no",2) )
 				append_short_attr(p, NO_VAL, buf_end, error);
 			else {
-				LOG(L_ERR,"ERROR:cpl_c:encode_location_attr: unknown value "
+				LOG(L_ERR,"ERROR:cpl_c:encode_lookup_attr: unknown value "
 					"<%.*s> for attribute CLEAR\n",val.len,val.s);
 				goto error;
 			}
-		} else if ( !strcasecmp(attr->name,"timeout") ) {
+		} else if ( !strcasecmp((const char*)attr->name,"timeout") ) {
 			LOG(L_WARN,"WARNING:cpl_c:encode_lookup_attr: unsupported param "
 				"TIMEOUT; skipping\n");
 		} else {
-			LOG(L_ERR,"ERROR:cpl_c:encode_location_attr: unknown attribute "
+			LOG(L_ERR,"ERROR:cpl_c:encode_lookup_attr: unknown attribute "
 				"<%s>\n",attr->name);
 			goto error;
 		}
@@ -871,7 +871,7 @@ static inline int encode_location_attr(xmlNodePtr  node, char *node_ptr,
 				/* check if it's a valid SIP URL -> just call
 				 * parse uri function and see if returns error ;-) */
 				if (parse_uri( val.s, val.len, &uri)!=0) {
-					LOG(L_ERR,"ERROR:cpl-c:encript_location_attr: <%s> is "
+					LOG(L_ERR,"ERROR:cpl-c:encrypt_location_attr: <%s> is "
 						"not a valid SIP URL\n",val.s);
 					goto error;
 				}
@@ -939,7 +939,7 @@ static inline int encode_rmvloc_attr(xmlNodePtr  node, char *node_ptr, char *buf
 				/* check if it's a valid SIP URL -> just call
 				 * parse uri function and see if returns error ;-) */
 				if (parse_uri( val.s, val.len, &uri)!=0) {
-					LOG(L_ERR,"ERROR:cpl-c:encript_rmvloc_attr: <%s> is "
+					LOG(L_ERR,"ERROR:cpl-c:encrypt_rmvloc_attr: <%s> is "
 						"not a valid SIP URL\n",val.s);
 					goto error;
 				}
@@ -948,7 +948,7 @@ static inline int encode_rmvloc_attr(xmlNodePtr  node, char *node_ptr, char *buf
 				break;
 			case 'P': case 'p':
 			case 'V': case 'v':
-				/* as the interpreter ignors PARAM and VALUE attributes, we will
+				/* as the interpreter ignores PARAM and VALUE attributes, we will
 				 * do the same ;-) */
 				break;
 			default:

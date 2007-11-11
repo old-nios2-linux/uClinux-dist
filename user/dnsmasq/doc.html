@@ -11,7 +11,8 @@ connection but would be a good choice for any small network where low
 resource use and ease of configuration are important. 
 <P>
 Dnsmasq is included in at least the following Linux distributions: Gentoo, Debian,
-Smoothwall, IP-Cop, floppyfw, and Firebox.
+Smoothwall, IP-Cop, floppyfw, Firebox, Freesco and
+Clarkconnect. It is also available as a FreeBSD port and is used in Linksys wireless routers.
 <P>
 Dnsmasq provides the following features:
 <DIR>
@@ -59,19 +60,24 @@ Dnsmasq can be configured to send queries for certain domains to
 upstream servers handling only those domains. This makes integration
 with private DNS systems easy.
 </LI>
-</DIR>
-<P>
-Dnsmasq has one further feature; it can be configured to return an MX record 
+<LI>
+Dnsmasq can be configured to return an MX record 
 for the firewall host. This makes it easy to configure the mailer on the local 
 machines to forward all mail to the central mailer on the firewall host. Never 
 lose root messages from your machines again!
+</LI>
+<LI>
+For version 1.15 dnsmasq has a facility to work around Verisign's infamous wildcard A record
+in the .com and .net TLDs
+</LI>
+</DIR>
 
 <H2>Download.</H2>
 
 Download dnsmasq <A HREF="http://www.thekelleys.org.uk/dnsmasq/"> here</A>. 
 The tarball includes this documentation, source, manpage and control files for building .rpms.
 There are also pre-built i386 .rpms, and a 
-<A HREF="http://www.thekelleys.org.uk/dnsmasq/CHANGELOG"> CHANGELOG</A>.
+<A HREF="CHANGELOG"> CHANGELOG</A>.
 Dnsmasq is part of the Debian distribution, it can be downloaded from 
 <A HREF="http://ftp.debian.org/debian/pool/main/d/dnsmasq/"> here</A> or installed using <TT>apt</TT>.
 
@@ -80,7 +86,14 @@ Dnsmasq is part of the Debian distribution, it can be downloaded from
 Assuming you have the relevant tools installed, you can rebuild .rpms simply by running (as root)
 
 <PRE>
-rpm -ta dnsmasq-xxx.tar.gz
+rpmbuild -ta dnsmasq-xxx.tar.gz
+</PRE>
+
+Note for Suse users: you will need to re-compress the tar file as
+bzip2 before building using the commands
+<PRE>
+gunzip dnsmasq-xxx.tar.gz
+bzip2 dnsmasq-zzz.tar
 </PRE>
 
 <H2>License.</H2>

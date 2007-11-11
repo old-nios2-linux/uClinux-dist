@@ -1,4 +1,4 @@
-/* $Id: arp.c,v 1.4 2001/11/12 04:02:06 pauli Exp $
+/* $Id: arp.c,v 1.5 2007/06/27 06:10:27 gerg Exp $
  *
  * dhcpcd - DHCP client daemon -
  * Copyright (C) 1996 - 1997 Yoichi Hariguchi <yoichi@fore.com>
@@ -77,7 +77,7 @@ arpCheck(u_long inaddr, struct ifinfo *ifbuf, long timeout)
 				rv = 0;
 			}
 			if ( arp.operation == htons(ARPOP_REPLY) &&
-				bcmp(arp.tHaddr, ifbuf->haddr, 6) == 0 &&
+				memcmp(arp.tHaddr, ifbuf->haddr, 6) == 0 &&
 				*((u_int *)arp.sInaddr) == inaddr ) {
 				rv = 0;
 				break;

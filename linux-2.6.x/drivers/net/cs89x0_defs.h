@@ -26,6 +26,10 @@
 #define _CS89X0_DEFS_EMBED_
 #endif
 
+#ifdef CONFIG_M5272
+#define _CS89X0_DEFS_EMBED_
+#endif
+
 #ifdef CONFIG_EXCALIBUR
 #include <asm/nios.h>
 #define _CS89X0_DEFS_EMBED_

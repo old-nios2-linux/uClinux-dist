@@ -95,7 +95,7 @@ static inline void flush_tlb_pgtables(struct mm_struct *mm,
 { /* Nothing to do */
 }
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 /*
  * For SH-4, we have our own implementation for ptep_get_and_clear
  */

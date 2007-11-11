@@ -328,12 +328,11 @@ static int __devinit mpcore_wdt_probe(struct platform_device *dev)
 		goto err_out;
 	}
 
-	wdt = kmalloc(sizeof(struct mpcore_wdt), GFP_KERNEL);
+	wdt = kzalloc(sizeof(struct mpcore_wdt), GFP_KERNEL);
 	if (!wdt) {
 		ret = -ENOMEM;
 		goto err_out;
 	}
-	memset(wdt, 0, sizeof(struct mpcore_wdt));
 
 	wdt->dev = &dev->dev;
 	wdt->irq = platform_get_irq(dev, 0);
@@ -347,7 +346,7 @@ static int __devinit mpcore_wdt_probe(struct platform_device *dev)
 		goto err_free;
 	}
 
-	mpcore_wdt_miscdev.dev = &dev->dev;
+	mpcore_wdt_miscdev.parent = &dev->dev;
 	ret = misc_register(&mpcore_wdt_miscdev);
 	if (ret) {
 		dev_printk(KERN_ERR, _dev, "cannot register miscdev on minor=%d (err=%d)\n",

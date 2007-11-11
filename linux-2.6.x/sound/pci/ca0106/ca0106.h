@@ -590,7 +590,6 @@ struct snd_ca0106 {
 	struct resource *res_port;
 	int irq;
 
-	unsigned int revision;		/* chip revision */
 	unsigned int serial;            /* serial number */
 	unsigned short model;		/* subsystem id */
 

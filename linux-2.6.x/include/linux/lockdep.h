@@ -1,12 +1,16 @@
 /*
  * Runtime locking correctness validator
  *
- *  Copyright (C) 2006 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
+ *  Copyright (C) 2006,2007 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
+ *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra <pzijlstr@redhat.com>
  *
  * see Documentation/lockdep-design.txt for more details.
  */
 #ifndef __LINUX_LOCKDEP_H
 #define __LINUX_LOCKDEP_H
+
+struct task_struct;
+struct lockdep_map;
 
 #ifdef CONFIG_LOCKDEP
 
@@ -112,7 +116,43 @@ struct lock_class {
 
 	const char			*name;
 	int				name_version;
+
+#ifdef CONFIG_LOCK_STAT
+	unsigned long			contention_point[4];
+#endif
 };
+
+#ifdef CONFIG_LOCK_STAT
+struct lock_time {
+	s64				min;
+	s64				max;
+	s64				total;
+	unsigned long			nr;
+};
+
+enum bounce_type {
+	bounce_acquired_write,
+	bounce_acquired_read,
+	bounce_contended_write,
+	bounce_contended_read,
+	nr_bounce_types,
+
+	bounce_acquired = bounce_acquired_write,
+	bounce_contended = bounce_contended_write,
+};
+
+struct lock_class_stats {
+	unsigned long			contention_point[4];
+	struct lock_time		read_waittime;
+	struct lock_time		write_waittime;
+	struct lock_time		read_holdtime;
+	struct lock_time		write_holdtime;
+	unsigned long			bounces[nr_bounce_types];
+};
+
+struct lock_class_stats lock_stats(struct lock_class *class);
+void clear_lock_stats(struct lock_class *class);
+#endif
 
 /*
  * Map the lock object (the lock instance) to the lock-class object.
@@ -122,6 +162,9 @@ struct lockdep_map {
 	struct lock_class_key		*key;
 	struct lock_class		*class_cache;
 	const char			*name;
+#ifdef CONFIG_LOCK_STAT
+	int				cpu;
+#endif
 };
 
 /*
@@ -132,6 +175,7 @@ struct lock_list {
 	struct list_head		entry;
 	struct lock_class		*class;
 	struct stack_trace		trace;
+	int				distance;
 };
 
 /*
@@ -162,6 +206,10 @@ struct held_lock {
 	unsigned long			acquire_ip;
 	struct lockdep_map		*instance;
 
+#ifdef CONFIG_LOCK_STAT
+	u64 				waittime_stamp;
+	u64				holdtime_stamp;
+#endif
 	/*
 	 * The lock-stack is unified in that the lock chains of interrupt
 	 * contexts nest ontop of process context chains, but we 'separate'
@@ -193,7 +241,6 @@ extern void lockdep_free_key_range(void *start, unsigned long size);
 
 extern void lockdep_off(void);
 extern void lockdep_on(void);
-extern int lockdep_internal(void);
 
 /*
  * These methods are used by specific locking variants (spinlocks,
@@ -243,6 +290,8 @@ extern void lock_release(struct lockdep_map *lock, int nested,
 
 # define INIT_LOCKDEP				.lockdep_recursion = 0,
 
+#define lockdep_depth(tsk)	(debug_locks ? (tsk)->lockdep_depth : 0)
+
 #else /* !LOCKDEP */
 
 static inline void lockdep_off(void)
@@ -251,11 +300,6 @@ static inline void lockdep_off(void)
 
 static inline void lockdep_on(void)
 {
-}
-
-static inline int lockdep_internal(void)
-{
-	return 0;
 }
 
 # define lock_acquire(l, s, t, r, c, i)		do { } while (0)
@@ -277,20 +321,57 @@ static inline int lockdep_internal(void)
  * The class key takes no space if lockdep is disabled:
  */
 struct lock_class_key { };
+
+#define lockdep_depth(tsk)	(0)
+
 #endif /* !LOCKDEP */
+
+#ifdef CONFIG_LOCK_STAT
+
+extern void lock_contended(struct lockdep_map *lock, unsigned long ip);
+extern void lock_acquired(struct lockdep_map *lock);
+
+#define LOCK_CONTENDED(_lock, try, lock)			\
+do {								\
+	if (!try(_lock)) {					\
+		lock_contended(&(_lock)->dep_map, _RET_IP_);	\
+		lock(_lock);					\
+	}							\
+	lock_acquired(&(_lock)->dep_map);			\
+} while (0)
+
+#else /* CONFIG_LOCK_STAT */
+
+#define lock_contended(lockdep_map, ip) do {} while (0)
+#define lock_acquired(lockdep_map) do {} while (0)
+
+#define LOCK_CONTENDED(_lock, try, lock) \
+	lock(_lock)
+
+#endif /* CONFIG_LOCK_STAT */
 
 #if defined(CONFIG_TRACE_IRQFLAGS) && defined(CONFIG_GENERIC_HARDIRQS)
 extern void early_init_irq_lock_class(void);
 #else
-# define early_init_irq_lock_class()		do { } while (0)
+static inline void early_init_irq_lock_class(void)
+{
+}
 #endif
 
 #ifdef CONFIG_TRACE_IRQFLAGS
 extern void early_boot_irqs_off(void);
 extern void early_boot_irqs_on(void);
+extern void print_irqtrace_events(struct task_struct *curr);
 #else
-# define early_boot_irqs_off()			do { } while (0)
-# define early_boot_irqs_on()			do { } while (0)
+static inline void early_boot_irqs_off(void)
+{
+}
+static inline void early_boot_irqs_on(void)
+{
+}
+static inline void print_irqtrace_events(struct task_struct *curr)
+{
+}
 #endif
 
 /*

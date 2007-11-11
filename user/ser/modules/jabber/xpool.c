@@ -1,5 +1,5 @@
 /*
- * $Id: xpool.c,v 1.2 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xpool.c,v 1.3 2004/08/24 08:58:30 janakj Exp $
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -185,7 +185,7 @@ void *xode_pool_malloco(xode_pool p, int size)
     return block;
 }  
 
-/* XXX efficient: move this to const char * and then loop throug the existing heaps to see if src is within a block in this pool */
+/* XXX efficient: move this to const char * and then loop through the existing heaps to see if src is within a block in this pool */
 char *xode_pool_strdup(xode_pool p, const char *src)
 {
     char *ret;

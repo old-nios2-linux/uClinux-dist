@@ -1,46 +1,65 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Asterisk Call Manager CDR records.
- * 
+ * Copyright (C) 2004 - 2005
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  * This program is free software, distributed under the terms of
- * the GNU General Public License.
- *
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Asterisk Call Manager CDR records.
+ * 
+ * See also
+ * \arg \ref AstCDR
+ * \arg \ref AstAMI
+ * \arg \ref Config_ami
+ * \ingroup cdr_drivers
+ */
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 69392 $")
+
 #include <sys/types.h>
-#include <asterisk/channel.h>
-#include <asterisk/cdr.h>
-#include <asterisk/module.h>
-#include <asterisk/logger.h>
-#include <asterisk/utils.h>
-#include <asterisk/manager.h>
-#include <asterisk/config.h>
-#include "../asterisk.h"
-#include "../astconf.h"
 #include <strings.h>
 #include <unistd.h>
 #include <time.h>
 
+#include "asterisk/channel.h"
+#include "asterisk/cdr.h"
+#include "asterisk/module.h"
+#include "asterisk/logger.h"
+#include "asterisk/utils.h"
+#include "asterisk/manager.h"
+#include "asterisk/config.h"
+
 #define DATE_FORMAT 	"%Y-%m-%d %T"
 #define CONF_FILE	"cdr_manager.conf"
 
-static char *desc = "Asterisk Call Manager CDR Backend";
-static char *name = "cdr_as";
+static char *name = "cdr_manager";
 
 static int enablecdr = 0;
 
-static void loadconfigurationfile(void)
+static int loadconfigurationfile(void)
 {
 	char *cat;
 	struct ast_config *cfg;
 	struct ast_variable *v;
 	
-	cfg = ast_load(CONF_FILE);
+	cfg = ast_config_load(CONF_FILE);
 	if (!cfg) {
 		/* Standard configuration */
 		enablecdr = 0;
-		return;
+		return 0;
 	}
 	
 	cat = ast_category_browse(cfg, NULL);
@@ -60,7 +79,8 @@ static void loadconfigurationfile(void)
 		cat = ast_category_browse(cfg, cat);
 	}
 	
-	ast_destroy(cfg);
+	ast_config_destroy(cfg);
+	return 1;
 }
 
 static int manager_log(struct ast_cdr *cdr)
@@ -75,17 +95,17 @@ static int manager_log(struct ast_cdr *cdr)
 		return 0;
 
 	t = cdr->start.tv_sec;
-	localtime_r(&t, &timeresult);
+	ast_localtime(&t, &timeresult, NULL);
 	strftime(strStartTime, sizeof(strStartTime), DATE_FORMAT, &timeresult);
 	
 	if (cdr->answer.tv_sec)	{
     		t = cdr->answer.tv_sec;
-    		localtime_r(&t, &timeresult);
+    		ast_localtime(&t, &timeresult, NULL);
 		strftime(strAnswerTime, sizeof(strAnswerTime), DATE_FORMAT, &timeresult);
 	}
 
 	t = cdr->end.tv_sec;
-	localtime_r(&t, &timeresult);
+	ast_localtime(&t, &timeresult, NULL);
 	strftime(strEndTime, sizeof(strEndTime), DATE_FORMAT, &timeresult);
 
 	manager_event(EVENT_FLAG_CALL, "Cdr",
@@ -101,8 +121,8 @@ static int manager_log(struct ast_cdr *cdr)
 	    "StartTime: %s\r\n"
 	    "AnswerTime: %s\r\n"
 	    "EndTime: %s\r\n"
-	    "Duration: %d\r\n"
-	    "BillableSeconds: %d\r\n"
+	    "Duration: %ld\r\n"
+	    "BillableSeconds: %ld\r\n"
 	    "Disposition: %s\r\n"
 	    "AMAFlags: %s\r\n"
 	    "UniqueID: %s\r\n"
@@ -115,25 +135,21 @@ static int manager_log(struct ast_cdr *cdr)
 	return 0;
 }
 
-char *description(void)
-{
-	return desc;
-}
-
-int unload_module(void)
+static int unload_module(void)
 {
 	ast_cdr_unregister(name);
 	return 0;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	int res;
 
 	/* Configuration file */
-	loadconfigurationfile();
+	if (!loadconfigurationfile())
+		return AST_MODULE_LOAD_DECLINE;
 	
-	res = ast_cdr_register(name, desc, manager_log);
+	res = ast_cdr_register(name, "Asterisk Manager Interface CDR Backend", manager_log);
 	if (res) {
 		ast_log(LOG_ERROR, "Unable to register Asterisk Call Manager CDR handling\n");
 	}
@@ -141,18 +157,14 @@ int load_module(void)
 	return res;
 }
 
-int reload(void)
+static int reload(void)
 {
 	loadconfigurationfile();
 	return 0;
 }
 
-int usecount(void)
-{
-	return 0;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Asterisk Manager Interface CDR Backend",
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload,
+	       );

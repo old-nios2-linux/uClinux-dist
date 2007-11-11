@@ -2,9 +2,8 @@
  *  Copyright (C) 2004 aCaB <acab@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 /*
@@ -36,175 +36,26 @@
 #include "clamav-config.h"
 #endif
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <string.h>
 
 #include "cltypes.h"
-#include "pe.h"
 #include "rebuildpe.h"
 #include "others.h"
-
-
-static int doubledl(char **scur, uint8_t *mydlptr, char *buffer, uint32_t buffersize)
-{
-  unsigned char mydl = *mydlptr;
-  unsigned char olddl = mydl;
-
-  mydl*=2;
-  if ( !(olddl & 0x7f)) {
-    if ( *scur < buffer || *scur >= buffer+buffersize-1 )
-      return -1;
-    olddl = **scur;
-    mydl = olddl*2+1;
-    *scur=*scur + 1;
-  }
-  *mydlptr = mydl;
-  return (olddl>>7)&1;
-}
-
-static int unfsg(char *source, char *dest, int ssize, int dsize, char **endsrc, char **enddst) {
-  uint8_t mydl=0x80;
-  uint32_t backbytes, backsize, oldback = 0;
-  char *csrc = source, *cdst = dest;
-  int oob, lostbit = 1;
-
-  /* I assume buffers size is >0 - No checking! */
-  *cdst++=*csrc++;
-
-  while ( 1 ) {
-    if ((oob=doubledl(&csrc, &mydl, source, ssize))) {
-      if (oob == -1)
-	return -1;
-      /* 164 */
-      backsize = 0;
-      if ((oob=doubledl(&csrc, &mydl, source, ssize))) {
-	if (oob == -1)
-	  return -1;
-	/* 16a */
-	backbytes = 0;
-	if ((oob=doubledl(&csrc, &mydl, source, ssize))) {
-	  if (oob == -1)
-	    return -1;
-	  /* 170 */
-	  lostbit = 1;
-	  backsize++;
-	  backbytes = 0x10;
-	  while ( backbytes < 0x100 ) {
-	    if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	      return -1;
-	    backbytes = backbytes*2+oob;
-	  }
-	  backbytes &= 0xff;
-	  if ( ! backbytes ) {
-	    if (cdst >= dest+dsize)
-	      return -1;
-	    *cdst++=0x00;
-	    continue;
-	  }
-	} else {
-	  /* 18f */
-	  if (csrc >= source+ssize)
-	    return -1;
-	  backbytes = *(unsigned char*)csrc;
-	  backsize = backsize * 2 + (backbytes & 1);
-	  backbytes = (backbytes & 0xff)>>1;
-	  csrc++;
-	  if (! backbytes)
-	    break;
-	  backsize+=2;
-	  oldback = backbytes;
-	  lostbit = 0;
-	}
-      } else {
-	/* 180 */
-	backsize = 1;
-	do {
-	  if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	    return -1;
-	  backsize = backsize*2+oob;
-	  if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	    return -1;
-	} while (oob);
-
-	backsize = backsize - 1 - lostbit;
-	if (! backsize) {
-	  /* 18a */
-	  backsize = 1;
-	  do {
-	    if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	      return -1;
-	    backsize = backsize*2+oob;
-	    if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	      return -1;
-	  } while (oob);
-
-	  backbytes = oldback;
-	} else {
-	  /* 198 */
-	  if (csrc >= source+ssize)
-	    return -1;
-	  backbytes = *(unsigned char*)csrc;
-	  backbytes += (backsize-1)<<8;
-	  backsize = 1;
-	  csrc++;
-	  do {
-	    if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	      return -1;
-	    backsize = backsize*2+oob;
-	    if ((oob=doubledl(&csrc, &mydl, source, ssize)) == -1)
-	      return -1;
-	  } while (oob);
-
-          if (backbytes >= 0x7d00)
-            backsize++;
-          if (backbytes >= 0x500)
-            backsize++;
-          if (backbytes <= 0x7f)
-            backsize += 2;
-
-	  oldback = backbytes;
-	}
-	lostbit = 0;
-      }
-      if (!CLI_ISCONTAINED(dest, dsize, cdst, backsize) || !CLI_ISCONTAINED(dest, dsize, cdst-backbytes, backsize))
-	return -1;
-      while(backsize--) {
-	*cdst=*(cdst-backbytes);
-	cdst++;
-      }
-
-    } else {
-      /* 15d */
-      if (cdst < dest || cdst >= dest+dsize || csrc < source || csrc >= source+ssize)
-	return -1;
-      *cdst++=*csrc++;
-      lostbit=1;
-    }
-  }
-
-  *endsrc = csrc;
-  *enddst = cdst;
-  return 0;
-}
+#include "packlibs.h"
+#include "fsg.h"
 
 int unfsg_200(char *source, char *dest, int ssize, int dsize, uint32_t rva, uint32_t base, uint32_t ep, int file) {
-  char *fake, *tsrc;
-  struct SECTION section; // Yup, just one ;)
+  char *tsrc;
+  struct cli_exe_section section; /* Yup, just one ;) */
   
-  if ( unfsg(source, dest, ssize, dsize, &fake, &fake) ) return -1;
+  if ( cli_unfsg(source, dest, ssize, dsize, NULL, NULL) ) return -1;
   
   section.raw=0;
   section.rsz = dsize;
   section.vsz = dsize;
   section.rva = rva;
-  if ( (tsrc = rebuildpe(dest, &section, 1, base, ep, 0, 0)) ) {
-    write(file, tsrc, 0x148+0x80+0x28+dsize);
-    free(tsrc);
-  } else {
+
+  if (!cli_rebuildpe(dest, &section, 1, base, ep, 0, 0, file)) {
     cli_dbgmsg("FSG: Rebuilding failed\n");
     return 0;
   }
@@ -212,13 +63,13 @@ int unfsg_200(char *source, char *dest, int ssize, int dsize, uint32_t rva, uint
 }
 
 
-int unfsg_133(char *source, char *dest, int ssize, int dsize, struct SECTION *sections, int sectcount, uint32_t base, uint32_t ep, int file) {
+int unfsg_133(char *source, char *dest, int ssize, int dsize, struct cli_exe_section *sections, int sectcount, uint32_t base, uint32_t ep, int file) {
   char *tsrc=source, *tdst=dest;
   int i, upd=1, offs=0, lastsz=dsize;
 
   for (i = 0 ; i <= sectcount ; i++) {
     char *startd=tdst;
-    if ( unfsg(tsrc, tdst, ssize - (tsrc - source), dsize - (tdst - dest), &tsrc, &tdst) == -1 )
+    if ( cli_unfsg(tsrc, tdst, ssize - (tsrc - source), dsize - (tdst - dest), &tsrc, &tdst) == -1 )
       return -1;
 
     /* RVA has been filled already in pe.c */
@@ -258,16 +109,12 @@ int unfsg_133(char *source, char *dest, int ssize, int dsize, struct SECTION *se
     else 
       sections[i].vsz = lastsz;
 
-    cli_dbgmsg("FSG: .SECT%d RVA:%x VSize:%x ROffset: %x, RSize:% x\n", i, sections[i].rva, sections[i].vsz, sections[i].raw, sections[i].rsz);
+    cli_dbgmsg("FSG: .SECT%d RVA:%x VSize:%x ROffset: %x, RSize:%x\n", i, sections[i].rva, sections[i].vsz, sections[i].raw, sections[i].rsz);
   }
 
-  if ( (tsrc = rebuildpe(dest, sections, sectcount+1, base, ep, 0, 0)) ) {
-    write(file, tsrc, 0x148+0x80+0x28*(sectcount+1)+offs);
-    free(tsrc);
-  } else {
+  if (!cli_rebuildpe(dest, sections, sectcount+1, base, ep, 0, 0, file)) {
     cli_dbgmsg("FSG: Rebuilding failed\n");
     return 0;
   }
-
   return 1;
 }

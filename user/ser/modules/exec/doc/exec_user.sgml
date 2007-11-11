@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.2.6.1 $</revnumber>
-		<date>$Date: 2003/11/26 20:53:10 $</date>
+		<revnumber>$Revision: 1.4.2.1 $</revnumber>
+		<date>$Date: 2005/06/22 23:12:06 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -16,16 +16,16 @@
 	<para>
 	    Exec module allows to start an external command from a ser script. The commands may
 	    be any valid shell commands--the command string is passed to shell using <quote>popen</quote>
-	    command. ser passes additionaly lot of information about request in environment
+	    command. ser passes additionally lot of information about request in environment
 	    variables:
 	</para>
 	<itemizedlist>
 	    <listitem>
 		<para>
 		    SIP_HF_&lt;hf_name&gt; contains value of each header field in request. If a
-	            header field occured multiple times, values are concatenated and
+	            header field occurred multiple times, values are concatenated and
 	            comma-separated. &lt;hf_name&gt; is in capital letters. Ff a header-field name
-	            occured in compact form, &lt;hf_name&gt; is canonical.
+	            occurred in compact form, &lt;hf_name&gt; is canonical.
 		</para>
 	    </listitem>
 	    <listitem>
@@ -119,10 +119,10 @@ modparam("exec", "setvars", 1)
 	    </example>
 	</section>
 	<section>
-	    <title><varname>exec_timer</varname> (UNUSED, placeholder only) (integer)</title>
+	    <title><varname>time_to_kill</varname> (integer)</title>
 	    <para>
 		Specifies the longest time a program is allowed to execute. If the time is exceeded,
-		the program is killed.
+		the program is killed. Value of 0 disables killing.
 	    </para>
 	    <para>
 		<emphasis>

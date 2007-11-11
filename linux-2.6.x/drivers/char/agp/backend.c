@@ -43,7 +43,7 @@
  * fix some real stupidity. It's only by chance we can bump
  * past 0.99 at all due to some boolean logic error. */
 #define AGPGART_VERSION_MAJOR 0
-#define AGPGART_VERSION_MINOR 101
+#define AGPGART_VERSION_MINOR 102
 static const struct agp_version agp_current_version =
 {
 	.major = AGPGART_VERSION_MAJOR,
@@ -321,7 +321,7 @@ EXPORT_SYMBOL(agp_try_unsupported_boot);
 static int __init agp_init(void)
 {
 	if (!agp_off)
-		printk(KERN_INFO "Linux agpgart interface v%d.%d (c) Dave Jones\n",
+		printk(KERN_INFO "Linux agpgart interface v%d.%d\n",
 			AGPGART_VERSION_MAJOR, AGPGART_VERSION_MINOR);
 	return 0;
 }

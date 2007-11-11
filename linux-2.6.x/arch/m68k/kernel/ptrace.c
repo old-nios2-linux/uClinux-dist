@@ -14,7 +14,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
@@ -76,7 +75,7 @@ static inline long get_reg(struct task_struct *task, int regno)
 
 	if (regno == PT_USP)
 		addr = &task->thread.usp;
-	else if (regno < sizeof(regoff)/sizeof(regoff[0]))
+	else if (regno < ARRAY_SIZE(regoff))
 		addr = (unsigned long *)(task->thread.esp0 + regoff[regno]);
 	else
 		return 0;
@@ -93,7 +92,7 @@ static inline int put_reg(struct task_struct *task, int regno,
 
 	if (regno == PT_USP)
 		addr = &task->thread.usp;
-	else if (regno < sizeof(regoff)/sizeof(regoff[0]))
+	else if (regno < ARRAY_SIZE(regoff))
 		addr = (unsigned long *)(task->thread.esp0 + regoff[regno]);
 	else
 		return -1;
@@ -117,7 +116,6 @@ static inline void singlestep_disable(struct task_struct *child)
 void ptrace_disable(struct task_struct *child)
 {
 	singlestep_disable(child);
-	clear_tsk_thread_flag(child, TIF_SYSCALL_TRACE);
 }
 
 long arch_ptrace(struct task_struct *child, long request, long addr, long data)
@@ -129,10 +127,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/* when I and D space are separate, these will need to be fixed. */
 	case PTRACE_PEEKTEXT:	/* read word at location addr. */
 	case PTRACE_PEEKDATA:
-		i = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
-		if (i != sizeof(tmp))
-			goto out_eio;
-		ret = put_user(tmp, (unsigned long *)data);
+		ret = generic_ptrace_peekdata(child, addr, data);
 		break;
 
 	/* read the word at location addr in the USER area. */
@@ -161,8 +156,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/* when I and D space are separate, this will have to be fixed. */
 	case PTRACE_POKETEXT:	/* write the word at location addr. */
 	case PTRACE_POKEDATA:
-		if (access_process_vm(child, addr, &data, sizeof(data), 1) != sizeof(data))
-			goto out_eio;
+		ret = generic_ptrace_pokedata(child, addr, data);
 		break;
 
 	case PTRACE_POKEUSR:	/* write the word at location addr in the USER area */

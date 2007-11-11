@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <paths.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <config/autoconf.h>
 #include <linux/version.h>
 #include <linux/autoconf.h>
@@ -81,7 +84,12 @@ static int shutdown_now(int rb_which)
 #endif
 
 #ifdef CONFIG_LEDMAN
-	/* Turn off all LEDs so it is clear that we are shut down */
+	/* We want to turn off all LEDs, except the POWER LED,
+	 * so it is clear that we are shut down. Enable the ALT functionality
+	 * for the POWER LED and then turn all std LEDs off. 
+	 */
+	ledman_cmd(LEDMAN_CMD_ALT_ON, LEDMAN_POWER);
+	ledman_cmd(LEDMAN_CMD_ON | LEDMAN_CMD_ALTBIT, LEDMAN_POWER);
 	ledman_cmd(LEDMAN_CMD_OFF, LEDMAN_ALL);
 #endif
 #ifdef CONFIG_SNAPDOG

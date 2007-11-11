@@ -1,13 +1,15 @@
 #ifndef _I386_CURRENT_H
 #define _I386_CURRENT_H
 
-#include <linux/thread_info.h>
+#include <linux/compiler.h>
+#include <asm/percpu.h>
 
 struct task_struct;
 
-static __always_inline struct task_struct * get_current(void)
+DECLARE_PER_CPU(struct task_struct *, current_task);
+static __always_inline struct task_struct *get_current(void)
 {
-	return current_thread_info()->task;
+	return x86_read_percpu(current_task);
 }
  
 #define current get_current()

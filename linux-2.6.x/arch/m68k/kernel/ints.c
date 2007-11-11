@@ -28,6 +28,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -58,14 +59,14 @@ static int m68k_first_user_vec;
 
 static struct irq_controller auto_irq_controller = {
 	.name		= "auto",
-	.lock		= SPIN_LOCK_UNLOCKED,
+	.lock		= __SPIN_LOCK_UNLOCKED(auto_irq_controller.lock),
 	.startup	= m68k_irq_startup,
 	.shutdown	= m68k_irq_shutdown,
 };
 
 static struct irq_controller user_irq_controller = {
 	.name		= "user",
-	.lock		= SPIN_LOCK_UNLOCKED,
+	.lock		= __SPIN_LOCK_UNLOCKED(user_irq_controller.lock),
 	.startup	= m68k_irq_startup,
 	.shutdown	= m68k_irq_shutdown,
 };
@@ -324,6 +325,10 @@ void disable_irq(unsigned int irq)
 }
 
 EXPORT_SYMBOL(disable_irq);
+
+void disable_irq_nosync(unsigned int irq) __attribute__((alias("disable_irq")));
+
+EXPORT_SYMBOL(disable_irq_nosync);
 
 int m68k_irq_startup(unsigned int irq)
 {

@@ -1,9 +1,9 @@
 /* 
- * $Id: auth_mod.c,v 1.42.4.3 2004/04/28 13:51:15 janakj Exp $ 
+ * $Id: auth_mod.c,v 1.54.2.2 2005/04/26 10:14:57 janakj Exp $ 
  *
  * Digest Authentication Module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,7 @@
  * 2003-04-28 rpid contributed by Juha Heinanen added (janakj) 
  */
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -50,9 +51,7 @@
 
 MODULE_VERSION
 
-
 #define RAND_SECRET_LEN 32
-
 
 /*
  * Module destroy function prototype
@@ -107,6 +106,7 @@ str rpid_prefix;
  */
 char* rpid_suffix_param = ";party=calling;id-type=subscriber;screen=yes";
 str rpid_suffix;
+
 
 /*
  * head of auto-generated realm to be stripped if present

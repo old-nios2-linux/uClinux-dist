@@ -91,7 +91,7 @@
 
 Name: %{realname}%{inlinetext}
 %{?_with_inline:%define Name: %{realname}-inline }
-Version: 2.6.1.1
+Version: 2.6.1.5
 Epoch: 1
 Release: %{release}
 Summary: An open source Network Intrusion Detection System (NIDS)
@@ -269,7 +269,7 @@ BuildSnort() {
 	%{?EnableInline}
    fi
 
-   %__make %{?_smp_mflags}
+   %__make
    %__mv src/snort ../%{name}-"$1"
    cd ..
 }
@@ -352,6 +352,10 @@ InstallSnort() {
 	%__ln_s -f %{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_ftptelnet_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_ftptelnet_preproc.so
 	%__install -p -m 0755 plain/src/dynamic-preprocessors/build/%{_prefix}/lib/snort_dynamicpreprocessor/libsf_dns_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor
 	%__ln_s -f %{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_dns_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_dns_preproc.so
+	%__install -p -m 0755 plain/src/dynamic-preprocessors/build/%{_prefix}/lib/snort_dynamicpreprocessor/libsf_ssh_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor
+	%__ln_s -f %{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_ssh_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_ssh_preproc.so
+	%__install -p -m 0755 plain/src/dynamic-preprocessors/build/%{_prefix}/lib/snort_dynamicpreprocessor/libsf_dcerpc_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor
+	%__ln_s -f %{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_dcerpc_preproc.so.0 $RPM_BUILD_ROOT%{_libdir}/%{realname}-%{version}_dynamicpreprocessor/libsf_dcerpc_preproc.so
 	%__install -p -m 0644 snort.8 $RPM_BUILD_ROOT%{_mandir}/man8
 	%__gzip $RPM_BUILD_ROOT%{_mandir}/man8/snort.8
 	%__install -p -m 0755 rpm/snortd $RPM_BUILD_ROOT%{_initrddir}
@@ -563,6 +567,9 @@ fi
 #	Vlatko Kosturjak <kost@linux.hr>
 
 %changelog
+* Wed Feb 28 2007 Steve Sturges <ssturges@sourcefire.com> 2.6.1
+- Removed smp flags to make command
+
 * Wed Nov 22 2006 Steve Sturges <ssturges@sourcefire.com> 2.6.1
 - Updated version to 2.6.1.1
 

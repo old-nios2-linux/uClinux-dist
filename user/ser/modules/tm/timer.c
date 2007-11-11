@@ -1,8 +1,8 @@
 /*
- * $Id: timer.c,v 1.51.2.1 2003/10/31 20:01:36 andrei Exp $
+ * $Id: timer.c,v 1.58.2.3 2005/12/06 13:20:14 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -96,6 +96,8 @@
  * History:
  * --------
  *  2003-06-27  timers are not unlinked if timerlist is 0 (andrei)
+ *  2004-02-13  t->is_invite, t->local, t->noisy_ctimer replaced;
+ *              timer_link.payload removed (bogdan)
  */
 
 #include "defs.h"
@@ -225,7 +227,7 @@ static void delete_cell( struct cell *p_cell, int unlock )
 		DBG("DEBUG: delete_cell %p: can't delete -- still reffed\n",
 			p_cell);
 		/* it's added to del list for future del */
-		set_timer( &(p_cell->dele_tl), DELETE_LIST );
+		set_timer( &(p_cell->dele_tl), DELETE_LIST, 0 );
 	} else {
 		if (unlock) UNLOCK_HASH(p_cell->hash_index);
 		DBG("DEBUG: delete transaction %p\n", p_cell );
@@ -239,46 +241,71 @@ static void fake_reply(struct cell *t, int branch, int code )
 	short do_cancel_branch;
 	enum rps reply_status;
 
-	do_cancel_branch=t->is_invite && should_cancel_branch(t, branch);
+	do_cancel_branch = is_invite(t) && should_cancel_branch(t, branch);
 
 	cancel_bitmap=do_cancel_branch ? 1<<branch : 0;
-	if (t->local) {
+	if ( is_local(t) ) {
 		reply_status=local_reply( t, FAKED_REPLY, branch, 
-			code, &cancel_bitmap );
+					  code, &cancel_bitmap );
+		if (reply_status==RPS_COMPLETED) {
+			     /* don't need to cleanup uac_timers -- they were cleaned
+				branch by branch and this last branch's timers are
+				reset now too
+			     */
+			     /* don't need to issue cancels -- local cancels have been
+				issued branch by branch and this last branch was
+				canceled now too
+			     */
+			     /* then the only thing to do now is to put the transaction
+				on FR/wait state 
+			     */
+			     /* there is no need to call set_final_timer here because
+			      * the transaction is known to be local
+			      */
+			put_on_wait(t);
+		}
 	} else {
 		reply_status=relay_reply( t, FAKED_REPLY, branch, code,
 			&cancel_bitmap );
+#if 0
+		if (reply_status==RPS_COMPLETED) {
+			     /* don't need to cleanup uac_timers -- they were cleaned
+				branch by branch and this last branch's timers are
+				reset now too
+			     */
+			     /* don't need to issue cancels -- local cancels have been
+				issued branch by branch and this last branch was
+				canceled now too
+			     */
+			     /* then the only thing to do now is to put the transaction
+				on FR/wait state 
+			     */
+			
+			     /* call to set_final_timer is embedded in relay_reply to avoid
+			      * race conditions where a reply would be sent but retransmission
+			      * timers would be set afterwards (which can cause troubles when a
+			      * reply spirals through the same instance twice and kernel switches
+			      * context immediately after message has been sent.
+			      */
+		}
+#endif
 	}
 	/* now when out-of-lock do the cancel I/O */
 	if (do_cancel_branch) cancel_branch(t, branch );
-	/* it's cleaned up on error; if no error occured and transaction
+	/* it's cleaned up on error; if no error occurred and transaction
 	   completed regularly, I have to clean-up myself
 	*/
-	if (reply_status==RPS_COMPLETED) {
-		/* don't need to cleanup uac_timers -- they were cleaned
-		   branch by branch and this last branch's timers are
-		   reset now too
-		*/
-		/* don't need to issue cancels -- local cancels have been
-		   issued branch by branch and this last branch was
-		   cancelled now too
-		*/
-		/* then the only thing to do now is to put the transaction
-		   on FR/wait state 
-		*/
-		set_final_timer(  t );
-	}
 }
 
 
 
 
-inline static void retransmission_handler( void *attr)
+inline static void retransmission_handler( struct timer_link *retr_tl )
 {
 	struct retr_buf* r_buf ;
 	enum lists id;
 
-	r_buf = (struct retr_buf*)attr;
+	r_buf = get_retr_timer_payload(retr_tl);
 #ifdef EXTRA_DEBUG
 	if (r_buf->my_T->damocles) {
 		LOG( L_ERR, "ERROR: transaction %p scheduled for deletion and"
@@ -288,9 +315,9 @@ inline static void retransmission_handler( void *attr)
 #endif
 
 	/*the transaction is already removed from RETRANSMISSION_LIST by timer*/
-	/* retransmision */
+	/* retransmission */
 	if ( r_buf->activ_type==TYPE_LOCAL_CANCEL 
-		|| r_buf->activ_type==0 ) {
+		|| r_buf->activ_type==TYPE_REQUEST ) {
 			DBG("DEBUG: retransmission_handler : "
 				"request resending (t=%p, %.9s ... )\n", 
 				r_buf->my_T, r_buf->buffer);
@@ -309,9 +336,8 @@ inline static void retransmission_handler( void *attr)
 	id = r_buf->retr_list;
 	r_buf->retr_list = id < RT_T2 ? id + 1 : RT_T2;
 	
-	r_buf->retr_timer.timer_list= NULL; /* set to NULL so that set_timer
-										   will work */
-	set_timer(&(r_buf->retr_timer),id < RT_T2 ? id + 1 : RT_T2 );
+	retr_tl->timer_list= NULL; /* set to NULL so that set_timer will work */
+	set_timer( retr_tl, id < RT_T2 ? id + 1 : RT_T2, 0 );
 
 	DBG("DEBUG: retransmission_handler : done\n");
 }
@@ -319,18 +345,18 @@ inline static void retransmission_handler( void *attr)
 
 
 
-inline static void final_response_handler( void *attr)
+inline static void final_response_handler( struct timer_link *fr_tl )
 {
 	int silent;
 	struct retr_buf* r_buf;
 	struct cell *t;
 
-	r_buf = (struct retr_buf*)attr;
-	if (r_buf==0){
+	if (fr_tl==0){
 		/* or BUG?, ignoring it for now */
 		LOG(L_CRIT, "ERROR: final_response_handler(0) called\n");
 		return;
 	}
+	r_buf = get_fr_timer_payload(fr_tl);
 	t=r_buf->my_T;
 
 #	ifdef EXTRA_DEBUG
@@ -349,7 +375,7 @@ inline static void final_response_handler( void *attr)
 	/* FR for local cancels.... */
 	if (r_buf->activ_type==TYPE_LOCAL_CANCEL)
 	{
-		DBG("DEBUG: FR_handler: stop retr for Local Cancel\n");
+		DBG("DEBUG: final_response_handler: stop retr for Local Cancel\n");
 		return;
 	}
 
@@ -358,7 +384,7 @@ inline static void final_response_handler( void *attr)
 #		ifdef EXTRA_DEBUG
 		if (t->uas.request->REQ_METHOD!=METHOD_INVITE
 			|| t->uas.status < 200 ) {
-			LOG(L_ERR, "ERROR: FR timer: uknown type reply buffer\n");
+			LOG(L_ERR, "ERROR: final_response_handler: unknown type reply buffer\n");
 			abort();
 		}
 #		endif
@@ -374,32 +400,36 @@ inline static void final_response_handler( void *attr)
 	   world */
 	silent=
 		/* not for UACs */
-		!t->local
+		!is_local(t)
 		/* invites only */
-		&& t->is_invite
+		&& is_invite(t)
 		/* parallel forking does not allow silent state discarding */
 		&& t->nr_of_outgoings==1
-		/* on_no_reply handler not installed -- serial forking could occur 
-		   otherwise */
+		/* on_negativ reply handler not installed -- serial forking 
+		 * could occur otherwise */
 		&& t->on_negative==0
+		/* the same for FAILURE callbacks */
+		&& !has_tran_tmcbs( t, TMCB_ON_FAILURE_RO|TMCB_ON_FAILURE) 
 		/* something received -- we will not be silent on error */
 		&& t->uac[r_buf->branch].last_received>0
 		/* don't go silent if disallowed globally ... */
 		&& noisy_ctimer==0
 		/* ... or for this particular transaction */
-		&& t->noisy_ctimer==0;
+		&& has_noisy_ctimer(t);
 	if (silent) {
 		UNLOCK_REPLIES(t);
-		DBG("DEBUG: FR_handler: transaction silently dropped (%p)\n",t);
+		DBG("DEBUG: final_response_handler: transaction silently dropped (%p)\n",t);
 		put_on_wait( t );
 		return;
 	}
 
-	DBG("DEBUG: FR_handler:stop retr. and send CANCEL (%p)\n", t);
+	DBG("DEBUG: final_response_handler:stop retr. and send CANCEL (%p)\n", t);
 	fake_reply(t, r_buf->branch, 408 );
 
 	DBG("DEBUG: final_response_handler : done\n");
 }
+
+
 
 void cleanup_localcancel_timers( struct cell *t )
 {
@@ -411,10 +441,11 @@ void cleanup_localcancel_timers( struct cell *t )
 }
 
 
-inline static void wait_handler( void *attr)
+inline static void wait_handler( struct timer_link *wait_tl )
 {
-	struct cell *p_cell = (struct cell*)attr;
+	struct cell *p_cell;
 
+	p_cell = get_wait_timer_payload( wait_tl );
 #ifdef EXTRA_DEBUG
 	if (p_cell->damocles) {
 		LOG( L_ERR, "ERROR: transaction %p scheduled for deletion and"
@@ -425,7 +456,7 @@ inline static void wait_handler( void *attr)
 #endif
 
 	/* stop cancel timers if any running */
-	if (p_cell->is_invite) cleanup_localcancel_timers( p_cell );
+	if ( is_invite(p_cell) ) cleanup_localcancel_timers( p_cell );
 
 	/* the transaction is already removed from WT_LIST by the timer */
 	/* remove the cell from the hash table */
@@ -443,11 +474,11 @@ inline static void wait_handler( void *attr)
 
 
 
-
-inline static void delete_handler( void *attr)
+inline static void delete_handler( struct timer_link *dele_tl )
 {
-	struct cell *p_cell = (struct cell*)attr;
+	struct cell *p_cell;
 
+	p_cell = get_dele_timer_payload( dele_tl );
 	DBG("DEBUG: delete_handler : removing %p \n", p_cell );
 #ifdef EXTRA_DEBUG
 	if (p_cell->damocles==0) {
@@ -491,12 +522,12 @@ void unlink_timer_lists()
 	/* unlink the timer lists */
 	for( i=0; i<NR_OF_TIMER_LISTS ; i++ )
 		reset_timer_list( i );
-	DBG("DEBUG: tm_shutdown : empting DELETE list\n");
+	DBG("DEBUG: unlink_timer_lists : emptying DELETE list\n");
 	/* deletes all cells from DELETE_LIST list 
-	   (they are no more accessible from enrys) */
+	   (they are no more accessible from entrys) */
 	while (tl!=end) {
 		tmp=tl->next_tl;
-		free_cell((struct cell*)tl->payload);
+		free_cell( get_dele_timer_payload(tl) );
 		tl=tmp;
 	}
 	
@@ -609,8 +640,40 @@ static void remove_timer_unsafe(  struct timer_link* tl )
 	}
 }
 
+/* undefine TIMER_ORDERED for a little bit more performance at the expense of
+ * the variable fr_inv_timers */
+#define TIMER_ORDERED
+/*#define TIMER_SKIP_DELETED */
 
+#ifdef TIMER_ORDERED /* can be very slow if coupled with TIMER_SKIP_DELETED */
+/* put a new cell into a list nr. list_id */
+static void insert_timer_unsafe( struct timer *timer_list, struct timer_link *tl,
+	unsigned int time_out )
+{
+	struct timer_link* ptr;
 
+	tl->time_out = time_out;
+	tl->timer_list = timer_list;
+
+	for(ptr = timer_list->last_tl.prev_tl; 
+	    ptr != &timer_list->first_tl; 
+	    ptr = ptr->prev_tl) {
+		if (
+#ifdef TIMER_SKIP_DELETED
+				(ptr->time_out != TIMER_DELETED) && 
+#endif
+				(ptr->time_out <= time_out)) break;
+	}
+
+	tl->prev_tl = ptr;
+	tl->next_tl = ptr->next_tl;
+	tl->prev_tl->next_tl = tl;
+	tl->next_tl->prev_tl = tl;
+
+	DBG("DEBUG: add_to_tail_of_timer[%d]: %p\n",timer_list->id,tl);
+}
+
+#else
 
 /* put a new cell into a list nr. list_id */
 static void add_timer_unsafe( struct timer *timer_list, struct timer_link *tl,
@@ -636,9 +699,11 @@ static void add_timer_unsafe( struct timer *timer_list, struct timer_link *tl,
 		abort();
 	}
 #endif
-	DBG("DEBUG: add_to_tail_of_timer[%d]: %p\n",timer_list->id,tl);
+	DBG("DEBUG: add_timer_unsafe[%d]: %p\n",timer_list->id,tl);
 }
 
+#define insert_timer_unsafe(tlist, tl, to) add_timer_unsafe((tlist),(tl),(to))
+#endif
 
 
 
@@ -694,8 +759,8 @@ static struct timer_link  *check_and_split_time_list( struct timer *timer_list,
 
 /* stop timer
  * WARNING: a reset'ed timer will be lost forever
- *  (succesive set_timer won't work unless you're lucky
- *   an catch the race condition, the ideea here is there is no
+ *  (successive set_timer won't work unless you're lucky
+ *   an catch the race condition, the idea here is there is no
  *   guarantee you can do anything after a timer_reset)*/
 void reset_timer( struct timer_link* tl )
 {
@@ -722,20 +787,26 @@ void reset_timer( struct timer_link* tl )
  *             same for an expired timer: only it's handler can
  *             set it again, an external set_timer has no guarantee
  */
-void set_timer( struct timer_link *new_tl, enum lists list_id )
+void set_timer( struct timer_link *new_tl, enum lists list_id, unsigned int* ext_timeout )
 {
 	unsigned int timeout;
 	struct timer* list;
 
 
 	if (list_id<FR_TIMER_LIST || list_id>=NR_OF_TIMER_LISTS) {
-		LOG(L_CRIT, "ERROR: set_timer: unkown list: %d\n", list_id);
+		LOG(L_CRIT, "ERROR: set_timer: unknown list: %d\n", list_id);
 #ifdef EXTRA_DEBUG
 		abort();
 #endif
 		return;
 	}
-	timeout = timer_id2timeout[ list_id ];
+
+	if (!ext_timeout) {
+		timeout = timer_id2timeout[ list_id ];
+	} else {
+		timeout = *ext_timeout;
+	}
+
 	list= &(timertable->timers[ list_id ]);
 
 	lock(list->mutex);
@@ -750,34 +821,46 @@ void set_timer( struct timer_link *new_tl, enum lists list_id )
 	}
 	/* make sure I'm not already on a list */
 	remove_timer_unsafe( new_tl );
-	add_timer_unsafe( list, new_tl, get_ticks()+timeout);
+	     /*
+	       add_timer_unsafe( list, new_tl, get_ticks()+timeout);
+	     */
+	insert_timer_unsafe( list, new_tl, get_ticks()+timeout);
 end:
 	unlock(list->mutex);
 }
 
 /* similar to set_timer, except it allows only one-time
    timer setting and all later attempts are ignored */
-void set_1timer( struct timer_link *new_tl, enum lists list_id )
+void set_1timer( struct timer_link *new_tl, enum lists list_id, unsigned int* ext_timeout )
 {
 	unsigned int timeout;
 	struct timer* list;
 
 
 	if (list_id<FR_TIMER_LIST || list_id>=NR_OF_TIMER_LISTS) {
-		LOG(L_CRIT, "ERROR: set_timer: unkown list: %d\n", list_id);
+		LOG(L_CRIT, "ERROR: set_timer: unknown list: %d\n", list_id);
 #ifdef EXTRA_DEBUG
 		abort();
 #endif
 		return;
 	}
-	timeout = timer_id2timeout[ list_id ];
+
+	if (!ext_timeout) {
+		timeout = timer_id2timeout[ list_id ];
+	} else {
+		timeout = *ext_timeout;
+	}
+
 	list= &(timertable->timers[ list_id ]);
 
 	lock(list->mutex);
 	if (!(new_tl->time_out>TIMER_DELETED)) {
 		/* make sure I'm not already on a list */
 		/* remove_timer_unsafe( new_tl ); */
+		/*
 		add_timer_unsafe( list, new_tl, get_ticks()+timeout);
+		*/
+		insert_timer_unsafe( list, new_tl, get_ticks()+timeout);
 
 		/* set_1timer is used only by WAIT -- that's why we can
 		   afford updating wait statistics; I admit its not nice
@@ -862,7 +945,7 @@ static void unlink_timers( struct cell *t )
 		DBG("DEBUG: timer routine:%d,tl=%p next=%p\n",\
 			id,(_tl),tmp_tl);\
 		if ((_tl)->time_out>TIMER_DELETED) \
-			(_handler)( (_tl)->payload );\
+			(_handler)( _tl );\
 		(_tl) = tmp_tl;\
 	}
 
@@ -874,10 +957,6 @@ void timer_routine(unsigned int ticks , void * attr)
 	/* struct timer_table *tt= (struct timer_table*)attr; */
 	struct timer_link *tl, *tmp_tl;
 	int                id;
-
-#ifdef BOGDAN_TRIFLE
-	DBG(" %d \n",ticks);
-#endif
 
 	for( id=0 ; id<NR_OF_TIMER_LISTS ; id++ )
 	{

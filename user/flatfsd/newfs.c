@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <syslog.h>
+#include <config/autoconf.h>
 #include "flatfs.h"
 
 /*****************************************************************************/
@@ -30,9 +32,27 @@
 
 int flat_needinit(void)
 {
+#ifndef CONFIG_USER_FLATFSD_EXTERNAL_INIT
 	if (access(SRCDIR "/.init", R_OK) == 0)
 		return 1;
+#endif
 	return 0;
+}
+
+/*****************************************************************************/
+
+/*
+ * Writes the .init file which indicates that the filesystem should be
+ * cleaned out after the next reboot (during flatfsd -r)
+ */
+int flat_requestinit(void)
+{
+	FILE *fh = fopen(SRCDIR "/.init", "w");
+	if (fh) {
+		fclose(fh);
+		return 1;
+	}
+	return ERROR_CODE();
 }
 
 /*****************************************************************************/
@@ -42,7 +62,7 @@ int flat_needinit(void)
  * Updates numfiles and numbytes and returns numfiles or < 0 on error.
  */
 
-int flat_filecount(void)
+int flat_filecount(char *configdir)
 {
 	DIR *dirp;
 	struct dirent *dp;
@@ -51,7 +71,7 @@ int flat_filecount(void)
 	numfiles = 0;
 	numbytes = 0;
 
-	if (chdir(SRCDIR) < 0)
+	if (chdir(configdir) < 0)
 		return ERROR_CODE();
 
 	/* Scan directory */
@@ -74,47 +94,38 @@ int flat_filecount(void)
 
 /*****************************************************************************/
 
+#ifndef CONFIG_USER_FLATFSD_EXTERNAL_INIT
 /*
  * Remove all files from the config file-system.
- * If 'realclean' is 0, actually just writes the .init file
- * which indicates that the filesystem should be cleaned out
- * after the next reboot (during flatfsd -r)
  */
 
-int flat_clean(int realclean)
+int flat_clean(void)
 {
-	if (realclean) {
-		DIR *dirp;
-		struct dirent *dp;
-		struct stat sb;
+	DIR *dirp;
+	struct dirent *dp;
+	struct stat sb;
 
-		if (chdir(SRCDIR) < 0)
-			return ERROR_CODE();
+	if (chdir(SRCDIR) < 0)
+		return ERROR_CODE();
 
-		/* Scan directory */
-		if ((dirp = opendir(".")) == NULL)
-			return ERROR_CODE();
+	/* Scan directory */
+	if ((dirp = opendir(".")) == NULL)
+		return ERROR_CODE();
 
-		while ((dp = readdir(dirp)) != NULL) {
-			/* only delete normal files */
-			if (stat(dp->d_name, &sb) == 0 && S_ISREG(sb.st_mode))
-				unlink(dp->d_name);
-		}
-
-		closedir(dirp);
-		return 0;
-	} else {
-		FILE *fh = fopen(SRCDIR "/.init", "w");
-		if (fh) {
-			fclose(fh);
-			return 1;
-		}
+	while ((dp = readdir(dirp)) != NULL) {
+		/* only delete normal files */
+		if (stat(dp->d_name, &sb) == 0 && S_ISREG(sb.st_mode))
+			unlink(dp->d_name);
 	}
-	return ERROR_CODE();
+
+	closedir(dirp);
+	return 0;
 }
+#endif
 
 /*****************************************************************************/
 
+#ifndef CONFIG_USER_FLATFSD_EXTERNAL_INIT
 /*
  * This is basically just a directory copy. Copy all files from the
  * given directory to the config directory.
@@ -180,7 +191,10 @@ int flat_new(const char *dir)
 	}
 
 	closedir(dirp);
+	syslog(LOG_INFO, "Created %d configuration files (%d bytes)",
+		numfiles, numbytes);
 	return 0;
 }
+#endif
 
 /*****************************************************************************/

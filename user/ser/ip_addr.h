@@ -1,8 +1,8 @@
-/* $Id: ip_addr.h,v 1.29.6.1 2004/07/15 21:18:34 andrei Exp $
+/* $Id: ip_addr.h,v 1.35 2004/11/30 16:28:23 andrei Exp $
  *
- * ip address family realted structures
+ * ip address family related structures
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -52,7 +52,7 @@ struct ip_addr{
 	unsigned int af; /* address family: AF_INET6 or AF_INET */
 	unsigned int len;    /* address len, 16 or 4 */
 	
-	/* 64 bits alligned address */
+	/* 64 bits aligned address */
 	union {
 		unsigned long  addrl[16/sizeof(long)]; /* long format*/
 		unsigned int   addr32[4];
@@ -77,6 +77,9 @@ union sockaddr_union{
 };
 
 
+
+enum si_flags { SI_NONE=0, SI_IS_IP=1, SI_IS_LO=2, SI_IS_MCAST=4 };
+
 struct socket_info{
 	int socket;
 	str name; /* name - eg.: foo.bar or 10.0.0.1 */
@@ -84,10 +87,11 @@ struct socket_info{
 	str address_str;        /* ip address converted to string -- optimization*/
 	unsigned short port_no;  /* port number */
 	str port_no_str; /* port number converted to string -- optimization*/
-	int is_ip; /* 1 if name is an ip address, 0 if not  -- optimization*/
-	int is_lo; /* 1 if is a loopback, 0 if not */
+	enum si_flags flags; /* SI_IS_IP | SI_IS_LO | SI_IS_MCAST */
 	union sockaddr_union su; 
 	int proto; /* tcp or udp*/
+	struct socket_info* next;
+	struct socket_info* prev;
 };
 
 
@@ -99,7 +103,7 @@ struct receive_info{
 	int proto;
 	int proto_reserved1; /* tcp stores the connection id here */
 	int proto_reserved2;
-	union sockaddr_union src_su; /* usefull for replies*/
+	union sockaddr_union src_su; /* useful for replies*/
 	struct socket_info* bind_address; /* sock_info structure on which 
 									  the msg was received*/
 	/* no need for dst_su yet */
@@ -111,6 +115,14 @@ struct dest_info{
 	int proto_reserved1; /* tcp stores the connection id here */ 
 	union sockaddr_union to;
 	struct socket_info* send_sock;
+};
+
+
+struct socket_id{
+	char* name;
+	int proto;
+	int port;
+	struct socket_id* next;
 };
 
 
@@ -161,11 +173,13 @@ void print_ip(char* prefix, struct ip_addr* ip, char* suffix);
 void stdout_print_ip(struct ip_addr* ip);
 void print_net(struct net* net);
 
-
-
+#ifdef USE_MCAST
+/* Returns 1 if the given address is a multicast address */
+int is_mcast(struct ip_addr* ip);
+#endif /* USE_MCAST */
 
 /* returns 1 if ip & net.mask == net.ip ; 0 otherwise & -1 on error 
-	[ diff. adress fams ]) */
+	[ diff. address families ]) */
 inline static int matchnet(struct ip_addr* ip, struct net* net)
 {
 	unsigned int r;
@@ -242,7 +256,7 @@ static inline int su_cmp(union sockaddr_union* s1, union sockaddr_union* s2)
 
 
 /* gets the port number (host byte order) */
-static inline short su_getport(union sockaddr_union* su)
+static inline unsigned short su_getport(union sockaddr_union* su)
 {
 	switch(su->s.sa_family){
 		case AF_INET:
@@ -379,7 +393,7 @@ static inline int hostent2su( union sockaddr_union* su,
 
 /* maximum size of a str returned by ip_addr2a (including \0) */
 #define IP_ADDR_MAX_STR_SIZE 40 /* 1234:5678:9012:3456:7890:1234:5678:9012\0 */
-/* fast ip_addr -> string convertor;
+/* fast ip_addr -> string converter;
  * it uses an internal buffer
  */
 static inline char* ip_addr2a(struct ip_addr* ip)

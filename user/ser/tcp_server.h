@@ -1,7 +1,7 @@
 /*
- * $Id: tcp_server.h,v 1.3 2003/07/01 20:23:51 andrei Exp $
+ * $Id: tcp_server.h,v 1.5 2004/08/24 08:45:10 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,7 +31,6 @@
 
 
 
-
 /* "public" functions*/
 
 struct tcp_connection* tcpconn_get(int id, struct ip_addr* ip, int port, 
@@ -40,6 +39,7 @@ void tcpconn_put(struct tcp_connection* c);
 int tcp_send(int type, char* buf, unsigned len, union sockaddr_union* to,
 			int id);
 
+int tcpconn_add_alias(int id, int port, int proto);
 
 
 

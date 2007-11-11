@@ -735,7 +735,6 @@ static void el_receive(struct net_device *dev)
 	else
 	{
     		skb_reserve(skb,2);	/* Force 16 byte alignment */
-		skb->dev = dev;
 		/*
 		 *	The read increments through the bytes. The interrupt
 		 *	handler will fix the pointer when it returns to
@@ -922,7 +921,7 @@ int __init init_module(void)
  * and then free up the resources we took when the card was found.
  */
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	struct net_device *dev = dev_3c501;
 	unregister_netdev(dev);

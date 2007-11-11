@@ -266,11 +266,11 @@ static void print_user_dma_lists(struct cryptocop_dma_list_operation *dma_op);
 
 
 
-struct file_operations cryptocop_fops = {
-	owner: THIS_MODULE,
-	open: cryptocop_open,
-	release: cryptocop_release,
-	ioctl: cryptocop_ioctl
+const struct file_operations cryptocop_fops = {
+	.owner =	THIS_MODULE,
+	.open =		cryptocop_open,
+	.release =	cryptocop_release,
+	.ioctl =	cryptocop_ioctl
 };
 
 

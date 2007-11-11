@@ -1,10 +1,10 @@
 /*
- * $Id: parse_via.c,v 1.20 2003/07/09 17:59:50 andrei Exp $ 
+ * $Id: parse_via.c,v 1.23.2.2 2005/07/20 17:11:52 andrei Exp $ 
  *
  * via parsing automaton
  * 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,6 +44,11 @@
  *  2003-04-26  ZSW (jiri)
  *  2003-06-23  fixed  parse_via_param [op].* param. parsing bug (andrei)
  *  2003-07-02  added support for TLS parsing in via (andrei)
+ *  2003-10-27  added support for alias via param parsing [see
+ *               draft-ietf-sip-connect-reuse-00.txt.]  (andrei)
+ *  2004-03-31  fixed rport set instead of i bug (andrei)
+ *  2005-03-02  if via has multiple bodies, and one of them is bad set
+ *               also the first one as bad (andrei)
  */
 
 
@@ -100,9 +105,10 @@ enum {
 	RECEIVED1, RECEIVED2, RECEIVED3, RECEIVED4, RECEIVED5, RECEIVED6,
 	RECEIVED7,
 	RPORT1, RPORT2, RPORT3,
+	ALIAS1, ALIAS2, ALIAS3, ALIAS4,
 	     /* fin states (227-...)*/
-	FIN_HIDDEN = 230, FIN_TTL, FIN_BRANCH, FIN_MADDR, FIN_RECEIVED,
-	FIN_RPORT, FIN_I
+	FIN_HIDDEN = 230, FIN_TTL, FIN_BRANCH,
+	FIN_MADDR, FIN_RECEIVED, FIN_RPORT, FIN_I, FIN_ALIAS
 	     /*GEN_PARAM,
 	       PARAM_ERROR*/ /* declared in msg_parser.h*/
 };
@@ -134,6 +140,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 			case '\t':
 				switch(state){
 					case FIN_HIDDEN:
+					case FIN_ALIAS:
 						param->type=state;
 						param->name.len=tmp-param->name.s;
 						state=L_PARAM;
@@ -167,6 +174,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 			case '\n':
 				switch(state){
 					case FIN_HIDDEN:
+					case FIN_ALIAS:
 						param->type=state;
 						param->name.len=tmp-param->name.s;
 						param->size=tmp-param->start; 
@@ -209,6 +217,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 			case '\r':
 				switch(state){
 					case FIN_HIDDEN:
+					case FIN_ALIAS:
 						param->type=state;
 						param->name.len=tmp-param->name.s;
 						param->size=tmp-param->start; 
@@ -260,6 +269,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 						goto find_value;
 					case F_PARAM:
 					case FIN_HIDDEN:
+					case FIN_ALIAS:
 						LOG(L_ERR, "ERROR: parse_via: invalid char <%c> in"
 								" state %d\n", *tmp, state);
 						goto error;
@@ -280,6 +290,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 				switch(state){
 					case FIN_HIDDEN:
 					case FIN_RPORT: /* rport can appear w/o a value */
+					case FIN_ALIAS:
 						param->type=state;
 						param->name.len=tmp-param->name.s;
 						state=F_PARAM;
@@ -309,6 +320,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 				switch(state){
 					case FIN_HIDDEN:
 					case FIN_RPORT:
+					case FIN_ALIAS:
 						param->type=state;
 						param->name.len=tmp-param->name.s;
 						state=F_VIA;
@@ -370,6 +382,9 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 						break;
 					case RECEIVED4:
 						state=RECEIVED5;
+						break;
+					case ALIAS2:
+						state=ALIAS3;
 						break;
 					case GEN_PARAM:
 						break;
@@ -503,6 +518,9 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 					case TTL2:
 						state=FIN_TTL;
 						break;
+					case ALIAS1:
+						state=ALIAS2;
+						break;
 					case GEN_PARAM:
 						break;
 					case F_CR:
@@ -536,7 +554,7 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 			case 'A':
 				switch(state){
 					case F_PARAM:
-						state=GEN_PARAM;
+						state=ALIAS1;
 						param->name.s=tmp;
 						break;
 					case MADDR1:
@@ -544,6 +562,9 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 						break;
 					case BRANCH2:
 						state=BRANCH3;
+						break;
+					case ALIAS3:
+						state=ALIAS4;
 						break;
 					case GEN_PARAM:
 						break;
@@ -674,6 +695,25 @@ static /*inline*/ char* parse_via_param(char* p, char* end,
 						break;
 					case RPORT1:
 						state=RPORT2;
+						break;
+					case F_CR:
+					case F_LF:
+					case F_CRLF:
+						state=END_OF_HEADER;
+						goto end_via;
+					default:
+						state=GEN_PARAM;
+				}
+				break;
+			case 's':
+			case 'S':
+				switch(state){
+					case F_PARAM:
+						state=GEN_PARAM;
+						param->name.s=tmp;
+						break;
+					case ALIAS4:
+						state=FIN_ALIAS;
 						break;
 					case F_CR:
 					case F_LF:
@@ -949,7 +989,12 @@ normal_exit:
 
 
 
-char* parse_via(char* buffer, char* end, struct via_body *vb)
+/*
+ * call it with a vb initialized to 0
+ * returns: pointer after the parsed parts and sets vb->error
+ * WARNING: don't forget to cleanup on error with free_via_list(vb)!
+ */
+char* parse_via(char* buffer, char* end, struct via_body *vbody)
 {
 	char* tmp;
 	char* param_start;
@@ -957,13 +1002,16 @@ char* parse_via(char* buffer, char* end, struct via_body *vb)
 	unsigned char saved_state;
 	int c_nest;
 	int err;
-
+	struct via_body* vb;
 	struct via_param* param;
 
+	vb=vbody; /* keep orignal vbody value, needed to set the error member
+				 in case of multiple via bodies in the same header */
 parse_again:
 	vb->error=PARSE_ERROR;
 	/* parse start of via ( SIP/2.0/UDP    )*/
 	state=F_SIP;
+	saved_state=F_SIP; /* fixes gcc 4.0 warning */
 	param_start=0;
 	for(tmp=buffer;tmp<end;tmp++){
 		switch(*tmp){
@@ -1814,14 +1862,24 @@ parse_again:
 						if (vb->last_param)	vb->last_param->next=param;
 						else				vb->param_lst=param;
 						vb->last_param=param;
-						if (param->type==PARAM_BRANCH)
-							vb->branch=param;
-						else if (param->type==PARAM_RECEIVED)
-							vb->received=param;
-						else if (param->type==PARAM_RPORT)
-							vb->rport=param;
-						else if (param->type==PARAM_I)
-							vb->i=param;
+						/* update param. shortcuts */
+						switch(param->type){
+							case PARAM_BRANCH:
+								vb->branch=param;
+								break;
+							case PARAM_RECEIVED:
+								vb->received=param;
+								break;
+							case PARAM_RPORT:
+								vb->rport=param;
+								break;
+							case PARAM_I:
+								vb->i=param;
+								break;
+							case PARAM_ALIAS:
+								vb->alias=param;
+								break;
+						}
 						
 						if (state==END_OF_HEADER){
 							state=saved_state;
@@ -1948,6 +2006,8 @@ error:
 		LOG(L_ERR, "ERROR: parse_via: via parse error\n");
 	}
 	vb->error=PARSE_ERROR;
+	vbody->error=PARSE_ERROR; /* make sure the first via body is marked
+								 as bad also */
 	return tmp;
 }
 

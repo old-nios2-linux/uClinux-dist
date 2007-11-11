@@ -148,8 +148,6 @@ struct ncp_nls_ioctl
 #include <linux/ncp_fs_i.h>
 #include <linux/ncp_fs_sb.h>
 
-/* undef because public define in umsdos_fs.h (ncp_fs.h isn't public) */
-#undef PRINTK
 /* define because it is easy to change PRINTK to {*}PRINTK */
 #define PRINTK(format, args...) printk(KERN_DEBUG format , ## args)
 
@@ -204,7 +202,7 @@ void ncp_update_inode(struct inode *, struct ncp_entry_info *);
 void ncp_update_inode2(struct inode *, struct ncp_entry_info *);
 
 /* linux/fs/ncpfs/dir.c */
-extern struct inode_operations ncp_dir_inode_operations;
+extern const struct inode_operations ncp_dir_inode_operations;
 extern const struct file_operations ncp_dir_operations;
 int ncp_conn_logged_in(struct super_block *);
 int ncp_date_dos2unix(__le16 time, __le16 date);
@@ -226,7 +224,7 @@ void ncp_lock_server(struct ncp_server *server);
 void ncp_unlock_server(struct ncp_server *server);
 
 /* linux/fs/ncpfs/file.c */
-extern struct inode_operations ncp_file_inode_operations;
+extern const struct inode_operations ncp_file_inode_operations;
 extern const struct file_operations ncp_file_operations;
 int ncp_make_open(struct inode *, int);
 

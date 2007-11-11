@@ -14,6 +14,14 @@
  */
 #include "dibusb.h"
 
+static int dib3000mb_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
+{
+	struct dvb_usb_adapter *adap = fe->dvb->priv;
+	struct dibusb_state *st = adap->priv;
+
+	return st->ops.tuner_pass_ctrl(fe, enable, st->tuner_addr);
+}
+
 static int dibusb_dib3000mb_frontend_attach(struct dvb_usb_adapter *adap)
 {
 	struct dib3000_config demod_cfg;
@@ -21,21 +29,34 @@ static int dibusb_dib3000mb_frontend_attach(struct dvb_usb_adapter *adap)
 
 	demod_cfg.demod_address = 0x8;
 
-	if ((adap->fe = dib3000mb_attach(&demod_cfg,&adap->dev->i2c_adap,&st->ops)) == NULL)
+	if ((adap->fe = dvb_attach(dib3000mb_attach, &demod_cfg,
+				   &adap->dev->i2c_adap, &st->ops)) == NULL)
 		return -ENODEV;
 
-	adap->fe->ops.tuner_ops.init       = dvb_usb_tuner_init_i2c;
-	adap->fe->ops.tuner_ops.set_params = dvb_usb_tuner_set_params_i2c;
-
-	adap->tuner_pass_ctrl = st->ops.tuner_pass_ctrl;
+	adap->fe->ops.i2c_gate_ctrl = dib3000mb_i2c_gate_ctrl;
 
 	return 0;
 }
 
 static int dibusb_thomson_tuner_attach(struct dvb_usb_adapter *adap)
 {
-	adap->pll_addr = 0x61;
-	adap->pll_desc = &dvb_pll_tua6010xs;
+	struct dibusb_state *st = adap->priv;
+
+	st->tuner_addr = 0x61;
+
+	dvb_attach(dvb_pll_attach, adap->fe, 0x61, &adap->dev->i2c_adap,
+		   DVB_PLL_TUA6010XS);
+	return 0;
+}
+
+static int dibusb_panasonic_tuner_attach(struct dvb_usb_adapter *adap)
+{
+	struct dibusb_state *st = adap->priv;
+
+	st->tuner_addr = 0x60;
+
+	dvb_attach(dvb_pll_attach, adap->fe, 0x60, &adap->dev->i2c_adap,
+		   DVB_PLL_TDA665X);
 	return 0;
 }
 
@@ -50,30 +71,28 @@ static int dibusb_tuner_probe_and_attach(struct dvb_usb_adapter *adap)
 		{ .flags = 0,        .buf = b,  .len = 2 },
 		{ .flags = I2C_M_RD, .buf = b2, .len = 1 },
 	};
+	struct dibusb_state *st = adap->priv;
 
 	/* the Panasonic sits on I2C addrass 0x60, the Thomson on 0x61 */
-	msg[0].addr = msg[1].addr = 0x60;
+	msg[0].addr = msg[1].addr = st->tuner_addr = 0x60;
 
-	if (adap->tuner_pass_ctrl)
-		adap->tuner_pass_ctrl(adap->fe,1,msg[0].addr);
+	if (adap->fe->ops.i2c_gate_ctrl)
+		adap->fe->ops.i2c_gate_ctrl(adap->fe,1);
 
 	if (i2c_transfer(&adap->dev->i2c_adap, msg, 2) != 2) {
 		err("tuner i2c write failed.");
 		ret = -EREMOTEIO;
 	}
 
-	if (adap->tuner_pass_ctrl)
-		adap->tuner_pass_ctrl(adap->fe,0,msg[0].addr);
+	if (adap->fe->ops.i2c_gate_ctrl)
+		adap->fe->ops.i2c_gate_ctrl(adap->fe,0);
 
 	if (b2[0] == 0xfe) {
 		info("This device has the Thomson Cable onboard. Which is default.");
-		dibusb_thomson_tuner_attach(adap);
+		ret = dibusb_thomson_tuner_attach(adap);
 	} else {
-		u8 bpll[4] = { 0x0b, 0xf5, 0x85, 0xab };
 		info("This device has the Panasonic ENV77H11D5 onboard.");
-		adap->pll_addr = 0x60;
-		memcpy(adap->pll_init,bpll,4);
-		adap->pll_desc = &dvb_pll_tda665x;
+		ret = dibusb_panasonic_tuner_attach(adap);
 	}
 
 	return ret;
@@ -163,23 +182,23 @@ static struct dvb_usb_device_properties dibusb1_1_properties = {
 			.caps = DVB_USB_ADAP_HAS_PID_FILTER | DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF,
 			.pid_filter_count = 16,
 
-	.streaming_ctrl   = dibusb_streaming_ctrl,
-	.pid_filter       = dibusb_pid_filter,
-	.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
-	.frontend_attach  = dibusb_dib3000mb_frontend_attach,
-	.tuner_attach     = dibusb_tuner_probe_and_attach,
+			.streaming_ctrl   = dibusb_streaming_ctrl,
+			.pid_filter       = dibusb_pid_filter,
+			.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
+			.frontend_attach  = dibusb_dib3000mb_frontend_attach,
+			.tuner_attach     = dibusb_tuner_probe_and_attach,
 
-	/* parameter for the MPEG2-data transfer */
+			/* parameter for the MPEG2-data transfer */
 			.stream = {
 				.type = USB_BULK,
-		.count = 7,
-		.endpoint = 0x02,
-		.u = {
-			.bulk = {
-				.buffersize = 4096,
-			}
-		}
-	},
+				.count = 7,
+				.endpoint = 0x02,
+				.u = {
+					.bulk = {
+						.buffersize = 4096,
+					}
+				}
+			},
 			.size_of_priv     = sizeof(struct dibusb_state),
 		}
 	},
@@ -248,23 +267,23 @@ static struct dvb_usb_device_properties dibusb1_1_an2235_properties = {
 			.caps = DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF | DVB_USB_ADAP_HAS_PID_FILTER,
 			.pid_filter_count = 16,
 
-	.streaming_ctrl   = dibusb_streaming_ctrl,
-	.pid_filter       = dibusb_pid_filter,
-	.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
-	.frontend_attach  = dibusb_dib3000mb_frontend_attach,
-	.tuner_attach     = dibusb_tuner_probe_and_attach,
+			.streaming_ctrl   = dibusb_streaming_ctrl,
+			.pid_filter       = dibusb_pid_filter,
+			.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
+			.frontend_attach  = dibusb_dib3000mb_frontend_attach,
+			.tuner_attach     = dibusb_tuner_probe_and_attach,
 
-	/* parameter for the MPEG2-data transfer */
+			/* parameter for the MPEG2-data transfer */
 			.stream = {
 				.type = USB_BULK,
-		.count = 7,
-		.endpoint = 0x02,
-		.u = {
-			.bulk = {
-				.buffersize = 4096,
-			}
-		}
-	},
+				.count = 7,
+				.endpoint = 0x02,
+				.u = {
+					.bulk = {
+						.buffersize = 4096,
+					}
+				}
+			},
 			.size_of_priv     = sizeof(struct dibusb_state),
 		},
 	},
@@ -312,22 +331,23 @@ static struct dvb_usb_device_properties dibusb2_0b_properties = {
 			.caps = DVB_USB_ADAP_HAS_PID_FILTER | DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF,
 			.pid_filter_count = 16,
 
-	.streaming_ctrl   = dibusb2_0_streaming_ctrl,
-	.pid_filter       = dibusb_pid_filter,
-	.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
-	.frontend_attach  = dibusb_dib3000mb_frontend_attach,
-	.tuner_attach     = dibusb_thomson_tuner_attach,
-	/* parameter for the MPEG2-data transfer */
+			.streaming_ctrl   = dibusb2_0_streaming_ctrl,
+			.pid_filter       = dibusb_pid_filter,
+			.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
+			.frontend_attach  = dibusb_dib3000mb_frontend_attach,
+			.tuner_attach     = dibusb_thomson_tuner_attach,
+
+			/* parameter for the MPEG2-data transfer */
 			.stream = {
 				.type = USB_BULK,
-		.count = 7,
-		.endpoint = 0x06,
-		.u = {
-			.bulk = {
-				.buffersize = 4096,
-			}
-		}
-	},
+				.count = 7,
+				.endpoint = 0x06,
+				.u = {
+					.bulk = {
+						.buffersize = 4096,
+					}
+				}
+			},
 			.size_of_priv     = sizeof(struct dibusb_state),
 		}
 	},
@@ -369,22 +389,22 @@ static struct dvb_usb_device_properties artec_t1_usb2_properties = {
 			.caps = DVB_USB_ADAP_HAS_PID_FILTER | DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF,
 			.pid_filter_count = 16,
 
-	.streaming_ctrl   = dibusb2_0_streaming_ctrl,
-	.pid_filter       = dibusb_pid_filter,
-	.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
-	.frontend_attach  = dibusb_dib3000mb_frontend_attach,
-	.tuner_attach     = dibusb_tuner_probe_and_attach,
-	/* parameter for the MPEG2-data transfer */
+			.streaming_ctrl   = dibusb2_0_streaming_ctrl,
+			.pid_filter       = dibusb_pid_filter,
+			.pid_filter_ctrl  = dibusb_pid_filter_ctrl,
+			.frontend_attach  = dibusb_dib3000mb_frontend_attach,
+			.tuner_attach     = dibusb_tuner_probe_and_attach,
+			/* parameter for the MPEG2-data transfer */
 			.stream = {
 				.type = USB_BULK,
-		.count = 7,
-		.endpoint = 0x06,
-		.u = {
-			.bulk = {
-				.buffersize = 4096,
-			}
-		}
-	},
+				.count = 7,
+				.endpoint = 0x06,
+				.u = {
+					.bulk = {
+						.buffersize = 4096,
+					}
+				}
+			},
 			.size_of_priv     = sizeof(struct dibusb_state),
 		}
 	},

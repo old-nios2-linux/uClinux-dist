@@ -34,7 +34,7 @@ extern void prom_grab_secondary(void);
 struct callvectors *debug_vectors;
 
 extern unsigned long yosemite_base;
-extern unsigned long cpu_clock;
+extern unsigned long cpu_clock_freq;
 
 const char *get_system_type(void)
 {
@@ -119,7 +119,7 @@ void __init prom_init(void)
 					  16);
 
 		if (strncmp("cpuclock", *env, strlen("cpuclock")) == 0)
-			cpu_clock =
+			cpu_clock_freq =
 			    simple_strtol(*env + strlen("cpuclock="), NULL,
 					  10);
 
@@ -132,9 +132,8 @@ void __init prom_init(void)
 	prom_grab_secondary();
 }
 
-unsigned long __init prom_free_prom_memory(void)
+void __init prom_free_prom_memory(void)
 {
-	return 0;
 }
 
 void __init prom_fixup_mem_map(unsigned long start, unsigned long end)

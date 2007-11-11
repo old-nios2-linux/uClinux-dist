@@ -305,31 +305,19 @@ int ProcessNextSMBCommand(u_int8_t command, SMB_HDR *smbHdr,
  * wrong architectures -- ie, we need no conversion on little
  * endian.  So, use these for SMB...
  */
-#ifndef LITTLE_ENDIAN
-#define LITTLE_ENDIAN	1234
-#define BIG_ENDIAN	4321
-#define OTHER_ENDIAN	0
-#endif
 
-#ifndef BYTE_ORDER
-#if defined(__i386__) || defined (M_I86) || defined (_M_IX86) || defined (WIN32)
-#define BYTE_ORDER	LITTLE_ENDIAN
-#else
-#define BYTE_ORDER	BIG_ENDIAN
-#endif
-#endif
-
-#if (BYTE_ORDER == BIG_ENDIAN)
+#ifdef WORDS_BIGENDIAN
 #define smb_htons(A)  ((((u_int16_t)(A) & 0xff00) >> 8) | (((u_int16_t)(A) & 0x00ff) << 8))
 #define smb_htonl(A)  ((((u_int32_t)(A) & 0xff000000) >> 24) | (((u_int32_t)(A) & 0x00ff0000) >> 8)  | (((u_int32_t)(A) & 0x0000ff00) << 8)  | (((u_int32_t)(A) & 0x000000ff) << 24))
 #define smb_ntohs     smb_htons
 #define smb_ntohl     smb_htonl
-#elif (BYTE_ORDER == LITTLE_ENDIAN)
-
+#define IS_LITTLE_ENDIAN 0
+#else
 #define smb_htons(A)  (A)
 #define smb_htonl(A)  (A)
 #define smb_ntohs(A)  (A)
 #define smb_ntohl(A)  (A)
+#define IS_LITTLE_ENDIAN 1
 #endif
 
 #endif /* _SMB_STRUCTS_H_ */

@@ -1,9 +1,9 @@
 /*
- * $Id: parse_contact.c,v 1.4 2003/04/10 12:38:18 janakj Exp $
+ * $Id: parse_contact.c,v 1.7 2004/09/02 14:03:08 janakj Exp $
  *
  * Contact header field body parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -120,4 +120,107 @@ void print_contact(FILE* _o, contact_body_t* _c)
 	fprintf(_o, "star: %d\n", _c->star);
 	print_contacts(_o, _c->contacts);
 	fprintf(_o, "===/Contact body===\n");
+}
+
+
+/*
+ * Contact header field iterator, returns next contact if any, it doesn't
+ * parse message header if not absolutely necessary
+ */
+int contact_iterator(contact_t** c, struct sip_msg* msg, contact_t* prev)
+{
+	static struct hdr_field* hdr = 0;
+	struct hdr_field* last;
+	contact_body_t* cb;
+
+	if (!msg) {
+		LOG(L_ERR, "contact_iterator: Invalid parameter value\n");
+		return -1;
+	}
+
+	if (!prev) {
+		     /* No pointer to previous contact given, find topmost
+		      * contact and return pointer to the first contact
+		      * inside that header field
+		      */
+		hdr = msg->contact;
+		if (!hdr) {
+			if (parse_headers(msg, HDR_CONTACT, 0) == -1) {
+				LOG(L_ERR, "contact_iterator: Error while parsing headers\n");
+				return -1;
+			}
+
+			hdr = msg->contact;
+		}
+
+		if (hdr) {
+			if (parse_contact(hdr) < 0) {
+				LOG(L_ERR, "contact_iterator: Error while parsing Contact\n");
+				return -1;
+			}
+		} else {
+			*c = 0;
+			return 1;
+		}
+
+		cb = (contact_body_t*)hdr->parsed;
+		*c = cb->contacts;
+		return 0;
+	} else {
+		     /* Check if there is another contact in the
+		      * same header field and if so then return it
+		      */
+		if (prev->next) {
+			*c = prev->next;
+			return 0;
+		}
+
+		     /* Try to find and parse another Contact
+		      * header field
+		      */
+		last = hdr;
+		hdr = hdr->next;
+
+		     /* Search another already parsed Contact
+		      * header field
+		      */
+		while(hdr && hdr->type != HDR_CONTACT) {
+			hdr = hdr->next;
+		}
+
+		if (!hdr) {
+			     /* Look for another Contact HF in unparsed
+			      * part of the message header
+			      */
+			if (parse_headers(msg, HDR_CONTACT, 1) == -1) {
+				LOG(L_ERR, "contact_iterator: Error while parsing message header\n");
+				return -1;
+			}
+			
+			     /* Check if last found header field is Contact
+			      * and if it is not the same header field as the
+			      * previous Contact HF (that indicates that the previous 
+			      * one was the last header field in the header)
+			      */
+			if ((msg->last_header->type == HDR_CONTACT) &&
+			    (msg->last_header != last)) {
+				hdr = msg->last_header;
+			} else {
+				*c = 0;
+				return 1;
+			}
+		}
+		
+		if (parse_contact(hdr) < 0) {
+			LOG(L_ERR, "contact_iterator: Error while parsing Contact HF body\n");
+			return -1;
+		}
+		
+		     /* And return first contact within that
+		      * header field
+		      */
+		cb = (contact_body_t*)hdr->parsed;
+		*c = cb->contacts;
+		return 0;
+	}
 }

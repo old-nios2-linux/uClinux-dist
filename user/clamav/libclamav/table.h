@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 /*
@@ -28,9 +29,15 @@ typedef	struct	tableEntry {
 typedef struct table {
 	tableEntry	*tableHead;
 	tableEntry	*tableLast;
+	unsigned	int	flags;
 } table_t;
+
+#define	TABLE_HAS_DELETED_ENTRIES	0x1
 
 struct	table	*tableCreate(void);
 void	tableDestroy(table_t *table);
 int	tableInsert(table_t *table, const char *key, int value);
+int	tableUpdate(table_t *table, const char *key, int new_value);
 int	tableFind(const table_t *table, const char *key);
+void	tableRemove(table_t *table, const char *key);
+void	tableIterate(table_t *table, void(*callback)(char *key, int value, void *arg), void *arg);

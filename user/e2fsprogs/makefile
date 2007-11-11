@@ -29,4 +29,4 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_E2FSPROGS_MISC_MKLOST_FOUND build/misc/mklost+found /bin/mklost+found
 	$(ROMFSINST) -e CONFIG_USER_E2FSPROGS_MISC_TUNE2FS build/misc/tune2fs /bin/tune2fs
 	$(ROMFSINST) -e CONFIG_USER_E2FSPROGS_MISC_UUIDGEN build/misc/uuidgen /bin/uuidgen
-	$(ROMFSINST) -e CONFIG_USER_E2FSPROGS_MISC_E2LABEL -s /bin/e2label /bin/tune2fs
+	$(ROMFSINST) -e CONFIG_USER_E2FSPROGS_MISC_E2LABEL -s /bin/tune2fs /bin/e2label

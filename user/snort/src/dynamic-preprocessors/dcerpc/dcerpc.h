@@ -39,7 +39,9 @@ typedef struct dcerpc_hdr
     u_int8_t  version_minor;
     u_int8_t  packet_type;
     u_int8_t  flags;
-    u_int32_t data_representation;
+    u_int8_t  byte_order;
+    u_int8_t  floating_point;
+    u_int16_t padding;
 
     u_int16_t frag_length;
     u_int16_t auth_length;
@@ -69,11 +71,21 @@ typedef struct dcerpc_req
 /* PIPE function */
 #define DCERPC_PIPE     0x0026
 
+#define DCERPC_BYTE_ORDER(byte_order_flag) ((u_int8_t)byte_order_flag & 0xF0) >> 4
+
+#ifdef WORDS_BIGENDIAN
+#define dcerpc_ntohs(byte_order_flag, value) \
+(DCERPC_BYTE_ORDER(byte_order_flag) == 0 ? (u_int16_t)value : (((u_int16_t)value & 0xff00) >> 8) | (((u_int16_t)value & 0x00ff) << 8))
+#else
+#define dcerpc_ntohs(byte_order_flag, value) \
+(DCERPC_BYTE_ORDER(byte_order_flag) == 1 ? (u_int16_t)value : (((u_int16_t)value & 0xff00) >> 8) | (((u_int16_t)value & 0x00ff) << 8))
+#endif
+
 
 int IsCompleteDCERPCMessage(u_int8_t *data, u_int16_t size);
 int ProcessDCERPCMessage(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t size);
 
-void ReassembleDCERPCRequest(u_int8_t *smb_hdr, u_int8_t *data, u_int16_t data_size);
+void ReassembleDCERPCRequest(u_int8_t *smb_hdr, u_int8_t *data);
 int DCERPC_Fragmentation(u_int8_t *smb_data, u_int16_t data_size, u_int16_t *frag_length);
 
 

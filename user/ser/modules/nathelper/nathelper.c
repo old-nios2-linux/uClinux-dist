@@ -1,4 +1,4 @@
-/* $Id: nathelper.c,v 1.17.2.1.2.9.2.5 2004/07/15 21:18:34 andrei Exp $
+/* $Id: nathelper.c,v 1.67.2.5 2005/07/20 17:11:51 andrei Exp $
  *
  * Copyright (C) 2003 Porta Software Ltd
  *
@@ -59,10 +59,10 @@
  *		       RTP proxy. Only makes sense for SIP requests,
  *		       replies are always processed in "lookup" mode;
  *		 `i' - flags that message is received from UA in the
- *		       LAN. Only makes sense when RTP proxy is rinning
+ *		       LAN. Only makes sense when RTP proxy is running
  *		       in the bridge mode.
  *
- *		force_rtp_proxy can now be invoked without any argumens,
+ *		force_rtp_proxy can now be invoked without any arguments,
  *		as previously, with one argument - in this case argument
  *		is treated as option string and with two arguments, in
  *		which case 1st argument is option string and the 2nd
@@ -78,10 +78,10 @@
  *		Two new options added into force_rtp_proxy:
  *
  *		 `f' - instructs nathelper to ignore marks inserted
- *		       by another nathepler in transit to indicate
+ *		       by another nathelper in transit to indicate
  *		       that the session is already goes through another
  *		       proxy. Allows creating chain of proxies.
- *		 `d' - flags that IP address in SDP should be trusted.
+ *		 `r' - flags that IP address in SDP should be trusted.
  *		       Without this flag, nathelper ignores address in the
  *		       SDP and uses source address of the SIP message
  *		       as media address which is passed to the RTP proxy.
@@ -111,12 +111,14 @@
  * 2004-03-22	Fix get_body position (should be called before get_callid)
  * 				(andrei)
  * 2004-03-24	Fix newport for null ip address case (e.g onhold re-INVITE)
-* 				(andrei)
- * 
+ * 				(andrei)
+ * 2004-09-30	added received port != via port test (andrei) 
+ * 2004-10-10   force_socket option introduced (jiri)
  *
  */
 
 #include "nhelpr_funcs.h"
+#include "../../flags.h"
 #include "../../sr_module.h"
 #include "../../dprint.h"
 #include "../../data_lump.h"
@@ -135,6 +137,8 @@
 #include "../registrar/sip_msg.h"
 #include "../../msg_translator.h"
 #include "../usrloc/usrloc.h"
+#include "../../usr_avp.h"
+#include "../../socket_info.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -165,6 +169,7 @@ MODULE_VERSION
 #define	NAT_UAC_TEST_RCVD	0x02
 #define	NAT_UAC_TEST_V_1918	0x04
 #define	NAT_UAC_TEST_S_1918	0x08
+#define	NAT_UAC_TEST_RPORT	0x10
 
 /* Handy macros */
 #define	STR2IOVEC(sx, ix)	{(ix).iov_base = (sx).s; (ix).iov_len = (sx).len;}
@@ -187,6 +192,8 @@ static int unforce_rtp_proxy_f(struct sip_msg *, char *, char *);
 static int force_rtp_proxy0_f(struct sip_msg *, char *, char *);
 static int force_rtp_proxy1_f(struct sip_msg *, char *, char *);
 static int force_rtp_proxy2_f(struct sip_msg *, char *, char *);
+static int fix_nated_register_f(struct sip_msg *, char *, char *);
+static int add_rcv_param_f(struct sip_msg *, char *, char *);
 
 static void timer(unsigned int, void *);
 inline static int fixup_str2int(void**, int);
@@ -197,6 +204,8 @@ static usrloc_api_t ul;
 
 static int cblen = 0;
 static int natping_interval = 0;
+struct socket_info* force_socket = 0;
+
 
 static struct {
 	const char *cnetaddr;
@@ -216,6 +225,7 @@ static struct {
 static int ping_nated_only = 0;
 static const char sbuf[4] = {0, 0, 0, 0};
 static char *rtpproxy_sock = "unix:/var/run/rtpproxy.sock";
+static char *force_socket_str = 0;
 static int rtpproxy_disable = 0;
 static int rtpproxy_disable_tout = 60;
 static int rtpproxy_retr = 5;
@@ -224,15 +234,18 @@ static int umode = 0;
 static int controlfd;
 static pid_t mypid;
 static unsigned int myseqn = 0;
+static int rcv_avp_no=42;
 
 static cmd_export_t cmds[] = {
-	{"fix_nated_contact", fix_nated_contact_f,    0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
-	{"fix_nated_sdp",     fix_nated_sdp_f,        1, fixup_str2int, REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
-	{"unforce_rtp_proxy", unforce_rtp_proxy_f,    0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
-	{"force_rtp_proxy",   force_rtp_proxy0_f,     0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
-	{"force_rtp_proxy",   force_rtp_proxy1_f,     1, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
-	{"force_rtp_proxy",   force_rtp_proxy2_f,     2, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
-	{"nat_uac_test",      nat_uac_test_f,         1, fixup_str2int, REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
+	{"fix_nated_contact",  fix_nated_contact_f,    0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
+	{"fix_nated_sdp",      fix_nated_sdp_f,        1, fixup_str2int, REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
+	{"unforce_rtp_proxy",  unforce_rtp_proxy_f,    0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
+	{"force_rtp_proxy",    force_rtp_proxy0_f,     0, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
+	{"force_rtp_proxy",    force_rtp_proxy1_f,     1, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
+	{"force_rtp_proxy",    force_rtp_proxy2_f,     2, 0,             REQUEST_ROUTE | ONREPLY_ROUTE },
+	{"nat_uac_test",       nat_uac_test_f,         1, fixup_str2int, REQUEST_ROUTE | ONREPLY_ROUTE | FAILURE_ROUTE },
+	{"fix_nated_register", fix_nated_register_f,   0, 0,             REQUEST_ROUTE },
+	{"add_rcv_param",      add_rcv_param_f,        0, 0,             REQUEST_ROUTE },
 	{0, 0, 0, 0, 0}
 };
 
@@ -244,6 +257,8 @@ static param_export_t params[] = {
 	{"rtpproxy_disable_tout", INT_PARAM, &rtpproxy_disable_tout },
 	{"rtpproxy_retr",         INT_PARAM, &rtpproxy_retr         },
 	{"rtpproxy_tout",         INT_PARAM, &rtpproxy_tout         },
+	{"received_avp",          INT_PARAM, &rcv_avp_no            },
+	{"force_socket",          STR_PARAM, &force_socket_str		},
 	{0, 0, 0}
 };
 
@@ -265,6 +280,13 @@ mod_init(void)
 	char *cp;
 	bind_usrloc_t bind_usrloc;
 	struct in_addr addr;
+	str socket_str;
+
+	if (force_socket_str) {
+		socket_str.s=force_socket_str;
+		socket_str.len=strlen(socket_str.s);
+		force_socket=grep_sock_info(&socket_str,0,0);
+	}
 
 	if (natping_interval > 0) {
 		bind_usrloc = (bind_usrloc_t)find_export("ul_bind_usrloc", 1, 0);
@@ -288,7 +310,7 @@ mod_init(void)
 	}
 
 	if (rtpproxy_disable == 0) {
-		/* Make rtpproxy_sock writeable */
+		/* Make rtpproxy_sock writable */
 		cp = pkg_malloc(strlen(rtpproxy_sock) + 1);
 		if (cp == NULL) {
 			LOG(L_ERR, "nathelper: Can't allocate memory\n");
@@ -320,6 +342,7 @@ child_init(int rank)
 	struct addrinfo hints, *res;
 
 	if (rtpproxy_disable == 0) {
+		mypid = getpid();
 		if (umode != 0) {
 			cp = strrchr(rtpproxy_sock, ':');
 			if (cp != NULL) {
@@ -358,7 +381,6 @@ child_init(int rank)
 	} else {
 		rtpproxy_disable_tout = -1;
 	}
-	mypid = getpid();
 
 	return 0;
 }
@@ -378,7 +400,7 @@ isnulladdr(str *sx, int pf)
 }
 
 /*
- * ser_memmem() returns the location of the first occurence of data
+ * ser_memmem() returns the location of the first occurrence of data
  * pattern b2 of size len2 in memory block b1 of size len1 or
  * NULL if none is found. Obtained from NetBSD.
  */
@@ -391,7 +413,7 @@ ser_memmem(const void *b1, const void *b2, size_t len1, size_t len2)
 	/* Initialize pattern pointer */
 	char *pp = (char *) b2;
 
-	/* Intialize end of search address space pointer */
+	/* Initialize end of search address space pointer */
 	char *eos = sp + len1 - len2;
 
 	/* Sanity check */
@@ -431,6 +453,7 @@ get_to_tag(struct sip_msg* _m, str* _tag)
 		_tag->s = get_to(_m)->tag_value.s;
 		_tag->len = get_to(_m)->tag_value.len;
 	} else {
+		_tag->s = 0; /* fixes gcc 4.0 warnings */
 		_tag->len = 0;
 	}
 
@@ -470,7 +493,12 @@ static inline int
 get_callid(struct sip_msg* _m, str* _cid)
 {
 
-	if (_m->callid == 0) {
+	if ((parse_headers(_m, HDR_CALLID, 0) == -1)) {
+		LOG(L_ERR, "get_callid(): parse_headers() failed\n");
+		return -1;
+	}
+
+	if (_m->callid == NULL) {
 		LOG(L_ERR, "get_callid(): Call-ID not found\n");
 		return -1;
 	}
@@ -518,34 +546,42 @@ fix_nated_contact_f(struct sip_msg* msg, char* str1, char* str2)
 	contact_t* c;
 	struct lump* anchor;
 	struct sip_uri uri;
+	str hostport;
 
 	if (get_contact_uri(msg, &uri, &c) == -1)
 		return -1;
 	if (uri.proto != PROTO_UDP && uri.proto != PROTO_NONE)
 		return -1;
-	if (uri.port.len == 0)
-		uri.port.s = uri.host.s + uri.host.len;
+	if ((c->uri.s < msg->buf) || (c->uri.s > (msg->buf + msg->len))) {
+		LOG(L_ERR, "ERROR: you can't call fix_nated_contact twice, "
+		    "check your config!\n");
+		return -1;
+	}
 
 	offset = c->uri.s - msg->buf;
 	anchor = del_lump(msg, offset, c->uri.len, HDR_CONTACT);
 	if (anchor == 0)
 		return -1;
 
+	hostport = uri.host;
+	if (uri.port.len > 0)
+		hostport.len = uri.port.s + uri.port.len - uri.host.s;
+
 	cp = ip_addr2a(&msg->rcv.src_ip);
-	len = c->uri.len + strlen(cp) + 6 /* :port */ - (uri.port.s + uri.port.len - uri.host.s) + 1;
+	len = c->uri.len + strlen(cp) + 6 /* :port */ - hostport.len + 1;
 	buf = pkg_malloc(len);
 	if (buf == NULL) {
 		LOG(L_ERR, "ERROR: fix_nated_contact: out of memory\n");
 		return -1;
 	}
-	temp[0] = uri.host.s[0];
+	temp[0] = hostport.s[0];
 	temp[1] = c->uri.s[c->uri.len];
-	c->uri.s[c->uri.len] = uri.host.s[0] = '\0';
+	c->uri.s[c->uri.len] = hostport.s[0] = '\0';
 	len1 = snprintf(buf, len, "%s%s:%d%s", c->uri.s, cp, msg->rcv.src_port,
-	    uri.port.s + uri.port.len);
+	    hostport.s + hostport.len);
 	if (len1 < len)
 		len = len1;
-	uri.host.s[0] = temp[0];
+	hostport.s[0] = temp[0];
 	c->uri.s[c->uri.len] = temp[1];
 	if (insert_new_lump_after(anchor, buf, len, HDR_CONTACT) == 0) {
 		pkg_free(buf);
@@ -563,7 +599,7 @@ fixup_str2int( void** param, int param_no)
 	unsigned long go_to;
 	int err;
 
-	if (param_no == 1) {
+	if (param_no == 1 || param_no == 2) {
 		go_to = str2s(*param, strlen(*param), &err);
 		if (err == 0) {
 			pkg_free(*param);
@@ -609,7 +645,7 @@ theend:
 }
 
 /*
- * test for occurence of RFC1918 IP address in Contact HF
+ * test for occurrence of RFC1918 IP address in Contact HF
  */
 static int
 contact_1918(struct sip_msg* msg)
@@ -624,7 +660,7 @@ contact_1918(struct sip_msg* msg)
 }
 
 /*
- * test for occurence of RFC1918 IP address in SDP
+ * test for occurrence of RFC1918 IP address in SDP
  */
 static int
 sdp_1918(struct sip_msg* msg)
@@ -647,7 +683,7 @@ sdp_1918(struct sip_msg* msg)
 }
 
 /*
- * test for occurence of RFC1918 IP address in top Via
+ * test for occurrence of RFC1918 IP address in top Via
  */
 static int
 via_1918(struct sip_msg* msg)
@@ -665,6 +701,11 @@ nat_uac_test_f(struct sip_msg* msg, char* str1, char* str2)
 
 	/* return true if any of the NAT-UAC tests holds */
 
+	/* test if the source port is different from the port in Via */
+	if ((tests & NAT_UAC_TEST_RPORT) &&
+		 (msg->rcv.src_port!=(msg->via1->port?msg->via1->port:SIP_PORT)) ){
+		return 1;
+	}
 	/*
 	 * test if source address of signaling is different from
 	 * address advertised in Via
@@ -672,18 +713,18 @@ nat_uac_test_f(struct sip_msg* msg, char* str1, char* str2)
 	if ((tests & NAT_UAC_TEST_RCVD) && received_test(msg))
 		return 1;
 	/*
-	 * test for occurences of RFC1918 addresses in Contact
+	 * test for occurrences of RFC1918 addresses in Contact
 	 * header field
 	 */
 	if ((tests & NAT_UAC_TEST_C_1918) && (contact_1918(msg)>0))
 		return 1;
 	/*
-	 * test for occurences of RFC1918 addresses in SDP body
+	 * test for occurrences of RFC1918 addresses in SDP body
 	 */
 	if ((tests & NAT_UAC_TEST_S_1918) && sdp_1918(msg))
 		return 1;
 	/*
-	 * test for occurences of RFC1918 addresses top Via
+	 * test for occurrences of RFC1918 addresses top Via
 	 */
 	if ((tests & NAT_UAC_TEST_V_1918) && via_1918(msg))
 		return 1;
@@ -695,6 +736,7 @@ nat_uac_test_f(struct sip_msg* msg, char* str1, char* str2)
 
 #define	ADD_ADIRECTION	0x01
 #define	FIX_MEDIP	0x02
+#define	ADD_ANORTPPROXY	0x04
 
 #define	ADIRECTION	"a=direction:active\r\n"
 #define	ADIRECTION_LEN	(sizeof(ADIRECTION) - 1)
@@ -726,35 +768,50 @@ fix_nated_sdp_f(struct sip_msg* msg, char* str1, char* str2)
 		return -1;
 	}
 
-	if (level & ADD_ADIRECTION) {
+	if (level & (ADD_ADIRECTION | ADD_ANORTPPROXY)) {
 		msg->msg_flags |= FL_FORCE_ACTIVE;
 		anchor = anchor_lump(msg, body.s + body.len - msg->buf, 0, 0);
 		if (anchor == NULL) {
 			LOG(L_ERR, "ERROR: fix_nated_sdp: anchor_lump failed\n");
 			return -1;
 		}
-		buf = pkg_malloc(ADIRECTION_LEN * sizeof(char));
-		if (buf == NULL) {
-			LOG(L_ERR, "ERROR: fix_nated_sdp: out of memory\n");
-			return -1;
+		if (level & ADD_ADIRECTION) {
+			buf = pkg_malloc(ADIRECTION_LEN * sizeof(char));
+			if (buf == NULL) {
+				LOG(L_ERR, "ERROR: fix_nated_sdp: out of memory\n");
+				return -1;
+			}
+			memcpy(buf, ADIRECTION, ADIRECTION_LEN);
+			if (insert_new_lump_after(anchor, buf, ADIRECTION_LEN, 0) == NULL) {
+				LOG(L_ERR, "ERROR: fix_nated_sdp: insert_new_lump_after failed\n");
+				pkg_free(buf);
+				return -1;
+			}
 		}
-		memcpy(buf, ADIRECTION, ADIRECTION_LEN);
-		if (insert_new_lump_after(anchor, buf, ADIRECTION_LEN, 0) == NULL) {
-			LOG(L_ERR, "ERROR: fix_nated_sdp: insert_new_lump_after failed\n");
-			pkg_free(buf);
-			return -1;
+		if (level & ADD_ANORTPPROXY) {
+			buf = pkg_malloc(ANORTPPROXY_LEN * sizeof(char));
+			if (buf == NULL) {
+				LOG(L_ERR, "ERROR: fix_nated_sdp: out of memory\n");
+				return -1;
+			}
+			memcpy(buf, ANORTPPROXY, ANORTPPROXY_LEN);
+			if (insert_new_lump_after(anchor, buf, ANORTPPROXY_LEN, 0) == NULL) {
+				LOG(L_ERR, "ERROR: fix_nated_sdp: insert_new_lump_after failed\n");
+				pkg_free(buf);
+				return -1;
+			}
 		}
 	}
 
 	if (level & FIX_MEDIP) {
 		if (extract_mediaip(&body, &oldip, &pf) == -1) {
 			LOG(L_ERR, "ERROR: fix_nated_sdp: can't extract media IP from the SDP\n");
-			goto finalise;
+			goto finalize;
 		}
 		if (pf != AF_INET) {
 			LOG(L_ERR, "ERROR: fix_nated_sdp: "
 			    "not an IPv4 address in SDP\n");
-			goto finalise;
+			goto finalize;
 		}
 		body1.s = oldip.s + oldip.len;
 		body1.len = body.s + body.len - body1.s;
@@ -781,7 +838,7 @@ fix_nated_sdp_f(struct sip_msg* msg, char* str1, char* str2)
 		}
 	}
 
-finalise:
+finalize:
 	return 1;
 }
 
@@ -863,12 +920,19 @@ extract_mediaport(str *body, str *mediaport)
 	  mediaport->s) - mediaport->s;
 	trim_len(mediaport->len, mediaport->s, *mediaport);
 
-	if (mediaport->len < 7 || memcmp(mediaport->s, "audio", 5) != 0 ||
-	  !isspace((int)mediaport->s[5])) {
+	if (mediaport->len > 6 && memcmp(mediaport->s, "audio", 5) == 0 &&
+	    isspace((int)mediaport->s[5])) {
+		mediaport->s += 5;
+		mediaport->len -= 5;
+	} else if (mediaport->len > 12 && memcmp(mediaport->s, "application", 11) == 0 &&
+	    isspace((int)mediaport->s[11])) {
+		mediaport->s += 11;
+		mediaport->len -= 11;
+	} else {
 		LOG(L_ERR, "ERROR: extract_mediaport: can't parse `m=' in SDP\n");
 		return -1;
 	}
-	cp = eat_space_end(mediaport->s + 5, mediaport->s + mediaport->len);
+	cp = eat_space_end(mediaport->s, mediaport->s + mediaport->len);
 	mediaport->len = eat_token_end(cp, mediaport->s + mediaport->len) - cp;
 	mediaport->s = cp;
 	return 1;
@@ -889,6 +953,28 @@ alter_mediaip(struct sip_msg *msg, str *body, str *oldip, int oldpf,
 	if (newip->len == oldip->len &&
 	    memcmp(newip->s, oldip->s, newip->len) == 0)
 		return 0;
+
+	/*
+	 * Since rewriting the same info twice will mess SDP up,
+	 * apply simple anti foot shooting measure - put flag on
+	 * messages that have been altered and check it when
+	 * another request comes.
+	 */
+#if 0
+	/* disabled: 
+	 *  - alter_mediaip is called twice if 2 c= lines are present
+	 *    in the sdp (and we want to allow it)
+	 *  - the message flags are propagated in the on_reply_route
+	 *  => if we set the flags for the request they will be seen for the
+	 *    reply too, but we don't want that
+	 *  --andrei
+	 */
+	if (msg->msg_flags & FL_SDP_IP_AFS) {
+		LOG(L_ERR, "ERROR: alter_mediaip: you can't rewrite the same "
+		  "SDP twice, check your config!\n");
+		return -1;
+	}
+#endif
 
 	if (preserve != 0) {
 		anchor = anchor_lump(msg, body->s + body->len - msg->buf, 0, 0);
@@ -953,6 +1039,11 @@ alter_mediaip(struct sip_msg *msg, str *body, str *oldip, int oldpf,
 		pkg_free(nip.s);
 		return -1;
 	}
+
+#if 0
+	msg->msg_flags |= FL_SDP_IP_AFS;
+#endif
+
 	if (insert_new_lump_after(anchor, nip.s, nip.len, 0) == 0) {
 		LOG(L_ERR, "ERROR: alter_mediaip: insert_new_lump_after failed\n");
 		pkg_free(nip.s);
@@ -973,6 +1064,22 @@ alter_mediaport(struct sip_msg *msg, str *body, str *oldport, str *newport,
 	if (newport->len == oldport->len &&
 	    memcmp(newport->s, oldport->s, newport->len) == 0)
 		return 0;
+
+	/*
+	 * Since rewriting the same info twice will mess SDP up,
+	 * apply simple anti foot shooting measure - put flag on
+	 * messages that have been altered and check it when
+	 * another request comes.
+	 */
+#if 0
+	/* disabled: - it propagates to the reply and we don't want this
+	 *  -- andrei */
+	if (msg->msg_flags & FL_SDP_PORT_AFS) {
+		LOG(L_ERR, "ERROR: alter_mediaip: you can't rewrite the same "
+		  "SDP twice, check your config!\n");
+		return -1;
+	}
+#endif
 
 	if (preserve != 0) {
 		anchor = anchor_lump(msg, body->s + body->len - msg->buf, 0, 0);
@@ -1014,6 +1121,10 @@ alter_mediaport(struct sip_msg *msg, str *body, str *oldport, str *newport,
 		pkg_free(buf);
 		return -1;
 	}
+
+#if 0
+	msg->msg_flags |= FL_SDP_PORT_AFS;
+#endif
 	return 0;
 }
 
@@ -1056,7 +1167,7 @@ rtpp_test(int isdisabled, int force)
 		    "version of RTP proxy found: %d supported, "
 		    "%d present\n", SUP_CPROTOVER, rtpp_ver);
 	}
-	LOG(L_WARN, "WARNING: rtpp_test: support for RTP proxy"
+	LOG(L_WARN, "WARNING: rtpp_test: support for RTP proxy "
 	    "has been disabled%s\n",
 	    rtpproxy_disable_tout < 0 ? "" : " temporarily");
 	if (rtpproxy_disable_tout >= 0)
@@ -1392,8 +1503,8 @@ force_rtp_proxy2_f(struct sip_msg* msg, char* str1, char* str2)
 		newip.s = (argc < 2) ? str2 : argv[1];
 		newip.len = strlen(newip.s);
 	}
-	newport.s=int2str(port, &newport.len); /* beware static buffer */
-	
+	newport.s = int2str(port, &newport.len); /* beware static buffer */
+
 	if (alter_mediaip(msg, &body, &oldip, pf, &newip, pf1, 0) == -1)
 		return -1;
 	if (oldip1.len > 0 &&
@@ -1504,7 +1615,8 @@ timer(unsigned int ticks, void *param)
 			continue;
 		}
 		hostent2su(&to, he, 0, curi.port_no);
-		send_sock = get_send_socket(&to, PROTO_UDP);
+		send_sock=force_socket ? force_socket : 
+					get_send_socket(0, &to, PROTO_UDP);
 		if (send_sock == NULL) {
 			LOG(L_ERR, "ERROR: nathelper::timer: can't get sending socket\n");
 			continue;
@@ -1512,4 +1624,172 @@ timer(unsigned int ticks, void *param)
 		udp_send(send_sock, (char *)sbuf, sizeof(sbuf), &to);
 	}
 	pkg_free(buf);
+}
+
+
+/*
+ * Create received SIP uri that will be either
+ * passed to registrar in an AVP or apended
+ * to Contact header field as a parameter
+ */
+static int
+create_rcv_uri(str* uri, struct sip_msg* m)
+{
+	static char buf[MAX_URI_SIZE];
+	char* p;
+	str ip, port;
+	int len;
+	str proto;
+
+	if (!uri || !m) {
+		LOG(L_ERR, "create_rcv_uri: Invalid parameter value\n");
+		return -1;
+	}
+
+	ip.s = ip_addr2a(&m->rcv.src_ip);
+	ip.len = strlen(ip.s);
+
+	port.s = int2str(m->rcv.src_port, &port.len);
+
+	switch(m->rcv.proto) {
+	case PROTO_NONE:
+	case PROTO_UDP:
+		proto.s = 0; /* Do not add transport parameter, UDP is default */
+		proto.len = 0;
+		break;
+
+	case PROTO_TCP:
+		proto.s = "TCP";
+		proto.len = 3;
+		break;
+
+	case PROTO_TLS:
+		proto.s = "TLS";
+		proto.len = 3;
+		break;
+
+	case PROTO_SCTP:
+		proto.s = "SCTP";
+		proto.len = 4;
+		break;
+
+	default:
+		LOG(L_ERR, "BUG: create_rcv_uri: Unknown transport protocol\n");
+		return -1;
+	}
+
+	len = 4 + ip.len + 1 + port.len;
+	if (proto.s) {
+		len += TRANSPORT_PARAM_LEN;
+		len += proto.len;
+	}
+
+	if (len > MAX_URI_SIZE) {
+		LOG(L_ERR, "create_rcv_uri: Buffer too small\n");
+		return -1;
+	}
+
+	p = buf;
+	memcpy(p, "sip:", 4);
+	p += 4;
+	
+	memcpy(p, ip.s, ip.len);
+	p += ip.len;
+
+	*p++ = ':';
+	
+	memcpy(p, port.s, port.len);
+	p += port.len;
+
+	if (proto.s) {
+		memcpy(p, TRANSPORT_PARAM, TRANSPORT_PARAM_LEN);
+		p += TRANSPORT_PARAM_LEN;
+
+		memcpy(p, proto.s, proto.len);
+		p += proto.len;
+	}
+
+	uri->s = buf;
+	uri->len = len;
+
+	return 0;
+}
+
+
+/*
+ * Add received parameter to Contacts for further
+ * forwarding of the REGISTER requuest
+ */
+static int
+add_rcv_param_f(struct sip_msg* msg, char* str1, char* str2)
+{
+	contact_t* c;
+	struct lump* anchor;
+	char* param;
+	str uri;
+
+	if (create_rcv_uri(&uri, msg) < 0) {
+		return -1;
+	}
+
+	if (contact_iterator(&c, msg, 0) < 0) {
+		return -1;
+	}
+
+	while(c) {
+		param = (char*)pkg_malloc(RECEIVED_LEN + 2 + uri.len);
+		if (!param) {
+			LOG(L_ERR, "add_rcv_param: No memory left\n");
+			return -1;
+		}
+		memcpy(param, RECEIVED, RECEIVED_LEN);
+		param[RECEIVED_LEN] = '\"';
+		memcpy(param + RECEIVED_LEN + 1, uri.s, uri.len);
+		param[RECEIVED_LEN + 1 + uri.len] = '\"';
+
+		anchor = anchor_lump(msg, c->name.s + c->len - msg->buf, 0, 0);
+		if (anchor == NULL) {
+			LOG(L_ERR, "add_rcv_param: anchor_lump failed\n");
+			return -1;
+		}		
+
+		if (insert_new_lump_after(anchor, param, RECEIVED_LEN + 1 + uri.len + 1, 0) == 0) {
+			LOG(L_ERR, "add_rcv_param: insert_new_lump_after failed\n");
+			pkg_free(param);
+			return -1;
+		}
+
+		if (contact_iterator(&c, msg, c) < 0) {
+			return -1;
+		}
+	}
+
+	return 1;
+}
+
+
+/*
+ * Create an AVP to be used by registrar with the source IP and port
+ * of the REGISTER
+ */
+static int
+fix_nated_register_f(struct sip_msg* msg, char* str1, char* str2)
+{
+	str uri;
+	int_str val;
+	int_str rcv_avp;
+
+	if (create_rcv_uri(&uri, msg) < 0) {
+		return -1;
+	}
+
+	val.s = &uri;
+
+	rcv_avp.n=rcv_avp_no;
+	if (add_avp(AVP_VAL_STR, rcv_avp, val) < 0) {
+		LOG(L_ERR, "fix_nated_register: Error while creating AVP\n");
+		return -1;
+	}
+
+	return 1;
 }

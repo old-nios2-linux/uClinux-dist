@@ -22,23 +22,21 @@
 #include "dccp.h"
 #include "feat.h"
 
-int dccp_feat_default_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
-int dccp_feat_default_rx_ccid	      = DCCPF_INITIAL_CCID;
-int dccp_feat_default_tx_ccid	      = DCCPF_INITIAL_CCID;
-int dccp_feat_default_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
-int dccp_feat_default_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
-int dccp_feat_default_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
-
-EXPORT_SYMBOL_GPL(dccp_feat_default_sequence_window);
+int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
+int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
+int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
+int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
+int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
+int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
 
 void dccp_minisock_init(struct dccp_minisock *dmsk)
 {
-	dmsk->dccpms_sequence_window = dccp_feat_default_sequence_window;
-	dmsk->dccpms_rx_ccid	     = dccp_feat_default_rx_ccid;
-	dmsk->dccpms_tx_ccid	     = dccp_feat_default_tx_ccid;
-	dmsk->dccpms_ack_ratio	     = dccp_feat_default_ack_ratio;
-	dmsk->dccpms_send_ack_vector = dccp_feat_default_send_ack_vector;
-	dmsk->dccpms_send_ndp_count  = dccp_feat_default_send_ndp_count;
+	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
+	dmsk->dccpms_rx_ccid	     = sysctl_dccp_feat_rx_ccid;
+	dmsk->dccpms_tx_ccid	     = sysctl_dccp_feat_tx_ccid;
+	dmsk->dccpms_ack_ratio	     = sysctl_dccp_feat_ack_ratio;
+	dmsk->dccpms_send_ack_vector = sysctl_dccp_feat_send_ack_vector;
+	dmsk->dccpms_send_ndp_count  = sysctl_dccp_feat_send_ndp_count;
 }
 
 static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
@@ -60,12 +58,9 @@ static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
 int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 {
 	struct dccp_sock *dp = dccp_sk(sk);
-#ifdef CONFIG_IP_DCCP_DEBUG
-	const char *debug_prefix = dp->dccps_role == DCCP_ROLE_CLIENT ?
-					"CLIENT rx opt: " : "server rx opt: ";
-#endif
 	const struct dccp_hdr *dh = dccp_hdr(skb);
 	const u8 pkt_type = DCCP_SKB_CB(skb)->dccpd_type;
+	u64 ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
 	unsigned char *options = (unsigned char *)dh + dccp_hdr_len(skb);
 	unsigned char *opt_ptr = options;
 	const unsigned char *opt_end = (unsigned char *)dh +
@@ -119,7 +114,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 				goto out_invalid_option;
 
 			opt_recv->dccpor_ndp = dccp_decode_value_var(value, len);
-			dccp_pr_debug("%sNDP count=%d\n", debug_prefix,
+			dccp_pr_debug("%s rx opt: NDP count=%d\n", dccp_role(sk),
 				      opt_recv->dccpor_ndp);
 			break;
 		case DCCPO_CHANGE_L:
@@ -153,7 +148,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 				break;
 
 			if (dccp_msk(sk)->dccpms_send_ack_vector &&
-			    dccp_ackvec_parse(sk, skb, opt, value, len))
+			    dccp_ackvec_parse(sk, skb, &ackno, opt, value, len))
 				goto out_invalid_option;
 			break;
 		case DCCPO_TIMESTAMP:
@@ -165,8 +160,8 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 			dp->dccps_timestamp_echo = opt_recv->dccpor_timestamp;
 			dccp_timestamp(sk, &dp->dccps_timestamp_time);
 
-			dccp_pr_debug("%sTIMESTAMP=%u, ackno=%llu\n",
-				      debug_prefix, opt_recv->dccpor_timestamp,
+			dccp_pr_debug("%s rx opt: TIMESTAMP=%u, ackno=%llu\n",
+				      dccp_role(sk), opt_recv->dccpor_timestamp,
 				      (unsigned long long)
 				      DCCP_SKB_CB(skb)->dccpd_ack_seq);
 			break;
@@ -176,21 +171,25 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 
 			opt_recv->dccpor_timestamp_echo = ntohl(*(__be32 *)value);
 
-			dccp_pr_debug("%sTIMESTAMP_ECHO=%u, len=%d, ackno=%llu, ",
-				      debug_prefix,
+			dccp_pr_debug("%s rx opt: TIMESTAMP_ECHO=%u, len=%d, "
+				      "ackno=%llu", dccp_role(sk),
 				      opt_recv->dccpor_timestamp_echo,
 				      len + 2,
 				      (unsigned long long)
 				      DCCP_SKB_CB(skb)->dccpd_ack_seq);
 
 
-			if (len == 4)
+			if (len == 4) {
+				dccp_pr_debug_cat("\n");
 				break;
+			}
 
 			if (len == 6)
 				elapsed_time = ntohs(*(__be16 *)(value + 4));
 			else
 				elapsed_time = ntohl(*(__be32 *)(value + 4));
+
+			dccp_pr_debug_cat(", ELAPSED_TIME=%d\n", elapsed_time);
 
 			/* Give precedence to the biggest ELAPSED_TIME */
 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
@@ -211,8 +210,8 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
 				opt_recv->dccpor_elapsed_time = elapsed_time;
 
-			dccp_pr_debug("%sELAPSED_TIME=%d\n", debug_prefix,
-				      elapsed_time);
+			dccp_pr_debug("%s rx opt: ELAPSED_TIME=%d\n",
+				      dccp_role(sk), elapsed_time);
 			break;
 			/*
 			 * From RFC 4340, sec. 10.3:
@@ -242,11 +241,10 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 		}
 			break;
 		default:
-			pr_info("DCCP(%p): option %d(len=%d) not "
-				"implemented, ignoring\n",
-				sk, opt, len);
+			DCCP_CRIT("DCCP(%p): option %d(len=%d) not "
+				  "implemented, ignoring", sk, opt, len);
 			break;
-	        }
+		}
 
 		if (opt != DCCPO_MANDATORY)
 			mandatory = 0;
@@ -261,7 +259,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
 out_invalid_option:
 	DCCP_INC_STATS_BH(DCCP_MIB_INVALIDOPT);
 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_OPTION_ERROR;
-	pr_info("DCCP(%p): invalid option %d, len=%d\n", sk, opt, len);
+	DCCP_WARN("DCCP(%p): invalid option %d, len=%d", sk, opt, len);
 	return -1;
 }
 
@@ -446,13 +444,12 @@ static int dccp_insert_option_timestamp_echo(struct sock *sk,
 }
 
 static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
-			        u8 *val, u8 len)
+				u8 *val, u8 len)
 {
 	u8 *to;
 
 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 3 > DCCP_MAX_OPT_LEN) {
-		LIMIT_NETDEBUG(KERN_INFO "DCCP: packet too small"
-			       " to insert feature %d option!\n", feat);
+		DCCP_WARN("packet too small for feature %d option!\n", feat);
 		return -1;
 	}
 
@@ -465,8 +462,10 @@ static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
 
 	if (len)
 		memcpy(to, val, len);
-	dccp_pr_debug("option %d feat %d len %d\n", type, feat, len);
 
+	dccp_pr_debug("%s(%s (%d), ...), length %d\n",
+		      dccp_feat_typename(type),
+		      dccp_feat_name(feat), feat, len);
 	return 0;
 }
 
@@ -560,17 +559,20 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
 			return -1;
 		dp->dccps_hc_rx_insert_options = 0;
 	}
-	if (dp->dccps_hc_tx_insert_options) {
-		if (ccid_hc_tx_insert_options(dp->dccps_hc_tx_ccid, sk, skb))
-			return -1;
-		dp->dccps_hc_tx_insert_options = 0;
-	}
 
 	/* Feature negotiation */
 	/* Data packets can't do feat negotiation */
 	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA &&
 	    DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATAACK &&
 	    dccp_insert_options_feat(sk, skb))
+		return -1;
+
+	/*
+	 * Obtain RTT sample from Request/Response exchange.
+	 * This is currently used in CCID 3 initialisation.
+	 */
+	if (DCCP_SKB_CB(skb)->dccpd_type == DCCP_PKT_REQUEST &&
+	    dccp_insert_option_timestamp(sk, skb))
 		return -1;
 
 	/* XXX: insert other options when appropriate */

@@ -2,7 +2,6 @@
  *  linux/include/asm-arm/cpu-multi32.h
  *
  *  Copyright (C) 2000 Russell King
- *  Modified by Hyok S. Choi, 2004
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -50,12 +49,11 @@ extern struct processor {
 	 * Set the page table
 	 */
 	void (*switch_mm)(unsigned long pgd_phys, struct mm_struct *mm);
-#ifdef CONFIG_MMU
 	/*
-	 * Set a PTE
+	 * Set a possibly extended PTE.  Non-extended PTEs should
+	 * ignore 'ext'.
 	 */
-	void (*set_pte)(pte_t *ptep, pte_t pte);
-#endif
+	void (*set_pte_ext)(pte_t *ptep, pte_t pte, unsigned int ext);
 } processor;
 
 #define cpu_proc_init()			processor._proc_init()
@@ -63,7 +61,5 @@ extern struct processor {
 #define cpu_reset(addr)			processor.reset(addr)
 #define cpu_do_idle()			processor._do_idle()
 #define cpu_dcache_clean_area(addr,sz)	processor.dcache_clean_area(addr,sz)
-#ifdef CONFIG_MMU
-#define cpu_set_pte(ptep, pte)		processor.set_pte(ptep, pte)
-#endif
+#define cpu_set_pte_ext(ptep,pte,ext)	processor.set_pte_ext(ptep,pte,ext)
 #define cpu_do_switch_mm(pgd,mm)	processor.switch_mm(pgd,mm)

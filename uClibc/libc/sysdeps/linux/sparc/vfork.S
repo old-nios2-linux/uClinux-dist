@@ -22,16 +22,17 @@
 #include <sys/syscall.h>
 
 #ifndef __NR_vfork
-/* uClinux-2.0 only has fork which is really vfork */
-#define __NR_vfork __NR_fork
+/* No vfork so use fork instead */
+# define __NR_vfork __NR_fork
 #endif
 
-.text;  
-.global	vfork;
-.align 4;
-.type	vfork,@function;
+.text
+.global	__vfork
+.hidden	__vfork
+.type	__vfork,%function
+.align 4
 
-vfork:
+__vfork:
 	mov __NR_vfork, %g1
 	ta	0x10
 	bcc,a	9000f
@@ -48,5 +49,7 @@ vfork:
 	retl
 	and	%o0, %o1, %o0
 
-.size vfork,.-vfork;
+.size __vfork,.-__vfork
 
+weak_alias(__vfork,vfork)
+libc_hidden_weak(vfork)

@@ -1,9 +1,9 @@
 /*
- * $Id: t_msgbuilder.c,v 1.34.4.2 2004/02/11 18:51:59 janakj Exp $
+ * $Id: t_msgbuilder.c,v 1.40 2004/11/09 15:15:12 andrei Exp $
  *
  * message printing
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,6 +36,8 @@
  *             is now called before reply status is updated to
  *             avoid late ACK sending (jiri)
  * 2003-10-02  added via_builder set host/port support (andrei)
+ * 2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
+ * 2004-02-13: t->is_invite and t->local replaced with flags (bogdan)
  */
 
 #include "defs.h"
@@ -60,7 +62,6 @@
 
 #define ROUTE_SEPARATOR ", "
 #define ROUTE_SEPARATOR_LEN (sizeof(ROUTE_SEPARATOR) - 1)
-
 
 #define  append_mem_block(_d,_s,_len) \
 		do{\
@@ -107,12 +108,12 @@ char *build_local(struct cell *Trans,unsigned int branch,
 		goto error;
 	branch_str.s=branch_buf;
 	branch_str.len=branch_len;
-	set_hostport(&hp, (Trans->local)?0:(Trans->uas.request));
+	set_hostport(&hp, (is_local(Trans))?0:(Trans->uas.request));
 	via=via_builder(&via_len, Trans->uac[branch].request.dst.send_sock,
 		&branch_str, 0, Trans->uac[branch].request.dst.proto, &hp );
 	if (!via)
 	{
-		LOG(L_ERR, "ERROR: t_build_and_send_CANCEL: "
+		LOG(L_ERR, "ERROR: build_local: "
 			"no via header got from builder\n");
 		goto error;
 	}
@@ -123,7 +124,7 @@ char *build_local(struct cell *Trans,unsigned int branch,
 
 
 	/* copy'n'paste Route headers */
-	if (!Trans->local) {
+	if (!is_local(Trans)) {
 		for ( hdr=Trans->uas.request->headers ; hdr ; hdr=hdr->next )
 			 if (hdr->type==HDR_ROUTE)
 				*len+=hdr->len;
@@ -139,7 +140,7 @@ char *build_local(struct cell *Trans,unsigned int branch,
 	cancel_buf=shm_malloc( *len+1 );
 	if (!cancel_buf)
 	{
-		LOG(L_ERR, "ERROR: t_build_and_send_CANCEL: cannot allocate memory\n");
+		LOG(L_ERR, "ERROR: build_local: cannot allocate memory\n");
 		goto error01;
 	}
 	p = cancel_buf;
@@ -162,7 +163,7 @@ char *build_local(struct cell *Trans,unsigned int branch,
 	append_mem_block( p, method, method_len );
 	append_mem_block( p, CRLF, CRLF_LEN );
 
-	if (!Trans->local)  {
+	if (!is_local(Trans))  {
 		for ( hdr=Trans->uas.request->headers ; hdr ; hdr=hdr->next )
 			if(hdr->type==HDR_ROUTE) {
 				append_mem_block(p, hdr->name.s, hdr->len );
@@ -192,11 +193,11 @@ struct rte {
 	struct rte* next;
 };
 
-
+  	 
 static inline void free_rte_list(struct rte* list)
 {
 	struct rte* ptr;
-
+	
 	while(list) {
 		ptr = list;
 		list = list->next;
@@ -220,7 +221,7 @@ static inline int process_routeset(struct sip_msg* msg, str* contact, struct rte
 				LOG(L_ERR, "process_routeset: Error while parsing Record-Route header\n");
 				return -1;
 			}
-
+			
 			p = (rr_t*)ptr->parsed;
 			while(p) {
 				t = (struct rte*)pkg_malloc(sizeof(struct rte));
@@ -237,14 +238,14 @@ static inline int process_routeset(struct sip_msg* msg, str* contact, struct rte
 		}
 		ptr = ptr->next;
 	}
-
+	
 	if (head) {
 		if (parse_uri(head->ptr->nameaddr.uri.s, head->ptr->nameaddr.uri.len, &puri) == -1) {
 			LOG(L_ERR, "process_routeset: Error while parsing URI\n");
 			free_rte_list(head);
 			return -1;
 		}
-
+		
 		if (puri.lr.s) {
 			     /* Next hop is loose router */
 			*ruri = *contact;
@@ -262,7 +263,7 @@ static inline int process_routeset(struct sip_msg* msg, str* contact, struct rte
 		*ruri = *contact;
 		*next_hop = *contact;
 	}
-
+	
 	*list = head;
 	return 0;
 }
@@ -272,13 +273,13 @@ static inline int calc_routeset_len(struct rte* list, str* contact)
 {
 	struct rte* ptr;
 	int ret;
-
+	
 	if (list || contact) {
 		ret = ROUTE_PREFIX_LEN + CRLF_LEN;
 	} else {
 		return 0;
 	}
-
+	
 	ptr = list;
 	while(ptr) {
 		if (ptr != list) {
@@ -287,29 +288,29 @@ static inline int calc_routeset_len(struct rte* list, str* contact)
 		ret += ptr->ptr->len;
 		ptr = ptr->next;
 	}
-
+	
 	if (contact) {
 		if (list) ret += ROUTE_SEPARATOR_LEN;
 		ret += 2 + contact->len;
 	}
-
+	
 	return ret;
 }
 
 
-/*
- * Print the route set
- */
+     /*
+      * Print the route set
+      */
 static inline char* print_rs(char* p, struct rte* list, str* contact)
 {
 	struct rte* ptr;
-
+	
 	if (list || contact) {
 		memapp(p, ROUTE_PREFIX, ROUTE_PREFIX_LEN);
 	} else {
 		return p;
 	}
-
+	
 	ptr = list;
 	while(ptr) {
 		if (ptr != list) {
@@ -319,55 +320,55 @@ static inline char* print_rs(char* p, struct rte* list, str* contact)
 		memapp(p, ptr->ptr->nameaddr.name.s, ptr->ptr->len);
 		ptr = ptr->next;
 	}
-
+	
 	if (contact) {
 		if (list) memapp(p, ROUTE_SEPARATOR, ROUTE_SEPARATOR_LEN);
 		*p++ = '<';
 		append_str(p, *contact);
 		*p++ = '>';
 	}
-
+	
 	memapp(p, CRLF, CRLF_LEN);
 	return p;
 }
 
 
-/*
- * Parse Contact header field body and extract URI
- * Does not parse headers !
- */
+     /*
+      * Parse Contact header field body and extract URI
+      * Does not parse headers !
+      */
 static inline int get_contact_uri(struct sip_msg* msg, str* uri)
 {
 	contact_t* c;
-
+	
 	uri->len = 0;
 	if (!msg->contact) return 1;
-
+	
 	if (parse_contact(msg->contact) < 0) {
 		LOG(L_ERR, "get_contact_uri: Error while parsing Contact body\n");
 		return -1;
 	}
-
+	
 	c = ((contact_body_t*)msg->contact->parsed)->contacts;
-
+	
 	if (!c) {
 		LOG(L_ERR, "get_contact_uri: Empty body or * contact\n");
 		return -2;
 	}
-
+	
 	*uri = c->uri;
 	return 0;
 }
 
 
 
-/*
- * The function creates an ACK to 200 OK. Route set will be created
- * and parsed and next_hop parameter will contain uri the which the
- * request should be send. The function is used by tm when it generates
- * local ACK to 200 OK (on behalf of applications using uac
- */
-char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch, 
+     /*
+      * The function creates an ACK to 200 OK. Route set will be created
+      * and parsed and next_hop parameter will contain uri the which the
+      * request should be send. The function is used by tm when it generates
+      * local ACK to 200 OK (on behalf of applications using uac
+      */
+char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch,
 		    str* to, unsigned int *len, str *next_hop)
 {
 	char *req_buf, *p, *via;
@@ -380,15 +381,15 @@ char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch
 	str contact, ruri, *cont;
 	struct socket_info* send_sock;
 	union sockaddr_union to_su;
-
+	
 	if (get_contact_uri(rpl, &contact) < 0) {
 		return 0;
 	}
-
+	
 	if (process_routeset(rpl, &contact, &list, &ruri, next_hop) < 0) {
 		return 0;
 	}
-
+	
 	if ((contact.s != ruri.s) || (contact.len != ruri.len)) {
 		     /* contact != ruri means that the next
 		      * hop is a strict router, cont will be non-zero
@@ -400,19 +401,19 @@ char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch
 		     /* Next hop is a loose router, nothing to append */
 		cont = 0;
 	}
-
+	
 	     /* method, separators, version: "ACK sip:p2@iptel.org SIP/2.0" */
 	*len = SIP_VERSION_LEN + ACK_LEN + 2 /* spaces */ + CRLF_LEN;
 	*len += ruri.len;
-
-
+	
+	
 	     /* via */
-	send_sock = uri2sock(next_hop, &to_su, PROTO_NONE);
+	send_sock = uri2sock(rpl, next_hop, &to_su, PROTO_NONE);
 	if (!send_sock) {
 		LOG(L_ERR, "build_dlg_ack: no socket found\n");
 		goto error;
-	}	
-
+	}
+	
 	if (!t_calc_branch(Trans,  branch, branch_buf, &branch_len)) goto error;
 	branch_str.s = branch_buf;
 	branch_str.len = branch_len;
@@ -423,72 +424,70 @@ char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch
 		goto error;
 	}
 	*len+= via_len;
-
-	/*headers*/
-	*len += Trans->from.len + Trans->callid.len + to->len + Trans->cseq_n.len + 1 + ACK_LEN + CRLF_LEN; 
-
+	
+	     /*headers*/
+	*len += Trans->from.len + Trans->callid.len + to->len + Trans->cseq_n.len + 1 + ACK_LEN + CRLF_LEN;
+	
 	     /* copy'n'paste Route headers */
 	
 	*len += calc_routeset_len(list, cont);
-
+	
 	     /* User Agent */
 	if (server_signature) *len += USER_AGENT_LEN + CRLF_LEN;
 	     /* Content Length, EoM */
 	*len += CONTENT_LENGTH_LEN + 1 + CRLF_LEN + CRLF_LEN;
-
+	
 	req_buf = shm_malloc(*len + 1);
 	if (!req_buf) {
 		LOG(L_ERR, "build_dlg_ack: Cannot allocate memory\n");
 		goto error01;
 	}
 	p = req_buf;
-
+	
 	append_mem_block( p, ACK, ACK_LEN );
 	append_mem_block( p, " ", 1 );
 	append_str(p, ruri);
 	append_mem_block( p, " " SIP_VERSION CRLF, 1 + SIP_VERSION_LEN + CRLF_LEN);
-
+  	 
 	     /* insert our via */
 	append_mem_block(p, via, via_len);
-
+	
 	     /*other headers*/
 	append_str(p, Trans->from);
 	append_str(p, Trans->callid);
 	append_str(p, *to);
-
+	
 	append_str(p, Trans->cseq_n);
 	append_mem_block( p, " ", 1 );
 	append_mem_block( p, ACK, ACK_LEN);
 	append_mem_block(p, CRLF, CRLF_LEN);
-
+	
 	     /* Routeset */
 	p = print_rs(p, list, cont);
-
+	
 	     /* User Agent header */
 	if (server_signature) {
 		append_mem_block(p, USER_AGENT CRLF, USER_AGENT_LEN + CRLF_LEN);
 	}
-
+	
 	     /* Content Length, EoM */
 	append_mem_block(p, CONTENT_LENGTH "0" CRLF CRLF, CONTENT_LENGTH_LEN + 1 + CRLF_LEN + CRLF_LEN);
 	*p = 0;
-
+	
 	pkg_free(via);
 	free_rte_list(list);
 	return req_buf;
-
-error01:
+	
+ error01:
 	pkg_free(via);
-error:
+ error:
 	free_rte_list(list);
 	return 0;
-}
-
-
+  	 }
 
 
 /*
- * Convert lenght of body into asciiz
+ * Convert length of body into asciiz
  */
 static inline int print_content_length(str* dest, str* body)
 {
@@ -549,7 +548,7 @@ static inline int assemble_via(str* dest, struct cell* t, struct socket_info* so
 	struct hostport hp;
 
 	if (!t_calc_branch(t, branch, branch_buf, &len)) {
-		LOG(L_ERR, "ERROR: build_via: branch calculation failed\n");
+		LOG(L_ERR, "ERROR: assemble_via: branch calculation failed\n");
 		return -1;
 	}
 	
@@ -563,7 +562,7 @@ static inline int assemble_via(str* dest, struct cell* t, struct socket_info* so
 	set_hostport(&hp, 0);
 	via = via_builder(&via_len, sock, &branch_str, 0, sock->proto, &hp);
 	if (!via) {
-		LOG(L_ERR, "build_via: via building failed\n");
+		LOG(L_ERR, "assemble_via: via building failed\n");
 		return -2;
 	}
 	
@@ -650,7 +649,7 @@ static inline char* print_cseq(char* w, str* cseq, str* method, struct cell* t)
 {
 	t->cseq_n.s = w; 
 	/* don't include method name and CRLF -- subsequent
-	 * local reuqests ACK/CANCEl will add their own */
+	 * local requests ACK/CANCEL will add their own */
 	t->cseq_n.len = CSEQ_LEN + cseq->len; 
 	w = print_cseq_mini(w, cseq, method);
 	return w;

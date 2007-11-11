@@ -242,6 +242,7 @@ static unsigned long tce_get_pSeriesLP(struct iommu_table *tbl, long tcenum)
 	return tce_ret;
 }
 
+#ifdef CONFIG_PCI
 static void iommu_table_setparms(struct pci_controller *phb,
 				 struct device_node *dn,
 				 struct iommu_table *tbl)
@@ -252,8 +253,8 @@ static void iommu_table_setparms(struct pci_controller *phb,
 
 	node = (struct device_node *)phb->arch_data;
 
-	basep = get_property(node, "linux,tce-base", NULL);
-	sizep = get_property(node, "linux,tce-size", NULL);
+	basep = of_get_property(node, "linux,tce-base", NULL);
+	sizep = of_get_property(node, "linux,tce-size", NULL);
 	if (basep == NULL || sizep == NULL) {
 		printk(KERN_ERR "PCI_DMA: iommu_table_setparms: %s has "
 				"missing tce entries !\n", dn->full_name);
@@ -309,7 +310,7 @@ static void iommu_table_setparms_lpar(struct pci_controller *phb,
 	tbl->it_size = size >> IOMMU_PAGE_SHIFT;
 }
 
-static void iommu_bus_setup_pSeries(struct pci_bus *bus)
+static void pci_dma_bus_setup_pSeries(struct pci_bus *bus)
 {
 	struct device_node *dn;
 	struct iommu_table *tbl;
@@ -318,10 +319,9 @@ static void iommu_bus_setup_pSeries(struct pci_bus *bus)
 	struct pci_dn *pci;
 	int children;
 
-	DBG("iommu_bus_setup_pSeries, bus %p, bus->self %p\n", bus, bus->self);
-
 	dn = pci_bus_to_OF_node(bus);
-	pci = PCI_DN(dn);
+
+	DBG("pci_dma_bus_setup_pSeries: setting up bus %s\n", dn->full_name);
 
 	if (bus->self) {
 		/* This is not a root bus, any setup will be done for the
@@ -329,6 +329,7 @@ static void iommu_bus_setup_pSeries(struct pci_bus *bus)
 		 */
 		return;
 	}
+	pci = PCI_DN(dn);
 
 	/* Check if the ISA bus on the system is under
 	 * this PHB.
@@ -390,30 +391,34 @@ static void iommu_bus_setup_pSeries(struct pci_bus *bus)
 }
 
 
-static void iommu_bus_setup_pSeriesLP(struct pci_bus *bus)
+static void pci_dma_bus_setup_pSeriesLP(struct pci_bus *bus)
 {
 	struct iommu_table *tbl;
 	struct device_node *dn, *pdn;
 	struct pci_dn *ppci;
 	const void *dma_window = NULL;
 
-	DBG("iommu_bus_setup_pSeriesLP, bus %p, bus->self %p\n", bus, bus->self);
-
 	dn = pci_bus_to_OF_node(bus);
+
+	DBG("pci_dma_bus_setup_pSeriesLP: setting up bus %s\n", dn->full_name);
 
 	/* Find nearest ibm,dma-window, walking up the device tree */
 	for (pdn = dn; pdn != NULL; pdn = pdn->parent) {
-		dma_window = get_property(pdn, "ibm,dma-window", NULL);
+		dma_window = of_get_property(pdn, "ibm,dma-window", NULL);
 		if (dma_window != NULL)
 			break;
 	}
 
 	if (dma_window == NULL) {
-		DBG("iommu_bus_setup_pSeriesLP: bus %s seems to have no ibm,dma-window property\n", dn->full_name);
+		DBG("  no ibm,dma-window property !\n");
 		return;
 	}
 
 	ppci = PCI_DN(pdn);
+
+	DBG("  parent is %s, iommu_table: 0x%p\n",
+	    pdn->full_name, ppci->iommu_table);
+
 	if (!ppci->iommu_table) {
 		/* Bussubno hasn't been copied yet.
 		 * Do it now because iommu_table_setparms_lpar needs it.
@@ -427,6 +432,7 @@ static void iommu_bus_setup_pSeriesLP(struct pci_bus *bus)
 		iommu_table_setparms_lpar(ppci->phb, pdn, tbl, dma_window);
 
 		ppci->iommu_table = iommu_init_table(tbl, ppci->phb->node);
+		DBG("  created table: %p\n", ppci->iommu_table);
 	}
 
 	if (pdn != dn)
@@ -434,27 +440,28 @@ static void iommu_bus_setup_pSeriesLP(struct pci_bus *bus)
 }
 
 
-static void iommu_dev_setup_pSeries(struct pci_dev *dev)
+static void pci_dma_dev_setup_pSeries(struct pci_dev *dev)
 {
-	struct device_node *dn, *mydn;
+	struct device_node *dn;
 	struct iommu_table *tbl;
 
-	DBG("iommu_dev_setup_pSeries, dev %p (%s)\n", dev, pci_name(dev));
+	DBG("pci_dma_dev_setup_pSeries: %s\n", pci_name(dev));
 
-	mydn = dn = pci_device_to_OF_node(dev);
+	dn = dev->dev.archdata.of_node;
 
 	/* If we're the direct child of a root bus, then we need to allocate
 	 * an iommu table ourselves. The bus setup code should have setup
 	 * the window sizes already.
 	 */
 	if (!dev->bus->self) {
+		struct pci_controller *phb = PCI_DN(dn)->phb;
+
 		DBG(" --> first child, no bridge. Allocating iommu table.\n");
 		tbl = kmalloc_node(sizeof(struct iommu_table), GFP_KERNEL,
-				   PCI_DN(dn)->phb->node);
-		iommu_table_setparms(PCI_DN(dn)->phb, dn, tbl);
-		PCI_DN(dn)->iommu_table = iommu_init_table(tbl,
-						PCI_DN(dn)->phb->node);
-
+				   phb->node);
+		iommu_table_setparms(phb, dn, tbl);
+		PCI_DN(dn)->iommu_table = iommu_init_table(tbl, phb->node);
+		dev->dev.archdata.dma_data = PCI_DN(dn)->iommu_table;
 		return;
 	}
 
@@ -465,42 +472,21 @@ static void iommu_dev_setup_pSeries(struct pci_dev *dev)
 	while (dn && PCI_DN(dn) && PCI_DN(dn)->iommu_table == NULL)
 		dn = dn->parent;
 
-	if (dn && PCI_DN(dn)) {
-		PCI_DN(mydn)->iommu_table = PCI_DN(dn)->iommu_table;
-	} else {
-		DBG("iommu_dev_setup_pSeries, dev %p (%s) has no iommu table\n", dev, pci_name(dev));
-	}
+	if (dn && PCI_DN(dn))
+		dev->dev.archdata.dma_data = PCI_DN(dn)->iommu_table;
+	else
+		printk(KERN_WARNING "iommu: Device %s has no iommu table\n",
+		       pci_name(dev));
 }
 
-static int iommu_reconfig_notifier(struct notifier_block *nb, unsigned long action, void *node)
-{
-	int err = NOTIFY_OK;
-	struct device_node *np = node;
-	struct pci_dn *pci = PCI_DN(np);
-
-	switch (action) {
-	case PSERIES_RECONFIG_REMOVE:
-		if (pci && pci->iommu_table &&
-		    get_property(np, "ibm,dma-window", NULL))
-			iommu_free_table(np);
-		break;
-	default:
-		err = NOTIFY_DONE;
-		break;
-	}
-	return err;
-}
-
-static struct notifier_block iommu_reconfig_nb = {
-	.notifier_call = iommu_reconfig_notifier,
-};
-
-static void iommu_dev_setup_pSeriesLP(struct pci_dev *dev)
+static void pci_dma_dev_setup_pSeriesLP(struct pci_dev *dev)
 {
 	struct device_node *pdn, *dn;
 	struct iommu_table *tbl;
 	const void *dma_window = NULL;
 	struct pci_dn *pci;
+
+	DBG("pci_dma_dev_setup_pSeriesLP: %s\n", pci_name(dev));
 
 	/* dev setup for LPAR is a little tricky, since the device tree might
 	 * contain the dma-window properties per-device and not neccesarily
@@ -509,26 +495,30 @@ static void iommu_dev_setup_pSeriesLP(struct pci_dev *dev)
 	 * already allocated.
 	 */
 	dn = pci_device_to_OF_node(dev);
-
-	DBG("iommu_dev_setup_pSeriesLP, dev %p (%s) %s\n",
-	     dev, pci_name(dev), dn->full_name);
+	DBG("  node is %s\n", dn->full_name);
 
 	for (pdn = dn; pdn && PCI_DN(pdn) && !PCI_DN(pdn)->iommu_table;
 	     pdn = pdn->parent) {
-		dma_window = get_property(pdn, "ibm,dma-window", NULL);
+		dma_window = of_get_property(pdn, "ibm,dma-window", NULL);
 		if (dma_window)
 			break;
 	}
+
+	if (!pdn || !PCI_DN(pdn)) {
+		printk(KERN_WARNING "pci_dma_dev_setup_pSeriesLP: "
+		       "no DMA window found for pci dev=%s dn=%s\n",
+				 pci_name(dev), dn? dn->full_name : "<null>");
+		return;
+	}
+	DBG("  parent is %s\n", pdn->full_name);
 
 	/* Check for parent == NULL so we don't try to setup the empty EADS
 	 * slots on POWER4 machines.
 	 */
 	if (dma_window == NULL || pdn->parent == NULL) {
-		DBG("No dma window for device, linking to parent\n");
-		PCI_DN(dn)->iommu_table = PCI_DN(pdn)->iommu_table;
+		DBG("  no dma window for device, linking to parent\n");
+		dev->dev.archdata.dma_data = PCI_DN(pdn)->iommu_table;
 		return;
-	} else {
-		DBG("Found DMA window, allocating table\n");
 	}
 
 	pci = PCI_DN(pdn);
@@ -542,24 +532,51 @@ static void iommu_dev_setup_pSeriesLP(struct pci_dev *dev)
 		iommu_table_setparms_lpar(pci->phb, pdn, tbl, dma_window);
 
 		pci->iommu_table = iommu_init_table(tbl, pci->phb->node);
+		DBG("  created table: %p\n", pci->iommu_table);
+	} else {
+		DBG("  found DMA window, table: %p\n", pci->iommu_table);
 	}
 
-	if (pdn != dn)
-		PCI_DN(dn)->iommu_table = pci->iommu_table;
+	dev->dev.archdata.dma_data = pci->iommu_table;
+}
+#else  /* CONFIG_PCI */
+#define pci_dma_bus_setup_pSeries	NULL
+#define pci_dma_dev_setup_pSeries	NULL
+#define pci_dma_bus_setup_pSeriesLP	NULL
+#define pci_dma_dev_setup_pSeriesLP	NULL
+#endif /* !CONFIG_PCI */
+
+static int iommu_reconfig_notifier(struct notifier_block *nb, unsigned long action, void *node)
+{
+	int err = NOTIFY_OK;
+	struct device_node *np = node;
+	struct pci_dn *pci = PCI_DN(np);
+
+	switch (action) {
+	case PSERIES_RECONFIG_REMOVE:
+		if (pci && pci->iommu_table &&
+		    of_get_property(np, "ibm,dma-window", NULL))
+			iommu_free_table(np);
+		break;
+	default:
+		err = NOTIFY_DONE;
+		break;
+	}
+	return err;
 }
 
-static void iommu_bus_setup_null(struct pci_bus *b) { }
-static void iommu_dev_setup_null(struct pci_dev *d) { }
+static struct notifier_block iommu_reconfig_nb = {
+	.notifier_call = iommu_reconfig_notifier,
+};
 
 /* These are called very early. */
 void iommu_init_early_pSeries(void)
 {
-	if (of_chosen && get_property(of_chosen, "linux,iommu-off", NULL)) {
+	if (of_chosen && of_get_property(of_chosen, "linux,iommu-off", NULL)) {
 		/* Direct I/O, IOMMU off */
-		ppc_md.iommu_dev_setup = iommu_dev_setup_null;
-		ppc_md.iommu_bus_setup = iommu_bus_setup_null;
-		pci_direct_iommu_init();
-
+		ppc_md.pci_dma_dev_setup = NULL;
+		ppc_md.pci_dma_bus_setup = NULL;
+		set_pci_dma_ops(&dma_direct_ops);
 		return;
 	}
 
@@ -572,19 +589,19 @@ void iommu_init_early_pSeries(void)
 			ppc_md.tce_free	 = tce_free_pSeriesLP;
 		}
 		ppc_md.tce_get   = tce_get_pSeriesLP;
-		ppc_md.iommu_bus_setup = iommu_bus_setup_pSeriesLP;
-		ppc_md.iommu_dev_setup = iommu_dev_setup_pSeriesLP;
+		ppc_md.pci_dma_bus_setup = pci_dma_bus_setup_pSeriesLP;
+		ppc_md.pci_dma_dev_setup = pci_dma_dev_setup_pSeriesLP;
 	} else {
 		ppc_md.tce_build = tce_build_pSeries;
 		ppc_md.tce_free  = tce_free_pSeries;
 		ppc_md.tce_get   = tce_get_pseries;
-		ppc_md.iommu_bus_setup = iommu_bus_setup_pSeries;
-		ppc_md.iommu_dev_setup = iommu_dev_setup_pSeries;
+		ppc_md.pci_dma_bus_setup = pci_dma_bus_setup_pSeries;
+		ppc_md.pci_dma_dev_setup = pci_dma_dev_setup_pSeries;
 	}
 
 
 	pSeries_reconfig_notifier_register(&iommu_reconfig_nb);
 
-	pci_iommu_init();
+	set_pci_dma_ops(&dma_iommu_ops);
 }
 

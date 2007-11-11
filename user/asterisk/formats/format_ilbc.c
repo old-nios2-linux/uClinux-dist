@@ -1,124 +1,57 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
- *
- * Save to raw, headerless iLBC data.
+ * Asterisk -- An open source telephony toolkit.
  *
  * Brian K. West <brian@bkw.org>
  * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Save to raw, headerless iLBC data.
+ * \arg File name extension: ilbc
+ * \ingroup formats
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/channel.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/sched.h>
-#include <asterisk/module.h>
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
+#include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#ifdef __linux__
-#include <endian.h>
-#else
-#include <machine/endian.h>
-#endif
+
+#include "asterisk/lock.h"
+#include "asterisk/channel.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/sched.h"
+#include "asterisk/module.h"
+#include "asterisk/endian.h"
 
 /* Some Ideas for this code came from makeg729e.c by Jeffrey Chilton */
 
 /* Portions of the conversion code are by guido@sienanet.it */
 
-struct ast_filestream {
-	void *reserved[AST_RESERVED_POINTERS];
-	/* Believe it or not, we must decode/recode to account for the
-	   weird MS format */
-	/* This is what a filestream means to us */
-	int fd; /* Descriptor */
-	struct ast_frame fr;				/* Frame information */
-	char waste[AST_FRIENDLY_OFFSET];	/* Buffer for sending frames, etc */
-	char empty;							/* Empty character */
-	unsigned char ilbc[50];				/* One Real iLBC Frame */
-};
-
-
-AST_MUTEX_DEFINE_STATIC(ilbc_lock);
-static int glistcnt = 0;
-
-static char *name = "iLBC";
-static char *desc = "Raw iLBC data";
-static char *exts = "ilbc";
-
-static struct ast_filestream *ilbc_open(int fd)
-{
-	/* We don't have any header to read or anything really, but
-	   if we did, it would go here.  We also might want to check
-	   and be sure it's a valid file.  */
-	struct ast_filestream *tmp;
-	if ((tmp = malloc(sizeof(struct ast_filestream)))) {
-		memset(tmp, 0, sizeof(struct ast_filestream));
-		if (ast_mutex_lock(&ilbc_lock)) {
-			ast_log(LOG_WARNING, "Unable to lock ilbc list\n");
-			free(tmp);
-			return NULL;
-		}
-		tmp->fd = fd;
-		tmp->fr.data = tmp->ilbc;
-		tmp->fr.frametype = AST_FRAME_VOICE;
-		tmp->fr.subclass = AST_FORMAT_ILBC;
-		/* datalen will vary for each frame */
-		tmp->fr.src = name;
-		tmp->fr.mallocd = 0;
-		glistcnt++;
-		ast_mutex_unlock(&ilbc_lock);
-		ast_update_use_count();
-	}
-	return tmp;
-}
-
-static struct ast_filestream *ilbc_rewrite(int fd, char *comment)
-{
-	/* We don't have any header to read or anything really, but
-	   if we did, it would go here.  We also might want to check
-	   and be sure it's a valid file.  */
-	struct ast_filestream *tmp;
-	if ((tmp = malloc(sizeof(struct ast_filestream)))) {
-		memset(tmp, 0, sizeof(struct ast_filestream));
-		if (ast_mutex_lock(&ilbc_lock)) {
-			ast_log(LOG_WARNING, "Unable to lock ilbc list\n");
-			free(tmp);
-			return NULL;
-		}
-		tmp->fd = fd;
-		glistcnt++;
-		ast_mutex_unlock(&ilbc_lock);
-		ast_update_use_count();
-	} else
-		ast_log(LOG_WARNING, "Out of memory\n");
-	return tmp;
-}
-
-static void ilbc_close(struct ast_filestream *s)
-{
-	if (ast_mutex_lock(&ilbc_lock)) {
-		ast_log(LOG_WARNING, "Unable to lock ilbc list\n");
-		return;
-	}
-	glistcnt--;
-	ast_mutex_unlock(&ilbc_lock);
-	ast_update_use_count();
-	close(s->fd);
-	free(s);
-	s = NULL;
-}
+#define	ILBC_BUF_SIZE	50	/* One Real iLBC Frame */
+#define	ILBC_SAMPLES	240
 
 static struct ast_frame *ilbc_read(struct ast_filestream *s, int *whennext)
 {
@@ -126,17 +59,14 @@ static struct ast_frame *ilbc_read(struct ast_filestream *s, int *whennext)
 	/* Send a frame from the file to the appropriate channel */
 	s->fr.frametype = AST_FRAME_VOICE;
 	s->fr.subclass = AST_FORMAT_ILBC;
-	s->fr.offset = AST_FRIENDLY_OFFSET;
-	s->fr.samples = 240;
-	s->fr.datalen = 50;
 	s->fr.mallocd = 0;
-	s->fr.data = s->ilbc;
-	if ((res = read(s->fd, s->ilbc, 50)) != 50) {
+	AST_FRAME_SET_BUFFER(&s->fr, s->buf, AST_FRIENDLY_OFFSET, ILBC_BUF_SIZE);
+	if ((res = fread(s->fr.data, 1, s->fr.datalen, s->f)) != s->fr.datalen) {
 		if (res)
 			ast_log(LOG_WARNING, "Short read (%d) (%s)!\n", res, strerror(errno));
 		return NULL;
 	}
-	*whennext = s->fr.samples;
+	*whennext = s->fr.samples = ILBC_SAMPLES;
 	return &s->fr;
 }
 
@@ -155,27 +85,23 @@ static int ilbc_write(struct ast_filestream *fs, struct ast_frame *f)
 		ast_log(LOG_WARNING, "Invalid data length, %d, should be multiple of 50\n", f->datalen);
 		return -1;
 	}
-	if ((res = write(fs->fd, f->data, f->datalen)) != f->datalen) {
+	if ((res = fwrite(f->data, 1, f->datalen, fs->f)) != f->datalen) {
 			ast_log(LOG_WARNING, "Bad write (%d/50): %s\n", res, strerror(errno));
 			return -1;
 	}
 	return 0;
 }
 
-static char *ilbc_getcomment(struct ast_filestream *s)
-{
-	return NULL;
-}
-
-static int ilbc_seek(struct ast_filestream *fs, long sample_offset, int whence)
+static int ilbc_seek(struct ast_filestream *fs, off_t sample_offset, int whence)
 {
 	long bytes;
 	off_t min,cur,max,offset=0;
 	min = 0;
-	cur = lseek(fs->fd, 0, SEEK_CUR);
-	max = lseek(fs->fd, 0, SEEK_END);
+	cur = ftello(fs->f);
+	fseeko(fs->f, 0, SEEK_END);
+	max = ftello(fs->f);
 	
-	bytes = 50 * (sample_offset / 240);
+	bytes = ILBC_BUF_SIZE * (sample_offset / ILBC_SAMPLES);
 	if (whence == SEEK_SET)
 		offset = bytes;
 	else if (whence == SEEK_CUR || whence == SEEK_FORCECUR)
@@ -185,9 +111,9 @@ static int ilbc_seek(struct ast_filestream *fs, long sample_offset, int whence)
 	if (whence != SEEK_FORCECUR) {
 		offset = (offset > max)?max:offset;
 	}
-	// protect against seeking beyond begining.
+	/* protect against seeking beyond begining. */
 	offset = (offset < min)?min:offset;
-	if (lseek(fs->fd, offset, SEEK_SET) < 0)
+	if (fseeko(fs->f, offset, SEEK_SET) < 0)
 		return -1;
 	return 0;
 }
@@ -195,58 +121,37 @@ static int ilbc_seek(struct ast_filestream *fs, long sample_offset, int whence)
 static int ilbc_trunc(struct ast_filestream *fs)
 {
 	/* Truncate file to current length */
-	if (ftruncate(fs->fd, lseek(fs->fd, 0, SEEK_CUR)) < 0)
+	if (ftruncate(fileno(fs->f), ftello(fs->f)) < 0)
 		return -1;
 	return 0;
 }
 
-static long ilbc_tell(struct ast_filestream *fs)
+static off_t ilbc_tell(struct ast_filestream *fs)
 {
-	off_t offset;
-	offset = lseek(fs->fd, 0, SEEK_CUR);
-	return (offset/50)*240;
+	off_t offset = ftello(fs->f);
+	return (offset/ILBC_BUF_SIZE)*ILBC_SAMPLES;
 }
 
-int load_module()
+static const struct ast_format ilbc_f = {
+	.name = "iLBC",
+	.exts = "ilbc",
+	.format = AST_FORMAT_ILBC,
+	.write = ilbc_write,
+	.seek = ilbc_seek,
+	.trunc = ilbc_trunc,
+	.tell = ilbc_tell,
+	.read = ilbc_read,
+	.buf_size = ILBC_BUF_SIZE + AST_FRIENDLY_OFFSET,
+};
+
+static int load_module(void)
 {
-	return ast_format_register(name, exts, AST_FORMAT_ILBC,
-								ilbc_open,
-								ilbc_rewrite,
-								ilbc_write,
-								ilbc_seek,
-								ilbc_trunc,
-								ilbc_tell,
-								ilbc_read,
-								ilbc_close,
-								ilbc_getcomment);
-								
-								
+	return ast_format_register(&ilbc_f);
 }
 
-int unload_module()
+static int unload_module(void)
 {
-	return ast_format_unregister(name);
+	return ast_format_unregister(ilbc_f.name);
 }	
 
-int usecount()
-{
-	int res;
-	if (ast_mutex_lock(&ilbc_lock)) {
-		ast_log(LOG_WARNING, "Unable to lock ilbc list\n");
-		return -1;
-	}
-	res = glistcnt;
-	ast_mutex_unlock(&ilbc_lock);
-	return res;
-}
-
-char *description()
-{
-	return desc;
-}
-
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Raw iLBC data");

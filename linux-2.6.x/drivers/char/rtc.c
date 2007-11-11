@@ -82,16 +82,13 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-#if defined(__i386__)
+#ifdef CONFIG_X86
 #include <asm/hpet.h>
 #endif
 
-#ifdef __sparc__
+#ifdef CONFIG_SPARC32
 #include <linux/pci.h>
 #include <asm/ebus.h>
-#ifdef __sparc_v9__
-#include <asm/isa.h>
-#endif
 
 static unsigned long rtc_port;
 static int rtc_irq = PCI_IRQ_NONE;
@@ -115,7 +112,12 @@ static int rtc_has_irq = 1;
 #define hpet_set_rtc_irq_bit(arg) 		0
 #define hpet_rtc_timer_init() 			do { } while (0)
 #define hpet_rtc_dropped_irq() 			0
-static inline irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id) {return 0;}
+#ifdef RTC_IRQ
+static irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id)
+{
+	return 0;
+}
+#endif
 #else
 extern irqreturn_t hpet_rtc_interrupt(int irq, void *dev_id);
 #endif
@@ -132,7 +134,9 @@ static struct fasync_struct *rtc_async_queue;
 static DECLARE_WAIT_QUEUE_HEAD(rtc_wait);
 
 #ifdef RTC_IRQ
-static struct timer_list rtc_irq_timer;
+static void rtc_dropped_irq(unsigned long data);
+
+static DEFINE_TIMER(rtc_irq_timer, rtc_dropped_irq, 0, 0);
 #endif
 
 static ssize_t rtc_read(struct file *file, char __user *buf,
@@ -147,8 +151,6 @@ static unsigned int rtc_poll(struct file *file, poll_table *wait);
 
 static void get_rtc_alm_time (struct rtc_time *alm_tm);
 #ifdef RTC_IRQ
-static void rtc_dropped_irq(unsigned long data);
-
 static void set_rtc_irq_bit_locked(unsigned char bit);
 static void mask_rtc_irq_bit_locked(unsigned char bit);
 
@@ -167,7 +169,9 @@ static void mask_rtc_irq_bit(unsigned char bit)
 }
 #endif
 
+#ifdef CONFIG_PROC_FS
 static int rtc_proc_open(struct inode *inode, struct file *file);
+#endif
 
 /*
  *	Bits in rtc_status. (6 bits of room for future expansion)
@@ -277,7 +281,7 @@ irqreturn_t rtc_interrupt(int irq, void *dev_id)
  */
 static ctl_table rtc_table[] = {
 	{
-		.ctl_name	= 1,
+		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "max-user-freq",
 		.data		= &rtc_max_user_freq,
 		.maxlen		= sizeof(int),
@@ -289,9 +293,8 @@ static ctl_table rtc_table[] = {
 
 static ctl_table rtc_root[] = {
 	{
-		.ctl_name	= 1,
+		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "rtc",
-		.maxlen		= 0,
 		.mode		= 0555,
 		.child		= rtc_table,
 	},
@@ -302,7 +305,6 @@ static ctl_table dev_root[] = {
 	{
 		.ctl_name	= CTL_DEV,
 		.procname	= "dev",
-		.maxlen		= 0,
 		.mode		= 0555,
 		.child		= rtc_root,
 	},
@@ -313,7 +315,7 @@ static struct ctl_table_header *sysctl_header;
 
 static int __init init_sysctl(void)
 {
-    sysctl_header = register_sysctl_table(dev_root, 0);
+    sysctl_header = register_sysctl_table(dev_root);
     return 0;
 }
 
@@ -385,7 +387,7 @@ static ssize_t rtc_read(struct file *file, char __user *buf,
 	if (!retval)
 		retval = count;
  out:
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&rtc_wait, &wait);
 
 	return retval;
@@ -447,8 +449,8 @@ static int rtc_do_ioctl(unsigned int cmd, unsigned long arg, int kernel)
 
 		spin_lock_irqsave (&rtc_lock, flags);
 		if (!(rtc_status & RTC_TIMER_ON)) {
-			rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
-			add_timer(&rtc_irq_timer);
+			mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq +
+					2*HZ/100);
 			rtc_status |= RTC_TIMER_ON;
 		}
 		set_rtc_irq_bit_locked(RTC_PIE);
@@ -906,6 +908,7 @@ static struct miscdevice rtc_dev = {
 	.fops		= &rtc_fops,
 };
 
+#ifdef CONFIG_PROC_FS
 static const struct file_operations rtc_proc_fops = {
 	.owner = THIS_MODULE,
 	.open = rtc_proc_open,
@@ -913,31 +916,28 @@ static const struct file_operations rtc_proc_fops = {
 	.llseek = seq_lseek,
 	.release = single_release,
 };
-
-#if defined(RTC_IRQ) && !defined(__sparc__)
-static irq_handler_t rtc_int_handler_ptr;
 #endif
 
 static int __init rtc_init(void)
 {
+#ifdef CONFIG_PROC_FS
 	struct proc_dir_entry *ent;
+#endif
 #if defined(__alpha__) || defined(__mips__)
 	unsigned int year, ctrl;
 	char *guess = NULL;
 #endif
-#ifdef __sparc__
+#ifdef CONFIG_SPARC32
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
-#ifdef __sparc_v9__
-	struct sparc_isa_bridge *isa_br;
-	struct sparc_isa_device *isa_dev;
-#endif
-#endif
-#ifndef __sparc__
+#else
 	void *r;
+#ifdef RTC_IRQ
+	irq_handler_t rtc_int_handler_ptr;
+#endif
 #endif
 
-#ifdef __sparc__
+#ifdef CONFIG_SPARC32
 	for_each_ebus(ebus) {
 		for_each_ebusdev(edev, ebus) {
 			if(strcmp(edev->prom_node->name, "rtc") == 0) {
@@ -947,17 +947,7 @@ static int __init rtc_init(void)
 			}
 		}
 	}
-#ifdef __sparc_v9__
-	for_each_isa(isa_br) {
-		for_each_isadev(isa_dev, isa_br) {
-			if (strcmp(isa_dev->prom_node->name, "rtc") == 0) {
-				rtc_port = isa_dev->resource.start;
-				rtc_irq = isa_dev->irq;
-				goto found;
-			}
-		}
-	}
-#endif
+	rtc_has_irq = 0;
 	printk(KERN_ERR "rtc_init: no PC rtc found\n");
 	return -EIO;
 
@@ -972,6 +962,7 @@ found:
 	 * PCI Slot 2 INTA# (and some INTx# in Slot 1).
 	 */
 	if (request_irq(rtc_irq, rtc_interrupt, IRQF_SHARED, "rtc", (void *)&rtc_port)) {
+		rtc_has_irq = 0;
 		printk(KERN_ERR "rtc: cannot register IRQ %d\n", rtc_irq);
 		return -EIO;
 	}
@@ -982,6 +973,9 @@ no_irq:
 	else
 		r = request_mem_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
 	if (!r) {
+#ifdef RTC_IRQ
+		rtc_has_irq = 0;
+#endif
 		printk(KERN_ERR "rtc: I/O resource %lx is not free.\n",
 		       (long)(RTC_PORT(0)));
 		return -EIO;
@@ -996,6 +990,7 @@ no_irq:
 
 	if(request_irq(RTC_IRQ, rtc_int_handler_ptr, IRQF_DISABLED, "rtc", NULL)) {
 		/* Yeah right, seeing as irq 8 doesn't even hit the bus. */
+		rtc_has_irq = 0;
 		printk(KERN_ERR "rtc: IRQ %d is not free.\n", RTC_IRQ);
 		if (RTC_IOMAPPED)
 			release_region(RTC_PORT(0), RTC_IO_EXTENT);
@@ -1007,26 +1002,24 @@ no_irq:
 
 #endif
 
-#endif /* __sparc__ vs. others */
+#endif /* CONFIG_SPARC32 vs. others */
 
 	if (misc_register(&rtc_dev)) {
 #ifdef RTC_IRQ
 		free_irq(RTC_IRQ, NULL);
+		rtc_has_irq = 0;
 #endif
 		release_region(RTC_PORT(0), RTC_IO_EXTENT);
 		return -ENODEV;
 	}
 
+#ifdef CONFIG_PROC_FS
 	ent = create_proc_entry("driver/rtc", 0, NULL);
-	if (!ent) {
-#ifdef RTC_IRQ
-		free_irq(RTC_IRQ, NULL);
+	if (ent)
+		ent->proc_fops = &rtc_proc_fops;
+	else
+		printk(KERN_WARNING "rtc: Failed to register with procfs.\n");
 #endif
-		release_region(RTC_PORT(0), RTC_IO_EXTENT);
-		misc_deregister(&rtc_dev);
-		return -ENOMEM;
-	}
-	ent->proc_fops = &rtc_proc_fops;
 
 #if defined(__alpha__) || defined(__mips__)
 	rtc_freq = HZ;
@@ -1071,8 +1064,6 @@ no_irq:
 	if (rtc_has_irq == 0)
 		goto no_irq2;
 
-	init_timer(&rtc_irq_timer);
-	rtc_irq_timer.function = rtc_dropped_irq;
 	spin_lock_irq(&rtc_lock);
 	rtc_freq = 1024;
 	if (!hpet_set_periodic_freq(rtc_freq)) {
@@ -1096,7 +1087,7 @@ static void __exit rtc_exit (void)
 	remove_proc_entry ("driver/rtc", NULL);
 	misc_deregister(&rtc_dev);
 
-#ifdef __sparc__
+#ifdef CONFIG_SPARC32
 	if (rtc_has_irq)
 		free_irq (rtc_irq, &rtc_port);
 #else
@@ -1108,7 +1099,7 @@ static void __exit rtc_exit (void)
 	if (rtc_has_irq)
 		free_irq (RTC_IRQ, NULL);
 #endif
-#endif /* __sparc__ */
+#endif /* CONFIG_SPARC32 */
 }
 
 module_init(rtc_init);
@@ -1150,7 +1141,8 @@ static void rtc_dropped_irq(unsigned long data)
 
 	spin_unlock_irq(&rtc_lock);
 
-	printk(KERN_WARNING "rtc: lost some interrupts at %ldHz.\n", freq);
+	if (printk_ratelimit())
+		printk(KERN_WARNING "rtc: lost some interrupts at %ldHz.\n", freq);
 
 	/* Now we have new data */
 	wake_up_interruptible(&rtc_wait);
@@ -1159,6 +1151,7 @@ static void rtc_dropped_irq(unsigned long data)
 }
 #endif
 
+#ifdef CONFIG_PROC_FS
 /*
  *	Info exported via "/proc/driver/rtc".
  */
@@ -1243,6 +1236,7 @@ static int rtc_proc_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, rtc_proc_show, NULL);
 }
+#endif
 
 void rtc_get_rtc_time(struct rtc_time *rtc_tm)
 {

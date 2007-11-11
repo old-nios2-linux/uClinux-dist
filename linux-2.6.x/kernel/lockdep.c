@@ -5,7 +5,8 @@
  *
  * Started by Ingo Molnar:
  *
- *  Copyright (C) 2006 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
+ *  Copyright (C) 2006,2007 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
+ *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra <pzijlstr@redhat.com>
  *
  * this code maps all the lock dependencies as they occur in a live kernel
  * and will warn about the following classes of locking bugs:
@@ -37,40 +38,78 @@
 #include <linux/debug_locks.h>
 #include <linux/irqflags.h>
 #include <linux/utsname.h>
+#include <linux/hash.h>
 
 #include <asm/sections.h>
 
 #include "lockdep_internals.h"
 
+#ifdef CONFIG_PROVE_LOCKING
+int prove_locking = 1;
+module_param(prove_locking, int, 0644);
+#else
+#define prove_locking 0
+#endif
+
+#ifdef CONFIG_LOCK_STAT
+int lock_stat = 1;
+module_param(lock_stat, int, 0644);
+#else
+#define lock_stat 0
+#endif
+
 /*
- * hash_lock: protects the lockdep hashes and class/list/hash allocators.
+ * lockdep_lock: protects the lockdep graph, the hashes and the
+ *               class/list/hash allocators.
  *
  * This is one of the rare exceptions where it's justified
  * to use a raw spinlock - we really dont want the spinlock
- * code to recurse back into the lockdep code.
+ * code to recurse back into the lockdep code...
  */
-static raw_spinlock_t hash_lock = (raw_spinlock_t)__RAW_SPIN_LOCK_UNLOCKED;
+static raw_spinlock_t lockdep_lock = (raw_spinlock_t)__RAW_SPIN_LOCK_UNLOCKED;
+
+static int graph_lock(void)
+{
+	__raw_spin_lock(&lockdep_lock);
+	/*
+	 * Make sure that if another CPU detected a bug while
+	 * walking the graph we dont change it (while the other
+	 * CPU is busy printing out stuff with the graph lock
+	 * dropped already)
+	 */
+	if (!debug_locks) {
+		__raw_spin_unlock(&lockdep_lock);
+		return 0;
+	}
+	return 1;
+}
+
+static inline int graph_unlock(void)
+{
+	if (debug_locks && !__raw_spin_is_locked(&lockdep_lock))
+		return DEBUG_LOCKS_WARN_ON(1);
+
+	__raw_spin_unlock(&lockdep_lock);
+	return 0;
+}
+
+/*
+ * Turn lock debugging off and return with 0 if it was off already,
+ * and also release the graph lock:
+ */
+static inline int debug_locks_off_graph_unlock(void)
+{
+	int ret = debug_locks_off();
+
+	__raw_spin_unlock(&lockdep_lock);
+
+	return ret;
+}
 
 static int lockdep_initialized;
 
 unsigned long nr_list_entries;
 static struct lock_list list_entries[MAX_LOCKDEP_ENTRIES];
-
-/*
- * Allocate a lockdep entry. (assumes hash_lock held, returns
- * with NULL on failure)
- */
-static struct lock_list *alloc_list_entry(void)
-{
-	if (nr_list_entries >= MAX_LOCKDEP_ENTRIES) {
-		__raw_spin_unlock(&hash_lock);
-		debug_locks_off();
-		printk("BUG: MAX_LOCKDEP_ENTRIES too low!\n");
-		printk("turning off the locking correctness validator.\n");
-		return NULL;
-	}
-	return list_entries + nr_list_entries++;
-}
 
 /*
  * All data structures here are protected by the global debug_lock.
@@ -80,6 +119,117 @@ static struct lock_list *alloc_list_entry(void)
  */
 unsigned long nr_lock_classes;
 static struct lock_class lock_classes[MAX_LOCKDEP_KEYS];
+
+#ifdef CONFIG_LOCK_STAT
+static DEFINE_PER_CPU(struct lock_class_stats[MAX_LOCKDEP_KEYS], lock_stats);
+
+static int lock_contention_point(struct lock_class *class, unsigned long ip)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(class->contention_point); i++) {
+		if (class->contention_point[i] == 0) {
+			class->contention_point[i] = ip;
+			break;
+		}
+		if (class->contention_point[i] == ip)
+			break;
+	}
+
+	return i;
+}
+
+static void lock_time_inc(struct lock_time *lt, s64 time)
+{
+	if (time > lt->max)
+		lt->max = time;
+
+	if (time < lt->min || !lt->min)
+		lt->min = time;
+
+	lt->total += time;
+	lt->nr++;
+}
+
+static inline void lock_time_add(struct lock_time *src, struct lock_time *dst)
+{
+	dst->min += src->min;
+	dst->max += src->max;
+	dst->total += src->total;
+	dst->nr += src->nr;
+}
+
+struct lock_class_stats lock_stats(struct lock_class *class)
+{
+	struct lock_class_stats stats;
+	int cpu, i;
+
+	memset(&stats, 0, sizeof(struct lock_class_stats));
+	for_each_possible_cpu(cpu) {
+		struct lock_class_stats *pcs =
+			&per_cpu(lock_stats, cpu)[class - lock_classes];
+
+		for (i = 0; i < ARRAY_SIZE(stats.contention_point); i++)
+			stats.contention_point[i] += pcs->contention_point[i];
+
+		lock_time_add(&pcs->read_waittime, &stats.read_waittime);
+		lock_time_add(&pcs->write_waittime, &stats.write_waittime);
+
+		lock_time_add(&pcs->read_holdtime, &stats.read_holdtime);
+		lock_time_add(&pcs->write_holdtime, &stats.write_holdtime);
+
+		for (i = 0; i < ARRAY_SIZE(stats.bounces); i++)
+			stats.bounces[i] += pcs->bounces[i];
+	}
+
+	return stats;
+}
+
+void clear_lock_stats(struct lock_class *class)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct lock_class_stats *cpu_stats =
+			&per_cpu(lock_stats, cpu)[class - lock_classes];
+
+		memset(cpu_stats, 0, sizeof(struct lock_class_stats));
+	}
+	memset(class->contention_point, 0, sizeof(class->contention_point));
+}
+
+static struct lock_class_stats *get_lock_stats(struct lock_class *class)
+{
+	return &get_cpu_var(lock_stats)[class - lock_classes];
+}
+
+static void put_lock_stats(struct lock_class_stats *stats)
+{
+	put_cpu_var(lock_stats);
+}
+
+static void lock_release_holdtime(struct held_lock *hlock)
+{
+	struct lock_class_stats *stats;
+	s64 holdtime;
+
+	if (!lock_stat)
+		return;
+
+	holdtime = sched_clock() - hlock->holdtime_stamp;
+
+	stats = get_lock_stats(hlock->class);
+	if (hlock->read)
+		lock_time_inc(&stats->read_holdtime, holdtime);
+	else
+		lock_time_inc(&stats->write_holdtime, holdtime);
+	put_lock_stats(stats);
+}
+#else
+static inline void lock_release_holdtime(struct held_lock *hlock)
+{
+}
+#endif
 
 /*
  * We keep a global list of all lock classes. The list only grows,
@@ -93,14 +243,10 @@ LIST_HEAD(all_lock_classes);
  */
 #define CLASSHASH_BITS		(MAX_LOCKDEP_KEYS_BITS - 1)
 #define CLASSHASH_SIZE		(1UL << CLASSHASH_BITS)
-#define CLASSHASH_MASK		(CLASSHASH_SIZE - 1)
-#define __classhashfn(key)	((((unsigned long)key >> CLASSHASH_BITS) + (unsigned long)key) & CLASSHASH_MASK)
+#define __classhashfn(key)	hash_long((unsigned long)key, CLASSHASH_BITS)
 #define classhashentry(key)	(classhash_table + __classhashfn((key)))
 
 static struct list_head classhash_table[CLASSHASH_SIZE];
-
-unsigned long nr_lock_chains;
-static struct lock_chain lock_chains[MAX_LOCKDEP_CHAINS];
 
 /*
  * We put the lock dependency chains into a hash-table as well, to cache
@@ -108,9 +254,7 @@ static struct lock_chain lock_chains[MAX_LOCKDEP_CHAINS];
  */
 #define CHAINHASH_BITS		(MAX_LOCKDEP_CHAINS_BITS-1)
 #define CHAINHASH_SIZE		(1UL << CHAINHASH_BITS)
-#define CHAINHASH_MASK		(CHAINHASH_SIZE - 1)
-#define __chainhashfn(chain) \
-		(((chain >> CHAINHASH_BITS) + chain) & CHAINHASH_MASK)
+#define __chainhashfn(chain)	hash_long(chain, CHAINHASH_BITS)
 #define chainhashentry(chain)	(chainhash_table + __chainhashfn((chain)))
 
 static struct list_head chainhash_table[CHAINHASH_SIZE];
@@ -140,21 +284,12 @@ void lockdep_on(void)
 
 EXPORT_SYMBOL(lockdep_on);
 
-int lockdep_internal(void)
-{
-	return current->lockdep_recursion != 0;
-}
-
-EXPORT_SYMBOL(lockdep_internal);
-
 /*
  * Debugging switches:
  */
 
 #define VERBOSE			0
-#ifdef VERBOSE
-# define VERY_VERBOSE		0
-#endif
+#define VERY_VERBOSE		0
 
 #if VERBOSE
 # define HARDIRQ_VERBOSE	1
@@ -179,8 +314,8 @@ static int class_filter(struct lock_class *class)
 			!strcmp(class->name, "&struct->lockfield"))
 		return 1;
 #endif
-	/* Allow everything else. 0 would be filter everything else */
-	return 1;
+	/* Filter everything else. 1 would be to allow everything else */
+	return 0;
 }
 #endif
 
@@ -192,29 +327,9 @@ static int verbose(struct lock_class *class)
 	return 0;
 }
 
-#ifdef CONFIG_TRACE_IRQFLAGS
-
-static int hardirq_verbose(struct lock_class *class)
-{
-#if HARDIRQ_VERBOSE
-	return class_filter(class);
-#endif
-	return 0;
-}
-
-static int softirq_verbose(struct lock_class *class)
-{
-#if SOFTIRQ_VERBOSE
-	return class_filter(class);
-#endif
-	return 0;
-}
-
-#endif
-
 /*
  * Stack-trace: tightly packed array of stack backtrace
- * addresses. Protected by the hash_lock.
+ * addresses. Protected by the graph_lock.
  */
 unsigned long nr_stack_trace_entries;
 static unsigned long stack_trace[MAX_STACK_TRACE_ENTRIES];
@@ -226,27 +341,21 @@ static int save_trace(struct stack_trace *trace)
 	trace->entries = stack_trace + nr_stack_trace_entries;
 
 	trace->skip = 3;
-	trace->all_contexts = 0;
 
-	/* Make sure to not recurse in case the the unwinder needs to tak
-e	   locks. */
-	lockdep_off();
-	save_stack_trace(trace, NULL);
-	lockdep_on();
+	save_stack_trace(trace);
 
 	trace->max_entries = trace->nr_entries;
 
 	nr_stack_trace_entries += trace->nr_entries;
-	if (DEBUG_LOCKS_WARN_ON(nr_stack_trace_entries > MAX_STACK_TRACE_ENTRIES))
-		return 0;
 
 	if (nr_stack_trace_entries == MAX_STACK_TRACE_ENTRIES) {
-		__raw_spin_unlock(&hash_lock);
-		if (debug_locks_off()) {
-			printk("BUG: MAX_STACK_TRACE_ENTRIES too low!\n");
-			printk("turning off the locking correctness validator.\n");
-			dump_stack();
-		}
+		if (!debug_locks_off_graph_unlock())
+			return 0;
+
+		printk("BUG: MAX_STACK_TRACE_ENTRIES too low!\n");
+		printk("turning off the locking correctness validator.\n");
+		dump_stack();
+
 		return 0;
 	}
 
@@ -266,6 +375,11 @@ unsigned int max_recursion_depth;
  * about it later on, in lockdep_info().
  */
 static int lockdep_init_error;
+static unsigned long lockdep_init_trace_data[20];
+static struct stack_trace lockdep_init_trace = {
+	.max_entries = ARRAY_SIZE(lockdep_init_trace_data),
+	.entries = lockdep_init_trace_data,
+};
 
 /*
  * Various lockdep statistics:
@@ -315,10 +429,7 @@ static const char *usage_str[] =
 
 const char * __get_key_name(struct lockdep_subclass_key *key, char *str)
 {
-	unsigned long offs, size;
-	char *modname;
-
-	return kallsyms_lookup((unsigned long)key, &size, &offs, &modname, str);
+	return kallsyms_lookup((unsigned long)key, NULL, NULL, NULL, str);
 }
 
 void
@@ -357,7 +468,7 @@ get_usage_chars(struct lock_class *class, char *c1, char *c2, char *c3, char *c4
 
 static void print_lock_name(struct lock_class *class)
 {
-	char str[128], c1, c2, c3, c4;
+	char str[KSYM_NAME_LEN], c1, c2, c3, c4;
 	const char *name;
 
 	get_usage_chars(class, &c1, &c2, &c3, &c4);
@@ -379,7 +490,7 @@ static void print_lock_name(struct lock_class *class)
 static void print_lockdep_cache(struct lockdep_map *lock)
 {
 	const char *name;
-	char str[128];
+	char str[KSYM_NAME_LEN];
 
 	name = lock->name;
 	if (!name)
@@ -449,71 +560,15 @@ static void print_lock_dependencies(struct lock_class *class, int depth)
 	print_lock_class_header(class, depth);
 
 	list_for_each_entry(entry, &class->locks_after, entry) {
-		DEBUG_LOCKS_WARN_ON(!entry->class);
+		if (DEBUG_LOCKS_WARN_ON(!entry->class))
+			return;
+
 		print_lock_dependencies(entry->class, depth + 1);
 
 		printk("%*s ... acquired at:\n",depth,"");
 		print_stack_trace(&entry->trace, 2);
 		printk("\n");
 	}
-}
-
-/*
- * Add a new dependency to the head of the list:
- */
-static int add_lock_to_list(struct lock_class *class, struct lock_class *this,
-			    struct list_head *head, unsigned long ip)
-{
-	struct lock_list *entry;
-	/*
-	 * Lock not present yet - get a new dependency struct and
-	 * add it to the list:
-	 */
-	entry = alloc_list_entry();
-	if (!entry)
-		return 0;
-
-	entry->class = this;
-	save_trace(&entry->trace);
-
-	/*
-	 * Since we never remove from the dependency list, the list can
-	 * be walked lockless by other CPUs, it's only allocation
-	 * that must be protected by the spinlock. But this also means
-	 * we must make new entries visible only once writes to the
-	 * entry become visible - hence the RCU op:
-	 */
-	list_add_tail_rcu(&entry->entry, head);
-
-	return 1;
-}
-
-/*
- * Recursive, forwards-direction lock-dependency checking, used for
- * both noncyclic checking and for hardirq-unsafe/softirq-unsafe
- * checking.
- *
- * (to keep the stackframe of the recursive functions small we
- *  use these global variables, and we also mark various helper
- *  functions as noinline.)
- */
-static struct held_lock *check_source, *check_target;
-
-/*
- * Print a dependency chain entry (this is only done when a deadlock
- * has been detected):
- */
-static noinline int
-print_circular_bug_entry(struct lock_list *target, unsigned int depth)
-{
-	if (debug_locks_silent)
-		return 0;
-	printk("\n-> #%u", depth);
-	print_lock_name(target->class);
-	printk(":\n");
-	print_stack_trace(&target->trace, 6);
-
-	return 0;
 }
 
 static void print_kernel_version(void)
@@ -523,95 +578,6 @@ static void print_kernel_version(void)
 		init_utsname()->version);
 }
 
-/*
- * When a circular dependency is detected, print the
- * header first:
- */
-static noinline int
-print_circular_bug_header(struct lock_list *entry, unsigned int depth)
-{
-	struct task_struct *curr = current;
-
-	__raw_spin_unlock(&hash_lock);
-	debug_locks_off();
-	if (debug_locks_silent)
-		return 0;
-
-	printk("\n=======================================================\n");
-	printk(  "[ INFO: possible circular locking dependency detected ]\n");
-	print_kernel_version();
-	printk(  "-------------------------------------------------------\n");
-	printk("%s/%d is trying to acquire lock:\n",
-		curr->comm, curr->pid);
-	print_lock(check_source);
-	printk("\nbut task is already holding lock:\n");
-	print_lock(check_target);
-	printk("\nwhich lock already depends on the new lock.\n\n");
-	printk("\nthe existing dependency chain (in reverse order) is:\n");
-
-	print_circular_bug_entry(entry, depth);
-
-	return 0;
-}
-
-static noinline int print_circular_bug_tail(void)
-{
-	struct task_struct *curr = current;
-	struct lock_list this;
-
-	if (debug_locks_silent)
-		return 0;
-
-	this.class = check_source->class;
-	save_trace(&this.trace);
-	print_circular_bug_entry(&this, 0);
-
-	printk("\nother info that might help us debug this:\n\n");
-	lockdep_print_held_locks(curr);
-
-	printk("\nstack backtrace:\n");
-	dump_stack();
-
-	return 0;
-}
-
-#define RECURSION_LIMIT 40
-
-static int noinline print_infinite_recursion_bug(void)
-{
-	__raw_spin_unlock(&hash_lock);
-	DEBUG_LOCKS_WARN_ON(1);
-
-	return 0;
-}
-
-/*
- * Prove that the dependency graph starting at <entry> can not
- * lead to <target>. Print an error and return 0 if it does.
- */
-static noinline int
-check_noncircular(struct lock_class *source, unsigned int depth)
-{
-	struct lock_list *entry;
-
-	debug_atomic_inc(&nr_cyclic_check_recursions);
-	if (depth > max_recursion_depth)
-		max_recursion_depth = depth;
-	if (depth >= RECURSION_LIMIT)
-		return print_infinite_recursion_bug();
-	/*
-	 * Check this lock's dependency list:
-	 */
-	list_for_each_entry(entry, &source->locks_after, entry) {
-		if (entry->class == check_target->class)
-			return print_circular_bug_header(entry, depth+1);
-		debug_atomic_inc(&nr_cyclic_checks);
-		if (!check_noncircular(entry->class, depth+1))
-			return print_circular_bug_entry(entry, depth+1);
-	}
-	return 1;
-}
-
 static int very_verbose(struct lock_class *class)
 {
 #if VERY_VERBOSE
@@ -619,443 +585,6 @@ static int very_verbose(struct lock_class *class)
 #endif
 	return 0;
 }
-#ifdef CONFIG_TRACE_IRQFLAGS
-
-/*
- * Forwards and backwards subgraph searching, for the purposes of
- * proving that two subgraphs can be connected by a new dependency
- * without creating any illegal irq-safe -> irq-unsafe lock dependency.
- */
-static enum lock_usage_bit find_usage_bit;
-static struct lock_class *forwards_match, *backwards_match;
-
-/*
- * Find a node in the forwards-direction dependency sub-graph starting
- * at <source> that matches <find_usage_bit>.
- *
- * Return 2 if such a node exists in the subgraph, and put that node
- * into <forwards_match>.
- *
- * Return 1 otherwise and keep <forwards_match> unchanged.
- * Return 0 on error.
- */
-static noinline int
-find_usage_forwards(struct lock_class *source, unsigned int depth)
-{
-	struct lock_list *entry;
-	int ret;
-
-	if (depth > max_recursion_depth)
-		max_recursion_depth = depth;
-	if (depth >= RECURSION_LIMIT)
-		return print_infinite_recursion_bug();
-
-	debug_atomic_inc(&nr_find_usage_forwards_checks);
-	if (source->usage_mask & (1 << find_usage_bit)) {
-		forwards_match = source;
-		return 2;
-	}
-
-	/*
-	 * Check this lock's dependency list:
-	 */
-	list_for_each_entry(entry, &source->locks_after, entry) {
-		debug_atomic_inc(&nr_find_usage_forwards_recursions);
-		ret = find_usage_forwards(entry->class, depth+1);
-		if (ret == 2 || ret == 0)
-			return ret;
-	}
-	return 1;
-}
-
-/*
- * Find a node in the backwards-direction dependency sub-graph starting
- * at <source> that matches <find_usage_bit>.
- *
- * Return 2 if such a node exists in the subgraph, and put that node
- * into <backwards_match>.
- *
- * Return 1 otherwise and keep <backwards_match> unchanged.
- * Return 0 on error.
- */
-static noinline int
-find_usage_backwards(struct lock_class *source, unsigned int depth)
-{
-	struct lock_list *entry;
-	int ret;
-
-	if (depth > max_recursion_depth)
-		max_recursion_depth = depth;
-	if (depth >= RECURSION_LIMIT)
-		return print_infinite_recursion_bug();
-
-	debug_atomic_inc(&nr_find_usage_backwards_checks);
-	if (source->usage_mask & (1 << find_usage_bit)) {
-		backwards_match = source;
-		return 2;
-	}
-
-	/*
-	 * Check this lock's dependency list:
-	 */
-	list_for_each_entry(entry, &source->locks_before, entry) {
-		debug_atomic_inc(&nr_find_usage_backwards_recursions);
-		ret = find_usage_backwards(entry->class, depth+1);
-		if (ret == 2 || ret == 0)
-			return ret;
-	}
-	return 1;
-}
-
-static int
-print_bad_irq_dependency(struct task_struct *curr,
-			 struct held_lock *prev,
-			 struct held_lock *next,
-			 enum lock_usage_bit bit1,
-			 enum lock_usage_bit bit2,
-			 const char *irqclass)
-{
-	__raw_spin_unlock(&hash_lock);
-	debug_locks_off();
-	if (debug_locks_silent)
-		return 0;
-
-	printk("\n======================================================\n");
-	printk(  "[ INFO: %s-safe -> %s-unsafe lock order detected ]\n",
-		irqclass, irqclass);
-	print_kernel_version();
-	printk(  "------------------------------------------------------\n");
-	printk("%s/%d [HC%u[%lu]:SC%u[%lu]:HE%u:SE%u] is trying to acquire:\n",
-		curr->comm, curr->pid,
-		curr->hardirq_context, hardirq_count() >> HARDIRQ_SHIFT,
-		curr->softirq_context, softirq_count() >> SOFTIRQ_SHIFT,
-		curr->hardirqs_enabled,
-		curr->softirqs_enabled);
-	print_lock(next);
-
-	printk("\nand this task is already holding:\n");
-	print_lock(prev);
-	printk("which would create a new lock dependency:\n");
-	print_lock_name(prev->class);
-	printk(" ->");
-	print_lock_name(next->class);
-	printk("\n");
-
-	printk("\nbut this new dependency connects a %s-irq-safe lock:\n",
-		irqclass);
-	print_lock_name(backwards_match);
-	printk("\n... which became %s-irq-safe at:\n", irqclass);
-
-	print_stack_trace(backwards_match->usage_traces + bit1, 1);
-
-	printk("\nto a %s-irq-unsafe lock:\n", irqclass);
-	print_lock_name(forwards_match);
-	printk("\n... which became %s-irq-unsafe at:\n", irqclass);
-	printk("...");
-
-	print_stack_trace(forwards_match->usage_traces + bit2, 1);
-
-	printk("\nother info that might help us debug this:\n\n");
-	lockdep_print_held_locks(curr);
-
-	printk("\nthe %s-irq-safe lock's dependencies:\n", irqclass);
-	print_lock_dependencies(backwards_match, 0);
-
-	printk("\nthe %s-irq-unsafe lock's dependencies:\n", irqclass);
-	print_lock_dependencies(forwards_match, 0);
-
-	printk("\nstack backtrace:\n");
-	dump_stack();
-
-	return 0;
-}
-
-static int
-check_usage(struct task_struct *curr, struct held_lock *prev,
-	    struct held_lock *next, enum lock_usage_bit bit_backwards,
-	    enum lock_usage_bit bit_forwards, const char *irqclass)
-{
-	int ret;
-
-	find_usage_bit = bit_backwards;
-	/* fills in <backwards_match> */
-	ret = find_usage_backwards(prev->class, 0);
-	if (!ret || ret == 1)
-		return ret;
-
-	find_usage_bit = bit_forwards;
-	ret = find_usage_forwards(next->class, 0);
-	if (!ret || ret == 1)
-		return ret;
-	/* ret == 2 */
-	return print_bad_irq_dependency(curr, prev, next,
-			bit_backwards, bit_forwards, irqclass);
-}
-
-#endif
-
-static int
-print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
-		   struct held_lock *next)
-{
-	debug_locks_off();
-	__raw_spin_unlock(&hash_lock);
-	if (debug_locks_silent)
-		return 0;
-
-	printk("\n=============================================\n");
-	printk(  "[ INFO: possible recursive locking detected ]\n");
-	print_kernel_version();
-	printk(  "---------------------------------------------\n");
-	printk("%s/%d is trying to acquire lock:\n",
-		curr->comm, curr->pid);
-	print_lock(next);
-	printk("\nbut task is already holding lock:\n");
-	print_lock(prev);
-
-	printk("\nother info that might help us debug this:\n");
-	lockdep_print_held_locks(curr);
-
-	printk("\nstack backtrace:\n");
-	dump_stack();
-
-	return 0;
-}
-
-/*
- * Check whether we are holding such a class already.
- *
- * (Note that this has to be done separately, because the graph cannot
- * detect such classes of deadlocks.)
- *
- * Returns: 0 on deadlock detected, 1 on OK, 2 on recursive read
- */
-static int
-check_deadlock(struct task_struct *curr, struct held_lock *next,
-	       struct lockdep_map *next_instance, int read)
-{
-	struct held_lock *prev;
-	int i;
-
-	for (i = 0; i < curr->lockdep_depth; i++) {
-		prev = curr->held_locks + i;
-		if (prev->class != next->class)
-			continue;
-		/*
-		 * Allow read-after-read recursion of the same
-		 * lock class (i.e. read_lock(lock)+read_lock(lock)):
-		 */
-		if ((read == 2) && prev->read)
-			return 2;
-		return print_deadlock_bug(curr, prev, next);
-	}
-	return 1;
-}
-
-/*
- * There was a chain-cache miss, and we are about to add a new dependency
- * to a previous lock. We recursively validate the following rules:
- *
- *  - would the adding of the <prev> -> <next> dependency create a
- *    circular dependency in the graph? [== circular deadlock]
- *
- *  - does the new prev->next dependency connect any hardirq-safe lock
- *    (in the full backwards-subgraph starting at <prev>) with any
- *    hardirq-unsafe lock (in the full forwards-subgraph starting at
- *    <next>)? [== illegal lock inversion with hardirq contexts]
- *
- *  - does the new prev->next dependency connect any softirq-safe lock
- *    (in the full backwards-subgraph starting at <prev>) with any
- *    softirq-unsafe lock (in the full forwards-subgraph starting at
- *    <next>)? [== illegal lock inversion with softirq contexts]
- *
- * any of these scenarios could lead to a deadlock.
- *
- * Then if all the validations pass, we add the forwards and backwards
- * dependency.
- */
-static int
-check_prev_add(struct task_struct *curr, struct held_lock *prev,
-	       struct held_lock *next)
-{
-	struct lock_list *entry;
-	int ret;
-
-	/*
-	 * Prove that the new <prev> -> <next> dependency would not
-	 * create a circular dependency in the graph. (We do this by
-	 * forward-recursing into the graph starting at <next>, and
-	 * checking whether we can reach <prev>.)
-	 *
-	 * We are using global variables to control the recursion, to
-	 * keep the stackframe size of the recursive functions low:
-	 */
-	check_source = next;
-	check_target = prev;
-	if (!(check_noncircular(next->class, 0)))
-		return print_circular_bug_tail();
-
-#ifdef CONFIG_TRACE_IRQFLAGS
-	/*
-	 * Prove that the new dependency does not connect a hardirq-safe
-	 * lock with a hardirq-unsafe lock - to achieve this we search
-	 * the backwards-subgraph starting at <prev>, and the
-	 * forwards-subgraph starting at <next>:
-	 */
-	if (!check_usage(curr, prev, next, LOCK_USED_IN_HARDIRQ,
-					LOCK_ENABLED_HARDIRQS, "hard"))
-		return 0;
-
-	/*
-	 * Prove that the new dependency does not connect a hardirq-safe-read
-	 * lock with a hardirq-unsafe lock - to achieve this we search
-	 * the backwards-subgraph starting at <prev>, and the
-	 * forwards-subgraph starting at <next>:
-	 */
-	if (!check_usage(curr, prev, next, LOCK_USED_IN_HARDIRQ_READ,
-					LOCK_ENABLED_HARDIRQS, "hard-read"))
-		return 0;
-
-	/*
-	 * Prove that the new dependency does not connect a softirq-safe
-	 * lock with a softirq-unsafe lock - to achieve this we search
-	 * the backwards-subgraph starting at <prev>, and the
-	 * forwards-subgraph starting at <next>:
-	 */
-	if (!check_usage(curr, prev, next, LOCK_USED_IN_SOFTIRQ,
-					LOCK_ENABLED_SOFTIRQS, "soft"))
-		return 0;
-	/*
-	 * Prove that the new dependency does not connect a softirq-safe-read
-	 * lock with a softirq-unsafe lock - to achieve this we search
-	 * the backwards-subgraph starting at <prev>, and the
-	 * forwards-subgraph starting at <next>:
-	 */
-	if (!check_usage(curr, prev, next, LOCK_USED_IN_SOFTIRQ_READ,
-					LOCK_ENABLED_SOFTIRQS, "soft"))
-		return 0;
-#endif
-	/*
-	 * For recursive read-locks we do all the dependency checks,
-	 * but we dont store read-triggered dependencies (only
-	 * write-triggered dependencies). This ensures that only the
-	 * write-side dependencies matter, and that if for example a
-	 * write-lock never takes any other locks, then the reads are
-	 * equivalent to a NOP.
-	 */
-	if (next->read == 2 || prev->read == 2)
-		return 1;
-	/*
-	 * Is the <prev> -> <next> dependency already present?
-	 *
-	 * (this may occur even though this is a new chain: consider
-	 *  e.g. the L1 -> L2 -> L3 -> L4 and the L5 -> L1 -> L2 -> L3
-	 *  chains - the second one will be new, but L1 already has
-	 *  L2 added to its dependency list, due to the first chain.)
-	 */
-	list_for_each_entry(entry, &prev->class->locks_after, entry) {
-		if (entry->class == next->class)
-			return 2;
-	}
-
-	/*
-	 * Ok, all validations passed, add the new lock
-	 * to the previous lock's dependency list:
-	 */
-	ret = add_lock_to_list(prev->class, next->class,
-			       &prev->class->locks_after, next->acquire_ip);
-	if (!ret)
-		return 0;
-	/*
-	 * Return value of 2 signals 'dependency already added',
-	 * in that case we dont have to add the backlink either.
-	 */
-	if (ret == 2)
-		return 2;
-	ret = add_lock_to_list(next->class, prev->class,
-			       &next->class->locks_before, next->acquire_ip);
-
-	/*
-	 * Debugging printouts:
-	 */
-	if (verbose(prev->class) || verbose(next->class)) {
-		__raw_spin_unlock(&hash_lock);
-		printk("\n new dependency: ");
-		print_lock_name(prev->class);
-		printk(" => ");
-		print_lock_name(next->class);
-		printk("\n");
-		dump_stack();
-		__raw_spin_lock(&hash_lock);
-	}
-	return 1;
-}
-
-/*
- * Add the dependency to all directly-previous locks that are 'relevant'.
- * The ones that are relevant are (in increasing distance from curr):
- * all consecutive trylock entries and the final non-trylock entry - or
- * the end of this context's lock-chain - whichever comes first.
- */
-static int
-check_prevs_add(struct task_struct *curr, struct held_lock *next)
-{
-	int depth = curr->lockdep_depth;
-	struct held_lock *hlock;
-
-	/*
-	 * Debugging checks.
-	 *
-	 * Depth must not be zero for a non-head lock:
-	 */
-	if (!depth)
-		goto out_bug;
-	/*
-	 * At least two relevant locks must exist for this
-	 * to be a head:
-	 */
-	if (curr->held_locks[depth].irq_context !=
-			curr->held_locks[depth-1].irq_context)
-		goto out_bug;
-
-	for (;;) {
-		hlock = curr->held_locks + depth-1;
-		/*
-		 * Only non-recursive-read entries get new dependencies
-		 * added:
-		 */
-		if (hlock->read != 2) {
-			check_prev_add(curr, hlock, next);
-			/*
-			 * Stop after the first non-trylock entry,
-			 * as non-trylock entries have added their
-			 * own direct dependencies already, so this
-			 * lock is connected to them indirectly:
-			 */
-			if (!hlock->trylock)
-				break;
-		}
-		depth--;
-		/*
-		 * End of lock-stack?
-		 */
-		if (!depth)
-			break;
-		/*
-		 * Stop the search if we cross into another context:
-		 */
-		if (curr->held_locks[depth].irq_context !=
-				curr->held_locks[depth-1].irq_context)
-			break;
-	}
-	return 1;
-out_bug:
-	__raw_spin_unlock(&hash_lock);
-	DEBUG_LOCKS_WARN_ON(1);
-
-	return 0;
-}
-
 
 /*
  * Is this the address of a static object:
@@ -1138,6 +667,7 @@ look_up_lock_class(struct lockdep_map *lock, unsigned int subclass)
 	if (unlikely(!lockdep_initialized)) {
 		lockdep_init();
 		lockdep_init_error = 1;
+		save_stack_trace(&lockdep_init_trace);
 	}
 #endif
 
@@ -1154,7 +684,8 @@ look_up_lock_class(struct lockdep_map *lock, unsigned int subclass)
 	 * (or spin_lock_init()) call - which acts as the key. For static
 	 * locks we use the lock object itself as the key.
 	 */
-	BUILD_BUG_ON(sizeof(struct lock_class_key) > sizeof(struct lock_class));
+	BUILD_BUG_ON(sizeof(struct lock_class_key) >
+			sizeof(struct lockdep_map));
 
 	key = lock->key->subkeys + subclass;
 
@@ -1164,9 +695,12 @@ look_up_lock_class(struct lockdep_map *lock, unsigned int subclass)
 	 * We can walk the hash lockfree, because the hash only
 	 * grows, and we are careful when adding entries to the end:
 	 */
-	list_for_each_entry(class, hash_head, hash_entry)
-		if (class->key == key)
+	list_for_each_entry(class, hash_head, hash_entry) {
+		if (class->key == key) {
+			WARN_ON_ONCE(class->name != lock->name);
 			return class;
+		}
+	}
 
 	return NULL;
 }
@@ -1182,6 +716,7 @@ register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
 	struct lockdep_subclass_key *key;
 	struct list_head *hash_head;
 	struct lock_class *class;
+	unsigned long flags;
 
 	class = look_up_lock_class(lock, subclass);
 	if (likely(class))
@@ -1203,7 +738,11 @@ register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
 	key = lock->key->subkeys + subclass;
 	hash_head = classhashentry(key);
 
-	__raw_spin_lock(&hash_lock);
+	raw_local_irq_save(flags);
+	if (!graph_lock()) {
+		raw_local_irq_restore(flags);
+		return NULL;
+	}
 	/*
 	 * We have to do the hash-walk again, to avoid races
 	 * with another CPU:
@@ -1216,8 +755,12 @@ register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
 	 * the hash:
 	 */
 	if (nr_lock_classes >= MAX_LOCKDEP_KEYS) {
-		__raw_spin_unlock(&hash_lock);
-		debug_locks_off();
+		if (!debug_locks_off_graph_unlock()) {
+			raw_local_irq_restore(flags);
+			return NULL;
+		}
+		raw_local_irq_restore(flags);
+
 		printk("BUG: MAX_LOCKDEP_KEYS too low!\n");
 		printk("turning off the locking correctness validator.\n");
 		return NULL;
@@ -1238,81 +781,424 @@ register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
 	list_add_tail_rcu(&class->hash_entry, hash_head);
 
 	if (verbose(class)) {
-		__raw_spin_unlock(&hash_lock);
+		graph_unlock();
+		raw_local_irq_restore(flags);
+
 		printk("\nnew class %p: %s", class->key, class->name);
 		if (class->name_version > 1)
 			printk("#%d", class->name_version);
 		printk("\n");
 		dump_stack();
-		__raw_spin_lock(&hash_lock);
+
+		raw_local_irq_save(flags);
+		if (!graph_lock()) {
+			raw_local_irq_restore(flags);
+			return NULL;
+		}
 	}
 out_unlock_set:
-	__raw_spin_unlock(&hash_lock);
+	graph_unlock();
+	raw_local_irq_restore(flags);
 
 	if (!subclass || force)
 		lock->class_cache = class;
 
-	DEBUG_LOCKS_WARN_ON(class->subclass != subclass);
+	if (DEBUG_LOCKS_WARN_ON(class->subclass != subclass))
+		return NULL;
 
 	return class;
 }
 
+#ifdef CONFIG_PROVE_LOCKING
 /*
- * Look up a dependency chain. If the key is not present yet then
- * add it and return 0 - in this case the new dependency chain is
- * validated. If the key is already hashed, return 1.
+ * Allocate a lockdep entry. (assumes the graph_lock held, returns
+ * with NULL on failure)
  */
-static inline int lookup_chain_cache(u64 chain_key)
+static struct lock_list *alloc_list_entry(void)
 {
-	struct list_head *hash_head = chainhashentry(chain_key);
-	struct lock_chain *chain;
+	if (nr_list_entries >= MAX_LOCKDEP_ENTRIES) {
+		if (!debug_locks_off_graph_unlock())
+			return NULL;
 
-	DEBUG_LOCKS_WARN_ON(!irqs_disabled());
-	/*
-	 * We can walk it lock-free, because entries only get added
-	 * to the hash:
-	 */
-	list_for_each_entry(chain, hash_head, entry) {
-		if (chain->chain_key == chain_key) {
-cache_hit:
-			debug_atomic_inc(&chain_lookup_hits);
-			/*
-			 * In the debugging case, force redundant checking
-			 * by returning 1:
-			 */
-#ifdef CONFIG_DEBUG_LOCKDEP
-			__raw_spin_lock(&hash_lock);
-			return 1;
-#endif
-			return 0;
-		}
-	}
-	/*
-	 * Allocate a new chain entry from the static array, and add
-	 * it to the hash:
-	 */
-	__raw_spin_lock(&hash_lock);
-	/*
-	 * We have to walk the chain again locked - to avoid duplicates:
-	 */
-	list_for_each_entry(chain, hash_head, entry) {
-		if (chain->chain_key == chain_key) {
-			__raw_spin_unlock(&hash_lock);
-			goto cache_hit;
-		}
-	}
-	if (unlikely(nr_lock_chains >= MAX_LOCKDEP_CHAINS)) {
-		__raw_spin_unlock(&hash_lock);
-		debug_locks_off();
-		printk("BUG: MAX_LOCKDEP_CHAINS too low!\n");
+		printk("BUG: MAX_LOCKDEP_ENTRIES too low!\n");
 		printk("turning off the locking correctness validator.\n");
-		return 0;
+		return NULL;
 	}
-	chain = lock_chains + nr_lock_chains++;
-	chain->chain_key = chain_key;
-	list_add_tail_rcu(&chain->entry, hash_head);
-	debug_atomic_inc(&chain_lookup_misses);
+	return list_entries + nr_list_entries++;
+}
+
+/*
+ * Add a new dependency to the head of the list:
+ */
+static int add_lock_to_list(struct lock_class *class, struct lock_class *this,
+			    struct list_head *head, unsigned long ip, int distance)
+{
+	struct lock_list *entry;
+	/*
+	 * Lock not present yet - get a new dependency struct and
+	 * add it to the list:
+	 */
+	entry = alloc_list_entry();
+	if (!entry)
+		return 0;
+
+	entry->class = this;
+	entry->distance = distance;
+	if (!save_trace(&entry->trace))
+		return 0;
+
+	/*
+	 * Since we never remove from the dependency list, the list can
+	 * be walked lockless by other CPUs, it's only allocation
+	 * that must be protected by the spinlock. But this also means
+	 * we must make new entries visible only once writes to the
+	 * entry become visible - hence the RCU op:
+	 */
+	list_add_tail_rcu(&entry->entry, head);
+
+	return 1;
+}
+
+/*
+ * Recursive, forwards-direction lock-dependency checking, used for
+ * both noncyclic checking and for hardirq-unsafe/softirq-unsafe
+ * checking.
+ *
+ * (to keep the stackframe of the recursive functions small we
+ *  use these global variables, and we also mark various helper
+ *  functions as noinline.)
+ */
+static struct held_lock *check_source, *check_target;
+
+/*
+ * Print a dependency chain entry (this is only done when a deadlock
+ * has been detected):
+ */
+static noinline int
+print_circular_bug_entry(struct lock_list *target, unsigned int depth)
+{
+	if (debug_locks_silent)
+		return 0;
+	printk("\n-> #%u", depth);
+	print_lock_name(target->class);
+	printk(":\n");
+	print_stack_trace(&target->trace, 6);
+
+	return 0;
+}
+
+/*
+ * When a circular dependency is detected, print the
+ * header first:
+ */
+static noinline int
+print_circular_bug_header(struct lock_list *entry, unsigned int depth)
+{
+	struct task_struct *curr = current;
+
+	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
+		return 0;
+
+	printk("\n=======================================================\n");
+	printk(  "[ INFO: possible circular locking dependency detected ]\n");
+	print_kernel_version();
+	printk(  "-------------------------------------------------------\n");
+	printk("%s/%d is trying to acquire lock:\n",
+		curr->comm, curr->pid);
+	print_lock(check_source);
+	printk("\nbut task is already holding lock:\n");
+	print_lock(check_target);
+	printk("\nwhich lock already depends on the new lock.\n\n");
+	printk("\nthe existing dependency chain (in reverse order) is:\n");
+
+	print_circular_bug_entry(entry, depth);
+
+	return 0;
+}
+
+static noinline int print_circular_bug_tail(void)
+{
+	struct task_struct *curr = current;
+	struct lock_list this;
+
+	if (debug_locks_silent)
+		return 0;
+
+	this.class = check_source->class;
+	if (!save_trace(&this.trace))
+		return 0;
+
+	print_circular_bug_entry(&this, 0);
+
+	printk("\nother info that might help us debug this:\n\n");
+	lockdep_print_held_locks(curr);
+
+	printk("\nstack backtrace:\n");
+	dump_stack();
+
+	return 0;
+}
+
+#define RECURSION_LIMIT 40
+
+static int noinline print_infinite_recursion_bug(void)
+{
+	if (!debug_locks_off_graph_unlock())
+		return 0;
+
+	WARN_ON(1);
+
+	return 0;
+}
+
+/*
+ * Prove that the dependency graph starting at <entry> can not
+ * lead to <target>. Print an error and return 0 if it does.
+ */
+static noinline int
+check_noncircular(struct lock_class *source, unsigned int depth)
+{
+	struct lock_list *entry;
+
+	debug_atomic_inc(&nr_cyclic_check_recursions);
+	if (depth > max_recursion_depth)
+		max_recursion_depth = depth;
+	if (depth >= RECURSION_LIMIT)
+		return print_infinite_recursion_bug();
+	/*
+	 * Check this lock's dependency list:
+	 */
+	list_for_each_entry(entry, &source->locks_after, entry) {
+		if (entry->class == check_target->class)
+			return print_circular_bug_header(entry, depth+1);
+		debug_atomic_inc(&nr_cyclic_checks);
+		if (!check_noncircular(entry->class, depth+1))
+			return print_circular_bug_entry(entry, depth+1);
+	}
+	return 1;
+}
+
 #ifdef CONFIG_TRACE_IRQFLAGS
+/*
+ * Forwards and backwards subgraph searching, for the purposes of
+ * proving that two subgraphs can be connected by a new dependency
+ * without creating any illegal irq-safe -> irq-unsafe lock dependency.
+ */
+static enum lock_usage_bit find_usage_bit;
+static struct lock_class *forwards_match, *backwards_match;
+
+/*
+ * Find a node in the forwards-direction dependency sub-graph starting
+ * at <source> that matches <find_usage_bit>.
+ *
+ * Return 2 if such a node exists in the subgraph, and put that node
+ * into <forwards_match>.
+ *
+ * Return 1 otherwise and keep <forwards_match> unchanged.
+ * Return 0 on error.
+ */
+static noinline int
+find_usage_forwards(struct lock_class *source, unsigned int depth)
+{
+	struct lock_list *entry;
+	int ret;
+
+	if (depth > max_recursion_depth)
+		max_recursion_depth = depth;
+	if (depth >= RECURSION_LIMIT)
+		return print_infinite_recursion_bug();
+
+	debug_atomic_inc(&nr_find_usage_forwards_checks);
+	if (source->usage_mask & (1 << find_usage_bit)) {
+		forwards_match = source;
+		return 2;
+	}
+
+	/*
+	 * Check this lock's dependency list:
+	 */
+	list_for_each_entry(entry, &source->locks_after, entry) {
+		debug_atomic_inc(&nr_find_usage_forwards_recursions);
+		ret = find_usage_forwards(entry->class, depth+1);
+		if (ret == 2 || ret == 0)
+			return ret;
+	}
+	return 1;
+}
+
+/*
+ * Find a node in the backwards-direction dependency sub-graph starting
+ * at <source> that matches <find_usage_bit>.
+ *
+ * Return 2 if such a node exists in the subgraph, and put that node
+ * into <backwards_match>.
+ *
+ * Return 1 otherwise and keep <backwards_match> unchanged.
+ * Return 0 on error.
+ */
+static noinline int
+find_usage_backwards(struct lock_class *source, unsigned int depth)
+{
+	struct lock_list *entry;
+	int ret;
+
+	if (!__raw_spin_is_locked(&lockdep_lock))
+		return DEBUG_LOCKS_WARN_ON(1);
+
+	if (depth > max_recursion_depth)
+		max_recursion_depth = depth;
+	if (depth >= RECURSION_LIMIT)
+		return print_infinite_recursion_bug();
+
+	debug_atomic_inc(&nr_find_usage_backwards_checks);
+	if (source->usage_mask & (1 << find_usage_bit)) {
+		backwards_match = source;
+		return 2;
+	}
+
+	/*
+	 * Check this lock's dependency list:
+	 */
+	list_for_each_entry(entry, &source->locks_before, entry) {
+		debug_atomic_inc(&nr_find_usage_backwards_recursions);
+		ret = find_usage_backwards(entry->class, depth+1);
+		if (ret == 2 || ret == 0)
+			return ret;
+	}
+	return 1;
+}
+
+static int
+print_bad_irq_dependency(struct task_struct *curr,
+			 struct held_lock *prev,
+			 struct held_lock *next,
+			 enum lock_usage_bit bit1,
+			 enum lock_usage_bit bit2,
+			 const char *irqclass)
+{
+	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
+		return 0;
+
+	printk("\n======================================================\n");
+	printk(  "[ INFO: %s-safe -> %s-unsafe lock order detected ]\n",
+		irqclass, irqclass);
+	print_kernel_version();
+	printk(  "------------------------------------------------------\n");
+	printk("%s/%d [HC%u[%lu]:SC%u[%lu]:HE%u:SE%u] is trying to acquire:\n",
+		curr->comm, curr->pid,
+		curr->hardirq_context, hardirq_count() >> HARDIRQ_SHIFT,
+		curr->softirq_context, softirq_count() >> SOFTIRQ_SHIFT,
+		curr->hardirqs_enabled,
+		curr->softirqs_enabled);
+	print_lock(next);
+
+	printk("\nand this task is already holding:\n");
+	print_lock(prev);
+	printk("which would create a new lock dependency:\n");
+	print_lock_name(prev->class);
+	printk(" ->");
+	print_lock_name(next->class);
+	printk("\n");
+
+	printk("\nbut this new dependency connects a %s-irq-safe lock:\n",
+		irqclass);
+	print_lock_name(backwards_match);
+	printk("\n... which became %s-irq-safe at:\n", irqclass);
+
+	print_stack_trace(backwards_match->usage_traces + bit1, 1);
+
+	printk("\nto a %s-irq-unsafe lock:\n", irqclass);
+	print_lock_name(forwards_match);
+	printk("\n... which became %s-irq-unsafe at:\n", irqclass);
+	printk("...");
+
+	print_stack_trace(forwards_match->usage_traces + bit2, 1);
+
+	printk("\nother info that might help us debug this:\n\n");
+	lockdep_print_held_locks(curr);
+
+	printk("\nthe %s-irq-safe lock's dependencies:\n", irqclass);
+	print_lock_dependencies(backwards_match, 0);
+
+	printk("\nthe %s-irq-unsafe lock's dependencies:\n", irqclass);
+	print_lock_dependencies(forwards_match, 0);
+
+	printk("\nstack backtrace:\n");
+	dump_stack();
+
+	return 0;
+}
+
+static int
+check_usage(struct task_struct *curr, struct held_lock *prev,
+	    struct held_lock *next, enum lock_usage_bit bit_backwards,
+	    enum lock_usage_bit bit_forwards, const char *irqclass)
+{
+	int ret;
+
+	find_usage_bit = bit_backwards;
+	/* fills in <backwards_match> */
+	ret = find_usage_backwards(prev->class, 0);
+	if (!ret || ret == 1)
+		return ret;
+
+	find_usage_bit = bit_forwards;
+	ret = find_usage_forwards(next->class, 0);
+	if (!ret || ret == 1)
+		return ret;
+	/* ret == 2 */
+	return print_bad_irq_dependency(curr, prev, next,
+			bit_backwards, bit_forwards, irqclass);
+}
+
+static int
+check_prev_add_irq(struct task_struct *curr, struct held_lock *prev,
+		struct held_lock *next)
+{
+	/*
+	 * Prove that the new dependency does not connect a hardirq-safe
+	 * lock with a hardirq-unsafe lock - to achieve this we search
+	 * the backwards-subgraph starting at <prev>, and the
+	 * forwards-subgraph starting at <next>:
+	 */
+	if (!check_usage(curr, prev, next, LOCK_USED_IN_HARDIRQ,
+					LOCK_ENABLED_HARDIRQS, "hard"))
+		return 0;
+
+	/*
+	 * Prove that the new dependency does not connect a hardirq-safe-read
+	 * lock with a hardirq-unsafe lock - to achieve this we search
+	 * the backwards-subgraph starting at <prev>, and the
+	 * forwards-subgraph starting at <next>:
+	 */
+	if (!check_usage(curr, prev, next, LOCK_USED_IN_HARDIRQ_READ,
+					LOCK_ENABLED_HARDIRQS, "hard-read"))
+		return 0;
+
+	/*
+	 * Prove that the new dependency does not connect a softirq-safe
+	 * lock with a softirq-unsafe lock - to achieve this we search
+	 * the backwards-subgraph starting at <prev>, and the
+	 * forwards-subgraph starting at <next>:
+	 */
+	if (!check_usage(curr, prev, next, LOCK_USED_IN_SOFTIRQ,
+					LOCK_ENABLED_SOFTIRQS, "soft"))
+		return 0;
+	/*
+	 * Prove that the new dependency does not connect a softirq-safe-read
+	 * lock with a softirq-unsafe lock - to achieve this we search
+	 * the backwards-subgraph starting at <prev>, and the
+	 * forwards-subgraph starting at <next>:
+	 */
+	if (!check_usage(curr, prev, next, LOCK_USED_IN_SOFTIRQ_READ,
+					LOCK_ENABLED_SOFTIRQS, "soft"))
+		return 0;
+
+	return 1;
+}
+
+static void inc_chains(void)
+{
 	if (current->hardirq_context)
 		nr_hardirq_chains++;
 	else {
@@ -1321,12 +1207,380 @@ cache_hit:
 		else
 			nr_process_chains++;
 	}
+}
+
 #else
+
+static inline int
+check_prev_add_irq(struct task_struct *curr, struct held_lock *prev,
+		struct held_lock *next)
+{
+	return 1;
+}
+
+static inline void inc_chains(void)
+{
 	nr_process_chains++;
+}
+
 #endif
+
+static int
+print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
+		   struct held_lock *next)
+{
+	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
+		return 0;
+
+	printk("\n=============================================\n");
+	printk(  "[ INFO: possible recursive locking detected ]\n");
+	print_kernel_version();
+	printk(  "---------------------------------------------\n");
+	printk("%s/%d is trying to acquire lock:\n",
+		curr->comm, curr->pid);
+	print_lock(next);
+	printk("\nbut task is already holding lock:\n");
+	print_lock(prev);
+
+	printk("\nother info that might help us debug this:\n");
+	lockdep_print_held_locks(curr);
+
+	printk("\nstack backtrace:\n");
+	dump_stack();
+
+	return 0;
+}
+
+/*
+ * Check whether we are holding such a class already.
+ *
+ * (Note that this has to be done separately, because the graph cannot
+ * detect such classes of deadlocks.)
+ *
+ * Returns: 0 on deadlock detected, 1 on OK, 2 on recursive read
+ */
+static int
+check_deadlock(struct task_struct *curr, struct held_lock *next,
+	       struct lockdep_map *next_instance, int read)
+{
+	struct held_lock *prev;
+	int i;
+
+	for (i = 0; i < curr->lockdep_depth; i++) {
+		prev = curr->held_locks + i;
+		if (prev->class != next->class)
+			continue;
+		/*
+		 * Allow read-after-read recursion of the same
+		 * lock class (i.e. read_lock(lock)+read_lock(lock)):
+		 */
+		if ((read == 2) && prev->read)
+			return 2;
+		return print_deadlock_bug(curr, prev, next);
+	}
+	return 1;
+}
+
+/*
+ * There was a chain-cache miss, and we are about to add a new dependency
+ * to a previous lock. We recursively validate the following rules:
+ *
+ *  - would the adding of the <prev> -> <next> dependency create a
+ *    circular dependency in the graph? [== circular deadlock]
+ *
+ *  - does the new prev->next dependency connect any hardirq-safe lock
+ *    (in the full backwards-subgraph starting at <prev>) with any
+ *    hardirq-unsafe lock (in the full forwards-subgraph starting at
+ *    <next>)? [== illegal lock inversion with hardirq contexts]
+ *
+ *  - does the new prev->next dependency connect any softirq-safe lock
+ *    (in the full backwards-subgraph starting at <prev>) with any
+ *    softirq-unsafe lock (in the full forwards-subgraph starting at
+ *    <next>)? [== illegal lock inversion with softirq contexts]
+ *
+ * any of these scenarios could lead to a deadlock.
+ *
+ * Then if all the validations pass, we add the forwards and backwards
+ * dependency.
+ */
+static int
+check_prev_add(struct task_struct *curr, struct held_lock *prev,
+	       struct held_lock *next, int distance)
+{
+	struct lock_list *entry;
+	int ret;
+
+	/*
+	 * Prove that the new <prev> -> <next> dependency would not
+	 * create a circular dependency in the graph. (We do this by
+	 * forward-recursing into the graph starting at <next>, and
+	 * checking whether we can reach <prev>.)
+	 *
+	 * We are using global variables to control the recursion, to
+	 * keep the stackframe size of the recursive functions low:
+	 */
+	check_source = next;
+	check_target = prev;
+	if (!(check_noncircular(next->class, 0)))
+		return print_circular_bug_tail();
+
+	if (!check_prev_add_irq(curr, prev, next))
+		return 0;
+
+	/*
+	 * For recursive read-locks we do all the dependency checks,
+	 * but we dont store read-triggered dependencies (only
+	 * write-triggered dependencies). This ensures that only the
+	 * write-side dependencies matter, and that if for example a
+	 * write-lock never takes any other locks, then the reads are
+	 * equivalent to a NOP.
+	 */
+	if (next->read == 2 || prev->read == 2)
+		return 1;
+	/*
+	 * Is the <prev> -> <next> dependency already present?
+	 *
+	 * (this may occur even though this is a new chain: consider
+	 *  e.g. the L1 -> L2 -> L3 -> L4 and the L5 -> L1 -> L2 -> L3
+	 *  chains - the second one will be new, but L1 already has
+	 *  L2 added to its dependency list, due to the first chain.)
+	 */
+	list_for_each_entry(entry, &prev->class->locks_after, entry) {
+		if (entry->class == next->class) {
+			if (distance == 1)
+				entry->distance = 1;
+			return 2;
+		}
+	}
+
+	/*
+	 * Ok, all validations passed, add the new lock
+	 * to the previous lock's dependency list:
+	 */
+	ret = add_lock_to_list(prev->class, next->class,
+			       &prev->class->locks_after, next->acquire_ip, distance);
+
+	if (!ret)
+		return 0;
+
+	ret = add_lock_to_list(next->class, prev->class,
+			       &next->class->locks_before, next->acquire_ip, distance);
+	if (!ret)
+		return 0;
+
+	/*
+	 * Debugging printouts:
+	 */
+	if (verbose(prev->class) || verbose(next->class)) {
+		graph_unlock();
+		printk("\n new dependency: ");
+		print_lock_name(prev->class);
+		printk(" => ");
+		print_lock_name(next->class);
+		printk("\n");
+		dump_stack();
+		return graph_lock();
+	}
+	return 1;
+}
+
+/*
+ * Add the dependency to all directly-previous locks that are 'relevant'.
+ * The ones that are relevant are (in increasing distance from curr):
+ * all consecutive trylock entries and the final non-trylock entry - or
+ * the end of this context's lock-chain - whichever comes first.
+ */
+static int
+check_prevs_add(struct task_struct *curr, struct held_lock *next)
+{
+	int depth = curr->lockdep_depth;
+	struct held_lock *hlock;
+
+	/*
+	 * Debugging checks.
+	 *
+	 * Depth must not be zero for a non-head lock:
+	 */
+	if (!depth)
+		goto out_bug;
+	/*
+	 * At least two relevant locks must exist for this
+	 * to be a head:
+	 */
+	if (curr->held_locks[depth].irq_context !=
+			curr->held_locks[depth-1].irq_context)
+		goto out_bug;
+
+	for (;;) {
+		int distance = curr->lockdep_depth - depth + 1;
+		hlock = curr->held_locks + depth-1;
+		/*
+		 * Only non-recursive-read entries get new dependencies
+		 * added:
+		 */
+		if (hlock->read != 2) {
+			if (!check_prev_add(curr, hlock, next, distance))
+				return 0;
+			/*
+			 * Stop after the first non-trylock entry,
+			 * as non-trylock entries have added their
+			 * own direct dependencies already, so this
+			 * lock is connected to them indirectly:
+			 */
+			if (!hlock->trylock)
+				break;
+		}
+		depth--;
+		/*
+		 * End of lock-stack?
+		 */
+		if (!depth)
+			break;
+		/*
+		 * Stop the search if we cross into another context:
+		 */
+		if (curr->held_locks[depth].irq_context !=
+				curr->held_locks[depth-1].irq_context)
+			break;
+	}
+	return 1;
+out_bug:
+	if (!debug_locks_off_graph_unlock())
+		return 0;
+
+	WARN_ON(1);
+
+	return 0;
+}
+
+unsigned long nr_lock_chains;
+static struct lock_chain lock_chains[MAX_LOCKDEP_CHAINS];
+
+/*
+ * Look up a dependency chain. If the key is not present yet then
+ * add it and return 1 - in this case the new dependency chain is
+ * validated. If the key is already hashed, return 0.
+ * (On return with 1 graph_lock is held.)
+ */
+static inline int lookup_chain_cache(u64 chain_key, struct lock_class *class)
+{
+	struct list_head *hash_head = chainhashentry(chain_key);
+	struct lock_chain *chain;
+
+	if (DEBUG_LOCKS_WARN_ON(!irqs_disabled()))
+		return 0;
+	/*
+	 * We can walk it lock-free, because entries only get added
+	 * to the hash:
+	 */
+	list_for_each_entry(chain, hash_head, entry) {
+		if (chain->chain_key == chain_key) {
+cache_hit:
+			debug_atomic_inc(&chain_lookup_hits);
+			if (very_verbose(class))
+				printk("\nhash chain already cached, key: "
+					"%016Lx tail class: [%p] %s\n",
+					(unsigned long long)chain_key,
+					class->key, class->name);
+			return 0;
+		}
+	}
+	if (very_verbose(class))
+		printk("\nnew hash chain, key: %016Lx tail class: [%p] %s\n",
+			(unsigned long long)chain_key, class->key, class->name);
+	/*
+	 * Allocate a new chain entry from the static array, and add
+	 * it to the hash:
+	 */
+	if (!graph_lock())
+		return 0;
+	/*
+	 * We have to walk the chain again locked - to avoid duplicates:
+	 */
+	list_for_each_entry(chain, hash_head, entry) {
+		if (chain->chain_key == chain_key) {
+			graph_unlock();
+			goto cache_hit;
+		}
+	}
+	if (unlikely(nr_lock_chains >= MAX_LOCKDEP_CHAINS)) {
+		if (!debug_locks_off_graph_unlock())
+			return 0;
+
+		printk("BUG: MAX_LOCKDEP_CHAINS too low!\n");
+		printk("turning off the locking correctness validator.\n");
+		return 0;
+	}
+	chain = lock_chains + nr_lock_chains++;
+	chain->chain_key = chain_key;
+	list_add_tail_rcu(&chain->entry, hash_head);
+	debug_atomic_inc(&chain_lookup_misses);
+	inc_chains();
 
 	return 1;
 }
+
+static int validate_chain(struct task_struct *curr, struct lockdep_map *lock,
+	       	struct held_lock *hlock, int chain_head)
+{
+	/*
+	 * Trylock needs to maintain the stack of held locks, but it
+	 * does not add new dependencies, because trylock can be done
+	 * in any order.
+	 *
+	 * We look up the chain_key and do the O(N^2) check and update of
+	 * the dependencies only if this is a new dependency chain.
+	 * (If lookup_chain_cache() returns with 1 it acquires
+	 * graph_lock for us)
+	 */
+	if (!hlock->trylock && (hlock->check == 2) &&
+			lookup_chain_cache(curr->curr_chain_key, hlock->class)) {
+		/*
+		 * Check whether last held lock:
+		 *
+		 * - is irq-safe, if this lock is irq-unsafe
+		 * - is softirq-safe, if this lock is hardirq-unsafe
+		 *
+		 * And check whether the new lock's dependency graph
+		 * could lead back to the previous lock.
+		 *
+		 * any of these scenarios could lead to a deadlock. If
+		 * All validations
+		 */
+		int ret = check_deadlock(curr, hlock, lock, hlock->read);
+
+		if (!ret)
+			return 0;
+		/*
+		 * Mark recursive read, as we jump over it when
+		 * building dependencies (just like we jump over
+		 * trylock entries):
+		 */
+		if (ret == 2)
+			hlock->read = 2;
+		/*
+		 * Add dependency only if this lock is not the head
+		 * of the chain, and if it's not a secondary read-lock:
+		 */
+		if (!chain_head && ret != 2)
+			if (!check_prevs_add(curr, hlock))
+				return 0;
+		graph_unlock();
+	} else
+		/* after lookup_chain_cache(): */
+		if (unlikely(!debug_locks))
+			return 0;
+
+	return 1;
+}
+#else
+static inline int validate_chain(struct task_struct *curr,
+	       	struct lockdep_map *lock, struct held_lock *hlock,
+		int chain_head)
+{
+	return 1;
+}
+#endif
 
 /*
  * We are building curr_chain_key incrementally, so double-check
@@ -1351,7 +1605,9 @@ static void check_chain_key(struct task_struct *curr)
 			return;
 		}
 		id = hlock->class - lock_classes;
-		DEBUG_LOCKS_WARN_ON(id >= MAX_LOCKDEP_KEYS);
+		if (DEBUG_LOCKS_WARN_ON(id >= MAX_LOCKDEP_KEYS))
+			return;
+
 		if (prev_hlock && (prev_hlock->irq_context !=
 							hlock->irq_context))
 			chain_key = 0;
@@ -1369,6 +1625,57 @@ static void check_chain_key(struct task_struct *curr)
 #endif
 }
 
+static int
+print_usage_bug(struct task_struct *curr, struct held_lock *this,
+		enum lock_usage_bit prev_bit, enum lock_usage_bit new_bit)
+{
+	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
+		return 0;
+
+	printk("\n=================================\n");
+	printk(  "[ INFO: inconsistent lock state ]\n");
+	print_kernel_version();
+	printk(  "---------------------------------\n");
+
+	printk("inconsistent {%s} -> {%s} usage.\n",
+		usage_str[prev_bit], usage_str[new_bit]);
+
+	printk("%s/%d [HC%u[%lu]:SC%u[%lu]:HE%u:SE%u] takes:\n",
+		curr->comm, curr->pid,
+		trace_hardirq_context(curr), hardirq_count() >> HARDIRQ_SHIFT,
+		trace_softirq_context(curr), softirq_count() >> SOFTIRQ_SHIFT,
+		trace_hardirqs_enabled(curr),
+		trace_softirqs_enabled(curr));
+	print_lock(this);
+
+	printk("{%s} state was registered at:\n", usage_str[prev_bit]);
+	print_stack_trace(this->class->usage_traces + prev_bit, 1);
+
+	print_irqtrace_events(curr);
+	printk("\nother info that might help us debug this:\n");
+	lockdep_print_held_locks(curr);
+
+	printk("\nstack backtrace:\n");
+	dump_stack();
+
+	return 0;
+}
+
+/*
+ * Print out an error if an invalid bit is set:
+ */
+static inline int
+valid_state(struct task_struct *curr, struct held_lock *this,
+	    enum lock_usage_bit new_bit, enum lock_usage_bit bad_bit)
+{
+	if (unlikely(this->class->usage_mask & (1 << bad_bit)))
+		return print_usage_bug(curr, this, bad_bit, new_bit);
+	return 1;
+}
+
+static int mark_lock(struct task_struct *curr, struct held_lock *this,
+		     enum lock_usage_bit new_bit);
+
 #ifdef CONFIG_TRACE_IRQFLAGS
 
 /*
@@ -1379,9 +1686,7 @@ print_irq_inversion_bug(struct task_struct *curr, struct lock_class *other,
 			struct held_lock *this, int forwards,
 			const char *irqclass)
 {
-	__raw_spin_unlock(&hash_lock);
-	debug_locks_off();
-	if (debug_locks_silent)
+	if (!debug_locks_off_graph_unlock() || debug_locks_silent)
 		return 0;
 
 	printk("\n=========================================================\n");
@@ -1451,7 +1756,7 @@ check_usage_backwards(struct task_struct *curr, struct held_lock *this,
 	return print_irq_inversion_bug(curr, backwards_match, this, 0, irqclass);
 }
 
-static inline void print_irqtrace_events(struct task_struct *curr)
+void print_irqtrace_events(struct task_struct *curr)
 {
 	printk("irq event stamp: %u\n", curr->irq_events);
 	printk("hardirqs last  enabled at (%u): ", curr->hardirq_enable_event);
@@ -1464,103 +1769,30 @@ static inline void print_irqtrace_events(struct task_struct *curr)
 	print_ip_sym(curr->softirq_disable_ip);
 }
 
-#else
-static inline void print_irqtrace_events(struct task_struct *curr)
+static int hardirq_verbose(struct lock_class *class)
 {
-}
+#if HARDIRQ_VERBOSE
+	return class_filter(class);
 #endif
-
-static int
-print_usage_bug(struct task_struct *curr, struct held_lock *this,
-		enum lock_usage_bit prev_bit, enum lock_usage_bit new_bit)
-{
-	__raw_spin_unlock(&hash_lock);
-	debug_locks_off();
-	if (debug_locks_silent)
-		return 0;
-
-	printk("\n=================================\n");
-	printk(  "[ INFO: inconsistent lock state ]\n");
-	print_kernel_version();
-	printk(  "---------------------------------\n");
-
-	printk("inconsistent {%s} -> {%s} usage.\n",
-		usage_str[prev_bit], usage_str[new_bit]);
-
-	printk("%s/%d [HC%u[%lu]:SC%u[%lu]:HE%u:SE%u] takes:\n",
-		curr->comm, curr->pid,
-		trace_hardirq_context(curr), hardirq_count() >> HARDIRQ_SHIFT,
-		trace_softirq_context(curr), softirq_count() >> SOFTIRQ_SHIFT,
-		trace_hardirqs_enabled(curr),
-		trace_softirqs_enabled(curr));
-	print_lock(this);
-
-	printk("{%s} state was registered at:\n", usage_str[prev_bit]);
-	print_stack_trace(this->class->usage_traces + prev_bit, 1);
-
-	print_irqtrace_events(curr);
-	printk("\nother info that might help us debug this:\n");
-	lockdep_print_held_locks(curr);
-
-	printk("\nstack backtrace:\n");
-	dump_stack();
-
 	return 0;
 }
 
-/*
- * Print out an error if an invalid bit is set:
- */
-static inline int
-valid_state(struct task_struct *curr, struct held_lock *this,
-	    enum lock_usage_bit new_bit, enum lock_usage_bit bad_bit)
+static int softirq_verbose(struct lock_class *class)
 {
-	if (unlikely(this->class->usage_mask & (1 << bad_bit)))
-		return print_usage_bug(curr, this, bad_bit, new_bit);
-	return 1;
+#if SOFTIRQ_VERBOSE
+	return class_filter(class);
+#endif
+	return 0;
 }
 
 #define STRICT_READ_CHECKS	1
 
-/*
- * Mark a lock with a usage bit, and validate the state transition:
- */
-static int mark_lock(struct task_struct *curr, struct held_lock *this,
-		     enum lock_usage_bit new_bit, unsigned long ip)
+static int mark_lock_irq(struct task_struct *curr, struct held_lock *this,
+		enum lock_usage_bit new_bit)
 {
-	unsigned int new_mask = 1 << new_bit, ret = 1;
+	int ret = 1;
 
-	/*
-	 * If already set then do not dirty the cacheline,
-	 * nor do any checks:
-	 */
-	if (likely(this->class->usage_mask & new_mask))
-		return 1;
-
-	__raw_spin_lock(&hash_lock);
-	/*
-	 * Make sure we didnt race:
-	 */
-	if (unlikely(this->class->usage_mask & new_mask)) {
-		__raw_spin_unlock(&hash_lock);
-		return 1;
-	}
-
-	this->class->usage_mask |= new_mask;
-
-#ifdef CONFIG_TRACE_IRQFLAGS
-	if (new_bit == LOCK_ENABLED_HARDIRQS ||
-			new_bit == LOCK_ENABLED_HARDIRQS_READ)
-		ip = curr->hardirq_enable_ip;
-	else if (new_bit == LOCK_ENABLED_SOFTIRQS ||
-			new_bit == LOCK_ENABLED_SOFTIRQS_READ)
-		ip = curr->softirq_enable_ip;
-#endif
-	if (!save_trace(this->class->usage_traces + new_bit))
-		return 0;
-
-	switch (new_bit) {
-#ifdef CONFIG_TRACE_IRQFLAGS
+	switch(new_bit) {
 	case LOCK_USED_IN_HARDIRQ:
 		if (!valid_state(curr, this, new_bit, LOCK_ENABLED_HARDIRQS))
 			return 0;
@@ -1719,41 +1951,19 @@ static int mark_lock(struct task_struct *curr, struct held_lock *this,
 		if (softirq_verbose(this->class))
 			ret = 2;
 		break;
-#endif
-	case LOCK_USED:
-		/*
-		 * Add it to the global list of classes:
-		 */
-		list_add_tail_rcu(&this->class->lock_entry, &all_lock_classes);
-		debug_atomic_dec(&nr_unused_locks);
-		break;
 	default:
-		debug_locks_off();
 		WARN_ON(1);
-		return 0;
-	}
-
-	__raw_spin_unlock(&hash_lock);
-
-	/*
-	 * We must printk outside of the hash_lock:
-	 */
-	if (ret == 2) {
-		printk("\nmarked lock as {%s}:\n", usage_str[new_bit]);
-		print_lock(this);
-		print_irqtrace_events(curr);
-		dump_stack();
+		break;
 	}
 
 	return ret;
 }
 
-#ifdef CONFIG_TRACE_IRQFLAGS
 /*
  * Mark all held locks with a usage bit:
  */
 static int
-mark_held_locks(struct task_struct *curr, int hardirq, unsigned long ip)
+mark_held_locks(struct task_struct *curr, int hardirq)
 {
 	enum lock_usage_bit usage_bit;
 	struct held_lock *hlock;
@@ -1773,7 +1983,7 @@ mark_held_locks(struct task_struct *curr, int hardirq, unsigned long ip)
 			else
 				usage_bit = LOCK_ENABLED_SOFTIRQS;
 		}
-		if (!mark_lock(curr, hlock, usage_bit, ip))
+		if (!mark_lock(curr, hlock, usage_bit))
 			return 0;
 	}
 
@@ -1826,7 +2036,7 @@ void trace_hardirqs_on(void)
 	 * We are going to turn hardirqs on, so set the
 	 * usage bit for all held locks:
 	 */
-	if (!mark_held_locks(curr, 1, ip))
+	if (!mark_held_locks(curr, 1))
 		return;
 	/*
 	 * If we have softirqs enabled, then set the usage
@@ -1834,7 +2044,7 @@ void trace_hardirqs_on(void)
 	 * this bit from being set before)
 	 */
 	if (curr->softirqs_enabled)
-		if (!mark_held_locks(curr, 0, ip))
+		if (!mark_held_locks(curr, 0))
 			return;
 
 	curr->hardirq_enable_ip = ip;
@@ -1902,7 +2112,7 @@ void trace_softirqs_on(unsigned long ip)
 	 * enabled too:
 	 */
 	if (curr->hardirqs_enabled)
-		mark_held_locks(curr, 0, ip);
+		mark_held_locks(curr, 0);
 }
 
 /*
@@ -1931,7 +2141,174 @@ void trace_softirqs_off(unsigned long ip)
 		debug_atomic_inc(&redundant_softirqs_off);
 }
 
+static int mark_irqflags(struct task_struct *curr, struct held_lock *hlock)
+{
+	/*
+	 * If non-trylock use in a hardirq or softirq context, then
+	 * mark the lock as used in these contexts:
+	 */
+	if (!hlock->trylock) {
+		if (hlock->read) {
+			if (curr->hardirq_context)
+				if (!mark_lock(curr, hlock,
+						LOCK_USED_IN_HARDIRQ_READ))
+					return 0;
+			if (curr->softirq_context)
+				if (!mark_lock(curr, hlock,
+						LOCK_USED_IN_SOFTIRQ_READ))
+					return 0;
+		} else {
+			if (curr->hardirq_context)
+				if (!mark_lock(curr, hlock, LOCK_USED_IN_HARDIRQ))
+					return 0;
+			if (curr->softirq_context)
+				if (!mark_lock(curr, hlock, LOCK_USED_IN_SOFTIRQ))
+					return 0;
+		}
+	}
+	if (!hlock->hardirqs_off) {
+		if (hlock->read) {
+			if (!mark_lock(curr, hlock,
+					LOCK_ENABLED_HARDIRQS_READ))
+				return 0;
+			if (curr->softirqs_enabled)
+				if (!mark_lock(curr, hlock,
+						LOCK_ENABLED_SOFTIRQS_READ))
+					return 0;
+		} else {
+			if (!mark_lock(curr, hlock,
+					LOCK_ENABLED_HARDIRQS))
+				return 0;
+			if (curr->softirqs_enabled)
+				if (!mark_lock(curr, hlock,
+						LOCK_ENABLED_SOFTIRQS))
+					return 0;
+		}
+	}
+
+	return 1;
+}
+
+static int separate_irq_context(struct task_struct *curr,
+		struct held_lock *hlock)
+{
+	unsigned int depth = curr->lockdep_depth;
+
+	/*
+	 * Keep track of points where we cross into an interrupt context:
+	 */
+	hlock->irq_context = 2*(curr->hardirq_context ? 1 : 0) +
+				curr->softirq_context;
+	if (depth) {
+		struct held_lock *prev_hlock;
+
+		prev_hlock = curr->held_locks + depth-1;
+		/*
+		 * If we cross into another context, reset the
+		 * hash key (this also prevents the checking and the
+		 * adding of the dependency to 'prev'):
+		 */
+		if (prev_hlock->irq_context != hlock->irq_context)
+			return 1;
+	}
+	return 0;
+}
+
+#else
+
+static inline
+int mark_lock_irq(struct task_struct *curr, struct held_lock *this,
+		enum lock_usage_bit new_bit)
+{
+	WARN_ON(1);
+	return 1;
+}
+
+static inline int mark_irqflags(struct task_struct *curr,
+		struct held_lock *hlock)
+{
+	return 1;
+}
+
+static inline int separate_irq_context(struct task_struct *curr,
+		struct held_lock *hlock)
+{
+	return 0;
+}
+
 #endif
+
+/*
+ * Mark a lock with a usage bit, and validate the state transition:
+ */
+static int mark_lock(struct task_struct *curr, struct held_lock *this,
+		     enum lock_usage_bit new_bit)
+{
+	unsigned int new_mask = 1 << new_bit, ret = 1;
+
+	/*
+	 * If already set then do not dirty the cacheline,
+	 * nor do any checks:
+	 */
+	if (likely(this->class->usage_mask & new_mask))
+		return 1;
+
+	if (!graph_lock())
+		return 0;
+	/*
+	 * Make sure we didnt race:
+	 */
+	if (unlikely(this->class->usage_mask & new_mask)) {
+		graph_unlock();
+		return 1;
+	}
+
+	this->class->usage_mask |= new_mask;
+
+	if (!save_trace(this->class->usage_traces + new_bit))
+		return 0;
+
+	switch (new_bit) {
+	case LOCK_USED_IN_HARDIRQ:
+	case LOCK_USED_IN_SOFTIRQ:
+	case LOCK_USED_IN_HARDIRQ_READ:
+	case LOCK_USED_IN_SOFTIRQ_READ:
+	case LOCK_ENABLED_HARDIRQS:
+	case LOCK_ENABLED_SOFTIRQS:
+	case LOCK_ENABLED_HARDIRQS_READ:
+	case LOCK_ENABLED_SOFTIRQS_READ:
+		ret = mark_lock_irq(curr, this, new_bit);
+		if (!ret)
+			return 0;
+		break;
+	case LOCK_USED:
+		/*
+		 * Add it to the global list of classes:
+		 */
+		list_add_tail_rcu(&this->class->lock_entry, &all_lock_classes);
+		debug_atomic_dec(&nr_unused_locks);
+		break;
+	default:
+		if (!debug_locks_off_graph_unlock())
+			return 0;
+		WARN_ON(1);
+		return 0;
+	}
+
+	graph_unlock();
+
+	/*
+	 * We must printk outside of the graph_lock:
+	 */
+	if (ret == 2) {
+		printk("\nmarked lock as {%s}:\n", usage_str[new_bit]);
+		print_lock(this);
+		print_irqtrace_events(curr);
+		dump_stack();
+	}
+
+	return ret;
+}
 
 /*
  * Initialize a lock instance's lock-class mapping info:
@@ -1957,6 +2334,9 @@ void lockdep_init_map(struct lockdep_map *lock, const char *name,
 	lock->name = name;
 	lock->key = key;
 	lock->class_cache = NULL;
+#ifdef CONFIG_LOCK_STAT
+	lock->cpu = raw_smp_processor_id();
+#endif
 	if (subclass)
 		register_lock_class(lock, subclass, 1);
 }
@@ -1977,6 +2357,9 @@ static int __lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 	unsigned int depth, id;
 	int chain_head = 0;
 	u64 chain_key;
+
+	if (!prove_locking)
+		check = 1;
 
 	if (unlikely(!debug_locks))
 		return 0;
@@ -2028,57 +2411,18 @@ static int __lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 	hlock->read = read;
 	hlock->check = check;
 	hlock->hardirqs_off = hardirqs_off;
-
-	if (check != 2)
-		goto out_calc_hash;
-#ifdef CONFIG_TRACE_IRQFLAGS
-	/*
-	 * If non-trylock use in a hardirq or softirq context, then
-	 * mark the lock as used in these contexts:
-	 */
-	if (!trylock) {
-		if (read) {
-			if (curr->hardirq_context)
-				if (!mark_lock(curr, hlock,
-						LOCK_USED_IN_HARDIRQ_READ, ip))
-					return 0;
-			if (curr->softirq_context)
-				if (!mark_lock(curr, hlock,
-						LOCK_USED_IN_SOFTIRQ_READ, ip))
-					return 0;
-		} else {
-			if (curr->hardirq_context)
-				if (!mark_lock(curr, hlock, LOCK_USED_IN_HARDIRQ, ip))
-					return 0;
-			if (curr->softirq_context)
-				if (!mark_lock(curr, hlock, LOCK_USED_IN_SOFTIRQ, ip))
-					return 0;
-		}
-	}
-	if (!hardirqs_off) {
-		if (read) {
-			if (!mark_lock(curr, hlock,
-					LOCK_ENABLED_HARDIRQS_READ, ip))
-				return 0;
-			if (curr->softirqs_enabled)
-				if (!mark_lock(curr, hlock,
-						LOCK_ENABLED_SOFTIRQS_READ, ip))
-					return 0;
-		} else {
-			if (!mark_lock(curr, hlock,
-					LOCK_ENABLED_HARDIRQS, ip))
-				return 0;
-			if (curr->softirqs_enabled)
-				if (!mark_lock(curr, hlock,
-						LOCK_ENABLED_SOFTIRQS, ip))
-					return 0;
-		}
-	}
+#ifdef CONFIG_LOCK_STAT
+	hlock->waittime_stamp = 0;
+	hlock->holdtime_stamp = sched_clock();
 #endif
-	/* mark it as used: */
-	if (!mark_lock(curr, hlock, LOCK_USED, ip))
+
+	if (check == 2 && !mark_irqflags(curr, hlock))
 		return 0;
-out_calc_hash:
+
+	/* mark it as used: */
+	if (!mark_lock(curr, hlock, LOCK_USED))
+		return 0;
+
 	/*
 	 * Calculate the chain hash: it's the combined has of all the
 	 * lock keys along the dependency chain. We save the hash value
@@ -2101,82 +2445,29 @@ out_calc_hash:
 	}
 
 	hlock->prev_chain_key = chain_key;
-
-#ifdef CONFIG_TRACE_IRQFLAGS
-	/*
-	 * Keep track of points where we cross into an interrupt context:
-	 */
-	hlock->irq_context = 2*(curr->hardirq_context ? 1 : 0) +
-				curr->softirq_context;
-	if (depth) {
-		struct held_lock *prev_hlock;
-
-		prev_hlock = curr->held_locks + depth-1;
-		/*
-		 * If we cross into another context, reset the
-		 * hash key (this also prevents the checking and the
-		 * adding of the dependency to 'prev'):
-		 */
-		if (prev_hlock->irq_context != hlock->irq_context) {
-			chain_key = 0;
-			chain_head = 1;
-		}
+	if (separate_irq_context(curr, hlock)) {
+		chain_key = 0;
+		chain_head = 1;
 	}
-#endif
 	chain_key = iterate_chain_key(chain_key, id);
 	curr->curr_chain_key = chain_key;
 
-	/*
-	 * Trylock needs to maintain the stack of held locks, but it
-	 * does not add new dependencies, because trylock can be done
-	 * in any order.
-	 *
-	 * We look up the chain_key and do the O(N^2) check and update of
-	 * the dependencies only if this is a new dependency chain.
-	 * (If lookup_chain_cache() returns with 1 it acquires
-	 * hash_lock for us)
-	 */
-	if (!trylock && (check == 2) && lookup_chain_cache(chain_key)) {
-		/*
-		 * Check whether last held lock:
-		 *
-		 * - is irq-safe, if this lock is irq-unsafe
-		 * - is softirq-safe, if this lock is hardirq-unsafe
-		 *
-		 * And check whether the new lock's dependency graph
-		 * could lead back to the previous lock.
-		 *
-		 * any of these scenarios could lead to a deadlock. If
-		 * All validations
-		 */
-		int ret = check_deadlock(curr, hlock, lock, read);
+	if (!validate_chain(curr, lock, hlock, chain_head))
+		return 0;
 
-		if (!ret)
-			return 0;
-		/*
-		 * Mark recursive read, as we jump over it when
-		 * building dependencies (just like we jump over
-		 * trylock entries):
-		 */
-		if (ret == 2)
-			hlock->read = 2;
-		/*
-		 * Add dependency only if this lock is not the head
-		 * of the chain, and if it's not a secondary read-lock:
-		 */
-		if (!chain_head && ret != 2)
-			if (!check_prevs_add(curr, hlock))
-				return 0;
-		__raw_spin_unlock(&hash_lock);
-	}
 	curr->lockdep_depth++;
 	check_chain_key(curr);
+#ifdef CONFIG_DEBUG_LOCKDEP
+	if (unlikely(!debug_locks))
+		return 0;
+#endif
 	if (unlikely(curr->lockdep_depth >= MAX_LOCK_DEPTH)) {
 		debug_locks_off();
 		printk("BUG: MAX_LOCK_DEPTH too low!\n");
 		printk("turning off the locking correctness validator.\n");
 		return 0;
 	}
+
 	if (unlikely(curr->lockdep_depth > max_lockdep_depth))
 		max_lockdep_depth = curr->lockdep_depth;
 
@@ -2264,6 +2555,8 @@ lock_release_non_nested(struct task_struct *curr,
 	return print_unlock_inbalance_bug(curr, lock, ip);
 
 found_it:
+	lock_release_holdtime(hlock);
+
 	/*
 	 * We have the right lock to unlock, 'hlock' points to it.
 	 * Now we remove it from the stack, and add back the other
@@ -2315,6 +2608,8 @@ static int lock_release_nested(struct task_struct *curr,
 		return 0;
 
 	curr->curr_chain_key = hlock->prev_chain_key;
+
+	lock_release_holdtime(hlock);
 
 #ifdef CONFIG_DEBUG_LOCKDEP
 	hlock->prev_chain_key = 0;
@@ -2390,6 +2685,9 @@ void lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 {
 	unsigned long flags;
 
+	if (unlikely(!lock_stat && !prove_locking))
+		return;
+
 	if (unlikely(current->lockdep_recursion))
 		return;
 
@@ -2409,6 +2707,9 @@ void lock_release(struct lockdep_map *lock, int nested, unsigned long ip)
 {
 	unsigned long flags;
 
+	if (unlikely(!lock_stat && !prove_locking))
+		return;
+
 	if (unlikely(current->lockdep_recursion))
 		return;
 
@@ -2422,6 +2723,166 @@ void lock_release(struct lockdep_map *lock, int nested, unsigned long ip)
 
 EXPORT_SYMBOL_GPL(lock_release);
 
+#ifdef CONFIG_LOCK_STAT
+static int
+print_lock_contention_bug(struct task_struct *curr, struct lockdep_map *lock,
+			   unsigned long ip)
+{
+	if (!debug_locks_off())
+		return 0;
+	if (debug_locks_silent)
+		return 0;
+
+	printk("\n=================================\n");
+	printk(  "[ BUG: bad contention detected! ]\n");
+	printk(  "---------------------------------\n");
+	printk("%s/%d is trying to contend lock (",
+		curr->comm, curr->pid);
+	print_lockdep_cache(lock);
+	printk(") at:\n");
+	print_ip_sym(ip);
+	printk("but there are no locks held!\n");
+	printk("\nother info that might help us debug this:\n");
+	lockdep_print_held_locks(curr);
+
+	printk("\nstack backtrace:\n");
+	dump_stack();
+
+	return 0;
+}
+
+static void
+__lock_contended(struct lockdep_map *lock, unsigned long ip)
+{
+	struct task_struct *curr = current;
+	struct held_lock *hlock, *prev_hlock;
+	struct lock_class_stats *stats;
+	unsigned int depth;
+	int i, point;
+
+	depth = curr->lockdep_depth;
+	if (DEBUG_LOCKS_WARN_ON(!depth))
+		return;
+
+	prev_hlock = NULL;
+	for (i = depth-1; i >= 0; i--) {
+		hlock = curr->held_locks + i;
+		/*
+		 * We must not cross into another context:
+		 */
+		if (prev_hlock && prev_hlock->irq_context != hlock->irq_context)
+			break;
+		if (hlock->instance == lock)
+			goto found_it;
+		prev_hlock = hlock;
+	}
+	print_lock_contention_bug(curr, lock, ip);
+	return;
+
+found_it:
+	hlock->waittime_stamp = sched_clock();
+
+	point = lock_contention_point(hlock->class, ip);
+
+	stats = get_lock_stats(hlock->class);
+	if (point < ARRAY_SIZE(stats->contention_point))
+		stats->contention_point[i]++;
+	if (lock->cpu != smp_processor_id())
+		stats->bounces[bounce_contended + !!hlock->read]++;
+	put_lock_stats(stats);
+}
+
+static void
+__lock_acquired(struct lockdep_map *lock)
+{
+	struct task_struct *curr = current;
+	struct held_lock *hlock, *prev_hlock;
+	struct lock_class_stats *stats;
+	unsigned int depth;
+	u64 now;
+	s64 waittime = 0;
+	int i, cpu;
+
+	depth = curr->lockdep_depth;
+	if (DEBUG_LOCKS_WARN_ON(!depth))
+		return;
+
+	prev_hlock = NULL;
+	for (i = depth-1; i >= 0; i--) {
+		hlock = curr->held_locks + i;
+		/*
+		 * We must not cross into another context:
+		 */
+		if (prev_hlock && prev_hlock->irq_context != hlock->irq_context)
+			break;
+		if (hlock->instance == lock)
+			goto found_it;
+		prev_hlock = hlock;
+	}
+	print_lock_contention_bug(curr, lock, _RET_IP_);
+	return;
+
+found_it:
+	cpu = smp_processor_id();
+	if (hlock->waittime_stamp) {
+		now = sched_clock();
+		waittime = now - hlock->waittime_stamp;
+		hlock->holdtime_stamp = now;
+	}
+
+	stats = get_lock_stats(hlock->class);
+	if (waittime) {
+		if (hlock->read)
+			lock_time_inc(&stats->read_waittime, waittime);
+		else
+			lock_time_inc(&stats->write_waittime, waittime);
+	}
+	if (lock->cpu != cpu)
+		stats->bounces[bounce_acquired + !!hlock->read]++;
+	put_lock_stats(stats);
+
+	lock->cpu = cpu;
+}
+
+void lock_contended(struct lockdep_map *lock, unsigned long ip)
+{
+	unsigned long flags;
+
+	if (unlikely(!lock_stat))
+		return;
+
+	if (unlikely(current->lockdep_recursion))
+		return;
+
+	raw_local_irq_save(flags);
+	check_flags(flags);
+	current->lockdep_recursion = 1;
+	__lock_contended(lock, ip);
+	current->lockdep_recursion = 0;
+	raw_local_irq_restore(flags);
+}
+EXPORT_SYMBOL_GPL(lock_contended);
+
+void lock_acquired(struct lockdep_map *lock)
+{
+	unsigned long flags;
+
+	if (unlikely(!lock_stat))
+		return;
+
+	if (unlikely(current->lockdep_recursion))
+		return;
+
+	raw_local_irq_save(flags);
+	check_flags(flags);
+	current->lockdep_recursion = 1;
+	__lock_acquired(lock);
+	current->lockdep_recursion = 0;
+	raw_local_irq_restore(flags);
+}
+EXPORT_SYMBOL_GPL(lock_acquired);
+#endif
+
 /*
  * Used by the testsuite, sanitize the validator state
  * after a simulated failure:
@@ -2430,6 +2891,7 @@ EXPORT_SYMBOL_GPL(lock_release);
 void lockdep_reset(void)
 {
 	unsigned long flags;
+	int i;
 
 	raw_local_irq_save(flags);
 	current->curr_chain_key = 0;
@@ -2440,6 +2902,8 @@ void lockdep_reset(void)
 	nr_softirq_chains = 0;
 	nr_process_chains = 0;
 	debug_locks = 1;
+	for (i = 0; i < CHAINHASH_SIZE; i++)
+		INIT_LIST_HEAD(chainhash_table + i);
 	raw_local_irq_restore(flags);
 }
 
@@ -2476,7 +2940,7 @@ void lockdep_free_key_range(void *start, unsigned long size)
 	int i;
 
 	raw_local_irq_save(flags);
-	__raw_spin_lock(&hash_lock);
+	graph_lock();
 
 	/*
 	 * Unhash all classes that were created by this module:
@@ -2490,7 +2954,7 @@ void lockdep_free_key_range(void *start, unsigned long size)
 				zap_class(class);
 	}
 
-	__raw_spin_unlock(&hash_lock);
+	graph_unlock();
 	raw_local_irq_restore(flags);
 }
 
@@ -2518,26 +2982,26 @@ void lockdep_reset_lock(struct lockdep_map *lock)
 	 * Debug check: in the end all mapped classes should
 	 * be gone.
 	 */
-	__raw_spin_lock(&hash_lock);
+	graph_lock();
 	for (i = 0; i < CLASSHASH_SIZE; i++) {
 		head = classhash_table + i;
 		if (list_empty(head))
 			continue;
 		list_for_each_entry_safe(class, next, head, hash_entry) {
 			if (unlikely(class == lock->class_cache)) {
-				__raw_spin_unlock(&hash_lock);
-				DEBUG_LOCKS_WARN_ON(1);
+				if (debug_locks_off_graph_unlock())
+					WARN_ON(1);
 				goto out_restore;
 			}
 		}
 	}
-	__raw_spin_unlock(&hash_lock);
+	graph_unlock();
 
 out_restore:
 	raw_local_irq_restore(flags);
 }
 
-void __init lockdep_init(void)
+void lockdep_init(void)
 {
 	int i;
 
@@ -2582,8 +3046,11 @@ void __init lockdep_info(void)
 		sizeof(struct held_lock) * MAX_LOCK_DEPTH);
 
 #ifdef CONFIG_DEBUG_LOCKDEP
-	if (lockdep_init_error)
-		printk("WARNING: lockdep init error! Arch code didnt call lockdep_init() early enough?\n");
+	if (lockdep_init_error) {
+		printk("WARNING: lockdep init error! Arch code didn't call lockdep_init() early enough?\n");
+		printk("Call stack leading to lockdep invocation was:\n");
+		print_stack_trace(&lockdep_init_trace, 0);
+	}
 #endif
 }
 
@@ -2645,6 +3112,7 @@ void debug_check_no_locks_freed(const void *mem_from, unsigned long mem_len)
 	}
 	local_irq_restore(flags);
 }
+EXPORT_SYMBOL_GPL(debug_check_no_locks_freed);
 
 static void print_held_locks_bug(struct task_struct *curr)
 {
@@ -2676,6 +3144,10 @@ void debug_show_all_locks(void)
 	int count = 10;
 	int unlock = 1;
 
+	if (unlikely(!debug_locks)) {
+		printk("INFO: lockdep is turned off.\n");
+		return;
+	}
 	printk("\nShowing all locks held in the system:\n");
 
 	/*
@@ -2719,8 +3191,11 @@ EXPORT_SYMBOL_GPL(debug_show_all_locks);
 
 void debug_show_held_locks(struct task_struct *task)
 {
+	if (unlikely(!debug_locks)) {
+		printk("INFO: lockdep is turned off.\n");
+		return;
+	}
 	lockdep_print_held_locks(task);
 }
 
 EXPORT_SYMBOL_GPL(debug_show_held_locks);
-

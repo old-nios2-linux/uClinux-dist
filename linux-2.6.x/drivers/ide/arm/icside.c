@@ -18,10 +18,10 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/scatterlist.h>
+#include <linux/io.h>
 
 #include <asm/dma.h>
 #include <asm/ecard.h>
-#include <asm/io.h>
 
 #define ICS_IDENT_OFFSET		0x2280
 
@@ -196,11 +196,6 @@ static void icside_maskproc(ide_drive_t *drive, int mask)
 }
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_ICS
-
-#ifndef CONFIG_IDEDMA_ICS_AUTO
-#warning CONFIG_IDEDMA_ICS_AUTO=n support is obsolete, and will be removed soon.
-#endif
-
 /*
  * SG-DMA support.
  *
@@ -307,26 +302,24 @@ static int icside_set_speed(ide_drive_t *drive, u8 xfer_mode)
 	return on;
 }
 
-static int icside_dma_host_off(ide_drive_t *drive)
+static void icside_dma_host_off(ide_drive_t *drive)
 {
-	return 0;
 }
 
-static int icside_dma_off_quietly(ide_drive_t *drive)
+static void icside_dma_off_quietly(ide_drive_t *drive)
 {
 	drive->using_dma = 0;
-	return icside_dma_host_off(drive);
 }
 
-static int icside_dma_host_on(ide_drive_t *drive)
+static void icside_dma_host_on(ide_drive_t *drive)
 {
-	return 0;
 }
 
 static int icside_dma_on(ide_drive_t *drive)
 {
 	drive->using_dma = 1;
-	return icside_dma_host_on(drive);
+
+	return 0;
 }
 
 static int icside_dma_check(ide_drive_t *drive)
@@ -349,7 +342,7 @@ static int icside_dma_check(ide_drive_t *drive)
 	 * Enable DMA on any drive that has multiword DMA
 	 */
 	if (id->field_valid & 2) {
-		xfer_mode = ide_dma_speed(drive, 0);
+		xfer_mode = ide_max_dma_mode(drive);
 		goto out;
 	}
 
@@ -365,10 +358,7 @@ static int icside_dma_check(ide_drive_t *drive)
 out:
 	on = icside_set_speed(drive, xfer_mode);
 
-	if (on)
-		return icside_dma_on(drive);
-	else
-		return icside_dma_off_quietly(drive);
+	return on ? 0 : -1;
 }
 
 static int icside_dma_end(ide_drive_t *drive)
@@ -458,33 +448,25 @@ static int icside_dma_test_irq(ide_drive_t *drive)
 			ICS_ARCIN_V6_INTRSTAT_1)) & 1;
 }
 
-static int icside_dma_timeout(ide_drive_t *drive)
+static void icside_dma_timeout(ide_drive_t *drive)
 {
 	printk(KERN_ERR "%s: DMA timeout occurred: ", drive->name);
 
 	if (icside_dma_test_irq(drive))
-		return 0;
+		return;
 
-	ide_dump_status(drive, "DMA timeout",
-		HWIF(drive)->INB(IDE_STATUS_REG));
+	ide_dump_status(drive, "DMA timeout", HWIF(drive)->INB(IDE_STATUS_REG));
 
-	return icside_dma_end(drive);
+	icside_dma_end(drive);
 }
 
-static int icside_dma_lostirq(ide_drive_t *drive)
+static void icside_dma_lost_irq(ide_drive_t *drive)
 {
 	printk(KERN_ERR "%s: IRQ lost\n", drive->name);
-	return 1;
 }
 
 static void icside_dma_init(ide_hwif_t *hwif)
 {
-	int autodma = 0;
-
-#ifdef CONFIG_IDEDMA_ICS_AUTO
-	autodma = 1;
-#endif
-
 	printk("    %s: SG-DMA", hwif->name);
 
 	hwif->atapi_dma		= 1;
@@ -494,20 +476,20 @@ static void icside_dma_init(ide_hwif_t *hwif)
 	hwif->dmatable_cpu	= NULL;
 	hwif->dmatable_dma	= 0;
 	hwif->speedproc		= icside_set_speed;
-	hwif->autodma		= autodma;
+	hwif->autodma		= 1;
 
 	hwif->ide_dma_check	= icside_dma_check;
-	hwif->ide_dma_host_off	= icside_dma_host_off;
-	hwif->ide_dma_off_quietly = icside_dma_off_quietly;
-	hwif->ide_dma_host_on	= icside_dma_host_on;
+	hwif->dma_host_off	= icside_dma_host_off;
+	hwif->dma_off_quietly	= icside_dma_off_quietly;
+	hwif->dma_host_on	= icside_dma_host_on;
 	hwif->ide_dma_on	= icside_dma_on;
 	hwif->dma_setup		= icside_dma_setup;
 	hwif->dma_exec_cmd	= icside_dma_exec_cmd;
 	hwif->dma_start		= icside_dma_start;
 	hwif->ide_dma_end	= icside_dma_end;
 	hwif->ide_dma_test_irq	= icside_dma_test_irq;
-	hwif->ide_dma_timeout	= icside_dma_timeout;
-	hwif->ide_dma_lostirq	= icside_dma_lostirq;
+	hwif->dma_timeout	= icside_dma_timeout;
+	hwif->dma_lost_irq	= icside_dma_lost_irq;
 
 	hwif->drives[0].autodma = hwif->autodma;
 	hwif->drives[1].autodma = hwif->autodma;
@@ -556,7 +538,7 @@ icside_setup(void __iomem *base, struct cardinfo *info, struct expansion_card *e
 		 * Ensure we're using MMIO
 		 */
 		default_hwif_mmiops(hwif);
-		hwif->mmio = 2;
+		hwif->mmio = 1;
 
 		for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
 			hwif->hw.io_ports[i] = port;
@@ -581,8 +563,7 @@ icside_register_v5(struct icside_state *state, struct expansion_card *ec)
 	ide_hwif_t *hwif;
 	void __iomem *base;
 
-	base = ioremap(ecard_resource_start(ec, ECARD_RES_MEMC),
-		       ecard_resource_len(ec, ECARD_RES_MEMC));
+	base = ecardm_iomap(ec, ECARD_RES_MEMC, 0, 0);
 	if (!base)
 		return -ENOMEM;
 
@@ -590,8 +571,8 @@ icside_register_v5(struct icside_state *state, struct expansion_card *ec)
 
 	ec->irqaddr  = base + ICS_ARCIN_V5_INTRSTAT;
 	ec->irqmask  = 1;
-	ec->irq_data = state;
-	ec->ops      = &icside_ops_arcin_v5;
+
+	ecard_setirq(ec, &icside_ops_arcin_v5, state);
 
 	/*
 	 * Be on the safe side - disable interrupts
@@ -599,15 +580,14 @@ icside_register_v5(struct icside_state *state, struct expansion_card *ec)
 	icside_irqdisable_arcin_v5(ec, 0);
 
 	hwif = icside_setup(base, &icside_cardinfo_v5, ec);
-	if (!hwif) {
-		iounmap(base);
+	if (!hwif)
 		return -ENODEV;
-	}
 
 	state->hwif[0] = hwif;
 
 	probe_hwif_init(hwif);
-	create_proc_ide_interfaces();
+
+	ide_proc_register_port(hwif);
 
 	return 0;
 }
@@ -620,8 +600,7 @@ icside_register_v6(struct icside_state *state, struct expansion_card *ec)
 	unsigned int sel = 0;
 	int ret;
 
-	ioc_base = ioremap(ecard_resource_start(ec, ECARD_RES_IOCFAST),
-			   ecard_resource_len(ec, ECARD_RES_IOCFAST));
+	ioc_base = ecardm_iomap(ec, ECARD_RES_IOCFAST, 0, 0);
 	if (!ioc_base) {
 		ret = -ENOMEM;
 		goto out;
@@ -630,11 +609,10 @@ icside_register_v6(struct icside_state *state, struct expansion_card *ec)
 	easi_base = ioc_base;
 
 	if (ecard_resource_flags(ec, ECARD_RES_EASI)) {
-		easi_base = ioremap(ecard_resource_start(ec, ECARD_RES_EASI),
-				    ecard_resource_len(ec, ECARD_RES_EASI));
+		easi_base = ecardm_iomap(ec, ECARD_RES_EASI, 0, 0);
 		if (!easi_base) {
 			ret = -ENOMEM;
-			goto unmap_slot;
+			goto out;
 		}
 
 		/*
@@ -645,8 +623,7 @@ icside_register_v6(struct icside_state *state, struct expansion_card *ec)
 
 	writeb(sel, ioc_base);
 
-	ec->irq_data      = state;
-	ec->ops           = &icside_ops_arcin_v6;
+	ecard_setirq(ec, &icside_ops_arcin_v6, state);
 
 	state->irq_port   = easi_base;
 	state->ioc_base   = ioc_base;
@@ -664,7 +641,7 @@ icside_register_v6(struct icside_state *state, struct expansion_card *ec)
 
 	if (!hwif || !mate) {
 		ret = -ENODEV;
-		goto unmap_port;
+		goto out;
 	}
 
 	state->hwif[0]    = hwif;
@@ -695,15 +672,12 @@ icside_register_v6(struct icside_state *state, struct expansion_card *ec)
 
 	probe_hwif_init(hwif);
 	probe_hwif_init(mate);
-	create_proc_ide_interfaces();
+
+	ide_proc_register_port(hwif);
+	ide_proc_register_port(mate);
 
 	return 0;
 
- unmap_port:
-	if (easi_base != ioc_base)
-		iounmap(easi_base);
- unmap_slot:
-	iounmap(ioc_base);
  out:
 	return ret;
 }
@@ -719,18 +693,16 @@ icside_probe(struct expansion_card *ec, const struct ecard_id *id)
 	if (ret)
 		goto out;
 
-	state = kmalloc(sizeof(struct icside_state), GFP_KERNEL);
+	state = kzalloc(sizeof(struct icside_state), GFP_KERNEL);
 	if (!state) {
 		ret = -ENOMEM;
 		goto release;
 	}
 
-	memset(state, 0, sizeof(state));
 	state->type	= ICS_TYPE_NOTYPE;
 	state->dev	= &ec->dev;
 
-	idmem = ioremap(ecard_resource_start(ec, ECARD_RES_IOCFAST),
-			ecard_resource_len(ec, ECARD_RES_IOCFAST));
+	idmem = ecardm_iomap(ec, ECARD_RES_IOCFAST, 0, 0);
 	if (idmem) {
 		unsigned int type;
 
@@ -738,7 +710,7 @@ icside_probe(struct expansion_card *ec, const struct ecard_id *id)
 		type |= (readb(idmem + ICS_IDENT_OFFSET + 4) & 1) << 1;
 		type |= (readb(idmem + ICS_IDENT_OFFSET + 8) & 1) << 2;
 		type |= (readb(idmem + ICS_IDENT_OFFSET + 12) & 1) << 3;
-		iounmap(idmem);
+		ecardm_iounmap(ec, idmem);
 
 		state->type = type;
 	}
@@ -806,13 +778,6 @@ static void __devexit icside_remove(struct expansion_card *ec)
 	}
 
 	ecard_set_drvdata(ec, NULL);
-	ec->ops = NULL;
-	ec->irq_data = NULL;
-
-	if (state->ioc_base)
-		iounmap(state->ioc_base);
-	if (state->ioc_base != state->irq_port)
-		iounmap(state->irq_port);
 
 	kfree(state);
 	ecard_release_resources(ec);

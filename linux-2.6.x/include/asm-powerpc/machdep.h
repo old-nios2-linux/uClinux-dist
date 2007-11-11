@@ -26,6 +26,7 @@ struct device_node;
 struct iommu_table;
 struct rtc_time;
 struct file;
+struct pci_controller;
 #ifdef CONFIG_KEXEC
 struct kimage;
 #endif
@@ -84,9 +85,17 @@ struct machdep_calls {
 	unsigned long	(*tce_get)(struct iommu_table *tbl,
 				    long index);
 	void		(*tce_flush)(struct iommu_table *tbl);
-	void		(*iommu_dev_setup)(struct pci_dev *dev);
-	void		(*iommu_bus_setup)(struct pci_bus *bus);
-	void		(*irq_bus_setup)(struct pci_bus *bus);
+	void		(*pci_dma_dev_setup)(struct pci_dev *dev);
+	void		(*pci_dma_bus_setup)(struct pci_bus *bus);
+
+	void __iomem *	(*ioremap)(phys_addr_t addr, unsigned long size,
+				   unsigned long flags);
+	void		(*iounmap)(volatile void __iomem *token);
+
+#ifdef CONFIG_PM
+	void		(*iommu_save)(void);
+	void		(*iommu_restore)(void);
+#endif
 #endif /* CONFIG_PPC64 */
 
 	int		(*probe)(void);
@@ -106,6 +115,18 @@ struct machdep_calls {
 	/* Called after scanning the bus, before allocating resources */
 	void		(*pcibios_fixup)(void);
 	int		(*pci_probe_mode)(struct pci_bus *);
+	void		(*pci_irq_fixup)(struct pci_dev *dev);
+
+	/* To setup PHBs when using automatic OF platform driver for PCI */
+	int		(*pci_setup_phb)(struct pci_controller *host);
+
+#ifdef CONFIG_PCI_MSI
+	int		(*msi_check_device)(struct pci_dev* dev,
+					    int nvec, int type);
+	int		(*setup_msi_irqs)(struct pci_dev *dev,
+					  int nvec, int type);
+	void		(*teardown_msi_irqs)(struct pci_dev *dev);
+#endif
 
 	void		(*restart)(char *cmd);
 	void		(*power_off)(void);
@@ -144,9 +165,6 @@ struct machdep_calls {
 	 * lines, chip power control, etc...).
 	 */
 	long	 	(*feature_call)(unsigned int feature, ...);
-
-	/* Check availability of legacy devices like i8042 */
-	int 		(*check_legacy_ioport)(unsigned int baseport);
 
 	/* Get legacy PCI/IDE interrupt mapping */ 
 	int		(*pci_get_legacy_ide_irq)(struct pci_dev *dev, int channel);
@@ -199,12 +217,8 @@ struct machdep_calls {
 	 * Returns 0 to allow assignment/enabling of the device. */
 	int  (*pcibios_enable_device_hook)(struct pci_dev *, int initial);
 
-	/* For interrupt routing */
-	unsigned char (*pci_swizzle)(struct pci_dev *, unsigned char *);
-	int (*pci_map_irq)(struct pci_dev *, unsigned char, unsigned char);
-
 	/* Called in indirect_* to avoid touching devices */
-	int (*pci_exclude_device)(unsigned char, unsigned char);
+	int (*pci_exclude_device)(struct pci_controller *, unsigned char, unsigned char);
 
 	/* Called at then very end of pcibios_init() */
 	void (*pcibios_after_init)(void);
@@ -239,14 +253,10 @@ struct machdep_calls {
 	 */
 	void (*machine_kexec)(struct kimage *image);
 #endif /* CONFIG_KEXEC */
-
-#ifdef CONFIG_PCI_MSI
-	int (*enable_msi)(struct pci_dev *pdev);
-	void (*disable_msi)(struct pci_dev *pdev);
-#endif /* CONFIG_PCI_MSI */
 };
 
 extern void power4_idle(void);
+extern void power4_cpu_offline_powersave(void);
 extern void ppc6xx_idle(void);
 
 /*

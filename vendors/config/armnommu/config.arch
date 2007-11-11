@@ -61,7 +61,11 @@ else
 ARCH          = armnommu
 endif
 ENDIAN        ?= little
+ifneq ($(shell which arm-linux-20070808-gcc),)
+CROSS_COMPILE = arm-linux-20070808-
+else
 CROSS_COMPILE = arm-linux-
+endif
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = arm-linux
 

@@ -10,4 +10,4 @@ obj-$(CONFIG_EARLY_PRINTK)	+= ip27-console.o
 obj-$(CONFIG_KGDB)		+= ip27-dbgio.o
 obj-$(CONFIG_SMP)		+= ip27-smp.o
 
-EXTRA_AFLAGS := $(CFLAGS)
+EXTRA_CFLAGS += -Werror

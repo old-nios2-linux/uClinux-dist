@@ -4,7 +4,7 @@
  * details.  THERE IS ABSOLUTELY NO WARRANTY FOR THIS SOFTWARE.
  */
 
-/* $Header: /usr/cvsroot/asterisk/codecs/gsm/src/preprocess.c,v 1.16 2003/02/12 13:59:14 matteo Exp $ */
+/* $Header$ */
 
 #include	<stdio.h>
 #include	<assert.h>
@@ -36,20 +36,15 @@ void Gsm_Preprocess P3((S, s, so),
 	word		 * s,
 	word 		 * so )		/* [0..159] 	IN/OUT	*/
 {
-
-	word       z1 = S->z1;
-	longword L_z2 = S->L_z2;
-	word 	   mp = S->mp;
-
+	word       	z1 = S->z1;
+	longword 	L_z2 = S->L_z2;
+	word 	   	mp = S->mp;
 	word 	   	s1;
-
-
 	word		SO;
-
-	longword	ltmp;		/* for   ADD */
 	ulongword	utmp;		/* for L_ADD */
+	register int	k = 160;
 
-	register int		k = 160;
+	(void) utmp;
 
 	while (k--) {
 
@@ -86,15 +81,18 @@ void Gsm_Preprocess P3((S, s, so),
 		/*   Execution of a 31 bv 16 bits multiplication
 		 */
 		{
-		word		msp, lsp;
+		word		msp;
+#ifndef __GNUC__ 
+		word		lsp;
+#endif
 		longword L_s2;
 		longword L_temp;
 		
 		L_s2 = s1;
 		L_s2 <<= 15;
 #ifndef __GNUC__ 
-		msp = SASR( L_z2, 15 );
-		lsp = L_z2 & 0x7fff; /* gsm_L_sub(L_z2,(msp<<15)); */
+		msp = (word)SASR( L_z2, 15 );
+		lsp = (word)(L_z2 & 0x7fff); /* gsm_L_sub(L_z2,(msp<<15)); */
 
 		L_s2  += GSM_MULT_R( lsp, 32735 );
 		L_temp = (longword)msp * 32735; /* GSM_L_MULT(msp,32735) >> 1;*/
@@ -117,8 +115,8 @@ void Gsm_Preprocess P3((S, s, so),
 	/*   4.2.3  Preemphasis
 	 */
 
-		msp   = GSM_MULT_R( mp, -28180 );
-		mp    = SASR( L_temp, 15 );
+		msp   = (word)GSM_MULT_R( mp, -28180 );
+		mp    = (word)SASR( L_temp, 15 );
 		*so++ = GSM_ADD( mp, msp );
 		}
 	}

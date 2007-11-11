@@ -9,38 +9,66 @@
 /***************************************************************************/
 
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/param.h>
+#include <linux/init.h>
 #include <linux/interrupt.h>
-#include <asm/irq.h>
-#include <asm/dma.h>
-#include <asm/traps.h>
 #include <asm/machdep.h>
+#include <asm/io.h>
 #include <asm/coldfire.h>
-#include <asm/mcftimer.h>
 #include <asm/mcfsim.h>
 #include <asm/mcfdma.h>
-#include <asm/irq.h>
 
 /***************************************************************************/
 
-void coldfire_tick(void);
-void coldfire_timer_init(irqreturn_t (*handler)(int, void *, struct pt_regs *));
-unsigned long coldfire_timer_offset(void);
-void coldfire_trap_init(void);
 void coldfire_reset(void);
 
 /***************************************************************************/
 
-/*
- *	DMA channel base address table.
- */
-unsigned int   dma_base_addr[MAX_M68K_DMA_CHANNELS] = {
-        MCF_MBAR + MCFDMA_BASE0,
-        MCF_MBAR + MCFDMA_BASE1,
+static struct mcf_platform_uart m5206_uart_platform[] = {
+	{
+		.mapbase	= MCF_MBAR + MCFUART_BASE1,
+		.irq		= 73,
+	},
+	{
+		.mapbase 	= MCF_MBAR + MCFUART_BASE2,
+		.irq		= 74,
+	},
+	{ },
 };
 
-unsigned int dma_device_address[MAX_M68K_DMA_CHANNELS];
+static struct platform_device m5206_uart = {
+	.name			= "mcfuart",
+	.id			= 0,
+	.dev.platform_data	= m5206_uart_platform,
+};
+
+static struct platform_device *m5206_devices[] __initdata = {
+	&m5206_uart,
+};
+
+/***************************************************************************/
+
+static void __init m5206_uart_init_line(int line, int irq)
+{
+	if (line == 0) {
+		writel(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI1, MCF_MBAR + MCFSIM_UART1ICR);
+		writeb(irq, MCFUART_BASE1 + MCFUART_UIVR);
+		mcf_setimr(mcf_getimr() & ~MCFSIM_IMR_UART1);
+	} else if (line == 1) {
+		writel(MCFSIM_ICR_LEVEL6 | MCFSIM_ICR_PRI2, MCF_MBAR + MCFSIM_UART2ICR);
+		writeb(irq, MCFUART_BASE2 + MCFUART_UIVR);
+		mcf_setimr(mcf_getimr() & ~MCFSIM_IMR_UART2);
+	}
+}
+
+static void __init m5206_uarts_init(void)
+{
+	const int nrlines = ARRAY_SIZE(m5206_uart_platform);
+	int line;
+
+	for (line = 0; (line < nrlines); line++)
+		m5206_uart_init_line(line, m5206_uart_platform[line].irq);
+}
 
 /***************************************************************************/
 
@@ -94,26 +122,28 @@ int mcf_timerirqpending(int timer)
 
 /***************************************************************************/
 
-void config_BSP(char *commandp, int size)
+void __init config_BSP(char *commandp, int size)
 {
 	mcf_setimr(MCFSIM_IMR_MASKALL);
 
-#if defined(CONFIG_BOOTPARAM)
-	strncpy(commandp, CONFIG_BOOTPARAM_STRING, size);
-	commandp[size-1] = 0;
-#elif defined(CONFIG_NETtel)
+#if defined(CONFIG_NETtel)
 	/* Copy command line from FLASH to local buffer... */
 	memcpy(commandp, (char *) 0xf0004000, size);
 	commandp[size-1] = 0;
-#else
-	memset(commandp, 0, size);
 #endif /* CONFIG_NETtel */
 
-	mach_sched_init = coldfire_timer_init;
-	mach_tick = coldfire_tick;
-	mach_gettimeoffset = coldfire_timer_offset;
-	mach_trap_init = coldfire_trap_init;
 	mach_reset = coldfire_reset;
 }
+
+/***************************************************************************/
+
+static int __init init_BSP(void)
+{
+	m5206_uarts_init();
+	platform_add_devices(m5206_devices, ARRAY_SIZE(m5206_devices));
+	return 0;
+}
+
+arch_initcall(init_BSP);
 
 /***************************************************************************/

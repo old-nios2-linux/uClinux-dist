@@ -56,7 +56,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>
@@ -331,11 +330,9 @@ static void *bsd_alloc (struct isdn_ppp_comp_data *data)
 	 * Allocate the main control structure for this instance.
 	 */
 	maxmaxcode = MAXCODE(bits);
-	db = (struct bsd_db *) kmalloc (sizeof (struct bsd_db),GFP_KERNEL);
+	db = kzalloc (sizeof (struct bsd_db),GFP_KERNEL);
 	if (!db)
 		return NULL;
-
-	memset (db, 0, sizeof(struct bsd_db));
 
 	db->xmit = data->flags & IPPP_COMP_FLAG_XMIT;
 	decomp = db->xmit ? 0 : 1;
@@ -344,7 +341,7 @@ static void *bsd_alloc (struct isdn_ppp_comp_data *data)
 	 * Allocate space for the dictionary. This may be more than one page in
 	 * length.
 	 */
-	db->dict = (struct bsd_dict *) vmalloc (hsize * sizeof (struct bsd_dict));
+	db->dict = vmalloc(hsize * sizeof(struct bsd_dict));
 	if (!db->dict) {
 		bsd_free (db);
 		return NULL;
@@ -357,8 +354,7 @@ static void *bsd_alloc (struct isdn_ppp_comp_data *data)
 	if (!decomp)
 		db->lens = NULL;
 	else {
-		db->lens = (unsigned short *) vmalloc ((maxmaxcode + 1) *
-			sizeof (db->lens[0]));
+		db->lens = vmalloc((maxmaxcode + 1) * sizeof(db->lens[0]));
 		if (!db->lens) {
 			bsd_free (db);
 			return (NULL);

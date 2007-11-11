@@ -36,39 +36,6 @@ hashbin_t *irias_objects;
  */
 struct ias_value irias_missing = { IAS_MISSING, 0, 0, 0, {0}};
 
-/*
- * Function strndup (str, max)
- *
- *    My own kernel version of strndup!
- *
- * Faster, check boundary... Jean II
- */
-static char *strndup(char *str, size_t max)
-{
-	char *new_str;
-	int len;
-
-	/* Check string */
-	if (str == NULL)
-		return NULL;
-	/* Check length, truncate */
-	len = strlen(str);
-	if(len > max)
-		len = max;
-
-	/* Allocate new string */
-        new_str = kmalloc(len + 1, GFP_ATOMIC);
-        if (new_str == NULL) {
-		IRDA_WARNING("%s: Unable to kmalloc!\n", __FUNCTION__);
-		return NULL;
-	}
-
-	/* Copy and truncate */
-	memcpy(new_str, str, len);
-	new_str[len] = '\0';
-
-	return new_str;
-}
 
 /*
  * Function ias_new_object (name, id)
@@ -78,7 +45,7 @@ static char *strndup(char *str, size_t max)
  */
 struct ias_object *irias_new_object( char *name, int id)
 {
-        struct ias_object *obj;
+	struct ias_object *obj;
 
 	IRDA_DEBUG( 4, "%s()\n", __FUNCTION__);
 
@@ -90,7 +57,13 @@ struct ias_object *irias_new_object( char *name, int id)
 	}
 
 	obj->magic = IAS_OBJECT_MAGIC;
-	obj->name = strndup(name, IAS_MAX_CLASSNAME);
+	obj->name = kstrndup(name, IAS_MAX_CLASSNAME, GFP_ATOMIC);
+	if (!obj->name) {
+		IRDA_WARNING("%s(), Unable to allocate name!\n",
+			     __FUNCTION__);
+		kfree(obj);
+		return NULL;
+	}
 	obj->id = id;
 
 	/* Locking notes : the attrib spinlock has lower precendence
@@ -101,6 +74,7 @@ struct ias_object *irias_new_object( char *name, int id)
 	if (obj->attribs == NULL) {
 		IRDA_WARNING("%s(), Unable to allocate attribs!\n",
 			     __FUNCTION__);
+		kfree(obj->name);
 		kfree(obj);
 		return NULL;
 	}
@@ -353,10 +327,19 @@ void irias_add_integer_attrib(struct ias_object *obj, char *name, int value,
 	}
 
 	attrib->magic = IAS_ATTRIB_MAGIC;
-	attrib->name = strndup(name, IAS_MAX_ATTRIBNAME);
+	attrib->name = kstrndup(name, IAS_MAX_ATTRIBNAME, GFP_ATOMIC);
 
 	/* Insert value */
 	attrib->value = irias_new_integer_value(value);
+	if (!attrib->name || !attrib->value) {
+		IRDA_WARNING("%s: Unable to allocate attribute!\n",
+			     __FUNCTION__);
+		if (attrib->value)
+			irias_delete_value(attrib->value);
+		kfree(attrib->name);
+		kfree(attrib);
+		return;
+	}
 
 	irias_add_attrib(obj, attrib, owner);
 }
@@ -388,9 +371,18 @@ void irias_add_octseq_attrib(struct ias_object *obj, char *name, __u8 *octets,
 	}
 
 	attrib->magic = IAS_ATTRIB_MAGIC;
-	attrib->name = strndup(name, IAS_MAX_ATTRIBNAME);
+	attrib->name = kstrndup(name, IAS_MAX_ATTRIBNAME, GFP_ATOMIC);
 
 	attrib->value = irias_new_octseq_value( octets, len);
+	if (!attrib->name || !attrib->value) {
+		IRDA_WARNING("%s: Unable to allocate attribute!\n",
+			     __FUNCTION__);
+		if (attrib->value)
+			irias_delete_value(attrib->value);
+		kfree(attrib->name);
+		kfree(attrib);
+		return;
+	}
 
 	irias_add_attrib(obj, attrib, owner);
 }
@@ -421,9 +413,18 @@ void irias_add_string_attrib(struct ias_object *obj, char *name, char *value,
 	}
 
 	attrib->magic = IAS_ATTRIB_MAGIC;
-	attrib->name = strndup(name, IAS_MAX_ATTRIBNAME);
+	attrib->name = kstrndup(name, IAS_MAX_ATTRIBNAME, GFP_ATOMIC);
 
 	attrib->value = irias_new_string_value(value);
+	if (!attrib->name || !attrib->value) {
+		IRDA_WARNING("%s: Unable to allocate attribute!\n",
+			     __FUNCTION__);
+		if (attrib->value)
+			irias_delete_value(attrib->value);
+		kfree(attrib->name);
+		kfree(attrib);
+		return;
+	}
 
 	irias_add_attrib(obj, attrib, owner);
 }
@@ -472,7 +473,13 @@ struct ias_value *irias_new_string_value(char *string)
 
 	value->type = IAS_STRING;
 	value->charset = CS_ASCII;
-	value->t.string = strndup(string, IAS_MAX_STRING);
+	value->t.string = kstrndup(string, IAS_MAX_STRING, GFP_ATOMIC);
+	if (!value->t.string) {
+		IRDA_WARNING("%s: Unable to kmalloc!\n", __FUNCTION__);
+		kfree(value);
+		return NULL;
+	}
+
 	value->len = strlen(value->t.string);
 
 	return value;
@@ -501,13 +508,12 @@ struct ias_value *irias_new_octseq_value(__u8 *octseq , int len)
 		len = IAS_MAX_OCTET_STRING;
 	value->len = len;
 
-	value->t.oct_seq = kmalloc(len, GFP_ATOMIC);
+	value->t.oct_seq = kmemdup(octseq, len, GFP_ATOMIC);
 	if (value->t.oct_seq == NULL){
 		IRDA_WARNING("%s: Unable to kmalloc!\n", __FUNCTION__);
 		kfree(value);
 		return NULL;
 	}
-	memcpy(value->t.oct_seq, octseq , len);
 	return value;
 }
 
@@ -522,7 +528,6 @@ struct ias_value *irias_new_missing_value(void)
 	}
 
 	value->type = IAS_MISSING;
-	value->len = 0;
 
 	return value;
 }

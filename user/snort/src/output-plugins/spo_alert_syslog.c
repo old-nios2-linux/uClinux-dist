@@ -122,7 +122,7 @@ void AlertSyslogInit(u_char *args)
     pv.alert_plugin_active = 1;
 
     /* parse the argument list from the rules file */
-    data = ParseSyslogArgs(args);
+    data = ParseSyslogArgs((char*)args);
 
     if (pv.daemon_flag)
         data->options |= LOG_PID;
@@ -512,88 +512,118 @@ void AlertSyslog(Packet *p, char *msg, void *arg, Event *event)
     char event_string[SYSLOG_BUF];
     SyslogData *data = (SyslogData *)arg;
 
-
-    bzero(event_string, SYSLOG_BUF);
+    event_string[0] = '\0';
 
     if(p && p->iph)
     {
-        /*
-         * have to do this since inet_ntoa is fucked up and writes to a static
-         * memory location
-         */
-        strlcpy(sip, inet_ntoa(p->iph->ip_src), 16);
-        strlcpy(dip, inet_ntoa(p->iph->ip_dst), 16);
+        if (strlcpy(sip, inet_ntoa(p->iph->ip_src), sizeof(sip)) >= sizeof(sip))
+            return;
+
+        if (strlcpy(dip, inet_ntoa(p->iph->ip_dst), sizeof(dip)) >= sizeof(dip))
+            return;
 
         if(event != NULL)
         {
-            snprintf(event_data, STD_BUF-1, "[%lu:%lu:%lu] ", 
-                    (unsigned long) event->sig_generator,
-                    (unsigned long) event->sig_id, 
-                    (unsigned long) event->sig_rev);
-            strlcat(event_string, event_data, SYSLOG_BUF);
+            if( SnortSnprintf(event_data, STD_BUF, "[%lu:%lu:%lu] ", 
+                              (unsigned long) event->sig_generator,
+                              (unsigned long) event->sig_id, 
+                              (unsigned long) event->sig_rev) != SNORT_SNPRINTF_SUCCESS )
+                return ;
+
+            if(  strlcat(event_string, event_data, SYSLOG_BUF) >= SYSLOG_BUF)
+                return ;
         }
 
         if(msg != NULL)
         {
-            strlcat(event_string, msg, SYSLOG_BUF);
+           if( strlcat(event_string, msg, SYSLOG_BUF) >= SYSLOG_BUF )
+                return ;
         }
         else
         {
-            strlcat(event_string, "ALERT", SYSLOG_BUF);
+           if(strlcat(event_string, "ALERT", SYSLOG_BUF) >= SYSLOG_BUF)
+                return ;
         }
 
         if(otn_tmp != NULL)
         {
             if(otn_tmp->sigInfo.classType)
             {
-                snprintf(pri_data, STD_BUF-1, " [Classification: %s] "
-                        "[Priority: %d]:", otn_tmp->sigInfo.classType->name,
-                        otn_tmp->sigInfo.priority); 
-                strlcat(event_string, pri_data, SYSLOG_BUF);
+                if( otn_tmp->sigInfo.classType->name )
+                {
+                    if( SnortSnprintf(pri_data, STD_BUF-1, " [Classification: %s] "
+                                      "[Priority: %d]:", 
+                                      otn_tmp->sigInfo.classType->name,
+                                      otn_tmp->sigInfo.priority) != SNORT_SNPRINTF_SUCCESS )
+                        return ;
+                }
+                if( strlcat(event_string, pri_data, SYSLOG_BUF) >= SYSLOG_BUF)
+                    return ;
             }
             else if(otn_tmp->sigInfo.priority != 0)
             {
-                snprintf(pri_data, STD_BUF-1, "[Priority: %d]:", 
-                        otn_tmp->sigInfo.priority); 
-                strlcat(event_string, pri_data, SYSLOG_BUF);
+                if( SnortSnprintf(pri_data, STD_BUF, "[Priority: %d]:", 
+                                  otn_tmp->sigInfo.priority) != SNORT_SNPRINTF_SUCCESS )
+                   return ;
+
+                if( strlcat(event_string, pri_data, SYSLOG_BUF) >= SYSLOG_BUF)
+                    return;
             }
         }
 
         if((p->iph->ip_proto != IPPROTO_TCP &&
-                    p->iph->ip_proto != IPPROTO_UDP) || 
-                p->frag_flag)
+            p->iph->ip_proto != IPPROTO_UDP) || 
+            p->frag_flag)
         {
             if(!pv.alert_interface_flag)
             {
-                snprintf(ip_data, STD_BUF-1, " {%s} %s -> %s",  
-                        protocol_names[p->iph->ip_proto], sip, dip);
+                if( protocol_names[p->iph->ip_proto]  )
+                {
+                    if( SnortSnprintf(ip_data, STD_BUF, " {%s} %s -> %s",  
+                                      protocol_names[p->iph->ip_proto],
+                                      sip, dip) != SNORT_SNPRINTF_SUCCESS )
+                   return;
+                }
             }
             else
             {
-                snprintf(ip_data, STD_BUF-1, " <%s> {%s} %s -> %s",  
-                        PRINT_INTERFACE(pv.interface), 
-                        protocol_names[p->iph->ip_proto], 
-                        sip, dip);
+                if( protocol_names[p->iph->ip_proto] && PRINT_INTERFACE(pv.interface) )
+                {
+                    if( SnortSnprintf(ip_data, STD_BUF, " <%s> {%s} %s -> %s",  
+                                      PRINT_INTERFACE(pv.interface), 
+                                      protocol_names[p->iph->ip_proto], 
+                                      sip, dip) != SNORT_SNPRINTF_SUCCESS )
+                        return ;
+                }
             }
         }
         else
         {
             if(pv.alert_interface_flag)
             {
-                snprintf(ip_data, STD_BUF-1, " <%s> {%s} %s:%i -> %s:%i",
-                        PRINT_INTERFACE(pv.interface), 
-                        protocol_names[p->iph->ip_proto], sip,
-                        p->sp, dip, p->dp);
+               if( protocol_names[p->iph->ip_proto] && PRINT_INTERFACE(pv.interface) )
+               {
+                   if( SnortSnprintf(ip_data, STD_BUF, " <%s> {%s} %s:%i -> %s:%i",
+                                     PRINT_INTERFACE(pv.interface), 
+                                     protocol_names[p->iph->ip_proto], sip,
+                                     p->sp, dip, p->dp) != SNORT_SNPRINTF_SUCCESS )
+                       return ;
+               }
             }
             else
             {
-                snprintf(ip_data, STD_BUF-1, " {%s} %s:%i -> %s:%i",
-                        protocol_names[p->iph->ip_proto], sip, p->sp, 
-                        dip, p->dp);
+               if( protocol_names[p->iph->ip_proto] )
+               {
+                   if( SnortSnprintf(ip_data, STD_BUF, " {%s} %s:%i -> %s:%i",
+                                     protocol_names[p->iph->ip_proto], sip, p->sp, 
+                                     dip, p->dp) != SNORT_SNPRINTF_SUCCESS )
+                       return ;
+               }
             }
         }
 
-        strlcat(event_string, ip_data, SYSLOG_BUF);
+        if( strlcat(event_string, ip_data, SYSLOG_BUF) >= SYSLOG_BUF)
+            return;
 
         syslog(data->priority, "%s", event_string);
 
@@ -613,7 +643,7 @@ void AlertSyslogCleanExit(int signal, void *arg)
     SyslogData *data = (SyslogData *)arg;
     DEBUG_WRAP(DebugMessage(DEBUG_LOG, "AlertSyslogCleanExit\n"););
     /* free memory from SyslogData */
-    free(data);
+    if(data)free(data);
 }
 
 void AlertSyslogRestart(int signal, void *arg)
@@ -621,5 +651,5 @@ void AlertSyslogRestart(int signal, void *arg)
     SyslogData *data = (SyslogData *)arg;
     DEBUG_WRAP(DebugMessage(DEBUG_LOG, "AlertSyslogRestartFunc\n"););
     /* free memory from SyslogData */
-    free(data);
+    if(data)free(data);
 }

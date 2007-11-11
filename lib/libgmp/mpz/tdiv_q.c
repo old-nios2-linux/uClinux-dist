@@ -1,42 +1,36 @@
 /* mpz_tdiv_q -- divide two integers and produce a quotient.
 
-Copyright (C) 1991, 1993, 1994, 1996, 2000 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2005 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
 void
-#if __STDC__
 mpz_tdiv_q (mpz_ptr quot, mpz_srcptr num, mpz_srcptr den)
-#else
-mpz_tdiv_q (quot, num, den)
-     mpz_ptr quot;
-     mpz_srcptr num;
-     mpz_srcptr den;
-#endif
 {
   mp_size_t ql;
   mp_size_t ns, ds, nl, dl;
   mp_ptr np, dp, qp, rp;
-  TMP_DECL (marker);
+  TMP_DECL;
 
   ns = SIZ (num);
   ds = SIZ (den);
@@ -49,26 +43,23 @@ mpz_tdiv_q (quot, num, den)
 
   if (ql <= 0)
     {
-      /* This needs to follow the assignment to rem, in case the
-	 numerator and quotient are the same.  */
       SIZ (quot) = 0;
       return;
     }
 
   MPZ_REALLOC (quot, ql);
 
-  TMP_MARK (marker);
+  TMP_MARK;
   qp = PTR (quot);
   rp = (mp_ptr) TMP_ALLOC (dl * BYTES_PER_MP_LIMB);
   np = PTR (num);
   dp = PTR (den);
 
   /* FIXME: We should think about how to handle the temporary allocation.
-     Perhaps mpn_tdiv_qr should handle it, since it anyway often need to
+     Perhaps mpn_tdiv_qr should handle it, since it anyway often needs to
      allocate temp space.  */
 
-  /* Copy denominator to temporary space if it overlaps with the quotient
-     or remainder.  */
+  /* Copy denominator to temporary space if it overlaps with the quotient.  */
   if (dp == qp)
     {
       mp_ptr tp;
@@ -76,8 +67,7 @@ mpz_tdiv_q (quot, num, den)
       MPN_COPY (tp, dp, dl);
       dp = tp;
     }
-  /* Copy numerator to temporary space if it overlaps with the quotient or
-     remainder.  */
+  /* Copy numerator to temporary space if it overlaps with the quotient.  */
   if (np == qp)
     {
       mp_ptr tp;
@@ -91,5 +81,5 @@ mpz_tdiv_q (quot, num, den)
   ql -=  qp[ql - 1] == 0;
 
   SIZ (quot) = (ns ^ ds) >= 0 ? ql : -ql;
-  TMP_FREE (marker);
+  TMP_FREE;
 }

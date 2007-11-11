@@ -19,6 +19,8 @@ ifeq ($(NANOX), Y)
 LIBNAME = libnano-X.a
 LIBNAMESO = libnano-X.so
 
+LDLIBS += -lm
+
 # Nano-X server files
 NANOXFILES = srvmain.o srvfunc.o srvutil.o srvevent.o srvclip.o
 

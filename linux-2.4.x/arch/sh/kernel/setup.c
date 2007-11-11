@@ -194,12 +194,12 @@ void copy_romfs()
 /*
  * if we don't have a BIOS, assume the debug serial port for now.
  */
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define SCBASE	0xa4000150
 #define	SCSSRT	short
 #define SCTDR ((volatile unsigned char *)   (SCBASE + 0x6))
 #define SCSSR ((volatile unsigned SCSSRT *) (SCBASE + 0x8))
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define SCBASE	0xffe80000
 #define	SCSSRT	short
 #define SCTDR ((volatile unsigned char *)   (SCBASE + 0xc))
@@ -592,7 +592,7 @@ void __init setup_arch(char **cmdline_p)
 		sh_mv.mv_init_arch();
 	}
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	init_task.used_math = 0;
 	init_task.flags &= ~PF_USEDFPU;
 #endif
@@ -638,7 +638,7 @@ struct sh_machine_vector* __init get_mv_byname(const char* name)
 #ifdef CONFIG_PROC_FS
 static int show_cpuinfo(struct seq_file *m, void *v)
 {
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 	seq_printf(m, "cpu family\t: SH-3\n"
 		      "cache size\t: 8K-byte\n");
 #if defined(CONFIG_SH_DSP)
@@ -648,7 +648,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 			(sh3_dsp() ? "present" : "not present"));
 }
 #endif
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	seq_printf(m, "cpu family\t: SH-4\n"
 		      "cache size\t: 8K-byte/16K-byte\n");
 #endif

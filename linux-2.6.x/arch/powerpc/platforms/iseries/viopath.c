@@ -36,12 +36,13 @@
 #include <linux/dma-mapping.h>
 #include <linux/wait.h>
 #include <linux/seq_file.h>
-#include <linux/smp_lock.h>
 #include <linux/interrupt.h>
+#include <linux/completion.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/prom.h>
+#include <asm/firmware.h>
 #include <asm/iseries/hv_types.h>
 #include <asm/iseries/hv_lp_event.h>
 #include <asm/iseries/hv_lp_config.h>
@@ -81,7 +82,7 @@ static void handleMonitorEvent(struct HvLpEvent *event);
  * if system_state is not SYSTEM_RUNNING, then wait_atomic is used ...
  */
 struct alloc_parms {
-	struct semaphore sem;
+	struct completion done;
 	int number;
 	atomic_t wait_atomic;
 	int used_wait_atomic;
@@ -115,14 +116,13 @@ static int proc_viopath_show(struct seq_file *m, void *v)
 	u16 vlanMap;
 	dma_addr_t handle;
 	HvLpEvent_Rc hvrc;
-	DECLARE_MUTEX_LOCKED(Semaphore);
+	DECLARE_COMPLETION(done);
 	struct device_node *node;
 	const char *sysid;
 
-	buf = kmalloc(HW_PAGE_SIZE, GFP_KERNEL);
+	buf = kzalloc(HW_PAGE_SIZE, GFP_KERNEL);
 	if (!buf)
 		return 0;
-	memset(buf, 0, HW_PAGE_SIZE);
 
 	handle = dma_map_single(iSeries_vio_dev, buf, HW_PAGE_SIZE,
 				DMA_FROM_DEVICE);
@@ -133,13 +133,13 @@ static int proc_viopath_show(struct seq_file *m, void *v)
 			HvLpEvent_AckInd_DoAck, HvLpEvent_AckType_ImmediateAck,
 			viopath_sourceinst(viopath_hostLp),
 			viopath_targetinst(viopath_hostLp),
-			(u64)(unsigned long)&Semaphore, VIOVERSION << 16,
+			(u64)(unsigned long)&done, VIOVERSION << 16,
 			((u64)handle) << 32, HW_PAGE_SIZE, 0, 0);
 
 	if (hvrc != HvLpEvent_Rc_Good)
 		printk(VIOPATH_KERN_WARN "hv error on op %d\n", (int)hvrc);
 
-	down(&Semaphore);
+	wait_for_completion(&done);
 
 	vlanMap = HvLpConfig_getVirtualLanIndexMap();
 
@@ -155,7 +155,7 @@ static int proc_viopath_show(struct seq_file *m, void *v)
 	node = of_find_node_by_path("/");
 	sysid = NULL;
 	if (node != NULL)
-		sysid = get_property(node, "system-id", NULL);
+		sysid = of_get_property(node, "system-id", NULL);
 
 	if (sysid == NULL)
 		seq_printf(m, "SRLNBR=<UNKNOWN>\n");
@@ -173,7 +173,7 @@ static int proc_viopath_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_viopath_show, NULL);
 }
 
-static struct file_operations proc_viopath_operations = {
+static const struct file_operations proc_viopath_operations = {
 	.open		= proc_viopath_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -183,6 +183,9 @@ static struct file_operations proc_viopath_operations = {
 static int __init vio_proc_init(void)
 {
 	struct proc_dir_entry *e;
+
+	if (!firmware_has_feature(FW_FEATURE_ISERIES))
+		return 0;
 
 	e = create_proc_entry("iSeries/config", 0, NULL);
 	if (e)
@@ -351,7 +354,7 @@ static void handleConfig(struct HvLpEvent *event)
 		return;
 	}
 
-	up((struct semaphore *)event->xCorrelationToken);
+	complete((struct completion *)event->xCorrelationToken);
 }
 
 /*
@@ -462,7 +465,7 @@ static void viopath_donealloc(void *parm, int number)
 	if (parmsp->used_wait_atomic)
 		atomic_set(&parmsp->wait_atomic, 0);
 	else
-		up(&parmsp->sem);
+		complete(&parmsp->done);
 }
 
 static int allocateEvents(HvLpIndex remoteLp, int numEvents)
@@ -474,7 +477,7 @@ static int allocateEvents(HvLpIndex remoteLp, int numEvents)
 		atomic_set(&parms.wait_atomic, 1);
 	} else {
 		parms.used_wait_atomic = 0;
-		init_MUTEX_LOCKED(&parms.sem);
+		init_completion(&parms.done);
 	}
 	mf_allocate_lp_events(remoteLp, HvLpEvent_Type_VirtualIo, 250,	/* It would be nice to put a real number here! */
 			    numEvents, &viopath_donealloc, &parms);
@@ -482,7 +485,7 @@ static int allocateEvents(HvLpIndex remoteLp, int numEvents)
 		while (atomic_read(&parms.wait_atomic))
 			mb();
 	} else
-		down(&parms.sem);
+		wait_for_completion(&parms.done);
 	return parms.number;
 }
 
@@ -583,10 +586,10 @@ int viopath_close(HvLpIndex remoteLp, int subtype, int numReq)
 	spin_unlock_irqrestore(&statuslock, flags);
 
 	parms.used_wait_atomic = 0;
-	init_MUTEX_LOCKED(&parms.sem);
+	init_completion(&parms.done);
 	mf_deallocate_lp_events(remoteLp, HvLpEvent_Type_VirtualIo,
 			      numReq, &viopath_donealloc, &parms);
-	down(&parms.sem);
+	wait_for_completion(&parms.done);
 
 	spin_lock_irqsave(&statuslock, flags);
 	for (i = 0, numOpen = 0; i < VIO_MAX_SUBTYPES; i++)

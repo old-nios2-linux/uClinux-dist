@@ -460,7 +460,7 @@ Tcl_RegsubCmd(dummy, interp, argc, argv)
 	}
     }
     sprintf(buf, "%d", num_matches);
-    Tcl_AppendResult (interp, buf, 0);
+    Tcl_AppendResult (interp, buf, (char *) NULL);
     result = TCL_OK;
 
     done:
@@ -1075,7 +1075,7 @@ Tcl_StringCmd(dummy, interp, argc, argv)
 	}
 	Tcl_ResetResult(interp);
 	while (count-- > 0) {
-	    Tcl_AppendResult(interp, argv[2], 0);
+	    Tcl_AppendResult(interp, argv[2], (char *) NULL);
 	}
 	return(TCL_OK);
     } else if ((c == 't') && (strncmp(argv[1], "tolower", length) == 0)

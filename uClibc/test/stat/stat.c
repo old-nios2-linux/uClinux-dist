@@ -1,8 +1,11 @@
 #include <stdio.h>
+#include <string.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
 
-void print_struct_stat(char *msg, struct stat *s)
+static void print_struct_stat(char *msg, struct stat *s)
 {
     printf("%s\n", msg);
     /* The casts are because glibc thinks it's cool */

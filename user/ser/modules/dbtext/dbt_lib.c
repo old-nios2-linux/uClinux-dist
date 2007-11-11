@@ -1,9 +1,9 @@
 /*
- * $Id: dbt_lib.c,v 1.7.2.2.2.1 2004/01/20 18:20:39 dcm Exp $
+ * $Id: dbt_lib.c,v 1.12 2004/08/24 08:58:26 janakj Exp $
  *
  * DBText library
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -66,7 +66,7 @@ int dbt_init_cache()
 		}
 		if (lock_init(_cachesem)==0)
 		{
-			LOG(L_CRIT,"dbtext:dbt_init_cache: could not intialize a lock\n");
+			LOG(L_CRIT,"dbtext:dbt_init_cache: could not initialize a lock\n");
 			lock_dealloc(_cachesem);
 			return -1;
 		}
@@ -99,7 +99,7 @@ dbt_cache_p dbt_cache_get_db(str *_s)
 	if(!_s || !_s->s || _s->len<=0)
 		return NULL;
 
-	DBG("DBT:dbt_cache_get_db: looking for db!\n");
+	DBG("DBT:dbt_cache_get_db: looking for db %.*s!\n",_s->len,_s->s);
 
 	lock_get(_cachesem);
 	
@@ -113,6 +113,7 @@ dbt_cache_p dbt_cache_get_db(str *_s)
 					&& !strncasecmp(_dcache->dbp->name.s, _s->s, _s->len))
 			{
 				lock_release(&_dcache->sem);
+				DBG("DBT:dbt_cache_get_db: db already cached!\n");
 				goto done;
 			}
 		}

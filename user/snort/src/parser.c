@@ -157,6 +157,7 @@ DynamicPreprocConfig *dynamicConfigListHead = NULL;
 DynamicPreprocConfig *dynamicConfigListTail = NULL;
 
 #endif
+void ParseIPv6Options(char *rule);
 
 /****************************************************************************
  *
@@ -183,6 +184,9 @@ void ParseRulesFile(char *file, int inclevel)
     struct  stat file_stat; /* for include path testing */
     char  * rule;
     char  * buf;
+
+    if (file == NULL)
+        return;
     
     rule = malloc(PARSERULE_SIZE);
     if( ! rule ) 
@@ -327,8 +331,12 @@ void ParseRulesFile(char *file, int inclevel)
                 {
                     FatalError("ParseRuleFile : VAR/RULE too long '%.*s...' \n",30,saved_line);
                 }
-                new_line = (char *) calloc((strlen(saved_line) + strlen(index)
-                            +1), sizeof(char)); 
+                new_line = (char *)calloc((strlen(saved_line) + strlen(index) + 1), sizeof(char)); 
+                if (new_line == NULL)
+                {
+                    FatalError("Failed to allocate memory\n");
+                }
+
                 strncat(new_line, saved_line, strlen(saved_line));
                 strncat(new_line, index, strlen(index));
                 free(saved_line);
@@ -1063,26 +1071,22 @@ void ProcessHeadNode(RuleTreeNode * test_node, ListHead * list, int protocol)
         switch(protocol)
         {
             case IPPROTO_TCP:
-                list->TcpList = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-                        sizeof(char));
+                list->TcpList = (RuleTreeNode *)SnortAlloc(sizeof(RuleTreeNode));
                 rtn_tmp = list->TcpList;
                 break;
 
             case IPPROTO_UDP:
-                list->UdpList = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-                        sizeof(char));
+                list->UdpList = (RuleTreeNode *)SnortAlloc(sizeof(RuleTreeNode));
                 rtn_tmp = list->UdpList;
                 break;
 
             case IPPROTO_ICMP:
-                list->IcmpList = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-                        sizeof(char));
+                list->IcmpList = (RuleTreeNode *)SnortAlloc(sizeof(RuleTreeNode));
                 rtn_tmp = list->IcmpList;
                 break;
 
             case ETHERNET_TYPE_IP:
-                list->IpList = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-                        sizeof(char));
+                list->IpList = (RuleTreeNode *)SnortAlloc(sizeof(RuleTreeNode));
                 rtn_tmp = list->IpList;
                 break;
 
@@ -1137,8 +1141,7 @@ void ProcessHeadNode(RuleTreeNode * test_node, ListHead * list, int protocol)
 
         /* build a new node */
         //rtn_idx->right = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-        rtn_tmp = (RuleTreeNode *) calloc(sizeof(RuleTreeNode), 
-                sizeof(char));
+        rtn_tmp = (RuleTreeNode *)SnortAlloc(sizeof(RuleTreeNode));
 
         /* set the global ptr so we can play with this from anywhere */
         //rtn_tmp = rtn_idx->right;
@@ -1319,7 +1322,7 @@ void AddRuleFuncToList(int (*func) (Packet *, struct _RuleTreeNode *, struct _Ru
 
     if(idx == NULL)
     {
-        rtn->rule_func = (RuleFpList *) calloc(sizeof(RuleFpList), sizeof(char));
+        rtn->rule_func = (RuleFpList *)SnortAlloc(sizeof(RuleFpList));
 
         rtn->rule_func->RuleHeadFunc = func;
     }
@@ -1328,7 +1331,7 @@ void AddRuleFuncToList(int (*func) (Packet *, struct _RuleTreeNode *, struct _Ru
         while(idx->next != NULL)
             idx = idx->next;
 
-        idx->next = (RuleFpList *) calloc(sizeof(RuleFpList), sizeof(char));
+        idx->next = (RuleFpList *)SnortAlloc(sizeof(RuleFpList));
 
         idx = idx->next;
         idx->RuleHeadFunc = func;
@@ -1810,8 +1813,6 @@ void ParseRuleOptions(char *rule, int rule_type, int protocol)
         /* first entry on the chain, make a new node and attach it */
         otn_idx = (OptTreeNode *) calloc(sizeof(OptTreeNode), sizeof(char));
 
-        bzero((char *) otn_idx, sizeof(OptTreeNode));
-
         otn_tmp = otn_idx;
 
         if(otn_tmp == NULL)
@@ -1867,6 +1868,11 @@ void ParseRuleOptions(char *rule, int rule_type, int protocol)
         }
         *aux = 0;
 
+        /* check for extraneous semi-colon */
+        if (strstr(idx, ";;"))
+        {
+            FatalError("%s(%d): Extraneous semi-colon in rule:\n%s)\n", file_name, file_line, rule);
+        }
 
         /* seperate all the options out, the seperation token is a semicolon */
         /*
@@ -1899,7 +1905,13 @@ void ParseRuleOptions(char *rule, int rule_type, int protocol)
             DEBUG_WRAP(DebugMessage(DEBUG_CONFIGRULES,"   option: %s\n", toks[i]););
 
             /* break out the option name from its data */
-            opts = mSplit(toks[i], ":", 4, &num_opts, '\\');
+            opts = mSplit(toks[i], ":", 2, &num_opts, '\\');
+
+            /* We got nothing but space in between semi-colons */
+            if (num_opts == 0)
+            {
+                FatalError("%s(%d): Empty option (extraneous semi-colon?) in rule:\n%s)\n", file_name, file_line, rule);
+            }
 
             /* can't free opts[0] later if it has been incremented, so
              * must use another variable here */
@@ -2507,7 +2519,7 @@ IpAddrSet *AllocAddrNode(RuleTreeNode *rtn, int mode)
         case SRC:
             if(rtn->sip == NULL)
             {
-                rtn->sip = (IpAddrSet *)calloc(sizeof(IpAddrSet), sizeof(char));
+                rtn->sip = (IpAddrSet *)calloc(1, sizeof(IpAddrSet));
                 if(rtn->sip == NULL)
                 {
                     FatalError(" Unable to allocate node for IP list\n");
@@ -2523,7 +2535,7 @@ IpAddrSet *AllocAddrNode(RuleTreeNode *rtn, int mode)
                     idx = idx->next;
                 }
 
-                idx->next = (IpAddrSet *)calloc(sizeof(IpAddrSet), sizeof(char));
+                idx->next = (IpAddrSet *)calloc(1, sizeof(IpAddrSet));
                 if(idx->next == NULL)
                 {
                     FatalError(" Unable to allocate node for IP list\n");
@@ -2535,7 +2547,7 @@ IpAddrSet *AllocAddrNode(RuleTreeNode *rtn, int mode)
         case DST:
             if(rtn->dip == NULL)
             {
-                rtn->dip = (IpAddrSet *)calloc(sizeof(IpAddrSet), sizeof(char));
+                rtn->dip = (IpAddrSet *)calloc(1, sizeof(IpAddrSet));
                 if(rtn->dip == NULL)
                 {
                     FatalError(" Unable to allocate node for IP list\n");
@@ -2551,7 +2563,7 @@ IpAddrSet *AllocAddrNode(RuleTreeNode *rtn, int mode)
                     idx = idx->next;
                 }
 
-                idx->next = (IpAddrSet *)calloc(sizeof(IpAddrSet), sizeof(char));
+                idx->next = (IpAddrSet *)calloc(1, sizeof(IpAddrSet));
                 if(idx->next == NULL)
                 {
                     FatalError(" Unable to allocate node for IP list\n");
@@ -2779,7 +2791,7 @@ void ParseMessage(char *msg)
 
     read = write = ptr;
 
-    while(read < end)
+    while(read < end && write < end)
     {
         if(*read == '\\')
         {
@@ -2859,10 +2871,12 @@ void ParseLogto(char *filename)
 
     /* malloc up a nice shiny clean buffer */
     otn_tmp->logto = (char *) calloc(strlen(sptr) + 1, sizeof(char));
+    if (otn_tmp->logto == NULL)
+    {
+        FatalError("ParseLogto() => Failed to allocate memory\n");
+    }
 
-    bzero((char *) otn_tmp->logto, strlen(sptr) + 1);
-
-    strncpy(otn_tmp->logto, sptr, strlen(sptr)+1);
+    SnortStrncpy(otn_tmp->logto, sptr, strlen(sptr) + 1);
 
     return;
 }
@@ -2917,7 +2931,7 @@ void ParseActivatedBy(char *act_by)
 
     if(al_ptr == NULL)
     {
-        rtn_tmp->activate_list = (ActivateList *) calloc(sizeof(ActivateList), sizeof(char));
+        rtn_tmp->activate_list = (ActivateList *)calloc(1, sizeof(ActivateList));
 
         if(rtn_tmp->activate_list == NULL)
         {
@@ -2933,7 +2947,7 @@ void ParseActivatedBy(char *act_by)
             al_ptr = al_ptr->next;
         }
 
-        al_ptr->next = (ActivateList *) calloc(sizeof(ActivateList), sizeof(char));
+        al_ptr->next = (ActivateList *)calloc(1, sizeof(ActivateList));
 
         al_ptr = al_ptr->next;
 
@@ -3083,7 +3097,7 @@ struct VarEntry *VarAlloc()
 {
     struct VarEntry *new;
 
-    if((new = (struct VarEntry *) calloc(sizeof(struct VarEntry), sizeof(char))) == NULL)
+    if((new = (struct VarEntry *)calloc(1, sizeof(struct VarEntry))) == NULL)
     {
         FatalError("cannot allocate memory for VarEntry.");
     }
@@ -3378,16 +3392,16 @@ char *ExpandVars(char *string)
 
                 if((p = strchr(rawvarname, ':')))
                 {
-                    strncpy(varname, rawvarname, p - rawvarname);
+                    SnortStrncpy(varname, rawvarname, p - rawvarname);
 
                     if(strlen(p) >= 2)
                     {
                         varmodifier = *(p + 1);
-                        strcpy(varaux, p + 2);
+                        SnortStrncpy(varaux, p + 2, sizeof(varaux));
                     }
                 }
                 else
-                    strcpy(varname, rawvarname);
+                    SnortStrncpy(varname, rawvarname, sizeof(varname));
 
                 bzero((char *) varbuffer, sizeof(varbuffer));
 
@@ -4414,7 +4428,7 @@ void ParseConfig(char *rule)
     }
     else if(!strcasecmp(config, "interface"))
     {
-        pv.interface = (char *) malloc(strlen(args) + 1);   /* XXX OOM check */
+        pv.interface = (char *)SnortAlloc((strlen(args) + 1) * sizeof(char));
         strlcpy(pv.interface, args, strlen(args)+1);
         DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Interface = %s\n", 
                     PRINT_INTERFACE(pv.interface)););
@@ -5001,9 +5015,16 @@ void ParseConfig(char *rule)
         }
     }
 #endif /* defined(ENABLE_RESPONSE2) && !defined(ENABLE_RESPONSE) */
-
-    FatalError("Unknown config directive: %s\n", rule);
+    else if (!strcasecmp(config, "ipv6_frag"))
+    {
+         DEBUG_WRAP(DebugMessage(DEBUG_CONFIGRULES,"IPv6 Rule Option\n"););
+         ParseIPv6Options(args);
+         mSplitFree(&rule_toks,num_rule_toks);
+         mSplitFree(&config_decl,num_config_decl_toks);
+         return;
+    }
     
+    FatalError("Unknown config directive: %s\n", rule);
 
     return;
 }
@@ -5274,7 +5295,12 @@ void ParseDynamicEngine(char *args)
         /* Load everything from current dir */
         if (!pv.dynamicEngineCurrentDir)
         {
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+            if (dynamicLib == NULL)
+            {
+                FatalError("ParseDynamicEngine() => Failed to allocate memory\n");
+            }
+
             /* getcwd will dynamically allocate space for the path */
             dynamicEngineLibPath = getcwd(dynamicLib->path, 0);
             dynamicLib->path = strdup(dynamicEngineLibPath);
@@ -5317,7 +5343,12 @@ void ParseDynamicEngine(char *args)
                     file_name, file_line);
     }
 
-    dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+    dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+    if (dynamicLib == NULL)
+    {
+        FatalError("ParseDynamicEngine() => Failed to allocate memory\n");
+    }
+
     dynamicLib->type = type;
     dynamicLib->path = strdup(dynamicEngineLibPath);
 
@@ -5355,7 +5386,12 @@ void ParseDynamicDetection(char *args)
         /* Load everything from current dir */
         if (!pv.dynamicLibraryCurrentDir)
         {
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+            if (dynamicLib == NULL)
+            {
+                FatalError("ParseDynamicDetection => Failed to allocate memory\n");
+            }
+
             /* getcwd will dynamically allocate space for the path */
             dynamicDetectionLibPath = getcwd(dynamicLib->path, 0);
             dynamicLib->path = strdup(dynamicDetectionLibPath);
@@ -5392,7 +5428,12 @@ void ParseDynamicDetection(char *args)
                     file_name, file_line);
     }
 
-    dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+    dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+    if (dynamicLib == NULL)
+    {
+        FatalError("ParseDynamicDetection => Failed to allocate memory\n");
+    }
+
     dynamicLib->type = type;
     dynamicLib->path = strdup(dynamicDetectionLibPath);
 
@@ -5429,7 +5470,12 @@ void ParseDynamicPreprocessor(char *args)
         /* Load everything from current dir */
         if (!pv.dynamicPreprocCurrentDir)
         {
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+            if (dynamicLib == NULL)
+            {
+                FatalError("ParseDynamicPreprocessor => Failed to allocate memory\n");
+            }
+
             /* getcwd will dynamically allocate space for the path */
             dynamicDetectionLibPath = getcwd(dynamicLib->path, 0);
             dynamicLib->path = strdup(dynamicDetectionLibPath);
@@ -5466,7 +5512,12 @@ void ParseDynamicPreprocessor(char *args)
                     file_name, file_line);
     }
 
-    dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+    dynamicLib = (DynamicDetectionSpecifier *)calloc(1, sizeof(DynamicDetectionSpecifier));
+    if (dynamicLib == NULL)
+    {
+        FatalError("ParseDynamicPreprocessor => Failed to allocate memory\n");
+    }
+
     dynamicLib->type = type;
     dynamicLib->path = strdup(dynamicDetectionLibPath);
 
@@ -5649,6 +5700,106 @@ void ParseRuleTypeDeclaration(FILE* rule_file, char *rule)
     pv.num_rule_types++;
 
     return;
+}
+
+void ParseIPv6Options(char *args) 
+{
+    int num_opts;
+    int num_args;
+    char **opt_toks;
+    char **arg_toks;
+    int i;
+
+    opt_toks = mSplit(args, ",", 128, &num_opts, 0);
+
+    for(i=0; i < num_opts; i++)
+    {
+        arg_toks = mSplit(opt_toks[i], " ", 2, &num_args, 0);
+
+        if(!arg_toks[1]) 
+        {
+             FatalError("%s(%d) => ipv6_frag option '%s' requires an argument.\n",
+                          file_name, file_line, arg_toks[0]);
+        }
+
+        if(!strcasecmp(arg_toks[0], "bsd_icmp_frag_alert"))
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_INIT, 
+                      "disabling the BSD ICMP fragmentation alert\n"););
+            if(!strcasecmp(arg_toks[1], "off"))
+                pv.decoder_flags.bsd_icmp_frag = 0;
+        }
+        else if(!strcasecmp(arg_toks[0], "bad_ipv6_frag_alert"))
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_INIT, 
+                      "disabling the IPv6 bad fragmentation packet alerts\n"););
+            if(!strcasecmp(arg_toks[1], "off"))
+                pv.decoder_flags.ipv6_bad_frag_pkt = 0;
+        
+        }
+        else if (!strcasecmp(arg_toks[0], "frag_timeout"))
+        {
+            long val;
+            char *endp;
+
+            if(!args)
+            {
+                 FatalError("Setting the ipv6_frag_timeout requires an integer argument.\n");
+            }
+
+            val = strtol(arg_toks[1], &endp, 0);
+            if(val <= 0 || val > 3600)
+                FatalError("%s(%d) => ipv6_frag_timeout: Invalid argument '%s'."
+                          " Must be greater that 0 and less than 3600 secnods.",
+                        file_name, file_line, arg_toks[1]);
+
+            if(args == endp || *endp)
+                FatalError("%s(%d) => ipv6_frag_timeout: Invalid argument '%s'.\n", 
+                        file_name, file_line, arg_toks[1]);
+
+            pv.ipv6_frag_timeout = val;
+        }
+        else if (!strcasecmp(arg_toks[0], "max_frag_sessions"))
+        {
+            long val;
+            char *endp;
+
+            if(!args)
+            {
+                 FatalError("Setting the ipv6_max_frag_sessions requires an integer argument.\n");
+            }
+
+            val = strtol(arg_toks[1], &endp, 0);
+            if (val <= 0) 
+                FatalError("%s(%d) => ipv6_max_frag_sessions: Invalid number of"    
+                        " sessions '%s'. Must be greater than 0\n", 
+                        file_name, file_line, arg_toks[1]);
+
+            if(args == endp || *endp)
+                FatalError("%s(%d) => ipv6_max_frag_sessions: Invalid number of"    
+                        " sessions '%s'.\n", 
+                        file_name, file_line, arg_toks[1]);
+
+            pv.ipv6_max_frag_sessions = val;
+        }
+        else if (!strcasecmp(arg_toks[0], "drop_bad_ipv6_frag"))
+        {
+            if(!strcasecmp(arg_toks[1], "off"))
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_INIT, 
+                      "disabling the BSD ICMP fragmentation alert\n"););
+                pv.decoder_flags.drop_bad_ipv6_frag = 0;
+            }
+        }
+        else 
+        {
+             FatalError("%s(%d) => Invalid option to ipv6_frag '%s %s'.\n", 
+                          file_name, file_line, arg_toks[0], arg_toks[1]);
+        }
+        mSplitFree(&arg_toks, num_args);
+    }
+
+    mSplitFree(&opt_toks, num_opts);
 }
 
 /* adapted from ParseRuleFile in rules.c */

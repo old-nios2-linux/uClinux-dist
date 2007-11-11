@@ -67,6 +67,15 @@
 #define NULL 0
 #endif
 
+/* Attribute `sentinel' was valid as of gcc 3.5.  */
+#ifndef ATTRIBUTE_SENTINEL
+# if (__GNUC__ > 3 || ( __GNUC__ == 3 && __GNUC_MINOR__ >= 5))
+#  define ATTRIBUTE_SENTINEL __attribute__ ((__sentinel__))
+# else
+#  define ATTRIBUTE_SENTINEL
+# endif /* GNUC >= 3.5 */
+#endif /* ATTRIBUTE_SENTINEL */
+
 #ifndef _CLIENTDATA
 typedef int *ClientData;
 #define _CLIENTDATA
@@ -246,7 +255,7 @@ EXTERN void		Tcl_ValidateAllMemory _ANSI_ARGS_((char *file,
 
 EXTERN void		Tcl_AppendElement _ANSI_ARGS_((Tcl_Interp *interp,
 			    CONST char *string, int noSep));
-EXTERN void		Tcl_AppendResult _ANSI_ARGS_((Tcl_Interp *interp, ...));
+EXTERN void		Tcl_AppendResult _ANSI_ARGS_((Tcl_Interp *interp, ...)) ATTRIBUTE_SENTINEL;
 EXTERN char *		Tcl_AssembleCmd _ANSI_ARGS_((Tcl_CmdBuf buffer,
 			    char *string));
 EXTERN void		Tcl_AddErrorInfo _ANSI_ARGS_((Tcl_Interp *interp,
@@ -315,7 +324,7 @@ EXTERN void		Tcl_ResetResult _ANSI_ARGS_((Tcl_Interp *interp));
 #define Tcl_Return Tcl_SetResult
 EXTERN int		Tcl_ScanElement _ANSI_ARGS_((CONST char *string,
 			    int *flagPtr));
-EXTERN void		Tcl_SetErrorCode _ANSI_ARGS_((Tcl_Interp *interp, ...));
+EXTERN void		Tcl_SetErrorCode _ANSI_ARGS_((Tcl_Interp *interp, ...)) ATTRIBUTE_SENTINEL;
 EXTERN void		Tcl_SetResult _ANSI_ARGS_((Tcl_Interp *interp,
 			    char *string, Tcl_FreeProc *freeProc));
 EXTERN char *		Tcl_SetVar _ANSI_ARGS_((Tcl_Interp *interp,
@@ -348,7 +357,7 @@ EXTERN void		Tcl_UntraceVar _ANSI_ARGS_((Tcl_Interp *interp,
 EXTERN void		Tcl_UntraceVar2 _ANSI_ARGS_((Tcl_Interp *interp,
 			    char *part1, char *part2, int flags,
 			    Tcl_VarTraceProc *proc, ClientData clientData));
-EXTERN int		Tcl_VarEval _ANSI_ARGS_((Tcl_Interp *interp, ...));
+EXTERN int		Tcl_VarEval _ANSI_ARGS_((Tcl_Interp *interp, ...)) ATTRIBUTE_SENTINEL;
 EXTERN ClientData	Tcl_VarTraceInfo _ANSI_ARGS_((Tcl_Interp *interp,
 			    char *varName, int flags,
 			    Tcl_VarTraceProc *procPtr,

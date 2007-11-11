@@ -36,8 +36,6 @@
 
 #define HT6560B_VERSION "v0.07"
 
-#undef REALLY_SLOW_IO		/* most systems can safely undef this */
-
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -143,16 +141,16 @@ static void ht6560b_selectproc (ide_drive_t *drive)
 		current_timing = timing;
 		if (drive->media != ide_disk || !drive->present)
 			select |= HT_PREFETCH_MODE;
-		(void) HWIF(drive)->INB(HT_CONFIG_PORT);
-		(void) HWIF(drive)->INB(HT_CONFIG_PORT);
-		(void) HWIF(drive)->INB(HT_CONFIG_PORT);
-		(void) HWIF(drive)->INB(HT_CONFIG_PORT);
-		HWIF(drive)->OUTB(select, HT_CONFIG_PORT);
+		(void)inb(HT_CONFIG_PORT);
+		(void)inb(HT_CONFIG_PORT);
+		(void)inb(HT_CONFIG_PORT);
+		(void)inb(HT_CONFIG_PORT);
+		outb(select, HT_CONFIG_PORT);
 		/*
 		 * Set timing for this drive:
 		 */
-		HWIF(drive)->OUTB(timing, IDE_SELECT_REG);
-		(void) HWIF(drive)->INB(IDE_STATUS_REG);
+		outb(timing, IDE_SELECT_REG);
+		(void)inb(IDE_STATUS_REG);
 #ifdef DEBUG
 		printk("ht6560b: %s: select=%#x timing=%#x\n",
 			drive->name, select, timing);
@@ -205,19 +203,21 @@ static u8 ht_pio2timings(ide_drive_t *drive, u8 pio)
 {
 	int active_time, recovery_time;
 	int active_cycles, recovery_cycles;
-	ide_pio_data_t d;
 	int bus_speed = system_bus_clock();
 	
         if (pio) {
-		pio = ide_get_best_pio_mode(drive, pio, 5, &d);
-		
+		unsigned int cycle_time;
+
+		pio = ide_get_best_pio_mode(drive, pio, 5);
+		cycle_time = ide_pio_cycle_time(drive, pio);
+
 		/*
 		 *  Just like opti621.c we try to calculate the
 		 *  actual cycle time for recovery and activity
 		 *  according system bus speed.
 		 */
 		active_time = ide_pio_timings[pio].active_time;
-		recovery_time = d.cycle_time 
+		recovery_time = cycle_time
 			- active_time
 			- ide_pio_timings[pio].setup_time;
 		/*
@@ -303,11 +303,19 @@ static void tune_ht6560b (ide_drive_t *drive, u8 pio)
 #endif
 }
 
+int probe_ht6560b = 0;
+
+module_param_named(probe, probe_ht6560b, bool, 0);
+MODULE_PARM_DESC(probe, "probe for HT6560B chipset");
+
 /* Can be called directly from ide.c. */
 int __init ht6560b_init(void)
 {
 	ide_hwif_t *hwif, *mate;
 	int t;
+
+	if (probe_ht6560b == 0)
+		return -ENODEV;
 
 	hwif = &ide_hwifs[0];
 	mate = &ide_hwifs[1];
@@ -325,12 +333,14 @@ int __init ht6560b_init(void)
 
 	hwif->chipset = ide_ht6560b;
 	hwif->selectproc = &ht6560b_selectproc;
+	hwif->pio_mask = ATA_PIO5;
 	hwif->tuneproc = &tune_ht6560b;
 	hwif->serialized = 1;	/* is this needed? */
 	hwif->mate = mate;
 
 	mate->chipset = ide_ht6560b;
 	mate->selectproc = &ht6560b_selectproc;
+	mate->pio_mask = ATA_PIO5;
 	mate->tuneproc = &tune_ht6560b;
 	mate->serialized = 1;	/* is this needed? */
 	mate->mate = hwif;
@@ -351,7 +361,8 @@ int __init ht6560b_init(void)
 	probe_hwif_init(hwif);
 	probe_hwif_init(mate);
 
-	create_proc_ide_interfaces();
+	ide_proc_register_port(hwif);
+	ide_proc_register_port(mate);
 
 	return 0;
 

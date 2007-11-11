@@ -65,6 +65,9 @@ extern int hiDetectCalled;
 
 extern PV pv;
 
+/* Stats tracking for HTTP Inspect */
+HIStats hi_stats;
+
 #define MAX_FILENAME    1000
 
 /**
@@ -116,6 +119,7 @@ extern PV pv;
 */
 #define PORTS             "ports"
 #define FLOW_DEPTH        "flow_depth"
+#define POST_DEPTH        "post_depth"
 #define IIS_UNICODE_MAP   "iis_unicode_map"
 #define CHUNK_LENGTH      "chunk_length"
 #define PIPELINE          "no_pipeline_req"
@@ -232,7 +236,7 @@ static int ProcessMaxPipeline(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to token '%s'.", MAX_PIPELINE);
 
         return -1;
@@ -247,7 +251,7 @@ static int ProcessMaxPipeline(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     */
     if(*pcEnd)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to token '%s'.  Must be a positive "
                 "number between 0 and %d.", MAX_PIPELINE,
                 HI_UI_CONFIG_MAX_PIPE);
@@ -258,7 +262,7 @@ static int ProcessMaxPipeline(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     if(GlobalConf->max_pipeline_requests < 0 || 
        GlobalConf->max_pipeline_requests > HI_UI_CONFIG_MAX_PIPE)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to token '%s'.  Must be a positive "
                 "number between 0 and %d.", MAX_PIPELINE, HI_UI_CONFIG_MAX_PIPE);
 
@@ -297,7 +301,7 @@ static int ProcessInspectType(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to token '%s'.", INSPECT_TYPE);
 
         return -1;
@@ -311,7 +315,7 @@ static int ProcessInspectType(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         **  We don't support this option yet, so we'll give an error and
         **  bail.
         */
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "Stateful HttpInspect processing is not yet available.  "
                  "Please use stateless processing for now.");
 
@@ -323,7 +327,7 @@ static int ProcessInspectType(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     }
     else
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to token '%s'.  Must be either "
                 "'%s' or '%s'.", INSPECT_TYPE, INSPECT_TYPE_STATEFUL,
                 INSPECT_TYPE_STATELESS);
@@ -348,7 +352,7 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "No argument to token '%s'.", IIS_UNICODE_MAP);
 
         return -1;
@@ -360,7 +364,7 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
 #ifndef WIN32
     if(pcToken[0] == '/')
     {
-        iRet = snprintf(filename, sizeof(filename), "%s", pcToken);
+        iRet = SnortSnprintf(filename, sizeof(filename), "%s", pcToken);
     }
     else
     {
@@ -369,19 +373,19 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
         */
         if(pv.config_dir[strlen(pv.config_dir)-1] == '/')
         {
-            iRet = snprintf(filename, sizeof(filename), 
-                            "%s%s", pv.config_dir, pcToken);
+            iRet = SnortSnprintf(filename, sizeof(filename), 
+                                 "%s%s", pv.config_dir, pcToken);
         }
         else
         {
-            iRet = snprintf(filename, sizeof(filename),
-                            "%s/%s", pv.config_dir, pcToken);
+            iRet = SnortSnprintf(filename, sizeof(filename),
+                                 "%s/%s", pv.config_dir, pcToken);
         }
     }
 #else
     if(strlen(pcToken)>3 && pcToken[1]==':' && pcToken[2]=='\\')
     {
-        iRet = snprintf(filename, sizeof(filename), "%s", pcToken);
+        iRet = SnortSnprintf(filename, sizeof(filename), "%s", pcToken);
     }
     else
     {
@@ -391,20 +395,20 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
         if(pv.config_dir[strlen(pv.config_dir)-1] == '\\' ||
            pv.config_dir[strlen(pv.config_dir)-1] == '/' )
         {
-            iRet = snprintf(filename, sizeof(filename), 
-                            "%s%s", pv.config_dir, pcToken);
+            iRet = SnortSnprintf(filename, sizeof(filename), 
+                                 "%s%s", pv.config_dir, pcToken);
         }
         else
         {
-            iRet = snprintf(filename, sizeof(filename),
-                            "%s\\%s", pv.config_dir, pcToken);
+            iRet = SnortSnprintf(filename, sizeof(filename),
+                                 "%s\\%s", pv.config_dir, pcToken);
         }
     }
 #endif
 
-    if(iRet < 0)
+    if(iRet != SNORT_SNPRINTF_SUCCESS)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "Filename too long for token '%s'.", IIS_UNICODE_MAP);
 
         return -1;
@@ -416,7 +420,7 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
     *iis_unicode_map_filename = strdup(filename);
     if(*iis_unicode_map_filename == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "Could not strdup() '%s' filename.",
                  IIS_UNICODE_MAP);
 
@@ -426,7 +430,7 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "No codemap to select from IIS Unicode Map file.");
 
         return -1;
@@ -438,7 +442,7 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
     iCodeMap = strtol(pcToken, &pcEnd, 10);
     if(*pcEnd || iCodeMap < 0)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "Invalid IIS codemap argument.");
 
         return -1;
@@ -458,19 +462,19 @@ static int ProcessIISUnicodeMap(int **iis_unicode_map,
     {
         if(iRet == HI_INVALID_FILE)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                      "Unable to open the IIS Unicode Map file '%s'.",
                      filename);
         }
         else if(iRet == HI_FATAL_ERR)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                      "Did not find specified IIS Unicode codemap in "
                      "the specified IIS Unicode Map file.");
         }
         else
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                      "There was an error while parsing the IIS Unicode "
                      "Map file.");
         }
@@ -491,7 +495,7 @@ static int ProcessOversizeDir(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "No argument to token '%s'.", OVERSIZE_DIR);
 
         return -1;
@@ -503,7 +507,7 @@ static int ProcessOversizeDir(HTTPINSPECT_CONF *ServerConf,
     iDirLen = strtol(pcToken, &pcEnd, 10);
     if(*pcEnd || iDirLen < 0)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                  "Invalid argument to token '%s'.", OVERSIZE_DIR);
         
         return -1;
@@ -602,9 +606,9 @@ static int ProcessGlobalConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         }
         else
         {
-            snprintf(ErrorString, ErrStrLen,
-                    "Invalid keyword '%s' for '%s' configuration.", 
-                     pcToken, GLOBAL);
+            SnortSnprintf(ErrorString, ErrStrLen,
+                          "Invalid keyword '%s' for '%s' configuration.", 
+                          pcToken, GLOBAL);
 
             return -1;
         }
@@ -617,8 +621,8 @@ static int ProcessGlobalConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     */
     if(!iTokens)
     {
-        snprintf(ErrorString, ErrStrLen,
-                "No tokens to '%s' configuration.", GLOBAL);
+        SnortSnprintf(ErrorString, ErrStrLen,
+                      "No tokens to '%s' configuration.", GLOBAL);
 
         return -1;
     }
@@ -628,9 +632,9 @@ static int ProcessGlobalConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     */
     if(!GlobalConf->iis_unicode_map)
     {
-        snprintf(ErrorString, ErrStrLen,
-                 "Global configuration must contain an IIS Unicode Map "
-                 "configuration.  Use token '%s'.", IIS_UNICODE_MAP);
+        SnortSnprintf(ErrorString, ErrStrLen,
+                      "Global configuration must contain an IIS Unicode Map "
+                      "configuration.  Use token '%s'.", IIS_UNICODE_MAP);
 
         return -1;
     }
@@ -652,14 +656,14 @@ static inline int _ProcessProfileErr(int iRet, char* ErrorString,
 {
     if(iRet == HI_MEM_ALLOC_FAIL)
     {
-        snprintf(ErrorString, ErrStrLen,
-                "Memory allocation failed while setting the '%s' "
-                "profile.", token);
+        SnortSnprintf(ErrorString, ErrStrLen,
+                      "Memory allocation failed while setting the '%s' "
+                      "profile.", token);
         return -1;
     }
     else
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Undefined error code for set_profile_%s.", token);
         return -1;
     }
@@ -698,7 +702,7 @@ static int ProcessProfile(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to '%s'.", PROFILE);
 
         return -1;
@@ -750,7 +754,7 @@ static int ProcessProfile(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     }
     else
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid profile argument '%s'.", pcToken);
 
         return -1;
@@ -793,7 +797,7 @@ static int ProcessPorts(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(!pcToken)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid port list format.");
 
         return -1;
@@ -801,7 +805,7 @@ static int ProcessPorts(HTTPINSPECT_CONF *ServerConf,
 
     if(strcmp(START_PORT_LIST, pcToken))
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must start a port list with the '%s' token.",
                 START_PORT_LIST);
 
@@ -825,7 +829,7 @@ static int ProcessPorts(HTTPINSPECT_CONF *ServerConf,
         */
         if(*pcEnd)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid port number.");
 
             return -1;
@@ -833,7 +837,7 @@ static int ProcessPorts(HTTPINSPECT_CONF *ServerConf,
 
         if(iPort < 0 || iPort > 65535)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid port number.  Must be between 0 and "
                     "65535.");
 
@@ -848,7 +852,7 @@ static int ProcessPorts(HTTPINSPECT_CONF *ServerConf,
 
     if(!iEndPorts)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must end '%s' configuration with '%s'.",
                 PORTS, END_PORT_LIST);
 
@@ -889,7 +893,7 @@ static int ProcessFlowDepth(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to '%s' token.", FLOW_DEPTH);
 
         return -1;
@@ -898,7 +902,7 @@ static int ProcessFlowDepth(HTTPINSPECT_CONF *ServerConf,
     iFlowDepth = strtol(pcToken, &pcEnd, 10);
     if(*pcEnd)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to '%s'.", FLOW_DEPTH);
 
         return -1;
@@ -907,7 +911,7 @@ static int ProcessFlowDepth(HTTPINSPECT_CONF *ServerConf,
     /* -1 here is okay, which means ignore ALL server side traffic */
     if(iFlowDepth < -1 || iFlowDepth > 1460)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to '%s'.  Must be between 0 and "
                 "1460.", FLOW_DEPTH);
 
@@ -915,6 +919,67 @@ static int ProcessFlowDepth(HTTPINSPECT_CONF *ServerConf,
     }
 
     ServerConf->flow_depth = iFlowDepth;
+
+    return 0;
+}
+
+/*
+**  NAME
+**    ProcessPostDepth::
+*/
+/**
+**  Configure the post depth for client requests
+**
+**  Checks that the value for flow depth is within bounds
+**  and is a valid number.
+**
+**  @param ServerConf  pointer to the server configuration
+**  @param ErrorString error string buffer
+**  @param ErrStrLen   the length of the error string buffer
+**
+**  @return an error code integer 
+**          (0 = success, >0 = non-fatal error, <0 = fatal error)
+**
+**  @retval  0 successs
+**  @retval -1 generic fatal error
+**  @retval  1 generic non-fatal error
+*/
+static int ProcessPostDepth(HTTPINSPECT_CONF *ServerConf,
+                            char *ErrorString, int ErrStrLen)
+{
+    char *pcToken;
+    int  post_depth;
+    char *pcEnd;
+
+    pcToken = strtok(NULL, CONF_SEPARATORS);
+    if(pcToken == NULL)
+    {
+        SnortSnprintf(ErrorString, ErrStrLen,
+                "No argument to '%s' token.", POST_DEPTH);
+
+        return -1;
+    }
+
+    post_depth = strtol(pcToken, &pcEnd, 10);
+    if(*pcEnd)
+    {
+        SnortSnprintf(ErrorString, ErrStrLen,
+                "Invalid argument to '%s'.", POST_DEPTH);
+
+        return -1;
+    }
+
+    /* -1 here is okay, which means ignore ALL server side traffic */
+    if(post_depth < -1 || post_depth > 65536)
+    {
+        SnortSnprintf(ErrorString, ErrStrLen,
+                "Invalid argument to '%s'.  Must be between 0 and "
+                "65536.", POST_DEPTH);
+
+        return -1;
+    }
+
+    ServerConf->post_depth = post_depth;
 
     return 0;
 }
@@ -947,7 +1012,7 @@ static int ProcessChunkLength(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to '%s' token.", CHUNK_LENGTH);
 
         return -1;
@@ -956,7 +1021,7 @@ static int ProcessChunkLength(HTTPINSPECT_CONF *ServerConf,
     iChunkLength = strtol(pcToken, &pcEnd, 10);
     if(*pcEnd)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to '%s'.", CHUNK_LENGTH);
 
         return -1;
@@ -964,7 +1029,7 @@ static int ProcessChunkLength(HTTPINSPECT_CONF *ServerConf,
 
     if(iChunkLength < 0)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to '%s'.", CHUNK_LENGTH);
 
         return -1;
@@ -1006,7 +1071,7 @@ static int ProcessConfOpt(HTTPINSPECT_CONF_OPT *ConfOpt, char *Option,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No argument to token '%s'.", Option);
 
         return -1;
@@ -1025,7 +1090,7 @@ static int ProcessConfOpt(HTTPINSPECT_CONF_OPT *ConfOpt, char *Option,
     }
     else
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid argument to token '%s'.", Option);
 
         return -1;
@@ -1069,7 +1134,7 @@ static int ProcessNonRfcChar(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(!pcToken)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid '%s' list format.", NON_RFC_CHAR);
 
         return -1;
@@ -1077,7 +1142,7 @@ static int ProcessNonRfcChar(HTTPINSPECT_CONF *ServerConf,
 
     if(strcmp(START_PORT_LIST, pcToken))
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must start a '%s' list with the '%s' token.",
                 NON_RFC_CHAR, START_PORT_LIST);
 
@@ -1095,7 +1160,7 @@ static int ProcessNonRfcChar(HTTPINSPECT_CONF *ServerConf,
         iChar = strtol(pcToken, &pcEnd, 16);
         if(*pcEnd)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid argument to '%s'.  Must be a single "
                     "character.", NON_RFC_CHAR);
 
@@ -1104,7 +1169,7 @@ static int ProcessNonRfcChar(HTTPINSPECT_CONF *ServerConf,
 
         if(iChar < 0 || iChar > 255)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid character value to '%s'.  Must be a single "
                     "character no greater than 255.", NON_RFC_CHAR);
 
@@ -1116,7 +1181,7 @@ static int ProcessNonRfcChar(HTTPINSPECT_CONF *ServerConf,
 
     if(!iEndChar)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must end '%s' configuration with '%s'.",
                 NON_RFC_CHAR, END_PORT_LIST);
 
@@ -1157,7 +1222,7 @@ static int ProcessWhitespaceChars(HTTPINSPECT_CONF *ServerConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(!pcToken)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Invalid '%s' list format.", WHITESPACE);
 
         return -1;
@@ -1165,7 +1230,7 @@ static int ProcessWhitespaceChars(HTTPINSPECT_CONF *ServerConf,
 
     if(strcmp(START_PORT_LIST, pcToken))
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must start a '%s' list with the '%s' token.",
                 WHITESPACE, START_PORT_LIST);
 
@@ -1183,7 +1248,7 @@ static int ProcessWhitespaceChars(HTTPINSPECT_CONF *ServerConf,
         iChar = strtol(pcToken, &pcEnd, 16);
         if(*pcEnd)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid argument to '%s'.  Must be a single "
                     "character.", WHITESPACE);
 
@@ -1192,7 +1257,7 @@ static int ProcessWhitespaceChars(HTTPINSPECT_CONF *ServerConf,
 
         if(iChar < 0 || iChar > 255)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid character value to '%s'.  Must be a single "
                     "character no greater than 255.", WHITESPACE);
 
@@ -1204,7 +1269,7 @@ static int ProcessWhitespaceChars(HTTPINSPECT_CONF *ServerConf,
 
     if(!iEndChar)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "Must end '%s' configuration with '%s'.",
                 WHITESPACE, END_PORT_LIST);
 
@@ -1252,7 +1317,7 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No tokens to '%s' configuration.", GLOBAL);
 
         return 1;
@@ -1269,7 +1334,7 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         pcToken = strtok(NULL, CONF_SEPARATORS);
         if(pcToken == NULL)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                      "No port list to the profile token.");
 
             return -1;
@@ -1303,8 +1368,14 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
             }
             else if(!strcmp(FLOW_DEPTH, pcToken))
             {
-                if((iRet = ProcessFlowDepth(ServerConf, 
-                                            ErrorString, ErrStrLen)))
+                if((iRet = ProcessFlowDepth(ServerConf, ErrorString, ErrStrLen)))
+                {
+                    return iRet;
+                }
+            }
+            else if(!strcmp(POST_DEPTH, pcToken))
+            {
+                if((iRet = ProcessPostDepth(ServerConf, ErrorString, ErrStrLen)))
                 {
                     return iRet;
                 }
@@ -1328,7 +1399,7 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
             }
             else
             {
-                snprintf(ErrorString, ErrStrLen,
+                SnortSnprintf(ErrorString, ErrStrLen,
                          "Invalid token while configuring the profile token.  "
                          "The only allowed tokens when configuring profiles "
                          "are: '%s', '%s', '%s', '%s', '%s', '%s', and '%s'.",
@@ -1342,7 +1413,7 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
 
         if(!iPorts)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                      "No port list to the profile token.");
 
             return -1;
@@ -1359,16 +1430,21 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     {
         if(!strcmp(PORTS, pcToken))
         {
-            if((iRet = ProcessPorts(ServerConf, 
-                                    ErrorString, ErrStrLen)))
+            if((iRet = ProcessPorts(ServerConf, ErrorString, ErrStrLen)))
             {
                 return iRet;
             }
         }
         else if(!strcmp(FLOW_DEPTH, pcToken))
         {
-            if((iRet = ProcessFlowDepth(ServerConf, 
-                                        ErrorString, ErrStrLen)))
+            if((iRet = ProcessFlowDepth(ServerConf, ErrorString, ErrStrLen)))
+            {
+                return iRet;
+            }
+        }
+        else if(!strcmp(POST_DEPTH, pcToken))
+        {
+            if((iRet = ProcessPostDepth(ServerConf, ErrorString, ErrStrLen)))
             {
                 return iRet;
             }
@@ -1608,7 +1684,7 @@ static int ProcessServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         }
         else
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid keyword '%s' for server configuration.",
                      pcToken);
 
@@ -1661,7 +1737,7 @@ static int PrintServerConf(HTTPINSPECT_CONF *ServerConf)
            
                     
     memset(buf, 0, STD_BUF+1);
-    snprintf(buf, STD_BUF, "      Ports: ");
+    SnortSnprintf(buf, STD_BUF, "      Ports: ");
 
     /*
     **  Print out all the applicable ports.
@@ -1726,7 +1802,7 @@ static int PrintServerConf(HTTPINSPECT_CONF *ServerConf)
     **  Print out the non-rfc chars
     */
     memset(buf, 0, STD_BUF+1);
-    snprintf(buf, STD_BUF, "      Non-RFC Compliant Characters: ");
+    SnortSnprintf(buf, STD_BUF, "      Non-RFC Compliant Characters: ");
     for(iCtr = 0; iCtr < 256; iCtr++)
     {
         if(ServerConf->non_rfc_chars[iCtr])
@@ -1748,7 +1824,7 @@ static int PrintServerConf(HTTPINSPECT_CONF *ServerConf)
     */
     iChar = 0;
     memset(buf, 0, STD_BUF+1);
-    snprintf(buf, STD_BUF, "      Whitespace Characters: ");
+    SnortSnprintf(buf, STD_BUF, "      Whitespace Characters: ");
     for(iCtr = 0; iCtr < 256; iCtr++)
     {
         if(ServerConf->whitespace[iCtr])
@@ -1782,7 +1858,7 @@ static int ProcessUniqueServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     pcToken = strtok(NULL, CONF_SEPARATORS);
     if(!pcToken)
     {
-        snprintf(ErrorString, ErrStrLen,
+        SnortSnprintf(ErrorString, ErrStrLen,
                 "No arguments to '%s' token.", SERVER);
 
         return -1;
@@ -1795,7 +1871,7 @@ static int ProcessUniqueServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
     {
         if(s_iDefaultServer)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Cannot configure '%s' settings more than once.",
                     GLOBAL_SERVER);
 
@@ -1825,7 +1901,7 @@ static int ProcessUniqueServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         Ip = inet_addr(pcToken);
         if(Ip == INADDR_NONE)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid IP to '%s' token.", SERVER);
 
             return -1;
@@ -1837,7 +1913,7 @@ static int ProcessUniqueServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
         ServerConf = malloc(sizeof(HTTPINSPECT_CONF));
         if(!ServerConf)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Could not allocate memory for server configuration.");
 
             return -1;
@@ -1858,14 +1934,14 @@ static int ProcessUniqueServerConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf,
             */
             if(iRet == HI_NONFATAL_ERR)
             {
-                snprintf(ErrorString, ErrStrLen,
+                SnortSnprintf(ErrorString, ErrStrLen,
                         "Duplicate server configuration.");
 
                 return -1;
             }
             else
             {
-                snprintf(ErrorString, ErrStrLen,
+                SnortSnprintf(ErrorString, ErrStrLen,
                         "Error when adding server configuration.");
 
                 return -1;
@@ -1955,7 +2031,7 @@ int HttpInspectSnortConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf, char *args, int iG
     
     if(GlobalConf == NULL)
     {
-        snprintf(ErrorString, ErrStrLen, 
+        SnortSnprintf(ErrorString, ErrStrLen, 
                 "Global configuration variable undefined.");
 
         return -1;
@@ -1963,7 +2039,7 @@ int HttpInspectSnortConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf, char *args, int iG
 
     if(args == NULL)
     {
-        snprintf(ErrorString, ErrStrLen, 
+        SnortSnprintf(ErrorString, ErrStrLen, 
                 "No arguments to HttpInspect configuration.");
 
         return -1;
@@ -1975,7 +2051,7 @@ int HttpInspectSnortConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf, char *args, int iG
     pcToken = strtok(args, CONF_SEPARATORS);
     if(pcToken == NULL)
     {
-        snprintf(ErrorString, ErrStrLen, 
+        SnortSnprintf(ErrorString, ErrStrLen, 
                 "No arguments to HttpInspect configuration.");
 
         return -1;
@@ -1994,7 +2070,7 @@ int HttpInspectSnortConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf, char *args, int iG
         */
         if(s_iGlobal)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Cannot configure '%s' settings more than once.",
                     GLOBAL);
 
@@ -2031,14 +2107,14 @@ int HttpInspectSnortConf(HTTPINSPECT_GLOBAL_CONF *GlobalConf, char *args, int iG
     {
         if(iGlobal)
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid configuration token '%s'.  " 
                     "The first configuration must start with a '%s' "
                     "configuration type.", pcToken, GLOBAL);
         }
         else
         {
-            snprintf(ErrorString, ErrStrLen,
+            SnortSnprintf(ErrorString, ErrStrLen,
                     "Invalid configuration token '%s'.  Must be a '%s' "
                     "configuration.", pcToken, SERVER);
         }
@@ -2321,6 +2397,8 @@ int SnortHttpInspect(HTTPINSPECT_GLOBAL_CONF *GlobalConf, Packet *p)
         return 1;
     }
 
+    hi_stats.total++;
+
     /*
     **  Set up the HI_SI_INPUT pointer.  This is what the session_inspection()
     **  routines use to determine client and server traffic.  Plus, this makes
@@ -2385,7 +2463,7 @@ int SnortHttpInspect(HTTPINSPECT_GLOBAL_CONF *GlobalConf, Packet *p)
         **  URI, so we make sure here that this can't happen.
         */
         p->uri_count = 0;
-        UriBufs[0].decode_flags = 0;
+        UriBufs[HTTP_BUFFER_URI].decode_flags = 0;
 
         if(iInspectMode == HI_SI_SERVER_MODE)
         {
@@ -2423,23 +2501,67 @@ int SnortHttpInspect(HTTPINSPECT_GLOBAL_CONF *GlobalConf, Packet *p)
         {
             if(!iCallDetect || Session->server_conf->uri_only)
             {
-                UriBufs[0].decode_flags |= HTTPURI_PIPELINE_REQ;
+                UriBufs[HTTP_BUFFER_URI].decode_flags |= HTTPURI_PIPELINE_REQ;
             }
+        
+            p->uri_count = 0;
 
             if(Session->client.request.uri_norm)
             {
-                UriBufs[0].uri    = Session->client.request.uri_norm;
-                UriBufs[0].length = Session->client.request.uri_norm_size;
-                p->uri_count = 1;
+                UriBufs[HTTP_BUFFER_URI].uri    = Session->client.request.uri_norm;
+                UriBufs[HTTP_BUFFER_URI].length = Session->client.request.uri_norm_size;
+                p->uri_count++;
                 p->packet_flags |= PKT_HTTP_DECODE;
             }
             else if(Session->client.request.uri)
             {
-                UriBufs[0].uri    = Session->client.request.uri;
-                UriBufs[0].length = Session->client.request.uri_size;
-                p->uri_count = 1;
-
+                UriBufs[HTTP_BUFFER_URI].uri    = Session->client.request.uri;
+                UriBufs[HTTP_BUFFER_URI].length = Session->client.request.uri_size;
+                p->uri_count++;
                 p->packet_flags |= PKT_HTTP_DECODE;
+            }
+
+            if(Session->client.request.method & (HI_POST_METHOD | HI_GET_METHOD)) 
+            { 
+                /* This handles the case that there was no URI */
+                if(!p->uri_count) 
+                {
+                    UriBufs[HTTP_BUFFER_URI].uri = NULL;
+                    UriBufs[HTTP_BUFFER_URI].length = 0;
+                    p->uri_count = 1;
+                }
+
+                if(Session->client.request.post_norm)
+                {
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].uri = 
+                            Session->client.request.post_norm;
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].length = 
+                            Session->client.request.post_norm_size;
+                    p->packet_flags |= PKT_HTTP_DECODE;
+                    p->uri_count++;
+                } 
+                else if(Session->client.request.post_raw)
+                {
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].uri = 
+                                Session->client.request.post_raw;
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].length = 
+                                Session->client.request.post_raw_size;
+                    p->packet_flags |= PKT_HTTP_DECODE;
+                    p->uri_count++;
+                }
+                else
+                {
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].uri = NULL;
+                    UriBufs[HTTP_BUFFER_CLIENT_BODY].length = 0;
+                }
+            }
+            else
+            {   
+                /* If we add another buffer, p->uri_count 
+                 * needs to be incremented */
+                // p->uri_count++;
+                UriBufs[HTTP_BUFFER_CLIENT_BODY].uri = NULL;
+                UriBufs[HTTP_BUFFER_CLIENT_BODY].length = 0;
             }
         }
         else if(iInspectMode == HI_SI_SERVER_MODE)

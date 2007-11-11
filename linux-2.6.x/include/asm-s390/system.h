@@ -97,16 +97,6 @@ static inline void restore_access_regs(unsigned int *acrs)
 	prev = __switch_to(prev,next);					     \
 } while (0)
 
-/*
- * On SMP systems, when the scheduler does migration-cost autodetection,
- * it needs a way to flush as much of the CPU's caches as possible.
- *
- * TODO: fill this in!
- */
-static inline void sched_cacheflush(void)
-{
-}
-
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING
 extern void account_vtime(struct task_struct *);
 extern void account_tick_vtime(struct task_struct *);
@@ -114,6 +104,16 @@ extern void account_system_vtime(struct task_struct *);
 #else
 #define account_vtime(x) do { /* empty */ } while (0)
 #endif
+
+#ifdef CONFIG_PFAULT
+extern void pfault_irq_init(void);
+extern int pfault_init(void);
+extern void pfault_fini(void);
+#else /* CONFIG_PFAULT */
+#define pfault_irq_init()	do { } while (0)
+#define pfault_init()		({-1;})
+#define pfault_fini()		do { } while (0)
+#endif /* CONFIG_PFAULT */
 
 #define finish_arch_switch(prev) do {					     \
 	set_fs(current->thread.mm_segment);				     \
@@ -363,8 +363,8 @@ __set_psw_mask(unsigned long mask)
 	__load_psw_mask(mask | (__raw_local_irq_stosm(0x00) & ~(-1UL >> 8)));
 }
 
-#define local_mcck_enable()  __set_psw_mask(PSW_KERNEL_BITS)
-#define local_mcck_disable() __set_psw_mask(PSW_KERNEL_BITS & ~PSW_MASK_MCHECK)
+#define local_mcck_enable()  __set_psw_mask(psw_kernel_bits)
+#define local_mcck_disable() __set_psw_mask(psw_kernel_bits & ~PSW_MASK_MCHECK)
 
 #ifdef CONFIG_SMP
 

@@ -17,9 +17,9 @@
 #define P3SEG		0xc0000000
 #define P4SEG		0xe0000000
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /* Should fill here */
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 /* Detailed P4SEG  */
 #define P4SEG_STORE_QUE	(P4SEG)
 #define P4SEG_IC_ADDR	0xf0000000

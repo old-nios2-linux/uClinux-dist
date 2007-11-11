@@ -76,13 +76,11 @@ extern int
   remote_send_offset,
   remote_recv_offset;
 
-#ifdef WANT_INTERVALS
+#if defined(WANT_INTERVALS) || defined(WANT_DEMO)
 extern	int          interval_usecs;
 extern  int          interval_wate;
 extern	int	     interval_burst;
-#endif /* WANT_INTERVALS */
 
-#ifdef WANT_DEMO
 extern int    demo_mode;
 extern double demo_interval;
 extern double demo_units;
@@ -102,6 +100,8 @@ extern int  confidence_level;
 extern int  iteration_min;
 extern int  iteration_max;
 extern double interval;
+
+extern int cpu_binding_requested;
 
 /* stuff to controll the bufferspace "width" */
 extern int	send_width;
@@ -127,6 +127,12 @@ extern	char
 
 extern char
   fill_file[BUFSIZ];
+
+extern char *
+  result_brand;
+
+extern int
+  no_control;
 
 #ifdef WANT_DLPI
 

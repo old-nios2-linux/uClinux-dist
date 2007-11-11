@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -21,6 +21,7 @@ static char rcsid[] = "$NetBSD: s_fabs.c,v 1.7 1995/05/10 20:47:13 jtc Exp $";
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(fabs)
 #ifdef __STDC__
 	double fabs(double x)
 #else
@@ -33,3 +34,4 @@ static char rcsid[] = "$NetBSD: s_fabs.c,v 1.7 1995/05/10 20:47:13 jtc Exp $";
 	SET_HIGH_WORD(x,high&0x7fffffff);
         return x;
 }
+libm_hidden_def(fabs)

@@ -281,18 +281,22 @@ struct cx88_board cx88_boards[] = {
 			.type   = CX88_VMUX_TELEVISION,
 			.vmux   = 0,
 			.gpio0  = 0x0000bde2,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_COMPOSITE1,
 			.vmux   = 1,
 			.gpio0  = 0x0000bde6,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_SVIDEO,
 			.vmux   = 2,
 			.gpio0  = 0x0000bde6,
+			.extadc = 1,
 		}},
 		.radio = {
 			.type   = CX88_RADIO,
 			.gpio0  = 0x0000bd62,
+			.extadc = 1,
 		},
 		.mpeg           = CX88_MPEG_BLACKBIRD,
 	},
@@ -353,6 +357,7 @@ struct cx88_board cx88_boards[] = {
 			.type   = CX88_VMUX_SVIDEO,
 			.vmux   = 2,
 			.gpio0  = 0x0000fde6, // 0x0000fda6 L,R RCA audio in?
+			.extadc = 1,
 		}},
 		.radio = {
 			.type   = CX88_RADIO,
@@ -523,6 +528,7 @@ struct cx88_board cx88_boards[] = {
 		.input          = {{
 			.type   = CX88_VMUX_TELEVISION,
 			.vmux   = 0,
+			.extadc = 1,
 		}},
 		.mpeg           = CX88_MPEG_BLACKBIRD,
 	},
@@ -646,18 +652,22 @@ struct cx88_board cx88_boards[] = {
 			.type   = CX88_VMUX_TELEVISION,
 			.vmux   = 0,
 			.gpio0  = 0x00009d80,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_COMPOSITE1,
 			.vmux   = 1,
 			.gpio0  = 0x00009d76,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_SVIDEO,
 			.vmux   = 2,
 			.gpio0  = 0x00009d76,
+			.extadc = 1,
 		}},
 		.radio = {
 			.type   = CX88_RADIO,
 			.gpio0  = 0x00009d00,
+			.extadc = 1,
 		},
 		.mpeg           = CX88_MPEG_BLACKBIRD,
 	},
@@ -754,6 +764,12 @@ struct cx88_board cx88_boards[] = {
 		.input          = {{
 			.type   = CX88_VMUX_DVB,
 			.vmux   = 0,
+		},{
+			.type   = CX88_VMUX_COMPOSITE1,
+			.vmux   = 2,
+		},{
+			.type   = CX88_VMUX_SVIDEO,
+			.vmux   = 2,
 		}},
 		.mpeg           = CX88_MPEG_DVB,
 	},
@@ -786,25 +802,29 @@ struct cx88_board cx88_boards[] = {
 		.tuner_addr     = ADDR_UNSET,
 		.radio_addr     = ADDR_UNSET,
 		.tda9887_conf   = TDA9887_PRESENT,
-		.mpeg           = CX88_MPEG_BLACKBIRD,
 		.input          = {{
 			.type   = CX88_VMUX_COMPOSITE1,
 			.vmux   = 0,
 			.gpio0  = 0x0000cd73,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_SVIDEO,
 			.vmux   = 1,
 			.gpio0  = 0x0000cd73,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_TELEVISION,
 			.vmux   = 3,
 			.gpio0  = 0x0000cdb3,
+			.extadc = 1,
 		}},
 		.radio = {
 			.type   = CX88_RADIO,
 			.vmux   = 2,
 			.gpio0  = 0x0000cdf3,
+			.extadc = 1,
 		},
+		.mpeg           = CX88_MPEG_BLACKBIRD,
 	},
 	[CX88_BOARD_KWORLD_VSTREAM_EXPERT_DVD] = {
 		 /* Alexander Wold <awold@bigfoot.com> */
@@ -865,6 +885,12 @@ struct cx88_board cx88_boards[] = {
 		.input          = {{
 			.type   = CX88_VMUX_DVB,
 			.vmux   = 0,
+		},{
+			.type   = CX88_VMUX_COMPOSITE1,
+			.vmux   = 1,
+		},{
+			.type   = CX88_VMUX_SVIDEO,
+			.vmux   = 2,
 		}},
 		.mpeg           = CX88_MPEG_DVB,
 	},
@@ -1050,7 +1076,6 @@ struct cx88_board cx88_boards[] = {
 		.mpeg           = CX88_MPEG_DVB,
 	},
 	[CX88_BOARD_KWORLD_HARDWARE_MPEG_TV_XPERT] = {
-		/* FIXME: Audio not working for s-video / composite inputs. */
 		.name           = "KWorld HardwareMpegTV XPert",
 		.tuner_type     = TUNER_PHILIPS_TDA8290,
 		.radio_type     = UNSET,
@@ -1065,10 +1090,12 @@ struct cx88_board cx88_boards[] = {
 			.type   = CX88_VMUX_COMPOSITE1,
 			.vmux   = 1,
 			.gpio0  = 0x3de6,
+			.extadc = 1,
 		},{
 			.type   = CX88_VMUX_SVIDEO,
 			.vmux   = 2,
 			.gpio0  = 0x3de6,
+			.extadc = 1,
 		}},
 		.radio = {
 			.type   = CX88_RADIO,
@@ -1252,35 +1279,35 @@ struct cx88_board cx88_boards[] = {
 			.gpio0  = 0x070b,
 		}},
 	},
-       [CX88_BOARD_TE_DTV_250_OEM_SWANN] = {
-	       .name           = "Shenzhen Tungsten Ages Tech TE-DTV-250 / Swann OEM",
-	       .tuner_type     = TUNER_LG_PAL_NEW_TAPC,
-	       .radio_type     = UNSET,
-	       .tuner_addr     = ADDR_UNSET,
-	       .radio_addr     = ADDR_UNSET,
-	       .input          = {{
-		       .type   = CX88_VMUX_TELEVISION,
-		       .vmux   = 0,
-		       .gpio0  = 0x003fffff,
-		       .gpio1  = 0x00e00000,
-		       .gpio2  = 0x003fffff,
-		       .gpio3  = 0x02000000,
-	       },{
-		       .type   = CX88_VMUX_COMPOSITE1,
-		       .vmux   = 1,
-		       .gpio0  = 0x003fffff,
-		       .gpio1  = 0x00e00000,
-		       .gpio2  = 0x003fffff,
-		       .gpio3  = 0x02000000,
+	[CX88_BOARD_TE_DTV_250_OEM_SWANN] = {
+		.name           = "Shenzhen Tungsten Ages Tech TE-DTV-250 / Swann OEM",
+		.tuner_type     = TUNER_LG_PAL_NEW_TAPC,
+		.radio_type     = UNSET,
+		.tuner_addr     = ADDR_UNSET,
+		.radio_addr     = ADDR_UNSET,
+		.input          = {{
+			.type   = CX88_VMUX_TELEVISION,
+			.vmux   = 0,
+			.gpio0  = 0x003fffff,
+			.gpio1  = 0x00e00000,
+			.gpio2  = 0x003fffff,
+			.gpio3  = 0x02000000,
 		},{
-		       .type   = CX88_VMUX_SVIDEO,
-		       .vmux   = 2,
-		       .gpio0  = 0x003fffff,
-		       .gpio1  = 0x00e00000,
-		       .gpio2  = 0x003fffff,
-		       .gpio3  = 0x02000000,
-	       }},
-       },
+			.type   = CX88_VMUX_COMPOSITE1,
+			.vmux   = 1,
+			.gpio0  = 0x003fffff,
+			.gpio1  = 0x00e00000,
+			.gpio2  = 0x003fffff,
+			.gpio3  = 0x02000000,
+		},{
+			.type   = CX88_VMUX_SVIDEO,
+			.vmux   = 2,
+			.gpio0  = 0x003fffff,
+			.gpio1  = 0x00e00000,
+			.gpio2  = 0x003fffff,
+			.gpio3  = 0x02000000,
+		}},
+	},
 	[CX88_BOARD_HAUPPAUGE_HVR1300] = {
 		.name		= "Hauppauge WinTV-HVR1300 DVB-T/Hybrid MPEG Encoder",
 		.tuner_type     = TUNER_PHILIPS_FMD1216ME_MK3,
@@ -1293,17 +1320,40 @@ struct cx88_board cx88_boards[] = {
 			.type   = CX88_VMUX_TELEVISION,
 			.vmux   = 0,
 			.gpio0	= 0xe780,
+			.extadc = 1,
 		},{
 			.type	= CX88_VMUX_COMPOSITE1,
 			.vmux	= 1,
 			.gpio0	= 0xe780,
+			.extadc = 1,
 		},{
 			.type	= CX88_VMUX_SVIDEO,
 			.vmux	= 2,
 			.gpio0	= 0xe780,
+			.extadc = 1,
 		}},
 		/* fixme: Add radio support */
-		.mpeg           = CX88_MPEG_DVB,
+		.mpeg           = CX88_MPEG_DVB | CX88_MPEG_BLACKBIRD,
+	},
+	[CX88_BOARD_ADSTECH_PTV_390] = {
+		.name           = "ADS Tech Instant Video PCI",
+		.tuner_type     = TUNER_ABSENT,
+		.radio_type     = UNSET,
+		.tuner_addr     = ADDR_UNSET,
+		.radio_addr     = ADDR_UNSET,
+		.input          = {{
+			.type   = CX88_VMUX_DEBUG,
+			.vmux   = 3,
+			.gpio0  = 0x04ff,
+		},{
+			.type   = CX88_VMUX_COMPOSITE1,
+			.vmux   = 1,
+			.gpio0  = 0x07fa,
+		},{
+			.type   = CX88_VMUX_SVIDEO,
+			.vmux   = 2,
+			.gpio0  = 0x07fa,
+		}},
 	},
 };
 const unsigned int cx88_bcount = ARRAY_SIZE(cx88_boards);
@@ -1515,6 +1565,10 @@ struct cx88_subid cx88_subids[] = {
 		.subdevice = 0x0840,
 		.card      = CX88_BOARD_KWORLD_HARDWARE_MPEG_TV_XPERT,
 	},{
+		.subvendor = 0x1421,
+		.subdevice = 0x0305,
+		.card      = CX88_BOARD_KWORLD_HARDWARE_MPEG_TV_XPERT,
+	},{
 		.subvendor = 0x18ac,
 		.subdevice = 0xdb40,
 		.card      = CX88_BOARD_DVICO_FUSIONHDTV_DVB_T_HYBRID,
@@ -1603,6 +1657,14 @@ struct cx88_subid cx88_subids[] = {
 		.subvendor = 0x0070,
 		.subdevice = 0x1402,
 		.card      = CX88_BOARD_HAUPPAUGE_HVR3000,
+	},{
+		.subvendor = 0x1421,
+		.subdevice = 0x0341, /* ADS Tech InstantTV DVB-S */
+		.card      = CX88_BOARD_KWORLD_DVBS_100,
+	},{
+		.subvendor = 0x1421,
+		.subdevice = 0x0390,
+		.card      = CX88_BOARD_ADSTECH_PTV_390,
 	},
 };
 const unsigned int cx88_idcount = ARRAY_SIZE(cx88_subids);
@@ -1610,7 +1672,7 @@ const unsigned int cx88_idcount = ARRAY_SIZE(cx88_subids);
 /* ----------------------------------------------------------------------- */
 /* some leadtek specific stuff                                             */
 
-static void __devinit leadtek_eeprom(struct cx88_core *core, u8 *eeprom_data)
+static void leadtek_eeprom(struct cx88_core *core, u8 *eeprom_data)
 {
 	/* This is just for the "Winfast 2000XP Expert" board ATM; I don't have data on
 	 * any others.
@@ -1758,7 +1820,7 @@ static void dvico_fusionhdtv_hybrid_init(struct cx88_core *core)
 		{ 0x03, 0x0C },
 	};
 
-	for (i = 0; i < 13; i++) {
+	for (i = 0; i < ARRAY_SIZE(init_bufs); i++) {
 		msg.buf = init_bufs[i];
 		msg.len = (i != 12 ? 5 : 2);
 		err = i2c_transfer(&core->i2c_adap, &msg, 1);
@@ -1885,12 +1947,21 @@ void cx88_card_setup(struct cx88_core *core)
 		if (0 == core->i2c_rc) {
 			/* enable tuner */
 			int i;
-			static const u8 buffer [] = { 0x10,0x12,0x13,0x04,0x16,0x00,0x14,0x04,0x017,0x00 };
+			static const u8 buffer [][2] = {
+				{0x10,0x12},
+				{0x13,0x04},
+				{0x16,0x00},
+				{0x14,0x04},
+				{0x17,0x00}
+			};
 			core->i2c_client.addr = 0x0a;
 
-			for (i = 0; i < 5; i++)
-				if (2 != i2c_master_send(&core->i2c_client,&buffer[i*2],2))
-					printk(KERN_WARNING "%s: Unable to enable tuner(%i).\n",
+			for (i = 0; i < ARRAY_SIZE(buffer); i++)
+				if (2 != i2c_master_send(&core->i2c_client,
+							buffer[i],2))
+					printk(KERN_WARNING
+						"%s: Unable to enable "
+						"tuner(%i).\n",
 						core->name, i);
 		}
 		break;

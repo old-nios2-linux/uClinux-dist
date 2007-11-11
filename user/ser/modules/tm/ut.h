@@ -1,10 +1,10 @@
 /*
- * $Id: ut.h,v 1.12 2003/07/07 20:53:21 andrei Exp $
+ * $Id: ut.h,v 1.14 2004/11/09 15:15:12 andrei Exp $
  *
  * utilities
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,7 +32,7 @@
  *  2003-02-13  added proto to uri2proxy (andrei)
  *  2003-04-09  uri2sock moved from uac.c (janakj)
  *  2003-04-14  added get_proto to determine protocol from uri unless
- *              specified explicitely (jiri)
+ *              specified explicitly (jiri)
  *  2003-07-07  get_proto takes now two protos as arguments (andrei)
  *              tls/sips support for get_proto & uri2proxy (andrei)
  */
@@ -63,7 +63,7 @@ inline static enum sip_protos get_proto(enum sip_protos force_proto,
 			switch(proto) {
 				case PROTO_NONE: /* uri default to UDP */
 						return PROTO_UDP;
-				case PROTO_UDP:/* transport specified explicitely */
+				case PROTO_UDP:/* transport specified explicitly */
 #ifdef USE_TCP
 				case PROTO_TCP:
 #endif
@@ -133,7 +133,8 @@ inline static struct proxy_l *uri2proxy( str *uri, int proto )
 /*
  * Convert a URI into socket_info
  */
-static inline struct socket_info *uri2sock(str *uri, union sockaddr_union *to_su, int proto)
+static inline struct socket_info *uri2sock(struct sip_msg* msg, str *uri,
+									union sockaddr_union *to_su, int proto)
 {
 	struct proxy_l *proxy;
 	struct socket_info* send_sock;
@@ -148,7 +149,7 @@ static inline struct socket_info *uri2sock(str *uri, union sockaddr_union *to_su
 	hostent2su(to_su, &proxy->host, proxy->addr_idx, 
 		   (proxy->port) ? proxy->port : SIP_PORT);
 			/* we use proxy->proto since uri2proxy just set it correctly*/
-	send_sock = get_send_socket(to_su, proxy->proto);
+	send_sock = get_send_socket(msg, to_su, proxy->proto);
 	if (!send_sock) {
 		LOG(L_ERR, "ERROR: uri2sock: no corresponding socket for af %d\n", 
 		    to_su->s.sa_family);

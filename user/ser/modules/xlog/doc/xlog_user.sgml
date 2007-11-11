@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.2 $</revnumber>
-		<date>$Date: 2003/10/12 13:07:40 $</date>
+		<revnumber>$Revision: 1.6 $</revnumber>
+		<date>$Date: 2004/11/17 14:13:18 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -26,16 +26,6 @@
 	    <listitem>
 		<para>
 		    %% : '%'
-		</para>
-	    </listitem>
-	    <listitem>
-		<para>
-		    %Ts : unix time stamp
-		</para>
-	    </listitem>
-	    <listitem>
-		<para>
-		    %Tf : string formatted time
 		</para>
 	    </listitem>
 	    <listitem>
@@ -61,6 +51,36 @@
 	    <listitem>
 		<para>
 		    %ft : 'From' tag
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %is : IP source address 
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %mb : whole SIP message buffer
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %mf : flags set for current SIP request
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %mi : SIP message id
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %ml : SIP message length
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %pp : process id (pid)
 		</para>
 	    </listitem>
 	    <listitem>
@@ -95,17 +115,35 @@
 	    </listitem>
 	    <listitem>
 		<para>
-		    %mi : SIP message id
+		    %Ts : unix time stamp
 		</para>
 	    </listitem>
 	    <listitem>
 		<para>
-		    %pp : process id (pid)
+		    %Tf : string formatted time
 		</para>
 	    </listitem>
 	    <listitem>
 		<para>
-		    %is : IP source address 
+		    %ua : User agent header field
+		</para>
+	    </listitem>
+	    <listitem>
+		<para>
+		    %{name[N]} : print the body of the Nth header identified by 
+			'name'. If [N] is omitted then the body of the first header is
+			printed. The first header is got when N=0, for the second N=1,
+			a.s.o. To print the last header of that type, use -1, no other
+			negative values are supported now. No white spaces are allowed
+			inside the specifier (before }, before or after {, [, ]
+			symbols).
+		</para>
+		<para>
+			The module should identify most of compact header names (the ones
+			recognized by ser which should be all at this moment), if not,
+			the compact form has to be specified explicitely. It is
+			recommended to use dedicated specifiers for headers (e.g., %ua
+			for user agent header), if they are available -- they are faster.
 		</para>
 	    </listitem>
 	</itemizedlist>
@@ -226,7 +264,7 @@ modparam("xlog", "buf_size", 8192)
 		<title><function>xlog</function> usage</title>
 		<programlisting format="linespecific">
 ...
-xlog("L_ERR", "time [%Tf] method <%rm> r-uri <%ru>\n");
+xlog("L_ERR", "time [%Tf] method <%rm> r-uri <%ru> 2nd via <%{via[1]}>\n");
 ...
 </programlisting>
 	    </example>

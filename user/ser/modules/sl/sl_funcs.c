@@ -1,7 +1,7 @@
 /*
- * $Id: sl_funcs.c,v 1.45.4.1 2003/11/26 16:44:27 bogdan Exp $
+ * $Id: sl_funcs.c,v 1.49.2.1 2005/03/01 11:24:21 bogdan Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -27,7 +27,7 @@
  /*
   * History:
   * -------
-  * 2003-02-11  modified sl_send_reply to use the transport independend
+  * 2003-02-11  modified sl_send_reply to use the transport independent
   *              msg_send  (andrei)
   * 2003-02-18  replaced TOTAG_LEN w/ TOTAG_VALUE_LEN (it was defined twice
   *              w/ different values!)  (andrei)
@@ -38,6 +38,7 @@
   * 2003-09-11: sl_tag converted to str to fit to the new
   *               build_res_buf_from_sip_req() interface (bogdan)
   * 2003-11-11: build_lump_rpl() removed, add_lump_rpl() has flags (bogdan)
+  * 2004-10-10: use of mhomed disabled for replies (jiri)
   */
 
 
@@ -123,6 +124,8 @@ int sl_send_reply(struct sip_msg *msg ,int code ,char *text )
 	char *dset;
 	int dset_len;
 	struct bookmark dummy_bm;
+	int backup_mhomed;
+	int ret;
 
 
 	if ( msg->first_line.u.request.method_value==METHOD_ACK)
@@ -173,7 +176,18 @@ int sl_send_reply(struct sip_msg *msg ,int code ,char *text )
 	}
 	
 
-	if (msg_send(0, msg->rcv.proto, &to, msg->rcv.proto_reserved1, buf, len)<0)
+	/* supress multhoming support when sending a reply back -- that makes sure
+	   that replies will come from where requests came in; good for NATs
+	   (there is no known use for mhomed for locally generated replies;
+	    note: forwarded cross-interface replies do benefit of mhomed!
+	*/
+	backup_mhomed=mhomed;
+	mhomed=0;
+	/* use for sending the received interface -bogdan*/
+	ret = msg_send( msg->rcv.bind_address, msg->rcv.proto, &to,
+			msg->rcv.proto_reserved1, buf, len);
+	mhomed=backup_mhomed;
+	if (ret<0) 
 		goto error;
 	
 	*(sl_timeout) = get_ticks() + SL_RPL_WAIT_TIME;

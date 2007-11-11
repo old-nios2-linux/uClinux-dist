@@ -114,6 +114,7 @@
 #define DPRINTK( when, msg... ) do { if ( (DEBUG & (when)) == (when) ) printk( msg ); } while (0)
 #else
 #define DPRINTK( when, msg... ) do { } while (0)
+#define DEBUG 0
 #endif
 #define DANY( msg... ) DPRINTK( 0xffff, msg );
 
@@ -419,7 +420,7 @@ static inline void borken_wait (void)
 #define ULOOP( i ) for (clock = i*8;;)
 #define TIMEOUT (!(clock--))
 
-int __init seagate_st0x_detect (struct scsi_host_template * tpnt)
+static int __init seagate_st0x_detect (struct scsi_host_template * tpnt)
 {
 	struct Scsi_Host *instance;
 	int i, j;
@@ -523,7 +524,7 @@ int __init seagate_st0x_detect (struct scsi_host_template * tpnt)
 #ifdef ARBITRATE
 		" ARBITRATE"
 #endif
-#ifdef DEBUG
+#if DEBUG
 		" DEBUG"
 #endif
 #ifdef FAST
@@ -733,7 +734,7 @@ static int internal_command (unsigned char target, unsigned char lun,
 	unsigned char *data = NULL;
 	struct scatterlist *buffer = NULL;
 	int clock, temp, nobuffs = 0, done = 0, len = 0;
-#ifdef DEBUG
+#if DEBUG
 	int transfered = 0, phase = 0, newphase;
 #endif
 	register unsigned char status_read;

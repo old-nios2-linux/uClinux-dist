@@ -35,26 +35,41 @@
 #include <asm/smp.h>
 #include <asm/war.h>
 
-static __init int __attribute__((unused)) r45k_bvahwbug(void)
+static __init int __maybe_unused r45k_bvahwbug(void)
 {
 	/* XXX: We should probe for the presence of this bug, but we don't. */
 	return 0;
 }
 
-static __init int __attribute__((unused)) r4k_250MHZhwbug(void)
+static __init int __maybe_unused r4k_250MHZhwbug(void)
 {
 	/* XXX: We should probe for the presence of this bug, but we don't. */
 	return 0;
 }
 
-static __init int __attribute__((unused)) bcm1250_m3_war(void)
+static __init int __maybe_unused bcm1250_m3_war(void)
 {
 	return BCM1250_M3_WAR;
 }
 
-static __init int __attribute__((unused)) r10000_llsc_war(void)
+static __init int __maybe_unused r10000_llsc_war(void)
 {
 	return R10000_LLSC_WAR;
+}
+
+/*
+ * Found by experiment: At least some revisions of the 4kc throw under
+ * some circumstances a machine check exception, triggered by invalid
+ * values in the index register.  Delaying the tlbp instruction until
+ * after the next branch,  plus adding an additional nop in front of
+ * tlbwi/tlbwr avoids the invalid index register values. Nobody knows
+ * why; it's not an issue caused by the core RTL.
+ *
+ */
+static __init int __attribute__((unused)) m4kc_tlbp_war(void)
+{
+	return (current_cpu_data.processor_id & 0xffff00) ==
+	       (PRID_COMP_MIPS | PRID_IMP_4KC);
 }
 
 /*
@@ -78,7 +93,7 @@ enum fields
 	SET = 0x200
 };
 
-#define OP_MASK		0x2f
+#define OP_MASK		0x3f
 #define OP_SH		26
 #define RS_MASK		0x1f
 #define RS_SH		21
@@ -92,7 +107,7 @@ enum fields
 #define IMM_SH		0
 #define JIMM_MASK	0x3ffffff
 #define JIMM_SH		0
-#define FUNC_MASK	0x2f
+#define FUNC_MASK	0x3f
 #define FUNC_SH		0
 #define SET_MASK	0x7
 #define SET_SH		0
@@ -423,6 +438,9 @@ enum label_id {
 	label_invalid,
 	label_second_part,
 	label_leave,
+#ifdef MODULE_START
+	label_module_alloc,
+#endif
 	label_vmalloc,
 	label_vmalloc_done,
 	label_tlbw_hazard,
@@ -455,6 +473,9 @@ static __init void build_label(struct label **lab, u32 *addr,
 
 L_LA(_second_part)
 L_LA(_leave)
+#ifdef MODULE_START
+L_LA(_module_alloc)
+#endif
 L_LA(_vmalloc)
 L_LA(_vmalloc_done)
 L_LA(_tlbw_hazard)
@@ -505,18 +526,18 @@ L_LA(_r3000_write_probe_fail)
 #define i_ehb(buf) i_sll(buf, 0, 0, 3)
 
 #ifdef CONFIG_64BIT
-static __init int __attribute__((unused)) in_compat_space_p(long addr)
+static __init int __maybe_unused in_compat_space_p(long addr)
 {
 	/* Is this address in 32bit compat space? */
 	return (((addr) & 0xffffffff00000000L) == 0xffffffff00000000L);
 }
 
-static __init int __attribute__((unused)) rel_highest(long val)
+static __init int __maybe_unused rel_highest(long val)
 {
 	return ((((val + 0x800080008000L) >> 48) & 0xffff) ^ 0x8000) - 0x8000;
 }
 
-static __init int __attribute__((unused)) rel_higher(long val)
+static __init int __maybe_unused rel_higher(long val)
 {
 	return ((((val + 0x80008000L) >> 32) & 0xffff) ^ 0x8000) - 0x8000;
 }
@@ -550,8 +571,8 @@ static __init void i_LA_mostly(u32 **buf, unsigned int rs, long addr)
 		i_lui(buf, rs, rel_hi(addr));
 }
 
-static __init void __attribute__((unused)) i_LA(u32 **buf, unsigned int rs,
-						long addr)
+static __init void __maybe_unused i_LA(u32 **buf, unsigned int rs,
+					     long addr)
 {
 	i_LA_mostly(buf, rs, addr);
 	if (rel_lo(addr))
@@ -630,8 +651,8 @@ static __init void copy_handler(struct reloc *rel, struct label *lab,
 	move_labels(lab, first, end, off);
 }
 
-static __init int __attribute__((unused)) insn_has_bdelay(struct reloc *rel,
-							  u32 *addr)
+static __init int __maybe_unused insn_has_bdelay(struct reloc *rel,
+						       u32 *addr)
 {
 	for (; rel->lab != label_invalid; rel++) {
 		if (rel->addr == addr
@@ -644,15 +665,15 @@ static __init int __attribute__((unused)) insn_has_bdelay(struct reloc *rel,
 }
 
 /* convenience functions for labeled branches */
-static void __init __attribute__((unused))
+static void __init __maybe_unused
 	il_bltz(u32 **p, struct reloc **r, unsigned int reg, enum label_id l)
 {
 	r_mips_pc16(r, *p, l);
 	i_bltz(p, reg, 0);
 }
 
-static void __init __attribute__((unused)) il_b(u32 **p, struct reloc **r,
-					 enum label_id l)
+static void __init __maybe_unused il_b(u32 **p, struct reloc **r,
+					     enum label_id l)
 {
 	r_mips_pc16(r, *p, l);
 	i_b(p, 0);
@@ -665,7 +686,7 @@ static void __init il_beqz(u32 **p, struct reloc **r, unsigned int reg,
 	i_beqz(p, reg, 0);
 }
 
-static void __init __attribute__((unused))
+static void __init __maybe_unused
 il_beqzl(u32 **p, struct reloc **r, unsigned int reg, enum label_id l)
 {
 	r_mips_pc16(r, *p, l);
@@ -684,6 +705,13 @@ static void __init il_bgezl(u32 **p, struct reloc **r, unsigned int reg,
 {
 	r_mips_pc16(r, *p, l);
 	i_bgezl(p, reg, 0);
+}
+
+static void __init __maybe_unused
+il_bgez(u32 **p, struct reloc **r, unsigned int reg, enum label_id l)
+{
+	r_mips_pc16(r, *p, l);
+	i_bgez(p, reg, 0);
 }
 
 /* The only general purpose registers allowed in TLB handlers. */
@@ -797,7 +825,7 @@ static __initdata u32 final_handler[64];
  *
  * As if we MIPS hackers wouldn't know how to nop pipelines happy ...
  */
-static __init void __attribute__((unused)) build_tlb_probe_entry(u32 **p)
+static __init void __maybe_unused build_tlb_probe_entry(u32 **p)
 {
 	switch (current_cpu_data.cputype) {
 	/* Found by experiment: R4600 v2.0 needs this, too.  */
@@ -880,6 +908,9 @@ static __init void build_tlb_write_entry(u32 **p, struct label **l,
 	case CPU_4KSC:
 	case CPU_20KC:
 	case CPU_25KF:
+	case CPU_LOONGSON2:
+		if (m4kc_tlbp_war())
+			i_nop(p);
 		tlbw(p);
 		break;
 
@@ -970,7 +1001,11 @@ build_get_pmde64(u32 **p, struct label **l, struct reloc **r,
 	 * The vmalloc handling is not in the hotpath.
 	 */
 	i_dmfc0(p, tmp, C0_BADVADDR);
+#ifdef MODULE_START
+	il_bltz(p, r, tmp, label_module_alloc);
+#else
 	il_bltz(p, r, tmp, label_vmalloc);
+#endif
 	/* No i_nop needed here, since the next insn doesn't touch TMP. */
 
 #ifdef CONFIG_SMP
@@ -1023,8 +1058,46 @@ build_get_pgd_vmalloc64(u32 **p, struct label **l, struct reloc **r,
 {
 	long swpd = (long)swapper_pg_dir;
 
+#ifdef MODULE_START
+	long modd = (long)module_pg_dir;
+
+	l_module_alloc(l, *p);
+	/*
+	 * Assumption:
+	 * VMALLOC_START >= 0xc000000000000000UL
+	 * MODULE_START >= 0xe000000000000000UL
+	 */
+	i_SLL(p, ptr, bvaddr, 2);
+	il_bgez(p, r, ptr, label_vmalloc);
+
+	if (in_compat_space_p(MODULE_START) && !rel_lo(MODULE_START)) {
+		i_lui(p, ptr, rel_hi(MODULE_START)); /* delay slot */
+	} else {
+		/* unlikely configuration */
+		i_nop(p); /* delay slot */
+		i_LA(p, ptr, MODULE_START);
+	}
+	i_dsubu(p, bvaddr, bvaddr, ptr);
+
+	if (in_compat_space_p(modd) && !rel_lo(modd)) {
+		il_b(p, r, label_vmalloc_done);
+		i_lui(p, ptr, rel_hi(modd));
+	} else {
+		i_LA_mostly(p, ptr, modd);
+		il_b(p, r, label_vmalloc_done);
+		i_daddiu(p, ptr, ptr, rel_lo(modd));
+	}
+
+	l_vmalloc(l, *p);
+	if (in_compat_space_p(MODULE_START) && !rel_lo(MODULE_START) &&
+	    MODULE_START << 32 == VMALLOC_START)
+		i_dsll32(p, ptr, ptr, 0);	/* typical case */
+	else
+		i_LA(p, ptr, VMALLOC_START);
+#else
 	l_vmalloc(l, *p);
 	i_LA(p, ptr, VMALLOC_START);
+#endif
 	i_dsubu(p, bvaddr, bvaddr, ptr);
 
 	if (in_compat_space_p(swpd) && !rel_lo(swpd)) {
@@ -1043,7 +1116,7 @@ build_get_pgd_vmalloc64(u32 **p, struct label **l, struct reloc **r,
  * TMP and PTR are scratch.
  * TMP will be clobbered, PTR will hold the pgd entry.
  */
-static __init void __attribute__((unused))
+static __init void __maybe_unused
 build_get_pgde32(u32 **p, unsigned int tmp, unsigned int ptr)
 {
 	long pgdc = (long)pgd_current;
@@ -1221,7 +1294,8 @@ static void __init build_r4000_tlb_refill_handler(void)
 	 * need three, with the second nop'ed and the third being
 	 * unused.
 	 */
-#ifdef CONFIG_32BIT
+	/* Loongson2 ebase is different than r4k, we have more space */
+#if defined(CONFIG_32BIT) || defined(CONFIG_CPU_LOONGSON2)
 	if ((p - tlb_handler) > 64)
 		panic("TLB refill handler space exceeded");
 #else
@@ -1234,7 +1308,7 @@ static void __init build_r4000_tlb_refill_handler(void)
 	/*
 	 * Now fold the handler in the TLB refill handler space.
 	 */
-#ifdef CONFIG_32BIT
+#if defined(CONFIG_32BIT) || defined(CONFIG_CPU_LOONGSON2)
 	f = final_handler;
 	/* Simplest case, just copy the handler. */
 	copy_handler(relocs, labels, tlb_handler, p, f);
@@ -1281,7 +1355,7 @@ static void __init build_r4000_tlb_refill_handler(void)
 		final_len);
 
 	f = final_handler;
-#ifdef CONFIG_64BIT
+#if defined(CONFIG_64BIT) && !defined(CONFIG_CPU_LOONGSON2)
 	if (final_len > 32)
 		final_len = 64;
 	else
@@ -1648,7 +1722,8 @@ build_r4000_tlbchange_handler_head(u32 **p, struct label **l,
 	l_smp_pgtable_change(l, *p);
 # endif
 	iPTE_LW(p, l, pte, ptr); /* get even pte */
-	build_tlb_probe_entry(p);
+	if (!m4kc_tlbp_war())
+		build_tlb_probe_entry(p);
 }
 
 static void __init
@@ -1690,6 +1765,8 @@ static void __init build_r4000_tlb_load_handler(void)
 
 	build_r4000_tlbchange_handler_head(&p, &l, &r, K0, K1);
 	build_pte_present(&p, &l, &r, K0, K1, label_nopage_tlbl);
+	if (m4kc_tlbp_war())
+		build_tlb_probe_entry(&p);
 	build_make_valid(&p, &r, K0, K1);
 	build_r4000_tlbchange_handler_tail(&p, &l, &r, K0, K1);
 
@@ -1724,6 +1801,8 @@ static void __init build_r4000_tlb_store_handler(void)
 
 	build_r4000_tlbchange_handler_head(&p, &l, &r, K0, K1);
 	build_pte_writable(&p, &l, &r, K0, K1, label_nopage_tlbs);
+	if (m4kc_tlbp_war())
+		build_tlb_probe_entry(&p);
 	build_make_write(&p, &r, K0, K1);
 	build_r4000_tlbchange_handler_tail(&p, &l, &r, K0, K1);
 
@@ -1758,6 +1837,8 @@ static void __init build_r4000_tlb_modify_handler(void)
 
 	build_r4000_tlbchange_handler_head(&p, &l, &r, K0, K1);
 	build_pte_modifiable(&p, &l, &r, K0, K1, label_nopage_tlbm);
+	if (m4kc_tlbp_war())
+		build_tlb_probe_entry(&p);
 	/* Present and writable bits set, set accessed and dirty bits. */
 	build_make_write(&p, &r, K0, K1);
 	build_r4000_tlbchange_handler_tail(&p, &l, &r, K0, K1);

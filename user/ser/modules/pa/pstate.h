@@ -1,9 +1,9 @@
 /*
  * Presence Agent, presentity state definitions
  *
- * $Id: pstate.h,v 1.2 2003/04/30 17:49:29 janakj Exp $
+ * $Id: pstate.h,v 1.4 2004/08/24 09:00:33 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,7 +37,8 @@ typedef enum pstate {
 	PS_AWAY,        /* Presentity is away */
 	PS_XAWAY,       /* Presentity is extended-away */
 	PS_DND,         /* Do Not Disturb */
-	PS_TYPING       /* Presentity is typing a message */
+	PS_TYPING,      /* Presentity is typing a message */
+	PS_NSTATES
 } pstate_t;
 
 #endif /* PSTATE_H */

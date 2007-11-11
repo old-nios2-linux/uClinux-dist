@@ -34,16 +34,17 @@ struct ip_conntrack_tuple_hash *
 ip_conntrack_find_get(const struct ip_conntrack_tuple *tuple,
 		      const struct ip_conntrack *ignored_conntrack);
 
-extern int __ip_conntrack_confirm(struct sk_buff *skb);
+extern int __ip_conntrack_confirm(unsigned int hooknum, struct sk_buff *skb);
 
 /* Confirm a connection: returns NF_DROP if packet must be dropped. */
-static inline int ip_conntrack_confirm(struct sk_buff *skb)
+static inline int ip_conntrack_confirm(unsigned int hooknum,
+				       struct sk_buff *skb)
 {
 	int ret = NF_ACCEPT;
 
 	if (skb->nfct
 	    && !is_confirmed((struct ip_conntrack *)skb->nfct->master))
-		ret = __ip_conntrack_confirm(skb);
+		ret = __ip_conntrack_confirm(hooknum, skb);
 	ip_conntrack_deliver_cached_events(skb);
 
 	return ret;

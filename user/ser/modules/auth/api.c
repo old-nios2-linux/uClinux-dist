@@ -1,9 +1,9 @@
 /*
- * $Id: api.c,v 1.5.6.4 2004/04/28 13:51:15 janakj Exp $
+ * $Id: api.c,v 1.10.2.2 2005/04/26 10:14:57 janakj Exp $
  *
  * Digest Authentication Module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -54,6 +54,7 @@ void strip_realm(str* _realm)
 		_realm->s += realm_prefix.len;
 		_realm->len -= realm_prefix.len;
 	}
+	return;
 }
 
 
@@ -144,7 +145,7 @@ auth_result_t pre_auth(struct sip_msg* _m, str* _realm, int _hftype, struct hdr_
 	     /* ACK and CANCEL must be always authorized, there is
 	      * no way how to challenge ACK and CANCEL cannot be
 	      * challenged because it must have the same CSeq as
-	      * the request to be cancelled
+	      * the request to be canceled
 	      */
 
 	if ((_m->REQ_METHOD == METHOD_ACK) ||  (_m->REQ_METHOD == METHOD_CANCEL)) return AUTHORIZED;
@@ -218,7 +219,7 @@ auth_result_t post_auth(struct sip_msg* _m, struct hdr_field* _h, str* _rpid)
 			      * nonces because there is no way how to challenge
 			      * with new nonce (ACK has no response associated 
 			      * and CANCEL must have the same CSeq as the request 
-			      * to be cancelled)
+			      * to be canceled)
 			      */
 		} else {
 			DBG("post_auth(): Response is OK, but nonce is stale\n");

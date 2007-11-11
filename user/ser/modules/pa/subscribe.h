@@ -1,9 +1,9 @@
 /*
  * Presence Agent, subscribe handling
  *
- * $Id: subscribe.h,v 1.4 2003/05/02 08:37:53 janakj Exp $
+ * $Id: subscribe.h,v 1.8 2004/08/24 09:00:33 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,6 +32,10 @@
 
 #include "../../parser/msg_parser.h"
 
+/*
+ * Check if a message received has been constructed properly
+ */
+int check_message(struct sip_msg* _m);
 
 /*
  * Handle a subscribe Request
@@ -46,10 +50,25 @@ int existing_subscription(struct sip_msg* _m, char* _domain, char* _s2);
 
 
 /*
+ * Handle a REGISTER Request: ensures AOR is in presentity table.
+ */
+int pa_handle_registration(struct sip_msg* _m, char* _domain, char* _s2);
+
+/*
  * Returns 1 if possibly a user agent can handle SUBSCRIBE
  * itself, 0 if it cannot for sure
  */
 int pua_exists(struct sip_msg* _m, char* _domain, char* _s2);
 
+enum doctype;
+/*
+ * Get presentity URI, which is stored in R-URI
+ */
+int get_pres_uri(struct sip_msg* _m, str* _puri);
+
+/*
+ * Parse Accept header field body
+ */
+int parse_accept(struct hdr_field* _h, enum doctype* _a);
 
 #endif /* SUBSCRIBE_H */

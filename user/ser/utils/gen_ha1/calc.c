@@ -1,7 +1,7 @@
 /*
- * $Id: calc.c,v 1.2 2002/09/19 12:23:56 jku Rel $
+ * $Id: calc.c,v 1.3 2004/08/24 09:01:30 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

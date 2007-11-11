@@ -35,6 +35,10 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <unistd.h>
+
+#define SAFEMEM_ERROR 0
+#define SAFEMEM_SUCCESS 1
+
 /* This INLINE is conflicting with the INLINE defined in bitop.h.
  * So, let's just add a little sanity check here.
  */
@@ -42,7 +46,7 @@
     #ifndef INLINE
         #define INLINE inline
     #endif
-    #define ERRORRET return 0;
+    #define ERRORRET return SAFEMEM_ERROR;
 #else
     #ifdef INLINE
         #undef INLINE
@@ -50,6 +54,7 @@
     #define INLINE   
     #define ERRORRET assert(0==1)
 #endif /* DEBUG */
+
 
 /*
  * Check to make sure that p is less than or equal to the ptr range
@@ -80,18 +85,32 @@ static INLINE int inBounds(u_int8_t *start, u_int8_t *end, u_int8_t *p)
  */
 static INLINE int SafeMemcpy(void *dst, void *src, size_t n, void *start, void *end)
 {
-     if(n < 1)
-     {
-         ERRORRET;
-     }
+    void *tmp;
 
-     if(!inBounds(start,end, dst) || !inBounds(start,end,((u_int8_t*)dst)+n))
-     {
-         ERRORRET;
-     }
+    if(n < 1)
+    {
+        ERRORRET;
+    }
 
-     memcpy(dst, src, n);
-     return 1;
+    if (!dst || !src)
+    {
+        ERRORRET;
+    }
+
+    tmp = ((u_int8_t*)dst) + (n-1);
+    if (tmp < dst)
+    {
+        ERRORRET;
+    }
+
+    if(!inBounds(start,end, dst) || !inBounds(start,end,tmp))
+    {
+        ERRORRET;
+    }
+
+    memcpy(dst, src, n);
+
+    return SAFEMEM_SUCCESS;
 }
 
 /** 

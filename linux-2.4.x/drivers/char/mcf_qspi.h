@@ -69,7 +69,7 @@
  * after delay set in QDLYR[DTL], pre-delay set in QDLYR[QCD] */
 #define QCR_SETUP               0x7000
 #define QCR_CONT                0x8000  /* 1=continuous CS after transfer */
-#define QCR_SETUP8              0x3000  /* sets BITSE to 0 => eigth bits per transfer */
+#define QCR_SETUP8              0x3000  /* sets BITSE to 0 => eight bits per transfer */
 
 
 typedef struct qspi_dev {

@@ -3,7 +3,7 @@
  *
  * Manages the PoPToP sessions.
  *
- * $Id: pptpmanager.c,v 1.11 2002/08/27 03:28:24 philipc Exp $
+ * $Id: pptpmanager.c,v 1.12 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -29,6 +29,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/time.h>
 #include <fcntl.h>
 
@@ -53,91 +54,176 @@ int deny_severity = LOG_WARNING;
 #include "compat.h"
 
 /* command line arg variables */
+extern char *ppp_binary;
 extern char *pppdoptstr;
 extern char *speedstr;
 extern char *bindaddr;
 extern int pptp_debug;
-
-#if !defined(PPPD_IP_ALLOC)
-extern char localIP[MAX_CONNECTIONS][16];
-extern char remoteIP[MAX_CONNECTIONS][16];
-
-/* for now, this contains all relavant info about a call
- * we are assuming that the remote and local IP's never change
- * and are set at startup.
- */
-struct callArray {
-	pid_t pid;
-	char pppRemote[16];
-	char pppLocal[16];
-};
+extern int pptp_noipparam;
+extern int pptp_logwtmp;
+extern int pptp_delegate;
 
 /* option for timeout on starting ctrl connection */
-int pptp_stimeout = STIMEOUT_DEFAULT;
+extern int pptp_stimeout;
 
-/* global for signal handler */
-static struct callArray clientArray[MAX_CONNECTIONS];
-
-/* from IP parser */
-extern int maxConnections;
-#endif
+extern int pptp_connections;
 
 /* local function prototypes */
 static void connectCall(int clientSocket, int clientNumber);
 static int createHostSocket(int *hostSocket);
 
-static void pptp_reap_child(int sig)
-{
-	int chld, status;
+/* this end's call identifier */
+uint16_t unique_call_id = 0;
 
-	while ((chld = waitpid(-1, &status, WNOHANG)) > 0) {
-#if !defined(PPPD_IP_ALLOC)
-		int i;
-		for (i = 0; i < maxConnections; i++)
-			if (clientArray[i].pid == chld)
-				break;
-		if (i < maxConnections) {
-			clientArray[i].pid = 0;
-			if (pptp_debug)
-				syslog(LOG_DEBUG, "MGR: Reaped child %d", chld);
-		} else
-			syslog(LOG_INFO, "MGR: Reaped unknown child %d", chld);
-#else
-		if (pptp_debug)
-			syslog(LOG_DEBUG, "MGR: Reaped child %d", chld);
-#endif
-	}
-	signal(SIGCHLD, pptp_reap_child);
+/* slots - begin */
+
+/* data about connection slots */
+struct slot {
+  pid_t pid;
+  char *local;
+  char *remote;
+} *slots;
+
+/* number of connection slots allocated */
+int slot_count;
+
+static void slot_iterate(struct slot *slots, int count, void (*callback) (struct slot *slot))
+{
+  int i;
+  for(i=0; i<count; i++)
+    (*callback)(&slots[i]);
+}
+
+static void slot_slot_init(struct slot *slot)
+{
+  slot->pid = 0;
+  slot->local = NULL;
+  slot->remote = NULL;
+}
+
+void slot_init(int count)
+{
+  slot_count = count;
+  slots = (struct slot *) calloc(slot_count, sizeof(struct slot));
+  slot_iterate(slots, slot_count, slot_slot_init);
+}
+
+static void slot_slot_free(struct slot *slot)
+{
+  slot->pid = 0;
+  if (slot->local) free(slot->local);
+  slot->local = NULL;
+  if (slot->remote) free(slot->remote);
+  slot->remote = NULL;
+}
+
+void slot_free()
+{
+  slot_iterate(slots, slot_count, slot_slot_free);
+  free(slots);
+  slots = NULL;
+  slot_count = 0;
+}
+
+void slot_set_local(int i, char *ip)
+{
+  struct slot *slot = &slots[i];
+  if (slot->local) free(slot->local);
+  slot->local = strdup(ip);
+}
+
+void slot_set_remote(int i, char *ip)
+{
+  struct slot *slot = &slots[i];
+  if (slot->remote) free(slot->remote);
+  slot->remote = strdup(ip);
+}
+
+void slot_set_pid(int i, pid_t pid)
+{
+  struct slot *slot = &slots[i];
+  slot->pid = pid; 
+}
+
+int slot_find_by_pid(pid_t pid)
+{
+  int i;
+  for(i=0; i<slot_count; i++) {
+    struct slot *slot = &slots[i];
+    if (slot->pid == pid) return i;
+  }
+  return -1;
+}
+
+int slot_find_empty()
+{
+  return slot_find_by_pid(0);
+}
+
+char *slot_get_local(int i)
+{
+  struct slot *slot = &slots[i];
+  return slot->local; 
+}
+
+char *slot_get_remote(int i)
+{
+  struct slot *slot = &slots[i];
+  return slot->remote; 
+}
+
+/* slots - end */
+
+static void sigchld_responder(int sig)
+{
+  int child, status;
+
+  while ((child = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (pptp_delegate) {
+      if (pptp_debug) syslog(LOG_DEBUG, "MGR: Reaped child %d", child);
+    } else {
+      int i;
+      i = slot_find_by_pid(child);
+      if (i != -1) {
+	slot_set_pid(i, 0);
+	if (pptp_debug) syslog(LOG_DEBUG, "MGR: Reaped child %d", child);
+      } else {
+	syslog(LOG_INFO, "MGR: Reaped unknown child %d", child);
+      }
+    }
+  }
 }
 
 int pptp_manager(int argc, char **argv)
 {
-	/* misc ints */
-	int loop, ctrl_pid;
+	int firstOpen = -1;
+	int ctrl_pid;
 	socklen_t addrsize;
 
-	/* for host stuff */
 	int hostSocket;
 	fd_set connSet;
-	sigset_t sigchld;
-	struct sigaction sa;
 
-	sigemptyset(&sigchld);
-	sigaddset(&sigchld, SIGCHLD);
+	int rc, sig_fd;
 
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = pptp_reap_child;
-	sigaction(SIGCHLD, &sa, NULL);
+	rc = sigpipe_create();
+	if (rc < 0) {
+		syslog(LOG_ERR, "MGR: unable to setup sigchld pipe!");
+		syslog_perror("sigpipe_create");
+		exit(-1);
+	}
+	
+	sigpipe_assign(SIGCHLD);
+	sigpipe_assign(SIGTERM);
+	sig_fd = sigpipe_fd();
 
 	/* openlog() not required, done in pptpd.c */
 
 	syslog(LOG_INFO, "MGR: Manager process started");
 
-#if !defined(PPPD_IP_ALLOC)
-	for (loop = 0; loop < maxConnections; loop++) {
-		clientArray[loop].pid = 0;
+	if (!pptp_delegate) {
+		syslog(LOG_INFO, "MGR: Maximum of %d connections available", 
+		       pptp_connections);
 	}
-#endif
 
 	/* Connect the host socket and activate it for listening */
 	if (createHostSocket(&hostSocket) < 0) {
@@ -146,35 +232,38 @@ int pptp_manager(int argc, char **argv)
 		exit(-1);
 	}
 
-	FD_ZERO(&connSet);
-
 	while (1) {
-#if !defined(PPPD_IP_ALLOC)
-		int firstOpen = -1;
-
-		for (loop = 0; loop < maxConnections; loop++)
-			if (clientArray[loop].pid == 0) {
-				firstOpen = loop;
-				break;
-			}
-
-		if (firstOpen == -1) {
-			syslog(LOG_ERR, "MGR: No free connection slots or IPs - no more clients can connect!");
-			FD_CLR(hostSocket, &connSet);
-		} else {
+		int max_fd;
+		FD_ZERO(&connSet);
+		if (pptp_delegate) {
 			FD_SET(hostSocket, &connSet);
+		} else {
+			firstOpen = slot_find_empty();
+			if (firstOpen == -1) {
+				syslog(LOG_ERR, "MGR: No free connection slots or IPs - no more clients can connect!");
+			} else {
+				FD_SET(hostSocket, &connSet);
+			}
 		}
-#else
-		FD_SET(hostSocket, &connSet);
-#endif
+		max_fd = hostSocket;
 
-		/* wait for connection (or for SIGCHLD [EINTR]).  don't just loop on EINTR
-		 * since hostSocket might not be in connSet (see above)
-		 */
-		if (select(hostSocket + 1, &connSet, NULL, NULL, NULL) < 0 && errno != EINTR) {
+		FD_SET(sig_fd, &connSet);
+		if (max_fd < sig_fd) max_fd = sig_fd;
+
+		while (1) {
+			if (select(max_fd + 1, &connSet, NULL, NULL, NULL) != -1) break;
+			if (errno == EINTR) continue;
 			syslog(LOG_ERR, "MGR: Error with manager select()!");
 			syslog_perror("select");
 			exit(-1);
+		}
+
+		if (FD_ISSET(sig_fd, &connSet)) {	/* SIGCHLD */
+			int signum = sigpipe_read();
+			if (signum == SIGCHLD)
+				sigchld_responder(signum);
+			else if (signum == SIGTERM)
+				return signum;
 		}
 
 		if (FD_ISSET(hostSocket, &connSet)) {	/* A call came! */
@@ -211,7 +300,12 @@ int pptp_manager(int argc, char **argv)
 				fd_set rfds;
 				struct timeval tv;
 				struct pptp_header ph;
-				int len;
+
+				/* TODO: this select below prevents
+                                   other connections from being
+                                   processed during the wait for the
+                                   first data packet from the
+                                   client. */
 
 				/*
 				 * DOS protection: get a peek at the first packet
@@ -230,19 +324,14 @@ int pptp_manager(int argc, char **argv)
 					continue;
 				}
 
-				len = recv(clientSocket, &ph, sizeof(ph), MSG_PEEK);
-				if (len == 0) {
-					syslog(LOG_WARNING, "MGR: dropped empty initial connection");
-					close(clientSocket);
-					continue;
-				}
-				if (len != sizeof(ph)) {
+				if (recv(clientSocket, &ph, sizeof(ph), MSG_PEEK) !=
+						sizeof(ph)) {
 					syslog(LOG_ERR, "MGR: dropped small initial connection");
 					close(clientSocket);
 					continue;
 				}
 
-				ph.length = htons(ph.length);
+				ph.length = ntohs(ph.length);
 				ph.pptp_type = ntohs(ph.pptp_type);
 				ph.magic = ntohl(ph.magic);
 				ph.ctrl_type = ntohs(ph.ctrl_type);
@@ -271,13 +360,6 @@ int pptp_manager(int argc, char **argv)
 					continue;
 				}
 
-				/* block SIGCHLD until parent registers
-				 * child in the connection list, else we
-				 * have a race condition with the handler.
-				 */
-				if (sigprocmask(SIG_BLOCK, &sigchld, NULL) !=0) {
-					syslog_perror("sigprocmask");
-				}
 #ifndef HAVE_FORK
 				switch (ctrl_pid = vfork()) {
 #else
@@ -292,21 +374,14 @@ int pptp_manager(int argc, char **argv)
 					close(hostSocket);
 					if (pptp_debug)
 						syslog(LOG_DEBUG, "MGR: Launching " PPTP_CTRL_BIN " to handle client");
-#if !defined(PPPD_IP_ALLOC)
-					connectCall(clientSocket, firstOpen);
-#else
-					connectCall(clientSocket, 0);
-#endif
+					connectCall(clientSocket, !pptp_delegate ? firstOpen : 0);
 					_exit(1);
 					/* NORETURN */
 				default:	/* parent */
 					close(clientSocket);
-#if !defined(PPPD_IP_ALLOC)
-					clientArray[firstOpen].pid = ctrl_pid;
-#endif
-					if (sigprocmask(SIG_UNBLOCK, &sigchld, NULL) !=0) {
-						syslog_perror("sigprocmask");
-					}
+					unique_call_id += MAX_CALLS_PER_TCP_LINK;
+					if (!pptp_delegate)
+						slot_set_pid(firstOpen, ctrl_pid);
 					break;
 				}
 			}
@@ -380,15 +455,20 @@ static int createHostSocket(int *hostSocket)
 static void connectCall(int clientSocket, int clientNumber)
 {
 
+#define NUM2ARRAY(array, num) snprintf(array, sizeof(array), "%d", num)
+	
 	char *ctrl_argv[16];	/* arguments for launching 'pptpctrl' binary */
 
 	int pptpctrl_argc = 0;	/* count the number of arguments sent to pptpctrl */
 
 	/* lame strings to hold passed args. */
 	char ctrl_debug[2];
+	char ctrl_noipparam[2];
 	char pppdoptfile_argv[2];
 	char speedgiven_argv[2];
 	extern char **environ;
+
+	char callid_argv[16];
 
 	/*
 	 * Launch the CTRL manager binary; we send it some information such as
@@ -404,12 +484,16 @@ static void connectCall(int clientSocket, int clientNumber)
 	}
 
 	/* get argv set up */
-	ctrl_debug[0] = pptp_debug ? '1' : '0';
+	NUM2ARRAY(ctrl_debug, pptp_debug ? 1 : 0);
 	ctrl_debug[1] = '\0';
 	ctrl_argv[pptpctrl_argc++] = ctrl_debug;
 
+	NUM2ARRAY(ctrl_noipparam, pptp_noipparam ? 1 : 0);
+	ctrl_noipparam[1] = '\0';
+	ctrl_argv[pptpctrl_argc++] = ctrl_noipparam;
+
 	/* optionfile = TRUE or FALSE; so the CTRL manager knows whether to load a non-standard options file */
-	pppdoptfile_argv[0] = pppdoptstr ? '1' : '0';
+	NUM2ARRAY(pppdoptfile_argv, pppdoptstr ? 1 : 0);
 	pppdoptfile_argv[1] = '\0';
 	ctrl_argv[pptpctrl_argc++] = pppdoptfile_argv;
 	if (pppdoptstr) {
@@ -417,24 +501,38 @@ static void connectCall(int clientSocket, int clientNumber)
 		ctrl_argv[pptpctrl_argc++] = pppdoptstr;
 	}
 	/* tell the ctrl manager whether we were given a speed */
-	speedgiven_argv[0] = speedstr ? '1' : '0';
+	NUM2ARRAY(speedgiven_argv, speedstr ? 1 : 0);
 	speedgiven_argv[1] = '\0';
 	ctrl_argv[pptpctrl_argc++] = speedgiven_argv;
 	if (speedstr) {
 		/* send the CTRL manager the speed of the connection so it can fire pppd at that speed */
 		ctrl_argv[pptpctrl_argc++] = speedstr;
 	}
-#if PPPD_IP_ALLOC
-	/* no local or remote address to specify */
-	ctrl_argv[pptpctrl_argc++] = "0";
-	ctrl_argv[pptpctrl_argc++] = "0";
-#else
-	/* specify local & remote addresses for this call */
-	ctrl_argv[pptpctrl_argc++] = "1";
-	ctrl_argv[pptpctrl_argc++] = localIP[clientNumber];
-	ctrl_argv[pptpctrl_argc++] = "1";
-	ctrl_argv[pptpctrl_argc++] = remoteIP[clientNumber];
-#endif
+	if (pptp_delegate) {
+		/* no local or remote address to specify */
+		ctrl_argv[pptpctrl_argc++] = "0";
+		ctrl_argv[pptpctrl_argc++] = "0";
+	} else {
+		/* specify local & remote addresses for this call */
+		ctrl_argv[pptpctrl_argc++] = "1";
+		ctrl_argv[pptpctrl_argc++] = slot_get_local(clientNumber);
+		ctrl_argv[pptpctrl_argc++] = "1";
+		ctrl_argv[pptpctrl_argc++] = slot_get_remote(clientNumber);
+	}
+
+	/* our call id to be included in GRE packets the client
+	 * will send to us */
+	NUM2ARRAY(callid_argv, unique_call_id);
+	ctrl_argv[pptpctrl_argc++] = callid_argv;
+
+	/* pass path to ppp binary */
+	ctrl_argv[pptpctrl_argc++] = ppp_binary;
+
+	/* pass logwtmp flag */
+	ctrl_argv[pptpctrl_argc++] = pptp_logwtmp ? "1" : "0";
+
+	/* note: update pptpctrl.8 if the argument list format is changed */
+
 	/* terminate argv array with a NULL */
 	ctrl_argv[pptpctrl_argc] = NULL;
 	pptpctrl_argc++;
@@ -442,6 +540,5 @@ static void connectCall(int clientSocket, int clientNumber)
 	/* ok, args are setup: invoke the call handler */
 	execve(PPTP_CTRL_BIN, ctrl_argv, environ);
 	syslog(LOG_ERR, "MGR: Failed to exec " PPTP_CTRL_BIN "!");
-	//syslog_perror("execvp " PPTP_CTRL_BIN);
 	_exit(1);
 }

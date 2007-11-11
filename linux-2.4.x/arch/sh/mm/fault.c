@@ -282,7 +282,7 @@ asmlinkage int __do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
 	if (writeaccess)
 		entry = pte_mkdirty(entry);
 	entry = pte_mkyoung(entry);
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	/*
 	 * ITLB is not affected by "ldtlb" instruction.
 	 * So, we need to flush the entry by ourselves.
@@ -300,7 +300,7 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long flags;
 	unsigned long pteval;
 	unsigned long vpn;
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	struct page *page;
 	unsigned long ptea;
 #endif
@@ -309,7 +309,7 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	if (vma && current->active_mm != vma->vm_mm)
 		return;
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	page = pte_page(pte);
 	if (VALID_PAGE(page) && !test_bit(PG_mapped, &page->flags)) {
 		unsigned long phys = pte_val(pte) & PTE_PHYS_MASK;
@@ -325,7 +325,7 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	ctrl_outl(vpn, MMU_PTEH);
 
 	pteval = pte_val(pte);
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	/* Set PTEA register */
 	/* TODO: make this look less hacky */
 	ptea = ((pteval >> 28) & 0xe) | (pteval & 0x1);
@@ -352,11 +352,11 @@ void __flush_tlb_page(unsigned long asid, unsigned long page)
 	 *
 	 * It would be simple if we didn't need to set PTEH.ASID...
 	 */
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 	addr = MMU_TLB_ADDRESS_ARRAY |(page & 0x1F000)| MMU_PAGE_ASSOC_BIT;
 	data = (page & 0xfffe0000) | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	addr = MMU_UTLB_ADDRESS_ARRAY | MMU_PAGE_ASSOC_BIT;
 	data = page | asid; /* VALID bit is off */
 	jump_to_P2();

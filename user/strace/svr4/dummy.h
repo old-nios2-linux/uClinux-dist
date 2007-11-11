@@ -24,7 +24,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: dummy.h,v 1.8 2001/04/18 15:11:52 hughesj Exp $
+ *	$Id: dummy.h,v 1.11 2002/05/17 11:37:50 hughesj Exp $
  */
 
 /* still unfinished */
@@ -59,7 +59,6 @@
 #define sys_ksigqueue printargs
 #define sys_lwp_sema_wait printargs
 #define sys_lwp_sema_trywait printargs
-#define sys_memcntl printargs
 #define sys_syscall printargs
 #define sys_clocal printargs
 #define sys_syssun printargs
@@ -144,7 +143,6 @@
 #define sys_keyctl printargs
 #define sys_secsys printargs
 #define sys_filepriv printargs
-#define sys_procpriv printargs
 #define sys_devstat printargs
 #define sys_fdevstat printargs
 #define sys_flvlfile printargs
@@ -172,7 +170,6 @@
 #define sys_unblock printargs
 #define sys_cancelblock printargs
 #define sys_lwpkill printargs
-#define sys_sigwait printargs
 #define sys_modload printargs
 #define sys_moduload printargs
 #define sys_modpath printargs
@@ -231,6 +228,7 @@
 #define sys_sleep sys_alarm
 #define sys_fork1 sys_fork
 #define sys_forkall sys_fork
+#define sys_memcntl sys_mctl
 #if UNIXWARE > 2
 #define sys_rfork1 sys_rfork
 #define sys_rforkall sys_rfork
@@ -306,6 +304,7 @@
 #define sys_kaio printargs
 
 #if DONE
+#define sys_sigwait printargs
 #define sys_mount printargs
 #define sys_sysinfo printargs
 #define sys_sysconfig printargs

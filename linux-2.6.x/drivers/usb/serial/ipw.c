@@ -167,11 +167,13 @@ static void ipw_read_bulk_callback(struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	struct tty_struct *tty;
 	int result;
+	int status = urb->status;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
-	if (urb->status) {
-		dbg("%s - nonzero read bulk status received: %d", __FUNCTION__, urb->status);
+	if (status) {
+		dbg("%s - nonzero read bulk status received: %d",
+		    __FUNCTION__, status);
 		return;
 	}
 
@@ -206,10 +208,9 @@ static int ipw_open(struct usb_serial_port *port, struct file *filp)
 
 	dbg("%s", __FUNCTION__);
 
-	buf_flow_init = kmalloc(16, GFP_KERNEL);
+	buf_flow_init = kmemdup(buf_flow_static, 16, GFP_KERNEL);
 	if (!buf_flow_init)
 		return -ENOMEM;
-	memcpy(buf_flow_init, buf_flow_static, 16);
 
 	if (port->tty)
 		port->tty->low_latency = 1;
@@ -370,13 +371,15 @@ static void ipw_close(struct usb_serial_port *port, struct file * filp)
 static void ipw_write_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
+	int status = urb->status;
 
 	dbg("%s", __FUNCTION__);
 
 	port->write_urb_busy = 0;
 
-	if (urb->status)
-		dbg("%s - nonzero write bulk status received: %d", __FUNCTION__, urb->status);
+	if (status)
+		dbg("%s - nonzero write bulk status received: %d",
+		    __FUNCTION__, status);
 
 	usb_serial_port_softint(port);
 }
@@ -443,6 +446,7 @@ static struct usb_serial_driver ipw_device = {
 		.name =		"ipw",
 	},
 	.description =		"IPWireless converter",
+	.usb_driver = 		&usb_ipw_driver,
 	.id_table =		usb_ipw_ids,
 	.num_interrupt_in =	NUM_DONT_CARE,
 	.num_bulk_in =		1,

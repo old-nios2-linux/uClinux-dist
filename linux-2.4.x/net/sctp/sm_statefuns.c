@@ -619,8 +619,9 @@ sctp_disposition_t sctp_sf_do_5_1D_ce(const struct sctp_endpoint *ep,
 	 */
         chunk->subh.cookie_hdr =
 		(struct sctp_signed_cookie *)chunk->skb->data;
-	skb_pull(chunk->skb,
-		 ntohs(chunk->chunk_hdr->length) - sizeof(sctp_chunkhdr_t));
+	if (!pskb_pull(chunk->skb, ntohs(chunk->chunk_hdr->length) -
+					 sizeof(sctp_chunkhdr_t)))
+		goto nomem;
 
 	/* 5.1 D) Upon reception of the COOKIE ECHO chunk, Endpoint
 	 * "Z" will reply with a COOKIE ACK chunk after building a TCB
@@ -949,7 +950,8 @@ sctp_disposition_t sctp_sf_beat_8_3(const struct sctp_endpoint *ep,
 	 */
 	chunk->subh.hb_hdr = (sctp_heartbeathdr_t *) chunk->skb->data;
 	paylen = ntohs(chunk->chunk_hdr->length) - sizeof(sctp_chunkhdr_t);
-	skb_pull(chunk->skb, paylen);
+	if (!pskb_pull(chunk->skb, paylen))
+		goto nomem;
 
 	reply = sctp_make_heartbeat_ack(asoc, chunk,
 					chunk->subh.hb_hdr, paylen);
@@ -1012,6 +1014,12 @@ sctp_disposition_t sctp_sf_backbeat_8_3(const struct sctp_endpoint *ep,
 						  commands);
 
 	hbinfo = (sctp_sender_hb_info_t *) chunk->skb->data;
+	/* Make sure that the length of the parameter is what we expect */
+	if (ntohs(hbinfo->param_hdr.length) !=
+				    sizeof(sctp_sender_hb_info_t)) {
+		return SCTP_DISPOSITION_DISCARD;
+	}
+
 	from_addr = hbinfo->daddr;
 	link = sctp_assoc_lookup_paddr(asoc, &from_addr);
 
@@ -1832,8 +1840,9 @@ sctp_disposition_t sctp_sf_do_5_2_4_dupcook(const struct sctp_endpoint *ep,
 	 * are in good shape.
 	 */
         chunk->subh.cookie_hdr = (struct sctp_signed_cookie *)chunk->skb->data;
-	skb_pull(chunk->skb, ntohs(chunk->chunk_hdr->length) -
-		 sizeof(sctp_chunkhdr_t));
+	if (!pskb_pull(chunk->skb, ntohs(chunk->chunk_hdr->length) -
+					sizeof(sctp_chunkhdr_t)))
+		goto nomem;
 
 	/* In RFC 2960 5.2.4 3, if both Verification Tags in the State Cookie
 	 * of a duplicate COOKIE ECHO match the Verification Tags of the
@@ -3981,18 +3990,12 @@ sctp_disposition_t sctp_sf_do_9_1_prm_abort(
 	 * from its upper layer, but retransmits data to the far end
 	 * if necessary to fill gaps.
 	 */
-	struct msghdr *msg = arg;
-	struct sctp_chunk *abort;
+	struct sctp_chunk *abort = arg;
 	sctp_disposition_t retval;
 
 	retval = SCTP_DISPOSITION_CONSUME;
 
-	/* Generate ABORT chunk to send the peer.  */
-	abort = sctp_make_abort_user(asoc, NULL, msg);
-	if (!abort)
-		retval = SCTP_DISPOSITION_NOMEM;
-	else
-		sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(abort));
+	sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(abort));
 
 	/* Even if we can't send the ABORT due to low memory delete the
 	 * TCB.  This is a departure from our typical NOMEM handling.
@@ -4114,8 +4117,7 @@ sctp_disposition_t sctp_sf_cookie_wait_prm_abort(
 	void *arg,
 	sctp_cmd_seq_t *commands)
 {
-	struct msghdr *msg = arg;
-	struct sctp_chunk *abort;
+	struct sctp_chunk *abort = arg;
 	sctp_disposition_t retval;
 
 	/* Stop T1-init timer */
@@ -4123,12 +4125,7 @@ sctp_disposition_t sctp_sf_cookie_wait_prm_abort(
 			SCTP_TO(SCTP_EVENT_TIMEOUT_T1_INIT));
 	retval = SCTP_DISPOSITION_CONSUME;
 
-	/* Generate ABORT chunk to send the peer */
-	abort = sctp_make_abort_user(asoc, NULL, msg);
-	if (!abort)
-		retval = SCTP_DISPOSITION_NOMEM;
-	else
-		sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(abort));
+	sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(abort));
 
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
 			SCTP_STATE(SCTP_STATE_CLOSED));

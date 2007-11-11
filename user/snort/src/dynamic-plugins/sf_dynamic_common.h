@@ -28,6 +28,10 @@
 typedef void (*LogMsgFunc)(const char *, ...);
 
 #define MAX_URIINFOS 5
+
+#define HTTP_BUFFER_URI 0
+#define HTTP_BUFFER_CLIENT_BODY 1
+
 typedef struct _UriInfo
 {
     u_int8_t *uriBuffer;

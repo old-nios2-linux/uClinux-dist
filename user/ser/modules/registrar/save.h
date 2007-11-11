@@ -1,10 +1,10 @@
 /*
- * $Id: save.h,v 1.3 2003/03/21 20:36:24 janakj Exp $
+ * $Id: save.h,v 1.9 2004/11/05 17:48:05 janakj Exp $
  *
  * Functions that process REGISTER message 
  * and store data in usrloc
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -45,10 +45,17 @@
  */
 int save(struct sip_msg* _m, char* _t, char* _s);
 
+
 /*
  * Process REGISTER request and save it's contacts, do not send any replies
  */
 int save_noreply(struct sip_msg* _m, char* _t, char* _s);
+
+
+/*
+ * Process REGISTER request and save it's contacts, do not send any replies
+ */
+int save_memory(struct sip_msg* _m, char* _t, char* _s);
 
 
 #endif /* SAVE_H */

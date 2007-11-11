@@ -3,6 +3,7 @@
 #include <linux/mm.h>
 #include <asm/io.h>
 #include <asm/processor.h>
+#include <asm/apic.h>
 
 #include "cpu.h"
 
@@ -21,6 +22,41 @@
  
 extern void vide(void);
 __asm__(".align 4\nvide: ret");
+
+#ifdef CONFIG_X86_LOCAL_APIC
+#define ENABLE_C1E_MASK         0x18000000
+#define CPUID_PROCESSOR_SIGNATURE       1
+#define CPUID_XFAM              0x0ff00000
+#define CPUID_XFAM_K8           0x00000000
+#define CPUID_XFAM_10H          0x00100000
+#define CPUID_XFAM_11H          0x00200000
+#define CPUID_XMOD              0x000f0000
+#define CPUID_XMOD_REV_F        0x00040000
+
+/* AMD systems with C1E don't have a working lAPIC timer. Check for that. */
+static __cpuinit int amd_apic_timer_broken(void)
+{
+	u32 lo, hi;
+	u32 eax = cpuid_eax(CPUID_PROCESSOR_SIGNATURE);
+	switch (eax & CPUID_XFAM) {
+	case CPUID_XFAM_K8:
+		if ((eax & CPUID_XMOD) < CPUID_XMOD_REV_F)
+			break;
+	case CPUID_XFAM_10H:
+	case CPUID_XFAM_11H:
+		rdmsr(MSR_K8_ENABLE_C1E, lo, hi);
+		if (lo & ENABLE_C1E_MASK)
+			return 1;
+                break;
+        default:
+                /* err on the side of caution */
+		return 1;
+        }
+	return 0;
+}
+#endif
+
+int force_mwait __cpuinitdata;
 
 static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 {
@@ -104,10 +140,7 @@ static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 					f_vide();
 				rdtscl(d2);
 				d = d2-d;
-				
-				/* Knock these two lines out if it debugs out ok */
-				printk(KERN_INFO "AMD K6 stepping B detected - ");
-				/* -- cut here -- */
+
 				if (d > 20*K6_BUG_LOOP) 
 					printk("system stability may be impaired when more than 32 MB are used.\n");
 				else 
@@ -201,6 +234,9 @@ static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 
 	switch (c->x86) {
 	case 15:
+	/* Use K8 tuning for Fam10h and Fam11h */
+	case 0x10:
+	case 0x11:
 		set_bit(X86_FEATURE_K8, c->x86_capability);
 		break;
 	case 6:
@@ -242,8 +278,24 @@ static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 	}
 #endif
 
-	if (cpuid_eax(0x80000000) >= 0x80000006)
-		num_cache_leaves = 3;
+	if (cpuid_eax(0x80000000) >= 0x80000006) {
+		if ((c->x86 == 0x10) && (cpuid_edx(0x80000006) & 0xf000))
+			num_cache_leaves = 4;
+		else
+			num_cache_leaves = 3;
+	}
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	if (amd_apic_timer_broken())
+		local_apic_timer_disabled = 1;
+#endif
+
+	if (c->x86 == 0x10 && !force_mwait)
+		clear_bit(X86_FEATURE_MWAIT, c->x86_capability);
+
+	/* K6s reports MCEs but don't actually have all the MSRs */
+	if (c->x86 < 6)
+		clear_bit(X86_FEATURE_MCE, c->x86_capability);
 }
 
 static unsigned int __cpuinit amd_size_cache(struct cpuinfo_x86 * c, unsigned int size)
@@ -283,13 +335,3 @@ int __init amd_init_cpu(void)
 	cpu_devs[X86_VENDOR_AMD] = &amd_cpu_dev;
 	return 0;
 }
-
-//early_arch_initcall(amd_init_cpu);
-
-static int __init amd_exit_cpu(void)
-{
-	cpu_devs[X86_VENDOR_AMD] = NULL;
-	return 0;
-}
-
-late_initcall(amd_exit_cpu);

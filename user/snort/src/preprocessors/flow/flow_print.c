@@ -4,6 +4,7 @@
 
 #include "flow_print.h"
 #include "flow_error.h"
+#include "util.h"
 
 #include <unistd.h>
 #include <syslog.h>
@@ -59,7 +60,7 @@ int flow_printf(const char *format, ...)
     return FLOW_SUCCESS;
 }
 
-int flow_fatalerror(const char *format, ...)
+NORETURN void flow_fatalerror(const char *format, ...)
 {
     char buf[BUFSIZE + 1];
     char fmt[BUFSIZE + 1];    
@@ -85,11 +86,9 @@ int flow_fatalerror(const char *format, ...)
     }
 
     exit(1);
-    /* not reached */
-    return FLOW_SUCCESS;
 }
 
-int flow_errormsg(const char *format, ...)
+NORETURN void flow_errormsg(const char *format, ...)
 {
     char buf[BUFSIZE + 1];
     char fmt[BUFSIZE + 1];    
@@ -114,6 +113,4 @@ int flow_errormsg(const char *format, ...)
     }
 
     exit(1);
-    return FLOW_SUCCESS;
-
 }

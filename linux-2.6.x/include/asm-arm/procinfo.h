@@ -2,7 +2,6 @@
  *  linux/include/asm-arm/procinfo.h
  *
  *  Copyright (C) 1996-1999 Russell King
- *  Modified by Hyok S. Choi, 2004
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -11,12 +10,10 @@
 #ifndef __ASM_PROCINFO_H
 #define __ASM_PROCINFO_H
 
-#ifndef __ASSEMBLY__
+#ifdef __KERNEL__
 
-#ifdef CONFIG_MMU
 struct cpu_tlb_fns;
 struct cpu_user_fns;
-#endif
 struct cpu_cache_fns;
 struct processor;
 
@@ -45,19 +42,8 @@ struct proc_info_list {
 	struct cpu_cache_fns	*cache;
 };
 
-extern unsigned int elf_hwcap;
-
-#endif	/* __ASSEMBLY__ */
-
-#define HWCAP_SWP	1
-#define HWCAP_HALF	2
-#define HWCAP_THUMB	4
-#define HWCAP_26BIT	8	/* Play it safe */
-#define HWCAP_FAST_MULT	16
-#define HWCAP_FPA	32
-#define HWCAP_VFP	64
-#define HWCAP_EDSP	128
-#define HWCAP_JAVA	256
-#define HWCAP_IWMMXT	512
-
+#else	/* __KERNEL__ */
+#include <asm/elf.h>
+#warning "Please include asm/elf.h instead"
+#endif	/* __KERNEL__ */
 #endif

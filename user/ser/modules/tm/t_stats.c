@@ -1,9 +1,9 @@
 /*
  *
- * $Id: t_stats.c,v 1.15 2003/07/07 15:06:23 andrei Exp $
+ * $Id: t_stats.c,v 1.18 2004/08/24 09:00:43 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -42,6 +42,7 @@
 #include "../../dprint.h"
 #include "../../config.h"
 #include "../../fifo_server.h"
+#include "../../unixsock_server.h"
 #include "../../pt.h"
 
 struct t_stats *tm_stats=0;
@@ -110,13 +111,58 @@ int static fifo_stats( FILE *pipe, char *response_file )
 
 }
 
+int static unixsock_stats(str* cmd)
+{
+	unsigned long total, current, waiting, total_local;
+	int i;
+	int pno;
+
+	unixsock_reply_asciiz( "200 OK\n");
+
+	pno = process_count();
+	for(i = 0, total = 0, waiting = 0, total_local = 0; i < pno; i++) {
+		total += tm_stats->s_transactions[i];
+		waiting += tm_stats->s_waiting[i];
+		total_local += tm_stats->s_client_transactions[i];
+	}
+	current = total - tm_stats->deleted;
+	waiting -= tm_stats->deleted;
+
+	if (unixsock_reply_printf("Current: %lu (%lu waiting) "
+				  "Total: %lu (%lu local) " CLEANUP_EOL,
+				  current, waiting, total, total_local) < 0) goto err;
+
+	if (unixsock_reply_printf("Replied localy: %lu" CLEANUP_EOL ,
+				  tm_stats->replied_localy ) < 0) goto err;
+	if (unixsock_reply_printf("Completion status 6xx: %lu,",
+				  tm_stats->completed_6xx ) < 0) goto err;
+	if (unixsock_reply_printf(" 5xx: %lu,",
+				  tm_stats->completed_5xx ) < 0) goto err;
+	if (unixsock_reply_printf(" 4xx: %lu,",
+				  tm_stats->completed_4xx ) < 0) goto err;
+	if (unixsock_reply_printf(" 3xx: %lu,",
+				  tm_stats->completed_3xx ) < 0) goto err;
+	if (unixsock_reply_printf("2xx: %lu" CLEANUP_EOL ,
+				  tm_stats->completed_2xx ) < 0) goto err;
+	
+	unixsock_reply_send();
+	return 0;
+
+ err:
+	unixsock_reply_reset();
+	unixsock_reply_asciiz("500 Buffer too small\n");
+	unixsock_reply_send();
+	return -1;
+}
+
+
 int init_tm_stats(void)
 {
 	int size;
 
 	tm_stats=shm_malloc(sizeof(struct t_stats));
 	if (tm_stats==0) {
-		LOG(L_ERR, "ERROR: init_stats: no mem for stats\n");
+		LOG(L_ERR, "ERROR: init_tm_stats: no mem for stats\n");
 		goto error0;
 	}
 	memset(tm_stats, 0, sizeof(struct t_stats) );
@@ -124,26 +170,31 @@ int init_tm_stats(void)
 	size=sizeof(stat_counter)*process_count();
 	tm_stats->s_waiting=shm_malloc(size);
 	if (tm_stats->s_waiting==0) {
-		LOG(L_ERR, "ERROR: init_stats: no mem for stats\n");
+		LOG(L_ERR, "ERROR: init_tm_stats: no mem for stats\n");
 		goto error1;
 	}
 	memset(tm_stats->s_waiting, 0, size );
 
 	tm_stats->s_transactions=shm_malloc(size);
 	if (tm_stats->s_transactions==0) {
-		LOG(L_ERR, "ERROR: init_stats: no mem for stats\n");
+		LOG(L_ERR, "ERROR: init_tm_stats: no mem for stats\n");
 		goto error2;
 	}
 	memset(tm_stats->s_transactions, 0, size );
 
 	tm_stats->s_client_transactions=shm_malloc(size);
 	if (tm_stats->s_client_transactions==0) {
-		LOG(L_ERR, "ERROR: init_stats: no mem for stats\n");
+		LOG(L_ERR, "ERROR: init_tm_stats: no mem for stats\n");
 		goto error3;
 	}
 	memset(tm_stats->s_client_transactions, 0, size );
 		 
 	if (register_fifo_cmd(fifo_stats, "t_stats", 0)<0) {
+		LOG(L_CRIT, "cannot register fifo stats\n");
+		goto error4;
+	}
+
+	if (unixsock_register_cmd("t_stats", unixsock_stats) < 0) {
 		LOG(L_CRIT, "cannot register fifo stats\n");
 		goto error4;
 	}

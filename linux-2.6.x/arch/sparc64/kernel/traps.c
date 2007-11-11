@@ -10,15 +10,16 @@
  */
 
 #include <linux/module.h>
-#include <linux/sched.h>  /* for jiffies */
+#include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/kallsyms.h>
 #include <linux/signal.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/kdebug.h>
 
+#include <asm/smp.h>
 #include <asm/delay.h>
 #include <asm/system.h>
 #include <asm/ptrace.h>
@@ -36,26 +37,12 @@
 #include <asm/psrcompat.h>
 #include <asm/processor.h>
 #include <asm/timer.h>
-#include <asm/kdebug.h>
 #include <asm/head.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
 #include <asm/prom.h>
 
-ATOMIC_NOTIFIER_HEAD(sparc64die_chain);
-
-int register_die_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_register(&sparc64die_chain, nb);
-}
-EXPORT_SYMBOL(register_die_notifier);
-
-int unregister_die_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&sparc64die_chain, nb);
-}
-EXPORT_SYMBOL(unregister_die_notifier);
 
 /* When an irrecoverable trap occurs at tl > 0, the trap entry
  * code logs the trap state registers at every level in the trap
@@ -808,8 +795,7 @@ extern unsigned int cheetah_deferred_trap_vector[], cheetah_deferred_trap_vector
 void __init cheetah_ecache_flush_init(void)
 {
 	unsigned long largest_size, smallest_linesize, order, ver;
-	struct device_node *dp;
-	int i, instance, sz;
+	int i, sz;
 
 	/* Scan all cpu device tree nodes, note two values:
 	 * 1) largest E-cache size
@@ -818,18 +804,20 @@ void __init cheetah_ecache_flush_init(void)
 	largest_size = 0UL;
 	smallest_linesize = ~0UL;
 
-	instance = 0;
-	while (!cpu_find_by_instance(instance, &dp, NULL)) {
+	for (i = 0; i < NR_CPUS; i++) {
 		unsigned long val;
 
-		val = of_getintprop_default(dp, "ecache-size",
-					    (2 * 1024 * 1024));
+		val = cpu_data(i).ecache_size;
+		if (!val)
+			continue;
+
 		if (val > largest_size)
 			largest_size = val;
-		val = of_getintprop_default(dp, "ecache-line-size", 64);
+
+		val = cpu_data(i).ecache_line_size;
 		if (val < smallest_linesize)
 			smallest_linesize = val;
-		instance++;
+
 	}
 
 	if (largest_size == 0UL || smallest_linesize == ~0UL) {
@@ -1873,6 +1861,16 @@ void sun4v_resum_error(struct pt_regs *regs, unsigned long offset)
 
 	put_cpu();
 
+	if (ent->err_type == SUN4V_ERR_TYPE_WARNING_RES) {
+		/* If err_type is 0x4, it's a powerdown request.  Do
+		 * not do the usual resumable error log because that
+		 * makes it look like some abnormal error.
+		 */
+		printk(KERN_INFO "Power down request...\n");
+		kill_cad_pid(SIGINT, 1);
+		return;
+	}
+
 	sun4v_log_error(regs, &local_copy, cpu,
 			KERN_ERR "RESUMABLE ERROR",
 			&sun4v_resum_oflow_cnt);
@@ -2136,12 +2134,20 @@ static void user_instruction_dump (unsigned int __user *pc)
 void show_stack(struct task_struct *tsk, unsigned long *_ksp)
 {
 	unsigned long pc, fp, thread_base, ksp;
-	void *tp = task_stack_page(tsk);
+	struct thread_info *tp;
 	struct reg_window *rw;
 	int count = 0;
 
 	ksp = (unsigned long) _ksp;
-
+	if (!tsk)
+		tsk = current;
+	tp = task_thread_info(tsk);
+	if (ksp == 0UL) {
+		if (tsk == current)
+			asm("mov %%fp, %0" : "=r" (ksp));
+		else
+			ksp = tp->ksp;
+	}
 	if (tp == current_thread_info())
 		flushw_all();
 
@@ -2170,11 +2176,7 @@ void show_stack(struct task_struct *tsk, unsigned long *_ksp)
 
 void dump_stack(void)
 {
-	unsigned long *ksp;
-
-	__asm__ __volatile__("mov	%%fp, %0"
-			     : "=r" (ksp));
-	show_stack(current, ksp);
+	show_stack(current, NULL);
 }
 
 EXPORT_SYMBOL(dump_stack);
@@ -2227,6 +2229,7 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	notify_die(DIE_OOPS, str, regs, 0, 255, SIGSEGV);
 	__asm__ __volatile__("flushw");
 	__show_regs(regs);
+	add_taint(TAINT_DIE);
 	if (regs->tstate & TSTATE_PRIV) {
 		struct reg_window *rw = (struct reg_window *)
 			(regs->u_regs[UREG_FP] + STACK_BIAS);
@@ -2261,8 +2264,12 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	do_exit(SIGSEGV);
 }
 
+#define VIS_OPCODE_MASK	((0x3 << 30) | (0x3f << 19))
+#define VIS_OPCODE_VAL	((0x2 << 30) | (0x36 << 19))
+
 extern int handle_popc(u32 insn, struct pt_regs *regs);
 extern int handle_ldf_stq(u32 insn, struct pt_regs *regs);
+extern int vis_emul(struct pt_regs *, unsigned int);
 
 void do_illegal_instruction(struct pt_regs *regs)
 {
@@ -2287,10 +2294,18 @@ void do_illegal_instruction(struct pt_regs *regs)
 			if (handle_ldf_stq(insn, regs))
 				return;
 		} else if (tlb_type == hypervisor) {
-			extern int vis_emul(struct pt_regs *, unsigned int);
+			if ((insn & VIS_OPCODE_MASK) == VIS_OPCODE_VAL) {
+				if (!vis_emul(regs, insn))
+					return;
+			} else {
+				struct fpustate *f = FPUSTATE;
 
-			if (!vis_emul(regs, insn))
-				return;
+				/* XXX maybe verify XFSR bits like
+				 * XXX do_fpother() does?
+				 */
+				if (do_mathemu(regs, f))
+					return;
+			}
 		}
 	}
 	info.si_signo = SIGILL;
@@ -2555,7 +2570,15 @@ void __init trap_init(void)
 	    (TRAP_PER_CPU_TSB_HUGE_TEMP !=
 	     offsetof(struct trap_per_cpu, tsb_huge_temp)) ||
 	    (TRAP_PER_CPU_IRQ_WORKLIST !=
-	     offsetof(struct trap_per_cpu, irq_worklist)))
+	     offsetof(struct trap_per_cpu, irq_worklist)) ||
+	    (TRAP_PER_CPU_CPU_MONDO_QMASK !=
+	     offsetof(struct trap_per_cpu, cpu_mondo_qmask)) ||
+	    (TRAP_PER_CPU_DEV_MONDO_QMASK !=
+	     offsetof(struct trap_per_cpu, dev_mondo_qmask)) ||
+	    (TRAP_PER_CPU_RESUM_QMASK !=
+	     offsetof(struct trap_per_cpu, resum_qmask)) ||
+	    (TRAP_PER_CPU_NONRESUM_QMASK !=
+	     offsetof(struct trap_per_cpu, nonresum_qmask)))
 		trap_per_cpu_offsets_are_bolixed_dave();
 
 	if ((TSB_CONFIG_TSB !=

@@ -1,9 +1,9 @@
 /* 
- * $Id: case_prox.h,v 1.7 2003/02/28 14:12:26 jiri Exp $ 
+ * $Id: case_prox.h,v 1.8 2004/08/24 09:01:24 janakj Exp $ 
  *
  * Proxy-Require, Proxy-Authorization Header Field Name Parsing Macros
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -141,6 +141,7 @@ extern OptTreeNode *otn_tmp;
 #define FRAG_POLICY_SOLARIS     7 /* Combo of FIRST & LAST, depending on
                                    * overlap situation.
                                    */
+#define FRAG_POLICY_DEFAULT     FRAG_POLICY_BSD
 
 /* max packet size */
 #define DATASIZE (ETHERNET_HEADER_LEN+IP_MAXPACKET)
@@ -271,6 +272,7 @@ typedef struct _FragTracker
     Frag3Context *context;
 
     int ordinal;
+    u_int32_t frag_policy;
 
 } FragTracker;
 
@@ -314,8 +316,14 @@ static u_int8_t frag3_registered = 0;    /* make sure we only register once per 
 static Frag3Context **frag3ContextList = NULL; /* List of Frag3 Contexts configured */
 static u_int8_t numFrag3Contexts = 0;
 
+static u_int8_t *frag_rebuild_buf = NULL;
+
+#ifdef GRE
+static u_int8_t *gre_frag_rebuild_buf = NULL;
+#endif
+
 /* enum for policy names */
-static char *policy_names[] = { "no policy!",
+static char *frag_policy_names[] = { "no policy!",
     "FIRST",
     "LINUX",
     "BSD",
@@ -482,7 +490,7 @@ static void Frag3PrintEngineConfig(Frag3Context *context)
 {
     LogMessage("Frag3 engine config:\n");
     LogMessage("    Target-based policy: %s\n", 
-            policy_names[context->frag_policy]);
+            frag_policy_names[context->frag_policy]);
     LogMessage("    Fragment timeout: %d seconds\n", 
             context->frag_timeout);
     LogMessage("    Fragment min_ttl:   %d\n", context->min_ttl);
@@ -800,7 +808,7 @@ void Frag3Init(u_char *args)
      * BSD since Win32/Linux have a higher incidence of occurrence.  Anyone
      * with an opinion on the matter feel free to email me...
      */
-    context->frag_policy = FRAG_POLICY_BSD;
+    context->frag_policy = FRAG_POLICY_DEFAULT;
     context->frag_timeout = FRAG_PRUNE_QUANTA; /* 60 seconds */
     context->ttl_limit = FRAG3_TTL_LIMIT;
     context->min_ttl = FRAG3_MIN_TTL;
@@ -826,6 +834,12 @@ void Frag3Init(u_char *args)
         {
             frag3_registered = 1;
             pfn->context = NULL;
+
+            frag_rebuild_buf = (u_int8_t *)SnortAlloc(DATASIZE + SPARC_TWIDDLE);
+#ifdef GRE
+            gre_frag_rebuild_buf = (u_int8_t *)SnortAlloc(DATASIZE + SPARC_TWIDDLE);
+#endif
+
         }
 #ifdef PERF_PROFILING
         RegisterPreprocessorProfile("frag3", &frag3PerfStats, 0, &totalPerfStats);
@@ -867,6 +881,44 @@ void Frag3Init(u_char *args)
     Frag3PrintEngineConfig(context);
 
     return;
+}
+
+static int FragPolicyIdFromName(char *name)
+{
+    if (!name)
+    {
+        return FRAG_POLICY_DEFAULT;
+    }
+
+    if(!strcasecmp(name, "bsd"))
+    {
+        return FRAG_POLICY_BSD;
+    }
+    else if(!strcasecmp(name, "bsd-right"))
+    {
+        return FRAG_POLICY_BSD_RIGHT;
+    }
+    else if(!strcasecmp(name, "linux"))
+    {
+        return FRAG_POLICY_LINUX;
+    }
+    else if(!strcasecmp(name, "first"))
+    {
+        return FRAG_POLICY_FIRST;
+    }
+    else if(!strcasecmp(name, "windows"))
+    {
+        return FRAG_POLICY_WINDOWS;
+    }
+    else if(!strcasecmp(name, "solaris"))
+    {
+        return FRAG_POLICY_SOLARIS;
+    }
+    else if(!strcasecmp(name, "last"))
+    {
+        return FRAG_POLICY_LAST;
+    }
+    return FRAG_POLICY_DEFAULT;
 }
 
 /**
@@ -969,6 +1021,7 @@ static void Frag3ParseGlobalArgs(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "memcap"))
             {
+#ifdef FRAG3_USE_MEMCAP
                 if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     global_config.memcap = atoi(stoks[1]);
@@ -994,9 +1047,7 @@ static void Frag3ParseGlobalArgs(u_char *args)
                 /* ok ok, it's really 9.375%, sue me */
                 ten_percent = ((global_config.memcap >> 5) + 
                                (global_config.memcap >> 6));
-            }
-            else if (!strcasecmp(stoks[0], "prealloc_memcap"))
-            {
+#else
                 /* Use memcap to calculate prealloc_frag value */
                 int memcap;
                 if(stoks[1] && isdigit((int)stoks[1][0]))
@@ -1023,6 +1074,7 @@ static void Frag3ParseGlobalArgs(u_char *args)
 
                 global_config.use_prealloc = 1;
                 global_config.memcap = memcap;
+#endif
             }
             else if(!strcasecmp(stoks[0], "prealloc_frags"))
             {
@@ -1059,8 +1111,6 @@ static void Frag3ParseGlobalArgs(u_char *args)
 
     return;
 }
-
-
 
 /**
  * Config parser for engine context config.  
@@ -1162,35 +1212,10 @@ static void Frag3ParseArgs(u_char *args, Frag3Context *context)
                     FatalError("%s(%d) => policy requires a policy "
                             "identifier argument\n", file_name, file_line);
 
-                if(!strcasecmp(toks[i+1], "bsd"))
-                {
-                    context->frag_policy = FRAG_POLICY_BSD;
-                }
-                else if(!strcasecmp(toks[i+1], "bsd-right"))
-                {
-                    context->frag_policy = FRAG_POLICY_BSD_RIGHT;
-                }
-                else if(!strcasecmp(toks[i+1], "linux"))
-                {
-                    context->frag_policy = FRAG_POLICY_LINUX;
-                }
-                else if(!strcasecmp(toks[i+1], "first"))
-                {
-                    context->frag_policy = FRAG_POLICY_FIRST;
-                }
-                else if(!strcasecmp(toks[i+1], "windows"))
-                {
-                    context->frag_policy = FRAG_POLICY_WINDOWS;
-                }
-                else if(!strcasecmp(toks[i+1], "solaris"))
-                {
-                    context->frag_policy = FRAG_POLICY_SOLARIS;
-                }
-                else if(!strcasecmp(toks[i+1], "last"))
-                {
-                    context->frag_policy = FRAG_POLICY_LAST;
-                }
-                else
+                context->frag_policy = FragPolicyIdFromName(toks[i+1]);
+
+                if ((context->frag_policy == FRAG_POLICY_DEFAULT) &&
+                    (strcasecmp(toks[i+1], "bsd")))
                 {
                     FatalError("%s(%d) => Bad policy name \"%s\"\n",
                             file_name, file_line, toks[i+1]);
@@ -1473,7 +1498,8 @@ void Frag3Defrag(Packet *p, void *context)
         {
             Frag3Rebuild(ft, p);
 
-            if ((p->frag_offset != 0) || (p->iph->ip_proto != IPPROTO_UDP))
+            if (p->frag_offset != 0 ||
+                (p->iph->ip_proto != IPPROTO_UDP && ft->frag_flags & FRAG_REBUILT))
             {
                 /* Need to reset some things here because the
                  * rebuilt packet will have reset the do_detect
@@ -1672,7 +1698,7 @@ static int INLINE Frag3CheckFirstLast(Packet *p, FragTracker *ft)
         if (ft->frag_flags & FRAG_GOT_LAST)
         {
             DEBUG_WRAP(DebugMessage(DEBUG_FRAG, "Got last frag again!\n"););
-            switch (ft->context->frag_policy)
+            switch (ft->frag_policy)
             {
                 case FRAG_POLICY_BSD:
                 case FRAG_POLICY_LINUX:
@@ -1851,6 +1877,16 @@ static int Frag3HandleIPOptions(FragTracker *ft,
     return 1;
 }
 
+int FragGetPolicy(FragTracker *ft, Frag3Context *f3context)
+{
+    DEBUG_WRAP(DebugMessage(DEBUG_FRAG,
+        "FragGetPolicy: Using configured default %d(%s)\n",
+        f3context->frag_policy, frag_policy_names[f3context->frag_policy]););
+
+    return f3context->frag_policy;
+}
+
+
 /**
  * Didn't find a FragTracker in the hash table, create a new one and put it
  * into the f_cache
@@ -1946,6 +1982,7 @@ static int Frag3NewTracker(Packet *p, FRAGKEY *fkey, Frag3Context *f3context)
     tmp->copied_ip_option_count = 0;
     tmp->context = f3context;
     tmp->ordinal = 0;
+    tmp->frag_policy = FragGetPolicy(tmp, f3context);
 
     /* 
      * get our first fragment storage struct 
@@ -2658,7 +2695,7 @@ static int Frag3Insert(Packet *p, FragTracker *ft, FRAGKEY *fkey,
              * The target-based modes here match the data generated by 
              * Paxson's Active Mapping paper as do the policy types.
              */
-            switch(f3context->frag_policy)
+            switch(ft->frag_policy)
             {
                 /* 
                  * new frag gets moved around 
@@ -2852,7 +2889,7 @@ left_overlap_last:
             /* 
              * once again, target-based policy processing
              */
-            switch(f3context->frag_policy)
+            switch(ft->frag_policy)
             {
                 /* 
                  * existing fragment gets truncated 
@@ -2860,7 +2897,7 @@ left_overlap_last:
                 case FRAG_POLICY_LAST:
                 case FRAG_POLICY_LINUX:
                 case FRAG_POLICY_BSD:
-                    if ((f3context->frag_policy == FRAG_POLICY_BSD) &&
+                    if ((ft->frag_policy == FRAG_POLICY_BSD) &&
                         (right->offset == frag_offset))
                     {
                         slide = (int16_t)(right->offset + right->size - frag_offset);
@@ -2932,7 +2969,7 @@ left_overlap_last:
             /*
              * handle the overlap in a target-based manner
              */
-            switch(f3context->frag_policy)
+            switch(ft->frag_policy)
             {
                 /*
                  * overlap is treated differently if there is more
@@ -2963,8 +3000,8 @@ left_overlap_last:
                     }
                     else
                     {
-                        if ((f3context->frag_policy == FRAG_POLICY_SOLARIS) ||
-                            (f3context->frag_policy == FRAG_POLICY_BSD))
+                        if ((ft->frag_policy == FRAG_POLICY_SOLARIS) ||
+                            (ft->frag_policy == FRAG_POLICY_BSD))
                         {
                             /* SOLARIS & BSD only */
                             if ((frag_end == right->offset + right->size) &&
@@ -3209,14 +3246,25 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
     u_int8_t save_ip_hlen = 0;
     Packet defrag_pkt;
     struct pcap_pkthdr dpkth;   /* BPF data */
-    u_int8_t dpkt[DATASIZE + SPARC_TWIDDLE];
+    u_int8_t *dpkt = NULL;
+    int datalink_header_len = 0;
+    int ret = 0;
     PROFILE_VARS;
+
+#ifdef GRE
+    if (p->greh == NULL)
+        dpkt = frag_rebuild_buf;
+    else
+        dpkt = gre_frag_rebuild_buf;
+#else
+    dpkt = frag_rebuild_buf;
+#endif
 
     memset(&defrag_pkt, 0, sizeof(Packet));
     memset(&dpkth, 0, sizeof(struct pcap_pkthdr));
     memset(dpkt, 0, DATASIZE + SPARC_TWIDDLE);
     defrag_pkt.pkth = &dpkth;
-    defrag_pkt.pkt = &dpkt[0];
+    defrag_pkt.pkt = dpkt;
     defrag_pkt.pkt += SPARC_TWIDDLE;
 
     DEBUG_WRAP(DebugMessage(DEBUG_FRAG, "Rebuilding pkt [0x%X:%d  0x%X:%d]\n", 
@@ -3238,6 +3286,7 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
     /* 
      * set the pointer to the end of the rebuild packet
      */
+    rebuild_ptr = defrag_pkt.pkt;
     rebuild_end = defrag_pkt.pkt + DATASIZE;
 
     /*
@@ -3262,24 +3311,108 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
     }
 
     /* copy the packet data from the last packet of the frag */
-    SafeMemcpy(defrag_pkt.pkt, p->eh, ETHERNET_HEADER_LEN,
-               defrag_pkt.pkt, rebuild_end);
-    SafeMemcpy(defrag_pkt.pkt + ETHERNET_HEADER_LEN, p->iph, sizeof(IPHdr),
-               defrag_pkt.pkt + ETHERNET_HEADER_LEN, rebuild_end);
+#ifdef GIDS
+    /* IPTABLES and IPFW don't have an ethernet header within their payloads */
+    if (!InlineMode())
+    {
+#endif
+        switch (datalink)
+        {
+        case DLT_EN10MB:
+#ifdef DLT_I4L_IP
+        case DLT_I4L_IP:
+#endif
+            datalink_header_len = ETHERNET_HEADER_LEN;
+            if (p->eh)
+            {
+                ret = SafeMemcpy(rebuild_ptr, p->eh, datalink_header_len,
+                                rebuild_ptr, rebuild_end);
+
+                if (ret == SAFEMEM_ERROR)
+                {
+                    /*XXX: Log message, failed to copy */
+                    ft->frag_flags = ft->frag_flags | FRAG_REBUILT;
+                    return;
+                }
+            }
+            else
+            {
+                EtherHdr *eh = (EtherHdr *)rebuild_ptr;
+                eh->ether_type = htons(ETHERNET_TYPE_IP);
+            }
+            rebuild_ptr += datalink_header_len;
+            break;
+
+/* XXX: This a list of supported decoders (from snort.c).  However IP
+ *      Fragmentation may not be supported for all of them.  Do as we
+ *      used to do for now and put the IP Frame as the first byte.
+ */
+#if 0
+        case DLT_IEEE802_11:
+        case DLT_ENC: /* Encapsulated data */
+        case DLT_IEEE802: /* Token Ring */
+        case DLT_FDDI: /* FDDI */
+        case DLT_CHDLC: /* Cisco HDLC */
+        case DLT_SLIP: /* Serial Line Internet Protocol */
+        case DLT_PPP: /* Point To Point Protocol */
+        case DLT_PPP_SERIAL: /* PPP with full HDLC header */
+        case DLT_LINUX_SLL:
+        case DLT_PFLOG:
+        case DLT_OLDPFLOG:
+        case DLT_LOOP:
+        case DLT_NULL:
+        case DLT_RAW:
+        case DLT_I4L_RAWIP:
+        case DLT_I4L_CISCOHDLC:
+            /* Need to add something to skip the correct number of bytes so
+             * the IP frame is in the correct location for each of these
+             * decoders. */
+#endif
+        default:
+            /* This is incomplete and doesn't skip any bytes for the IP Frame */
+
+            break;
+        }
+#ifdef GIDS
+    }
+#endif 
 
     /*
-     * set the pointer to the beginning of the transport layer of the
-     * rebuilt packet
+     * copy the ip header
      */
-    rebuild_ptr = defrag_pkt.pkt + ETHERNET_HEADER_LEN + sizeof(IPHdr);
+    ret = SafeMemcpy(rebuild_ptr, p->iph, sizeof(IPHdr),
+                     rebuild_ptr, rebuild_end);
+
+    if (ret == SAFEMEM_ERROR)
+    {
+        /*XXX: Log message, failed to copy */
+        ft->frag_flags = ft->frag_flags | FRAG_REBUILT;
+        return;
+    }
+
+    /* 
+     * reset the ip header pointer in the rebuilt packet
+     */
+    defrag_pkt.iph = (IPHdr *)rebuild_ptr;
+
+    /* and move the pointer to the beginning of the transport layer
+     * of the rebuilt packet. */
+    rebuild_ptr += sizeof(IPHdr);
 
     /*
      * if there are IP options, copy those in as well
      */
     if (ft->ip_options_data && ft->ip_options_len)
     {
-        SafeMemcpy(rebuild_ptr, ft->ip_options_data, ft->ip_options_len,
-            rebuild_ptr, rebuild_end);
+        ret = SafeMemcpy(rebuild_ptr, ft->ip_options_data, ft->ip_options_len,
+                         rebuild_ptr, rebuild_end);
+
+        if (ret == SAFEMEM_ERROR)
+        {
+            /*XXX: Log message, failed to copy */
+            ft->frag_flags = ft->frag_flags | FRAG_REBUILT;
+            return;
+        }
 
         /*
          * adjust the pointer to the beginning of the transport layer of the
@@ -3298,11 +3431,6 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
          * copied across all fragments, EXCEPT the offset 0 fragment.
          */
     }
-
-    /* 
-     * reset the ip header pointer 
-     */
-    defrag_pkt.iph = (IPHdr *) (defrag_pkt.pkt + ETHERNET_HEADER_LEN);
 
     /* 
      * clear the packet fragment fields 
@@ -3339,15 +3467,23 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
          * try to avoid buffer overflows...
          */
         if (frag->size)
-            SafeMemcpy(rebuild_ptr+frag->offset, frag->data, frag->size, 
-                rebuild_ptr, rebuild_end);
+        {
+            ret = SafeMemcpy(rebuild_ptr+frag->offset, frag->data, frag->size, 
+                             rebuild_ptr, rebuild_end);
 
+            if (ret == SAFEMEM_ERROR)
+            {
+                /*XXX: Log message, failed to copy */
+                ft->frag_flags = ft->frag_flags | FRAG_REBUILT;
+                return;
+            }
+        }
     }
 
     /* 
      * set the new packet's capture length 
      */
-    if((ETHERNET_HEADER_LEN + ft->calculated_size + sizeof(IPHdr)
+    if((datalink_header_len + ft->calculated_size + sizeof(IPHdr)
                             + ft->ip_options_len) > 
             (IP_MAXPACKET-1))
     {
@@ -3358,13 +3494,13 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
 #ifdef DONT_TRUNCATE
         defrag_pkt.pkth->caplen = IP_MAXPACKET - 1;
 #else /* DONT_TRUNCATE */
-        defrag_pkt.pkth->caplen = ETHERNET_HEADER_LEN +
+        defrag_pkt.pkth->caplen = datalink_header_len +
             ft->calculated_size + sizeof(IPHdr) + ft->ip_options_len ;
 #endif /* DONT_TRUNCATE */
     }
     else
     {
-        defrag_pkt.pkth->caplen = ETHERNET_HEADER_LEN +
+        defrag_pkt.pkth->caplen = datalink_header_len +
             ft->calculated_size + sizeof(IPHdr) + ft->ip_options_len;
     }
 
@@ -3373,7 +3509,7 @@ static void Frag3Rebuild(FragTracker *ft, Packet *p)
     /* 
      * set the ip dgm length 
      */
-    defrag_pkt.iph->ip_len = htons((short)(defrag_pkt.pkth->len-ETHERNET_HEADER_LEN));
+    defrag_pkt.iph->ip_len = htons((short)(defrag_pkt.pkth->len-datalink_header_len));
     defrag_pkt.actual_ip_len = ntohs(defrag_pkt.iph->ip_len);
 
     /* 
@@ -3754,6 +3890,15 @@ void Frag3CleanExit(int signal, void *foo)
 
     /* Cleanup the list of Frag3 engine contexts */
     free(frag3ContextList);
+
+    /* Free the rebuild buffer memory */
+    if (frag_rebuild_buf != NULL)
+        free(frag_rebuild_buf);
+
+#ifdef GRE
+    if (gre_frag_rebuild_buf != NULL)
+        free(gre_frag_rebuild_buf);
+#endif
 
     //sfxhash_delete(f_cache);
     //f_cache = NULL;

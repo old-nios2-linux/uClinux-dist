@@ -29,6 +29,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "ipv6.h"
+
 #include "decode.h"
 #include "snort.h"
 #include "debug.h"
@@ -139,7 +141,7 @@ void DecodeEthPkt(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
 
         case ETHERNET_TYPE_IPV6:
             DecodeIPV6(p->pkt + ETHERNET_HEADER_LEN, 
-                    (cap_len - ETHERNET_HEADER_LEN));
+                    (cap_len - ETHERNET_HEADER_LEN), p);
             PREPROC_PROFILE_END(decodePerfStats);
             return;
 
@@ -496,14 +498,14 @@ void DecodeVlan(u_int8_t * pkt, const u_int32_t len, Packet * p)
             switch(ntohs(p->ehllcother->proto_id))
             {
                 case ETHERNET_TYPE_IP:
-                    DecodeIP(p->pkt + sizeof(VlanTagHdr) + sizeof(EthLlc) +
-                            sizeof(EthLlcOther), len - sizeof(VlanTagHdr), p);
+                    DecodeIP(p->pkt + sizeof(VlanTagHdr) + sizeof(EthLlc) + sizeof(EthLlcOther),
+                        len - sizeof(VlanTagHdr) - sizeof(EthLlc) - sizeof(EthLlcOther), p);
                     return;
 
                 case ETHERNET_TYPE_ARP:
                 case ETHERNET_TYPE_REVARP:
-                    DecodeARP(p->pkt + sizeof(VlanTagHdr)+ sizeof(EthLlc) +
-                            sizeof(EthLlcOther), len - sizeof(VlanTagHdr), p);
+                    DecodeARP(p->pkt + sizeof(VlanTagHdr) + sizeof(EthLlc) + sizeof(EthLlcOther),
+                        len - sizeof(VlanTagHdr) - sizeof(EthLlc) - sizeof(EthLlcOther), p);
                     return;
 
                 default:
@@ -1120,7 +1122,7 @@ void DecodeLinuxSLLPkt(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
             return;
 
         case ETHERNET_TYPE_IPV6:
-            DecodeIPV6(p->pkt + SLL_HDR_LEN, (cap_len - SLL_HDR_LEN));
+            DecodeIPV6(p->pkt + SLL_HDR_LEN, (cap_len - SLL_HDR_LEN), p);
             PREPROC_PROFILE_END(decodePerfStats);
             return;
 
@@ -1229,7 +1231,7 @@ void DecodeOldPflog(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
 
 #ifdef AF_INET6
         case AF_INET6:  /* IPv6 */
-            DecodeIPV6(p->pkt + OLDPFLOG_HDRLEN, (cap_len - OLDPFLOG_HDRLEN));
+            DecodeIPV6(p->pkt + OLDPFLOG_HDRLEN, (cap_len - OLDPFLOG_HDRLEN), p);
             PREPROC_PROFILE_END(decodePerfStats);
             return;
 #endif
@@ -1312,7 +1314,7 @@ void DecodePflog(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
 
 #ifdef AF_INET6
         case AF_INET6:  /* IPv6 */
-            DecodeIPV6(p->pkt + PFLOG_HDRLEN, (cap_len - PFLOG_HDRLEN));
+            DecodeIPV6(p->pkt + PFLOG_HDRLEN, (cap_len - PFLOG_HDRLEN), p);
             PREPROC_PROFILE_END(decodePerfStats);
             return;
 #endif
@@ -1551,6 +1553,12 @@ void DecodePPPoEPkt(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
 
     while (ppppoe_tag < (PPPoE_Tag *)(pkt + pkthdr->caplen))
     {
+        if (((char*)(ppppoe_tag)+(sizeof(PPPoE_Tag)-1)) > (char*)(pkt + pkthdr->caplen))
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Not enough data in packet for PPPOE Tag\n"););
+            break;
+        }
+
         /* no guarantee in PPPoE spec that ppppoe_tag is aligned at all... */
         memcpy(&tag, ppppoe_tag, sizeof(tag));
 
@@ -1607,7 +1615,7 @@ void DecodePPPoEPkt(Packet * p, struct pcap_pkthdr * pkthdr, u_int8_t * pkt)
                 case PPPoE_TAG_SERVICE_NAME_ERROR:
                 case PPPoE_TAG_AC_SYSTEM_ERROR:
                 case PPPoE_TAG_GENERIC_ERROR: /* ascii data */
-                    buf = (char *) calloc(ntohs(tag.length) + 1, sizeof(char));
+                    buf = (char *)SnortAlloc(ntohs(tag.length) + 1);
                     strlcpy(buf, (char *)(ppppoe_tag+1), ntohs(tag.length));
                     DebugMessage(DEBUG_DECODE, "data (UTF-8): %s\n", buf);
                     free(buf);
@@ -2339,14 +2347,19 @@ void DecodeIP(u_int8_t * pkt, const u_int32_t len, Packet * p)
     else
     {
 #ifdef GRE
-    /* if delivery header for GRE encapsulated packet is IP and it 
-     * had options, p->ip_options_data will be pointing to this outer
-     * IP's options
-     * set to NULL so these options aren't associated with this inner IP
-     * since p->iph will be pointing to this inner IP
-     */
-    if (p->greh != NULL)
-        p->ip_options_data = NULL;
+        /* If delivery header for GRE encapsulated packet is IP and it 
+         * had options, the packet's ip options will be refering to this
+         * outer IP's options
+         * Zero these options so they aren't associated with this inner IP
+         * since p->iph will be pointing to this inner IP
+         */
+        if (p->greh != NULL)
+        {
+            p->ip_options_data = NULL;
+            p->ip_options_len = 0;
+            memset(&(p->ip_options[0]), 0, sizeof(p->ip_options));
+            p->ip_lastopt_bad = 0;
+        }
 #endif
 
         p->ip_option_count = 0;
@@ -3397,13 +3410,129 @@ void DecodeEAP(u_int8_t * pkt, const u_int32_t len, Packet * p)
  *
  * Returns: void function
  */
-void DecodeIPV6(u_int8_t *pkt, u_int32_t len)
+void DecodeIPV6(u_int8_t *pkt, u_int32_t len, Packet *p)
 {
-    DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "IPv6 is not supported.\n"););
-    pc.ipv6++;
+    IP6Hdr *ip6h;
+    int alert_status = CheckIPV6Frag((char *) pkt, len, p);
+
+    if(alert_status == IPV6_FRAG_NO_ALERT)
+    {
+        pc.ipv6++;
+        return;
+    }
+
+    p->packet_flags |= PKT_NO_DETECT;
+
+    /* Need to set up a fake IP header for logging purposes.  First make sure
+     * there is room */
+    if(sizeof(IP6Hdr) <= len) 
+    {
+        /* Need IP addresses for packet logging -- for now, just using the 
+         * lowest 4 bytes of the IPv6 addresses */
+        ip6h = (IP6Hdr*)pkt;
+        
+        p->eh->ether_type = htons(ETHERNET_TYPE_IP);
+        p->iph = (IPHdr*)(p->pkt + ETHERNET_HEADER_LEN);
+        memset(p->iph, 0, sizeof(IPHdr));
+        p->iph->ip_len = htons(IP_HEADER_LEN);
+        SET_IP_VER(p->iph, 0x4);
+        SET_IP_HLEN(p->iph, 0x5);
+    
+    #ifdef WORDS_BIGENDIAN
+        p->iph->ip_src.s_addr = ((u_int32_t)ip6h->ip6_src.s6_addr) & 0x00ffffff;
+        p->iph->ip_dst.s_addr = ((u_int32_t)ip6h->ip6_dst.s6_addr) & 0x00ffffff;
+    #else
+        p->iph->ip_src.s_addr = ((u_int32_t*)(&ip6h->ip6_src))[3] & 0xffffff00;
+        p->iph->ip_dst.s_addr = ((u_int32_t*)(&ip6h->ip6_dst))[3] & 0xffffff00;
+    #endif
+    }
+    else 
+    {
+        p->iph = NULL;
+    }
+
+    if (alert_status == IPV6_FRAG_ALERT)
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.bsd_icmp_frag)
+        {
+            SnortEventqAdd(GENERATOR_SPP_FRAG3, FRAG3_IPV6_BSD_ICMP_FRAG, 
+                    1, 0, 3, FRAG3_IPV6_BSD_ICMP_FRAG_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_bad_ipv6_frag)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+    else if (alert_status == IPV6_FRAG_BAD_PKT) 
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.ipv6_bad_frag_pkt)
+        {
+            SnortEventqAdd(GENERATOR_SPP_FRAG3, FRAG3_IPV6_BAD_FRAG_PKT, 
+                    1, DECODE_CLASS, 3, FRAG3_IPV6_BAD_FRAG_PKT_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_bad_ipv6_frag)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+    else if(alert_status == IPV6_MIN_TTL_EXCEEDED) 
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.decode_alerts)
+        {
+            SnortEventqAdd(GENERATOR_SNORT_DECODE, DECODE_IPV6_MIN_TTL, 
+                    1, DECODE_CLASS, 3, DECODE_IPV6_MIN_TTL_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_alerts)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+    else if(alert_status == IPV6_IS_NOT) 
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.decode_alerts)
+        {
+            SnortEventqAdd(GENERATOR_SNORT_DECODE, DECODE_IPV6_IS_NOT, 1,
+                    DECODE_CLASS, 3, DECODE_IPV6_IS_NOT_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_alerts)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+    else if(alert_status == IPV6_TRUNCATED_EXT)
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.decode_alerts)
+        {
+            SnortEventqAdd(GENERATOR_SNORT_DECODE, DECODE_IPV6_TRUNCATED_EXT, 1,
+                    DECODE_CLASS, 3, DECODE_IPV6_TRUNCATED_EXT_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_alerts)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+    else if(alert_status == IPV6_TRUNCATED)
+    {
+        if((runMode == MODE_IDS) && pv.decoder_flags.decode_alerts)
+        {
+            SnortEventqAdd(GENERATOR_SNORT_DECODE, DECODE_IPV6_TRUNCATED, 1,
+                    DECODE_CLASS, 3, DECODE_IPV6_TRUNCATED_STR, 0);
+            if ((InlineMode()) && pv.decoder_flags.drop_alerts)
+            {
+                DEBUG_WRAP(DebugMessage(DEBUG_DECODE, "Dropping bad packet\n"););
+                InlineDrop(p);
+            }
+        }
+    }
+
+    pc.discards++;
     return;
 }
-
 
 /*
  * Function: DecodeEthLoopback(u_int8_t *, u_int32_t)
@@ -3462,7 +3591,7 @@ void DecodeGRE(u_int8_t *pkt, const u_int32_t len, Packet *p)
     u_int32_t hlen;    /* GRE header length */
     u_int32_t payload_len;
    
-    if (len < sizeof(GREHdr))
+    if (len < GRE_HEADER_LEN)
     {
         if(pv.verbose_flag)
             ErrorMessage("GRE header length > rest of packet length");
@@ -3553,8 +3682,10 @@ void DecodeGRE(u_int8_t *pkt, const u_int32_t len, Packet *p)
 
             sre_addrfamily = ntohs(*((u_int16_t *)sre_ptr));
             sre_ptr += sizeof(sre_addrfamily);
+
             sre_offset = *((u_int8_t *)sre_ptr);
             sre_ptr += sizeof(sre_offset);
+
             sre_length = *((u_int8_t *)sre_ptr);
             sre_ptr += sizeof(sre_length);
 
@@ -3566,9 +3697,7 @@ void DecodeGRE(u_int8_t *pkt, const u_int32_t len, Packet *p)
         }
     }
 
-    payload_len = len - hlen;
-
-    if (payload_len < 0)
+    if (hlen > len)
     {
         if(pv.verbose_flag)
             ErrorMessage("GRE header length > rest of packet length");
@@ -3589,7 +3718,9 @@ void DecodeGRE(u_int8_t *pkt, const u_int32_t len, Packet *p)
         return;
     }
 
-    /* send to next protocol decoder */
+    payload_len = len - hlen;
+
+    /* Send to next protocol decoder */
     /* As described in RFC 2784 the possible protocols are listed in
      * RFC 1700 under "ETHER TYPES"
      * See also "Current List of Protocol Types" in RFC 1701
@@ -3610,7 +3741,7 @@ void DecodeGRE(u_int8_t *pkt, const u_int32_t len, Packet *p)
             return;
 
         case ETHERNET_TYPE_IPV6:
-            DecodeIPV6(pkt + hlen, payload_len); 
+            DecodeIPV6(pkt + hlen, payload_len, p); 
             return;
 
         case ETHERNET_TYPE_IPX:
@@ -3680,7 +3811,7 @@ void DecodeTransBridging(u_int8_t *pkt, const u_int32_t len, Packet *p)
             return;
 
         case ETHERNET_TYPE_IPV6:
-            DecodeIPV6(pkt + ETHERNET_HEADER_LEN, len - ETHERNET_HEADER_LEN);
+            DecodeIPV6(pkt + ETHERNET_HEADER_LEN, len - ETHERNET_HEADER_LEN, p);
             return;
 
         case ETHERNET_TYPE_IPX:
@@ -4167,6 +4298,9 @@ void InitDecoderFlags(void)
     pv.decoder_flags.drop_tcpopt_decode     = 0;
     pv.decoder_flags.ipopt_decode           = 1;
     pv.decoder_flags.drop_ipopt_decode      = 0;
+    pv.decoder_flags.ipv6_bad_frag_pkt      = 1;
+    pv.decoder_flags.bsd_icmp_frag          = 1;
+    pv.decoder_flags.drop_bad_ipv6_frag     = 1;
 }
 
 #if defined(WORDS_MUSTALIGN) && !defined(__GNUC__)

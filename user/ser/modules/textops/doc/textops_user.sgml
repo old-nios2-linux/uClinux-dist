@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.5 $</revnumber>
-		<date>$Date: 2003/10/09 08:16:40 $</date>
+		<revnumber>$Revision: 1.7 $</revnumber>
+		<date>$Date: 2004/08/24 09:00:40 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -120,7 +120,7 @@ search_append("[Ss]er", " blabla");
 		<function moreinfo="none">replace(re, txt)</function>
 	    </title>
 	    <para>
-		Replaces the first occurence of re with txt.
+		Replaces the first occurrence of re with txt.
 	    </para>
 	    <para>Meaning of the parameters is as follows:</para>
 	    <itemizedlist>
@@ -194,6 +194,35 @@ if ( subst('/^To:(.*)sip:[^@]*@[a-zA-Z0-9.]+(.*)$/t:\1\u\2/ig') ) {};
 # adds 3463 prefix to numeric uris, and save the original uri (\0 match)
 # as a parameter: orig_uri (just an example)
 if (subst_uri('/^sip:([0-9]+)@(.*)$/sip:3463\1@\2;orig_uri=\0/i')){$
+
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title>
+		<function moreinfo="none">subst_user('/re/repl/flags')</function>
+	    </title>
+	    <para>
+		Runs the re substitution on the message uri (like subst_uri but works
+		 only on the user portion of the uri)
+	    </para>
+	    <para>Meaning of the parameters is as follows:</para>
+	    <itemizedlist>
+		<listitem>
+		    <para><emphasis>'/re/repl/flags'</emphasis> - sed like regular
+				expression. flags can be a combination of i (case insensitive),
+				g (global) or s (match newline don't treat it as end of line).
+		    </para>
+		</listitem>
+	    </itemizedlist>
+	    <example>
+		<title><function>subst</function> usage</title>
+		<programlisting format="linespecific">
+...
+# adds 3463 prefix to uris ending with 3642 (just an example)
+if (subst_user('/3642$/36423463/')){$
 
 ...
 </programlisting>
@@ -307,7 +336,7 @@ if (is_present_hf("From")) log(1, "From HF Present");
 	</section>
     </section>
     <section>
-		<title>Known Limitatons</title>
+		<title>Known Limitations</title>
 		<para>
 			Search functions are applied to the original request,
 			i.e., they ignore all changes resulting from message

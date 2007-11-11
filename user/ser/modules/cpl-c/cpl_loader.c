@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_loader.c,v 1.5.4.1 2003/11/28 13:21:07 bogdan Exp $
+ * $Id: cpl_loader.c,v 1.11 2004/12/08 20:43:23 bogdan Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -60,7 +60,7 @@ extern db_con_t* db_hdl;
 
 
 #if 0
-/* debug function -> write into a file the content of a str stuct. */
+/* debug function -> write into a file the content of a str struct. */
 int write_to_file(char *filename, str *buf)
 {
 	int fd;
@@ -90,7 +90,7 @@ error:
 
 
 
-/* Loads a file into a buffer; first the file lenght will be determined for
+/* Loads a file into a buffer; first the file length will be determined for
  * allocated an exact buffer len for storing the file content into.
  * Returns:  1 - success
  *          -1 - error
@@ -120,7 +120,7 @@ int load_file( char *filename, str *xml)
 	}
 	DBG("DEBUG:cpl-c:load_file: file size = %d\n",xml->len);
 	if ( lseek(fd,0,SEEK_SET)==-1 ) {
-		LOG(L_ERR,"ERROR:cpl-c:load_file: cannot go to begining (lseek):"
+		LOG(L_ERR,"ERROR:cpl-c:load_file: cannot go to beginning (lseek):"
 			" %s\n",strerror(errno));
 		goto error;
 	}
@@ -153,15 +153,17 @@ int load_file( char *filename, str *xml)
 	}
 	xml->s[xml->len] = 0;
 
+	close(fd);
 	return 1;
 error:
+	if (fd!=-1) close(fd);
 	if (xml->s) pkg_free( xml->s);
 	return -1;
 }
 
 
 
-/* Writes an aray of texts into the given response file.
+/* Writes an array of texts into the given response file.
  * Accepts also empty texts, case in which it will be created an empty
  * response file.
  */
@@ -204,7 +206,7 @@ static inline int check_userhost( char *p, char *end)
 
 	/* parse user name */
 	p1 = p;
-	while (p<end && (isalnum(*p) || *p=='-' || *p=='_' || *p=='.' ))
+	while (p<end && (isalnum((int)*p) || *p=='-' || *p=='_' || *p=='.' ))
 		p++;
 	if (p==p1 || p==end || *p!='@')
 		return -1;
@@ -216,7 +218,7 @@ static inline int check_userhost( char *p, char *end)
 		if (*p=='.') {
 			if (dot) return -1; /* dot after dot */
 			dot = 1;
-		} else if (isalnum(*p) || *p=='-' || *p=='_' ) {
+		} else if (isalnum((int)*p) || *p=='-' || *p=='_' ) {
 			dot = 0;
 		} else {
 			return -1;
@@ -256,7 +258,7 @@ int cpl_load( FILE *fifo_stream, char *response_file )
 	str enc_log = {0,0};
 	str logs[2];
 
-	DBG("DEBUG:cpl-c:cpl_load: \"LOAD_CPL\" FIFO commnad received!\n");
+	DBG("DEBUG:cpl-c:cpl_load: \"LOAD_CPL\" FIFO command received!\n");
 
 	/* check the name of the response file */
 	if (response_file==0) {
@@ -294,7 +296,7 @@ int cpl_load( FILE *fifo_stream, char *response_file )
 		goto error1;
 	}
 
-	/* load the xml file - this function will allocted a buff for the loading
+	/* load the xml file - this function will allocated a buff for the loading
 	 * the cpl file and attach it to xml.s -> don't forget to free it! */
 	if (load_file( cpl_file, &xml)!=1) {
 		logs[1].s = FILE_LOAD_ERR;
@@ -310,7 +312,7 @@ int cpl_load( FILE *fifo_stream, char *response_file )
 	logs[1] = enc_log;
 
 	/* write both the XML and binary formats into database */
-	if (write_to_db( db_hdl, user, &xml, &bin)!=1) {
+	if (write_to_db(user, &xml, &bin)!=1) {
 		logs[1].s = DB_SAVE_ERR;
 		logs[1].len = strlen( DB_SAVE_ERR );
 		goto error1;
@@ -354,7 +356,7 @@ int cpl_remove( FILE *fifo_stream, char *response_file )
 	int user_len;
 	str logs[2];
 
-	DBG("DEBUG:cpl-c:cpl_remove: \"REMOVE_CPL\" FIFO commnad received!\n");
+	DBG("DEBUG:cpl-c:cpl_remove: \"REMOVE_CPL\" FIFO command received!\n");
 
 	/* check the name of the response file */
 	if (response_file==0) {
@@ -382,7 +384,7 @@ int cpl_remove( FILE *fifo_stream, char *response_file )
 		goto error1;
 	}
 
-	if (rmv_from_db( db_hdl, user)!=1) {
+	if (rmv_from_db(user)!=1) {
 		logs[1].s = DB_RMV_ERR;
 		logs[1].len = sizeof(DB_RMV_ERR);
 		goto error1;
@@ -445,7 +447,7 @@ int cpl_get( FILE *fifo_stream, char *response_file )
 	}
 
 	/* get the script for this user */
-	if (get_user_script( db_hdl, &user, &script, "cpl_xml")==-1) {
+	if (get_user_script(&user, &script, "cpl_xml")==-1) {
 		logs[1].s = DB_GET_ERR;
 		logs[1].len = strlen( DB_GET_ERR );
 		goto error1;

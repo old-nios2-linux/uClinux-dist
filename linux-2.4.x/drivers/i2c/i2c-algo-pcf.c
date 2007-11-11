@@ -440,14 +440,11 @@ static u32 pcf_func(struct i2c_adapter *adap)
 /* -----exported algorithm data: -------------------------------------	*/
 
 static struct i2c_algorithm pcf_algo = {
-	"PCF8584 algorithm",
-	I2C_ALGO_PCF,
-	pcf_xfer,
-	NULL,
-	NULL,				/* slave_xmit		*/
-	NULL,				/* slave_recv		*/
-	algo_control,			/* ioctl		*/
-	pcf_func,			/* functionality	*/
+	.name		= "PCF8584 algorithm",
+	.id		= I2C_ALGO_PCF,
+	.master_xfer	= pcf_xfer,
+	.algo_control	= algo_control,
+	.functionality	= pcf_func,
 };
 
 /* 
@@ -477,8 +474,6 @@ int i2c_pcf_add_bus(struct i2c_adapter *adap)
 	MOD_INC_USE_COUNT;
 #endif
 
-	i2c_add_adapter(adap);
-
 	/* scan bus */
 	if (pcf_scan) {
 		printk(KERN_INFO " i2c-algo-pcf.o: scanning bus %s.\n",
@@ -502,7 +497,8 @@ int i2c_pcf_add_bus(struct i2c_adapter *adap)
 		}
 		printk("\n");
 	}
-	return 0;
+
+	return i2c_add_adapter(adap);
 }
 
 
@@ -524,7 +520,6 @@ int __init i2c_algo_pcf_init (void)
 	printk("i2c-algo-pcf.o: i2c pcf8584 algorithm module\n");
 	return 0;
 }
-
 
 EXPORT_SYMBOL(i2c_pcf_add_bus);
 EXPORT_SYMBOL(i2c_pcf_del_bus);

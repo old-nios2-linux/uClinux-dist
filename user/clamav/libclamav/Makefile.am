@@ -1,5 +1,5 @@
 #
-#  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
+#  Copyright (C) 2002 - 2006 Tomasz Kojm <tkojm@clamav.net>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -13,12 +13,13 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 
-INCLUDES = -I$(top_srcdir) -I@srcdir@/zziplib -I@srcdir@/mspack
+INCLUDES = -I$(top_srcdir) -I@srcdir@/unrar -I@srcdir@/nsis
 
-libclamav_la_LIBADD = @LIBCLAMAV_LIBS@
+libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@
 
 libclamav_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ -no-undefined
 
@@ -30,6 +31,8 @@ libclamav_la_SOURCES = \
         matcher-ac.h \
         matcher-bm.c \
         matcher-bm.h \
+	matcher-ncore.c \
+	matcher-ncore.h \
         matcher.c \
         matcher.h \
         md5.c \
@@ -44,29 +47,12 @@ libclamav_la_SOURCES = \
 	dsig.h \
         str.c \
 	str.h \
-	defaults.h \
 	scanners.c \
 	scanners.h \
 	filetypes.c \
 	filetypes.h \
-	unrarlib.c \
-	unrarlib.h \
-	zziplib/zzip-conf.h \
-	zziplib/zzip-config.h \
-	zziplib/zzip-dir.c \
-	zziplib/zzip-err.c \
-	zziplib/zzip-file.c \
-	zziplib/zzip-file.h \
-	zziplib/zzip-info.c \
-	zziplib/zzip-io.c \
-	zziplib/zzip-io.h \
-	zziplib/zzip-stat.c \
-	zziplib/zzip-zip.c \
-	zziplib/zzip.h \
-	zziplib/zzipformat.h \
-	zziplib/zziplib.h \
-	zziplib/strc.c \
-	zziplib/strc.h \
+	rtf.c \
+	rtf.h \
 	blob.c \
 	blob.h \
 	mbox.c \
@@ -75,8 +61,6 @@ libclamav_la_SOURCES = \
 	message.h \
 	snprintf.c \
 	snprintf.h \
-	strrcpy.c \
-	strrcpy.h \
 	table.c \
 	table.h \
 	text.c \
@@ -90,17 +74,6 @@ libclamav_la_SOURCES = \
 	msexpand.h \
 	pe.c \
 	pe.h \
-	mspack/cabd.c \
-	mspack/cab.h \
-	mspack/lzxd.c \
-	mspack/lzx.h \
-	mspack/mspack.h \
-	mspack/mszipd.c \
-	mspack/mszip.h \
-	mspack/qtmd.c \
-	mspack/qtm.h \
-	mspack/system.c \
-	mspack/system.h \
 	upx.c \
 	upx.h \
 	htmlnorm.c \
@@ -111,12 +84,28 @@ libclamav_la_SOURCES = \
 	rebuildpe.h \
 	petite.c \
 	petite.h \
+	wwunpack.c \
+	wwunpack.h \
+	suecrypt.c \
+	suecrypt.h \
+	unsp.c \
+	unsp.h \
+	aspack.c \
+	aspack.h \
+	packlibs.c \
+	packlibs.h \
 	fsg.c \
 	fsg.h \
+	mew.c \
+	mew.h \
+	upack.c \
+	upack.h \
 	line.c \
 	line.h \
 	untar.c \
 	untar.h \
+	unzip.c \
+	unzip.h \
 	special.c \
 	special.h \
 	binhex.c \
@@ -125,7 +114,68 @@ libclamav_la_SOURCES = \
 	is_tar.h \
 	tnef.c \
 	tnef.h \
+	unrar/unrar15.c \
+	unrar/unrar20.h \
+	unrar/unrarcmd.h \
+	unrar/unrar.h \
+	unrar/unrarvm.c \
+	unrar/unrar15.h \
+	unrar/unrar.c \
+	unrar/unrarfilter.c \
+	unrar/unrarppm.c \
+	unrar/unrarvm.h \
+	unrar/unrar20.c \
+	unrar/unrarcmd.c \
+	unrar/unrarfilter.h \
+	unrar/unrarppm.h \
+	nsis/LZMADecode.c \
+	nsis/LZMADecode.h \
+	nsis/bzlib.c \
+	nsis/bzlib_private.h \
+	nsis/infblock.c \
+	nsis/nsis_bzlib.h \
+	nsis/nsis_zconf.h \
+	nsis/nsis_zlib.h \
+	nsis/nsis_zutil.h \
+	nsis/nulsft.c \
+	nsis/nulsft.h \
+	pdf.c \
+	pdf.h \
+	spin.c \
+	spin.h \
+	yc.c \
+	yc.h \
+	elf.c \
+	elf.h \
+	execs.h \
+	sis.c \
+	sis.h \
 	uuencode.c \
-	uuencode.h
+	uuencode.h \
+	phishcheck.c \
+	phishcheck.h \
+	phish_domaincheck_db.c \
+	phish_domaincheck_db.h \
+	phish_whitelist.c \
+	phish_whitelist.h \
+	iana_tld.h \
+	regex_list.c \
+	regex_list.h \
+	sha256.c \
+	sha256.h \
+	mspack.c \
+	mspack.h \
+	cab.c \
+	cab.h \
+	entconv.c \
+	entconv.h \
+	entitylist.h \
+	encoding_aliases.h \
+	hashtab.c \
+	hashtab.h \
+	dconf.c \
+	dconf.h \
+	lockdb.c \
+	lockdb.h
 
 lib_LTLIBRARIES = libclamav.la

@@ -142,15 +142,15 @@ void AlertFast(Packet *p, char *msg, void *arg, Event *event)
     /* dump the timestamp */
     fwrite(timestamp, strlen(timestamp), 1, data->file);
 
-    if( p->packet_flags& PKT_INLINE_DROP ) fputs(" [Drop]",data->file);
+    if( p && (p->packet_flags & PKT_INLINE_DROP) ) fputs(" [Drop]",data->file);
 
     if(msg != NULL)
     {
 #ifdef MARK_TAGGED
         char c=' ';
-        if (p->packet_flags & PKT_REBUILT_STREAM)
+        if (p && (p->packet_flags & PKT_REBUILT_STREAM))
             c = 'R';
-        else if (p->packet_flags & PKT_REBUILT_FRAG)
+        else if (p && (p->packet_flags & PKT_REBUILT_FRAG))
             c = 'F';
         fprintf(data->file, " [**] %c ", c);
 #else

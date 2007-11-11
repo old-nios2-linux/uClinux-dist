@@ -20,7 +20,7 @@
 #include <linux/delayacct.h>
 
 int delayacct_on __read_mostly = 1;	/* Delay accounting turned on/off */
-kmem_cache_t *delayacct_cache;
+struct kmem_cache *delayacct_cache;
 
 static int __init delayacct_setup_disable(char *str)
 {
@@ -31,17 +31,13 @@ __setup("nodelayacct", delayacct_setup_disable);
 
 void delayacct_init(void)
 {
-	delayacct_cache = kmem_cache_create("delayacct_cache",
-					sizeof(struct task_delay_info),
-					0,
-					SLAB_PANIC,
-					NULL, NULL);
+	delayacct_cache = KMEM_CACHE(task_delay_info, SLAB_PANIC);
 	delayacct_tsk_init(&init_task);
 }
 
 void __delayacct_tsk_init(struct task_struct *tsk)
 {
-	tsk->delays = kmem_cache_zalloc(delayacct_cache, SLAB_KERNEL);
+	tsk->delays = kmem_cache_zalloc(delayacct_cache, GFP_KERNEL);
 	if (tsk->delays)
 		spin_lock_init(&tsk->delays->lock);
 }
@@ -103,9 +99,10 @@ void __delayacct_blkio_end(void)
 int __delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk)
 {
 	s64 tmp;
-	struct timespec ts;
-	unsigned long t1,t2,t3;
+	unsigned long t1;
+	unsigned long long t2, t3;
 	unsigned long flags;
+	struct timespec ts;
 
 	/* Though tsk->delays accessed later, early exit avoids
 	 * unnecessary returning of other data
@@ -128,11 +125,10 @@ int __delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk)
 
 	d->cpu_count += t1;
 
-	jiffies_to_timespec(t2, &ts);
-	tmp = (s64)d->cpu_delay_total + timespec_to_ns(&ts);
+	tmp = (s64)d->cpu_delay_total + t2;
 	d->cpu_delay_total = (tmp < (s64)d->cpu_delay_total) ? 0 : tmp;
 
-	tmp = (s64)d->cpu_run_virtual_total + (s64)jiffies_to_usecs(t3) * 1000;
+	tmp = (s64)d->cpu_run_virtual_total + t3;
 	d->cpu_run_virtual_total =
 		(tmp < (s64)d->cpu_run_virtual_total) ?	0 : tmp;
 

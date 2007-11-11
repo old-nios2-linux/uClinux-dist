@@ -1,7 +1,7 @@
 /*
- * $Id: strs.h,v 1.2 2002/09/19 12:23:55 jku Rel $
+ * $Id: strs.h,v 1.3 2004/08/24 09:01:29 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,7 +31,7 @@
 #define via1 0x3a616976   /* "via:" */
 /*
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -1,15 +1,18 @@
 #! /bin/sh
 #
-# Reconfigure the beast, rebuilding dependencies and updating version numbers
-# as appropriate.
+# Reconfigure for a release, by updating the Makefile dependencies and
+# running the autotools.
 #
-# $Id: reconf,v 1.1.1.1 1999/11/22 03:48:02 christ Exp $
+# $Id: reconf,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
 
+# make the existing config.h disappear temporarily
 if test -f config.h
 then
   mv -f config.h config.h.TMP
 fi
 touch config.h
+
+# rebuild dependencies (makedepend)
 for makefile in Makefile.am Makefile.uClinux
 do
   echo -n "Rebuilding $makefile..."
@@ -36,27 +39,22 @@ do
     echo "No change."
   fi
 done
+
+# restore the previous config.h
 rm -f config.h
 if test -f config.h.TMP
 then
   mv -f config.h.TMP config.h
 fi
-SCONF=samples/pptpd.conf
-echo -n "Updating version number in $SCONF..."
-sed 's/^# for PoPToP version .*$/# for PoPToP version '`./version`/ < $SCONF > $SCONF.new
-if ! cmp -s $SCONF.new $SCONF
-then
-  echo 'done.'
-  echo "Updated: <=old >=new"
-  diff $SCONF $SCONF.new | grep '^[<>]'
-  mv -f $SCONF.new $SCONF
-else
-  rm -f $SCONF.new
-  echo "no change."
-fi
+
+# show us what we do next
 set -x
+
+# reset the configuration
 rm -f config.cache
 rm -f config.log
+
+# run the build tools sequence
 aclocal
 autoconf
 automake -a --copy --verbose

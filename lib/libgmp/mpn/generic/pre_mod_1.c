@@ -1,69 +1,54 @@
-/* mpn_preinv_mod_1 (dividend_ptr, dividend_size, divisor_limb,
-		       divisor_limb_inverted) --
-   Divide (DIVIDEND_PTR,,DIVIDEND_SIZE) by the normalized DIVISOR_LIMB.
-   DIVISOR_LIMB_INVERTED should be 2^(2*BITS_PER_MP_LIMB) / DIVISOR_LIMB +
-   - 2^BITS_PER_MP_LIMB.
+/* mpn_preinv_mod_1 (up, un, d, dinv) -- Divide (UP,,UN) by the normalized D.
+   DINV should be 2^(2*GMP_LIMB_BITS) / D - 2^GMP_LIMB_BITS.
    Return the single-limb remainder.
 
-Copyright (C) 1991, 1993, 1994, Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 2000, 2001, 2002, 2004, 2005 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+The GNU MP Library is free software; you can redistribute it and/or modify it
+under the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
-License for more details.
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
+for more details.
 
-You should have received a copy of the GNU Library General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+You should have received a copy of the GNU Lesser General Public License along
+with the GNU MP Library; see the file COPYING.LIB.  If not, write to the Free
+Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-#ifndef UMUL_TIME
-#define UMUL_TIME 1
-#endif
 
-#ifndef UDIV_TIME
-#define UDIV_TIME UMUL_TIME
-#endif
+/* This function used to be documented, but is now considered obsolete.  It
+   continues to exist for binary compatibility, even when not required
+   internally.  */
 
 mp_limb_t
-#if __STDC__
-mpn_preinv_mod_1 (mp_srcptr dividend_ptr, mp_size_t dividend_size,
-		  mp_limb_t divisor_limb, mp_limb_t divisor_limb_inverted)
-#else
-mpn_preinv_mod_1 (dividend_ptr, dividend_size, divisor_limb, divisor_limb_inverted)
-     mp_srcptr dividend_ptr;
-     mp_size_t dividend_size;
-     mp_limb_t divisor_limb;
-     mp_limb_t divisor_limb_inverted;
-#endif
+mpn_preinv_mod_1 (mp_srcptr up, mp_size_t un, mp_limb_t d, mp_limb_t dinv)
 {
   mp_size_t i;
   mp_limb_t n0, r;
-  int dummy;
+  mp_limb_t dummy;
 
-  i = dividend_size - 1;
-  r = dividend_ptr[i];
+  ASSERT (un >= 1);
+  ASSERT (d & GMP_LIMB_HIGHBIT);
 
-  if (r >= divisor_limb)
-    r = 0;
-  else
-    i--;
+  r = up[un - 1];
+  if (r >= d)
+    r -= d;
 
-  for (; i >= 0; i--)
+  for (i = un - 2; i >= 0; i--)
     {
-      n0 = dividend_ptr[i];
-      udiv_qrnnd_preinv (dummy, r, r, n0, divisor_limb, divisor_limb_inverted);
+      n0 = up[i];
+      udiv_qrnnd_preinv (dummy, r, r, n0, d, dinv);
     }
   return r;
 }

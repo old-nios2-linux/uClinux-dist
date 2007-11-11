@@ -42,7 +42,6 @@
 #include <linux/highmem.h>
 #include <linux/init.h>
 #include <linux/string.h>
-#include <linux/smp_lock.h>
 #include <linux/backing-dev.h>
 
 #include <asm/uaccess.h>
@@ -61,12 +60,12 @@
 #define MLOG_MASK_PREFIX ML_DLMFS
 #include "cluster/masklog.h"
 
-static struct super_operations dlmfs_ops;
-static struct file_operations dlmfs_file_operations;
-static struct inode_operations dlmfs_dir_inode_operations;
-static struct inode_operations dlmfs_root_inode_operations;
-static struct inode_operations dlmfs_file_inode_operations;
-static kmem_cache_t *dlmfs_inode_cache;
+static const struct super_operations dlmfs_ops;
+static const struct file_operations dlmfs_file_operations;
+static const struct inode_operations dlmfs_dir_inode_operations;
+static const struct inode_operations dlmfs_root_inode_operations;
+static const struct inode_operations dlmfs_file_inode_operations;
+static struct kmem_cache *dlmfs_inode_cache;
 
 struct workqueue_struct *user_dlm_worker;
 
@@ -176,7 +175,7 @@ static ssize_t dlmfs_file_read(struct file *filp,
 	int bytes_left;
 	ssize_t readlen;
 	char *lvb_buf;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 
 	mlog(0, "inode %lu, count = %zu, *ppos = %llu\n",
 		inode->i_ino, count, *ppos);
@@ -220,7 +219,7 @@ static ssize_t dlmfs_file_write(struct file *filp,
 	int bytes_left;
 	ssize_t writelen;
 	char *lvb_buf;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 
 	mlog(0, "inode %lu, count = %zu, *ppos = %llu\n",
 		inode->i_ino, count, *ppos);
@@ -257,26 +256,23 @@ static ssize_t dlmfs_file_write(struct file *filp,
 }
 
 static void dlmfs_init_once(void *foo,
-			    kmem_cache_t *cachep,
+			    struct kmem_cache *cachep,
 			    unsigned long flags)
 {
 	struct dlmfs_inode_private *ip =
 		(struct dlmfs_inode_private *) foo;
 
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR) {
-		ip->ip_dlm = NULL;
-		ip->ip_parent = NULL;
+	ip->ip_dlm = NULL;
+	ip->ip_parent = NULL;
 
-		inode_init_once(&ip->ip_vfs_inode);
-	}
+	inode_init_once(&ip->ip_vfs_inode);
 }
 
 static struct inode *dlmfs_alloc_inode(struct super_block *sb)
 {
 	struct dlmfs_inode_private *ip;
 
-	ip = kmem_cache_alloc(dlmfs_inode_cache, SLAB_NOFS);
+	ip = kmem_cache_alloc(dlmfs_inode_cache, GFP_NOFS);
 	if (!ip)
 		return NULL;
 
@@ -540,27 +536,27 @@ static int dlmfs_fill_super(struct super_block * sb,
 	return 0;
 }
 
-static struct file_operations dlmfs_file_operations = {
+static const struct file_operations dlmfs_file_operations = {
 	.open		= dlmfs_file_open,
 	.release	= dlmfs_file_release,
 	.read		= dlmfs_file_read,
 	.write		= dlmfs_file_write,
 };
 
-static struct inode_operations dlmfs_dir_inode_operations = {
+static const struct inode_operations dlmfs_dir_inode_operations = {
 	.create		= dlmfs_create,
 	.lookup		= simple_lookup,
 	.unlink		= dlmfs_unlink,
 };
 
 /* this way we can restrict mkdir to only the toplevel of the fs. */
-static struct inode_operations dlmfs_root_inode_operations = {
+static const struct inode_operations dlmfs_root_inode_operations = {
 	.lookup		= simple_lookup,
 	.mkdir		= dlmfs_mkdir,
 	.rmdir		= simple_rmdir,
 };
 
-static struct super_operations dlmfs_ops = {
+static const struct super_operations dlmfs_ops = {
 	.statfs		= simple_statfs,
 	.alloc_inode	= dlmfs_alloc_inode,
 	.destroy_inode	= dlmfs_destroy_inode,
@@ -568,7 +564,7 @@ static struct super_operations dlmfs_ops = {
 	.drop_inode	= generic_delete_inode,
 };
 
-static struct inode_operations dlmfs_file_inode_operations = {
+static const struct inode_operations dlmfs_file_inode_operations = {
 	.getattr	= simple_getattr,
 };
 
@@ -596,7 +592,7 @@ static int __init init_dlmfs_fs(void)
 				sizeof(struct dlmfs_inode_private),
 				0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 					SLAB_MEM_SPREAD),
-				dlmfs_init_once, NULL);
+				dlmfs_init_once);
 	if (!dlmfs_inode_cache)
 		return -ENOMEM;
 	cleanup_inode = 1;

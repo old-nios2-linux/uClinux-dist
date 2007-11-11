@@ -83,8 +83,11 @@ _start:
 	move.l	%d0, %sp			/* Set up initial stack ptr */
 	move.l	%d0, _ramend			/* Set end ram addr */
 	
+#if !defined(CONFIG_UCBOOTSTRAP)
 	/* jsr	disablecache */
 	 jsr	enablecache 
+#else /* allow bootloader to override */
+#endif
 
 
 #if defined(CONFIG_ROMFS_IMAGE)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006 QLogic, Inc. All rights reserved.
+ * Copyright (c) 2006, 2007 QLogic Corporation. All rights reserved.
  * Copyright (c) 2005, 2006 PathScale, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include <rdma/ib_umem.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_smi.h>
 
@@ -54,6 +55,8 @@ static inline struct ipath_fmr *to_ifmr(struct ib_fmr *ibfmr)
  * @acc: access flags
  *
  * Returns the memory region on success, otherwise returns an errno.
+ * Note that all DMA addresses should be created via the
+ * struct ib_dma_mapping_ops functions (see ipath_dma.c).
  */
 struct ib_mr *ipath_get_dma_mr(struct ib_pd *pd, int acc)
 {
@@ -145,12 +148,12 @@ struct ib_mr *ipath_reg_phys_mr(struct ib_pd *pd,
 	mr->mr.offset = 0;
 	mr->mr.access_flags = acc;
 	mr->mr.max_segs = num_phys_buf;
+	mr->umem = NULL;
 
 	m = 0;
 	n = 0;
 	for (i = 0; i < num_phys_buf; i++) {
-		mr->mr.map[m]->segs[n].vaddr =
-			phys_to_virt(buffer_list[i].addr);
+		mr->mr.map[m]->segs[n].vaddr = (void *) buffer_list[i].addr;
 		mr->mr.map[m]->segs[n].length = buffer_list[i].size;
 		mr->mr.length += buffer_list[i].size;
 		n++;
@@ -169,50 +172,66 @@ bail:
 /**
  * ipath_reg_user_mr - register a userspace memory region
  * @pd: protection domain for this memory region
- * @region: the user memory region
+ * @start: starting userspace address
+ * @length: length of region to register
+ * @virt_addr: virtual address to use (from HCA's point of view)
  * @mr_access_flags: access flags for this memory region
  * @udata: unused by the InfiniPath driver
  *
  * Returns the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *ipath_reg_user_mr(struct ib_pd *pd, struct ib_umem *region,
-				int mr_access_flags, struct ib_udata *udata)
+struct ib_mr *ipath_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+				u64 virt_addr, int mr_access_flags,
+				struct ib_udata *udata)
 {
 	struct ipath_mr *mr;
+	struct ib_umem *umem;
 	struct ib_umem_chunk *chunk;
 	int n, m, i;
 	struct ib_mr *ret;
 
-	if (region->length == 0) {
+	if (length == 0) {
 		ret = ERR_PTR(-EINVAL);
 		goto bail;
 	}
 
+	umem = ib_umem_get(pd->uobject->context, start, length, mr_access_flags);
+	if (IS_ERR(umem))
+		return (void *) umem;
+
 	n = 0;
-	list_for_each_entry(chunk, &region->chunk_list, list)
+	list_for_each_entry(chunk, &umem->chunk_list, list)
 		n += chunk->nents;
 
 	mr = alloc_mr(n, &to_idev(pd->device)->lk_table);
 	if (!mr) {
 		ret = ERR_PTR(-ENOMEM);
+		ib_umem_release(umem);
 		goto bail;
 	}
 
 	mr->mr.pd = pd;
-	mr->mr.user_base = region->user_base;
-	mr->mr.iova = region->virt_base;
-	mr->mr.length = region->length;
-	mr->mr.offset = region->offset;
+	mr->mr.user_base = start;
+	mr->mr.iova = virt_addr;
+	mr->mr.length = length;
+	mr->mr.offset = umem->offset;
 	mr->mr.access_flags = mr_access_flags;
 	mr->mr.max_segs = n;
+	mr->umem = umem;
 
 	m = 0;
 	n = 0;
-	list_for_each_entry(chunk, &region->chunk_list, list) {
-		for (i = 0; i < chunk->nmap; i++) {
-			mr->mr.map[m]->segs[n].vaddr =
-				page_address(chunk->page_list[i].page);
-			mr->mr.map[m]->segs[n].length = region->page_size;
+	list_for_each_entry(chunk, &umem->chunk_list, list) {
+		for (i = 0; i < chunk->nents; i++) {
+			void *vaddr;
+
+			vaddr = page_address(chunk->page_list[i].page);
+			if (!vaddr) {
+				ret = ERR_PTR(-EINVAL);
+				goto bail;
+			}
+			mr->mr.map[m]->segs[n].vaddr = vaddr;
+			mr->mr.map[m]->segs[n].length = umem->page_size;
 			n++;
 			if (n == IPATH_SEGSZ) {
 				m++;
@@ -246,6 +265,10 @@ int ipath_dereg_mr(struct ib_mr *ibmr)
 		i--;
 		kfree(mr->mr.map[i]);
 	}
+
+	if (mr->umem)
+		ib_umem_release(mr->umem);
+
 	kfree(mr);
 	return 0;
 }
@@ -347,7 +370,7 @@ int ipath_map_phys_fmr(struct ib_fmr *ibfmr, u64 * page_list,
 	n = 0;
 	ps = 1 << fmr->page_shift;
 	for (i = 0; i < list_len; i++) {
-		fmr->mr.map[m]->segs[n].vaddr = phys_to_virt(page_list[i]);
+		fmr->mr.map[m]->segs[n].vaddr = (void *) page_list[i];
 		fmr->mr.map[m]->segs[n].length = ps;
 		if (++n == IPATH_SEGSZ) {
 			m++;

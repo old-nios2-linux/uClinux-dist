@@ -239,7 +239,7 @@ static void setup_tsb_params(struct mm_struct *mm, unsigned long tsb_idx, unsign
 	}
 }
 
-static kmem_cache_t *tsb_caches[8] __read_mostly;
+static struct kmem_cache *tsb_caches[8] __read_mostly;
 
 static const char *tsb_cache_names[8] = {
 	"tsb_8KB",
@@ -252,7 +252,7 @@ static const char *tsb_cache_names[8] = {
 	"tsb_1MB",
 };
 
-void __init tsb_cache_init(void)
+void __init pgtable_cache_init(void)
 {
 	unsigned long i;
 
@@ -262,9 +262,7 @@ void __init tsb_cache_init(void)
 
 		tsb_caches[i] = kmem_cache_create(name,
 						  size, size,
-						  SLAB_HWCACHE_ALIGN |
-						  SLAB_MUST_HWCACHE_ALIGN,
-						  NULL, NULL);
+						  0, NULL);
 		if (!tsb_caches[i]) {
 			prom_printf("Could not create %s cache\n", name);
 			prom_halt();

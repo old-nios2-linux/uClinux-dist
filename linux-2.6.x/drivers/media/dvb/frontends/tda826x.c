@@ -42,8 +42,7 @@ struct tda826x_priv {
 
 static int tda826x_release(struct dvb_frontend *fe)
 {
-	if (fe->tuner_priv)
-		kfree(fe->tuner_priv);
+	kfree(fe->tuner_priv);
 	fe->tuner_priv = NULL;
 	return 0;
 }
@@ -90,8 +89,8 @@ static int tda826x_set_params(struct dvb_frontend *fe, struct dvb_frontend_param
 	buf[2] = (1<<5) | 0x0b; // 1Mhz + 0.45 VCO
 	buf[3] = div >> 7;
 	buf[4] = div << 1;
-	buf[5] = 0xff; // basedband filter to max
-	buf[6] = 0xfe; // gains at max + no RF attenuation
+	buf[5] = 0x77; // baseband cut-off 19 MHz
+	buf[6] = 0xfe; // baseband gain 9 db + no RF attenuation
 	buf[7] = 0x83; // charge pumps at high, tests off
 	buf[8] = 0x80; // recommended value 4 for AMPVCO + disable ports.
 	buf[9] = 0x1a; // normal caltime + recommended values for SELTH + SELVTL
@@ -133,18 +132,21 @@ struct dvb_frontend *tda826x_attach(struct dvb_frontend *fe, int addr, struct i2
 {
 	struct tda826x_priv *priv = NULL;
 	u8 b1 [] = { 0, 0 };
-	struct i2c_msg msg = { .addr = addr, .flags = I2C_M_RD, .buf = b1, .len = 2 };
+	struct i2c_msg msg[2] = {
+		{ .addr = addr, .flags = 0,        .buf = NULL, .len = 0 },
+		{ .addr = addr, .flags = I2C_M_RD, .buf = b1, .len = 2 }
+	};
 	int ret;
 
 	dprintk("%s:\n", __FUNCTION__);
 
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 1);
-	ret = i2c_transfer (i2c, &msg, 1);
+	ret = i2c_transfer (i2c, msg, 2);
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 0);
 
-	if (ret != 1)
+	if (ret != 2)
 		return NULL;
 	if (!(b1[1] & 0x80))
 		return NULL;

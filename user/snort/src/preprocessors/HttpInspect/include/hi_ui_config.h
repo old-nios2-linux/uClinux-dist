@@ -72,6 +72,7 @@ typedef struct s_HTTPINSPECT_CONF
     int  port_count;
     char ports[65536];
     int  flow_depth;
+    int  post_depth;
 
     /*
     **  Unicode mapping for IIS servers

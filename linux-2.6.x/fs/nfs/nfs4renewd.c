@@ -43,8 +43,6 @@
  * child task framework of the RPC layer?
  */
 
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/sunrpc/sched.h>
@@ -59,9 +57,10 @@
 #define NFSDBG_FACILITY	NFSDBG_PROC
 
 void
-nfs4_renew_state(void *data)
+nfs4_renew_state(struct work_struct *work)
 {
-	struct nfs_client *clp = (struct nfs_client *)data;
+	struct nfs_client *clp =
+		container_of(work, struct nfs_client, cl_renewd.work);
 	struct rpc_cred *cred;
 	long lease, timeout;
 	unsigned long last, now;
@@ -128,16 +127,15 @@ nfs4_schedule_state_renewal(struct nfs_client *clp)
 void
 nfs4_renewd_prepare_shutdown(struct nfs_server *server)
 {
-	flush_scheduled_work();
+	cancel_delayed_work(&server->nfs_client->cl_renewd);
 }
 
 void
 nfs4_kill_renewd(struct nfs_client *clp)
 {
 	down_read(&clp->cl_sem);
-	cancel_delayed_work(&clp->cl_renewd);
+	cancel_delayed_work_sync(&clp->cl_renewd);
 	up_read(&clp->cl_sem);
-	flush_scheduled_work();
 }
 
 /*

@@ -111,21 +111,42 @@
 #define E1000_TCTL_NRTU   0x02000000    /* No Re-transmit on underrun */
 
 /* PCI Device IDs */
-#define E1000_DEV_ID_82542          0x1000
-#define E1000_DEV_ID_82543GC_FIBER  0x1001
-#define E1000_DEV_ID_82543GC_COPPER 0x1004
-#define E1000_DEV_ID_82544EI_COPPER 0x1008
-#define E1000_DEV_ID_82544EI_FIBER  0x1009
-#define E1000_DEV_ID_82544GC_COPPER 0x100C
-#define E1000_DEV_ID_82544GC_LOM    0x100D
-#define E1000_DEV_ID_82540EM        0x100E
-#define E1000_DEV_ID_82540EM_LOM    0x1015
-#define E1000_DEV_ID_82545EM_COPPER 0x100F
-#define E1000_DEV_ID_82545EM_FIBER  0x1011
-#define E1000_DEV_ID_82546EB_COPPER 0x1010
-#define E1000_DEV_ID_82546EB_FIBER  0x1012
-#define E1000_DEV_ID_82541EI_COPPER 0x1013
-#define E1000_DEV_ID_82547EI_COPPER 0x1019
+#define E1000_DEV_ID_82542               0x1000
+#define E1000_DEV_ID_82543GC_FIBER       0x1001
+#define E1000_DEV_ID_82543GC_COPPER      0x1004
+#define E1000_DEV_ID_82544EI_COPPER      0x1008
+#define E1000_DEV_ID_82544EI_FIBER       0x1009
+#define E1000_DEV_ID_82544GC_COPPER      0x100C
+#define E1000_DEV_ID_82544GC_LOM         0x100D
+#define E1000_DEV_ID_82540EM             0x100E
+#define E1000_DEV_ID_82540EM_LOM         0x1015
+#define E1000_DEV_ID_82540EP_LOM         0x1016
+#define E1000_DEV_ID_82540EP             0x1017
+#define E1000_DEV_ID_82540EP_LP          0x101E
+#define E1000_DEV_ID_82545EM_COPPER      0x100F
+#define E1000_DEV_ID_82545EM_FIBER       0x1011
+#define E1000_DEV_ID_82545GM_COPPER      0x1026
+#define E1000_DEV_ID_82545GM_FIBER       0x1027
+#define E1000_DEV_ID_82545GM_SERDES      0x1028
+#define E1000_DEV_ID_82546EB_COPPER      0x1010
+#define E1000_DEV_ID_82546EB_FIBER       0x1012
+#define E1000_DEV_ID_82546EB_QUAD_COPPER 0x101D
+#define E1000_DEV_ID_82541EI             0x1013
+#define E1000_DEV_ID_82541EI_MOBILE      0x1018
+#define E1000_DEV_ID_82541ER             0x1078
+#define E1000_DEV_ID_82547GI             0x1075
+#define E1000_DEV_ID_82541GI             0x1076
+#define E1000_DEV_ID_82541GI_MOBILE      0x1077
+#define E1000_DEV_ID_82541GI_LF          0x107C
+#define E1000_DEV_ID_82546GB_COPPER      0x1079
+#define E1000_DEV_ID_82546GB_FIBER       0x107A
+#define E1000_DEV_ID_82546GB_SERDES      0x107B
+#define E1000_DEV_ID_82546GB_PCIE        0x108A
+#define E1000_DEV_ID_82547EI             0x1019
+#define E1000_DEV_ID_82573E              0x108B
+#define E1000_DEV_ID_82573E_IAMT         0x108C
+
+#define E1000_DEV_ID_82546GB_QUAD_COPPER 0x1099
 
 #define E1000_82542_2_0_REV_ID 2
 #define E1000_82542_2_1_REV_ID 3
@@ -140,9 +161,14 @@ enum e1000_mac_type {
 	e1000_82544,
 	e1000_82540,
 	e1000_82545,
+	e1000_82545_rev_3,
 	e1000_82546,
+	e1000_82546_rev_3,
 	e1000_82541,
+	e1000_82541_rev_2,
 	e1000_82547,
+	e1000_82547_rev_2,
+	e1000_82573,
 	e1000_num_macs
 };
 
@@ -175,32 +201,63 @@ e1000_get_mac_type(u16 device_id, u8 revision_id)
 		mac_type = e1000_82544;
 		break;
 	case E1000_DEV_ID_82540EM:
+	case E1000_DEV_ID_82540EM_LOM:
+	case E1000_DEV_ID_82540EP:
+	case E1000_DEV_ID_82540EP_LOM:
+	case E1000_DEV_ID_82540EP_LP:
 		mac_type = e1000_82540;
 		break;
 	case E1000_DEV_ID_82545EM_COPPER:
 	case E1000_DEV_ID_82545EM_FIBER:
 		mac_type = e1000_82545;
 		break;
+	case E1000_DEV_ID_82545GM_COPPER:
+	case E1000_DEV_ID_82545GM_FIBER:
+	case E1000_DEV_ID_82545GM_SERDES:
+		mac_type = e1000_82545_rev_3;
+		break;
 	case E1000_DEV_ID_82546EB_COPPER:
 	case E1000_DEV_ID_82546EB_FIBER:
+	case E1000_DEV_ID_82546EB_QUAD_COPPER:
 		mac_type = e1000_82546;
 		break;
-	case E1000_DEV_ID_82541EI_COPPER:
+	case E1000_DEV_ID_82546GB_COPPER:
+	case E1000_DEV_ID_82546GB_FIBER:
+	case E1000_DEV_ID_82546GB_SERDES:
+	case E1000_DEV_ID_82546GB_PCIE:
+	case E1000_DEV_ID_82546GB_QUAD_COPPER:
+		mac_type = e1000_82546_rev_3;
+		break;
+	case E1000_DEV_ID_82541EI:
+	case E1000_DEV_ID_82541EI_MOBILE:
 		mac_type = e1000_82541;
 		break;
-	case E1000_DEV_ID_82547EI_COPPER:
+	case E1000_DEV_ID_82541ER:
+	case E1000_DEV_ID_82541GI:
+	case E1000_DEV_ID_82541GI_LF:
+	case E1000_DEV_ID_82541GI_MOBILE:
+		mac_type = e1000_82541_rev_2;
+		break;
+	case E1000_DEV_ID_82547EI:
 		mac_type = e1000_82547;
+		break;
+	case E1000_DEV_ID_82547GI:
+		mac_type = e1000_82547_rev_2;
+		break;
+	case E1000_DEV_ID_82573E:
+	case E1000_DEV_ID_82573E_IAMT:
+		mac_type = e1000_82573;
 		break;
 	default:
 		/* list of supported devices probably needs updating */
-		mac_type = e1000_undefined;
+		mac_type = e1000_82543;
 		break;
 	}
 
 	return mac_type;
 }
 
-int 
+int
 e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 {
 	u32 *regs_buff = (u32 *)regs->data;
@@ -209,7 +266,7 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	u8 version = (u8)(regs->version >> 24);
 	enum e1000_mac_type mac_type;
 	u32 reg;
-	
+
 	if(version != 1)
 		return -1;
 
@@ -225,7 +282,6 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	reg = regs_buff[0];
 	fprintf(stdout,
 		"0x00000: CTRL (Device control register)  0x%08X\n"
-		"      Duplex:                            %s\n"
 		"      Endian mode (buffers):             %s\n"
 		"      Link reset:                        %s\n"
 		"      Set link up:                       %s\n"
@@ -234,7 +290,6 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Transmit flow control:             %s\n"
 		"      VLAN mode:                         %s\n",
 		reg,
-		reg & E1000_CTRL_FD     ? "full"     : "half",
 		reg & E1000_CTRL_BEM    ? "big"      : "little",
 		reg & E1000_CTRL_LRST   ? "reset"    : "normal",
 		reg & E1000_CTRL_SLU    ? "1"        : "0",
@@ -256,7 +311,7 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		reg & E1000_CTRL_FRCSPD ? "yes"      : "no",
 		reg & E1000_CTRL_FRCDPX ? "yes"      : "no");
 	}
-		
+
 	/* Device status register */
 	reg = regs_buff[1];
 	fprintf(stdout,
@@ -266,7 +321,23 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		reg,
 		reg & E1000_STATUS_FD      ? "full"        : "half",
 		reg & E1000_STATUS_LU      ? "link config" : "no link config");
-	if(mac_type >= e1000_82543) {
+	if(mac_type >= e1000_82573) {
+	fprintf(stdout,
+		"      TBI mode:                          %s\n"
+		"      Link speed:                        %s\n"
+		"      Bus type:                          %s\n"
+		"      Port number:                       %s\n",
+		reg & E1000_STATUS_TBIMODE ? "enabled"     : "disabled",
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_10   ?
+		"10Mb/s" :
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_100  ?
+		"100Mb/s" :
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_1000 ?
+		"1000Mb/s" : "not used",
+		"PCI Express",
+		(reg & E1000_STATUS_FUNC_MASK) == 0 ? "0" : "1");
+	}
+	else if(mac_type >= e1000_82543) {
 	fprintf(stdout,
 		"      TBI mode:                          %s\n"
 		"      Link speed:                        %s\n"
@@ -274,11 +345,11 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Bus speed:                         %s\n"
 		"      Bus width:                         %s\n",
 		reg & E1000_STATUS_TBIMODE ? "enabled"     : "disabled",
-		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_10   ? 
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_10   ?
 		"10Mb/s" :
-		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_100  ? 
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_100  ?
 		"100Mb/s" :
-		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_1000 ? 
+		(reg & E1000_STATUS_SPEED_MASK) == E1000_STATUS_SPEED_1000 ?
 		"1000Mb/s" : "not used",
 		(reg & E1000_STATUS_PCIX_MODE) ? "PCI-X" : "PCI",
 		(reg & E1000_STATUS_PCIX_MODE) ?
@@ -288,7 +359,7 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 			((reg & E1000_STATUS_PCI66) ? "66MHz" : "33MHz"),
 		(reg & E1000_STATUS_BUS64) ? "64-bit" : "32-bit");
 	}
-		
+
 	/* Receive control register */
 	reg = regs_buff[2];
 	fprintf(stdout,
@@ -322,7 +393,7 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	if(mac_type >= e1000_82543) {
 	fprintf(stdout,
 		"      Receive buffer size:               %s\n",
-		reg & E1000_RCTL_BSEX    ? 
+		reg & E1000_RCTL_BSEX    ?
 			((reg & E1000_RCTL_SZ)==E1000_RCTL_SZ_16384 ? "16384" :
 			 (reg & E1000_RCTL_SZ)==E1000_RCTL_SZ_8192  ? "8192"  :
 			 (reg & E1000_RCTL_SZ)==E1000_RCTL_SZ_4096  ? "4096"  :
@@ -339,7 +410,7 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		(reg & E1000_RCTL_SZ) == E1000_RCTL_SZ_512   ? "512"   :
 		"256");
 	}
-		
+
 	/* Receive descriptor registers */
 	fprintf(stdout,
 		"0x02808: RDLEN (Receive desc length)     0x%08X\n",
@@ -368,9 +439,9 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	if(mac_type >= e1000_82543) {
 	fprintf(stdout,
 		"      Re-transmit on late collision:     %s\n",
-		reg & E1000_TCTL_RTLC     ? "enabled"  : "disabled");
+		reg & E1000_TCTL_RTLC    ? "enabled"  : "disabled");
 	}
-		
+
 	/* Transmit descriptor registers */
 	fprintf(stdout,
 		"0x03808: TDLEN (Transmit desc length)    0x%08X\n",
@@ -384,6 +455,13 @@ e1000_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	fprintf(stdout,
 		"0x03820: TIDV  (Transmit delay timer)    0x%08X\n",
 		regs_buff[11]);
+
+	/* PHY type */
+	fprintf(stdout,
+		"PHY type:                                %s\n",
+		regs_buff[12] == 0 ? "M88" :
+		regs_buff[12] == 1 ? "IGP" :
+		regs_buff[12] == 2 ? "IGP2" : "unknown" );
 
 	return 0;
 }

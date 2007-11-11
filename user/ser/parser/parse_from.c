@@ -1,7 +1,7 @@
 /*
- * $Id: parse_from.c,v 1.3 2002/12/03 11:45:52 bogdan Exp $
+ * $Id: parse_from.c,v 1.4 2004/08/24 09:01:25 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

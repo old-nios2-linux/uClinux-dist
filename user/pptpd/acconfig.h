@@ -3,7 +3,7 @@
  *
  * Additional autoconf defines for this program.
  *
- * $Id: acconfig.h,v 1.1.1.1 1999/11/22 03:48:02 christ Exp $
+ * $Id: acconfig.h,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
  */
 
 /* Use BSD User land PPP? */
@@ -12,8 +12,8 @@
 /* Use SLIRP? */
 #undef SLIRP
 
-/* Let PPPD choose the IP addresses? */
-#undef PPPD_IP_ALLOC
+/* Enable Broadcast Relay? */
+#undef BCRELAY
 
 /* Work as a PNS rather than a PAC? */
 #undef PNS_MODE
@@ -23,6 +23,9 @@
 
 /* Where is my pppd? */
 #undef PPP_BINARY
+
+/* Syslog Facility to use?  See openlog(3). */
+#undef PPTP_FACILITY
 
 /* Have libwrap? */
 #undef HAVE_LIBWRAP

@@ -1,7 +1,7 @@
 /*
- * $Id: receive.h,v 1.5 2002/12/12 21:46:38 andrei Exp $
+ * $Id: receive.h,v 1.6 2004/08/24 08:45:10 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

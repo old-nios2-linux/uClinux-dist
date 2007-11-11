@@ -1,3 +1,59 @@
+2006-05-31  Stephen Hemminger  <shemminger@zqx3.pdx.osdl.net>
+
+	* Fixed bug where setting port priority set path cost instead
+
+2006-01-31  Stephen Hemminger  <shemminger@osdl.org>
+
+	* Released bridge-utils 1.1
+	* Change to use libsysfs 2.0
+
+2005-03-16  Stephen Hemminger  <shemminger@osdl.org>
+
+	* Released bridge-utils 1.0.6
+	* Fix for libsys detection (for FC)
+	* Update autoconf usage
+	* Allow multiple interfaces for addif,delif
+
+2004-12-02  Stephen Hemminger  <shemminger@osdl.org>
+
+	* Released bridge-utils 1.0.5
+	* Remove brctld out of date, buggy not used
+	* Cleanup command line help and error messages
+	* Fix segv with wrong # of args to 'brctl stp'
+	
+
+20040601	Stephen Hemminger <shemminger@osdl.org>
+	* Released bridge-utils 1.0.4
+	  - should build with out sysfs now.
+	  - report errors on foreach_port failing
+	  - more build cleanup
+
+20040525	Stephen Hemminger <shemminger@osdl.org>
+	* Released bridge-utils 1.0.1
+	  - Change configure option 
+	    from --with-linux=<path>
+	    to   --with-linux-headers=<path>
+	    so options match help message.
+	  - Fix so utilities work with earlier 2.6 kernels that
+	    have sysfs but not new ioctl's or directories yet.
+	  - Build spec file from template.
+	
+20040524	Stephen Hemminger <shemminger@osdl.org>
+	* Released bridge-utils 1.0
+	  - Use sysfs to control bridge parameters
+	  - Add new ioctl syntax to handle mixed 32/64 bit mode
+	    (Earlier method would not work on all platforms).
+	  - Change libbbridge API to do work as needed, rather
+	    than reading all bridges/ports at startup. Old way
+	    would not scale with 1000's of entries
+	  - Minor cleanups.
+
+20040401	Stephen Hemminger <shemminger@osdl.org>
+	* Releases bridge-utils 0.9.7
+	  - add -V option
+	  - support 100's of bridge ports
+	  - minor bug fixes
+
 20021002	Lennert Buytenhek <buytenh@gnu.org>
 
 	* Released bridge-utils 0.9.6.

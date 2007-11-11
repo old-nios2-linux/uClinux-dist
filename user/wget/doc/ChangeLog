@@ -1,6 +1,291 @@
+2005-09-02  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* sample.wgetrc: Rewrite the "passive FTP" paragraph to better
+	reflect reality.
+
+2005-08-09  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Wgetrc Commands): Removed documentation for the now
+	deleted command "kill_longer".
+
+2005-06-28  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Logging and Input File Options): Don't claim that
+	--base requires --force-html to work.
+
+2005-06-25  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Update -4/-6 documentation to
+	reflect the fact that we no longer use AI_ADDRCONFIG.
+
+2005-06-24  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* gpl.texi (GNU General Public License): Split GPL text into a
+	separate file and include it from wget.texi.  Used the latest
+	template from gnu.org with the updated address of the FSF.
+
+2005-06-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* version.texi: Bump version to 1.10.1.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Mailing List): Remove reference to the wget-cvs list,
+	which no longer exists.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Use the more standard authorship phrase "and others".
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Overview): Remove explicit vertical spacing.
+
+2005-06-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* texinfo.tex: Update with a non-prehistoric version.
+
+2005-06-16  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Logging and Input File Options): It's --no-verbose,
+	not --non-verbose.
+
+2005-06-06  Keith Moore  <keithmo@exmsft.com>
+
+	* Makefile.in: Fix a harmless (but annoying) installation warning.
+
+2005-05-30  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTP Options): Removed statement that redirect in
+	response to POST is "technically disallowed", which I cannot find
+	in rfc2616 nor in rfc1945.  Even if that were technically the
+	case, the widespreadedness of such responses would make the
+	prohibition irrelevant.
+
+2005-05-14  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Overview): Document --[no-]proxy as primarily being
+	used to turn *off* the use of proxies.
+
+2005-05-11  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTPS (SSL/TLS) Options): Explain certificate
+	checking in more detail.
+
+2005-05-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* texi2pod.pl.in: Allow an "EXAMPLES" section.
+
+2005-05-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTP Options): Document empty user-agent.
+
+2005-05-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Explain that the read timeout
+	really refers to idle timeout.
+	(Download Options): Mention that decimal and subsecond values may
+	be used for timeouts.
+
+2005-05-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: We're using GFDL 1.2, not 1.1.
+
+2005-05-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Contributors): Updated.
+
+2005-04-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Fix bind address cindex entry that
+	broke concept index generation.
+
+2005-04-27  Mauro Tortonesi  <mauro@ferrara.linux.it>
+
+	* wget.texi: Fixed a broken reference to Security Considerations
+	section in tex-generated documents (like the man page).
+
+2005-04-27  Mauro Tortonesi  <mauro@ferrara.linux.it>
+
+	* wget.texi: Document --user, --password, --ftp-user and the
+	corresponding Wgetrc command. Renamed --ftp-passwd to --ftp-password,
+	--http-passwd to --http-passwd and --proxy-passwd to proxy_password.
+	Renamed ftp_passwd to ftp_password, http_passwd to http_passwd and
+	proxy_passwd to proxy_password. Removed documentation for the
+	deprecated login command.
+
+2005-04-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTPS (SSL/TLS) Options): Document --random-file.
+
+2005-04-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Improve wording of command descriptions.
+
+2005-04-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTP Options): Mention --keep-session-cookies when
+	documenting --post-data.
+
+2005-04-27  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Document the new form of SSL/TLS options.
+
+2005-04-26  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTP Options): Improved entry on
+	--keep-session-cookies.
+
+2005-04-26  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Directory Options): Removed stray text after
+	--protocol-directories.
+
+2005-04-26  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Option Syntax): Document boolean options.  Include
+	the option syntax in the man page.
+	(Directory Options): Removed stray text after --protocol-directories.
+
+2005-04-25  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Advanced Usage): Don't advertise the non-existent
+	`-s' option.
+
+2005-04-25  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Document --retry-connrefused.
+
+2005-04-25  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* Makefile.in (wget.info): Depend on version.texi as well.
+
+	* wget.texi: Simplify copyright.  Replace remaining instances of
+	--OPTION=off with --no-OPTION.
+
+2005-04-24  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Document --prefer-family.
+
+2005-04-24  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Don't claim that -6 accepts mapped
+	IPv4 addresses.
+
+2005-04-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Documented the SSL command-line options.
+
+2005-04-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Wgetrc Commands): Document ftp_passwd.
+	(FTP Options): Document --ftp-passwd.
+
+2005-04-23  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* texi2pod.pl.in: First process @@ then @}, so @samp{-wget@@} is
+	interpreted correctly.
+
+2005-04-20  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Document behavior of -6 wrt mapped IPv4 addresses.
+
+2005-04-20  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Document IPv6 related options.
+
+2005-04-18  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Update mailing list information.
+
+2005-04-18  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Don't claim that --no-dns-cache is
+	necessary for dyndns servers -- it's not.
+
+2005-04-08  Larry Jones  <lawrence.jones@ugsplm.com>
+
+	* Makefile.in (wget.info): Don't use $< in an explicit rule.
+
+2005-03-22  Joseph Caretto  <jcaretto@pitt.edu>
+
+	* texi2pod.pl.in: Handle asis again.  It used to work (see the
+	2001-12-11 entry), but the local change was lost in the upgrade
+	to 1.4.
+
+2005-02-11  Mauro Tortonesi  <mauro@ferrara.linux.it>
+	
+	* wget.texi: Added Simone Piunno as new contributor.
+	
+2005-01-01  Mauro Tortonesi  <mauro@ferrara.linux.it>
+
+	* wget.texi: Updated copyright information, added new contributors.
+
+2004-11-20  Hans-Andreas Engel  <engel@node.ch>
+	
+	* wget.texi: Describe limitations of combining `-O' with `-k'.
+
+2004-05-13  Nico R.  <n-roeser@gmx.net>
+
+	* Makefile.in: Allow building in a separate tree with source tree
+	write-protected.
+
+2004-02-22  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Contributors): Updated.
+
+2004-02-12  Jens Roesner  <jens.roesner@gmx.de>
+
+	* wget.texi (Wgetrc Commands): Document `-e' here.
+
+2004-02-08  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Security Considerations): Put @item contents on a
+	separate line.
+	Reported by Ted Rodriguez-Bell.
+
+2004-02-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Wgetrc Commands): Document --no-http-keep-alive and
+	the corresponding Wgetrc command.
+
+2003-12-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Download Options): Don't incorrectly claim that `-O'
+	sets the number of retries to 1.
+
+2003-12-06  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Document the new option `--protocol-directories'.
+
+2003-11-15  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (Portability): Update slightly.
+
+2003-11-15  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: Documented that --dont-remove-listing is now
+	--no-remove-listing.
+
+2003-11-14  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* fdl.texi: New file.
+
+	* wget.texi: Upgrade to GNU Free Documentation License 1.2.
+
 2003-11-09  Hrvoje Niksic  <hniksic@xemacs.org>
 
-	* wget.texi (Contributors): Update my email address.
+	* wget.texi: Remove next/previous/up node links.  Makeinfo doesn't
+	require them, and they make the document harder to modify.
+
+2003-11-09  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi: No longer document options -s, -C, -g, and -G.
+	(Contributors): Update my email address.
+
+2003-11-05  Hrvoje Niksic  <hniksic@xemacs.org>
+
+	* wget.texi (HTTP Options): Document `--keep-session-cookies'.
 
 2003-10-26  Hrvoje Niksic  <hniksic@xemacs.org>
 

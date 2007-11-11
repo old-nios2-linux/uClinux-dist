@@ -1,5 +1,5 @@
 /*
- * $Id: aug_util.c,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: aug_util.c,v 1.1.10.1 2005/07/20 17:11:52 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -40,10 +40,10 @@
 **
 **
 **                      $RCSfile: aug_util.c,v $
-**                     $Revision: 1.1 $
+**                     $Revision: 1.1.10.1 $
 **
-**             Last change $Date: 2003/04/08 01:25:35 $
-**           Last change $Author: lgfausak $
+**             Last change $Date: 2005/07/20 17:11:52 $
+**           Last change $Author: andrei $
 **                        $State: Exp $
 **                       $Locker:  $
 **
@@ -111,7 +111,6 @@ augExport void aug_abort(char *file, int line, char *fmt, ...)
 augExport void aug_setmodule(char *name)
 {
 	char *prog;
-	int len;
 
 	if(!name)
 		return;

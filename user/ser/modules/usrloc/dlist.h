@@ -1,9 +1,9 @@
 /*
- * $Id: dlist.h,v 1.10 2003/10/08 21:56:33 janakj Exp $
+ * $Id: dlist.h,v 1.12 2004/08/24 09:00:46 janakj Exp $
  *
  * List of registered domains
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -74,12 +74,6 @@ void print_all_udomains(FILE* _f);
  * Called from timer
  */
 int synchronize_all_udomains(void);
-
-
-/*
- * Preload content of all domains from database
- */
-int preload_all_udomains(void);
 
 
 /*

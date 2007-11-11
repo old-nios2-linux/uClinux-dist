@@ -1,7 +1,7 @@
 /* 
- * $Id: db_con.h,v 1.5 2003/06/25 16:58:26 janakj Exp $ 
+ * $Id: db_con.h,v 1.9 2004/08/24 08:45:12 janakj Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,19 +37,14 @@
  * handle
  */
 typedef struct {
-	char* table;           /* Default table to use */
-	int connected;         /* 1 if database is connected */
-	unsigned long tail[1]; /* Variable length tail
+	const char* table;     /* Default table to use */
+	unsigned long tail;    /* Variable length tail
 				* database module specific */    
 } db_con_t;
 
 
-#define CON_CONNECTED(cn)  ((cn)->connected)
 #define CON_TABLE(cn)      ((cn)->table)
 #define CON_TAIL(cn)       ((cn)->tail)
-
-
-int use_table(db_con_t* _h, const char* _t);
 
 
 #endif /* DB_CON_H */

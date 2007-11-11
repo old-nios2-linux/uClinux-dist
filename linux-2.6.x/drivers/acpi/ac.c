@@ -34,8 +34,6 @@
 
 #define ACPI_AC_COMPONENT		0x00020000
 #define ACPI_AC_CLASS			"ac_adapter"
-#define ACPI_AC_HID 			"ACPI0003"
-#define ACPI_AC_DRIVER_NAME		"ACPI AC Adapter Driver"
 #define ACPI_AC_DEVICE_NAME		"AC Adapter"
 #define ACPI_AC_FILE_STATE		"state"
 #define ACPI_AC_NOTIFY_STATUS		0x80
@@ -44,10 +42,10 @@
 #define ACPI_AC_STATUS_UNKNOWN		0xFF
 
 #define _COMPONENT		ACPI_AC_COMPONENT
-ACPI_MODULE_NAME("acpi_ac")
+ACPI_MODULE_NAME("ac");
 
-    MODULE_AUTHOR("Paul Diefenbaugh");
-MODULE_DESCRIPTION(ACPI_AC_DRIVER_NAME);
+MODULE_AUTHOR("Paul Diefenbaugh");
+MODULE_DESCRIPTION("ACPI AC Adapter Driver");
 MODULE_LICENSE("GPL");
 
 extern struct proc_dir_entry *acpi_lock_ac_dir(void);
@@ -57,10 +55,16 @@ static int acpi_ac_add(struct acpi_device *device);
 static int acpi_ac_remove(struct acpi_device *device, int type);
 static int acpi_ac_open_fs(struct inode *inode, struct file *file);
 
+const static struct acpi_device_id ac_device_ids[] = {
+	{"ACPI0003", 0},
+	{"", 0},
+};
+MODULE_DEVICE_TABLE(acpi, ac_device_ids);
+
 static struct acpi_driver acpi_ac_driver = {
-	.name = ACPI_AC_DRIVER_NAME,
+	.name = "ac",
 	.class = ACPI_AC_CLASS,
-	.ids = ACPI_AC_HID,
+	.ids = ac_device_ids,
 	.ops = {
 		.add = acpi_ac_add,
 		.remove = acpi_ac_remove,
@@ -109,7 +113,7 @@ static struct proc_dir_entry *acpi_ac_dir;
 
 static int acpi_ac_seq_show(struct seq_file *seq, void *offset)
 {
-	struct acpi_ac *ac = (struct acpi_ac *)seq->private;
+	struct acpi_ac *ac = seq->private;
 
 
 	if (!ac)
@@ -187,7 +191,7 @@ static int acpi_ac_remove_fs(struct acpi_device *device)
 
 static void acpi_ac_notify(acpi_handle handle, u32 event, void *data)
 {
-	struct acpi_ac *ac = (struct acpi_ac *)data;
+	struct acpi_ac *ac = data;
 	struct acpi_device *device = NULL;
 
 
@@ -200,7 +204,10 @@ static void acpi_ac_notify(acpi_handle handle, u32 event, void *data)
 	case ACPI_NOTIFY_BUS_CHECK:
 	case ACPI_NOTIFY_DEVICE_CHECK:
 		acpi_ac_get_state(ac);
-		acpi_bus_generate_event(device, event, (u32) ac->state);
+		acpi_bus_generate_proc_event(device, event, (u32) ac->state);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  device->dev.bus_id, event,
+						  (u32) ac->state);
 		break;
 	default:
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
@@ -221,10 +228,9 @@ static int acpi_ac_add(struct acpi_device *device)
 	if (!device)
 		return -EINVAL;
 
-	ac = kmalloc(sizeof(struct acpi_ac), GFP_KERNEL);
+	ac = kzalloc(sizeof(struct acpi_ac), GFP_KERNEL);
 	if (!ac)
 		return -ENOMEM;
-	memset(ac, 0, sizeof(struct acpi_ac));
 
 	ac->device = device;
 	strcpy(acpi_device_name(device), ACPI_AC_DEVICE_NAME);
@@ -269,7 +275,7 @@ static int acpi_ac_remove(struct acpi_device *device, int type)
 	if (!device || !acpi_driver_data(device))
 		return -EINVAL;
 
-	ac = (struct acpi_ac *)acpi_driver_data(device);
+	ac = acpi_driver_data(device);
 
 	status = acpi_remove_notify_handler(device->handle,
 					    ACPI_ALL_NOTIFY, acpi_ac_notify);

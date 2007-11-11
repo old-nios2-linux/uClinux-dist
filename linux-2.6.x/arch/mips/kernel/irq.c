@@ -28,7 +28,7 @@
 
 static unsigned long irq_map[NR_IRQS / BITS_PER_LONG];
 
-int __devinit allocate_irqno(void)
+int allocate_irqno(void)
 {
 	int irq;
 
@@ -59,7 +59,7 @@ void __init alloc_legacy_irqno(void)
 		BUG_ON(test_and_set_bit(i, irq_map));
 }
 
-void __devinit free_irqno(unsigned int irq)
+void free_irqno(unsigned int irq)
 {
 	smp_mb__before_clear_bit();
 	clear_bit(irq, irq_map);
@@ -74,38 +74,11 @@ EXPORT_SYMBOL_GPL(free_irqno);
  */
 void ack_bad_irq(unsigned int irq)
 {
+	smtc_im_ack_irq(irq);
 	printk("unexpected IRQ # %d\n", irq);
 }
 
 atomic_t irq_err_count;
-
-#ifdef CONFIG_MIPS_MT_SMTC
-/*
- * SMTC Kernel needs to manipulate low-level CPU interrupt mask
- * in do_IRQ. These are passed in setup_irq_smtc() and stored
- * in this table.
- */
-unsigned long irq_hwmask[NR_IRQS];
-#endif /* CONFIG_MIPS_MT_SMTC */
-
-#undef do_IRQ
-
-/*
- * do_IRQ handles all normal device IRQ's (the special
- * SMP cross-CPU interrupts have their own specific
- * handlers).
- */
-asmlinkage unsigned int do_IRQ(unsigned int irq)
-{
-	irq_enter();
-
-	__DO_IRQ_SMTC_HOOK();
-	__do_IRQ(irq);
-
-	irq_exit();
-
-	return 1;
-}
 
 /*
  * Generic, controller-independent functions:
@@ -136,7 +109,7 @@ int show_interrupts(struct seq_file *p, void *v)
 		for_each_online_cpu(j)
 			seq_printf(p, "%10u ", kstat_cpu(j).irqs[i]);
 #endif
-		seq_printf(p, " %14s", irq_desc[i].chip->typename);
+		seq_printf(p, " %14s", irq_desc[i].chip->name);
 		seq_printf(p, "  %s", action->name);
 
 		for (action=action->next; action; action = action->next)
@@ -172,19 +145,6 @@ __setup("nokgdb", nokgdb);
 
 void __init init_IRQ(void)
 {
-	int i;
-
-	for (i = 0; i < NR_IRQS; i++) {
-		irq_desc[i].status  = IRQ_DISABLED;
-		irq_desc[i].action  = NULL;
-		irq_desc[i].depth   = 1;
-		irq_desc[i].chip = &no_irq_chip;
-		spin_lock_init(&irq_desc[i].lock);
-#ifdef CONFIG_MIPS_MT_SMTC
-		irq_hwmask[i] = 0;
-#endif /* CONFIG_MIPS_MT_SMTC */
-	}
-
 	arch_init_irq();
 
 #ifdef CONFIG_KGDB

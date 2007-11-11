@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>Database structure</TITLE>
-<META NAME="description" CONTENT="Database structure">
+<TITLE>Header file</TITLE>
+<META NAME="description" CONTENT="Header file">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -19,56 +19,52 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
 
+<LINK REL="next" HREF="node40.html">
 <LINK REL="previous" HREF="node38.html">
-<LINK REL="up" HREF="node35.html">
+<LINK REL="up" HREF="node38.html">
 <LINK REL="next" HREF="node40.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html1082"
+<A NAME="tex2html705"
   HREF="node40.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html1078"
-  HREF="node35.html">
+<A NAME="tex2html701"
+  HREF="node38.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html1074"
+<A NAME="tex2html695"
   HREF="node38.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html1080"
+<A NAME="tex2html703"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html1083"
-  HREF="node40.html">Database reloading</A>
-<B> Up:</B> <A NAME="tex2html1079"
-  HREF="node35.html">API</A>
-<B> Previous:</B> <A NAME="tex2html1075"
-  HREF="node38.html">Error handling</A>
- &nbsp <B>  <A NAME="tex2html1081"
+<B> Next:</B> <A NAME="tex2html706"
+  HREF="node40.html">Database loading</A>
+<B> Up:</B> <A NAME="tex2html702"
+  HREF="node38.html">API</A>
+<B> Previous:</B> <A NAME="tex2html696"
+  HREF="node38.html">API</A>
+ &nbsp <B>  <A NAME="tex2html704"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H3><A NAME="SECTION00073400000000000000">
-Database structure</A>
+<H3><A NAME="SECTION00074100000000000000">
+Header file</A>
 </H3>
-    Now initialise internal transitions with <code>cl_build</code>.
+    Every program using libclamav must include the header file <code>clamav.h</code>:
     <PRE>
-	int cl_build(struct cl_node *root);
+	#include &lt;clamav.h&gt;
 </PRE>
-    In our example:
-    <PRE>
-	if((ret = cl_build(root)))
-	    printf("cl_build() error: %s\n", cl_strerror(ret));
-    </PRE>
 
 <P>
 <BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

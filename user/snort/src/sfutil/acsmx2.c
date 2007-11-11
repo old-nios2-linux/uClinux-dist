@@ -1089,6 +1089,9 @@ Conv_Full_DFA_To_SparseBands(ACSM_STRUCT2 * acsm)
  
       for( j=band_begin[i]; j<=band_end[i]; j++ )
       {
+         if (j >= MAX_ALPHABET_SIZE)
+             return -1;
+
          p[m++] = full[j];  /* some states may be state zero */
       }
     }
@@ -2410,7 +2413,8 @@ main (int argc, char **argv)
      exit(0);
   }
 
-  strcpy (text, argv[1]);
+  strncpy (text, argv[1], sizeof(text) - 1);
+  text[sizeof(text) - 1] = '\0';
 
   acsm->acsmFormat = ACF_FULL;
 

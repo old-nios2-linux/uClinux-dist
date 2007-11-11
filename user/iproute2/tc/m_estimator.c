@@ -23,7 +23,7 @@
 #include "utils.h"
 #include "tc_util.h"
 
-static void est_help(void) __attribute__((noreturn));
+static void est_help(void);
 
 static void est_help(void)
 {
@@ -31,7 +31,7 @@ static void est_help(void)
 	fprintf(stderr, "  INTERVAL is interval between measurements\n");
 	fprintf(stderr, "  TIME-CONST is averaging time constant\n");
 	fprintf(stderr, "Example: ... est 1sec 8sec\n");
-	exit(-1);
+	return;
 }
 
 int parse_estimator(int *p_argc, char ***p_argv, struct tc_estimator *est)
@@ -39,22 +39,22 @@ int parse_estimator(int *p_argc, char ***p_argv, struct tc_estimator *est)
 	int argc = *p_argc;
 	char **argv = *p_argv;
 	unsigned A, time_const;
-	
+
 	NEXT_ARG();
 	if (est->ewma_log)
 		duparg("estimator", *argv);
 	if (matches(*argv, "help") == 0)
 		est_help();
-	if (get_usecs(&A, *argv))
+	if (get_time(&A, *argv))
 		invarg("estimator", "invalid estimator interval");
 	NEXT_ARG();
 	if (matches(*argv, "help") == 0)
 		est_help();
-	if (get_usecs(&time_const, *argv))
+	if (get_time(&time_const, *argv))
 		invarg("estimator", "invalid estimator time constant");
 	if (tc_setup_estimator(A, time_const, est) < 0) {
 		fprintf(stderr, "Error: estimator parameters are out of range.\n");
-		exit(-1);
+		return -1;
 	}
 	if (show_raw)
 		fprintf(stderr, "[estimator i=%u e=%u]\n", est->interval, est->ewma_log);

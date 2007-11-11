@@ -41,8 +41,12 @@ ifeq ($(CONFIG_CLEOPATRA), y)
 ARCH                     = CLEOPATRA
 BIGENDIAN                = Y
 else
-ARCH                     = LINUX-NATIVE
+ARCH                     = uClinux
+ifeq ($(CONFIG_M68KNOMMU),y)
+BIGENDIAN                = Y
+else
 BIGENDIAN                = N
+endif
 endif
 ARMTOOLSPREFIX           = arm-linux-
 MIPSTOOLSPREFIX          = mipsel-linux-
@@ -189,6 +193,7 @@ INCJPEG                  = .
 LIBJPEG                  = /usr/lib/libjpeg.a
 else
 HAVE_JPEG_SUPPORT        = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_JPEG_SUPPORT))
+LIBJPEG                  = $(ROOTDIR)/lib/libjpeg.a
 endif
 
 ####################################################################
@@ -203,8 +208,8 @@ LIBZ                     = /usr/lib/libz.a
 else
 HAVE_PNG_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_PNG_SUPPORT))
 # INCPNG                   = .
-# LIBPNG                   = /usr/lib/libpng.a
-# LIBZ                     = /usr/lib/libz.a
+LIBPNG                   = $(ROOTDIR)/lib/libpng.a
+LIBZ                     = $(ROOTDIR)/lib/libz.a
 endif
 
 ####################################################################
@@ -345,7 +350,7 @@ SCREEN_DEPTH             = 4
 # isn't functioning properly
 USE_EXPOSURE		 = Y
 
-else
+endif
 
 # framebuffer screen driver (linear and/or vga 4 planes)
 # set VTSWITCH to include virtual terminal switch code
@@ -362,7 +367,6 @@ FRAMEBUFFER              = $(subst y,Y,$(CONFIG_USER_MICROWIN_FRAMEBUFFER))
 FBVGA                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_FBVGA))
 VTSWITCH                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_VTSWITCH))
 FBREVERSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_FBREVERSE))
-endif
 endif
 
 # set HAVETEXTMODE=Y for systems that can switch between text & graphics.

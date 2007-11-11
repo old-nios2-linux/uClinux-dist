@@ -55,7 +55,7 @@ unsigned int flat1_gethdr(void)
 
 	if (flat_seek(0L, SEEK_SET) != 0L)
 		return ERROR_CODE();
-	if (flat_read((void *) &hdr, sizeof(hdr)) != sizeof(hdr))
+	if (flat_read(&hdr, sizeof(hdr)) != sizeof(hdr))
 		return ERROR_CODE();
         return hdr.magic;
 }
@@ -78,7 +78,7 @@ int flat1_checkfs(void)
 		return ERROR_CODE();
 
 	/* Check that header is a valid version 1/2 header */
-	if (flat_read((void *) &hdr, sizeof(hdr)) != sizeof(hdr))
+	if (flat_read(&hdr, sizeof(hdr)) != sizeof(hdr))
 		return ERROR_CODE();
 
 	if ((hdr.magic != FLATFS_MAGIC) && (hdr.magic != FLATFS_MAGIC_V2))
@@ -99,7 +99,7 @@ int flat1_checkfs(void)
 	 */
 	for (sum = 0, size = sizeof(hdr); (size < len); size += sizeof(buf)) {
 		n = (size > sizeof(buf)) ? sizeof(buf) :  size;
-		if (flat_read((void *) &buf[0], n) != n)
+		if (flat_read(&buf[0], n) != n)
 			return ERROR_CODE();
 		sum += chksum(&buf[0], n);
 	}
@@ -148,7 +148,7 @@ int flat1_restorefs(int version, int dowrite)
 
 	for (numfiles = 0, numbytes = 0; ; numfiles++) {
 		/* Get the name of next file. */
-		if (flat_read((void *) &ent, sizeof(ent)) != sizeof(ent))
+		if (flat_read(&ent, sizeof(ent)) != sizeof(ent))
 			return ERROR_CODE();
 
 		if (ent.filelen == FLATFS_EOF)
@@ -158,11 +158,11 @@ int flat1_restorefs(int version, int dowrite)
 		if (n > sizeof(filename))
 			return ERROR_CODE();
 
-		if (flat_read((void *) &filename[0], n) != n)
+		if (flat_read(&filename[0], n) != n)
 			return ERROR_CODE();
 
 		if (version >= 2) {
-			if (flat_read((void *) &mode, sizeof(mode)) != sizeof(mode)) {
+			if (flat_read(&mode, sizeof(mode)) != sizeof(mode)) {
 				flat_close(1, 0);
 				return ERROR_CODE();
 			}
@@ -259,7 +259,7 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 
 	ent.namelen = size;
 	ent.filelen = st.st_size;
-	if (dowrite && flat_write(*ptotal, (char *) &ent, sizeof(ent)) < 0)
+	if (dowrite && flat_write(*ptotal, &ent, sizeof(ent)) < 0)
 		return ERROR_CODE();
 	*ptotal += sizeof(ent);
 
@@ -268,14 +268,14 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 		return ERROR_CODE();
 	*ptotal += size;
 	size = ((size + 3) & ~0x3) - size;
-	if (dowrite && flat_write(*ptotal, (char *)&zero, size) < 0)
+	if (dowrite && flat_write(*ptotal, &zero, size) < 0)
 		return ERROR_CODE();
 	*ptotal += size;
 
 	/* Write out the permissions */
 	mode = (mode_t) st.st_mode;
 	size = sizeof(mode);
-	if (dowrite && flat_write(*ptotal, (char *) &mode, size) < 0)
+	if (dowrite && flat_write(*ptotal, &mode, size) < 0)
 		return ERROR_CODE();
 	*ptotal += size;
 
@@ -320,7 +320,7 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 
 		/* Pad to align */
 		written = ((st.st_size + 3) & ~0x3) - st.st_size;
-		if (dowrite && flat_write(*ptotal, (char *)&zero, written) < 0)
+		if (dowrite && flat_write(*ptotal, &zero, written) < 0)
 			return ERROR_CODE();
 		*ptotal += written;
 	}
@@ -406,7 +406,7 @@ int flat1_savefs(int dowrite, unsigned *total)
 	if (dowrite) {
 		ent.namelen = FLATFS_EOF;
 		ent.filelen = FLATFS_EOF;
-		rc = flat_write(*total, (char *) &ent, sizeof(ent));
+		rc = flat_write(*total, &ent, sizeof(ent));
 		if (rc < 0 && !ret)
 			ret = rc;
 	}
@@ -441,7 +441,7 @@ int flat1_savefs(int dowrite, unsigned *total)
 			flat_sum, *total);
 #endif
 
-		rc = flat_write(0L, (char *)&hdr, sizeof(hdr));
+		rc = flat_write(0L, &hdr, sizeof(hdr));
 		if (rc < 0 && !ret)
 			ret = rc;
 	}

@@ -39,7 +39,11 @@ ifeq ($(UCLINUX_COMMON_LIB),1)
 	SLIBIXML	=	-lixml
 	SLIBJPEG	=	-ljpeg
 	SLIBPNG		=	-lpng
-	SLIBSTDCPP	=	-Wl,-Bstatic -lstdc++ -Wl,-Bdynamic
+	ifdef CONFIG_LIB_STLPORT_SHARED
+		SLIBSTDCPP	=	-lstdc++
+	else
+		SLIBSTDCPP	=	-Wl,-Bstatic -lstdc++ -Wl,-Bdynamic
+	endif
 	SLIBTHREADUTIL	=	-lthreadutil
 	SLIBPTHREAD	=	-lpthread
 	SLIBUPNP	=	-lupnp
@@ -89,8 +93,9 @@ ifeq ($(UCLINUX_COMMON_LIB),1)
 	STL_INCDIR=$(ROOTDIR)/include/STLport
 	STL_LIBDIR=$(ROOTDIR)/lib/STLport/lib
 
-	ifeq "$(shell $(LD) --fatal-warnings 2>&1 | grep 'unrecogni.ed option')" ""
-		# Linker warnings are almost always a sign of badness
-		LDFLAGS  += -Wl,--fatal-warnings
-	endif
+	# Some make-foo to add the --fatal-warnings linker option, if supported
+	# (with thanks to Kbuild in 2.6)
+	# LDFLAGS += $(shell if $(CC) -Wl,--fatal-warnings -nostdlib -xc /dev/null -o /tmp/$$$$.out > /dev/null 2>&1; then echo "-Wl,--fatal-warnings"; rm /tmp/$$$$.out; fi;)
+
+	PKG_CONFIG_LIBDIR=$(ROOTDIR)/lib
 endif

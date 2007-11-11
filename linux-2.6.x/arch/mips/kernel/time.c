@@ -11,12 +11,12 @@
  * Free Software Foundation;  either version 2 of the  License, or (at your
  * option) any later version.
  */
-#include <linux/clocksource.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/param.h>
+#include <linux/profile.h>
 #include <linux/time.h>
 #include <linux/timex.h>
 #include <linux/smp.h>
@@ -83,16 +83,10 @@ static void null_timer_ack(void) { /* nothing */ }
 /*
  * Null high precision timer functions for systems lacking one.
  */
-static unsigned int null_hpt_read(void)
+static cycle_t null_hpt_read(void)
 {
 	return 0;
 }
-
-static void __init null_hpt_init(void)
-{
-	/* nothing */
-}
-
 
 /*
  * Timer ack for an R4k-compatible timer of a known frequency.
@@ -101,10 +95,8 @@ static void c0_timer_ack(void)
 {
 	unsigned int count;
 
-#ifndef CONFIG_SOC_PNX8550	/* pnx8550 resets to zero */
 	/* Ack this timer interrupt and set the next one.  */
 	expirelo += cycles_per_jiffy;
-#endif
 	write_c0_compare(expirelo);
 
 	/* Check to see if we have missed any timer interrupts.  */
@@ -118,7 +110,7 @@ static void c0_timer_ack(void)
 /*
  * High precision timer functions for a R4k-compatible timer.
  */
-static unsigned int c0_hpt_read(void)
+static cycle_t c0_hpt_read(void)
 {
 	return read_c0_count();
 }
@@ -132,9 +124,6 @@ static void __init c0_hpt_timer_init(void)
 
 int (*mips_timer_state)(void);
 void (*mips_timer_ack)(void);
-unsigned int (*mips_hpt_read)(void);
-void (*mips_hpt_init)(void) __initdata = null_hpt_init;
-unsigned int mips_hpt_mask = 0xffffffff;
 
 /* last time when xtime and rtc are sync'ed up */
 static long last_rtc_update;
@@ -211,6 +200,35 @@ int (*perf_irq)(void) = null_perf_irq;
 EXPORT_SYMBOL(null_perf_irq);
 EXPORT_SYMBOL(perf_irq);
 
+/*
+ * Timer interrupt
+ */
+int cp0_compare_irq;
+
+/*
+ * Performance counter IRQ or -1 if shared with timer
+ */
+int cp0_perfcount_irq;
+EXPORT_SYMBOL_GPL(cp0_perfcount_irq);
+
+/*
+ * Possibly handle a performance counter interrupt.
+ * Return true if the timer interrupt should not be checked
+ */
+static inline int handle_perf_irq (int r2)
+{
+	/*
+	 * The performance counter overflow interrupt may be shared with the
+	 * timer interrupt (cp0_perfcount_irq < 0). If it is and a
+	 * performance counter has overflowed (perf_irq() == IRQ_HANDLED)
+	 * and we can't reliably determine if a counter interrupt has also
+	 * happened (!r2) then don't check for a timer interrupt.
+	 */
+	return (cp0_perfcount_irq < 0) &&
+		perf_irq() == IRQ_HANDLED &&
+		!r2;
+}
+
 asmlinkage void ll_timer_interrupt(int irq)
 {
 	int r2 = cpu_has_mips_r2;
@@ -218,19 +236,13 @@ asmlinkage void ll_timer_interrupt(int irq)
 	irq_enter();
 	kstat_this_cpu.irqs[irq]++;
 
-	/*
-	 * Suckage alert:
-	 * Before R2 of the architecture there was no way to see if a
-	 * performance counter interrupt was pending, so we have to run the
-	 * performance counter interrupt handler anyway.
-	 */
-	if (!r2 || (read_c0_cause() & (1 << 26)))
-		if (perf_irq())
-			goto out;
+	if (handle_perf_irq(r2))
+		goto out;
 
-	/* we keep interrupt disabled all the time */
-	if (!r2 || (read_c0_cause() & (1 << 30)))
-		timer_interrupt(irq, NULL);
+	if (r2 && ((read_c0_cause() & (1 << 30)) == 0))
+		goto out;
+
+	timer_interrupt(irq, NULL);
 
 out:
 	irq_exit();
@@ -270,14 +282,13 @@ unsigned int mips_hpt_frequency;
 
 static struct irqaction timer_irqaction = {
 	.handler = timer_interrupt,
-	.flags = IRQF_DISABLED,
+	.flags = IRQF_DISABLED | IRQF_PERCPU,
 	.name = "timer",
 };
 
 static unsigned int __init calibrate_hpt(void)
 {
-	u64 frequency;
-	u32 hpt_start, hpt_end, hpt_count, hz;
+	cycle_t frequency, hpt_start, hpt_end, hpt_count, hz;
 
 	const int loops = HZ / 10;
 	int log_2_loops = 0;
@@ -303,29 +314,24 @@ static unsigned int __init calibrate_hpt(void)
 	 * during the calculated number of periods between timer
 	 * interrupts.
 	 */
-	hpt_start = mips_hpt_read();
+	hpt_start = clocksource_mips.read();
 	do {
 		while (mips_timer_state());
 		while (!mips_timer_state());
 	} while (--i);
-	hpt_end = mips_hpt_read();
+	hpt_end = clocksource_mips.read();
 
-	hpt_count = (hpt_end - hpt_start) & mips_hpt_mask;
+	hpt_count = (hpt_end - hpt_start) & clocksource_mips.mask;
 	hz = HZ;
-	frequency = (u64)hpt_count * (u64)hz;
+	frequency = hpt_count * hz;
 
 	return frequency >> log_2_loops;
 }
 
-static cycle_t read_mips_hpt(void)
-{
-	return (cycle_t)mips_hpt_read();
-}
-
-static struct clocksource clocksource_mips = {
+struct clocksource clocksource_mips = {
 	.name		= "MIPS",
-	.read		= read_mips_hpt,
-	.is_continuous	= 1,
+	.mask		= CLOCKSOURCE_MASK(32),
+	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
 static void __init init_mips_clocksource(void)
@@ -333,7 +339,7 @@ static void __init init_mips_clocksource(void)
 	u64 temp;
 	u32 shift;
 
-	if (!mips_hpt_frequency || mips_hpt_read == null_hpt_read)
+	if (!mips_hpt_frequency || clocksource_mips.read == null_hpt_read)
 		return;
 
 	/* Calclate a somewhat reasonable rating value */
@@ -347,7 +353,6 @@ static void __init init_mips_clocksource(void)
 	}
 	clocksource_mips.shift = shift;
 	clocksource_mips.mult = (u32)temp;
-	clocksource_mips.mask = mips_hpt_mask;
 
 	clocksource_register(&clocksource_mips);
 }
@@ -367,31 +372,35 @@ void __init time_init(void)
 	                        -xtime.tv_sec, -xtime.tv_nsec);
 
 	/* Choose appropriate high precision timer routines.  */
-	if (!cpu_has_counter && !mips_hpt_read)
+	if (!cpu_has_counter && !clocksource_mips.read)
 		/* No high precision timer -- sorry.  */
-		mips_hpt_read = null_hpt_read;
+		clocksource_mips.read = null_hpt_read;
 	else if (!mips_hpt_frequency && !mips_timer_state) {
 		/* A high precision timer of unknown frequency.  */
-		if (!mips_hpt_read)
+		if (!clocksource_mips.read)
 			/* No external high precision timer -- use R4k.  */
-			mips_hpt_read = c0_hpt_read;
+			clocksource_mips.read = c0_hpt_read;
 	} else {
 		/* We know counter frequency.  Or we can get it.  */
-		if (!mips_hpt_read) {
+		if (!clocksource_mips.read) {
 			/* No external high precision timer -- use R4k.  */
-			mips_hpt_read = c0_hpt_read;
+			clocksource_mips.read = c0_hpt_read;
 
 			if (!mips_timer_state) {
 				/* No external timer interrupt -- use R4k.  */
-				mips_hpt_init = c0_hpt_timer_init;
 				mips_timer_ack = c0_timer_ack;
+				/* Calculate cache parameters.  */
+				cycles_per_jiffy =
+					(mips_hpt_frequency + HZ / 2) / HZ;
+				/*
+				 * This sets up the high precision
+				 * timer for the first interrupt.
+				 */
+				c0_hpt_timer_init();
 			}
 		}
 		if (!mips_hpt_frequency)
 			mips_hpt_frequency = calibrate_hpt();
-
-		/* Calculate cache parameters.  */
-		cycles_per_jiffy = (mips_hpt_frequency + HZ / 2) / HZ;
 
 		/* Report the high precision timer rate for a reference.  */
 		printk("Using %u.%03u MHz high precision timer.\n",
@@ -402,9 +411,6 @@ void __init time_init(void)
 	if (!mips_timer_ack)
 		/* No timer interrupt ack (e.g. i8254).  */
 		mips_timer_ack = null_timer_ack;
-
-	/* This sets up the high precision timer for the first interrupt.  */
-	mips_hpt_init();
 
 	/*
 	 * Call board specific timer interrupt setup.
@@ -473,8 +479,3 @@ EXPORT_SYMBOL(rtc_lock);
 EXPORT_SYMBOL(to_tm);
 EXPORT_SYMBOL(rtc_mips_set_time);
 EXPORT_SYMBOL(rtc_mips_get_time);
-
-unsigned long long sched_clock(void)
-{
-	return (unsigned long long)jiffies*(1000000000/HZ);
-}

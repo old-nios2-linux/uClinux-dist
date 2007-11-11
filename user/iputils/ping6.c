@@ -68,32 +68,56 @@ char copyright[] =
  */
 #include "ping_common.h"
 
-#include <linux/in6.h>
-#include <linux/ipv6.h>
-#include <linux/icmpv6.h>
+#include <linux/filter.h>
+#include <netinet/ip6.h>
+#include <netinet/icmp6.h>
+
+#ifndef SOL_IPV6
+#define SOL_IPV6 IPPROTO_IPV6
+#endif
+
+#ifndef SOL_ICMPV6
+#define SOL_ICMPV6 IPPROTO_ICMPV6
+#endif
+
+/* RFC3542 */
+#ifndef ICMP6_DST_UNREACH_BEYONDSCOPE
+#define ICMP6_DST_UNREACH_BEYONDSCOPE ICMP6_DST_UNREACH_NOTNEIGHBOR
+#endif
+
+#ifndef IPV6_SRCRT_TYPE_0
+#define IPV6_SRCRT_TYPE_0	0
+#endif
+
+#ifndef MLD_LISTENER_QUERY
+#define MLD_LISTENER_QUERY	130
+#define MLD_LISTENER_REPORT	131
+#define MLD_LISTENER_REDUCTION	132
+#endif
 
 #define BIT_CLEAR(nr, addr) do { ((__u32 *)(addr))[(nr) >> 5] &= ~(1U << ((nr) & 31)); } while(0)
 #define BIT_SET(nr, addr) do { ((__u32 *)(addr))[(nr) >> 5] |= (1U << ((nr) & 31)); } while(0)
 #define BIT_TEST(nr, addr) do { (__u32 *)(addr))[(nr) >> 5] & (1U << ((nr) & 31)); } while(0)
 
-#define ICMPV6_FILTER_WILLPASS(type, filterp) \
+#ifndef ICMP6_FILTER_WILLPASS
+#define ICMP6_FILTER_WILLPASS(type, filterp) \
 	(BIT_TEST((type), filterp) == 0)
 
-#define ICMPV6_FILTER_WILLBLOCK(type, filterp) \
+#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
 	BIT_TEST((type), filterp)
 
-#define ICMPV6_FILTER_SETPASS(type, filterp) \
+#define ICMP6_FILTER_SETPASS(type, filterp) \
 	BIT_CLEAR((type), filterp)
 
-#define ICMPV6_FILTER_SETBLOCK(type, filterp) \
+#define ICMP6_FILTER_SETBLOCK(type, filterp) \
 	BIT_SET((type), filterp)
 
-#define ICMPV6_FILTER_SETPASSALL(filterp) \
+#define ICMP6_FILTER_SETPASSALL(filterp) \
 	memset(filterp, 0, sizeof(struct icmp6_filter));
 
-#define ICMPV6_FILTER_SETBLOCKALL(filterp) \
+#define ICMP6_FILTER_SETBLOCKALL(filterp) \
 	memset(filterp, 0xFF, sizeof(struct icmp6_filter));
-
+#endif
 
 #define	MAXPACKET	128000		/* max packet size */
 
@@ -137,7 +161,7 @@ size_t inet6_srcrt_space(int type, int segments)
 	if (type != 0 || segments > 24)
 		return 0;
 
-	return (sizeof(struct cmsghdr) + sizeof(struct rt0_hdr) +
+	return (sizeof(struct cmsghdr) + sizeof(struct ip6_rthdr0) +
 		segments * sizeof(struct in6_addr));
 }
 
@@ -148,10 +172,10 @@ extern struct cmsghdr *	inet6_srcrt_init(void *bp, int type)
 	if (type)
 		return NULL;
 
-	memset(bp, 0, sizeof(struct cmsghdr) + sizeof(struct rt0_hdr));
+	memset(bp, 0, sizeof(struct cmsghdr) + sizeof(struct ip6_rthdr0));
 	cmsg = (struct cmsghdr *) bp;
 
-	cmsg->cmsg_len = sizeof(struct cmsghdr) + sizeof(struct rt0_hdr);
+	cmsg->cmsg_len = sizeof(struct cmsghdr) + sizeof(struct ip6_rthdr0);
 	cmsg->cmsg_level = SOL_IPV6;
 	cmsg->cmsg_type = IPV6_RTHDR;
 
@@ -160,14 +184,14 @@ extern struct cmsghdr *	inet6_srcrt_init(void *bp, int type)
 
 int inet6_srcrt_add(struct cmsghdr *cmsg, const struct in6_addr *addr)
 {
-	struct rt0_hdr *hdr;
+	struct ip6_rthdr0 *hdr;
 	
-	hdr = (struct rt0_hdr *) CMSG_DATA(cmsg);
+	hdr = (struct ip6_rthdr0 *) CMSG_DATA(cmsg);
 
 	cmsg->cmsg_len += sizeof(struct in6_addr);
-	hdr->rt_hdr.hdrlen += sizeof(struct in6_addr) / 8;
+	hdr->ip6r0_len += sizeof(struct in6_addr) / 8;
 
-	memcpy(&hdr->addr[hdr->rt_hdr.segments_left++], addr,
+	memcpy(&hdr->ip6r0_addr[hdr->ip6r0_segleft++], addr,
 	       sizeof(struct in6_addr));
 		
 	return 0;
@@ -178,16 +202,22 @@ int main(int argc, char *argv[])
 	int ch, hold, packlen;
 	u_char *packet;
 	char *target;
+	struct addrinfo hints, *ai;
+	int gai;
 	struct sockaddr_in6 firsthop;
 	int socket_errno;
 	struct icmp6_filter filter;
 	int err, csum_offset, sz_opt;
+	static uint32_t scope_id = 0;
 
 	icmp_sock = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 	socket_errno = errno;
 
 	uid = getuid();
-	setuid(uid);
+	if (setuid(uid)) {
+		perror("ping: setuid");
+		exit(-1);
+	}
 
 	source.sin6_family = AF_INET6;
 	memset(&firsthop, 0, sizeof(firsthop));
@@ -241,7 +271,7 @@ int main(int argc, char *argv[])
 	argv += optind;
 
 	while (argc > 1) {
-		struct in6_addr addr;
+		struct in6_addr *addr;
 
 		if (srcrt == NULL) {
 			int space;
@@ -264,22 +294,29 @@ int main(int argc, char *argv[])
 
 		target = *argv;
 
-		if (inet_pton(AF_INET6, target, &addr) <= 0) {
-			struct hostent *hp;
-
-			hp = gethostbyname2(target, AF_INET6);
-
-			if (hp == NULL)	{
-				fprintf(stderr, "unknown host %s\n", target);
-				exit(2);
-			}
-
-			memcpy(&addr, hp->h_addr_list[0], 16);
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET6;
+		gai = getaddrinfo(target, NULL, &hints, &ai);
+		if (gai) {
+			fprintf(stderr, "unknown host\n");
+			exit(2);
 		}
-
-		inet6_srcrt_add(srcrt, &addr);
-		if (ipv6_addr_any(&firsthop.sin6_addr))
-			memcpy(&firsthop.sin6_addr, &addr, 16);
+		addr = &((struct sockaddr_in6 *)(ai->ai_addr))->sin6_addr;
+		inet6_srcrt_add(srcrt, addr);
+		if (ipv6_addr_any(&firsthop.sin6_addr)) {
+			memcpy(&firsthop.sin6_addr, addr, 16);
+#ifdef HAVE_SIN6_SCOPEID
+			firsthop.sin6_scope_id = ((struct sockaddr_in6 *)(ai->ai_addr))->sin6_scope_id;
+			/* Verify scope_id is the same as previous nodes */
+			if (firsthop.sin6_scope_id && scope_id && firsthop.sin6_scope_id != scope_id) {
+				fprintf(stderr, "scope discrepancy among the nodes\n");
+				exit(2);
+			} else if (!scope_id) {
+				scope_id = firsthop.sin6_scope_id;
+			}
+#endif
+		}
+		freeaddrinfo(ai);
 
 		argv++;
 		argc--;
@@ -289,31 +326,40 @@ int main(int argc, char *argv[])
 		usage();
 	target = *argv;
 
-	memset(&whereto, 0, sizeof(struct sockaddr_in6));
-	whereto.sin6_family = AF_INET6;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET6;
+	gai = getaddrinfo(target, NULL, &hints, &ai);
+	if (gai) {
+		fprintf(stderr, "unknown host\n");
+		exit(2);
+	}
+
+	memcpy(&whereto, ai->ai_addr, sizeof(whereto));
 	whereto.sin6_port = htons(IPPROTO_ICMPV6);
 
-	if (inet_pton(AF_INET6, target, &whereto.sin6_addr) <= 0) {
-		struct hostent *hp;
-
-		hp = gethostbyname2(target, AF_INET6);
-
-		if (hp == NULL) {
-			fprintf(stderr, "unknown host\n");
-			exit(2);
-		}
-		
-		memcpy(&whereto.sin6_addr, hp->h_addr_list[0], 16);
-	} else {
+	if (memchr(target, ':', strlen(target)))
 		options |= F_NUMERIC;
-	}
-	if (ipv6_addr_any(&firsthop.sin6_addr))
+
+	freeaddrinfo(ai);
+
+	if (ipv6_addr_any(&firsthop.sin6_addr)) {
 		memcpy(&firsthop.sin6_addr, &whereto.sin6_addr, 16);
+#ifdef HAVE_SIN6_SCOPEID
+		firsthop.sin6_scope_id = whereto.sin6_scope_id;
+		/* Verify scope_id is the same as intermediate nodes */
+		if (firsthop.sin6_scope_id && scope_id && firsthop.sin6_scope_id != scope_id) {
+			fprintf(stderr, "scope discrepancy among the nodes\n");
+			exit(2);
+		} else if (!scope_id) {
+			scope_id = firsthop.sin6_scope_id;
+		}
+#endif
+	}
 
 	hostname = target;
 
 	if (ipv6_addr_any(&source.sin6_addr)) {
-		int alen;
+		socklen_t alen;
 		int probe_fd = socket(AF_INET6, SOCK_DGRAM, 0);
 
 		if (probe_fd < 0) {
@@ -441,22 +487,22 @@ int main(int argc, char *argv[])
 	 *	select icmp echo reply as icmp type to receive
 	 */
 
-	ICMPV6_FILTER_SETBLOCKALL(&filter);
+	ICMP6_FILTER_SETBLOCKALL(&filter);
 
 	if (!working_recverr) {
-		ICMPV6_FILTER_SETPASS(ICMPV6_DEST_UNREACH, &filter);
-		ICMPV6_FILTER_SETPASS(ICMPV6_PKT_TOOBIG, &filter);
-		ICMPV6_FILTER_SETPASS(ICMPV6_TIME_EXCEED, &filter);
-		ICMPV6_FILTER_SETPASS(ICMPV6_PARAMPROB, &filter);
+		ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &filter);
+		ICMP6_FILTER_SETPASS(ICMP6_PACKET_TOO_BIG, &filter);
+		ICMP6_FILTER_SETPASS(ICMP6_TIME_EXCEEDED, &filter);
+		ICMP6_FILTER_SETPASS(ICMP6_PARAM_PROB, &filter);
 	}
 
-	ICMPV6_FILTER_SETPASS(ICMPV6_ECHO_REPLY, &filter);
+	ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &filter);
 
-	err = setsockopt(icmp_sock, SOL_ICMPV6, ICMPV6_FILTER, &filter,
+	err = setsockopt(icmp_sock, IPPROTO_ICMPV6, ICMP6_FILTER, &filter,
 			 sizeof(struct icmp6_filter));
 
 	if (err < 0) {
-		perror("setsockopt(ICMPV6_FILTER)");
+		perror("setsockopt(ICMP6_FILTER)");
 		exit(2);
 	}
 
@@ -483,8 +529,17 @@ int main(int argc, char *argv[])
 
 	if (1) {
 		int on = 1;
-		if (setsockopt(icmp_sock, IPPROTO_IPV6, IPV6_HOPLIMIT,
-			       &on, sizeof(on)) == -1) {
+		if (
+#ifdef IPV6_RECVHOPLIMIT
+		    setsockopt(icmp_sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT,
+			       &on, sizeof(on)) == -1 &&
+		    setsockopt(icmp_sock, IPPROTO_IPV6, IPV6_2292HOPLIMIT,
+			       &on, sizeof(on)) == -1
+#else
+		    setsockopt(icmp_sock, IPPROTO_IPV6, IPV6_HOPLIMIT,
+			       &on, sizeof(on)) == -1
+#endif
+		   ){
 			perror ("can't receive hop limit");
 			exit(2);
 		}
@@ -557,7 +612,7 @@ int receive_error_msg()
 	struct msghdr msg;
 	struct cmsghdr *cmsg;
 	struct sock_extended_err *e;
-	struct icmp6hdr icmph;
+	struct icmp6_hdr icmph;
 	struct sockaddr_in6 target;
 	int net_errors = 0;
 	int local_errors = 0;
@@ -603,8 +658,8 @@ int receive_error_msg()
 
 		if (res < sizeof(icmph) ||
 		    memcmp(&target.sin6_addr, &whereto.sin6_addr, 16) ||
-		    icmph.icmp6_type != ICMPV6_ECHO_REQUEST ||
-		    icmph.icmp6_identifier != ident) {
+		    icmph.icmp6_type != ICMP6_ECHO_REQUEST ||
+		    icmph.icmp6_id != ident) {
 			/* Not our error, not an error at all. Clear. */
 			saved_errno = 0;
 			goto out;
@@ -617,7 +672,7 @@ int receive_error_msg()
 		if (options & F_FLOOD) {
 			write(STDOUT_FILENO, "\bE", 2);
 		} else {
-			printf("From %s icmp_seq=%u ", pr_addr(&sin6->sin6_addr), ntohs(icmph.icmp6_sequence));
+			printf("From %s icmp_seq=%u ", pr_addr(&sin6->sin6_addr), ntohs(icmph.icmp6_seq));
 			pr_icmph(e->ee_type, e->ee_code, e->ee_info);
 			putchar('\n');
 			fflush(stdout);
@@ -639,16 +694,16 @@ out:
  */
 int send_probe(void)
 {
-	struct icmp6hdr *icmph;
+	struct icmp6_hdr *icmph;
 	int cc;
 	int i;
 
-	icmph = (struct icmp6hdr *)outpack;
-	icmph->icmp6_type = ICMPV6_ECHO_REQUEST;
+	icmph = (struct icmp6_hdr *)outpack;
+	icmph->icmp6_type = ICMP6_ECHO_REQUEST;
 	icmph->icmp6_code = 0;
 	icmph->icmp6_cksum = 0;
-	icmph->icmp6_sequence = htons(ntransmitted+1);
-	icmph->icmp6_identifier = ident;
+	icmph->icmp6_seq = htons(ntransmitted+1);
+	icmph->icmp6_id = ident;
 
 	CLR((ntransmitted+1) % mx_dup_ck);
 
@@ -696,39 +751,44 @@ parse_reply(struct msghdr *msg, int cc, void *addr, struct timeval *tv)
 	struct sockaddr_in6 *from = addr;
 	__u8 *buf = msg->msg_iov->iov_base;
 	struct cmsghdr *c;
-	struct icmp6hdr *icmph;
+	struct icmp6_hdr *icmph;
 	int hops = -1;
 
 	for (c = CMSG_FIRSTHDR(msg); c; c = CMSG_NXTHDR(msg, c)) {
-		if (c->cmsg_level != SOL_IPV6 ||
-		    c->cmsg_type != IPV6_HOPLIMIT)
+		if (c->cmsg_level != SOL_IPV6)
 			continue;
-		if (c->cmsg_len < CMSG_LEN(sizeof(int)))
-			continue;
-		hops = *(int*)CMSG_DATA(c);
+		switch(c->cmsg_type) {
+		case IPV6_HOPLIMIT:
+#ifdef IPV6_2292HOPLIMIT
+		case IPV6_2292HOPLIMIT:
+#endif
+			if (c->cmsg_len < CMSG_LEN(sizeof(int)))
+				continue;
+			hops = *(int*)CMSG_DATA(c);
+		}
 	}
 
 
 	/* Now the ICMP part */
 
-	icmph = (struct icmp6hdr *) buf;
+	icmph = (struct icmp6_hdr *) buf;
 	if (cc < 8) {
 		if (options & F_VERBOSE)
 			fprintf(stderr, "ping: packet too short (%d bytes)\n", cc);
 		return 1;
 	}
 
-	if (icmph->icmp6_type == ICMPV6_ECHO_REPLY) {
-		if (icmph->icmp6_identifier != ident)
+	if (icmph->icmp6_type == ICMP6_ECHO_REPLY) {
+		if (icmph->icmp6_id != ident)
 			return 1;
 		if (gather_statistics((__u8*)(icmph+1), cc,
-				      ntohs(icmph->icmp6_sequence),
+				      ntohs(icmph->icmp6_seq),
 				      hops, 0, tv, pr_addr(&from->sin6_addr)))
 			return 0;
 	} else {
 		int nexthdr;
-		struct ipv6hdr *iph1 = (struct ipv6hdr*)(icmph+1);
-		struct icmp6hdr *icmph1 = (struct icmp6hdr *)(iph1+1);
+		struct ip6_hdr *iph1 = (struct ip6_hdr*)(icmph+1);
+		struct icmp6_hdr *icmph1 = (struct icmp6_hdr *)(iph1+1);
 
 		/* We must not ever fall here. All the messages but
 		 * echo reply are blocked by filter and error are
@@ -737,23 +797,23 @@ parse_reply(struct msghdr *msg, int cc, void *addr, struct timeval *tv)
 		 * using RECVRERR. :-)
 		 */
 
-		if (cc < 8+sizeof(struct ipv6hdr)+8)
+		if (cc < 8+sizeof(struct ip6_hdr)+8)
 			return 1;
 
-		if (memcmp(&iph1->daddr, &whereto.sin6_addr, 16))
+		if (memcmp(&iph1->ip6_dst, &whereto.sin6_addr, 16))
 			return 1;
 
-		nexthdr = iph1->nexthdr;
+		nexthdr = iph1->ip6_nxt;
 
 		if (nexthdr == 44) {
 			nexthdr = *(__u8*)icmph1;
 			icmph1++;
 		}
 		if (nexthdr == IPPROTO_ICMPV6) {
-			if (icmph1->icmp6_type != ICMPV6_ECHO_REQUEST ||
-			    icmph1->icmp6_identifier != ident)
+			if (icmph1->icmp6_type != ICMP6_ECHO_REQUEST ||
+			    icmph1->icmp6_id != ident)
 				return 1;
-			acknowledge(ntohs(icmph1->icmp6_sequence));
+			acknowledge(ntohs(icmph1->icmp6_seq));
 			if (working_recverr)
 				return 0;
 			nerrors++;
@@ -761,7 +821,7 @@ parse_reply(struct msghdr *msg, int cc, void *addr, struct timeval *tv)
 				write(STDOUT_FILENO, "\bE", 2);
 				return 0;
 			}
-			printf("From %s: icmp_seq=%u ", pr_addr(&from->sin6_addr), ntohs(icmph1->icmp6_sequence));
+			printf("From %s: icmp_seq=%u ", pr_addr(&from->sin6_addr), ntohs(icmph1->icmp6_seq));
 		} else {
 			/* We've got something other than an ECHOREPLY */
 			if (!(options & F_VERBOSE) || uid)
@@ -784,22 +844,22 @@ parse_reply(struct msghdr *msg, int cc, void *addr, struct timeval *tv)
 int pr_icmph(__u8 type, __u8 code, __u32 info)
 {
 	switch(type) {
-	case ICMPV6_DEST_UNREACH:
+	case ICMP6_DST_UNREACH:
 		printf("Destination unreachable: ");
 		switch (code) {
-		case ICMPV6_NOROUTE:
+		case ICMP6_DST_UNREACH_NOROUTE:
 			printf("No route");
 			break;
-		case ICMPV6_ADM_PROHIBITED:
+		case ICMP6_DST_UNREACH_ADMIN:
 			printf("Administratively prohibited");
 			break;
-		case ICMPV6_NOT_NEIGHBOUR:
-			printf("Not neighbour");
+		case ICMP6_DST_UNREACH_BEYONDSCOPE:
+			printf("Beyond scope of source address");
 			break;
-		case ICMPV6_ADDR_UNREACH:
+		case ICMP6_DST_UNREACH_ADDR:
 			printf("Address unreachable");
 			break;
-		case ICMPV6_PORT_UNREACH:
+		case ICMP6_DST_UNREACH_NOPORT:
 			printf("Port unreachable");
 			break;
 		default:	
@@ -807,45 +867,45 @@ int pr_icmph(__u8 type, __u8 code, __u32 info)
 			break;
 		}
 		break;
-	case ICMPV6_PKT_TOOBIG:
+	case ICMP6_PACKET_TOO_BIG:
 		printf("Packet too big: mtu=%u", info);
 		if (code)
 			printf(", code=%d", code);
 		break;
-	case ICMPV6_TIME_EXCEED:
+	case ICMP6_TIME_EXCEEDED:
 		printf("Time exceeded: ");
-		if (code == ICMPV6_EXC_HOPLIMIT)
+		if (code == ICMP6_TIME_EXCEED_TRANSIT)
 			printf("Hop limit");
-		else if (code == ICMPV6_EXC_FRAGTIME)
+		else if (code == ICMP6_TIME_EXCEED_REASSEMBLY)
 			printf("Defragmentation failure");
 		else
 			printf("code %d", code);
 		break;
-	case ICMPV6_PARAMPROB:
+	case ICMP6_PARAM_PROB:
 		printf("Parameter problem: ");
-		if (code == ICMPV6_HDR_FIELD)
+		if (code == ICMP6_PARAMPROB_HEADER)
 			printf("Wrong header field ");
-		else if (code == ICMPV6_UNK_NEXTHDR)
+		else if (code == ICMP6_PARAMPROB_NEXTHEADER)
 			printf("Unknown header ");
-		else if (code == ICMPV6_UNK_OPTION)
+		else if (code == ICMP6_PARAMPROB_OPTION)
 			printf("Unknown option ");
 		else
 			printf("code %d ", code);
 		printf ("at %u", info);
 		break;
-	case ICMPV6_ECHO_REQUEST:
+	case ICMP6_ECHO_REQUEST:
 		printf("Echo request");
 		break;
-	case ICMPV6_ECHO_REPLY:
+	case ICMP6_ECHO_REPLY:
 		printf("Echo reply");
 		break;
-	case ICMPV6_MGM_QUERY:
+	case MLD_LISTENER_QUERY:
 		printf("MLD Query");
 		break;
-	case ICMPV6_MGM_REPORT:
+	case MLD_LISTENER_REPORT:
 		printf("MLD Report");
 		break;
-	case ICMPV6_MGM_REDUCTION:
+	case MLD_LISTENER_REDUCTION:
 		printf("MLD Reduction");
 		break;
 	default:
@@ -865,7 +925,7 @@ void install_filter(void)
 		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, 0xAAAA, 0, 1),  /* Ours? */
 		BPF_STMT(BPF_RET|BPF_K, ~0U),  /* Yes, it passes. */
 		BPF_STMT(BPF_LD|BPF_B|BPF_ABS, 0),  /* Load icmp type */
-		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, ICMPV6_ECHO_REPLY, 1, 0), /* Echo? */
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, ICMP6_ECHO_REPLY, 1, 0), /* Echo? */
 		BPF_STMT(BPF_RET|BPF_K, ~0U), /* No. It passes. This must not happen. */
 		BPF_STMT(BPF_RET|BPF_K, 0), /* Echo with wrong ident. Reject. */
 	};
@@ -879,7 +939,7 @@ void install_filter(void)
 	once = 1;
 
 	/* Patch bpflet for current identifier. */
-	insns[1] = (struct sock_filter)BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __constant_htons(ident), 0, 1);
+	insns[1] = (struct sock_filter)BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(ident), 0, 1);
 
 	if (setsockopt(icmp_sock, SOL_SOCKET, SO_ATTACH_FILTER, &filter, sizeof(filter)))
 		perror("WARNING: failed to install socket filter\n");

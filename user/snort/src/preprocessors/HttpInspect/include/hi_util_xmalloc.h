@@ -12,10 +12,7 @@
 
 #include <sys/types.h>
 
-typedef unsigned long long UINT64;
-
 #endif
-
 
 
 void *xmalloc(size_t byteSize);

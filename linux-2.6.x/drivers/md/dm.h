@@ -18,19 +18,70 @@
 
 #define DM_NAME "device-mapper"
 
-#define DMERR(f, arg...) printk(KERN_ERR DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
-#define DMWARN(f, arg...) printk(KERN_WARNING DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
-#define DMINFO(f, arg...) printk(KERN_INFO DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
+#define DMERR(f, arg...) \
+	printk(KERN_ERR DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
+#define DMERR_LIMIT(f, arg...) \
+	do { \
+		if (printk_ratelimit())	\
+			printk(KERN_ERR DM_NAME ": " DM_MSG_PREFIX ": " \
+			       f "\n", ## arg); \
+	} while (0)
+
+#define DMWARN(f, arg...) \
+	printk(KERN_WARNING DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
+#define DMWARN_LIMIT(f, arg...) \
+	do { \
+		if (printk_ratelimit())	\
+			printk(KERN_WARNING DM_NAME ": " DM_MSG_PREFIX ": " \
+			       f "\n", ## arg); \
+	} while (0)
+
+#define DMINFO(f, arg...) \
+	printk(KERN_INFO DM_NAME ": " DM_MSG_PREFIX ": " f "\n", ## arg)
+#define DMINFO_LIMIT(f, arg...) \
+	do { \
+		if (printk_ratelimit())	\
+			printk(KERN_INFO DM_NAME ": " DM_MSG_PREFIX ": " f \
+			       "\n", ## arg); \
+	} while (0)
+
 #ifdef CONFIG_DM_DEBUG
-#  define DMDEBUG(f, arg...) printk(KERN_DEBUG DM_NAME ": " DM_MSG_PREFIX " DEBUG: " f "\n", ## arg)
+#  define DMDEBUG(f, arg...) \
+	printk(KERN_DEBUG DM_NAME ": " DM_MSG_PREFIX " DEBUG: " f "\n", ## arg)
+#  define DMDEBUG_LIMIT(f, arg...) \
+	do { \
+		if (printk_ratelimit())	\
+			printk(KERN_DEBUG DM_NAME ": " DM_MSG_PREFIX ": " f \
+			       "\n", ## arg); \
+	} while (0)
 #else
 #  define DMDEBUG(f, arg...) do {} while (0)
+#  define DMDEBUG_LIMIT(f, arg...) do {} while (0)
 #endif
 
 #define DMEMIT(x...) sz += ((sz >= maxlen) ? \
 			  0 : scnprintf(result + sz, maxlen - sz, x))
 
 #define SECTOR_SHIFT 9
+
+/*
+ * Definitions of return values from target end_io function.
+ */
+#define DM_ENDIO_INCOMPLETE	1
+#define DM_ENDIO_REQUEUE	2
+
+/*
+ * Definitions of return values from target map function.
+ */
+#define DM_MAPIO_SUBMITTED	0
+#define DM_MAPIO_REMAPPED	1
+#define DM_MAPIO_REQUEUE	DM_ENDIO_REQUEUE
+
+/*
+ * Suspend feature flags
+ */
+#define DM_SUSPEND_LOCKFS_FLAG		(1 << 0)
+#define DM_SUSPEND_NOFLUSH_FLAG		(1 << 1)
 
 /*
  * List of devices that a metadevice uses and should open/close.

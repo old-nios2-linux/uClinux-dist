@@ -14,6 +14,7 @@
 #include <linux/etherdevice.h>
 
 #include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6.h>
 #include <linux/netfilter/xt_mac.h>
 #include <linux/netfilter/x_tables.h>
 
@@ -23,7 +24,7 @@ MODULE_DESCRIPTION("iptables mac matching module");
 MODULE_ALIAS("ipt_mac");
 MODULE_ALIAS("ip6t_mac");
 
-static int
+static bool
 match(const struct sk_buff *skb,
       const struct net_device *in,
       const struct net_device *out,
@@ -31,19 +32,19 @@ match(const struct sk_buff *skb,
       const void *matchinfo,
       int offset,
       unsigned int protoff,
-      int *hotdrop)
+      bool *hotdrop)
 {
     const struct xt_mac_info *info = matchinfo;
 
     /* Is mac pointer valid? */
-    return (skb->mac.raw >= skb->head
-	    && (skb->mac.raw + ETH_HLEN) <= skb->data
-	    /* If so, compare... */
-	    && ((!compare_ether_addr(eth_hdr(skb)->h_source, info->srcaddr))
-		^ info->invert));
+    return skb_mac_header(skb) >= skb->head &&
+	   skb_mac_header(skb) + ETH_HLEN <= skb->data
+	   /* If so, compare... */
+	   && ((!compare_ether_addr(eth_hdr(skb)->h_source, info->srcaddr))
+		^ info->invert);
 }
 
-static struct xt_match xt_mac_match[] = {
+static struct xt_match xt_mac_match[] __read_mostly = {
 	{
 		.name		= "mac",
 		.family		= AF_INET,
@@ -59,9 +60,9 @@ static struct xt_match xt_mac_match[] = {
 		.family		= AF_INET6,
 		.match		= match,
 		.matchsize	= sizeof(struct xt_mac_info),
-		.hooks		= (1 << NF_IP_PRE_ROUTING) |
-				  (1 << NF_IP_LOCAL_IN) |
-				  (1 << NF_IP_FORWARD),
+		.hooks		= (1 << NF_IP6_PRE_ROUTING) |
+				  (1 << NF_IP6_LOCAL_IN) |
+				  (1 << NF_IP6_FORWARD),
 		.me		= THIS_MODULE,
 	},
 };

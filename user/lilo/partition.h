@@ -1,6 +1,14 @@
 /* partition.h  -  Partition table handling */
 
-/* Copyright 1992-1996 Werner Almesberger. See file COPYING for details. */
+/*
+Copyright 1992-1998 Werner Almesberger.
+Copyright 1999-2004 John Coffman.
+All rights reserved.
+
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
 
 
 #ifndef PARTITION_H
@@ -16,6 +24,20 @@ typedef struct _change_rule {
     struct _change_rule *next;
 } CHANGE_RULE;
 
+enum {PTW_OKAY=0, PTW_DOS=1, PTW_OS2=2, PTW_SWAP, PTW_XFS,
+		PTW_mask=7, PTW_NTFS=8};
+
+
+#define LLSECTORSIZE ((long long)SECTOR_SIZE)
+
+#if __GLIBC__ < 2 || __GLIBC_MINOR__ < 1
+typedef long long lloff_t;
+
+#ifdef _syscall5
+       lloff_t lseek64(unsigned int fd, lloff_t offs, unsigned int whence);
+#endif
+#endif
+
 struct partition {
 	unsigned char boot_ind;		/* 0x80 - active */
 	unsigned char head;		/* starting head */
@@ -30,13 +52,15 @@ struct partition {
 };
 
 
-#if 1
-
-#define SECTORSIZE ((long long)SECTOR_SIZE)
-
-       loff_t llseek(unsigned int fd, loff_t offs, unsigned int whence);
-
-#endif
+int part_nowrite(char* device);
+/* identify partitions which would be destroyed if the boot block
+   is overwritten:
+   
+   known problems occur for:
+   	XFS
+   	NTFS
+   	DOS FAT (relocation will fix)
+*/
 
 #define is_extd_part(x) ((x)==PART_DOS_EXTD||(x)==PART_WIN_EXTD_LBA||(x)==PART_LINUX_EXTD)
 
@@ -57,5 +81,8 @@ void do_activate(char *where, char *which);
 void do_install_mbr(char *where, char *what);
 /* Install a new MBR (Master Boot Record) */
 
+int read_partitions(char *part, int max, int *volid,
+		struct partition *p, long long *where);
+/* read all partitions & partition tables */
 
 #endif

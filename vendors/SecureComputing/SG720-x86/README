@@ -1,0 +1,7 @@
+
+You must install the latest genext2fs and not use the version that comes
+with our tools chains.  You should then remove /usr/local/bin/genext2fs
+and never use it again :-)
+
+You must install qemu to build
+

@@ -1,53 +1,76 @@
-/* mpz_tdiv_ui(dividend, divisor_limb)
-   -- Return DIVDEND mod DIVISOR_LIMB.
+/* mpz_tdiv_ui(dividend, divisor_limb) -- Return DIVDEND mod DIVISOR_LIMB.
 
-Copyright (C) 1991, 1993, 1994, 1996, 1997, 1998 Free Software Foundation,
-Inc.
+Copyright 1991, 1993, 1994, 1996, 1997, 1998, 2001, 2002, 2004, 2005 Free
+Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
+#include "longlong.h"
 
 unsigned long int
-#if __STDC__
 mpz_tdiv_ui (mpz_srcptr dividend, unsigned long int divisor)
-#else
-mpz_tdiv_ui (dividend, divisor)
-     mpz_srcptr dividend;
-     unsigned long int divisor;
-#endif
 {
-  mp_size_t dividend_size;
-  mp_size_t size;
-  mp_limb_t remainder_limb;
+  mp_size_t ns, nn;
+  mp_ptr np;
+  mp_limb_t rl;
 
   if (divisor == 0)
     DIVIDE_BY_ZERO;
 
-  dividend_size = dividend->_mp_size;
-  size = ABS (dividend_size);
+  ns = SIZ(dividend);
+  if (ns == 0)
+    {
+      return 0;
+    }
 
-  /* No need for temporary allocation and copying if QUOT == DIVIDEND as
-     the divisor is just one limb, and thus no intermediate remainders
-     need to be stored.  */
+  nn = ABS(ns);
+  np = PTR(dividend);
 
-  remainder_limb = mpn_mod_1 (dividend->_mp_d, size, (mp_limb_t) divisor);
+#if BITS_PER_ULONG > GMP_NUMB_BITS  /* avoid warnings about shift amount */
+  if (divisor > GMP_NUMB_MAX)
+    {
+      mp_limb_t dp[2], rp[2];
+      mp_ptr qp;
+      mp_size_t rn;
+      TMP_DECL;
 
-  return remainder_limb;
+      if (nn == 1)		/* tdiv_qr requirements; tested above for 0 */
+	{
+	  rl = np[0];
+	  return rl;
+	}
+
+      TMP_MARK;
+      dp[0] = divisor & GMP_NUMB_MASK;
+      dp[1] = divisor >> GMP_NUMB_BITS;
+      qp = TMP_ALLOC_LIMBS (nn - 2 + 1);
+      mpn_tdiv_qr (qp, rp, (mp_size_t) 0, np, nn, dp, (mp_size_t) 2);
+      TMP_FREE;
+      rl = rp[0] + (rp[1] << GMP_NUMB_BITS);
+      rn = 2 - (rp[1] == 0);  rn -= (rp[rn - 1] == 0);
+    }
+  else
+#endif
+    {
+      rl = mpn_mod_1 (np, nn, (mp_limb_t) divisor);
+    }
+
+  return rl;
 }

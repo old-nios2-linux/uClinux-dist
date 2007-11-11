@@ -65,8 +65,6 @@ struct tcf_exts
 {
 #ifdef CONFIG_NET_CLS_ACT
 	struct tc_action *action;
-#elif defined CONFIG_NET_CLS_POLICE
-	struct tcf_police *police;
 #endif
 };
 
@@ -91,8 +89,6 @@ tcf_exts_is_predicative(struct tcf_exts *exts)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	return !!exts->action;
-#elif defined CONFIG_NET_CLS_POLICE
-	return !!exts->police;
 #else
 	return 0;
 #endif
@@ -129,11 +125,7 @@ tcf_exts_exec(struct sk_buff *skb, struct tcf_exts *exts,
 #ifdef CONFIG_NET_CLS_ACT
 	if (exts->action)
 		return tcf_action_exec(skb, exts->action, res);
-#elif defined CONFIG_NET_CLS_POLICE
-	if (exts->police)
-		return tcf_police(skb, exts->police);
 #endif
-
 	return 0;
 }
 
@@ -306,6 +298,8 @@ static inline int tcf_em_tree_match(struct sk_buff *skb,
 		return 1;
 }
 
+#define MODULE_ALIAS_TCF_EMATCH(kind)	MODULE_ALIAS("ematch-kind-" __stringify(kind))
+
 #else /* CONFIG_NET_EMATCH */
 
 struct tcf_ematch_tree
@@ -326,18 +320,18 @@ static inline unsigned char * tcf_get_base_ptr(struct sk_buff *skb, int layer)
 		case TCF_LAYER_LINK:
 			return skb->data;
 		case TCF_LAYER_NETWORK:
-			return skb->nh.raw;
+			return skb_network_header(skb);
 		case TCF_LAYER_TRANSPORT:
-			return skb->h.raw;
+			return skb_transport_header(skb);
 	}
 
 	return NULL;
 }
 
-static inline int tcf_valid_offset(struct sk_buff *skb, unsigned char *ptr,
-				   int len)
+static inline int tcf_valid_offset(const struct sk_buff *skb,
+				   const unsigned char *ptr, const int len)
 {
-	return unlikely((ptr + len) < skb->tail && ptr > skb->head);
+	return unlikely((ptr + len) < skb_tail_pointer(skb) && ptr > skb->head);
 }
 
 #ifdef CONFIG_NET_CLS_IND
@@ -352,10 +346,13 @@ tcf_change_indev(struct tcf_proto *tp, char *indev, struct rtattr *indev_tlv)
 static inline int
 tcf_match_indev(struct sk_buff *skb, char *indev)
 {
+	struct net_device *dev;
+
 	if (indev[0]) {
-		if  (!skb->input_dev)
+		if  (!skb->iif)
 			return 0;
-		if (strcmp(indev, skb->input_dev->name))
+		dev = __dev_get_by_index(skb->iif);
+		if (!dev || strcmp(indev, dev->name))
 			return 0;
 	}
 

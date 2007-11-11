@@ -436,9 +436,6 @@ int ProcessBaseStats(SFBASE *sfBase, int console, int file, FILE * fh)
 
 int GetProcessingTime(SYSTIMES *Systimes, SFBASE *sfBase)
 {
-#ifndef LINUX_SMP
-    int rusageRet = -1;
-#endif
     int todRet = -1;
     struct timeval tvTime;
 #ifdef LINUX_SMP
@@ -448,8 +445,11 @@ int GetProcessingTime(SYSTIMES *Systimes, SFBASE *sfBase)
     todRet = gettimeofday(&tvTime, NULL);
 #else
     struct rusage  rusage;
+    int rusageRet;
 #ifndef WIN32
     rusageRet = getrusage(RUSAGE_SELF, &rusage);
+#else
+    rusageRet = -1;
 #endif  /* !WIN32 */
     todRet = gettimeofday(&tvTime, NULL);
 
@@ -1184,7 +1184,7 @@ int LogBasePerfStats(SFBASE_STATS *sfBaseStats,  FILE * fh )
     fprintf(fh,"%llu,",sfBaseStats->pkt_stats.pkts_recv);
     fprintf(fh,"%llu,", sfBaseStats->pkt_stats.pkts_drop);
     
-    fprintf(fh,"%llu", sfBaseStats->total_blocked_packets);
+    fprintf(fh,"%llu,", sfBaseStats->total_blocked_packets);
 
     fprintf(fh,
 #ifdef WIN32

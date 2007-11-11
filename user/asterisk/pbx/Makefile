@@ -1,70 +1,48 @@
 #
 # Asterisk -- A telephony toolkit for Linux.
 # 
-# Makefile for PBX frontends (dynamically loaded)
+# Makefile for PBX modules
 #
-# Copyright (C) 1999, Mark Spencer
-#
-# Mark Spencer <markster@linux-support.net>
+# Copyright (C) 1999-2006, Digium, Inc.
 #
 # This program is free software, distributed under the terms of
 # the GNU General Public License
 #
 
+-include ../menuselect.makeopts ../menuselect.makedeps
 
+C_MODS:=$(filter-out $(MENUSELECT_PBX),$(patsubst %.c,%,$(wildcard pbx_*.c)))
+CC_MODS:=$(filter-out $(MENUSELECT_PBX),$(patsubst %.cc,%,$(wildcard pbx_*.cc)))
 
-PBX_LIBS=pbx_config.so pbx_wilcalu.so pbx_spool.so     # pbx_gtkconsole.so pbx_kdeconsole.so
+LOADABLE_MODS:=$(C_MODS) $(CC_MODS)
 
-# Add GTK console if appropriate
-PBX_LIBS+=$(shell gtk-config --cflags >/dev/null 2>/dev/null && echo "pbx_gtkconsole.so")
-# Add KDE Console if appropriate
-#PBX_LIBS+=$(shell [ "$$QTDIR" != "" ] && echo "pbx_kdeconsole.so")
-
-
-GTK_FLAGS=`gtk-config --cflags gthread`
-GTK_LIBS=`gtk-config --libs gthread`
-#CXX=egcs
-MOC=$(QTDIR)/bin/moc
-KDE_FLAGS=-I$(KDEDIR)/include -I$(KDEDIR)/include/kde -I$(QTDIR)/include
-KDE_LIBS=-L$(KDEDIR)/lib -L$(QTDIR)/lib -lqt -lkdecore -lkdeui
-CFLAGS+=-fPIC
-
-KDE_CONSOLE_OBJS=pbx_kdeconsole_main.o pbx_kdeconsole.o 
-
-all: depend $(PBX_LIBS)
-
-clean:
-	rm -f *.so *.o .depend
-
-pbx_gtkconsole.o: pbx_gtkconsole.c
-	$(CC) $(CFLAGS) $(GTK_FLAGS) -c -o $@ $<
-
-pbx_gtkconsole.so: pbx_gtkconsole.o
-	$(CC) $(SOLINK) -o $@ $< $(GTK_LIBS)
-
-pbx_kdeconsole.o: pbx_kdeconsole.cc pbx_kdeconsole.moc
-	$(CXX) $(CFLAGS) $(KDE_FLAGS) -c -o $@ $<
-
-pbx_kdeconsole_main.o: pbx_kdeconsole_main.cc pbx_kdeconsole.h
-	$(CXX) $(CFLAGS) $(KDE_FLAGS) -c -o $@ $<
-
-pbx_kdeconsole.so: $(KDE_CONSOLE_OBJS)
-	$(CC) $(SOLINK) -o $@ $(KDE_CONSOLE_OBJS) $(KDE_LIBS)
-
-%.moc : %.h
-	$(MOC) $< -o $@
-
-%.so : %.o
-	$(CC) $(SOLINK) -o $@ $<
-
-ifneq ($(wildcard .depend),)
-include .depend
+ifneq ($(findstring pbx,$(MENUSELECT_EMBED)),)
+  EMBEDDED_MODS:=$(LOADABLE_MODS)
+  LOADABLE_MODS:=
 endif
 
-install: all
-	for x in $(PBX_LIBS); do $(INSTALL) -m 755 $$x $(DESTDIR)$(MODULES_DIR) ; done
+all: _all
 
-depend: .depend
+include $(ASTTOPDIR)/Makefile.moddir_rules
 
-.depend:
-	../mkdep $(CFLAGS) `ls *.c`
+clean::
+	rm -f ael/*.o
+
+ael/ael_lex.o: ael/ael_lex.c ../include/asterisk/ael_structs.h ael/ael.tab.h
+ael/ael_lex.o: ASTCFLAGS+=-I.
+
+ael/ael.tab.o: ael/ael.tab.c ael/ael.tab.h ../include/asterisk/ael_structs.h
+ael/ael.tab.o: ASTCFLAGS+=-I.
+
+$(if $(filter pbx_ael,$(EMBEDDED_MODS)),modules.link,pbx_ael.so): ael/ael.tab.o ael/ael_lex.o
+
+ael/ael_lex.c:
+	(cd ael; flex ael.flex; sed -i -e "/begin standard C headers/i#include \"asterisk.h\"" ael_lex.c)
+
+ael/ael.tab.c ael/ael.tab.h:
+	(cd ael; bison -v -d ael.y)
+
+dundi-parser.o: dundi-parser.h
+dundi-parser.o: ASTCFLAGS+=-I.
+
+$(if $(filter pbx_dundi,$(EMBEDDED_MODS)),modules.link,pbx_dundi.so): dundi-parser.o

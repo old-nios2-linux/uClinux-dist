@@ -74,6 +74,7 @@
 #include <string.h>
 
 #include "sfxhash.h"
+#include "util.h"
 
 /*
  * Private Malloc - abstract the memory system
@@ -199,7 +200,8 @@ SFXHASH * sfxhash_new( int nrows, int keysize, int datasize, int maxmem,
     }
 
     /* Allocate the table structure from general memory */
-    h = (SFXHASH*) calloc( 1, sizeof(SFXHASH) );
+    //h = (SFXHASH*) calloc( 1, sizeof(SFXHASH) );
+    h = (SFXHASH*)SnortAlloc(sizeof(SFXHASH));
     if( !h ) 
     {
         return 0;
@@ -561,7 +563,7 @@ SFXHASH_NODE * sfxhash_newnode( SFXHASH * t )
         hnode = (SFXHASH_NODE*)s_malloc( t, sizeof(SFXHASH_NODE) +
                                          t->keysize + t->datasize );
     }
-        
+
     /*  If we still haven't found hnode, we're at our memory limit.
      *
      *  Uses Automatic Node Recovery, to recycle the oldest node-based on access
@@ -1241,8 +1243,10 @@ int main ( int argc, char ** argv )
     /* Add Nodes to the Hash Table */
     for(i=0;i<num;i++) 
     {
-        sprintf(strkey, "KeyWord%5.5d",i+1);
-        sprintf(strdata,"KeyWord%5.5d",i+1);
+        snprintf(strkey, sizeof(strkey), "KeyWord%5.5d",i+1);
+        strkey[sizeof(strkey) - 1] = '\0';
+        snprintf(strdata, sizeof(strdata), "KeyWord%5.5d",i+1);
+        strdata[sizeof(strdata) - 1] = '\0';
         //strupr(strdata);
         sfxhash_add( t, strkey  /* user key */ ,  strdata /* user data */ );
     }  
@@ -1251,7 +1255,8 @@ int main ( int argc, char ** argv )
     printf("\n** FIND KEY TEST\n");
     for(i=0;i<num;i++) 
     {
-        sprintf(strkey,"KeyWord%5.5d",i+1);
+        snprintf(strkey, sizeof(strkey) - 1, "KeyWord%5.5d",i+1);
+        strkey[sizeof(strkey) - 1] = '\0';
 
         p = (char*) sfxhash_find( t, strkey );
 

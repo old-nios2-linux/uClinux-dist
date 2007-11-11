@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2001  SnapGear Inc. <davidm@snapgear.com>
  * Copyright (C) 2000  Lineo, Inc.  (www.lineo.com)   
- * Copyright (C) 1997, 1998  D. Jeff Dionne <jeff@lineo.ca>,
+ * Copyright (C) 1997, 1998  D. Jeff Dionne <jeff@uclinux.org>,
  *                           Kenneth Albanowski <kjahds@kjahds.com>,
  * Copyright (C) 1999-2003   Greg Ungerer <gerg@snapgear.com>
  *
@@ -222,9 +222,13 @@ extern char _ebss;
 #if defined(CONFIG_BOARD_UC5272) || \
     defined(CONFIG_BOARD_UC5282) || \
     defined(CONFIG_GELUNAR_M528X)
+#if !defined(CONFIG_ROMFS_IMAGE)
 extern char _image_start[];
 #define FIXED_ROMARRAY _image_start
 #undef FIXUP_ARENAS
+#else
+#define FIXUP_ARENAS  arena[0].address = (unsigned long) &_ebss;
+#endif
 #endif
 
 #if defined(CONFIG_MACH_UC5471DSP)
@@ -3041,7 +3045,9 @@ int __init blkmem_init( void )
    * This used to set the minor # to 1, which didn't work...
    * --gmcnutt
    */
+#if !defined(CONFIG_ROOT_NFS)
     ROOT_DEV = MKDEV(MAJOR_NR,0);
+#endif
   /*}*/
 #endif
 #endif

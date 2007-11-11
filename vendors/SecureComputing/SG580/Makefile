@@ -7,6 +7,7 @@ ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 IMAGESIZE = 15597568
 FLASH     = $(IMAGEDIR)/flash.bin
+SHIM	  = $(ROOTDIR)/boot/shim/shim.b
 
 SQUASH_ENDIAN = -be
 

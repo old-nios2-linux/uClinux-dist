@@ -6,7 +6,14 @@
  * Copyright (C) 2002 Paul Mundt
  */
 
+#include <linux/irqflags.h>
+#include <linux/compiler.h>
+#include <linux/linkage.h>
 #include <asm/types.h>
+#include <asm/ptrace.h>
+
+struct task_struct *__switch_to(struct task_struct *prev,
+				struct task_struct *next);
 
 /*
  *	switch_to() should switch tasks to task nr n, first
@@ -57,16 +64,6 @@
 	last = __last;							\
 } while (0)
 
-/*
- * On SMP systems, when the scheduler does migration-cost autodetection,
- * it needs a way to flush as much of the CPU's caches as possible.
- *
- * TODO: fill this in!
- */
-static inline void sched_cacheflush(void)
-{
-}
-
 #ifdef CONFIG_CPU_SH4A
 #define __icbi()			\
 {					\
@@ -78,16 +75,6 @@ static inline void sched_cacheflush(void)
 		: "m" (__m(__addr)));	\
 }
 #endif
-
-static inline unsigned long tas(volatile int *m)
-{
-	unsigned long retval;
-
-	__asm__ __volatile__ ("tas.b	@%1\n\t"
-			      "movt	%0"
-			      : "=r" (retval): "r" (m): "t", "memory");
-	return retval;
-}
 
 /*
  * A brief note on ctrl_barrier(), the control register write barrier.
@@ -129,104 +116,7 @@ static inline unsigned long tas(volatile int *m)
 #define smp_read_barrier_depends()	do { } while(0)
 #endif
 
-#define set_mb(var, value) do { xchg(&var, value); } while (0)
-
-/* Interrupt Control */
-#ifdef CONFIG_CPU_HAS_SR_RB
-static inline void local_irq_enable(void)
-{
-	unsigned long __dummy0, __dummy1;
-
-	__asm__ __volatile__("stc	sr, %0\n\t"
-			     "and	%1, %0\n\t"
-			     "stc	r6_bank, %1\n\t"
-			     "or	%1, %0\n\t"
-			     "ldc	%0, sr"
-			     : "=&r" (__dummy0), "=r" (__dummy1)
-			     : "1" (~0x000000f0)
-			     : "memory");
-}
-#else
-static inline void local_irq_enable(void)
-{
-	unsigned long __dummy0, __dummy1;
-
-	__asm__ __volatile__ (
-		"stc	sr, %0\n\t"
-		"and	%1, %0\n\t"
-		"ldc	%0, sr\n\t"
-		: "=&r" (__dummy0), "=r" (__dummy1)
-		: "1" (~0x000000f0)
-		: "memory");
-}
-#endif
-
-static inline void local_irq_disable(void)
-{
-	unsigned long __dummy;
-	__asm__ __volatile__("stc	sr, %0\n\t"
-			     "or	#0xf0, %0\n\t"
-			     "ldc	%0, sr"
-			     : "=&z" (__dummy)
-			     : /* no inputs */
-			     : "memory");
-}
-
-static inline void set_bl_bit(void)
-{
-	unsigned long __dummy0, __dummy1;
-
-	__asm__ __volatile__ ("stc	sr, %0\n\t"
-			     "or	%2, %0\n\t"
-			     "and	%3, %0\n\t"
-			     "ldc	%0, sr"
-			     : "=&r" (__dummy0), "=r" (__dummy1)
-			     : "r" (0x10000000), "r" (0xffffff0f)
-			     : "memory");
-}
-
-static inline void clear_bl_bit(void)
-{
-	unsigned long __dummy0, __dummy1;
-
-	__asm__ __volatile__ ("stc	sr, %0\n\t"
-			     "and	%2, %0\n\t"
-			     "ldc	%0, sr"
-			     : "=&r" (__dummy0), "=r" (__dummy1)
-			     : "1" (~0x10000000)
-			     : "memory");
-}
-
-#define local_save_flags(x) \
-	__asm__("stc sr, %0; and #0xf0, %0" : "=&z" (x) :/**/: "memory" )
-
-#define irqs_disabled()			\
-({					\
-	unsigned long flags;		\
-	local_save_flags(flags);	\
-	(flags != 0);			\
-})
-
-static inline unsigned long local_irq_save(void)
-{
-	unsigned long flags, __dummy;
-
-	__asm__ __volatile__("stc	sr, %1\n\t"
-			     "mov	%1, %0\n\t"
-			     "or	#0xf0, %0\n\t"
-			     "ldc	%0, sr\n\t"
-			     "mov	%1, %0\n\t"
-			     "and	#0xf0, %0"
-			     : "=&z" (flags), "=&r" (__dummy)
-			     :/**/
-			     : "memory" );
-	return flags;
-}
-
-#define local_irq_restore(x) do {			\
-	if ((x & 0x000000f0) != 0x000000f0)		\
-		local_irq_enable();			\
-} while (0)
+#define set_mb(var, value) do { (void)xchg(&var, value); } while (0)
 
 /*
  * Jump to P2 area.
@@ -263,9 +153,6 @@ do {							\
 		"2:"					\
 		: "=&r" (__dummy));			\
 } while (0)
-
-/* For spinlocks etc */
-#define local_irq_save(x)	x = local_irq_save()
 
 static inline unsigned long xchg_u32(volatile u32 *m, unsigned long val)
 {
@@ -353,6 +240,8 @@ static inline unsigned long __cmpxchg(volatile void * ptr, unsigned long old,
 				    (unsigned long)_n_, sizeof(*(ptr))); \
   })
 
+extern void die(const char *str, struct pt_regs *regs, long err) __attribute__ ((noreturn));
+
 extern void *set_exception_table_vec(unsigned int vec, void *handler);
 
 static inline void *set_exception_table_evt(unsigned int evt, void *handler)
@@ -360,12 +249,31 @@ static inline void *set_exception_table_evt(unsigned int evt, void *handler)
 	return set_exception_table_vec(evt >> 5, handler);
 }
 
+/*
+ * SH-2A has both 16 and 32-bit opcodes, do lame encoding checks.
+ */
+#ifdef CONFIG_CPU_SH2A
+extern unsigned int instruction_size(unsigned int insn);
+#else
+#define instruction_size(insn)	(2)
+#endif
+
 /* XXX
  * disable hlt during certain critical i/o operations
  */
 #define HAVE_DISABLE_HLT
 void disable_hlt(void);
 void enable_hlt(void);
+
+void default_idle(void);
+
+asmlinkage void break_point_trap(void);
+asmlinkage void debug_trap_handler(unsigned long r4, unsigned long r5,
+				   unsigned long r6, unsigned long r7,
+				   struct pt_regs __regs);
+asmlinkage void bug_trap_handler(unsigned long r4, unsigned long r5,
+				 unsigned long r6, unsigned long r7,
+				 struct pt_regs __regs);
 
 #define arch_align_stack(x) (x)
 

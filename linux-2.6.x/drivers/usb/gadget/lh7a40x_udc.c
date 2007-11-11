@@ -75,14 +75,9 @@ static int lh7a40x_ep_enable(struct usb_ep *ep,
 static int lh7a40x_ep_disable(struct usb_ep *ep);
 static struct usb_request *lh7a40x_alloc_request(struct usb_ep *ep, gfp_t);
 static void lh7a40x_free_request(struct usb_ep *ep, struct usb_request *);
-static void *lh7a40x_alloc_buffer(struct usb_ep *ep, unsigned, dma_addr_t *,
-				  gfp_t);
-static void lh7a40x_free_buffer(struct usb_ep *ep, void *, dma_addr_t,
-				unsigned);
 static int lh7a40x_queue(struct usb_ep *ep, struct usb_request *, gfp_t);
 static int lh7a40x_dequeue(struct usb_ep *ep, struct usb_request *);
 static int lh7a40x_set_halt(struct usb_ep *ep, int);
-static int lh7a40x_fifo_status(struct usb_ep *ep);
 static int lh7a40x_fifo_status(struct usb_ep *ep);
 static void lh7a40x_fifo_flush(struct usb_ep *ep);
 static void lh7a40x_ep0_kick(struct lh7a40x_udc *dev, struct lh7a40x_ep *ep);
@@ -104,9 +99,6 @@ static struct usb_ep_ops lh7a40x_ep_ops = {
 
 	.alloc_request = lh7a40x_alloc_request,
 	.free_request = lh7a40x_free_request,
-
-	.alloc_buffer = lh7a40x_alloc_buffer,
-	.free_buffer = lh7a40x_free_buffer,
 
 	.queue = lh7a40x_queue,
 	.dequeue = lh7a40x_dequeue,
@@ -423,9 +415,10 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 	DEBUG("%s: %s\n", __FUNCTION__, driver->driver.name);
 
 	if (!driver
-	    || driver->speed != USB_SPEED_FULL
-	    || !driver->bind
-	    || !driver->unbind || !driver->disconnect || !driver->setup)
+			|| driver->speed != USB_SPEED_FULL
+			|| !driver->bind
+			|| !driver->disconnect
+			|| !driver->setup)
 		return -EINVAL;
 	if (!dev)
 		return -ENODEV;
@@ -472,7 +465,7 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 
 	if (!dev)
 		return -ENODEV;
-	if (!driver || driver != dev->driver)
+	if (!driver || driver != dev->driver || !driver->unbind)
 		return -EINVAL;
 
 	spin_lock_irqsave(&dev->lock, flags);
@@ -1132,26 +1125,6 @@ static void lh7a40x_free_request(struct usb_ep *ep, struct usb_request *_req)
 	req = container_of(_req, struct lh7a40x_request, req);
 	WARN_ON(!list_empty(&req->queue));
 	kfree(req);
-}
-
-static void *lh7a40x_alloc_buffer(struct usb_ep *ep, unsigned bytes,
-				  dma_addr_t * dma, gfp_t gfp_flags)
-{
-	char *retval;
-
-	DEBUG("%s (%p, %d, %d)\n", __FUNCTION__, ep, bytes, gfp_flags);
-
-	retval = kmalloc(bytes, gfp_flags & ~(__GFP_DMA | __GFP_HIGHMEM));
-	if (retval)
-		*dma = virt_to_bus(retval);
-	return retval;
-}
-
-static void lh7a40x_free_buffer(struct usb_ep *ep, void *buf, dma_addr_t dma,
-				unsigned bytes)
-{
-	DEBUG("%s, %p\n", __FUNCTION__, ep);
-	kfree(buf);
 }
 
 /** Queue one request
@@ -2126,9 +2099,11 @@ static int lh7a40x_udc_remove(struct platform_device *pdev)
 
 	DEBUG("%s: %p\n", __FUNCTION__, pdev);
 
+	if (dev->driver)
+		return -EBUSY;
+
 	udc_disable(dev);
 	remove_proc_files();
-	usb_gadget_unregister_driver(dev->driver);
 
 	free_irq(IRQ_USBINTR, dev);
 

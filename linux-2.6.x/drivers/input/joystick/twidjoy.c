@@ -194,7 +194,7 @@ static int twidjoy_connect(struct serio *serio, struct serio_driver *drv)
 	twidjoy = kzalloc(sizeof(struct twidjoy), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!twidjoy || !input_dev)
-		goto fail;
+		goto fail1;
 
 	twidjoy->dev = input_dev;
 	snprintf(twidjoy->phys, sizeof(twidjoy->phys), "%s/input0", serio->phys);
@@ -205,11 +205,9 @@ static int twidjoy_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.vendor = SERIO_TWIDJOY;
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &serio->dev;
-	input_dev->private = twidjoy;
+	input_dev->dev.parent = &serio->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);
-	input_dev->absbit[0] = BIT(ABS_X) | BIT(ABS_Y);
 	input_set_abs_params(input_dev, ABS_X, -50, 50, 4, 4);
 	input_set_abs_params(input_dev, ABS_Y, -50, 50, 4, 4);
 
@@ -221,13 +219,17 @@ static int twidjoy_connect(struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open(serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
-	input_register_device(twidjoy->dev);
+	err = input_register_device(twidjoy->dev);
+	if (err)
+		goto fail3;
+
 	return 0;
 
- fail:	serio_set_drvdata(serio, NULL);
-	input_free_device(input_dev);
+ fail3:	serio_close(serio);
+ fail2:	serio_set_drvdata(serio, NULL);
+ fail1:	input_free_device(input_dev);
 	kfree(twidjoy);
 	return err;
 }
@@ -265,8 +267,7 @@ static struct serio_driver twidjoy_drv = {
 
 static int __init twidjoy_init(void)
 {
-	serio_register_driver(&twidjoy_drv);
-	return 0;
+	return serio_register_driver(&twidjoy_drv);
 }
 
 static void __exit twidjoy_exit(void)

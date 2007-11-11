@@ -1,9 +1,9 @@
 /*
- * $Id: authdb_mod.h,v 1.4 2003/09/15 19:47:02 janakj Exp $
+ * $Id: authdb_mod.h,v 1.8.2.2 2005/04/26 10:14:57 janakj Exp $
  *
  * Digest Authentication - Database support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,7 @@
 #ifndef AUTHDB_MOD_H
 #define AUTHDB_MOD_H
 
+#include "../../str.h"
 #include "../../db/db.h"
 #include "../auth/api.h"
 #include "../../parser/msg_parser.h"
@@ -40,19 +41,19 @@
  * Module parameters variables
  */
 
-extern char* db_url;          /* Database URL */
-extern char* user_column;     /* 'username' column name */
-extern char* domain_column;   /* 'domain' column name */
-extern char* rpid_column;     /* 'rpid' column name */
-extern char* pass_column;     /* 'password' column name */
-extern char* pass_column_2;   /* Column containg HA1 string constructed
-			       * of user@domain username
-			       */
+extern str user_column;     /* 'username' column name */
+extern str domain_column;   /* 'domain' column name */
+extern str pass_column;     /* 'password' column name */
+extern str pass_column_2;   /* Column containing HA1 string constructed
+			     * of user@domain username
+			     */
+extern str *avps_int;       /* Columns containing int AVPs to be set after successful auth */
+extern str *avps_str;       /* Columns containing str AVPs to be set after successful auth */
+extern int avps_int_n;
+extern int avps_str_n;
 
 extern int calc_ha1;          /* if set to 1, ha1 is calculated by the server */
 extern int use_domain;        /* If set to 1 then the domain will be used when selecting a row */
-extern int use_rpid;          /* If set to 1 then rpid will be fetched from rpid_column */
-extern db_con_t* db_handle;   /* Database connection handle */
 
 extern pre_auth_f pre_auth_func;
 extern post_auth_f post_auth_func;

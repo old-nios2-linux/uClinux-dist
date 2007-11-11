@@ -1,8 +1,8 @@
 /*
- * $Id: t_msgbuilder.h,v 1.12.6.2 2004/02/11 18:51:59 janakj Exp $
+ * $Id: t_msgbuilder.h,v 1.15 2004/08/24 09:00:43 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,6 +24,10 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * History:
+ * --------
+ *  2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
  */
 
 
@@ -65,6 +69,11 @@
 char *build_local(struct cell *Trans, unsigned int branch,
 	unsigned int *len, char *method, int method_len, str *to);
 
+char *build_uac_request(  str msg_type, str dst, str from,
+	str fromtag, int cseq, str callid, str headers, 
+	str body, int branch,
+	struct cell *t, unsigned int *len);
+
 
 /*
  * The function creates an ACK to 200 OK. Route set will be created
@@ -72,14 +81,8 @@ char *build_local(struct cell *Trans, unsigned int branch,
  * request should be send. The function is used by tm when it generates
  * local ACK to 200 OK (on behalf of applications using uac
  */
-char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch, 
+char *build_dlg_ack(struct sip_msg* rpl, struct cell *Trans, unsigned int branch,
 		    str* to, unsigned int *len, str *next_hop);
-
-
-char *build_uac_request(  str msg_type, str dst, str from,
-	str fromtag, int cseq, str callid, str headers, 
-	str body, int branch,
-	struct cell *t, unsigned int *len);
 
 
 /*

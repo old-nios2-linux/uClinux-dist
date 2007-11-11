@@ -1,56 +1,84 @@
-/* mpz/lcm.c:   Calculate the least common multiple of two integers.
+/* mpz_lcm -- mpz/mpz least common multiple.
 
-Copyright (C) 1996 Free Software Foundation, Inc.
+Copyright 1996, 2000, 2001, 2005 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-void *_mpz_realloc ();
 
 void
-#if __STDC__
 mpz_lcm (mpz_ptr r, mpz_srcptr u, mpz_srcptr v)
-#else
-mpz_lcm (r, u, v)
-     mpz_ptr r;
-     mpz_srcptr u;
-     mpz_srcptr v;
-#endif
 {
   mpz_t g;
   mp_size_t usize, vsize, size;
+  TMP_DECL;
 
-  usize = ABS (SIZ (u));
-  vsize = ABS (SIZ (v));
-
+  usize = SIZ (u);
+  vsize = SIZ (v);
   if (usize == 0 || vsize == 0)
     {
       SIZ (r) = 0;
       return;
     }
+  usize = ABS (usize);
+  vsize = ABS (vsize);
 
+  if (vsize == 1)
+    {
+      mp_limb_t  vl, gl, c;
+      mp_srcptr  up;
+      mp_ptr     rp;
+
+    one:
+      MPZ_REALLOC (r, usize+1);
+
+      up = PTR(u);
+      vl = PTR(v)[0];
+      gl = mpn_gcd_1 (up, usize, vl);
+      vl /= gl;
+
+      rp = PTR(r);
+      c = mpn_mul_1 (rp, up, usize, vl);
+      rp[usize] = c;
+      usize += (c != 0);
+      SIZ(r) = usize;
+      return;
+    }
+
+  if (usize == 1)
+    {
+      usize = vsize;
+      MPZ_SRCPTR_SWAP (u, v);
+      goto one;
+    }
+
+  TMP_MARK;
   size = MAX (usize, vsize);
   MPZ_TMP_INIT (g, size);
 
   mpz_gcd (g, u, v);
   mpz_divexact (g, u, g);
   mpz_mul (r, g, v);
+
+  SIZ (r) = ABS (SIZ (r));	/* result always positive */
+
+  TMP_FREE;
 }

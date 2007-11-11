@@ -585,7 +585,7 @@ void ParseFrag2Args(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "min_ttl"))
             {
-                if(isdigit((int)stoks[1][0]))
+                if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     f2data.min_ttl = atoi(stoks[1]);
                 }
@@ -604,7 +604,7 @@ void ParseFrag2Args(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "self_preservation_threshold"))
             {
-                if(isdigit((int)stoks[1][0]))
+                if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     f2data.sp_threshold = atoi(stoks[1]);
                 }
@@ -619,7 +619,7 @@ void ParseFrag2Args(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "self_preservation_period"))
             {
-                if(isdigit((int)stoks[1][0]))
+                if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     f2data.sp_period = atoi(stoks[1]);
                 }
@@ -634,7 +634,7 @@ void ParseFrag2Args(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "suspend_threshold"))
             {
-                if(isdigit((int)stoks[1][0]))
+                if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     f2data.suspend_threshold = atoi(stoks[1]);
                 }
@@ -649,7 +649,7 @@ void ParseFrag2Args(u_char *args)
             }
             else if(!strcasecmp(stoks[0], "suspend_period"))
             {
-                if(isdigit((int)stoks[1][0]))
+                if(stoks[1] && isdigit((int)stoks[1][0]))
                 {
                     f2data.suspend_period = atoi(stoks[1]);
                 }

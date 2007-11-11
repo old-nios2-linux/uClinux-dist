@@ -1,9 +1,8 @@
 /* uCbootstrap.h:  Bootloader system call interface
  *
- * (c) 2002 Arcturus networks, Inc.
- *
- *  ARM7TDMI support by O.Zhadan,  2001
- *  ( used undefined instruction trap )
+ * Copyright (C) 2001-2007 Arcturus Networks Inc.
+ *               by Oleks G. Zhadan et al
+ *               <www.ArcturusNetworks.com>   
  */
 
 #ifndef __UCBOOTSTRAP_H__
@@ -176,5 +175,28 @@ typedef struct _memnode {
   int len;
   int *offset;
 } mnode_t;
+
+
+
+/*
+ * uCbootstrap header specification
+ */
+
+#if !defined (_UCHEADER_H_)
+#define _UCHEADER_H_
+#define _UCHEADER_VERSION_ 0.1
+
+typedef struct {
+        unsigned char magic[8];     /* magic number "uCimage\0" */
+        int           header_size;  /* after which data begins */
+        int           data_size;    /* size of image in bytes */
+        char          datecode[12]; /* output of 'date -I': "yyyy-mm-dd" */
+        unsigned char md5sum[16];   /* binary md5sum of data */
+        char          name[128];    /* filename or ID */
+        char          padding[84];  /* pad to 256 bytes*/
+} uCimage_header;
+
+#define UCHEADER_MAGIC "uCimage\0" /* including one terminating zero */
+#endif /* !defined (_UCHEADER_H_) */
 
 #endif /* __UCBOOTSTRAP_H__ */

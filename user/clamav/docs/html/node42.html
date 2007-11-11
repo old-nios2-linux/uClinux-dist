@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>Memory</TITLE>
-<META NAME="description" CONTENT="Memory">
+<TITLE>Engine structure</TITLE>
+<META NAME="description" CONTENT="Engine structure">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -19,53 +19,62 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
 
-<LINK REL="next" HREF="node43.html">
 <LINK REL="previous" HREF="node41.html">
-<LINK REL="up" HREF="node40.html">
+<LINK REL="up" HREF="node38.html">
 <LINK REL="next" HREF="node43.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html1122"
+<A NAME="tex2html739"
   HREF="node43.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html1118"
-  HREF="node40.html">
+<A NAME="tex2html735"
+  HREF="node38.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html1112"
+<A NAME="tex2html731"
   HREF="node41.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html1120"
+<A NAME="tex2html737"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html1123"
-  HREF="node43.html">clamav-config</A>
-<B> Up:</B> <A NAME="tex2html1119"
-  HREF="node40.html">Database reloading</A>
-<B> Previous:</B> <A NAME="tex2html1113"
-  HREF="node41.html">Data scan functions</A>
- &nbsp <B>  <A NAME="tex2html1121"
+<B> Next:</B> <A NAME="tex2html740"
+  HREF="node43.html">Database reloading</A>
+<B> Up:</B> <A NAME="tex2html736"
+  HREF="node38.html">API</A>
+<B> Previous:</B> <A NAME="tex2html732"
+  HREF="node41.html">Error handling</A>
+ &nbsp <B>  <A NAME="tex2html738"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H3><A NAME="SECTION00074200000000000000">
-Memory</A>
+<H3><A NAME="SECTION00074400000000000000">
+Engine structure</A>
 </H3>
-    Because the internal database uses a few megabytes of memory, you should
-    release it if you no longer need to scan files.
+    When all required databases are loaded you should prepare the detection
+    engine by calling <code>cl_build</code>. In the case of failure you should
+    free the memory occupied by the engine with <code>cl_free</code>:
     <PRE>
-	void cl_free(struct cl_node *root);
+	int cl_build(struct cl_engine *engine);
+	void cl_free(struct cl_engine *engine);
+</PRE>
+    In our example:
+    <PRE>
+	if((ret = cl_build(engine))) {
+	    printf("cl_build() error: %s\n", cl_strerror(ret));
+	    cl_free(engine);
+	    exit(1);
+	}
 </PRE>
 
 <P>
 <BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

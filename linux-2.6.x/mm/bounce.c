@@ -190,7 +190,7 @@ static int bounce_end_io_read_isa(struct bio *bio, unsigned int bytes_done, int 
 	return 0;
 }
 
-static void __blk_queue_bounce(request_queue_t *q, struct bio **bio_orig,
+static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
 			       mempool_t *pool)
 {
 	struct page *page;
@@ -204,7 +204,7 @@ static void __blk_queue_bounce(request_queue_t *q, struct bio **bio_orig,
 		/*
 		 * is destination page below bounce pfn?
 		 */
-		if (page_to_pfn(page) < q->bounce_pfn)
+		if (page_to_pfn(page) <= q->bounce_pfn)
 			continue;
 
 		/*
@@ -236,6 +236,8 @@ static void __blk_queue_bounce(request_queue_t *q, struct bio **bio_orig,
 	 */
 	if (!bio)
 		return;
+
+	blk_add_trace_bio(q, *bio_orig, BLK_TA_BOUNCE);
 
 	/*
 	 * at least one page was bounced, fill in possible non-highmem
@@ -273,7 +275,7 @@ static void __blk_queue_bounce(request_queue_t *q, struct bio **bio_orig,
 	*bio_orig = bio;
 }
 
-void blk_queue_bounce(request_queue_t *q, struct bio **bio_orig)
+void blk_queue_bounce(struct request_queue *q, struct bio **bio_orig)
 {
 	mempool_t *pool;
 
@@ -290,8 +292,6 @@ void blk_queue_bounce(request_queue_t *q, struct bio **bio_orig)
 		BUG_ON(!isa_page_pool);
 		pool = isa_page_pool;
 	}
-
-	blk_add_trace_bio(q, *bio_orig, BLK_TA_BOUNCE);
 
 	/*
 	 * slow path

@@ -13,8 +13,12 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
+#ifdef	_MSC_VER
+#include <winsock.h>
+#endif
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -31,8 +35,9 @@
 #include <resolv.h>
 #include <sys/types.h>
 
-#include "memory.h"
-#include "output.h"
+#include "shared/output.h"
+
+#include "dns.h"
 
 #ifndef PACKETSZ
 #define PACKETSZ 512
@@ -40,70 +45,121 @@
 
 char *txtquery(const char *domain, unsigned int *ttl)
 {
-	unsigned char answer[PACKETSZ], *pt;
-	char host[128], *txt;
-	int len, exp, cttl, size, txtlen, type;
+	unsigned char answer[PACKETSZ], host[128], *pt;
+	char *txt;
+	int len, exp, cttl, size, txtlen, type, qtype;
 
 
+    *ttl = 0;
     if(res_init() < 0) {
-	mprintf("@res_init failed\n");
+	logg("^res_init failed\n");
 	return NULL;
     }
 
-    mprintf("*Querying %s\n", domain);
+    logg("*Querying %s\n", domain);
 
     memset(answer, 0, PACKETSZ);
-    if((len = res_query(domain, C_IN, T_TXT, answer, PACKETSZ)) < 0) {
-	mprintf("@Can't query %s\n", domain);
+    qtype = T_TXT;
+    if((len = res_query(domain, C_IN, qtype, answer, PACKETSZ)) < 0) {
+#ifdef FRESHCLAM_DNS_FIX
+	/*  The DNS server in the SpeedTouch Alcatel 510 modem can't
+	 *  handle a TXT-query, but it can resolve an ANY-query to a
+	 *  TXT-record, so we try an ANY-query now.  The thing we try
+	 *  to resolve normally only has a TXT-record anyway.  
+	 */
+	memset(answer, 0, PACKETSZ);
+	qtype=T_ANY;
+	if((len = res_query(domain, C_IN, qtype, answer, PACKETSZ)) < 0) {
+	    logg("^Can't query %s\n", domain);
+	    return NULL;
+	}
+#else
+	logg("^Can't query %s\n", domain);
 	return NULL;
+#endif
     }
 
     pt = answer + sizeof(HEADER);
 
     if((exp = dn_expand(answer, answer + len, pt, host, sizeof(host))) < 0) {
-	mprintf("@dn_expand failed\n");
+	logg("^dn_expand failed\n");
 	return NULL;
     }
 
     pt += exp;
 
     GETSHORT(type, pt);
-    if(type != T_TXT) {
-	mprintf("@Broken DNS reply.\n");
+    if(type != qtype) {
+	logg("^Broken DNS reply.\n");
 	return NULL;
     }
 
     pt += INT16SZ; /* class */
 
     if((exp = dn_expand(answer, answer + len, pt, host, sizeof(host))) < 0) {
-	mprintf("@second dn_expand failed\n");
+	logg("^second dn_expand failed\n");
 	return NULL;
     }
 
     pt += exp;
     GETSHORT(type, pt);
     if(type != T_TXT) {
-	mprintf("@Not a TXT record\n");
+	logg("^Not a TXT record\n");
 	return NULL;
     }
 
     pt += INT16SZ; /* class */
     GETLONG(cttl, pt);
-    *ttl = cttl;
     GETSHORT(size, pt);
     txtlen = *pt;
 
     if(txtlen >= size || !txtlen) {
-	mprintf("@Broken TXT record (txtlen = %d, size = %d)\n", txtlen, size);
+	logg("^Broken TXT record (txtlen = %d, size = %d)\n", txtlen, size);
 	return NULL;
     }
 
-    if(!(txt = mmalloc(txtlen + 1)))
+    if(!(txt = (char *) malloc(txtlen + 1)))
 	return NULL;
 
     pt++;
-    strncpy(txt, (char *) pt, txtlen);
+    memcpy(txt, pt, txtlen);
     txt[txtlen] = 0;
+    *ttl = cttl;
+
+    return txt;
+}
+
+#elif defined(C_WINDOWS)
+
+/*
+ * Note: Needs to link with dnsapi.lib.  
+ * The dll behind this library is available from Windows 2000 onward.
+ * Written by Mark Pizzolato
+ */
+
+#include <string.h>
+#include <windows.h>
+#include <windns.h>
+#include "shared/output.h"
+
+char *txtquery(const char *domain, unsigned int *ttl)
+{
+	PDNS_RECORD pDnsRecord;
+	char *txt = NULL;
+
+    *ttl = 0;
+    mprintf("*Querying %s\n", domain);
+
+   if(DnsQuery_UTF8(domain, DNS_TYPE_TEXT, DNS_QUERY_TREAT_AS_FQDN, NULL, &pDnsRecord, NULL) != 0)
+	return NULL;
+
+    if((pDnsRecord->Data.TXT.dwStringCount > 0) && pDnsRecord->Data.TXT.pStringArray[0]) {
+	txt = malloc(strlen(pDnsRecord->Data.TXT.pStringArray[0]) + 1);
+	if(txt)
+	    strcpy(txt, pDnsRecord->Data.TXT.pStringArray[0]);
+	*ttl = pDnsRecord->dwTtl;
+    }
+    DnsRecordListFree(pDnsRecord, DnsFreeRecordList);
 
     return txt;
 }
@@ -112,6 +168,7 @@ char *txtquery(const char *domain, unsigned int *ttl)
 
 char *txtquery(const char *domain, unsigned int *ttl)
 {
+    *ttl = 1;  /* ttl of 1 combined with a NULL return distinguishes a failed lookup from DNS queries not being available */
     return NULL;
 }
 

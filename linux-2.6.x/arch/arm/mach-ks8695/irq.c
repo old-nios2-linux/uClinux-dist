@@ -21,6 +21,9 @@
 
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/ioport.h>
+#include <linux/sysdev.h>
+
 #include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/io.h>
@@ -47,7 +50,8 @@ static int ks8695_irq_set_type(unsigned int irq, unsigned int type)
 	return 0;
 }
 
-struct irqchip ks8695_irq_chip = {
+struct irq_chip ks8695_irq_chip = {
+	.name		= "KS8695",
 	.ack		= ks8695_irq_mask,
 	.mask		= ks8695_irq_mask,
 	.unmask		= ks8695_irq_unmask,
@@ -64,7 +68,7 @@ void __init ks8695_init_irq(void)
 
 	for (i = 0; (i < NR_IRQS); i++) {
 		set_irq_chip(i, &ks8695_irq_chip);
-		set_irq_handler(i, do_level_IRQ);
+		set_irq_handler(i, handle_level_irq);
 		set_irq_flags(i, IRQF_VALID);
 	}
 }

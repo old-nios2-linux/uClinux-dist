@@ -21,7 +21,7 @@ xattr_set_acl(struct inode *inode, int type, const void *value, size_t size)
 
 	if (!reiserfs_posixacl(inode->i_sb))
 		return -EOPNOTSUPP;
-	if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
+	if (!is_owner_or_cap(inode))
 		return -EPERM;
 
 	if (value) {
@@ -135,7 +135,7 @@ static void *posix_acl_to_disk(const struct posix_acl *acl, size_t * size)
 	int n;
 
 	*size = reiserfs_acl_size(acl->a_count);
-	ext_acl = (reiserfs_acl_header *) kmalloc(sizeof(reiserfs_acl_header) +
+	ext_acl = kmalloc(sizeof(reiserfs_acl_header) +
 						  acl->a_count *
 						  sizeof(reiserfs_acl_entry),
 						  GFP_NOFS);

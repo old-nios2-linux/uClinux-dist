@@ -10,7 +10,6 @@
 
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/random.h>
 
@@ -37,6 +36,8 @@ static struct dentry *hfsplus_lookup(struct inode *dir, struct dentry *dentry,
 	u16 type;
 
 	sb = dir->i_sb;
+
+	dentry->d_op = &hfsplus_dentry_operations;
 	dentry->d_fsdata = NULL;
 	hfs_find_init(HFSPLUS_SB(sb).cat_tree, &fd);
 	hfsplus_cat_build_key(sb, fd.search_key, dir->i_ino, &dentry->d_name);
@@ -111,7 +112,7 @@ fail:
 
 static int hfsplus_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct super_block *sb = inode->i_sb;
 	int len, err;
 	char strbuf[HFSPLUS_MAX_STRLEN + 1];
@@ -471,7 +472,7 @@ static int hfsplus_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return res;
 }
 
-struct inode_operations hfsplus_dir_inode_operations = {
+const struct inode_operations hfsplus_dir_inode_operations = {
 	.lookup		= hfsplus_lookup,
 	.create		= hfsplus_create,
 	.link		= hfsplus_link,

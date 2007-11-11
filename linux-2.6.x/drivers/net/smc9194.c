@@ -1000,7 +1000,7 @@ static int __init smc_probe(struct net_device *dev, smcio_t ioaddr)
 	int i, memory, retval;
 	static unsigned version_printed;
 	unsigned int bank;
-#if defined(CONFIG_NETtel) || defined(CONFIG_eLIA) || defined(CONFIG_DISKtel) || defined(CONFIG_CLEOPATRA)
+#if defined(CONFIG_NETtel) || defined(CONFIG_eLIA) || defined(CONFIG_CLEOPATRA)
 	static int nr = 0;
 #endif
 #if defined(CONFIG_COLDFIRE) || defined(CONFIG_M68EZ328)
@@ -1090,7 +1090,7 @@ static int __init smc_probe(struct net_device *dev, smcio_t ioaddr)
 	dev->base_addr = ioaddr;
 
 #if defined(CONFIG_COLDFIRE) || defined(CONFIG_M68EZ328)
-#if defined(CONFIG_NETtel) || defined(CONFIG_eLIA) || defined(CONFIG_DISKtel) || defined(CONFIG_CLEOPATRA)
+#if defined(CONFIG_NETtel) || defined(CONFIG_eLIA) || defined(CONFIG_CLEOPATRA)
 	/*
 	 . MAC address should be in FLASH, check that it is valid.
 	 . If good use it, otherwise use the default.
@@ -1320,7 +1320,7 @@ static int smc_open(struct net_device *dev)
 	/* Select which interface to use */
 
 	SMC_SELECT_BANK( 1 );
-#if defined(CONFIG_DISKtel) || defined(CONFIG_SH_KEYWEST)
+#if defined(CONFIG_SH_KEYWEST)
 	/* Setup to use external PHY on smc91c110 */
 	outw( inw( ioaddr + CONFIG ) | CFG_NO_WAIT | CFG_MII_SELECT,
 		(ioaddr + CONFIG ));
@@ -1470,7 +1470,6 @@ static void smc_rcv(struct net_device *dev)
 
 		skb_reserve( skb, 2 );   /* 16 bit alignment */
 
-		skb->dev = dev;
 		data = skb_put( skb, packet_length);
 
 #ifdef USE_32_BIT
@@ -1867,7 +1866,7 @@ int __init init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(devSMC9194);
 	free_irq(devSMC9194->irq, devSMC9194);

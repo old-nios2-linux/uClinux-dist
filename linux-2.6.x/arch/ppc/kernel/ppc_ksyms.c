@@ -40,9 +40,9 @@
 #include <asm/time.h>
 #include <asm/cputable.h>
 #include <asm/btext.h>
-#include <asm/div64.h>
 #include <asm/xmon.h>
 #include <asm/signal.h>
+#include <asm/dcr.h>
 
 #ifdef  CONFIG_8xx
 #include <asm/commproc.h>
@@ -64,7 +64,6 @@ extern unsigned long mm_ptov (unsigned long paddr);
 
 EXPORT_SYMBOL(clear_pages);
 EXPORT_SYMBOL(clear_user_page);
-EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(transfer_to_handler);
 EXPORT_SYMBOL(do_IRQ);
 EXPORT_SYMBOL(machine_check_exception);
@@ -92,9 +91,6 @@ EXPORT_SYMBOL(strncpy);
 EXPORT_SYMBOL(strcat);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strcmp);
-EXPORT_SYMBOL(strcasecmp);
-EXPORT_SYMBOL(strncasecmp);
-EXPORT_SYMBOL(__div64_32);
 
 EXPORT_SYMBOL(csum_partial);
 EXPORT_SYMBOL(csum_partial_copy_generic);
@@ -270,7 +266,7 @@ EXPORT_SYMBOL(mmu_hash_lock); /* For MOL */
 extern long *intercept_table;
 EXPORT_SYMBOL(intercept_table);
 #endif /* CONFIG_PPC_STD_MMU */
-#if defined(CONFIG_40x) || defined(CONFIG_BOOKE)
+#ifdef CONFIG_PPC_DCR_NATIVE
 EXPORT_SYMBOL(__mtdcr);
 EXPORT_SYMBOL(__mfdcr);
 #endif

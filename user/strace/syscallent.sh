@@ -24,11 +24,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#	$Id: syscallent.sh,v 1.1.1.1 1999/02/19 00:22:44 wichert Exp $
+#	$Id: syscallent.sh,v 1.3 2003/03/31 01:03:34 roland Exp $
 
-cat $* |
-	sed -n 's/^#[ 	]*define[ 	][ 	]*SYS_\([^ 	]*\)[ 	]*[^0-9]*\([0-9]*\).*$/\1 \2/p' |
-	sort +1n |
+cat ${1+"$@"} |
+	sed -n 's/^#[ 	]*define[ 	][ 	]*SYS_\([^ 	]*\)[ 	]*[^0-9]*\([0-9]*\).*$/\1 \2/p
+s/^#[ 	]*define[ 	][ 	]*__NR_\([^ 	]*\)[ 	]*[^0-9]*\([0-9]*\).*$/\1 \2/p
+s/^#[ ]*define[ ][ ]*__NR_\([^ ]*\)[ ]*[^0-9()]*(__NR_Linux + \([0-9]*\))$/\1 \2/p' |
+	sort +1n | uniq |
 	awk '
 	BEGIN {
 		tabs = "\t\t\t\t\t\t\t\t"

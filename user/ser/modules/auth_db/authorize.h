@@ -1,9 +1,9 @@
 /*
- * $Id: authorize.h,v 1.1 2003/03/06 15:39:33 janakj Exp $
+ * $Id: authorize.h,v 1.3.2.2 2005/04/26 10:14:57 janakj Exp $
  *
  * Digest Authentication - Database support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -34,6 +34,10 @@
 
 #include "../../parser/msg_parser.h"
 
+int auth_db_init(char* db_url);
+int auth_db_bind(char* db_url);
+void auth_db_close();
+int auth_db_ver(char* db_url, str* name);
 
 /*
  * Authorize using Proxy-Authorization header field

@@ -25,7 +25,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: dummy.h,v 1.8 2000/05/01 01:54:00 wichert Exp $
+ *	$Id: dummy.h,v 1.17 2004/04/16 21:48:44 roland Exp $
  */
 
 #include <linux/version.h>
@@ -59,19 +59,20 @@
 #define	sys_syslog		printargs
 #define	sys_iopl		printargs
 #define	sys_vm86old		printargs
-#define	sys_modify_ldt		printargs
 #define	sys_get_kernel_syms	printargs
 #define	sys_bdflush		printargs
 #define	sys_sysfs		printargs
 #define	sys_afs_syscall		printargs
 
-#define sys_sched_setparam	printargs
-#define sys_sched_getparam	printargs
-#define sys_sched_setscheduler	printargs
-#define sys_sched_getscheduler	printargs
+/* machine-specific */
+#ifndef I386
+#define	sys_modify_ldt		printargs
+#define sys_get_thread_area	printargs
+#define sys_set_thread_area	printargs
+#endif
+
 #define sys_sched_yield		printargs
-#define sys_sched_get_priority_max printargs
-#define sys_sched_get_priority_min printargs
+#define sys_sched_get_priority_max sys_sched_get_priority_min
 #define sys_sched_rr_get_interval printargs
 
 /* like another call */
@@ -88,6 +89,8 @@
 #define sys_fdatasync		sys_close
 #define sys_mlock		sys_munmap
 #define sys_munlock		sys_munmap
+#define sys_clock_getres	sys_clock_gettime
+#define sys_mq_unlink		sys_unlink
 
 /* printargs does the right thing */
 #define	sys_setup		printargs
@@ -105,6 +108,8 @@
 #define	sys_idle		printargs
 #define	sys_getpgid		printargs
 #define sys_munlockall		printargs
+#define sys_timer_getoverrun	printargs
+#define sys_timer_delete	printargs
 
 /* subcall entry points */
 #define	sys_socketcall		printargs
@@ -131,6 +136,19 @@
 #ifndef HAVE_SENDMSG
 #define sys_sendmsg		printargs
 #define sys_recvmsg		printargs
+#endif
+
+#ifndef SYS_getpmsg
+#define sys_getpmsg		printargs
+#endif
+#ifndef SYS_putpmsg
+#define sys_putpmsg		printargs
+#endif
+
+#ifndef HAVE_STRUCT___OLD_KERNEL_STAT
+#define sys_oldstat		printargs
+#define sys_oldfstat		printargs
+#define sys_oldlstat		printargs
 #endif
 
 #if DONE

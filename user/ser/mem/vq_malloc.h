@@ -1,7 +1,7 @@
-/* $Id: vq_malloc.h,v 1.6 2002/11/25 20:29:44 andrei Exp $
+/* $Id: vq_malloc.h,v 1.7 2004/08/24 08:58:23 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

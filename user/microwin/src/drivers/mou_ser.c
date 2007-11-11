@@ -46,9 +46,9 @@
 #if ELKS
 #define	MOUSE_PORT	"/dev/ttys0"	/* default mouse tty port */
 #else
-/*#define MOUSE_PORT	"/dev/ttyS1"	/* default mouse tty port */*/
 #define MOUSE_PORT	"/dev/psaux"	/* default mouse tty port*/
 #endif
+
 /* For the COBRA5272 we use mouse type ms: */
 #ifdef CONFIG_COBRA5272
 #define	MOUSE_TYPE	"ms"		/* default mouse type "ms","pc","ps2" */

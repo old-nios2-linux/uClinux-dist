@@ -1,10 +1,11 @@
 /*
  *  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  cli_strrcpy(): Copyright (C) 2002 Nigel Horne <njh@bandsman.co.uk>
+ *  cli_strtokenize(): Copyright (C) 2007 Edwin Torok <edwin@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +14,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -26,50 +28,78 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/types.h>
 
 #include "clamav.h"
 #include "others.h"
-#include "defaults.h"
+#include "matcher.h"
+#include "cltypes.h"
 
 static int cli_hex2int(int c)
 {
-	int l = tolower(c);
+	int l;
 
-    if (!isascii(l))
+    if(!isascii(c))
     	return -1;
-    if (isdigit(l))
-	return l - '0';
-    if ((l >= 'a') && (l <= 'f'))
+
+    if(isdigit(c))
+	return c - '0';
+
+    l = tolower(c);
+    if((l >= 'a') && (l <= 'f'))
 	return l + 10 - 'a';
 
     cli_errmsg("hex2int() translation problem (%d)\n", l);
     return -1;
 }
 
-short int *cli_hex2si(const char *hex)
+uint16_t *cli_hex2ui(const char *hex)
 {
-	short int *str, *ptr, val, c;
-	int i, len;
+	uint16_t *str, *ptr, val;
+	unsigned int i, len;
+	int c;
 
 
     len = strlen(hex);
 
     if(len % 2 != 0) {
-	cli_errmsg("cli_hex2si(): Malformed hexstring: %s (length: %d)\n", hex, len);
+	cli_errmsg("cli_hex2si(): Malformed hexstring: %s (length: %u)\n", hex, len);
 	return NULL;
     }
 
-    str = cli_calloc((len / 2) + 1, sizeof(short int));
+    str = cli_calloc((len / 2) + 1, sizeof(uint16_t));
     if(!str)
 	return NULL;
 
     ptr = str;
 
     for(i = 0; i < len; i += 2) {
-	if(hex[i] == '?') {
-	    val = CLI_IGN;
-	} else if(hex[i] == '@') {
-	    val = CLI_ALT;
+	val = 0;
+
+	if(hex[i] == '?' && hex[i + 1] == '?') {
+	    val |= CLI_MATCH_IGNORE;
+
+	} else if(hex[i + 1] == '?') {
+	    if((c = cli_hex2int(hex[i])) >= 0) {
+		val = c << 4;
+	    } else {
+		free(str);
+		return NULL;
+	    }
+	    val |= CLI_MATCH_NIBBLE_HIGH;
+
+	} else if(hex[i] == '?') {
+	    if((c = cli_hex2int(hex[i + 1])) >= 0) {
+		val = c;
+	    } else {
+		free(str);
+		return NULL;
+	    }
+	    val |= CLI_MATCH_NIBBLE_LOW;
+
+	} else if(hex[i] == '(') {
+	    val |= CLI_MATCH_ALTERNATIVE;
+
 	} else {
 	    if((c = cli_hex2int(hex[i])) >= 0) {
 		val = c;
@@ -84,6 +114,7 @@ short int *cli_hex2si(const char *hex)
 		return NULL;
 	    }
 	}
+
 	*ptr++ = val;
     }
 
@@ -168,9 +199,34 @@ char *cli_str2hex(const char *string, unsigned int len)
     return hexstr;
 }
 
+char *cli_utf16toascii(const char *str, unsigned int length)
+{
+	char *decoded;
+	unsigned int i, j;
+
+
+    if(length < 2) {
+	cli_warnmsg("cli_utf16toascii: length < 2\n");
+	return NULL;
+    }
+
+    if(length % 2)
+	length--;
+
+    if(!(decoded = cli_calloc(length / 2 + 1, sizeof(char))))
+	return NULL;
+
+    for(i = 0, j = 0; i < length; i += 2, j++) {
+       decoded[j] = str[i + 1] << 4;
+       decoded[j] += str[i];
+    }
+
+    return decoded;
+}
+
 int cli_strbcasestr(const char *haystack, const char *needle)
 {
-	char *pt = (char *) haystack;
+	const char *pt =  haystack;
 	int i, j;
 
     i = strlen(haystack);
@@ -244,7 +300,7 @@ char *cli_strtok(const char *line, int fieldno, const char *delim)
     if (i == j) {
 	return NULL;
     }
-    buffer = malloc(j-i+1);
+    buffer = cli_malloc(j-i+1);
     if(!buffer)
 	return NULL;
     strncpy(buffer, line+i, j-i);
@@ -326,4 +382,36 @@ const char *cli_memstr(const char *haystack, int hs, const char *needle, int ns)
     }
 
     return NULL;
+}
+
+char *cli_strrcpy(char *dest, const char *source) /* by NJH */
+{
+
+    if(!dest || !source) {
+	cli_errmsg("cli_strrcpy: NULL argument\n");
+	return NULL;
+    }
+
+    while((*dest++ = *source++));
+
+    return --dest;
+}
+
+void cli_strtokenize(char *buffer, const char delim, const size_t token_count, const char **tokens)
+{
+	size_t tokens_found;
+
+
+    for(tokens_found = 0; tokens_found < token_count; ) {
+	tokens[tokens_found++] = buffer;
+	buffer = strchr(buffer, delim);
+	if(buffer) {
+	    *buffer++ = '\0';
+	} else {
+	    while(tokens_found < token_count)
+		tokens[tokens_found++] = NULL;
+
+	    return;
+	}
+    }
 }

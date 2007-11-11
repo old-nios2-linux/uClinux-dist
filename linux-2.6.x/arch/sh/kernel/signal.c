@@ -11,7 +11,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -23,7 +22,9 @@
 #include <linux/elf.h>
 #include <linux/personality.h>
 #include <linux/binfmts.h>
-
+#include <linux/freezer.h>
+#include <linux/io.h>
+#include <asm/system.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -37,7 +38,7 @@
 asmlinkage int
 sys_sigsuspend(old_sigset_t mask,
 	       unsigned long r5, unsigned long r6, unsigned long r7,
-	       struct pt_regs regs)
+	       struct pt_regs __regs)
 {
 	mask &= _BLOCKABLE;
 	spin_lock_irq(&current->sighand->siglock);
@@ -52,7 +53,7 @@ sys_sigsuspend(old_sigset_t mask,
 	return -ERESTARTNOHAND;
 }
 
-asmlinkage int 
+asmlinkage int
 sys_sigaction(int sig, const struct old_sigaction __user *act,
 	      struct old_sigaction __user *oact)
 {
@@ -87,9 +88,11 @@ sys_sigaction(int sig, const struct old_sigaction __user *act,
 asmlinkage int
 sys_sigaltstack(const stack_t __user *uss, stack_t __user *uoss,
 		unsigned long r6, unsigned long r7,
-		struct pt_regs regs)
+		struct pt_regs __regs)
 {
-	return do_sigaltstack(uss, uoss, regs.regs[15]);
+	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
+
+	return do_sigaltstack(uss, uoss, regs->regs[15]);
 }
 
 
@@ -98,7 +101,11 @@ sys_sigaltstack(const stack_t __user *uss, stack_t __user *uoss,
  */
 
 #define MOVW(n)	 (0x9300|((n)-2))	/* Move mem word at PC+n to R3 */
-#define TRAP16	 0xc310			/* Syscall w/no args (NR in R3) */
+#if defined(CONFIG_CPU_SH2)
+#define TRAP_NOARG 0xc320		/* Syscall w/no args (NR in R3) */
+#else
+#define TRAP_NOARG 0xc310		/* Syscall w/no args (NR in R3) */
+#endif
 #define OR_R0_R0 0x200b			/* or r0,r0 (insert to avoid hardware bug) */
 
 struct sigframe
@@ -120,7 +127,7 @@ static inline int restore_sigcontext_fpu(struct sigcontext __user *sc)
 {
 	struct task_struct *tsk = current;
 
-	if (!(cpu_data->flags & CPU_HAS_FPU))
+	if (!(current_cpu_data.flags & CPU_HAS_FPU))
 		return 0;
 
 	set_used_math();
@@ -133,7 +140,7 @@ static inline int save_sigcontext_fpu(struct sigcontext __user *sc,
 {
 	struct task_struct *tsk = current;
 
-	if (!(cpu_data->flags & CPU_HAS_FPU))
+	if (!(current_cpu_data.flags & CPU_HAS_FPU))
 		return 0;
 
 	if (!used_math()) {
@@ -174,7 +181,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext __user *sc, int *r0_p
 #undef COPY
 
 #ifdef CONFIG_SH_FPU
-	if (cpu_data->flags & CPU_HAS_FPU) {
+	if (current_cpu_data.flags & CPU_HAS_FPU) {
 		int owned_fp;
 		struct task_struct *tsk = current;
 
@@ -194,9 +201,10 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext __user *sc, int *r0_p
 
 asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 			     unsigned long r6, unsigned long r7,
-			     struct pt_regs regs)
+			     struct pt_regs __regs)
 {
-	struct sigframe __user *frame = (struct sigframe __user *)regs.regs[15];
+	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
+	struct sigframe __user *frame = (struct sigframe __user *)regs->regs[15];
 	sigset_t set;
 	int r0;
 
@@ -216,7 +224,7 @@ asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
 
-	if (restore_sigcontext(&regs, &frame->sc, &r0))
+	if (restore_sigcontext(regs, &frame->sc, &r0))
 		goto badframe;
 	return r0;
 
@@ -227,9 +235,10 @@ badframe:
 
 asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 				unsigned long r6, unsigned long r7,
-				struct pt_regs regs)
+				struct pt_regs __regs)
 {
-	struct rt_sigframe __user *frame = (struct rt_sigframe __user *)regs.regs[15];
+	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
+	struct rt_sigframe __user *frame = (struct rt_sigframe __user *)regs->regs[15];
 	sigset_t set;
 	stack_t st;
 	int r0;
@@ -246,21 +255,21 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
 
-	if (restore_sigcontext(&regs, &frame->uc.uc_mcontext, &r0))
+	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &r0))
 		goto badframe;
 
 	if (__copy_from_user(&st, &frame->uc.uc_stack, sizeof(st)))
 		goto badframe;
 	/* It is more difficult to avoid calling this function than to
 	   call it and ignore errors.  */
-	do_sigaltstack(&st, NULL, regs.regs[15]);
+	do_sigaltstack((const stack_t __user *)&st, NULL, (unsigned long)frame);
 
 	return r0;
 
 badframe:
 	force_sig(SIGSEGV, current);
 	return 0;
-}	
+}
 
 /*
  * Set up a signal frame.
@@ -350,7 +359,7 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 	} else {
 		/* Generate return code (system call to sigreturn) */
 		err |= __put_user(MOVW(7), &frame->retcode[0]);
-		err |= __put_user(TRAP16, &frame->retcode[1]);
+		err |= __put_user(TRAP_NOARG, &frame->retcode[1]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[2]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[3]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[4]);
@@ -430,7 +439,7 @@ static int setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	} else {
 		/* Generate return code (system call to rt_sigreturn) */
 		err |= __put_user(MOVW(7), &frame->retcode[0]);
-		err |= __put_user(TRAP16, &frame->retcode[1]);
+		err |= __put_user(TRAP_NOARG, &frame->retcode[1]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[2]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[3]);
 		err |= __put_user(OR_R0_R0, &frame->retcode[4]);
@@ -473,7 +482,7 @@ give_sigsegv:
 
 static int
 handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
-	      sigset_t *oldset, struct pt_regs *regs)
+	      sigset_t *oldset, struct pt_regs *regs, unsigned int save_r0)
 {
 	int ret;
 
@@ -481,6 +490,7 @@ handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 	if (regs->tra >= 0) {
 		/* If so, check system call restarting.. */
 		switch (regs->regs[0]) {
+			case -ERESTART_RESTARTBLOCK:
 			case -ERESTARTNOHAND:
 				regs->regs[0] = -EINTR;
 				break;
@@ -492,7 +502,10 @@ handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 				}
 			/* fallthrough */
 			case -ERESTARTNOINTR:
-				regs->pc -= 2;
+				regs->regs[0] = save_r0;
+				regs->pc -= instruction_size(
+						ctrl_inw(regs->pc - 4));
+				break;
 		}
 	} else {
 		/* gUSA handling */
@@ -508,7 +521,8 @@ handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 			regs->regs[15] = regs->regs[1];
 			if (regs->pc < regs->regs[0])
 				/* Go to rewind point #1 */
-				regs->pc = regs->regs[0] + offset - 2;
+				regs->pc = regs->regs[0] + offset -
+					instruction_size(ctrl_inw(regs->pc-4));
 		}
 #ifdef CONFIG_PREEMPT
 		local_irq_restore(flags);
@@ -572,7 +586,8 @@ static void do_signal(struct pt_regs *regs, unsigned int save_r0)
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
 		/* Whee!  Actually deliver the signal.  */
-		if (handle_signal(signr, &ka, &info, oldset, regs) == 0) {
+		if (handle_signal(signr, &ka, &info, oldset,
+				  regs, save_r0) == 0) {
 			/* a signal was successfully delivered; the saved
 			 * sigmask will have been stored in the signal frame,
 			 * and will be restored by sigreturn, so we can simply
@@ -580,6 +595,8 @@ static void do_signal(struct pt_regs *regs, unsigned int save_r0)
 			if (test_thread_flag(TIF_RESTORE_SIGMASK))
 				clear_thread_flag(TIF_RESTORE_SIGMASK);
 		}
+
+		return;
 	}
 
  no_signal:
@@ -589,10 +606,10 @@ static void do_signal(struct pt_regs *regs, unsigned int save_r0)
 		if (regs->regs[0] == -ERESTARTNOHAND ||
 		    regs->regs[0] == -ERESTARTSYS ||
 		    regs->regs[0] == -ERESTARTNOINTR) {
-		    	regs->regs[0] = save_r0;
-			regs->pc -= 2;
+			regs->regs[0] = save_r0;
+			regs->pc -= instruction_size(ctrl_inw(regs->pc - 4));
 		} else if (regs->regs[0] == -ERESTART_RESTARTBLOCK) {
-			regs->pc -= 2;
+			regs->pc -= instruction_size(ctrl_inw(regs->pc - 4));
 			regs->regs[3] = __NR_restart_syscall;
 		}
 	}

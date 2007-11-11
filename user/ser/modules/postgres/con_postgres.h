@@ -1,5 +1,5 @@
 /*
- * $Id: con_postgres.h,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: con_postgres.h,v 1.2 2004/02/08 15:30:59 lgfausak Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -46,6 +46,7 @@
  * Postgres specific connection data
  */
 struct con_postgres {
+	int connected;
 	char *sqlurl;	/* the url we are connected to, all connection memory
 			   parents from this */
 	PGconn *con;	/* this is the postgres connection */
@@ -60,6 +61,7 @@ struct con_postgres {
 #define CON_CONNECTION(db_con) (((struct con_postgres*)((db_con)->tail))->con)
 #define CON_FP(db_con)        (((struct con_postgres*)((db_con)->tail))->fp)
 #define CON_PID(db_con)       (((struct con_postgres*)((db_con)->tail))->tpid)
+#define CON_CONNECTED(db_con) (((struct con_postgres*)((db_con)->tail))->connected)
 
 #define PLOG(f,s) LOG(L_ERR, "PG[%d] %s %s\n",__LINE__,f,s)
 #define DLOG(f,s) LOG(L_INFO, "PG[%d] %s %s\n",__LINE__,f,s)

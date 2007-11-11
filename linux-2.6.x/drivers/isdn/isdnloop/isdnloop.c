@@ -415,7 +415,8 @@ isdnloop_sendbuf(int channel, struct sk_buff *skb, isdnloop_card * card)
 		spin_lock_irqsave(&card->isdnloop_lock, flags);
 		nskb = dev_alloc_skb(skb->len);
 		if (nskb) {
-			memcpy(skb_put(nskb, len), skb->data, len);
+			skb_copy_from_linear_data(skb,
+						  skb_put(nskb, len), len);
 			skb_queue_tail(&card->bqueue[channel], nskb);
 			dev_kfree_skb(skb);
 		} else
@@ -1430,12 +1431,11 @@ isdnloop_initcard(char *id)
 	isdnloop_card *card;
 	int i;
 
-	if (!(card = (isdnloop_card *) kmalloc(sizeof(isdnloop_card), GFP_KERNEL))) {
+	if (!(card = kzalloc(sizeof(isdnloop_card), GFP_KERNEL))) {
 		printk(KERN_WARNING
 		 "isdnloop: (%s) Could not allocate card-struct.\n", id);
 		return (isdnloop_card *) 0;
 	}
-	memset((char *) card, 0, sizeof(isdnloop_card));
 	card->interface.owner = THIS_MODULE;
 	card->interface.channels = ISDNLOOP_BCH;
 	card->interface.hl_hdrlen  = 1; /* scratch area for storing ack flag*/ 
@@ -1462,7 +1462,7 @@ isdnloop_initcard(char *id)
 		skb_queue_head_init(&card->bqueue[i]);
 	}
 	skb_queue_head_init(&card->dqueue);
-	card->isdnloop_lock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&card->isdnloop_lock);
 	card->next = cards;
 	cards = card;
 	if (!register_isdn(&card->interface)) {

@@ -92,7 +92,7 @@ static int ixp4xx_i2c_remove(struct platform_device *plat_dev)
 
 	platform_set_drvdata(plat_dev, NULL);
 
-	i2c_bit_del_bus(&drv_data->adapter);
+	i2c_del_adapter(&drv_data->adapter);
 
 	kfree(drv_data);
 
@@ -128,7 +128,7 @@ static int ixp4xx_i2c_probe(struct platform_device *plat_dev)
 	drv_data->adapter.id = I2C_HW_B_IXP4XX;
 	drv_data->adapter.class = I2C_CLASS_HWMON;
 	strlcpy(drv_data->adapter.name, plat_dev->dev.driver->name,
-		I2C_NAME_SIZE);
+		sizeof(drv_data->adapter.name));
 	drv_data->adapter.algo_data = &drv_data->algo_data;
 
 	drv_data->adapter.dev.parent = &plat_dev->dev;

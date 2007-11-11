@@ -17,10 +17,10 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/cpufreq.h>
-#include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <asm/ist.h>
+#include <asm/io.h>
 
 #include "speedstep-lib.h"
 
@@ -359,9 +359,6 @@ static int __init speedstep_init(void)
 	case SPEEDSTEP_PROCESSOR_PIII_T:
 	case SPEEDSTEP_PROCESSOR_PIII_C:
 	case SPEEDSTEP_PROCESSOR_PIII_C_EARLY:
-		break;
-	case SPEEDSTEP_PROCESSOR_P4M:
-		printk(KERN_INFO "speedstep-smi: you're trying to use this cpufreq driver on a Pentium 4-based CPU. Most likely it will not work.\n");
 		break;
 	default:
 		speedstep_processor = 0;

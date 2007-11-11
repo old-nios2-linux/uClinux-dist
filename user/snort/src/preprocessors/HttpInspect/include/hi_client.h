@@ -23,8 +23,12 @@ typedef struct s_HI_CLIENT_REQ
 
     u_char *uri;
     u_char *uri_norm;
-    u_int  uri_size;
+    u_char *post_raw;
+    u_char *post_norm;
+    u_int uri_size;
     u_int uri_norm_size;
+    u_int post_raw_size;
+    u_int post_norm_size;
 
     /*
     u_char *param;
@@ -44,6 +48,7 @@ typedef struct s_HI_CLIENT_REQ
     */
 
     u_char *pipeline_req;
+    u_char method;
 
 }  HI_CLIENT_REQ;
 

@@ -2,9 +2,8 @@
  *  Copyright (C) 1999 - 2005 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  */
 
@@ -26,23 +26,39 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifndef	C_WINDOWS
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <dirent.h>
+#endif
 #include <time.h>
 #include <fcntl.h>
+#ifndef	C_WINDOWS
 #include <pwd.h>
+#endif
 #include <errno.h>
-#include <target.h>
+#include "target.h"
+#ifndef	C_WINDOWS
 #include <sys/time.h>
+#endif
+#ifdef	HAVE_SYS_PARAM_H
 #include <sys/param.h>
+#endif
+#ifdef	HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+#if	defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 
 #ifdef CL_THREAD_SAFE
 #  include <pthread.h>
-pthread_mutex_t cli_gentemp_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t cli_gentempname_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 #if defined(HAVE_READDIR_R_3) || defined(HAVE_READDIR_R_2)
@@ -55,28 +71,20 @@ pthread_mutex_t cli_gentemp_mutex = PTHREAD_MUTEX_INITIALIZER;
 #include "md5.h"
 #include "cltypes.h"
 
-/* Maximum filenames under various systems - njh */
-#ifndef	NAME_MAX	/* e.g. Linux */
-# ifdef	MAXNAMELEN	/* e.g. Solaris */
-#   define	NAME_MAX	MAXNAMELEN
-# else
-#   ifdef	FILENAME_MAX	/* e.g. SCO */
-#     define	NAME_MAX	FILENAME_MAX
-#   else
-#     define	NAME_MAX	256
-#   endif
-# endif
-#endif
-
 #ifndef	O_BINARY
 #define	O_BINARY	0
 #endif
 
-#define CL_FLEVEL 10 /* don't touch it */
+#ifdef        C_WINDOWS
+#undef        P_tmpdir
+#define       P_tmpdir        "C:\\WINDOWS\\TEMP"
+#endif
+
+#define CL_FLEVEL 21 /* don't touch it */
 
 short cli_debug_flag = 0, cli_leavetemps_flag = 0;
 
-static unsigned char oldmd5buff[16] = { 16, 38, 97, 12, 8, 4, 72, 196, 217, 144, 33, 124, 18, 11, 17, 253 };
+static unsigned char name_salt[16] = { 16, 38, 97, 12, 8, 4, 72, 196, 217, 144, 33, 124, 18, 11, 17, 253 };
 
 
 void cli_warnmsg(const char *str, ...)
@@ -113,7 +121,7 @@ void cli_dbgmsg(const char *str, ...)
     if(cli_debug_flag) {
 	    va_list args;
 	    int sz = sizeof("LibClamAV debug: ") - 1;
-	    char buff[256];
+	    char buff[BUFSIZ];
 
 	memcpy(buff, "LibClamAV debug: ", sz);
 	va_start(args, str);
@@ -130,7 +138,7 @@ void cl_debug(void)
     cli_debug_flag = 1;
 }
 
-int cl_retflevel(void)
+unsigned int cl_retflevel(void)
 {
     return CL_FLEVEL;
 }
@@ -157,8 +165,6 @@ const char *cl_strerror(int clerror)
 	    return "RAR module failure";
 	case CL_EZIP:
 	    return "Zip module failure";
-	case CL_EMALFZIP:
-	    return "Malformed Zip detected";
 	case CL_EGZIP:
 	    return "GZip module failure";
 	case CL_EMSCOMP:
@@ -195,33 +201,38 @@ const char *cl_strerror(int clerror)
 	    return "Input/Output error";
 	case CL_EFORMAT:
 	    return "Bad format or broken data";
+	case CL_ESUPPORT:
+	    return "Not supported data format";
+	case CL_ENCINIT:
+	    return "NodalCore initialization failure";
+	case CL_ENCLOAD:
+	    return "Error loading NodalCore database";
+	case CL_ENCIO:
+	    return "NodalCore accelerator Input/Output error";
+	case CL_ELOCKDB:
+	    return "Unable to lock database directory";
 	default:
 	    return "Unknown error code";
     }
-}
-
-const char *cl_perror(int clerror)
-{
-    return cl_strerror(clerror);
 }
 
 unsigned char *cli_md5digest(int desc)
 {
 	unsigned char *digest;
 	char buff[FILEBUFF];
-	MD5_CTX ctx;
+	cli_md5_ctx ctx;
 	int bytes;
 
 
     if(!(digest = cli_malloc(16)))
 	return NULL;
 
-    MD5_Init(&ctx);
+    cli_md5_init(&ctx);
 
     while((bytes = cli_readn(desc, buff, FILEBUFF)))
-	MD5_Update(&ctx, buff, bytes);
+	cli_md5_update(&ctx, buff, bytes);
 
-    MD5_Final(digest, &ctx);
+    cli_md5_final(digest, &ctx);
 
     return digest;
 }
@@ -230,17 +241,17 @@ char *cli_md5stream(FILE *fs, unsigned char *digcpy)
 {
 	unsigned char digest[16];
 	char buff[FILEBUFF];
-	MD5_CTX ctx;
+	cli_md5_ctx ctx;
 	char *md5str, *pt;
 	int i, bytes;
 
 
-    MD5_Init(&ctx);
+    cli_md5_init(&ctx);
 
     while((bytes = fread(buff, 1, FILEBUFF, fs)))
-	MD5_Update(&ctx, buff, bytes);
+	cli_md5_update(&ctx, buff, bytes);
 
-    MD5_Final(digest, &ctx);
+    cli_md5_final(digest, &ctx);
 
     if(!(md5str = (char *) cli_calloc(32 + 1, sizeof(char))))
 	return NULL;
@@ -274,18 +285,20 @@ char *cli_md5file(const char *filename)
     return md5str;
 }
 
-static char *cli_md5buff(const char *buffer, unsigned int len)
+static char *cli_md5buff(const unsigned char *buffer, unsigned int len, unsigned char *dig)
 {
 	unsigned char digest[16];
 	char *md5str, *pt;
-	MD5_CTX ctx;
+	cli_md5_ctx ctx;
 	int i;
 
 
-    MD5_Init(&ctx);
-    MD5_Update(&ctx, (unsigned char *) buffer, len);
-    MD5_Final(digest, &ctx);
-    memcpy(oldmd5buff, digest, 16);
+    cli_md5_init(&ctx);
+    cli_md5_update(&ctx, buffer, len);
+    cli_md5_final(digest, &ctx);
+
+    if(dig)
+	memcpy(dig, digest, 16);
 
     if(!(md5str = (char *) cli_calloc(32 + 1, sizeof(char))))
 	return NULL;
@@ -305,11 +318,15 @@ void *cli_malloc(size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("Attempt to allocate %u bytes. Please report to bugs@clamav.net\n", size);
+	cli_errmsg("cli_malloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
 	return NULL;
     }
 
+#if defined(_MSC_VER) && defined(_DEBUG)
+    alloc = _malloc_dbg(size, _NORMAL_BLOCK, __FILE__, __LINE__);
+#else
     alloc = malloc(size);
+#endif
 
     if(!alloc) {
 	cli_errmsg("cli_malloc(): Can't allocate memory (%u bytes).\n", size);
@@ -325,11 +342,15 @@ void *cli_calloc(size_t nmemb, size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("Attempt to allocate %u bytes. Please report to bugs@clamav.net\n", size);
+	cli_errmsg("cli_calloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
 	return NULL;
     }
 
+#if defined(_MSC_VER) && defined(_DEBUG)
+    alloc = _calloc_dbg(nmemb, size, _NORMAL_BLOCK, __FILE__, __LINE__);
+#else
     alloc = calloc(nmemb, size);
+#endif
 
     if(!alloc) {
 	cli_errmsg("cli_calloc(): Can't allocate memory (%u bytes).\n", nmemb * size);
@@ -345,17 +366,63 @@ void *cli_realloc(void *ptr, size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("Attempt to allocate %u bytes. Please report to bugs@clamav.net\n", size);
+	cli_errmsg("cli_realloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
 	return NULL;
     }
 
     alloc = realloc(ptr, size);
 
     if(!alloc) {
-	cli_errmsg("cli_realloc(): Can't re-allocate memory to %u byte.\n", size);
+	cli_errmsg("cli_realloc(): Can't re-allocate memory to %u bytes.\n", size);
 	perror("realloc_problem");
 	return NULL;
     } else return alloc;
+}
+
+void *cli_realloc2(void *ptr, size_t size)
+{
+	void *alloc;
+
+
+    if(!size || size > CLI_MAX_ALLOCATION) {
+	cli_errmsg("cli_realloc2(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
+	return NULL;
+    }
+
+    alloc = realloc(ptr, size);
+
+    if(!alloc) {
+	cli_errmsg("cli_realloc2(): Can't re-allocate memory to %u bytes.\n", size);
+	perror("realloc_problem");
+	if(ptr)
+	    free(ptr);
+	return NULL;
+    } else return alloc;
+}
+
+char *cli_strdup(const char *s)
+{
+        char *alloc;
+
+
+    if(s == NULL) {
+        cli_errmsg("cli_strdup(): s == NULL. Please report to http://bugs.clamav.net\n");
+        return NULL;
+    }
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+    alloc = _strdup_dbg(s, _NORMAL_BLOCK, __FILE__, __LINE__);
+#else
+    alloc = strdup(s);
+#endif
+
+    if(!alloc) {
+        cli_errmsg("cli_strdup(): Can't allocate memory (%u bytes).\n", strlen(s));
+        perror("strdup_problem");
+        return NULL;
+    }
+
+    return alloc;
 }
 
 unsigned int cli_rndnum(unsigned int max)
@@ -386,14 +453,12 @@ void cl_settempdir(const char *dir, short leavetemps)
     cli_leavetemps_flag = leavetemps;
 }
 
-char *cli_gentemp(const char *dir)
+static char *cli_gentempname(const char *dir)
 {
 	char *name, *tmp;
         const char *mdir;
 	unsigned char salt[16 + 32];
 	int i;
-	struct stat foo;
-
 
     if(!dir) {
 	if((mdir = getenv("TMPDIR")) == NULL)
@@ -405,35 +470,180 @@ char *cli_gentemp(const char *dir)
     } else
 	mdir = dir;
 
-    name = (char*) cli_calloc(strlen(mdir) + 1 + 16 + 1 + 7, sizeof(char));
-    if(name == NULL) {
-	cli_dbgmsg("cli_gentemp('%s'): out of memory\n", dir);
+    name = (char *) cli_calloc(strlen(mdir) + 1 + 32 + 1 + 7, sizeof(char));
+    if(!name) {
+	cli_dbgmsg("cli_gentempname('%s'): out of memory\n", mdir);
 	return NULL;
     }
 
 #ifdef CL_THREAD_SAFE
-    pthread_mutex_lock(&cli_gentemp_mutex);
+    pthread_mutex_lock(&cli_gentempname_mutex);
 #endif
 
-    memcpy(salt, oldmd5buff, 16);
+    memcpy(salt, name_salt, 16);
 
-    do {
-	for(i = 16; i < 48; i++)
-	    salt[i] = cli_rndnum(255);
+    for(i = 16; i < 48; i++)
+	salt[i] = cli_rndnum(256);
 
-	tmp = cli_md5buff(( char* ) salt, 48);
-	sprintf(name, "%s/clamav-", mdir);
-	strncat(name, tmp, 16);
-	free(tmp);
-    } while(stat(name, &foo) != -1);
+    tmp = cli_md5buff(salt, 48, name_salt);
 
 #ifdef CL_THREAD_SAFE
-    pthread_mutex_unlock(&cli_gentemp_mutex);
+    pthread_mutex_unlock(&cli_gentempname_mutex);
 #endif
+
+    if(!tmp) {
+	free(name);
+	cli_dbgmsg("cli_gentempname('%s'): out of memory\n", mdir);
+	return NULL;
+    }
+
+#ifdef	C_WINDOWS
+	sprintf(name, "%s\\clamav-", mdir);
+#else
+	sprintf(name, "%s/clamav-", mdir);
+#endif
+    strncat(name, tmp, 32);
+    free(tmp);
 
     return(name);
 }
 
+char *cli_gentemp(const char *dir)
+{
+	char *name;
+
+    name = cli_gentempname(dir);
+
+    return(name);
+}
+
+
+char *cli_gentempdir(const char *dir)
+{
+	char *name;
+
+    name = cli_gentempname(dir);
+
+    if(name && mkdir(name, 0700)) {
+	cli_dbgmsg("cli_gentempdir(): can't create temp directory: %s\n", name);
+        free(name);
+        name = NULL;
+    }
+
+    return(name);
+}
+
+char *cli_gentempdesc(const char *dir, int *fd)
+{
+	char *name;
+
+    name = cli_gentempname(dir);
+
+    if(name && ((*fd = open(name, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU)) < 0)) {
+	cli_dbgmsg("cli_gentempdesc(): can't create temp file: %s\n", name);
+        free(name);
+        name = NULL;
+    }
+
+    return(name);
+}
+
+char *cli_gentempstream(const char *dir, FILE **fs)
+{
+	char *name;
+	mode_t omask;
+
+
+    name = cli_gentempname(dir);
+    if(!name)
+	return NULL;
+
+    omask = umask(077);
+    if((*fs = fopen(name, "wb+")) == NULL) {
+	cli_dbgmsg("cli_gentempstream(): can't create temp file: %s\n", name);
+        free(name);
+        name = NULL;
+    }
+    umask(omask);
+
+    return name;
+}
+
+#ifdef	C_WINDOWS
+/*
+ * Windows doesn't allow you to delete a directory while it is still open
+ */
+int
+cli_rmdirs(const char *name)
+{
+	int rc;
+	struct stat statb;	
+	DIR *dd;
+	struct dirent *dent;
+#if defined(HAVE_READDIR_R_3) || defined(HAVE_READDIR_R_2)
+	union {
+	    struct dirent d;
+	    char b[offsetof(struct dirent, d_name) + NAME_MAX + 1];
+	} result;
+#endif
+
+
+    if(stat(name, &statb) < 0) {
+	cli_warnmsg("Can't locate %s: %s\n", name, strerror(errno));
+	return -1;
+    }
+
+    if(!S_ISDIR(statb.st_mode)) {
+	if(unlink(name) < 0) {
+	    cli_warnmsg("Can't remove %s: %s\n", name, strerror(errno));
+	    return -1;
+	}
+	return 0;
+    }
+
+    if((dd = opendir(name)) == NULL)
+	return -1;
+
+    rc = 0;
+
+#ifdef HAVE_READDIR_R_3
+    while((readdir_r(dd, &result.d, &dent) == 0) && dent) {
+#elif defined(HAVE_READDIR_R_2)
+    while((dent = (struct dirent *)readdir_r(dd, &result.d)) != NULL) {
+#else
+    while((dent = readdir(dd)) != NULL) {
+#endif
+	    char *fname;
+
+	if(strcmp(dent->d_name, ".") == 0)
+	    continue;
+	if(strcmp(dent->d_name, "..") == 0)
+	    continue;
+
+	fname = cli_malloc(strlen(name) + strlen(dent->d_name) + 2);
+
+	if(fname == NULL) {
+	    closedir(dd);
+	    return -1;
+	}
+
+	sprintf(fname, "%s\\%s", name, dent->d_name);
+	rc = cli_rmdirs(fname);
+	free(fname);
+	if(rc != 0)
+	    break;
+    }
+
+    closedir(dd);
+
+    if(rmdir(name) < 0) {
+	cli_errmsg("Can't remove temporary directory %s: %s\n", name, strerror(errno));
+	return -1;
+    }
+
+    return rc;	
+}
+#else
 int cli_rmdirs(const char *dirname)
 {
 	DIR *dd;
@@ -446,6 +656,7 @@ int cli_rmdirs(const char *dirname)
 #endif
 	struct stat maind, statbuf;
 	char *fname;
+	int ret;
 
 
     chmod(dirname, 0700);
@@ -455,7 +666,7 @@ int cli_rmdirs(const char *dirname)
 	    if(errno != ENOTEMPTY && errno != EEXIST && errno != EBADF) {
 		cli_errmsg("Can't remove temporary directory %s: %s\n", dirname, strerror(errno));
 		closedir(dd);
-		return 0;
+		return -1;
 	    }
 
 #ifdef HAVE_READDIR_R_3
@@ -465,13 +676,22 @@ int cli_rmdirs(const char *dirname)
 #else
 	    while((dent = readdir(dd))) {
 #endif
-#if ((!defined(C_CYGWIN)) && (!defined(C_INTERIX)))
+#if	(!defined(C_CYGWIN)) && (!defined(C_INTERIX)) && (!defined(C_WINDOWS))
 		if(dent->d_ino)
 #endif
 		{
 		    if(strcmp(dent->d_name, ".") && strcmp(dent->d_name, "..")) {
-			fname = cli_calloc(strlen(dirname) + strlen(dent->d_name) + 2, sizeof(char));
+			fname = cli_malloc(strlen(dirname) + strlen(dent->d_name) + 2);
+			if(!fname) {
+			    closedir(dd);
+			    return -1;
+			}
+
+#ifdef	C_WINDOWS
+			sprintf(fname, "%s\\%s", dirname, dent->d_name);
+#else
 			sprintf(fname, "%s/%s", dirname, dent->d_name);
+#endif
 
 			/* stat the file */
 			if(lstat(fname, &statbuf) != -1) {
@@ -481,12 +701,23 @@ int cli_rmdirs(const char *dirname)
 					cli_errmsg("Can't remove some temporary directories due to access problem.\n");
 					closedir(dd);
 					free(fname);
-					return 0;
+					return -1;
 				    }
-				    cli_rmdirs(fname);
+				    ret = cli_rmdirs(fname);
+				    if(ret) {
+					cli_warnmsg("Can't remove directory %s\n", fname);
+					free(fname);
+					closedir(dd);
+					return -1;
+				    }
 				}
 			    } else
-				unlink(fname);
+				if(unlink(fname) < 0) {
+				    cli_warnmsg("Couldn't remove %s: %s\n", fname, strerror(errno));
+				    free(fname);
+				    closedir(dd);
+				    return -1;
+				}
 			}
 
 			free(fname);
@@ -495,16 +726,16 @@ int cli_rmdirs(const char *dirname)
 	    }
 
 	    rewinddir(dd);
-
 	}
 
     } else { 
-	return 53;
+	return -1;
     }
 
     closedir(dd);
     return 0;
 }
+#endif
 
 /* Function: readn
         Try hard to read the requested number of bytes
@@ -528,6 +759,7 @@ int cli_readn(int fd, void *buff, unsigned int count)
 			if (errno == EINTR) {
 				continue;
 			}
+			cli_errmsg("cli_readn: read error: %s\n", strerror(errno));
                         return -1;
                 }
                 todo -= retval;
@@ -541,15 +773,15 @@ int cli_readn(int fd, void *buff, unsigned int count)
 /* Function: writen
         Try hard to write the specified number of bytes
 */
-int cli_writen(int fd, void *buff, unsigned int count)
+int cli_writen(int fd, const void *buff, unsigned int count)
 {
         int retval;
         unsigned int todo;
-        unsigned char *current;
+        const unsigned char *current;
 
 
         todo = count;
-        current = (unsigned char *) buff;
+        current = (const unsigned char *) buff;
 
         do {
                 retval = write(fd, current, todo);
@@ -557,6 +789,7 @@ int cli_writen(int fd, void *buff, unsigned int count)
 			if (errno == EINTR) {
 				continue;
 			}
+			cli_errmsg("cli_writen: write error: %s\n", strerror(errno));
                         return -1;
                 }
                 todo -= retval;
@@ -567,40 +800,16 @@ int cli_writen(int fd, void *buff, unsigned int count)
         return count;
 }
 
-int32_t cli_readint32(const char *buff)
-{
-	int32_t ret;
-
-#if WORDS_BIGENDIAN == 0
-    ret = *(int32_t *) buff;
-#else
-    ret = buff[0] & 0xff;
-    ret |= (buff[1] & 0xff) << 8;
-    ret |= (buff[2] & 0xff) << 16;
-    ret |= (buff[3] & 0xff) << 24;
-#endif
-
-    return ret;
-}
-
-void cli_writeint32(char *offset, uint32_t value)
-{
-    offset[0] = value & 0xff;
-    offset[1] = (value & 0xff00) >> 8;
-    offset[2] = (value & 0xff0000) >> 16;
-    offset[3] = (value & 0xff000000) >> 24;
-}
-
 int cli_filecopy(const char *src, const char *dest)
 {
 	char *buffer;
 	int s, d, bytes;
 
 
-    if((s = open(src, O_RDONLY)) == -1)
+    if((s = open(src, O_RDONLY|O_BINARY)) == -1)
 	return -1;
 
-    if((d = open(dest, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY)) == -1) {
+    if((d = open(dest, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY, S_IRWXU)) == -1) {
 	close(s);
 	return -1;
     }
@@ -637,7 +846,7 @@ static unsigned long nearest_power(unsigned long num)
 	return n;
 }
 
-bitset_t *cli_bitset_init()
+bitset_t *cli_bitset_init(void)
 {
 	bitset_t *bs;
 	
@@ -664,12 +873,14 @@ void cli_bitset_free(bitset_t *bs)
 static bitset_t *bitset_realloc(bitset_t *bs, unsigned long min_size)
 {
 	unsigned long new_length;
+	unsigned char *new_bitset;
 	
 	new_length = nearest_power(min_size);
-	bs->bitset = (unsigned char *) cli_realloc(bs->bitset, new_length);
-	if (!bs->bitset) {
+	new_bitset = (unsigned char *) cli_realloc(bs->bitset, new_length);
+	if (!new_bitset) {
 		return NULL;
 	}
+	bs->bitset = new_bitset;
 	memset(bs->bitset+bs->length, 0, new_length-bs->length);
 	bs->length = new_length;
 	return bs;
@@ -699,9 +910,8 @@ int cli_bitset_test(bitset_t *bs, unsigned long bit_offset)
 	char_offset = bit_offset / BITS_PER_CHAR;
 	bit_offset = bit_offset % BITS_PER_CHAR;
 
-	if (char_offset >= bs->length) {
+	if (char_offset >= bs->length) {	
 		return FALSE;
 	}
-
 	return (bs->bitset[char_offset] & ((unsigned char)1 << bit_offset));
 }

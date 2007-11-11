@@ -1,9 +1,9 @@
-/* $Id: sr_module.h,v 1.18 2003/04/27 18:17:23 jiri Exp $
+/* $Id: sr_module.h,v 1.24 2004/12/03 19:09:31 andrei Exp $
  *
- * modules/plugin strtuctures declarations
+ * modules/plug-in structures declarations
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,6 +33,11 @@
  *               and param_export (andrei)
  *  2003-03-16  Added flags field to cmd_export_ (janakj)
  *  2003-04-05  s/reply_route/failure_route, onreply_route introduced (jiri)
+ *  2004-03-12  extra flag USE_FUNC_PARAM added to modparam type -
+ *              instead of copying the param value, a func is called (bogdan)
+ *  2004-09-19  switched to version.h for the module versions checks (andrei)
+ *  2004-12-03  changed param_func_t to (modparam_t, void*), killed
+ *               param_func_param_t   (andrei)
  */
 
 
@@ -40,6 +45,7 @@
 #define sr_module_h
 
 #include "parser/msg_parser.h" /* for sip_msg */
+#include "version.h"
 
 typedef  struct module_exports* (*module_register)();
 typedef  int (*cmd_function)(struct sip_msg*, char*, char*);
@@ -51,10 +57,14 @@ typedef int (*init_function)(void);
 typedef int (*child_init_function)(int rank);
 
 
-typedef enum {
-	STR_PARAM,  /* String parameter type */
-	INT_PARAM,  /* Integer parameter type */
-} modparam_t;       /* Allowed types of parameters */
+#define STR_PARAM        (1U<<0)  /* String parameter type */
+#define INT_PARAM        (1U<<1)  /* Integer parameter type */
+#define USE_FUNC_PARAM   (1U<<(8*sizeof(int)-1))
+#define PARAM_TYPE_MASK(_x)   ((_x)&(~USE_FUNC_PARAM))
+
+typedef unsigned int modparam_t;
+
+typedef int (*param_func_t)( modparam_t type, void* val);
 
 #define REQUEST_ROUTE 1  /* Function can be used in request route blocks */
 #define FAILURE_ROUTE 2  /* Function can be used in reply route blocks */
@@ -65,8 +75,11 @@ typedef enum {
 #define PROC_TIMER    -1  /* Timer attendant process */
 #define PROC_FIFO     -2  /* FIFO attendant process */
 #define PROC_TCP_MAIN -4  /* TCP main process */
+#define PROC_UNIXSOCK -5  /* Unix domain socket server processes */
 
-#define MODULE_VERSION char *module_version=VERSION;
+#define MODULE_VERSION \
+	char *module_version=SER_FULL_VERSION; \
+	char *module_flags=SER_COMPILE_FLAGS;
 
 struct cmd_export_ {
 	char* name;             /* null terminated command name */
@@ -96,7 +109,7 @@ struct module_exports{
 	param_export_t* params;         /* null terminated array of the exported
 									   module parameters */
 
-	init_function init_f;           /* Initilization function */
+	init_function init_f;           /* Initialization function */
 	response_function response_f;   /* function used for responses,
 									   returns yes or no; can be null */
 	destroy_function destroy_f;     /* function called when the module should
@@ -119,12 +132,13 @@ struct sr_module{
 };
 
 
-extern struct sr_module* modules; /* global module list*/
+struct sr_module* modules; /* global module list*/
 
 int register_builtin_modules();
 int register_module(struct module_exports*, char*,  void*);
 int load_module(char* path);
 cmd_function find_export(char* name, int param_no, int flags);
+cmd_function find_mod_export(char* mod, char* name, int param_no, int flags);
 struct sr_module* find_module(void *f, cmd_export_t** cmd);
 void destroy_modules();
 int init_child(int rank);

@@ -23,6 +23,7 @@
 #include <linux/cpu.h>
 #include <linux/interrupt.h>
 #include <linux/smp.h>
+#include <linux/fs.h>
 
 #include <asm/cpu.h>
 #include <asm/elf.h>
@@ -63,6 +64,8 @@ unsigned int processor_id;
 unsigned int __machine_arch_type;
 EXPORT_SYMBOL(__machine_arch_type);
 
+unsigned int __atags_pointer __initdata;
+
 unsigned int system_rev;
 EXPORT_SYMBOL(system_rev);
 
@@ -88,6 +91,9 @@ struct cpu_user_fns cpu_user;
 #ifdef MULTI_CACHE
 struct cpu_cache_fns cpu_cache;
 #endif
+#ifdef CONFIG_OUTER_CACHE
+struct outer_cache_fns outer_cache;
+#endif
 
 struct stack {
 	u32 irq[3];
@@ -106,7 +112,7 @@ unsigned long phys_initrd_size __initdata = 0;
 static struct meminfo meminfo __initdata = { 0, };
 static const char *cpu_name;
 static const char *machine_name;
-static char command_line[COMMAND_LINE_SIZE];
+static char __initdata command_line[COMMAND_LINE_SIZE];
 
 static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
 static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
@@ -354,12 +360,6 @@ static void __init setup_processor(void)
 #ifndef CONFIG_ARM_THUMB
 	elf_hwcap &= ~HWCAP_THUMB;
 #endif
-#ifndef CONFIG_VFP
-	elf_hwcap &= ~HWCAP_VFP;
-#endif
-#ifndef CONFIG_IWMMXT
-	elf_hwcap &= ~HWCAP_IWMMXT;
-#endif
 
 	cpu_proc_init();
 }
@@ -441,16 +441,19 @@ __early_param("initrd=", early_initrd);
 
 static void __init arm_add_memory(unsigned long start, unsigned long size)
 {
+	struct membank *bank;
+
 	/*
 	 * Ensure that start/size are aligned to a page boundary.
 	 * Size is appropriately rounded down, start is rounded up.
 	 */
 	size -= start & ~PAGE_MASK;
 
-	meminfo.bank[meminfo.nr_banks].start = PAGE_ALIGN(start);
-	meminfo.bank[meminfo.nr_banks].size  = size & PAGE_MASK;
-	meminfo.bank[meminfo.nr_banks].node  = PHYS_TO_NID(start);
-	meminfo.nr_banks += 1;
+	bank = &meminfo.bank[meminfo.nr_banks++];
+
+	bank->start = PAGE_ALIGN(start);
+	bank->size  = size & PAGE_MASK;
+	bank->node  = PHYS_TO_NID(start);
 }
 
 /*
@@ -782,7 +785,9 @@ void __init setup_arch(char **cmdline_p)
 	if (mdesc->soft_reboot)
 		reboot_setup("s");
 
-	if (mdesc->boot_params)
+	if (__atags_pointer)
+		tags = phys_to_virt(__atags_pointer);
+	else if (mdesc->boot_params)
 		tags = phys_to_virt(mdesc->boot_params);
 
 	/*
@@ -808,8 +813,8 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.end_data   = (unsigned long) &_edata;
 	init_mm.brk	   = (unsigned long) &_end;
 
-	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
-	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	memcpy(boot_command_line, from, COMMAND_LINE_SIZE);
+	boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(cmdline_p, from);
 	paging_init(&meminfo, mdesc);
 	request_standard_resources(&meminfo, mdesc);
@@ -841,8 +846,11 @@ static int __init topology_init(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
-		register_cpu(&per_cpu(cpu_data, cpu).cpu, cpu);
+	for_each_possible_cpu(cpu) {
+		struct cpuinfo_arm *cpuinfo = &per_cpu(cpu_data, cpu);
+		cpuinfo->cpu.hotpluggable = 1;
+		register_cpu(&cpuinfo->cpu, cpu);
+	}
 
 	return 0;
 }
@@ -860,6 +868,7 @@ static const char *hwcap_str[] = {
 	"edsp",
 	"java",
 	"iwmmxt",
+	"crunch",
 	NULL
 };
 
@@ -916,7 +925,7 @@ static int c_show(struct seq_file *m, void *v)
 
 	if ((processor_id & 0x0008f000) == 0x00000000) {
 		/* pre-ARM7 */
-		seq_printf(m, "CPU part\t\t: %07x\n", processor_id >> 4);
+		seq_printf(m, "CPU part\t: %07x\n", processor_id >> 4);
 	} else {
 		if ((processor_id & 0x0008f000) == 0x00007000) {
 			/* ARM7 */

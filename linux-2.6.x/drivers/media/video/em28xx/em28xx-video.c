@@ -1480,7 +1480,7 @@ static int em28xx_v4l2_ioctl(struct inode *inode, struct file *filp,
 	return ret;
 }
 
-static struct file_operations em28xx_v4l_fops = {
+static const struct file_operations em28xx_v4l_fops = {
 	.owner = THIS_MODULE,
 	.open = em28xx_v4l2_open,
 	.release = em28xx_v4l2_close,
@@ -1674,9 +1674,9 @@ static int em28xx_init_dev(struct em28xx **devhandle, struct usb_device *udev,
 	if (dev->has_msp34xx) {
 		/* Send a reset to other chips via gpio */
 		em28xx_write_regs_req(dev, 0x00, 0x08, "\xf7", 1);
-		udelay(2500);
+		msleep(3);
 		em28xx_write_regs_req(dev, 0x00, 0x08, "\xff", 1);
-		udelay(2500);
+		msleep(3);
 
 	}
 	video_mux(dev, 0);
@@ -1729,7 +1729,7 @@ static int em28xx_usb_probe(struct usb_interface *interface,
 
 	endpoint = &interface->cur_altsetting->endpoint[1].desc;
 
-	/* check if the the device has the iso in endpoint at the correct place */
+	/* check if the device has the iso in endpoint at the correct place */
 	if ((endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) !=
 	    USB_ENDPOINT_XFER_ISOC) {
 		em28xx_err(DRIVER_NAME " probing error: endpoint is non-ISO endpoint!\n");
@@ -1772,6 +1772,7 @@ static int em28xx_usb_probe(struct usb_interface *interface,
 	if (dev->alt_max_pkt_size == NULL) {
 		em28xx_errdev("out of memory!\n");
 		em28xx_devused&=~(1<<nr);
+		kfree(dev);
 		return -ENOMEM;
 	}
 

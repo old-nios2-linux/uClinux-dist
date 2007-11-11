@@ -32,7 +32,7 @@
  */
 #define IO_SPACE_LIMIT		0xffffffffffffffffUL
 
-#define MAX_IO_SPACES_BITS		4
+#define MAX_IO_SPACES_BITS		8
 #define MAX_IO_SPACES			(1UL << MAX_IO_SPACES_BITS)
 #define IO_SPACE_BITS			24
 #define IO_SPACE_SIZE			(1UL << IO_SPACE_BITS)
@@ -421,11 +421,7 @@ __writeq (unsigned long val, volatile void __iomem *addr)
 
 extern void __iomem * ioremap(unsigned long offset, unsigned long size);
 extern void __iomem * ioremap_nocache (unsigned long offset, unsigned long size);
-
-static inline void
-iounmap (volatile void __iomem *addr)
-{
-}
+extern void iounmap (volatile void __iomem *addr);
 
 /* Use normal IO mappings for DMI */
 #define dmi_ioremap ioremap

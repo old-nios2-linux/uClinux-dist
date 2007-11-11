@@ -26,7 +26,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <asm/types.h>
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include "mtd/mtd-user.h"
 
 /*

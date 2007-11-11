@@ -18,13 +18,13 @@
  * for more details.
  */
 
-char ipsec_tunnel_c_version[] = "RCSID $Id: ipsec_tunnel.c,v 1.232.2.4 2006/03/28 20:58:19 ken Exp $";
+char ipsec_tunnel_c_version[] = "RCSID $Id: ipsec_tunnel.c,v 1.232.2.5 2006/10/06 21:39:26 paul Exp $";
 
 #define __NO_VERSION__
 #include <linux/module.h>
 #ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>	/* for CONFIG_IP_FORWARD */
-#endif
+#include <linux/config.h>
+#endif	/* for CONFIG_IP_FORWARD */
 #include <linux/version.h>
 #include <linux/kernel.h> /* printk() */
 
@@ -211,7 +211,7 @@ ipsec_tunnel_SAlookup(struct ipsec_xmit_state *ixs)
 	 * The spinlock is to prevent any other process from accessing or deleting
 	 * the eroute while we are using and updating it.
 	 */
-	spin_lock(&eroute_lock);
+	spin_lock_bh(&eroute_lock);
 	
 	ixs->eroute = ipsec_findroute(&ixs->matcher);
 
@@ -424,7 +424,7 @@ ipsec_tunnel_SAlookup(struct ipsec_xmit_state *ixs)
 			ixs->eroute->er_last = ixs->skb;
 			ixs->skb = NULL;
 			ixs->stats->tx_dropped++;
-			spin_unlock(&eroute_lock);
+			spin_unlock_bh(&eroute_lock);
 			return IPSEC_XMIT_STOLEN;
 		}
 		ixs->outgoing_said = ixs->eroute->er_said;
@@ -451,7 +451,7 @@ ipsec_tunnel_SAlookup(struct ipsec_xmit_state *ixs)
 					       "Failed, tried to allocate %d bytes for source ident.\n", 
 					       len);
 					ixs->stats->tx_dropped++;
-					spin_unlock(&eroute_lock);
+					spin_unlock_bh(&eroute_lock);
 					return IPSEC_XMIT_ERRMEMALLOC;
 				}
 				memcpy(ixs->ips.ips_ident_s.data, ixs->eroute->er_ident_s.data, len);
@@ -471,7 +471,7 @@ ipsec_tunnel_SAlookup(struct ipsec_xmit_state *ixs)
 					       "Failed, tried to allocate %d bytes for dest ident.\n", 
 					       len);
 					ixs->stats->tx_dropped++;
-					spin_unlock(&eroute_lock);
+					spin_unlock_bh(&eroute_lock);
 					return IPSEC_XMIT_ERRMEMALLOC;
 				}
 				memcpy(ixs->ips.ips_ident_d.data, ixs->eroute->er_ident_d.data, len);
@@ -479,7 +479,7 @@ ipsec_tunnel_SAlookup(struct ipsec_xmit_state *ixs)
 		}
 	}
 
-	spin_unlock(&eroute_lock);
+	spin_unlock_bh(&eroute_lock);
 	return IPSEC_XMIT_OK;
 }
 
@@ -514,7 +514,7 @@ ipsec_tunnel_restore_hard_header(struct ipsec_xmit_state*ixs)
 	}
 #ifdef CONFIG_IPSEC_NAT_TRAVERSAL
 	if (ixs->natt_type && ixs->natt_head) {
-		struct iphdr *ipp = ixs->skb->nh.iph;
+		struct iphdr *ipp = ip_hdr(ixs->skb);
 		struct udphdr *udp;
 		KLIPS_PRINT(debug_tunnel & DB_TN_XMIT,
 			    "klips_debug:ipsec_tunnel_start_xmit: "
@@ -580,17 +580,17 @@ ipsec_tunnel_send(struct ipsec_xmit_state*ixs)
 #ifdef NETDEV_25
 	memset (&fl, 0x0, sizeof (struct flowi));
  	fl.oif = ixs->physdev->iflink;
- 	fl.nl_u.ip4_u.daddr = ixs->skb->nh.iph->daddr;
- 	fl.nl_u.ip4_u.saddr = ixs->pass ? 0 : ixs->skb->nh.iph->saddr;
- 	fl.nl_u.ip4_u.tos = RT_TOS(ixs->skb->nh.iph->tos);
- 	fl.proto = ixs->skb->nh.iph->protocol;
+ 	fl.nl_u.ip4_u.daddr = ip_hdr(ixs->skb)->daddr;
+ 	fl.nl_u.ip4_u.saddr = ixs->pass ? 0 : ip_hdr(ixs->skb)->saddr;
+ 	fl.nl_u.ip4_u.tos = RT_TOS(ip_hdr(ixs->skb)->tos);
+ 	fl.proto = ip_hdr(ixs->skb)->protocol;
  	if ((ixs->error = ip_route_output_key(&ixs->route, &fl))) {
 #else
 	/*skb_orphan(ixs->skb);*/
 	if((ixs->error = ip_route_output(&ixs->route,
-				    ixs->skb->nh.iph->daddr,
-				    ixs->pass ? 0 : ixs->skb->nh.iph->saddr,
-				    RT_TOS(ixs->skb->nh.iph->tos),
+				    ip_hdr(ixs->skb)->daddr,
+				    ixs->pass ? 0 : ip_hdr(ixs->skb)->saddr,
+				    RT_TOS(ip_hdr(ixs->skb)->tos),
                                     /* mcr->rgb: should this be 0 instead? */
 				    ixs->physdev->iflink))) {
 #endif
@@ -615,16 +615,16 @@ ipsec_tunnel_send(struct ipsec_xmit_state*ixs)
 	dst_release(ixs->skb->dst);
 	ixs->skb->dst = &ixs->route->u.dst;
 	ixs->stats->tx_bytes += ixs->skb->len;
-	if(ixs->skb->len < ixs->skb->nh.raw - ixs->skb->data) {
+	if(ixs->skb->len < skb_network_header(ixs->skb) - ixs->skb->data) {
 		ixs->stats->tx_errors++;
 		printk(KERN_WARNING
 		       "klips_error:ipsec_xmit_send: "
 		       "tried to __skb_pull nh-data=%ld, %d available.  This should never happen, please report.\n",
-		       (unsigned long)(ixs->skb->nh.raw - ixs->skb->data),
+		       (unsigned long)(skb_network_header(ixs->skb) - ixs->skb->data),
 		       ixs->skb->len);
 		return IPSEC_XMIT_PUSHPULLERR;
 	}
-	__skb_pull(ixs->skb, ixs->skb->nh.raw - ixs->skb->data);
+	__skb_pull(ixs->skb, skb_network_header(ixs->skb) - ixs->skb->data);
 #ifdef SKB_RESET_NFCT
 	if(!ixs->pass) {
 	  nf_conntrack_put(ixs->skb->nfct);
@@ -638,7 +638,7 @@ ipsec_tunnel_send(struct ipsec_xmit_state*ixs)
 		    "klips_debug:ipsec_xmit_send: "
 		    "...done, calling ip_send() on device:%s\n",
 		    ixs->skb->dev ? ixs->skb->dev->name : "NULL");
-	KLIPS_IP_PRINT(debug_tunnel & DB_TN_XMIT, ixs->skb->nh.iph);
+	KLIPS_IP_PRINT(debug_tunnel & DB_TN_XMIT, ip_hdr(ixs->skb));
 #ifdef NETDEV_23	/* 2.4 kernels */
 	{
 		int err;
@@ -729,7 +729,7 @@ ipsec_tunnel_xsm_complete(
 	ixs->matcher.sen_proto = ixs->iph->protocol;
 	ipsec_extract_ports(ixs->iph, &ixs->matcher);
 
-	spin_lock(&eroute_lock);
+	spin_lock_bh(&eroute_lock);
 	ixs->eroute = ipsec_findroute(&ixs->matcher);
 	if(ixs->eroute) {
 		ixs->outgoing_said = ixs->eroute->er_said;
@@ -737,7 +737,7 @@ ipsec_tunnel_xsm_complete(
 		ixs->eroute->er_count++;
 		ixs->eroute->er_lasttime = jiffies/HZ;
 	}
-	spin_unlock(&eroute_lock);
+	spin_unlock_bh(&eroute_lock);
 
 	KLIPS_PRINT((debug_tunnel & DB_TN_XMIT) &&
 			/* ((ixs->orgdst != ixs->newdst) || (ixs->orgsrc != ixs->newsrc)) */
@@ -935,8 +935,8 @@ ipsec_tunnel_hard_header(struct sk_buff *skb, struct net_device *dev,
 #ifdef NET_21
 			KLIPS_PRINTMORE(debug_tunnel & DB_TN_REVEC,
 					"ip=%08x->%08x\n",
-					(__u32)ntohl(skb->nh.iph->saddr),
-					(__u32)ntohl(skb->nh.iph->daddr) );
+					(__u32)ntohl(ip_hdr(skb)->saddr),
+					(__u32)ntohl(ip_hdr(skb)->daddr) );
 #else /* NET_21 */
 			KLIPS_PRINTMORE(debug_tunnel & DB_TN_REVEC,
 					"ip=%08x->%08x\n",
@@ -961,8 +961,8 @@ ipsec_tunnel_hard_header(struct sk_buff *skb, struct net_device *dev,
 #ifdef NET_21
 		KLIPS_PRINTMORE(debug_tunnel & DB_TN_REVEC,
 			    "ip=%08x->%08x\n",
-			    (__u32)ntohl(skb->nh.iph->saddr),
-			    (__u32)ntohl(skb->nh.iph->daddr) );
+			    (__u32)ntohl(ip_hdr(skb)->saddr),
+			    (__u32)ntohl(ip_hdr(skb)->daddr) );
 #else /* NET_21 */
 		KLIPS_PRINTMORE(debug_tunnel & DB_TN_REVEC,
 			    "ip=%08x->%08x\n",
@@ -1028,8 +1028,8 @@ ipsec_tunnel_rebuild_header(void *buff, struct net_device *dev,
 #ifdef NET_21
 		KLIPS_PRINT(debug_tunnel & DB_TN_REVEC,
 			    "ip=%08x->%08x\n",
-			    (__u32)ntohl(skb->nh.iph->saddr),
-			    (__u32)ntohl(skb->nh.iph->daddr) );
+			    (__u32)ntohl(ip_hdr(skb)->saddr),
+			    (__u32)ntohl(ip_hdr(skb)->daddr) );
 #else /* NET_21 */
 		KLIPS_PRINT(debug_tunnel & DB_TN_REVEC,
 			    "ip=%08x->%08x\n",
@@ -1047,8 +1047,8 @@ ipsec_tunnel_rebuild_header(void *buff, struct net_device *dev,
 #ifdef NET_21
 	KLIPS_PRINT(debug_tunnel & DB_TN_REVEC,
 		    "ip=%08x->%08x\n",
-		    (__u32)ntohl(skb->nh.iph->saddr),
-		    (__u32)ntohl(skb->nh.iph->daddr) );
+		    (__u32)ntohl(ip_hdr(skb)->saddr),
+		    (__u32)ntohl(ip_hdr(skb)->daddr) );
 #else /* NET_21 */
 	KLIPS_PRINT(debug_tunnel & DB_TN_REVEC,
 		    "ip=%08x->%08x\n",
@@ -1842,7 +1842,9 @@ ipsec_tunnel_init_devices(void)
 		memset((caddr_t)dev_ipsec->name, 0, IFNAMSIZ);
 		strncpy(dev_ipsec->name, name, IFNAMSIZ);
 #endif /* NETDEV_23 */
+#ifdef HAVE_DEV_NEXT
 		dev_ipsec->next = NULL;
+#endif
 		dev_ipsec->init = &ipsec_tunnel_probe;
 		KLIPS_PRINT(debug_tunnel & DB_TN_INIT,
 			    "klips_debug:ipsec_tunnel_init_devices: "
@@ -1904,6 +1906,11 @@ ipsec_tunnel_cleanup_devices(void)
 
 /*
  * $Log: ipsec_tunnel.c,v $
+ * Revision 1.232.2.5  2006/10/06 21:39:26  paul
+ * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
+ * set. This is defined through autoconf.h which is included through the
+ * linux kernel build macros.
+ *
  * Revision 1.232.2.4  2006/03/28 20:58:19  ken
  * Fix for KLIPS on 2.6.16 - need to include <net/arp.h> now
  *

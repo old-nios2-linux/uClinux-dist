@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/kfifo.h>
+#include <linux/log2.h>
 
 /**
  * kfifo_init - allocates a new FIFO using a preallocated buffer
@@ -32,8 +33,8 @@
  * @gfp_mask: get_free_pages mask, passed to kmalloc()
  * @lock: the lock to be used to protect the fifo buffer
  *
- * Do NOT pass the kfifo to kfifo_free() after use ! Simply free the
- * struct kfifo with kfree().
+ * Do NOT pass the kfifo to kfifo_free() after use! Simply free the
+ * &struct kfifo with kfree().
  */
 struct kfifo *kfifo_init(unsigned char *buffer, unsigned int size,
 			 gfp_t gfp_mask, spinlock_t *lock)
@@ -41,7 +42,7 @@ struct kfifo *kfifo_init(unsigned char *buffer, unsigned int size,
 	struct kfifo *fifo;
 
 	/* size must be a power of 2 */
-	BUG_ON(size & (size - 1));
+	BUG_ON(!is_power_of_2(size));
 
 	fifo = kmalloc(sizeof(struct kfifo), gfp_mask);
 	if (!fifo)
@@ -108,7 +109,7 @@ EXPORT_SYMBOL(kfifo_free);
  * @buffer: the data to be added.
  * @len: the length of the data to be added.
  *
- * This function copies at most 'len' bytes from the 'buffer' into
+ * This function copies at most @len bytes from the @buffer into
  * the FIFO depending on the free space, and returns the number of
  * bytes copied.
  *
@@ -155,8 +156,8 @@ EXPORT_SYMBOL(__kfifo_put);
  * @buffer: where the data must be copied.
  * @len: the size of the destination buffer.
  *
- * This function copies at most 'len' bytes from the FIFO into the
- * 'buffer' and returns the number of copied bytes.
+ * This function copies at most @len bytes from the FIFO into the
+ * @buffer and returns the number of copied bytes.
  *
  * Note that with only one concurrent reader and one concurrent
  * writer, you don't need extra locking to use these functions.

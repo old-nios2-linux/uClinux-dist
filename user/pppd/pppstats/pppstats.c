@@ -31,8 +31,12 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+#ifndef __STDC__
+#define const
+#endif
+
 #ifndef lint
-static char rcsid[] = "$Id: pppstats.c,v 1.1.1.1 1999/11/22 03:47:56 christ Exp $";
+static const char rcsid[] = "$Id: pppstats.c,v 1.2 2007/06/08 04:02:39 gerg Exp $";
 #endif
 
 #include <stdio.h>
@@ -49,13 +53,13 @@ static char rcsid[] = "$Id: pppstats.c,v 1.1.1.1 1999/11/22 03:47:56 christ Exp 
 #include <sys/ioctl.h>
 
 #ifndef STREAMS
-#if defined(_linux_) && defined(__powerpc__) \
+#if defined(__linux__) && defined(__powerpc__) \
     && (__GLIBC__ == 2 && __GLIBC_MINOR__ == 0)
 /* kludge alert! */
 #undef __GLIBC__
 #endif
 #include <sys/socket.h>		/* *BSD, Linux, NeXT, Ultrix etc. */
-#ifndef _linux_
+#ifndef __linux__
 #include <net/if.h>
 #include <net/ppp_defs.h>
 #include <net/if_ppp.h>
@@ -70,7 +74,7 @@ static char rcsid[] = "$Id: pppstats.c,v 1.1.1.1 1999/11/22 03:47:56 christ Exp 
 #endif
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
-#endif /* _linux_ */
+#endif /* __linux__ */
 
 #else	/* STREAMS */
 #include <sys/stropts.h>	/* SVR4, Solaris 2, SunOS 4, OSF/1, etc. */
@@ -94,6 +98,14 @@ char	*interface;
 extern int optind;
 extern char *optarg;
 #endif
+
+/*
+ * If PPP_DRV_NAME is not defined, use the legacy "ppp" as the
+ * device name.
+ */
+#if !defined(PPP_DRV_NAME)
+#define PPP_DRV_NAME    "ppp"
+#endif /* !defined(PPP_DRV_NAME) */
 
 static void usage __P((void));
 static void catchalarm __P((int));
@@ -132,7 +144,7 @@ get_ppp_stats(curp)
 
     memset (&req, 0, sizeof (req));
 
-#ifdef _linux_
+#ifdef __linux__
     req.stats_ptr = (caddr_t) &req.stats;
 #undef ifr_name
 #define ifr_name ifr__name
@@ -158,7 +170,7 @@ get_ppp_cstats(csp)
 
     memset (&creq, 0, sizeof (creq));
 
-#ifdef _linux_
+#ifdef __linux__
     creq.stats_ptr = (caddr_t) &creq.stats;
 #undef  ifr_name
 #define ifr_name ifr__name
@@ -178,7 +190,7 @@ get_ppp_cstats(csp)
 	}
     }
 
-#ifdef _linux_
+#ifdef __linux__
     if (creq.stats.c.bytes_out == 0) {
 	creq.stats.c.bytes_out = creq.stats.c.comp_bytes + creq.stats.c.inc_bytes;
 	creq.stats.c.in_count = creq.stats.c.unc_bytes;
@@ -440,7 +452,7 @@ main(argc, argv)
     char *dev;
 #endif
 
-    interface = "ppp0";
+    interface = PPP_DRV_NAME "0";
     if ((progname = strrchr(argv[0], '/')) == NULL)
 	progname = argv[0];
     else
@@ -494,7 +506,7 @@ main(argc, argv)
     if (argc > 0)
 	interface = argv[0];
 
-    if (sscanf(interface, "ppp%d", &unit) != 1) {
+    if (sscanf(interface, PPP_DRV_NAME "%d", &unit) != 1) {
 	fprintf(stderr, "%s: invalid interface '%s' specified\n",
 		progname, interface);
     }
@@ -510,7 +522,7 @@ main(argc, argv)
 	    exit(1);
 	}
 
-#ifdef _linux_
+#ifdef __linux__
 #undef  ifr_name
 #define ifr_name ifr_ifrn.ifrn_name
 #endif
@@ -526,7 +538,7 @@ main(argc, argv)
 #ifdef __osf__
     dev = "/dev/streams/ppp";
 #else
-    dev = "/dev/ppp";
+    dev = "/dev/" PPP_DRV_NAME;
 #endif
     if ((s = open(dev, O_RDONLY)) < 0) {
 	fprintf(stderr, "%s: couldn't open ", progname);

@@ -1,8 +1,8 @@
 /*
- * $Id: auth_diameter.h,v 1.1 2003/08/29 18:55:15 ramona Exp $ 
+ * $Id: auth_diameter.h,v 1.3 2004/08/24 08:58:25 janakj Exp $ 
  * Digest Authentication - Diameter support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,7 +39,7 @@
 #define M_NAME "auth_diameter"
 
 extern char *diameter_client_host;
-extern char* diameter_client_port;
+extern int diameter_client_port;
 
 /* Stateless reply function pointer */
 extern int (*sl_reply)(struct sip_msg* _m, char* _str1, char* _str2);

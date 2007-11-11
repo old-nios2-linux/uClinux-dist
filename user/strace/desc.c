@@ -27,13 +27,22 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: desc.c,v 1.9 2001/03/08 13:59:00 hughesj Exp $
+ *	$Id: desc.c,v 1.27 2007/01/11 23:19:55 ldv Exp $
  */
 
 #include "defs.h"
 
 #include <fcntl.h>
 #include <sys/file.h>
+#ifdef LINUX
+#include <inttypes.h>
+#endif
+#ifdef HAVE_SYS_EPOLL_H
+#include <sys/epoll.h>
+#endif
+#ifdef HAVE_LIBAIO_H
+#include <libaio.h>
+#endif
 
 #if HAVE_LONG_LONG_OFF_T
 /*
@@ -44,7 +53,7 @@
 #endif
 
 
-static struct xlat fcntlcmds[] = {
+static const struct xlat fcntlcmds[] = {
 	{ F_DUPFD,	"F_DUPFD"	},
 	{ F_GETFD,	"F_GETFD"	},
 	{ F_SETFD,	"F_SETFD"	},
@@ -142,7 +151,7 @@ static struct xlat fcntlcmds[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat fdflags[] = {
+static const struct xlat fdflags[] = {
 #ifdef FD_CLOEXEC
 	{ FD_CLOEXEC,	"FD_CLOEXEC"	},
 #endif
@@ -151,7 +160,7 @@ static struct xlat fdflags[] = {
 
 #ifdef LOCK_SH
 
-static struct xlat flockcmds[] = {
+static const struct xlat flockcmds[] = {
 	{ LOCK_SH,	"LOCK_SH"	},
 	{ LOCK_EX,	"LOCK_EX"	},
 	{ LOCK_NB,	"LOCK_NB"	},
@@ -161,7 +170,7 @@ static struct xlat flockcmds[] = {
 
 #endif /* LOCK_SH */
 
-static struct xlat lockfcmds[] = {
+static const struct xlat lockfcmds[] = {
 	{ F_RDLCK,	"F_RDLCK"	},
 	{ F_WRLCK,	"F_WRLCK"	},
 	{ F_UNLCK,	"F_UNLCK"	},
@@ -174,7 +183,7 @@ static struct xlat lockfcmds[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat whence[] = {
+static const struct xlat whence[] = {
 	{ SEEK_SET,	"SEEK_SET"	},
 	{ SEEK_CUR,	"SEEK_CUR"	},
 	{ SEEK_END,	"SEEK_END"	},
@@ -212,7 +221,7 @@ int getlk;
 static void
 printflock64(tcp, addr, getlk)
 struct tcb *tcp;
-int addr;
+long addr;
 int getlk;
 {
 	struct flock64 fl;
@@ -225,7 +234,7 @@ int getlk;
 	printxval(lockfcmds, fl.l_type, "F_???");
 	tprintf(", whence=");
 	printxval(whence, fl.l_whence, "SEEK_???");
-	tprintf(", start=%lld, len=%lld", fl.l_start, fl.l_len);
+	tprintf(", start=%lld, len=%lld", (long long) fl.l_start, (long long) fl.l_len);
 	if (getlk)
 		tprintf(", pid=%lu}", (unsigned long) fl.l_pid);
 	else
@@ -233,13 +242,11 @@ int getlk;
 }
 #endif
 
-static char *
-sprintflags(xlat, flags)
-struct xlat *xlat;
-int flags;
+static const char *
+sprintflags(const struct xlat *xlat, int flags)
 {
 	static char outstr[1024];
-	char *sep;
+	const char *sep;
 
 	strcpy(outstr, "flags ");
 	sep = "";
@@ -257,28 +264,62 @@ int flags;
 	return outstr;
 }
 
-int
-sys_fcntl(tcp)
-struct tcb *tcp;
+/*
+ * low bits of the open(2) flags define access mode,
+ * other bits are real flags.
+ */
+static const char *
+sprint_open_modes(mode_t flags)
 {
-	extern struct xlat openmodes[];
+	extern const struct xlat open_access_modes[];
+	extern const struct xlat open_mode_flags[];
+	static char outstr[1024];
+	const char *str = xlookup(open_access_modes, flags & 3);
+	const char *sep = "";
+	const struct xlat *x;
 
+	strcpy(outstr, "flags ");
+	if (str)
+	{
+		strcat(outstr, str);
+		flags &= ~3;
+		if (!flags)
+			return outstr;
+		strcat(outstr, "|");
+	}
+
+	for (x = open_mode_flags; x->str; x++)
+	{
+		if ((flags & x->val) == x->val)
+		{
+			sprintf(outstr + strlen(outstr),
+				"%s%s", sep, x->str);
+			sep = "|";
+			flags &= ~x->val;
+		}
+	}
+	if (flags)
+		sprintf(outstr + strlen(outstr), "%s%#x", sep, flags);
+	return outstr;
+}
+
+int
+sys_fcntl(struct tcb *tcp)
+{
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
 		printxval(fcntlcmds, tcp->u_arg[1], "F_???");
 		switch (tcp->u_arg[1]) {
 		case F_SETFD:
 			tprintf(", ");
-			if (printflags(fdflags, tcp->u_arg[2]) == 0)
-				tprintf("0");
+			printflags(fdflags, tcp->u_arg[2], "FD_???");
 			break;
 		case F_SETOWN: case F_DUPFD:
 			tprintf(", %ld", tcp->u_arg[2]);
 			break;
 		case F_SETFL:
 			tprintf(", ");
-			if (printflags(openmodes, tcp->u_arg[2] + 1) == 0)
-				tprintf("0");
+			tprint_open_modes(tcp, tcp->u_arg[2]);
 			break;
 		case F_SETLK: case F_SETLKW:
 #ifdef F_FREESP
@@ -291,7 +332,7 @@ struct tcb *tcp;
 #ifdef F_FREESP64
 		case F_FREESP64:
 #endif
-		/* Linux glibc defines SETLK64 as SETLK, 
+		/* Linux glibc defines SETLK64 as SETLK,
 		   even though the kernel has different values - as does Solaris. */
 #if defined(F_SETLK64) && F_SETLK64+0!=F_SETLK
 		case F_SETLK64:
@@ -318,7 +359,7 @@ struct tcb *tcp;
 			tcp->auxstr = sprintflags(fdflags, tcp->u_rval);
 			return RVAL_HEX|RVAL_STR;
 		case F_GETFL:
-			tcp->auxstr = sprintflags(openmodes, tcp->u_rval + 1);
+			tcp->auxstr = sprint_open_modes(tcp->u_rval);
 			return RVAL_HEX|RVAL_STR;
 		case F_GETLK:
 			tprintf(", ");
@@ -348,8 +389,7 @@ struct tcb *tcp;
 {
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
-		if (!printflags(flockcmds, tcp->u_arg[1]))
-			tprintf("LOCK_???");
+		printflags(flockcmds, tcp->u_arg[1], "LOCK_???");
 	}
 	return 0;
 }
@@ -385,33 +425,30 @@ struct tcb *tcp;
 	return 0;
 }
 
+#if defined(ALPHA) || defined(FREEBSD) || defined(SUNOS4)
 int
 sys_getdtablesize(tcp)
 struct tcb *tcp;
 {
 	return 0;
 }
+#endif /* ALPHA || FREEBSD || SUNOS4 */
 
 static int
-decode_select(tcp, args, bitness)
-struct tcb *tcp;
-long *args;
-int bitness;
+decode_select(struct tcb *tcp, long *args, enum bitness_t bitness)
 {
 	int i, j, nfds;
-	fd_set fds;
-	struct timeval tv;
-#ifdef ALPHA
-	struct timeval32 {
-		unsigned tv_sec;
-		unsigned tv_usec;
-	} *tv32;
-#endif
+	unsigned int fdsize = ((((args[0] + 7) / 8) + sizeof(long) - 1)
+			       & -sizeof(long));
+	fd_set *fds;
 	static char outstr[1024];
 	char *sep;
 	long arg;
 
 	if (entering(tcp)) {
+		fds = (fd_set *) malloc(fdsize);
+		if (fds == NULL)
+			fprintf(stderr, "out of memory\n");
 		nfds = args[0];
 		tprintf("%d", nfds);
 		for (i = 0; i < 3; i++) {
@@ -420,39 +457,26 @@ int bitness;
 				tprintf(", NULL");
 				continue;
 			}
-			if (!verbose(tcp)) {
+			if (fds == NULL || !verbose(tcp)) {
 				tprintf(", %#lx", arg);
 				continue;
 			}
-			if (umove(tcp, arg, &fds) < 0) {
+			if (umoven(tcp, arg, fdsize, (char *) fds) < 0) {
 				tprintf(", [?]");
 				continue;
 			}
 			tprintf(", [");
 			for (j = 0, sep = ""; j < nfds; j++) {
-				if (FD_ISSET(j, &fds)) {
+				if (FD_ISSET(j, fds)) {
 					tprintf("%s%u", sep, j);
 					sep = " ";
 				}
 			}
 			tprintf("]");
 		}
-		if (!args[4])
-			tprintf(", NULL");
-		else if (!verbose(tcp))
-			tprintf(", %#lx", args[4]);
-		else if (umove(tcp, args[4], &tv) < 0)
-			tprintf(", {...}");
-		else {
-#ifdef ALPHA
-			if (bitness) {
-				tv32=(struct timeval32*)&tv;
-				tprintf(", {%u, %u}", tv32->tv_sec, tv32->tv_usec);
-			} else
-#endif
-				tprintf(", {%lu, %lu}",
-					(long) tv.tv_sec, (long) tv.tv_usec);
-		}
+		free(fds);
+		tprintf(", ");
+		printtv_bitness(tcp, args[4], bitness);
 	}
 	else
 	{
@@ -466,6 +490,11 @@ int bitness;
 			tcp->auxstr = "Timeout";
 			return RVAL_STR;
 		}
+
+		fds = (fd_set *) malloc(fdsize);
+		if (fds == NULL)
+			fprintf(stderr, "out of memory\n");
+
 		outstr[0] = '\0';
 		for (i = 0; i < 3; i++) {
 			int first = 1;
@@ -473,10 +502,11 @@ int bitness;
 
 			tcp->auxstr = outstr;
 			arg = args[i+1];
-			if (!arg || umove(tcp, arg, &fds) < 0)
+			if (fds == NULL || !arg ||
+			    umoven(tcp, arg, fdsize, (char *) fds) < 0)
 				continue;
 			for (j = 0; j < args[0]; j++) {
-				if (FD_ISSET(j, &fds)) {
+				if (FD_ISSET(j, fds)) {
 					if (first) {
 						sprintf(str, "%s%s [%u", sep,
 							i == 0 ? "in" :
@@ -498,25 +528,16 @@ int bitness;
 			if (nfds == 0)
 				break;
 		}
+		free(fds);
 #ifdef LINUX
 		/* This contains no useful information on SunOS.  */
 		if (args[4]) {
-			char str[20];
+			char str[128];
 
-			if (umove(tcp, args[4], &tv) >= 0) {
-#ifdef ALPHA
-				if (bitness) {
-					tv32=(struct timeval32*)&tv;
-					sprintf(str, "%sleft {%u, %u}", sep,
-						tv32->tv_sec, tv32->tv_usec);
-				} else
-#endif
-					sprintf(str, "%sleft {%lu, %lu}", sep,
-						(long) tv.tv_sec, (long) tv.tv_usec);
-
-				if ((cumlen += strlen(str)) < sizeof(outstr))
-					strcat(outstr, str);
-			}
+			sprintf(str, "%sleft ", sep);
+			sprinttv(tcp, args[4], bitness, str + strlen(str));
+			if ((cumlen += strlen(str)) < sizeof(outstr))
+				strcat(outstr, str);
 		}
 #endif /* LINUX */
 		return RVAL_STR;
@@ -536,24 +557,346 @@ struct tcb *tcp;
 		tprintf("[...]");
 		return 0;
 	}
-	return decode_select(tcp, args, 0);
+	return decode_select(tcp, args, BITNESS_CURRENT);
 }
 
 #ifdef ALPHA
+int
 sys_osf_select(tcp)
 struct tcb *tcp;
 {
 	long *args = tcp->u_arg;
-	return decode_select(tcp, args, 1);
+	return decode_select(tcp, args, BITNESS_32);
 }
 #endif
 
+static struct xlat epollctls[] = {
+#ifdef EPOLL_CTL_ADD
+	{ EPOLL_CTL_ADD,	"EPOLL_CTL_ADD"	},
+#endif
+#ifdef EPOLL_CTL_MOD
+	{ EPOLL_CTL_MOD,	"EPOLL_CTL_MOD"	},
+#endif
+#ifdef EPOLL_CTL_DEL
+	{ EPOLL_CTL_DEL,	"EPOLL_CTL_DEL"	},
+#endif
+	{ 0,			NULL		}
+};
+
+static struct xlat epollevents[] = {
+#ifdef EPOLLIN
+	{ EPOLLIN,	"EPOLLIN"	},
+#endif
+#ifdef EPOLLPRI
+	{ EPOLLPRI,	"EPOLLPRI"	},
+#endif
+#ifdef EPOLLOUT
+	{ EPOLLOUT,	"EPOLLOUT"	},
+#endif
+#ifdef EPOLLRDNORM
+	{ EPOLLRDNORM,	"EPOLLRDNORM"	},
+#endif
+#ifdef EPOLLRDBAND
+	{ EPOLLRDBAND,	"EPOLLRDBAND"	},
+#endif
+#ifdef EPOLLWRNORM
+	{ EPOLLWRNORM,	"EPOLLWRNORM"	},
+#endif
+#ifdef EPOLLWRBAND
+	{ EPOLLWRBAND,	"EPOLLWRBAND"	},
+#endif
+#ifdef EPOLLMSG
+	{ EPOLLMSG,	"EPOLLMSG"	},
+#endif
+#ifdef EPOLLERR
+	{ EPOLLERR,	"EPOLLERR"	},
+#endif
+#ifdef EPOLLHUP
+	{ EPOLLHUP,	"EPOLLHUP"	},
+#endif
+#ifdef EPOLLONESHOT
+	{ EPOLLONESHOT,	"EPOLLONESHOT"	},
+#endif
+#ifdef EPOLLET
+	{ EPOLLET,	"EPOLLET"	},
+#endif
+	{ 0,		NULL		}
+};
+
+int
+sys_epoll_create(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp))
+		tprintf("%ld", tcp->u_arg[0]);
+	return 0;
+}
+
+#ifdef HAVE_SYS_EPOLL_H
+static void
+print_epoll_event(ev)
+struct epoll_event *ev;
+{
+	tprintf("{");
+	printflags(epollevents, ev->events, "EPOLL???");
+	/* We cannot know what format the program uses, so print u32 and u64
+	   which will cover every value.  */
+	tprintf(", {u32=%" PRIu32 ", u64=%" PRIu64 "}}",
+		ev->data.u32, ev->data.u64);
+}
+#endif
+
+int
+sys_epoll_ctl(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp)) {
+		tprintf("%ld, ", tcp->u_arg[0]);
+                printxval(epollctls, tcp->u_arg[1], "EPOLL_CTL_???");
+		tprintf(", %ld, ", tcp->u_arg[2]);
+		if (tcp->u_arg[3] == 0)
+			tprintf("NULL");
+		else {
+#ifdef HAVE_SYS_EPOLL_H
+			struct epoll_event ev;
+			if (umove(tcp, tcp->u_arg[3], &ev) == 0)
+				print_epoll_event(&ev);
+			else
+#endif
+				tprintf("{...}");
+		}
+	}
+	return 0;
+}
+
+int
+sys_epoll_wait(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp))
+		tprintf("%ld, ", tcp->u_arg[0]);
+	else {
+		if (syserror(tcp))
+			tprintf("%lx", tcp->u_arg[1]);
+		else if (tcp->u_rval == 0)
+			tprintf("{}");
+		else {
+#ifdef HAVE_SYS_EPOLL_H
+			struct epoll_event ev, *start, *cur, *end;
+			int failed = 0;
+
+			tprintf("{");
+			start = (struct epoll_event *) tcp->u_arg[1];
+			end = start + tcp->u_rval;
+			for (cur = start; cur < end; ++cur) {
+				if (cur > start)
+					tprintf(", ");
+				if (umove(tcp, (long) cur, &ev) == 0)
+					print_epoll_event(&ev);
+				else {
+					tprintf("?");
+					failed = 1;
+					break;
+				}
+			}
+			tprintf("}");
+			if (failed)
+				tprintf(" %#lx", (long) start);
+#else
+			tprintf("{...}");
+#endif
+		}
+		tprintf(", %ld, %ld", tcp->u_arg[2], tcp->u_arg[3]);
+	}
+	return 0;
+}
+
+int
+sys_io_setup(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp))
+		tprintf("%ld, ", tcp->u_arg[0]);
+	else {
+		if (syserror(tcp))
+			tprintf("0x%0lx", tcp->u_arg[1]);
+		else {
+			unsigned long user_id;
+			if (umove(tcp, tcp->u_arg[1], &user_id) == 0)
+				tprintf("{%lu}", user_id);
+			else
+				tprintf("{...}");
+		}
+	}
+	return 0;
+}
+
+int
+sys_io_destroy(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp))
+		tprintf("%lu", tcp->u_arg[0]);
+	return 0;
+}
+
+int
+sys_io_submit(tcp)
+struct tcb *tcp;
+{
+	long nr;
+	if (entering(tcp)) {
+		tprintf("%lu, %ld, ", tcp->u_arg[0], tcp->u_arg[1]);
+		nr = tcp->u_arg[1];
+		/* and if nr is negative? */
+		if (nr == 0)
+			tprintf("{}");
+		else {
+#ifdef HAVE_LIBAIO_H
+			long i;
+			struct iocb *iocbp, **iocbs = (void *)tcp->u_arg[2];
+
+			for (i = 0; i < nr; i++, iocbs++) {
+				struct iocb iocb;
+				if (i == 0)
+					tprintf("{");
+				else
+					tprintf(", ");
+
+				if (umove(tcp, (unsigned long)iocbs, &iocbp) ||
+				    umove(tcp, (unsigned long)iocbp, &iocb)) {
+					tprintf("{...}");
+					continue;
+				}
+				tprintf("{%p, %u, %hu, %hu, %d}",
+					iocb.data, iocb.key,
+					iocb.aio_lio_opcode,
+					iocb.aio_reqprio, iocb.aio_fildes);
+			}
+			if (i)
+				tprintf("}");
+#else
+			tprintf("{...}");
+#endif
+		}
+	}
+	return 0;
+}
+
+int
+sys_io_cancel(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp)) {
+#ifdef HAVE_LIBAIO_H
+		struct iocb iocb;
+#endif
+		tprintf("%lu, ", tcp->u_arg[0]);
+#ifdef HAVE_LIBAIO_H
+		if (umove(tcp, tcp->u_arg[1], &iocb) == 0) {
+			tprintf("{%p, %u, %hu, %hu, %d}, ",
+				iocb.data, iocb.key,
+				iocb.aio_lio_opcode,
+				iocb.aio_reqprio, iocb.aio_fildes);
+		} else
+#endif
+			tprintf("{...}, ");
+	} else {
+		if (tcp->u_rval < 0)
+			tprintf("{...}");
+		else {
+#ifdef HAVE_LIBAIO_H
+			struct io_event event;
+			if (umove(tcp, tcp->u_arg[2], &event) == 0)
+				tprintf("{%p, %p, %ld, %ld}",
+					event.data, event.obj,
+					event.res, event.res2);
+			else 
+#endif
+				tprintf("{...}");
+		}
+	}
+	return 0;
+}
+
+int
+sys_io_getevents(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp)) {
+		tprintf("%ld, %ld, %ld, ", tcp->u_arg[0], tcp->u_arg[1],
+			tcp->u_arg[2]);
+	} else {
+		if (tcp->u_rval == 0) {
+			tprintf("{}");
+		} else  {
+#ifdef HAVE_LIBAIO_H
+			struct io_event *events = (void *)tcp->u_arg[3];
+			long i, nr = tcp->u_rval;
+
+			for (i = 0; i < nr; i++, events++) {
+				struct io_event event;
+
+				if (i == 0)
+					tprintf("{");
+				else
+					tprintf(", ");
+
+				if (umove(tcp, (unsigned long)events, &event) != 0) {
+					tprintf("{...}");
+					continue;
+				}
+				tprintf("{%p, %p, %ld, %ld}", event.data,
+					event.obj, event.res, event.res2);
+			}
+			tprintf("}, ");
+#else
+				tprintf("{...}");
+#endif
+		}
+
+		if (tcp->u_arg[4] == 0)
+			tprintf("NULL");
+		else {
+			struct timespec to;
+			if (umove(tcp, tcp->u_arg[4], &to) == 0)
+				tprintf("{%lu, %lu}", to.tv_sec, to.tv_nsec);
+			else
+				tprintf("{...}");
+		}
+	}
+	return 0;
+}
 #endif /* LINUX */
 
 int
 sys_select(tcp)
 struct tcb *tcp;
 {
-	long *args = tcp->u_arg;
-	return decode_select(tcp, args, 0);
+	return decode_select(tcp, tcp->u_arg, BITNESS_CURRENT);
 }
+
+#ifdef LINUX
+int
+sys_pselect6(struct tcb *tcp)
+{
+	int rc = decode_select(tcp, tcp->u_arg, BITNESS_CURRENT);
+	if (exiting(tcp)) {
+		struct {
+			void *ss;
+			unsigned long len;
+		} data;
+		if (umove(tcp, tcp->u_arg[5], &data) < 0)
+			tprintf(", %#lx", tcp->u_arg[5]);
+		else {
+			tprintf(", {");
+			if (data.len < sizeof(sigset_t))
+				tprintf("%#lx", (long)data.ss);
+			else
+				print_sigset(tcp, (long)data.ss, 0);
+			tprintf(", %lu}", data.len);
+		}
+	}
+	return rc;
+}
+#endif

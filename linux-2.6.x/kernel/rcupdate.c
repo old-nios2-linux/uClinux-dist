@@ -235,12 +235,14 @@ static void rcu_do_batch(struct rcu_data *rdp)
 
 	list = rdp->donelist;
 	while (list) {
-		next = rdp->donelist = list->next;
+		next = list->next;
+		prefetch(next);
 		list->func(list);
 		list = next;
 		if (++count >= rdp->blimit)
 			break;
 	}
+	rdp->donelist = list;
 
 	local_irq_disable();
 	rdp->qlen -= count;
@@ -556,9 +558,11 @@ static int __cpuinit rcu_cpu_notify(struct notifier_block *self,
 	long cpu = (long)hcpu;
 	switch (action) {
 	case CPU_UP_PREPARE:
+	case CPU_UP_PREPARE_FROZEN:
 		rcu_online_cpu(cpu);
 		break;
 	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
 		rcu_offline_cpu(cpu);
 		break;
 	default:

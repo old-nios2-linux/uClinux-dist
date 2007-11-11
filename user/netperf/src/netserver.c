@@ -1,6 +1,6 @@
 /*
  
-	   Copyright (C) 1993-2005 Hewlett-Packard Company
+	   Copyright (C) 1993-2007 Hewlett-Packard Company
                          ALL RIGHTS RESERVED.
  
   The enclosed software and documentation includes copyrighted works
@@ -42,7 +42,7 @@
  
 */
 char	netserver_id[]="\
-@(#)netserver.c (c) Copyright 1993-2004 Hewlett-Packard Co. Version 2.4.0";
+@(#)netserver.c (c) Copyright 1993-2007 Hewlett-Packard Co. Version 2.4.3";
 
  /***********************************************************************/
  /*									*/
@@ -90,9 +90,11 @@ char	netserver_id[]="\
 #include <winsock2.h>
 #define netperf_socklen_t socklen_t
 /* we need to find some other way to decide to include ws2 */
-#ifdef DO_IPV6
+/* if you are trying to compile on Windows 2000 or NT 4 you will */
+/* probably have to define DONT_IPV6 */
+#ifndef DONT_IPV6
 #include <ws2tcpip.h>
-#endif  /* DO_IPV6 */
+#endif  /* DONT_IPV6 */
 #include <windows.h>
 #define sleep(x) Sleep((x)*1000)
 #else
@@ -124,10 +126,6 @@ char	netserver_id[]="\
 #ifdef WANT_DLPI
 #include "nettest_dlpi.h"
 #endif /* WANT_DLPI */
-
-#ifdef DO_DNS
-#include "nettest_dns.h"
-#endif /* DO_DNS */
 
 #ifdef WANT_SCTP
 #include "nettest_sctp.h"
@@ -190,7 +188,30 @@ process_requests()
       send_response();
       /* +SAF why??? */
       if (!debug) 
+      {
 	fclose(where);
+#if !defined(WIN32) && !defined(MPE) && !defined(__VMS)
+	/* For Unix: reopen the debug write file descriptor to "/dev/null" */
+	/* and redirect stdout to it.					   */
+	fflush (stdout);
+	where = fopen ("/dev/null", "w");
+	if (where == NULL)
+	{
+	  perror ("netserver: reopening debug fp for writing: /dev/null");
+	  exit   (1);
+	}
+	if (close (STDOUT_FILENO) == -1)
+	{
+	  perror ("netserver: closing stdout file descriptor");
+	  exit   (1);
+	}
+	if (dup (fileno (where))  == -1)
+	{
+	  perror ("netserver: duplicate /dev/null write file descr. to stdout");
+	  exit   (1);
+	}
+#endif /* !WIN32 !MPE !__VMS */
+      }
       break;
       
     case CPU_CALIBRATE:
@@ -315,12 +336,6 @@ process_requests()
 
 #endif /* WANT_XTI */
 
-#ifdef DO_DNS
-    case DO_DNS_RR:
-      recv_dns_rr();
-      break;
-#endif /* DO_DNS */
-
 #ifdef WANT_SCTP
     case DO_SCTP_STREAM:
       recv_sctp_stream();
@@ -376,6 +391,11 @@ set_up_server(char hostname[], char port[], int af)
   int count;
   int error;
   int not_listening;
+
+#if !defined(WIN32) && !defined(MPE) && !defined(__VMS)
+  FILE *rd_null_fp;    /* Used to redirect from "/dev/null". */
+  FILE *wr_null_fp;    /* Used to redirect to   "/dev/null". */
+#endif /* !WIN32 !MPE !__VMS */
 
   if (debug) {
     fprintf(stderr,
@@ -491,6 +511,10 @@ set_up_server(char hostname[], char port[], int af)
     */
 
 #if !defined(WIN32) && !defined(MPE) && !defined(__VMS)
+  /* Flush the standard I/O file descriptors before forking. */
+  fflush (stdin);
+  fflush (stdout);
+  fflush (stderr);
   switch (fork())
     {
     case -1:  	
@@ -498,9 +522,53 @@ set_up_server(char hostname[], char port[], int af)
       exit(1);
       
     case 0:	
-      /* stdin/stderr should use fclose */
-      fclose(stdin);
-      fclose(stderr);
+      /* Redirect stdin from "/dev/null". */
+      rd_null_fp = fopen ("/dev/null", "r");
+      if (rd_null_fp == NULL)
+      {
+	perror ("netserver: opening for reading: /dev/null");
+	exit   (1);
+      }
+      if (close (STDIN_FILENO) == -1)
+      {
+	perror ("netserver: closing stdin file descriptor");
+	exit   (1);
+      }
+      if (dup (fileno (rd_null_fp)) == -1)
+      {
+	perror ("netserver: duplicate /dev/null read file descr. to stdin");
+	exit   (1);
+      }
+
+      /* Redirect stdout to the debug write file descriptor. */
+      if (close (STDOUT_FILENO) == -1)
+      {
+	perror ("netserver: closing stdout file descriptor");
+	exit   (1);
+      }
+      if (dup (fileno (where))  == -1)
+      {
+	perror ("netserver: duplicate the debug write file descr. to stdout");
+	exit   (1);
+      }
+
+      /* Redirect stderr to "/dev/null". */
+      wr_null_fp = fopen ("/dev/null", "w");
+      if (wr_null_fp == NULL)
+      {
+	perror ("netserver: opening for writing: /dev/null");
+	exit   (1);
+      }
+      if (close (STDERR_FILENO) == -1)
+      {
+	perror ("netserver: closing stderr file descriptor");
+	exit   (1);
+      }
+      if (dup (fileno (wr_null_fp))  == -1)
+      {
+	perror ("netserver: dupicate /dev/null write file descr. to stderr");
+	exit   (1);
+      }
  
 #ifndef NO_SETSID
       setsid();
@@ -613,7 +681,10 @@ set_up_server(char hostname[], char port[], int af)
 	      /* we have reaped all the children there are to reap at */
 	      /* the moment, so it is time to move on. raj 12/94 */
 #ifndef DONT_WAIT
+#ifdef NO_SETSID
+	      /* Only call "waitpid()" if "setsid()" is not used. */
 	      while(waitpid(-1, NULL, WNOHANG) > 0) { }
+#endif /* NO_SETSID */
 #endif /* DONT_WAIT */
 	      break;
 	    }

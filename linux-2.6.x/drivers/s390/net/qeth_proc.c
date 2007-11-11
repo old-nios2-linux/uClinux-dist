@@ -37,7 +37,6 @@ qeth_procfile_seq_start(struct seq_file *s, loff_t *offset)
 	struct device *dev = NULL;
 	loff_t nr = 0;
 
-	down_read(&qeth_ccwgroup_driver.driver.bus->subsys.rwsem);
 	if (*offset == 0)
 		return SEQ_START_TOKEN;
 	while (1) {
@@ -53,7 +52,6 @@ qeth_procfile_seq_start(struct seq_file *s, loff_t *offset)
 static void
 qeth_procfile_seq_stop(struct seq_file *s, void* it)
 {
-	up_read(&qeth_ccwgroup_driver.driver.bus->subsys.rwsem);
 }
 
 static void *
@@ -161,7 +159,7 @@ qeth_procfile_open(struct inode *inode, struct file *file)
 	return seq_open(file, &qeth_procfile_seq_ops);
 }
 
-static struct file_operations qeth_procfile_fops = {
+static const struct file_operations qeth_procfile_fops = {
 	.owner   = THIS_MODULE,
 	.open    = qeth_procfile_open,
 	.read    = seq_read,
@@ -214,6 +212,12 @@ qeth_perf_procfile_seq_show(struct seq_file *s, void *it)
 		      "  Skb fragments sent in SG mode          : %u\n\n",
 		      card->perf_stats.sg_skbs_sent,
 		      card->perf_stats.sg_frags_sent);
+	seq_printf(s, "  Skbs received in SG mode               : %u\n"
+		      "  Skb fragments received in SG mode      : %u\n"
+		      "  Page allocations for rx SG mode        : %u\n\n",
+		      card->perf_stats.sg_skbs_rx,
+		      card->perf_stats.sg_frags_rx,
+		      card->perf_stats.sg_alloc_page_rx);
 	seq_printf(s, "  large_send tx (in Kbytes)              : %u\n"
 		      "  large_send count                       : %u\n\n",
 		      card->perf_stats.large_send_bytes >> 10,
@@ -273,7 +277,7 @@ qeth_perf_procfile_open(struct inode *inode, struct file *file)
 	return seq_open(file, &qeth_perf_procfile_seq_ops);
 }
 
-static struct file_operations qeth_perf_procfile_fops = {
+static const struct file_operations qeth_perf_procfile_fops = {
 	.owner   = THIS_MODULE,
 	.open    = qeth_perf_procfile_open,
 	.read    = seq_read,

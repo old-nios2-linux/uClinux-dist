@@ -35,7 +35,7 @@
 #include <sound/initval.h>
 #include <sound/rawmidi.h>
 
-#include <linux/usb_ch9.h>
+#include <linux/usb/ch9.h>
 #include <linux/usb_gadget.h>
 #include <linux/usb/audio.h>
 #include <linux/usb/midi.h>
@@ -123,7 +123,7 @@ struct gmidi_device {
 	struct usb_request	*req;		/* for control responses */
 	u8			config;
 	struct usb_ep		*in_ep, *out_ep;
-	struct snd_card 	*card;
+	struct snd_card		*card;
 	struct snd_rawmidi	*rmidi;
 	struct snd_rawmidi_substream *in_substream;
 	struct snd_rawmidi_substream *out_substream;
@@ -490,7 +490,7 @@ static void gmidi_complete(struct usb_ep *ep, struct usb_request *req)
 	int status = req->status;
 
 	switch (status) {
-	case 0: 			/* normal completion */
+	case 0:				/* normal completion */
 		if (ep == dev->out_ep) {
 			/* we received stuff.
 			   req is queued again, below */
@@ -505,7 +505,7 @@ static void gmidi_complete(struct usb_ep *ep, struct usb_request *req)
 		break;
 
 	/* this endpoint is normally active while we're configured */
-	case -ECONNABORTED: 		/* hardware forced ep reset */
+	case -ECONNABORTED:		/* hardware forced ep reset */
 	case -ECONNRESET:		/* request dequeued */
 	case -ESHUTDOWN:		/* disconnect from host */
 		VDBG(dev, "%s gone (%d), %d/%d\n", ep->name, status,
@@ -656,7 +656,7 @@ gmidi_set_config(struct gmidi_device *dev, unsigned number, gfp_t gfp_flags)
 		case USB_SPEED_LOW:	speed = "low"; break;
 		case USB_SPEED_FULL:	speed = "full"; break;
 		case USB_SPEED_HIGH:	speed = "high"; break;
-		default: 		speed = "?"; break;
+		default:		speed = "?"; break;
 		}
 
 		dev->config = number;
@@ -1236,7 +1236,7 @@ autoconf_fail:
 
 
 	/* ok, we made sense of the hardware ... */
-	dev = kzalloc(sizeof(*dev), SLAB_KERNEL);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		return -ENOMEM;
 	}
@@ -1248,14 +1248,8 @@ autoconf_fail:
 	tasklet_init(&dev->tasklet, gmidi_in_tasklet, (unsigned long)dev);
 
 	/* preallocate control response and buffer */
-	dev->req = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
+	dev->req = alloc_ep_req(gadget->ep0, USB_BUFSIZ);
 	if (!dev->req) {
-		err = -ENOMEM;
-		goto fail;
-	}
-	dev->req->buf = usb_ep_alloc_buffer(gadget->ep0, USB_BUFSIZ,
-				&dev->req->dma, GFP_KERNEL);
-	if (!dev->req->buf) {
 		err = -ENOMEM;
 		goto fail;
 	}
@@ -1308,7 +1302,7 @@ static struct usb_gadget_driver gmidi_driver = {
 	.speed		= USB_SPEED_FULL,
 	.function	= (char *)longname,
 	.bind		= gmidi_bind,
-	.unbind		= __exit_p(gmidi_unbind),
+	.unbind		= gmidi_unbind,
 
 	.setup		= gmidi_setup,
 	.disconnect	= gmidi_disconnect,
@@ -1316,7 +1310,7 @@ static struct usb_gadget_driver gmidi_driver = {
 	.suspend	= gmidi_suspend,
 	.resume		= gmidi_resume,
 
-	.driver 	= {
+	.driver		= {
 		.name		= (char *)shortname,
 		.owner		= THIS_MODULE,
 	},

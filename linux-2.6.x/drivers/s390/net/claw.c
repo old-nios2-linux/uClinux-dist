@@ -121,7 +121,7 @@ MODULE_LICENSE("GPL");
 #define DEBUG
 #endif
 
- char debug_buffer[255];
+static char debug_buffer[255];
 /**
  * Debug Facility Stuff
  */
@@ -223,16 +223,14 @@ static void claw_timer ( struct chbk * p_ch );
 /* Functions */
 static int add_claw_reads(struct net_device *dev,
 	struct ccwbk* p_first, struct ccwbk* p_last);
-static void inline ccw_check_return_code (struct ccw_device *cdev,
-        int return_code);
-static void inline ccw_check_unit_check (struct chbk * p_ch,
-	unsigned char sense );
+static void ccw_check_return_code (struct ccw_device *cdev, int return_code);
+static void ccw_check_unit_check (struct chbk * p_ch, unsigned char sense );
 static int find_link(struct net_device *dev, char *host_name, char *ws_name );
 static int claw_hw_tx(struct sk_buff *skb, struct net_device *dev, long linkid);
 static int init_ccw_bk(struct net_device *dev);
 static void probe_error( struct ccwgroup_device *cgdev);
 static struct net_device_stats *claw_stats(struct net_device *dev);
-static int inline pages_to_order_of_mag(int num_of_pages);
+static int pages_to_order_of_mag(int num_of_pages);
 static struct sk_buff *claw_pack_skb(struct claw_privbk *privptr);
 #ifdef DEBUG
 static void dumpit (char *buf, int len);
@@ -319,8 +317,8 @@ claw_probe(struct ccwgroup_device *cgdev)
 		CLAW_DBF_TEXT_(2,setup,"probex%d",-ENOMEM);
 		return -ENOMEM;
 	}
-	privptr->p_mtc_envelope= kmalloc( MAX_ENVELOPE_SIZE, GFP_KERNEL);
-	privptr->p_env = kmalloc(sizeof(struct claw_env), GFP_KERNEL);
+	privptr->p_mtc_envelope= kzalloc( MAX_ENVELOPE_SIZE, GFP_KERNEL);
+	privptr->p_env = kzalloc(sizeof(struct claw_env), GFP_KERNEL);
         if ((privptr->p_mtc_envelope==NULL) || (privptr->p_env==NULL)) {
                 probe_error(cgdev);
 		put_device(&cgdev->dev);
@@ -329,8 +327,6 @@ claw_probe(struct ccwgroup_device *cgdev)
 		CLAW_DBF_TEXT_(2,setup,"probex%d",-ENOMEM);
                 return -ENOMEM;
         }
-	memset(privptr->p_mtc_envelope, 0x00, MAX_ENVELOPE_SIZE);
-	memset(privptr->p_env, 0x00, sizeof(struct claw_env));
 	memcpy(privptr->p_env->adapter_name,WS_NAME_NOT_DEF,8);
 	memcpy(privptr->p_env->host_name,WS_NAME_NOT_DEF,8);
 	memcpy(privptr->p_env->api_type,WS_NAME_NOT_DEF,8);
@@ -1310,7 +1306,7 @@ claw_timer ( struct chbk * p_ch )
 *    of magnitude get_free_pages() has an upper order of 9           *
 *--------------------------------------------------------------------*/
 
-static int inline
+static int
 pages_to_order_of_mag(int num_of_pages)
 {
 	int	order_of_mag=1;		/* assume 2 pages */
@@ -1482,7 +1478,7 @@ add_claw_reads(struct net_device *dev, struct ccwbk* p_first,
  *                                                                   *
  *-------------------------------------------------------------------*/
 
-static void inline
+static void
 ccw_check_return_code(struct ccw_device *cdev, int return_code)
 {
 #ifdef FUNCTRACE
@@ -1529,7 +1525,7 @@ ccw_check_return_code(struct ccw_device *cdev, int return_code)
 *       ccw_check_unit_check                                         *
 *--------------------------------------------------------------------*/
 
-static void inline
+static void
 ccw_check_unit_check(struct chbk * p_ch, unsigned char sense )
 {
 	struct net_device *dev = p_ch->ndev;
@@ -3527,8 +3523,8 @@ unpack_next:
                                 memcpy(skb_put(skb,len_of_data),
 					privptr->p_mtc_envelope,
 					len_of_data);
-                                skb->mac.raw=skb->data;
                                 skb->dev=dev;
+				skb_reset_mac_header(skb);
                                 skb->protocol=htons(ETH_P_IP);
                                 skb->ip_summed=CHECKSUM_UNNECESSARY;
                                 privptr->stats.rx_packets++;
@@ -3914,6 +3910,7 @@ static int
 add_channel(struct ccw_device *cdev,int i,struct claw_privbk *privptr)
 {
 	struct chbk *p_ch;
+	struct ccw_dev_id dev_id;
 
 #ifdef FUNCTRACE
         printk(KERN_INFO "%s:%s Enter\n",cdev->dev.bus_id,__FUNCTION__);
@@ -3923,8 +3920,9 @@ add_channel(struct ccw_device *cdev,int i,struct claw_privbk *privptr)
 	p_ch = &privptr->channel[i];
 	p_ch->cdev = cdev;
 	snprintf(p_ch->id, CLAW_ID_SIZE, "cl-%s", cdev->dev.bus_id);
-	sscanf(cdev->dev.bus_id+4,"%x",&p_ch->devno);
-	if ((p_ch->irb = kmalloc(sizeof (struct irb),GFP_KERNEL)) == NULL) {
+	ccw_device_get_id(cdev, &dev_id);
+	p_ch->devno = dev_id.devno;
+	if ((p_ch->irb = kzalloc(sizeof (struct irb),GFP_KERNEL)) == NULL) {
 		printk(KERN_WARNING "%s Out of memory in %s for irb\n",
 			p_ch->id,__FUNCTION__);
 #ifdef FUNCTRACE
@@ -3933,7 +3931,6 @@ add_channel(struct ccw_device *cdev,int i,struct claw_privbk *privptr)
 #endif
 		return -ENOMEM;
 	}
-	memset(p_ch->irb, 0, sizeof (struct irb));
 #ifdef FUNCTRACE
         	printk(KERN_INFO "%s:%s Exit on line %d\n",
 			cdev->dev.bus_id,__FUNCTION__,__LINE__);
@@ -3957,6 +3954,7 @@ claw_new_device(struct ccwgroup_device *cgdev)
 	struct claw_env *p_env;
 	struct net_device *dev;
 	int ret;
+	struct ccw_dev_id dev_id;
 
 	pr_debug("%s() called\n", __FUNCTION__);
 	printk(KERN_INFO "claw: add for %s\n",cgdev->cdev[READ]->dev.bus_id);
@@ -3967,10 +3965,10 @@ claw_new_device(struct ccwgroup_device *cgdev)
 	if (!privptr)
 		return -ENODEV;
 	p_env = privptr->p_env;
-	sscanf(cgdev->cdev[READ]->dev.bus_id+4,"%x",
-		&p_env->devno[READ]);
-        sscanf(cgdev->cdev[WRITE]->dev.bus_id+4,"%x",
-		&p_env->devno[WRITE]);
+	ccw_device_get_id(cgdev->cdev[READ], &dev_id);
+	p_env->devno[READ] = dev_id.devno;
+	ccw_device_get_id(cgdev->cdev[WRITE], &dev_id);
+	p_env->devno[WRITE] = dev_id.devno;
 	ret = add_channel(cgdev->cdev[0],0,privptr);
 	if (ret == 0)
 		ret = add_channel(cgdev->cdev[1],1,privptr);

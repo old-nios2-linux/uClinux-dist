@@ -1,6 +1,6 @@
 /* Copyright (C) 1989, 1997, 1998, 1999 Aladdin Enterprises.  All rights reserved. */
 
-/*$Id: ansi2knr.c,v 1.2 2003/10/04 10:34:10 hniksic Exp $*/
+/*$Id: ansi2knr.c 1002 2003-10-04 10:34:10Z hniksic $*/
 /* Convert ANSI C function definitions to K&R ("traditional C") syntax */
 
 /*

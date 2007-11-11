@@ -1,9 +1,9 @@
 /*
- * $Id: param_parser.c,v 1.4 2003/03/03 17:45:25 janakj Exp $
+ * $Id: param_parser.c,v 1.5 2004/08/24 09:01:29 janakj Exp $
  *
  * 32-bit Digest parameter name parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -163,7 +163,7 @@ hauppauge_tuner[] =
 	/* 60-69 */
 	{ TUNER_PHILIPS_FM1216ME_MK3, "LG S001D MK3"},
 	{ TUNER_ABSENT,        "LG M001D MK3"},
-	{ TUNER_ABSENT,        "LG S701D MK3"},
+	{ TUNER_PHILIPS_FM1216ME_MK3, "LG S701D MK3"},
 	{ TUNER_ABSENT,        "LG M701D MK3"},
 	{ TUNER_ABSENT,        "Temic 4146FM5"},
 	{ TUNER_ABSENT,        "Temic 4136FY5"},
@@ -183,8 +183,8 @@ hauppauge_tuner[] =
 	{ TUNER_ABSENT,        "Silicon TDA8275C1 8290 FM"},
 	{ TUNER_ABSENT,        "Thompson DTT757"},
 	/* 80-89 */
-	{ TUNER_ABSENT,        "Philips FQ1216LME MK3"},
-	{ TUNER_ABSENT,        "LG TAPC G701D"},
+	{ TUNER_PHILIPS_FM1216ME_MK3, "Philips FQ1216LME MK3"},
+	{ TUNER_LG_PAL_NEW_TAPC, "LG TAPC G701D"},
 	{ TUNER_LG_NTSC_NEW_TAPC, "LG TAPC H791F"},
 	{ TUNER_LG_PAL_NEW_TAPC, "TCL 2002MB 3"},
 	{ TUNER_LG_PAL_NEW_TAPC, "TCL 2002MI 3"},
@@ -229,6 +229,36 @@ hauppauge_tuner[] =
 	/* 120-129 */
 	{ TUNER_ABSENT,        "Xceive XC3028"},
 	{ TUNER_ABSENT,        "Philips FQ1216LME MK5"},
+	{ TUNER_ABSENT,        "Philips FQD1216LME"},
+	{ TUNER_ABSENT,        "Conexant CX24118A"},
+	{ TUNER_ABSENT,        "TCL DMF11WIP"},
+	{ TUNER_ABSENT,        "TCL MFNM05_4H_E"},
+	{ TUNER_ABSENT,        "TCL MNM05_4H_E"},
+	{ TUNER_ABSENT,        "TCL MPE05_2H_E"},
+	{ TUNER_ABSENT,        "TCL MQNM05_4_U"},
+	{ TUNER_ABSENT,        "TCL M2523_5NH_E"},
+	/* 130-139 */
+	{ TUNER_ABSENT,        "TCL M2523_3DBH_E"},
+	{ TUNER_ABSENT,        "TCL M2523_3DIH_E"},
+	{ TUNER_ABSENT,        "TCL MFPE05_2_U"},
+	{ TUNER_ABSENT,        "Philips FMD1216MEX"},
+	{ TUNER_ABSENT,        "Philips FRH2036B"},
+	{ TUNER_ABSENT,        "Panasonic ENGF75_01GF"},
+	{ TUNER_ABSENT,        "MaxLinear MXL5005"},
+	{ TUNER_ABSENT,        "MaxLinear MXL5003"},
+	{ TUNER_ABSENT,        "Xceive XC2028"},
+	{ TUNER_ABSENT,        "Microtune MT2131"},
+	/* 140-149 */
+	{ TUNER_ABSENT,        "Philips 8275A_8295"},
+	{ TUNER_ABSENT,        "TCL MF02GIP_5N_E"},
+	{ TUNER_ABSENT,        "TCL MF02GIP_3DB_E"},
+	{ TUNER_ABSENT,        "TCL MF02GIP_3DI_E"},
+	{ TUNER_ABSENT,        "Microtune MT2266"},
+	{ TUNER_ABSENT,        "TCL MF10WPP_4N_E"},
+	{ TUNER_ABSENT,        "LG TAPQ_H702F"},
+	{ TUNER_ABSENT,        "TCL M09WPP_4N_E"},
+	{ TUNER_ABSENT,        "MaxLinear MXL5005_v2"},
+	{ TUNER_ABSENT,        "Philips 18271_8295"},
 };
 
 static struct HAUPPAUGE_AUDIOIC
@@ -280,11 +310,16 @@ audioIC[] =
 	{AUDIO_CHIP_INTERNAL, "CX883"},
 	{AUDIO_CHIP_INTERNAL, "CX882"},
 	{AUDIO_CHIP_INTERNAL, "CX25840"},
-	/* 35-38 */
+	/* 35-39 */
 	{AUDIO_CHIP_INTERNAL, "CX25841"},
 	{AUDIO_CHIP_INTERNAL, "CX25842"},
 	{AUDIO_CHIP_INTERNAL, "CX25843"},
 	{AUDIO_CHIP_INTERNAL, "CX23418"},
+	{AUDIO_CHIP_INTERNAL, "CX23885"},
+	/* 40-42 */
+	{AUDIO_CHIP_INTERNAL, "CX23888"},
+	{AUDIO_CHIP_INTERNAL, "SAA7131"},
+	{AUDIO_CHIP_INTERNAL, "CX23887"},
 };
 
 /* This list is supplied by Hauppauge. Thanks! */
@@ -301,8 +336,10 @@ static const char *decoderIC[] = {
 	"CX880", "CX881", "CX883", "SAA7111", "SAA7113",
 	/* 25-29 */
 	"CX882", "TVP5150A", "CX25840", "CX25841", "CX25842",
-	/* 30-31 */
-	"CX25843", "CX23418",
+	/* 30-34 */
+	"CX25843", "CX23418", "NEC61153", "CX23885", "CX23888",
+	/* 35-37 */
+	"SAA7131", "CX25837", "CX23887"
 };
 
 static int hasRadioTuner(int tunerType)
@@ -430,7 +467,7 @@ void tveeprom_hauppauge_analog(struct i2c_client *c, struct tveeprom *tvee,
 			tvee->has_radio = eeprom_data[i+len-1];
 			/* old style tag, don't know how to detect
 			IR presence, mark as unknown. */
-			tvee->has_ir = 2;
+			tvee->has_ir = -1;
 			tvee->model =
 				eeprom_data[i+8] +
 				(eeprom_data[i+9] << 8);
@@ -453,7 +490,7 @@ void tveeprom_hauppauge_analog(struct i2c_client *c, struct tveeprom *tvee,
 			to indicate 4052 mux was removed in favor of using MSP
 			inputs directly. */
 			audioic = eeprom_data[i+2] & 0x7f;
-			if (audioic < sizeof(audioIC)/sizeof(*audioIC))
+			if (audioic < ARRAY_SIZE(audioIC))
 				tvee->audio_processor = audioIC[audioic].id;
 			else
 				tvee->audio_processor = AUDIO_CHIP_UNKNOWN;
@@ -486,7 +523,7 @@ void tveeprom_hauppauge_analog(struct i2c_client *c, struct tveeprom *tvee,
 			to indicate 4052 mux was removed in favor of using MSP
 			inputs directly. */
 			audioic = eeprom_data[i+1] & 0x7f;
-			if (audioic < sizeof(audioIC)/sizeof(*audioIC))
+			if (audioic < ARRAY_SIZE(audioIC))
 				tvee->audio_processor = audioIC[audioic].id;
 			else
 				tvee->audio_processor = AUDIO_CHIP_UNKNOWN;
@@ -641,7 +678,7 @@ void tveeprom_hauppauge_analog(struct i2c_client *c, struct tveeprom *tvee,
 		tveeprom_info("audio processor is unknown (no idx)\n");
 		tvee->audio_processor=AUDIO_CHIP_UNKNOWN;
 	} else {
-		if (audioic < sizeof(audioIC)/sizeof(*audioIC))
+		if (audioic < ARRAY_SIZE(audioIC))
 			tveeprom_info("audio processor is %s (idx %d)\n",
 					audioIC[audioic].name,audioic);
 		else
@@ -653,13 +690,14 @@ void tveeprom_hauppauge_analog(struct i2c_client *c, struct tveeprom *tvee,
 			STRM(decoderIC, tvee->decoder_processor),
 			tvee->decoder_processor);
 	}
-	if (tvee->has_ir == 2)
+	if (tvee->has_ir == -1)
 		tveeprom_info("has %sradio\n",
 				tvee->has_radio ? "" : "no ");
 	else
-		tveeprom_info("has %sradio, has %sIR remote\n",
+		tveeprom_info("has %sradio, has %sIR receiver, has %sIR transmitter\n",
 				tvee->has_radio ? "" : "no ",
-				tvee->has_ir ? "" : "no ");
+				(tvee->has_ir & 1) ? "" : "no ",
+				(tvee->has_ir & 2) ? "" : "no ");
 }
 EXPORT_SYMBOL(tveeprom_hauppauge_analog);
 

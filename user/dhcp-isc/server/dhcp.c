@@ -43,7 +43,7 @@
 #ifndef EMBED
 #ifndef lint
 static char copyright[] =
-"$Id: dhcp.c,v 1.13 2005/07/04 00:36:32 toby Exp $ Copyright (c) 1995, 1996, 1997, 1998, 1999 The Internet Software Consortium.  All rights reserved.\n";
+"$Id: dhcp.c,v 1.14 2007/03/06 08:07:31 philipc Exp $ Copyright (c) 1995, 1996, 1997, 1998, 1999 The Internet Software Consortium.  All rights reserved.\n";
 #endif /* not lint */
 #endif
 
@@ -71,11 +71,22 @@ static void force_nameserver(struct tree_cache **opts) {
 		unsigned long	*ns;
 		int		 k = 0;
 #ifdef CONFIG_USER_DNSMASQ_DNSMASQ
-		struct stat st;
-		if (stat(_PATH_DNSMASQ_PID, &st) == 0) {
-			ns = (unsigned long *)malloc(sizeof(unsigned long));
-			ns[0] = *(unsigned long *) opts[DHO_DHCP_SERVER_IDENTIFIER]->value;
-			k = 1;
+		FILE *in;
+		int found = 0;
+		in = fopen(_PATH_DNSMASQ_PID, "r");
+		if (in != NULL) {
+			char tmp[16];
+			pid_t pid;
+			if (fread(tmp, 1, sizeof(tmp), in) > 0) {
+				pid = atoi(tmp);
+				if (pid > 1 && (kill(pid, 0) == 0
+							|| errno == EPERM)) {
+					ns = (unsigned long *)malloc(sizeof(unsigned long));
+					ns[0] = *(unsigned long *) opts[DHO_DHCP_SERVER_IDENTIFIER]->value;
+					k = 1;
+				}
+			}
+			fclose(in);
 		}
 #endif
 		if (k == 0)	{

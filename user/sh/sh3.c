@@ -11,6 +11,24 @@
 #include <sys/wait.h>
 #undef NULL
 #include "sh.h"
+#include <unistd.h>
+
+#define FREE 32767
+int loop_is_called = 0;
+int loop_last_areanum = 0;
+
+static void catchsubint()
+{
+	isbreak = 1;
+	longjmp(failpt, 1);
+}
+
+static void catchsubquit()
+{
+	isbreak = 1;
+	longjmp(failpt, 1);
+}
+
 
 /* -------- exec.c -------- */
 /* #include "sh.h" */
@@ -39,7 +57,7 @@ static	char	*signame[] = {
 };
 #define	NSIGNAL (sizeof(signame)/sizeof(signame[0]))
 
-
+static int set_is_called = 0;
 _PROTOTYPE(static int forkexec, (struct op *t, int *pin, int *pout, int act, char **wp, int *pforked ));
 _PROTOTYPE(int iosetup, (struct ioword *iop, int pipein, int pipeout ));
 _PROTOTYPE(static void echo, (char **wp ));
@@ -84,10 +102,21 @@ int act;
 	struct var *vp;
 	struct brkcon bc;
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &i;
+        (void) &rv;
+        (void) &wp;
+#endif
+
 	if (t == NULL)
 		return(0);
 	rv = 0;
 	a = areanum++;
+	if (areanum == FREE) {/* get around of FREE */
+		areanum++;
+	}
+	isbreak = 0;
 	wp = (wp2 = t->words) != NULL
 	     ? eval(wp2, t->type == TCOM ? DOALL : DOALL & ~DOKEY)
 	     : NULL;
@@ -144,11 +173,10 @@ int act;
 				close(0);
 				open("/dev/null", 0);
 			}
-#ifdef EMBED
-			_exit(execute(t->left, pin, pout, FEXEC));
-#else
+			/* for background process */
+			if(setpgid(getpid(), getpid()) == -1)
+				exit(1);
 			exit(execute(t->left, pin, pout, FEXEC));
-#endif
 		}
 	}
 		break;
@@ -172,8 +200,9 @@ int act;
 		}
 		vp = lookup(t->str);
 		while (setjmp(bc.brkpt))
-			if (isbreak)
+			if (isbreak){
 				goto broken;
+			}
 		brkset(&bc);
 		for (t1 = t->left; i-- && *wp != NULL;) {
 			setval(vp, *wp++);
@@ -189,6 +218,9 @@ int act;
 				goto broken;
 		brkset(&bc);
 		t1 = t->left;
+		if(!loop_is_called ) {
+			loop_is_called = areanum;
+		}
 		while ((execute(t1, pin, pout, 0) == 0) == (t->type == TWHILE))
 			rv = execute(t->right, pin, pout, 0);
 		brklist = brklist->nextlev;
@@ -226,6 +258,10 @@ int act;
 
 broken:
 	t->words = wp2;
+	if (isbreak == 1){
+		signal(SIGINT, catchint);
+		signal(SIGQUIT, catchquit);
+	}
 	isbreak = 0;
 	freehere(areanum);
 	freearea(areanum);
@@ -251,7 +287,7 @@ int *pforked;
 {
 	int i, rv, (*shcom)();
 	register int f;
-	char *cp;
+	char *cp = NULL;
 	struct ioword **iopp;
 	int resetsig;
 	char **owp;
@@ -266,6 +302,16 @@ int *pforked;
 	int hexecflg;
 	int forkp;
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &shcom;
+        (void) &resetsig;
+        (void) &cp;
+        (void) &owp;
+        (void) &pin;
+        (void) &pout;
+        (void) &wp;
+#endif
 	owp = wp;
 	resetsig = 0;
 	*pforked = 0;
@@ -359,6 +405,7 @@ int *pforked;
 		dup2(pout[1], 1);
 		closepipe(pout);
 	}
+#if 0
 	if ((iopp = t->ioact) != NULL) {
 		if (shcom != NULL && shcom != doexec) {
 			prs(cp);
@@ -366,9 +413,19 @@ int *pforked;
 			RETURN(-1);
 		}
 		while (*iopp)
-			if (iosetup(*iopp++, pin!=NULL, pout!=NULL))
+			if (iosetup(*iopp++, pin!=NULL, pout!=NULL)){
 				RETURN(rv);
+			}
 	}
+#else
+	if ((iopp = t->ioact) != NULL) {
+		if (shcom == NULL || (shcom == doexec)) 
+			while (*iopp)
+				if (iosetup(*iopp++, pin!=NULL, pout!=NULL)){
+					RETURN(rv);
+				}
+	}
+#endif
 	if (shcom)
 		RETURN(setstatus((*shcom)(t)));
 	/* should use FIOCEXCL */
@@ -406,8 +463,9 @@ iosetup(iop, pipein, pipeout)
 register struct ioword *iop;
 int pipein, pipeout;
 {
-	register u;
-	char *cp, *msg;
+	register int u;
+	char *msg;
+	char *cp = NULL;
 
 	if (iop->io_unit == IODEFAULT)	/* take default */
 		iop->io_unit = iop->io_flag&(IOREAD|IOHERE)? 0: 1;
@@ -458,13 +516,18 @@ int pipein, pipeout;
 	case IOCLOSE:
 		close(iop->io_unit);
 		return(0);
+	default:
+		u = -1;
+		break;
 	}
 	if (u < 0) {
 		prs(cp);
 		prs(": cannot ");
 		warn(msg);
-		return(1);
-	} else {
+		exit(1); 
+	}
+	 else
+		{
 		if (u != iop->io_unit) {
 			dup2(u, iop->io_unit);
 			close(u);
@@ -477,7 +540,7 @@ static void
 echo(wp)
 register char **wp;
 {
-	register i;
+	register int i;
 
 	prs("+");
 	for (i=0; wp[i]; i++) {
@@ -582,7 +645,7 @@ int canintr;
 		}
 	} while (pid != lastpid);
 	heedint = oheedint;
-	if (intr)
+	if (intr) {
 		if (talking) {
 			if (canintr)
 				intr = 0;
@@ -590,6 +653,7 @@ int canintr;
 			if (exstat == 0) exstat = rv;
 			onintr(0);
 		}
+	}
 	return(rv);
 }
 
@@ -669,7 +733,14 @@ int (*f)();
 	xint *ofail;
 	int rv;
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &rv;
+#endif
 	areanum++;
+	if (areanum == FREE) {/* get around of FREE */
+	areanum++;
+	}
 	swdlist = wdlist;
 	siolist = iolist;
 	otree = outtree;
@@ -729,7 +800,7 @@ int
 doshift(t)
 register struct op *t;
 {
-	register n;
+	register int n;
 
 	n = t->words[1]? getn(t->words[1]): 1;
 	if(dolc < n) {
@@ -772,8 +843,8 @@ register struct op *t;
 		i = umask(0);
 		umask(i);
 		for (n=3*4; (n-=3) >= 0;)
-			putc('0'+((i>>n)&07));
-		putc('\n');
+			myputc('0'+((i>>n)&07));
+		myputc('\n');
 	} else {
 		for (n=0; *cp>='0' && *cp<='9'; cp++)
 			n = n*8 + (*cp-'0');
@@ -786,7 +857,7 @@ int
 doexec(t)
 register struct op *t;
 {
-	register i;
+	register int i;
 	jmp_buf ex;
 	xint *ofail;
 
@@ -809,7 +880,7 @@ int
 dodot(t)
 struct op *t;
 {
-	register i;
+	register int i;
 	register char *sp, *tp;
 	char *cp;
 
@@ -839,7 +910,7 @@ int
 dowait(t)
 struct op *t;
 {
-	register i;
+	register int i;
 	register char *cp;
 
 	if ((cp = t->words[1]) != NULL) {
@@ -857,24 +928,39 @@ doread(t)
 struct op *t;
 {
 	register char *cp, **wp;
-	register nb;
+	register int nb = 0;
 	register int  nl = 0;
 
+	int fp = 0;
+
 	if (t->words[1] == NULL) {
+/*
+ * Code reduction for embedded product with no attended system.
+ * If you want to see the usage help message, just add CFLAGS += -DENABLE_USAGE
+ * in compiler options list or Makefile.
+ */
+#if defined(ENABLE_USAGE)
 		err("Usage: read name ...");
+#endif
 		return(1);
 	}
+
+	/* reading from a file in (*t->ioact)->io_name if following holds */ 
+	if(t->ioact && (*t->ioact) && (*t->ioact)->io_name ) fp = open((*t->ioact)->io_name, O_RDONLY);
+
 	for (wp = t->words+1; *wp; wp++) {
-		for (cp = e.linep; !nl && cp < elinep-1; cp++)
-			if ((nb = read(0, cp, sizeof(*cp))) != sizeof(*cp) ||
+		for (cp = e.linep; !nl && cp < elinep-1; cp++){
+			if ((nb = read(fp, cp, sizeof(*cp))) != sizeof(*cp) ||
 			    (nl = (*cp == '\n')) ||
 			    (wp[1] && any(*cp, ifs->value)))
 				break;
+		}
 		*cp = 0;
 		if (nb <= 0)
 			break;
 		setval(lookup(*wp), e.linep);
 	}
+	if (fp) close (fp);
 	return(nb <= 0);
 }
 
@@ -893,7 +979,7 @@ register struct op *t;
 	register int  resetsig;
 
 	if (t->words[1] == NULL) {
-		for (i=0; i<=NSIG; i++)
+		for (i=0; i<=_NSIG; i++)
 			if (trap[i]) {
 				prn(i);
 				prs(": ");
@@ -933,7 +1019,7 @@ char *s;
 {
 	register int n;
 
-	if ((n = getn(s)) < 0 || n > NSIG) {
+	if ((n = getn(s)) < 0 || n > _NSIG) {
 		err("trap: bad signal number");
 		n = 0;
 	}
@@ -942,7 +1028,7 @@ char *s;
 
 void
 setsig(n, f)
-register n;
+register int n;
 _PROTOTYPE(void (*f), (int));
 {
 	if (n == 0)
@@ -958,7 +1044,7 @@ getn(as)
 char *as;
 {
 	register char *s;
-	register n, m;
+	register int n, m;
 
 	s = as;
 	m = 1;
@@ -986,6 +1072,16 @@ int
 docontinue(t)
 struct op *t;
 {
+	static int last;
+	if(last){
+		myfreearea(last);
+	}
+	loop_last_areanum = areanum;
+	last = areanum;
+	if (loop_is_called && areanum  >= FREE) {
+		loop_last_areanum = last;
+		areanum = loop_is_called ;
+	}
 	return(brkcontin(t->words[1], 0));
 }
 
@@ -995,7 +1091,7 @@ register char *cp;
 int val;
 {
 	register struct brkcon *bc;
-	register nl;
+	register int nl;
 
 	nl = cp == NULL? 1: getn(cp);
 	if (nl <= 0)
@@ -1073,8 +1169,7 @@ register struct op *t;
 {
 	register struct var *vp;
 	register char *cp;
-	register n;
-
+	register int n;
 	if ((cp = t->words[1]) == NULL) {
 		for (vp = vlist; vp; vp = vp->next)
 			varput(vp->name, 1);
@@ -1096,7 +1191,7 @@ register struct op *t;
 
 				default:
 					if (*cp>='a' && *cp<='z')
-						flag[*cp]++;
+						flag[(int) *cp]++;
 					break;
 				}
 		setdash();
@@ -1105,9 +1200,27 @@ register struct op *t;
 		t->words[0] = dolv[0];
 		for (n=1; t->words[n]; n++)
 			setarea((char *)t->words[n], 0);
+		/* DELETE old dolv 
+		 * dolv points to environment variables when new shell starts,
+		 * when "set" is called with arguments, we need to make sure 
+		 * this call is not the first one. The second and following calls 
+		 * should DELETE the old dolv[]
+		 */
+		{
+		    int i = 1;
+		    if (set_is_called){
+			while(dolv[i]) {
+				DELETE(dolv[i]);
+				i++;
+			}
+			DELETE((dolv-1)); /* remove []: see setarea((char *)(dolv-1), 0); */
+		    }
+		}
+
 		dolc = n-1;
 		dolv = t->words;
-		setval(lookup("#"), putn(dolc));
+		set_is_called = 1;
+		setval(lookup("#"), putn(dolc));  /* wmq: set the number of arguments */
 		setarea((char *)(dolv-1), 0);
 	}
 	return(0);
@@ -1151,26 +1264,26 @@ struct	builtin {
 	int	(*fn)();
 };
 static struct	builtin	builtin[] = {
-	":",		dolabel,
-	"cd",		dochdir,
-	"shift",	doshift,
-	"exec",		doexec,
-	"wait",		dowait,
-	"read",		doread,
-	"eval",		doeval,
-	"trap",		dotrap,
-	"break",	dobreak,
-	"continue",	docontinue,
-	"exit",		doexit,
-	"export",	doexport,
-	"readonly",	doreadonly,
-	"set",		doset,
-	".",		dodot,
-	"umask",	doumask,
-	"login",	dologin,
-	"newgrp",	dologin,
-	"times",	dotimes,
-	0,
+	{":",		dolabel},
+	{"cd",		dochdir},
+	{"shift",	doshift},
+	{"exec",	doexec},
+	{"wait",	dowait},
+	{"read",	doread},
+	{"eval",	doeval},
+	{"trap",	dotrap},
+	{"break",	dobreak},
+	{"continue",	docontinue},
+	{"exit",	doexit},
+	{"export",	doexport},
+	{"readonly",	doreadonly},
+	{"set",		doset},
+	{".",		dodot},
+	{"umask",	doumask},
+	{"login",	dologin},
+	{"newgrp",	dologin},
+	{"times",	dotimes},
+	{ NULL, 0},
 };
 
 int (*inbuilt(s))()

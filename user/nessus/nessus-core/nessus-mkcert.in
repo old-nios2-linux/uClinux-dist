@@ -135,7 +135,7 @@ test -z "$RANDFLAG" -a -z "$RANDFILE" &&
 umask 077
 
 # Set environment
-BASEDIR=${TMPDIR-/tmp}/nessus-mkcert.$$
+BASEDIR=${TMPDIR-/var/tmp}/nessus-mkcert.$$
 mkdir $BASEDIR || exit 1
 
 
@@ -408,7 +408,7 @@ openssl ca -config $BASEDIR/std.cnf -name NessusCA -batch -days $SRVCERT_LIFETIM
 chmod a+r $CACERT $SRVCERT #cln $CLNCERT
 
 
-CF=@sysconfdir@/nessus/nessusd.conf
+CF=@sysconfdir@/nessusd.conf
 egrep -v '^ *(pem_password|cert_file|key_file|ca_file|force_pubkey_auth) *=' "$CF" > "$CF.tmp"
 echo "#
 # Added by nessus-mkcert

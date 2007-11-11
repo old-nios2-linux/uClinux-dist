@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.1.8.1 $</revnumber>
-		<date>$Date: 2004/07/21 10:34:46 $</date>
+		<revnumber>$Revision: 1.5.2.1 $</revnumber>
+		<date>$Date: 2005/06/22 23:12:09 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -69,6 +69,18 @@ modparam("usrloc", "user_column", "username")
 ...
 </programlisting>
 	    </example>
+	</section>
+
+	<section>
+	    <title><varname>domain_column</varname> (string)</title>
+	    <para>
+		Name of column containing domain parts.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is <quote>domain</quote>.
+		</emphasis>
+	    </para>
 	</section>
 
 	<section>
@@ -192,6 +204,18 @@ modparam("usrloc", "method_column", "method")
 	</section>
 
 	<section>
+	    <title><varname>flags_column</varname> (string)</title>
+	    <para>
+		Name of column containing saved flags.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is <quote>flags</quote>.
+		</emphasis>
+	    </para>
+	</section>
+
+	<section>
 	    <title><varname>user_agent_column</varname> (string)</title>
 	    <para>
 		Name of column containing user-agent values.
@@ -212,20 +236,53 @@ modparam("usrloc", "user_agent_column", "user_agent")
 	</section>
 
 	<section>
+	    <title><varname>received_column</varname> (string)</title>
+	    <para>
+		Name of column containing the source IP, port, and protocol from the REGISTER
+		message.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is <quote>received</quote>.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>received_column</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("usrloc", "received_column", "received")
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>user_agent_column</varname> (string)</title>
+	    <para>
+		Name of column containing the user agent string.		
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is <quote>user_agent</quote>.
+		</emphasis>
+	    </para>
+	</section>
+
+	<section>
 	    <title><varname>db_url</varname> (string)</title>
 	    <para>
 		&url; of the database that should be used.
 	    </para>
 	    <para>
 		<emphasis>
-		    Default value is <quote>sql://ser:heslo@localhost/ser</quote>.
+		    Default value is <quote>mysql://ser:heslo@localhost/ser</quote>.
 		</emphasis>
 	    </para>
 	    <example>
 		<title>Set <varname>db_url</varname> parameter</title>
 		<programlisting format="linespecific">
 ...
-modparam("usrloc", "db_url", "sql://username:password@localhost/ser")
+modparam("usrloc", "db_url", "mysql://username:password@localhost/ser")
 ...
 </programlisting>
 	    </example>
@@ -254,10 +311,38 @@ modparam("usrloc", "timer_interval", 120)
 	</section>
 
 	<section>
+	    <title><varname>use_domain</varname> (integer)</title>
+	    <para>
+		Use also the domain part, in addition to username, when
+		searching for a record. This parameter must be enabled in
+		multi-domain mode.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0 (disabled).
+		</emphasis>
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>desc_time_order</varname> (integer)</title>
+	    <para>
+		Enable/disable sorting of contacts in descenting modification
+		time order. This ensures that most fresh contacts come first
+		when doing serial forking.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0 (disabled).
+		</emphasis>
+	    </para>
+	</section>
+
+	<section>
 	    <title><varname>db_mode</varname> (integer)</title>
 	    <para>
 		The usrloc module can utilize database for persistent contact storage. If you use
-		database, your contacts will survive machine restarts or sw crashes. The
+		database, your contacts will survive machine restarts or SW crashes. The
 		disadvantage is that accessing database can be very time consuming. Therefore,
 		usrloc module implements three database accessing modes:
 	    </para>
@@ -266,7 +351,7 @@ modparam("usrloc", "timer_interval", 120)
 		    <para>
 			0 - This disables database completely. Only memory will be used. Contacts
 			will not survive restart. Use this value if you need a really fast usrloc
-			and contact persistence is not necessarry or is provided by other means.
+			and contact persistence is not necessary or is provided by other means.
 		    </para>
 		</listitem>
 		<listitem>

@@ -1,24 +1,34 @@
 /*
  * utils.c - various utility functions used in pppd.
  *
- * Copyright (c) 1999 The Australian National University.
- * All rights reserved.
+ * Copyright (c) 1999-2002 Paul Mackerras. All rights reserved.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that the above copyright notice and this paragraph are
- * duplicated in all such forms and that any documentation,
- * advertising materials, and other materials related to such
- * distribution and use acknowledge that the software was developed
- * by the Australian National University.  The name of the University
- * may not be used to endorse or promote products derived from this
- * software without specific prior written permission.
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
- * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. The name(s) of the authors of this software must not be used to
+ *    endorse or promote products derived from this software without
+ *    prior written permission.
+ *
+ * 3. Redistributions of any form whatsoever must retain the following
+ *    acknowledgment:
+ *    "This product includes software developed by Paul Mackerras
+ *     <paulus@samba.org>".
+ *
+ * THE AUTHORS OF THIS SOFTWARE DISCLAIM ALL WARRANTIES WITH REGARD TO
+ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS, IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+ * SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef lint
-static char rcsid[] = "$Id: utils.c,v 1.3 2002/06/04 03:33:09 davidm Exp $";
-#endif
+
+#define RCSID	"$Id: utils.c,v 1.4 2007/06/08 04:02:38 gerg Exp $"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -30,8 +40,8 @@ static char rcsid[] = "$Id: utils.c,v 1.3 2002/06/04 03:33:09 davidm Exp $";
 #include <fcntl.h>
 #include <syslog.h>
 #include <netdb.h>
-#include <utmp.h>
 #include <time.h>
+#include <utmp.h>
 #include <pwd.h>
 #include <sys/param.h>
 #include <sys/types.h>
@@ -42,17 +52,21 @@ static char rcsid[] = "$Id: utils.c,v 1.3 2002/06/04 03:33:09 davidm Exp $";
 #include <sys/socket.h>
 #include <netinet/in.h>
 #ifdef SVR4
-#include <sys/sysmacros.h>
+#include <sys/mkdev.h>
 #endif
 
 #include "pppd.h"
+#include "fsm.h"
+#include "lcp.h"
+
+static const char rcsid[] = RCSID;
 
 #if defined(SUNOS4)
 extern char *strerror();
 #endif
 
-static void pr_log __P((void *, char *, ...));
 static void logit __P((int, char *, va_list));
+static void log_write __P((int, char *));
 static void vslp_printer __P((void *, char *, ...));
 static void format_packet __P((u_char *, int, void (*) (void *, char *, ...),
 			       void *));
@@ -104,7 +118,7 @@ strlcat(dest, src, len)
 /*
  * slprintf - format a message into a buffer.  Like sprintf except we
  * also specify the length of the output buffer, and we handle
- * %r (recursive format), %m (error message), %v (visible string),
+ * %m (error message), %v (visible string),
  * %q (quoted string), %t (current time) and %I (IP address) formats.
  * Doesn't do floating-point formats.
  * Returns the number of chars put into buf.
@@ -115,7 +129,7 @@ slprintf __V((char *buf, int buflen, char *fmt, ...))
     va_list args;
     int n;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(args, fmt);
 #else
     char *buf;
@@ -172,7 +186,8 @@ vslprintf(buf, buflen, fmt, args)
 	if (*fmt == 0)
 	    break;
 	c = *++fmt;
-	width = prec = 0;
+	width = 0;
+	prec = -1;
 	fillch = ' ';
 	if (c == '0') {
 	    fillch = '0';
@@ -193,6 +208,7 @@ vslprintf(buf, buflen, fmt, args)
 		prec = va_arg(args, int);
 		c = *++fmt;
 	    } else {
+		prec = 0;
 		while (isdigit(c)) {
 		    prec = prec * 10 + c - '0';
 		    c = *++fmt;
@@ -204,6 +220,28 @@ vslprintf(buf, buflen, fmt, args)
 	neg = 0;
 	++fmt;
 	switch (c) {
+	case 'l':
+	    c = *fmt++;
+	    switch (c) {
+	    case 'd':
+		val = va_arg(args, long);
+		if (val < 0) {
+		    neg = 1;
+		    val = -val;
+		}
+		base = 10;
+		break;
+	    case 'u':
+		val = va_arg(args, unsigned long);
+		base = 10;
+		break;
+	    default:
+		*buf++ = '%'; --buflen;
+		*buf++ = 'l'; --buflen;
+		--fmt;		/* so %lz outputs %lz etc. */
+		continue;
+	    }
+	    break;
 	case 'd':
 	    i = va_arg(args, int);
 	    if (i < 0) {
@@ -211,6 +249,10 @@ vslprintf(buf, buflen, fmt, args)
 		val = -i;
 	    } else
 		val = i;
+	    base = 10;
+	    break;
+	case 'u':
+	    val = va_arg(args, unsigned int);
 	    base = 10;
 	    break;
 	case 'o':
@@ -245,6 +287,7 @@ vslprintf(buf, buflen, fmt, args)
 		     (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff);
 	    str = num;
 	    break;
+#if 0	/* not used, and breaks on S/390, apparently */
 	case 'r':
 	    f = va_arg(args, char *);
 #ifndef __powerpc__
@@ -256,6 +299,7 @@ vslprintf(buf, buflen, fmt, args)
 	    buf += n;
 	    buflen -= n;
 	    continue;
+#endif
 	case 't':
 	    time(&t);
 	    str = ctime(&t);
@@ -266,11 +310,11 @@ vslprintf(buf, buflen, fmt, args)
 	case 'q':		/* quoted string */
 	    quoted = c == 'q';
 	    p = va_arg(args, unsigned char *);
-	    if (fillch == '0' && prec > 0) {
+	    if (fillch == '0' && prec >= 0) {
 		n = prec;
 	    } else {
 		n = strlen((char *)p);
-		if (prec > 0 && prec < n)
+		if (prec >= 0 && n > prec)
 		    n = prec;
 	    }
 	    while (n > 0 && buflen > 0) {
@@ -355,7 +399,7 @@ vslprintf(buf, buflen, fmt, args)
 	    len = num + sizeof(num) - 1 - str;
 	} else {
 	    len = strlen(str);
-	    if (prec > 0 && len > prec)
+	    if (prec >= 0 && len > prec)
 		len = prec;
 	}
 	if (width > 0) {
@@ -387,7 +431,7 @@ vslp_printer __V((void *arg, char *fmt, ...))
     va_list pvar;
     struct buffer_info *bi;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     void *arg;
@@ -405,12 +449,10 @@ vslp_printer __V((void *arg, char *fmt, ...))
     bi->len -= n;
 }
 
+#ifdef unused
 /*
  * log_packet - format a packet and log it.
  */
-
-char line[256];			/* line to be logged accumulated here */
-char *linep;
 
 void
 log_packet(p, len, prefix, level)
@@ -419,12 +461,11 @@ log_packet(p, len, prefix, level)
     char *prefix;
     int level;
 {
-    strlcpy(line, prefix, sizeof(line));
-    linep = line + strlen(line);
-    format_packet(p, len, pr_log, NULL);
-    if (linep != line)
-	syslog(level, "%s", line);
+	init_pr_log(prefix, level);
+	format_packet(p, len, pr_log, &level);
+	end_pr_log();
 }
+#endif /* unused */
 
 /*
  * format_packet - make a readable representation of a packet,
@@ -476,33 +517,92 @@ format_packet(p, len, printer, arg)
 	printer(arg, "%.*B", len, p);
 }
 
-static void
+/*
+ * init_pr_log, end_pr_log - initialize and finish use of pr_log.
+ */
+
+static char line[256];		/* line to be logged accumulated here */
+static char *linep;		/* current pointer within line */
+static int llevel;		/* level for logging */
+
+void
+init_pr_log(prefix, level)
+     char *prefix;
+     int level;
+{
+	linep = line;
+	if (prefix != NULL) {
+		strlcpy(line, prefix, sizeof(line));
+		linep = line + strlen(line);
+	}
+	llevel = level;
+}
+
+void
+end_pr_log()
+{
+	if (linep != line) {
+		*linep = 0;
+		log_write(llevel, line);
+	}
+}
+
+/*
+ * pr_log - printer routine for outputting to syslog
+ */
+void
 pr_log __V((void *arg, char *fmt, ...))
 {
-    int n;
-    va_list pvar;
-    char buf[256];
+	int l, n;
+	va_list pvar;
+	char *p, *eol;
+	char buf[256];
 
-	 
-#if __STDC__
-    va_start(pvar, fmt);
+#if defined(__STDC__)
+	va_start(pvar, fmt);
 #else
-    void *arg;
-    char *fmt;
-    va_start(pvar);
-    arg = va_arg(pvar, void *);
-    fmt = va_arg(pvar, char *);
+	void *arg;
+	char *fmt;
+	va_start(pvar);
+	arg = va_arg(pvar, void *);
+	fmt = va_arg(pvar, char *);
 #endif
 
-    n = vslprintf(buf, sizeof(buf), fmt, pvar);
-    va_end(pvar);
+	n = vslprintf(buf, sizeof(buf), fmt, pvar);
+	va_end(pvar);
 
-    if (linep + n + 1 > line + sizeof(line)) {
-	syslog(LOG_DEBUG, "%s", line);
-	linep = line;
-    }
-    strlcpy(linep, buf, line + sizeof(line) - linep);
-    linep += n;
+	p = buf;
+	eol = strchr(buf, '\n');
+	if (linep != line) {
+		l = (eol == NULL)? n: eol - buf;
+		if (linep + l < line + sizeof(line)) {
+			if (l > 0) {
+				memcpy(linep, buf, l);
+				linep += l;
+			}
+			if (eol == NULL)
+				return;
+			p = eol + 1;
+			eol = strchr(p, '\n');
+		}
+		*linep = 0;
+		log_write(llevel, line);
+		linep = line;
+	}
+
+	while (eol != NULL) {
+		*eol = 0;
+		log_write(llevel, p);
+		p = eol + 1;
+		eol = strchr(p, '\n');
+	}
+
+	/* assumes sizeof(buf) <= sizeof(line) */
+	l = buf + n - p;
+	if (l > 0) {
+		memcpy(line, p, n);
+		linep = line + l;
+	}
 }
 
 /*
@@ -554,22 +654,27 @@ logit(level, fmt, args)
     va_list args;
 {
     int n;
-#ifndef EMBED
-    char buf[256];
-#else
-    char buf[100];
-#endif
+    char buf[1024];
 
     n = vslprintf(buf, sizeof(buf), fmt, args);
+    log_write(level, buf);
+}
+
+static void
+log_write(level, buf)
+    int level;
+    char *buf;
+{
     syslog(level, "%s", buf);
-#ifndef EMBED
     if (log_to_fd >= 0 && (level != LOG_DEBUG || debug)) {
-	if (buf[n-1] != '\n')
-	    buf[n++] = '\n';
-	if (write(log_to_fd, buf, n) != n)
+	int n = strlen(buf);
+
+	if (n > 0 && buf[n-1] == '\n')
+	    --n;
+	if (write(log_to_fd, buf, n) != n
+	    || write(log_to_fd, "\n", 1) != 1)
 	    log_to_fd = -1;
     }
-#endif
 }
 
 /*
@@ -580,7 +685,7 @@ fatal __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -602,7 +707,7 @@ error __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -612,6 +717,7 @@ error __V((char *fmt, ...))
 
     logit(LOG_ERR, fmt, pvar);
     va_end(pvar);
+    ++error_count;
 }
 
 /*
@@ -622,7 +728,7 @@ warn __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -642,7 +748,7 @@ notice __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -662,7 +768,7 @@ info __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -682,7 +788,7 @@ dbglog __V((char *fmt, ...))
 {
     va_list pvar;
 
-#if __STDC__
+#if defined(__STDC__)
     va_start(pvar, fmt);
 #else
     char *fmt;
@@ -694,11 +800,65 @@ dbglog __V((char *fmt, ...))
     va_end(pvar);
 }
 
-#ifndef EMBED
+/*
+ * dump_packet - print out a packet in readable form if it is interesting.
+ * Assumes len >= PPP_HDRLEN.
+ */
+void
+dump_packet(const char *tag, unsigned char *p, int len)
+{
+    int proto;
+
+    if (!debug)
+	return;
+
+    /*
+     * don't print LCP echo request/reply packets if debug <= 1
+     * and the link is up.
+     */
+    proto = (p[2] << 8) + p[3];
+    if (debug <= 1 && unsuccess == 0 && proto == PPP_LCP
+	&& len >= PPP_HDRLEN + HEADERLEN) {
+	unsigned char *lcp = p + PPP_HDRLEN;
+	int l = (lcp[2] << 8) + lcp[3];
+
+	if ((lcp[0] == ECHOREQ || lcp[0] == ECHOREP)
+	    && l >= HEADERLEN && l <= len - PPP_HDRLEN)
+	    return;
+    }
+
+    dbglog("%s %P", tag, p, len);
+}
+
+/*
+ * complete_read - read a full `count' bytes from fd,
+ * unless end-of-file or an error other than EINTR is encountered.
+ */
+ssize_t
+complete_read(int fd, void *buf, size_t count)
+{
+	size_t done;
+	ssize_t nb;
+	char *ptr = buf;
+
+	for (done = 0; done < count; ) {
+		nb = read(fd, ptr, count - done);
+		if (nb < 0) {
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		if (nb == 0)
+			break;
+		done += nb;
+		ptr += nb;
+	}
+	return done;
+}
 
 /* Procedures for locking the serial device using a lock file. */
 #ifndef LOCK_DIR
-#ifdef _linux_
+#ifdef __linux__
 #define LOCK_DIR	"/var/lock"
 #else
 #ifdef SVR4
@@ -723,7 +883,7 @@ lock(dev)
 
     result = mklock (dev, (void *) 0);
     if (result == 0) {
-	strlcpy(lock_file, sizeof(lock_file), dev);
+	strlcpy(lock_file, dev, sizeof(lock_file));
 	return 0;
     }
 
@@ -754,9 +914,20 @@ lock(dev)
 	     major(sbuf.st_rdev), minor(sbuf.st_rdev));
 #else
     char *p;
+    char lockdev[MAXPATHLEN];
 
-    if ((p = strrchr(dev, '/')) != NULL)
-	dev = p + 1;
+    if ((p = strstr(dev, "dev/")) != NULL) {
+	dev = p + 4;
+	strncpy(lockdev, dev, MAXPATHLEN-1);
+	lockdev[MAXPATHLEN-1] = 0;
+	while ((p = strrchr(lockdev, '/')) != NULL) {
+	    *p = '_';
+	}
+	dev = lockdev;
+    } else
+	if ((p = strrchr(dev, '/')) != NULL)
+	    dev = p + 1;
+
     slprintf(lock_file, sizeof(lock_file), "%s/LCK..%s", LOCK_DIR, dev);
 #endif
 
@@ -881,4 +1052,3 @@ unlock()
     }
 }
 
-#endif /* EMBED */

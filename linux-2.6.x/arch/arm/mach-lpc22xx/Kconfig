@@ -1,10 +1,16 @@
-#       linux/arch/arm/mach-lpc22xx/Kconfig	
+#	linux/arch/arm/mach-lpc22xx/Kconfig	
 #	Copyright (C) 2004 Philips Semiconductors
 #
 
 
 menu "LPC22xx Options"
-	depends on ARCH_LPC22xx
+	depends on ARCH_LPC22XX
+
+config MACH_LPC22XX
+	bool
+	default y
+	help
+		Phillips LPC22XX Family
 
 config ARCH_SUPPORTS_BIG_ENDIAN
     bool "Default Big Endian mode"
@@ -36,8 +42,8 @@ config SKIP_DUMP_CPU_INFO
 	recognition instructions which uses MMU features.
 
 config REMAP_VECTORS_TO_RAM
-	bool "Remap Vectors to ram"
-	default y
+	bool "Remap Vectors to external RAM"
+	default n
 	help
 	LPC22xx suppports ROM and RAM remap function. 
 

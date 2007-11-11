@@ -1,9 +1,9 @@
 /* 
- * $Id: re.c,v 1.7.4.1 2004/04/28 18:43:52 jiri Exp $
+ * $Id: re.c,v 1.11 2004/11/12 16:58:58 andrei Exp $
  *
  * regexp and regexp substitutions implementations
  * 
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,6 +30,7 @@
  * History:
  * --------
  *   2003-08-04  created by andrei
+ *   2004-11-12  minor api extension, added *count (andrei)
  */
 
 
@@ -268,7 +269,7 @@ error:
 
 
 
-static int replace_len(char* match, int nmatch, regmatch_t* pmatch,
+static int replace_len(const char* match, int nmatch, regmatch_t* pmatch,
 					struct subst_expr* se, struct sip_msg* msg)
 {
 	int r;
@@ -314,7 +315,7 @@ static int replace_len(char* match, int nmatch, regmatch_t* pmatch,
 
 /* rpl.s will be alloc'ed with the proper size & rpl.len set
  * returns 0 on success, <0 on error*/
-static int replace_build(char* match, int nmatch, regmatch_t* pmatch,
+static int replace_build(const char* match, int nmatch, regmatch_t* pmatch,
 					struct subst_expr* se, struct sip_msg* msg, str* rpl)
 {
 	int r;
@@ -326,7 +327,7 @@ static int replace_build(char* match, int nmatch, regmatch_t* pmatch,
 	
 	rpl->len=replace_len(match, nmatch, pmatch, se, msg);
 	if (rpl->len==0){
-		rpl->s=0; /* emtpy string */
+		rpl->s=0; /* empty string */
 		return 0;
 	}
 	rpl->s=pkg_malloc(rpl->len);
@@ -386,20 +387,26 @@ error:
 
 
 /* WARNING: input must be 0 terminated! */
-struct replace_lst* subst_run(struct subst_expr* se, char* input,
-								struct sip_msg* msg)
+/* returns: 0 if no match or error, or subst result; if count!=0
+ *           it will be set to 0 (no match), the number of matches
+ *           or -1 (error).
+ */
+struct replace_lst* subst_run(struct subst_expr* se, const char* input,
+								struct sip_msg* msg, int* count)
 {
 	struct replace_lst *head;
 	struct replace_lst **crt;
-	char *p;
+	const char *p;
 	int r;
 	regmatch_t* pmatch;
 	int nmatch;
 	int eflags;
+	int cnt;
 	
 	
 	/* init */
 	head=0;
+	cnt=0;
 	crt=&head;
 	p=input;
 	nmatch=se->max_pmatch+1;
@@ -439,36 +446,43 @@ struct replace_lst* subst_run(struct subst_expr* se, char* input,
 			}
 			crt=&((*crt)->next);
 			p+=pmatch[0].rm_eo;
+			cnt++;
 		}
 	}while((r==0) && se->replace_all);
 	pkg_free(pmatch);
+	if (count)*count=cnt;
 	return head;
 error:
 	if (head) replace_lst_free(head);
 	if (pmatch) pkg_free(pmatch);
+	if (count) *count=-1;
 	return 0;
 }
 
 
 
 /* returns the substitution result in a str, input must be 0 term
- *  0 on no match or malloc error */ 
-str* subst_str(char *input, struct sip_msg* msg, struct subst_expr* se)
+ *  0 on no match or malloc error
+ *  if count is non zero it will be set to the number of matches, or -1
+ *   if error 
+ */ 
+str* subst_str(const char *input, struct sip_msg* msg, struct subst_expr* se,
+				int* count)
 {
 	str* res;
 	struct replace_lst *lst;
 	struct replace_lst* l;
 	int len;
 	int size;
-	char* p;
+	const char* p;
 	char* dest;
-	char* end;
+	const char* end;
 	
 	
 	/* compute the len */
 	len=strlen(input);
 	end=input+len;
-	lst=subst_run(se, input, msg);
+	lst=subst_run(se, input, msg, count);
 	if (lst==0){
 		DBG("subst_str: no match\n");
 		return 0;
@@ -510,5 +524,6 @@ error:
 		if (res->s) pkg_free(res->s);
 		pkg_free(res);
 	}
+	if (count) *count=-1;
 	return 0;
 }

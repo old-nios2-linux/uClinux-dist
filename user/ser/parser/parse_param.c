@@ -1,9 +1,9 @@
 /* 
- * $Id: parse_param.c,v 1.15.4.1 2004/02/09 15:46:11 janakj Exp $
+ * $Id: parse_param.c,v 1.21 2004/09/01 12:50:40 janakj Exp $
  *
  * Generic Parameter Parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -80,6 +80,15 @@ static inline void parse_contact_class(param_hooks_t* _h, param_t* _p)
 			_h->contact.method = _p;
 		}
 		break;
+		
+	case 'r':
+	case 'R':
+		if ((_p->name.len == 8) &&
+		    (!strncasecmp(_p->name.s + 1, "eceived", 7))) {
+			_p->type = P_RECEIVED;
+			_h->contact.received = _p;
+		}
+		break;
 	}
 }
 
@@ -102,6 +111,12 @@ static inline void parse_uri_class(param_hooks_t* _h, param_t* _p)
 		    (!strncasecmp(_p->name.s + 1, "ransport", 8))) {
 			_p->type = P_TRANSPORT;
 			_h->uri.transport = _p;
+		} else if (_p->name.len == 2) {
+			if (((_p->name.s[1] == 't') || (_p->name.s[1] == 'T')) &&
+			    ((_p->name.s[2] == 'l') || (_p->name.s[2] == 'L'))) {
+				_p->type = P_TTL;
+				_h->uri.ttl = _p;
+			}
 		}
 		break;
 
@@ -201,7 +216,7 @@ static inline int parse_token_param(str* _s, str* _r)
 	      */
 	_r->s = _s->s;
 
-	     /* Iterate throught the
+	     /* Iterate through the
 	      * token body
 	      */
 	for(i = 0; i < _s->len; i++) {
@@ -458,6 +473,8 @@ static inline void print_param(FILE* _o, param_t* _p)
 	case P_LR:        type = "P_LR";        break;
 	case P_R2:        type = "P_R2";        break;
 	case P_MADDR:     type = "P_MADDR";     break;
+	case P_TTL:       type = "P_TTL";       break;
+	case P_RECEIVED:  type = "P_RECEIVED";  break;
 	default:          type = "UNKNOWN";     break;
 	}
 	

@@ -48,6 +48,15 @@ struct aoe_hdr {
 	__be32 tag;
 };
 
+#ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+static inline struct aoe_hdr *aoe_hdr(const struct sk_buff *skb)
+{
+	return (struct aoe_hdr *)skb_mac_header(skb);
+}
+#endif
+
 struct aoe_atahdr {
 	unsigned char aflags;
 	unsigned char errfeat;
@@ -129,7 +138,7 @@ struct aoedev {
 	u16 maxbcnt;
 	struct work_struct work;/* disk create work struct */
 	struct gendisk *gd;
-	request_queue_t blkq;
+	struct request_queue blkq;
 	struct hd_geometry geo; 
 	sector_t ssize;
 	struct timer_list timer;
@@ -159,7 +168,7 @@ void aoecmd_work(struct aoedev *d);
 void aoecmd_cfg(ushort aoemajor, unsigned char aoeminor);
 void aoecmd_ata_rsp(struct sk_buff *);
 void aoecmd_cfg_rsp(struct sk_buff *);
-void aoecmd_sleepwork(void *vp);
+void aoecmd_sleepwork(struct work_struct *);
 struct sk_buff *new_skb(ulong);
 
 int aoedev_init(void);

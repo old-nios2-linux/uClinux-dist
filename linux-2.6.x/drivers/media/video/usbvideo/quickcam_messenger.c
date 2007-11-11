@@ -86,6 +86,7 @@ MODULE_DEVICE_TABLE(usb, qcm_table);
 static void qcm_register_input(struct qcm *cam, struct usb_device *dev)
 {
 	struct input_dev *input_dev;
+	int error;
 
 	usb_make_path(dev, cam->input_physname, sizeof(cam->input_physname));
 	strncat(cam->input_physname, "/input0", sizeof(cam->input_physname));
@@ -99,14 +100,20 @@ static void qcm_register_input(struct qcm *cam, struct usb_device *dev)
 	input_dev->name = "QCM button";
 	input_dev->phys = cam->input_physname;
 	usb_to_input_id(dev, &input_dev->id);
-	input_dev->cdev.dev = &dev->dev;
+	input_dev->dev.parent = &dev->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY);
 	input_dev->keybit[LONG(BTN_0)] = BIT(BTN_0);
 
 	input_dev->private = cam;
 
-	input_register_device(cam->input);
+	error = input_register_device(cam->input);
+	if (error) {
+		warn("Failed to register camera's input device, err: %d\n",
+		     error);
+		input_free_device(cam->input);
+		cam->input = NULL;
+	}
 }
 
 static void qcm_unregister_input(struct qcm *cam)
@@ -190,8 +197,7 @@ static int qcm_alloc_int_urb(struct qcm *cam)
 
 static void qcm_free_int(struct qcm *cam)
 {
-	if (cam->button_urb)
-		usb_free_urb(cam->button_urb);
+	usb_free_urb(cam->button_urb);
 }
 #endif /* CONFIG_INPUT */
 
@@ -433,7 +439,7 @@ static int qcm_sensor_init(struct uvd *uvd)
 	int ret;
 	int i;
 
-	for (i=0; i < sizeof(regval_table)/sizeof(regval_table[0]) ; i++) {
+	for (i=0; i < ARRAY_SIZE(regval_table) ; i++) {
 		CHECK_RET(ret, qcm_stv_setb(uvd->dev,
 					regval_table[i].reg,
 					regval_table[i].val));

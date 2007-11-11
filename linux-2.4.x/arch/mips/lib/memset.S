@@ -61,6 +61,18 @@ EXPORT(__bzero)
 	beqz	t0, 1f
 	 subu	t0, 4				/* alignment in bytes */
 
+#if defined(CONFIG_RTL865X)
+
+align_word:  /* fill bytewise */
+	EX(sb, a1, 0(a0), first_fixup)
+	addiu	a0, 1
+	subu	a2, 1
+	andi	t0, a0, 3	
+	bnez 	t0, align_word
+	 nop
+
+#else /* CONFIG_RTL865X */
+
 #ifdef __MIPSEB__
 	EX(swl, a1, (a0), first_fixup)		/* make word aligned */
 #endif
@@ -69,6 +81,8 @@ EXPORT(__bzero)
 #endif
 	subu	a0, t0				/* word align ptr */
 	addu	a2, t0				/* correct size */
+
+#endif /* CONFIG_RTL865X */
 
 1:	ori	t1, a2, 0x3f			/* # of full blocks */
 	xori	t1, 0x3f
@@ -95,6 +109,19 @@ memset_partial:
 2:	.set	pop
 	andi	a2, 3				/* 0 <= n <= 3 to go */
 
+#if defined(CONFIG_RTL865X)
+
+	beqz	a2, 1f
+	 nop
+byte_write:  /* fill bytewise */
+	EX(sb, a1, 0(a0), last_fixup)
+	addiu	a0, 1
+	subu	a2, 1
+	bnez	a2, byte_write 
+	 nop
+
+#else /* CONFIG_RTL865X */
+
 	beqz	a2, 1f
 	 addu	a0, a2				/* What's left */
 #ifdef __MIPSEB__
@@ -103,6 +130,9 @@ memset_partial:
 #ifdef __MIPSEL__
 	EX(swl, a1, -1(a0), last_fixup)
 #endif
+
+#endif /* CONFIG_RTL865X */
+
 1:	jr	ra
 	 move	a2, zero
 

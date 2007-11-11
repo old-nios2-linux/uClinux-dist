@@ -4,7 +4,7 @@ AC_INIT(src/snort.c)
 AM_CONFIG_HEADER(config.h)
 # When changing the snort version, please also update the VERSION
 # definition in "src/win32/WIN32-Includes/config.h"
-AM_INIT_AUTOMAKE(snort,2.6.1.1)
+AM_INIT_AUTOMAKE(snort,2.6.1.5)
 
 # Since we get -O2 from configure defaults, which doesn't work in 64bit
 # mode, let's make some changes here before calling _CC macros.

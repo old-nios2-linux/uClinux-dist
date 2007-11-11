@@ -54,15 +54,15 @@ static inline int i2o_device_issue_claim(struct i2o_device *dev, u32 cmd,
  *	@dev: I2O device to claim
  *	@drv: I2O driver which wants to claim the device
  *
- *	Do the leg work to assign a device to a given OSM. If the claim succeed
- *	the owner of the rimary. If the attempt fails a negative errno code
+ *	Do the leg work to assign a device to a given OSM. If the claim succeeds,
+ *	the owner is the primary. If the attempt fails a negative errno code
  *	is returned. On success zero is returned.
  */
 int i2o_device_claim(struct i2o_device *dev)
 {
 	int rc = 0;
 
-	down(&dev->lock);
+	mutex_lock(&dev->lock);
 
 	rc = i2o_device_issue_claim(dev, I2O_CMD_UTIL_CLAIM, I2O_CLAIM_PRIMARY);
 	if (!rc)
@@ -72,7 +72,7 @@ int i2o_device_claim(struct i2o_device *dev)
 		pr_debug("i2o: claim of device %d failed %d\n",
 			 dev->lct_data.tid, rc);
 
-	up(&dev->lock);
+	mutex_unlock(&dev->lock);
 
 	return rc;
 }
@@ -96,7 +96,7 @@ int i2o_device_claim_release(struct i2o_device *dev)
 	int tries;
 	int rc = 0;
 
-	down(&dev->lock);
+	mutex_lock(&dev->lock);
 
 	/*
 	 *      If the controller takes a nonblocking approach to
@@ -118,7 +118,7 @@ int i2o_device_claim_release(struct i2o_device *dev)
 		pr_debug("i2o: claim release of device %d failed %d\n",
 			 dev->lct_data.tid, rc);
 
-	up(&dev->lock);
+	mutex_unlock(&dev->lock);
 
 	return rc;
 }
@@ -198,7 +198,7 @@ static struct i2o_device *i2o_device_alloc(void)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&dev->list);
-	init_MUTEX(&dev->lock);
+	mutex_init(&dev->lock);
 
 	dev->device.bus = &i2o_bus_type;
 	dev->device.release = &i2o_device_release;
@@ -208,24 +208,23 @@ static struct i2o_device *i2o_device_alloc(void)
 
 /**
  *	i2o_device_add - allocate a new I2O device and add it to the IOP
- *	@iop: I2O controller where the device is on
+ *	@c: I2O controller that the device is on
  *	@entry: LCT entry of the I2O device
  *
  *	Allocate a new I2O device and initialize it with the LCT entry. The
  *	device is appended to the device list of the controller.
  *
- *	Returns a pointer to the I2O device on success or negative error code
- *	on failure.
+ *	Returns zero on success, or a -ve errno.
  */
-static struct i2o_device *i2o_device_add(struct i2o_controller *c,
-					 i2o_lct_entry * entry)
+static int i2o_device_add(struct i2o_controller *c, i2o_lct_entry *entry)
 {
 	struct i2o_device *i2o_dev, *tmp;
+	int rc;
 
 	i2o_dev = i2o_device_alloc();
 	if (IS_ERR(i2o_dev)) {
 		printk(KERN_ERR "i2o: unable to allocate i2o device\n");
-		return i2o_dev;
+		return PTR_ERR(i2o_dev);
 	}
 
 	i2o_dev->lct_data = *entry;
@@ -236,7 +235,9 @@ static struct i2o_device *i2o_device_add(struct i2o_controller *c,
 	i2o_dev->iop = c;
 	i2o_dev->device.parent = &c->device;
 
-	device_register(&i2o_dev->device);
+	rc = device_register(&i2o_dev->device);
+	if (rc)
+		goto err;
 
 	list_add_tail(&i2o_dev->list, &c->devices);
 
@@ -270,12 +271,16 @@ static struct i2o_device *i2o_device_add(struct i2o_controller *c,
 
 	pr_debug("i2o: device %s added\n", i2o_dev->device.bus_id);
 
-	return i2o_dev;
+	return 0;
+
+err:
+	kfree(i2o_dev);
+	return rc;
 }
 
 /**
  *	i2o_device_remove - remove an I2O device from the I2O core
- *	@dev: I2O device which should be released
+ *	@i2o_dev: I2O device which should be released
  *
  *	Is used on I2O controller removal or LCT modification, when the device
  *	is removed from the system. Note that the device could still hang
@@ -321,7 +326,7 @@ int i2o_device_parse_lct(struct i2o_controller *c)
 	u16 table_size;
 	u32 buf;
 
-	down(&c->lct_lock);
+	mutex_lock(&c->lct_lock);
 
 	kfree(c->lct);
 
@@ -330,7 +335,7 @@ int i2o_device_parse_lct(struct i2o_controller *c)
 
 	lct = c->lct = kmalloc(table_size * 4, GFP_KERNEL);
 	if (!lct) {
-		up(&c->lct_lock);
+		mutex_unlock(&c->lct_lock);
 		return -ENOMEM;
 	}
 
@@ -403,7 +408,7 @@ int i2o_device_parse_lct(struct i2o_controller *c)
 			i2o_device_remove(dev);
 	}
 
-	up(&c->lct_lock);
+	mutex_unlock(&c->lct_lock);
 
 	return 0;
 }
@@ -480,7 +485,7 @@ int i2o_parm_field_get(struct i2o_device *i2o_dev, int group, int field,
 	u8 *resblk;		/* 8 bytes for header */
 	int rc;
 
-	resblk = kmalloc(buflen + 8, GFP_KERNEL | GFP_ATOMIC);
+	resblk = kmalloc(buflen + 8, GFP_KERNEL);
 	if (!resblk)
 		return -ENOMEM;
 

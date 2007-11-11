@@ -138,7 +138,7 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 
 ======================================================================*/
 
-static int ibmtr_attach(struct pcmcia_device *link)
+static int __devinit ibmtr_attach(struct pcmcia_device *link)
 {
     ibmtr_dev_t *info;
     struct net_device *dev;
@@ -146,9 +146,8 @@ static int ibmtr_attach(struct pcmcia_device *link)
     DEBUG(0, "ibmtr_attach()\n");
 
     /* Create new token-ring device */
-    info = kmalloc(sizeof(*info), GFP_KERNEL); 
+    info = kzalloc(sizeof(*info), GFP_KERNEL);
     if (!info) return -ENOMEM;
-    memset(info,0,sizeof(*info));
     dev = alloc_trdev(sizeof(struct tok_info));
     if (!dev) {
 	kfree(info);
@@ -189,16 +188,20 @@ static void ibmtr_detach(struct pcmcia_device *link)
 {
     struct ibmtr_dev_t *info = link->priv;
     struct net_device *dev = info->dev;
+     struct tok_info *ti = netdev_priv(dev);
 
     DEBUG(0, "ibmtr_detach(0x%p)\n", link);
+    
+    /* 
+     * When the card removal interrupt hits tok_interrupt(), 
+     * bail out early, so we don't crash the machine 
+     */
+    ti->sram_phys |= 1;
 
     if (link->dev_node)
 	unregister_netdev(dev);
-
-    {
-	struct tok_info *ti = netdev_priv(dev);
-	del_timer_sync(&(ti->tr_timer));
-    }
+    
+    del_timer_sync(&(ti->tr_timer));
 
     ibmtr_release(link);
 
@@ -217,29 +220,17 @@ static void ibmtr_detach(struct pcmcia_device *link)
 #define CS_CHECK(fn, ret) \
 do { last_fn = (fn); if ((last_ret = (ret)) != 0) goto cs_failed; } while (0)
 
-static int ibmtr_config(struct pcmcia_device *link)
+static int __devinit ibmtr_config(struct pcmcia_device *link)
 {
     ibmtr_dev_t *info = link->priv;
     struct net_device *dev = info->dev;
     struct tok_info *ti = netdev_priv(dev);
-    tuple_t tuple;
-    cisparse_t parse;
     win_req_t req;
     memreq_t mem;
     int i, last_ret, last_fn;
-    u_char buf[64];
 
     DEBUG(0, "ibmtr_config(0x%p)\n", link);
 
-    tuple.Attributes = 0;
-    tuple.TupleData = buf;
-    tuple.TupleDataMax = 64;
-    tuple.TupleOffset = 0;
-    tuple.DesiredTuple = CISTPL_CONFIG;
-    CS_CHECK(GetFirstTuple, pcmcia_get_first_tuple(link, &tuple));
-    CS_CHECK(GetTupleData, pcmcia_get_tuple_data(link, &tuple));
-    CS_CHECK(ParseTuple, pcmcia_parse_tuple(link, &tuple, &parse));
-    link->conf.ConfigBase = parse.config.base;
     link->conf.ConfigIndex = 0x61;
 
     /* Determine if this is PRIMARY or ALTERNATE. */

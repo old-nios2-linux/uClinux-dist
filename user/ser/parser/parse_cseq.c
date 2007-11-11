@@ -1,7 +1,7 @@
 /* 
- * $Id: parse_cseq.c,v 1.5 2003/02/28 14:12:26 jiri Exp $ 
+ * $Id: parse_cseq.c,v 1.6 2004/08/24 09:01:25 janakj Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

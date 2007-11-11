@@ -1,9 +1,9 @@
 /*
- * $Id: group.c,v 1.5.6.2 2004/07/22 22:40:22 andrei Exp $
+ * $Id: group.c,v 1.9.2.2 2005/07/20 17:11:51 andrei Exp $
  *
  * Group membership checking over Radius
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,7 +32,12 @@
  *
  */
 
-#include <radiusclient.h>
+#ifdef RADIUSCLIENT_NG_4
+#  include <radiusclient.h>
+#else
+#  include <radiusclient-ng.h>
+#endif
+
 #include <string.h>
 #include "../../mem/mem.h"
 #include "../../ut.h"
@@ -123,10 +128,12 @@ int radius_is_user_in(struct sip_msg* _m, char* _hf, char* _group)
 	struct hdr_field* h;
 	struct sip_uri puri;
 
+	uri.s=0;  /* fixes gcc 4.0 warning */
+	uri.len=0;
 	grp = (str*)_group; /* via fixup */
 	send = received = 0;
 
-	hf_type = (long)_hf;
+	hf_type = (int)(long)_hf;
 
 	switch(hf_type) {
 	case 1: /* Request-URI */

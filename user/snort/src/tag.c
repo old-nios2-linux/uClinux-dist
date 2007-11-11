@@ -603,6 +603,7 @@ int CheckTagList(Packet *p, Event *event)
             /* set event reference details */
             event->ref_time.tv_sec = returned->event_time.tv_sec;
             event->ref_time.tv_usec = returned->event_time.tv_usec;
+            event->event_reference = returned->event_id | pv.event_log_id;
         }
         
         if(returned->bytes == 0 && returned->packets == 0 && 
@@ -852,7 +853,7 @@ void ParseTag(char *args, OptTreeNode *otn)
     /* check that we've got enough to set a tag with */
     if(type && metric && count)
     {
-        otn->tag = (TagData *)calloc(sizeof(TagData), sizeof(char));
+        otn->tag = (TagData *)SnortAlloc(sizeof(TagData));
 
         otn->tag->tag_type = type;
         otn->tag->tag_metric = metric;

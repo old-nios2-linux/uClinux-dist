@@ -25,10 +25,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: syscall.h,v 1.5 2001/08/03 11:37:07 wichert Exp $
+ *	$Id: syscall.h,v 1.11 2006/01/12 22:34:50 roland Exp $
  */
 #include "dummy.h"
 
+int	sys_restart_syscall();
 int	sys_nosys();
 int	sys_nullsys();
 int	sys_errsys();
@@ -59,6 +60,7 @@ int	sys_getitimer(),sys_setitimer();
 /* 1.5 descriptors */
 int	sys_getdtablesize(),sys_dup(),sys_dup2(),sys_close();
 int	sys_oldselect(),sys_select(),sys_getdopt(),sys_setdopt(),sys_fcntl(),sys_flock();
+int	sys_epoll_create(), sys_epoll_ctl(), sys_epoll_wait();
 
 /* 1.6 resource controls */
 int	sys_getpriority(),sys_setpriority(),sys_getrusage(),sys_getrlimit(),sys_setrlimit();
@@ -80,11 +82,13 @@ int	sys_aioread(), sys_aiowrite(), sys_aiowait(), sys_aiocancel();
 /* 2.2 file system */
 int	sys_chdir(),sys_chroot();
 int	sys_fchdir(),sys_fchroot();
-int	sys_mkdir(),sys_rmdir(),sys_getdirentries(), sys_getdents(),sys_readdir();
+int	sys_mkdir(),sys_rmdir(),sys_getdirentries();
+int	sys_getdents(), sys_getdents64(), sys_readdir();
 int	sys_creat(),sys_open(),sys_mknod(),sys_unlink(),sys_stat(),sys_fstat(),sys_lstat();
 int	sys_chown(),sys_fchown(),sys_chmod(),sys_fchmod(),sys_utimes();
 int	sys_link(),sys_symlink(),sys_readlink(),sys_rename();
-int	sys_lseek(),sys_truncate(),sys_ftruncate(),sys_access(),sys_fsync(),sys_sysctl();
+int	sys_lseek(), sys_llseek();
+int	sys_truncate(),sys_ftruncate(),sys_access(),sys_fsync(),sys_sysctl();
 int	sys_statfs(),sys_fstatfs(),sys_msync();
 int sys_stat64(), sys_lstat64(), sys_fstat64();
 int sys_truncate64(), sys_ftruncate64();
@@ -105,6 +109,10 @@ int sys_sendfile(), sys_query_module(), sys_capget(), sys_capset();
 int sys_create_module(), sys_init_module();
 
 int	sys_umask();		/* XXX */
+
+int sys_sched_setparam(), sys_sched_getparam();
+int sys_sched_setscheduler(), sys_sched_getscheduler(), sys_sched_yield();
+int sys_sched_get_priority_max(), sys_sched_get_priority_min();
 
 /* 2.3.1 SystemV-compatible IPC */
 int	sys_semsys(), sys_semctl(), sys_semget();
@@ -184,5 +192,15 @@ int	sys_putmsg();
 int	sys_poll();
 
 int	sys_vpixsys();		/* VP/ix system calls */
+
+int	sys_sendfile64(), sys_futex(), sys_gettid(), sys_sched_setaffinity();
+int	sys_sched_getaffinity(), sys_setxattr(), sys_lsetxattr();
+int	sys_fsetxattr(), sys_getxattr(), sys_lgetxattr(), sys_fgetxattr();
+int	sys_listxattr(), sys_llistxattr(), sys_flistxattr();
+int	sys_removexattr(), sys_lremovexattr(), sys_fremovexattr();
+int	sys_remap_file_pages(), sys_readahead(), sys_tgkill(), sys_statfs64();
+int	sys_fstatfs64(), sys_clock_settime(), sys_clock_gettime();
+int	sys_clock_getres(), sys_clock_nanosleep();
+int	sys_timer_create(), sys_timer_settime(), sys_timer_gettime();
 
 #include "syscall1.h"

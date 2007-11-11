@@ -23,16 +23,13 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <asm/assembler.h>
-#include <asm/procinfo.h>
+#include <asm/elf.h>
 #include <asm/pgtable.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include "proc-macros.S"
 
-#ifndef CONFIG_MMU
-#error "need to be revisited"
-#endif
 /*
  * This is the maximum size of an area which will be flushed.  If the area
  * is larger than this, then we flush the whole cache
@@ -424,14 +421,14 @@ ENTRY(cpu_xscale_switch_mm)
 	cpwait_ret lr, ip
 
 /*
- * cpu_xscale_set_pte(ptep, pte)
+ * cpu_xscale_set_pte_ext(ptep, pte, ext)
  *
  * Set a PTE and flush it out
  *
  * Errata 40: must set memory to write-through for user read-only pages.
  */
 	.align	5
-ENTRY(cpu_xscale_set_pte)
+ENTRY(cpu_xscale_set_pte_ext)
 	str	r1, [r0], #-2048		@ linux version
 
 	bic	r2, r1, #0xff0
@@ -494,12 +491,7 @@ __xscale_setup:
 	mcr	p15, 0, ip, c7, c7, 0		@ invalidate I, D caches & BTB
 	mcr	p15, 0, ip, c7, c10, 4		@ Drain Write (& Fill) Buffer
 	mcr	p15, 0, ip, c8, c7, 0		@ invalidate I, D TLBs
-#ifdef CONFIG_IWMMXT
-	mov	r0, #0				@ initially disallow access to CP0/CP1
-#else
-	mov	r0, #1				@ Allow access to CP0
-#endif
-	orr     r0, r0, #1 << 6			@ cp6 for IOP3xx and Bulverde
+	mov	r0, #1 << 6			@ cp6 for IOP3xx and Bulverde
 	orr	r0, r0, #1 << 13		@ Its undefined whether this
 	mcr	p15, 0, r0, c15, c1, 0		@ affects USR or SVC modes
 
@@ -537,7 +529,7 @@ ENTRY(xscale_processor_functions)
 	.word	cpu_xscale_do_idle
 	.word	cpu_xscale_dcache_clean_area
 	.word	cpu_xscale_switch_mm
-	.word	cpu_xscale_set_pte
+	.word	cpu_xscale_set_pte_ext
 	.size	xscale_processor_functions, . - xscale_processor_functions
 
 	.section ".rodata"
@@ -591,6 +583,11 @@ cpu_pxa210_name:
 cpu_ixp42x_name:
 	.asciz	"XScale-IXP42x Family"
 	.size	cpu_ixp42x_name, . - cpu_ixp42x_name
+
+	.type	cpu_ixp43x_name, #object
+cpu_ixp43x_name:
+	.asciz	"XScale-IXP43x Family"
+	.size	cpu_ixp43x_name, . - cpu_ixp43x_name
 
 	.type	cpu_ixp46x_name, #object
 cpu_ixp46x_name:
@@ -716,7 +713,7 @@ __8032x_proc_info:
 	.type	__8033x_proc_info,#object
 __8033x_proc_info:
 	.long	0x69054010
-	.long	0xffffff30
+	.long	0xfffffd30
 	.long   PMD_TYPE_SECT | \
 		PMD_SECT_BUFFERABLE | \
 		PMD_SECT_CACHEABLE | \
@@ -851,6 +848,29 @@ __ixp42x_proc_info:
 	.long	xscale_cache_fns
 	.size   __ixp42x_proc_info, . - __ixp42x_proc_info                
 
+	.type   __ixp43x_proc_info, #object
+__ixp43x_proc_info:
+	.long   0x69054040
+	.long   0xfffffff0
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_BUFFERABLE | \
+		PMD_SECT_CACHEABLE | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ
+	b       __xscale_setup
+	.long   cpu_arch_name
+	.long   cpu_elf_name
+	.long   HWCAP_SWP|HWCAP_HALF|HWCAP_THUMB|HWCAP_FAST_MULT|HWCAP_EDSP
+	.long   cpu_ixp43x_name
+	.long   xscale_processor_functions
+	.long   v4wbi_tlb_fns
+	.long   xscale_mc_user_fns
+	.long   xscale_cache_fns
+	.size   __ixp43x_proc_info, . - __ixp43x_proc_info
+
 	.type	__ixp46x_proc_info, #object
 __ixp46x_proc_info:
 	.long   0x69054200
@@ -912,7 +932,7 @@ __pxa270_proc_info:
 	b	__xscale_setup
 	.long	cpu_arch_name
 	.long	cpu_elf_name
-	.long	HWCAP_SWP|HWCAP_HALF|HWCAP_THUMB|HWCAP_FAST_MULT|HWCAP_EDSP|HWCAP_IWMMXT
+	.long	HWCAP_SWP|HWCAP_HALF|HWCAP_THUMB|HWCAP_FAST_MULT|HWCAP_EDSP
 	.long	cpu_pxa270_name
 	.long	xscale_processor_functions
 	.long	v4wbi_tlb_fns

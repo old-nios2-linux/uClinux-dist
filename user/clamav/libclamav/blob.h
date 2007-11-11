@@ -13,9 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $LOG$
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __BLOB_H
@@ -27,8 +26,8 @@
 typedef struct blob {
 	char	*name;	/* filename */
 	unsigned	char	*data;	/* the stuff itself */
-	unsigned	long	len;	/* number of bytes of data so far */
-	unsigned	long	size;	/* number of bytes allocated to data so far */
+	off_t	len;	/* number of bytes of data so far */
+	off_t	size;	/* number of bytes allocated to data so far */
 	int	isClosed;
 #ifdef	CL_DEBUG
 	object_type	magic;	/* verify that this is a blob */
@@ -39,10 +38,9 @@ blob	*blobCreate(void);
 void	blobDestroy(blob *b);
 void	blobArrayDestroy(blob *b[], int n);
 void	blobSetFilename(blob *b, const char *dir, const char *filename);
-const	char	*blobGetFilename(const blob *b);
 int	blobAddData(blob *b, const unsigned char *data, size_t len);
 unsigned char *blobGetData(const blob *b);
-unsigned	long	blobGetDataSize(const blob *b);
+size_t	blobGetDataSize(const blob *b);
 void	blobClose(blob *b);
 int	blobcmp(const blob *b1, const blob *b2);
 int	blobGrow(blob *b, size_t len);
@@ -53,27 +51,19 @@ int	blobGrow(blob *b, size_t len);
 typedef	struct fileblob {
 	FILE	*fp;
 	blob	b;
-	int	isNotEmpty;
+	unsigned	int	isNotEmpty : 1;
+	unsigned	int	isInfected : 1;
+	unsigned	long	bytes_scanned;
+	cli_ctx	*ctx;
 } fileblob;
 
 fileblob	*fileblobCreate(void);
 void	fileblobDestroy(fileblob *fb);
 void	fileblobSetFilename(fileblob *fb, const char *dir, const char *filename);
 const	char	*fileblobGetFilename(const fileblob *fb);
+void	fileblobSetCTX(fileblob *fb, cli_ctx *ctx);
 int	fileblobAddData(fileblob *fb, const unsigned char *data, size_t len);
+int	fileblobContainsVirus(const fileblob *fb);
 void	sanitiseName(char *name);
-
-/* Maximum filenames under various systems */
-#ifndef NAME_MAX        /* e.g. Linux */
-# ifdef MAXNAMELEN      /* e.g. Solaris */
-#   define      NAME_MAX        MAXNAMELEN
-# else
-#   ifdef       FILENAME_MAX    /* e.g. SCO */
-#     define    NAME_MAX        FILENAME_MAX
-#   else
-#     define    NAME_MAX        256
-#   endif
-# endif
-#endif
 
 #endif /*_BLOB_H*/

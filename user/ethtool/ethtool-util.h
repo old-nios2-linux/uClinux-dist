@@ -12,7 +12,7 @@ typedef __uint8_t u8;           /* ditto */
 
 /* National Semiconductor DP83815, DP83816 */
 int natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
-int natsemi_dump_eeprom(struct ethtool_drvinfo *info, 
+int natsemi_dump_eeprom(struct ethtool_drvinfo *info,
 	struct ethtool_eeprom *ee);
 
 /* Digital/Intel 21040 and 21041 */
@@ -32,5 +32,20 @@ int tg3_dump_eeprom(struct ethtool_drvinfo *info, struct ethtool_eeprom *ee);
 
 /* Advanced Micro Devices  AMD8111 based Adapter */
 int amd8111e_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+
+/* Advanced Micro Devices PCnet32 Adapter */
+int pcnet32_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+
+/* Motorola 8xx FEC Ethernet controller */
+int fec_8xx_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+
+/* PowerPC 4xx on-chip Ethernet controller */
+int ibm_emac_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+
+/* Broadcom Tigon3 Ethernet controller */
+int tg3_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
+
+/* SysKonnect Gigabit (Genesis and Yukon) */
+int skge_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs);
 
 #endif

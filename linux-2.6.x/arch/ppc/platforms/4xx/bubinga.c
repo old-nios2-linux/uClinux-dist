@@ -21,6 +21,7 @@
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/serial_core.h>
+#include <linux/serial_8250.h>
 
 #include <asm/system.h>
 #include <asm/pci-bridge.h>
@@ -116,6 +117,7 @@ bubinga_early_serial_map(void)
 void __init
 bios_fixup(struct pci_controller *hose, struct pcil0_regs *pcip)
 {
+#ifdef CONFIG_PCI
 
 	unsigned int bar_response, bar;
 	/*
@@ -196,7 +198,7 @@ bios_fixup(struct pci_controller *hose, struct pcil0_regs *pcip)
 		    hose->first_busno, PCI_SLOT(hose->first_busno),
 		    PCI_FUNC(hose->first_busno), bar, bar_response);
 	}
-	/* end work arround */
+	/* end workaround */
 
 #ifdef DEBUG
 	printk("PCI bridge regs after fixup \n");
@@ -211,6 +213,7 @@ bios_fixup(struct pci_controller *hose, struct pcil0_regs *pcip)
 	printk(" ptm2ms\t0x%x\n", in_le32(&(pcip->ptm2ms)));
 	printk(" ptm2la\t0x%x\n", in_le32(&(pcip->ptm2la)));
 
+#endif
 #endif
 }
 

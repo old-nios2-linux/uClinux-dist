@@ -311,8 +311,8 @@ int CheckFlowShutdown(Packet *p)
     FLOW *flowp = (FLOW *) p->flow;
     PROFILE_VARS;
    
-    /* Use TMPSTART to not add to 'checks' */
-    PREPROC_PROFILE_TMPSTART(flowPerfStats);
+    /* Use REENTER_START to not add to 'checks' */
+    PREPROC_PROFILE_REENTER_START(flowPerfStats);
     if(flowp != NULL)
     {
         if(flow_checkflag(flowp, FLOW_CLOSEME))
@@ -323,7 +323,7 @@ int CheckFlowShutdown(Packet *p)
             if(flowcache_releaseflow(fcache, &flowp) != FLOW_SUCCESS)
             {
                 flow_printf("Can't release flow %p\n", p->flow);
-                PREPROC_PROFILE_TMPEND(flowPerfStats);
+                PREPROC_PROFILE_REENTER_END(flowPerfStats);
                 return FLOW_BADJUJU;
             }
         }
@@ -331,7 +331,7 @@ int CheckFlowShutdown(Packet *p)
 
     p->flow = NULL;
 
-    PREPROC_PROFILE_TMPEND(flowPerfStats);
+    PREPROC_PROFILE_REENTER_END(flowPerfStats);
     return FLOW_SUCCESS;
 }
 

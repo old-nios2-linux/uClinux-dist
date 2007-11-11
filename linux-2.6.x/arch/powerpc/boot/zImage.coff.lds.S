@@ -1,5 +1,6 @@
 OUTPUT_ARCH(powerpc:common)
-ENTRY(_start)
+ENTRY(_zimage_start_opd)
+EXTERN(_zimage_start_opd)
 SECTIONS
 {
   . = (5*1024*1024);
@@ -20,6 +21,10 @@ SECTIONS
     __got2_start = .;
     *(.got2)
     __got2_end = .;
+
+    _dtb_start = .;
+    *(.kernel:dtb)
+    _dtb_end = .;
 
     _vmlinux_start =  .;
     *(.kernel:vmlinux.strip)

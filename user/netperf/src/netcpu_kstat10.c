@@ -1,5 +1,5 @@
 char   netcpu_kstat10_id[]="\
-@(#)netcpu_kstat10.c (c) Copyright 2005, Hewlett-Packard Company Version 2.4.0";
+@(#)netcpu_kstat10.c (c) Copyright 2005-2007, Hewlett-Packard Company Version 2.4.3";
 
 #if HAVE_CONFIG_H
 # include <config.h>
@@ -413,6 +413,14 @@ calc_cpu_util_internal(float elapsed_time)
 	      "calc_cpu_util_internal: more interrupt time than others combined!\n");
       fprintf(where,
 	      "\tso CPU util cannot be estimated\n");
+      fprintf(where,
+	      "\t delta[%d].interrupt %llu\n",i,delta_cpu_counters[i].interrupt);
+      fprintf(where,
+	      "\t delta[%d].idle %llu\n",i,delta_cpu_counters[i].idle);
+      fprintf(where,
+	      "\t delta[%d].user %llu\n",i,delta_cpu_counters[i].user);
+      fprintf(where,
+	      "\t delta[%d].kernel %llu\n",i,delta_cpu_counters[i].kernel);
       fflush(where);
       
       lib_local_cpu_util = -1.0;

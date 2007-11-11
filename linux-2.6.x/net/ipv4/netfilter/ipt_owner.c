@@ -15,13 +15,13 @@
 #include <net/sock.h>
 
 #include <linux/netfilter_ipv4/ipt_owner.h>
-#include <linux/netfilter_ipv4/ip_tables.h>
+#include <linux/netfilter/x_tables.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Marc Boucher <marc@mbsi.ca>");
 MODULE_DESCRIPTION("iptables owner match");
 
-static int
+static bool
 match(const struct sk_buff *skb,
       const struct net_device *in,
       const struct net_device *out,
@@ -29,47 +29,48 @@ match(const struct sk_buff *skb,
       const void *matchinfo,
       int offset,
       unsigned int protoff,
-      int *hotdrop)
+      bool *hotdrop)
 {
 	const struct ipt_owner_info *info = matchinfo;
 
 	if (!skb->sk || !skb->sk->sk_socket || !skb->sk->sk_socket->file)
-		return 0;
+		return false;
 
 	if(info->match & IPT_OWNER_UID) {
 		if ((skb->sk->sk_socket->file->f_uid != info->uid) ^
 		    !!(info->invert & IPT_OWNER_UID))
-			return 0;
+			return false;
 	}
 
 	if(info->match & IPT_OWNER_GID) {
 		if ((skb->sk->sk_socket->file->f_gid != info->gid) ^
 		    !!(info->invert & IPT_OWNER_GID))
-			return 0;
+			return false;
 	}
 
-	return 1;
+	return true;
 }
 
-static int
+static bool
 checkentry(const char *tablename,
-           const void *ip,
+	   const void *ip,
 	   const struct xt_match *match,
-           void *matchinfo,
-           unsigned int hook_mask)
+	   void *matchinfo,
+	   unsigned int hook_mask)
 {
 	const struct ipt_owner_info *info = matchinfo;
 
 	if (info->match & (IPT_OWNER_PID|IPT_OWNER_SID|IPT_OWNER_COMM)) {
 		printk("ipt_owner: pid, sid and command matching "
 		       "not supported anymore\n");
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
 }
 
-static struct ipt_match owner_match = {
+static struct xt_match owner_match __read_mostly = {
 	.name		= "owner",
+	.family		= AF_INET,
 	.match		= match,
 	.matchsize	= sizeof(struct ipt_owner_info),
 	.hooks		= (1 << NF_IP_LOCAL_OUT) | (1 << NF_IP_POST_ROUTING),
@@ -79,12 +80,12 @@ static struct ipt_match owner_match = {
 
 static int __init ipt_owner_init(void)
 {
-	return ipt_register_match(&owner_match);
+	return xt_register_match(&owner_match);
 }
 
 static void __exit ipt_owner_fini(void)
 {
-	ipt_unregister_match(&owner_match);
+	xt_unregister_match(&owner_match);
 }
 
 module_init(ipt_owner_init);

@@ -162,7 +162,7 @@ int *make_skip(char *ptrn, int plen)
 
     if (skip == NULL)
     {
-        _dpd.fatalMsg("%s(%d) => Failed to allocate skip for Boyer-Moore\n");
+        DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate skip for Boyer-Moore\n");
 
         return NULL;
     }
@@ -201,7 +201,7 @@ int *make_shift(char *ptrn, int plen)
 
     if (shift == NULL)
     {
-        _dpd.fatalMsg("%s(%d) => Failed to allocate shift for Boyer-Moore\n");
+        DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate shift for Boyer-Moore\n");
 
         return NULL;
     }

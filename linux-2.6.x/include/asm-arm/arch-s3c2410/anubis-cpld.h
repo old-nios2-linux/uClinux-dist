@@ -1,6 +1,6 @@
 /* linux/include/asm-arm/arch-s3c2410/anubis-cpld.h
  *
- * (c) 2005 Simtec Electronics
+ * Copyright (c) 2005 Simtec Electronics
  *	http://www.simtec.co.uk/products/
  *	Ben Dooks <ben@simtec.co.uk>
  *
@@ -17,5 +17,9 @@
 /* CTRL2 - NAND WP control, IDE Reset assert/check */
 
 #define ANUBIS_CTRL1_NANDSEL		(0x3)
+
+/* IDREG - revision */
+
+#define ANUBIS_IDREG_REVMASK		(0x7)
 
 #endif /* __ASM_ARCH_ANUBISCPLD_H */

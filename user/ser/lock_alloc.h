@@ -1,7 +1,7 @@
-/* $Id: lock_alloc.h,v 1.4.6.1 2004/07/26 23:18:35 andrei Exp $ */
+/* $Id: lock_alloc.h,v 1.6 2004/08/24 08:45:10 janakj Exp $ */
 /*
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

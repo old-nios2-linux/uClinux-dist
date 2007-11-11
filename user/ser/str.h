@@ -1,7 +1,7 @@
 /*
- * $Id: str.h,v 1.2 2002/09/19 12:23:53 jku Rel $
+ * $Id: str.h,v 1.4.2.1 2005/11/17 03:56:02 sobomax Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,11 +31,13 @@
 
 
 struct _str{
-	char* s; /* null terminated string*/
+	char* s; /*string*/
 	int len; /*string len*/
 };
 
 typedef struct _str str;
 
+#define STR_STATIC_INIT(v) {(v), sizeof(v) - 1}
+#define STR_NULL {NULL, 0}
 
 #endif

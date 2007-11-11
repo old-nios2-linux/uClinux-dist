@@ -38,6 +38,16 @@
 	SAVE_ALL
 	CLI
 	.set	at
+#if defined(CONFIG_RTL865X)
+	move	a0, sp
+	jal	irq_dispatch
+	nop				# delay slot
+	j	ret_from_irq
+	nop				# delay slot
+irq_bad:
+	j	irq_bad
+	nop
+#else
 	mfc0	s0, CP0_CAUSE		# determine cause
 
 	andi	a0, s0, CAUSEF_IP6
@@ -63,4 +73,5 @@
 	move	a0, sp
 	j	irq_bad
 	nop
+#endif
 	END(ninoIRQ)

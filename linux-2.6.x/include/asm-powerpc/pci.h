@@ -62,33 +62,18 @@ static inline int pci_get_legacy_ide_irq(struct pci_dev *dev, int channel)
 }
 
 #ifdef CONFIG_PPC64
-#define HAVE_ARCH_PCI_MWI 1
-static inline int pcibios_prep_mwi(struct pci_dev *dev)
-{
-	/*
-	 * We would like to avoid touching the cacheline size or MWI bit
-	 * but we cant do that with the current pcibios_prep_mwi 
-	 * interface. pSeries firmware sets the cacheline size (which is not
-	 * the cpu cacheline size in all cases) and hardware treats MWI 
-	 * the same as memory write. So we dont touch the cacheline size
-	 * here and allow the generic code to set the MWI bit.
-	 */
-	return 0;
-}
 
-extern struct dma_mapping_ops pci_dma_ops;
-
-/* For DAC DMA, we currently don't support it by default, but
- * we let 64-bit platforms override this.
+/*
+ * We want to avoid touching the cacheline size or MWI bit.
+ * pSeries firmware sets the cacheline size (which is not the cpu cacheline
+ * size in all cases) and hardware treats MWI the same as memory write.
  */
-static inline int pci_dac_dma_supported(struct pci_dev *hwdev,u64 mask)
-{
-	if (pci_dma_ops.dac_dma_supported)
-		return pci_dma_ops.dac_dma_supported(&hwdev->dev, mask);
-	return 0;
-}
+#define PCI_DISABLE_MWI
 
 #ifdef CONFIG_PCI
+extern void set_pci_dma_ops(struct dma_mapping_ops *dma_ops);
+extern struct dma_mapping_ops *get_pci_dma_ops(void);
+
 static inline void pci_dma_burst_advice(struct pci_dev *pdev,
 					enum pci_dma_burst_strategy *strat,
 					unsigned long *strategy_parameter)
@@ -105,9 +90,10 @@ static inline void pci_dma_burst_advice(struct pci_dev *pdev,
 	*strat = PCI_DMA_BURST_MULTIPLE;
 	*strategy_parameter = cacheline_size;
 }
+#else	/* CONFIG_PCI */
+#define set_pci_dma_ops(d)
+#define get_pci_dma_ops()	NULL
 #endif
-
-extern int pci_domain_nr(struct pci_bus *bus);
 
 /* Decide whether to display the domain number in /proc */
 extern int pci_proc_domain(struct pci_bus *bus);
@@ -124,15 +110,6 @@ static inline void pci_dma_burst_advice(struct pci_dev *pdev,
 }
 #endif
 
-/*
- * At present there are very few 32-bit PPC machines that can have
- * memory above the 4GB point, and we don't support that.
- */
-#define pci_dac_dma_supported(pci_dev, mask)	(0)
-
-/* Return the index of the PCI controller for device PDEV. */
-#define pci_domain_nr(bus) ((struct pci_controller *)(bus)->sysdata)->index
-
 /* Set the name of the bus as it appears in /proc/bus/pci */
 static inline int pci_proc_domain(struct pci_bus *bus)
 {
@@ -140,6 +117,8 @@ static inline int pci_proc_domain(struct pci_bus *bus)
 }
 
 #endif /* CONFIG_PPC64 */
+
+extern int pci_domain_nr(struct pci_bus *bus);
 
 struct vm_area_struct;
 /* Map a range of PCI memory or I/O space for a device into user space */
@@ -149,8 +128,13 @@ int pci_mmap_page_range(struct pci_dev *pdev, struct vm_area_struct *vma,
 /* Tell drivers/pci/proc.c that we have pci_mmap_page_range() */
 #define HAVE_PCI_MMAP	1
 
-#ifdef CONFIG_PPC64
-/* pci_unmap_{single,page} is not a nop, thus... */
+#if defined(CONFIG_PPC64) || defined(CONFIG_NOT_COHERENT_CACHE)
+/*
+ * For 64-bit kernels, pci_unmap_{single,page} is not a nop.
+ * For 32-bit non-coherent kernels, pci_dma_sync_single_for_cpu() and
+ * so on are not nops.
+ * and thus...
+ */
 #define DECLARE_PCI_UNMAP_ADDR(ADDR_NAME)	\
 	dma_addr_t ADDR_NAME;
 #define DECLARE_PCI_UNMAP_LEN(LEN_NAME)		\
@@ -163,6 +147,20 @@ int pci_mmap_page_range(struct pci_dev *pdev, struct vm_area_struct *vma,
 	((PTR)->LEN_NAME)
 #define pci_unmap_len_set(PTR, LEN_NAME, VAL)		\
 	(((PTR)->LEN_NAME) = (VAL))
+
+#else /* 32-bit && coherent */
+
+/* pci_unmap_{page,single} is a nop so... */
+#define DECLARE_PCI_UNMAP_ADDR(ADDR_NAME)
+#define DECLARE_PCI_UNMAP_LEN(LEN_NAME)
+#define pci_unmap_addr(PTR, ADDR_NAME)		(0)
+#define pci_unmap_addr_set(PTR, ADDR_NAME, VAL)	do { } while (0)
+#define pci_unmap_len(PTR, LEN_NAME)		(0)
+#define pci_unmap_len_set(PTR, LEN_NAME, VAL)	do { } while (0)
+
+#endif /* CONFIG_PPC64 || CONFIG_NOT_COHERENT_CACHE */
+
+#ifdef CONFIG_PPC64
 
 /* The PCI address space does not equal the physical memory address
  * space (we have an IOMMU).  The IDE and SCSI device layers use
@@ -178,16 +176,8 @@ int pci_mmap_page_range(struct pci_dev *pdev, struct vm_area_struct *vma,
  */
 #define PCI_DMA_BUS_IS_PHYS     (1)
 
-/* pci_unmap_{page,single} is a nop so... */
-#define DECLARE_PCI_UNMAP_ADDR(ADDR_NAME)
-#define DECLARE_PCI_UNMAP_LEN(LEN_NAME)
-#define pci_unmap_addr(PTR, ADDR_NAME)		(0)
-#define pci_unmap_addr_set(PTR, ADDR_NAME, VAL)	do { } while (0)
-#define pci_unmap_len(PTR, LEN_NAME)		(0)
-#define pci_unmap_len_set(PTR, LEN_NAME, VAL)	do { } while (0)
-
 #endif /* CONFIG_PPC64 */
-	
+
 extern void pcibios_resource_to_bus(struct pci_dev *dev,
 			struct pci_bus_region *region,
 			struct resource *res);
@@ -209,12 +199,10 @@ static inline struct resource *pcibios_select_root(struct pci_dev *pdev,
 	return root;
 }
 
-extern int unmap_bus_range(struct pci_bus *bus);
-
-extern int remap_bus_range(struct pci_bus *bus);
-
 extern void pcibios_fixup_device_resources(struct pci_dev *dev,
 			struct pci_bus *bus);
+
+extern void pcibios_setup_new_device(struct pci_dev *dev);
 
 extern void pcibios_claim_one_bus(struct pci_bus *b);
 
@@ -230,20 +218,16 @@ extern void of_scan_bus(struct device_node *node, struct pci_bus *bus);
 
 extern int pci_read_irq_line(struct pci_dev *dev);
 
-extern void pcibios_add_platform_entries(struct pci_dev *dev);
-
 struct file;
 extern pgprot_t	pci_phys_mem_access_prot(struct file *file,
 					 unsigned long pfn,
 					 unsigned long size,
 					 pgprot_t prot);
 
-#if defined(CONFIG_PPC_MULTIPLATFORM) || defined(CONFIG_PPC32)
 #define HAVE_ARCH_PCI_RESOURCE_TO_USER
 extern void pci_resource_to_user(const struct pci_dev *dev, int bar,
 				 const struct resource *rsrc,
 				 resource_size_t *start, resource_size_t *end);
-#endif /* CONFIG_PPC_MULTIPLATFORM || CONFIG_PPC32 */
 
 #endif	/* __KERNEL__ */
 #endif /* __ASM_POWERPC_PCI_H */

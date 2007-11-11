@@ -41,7 +41,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/completion.h>
 #include <linux/device.h>
-#include <linux/kernel.h>
 
 #include <asm/uaccess.h>
 #include <asm/vio.h>
@@ -49,6 +48,7 @@
 #include <asm/iseries/hv_lp_event.h>
 #include <asm/iseries/hv_lp_config.h>
 #include <asm/iseries/vio.h>
+#include <asm/firmware.h>
 
 MODULE_DESCRIPTION("iSeries Virtual DASD");
 MODULE_AUTHOR("Dave Boutcher");
@@ -251,10 +251,10 @@ static int viodasd_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 	struct gendisk *disk = bdev->bd_disk;
 	struct viodasd_device *d = disk->private_data;
 
-	geo->sectors = d->sectors ? d->sectors : 0;
+	geo->sectors = d->sectors ? d->sectors : 32;
 	geo->heads = d->tracks ? d->tracks  : 64;
 	geo->cylinders = d->cylinders ? d->cylinders :
-		get_capacity(disk) / (geo->cylinders * geo->heads);
+		get_capacity(disk) / (geo->sectors * geo->heads);
 
 	return 0;
 }
@@ -399,7 +399,7 @@ error_ret:
 /*
  * This is the external request processing routine
  */
-static void do_viodasd_request(request_queue_t *q)
+static void do_viodasd_request(struct request_queue *q)
 {
 	struct request *req;
 
@@ -759,6 +759,8 @@ static struct vio_driver viodasd_driver = {
 	}
 };
 
+static int need_delete_probe;
+
 /*
  * Initialize the whole device driver.  Handle module and non-module
  * versions
@@ -767,52 +769,78 @@ static int __init viodasd_init(void)
 {
 	int rc;
 
+	if (!firmware_has_feature(FW_FEATURE_ISERIES)) {
+		rc = -ENODEV;
+		goto early_fail;
+	}
+
 	/* Try to open to our host lp */
 	if (viopath_hostLp == HvLpIndexInvalid)
 		vio_set_hostlp();
 
 	if (viopath_hostLp == HvLpIndexInvalid) {
 		printk(VIOD_KERN_WARNING "invalid hosting partition\n");
-		return -EIO;
+		rc = -EIO;
+		goto early_fail;
 	}
 
 	printk(VIOD_KERN_INFO "vers " VIOD_VERS ", hosting partition %d\n",
 			viopath_hostLp);
 
         /* register the block device */
-	if (register_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME)) {
+	rc =  register_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME);
+	if (rc) {
 		printk(VIOD_KERN_WARNING
 				"Unable to get major number %d for %s\n",
 				VIODASD_MAJOR, VIOD_GENHD_NAME);
-		return -EIO;
+		goto early_fail;
 	}
 	/* Actually open the path to the hosting partition */
-	if (viopath_open(viopath_hostLp, viomajorsubtype_blockio,
-				VIOMAXREQ + 2)) {
+	rc = viopath_open(viopath_hostLp, viomajorsubtype_blockio,
+				VIOMAXREQ + 2);
+	if (rc) {
 		printk(VIOD_KERN_WARNING
 		       "error opening path to host partition %d\n",
 		       viopath_hostLp);
-		unregister_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME);
-		return -EIO;
+		goto unregister_blk;
 	}
 
 	/* Initialize our request handler */
 	vio_setHandler(viomajorsubtype_blockio, handle_block_event);
 
 	rc = vio_register_driver(&viodasd_driver);
-	if (rc == 0)
-		driver_create_file(&viodasd_driver.driver, &driver_attr_probe);
+	if (rc) {
+		printk(VIOD_KERN_WARNING "vio_register_driver failed\n");
+		goto unset_handler;
+	}
+
+	/*
+	 * If this call fails, it just means that we cannot dynamically
+	 * add virtual disks, but the driver will still work fine for
+	 * all existing disk, so ignore the failure.
+	 */
+	if (!driver_create_file(&viodasd_driver.driver, &driver_attr_probe))
+		need_delete_probe = 1;
+
+	return 0;
+
+unset_handler:
+	vio_clearHandler(viomajorsubtype_blockio);
+	viopath_close(viopath_hostLp, viomajorsubtype_blockio, VIOMAXREQ + 2);
+unregister_blk:
+	unregister_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME);
+early_fail:
 	return rc;
 }
 module_init(viodasd_init);
 
-void viodasd_exit(void)
+void __exit viodasd_exit(void)
 {
-	driver_remove_file(&viodasd_driver.driver, &driver_attr_probe);
+	if (need_delete_probe)
+		driver_remove_file(&viodasd_driver.driver, &driver_attr_probe);
 	vio_unregister_driver(&viodasd_driver);
 	vio_clearHandler(viomajorsubtype_blockio);
-	unregister_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME);
 	viopath_close(viopath_hostLp, viomajorsubtype_blockio, VIOMAXREQ + 2);
+	unregister_blkdev(VIODASD_MAJOR, VIOD_GENHD_NAME);
 }
-
 module_exit(viodasd_exit);

@@ -1,7 +1,7 @@
 /*
- * $Id: dset.h,v 1.4 2002/09/19 12:23:52 jku Rel $
+ * $Id: dset.h,v 1.7.2.1 2005/02/15 21:55:02 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2004 FhG FOKUS
  *
  * This file is part of ser, a free SIP server.
  *
@@ -25,36 +25,60 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#ifndef _DSET_H
+#define _DSET_H
 
-#ifndef _T_FORKS_H
-#define _T_FORKS_H
-
-#include "config.h"
-
-#define CONTACT "Contact: "
-#define CONTACT_LEN 9
-#define CONTACT_DELIM ", "
-#define CONTACT_DELIM_LEN 2
-
-
-struct branch
-{
-	char uri[MAX_URI_SIZE];
-	unsigned int len;
-};
+#include "qvalue.h"
 
 struct sip_msg;
 
+extern unsigned int nr_branches;
+
+
+/* 
+ * Add a new branch to current transaction 
+ */
+int append_branch(struct sip_msg* msg, char* uri, int uri_len, char* dst_uri, int dst_uri_len, qvalue_t q);
+
+
+/* 
+ * Iterate through the list of transaction branches 
+ */
+void init_branch_iterator(void);
+
+
 /*
-typedef int (*tfork_f)( struct sip_msg *msg, char *uri, int uri_len );
-*/
+ * Get the next branch in the current transaction
+ */
+char* next_branch(int* len, qvalue_t* q, char** dst_uri, int* dst_len);
 
-/* add a new branch to current transaction */
-int append_branch( struct sip_msg *msg, char *uri, int uri_len );
-/* iterate through list of new transaction branches */
-void init_branch_iterator();
-char *next_branch( int *len );
-void clear_branches();
 
-char *print_dset( struct sip_msg *msg, int *len );
-#endif
+/*
+ * Empty the array of branches
+ */
+void clear_branches(void);
+
+
+/*
+ * Create a Contact header field from the
+ * list of current branches
+ */
+char* print_dset(struct sip_msg* msg, int* len);
+
+
+/* 
+ * Set the q value of the Request-URI
+ */
+void set_ruri_q(qvalue_t q);
+
+
+/* 
+ * Get the q value of the Request-URI
+ */
+qvalue_t get_ruri_q(void);
+
+int get_request_uri(struct sip_msg* _m, str* _u);
+int rewrite_uri(struct sip_msg* _m, str* _s);
+
+
+#endif /* _DSET_H */

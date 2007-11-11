@@ -17,6 +17,7 @@
 
 #include <linux/ipv6.h>
 #include <linux/hardirq.h>
+#include <net/if_inet6.h>
 #include <net/ndisc.h>
 #include <net/flow.h>
 #include <net/snmp.h>
@@ -95,10 +96,10 @@
  */
 
 struct frag_hdr {
-	unsigned char	nexthdr;
-	unsigned char	reserved;	
-	unsigned short	frag_off;
-	__u32		identification;
+	__u8	nexthdr;
+	__u8	reserved;
+	__be16	frag_off;
+	__be32	identification;
 };
 
 #define	IP6_MF	0x0001
@@ -113,9 +114,24 @@ extern int sysctl_mld_max_msf;
 
 /* MIBs */
 DECLARE_SNMP_STAT(struct ipstats_mib, ipv6_statistics);
-#define IP6_INC_STATS(field)		SNMP_INC_STATS(ipv6_statistics, field)
-#define IP6_INC_STATS_BH(field)		SNMP_INC_STATS_BH(ipv6_statistics, field)
-#define IP6_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(ipv6_statistics, field)
+#define IP6_INC_STATS(idev,field)		({			\
+	struct inet6_dev *_idev = (idev);				\
+	if (likely(_idev != NULL))					\
+		SNMP_INC_STATS(_idev->stats.ipv6, field);		\
+	SNMP_INC_STATS(ipv6_statistics, field);				\
+})
+#define IP6_INC_STATS_BH(idev,field)		({			\
+	struct inet6_dev *_idev = (idev);				\
+	if (likely(_idev != NULL))					\
+		SNMP_INC_STATS_BH(_idev->stats.ipv6, field);		\
+	SNMP_INC_STATS_BH(ipv6_statistics, field);			\
+})
+#define IP6_INC_STATS_USER(idev,field)		({			\
+	struct inet6_dev *_idev = (idev);				\
+	if (likely(_idev != NULL))					\
+		SNMP_INC_STATS_USER(_idev->stats.ipv6, field);		\
+	SNMP_INC_STATS_USER(ipv6_statistics, field);			\
+})
 DECLARE_SNMP_STAT(struct icmpv6_mib, icmpv6_statistics);
 #define ICMP6_INC_STATS(idev, field)		({			\
 	struct inet6_dev *_idev = (idev);				\
@@ -143,16 +159,13 @@ DECLARE_SNMP_STAT(struct icmpv6_mib, icmpv6_statistics);
 	SNMP_INC_STATS_OFFSET_BH(icmpv6_statistics, field, _offset);    	\
 })
 DECLARE_SNMP_STAT(struct udp_mib, udp_stats_in6);
-#define UDP6_INC_STATS(field)		SNMP_INC_STATS(udp_stats_in6, field)
-#define UDP6_INC_STATS_BH(field)	SNMP_INC_STATS_BH(udp_stats_in6, field)
-#define UDP6_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(udp_stats_in6, field)
-
-int snmp6_register_dev(struct inet6_dev *idev);
-int snmp6_unregister_dev(struct inet6_dev *idev);
-int snmp6_alloc_dev(struct inet6_dev *idev);
-int snmp6_free_dev(struct inet6_dev *idev);
-int snmp6_mib_init(void *ptr[2], size_t mibsize, size_t mibalign);
-void snmp6_mib_free(void *ptr[2]);
+DECLARE_SNMP_STAT(struct udp_mib, udplite_stats_in6);
+#define UDP6_INC_STATS_BH(field, is_udplite) 			      do  {  \
+	if (is_udplite) SNMP_INC_STATS_BH(udplite_stats_in6, field);         \
+	else		SNMP_INC_STATS_BH(udp_stats_in6, field);    } while(0)
+#define UDP6_INC_STATS_USER(field, is_udplite)			       do {    \
+	if (is_udplite) SNMP_INC_STATS_USER(udplite_stats_in6, field);         \
+	else		SNMP_INC_STATS_USER(udp_stats_in6, field);    } while(0)
 
 struct ip6_ra_chain
 {
@@ -191,10 +204,10 @@ struct ipv6_txoptions
 struct ip6_flowlabel
 {
 	struct ip6_flowlabel	*next;
-	u32			label;
+	__be32			label;
+	atomic_t		users;
 	struct in6_addr		dst;
 	struct ipv6_txoptions	*opt;
-	atomic_t		users;
 	unsigned long		linger;
 	u8			share;
 	u32			owner;
@@ -211,7 +224,7 @@ struct ipv6_fl_socklist
 	struct ip6_flowlabel	*fl;
 };
 
-extern struct ip6_flowlabel	*fl6_sock_lookup(struct sock *sk, u32 label);
+extern struct ip6_flowlabel	*fl6_sock_lookup(struct sock *sk, __be32 label);
 extern struct ipv6_txoptions	*fl6_merge_options(struct ipv6_txoptions * opt_space,
 						   struct ip6_flowlabel * fl,
 						   struct ipv6_txoptions * fopt);
@@ -279,7 +292,7 @@ static inline int ipv6_addr_src_scope(const struct in6_addr *addr)
 
 static inline int ipv6_addr_cmp(const struct in6_addr *a1, const struct in6_addr *a2)
 {
-	return memcmp((const void *) a1, (const void *) a2, sizeof(struct in6_addr));
+	return memcmp(a1, a2, sizeof(struct in6_addr));
 }
 
 static inline int
@@ -296,7 +309,7 @@ ipv6_masked_addr_cmp(const struct in6_addr *a1, const struct in6_addr *m,
 
 static inline void ipv6_addr_copy(struct in6_addr *a1, const struct in6_addr *a2)
 {
-	memcpy((void *) a1, (const void *) a2, sizeof(struct in6_addr));
+	memcpy(a1, a2, sizeof(struct in6_addr));
 }
 
 static inline void ipv6_addr_prefix(struct in6_addr *pfx, 
@@ -307,16 +320,12 @@ static inline void ipv6_addr_prefix(struct in6_addr *pfx,
 	int o = plen >> 3,
 	    b = plen & 0x7;
 
+	memset(pfx->s6_addr, 0, sizeof(pfx->s6_addr));
 	memcpy(pfx->s6_addr, addr, o);
-	if (b != 0) {
+	if (b != 0)
 		pfx->s6_addr[o] = addr->s6_addr[o] & (0xff00 >> b);
-		o++;
-	}
-	if (o < 16)
-		memset(pfx->s6_addr + o, 0, 16 - o);
 }
 
-#ifndef __HAVE_ARCH_ADDR_SET
 static inline void ipv6_addr_set(struct in6_addr *addr, 
 				     __be32 w1, __be32 w2,
 				     __be32 w3, __be32 w4)
@@ -326,7 +335,6 @@ static inline void ipv6_addr_set(struct in6_addr *addr,
 	addr->s6_addr32[2] = w3;
 	addr->s6_addr32[3] = w4;
 }
-#endif
 
 static inline int ipv6_addr_equal(const struct in6_addr *a1,
 				  const struct in6_addr *a2)
@@ -375,22 +383,15 @@ static inline int ipv6_addr_any(const struct in6_addr *a)
  */
 static inline int __ipv6_addr_diff(const void *token1, const void *token2, int addrlen)
 {
-	const __u32 *a1 = token1, *a2 = token2;
+	const __be32 *a1 = token1, *a2 = token2;
 	int i;
 
 	addrlen >>= 2;
 
 	for (i = 0; i < addrlen; i++) {
-		__u32 xb = a1[i] ^ a2[i];
-		if (xb) {
-			int j = 31;
-
-			xb = ntohl(xb);
-			while ((xb & (1 << j)) == 0)
-				j--;
-
-			return (i * 32 + 31 - j);
-		}
+		__be32 xb = a1[i] ^ a2[i];
+		if (xb)
+			return i * 32 + 32 - fls(ntohl(xb));
 	}
 
 	/*
@@ -469,6 +470,9 @@ extern void			ip6_flush_pending_frames(struct sock *sk);
 extern int			ip6_dst_lookup(struct sock *sk,
 					       struct dst_entry **dst,
 					       struct flowi *fl);
+extern int			ip6_dst_blackhole(struct sock *sk,
+						  struct dst_entry **dst,
+						  struct flowi *fl);
 extern int			ip6_sk_dst_lookup(struct sock *sk,
 						  struct dst_entry **dst,
 						  struct flowi *fl);
@@ -509,10 +513,6 @@ extern int 			ipv6_ext_hdr(u8 nexthdr);
 
 extern int ipv6_find_tlv(struct sk_buff *skb, int offset, int type);
 
-extern struct ipv6_txoptions *	ipv6_invert_rthdr(struct sock *sk,
-						  struct ipv6_rt_hdr *hdr);
-
-
 /*
  *	socket options (ipv6_sockglue.c)
  */
@@ -544,7 +544,7 @@ extern int			ip6_datagram_connect(struct sock *sk,
 						     struct sockaddr *addr, int addr_len);
 
 extern int 			ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len);
-extern void			ipv6_icmp_error(struct sock *sk, struct sk_buff *skb, int err, u16 port,
+extern void			ipv6_icmp_error(struct sock *sk, struct sk_buff *skb, int err, __be16 port,
 						u32 info, u8 *payload);
 extern void			ipv6_local_error(struct sock *sk, int err, struct flowi *fl, u32 info);
 
@@ -589,10 +589,24 @@ extern int  tcp6_proc_init(void);
 extern void tcp6_proc_exit(void);
 extern int  udp6_proc_init(void);
 extern void udp6_proc_exit(void);
+extern int  udplite6_proc_init(void);
+extern void udplite6_proc_exit(void);
 extern int  ipv6_misc_proc_init(void);
 extern void ipv6_misc_proc_exit(void);
+extern int snmp6_register_dev(struct inet6_dev *idev);
+extern int snmp6_unregister_dev(struct inet6_dev *idev);
 
 extern struct rt6_statistics rt6_stats;
+#else
+static inline int snmp6_register_dev(struct inet6_dev *idev)
+{
+	return 0;
+}
+
+static inline int snmp6_unregister_dev(struct inet6_dev *idev)
+{
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_SYSCTL

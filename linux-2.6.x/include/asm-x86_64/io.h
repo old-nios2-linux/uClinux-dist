@@ -100,7 +100,7 @@ __OUTS(l)
 
 #define IO_SPACE_LIMIT 0xffff
 
-#if defined(__KERNEL__) && __x86_64__
+#if defined(__KERNEL__) && defined(__x86_64__)
 
 #include <linux/vmalloc.h>
 
@@ -144,6 +144,7 @@ extern void early_iounmap(void *addr, unsigned long size);
  */
 extern void __iomem * ioremap_nocache (unsigned long offset, unsigned long size);
 extern void iounmap(volatile void __iomem *addr);
+extern void __iomem *fix_ioremap(unsigned idx, unsigned long phys);
 
 /*
  * ISA I/O bus memory addresses are 1:1 with the physical address.
@@ -247,12 +248,6 @@ void memset_io(volatile void __iomem *a, int b, size_t c);
  * analogy with PCI is quite large):
  */
 #define __ISA_IO_base ((char __iomem *)(PAGE_OFFSET))
-
-/*
- * Again, x86-64 does not require mem IO specific function.
- */
-
-#define eth_io_copy_and_sum(a,b,c,d)		eth_copy_and_sum((a),(void *)(b),(c),(d))
 
 /* Nothing to do */
 

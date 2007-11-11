@@ -171,10 +171,10 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 	/* do nothing */
 	/* Possibly, set clear debug registers */
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	struct task_struct *tsk = current;
 
 	/* Forget lazy FPU state */
@@ -191,7 +191,7 @@ void release_thread(struct task_struct *dead_task)
 /* Fill in the fpu structure for a core dump.. */
 int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpu)
 {
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	int fpvalid;
 	struct task_struct *tsk = current;
 
@@ -214,7 +214,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	struct task_struct *tsk = current;
 
 	unlazy_fpu(tsk);
@@ -298,7 +298,7 @@ ubc_set_tracing(int asid, unsigned long nextpc1, unsigned nextpc2)
  */
 void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	unlazy_fpu(prev);
 #endif
 

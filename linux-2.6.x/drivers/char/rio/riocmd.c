@@ -402,7 +402,7 @@ static int RIOCommandRup(struct rio_info *p, uint Rup, struct Host *HostP, struc
 		rio_dprintk(RIO_DEBUG_CMD, "CONTROL information: Host number %Zd, name ``%s''\n", HostP - p->RIOHosts, HostP->Name);
 		rio_dprintk(RIO_DEBUG_CMD, "CONTROL information: Rup number  0x%x\n", rup);
 
-		if (Rup >= (unsigned short) MAX_RUP) {
+		if (Rup < (unsigned short) MAX_RUP) {
 			rio_dprintk(RIO_DEBUG_CMD, "CONTROL information: This is the RUP for RTA ``%s''\n", HostP->Mapping[Rup].Name);
 		} else
 			rio_dprintk(RIO_DEBUG_CMD, "CONTROL information: This is the RUP for link ``%c'' of host ``%s''\n", ('A' + Rup - MAX_RUP), HostP->Name);
@@ -556,9 +556,7 @@ struct CmdBlk *RIOGetCmdBlk(void)
 {
 	struct CmdBlk *CmdBlkP;
 
-	CmdBlkP = (struct CmdBlk *)kmalloc(sizeof(struct CmdBlk), GFP_ATOMIC);
-	if (CmdBlkP)
-		memset(CmdBlkP, 0, sizeof(struct CmdBlk));
+	CmdBlkP = kzalloc(sizeof(struct CmdBlk), GFP_ATOMIC);
 	return CmdBlkP;
 }
 
@@ -922,7 +920,7 @@ int RIOUnUse(unsigned long iPortP, struct CmdBlk *CmdBlkP)
 ** 
 ** Packet is an actual packet structure to be filled in with the packet
 ** information associated with the command. You need to fill in everything,
-** as the command processore doesn't process the command packet in any way.
+** as the command processor doesn't process the command packet in any way.
 ** 
 ** The PreFuncP is called before the packet is enqueued on the host rup.
 ** PreFuncP is called as (*PreFuncP)(PreArg, CmdBlkP);. PreFuncP must

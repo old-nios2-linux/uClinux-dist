@@ -3,8 +3,8 @@
  * Intersil Prism2/2.5/3.
  *
  * Copyright (c) 2001-2002, SSH Communications Security Corp and Jouni Malinen
- * <jkmaline@cc.hut.fi>
- * Copyright (c) 2002-2005, Jouni Malinen <jkmaline@cc.hut.fi>
+ * <j@w1.fi>
+ * Copyright (c) 2002-2005, Jouni Malinen <j@w1.fi>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -347,14 +347,12 @@ static int hfa384x_cmd(struct net_device *dev, u16 cmd, u16 param0,
 	if (signal_pending(current))
 		return -EINTR;
 
-	entry = (struct hostap_cmd_queue *)
-		kmalloc(sizeof(*entry), GFP_ATOMIC);
+	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 	if (entry == NULL) {
 		printk(KERN_DEBUG "%s: hfa384x_cmd - kmalloc failed\n",
 		       dev->name);
 		return -ENOMEM;
 	}
-	memset(entry, 0, sizeof(*entry));
 	atomic_set(&entry->usecnt, 1);
 	entry->type = CMD_SLEEP;
 	entry->cmd = cmd;
@@ -517,14 +515,12 @@ static int hfa384x_cmd_callback(struct net_device *dev, u16 cmd, u16 param0,
 		return -1;
 	}
 
-	entry = (struct hostap_cmd_queue *)
-		kmalloc(sizeof(*entry), GFP_ATOMIC);
+	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 	if (entry == NULL) {
 		printk(KERN_DEBUG "%s: hfa384x_cmd_callback - kmalloc "
 		       "failed\n", dev->name);
 		return -ENOMEM;
 	}
-	memset(entry, 0, sizeof(*entry));
 	atomic_set(&entry->usecnt, 1);
 	entry->type = CMD_CALLBACK;
 	entry->cmd = cmd;
@@ -1645,9 +1641,9 @@ static void prism2_schedule_reset(local_info_t *local)
 
 /* Called only as scheduled task after noticing card timeout in interrupt
  * context */
-static void handle_reset_queue(void *data)
+static void handle_reset_queue(struct work_struct *work)
 {
-	local_info_t *local = (local_info_t *) data;
+	local_info_t *local = container_of(work, local_info_t, reset_queue);
 
 	printk(KERN_DEBUG "%s: scheduled card reset\n", local->dev->name);
 	prism2_hw_reset(local->dev);
@@ -1842,13 +1838,14 @@ static int prism2_tx_80211(struct sk_buff *skb, struct net_device *dev)
 
 	/* skb->data starts with txdesc->frame_control */
 	hdr_len = 24;
-	memcpy(&txdesc.frame_control, skb->data, hdr_len);
+	skb_copy_from_linear_data(skb, &txdesc.frame_control, hdr_len);
  	fc = le16_to_cpu(txdesc.frame_control);
 	if (WLAN_FC_GET_TYPE(fc) == IEEE80211_FTYPE_DATA &&
 	    (fc & IEEE80211_FCTL_FROMDS) && (fc & IEEE80211_FCTL_TODS) &&
 	    skb->len >= 30) {
 		/* Addr4 */
-		memcpy(txdesc.addr4, skb->data + hdr_len, ETH_ALEN);
+		skb_copy_from_linear_data_offset(skb, hdr_len, txdesc.addr4,
+						 ETH_ALEN);
 		hdr_len += ETH_ALEN;
 	}
 
@@ -2221,7 +2218,7 @@ static void hostap_tx_callback(local_info_t *local,
 		memcpy(skb_put(skb, len), payload, len);
 
 	skb->dev = local->dev;
-	skb->mac.raw = skb->data;
+	skb_reset_mac_header(skb);
 
 	cb->func(skb, ok, cb->data);
 }
@@ -2256,7 +2253,7 @@ static int hostap_tx_compl_read(local_info_t *local, int error,
 	if (txdesc->sw_support) {
 		len = le16_to_cpu(txdesc->data_len);
 		if (len < PRISM2_DATA_MAXLEN) {
-			*payload = (char *) kmalloc(len, GFP_ATOMIC);
+			*payload = kmalloc(len, GFP_ATOMIC);
 			if (*payload == NULL ||
 			    hfa384x_from_bap(dev, BAP0, *payload, len)) {
 				PDEBUG(DEBUG_EXTRA, "%s: could not read TX "
@@ -2896,9 +2893,10 @@ static void hostap_passive_scan(unsigned long data)
 
 /* Called only as a scheduled task when communications quality values should
  * be updated. */
-static void handle_comms_qual_update(void *data)
+static void handle_comms_qual_update(struct work_struct *work)
 {
-	local_info_t *local = data;
+	local_info_t *local =
+		container_of(work, local_info_t, comms_qual_update);
 	prism2_update_comms_qual(local->dev);
 }
 
@@ -3015,14 +3013,12 @@ static int prism2_set_tim(struct net_device *dev, int aid, int set)
 	iface = netdev_priv(dev);
 	local = iface->local;
 
-	new_entry = (struct set_tim_data *)
-		kmalloc(sizeof(*new_entry), GFP_ATOMIC);
+	new_entry = kzalloc(sizeof(*new_entry), GFP_ATOMIC);
 	if (new_entry == NULL) {
 		printk(KERN_DEBUG "%s: prism2_set_tim: kmalloc failed\n",
 		       local->dev->name);
 		return -ENOMEM;
 	}
-	memset(new_entry, 0, sizeof(*new_entry));
 	new_entry->aid = aid;
 	new_entry->set = set;
 
@@ -3050,9 +3046,9 @@ static int prism2_set_tim(struct net_device *dev, int aid, int set)
 }
 
 
-static void handle_set_tim_queue(void *data)
+static void handle_set_tim_queue(struct work_struct *work)
 {
-	local_info_t *local = (local_info_t *) data;
+	local_info_t *local = container_of(work, local_info_t, set_tim_queue);
 	struct set_tim_data *entry;
 	u16 val;
 
@@ -3209,15 +3205,15 @@ prism2_init_local_data(struct prism2_helper_functions *funcs, int card_idx,
 	local->scan_channel_mask = 0xffff;
 
 	/* Initialize task queue structures */
-	INIT_WORK(&local->reset_queue, handle_reset_queue, local);
+	INIT_WORK(&local->reset_queue, handle_reset_queue);
 	INIT_WORK(&local->set_multicast_list_queue,
-		  hostap_set_multicast_list_queue, local->dev);
+		  hostap_set_multicast_list_queue);
 
-	INIT_WORK(&local->set_tim_queue, handle_set_tim_queue, local);
+	INIT_WORK(&local->set_tim_queue, handle_set_tim_queue);
 	INIT_LIST_HEAD(&local->set_tim_list);
 	spin_lock_init(&local->set_tim_lock);
 
-	INIT_WORK(&local->comms_qual_update, handle_comms_qual_update, local);
+	INIT_WORK(&local->comms_qual_update, handle_comms_qual_update);
 
 	/* Initialize tasklets for handling hardware IRQ related operations
 	 * outside hw IRQ handler */

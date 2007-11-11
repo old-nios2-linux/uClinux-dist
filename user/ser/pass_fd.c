@@ -1,7 +1,7 @@
 /*
- * $Id: pass_fd.c,v 1.3.4.3 2003/11/12 20:00:10 andrei Exp $
+ * $Id: pass_fd.c,v 1.7.2.1 2005/08/31 13:18:29 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -96,13 +96,16 @@ int send_fd(int unix_socket, void* data, int data_len, int fd)
 	int ret;
 #ifdef HAVE_MSGHDR_MSG_CONTROL
 	struct cmsghdr* cmsg;
+	/* make sure msg_control will point to properly aligned data */
 	union {
 		struct cmsghdr cm;
 		char control[CMSG_SPACE(sizeof(fd))];
 	}control_un;
 	
 	msg.msg_control=control_un.control;
-	msg.msg_controllen=sizeof(control_un.control);
+	/* openbsd doesn't like "more space", msg_controllen must not
+	 * include the end padding */
+	msg.msg_controllen=CMSG_LEN(sizeof(fd));
 	
 	cmsg=CMSG_FIRSTHDR(&msg);
 	cmsg->cmsg_level = SOL_SOCKET;
@@ -205,7 +208,7 @@ again:
 		*fd=*((int*) CMSG_DATA(cmsg));
 	}else{
 		LOG(L_ERR, "ERROR: receive_fd: no descriptor passed, cmsg=%p,"
-				"len=%d\n", cmsg, cmsg->cmsg_len);
+				"len=%d\n", cmsg, (unsigned)cmsg->cmsg_len);
 		*fd=-1;
 		/* it's not really an error */
 	}

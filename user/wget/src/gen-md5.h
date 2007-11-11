@@ -36,6 +36,8 @@ typedef struct gen_md5_context gen_md5_context;
    includes.  */
 struct gen_md5_context;
 
+#define MD5_HASHLEN 16
+
 #define ALLOCA_MD5_CONTEXT(var_name)			\
   gen_md5_context *var_name =				\
   (gen_md5_context *) alloca (gen_md5_context_size ())

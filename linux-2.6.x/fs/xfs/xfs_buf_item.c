@@ -580,8 +580,8 @@ xfs_buf_item_unlock(
 	 * If the buf item isn't tracking any data, free it.
 	 * Otherwise, if XFS_BLI_HOLD is set clear it.
 	 */
-	if (xfs_count_bits(bip->bli_format.blf_data_map,
-			      bip->bli_format.blf_map_size, 0) == 0) {
+	if (xfs_bitmap_empty(bip->bli_format.blf_data_map,
+			     bip->bli_format.blf_map_size)) {
 		xfs_buf_item_relse(bp);
 	} else if (hold) {
 		bip->bli_flags &= ~XFS_BLI_HOLD;
@@ -660,7 +660,7 @@ xfs_buf_item_committing(xfs_buf_log_item_t *bip, xfs_lsn_t commit_lsn)
 /*
  * This is the ops vector shared by all buf log items.
  */
-STATIC struct xfs_item_ops xfs_buf_item_ops = {
+static struct xfs_item_ops xfs_buf_item_ops = {
 	.iop_size	= (uint(*)(xfs_log_item_t*))xfs_buf_item_size,
 	.iop_format	= (void(*)(xfs_log_item_t*, xfs_log_iovec_t*))
 					xfs_buf_item_format,

@@ -1,5 +1,5 @@
 /*
- * $Id: dbase.c,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: dbase.c,v 1.3.2.1 2005/07/20 17:11:52 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -115,7 +115,7 @@ static int connect_db(db_con_t* _h, const char* _db_url)
 
 	/*
 	** get the connection parameters parsed from the db_url string
-	** it looks like: sql://username:userpass@dbhost:dbport/dbname
+	** it looks like: postgres://username:userpass@dbhost:dbport/dbname
 	** username/userpass : name and password for the database
 	** dbhost :            the host name or ip address hosting the database
 	** dbport :            the port to connect to database on
@@ -234,14 +234,18 @@ static int disconnect_db(db_con_t* _h)
 db_con_t *db_init(const char* _sqlurl)
 {
 	db_con_t* res;
+	void* t;
 
 	DLOG("db_init", "entry");
 
 	/*
 	** this is the root memory for this database connection.
 	*/
-	res = aug_alloc(sizeof(db_con_t) + sizeof(struct con_postgres), NULL);
-	memset(res, 0, sizeof(db_con_t) + sizeof(struct con_postgres));
+	res = aug_alloc(sizeof(db_con_t), 0);
+	memset(res, 0, sizeof(db_con_t));
+	t = aug_alloc(sizeof(struct con_postgres), (char*)res);
+	res->tail = (unsigned long) t;
+	memset((struct con_postgres*)res->tail, 0, sizeof(struct con_postgres));
 
 	if (connect_db(res, _sqlurl) < 0)
 	{

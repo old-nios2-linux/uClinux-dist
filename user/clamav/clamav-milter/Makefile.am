@@ -13,7 +13,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 # FIXME: check automake for 'and' (&&)
 if BUILD_CLAMD
@@ -24,12 +25,14 @@ sbin_PROGRAMS = clamav-milter
 clamav_milter_SOURCES = \
     $(top_srcdir)/shared/cfgparser.c \
     $(top_srcdir)/shared/cfgparser.h \
+    $(top_srcdir)/shared/output.c \
+    $(top_srcdir)/shared/output.h \
     $(top_srcdir)/shared/getopt.c \
     $(top_srcdir)/shared/getopt.h \
-    $(top_srcdir)/shared/memory.c \
-    $(top_srcdir)/shared/memory.h \
     $(top_srcdir)/shared/misc.c \
     $(top_srcdir)/shared/misc.h \
+    $(top_srcdir)/shared/network.c \
+    $(top_srcdir)/shared/network.h \
     clamav-milter.c
 
 man_MANS = $(top_srcdir)/docs/man/clamav-milter.8
@@ -37,6 +40,6 @@ man_MANS = $(top_srcdir)/docs/man/clamav-milter.8
 endif
 endif
 
-LIBS = $(top_builddir)/libclamav/libclamav.la @CLAMAV_MILTER_LIBS@
-INCLUDES = -I$(top_srcdir)/clamd -I$(top_srcdir)/libclamav -I$(top_srcdir)/shared
+LIBS = $(top_builddir)/libclamav/libclamav.la @CLAMAV_MILTER_LIBS@ @THREAD_LIBS@
+INCLUDES = -I$(top_srcdir)/clamd -I$(top_srcdir)/libclamav -I$(top_srcdir)/shared -I$(top_srcdir)
 EXTRA_DIST = clamav-milter.c INSTALL

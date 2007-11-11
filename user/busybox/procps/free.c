@@ -4,30 +4,15 @@
  *
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under the GPL version 2, see the file LICENSE in this tarball.
  */
 
 /* getopt not needed */
 
-#include <stdio.h>
-#include <errno.h>
-#include <stdlib.h>
 #include "busybox.h"
 
-extern int free_main(int argc, char **argv)
+int free_main(int argc, char **argv);
+int free_main(int argc, char **argv)
 {
 	struct sysinfo info;
 	sysinfo(&info);
@@ -42,7 +27,7 @@ extern int free_main(int argc, char **argv)
 		/* TODO:  Make all this stuff not overflow when mem >= 4 Gib */
 		info.totalram/=info.mem_unit;
 		info.freeram/=info.mem_unit;
-#ifndef __uClinux__
+#ifndef BB_NOMMU
 		info.totalswap/=info.mem_unit;
 		info.freeswap/=info.mem_unit;
 #endif
@@ -53,7 +38,7 @@ extern int free_main(int argc, char **argv)
 		/* TODO:  Make all this stuff not overflow when mem >= 4 Gib */
 		info.totalram*=info.mem_unit;
 		info.freeram*=info.mem_unit;
-#ifndef __uClinux__
+#ifndef BB_NOMMU
 		info.totalswap*=info.mem_unit;
 		info.freeswap*=info.mem_unit;
 #endif
@@ -71,7 +56,7 @@ extern int free_main(int argc, char **argv)
 			info.totalram-info.freeram, info.freeram,
 			info.sharedram, info.bufferram);
 
-#ifndef __uClinux__
+#ifndef BB_NOMMU
 	printf("%6s%13ld%13ld%13ld\n", "Swap:", info.totalswap,
 			info.totalswap-info.freeswap, info.freeswap);
 

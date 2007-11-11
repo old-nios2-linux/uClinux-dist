@@ -7,7 +7,6 @@
  * of the GNU General Public License version 2.
  */
 
-#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
@@ -25,35 +24,30 @@
 #include "util.h"
 #include "glock.h"
 
-static void gfs2_init_inode_once(void *foo, kmem_cache_t *cachep, unsigned long flags)
+static void gfs2_init_inode_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
 	struct gfs2_inode *ip = foo;
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR) {
-		inode_init_once(&ip->i_inode);
-		spin_lock_init(&ip->i_spin);
-		init_rwsem(&ip->i_rw_mutex);
-		memset(ip->i_cache, 0, sizeof(ip->i_cache));
-	}
+
+	inode_init_once(&ip->i_inode);
+	spin_lock_init(&ip->i_spin);
+	init_rwsem(&ip->i_rw_mutex);
+	memset(ip->i_cache, 0, sizeof(ip->i_cache));
 }
 
-static void gfs2_init_glock_once(void *foo, kmem_cache_t *cachep, unsigned long flags)
+static void gfs2_init_glock_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
 	struct gfs2_glock *gl = foo;
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR) {
-		INIT_HLIST_NODE(&gl->gl_list);
-		spin_lock_init(&gl->gl_spin);
-		INIT_LIST_HEAD(&gl->gl_holders);
-		INIT_LIST_HEAD(&gl->gl_waiters1);
-		INIT_LIST_HEAD(&gl->gl_waiters2);
-		INIT_LIST_HEAD(&gl->gl_waiters3);
-		gl->gl_lvb = NULL;
-		atomic_set(&gl->gl_lvb_count, 0);
-		INIT_LIST_HEAD(&gl->gl_reclaim);
-		INIT_LIST_HEAD(&gl->gl_ail_list);
-		atomic_set(&gl->gl_ail_count, 0);
-	}
+
+	INIT_HLIST_NODE(&gl->gl_list);
+	spin_lock_init(&gl->gl_spin);
+	INIT_LIST_HEAD(&gl->gl_holders);
+	INIT_LIST_HEAD(&gl->gl_waiters1);
+	INIT_LIST_HEAD(&gl->gl_waiters3);
+	gl->gl_lvb = NULL;
+	atomic_set(&gl->gl_lvb_count, 0);
+	INIT_LIST_HEAD(&gl->gl_reclaim);
+	INIT_LIST_HEAD(&gl->gl_ail_list);
+	atomic_set(&gl->gl_ail_count, 0);
 }
 
 /**
@@ -78,7 +72,7 @@ static int __init init_gfs2_fs(void)
 	gfs2_glock_cachep = kmem_cache_create("gfs2_glock",
 					      sizeof(struct gfs2_glock),
 					      0, 0,
-					      gfs2_init_glock_once, NULL);
+					      gfs2_init_glock_once);
 	if (!gfs2_glock_cachep)
 		goto fail;
 
@@ -86,13 +80,13 @@ static int __init init_gfs2_fs(void)
 					      sizeof(struct gfs2_inode),
 					      0,  SLAB_RECLAIM_ACCOUNT|
 					          SLAB_MEM_SPREAD,
-					      gfs2_init_inode_once, NULL);
+					      gfs2_init_inode_once);
 	if (!gfs2_inode_cachep)
 		goto fail;
 
 	gfs2_bufdata_cachep = kmem_cache_create("gfs2_bufdata",
 						sizeof(struct gfs2_bufdata),
-					        0, 0, NULL, NULL);
+					        0, 0, NULL);
 	if (!gfs2_bufdata_cachep)
 		goto fail;
 
@@ -103,6 +97,8 @@ static int __init init_gfs2_fs(void)
 	error = register_filesystem(&gfs2meta_fs_type);
 	if (error)
 		goto fail_unregister;
+
+	gfs2_register_debugfs();
 
 	printk("GFS2 (built %s %s) installed\n", __DATE__, __TIME__);
 
@@ -131,6 +127,7 @@ fail:
 
 static void __exit exit_gfs2_fs(void)
 {
+	gfs2_unregister_debugfs();
 	unregister_filesystem(&gfs2_fs_type);
 	unregister_filesystem(&gfs2meta_fs_type);
 

@@ -57,7 +57,7 @@
  * There is a 25/33MHz switch in configuration
  * register, but driver is written for use at any frequency which get
  * (use idebus=xx to select PCI bus speed).
- * Use ide0=autotune for automatical tune of the PIO modes.
+ * Use hda=autotune and hdb=autotune for automatical tune of the PIO modes.
  * If you get strange results, do not use this and set PIO manually
  * by hdparm.
  *
@@ -87,7 +87,6 @@
  * 0.5 doesn't work.
  */
 
-#undef REALLY_SLOW_IO	/* most systems can safely undef this */
 #define OPTI621_DEBUG		/* define for debug messages */
 
 #include <linux/types.h>
@@ -148,12 +147,12 @@ static void compute_pios(ide_drive_t *drive, u8 pio)
 	int d;
 	ide_hwif_t *hwif = HWIF(drive);
 
-	drive->drive_data = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO, NULL);
+	drive->drive_data = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO);
 	for (d = 0; d < 2; ++d) {
 		drive = &hwif->drives[d];
 		if (drive->present) {
 			if (drive->drive_data == PIO_DONT_KNOW)
-				drive->drive_data = ide_get_best_pio_mode(drive, 255, OPTI621_MAX_PIO, NULL);
+				drive->drive_data = ide_get_best_pio_mode(drive, 255, OPTI621_MAX_PIO);
 #ifdef OPTI621_DEBUG
 			printk("%s: Selected PIO mode %d\n",
 				drive->name, drive->drive_data);
@@ -176,34 +175,35 @@ static int cmpt_clk(int time, int bus_speed)
 	return ((time*bus_speed+999)/1000);
 }
 
-static void write_reg(ide_hwif_t *hwif, u8 value, int reg)
 /* Write value to register reg, base of register
  * is at reg_base (0x1f0 primary, 0x170 secondary,
  * if not changed by PCI configuration).
  * This is from setupvic.exe program.
  */
+static void write_reg(u8 value, int reg)
 {
-	hwif->INW(reg_base+1);
-	hwif->INW(reg_base+1);
-	hwif->OUTB(3, reg_base+2);
-	hwif->OUTB(value, reg_base+reg);
-	hwif->OUTB(0x83, reg_base+2);
+	inw(reg_base + 1);
+	inw(reg_base + 1);
+	outb(3, reg_base + 2);
+	outb(value, reg_base + reg);
+	outb(0x83, reg_base + 2);
 }
 
-static u8 read_reg(ide_hwif_t *hwif, int reg)
 /* Read value from register reg, base of register
  * is at reg_base (0x1f0 primary, 0x170 secondary,
  * if not changed by PCI configuration).
  * This is from setupvic.exe program.
  */
+static u8 read_reg(int reg)
 {
 	u8 ret = 0;
 
-	hwif->INW(reg_base+1);
-	hwif->INW(reg_base+1);
-	hwif->OUTB(3, reg_base+2);
-	ret = hwif->INB(reg_base+reg);
-	hwif->OUTB(0x83, reg_base+2);
+	inw(reg_base + 1);
+	inw(reg_base + 1);
+	outb(3, reg_base + 2);
+	ret = inb(reg_base + reg);
+	outb(0x83, reg_base + 2);
+
 	return ret;
 }
 
@@ -286,39 +286,39 @@ static void opti621_tune_drive (ide_drive_t *drive, u8 pio)
      	reg_base = hwif->io_ports[IDE_DATA_OFFSET];
 
 	/* allow Register-B */
-	hwif->OUTB(0xc0, reg_base+CNTRL_REG);
+	outb(0xc0, reg_base + CNTRL_REG);
 	/* hmm, setupvic.exe does this ;-) */
-	hwif->OUTB(0xff, reg_base+5);
+	outb(0xff, reg_base + 5);
 	/* if reads 0xff, adapter not exist? */
-	(void) hwif->INB(reg_base+CNTRL_REG);
+	(void)inb(reg_base + CNTRL_REG);
 	/* if reads 0xc0, no interface exist? */
-	read_reg(hwif, CNTRL_REG);
+	read_reg(CNTRL_REG);
 	/* read version, probably 0 */
-	read_reg(hwif, STRAP_REG);
+	read_reg(STRAP_REG);
 
 	/* program primary drive */
-		/* select Index-0 for Register-A */
-	write_reg(hwif, 0,      MISC_REG);
-		/* set read cycle timings */
-	write_reg(hwif, cycle1, READ_REG);
-		/* set write cycle timings */
-	write_reg(hwif, cycle1, WRITE_REG);
+	/* select Index-0 for Register-A */
+	write_reg(0, MISC_REG);
+	/* set read cycle timings */
+	write_reg(cycle1, READ_REG);
+	/* set write cycle timings */
+	write_reg(cycle1, WRITE_REG);
 
 	/* program secondary drive */
-		/* select Index-1 for Register-B */
-	write_reg(hwif, 1,      MISC_REG);
-		/* set read cycle timings */
-	write_reg(hwif, cycle2, READ_REG);
-		/* set write cycle timings */
-	write_reg(hwif, cycle2, WRITE_REG);
+	/* select Index-1 for Register-B */
+	write_reg(1, MISC_REG);
+	/* set read cycle timings */
+	write_reg(cycle2, READ_REG);
+	/* set write cycle timings */
+	write_reg(cycle2, WRITE_REG);
 
 	/* use Register-A for drive 0 */
 	/* use Register-B for drive 1 */
-	write_reg(hwif, 0x85, CNTRL_REG);
+	write_reg(0x85, CNTRL_REG);
 
 	/* set address setup, DRDY timings,   */
 	/*  and read prefetch for both drives */
- 	write_reg(hwif, misc, MISC_REG);
+	write_reg(misc, MISC_REG);
 
 	spin_unlock_irqrestore(&ide_lock, flags);
 }
@@ -350,17 +350,17 @@ static ide_pci_device_t opti621_chipsets[] __devinitdata = {
 	{	/* 0 */
 		.name		= "OPTI621",
 		.init_hwif	= init_hwif_opti621,
-		.channels	= 2,
 		.autodma	= AUTODMA,
 		.enablebits	= {{0x45,0x80,0x00}, {0x40,0x08,0x00}},
 		.bootable	= ON_BOARD,
+		.pio_mask	= ATA_PIO3,
 	},{	/* 1 */
 		.name		= "OPTI621X",
 		.init_hwif	= init_hwif_opti621,
-		.channels	= 2,
 		.autodma	= AUTODMA,
 		.enablebits	= {{0x45,0x80,0x00}, {0x40,0x08,0x00}},
 		.bootable	= ON_BOARD,
+		.pio_mask	= ATA_PIO3,
 	}
 };
 
@@ -382,7 +382,7 @@ static struct pci_driver driver = {
 	.probe		= opti621_init_one,
 };
 
-static int opti621_ide_init(void)
+static int __init opti621_ide_init(void)
 {
 	return ide_pci_register_driver(&driver);
 }

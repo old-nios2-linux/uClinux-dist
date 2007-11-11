@@ -48,9 +48,9 @@ endif
 ENDIAN        ?= little
 MACHINE       = mips
 ARCH          = mips
-CROSS_COMPILE = mips_fp_le-
+CROSS_COMPILE = mips-linux-
 CROSS         = $(CROSS_COMPILE)
-CONFIGURE_HOST = mips_fp_le
+CONFIGURE_HOST = mips-linux-
 
 CC        = $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
@@ -70,6 +70,14 @@ UCLINUX_BUILD_SET = 0					# have we set a special config below
 
 # Pull in common definitions
 include $(ROOTDIR)/vendors/config/common/config.arch
+
+# These can be used by configure.
+# Either configure $(CONFIGURE_OPTS)
+# or     configure --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
+#
+TARGETARCH    := mips-linux
+HOSTARCH      := $(shell sh $(ROOTDIR)/tools/config.guess)
+CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
 
 ############################################################################
 #

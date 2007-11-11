@@ -8,6 +8,8 @@
 #include <linux/videodev.h>
 #include <media/tuner.h>
 #include <media/v4l2-common.h>
+#include <media/tuner-types.h>
+#include "tuner-driver.h"
 
 static int offset = 0;
 module_param(offset, int, 0664);
@@ -54,9 +56,9 @@ MODULE_PARM_DESC(offset,"Allows to specify an offset for tuner");
     sound 2          33.16  -      -
     NICAM            33.05  33.05  39.80
  */
-#define PHILIPS_MF_SET_BG	0x01 /* Bit 2 must be zero, Bit 3 is system output */
-#define PHILIPS_MF_SET_PAL_L	0x03 // France
-#define PHILIPS_MF_SET_PAL_L2	0x02 // L'
+#define PHILIPS_MF_SET_STD_BG	0x01 /* Bit 2 must be zero, Bit 3 is system output */
+#define PHILIPS_MF_SET_STD_L	0x03 /* Used on Secam France */
+#define PHILIPS_MF_SET_STD_LC	0x02 /* Used on SECAM L' */
 
 /* Control byte */
 
@@ -108,6 +110,7 @@ static int tuner_stereo(struct i2c_client *c)
 		case TUNER_PHILIPS_FM1216ME_MK3:
 		case TUNER_PHILIPS_FM1236_MK3:
 		case TUNER_PHILIPS_FM1256_IH3:
+		case TUNER_LG_NTSC_TAPE:
 			stereo = ((status & TUNER_SIGNAL) == TUNER_STEREO_MK3);
 			break;
 		default:
@@ -204,9 +207,13 @@ static void default_set_tv_freq(struct i2c_client *c, unsigned int freq)
 		/* 0x01 -> ??? no change ??? */
 		/* 0x02 -> PAL BDGHI / SECAM L */
 		/* 0x04 -> ??? PAL others / SECAM others ??? */
-		cb &= ~0x02;
-		if (t->std & V4L2_STD_SECAM)
-			cb |= 0x02;
+		cb &= ~0x03;
+		if (t->std & V4L2_STD_SECAM_L) //also valid for V4L2_STD_SECAM
+			cb |= PHILIPS_MF_SET_STD_L;
+		else if (t->std & V4L2_STD_SECAM_LC)
+			cb |= PHILIPS_MF_SET_STD_LC;
+		else /* V4L2_STD_B|V4L2_STD_GH */
+			cb |= PHILIPS_MF_SET_STD_BG;
 		break;
 
 	case TUNER_TEMIC_4046FM5:
@@ -421,6 +428,7 @@ static void default_set_radio_freq(struct i2c_client *c, unsigned int freq)
 	case TUNER_PHILIPS_FM1216ME_MK3:
 	case TUNER_PHILIPS_FM1236_MK3:
 	case TUNER_PHILIPS_FMD1216ME_MK3:
+	case TUNER_LG_NTSC_TAPE:
 		buffer[3] = 0x19;
 		break;
 	case TUNER_TNF_5335MF:
@@ -465,11 +473,20 @@ static void default_set_radio_freq(struct i2c_client *c, unsigned int freq)
 			config |= TDA9887_INTERCARRIER;
 /*		if (params->port1_set_for_fm_mono)
 			config &= ~TDA9887_PORT1_ACTIVE;*/
+		if (params->fm_gain_normal)
+			config |= TDA9887_GAIN_NORMAL;
 		i2c_clients_command(c->adapter, TDA9887_SET_CONFIG, &config);
 	}
 	if (4 != (rc = i2c_master_send(c,buffer,4)))
 		tuner_warn("i2c i/o error: rc == %d (should be 4)\n",rc);
 }
+
+static struct tuner_operations simple_tuner_ops = {
+	.set_tv_freq    = default_set_tv_freq,
+	.set_radio_freq = default_set_radio_freq,
+	.has_signal     = tuner_signal,
+	.is_stereo      = tuner_stereo,
+};
 
 int default_tuner_init(struct i2c_client *c)
 {
@@ -479,11 +496,7 @@ int default_tuner_init(struct i2c_client *c)
 		   t->type, tuners[t->type].name);
 	strlcpy(c->name, tuners[t->type].name, sizeof(c->name));
 
-	t->set_tv_freq = default_set_tv_freq;
-	t->set_radio_freq = default_set_radio_freq;
-	t->has_signal = tuner_signal;
-	t->is_stereo = tuner_stereo;
-	t->standby = NULL;
+	memcpy(&t->ops, &simple_tuner_ops, sizeof(struct tuner_operations));
 
 	return 0;
 }

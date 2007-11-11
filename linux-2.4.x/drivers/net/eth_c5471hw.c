@@ -1,6 +1,10 @@
 /***********************************************************************
  * linux/drivers/net/eth_c5471hw.c
  *
+ *   Copyright (C) 2004-2006 Arcturus Networks Inc. 
+ *                 by Ted Ma and David Wu 
+ *                 <www.ArcturusNetworks.com>
+ *
  *   Copyright (C) 2003 Cadenux, LLC. All rights reserved.
  *   todd.fischer@cadenux.com  <www.cadenux.com>
  *
@@ -33,12 +37,17 @@
  ***********************************************************************/
 
 #include <linux/kernel.h>
+#include <asm/io.h>
 #include <asm/string.h>
+#include <linux/delay.h>
 #include "eth_c5471.h"
 
 /***********************************************************************
  * Definitions
  ***********************************************************************/
+int enet0_reset_flag = 0;
+int enet0_tx_flag = 1;
+int queue_stopped = 0;
 
 #ifdef MODULE
 static int   eth_strlen(const char *str);
@@ -50,9 +59,22 @@ static int   eth_strcmp(const char *s1, const char *s2);
 # define eth_strcmp(s1,s2)    strcmp(s1,s2)
 #endif
 
+#if defined(ETHERNET_PHY_LU3X31T_T64)
+#define MDIO_bit  0x00004000
+#define MDCLK_bit 0x00008000
+#elif defined (CONFIG_FEC_LXT972)
+#define MDIO_bit  0x00000008
+#define MDCLK_bit 0x00000010
+#endif
+
+#if defined (CONFIG_UCBOOTSTRAP)
+extern unsigned char fec_hwaddr[6];
+#endif
+
 /***********************************************************************
  * Public Variables
  ***********************************************************************/
+long counter = 0;
 
 /***********************************************************************
  * Private Variables
@@ -77,8 +99,8 @@ static long         *current_rx_enet0_desc;
 static long         *last_packet_desc_start;
 static long         *last_packet_desc_end;
 static unsigned long eim_status_shadow;
-static unsigned long cached_rx_status;
-static unsigned long cached_tx_status;
+unsigned long cached_rx_status = 0;
+unsigned long cached_tx_status = 0;
 
 /***********************************************************************
  * eth_strlen, eth_strcpy, eth_strcmp
@@ -179,8 +201,6 @@ static __inline__ unsigned long eth_in32(volatile unsigned long *addr)
  *             Pin state internalized
  */
 
-#define MDIO_bit  0x00004000
-#define MDCLK_bit 0x00008000
 
 static void eth_md_tx_bit (int bit_state)
 {
@@ -235,9 +255,6 @@ static void eth_md_tx_bit (int bit_state)
  *                  ^
  *         pin state sample point
  */
-
-#define MDIO_bit  0x00004000
-#define MDCLK_bit 0x00008000
 
 static unsigned long eth_md_rx_bit (void)
 {
@@ -408,8 +425,9 @@ static int eth_md_read_reg (int adr, int reg)
  * require host intervention at the MDC and MDIO pins.
  */
 
-#if (CADENUX_ETHERNET_PHY == ETHERNET_PHY_LU3X31T_T64)
-static int eth_phy_init (void)
+//#if (CADENUX_ETHERNET_PHY == ETHERNET_PHY_LU3X31T_T64)
+#if defined(ETHERNET_PHY_LU3X31T_T64)
+static int eth_phy_init (struct net_device * dev)
 {
   int phy_id;
   int status;
@@ -492,7 +510,410 @@ static int eth_phy_init (void)
   status = eth_md_read_reg(0, MD_PHY_CTRL_STAT_REG);
   return status;
 }
+#elif defined (CONFIG_FEC_LXT972)
+
+#define SUCCESS             0       // function call was successful
+#define FAIL                -1      // general error code
+
+/* The internal registers are
+ * accessable by clocking serial data in/out of the MDIO pin of the
+ * FEC_LXT972 chip. For C5471, the MDC and the MDIO pins are
+ * connected to the C5471 GPIO04 and GPIO03 pins respectivley.
+ */
+
+static void auto_nego(void)
+{
+#ifdef PHY_DEBUG
+	dbg( "Autonegotiating at all speeds!");
+#endif
+	eth_md_write_reg( PHYAddr, PHYANegAd, PHYLEDANEG);
+
+#ifdef PHY_DEBUG
+	dbg("PHYStat2 0x%x ", eth_md_read_reg(PHYAddr, PHYStat2));
+#endif
+
+	/* set to auto negotiation mode and restart it */
+	if( !(eth_md_read_reg(PHYAddr, PHYCtl) & PHY_CONTROL_AUTONEG )) /* when not set */
+		eth_md_write_reg( PHYAddr, PHYCtl, PHY_CONTROL_AUTONEG | PHY_CONTROL_RESTART_AUTONEG);
+
+	return ;
+}
+
+#if 0 //David Wu: not used in this file
+static int
+PHYCheckCable( void)
+{
+	int data = 0;
+	int i;
+
+	data = eth_md_read_reg(PHYAddr, PHYStat2);
+
+#ifdef PHY_DEBUG
+	dbg("PHYStat2 0x%x", (int) data);
+#endif
+
+        for ( i = 0; i < PHY_BUSYLOOP_COUNT; i++)
+        {
+		data = eth_md_read_reg(PHYAddr, PHYStat2);
+		if (data & PHY_STATUS_REG_TWO_LINK)
+                {
+#ifdef PHY_DEBUG
+                        dbg("Cable detected");
+#endif
+                        break;
+                }
+                mdelay( 10);    // 10 mS
+        }
+	if (!(data & PHY_STATUS_REG_TWO_LINK)){
+#ifdef PHY_DEBUG
+		dbg("Link is down.");
+#endif
+    		return(FAIL);
+	}
+#ifdef PHY_DEBUG
+	{
+		data = eth_md_read_reg(PHYAddr, PHYStat2);
+		if (data & PHY_STATUS_REG_TWO_MODE_100)
+			printk( "%s: running at 100 Mbps, ", __FUNCTION__);
+		else
+			printk( "%s: running at  10 Mbps, ", __FUNCTION__);
+
+		if(data & PHY_STATUS_REG_TWO_DUPLEX_MODE)
+			printk( "full duplex Mode.\n");
+		else
+			printk( "half duplex Mode. \n");
+	}
+#endif
+	return SUCCESS;
+}   
+#endif
+/*************************************************************************
+ * SetupPHY - initialize and configure the PHY device.
+ *
+ * This routine initializes and configures the PHY device 
+ *      ***** NOTE: the LED values used for initialization are overwritten
+ *
+ * LevelOne LXT972
+ * Loopback=disabled
+ * Speed = 100/10
+ * Power Down = 0 normal
+ * Isolate = 0 normal
+ * Restart Auto-Negotiation = 0
+ * Duplex = 1 Full / 0 Half
+ * Collision Test = 0 Disabled
+ *
+ **** parm mode values *****
+ * For Full Dup 10Mbps:  0x0100
+ * For Half Dup 10Mbps:  0x0000
+ * For Full Dup 100Mbps: 0x2100
+ * For Half Dup 100Mbps: 0x2000
+ * For Auto Negotiate:   0x1000         - half duplex 10 advertised
+ * For Auto Negotiate:   0x1100         - full/half duplex 10 advertised
+ * For Auto Negotiate:   0x3000         - half duplex 10/100 advertised
+ * For Auto Negotiate:   0x3100         - full/half duplex 10/100 advertised
+ * For Restart AutoNeg:  0x0200         - current values retained
+ *
+ *************************************************************************/
+static void
+SetupPHY( unsigned int mode) 
+{
+	unsigned int j;
+	unsigned int data;
+
+	/* First reset the PHY */
+	eth_md_write_reg( PHYAddr, PHYCtl, PHY_CONTROL_RESET);
+
+	/*
+	 * Read the Reset bit(0.15) of the PHY to see if the reset is completed.
+	 */
+	for ( j = 0; j < PHY_RESETLOOP_COUNT; j++)
+	{
+		data = eth_md_read_reg(PHYAddr, PHYCtl);
+
+		if ( (data & PHY_CONTROL_RESET) == 0)
+		{
+#ifdef PHY_DEBUG
+			dbg( "reset");
+#endif
+			break;
+		}
+		mdelay( 10);    // 10 mS
+	}
+	mdelay( 10);  // just in case
+
+	// change the LED to right link/activity LEFT->speed or ???
+	eth_md_write_reg( PHYAddr, PHYLedCfg, PHYLEDCFG);
+
+	data = eth_md_read_reg(PHYAddr, PHYCtl);
+#ifdef PHY_DEBUG
+	dbg( "setting up mode from 0x%08x to 0x%08x", (int) data, (int) mode);
+#endif
+
+	if (0 == (mode & PHY_CONTROL_AUTONEG))
+	{     // Not autonegotiation mode - just write mode and done
+		dbg( "not autonegotiation mode.\n");
+		eth_md_write_reg(PHYAddr, PHYCtl, mode);
+		return;         // no autonegotiation - no advertising
+	}
+	return auto_nego();  
+}
+
+static int eth_phy_init (struct net_device * dev)
+{
+	int phy_id;
+
+	/* Next, Setup GPIO pins to talk serially to the
+	 * Lucent transeiver chip.
+	 */
+
+	dbg("Setup GPIO connection to PHY.");
+
+	/* enable gpio bits 04, 03 */
+	eth_out32(GPIO_EN_REG, (eth_in32(GPIO_EN_REG)|0x00000018));
+
+	/* config gpio(04); out -> MDCLK */
+	eth_out32(GPIO_CIO_REG, (eth_in32(GPIO_CIO_REG)&~0x00000010));
+
+	/* config gpio(03); in <- MDIO */
+	eth_out32(GPIO_CIO_REG, (eth_in32(GPIO_CIO_REG)|0x00000008));
+
+	/* initial pin state; MDCLK = 0 */
+	eth_out32(GPIO_IO_REG, (eth_in32(GPIO_IO_REG)&0x000FFFE7));
+
+	/* Next, request a chip reset */
+	dbg("PHY reset");
+	eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_RESET);
+
+	while (eth_md_read_reg(PHYAddr, PHYCtl) & PHY_CONTROL_RESET)
+	{
+		/* FIXME: wait for chip reset to complete. */
+		/* should do something in case of busy looping */
+	}
+
+	/* Next, Read out the chip ID */
+	phy_id = (eth_md_read_reg(PHYAddr, PHYId1) << 16) | eth_md_read_reg(PHYAddr, PHYId2);
+	dbg("PHY chip ID read: %x", phy_id);
+	if (phy_id != LXT972_ID_val)
+	{
+		err("Unexpected PHY chip ID 0x%X", phy_id);
+		return -1;
+	}
+
+#if 1
+	SetupPHY(PHY_CONTROL_AUTONEG);
+	return 0;
 #else
+	switch (LAN_Rate)
+	{
+	case 100: /* 100BaseT */
+		dbg("Setting PHY Transceiver for 100BaseT FullDuplex");
+		eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_SPEED_100_FULL);
+		break;
+
+	case 50: /* 100BaseT */
+		dbg("Setting PHY Transceiver for 100BaseT HalfDuplex");
+		eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_SPEED_100_HALF);
+		break;
+
+	case 10: /* 10BaseT */
+		dbg("Setting PHY Transceiver for 10BaseT FullDuplex");
+		eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_SPEED_10_FULL);
+		break;
+
+	case 5: /* 10BaseT */
+		dbg("Setting PHY Transceiver for 10BaseT HalfDuplex");
+		eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_SPEED_10_HALF);
+		break;
+
+	case 0: /* Auto negotiation */
+		dbg("Setting PHY Transceiver for Autonegotiation");
+		eth_md_write_reg(PHYAddr, PHYCtl, PHY_CONTROL_AUTONEG);
+		break;
+	}
+
+	return PHYCheckCable();
+#endif
+
+}
+
+void enable_link_interrupt(void)
+{
+	eth_md_read_reg(PHYAddr, PHYIntStat); /* PHYIntStat: self clear */
+
+	/* enable gpio bits 00 for input ->MDINT IRQ3: link interrupt */
+	eth_out32(GPIO_EN_REG, (eth_in32(GPIO_EN_REG)|0x00000001));
+	eth_out32(GPIO_CIO_REG, (eth_in32(GPIO_CIO_REG)|0x00000001));
+
+	/* IRQ generated on the falling edge */
+	eth_out32((volatile unsigned long *)GPIO_IRQA, (eth_in32((volatile unsigned long *)GPIO_IRQA)&~0x00000001));
+	eth_out32((volatile unsigned long *)GPIO_IRQB, (eth_in32((volatile unsigned long *)GPIO_IRQB)|0x00000001));
+
+	/* clear interrupt first */
+	eth_in32((volatile unsigned long *)SRC_IRQ_REG); /* Insure appropriate IT_REG bit clears */
+	/* Reset IRQ output. Clear SRC_IRQ_REG. Enables a new IRQ generation. */
+  	eth_out32((volatile unsigned long *)INT_CTRL_REG, (eth_in32((volatile unsigned long *)INT_CTRL_REG)|0x00000001));
+
+	/* Interrupt Level for link interrupt */
+	eth_out32((volatile unsigned long *)ILR_IRQ3_REG, (eth_in32((volatile unsigned long *)ILR_IRQ3_REG)|0x0000003E)); /* ILR_IRQ3_REG set to 0x20(EdgeSensitive) + 0x1E(Priority) */
+
+	/* 0x00f2: enable link/duplex/speed change/auto negotiation interrupt. */
+	eth_md_write_reg( PHYAddr, PHYIntEn, 0x00f2);
+}
+
+void reset_duplex_mode(struct net_device * dev){
+#ifdef LINUX_20 
+		eth_turn_off_ethernet(dev);
+		dev->tbusy    = 1;
+		dev->start    = 0;
+#else
+		netif_stop_queue(dev);
+		eth_turn_off_ethernet(dev);
+#endif
+
+		eth_out32(EIM_INT_EN_REG       , 0x00000000);
+		/* flip duplex */
+		eth_out32(ENET0_MODE_REG, eth_in32(ENET0_MODE_REG) ^ ENET0_MODE_FULLDUPLEX);
+		/* enable tx and rx */
+  		//clearbits = eth_in32(EIM_STATUS_REG);
+#ifdef ETH_C5471_USE_ESM
+		eth_out32(EIM_INT_EN_REG, (eth_in32(EIM_INT_EN_REG) | EIM_CPU_TX_INT | EIM_CPU_RX_INT));
+		eth_out32(EIM_CTRL_REG, (eth_in32(EIM_CTRL_REG) | EIM_CTRL_ESM_EN));
+#else
+		eth_out32(EIM_INT_EN_REG, (eth_in32(EIM_INT_EN_REG) | EIM_ENET0_TX_INT | EIM_ENET0_RX_INT | EIM_ENET0_ERR_INT));
+#endif
+		/* enable ENET */
+		eth_out32(ENET0_MODE_REG, (eth_in32(ENET0_MODE_REG) | ENET0_MODE_ENABLE));
+#ifdef LINUX_20
+		dev->tbusy     = 0;
+		dev->interrupt = 0;
+		dev->start     = 1;
+#else
+		netif_start_queue(dev);
+#endif
+}
+
+/* This interrupt handler does the link / duplex / speed change/auto negotiation interrupt. */
+void eth_5471_link_interrupt(int irq, void *dev_instance, struct pt_regs *rgs)
+{
+	int status;
+	int base_t10 = 0, half_duplex = 0;
+	struct net_device *dev = (struct net_device *)dev_instance;
+	struct net_local * np = (struct net_local *) dev->priv;
+
+	spin_lock( &np->lock);
+
+	status = eth_md_read_reg(PHYAddr, PHYIntStat); /* PHYIntStat: self clear */
+
+	dbg("PHYIntStat: 0x%x\n", status);
+
+	if(!status ) goto clear_int;  // nothing changed
+
+	/* disable: link/duplex/speed change interrupt. */
+	eth_md_write_reg( PHYAddr, PHYIntEn, 0x0000);
+
+	if (ANDONE & status){  // auto negotiation completed
+		dbg("ANDONE\n");
+		if (LINKCHG & status){    // link changed
+			dbg("LINKCHG\n");
+			status = eth_md_read_reg(PHYAddr, PHYStat2);
+			if((status & PHY_STATUS_REG_TWO_LINK))
+				printk("Link is up.\n");
+			else {
+				printk("Link is down.\n");
+				goto clear_int;
+			}
+		} else
+			status = eth_md_read_reg(PHYAddr, PHYStat2);
+		if (status & PHY_STATUS_REG_TWO_MODE_100)
+			printk( "running at 100 Mbps, ");
+		else {
+			base_t10 = 1;
+			printk( "running at  10 Mbps, ");
+		}
+		if(status & PHY_STATUS_REG_TWO_DUPLEX_MODE){
+			printk( "full duplex Mode.\n");
+		} else {
+			printk( "half duplex Mode.\n");
+			half_duplex = 1;
+		}
+		if(base_t10){  /* set to 10Base-T */
+			eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) & ~PHY_CONTROL_SELECT_SPEED);
+		}else{         /* set to 100Base-T */
+			eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) | PHY_CONTROL_SELECT_SPEED);
+		}
+		if(half_duplex){
+			/* enable collision test, half duplex and SQE heartbeat */
+			eth_md_write_reg( PHYAddr, PHYCtl, (eth_md_read_reg(PHYAddr, PHYCtl) | PHY_CONTROL_COLLISION_TEST) & ~(PHY_CONTROL_DUPLEXMODE));
+			eth_md_write_reg( PHYAddr, PHYPortCfg, eth_md_read_reg(PHYAddr, PHYPortCfg) | 0x0200);
+			if(eth_in32(ENET0_MODE_REG) & ENET0_MODE_FULLDUPLEX)
+				reset_duplex_mode(dev);
+		} else {
+			/* disable collision test and SQE heartbeat, set to full duplex mode */
+			eth_md_write_reg( PHYAddr, PHYCtl, (eth_md_read_reg(PHYAddr, PHYCtl) & ~PHY_CONTROL_COLLISION_TEST) | PHY_CONTROL_DUPLEXMODE);
+			eth_md_write_reg( PHYAddr, PHYPortCfg, eth_md_read_reg(PHYAddr, PHYPortCfg) & ~0x0200);
+			if(!(eth_in32(ENET0_MODE_REG) & ENET0_MODE_FULLDUPLEX))
+				reset_duplex_mode(dev);
+		}
+	} else if (LINKCHG & status){    // link changed
+		dbg("LINKCHG\n");
+		status = eth_md_read_reg(PHYAddr, PHYStat2);
+		if((status & PHY_STATUS_REG_TWO_LINK))
+			printk("Link is up.\n");
+		else {
+			printk("Link is down.\n");
+			goto clear_int;
+		}
+	} else {
+		if (SPEEDCHG & status){  // speed changed
+			dbg("SPEEDCHG\n");
+			status = eth_md_read_reg(PHYAddr, PHYStat2);
+			if (status & PHY_STATUS_REG_TWO_MODE_100) /* set to 100Base-T */
+				eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) | PHY_CONTROL_SELECT_SPEED);
+			else                                      /* set to 10Base-T */
+				eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) & ~PHY_CONTROL_SELECT_SPEED);
+		}
+		if (DUPLEXCHG & status){ // duplex changed
+			dbg("DUPLEXCHG\n");
+			status = eth_md_read_reg(PHYAddr, PHYStat2);
+			if(!(status & PHY_STATUS_REG_TWO_LINK)) 
+				goto clear_int;
+			if(!(status & PHY_STATUS_REG_TWO_DUPLEX_MODE))
+				half_duplex = 1;
+			if (!(status & PHY_STATUS_REG_TWO_MODE_100))
+				base_t10 = 1;
+			if(half_duplex){
+				/* enable collision test and SQE heartbeat */
+				eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) | PHY_CONTROL_COLLISION_TEST);
+				eth_md_write_reg( PHYAddr, PHYPortCfg, eth_md_read_reg(PHYAddr, PHYPortCfg) | 0x0200);
+				if(eth_in32(ENET0_MODE_REG) & ENET0_MODE_FULLDUPLEX)
+					reset_duplex_mode(dev);
+			} else {
+				/* disable collision test and SQE heartbeat */
+				eth_md_write_reg( PHYAddr, PHYCtl, eth_md_read_reg(PHYAddr, PHYCtl) & ~PHY_CONTROL_COLLISION_TEST);
+				eth_md_write_reg( PHYAddr, PHYPortCfg, eth_md_read_reg(PHYAddr, PHYPortCfg) & ~0x0200);
+				if(!(eth_in32(ENET0_MODE_REG) & ENET0_MODE_FULLDUPLEX))
+					reset_duplex_mode(dev);
+			}
+		}
+	}
+#ifdef PHY_DEBUG
+	dbg("IT_REG line: %d 0x%8lx", __LINE__, eth_in32((volatile unsigned long *)IT_REG));
+	dbg("MASK_IT_REG: 0x%8lx", eth_in32((volatile unsigned long *)MASK_IT_REG));
+#endif
+
+	auto_nego();
+clear_int:
+	/* clear interrupt first by reading SRC_IRQ_REG */
+	eth_in32((volatile unsigned long *)SRC_IRQ_REG); /* Insure appropriate IT_REG bit clears */
+
+	/* Reset IRQ output. Clear SRC_IRQ_REG. Enables a new IRQ generation. */
+  	eth_out32((volatile unsigned long *)INT_CTRL_REG, (eth_in32((volatile unsigned long *)INT_CTRL_REG)|0x00000001));
+
+	/* disable: link/duplex/speed change/auto negotiation interrupt. */
+	eth_md_write_reg( PHYAddr, PHYIntEn, 0x00f2); 
+	spin_unlock( &np->lock);
+}
+#else 
 # define eth_phy_init()
 # if !defined(CADENUX_ETHERNET_PHY)
 #  warning "CADENUX_ETHERNET_PHY not defined -- assumed NONE"
@@ -503,7 +924,7 @@ static int eth_phy_init (void)
  * eth_eim_reset
  ***********************************************************************/
 
-/* The C5472 docs states that a module should generally be reset
+/* The C5471 docs states that a module should generally be reset
  * according to the following algorithm:
  *
  *  1. Put the module in reset.
@@ -556,7 +977,7 @@ static void eth_eim_reset (void)
  * eth_eim_specific_config
  ***********************************************************************/
 
-/* This function sssumes that all registers are currently in the
+/* This function assumes that all registers are currently in the
  * power-up reset state. This routine then modifies that state to
  * provide our  specific ethernet configuration.
  */
@@ -746,7 +1167,7 @@ static void eth_eim_specific_config(void)
 #endif  
   eth_out32(ENET0_DRP_REG        , 0x00000000);
 
-#if 1  
+#if 0  
   {
     int i;
     for (i = 0; i < 2000000; i++);
@@ -804,6 +1225,7 @@ static const unsigned char hextable[256] = {
   255, 255, 255, 255, 255, 255, 255, 255,
 };
 
+#ifndef CONFIG_UCBOOTSTRAP
 /***********************************************************************
  * eth_ascii_to_bin
  ***********************************************************************/
@@ -847,6 +1269,7 @@ static unsigned char eth_hexstrtobyte(char *str)
     }
   return (unsigned char)retval;
 }
+#endif
 
 /***********************************************************************
  * eth_fill_mac
@@ -862,6 +1285,7 @@ static unsigned char eth_hexstrtobyte(char *str)
 #define MIN_MAC 11
 #define MAX_MAC 17
 
+#ifndef CONFIG_UCBOOTSTRAP
 static void eth_fill_mac(unsigned char *mac_array, char *MAC_str)
 {
   /* example MAC: 1:2:3:4:5:6 (11 chars).
@@ -898,6 +1322,7 @@ static void eth_fill_mac(unsigned char *mac_array, char *MAC_str)
       start = end;
     }
 }
+#endif
 
 /***********************************************************************
  * eth_mac_is_null
@@ -951,13 +1376,21 @@ static void eth_mac_assign(unsigned char *mac_array)
    * accept all mode which runs the ENET in PROMISCUOUS
      mode).
    */
-
+#if defined(CONFIG_UCBOOTSTRAP)
+  eth_out32(ENET0_PARHI_REG, ((mac_array[5] << 8)  |
+			     (mac_array[4])));
+  eth_out32(ENET0_PARLO_REG, ((mac_array[3] << 24) |
+			     (mac_array[2] << 16) |
+			     (mac_array[1] << 8)  |
+			     (mac_array[0])));
+#else
   eth_out32(ENET0_PARHI_REG, ((mac_array[0] << 8)  |
 			     (mac_array[1])));
   eth_out32(ENET0_PARLO_REG, ((mac_array[2] << 24) |
 			     (mac_array[3] << 16) |
 			     (mac_array[4] << 8)  |
 			     (mac_array[5])));
+#endif
 }
 
 #ifdef ETH_C5471_USE_ESM
@@ -1044,7 +1477,7 @@ static void incr_rx_enet0_desc(void)
  * eth_tx_errors
  ***********************************************************************/
 
-int eth_tx_errors(void)
+unsigned long eth_tx_errors(void)
 {
   int more;
   long *Descriptor_p = last_packet_desc_start;
@@ -1082,15 +1515,7 @@ int eth_tx_errors(void)
 	    }
 	}
     }
-  
-  if (cached_tx_status)
-    {
-      return 1;
-    }
-  else
-    {
-      return 0;
-    }
+  return cached_tx_status;
 }
 
 /***********************************************************************
@@ -1258,16 +1683,9 @@ int eth_rx_length_errors(void)
  * eth_rx_errors
  ***********************************************************************/
 
-int eth_rx_errors(void)
+unsigned long eth_rx_errors(void)
 {
-  if (cached_rx_status)
-    {
-      return 1;
-    }
-  else
-    {
-      return 0;
-    }
+  return cached_rx_status;
 }
 
 /***********************************************************************
@@ -1343,9 +1761,14 @@ int eth_xmit_int_active(void)
 
 void eth_get_default_MAC(unsigned char *mac_array)
 {
-  int got_mac = 0;
 
   /* Ether MAC string deposited by bootloader to IRAM.  */
+
+#if defined(CONFIG_UCBOOTSTRAP)
+  memcpy(mac_array, &fec_hwaddr, 6);
+
+#else
+  int got_mac = 0;
 
   if (0 == *(__EtherMACMagicStr+eth_strlen("etherMAC-->")))
     {
@@ -1386,6 +1809,9 @@ void eth_get_default_MAC(unsigned char *mac_array)
       mac_array[5] = 0xce;
 #endif
     }
+
+#endif
+
 }
 
 /***********************************************************************
@@ -1501,7 +1927,7 @@ void eth_set_filter(int cpu_fltr)
  * eth_turn_on_ethernet
  ***********************************************************************/
 
-void eth_turn_on_ethernet(void)
+void eth_turn_on_ethernet(struct net_device * dev)
 {
   volatile unsigned long clearbits;
 
@@ -1512,7 +1938,7 @@ void eth_turn_on_ethernet(void)
 
   dbg("PHY init");
 
-  eth_phy_init();
+  eth_phy_init(dev);
 
   dbg("EIM config");
 
@@ -1569,7 +1995,7 @@ void eth_turn_on_ethernet(void)
  * eth_turn_off_ethernet
  ***********************************************************************/
 
-void eth_turn_off_ethernet(void)
+void eth_turn_off_ethernet(struct net_device * dev)
 {
   /* Next, disable interrupts going from EIM Module to Interrupt Module. */
 
@@ -1583,11 +2009,28 @@ void eth_turn_off_ethernet(void)
   /* disable ENET */
   eth_out32(ENET0_MODE_REG, (eth_in32(ENET0_MODE_REG) & ~ENET0_MODE_ENABLE));
 
+#ifdef ETH_C5471_USE_ESM
+  eth_out32(EIM_CTRL_REG, (eth_in32(EIM_CTRL_REG) & ~(EIM_CTRL_ENET0_EN  |
+	   EIM_CTRL_ENET0_RXEN | EIM_CTRL_ENET0_TXEN |
+	   EIM_CTRL_CPU_RXEN   | EIM_CTRL_CPU_TXEN)));
+#else
+  eth_out32(EIM_CTRL_REG, (eth_in32(EIM_CTRL_REG) & ~(EIM_CTRL_ENET0_EN  |
+	   EIM_CTRL_ENET0_RXEN | EIM_CTRL_ENET0_TXEN)));
+#endif
+
   /* disable SWITCH */
   eth_out32(EIM_CTRL_REG, (eth_in32(EIM_CTRL_REG) & ~EIM_CTRL_ESM_EN));
   return;
 }
 
+/***********************************************************************
+ * eth_read_enet_sys_err_reg return value in ENET0_SYS_ERR_REG
+ ***********************************************************************/
+unsigned long eth_read_enet_sys_err_reg(void)
+{
+	unsigned long retv = eth_in32(ENET0_SYS_ERR_REG);
+	return retv;
+}
 
 #ifdef ETH_C5471_USE_ESM
 
@@ -1790,7 +2233,7 @@ void eth_send_packet(unsigned char *buf, int numbytes)
 			bytelen = numbytes;
 		}
 
-	    /* Next, submit ether frame bytes to the C5472 Ether Module packet
+	    /* Next, submit ether frame bytes to the C5471 Ether Module packet
 	     * memory space.
 	     */
 
@@ -1845,6 +2288,139 @@ void eth_send_packet(unsigned char *buf, int numbytes)
   	return;
 }
 #else
+/***********************************************************************
+ * eth_free_received_packet when rx error occured
+ ***********************************************************************/
+void eth_free_received_packet(void)
+{
+         
+        unsigned short more;
+         /*This frees up the memory contained within
+         * the EIM for additional packets that might be received
+         * later from the network.
+         */
+        more = 1;
+        while (more)
+        {
+                if ((EIM_DESC_OWNER_HOST & eth_in32(current_rx_enet0_desc)) == 0)
+                {
+                        err("LOGIC Error! eth_get_received_packet_data()");
+                        return;
+                }
+                if (eth_in32(current_rx_enet0_desc) & EIM_DESC_LIF)
+                {
+                        more = 0;
+                }
+        /* Next, Clear all bits of words0/1 of the descriptor
+         * except preserve the settings of a select few. Can
+         * leave descriptor words 2/3 alone.
+         */
+        eth_out32(current_rx_enet0_desc, (EIM_DESC_PACKET_BYTES | (eth_in32(current_rx_enet0_desc) & (EIM_DESC_WRAP | EIM_DESC_INTEN))));
+
+        /* Next, Give ownership of now emptied descriptor
+         * back to the Ether Module's ENET0.
+         */
+        eth_out32(current_rx_enet0_desc, (eth_in32(current_rx_enet0_desc) & ~(EIM_DESC_OWNER_HOST)));
+        incr_rx_enet0_desc(); /* advance; to find our next data buffer. */
+        }
+        return;
+}
+
+/***********************************************************************
+ * eth_reset_enet when rx overrun error occured
+ * not tested for LINUX_20
+ ***********************************************************************/
+void eth_reset_enet(struct NET_DEVICE *dev)
+{
+	dbg("ENET0_SYS_ERR_REG");
+	//----- ethernet off ----------------------
+#ifdef LINUX_20
+	eth_turn_off_ethernet(dev);
+	dev->tbusy    = 1;
+	dev->start    = 0;
+
+#else
+	netif_stop_queue(dev);
+	eth_turn_off_ethernet(dev);
+#endif
+	//-------- ethernet on -----------
+	eth_eim_reset();
+
+	eth_eim_specific_config();
+
+	if (eth_mac_is_null(d_MAC))
+	  {
+	    eth_get_default_MAC(d_MAC);
+	  }
+	eth_mac_assign(d_MAC);
+
+	/* set address mode using current setting*/
+	{ // same as set_multicast_list(dev), which is defined as static, we cannot call it from this file
+	  int eim_addr_mode;              /* ENET_ADR_ defines */
+	  int cpu_fltr_mode;              /* EIM_FILTER_ defines */
+  
+	  if(dev->flags&IFF_PROMISC)
+ 	  {
+	    eim_addr_mode = ENET_ADR_PROMISCUOUS;
+	    cpu_fltr_mode = EIM_FILTER_MULTICAST |
+                            EIM_FILTER_BROADCAST |
+                       	    EIM_FILTER_UNICAST;
+	    eth_multicast_promiscuous();
+	  }
+	  else if(dev->flags&IFF_ALLMULTI)
+	  {
+	    eim_addr_mode = ENET_ADR_PROMISCUOUS;
+	    cpu_fltr_mode = EIM_FILTER_MULTICAST |
+                            EIM_FILTER_BROADCAST |
+                            EIM_FILTER_UNICAST;
+	    eth_multicast_accept_multicast();
+	  }
+	  else if(dev->mc_count > 0)
+	  {
+	    /* Accept all multicast packets and
+	    rely on higher-level filtering */
+	    eim_addr_mode = ENET_ADR_BROADCAST | ENET_ADR_HAST_FLTR | ENET_ADR_DEST_ADDR;
+	    cpu_fltr_mode = EIM_FILTER_MULTICAST |
+        	            EIM_FILTER_BROADCAST |
+       	                    EIM_FILTER_UNICAST;
+	    eth_multicast_accept_multicast();
+	  }
+	  else {
+	    /* just accept broadcast packets and packets
+	       sent to this device */
+	    eim_addr_mode = ENET_ADR_BROADCAST | ENET_ADR_DEST_ADDR;
+	    cpu_fltr_mode = EIM_FILTER_BROADCAST |
+	                    EIM_FILTER_UNICAST;
+	  }
+	  eth_set_addressing(eim_addr_mode);
+	  eth_set_filter(cpu_fltr_mode);
+	}
+
+	/* Next, enable interrupts going from EIM Module to Interrupt Module. */
+#ifdef ETH_C5471_USE_ESM
+	eth_out32(EIM_INT_EN_REG, (eth_in32(EIM_INT_EN_REG) | EIM_CPU_TX_INT | EIM_CPU_RX_INT));
+#else
+	eth_out32(EIM_INT_EN_REG, (eth_in32(EIM_INT_EN_REG) | EIM_ENET0_TX_INT | EIM_ENET0_RX_INT | EIM_ENET0_ERR_INT));
+#endif
+	/* enable SWITCH */
+#ifdef ETH_C5471_USE_ESM
+	eth_out32(EIM_CTRL_REG, (eth_in32(EIM_CTRL_REG) | EIM_CTRL_ESM_EN));
+#endif
+
+	/* enable ENET */
+	eth_out32(ENET0_MODE_REG, (eth_in32(ENET0_MODE_REG) | ENET0_MODE_ENABLE));
+
+	dbg("Ethernet HW reset complete\n");
+
+#ifdef LINUX_20  
+	dev->tbusy     = 0;
+	dev->interrupt = 0;
+	dev->start     = 1;
+#else
+	netif_start_queue(dev);
+#endif
+	return ;
+}
 
 /***********************************************************************
  * eth_get_received_packet_len
@@ -1957,6 +2533,7 @@ void eth_get_received_packet_data(unsigned char *buf, int *numbytes)
     	packetmem = (unsigned short *)eth_in32(current_rx_enet0_desc+1);
 
 	    /* divide by 2 with round up. */
+	/* ethernet interface in big endian while processor runs in little endian */ 
     	numshorts = (bytelen+ROUNDUP)>>1;
 	    for (i=0; i<numshorts; i++, j++)
 		{
@@ -2002,12 +2579,14 @@ void eth_get_received_packet_data(unsigned char *buf, int *numbytes)
  * any necessary retrys required due to normal network collisions, etc.
  */
 
-void eth_send_packet(unsigned char *buf, int numbytes)
+void eth_send_packet(unsigned char *buf, int numbytes, struct NET_DEVICE *dev)
 {
 	unsigned int i, j, FirstFrame;
 	unsigned short bytelen, numshorts;
 	unsigned short *packetmem;
 	unsigned long cached_desc;
+	int counter = 0;
+
 #ifdef ETH_C5471_ALL_DESC_AT_ONCE
 	long *tmp_packet_desc;
 #endif
@@ -2024,15 +2603,23 @@ void eth_send_packet(unsigned char *buf, int numbytes)
 	while (numbytes)
   	{
     	while ((EIM_DESC_OWNER_HOST & eth_in32(current_tx_enet0_desc)) == 0)
-		{
+	    {
 	  	/* words #0 and #1 of descriptor
 	   	 * loop until the ENET0 goes off the descriptor
 	  	 * giving us access rights to submit our new ether
 	  	 * frame to it.
 	  	 * do_delay(1000);
 	  	 */
+		mdelay(1);  /* 1 ms */
+		if(counter++ > 100 || !queue_stopped) /* we are spinning here */
+		{
+			if(!queue_stopped){ 
+				netif_stop_queue(dev);
+				queue_stopped = 1;
+			}
 		}
 
+	    }
 	    if (numbytes >= EIM_DESC_PACKET_BYTES)
 		{
 			bytelen = EIM_DESC_PACKET_BYTES;
@@ -2047,6 +2634,7 @@ void eth_send_packet(unsigned char *buf, int numbytes)
 	     */
 
 	    /* divide by 2 with round up. */
+	    /* ethernet interface in big endian while processor runs in little endian */ 
 	    numshorts = (bytelen+1)>>1;
 
     	/* words #2 and #3 of descriptor */
@@ -2120,6 +2708,10 @@ void eth_send_packet(unsigned char *buf, int numbytes)
      * for the wire. */
 	eth_out32(ENET0_TXBUF_RDY_REG, 0x00000001);
 #endif
+	if(queue_stopped){
+		netif_wake_queue(dev);
+		queue_stopped = 0;
+	}
 	return;
 }
 

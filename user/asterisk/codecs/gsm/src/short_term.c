@@ -4,7 +4,7 @@
  * details.  THERE IS ABSOLUTELY NO WARRANTY FOR THIS SOFTWARE.
  */
 
-/* $Header: /usr/cvsroot/asterisk/codecs/gsm/src/short_term.c,v 1.16 2003/02/12 13:59:14 matteo Exp $ */
+/* $Header$ */
 
 #include <stdio.h>
 #include <assert.h>
@@ -30,7 +30,6 @@ static void Decoding_of_the_coded_Log_Area_Ratios P2((LARc,LARpp),
 	word	* LARpp)	/* out: decoded ..			*/
 {
 	register word	temp1 /* , temp2 */;
-	register long	ltmp;	/* for GSM_ADD */
 
 	/*  This procedure requires for efficient implementation
 	 *  two tables.
@@ -59,7 +58,7 @@ static void Decoding_of_the_coded_Log_Area_Ratios P2((LARc,LARpp),
 #define	STEP( B, MIC, INVA )	\
 		temp1    = GSM_ADD( *LARc++, MIC ) << 10;	\
 		temp1    = GSM_SUB( temp1, B << 1 );		\
-		temp1    = GSM_MULT_R( INVA, temp1 );		\
+		temp1    = (word)GSM_MULT_R( INVA, temp1 );		\
 		*LARpp++ = GSM_ADD( temp1, temp1 );
 
 	STEP(      0,  -32,  13107 );
@@ -99,7 +98,6 @@ static void Coefficients_0_12 P3((LARpp_j_1, LARpp_j, LARp),
 	register word * LARp)
 {
 	register int 	i;
-	register longword ltmp;
 
 	for (i = 1; i <= 8; i++, LARp++, LARpp_j_1++, LARpp_j++) {
 		*LARp = GSM_ADD( SASR( *LARpp_j_1, 2 ), SASR( *LARpp_j, 2 ));
@@ -113,7 +111,6 @@ static void Coefficients_13_26 P3((LARpp_j_1, LARpp_j, LARp),
 	register word * LARp)
 {
 	register int i;
-	register longword ltmp;
 	for (i = 1; i <= 8; i++, LARpp_j_1++, LARpp_j++, LARp++) {
 		*LARp = GSM_ADD( SASR( *LARpp_j_1, 1), SASR( *LARpp_j, 1 ));
 	}
@@ -125,7 +122,6 @@ static void Coefficients_27_39 P3((LARpp_j_1, LARpp_j, LARp),
 	register word * LARp)
 {
 	register int i;
-	register longword ltmp;
 
 	for (i = 1; i <= 8; i++, LARpp_j_1++, LARpp_j++, LARp++) {
 		*LARp = GSM_ADD( SASR( *LARpp_j_1, 2 ), SASR( *LARpp_j, 2 ));
@@ -156,7 +152,6 @@ static void LARp_to_rp P1((LARp),
 {
 	register int 		i;
 	register word		temp;
-	register longword	ltmp;
 
 	for (i = 1; i <= 8; i++, LARp++) {
 
@@ -219,7 +214,7 @@ static void Short_term_analysis_filtering P4((u0,rp0,k_n,s),
 		for (rp=rp0, u=u0; u<u_top;) {
 			register longword	ui, rpi;
 			ui    = *u;
-			*u++  = u_out;
+			*u++  = (word)u_out;
 			rpi   = *rp++;
 			u_out = ui + (((rpi*di)+0x4000)>>15);
 			di    = di + (((rpi*ui)+0x4000)>>15);
@@ -231,7 +226,7 @@ static void Short_term_analysis_filtering P4((u0,rp0,k_n,s),
 			if (di>MAX_WORD) di=MAX_WORD;
 			else if (di<MIN_WORD) di=MIN_WORD;
 		}
-		*s++ = di;
+		*s++ = (word)di;
 	}
 }
 #endif
@@ -320,9 +315,9 @@ static void Short_term_synthesis_filtering P5((S,rrp,k,wt,sr),
 			if (tmp1 != (word)tmp1) {
 				tmp1 = (tmp1<0)? MIN_WORD:MAX_WORD;
 			}
-			v[i+1] = tmp1;
+			v[i+1] = (word)tmp1;
 		}
-		*sr++ = v[0] = sri;
+		*sr++ = v[0] = (word)sri;
 	}
 }
 
@@ -378,7 +373,7 @@ void Gsm_Short_Term_Analysis_Filter P3((S,LARc,s),
 	word		* LARpp_j_1	= S->LARpp[ S->j ^= 1 ];
 
 	word		LARp[8];
-int i;
+
 #undef	FILTER
 #if 	defined(FAST) && defined(USE_FLOAT_MUL)
 # 	define	FILTER 	(* (S->fast			\

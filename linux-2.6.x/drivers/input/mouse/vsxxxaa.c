@@ -497,7 +497,7 @@ vsxxxaa_connect (struct serio *serio, struct serio_driver *drv)
 	mouse = kzalloc (sizeof (struct vsxxxaa), GFP_KERNEL);
 	input_dev = input_allocate_device ();
 	if (!mouse || !input_dev)
-		goto fail;
+		goto fail1;
 
 	mouse->dev = input_dev;
 	mouse->serio = serio;
@@ -508,8 +508,7 @@ vsxxxaa_connect (struct serio *serio, struct serio_driver *drv)
 	input_dev->name = mouse->name;
 	input_dev->phys = mouse->phys;
 	input_dev->id.bustype = BUS_RS232;
-	input_dev->cdev.dev = &serio->dev;
-	input_dev->private = mouse;
+	input_dev->dev.parent = &serio->dev;
 
 	set_bit (EV_KEY, input_dev->evbit);		/* We have buttons */
 	set_bit (EV_REL, input_dev->evbit);
@@ -527,7 +526,7 @@ vsxxxaa_connect (struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open (serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
 	/*
 	 * Request selftest. Standard packet format and differential
@@ -535,12 +534,15 @@ vsxxxaa_connect (struct serio *serio, struct serio_driver *drv)
 	 */
 	serio->write (serio, 'T'); /* Test */
 
-	input_register_device (input_dev);
+	err = input_register_device (input_dev);
+	if (err)
+		goto fail3;
 
 	return 0;
 
- fail:	serio_set_drvdata (serio, NULL);
-	input_free_device (input_dev);
+ fail3:	serio_close (serio);
+ fail2:	serio_set_drvdata (serio, NULL);
+ fail1:	input_free_device (input_dev);
 	kfree (mouse);
 	return err;
 }
@@ -571,8 +573,7 @@ static struct serio_driver vsxxxaa_drv = {
 static int __init
 vsxxxaa_init (void)
 {
-	serio_register_driver(&vsxxxaa_drv);
-	return 0;
+	return serio_register_driver(&vsxxxaa_drv);
 }
 
 static void __exit

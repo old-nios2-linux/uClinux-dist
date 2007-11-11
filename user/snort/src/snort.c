@@ -97,6 +97,7 @@
 #include "inline.h"
 #include "mpse.h"
 #include "generators.h"
+#include "ipv6.h"
 
 #ifdef DYNAMIC_PLUGIN
 #include "dynamic-plugins/sf_dynamic_engine.h"
@@ -207,7 +208,8 @@ static void LoadDynamicPlugins();
 #endif
 static void PrintVersion();
 #ifdef INLINE_FAILOPEN
-void *InlineFailOpenThread(void *arg);
+void *InlinePatternMatcherInitThread(void *arg);
+void PcapIgnorePacket(char *user, struct pcap_pkthdr * pkthdr, u_char * pkt);
 #endif
 
 /* Signal handler declarations ************************************************/
@@ -491,6 +493,11 @@ int SnortMain(int argc, char *argv[])
     /* Initialize storage space for preprocessor defined rule options */
     PreprocessorRuleOptionsInit();
 #endif
+
+    /* Initialize max frag hash for the BSD IPv6 fragmentation exploit */
+    pv.ipv6_max_frag_sessions = 10000;
+    /* This is the default timeout on BSD */
+    pv.ipv6_frag_timeout = 60;
 
     /* chew up the command line */
     ParseCmdLine(argc, argv);
@@ -790,6 +797,8 @@ int SnortMain(int argc, char *argv[])
 
         asn1_init_mem(512);
 
+        ipv6_init(pv.ipv6_max_frag_sessions);
+
         /*
         **  Handles Fatal Errors itself.
         */
@@ -896,41 +905,6 @@ int SnortMain(int argc, char *argv[])
     if (!pd)
         InitPcap( 0 );
 
-#ifdef INLINE_FAILOPEN
-    /* If in inline mode, start a thread to pull packets off the wire
-     * and pass them through until we've read and initialized all the
-     * rules, preprocessors, output plugins, etc.
-     */
-    pv.pass_thread_running_flag = 0;
-    pv.initialization_done_flag = 0;
-    if (InlineMode() && !pv.readmode_flag && !pv.inline_failopen_disabled_flag)
-    {
-        LogMessage("Inline Fail Open Thread starting..\n");
-        if (pthread_create(&pv.pass_thread_id, NULL, InlineFailOpenThread, NULL))
-        {
-            ErrorMessage("Failed to start Inline Fail Open Thread. Starting "
-                    "normally\n");
-        }
-        else
-        {
-            while (!pv.pass_thread_running_flag)
-            {
-                /* wait for the thread to spin up */
-                LogMessage("Waiting for Inline Fail Open Thread to start..\n");
-                sleep(1);
-            }
-            LogMessage("Inline Fail Open Thread started %d\n",
-                pv.pass_thread_id);
-
-            if (pthread_detach(pv.pass_thread_id))
-            {
-                LogMessage("Inline Fail Open Thread %d not detached %d %s\n",
-                        pv.pass_thread_id, errno, strerror(errno));
-            }
-        }
-    }
-#endif
-
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Setting Packet Processor\n"););
 
     /* set the packet processor (ethernet, slip, t/r, etc ) */
@@ -1012,12 +986,64 @@ int SnortMain(int argc, char *argv[])
 
     PostConfigInitPlugins();
 
+#if defined(INLINE_FAILOPEN) && !defined(GIDS)
+    if (InlineMode() && !pv.readmode_flag &&
+        !pv.inline_failopen_disabled_flag &&
+        !pv.test_mode_flag && pd)
+    {
+        /* If in inline mode, start a thread to handle the initialization
+         * of the fast pattern matcher.  Then, loop, passing packets,
+         * until that initialization is complete.
+         */
+        LogMessage("Fail Open Thread starting..\n");
+        pv.initialization_done_flag = 0;
+        if (pthread_create(&pv.pass_thread_id, NULL, InlinePatternMatcherInitThread, NULL))
+        {
+            ErrorMessage("Failed to start Fail Open Thread. Starting "
+                    "normally\n");
+            fpCreateFastPacketDetection();
+        }
+        else
+        {
+            while (!pv.pass_thread_running_flag)
+            {
+                /* wait for the thread to spin up */
+                LogMessage("Waiting for Fail Open Thread to start...\n");
+                sleep(1);
+            }
+            LogMessage("Fail Open Thread started %d (%d)\n",
+                pv.pass_thread_id, pv.pass_thread_pid);
+
+            pv.initialization_done_flag = 1;
+
+            while (pv.pass_thread_running_flag)
+            {
+                int pcap_ret = pcap_dispatch(pd, 1,
+                        (pcap_handler)PcapIgnorePacket, NULL);
+                if (pcap_ret >= 0)
+                {
+                    //LogMessage("Inline Fail Open Thread read %d packets\n",
+                        //pcap_ret);
+                }
+            }
+            LogMessage("Fail Open Thread terminated, passed %d packets.\n",
+                pv.pass_thread_pktcount);
+
+            /* Okay, thread is gone, we can start up */
+        }
+    }
+    else
+    {
+        fpCreateFastPacketDetection();
+    }
+#else
     /*
     **  Create Fast Packet Classification Arrays
     **  from RTN list.  These arrays will be used to
     **  classify incoming packets through protocol.
     */
     fpCreateFastPacketDetection();
+#endif
 
     if(!pv.quiet_flag)
     {
@@ -1059,33 +1085,6 @@ int SnortMain(int argc, char *argv[])
 
 #ifdef TIMESTATS
     start_time = time(&start_time); /* start counting seconds */
-#endif
-
-#ifdef INLINE_FAILOPEN
-    if (InlineMode() &&
-        !pv.readmode_flag &&
-        !pv.inline_failopen_disabled_flag &&
-        pv.pass_thread_running_flag)
-    {
-        /* Tell the inline wait thread to go away */
-        pv.initialization_done_flag = 1;
-        LogMessage("Inline Fail Open Thread running (%d), terminating it...\n",
-            pv.pass_thread_id);
-
-        /* wait for thread to exit... */
-        LogMessage("Waiting for Inline Fail Open Thread to terminate.\n");
-        if (pthread_join(pv.pass_thread_id, NULL))
-        {
-            LogMessage("Inline Thread terminated.\n");
-        }
-        else
-        {
-            LogMessage("Inline Thread failed to terminate %d: %s\n",
-                errno, strerror(errno) );
-        }
-
-        /* Okay, thread is gone, we can start up */
-    }
 #endif
 
 #ifdef GIDS
@@ -1323,7 +1322,8 @@ static INLINE void free_packetBitOp(BITOP *BitOp, MemPool *BitOpPool, MemBucket 
     else if (BitOp && BitOp->pucBitBuffer)
         boFreeBITOP(BitOp);
 
-    BitOp->pucBitBuffer = NULL;
+    if (BitOp != NULL)
+        BitOp->pucBitBuffer = NULL;
 }
 
 static MemPool bitop_pool;
@@ -1381,6 +1381,14 @@ void ProcessPacket(char *user, struct pcap_pkthdr * pkthdr, u_char * pkt, void *
     }
 
     p.preprocessor_bits = &packetBitOp;
+
+    /* Make sure this packet skips the rest of the preprocessors */
+    /* Remove once the IPv6 frag code is moved into frag 3 */
+    if(p.packet_flags & PKT_NO_DETECT)
+    {
+        DisableAllDetect(&p);
+    }
+
 
 #ifdef GRE
     if (ft && p.greh == NULL)
@@ -1590,7 +1598,7 @@ void ParseDynamicLibInfo(int type)
                 FatalError("Maximum number of loaded Dynamic Preprocessor Libs (%d) exceeded\n", MAX_DYNAMIC_PREPROC_LIBS);
             }
 
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)SnortAlloc(sizeof(DynamicDetectionSpecifier));
             dynamicLib->type = type;
             if (!optarg && type == DYNAMIC_PREPROC_DIRECTORY)
             {
@@ -1616,7 +1624,7 @@ void ParseDynamicLibInfo(int type)
                 FatalError("Maximum number of loaded Dynamic Detection Libs (%d) exceeded\n", MAX_DYNAMIC_PREPROC_LIBS);
             }
 
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)SnortAlloc(sizeof(DynamicDetectionSpecifier));
             dynamicLib->type = type;
             if (!optarg && type == DYNAMIC_LIBRARY_DIRECTORY)
             {
@@ -1643,7 +1651,7 @@ void ParseDynamicLibInfo(int type)
                 FatalError("Maximum number of loaded Dynamic Engine Libs (%d) exceeded\n", MAX_DYNAMIC_ENGINES);
             }
 
-            dynamicLib = calloc(1, sizeof(DynamicDetectionSpecifier));
+            dynamicLib = (DynamicDetectionSpecifier *)SnortAlloc(sizeof(DynamicDetectionSpecifier));
             dynamicLib->type = type;
 
             if (!optarg && type == DYNAMIC_LIBRARY_DIRECTORY)
@@ -1796,7 +1804,7 @@ int ParseCmdLine(int argc, char *argv[])
                 DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Dumping dynamic engine rules\n"););
                 pv.dump_dynamic_rules_flag = 1;
                 if (strlen(optarg) < STD_BUF)
-                    strcpy(pv.dynamic_rules_path, optarg);
+                    SnortStrncpy(pv.dynamic_rules_path, optarg, STD_BUF);
                 else
                     FatalError("Dump Path long than allowable %d characters\n", STD_BUF-1);
                 break;
@@ -1811,7 +1819,7 @@ int ParseCmdLine(int argc, char *argv[])
                 pv.treat_drop_as_alert=1;
                 break;
             case PID_PATH:
-                strcpy(pv.pid_path, optarg);
+                SnortStrncpy(pv.pid_path, optarg, STD_BUF);
                 pv.create_pid_file = 1;
                 break;
             case CREATE_PID_FILE:
@@ -2059,8 +2067,7 @@ int ParseCmdLine(int argc, char *argv[])
                    the entire name of the interface and it is compiled
                    regardless of which OS you have */
                 {
-                    pv.interface = (char *)malloc(strlen(optarg) + 1);
-                    /* XXX OOM check */
+                    pv.interface = (char *)SnortAlloc(strlen(optarg) + 1);
                     strlcpy(pv.interface, optarg, strlen(optarg)+1);
                     DEBUG_WRAP(DebugMessage(DEBUG_INIT,
                         "Interface = %s\n",
@@ -2286,7 +2293,7 @@ int ParseCmdLine(int argc, char *argv[])
                 {
                     struct VarEntry *p;
                     int namesize = eq_p-optarg;
-                    eq_n = calloc(namesize+2, sizeof(char));
+                    eq_n = (char *)SnortAlloc((namesize + 2) * sizeof(char));
                     strlcpy(eq_n, optarg, namesize+1);
                     p = VarDefine(eq_n, eq_p + 1);
                     p->flags |= VAR_STATIC;
@@ -2784,27 +2791,36 @@ int snort_idle()
 }
 
 #ifdef INLINE_FAILOPEN
-static int inline_ignored_packets = 0;
 void PcapIgnorePacket(char *user, struct pcap_pkthdr * pkthdr, u_char * pkt)
 {
-    /* Empty function -- do nothing with the packet we just read */
-    inline_ignored_packets++;
+    DEBUG_WRAP(FILE *tmp;);
 
-    if (pv.initialization_done_flag)
-    {
-        pv.pass_thread_running_flag = 0;
-        pthread_exit(NULL);
-    }
+    /* Empty function -- do nothing with the packet we just read */
+    pv.pass_thread_pktcount++;
+
+    DEBUG_WRAP(
+            tmp = fopen("/var/tmp/fo_threadid", "a");
+            fprintf(tmp, "Packet Count %d\n", pv.pass_thread_pktcount);
+            fclose(tmp);
+            );
 
     return;
 }
 
-void *InlineFailOpenThread(void *arg)
+void *InlinePatternMatcherInitThread(void *arg)
 {
-    int pcap_ret;
     sigset_t mtmask, oldmask;
+    DEBUG_WRAP(FILE *tmp;);
 
     sigemptyset(&mtmask);
+
+    pv.pass_thread_pid = getpid();
+
+    DEBUG_WRAP(
+            tmp = fopen("/var/tmp/fo_threadid", "w");
+            fprintf(tmp, "Fail Open Thread ID: %d\n", pv.pass_thread_pid);
+            fclose(tmp);
+            );
 
     /* Get the current set of signals inherited from main thread. */
     pthread_sigmask(SIG_UNBLOCK, &mtmask, &oldmask);
@@ -2813,23 +2829,21 @@ void *InlineFailOpenThread(void *arg)
      * now Main receives all signals. */
     pthread_sigmask(SIG_BLOCK, &oldmask, NULL);
 
+    /* Now block those signals from being delivered to this thread.
+     * now Main receives all signals. */
+    pthread_sigmask(SIG_BLOCK, &oldmask, NULL);
+
     pv.pass_thread_running_flag = 1;
 
-    //LogMessage("Inline Fail Open Thread started\n");
-
+    /* simple mutexy wait for main thread to stop printing stuff... */
     while (!pv.initialization_done_flag)
     {
-        //LogMessage("Inline Fail Open Thread calling pcap_dispatch\n");
-        pcap_ret = pcap_dispatch(pd, 1, (pcap_handler)PcapIgnorePacket, NULL);
-
-        if (pcap_ret >= 0)
-        {
-            //LogMessage("Inline Fail Open Thread read %d packets\n", pcap_ret);
-        }
+        sleep(1);
     }
 
-    //LogMessage("Inline Fail Open Thread exiting (allowed %d packets through)\n",
-            //inline_ignored_packets);
+    /* Do the fast packet initialization */
+    fpCreateFastPacketDetection();
+
     pv.pass_thread_running_flag = 0;
 
     pthread_exit(NULL);
@@ -3114,7 +3128,6 @@ static char *ConfigFileSearch()
     int i;
     char *conf_files[]={"/etc/snort.conf", "./snort.conf", NULL};
     char *fname = NULL;
-    char *home_dir = NULL;
     char *rval = NULL;
 
     i = 0;
@@ -3136,12 +3149,19 @@ static char *ConfigFileSearch()
     /* search for .snortrc in the HOMEDIR */
     if(!rval)
     {
-        if((home_dir = getenv("HOME")))
+        char *home_dir = NULL;
+
+        if((home_dir = getenv("HOME")) != NULL)
         {
+            char *snortrc = "/.snortrc";
+            int path_len;
+
+            path_len = strlen(home_dir) + strlen(snortrc) + 1;
+
             /* create the full path */
-            fname = (char *)malloc(strlen(home_dir) + strlen("/.snortrc") + 1);
-            if(!fname)
-                FatalError("Out of memory searching for config file\n");
+            fname = (char *)SnortAlloc(path_len);
+
+            snprintf(fname, path_len, "%s%s", home_dir, snortrc);
 
             if(stat(fname, &st) != -1)
                 rval = fname;

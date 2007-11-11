@@ -76,14 +76,19 @@ void xshowmem()
 
 char *xstrdup(const char *str)
 {
-	char *data = (char *)xmalloc( strlen(str) + 1 );
+    int data_size;
+	char *data = NULL;
+
+    data_size = strlen(str) + 1;
+    data = (char *)xmalloc(data_size);
     
 	if(data == NULL)
     {
         return NULL;
     }
 
-    strcpy(data,str);
+    strncpy(data, str, data_size - 1);
+    data[data_size - 1] = '\0';
 
     return data;
 }

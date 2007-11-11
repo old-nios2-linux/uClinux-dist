@@ -1792,13 +1792,13 @@ static void __exit exit_squashfs_fs(void)
 }
 
 
-static kmem_cache_t * squashfs_inode_cachep;
+static struct kmem_cache * squashfs_inode_cachep;
 
 
 static struct inode *squashfs_alloc_inode(struct super_block *sb)
 {
 	struct squashfs_inode_info *ei;
-	ei = (struct squashfs_inode_info *)kmem_cache_alloc(squashfs_inode_cachep, SLAB_KERNEL);
+	ei = (struct squashfs_inode_info *)kmem_cache_alloc(squashfs_inode_cachep, GFP_KERNEL);
 	if (!ei)
 		return NULL;
 	return &ei->vfs_inode;
@@ -1811,13 +1811,11 @@ static void squashfs_destroy_inode(struct inode *inode)
 }
 
 
-static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
+static void init_once(void * foo, struct kmem_cache * cachep, unsigned long flags)
 {
 	struct squashfs_inode_info *ei = (struct squashfs_inode_info *) foo;
 
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR)
-		inode_init_once(&ei->vfs_inode);
+	inode_init_once(&ei->vfs_inode);
 }
  
 
@@ -1826,7 +1824,7 @@ static int init_inodecache(void)
 	squashfs_inode_cachep = kmem_cache_create("squashfs_inode_cache",
 					     sizeof(struct squashfs_inode_info),
 					     0, SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT,
-					     init_once, NULL);
+					     init_once);
 	if (squashfs_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;

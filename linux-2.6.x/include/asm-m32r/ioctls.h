@@ -1,10 +1,6 @@
 #ifndef __ARCH_M32R_IOCTLS_H__
 #define __ARCH_M32R_IOCTLS_H__
 
-/* $Id$ */
-
-/* orig : i386 2.5.67 */
-
 #include <asm/ioctl.h>
 
 /* 0x54 is just a magic number to make these relatively unique ('T') */
@@ -51,6 +47,10 @@
 #define TIOCSBRK	0x5427  /* BSD compatibility */
 #define TIOCCBRK	0x5428  /* BSD compatibility */
 #define TIOCGSID	0x5429  /* Return the session ID of FD */
+#define TCGETS2		_IOR('T',0x2A, struct termios2)
+#define TCSETS2		_IOW('T',0x2B, struct termios2)
+#define TCSETSW2	_IOW('T',0x2C, struct termios2)
+#define TCSETSF2	_IOW('T',0x2D, struct termios2)
 #define TIOCGPTN	_IOR('T',0x30, unsigned int) /* Get Pty Number (of pty-mux device) */
 #define TIOCSPTLCK	_IOW('T',0x31, int)  /* Lock/unlock Pty */
 
@@ -85,4 +85,3 @@
 #define TIOCSER_TEMT    0x01	/* Transmitter physically empty */
 
 #endif /* __ARCH_M32R_IOCTLS_H__ */
-

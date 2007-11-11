@@ -1,9 +1,9 @@
 /*
- * $Id: save.c,v 1.22.6.1 2004/07/21 10:34:45 sobomax Exp $
+ * $Id: save.c,v 1.37.2.3 2005/05/18 12:06:25 janakj Exp $
  *
  * Process REGISTER request and send reply
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,26 +29,28 @@
  * History:
  * ----------
  * 2003-01-27 next baby-step to removing ZT - PRESERVE_ZT (jiri)
- * 2003-02-28 scratcpad compatibility abandoned (jiri)
+ * 2003-02-28 scrathcpad compatibility abandoned (jiri)
  * 2003-03-21  save_noreply added, patch provided by Maxim Sobolev <sobomax@portaone.com> (janakj)
  */
 
 
 #include "../../comp_defs.h"
-#include "save.h"
 #include "../../str.h"
 #include "../../parser/parse_to.h"
 #include "../../dprint.h"
 #include "../../trim.h"
 #include "../../ut.h"
 #include "../usrloc/usrloc.h"
+#include "../../qvalue.h"
 #include "common.h"
 #include "sip_msg.h"
 #include "rerrno.h"
 #include "reply.h"
 #include "reg_mod.h"
 #include "regtime.h"
+#include "save.h"
 
+static int mem_only = 0;
 
 void remove_cont(urecord_t* _r, ucontact_t* _c)
 {
@@ -93,8 +95,22 @@ void move_on_top(urecord_t* _r, ucontact_t* _c)
 static inline int star(udomain_t* _d, str* _a)
 {
 	urecord_t* r;
+	ucontact_t* c;
 	
 	ul.lock_udomain(_d);
+
+	if (!ul.get_urecord(_d, _a, &r)) {
+		c = r->contacts;
+		while(c) {
+			if (mem_only) {
+				c->flags |= FL_MEM;
+			} else {
+				c->flags &= ~FL_MEM;
+			}
+			c = c->next;
+		}
+	}
+
 	if (ul.delete_urecord(_d, _a) < 0) {
 		LOG(L_ERR, "star(): Error while removing record from usrloc\n");
 		
@@ -153,13 +169,21 @@ static inline int insert(struct sip_msg* _m, contact_t* _c, udomain_t* _d, str* 
 	urecord_t* r = 0;
 	ucontact_t* c;
 	int e, cseq;
-	float q;
+	qvalue_t q;
 	str callid;
 	unsigned int flags;
+	str* recv;
+	int_str rcv_avp;
+	int_str val;
+	int num;
 
+	rcv_avp.n=rcv_avp_no;
 	if (isflagset(_m, nat_flag) == 1) flags = FL_NAT;
 	else flags = FL_NONE;
 
+	flags |= mem_only;
+
+	num = 0;
 	while(_c) {
 		if (calc_contact_expires(_m, _c->expires, &e) < 0) {
 			LOG(L_ERR, "insert(): Error while calculating expires\n");
@@ -167,6 +191,13 @@ static inline int insert(struct sip_msg* _m, contact_t* _c, udomain_t* _d, str* 
 		}
 		     /* Skip contacts with zero expires */
 		if (e == 0) goto skip;
+
+		if (max_contacts && (num >= max_contacts)) {
+			rerrno = R_TOO_MANY;
+			ul.delete_urecord(_d, _a);
+			return -1;
+		}
+		num++;
 		
 	        if (r == 0) {
 			if (ul.insert_urecord(_d, _a, &r) < 0) {
@@ -195,7 +226,15 @@ static inline int insert(struct sip_msg* _m, contact_t* _c, udomain_t* _d, str* 
 			return -4;
 		}
 
-		if (ul.insert_ucontact(r, &_c->uri, e, q, &callid, cseq, flags, &c, ua) < 0) {
+		if (_c->received) {
+			recv = &_c->received->body;
+		} else if (search_first_avp(0, rcv_avp, &val)) {
+			recv = val.s;
+		} else {
+			recv = 0;
+		}
+
+		if (ul.insert_ucontact(r, &_c->uri, e, q, &callid, cseq, flags, &c, ua, recv) < 0) {
 			rerrno = R_UL_INS_C;
 			LOG(L_ERR, "insert(): Error while inserting contact\n");
 			ul.delete_urecord(_d, _a);
@@ -218,8 +257,50 @@ static inline int insert(struct sip_msg* _m, contact_t* _c, udomain_t* _d, str* 
 }
 
 
+static int test_max_contacts(struct sip_msg* _m, urecord_t* _r, contact_t* _c)
+{
+	int num;
+	int e;
+	ucontact_t* ptr, *cont;
+	
+	num = 0;
+	ptr = _r->contacts;
+	while(ptr) {
+		if (VALID_CONTACT(ptr, act_time)) {
+			num++;
+		}
+		ptr = ptr->next;
+	}
+	DBG("test_max_contacts: %d valid contacts\n", num);
+	
+	while(_c) {
+		if (calc_contact_expires(_m, _c->expires, &e) < 0) {
+			LOG(L_ERR, "test_max_contacts: Error while calculating expires\n");
+			return -1;
+		}
+		
+		if (ul.get_ucontact(_r, &_c->uri, &cont) > 0) {
+			     /* Contact not found */
+			if (e != 0) num++;
+		} else {
+			if (e == 0) num--;
+		}
+		
+		_c = get_next_contact(_c);
+	}
+	
+	DBG("test_max_contacts: %d contacts after commit\n", num);
+	if (num > max_contacts) {
+		rerrno = R_TOO_MANY;
+		return 1;
+	}
+	
+	return 0;
+}
+
+
 /*
- * Message contained some contacts and apropriate
+ * Message contained some contacts and appropriate
  * record was found, so we have to walk through
  * all contacts and do the following:
  * 1) If contact in usrloc doesn't exists and
@@ -233,11 +314,30 @@ static inline int update(struct sip_msg* _m, urecord_t* _r, contact_t* _c, str* 
 {
 	ucontact_t* c, *c2;
 	str callid;
-	int cseq, e;
-	float q;
-	unsigned int fl;
+	int cseq, e, ret;
+	int set, reset;
+	qvalue_t q;
+	unsigned int nated;
+	str* recv;
+	int_str rcv_avp;
+	int_str val;
+	
+	rcv_avp.n=rcv_avp_no;
+	if (isflagset(_m, nat_flag) == 1) {
+		nated = FL_NAT;
+	} else {
+		nated = FL_NONE;
+	}
 
-	fl = (isflagset(_m, nat_flag) == 1);
+	if (max_contacts) {
+		ret = test_max_contacts(_m, _r, _c);
+		if (ret != 0) {
+			build_contact(_r->contacts);
+			return -1;
+		}
+	}
+
+	_c = get_first_contact(_m);
 
 	while(_c) {
 		if (calc_contact_expires(_m, _c->expires, &e) < 0) {
@@ -267,8 +367,17 @@ static inline int update(struct sip_msg* _m, urecord_t* _r, contact_t* _c, str* 
 					return -3;
 				}
 				
+				if (_c->received) {
+					recv = &_c->received->body;
+				} else if (search_first_avp(0, rcv_avp, &val)) {
+					recv = val.s;
+				} else {
+					recv = 0;
+				}
+
 				if (ul.insert_ucontact(_r, &_c->uri, e, q, &callid, cseq,
-						       (fl ? FL_NAT : FL_NONE), &c2, _ua) < 0) {
+						       nated | mem_only, 
+						       &c2, _ua, recv) < 0) {
 					rerrno = R_UL_INS_C;
 					LOG(L_ERR, "update(): Error while inserting contact\n");
 					return -4;
@@ -276,6 +385,12 @@ static inline int update(struct sip_msg* _m, urecord_t* _r, contact_t* _c, str* 
 			}
 		} else {
 			if (e == 0) {
+				if (mem_only) {
+					c->flags |= FL_MEM;
+				} else {
+					c->flags &= ~FL_MEM;
+				}
+
 				if (ul.delete_ucontact(_r, c) < 0) {
 					rerrno = R_UL_DEL_C;
 					LOG(L_ERR, "update(): Error while deleting contact\n");
@@ -300,9 +415,17 @@ static inline int update(struct sip_msg* _m, urecord_t* _r, contact_t* _c, str* 
 					return -7;
 				}
 				
-				if (ul.update_ucontact(c, e, q, &callid, cseq,
-						       (fl ? FL_NAT : FL_NONE),
-						       (fl ? FL_NONE : FL_NAT), _ua) < 0) {
+				if (_c->received) {
+					recv = &_c->received->body;
+				} else if (search_first_avp(0, rcv_avp, &val)) {
+					recv = val.s;
+				} else {
+					recv = 0;
+				}
+
+				set = nated | mem_only;
+				reset = ~(nated | mem_only) & (FL_NAT | FL_MEM);
+				if (ul.update_ucontact(c, e, q, &callid, cseq, set, reset, _ua, recv) < 0) {
 					rerrno = R_UL_UPD_C;
 					LOG(L_ERR, "update(): Error while updating contact\n");
 					return -8;
@@ -424,6 +547,7 @@ static inline int save_real(struct sip_msg* _m, udomain_t* _t, char* _s, int dor
  */
 int save(struct sip_msg* _m, char* _t, char* _s)
 {
+	mem_only = 0;
 	return save_real(_m, (udomain_t*)_t, _s, 1);
 }
 
@@ -433,5 +557,16 @@ int save(struct sip_msg* _m, char* _t, char* _s)
  */
 int save_noreply(struct sip_msg* _m, char* _t, char* _s)
 {
+	mem_only = 0;
 	return save_real(_m, (udomain_t*)_t, _s, 0);
+}
+
+
+/*
+ * Update memory cache only
+ */
+int save_memory(struct sip_msg* _m, char* _t, char* _s)
+{
+	mem_only = FL_MEM;
+	return save_real(_m, (udomain_t*)_t, _s, 1);
 }

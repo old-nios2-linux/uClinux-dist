@@ -25,7 +25,6 @@
 #include <linux/console.h>
 #include <linux/delay.h>
 #include <linux/irq.h>
-#include <linux/ide.h>
 #include <linux/seq_file.h>
 #include <linux/root_dev.h>
 #include <linux/serial.h>
@@ -42,6 +41,7 @@
 #include <asm/reg.h>
 #include <mm/mmu_decl.h>
 #include "mpc7448_hpc2.h"
+#include <asm/tsi108_pci.h>
 #include <asm/tsi108_irq.h>
 #include <asm/mpic.h>
 
@@ -52,18 +52,12 @@
 #define DBG(fmt...) do { } while(0)
 #endif
 
-#ifndef CONFIG_PCI
-isa_io_base = MPC7448_HPC2_ISA_IO_BASE;
-isa_mem_base = MPC7448_HPC2_ISA_MEM_BASE;
-pci_dram_offset = MPC7448_HPC2_PCI_MEM_OFFSET;
-#endif
+#define MPC7448HPC2_PCI_CFG_PHYS 0xfb000000
 
-extern int tsi108_setup_pci(struct device_node *dev);
 extern void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
-extern void tsi108_pci_int_init(void);
-extern void tsi108_irq_cascade(unsigned int irq, struct irq_desc *desc);
 
-int mpc7448_hpc2_exclude_device(u_char bus, u_char devfn)
+int mpc7448_hpc2_exclude_device(struct pci_controller *hose,
+				u_char bus, u_char devfn)
 {
 	if (bus == 0 && PCI_SLOT(devfn) == 0)
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -71,99 +65,18 @@ int mpc7448_hpc2_exclude_device(u_char bus, u_char devfn)
 		return PCIBIOS_SUCCESSFUL;
 }
 
-/*
- * find pci slot by devfn in interrupt map of OF tree
- */
-u8 find_slot_by_devfn(unsigned int *interrupt_map, unsigned int devfn)
-{
-	int i;
-	unsigned int tmp;
-	for (i = 0; i < 4; i++){
-		tmp = interrupt_map[i*4*7];
-		if ((tmp >> 11) == (devfn >> 3))
-			return i;
-	}
-	return i;
-}
-
-/*
- * Scans the interrupt map for pci device
- */
-void mpc7448_hpc2_fixup_irq(struct pci_dev *dev)
-{
-	struct pci_controller *hose;
-	struct device_node *node;
-	const unsigned int *interrupt;
-	int busnr;
-	int len;
-	u8 slot;
-	u8 pin;
-
-	/* Lookup the hose */
-	busnr = dev->bus->number;
-	hose = pci_bus_to_hose(busnr);
-	if (!hose)
-		printk(KERN_ERR "No pci hose found\n");
-
-	/* Check it has an OF node associated */
-	node = (struct device_node *) hose->arch_data;
-	if (!node)
-		printk(KERN_ERR "No pci node found\n");
-
-	interrupt = get_property(node, "interrupt-map", &len);
-	slot = find_slot_by_devfn(interrupt, dev->devfn);
-	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-	if (pin == 0 || pin > 4)
-		pin = 1;
-	pin--;
-	dev->irq  = interrupt[slot*4*7 + pin*7 + 5];
-	DBG("TSI_PCI: dev->irq = 0x%x\n", dev->irq);
-}
-/* temporary pci irq map fixup*/
-
-void __init mpc7448_hpc2_pcibios_fixup(void)
-{
-	struct pci_dev *dev = NULL;
-	for_each_pci_dev(dev) {
-		mpc7448_hpc2_fixup_irq(dev);
-		pci_write_config_byte(dev, PCI_INTERRUPT_LINE, dev->irq);
-	}
-}
-
 static void __init mpc7448_hpc2_setup_arch(void)
 {
-	struct device_node *cpu;
 	struct device_node *np;
 	if (ppc_md.progress)
 		ppc_md.progress("mpc7448_hpc2_setup_arch():set_bridge", 0);
 
-	cpu = of_find_node_by_type(NULL, "cpu");
-	if (cpu != 0) {
-		const unsigned int *fp;
-
-		fp = get_property(cpu, "clock-frequency", NULL);
-		if (fp != 0)
-			loops_per_jiffy = *fp / HZ;
-		else
-			loops_per_jiffy = 50000000 / HZ;
-		of_node_put(cpu);
-	}
 	tsi108_csr_vir_base = get_vir_csrbase();
-
-#ifdef	CONFIG_ROOT_NFS
-	ROOT_DEV = Root_NFS;
-#else
-	ROOT_DEV = Root_HDA1;
-#endif
-
-#ifdef CONFIG_BLK_DEV_INITRD
-	ROOT_DEV = Root_RAM0;
-#endif
 
 	/* setup PCI host bridge */
 #ifdef CONFIG_PCI
 	for (np = NULL; (np = of_find_node_by_type(np, "pci")) != NULL;)
-		tsi108_setup_pci(np);
+		tsi108_setup_pci(np, MPC7448HPC2_PCI_CFG_PHYS, 0);
 
 	ppc_md.pci_exclude_device = mpc7448_hpc2_exclude_device;
 	if (ppc_md.progress)
@@ -192,14 +105,17 @@ static void __init mpc7448_hpc2_init_IRQ(void)
 {
 	struct mpic *mpic;
 	phys_addr_t mpic_paddr = 0;
+	struct device_node *tsi_pic;
+#ifdef CONFIG_PCI
 	unsigned int cascade_pci_irq;
 	struct device_node *tsi_pci;
-	struct device_node *tsi_pic;
+	struct device_node *cascade_node = NULL;
+#endif
 
 	tsi_pic = of_find_node_by_type(NULL, "open-pic");
 	if (tsi_pic) {
 		unsigned int size;
-		const void *prop = get_property(tsi_pic, "reg", &size);
+		const void *prop = of_get_property(tsi_pic, "reg", &size);
 		mpic_paddr = of_translate_address(tsi_pic, prop);
 	}
 
@@ -208,31 +124,41 @@ static void __init mpc7448_hpc2_init_IRQ(void)
 		return;
 	}
 
-	DBG("%s: tsi108pic phys_addr = 0x%x\n", __FUNCTION__,
+	DBG("%s: tsi108 pic phys_addr = 0x%x\n", __FUNCTION__,
 	    (u32) mpic_paddr);
 
 	mpic = mpic_alloc(tsi_pic, mpic_paddr,
 			MPIC_PRIMARY | MPIC_BIG_ENDIAN | MPIC_WANTS_RESET |
 			MPIC_SPV_EOI | MPIC_NO_PTHROU_DIS | MPIC_REGSET_TSI108,
-			0, /* num_sources used */
-			0, /* num_sources used */
+			24,
+			NR_IRQS-4, /* num_sources used */
 			"Tsi108_PIC");
 
-	BUG_ON(mpic == NULL); /* XXXX */
+	BUG_ON(mpic == NULL);
+
+	mpic_assign_isu(mpic, 0, mpic_paddr + 0x100);
+
 	mpic_init(mpic);
 
+#ifdef CONFIG_PCI
 	tsi_pci = of_find_node_by_type(NULL, "pci");
-	if (tsi_pci == 0) {
+	if (tsi_pci == NULL) {
 		printk("%s: No tsi108 pci node found !\n", __FUNCTION__);
+		return;
+	}
+	cascade_node = of_find_node_by_type(NULL, "pic-router");
+	if (cascade_node == NULL) {
+		printk("%s: No tsi108 pci cascade node found !\n", __FUNCTION__);
 		return;
 	}
 
 	cascade_pci_irq = irq_of_parse_and_map(tsi_pci, 0);
+	DBG("%s: tsi108 cascade_pci_irq = 0x%x\n", __FUNCTION__,
+	    (u32) cascade_pci_irq);
+	tsi108_pci_int_init(cascade_node);
 	set_irq_data(cascade_pci_irq, mpic);
 	set_irq_chained_handler(cascade_pci_irq, tsi108_irq_cascade);
-
-	tsi108_pci_int_init();
-
+#endif
 	/* Configure MPIC outputs to CPU0 */
 	tsi108_write_reg(TSI108_MPIC_OFFSET + 0x30c, 0);
 	of_node_put(tsi_pic);
@@ -279,7 +205,6 @@ static int __init mpc7448_hpc2_probe(void)
 
 static int mpc7448_machine_check_exception(struct pt_regs *regs)
 {
-	extern void tsi108_clear_pci_cfg_error(void);
 	const struct exception_table_entry *entry;
 
 	/* Are we prepared to handle this fault */
@@ -290,7 +215,6 @@ static int mpc7448_machine_check_exception(struct pt_regs *regs)
 		return 1;
 	}
 	return 0;
-
 }
 
 define_machine(mpc7448_hpc2){
@@ -300,7 +224,6 @@ define_machine(mpc7448_hpc2){
 	.init_IRQ 		= mpc7448_hpc2_init_IRQ,
 	.show_cpuinfo 		= mpc7448_hpc2_show_cpuinfo,
 	.get_irq 		= mpic_get_irq,
-	.pcibios_fixup 		= mpc7448_hpc2_pcibios_fixup,
 	.restart 		= mpc7448_hpc2_restart,
 	.calibrate_decr 	= generic_calibrate_decr,
 	.machine_check_exception= mpc7448_machine_check_exception,

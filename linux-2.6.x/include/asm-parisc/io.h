@@ -15,6 +15,16 @@ extern unsigned long parisc_vmerge_max_size;
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt
 
+static inline unsigned long isa_bus_to_virt(unsigned long addr) {
+	BUG();
+	return 0;
+}
+
+static inline unsigned long isa_virt_to_bus(void *addr) {
+	BUG();
+	return 0;
+}
+
 /*
  * Memory mapped I/O
  *
@@ -67,7 +77,7 @@ static inline unsigned long long gsc_readq(unsigned long addr)
 {
 	unsigned long long ret;
 
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 	__asm__ __volatile__(
 	"	ldda	0(%1),%0\n"
 	:  "=r" (ret) : "r" (addr) );
@@ -108,7 +118,7 @@ static inline void gsc_writel(unsigned int val, unsigned long addr)
 
 static inline void gsc_writeq(unsigned long long val, unsigned long addr)
 {
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 	__asm__ __volatile__(
 	"	stda	%0,0(%1)\n"
 	: :  "r" (val), "r" (addr) );
@@ -190,15 +200,6 @@ static inline void __raw_writeq(unsigned long long b, volatile void __iomem *add
 void memset_io(volatile void __iomem *addr, unsigned char val, int count);
 void memcpy_fromio(void *dst, const volatile void __iomem *src, int count);
 void memcpy_toio(volatile void __iomem *dst, const void *src, int count);
-
-/*
- * XXX - We don't have csum_partial_copy_fromio() yet, so we cheat here and 
- * just copy it. The net code will then do the checksum later. Presently 
- * only used by some shared memory 8390 Ethernet cards anyway.
- */
-
-#define eth_io_copy_and_sum(skb,src,len,unused) \
-  memcpy_fromio((skb)->data,(src),(len))
 
 /* Port-space IO */
 

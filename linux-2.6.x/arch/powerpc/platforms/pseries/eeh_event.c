@@ -37,8 +37,8 @@
 /* EEH event workqueue setup. */
 static DEFINE_SPINLOCK(eeh_eventlist_lock);
 LIST_HEAD(eeh_eventlist);
-static void eeh_thread_launcher(void *);
-DECLARE_WORK(eeh_event_wq, eeh_thread_launcher, NULL);
+static void eeh_thread_launcher(struct work_struct *);
+DECLARE_WORK(eeh_event_wq, eeh_thread_launcher);
 
 /* Serialize reset sequences for a given pci device */
 DEFINE_MUTEX(eeh_event_mutex);
@@ -103,7 +103,7 @@ static int eeh_event_handler(void * dummy)
  * eeh_thread_launcher
  * @dummy - unused
  */
-static void eeh_thread_launcher(void *dummy)
+static void eeh_thread_launcher(struct work_struct *dummy)
 {
 	if (kernel_thread(eeh_event_handler, NULL, CLONE_KERNEL) < 0)
 		printk(KERN_ERR "Failed to start EEH daemon\n");
@@ -118,9 +118,7 @@ static void eeh_thread_launcher(void *dummy)
  * (from a workqueue).
  */
 int eeh_send_failure_event (struct device_node *dn,
-                            struct pci_dev *dev,
-                            enum pci_channel_state state,
-                            int time_unavail)
+                            struct pci_dev *dev)
 {
 	unsigned long flags;
 	struct eeh_event *event;
@@ -128,7 +126,7 @@ int eeh_send_failure_event (struct device_node *dn,
 
 	if (!mem_init_done) {
 		printk(KERN_ERR "EEH: event during early boot not handled\n");
-		location = get_property(dn, "ibm,loc-code", NULL);
+		location = of_get_property(dn, "ibm,loc-code", NULL);
 		printk(KERN_ERR "EEH: device node = %s\n", dn->full_name);
 		printk(KERN_ERR "EEH: PCI location = %s\n", location);
 		return 1;
@@ -144,8 +142,6 @@ int eeh_send_failure_event (struct device_node *dn,
 
 	event->dn = dn;
 	event->dev = dev;
-	event->state = state;
-	event->time_unavail = time_unavail;
 
 	/* We may or may not be called in an interrupt context */
 	spin_lock_irqsave(&eeh_eventlist_lock, flags);

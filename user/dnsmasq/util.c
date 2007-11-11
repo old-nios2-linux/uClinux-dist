@@ -19,7 +19,7 @@
 /* Also prefer /dev/urandom over /dev/random, to preserve the entropy pool */
 #ifdef HAVE_ARC4RANDOM
 # define rand()		arc4random()
-# define srand(s)	(NULL)
+# define srand(s)	(void)0
 # define RANDFILE	(NULL)
 #else
 # ifdef HAVE_RANDOM
@@ -72,10 +72,9 @@ unsigned short rand16(void)
 	    {
 	      seed = badseed;
 	    }
+	  close(fd);
 	}
-      if (seed != badseed)
-	close(fd);
-      
+
       srand(seed);
       been_seeded = 1;
     }
@@ -88,16 +87,33 @@ unsigned short rand16(void)
   return( (unsigned short) (rand() >> 15) );
 }
 
-void canonicalise(char *s)
+int legal_char(char c)
 {
-  char *p;
-  int l = strlen(s);
+  /* check for legal char a-z A-Z 0-9 - 
+     (also / , used for RFC2317 and _ used in windows queries) */
+  if ((c >= 'A' && c <= 'Z') ||
+      (c >= 'a' && c <= 'z') ||
+      (c >= '0' && c <= '9') ||
+      c == '-' || c == '/' || c == '_')
+    return 1;
   
-  for (p=s; *p; p++)
-    *p = tolower(*p);
+  return 0;
+}
+  
+int canonicalise(char *s)
+{
+  /* check for legal chars ans remove trailing . */
+  int l = strlen(s);
+  char c;
 
   if (l>0 && s[l-1] == '.')
     s[l-1] = 0;
+
+  while ((c = *s++))
+    if (c != '.' && !legal_char(c))
+      return 0;
+  
+  return 1;
 }
 
 /* for use during startup */
@@ -172,3 +188,25 @@ int sa_len(union mysockaddr *addr)
     return sizeof(addr->in); 
 #endif
 }
+
+/* don't use strcasecmp and friends here - they may be messed up by LOCALE */
+int hostname_isequal(unsigned char *a, unsigned char *b)
+{
+  unsigned int c1, c2;
+  
+  do {
+    c1 = *a++;
+    c2 = *b++;
+    
+    if (c1 >= 'A' && c1 <= 'Z')
+      c1 += 'a' - 'A';
+    if (c2 >= 'A' && c2 <= 'Z')
+      c2 += 'a' - 'A';
+    
+    if (c1 != c2)
+      return 0;
+  } while (c1);
+  
+  return 1;
+}
+    

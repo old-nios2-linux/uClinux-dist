@@ -1,9 +1,9 @@
 /*
  * Presence Agent, error reporting
  *
- * $Id: paerrno.h,v 1.4 2003/05/02 08:37:53 janakj Exp $
+ * $Id: paerrno.h,v 1.7 2004/08/24 08:58:32 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,10 +39,12 @@ typedef enum paerr {
 	PA_EVENT_PARSE,   /* Error while parsing Event header field */
 	PA_EXPIRES_PARSE, /* Error while parsing Expires header field */
 	PA_EVENT_UNSUPP,  /* Unsupported event package */
+	PA_WRONG_ACCEPTS, /* Accepts does not match event package */
 	PA_NO_MEMORY,     /* No memory left */
 	PA_TIMER_ERROR,   /* Error in timer */
 	PA_EXTRACT_USER,  /* Error while extracting username from R-URI */
 	PA_FROM_ERR,      /* From malformed or missing */
+	PA_TO_ERR,        /* To malformed or missing */
 	PA_SMALL_BUFFER,  /* Buffer too small */
 	PA_UNSUPP_DOC,    /* Unsupported presence document format */
 	PA_ACCEPT_PARSE,  /* Error while parsing Accept header field */

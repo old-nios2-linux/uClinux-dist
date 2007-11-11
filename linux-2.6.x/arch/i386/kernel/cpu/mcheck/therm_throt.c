@@ -1,5 +1,5 @@
 /*
- * linux/arch/i386/kerne/cpu/mcheck/therm_throt.c
+ * linux/arch/i386/kernel/cpu/mcheck/therm_throt.c
  *
  * Thermal throttle event support code (such as syslog messaging and rate
  * limiting) that was factored out from x86_64 (mce_intel.c) and i386 (p4.c).
@@ -20,6 +20,7 @@
 #include <linux/cpu.h>
 #include <asm/cpu.h>
 #include <linux/notifier.h>
+#include <linux/jiffies.h>
 #include <asm/therm_throt.h>
 
 /* How long to wait between reporting thermal events */
@@ -115,7 +116,6 @@ static __cpuinit int thermal_throttle_add_dev(struct sys_device *sys_dev)
 	return sysfs_create_group(&sys_dev->kobj, &thermal_throttle_attr_group);
 }
 
-#ifdef CONFIG_HOTPLUG_CPU
 static __cpuinit void thermal_throttle_remove_dev(struct sys_device *sys_dev)
 {
 	return sysfs_remove_group(&sys_dev->kobj, &thermal_throttle_attr_group);
@@ -134,17 +134,21 @@ static __cpuinit int thermal_throttle_cpu_callback(struct notifier_block *nfb,
 	int err;
 
 	sys_dev = get_cpu_sysdev(cpu);
-	mutex_lock(&therm_cpu_lock);
 	switch (action) {
 	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+		mutex_lock(&therm_cpu_lock);
 		err = thermal_throttle_add_dev(sys_dev);
+		mutex_unlock(&therm_cpu_lock);
 		WARN_ON(err);
 		break;
 	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
+		mutex_lock(&therm_cpu_lock);
 		thermal_throttle_remove_dev(sys_dev);
+		mutex_unlock(&therm_cpu_lock);
 		break;
 	}
-	mutex_unlock(&therm_cpu_lock);
 	return NOTIFY_OK;
 }
 
@@ -152,7 +156,6 @@ static struct notifier_block thermal_throttle_cpu_notifier =
 {
 	.notifier_call = thermal_throttle_cpu_callback,
 };
-#endif /* CONFIG_HOTPLUG_CPU */
 
 static __init int thermal_throttle_init_device(void)
 {

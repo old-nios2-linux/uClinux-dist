@@ -1,10 +1,10 @@
 /* 
- * $Id: stats.c,v 1.8 2003/03/19 23:46:09 janakj Exp $
+ * $Id: stats.c,v 1.9 2004/08/24 08:45:10 janakj Exp $
  *
  * Stats reporting code. It reports through SIG_USR1 and if loaded
  * through the SNMP module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -261,7 +261,7 @@ static int collect_stats(struct stats_s *s)
 		return -1;
 	}
 	if(!global_stats || stats_segments == -1) {
-		LOG(L_ERR, "Can't collect statistics, not initalized!!\n");
+		LOG(L_ERR, "Can't collect statistics, not initialized!!\n");
 		return -1;
 	}
 

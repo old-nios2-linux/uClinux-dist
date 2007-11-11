@@ -5,14 +5,14 @@
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 
-#include <asm/proto.h>
+#include <asm/iommu.h>
 #include <asm/swiotlb.h>
 #include <asm/dma.h>
 
 int swiotlb __read_mostly;
 EXPORT_SYMBOL(swiotlb);
 
-struct dma_mapping_ops swiotlb_dma_ops = {
+const struct dma_mapping_ops swiotlb_dma_ops = {
 	.mapping_error = swiotlb_dma_mapping_error,
 	.alloc_coherent = swiotlb_alloc_coherent,
 	.free_coherent = swiotlb_free_coherent,
@@ -29,7 +29,7 @@ struct dma_mapping_ops swiotlb_dma_ops = {
 	.dma_supported = NULL,
 };
 
-void pci_swiotlb_init(void)
+void __init pci_swiotlb_init(void)
 {
 	/* don't initialize swiotlb if iommu=off (no_iommu=1) */
 	if (!iommu_detected && !no_iommu && end_pfn > MAX_DMA32_PFN)

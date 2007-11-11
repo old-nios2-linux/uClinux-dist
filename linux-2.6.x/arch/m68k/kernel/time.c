@@ -72,7 +72,7 @@ static irqreturn_t timer_interrupt(int irq, void *dummy)
 	return IRQ_HANDLED;
 }
 
-void time_init(void)
+void __init time_init(void)
 {
 	struct rtc_time time;
 
@@ -159,12 +159,3 @@ int do_settimeofday(struct timespec *tv)
 }
 
 EXPORT_SYMBOL(do_settimeofday);
-
-/*
- * Scheduler clock - returns current time in ns units.
- */
-unsigned long long sched_clock(void)
-{
-       return (unsigned long long)jiffies*(1000000000/HZ);
-}
-

@@ -220,7 +220,7 @@ retry:
 			continue;
 		}
 
-#ifdef CONFIG_PCI_AUTO_UPDATE_RESOURCES
+#if 1
 		/* Write it out and update our limit */
 		early_write_config_dword(hose, top_bus, current_bus, pci_devfn,
 					 bar, bar_value);

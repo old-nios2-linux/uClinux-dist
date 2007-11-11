@@ -46,9 +46,9 @@ static void free_pool(mempool_t *pool)
  * @pool_data: optional private data available to the user-defined functions.
  *
  * this function creates and allocates a guaranteed size, preallocated
- * memory pool. The pool can be used from the mempool_alloc and mempool_free
+ * memory pool. The pool can be used from the mempool_alloc() and mempool_free()
  * functions. This function might sleep. Both the alloc_fn() and the free_fn()
- * functions might sleep - as long as the mempool_alloc function is not called
+ * functions might sleep - as long as the mempool_alloc() function is not called
  * from IRQ contexts.
  */
 mempool_t *mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
@@ -62,10 +62,9 @@ mempool_t *mempool_create_node(int min_nr, mempool_alloc_t *alloc_fn,
 			mempool_free_t *free_fn, void *pool_data, int node_id)
 {
 	mempool_t *pool;
-	pool = kmalloc_node(sizeof(*pool), GFP_KERNEL, node_id);
+	pool = kmalloc_node(sizeof(*pool), GFP_KERNEL | __GFP_ZERO, node_id);
 	if (!pool)
 		return NULL;
-	memset(pool, 0, sizeof(*pool));
 	pool->elements = kmalloc_node(min_nr * sizeof(void *),
 					GFP_KERNEL, node_id);
 	if (!pool->elements) {
@@ -195,7 +194,7 @@ EXPORT_SYMBOL(mempool_destroy);
  *             mempool_create().
  * @gfp_mask:  the usual allocation bitmask.
  *
- * this function only sleeps if the alloc_fn function sleeps or
+ * this function only sleeps if the alloc_fn() function sleeps or
  * returns NULL. Note that due to preallocation, this function
  * *never* fails when called from process contexts. (it might
  * fail if called from an IRQ context.)
@@ -262,6 +261,9 @@ EXPORT_SYMBOL(mempool_alloc);
 void mempool_free(void *element, mempool_t *pool)
 {
 	unsigned long flags;
+
+	if (unlikely(element == NULL))
+		return;
 
 	smp_mb();
 	if (pool->curr_nr < pool->min_nr) {

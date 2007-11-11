@@ -3,13 +3,22 @@
  *
  * Manager function prototype.
  *
- * $Id: pptpmanager.h,v 1.2 2002/03/08 03:09:43 davidm Exp $
+ * $Id: pptpmanager.h,v 1.3 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifndef _PPTPD_PPTPSERVER_H
 #define _PPTPD_PPTPSERVER_H
 
+void slot_init(int count);
+void slot_free();
+void slot_set_local(int i, char *ip);
+void slot_set_remote(int i, char *ip);
+void slot_set_pid(int i, pid_t pid);
+int slot_find_by_pid(pid_t pid);
+int slot_find_empty();
+char *slot_get_local(int i);
+char *slot_get_remote(int i);
+
 extern int pptp_manager(int argc, char **argv);
-extern int pptp_stimeout;
 
 #endif	/* !_PPTPD_PPTPSERVER_H */

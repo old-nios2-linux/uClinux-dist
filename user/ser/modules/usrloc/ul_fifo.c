@@ -1,9 +1,7 @@
 /*
+ * $Id: ul_fifo.c,v 1.33.2.1 2005/03/29 11:54:35 janakj Exp $
  *
- * $Id: ul_fifo.c,v 1.26.6.1 2004/07/21 10:34:45 sobomax Exp $
- *
- *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,16 +35,18 @@
 #include "../../fifo_server.h"
 #include "../../dprint.h"
 #include "../../ut.h"
+#include "../../qvalue.h"
 #include "ul_fifo.h"
 #include "dlist.h"
 #include "udomain.h"
 #include "utime.h"
 #include "ul_mod.h"
 
-#define MAX_CONTACT 128
-#define MAX_EXPIRES 20
-#define MAX_Q 20
-#define MAX_REPLICATE 12
+#define MAX_CONTACT_LEN 128
+#define MAX_EXPIRES_LEN 20
+#define MAX_Q_LEN 20
+#define MAX_REPLICATE_LEN 12
+#define MAX_FLAGS_LEN 12
 
 
 /*
@@ -140,7 +140,7 @@ static inline void fifo_find_domain(str* _name, udomain_t** _d)
 }
 
 
-static inline int add_contact(udomain_t* _d, str* _u, str* _c, time_t _e, float _q, int _r)
+static inline int add_contact(udomain_t* _d, str* _u, str* _c, time_t _e, qvalue_t _q, int _f)
 {
 	urecord_t* r;
 	ucontact_t* c = 0;
@@ -148,8 +148,8 @@ static inline int add_contact(udomain_t* _d, str* _u, str* _c, time_t _e, float 
 	str cid;
 	str ua;
 	
-	if (_e == 0) {
-		LOG(L_ERR, "fifo_add_contact(): expires == 0, giving up\n");
+	if (_e == 0 && !(_f & FL_PERMANENT)) {
+		LOG(L_ERR, "fifo_add_contact(): expires == 0 and not persistent contact, giving up\n");
 		return -1;
 	}
 
@@ -180,13 +180,13 @@ static inline int add_contact(udomain_t* _d, str* _u, str* _c, time_t _e, float 
 	ua.len = FIFO_UA_LEN;
 
 	if (c) {
-		if (update_ucontact_rep(c, _e + act_time, _q, &cid, FIFO_CSEQ, _r, FL_NONE, FL_NONE, &ua) < 0) {
+		if (update_ucontact(c, _e + act_time, _q, &cid, FIFO_CSEQ, _f, FL_NONE, &ua, 0) < 0) {
 			LOG(L_ERR, "fifo_add_contact(): Error while updating contact\n");
 			release_urecord(r);
 			return -5;
 		}
 	} else {
-		if (insert_ucontact_rep(r, _c, _e + act_time, _q, &cid, FIFO_CSEQ, FL_NONE, _r, &c, &ua) < 0) {
+		if (insert_ucontact(r, _c, _e + act_time, _q, &cid, FIFO_CSEQ, _f, &c, &ua, 0) < 0) {
 			LOG(L_ERR, "fifo_add_contact(): Error while inserting contact\n");
 			release_urecord(r);
 			return -6;
@@ -202,16 +202,17 @@ static int ul_add(FILE* pipe, char* response_file)
 {
 	char table_s[MAX_TABLE];
 	char user_s[MAX_USER];
-	char contact_s[MAX_CONTACT];
-	char expires_s[MAX_EXPIRES];
-	char q_s[MAX_Q];
-	char rep_s[MAX_REPLICATE];
+	char contact_s[MAX_CONTACT_LEN];
+	char expires_s[MAX_EXPIRES_LEN];
+	char q_s[MAX_Q_LEN];
+	char rep_s[MAX_REPLICATE_LEN];
+	char flags_s[MAX_FLAGS_LEN];
 	udomain_t* d;
-	float q_f;
-	int exp_i, rep_i;
+	int exp_i, flags_i;
 	char* at;
+	qvalue_t qval;
 
-	str table, user, contact, expires, q, rep;
+	str table, user, contact, expires, q, rep, flags;
 
 	if (!read_line(table_s, MAX_TABLE, pipe, &table.len) || table.len == 0) {
 		fifo_reply(response_file,
@@ -242,14 +243,14 @@ static int ul_add(FILE* pipe, char* response_file)
 		}
 	}
 
-	if (!read_line(contact_s, MAX_CONTACT, pipe, &contact.len) || contact.len == 0) {
+	if (!read_line(contact_s, MAX_CONTACT_LEN, pipe, &contact.len) || contact.len == 0) {
 		fifo_reply(response_file,
 			   "400 ul_add: contact expected\n");
 		LOG(L_ERR, "ERROR: ul_add: contact expected\n");
 		return 1;
 	}
 	
-	if (!read_line(expires_s, MAX_EXPIRES, pipe, &expires.len) || expires.len == 0) {
+	if (!read_line(expires_s, MAX_EXPIRES_LEN, pipe, &expires.len) || expires.len == 0) {
 		fifo_reply(response_file,
 			   "400 ul_add: expires expected\n");
 		LOG(L_ERR, "ERROR: ul_add: expires expected\n");
@@ -262,11 +263,19 @@ static int ul_add(FILE* pipe, char* response_file)
 		LOG(L_ERR, "ERROR: ul_add: q expected\n");
 		return 1;
 	}
-	
-	if (!read_line(rep_s, MAX_REPLICATE, pipe, &rep.len) || rep.len == 0) {
+
+	     /* Kept for backwards compatibility */
+	if (!read_line(rep_s, MAX_REPLICATE_LEN, pipe, &rep.len) || rep.len == 0) {
 		fifo_reply(response_file,
 			   "400 ul_add: replicate expected\n");
 		LOG(L_ERR, "ERROR: ul_add: replicate expected\n");
+		return 1;
+	}
+
+	if (!read_line(flags_s, MAX_FLAGS_LEN, pipe, &flags.len) || flags.len == 0) {
+		fifo_reply(response_file,
+			   "400 ul_add: flags expected\n");
+		LOG(L_ERR, "ERROR: ul_add: flags expected\n");
 		return 1;
 	}
 	
@@ -277,7 +286,7 @@ static int ul_add(FILE* pipe, char* response_file)
 	contact.s = contact_s;
 	expires.s = expires_s;
 	q.s = q_s;
-	rep.s = rep_s;
+	flags.s = flags_s;
 	
 	fifo_find_domain(&table, &d);
 	
@@ -286,20 +295,20 @@ static int ul_add(FILE* pipe, char* response_file)
 			fifo_reply(response_file, "400 Invalid expires format\n");
 			return 1;
 		}
-		
-		if (str2float(&q, &q_f) < 0) {
-			fifo_reply(response_file, "400 Invalid q format\n");
+
+		if (str2q(&qval, q.s, q.len) < 0) {
+			fifo_reply(response_file, "400 Invalid q value\n");
 			return 1;
 		}
 
-		if (str2int(&rep, (unsigned int*)&rep_i) < 0) {
-			fifo_reply(response_file, "400 Invalid replicate format\n");
+		if (str2int(&flags, (unsigned int*)&flags_i) < 0) {
+			fifo_reply(response_file, "400 Invalid flags format\n");
 			return 1;
 		}
 		
 		lock_udomain(d);
 		
-		if (add_contact(d, &user, &contact, exp_i, q_f, rep_i) < 0) {
+		if (add_contact(d, &user, &contact, exp_i, qval, flags_i) < 0) {
 			unlock_udomain(d);
 			LOG(L_ERR, "ul_add(): Error while adding contact ('%.*s','%.*s') in table '%.*s'\n",
 			    user.len, ZSW(user.s), contact.len, ZSW(contact.s), table.len, ZSW(table.s));
@@ -391,7 +400,7 @@ static int ul_rm_contact(FILE* pipe, char* response_file)
 {
 	char table[MAX_TABLE];
 	char user[MAX_USER];
-	char contact[MAX_CONTACT];
+	char contact[MAX_CONTACT_LEN];
 	udomain_t* d;
 	urecord_t* r;
 	ucontact_t* con;
@@ -428,7 +437,7 @@ static int ul_rm_contact(FILE* pipe, char* response_file)
 	}
 
 
-	if (!read_line(contact, MAX_CONTACT, pipe, &c.len) || c.len == 0) {
+	if (!read_line(contact, MAX_CONTACT_LEN, pipe, &c.len) || c.len == 0) {
 		fifo_reply(response_file,
 			   "400 ul_rm_contact: contact expected\n");
 		LOG(L_ERR, "ERROR: ul_rm_contact: contact expected\n");
@@ -505,14 +514,14 @@ static inline int print_contacts(FILE* _o, ucontact_t* _c)
 	int cnt = 0;
 
 	while(_c) {
-		if ((_c->expires > act_time) && (_c->state < CS_ZOMBIE_N)) {
+		if (VALID_CONTACT(_c, act_time)) {
 			cnt++;
 			if (cnt==1) {
 				fputs( "200 OK\n", _o);
 			}
-			fprintf(_o, "<%.*s>;q=%-3.2f;expires=%d\n",
+			fprintf(_o, "<%.*s>;q=%s;expires=%d\n",
 				_c->c.len, ZSW(_c->c.s),
-				_c->q, (int)(_c->expires - act_time));
+				q2str(_c->q, 0), (int)(_c->expires - act_time));
 		}
 
 		_c = _c->next;

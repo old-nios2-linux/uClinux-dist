@@ -1,9 +1,9 @@
 /*
  * Record-Route & Route module interface
  *
- * $Id: rr_mod.h,v 1.7 2003/07/15 10:05:23 dcm Exp $
+ * $Id: rr_mod.h,v 1.9 2004/08/24 09:00:38 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,5 +44,6 @@ extern str i_user;
 extern int append_fromtag;
 extern int enable_double_rr;
 extern int enable_full_lr;
+extern int add_username;
 
 #endif /* RR_MOD_H */

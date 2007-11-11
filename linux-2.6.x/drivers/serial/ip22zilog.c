@@ -14,7 +14,6 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/tty.h>
@@ -840,8 +839,8 @@ ip22zilog_convert_to_zs(struct uart_ip22zilog_port *up, unsigned int cflag,
 
 /* The port lock is not held.  */
 static void
-ip22zilog_set_termios(struct uart_port *port, struct termios *termios,
-		      struct termios *old)
+ip22zilog_set_termios(struct uart_port *port, struct ktermios *termios,
+		      struct ktermios *old)
 {
 	struct uart_ip22zilog_port *up = (struct uart_ip22zilog_port *) port;
 	unsigned long flags;
@@ -863,6 +862,7 @@ ip22zilog_set_termios(struct uart_port *port, struct termios *termios,
 	up->cflag = termios->c_cflag;
 
 	ip22zilog_maybe_update_regs(up, ZILOG_CHANNEL_FROM_PORT(port));
+	uart_update_timeout(port, termios->c_cflag, baud);
 
 	spin_unlock_irqrestore(&up->port.lock, flags);
 }
@@ -922,13 +922,7 @@ static int zilog_irq = -1;
 
 static void * __init alloc_one_table(unsigned long size)
 {
-	void *ret;
-
-	ret = kmalloc(size, GFP_KERNEL);
-	if (ret != NULL)
-		memset(ret, 0, size);
-
-	return ret;
+	return kzalloc(size, GFP_KERNEL);
 }
 
 static void __init ip22zilog_alloc_tables(void)
@@ -1024,6 +1018,8 @@ ip22serial_console_termios(struct console *con, char *options)
 	}
 
 	con->cflag = cflag | CS8;			/* 8N1 */
+
+	uart_update_timeout(&ip22zilog_port_table[con->index].port, cflag, baud);
 }
 
 static int __init ip22zilog_console_setup(struct console *con, char *options)

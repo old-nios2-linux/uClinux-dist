@@ -20,6 +20,7 @@
 #include <asm/byteorder.h>
 #include <asm/cpu.h>
 #include <asm/cpu-features.h>
+#include <asm-generic/iomap.h>
 #include <asm/page.h>
 #include <asm/pgtable-bits.h>
 #include <asm/processor.h>
@@ -113,9 +114,9 @@ static inline void set_io_port_base(unsigned long base)
  *     almost all conceivable cases a device driver should not be using
  *     this function
  */
-static inline unsigned long virt_to_phys(volatile void * address)
+static inline unsigned long virt_to_phys(volatile const void *address)
 {
-	return (unsigned long)address - PAGE_OFFSET;
+	return (unsigned long)address - PAGE_OFFSET + PHYS_OFFSET;
 }
 
 /*
@@ -132,7 +133,7 @@ static inline unsigned long virt_to_phys(volatile void * address)
  */
 static inline void * phys_to_virt(unsigned long address)
 {
-	return (void *)(address + PAGE_OFFSET);
+	return (void *)(address + PAGE_OFFSET - PHYS_OFFSET);
 }
 
 /*
@@ -177,6 +178,11 @@ extern void __iounmap(const volatile void __iomem *addr);
 static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
 	unsigned long flags)
 {
+	void __iomem *addr = plat_ioremap(offset, size, flags);
+
+	if (addr)
+		return addr;
+
 #define __IS_LOW512(addr) (!((phys_t)(addr) & (phys_t) ~0x1fffffffULL))
 
 	if (cpu_has_64bit_addresses) {
@@ -206,7 +212,8 @@ static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
 		 */
 		if (__IS_LOW512(phys_addr) && __IS_LOW512(last_addr) &&
 		    flags == _CACHE_UNCACHED)
-			return (void __iomem *)CKSEG1ADDR(phys_addr);
+			return (void __iomem *)
+				(unsigned long)CKSEG1ADDR(phys_addr);
 	}
 
 	return __ioremap(offset, size, flags);
@@ -281,6 +288,9 @@ static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
 
 static inline void iounmap(const volatile void __iomem *addr)
 {
+	if (plat_iounmap(addr))
+		return;
+
 #define __IS_KSEG1(addr) (((unsigned long)(addr) & ~0x1fffffffUL) == CKSEG1)
 
 	if (cpu_has_64bit_addresses ||
@@ -518,34 +528,6 @@ static inline void memcpy_toio(volatile void __iomem *dst, const void *src, int 
 }
 
 /*
- * Memory Mapped I/O
- */
-#define ioread8(addr)		readb(addr)
-#define ioread16(addr)		readw(addr)
-#define ioread32(addr)		readl(addr)
-
-#define iowrite8(b,addr)	writeb(b,addr)
-#define iowrite16(w,addr)	writew(w,addr)
-#define iowrite32(l,addr)	writel(l,addr)
-
-#define ioread8_rep(a,b,c)	readsb(a,b,c)
-#define ioread16_rep(a,b,c)	readsw(a,b,c)
-#define ioread32_rep(a,b,c)	readsl(a,b,c)
-
-#define iowrite8_rep(a,b,c)	writesb(a,b,c)
-#define iowrite16_rep(a,b,c)	writesw(a,b,c)
-#define iowrite32_rep(a,b,c)	writesl(a,b,c)
-
-/* Create a virtual mapping cookie for an IO port range */
-extern void __iomem *ioport_map(unsigned long port, unsigned int nr);
-extern void ioport_unmap(void __iomem *);
-
-/* Create a virtual mapping cookie for a PCI BAR (memory or IO) */
-struct pci_dev;
-extern void __iomem *pci_iomap(struct pci_dev *dev, int bar, unsigned long max);
-extern void pci_iounmap(struct pci_dev *dev, void __iomem *);
-
-/*
  * ISA space is 'always mapped' on currently supported MIPS systems, no need
  * to explicitly ioremap() it. The fact that the ISA IO space is mapped
  * to PAGE_OFFSET is pure coincidence - it does not mean ISA values
@@ -554,12 +536,6 @@ extern void pci_iounmap(struct pci_dev *dev, void __iomem *);
  * analogy with PCI is quite large):
  */
 #define __ISA_IO_base ((char *)(isa_slot_offset))
-
-/*
- * We don't have csum_partial_copy_fromio() yet, so we cheat here and
- * just copy it. The net code will then do the checksum later.
- */
-#define eth_io_copy_and_sum(skb,src,len,unused) memcpy_fromio((skb)->data,(src),(len))
 
 /*
  * The caches on some architectures aren't dma-coherent and have need to

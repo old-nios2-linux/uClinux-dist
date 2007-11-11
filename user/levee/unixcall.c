@@ -54,7 +54,6 @@ char *
 basename(s)
 char *s;
 {
-    char *rindex();
     register char *p;
 
     if (p=strrchr(s,'/'))

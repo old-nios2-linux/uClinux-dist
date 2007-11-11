@@ -41,6 +41,7 @@
 #include <linux/ethtool.h>
 #include <linux/mii.h>
 #include <linux/if_vlan.h>
+#include <linux/mm.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -151,7 +152,7 @@ static int full_duplex[MAX_UNITS] = {0, };
  * This SUCKS.
  * We need a much better method to determine if dma_addr_t is 64-bit.
  */
-#if (defined(__i386__) && defined(CONFIG_HIGHMEM64G)) || defined(__x86_64__) || defined (__ia64__) || defined(__mips64__) || (defined(__mips__) && defined(CONFIG_HIGHMEM) && defined(CONFIG_64BIT_PHYS_ADDR))
+#if (defined(__i386__) && defined(CONFIG_HIGHMEM64G)) || defined(__x86_64__) || defined (__ia64__) || defined(__alpha__) || defined(__mips64__) || (defined(__mips__) && defined(CONFIG_HIGHMEM) && defined(CONFIG_64BIT_PHYS_ADDR))
 /* 64-bit dma_addr_t */
 #define ADDR_64BITS	/* This chip uses 64 bit addresses. */
 #define netdrv_addr_t u64
@@ -676,8 +677,7 @@ static void netdev_vlan_rx_kill_vid(struct net_device *dev, unsigned short vid)
 	spin_lock(&np->lock);
 	if (debug > 1)
 		printk("%s: removing vlanid %d from vlan filter\n", dev->name, vid);
-	if (np->vlgrp)
-		np->vlgrp->vlan_devices[vid] = NULL;
+	vlan_group_set_device(np->vlgrp, vid, NULL);
 	set_rx_mode(dev);
 	spin_unlock(&np->lock);
 }
@@ -740,7 +740,7 @@ static int __devinit starfire_init_one(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	/* enable MWI -- it vastly improves Rx performance on sparc64 */
-	pci_set_mwi(pdev);
+	pci_try_set_mwi(pdev);
 
 #ifdef ZEROCOPY
 	/* Starfire can do TCP/UDP checksumming */
@@ -1452,12 +1452,11 @@ static int __netdev_rx(struct net_device *dev, int *quota)
 		   to a minimally-sized skbuff. */
 		if (pkt_len < rx_copybreak
 		    && (skb = dev_alloc_skb(pkt_len + 2)) != NULL) {
-			skb->dev = dev;
 			skb_reserve(skb, 2);	/* 16 byte align the IP header */
 			pci_dma_sync_single_for_cpu(np->pci_dev,
 						    np->rx_info[entry].mapping,
 						    pkt_len, PCI_DMA_FROMDEVICE);
-			eth_copy_and_sum(skb, np->rx_info[entry].skb->data, pkt_len, 0);
+			skb_copy_to_linear_data(skb, np->rx_info[entry].skb->data, pkt_len);
 			pci_dma_sync_single_for_device(np->pci_dev,
 						       np->rx_info[entry].mapping,
 						       pkt_len, PCI_DMA_FROMDEVICE);
@@ -1737,7 +1736,7 @@ static void set_rx_mode(struct net_device *dev)
 		int vlan_count = 0;
 		void __iomem *filter_addr = ioaddr + HashTable + 8;
 		for (i = 0; i < VLAN_VID_MASK; i++) {
-			if (np->vlgrp->vlan_devices[i]) {
+			if (vlan_group_get_device(np->vlgrp, i)) {
 				if (vlan_count >= 32)
 					break;
 				writew(cpu_to_be16(i), filter_addr);

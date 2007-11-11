@@ -9,6 +9,7 @@
 #include <linux/ctype.h>
 #include <linux/capability.h>
 #include <linux/time.h>
+#include <linux/sched.h>
 #include <asm/current.h>
 #include <asm/uaccess.h>
 
@@ -58,6 +59,7 @@ int jfs_ioctl(struct inode * inode, struct file * filp, unsigned int cmd,
 
 	switch (cmd) {
 	case JFS_IOC_GETFLAGS:
+		jfs_get_inode_flags(jfs_inode);
 		flags = jfs_inode->mode2 & JFS_FL_USER_VISIBLE;
 		flags = jfs_map_ext2(flags, 0);
 		return put_user(flags, (int __user *) arg);
@@ -67,7 +69,7 @@ int jfs_ioctl(struct inode * inode, struct file * filp, unsigned int cmd,
 		if (IS_RDONLY(inode))
 			return -EROFS;
 
-		if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
+		if (!is_owner_or_cap(inode))
 			return -EACCES;
 
 		if (get_user(flags, (int __user *) arg))
@@ -77,6 +79,7 @@ int jfs_ioctl(struct inode * inode, struct file * filp, unsigned int cmd,
 		if (!S_ISDIR(inode->i_mode))
 			flags &= ~JFS_DIRSYNC_FL;
 
+		jfs_get_inode_flags(jfs_inode);
 		oldflags = jfs_inode->mode2;
 
 		/*

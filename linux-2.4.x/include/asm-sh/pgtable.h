@@ -17,7 +17,7 @@
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 extern void paging_init(void);
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /* Cache flushing:
  *
  *  - flush_cache_all() flushes entire cache
@@ -54,7 +54,7 @@ extern void paging_init(void);
 
 #define p3_cache_init()				do { } while (0)
 
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 
 #include <asm/cache.h>
 #include <asm/cacheflush.h>
@@ -135,7 +135,7 @@ extern unsigned long empty_zero_page[1024];
 
 
 /* Mask which drop software flags */
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /*
  * MMU on SH-3 has bug on SH-bit: We can't use it if MMUCR.IX=1.
  * Work around: Just drop SH-bit.

@@ -16,10 +16,12 @@
 #include <linux/mtd/mtd.h>
 #include <linux/blkdev.h>
 #include <linux/blkpg.h>
+#include <linux/freezer.h>
 #include <linux/spinlock.h>
 #include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
+#include <linux/kthread.h>
 #include <asm/uaccess.h>
 
 static LIST_HEAD(blktrans_majors);
@@ -28,9 +30,7 @@ extern struct mutex mtd_table_mutex;
 extern struct mtd_info *mtd_table[];
 
 struct mtd_blkcore_priv {
-	struct completion thread_dead;
-	int exiting;
-	wait_queue_head_t thread_wq;
+	struct task_struct *thread;
 	struct request_queue *rq;
 	spinlock_t queue_lock;
 };
@@ -42,19 +42,20 @@ static int do_blktrans_request(struct mtd_blktrans_ops *tr,
 	unsigned long block, nsect;
 	char *buf;
 
-	block = req->sector;
-	nsect = req->current_nr_sectors;
+	block = req->sector << 9 >> tr->blkshift;
+	nsect = req->current_nr_sectors << 9 >> tr->blkshift;
+
 	buf = req->buffer;
 
 	if (!blk_fs_request(req))
 		return 0;
 
-	if (block + nsect > get_capacity(req->rq_disk))
+	if (req->sector + req->current_nr_sectors > get_capacity(req->rq_disk))
 		return 0;
 
 	switch(rq_data_dir(req)) {
 	case READ:
-		for (; nsect > 0; nsect--, block++, buf += 512)
+		for (; nsect > 0; nsect--, block++, buf += tr->blksize)
 			if (tr->readsect(dev, block, buf))
 				return 0;
 		return 1;
@@ -63,7 +64,7 @@ static int do_blktrans_request(struct mtd_blktrans_ops *tr,
 		if (!tr->writesect)
 			return 0;
 
-		for (; nsect > 0; nsect--, block++, buf += 512)
+		for (; nsect > 0; nsect--, block++, buf += tr->blksize)
 			if (tr->writesect(dev, block, buf))
 				return 0;
 		return 1;
@@ -80,40 +81,21 @@ static int mtd_blktrans_thread(void *arg)
 	struct request_queue *rq = tr->blkcore_priv->rq;
 
 	/* we might get involved when memory gets low, so use PF_MEMALLOC */
-	current->flags |= PF_MEMALLOC | PF_NOFREEZE;
-
-	daemonize("%sd", tr->name);
-
-	/* daemonize() doesn't do this for us since some kernel threads
-	   actually want to deal with signals. We can't just call
-	   exit_sighand() since that'll cause an oops when we finally
-	   do exit. */
-	spin_lock_irq(&current->sighand->siglock);
-	sigfillset(&current->blocked);
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
+	current->flags |= PF_MEMALLOC;
 
 	spin_lock_irq(rq->queue_lock);
-
-	while (!tr->blkcore_priv->exiting) {
+	while (!kthread_should_stop()) {
 		struct request *req;
 		struct mtd_blktrans_dev *dev;
 		int res = 0;
-		DECLARE_WAITQUEUE(wait, current);
 
 		req = elv_next_request(rq);
 
 		if (!req) {
-			add_wait_queue(&tr->blkcore_priv->thread_wq, &wait);
 			set_current_state(TASK_INTERRUPTIBLE);
-
 			spin_unlock_irq(rq->queue_lock);
-
 			schedule();
-			remove_wait_queue(&tr->blkcore_priv->thread_wq, &wait);
-
 			spin_lock_irq(rq->queue_lock);
-
 			continue;
 		}
 
@@ -132,13 +114,13 @@ static int mtd_blktrans_thread(void *arg)
 	}
 	spin_unlock_irq(rq->queue_lock);
 
-	complete_and_exit(&tr->blkcore_priv->thread_dead, 0);
+	return 0;
 }
 
 static void mtd_blktrans_request(struct request_queue *rq)
 {
 	struct mtd_blktrans_ops *tr = rq->queuedata;
-	wake_up(&tr->blkcore_priv->thread_wq);
+	wake_up_process(tr->blkcore_priv->thread);
 }
 
 
@@ -235,7 +217,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 	int last_devnum = -1;
 	struct gendisk *gd;
 
-	if (!!mutex_trylock(&mtd_table_mutex)) {
+	if (mutex_trylock(&mtd_table_mutex)) {
 		mutex_unlock(&mtd_table_mutex);
 		BUG();
 	}
@@ -297,7 +279,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 
 	/* 2.5 has capacity in units of 512 bytes while still
 	   having BLOCK_SIZE_BITS set to 10. Just to keep us amused. */
-	set_capacity(gd, (new->size * new->blksize) >> 9);
+	set_capacity(gd, (new->size * tr->blksize) >> 9);
 
 	gd->private_data = new;
 	new->blkcore_priv = gd;
@@ -313,7 +295,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 
 int del_mtd_blktrans_dev(struct mtd_blktrans_dev *old)
 {
-	if (!!mutex_trylock(&mtd_table_mutex)) {
+	if (mutex_trylock(&mtd_table_mutex)) {
 		mutex_unlock(&mtd_table_mutex);
 		BUG();
 	}
@@ -372,11 +354,9 @@ int register_mtd_blktrans(struct mtd_blktrans_ops *tr)
 	if (!blktrans_notifier.list.next)
 		register_mtd_user(&blktrans_notifier);
 
-	tr->blkcore_priv = kmalloc(sizeof(*tr->blkcore_priv), GFP_KERNEL);
+	tr->blkcore_priv = kzalloc(sizeof(*tr->blkcore_priv), GFP_KERNEL);
 	if (!tr->blkcore_priv)
 		return -ENOMEM;
-
-	memset(tr->blkcore_priv, 0, sizeof(*tr->blkcore_priv));
 
 	mutex_lock(&mtd_table_mutex);
 
@@ -389,8 +369,6 @@ int register_mtd_blktrans(struct mtd_blktrans_ops *tr)
 		return ret;
 	}
 	spin_lock_init(&tr->blkcore_priv->queue_lock);
-	init_completion(&tr->blkcore_priv->thread_dead);
-	init_waitqueue_head(&tr->blkcore_priv->thread_wq);
 
 	tr->blkcore_priv->rq = blk_init_queue(mtd_blktrans_request, &tr->blkcore_priv->queue_lock);
 	if (!tr->blkcore_priv->rq) {
@@ -401,14 +379,17 @@ int register_mtd_blktrans(struct mtd_blktrans_ops *tr)
 	}
 
 	tr->blkcore_priv->rq->queuedata = tr;
+	blk_queue_hardsect_size(tr->blkcore_priv->rq, tr->blksize);
+	tr->blkshift = ffs(tr->blksize) - 1;
 
-	ret = kernel_thread(mtd_blktrans_thread, tr, CLONE_KERNEL);
-	if (ret < 0) {
+	tr->blkcore_priv->thread = kthread_run(mtd_blktrans_thread, tr,
+			"%sd", tr->name);
+	if (IS_ERR(tr->blkcore_priv->thread)) {
 		blk_cleanup_queue(tr->blkcore_priv->rq);
 		unregister_blkdev(tr->major, tr->name);
 		kfree(tr->blkcore_priv);
 		mutex_unlock(&mtd_table_mutex);
-		return ret;
+		return PTR_ERR(tr->blkcore_priv->thread);
 	}
 
 	INIT_LIST_HEAD(&tr->devs);
@@ -431,9 +412,7 @@ int deregister_mtd_blktrans(struct mtd_blktrans_ops *tr)
 	mutex_lock(&mtd_table_mutex);
 
 	/* Clean up the kernel thread */
-	tr->blkcore_priv->exiting = 1;
-	wake_up(&tr->blkcore_priv->thread_wq);
-	wait_for_completion(&tr->blkcore_priv->thread_dead);
+	kthread_stop(tr->blkcore_priv->thread);
 
 	/* Remove it from the list of active majors */
 	list_del(&tr->list);

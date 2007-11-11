@@ -572,6 +572,17 @@ __init void cpu_probe(void)
 	c->fpu_id	= FPIR_IMP_NONE;
 	c->cputype	= CPU_UNKNOWN;
 
+#if defined(CONFIG_RTL865XB) || defined(CONFIG_RTL865XC)
+	c->cputype   = CPU_R3000;
+	c->isa_level = MIPS_CPU_ISA_I;
+	c->options   = MIPS_CPU_TLB;
+#ifdef CONFIG_RTL865XB
+    c->tlbsize   = 16;
+#endif
+#ifdef CONFIG_RTL865XC
+	c->tlbsize   = 32;
+#endif
+#else
 	c->processor_id = read_c0_prid();
 	switch (c->processor_id & 0xff0000) {
 
@@ -596,6 +607,7 @@ __init void cpu_probe(void)
 	}
 	if (c->options & MIPS_CPU_FPU)
 		c->fpu_id = cpu_get_fpu_id();
+#endif
 }
 
 __init void cpu_report(void)

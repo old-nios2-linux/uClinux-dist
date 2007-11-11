@@ -15,6 +15,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <unistd.h>
+#define _GNU_SOURCE
 #include <string.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -28,7 +29,7 @@
 #else 
 #include <linux/mtd/mtd.h>
 #endif
-#else
+#elif defined(CONFIG_BLK_DEV_BLKMEM)
 #include <linux/blkmem.h>
 #endif
 #if defined(CONFIG_NFTL_RW) && !defined(NFTL_MAJOR)
@@ -197,9 +198,9 @@ int main(int argc, char *argv[])
 	/*
 	 * Check the the flash device we're writing to is unique unless we're
 	 * doing a forced write or we've set the preserve flash and an explicit
-	 * offset.
+	 * offset or we aren't erasing.
 	 */
-	if (preserve && offset > 0)
+	if ((preserve && offset > 0) || !erase)
 		doforce++;
 	if (!doforce && sanity_check(fd)) {
 		printf("ERROR: multiple identical flash devices found. "
@@ -222,7 +223,7 @@ int main(int argc, char *argv[])
 	}
 	else
 #endif
-#ifdef CONFIG_MTD
+#if defined(CONFIG_MTD)
 	{
 		if (ioctl(fd, MEMGETINFO, &mtd_info) < 0) {
 			printf("ERROR: ioctl(MEMGETINFO) failed, errno=%d\n",
@@ -233,7 +234,7 @@ int main(int argc, char *argv[])
 		sector_size = mtd_info.erasesize;
 		write_chunk = 512;
 	}
-#else
+#elif defined(BMGETSIZEB) && defined(BMSGSIZE)
 	{
 		if (ioctl(fd, BMGETSIZEB, &device_size) < 0) {
 			printf("ERROR: ioctl(BMGETSIZEB) failed, errno=%d\n",
@@ -247,6 +248,17 @@ int main(int argc, char *argv[])
 		}
 		write_chunk = sector_size;
 	}
+#else
+	if (lseek(fd, SEEK_END, 0L) < 0) {
+		printf("flashw: lseek (SEEK_END) failed, errno=%d\n", errno);
+		exit(1);
+	}
+	device_size = lseek(fd, SEEK_CUR, 0L);
+	sector_size = 512;
+	write_chunk = 512;
+	lseek(fd, SEEK_SET, 0L);
+	printf("Using disk like behaviour, device_size=%d sector_size=512\n",
+			device_size);
 #endif
 
 	if (offset >= device_size) {
@@ -337,13 +349,13 @@ int main(int argc, char *argv[])
 #endif
 
 		if (erase) {
-#ifdef CONFIG_MTD
+#if defined(CONFIG_MTD)
 			erase_info.start = pos;
 			erase_info.length = sector_size;
 			if (ioctl(fd, MEMERASE, &erase_info) == -1)
 				printf("ERROR: ioctl(MEMERASE) failed, "
 					"pos=%x, errno=%d\n", pos, errno);
-#else
+#elif defined(BMSERASE)
  			if (ioctl(fd, BMSERASE, pos) < 0)
  				printf("ERROR: ioctl(BMERASE) failed, "
 					"pos=%x, errno=%d\n", pos, errno);

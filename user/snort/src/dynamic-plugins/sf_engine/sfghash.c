@@ -809,7 +809,8 @@ int main ( int argc, char ** argv )
    /* Add Nodes to the Hash Table */
    for(i=0;i<num;i++) 
    {
-       sprintf(str,"KeyWord%d",i+1);
+       snprintf(str, sizeof(str), "KeyWord%d",i+1);
+       str[sizeof(str) - 1] = '\0';
        sfghash_add( t, str,  strupr(strdup(str)) );
 
        sfatom_add( str,  strupr(strdup(str)) );
@@ -820,7 +821,8 @@ int main ( int argc, char ** argv )
 
    for(i=0;i<num;i++) 
    {
-      sprintf(str,"KeyWord%d",i+1);
+      snprintf(str, sizeof(str), "KeyWord%d",i+1);
+      str[sizeof(str) - 1] = '\0';
 
       p = (char*) sfghash_find( t, str );
 

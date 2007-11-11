@@ -434,8 +434,7 @@ int AddIPMacEntryToList(IPMacEntryList *ip_mac_entry_list,
     if (ip_mac_entry == NULL || ip_mac_entry_list == NULL)
         return 1;
 
-    newNode = (IPMacEntryListNode *)malloc(sizeof(IPMacEntryListNode));
-    /* XXX: OOM Check */
+    newNode = (IPMacEntryListNode *)SnortAlloc(sizeof(IPMacEntryListNode));
     newNode->ip_mac_entry = ip_mac_entry;
     newNode->next = NULL;
 

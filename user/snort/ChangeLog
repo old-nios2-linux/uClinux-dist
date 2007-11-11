@@ -1,3 +1,359 @@
+2007-05-09 Adam Keeton <akeeton@sourcefire.com>
+    * src/preprocessors/HttpInspect/client/hi_client_norm.c:
+    * src/preprocessors/HttpInspect/include/hi_si.h:
+    * src/preprocessors/HttpInspect/normalization/hi_norm.c:
+      Added code to prevent URI-related alerts from firing when the
+      body is being normalized.
+
+2007-05-08 Adam Keeton <akeeton@sourcefire.com>
+    * src/preprocessors/HttpInspect/client/hi_client.c:
+      Fixed pointer initialization relating to POST normalization.
+
+2007-04-26 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.h:
+    * src/detection-plugins/sp_pattern_match.c:
+    * src/detection-plugins/sp_pattern_match.h:
+    * src/dynamic-plugins/sf_dynamic_common.h:
+    * src/dynamic-plugins/sf_engine/sf_snort_detection_engine.c:
+    * src/dynamic-plugins/sf_engine/sf_snort_plugin_api.h:
+    * src/dynamic-plugins/sf_engine/sf_snort_plugin_content.c:
+    * doc/snort_manual.tex:
+    * doc/snort_manual.pdf:
+      Provide new rule keyword modifier for content option that allows a
+      rule to search for a pattern in the body of an HTTP client request.
+    * src/util.c:
+    * src/preprocessors/snort_httpinspect.c:
+    * src/preprocessors/spp_httpinspect.c:
+    * src/preprocessors/HttpInspect/client/hi_client.c:
+    * src/preprocessors/HttpInspect/client/hi_client_norm.c:
+    * src/preprocessors/HttpInspect/include/hi_client.h:
+    * src/preprocessors/HttpInspect/include/hi_include.h:
+    * src/preprocessors/HttpInspect/include/hi_ui_config.h:
+    * src/preprocessors/HttpInspect/include/hi_util_xmalloc.h:
+    * src/preprocessors/HttpInspect/normalization/hi_norm.c:
+    * src/preprocessors/HttpInspect/user_interface/hi_ui_config.c:
+    * src/preprocessors/HttpInspect/user_interface/hi_ui_server_lookup.c:
+    * src/preprocessors/HttpInspect/utils/hi_util_kmap.c:
+      Update to normalize the body of a client request to allow rules to
+      check specifically for parameters of a POST or GET request.  Also
+      add stats that are part of the hourly stats that track various
+      HTTP encodings and normalizations that have occured.
+    * src/preprocessors/spp_stream4.c:
+      Fix potential memory leak.
+
+2007-04-13 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.h:
+    * src/decode.c:
+    * src/ipv6.c:
+      Changed structure declaration and usage to not conflict with OpenBSD.
+
+2007-03-22 Steven Sturges <ssturges@sourcefire.com>
+    * src/util.c:
+    * src/util.h:
+    * src/parser/IpAddrSet.c:
+      Update to check return values from snprintf.
+
+2007-03-19 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.h:
+    * src/parser.c:
+    * src/ipv6.c:
+      Updates to handle Win32 platforms.
+    * src/preprocessors/spp_frag3.c:
+      Handle readback mode when compiled for IPFW or IPQ.
+
+2007-03-16 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.c:
+    * src/decode.h:
+    * src/parser.c:
+      Update for logging of IPv6 packets (make them look like IPv4 for now),
+      and turn on drops by default.
+
+2007-03-15 Steven Sturges <ssturges@sourcefire.com>
+    * doc/README.ipv6
+    * etc/gen-msg.map:
+    * src/Makefile.am:
+    * src/decode.c:
+    * src/decode.h:
+    * src/generators.h:
+    * src/ipv6.c (added):
+    * src/ipv6.h (added):
+    * src/parser.c:
+    * src/snort.c:
+    * src/snort.h:
+    * src/win32//WIN32-Prj/snort.dsp:
+      Added ability for Snort to track fragmented ICMPv6 to check for the
+      remote BSD exploit (Bugtraq ID 22901, CVE-2007-1365).
+    * src/win32/WIN32-Code/misc.c:
+    * src/win32/WIN32-Code/syslog.c:
+    * src/win32/WIN32-Code/win32_service.c:
+    * src/plugbase.c:
+    * src/preprocessors/perf-base.c:
+    * src/preprocessors/spp_frag2.c:
+    * src/preprocessors/stream_ignore.c:
+    * src/profiler.c:
+    * src/snort.c:
+      Cleanup to use safe snprintf and strncpy functions, check return values
+      of SafeMemcpy, use calloc or SnortAlloc, and other static size buffer
+      bounds checks.
+
+2007-03-14 Steven Sturges <ssturges@sourcefire.com>
+    * src/bounds.h:
+    * src/fpdetect.c:
+    * src/log.c:
+    * src/mstring.c:
+    * src/parser.c:
+    * src/plugbase.c:
+    * src/profiler.c:
+    * src/sfthreshold.c:
+    * src/snort.c:
+    * src/ubi_BinTree.c:
+    * src/util.c:
+    * src/util.h:
+    * src/detection-plugins/sp_rpc_check.c:
+    * src/detection-plugins/sp_ttl_check.c:
+    * src/detection-plugins/sp_pattern_match.c:
+    * src/detection-plugins/sp_react.c:
+    * src/detection-plugins/sp_session.c:
+    * src/dynamic-plugins/sf_dynamic_engine.h:
+    * src/dynamic-plugins/sf_dynamic_plugins.c:
+    * src/dynamic-plugins/sf_dynamic_preprocessor.h:
+    * src/dynamic-plugins/sf_engine/bmh.c:
+    * src/dynamic-plugins/sf_engine/sf_snort_detection_engine.c:
+    * src/dynamic-plugins/sf_engine/sf_snort_plugin_loop.c:
+    * src/dynamic-plugins/sf_preproc_example/sf_dynamic_preproc_lib.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_config.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_util.c:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+    * src/dynamic-preprocessors/dcerpc/snort_dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/spp_dcerpc.c:
+    * src/dynamic-preprocessors/dns/spp_dns.c:
+    * src/dynamic-preprocessors/ftptelnet/ftpp_si.c:
+    * src/dynamic-preprocessors/ftptelnet/hi_util_kmap.c:
+    * src/dynamic-preprocessors/ftptelnet/hi_util_xmalloc.c:
+    * src/dynamic-preprocessors/ftptelnet/pp_ftp.c:
+    * src/dynamic-preprocessors/ftptelnet/snort_ftptelnet.c:
+    * src/dynamic-preprocessors/ftptelnet/spp_ftptelnet.c:
+    * src/dynamic-preprocessors/smtp/smtp_config.c:
+    * src/dynamic-preprocessors/smtp/smtp_log.c:
+    * src/dynamic-preprocessors/smtp/smtp_normalize.c:
+    * src/dynamic-preprocessors/smtp/smtp_util.c:
+    * src/dynamic-preprocessors/smtp/snort_smtp.c:
+    * src/dynamic-preprocessors/ssh/spp_ssh.c:
+    * src/output-plugins/spo_alert_syslog.c:
+    * src/output-plugins/spo_alert_fast.c:
+    * src/output-plugins/spo_database.c:
+    * src/output-plugins/spo_log_ascii.c:
+    * src/output-plugins/spo_log_tcpdump.c:
+    * src/output-plugins/spo_unified.c:
+    * src/preprocessors/flow/flow_print.c:
+    * src/preprocessors/flow/flow_print.h:
+    * src/preprocessors/flow/int-snort/flow_packet.h:
+    * src/preprocessors/flow/portscan/flowps.c:
+    * src/preprocessors/perf-base.c:
+    * src/preprocessors/perf.c:
+    * src/preprocessors/portscan.c:
+    * src/preprocessors/HttpInspect/client/hi_client.c:
+    * src/preprocessors/HttpInspect/event_output/hi_eo_log.c:
+    * src/preprocessors/HttpInspect/utils/hi_util_kmap.c:
+    * src/preprocessors/snort_httpinspect.c:
+    * src/preprocessors/snort_stream4_udp.c:
+    * src/preprocessors/snort_stream4_session.c:
+    * src/preprocessors/spp_bo.c:
+    * src/preprocessors/spp_frag3.c:
+    * src/preprocessors/spp_perfmonitor.c:
+    * src/preprocessors/spp_sfportscan.c:
+    * src/preprocessors/spp_stream4.c:
+    * src/preprocessors/spp_stream5.c:
+    * src/preprocessors/str_search.c:
+    * src/preprocessors/stream_api.h:
+    * src/preprocessors/stream_ignore.c:
+    * src/preprocessors/Stream5/snort_stream5_tcp.c:
+    * src/preprocessors/Stream5/snort_stream5_udp.c:
+    * src/sfutil/acsmx.c:
+    * src/sfutil/acsmx2.c:
+    * src/sfutil/ipobj.c:
+    * src/sfutil/mwm.c:
+    * src/sfutil/sfghash.c:
+    * src/sfutil/sfmemcap.c:
+    * src/sfutil/sfxhash.c:
+      Cleanup to use safe snprintf and strncpy functions, check return values
+      of SafeMemcpy, use calloc or SnortAlloc, and other static size buffer
+      bounds checks.  Add handling for FatalError not returning for static
+      code analysis tools.  Update Stream4 session management.
+    * src/sfutil/sfthd.c:
+      Fix memory leak in global config.  Thanks Boris Lytochkin for pointing
+      this out.
+    * etc/snort.conf:
+      Remove extra 'bound to' from frag3 description.  Thanks Michael Burns
+      for pointing that out.
+
+2007-03-02 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.c:
+      Correct remaining size calculation for LLC and Vlan tags.
+    * src/log.c:
+      Check length for TCP SACK option before copying data from packet.
+    * src/debug.c:
+    * src/detect.c:
+    * src/parser.c:
+    * src/pcrm.c:
+    * src/plugbase.c:
+    * src/sfthreshold.c:
+    * src/snort.c:
+    * src/tag.c:
+    * src/util.c:
+    * src/util.h:
+    * src/detection-plugins/sp_ip_fragbits.c:
+    * src/detection-plugins/sp_pcre.c:
+    * src/dynamic-plugins/sf_dynamic_plugins.c:
+    * src/dynamic-plugins/sp_preprocopt.c:
+    * src/dynamic-plugins/sf_engine/sf_snort_detection_engine.c:
+    * src/dynamic-plugins/sf_engine/sf_snort_plugin_loop.c:
+    * src/dynamic-preprocessors/ssh/spp_ssh.c:
+    * src/output-plugins/spo_alert_prelude.c:
+    * src/output-plugins/spo_alert_syslog.c:
+    * src/output-plugins/spo_alert_unixsock.c:
+    * src/output-plugins/spo_log_ascii.c:
+    * src/output-plugins/spo_log_tcpdump.c:
+    * src/output-plugins/spo_unified.c:
+    * src/preprocessors/perf.c:
+    * src/preprocessors/spp_arpspoof.c:
+    * src/preprocessors/spp_sfportscan.c:
+    * src/preprocessors/spp_stream4.c:
+    * src/preprocessors/HttpInspect/client/hi_client.c:
+    * src/preprocessors/Stream5/snort_stream5_session.c:
+    * src/preprocessors/Stream5/snort_stream5_tcp.c:
+    * src/sfutil/ipobj.c:
+    * src/sfutil/mwm.c:
+    * src/sfutil/sfksearch.c:
+    * src/sfutil/util_net.c:
+      Code cleanup, ensure null termination on string buffers, initialization
+      of memory allocations, parameter validation, etc.
+    * src/output-plugins/spo_database.c:
+      Code cleanup, ensure null termination on string buffers, initialization
+      of memory allocations, parameter validation, etc.  Handle truncated
+      SQL queries.
+    * src/bounds.h:
+    * src/detection-plugins/sp_pattern_match.c:
+      Update size calculation in calls to SafeMemcpy.
+    * src/profiler.h:
+    * src/preprocessors/spp_flow.c:
+      Fix miscalculation of processor time attributable to flow.
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc.h:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_config.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_util.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_util.h:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.h:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_structs.h:
+    * src/dynamic-preprocessors/dcerpc/smb_structs.h:
+    * src/dynamic-preprocessors/dcerpc/snort_dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/snort_dcerpc.h:
+    * src/dynamic-preprocessors/dcerpc/spp_dcerpc.c:
+      Code cleanup to perform bounds checking, validation of memcpy
+      success, remove potential memory leak.  Code readability improvements
+      and update DCE endianness checks.
+    * src/dynamic-preprocessors/dns/sf_preproc_info.h:
+    * src/dynamic-preprocessors/dns/spp_dns.c:
+      Code cleanup for initialization of memory allocations and add
+      early termination when at end of packet payload.
+    * src/dynamic-preprocessors/ftptelnet/ftpp_si.c:
+    * src/dynamic-preprocessors/ftptelnet/ftpp_si.h:
+    * src/dynamic-preprocessors/ftptelnet/pp_ftp.c:
+    * src/dynamic-preprocessors/ftptelnet/sf_preproc_info.h:
+    * src/dynamic-preprocessors/ftptelnet/snort_ftptelnet.c:
+      Code cleanup for initialization of memory allocations and remove
+      dead/unused code for directory and user state tracking.
+    * src/dynamic-preprocessors/smtp/sf_preproc_info.h:
+    * src/dynamic-preprocessors/smtp/smtp_config.c:
+    * src/dynamic-preprocessors/smtp/smtp_normalize.c:
+    * src/dynamic-preprocessors/smtp/smtp_normalize.h:
+    * src/dynamic-preprocessors/smtp/snort_smtp.c:
+      Code cleanup for initialization of memory allocations, fix normalization
+      to prevent read beyond packet payload.  Generate SMTP command overflow
+      even if packet payload doesn't contain complete command (missing LF).
+    * src/preprocessors/spp_frag3.c:
+      Further update to handle iptables (and other datalink layers) that
+      do not have ethernet headers to be included in rebuilt fragment.
+:
+2007-02-20 Steven Sturges <ssturges@sourcefire.com>
+    * src/util.c:
+      Update copyright date to include 2007.
+
+2007-02-16 Steven Sturges <ssturges@sourcefire.com>
+    * src/dynamic-preprocessors/Makefile.am:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+      Add bounds checking to ReassembleSMBWriteX; use Safememcpy for calculated
+      length buffer copies.
+
+2007-02-02 Steven Sturges <ssturges@sourcefire.com>
+    * src/bounds.h:
+    * src/preprocessors/spp_frag3.c:
+      Fix issue when Snort is inline using iptables, without either the
+      ipconntrack or NAT modules.  This should not occur using the recommended
+      snort inline configuration, since the OS is supposed to handle IP
+      fragment reassembly.  The Ethernet header doesn't exist in the packet
+      received by Snort, causing snort to dereference an invalid pointer.
+      Thanks to Panda Software and Joel Ebrahimi for reporting the issue."
+
+2007-01-07 Steven Sturges <ssturges@sourcefire.com>
+    * src/decode.c:
+    * src/decode.h:
+      Fixed issue where GRE decoder was attempting to assign a potentially
+      negative value to an unsigned integer.  This value, which would then
+      be positive, was then checked to see if it was less than zero, which
+      would indicate whether the calculated length of the header was greater
+      than the length of the rest of the packet capture.  This would always
+      return false and the assumed length of the packet would potentially
+      be larger than the actual length, leading to a potential dereferning
+      of invalid memory.  Thanks to Chris Rohlf for pointing this out.
+
+2006-12-04 Steven Sturges <ssturges@sourcefire.com>
+    * src/dynamic-preprocessors/ftptelnet/ftpp_ui_config.c:
+    * src/dynamic-preprocessors/ftptelnet/ftpp_ui_config.h:
+    * src/dynamic-preprocessors/ftptelnet/snort_ftptelnet.c:
+      Configuration validation update.
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/sf_preproc_info.h:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+      Additional updates for bounds checking.
+    * src/detection-plugins/sp_isdataat.c:
+    * doc/snort_manual.tex:
+    * doc/snort_manual.pdf:
+      Added an option to specify rawbytes for the buffer.
+
+2006-11-30 Steven Sturges <ssturges@sourcefire.com>
+    * src/tag.c:
+      Fix logging of tagged packets when -G (event source ID) is used.
+    * src/event.h:
+    * src/snort_packet_header.h:
+    * src/output-plugins/spo_unified.c:
+      Fix unified to work correctly on 64bit platforms.  Thanks Nikns Siankin
+      for the report.  Nikns provides a patch to barnyard that may be
+      required to use this functionality on a 64bit systems.  Grab the
+      patch from here: http://secure.lv/~nikns/stuff/barnyard_64bit.diff
+    * src/snort.c:
+    * src/snort.h:
+      Reorganize code for inline fail-open to create pattern matcher rule
+      groups in the thread.
+    * src/util.c:
+      Code cleanup
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_util.c:
+    * src/dynamic-preprocessors/dcerpc/sf_preproc_info.h:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+    * src/dynamic-preprocessors/dcerpc/snort_dcerpc.c:
+      Fix segfault caused by integer overflow and add additional checks
+      to protect against other underflow/overflow conditions.
+    * src/preprocessors/spp_stream4.c:
+    * src/preprocessors/stream.h:
+      Add capability to have multiple application layer preprocessors store
+      data within the stream to better handle autodetection and multi-protocol
+      packets.  Fix additional issue with high CPU and reprocessing rebuilt
+      packets that are split across a sequence wrap.  
+
 2006-11-22 Steven Sturges <ssturges@sourcefire.com>
     * preprocessors/spp_stream4.c:
       Fix problem with snort using high CPU and reprocessing the same
@@ -7,6 +363,25 @@
 2006-11-16 Andrew Mullican <amullican@sourcefire.com>
     * etc/gen-msg.map:
       Add DCE/RPC preprocessor alert.
+
+2006-11-07 Steven Sturges <ssturges@sourcefire.com>
+    * src/dynamic-preprocessors/dcerpc/dcerpc.c:
+    * src/dynamic-preprocessors/dcerpc/dcerpc_config.c:
+    * src/dynamic-preprocessors/dcerpc/smb_andx_decode.c:
+    * src/dynamic-preprocessors/dcerpc/snort_dcerpc.h:
+    * src/dynamic-preprocessors/dcerpc/spp_dcerpc.c:
+      Updates for printing of options and handling of memcap.
+    * src/dynamic-preprocessors/ftptelnet/snort_ftptelnet.c:
+      Add print for config option.
+    * src/preprocessors/spp_stream5.c:
+    * src/preprocessors/Stream5/snort_stream5_session.c:
+    * src/preprocessors/Stream5/snort_stream5_tcp.c:
+    * src/preprocessors/Stream5/snort_stream5_udp.c:
+      Add UDP session tracking stats.  Improved TCP Timestamp handling.
+      Seperate MacOS policy from BSD, as they differ slightly.  Improved
+      performance of session pruning.
+    * src/snort.c:
+      Updates to inline thread initialization.
 
 2006-10-30 Steven Sturges <ssturges@sourcefire.com>
     * src/dynamic-preprocessors/dcerpc/dcerpc.c:

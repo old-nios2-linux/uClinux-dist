@@ -1,9 +1,9 @@
 /*
- * $Id: nonce.h,v 1.5 2003/03/06 15:32:39 janakj Exp $
+ * $Id: nonce.h,v 1.6 2004/08/24 08:58:24 janakj Exp $
  *
  * Nonce related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

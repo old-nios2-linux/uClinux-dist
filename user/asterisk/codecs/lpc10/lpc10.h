@@ -1,6 +1,6 @@
 /*
 
-$Log: lpc10.h,v $
+$Log$
 Revision 1.18  2004/08/31 13:32:11  markster
 Merge NetBSD and Courtesty tone with modifications (bug #2329)
 
@@ -31,6 +31,8 @@ Add broken lpc10 code...  It's not too far from working I don't think...
 #ifndef __LPC10_H__
 #define __LPC10_H__
 
+#define P_R_O_T_O_T_Y_P_E_S
+
 #define LPC10_SAMPLES_PER_FRAME 180
 #define LPC10_BITS_IN_COMPRESSED_FRAME 54
 
@@ -46,18 +48,24 @@ Add broken lpc10 code...  It's not too far from working I don't think...
 
 #if defined(unix) || defined(__unix__) || defined(__NetBSD__)
 typedef short		INT16;
-typedef int		INT32;
+typedef int			INT32;
 #endif
 
 
 #if defined(__MSDOS__) || defined(MSDOS)
-typedef int		INT16;
+typedef int			INT16;
 typedef long		INT32;
 #endif
 
 #if defined(__APPLE__)
 typedef short		INT16;
-typedef int		INT32;
+typedef int			INT32;
+#endif
+
+#if defined(WIN32) && defined(_MSC_VER)
+typedef __int16		INT16;
+typedef __int32		INT32;
+#pragma warning(disable: 4005)
 #endif
 
 

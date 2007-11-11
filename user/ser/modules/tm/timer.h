@@ -1,7 +1,7 @@
 /*
- * $Id: timer.h,v 1.34 2003/09/19 19:20:36 andrei Exp $
+ * $Id: timer.h,v 1.37 2004/11/01 14:09:09 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,6 +28,7 @@
  * History:
  * --------
  *  2003-09-12  timer_link.tg exists only if EXTRA_DEBUG (andrei)
+ *  2004-02-13  timer_link.payload removed (bogdan)
  */
 
 
@@ -39,7 +40,7 @@
 #include "lock.h"
 
 /* timer timestamp value indicating a timer has been 
-   deactived and shall not be executed
+   deactivated and shall not be executed
 */
 #define TIMER_DELETED	1
 
@@ -59,14 +60,13 @@ enum lists
 };
 
 /* all you need to put a cell in a timer list
-   links to neighbours and timer value */
+   links to neighbors and timer value */
 typedef struct timer_link
 {
-	struct timer_link *next_tl;
-	struct timer_link *prev_tl;
-	volatile unsigned int       time_out;
-	void              *payload;
-	struct timer      *timer_list;
+	struct timer_link     *next_tl;
+	struct timer_link     *prev_tl;
+	volatile unsigned int  time_out;
+	struct timer          *timer_list;
 #ifdef EXTRA_DEBUG
 	enum timer_groups  tg;
 #endif
@@ -110,10 +110,10 @@ struct timer_link  *check_and_split_time_list( struct timer*, int);
 
 void reset_timer( struct timer_link* tl );
 /* determine timer length and put on a correct timer list */
-void set_timer( struct timer_link *new_tl, enum lists list_id );
+void set_timer( struct timer_link *new_tl, enum lists list_id, unsigned int* ext_timeout );
 /* similar to set_timer, except it allows only one-time
    timer setting and all later attempts are ignored */
-void set_1timer( struct timer_link *new_tl, enum lists list_id );
+void set_1timer( struct timer_link *new_tl, enum lists list_id, unsigned int* ext_timeout );
 /*void unlink_timers( struct cell *t );*/
 void timer_routine(unsigned int, void*);
 

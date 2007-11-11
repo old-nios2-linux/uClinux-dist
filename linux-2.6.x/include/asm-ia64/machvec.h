@@ -21,6 +21,7 @@ struct mm_struct;
 struct pci_bus;
 struct task_struct;
 struct pci_dev;
+struct msi_desc;
 
 typedef void ia64_mv_setup_t (char **);
 typedef void ia64_mv_cpu_init_t (void);
@@ -29,6 +30,7 @@ typedef void ia64_mv_send_ipi_t (int, int, int, int);
 typedef void ia64_mv_timer_interrupt_t (int, void *);
 typedef void ia64_mv_global_tlb_purge_t (struct mm_struct *, unsigned long, unsigned long, unsigned long);
 typedef void ia64_mv_tlb_migrate_finish_t (struct mm_struct *);
+typedef u8 ia64_mv_irq_to_vector (int);
 typedef unsigned int ia64_mv_local_vector_to_irq (u8);
 typedef char *ia64_mv_pci_get_legacy_mem_t (struct pci_bus *);
 typedef int ia64_mv_pci_legacy_read_t (struct pci_bus *, u16 port, u32 *val,
@@ -36,6 +38,8 @@ typedef int ia64_mv_pci_legacy_read_t (struct pci_bus *, u16 port, u32 *val,
 typedef int ia64_mv_pci_legacy_write_t (struct pci_bus *, u16 port, u32 val,
 					u8 size);
 typedef void ia64_mv_migrate_t(struct task_struct * task);
+typedef void ia64_mv_pci_fixup_bus_t (struct pci_bus *);
+typedef void ia64_mv_kernel_launch_event_t(void);
 
 /* DMA-mapping interface: */
 typedef void ia64_mv_dma_init (void);
@@ -77,7 +81,7 @@ typedef unsigned short ia64_mv_readw_relaxed_t (const volatile void __iomem *);
 typedef unsigned int ia64_mv_readl_relaxed_t (const volatile void __iomem *);
 typedef unsigned long ia64_mv_readq_relaxed_t (const volatile void __iomem *);
 
-typedef int ia64_mv_setup_msi_irq_t (unsigned int irq, struct pci_dev *pdev);
+typedef int ia64_mv_setup_msi_irq_t (struct pci_dev *pdev, struct msi_desc *);
 typedef void ia64_mv_teardown_msi_irq_t (unsigned int irq);
 
 static inline void
@@ -92,6 +96,11 @@ machvec_noop_mm (struct mm_struct *mm)
 
 static inline void
 machvec_noop_task (struct task_struct *task)
+{
+}
+
+static inline void
+machvec_noop_bus (struct pci_bus *bus)
 {
 }
 
@@ -137,6 +146,7 @@ extern void machvec_tlb_migrate_finish (struct mm_struct *);
 #  define platform_dma_sync_sg_for_device ia64_mv.dma_sync_sg_for_device
 #  define platform_dma_mapping_error		ia64_mv.dma_mapping_error
 #  define platform_dma_supported	ia64_mv.dma_supported
+#  define platform_irq_to_vector	ia64_mv.irq_to_vector
 #  define platform_local_vector_to_irq	ia64_mv.local_vector_to_irq
 #  define platform_pci_get_legacy_mem	ia64_mv.pci_get_legacy_mem
 #  define platform_pci_legacy_read	ia64_mv.pci_legacy_read
@@ -159,6 +169,8 @@ extern void machvec_tlb_migrate_finish (struct mm_struct *);
 #  define platform_migrate		ia64_mv.migrate
 #  define platform_setup_msi_irq	ia64_mv.setup_msi_irq
 #  define platform_teardown_msi_irq	ia64_mv.teardown_msi_irq
+#  define platform_pci_fixup_bus	ia64_mv.pci_fixup_bus
+#  define platform_kernel_launch_event	ia64_mv.kernel_launch_event
 # endif
 
 /* __attribute__((__aligned__(16))) is required to make size of the
@@ -188,6 +200,7 @@ struct ia64_machine_vector {
 	ia64_mv_dma_sync_sg_for_device *dma_sync_sg_for_device;
 	ia64_mv_dma_mapping_error *dma_mapping_error;
 	ia64_mv_dma_supported *dma_supported;
+	ia64_mv_irq_to_vector *irq_to_vector;
 	ia64_mv_local_vector_to_irq *local_vector_to_irq;
 	ia64_mv_pci_get_legacy_mem_t *pci_get_legacy_mem;
 	ia64_mv_pci_legacy_read_t *pci_legacy_read;
@@ -210,6 +223,8 @@ struct ia64_machine_vector {
 	ia64_mv_migrate_t *migrate;
 	ia64_mv_setup_msi_irq_t *setup_msi_irq;
 	ia64_mv_teardown_msi_irq_t *teardown_msi_irq;
+	ia64_mv_pci_fixup_bus_t *pci_fixup_bus;
+	ia64_mv_kernel_launch_event_t *kernel_launch_event;
 } __attribute__((__aligned__(16))); /* align attrib? see above comment */
 
 #define MACHVEC_INIT(name)			\
@@ -235,6 +250,7 @@ struct ia64_machine_vector {
 	platform_dma_sync_sg_for_device,	\
 	platform_dma_mapping_error,			\
 	platform_dma_supported,			\
+	platform_irq_to_vector,			\
 	platform_local_vector_to_irq,		\
 	platform_pci_get_legacy_mem,		\
 	platform_pci_legacy_read,		\
@@ -257,10 +273,13 @@ struct ia64_machine_vector {
 	platform_migrate,			\
 	platform_setup_msi_irq,			\
 	platform_teardown_msi_irq,		\
+	platform_pci_fixup_bus,			\
+	platform_kernel_launch_event            \
 }
 
 extern struct ia64_machine_vector ia64_mv;
 extern void machvec_init (const char *name);
+extern void machvec_init_from_cmdline(const char *cmdline);
 
 # else
 #  error Unknown configuration.  Update asm-ia64/machvec.h.
@@ -309,6 +328,9 @@ extern ia64_mv_dma_supported		swiotlb_dma_supported;
 #ifndef platform_tlb_migrate_finish
 # define platform_tlb_migrate_finish	machvec_noop_mm
 #endif
+#ifndef platform_kernel_launch_event
+# define platform_kernel_launch_event	machvec_noop
+#endif
 #ifndef platform_dma_init
 # define platform_dma_init		swiotlb_init
 #endif
@@ -347,6 +369,9 @@ extern ia64_mv_dma_supported		swiotlb_dma_supported;
 #endif
 #ifndef platform_dma_supported
 # define  platform_dma_supported	swiotlb_dma_supported
+#endif
+#ifndef platform_irq_to_vector
+# define platform_irq_to_vector		__ia64_irq_to_vector
 #endif
 #ifndef platform_local_vector_to_irq
 # define platform_local_vector_to_irq	__ia64_local_vector_to_irq
@@ -415,6 +440,9 @@ extern int ia64_pci_legacy_write(struct pci_bus *bus, u16 port, u32 val, u8 size
 #endif
 #ifndef platform_teardown_msi_irq
 # define platform_teardown_msi_irq	((ia64_mv_teardown_msi_irq_t*)NULL)
+#endif
+#ifndef platform_pci_fixup_bus
+# define platform_pci_fixup_bus	machvec_noop_bus
 #endif
 
 #endif /* _ASM_IA64_MACHVEC_H */

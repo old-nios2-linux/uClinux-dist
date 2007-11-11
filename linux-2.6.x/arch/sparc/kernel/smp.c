@@ -11,7 +11,6 @@
 #include <linux/sched.h>
 #include <linux/threads.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
@@ -33,6 +32,8 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/cpudata.h>
+
+#include "irq.h"
 
 int smp_num_cpus = 1;
 volatile unsigned long cpu_callin_map[NR_CPUS] __initdata = {0,};
@@ -69,16 +70,6 @@ void __cpuinit smp_store_cpu_info(int id)
 	cpu_data(id).prom_node = cpu_node;
 	cpu_data(id).mid = cpu_get_hwmid(cpu_node);
 
-	/* this is required to tune the scheduler correctly */
-	/* is it possible to have CPUs with different cache sizes? */
-	if (id == boot_cpu_id) {
-		int cache_line,cache_nlines;
-		cache_line = 0x20;
-		cache_line = prom_getintdefault(cpu_node, "ecache-line-size", cache_line);
-		cache_nlines = 0x8000;
-		cache_nlines = prom_getintdefault(cpu_node, "ecache-nlines", cache_nlines);
-		max_cache_size = cache_line * cache_nlines;
-	}
 	if (cpu_data(id).mid < 0)
 		panic("No MID found for CPU%d at node 0x%08d", id, cpu_node);
 }
@@ -292,8 +283,8 @@ int setup_profiling_timer(unsigned int multiplier)
 
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
-	extern void smp4m_boot_cpus(void);
-	extern void smp4d_boot_cpus(void);
+	extern void __init smp4m_boot_cpus(void);
+	extern void __init smp4d_boot_cpus(void);
 	int i, cpuid, extra;
 
 	printk("Entering SMP Mode...\n");
@@ -375,8 +366,8 @@ void __init smp_prepare_boot_cpu(void)
 
 int __cpuinit __cpu_up(unsigned int cpu)
 {
-	extern int smp4m_boot_one_cpu(int);
-	extern int smp4d_boot_one_cpu(int);
+	extern int __cpuinit smp4m_boot_one_cpu(int);
+	extern int __cpuinit smp4d_boot_one_cpu(int);
 	int ret=0;
 
 	switch(sparc_cpu_model) {

@@ -1,5 +1,5 @@
 char   netcpu_ntperf_id[]="\
-@(#)netcpu_ntperf.c (c) Copyright 2005, Hewlett-Packard Company, Version 2.4.0";
+@(#)netcpu_ntperf.c (c) Copyright 2005-2007, Hewlett-Packard Company, Version 2.4.3";
 
 #if HAVE_CONFIG_H
 # include <config.h>
@@ -34,7 +34,9 @@ char   netcpu_ntperf_id[]="\
 #include <assert.h>
 
 #include <winsock2.h>
-#ifdef DO_IPV6
+// If you are trying to compile on Windows 2000 or NT 4.0 you may
+// need to define DONT_IPV6 in the "sources" files.
+#ifndef DONT_IPV6
 #include <ws2tcpip.h>
 #endif
 
@@ -75,7 +77,7 @@ typedef ULONG (__stdcall *NT_QUERY_SYSTEM_INFORMATION)(
 NT_QUERY_SYSTEM_INFORMATION NtQuerySystemInformation = NULL;
 
 
-static LARGE_INTEGER TickHz;
+static LARGE_INTEGER TickHz = {0,0};
 
 _inline LARGE_INTEGER ReadPerformanceCounter(VOID)
 {
@@ -343,7 +345,7 @@ double ReportPerfCntrs(PerfObj *PerfCntrs)
   
   if (verbosity > 1)
     {
-      fprintf(where,"ActualDuation (ms): %d\n", duration/10);
+      fprintf(where,"ActualDuration (ms): %d\n", duration/10);
     }
   
   if (verbosity > 1)
@@ -456,11 +458,13 @@ void ClosePerfCntrs(PerfObj *PerfCntrs)
 void
 cpu_start_internal(void)
 {
+  RestartPerfCntrs(PerfCntrs);
 }
 
 void
 cpu_stop_internal(void)
 {
+  RestartPerfCntrs(PerfCntrs);
 }
 
 float

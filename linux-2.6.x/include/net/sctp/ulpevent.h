@@ -89,6 +89,7 @@ struct sctp_ulpevent *sctp_ulpevent_make_assoc_change(
 	__u16 error,
 	__u16 outbound,
 	__u16 inbound,
+	struct sctp_chunk *chunk,
 	gfp_t gfp);
 
 struct sctp_ulpevent *sctp_ulpevent_make_peer_addr_change(
@@ -120,7 +121,7 @@ struct sctp_ulpevent *sctp_ulpevent_make_pdapi(
 	const struct sctp_association *asoc,
 	__u32 indication, gfp_t gfp);
 
-struct sctp_ulpevent *sctp_ulpevent_make_adaption_indication(
+struct sctp_ulpevent *sctp_ulpevent_make_adaptation_indication(
 	const struct sctp_association *asoc, gfp_t gfp);
 
 struct sctp_ulpevent *sctp_ulpevent_make_rcvmsg(struct sctp_association *asoc,

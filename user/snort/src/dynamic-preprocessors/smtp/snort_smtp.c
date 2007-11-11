@@ -48,6 +48,8 @@
 #include "smtp_xlink2state.h"
 #include "smtp_normalize.h"
 
+#include "bounds.h"
+
 #include "profiler.h"
 #ifdef PERF_PROFILING
 extern PreprocStats smtpDetectPerfStats;
@@ -127,11 +129,19 @@ void SMTP_Init(void)
     
     /* Set up commands we will watch for */
     _dpd.searchAPI->search_init(NUM_SEARCHES);
-    for ( i = 0; _smtp_config.cmd[i].name != NULL; i++ )
+    for ( i = 0; i < _smtp_config.cmd_size ; i++ )
     {
-        /* Save length of this command for future use */
-        _smtp_config.cmd[i].name_len = strlen(_smtp_config.cmd[i].name);
-        _dpd.searchAPI->search_add(CMD_SEARCH, _smtp_config.cmd[i].name, _smtp_config.cmd[i].name_len, i);
+        if (_smtp_config.cmd[i].name == NULL)
+        {
+            /* Save length of this command for future use */
+            _smtp_config.cmd[i].name_len = 0;
+        }
+        else
+        {
+            /* Save length of this command for future use */
+            _smtp_config.cmd[i].name_len = strlen(_smtp_config.cmd[i].name);
+            _dpd.searchAPI->search_add(CMD_SEARCH, _smtp_config.cmd[i].name, _smtp_config.cmd[i].name_len, i);
+        }
     }
     _dpd.searchAPI->search_prep(CMD_SEARCH);
 
@@ -273,7 +283,7 @@ static void SMTP_Setup(SFSnortPacket *p)
         smtp = (SMTP *) malloc(sizeof(SMTP));
         if ( smtp == NULL )
         {
-            _dpd.fatalMsg("%s(%d) => Failed to allocate for SMTP session data\n");
+            DynamicPreprocessorFatalMessage("%s(%d) => Failed to allocate for SMTP session data\n");
             return;
         }
         else
@@ -493,6 +503,7 @@ static int GetBoundaryString(char *data, u_int data_len)
     u_int blen = 0;
     u_int boundary_len = 9;  /* strlen("boundary=") */
     u_int multipart_len = 9; /* strlen("multipart") */
+    int ret;
 
     /* We've got Content-Type:, look for "multipart" following */
     while ( data_len > 0 && isspace(*data) )
@@ -510,32 +521,48 @@ static int GetBoundaryString(char *data, u_int data_len)
     if ( !b )
         return 0;
 
+    /* since b > data and b < data + data_len, this subtraction will
+     * not yield a negative number
+     * b will be somewhere between data and data + data_len */
+    blen = data_len - (b - data);
+
     b += boundary_len;  
+    blen -= boundary_len;
+
+    if (b >= data + data_len)
+        return 0;
 
     if ( *b == '\"' )
     {
         b++;
-        data_len -= (boundary_len + 1);
-        end = safe_strchr(b, '\"', data_len);
+        blen--;
+        end = safe_strchr(b, '\"', blen);
         if ( !end )
             return 0;
     }
     else
     {
-        end = safe_strchr(b, '\r', data_len);
+        end = safe_strchr(b, '\r', blen);
         if ( !end )
-            end = safe_strchr(b, '\n', data_len);
+            end = safe_strchr(b, '\n', blen);
         if ( !end )
             return 0;
     }
 
+    /* recalculate blen based on where end is */
     blen = end - b;
-    if ( blen > MAX_BOUNDARY_LEN )
+
+    ret = SafeMemcpy(_smtp->boundary, "--", 2, _smtp->boundary, _smtp->boundary + MAX_BOUNDARY_LEN);
+    if (ret == SAFEMEM_ERROR)
         return 0;
 
-    memcpy(_smtp->boundary, "--", 2);
-    memcpy(_smtp->boundary+2, b, blen);
+    ret = SafeMemcpy(_smtp->boundary+2, b, blen, _smtp->boundary+2, _smtp->boundary + MAX_BOUNDARY_LEN);
+    if (ret == SAFEMEM_ERROR)
+        return 0;
+
     blen += 2;
+    if (blen >= MAX_BOUNDARY_LEN)
+        return 0;
     _smtp->boundary[blen] = '\0';
     _smtp->boundary_len = blen;
 
@@ -558,6 +585,7 @@ static u_int16_t SMTP_HandleCommandState(SFSnortPacket *p, u_int16_t i)
     int       cmdFound;
     char     *searchStr;
     int       nbytes;
+    int       ret;
 
     /* Loop through packet, counting chars.  Notice if one is LF. */
     for ( ; i < p->payload_size; i++ )
@@ -629,12 +657,27 @@ static u_int16_t SMTP_HandleCommandState(SFSnortPacket *p, u_int16_t i)
                     {
                         if ( !_smtp->normalizing )
                         {
-                            if ( SMTP_NeedNormalize(p->payload + _smtp->token_length) )
+                            if ( SMTP_NeedNormalize(p->payload + i + _smtp->token_length, p->payload + p->payload_size) )
                             {
                                 _smtp->normalizing = 1;
-                                memcpy(_dpd.altBuffer, p->payload, i);
+                                ret = SafeMemcpy(_dpd.altBuffer, p->payload, i,
+                                                 _dpd.altBuffer, _dpd.altBuffer+_dpd.altBufferLen);
+
+                                //if (ret == SAFEMEM_ERROR)
+                                //{
+                                //    DEBUG_WRAP(_dpd.debugMsg(DEBUG_SMTP, "SMTP_HandleCommandState() => SafeMemcpy failed\n"););
+                                //    return -1;
+                                //}
+
                                 p->normalized_payload_size = i;
+
                                 nbytes = SMTP_Normalize(p, i, _smtp->token_length);
+                                //if (nbytes == -1)
+                                //{
+                                //    DEBUG_WRAP(_dpd.debugMsg(DEBUG_SMTP, "SMTP_HandleCommandState() => SMTP_Normalize failed\n"););
+                                //    return -1;
+                                //}
+
                                 i+= nbytes;
                                 count += nbytes;
                                 p->flags |= FLAG_ALT_DECODE;
@@ -643,6 +686,13 @@ static u_int16_t SMTP_HandleCommandState(SFSnortPacket *p, u_int16_t i)
                         else  /* Already normalizing */
                         {
                             nbytes = SMTP_Normalize(p, i, _smtp->token_length);
+                            //if (nbytes == -1)
+                            //{
+                            //    DEBUG_WRAP(_dpd.debugMsg(DEBUG_SMTP, "SMTP_HandleCommandState() => SMTP_Normalize failed\n"););
+                            //    p->flags &= ~FLAG_ALT_DECODE;
+                            //    return -1;
+                            //}
+
                             i += nbytes;
                             count += nbytes;
                         }
@@ -689,6 +739,23 @@ static u_int16_t SMTP_HandleCommandState(SFSnortPacket *p, u_int16_t i)
         }        
     }
 
+    if (count != 0)
+    {
+        if ( _smtp->token_id && _smtp_config.cmd[_smtp->token_iid].max_len != 0
+                    && count > _smtp_config.cmd[_smtp->token_iid].max_len )
+        {
+            SMTP_GenerateAlert(SMTP_EVENT_SPECIFIC_CMD_OVERFLOW,
+                    "%s: %s, %d chars", SMTP_SPECIFIC_CMD_OVERFLOW_STR,
+                    _smtp_config.cmd[_smtp->token_iid].name, count);
+        }
+        else if ( _smtp_config.max_command_line_len != 0
+                    && count > _smtp_config.max_command_line_len )
+        {
+            SMTP_GenerateAlert(SMTP_EVENT_COMMAND_OVERFLOW,
+                        "%s: more than %d chars", SMTP_COMMAND_OVERFLOW_STR,
+                        _smtp_config.max_command_line_len);
+        }                        
+    }                        
     return i;
 }
 
@@ -949,6 +1016,8 @@ static void SMTP_ProcessClientPacket(SFSnortPacket *p)
         {
             case COMMAND:
                 i = SMTP_HandleCommandState(p, i);
+                //if (i < 0)
+                //    return;
                 break;
             case DATA:
             case DATA_PEND:
@@ -1092,7 +1161,7 @@ void SnortSMTP(SFSnortPacket *p)
     
     SMTP_Setup(p);
 
-    if(_smtp && _smtp_config.inspection_type == SMTP_STATELESS)
+    if(_smtp_config.inspection_type == SMTP_STATELESS)
     {
         SMTP_ResetState(_smtp);
     }

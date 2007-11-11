@@ -1,11 +1,11 @@
 /*
- * $Id: pt.h,v 1.7 2003/04/18 13:58:15 andrei Exp $
+ * $Id: pt.h,v 1.11 2004/11/26 16:27:22 andrei Exp $
  *
  * Process Table
  *
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -43,6 +43,7 @@
 
 #include "globals.h"
 #include "timer.h"
+#include "socket_info.h"
 
 #define MAX_PT_DESC	128
 
@@ -63,25 +64,28 @@ extern int process_no;
 */
 inline static int process_count()
 {
+	int udp_listeners;
+	struct socket_info* si;
+	
+	for (si=udp_listen, udp_listeners=0; si; si=si->next, udp_listeners++);
     return 
 		/* receivers and attendant */
-		(dont_fork ? 1 : children_no*sock_no + 1)
+		(dont_fork ? 1 : children_no*udp_listeners + 1)
 		/* timer process */
-		+ (timer_list ? 1 : 0 )
+		+ 1 /* always, we need it in most cases, and we can't tell here
+			   & now if we don't need it */
 		/* fifo server */
 		+((fifo==NULL || strlen(fifo)==0) ? 0 : 1 )
+		/* unixsock server*/
+		+(unixsock_name?unixsock_children:0)
 #ifdef USE_TCP
-		+((!tcp_disable)?( 1/* tcp main */ + tcp_children_no + 
-							(timer_list ? 0: 1)):0) /* add the timer proc.
-													  if not already taken
-													  into account */
+		+((!tcp_disable)?( 1/* tcp main */ + tcp_children_no ):0) 
 #endif
-		
 		;
 }
 
 
-/* retun processes's pid */
+/* return processes pid */
 inline static int my_pid()
 {
 	return pt ? pt[process_no].pid : getpid();

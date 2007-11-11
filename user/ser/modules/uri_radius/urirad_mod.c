@@ -1,9 +1,9 @@
 /* 
- * $Id: urirad_mod.c,v 1.5.6.1 2004/07/18 22:56:24 sobomax Exp $ 
+ * $Id: urirad_mod.c,v 1.7.2.1 2005/06/17 11:26:37 janakj Exp $ 
  *
  * URI checks using Radius
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,7 +37,12 @@
 #include "urirad_mod.h"
 #include "checks.h"
 #include "../../modules/acc/dict.h"
-#include <radiusclient.h>
+
+#ifdef RADIUSCLIENT_NG_4
+#  include <radiusclient.h>
+#else
+#  include <radiusclient-ng.h>
+#endif
 
 MODULE_VERSION
 

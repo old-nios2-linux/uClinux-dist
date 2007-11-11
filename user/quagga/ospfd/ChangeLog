@@ -1,3 +1,70 @@
+2006-04-03 Paul Jakma <paul.jakma@sun.com>
+
+	* (general) Fix issues with handling of Vlinks and entries
+	  in the nbrs route-table which were highlighted by the
+	  nsm/nbr_self fixes from bug #234. Many thanks to Juergen
+	  Kammer for his help and efforts in testing out debug patches to
+	  pinpoint the issue.
+	* ospf_interface.c: (ospf_vl_new) Add nbr_self for Vlink.
+	* ospf_neighbor.c: (ospf_nbr_key) new static function, helper
+	  to create key in nbrs table for a given nbr.
+	  (ospf_nbr_delete) Use ospf_nbr_key. Add an assert() to
+	  document an expected state.
+	  (ospf_nbr_add_self) Ditto.
+	  (ospf_nbr_lookup_by_addr) Add an assert.
+	* ospf_nsm.c: (nsm_kill_nbr) Can never kill the nbr_self
+	  psuedo-neighbour.
+	* ospf_{nsm,interface}.c: Fix merge errors from previous commit.
+
+2006-03-27 Paul Jakma <paul.jakma@sun.com>
+
+	* ospf_lsa.c: (ospf_lsa_checksum) Add an explicit cast to avoid
+	  the ambiguities of ANSI and C99 C with respect to type
+	  conversion. Detailed problem report and test case with
+	  example data supplied by Dmitry Ivanov <dimss@telecentrs.lv>.
+
+2006-03-25 Paul Jakma <paul.jakma@sun.com>
+
+	* ospf_interface.c: (ospf_if_lookup_recv_if) Ignore loopbacks,
+	  we can never ever receive packets on those. Should fix
+	  case where CARP is run with address in same subnet as real
+	  interface. Problem report and diagnosis thanks to:
+	  Landon Fuller <landonf@opendarwin.org>.
+	  However, ospf_read() still can't deal deterministically with
+	  multiple interfaces in same subnet.
+
+2006-03-23 Steve Lawson <steve.lawson@aheadcomusa.com>
+
+	* ospf_lsa.c: (ospf_lsa_install) Fix incorrect byte-order
+	  conversion of OSPF_MAX_SEQUENCE_NUMBER
+
+2006-01-10 Len Sorensen <lennartsorensen@ruggedcom.com>
+
+	* (general) Bug #234, see also [quagga-dev 3902].
+	  Fix problem with nbr_self not being properly reinitialised
+	  when an interface comes up, after having been down.
+	  Some re-arrangement done by Paul Jakma, any bugs introduced
+	  on top of Len's suggested changes are his.
+	* ospf_neighbor.c: (ospf_nbr_add_self) centralise
+	  initialisation of nbr_self parameters here.
+	* ospf_interface.c: (ospf_if_new) deleting initialisation of
+	  parameters of nbr_self, just rely on call to
+	  ospf_nbr_add_self.
+	  (ospf_if_cleanup) ditto.
+	* ospfd.c: (ospf_network_run) ditto.
+
+2006-01-10 Juris Kalnins <juris@mt.lv>
+
+	* ospf_zebra.c: (ospf_interface_address_delete) fix rare leak
+	  of struct connected in an error case.
+	* ospf_packet.c: (ospf_make_md5_digest) fix odd, if not
+	  undefined effect, assignment of an increment expression.
+
+2005-08-21 Hasso Tepper <hasso at quagga.net>
+
+	* ospf_vty.c: Make "show ip ospf neighbor xxx" commands work.
+	  Interface should be specified by name now.
+
 2005-08-17 Hasso Tepper <hasso at quagga.net>
 
 	* ospf_vty.c: Check carefully if interface exists before trying to

@@ -203,7 +203,7 @@ struct llc_pdu_sn {
 
 static inline struct llc_pdu_sn *llc_pdu_sn_hdr(struct sk_buff *skb)
 {
-	return (struct llc_pdu_sn *)skb->nh.raw;
+	return (struct llc_pdu_sn *)skb_network_header(skb);
 }
 
 /* Un-numbered PDU format (3 bytes in length) */
@@ -215,12 +215,7 @@ struct llc_pdu_un {
 
 static inline struct llc_pdu_un *llc_pdu_un_hdr(struct sk_buff *skb)
 {
-	return (struct llc_pdu_un *)skb->nh.raw;
-}
-
-static inline void *llc_set_pdu_hdr(struct sk_buff *skb, void *ptr)
-{
-	return skb->nh.raw = ptr;
+	return (struct llc_pdu_un *)skb_network_header(skb);
 }
 
 /**
@@ -237,7 +232,11 @@ static inline void llc_pdu_header_init(struct sk_buff *skb, u8 type,
 				       u8 ssap, u8 dsap, u8 cr)
 {
 	const int hlen = type == LLC_PDU_TYPE_U ? 3 : 4;
-	struct llc_pdu_un *pdu = llc_set_pdu_hdr(skb, skb_push(skb, hlen));
+	struct llc_pdu_un *pdu;
+
+	skb_push(skb, hlen);
+	skb_reset_network_header(skb);
+	pdu = llc_pdu_un_hdr(skb);
 	pdu->dsap = dsap;
 	pdu->ssap = ssap;
 	pdu->ssap |= cr;
@@ -252,9 +251,9 @@ static inline void llc_pdu_header_init(struct sk_buff *skb, u8 type,
  */
 static inline void llc_pdu_decode_sa(struct sk_buff *skb, u8 *sa)
 {
-	if (skb->protocol == ntohs(ETH_P_802_2))
+	if (skb->protocol == htons(ETH_P_802_2))
 		memcpy(sa, eth_hdr(skb)->h_source, ETH_ALEN);
-	else if (skb->protocol == ntohs(ETH_P_TR_802_2)) {
+	else if (skb->protocol == htons(ETH_P_TR_802_2)) {
 		memcpy(sa, tr_hdr(skb)->saddr, ETH_ALEN);
 		*sa &= 0x7F;
 	}
@@ -269,9 +268,9 @@ static inline void llc_pdu_decode_sa(struct sk_buff *skb, u8 *sa)
  */
 static inline void llc_pdu_decode_da(struct sk_buff *skb, u8 *da)
 {
-	if (skb->protocol == ntohs(ETH_P_802_2))
+	if (skb->protocol == htons(ETH_P_802_2))
 		memcpy(da, eth_hdr(skb)->h_dest, ETH_ALEN);
-	else if (skb->protocol == ntohs(ETH_P_TR_802_2))
+	else if (skb->protocol == htons(ETH_P_TR_802_2))
 		memcpy(da, tr_hdr(skb)->daddr, ETH_ALEN);
 }
 
@@ -345,7 +344,7 @@ static inline void llc_pdu_init_as_test_rsp(struct sk_buff *skb,
 	pdu->ctrl_1  = LLC_PDU_TYPE_U;
 	pdu->ctrl_1 |= LLC_1_PDU_CMD_TEST;
 	pdu->ctrl_1 |= LLC_U_PF_BIT_MASK;
-	if (ev_skb->protocol == ntohs(ETH_P_802_2)) {
+	if (ev_skb->protocol == htons(ETH_P_802_2)) {
 		struct llc_pdu_un *ev_pdu = llc_pdu_un_hdr(ev_skb);
 		int dsize;
 

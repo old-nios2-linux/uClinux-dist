@@ -54,7 +54,7 @@ extern int cap_inode_removexattr(struct dentry *dentry, char *name);
 extern int cap_task_post_setuid (uid_t old_ruid, uid_t old_euid, uid_t old_suid, int flags);
 extern void cap_task_reparent_to_init (struct task_struct *p);
 extern int cap_syslog (int type);
-extern int cap_vm_enough_memory (long pages);
+extern int cap_vm_enough_memory (struct mm_struct *mm, long pages);
 
 struct msghdr;
 struct sk_buff;
@@ -71,6 +71,7 @@ struct xfrm_user_sec_ctx;
 extern int cap_netlink_send(struct sock *sk, struct sk_buff *skb);
 extern int cap_netlink_recv(struct sk_buff *skb, int cap);
 
+extern unsigned long mmap_min_addr;
 /*
  * Values used in the task_security_ops calls
  */
@@ -322,7 +323,7 @@ struct request_sock;
  *	@dir contains the inode structure of parent of the new file.
  *	@dentry contains the dentry structure of the new file.
  *	@mode contains the mode of the new file.
- *	@dev contains the the device number.
+ *	@dev contains the device number.
  *	Return 0 if permission is granted.
  * @inode_rename:
  *	Check for permission to rename a file or directory.
@@ -492,7 +493,7 @@ struct request_sock;
  *	Note that the fown_struct, @fown, is never outside the context of a
  *	struct file, so the file structure (and associated security information)
  *	can always be obtained:
- *		(struct file *)((long)fown - offsetof(struct file,f_owner));
+ *		container_of(fown, struct file, f_owner)
  * 	@tsk contains the structure of task receiving signal.
  *	@fown contains the file owner information.
  *	@sig is the signal that will be sent.  When 0, kernel sends SIGIO.
@@ -826,6 +827,8 @@ struct request_sock;
  *	Sets the openreq's sid to socket's sid with MLS portion taken from peer sid.
  * @inet_csk_clone:
  *	Sets the new child socket's sid to the openreq sid.
+ * @inet_conn_established:
+ *     Sets the connection's peersid to the secmark on skb.
  * @req_classify_flow:
  *	Sets the flow's sid to the openreq sid.
  *
@@ -836,10 +839,8 @@ struct request_sock;
  *	used by the XFRM system.
  *	@sec_ctx contains the security context information being provided by
  *	the user-level policy update program (e.g., setkey).
- *	@sk refers to the sock from which to derive the security context.
  *	Allocate a security structure to the xp->security field; the security
- *	field is initialized to NULL when the xfrm_policy is allocated. Only
- *	one of sec_ctx or sock can be specified.
+ *	field is initialized to NULL when the xfrm_policy is allocated.
  *	Return 0 if operation was successful (memory to allocate, legal context)
  * @xfrm_policy_clone_security:
  *	@old contains an existing xfrm_policy in the SPD.
@@ -858,9 +859,6 @@ struct request_sock;
  *	Database by the XFRM system.
  *	@sec_ctx contains the security context information being provided by
  *	the user-level SA generation program (e.g., setkey or racoon).
- *	@polsec contains the security context information associated with a xfrm
- *	policy rule from which to take the base context. polsec must be NULL
- *	when sec_ctx is specified.
  *	@secid contains the secid from which to take the mls portion of the context.
  *	Allocate a security structure to the x->security field; the security
  *	field is initialized to NULL when the xfrm_state is allocated. Set the
@@ -888,11 +886,6 @@ struct request_sock;
  *	@x contains the state to match.
  *	@xp contains the policy to check for a match.
  *	@fl contains the flow to check for a match.
- *	Return 1 if there is a match.
- * @xfrm_flow_state_match:
- *	@fl contains the flow key to match.
- *	@xfrm points to the xfrm_state to match.
- *	@xp points to the xfrm_policy to match.
  *	Return 1 if there is a match.
  * @xfrm_decode_session:
  *	@skb points to skb to decode.
@@ -1132,6 +1125,7 @@ struct request_sock;
  *	Return 0 if permission is granted.
  * @vm_enough_memory:
  *	Check permissions for allocating a new virtual mapping.
+ *	@mm contains the mm struct it is being added to.
  *      @pages contains the number of pages.
  *	Return 0 if permission is granted.
  *
@@ -1176,7 +1170,7 @@ struct security_operations {
 	int (*quota_on) (struct dentry * dentry);
 	int (*syslog) (int type);
 	int (*settime) (struct timespec *ts, struct timezone *tz);
-	int (*vm_enough_memory) (long pages);
+	int (*vm_enough_memory) (struct mm_struct *mm, long pages);
 
 	int (*bprm_alloc_security) (struct linux_binprm * bprm);
 	void (*bprm_free_security) (struct linux_binprm * bprm);
@@ -1249,8 +1243,9 @@ struct security_operations {
 	int (*file_ioctl) (struct file * file, unsigned int cmd,
 			   unsigned long arg);
 	int (*file_mmap) (struct file * file,
-			  unsigned long reqprot,
-			  unsigned long prot, unsigned long flags);
+			  unsigned long reqprot, unsigned long prot,
+			  unsigned long flags, unsigned long addr,
+			  unsigned long addr_only);
 	int (*file_mprotect) (struct vm_area_struct * vma,
 			      unsigned long reqprot,
 			      unsigned long prot);
@@ -1332,7 +1327,7 @@ struct security_operations {
 
 	void (*d_instantiate) (struct dentry *dentry, struct inode *inode);
 
- 	int (*getprocattr)(struct task_struct *p, char *name, void *value, size_t size);
+ 	int (*getprocattr)(struct task_struct *p, char *name, char **value);
  	int (*setprocattr)(struct task_struct *p, char *name, void *value, size_t size);
 	int (*secid_to_secctx)(u32 secid, char **secdata, u32 *seclen);
 	void (*release_secctx)(char *secdata, u32 seclen);
@@ -1373,25 +1368,24 @@ struct security_operations {
 	int (*inet_conn_request)(struct sock *sk, struct sk_buff *skb,
 					struct request_sock *req);
 	void (*inet_csk_clone)(struct sock *newsk, const struct request_sock *req);
+	void (*inet_conn_established)(struct sock *sk, struct sk_buff *skb);
 	void (*req_classify_flow)(const struct request_sock *req, struct flowi *fl);
 #endif	/* CONFIG_SECURITY_NETWORK */
 
 #ifdef CONFIG_SECURITY_NETWORK_XFRM
 	int (*xfrm_policy_alloc_security) (struct xfrm_policy *xp,
-			struct xfrm_user_sec_ctx *sec_ctx, struct sock *sk);
+			struct xfrm_user_sec_ctx *sec_ctx);
 	int (*xfrm_policy_clone_security) (struct xfrm_policy *old, struct xfrm_policy *new);
 	void (*xfrm_policy_free_security) (struct xfrm_policy *xp);
 	int (*xfrm_policy_delete_security) (struct xfrm_policy *xp);
 	int (*xfrm_state_alloc_security) (struct xfrm_state *x,
-		struct xfrm_user_sec_ctx *sec_ctx, struct xfrm_sec_ctx *polsec,
+		struct xfrm_user_sec_ctx *sec_ctx,
 		u32 secid);
 	void (*xfrm_state_free_security) (struct xfrm_state *x);
 	int (*xfrm_state_delete_security) (struct xfrm_state *x);
 	int (*xfrm_policy_lookup)(struct xfrm_policy *xp, u32 fl_secid, u8 dir);
 	int (*xfrm_state_pol_flow_match)(struct xfrm_state *x,
 			struct xfrm_policy *xp, struct flowi *fl);
-	int (*xfrm_flow_state_match)(struct flowi *fl, struct xfrm_state *xfrm,
-			struct xfrm_policy *xp);
 	int (*xfrm_decode_session)(struct sk_buff *skb, u32 *secid, int ckall);
 #endif	/* CONFIG_SECURITY_NETWORK_XFRM */
 
@@ -1476,10 +1470,14 @@ static inline int security_settime(struct timespec *ts, struct timezone *tz)
 	return security_ops->settime(ts, tz);
 }
 
-
 static inline int security_vm_enough_memory(long pages)
 {
-	return security_ops->vm_enough_memory(pages);
+	return security_ops->vm_enough_memory(current->mm, pages);
+}
+
+static inline int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+{
+	return security_ops->vm_enough_memory(mm, pages);
 }
 
 static inline int security_bprm_alloc (struct linux_binprm *bprm)
@@ -1823,9 +1821,12 @@ static inline int security_file_ioctl (struct file *file, unsigned int cmd,
 
 static inline int security_file_mmap (struct file *file, unsigned long reqprot,
 				      unsigned long prot,
-				      unsigned long flags)
+				      unsigned long flags,
+				      unsigned long addr,
+				      unsigned long addr_only)
 {
-	return security_ops->file_mmap (file, reqprot, prot, flags);
+	return security_ops->file_mmap (file, reqprot, prot, flags, addr,
+					addr_only);
 }
 
 static inline int security_file_mprotect (struct vm_area_struct *vma,
@@ -2101,9 +2102,9 @@ static inline void security_d_instantiate (struct dentry *dentry, struct inode *
 	security_ops->d_instantiate (dentry, inode);
 }
 
-static inline int security_getprocattr(struct task_struct *p, char *name, void *value, size_t size)
+static inline int security_getprocattr(struct task_struct *p, char *name, char **value)
 {
-	return security_ops->getprocattr(p, name, value, size);
+	return security_ops->getprocattr(p, name, value);
 }
 
 static inline int security_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
@@ -2139,7 +2140,7 @@ extern int mod_reg_security	(const char *name, struct security_operations *ops);
 extern int mod_unreg_security	(const char *name, struct security_operations *ops);
 extern struct dentry *securityfs_create_file(const char *name, mode_t mode,
 					     struct dentry *parent, void *data,
-					     struct file_operations *fops);
+					     const struct file_operations *fops);
 extern struct dentry *securityfs_create_dir(const char *name, struct dentry *parent);
 extern void securityfs_remove(struct dentry *dentry);
 
@@ -2223,7 +2224,12 @@ static inline int security_settime(struct timespec *ts, struct timezone *tz)
 
 static inline int security_vm_enough_memory(long pages)
 {
-	return cap_vm_enough_memory(pages);
+	return cap_vm_enough_memory(current->mm, pages);
+}
+
+static inline int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
+{
+	return cap_vm_enough_memory(mm, pages);
 }
 
 static inline int security_bprm_alloc (struct linux_binprm *bprm)
@@ -2498,7 +2504,9 @@ static inline int security_file_ioctl (struct file *file, unsigned int cmd,
 
 static inline int security_file_mmap (struct file *file, unsigned long reqprot,
 				      unsigned long prot,
-				      unsigned long flags)
+				      unsigned long flags,
+				      unsigned long addr,
+				      unsigned long addr_only)
 {
 	return 0;
 }
@@ -2758,7 +2766,7 @@ static inline int security_sem_semop (struct sem_array * sma,
 static inline void security_d_instantiate (struct dentry *dentry, struct inode *inode)
 { }
 
-static inline int security_getprocattr(struct task_struct *p, char *name, void *value, size_t size)
+static inline int security_getprocattr(struct task_struct *p, char *name, char **value)
 {
 	return -EINVAL;
 }
@@ -2966,9 +2974,15 @@ static inline void security_inet_csk_clone(struct sock *newsk,
 {
 	security_ops->inet_csk_clone(newsk, req);
 }
+
+static inline void security_inet_conn_established(struct sock *sk,
+			struct sk_buff *skb)
+{
+	security_ops->inet_conn_established(sk, skb);
+}
 #else	/* CONFIG_SECURITY_NETWORK */
 static inline int security_unix_stream_connect(struct socket * sock,
-					       struct socket * other, 
+					       struct socket * other,
 					       struct sock * newsk)
 {
 	return 0;
@@ -3115,12 +3129,17 @@ static inline void security_inet_csk_clone(struct sock *newsk,
 			const struct request_sock *req)
 {
 }
+
+static inline void security_inet_conn_established(struct sock *sk,
+			struct sk_buff *skb)
+{
+}
 #endif	/* CONFIG_SECURITY_NETWORK */
 
 #ifdef CONFIG_SECURITY_NETWORK_XFRM
 static inline int security_xfrm_policy_alloc(struct xfrm_policy *xp, struct xfrm_user_sec_ctx *sec_ctx)
 {
-	return security_ops->xfrm_policy_alloc_security(xp, sec_ctx, NULL);
+	return security_ops->xfrm_policy_alloc_security(xp, sec_ctx);
 }
 
 static inline int security_xfrm_policy_clone(struct xfrm_policy *old, struct xfrm_policy *new)
@@ -3141,7 +3160,7 @@ static inline int security_xfrm_policy_delete(struct xfrm_policy *xp)
 static inline int security_xfrm_state_alloc(struct xfrm_state *x,
 			struct xfrm_user_sec_ctx *sec_ctx)
 {
-	return security_ops->xfrm_state_alloc_security(x, sec_ctx, NULL, 0);
+	return security_ops->xfrm_state_alloc_security(x, sec_ctx, 0);
 }
 
 static inline int security_xfrm_state_alloc_acquire(struct xfrm_state *x,
@@ -3149,7 +3168,11 @@ static inline int security_xfrm_state_alloc_acquire(struct xfrm_state *x,
 {
 	if (!polsec)
 		return 0;
-	return security_ops->xfrm_state_alloc_security(x, NULL, polsec, secid);
+	/*
+	 * We want the context to be taken from secid which is usually
+	 * from the sock.
+	 */
+	return security_ops->xfrm_state_alloc_security(x, NULL, secid);
 }
 
 static inline int security_xfrm_state_delete(struct xfrm_state *x)
@@ -3171,12 +3194,6 @@ static inline int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
 			struct xfrm_policy *xp, struct flowi *fl)
 {
 	return security_ops->xfrm_state_pol_flow_match(x, xp, fl);
-}
-
-static inline int security_xfrm_flow_state_match(struct flowi *fl,
-			struct xfrm_state *xfrm, struct xfrm_policy *xp)
-{
-	return security_ops->xfrm_flow_state_match(fl, xfrm, xp);
 }
 
 static inline int security_xfrm_decode_session(struct sk_buff *skb, u32 *secid)
@@ -3238,12 +3255,6 @@ static inline int security_xfrm_policy_lookup(struct xfrm_policy *xp, u32 fl_sec
 
 static inline int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
 			struct xfrm_policy *xp, struct flowi *fl)
-{
-	return 1;
-}
-
-static inline int security_xfrm_flow_state_match(struct flowi *fl,
-			struct xfrm_state *xfrm, struct xfrm_policy *xp)
 {
 	return 1;
 }

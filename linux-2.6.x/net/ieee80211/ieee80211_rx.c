@@ -3,8 +3,8 @@
  * for Intersil Prism2/2.5/3 - hostap.o module, common routines
  *
  * Copyright (c) 2001-2002, SSH Communications Security Corp and Jouni Malinen
- * <jkmaline@cc.hut.fi>
- * Copyright (c) 2002-2003, Jouni Malinen <jkmaline@cc.hut.fi>
+ * <j@w1.fi>
+ * Copyright (c) 2002-2003, Jouni Malinen <j@w1.fi>
  * Copyright (c) 2004-2005, Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -42,7 +42,7 @@ static void ieee80211_monitor_rx(struct ieee80211_device *ieee,
 	u16 fc = le16_to_cpu(hdr->frame_ctl);
 
 	skb->dev = ieee->dev;
-	skb->mac.raw = skb->data;
+	skb_reset_mac_header(skb);
 	skb_pull(skb, ieee80211_get_hdrlen(fc));
 	skb->pkt_type = PACKET_OTHERHOST;
 	skb->protocol = __constant_htons(ETH_P_80211_RAW);
@@ -366,6 +366,12 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 	frag = WLAN_GET_SEQ_FRAG(sc);
 	hdrlen = ieee80211_get_hdrlen(fc);
 
+	if (skb->len < hdrlen) {
+		printk(KERN_INFO "%s: invalid SKB length %d\n",
+			dev->name, skb->len);
+		goto rx_dropped;
+	}
+
 	/* Put this code here so that we avoid duplicating it in all
 	 * Rx paths. - Jean II */
 #ifdef CONFIG_WIRELESS_EXT
@@ -415,17 +421,16 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 	    ieee->host_mc_decrypt : ieee->host_decrypt;
 
 	if (can_be_decrypted) {
-		int idx = 0;
 		if (skb->len >= hdrlen + 3) {
 			/* Top two-bits of byte 3 are the key index */
-			idx = skb->data[hdrlen + 3] >> 6;
+			keyidx = skb->data[hdrlen + 3] >> 6;
 		}
 
-		/* ieee->crypt[] is WEP_KEY (4) in length.  Given that idx
-		 * is only allowed 2-bits of storage, no value of idx can
-		 * be provided via above code that would result in idx
+		/* ieee->crypt[] is WEP_KEY (4) in length.  Given that keyidx
+		 * is only allowed 2-bits of storage, no value of keyidx can
+		 * be provided via above code that would result in keyidx
 		 * being out of range */
-		crypt = ieee->crypt[idx];
+		crypt = ieee->crypt[keyidx];
 
 #ifdef NOT_YET
 		sta = NULL;
@@ -479,6 +484,11 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 			goto rx_exit;
 	}
 #endif
+	/* drop duplicate 802.11 retransmissions (IEEE 802.11 Chap. 9.29) */
+	if (sc == ieee->prev_seq_ctl)
+		goto rx_dropped;
+	else
+		ieee->prev_seq_ctl = sc;
 
 	/* Data frame - extract src/dst addresses */
 	if (skb->len < IEEE80211_3ADDR_LEN)
@@ -602,12 +612,12 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 		if (frag == 0) {
 			/* copy first fragment (including full headers) into
 			 * beginning of the fragment cache skb */
-			memcpy(skb_put(frag_skb, flen), skb->data, flen);
+			skb_copy_from_linear_data(skb, skb_put(frag_skb, flen), flen);
 		} else {
 			/* append frame payload to the end of the fragment
 			 * cache skb */
-			memcpy(skb_put(frag_skb, flen), skb->data + hdrlen,
-			       flen);
+			skb_copy_from_linear_data_offset(skb, hdrlen,
+				      skb_put(frag_skb, flen), flen);
 		}
 		dev_kfree_skb_any(skb);
 		skb = NULL;
@@ -653,6 +663,51 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 				     " (drop_unencrypted=1)\n",
 				     MAC_ARG(hdr->addr2));
 		goto rx_dropped;
+	}
+
+	/* If the frame was decrypted in hardware, we may need to strip off
+	 * any security data (IV, ICV, etc) that was left behind */
+	if (!can_be_decrypted && (fc & IEEE80211_FCTL_PROTECTED) &&
+	    ieee->host_strip_iv_icv) {
+		int trimlen = 0;
+
+		/* Top two-bits of byte 3 are the key index */
+		if (skb->len >= hdrlen + 3)
+			keyidx = skb->data[hdrlen + 3] >> 6;
+
+		/* To strip off any security data which appears before the
+		 * payload, we simply increase hdrlen (as the header gets
+		 * chopped off immediately below). For the security data which
+		 * appears after the payload, we use skb_trim. */
+
+		switch (ieee->sec.encode_alg[keyidx]) {
+		case SEC_ALG_WEP:
+			/* 4 byte IV */
+			hdrlen += 4;
+			/* 4 byte ICV */
+			trimlen = 4;
+			break;
+		case SEC_ALG_TKIP:
+			/* 4 byte IV, 4 byte ExtIV */
+			hdrlen += 8;
+			/* 8 byte MIC, 4 byte ICV */
+			trimlen = 12;
+			break;
+		case SEC_ALG_CCMP:
+			/* 8 byte CCMP header */
+			hdrlen += 8;
+			/* 8 byte MIC */
+			trimlen = 8;
+			break;
+		}
+
+		if (skb->len < trimlen)
+			goto rx_dropped;
+
+		__skb_trim(skb, skb->len - trimlen);
+
+		if (skb->len < hdrlen)
+			goto rx_dropped;
 	}
 
 	/* skb: hdr + (possible reassembled) full plaintext payload */
@@ -710,8 +765,9 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 		    IEEE80211_FCTL_TODS) && skb->len >= ETH_HLEN + ETH_ALEN) {
 		/* Non-standard frame: get addr4 from its bogus location after
 		 * the payload */
-		memcpy(skb->data + ETH_ALEN,
-		       skb->data + skb->len - ETH_ALEN, ETH_ALEN);
+		skb_copy_to_linear_data_offset(skb, ETH_ALEN,
+					       skb->data + skb->len - ETH_ALEN,
+					       ETH_ALEN);
 		skb_trim(skb, skb->len - ETH_ALEN);
 	}
 #endif
@@ -740,10 +796,11 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 
 	if (skb2 != NULL) {
 		/* send to wireless media */
-		skb2->protocol = __constant_htons(ETH_P_802_3);
-		skb2->mac.raw = skb2->nh.raw = skb2->data;
-		/* skb2->nh.raw = skb2->data + ETH_HLEN; */
 		skb2->dev = dev;
+		skb2->protocol = __constant_htons(ETH_P_802_3);
+		skb_reset_mac_header(skb2);
+		skb_reset_network_header(skb2);
+		/* skb2->network_header += ETH_HLEN; */
 		dev_queue_xmit(skb2);
 	}
 #endif
@@ -751,7 +808,6 @@ int ieee80211_rx(struct ieee80211_device *ieee, struct sk_buff *skb,
 	if (skb) {
 		skb->protocol = eth_type_trans(skb, dev);
 		memset(skb->cb, 0, sizeof(skb->cb));
-		skb->dev = dev;
 		skb->ip_summed = CHECKSUM_NONE;	/* 802.11 crc not sufficient */
 		if (netif_rx(skb) == NET_RX_DROP) {
 			/* netif_rx always succeeds, but it might drop
@@ -803,7 +859,7 @@ void ieee80211_rx_any(struct ieee80211_device *ieee,
 
 	if ((fc & IEEE80211_FCTL_VERS) != 0)
 		goto drop_free;
-		
+
 	switch (fc & IEEE80211_FCTL_FTYPE) {
 	case IEEE80211_FTYPE_MGMT:
 		if (skb->len < sizeof(struct ieee80211_hdr_3addr))
@@ -1255,12 +1311,11 @@ static int ieee80211_parse_info_param(struct ieee80211_info_element
 		case MFIE_TYPE_IBSS_DFS:
 			if (network->ibss_dfs)
 				break;
-			network->ibss_dfs =
-			    kmalloc(info_element->len, GFP_ATOMIC);
+			network->ibss_dfs = kmemdup(info_element->data,
+						    info_element->len,
+						    GFP_ATOMIC);
 			if (!network->ibss_dfs)
 				return 1;
-			memcpy(network->ibss_dfs, info_element->data,
-			       info_element->len);
 			network->flags |= NETWORK_HAS_IBSS_DFS;
 			break;
 
@@ -1441,7 +1496,7 @@ static void update_network(struct ieee80211_network *dst,
 
 	/* We only update the statistics if they were created by receiving
 	 * the network information on the actual channel the network is on.
-	 * 
+	 *
 	 * This keeps beacons received on neighbor channels from bringing
 	 * down the signal level of an AP. */
 	if (dst->channel == src->stats.received_channel)

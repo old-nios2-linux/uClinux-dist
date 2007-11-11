@@ -167,13 +167,13 @@ static void add_sector(conf_t *conf, sector_t start, int mode)
 		conf->nfaults = n+1;
 }
 
-static int make_request(request_queue_t *q, struct bio *bio)
+static int make_request(struct request_queue *q, struct bio *bio)
 {
 	mddev_t *mddev = q->queuedata;
 	conf_t *conf = (conf_t*)mddev->private;
 	int failit = 0;
 
-	if (bio->bi_rw & 1) {
+	if (bio_data_dir(bio) == WRITE) {
 		/* write request */
 		if (atomic_read(&conf->counters[WriteAll])) {
 			/* special case - don't decrement, don't generic_make_request,

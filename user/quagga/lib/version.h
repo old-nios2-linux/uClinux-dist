@@ -26,7 +26,7 @@
 
 #define QUAGGA_PROGNAME   "Quagga"
 
-#define QUAGGA_VERSION     "0.98.5"
+#define QUAGGA_VERSION     "0.98.6"
 
 #define ZEBRA_BUG_ADDRESS "http://bugzilla.quagga.net"
 

@@ -1,6 +1,6 @@
 #ifndef lint
 char	nettest_sctp[]="\
-@(#)nettest_sctp.c (c) Copyright 2005 Hewlett-Packard Co. Version 2.4.1";
+@(#)nettest_sctp.c (c) Copyright 2005-2007 Hewlett-Packard Co. Version 2.4.3";
 #else
 #define DIRTY
 #define WANT_HISTOGRAM
@@ -58,6 +58,17 @@ char	nettest_sctp[]="\
 #include <netinet/sctp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+
+/* would seem that not all sctp.h files define a MSG_EOF, but that
+   MSG_EOF can be the same as MSG_FIN so lets work with that
+   assumption.  initial find by Jon Pedersen. raj 2006-02-01 */
+#ifndef MSG_EOF
+#ifdef MSG_FIN
+#define MSG_EOF MSG_FIN
+#else
+#error Must have either MSG_EOF or MSG_FIN defined
+#endif
+#endif 
 
 #include "netlib.h"
 #include "netsh.h"
@@ -606,7 +617,7 @@ Size (bytes)\n\
 
     if (non_block) {
 	/* now that we are connected, mark the socket as non-blocking */
-	if (fcntl(send_socket, F_SETFL, O_NONBLOCK) == -1) {
+	if (!set_nonblock(send_socket)) {
 	  perror("netperf: fcntl");
 	  exit(1);
 	}
@@ -737,7 +748,7 @@ Size (bytes)\n\
       if ((interval_burst) && (--interval_count == 0)) {
 	/* call sigsuspend and wait for the interval timer to get us */
 	/* out */
-	if (debug) {
+	if (debug > 1) {
 	  fprintf(where,"about to suspend\n");
 	  fflush(where);
 	}
@@ -1270,7 +1281,7 @@ recv_sctp_stream()
   if (non_block) {
       fprintf(where, "setting socket as nonblocking\n");
       fflush(where);
-      if (fcntl(s_data, F_SETFL, O_NONBLOCK) == -1) {
+      if (!set_nonblock(s_data)) {
 	close(s_data);
 	exit(1);
       }
@@ -1748,7 +1759,7 @@ Size (bytes)\n\
 
 	if (non_block) {
 	    /* now that we are connected, mark the socket as non-blocking */
-	    if (fcntl(send_socket[j], F_SETFL, O_NONBLOCK) == -1) {
+	    if (!set_nonblock(send_socket[j])) {
 	      perror("netperf: fcntl");
 	      exit(1);
 	    }
@@ -1887,7 +1898,7 @@ Size (bytes)\n\
       if ((interval_burst) && (--interval_count == 0)) {
 	/* call sigsuspend and wait for the interval timer to get us */
 	/* out */
-	if (debug) {
+	if (debug > 1) {
 	  fprintf(where,"about to suspend\n");
 	  fflush(where);
 	}
@@ -2418,7 +2429,7 @@ recv_sctp_stream_1toMany()
   
   /* now that we are connected, mark the socket as non-blocking */
   if (non_block) {
-      if (fcntl(s_recv, F_SETFL, O_NONBLOCK) == -1) {
+      if (!set_nonblock(s_recv)) {
 	close(s_recv);
 	exit(1);
       }
@@ -2818,7 +2829,7 @@ Send   Recv    Send   Recv\n\
 
     /* set non-blocking if needed */
     if (non_block) {
-	if (fcntl(send_socket, F_SETFL, O_NONBLOCK) == -1) {
+       if (!set_nonblock(send_socket)) {
 	    close(send_socket);
 	    exit(1);
 	}
@@ -2970,7 +2981,7 @@ Send   Recv    Send   Recv\n\
       if ((interval_burst) && (--interval_count == 0)) {
 	/* call sigsuspend and wait for the interval timer to get us */
 	/* out */
-	if (debug) {
+	if (debug > 1) {
 	  fprintf(where,"about to suspend\n");
 	  fflush(where);
 	}
@@ -3439,8 +3450,8 @@ recv_sctp_rr()
 
   /* now that we are connected, mark the socket as non-blocking */
   if (non_block) {
-    if (fcntl(s_data, F_SETFL, O_NONBLOCK) == -1) {
-	perror("netperf: fcntl");
+    if (!set_nonblock(s_data)) {
+      perror("netperf: set_nonblock");
 	exit(1);
     }
   }
@@ -3877,7 +3888,7 @@ Send   Recv    Send   Recv\n\
       sctp_enable_events(send_socket[j], 0);
       
       if (non_block) {
-	if (fcntl(send_socket[j], F_SETFL, O_NONBLOCK) == -1) {
+        if (!set_nonblock(send_socket[j])) {
 	  close(send_socket[j]);
 	  exit(1);
 	}
@@ -4481,8 +4492,8 @@ recv_sctp_rr_1toMany()
 
   /* now that we are connected, mark the socket as non-blocking */
   if (non_block) {
-    if (fcntl(s_rcv, F_SETFL, O_NONBLOCK) == -1) {
-	perror("netperf: fcntl");
+    if (!set_nonblock(s_rcv)) {
+      perror("netperf: set_nonblock");
 	exit(1);
     }
   }
@@ -4681,6 +4692,12 @@ scan_sctp_args(argc, argv)
   char	
     arg1[BUFSIZ],  /* argument holders		*/
     arg2[BUFSIZ];
+
+  if (no_control) {
+    fprintf(where,
+	    "The SCTP tests do not know how to deal with no control tests\n");
+    exit(-1);
+  }
 
   strncpy(local_data_port,"0",sizeof(local_data_port));
   strncpy(remote_data_port,"0",sizeof(remote_data_port));

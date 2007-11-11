@@ -20,7 +20,6 @@
 #include "hostap_wlan.h"
 
 
-static char *version = PRISM2_VERSION " (Jouni Malinen <jkmaline@cc.hut.fi>)";
 static char *dev_info = "hostap_pci";
 
 
@@ -29,7 +28,6 @@ MODULE_DESCRIPTION("Support for Intersil Prism2.5-based 802.11 wireless LAN "
 		   "PCI cards.");
 MODULE_SUPPORTED_DEVICE("Intersil Prism2.5-based WLAN PCI cards");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(PRISM2_VERSION);
 
 
 /* struct local_info::hw_priv */
@@ -300,10 +298,9 @@ static int prism2_pci_probe(struct pci_dev *pdev,
 	struct hostap_interface *iface;
 	struct hostap_pci_priv *hw_priv;
 
-	hw_priv = kmalloc(sizeof(*hw_priv), GFP_KERNEL);
+	hw_priv = kzalloc(sizeof(*hw_priv), GFP_KERNEL);
 	if (hw_priv == NULL)
 		return -ENOMEM;
-	memset(hw_priv, 0, sizeof(*hw_priv));
 
 	if (pci_enable_device(pdev))
 		goto err_out_free;
@@ -425,8 +422,14 @@ static int prism2_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 static int prism2_pci_resume(struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
+	int err;
 
-	pci_enable_device(pdev);
+	err = pci_enable_device(pdev);
+	if (err) {
+		printk(KERN_ERR "%s: pci_enable_device failed on resume\n",
+		       dev->name);
+		return err;
+	}
 	pci_restore_state(pdev);
 	prism2_hw_config(dev, 0);
 	if (netif_running(dev)) {
@@ -450,15 +453,11 @@ static struct pci_driver prism2_pci_drv_id = {
 	.suspend	= prism2_pci_suspend,
 	.resume		= prism2_pci_resume,
 #endif /* CONFIG_PM */
-	/* Linux 2.4.6 added save_state and enable_wake that are not used here
-	 */
 };
 
 
 static int __init init_prism2_pci(void)
 {
-	printk(KERN_INFO "%s: %s\n", dev_info, version);
-
 	return pci_register_driver(&prism2_pci_drv_id);
 }
 
@@ -466,7 +465,6 @@ static int __init init_prism2_pci(void)
 static void __exit exit_prism2_pci(void)
 {
 	pci_unregister_driver(&prism2_pci_drv_id);
-	printk(KERN_INFO "%s: Driver unloaded\n", dev_info);
 }
 
 

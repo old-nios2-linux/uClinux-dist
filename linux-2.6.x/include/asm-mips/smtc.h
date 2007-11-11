@@ -34,6 +34,9 @@ typedef long asiduse;
 
 extern asiduse smtc_live_asid[MAX_SMTC_TLBS][MAX_SMTC_ASIDS];
 
+struct mm_struct;
+struct task_struct;
+
 void smtc_get_new_mmu_context(struct mm_struct *mm, unsigned long cpu);
 
 void smtc_flush_tlb_asid(unsigned long asid);
@@ -51,5 +54,15 @@ extern void smtc_boot_secondary(int cpu, struct task_struct *t);
  */
 
 #define PARKED_INDEX	((unsigned int)0x80000000)
+
+/*
+ * Define low-level interrupt mask for IPIs, if necessary.
+ * By default, use SW interrupt 1, which requires no external
+ * hardware support, but which works only for single-core
+ * MIPS MT systems.
+ */
+#ifndef MIPS_CPU_IPI_IRQ
+#define MIPS_CPU_IPI_IRQ 1
+#endif
 
 #endif /*  _ASM_SMTC_MT_H */

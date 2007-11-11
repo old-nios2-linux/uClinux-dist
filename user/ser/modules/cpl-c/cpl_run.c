@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_run.c,v 1.23.4.8 2004/05/26 19:58:50 bogdan Exp $
+ * $Id: cpl_run.c,v 1.37.2.2 2005/07/20 17:11:51 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,6 +28,10 @@
  * -------
  * 2003-01-23 : created (bogdan)
  * 2003-09-11 : build_lump_rpl() merged into add_lump_rpl() (bogdan)
+ * 2004-06-14 : all global variables merged into cpl_env and cpl_fct;
+ *              append_branches param added to lookup node (bogdan)
+ * 2004-06-14 : flag CPL_IS_STATEFUL is set now immediately after the 
+ *              transaction is created (bogdan)
 */
 
 #include <stdio.h>
@@ -48,6 +52,7 @@
 #include "cpl_utils.h"
 #include "cpl_nonsig.h"
 #include "cpl_sig.h"
+#include "cpl_env.h"
 #include "cpl_run.h"
 
 
@@ -107,12 +112,6 @@
 	}while(0)
 
 
-extern char            *log_dir;
-extern struct tm_binds cpl_tmb;
-extern udomain_t*      cpl_domain;
-extern usrloc_api_t    cpl_ulb;
-extern int (*cpl_sl_reply)(struct sip_msg* _m, char* _s1, char* _s2);
-
 
 struct cpl_interpreter* new_cpl_interpreter( struct sip_msg *msg, str *script)
 {
@@ -132,7 +131,7 @@ struct cpl_interpreter* new_cpl_interpreter( struct sip_msg *msg, str *script)
 	intr->ip = script->s;
 	intr->msg = msg;
 
-	/* check the begining of the script */
+	/* check the beginning of the script */
 	if ( NODE_TYPE(intr->ip)!=CPL_NODE ) {
 		LOG(L_ERR,"ERROR:build_cpl_interpreter: first node is not CPL!!\n");
 		goto error;
@@ -270,44 +269,47 @@ static inline char *run_lookup( struct cpl_interpreter *intr )
 
 	kid = failure_kid;
 
-	if (cpl_domain) {
+	if (cpl_env.lu_domain) {
 		/* fetch user's contacts via usrloc */
 		tc = time(0);
-		cpl_ulb.lock_udomain( cpl_domain );
-		i = cpl_ulb.get_urecord( cpl_domain, &intr->user, &r);
+		cpl_fct.ulb.lock_udomain( cpl_env.lu_domain );
+		i = cpl_fct.ulb.get_urecord( cpl_env.lu_domain, &intr->user, &r);
 		if (i < 0) {
 			/* failure */
 			LOG(L_ERR, "ERROR:run_lookup: Error while querying usrloc\n");
-			cpl_ulb.unlock_udomain( cpl_domain );
+			cpl_fct.ulb.unlock_udomain( cpl_env.lu_domain );
 		} else if (i > 0) {
 			/* not found */
 			DBG("DBG:cpl-c:run_lookup: '%.*s' Not found in usrloc\n",
 				intr->user.len, intr->user.s);
-			cpl_ulb.unlock_udomain( cpl_domain );
+			cpl_fct.ulb.unlock_udomain( cpl_env.lu_domain );
 			kid = notfound_kid;
 		} else {
 			contact = r->contacts;
 			/* skip expired contacts */
-			while ((contact) && ((contact->expires <= tc) ||
-			(contact->state >= CS_ZOMBIE_N)))
+			while (contact && contact->expires<=tc)
 				contact = contact->next;
 			/* any contacts left? */
 			if (contact) {
 				/* clear loc set if requested */
 				if (clear)
 					empty_location_set( &(intr->loc_set) );
-				/* add first location to set */
-				DBG("DBG:cpl-c:run_lookup: adding <%.*s>q=%d\n",
-					contact->c.len,contact->c.s,(int)(10*contact->q));
-				if (add_location( &(intr->loc_set), &contact->c,
-				(int)(10*contact->q),
-				CPL_LOC_DUPL|((contact->flags & FL_NAT)*CPL_LOC_NATED) )==-1) {
-					LOG(L_ERR,"ERROR:cpl-c:run_lookup: unable to add "
-						"location to set :-(\n");
-					cpl_ulb.unlock_udomain( cpl_domain );
-					goto runtime_error;
-				}
-				/* set the flag for modifing the location set */
+				/* start adding locations to set */
+				do {
+					DBG("DBG:cpl-c:run_lookup: adding <%.*s>q=%d\n",
+						contact->c.len,contact->c.s,(int)(10*contact->q));
+					if (add_location( &(intr->loc_set), &contact->c,
+					(int)(10*contact->q),
+					CPL_LOC_DUPL|((contact->flags & FL_NAT)*CPL_LOC_NATED)
+					)==-1) {
+						LOG(L_ERR,"ERROR:cpl-c:run_lookup: unable to add "
+							"location to set :-(\n");
+						cpl_fct.ulb.unlock_udomain( cpl_env.lu_domain );
+						goto runtime_error;
+					}
+					contact = contact->next;
+				}while( contact && cpl_env.lu_append_branches);
+				/* set the flag for modifying the location set */
 				intr->flags |= CPL_LOC_SET_MODIFIED;
 				/* we found a valid contact */
 				kid = success_kid;
@@ -315,7 +317,7 @@ static inline char *run_lookup( struct cpl_interpreter *intr )
 				/* no valid contact found */
 				kid = notfound_kid;
 			}
-			cpl_ulb.unlock_udomain( cpl_domain );
+			cpl_fct.ulb.unlock_udomain( cpl_env.lu_domain );
 		}
 
 	}
@@ -346,6 +348,7 @@ static inline char *run_location( struct cpl_interpreter *intr )
 	clear = NO_VAL;
 	prio = 10;
 	url.s = (char*)UNDEF_CHAR;
+	url.len = 0; /* fixes gcc 4.0 warning */
 
 	/* sanity check */
 	if (NR_OF_KIDS(intr->ip)>1) {
@@ -395,7 +398,7 @@ static inline char *run_location( struct cpl_interpreter *intr )
 		LOG(L_ERR,"ERROR:run_location: unable to add location to set :-(\n");
 		goto runtime_error;
 	}
-	/* set the flag for modifing the location set */
+	/* set the flag for modifying the location set */
 	intr->flags |= CPL_LOC_SET_MODIFIED;
 
 	return get_first_child(intr->ip);
@@ -451,7 +454,7 @@ static inline char *run_remove_location( struct cpl_interpreter *intr )
 	} else {
 		remove_location( &(intr->loc_set), url.s, url.len );
 	}
-	/* set the flag for modifing the location set */
+	/* set the flag for modifying the location set */
 	intr->flags |= CPL_LOC_SET_MODIFIED;
 
 done:
@@ -508,7 +511,7 @@ static inline char *run_sub( struct cpl_interpreter *intr )
 		goto script_error;
 	}
 	if ( NR_OF_ATTR(p)!=0 ) {
-		LOG(L_ERR,"ERROR:cpl_c:run_sub: inavlid subaction node reached "
+		LOG(L_ERR,"ERROR:cpl_c:run_sub: invalid subaction node reached "
 		"(attrs=%d); expected (0)!\n",NR_OF_ATTR(p));
 		goto script_error;
 	}
@@ -588,8 +591,8 @@ static inline char *run_reject( struct cpl_interpreter *intr )
 	}
 
 	/* if still stateless and FORCE_STATEFUL set -> build the transaction */
-	if ( !(intr->flags&CPL_PROXY_DONE) && intr->flags&CPL_FORCE_STATEFUL) {
-		i = cpl_tmb.t_newtran( intr->msg );
+	if ( !(intr->flags&CPL_IS_STATEFUL) && intr->flags&CPL_FORCE_STATEFUL) {
+		i = cpl_fct.tmb.t_newtran( intr->msg );
 		if (i<0) {
 			LOG(L_ERR,"ERROR:cpl-c:run_reject: failed to build new "
 				"transaction!\n");
@@ -601,15 +604,16 @@ static inline char *run_reject( struct cpl_interpreter *intr )
 			 * script by returning EO_SCRIPT */
 			return EO_SCRIPT;
 		}
+		intr->flags |= CPL_IS_STATEFUL;
 	}
 
 	/* send the reply */
-	if ( intr->flags&(CPL_PROXY_DONE|CPL_IS_STATEFUL|CPL_FORCE_STATEFUL) ) {
+	if ( intr->flags&CPL_IS_STATEFUL ) {
 		/* reply statefully */
-		i = cpl_tmb.t_reply(intr->msg, (int)status, reason_s );
+		i = cpl_fct.tmb.t_reply(intr->msg, (int)status, reason_s );
 	} else {
 		/* reply statelessly */
-		i = cpl_sl_reply(intr->msg, (char*)(int)status, reason_s );
+		i = cpl_fct.sl_reply(intr->msg, (char*)(long)status, reason_s );
 	}
 
 	if ( i!=1 ) {
@@ -700,8 +704,8 @@ static inline char *run_redirect( struct cpl_interpreter *intr )
 	memcpy(cp,CRLF,CRLF_LEN);
 
 	/* if still stateless and FORCE_STATEFUL set -> build the transaction */
-	if ( !(intr->flags&CPL_PROXY_DONE) && intr->flags&CPL_FORCE_STATEFUL) {
-		i = cpl_tmb.t_newtran( intr->msg );
+	if ( !(intr->flags&CPL_IS_STATEFUL) && intr->flags&CPL_FORCE_STATEFUL) {
+		i = cpl_fct.tmb.t_newtran( intr->msg );
 		if (i<0) {
 			LOG(L_ERR,"ERROR:cpl-c:run_redirect: failed to build new "
 				"transaction!\n");
@@ -715,6 +719,7 @@ static inline char *run_redirect( struct cpl_interpreter *intr )
 			pkg_free( lump_str.s );
 			return EO_SCRIPT;
 		}
+		intr->flags |= CPL_IS_STATEFUL;
 	}
 
 	/* add the lump to the reply */
@@ -726,23 +731,23 @@ static inline char *run_redirect( struct cpl_interpreter *intr )
 	}
 
 	/* send the reply */
-	if ( intr->flags&(CPL_PROXY_DONE|CPL_IS_STATEFUL|CPL_FORCE_STATEFUL) ) {
+	if ( intr->flags&CPL_IS_STATEFUL ) {
 		/* reply statefully */
 		if (permanent)
-			i = cpl_tmb.t_reply( intr->msg, (int)301, "Moved permanently" );
+			i = cpl_fct.tmb.t_reply( intr->msg, (int)301, "Moved permanently");
 		else
-			i = cpl_tmb.t_reply( intr->msg, (int)302, "Moved temporarily" );
+			i = cpl_fct.tmb.t_reply( intr->msg, (int)302, "Moved temporarily");
 	} else {
 		/* reply statelessly */
 		if (permanent)
-			i = cpl_sl_reply( intr->msg, (char*)301, "Moved permanently" );
+			i = cpl_fct.sl_reply( intr->msg, (char*)301, "Moved permanently");
 		else
-			i = cpl_sl_reply( intr->msg, (char*)302, "Moved temporarily" );
+			i = cpl_fct.sl_reply( intr->msg, (char*)302, "Moved temporarily");
 	}
 
 	/* msg which I'm working on can be in private memory or is a clone into
 	 * shared memory (if I'm after a failed proxy); So, it's better to removed
-	 * by myself the lump that I added previosly */
+	 * by myself the lump that I added previously */
 	unlink_lump_rpl( intr->msg, lump);
 	free_lump_rpl( lump );
 
@@ -780,8 +785,8 @@ static inline char *run_log( struct cpl_interpreter *intr )
 		goto script_error;
 	}
 
-	/* is loging enabled? */
-	if ( log_dir==0 )
+	/* is logging enabled? */
+	if ( cpl_env.log_dir==0 )
 		goto done;
 
 	/* read the attributes of the LOG node*/
@@ -935,17 +940,17 @@ script_error:
 static inline int run_default( struct cpl_interpreter *intr )
 {
 	if (!(intr->flags&CPL_PROXY_DONE)) {
-		/* no signalling operations */
+		/* no signaling operations */
 		if ( !(intr->flags&CPL_LOC_SET_MODIFIED) ) {
 			/*  no location modifications */
 			if (intr->loc_set==0 ) {
-				/* case 1 : no location modifications or signalling operations
+				/* case 1 : no location modifications or signaling operations
 				 * performed, location set empty ->
 				 * Look up the user's location through whatever mechanism the
 				 * server would use if no CPL script were in effect */
 				return SCRIPT_DEFAULT;
 			} else {
-				/* case 2 : no location modifications or signalling operations
+				/* case 2 : no location modifications or signaling operations
 				 * performed, location set non-empty: (This can only happen 
 				 * for outgoing calls.) ->
 				 * Proxy the call to the address in the location set.
@@ -954,20 +959,20 @@ static inline int run_default( struct cpl_interpreter *intr )
 				return SCRIPT_DEFAULT;
 			}
 		} else {
-			/* case 3 : location modifications performed, no signalling 
+			/* case 3 : location modifications performed, no signaling 
 			 * operations ->
 			 * Proxy the call to the addresses in the location set */
-			if (cpl_proxy_to_loc_set( intr->msg, &(intr->loc_set), 0 )==0)
+			if (!cpl_proxy_to_loc_set(intr->msg,&(intr->loc_set),intr->flags))
 				return SCRIPT_END;
 			return SCRIPT_RUN_ERROR;
 		}
 	} else {
 		/* case 4 : proxy operation previously taken -> return whatever the 
 		 * "best" response is of all accumulated responses to the call to this
-		 * point, according to the rules of the underlying signalling
+		 * point, according to the rules of the underlying signaling
 		 * protocol. */
 		/* we will let ser to choose and forward one of the replies -> for this
-		 * nothinh must be done */
+		 * nothing must be done */
 		return SCRIPT_END;
 	}
 	/*return SCRIPT_RUN_ERROR;*/

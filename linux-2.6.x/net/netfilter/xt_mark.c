@@ -19,7 +19,7 @@ MODULE_DESCRIPTION("iptables mark matching module");
 MODULE_ALIAS("ipt_mark");
 MODULE_ALIAS("ip6t_mark");
 
-static int
+static bool
 match(const struct sk_buff *skb,
       const struct net_device *in,
       const struct net_device *out,
@@ -27,27 +27,27 @@ match(const struct sk_buff *skb,
       const void *matchinfo,
       int offset,
       unsigned int protoff,
-      int *hotdrop)
+      bool *hotdrop)
 {
 	const struct xt_mark_info *info = matchinfo;
 
-	return ((skb->nfmark & info->mask) == info->mark) ^ info->invert;
+	return ((skb->mark & info->mask) == info->mark) ^ info->invert;
 }
 
-static int
+static bool
 checkentry(const char *tablename,
-           const void *entry,
+	   const void *entry,
 	   const struct xt_match *match,
-           void *matchinfo,
-           unsigned int hook_mask)
+	   void *matchinfo,
+	   unsigned int hook_mask)
 {
 	const struct xt_mark_info *minfo = matchinfo;
 
 	if (minfo->mark > 0xffffffff || minfo->mask > 0xffffffff) {
 		printk(KERN_WARNING "mark: only supports 32bit mark\n");
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
 }
 
 #ifdef CONFIG_COMPAT
@@ -60,7 +60,7 @@ struct compat_xt_mark_info {
 
 static void compat_from_user(void *dst, void *src)
 {
-	struct compat_xt_mark_info *cm = src;
+	const struct compat_xt_mark_info *cm = src;
 	struct xt_mark_info m = {
 		.mark	= cm->mark,
 		.mask	= cm->mask,
@@ -71,7 +71,7 @@ static void compat_from_user(void *dst, void *src)
 
 static int compat_to_user(void __user *dst, void *src)
 {
-	struct xt_mark_info *m = src;
+	const struct xt_mark_info *m = src;
 	struct compat_xt_mark_info cm = {
 		.mark	= m->mark,
 		.mask	= m->mask,
@@ -81,7 +81,7 @@ static int compat_to_user(void __user *dst, void *src)
 }
 #endif /* CONFIG_COMPAT */
 
-static struct xt_match xt_mark_match[] = {
+static struct xt_match xt_mark_match[] __read_mostly = {
 	{
 		.name		= "mark",
 		.family		= AF_INET,

@@ -3,6 +3,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <asm/ioctls.h>
+#include <sys/ioctl.h>
 
 int main(int argc,char *argv[])
 {
@@ -10,7 +11,7 @@ int main(int argc,char *argv[])
 	int ret;
 
 	printf("TCGETS = 0x%08x\n",TCGETS);
-	printf("sizeof(struct termios) = %d\n",sizeof(struct termios));
+	printf("sizeof(struct termios) = %ld\n",(long)sizeof(struct termios));
 
 	ret = ioctl(fileno(stdout),TCGETS,&t);
 

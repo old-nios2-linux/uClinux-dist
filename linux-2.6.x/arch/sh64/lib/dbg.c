@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/fs.h>
 #include <asm/mmu_context.h>
 
 typedef u64 regType_t;
@@ -383,7 +384,7 @@ void show_excp_regs(char *from, int trapnr, int signr, struct pt_regs *regs)
 /* ======================================================================= */
 
 /*
-** Depending on <base> scan the MMU, Data or Instrction side
+** Depending on <base> scan the MMU, Data or Instruction side
 ** looking for a valid mapping matching Eaddr & asid.
 ** Return -1 if not found or the TLB id entry otherwise.
 ** Note: it works only for 4k pages!

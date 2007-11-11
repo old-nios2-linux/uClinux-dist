@@ -35,8 +35,9 @@ enum pid_type
  *
  * Holding a reference to struct pid solves both of these problems.
  * It is small so holding a reference does not consume a lot of
- * resources, and since a new struct pid is allocated when the numeric
- * pid value is reused we don't mistakenly refer to new processes.
+ * resources, and since a new struct pid is allocated when the numeric pid
+ * value is reused (when pids wrap around) we don't mistakenly refer to new
+ * processes.
  */
 
 struct pid
@@ -49,6 +50,8 @@ struct pid
 	struct hlist_head tasks[PIDTYPE_MAX];
 	struct rcu_head rcu;
 };
+
+extern struct pid init_struct_pid;
 
 struct pid_link
 {
@@ -75,8 +78,7 @@ extern struct pid *get_task_pid(struct task_struct *task, enum pid_type type);
  * write-held.
  */
 extern int FASTCALL(attach_pid(struct task_struct *task,
-				enum pid_type type, int nr));
-
+				enum pid_type type, struct pid *pid));
 extern void FASTCALL(detach_pid(struct task_struct *task, enum pid_type));
 extern void FASTCALL(transfer_pid(struct task_struct *old,
 				  struct task_struct *new, enum pid_type));
@@ -103,20 +105,6 @@ static inline pid_t pid_nr(struct pid *pid)
 		nr = pid->nr;
 	return nr;
 }
-
-
-#define do_each_task_pid(who, type, task)				\
-	do {								\
-		struct hlist_node *pos___;				\
-		struct pid *pid___ = find_pid(who);			\
-		if (pid___ != NULL)					\
-			hlist_for_each_entry_rcu((task), pos___,	\
-				&pid___->tasks[type], pids[type].node) {
-
-#define while_each_task_pid(who, type, task)				\
-			}						\
-	} while (0)
-
 
 #define do_each_pid_task(pid, type, task)				\
 	do {								\

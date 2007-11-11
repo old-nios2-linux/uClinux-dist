@@ -8,6 +8,8 @@ source "drivers/connector/Kconfig"
 
 source "drivers/mtd/Kconfig"
 
+source "drivers/of/Kconfig"
+
 source "drivers/parport/Kconfig"
 
 source "drivers/pnp/Kconfig"
@@ -23,8 +25,6 @@ source "drivers/ide/Kconfig"
 source "drivers/scsi/Kconfig"
 
 source "drivers/ata/Kconfig"
-
-source "drivers/cdrom/Kconfig"
 
 source "drivers/md/Kconfig"
 
@@ -54,6 +54,8 @@ source "drivers/spi/Kconfig"
 
 source "drivers/w1/Kconfig"
 
+source "drivers/power/Kconfig"
+
 source "drivers/hwmon/Kconfig"
 
 source "drivers/mfd/Kconfig"
@@ -63,6 +65,8 @@ source "drivers/media/Kconfig"
 source "drivers/video/Kconfig"
 
 source "sound/Kconfig"
+
+source "drivers/hid/Kconfig"
 
 source "drivers/usb/Kconfig"
 
@@ -78,4 +82,11 @@ source "drivers/rtc/Kconfig"
 
 source "drivers/dma/Kconfig"
 
+source "drivers/auxdisplay/Kconfig"
+
+source "drivers/kvm/Kconfig"
+
+source "drivers/uio/Kconfig"
+
+source "drivers/lguest/Kconfig"
 endmenu

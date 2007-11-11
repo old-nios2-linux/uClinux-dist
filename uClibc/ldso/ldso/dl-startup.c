@@ -3,7 +3,8 @@
  * Program to load an ELF binary on a linux system, and run it
  * after resolving ELF shared library symbols
  *
- * Copyright (C) 2000-2004 by Erik Andersen <andersen@codepoet.org>
+ * Copyright (C) 2005 by Joakim Tjernlund
+ * Copyright (C) 2000-2006 by Erik Andersen <andersen@codepoet.org>
  * Copyright (c) 1994-2000 Eric Youngdale, Peter MacDonald,
  *				David Engel, Hongjiu Lu and Mitch D'Souza
  *
@@ -96,38 +97,31 @@
 /* Static declarations */
 int (*_dl_elf_main) (int, char **, char **);
 
-
-
+static void* __rtld_stack_end; /* Points to argc on stack, e.g *((long *)__rtld_stackend) == argc */
+strong_alias(__rtld_stack_end, __libc_stack_end) /* Exported version of __rtld_stack_end */
 
 /* When we enter this piece of code, the program stack looks like this:
-        argc            argument counter (integer)
-        argv[0]         program name (pointer)
-        argv[1...N]     program args (pointers)
-        argv[argc-1]    end of args (integer)
-		NULL
-        env[0...N]      environment variables (pointers)
-        NULL
-		auxvt[0...N]   Auxiliary Vector Table elements (mixed types)
+	argc            argument counter (integer)
+	argv[0]         program name (pointer)
+	argv[1...N]     program args (pointers)
+	argv[argc-1]    end of args (integer)
+	NULL
+	env[0...N]      environment variables (pointers)
+	NULL
+	auxvt[0...N]   Auxiliary Vector Table elements (mixed types)
 */
-DL_BOOT(unsigned long args)
+DL_START(unsigned long args)
 {
 	unsigned int argc;
 	char **argv, **envp;
-	unsigned long load_addr;
-	unsigned long *got;
+	DL_LOADADDR_TYPE load_addr;
+	ElfW(Addr) got;
 	unsigned long *aux_dat;
-	int goof = 0;
 	ElfW(Ehdr) *header;
 	struct elf_resolve tpnt_tmp;
 	struct elf_resolve *tpnt = &tpnt_tmp;
-	Elf32_auxv_t auxvt[AT_EGID + 1];
-	Elf32_Dyn *dpnt;
-	int indx;
-#if defined(__i386__)
-	int status = 0;
-#endif
-
-
+	ElfW(auxv_t) auxvt[AT_EGID + 1];
+	ElfW(Dyn) *dpnt;
 
 	/* WARNING! -- we cannot make _any_ funtion calls until we have
 	 * taken care of fixing up our own relocations.  Making static
@@ -137,14 +131,19 @@ DL_BOOT(unsigned long args)
 	/* First obtain the information on the stack that tells us more about
 	   what binary is loaded, where it is loaded, etc, etc */
 	GET_ARGV(aux_dat, args);
-#if defined (__arm__) || defined (__mips__) || defined (__cris__)
-	aux_dat += 1;
-#endif
 	argc = *(aux_dat - 1);
 	argv = (char **) aux_dat;
 	aux_dat += argc;			/* Skip over the argv pointers */
 	aux_dat++;					/* Skip over NULL at end of argv */
 	envp = (char **) aux_dat;
+#ifndef NO_EARLY_SEND_STDERR
+	SEND_EARLY_STDERR_DEBUG("argc=");
+	SEND_NUMBER_STDERR_DEBUG(argc, 0);
+	SEND_EARLY_STDERR_DEBUG(" argv=");
+	SEND_ADDRESS_STDERR_DEBUG(argv, 0);
+	SEND_EARLY_STDERR_DEBUG(" envp=");
+	SEND_ADDRESS_STDERR_DEBUG(envp, 1);
+#endif
 	while (*aux_dat)
 		aux_dat++;				/* Skip over the envp pointers */
 	aux_dat++;					/* Skip over NULL at end of envp */
@@ -157,21 +156,23 @@ DL_BOOT(unsigned long args)
 	 * the Auxiliary Vector Table.  Read out the elements of the auxvt,
 	 * sort and store them in auxvt for later use. */
 	while (*aux_dat) {
-		Elf32_auxv_t *auxv_entry = (Elf32_auxv_t *) aux_dat;
+		ElfW(auxv_t) *auxv_entry = (ElfW(auxv_t) *) aux_dat;
 
 		if (auxv_entry->a_type <= AT_EGID) {
-			_dl_memcpy(&(auxvt[auxv_entry->a_type]), auxv_entry, sizeof(Elf32_auxv_t));
+			_dl_memcpy(&(auxvt[auxv_entry->a_type]), auxv_entry, sizeof(ElfW(auxv_t)));
 		}
 		aux_dat += 2;
 	}
 
 	/* locate the ELF header.   We need this done as soon as possible
 	 * (esp since SEND_STDERR() needs this on some platforms... */
-	load_addr = auxvt[AT_BASE].a_un.a_val;
-	header = (ElfW(Ehdr) *) auxvt[AT_BASE].a_un.a_ptr;
+	if (!auxvt[AT_BASE].a_un.a_val)
+		auxvt[AT_BASE].a_un.a_val = elf_machine_load_address();
+	DL_INIT_LOADADDR_BOOT(load_addr, auxvt[AT_BASE].a_un.a_val);
+	header = (ElfW(Ehdr) *) auxvt[AT_BASE].a_un.a_val;
 
 	/* Check the ELF header to make sure everything looks ok.  */
-	if (!header || header->e_ident[EI_CLASS] != ELFCLASS32 ||
+	if (!header || header->e_ident[EI_CLASS] != ELF_CLASS ||
 			header->e_ident[EI_VERSION] != EV_CURRENT
 			/* Do not use an inline _dl_strncmp here or some arches
 			* will blow chunks, i.e. those that need to relocate all
@@ -181,231 +182,137 @@ DL_BOOT(unsigned long args)
 			|| header->e_ident[EI_MAG2] != ELFMAG2
 			|| header->e_ident[EI_MAG3] != ELFMAG3)
 	{
-		SEND_STDERR("Invalid ELF header\n");
+		SEND_EARLY_STDERR("Invalid ELF header\n");
 		_dl_exit(0);
 	}
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("ELF header=");
-	SEND_ADDRESS_STDERR(load_addr, 1);
-#endif
-
+	SEND_EARLY_STDERR_DEBUG("ELF header=");
+	SEND_ADDRESS_STDERR_DEBUG(DL_LOADADDR_BASE(load_addr), 1);
 
 	/* Locate the global offset table.  Since this code must be PIC
 	 * we can take advantage of the magic offset register, if we
 	 * happen to know what that is for this architecture.  If not,
 	 * we can always read stuff out of the ELF file to find it... */
-#if defined(__i386__)
-	__asm__("\tmovl %%ebx,%0\n\t":"=a"(got));
-#elif defined(__m68k__)
-	__asm__("movel %%a5,%0":"=g"(got));
-#elif defined(__sparc__)
-	__asm__("\tmov %%l7,%0\n\t":"=r"(got));
-#elif defined(__arm__)
-	__asm__("\tmov %0, r10\n\t":"=r"(got));
-#elif defined(__powerpc__)
-	__asm__("\tbl _GLOBAL_OFFSET_TABLE_-4@local\n\t":"=l"(got));
-#elif defined(__mips__)
-	__asm__("\tmove %0, $28\n\tsubu %0,%0,0x7ff0\n\t":"=r"(got));
-#elif defined(__sh__) && !defined(__SH5__)
-	__asm__(
-			"       mov.l    1f, %0\n"
-			"       mova     1f, r0\n"
-			"       bra      2f\n"
-			"       add r0,  %0\n"
-			"       .balign  4\n"
-			"1:     .long    _GLOBAL_OFFSET_TABLE_\n"
-			"2:" : "=r" (got) : : "r0");
-#elif defined(__cris__)
-	__asm__("\tmove.d $pc,%0\n\tsub.d .:GOTOFF,%0\n\t":"=r"(got));
-#else
-	/* Do things the slow way in C */
-	{
-		unsigned long tx_reloc;
-		Elf32_Dyn *dynamic = NULL;
-		Elf32_Shdr *shdr;
-		Elf32_Phdr *pt_load;
-
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-		SEND_STDERR("Finding the GOT using C code to read the ELF file\n");
-#endif
-		/* Find where the dynamic linking information section is hiding */
-		shdr = (Elf32_Shdr *) (header->e_shoff + (char *) header);
-		for (indx = header->e_shnum; --indx >= 0; ++shdr) {
-			if (shdr->sh_type == SHT_DYNAMIC) {
-				goto found_dynamic;
-			}
-		}
-		SEND_STDERR("missing dynamic linking information section \n");
-		_dl_exit(0);
-
-found_dynamic:
-		dynamic = (Elf32_Dyn *) (shdr->sh_offset + (char *) header);
-
-		/* Find where PT_LOAD is hiding */
-		pt_load = (Elf32_Phdr *) (header->e_phoff + (char *) header);
-		for (indx = header->e_phnum; --indx >= 0; ++pt_load) {
-			if (pt_load->p_type == PT_LOAD) {
-				goto found_pt_load;
-			}
-		}
-		SEND_STDERR("missing loadable program segment\n");
-		_dl_exit(0);
-
-found_pt_load:
-		/* Now (finally) find where DT_PLTGOT is hiding */
-		tx_reloc = pt_load->p_vaddr - pt_load->p_offset;
-		for (; DT_NULL != dynamic->d_tag; ++dynamic) {
-			if (dynamic->d_tag == DT_PLTGOT) {
-				goto found_got;
-			}
-		}
-		SEND_STDERR("missing global offset table\n");
-		_dl_exit(0);
-
-found_got:
-		got = (unsigned long *) (dynamic->d_un.d_val - tx_reloc +
-				(char *) header);
-	}
-#endif
-
-	/* Now, finally, fix up the location of the dynamic stuff */
-	dpnt = (Elf32_Dyn *) (*got + load_addr);
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("First Dynamic section entry=");
-	SEND_ADDRESS_STDERR(dpnt, 1);
-#endif
+	got = elf_machine_dynamic();
+	dpnt = (ElfW(Dyn) *) DL_RELOC_ADDR(load_addr, got);
+	SEND_EARLY_STDERR_DEBUG("First Dynamic section entry=");
+	SEND_ADDRESS_STDERR_DEBUG(dpnt, 1);
 	_dl_memset(tpnt, 0, sizeof(struct elf_resolve));
-
+	tpnt->loadaddr = load_addr;
 	/* OK, that was easy.  Next scan the DYNAMIC section of the image.
 	   We are only doing ourself right now - we will have to do the rest later */
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("scanning DYNAMIC section\n");
-#endif
+	SEND_EARLY_STDERR_DEBUG("Scanning DYNAMIC section\n");
 	tpnt->dynamic_addr = dpnt;
-#if defined(__mips__) || defined(__sh__)
-	/* MIPS cannot call functions here, must inline */
-	__dl_parse_dynamic_info(dpnt, tpnt->dynamic_info, NULL);
+#if defined(NO_FUNCS_BEFORE_BOOTSTRAP)
+	/* Some architectures cannot call functions here, must inline */
+	__dl_parse_dynamic_info(dpnt, tpnt->dynamic_info, NULL, load_addr);
 #else
-	_dl_parse_dynamic_info(dpnt, tpnt->dynamic_info, NULL);
+	_dl_parse_dynamic_info(dpnt, tpnt->dynamic_info, NULL, load_addr);
 #endif
 
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("done scanning DYNAMIC section\n");
-#endif
+	SEND_EARLY_STDERR_DEBUG("Done scanning DYNAMIC section\n");
 
-#ifndef __FORCE_SHAREABLE_TEXT_SEGMENTS__
-	/* Ugly, ugly.  We need to call mprotect to change the protection of
-	   the text pages so that we can do the dynamic linking.  We can set the
-	   protection back again once we are done */
+#if defined(PERFORM_BOOTSTRAP_GOT)
 
-	{
-		ElfW(Phdr) *ppnt;
-		int i;
+	SEND_EARLY_STDERR_DEBUG("About to do specific GOT bootstrap\n");
+	/* some arches (like MIPS) we have to tweak the GOT before relocations */
+	PERFORM_BOOTSTRAP_GOT(tpnt);
 
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-		SEND_STDERR("calling mprotect on the shared library/dynamic linker\n");
-#endif
-
-		/* First cover the shared library/dynamic linker. */
-		if (tpnt->dynamic_info[DT_TEXTREL]) {
-			header = (ElfW(Ehdr) *) auxvt[AT_BASE].a_un.a_ptr;
-			ppnt = (ElfW(Phdr) *) ((int)auxvt[AT_BASE].a_un.a_ptr +
-					header->e_phoff);
-			for (i = 0; i < header->e_phnum; i++, ppnt++) {
-				if (ppnt->p_type == PT_LOAD && !(ppnt->p_flags & PF_W)) {
-					_dl_mprotect((void *) (load_addr + (ppnt->p_vaddr & PAGE_ALIGN)),
-							(ppnt->p_vaddr & ADDR_ALIGN) + (unsigned long) ppnt->p_filesz,
-							PROT_READ | PROT_WRITE | PROT_EXEC);
-				}
-			}
-		}
-	}
-#endif
-#if defined(__mips__)
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("About to do MIPS specific GOT bootstrap\n");
-#endif
-	/* For MIPS we have to do stuff to the GOT before we do relocations.  */
-	PERFORM_BOOTSTRAP_GOT(got, tpnt);
-#endif
+#else
 
 	/* OK, now do the relocations.  We do not do a lazy binding here, so
 	   that once we are done, we have considerably more flexibility. */
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("About to do library loader relocations\n");
-#endif
+	SEND_EARLY_STDERR_DEBUG("About to do library loader relocations\n");
+
+	{
+		int goof, indx;
 #ifdef  ELF_MACHINE_PLTREL_OVERLAP
 # define INDX_MAX 1
 #else
 # define INDX_MAX 2
 #endif
-	goof = 0;
-	for (indx = 0; indx < INDX_MAX; indx++) {
-		unsigned int i;
-		ELF_RELOC *rpnt;
-		unsigned long *reloc_addr;
-		unsigned long symbol_addr;
-		int symtab_index;
-		unsigned long rel_addr, rel_size;
-		Elf32_Sym *sym;
+		goof = 0;
+		for (indx = 0; indx < INDX_MAX; indx++) {
+			unsigned int i;
+			unsigned long *reloc_addr;
+			unsigned long symbol_addr;
+			int symtab_index;
+			ElfW(Sym) *sym;
+			ELF_RELOC *rpnt;
+			unsigned long rel_addr, rel_size;
+			ElfW(Word) relative_count = tpnt->dynamic_info[DT_RELCONT_IDX];
 
-		rel_addr = (indx ? tpnt->dynamic_info[DT_JMPREL] : tpnt->
-				dynamic_info[DT_RELOC_TABLE_ADDR]);
-		rel_size = (indx ? tpnt->dynamic_info[DT_PLTRELSZ] : tpnt->
-				dynamic_info[DT_RELOC_TABLE_SIZE]);
+			rel_addr = (indx ? tpnt->dynamic_info[DT_JMPREL] :
+			                   tpnt->dynamic_info[DT_RELOC_TABLE_ADDR]);
+			rel_size = (indx ? tpnt->dynamic_info[DT_PLTRELSZ] :
+			                   tpnt->dynamic_info[DT_RELOC_TABLE_SIZE]);
 
-		if (!rel_addr)
-			continue;
+			if (!rel_addr)
+				continue;
 
-		/* Now parse the relocation information */
-		rpnt = (ELF_RELOC *) (rel_addr + load_addr);
-		for (i = 0; i < rel_size; i += sizeof(ELF_RELOC), rpnt++) {
-			reloc_addr = (unsigned long *) (load_addr + (unsigned long) rpnt->r_offset);
-			symtab_index = ELF32_R_SYM(rpnt->r_info);
-			symbol_addr = 0;
-			sym = NULL;
-			if (symtab_index) {
-				char *strtab;
-				Elf32_Sym *symtab;
-
-				symtab = (Elf32_Sym *) (tpnt->dynamic_info[DT_SYMTAB] + load_addr);
-				strtab = (char *) (tpnt->dynamic_info[DT_STRTAB] + load_addr);
-				sym = &symtab[symtab_index];
-				symbol_addr = load_addr + sym->st_value;
-
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-				SEND_STDERR("relocating symbol: ");
-				SEND_STDERR(strtab + sym->st_name);
-				SEND_STDERR("\n");
-#endif
+			/* Now parse the relocation information */
+			/* Since ldso is linked with -Bsymbolic, all relocs will be RELATIVE(for those archs that have
+			   RELATIVE relocs) which means that the for(..) loop below has nothing to do and can be deleted.
+			   Possibly one should add a HAVE_RELATIVE_RELOCS directive and #ifdef away some code. */
+			if (!indx && relative_count) {
+				rel_size -= relative_count * sizeof(ELF_RELOC);
+				elf_machine_relative(load_addr, rel_addr, relative_count);
+				rel_addr += relative_count * sizeof(ELF_RELOC);
 			}
-			/* Use this machine-specific macro to perform the actual relocation.  */
-			PERFORM_BOOTSTRAP_RELOC(rpnt, reloc_addr, symbol_addr, load_addr, sym);
+
+			rpnt = (ELF_RELOC *) rel_addr;
+			for (i = 0; i < rel_size; i += sizeof(ELF_RELOC), rpnt++) {
+				reloc_addr = (unsigned long *) DL_RELOC_ADDR(load_addr, (unsigned long)rpnt->r_offset);
+				symtab_index = ELF_R_SYM(rpnt->r_info);
+				symbol_addr = 0;
+				sym = NULL;
+				if (symtab_index) {
+					char *strtab;
+					ElfW(Sym) *symtab;
+
+					symtab = (ElfW(Sym) *) tpnt->dynamic_info[DT_SYMTAB];
+					strtab = (char *) tpnt->dynamic_info[DT_STRTAB];
+					sym = &symtab[symtab_index];
+					symbol_addr = (unsigned long) DL_RELOC_ADDR(load_addr, sym->st_value);
+
+#ifndef EARLY_STDERR_SPECIAL
+					SEND_STDERR_DEBUG("relocating symbol: ");
+					SEND_STDERR_DEBUG(strtab + sym->st_name);
+					SEND_STDERR_DEBUG("\n");
+#endif
+				} else
+					SEND_STDERR_DEBUG("relocating unknown symbol\n");
+				/* Use this machine-specific macro to perform the actual relocation.  */
+				PERFORM_BOOTSTRAP_RELOC(rpnt, reloc_addr, symbol_addr, load_addr, sym);
+			}
+		}
+
+		if (goof) {
+			_dl_exit(14);
 		}
 	}
-
-	if (goof) {
-		_dl_exit(14);
-	}
-
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	/* Wahoo!!! */
-	SEND_STDERR("Done relocating library loader, so we can now\n"
-			"\tuse globals and make function calls!\n");
 #endif
+
+	/* Wahoo!!! */
+	SEND_STDERR_DEBUG("Done relocating ldso; we can now use globals and make function calls!\n");
 
 	/* Now we have done the mandatory linking of some things.  We are now
 	   free to start using global variables, since these things have all been
-	   fixed up by now.  Still no function calls outside of this library ,
+	   fixed up by now.  Still no function calls outside of this library,
 	   since the dynamic resolver is not yet ready. */
+
+	__rtld_stack_end = (void *)(argv - 1);
+
 	_dl_get_ready_to_run(tpnt, load_addr, auxvt, envp, argv);
 
 
 	/* Transfer control to the application.  */
-#ifdef __SUPPORT_LD_DEBUG_EARLY__
-	SEND_STDERR("transfering control to application\n");
-#endif
-	_dl_elf_main = (int (*)(int, char **, char **)) auxvt[AT_ENTRY].a_un.a_fcn;
-	START();
-}
+	SEND_STDERR_DEBUG("transfering control to application @ ");
+	_dl_elf_main = (int (*)(int, char **, char **)) auxvt[AT_ENTRY].a_un.a_val;
+	SEND_ADDRESS_STDERR_DEBUG(_dl_elf_main, 1);
 
+#ifndef START
+	return _dl_elf_main;
+#else
+	START();
+#endif
+}

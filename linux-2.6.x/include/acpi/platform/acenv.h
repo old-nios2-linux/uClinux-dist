@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2006, R. Byron Moore
+ * Copyright (C) 2000 - 2007, R. Byron Moore
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -136,7 +136,7 @@
 
 /*! [Begin] no source code translation */
 
-#if defined(__linux__)
+#if defined(_LINUX) || defined(__linux__)
 #include "aclinux.h"
 
 #elif defined(_AED_EFI)

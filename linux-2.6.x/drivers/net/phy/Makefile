@@ -10,4 +10,6 @@ obj-$(CONFIG_LXT_PHY)		+= lxt.o
 obj-$(CONFIG_QSEMI_PHY)		+= qsemi.o
 obj-$(CONFIG_SMSC_PHY)		+= smsc.o
 obj-$(CONFIG_VITESSE_PHY)	+= vitesse.o
+obj-$(CONFIG_BROADCOM_PHY)	+= broadcom.o
+obj-$(CONFIG_ICPLUS_PHY)	+= icplus.o
 obj-$(CONFIG_FIXED_PHY)		+= fixed.o

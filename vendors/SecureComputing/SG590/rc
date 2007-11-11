@@ -6,8 +6,7 @@ watchdog /dev/watchdog
 hostname SG590
 echo "Mounting Filesystems ..."
 mount -t sysfs none /sys
-mount -t devpts devpts /dev/pts
-mount -t tmpfs -o size=33m tmpfs /var
+mount -t tmpfs -o size=33792k tmpfs /var
 mount -t tmpfs -o size=2048k tmpfs /etc/config
 mkdir -m 1777 /var/tmp
 mkdir -m 755 /var/log
@@ -15,6 +14,7 @@ mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+mount -t devpts devpts /dev/pts
 echo "Setting system clock ..."
 hwclock --hctosys --utc
 echo "Processing Config Filesystem ..."
@@ -23,7 +23,6 @@ echo "Loading network drivers."
 modprobe ixp400
 cat /etc/IxNpeMicrocode.dat >/dev/ixNpe
 modprobe ixp400_eth
-# reorder ports to get consistent naming
 ip link set eth0 name ethb
 ip link set eth1 name etha
 ip link set eth2 name ethd

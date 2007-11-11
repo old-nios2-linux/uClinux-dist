@@ -1,40 +1,32 @@
 /* mpz_gcdext(g, s, t, a, b) -- Set G to gcd(a, b), and S and T such that
    g = as + bt.
 
-Copyright (C) 1991, 1993, 1994, 1995, 1996, 1997 Free Software Foundation,
-Inc.
+Copyright 1991, 1993, 1994, 1995, 1996, 1997, 2000, 2001, 2005 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
+#include <stdio.h> /* for NULL */
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpz_gcdext (mpz_ptr g, mpz_ptr s, mpz_ptr t, mpz_srcptr a, mpz_srcptr b)
-#else
-mpz_gcdext (g, s, t, a, b)
-     mpz_ptr g;
-     mpz_ptr s;
-     mpz_ptr t;
-     mpz_srcptr a;
-     mpz_srcptr b;
-#endif
 {
   mp_size_t asize, bsize, usize, vsize;
   mp_srcptr ap, bp;
@@ -43,10 +35,10 @@ mpz_gcdext (g, s, t, a, b)
   mp_ptr gp, sp, tmp_gp, tmp_sp;
   mpz_srcptr u, v;
   mpz_ptr ss, tt;
-  __mpz_struct tmp_struct;
-  TMP_DECL (marker);
+  __mpz_struct stmp, gtmp;
+  TMP_DECL;
 
-  TMP_MARK (marker);
+  TMP_MARK;
 
   /* mpn_gcdext requires that U >= V.  Therefore, we often have to swap U and
      V.  This in turn leads to a lot of complications.  The computed cofactor
@@ -97,25 +89,11 @@ mpz_gcdext (g, s, t, a, b)
     gsize = mpn_gcdext (tmp_gp, tmp_sp, &tmp_ssize, up, usize, vp, vsize);
   ssize = ABS (tmp_ssize);
 
-  if (ALLOC (g) < gsize)
-    _mpz_realloc (g, gsize);
-  gp = PTR (g);
-  MPN_COPY (gp, tmp_gp, gsize);
-  SIZ (g) = gsize;
+  PTR (&gtmp) = tmp_gp;
+  SIZ (&gtmp) = gsize;
 
-  if (ss == NULL)
-    {
-      ss = &tmp_struct;
-      MPZ_TMP_INIT (ss, ssize);
-    }
-  else
-    {
-      if (ALLOC (ss) < ssize)
-	_mpz_realloc (ss, ssize);
-    }
-  sp = PTR (ss);
-  MPN_COPY (sp, tmp_sp, ssize);
-  SIZ (ss) = (tmp_ssize ^ SIZ (u)) >= 0 ? ssize : -ssize;
+  PTR (&stmp) = tmp_sp;
+  SIZ (&stmp) = (tmp_ssize ^ SIZ (u)) >= 0 ? ssize : -ssize;
 
   if (tt != NULL)
     {
@@ -125,11 +103,26 @@ mpz_gcdext (g, s, t, a, b)
 	{
 	  mpz_t x;
 	  MPZ_TMP_INIT (x, ssize + usize + 1);
-	  mpz_mul (x, ss, u);
-	  mpz_sub (x, g, x);
+	  mpz_mul (x, &stmp, u);
+	  mpz_sub (x, &gtmp, x);
 	  mpz_tdiv_q (tt, x, v);
 	}
     }
 
-  TMP_FREE (marker);
+  if (ss != NULL)
+    {
+      if (ALLOC (ss) < ssize)
+	_mpz_realloc (ss, ssize);
+      sp = PTR (ss);
+      MPN_COPY (sp, tmp_sp, ssize);
+      SIZ (ss) = SIZ (&stmp);
+    }
+
+  if (ALLOC (g) < gsize)
+    _mpz_realloc (g, gsize);
+  gp = PTR (g);
+  MPN_COPY (gp, tmp_gp, gsize);
+  SIZ (g) = gsize;
+
+  TMP_FREE;
 }

@@ -1189,7 +1189,6 @@ static void mc32_rx_ring(struct net_device *dev)
 			}
 
 			skb->protocol=eth_type_trans(skb,dev);
-			skb->dev=dev;
 			dev->last_rx = jiffies;
  			lp->net_stats.rx_packets++;
  			lp->net_stats.rx_bytes += length;
@@ -1659,7 +1658,7 @@ int __init init_module(void)
  *	transmit operations are allowed to start scribbling into memory.
  */
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(this_device);
 	cleanup_card(this_device);

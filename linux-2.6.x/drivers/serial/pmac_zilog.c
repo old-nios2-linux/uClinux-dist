@@ -1262,8 +1262,8 @@ static void pmz_irda_setup(struct uart_pmac_port *uap, unsigned long *baud)
 }
 
 
-static void __pmz_set_termios(struct uart_port *port, struct termios *termios,
-			      struct termios *old)
+static void __pmz_set_termios(struct uart_port *port, struct ktermios *termios,
+			      struct ktermios *old)
 {
 	struct uart_pmac_port *uap = to_pmz(port);
 	unsigned long baud;
@@ -1273,7 +1273,7 @@ static void __pmz_set_termios(struct uart_port *port, struct termios *termios,
 	if (ZS_IS_ASLEEP(uap))
 		return;
 
-	memcpy(&uap->termios_cache, termios, sizeof(struct termios));
+	memcpy(&uap->termios_cache, termios, sizeof(struct ktermios));
 
 	/* XXX Check which revs of machines actually allow 1 and 4Mb speeds
 	 * on the IR dongle. Note that the IRTTY driver currently doesn't know
@@ -1313,8 +1313,8 @@ static void __pmz_set_termios(struct uart_port *port, struct termios *termios,
 }
 
 /* The port lock is not held.  */
-static void pmz_set_termios(struct uart_port *port, struct termios *termios,
-			    struct termios *old)
+static void pmz_set_termios(struct uart_port *port, struct ktermios *termios,
+			    struct ktermios *old)
 {
 	struct uart_pmac_port *uap = to_pmz(port);
 	unsigned long flags;
@@ -1450,14 +1450,14 @@ no_dma:
 	/*
 	 * Detect port type
 	 */
-	if (device_is_compatible(np, "cobalt"))
+	if (of_device_is_compatible(np, "cobalt"))
 		uap->flags |= PMACZILOG_FLAG_IS_INTMODEM;
-	conn = get_property(np, "AAPL,connector", &len);
+	conn = of_get_property(np, "AAPL,connector", &len);
 	if (conn && (strcmp(conn, "infrared") == 0))
 		uap->flags |= PMACZILOG_FLAG_IS_IRDA;
 	uap->port_type = PMAC_SCC_ASYNC;
 	/* 1999 Powerbook G3 has slot-names property instead */
-	slots = get_property(np, "slot-names", &len);
+	slots = of_get_property(np, "slot-names", &len);
 	if (slots && slots->count > 0) {
 		if (strcmp(slots->name, "IrDA") == 0)
 			uap->flags |= PMACZILOG_FLAG_IS_IRDA;
@@ -1467,10 +1467,11 @@ no_dma:
 	if (ZS_IS_IRDA(uap))
 		uap->port_type = PMAC_SCC_IRDA;
 	if (ZS_IS_INTMODEM(uap)) {
-		struct device_node* i2c_modem = find_devices("i2c-modem");
+		struct device_node* i2c_modem =
+			of_find_node_by_name(NULL, "i2c-modem");
 		if (i2c_modem) {
 			const char* mid =
-				get_property(i2c_modem, "modem-id", NULL);
+				of_get_property(i2c_modem, "modem-id", NULL);
 			if (mid) switch(*mid) {
 			case 0x04 :
 			case 0x05 :
@@ -1482,6 +1483,7 @@ no_dma:
 			}
 			printk(KERN_INFO "pmac_zilog: i2c-modem detected, id: %d\n",
 				mid ? (*mid) : 0);
+			of_node_put(i2c_modem);
 		} else {
 			printk(KERN_INFO "pmac_zilog: serial modem detected\n");
 		}

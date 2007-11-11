@@ -102,11 +102,11 @@ int flat_check(void)
  * the the right place to handle it.
  */
 
-int flat_restorefs(void)
+int flat_restorefs(char *configdir)
 {
 	int rc;
 
-	if (chdir(DSTDIR) < 0) {
+	if (chdir(configdir) < 0) {
 		return ERROR_CODE();
 	}
 
@@ -130,6 +130,9 @@ int flat_restorefs(void)
 	}
 
 	flat_close(0, 0);
+	if (rc == 0)
+		syslog(LOG_INFO, "Restored %d configuration files (%d bytes)",
+			numfiles, numbytes);
 	return rc;
 }
 
@@ -141,7 +144,7 @@ int flat_restorefs(void)
  *	write system call so that FLASH programming is done properly.
  */
 
-int flat_savefs(int version)
+int flat_savefs(int version, char *configdir)
 {
 	unsigned int total;
 	time_t start_time, flt_write_time;
@@ -150,7 +153,7 @@ int flat_savefs(int version)
 	flat_sum = 0;
 	start_time = time(NULL);
 
-	if (chdir(SRCDIR) < 0)
+	if (chdir(configdir) < 0)
 		return ERROR_CODE();
 
 #ifndef HAS_RTC

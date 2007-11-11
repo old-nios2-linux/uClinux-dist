@@ -1,8 +1,8 @@
 /*
- * $Id: sms.c,v 1.34.8.1 2004/07/26 23:18:36 andrei Exp $
+ * $Id: sms.c,v 1.37 2004/08/24 09:00:39 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,6 +33,7 @@
  *  2003-03-19  all mallocs/frees replaced w/ pkg_malloc/pkg_free (andrei)
  *  2003-04-02  port_no_str does not contain a leading ':' anymore (andrei)
  *  2003-04-06  Only child 1 will execute child init (janakj)
+ *  2003-10-24  updated to the new socket_info lists (andrei)
  */
 
 
@@ -49,6 +50,7 @@
 #include "../../globals.h"
 #include "../../mem/mem.h"
 #include "../../mem/shm_mem.h"
+#include "../../socket_info.h"
 #include "../tm/tm_load.h"
 #include "sms_funcs.h"
 #include "sms_report.h"
@@ -74,7 +76,7 @@ char *links_config    = 0;
 char *default_net_str = 0;
 char *domain_str      = 0;
 
-/*global vaiables*/
+/*global variables*/
 int    default_net    = 0;
 int    max_sms_parts  = MAX_SMS_PARTS;
 str    domain;
@@ -235,7 +237,7 @@ int set_modem_arg(struct modem *mdm, char *arg, char *arg_end)
 			mdm->baudrate = foo;
 			break;
 		default:
-			LOG(L_ERR,"ERROR:set_modem_arg: unknow param name [%c]\n",*arg);
+			LOG(L_ERR,"ERROR:set_modem_arg: unknown param name [%c]\n",*arg);
 			goto error;
 	}
 
@@ -267,7 +269,7 @@ int set_network_arg(struct network *net, char *arg, char *arg_end)
 			net->max_sms_per_call = foo;
 			break;
 		default:
-			LOG(L_ERR,"ERROR:set_network_arg: unknow param name [%c]\n",*arg);
+			LOG(L_ERR,"ERROR:set_network_arg: unknown param name [%c]\n",*arg);
 			goto error;
 	}
 
@@ -490,7 +492,7 @@ int parse_config_lines()
 		}
 	}
 
-	/* resloving default setwork name - if any*/
+	/* resolving default network name - if any*/
 	if (default_net_str) {
 		for(net_nr=-1,i=0;i<nr_of_networks&&net_nr==-1;i++)
 			if (!strcasecmp(networks[i].name,default_net_str))
@@ -506,7 +508,7 @@ int parse_config_lines()
 	return 0;
 parse_error:
 	LOG(L_ERR,"ERROR: SMS %s config: parse error before  chr %d [%.*s]\n",
-		(step==1)?"modems":(step==2?"netwoks":"links"),
+		(step==1)?"modems":(step==2?"networks":"links"),
 		(int)(p - ((step==1)?modems_config:
 				   (step==2?networks_config:links_config))),
 		(*p==0)?4:1,(*p==0)?"NULL":p );
@@ -522,6 +524,7 @@ int global_init()
 	load_tm_f  load_tm;
 	int        i, net_pipe[2], foo;
 	char       *p;
+	struct socket_info* si;
 
 	/* import the TM auto-loading function */
 	if ( !(load_tm=(load_tm_f)find_export("load_tm", NO_SCRIPT, 0))) {
@@ -532,30 +535,35 @@ int global_init()
 	if (load_tm( &tmb )==-1) 
 		goto error;
 
-	/*fix domain lenght*/
+	/*fix domain length*/
 	if (domain_str) {
 		domain.s = domain_str;
 		domain.len = strlen(domain_str);
 	} else {
+		si=get_first_socket();
+		if (si==0){
+			LOG(L_CRIT, "BUG: sms_init_child: null listen socket list\n");
+			goto error;
+		}
 		/*do I have to add port?*/
-		i = (sock_info[0].port_no_str.len && sock_info[0].port_no!=5060);
-		domain.len = sock_info[0].name.len + i*(sock_info[0].port_no_str.len+1);
+		i = (si->port_no_str.len && si->port_no!=5060);
+		domain.len = si->name.len + i*(si->port_no_str.len+1);
 		domain.s = (char*)pkg_malloc(domain.len);
 		if (!domain.s) {
 			LOG(L_ERR,"ERROR:sms_init_child: no free pkg memory!\n");
 			goto error;
 		}
 		p = domain.s;
-		memcpy(p,sock_info[0].name.s,sock_info[0].name.len);
-		p += sock_info[0].name.len;
+		memcpy(p,si->name.s,si->name.len);
+		p += si->name.len;
 		if (i) {
 			*p=':'; p++;
-			memcpy(p,sock_info[0].port_no_str.s,sock_info[0].port_no_str.len);
-			p += sock_info[0].port_no_str.len;
+			memcpy(p,si->port_no_str.s, si->port_no_str.len);
+			p += si->port_no_str.len;
 		}
 	}
 
-	/* creats pipes for networks */
+	/* creates pipes for networks */
 	for(i=0;i<nr_of_networks;i++)
 	{
 		/* create the pipe*/
@@ -605,10 +613,10 @@ int sms_child_init(int rank)
 {
 	int  i, foo;
 
-	/* only the child 1 will execut this */
+	/* only the child 1 will execute this */
 	if (rank != 1) goto done;
 
-	/* creats processes for each modem */
+	/* creates processes for each modem */
 	for(i=0;i<nr_of_modems;i++)
 	{
 		if ( (foo=fork())<0 ) {

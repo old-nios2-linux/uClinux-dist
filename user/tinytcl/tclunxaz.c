@@ -1878,12 +1878,12 @@ Tcl_PidCmd (clientData, interp, argc, argv)
     char buf[10];
 
     if (argc != 1) {
-        Tcl_AppendResult (interp, "bad # args: ", argv[0], 0);
+        Tcl_AppendResult (interp, "bad # args: ", argv[0], (char *) NULL);
         return TCL_ERROR;
     }
     
     sprintf(buf, "%d", getpid());
 
-    Tcl_AppendResult (interp, buf, 0);
+    Tcl_AppendResult (interp, buf, (char *) NULL);
     return TCL_OK;
 }

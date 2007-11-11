@@ -236,8 +236,20 @@ int control_finish (struct tunnel *t, struct call *c)
             if ((t->lac && t->lac->challenge)
                 || (t->lns && t->lns->challenge))
             {
+                if (t->chal_them.challenge)
+                    free(t->chal_them.challenge);
+                t->chal_them.challenge = malloc(MD_SIG_SIZE);
+                if (!(t->chal_them.challenge))
+                {
+                    log (LOG_WARN, "%s: malloc failed for challenge\n",
+                    __FUNCTION__);
+                    toss (buf);
+                    return -EINVAL;
+                }
                 mk_challenge (t->chal_them.challenge, MD_SIG_SIZE);
-                add_challenge_avp (buf, t->chal_them.challenge, MD_SIG_SIZE);
+                t->chal_them.chal_len = MD_SIG_SIZE;
+                add_challenge_avp (buf, t->chal_them.challenge,
+                           t->chal_them.chal_len);
                 t->chal_them.state = STATE_CHALLENGED;
                 /* We generate the challenge and make a note that we plan to
                    challenge the peer, but we can't predict the response yet
@@ -441,6 +453,8 @@ int control_finish (struct tunnel *t, struct call *c)
         }
         if (t->lns->challenge)
         {
+            if (t->chal_them.challenge)
+                free(t->chal_them.challenge);
             t->chal_them.challenge = malloc(MD_SIG_SIZE);
             if (!(t->chal_them.challenge))
             {
@@ -450,6 +464,7 @@ int control_finish (struct tunnel *t, struct call *c)
                 return -EINVAL;
             }
             mk_challenge (t->chal_them.challenge, MD_SIG_SIZE);
+            t->chal_them.chal_len = MD_SIG_SIZE;
             t->chal_them.ss = SCCCN;
             if (handle_challenge (t, &t->chal_them))
             {
@@ -460,7 +475,8 @@ int control_finish (struct tunnel *t, struct call *c)
                 toss (buf);
                 return -EINVAL;
             };
-            add_challenge_avp (buf, t->chal_them.challenge, MD_SIG_SIZE);
+            add_challenge_avp (buf, t->chal_them.challenge,
+			       t->chal_them.chal_len);
         }
         add_control_hdr (t, c, buf);
         if (packet_dump)

@@ -417,6 +417,27 @@ static void ks8695_hungup(void *driver_data)
 
 /****************************************************************************/
 
+static void ks8695_break(struct tty_struct *tty, int break_state)
+{
+	struct ks8695_uart_tty_port *port = tty->driver_data;
+	struct ksuart volatile *uartp;
+	unsigned long flags;
+
+#if DEBUG
+	printk("ks8695_break(break_state=%d)\n", break_state);
+#endif
+
+	uartp = port->uartp;
+	save_flags(flags); cli();
+	if (break_state == -1)
+		uartp->LCR |= KS8695_UART_LINEC_BRK;
+	else
+		uartp->LCR &= ~KS8695_UART_LINEC_BRK;
+	restore_flags(flags);
+}
+
+/****************************************************************************/
+
 static void ks8695_getserial(void *driver_data, struct serial_struct *s)
 {
 	struct ks8695_uart_tty_port *port = driver_data;
@@ -856,7 +877,7 @@ static int __init ks8695_init(void)
 	ks8695_driver.stop = gs_stop;
 	ks8695_driver.start = gs_start;
 	ks8695_driver.hangup = gs_hangup;
-	//ks8695_driver.break_ctl = ks8695_break;
+	ks8695_driver.break_ctl = ks8695_break;
 	//ks8695_driver.send_xchar = ks8695_send_xchar;
 	//ks8695_driver.wait_until_sent = ks8695_wait_until_sent;
 	ks8695_driver.read_proc = ks8695_read_proc;

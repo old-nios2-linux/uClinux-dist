@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -32,6 +32,7 @@ static const double huge = 1.0e300;
 static double huge = 1.0e300;
 #endif
 
+libm_hidden_proto(ceil)
 #ifdef __STDC__
 	double ceil(double x)
 #else
@@ -46,7 +47,7 @@ static double huge = 1.0e300;
 	if(j0<20) {
 	    if(j0<0) { 	/* raise inexact if x != 0 */
 		if(huge+x>0.0) {/* return 0*sign(x) if |x|<1 */
-		    if(i0<0) {i0=0x80000000;i1=0;} 
+		    if(i0<0) {i0=0x80000000;i1=0;}
 		    else if((i0|i1)!=0) { i0=0x3ff00000;i1=0;}
 		}
 	    } else {
@@ -65,7 +66,7 @@ static double huge = 1.0e300;
 	    if((i1&i)==0) return x;	/* x is integral */
 	    if(huge+x>0.0) { 		/* raise inexact flag */
 		if(i0>0) {
-		    if(j0==20) i0+=1; 
+		    if(j0==20) i0+=1;
 		    else {
 			j = i1 + (1<<(52-j0));
 			if(j<i1) i0+=1;	/* got a carry */
@@ -78,4 +79,4 @@ static double huge = 1.0e300;
 	INSERT_WORDS(x,i0,i1);
 	return x;
 }
-
+libm_hidden_def(ceil)

@@ -84,10 +84,8 @@ void vsyslog(int pri, char *fmt, va_list ap){
             {
                     if (ch == '%' && fmt[1] == 'm') {
                             ++fmt;
-                            prlen = _snprintf(t, fmt_left, "%s",
-                                strerror(saved_errno));
-                            if (prlen >= fmt_left)
-                                    prlen = fmt_left - 1;
+                            SnortSnprintf(t, fmt_left, "%s", strerror(saved_errno));
+                            prlen = SnortStrnlen(t, fmt_left);
                             t += prlen;
                             fmt_left -= prlen;
                     } else {
@@ -99,7 +97,9 @@ void vsyslog(int pri, char *fmt, va_list ap){
             }
             *t = '\0';
 
-	    _vsnprintf(p, tbuf_left, fmt_cpy, ap);
+        fmt_cpy[FMT_LEN - 1] = '\0';
+	    vsnprintf(p, tbuf_left, fmt_cpy, ap);
+        p[tbuf_left - 1] = '\0';
 	    
 	    /* Get connected, output the message to the local logger. */
 	    if (!opened)
@@ -165,7 +165,8 @@ void vsyslog(int pri, char *fmt, va_list ap){
                 tbuf_left -= prlen;             \
         } while (0)
 
-    prlen = snprintf(p, tbuf_left, "<%d>", pri);
+    SnortSnprintf(p, tbuf_left, "<%d>", pri);
+    prlen = SnortStrnlen(p, tbuf_left);
     DEC();
 
     prlen = strftime(p, tbuf_left, "%h %e %T ", localtime(&now));
@@ -176,11 +177,13 @@ void vsyslog(int pri, char *fmt, va_list ap){
     if (LogTag == NULL)
             LogTag = VERSION;
     if (LogTag != NULL) {
-            prlen = snprintf(p, tbuf_left, "%s", LogTag);
+            SnortSnprintf(p, tbuf_left, "%s", LogTag);
+            prlen = SnortStrnlen(p, tbuf_left);
             DEC();
     }
     if (LogStat & LOG_PID) {
-            prlen = snprintf(p, tbuf_left, "[%d]", getpid());
+            SnortSnprintf(p, tbuf_left, "[%d]", getpid());
+            prlen = SnortStrnlen(p, tbuf_left);
             DEC();
     }
     if (LogTag != NULL) {
@@ -201,8 +204,8 @@ void vsyslog(int pri, char *fmt, va_list ap){
     for (t = fmt_cpy, fmt_left = FMT_LEN; (ch = *fmt); ++fmt) {
             if (ch == '%' && fmt[1] == 'm') {
                     ++fmt;
-                    prlen = snprintf(t, fmt_left, "%s",
-                        strerror(saved_errno));
+                    SnortSnprintf(t, fmt_left, "%s", strerror(saved_errno));
+                    prlen = SnortStrnlen(t, fmt_left);
                     if (prlen >= fmt_left)
                             prlen = fmt_left - 1;
                     t += prlen;
@@ -216,7 +219,9 @@ void vsyslog(int pri, char *fmt, va_list ap){
     }
     *t = '\0';
 
+    fmt_cpy[FMT_LEN - 1] = '\0';
     prlen = vsnprintf(p, tbuf_left, fmt_cpy, ap);
+    p[tbuf_left - 1] = '\0';
     DEC();
     cnt = p - tbuf;
 
@@ -268,7 +273,7 @@ void AddEventSource(char *ident)
 	
     // Add your source name as a subkey under the Application 
     // key in the EventLog registry key. 
-    _snprintf(key, sizeof(key), "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s", ident);
+    SnortSnprintf(key, sizeof(key), "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s", ident);
 
     if (RegCreateKey(HKEY_LOCAL_MACHINE, key, &hk)) {
 		printf("Could not create the registry key."); 
@@ -276,7 +281,9 @@ void AddEventSource(char *ident)
 	}
  
     // Set the name of the message file. 
-	GetModuleFileName(NULL, szFilePath, sizeof(szFilePath));
+	GetModuleFileName(NULL, szFilePath, sizeof(szFilePath)-1);
+    szFilePath[ sizeof(szFilePath)-1 ] = 0;
+
     // Add the name to the EventMessageFile subkey. 
  
     if (RegSetValueEx(hk,             // subkey handle 
@@ -322,6 +329,12 @@ unsigned long resolve_host(char *host) {
         else
         {
             /* protecting against malicious DNS servers */
+            if (he->h_length < 0)
+            {
+                printf("Unable to resolve address: %s", host);
+                return 0;
+            }
+
             if(he->h_length <= sizeof(unsigned long))
             {
                 memcpy((char FAR *)&(ip), he->h_addr, he->h_length);

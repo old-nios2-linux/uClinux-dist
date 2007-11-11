@@ -1,7 +1,7 @@
 /* 
- * $Id: db_val.h,v 1.7.4.1 2004/03/05 18:00:34 janakj Exp $ 
+ * $Id: db_val.h,v 1.9 2004/08/24 08:45:12 janakj Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -34,16 +34,16 @@
 
 
 /*
- * Accepted column types
+ * Accepted value types
  */
 typedef enum {
-	DB_INT,
-        DB_DOUBLE,
-	DB_STRING,
-	DB_STR,
-	DB_DATETIME,
-	DB_BLOB,
-	DB_BITMAP
+	DB_INT,        /* 32-bit integer */
+        DB_DOUBLE,     /* double data type */
+	DB_STRING,     /* Zero-terminated string */
+	DB_STR,        /* str structure */
+	DB_DATETIME,   /* Date and time */
+	DB_BLOB,       /* Large binary object */
+	DB_BITMAP      /* Bitmap of flags */
 } db_type_t;
 
 
@@ -70,7 +70,6 @@ typedef struct {
 /*
  * Useful macros for accessing attributes of db_val structure
  */
-
 #define VAL_TYPE(dv)   ((dv)->type)
 #define VAL_NULL(dv)   ((dv)->nul)
 #define VAL_INT(dv)    ((dv)->val.int_val)

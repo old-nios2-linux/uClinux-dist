@@ -74,7 +74,6 @@ struct cs4231_dma_control {
         void		(*enable)(struct cs4231_dma_control *dma_cont, int on);
         int		(*request)(struct cs4231_dma_control *dma_cont, dma_addr_t bus_addr, size_t len);
         unsigned int	(*address)(struct cs4231_dma_control *dma_cont);
-        void		(*reset)(struct snd_cs4231 *chip); 
         void		(*preallocate)(struct snd_cs4231 *chip, struct snd_pcm *pcm); 
 #ifdef EBUS_SUPPORT
 	struct		ebus_dma_info	ebus_info;
@@ -661,11 +660,9 @@ static int snd_cs4231_trigger(struct snd_pcm_substream *substream, int cmd)
 	{
 		unsigned int what = 0;
 		struct snd_pcm_substream *s;
-		struct list_head *pos;
 		unsigned long flags;
 
-		snd_pcm_group_for_each(pos, substream) {
-			s = snd_pcm_group_substream_entry(pos);
+		snd_pcm_group_for_each_entry(s, substream) {
 			if (s == chip->playback_substream) {
 				what |= CS4231_PLAYBACK_ENABLE;
 				snd_pcm_trigger_done(s, substream);
@@ -1216,10 +1213,6 @@ static int __init snd_cs4231_probe(struct snd_cs4231 *chip)
 
 	spin_lock_irqsave(&chip->lock, flags);
 
-
-	/* Reset DMA engine (sbus only).  */
-	chip->p_dma.reset(chip);
-
 	__cs4231_readb(chip, CS4231P(chip, STATUS));	/* clear any pendings IRQ */
 	__cs4231_writeb(chip, 0, CS4231P(chip, STATUS));
 	mb();
@@ -1268,7 +1261,7 @@ static struct snd_pcm_hardware snd_cs4231_playback =
 	.channels_min		= 1,
 	.channels_max		= 2,
 	.buffer_bytes_max	= (32*1024),
-	.period_bytes_min	= 4096,
+	.period_bytes_min	= 64,
 	.period_bytes_max	= (32*1024),
 	.periods_min		= 1,
 	.periods_max		= 1024,
@@ -1288,7 +1281,7 @@ static struct snd_pcm_hardware snd_cs4231_capture =
 	.channels_min		= 1,
 	.channels_max		= 2,
 	.buffer_bytes_max	= (32*1024),
-	.period_bytes_min	= 4096,
+	.period_bytes_min	= 64,
 	.period_bytes_max	= (32*1024),
 	.periods_min		= 1,
 	.periods_max		= 1024,
@@ -1796,7 +1789,7 @@ static irqreturn_t snd_cs4231_sbus_interrupt(int irq, void *dev_id)
 	snd_cs4231_outm(chip, CS4231_IRQ_STATUS, ~CS4231_ALL_IRQS | ~status, 0);
 	spin_unlock_irqrestore(&chip->lock, flags);
 
-	return 0;
+	return IRQ_HANDLED;
 }
 
 /*
@@ -1821,7 +1814,6 @@ static int sbus_dma_request(struct cs4231_dma_control *dma_cont, dma_addr_t bus_
 	if (!(csr & test))
 		goto out;
 	err = -EBUSY;
-	csr = sbus_readl(base->regs + APCCSR);
 	test = APC_XINT_CNVA;
 	if ( base->dir == APC_PLAY )
 		test = APC_XINT_PNVA;
@@ -1862,17 +1854,15 @@ static void sbus_dma_enable(struct cs4231_dma_control *dma_cont, int on)
 
 	spin_lock_irqsave(&base->lock, flags);
 	if (!on) {
-		if (base->dir == APC_PLAY) { 
-			sbus_writel(0, base->regs + base->dir + APCNVA); 
-			sbus_writel(1, base->regs + base->dir + APCC); 
+		sbus_writel(0, base->regs + base->dir + APCNC);
+		sbus_writel(0, base->regs + base->dir + APCNVA);
+		if ( base->dir == APC_PLAY ) {
+			sbus_writel(0, base->regs + base->dir + APCC);
+			sbus_writel(0, base->regs + base->dir + APCVA);
 		}
-		else
-		{
-			sbus_writel(0, base->regs + base->dir + APCNC); 
-			sbus_writel(0, base->regs + base->dir + APCVA); 
-		} 
+
+		udelay(1200);
 	} 
-	udelay(600); 
 	csr = sbus_readl(base->regs + APCCSR);
 	shift = 0;
 	if ( base->dir == APC_PLAY )
@@ -1896,23 +1886,6 @@ static unsigned int sbus_dma_addr(struct cs4231_dma_control *dma_cont)
 	struct sbus_dma_info *base = &dma_cont->sbus_info;
 
         return sbus_readl(base->regs + base->dir + APCVA);
-}
-
-static void sbus_dma_reset(struct snd_cs4231 *chip)
-{
-        sbus_writel(APC_CHIP_RESET, chip->port + APCCSR);
-        sbus_writel(0x00, chip->port + APCCSR);
-        sbus_writel(sbus_readl(chip->port + APCCSR) | APC_CDC_RESET,
-		    chip->port + APCCSR);
-  
-        udelay(20);
-  
-        sbus_writel(sbus_readl(chip->port + APCCSR) & ~APC_CDC_RESET,
-		    chip->port + APCCSR);
-        sbus_writel(sbus_readl(chip->port + APCCSR) | (APC_XINT_ENA |
-		       APC_XINT_PENA |
-		       APC_XINT_CENA),
-	               chip->port + APCCSR);
 }
 
 static void sbus_dma_preallocate(struct snd_cs4231 *chip, struct snd_pcm *pcm)
@@ -1990,14 +1963,12 @@ static int __init snd_cs4231_sbus_create(struct snd_card *card,
 	chip->p_dma.enable = sbus_dma_enable;
 	chip->p_dma.request = sbus_dma_request;
 	chip->p_dma.address = sbus_dma_addr;
-	chip->p_dma.reset = sbus_dma_reset;
 	chip->p_dma.preallocate = sbus_dma_preallocate;
 
 	chip->c_dma.prepare = sbus_dma_prepare;
 	chip->c_dma.enable = sbus_dma_enable;
 	chip->c_dma.request = sbus_dma_request;
 	chip->c_dma.address = sbus_dma_addr;
-	chip->c_dma.reset = sbus_dma_reset;
 	chip->c_dma.preallocate = sbus_dma_preallocate;
 
 	if (request_irq(sdev->irqs[0], snd_cs4231_sbus_interrupt,
@@ -2091,11 +2062,6 @@ static unsigned int _ebus_dma_addr(struct cs4231_dma_control *dma_cont)
 	return ebus_dma_addr(&dma_cont->ebus_info);
 }
 
-static void _ebus_dma_reset(struct snd_cs4231 *chip)
-{
-	return;
-}
-
 static void _ebus_dma_preallocate(struct snd_cs4231 *chip, struct snd_pcm *pcm)
 {
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
@@ -2175,14 +2141,12 @@ static int __init snd_cs4231_ebus_create(struct snd_card *card,
 	chip->p_dma.enable = _ebus_dma_enable;
 	chip->p_dma.request = _ebus_dma_request;
 	chip->p_dma.address = _ebus_dma_addr;
-	chip->p_dma.reset = _ebus_dma_reset;
 	chip->p_dma.preallocate = _ebus_dma_preallocate;
 
 	chip->c_dma.prepare = _ebus_dma_prepare;
 	chip->c_dma.enable = _ebus_dma_enable;
 	chip->c_dma.request = _ebus_dma_request;
 	chip->c_dma.address = _ebus_dma_addr;
-	chip->c_dma.reset = _ebus_dma_reset;
 	chip->c_dma.preallocate = _ebus_dma_preallocate;
 
 	chip->port = ioremap(edev->resource[0].start, 0x10);
@@ -2286,7 +2250,7 @@ static int __init cs4231_init(void)
 			if (!strcmp(edev->prom_node->name, "SUNW,CS4231")) {
 				match = 1;
 			} else if (!strcmp(edev->prom_node->name, "audio")) {
-				char *compat;
+				const char *compat;
 
 				compat = of_get_property(edev->prom_node,
 							 "compatible", NULL);

@@ -72,6 +72,8 @@
 #define	MCF_CLK		66000000
 #elif defined(CONFIG_CLOCK_70MHz)
 #define	MCF_CLK		70000000
+#elif defined(CONFIG_CLOCK_80MHz)
+#define	MCF_CLK		80000000
 #elif defined(CONFIG_CLOCK_100MHz)
 #define	MCF_CLK		100000000
 #elif defined(CONFIG_CLOCK_140MHz)

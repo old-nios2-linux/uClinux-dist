@@ -49,7 +49,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/ioctls.h>
-
+#include <asm/firmware.h>
 #include <asm/vio.h>
 #include <asm/iseries/vio.h>
 #include <asm/iseries/hv_lp_event.h>
@@ -442,7 +442,7 @@ static ssize_t viotap_write(struct file *file, const char *buf,
 	if (op == NULL)
 		return -ENOMEM;
 
-	get_dev_info(file->f_dentry->d_inode, &devi);
+	get_dev_info(file->f_path.dentry->d_inode, &devi);
 
 	/*
 	 * We need to make sure we can send a request.  We use
@@ -532,7 +532,7 @@ static ssize_t viotap_read(struct file *file, char *buf, size_t count,
 	if (op == NULL)
 		return -ENOMEM;
 
-	get_dev_info(file->f_dentry->d_inode, &devi);
+	get_dev_info(file->f_path.dentry->d_inode, &devi);
 
 	/*
 	 * We need to make sure we can send a request.  We use
@@ -612,7 +612,7 @@ static int viotap_ioctl(struct inode *inode, struct file *file,
 	if (op == NULL)
 		return -ENOMEM;
 
-	get_dev_info(file->f_dentry->d_inode, &devi);
+	get_dev_info(file->f_path.dentry->d_inode, &devi);
 
 	down(&reqSem);
 
@@ -777,7 +777,7 @@ static int viotap_open(struct inode *inode, struct file *file)
 	if (op == NULL)
 		return -ENOMEM;
 
-	get_dev_info(file->f_dentry->d_inode, &devi);
+	get_dev_info(file->f_path.dentry->d_inode, &devi);
 
 	/* Note: We currently only support one mode! */
 	if ((devi.devno >= viotape_numdev) || (devi.mode)) {
@@ -822,7 +822,7 @@ static int viotap_release(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	init_completion(&op->com);
 
-	get_dev_info(file->f_dentry->d_inode, &devi);
+	get_dev_info(file->f_path.dentry->d_inode, &devi);
 
 	if (devi.devno >= viotape_numdev) {
 		ret = -ENODEV;
@@ -872,13 +872,13 @@ free_op:
 	return ret;
 }
 
-struct file_operations viotap_fops = {
-	owner: THIS_MODULE,
-	read: viotap_read,
-	write: viotap_write,
-	ioctl: viotap_ioctl,
-	open: viotap_open,
-	release: viotap_release,
+const struct file_operations viotap_fops = {
+	.owner =	THIS_MODULE,
+	.read =		viotap_read,
+	.write =	viotap_write,
+	.ioctl =	viotap_ioctl,
+	.open =		viotap_open,
+	.release =	viotap_release,
 };
 
 /* Handle interrupt events for tape */
@@ -997,6 +997,9 @@ int __init viotap_init(void)
 	int ret;
 	struct proc_dir_entry *e;
 
+	if (!firmware_has_feature(FW_FEATURE_ISERIES))
+		return -ENODEV;
+
 	op_struct_list = NULL;
 	if ((ret = add_op_structs(VIOTAPE_MAXREQ)) < 0) {
 		printk(VIOTAPE_KERN_WARN "couldn't allocate op structs\n");
@@ -1095,15 +1098,10 @@ static int chg_state(int index, unsigned char new_state, struct file *file)
 /* Cleanup */
 static void __exit viotap_exit(void)
 {
-	int ret;
-
 	remove_proc_entry("iSeries/viotape", NULL);
 	vio_unregister_driver(&viotape_driver);
 	class_destroy(tape_class);
-	ret = unregister_chrdev(VIOTAPE_MAJOR, "viotape");
-	if (ret < 0)
-		printk(VIOTAPE_KERN_WARN "Error unregistering device: %d\n",
-				ret);
+	unregister_chrdev(VIOTAPE_MAJOR, "viotape");
 	if (viotape_unitinfo)
 		dma_free_coherent(iSeries_vio_dev,
 				sizeof(viotape_unitinfo[0]) * VIOTAPE_MAX_TAPE,

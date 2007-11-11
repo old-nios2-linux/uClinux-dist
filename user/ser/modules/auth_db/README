@@ -29,6 +29,9 @@ Jan Janak
               1.3.6. calculate_ha1 (integer)
               1.3.7. password_column_2 (string)
               1.3.8. use_rpid (integer)
+              1.3.9. avps_column_int (string)
+              1.3.10. avps_column_str (string)
+              1.3.11. use_domain (integer)
 
         1.4. Exported Functions
 
@@ -81,14 +84,14 @@ Chapter 1. User's Guide
    This is URL of the database to be used. Value of the parameter
    depends on the database module used. For example for mysql and
    postgres modules this is something like
-   sql://username:password@host:port/database. For dbtext module
-   (which stores data in plaintex files) it is directory in which
-   the database resides.
+   mysql://username:password@host:port/database. For dbtext
+   module (which stores data in plaintext files) it is directory
+   in which the database resides.
 
-   Default value is "sql://serro:47serro11@localhost/ser".
+   Default value is "mysql://serro:47serro11@localhost/ser".
 
    Example 1-1. db_url parameter usage
-modparam("auth_db", "db_url", "sql://foo:bar@foobar.org/ser")
+modparam("auth_db", "db_url", "mysql://foo:bar@foobar.org/ser")
      _________________________________________________________
 
 1.3.2. user_column (string)
@@ -201,12 +204,41 @@ modparam("auth_db", "password_column_2", "ha1_2")
 modparam("auth_db", "use_rpid", 1)
      _________________________________________________________
 
+1.3.9. avps_column_int (string)
+
+   List of AVP names separated by | character to be loaded from
+   database if authentication is successful. The type of all AVPs
+   is integer. Values will be loaded from columns with same name
+   from subscriber table. Columns must exist.
+
+   Default value of this parameter is ""
+     _________________________________________________________
+
+1.3.10. avps_column_str (string)
+
+   List of AVP names separated by | character to be loaded from
+   database if authentication is successful. The type of all AVPs
+   is string. Values will be loaded from columns with same name
+   from subscriber table. Columns must exist.
+
+   Default value of this parameter is "rpid".
+     _________________________________________________________
+
+1.3.11. use_domain (integer)
+
+   When enabled accounting modules will use username,domain pair
+   as the key in database queries. If disabled only username will
+   be used.
+
+   Default value of this parameter is 0.
+     _________________________________________________________
+
 1.4. Exported Functions
 
 1.4.1. www_authorize(realm, table)
 
-   The function verifies credencials according to RFC2617. If the
-   credentials are verified sucessfully then the function will
+   The function verifies credentials according to RFC2617. If the
+   credentials are verified successfully then the function will
    succeed and mark the credentials as authorized (marked
    credentials can be later used by some other functions). If the
    function was unable to verify the credentials for some reason
@@ -217,15 +249,15 @@ modparam("auth_db", "use_rpid", 1)
 
      * realm - Realm is a opaque string that the user agent
        should present to the user so he can decide what username
-       and password to use. Usualy this is domain of the host the
-       server is running on.
+       and password to use. Usually this is domain of the host
+       the server is running on.
        If an empty string "" is used then the server will
        generate it from the request. In case of REGISTER requests
        To header field domain will be used (because this header
        field represents a user being registered), for all other
        messages From header field domain will be used.
      * table - Table to be used to lookup usernames and passwords
-       (usualy subscribers table).
+       (usually subscribers table).
 
    Example 1-9. www_authorize usage
 ...
@@ -237,8 +269,8 @@ if (www_authorize("iptel.org", "subscriber")) {
 
 1.4.2. proxy_authorize(realm, table)
 
-   The function verifies credencials according to RFC2617. If the
-   credentials are verified sucessfully then the function will
+   The function verifies credentials according to RFC2617. If the
+   credentials are verified successfully then the function will
    succeed and mark the credentials as authorized (marked
    credentials can be later used by some other functions). If the
    function was unable to verify the credentials for some reason
@@ -249,13 +281,13 @@ if (www_authorize("iptel.org", "subscriber")) {
 
      * realm - Realm is a opaque string that the user agent
        should present to the user so he can decide what username
-       and password to use. Usualy this is domain of the host the
-       server is running on.
+       and password to use. Usually this is domain of the host
+       the server is running on.
        If an empty string "" is used then the server will
        generate it from the request. From header field domain
        will be used as realm.
      * table - Table to be used to lookup usernames and passwords
-       (usualy subscribers table).
+       (usually subscribers table).
 
    Example 1-10. proxy_authorize usage
 ...

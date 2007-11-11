@@ -20,7 +20,6 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/initrd.h>
-#include <linux/ide.h>
 #include <linux/seq_file.h>
 #include <linux/ioport.h>
 #include <linux/console.h>
@@ -33,6 +32,7 @@
 #include <linux/serial.h>
 #include <linux/serial_8250.h>
 #include <linux/bootmem.h>
+#include <linux/pci.h>
 #include <asm/io.h>
 #include <asm/kdump.h>
 #include <asm/prom.h>
@@ -71,7 +71,6 @@
 
 int have_of = 1;
 int boot_cpuid = 0;
-dev_t boot_dev;
 u64 ppc64_pft_size;
 
 /* Pick defaults since we might want to patch instructions
@@ -110,7 +109,7 @@ static void check_smt_enabled(void)
 	dn = of_find_node_by_path("/options");
 
 	if (dn) {
-		smt_option = get_property(dn, "ibm,smt-enabled", NULL);
+		smt_option = of_get_property(dn, "ibm,smt-enabled", NULL);
 
                 if (smt_option) {
 			if (!strcmp(smt_option, "on"))
@@ -171,7 +170,7 @@ void __init setup_paca(int cpu)
 void __init early_setup(unsigned long dt_ptr)
 {
 	/* Identify CPU type */
-	identify_cpu(0);
+	identify_cpu(0, mfspr(SPRN_PVR));
 
 	/* Assume we're on cpu 0 for now. Don't write to the paca yet! */
 	setup_paca(0);
@@ -226,8 +225,8 @@ void early_setup_secondary(void)
 {
 	struct paca_struct *lpaca = get_paca();
 
-	/* Mark enabled in PACA */
-	lpaca->proc_enabled = 0;
+	/* Mark interrupts enabled in PACA */
+	lpaca->soft_enabled = 0;
 
 	/* Initialize hash table for that CPU */
 	htab_initialize_secondary();
@@ -305,10 +304,10 @@ static void __init initialize_cache_info(void)
 
 			size = 0;
 			lsize = cur_cpu_spec->dcache_bsize;
-			sizep = get_property(np, "d-cache-size", NULL);
+			sizep = of_get_property(np, "d-cache-size", NULL);
 			if (sizep != NULL)
 				size = *sizep;
-			lsizep = get_property(np, dc, NULL);
+			lsizep = of_get_property(np, dc, NULL);
 			if (lsizep != NULL)
 				lsize = *lsizep;
 			if (sizep == 0 || lsizep == 0)
@@ -322,10 +321,10 @@ static void __init initialize_cache_info(void)
 
 			size = 0;
 			lsize = cur_cpu_spec->icache_bsize;
-			sizep = get_property(np, "i-cache-size", NULL);
+			sizep = of_get_property(np, "i-cache-size", NULL);
 			if (sizep != NULL)
 				size = *sizep;
-			lsizep = get_property(np, ic, NULL);
+			lsizep = of_get_property(np, ic, NULL);
 			if (lsizep != NULL)
 				lsize = *lsizep;
 			if (sizep == 0 || lsizep == 0)
@@ -392,7 +391,8 @@ void __init setup_system(void)
 	 * setting up the hash table pointers. It also sets up some interrupt-mapping
 	 * related options that will be used by finish_device_tree()
 	 */
-	ppc_md.init_early();
+	if (ppc_md.init_early)
+		ppc_md.init_early();
 
  	/*
 	 * We can discover serial ports now since the above did setup the
@@ -582,14 +582,14 @@ void __init setup_per_cpu_areas(void)
 	char *ptr;
 
 	/* Copy section for each CPU (we discard the original) */
-	size = ALIGN(__per_cpu_end - __per_cpu_start, SMP_CACHE_BYTES);
+	size = ALIGN(__per_cpu_end - __per_cpu_start, PAGE_SIZE);
 #ifdef CONFIG_MODULES
 	if (size < PERCPU_ENOUGH_ROOM)
 		size = PERCPU_ENOUGH_ROOM;
 #endif
 
 	for_each_possible_cpu(i) {
-		ptr = alloc_bootmem_node(NODE_DATA(cpu_to_node(i)), size);
+		ptr = alloc_bootmem_pages_node(NODE_DATA(cpu_to_node(i)), size);
 		if (!ptr)
 			panic("Cannot allocate cpu data for CPU %d\n", i);
 
@@ -598,3 +598,10 @@ void __init setup_per_cpu_areas(void)
 	}
 }
 #endif
+
+
+#ifdef CONFIG_PPC_INDIRECT_IO
+struct ppc_pci_io ppc_pci_io;
+EXPORT_SYMBOL(ppc_pci_io);
+#endif /* CONFIG_PPC_INDIRECT_IO */
+

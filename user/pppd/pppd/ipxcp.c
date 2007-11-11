@@ -1,26 +1,48 @@
 /*
  * ipxcp.c - PPP IPX Control Protocol.
  *
- * Copyright (c) 1989 Carnegie Mellon University.
- * All rights reserved.
+ * Copyright (c) 1984-2000 Carnegie Mellon University. All rights reserved.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that the above copyright notice and this paragraph are
- * duplicated in all such forms and that any documentation,
- * advertising materials, and other materials related to such
- * distribution and use acknowledge that the software was developed
- * by Carnegie Mellon University.  The name of the
- * University may not be used to endorse or promote products derived
- * from this software without specific prior written permission.
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
- * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. The name "Carnegie Mellon University" must not be used to
+ *    endorse or promote products derived from this software without
+ *    prior written permission. For permission or any legal
+ *    details, please contact
+ *      Office of Technology Transfer
+ *      Carnegie Mellon University
+ *      5000 Forbes Avenue
+ *      Pittsburgh, PA  15213-3890
+ *      (412) 268-4387, fax: (412) 268-7395
+ *      tech-transfer@andrew.cmu.edu
+ *
+ * 4. Redistributions of any form whatsoever must retain the following
+ *    acknowledgment:
+ *    "This product includes software developed by Computing Services
+ *     at Carnegie Mellon University (http://www.cmu.edu/computing/)."
+ *
+ * CARNEGIE MELLON UNIVERSITY DISCLAIMS ALL WARRANTIES WITH REGARD TO
+ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS, IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY BE LIABLE
+ * FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #ifdef IPX_CHANGE
-#ifndef lint
-static char rcsid[] = "$Id: ipxcp.c,v 1.1.1.1 1999/11/22 03:47:54 christ Exp $";
-#endif
+
+#define RCSID	"$Id: ipxcp.c,v 1.2 2007/06/08 04:02:38 gerg Exp $"
 
 /*
  * TODO:
@@ -40,6 +62,8 @@ static char rcsid[] = "$Id: ipxcp.c,v 1.1.1.1 1999/11/22 03:47:54 christ Exp $";
 #include "pathnames.h"
 #include "magic.h"
 
+static const char rcsid[] = RCSID;
+
 /* global vars */
 ipxcp_options ipxcp_wantoptions[NUM_PPP];	/* Options that we want to request */
 ipxcp_options ipxcp_gotoptions[NUM_PPP];	/* Options that peer ack'd */
@@ -58,7 +82,7 @@ static void ipxcp_resetci __P((fsm *));	/* Reset our CI */
 static int  ipxcp_cilen __P((fsm *));		/* Return length of our CI */
 static void ipxcp_addci __P((fsm *, u_char *, int *)); /* Add our CI */
 static int  ipxcp_ackci __P((fsm *, u_char *, int));	/* Peer ack'd our CI */
-static int  ipxcp_nakci __P((fsm *, u_char *, int));	/* Peer nak'd our CI */
+static int  ipxcp_nakci __P((fsm *, u_char *, int, int));/* Peer nak'd our CI */
 static int  ipxcp_rejci __P((fsm *, u_char *, int));	/* Peer rej'd our CI */
 static int  ipxcp_reqci __P((fsm *, u_char *, int *, int)); /* Rcv CI */
 static void ipxcp_up __P((fsm *));		/* We're UP */
@@ -90,43 +114,55 @@ static fsm_callbacks ipxcp_callbacks = { /* IPXCP callback routines */
  * Command-line options.
  */
 static int setipxnode __P((char **));
+static void printipxnode __P((option_t *,
+			      void (*)(void *, char *, ...), void *));
 static int setipxname __P((char **));
 
 static option_t ipxcp_option_list[] = {
     { "ipx", o_bool, &ipxcp_protent.enabled_flag,
-      "Enable IPXCP (and IPX)", 1 },
+      "Enable IPXCP (and IPX)", OPT_PRIO | 1 },
     { "+ipx", o_bool, &ipxcp_protent.enabled_flag,
-      "Enable IPXCP (and IPX)", 1 },
+      "Enable IPXCP (and IPX)", OPT_PRIOSUB | OPT_ALIAS | 1 },
     { "noipx", o_bool, &ipxcp_protent.enabled_flag,
-      "Disable IPXCP (and IPX)" },
+      "Disable IPXCP (and IPX)", OPT_PRIOSUB },
     { "-ipx", o_bool, &ipxcp_protent.enabled_flag,
-      "Disable IPXCP (and IPX)" } ,
+      "Disable IPXCP (and IPX)", OPT_PRIOSUB | OPT_ALIAS },
+
     { "ipx-network", o_uint32, &ipxcp_wantoptions[0].our_network,
-      "Set our IPX network number", 0, &ipxcp_wantoptions[0].neg_nn },
+      "Set our IPX network number", OPT_PRIO, &ipxcp_wantoptions[0].neg_nn },
+
     { "ipxcp-accept-network", o_bool, &ipxcp_wantoptions[0].accept_network,
       "Accept peer IPX network number", 1,
       &ipxcp_allowoptions[0].accept_network },
-    { "ipx-node", o_special, setipxnode,
-      "Set IPX node number" },
+
+    { "ipx-node", o_special, (void *)setipxnode,
+      "Set IPX node number", OPT_A2PRINTER, (void *)printipxnode },
+
     { "ipxcp-accept-local", o_bool, &ipxcp_wantoptions[0].accept_local,
       "Accept our IPX address", 1,
       &ipxcp_allowoptions[0].accept_local },
+
     { "ipxcp-accept-remote", o_bool, &ipxcp_wantoptions[0].accept_remote,
       "Accept peer's IPX address", 1,
       &ipxcp_allowoptions[0].accept_remote },
+
     { "ipx-routing", o_int, &ipxcp_wantoptions[0].router,
-      "Set IPX routing proto number", 0,
+      "Set IPX routing proto number", OPT_PRIO,
       &ipxcp_wantoptions[0].neg_router },
+
     { "ipx-router-name", o_special, setipxname,
-      "Set IPX router name" },
+      "Set IPX router name", OPT_PRIO | OPT_A2STRVAL | OPT_STATIC,
+       &ipxcp_wantoptions[0].name },
+
     { "ipxcp-restart", o_int, &ipxcp_fsm[0].timeouttime,
-      "Set timeout for IPXCP" },
+      "Set timeout for IPXCP", OPT_PRIO },
     { "ipxcp-max-terminate", o_int, &ipxcp_fsm[0].maxtermtransmits,
-      "Set max #xmits for IPXCP term-reqs" },
+      "Set max #xmits for IPXCP term-reqs", OPT_PRIO },
     { "ipxcp-max-configure", o_int, &ipxcp_fsm[0].maxconfreqtransmits,
-      "Set max #xmits for IPXCP conf-reqs" },
+      "Set max #xmits for IPXCP conf-reqs", OPT_PRIO },
     { "ipxcp-max-failure", o_int, &ipxcp_fsm[0].maxnakloops,
-      "Set max #conf-naks for IPXCP" },
+      "Set max #conf-naks for IPXCP", OPT_PRIO },
+
     { NULL }
 };
 
@@ -247,26 +283,60 @@ u_char *src, *dst;
     return src;
 }
 
+static int ipx_prio_our, ipx_prio_his;
+
 static int
 setipxnode(argv)
     char **argv;
 {
     char *end;
+    int have_his = 0;
+    u_char our_node[6];
+    u_char his_node[6];
 
-    memset (&ipxcp_wantoptions[0].our_node[0], 0, 6);
-    memset (&ipxcp_wantoptions[0].his_node[0], 0, 6);
+    memset (our_node, 0, 6);
+    memset (his_node, 0, 6);
 
-    end = setipxnodevalue (*argv, &ipxcp_wantoptions[0].our_node[0]);
-    if (*end == ':')
-	end = setipxnodevalue (++end, &ipxcp_wantoptions[0].his_node[0]);
+    end = setipxnodevalue (*argv, our_node);
+    if (*end == ':') {
+	have_his = 1;
+	end = setipxnodevalue (++end, his_node);
+    }
 
     if (*end == '\0') {
         ipxcp_wantoptions[0].neg_node = 1;
+	if (option_priority >= ipx_prio_our) {
+	    memcpy(&ipxcp_wantoptions[0].our_node[0], our_node, 6);
+	    ipx_prio_our = option_priority;
+	}
+	if (have_his && option_priority >= ipx_prio_his) {
+	    memcpy(&ipxcp_wantoptions[0].his_node[0], his_node, 6);
+	    ipx_prio_his = option_priority;
+	}
         return 1;
     }
 
     option_error("invalid parameter '%s' for ipx-node option", *argv);
     return 0;
+}
+
+static void
+printipxnode(opt, printer, arg)
+    option_t *opt;
+    void (*printer) __P((void *, char *, ...));
+    void *arg;
+{
+	unsigned char *p;
+
+	p = ipxcp_wantoptions[0].our_node;
+	if (ipx_prio_our)
+		printer(arg, "%.2x%.2x%.2x%.2x%.2x%.2x",
+			p[0], p[1], p[2], p[3], p[4], p[5]);
+	printer(arg, ":");
+	p = ipxcp_wantoptions[0].his_node;
+	if (ipx_prio_his)
+		printer(arg, "%.2x%.2x%.2x%.2x%.2x%.2x",
+			p[0], p[1], p[2], p[3], p[4], p[5]);
 }
 
 static int
@@ -290,7 +360,7 @@ setipxname (argv)
 	    return 0;
 	}
 
-	if (count >= sizeof (ipxcp_wantoptions[0].name)) {
+	if (count >= sizeof (ipxcp_wantoptions[0].name) - 1) {
 	    option_error("IPX router name is limited to %d characters",
 			 sizeof (ipxcp_wantoptions[0].name) - 1);
 	    return 0;
@@ -298,6 +368,7 @@ setipxname (argv)
 
 	dest[count++] = toupper (ch);
     }
+    dest[count] = 0;
 
     return 1;
 }
@@ -692,10 +763,11 @@ ipxcp_ackci(f, p, len)
  */
 
 static int
-ipxcp_nakci(f, p, len)
+ipxcp_nakci(f, p, len, treat_as_reject)
     fsm *f;
     u_char *p;
     int len;
+    int treat_as_reject;
 {
     u_char citype, cilen, *next;
     u_short s;
@@ -706,11 +778,11 @@ ipxcp_nakci(f, p, len)
     BZERO(&no, sizeof(no));
     try = *go;
 
-    while (len > CILEN_VOID) {
+    while (len >= CILEN_VOID) {
 	GETCHAR (citype, p);
 	GETCHAR (cilen,	 p);
 	len -= cilen;
-	if (len < 0)
+	if (cilen < CILEN_VOID || len < 0)
 	    goto bad;
 	next = &p [cilen - CILEN_VOID];
 
@@ -721,7 +793,9 @@ ipxcp_nakci(f, p, len)
 	    no.neg_nn = 1;
 
 	    GETLONG(l, p);
-	    if (l && ao->accept_network)
+	    if (treat_as_reject)
+		try.neg_nn = 0;
+	    else if (l && ao->accept_network)
 		try.our_network = l;
 	    break;
 
@@ -730,8 +804,10 @@ ipxcp_nakci(f, p, len)
 		goto bad;
 	    no.neg_node = 1;
 
-	    if (!zero_node (p) && ao->accept_local &&
-		! compare_node (p, ho->his_node))
+	    if (treat_as_reject)
+		try.neg_node = 0;
+	    else if (!zero_node (p) && ao->accept_local &&
+		     ! compare_node (p, ho->his_node))
 		copy_node (p, try.our_node);
 	    break;
 
@@ -1265,6 +1341,7 @@ ipxcp_up(f)
 	ipxcp_close(unit, "Interface configuration failed");
 	return;
     }
+    ipxcp_is_up = 1;
 
     /* set the network number for IPX */
     if (!sipxfaddr(unit, go->network, go->our_node)) {
@@ -1274,7 +1351,6 @@ ipxcp_up(f)
 	return;
     }
 
-    ipxcp_is_up = 1;
     np_up(f->unit, PPP_IPX);
 
     /*
@@ -1298,11 +1374,12 @@ ipxcp_down(f)
 {
     IPXCPDEBUG(("ipxcp: down"));
 
-    if (ipxcp_is_up) {
-	ipxcp_is_up = 0;
-	np_down(f->unit, PPP_IPX);
-    }
-    cipxfaddr (f->unit);
+    if (!ipxcp_is_up)
+	return;
+    ipxcp_is_up = 0;
+    np_down(f->unit, PPP_IPX);
+    cipxfaddr(f->unit);
+    sifnpmode(f->unit, PPP_IPX, NPMODE_DROP);
     sifdown(f->unit);
     ipxcp_script (f, _PATH_IPXDOWN);
 }
@@ -1381,7 +1458,7 @@ ipxcp_script(f, script)
     argv[11] = ipparam;
     argv[12] = strpid;
     argv[13] = NULL;
-    run_program(script, argv, 0, NULL, NULL);
+    run_program(script, argv, 0, NULL, NULL, 0);
 }
 
 /*

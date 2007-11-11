@@ -16,7 +16,6 @@
 #include <linux/init.h>
 #include <linux/file.h>
 #include <linux/dcache.h>
-#include <linux/smp_lock.h>
 #include <linux/module.h>
 #include <linux/net.h>
 #include <linux/kthread.h>
@@ -152,7 +151,7 @@ int smbiod_retry(struct smb_sb_info *server)
 {
 	struct list_head *head;
 	struct smb_request *req;
-	pid_t pid = server->conn_pid;
+	struct pid *pid = get_pid(server->conn_pid);
 	int result = 0;
 
 	VERBOSE("state: %d\n", server->state);
@@ -222,7 +221,7 @@ int smbiod_retry(struct smb_sb_info *server)
 	/*
 	 * Note: use the "priv" flag, as a user process may need to reconnect.
 	 */
-	result = kill_proc(pid, SIGUSR1, 1);
+	result = kill_pid(pid, SIGUSR1, 1);
 	if (result) {
 		/* FIXME: this is most likely fatal, umount? */
 		printk(KERN_ERR "smb_retry: signal failed [%d]\n", result);
@@ -233,6 +232,7 @@ int smbiod_retry(struct smb_sb_info *server)
 	/* FIXME: The retried requests should perhaps get a "time boost". */
 
 out:
+	put_pid(pid);
 	return result;
 }
 
@@ -298,8 +298,6 @@ out:
  */
 static int smbiod(void *unused)
 {
-	allow_signal(SIGKILL);
-
 	VERBOSE("SMB Kernel thread starting (%d) ...\n", current->pid);
 
 	for (;;) {

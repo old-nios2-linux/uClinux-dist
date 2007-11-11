@@ -1,32 +1,59 @@
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
+#include <linux/kprobes.h>
+#include <linux/mm.h>
+#include <linux/vmalloc.h>
 #include <asm/alternative.h>
 #include <asm/sections.h>
+#include <asm/pgtable.h>
+#include <asm/mce.h>
+#include <asm/nmi.h>
 
-static int no_replacement    = 0;
-static int smp_alt_once      = 0;
-static int debug_alternative = 0;
+#define MAX_PATCH_LEN (255-1)
 
-static int __init noreplacement_setup(char *s)
-{
-	no_replacement = 1;
-	return 1;
-}
+#ifdef CONFIG_HOTPLUG_CPU
+static int smp_alt_once;
+
 static int __init bootonly(char *str)
 {
 	smp_alt_once = 1;
 	return 1;
 }
+__setup("smp-alt-boot", bootonly);
+#else
+#define smp_alt_once 1
+#endif
+
+static int debug_alternative;
+
 static int __init debug_alt(char *str)
 {
 	debug_alternative = 1;
 	return 1;
 }
-
-__setup("noreplacement", noreplacement_setup);
-__setup("smp-alt-boot", bootonly);
 __setup("debug-alternative", debug_alt);
+
+static int noreplace_smp;
+
+static int __init setup_noreplace_smp(char *str)
+{
+	noreplace_smp = 1;
+	return 1;
+}
+__setup("noreplace-smp", setup_noreplace_smp);
+
+#ifdef CONFIG_PARAVIRT
+static int noreplace_paravirt = 0;
+
+static int __init setup_noreplace_paravirt(char *str)
+{
+	noreplace_paravirt = 1;
+	return 1;
+}
+__setup("noreplace-paravirt", setup_noreplace_paravirt);
+#endif
 
 #define DPRINTK(fmt, args...) if (debug_alternative) \
 	printk(KERN_DEBUG fmt, args)
@@ -123,11 +150,23 @@ static unsigned char** find_nop_table(void)
 
 #endif /* CONFIG_X86_64 */
 
-extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
-extern struct alt_instr __smp_alt_instructions[], __smp_alt_instructions_end[];
-extern u8 *__smp_locks[], *__smp_locks_end[];
+/* Use this to add nops to a buffer, then text_poke the whole buffer. */
+static void add_nops(void *insns, unsigned int len)
+{
+	unsigned char **noptable = find_nop_table();
 
-extern u8 __smp_alt_begin[], __smp_alt_end[];
+	while (len > 0) {
+		unsigned int noplen = len;
+		if (noplen > ASM_NOP_MAX)
+			noplen = ASM_NOP_MAX;
+		memcpy(insns, noptable[noplen], noplen);
+		insns += noplen;
+		len -= noplen;
+	}
+}
+
+extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
+extern u8 *__smp_locks[], *__smp_locks_end[];
 
 /* Replace instructions with better alternatives for this CPU type.
    This runs before SMP is initialized to avoid SMP problems with
@@ -137,17 +176,16 @@ extern u8 __smp_alt_begin[], __smp_alt_end[];
 
 void apply_alternatives(struct alt_instr *start, struct alt_instr *end)
 {
-	unsigned char **noptable = find_nop_table();
 	struct alt_instr *a;
-	u8 *instr;
-	int diff, i, k;
+	char insnbuf[MAX_PATCH_LEN];
 
 	DPRINTK("%s: alt table %p -> %p\n", __FUNCTION__, start, end);
 	for (a = start; a < end; a++) {
+		u8 *instr = a->instr;
 		BUG_ON(a->replacementlen > a->instrlen);
+		BUG_ON(a->instrlen > sizeof(insnbuf));
 		if (!boot_cpu_has(a->cpuid))
 			continue;
-		instr = a->instr;
 #ifdef CONFIG_X86_64
 		/* vsyscall code is not mapped yet. resolve it manually. */
 		if (instr >= (u8 *)VSYSCALL_START && instr < (u8*)VSYSCALL_END) {
@@ -156,42 +194,14 @@ void apply_alternatives(struct alt_instr *start, struct alt_instr *end)
 				__FUNCTION__, a->instr, instr);
 		}
 #endif
-		memcpy(instr, a->replacement, a->replacementlen);
-		diff = a->instrlen - a->replacementlen;
-		/* Pad the rest with nops */
-		for (i = a->replacementlen; diff > 0; diff -= k, i += k) {
-			k = diff;
-			if (k > ASM_NOP_MAX)
-				k = ASM_NOP_MAX;
-			memcpy(a->instr + i, noptable[k], k);
-		}
+		memcpy(insnbuf, a->replacement, a->replacementlen);
+		add_nops(insnbuf + a->replacementlen,
+			 a->instrlen - a->replacementlen);
+		text_poke(instr, insnbuf, a->instrlen);
 	}
 }
 
 #ifdef CONFIG_SMP
-
-static void alternatives_smp_save(struct alt_instr *start, struct alt_instr *end)
-{
-	struct alt_instr *a;
-
-	DPRINTK("%s: alt table %p-%p\n", __FUNCTION__, start, end);
-	for (a = start; a < end; a++) {
-		memcpy(a->replacement + a->replacementlen,
-		       a->instr,
-		       a->instrlen);
-	}
-}
-
-static void alternatives_smp_apply(struct alt_instr *start, struct alt_instr *end)
-{
-	struct alt_instr *a;
-
-	for (a = start; a < end; a++) {
-		memcpy(a->instr,
-		       a->replacement + a->replacementlen,
-		       a->instrlen);
-	}
-}
 
 static void alternatives_smp_lock(u8 **start, u8 **end, u8 *text, u8 *text_end)
 {
@@ -202,21 +212,25 @@ static void alternatives_smp_lock(u8 **start, u8 **end, u8 *text, u8 *text_end)
 			continue;
 		if (*ptr > text_end)
 			continue;
-		**ptr = 0xf0; /* lock prefix */
+		text_poke(*ptr, ((unsigned char []){0xf0}), 1); /* add lock prefix */
 	};
 }
 
 static void alternatives_smp_unlock(u8 **start, u8 **end, u8 *text, u8 *text_end)
 {
-	unsigned char **noptable = find_nop_table();
 	u8 **ptr;
+	char insn[1];
 
+	if (noreplace_smp)
+		return;
+
+	add_nops(insn, 1);
 	for (ptr = start; ptr < end; ptr++) {
 		if (*ptr < text)
 			continue;
 		if (*ptr > text_end)
 			continue;
-		**ptr = noptable[1][0];
+		text_poke(*ptr, insn, 1);
 	};
 }
 
@@ -245,7 +259,7 @@ void alternatives_smp_module_add(struct module *mod, char *name,
 	struct smp_alt_module *smp;
 	unsigned long flags;
 
-	if (no_replacement)
+	if (noreplace_smp)
 		return;
 
 	if (smp_alt_once) {
@@ -282,7 +296,7 @@ void alternatives_smp_module_del(struct module *mod)
 	struct smp_alt_module *item;
 	unsigned long flags;
 
-	if (no_replacement || smp_alt_once)
+	if (smp_alt_once || noreplace_smp)
 		return;
 
 	spin_lock_irqsave(&smp_alt, flags);
@@ -313,7 +327,7 @@ void alternatives_smp_switch(int smp)
 	return;
 #endif
 
-	if (no_replacement || smp_alt_once)
+	if (noreplace_smp || smp_alt_once)
 		return;
 	BUG_ON(!smp && (num_online_cpus() > 1));
 
@@ -322,8 +336,6 @@ void alternatives_smp_switch(int smp)
 		printk(KERN_INFO "SMP alternatives: switching to SMP code\n");
 		clear_bit(X86_FEATURE_UP, boot_cpu_data.x86_capability);
 		clear_bit(X86_FEATURE_UP, cpu_data[0].x86_capability);
-		alternatives_smp_apply(__smp_alt_instructions,
-				       __smp_alt_instructions_end);
 		list_for_each_entry(mod, &smp_alt_modules, next)
 			alternatives_smp_lock(mod->locks, mod->locks_end,
 					      mod->text, mod->text_end);
@@ -331,8 +343,6 @@ void alternatives_smp_switch(int smp)
 		printk(KERN_INFO "SMP alternatives: switching to UP code\n");
 		set_bit(X86_FEATURE_UP, boot_cpu_data.x86_capability);
 		set_bit(X86_FEATURE_UP, cpu_data[0].x86_capability);
-		apply_alternatives(__smp_alt_instructions,
-				   __smp_alt_instructions_end);
 		list_for_each_entry(mod, &smp_alt_modules, next)
 			alternatives_smp_unlock(mod->locks, mod->locks_end,
 						mod->text, mod->text_end);
@@ -342,16 +352,47 @@ void alternatives_smp_switch(int smp)
 
 #endif
 
+#ifdef CONFIG_PARAVIRT
+void apply_paravirt(struct paravirt_patch_site *start,
+		    struct paravirt_patch_site *end)
+{
+	struct paravirt_patch_site *p;
+	char insnbuf[MAX_PATCH_LEN];
+
+	if (noreplace_paravirt)
+		return;
+
+	for (p = start; p < end; p++) {
+		unsigned int used;
+
+		BUG_ON(p->len > MAX_PATCH_LEN);
+		/* prep the buffer with the original instructions */
+		memcpy(insnbuf, p->instr, p->len);
+		used = paravirt_ops.patch(p->instrtype, p->clobbers, insnbuf,
+					  (unsigned long)p->instr, p->len);
+
+		BUG_ON(used > p->len);
+
+		/* Pad the rest with nops */
+		add_nops(insnbuf + used, p->len - used);
+		text_poke(p->instr, insnbuf, p->len);
+	}
+}
+extern struct paravirt_patch_site __start_parainstructions[],
+	__stop_parainstructions[];
+#endif	/* CONFIG_PARAVIRT */
+
 void __init alternative_instructions(void)
 {
 	unsigned long flags;
-	if (no_replacement) {
-		printk(KERN_INFO "(SMP-)alternatives turned off\n");
-		free_init_pages("SMP alternatives",
-				(unsigned long)__smp_alt_begin,
-				(unsigned long)__smp_alt_end);
-		return;
-	}
+
+	/* The patching is not fully atomic, so try to avoid local interruptions
+	   that might execute the to be patched code.
+	   Other CPUs are not running. */
+	stop_nmi();
+#ifdef CONFIG_X86_MCE
+	stop_mce();
+#endif
 
 	local_irq_save(flags);
 	apply_alternatives(__alt_instructions, __alt_instructions_end);
@@ -362,8 +403,6 @@ void __init alternative_instructions(void)
 #ifdef CONFIG_HOTPLUG_CPU
 	if (num_possible_cpus() < 2)
 		smp_alt_once = 1;
-#else
-	smp_alt_once = 1;
 #endif
 
 #ifdef CONFIG_SMP
@@ -372,22 +411,40 @@ void __init alternative_instructions(void)
 			printk(KERN_INFO "SMP alternatives: switching to UP code\n");
 			set_bit(X86_FEATURE_UP, boot_cpu_data.x86_capability);
 			set_bit(X86_FEATURE_UP, cpu_data[0].x86_capability);
-			apply_alternatives(__smp_alt_instructions,
-					   __smp_alt_instructions_end);
 			alternatives_smp_unlock(__smp_locks, __smp_locks_end,
 						_text, _etext);
 		}
 		free_init_pages("SMP alternatives",
-				(unsigned long)__smp_alt_begin,
-				(unsigned long)__smp_alt_end);
+				(unsigned long)__smp_locks,
+				(unsigned long)__smp_locks_end);
 	} else {
-		alternatives_smp_save(__smp_alt_instructions,
-				      __smp_alt_instructions_end);
 		alternatives_smp_module_add(NULL, "core kernel",
 					    __smp_locks, __smp_locks_end,
 					    _text, _etext);
 		alternatives_smp_switch(0);
 	}
 #endif
+ 	apply_paravirt(__parainstructions, __parainstructions_end);
 	local_irq_restore(flags);
+
+	restart_nmi();
+#ifdef CONFIG_X86_MCE
+	restart_mce();
+#endif
+}
+
+/*
+ * Warning:
+ * When you use this code to patch more than one byte of an instruction
+ * you need to make sure that other CPUs cannot execute this code in parallel.
+ * Also no thread must be currently preempted in the middle of these instructions.
+ * And on the local CPU you need to be protected again NMI or MCE handlers
+ * seeing an inconsistent instruction while you patch.
+ */
+void __kprobes text_poke(void *addr, unsigned char *opcode, int len)
+{
+	memcpy(addr, opcode, len);
+	sync_core();
+	/* Could also do a CLFLUSH here to speed up CPU recovery; but
+	   that causes hangs on some VIA CPUs. */
 }

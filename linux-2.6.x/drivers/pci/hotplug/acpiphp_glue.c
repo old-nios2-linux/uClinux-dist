@@ -46,7 +46,6 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/pci_hotplug.h>
-#include <linux/smp_lock.h>
 #include <linux/mutex.h>
 
 #include "../pci.h"
@@ -773,13 +772,13 @@ static int get_gsi_base(acpi_handle handle, u32 *gsi_base)
 		goto out;
 
 	table = obj->buffer.pointer;
-	switch (((acpi_table_entry_header *)table)->type) {
-	case ACPI_MADT_IOSAPIC:
-		*gsi_base = ((struct acpi_table_iosapic *)table)->global_irq_base;
+	switch (((struct acpi_subtable_header *)table)->type) {
+	case ACPI_MADT_TYPE_IO_SAPIC:
+		*gsi_base = ((struct acpi_madt_io_sapic *)table)->global_irq_base;
 		result = 0;
 		break;
-	case ACPI_MADT_IOAPIC:
-		*gsi_base = ((struct acpi_table_ioapic *)table)->global_irq_base;
+	case ACPI_MADT_TYPE_IO_APIC:
+		*gsi_base = ((struct acpi_madt_io_apic *)table)->global_irq_base;
 		result = 0;
 		break;
 	default:
@@ -1283,7 +1282,7 @@ static unsigned int get_slot_status(struct acpiphp_slot *slot)
 /**
  * acpiphp_eject_slot - physically eject the slot
  */
-static int acpiphp_eject_slot(struct acpiphp_slot *slot)
+int acpiphp_eject_slot(struct acpiphp_slot *slot)
 {
 	acpi_status status;
 	struct acpiphp_func *func;
@@ -1367,6 +1366,9 @@ static void program_hpp(struct pci_dev *dev, struct acpiphp_bridge *bridge)
 	if (!(dev->hdr_type == PCI_HEADER_TYPE_NORMAL ||
 			(dev->hdr_type == PCI_HEADER_TYPE_BRIDGE &&
 			(dev->class >> 8) == PCI_CLASS_BRIDGE_PCI)))
+		return;
+
+	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 		return;
 
 	pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE,
@@ -1503,6 +1505,37 @@ static void handle_bridge_insertion(acpi_handle handle, u32 type)
  * ACPI event handlers
  */
 
+static acpi_status
+count_sub_bridges(acpi_handle handle, u32 lvl, void *context, void **rv)
+{
+	int *count = (int *)context;
+	struct acpiphp_bridge *bridge;
+
+	bridge = acpiphp_handle_to_bridge(handle);
+	if (bridge)
+		(*count)++;
+	return AE_OK ;
+}
+
+static acpi_status
+check_sub_bridges(acpi_handle handle, u32 lvl, void *context, void **rv)
+{
+	struct acpiphp_bridge *bridge;
+	char objname[64];
+	struct acpi_buffer buffer = { .length = sizeof(objname),
+				      .pointer = objname };
+
+	bridge = acpiphp_handle_to_bridge(handle);
+	if (bridge) {
+		acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer);
+		dbg("%s: re-enumerating slots under %s\n",
+			__FUNCTION__, objname);
+		acpi_get_name(handle, ACPI_FULL_PATHNAME, &buffer);
+		acpiphp_check_bridge(bridge);
+	}
+	return AE_OK ;
+}
+
 /**
  * handle_hotplug_event_bridge - handle ACPI event on bridges
  *
@@ -1520,6 +1553,7 @@ static void handle_hotplug_event_bridge(acpi_handle handle, u32 type, void *cont
 	struct acpi_buffer buffer = { .length = sizeof(objname),
 				      .pointer = objname };
 	struct acpi_device *device;
+	int num_sub_bridges = 0;
 
 	if (acpi_bus_get_device(handle, &device)) {
 		/* This bridge must have just been physically inserted */
@@ -1528,7 +1562,12 @@ static void handle_hotplug_event_bridge(acpi_handle handle, u32 type, void *cont
 	}
 
 	bridge = acpiphp_handle_to_bridge(handle);
-	if (!bridge) {
+	if (type == ACPI_NOTIFY_BUS_CHECK) {
+		acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, ACPI_UINT32_MAX,
+			count_sub_bridges, &num_sub_bridges, NULL);
+	}
+
+	if (!bridge && !num_sub_bridges) {
 		err("cannot get bridge info\n");
 		return;
 	}
@@ -1539,7 +1578,14 @@ static void handle_hotplug_event_bridge(acpi_handle handle, u32 type, void *cont
 	case ACPI_NOTIFY_BUS_CHECK:
 		/* bus re-enumerate */
 		dbg("%s: Bus check notify on %s\n", __FUNCTION__, objname);
-		acpiphp_check_bridge(bridge);
+		if (bridge) {
+			dbg("%s: re-enumerating slots under %s\n",
+				__FUNCTION__, objname);
+			acpiphp_check_bridge(bridge);
+		}
+		if (num_sub_bridges)
+			acpi_walk_namespace(ACPI_TYPE_DEVICE, handle,
+				ACPI_UINT32_MAX, check_sub_bridges, NULL, NULL);
 		break;
 
 	case ACPI_NOTIFY_DEVICE_CHECK:
@@ -1682,7 +1728,7 @@ int __init acpiphp_glue_init(void)
  *
  * This function frees all data allocated in acpiphp_glue_init()
  */
-void __exit acpiphp_glue_exit(void)
+void  acpiphp_glue_exit(void)
 {
 	acpi_pci_unregister_driver(&acpi_pci_hp_driver);
 }
@@ -1693,14 +1739,10 @@ void __exit acpiphp_glue_exit(void)
  */
 int __init acpiphp_get_num_slots(void)
 {
-	struct list_head *node;
 	struct acpiphp_bridge *bridge;
-	int num_slots;
+	int num_slots = 0;
 
-	num_slots = 0;
-
-	list_for_each (node, &bridge_list) {
-		bridge = (struct acpiphp_bridge *)node;
+	list_for_each_entry (bridge, &bridge_list, list) {
 		dbg("Bus %04x:%02x has %d slot%s\n",
 				pci_domain_nr(bridge->pci_bus),
 				bridge->pci_bus->number, bridge->nr_slots,

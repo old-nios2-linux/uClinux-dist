@@ -117,6 +117,7 @@ MODULE_AUTHOR("Peter Gruber <nokos@gmx.net>");
 MODULE_DESCRIPTION("riptide");
 MODULE_LICENSE("GPL");
 MODULE_SUPPORTED_DEVICE("{{Conexant,Riptide}}");
+MODULE_FIRMWARE("riptide.hex");
 
 static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
@@ -1899,9 +1900,8 @@ snd_riptide_create(struct snd_card *card, struct pci_dev *pci,
 	hwport = (struct riptideport *)chip->port;
 	UNSET_AIE(hwport);
 
-	if (request_irq
-	    (pci->irq, snd_riptide_interrupt, IRQF_DISABLED | IRQF_SHARED,
-	     "RIPTIDE", chip)) {
+	if (request_irq(pci->irq, snd_riptide_interrupt, IRQF_SHARED,
+			"RIPTIDE", chip)) {
 		snd_printk(KERN_ERR "Riptide: unable to grab IRQ %d\n",
 			   pci->irq);
 		snd_riptide_free(chip);
@@ -1919,6 +1919,8 @@ snd_riptide_create(struct snd_card *card, struct pci_dev *pci,
 		snd_riptide_free(chip);
 		return err;
 	}
+
+	snd_card_set_dev(card, &pci->dev);
 
 	*rchip = chip;
 	return 0;

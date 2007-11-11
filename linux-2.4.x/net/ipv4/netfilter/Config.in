@@ -18,6 +18,7 @@ if [ "$CONFIG_IP_NF_CONNTRACK" != "n" ]; then
 	bool   '    PPTP verbose debug' CONFIG_IP_NF_PPTP_DEBUG
   fi
   bool '  Connection tracking flow accounting' CONFIG_IP_NF_CT_ACCT
+  bool '  Connection tracking devices' CONFIG_IP_NF_CT_DEV
   bool '  Connection tracking events' CONFIG_IP_NF_CONNTRACK_EVENTS
 fi
 

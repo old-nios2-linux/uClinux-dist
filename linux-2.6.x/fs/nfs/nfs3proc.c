@@ -16,7 +16,6 @@
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
 #include <linux/lockd/bind.h>
-#include <linux/smp_lock.h>
 #include <linux/nfs_mount.h>
 
 #include "iostat.h"
@@ -253,74 +252,6 @@ static int nfs3_proc_readlink(struct inode *inode, struct page *page,
 	return status;
 }
 
-static int nfs3_proc_read(struct nfs_read_data *rdata)
-{
-	int			flags = rdata->flags;
-	struct inode *		inode = rdata->inode;
-	struct nfs_fattr *	fattr = rdata->res.fattr;
-	struct rpc_message	msg = {
-		.rpc_proc	= &nfs3_procedures[NFS3PROC_READ],
-		.rpc_argp	= &rdata->args,
-		.rpc_resp	= &rdata->res,
-		.rpc_cred	= rdata->cred,
-	};
-	int			status;
-
-	dprintk("NFS call  read %d @ %Ld\n", rdata->args.count,
-			(long long) rdata->args.offset);
-	nfs_fattr_init(fattr);
-	status = rpc_call_sync(NFS_CLIENT(inode), &msg, flags);
-	if (status >= 0)
-		nfs_refresh_inode(inode, fattr);
-	dprintk("NFS reply read: %d\n", status);
-	return status;
-}
-
-static int nfs3_proc_write(struct nfs_write_data *wdata)
-{
-	int			rpcflags = wdata->flags;
-	struct inode *		inode = wdata->inode;
-	struct nfs_fattr *	fattr = wdata->res.fattr;
-	struct rpc_message	msg = {
-		.rpc_proc	= &nfs3_procedures[NFS3PROC_WRITE],
-		.rpc_argp	= &wdata->args,
-		.rpc_resp	= &wdata->res,
-		.rpc_cred	= wdata->cred,
-	};
-	int			status;
-
-	dprintk("NFS call  write %d @ %Ld\n", wdata->args.count,
-			(long long) wdata->args.offset);
-	nfs_fattr_init(fattr);
-	status = rpc_call_sync(NFS_CLIENT(inode), &msg, rpcflags);
-	if (status >= 0)
-		nfs_post_op_update_inode(inode, fattr);
-	dprintk("NFS reply write: %d\n", status);
-	return status < 0? status : wdata->res.count;
-}
-
-static int nfs3_proc_commit(struct nfs_write_data *cdata)
-{
-	struct inode *		inode = cdata->inode;
-	struct nfs_fattr *	fattr = cdata->res.fattr;
-	struct rpc_message	msg = {
-		.rpc_proc	= &nfs3_procedures[NFS3PROC_COMMIT],
-		.rpc_argp	= &cdata->args,
-		.rpc_resp	= &cdata->res,
-		.rpc_cred	= cdata->cred,
-	};
-	int			status;
-
-	dprintk("NFS call  commit %d @ %Ld\n", cdata->args.count,
-			(long long) cdata->args.offset);
-	nfs_fattr_init(fattr);
-	status = rpc_call_sync(NFS_CLIENT(inode), &msg, 0);
-	if (status >= 0)
-		nfs_post_op_update_inode(inode, fattr);
-	dprintk("NFS reply commit: %d\n", status);
-	return status;
-}
-
 /*
  * Create a regular file.
  * For now, we don't implement O_EXCL.
@@ -369,7 +300,7 @@ again:
 
 	/* If the server doesn't support the exclusive creation semantics,
 	 * try again with simple 'guarded' mode. */
-	if (status == NFSERR_NOTSUPP) {
+	if (status == -ENOTSUPP) {
 		switch (arg.createmode) {
 			case NFS3_CREATE_EXCLUSIVE:
 				arg.createmode = NFS3_CREATE_GUARDED;
@@ -404,9 +335,7 @@ again:
 		 * not sure this buys us anything (and I'd have
 		 * to revamp the NFSv3 XDR code) */
 		status = nfs3_proc_setattr(dentry, &fattr, sattr);
-		if (status == 0)
-			nfs_setattr_update_inode(dentry->d_inode, sattr);
-		nfs_refresh_inode(dentry->d_inode, &fattr);
+		nfs_post_op_update_inode(dentry->d_inode, &fattr);
 		dprintk("NFS reply setattr (post-create): %d\n", status);
 	}
 	if (status != 0)
@@ -420,62 +349,42 @@ out:
 static int
 nfs3_proc_remove(struct inode *dir, struct qstr *name)
 {
-	struct nfs_fattr	dir_attr;
-	struct nfs3_diropargs	arg = {
-		.fh		= NFS_FH(dir),
-		.name		= name->name,
-		.len		= name->len
+	struct nfs_removeargs arg = {
+		.fh = NFS_FH(dir),
+		.name.len = name->len,
+		.name.name = name->name,
 	};
-	struct rpc_message	msg = {
-		.rpc_proc	= &nfs3_procedures[NFS3PROC_REMOVE],
-		.rpc_argp	= &arg,
-		.rpc_resp	= &dir_attr,
+	struct nfs_removeres res;
+	struct rpc_message msg = {
+		.rpc_proc = &nfs3_procedures[NFS3PROC_REMOVE],
+		.rpc_argp = &arg,
+		.rpc_resp = &res,
 	};
 	int			status;
 
 	dprintk("NFS call  remove %s\n", name->name);
-	nfs_fattr_init(&dir_attr);
+	nfs_fattr_init(&res.dir_attr);
 	status = rpc_call_sync(NFS_CLIENT(dir), &msg, 0);
-	nfs_post_op_update_inode(dir, &dir_attr);
+	nfs_post_op_update_inode(dir, &res.dir_attr);
 	dprintk("NFS reply remove: %d\n", status);
 	return status;
 }
 
-static int
-nfs3_proc_unlink_setup(struct rpc_message *msg, struct dentry *dir, struct qstr *name)
+static void
+nfs3_proc_unlink_setup(struct rpc_message *msg, struct inode *dir)
 {
-	struct unlinkxdr {
-		struct nfs3_diropargs arg;
-		struct nfs_fattr res;
-	} *ptr;
-
-	ptr = kmalloc(sizeof(*ptr), GFP_KERNEL);
-	if (!ptr)
-		return -ENOMEM;
-	ptr->arg.fh = NFS_FH(dir->d_inode);
-	ptr->arg.name = name->name;
-	ptr->arg.len = name->len;
-	nfs_fattr_init(&ptr->res);
 	msg->rpc_proc = &nfs3_procedures[NFS3PROC_REMOVE];
-	msg->rpc_argp = &ptr->arg;
-	msg->rpc_resp = &ptr->res;
-	return 0;
 }
 
 static int
-nfs3_proc_unlink_done(struct dentry *dir, struct rpc_task *task)
+nfs3_proc_unlink_done(struct rpc_task *task, struct inode *dir)
 {
-	struct rpc_message *msg = &task->tk_msg;
-	struct nfs_fattr	*dir_attr;
-
-	if (nfs3_async_handle_jukebox(task, dir->d_inode))
-		return 1;
-	if (msg->rpc_argp) {
-		dir_attr = (struct nfs_fattr*)msg->rpc_resp;
-		nfs_post_op_update_inode(dir->d_inode, dir_attr);
-		kfree(msg->rpc_argp);
-	}
-	return 0;
+	struct nfs_removeres *res;
+	if (nfs3_async_handle_jukebox(task, dir))
+		return 0;
+	res = task->tk_msg.rpc_resp;
+	nfs_post_op_update_inode(dir, &res->dir_attr);
+	return 1;
 }
 
 static int
@@ -690,8 +599,6 @@ nfs3_proc_readdir(struct dentry *dentry, struct rpc_cred *cred,
 	};
 	int			status;
 
-	lock_kernel();
-
 	if (plus)
 		msg.rpc_proc = &nfs3_procedures[NFS3PROC_READDIRPLUS];
 
@@ -702,7 +609,6 @@ nfs3_proc_readdir(struct dentry *dentry, struct rpc_cred *cred,
 	status = rpc_call_sync(NFS_CLIENT(dir), &msg, 0);
 	nfs_refresh_inode(dir, &dir_attr);
 	dprintk("NFS reply readdir: %d\n", status);
-	unlock_kernel();
 	return status;
 }
 
@@ -889,7 +795,7 @@ static void nfs3_proc_commit_setup(struct nfs_write_data *data, int how)
 static int
 nfs3_proc_lock(struct file *filp, int cmd, struct file_lock *fl)
 {
-	return nlmclnt_proc(filp->f_dentry->d_inode, cmd, fl);
+	return nlmclnt_proc(filp->f_path.dentry->d_inode, cmd, fl);
 }
 
 const struct nfs_rpc_ops nfs_v3_clientops = {
@@ -903,9 +809,6 @@ const struct nfs_rpc_ops nfs_v3_clientops = {
 	.lookup		= nfs3_proc_lookup,
 	.access		= nfs3_proc_access,
 	.readlink	= nfs3_proc_readlink,
-	.read		= nfs3_proc_read,
-	.write		= nfs3_proc_write,
-	.commit		= nfs3_proc_commit,
 	.create		= nfs3_proc_create,
 	.remove		= nfs3_proc_remove,
 	.unlink_setup	= nfs3_proc_unlink_setup,

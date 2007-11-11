@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <linux/pci.h>
 #include <asm/io.h>
 
 struct dma_coherent_mem {
@@ -75,9 +76,9 @@ EXPORT_SYMBOL(dma_free_coherent);
 int dma_declare_coherent_memory(struct device *dev, dma_addr_t bus_addr,
 				dma_addr_t device_addr, size_t size, int flags)
 {
-	void __iomem *mem_base;
+	void __iomem *mem_base = NULL;
 	int pages = size >> PAGE_SHIFT;
-	int bitmap_size = (pages + 31)/32;
+	int bitmap_size = BITS_TO_LONGS(pages) * sizeof(long);
 
 	if ((flags & (DMA_MEMORY_MAP | DMA_MEMORY_IO)) == 0)
 		goto out;
@@ -92,14 +93,12 @@ int dma_declare_coherent_memory(struct device *dev, dma_addr_t bus_addr,
 	if (!mem_base)
 		goto out;
 
-	dev->dma_mem = kmalloc(sizeof(struct dma_coherent_mem), GFP_KERNEL);
+	dev->dma_mem = kzalloc(sizeof(struct dma_coherent_mem), GFP_KERNEL);
 	if (!dev->dma_mem)
 		goto out;
-	memset(dev->dma_mem, 0, sizeof(struct dma_coherent_mem));
-	dev->dma_mem->bitmap = kmalloc(bitmap_size, GFP_KERNEL);
+	dev->dma_mem->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
 	if (!dev->dma_mem->bitmap)
 		goto free1_out;
-	memset(dev->dma_mem->bitmap, 0, bitmap_size);
 
 	dev->dma_mem->virt_base = mem_base;
 	dev->dma_mem->device_base = device_addr;
@@ -112,8 +111,10 @@ int dma_declare_coherent_memory(struct device *dev, dma_addr_t bus_addr,
 	return DMA_MEMORY_IO;
 
  free1_out:
-	kfree(dev->dma_mem->bitmap);
+	kfree(dev->dma_mem);
  out:
+	if (mem_base)
+		iounmap(mem_base);
 	return 0;
 }
 EXPORT_SYMBOL(dma_declare_coherent_memory);
@@ -148,3 +149,29 @@ void *dma_mark_declared_memory_occupied(struct device *dev,
 	return mem->virt_base + (pos << PAGE_SHIFT);
 }
 EXPORT_SYMBOL(dma_mark_declared_memory_occupied);
+
+#ifdef CONFIG_PCI
+/* Many VIA bridges seem to corrupt data for DAC. Disable it here */
+
+int forbid_dac;
+EXPORT_SYMBOL(forbid_dac);
+
+static __devinit void via_no_dac(struct pci_dev *dev)
+{
+	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI && forbid_dac == 0) {
+		printk(KERN_INFO "PCI: VIA PCI bridge detected. Disabling DAC.\n");
+		forbid_dac = 1;
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_VIA, PCI_ANY_ID, via_no_dac);
+
+static int check_iommu(char *s)
+{
+	if (!strcmp(s, "usedac")) {
+		forbid_dac = -1;
+		return 1;
+	}
+	return 0;
+}
+__setup("iommu=", check_iommu);
+#endif

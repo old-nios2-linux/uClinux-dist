@@ -1,2 +1,2 @@
-inet:unknown:/bin/inetd
-#boa:unknown:/bin/boa
+# inet:unknown:/bin/inetd
+# boa:unknown:/bin/boa

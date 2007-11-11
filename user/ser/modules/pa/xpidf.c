@@ -1,9 +1,9 @@
 /*
  * Presence Agent, XPIDF document support
  *
- * $Id: xpidf.c,v 1.5.4.1 2003/11/11 14:32:27 janakj Exp $
+ * $Id: xpidf.c,v 1.11 2004/08/24 09:00:33 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -63,7 +63,7 @@
 #define DOCTYPE "<!DOCTYPE presence PUBLIC \"" PUBLIC_ID "\" \"" XPIDF_DTD "\">"
 #define DOCTYPE_L (sizeof(DOCTYPE) - 1)
 
-#define PRESENTITY_START "<presentity uri=\""
+#define PRESENTITY_START "<presentity uri=\"sip:"
 #define PRESENTITY_START_L (sizeof(PRESENTITY_START) - 1)
 
 #define PRESENTITY_END ";method=SUBSCRIBE\"/>"
@@ -72,10 +72,10 @@
 #define ATOM_STAG "<atom id=\"9r28r49\">"
 #define ATOM_STAG_L (sizeof(ATOM_STAG) - 1)
 
-#define ADDRESS_START "<address uri=\""
+#define ADDRESS_START "<address uri=\"sip:"
 #define ADDRESS_START_L (sizeof(ADDRESS_START) - 1)
 
-#define ADDRESS_END "\">"
+#define ADDRESS_END ";user=ip\" priority=\"0,800000\">"
 #define ADDRESS_END_L (sizeof(ADDRESS_END) - 1)
 
 #define STATUS_OPEN "<status status=\"open\"/>"
@@ -84,8 +84,11 @@
 #define STATUS_CLOSED "<status status=\"closed\"/>"
 #define STATUS_CLOSED_L (sizeof(STATUS_CLOSED) - 1)
 
-#define STATUS_INUSE "<status status=\"inuse\"/>"
-#define STATUS_INUSE_L (sizeof(STATUS_INUSE) - 1)
+#define MSNSUBSTATUS_ONLINE "<msnsubstatus substatus=\"online\"/>\r\n"
+#define MSNSUBSTATUS_ONLINE_L (sizeof(MSNSUBSTATUS_ONLINE)-1)
+
+#define MSNSUBSTATUS_OFFLINE "<msnsubstatus substatus=\"offline\"/>\r\n"
+#define MSNSUBSTATUS_OFFLINE_L (sizeof(MSNSUBSTATUS_OFFLINE)-1)
 
 
 /*
@@ -93,6 +96,12 @@
  */
 int start_xpidf_doc(str* _b, int _l)
 {
+	if (!_b || !_b->s) {
+		LOG(L_ERR, "start_xpidf_doc: Invalid parameter value\n");
+		paerrno = PA_INTERNAL_ERROR;
+		return -1;
+	}
+
 	if ((XML_VERSION_L + 
 	     CRLF_L +
 	     DOCTYPE_L + 
@@ -116,14 +125,19 @@ int start_xpidf_doc(str* _b, int _l)
  */
 int xpidf_add_presentity(str* _b, int _l, str* _uri)
 {
-	if (_l < PRESENTITY_START_L + 4 + _uri->len + PRESENTITY_END_L + CRLF_L) {
+	if (!_b || !_b->s || !_uri || !_uri->s) {
+		LOG(L_ERR, "xpidf_add_presentity: Invalid parameter value\n");
+		paerrno = PA_INTERNAL_ERROR;
+		return -1;
+	}
+
+	if (_l < PRESENTITY_START_L + _uri->len + PRESENTITY_END_L + CRLF_L) {
 		paerrno = PA_SMALL_BUFFER;
-		LOG(L_ERR, "pidf_add_presentity(): Buffer too small\n");
+		LOG(L_ERR, "xpidf_add_presentity(): Buffer too small\n");
 		return -1;
 	}
 
 	str_append(_b, PRESENTITY_START, PRESENTITY_START_L);
-	str_append(_b, "sip:", 4);
 	str_append(_b, _uri->s, _uri->len);
 	str_append(_b, PRESENTITY_END CRLF, PRESENTITY_END_L + CRLF_L);
 	return 0;
@@ -137,22 +151,47 @@ int xpidf_add_address(str* _b, int _l, str* _addr, xpidf_status_t _st)
 {
 	int len = 0;
 	char* p;
+	int len_available = 0;
+	char * available;
 
 	switch(_st) {
-	case XPIDF_ST_OPEN:   p = STATUS_OPEN;   len = STATUS_OPEN_L;   break;
-	case XPIDF_ST_CLOSED: p = STATUS_CLOSED; len = STATUS_CLOSED_L; break;
-	case XPIDF_ST_INUSE:  p = STATUS_INUSE;  len = STATUS_INUSE_L;  break;
-	default:              p = STATUS_CLOSED; len = STATUS_CLOSED_L; break; /* Makes gcc happy */
+	case XPIDF_ST_OPEN:
+		p = STATUS_OPEN; 
+		len = STATUS_OPEN_L;
+		available = MSNSUBSTATUS_ONLINE; 
+		len_available = MSNSUBSTATUS_ONLINE_L;
+		break;
+#if 0
+	case XPIDF_ST_INUSE:     
+		p = STATUS_INUSE; 
+		len = STATUS_INUSE_L;
+		available = MSNSUBSTATUS_OFFLINE; 
+		len_available = MSNSUBSTATUS_OFFLINE_L;
+		break;
+#endif
+	default:
+	case XPIDF_ST_CLOSED: 
+		p = STATUS_CLOSED; 
+		len = STATUS_CLOSED_L;
+		available = MSNSUBSTATUS_OFFLINE; 
+		len_available = MSNSUBSTATUS_OFFLINE_L;
+		break;
+	}
+
+	if (!_b || !_b->s || !_addr || !_addr->s) {
+		LOG(L_ERR, "xpidf_add_address: Invalid parameter value\n");
+		paerrno = PA_INTERNAL_ERROR;
+		return -1;
 	}
 
 	if (_l < (ATOM_STAG_L + 
 		  CRLF_L +
 		  ADDRESS_START_L + 
-		  4 +
 		  _addr->len + 
 		  ADDRESS_END_L + 
 		  CRLF_L +
 		  len + 
+		  len_available + 
 		  CRLF_L +
 		  ADDRESS_ETAG_L + 
 		  CRLF_L +
@@ -166,10 +205,10 @@ int xpidf_add_address(str* _b, int _l, str* _addr, xpidf_status_t _st)
 	}
 
 	str_append(_b, ATOM_STAG CRLF ADDRESS_START, ATOM_STAG_L + CRLF_L + ADDRESS_START_L);
-	str_append(_b, "sip:", 4);
 	str_append(_b, _addr->s, _addr->len);
 	str_append(_b, ADDRESS_END CRLF, ADDRESS_END_L + CRLF_L);
 	str_append(_b, p, len);
+	str_append(_b,available, len_available);
 	str_append(_b, CRLF ADDRESS_ETAG CRLF ATOM_ETAG CRLF, 
 		   CRLF_L + ADDRESS_ETAG_L + CRLF_L + ATOM_ETAG_L + CRLF_L);
 

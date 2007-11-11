@@ -17,6 +17,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/unistd.h>
 #include <linux/file.h>
 #include <linux/fs.h>
@@ -70,6 +71,7 @@ static int sp_stopping = 0;
 #define MTSP_SYSCALL_GETTIME	(MTSP_SYSCALL_BASE + 7)
 #define MTSP_SYSCALL_PIPEFREQ	(MTSP_SYSCALL_BASE + 8)
 #define MTSP_SYSCALL_GETTOD	(MTSP_SYSCALL_BASE + 9)
+#define MTSP_SYSCALL_IOCTL     (MTSP_SYSCALL_BASE + 10)
 
 #define MTSP_O_RDONLY		0x0000
 #define MTSP_O_WRONLY		0x0001
@@ -87,7 +89,7 @@ static int sp_stopping = 0;
 #define MTSP_O_EXCL		0x0800
 #define MTSP_O_BINARY		0x8000
 
-#define SP_VPE 1
+extern int tclimit;
 
 struct apsp_table  {
 	int sp;
@@ -110,7 +112,8 @@ struct apsp_table syscall_command_table[] = {
 	{ MTSP_SYSCALL_CLOSE, __NR_close },
 	{ MTSP_SYSCALL_READ, __NR_read },
 	{ MTSP_SYSCALL_WRITE, __NR_write },
-	{ MTSP_SYSCALL_LSEEK32, __NR_lseek }
+	{ MTSP_SYSCALL_LSEEK32, __NR_lseek },
+	{ MTSP_SYSCALL_IOCTL, __NR_ioctl }
 };
 
 static int sp_syscall(int num, int arg0, int arg1, int arg2, int arg3)
@@ -189,17 +192,22 @@ void sp_work_handle_request(void)
 	struct mtsp_syscall_generic generic;
 	struct mtsp_syscall_ret ret;
 	struct kspd_notifications *n;
+	unsigned long written;
+	mm_segment_t old_fs;
 	struct timeval tv;
 	struct timezone tz;
 	int cmd;
 
 	char *vcwd;
-	mm_segment_t old_fs;
 	int size;
 
 	ret.retval = -1;
 
-	if (!rtlx_read(RTLX_CHANNEL_SYSIO, &sc, sizeof(struct mtsp_syscall), 0)) {
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	if (!rtlx_read(RTLX_CHANNEL_SYSIO, &sc, sizeof(struct mtsp_syscall))) {
+		set_fs(old_fs);
 		printk(KERN_ERR "Expected request but nothing to read\n");
 		return;
 	}
@@ -207,7 +215,8 @@ void sp_work_handle_request(void)
 	size = sc.size;
 
 	if (size) {
-		if (!rtlx_read(RTLX_CHANNEL_SYSIO, &generic, size, 0)) {
+		if (!rtlx_read(RTLX_CHANNEL_SYSIO, &generic, size)) {
+			set_fs(old_fs);
 			printk(KERN_ERR "Expected request but nothing to read\n");
 			return;
 		}
@@ -216,8 +225,8 @@ void sp_work_handle_request(void)
 	/* Run the syscall at the priviledge of the user who loaded the
 	   SP program */
 
-	if (vpe_getuid(SP_VPE))
-		sp_setfsuidgid( vpe_getuid(SP_VPE), vpe_getgid(SP_VPE));
+	if (vpe_getuid(tclimit))
+		sp_setfsuidgid(vpe_getuid(tclimit), vpe_getgid(tclimit));
 
 	switch (sc.cmd) {
 	/* needs the flags argument translating from SDE kit to
@@ -232,13 +241,11 @@ void sp_work_handle_request(void)
  		if ((ret.retval = sp_syscall(__NR_gettimeofday, (int)&tv,
  		                             (int)&tz, 0,0)) == 0)
 		ret.retval = tv.tv_sec;
-
-		ret.errno = errno;
 		break;
 
  	case MTSP_SYSCALL_EXIT:
 		list_for_each_entry(n, &kspd_notifylist, list)
- 			n->kspd_sp_exit(SP_VPE);
+			n->kspd_sp_exit(tclimit);
 		sp_stopping = 1;
 
 		printk(KERN_DEBUG "KSPD got exit syscall from SP exitcode %d\n",
@@ -248,7 +255,7 @@ void sp_work_handle_request(void)
  	case MTSP_SYSCALL_OPEN:
  		generic.arg1 = translate_open_flags(generic.arg1);
 
- 		vcwd = vpe_getcwd(SP_VPE);
+		vcwd = vpe_getcwd(tclimit);
 
  		/* change to the cwd of the process that loaded the SP program */
 		old_fs = get_fs();
@@ -270,18 +277,20 @@ void sp_work_handle_request(void)
 		if (cmd >= 0) {
 			ret.retval = sp_syscall(cmd, generic.arg0, generic.arg1,
 			                        generic.arg2, generic.arg3);
-			ret.errno = errno;
 		} else
  			printk(KERN_WARNING
 			       "KSPD: Unknown SP syscall number %d\n", sc.cmd);
 		break;
  	} /* switch */
 
-	if (vpe_getuid(SP_VPE))
+	if (vpe_getuid(tclimit))
 		sp_setfsuidgid( 0, 0);
 
-	if ((rtlx_write(RTLX_CHANNEL_SYSIO, &ret, sizeof(struct mtsp_syscall_ret), 0))
-	    < sizeof(struct mtsp_syscall_ret))
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	written = rtlx_write(RTLX_CHANNEL_SYSIO, &ret, sizeof(ret));
+	set_fs(old_fs);
+	if (written < sizeof(ret))
 		printk("KSPD: sp_work_handle_request failed to send to SP\n");
 }
 
@@ -301,7 +310,7 @@ static void sp_cleanup(void)
 	for (;;) {
 		unsigned long set;
 		i = j * __NFDBITS;
-		if (i >= fdt->max_fdset || i >= fdt->max_fds)
+		if (i >= fdt->max_fds)
 			break;
 		set = fdt->open_fds->fds_bits[j++];
 		while (set) {
@@ -319,7 +328,7 @@ static void sp_cleanup(void)
 static int channel_open = 0;
 
 /* the work handler */
-static void sp_work(void *data)
+static void sp_work(struct work_struct *unused)
 {
 	if (!channel_open) {
 		if( rtlx_open(RTLX_CHANNEL_SYSIO, 1) != 0) {
@@ -354,11 +363,10 @@ static void startwork(int vpe)
 			return;
 		}
 
-		INIT_WORK(&work, sp_work, NULL);
-		queue_work(workqueue, &work);
-	} else
-		queue_work(workqueue, &work);
+		INIT_WORK(&work, sp_work);
+	}
 
+	queue_work(workqueue, &work);
 }
 
 static void stopwork(int vpe)
@@ -380,7 +388,7 @@ static int kspd_module_init(void)
 
 	notify.start = startwork;
 	notify.stop = stopwork;
-	vpe_notify(SP_VPE, &notify);
+	vpe_notify(tclimit, &notify);
 
 	return 0;
 }

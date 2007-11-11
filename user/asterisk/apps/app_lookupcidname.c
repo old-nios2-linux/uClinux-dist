@@ -1,31 +1,49 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * App to set callerid name from database, based on directory number
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/options.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <asterisk/image.h>
-#include <asterisk/callerid.h>
-#include <asterisk/astdb.h>
-#include <string.h>
-#include <stdlib.h>
+/*! \file
+ *
+ * \brief App to set callerid name from database, based on directory number
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
+ */
 
-static char *tdesc = "Look up CallerID Name from local database";
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 56922 $")
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/options.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/image.h"
+#include "asterisk/callerid.h"
+#include "asterisk/astdb.h"
 
 static char *app = "LookupCIDName";
 
@@ -37,75 +55,49 @@ static char *descrip =
   "Caller*ID name.  Does nothing if no Caller*ID was received on the\n"
   "channel.  This is useful if you do not subscribe to Caller*ID\n"
   "name delivery, or if you want to change the names on some incoming\n"
-  "calls.  Always returns 0.\n";
+  "calls.\n\n"
+  "LookupCIDName is deprecated.  Please use ${DB(cidname/${CALLERID(num)})}\n"
+  "instead.\n";
 
-STANDARD_LOCAL_USER;
 
-LOCAL_USER_DECL;
-
-static int
-lookupcidname_exec (struct ast_channel *chan, void *data)
+static int lookupcidname_exec (struct ast_channel *chan, void *data)
 {
-  char old_cid[144] = "", *num, *name;
-  char new_cid[144];
-  char dbname[64];
-  char shrunknum[64] = "";
-  struct localuser *u;
+	char dbname[64];
+	struct ast_module_user *u;
+	static int dep_warning = 0;
 
-  LOCAL_USER_ADD (u);
-  if (chan->callerid)
-    {
-      strncpy (old_cid, chan->callerid, sizeof (old_cid) - 1);
-      ast_callerid_parse (old_cid, &name, &num);	/* this destroys the original string */
-      if (num)			/* It's possible to get an empty number */
-	strncpy (shrunknum, num, sizeof (shrunknum) - 1);
-      else
-	num = shrunknum;
-      ast_shrink_phone_number (shrunknum);
-      if (!ast_db_get ("cidname", shrunknum, dbname, sizeof (dbname)))
-	{
-	  snprintf (new_cid, sizeof (new_cid), "\"%s\" <%s>", dbname, num);
-	  ast_set_callerid (chan, new_cid, 0);
-	  if (option_verbose > 2)
-	    ast_verbose (VERBOSE_PREFIX_3 "Changed Caller*ID to %s\n",
-			 new_cid);
+	u = ast_module_user_add(chan);
+	if (!dep_warning) {
+		dep_warning = 1;
+		ast_log(LOG_WARNING, "LookupCIDName is deprecated.  Please use ${DB(cidname/${CALLERID(num)})} instead.\n");
 	}
+	if (chan->cid.cid_num) {
+		if (!ast_db_get ("cidname", chan->cid.cid_num, dbname, sizeof (dbname))) {
+			ast_set_callerid (chan, NULL, dbname, NULL);
+			if (option_verbose > 2)
+				ast_verbose (VERBOSE_PREFIX_3 "Changed Caller*ID name to %s\n",
+					     dbname);
+		}
+	}
+	ast_module_user_remove(u);
 
-    }
-  LOCAL_USER_REMOVE (u);
-  return 0;
+	return 0;
 }
 
-int
-unload_module (void)
+static int unload_module(void)
 {
-  STANDARD_HANGUP_LOCALUSERS;
-  return ast_unregister_application (app);
+	int res;
+
+	res = ast_unregister_application (app);
+
+	ast_module_user_hangup_all();
+
+	return res;
 }
 
-int
-load_module (void)
+static int load_module(void)
 {
-  return ast_register_application (app, lookupcidname_exec, synopsis,
-				   descrip);
+	return ast_register_application (app, lookupcidname_exec, synopsis, descrip);
 }
 
-char *
-description (void)
-{
-  return tdesc;
-}
-
-int
-usecount (void)
-{
-  int res;
-  STANDARD_USECOUNT (res);
-  return res;
-}
-
-char *
-key ()
-{
-  return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Look up CallerID Name from local database");

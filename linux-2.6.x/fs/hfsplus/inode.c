@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/mpage.h>
+#include <linux/sched.h>
 
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
@@ -98,7 +99,7 @@ static ssize_t hfsplus_direct_IO(int rw, struct kiocb *iocb,
 		const struct iovec *iov, loff_t offset, unsigned long nr_segs)
 {
 	struct file *file = iocb->ki_filp;
-	struct inode *inode = file->f_dentry->d_inode->i_mapping->host;
+	struct inode *inode = file->f_path.dentry->d_inode->i_mapping->host;
 
 	return blockdev_direct_IO(rw, iocb, inode, inode->i_sb->s_bdev, iov,
 				  offset, nr_segs, hfsplus_get_block, NULL);
@@ -132,6 +133,11 @@ const struct address_space_operations hfsplus_aops = {
 	.direct_IO	= hfsplus_direct_IO,
 #endif
 	.writepages	= hfsplus_writepages,
+};
+
+struct dentry_operations hfsplus_dentry_operations = {
+	.d_hash       = hfsplus_hash_dentry,
+	.d_compare    = hfsplus_compare_dentry,
 };
 
 static struct dentry *hfsplus_file_lookup(struct inode *dir, struct dentry *dentry,
@@ -272,10 +278,10 @@ static int hfsplus_file_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-extern struct inode_operations hfsplus_dir_inode_operations;
+extern const struct inode_operations hfsplus_dir_inode_operations;
 extern struct file_operations hfsplus_dir_operations;
 
-static struct inode_operations hfsplus_file_inode_operations = {
+static const struct inode_operations hfsplus_file_inode_operations = {
 	.lookup		= hfsplus_file_lookup,
 	.truncate	= hfsplus_file_truncate,
 	.permission	= hfsplus_permission,
@@ -291,7 +297,7 @@ static const struct file_operations hfsplus_file_operations = {
 	.write		= do_sync_write,
 	.aio_write	= generic_file_aio_write,
 	.mmap		= generic_file_mmap,
-	.sendfile	= generic_file_sendfile,
+	.splice_read	= generic_file_splice_read,
 	.fsync		= file_fsync,
 	.open		= hfsplus_file_open,
 	.release	= hfsplus_file_release,

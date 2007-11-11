@@ -5831,13 +5831,14 @@ then
     #	anyways and he can override on the configure line.
     with_ssl=""
     for ac_dir in \
-      /usr/local/ssl \
-      /usr/ssl \
-      /local/ssl \
-      /opt/ssl \
-      /usr/sfw \
-      /usr/freeware \
-      ; \
+	  ../../include/openssl \
+#      /usr/local/ssl \
+#      /usr/ssl \
+#      /local/ssl \
+#      /opt/ssl \
+#      /usr/sfw \
+#      /usr/freeware \
+#      ; \
     do
         if test -d "$ac_dir" ; then
             with_ssl=$ac_dir
@@ -5935,7 +5936,7 @@ fi
    then
     ssl="-L$with_ssl/lib32 -lssl -lcrypto $withdl"
    else
-    ssl="-L$with_ssl/lib -lssl -lcrypto $withdl"
+    ssl="-L$with_ssl -lssl -lcrypto $withdl"
   fi
 else
   with_ssl=""
@@ -5945,7 +5946,7 @@ fi
 
 test -n "$with_ssl" && {
 XCFLAGS=$CFLAGS
-CFLAGS="$XCFLAGS -I$with_ssl/include -L$with_ssl/lib"
+CFLAGS="$XCFLAGS -I$with_ssl/include -L$with_ssl"
 XLDFLAGS=$LDFLAGS
 LDFLAGS="-lcrypto"
 echo $ac_n "checking for RAND_status in -lssl""... $ac_c" 1>&6

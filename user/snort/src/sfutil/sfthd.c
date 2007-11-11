@@ -7,6 +7,9 @@
  * Copyright (C) 2003 Sourcefire,Inc.
  * Marc Norton
  *
+ * 3/5/07 - man - fixed memory leak in globnal config to limit 
+ * of one gid=0, or multiple gid!=0 but not both. 
+ * Boris Lytochkin found it.
  */
 
 #include <stdlib.h>
@@ -370,7 +373,26 @@ sfthd_create_threshold_global(	THD_STRUCT * thd,
 				unsigned     ip_mask )
 {
     THD_NODE * sfthd_node;
-	   
+	
+    /* 
+     * check for duplicates, we only allow 
+     * a single gid=0/sid=0 rule,
+     * or multiple gid!=0/sid=0 rules 
+     */
+    if( gen_id == 0)
+    {
+       int i;
+       for(i=0;i<THD_MAX_GENID;i++)
+           if( thd->sfthd_garray [ i ] )
+           {
+               return THD_TOO_MANY_THDOBJ;
+           }
+    }
+    else if(  thd->sfthd_garray [ gen_id ] )
+    {
+       return THD_TOO_MANY_THDOBJ;
+    }
+
     sfthd_node = (THD_NODE*)calloc(1,sizeof(THD_NODE));
     if( !sfthd_node )
     {

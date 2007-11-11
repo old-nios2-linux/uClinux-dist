@@ -51,6 +51,7 @@ static char sccsid[] = "@(#)commands.c	8.2 (Berkeley) 12/15/93";
 #endif	/* CRAY */
 
 #include <string.h>
+#include <strings.h>
 #include <signal.h>
 #include <netdb.h>
 #include <ctype.h>
@@ -1403,7 +1404,6 @@ shell(argc, argv)
 	     * Fire up the shell in the child.
 	     */
 	    register char *shellp, *shellname;
-	    extern char *rindex();
 
 	    shellp = getenv("SHELL");
 	    if (shellp == NULL)
@@ -1690,7 +1690,6 @@ env_init()
 	extern char **environ;
 	register char **epp, *cp;
 	register struct env_lst *ep;
-	extern char *index();
 
 	for (epp = environ; *epp; epp++) {
 		if (cp = index(*epp, '=')) {

@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 #
-#  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+#  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -29,7 +29,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
@@ -69,20 +70,20 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_sigtool_OBJECTS = output.$(OBJEXT) getopt.$(OBJEXT) \
-	memory.$(OBJEXT) cfgparser.$(OBJEXT) misc.$(OBJEXT) \
-	options.$(OBJEXT) vba.$(OBJEXT) sigtool.$(OBJEXT)
+	cfgparser.$(OBJEXT) misc.$(OBJEXT) options.$(OBJEXT) \
+	cdiff.$(OBJEXT) vba.$(OBJEXT) sigtool.$(OBJEXT)
 sigtool_OBJECTS = $(am_sigtool_OBJECTS)
-sigtool_DEPENDENCIES = $(top_builddir)/clamscan/others.o
+sigtool_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) \
+LTCOMPILE = $(LIBTOOL) --tag=CC --mode=compile $(CC) $(DEFS) \
 	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
 	$(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
-LINK = $(LIBTOOL) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+LINK = $(LIBTOOL) --tag=CC --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = $(sigtool_SOURCES)
 DIST_SOURCES = $(sigtool_SOURCES)
@@ -90,10 +91,10 @@ ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
-ADDITIONAL_LIBS = @ADDITIONAL_LIBS@
 AMDEP_FALSE = @AMDEP_FALSE@
 AMDEP_TRUE = @AMDEP_TRUE@
 AMTAR = @AMTAR@
+AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -110,8 +111,14 @@ CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
 CLAMD_LIBS = @CLAMD_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CXX = @CXX@
+CXXCPP = @CXXCPP@
+CXXDEPMODE = @CXXDEPMODE@
+CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DBDIR = @DBDIR@
+
+#sigtool_LDADD = $(top_builddir)/clamscan/others.o 
 DEFS = @DEFS@ -DCL_NOTHREADS
 DEPDIR = @DEPDIR@
 ECHO = @ECHO@
@@ -120,6 +127,8 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
+F77 = @F77@
+FFLAGS = @FFLAGS@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
 GETENT = @GETENT@
 GREP = @GREP@
@@ -133,7 +142,7 @@ LDFLAGS = @LDFLAGS@
 LIBCLAMAV_LIBS = @LIBCLAMAV_LIBS@
 LIBCLAMAV_VERSION = @LIBCLAMAV_VERSION@
 LIBOBJS = @LIBOBJS@
-LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @ADDITIONAL_LIBS@
+LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @THREAD_LIBS@
 LIBTOOL = @LIBTOOL@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
@@ -150,14 +159,20 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 RANLIB = @RANLIB@
+SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+THREAD_LIBS = @THREAD_LIBS@
 TH_SAFE = @TH_SAFE@
 VERSION = @VERSION@
 ac_ct_CC = @ac_ct_CC@
+ac_ct_CXX = @ac_ct_CXX@
+ac_ct_F77 = @ac_ct_F77@
 am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
 am__fastdepCC_TRUE = @am__fastdepCC_TRUE@
+am__fastdepCXX_FALSE = @am__fastdepCXX_FALSE@
+am__fastdepCXX_TRUE = @am__fastdepCXX_TRUE@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -208,19 +223,18 @@ sigtool_SOURCES = \
     $(top_srcdir)/shared/output.h \
     $(top_srcdir)/shared/getopt.c \
     $(top_srcdir)/shared/getopt.h \
-    $(top_srcdir)/shared/memory.c \
-    $(top_srcdir)/shared/memory.h \
     $(top_srcdir)/shared/cfgparser.c \
     $(top_srcdir)/shared/cfgparser.h \
     $(top_srcdir)/shared/misc.c \
     $(top_srcdir)/shared/misc.h \
-    options.c \
-    options.h \
+    $(top_srcdir)/shared/options.c \
+    $(top_srcdir)/shared/options.h \
+    $(top_srcdir)/shared/cdiff.c \
+    $(top_srcdir)/shared/cdiff.h \
     vba.c \
     vba.h \
     sigtool.c
 
-sigtool_LDADD = $(top_builddir)/clamscan/others.o 
 INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
 all: all-am
 
@@ -285,7 +299,7 @@ clean-binPROGRAMS:
 	done
 sigtool$(EXEEXT): $(sigtool_OBJECTS) $(sigtool_DEPENDENCIES) 
 	@rm -f sigtool$(EXEEXT)
-	$(LINK) $(sigtool_LDFLAGS) $(sigtool_OBJECTS) $(sigtool_LDADD) $(LIBS)
+	$(LINK) $(sigtool_LDFLAGS) $(sigtool_OBJECTS) $(sigtool_LDADD) $(LIBCLAMAV_LIBS) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -293,9 +307,9 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cdiff.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cfgparser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/getopt.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/memory.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/misc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/options.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/output.Po@am__quote@
@@ -351,20 +365,6 @@ getopt.obj: $(top_srcdir)/shared/getopt.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o getopt.obj `if test -f '$(top_srcdir)/shared/getopt.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/getopt.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/getopt.c'; fi`
 
-memory.o: $(top_srcdir)/shared/memory.c
-@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT memory.o -MD -MP -MF "$(DEPDIR)/memory.Tpo" -c -o memory.o `test -f '$(top_srcdir)/shared/memory.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/memory.c; \
-@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/memory.Tpo" "$(DEPDIR)/memory.Po"; else rm -f "$(DEPDIR)/memory.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/memory.c' object='memory.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o memory.o `test -f '$(top_srcdir)/shared/memory.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/memory.c
-
-memory.obj: $(top_srcdir)/shared/memory.c
-@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT memory.obj -MD -MP -MF "$(DEPDIR)/memory.Tpo" -c -o memory.obj `if test -f '$(top_srcdir)/shared/memory.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/memory.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/memory.c'; fi`; \
-@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/memory.Tpo" "$(DEPDIR)/memory.Po"; else rm -f "$(DEPDIR)/memory.Tpo"; exit 1; fi
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/memory.c' object='memory.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o memory.obj `if test -f '$(top_srcdir)/shared/memory.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/memory.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/memory.c'; fi`
-
 cfgparser.o: $(top_srcdir)/shared/cfgparser.c
 @am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT cfgparser.o -MD -MP -MF "$(DEPDIR)/cfgparser.Tpo" -c -o cfgparser.o `test -f '$(top_srcdir)/shared/cfgparser.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/cfgparser.c; \
 @am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/cfgparser.Tpo" "$(DEPDIR)/cfgparser.Po"; else rm -f "$(DEPDIR)/cfgparser.Tpo"; exit 1; fi
@@ -392,6 +392,34 @@ misc.obj: $(top_srcdir)/shared/misc.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/misc.c' object='misc.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o misc.obj `if test -f '$(top_srcdir)/shared/misc.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/misc.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/misc.c'; fi`
+
+options.o: $(top_srcdir)/shared/options.c
+@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT options.o -MD -MP -MF "$(DEPDIR)/options.Tpo" -c -o options.o `test -f '$(top_srcdir)/shared/options.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/options.c; \
+@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/options.Tpo" "$(DEPDIR)/options.Po"; else rm -f "$(DEPDIR)/options.Tpo"; exit 1; fi
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/options.c' object='options.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o options.o `test -f '$(top_srcdir)/shared/options.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/options.c
+
+options.obj: $(top_srcdir)/shared/options.c
+@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT options.obj -MD -MP -MF "$(DEPDIR)/options.Tpo" -c -o options.obj `if test -f '$(top_srcdir)/shared/options.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/options.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/options.c'; fi`; \
+@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/options.Tpo" "$(DEPDIR)/options.Po"; else rm -f "$(DEPDIR)/options.Tpo"; exit 1; fi
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/options.c' object='options.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o options.obj `if test -f '$(top_srcdir)/shared/options.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/options.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/options.c'; fi`
+
+cdiff.o: $(top_srcdir)/shared/cdiff.c
+@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT cdiff.o -MD -MP -MF "$(DEPDIR)/cdiff.Tpo" -c -o cdiff.o `test -f '$(top_srcdir)/shared/cdiff.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/cdiff.c; \
+@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/cdiff.Tpo" "$(DEPDIR)/cdiff.Po"; else rm -f "$(DEPDIR)/cdiff.Tpo"; exit 1; fi
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/cdiff.c' object='cdiff.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o cdiff.o `test -f '$(top_srcdir)/shared/cdiff.c' || echo '$(srcdir)/'`$(top_srcdir)/shared/cdiff.c
+
+cdiff.obj: $(top_srcdir)/shared/cdiff.c
+@am__fastdepCC_TRUE@	if $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT cdiff.obj -MD -MP -MF "$(DEPDIR)/cdiff.Tpo" -c -o cdiff.obj `if test -f '$(top_srcdir)/shared/cdiff.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/cdiff.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/cdiff.c'; fi`; \
+@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/cdiff.Tpo" "$(DEPDIR)/cdiff.Po"; else rm -f "$(DEPDIR)/cdiff.Tpo"; exit 1; fi
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$(top_srcdir)/shared/cdiff.c' object='cdiff.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o cdiff.obj `if test -f '$(top_srcdir)/shared/cdiff.c'; then $(CYGPATH_W) '$(top_srcdir)/shared/cdiff.c'; else $(CYGPATH_W) '$(srcdir)/$(top_srcdir)/shared/cdiff.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

@@ -25,7 +25,7 @@
 struct sh_machine_vector mv_unknown __initmv = {
 	mv_name:		"Unknown",
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	mv_nr_irqs:		48,
 #elif defined(CONFIG_CPU_SUBTYPE_SH7708)
 	mv_nr_irqs:		32,

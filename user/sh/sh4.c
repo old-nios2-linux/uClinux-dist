@@ -37,13 +37,19 @@ _PROTOTYPE(char *memcopy, (char *ato, char *from, int nb ));
 
 char **
 eval(ap, f)
-register char **ap;
+char **ap;
 int f;
 {
 	struct wdblock *wb;
 	char **wp;
 	char **wf;
 	jmp_buf ev;
+
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &wp;
+        (void) &ap;
+#endif
 
 	wp = NULL;
 	wb = NULL;
@@ -102,11 +108,15 @@ makenv()
 
 char *
 evalstr(cp, f)
-register char *cp;
+char *cp;
 int f;
 {
 	struct wdblock *wb;
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &cp;
+#endif
 	wb = NULL;
 	if (expand(cp, &wb, f)) {
 		if (wb == NULL || wb->w_nword == 0 || (cp = wb->w_words[0]) == NULL)
@@ -119,12 +129,16 @@ int f;
 
 static int
 expand(cp, wbp, f)
-register char *cp;
+char *cp;
 register struct wdblock **wbp;
 int f;
 {
 	jmp_buf ev;
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &cp;
+#endif
 	gflg = 0;
 	if (cp == NULL)
 		return(0);
@@ -164,7 +178,7 @@ static char *
 blank(f)
 int f;
 {
-	register c, c1;
+	register int c, c1;
 	register char *sp;
 	int scanequals, foundequals;
 
@@ -213,13 +227,14 @@ loop:
 				goto loop;
 			break;
 		}
-		if (scanequals)
+		if (scanequals){
 			if (c == '=') {
 				foundequals = 1;
 				scanequals  = 0;
 			}
 			else if (!letnum(c))
 				scanequals = 0;
+		}
 		*e.linep++ = c;
 	}
 	*e.linep++ = 0;
@@ -263,7 +278,8 @@ int quoted;
 	int otask;
 	struct io *oiop;
 	char *dolp;
-	register char *s, c, *cp;
+	register char *s, c;
+	char *cp = NULL;
 	struct var *vp;
 	int empty;
 
@@ -379,7 +395,7 @@ static int
 grave(quoted)
 int quoted;
 {
-	register char *cp;
+	char *cp;
 	register int i;
 	int pf[2];
 #ifdef EMBED
@@ -387,6 +403,10 @@ int quoted;
 	extern char **environ;
 #endif
 
+#if __GNUC__
+        /* Avoid longjmp clobbering */
+        (void) &cp;
+#endif
 	for (cp = e.iop->argp->aword; *cp != '`'; cp++)
 		if (*cp == 0) {
 			err("no closing `");
@@ -430,7 +450,7 @@ int quoted;
 #else
 	*cp = 0;
 	/* allow trapped signals */
-	for (i=0; i<=NSIG; i++)
+	for (i=0; i<=_NSIG; i++)
 		if (ourtrap[i] && signal(i, SIG_IGN) != SIG_IGN)
 			signal(i, SIG_DFL);
 	dup2(pf[1], 1);
@@ -483,7 +503,7 @@ my_glob(cp, wb)
 char *cp;
 struct wdblock *wb;
 {
-	register i;
+	register int i;
 	register char *pp;
 
 	if (cp == 0)
@@ -531,7 +551,7 @@ register char *pp;
 {
 	register char *np, *cp;
 	char *name, *gp, *dp;
-	int dn, j, n, k;
+	int k;
 	DIR *dirp;
 	struct dirent *de;
 	char dname[NAME_MAX+1];
@@ -612,7 +632,7 @@ static int
 anyspcl(wb)
 register struct wdblock *wb;
 {
-	register i;
+	register int i;
 	register char **wd;
 
 	wd = wb->w_words;
@@ -653,7 +673,7 @@ char *wd;
 register struct wdblock *wb;
 {
 	register struct wdblock *wb2;
-	register nw;
+	register int nw;
 
 	if (wb == NULL)
 		wb = newword(NSTART);
@@ -673,7 +693,7 @@ getwords(wb)
 register struct wdblock *wb;
 {
 	register char **wd;
-	register nb;
+	register int nb;
 
 	if (wb == NULL)
 		return((char **)NULL);

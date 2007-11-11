@@ -27,10 +27,10 @@
 extern void clear_page(void *to);
 extern void copy_page(void *to, void *from);
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define clear_user_page(page, vaddr)	clear_page(page)
 #define copy_user_page(to, from, vaddr)	copy_page(to, from)
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 extern void clear_user_page(void *to, unsigned long address);
 extern void copy_user_page(void *to, void *from, unsigned long address);
 extern void __clear_user_page(void *to, void *orig_to);

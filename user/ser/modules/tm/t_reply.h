@@ -1,7 +1,7 @@
 /*
- * $Id: t_reply.h,v 1.13.6.1 2003/12/02 15:34:39 bogdan Exp $
+ * $Id: t_reply.h,v 1.19 2004/10/01 17:19:19 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,13 +35,16 @@
 
 #include "h_table.h"
 
+
+extern int restart_fr_on_each_reply;
+
 /* reply processing status */
 enum rps {
 	/* something bad happened */
 	RPS_ERROR=0,	
 	/* transaction completed but we still accept the reply */
 	RPS_PUSHED_AFTER_COMPLETION,
-	/* reply dscarded */
+	/* reply discarded */
 	RPS_DISCARDED,
 	/* reply stored for later processing */
 	RPS_STORE,
@@ -89,7 +92,7 @@ int t_retransmit_reply( /* struct sip_msg * */  );
 
 /* send a UAS reply
  * Warning: 'buf' and 'len' should already have been build.
- * returns 1 if everything was OK or -1 for erro
+ * returns 1 if everything was OK or -1 for error
  */
 
 #ifdef _OBSO
@@ -103,7 +106,7 @@ int t_reply_with_body( struct cell *trans, unsigned int code,
 
 
 /* send a UAS reply
- * returns 1 if everything was OK or -1 for erro
+ * returns 1 if everything was OK or -1 for error
  */
 int t_reply( struct cell *t, struct sip_msg * , unsigned int , char * );
 /* the same as t_reply, except it does not claim
@@ -141,6 +144,9 @@ void tm_init_tags();
 /* selects the branch for fwd-ing the reply */
 int t_pick_branch(int inc_branch, int inc_code, struct cell *t, int *res_code);
 
+int fifo_t_reply( FILE *stream, char *response_file );
+
+int unixsock_t_reply(str* msg);
 
 #endif
 

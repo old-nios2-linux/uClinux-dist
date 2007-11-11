@@ -271,7 +271,7 @@ struct NCR5380_hostdata {
 	unsigned long time_expires;		/* in jiffies, set prior to sleeping */
 	int select_time;			/* timer in select for target response */
 	volatile Scsi_Cmnd *selecting;
-	struct work_struct coroutine;		/* our co-routine */
+	struct delayed_work coroutine;		/* our co-routine */
 #ifdef NCR5380_STATS
 	unsigned timebase;			/* Base for time calcs */
 	long time_read[8];			/* time to do reads */
@@ -298,8 +298,8 @@ static void NCR5380_information_transfer(struct Scsi_Host *instance);
 #ifndef DONT_USE_INTR
 static irqreturn_t NCR5380_intr(int irq, void *dev_id);
 #endif
-static void NCR5380_main(void *ptr);
-static void NCR5380_print_options(struct Scsi_Host *instance);
+static void NCR5380_main(struct work_struct *work);
+static void __maybe_unused NCR5380_print_options(struct Scsi_Host *instance);
 #ifdef NDEBUG
 static void NCR5380_print_phase(struct Scsi_Host *instance);
 static void NCR5380_print(struct Scsi_Host *instance);
@@ -307,8 +307,8 @@ static void NCR5380_print(struct Scsi_Host *instance);
 static int NCR5380_abort(Scsi_Cmnd * cmd);
 static int NCR5380_bus_reset(Scsi_Cmnd * cmd);
 static int NCR5380_queue_command(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *));
-static int NCR5380_proc_info(struct Scsi_Host *instance, char *buffer, char **start,
-off_t offset, int length, int inout);
+static int __maybe_unused NCR5380_proc_info(struct Scsi_Host *instance,
+	char *buffer, char **start, off_t offset, int length, int inout);
 
 static void NCR5380_reselect(struct Scsi_Host *instance);
 static int NCR5380_select(struct Scsi_Host *instance, Scsi_Cmnd * cmd, int tag);

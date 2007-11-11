@@ -35,7 +35,6 @@
 #include <linux/nfsd/cache.h>
 #include <linux/nfsd/xdr.h>
 #include <linux/nfsd/syscall.h>
-#include <linux/nfsd/interface.h>
 
 #include <asm/uaccess.h>
 
@@ -111,7 +110,7 @@ static ssize_t (*write_op[])(struct file *, char *, size_t) = {
 
 static ssize_t nfsctl_transaction_write(struct file *file, const char __user *buf, size_t size, loff_t *pos)
 {
-	ino_t ino =  file->f_dentry->d_inode->i_ino;
+	ino_t ino =  file->f_path.dentry->d_inode->i_ino;
 	char *data;
 	ssize_t rv;
 
@@ -123,7 +122,7 @@ static ssize_t nfsctl_transaction_write(struct file *file, const char __user *bu
 		return PTR_ERR(data);
 
 	rv =  write_op[ino](file, data, size);
-	if (rv>0) {
+	if (rv >= 0) {
 		simple_transaction_set(file, rv);
 		rv = size;
 	}
@@ -245,7 +244,7 @@ static ssize_t write_getfs(struct file *file, char *buf, size_t size)
 	}
 	exp_readunlock();
 	if (err == 0)
-		err = res->fh_size + (int)&((struct knfsd_fh*)0)->fh_base;
+		err = res->fh_size + offsetof(struct knfsd_fh, fh_base);
  out:
 	return err;
 }

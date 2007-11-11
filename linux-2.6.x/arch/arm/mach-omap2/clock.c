@@ -27,6 +27,7 @@
 
 #include <asm/arch/clock.h>
 #include <asm/arch/sram.h>
+#include <asm/div64.h>
 
 #include "prcm-regs.h"
 #include "memory.h"
@@ -442,7 +443,7 @@ static long omap2_clk_round_rate(struct clk *clk, unsigned long rate)
 
 /*
  * Check the DLL lock state, and return tue if running in unlock mode.
- * This is needed to compenste for the shifted DLL value in unlock mode.
+ * This is needed to compensate for the shifted DLL value in unlock mode.
  */
 static u32 omap2_dll_force_needed(void)
 {
@@ -1159,8 +1160,8 @@ int __init omap2_clk_init(void)
 	clk_enable(&sync_32k_ick);
 	clk_enable(&omapctrl_ick);
 
-	/* Force the APLLs active during bootup to avoid disabling and
-	 * enabling them unnecessarily. */
+	/* Force the APLLs always active. The clocks are idled
+	 * automatically by hardware. */
 	clk_enable(&apll96_ck);
 	clk_enable(&apll54_ck);
 
@@ -1173,12 +1174,3 @@ int __init omap2_clk_init(void)
 
 	return 0;
 }
-
-static int __init omap2_disable_aplls(void)
-{
-	clk_disable(&apll96_ck);
-	clk_disable(&apll54_ck);
-
-	return 0;
-}
-late_initcall(omap2_disable_aplls);

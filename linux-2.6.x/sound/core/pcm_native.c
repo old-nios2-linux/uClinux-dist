@@ -21,7 +21,6 @@
 
 #include <sound/driver.h>
 #include <linux/mm.h>
-#include <linux/smp_lock.h>
 #include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/time.h>
@@ -713,26 +712,23 @@ static int snd_pcm_action_group(struct action_ops *ops,
 				struct snd_pcm_substream *substream,
 				int state, int do_lock)
 {
-	struct list_head *pos;
 	struct snd_pcm_substream *s = NULL;
 	struct snd_pcm_substream *s1;
 	int res = 0;
 
-	snd_pcm_group_for_each(pos, substream) {
-		s = snd_pcm_group_substream_entry(pos);
+	snd_pcm_group_for_each_entry(s, substream) {
 		if (do_lock && s != substream)
-			spin_lock(&s->self_group.lock);
+			spin_lock_nested(&s->self_group.lock,
+					 SINGLE_DEPTH_NESTING);
 		res = ops->pre_action(s, state);
 		if (res < 0)
 			goto _unlock;
 	}
-	snd_pcm_group_for_each(pos, substream) {
-		s = snd_pcm_group_substream_entry(pos);
+	snd_pcm_group_for_each_entry(s, substream) {
 		res = ops->do_action(s, state);
 		if (res < 0) {
 			if (ops->undo_action) {
-				snd_pcm_group_for_each(pos, substream) {
-					s1 = snd_pcm_group_substream_entry(pos);
+				snd_pcm_group_for_each_entry(s1, substream) {
 					if (s1 == s) /* failed stream */
 						break;
 					ops->undo_action(s1, state);
@@ -742,15 +738,13 @@ static int snd_pcm_action_group(struct action_ops *ops,
 			goto _unlock;
 		}
 	}
-	snd_pcm_group_for_each(pos, substream) {
-		s = snd_pcm_group_substream_entry(pos);
+	snd_pcm_group_for_each_entry(s, substream) {
 		ops->post_action(s, state);
 	}
  _unlock:
 	if (do_lock) {
 		/* unlock streams */
-		snd_pcm_group_for_each(pos, substream) {
-			s1 = snd_pcm_group_substream_entry(pos);
+		snd_pcm_group_for_each_entry(s1, substream) {
 			if (s1 != substream)
 				spin_unlock(&s1->self_group.lock);
 			if (s1 == s)	/* end */
@@ -1439,7 +1433,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream)
 {
 	struct snd_card *card;
 	struct snd_pcm_runtime *runtime;
-	struct list_head *pos;
+	struct snd_pcm_substream *s;
 	int result = 0;
 	int i, num_drecs;
 	struct drain_rec *drec, drec_tmp, *d;
@@ -1474,8 +1468,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream)
 
 	/* count only playback streams */
 	num_drecs = 0;
-	snd_pcm_group_for_each(pos, substream) {
-		struct snd_pcm_substream *s = snd_pcm_group_substream_entry(pos);
+	snd_pcm_group_for_each_entry(s, substream) {
 		runtime = s->runtime;
 		if (s->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			d = &drec[num_drecs++];
@@ -1494,7 +1487,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream)
 
 	snd_pcm_stream_lock_irq(substream);
 	/* resume pause */
-	if (runtime->status->state == SNDRV_PCM_STATE_PAUSED)
+	if (substream->runtime->status->state == SNDRV_PCM_STATE_PAUSED)
 		snd_pcm_pause(substream, 0);
 
 	/* pre-start/stop - all running streams are changed to DRAINING state */
@@ -1604,7 +1597,7 @@ static struct file *snd_pcm_file_fd(int fd)
 	file = fget(fd);
 	if (!file)
 		return NULL;
-	inode = file->f_dentry->d_inode;
+	inode = file->f_path.dentry->d_inode;
 	if (!S_ISCHR(inode->i_mode) ||
 	    imajor(inode) != snd_major) {
 		fput(file);
@@ -1675,7 +1668,7 @@ static void relink_to_local(struct snd_pcm_substream *substream)
 
 static int snd_pcm_unlink(struct snd_pcm_substream *substream)
 {
-	struct list_head *pos;
+	struct snd_pcm_substream *s;
 	int res = 0;
 
 	down_write(&snd_pcm_link_rwsem);
@@ -1687,8 +1680,8 @@ static int snd_pcm_unlink(struct snd_pcm_substream *substream)
 	list_del(&substream->link_list);
 	substream->group->count--;
 	if (substream->group->count == 1) {	/* detach the last stream, too */
-		snd_pcm_group_for_each(pos, substream) {
-			relink_to_local(snd_pcm_group_substream_entry(pos));
+		snd_pcm_group_for_each_entry(s, substream) {
+			relink_to_local(s);
 			break;
 		}
 		kfree(substream->group);
@@ -3027,7 +3020,7 @@ static struct page * snd_pcm_mmap_status_nopage(struct vm_area_struct *area,
 	struct page * page;
 	
 	if (substream == NULL)
-		return NOPAGE_OOM;
+		return NOPAGE_SIGBUS;
 	runtime = substream->runtime;
 	page = virt_to_page(runtime->status);
 	get_page(page);
@@ -3070,7 +3063,7 @@ static struct page * snd_pcm_mmap_control_nopage(struct vm_area_struct *area,
 	struct page * page;
 	
 	if (substream == NULL)
-		return NOPAGE_OOM;
+		return NOPAGE_SIGBUS;
 	runtime = substream->runtime;
 	page = virt_to_page(runtime->control);
 	get_page(page);
@@ -3131,18 +3124,18 @@ static struct page *snd_pcm_mmap_data_nopage(struct vm_area_struct *area,
 	size_t dma_bytes;
 	
 	if (substream == NULL)
-		return NOPAGE_OOM;
+		return NOPAGE_SIGBUS;
 	runtime = substream->runtime;
 	offset = area->vm_pgoff << PAGE_SHIFT;
 	offset += address - area->vm_start;
-	snd_assert((offset % PAGE_SIZE) == 0, return NOPAGE_OOM);
+	snd_assert((offset % PAGE_SIZE) == 0, return NOPAGE_SIGBUS);
 	dma_bytes = PAGE_ALIGN(runtime->dma_bytes);
 	if (offset > dma_bytes - PAGE_SIZE)
 		return NOPAGE_SIGBUS;
 	if (substream->ops->page) {
 		page = substream->ops->page(substream, offset);
 		if (! page)
-			return NOPAGE_OOM;
+			return NOPAGE_OOM; /* XXX: is this really due to OOM? */
 	} else {
 		vaddr = runtime->dma_area + offset;
 		page = virt_to_page(vaddr);
@@ -3424,7 +3417,7 @@ out:
  *  Register section
  */
 
-struct file_operations snd_pcm_f_ops[2] = {
+const struct file_operations snd_pcm_f_ops[2] = {
 	{
 		.owner =		THIS_MODULE,
 		.write =		snd_pcm_write,

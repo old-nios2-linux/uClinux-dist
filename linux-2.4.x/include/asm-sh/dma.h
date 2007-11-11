@@ -14,13 +14,13 @@
 /* XXX: This is not applicable to SuperH, just needed for alloc_bootmem */
 #define MAX_DMA_ADDRESS      (PAGE_OFFSET+0x10000000)
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define SAR ((unsigned long[]){0xa4000020,0xa4000030,0xa4000040,0xa4000050})
 #define DAR ((unsigned long[]){0xa4000024,0xa4000034,0xa4000044,0xa4000054})
 #define DMATCR ((unsigned long[]){0xa4000028,0xa4000038,0xa4000048,0xa4000058})
 #define CHCR ((unsigned long[]){0xa400002c,0xa400003c,0xa400004c,0xa400005c})
 #define DMAOR 0xa4000060UL
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define SAR ((unsigned long[]){0xbfa00000,0xbfa00010,0xbfa00020,0xbfa00030})
 #define DAR ((unsigned long[]){0xbfa00004,0xbfa00014,0xbfa00024,0xbfa00034})
 #define DMATCR ((unsigned long[]){0xbfa00008,0xbfa00018,0xbfa00028,0xbfa00038})

@@ -60,6 +60,7 @@
 #include <ctype.h>
   
 #include "acsmx.h"
+#include "util.h"
   
 #define MEMASSERT(p,s) if(!p){fprintf(stderr,"ACSM-No Memory: %s!\n",s);exit(0);}
 
@@ -383,7 +384,7 @@ Build_NFA (ACSM_STRUCT * acsm)
 
               if( !px )
               {
-                printf("*** Out of memory Initializing Aho Corasick in acsmx.c ****");
+                FatalError("*** Out of memory Initializing Aho Corasick in acsmx.c ****");
               }
 
               /* Insert at front of MatchList */ 
@@ -743,7 +744,8 @@ main (int argc, char **argv)
       exit (0);
     }
   acsm = acsmNew ();
-  strcpy (text, argv[1]);
+  strncpy(text, argv[1], sizeof(text) - 1);
+  text[sizeof(text) - 1] = '\0';
   for (i = 1; i < argc; i++)
     if (strcmp (argv[i], "-nocase") == 0)
       nocase = 1;

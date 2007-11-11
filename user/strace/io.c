@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: io.c,v 1.10 2001/07/10 13:48:44 hughesj Exp $
+ *	$Id: io.c,v 1.21 2006/12/13 17:08:08 ldv Exp $
  */
 
 #include "defs.h"
@@ -78,38 +78,72 @@ struct tcb *tcp;
 void
 tprint_iov(tcp, len, addr)
 struct tcb * tcp;
-int len;
-long addr;
+unsigned long len;
+unsigned long addr;
 {
-	struct iovec *iov;
-	int i;
-
+#if defined(LINUX) && SUPPORTED_PERSONALITIES > 1
+	union {
+		struct { u_int32_t base; u_int32_t len; } iov32;
+		struct { u_int64_t base; u_int64_t len; } iov64;
+	} iov;
+#define sizeof_iov \
+  (personality_wordsize[current_personality] == 4 \
+   ? sizeof(iov.iov32) : sizeof(iov.iov64))
+#define iov_iov_base \
+  (personality_wordsize[current_personality] == 4 \
+   ? (u_int64_t) iov.iov32.base : iov.iov64.base)
+#define iov_iov_len \
+  (personality_wordsize[current_personality] == 4 \
+   ? (u_int64_t) iov.iov32.len : iov.iov64.len)
+#else
+	struct iovec iov;
+#define sizeof_iov sizeof(iov)
+#define iov_iov_base iov.iov_base
+#define iov_iov_len iov.iov_len
+#endif
+	unsigned long size, cur, end, abbrev_end;
+	int failed = 0;
 
 	if (!len) {
 		tprintf("[]");
 		return;
 	}
-	  
-	if ((iov = (struct iovec *) malloc(len * sizeof *iov)) == NULL) {
-		fprintf(stderr, "No memory");
+	size = len * sizeof_iov;
+	end = addr + size;
+	if (!verbose(tcp) || size / sizeof_iov != len || end < addr) {
+		tprintf("%#lx", addr);
 		return;
 	}
-	if (umoven(tcp, addr,
-		   len * sizeof *iov, (char *) iov) < 0) {
-		tprintf("%#lx", tcp->u_arg[1]);
+	if (abbrev(tcp)) {
+		abbrev_end = addr + max_strlen * sizeof_iov;
+		if (abbrev_end < addr)
+			abbrev_end = end;
 	} else {
-		tprintf("[");
-		for (i = 0; i < len; i++) {
-			if (i)
-				tprintf(", ");
-			tprintf("{");
-			printstr(tcp, (long) iov[i].iov_base,
-				iov[i].iov_len);
-			tprintf(", %lu}", (unsigned long)iov[i].iov_len);
-		}
-		tprintf("]");
+		abbrev_end = end;
 	}
-	free((char *) iov);
+	tprintf("[");
+	for (cur = addr; cur < end; cur += sizeof_iov) {
+		if (cur > addr)
+			tprintf(", ");
+		if (cur >= abbrev_end) {
+			tprintf("...");
+			break;
+		}
+		if (umoven(tcp, cur, sizeof_iov, (char *) &iov) < 0) {
+			tprintf("?");
+			failed = 1;
+			break;
+		}
+		tprintf("{");
+		printstr(tcp, (long) iov_iov_base, iov_iov_len);
+		tprintf(", %lu}", (unsigned long)iov_iov_len);
+	}
+	tprintf("]");
+	if (failed)
+		tprintf(" %#lx", addr);
+#undef sizeof_iov
+#undef iov_iov_base
+#undef iov_iov_len
 }
 
 int
@@ -161,8 +195,7 @@ struct tcb *tcp;
 		tprintf(", %lu, %ld", tcp->u_arg[2], tcp->u_arg[3]);
 #else
 		tprintf(", %lu, %llu", tcp->u_arg[2],
-				(((unsigned long long) tcp->u_arg[4]) << 32
-				 | tcp->u_arg[3]));
+			LONG_LONG(tcp->u_arg[3], tcp->u_arg[4]));
 #endif
 	}
 	return 0;
@@ -180,8 +213,7 @@ struct tcb *tcp;
 		tprintf(", %lu, %ld", tcp->u_arg[2], tcp->u_arg[3]);
 #else
 		tprintf(", %lu, %llu", tcp->u_arg[2],
-				(((unsigned long long) tcp->u_arg[4]) << 32
-				 | tcp->u_arg[3]));
+			LONG_LONG(tcp->u_arg[3], tcp->u_arg[4]));
 #endif
 	}
 	return 0;
@@ -198,8 +230,8 @@ struct tcb *tcp;
 {
 	if (entering(tcp)) {
 		tprintf("%ld, %ld, %llu, %lu", tcp->u_arg[0], tcp->u_arg[1],
-			(((unsigned long long) tcp->u_arg[3]) << 32 |
-			 tcp->u_arg[2]), tcp->u_arg[4]);
+			LONG_LONG(tcp->u_arg[2], tcp->u_arg[3]),
+			tcp->u_arg[4]);
 	} else {
 		off_t offset;
 
@@ -231,6 +263,18 @@ struct tcb *tcp;
 #endif /* FREEBSD */
 
 #ifdef LINUX
+
+/* The SH4 ABI does allow long longs in odd-numbered registers, but
+   does not allow them to be split between registers and memory - and
+   there are only four argument registers for normal functions.  As a
+   result pread takes an extra padding argument before the offset.  This
+   was changed late in the 2.4 series (around 2.4.20).  */
+#if defined(SH)
+#define PREAD_OFFSET_ARG 4
+#else
+#define PREAD_OFFSET_ARG 3
+#endif
+
 int
 sys_pread(tcp)
 struct tcb *tcp;
@@ -242,8 +286,9 @@ struct tcb *tcp;
 			tprintf("%#lx", tcp->u_arg[1]);
 		else
 			printstr(tcp, tcp->u_arg[1], tcp->u_rval);
+		ALIGN64 (tcp, PREAD_OFFSET_ARG); /* PowerPC alignment restriction */
 		tprintf(", %lu, %llu", tcp->u_arg[2],
-			*(unsigned long long *)&tcp->u_arg[3]);
+			*(unsigned long long *)&tcp->u_arg[PREAD_OFFSET_ARG]);
 	}
 	return 0;
 }
@@ -255,8 +300,9 @@ struct tcb *tcp;
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
 		printstr(tcp, tcp->u_arg[1], tcp->u_arg[2]);
+		ALIGN64 (tcp, PREAD_OFFSET_ARG); /* PowerPC alignment restriction */
 		tprintf(", %lu, %llu", tcp->u_arg[2],
-			*(unsigned long long *)&tcp->u_arg[3]);
+			*(unsigned long long *)&tcp->u_arg[PREAD_OFFSET_ARG]);
 	}
 	return 0;
 }
@@ -275,6 +321,25 @@ struct tcb *tcp;
 			tprintf("%#lx", tcp->u_arg[2]);
 		else
 			tprintf("[%lu]", offset);
+		tprintf(", %lu", tcp->u_arg[3]);
+	}
+	return 0;
+}
+
+int
+sys_sendfile64(tcp)
+struct tcb *tcp;
+{
+	if (entering(tcp)) {
+		loff_t offset;
+
+		tprintf("%ld, %ld, ", tcp->u_arg[0], tcp->u_arg[1]);
+		if (!tcp->u_arg[2])
+			tprintf("NULL");
+		else if (umove(tcp, tcp->u_arg[2], &offset) < 0)
+			tprintf("%#lx", tcp->u_arg[2]);
+		else
+			tprintf("[%llu]", (unsigned long long int) offset);
 		tprintf(", %lu", tcp->u_arg[3]);
 	}
 	return 0;
@@ -315,25 +380,30 @@ struct tcb *tcp;
 	return 0;
 }
 #endif
- 
+
 int
 sys_ioctl(tcp)
 struct tcb *tcp;
 {
-	char *symbol;
+	const struct ioctlent *iop;
 
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
-		symbol = ioctl_lookup(tcp->u_arg[1]);
-		if (symbol)
-			tprintf("%s", symbol);
-		else
+		iop = ioctl_lookup(tcp->u_arg[1]);
+		if (iop) {
+			tprintf("%s", iop->symbol);
+			while ((iop = ioctl_next_match(iop)))
+				tprintf(" or %s", iop->symbol);
+		} else
 			tprintf("%#lx", tcp->u_arg[1]);
 		ioctl_decode(tcp, tcp->u_arg[1], tcp->u_arg[2]);
 	}
 	else {
-		if (ioctl_decode(tcp, tcp->u_arg[1], tcp->u_arg[2]) == 0)
+		int ret;
+		if (!(ret = ioctl_decode(tcp, tcp->u_arg[1], tcp->u_arg[2])))
 			tprintf(", %#lx", tcp->u_arg[2]);
+		else
+			return ret - 1;
 	}
 	return 0;
 }

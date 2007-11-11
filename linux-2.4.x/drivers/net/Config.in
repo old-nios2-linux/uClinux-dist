@@ -67,7 +67,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
          source drivers/acorn/net/Config.in
       fi
-      if [ "$CONFIG_ARCH_VC547X" = "y" ]; then
+      if [ "$CONFIG_ARCH_VC547X" = "y" -o "$CONFIG_MACH_UC5471DSP" = "y" -o "$CONFIG_MACH_SJ5471ENG" = "y" ]; then
          tristate 'C5471 LAN ethernet' CONFIG_C5471_NET
          if [ "$CONFIG_C5471_NET" = "y" ]; then
            int 'C5471 LAN rate (0=Auto,10,100)' C5471_LAN_RATE 0

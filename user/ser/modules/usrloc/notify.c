@@ -1,7 +1,7 @@
 /*
- * $Id: notify.c,v 1.5.6.1 2004/03/24 14:50:43 andrei Exp $
+ * $Id: notify.c,v 1.8.2.2 2005/09/29 16:49:35 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,13 +36,13 @@
 str dom = {"location", 8};
 
 
-void notify_watchers(struct urecord* _r, int state)
+void notify_watchers(struct urecord* _r, ucontact_t *_c, int state)
 {
 	notify_cb_t* n;
        
 	n = _r->watchers;
         while(n) {
-		n->cb(&_r->aor, state, n->data);
+		n->cb(&_r->aor, &_c->c, state, n->data);
 		n = n->next;
 	}
 }
@@ -51,6 +51,7 @@ void notify_watchers(struct urecord* _r, int state)
 int add_watcher(struct urecord* _r, notcb_t _c, void* _d)
 {
 	notify_cb_t* ptr;
+	ucontact_t *c;
 
 	ptr = (notify_cb_t*)shm_malloc(sizeof(notify_cb_t));
 	if (ptr == 0) {
@@ -63,7 +64,11 @@ int add_watcher(struct urecord* _r, notcb_t _c, void* _d)
 	ptr->next = _r->watchers;
 	_r->watchers = ptr;
 
-	ptr->cb(&_r->aor, (_r->contacts) ? (PRES_ONLINE) : (PRES_OFFLINE), ptr->data);
+	c = _r->contacts;
+	while (c) {
+		ptr->cb(&_r->aor, &c->c, PRES_ONLINE, ptr->data);
+		c = c->next;
+	}
 	return 0;
 }
 
@@ -77,6 +82,7 @@ int remove_watcher(struct urecord* _r, notcb_t _c, void* _d)
 		if ((ptr->cb == _c) && (ptr->data == _d)) {
 			if (prev) prev->next = ptr->next;
 			else _r->watchers = ptr->next;
+			shm_free(ptr);
 			return 0;
 		}
 		prev = ptr;
@@ -100,6 +106,7 @@ int register_watcher(str* _f, str* _t, notcb_t _c, void* _data)
 
 	if (get_urecord(d, _t, &r) > 0) {
 		if (insert_urecord(d, _t, &r) < 0) {
+			unlock_udomain(d);
 			LOG(L_ERR, "register_watcher(): Error while creating a new record\n");
 			return -2;
 		}
@@ -131,6 +138,7 @@ int unregister_watcher(str* _f, str* _t, notcb_t _c, void* _data)
 	lock_udomain(d);
 	
 	if (get_urecord(d, _t, &r) > 0) {
+		unlock_udomain(d);
 		DBG("unregister_watcher(): Record not found\n");
 		return 0;
 	}

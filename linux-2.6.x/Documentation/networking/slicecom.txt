@@ -1,9 +1,9 @@
 
 SliceCOM adapter user's documentation - for the 0.51 driver version
 
-Written by Bartók István <bartoki@itc.hu>
+Written by BartÃ³k IstvÃ¡n <bartoki@itc.hu>
 
-English translation: Lakatos György <gyuri@itc.hu>
+English translation: Lakatos GyÃ¶rgy <gyuri@itc.hu>
 Mon Dec 11 15:28:42 CET 2000
 
 Last modified: Wed Aug 29 17:25:37 CEST 2001
@@ -126,7 +126,7 @@ comx0/boardnum	- board number of the SliceCom in the PC (using the 'natural'
 
 Though the options below are to be set on a single interface, they apply to the
 whole board. The restriction, to use them on 'UP' interfaces, is because the 
-command sequence below could lead to unpredicable results.
+command sequence below could lead to unpredictable results.
 
 	# echo 0        >boardnum
 	# echo internal >clock_source

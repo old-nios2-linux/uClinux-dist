@@ -1,6 +1,6 @@
 /*
 
-$Log: voicin.c,v $
+$Log$
 Revision 1.16  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 
@@ -56,22 +56,22 @@ extern struct {
 
 /* 	VOICIN Version 52 */
 
-/* $Log: voicin.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/11/23 22:14:32  markster
-/* Various warning cleanups
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:40  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/11/23 22:14:32  markster
+ * Various warning cleanups
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:40  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:45:00  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_encoder_state that is passed as an
@@ -307,22 +307,22 @@ s*/
 
 /* 	Global Variables: */
 /*       Arguments */
-/* $Log: voicin.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/11/23 22:14:32  markster
-/* Various warning cleanups
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:40  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/11/23 22:14:32  markster
+ * Various warning cleanups
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:40  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:45:00  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_encoder_state that is passed as an
@@ -778,7 +778,7 @@ d*/
 /*   NOTE: The divisor is a function of REF, the expected energies. */
 /* Computing MIN */
 /* Computing MAX */
-    r__2 = sqrt((real) (*lbue * *lbve)) * 64 / 3000;
+    r__2 = (real)(sqrt((real) (*lbue * *lbve)) * 64 / 3000);
     r__1 = max(r__2,1.f);
     *dither = min(r__1,20.f);
 /*   Voicing decisions are returned in VOIBUF. */

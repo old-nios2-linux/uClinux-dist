@@ -62,9 +62,9 @@ struct acpiphp_slot;
 struct slot {
 	struct hotplug_slot	*hotplug_slot;
 	struct acpiphp_slot	*acpi_slot;
+	struct hotplug_slot_info info;
+	char name[SLOT_NAME_SIZE];
 };
-
-
 
 /**
  * struct acpiphp_bridge - PCI bridge information
@@ -211,6 +211,7 @@ typedef int (*acpiphp_callback)(struct acpiphp_slot *slot, void *data);
 
 extern int acpiphp_enable_slot (struct acpiphp_slot *slot);
 extern int acpiphp_disable_slot (struct acpiphp_slot *slot);
+extern int acpiphp_eject_slot (struct acpiphp_slot *slot);
 extern u8 acpiphp_get_power_status (struct acpiphp_slot *slot);
 extern u8 acpiphp_get_attention_status (struct acpiphp_slot *slot);
 extern u8 acpiphp_get_latch_status (struct acpiphp_slot *slot);

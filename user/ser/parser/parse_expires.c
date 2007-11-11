@@ -1,9 +1,9 @@
 /*
- * $Id: parse_expires.c,v 1.5 2003/04/26 20:28:46 jiri Exp $
+ * $Id: parse_expires.c,v 1.6 2004/08/24 09:01:25 janakj Exp $
  *
  * Expires header field body parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

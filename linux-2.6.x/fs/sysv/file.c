@@ -27,10 +27,10 @@ const struct file_operations sysv_file_operations = {
 	.aio_write	= generic_file_aio_write,
 	.mmap		= generic_file_mmap,
 	.fsync		= sysv_sync_file,
-	.sendfile	= generic_file_sendfile,
+	.splice_read	= generic_file_splice_read,
 };
 
-struct inode_operations sysv_file_inode_operations = {
+const struct inode_operations sysv_file_inode_operations = {
 	.truncate	= sysv_truncate,
 	.getattr	= sysv_getattr,
 };

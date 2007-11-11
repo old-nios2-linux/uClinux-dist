@@ -123,8 +123,8 @@ static int x25_asy_change_mtu(struct net_device *dev, int newmtu)
 	unsigned char *xbuff, *rbuff;
 	int len = 2* newmtu;
 
-	xbuff = (unsigned char *) kmalloc (len + 4, GFP_ATOMIC);
-	rbuff = (unsigned char *) kmalloc (len + 4, GFP_ATOMIC);
+	xbuff = kmalloc(len + 4, GFP_ATOMIC);
+	rbuff = kmalloc(len + 4, GFP_ATOMIC);
 
 	if (xbuff == NULL || rbuff == NULL)  
 	{
@@ -465,11 +465,11 @@ static int x25_asy_open(struct net_device *dev)
 
 	len = dev->mtu * 2;
 
-	sl->rbuff = (unsigned char *) kmalloc(len + 4, GFP_KERNEL);
+	sl->rbuff = kmalloc(len + 4, GFP_KERNEL);
 	if (sl->rbuff == NULL)   {
 		goto norbuff;
 	}
-	sl->xbuff = (unsigned char *) kmalloc(len + 4, GFP_KERNEL);
+	sl->xbuff = kmalloc(len + 4, GFP_KERNEL);
 	if (sl->xbuff == NULL)   {
 		goto noxbuff;
 	}
@@ -786,14 +786,12 @@ static int __init init_x25_asy(void)
 	printk(KERN_INFO "X.25 async: version 0.00 ALPHA "
 			"(dynamic channels, max=%d).\n", x25_asy_maxdev );
 
-	x25_asy_devs = kmalloc(sizeof(struct net_device *)*x25_asy_maxdev, 
-			       GFP_KERNEL);
+	x25_asy_devs = kcalloc(x25_asy_maxdev, sizeof(struct net_device*), GFP_KERNEL);
 	if (!x25_asy_devs) {
 		printk(KERN_WARNING "X25 async: Can't allocate x25_asy_ctrls[] "
 				"array! Uaargh! (-> No X.25 available)\n");
 		return -ENOMEM;
 	}
-	memset(x25_asy_devs, 0, sizeof(struct net_device *)*x25_asy_maxdev); 
 
 	return tty_register_ldisc(N_X25, &x25_ldisc);
 }

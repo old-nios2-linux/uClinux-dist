@@ -768,7 +768,7 @@ de21041_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		v & (1<<0) ? "      Jabber disable\n" : "");
 }
 
-int 
+int
 de2104x_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 {
 	unsigned int de21040 = regs->version & 1;

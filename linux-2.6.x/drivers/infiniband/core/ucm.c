@@ -161,12 +161,14 @@ static void ib_ucm_cleanup_events(struct ib_ucm_context *ctx)
 				    struct ib_ucm_event, ctx_list);
 		list_del(&uevent->file_list);
 		list_del(&uevent->ctx_list);
+		mutex_unlock(&ctx->file->file_mutex);
 
 		/* clear incoming connections. */
 		if (ib_ucm_new_cm_id(uevent->resp.event))
 			ib_destroy_cm_id(uevent->cm_id);
 
 		kfree(uevent);
+		mutex_lock(&ctx->file->file_mutex);
 	}
 	mutex_unlock(&ctx->file->file_mutex);
 }
@@ -328,20 +330,18 @@ static int ib_ucm_event_process(struct ib_cm_event *evt,
 	}
 
 	if (uvt->data_len) {
-		uvt->data = kmalloc(uvt->data_len, GFP_KERNEL);
+		uvt->data = kmemdup(evt->private_data, uvt->data_len, GFP_KERNEL);
 		if (!uvt->data)
 			goto err1;
 
-		memcpy(uvt->data, evt->private_data, uvt->data_len);
 		uvt->resp.present |= IB_UCM_PRES_DATA;
 	}
 
 	if (uvt->info_len) {
-		uvt->info = kmalloc(uvt->info_len, GFP_KERNEL);
+		uvt->info = kmemdup(info, uvt->info_len, GFP_KERNEL);
 		if (!uvt->info)
 			goto err2;
 
-		memcpy(uvt->info, info, uvt->info_len);
 		uvt->resp.present |= IB_UCM_PRES_INFO;
 	}
 	return 0;
@@ -407,28 +407,17 @@ static ssize_t ib_ucm_event(struct ib_ucm_file *file,
 
 	mutex_lock(&file->file_mutex);
 	while (list_empty(&file->events)) {
-
-		if (file->filp->f_flags & O_NONBLOCK) {
-			result = -EAGAIN;
-			break;
-		}
-
-		if (signal_pending(current)) {
-			result = -ERESTARTSYS;
-			break;
-		}
-
-		prepare_to_wait(&file->poll_wait, &wait, TASK_INTERRUPTIBLE);
-
 		mutex_unlock(&file->file_mutex);
-		schedule();
+
+		if (file->filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+
+		if (wait_event_interruptible(file->poll_wait,
+					     !list_empty(&file->events)))
+			return -ERESTARTSYS;
+
 		mutex_lock(&file->file_mutex);
-
-		finish_wait(&file->poll_wait, &wait);
 	}
-
-	if (result)
-		goto done;
 
 	uevent = list_entry(file->events.next, struct ib_ucm_event, file_list);
 
@@ -685,11 +674,11 @@ out:
 	return result;
 }
 
-static ssize_t ib_ucm_establish(struct ib_ucm_file *file,
-				const char __user *inbuf,
-				int in_len, int out_len)
+static ssize_t ib_ucm_notify(struct ib_ucm_file *file,
+			     const char __user *inbuf,
+			     int in_len, int out_len)
 {
-	struct ib_ucm_establish cmd;
+	struct ib_ucm_notify cmd;
 	struct ib_ucm_context *ctx;
 	int result;
 
@@ -700,7 +689,7 @@ static ssize_t ib_ucm_establish(struct ib_ucm_file *file,
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
-	result = ib_cm_establish(ctx->cm_id);
+	result = ib_cm_notify(ctx->cm_id, (enum ib_event_type) cmd.event);
 	ib_ucm_ctx_put(ctx);
 	return result;
 }
@@ -834,7 +823,6 @@ static ssize_t ib_ucm_send_rep(struct ib_ucm_file *file,
 	param.private_data_len    = cmd.len;
 	param.responder_resources = cmd.responder_resources;
 	param.initiator_depth     = cmd.initiator_depth;
-	param.target_ack_delay    = cmd.target_ack_delay;
 	param.failover_accepted   = cmd.failover_accepted;
 	param.flow_control        = cmd.flow_control;
 	param.rnr_retry_count     = cmd.rnr_retry_count;
@@ -1107,7 +1095,7 @@ static ssize_t (*ucm_cmd_table[])(struct ib_ucm_file *file,
 	[IB_USER_CM_CMD_DESTROY_ID]    = ib_ucm_destroy_id,
 	[IB_USER_CM_CMD_ATTR_ID]       = ib_ucm_attr_id,
 	[IB_USER_CM_CMD_LISTEN]        = ib_ucm_listen,
-	[IB_USER_CM_CMD_ESTABLISH]     = ib_ucm_establish,
+	[IB_USER_CM_CMD_NOTIFY]        = ib_ucm_notify,
 	[IB_USER_CM_CMD_SEND_REQ]      = ib_ucm_send_req,
 	[IB_USER_CM_CMD_SEND_REP]      = ib_ucm_send_rep,
 	[IB_USER_CM_CMD_SEND_RTU]      = ib_ucm_send_rtu,
@@ -1221,7 +1209,7 @@ static void ib_ucm_release_class_dev(struct class_device *class_dev)
 	kfree(dev);
 }
 
-static struct file_operations ucm_fops = {
+static const struct file_operations ucm_fops = {
 	.owner 	 = THIS_MODULE,
 	.open 	 = ib_ucm_open,
 	.release = ib_ucm_close,

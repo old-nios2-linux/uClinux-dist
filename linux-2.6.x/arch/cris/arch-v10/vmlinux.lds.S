@@ -44,7 +44,7 @@ SECTIONS
 	___data_start = . ;
 	__Sdata = . ;
 	.data : {                     /* Data */
-		*(.data)
+		DATA_DATA
 	}
 	__edata = . ;                 /* End of data section */
 	_edata = . ;
@@ -82,7 +82,8 @@ SECTIONS
 		__con_initcall_end = .;
 	}	
 	SECURITY_INIT
-		
+
+#ifdef CONFIG_BLK_DEV_INITRD
 	.init.ramfs : {
 		__initramfs_start = .;
 		*(.init.ramfs)
@@ -93,6 +94,7 @@ SECTIONS
 		FILL (0); 
 		. = ALIGN (8192);
 	}
+#endif
 	
 	__vmlinux_end = .;            /* last address of the physical file */
   	__init_end = .;

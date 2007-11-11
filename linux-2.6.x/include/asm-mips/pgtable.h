@@ -67,17 +67,7 @@ extern unsigned long empty_zero_page;
 extern unsigned long zero_page_mask;
 
 #define ZERO_PAGE(vaddr) \
-	(virt_to_page(empty_zero_page + (((unsigned long)(vaddr)) & zero_page_mask)))
-
-#define __HAVE_ARCH_MOVE_PTE
-#define move_pte(pte, prot, old_addr, new_addr)				\
-({									\
- 	pte_t newpte = (pte);						\
-	if (pte_present(pte) && pfn_valid(pte_pfn(pte)) &&		\
-			pte_page(pte) == ZERO_PAGE(old_addr))		\
-		newpte = mk_pte(ZERO_PAGE(new_addr), (prot));		\
-	newpte;								\
-})
+	(virt_to_page((void *)(empty_zero_page + (((unsigned long)(vaddr)) & zero_page_mask))))
 
 extern void paging_init(void);
 
@@ -85,7 +75,7 @@ extern void paging_init(void);
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-#define pmd_phys(pmd)		(pmd_val(pmd) - PAGE_OFFSET)
+#define pmd_phys(pmd)		virt_to_phys((void *)pmd_val(pmd))
 #define pmd_page(pmd)		(pfn_to_page(pmd_phys(pmd) >> PAGE_SHIFT))
 #define pmd_page_vaddr(pmd)	pmd_val(pmd)
 
@@ -178,19 +168,21 @@ static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *pt
 #define set_pud(pudptr, pudval) do { *(pudptr) = (pudval); } while(0)
 #endif
 
-#define PGD_T_LOG2	ffz(~sizeof(pgd_t))
-#define PMD_T_LOG2	ffz(~sizeof(pmd_t))
-#define PTE_T_LOG2	ffz(~sizeof(pte_t))
+#define PGD_T_LOG2	(__builtin_ffs(sizeof(pgd_t)) - 1)
+#define PMD_T_LOG2	(__builtin_ffs(sizeof(pmd_t)) - 1)
+#define PTE_T_LOG2	(__builtin_ffs(sizeof(pte_t)) - 1)
 
-extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
+/*
+ * We used to declare this array with size but gcc 3.3 and older are not able
+ * to find that this expression is a constant, so the size is dropped.
+ */
+extern pgd_t swapper_pg_dir[];
 
 /*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-static inline int pte_user(pte_t pte)	{ BUG(); return 0; }
 #if defined(CONFIG_64BIT_PHYS_ADDR) && defined(CONFIG_CPU_MIPS32_R1)
-static inline int pte_read(pte_t pte)	{ return pte.pte_low & _PAGE_READ; }
 static inline int pte_write(pte_t pte)	{ return pte.pte_low & _PAGE_WRITE; }
 static inline int pte_dirty(pte_t pte)	{ return pte.pte_low & _PAGE_MODIFIED; }
 static inline int pte_young(pte_t pte)	{ return pte.pte_low & _PAGE_ACCESSED; }
@@ -200,13 +192,6 @@ static inline pte_t pte_wrprotect(pte_t pte)
 {
 	pte.pte_low  &= ~(_PAGE_WRITE | _PAGE_SILENT_WRITE);
 	pte.pte_high &= ~_PAGE_SILENT_WRITE;
-	return pte;
-}
-
-static inline pte_t pte_rdprotect(pte_t pte)
-{
-	pte.pte_low  &= ~(_PAGE_READ | _PAGE_SILENT_READ);
-	pte.pte_high &= ~_PAGE_SILENT_READ;
 	return pte;
 }
 
@@ -234,16 +219,6 @@ static inline pte_t pte_mkwrite(pte_t pte)
 	return pte;
 }
 
-static inline pte_t pte_mkread(pte_t pte)
-{
-	pte.pte_low |= _PAGE_READ;
-	if (pte.pte_low & _PAGE_ACCESSED) {
-		pte.pte_low  |= _PAGE_SILENT_READ;
-		pte.pte_high |= _PAGE_SILENT_READ;
-	}
-	return pte;
-}
-
 static inline pte_t pte_mkdirty(pte_t pte)
 {
 	pte.pte_low |= _PAGE_MODIFIED;
@@ -263,7 +238,6 @@ static inline pte_t pte_mkyoung(pte_t pte)
 	return pte;
 }
 #else
-static inline int pte_read(pte_t pte)	{ return pte_val(pte) & _PAGE_READ; }
 static inline int pte_write(pte_t pte)	{ return pte_val(pte) & _PAGE_WRITE; }
 static inline int pte_dirty(pte_t pte)	{ return pte_val(pte) & _PAGE_MODIFIED; }
 static inline int pte_young(pte_t pte)	{ return pte_val(pte) & _PAGE_ACCESSED; }
@@ -272,12 +246,6 @@ static inline int pte_file(pte_t pte)	{ return pte_val(pte) & _PAGE_FILE; }
 static inline pte_t pte_wrprotect(pte_t pte)
 {
 	pte_val(pte) &= ~(_PAGE_WRITE | _PAGE_SILENT_WRITE);
-	return pte;
-}
-
-static inline pte_t pte_rdprotect(pte_t pte)
-{
-	pte_val(pte) &= ~(_PAGE_READ | _PAGE_SILENT_READ);
 	return pte;
 }
 
@@ -298,14 +266,6 @@ static inline pte_t pte_mkwrite(pte_t pte)
 	pte_val(pte) |= _PAGE_WRITE;
 	if (pte_val(pte) & _PAGE_MODIFIED)
 		pte_val(pte) |= _PAGE_SILENT_WRITE;
-	return pte;
-}
-
-static inline pte_t pte_mkread(pte_t pte)
-{
-	pte_val(pte) |= _PAGE_READ;
-	if (pte_val(pte) & _PAGE_ACCESSED)
-		pte_val(pte) |= _PAGE_SILENT_READ;
 	return pte;
 }
 
@@ -396,10 +356,6 @@ static inline int io_remap_pfn_range(struct vm_area_struct *vma,
 #define io_remap_pfn_range(vma, vaddr, pfn, size, prot)		\
 		remap_pfn_range(vma, vaddr, pfn, size, prot)
 #endif
-
-#define MK_IOSPACE_PFN(space, pfn)	(pfn)
-#define GET_IOSPACE(pfn)		0
-#define GET_PFN(pfn)			(pfn)
 
 #include <asm-generic/pgtable.h>
 

@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_db.h,v 1.6 2003/09/12 15:38:56 bogdan Exp $
+ * $Id: cpl_db.h,v 1.9 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,28 +31,33 @@
 #include "../../db/db.h"
 
 
+int cpl_db_bind(char* db_url);
+int cpl_db_init(char* db_url, char* db_table);
+void cpl_db_close();
+
+
 /* inserts into database a cpl script in XML format(xml) along with its binary
  * format (bin)
  * Returns:  1 - success
  *          -1 - error
  */
-int write_to_db(db_con_t *db_con, char *usr, str *xml, str *bin);
+int write_to_db( char *usr, str *xml, str *bin);
 
 
 /* fetch from database the binary format of the cpl script for a given user
  * Returns:  1 - success
  *          -1 - error
  */
-int get_user_script( db_con_t *db_hdl, str *user, str *script, char *key);
+int get_user_script(str *user, str *script, const char *key);
 
 
-/* delete from database the entiry record for a given user - if a user has no
- * script, he will be removed complitly from db; users without script are not
+/* delete from database the entire record for a given user - if a user has no
+ * script, he will be removed completely from db; users without script are not
  * allowed into db ;-)
  * Returns:  1 - success
  *          -1 - error
  */
-int rmv_from_db(db_con_t *db_con, char *usr);
+int rmv_from_db(char *usr);
 
 
 #endif

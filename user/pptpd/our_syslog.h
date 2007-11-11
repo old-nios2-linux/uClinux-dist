@@ -3,7 +3,7 @@
  *
  * Syslog replacement functions
  *
- * $Id: our_syslog.h,v 1.3 2001/08/27 01:07:54 philipc Exp $
+ * $Id: our_syslog.h,v 1.4 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifndef _PPTPD_SYSLOG_H

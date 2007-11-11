@@ -1,9 +1,9 @@
 /* 
- * $Id: ucontact.h,v 1.10.6.1 2004/07/21 10:34:45 sobomax Exp $ 
+ * $Id: ucontact.h,v 1.17.2.1 2005/03/29 11:54:35 janakj Exp $ 
  *
  * Usrloc contact structure
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -38,17 +38,15 @@
 
 #include <stdio.h>
 #include <time.h>
+#include "../../qvalue.h"
 #include "../../str.h"
+
+
 
 typedef enum cstate {
 	CS_NEW,        /* New contact - not flushed yet */
 	CS_SYNC,       /* Synchronized contact with the database */
-	CS_DIRTY,      /* Update contact - not flushed yet */
-	/* Attention the sequence of this entries is used in conditions.
-	 * Changes here can break things! */
-	CS_ZOMBIE_N,   /* Removed contact - not flushed yet */
-	CS_ZOMBIE_S,   /* Removed contact - synchronized with db */
-	CS_ZOMBIE_D    /* Removed contact - updated and not flushed yet */
+	CS_DIRTY       /* Update contact - not flushed yet */
 } cstate_t;
 
 
@@ -64,6 +62,8 @@ typedef enum flags {
 	FL_N_MESSAGE   = 1 << 4,     /* Contact doesn't support MESSAGE */
 	FL_SUBSCRIBE   = 1 << 5,     /* Contact supports SUBSCRIBE and NOTIFY */
 	FL_N_SUBSCRIBE = 1 << 6,     /* Contact doesn't support SUBSCRIBE and NOTIFY */
+	FL_PERMANENT   = 1 << 7,     /* Permanent contact (does not expire) */
+	FL_MEM         = 1 << 8,     /* Update memory only -- used for REGISTER replication */
 	FL_ALL         = 0xFFFFFFFF  /* All flags set */
 } flags_t;
 
@@ -72,11 +72,11 @@ typedef struct ucontact {
 	str* domain;            /* Pointer to domain name */
 	str* aor;               /* Pointer to the address of record string in record structure*/
 	str c;                  /* Contact address */
+	str received;           /* IP, port, and protocol we received the REGISTER from */
 	time_t expires;         /* expires parameter */
-	float q;                /* q parameter */
+	qvalue_t q;             /* q parameter */
 	str callid;             /* Call-ID header field */
         int cseq;               /* CSeq value */
-	unsigned int replicate; /* replication marker */
 	cstate_t state;         /* State of the contact */
 	unsigned int flags;     /* Various flags (NAT, supported methods etc) */
 	str user_agent;		/* User-Agent header field */
@@ -86,10 +86,16 @@ typedef struct ucontact {
 
 
 /*
+ * Valid contact is a contact that either didn't expire yet or is permanent
+ */
+#define VALID_CONTACT(c, t) (((c->expires > t) || (c->flags & FL_PERMANENT)))
+
+
+/*
  * Create a new contact structure
  */
-int new_ucontact(str* _dom, str* _aor, str* _contact, time_t _e, float _q, 
-		 str* _callid, int _cseq, unsigned int _flags, int _rep, ucontact_t** _c, str* _ua);
+int new_ucontact(str* _dom, str* _aor, str* _contact, time_t _e, qvalue_t _q, 
+		 str* _callid, int _cseq, unsigned int _flags, ucontact_t** _c, str* _ua, str* _recv);
 
 
 /*
@@ -107,8 +113,8 @@ void print_ucontact(FILE* _f, ucontact_t* _c);
 /*
  * Update existing contact in memory with new values
  */
-int mem_update_ucontact(ucontact_t* _c, time_t _e, float _q, str* _cid, int _cs,
-			unsigned int _set, unsigned int _res, str* _ua);
+int mem_update_ucontact(ucontact_t* _c, time_t _e, qvalue_t _q, str* _cid, int _cs,
+			unsigned int _set, unsigned int _res, str* _ua, str* _recv);
 
 
 /* ===== State transition functions - for write back cache scheme ======== */
@@ -125,7 +131,7 @@ void st_update_ucontact(ucontact_t* _c);
  * Update state of the contact if we
  * are using write-back scheme
  * Returns 1 if the contact should be
- * deleted from memory immediatelly,
+ * deleted from memory immediately,
  * 0 otherwise
  */
 int st_delete_ucontact(ucontact_t* _c);
@@ -175,16 +181,10 @@ int db_delete_ucontact(ucontact_t* _c);
 /*
  * Update ucontact with new values without replication
  */
-typedef int (*update_ucontact_t)(ucontact_t* _c, time_t _e, float _q, str* _cid, int _cs, 
-				 unsigned int _set, unsigned int _res, str* _ua);
-int update_ucontact(ucontact_t* _c, time_t _e, float _q, str* _cid, int _cs,
-		    unsigned int _set, unsigned int _res, str* _ua);
-
-/*
- * Update ucontact with new values with addtional replication argument
- */
-int update_ucontact_rep(ucontact_t* _c, time_t _e, float _q, str* _cid, int _cs, int _rep,
-			unsigned int _set, unsigned int _res, str* _ua);
+typedef int (*update_ucontact_t)(ucontact_t* _c, time_t _e, qvalue_t _q, str* _cid, int _cs, 
+				 unsigned int _set, unsigned int _res, str* _ua, str* _recv);
+int update_ucontact(ucontact_t* _c, time_t _e, qvalue_t _q, str* _cid, int _cs,
+		    unsigned int _set, unsigned int _res, str* _ua, str* _recv);
 
 
 #endif /* UCONTACT_H */

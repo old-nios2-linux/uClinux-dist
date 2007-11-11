@@ -30,6 +30,13 @@
 #include <string.h>
 #include <ctype.h>
 
+libc_hidden_proto(memcpy)
+libc_hidden_proto(memset)
+libc_hidden_proto(strchr)
+libc_hidden_proto(strcpy)
+libc_hidden_proto(strlen)
+libc_hidden_proto(sprintf)
+libc_hidden_proto(tolower)
 
 /*
  * WARNING: Don't even consider trying to compile this on a system where
@@ -58,10 +65,12 @@ inet_ntop4(const u_char *src, char *dst, size_t size)
 	i = 0;
 	for (octet = 0; octet <= 3; octet++) {
 
+#if 0	/* since src is unsigned char, it will never be > 255 ... */
 		if (src[octet] > 255) {
 			__set_errno (ENOSPC);
 			return (NULL);
 		}
+#endif
 		tmp[i++] = '0' + src[octet] / 100;
 		if (tmp[i - 1] == '0') {
 			tmp[i - 1] = '0' + (src[octet] / 10 % 10);
@@ -244,7 +253,7 @@ inet_pton4(const char *src, u_char *dst)
 
 /* We cannot use the macro version of tolower() or very bad
  * things happen when '*src++' gets evaluated multiple times.  
- * So * undef it here so we get the function version of tolower
+ * So undef it here so we get the function version of tolower
  * instead.
  */
 #undef tolower
@@ -347,12 +356,9 @@ inet_pton6(const char *src, u_char *dst)
  * author:
  *	Paul Vixie, 1996.
  */
-extern const char *
-inet_ntop(af, src, dst, size)
-	int af;
-	const void *src;
-	char *dst;
-	socklen_t size;
+libc_hidden_proto(inet_ntop)
+const char *
+inet_ntop(int af, const void *src, char *dst, socklen_t size)
 {
 	switch (af) {
 	case AF_INET:
@@ -367,6 +373,7 @@ inet_ntop(af, src, dst, size)
 	}
 	/* NOTREACHED */
 }
+libc_hidden_def(inet_ntop)
 
 
 /* int
@@ -380,11 +387,9 @@ inet_ntop(af, src, dst, size)
  * author:
  *	Paul Vixie, 1996.
  */
-extern int
-inet_pton(af, src, dst)
-	int af;
-	const char *src;
-	void *dst;
+libc_hidden_proto(inet_pton)
+int
+inet_pton(int af, const char *src, void *dst)
 {
 	switch (af) {
 	case AF_INET:
@@ -399,4 +404,4 @@ inet_pton(af, src, dst)
 	}
 	/* NOTREACHED */
 }
-
+libc_hidden_def(inet_pton)

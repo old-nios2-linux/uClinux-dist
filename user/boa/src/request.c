@@ -557,22 +557,16 @@ int process_header_end(request * req)
 #endif				
   
 	if (req->method == M_POST) {
-		char *tmpfilep = (char *) tmpnam(NULL);
+		char tmpfile[32] = { "/tmp/boaXXXXXX" };
 
-		if (!tmpfilep) {
-#if 0
-			boa_perror(req, "tmpnam");
-#endif
-			return 0;
-		}
 		/* open temp file for post data */
-		if ((req->post_data_fd = open(tmpfilep, O_RDWR | O_CREAT)) == -1) {
+		if ((req->post_data_fd = mkstemp(tmpfile)) == -1) {
 #if 0
 			boa_perror(req, "tmpfile open");
 #endif
 			return 0;
 		}
-		req->post_file_name = strdup(tmpfilep);
+		req->post_file_name = strdup(tmpfile);
 		return 1;
 	}
 	if (req->is_cgi)

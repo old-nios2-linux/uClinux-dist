@@ -69,11 +69,9 @@ static int probe_st5481(struct usb_interface *intf,
 	     le16_to_cpu(dev->descriptor.idProduct),
 	     number_of_leds);
 
-	adapter = kmalloc(sizeof(struct st5481_adapter), GFP_KERNEL);
+	adapter = kzalloc(sizeof(struct st5481_adapter), GFP_KERNEL);
 	if (!adapter)
 		return -ENOMEM;
-
-	memset(adapter, 0, sizeof(struct st5481_adapter));
 
 	adapter->number_of_leds = number_of_leds;
 	adapter->usb_dev = dev;
@@ -109,12 +107,17 @@ static int probe_st5481(struct usb_interface *intf,
 	for (i = 0; i < 2; i++)
 		b_if[i] = &adapter->bcs[i].b_if;
 
-	hisax_register(&adapter->hisax_d_if, b_if, "st5481_usb", protocol);
+	if (hisax_register(&adapter->hisax_d_if, b_if, "st5481_usb",
+			protocol) != 0)
+		goto err_b1;
+
 	st5481_start(adapter);
 
 	usb_set_intfdata(intf, adapter);
 	return 0;
 
+ err_b1:
+	st5481_release_b(&adapter->bcs[1]);
  err_b:
 	st5481_release_b(&adapter->bcs[0]);
  err_d:

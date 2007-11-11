@@ -323,17 +323,17 @@ FILE *OpenSessionFile(Packet *p)
     {
         if((p->iph->ip_src.s_addr & pv.netmask) != pv.homenet)
         {
-            sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
+            SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
         }
         else
         {
             if(p->sp >= p->dp)
             {
-                sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
             }
             else
             {
-                sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
             }
         }
     }
@@ -341,17 +341,17 @@ FILE *OpenSessionFile(Packet *p)
     {
         if((p->iph->ip_src.s_addr & pv.netmask) == pv.homenet)
         {
-            sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
+            SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
         }
         else
         {
             if(p->sp >= p->dp)
             {
-                sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_src));
             }
             else
             {
-                sprintf(log_path, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, inet_ntoa(p->iph->ip_dst));
             }
         }
     }
@@ -369,17 +369,17 @@ FILE *OpenSessionFile(Packet *p)
     if(p->sp >= p->dp)
     {
 #ifdef WIN32
-        sprintf(session_file, "%s/SESSION_%d-%d", log_path, p->sp, p->dp);
+        SnortSnprintf(session_file, STD_BUF, "%s/SESSION_%d-%d", log_path, p->sp, p->dp);
 #else
-        sprintf(session_file, "%s/SESSION:%d-%d", log_path, p->sp, p->dp);
+        SnortSnprintf(session_file, STD_BUF, "%s/SESSION:%d-%d", log_path, p->sp, p->dp);
 #endif
     }
     else
     {
 #ifdef WIN32
-        sprintf(session_file, "%s/SESSION_%d-%d", log_path, p->dp, p->sp);
+        SnortSnprintf(session_file, STD_BUF, "%s/SESSION_%d-%d", log_path, p->dp, p->sp);
 #else
-        sprintf(session_file, "%s/SESSION:%d-%d", log_path, p->dp, p->sp);
+        SnortSnprintf(session_file, STD_BUF, "%s/SESSION:%d-%d", log_path, p->dp, p->sp);
 #endif
     }
 

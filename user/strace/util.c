@@ -30,17 +30,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: util.c,v 1.25 2001/07/10 13:48:44 hughesj Exp $
+ *	$Id: util.c,v 1.66 2007/01/11 22:05:06 ldv Exp $
  */
 
 #include "defs.h"
 
-#ifdef HAVE_SYS_USER_H
+#include <signal.h>
+#include <sys/syscall.h>
 #include <sys/user.h>
-#else
-#undef PTRACE_SYSCALL
-#include <linux/user.h>
-#endif
 #include <sys/param.h>
 #include <fcntl.h>
 #if HAVE_SYS_UIO_H
@@ -54,10 +51,11 @@
 
 #if defined(linux) && (__GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 1))
 #include <linux/ptrace.h>
-#endif 
+#endif
 
 #if defined(LINUX) && defined(IA64)
-#include <asm/ptrace_offsets.h>
+# include <asm/ptrace_offsets.h>
+# include <asm/rse.h>
 #endif
 
 #ifdef HAVE_SYS_REG_H
@@ -65,16 +63,38 @@
 # define PTRACE_PEEKUSR PTRACE_PEEKUSER
 #elif defined(HAVE_LINUX_PTRACE_H)
 #undef PTRACE_SYSCALL
+# ifdef HAVE_STRUCT_IA64_FPREG
+#  define ia64_fpreg XXX_ia64_fpreg
+# endif
+# ifdef HAVE_STRUCT_PT_ALL_USER_REGS
+#  define pt_all_user_regs XXX_pt_all_user_regs
+# endif
 #include <linux/ptrace.h>
+# undef ia64_fpreg
+# undef pt_all_user_regs
 #endif
 
 #ifdef SUNOS4_KERNEL_ARCH_KLUDGE
 #include <sys/utsname.h>
 #endif /* SUNOS4_KERNEL_ARCH_KLUDGE */
 
-#if defined(LINUX) && defined(SPARC)
+#if defined(LINUXSPARC)
 
-#include <asm/reg.h>
+# define fpq kernel_fpq
+# define fq kernel_fq
+# define fpu kernel_fpu
+# include <asm/reg.h>
+# undef fpq
+# undef fq
+# undef fpu
+
+#if defined (SPARC64)
+# define r_pc r_tpc
+# undef PTRACE_GETREGS
+# define PTRACE_GETREGS PTRACE_GETREGS64
+# undef PTRACE_SETREGS
+# define PTRACE_SETREGS PTRACE_SETREGS64
+#endif /* SPARC64 */
 
 #if !defined(__GLIBC__)
 
@@ -92,7 +112,11 @@ __asm__ volatile ("or %%g0, %1, %%o0\n\t" \
                   "or %%g0, %4, %%o3\n\t" \
                   "or %%g0, %5, %%o4\n\t" \
                   "or %%g0, %6, %%g1\n\t" \
+#if defined (SPARC64)
+                  "t 0x6d\n\t" \
+#else
                   "t 0x10\n\t" \
+#endif
                   "bcc 1f\n\t" \
                   "or %%g0, %%o0, %0\n\t" \
                   "sub %%g0, %%o0, %0\n\t" \
@@ -124,6 +148,7 @@ static _hack_syscall5(int,_ptrace,int,__request,int,__pid,int,__addr,int,__data,
 #define MIN(a,b)		(((a) < (b)) ? (a) : (b))
 #endif
 
+#if 0
 void
 tv_tv(tv, a, b)
 struct timeval *tv;
@@ -133,6 +158,7 @@ int b;
 	tv->tv_sec = a;
 	tv->tv_usec = b;
 }
+#endif
 
 int
 tv_nz(a)
@@ -205,10 +231,8 @@ int n;
 	tv->tv_usec %= 1000000;
 }
 
-char *
-xlookup(xlat, val)
-struct xlat *xlat;
-int val;
+const char *
+xlookup(const struct xlat *xlat, int val)
 {
 	for (; xlat->str != NULL; xlat++)
 		if (xlat->val == val)
@@ -220,12 +244,9 @@ int val;
  * Print entry in struct xlat table, if there.
  */
 void
-printxval(xlat, val, dflt)
-struct xlat *xlat;
-int val;
-char *dflt;
+printxval(const struct xlat *xlat, int val, const char *dflt)
 {
-	char *str = xlookup(xlat, val);
+	const char *str = xlookup(xlat, val);
 
 	if (str)
 		tprintf("%s", str);
@@ -240,7 +261,7 @@ char *dflt;
  */
 int
 addflags(xlat, flags)
-struct xlat *xlat;
+const struct xlat *xlat;
 int flags;
 {
 	int n;
@@ -260,9 +281,10 @@ int flags;
 }
 
 int
-printflags(xlat, flags)
-struct xlat *xlat;
+printflags(xlat, flags, dflt)
+const struct xlat *xlat;
 int flags;
+const char *dflt;
 {
 	int n;
 	char *sep;
@@ -281,15 +303,49 @@ int flags;
 			n++;
 		}
 	}
-	if (flags) {
-		tprintf("%s%#x", sep, flags);
-		n++;
+
+	if (n) {
+		if (flags) {
+			tprintf("%s%#x", sep, flags);
+			n++;
+		}
+	} else {
+		if (flags) {
+			tprintf("%#x", flags);
+			if (dflt)
+				tprintf(" /* %s */", dflt);
+		} else {
+			if (dflt)
+				tprintf("0");
+		}
 	}
+
 	return n;
 }
 
 void
 printnum(tcp, addr, fmt)
+struct tcb *tcp;
+long addr;
+char *fmt;
+{
+	long num;
+
+	if (!addr) {
+		tprintf("NULL");
+		return;
+	}
+	if (umove(tcp, addr, &num) < 0) {
+		tprintf("%#lx", addr);
+		return;
+	}
+	tprintf("[");
+	tprintf(fmt, num);
+	tprintf("]");
+}
+
+void
+printnum_int(tcp, addr, fmt)
 struct tcb *tcp;
 long addr;
 char *fmt;
@@ -309,11 +365,20 @@ char *fmt;
 	tprintf("]");
 }
 
+void
+printuid(text, uid)
+const char *text;
+unsigned long uid;
+{
+	tprintf("%s", text);
+	tprintf((uid == -1) ? "%ld" : "%lu", uid);
+}
+
 static char path[MAXPATHLEN + 1];
 
-void
+static void
 string_quote(str)
-char *str;
+const char *str;
 {
 	char buf[2 * MAXPATHLEN + 1];
 	char *s;
@@ -339,7 +404,9 @@ printpath(tcp, addr)
 struct tcb *tcp;
 long addr;
 {
-	if (umovestr(tcp, addr, MAXPATHLEN, path) < 0)
+	if (addr == 0)
+		tprintf("NULL");
+	else if (umovestr(tcp, addr, MAXPATHLEN, path) < 0)
 		tprintf("%#lx", addr);
 	else
 		string_quote(path);
@@ -352,7 +419,12 @@ struct tcb *tcp;
 long addr;
 int n;
 {
-	if (umovestr(tcp, addr, n, path) < 0)
+	if (n >= sizeof path)
+		n = sizeof path - 1;
+
+	if (addr == 0)
+		tprintf("NULL");
+	else 	if (umovestr(tcp, addr, n, path) < 0)
 		tprintf("%#lx", addr);
 	else {
 		path[n] = '\0';
@@ -378,7 +450,7 @@ int len;
 	if (!str) {
 		if ((str = malloc(max_strlen)) == NULL
 		    || (outstr = malloc(2*max_strlen)) == NULL) {
-			fprintf(stderr, "printstr: no memory\n");
+			fprintf(stderr, "out of memory\n");
 			tprintf("%#lx", addr);
 			return;
 		}
@@ -479,28 +551,51 @@ struct tcb * tcp;
 int len;
 long addr;
 {
+#if defined(LINUX) && SUPPORTED_PERSONALITIES > 1
+	union {
+		struct { u_int32_t base; u_int32_t len; } *iov32;
+		struct { u_int64_t base; u_int64_t len; } *iov64;
+	} iovu;
+#define iov iovu.iov64
+#define sizeof_iov \
+  (personality_wordsize[current_personality] == 4 \
+   ? sizeof(*iovu.iov32) : sizeof(*iovu.iov64))
+#define iov_iov_base(i) \
+  (personality_wordsize[current_personality] == 4 \
+   ? (u_int64_t) iovu.iov32[i].base : iovu.iov64[i].base)
+#define iov_iov_len(i) \
+  (personality_wordsize[current_personality] == 4 \
+   ? (u_int64_t) iovu.iov32[i].len : iovu.iov64[i].len)
+#else
 	struct iovec *iov;
+#define sizeof_iov sizeof(*iov)
+#define iov_iov_base(i) iov[i].iov_base
+#define iov_iov_len(i) iov[i].iov_len
+#endif
 	int i;
+	unsigned long size;
 
-	  
-	if ((iov = (struct iovec *) malloc(len * sizeof *iov)) == NULL) {
-		fprintf(stderr, "dump: No memory");
+	size = sizeof_iov * (unsigned long) len;
+	if (size / sizeof_iov != len
+	    || (iov = malloc(size)) == NULL) {
+		fprintf(stderr, "out of memory\n");
 		return;
 	}
-	if (umoven(tcp, addr,
-		   len * sizeof *iov, (char *) iov) >= 0) {
-                
+	if (umoven(tcp, addr, size, (char *) iov) >= 0) {
 		for (i = 0; i < len; i++) {
                         /* include the buffer number to make it easy to
                          * match up the trace with the source */
                         tprintf(" * %lu bytes in buffer %d\n",
-                                (unsigned long)iov[i].iov_len, i);
-                        dumpstr(tcp, (long) iov[i].iov_base,
-                                iov[i].iov_len);
+                                (unsigned long)iov_iov_len(i), i);
+                        dumpstr(tcp, (long) iov_iov_base(i),
+                                iov_iov_len(i));
                 }
 	}
 	free((char *) iov);
-        
+#undef sizeof_iov
+#undef iov_iov_base
+#undef iov_iov_len
+#undef iov
 }
 #endif
 
@@ -520,7 +615,7 @@ int len;
 		if (str)
 			free(str);
 		if ((str = malloc(len)) == NULL) {
-			fprintf(stderr, "dump: no memory\n");
+			fprintf(stderr, "out of memory\n");
 			return;
 		}
 		strsize = len;
@@ -610,7 +705,8 @@ char *laddr;
 				/* Ran into 'end of memory' - stupid "printpath" */
 				return 0;
 			}
-			perror("ptrace: umoven");
+			if (addr != 0)
+				perror("ptrace: umoven");
 			return -1;
 		}
 		started = 1;
@@ -716,7 +812,7 @@ char *laddr;
 
 	while (left) {
 		if (move > left) move = left;
-		if ((move = read(fd, laddr, move)) == -1)
+		if ((move = read(fd, laddr, move)) <= 0)
 			return left != len ? 0 : -1;
 		if (memchr (laddr, 0, move)) break;
 		left -= move;
@@ -778,10 +874,10 @@ char *laddr;
 }
 
 #ifdef LINUX
-#ifndef SPARC
+#if !defined (SPARC) && !defined(SPARC64)
 #define PTRACE_WRITETEXT	101
 #define PTRACE_WRITEDATA	102
-#endif /* !SPARC */
+#endif /* !SPARC && !SPARC64 */
 #endif /* LINUX */
 
 #ifdef SUNOS4
@@ -899,8 +995,8 @@ long *res;
 			}
 			is_sun4m = strcmp(name.machine, "sun4m") == 0;
 			if (is_sun4m) {
-				extern struct xlat struct_user_offsets[];
-				struct xlat *x;
+				extern const struct xlat struct_user_offsets[];
+				const struct xlat *x;
 
 				for (x = struct_user_offsets; x->str; x++)
 					x->val += 1024;
@@ -913,7 +1009,9 @@ long *res;
 	errno = 0;
 	val = ptrace(PTRACE_PEEKUSER, pid, (char *) off, 0);
 	if (val == -1 && errno) {
-		perror("upeek: ptrace(PTRACE_PEEKUSER, ... )");
+		char buf[60];
+		sprintf(buf,"upeek: ptrace(PTRACE_PEEKUSER,%d,%lu,0)",pid,off);
+		perror(buf);
 		return -1;
 	}
 	*res = val;
@@ -922,6 +1020,7 @@ long *res;
 
 #endif /* !USE_PROCFS */
 
+#if 0
 long
 getpc(tcp)
 struct tcb *tcp;
@@ -932,6 +1031,9 @@ struct tcb *tcp;
 #if defined(I386)
 	if (upeek(tcp->pid, 4*EIP, &pc) < 0)
 		return -1;
+#elif defined(X86_64)
+	if (upeek(tcp->pid, 8*RIP, &pc) < 0)
+		return -1;
 #elif defined(IA64)
 	if (upeek(tcp->pid, PT_B0, &pc) < 0)
 		return -1;
@@ -939,7 +1041,7 @@ struct tcb *tcp;
 	if (upeek(tcp->pid, 4*15, &pc) < 0)
 		return -1;
 #elif defined(POWERPC)
-	if (upeek(tcp->pid, 4*PT_NIP, &pc) < 0)
+	if (upeek(tcp->pid, sizeof(unsigned long)*PT_NIP, &pc) < 0)
 		return -1;
 #elif defined(M68K)
 	if (upeek(tcp->pid, 4*PT_PC, &pc) < 0)
@@ -950,18 +1052,22 @@ struct tcb *tcp;
 #elif defined(MIPS)
  	if (upeek(tcp->pid, REG_EPC, &pc) < 0)
  		return -1;
-#elif defined(SPARC)
+#elif defined(SPARC) || defined(SPARC64)
 	struct regs regs;
 	if (ptrace(PTRACE_GETREGS,tcp->pid,(char *)&regs,0) < 0)
 		return -1;
 	pc = regs.r_pc;
-#elif defined(S390)
+#elif defined(S390) || defined(S390X)
 	if(upeek(tcp->pid,PT_PSWADDR,&pc) < 0)
+		return -1;
 #elif defined(HPPA)
 	if(upeek(tcp->pid,PT_IAOQ0,&pc) < 0)
 		return -1;
 #elif defined(SH)
        if (upeek(tcp->pid, 4*REG_PC ,&pc) < 0)
+               return -1;
+#elif defined(SH64)
+       if (upeek(tcp->pid, REG_PC ,&pc) < 0)
                return -1;
 #endif
 	return pc;
@@ -992,33 +1098,58 @@ struct tcb *tcp;
 	return regs.r_eip;
 #endif /* FREEBSD */
 }
+#endif
 
 void
 printcall(tcp)
 struct tcb *tcp;
 {
+#define PRINTBADPC tprintf(sizeof(long) == 4 ? "[????????] " : \
+			   sizeof(long) == 8 ? "[????????????????] " : \
+			   NULL /* crash */)
 
 #ifdef LINUX
 #ifdef I386
 	long eip;
 
 	if (upeek(tcp->pid, 4*EIP, &eip) < 0) {
-		tprintf("[????????] ");
+		PRINTBADPC;
 		return;
 	}
 	tprintf("[%08lx] ", eip);
-#elif defined(IA62)
+
+#elif defined(S390) || defined(S390X)
+         long psw;
+         if(upeek(tcp->pid,PT_PSWADDR,&psw) < 0) {
+                 PRINTBADPC;
+                 return;
+         }
+#ifdef S390
+         tprintf("[%08lx] ", psw);
+#elif S390X
+       tprintf("[%16lx] ", psw);
+#endif
+
+#elif defined(X86_64)
+	long rip;
+
+	if (upeek(tcp->pid, 8*RIP, &rip) < 0) {
+		PRINTBADPC;
+		return;
+	}
+	tprintf("[%16lx] ", rip);
+#elif defined(IA64)
 	long ip;
 
 	if (upeek(tcp->pid, PT_B0, &ip) < 0) {
-		tprintf("[????????] ");
+		PRINTBADPC;
 		return;
 	}
 	tprintf("[%08lx] ", ip);
 #elif defined(POWERPC)
 	long pc;
 
-	if (upeek(tcp->pid, 4*PT_NIP, &pc) < 0) {
+	if (upeek(tcp->pid, sizeof(unsigned long)*PT_NIP, &pc) < 0) {
 		tprintf ("[????????] ");
 		return;
 	}
@@ -1035,14 +1166,14 @@ struct tcb *tcp;
 	long pc;
 
 	if (upeek(tcp->pid, REG_PC, &pc) < 0) {
-		tprintf ("[????????] ");
+		tprintf ("[????????????????] ");
 		return;
 	}
 	tprintf("[%08lx] ", pc);
-#elif defined(SPARC)
+#elif defined(SPARC) || defined(SPARC64)
 	struct regs regs;
 	if (ptrace(PTRACE_GETREGS,tcp->pid,(char *)&regs,0) < 0) {
-		tprintf("[????????] ");
+		PRINTBADPC;
 		return;
 	}
 	tprintf("[%08lx] ", regs.r_pc);
@@ -1070,6 +1201,22 @@ struct tcb *tcp;
                return;
        }
        tprintf("[%08lx] ", pc);
+#elif defined(SH64)
+	long pc;
+
+	if (upeek(tcp->pid, REG_PC, &pc) < 0) {
+		tprintf ("[????????????????] ");
+		return;
+	}
+	tprintf("[%08lx] ", pc);
+#elif defined(ARM)
+	long pc;
+
+	if (upeek(tcp->pid, 4*15, &pc) < 0) {
+		PRINTBADPC;
+		return;
+	}
+	tprintf("[%08lx] ", pc);
 #endif /* !architecture */
 #endif /* LINUX */
 
@@ -1078,7 +1225,7 @@ struct tcb *tcp;
 
 	if (ptrace(PTRACE_GETREGS, tcp->pid, (char *) &regs, 0) < 0) {
 		perror("printcall: ptrace(PTRACE_GETREGS, ...)");
-		tprintf("[????????] ");
+		PRINTBADPC;
 		return;
 	}
 	tprintf("[%08x] ", regs.r_o7);
@@ -1086,7 +1233,7 @@ struct tcb *tcp;
 
 #ifdef SVR4
 	/* XXX */
-	tprintf("[????????] ");
+	PRINTBADPC;
 #endif
 
 #ifdef FREEBSD
@@ -1098,16 +1245,287 @@ struct tcb *tcp;
 
 #ifndef USE_PROCFS
 
+#if defined LINUX
+
+#include <sys/syscall.h>
+#ifndef CLONE_PTRACE
+# define CLONE_PTRACE    0x00002000
+#endif
+#ifndef CLONE_STOPPED
+# define CLONE_STOPPED   0x02000000
+#endif
+
+#ifdef IA64
+
+/* We don't have fork()/vfork() syscalls on ia64 itself, but the ia32
+   subsystem has them for x86... */
+#define SYS_fork	2
+#define SYS_vfork	190
+
+typedef unsigned long *arg_setup_state;
+
+static int
+arg_setup(struct tcb *tcp, arg_setup_state *state)
+{
+	unsigned long *bsp, cfm, sof, sol;
+
+	if (ia32)
+		return 0;
+
+	if (upeek(tcp->pid, PT_AR_BSP, (long *) &bsp) < 0)
+		return -1;
+	if (upeek(tcp->pid, PT_CFM, (long *) &cfm) < 0)
+		return -1;
+
+	sof = (cfm >> 0) & 0x7f;
+	sol = (cfm >> 7) & 0x7f;
+	bsp = ia64_rse_skip_regs(bsp, -sof + sol);
+
+	*state = bsp;
+	return 0;
+}
+
+# define arg_finish_change(tcp, state)	0
+
+#ifdef SYS_fork
+static int
+get_arg0 (struct tcb *tcp, arg_setup_state *state, long *valp)
+{
+	int ret;
+
+	if (ia32)
+		ret = upeek (tcp->pid, PT_R11, valp);
+	else
+		ret = umoven (tcp,
+			      (unsigned long) ia64_rse_skip_regs(*state, 0),
+			      sizeof(long), (void *) valp);
+	return ret;
+}
+
+static int
+get_arg1 (struct tcb *tcp, arg_setup_state *state, long *valp)
+{
+	int ret;
+
+	if (ia32)
+		ret = upeek (tcp->pid, PT_R9, valp);
+	else
+		ret = umoven (tcp,
+			      (unsigned long) ia64_rse_skip_regs(*state, 1),
+			      sizeof(long), (void *) valp);
+	return ret;
+}
+#endif
+
+static int
+set_arg0 (struct tcb *tcp, arg_setup_state *state, long val)
+{
+	int req = PTRACE_POKEDATA;
+	void *ap;
+
+	if (ia32) {
+		ap = (void *) (intptr_t) PT_R11;	 /* r11 == EBX */
+		req = PTRACE_POKEUSER;
+	} else
+		ap = ia64_rse_skip_regs(*state, 0);
+	errno = 0;
+	ptrace(req, tcp->pid, ap, val);
+	return errno ? -1 : 0;
+}
+
+static int
+set_arg1 (struct tcb *tcp, arg_setup_state *state, long val)
+{
+	int req = PTRACE_POKEDATA;
+	void *ap;
+
+	if (ia32) {
+		ap = (void *) (intptr_t) PT_R9;		/* r9 == ECX */
+		req = PTRACE_POKEUSER;
+	} else
+		ap = ia64_rse_skip_regs(*state, 1);
+	errno = 0;
+	ptrace(req, tcp->pid, ap, val);
+	return errno ? -1 : 0;
+}
+
+#elif defined (SPARC) || defined (SPARC64)
+
+typedef struct regs arg_setup_state;
+
+# define arg_setup(tcp, state) \
+  (ptrace (PTRACE_GETREGS, tcp->pid, (char *) (state), 0))
+# define arg_finish_change(tcp, state) \
+  (ptrace (PTRACE_SETREGS, tcp->pid, (char *) (state), 0))
+
+# define get_arg0(tcp, state, valp) (*(valp) = (state)->r_o0, 0)
+# define get_arg1(tcp, state, valp) (*(valp) = (state)->r_o1, 0)
+# define set_arg0(tcp, state, val) ((state)->r_o0 = (val), 0)
+# define set_arg1(tcp, state, val) ((state)->r_o1 = (val), 0)
+# define restore_arg0(tcp, state, val) 0
+
+#else
+
+# if defined S390 || defined S390X
+/* Note: this is only true for the `clone' system call, which handles
+   arguments specially.  We could as well say that its first two arguments
+   are swapped relative to other architectures, but that would just be
+   another #ifdef in the calls.  */
+#  define arg0_offset	PT_GPR3
+#  define arg1_offset	PT_ORIGGPR2
+#  define restore_arg0(tcp, state, val) ((void) (state), 0)
+#  define restore_arg1(tcp, state, val) ((void) (state), 0)
+#  define arg0_index	1
+#  define arg1_index	0
+# elif defined (ALPHA) || defined (MIPS)
+#  define arg0_offset	REG_A0
+#  define arg1_offset	(REG_A0+1)
+# elif defined (POWERPC)
+#  define arg0_offset	(sizeof(unsigned long)*PT_R3)
+#  define arg1_offset	(sizeof(unsigned long)*PT_R4)
+#  define restore_arg0(tcp, state, val) ((void) (state), 0)
+# elif defined (HPPA)
+#  define arg0_offset	 PT_GR26
+#  define arg1_offset	 (PT_GR26-4)
+# elif defined (X86_64)
+#  define arg0_offset	((long)(8*(current_personality ? RBX : RDI)))
+#  define arg1_offset	((long)(8*(current_personality ? RCX : RSI)))
+# elif defined (SH)
+#  define arg0_offset	(4*(REG_REG0+4))
+#  define arg1_offset	(4*(REG_REG0+5))
+# elif defined (SH64)
+   /* ABI defines arg0 & 1 in r2 & r3 */
+#  define arg0_offset   (REG_OFFSET+16)
+#  define arg1_offset   (REG_OFFSET+24)
+#  define restore_arg0(tcp, state, val) 0
+# else
+#  define arg0_offset	0
+#  define arg1_offset	4
+#  if defined ARM
+#   define restore_arg0(tcp, state, val) 0
+#  endif
+# endif
+
+typedef int arg_setup_state;
+
+# define arg_setup(tcp, state) (0)
+# define arg_finish_change(tcp, state)	0
+# define get_arg0(tcp, cookie, valp) \
+  (upeek ((tcp)->pid, arg0_offset, (valp)))
+# define get_arg1(tcp, cookie, valp) \
+  (upeek ((tcp)->pid, arg1_offset, (valp)))
+
+static int
+set_arg0 (struct tcb *tcp, void *cookie, long val)
+{
+	return ptrace (PTRACE_POKEUSER, tcp->pid, (char*)arg0_offset, val);
+}
+
+static int
+set_arg1 (struct tcb *tcp, void *cookie, long val)
+{
+	return ptrace (PTRACE_POKEUSER, tcp->pid, (char*)arg1_offset, val);
+}
+
+#endif
+
+#ifndef restore_arg0
+# define restore_arg0(tcp, state, val) set_arg0((tcp), (state), (val))
+#endif
+#ifndef restore_arg1
+# define restore_arg1(tcp, state, val) set_arg1((tcp), (state), (val))
+#endif
+
+#ifndef arg0_index
+# define arg0_index 0
+# define arg1_index 1
+#endif
+
+int
+setbpt(tcp)
+struct tcb *tcp;
+{
+	extern int change_syscall(struct tcb *, int);
+	arg_setup_state state;
+
+	if (tcp->flags & TCB_BPTSET) {
+		fprintf(stderr, "PANIC: TCB already set in pid %u\n", tcp->pid);
+		return -1;
+	}
+
+	switch (known_scno(tcp)) {
+#ifdef SYS_vfork
+	case SYS_vfork:
+#endif
+#ifdef SYS_fork
+	case SYS_fork:
+#endif
+#if defined SYS_fork || defined SYS_vfork
+		if (arg_setup (tcp, &state) < 0
+		    || get_arg0 (tcp, &state, &tcp->inst[0]) < 0
+		    || get_arg1 (tcp, &state, &tcp->inst[1]) < 0
+		    || change_syscall(tcp, SYS_clone) < 0
+		    || set_arg0 (tcp, &state, CLONE_PTRACE|SIGCHLD) < 0
+		    || set_arg1 (tcp, &state, 0) < 0
+		    || arg_finish_change (tcp, &state) < 0)
+			return -1;
+		tcp->u_arg[arg0_index] = CLONE_PTRACE|SIGCHLD;
+		tcp->u_arg[arg1_index] = 0;
+		tcp->flags |= TCB_BPTSET;
+		return 0;
+#endif
+
+	case SYS_clone:
+#ifdef SYS_clone2
+	case SYS_clone2:
+#endif
+		if ((tcp->u_arg[arg0_index] & CLONE_PTRACE) == 0
+		    && (arg_setup (tcp, &state) < 0
+			|| set_arg0 (tcp, &state,
+				     tcp->u_arg[arg0_index] | CLONE_PTRACE) < 0
+			|| arg_finish_change (tcp, &state) < 0))
+			return -1;
+		tcp->flags |= TCB_BPTSET;
+		tcp->inst[0] = tcp->u_arg[arg0_index];
+		tcp->inst[1] = tcp->u_arg[arg1_index];
+		return 0;
+
+	default:
+		fprintf(stderr, "PANIC: setbpt for syscall %ld on %u???\n",
+			tcp->scno, tcp->pid);
+		break;
+	}
+
+	return -1;
+}
+
+int
+clearbpt(tcp)
+struct tcb *tcp;
+{
+	arg_setup_state state;
+	if (arg_setup (tcp, &state) < 0
+	    || restore_arg0 (tcp, &state, tcp->inst[0]) < 0
+	    || restore_arg1 (tcp, &state, tcp->inst[1]) < 0
+	    || arg_finish_change (tcp, &state))
+		return -1;
+	tcp->flags &= ~TCB_BPTSET;
+	return 0;
+}
+
+#else
+
 int
 setbpt(tcp)
 struct tcb *tcp;
 {
 
 #ifdef LINUX
-#ifdef SPARC
+#if defined (SPARC) || defined (SPARC64)
 	/* We simply use the SunOS breakpoint code. */
 
 	struct regs regs;
+	unsigned long inst;
 #define LOOPA	0x30800000	/* ba,a	0 */
 
 	if (tcp->flags & TCB_BPTSET) {
@@ -1137,25 +1555,55 @@ struct tcb *tcp;
 	 * Of cause, if we evaporate ourselves in the middle of all this...
 	 */
 	errno = 0;
-	ptrace(PTRACE_POKETEXT, tcp->pid, (char *) tcp->baddr, LOOPA);
+	inst = LOOPA;
+#if defined (SPARC64)
+	inst <<= 32;
+	inst |= (tcp->inst[0] & 0xffffffffUL);
+#endif
+	ptrace(PTRACE_POKETEXT, tcp->pid, (char *) tcp->baddr, inst);
 	if(errno) {
 		perror("setbpt: ptrace(PTRACE_POKETEXT, ...)");
 		return -1;
 	}
 	tcp->flags |= TCB_BPTSET;
 
-#else /* !SPARC */
+#else /* !SPARC && !SPARC64 */
 #ifdef IA64
-	/*
-	 * Our strategy here is to replace the bundle that contained
-	 * the clone() syscall with a bundle of the form:
-	 *
-	 *	{ 1: br 1b; br 1b; br 1b }
-	 *
-	 * This ensures that the newly forked child will loop
-	 * endlessly until we've got a chance to attach to it.
-	 */
-	{
+	if (ia32) {
+#		define LOOP	0x0000feeb
+		if (tcp->flags & TCB_BPTSET) {
+			fprintf(stderr, "PANIC: bpt already set in pid %u\n",
+				tcp->pid);
+			return -1;
+		}
+		if (upeek(tcp->pid, PT_CR_IIP, &tcp->baddr) < 0)
+			return -1;
+		if (debug)
+			fprintf(stderr, "[%d] setting bpt at %lx\n",
+				tcp->pid, tcp->baddr);
+		tcp->inst[0] = ptrace(PTRACE_PEEKTEXT, tcp->pid,
+				      (char *) tcp->baddr, 0);
+		if (errno) {
+			perror("setbpt: ptrace(PTRACE_PEEKTEXT, ...)");
+			return -1;
+		}
+		ptrace(PTRACE_POKETEXT, tcp->pid, (char *) tcp->baddr, LOOP);
+		if (errno) {
+			perror("setbpt: ptrace(PTRACE_POKETEXT, ...)");
+			return -1;
+		}
+		tcp->flags |= TCB_BPTSET;
+	} else {
+		/*
+		 * Our strategy here is to replace the bundle that
+		 * contained the clone() syscall with a bundle of the
+		 * form:
+		 *
+		 *	{ 1: br 1b; br 1b; br 1b }
+		 *
+		 * This ensures that the newly forked child will loop
+		 * endlessly until we've got a chance to attach to it.
+		 */
 #		define LOOP0	0x0000100000000017
 #		define LOOP1	0x4000000000200000
 		unsigned long addr, ipsr;
@@ -1166,11 +1614,14 @@ struct tcb *tcp;
 			return -1;
 		if (upeek(pid, PT_CR_IIP, &addr) < 0)
 			return -1;
-		tcp->baddr = addr | ((ipsr >> 41) & 0x3);	/* store "ri" in low two bits */
+		/* store "ri" in low two bits */
+		tcp->baddr = addr | ((ipsr >> 41) & 0x3);
 
 		errno = 0;
-		tcp->inst[0] = ptrace(PTRACE_PEEKTEXT, pid, (char *) addr + 0, 0);
-		tcp->inst[1] = ptrace(PTRACE_PEEKTEXT, pid, (char *) addr + 8, 0);
+		tcp->inst[0] = ptrace(PTRACE_PEEKTEXT, pid, (char *) addr + 0,
+				      0);
+		tcp->inst[1] = ptrace(PTRACE_PEEKTEXT, pid, (char *) addr + 8,
+				      0);
 		if (errno) {
 			perror("setbpt: ptrace(PTRACE_PEEKTEXT, ...)");
 			return -1;
@@ -1185,61 +1636,24 @@ struct tcb *tcp;
 		}
 		tcp->flags |= TCB_BPTSET;
 	}
-#elif defined(ARM)
-	struct pt_regs regs;
-
-#define ARM_LOOP	0xeafffffe
-
-	if (tcp->flags & TCB_BPTSET) {
-		fprintf(stderr, "PANIC: TCB already set in pid %u\n", tcp->pid);
-		return -1;
-	}
-
-	if (ptrace(PTRACE_GETREGS, tcp->pid, 0, &regs) < 0) {
-		perror("setbpt: ptrace(PTRACE_GETREGS, ...)");
-		return -1;
-	}
-
-	/*
-	 * Again, we only support 32-bit CPUs
-	 */
-	tcp->baddr = regs.ARM_pc;
-
-	if (debug)
-		fprintf(stderr, "[%d] setting bpt at %lx\n", tcp->pid, tcp->baddr);
-
-	if (regs.ARM_cpsr & 0x20) {
-		fprintf(stderr, "PANIC: can't handle thumb mode\n");
-		return -1;
-	} else {
-		errno = 0;
-		tcp->inst[0] = ptrace(PTRACE_PEEKTEXT, tcp->pid, (char *)tcp->baddr, 0);
-		if (errno) {
-			perror("setbpt: ptrace(PTRACE_PEEKTEXT, ...)");
-			return -1;
-		}
-
-		ptrace(PTRACE_POKETEXT, tcp->pid, (char *)tcp->baddr, ARM_LOOP);
-		if (errno) {
-			perror("setbpt: ptrace(PTRACE_POKETEXT, ...)");
-			return -1;
-		}
-		tcp->flags |= TCB_BPTSET;
-	}
 #else /* !IA64 */
 
-#if defined (I386)
+#if defined (I386) || defined(X86_64)
 #define LOOP	0x0000feeb
 #elif defined (M68K)
 #define LOOP	0x60fe0000
 #elif defined (ALPHA)
 #define LOOP	0xc3ffffff
 #elif defined (POWERPC)
-#define LOOP	0x0000feeb
+#define LOOP	0x48000000
+#elif defined(ARM)
+#define LOOP	0xEAFFFFFE
 #elif defined(MIPS)
 #define LOOP	0x1000ffff
 #elif defined(S390)
 #define LOOP	0xa7f40000	/* BRC 15,0 */
+#elif defined(S390X)
+#define LOOP   0xa7f4000000000000UL /* BRC 15,0 */
 #elif defined(HPPA)
 #define LOOP	0xe81f1ff7	/* b,l,n <loc>,r0 */
 #elif defined(SH)
@@ -1259,17 +1673,22 @@ struct tcb *tcp;
 #if defined (I386)
 	if (upeek(tcp->pid, 4*EIP, &tcp->baddr) < 0)
 		return -1;
+#elif defined (X86_64)
+	if (upeek(tcp->pid, 8*RIP, &tcp->baddr) < 0)
+		return -1;
 #elif defined (M68K)
 	if (upeek(tcp->pid, 4*PT_PC, &tcp->baddr) < 0)
 	  return -1;
 #elif defined (ALPHA)
 	return -1;
+#elif defined (ARM)
+	return -1;
 #elif defined (MIPS)
 	return -1;		/* FIXME: I do not know what i do - Flo */
 #elif defined (POWERPC)
-	if (upeek(tcp->pid, 4*PT_NIP, &tcp->baddr) < 0)
+	if (upeek(tcp->pid, sizeof(unsigned long)*PT_NIP, &tcp->baddr) < 0)
 		return -1;
-#elif defined(S390)
+#elif defined(S390) || defined(S390X)
 	if (upeek(tcp->pid,PT_PSWADDR, &tcp->baddr) < 0)
 		return -1;
 #elif defined(HPPA)
@@ -1297,7 +1716,7 @@ struct tcb *tcp;
 	tcp->flags |= TCB_BPTSET;
 
 #endif /* !IA64 */
-#endif /* SPARC */
+#endif /* SPARC || SPARC64 */
 #endif /* LINUX */
 
 #ifdef SUNOS4
@@ -1358,7 +1777,7 @@ struct tcb *tcp;
 {
 
 #ifdef LINUX
-#if defined(I386)
+#if defined(I386) || defined(X86_64)
 	long eip;
 #elif defined(POWERPC)
 	long pc;
@@ -1372,7 +1791,7 @@ struct tcb *tcp;
        long pc;
 #endif /* architecture */
 
-#ifdef SPARC
+#if defined (SPARC) || defined (SPARC64)
 	/* Again, we borrow the SunOS breakpoint code. */
 	if (!(tcp->flags & TCB_BPTSET)) {
 		fprintf(stderr, "PANIC: TCB not set in pid %u\n", tcp->pid);
@@ -1385,24 +1804,35 @@ struct tcb *tcp;
 		return -1;
 	}
 	tcp->flags &= ~TCB_BPTSET;
-#elif defined(ARM)
-	/*
-	 * Gratuitously copied from SPARC.  Replace the breakpoint
-	 * instruction with the original instruction we saved earlier.
-	 */
-	if (!(tcp->flags & TCB_BPTSET)) {
-		fprintf(stderr, "PANIC: TCB not set in pid %u\n", tcp->pid);
-		return -1;
-	}
-	errno = 0;
-	ptrace(PTRACE_POKETEXT, tcp->pid, (char *) tcp->baddr, tcp->inst[0]);
-	if(errno) {
-		perror("clearbtp: ptrace(PTRACE_POKETEXT, ...)");
-		return -1;
-	}
-	tcp->flags &= ~TCB_BPTSET;
 #elif defined(IA64)
-	{
+	if (ia32) {
+		unsigned long addr;
+
+		if (debug)
+			fprintf(stderr, "[%d] clearing bpt\n", tcp->pid);
+		if (!(tcp->flags & TCB_BPTSET)) {
+			fprintf(stderr, "PANIC: TCB not set in pid %u\n", tcp->pid);
+			return -1;
+		}
+		errno = 0;
+		ptrace(PTRACE_POKETEXT, tcp->pid, (char *) tcp->baddr, tcp->inst[0]);
+		if (errno) {
+			perror("clearbtp: ptrace(PTRACE_POKETEXT, ...)");
+			return -1;
+		}
+		tcp->flags &= ~TCB_BPTSET;
+
+		if (upeek(tcp->pid, PT_CR_IIP, &addr) < 0)
+			return -1;
+		if (addr != tcp->baddr) {
+			/* The breakpoint has not been reached yet.  */
+			if (debug)
+				fprintf(stderr,
+					"NOTE: PC not at bpt (pc %#lx baddr %#lx)\n",
+						addr, tcp->baddr);
+			return 0;
+		}
+	} else {
 		unsigned long addr, ipsr;
 		pid_t pid;
 
@@ -1441,7 +1871,7 @@ struct tcb *tcp;
 			return 0;
 		}
 	}
-#else /* !IA64  && ! SPARC */
+#else /* !IA64  && !SPARC && !SPARC64 */
 
 	if (debug)
 		fprintf(stderr, "[%d] clearing bpt\n", tcp->pid);
@@ -1468,8 +1898,19 @@ struct tcb *tcp;
 					eip, tcp->baddr);
 		return 0;
 	}
+#elif defined(X86_64)
+	if (upeek(tcp->pid, 8*RIP, &eip) < 0)
+		return -1;
+	if (eip != tcp->baddr) {
+		/* The breakpoint has not been reached yet.  */
+		if (debug)
+			fprintf(stderr,
+				"NOTE: PC not at bpt (pc %#lx baddr %#lx)\n",
+					eip, tcp->baddr);
+		return 0;
+	}
 #elif defined(POWERPC)
-	if (upeek(tcp->pid, 4*PT_NIP, &pc) < 0)
+	if (upeek(tcp->pid, sizeof(unsigned long)*PT_NIP, &pc) < 0)
 		return -1;
 	if (pc != tcp->baddr) {
 		/* The breakpoint has not been reached yet.  */
@@ -1528,7 +1969,7 @@ struct tcb *tcp;
         }
 
 #endif /* arch */
-#endif /* !SPARC && !IA64 */
+#endif /* !SPARC && !SPARC64 && !IA64 */
 #endif /* LINUX */
 
 #ifdef SUNOS4
@@ -1583,6 +2024,8 @@ struct tcb *tcp;
 
 	return 0;
 }
+
+#endif
 
 #endif /* !USE_PROCFS */
 
@@ -1639,7 +2082,7 @@ struct tcb *tcp;
 		return -1;
 	}
 	if ((strtab = malloc((unsigned)ld.ld_symb_size)) == NULL) {
-		fprintf(stderr, "fixvfork: out of memory\n");
+		fprintf(stderr, "out of memory\n");
 		return -1;
 	}
 	if (umoven(tcp, (int)ld.ld_symbols+(int)N_TXTADDR(hdr),

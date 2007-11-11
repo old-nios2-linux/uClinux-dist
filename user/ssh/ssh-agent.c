@@ -1,3 +1,4 @@
+/* $OpenBSD: ssh-agent.c,v 1.154 2007/02/28 00:55:30 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -34,18 +35,40 @@
  */
 
 #include "includes.h"
+
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#ifdef HAVE_SYS_TIME_H
+# include <sys/time.h>
+#endif
+#ifdef HAVE_SYS_UN_H
+# include <sys/un.h>
+#endif
 #include "openbsd-compat/sys-queue.h"
-RCSID("$OpenBSD: ssh-agent.c,v 1.124 2005/10/30 08:52:18 djm Exp $");
 
 #include <openssl/evp.h>
 #include <openssl/md5.h>
 
+#include <errno.h>
+#include <fcntl.h>
+#ifdef HAVE_PATHS_H
+# include <paths.h>
+#endif
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "rsa.h"
 #include "buffer.h"
-#include "bufaux.h"
-#include "xmalloc.h"
-#include "getput.h"
 #include "key.h"
 #include "authfd.h"
 #include "compat.h"
@@ -99,8 +122,8 @@ int max_fd = 0;
 pid_t parent_pid = -1;
 
 /* pathname and directory for AUTH_SOCKET */
-char socket_name[1024];
-char socket_dir[1024];
+char socket_name[MAXPATHLEN];
+char socket_dir[MAXPATHLEN];
 
 /* locking */
 int locked = 0;
@@ -305,8 +328,8 @@ process_sign_request2(SocketEntry *e)
 		Identity *id = lookup_identity(key, 2);
 		if (id != NULL && (!id->confirm || confirm_key(id) == 0))
 			ok = key_sign(id->key, &signature, &slen, data, dlen);
+		key_free(key);
 	}
-	key_free(key);
 	buffer_init(&msg);
 	if (ok == 0) {
 		buffer_put_char(&msg, SSH2_AGENT_SIGN_RESPONSE);
@@ -411,6 +434,7 @@ reaper(void)
 		for (id = TAILQ_FIRST(&tab->idlist); id; id = nxt) {
 			nxt = TAILQ_NEXT(id, next);
 			if (id->death != 0 && now >= id->death) {
+				debug("expiring key '%s'", id->comment);
 				TAILQ_REMOVE(&tab->idlist, id, next);
 				free_identity(id);
 				tab->nentries--;
@@ -675,13 +699,10 @@ process_message(SocketEntry *e)
 	u_int msg_len, type;
 	u_char *cp;
 
-	/* kill dead keys */
-	reaper();
-
 	if (buffer_len(&e->input) < 5)
 		return;		/* Incomplete message. */
 	cp = buffer_ptr(&e->input);
-	msg_len = GET_32BIT(cp);
+	msg_len = get_u32(cp);
 	if (msg_len > 256 * 1024) {
 		close_socket(e);
 		return;
@@ -793,10 +814,7 @@ new_socket(sock_type type, int fd)
 		}
 	old_alloc = sockets_alloc;
 	new_alloc = sockets_alloc + 10;
-	if (sockets)
-		sockets = xrealloc(sockets, new_alloc * sizeof(sockets[0]));
-	else
-		sockets = xmalloc(new_alloc * sizeof(sockets[0]));
+	sockets = xrealloc(sockets, new_alloc, sizeof(sockets[0]));
 	for (i = old_alloc; i < new_alloc; i++)
 		sockets[i].type = AUTH_UNUSED;
 	sockets_alloc = new_alloc;
@@ -877,7 +895,7 @@ after_select(fd_set *readset, fd_set *writeset)
 			if (FD_ISSET(sockets[i].fd, readset)) {
 				slen = sizeof(sunaddr);
 				sock = accept(sockets[i].fd,
-				    (struct sockaddr *) &sunaddr, &slen);
+				    (struct sockaddr *)&sunaddr, &slen);
 				if (sock < 0) {
 					error("accept from AUTH_SOCKET: %s",
 					    strerror(errno));
@@ -954,6 +972,7 @@ cleanup_exit(int i)
 	_exit(i);
 }
 
+/*ARGSUSED*/
 static void
 cleanup_handler(int sig)
 {
@@ -961,6 +980,7 @@ cleanup_handler(int sig)
 	_exit(2);
 }
 
+/*ARGSUSED*/
 static void
 check_parent_exists(int sig)
 {
@@ -994,7 +1014,7 @@ int
 main(int ac, char **av)
 {
 	int c_flag = 0, d_flag = 0, k_flag = 0, s_flag = 0;
-	int sock, fd,  ch;
+	int sock, fd, ch, result, saved_errno;
 	u_int nalloc;
 	char *shell, *format, *pidstr, *agentsocket = NULL;
 	fd_set *readsetp = NULL, *writesetp = NULL;
@@ -1007,6 +1027,7 @@ main(int ac, char **av)
 	extern char *optarg;
 	pid_t pid;
 	char pidstrbuf[1 + 3 * sizeof pid];
+	struct timeval tv;
 
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
@@ -1067,20 +1088,24 @@ main(int ac, char **av)
 
 	if (ac == 0 && !c_flag && !s_flag) {
 		shell = getenv("SHELL");
-		if (shell != NULL && strncmp(shell + strlen(shell) - 3, "csh", 3) == 0)
+		if (shell != NULL &&
+		    strncmp(shell + strlen(shell) - 3, "csh", 3) == 0)
 			c_flag = 1;
 	}
 	if (k_flag) {
+		const char *errstr = NULL;
+
 		pidstr = getenv(SSH_AGENTPID_ENV_NAME);
 		if (pidstr == NULL) {
 			fprintf(stderr, "%s not set, cannot kill agent\n",
 			    SSH_AGENTPID_ENV_NAME);
 			exit(1);
 		}
-		pid = atoi(pidstr);
-		if (pid < 1) {
-			fprintf(stderr, "%s=\"%s\", which is not a good PID\n",
-			    SSH_AGENTPID_ENV_NAME, pidstr);
+		pid = (int)strtonum(pidstr, 2, INT_MAX, &errstr);
+		if (errstr) {
+			fprintf(stderr,
+			    "%s=\"%s\", which is not a good PID: %s\n",
+			    SSH_AGENTPID_ENV_NAME, pidstr, errstr);
 			exit(1);
 		}
 		if (kill(pid, SIGTERM) == -1) {
@@ -1124,7 +1149,7 @@ main(int ac, char **av)
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, socket_name, sizeof(sunaddr.sun_path));
 	prev_mask = umask(0177);
-	if (bind(sock, (struct sockaddr *) & sunaddr, sizeof(sunaddr)) < 0) {
+	if (bind(sock, (struct sockaddr *) &sunaddr, sizeof(sunaddr)) < 0) {
 		perror("bind");
 		*socket_name = '\0'; /* Don't unlink any existing file */
 		umask(prev_mask);
@@ -1216,13 +1241,18 @@ skip:
 	nalloc = 0;
 
 	while (1) {
+		tv.tv_sec = 10;
+		tv.tv_usec = 0;
 		prepare_select(&readsetp, &writesetp, &max_fd, &nalloc);
-		if (select(max_fd + 1, readsetp, writesetp, NULL, NULL) < 0) {
-			if (errno == EINTR)
+		result = select(max_fd + 1, readsetp, writesetp, NULL, &tv);
+		saved_errno = errno;
+		reaper();	/* remove expired keys */
+		if (result < 0) {
+			if (saved_errno == EINTR)
 				continue;
-			fatal("select: %s", strerror(errno));
-		}
-		after_select(readsetp, writesetp);
+			fatal("select: %s", strerror(saved_errno));
+		} else if (result > 0)
+			after_select(readsetp, writesetp);
 	}
 	/* NOTREACHED */
 }

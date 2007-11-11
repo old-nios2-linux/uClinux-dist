@@ -1,6 +1,7 @@
 /*
- * i2c-algo-sgi.c: i2c driver algorithms for SGI adapters.
- * 
+ * i2c-algo-sgi.c: i2c driver algorithm used by the VINO (SGI Indy) and
+ * MACE (SGI O2) chips.
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License version 2 as published by the Free Software Foundation.
  *
@@ -162,8 +163,8 @@ static const struct i2c_algorithm sgi_algo = {
 	.functionality	= sgi_func,
 };
 
-/* 
- * registering functions to load algorithms at runtime 
+/*
+ * registering functions to load algorithms at runtime
  */
 int i2c_sgi_add_bus(struct i2c_adapter *adap)
 {
@@ -171,15 +172,7 @@ int i2c_sgi_add_bus(struct i2c_adapter *adap)
 
 	return i2c_add_adapter(adap);
 }
-
-
-int i2c_sgi_del_bus(struct i2c_adapter *adap)
-{
-	return i2c_del_adapter(adap);
-}
-
 EXPORT_SYMBOL(i2c_sgi_add_bus);
-EXPORT_SYMBOL(i2c_sgi_del_bus);
 
 MODULE_AUTHOR("Ladislav Michl <ladis@linux-mips.org>");
 MODULE_DESCRIPTION("I2C-Bus SGI algorithm");

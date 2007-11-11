@@ -102,7 +102,7 @@ dcssblk_release_segment(struct device *dev)
  * device needs to be enqueued before the semaphore is
  * freed.
  */
-static inline int
+static int
 dcssblk_assign_free_minor(struct dcssblk_dev_info *dev_info)
 {
 	int minor, found;
@@ -230,7 +230,7 @@ dcssblk_shared_store(struct device *dev, struct device_attribute *attr, const ch
 					   SEGMENT_SHARED);
 		if (rc < 0) {
 			BUG_ON(rc == -EINVAL);
-			if (rc == -EIO || rc == -ENOENT)
+			if (rc != -EAGAIN)
 				goto removeseg;
 		} else {
 			dev_info->is_shared = 1;
@@ -253,7 +253,7 @@ dcssblk_shared_store(struct device *dev, struct device_attribute *attr, const ch
 					   SEGMENT_EXCLUSIVE);
 		if (rc < 0) {
 			BUG_ON(rc == -EINVAL);
-			if (rc == -EIO || rc == -ENOENT)
+			if (rc != -EAGAIN)
 				goto removeseg;
 		} else {
 			dev_info->is_shared = 0;
@@ -621,7 +621,7 @@ out:
 }
 
 static int
-dcssblk_make_request(request_queue_t *q, struct bio *bio)
+dcssblk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct dcssblk_dev_info *dev_info;
 	struct bio_vec *bvec;
@@ -747,14 +747,9 @@ dcssblk_check_params(void)
 static void __exit
 dcssblk_exit(void)
 {
-	int rc;
-
 	PRINT_DEBUG("DCSSBLOCK EXIT...\n");
 	s390_root_dev_unregister(dcssblk_root_dev);
-	rc = unregister_blkdev(dcssblk_major, DCSSBLK_NAME);
-	if (rc) {
-		PRINT_ERR("unregister_blkdev() failed!\n");
-	}
+	unregister_blkdev(dcssblk_major, DCSSBLK_NAME);
 	PRINT_DEBUG("...finished!\n");
 }
 

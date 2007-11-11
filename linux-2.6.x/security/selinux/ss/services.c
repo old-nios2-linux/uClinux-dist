@@ -17,9 +17,13 @@
  *
  *      Added support for NetLabel
  *
+ * Updated: Chad Sellers <csellers@tresys.com>
+ *
+ *  Added validation of kernel classes and permissions
+ *
  * Copyright (C) 2006 Hewlett-Packard Development Company, L.P.
  * Copyright (C) 2004-2006 Trusted Computer Solutions, Inc.
- * Copyright (C) 2003 - 2004 Tresys Technology, LLC
+ * Copyright (C) 2003 - 2004, 2006 Tresys Technology, LLC
  * Copyright (C) 2003 Red Hat, Inc., James Morris <jmorris@redhat.com>
  *	This program is free software; you can redistribute it and/or modify
  *  	it under the terms of the GNU General Public License as published by
@@ -29,12 +33,12 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
+#include <linux/rcupdate.h>
 #include <linux/errno.h>
 #include <linux/in.h>
 #include <linux/sched.h>
 #include <linux/audit.h>
 #include <linux/mutex.h>
-#include <net/sock.h>
 #include <net/netlabel.h>
 
 #include "flask.h"
@@ -48,10 +52,17 @@
 #include "conditional.h"
 #include "mls.h"
 #include "objsec.h"
-#include "selinux_netlabel.h"
+#include "netlabel.h"
+#include "xfrm.h"
+#include "ebitmap.h"
 
 extern void selnl_notify_policyload(u32 seqno);
 unsigned int policydb_loaded_version;
+
+/*
+ * This is declared in avc.c
+ */
+extern const struct selinux_class_perm selinux_class_perm;
 
 static DEFINE_RWLOCK(policy_rwlock);
 #define POLICY_RDLOCK read_lock(&policy_rwlock)
@@ -582,6 +593,13 @@ static int context_struct_to_string(struct context *context, char **scontext, u3
 
 #include "initial_sid_to_string.h"
 
+const char *security_get_initial_sid_context(u32 sid)
+{
+	if (unlikely(sid > SECINITSID_NUM))
+		return NULL;
+	return initial_sid_to_string[sid];
+}
+
 /**
  * security_sid_to_context - Obtain a context for a given SID.
  * @sid: security identifier, SID
@@ -596,6 +614,9 @@ int security_sid_to_context(u32 sid, char **scontext, u32 *scontext_len)
 {
 	struct context *context;
 	int rc = 0;
+
+	*scontext = NULL;
+	*scontext_len  = 0;
 
 	if (!ss_initialized) {
 		if (sid <= SECINITSID_NUM) {
@@ -771,7 +792,7 @@ int security_context_to_sid(char *scontext, u32 scontext_len, u32 *sid)
  * @scontext: security context
  * @scontext_len: length in bytes
  * @sid: security identifier, SID
- * @def_sid: default SID to assign on errror
+ * @def_sid: default SID to assign on error
  *
  * Obtains a SID associated with the security context that
  * has the string representation specified by @scontext.
@@ -1019,86 +1040,114 @@ int security_change_sid(u32 ssid,
 }
 
 /*
- * Verify that each permission that is defined under the
- * existing policy is still defined with the same value
- * in the new policy.
+ * Verify that each kernel class that is defined in the
+ * policy is correct
  */
-static int validate_perm(void *key, void *datum, void *p)
+static int validate_classes(struct policydb *p)
 {
-	struct hashtab *h;
-	struct perm_datum *perdatum, *perdatum2;
-	int rc = 0;
+	int i, j;
+	struct class_datum *cladatum;
+	struct perm_datum *perdatum;
+	u32 nprim, tmp, common_pts_len, perm_val, pol_val;
+	u16 class_val;
+	const struct selinux_class_perm *kdefs = &selinux_class_perm;
+	const char *def_class, *def_perm, *pol_class;
+	struct symtab *perms;
 
-
-	h = p;
-	perdatum = datum;
-
-	perdatum2 = hashtab_search(h, key);
-	if (!perdatum2) {
-		printk(KERN_ERR "security:  permission %s disappeared",
-		       (char *)key);
-		rc = -ENOENT;
-		goto out;
-	}
-	if (perdatum->value != perdatum2->value) {
-		printk(KERN_ERR "security:  the value of permission %s changed",
-		       (char *)key);
-		rc = -EINVAL;
-	}
-out:
-	return rc;
-}
-
-/*
- * Verify that each class that is defined under the
- * existing policy is still defined with the same
- * attributes in the new policy.
- */
-static int validate_class(void *key, void *datum, void *p)
-{
-	struct policydb *newp;
-	struct class_datum *cladatum, *cladatum2;
-	int rc;
-
-	newp = p;
-	cladatum = datum;
-
-	cladatum2 = hashtab_search(newp->p_classes.table, key);
-	if (!cladatum2) {
-		printk(KERN_ERR "security:  class %s disappeared\n",
-		       (char *)key);
-		rc = -ENOENT;
-		goto out;
-	}
-	if (cladatum->value != cladatum2->value) {
-		printk(KERN_ERR "security:  the value of class %s changed\n",
-		       (char *)key);
-		rc = -EINVAL;
-		goto out;
-	}
-	if ((cladatum->comdatum && !cladatum2->comdatum) ||
-	    (!cladatum->comdatum && cladatum2->comdatum)) {
-		printk(KERN_ERR "security:  the inherits clause for the access "
-		       "vector definition for class %s changed\n", (char *)key);
-		rc = -EINVAL;
-		goto out;
-	}
-	if (cladatum->comdatum) {
-		rc = hashtab_map(cladatum->comdatum->permissions.table, validate_perm,
-		                 cladatum2->comdatum->permissions.table);
-		if (rc) {
-			printk(" in the access vector definition for class "
-			       "%s\n", (char *)key);
-			goto out;
+	for (i = 1; i < kdefs->cts_len; i++) {
+		def_class = kdefs->class_to_string[i];
+		if (!def_class)
+			continue;
+		if (i > p->p_classes.nprim) {
+			printk(KERN_INFO
+			       "security:  class %s not defined in policy\n",
+			       def_class);
+			continue;
+		}
+		pol_class = p->p_class_val_to_name[i-1];
+		if (strcmp(pol_class, def_class)) {
+			printk(KERN_ERR
+			       "security:  class %d is incorrect, found %s but should be %s\n",
+			       i, pol_class, def_class);
+			return -EINVAL;
 		}
 	}
-	rc = hashtab_map(cladatum->permissions.table, validate_perm,
-	                 cladatum2->permissions.table);
-	if (rc)
-		printk(" in access vector definition for class %s\n",
-		       (char *)key);
-out:
-	return rc;
+	for (i = 0; i < kdefs->av_pts_len; i++) {
+		class_val = kdefs->av_perm_to_string[i].tclass;
+		perm_val = kdefs->av_perm_to_string[i].value;
+		def_perm = kdefs->av_perm_to_string[i].name;
+		if (class_val > p->p_classes.nprim)
+			continue;
+		pol_class = p->p_class_val_to_name[class_val-1];
+		cladatum = hashtab_search(p->p_classes.table, pol_class);
+		BUG_ON(!cladatum);
+		perms = &cladatum->permissions;
+		nprim = 1 << (perms->nprim - 1);
+		if (perm_val > nprim) {
+			printk(KERN_INFO
+			       "security:  permission %s in class %s not defined in policy\n",
+			       def_perm, pol_class);
+			continue;
+		}
+		perdatum = hashtab_search(perms->table, def_perm);
+		if (perdatum == NULL) {
+			printk(KERN_ERR
+			       "security:  permission %s in class %s not found in policy\n",
+			       def_perm, pol_class);
+			return -EINVAL;
+		}
+		pol_val = 1 << (perdatum->value - 1);
+		if (pol_val != perm_val) {
+			printk(KERN_ERR
+			       "security:  permission %s in class %s has incorrect value\n",
+			       def_perm, pol_class);
+			return -EINVAL;
+		}
+	}
+	for (i = 0; i < kdefs->av_inherit_len; i++) {
+		class_val = kdefs->av_inherit[i].tclass;
+		if (class_val > p->p_classes.nprim)
+			continue;
+		pol_class = p->p_class_val_to_name[class_val-1];
+		cladatum = hashtab_search(p->p_classes.table, pol_class);
+		BUG_ON(!cladatum);
+		if (!cladatum->comdatum) {
+			printk(KERN_ERR
+			       "security:  class %s should have an inherits clause but does not\n",
+			       pol_class);
+			return -EINVAL;
+		}
+		tmp = kdefs->av_inherit[i].common_base;
+		common_pts_len = 0;
+		while (!(tmp & 0x01)) {
+			common_pts_len++;
+			tmp >>= 1;
+		}
+		perms = &cladatum->comdatum->permissions;
+		for (j = 0; j < common_pts_len; j++) {
+			def_perm = kdefs->av_inherit[i].common_pts[j];
+			if (j >= perms->nprim) {
+				printk(KERN_INFO
+				       "security:  permission %s in class %s not defined in policy\n",
+				       def_perm, pol_class);
+				continue;
+			}
+			perdatum = hashtab_search(perms->table, def_perm);
+			if (perdatum == NULL) {
+				printk(KERN_ERR
+				       "security:  permission %s in class %s not found in policy\n",
+				       def_perm, pol_class);
+				return -EINVAL;
+			}
+			if (perdatum->value != j + 1) {
+				printk(KERN_ERR
+				       "security:  permission %s in class %s has incorrect value\n",
+				       def_perm, pol_class);
+				return -EINVAL;
+			}
+		}
+	}
+	return 0;
 }
 
 /* Clone the SID into the new SID table. */
@@ -1208,6 +1257,7 @@ bad:
 }
 
 extern void selinux_complete_init(void);
+static int security_preserve_bools(struct policydb *p);
 
 /**
  * security_load_policy - Load a security policy configuration.
@@ -1243,6 +1293,16 @@ int security_load_policy(void *data, size_t len)
 			avtab_cache_destroy();
 			return -EINVAL;
 		}
+		/* Verify that the kernel defined classes are correct. */
+		if (validate_classes(&policydb)) {
+			printk(KERN_ERR
+			       "security:  the definition of a class is incorrect\n");
+			LOAD_UNLOCK;
+			sidtab_destroy(&sidtab);
+			policydb_destroy(&policydb);
+			avtab_cache_destroy();
+			return -EINVAL;
+		}
 		policydb_loaded_version = policydb.policyvers;
 		ss_initialized = 1;
 		seqno = ++latest_granting;
@@ -1251,6 +1311,7 @@ int security_load_policy(void *data, size_t len)
 		avc_ss_reset(seqno);
 		selnl_notify_policyload(seqno);
 		selinux_netlbl_cache_invalidate();
+		selinux_xfrm_notify_policyload();
 		return 0;
 	}
 
@@ -1265,11 +1326,17 @@ int security_load_policy(void *data, size_t len)
 
 	sidtab_init(&newsidtab);
 
-	/* Verify that the existing classes did not change. */
-	if (hashtab_map(policydb.p_classes.table, validate_class, &newpolicydb)) {
-		printk(KERN_ERR "security:  the definition of an existing "
-		       "class changed\n");
+	/* Verify that the kernel defined classes are correct. */
+	if (validate_classes(&newpolicydb)) {
+		printk(KERN_ERR
+		       "security:  the definition of a class is incorrect\n");
 		rc = -EINVAL;
+		goto err;
+	}
+
+	rc = security_preserve_bools(&newpolicydb);
+	if (rc) {
+		printk(KERN_ERR "security:  unable to preserve booleans\n");
 		goto err;
 	}
 
@@ -1306,6 +1373,7 @@ int security_load_policy(void *data, size_t len)
 	avc_ss_reset(seqno);
 	selnl_notify_policyload(seqno);
 	selinux_netlbl_cache_invalidate();
+	selinux_xfrm_notify_policyload();
 
 	return 0;
 
@@ -1519,19 +1587,18 @@ int security_get_user_sids(u32 fromsid,
 			   u32 *nel)
 {
 	struct context *fromcon, usercon;
-	u32 *mysids, *mysids2, sid;
+	u32 *mysids = NULL, *mysids2, sid;
 	u32 mynel = 0, maxnel = SIDS_NEL;
 	struct user_datum *user;
 	struct role_datum *role;
-	struct av_decision avd;
 	struct ebitmap_node *rnode, *tnode;
 	int rc = 0, i, j;
 
-	if (!ss_initialized) {
-		*sids = NULL;
-		*nel = 0;
+	*sids = NULL;
+	*nel = 0;
+
+	if (!ss_initialized)
 		goto out;
-	}
 
 	POLICY_RDLOCK;
 
@@ -1567,17 +1634,9 @@ int security_get_user_sids(u32 fromsid,
 			if (mls_setup_user_range(fromcon, user, &usercon))
 				continue;
 
-			rc = context_struct_compute_av(fromcon, &usercon,
-						       SECCLASS_PROCESS,
-						       PROCESS__TRANSITION,
-						       &avd);
-			if (rc ||  !(avd.allowed & PROCESS__TRANSITION))
-				continue;
 			rc = sidtab_context_to_sid(&sidtab, &usercon, &sid);
-			if (rc) {
-				kfree(mysids);
+			if (rc)
 				goto out_unlock;
-			}
 			if (mynel < maxnel) {
 				mysids[mynel++] = sid;
 			} else {
@@ -1585,7 +1644,6 @@ int security_get_user_sids(u32 fromsid,
 				mysids2 = kcalloc(maxnel, sizeof(*mysids2), GFP_ATOMIC);
 				if (!mysids2) {
 					rc = -ENOMEM;
-					kfree(mysids);
 					goto out_unlock;
 				}
 				memcpy(mysids2, mysids, mynel * sizeof(*mysids2));
@@ -1596,11 +1654,32 @@ int security_get_user_sids(u32 fromsid,
 		}
 	}
 
-	*sids = mysids;
-	*nel = mynel;
-
 out_unlock:
 	POLICY_RDUNLOCK;
+	if (rc || !mynel) {
+		kfree(mysids);
+		goto out;
+	}
+
+	mysids2 = kcalloc(mynel, sizeof(*mysids2), GFP_KERNEL);
+	if (!mysids2) {
+		rc = -ENOMEM;
+		kfree(mysids);
+		goto out;
+	}
+	for (i = 0, j = 0; i < mynel; i++) {
+		rc = avc_has_perm_noaudit(fromsid, mysids[i],
+					  SECCLASS_PROCESS,
+					  PROCESS__TRANSITION, AVC_STRICT,
+					  NULL);
+		if (!rc)
+			mysids2[j++] = mysids[i];
+		cond_resched();
+	}
+	rc = 0;
+	kfree(mysids);
+	*sids = mysids2;
+	*nel = j;
 out:
 	return rc;
 }
@@ -1805,6 +1884,7 @@ out:
 	if (!rc) {
 		avc_ss_reset(seqno);
 		selnl_notify_policyload(seqno);
+		selinux_xfrm_notify_policyload();
 	}
 	return rc;
 }
@@ -1825,6 +1905,37 @@ int security_get_bool_value(int bool)
 	rc = policydb.bool_val_to_struct[bool]->state;
 out:
 	POLICY_RDUNLOCK;
+	return rc;
+}
+
+static int security_preserve_bools(struct policydb *p)
+{
+	int rc, nbools = 0, *bvalues = NULL, i;
+	char **bnames = NULL;
+	struct cond_bool_datum *booldatum;
+	struct cond_node *cur;
+
+	rc = security_get_bools(&nbools, &bnames, &bvalues);
+	if (rc)
+		goto out;
+	for (i = 0; i < nbools; i++) {
+		booldatum = hashtab_search(p->p_bools.table, bnames[i]);
+		if (booldatum)
+			booldatum->state = bvalues[i];
+	}
+	for (cur = p->cond_list; cur != NULL; cur = cur->next) {
+		rc = evaluate_cond_node(p, cur);
+		if (rc)
+			goto out;
+	}
+
+out:
+	if (bnames) {
+		for (i = 0; i < nbools; i++)
+			kfree(bnames[i]);
+	}
+	kfree(bnames);
+	kfree(bvalues);
 	return rc;
 }
 
@@ -1868,10 +1979,9 @@ int security_sid_mls_copy(u32 sid, u32 mls_sid, u32 *new_sid)
 	newcon.user = context1->user;
 	newcon.role = context1->role;
 	newcon.type = context1->type;
-	rc = mls_copy_context(&newcon, context2);
+	rc = mls_context_cpy(&newcon, context2);
 	if (rc)
 		goto out_unlock;
-
 
 	/* Check the validity of the new context. */
 	if (!policydb_context_isvalid(&policydb, &newcon)) {
@@ -1894,6 +2004,101 @@ out_unlock:
 	POLICY_RDUNLOCK;
 	context_destroy(&newcon);
 out:
+	return rc;
+}
+
+static int get_classes_callback(void *k, void *d, void *args)
+{
+	struct class_datum *datum = d;
+	char *name = k, **classes = args;
+	int value = datum->value - 1;
+
+	classes[value] = kstrdup(name, GFP_ATOMIC);
+	if (!classes[value])
+		return -ENOMEM;
+
+	return 0;
+}
+
+int security_get_classes(char ***classes, int *nclasses)
+{
+	int rc = -ENOMEM;
+
+	POLICY_RDLOCK;
+
+	*nclasses = policydb.p_classes.nprim;
+	*classes = kcalloc(*nclasses, sizeof(*classes), GFP_ATOMIC);
+	if (!*classes)
+		goto out;
+
+	rc = hashtab_map(policydb.p_classes.table, get_classes_callback,
+			*classes);
+	if (rc < 0) {
+		int i;
+		for (i = 0; i < *nclasses; i++)
+			kfree((*classes)[i]);
+		kfree(*classes);
+	}
+
+out:
+	POLICY_RDUNLOCK;
+	return rc;
+}
+
+static int get_permissions_callback(void *k, void *d, void *args)
+{
+	struct perm_datum *datum = d;
+	char *name = k, **perms = args;
+	int value = datum->value - 1;
+
+	perms[value] = kstrdup(name, GFP_ATOMIC);
+	if (!perms[value])
+		return -ENOMEM;
+
+	return 0;
+}
+
+int security_get_permissions(char *class, char ***perms, int *nperms)
+{
+	int rc = -ENOMEM, i;
+	struct class_datum *match;
+
+	POLICY_RDLOCK;
+
+	match = hashtab_search(policydb.p_classes.table, class);
+	if (!match) {
+		printk(KERN_ERR "%s:  unrecognized class %s\n",
+			__FUNCTION__, class);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	*nperms = match->permissions.nprim;
+	*perms = kcalloc(*nperms, sizeof(*perms), GFP_ATOMIC);
+	if (!*perms)
+		goto out;
+
+	if (match->comdatum) {
+		rc = hashtab_map(match->comdatum->permissions.table,
+				get_permissions_callback, *perms);
+		if (rc < 0)
+			goto err;
+	}
+
+	rc = hashtab_map(match->permissions.table, get_permissions_callback,
+			*perms);
+	if (rc < 0)
+		goto err;
+
+out:
+	POLICY_RDUNLOCK;
+	return rc;
+
+err:
+	POLICY_RDUNLOCK;
+	for (i = 0; i < *nperms; i++)
+		kfree((*perms)[i]);
+	kfree(*perms);
 	return rc;
 }
 
@@ -1922,7 +2127,7 @@ int selinux_audit_rule_init(u32 field, u32 op, char *rulestr,
 	*rule = NULL;
 
 	if (!ss_initialized)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	switch (field) {
 	case AUDIT_SUBJ_USER:
@@ -2147,13 +2352,13 @@ void selinux_audit_set_callback(int (*callback)(void))
 
 #ifdef CONFIG_NETLABEL
 /*
- * This is the structure we store inside the NetLabel cache block.
+ * NetLabel cache structure
  */
-#define NETLBL_CACHE(x)           ((struct netlbl_cache *)(x))
+#define NETLBL_CACHE(x)           ((struct selinux_netlbl_cache *)(x))
 #define NETLBL_CACHE_T_NONE       0
 #define NETLBL_CACHE_T_SID        1
 #define NETLBL_CACHE_T_MLS        2
-struct netlbl_cache {
+struct selinux_netlbl_cache {
 	u32 type;
 	union {
 		u32 sid;
@@ -2162,7 +2367,7 @@ struct netlbl_cache {
 };
 
 /**
- * selinux_netlbl_cache_free - Free the NetLabel cached data
+ * security_netlbl_cache_free - Free the NetLabel cached data
  * @data: the data to free
  *
  * Description:
@@ -2170,9 +2375,9 @@ struct netlbl_cache {
  * netlbl_lsm_cache structure.
  *
  */
-static void selinux_netlbl_cache_free(const void *data)
+static void security_netlbl_cache_free(const void *data)
 {
-	struct netlbl_cache *cache;
+	struct selinux_netlbl_cache *cache;
 
 	if (data == NULL)
 		return;
@@ -2187,35 +2392,35 @@ static void selinux_netlbl_cache_free(const void *data)
 }
 
 /**
- * selinux_netlbl_cache_add - Add an entry to the NetLabel cache
- * @skb: the packet
+ * security_netlbl_cache_add - Add an entry to the NetLabel cache
+ * @secattr: the NetLabel packet security attributes
  * @ctx: the SELinux context
  *
  * Description:
  * Attempt to cache the context in @ctx, which was derived from the packet in
- * @skb, in the NetLabel subsystem cache.
+ * @skb, in the NetLabel subsystem cache.  This function assumes @secattr has
+ * already been initialized.
  *
  */
-static void selinux_netlbl_cache_add(struct sk_buff *skb, struct context *ctx)
+static void security_netlbl_cache_add(struct netlbl_lsm_secattr *secattr,
+				      struct context *ctx)
 {
-	struct netlbl_cache *cache = NULL;
-	struct netlbl_lsm_secattr secattr;
+	struct selinux_netlbl_cache *cache = NULL;
 
-	netlbl_secattr_init(&secattr);
-	secattr.cache = netlbl_secattr_cache_alloc(GFP_ATOMIC);
-	if (secattr.cache == NULL)
-		goto netlbl_cache_add_return;
+	secattr->cache = netlbl_secattr_cache_alloc(GFP_ATOMIC);
+	if (secattr->cache == NULL)
+		return;
 
 	cache = kzalloc(sizeof(*cache),	GFP_ATOMIC);
 	if (cache == NULL)
-		goto netlbl_cache_add_return;
-	secattr.cache->free = selinux_netlbl_cache_free;
-	secattr.cache->data = (void *)cache;
+		return;
 
 	cache->type = NETLBL_CACHE_T_MLS;
 	if (ebitmap_cpy(&cache->data.mls_label.level[0].cat,
-			&ctx->range.level[0].cat) != 0)
-		goto netlbl_cache_add_return;
+			&ctx->range.level[0].cat) != 0) {
+		kfree(cache);
+		return;
+	}
 	cache->data.mls_label.level[1].cat.highbit =
 		cache->data.mls_label.level[0].cat.highbit;
 	cache->data.mls_label.level[1].cat.node =
@@ -2223,52 +2428,44 @@ static void selinux_netlbl_cache_add(struct sk_buff *skb, struct context *ctx)
 	cache->data.mls_label.level[0].sens = ctx->range.level[0].sens;
 	cache->data.mls_label.level[1].sens = ctx->range.level[0].sens;
 
-	netlbl_cache_add(skb, &secattr);
-
-netlbl_cache_add_return:
-	netlbl_secattr_destroy(&secattr);
+	secattr->cache->free = security_netlbl_cache_free;
+	secattr->cache->data = (void *)cache;
+	secattr->flags |= NETLBL_SECATTR_CACHE;
 }
 
 /**
- * selinux_netlbl_cache_invalidate - Invalidate the NetLabel cache
- *
- * Description:
- * Invalidate the NetLabel security attribute mapping cache.
- *
- */
-void selinux_netlbl_cache_invalidate(void)
-{
-	netlbl_cache_invalidate();
-}
-
-/**
- * selinux_netlbl_secattr_to_sid - Convert a NetLabel secattr to a SELinux SID
- * @skb: the network packet
+ * security_netlbl_secattr_to_sid - Convert a NetLabel secattr to a SELinux SID
  * @secattr: the NetLabel packet security attributes
  * @base_sid: the SELinux SID to use as a context for MLS only attributes
  * @sid: the SELinux SID
  *
  * Description:
- * Convert the given NetLabel packet security attributes in @secattr into a
+ * Convert the given NetLabel security attributes in @secattr into a
  * SELinux SID.  If the @secattr field does not contain a full SELinux
- * SID/context then use the context in @base_sid as the foundation.  If @skb
- * is not NULL attempt to cache as much data as possibile.  Returns zero on
- * success, negative values on failure.
+ * SID/context then use the context in @base_sid as the foundation.  If
+ * possibile the 'cache' field of @secattr is set and the CACHE flag is set;
+ * this is to allow the @secattr to be used by NetLabel to cache the secattr to
+ * SID conversion for future lookups.  Returns zero on success, negative
+ * values on failure.
  *
  */
-static int selinux_netlbl_secattr_to_sid(struct sk_buff *skb,
-					 struct netlbl_lsm_secattr *secattr,
-					 u32 base_sid,
-					 u32 *sid)
+int security_netlbl_secattr_to_sid(struct netlbl_lsm_secattr *secattr,
+				   u32 base_sid,
+				   u32 *sid)
 {
 	int rc = -EIDRM;
 	struct context *ctx;
 	struct context ctx_new;
-	struct netlbl_cache *cache;
+	struct selinux_netlbl_cache *cache;
+
+	if (!ss_initialized) {
+		*sid = SECSID_NULL;
+		return 0;
+	}
 
 	POLICY_RDLOCK;
 
-	if (secattr->cache) {
+	if (secattr->flags & NETLBL_SECATTR_CACHE) {
 		cache = NETLBL_CACHE(secattr->cache->data);
 		switch (cache->type) {
 		case NETLBL_CACHE_T_SID:
@@ -2301,7 +2498,7 @@ static int selinux_netlbl_secattr_to_sid(struct sk_buff *skb,
 		default:
 			goto netlbl_secattr_to_sid_return;
 		}
-	} else if (secattr->mls_lvl_vld) {
+	} else if (secattr->flags & NETLBL_SECATTR_MLS_LVL) {
 		ctx = sidtab_search(&sidtab, base_sid);
 		if (ctx == NULL)
 			goto netlbl_secattr_to_sid_return;
@@ -2309,13 +2506,10 @@ static int selinux_netlbl_secattr_to_sid(struct sk_buff *skb,
 		ctx_new.user = ctx->user;
 		ctx_new.role = ctx->role;
 		ctx_new.type = ctx->type;
-		mls_import_lvl(&ctx_new, secattr->mls_lvl, secattr->mls_lvl);
-		if (secattr->mls_cat) {
-			if (mls_import_cat(&ctx_new,
-					   secattr->mls_cat,
-					   secattr->mls_cat_len,
-					   NULL,
-					   0) != 0)
+		mls_import_netlbl_lvl(&ctx_new, secattr);
+		if (secattr->flags & NETLBL_SECATTR_MLS_CAT) {
+			if (ebitmap_netlbl_import(&ctx_new.range.level[0].cat,
+						  secattr->mls_cat) != 0)
 				goto netlbl_secattr_to_sid_return;
 			ctx_new.range.level[1].cat.highbit =
 				ctx_new.range.level[0].cat.highbit;
@@ -2332,8 +2526,8 @@ static int selinux_netlbl_secattr_to_sid(struct sk_buff *skb,
 		if (rc != 0)
 			goto netlbl_secattr_to_sid_return_cleanup;
 
-		if (skb != NULL)
-			selinux_netlbl_cache_add(skb, &ctx_new);
+		security_netlbl_cache_add(secattr, &ctx_new);
+
 		ebitmap_destroy(&ctx_new.range.level[0].cat);
 	} else {
 		*sid = SECSID_NULL;
@@ -2349,374 +2543,43 @@ netlbl_secattr_to_sid_return_cleanup:
 }
 
 /**
- * selinux_netlbl_skbuff_getsid - Get the sid of a packet using NetLabel
- * @skb: the packet
- * @base_sid: the SELinux SID to use as a context for MLS only attributes
- * @sid: the SID
+ * security_netlbl_sid_to_secattr - Convert a SELinux SID to a NetLabel secattr
+ * @sid: the SELinux SID
+ * @secattr: the NetLabel packet security attributes
  *
  * Description:
- * Call the NetLabel mechanism to get the security attributes of the given
- * packet and use those attributes to determine the correct context/SID to
- * assign to the packet.  Returns zero on success, negative values on failure.
+ * Convert the given SELinux SID in @sid into a NetLabel security attribute.
+ * Returns zero on success, negative values on failure.
  *
  */
-static int selinux_netlbl_skbuff_getsid(struct sk_buff *skb,
-					u32 base_sid,
-					u32 *sid)
-{
-	int rc;
-	struct netlbl_lsm_secattr secattr;
-
-	netlbl_secattr_init(&secattr);
-	rc = netlbl_skbuff_getattr(skb, &secattr);
-	if (rc == 0)
-		rc = selinux_netlbl_secattr_to_sid(skb,
-						   &secattr,
-						   base_sid,
-						   sid);
-	netlbl_secattr_destroy(&secattr);
-
-	return rc;
-}
-
-/**
- * selinux_netlbl_socket_setsid - Label a socket using the NetLabel mechanism
- * @sock: the socket to label
- * @sid: the SID to use
- *
- * Description:
- * Attempt to label a socket using the NetLabel mechanism using the given
- * SID.  Returns zero values on success, negative values on failure.
- *
- */
-static int selinux_netlbl_socket_setsid(struct socket *sock, u32 sid)
+int security_netlbl_sid_to_secattr(u32 sid, struct netlbl_lsm_secattr *secattr)
 {
 	int rc = -ENOENT;
-	struct sk_security_struct *sksec = sock->sk->sk_security;
-	struct netlbl_lsm_secattr secattr;
 	struct context *ctx;
+
+	netlbl_secattr_init(secattr);
 
 	if (!ss_initialized)
 		return 0;
 
-	netlbl_secattr_init(&secattr);
-
 	POLICY_RDLOCK;
-
 	ctx = sidtab_search(&sidtab, sid);
 	if (ctx == NULL)
-		goto netlbl_socket_setsid_return;
-
-	secattr.domain = kstrdup(policydb.p_type_val_to_name[ctx->type - 1],
-				 GFP_ATOMIC);
-	mls_export_lvl(ctx, &secattr.mls_lvl, NULL);
-	secattr.mls_lvl_vld = 1;
-	rc = mls_export_cat(ctx,
-			    &secattr.mls_cat,
-			    &secattr.mls_cat_len,
-			    NULL,
-			    NULL);
+		goto netlbl_sid_to_secattr_failure;
+	secattr->domain = kstrdup(policydb.p_type_val_to_name[ctx->type - 1],
+				  GFP_ATOMIC);
+	secattr->flags |= NETLBL_SECATTR_DOMAIN;
+	mls_export_netlbl_lvl(ctx, secattr);
+	rc = mls_export_netlbl_cat(ctx, secattr);
 	if (rc != 0)
-		goto netlbl_socket_setsid_return;
-
-	rc = netlbl_socket_setattr(sock, &secattr);
-	if (rc == 0)
-		sksec->nlbl_state = NLBL_LABELED;
-
-netlbl_socket_setsid_return:
+		goto netlbl_sid_to_secattr_failure;
 	POLICY_RDUNLOCK;
-	netlbl_secattr_destroy(&secattr);
-	return rc;
-}
 
-/**
- * selinux_netlbl_sk_security_init - Setup the NetLabel fields
- * @ssec: the sk_security_struct
- * @family: the socket family
- *
- * Description:
- * Called when a new sk_security_struct is allocated to initialize the NetLabel
- * fields.
- *
- */
-void selinux_netlbl_sk_security_init(struct sk_security_struct *ssec,
-				     int family)
-{
-        if (family == PF_INET)
-		ssec->nlbl_state = NLBL_REQUIRE;
-	else
-		ssec->nlbl_state = NLBL_UNSET;
-}
+	return 0;
 
-/**
- * selinux_netlbl_sk_clone_security - Copy the NetLabel fields
- * @ssec: the original sk_security_struct
- * @newssec: the cloned sk_security_struct
- *
- * Description:
- * Clone the NetLabel specific sk_security_struct fields from @ssec to
- * @newssec.
- *
- */
-void selinux_netlbl_sk_clone_security(struct sk_security_struct *ssec,
-				      struct sk_security_struct *newssec)
-{
-	newssec->sclass = ssec->sclass;
-	if (ssec->nlbl_state != NLBL_UNSET)
-		newssec->nlbl_state = NLBL_REQUIRE;
-	else
-		newssec->nlbl_state = NLBL_UNSET;
-}
-
-/**
- * selinux_netlbl_socket_post_create - Label a socket using NetLabel
- * @sock: the socket to label
- * @sock_family: the socket family
- * @sid: the SID to use
- *
- * Description:
- * Attempt to label a socket using the NetLabel mechanism using the given
- * SID.  Returns zero values on success, negative values on failure.
- *
- */
-int selinux_netlbl_socket_post_create(struct socket *sock,
-				      int sock_family,
-				      u32 sid)
-{
-	struct inode_security_struct *isec = SOCK_INODE(sock)->i_security;
-	struct sk_security_struct *sksec = sock->sk->sk_security;
-
-	sksec->sclass = isec->sclass;
-
-	if (sock_family != PF_INET)
-		return 0;
-
-	sksec->nlbl_state = NLBL_REQUIRE;
-	return selinux_netlbl_socket_setsid(sock, sid);
-}
-
-/**
- * selinux_netlbl_sock_graft - Netlabel the new socket
- * @sk: the new connection
- * @sock: the new socket
- *
- * Description:
- * The connection represented by @sk is being grafted onto @sock so set the
- * socket's NetLabel to match the SID of @sk.
- *
- */
-void selinux_netlbl_sock_graft(struct sock *sk, struct socket *sock)
-{
-	struct inode_security_struct *isec = SOCK_INODE(sock)->i_security;
-	struct sk_security_struct *sksec = sk->sk_security;
-	struct netlbl_lsm_secattr secattr;
-	u32 nlbl_peer_sid;
-
-	sksec->sclass = isec->sclass;
-
-	if (sk->sk_family != PF_INET)
-		return;
-
-	netlbl_secattr_init(&secattr);
-	if (netlbl_sock_getattr(sk, &secattr) == 0 &&
-	    selinux_netlbl_secattr_to_sid(NULL,
-					  &secattr,
-					  SECINITSID_UNLABELED,
-					  &nlbl_peer_sid) == 0)
-		sksec->peer_sid = nlbl_peer_sid;
-	netlbl_secattr_destroy(&secattr);
-
-	sksec->nlbl_state = NLBL_REQUIRE;
-
-	/* Try to set the NetLabel on the socket to save time later, if we fail
-	 * here we will pick up the pieces in later calls to
-	 * selinux_netlbl_inode_permission(). */
-	selinux_netlbl_socket_setsid(sock, sksec->sid);
-}
-
-/**
- * selinux_netlbl_inet_conn_request - Handle a new connection request
- * @skb: the packet
- * @sock_sid: the SID of the parent socket
- *
- * Description:
- * If present, use the security attributes of the packet in @skb and the
- * parent sock's SID to arrive at a SID for the new child sock.  Returns the
- * SID of the connection or SECSID_NULL on failure.
- *
- */
-u32 selinux_netlbl_inet_conn_request(struct sk_buff *skb, u32 sock_sid)
-{
-	int rc;
-	u32 peer_sid;
-
-	rc = selinux_netlbl_skbuff_getsid(skb, sock_sid, &peer_sid);
-	if (rc != 0)
-		return SECSID_NULL;
-
-	return peer_sid;
-}
-
-/**
- * selinux_netlbl_inode_permission - Verify the socket is NetLabel labeled
- * @inode: the file descriptor's inode
- * @mask: the permission mask
- *
- * Description:
- * Looks at a file's inode and if it is marked as a socket protected by
- * NetLabel then verify that the socket has been labeled, if not try to label
- * the socket now with the inode's SID.  Returns zero on success, negative
- * values on failure.
- *
- */
-int selinux_netlbl_inode_permission(struct inode *inode, int mask)
-{
-	int rc;
-	struct inode_security_struct *isec;
-	struct sk_security_struct *sksec;
-	struct socket *sock;
-
-	if (!S_ISSOCK(inode->i_mode))
-		return 0;
-
-	sock = SOCKET_I(inode);
-	isec = inode->i_security;
-	sksec = sock->sk->sk_security;
-	mutex_lock(&isec->lock);
-	if (unlikely(sksec->nlbl_state == NLBL_REQUIRE &&
-		     (mask & (MAY_WRITE | MAY_APPEND)))) {
-		lock_sock(sock->sk);
-		rc = selinux_netlbl_socket_setsid(sock, sksec->sid);
-		release_sock(sock->sk);
-	} else
-		rc = 0;
-	mutex_unlock(&isec->lock);
-
-	return rc;
-}
-
-/**
- * selinux_netlbl_sock_rcv_skb - Do an inbound access check using NetLabel
- * @sksec: the sock's sk_security_struct
- * @skb: the packet
- * @ad: the audit data
- *
- * Description:
- * Fetch the NetLabel security attributes from @skb and perform an access check
- * against the receiving socket.  Returns zero on success, negative values on
- * error.
- *
- */
-int selinux_netlbl_sock_rcv_skb(struct sk_security_struct *sksec,
-				struct sk_buff *skb,
-				struct avc_audit_data *ad)
-{
-	int rc;
-	u32 netlbl_sid;
-	u32 recv_perm;
-
-	rc = selinux_netlbl_skbuff_getsid(skb,
-					  SECINITSID_UNLABELED,
-					  &netlbl_sid);
-	if (rc != 0)
-		return rc;
-
-	if (netlbl_sid == SECSID_NULL)
-		return 0;
-
-	switch (sksec->sclass) {
-	case SECCLASS_UDP_SOCKET:
-		recv_perm = UDP_SOCKET__RECVFROM;
-		break;
-	case SECCLASS_TCP_SOCKET:
-		recv_perm = TCP_SOCKET__RECVFROM;
-		break;
-	default:
-		recv_perm = RAWIP_SOCKET__RECVFROM;
-	}
-
-	rc = avc_has_perm(sksec->sid,
-			  netlbl_sid,
-			  sksec->sclass,
-			  recv_perm,
-			  ad);
-	if (rc == 0)
-		return 0;
-
-	netlbl_skbuff_err(skb, rc);
-	return rc;
-}
-
-/**
- * selinux_netlbl_socket_getpeersec_stream - Return the connected peer's SID
- * @sock: the socket
- *
- * Description:
- * Examine @sock to find the connected peer's SID.  Returns the SID on success
- * or SECSID_NULL on error.
- *
- */
-u32 selinux_netlbl_socket_getpeersec_stream(struct socket *sock)
-{
-	struct sk_security_struct *sksec = sock->sk->sk_security;
-	return sksec->peer_sid;
-}
-
-/**
- * selinux_netlbl_socket_getpeersec_dgram - Return the SID of a NetLabel packet
- * @skb: the packet
- *
- * Description:
- * Examine @skb to find the SID assigned to it by NetLabel.  Returns the SID on
- * success, SECSID_NULL on error.
- *
- */
-u32 selinux_netlbl_socket_getpeersec_dgram(struct sk_buff *skb)
-{
-	int peer_sid;
-
-	if (selinux_netlbl_skbuff_getsid(skb,
-					 SECINITSID_UNLABELED,
-					 &peer_sid) != 0)
-		return SECSID_NULL;
-
-	return peer_sid;
-}
-
-/**
- * selinux_netlbl_socket_setsockopt - Do not allow users to remove a NetLabel
- * @sock: the socket
- * @level: the socket level or protocol
- * @optname: the socket option name
- *
- * Description:
- * Check the setsockopt() call and if the user is trying to replace the IP
- * options on a socket and a NetLabel is in place for the socket deny the
- * access; otherwise allow the access.  Returns zero when the access is
- * allowed, -EACCES when denied, and other negative values on error.
- *
- */
-int selinux_netlbl_socket_setsockopt(struct socket *sock,
-				     int level,
-				     int optname)
-{
-	int rc = 0;
-	struct inode *inode = SOCK_INODE(sock);
-	struct sk_security_struct *sksec = sock->sk->sk_security;
-	struct inode_security_struct *isec = inode->i_security;
-	struct netlbl_lsm_secattr secattr;
-
-	mutex_lock(&isec->lock);
-	if (level == IPPROTO_IP && optname == IP_OPTIONS &&
-	    sksec->nlbl_state == NLBL_LABELED) {
-		netlbl_secattr_init(&secattr);
-		rc = netlbl_socket_getattr(sock, &secattr);
-		if (rc == 0 && (secattr.cache || secattr.mls_lvl_vld))
-			rc = -EACCES;
-		netlbl_secattr_destroy(&secattr);
-	}
-	mutex_unlock(&isec->lock);
-
+netlbl_sid_to_secattr_failure:
+	POLICY_RDUNLOCK;
+	netlbl_secattr_destroy(secattr);
 	return rc;
 }
 #endif /* CONFIG_NETLABEL */

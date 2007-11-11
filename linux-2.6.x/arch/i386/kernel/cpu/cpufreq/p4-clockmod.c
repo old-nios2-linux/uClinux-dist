@@ -27,7 +27,6 @@
 #include <linux/cpufreq.h>
 #include <linux/slab.h>
 #include <linux/cpumask.h>
-#include <linux/sched.h>	/* current / set_cpus_allowed() */
 
 #include <asm/processor.h>
 #include <asm/msr.h>
@@ -51,7 +50,6 @@ enum {
 
 
 static int has_N44_O17_errata[NR_CPUS];
-static int has_N60_errata[NR_CPUS];
 static unsigned int stock_freq;
 static struct cpufreq_driver p4clockmod_driver;
 static unsigned int cpufreq_p4_get(unsigned int cpu);
@@ -63,7 +61,7 @@ static int cpufreq_p4_setdc(unsigned int cpu, unsigned int newstate)
 	if (!cpu_online(cpu) || (newstate > DC_DISABLE) || (newstate == DC_RESV))
 		return -EINVAL;
 
-	rdmsr(MSR_IA32_THERM_STATUS, l, h);
+	rdmsr_on_cpu(cpu, MSR_IA32_THERM_STATUS, &l, &h);
 
 	if (l & 0x01)
 		dprintk("CPU#%d currently thermal throttled\n", cpu);
@@ -71,10 +69,10 @@ static int cpufreq_p4_setdc(unsigned int cpu, unsigned int newstate)
 	if (has_N44_O17_errata[cpu] && (newstate == DC_25PT || newstate == DC_DFLT))
 		newstate = DC_38PT;
 
-	rdmsr(MSR_IA32_THERM_CONTROL, l, h);
+	rdmsr_on_cpu(cpu, MSR_IA32_THERM_CONTROL, &l, &h);
 	if (newstate == DC_DISABLE) {
 		dprintk("CPU#%d disabling modulation\n", cpu);
-		wrmsr(MSR_IA32_THERM_CONTROL, l & ~(1<<4), h);
+		wrmsr_on_cpu(cpu, MSR_IA32_THERM_CONTROL, l & ~(1<<4), h);
 	} else {
 		dprintk("CPU#%d setting duty cycle to %d%%\n",
 			cpu, ((125 * newstate) / 10));
@@ -85,7 +83,7 @@ static int cpufreq_p4_setdc(unsigned int cpu, unsigned int newstate)
 		 */
 		l = (l & ~14);
 		l = l | (1<<4) | ((newstate & 0x7)<<1);
-		wrmsr(MSR_IA32_THERM_CONTROL, l, h);
+		wrmsr_on_cpu(cpu, MSR_IA32_THERM_CONTROL, l, h);
 	}
 
 	return 0;
@@ -112,7 +110,6 @@ static int cpufreq_p4_target(struct cpufreq_policy *policy,
 {
 	unsigned int    newstate = DC_RESV;
 	struct cpufreq_freqs freqs;
-	cpumask_t cpus_allowed;
 	int i;
 
 	if (cpufreq_frequency_table_target(policy, &p4clockmod_table[0], target_freq, relation, &newstate))
@@ -133,17 +130,8 @@ static int cpufreq_p4_target(struct cpufreq_policy *policy,
 	/* run on each logical CPU, see section 13.15.3 of IA32 Intel Architecture Software
 	 * Developer's Manual, Volume 3
 	 */
-	cpus_allowed = current->cpus_allowed;
-
-	for_each_cpu_mask(i, policy->cpus) {
-		cpumask_t this_cpu = cpumask_of_cpu(i);
-
-		set_cpus_allowed(current, this_cpu);
-		BUG_ON(smp_processor_id() != i);
-
+	for_each_cpu_mask(i, policy->cpus)
 		cpufreq_p4_setdc(i, p4clockmod_table[newstate].index);
-	}
-	set_cpus_allowed(current, cpus_allowed);
 
 	/* notifiers */
 	for_each_cpu_mask(i, policy->cpus) {
@@ -163,29 +151,27 @@ static int cpufreq_p4_verify(struct cpufreq_policy *policy)
 
 static unsigned int cpufreq_p4_get_frequency(struct cpuinfo_x86 *c)
 {
-	if ((c->x86 == 0x06) && (c->x86_model == 0x09)) {
-		/* Pentium M (Banias) */
-		printk(KERN_WARNING PFX "Warning: Pentium M detected. "
-		       "The speedstep_centrino module offers voltage scaling"
-		       " in addition of frequency scaling. You should use "
-		       "that instead of p4-clockmod, if possible.\n");
-		return speedstep_get_processor_frequency(SPEEDSTEP_PROCESSOR_PM);
-	}
-
-	if ((c->x86 == 0x06) && (c->x86_model == 0x0D)) {
-		/* Pentium M (Dothan) */
-		printk(KERN_WARNING PFX "Warning: Pentium M detected. "
-		       "The speedstep_centrino module offers voltage scaling"
-		       " in addition of frequency scaling. You should use "
-		       "that instead of p4-clockmod, if possible.\n");
-		/* on P-4s, the TSC runs with constant frequency independent whether
-		 * throttling is active or not. */
-		p4clockmod_driver.flags |= CPUFREQ_CONST_LOOPS;
-		return speedstep_get_processor_frequency(SPEEDSTEP_PROCESSOR_PM);
+	if (c->x86 == 0x06) {
+		if (cpu_has(c, X86_FEATURE_EST))
+			printk(KERN_WARNING PFX "Warning: EST-capable CPU detected. "
+			       "The acpi-cpufreq module offers voltage scaling"
+			       " in addition of frequency scaling. You should use "
+			       "that instead of p4-clockmod, if possible.\n");
+		switch (c->x86_model) {
+		case 0x0E: /* Core */
+		case 0x0F: /* Core Duo */
+			p4clockmod_driver.flags |= CPUFREQ_CONST_LOOPS;
+			return speedstep_get_processor_frequency(SPEEDSTEP_PROCESSOR_PCORE);
+		case 0x0D: /* Pentium M (Dothan) */
+			p4clockmod_driver.flags |= CPUFREQ_CONST_LOOPS;
+			/* fall through */
+		case 0x09: /* Pentium M (Banias) */
+			return speedstep_get_processor_frequency(SPEEDSTEP_PROCESSOR_PM);
+		}
 	}
 
 	if (c->x86 != 0xF) {
-		printk(KERN_WARNING PFX "Unknown p4-clockmod-capable CPU. Please send an e-mail to <linux@brodo.de>\n");
+		printk(KERN_WARNING PFX "Unknown p4-clockmod-capable CPU. Please send an e-mail to <cpufreq@lists.linux.org.uk>\n");
 		return 0;
 	}
 
@@ -226,12 +212,6 @@ static int cpufreq_p4_cpu_init(struct cpufreq_policy *policy)
 	case 0x0f12:
 		has_N44_O17_errata[policy->cpu] = 1;
 		dprintk("has errata -- disabling low frequencies\n");
-		break;
-
-	case 0x0f29:
-		has_N60_errata[policy->cpu] = 1;
-		dprintk("has errata -- disabling frequencies lower than 2ghz\n");
-		break;
 	}
 
 	/* get max frequency */
@@ -242,8 +222,6 @@ static int cpufreq_p4_cpu_init(struct cpufreq_policy *policy)
 	/* table init */
 	for (i=1; (p4clockmod_table[i].frequency != CPUFREQ_TABLE_END); i++) {
 		if ((i<2) && (has_N44_O17_errata[policy->cpu]))
-			p4clockmod_table[i].frequency = CPUFREQ_ENTRY_INVALID;
-		else if (has_N60_errata[policy->cpu] && ((stock_freq * i)/8) < 2000000)
 			p4clockmod_table[i].frequency = CPUFREQ_ENTRY_INVALID;
 		else
 			p4clockmod_table[i].frequency = (stock_freq * i)/8;
@@ -267,17 +245,9 @@ static int cpufreq_p4_cpu_exit(struct cpufreq_policy *policy)
 
 static unsigned int cpufreq_p4_get(unsigned int cpu)
 {
-	cpumask_t cpus_allowed;
 	u32 l, h;
 
-	cpus_allowed = current->cpus_allowed;
-
-	set_cpus_allowed(current, cpumask_of_cpu(cpu));
-	BUG_ON(smp_processor_id() != cpu);
-
-	rdmsr(MSR_IA32_THERM_CONTROL, l, h);
-
-	set_cpus_allowed(current, cpus_allowed);
+	rdmsr_on_cpu(cpu, MSR_IA32_THERM_CONTROL, &l, &h);
 
 	if (l & 0x10) {
 		l = l >> 1;

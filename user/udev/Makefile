@@ -97,7 +97,7 @@ usrbindir =	${prefix}/usr/bin
 usrsbindir =	${prefix}/usr/sbin
 libudevdir =	${prefix}/lib/udev
 mandir =	${prefix}/usr/share/man
-configdir =	${etcdir}
+configdir =	${etcdir}/udev
 udevdir =	/dev
 DESTDIR =
 
@@ -199,7 +199,7 @@ udev_version.h:
 	$(Q) echo \#define UDEV_VERSION		\"$(VERSION)\" >> $@
 	$(Q) echo \#define UDEV_ROOT		\"$(udevdir)\" >> $@
 	$(Q) echo \#define UDEV_CONFIG_FILE	\"$(configdir)/udev.conf\" >> $@
-	$(Q) echo \#define UDEV_RULES_FILE	\"$(configdir)/config\" >> $@
+	$(Q) echo \#define UDEV_RULES_FILE	\"$(configdir)/rules.d\" >> $@
 
 # man pages
 %.8 %.7: %.xml
@@ -359,12 +359,16 @@ udev_gcov.txt: $(wildcard *.gcda) $(wildcard *.gcno)
 	echo "view $@ for the result"
 
 romfs:
+ifdef CONFIG_HOTPLUG
 	$(ROMFSINST) /sbin/udevd
 	$(ROMFSINST) /sbin/udevtrigger
 	$(ROMFSINST) /sbin/udevsettle
 	$(ROMFSINST) /sbin/udevcontrol
 	$(ROMFSINST) /sbin/udevmonitor
+else
+	$(ROMFSINST) /sbin/udevstart
+endif
 	$(ROMFSINST) /sbin/udevinfo
 	$(ROMFSINST) /sbin/udevtest
-	$(ROMFSINST) /sbin/udevstart
-	$(ROMFSINST) etc/udev/udev.conf /etc/udev.conf
+	$(ROMFSINST) -d etc/udev/udev.conf /etc/udev/udev.conf
+	$(ROMFSINST) -d -s /etc/config/udev.rules /etc/udev/rules.d/50-config.rules

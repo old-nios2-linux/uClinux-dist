@@ -17,7 +17,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
-#include <linux/smp_lock.h>
+#include <linux/sched.h>
 
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"
@@ -101,7 +101,7 @@ out:
 static ssize_t
 ncp_file_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_dentry;
+	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
 	size_t already_read = 0;
 	off_t pos;
@@ -182,7 +182,7 @@ outrel:
 static ssize_t
 ncp_file_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
-	struct dentry *dentry = file->f_dentry;
+	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
 	size_t already_written = 0;
 	off_t pos;
@@ -203,7 +203,6 @@ ncp_file_write(struct file *file, const char __user *buf, size_t count, loff_t *
 
 	if (pos + count > MAX_NON_LFS && !(file->f_flags&O_LARGEFILE)) {
 		if (pos >= MAX_NON_LFS) {
-			send_sig(SIGXFSZ, current, 0);
 			return -EFBIG;
 		}
 		if (count > MAX_NON_LFS - (u32)pos) {
@@ -212,7 +211,6 @@ ncp_file_write(struct file *file, const char __user *buf, size_t count, loff_t *
 	}
 	if (pos >= inode->i_sb->s_maxbytes) {
 		if (count || pos > inode->i_sb->s_maxbytes) {
-			send_sig(SIGXFSZ, current, 0);
 			return -EFBIG;
 		}
 	}
@@ -297,7 +295,7 @@ const struct file_operations ncp_file_operations =
 	.fsync		= ncp_fsync,
 };
 
-struct inode_operations ncp_file_inode_operations =
+const struct inode_operations ncp_file_inode_operations =
 {
 	.setattr	= ncp_notify_change,
 };

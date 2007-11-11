@@ -61,6 +61,27 @@ extern unsigned long pci_bus_to_phys(unsigned int ba, int busnr);
  */
 #define PCI_DMA_BUS_IS_PHYS     (1)
 
+#ifdef CONFIG_NOT_COHERENT_CACHE
+/*
+ * pci_unmap_{page,single} are NOPs but pci_dma_sync_single_for_cpu()
+ * and so on are not, so...
+ */
+
+#define DECLARE_PCI_UNMAP_ADDR(ADDR_NAME)	\
+	dma_addr_t ADDR_NAME;
+#define DECLARE_PCI_UNMAP_LEN(LEN_NAME)		\
+	__u32 LEN_NAME;
+#define pci_unmap_addr(PTR, ADDR_NAME)			\
+	((PTR)->ADDR_NAME)
+#define pci_unmap_addr_set(PTR, ADDR_NAME, VAL)		\
+	(((PTR)->ADDR_NAME) = (VAL))
+#define pci_unmap_len(PTR, LEN_NAME)			\
+	((PTR)->LEN_NAME)
+#define pci_unmap_len_set(PTR, LEN_NAME, VAL)		\
+	(((PTR)->LEN_NAME) = (VAL))
+
+#else /* coherent */
+
 /* pci_unmap_{page,single} is a nop so... */
 #define DECLARE_PCI_UNMAP_ADDR(ADDR_NAME)
 #define DECLARE_PCI_UNMAP_LEN(LEN_NAME)
@@ -68,6 +89,8 @@ extern unsigned long pci_bus_to_phys(unsigned int ba, int busnr);
 #define pci_unmap_addr_set(PTR, ADDR_NAME, VAL)	do { } while (0)
 #define pci_unmap_len(PTR, LEN_NAME)		(0)
 #define pci_unmap_len_set(PTR, LEN_NAME, VAL)	do { } while (0)
+
+#endif /* CONFIG_NOT_COHERENT_CACHE */
 
 #ifdef CONFIG_PCI
 static inline void pci_dma_burst_advice(struct pci_dev *pdev,
@@ -78,12 +101,6 @@ static inline void pci_dma_burst_advice(struct pci_dev *pdev,
 	*strategy_parameter = ~0UL;
 }
 #endif
-
-/*
- * At present there are very few 32-bit PPC machines that can have
- * memory above the 4GB point, and we don't support that.
- */
-#define pci_dac_dma_supported(pci_dev, mask)	(0)
 
 /* Return the index of the PCI controller for device PDEV. */
 #define pci_domain_nr(bus) ((struct pci_controller *)(bus)->sysdata)->index
@@ -121,8 +138,6 @@ pcibios_select_root(struct pci_dev *pdev, struct resource *res)
 
 	return root;
 }
-
-extern void pcibios_add_platform_entries(struct pci_dev *dev);
 
 struct file;
 extern pgprot_t	pci_phys_mem_access_prot(struct file *file,

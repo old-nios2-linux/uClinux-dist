@@ -1,7 +1,7 @@
 /*
- * $Id: msfuncs.c,v 1.10.8.2 2004/07/23 20:16:03 dcm Exp $
+ * $Id: msfuncs.c,v 1.12 2004/09/01 16:48:38 dcm Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -66,13 +66,14 @@
 			if((_p)+(_pos) > (_e)) goto error
 
 /**
- * apostrphes escaping
+ * apostrophes escaping
  * - src: source buffer
  * - slen: length of source buffer
  * - dst: destination buffer
  * - dlen: max length of destination buffer
  * #return: destination length => OK; -1 => error
  */
+
 int m_apo_escape(char* src, int slen, char* dst, int dlen)
 {
 	int i, j;
@@ -106,14 +107,14 @@ int m_apo_escape(char* src, int slen, char* dst, int dlen)
 }
 
 /**
- * etract the value of Content-Type header
+ * extract the value of Content-Type header
  * - src: pointer to C-T content
  * - len: length of src
  * - ctype: parsed C-T
  * - flag: what to parse - bit mask of CT_TYPE, CT_CHARSET, CT_MSGR
  *
  * #return: 0 OK ; -1 error
- */
+  */
 int m_extract_content_type(char* src, int len, t_content_type* ctype, int flag)
 {
 	char *p, *end;

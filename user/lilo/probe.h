@@ -1,13 +1,20 @@
-/* probe.h  -- definitions for the LILO probe utility */
+/* probe.h  -- definitions for the LILO probe utility
+
+Copyright 1999-2005 John Coffman.
+All rights reserved.
+
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
 
 #ifndef __PROBE_H_
 #define __PROBE_H_
 
-#include "lilo.h"
 
 
 struct disk_geom {
-   unsigned long n_total_blocks;
+   unsigned int n_total_blocks;
    int n_sect;
    int n_head;
    int n_cyl;
@@ -25,12 +32,12 @@ struct disk_geom {
 struct disk_param {
    short size;
    short flags;
-   unsigned long n_cyl;
-   unsigned long n_head;
-   unsigned long n_sect;
+   unsigned int n_cyl;
+   unsigned int n_head;
+   unsigned int n_sect;
    long long n_sectors;
    short n_byte;
-   unsigned long edd_config_ptr;
+   unsigned int edd_config_ptr;
 };
 #endif
 
@@ -40,6 +47,73 @@ struct disk_param {
 
 
 /* the following structures are created by the biosdata.S codes */
+
+typedef
+struct Equip {
+   unsigned short equipment;
+   unsigned short mem;
+#if PROBE_VERSION >= 5
+   unsigned short boot_dx;
+#endif
+} equip_t;
+
+
+/* BD_GET_VIDEO >= 1 */
+typedef
+struct Video1 {
+   struct {
+      unsigned char  al;
+      unsigned char  ah;
+      unsigned char  bl;
+      unsigned char  bh;
+   } vid0F;
+} video_t1;
+
+
+/* BD_GET_VIDEO >= 2  */
+typedef
+struct Video2 {
+   struct {
+      unsigned short ax;
+      unsigned char  bl;
+      unsigned char  bh;
+   } vid12;
+   struct {
+      unsigned char  al;
+      unsigned char  ah;
+      unsigned short bx;
+   } vid1A;
+} video_t2;
+
+/* BD_GET_VIDEO >=2 extension for PROBE_VERSION 5 */
+typedef
+struct Video25 {
+   struct {
+      unsigned short ax;
+      unsigned short cx;
+      unsigned short dx;
+      unsigned short bp;
+   } vid36;
+} video_t25;
+
+
+/* BD_GET_VIDEO >= 3  */
+typedef
+struct Video3 {
+   struct {
+      unsigned short ax;
+               char  sig[4];
+   } vid4F00;
+   struct {
+      unsigned short ax;
+      unsigned short bits;
+   } vid101;
+   struct {
+      unsigned short ax;
+      unsigned short bits;
+   } vid103;
+} video_t3;
+
 
 typedef
 struct Video {
@@ -55,13 +129,11 @@ struct Video {
    } vid0F;
 
 /* BD_GET_VIDEO >= 2  */
-#if 1
    struct {
       unsigned short ax;
       unsigned char  bl;
       unsigned char  bh;
    } vid12;
-#endif
    struct {
       unsigned char  al;
       unsigned char  ah;
@@ -84,6 +156,7 @@ struct Video {
    } vid103;
 } video_t;
 
+
 typedef
 struct Floppy {
    struct {
@@ -101,6 +174,7 @@ struct Floppy {
       unsigned short es;
    } fn08;
 } floppy_t;
+
 
 typedef
 struct Hard {
@@ -134,9 +208,9 @@ typedef
 struct Edd {
    unsigned short size;			/* 26 or 30 */
    unsigned short info;
-   unsigned long  cylinders;
-   unsigned long  heads;
-   unsigned long  sectors;
+   unsigned int  cylinders;
+   unsigned int  heads;
+   unsigned int  sectors;
    long long      total_sectors;
    unsigned short sector_size;
 
@@ -145,6 +219,13 @@ struct Edd {
            fn48_t reg;		/* AH & flags returned from the call */
 } edd_t;				/* struct is 26; but may be 30 in mem */
 
+/* the video adapter types */
+enum {VIDEO_UNKNOWN, VIDEO_MDA, VIDEO_CGA, VIDEO_EGA, VIDEO_MCGA,
+	VIDEO_VGA, VIDEO_VESA, VIDEO_VESA_800};
+
+int fetch(void);
+
+int purge(void);
 
 void probe_tell (char *cmd);
 
@@ -152,6 +233,9 @@ int bios_max_devs(void);
 
 int bios_device(GEOMETRY *geo, int device);
 
+int get_video(void);	/* return -1 on error, or adapter type [0..7] */
+
+void check_bios(void);	/* set up bios_passes_dl */
 
 #endif
 /* end probe.h */

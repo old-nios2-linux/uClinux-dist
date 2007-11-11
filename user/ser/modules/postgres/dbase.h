@@ -1,5 +1,5 @@
 /*
- * $Id: dbase.h,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: dbase.h,v 1.2 2004/04/13 14:58:05 janakj Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -105,5 +105,17 @@ int db_delete(db_con_t* _h, db_key_t* _k, db_op_t* _o, db_val_t* _v, int _n);
 int db_update(db_con_t* _h, db_key_t* _k, db_op_t* _o, db_val_t* _v,
 	      db_key_t* _uk, db_val_t* _uv, int _n, int _un);
 
+
+/*
+ * Store name of table that will be used by
+ * subsequent database functions
+ */
+int use_table(db_con_t* _h, const char* _t);
+
+int val2str(db_val_t* _v, char* _s, int* _len);
+
+int free_result(db_res_t* _r);
+
+int convert_result(db_con_t* _h, db_res_t* _r);
 
 #endif /* DBASE_H */

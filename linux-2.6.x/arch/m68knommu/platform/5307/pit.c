@@ -5,9 +5,8 @@
  *	         hardware timer only exists in the Freescale ColdFire
  *		 5270/5271, 5282 and other CPUs.
  *
- *	Copyright (C) 1999-2006, Greg Ungerer (gerg@snapgear.com)
+ *	Copyright (C) 1999-2007, Greg Ungerer (gerg@snapgear.com)
  *	Copyright (C) 2001-2004, SnapGear Inc. (www.snapgear.com)
- *
  */
 
 /***************************************************************************/
@@ -17,8 +16,9 @@
 #include <linux/param.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <asm/machdep.h>
 #include <asm/io.h>
-#include <asm/irq.h>
 #include <asm/coldfire.h>
 #include <asm/mcfpit.h>
 #include <asm/mcfsim.h>
@@ -29,34 +29,39 @@
  *	By default use timer1 as the system clock timer.
  */
 #define	TA(a)	(MCF_IPSBAR + MCFPIT_BASE1 + (a))
+#define	INTC0	(MCF_IPSBAR + MCFICM_INTC0)
 
 /***************************************************************************/
 
-void coldfire_pit_tick(void)
+static irqreturn_t hw_tick(int irq, void *dummy)
 {
 	unsigned short pcsr;
 
 	/* Reset the ColdFire timer */
 	pcsr = __raw_readw(TA(MCFPIT_PCSR));
 	__raw_writew(pcsr | MCFPIT_PCSR_PIF, TA(MCFPIT_PCSR));
+
+	return arch_timer_interrupt(irq, dummy);
 }
 
 /***************************************************************************/
 
-void coldfire_pit_init(irqreturn_t (*handler)(int, void *, struct pt_regs *))
+static struct irqaction coldfire_pit_irq = {
+	.name	 = "timer",
+	.flags	 = IRQF_DISABLED | IRQF_TIMER,
+	.handler = hw_tick,
+};
+
+void hw_timer_init(void)
 {
-	volatile unsigned char *icrp;
-	volatile unsigned long *imrp;
+	u32 imr;
 
-	request_irq(MCFINT_VECBASE + MCFINT_PIT1, handler, IRQF_DISABLED,
-		"ColdFire Timer", NULL);
+	setup_irq(MCFINT_VECBASE + MCFINT_PIT1, &coldfire_pit_irq);
 
-	icrp = (volatile unsigned char *) (MCF_IPSBAR + MCFICM_INTC0 +
-		MCFINTC_ICR0 + MCFINT_PIT1);
-	*icrp = ICR_INTRCONF;
-
-	imrp = (volatile unsigned long *) (MCF_IPSBAR + MCFICM_INTC0 + MCFPIT_IMR);
-	*imrp &= ~MCFPIT_IMR_IBIT;
+	__raw_writeb(ICR_INTRCONF, INTC0 + MCFINTC_ICR0 + MCFINT_PIT1);
+	imr = __raw_readl(INTC0 + MCFPIT_IMR);
+	imr &= ~MCFPIT_IMR_IBIT;
+	__raw_writel(imr, INTC0 + MCFPIT_IMR);
 
 	/* Set up PIT timer 1 as poll clock */
 	__raw_writew(MCFPIT_PCSR_DISABLE, TA(MCFPIT_PCSR));
@@ -67,7 +72,7 @@ void coldfire_pit_init(irqreturn_t (*handler)(int, void *, struct pt_regs *))
 
 /***************************************************************************/
 
-unsigned long coldfire_pit_offset(void)
+unsigned long hw_timer_offset(void)
 {
 	volatile unsigned long *ipr;
 	unsigned long pmr, pcntr, offset;

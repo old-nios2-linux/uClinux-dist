@@ -26,20 +26,22 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/sched.h>
 #include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/string.h>
-#include <linux/smp_lock.h>
 #include <linux/inet.h>
 #include <linux/list.h>
 #include <asm/uaccess.h>
 #include <linux/idr.h>
+#include <net/9p/9p.h>
+#include <net/9p/client.h>
 
-#include "debug.h"
 #include "v9fs.h"
-#include "9p.h"
 #include "v9fs_vfs.h"
 #include "fid.h"
+
+static const struct file_operations v9fs_cached_file_operations;
 
 /**
  * v9fs_file_open - open a file (or directory)
@@ -50,74 +52,40 @@
 
 int v9fs_file_open(struct inode *inode, struct file *file)
 {
-	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
-	struct v9fs_fid *vfid;
-	struct v9fs_fcall *fcall = NULL;
-	int omode;
-	int fid = V9FS_NOFID;
 	int err;
+	struct v9fs_session_info *v9ses;
+	struct p9_fid *fid;
+	int omode;
 
-	dprintk(DEBUG_VFS, "inode: %p file: %p \n", inode, file);
+	P9_DPRINTK(P9_DEBUG_VFS, "inode: %p file: %p \n", inode, file);
+	v9ses = v9fs_inode2v9ses(inode);
+	omode = v9fs_uflags2omode(file->f_flags);
+	fid = file->private_data;
+	if (!fid) {
+		fid = v9fs_fid_clone(file->f_path.dentry);
+		if (IS_ERR(fid))
+			return PTR_ERR(fid);
 
-	vfid = v9fs_fid_lookup(file->f_dentry);
-	if (!vfid) {
-		dprintk(DEBUG_ERROR, "Couldn't resolve fid from dentry\n");
-		return -EBADF;
-	}
-
-	fid = v9fs_get_idpool(&v9ses->fidpool);
-	if (fid < 0) {
-		eprintk(KERN_WARNING, "newfid fails!\n");
-		return -ENOSPC;
-	}
-
-	err = v9fs_t_walk(v9ses, vfid->fid, fid, NULL, &fcall);
-	if (err < 0) {
-		dprintk(DEBUG_ERROR, "rewalk didn't work\n");
-		if (fcall && fcall->id == RWALK)
-			goto clunk_fid;
-		else {
-			v9fs_put_idpool(fid, &v9ses->fidpool);
-			goto free_fcall;
+		err = p9_client_open(fid, omode);
+		if (err < 0) {
+			p9_client_clunk(fid);
+			return err;
+		}
+		if (omode & P9_OTRUNC) {
+			inode->i_size = 0;
+			inode->i_blocks = 0;
 		}
 	}
-	kfree(fcall);
 
-	/* TODO: do special things for O_EXCL, O_NOFOLLOW, O_SYNC */
-	/* translate open mode appropriately */
-	omode = v9fs_uflags2omode(file->f_flags);
-	err = v9fs_t_open(v9ses, fid, omode, &fcall);
-	if (err < 0) {
-		PRINT_FCALL_ERROR("open failed", fcall);
-		goto clunk_fid;
+	file->private_data = fid;
+	if ((fid->qid.version) && (v9ses->cache)) {
+		P9_DPRINTK(P9_DEBUG_VFS, "cached");
+		/* enable cached file options */
+		if(file->f_op == &v9fs_file_operations)
+			file->f_op = &v9fs_cached_file_operations;
 	}
-
-	vfid = kmalloc(sizeof(struct v9fs_fid), GFP_KERNEL);
-	if (vfid == NULL) {
-		dprintk(DEBUG_ERROR, "out of memory\n");
-		err = -ENOMEM;
-		goto clunk_fid;
-	}
-
-	file->private_data = vfid;
-	vfid->fid = fid;
-	vfid->fidopen = 1;
-	vfid->fidclunked = 0;
-	vfid->iounit = fcall->params.ropen.iounit;
-	vfid->rdir_pos = 0;
-	vfid->rdir_fcall = NULL;
-	vfid->filp = file;
-	kfree(fcall);
 
 	return 0;
-
-clunk_fid:
-	v9fs_t_clunk(v9ses, fid);
-
-free_fcall:
-	kfree(fcall);
-
-	return err;
 }
 
 /**
@@ -132,9 +100,9 @@ free_fcall:
 static int v9fs_file_lock(struct file *filp, int cmd, struct file_lock *fl)
 {
 	int res = 0;
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 
-	dprintk(DEBUG_VFS, "filp: %p lock: %p\n", filp, fl);
+	P9_DPRINTK(P9_DEBUG_VFS, "filp: %p lock: %p\n", filp, fl);
 
 	/* No mandatory locks */
 	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
@@ -142,7 +110,7 @@ static int v9fs_file_lock(struct file *filp, int cmd, struct file_lock *fl)
 
 	if ((IS_SETLK(cmd) || IS_SETLKW(cmd)) && fl->fl_type != F_UNLCK) {
 		filemap_write_and_wait(inode->i_mapping);
-		invalidate_inode_pages(&inode->i_data);
+		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	}
 
 	return res;
@@ -160,55 +128,16 @@ static ssize_t
 v9fs_file_read(struct file *filp, char __user * data, size_t count,
 	       loff_t * offset)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
-	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
-	struct v9fs_fid *v9f = filp->private_data;
-	struct v9fs_fcall *fcall = NULL;
-	int fid = v9f->fid;
-	int rsize = 0;
-	int result = 0;
-	int total = 0;
-	int n;
+	int ret;
+	struct p9_fid *fid;
 
-	dprintk(DEBUG_VFS, "\n");
+	P9_DPRINTK(P9_DEBUG_VFS, "\n");
+	fid = filp->private_data;
+	ret = p9_client_uread(fid, data, *offset, count);
+	if (ret > 0)
+		*offset += ret;
 
-	rsize = v9ses->maxdata - V9FS_IOHDRSZ;
-	if (v9f->iounit != 0 && rsize > v9f->iounit)
-		rsize = v9f->iounit;
-
-	do {
-		if (count < rsize)
-			rsize = count;
-
-		result = v9fs_t_read(v9ses, fid, *offset, rsize, &fcall);
-
-		if (result < 0) {
-			printk(KERN_ERR "9P2000: v9fs_t_read returned %d\n",
-			       result);
-
-			kfree(fcall);
-			return total;
-		} else
-			*offset += result;
-
-		n = copy_to_user(data, fcall->params.rread.data, result);
-		if (n) {
-			dprintk(DEBUG_ERROR, "Problem copying to user %d\n", n);
-			kfree(fcall);
-			return -EFAULT;
-		}
-
-		count -= result;
-		data += result;
-		total += result;
-
-		kfree(fcall);
-
-		if (result < rsize)
-			break;
-	} while (count);
-
-	return total;
+	return ret;
 }
 
 /**
@@ -224,51 +153,37 @@ static ssize_t
 v9fs_file_write(struct file *filp, const char __user * data,
 		size_t count, loff_t * offset)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
-	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
-	struct v9fs_fid *v9fid = filp->private_data;
-	struct v9fs_fcall *fcall;
-	int fid = v9fid->fid;
-	int result = -EIO;
-	int rsize = 0;
-	int total = 0;
+	int ret;
+	struct p9_fid *fid;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 
-	dprintk(DEBUG_VFS, "data %p count %d offset %x\n", data, (int)count,
-		(int)*offset);
-	rsize = v9ses->maxdata - V9FS_IOHDRSZ;
-	if (v9fid->iounit != 0 && rsize > v9fid->iounit)
-		rsize = v9fid->iounit;
+	P9_DPRINTK(P9_DEBUG_VFS, "data %p count %d offset %x\n", data,
+		(int)count, (int)*offset);
 
-	do {
-		if (count < rsize)
-			rsize = count;
+	fid = filp->private_data;
+	ret = p9_client_uwrite(fid, data, *offset, count);
+	if (ret > 0)
+		*offset += ret;
 
-		result = v9fs_t_write(v9ses, fid, *offset, rsize, data, &fcall);
-		if (result < 0) {
-			PRINT_FCALL_ERROR("error while writing", fcall);
-			kfree(fcall);
-			return result;
-		} else
-			*offset += result;
+	if (*offset > inode->i_size) {
+		inode->i_size = *offset;
+		inode->i_blocks = (inode->i_size + 512 - 1) >> 9;
+	}
 
-		kfree(fcall);
-		fcall = NULL;
-
-		if (result != rsize) {
-			eprintk(KERN_ERR,
-				"short write: v9fs_t_write returned %d\n",
-				result);
-			break;
-		}
-
-		count -= result;
-		data += result;
-		total += result;
-	} while (count);
-
-		invalidate_inode_pages2(inode->i_mapping);
-	return total;
+	invalidate_inode_pages2(inode->i_mapping);
+	return ret;
 }
+
+static const struct file_operations v9fs_cached_file_operations = {
+	.llseek = generic_file_llseek,
+	.read = do_sync_read,
+	.aio_read = generic_file_aio_read,
+	.write = v9fs_file_write,
+	.open = v9fs_file_open,
+	.release = v9fs_dir_release,
+	.lock = v9fs_file_lock,
+	.mmap = generic_file_mmap,
+};
 
 const struct file_operations v9fs_file_operations = {
 	.llseek = generic_file_llseek,

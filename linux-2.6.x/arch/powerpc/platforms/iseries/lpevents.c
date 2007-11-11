@@ -17,6 +17,7 @@
 
 #include <asm/system.h>
 #include <asm/paca.h>
+#include <asm/firmware.h>
 #include <asm/iseries/it_lp_queue.h>
 #include <asm/iseries/hv_lp_event.h>
 #include <asm/iseries/hv_call_event.h>
@@ -181,7 +182,7 @@ static int set_spread_lpevents(char *str)
 }
 __setup("spread_lpevents=", set_spread_lpevents);
 
-void setup_hvlpevent_queue(void)
+void __init setup_hvlpevent_queue(void)
 {
 	void *eventStack;
 
@@ -307,7 +308,7 @@ static int proc_lpevents_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_lpevents_show, NULL);
 }
 
-static struct file_operations proc_lpevents_operations = {
+static const struct file_operations proc_lpevents_operations = {
 	.open		= proc_lpevents_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -317,6 +318,9 @@ static struct file_operations proc_lpevents_operations = {
 static int __init proc_lpevents_init(void)
 {
 	struct proc_dir_entry *e;
+
+	if (!firmware_has_feature(FW_FEATURE_ISERIES))
+		return 0;
 
 	e = create_proc_entry("iSeries/lpevents", S_IFREG|S_IRUGO, NULL);
 	if (e)

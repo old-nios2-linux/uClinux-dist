@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>Database reloading</TITLE>
-<META NAME="description" CONTENT="Database reloading">
+<TITLE>Database loading</TITLE>
+<META NAME="description" CONTENT="Database loading">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -19,88 +19,94 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
 
-<LINK REL="next" HREF="node45.html">
-<LINK REL="previous" HREF="node35.html">
-<LINK REL="up" HREF="node30.html">
+<LINK REL="next" HREF="node41.html">
+<LINK REL="previous" HREF="node39.html">
+<LINK REL="up" HREF="node38.html">
 <LINK REL="next" HREF="node41.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html1094"
+<A NAME="tex2html717"
   HREF="node41.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html1090"
-  HREF="node30.html">
+<A NAME="tex2html713"
+  HREF="node38.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html1084"
+<A NAME="tex2html707"
   HREF="node39.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html1092"
+<A NAME="tex2html715"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html1095"
-  HREF="node41.html">Data scan functions</A>
-<B> Up:</B> <A NAME="tex2html1091"
-  HREF="node30.html">LibClamAV</A>
-<B> Previous:</B> <A NAME="tex2html1085"
-  HREF="node39.html">Database structure</A>
- &nbsp <B>  <A NAME="tex2html1093"
+<B> Next:</B> <A NAME="tex2html718"
+  HREF="node41.html">Error handling</A>
+<B> Up:</B> <A NAME="tex2html714"
+  HREF="node38.html">API</A>
+<B> Previous:</B> <A NAME="tex2html708"
+  HREF="node39.html">Header file</A>
+ &nbsp <B>  <A NAME="tex2html716"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H2><A NAME="SECTION00074000000000000000">
-Database reloading</A>
-</H2>
-    The most important thing is to keep the internal instance of the database
-    up to date. You can watch database changes with the <code>cl_stat</code>
-    functions family.
+<H3><A NAME="SECTION00074200000000000000">
+Database loading</A>
+</H3>
+    The following set of functions provides an interface for loading
+    the virus database:
     <PRE>
-	int cl_statinidir(const char *dirname, struct cl_stat *dbstat);
-	int cl_statchkdir(const struct cl_stat *dbstat);
-	int cl_statfree(struct cl_stat *dbstat);
+	const char *cl_retdbdir(void);
+
+	int cl_load(const char *path, struct cl_engine **engine,
+		    unsigned int *signo, unsigned int options);
 </PRE>
-    Initialization:
+    <code>cl_retdbdir</code> returns the default (hardcoded) path to the directory
+    with ClamAV databases.
+    <code>cl_load</code> loads a single database file or all databases from a
+    directory (if <code>path</code> points to a directory). The second argument
+    is used for passing in the engine structure which should be previously
+    initialized with NULL. A number of loaded signatures will be <B>added</B>
+    to <code>signo</code> <A NAME="tex2html16"
+  HREF="footnode.html#foot292"><SUP>7</SUP></A>. The last argument can pass the following flags:
+    
+<UL>
+<LI><B>CL_DB_STDOPT</B>
+<BR>
+This is an alias for a recommended set of scan options.
+</LI>
+<LI><B>CL_DB_NCORE</B>
+<BR>
+Initialize NodalCore and load the hardware database (if applicable).
+</LI>
+<LI><B>CL_DB_PHISHING</B>
+<BR>
+Load phishing signatures.
+</LI>
+<LI><B>CL_DB_PHISHING_URLS</B>
+<BR>
+Initialize the phishing detection module and load .wdb and .pdb files.
+    
+</LI>
+</UL>
+    <code>cl_load</code> returns 0 (<code>CL_SUCCESS</code>) on success and a non-negative
+    value on failure.
     <PRE>
 	    ...
-	    struct cl_stat dbstat;
+	    struct cl_engine *engine = NULL;
+	    unsigned int sigs = 0;
+	    int ret;
 
-	memset(&amp;dbstat, 0, sizeof(struct cl_stat));
-	cl_statinidir(dbdir, &amp;dbstat);
+	ret = cl_load(cl_retdbdir(), &amp;engine, &amp;sigs, CL_DB_STDOPT);
 </PRE>
-    To check for a change you only need to call <code>cl_statchkdir</code>:
-    <PRE>
-	if(cl_statchkdir(&amp;dbstat) == 1) {
-	    reload_database...;
-	    cl_statfree(&amp;dbstat);
-	    cl_statinidir(cl_retdbdir(), &amp;dbstat);
-	}
-</PRE>
-    Remember to reinitialize the structure after reload.
 
 <P>
 <BR><HR>
-<!--Table of Child-Links-->
-<A NAME="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
-
-<UL>
-<LI><A NAME="tex2html1096"
-  HREF="node41.html">Data scan functions</A>
-<LI><A NAME="tex2html1097"
-  HREF="node42.html">Memory</A>
-<LI><A NAME="tex2html1098"
-  HREF="node43.html">clamav-config</A>
-<LI><A NAME="tex2html1099"
-  HREF="node44.html">Example</A>
-</UL>
-<!--End of Table of Child-Links-->
-<BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

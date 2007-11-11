@@ -841,11 +841,9 @@ new_adapter(void)
 	struct hisax_b_if *b_if[2];
 	int i;
 
-	adapter = kmalloc(sizeof(struct fritz_adapter), GFP_KERNEL);
+	adapter = kzalloc(sizeof(struct fritz_adapter), GFP_KERNEL);
 	if (!adapter)
 		return NULL;
-
-	memset(adapter, 0, sizeof(struct fritz_adapter));
 
 	adapter->isac.hisax_d_if.owner = THIS_MODULE;
 	adapter->isac.hisax_d_if.ifc.priv = &adapter->isac;
@@ -861,7 +859,11 @@ new_adapter(void)
 	for (i = 0; i < 2; i++)
 		b_if[i] = &adapter->bcs[i].b_if;
 
-	hisax_register(&adapter->isac.hisax_d_if, b_if, "fcpcipnp", protocol);
+	if (hisax_register(&adapter->isac.hisax_d_if, b_if, "fcpcipnp",
+			protocol) != 0) {
+		kfree(adapter);
+		adapter = NULL;
+	}
 
 	return adapter;
 }

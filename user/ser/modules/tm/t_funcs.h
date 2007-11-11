@@ -1,7 +1,7 @@
 /*
- * $Id: t_funcs.h,v 1.55 2003/03/31 14:41:55 jiri Exp $
+ * $Id: t_funcs.h,v 1.60.2.1 2005/02/16 23:24:14 bogdan Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -56,6 +56,7 @@
 #include "../../md5utils.h"
 #include "../../ip_addr.h"
 #include "../../parser/parse_uri.h"
+#include "../../usr_avp.h"
 
 #include "config.h"
 #include "lock.h"
@@ -63,7 +64,6 @@
 #include "sip_msg.h"
 #include "h_table.h"
 #include "ut.h"
-
 
 struct s_table;
 struct timer;
@@ -73,8 +73,13 @@ struct cell;
 extern int noisy_ctimer;
 
 
+/* default names for timer's AVPs  */
+#define FR_TIMER_AVP      "callee_fr_timer"
+#define FR_INV_TIMER_AVP  "callee_fr_inv_timer"
+
+
 /* send a private buffer: utilize a retransmission structure
-   but take a separate buffer not refered by it; healthy
+   but take a separate buffer not referred by it; healthy
    for reducing time spend in REPLIES locks
 */
 
@@ -106,14 +111,35 @@ int send_pr_buffer( struct retr_buf *rb, void *buf, int len);
 #define INIT_REF_UNSAFE(_T_cell) ((_T_cell)->ref_count=1)
 #define IS_REFFED_UNSAFE(_T_cell) ((_T_cell)->ref_count!=0)
 
+/*
+ * Parse and fixup the fr_*_timer AVP specs
+ */
+int init_avp_params(char *fr_timer_param, char *fr_inv_timer_param);
+
+
+/*
+ * Get the FR_{INV}_TIMER from corresponding AVP
+ */
+int fr_avp2timer(unsigned int* timer);
+int fr_inv_avp2timer(unsigned int* timer);
+
+
 
 static void inline _set_fr_retr( struct retr_buf *rb, int retr )
 {
+	unsigned int timer;
+
 	if (retr) {
 		rb->retr_list=RT_T1_TO_1;
-		set_timer( &rb->retr_timer, RT_T1_TO_1 );
+		set_timer( &rb->retr_timer, RT_T1_TO_1, 0 );
 	}
-	set_timer(&rb->fr_timer, FR_TIMER_LIST);
+
+	if (!fr_avp2timer(&timer)) {
+		DBG("_set_fr_retr: FR_TIMER = %d\n", timer);
+		set_timer(&rb->fr_timer, FR_TIMER_LIST, &timer);
+	} else {
+		set_timer(&rb->fr_timer, FR_TIMER_LIST, 0);
+	}
 }
 
 static void inline start_retr(struct retr_buf *rb)
@@ -127,7 +153,6 @@ static void inline force_retr(struct retr_buf *rb)
 }
 
 
-int   tm_startup();
 void tm_shutdown();
 
 
@@ -156,7 +181,6 @@ void cleanup_localcancel_timers( struct cell *t );
 
 int t_relay_to( struct sip_msg  *p_msg ,
 	struct proxy_l *proxy, int proto, int replicate ) ;
-
 
 #endif
 

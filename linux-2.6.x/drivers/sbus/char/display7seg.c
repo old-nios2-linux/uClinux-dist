@@ -20,6 +20,7 @@
 #include <asm/ebus.h>			/* EBus device					*/
 #include <asm/oplib.h>			/* OpenProm Library 			*/
 #include <asm/uaccess.h>		/* put_/get_user			*/
+#include <asm/io.h>
 
 #include <asm/display7seg.h>
 
@@ -121,7 +122,7 @@ static long d7s_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	__u8 ireg = 0;
 	int error = 0;
 
-	if (D7S_MINOR != iminor(file->f_dentry->d_inode))
+	if (D7S_MINOR != iminor(file->f_path.dentry->d_inode))
 		return -ENODEV;
 
 	lock_kernel();
@@ -166,7 +167,7 @@ static long d7s_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return error;
 }
 
-static struct file_operations d7s_fops = {
+static const struct file_operations d7s_fops = {
 	.owner =		THIS_MODULE,
 	.unlocked_ioctl =	d7s_ioctl,
 	.compat_ioctl =		d7s_ioctl,

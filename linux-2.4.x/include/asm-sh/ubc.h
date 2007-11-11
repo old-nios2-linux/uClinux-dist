@@ -9,7 +9,7 @@
 #define UBC_TYPE_SH7729	0
 #endif
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define UBC_BARA                0xffffffb0
 #define UBC_BAMRA               0xffffffb4
 #define UBC_BBRA                0xffffffb8
@@ -21,7 +21,7 @@
 #define UBC_BDRB                0xffffff90
 #define UBC_BDMRB               0xffffff94
 #define UBC_BRCR                0xffffff98
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define UBC_BARA		0xff200000
 #define UBC_BAMRA		0xff200004
 #define UBC_BBRA		0xff200008

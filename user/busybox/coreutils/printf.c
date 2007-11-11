@@ -1,20 +1,11 @@
 /* vi: set sw=4 ts=4: */
 /* printf - format and print data
-   Copyright (C) 90, 91, 92, 93, 94, 95, 1996 Free Software Foundation, Inc.
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
-   any later version.
+   Copyright 1999 Dave Cinege
+   Portions copyright (C) 1990-1996 Free Software Foundation, Inc.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Licensed under GPL v2 or later, see file LICENSE in this tarball for details.
+*/
 
 /* Usage: printf format [argument...]
 
@@ -39,7 +30,7 @@
 
    %b = print an argument string, interpreting backslash escapes
 
-   The `format' argument is re-used as many times as necessary
+   The 'format' argument is re-used as many times as necessary
    to convert all of the given arguments.
 
    David MacKenzie <djm@gnu.ai.mit.edu> */
@@ -47,65 +38,165 @@
 
 //   19990508 Busy Boxed! Dave Cinege
 
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <string.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <assert.h>
 #include "busybox.h"
 
-static double xstrtod __P((char *s));
-static long xstrtol __P((char *s));
-static unsigned long xstrtoul __P((char *s));
-static void print_esc_string __P((char *str));
-static int print_formatted __P((char *format, int argc, char **argv));
-static void print_direc __P( (char *start, size_t length,
-			int field_width, int precision, char *argument));
+typedef void (*converter)(const char *arg, void *result);
 
-int printf_main(int argc, char **argv)
+static void multiconvert(const char *arg, void *result, converter convert)
 {
-	char *format;
-	int args_used;
+	char s[sizeof(int)*3 + 2];
 
-	if (argc <= 1 || **(argv + 1) == '-') {
-		bb_show_usage();
+	if (*arg == '"' || *arg == '\'') {
+		sprintf(s, "%d", (unsigned char)arg[1]);
+		arg = s;
+	}
+	convert(arg, result);
+	/* if there was conversion error, print unconverted string */
+	if (errno)
+		fputs(arg, stderr);
+}
+
+static void conv_strtoul(const char *arg, void *result)
+{
+	*(unsigned long*)result = bb_strtoul(arg, NULL, 0);
+}
+static void conv_strtol(const char *arg, void *result)
+{
+	*(long*)result = bb_strtol(arg, NULL, 0);
+}
+static void conv_strtod(const char *arg, void *result)
+{
+	char *end;
+	/* Well, this one allows leading whitespace... so what */
+	/* What I like much less is that "-" is accepted too! :( */
+	*(double*)result = strtod(arg, &end);
+	if (end[0]) errno = ERANGE;
+}
+
+static unsigned long my_xstrtoul(const char *arg)
+{
+	unsigned long result;
+	multiconvert(arg, &result, conv_strtoul);
+	return result;
+}
+
+static long my_xstrtol(const char *arg)
+{
+	long result;
+	multiconvert(arg, &result, conv_strtol);
+	return result;
+}
+
+static double my_xstrtod(const char *arg)
+{
+	double result;
+	multiconvert(arg, &result, conv_strtod);
+	return result;
+}
+
+static void print_esc_string(char *str)
+{
+	for (; *str; str++) {
+		if (*str == '\\') {
+			str++;
+			putchar(bb_process_escape_sequence((const char **)&str));
+		} else {
+			putchar(*str);
+		}
+
+	}
+}
+
+static void print_direc(char *start, size_t length, int field_width, int precision,
+		const char *argument)
+{
+	char *p;		/* Null-terminated copy of % directive. */
+
+	p = xmalloc((unsigned) (length + 1));
+	strncpy(p, start, length);
+	p[length] = 0;
+
+	switch (p[length - 1]) {
+	case 'd':
+	case 'i':
+		if (field_width < 0) {
+			if (precision < 0)
+				printf(p, my_xstrtol(argument));
+			else
+				printf(p, precision, my_xstrtol(argument));
+		} else {
+			if (precision < 0)
+				printf(p, field_width, my_xstrtol(argument));
+			else
+				printf(p, field_width, precision, my_xstrtol(argument));
+		}
+		break;
+	case 'o':
+	case 'u':
+	case 'x':
+	case 'X':
+		if (field_width < 0) {
+			if (precision < 0)
+				printf(p, my_xstrtoul(argument));
+			else
+				printf(p, precision, my_xstrtoul(argument));
+		} else {
+			if (precision < 0)
+				printf(p, field_width, my_xstrtoul(argument));
+			else
+				printf(p, field_width, precision, my_xstrtoul(argument));
+		}
+		break;
+	case 'f':
+	case 'e':
+	case 'E':
+	case 'g':
+	case 'G':
+		if (field_width < 0) {
+			if (precision < 0)
+				printf(p, my_xstrtod(argument));
+			else
+				printf(p, precision, my_xstrtod(argument));
+		} else {
+			if (precision < 0)
+				printf(p, field_width, my_xstrtod(argument));
+			else
+				printf(p, field_width, precision, my_xstrtod(argument));
+		}
+		break;
+	case 'c':
+		printf(p, *argument);
+		break;
+	case 's':
+		if (field_width < 0) {
+			if (precision < 0)
+				printf(p, argument);
+			else
+				printf(p, precision, argument);
+		} else {
+			if (precision < 0)
+				printf(p, field_width, argument);
+			else
+				printf(p, field_width, precision, argument);
+		}
+		break;
 	}
 
-	format = argv[1];
-	argc -= 2;
-	argv += 2;
-
-	do {
-		args_used = print_formatted(format, argc, argv);
-		argc -= args_used;
-		argv += args_used;
-	}
-	while (args_used > 0 && argc > 0);
-
-/*
-  if (argc > 0)
-    fprintf(stderr, "excess args ignored");
-*/
-
-	return EXIT_SUCCESS;
+	free(p);
 }
 
 /* Print the text in FORMAT, using ARGV (with ARGC elements) for
-   arguments to any `%' directives.
+   arguments to any '%' directives.
    Return the number of elements of ARGV used.  */
 
 static int print_formatted(char *format, int argc, char **argv)
 {
-	int save_argc = argc;		/* Preserve original value.  */
-	char *f;					/* Pointer into `format'.  */
-	char *direc_start;			/* Start of % directive.  */
-	size_t direc_length;		/* Length of % directive.  */
-	int field_width;			/* Arg to first '*', or -1 if none.  */
-	int precision;				/* Arg to second '*', or -1 if none.  */
+	int save_argc = argc;   /* Preserve original value.  */
+	char *f;                /* Pointer into 'format'.  */
+	char *direc_start;      /* Start of % directive.  */
+	size_t direc_length;    /* Length of % directive.  */
+	int field_width;        /* Arg to first '*', or -1 if none.  */
+	int precision;          /* Arg to second '*', or -1 if none.  */
 
 	for (f = format; *f; ++f) {
 		switch (*f) {
@@ -133,16 +224,17 @@ static int print_formatted(char *format, int argc, char **argv)
 				++f;
 				++direc_length;
 				if (argc > 0) {
-					field_width = xstrtoul(*argv);
+					field_width = my_xstrtoul(*argv);
 					++argv;
 					--argc;
 				} else
 					field_width = 0;
-			} else
+			} else {
 				while (isdigit(*f)) {
 					++f;
 					++direc_length;
 				}
+			}
 			if (*f == '.') {
 				++f;
 				++direc_length;
@@ -150,7 +242,7 @@ static int print_formatted(char *format, int argc, char **argv)
 					++f;
 					++direc_length;
 					if (argc > 0) {
-						precision = xstrtoul(*argv);
+						precision = my_xstrtoul(*argv);
 						++argv;
 						--argc;
 					} else
@@ -166,9 +258,9 @@ static int print_formatted(char *format, int argc, char **argv)
 				++direc_length;
 			}
 			/*
-			   if (!strchr ("diouxXfeEgGcs", *f))
-			   fprintf(stderr, "%%%c: invalid directive", *f);
-			 */
+			if (!strchr ("diouxXfeEgGcs", *f))
+			fprintf(stderr, "%%%c: invalid directive", *f);
+			*/
 			++direc_length;
 			if (argc > 0) {
 				print_direc(direc_start, direc_length, field_width,
@@ -179,14 +271,12 @@ static int print_formatted(char *format, int argc, char **argv)
 				print_direc(direc_start, direc_length, field_width,
 							precision, "");
 			break;
-
 		case '\\':
 			if (*++f == 'c')
 				exit(0);
 			putchar(bb_process_escape_sequence((const char **)&f));
 			f--;
 			break;
-
 		default:
 			putchar(*f);
 		}
@@ -195,122 +285,29 @@ static int print_formatted(char *format, int argc, char **argv)
 	return save_argc - argc;
 }
 
-static void
-print_direc(char *start, size_t length, int field_width, int precision,
-			char *argument)
+int printf_main(int argc, char **argv);
+int printf_main(int argc, char **argv)
 {
-	char *p;					/* Null-terminated copy of % directive. */
+	char *format;
+	int args_used;
 
-	p = xmalloc((unsigned) (length + 1));
-	strncpy(p, start, length);
-	p[length] = 0;
-
-	switch (p[length - 1]) {
-	case 'd':
-	case 'i':
-		if (field_width < 0) {
-			if (precision < 0)
-				printf(p, xstrtol(argument));
-			else
-				printf(p, precision, xstrtol(argument));
-		} else {
-			if (precision < 0)
-				printf(p, field_width, xstrtol(argument));
-			else
-				printf(p, field_width, precision, xstrtol(argument));
-		}
-		break;
-
-	case 'o':
-	case 'u':
-	case 'x':
-	case 'X':
-		if (field_width < 0) {
-			if (precision < 0)
-				printf(p, xstrtoul(argument));
-			else
-				printf(p, precision, xstrtoul(argument));
-		} else {
-			if (precision < 0)
-				printf(p, field_width, xstrtoul(argument));
-			else
-				printf(p, field_width, precision, xstrtoul(argument));
-		}
-		break;
-
-	case 'f':
-	case 'e':
-	case 'E':
-	case 'g':
-	case 'G':
-		if (field_width < 0) {
-			if (precision < 0)
-				printf(p, xstrtod(argument));
-			else
-				printf(p, precision, xstrtod(argument));
-		} else {
-			if (precision < 0)
-				printf(p, field_width, xstrtod(argument));
-			else
-				printf(p, field_width, precision, xstrtod(argument));
-		}
-		break;
-
-	case 'c':
-		printf(p, *argument);
-		break;
-
-	case 's':
-		if (field_width < 0) {
-			if (precision < 0)
-				printf(p, argument);
-			else
-				printf(p, precision, argument);
-		} else {
-			if (precision < 0)
-				printf(p, field_width, argument);
-			else
-				printf(p, field_width, precision, argument);
-		}
-		break;
+	if (argc <= 1 || argv[1][0] == '-') {
+		bb_show_usage();
 	}
 
-	free(p);
-}
+	format = argv[1];
+	argc -= 2;
+	argv += 2;
 
-static unsigned long xstrtoul(char *arg)
-{
-	unsigned long result;
-	if (safe_strtoul(arg, &result))
-		fprintf(stderr, "%s", arg);
-	return result;
-}
+	do {
+		args_used = print_formatted(format, argc, argv);
+		argc -= args_used;
+		argv += args_used;
+	} while (args_used > 0 && argc > 0);
 
-static long xstrtol(char *arg)
-{
-	long result;
-	if (safe_strtol(arg, &result))
-		fprintf(stderr, "%s", arg);
-	return result;
-}
+/*	if (argc > 0)
+		fprintf(stderr, "excess args ignored");
+*/
 
-static double xstrtod(char *arg)
-{
-	double result;
-	if (safe_strtod(arg, &result))
-		fprintf(stderr, "%s", arg);
-	return result;
-}
-
-static void print_esc_string(char *str)
-{
-	for (; *str; str++) {
-		if (*str == '\\') {
-			str++;
-			putchar(bb_process_escape_sequence((const char **)&str));
-		} else {
-			putchar(*str);
-		}
-
-	}
+	return EXIT_SUCCESS;
 }

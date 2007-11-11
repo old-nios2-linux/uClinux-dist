@@ -59,7 +59,7 @@ void pptp_gre_copy(u_int16_t call_id, u_int16_t peer_call_id,
   struct sockaddr_in src_addr;
   int s = gre_fd, n, stat1, stat2;
 
-  openlog("pptp_gre", 0, 0);
+  openlog("pptp_gre", LOG_PID, 0);
 
   pptp_gre_call_id = call_id;
   pptp_gre_peer_call_id = peer_call_id;

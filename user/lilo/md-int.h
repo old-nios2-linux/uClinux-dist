@@ -24,8 +24,10 @@ typedef unsigned int md_u32;
 typedef unsigned short md_u16;
 typedef unsigned char md_u8;
 
-#include <linux/major.h>
+/*#include <linux/major.h>*/
 #include <sys/ioctl.h>
+
+#define MD_MAJOR MAJOR_MD
 
 /*
  * Different major versions are not compatible.
@@ -34,9 +36,9 @@ typedef unsigned char md_u8;
  */
 
 struct md_version {
-	int major;
-	int minor;
-	int patchlevel;
+	md_u32 major;
+	md_u32 minor;
+	md_u32 patchlevel;
 };
 
 /*

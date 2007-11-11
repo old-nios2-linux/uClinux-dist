@@ -40,6 +40,7 @@ typedef struct _PatternMatchData
 
     int nocase;             /* Toggle case insensitity */
     int use_doe;            /* Use the doe_ptr for relative pattern searching */
+    int uri_buffer;         /* Index of the URI buffer */
     u_int pattern_size;     /* size of app layer pattern */
     u_int replace_size;     /* size of app layter replace pattern */
     char *replace_buf;      /* app layer pattern to replace with */

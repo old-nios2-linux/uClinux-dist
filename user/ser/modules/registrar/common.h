@@ -1,9 +1,9 @@
 /*
- * $Id: common.h,v 1.7 2003/04/01 15:48:20 janakj Exp $
+ * $Id: common.h,v 1.10 2004/08/24 09:00:37 janakj Exp $
  *
  * Common stuff
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,7 +32,6 @@
 #define COMMON_H
 
 #include "../../str.h"
-#include "../../parser/msg_parser.h"
 
 
 /*

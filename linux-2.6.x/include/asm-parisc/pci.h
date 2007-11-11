@@ -149,7 +149,7 @@ extern int parisc_bus_is_phys; 	/* in arch/parisc/kernel/setup.c */
 /*
 ** Most PCI devices (eg Tulip, NCR720) also export the same registers
 ** to both MMIO and I/O port space.  Due to poor performance of I/O Port
-** access under HP PCI bus adapters, strongly reccomend use of MMIO
+** access under HP PCI bus adapters, strongly recommend the use of MMIO
 ** address space.
 **
 ** While I'm at it more PA programming notes:
@@ -238,9 +238,6 @@ extern inline void pcibios_register_hba(struct pci_hba_data *x)
 #define PCIBIOS_MIN_IO          0x10
 #define PCIBIOS_MIN_MEM         0x1000 /* NBPG - but pci/setup-res.c dies */
 
-/* Don't support DAC yet. */
-#define pci_dac_dma_supported(pci_dev, mask)   (0)
-
 /* export the pci_ DMA API in terms of the dma_ one */
 #include <asm-generic/pci-dma-compat.h>
 
@@ -282,10 +279,6 @@ pcibios_select_root(struct pci_dev *pdev, struct resource *res)
 		root = &iomem_resource;
 
 	return root;
-}
-
-static inline void pcibios_add_platform_entries(struct pci_dev *dev)
-{
 }
 
 static inline void pcibios_penalize_isa_irq(int irq, int active)

@@ -48,6 +48,7 @@
 #include "decode.h"
 #include "stream_api.h"
 #include "sfghash.h"
+#include "util.h"
 
 /* Reasonably small, and prime */
 #define IGNORE_HASH_SIZE 1021
@@ -69,6 +70,7 @@ typedef struct _IgnoreHashKey
     u_int32_t ip2;
     short port;
     char protocol;
+    char pad;
 } IgnoreHashKey;
 
 /* The hash table of ignored channels */
@@ -125,6 +127,7 @@ int IgnoreChannel(u_int32_t cliIP, u_int16_t cliPort,
     hashKey.ip2 = ip2;
     hashKey.port = portToHash;
     hashKey.protocol = protocol;
+    hashKey.pad = 0;
 
     node = sfghash_find(channelHash, &hashKey);
     if (node)
@@ -252,6 +255,7 @@ char CheckIgnoreChannel(Packet *p)
     }
     hashKey.port = dstPort;
     hashKey.protocol = protocol;
+    hashKey.pad = 0;
 
     node = sfghash_find(channelHash, &hashKey);
 
@@ -342,7 +346,7 @@ char CheckIgnoreChannel(Packet *p)
                     struct in_addr tmpAddr;
                     char srcAddr[17];
                     tmpAddr.s_addr = srcIP;
-                    strcpy(srcAddr, inet_ntoa(tmpAddr));
+                    SnortStrncpy(srcAddr, inet_ntoa(tmpAddr), sizeof(srcAddr));
                     tmpAddr.s_addr = dstIP;
 
                     DEBUG_WRAP(DebugMessage(DEBUG_STREAM,

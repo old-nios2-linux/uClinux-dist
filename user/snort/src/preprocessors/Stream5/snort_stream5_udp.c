@@ -129,7 +129,7 @@ static void Stream5ParseUdpArgs(u_char *args, Stream5UdpPolicy *s5UdpPolicy)
     char *index;
     char **stoks = NULL;
     int s_toks;
-    char *endPtr;
+    char *endPtr = NULL;
 
     s5UdpPolicy->session_timeout = S5_DEFAULT_SSN_TIMEOUT;
     s5UdpPolicy->flags = 0;
@@ -194,7 +194,7 @@ static void Stream5PrintUdpConfig(Stream5UdpPolicy *s5UdpPolicy)
     LogMessage("Stream5 UDP Policy config:\n");
     LogMessage("    Timeout: %d seconds\n", s5UdpPolicy->session_timeout);
     LogMessage("    Flags: 0x%X\n", s5UdpPolicy->flags);
-    IpAddrSetPrint("    Bound Addresses:", s5UdpPolicy->bound_addrs);
+    //IpAddrSetPrint("    Bound Addresses:", s5UdpPolicy->bound_addrs);
 }
 
 int Stream5VerifyUdpConfig()

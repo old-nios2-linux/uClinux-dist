@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -18,24 +18,24 @@ static char rcsid[] = "$NetBSD: k_sin.c,v 1.8 1995/05/10 20:46:31 jtc Exp $";
  * kernel sin function on [-pi/4, pi/4], pi/4 ~ 0.7854
  * Input x is assumed to be bounded by ~pi/4 in magnitude.
  * Input y is the tail of x.
- * Input iy indicates whether y is 0. (if iy=0, y assume to be 0). 
+ * Input iy indicates whether y is 0. (if iy=0, y assume to be 0).
  *
  * Algorithm
- *	1. Since sin(-x) = -sin(x), we need only to consider positive x. 
+ *	1. Since sin(-x) = -sin(x), we need only to consider positive x.
  *	2. if x < 2^-27 (hx<0x3e400000 0), return x with inexact if x!=0.
  *	3. sin(x) is approximated by a polynomial of degree 13 on
  *	   [0,pi/4]
  *		  	         3            13
  *	   	sin(x) ~ x + S1*x + ... + S6*x
  *	   where
- *	
+ *
  * 	|sin(x)         2     4     6     8     10     12  |     -58
  * 	|----- - (1+S1*x +S2*x +S3*x +S4*x +S5*x  +S6*x   )| <= 2
- * 	|  x 					           | 
- * 
+ * 	|  x 					           |
+ *
  *	4. sin(x+y) = sin(x) + sin'(x')*y
  *		    ~ sin(x) + (1-x*x/2)*y
- *	   For better accuracy, let 
+ *	   For better accuracy, let
  *		     3      2      2      2      2
  *		r = x *(S2+x *(S3+x *(S4+x *(S5+x *S6))))
  *	   then                   3    2
@@ -46,9 +46,9 @@ static char rcsid[] = "$NetBSD: k_sin.c,v 1.8 1995/05/10 20:46:31 jtc Exp $";
 #include "math_private.h"
 
 #ifdef __STDC__
-static const double 
+static const double
 #else
-static double 
+static double
 #endif
 half =  5.00000000000000000000e-01, /* 0x3FE00000, 0x00000000 */
 S1  = -1.66666666666666324348e-01, /* 0xBFC55555, 0x55555549 */
@@ -59,9 +59,9 @@ S5  = -2.50507602534068634195e-08, /* 0xBE5AE5E6, 0x8A2B9CEB */
 S6  =  1.58969099521155010221e-10; /* 0x3DE5D93A, 0x5ACFD57C */
 
 #ifdef __STDC__
-	double __kernel_sin(double x, double y, int iy)
+	double attribute_hidden __kernel_sin(double x, double y, int iy)
 #else
-	double __kernel_sin(x, y, iy)
+	double attribute_hidden __kernel_sin(x, y, iy)
 	double x,y; int iy;		/* iy=0 if y is zero */
 #endif
 {

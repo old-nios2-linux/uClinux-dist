@@ -75,7 +75,7 @@ void show_mem(void)
 	printk("Free swap:       %6ldkB\n",
 	       nr_swap_pages << (PAGE_SHIFT-10));
 	printk("%ld pages of RAM\n", totalram_pages);
-	printk("%d free pages\n", nr_free_pages());
+	printk("%ld free pages\n", nr_free_pages());
 #if 0 /* undefined pgtable_cache_size, pgd_cache_size */
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 #ifndef CONFIG_SMP
@@ -307,6 +307,9 @@ void check_pgt_cache(void)
 extern void sun4c_paging_init(void);
 extern void srmmu_paging_init(void);
 extern void device_scan(void);
+
+pgprot_t PAGE_SHARED __read_mostly;
+EXPORT_SYMBOL(PAGE_SHARED);
 
 void __init paging_init(void)
 {

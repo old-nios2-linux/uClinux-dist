@@ -208,7 +208,7 @@ static KMAPNODE * KMapCreateNode(KMAP * km)
 int KMapAdd( KMAP *km, void * key, int n, void * userdata )
 {
     int            i,ksize;
-    int            type;
+    int            type = 0;
     unsigned char *P = (unsigned char *)key;
     KMAPNODE      *root;
     unsigned char  xkey[256];
@@ -481,6 +481,8 @@ int main( int argc, char ** argv )
     KMAP * km;
     char * p;
     char   str[80];
+
+    str[79] = '\0';
     
     printf("usage: kmap nkeys (default=10)\n\n");
     
@@ -495,7 +497,7 @@ int main( int argc, char ** argv )
     
     for(i=1;i<=n;i++)
     {
-        sprintf(str,"KeyWord%d",i);
+        snprintf(str, sizeof(str) - 1, "KeyWord%d",i);
         KMapAdd( km, str, 0 /* strlen(str) */, strupr(strdup(str)) );
         printf("Adding Key=%s\n",str);
     }
@@ -504,7 +506,7 @@ int main( int argc, char ** argv )
     printf("\nKey Find test...\n");
     for(i=1;i<=n;i++)
     {
-        sprintf(str,"KeyWord%d",i);
+        snprintf(str, sizeof(str) - 1, "KeyWord%d",i);
         p = (char*) KMapFind( km, str,  0 /*strlen(str) */ );
         if(p)printf("key=%s, data=%*s\n",str,strlen(str),p);
         else printf("'%s' NOT found.\n",str);
@@ -514,7 +516,7 @@ int main( int argc, char ** argv )
     printf("\nKey Find test2...\n");
     for(i=1;i<=n;i++)
     {
-        sprintf(str,"KeyWord%d",i);
+        snprintf(str, sizeof(str) - 1, "KeyWord%d",i);
         p = (char*) KMapFind( km, str,  0 /*strlen(str) */ );
         if(p)printf("key=%s, data=%*s\n",str,strlen(str),p);
         else printf("'%s' NOT found.\n",str);

@@ -1,10 +1,9 @@
 /*
- *  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2002 - 2006 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -30,11 +30,12 @@
 
 #include "options.h"
 #include "others.h"
-#include "shared.h"
 #include "defaults.h"
 #include "client.h"
 #include "output.h"
 #include "misc.h"
+
+#include "clamscan/clamscan_opt.h"
 
 void help(void);
 
@@ -42,46 +43,57 @@ short printinfected = 0;
 
 extern int notremoved, notmoved;
 
-void clamscan(struct optstruct *opt)
+int main(int argc, char **argv)
 {
 	int ds, dms, ret, infected;
 	struct timeval t1, t2;
 	struct timezone tz;
 	time_t starttime;
+	struct optstruct *opt;
+	const char *clamdscan_accepted[] = { "help", "version", "verbose", "quiet",
+				  "stdout", "log", "move", "copy", "remove",
+				  "config-file", "no-summary",
+				  "disable-summary", "multiscan", NULL };
 
 
-    /* initialize some important variables */
+    opt = opt_parse(argc, argv, clamscan_shortopt, clamscan_longopt, clamdscan_accepted);
+    if(!opt) {
+	mprintf("!Can't parse the command line\n");
+	return 2;
+    }
 
-    if(optc(opt, 'v')) {
+    if(opt_check(opt, "verbose")) {
 	mprintf_verbose = 1;
 	logg_verbose = 1;
     }
 
-    if(optl(opt, "quiet"))
+    if(opt_check(opt, "quiet"))
 	mprintf_quiet = 1;
 
-    if(optl(opt, "stdout"))
+    if(opt_check(opt, "stdout"))
 	mprintf_stdout = 1;
 
-    if(optc(opt, 'V')) {
+    if(opt_check(opt, "version")) {
 	print_version();
+	opt_free(opt);
 	exit(0);
     }
 
-    if(optc(opt, 'h')) {
-	free_opt(opt);
+    if(opt_check(opt, "help")) {
+	opt_free(opt);
     	help();
     }
 
-    if(optc(opt, 'i'))
+    if(opt_check(opt, "infected"))
 	printinfected = 1;
 
     /* initialize logger */
 
-    if(optc(opt, 'l')) {
-	logg_file = getargc(opt, 'l');
+    if(opt_check(opt, "log")) {
+	logg_file = opt_arg(opt, "log");
 	if(logg("--------------------------------------\n")) {
 	    mprintf("!Problem with internal logger.\n");
+	    opt_free(opt);
 	    exit(2);
 	}
     } else 
@@ -90,35 +102,30 @@ void clamscan(struct optstruct *opt)
 
     time(&starttime);
     /* ctime() does \n, but I need it once more */
-    logg("Scan started: %s\n", ctime(&starttime));
 
     gettimeofday(&t1, &tz);
 
     ret = client(opt, &infected);
 
-/* Implement STATUS in clamd */
-    if(!optl(opt, "disable-summary") && !optl(opt, "no-summary")) {
+    /* TODO: Implement STATUS in clamd */
+    if(!opt_check(opt, "disable-summary") && !opt_check(opt, "no-summary")) {
 	gettimeofday(&t2, &tz);
 	ds = t2.tv_sec - t1.tv_sec;
 	dms = t2.tv_usec - t1.tv_usec;
 	ds -= (dms < 0) ? (1):(0);
 	dms += (dms < 0) ? (1000000):(0);
-	mprintf("\n----------- SCAN SUMMARY -----------\n");
-	    logg("\n-- summary --\n");
-	mprintf("Infected files: %d\n", infected);
-	    logg("Infected files: %d\n", infected);
+	logg("\n----------- SCAN SUMMARY -----------\n");
+	logg("Infected files: %d\n", infected);
 	if(notremoved) {
-	    mprintf("Not removed: %d\n", notremoved);
-		logg("Not removed: %d\n", notremoved);
+	    logg("Not removed: %d\n", notremoved);
 	}
 	if(notmoved) {
-	    mprintf("Not moved: %d\n", notmoved);
-		logg("Not moved: %d\n", notmoved);
+	    logg("Not moved: %d\n", notmoved);
 	}
-	mprintf("Time: %d.%3.3d sec (%d m %d s)\n", ds, dms/1000, ds/60, ds%60);
-	    logg("Time: %d.%3.3d sec (%d m %d s)\n", ds, dms/1000, ds/60, ds%60);
+	logg("Time: %d.%3.3d sec (%d m %d s)\n", ds, dms/1000, ds/60, ds%60);
     }
 
+    opt_free(opt);
     exit(ret);
 }
 
@@ -129,7 +136,7 @@ void help(void)
 
     mprintf("\n");
     mprintf("                       ClamAV Daemon Client "VERSION"\n");
-    mprintf("     (C) 2002 - 2005 ClamAV Team - http://www.clamav.net/team.html\n\n");
+    mprintf("     (C) 2002 - 2007 ClamAV Team - http://www.clamav.net/team\n\n");
 
     mprintf("    --help              -h             Show help\n");
     mprintf("    --version           -V             Print version number and exit\n");
@@ -140,7 +147,9 @@ void help(void)
     mprintf("    --log=FILE          -l FILE        Save scan report in FILE\n");
     mprintf("    --remove                           Remove infected files. Be careful!\n");
     mprintf("    --move=DIRECTORY                   Move infected files into DIRECTORY\n");
+    mprintf("    --copy=DIRECTORY                   Copy infected files into DIRECTORY\n");
     mprintf("    --config-file=FILE                 Read configuration from FILE.\n");
+    mprintf("    --multiscan           -m           Force MULTISCAN mode\n");
     mprintf("    --infected            -i           Only print infected files\n");
     mprintf("    --no-summary                       Disable summary at end of scanning\n");
     mprintf("\n");

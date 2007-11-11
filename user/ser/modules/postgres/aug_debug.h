@@ -1,5 +1,5 @@
 /*
- * $Id: aug_debug.h,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: aug_debug.h,v 1.1.10.1 2005/07/20 17:11:52 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -40,10 +40,10 @@
 **
 **
 **                      $RCSfile: aug_debug.h,v $
-**                     $Revision: 1.1 $
+**                     $Revision: 1.1.10.1 $
 **
-**             Last change $Date: 2003/04/08 01:25:35 $
-**           Last change $Author: lgfausak $
+**             Last change $Date: 2005/07/20 17:11:52 $
+**           Last change $Author: andrei $
 **                        $State: Exp $
 **                       $Locker:  $
 **
@@ -126,9 +126,14 @@ extern augBool aug_dab_enabled;
 
 #else
 
+#ifdef __SUNPRO_C
+	#define DABL_NOP(...) /* ignore */
+#else
+	#define DABL_NOP(args...) /* ignore */
+#endif
 #define DABNAME(name)
 #define DABLEVEL(lev)	(augFALSE)
-#define DABL(lev)	(augFALSE) &&
+#define DABL(lev)	 DABL_NOP
 #define DAB		DABL(0)
 #define DABTRACE	DABL(0)
 #define DABBULK		DABL(0)

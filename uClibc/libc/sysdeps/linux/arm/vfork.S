@@ -1,71 +1,55 @@
 /* vi: set sw=4 ts=4: */
-/* vfork for uClibc
- *
- * Copyright (C) 2000 by Lineo, inc. and Erik Andersen
- * Copyright (C) 2000,2001 by Erik Andersen <andersen@uclibc.org>
- * Written by Erik Andersen <andersen@uclibc.org>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Library General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or (at your
- * option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Library General Public License
- * for more details.
- *
- * You should have received a copy of the GNU Library General Public License
- * along with this program; if not, write to the Free Software Foundation,
- * Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+/*
+ * vfork for uClibc
+ * Copyright (C) 2000-2006 by Erik Andersen <andersen@uclibc.org>
+ * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
  */
 
-#include <asm/errno.h>
+#include <features.h>
+
+#define _ERRNO_H
+#include <bits/errno.h>
 #include <sys/syscall.h>
 
+#ifdef __NR_fork
+.text
+.global	__vfork
+.hidden	__vfork
+.type	__vfork,%function
+.align 4
 
-
-		.text
-		.global vfork;
-		.type vfork,%function
-		.align 4;                                                               \
-
-
-
-vfork:
+__vfork:
 
 #ifdef __NR_vfork
-		swi		__NR_vfork
-		cmn		r0, #4096
-		movcc	pc, lr
-
-		/* Check if vfork even exists.  */
-		ldr     r1, =-ENOSYS
-		teq     r0, r1
-		bne     __syscall_error
+	DO_CALL (vfork)
+	cmn	r0, #4096
+#if defined(__USE_BX__)
+	bxcc	lr
+#else
+	movcc	pc, lr
 #endif
 
-		/* If we don't have vfork, use fork.  */
-		swi     __NR_fork
-		cmn     r0, #4096
+	/* Check if vfork even exists.  */
+	ldr     r1, =-ENOSYS
+	teq     r0, r1
+	bne     __error
+#endif
 
-		/* Syscal worked.  Return to child/parent */
-		movcc   pc, lr
+	/* If we don't have vfork, use fork.  */
+	DO_CALL (fork)
+	cmn     r0, #4096
 
-__syscall_error:
+	/* Syscall worked.  Return to child/parent */
+#if defined(__USE_BX__)
+	bxcc	lr
+#else
+	movcc   pc, lr
+#endif
 
-		/* Looks like the syscall choked -- set errno */
-		ldr  r3, .L4
-		/* Calculate the - of the syscall result, in case we need it */
-		rsb  r2, r0, $0
+__error:
+	b	__syscall_error
 
-		/* errno = -result */
-		str  r2, [r9,r3]
-
-		/* return -1 */
-		mvn  r0, $0
-		mov  pc, lr
-
-.L4:  .word errno
-
-
+.size __vfork,.-__vfork
+weak_alias(__vfork,vfork)
+libc_hidden_weak(vfork)
+#endif

@@ -11,8 +11,6 @@
 #ifndef __E820_HEADER
 #define __E820_HEADER
 
-#include <linux/mmzone.h>
-
 #define E820MAP	0x2d0		/* our map */
 #define E820MAX	128		/* number of entries in E820MAP */
 #define E820NR	0x1e8		/* # entries in E820MAP */
@@ -30,7 +28,7 @@ struct e820entry {
 } __attribute__((packed));
 
 struct e820map {
-    int nr_map;
+	u32 nr_map;
 	struct e820entry map[E820MAX];
 };
 
@@ -46,6 +44,7 @@ extern void e820_mark_nosave_regions(void);
 extern void e820_print_map(char *who);
 extern int e820_any_mapped(unsigned long start, unsigned long end, unsigned type);
 extern int e820_all_mapped(unsigned long start, unsigned long end, unsigned type);
+extern unsigned long e820_hole_size(unsigned long start, unsigned long end);
 
 extern void e820_setup_gap(void);
 extern void e820_register_active_regions(int nid,
@@ -56,6 +55,7 @@ extern void finish_e820_parsing(void);
 extern struct e820map e820;
 
 extern unsigned ebda_addr, ebda_size;
+extern unsigned long nodemap_addr, nodemap_size;
 #endif/*!__ASSEMBLY__*/
 
 #endif/*__E820_HEADER*/

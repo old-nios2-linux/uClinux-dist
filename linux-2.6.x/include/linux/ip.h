@@ -98,11 +98,25 @@ struct iphdr {
 	__be16	frag_off;
 	__u8	ttl;
 	__u8	protocol;
-	__be16	check;
+	__sum16	check;
 	__be32	saddr;
 	__be32	daddr;
 	/*The options start here. */
 };
+
+#ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+static inline struct iphdr *ip_hdr(const struct sk_buff *skb)
+{
+	return (struct iphdr *)skb_network_header(skb);
+}
+
+static inline struct iphdr *ipip_hdr(const struct sk_buff *skb)
+{
+	return (struct iphdr *)skb_transport_header(skb);
+}
+#endif
 
 struct ip_auth_hdr {
 	__u8  nexthdr;

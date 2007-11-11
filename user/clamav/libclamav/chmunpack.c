@@ -15,7 +15,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
  
 #if HAVE_CONFIG_H
@@ -26,10 +27,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <string.h>
 
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 #if HAVE_MMAP
 #if HAVE_SYS_MMAN_H
 #include <sys/mman.h>
@@ -42,14 +45,9 @@
 #endif
 
 #include "others.h"
-#include "mspack/mspack.h"
-#include "mspack/lzx.h"
+#include "mspack.h"
 #include "cltypes.h"
-
-#define FALSE (0)
-#define TRUE (1)
-
-#define MIN(a,b) ((a < b) ? a : b)
+#include "chmunpack.h"
 
 #ifndef HAVE_ATTRIB_PACKED
 #define __attribute__(x)
@@ -57,6 +55,14 @@
 
 #ifdef HAVE_PRAGMA_PACK
 #pragma pack(1)
+#endif
+
+#ifdef HAVE_PRAGMA_PACK_HPPA
+#pragma pack 1
+#endif
+
+#ifndef	O_BINARY
+#define	O_BINARY	0
 #endif
 
 #define CHM_ITSF_MIN_LEN (0x60)
@@ -149,42 +155,16 @@ typedef struct lzx_content_tag {
 #pragma pack()
 #endif
 
-#if WORDS_BIGENDIAN == 0
-#define chm_endian_convert_16(v)	(v)
-#else
-static uint16_t chm_endian_convert_16(uint16_t v)
-{
-	return ((v >> 8) + (v << 8));
-}
+#ifdef HAVE_PRAGMA_PACK_HPPA
+#pragma pack
 #endif
 
-#if WORDS_BIGENDIAN == 0
-#define chm_endian_convert_32(v)    (v)
-#else
-static uint32_t chm_endian_convert_32(uint32_t v)
-{
-        return ((v >> 24) | ((v & 0x00FF0000) >> 8) |
-                ((v & 0x0000FF00) << 8) | (v << 24));
-}
-#endif
-
-#if WORDS_BIGENDIAN == 0
-#define chm_endian_convert_64(v)    (v)
-#else
-static uint64_t chm_endian_convert_64(uint64_t v)
-{
-	return ((v >> 56) | ((v & 0x00FF000000000000LL) >> 40) |
-		((v & 0x0000FF0000000000LL) >> 24) |
-		((v & 0x000000FF00000000LL) >> 8) |
-		((v & 0x00000000FF000000LL) << 8) |
-		((v & 0x0000000000FF0000LL) << 24) |
-		((v & 0x000000000000FF00LL) << 40) |
-		(v << 56));
-}
-#endif
+#define chm_endian_convert_16(x) le16_to_host(x) 
+#define chm_endian_convert_32(x) le32_to_host(x) 
+#define chm_endian_convert_64(x) le64_to_host(x)
 
 /* Read in a block of data from either the mmap area or the given fd */
-int chm_read_data(int fd, unsigned char *dest, off_t offset, off_t len,
+static int chm_read_data(int fd, unsigned char *dest, off_t offset, off_t len,
 			unsigned char *m_area, off_t m_length)
 {
 	if ((offset < 0) || (len < 0) || ((offset+len) < 0)) {
@@ -206,7 +186,7 @@ int chm_read_data(int fd, unsigned char *dest, off_t offset, off_t len,
 	return TRUE;
 }
 
-uint64_t chm_copy_file_data(int ifd, int ofd, uint64_t len)
+static uint64_t chm_copy_file_data(int ifd, int ofd, uint64_t len)
 {
 	unsigned char data[8192];
 	uint64_t count, rem;
@@ -265,7 +245,7 @@ static void itsf_print_header(itsf_header_t *itsf_hdr)
 
 static int itsf_read_header(int fd, itsf_header_t *itsf_hdr, unsigned char *m_area, off_t m_length)
 {
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 	if (!chm_read_data(fd, (unsigned char *) itsf_hdr, 0, CHM_ITSF_MIN_LEN,
 				m_area,	m_length)) {
 		return FALSE;
@@ -354,7 +334,7 @@ static void itsp_print_header(itsp_header_t *itsp_hdr)
 static int itsp_read_header(int fd, itsp_header_t *itsp_hdr, off_t offset,
 				unsigned char *m_area, off_t m_length)
 {
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 	if (!chm_read_data(fd, (unsigned char *) itsp_hdr, offset, CHM_ITSP_LEN,
 				m_area,	m_length)) {
 		return FALSE;
@@ -487,7 +467,7 @@ static int read_chunk_entries(unsigned char *chunk, uint32_t chunk_len,
 		}
 		if (name_len > 0xFFFFFF) {
 			cli_dbgmsg("CHM file name too long: %llu\n", name_len);
-			file_e->name = (unsigned char *) strdup("truncated");
+			file_e->name = (unsigned char *) cli_strdup("truncated");
 	                if (!file_e->name) {
         	                free(file_e);
                 	        return FALSE;
@@ -498,7 +478,7 @@ static int read_chunk_entries(unsigned char *chunk, uint32_t chunk_len,
 				free(file_e);
 				return FALSE;
 			}
-			strncpy((char *) file_e->name, (char *) current, name_len);
+			strncpy(file_e->name, current, name_len);
 			file_e->name[name_len] = '\0';
 		}
 		current += name_len;
@@ -557,7 +537,7 @@ static int read_chunk(int fd, off_t offset, uint32_t chunk_len,
 		return FALSE;
 	}
 	
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 	/* 8 bytes reads the signature and the free_space */
 	if (!chm_read_data(fd, chunk_hdr->signature, offset, 8,
 				m_area,	m_length)) {
@@ -587,7 +567,7 @@ static int read_chunk(int fd, off_t offset, uint32_t chunk_len,
 	chunk_hdr->free_space = chm_endian_convert_32(chunk_hdr->free_space);
 	
 	if (memcmp(chunk_hdr->signature, "PMGL", 4) == 0) {
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 		if (!chm_read_data(fd, (unsigned char *) &chunk_hdr->unknown, offset+8, 12,
 					m_area,	m_length)) {
 			goto abort;
@@ -656,7 +636,7 @@ static lzx_control_t *read_sys_control(int fd, itsf_header_t *itsf_hdr, file_lis
 	if (!lzx_control) {
 		return NULL;
 	}
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 	if (!chm_read_data(fd, (unsigned char *) lzx_control, offset, CHM_CONTROL_LEN,
 				m_area,	m_length)) {
 		goto abort;
@@ -690,7 +670,7 @@ static lzx_control_t *read_sys_control(int fd, itsf_header_t *itsf_hdr, file_lis
 	lzx_control->window_size = chm_endian_convert_32(lzx_control->window_size);
 	lzx_control->cache_size = chm_endian_convert_32(lzx_control->cache_size);
 	
-	if (strncmp((char *) "LZXC", (char *) lzx_control->signature, 4) != 0) {
+	if (strncmp("LZXC", lzx_control->signature, 4) != 0) {
 		cli_dbgmsg("bad sys_control signature");
 		goto abort;
 	}
@@ -778,7 +758,7 @@ static lzx_reset_table_t *read_sys_reset_table(int fd, itsf_header_t *itsf_hdr, 
 	/* Save the entry offset for later use */
 	lzx_reset_table->rt_offset = offset-4;
 
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 	if (!chm_read_data(fd, (unsigned char *) lzx_reset_table, offset, CHM_RESET_TABLE_LEN,
 				m_area,	m_length)) {
 		goto abort;
@@ -836,14 +816,6 @@ abort:
 #define CHM_SYS_CONTENT_NAME "::DataSpace/Storage/MSCompressed/Content"
 #define CHM_SYS_RESETTABLE_NAME "::DataSpace/Storage/MSCompressed/Transform/{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}/InstanceData/ResetTable"
 
-struct mspack_file_p {
-  FILE *fh;
-  char *name;
-  int desc;
-};
-
-extern struct mspack_system *mspack_default_system;
-
 static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *itsf_hdr,
 				file_list_t *file_l, file_list_t *sys_file_l,
 				unsigned char *m_area, off_t m_length)
@@ -852,48 +824,25 @@ static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *its
 	lzx_content_t *lzx_content=NULL;
 	lzx_reset_table_t *lzx_reset_table=NULL;
 	lzx_control_t *lzx_control=NULL;
-	int window_bits, count, length, ofd, retval=FALSE;
+	int window_bits, count, length, tmpfd, ofd, retval=FALSE;
 	uint64_t com_offset;
-	struct mspack_file_p mf_in, mf_out;
-	struct lzxd_stream * stream;
+	struct lzx_stream * stream;
 	unsigned char filename[1024];
 	
-	mf_in.desc = dup(fd);
-	if (mf_in.desc < 0) {
+	snprintf(filename, 1024, "%s/clamav-unchm.bin", dirname);
+	tmpfd = open(filename, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU);
+	if (tmpfd<0) {
+		cli_dbgmsg("open failed for %s\n", filename);
 		return FALSE;
 	}
-	mf_in.fh = fdopen(mf_in.desc, "r");
-	if (!mf_in.fh) {
-		close(mf_in.desc);
-		return FALSE;
-	}
-	mf_in.name = strdup("input");
-	
-	snprintf((char *) filename, 1024, "%s/clamav-unchm.bin", dirname);
-	mf_out.desc = open((char *) filename, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
-	if (!mf_out.desc) {
-		cli_dbgmsg("open failed\n", filename);
-		free(mf_in.name);
-		fclose(mf_in.fh);
-		return FALSE;
-	}
-	mf_out.fh = fdopen(mf_out.desc, "w");
-	if (!mf_out.fh) {
-		cli_dbgmsg("fdopen failed\n", filename);
-		free(mf_in.name);
-		fclose(mf_in.fh);
-		return FALSE;
-	}
-		
-	mf_out.name = strdup("output");
-	
+
 	entry = sys_file_l->next;
 	while (entry) {
-		if (strcmp((char *) entry->name, CHM_SYS_CONTROL_NAME) == 0) {
+		if (strcmp(entry->name, CHM_SYS_CONTROL_NAME) == 0) {
 			lzx_control = read_sys_control(fd, itsf_hdr, entry, m_area, m_length);
-		} else if (strcmp((char *) entry->name, CHM_SYS_CONTENT_NAME) == 0) {
+		} else if (strcmp(entry->name, CHM_SYS_CONTENT_NAME) == 0) {
 			lzx_content = read_sys_content(fd, itsf_hdr, entry);
-		} else if (strcmp((char *) entry->name, CHM_SYS_RESETTABLE_NAME) == 0) {
+		} else if (strcmp(entry->name, CHM_SYS_RESETTABLE_NAME) == 0) {
 			lzx_reset_table = read_sys_reset_table(fd, itsf_hdr, entry, m_area, m_length);
 		}
 		entry = entry->next;
@@ -942,31 +891,30 @@ static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *its
 	com_offset = lzx_content->offset;
 	cli_dbgmsg("Compressed offset: %llu\n", com_offset);
 	
-	stream = lzxd_init(mspack_default_system, (struct mspack_file *) &mf_in, (struct mspack_file *) &mf_out, window_bits,
+	stream = lzx_init(fd, tmpfd, window_bits,
 			lzx_control->reset_interval / LZX_FRAME_SIZE,
-			4096, length);
+			4096, length, NULL, NULL);
 	lseek(fd, com_offset, SEEK_SET);
 	if (!stream) {
-		cli_dbgmsg("lzxd_init failed\n");
+		cli_dbgmsg("lzx_init failed\n");
 		goto abort;
 	}
 	
-	lzxd_decompress(stream, length);
-	lzxd_free(stream);
+	lzx_decompress(stream, length);
+	lzx_free(stream);
 	
 	entry = file_l->next;
-	fclose(mf_out.fh);
-	mf_out.fh = NULL;
+	close(tmpfd);
 	
 	/* Reopen the file for reading */
-	mf_out.desc = open((char *) filename, O_RDONLY);
-	if (mf_out.desc < 0) {
+	tmpfd = open(filename, O_RDONLY|O_BINARY);
+	if (tmpfd < 0) {
 		cli_dbgmsg("re-open output failed\n");
 		goto abort;
 	}
 	
 	/* Delete the file */
-	unlink((char *) filename);
+	unlink(filename);
 	
 	count=0;
 	while(entry) {
@@ -974,19 +922,19 @@ static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *its
 			entry = entry->next;
 			continue;
 		}
-		if (lseek(mf_out.desc, entry->offset, SEEK_SET) != (off_t)entry->offset) {
+		if (lseek(tmpfd, entry->offset, SEEK_SET) != (off_t)entry->offset) {
 			cli_dbgmsg("seek in output failed\n");
 			entry = entry->next;
 			continue;
 		}
 		
-		snprintf((char *) filename, 1024, "%s/%d-%llu.chm", dirname, count, entry->offset);
-		ofd = open((char *) filename, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
+		snprintf(filename, 1024, "%s/%d-%llu.chm", dirname, count, entry->offset);
+		ofd = open(filename, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU);
 		if (ofd < 0) {
 			entry = entry->next;
 			continue;
 		}
-		if (chm_copy_file_data(mf_out.desc, ofd, entry->length) != entry->length) {
+		if (chm_copy_file_data(tmpfd, ofd, entry->length) != entry->length) {
 			cli_dbgmsg("failed to copy %lu bytes\n", entry->length);
 		}
 		
@@ -994,10 +942,14 @@ static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *its
 		entry = entry->next;
 		count++;
 	}
-	close(mf_out.desc);
+	close(tmpfd);
+	tmpfd=-1;
 	retval = TRUE;
 	
 abort:
+	if (tmpfd>=0) {
+		close(tmpfd);
+	}
 	if (lzx_content) {
 		free(lzx_content);
 	}
@@ -1006,12 +958,6 @@ abort:
 	}
 	if (lzx_control) {
 		free(lzx_control);
-	}
-	free(mf_in.name);
-	fclose(mf_in.fh);
-	free(mf_out.name);
-	if (mf_out.fh) {
-		fclose(mf_out.fh);
 	}
 	return retval;
 }

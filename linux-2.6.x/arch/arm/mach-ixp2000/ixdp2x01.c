@@ -63,7 +63,7 @@ static void ixdp2x01_irq_unmask(unsigned int irq)
 
 static u32 valid_irq_mask;
 
-static void ixdp2x01_irq_handler(unsigned int irq, struct irqdesc *desc)
+static void ixdp2x01_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	u32 ex_interrupt;
 	int i;
@@ -79,7 +79,7 @@ static void ixdp2x01_irq_handler(unsigned int irq, struct irqdesc *desc)
 
 	for (i = 0; i < IXP2000_BOARD_IRQS; i++) {
 		if (ex_interrupt & (1 << i)) {
-			struct irqdesc *cpld_desc;
+			struct irq_desc *cpld_desc;
 			int cpld_irq = IXP2000_BOARD_IRQ(0) + i;
 			cpld_desc = irq_desc + cpld_irq;
 			desc_handle_irq(cpld_irq, cpld_desc);
@@ -89,7 +89,7 @@ static void ixdp2x01_irq_handler(unsigned int irq, struct irqdesc *desc)
 	desc->chip->unmask(irq);
 }
 
-static struct irqchip ixdp2x01_irq_chip = {
+static struct irq_chip ixdp2x01_irq_chip = {
 	.mask	= ixdp2x01_irq_mask,
 	.ack	= ixdp2x01_irq_mask,
 	.unmask	= ixdp2x01_irq_unmask
@@ -119,7 +119,7 @@ void __init ixdp2x01_init_irq(void)
 	for (irq = NR_IXP2000_IRQS; irq < NR_IXDP2X01_IRQS; irq++) {
 		if (irq & valid_irq_mask) {
 			set_irq_chip(irq, &ixdp2x01_irq_chip);
-			set_irq_handler(irq, do_level_IRQ);
+			set_irq_handler(irq, handle_level_irq);
 			set_irq_flags(irq, IRQF_VALID);
 		} else {
 			set_irq_flags(irq, 0);
@@ -276,7 +276,7 @@ static int __init ixdp2x01_pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	/* Device is located after first MB bridge */
 	case 0x0008:
 		if (tmp_bus == dev->bus) {
-			/* Device is located directy after first MB bridge */
+			/* Device is located directly after first MB bridge */
 			switch (devpin) {
 			case DEVPIN(1, 1):	/* Onboard 82546 ch 0 */
 				if (machine_is_ixdp2401())
@@ -299,7 +299,7 @@ static int __init ixdp2x01_pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 		break;
 	case 0x0010:
 		if (tmp_bus == dev->bus) {
-			/* Device is located directy after second MB bridge */
+			/* Device is located directly after second MB bridge */
 			/* Secondary bus of second bridge */
 			switch (devpin) {
 			case DEVPIN(0, 1):	/* DB#0 */
@@ -348,7 +348,7 @@ int __init ixdp2x01_pci_init(void)
 subsys_initcall(ixdp2x01_pci_init);
 
 /*************************************************************************
- * IXDP2x01 Machine Intialization
+ * IXDP2x01 Machine Initialization
  *************************************************************************/
 static struct flash_platform_data ixdp2x01_flash_platform_data = {
 	.map_name	= "cfi_probe",

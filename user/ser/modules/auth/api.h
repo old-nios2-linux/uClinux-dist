@@ -1,9 +1,9 @@
 /*
- * $Id: api.h,v 1.3.6.1 2004/04/27 21:21:52 jiri Exp $
+ * $Id: api.h,v 1.5.2.2 2005/04/26 10:14:57 janakj Exp $
  *
  * Digest Authentication Module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -38,10 +38,10 @@
 #define MAX_RPID_LEN 1024  /* Size of the buffer */
 
 typedef enum auth_result {
-	ERROR = -2 ,        /* Error occured, a reply has been sent out -> return 0 to the ser core */
+	ERROR = -2 ,        /* Error occurred, a reply has been sent out -> return 0 to the ser core */
 	NOT_AUTHORIZED,     /* Don't perform authorization, credentials missing */
 	DO_AUTHORIZATION,   /* Perform digest authorization */
-        AUTHORIZED          /* Authorized by default, no digest authorization necessarry */
+        AUTHORIZED          /* Authorized by default, no digest authorization necessary */
 } auth_result_t;
 
 

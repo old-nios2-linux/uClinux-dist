@@ -91,9 +91,9 @@ extern int     kgdb_setjmp(jmp_buf __jmpb);
 } while (0)
 
 /* KGDB should be able to flush all kernel text space */
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define kgdb_flush_icache_range(start, end)	do { } while (0)
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define kgdb_flush_icache_range(start, end) \
 {									       \
 	extern void __flush_purge_region(void *, int);			       \

@@ -1,9 +1,9 @@
 /*
  * Presence Agent, module interface
  *
- * $Id: pa_mod.h,v 1.2.4.1 2003/11/11 14:32:27 janakj Exp $
+ * $Id: pa_mod.h,v 1.10 2004/08/24 08:58:32 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,12 +32,43 @@
 
 #include "../../parser/msg_parser.h"
 #include "../tm/tm_load.h"
+#include "../../db/db.h"
 
 extern int default_expires;
+extern double default_priority;
 extern int timer_interval;
 
 /* TM bind */
 extern struct tm_binds tmb;
 
+/* DB module bind */
+extern db_func_t pa_dbf;
+extern db_con_t* pa_db;
+
+/* PA database */
+extern int use_db;
+extern int use_place_table;
+extern str db_url;
+extern str pa_domain;
+extern char *presentity_table;
+extern char *presentity_contact_table;
+extern char *watcherinfo_table;
+extern char *place_table;
+extern int use_bsearch;
+extern int use_location_package;
+extern int new_watcher_pending;
+extern int callback_update_db;
+extern int callback_lock_pdomain;
+extern int new_tuple_on_publish;
+extern int pa_pidf_priority;
+
+/*
+ * compare two str's
+ */
+int str_strcmp(const str *stra, const str *strb);
+/*
+ * case-insensitive compare two str's
+ */
+int str_strcasecmp(const str *stra, const str *strb);
 
 #endif /* PA_MOD_H */

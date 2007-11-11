@@ -1,9 +1,122 @@
 GNU Wget NEWS -- history of user-visible changes.
 
-Copyright (C) 1997, 1998, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright (C) 2005 Free Software Foundation, Inc.
 See the end for copying conditions.
 
 Please send GNU Wget bug reports to <bug-wget@gnu.org>.
+
+* Wget 1.10.1 is a bugfix release with no user-visible changes.
+
+* Changes in Wget 1.10.
+
+** Downloading files larger than 2GB, sometimes referred to as "large
+files", now works on systems that support them.  This includes the
+majority of modern Unixes, as well as MS Windows.
+
+** IPv6 is now supported by Wget.  Unlike the experimental code in
+1.9, this version supports dual-family systems.  The new flags
+`--inet4' and `--inet6' (or `-4' and `-6' for short) force the use of
+IPv4 and IPv6 respectively.  Note that IPv6 support has not yet been
+tested on Windows.
+
+** Microsoft's proprietary "NTLM" method of HTTP authentication is now
+supported.  This authentication method is undocumented and only used
+by IIS.  Note that *proxy* authentication is not supported in this
+release; you can only authenticate to the target web site.
+
+** Wget no longer truncates partially downloaded files when download
+has to start over because the server doesn't support Range.  Instead,
+with such servers Wget now simply ignores the data up to the byte
+where the last attempt left off, and only then continues appending to
+the file.  That way the downloaded file never shrinks, and download
+retries from servers without support for partial downloads work even
+when downloading to stdout.
+
+** SSL/TLS changes:
+
+*** SSL/TLS downloads now attempt to verify the server's certificate
+against the recognized certificate authorities.  This requires CA
+certificates to have been installed in a location visible to the
+OpenSSL library.  If this is not the case, you can get the bundle
+yourself from a source you trust (for example, the bundle extracted
+from Mozilla available at http://curl.haxx.se/docs/caextract.html),
+and point Wget to the PEM file using the `--ca-certificate'
+command-line option or the corresponding `.wgetrc' command.
+
+*** Secure downloads now verify that the host name in the URL matches
+the "common name" in the certificate presented by the server.
+
+*** Although the above checks provide more secure downloads, they
+unavoidably break interoperability with some sites that worked with
+previous versions, particularly those using self-signed, expired, or
+otherwise invalid certificates.  If you encounter "certificate
+verification" errors or complaints that "common name doesn't match
+requested host name" and are convinced of the site's authenticity, you
+can use `--no-check-certificate' to bypass both checks.
+
+*** Talking to SSL/TLS servers over proxies now actually works.
+Previous versions of Wget erroneously sent GET requests for https
+URLs.  Wget 1.10 utilizes the CONNECT method designed for this
+purpose.
+
+*** The SSL/TLS-related options have been redesigned and, for the
+first time, documented in the manual.  The old, undocumented, options
+are no longer supported.
+
+** Passive FTP is now the default FTP transfer mode.  Use
+`--no-passive-ftp' or specify `passive_ftp = off' in your init file to
+revert to the old behavior.
+
+** The `--header' option can now be used to override generated
+headers.  For example, `wget --header="Host: foo.bar"
+http://127.0.0.1' tells Wget to connect to localhost, but to specify
+"foo.bar" in the `Host' header.  In previous versions such use of
+`--header' lead to duplicate headers in HTTP requests.
+
+** The responses without headers, aka "HTTP 0.9" responses, are
+detected and handled.  Although HTTP 0.9 has long been obsolete, it is
+still occasionally used, sometimes by accident.
+
+** The progress bar is now updated regularly even when the data does
+not arrive from the network.
+
+** Wget no longer preserves permissions of files retrieved by FTP by
+default.  Anonymous FTP servers frequently use permissions like "664",
+which might not be what the user wants.  The new option
+`--preserve-permissions' and the corresponding `.wgetrc' variable can
+be used to revert to the old behavior.
+
+** The new option `--protocol-directories' instructs Wget to also use
+the protocol name as a directory component of local file names.
+
+** Options that previously unconditionally set or unset various flags
+are now boolean options that can be invoked as either `--OPTION' or
+`--no-OPTION'.  Options that required an argument "on" or "off" have
+also been changed this way, but they still accept the old syntax for
+backward compatibility.  For example, instead of `--glob=off' you can
+write `--no-glob'.
+
+Allowing `--no-OPTION' for every `--OPTION' and the other way around
+is useful because it allows the user to override non-default behavior
+specified via `.wgetrc'.
+
+** The new option `--keep-session-cookies' causes `--save-cookies' to
+save session cookies (normally only kept in memory) along with the
+permanent ones.  This is useful because many sites track important
+information, such as whether the user has authenticated, in session
+cookies.  With this option multiple Wget runs are treated as a single
+browser session.
+
+** Wget now supports the --ftp-user and --ftp-password command
+switches to set username and password for FTP, and the --user and
+--password command switches to set username and password for both FTP
+and HTTP.  The --http-passwd and --proxy-passwd command switches have
+been renamed to --http-password and --proxy-password respectively, and
+the related http_passwd and proxy_passwd .wgetrc commands to
+http_password and proxy_password respectively.  The login and passwd
+.wgetrc commands have been deprecated.
+
+* `wget -b' now works correctly under Windows.
 
 * Wget 1.9.1 is a bugfix release with no user-visible changes.
 
@@ -33,7 +146,7 @@ log on to the proxy as "username@host".
 even in the face of refused connections, which are otherwise
 considered a fatal error.
 
-** The new option `--dns-cache=off' may be used to prevent Wget from
+** The new option `--no-dns-cache' may be used to prevent Wget from
 caching DNS lookups.
 
 ** Wget no longer escapes characters in local file names based on
@@ -438,7 +551,7 @@ geturl -vo log http://fly.cc.fer.hr/
 ----------------------------------------------------------------------
 Copyright information:
 
-Copyright (C) 1997, 1998, 2000, 2001 Free Software Foundation, Inc.
+Copyright (C) 2005 Free Software Foundation, Inc.
 
    Permission is granted to anyone to make or distribute verbatim
    copies of this document as received, in any medium, provided that

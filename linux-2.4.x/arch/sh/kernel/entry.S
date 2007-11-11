@@ -71,17 +71,17 @@ PT_TRACESYS  = 0x00000002
 ENOSYS = 38
 EINVAL = 22
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 TRA     = 0xffffffd0
 EXPEVT  = 0xffffffd4
-#if defined(CONFIG_CPU_SUBTYPE_SH7300) || defined(CONFIG_CPU_SUBTYPE_SH7707) || \ 
+#if defined(CONFIG_CPU_SUBTYPE_SH7300) || defined(CONFIG_CPU_SUBTYPE_SH7707) || \
     defined(CONFIG_CPU_SUBTYPE_SH7709)
 INTEVT  = 0xa4000000		! INTEVTE2(0xa4000000)
 #else
 INTEVT  = 0xffffffd8
 #endif
 MMU_TEA = 0xfffffffc		! TLB Exception Address Register
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 TRA     = 0xff000020
 EXPEVT  = 0xff000024
 INTEVT  = 0xff000028
@@ -839,7 +839,7 @@ ENTRY(exception_handling_table)
 	.long	tlb_protection_violation_store
 	.long	address_error_load
 	.long	address_error_store
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	.long	SYMBOL_NAME(do_fpu_error)
 #else
 	.long	error	! fpu_exception
@@ -974,7 +974,7 @@ ENTRY(interrupt_table)
 	.long   SYMBOL_NAME(do_IRQ)	! 108
 #endif
 #endif
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 	.long	SYMBOL_NAME(do_IRQ)	! 32 Hitachi UDI
 	.long	SYMBOL_NAME(do_IRQ)	! 33 GPIO
 	.long	SYMBOL_NAME(do_IRQ)	! 34 DMAC dmte0
@@ -1416,7 +1416,7 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-(.-sys_call_table)/4
+	.rept NR_syscalls - 225
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr
 

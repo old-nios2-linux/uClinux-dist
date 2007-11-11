@@ -198,7 +198,7 @@ snd_vortex_create(struct snd_card *card, struct pci_dev *pci, vortex_t ** rchip)
 	}
 
 	if ((err = request_irq(pci->irq, vortex_interrupt,
-	                       IRQF_DISABLED | IRQF_SHARED, CARD_NAME_SHORT,
+	                       IRQF_SHARED, CARD_NAME_SHORT,
 	                       chip)) != 0) {
 		printk(KERN_ERR "cannot grab irq\n");
 		goto irq_out;
@@ -341,11 +341,7 @@ snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 		snd_card_free(card);
 		return err;
 	}
-	if ((err = pci_read_config_byte(pci, PCI_REVISION_ID,
-				  &(chip->rev))) < 0) {
-		snd_card_free(card);
-		return err;
-	}
+	chip->rev = pci->revision;
 #ifdef CHIP_AU8830
 	if ((chip->rev) != 0xfe && (chip->rev) != 0xfa) {
 		printk(KERN_ALERT

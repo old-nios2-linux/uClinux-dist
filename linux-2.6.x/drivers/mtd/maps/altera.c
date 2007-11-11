@@ -72,6 +72,16 @@ static struct mtd_partition alteramap_partitions[] = {
 		.offset =	0x600000,
 		.mask_flags =	MTD_WRITEABLE,  /* force read-only */
 	}
+#elif defined(CONFIG_ALTERA_DE2)
+	{
+		.name =		"romfs/jffs2",
+		.size =		0x200000,
+		.offset =	0x200000,
+	},{
+		.name =		"loader/kernel",
+		.size =		0x200000,
+		.offset =	0,
+	}
 #else
 	{
 		.name =		"romfs/jffs2",

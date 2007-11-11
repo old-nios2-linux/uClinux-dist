@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/cpumask.h>
 #include <linux/cpu.h>
+#include <linux/err.h>
 
 #include <asm/atomic.h>
 #include <asm/cpu.h>
@@ -51,41 +52,14 @@ int __cpu_logical_map[NR_CPUS];		/* Map logical to physical */
 EXPORT_SYMBOL(phys_cpu_present_map);
 EXPORT_SYMBOL(cpu_online_map);
 
-static void smp_tune_scheduling (void)
-{
-	struct cache_desc *cd = &current_cpu_data.scache;
-	unsigned long cachesize;       /* kB   */
-	unsigned long cpu_khz;
-
-	/*
-	 * Crude estimate until we actually meassure ...
-	 */
-	cpu_khz = loops_per_jiffy * 2 * HZ / 1000;
-
-	/*
-	 * Rough estimation for SMP scheduling, this is the number of
-	 * cycles it takes for a fully memory-limited process to flush
-	 * the SMP-local cache.
-	 *
-	 * (For a P5 this pretty much means we will choose another idle
-	 *  CPU almost always at wakeup time (this is due to the small
-	 *  L1 cache), on PIIs it's around 50-100 usecs, depending on
-	 *  the cache size)
-	 */
-	if (!cpu_khz)
-		return;
-
-	cachesize = cd->linesz * cd->sets * cd->ways;
-}
-
 extern void __init calibrate_delay(void);
-extern ATTRIB_NORET void cpu_idle(void);
+extern void cpu_idle(void);
 
 /*
  * First C code run on the secondary CPUs after being started up by
  * the master.
  */
-asmlinkage void start_secondary(void)
+asmlinkage __cpuinit void start_secondary(void)
 {
 	unsigned int cpu;
 
@@ -172,7 +146,7 @@ int smp_call_function (void (*func) (void *info), void *info, int retry,
 
 	spin_lock(&smp_call_lock);
 	call_data = &data;
-	mb();
+	smp_mb();
 
 	/* Send a message to all other CPUs and wait for them to respond */
 	for_each_online_cpu(i)
@@ -204,7 +178,7 @@ void smp_call_function_interrupt(void)
 	 * Notify initiating CPU that I've grabbed the data and am
 	 * about to execute the function.
 	 */
-	mb();
+	smp_mb();
 	atomic_inc(&call_data->started);
 
 	/*
@@ -215,9 +189,64 @@ void smp_call_function_interrupt(void)
 	irq_exit();
 
 	if (wait) {
-		mb();
+		smp_mb();
 		atomic_inc(&call_data->finished);
 	}
+}
+
+int smp_call_function_single(int cpu, void (*func) (void *info), void *info,
+			     int retry, int wait)
+{
+	struct call_data_struct data;
+	int me;
+
+	/*
+	 * Can die spectacularly if this CPU isn't yet marked online
+	 */
+	if (!cpu_online(cpu))
+		return 0;
+
+	me = get_cpu();
+	BUG_ON(!cpu_online(me));
+
+	if (cpu == me) {
+		local_irq_disable();
+		func(info);
+		local_irq_enable();
+		put_cpu();
+		return 0;
+	}
+
+	/* Can deadlock when called with interrupts disabled */
+	WARN_ON(irqs_disabled());
+
+	data.func = func;
+	data.info = info;
+	atomic_set(&data.started, 0);
+	data.wait = wait;
+	if (wait)
+		atomic_set(&data.finished, 0);
+
+	spin_lock(&smp_call_lock);
+	call_data = &data;
+	smp_mb();
+
+	/* Send a message to the other CPU */
+	core_send_ipi(cpu, SMP_CALL_FUNCTION);
+
+	/* Wait for response */
+	/* FIXME: lock-up detection, backtrace on lock-up */
+	while (atomic_read(&data.started) != 1)
+		barrier();
+
+	if (wait)
+		while (atomic_read(&data.finished) != 1)
+			barrier();
+	call_data = NULL;
+	spin_unlock(&smp_call_lock);
+
+	put_cpu();
+	return 0;
 }
 
 static void stop_this_cpu(void *dummy)
@@ -245,7 +274,6 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	init_new_context(current, &init_mm);
 	current_thread_info()->cpu = 0;
-	smp_tune_scheduling();
 	plat_prepare_cpus(max_cpus);
 #ifndef CONFIG_HOTPLUG_CPU
 	cpu_present_map = cpu_possible_map;
@@ -271,7 +299,7 @@ void __devinit smp_prepare_boot_cpu(void)
  * and keep control until "cpu_online(cpu)" is set.  Note: cpu is
  * physical, not logical.
  */
-int __devinit __cpu_up(unsigned int cpu)
+int __cpuinit __cpu_up(unsigned int cpu)
 {
 	struct task_struct *idle;
 

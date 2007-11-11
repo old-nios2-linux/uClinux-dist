@@ -27,8 +27,8 @@
 #include <linux/capability.h>
 #include <linux/ctype.h>
 #include <linux/utsname.h>
-#include <linux/capability.h>
 #include <linux/smp_lock.h>
+#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
@@ -45,26 +45,25 @@
 #include <linux/syscalls.h>
 #include <linux/nfs_fs.h>
 #include <linux/acpi.h>
+#include <linux/reboot.h>
 
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-extern int proc_nr_files(ctl_table *table, int write, struct file *filp,
-                     void __user *buffer, size_t *lenp, loff_t *ppos);
-
 #ifdef CONFIG_X86
 #include <asm/nmi.h>
+#include <asm/stacktrace.h>
 #endif
 
 #if defined(CONFIG_SYSCTL)
 
 /* External variables not in a header file. */
 extern int C_A_D;
+extern int print_fatal_signals;
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern int sysctl_panic_on_oom;
 extern int max_threads;
-extern int sysrq_enabled;
 extern int core_uses_pid;
 extern int suid_dumpable;
 extern char core_pattern[];
@@ -76,6 +75,9 @@ extern int pid_max_min, pid_max_max;
 extern int sysctl_drop_caches;
 extern int percpu_pagelist_fraction;
 extern int compat_log;
+extern int maps_protect;
+extern int sysctl_stat_interval;
+extern int audit_argv_kb;
 
 /* this is needed for the proc_dointvec_minmax for [fs_]overflow UID and GID */
 static int maxolduid = 65535;
@@ -89,10 +91,6 @@ extern char modprobe_path[];
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 extern int sg_big_buff;
-#endif
-#ifdef CONFIG_SYSVIPC
-static int proc_do_ipc_string(ctl_table *table, int write, struct file *filp,
-		void __user *buffer, size_t *lenp, loff_t *ppos);
 #endif
 
 #ifdef __sparc__
@@ -130,15 +128,15 @@ extern int max_lock_depth;
 
 #ifdef CONFIG_SYSCTL_SYSCALL
 static int parse_table(int __user *, int, void __user *, size_t __user *,
-		void __user *, size_t, ctl_table *, void **);
+		void __user *, size_t, ctl_table *);
 #endif
 
-static int proc_do_uts_string(ctl_table *table, int write, struct file *filp,
-		  void __user *buffer, size_t *lenp, loff_t *ppos);
 
 #ifdef CONFIG_PROC_SYSCTL
 static int proc_do_cad_pid(ctl_table *table, int write, struct file *filp,
 		  void __user *buffer, size_t *lenp, loff_t *ppos);
+static int proc_dointvec_taint(ctl_table *table, int write, struct file *filp,
+			       void __user *buffer, size_t *lenp, loff_t *ppos);
 #endif
 
 static ctl_table root_table[];
@@ -162,25 +160,8 @@ extern ctl_table inotify_table[];
 int sysctl_legacy_va_layout;
 #endif
 
-/* /proc declarations: */
-
-#ifdef CONFIG_PROC_SYSCTL
-
-static ssize_t proc_readsys(struct file *, char __user *, size_t, loff_t *);
-static ssize_t proc_writesys(struct file *, const char __user *, size_t, loff_t *);
-static int proc_opensys(struct inode *, struct file *);
-
-struct file_operations proc_sys_file_operations = {
-	.open		= proc_opensys,
-	.read		= proc_readsys,
-	.write		= proc_writesys,
-};
-
-extern struct proc_dir_entry *proc_sys_root;
-
-static void register_proc_table(ctl_table *, struct proc_dir_entry *, void *);
-static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
-#endif
+extern int prove_locking;
+extern int lock_stat;
 
 /* The default sysctl tables: */
 
@@ -223,105 +204,133 @@ static ctl_table root_table[] = {
 		.mode		= 0555,
 		.child		= dev_table,
 	},
-
+/*
+ * NOTE: do not add new entries to this table unless you have read
+ * Documentation/sysctl/ctl_unnumbered.txt
+ */
 	{ .ctl_name = 0 }
 };
 
+#ifdef CONFIG_SCHED_DEBUG
+static unsigned long min_sched_granularity_ns = 100000;		/* 100 usecs */
+static unsigned long max_sched_granularity_ns = 1000000000;	/* 1 second */
+static unsigned long min_wakeup_granularity_ns;			/* 0 usecs */
+static unsigned long max_wakeup_granularity_ns = 1000000000;	/* 1 second */
+#endif
+
 static ctl_table kern_table[] = {
-#ifndef CONFIG_UTS_NS
+#ifdef CONFIG_SCHED_DEBUG
 	{
-		.ctl_name	= KERN_OSTYPE,
-		.procname	= "ostype",
-		.data		= init_uts_ns.name.sysname,
-		.maxlen		= sizeof(init_uts_ns.name.sysname),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-	{
-		.ctl_name	= KERN_OSRELEASE,
-		.procname	= "osrelease",
-		.data		= init_uts_ns.name.release,
-		.maxlen		= sizeof(init_uts_ns.name.release),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-	{
-		.ctl_name	= KERN_VERSION,
-		.procname	= "version",
-		.data		= init_uts_ns.name.version,
-		.maxlen		= sizeof(init_uts_ns.name.version),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-	{
-		.ctl_name	= KERN_NODENAME,
-		.procname	= "hostname",
-		.data		= init_uts_ns.name.nodename,
-		.maxlen		= sizeof(init_uts_ns.name.nodename),
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_min_granularity_ns",
+		.data		= &sysctl_sched_min_granularity,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_sched_granularity_ns,
+		.extra2		= &max_sched_granularity_ns,
 	},
 	{
-		.ctl_name	= KERN_DOMAINNAME,
-		.procname	= "domainname",
-		.data		= init_uts_ns.name.domainname,
-		.maxlen		= sizeof(init_uts_ns.name.domainname),
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_latency_ns",
+		.data		= &sysctl_sched_latency,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-#else  /* !CONFIG_UTS_NS */
-	{
-		.ctl_name	= KERN_OSTYPE,
-		.procname	= "ostype",
-		.data		= NULL,
-		/* could maybe use __NEW_UTS_LEN here? */
-		.maxlen		= FIELD_SIZEOF(struct new_utsname, sysname),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_sched_granularity_ns,
+		.extra2		= &max_sched_granularity_ns,
 	},
 	{
-		.ctl_name	= KERN_OSRELEASE,
-		.procname	= "osrelease",
-		.data		= NULL,
-		.maxlen		= FIELD_SIZEOF(struct new_utsname, release),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-	{
-		.ctl_name	= KERN_VERSION,
-		.procname	= "version",
-		.data		= NULL,
-		.maxlen		= FIELD_SIZEOF(struct new_utsname, version),
-		.mode		= 0444,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
-	},
-	{
-		.ctl_name	= KERN_NODENAME,
-		.procname	= "hostname",
-		.data		= NULL,
-		.maxlen		= FIELD_SIZEOF(struct new_utsname, nodename),
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_wakeup_granularity_ns",
+		.data		= &sysctl_sched_wakeup_granularity,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_wakeup_granularity_ns,
+		.extra2		= &max_wakeup_granularity_ns,
 	},
 	{
-		.ctl_name	= KERN_DOMAINNAME,
-		.procname	= "domainname",
-		.data		= NULL,
-		.maxlen		= FIELD_SIZEOF(struct new_utsname, domainname),
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_batch_wakeup_granularity_ns",
+		.data		= &sysctl_sched_batch_wakeup_granularity,
+		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= &proc_do_uts_string,
-		.strategy	= &sysctl_string,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_wakeup_granularity_ns,
+		.extra2		= &max_wakeup_granularity_ns,
 	},
-#endif /* !CONFIG_UTS_NS */
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_stat_granularity_ns",
+		.data		= &sysctl_sched_stat_granularity,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_wakeup_granularity_ns,
+		.extra2		= &max_wakeup_granularity_ns,
+	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_runtime_limit_ns",
+		.data		= &sysctl_sched_runtime_limit,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &min_sched_granularity_ns,
+		.extra2		= &max_sched_granularity_ns,
+	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_child_runs_first",
+		.data		= &sysctl_sched_child_runs_first,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_features",
+		.data		= &sysctl_sched_features,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+#endif
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "sched_compat_yield",
+		.data		= &sysctl_sched_compat_yield,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+#ifdef CONFIG_PROVE_LOCKING
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "prove_locking",
+		.data		= &prove_locking,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+#endif
+#ifdef CONFIG_LOCK_STAT
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "lock_stat",
+		.data		= &lock_stat,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+#endif
 	{
 		.ctl_name	= KERN_PANIC,
 		.procname	= "panic",
@@ -338,23 +347,35 @@ static ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	},
+#ifdef CONFIG_AUDITSYSCALL
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "audit_argv_kb",
+		.data		= &audit_argv_kb,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+#endif
 	{
 		.ctl_name	= KERN_CORE_PATTERN,
 		.procname	= "core_pattern",
 		.data		= core_pattern,
-		.maxlen		= 128,
+		.maxlen		= CORENAME_MAX_SIZE,
 		.mode		= 0644,
 		.proc_handler	= &proc_dostring,
 		.strategy	= &sysctl_string,
 	},
+#ifdef CONFIG_PROC_SYSCTL
 	{
 		.ctl_name	= KERN_TAINTED,
 		.procname	= "tainted",
 		.data		= &tainted,
 		.maxlen		= sizeof(int),
-		.mode		= 0444,
-		.proc_handler	= &proc_dointvec,
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_taint,
 	},
+#endif
 	{
 		.ctl_name	= KERN_CAP_BSET,
 		.procname	= "cap-bound",
@@ -373,6 +394,14 @@ static ctl_table kern_table[] = {
 		.proc_handler	= &proc_dointvec,
 	},
 #endif
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "print-fatal-signals",
+		.data		= &print_fatal_signals,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
 #ifdef __sparc__
 	{
 		.ctl_name	= KERN_SPARC_REBOOT,
@@ -476,69 +505,11 @@ static ctl_table kern_table[] = {
 		.proc_handler	= &proc_dointvec,
 	},
 #endif
-#ifdef CONFIG_SYSVIPC
-	{
-		.ctl_name	= KERN_SHMMAX,
-		.procname	= "shmmax",
-		.data		= NULL,
-		.maxlen		= sizeof (size_t),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_SHMALL,
-		.procname	= "shmall",
-		.data		= NULL,
-		.maxlen		= sizeof (size_t),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_SHMMNI,
-		.procname	= "shmmni",
-		.data		= NULL,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_MSGMAX,
-		.procname	= "msgmax",
-		.data		= NULL,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_MSGMNI,
-		.procname	= "msgmni",
-		.data		= NULL,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_MSGMNB,
-		.procname	=  "msgmnb",
-		.data		= NULL,
-		.maxlen		= sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-	{
-		.ctl_name	= KERN_SEM,
-		.procname	= "sem",
-		.data		= NULL,
-		.maxlen		= 4*sizeof (int),
-		.mode		= 0644,
-		.proc_handler	= &proc_do_ipc_string,
-	},
-#endif
 #ifdef CONFIG_MAGIC_SYSRQ
 	{
 		.ctl_name	= KERN_SYSRQ,
 		.procname	= "sysrq",
-		.data		= &sysrq_enabled,
+		.data		= &__sysrq_enabled,
 		.maxlen		= sizeof (int),
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
@@ -707,6 +678,14 @@ static ctl_table kern_table[] = {
 		.mode		= 0444,
 		.proc_handler	= &proc_dointvec,
 	},
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "kstack_depth_to_print",
+		.data		= &kstack_depth_to_print,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
 #endif
 #if defined(CONFIG_MMU)
 	{
@@ -728,11 +707,11 @@ static ctl_table kern_table[] = {
 		.proc_handler	= &proc_dointvec,
 	},
 #endif
-#ifdef CONFIG_ACPI_SLEEP
+#if	defined(CONFIG_ACPI_SLEEP) && defined(CONFIG_X86)
 	{
 		.ctl_name	= KERN_ACPI_VIDEO_FLAGS,
 		.procname	= "acpi_video_flags",
-		.data		= &acpi_video_flags,
+		.data		= &acpi_realmode_flags,
 		.maxlen		= sizeof (unsigned long),
 		.mode		= 0644,
 		.proc_handler	= &proc_doulongvec_minmax,
@@ -768,13 +747,36 @@ static ctl_table kern_table[] = {
 		.proc_handler	= &proc_dointvec,
 	},
 #endif
-
+#ifdef CONFIG_PROC_FS
+	{
+		.ctl_name       = CTL_UNNUMBERED,
+		.procname       = "maps_protect",
+		.data           = &maps_protect,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = &proc_dointvec,
+	},
+#endif
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "poweroff_cmd",
+		.data		= &poweroff_cmd,
+		.maxlen		= POWEROFF_CMD_PATH_LEN,
+		.mode		= 0644,
+		.proc_handler	= &proc_dostring,
+		.strategy	= &sysctl_string,
+	},
+/*
+ * NOTE: do not add new entries to this table unless you have read
+ * Documentation/sysctl/ctl_unnumbered.txt
+ */
 	{ .ctl_name = 0 }
 };
 
 /* Constants for minimum and maximum testing in vm_table.
    We use these as one-element integer vectors. */
 static int zero;
+static int two = 2;
 static int one_hundred = 100;
 
 
@@ -887,6 +889,14 @@ static ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	 },
+	 {
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "hugepages_treat_as_movable",
+		.data		= &hugepages_treat_as_movable,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &hugetlb_treat_movable_handler,
+	},
 #endif
 	{
 		.ctl_name	= VM_LOWMEM_RESERVE_RATIO,
@@ -977,17 +987,6 @@ static ctl_table vm_table[] = {
 		.extra1		= &zero,
 	},
 #endif
-#ifdef CONFIG_SWAP
-	{
-		.ctl_name	= VM_SWAP_TOKEN_TIMEOUT,
-		.procname	= "swap_token_timeout",
-		.data		= &swap_token_default_timeout,
-		.maxlen		= sizeof(swap_token_default_timeout),
-		.mode		= 0644,
-		.proc_handler	= &proc_dointvec_jiffies,
-		.strategy	= &sysctl_jiffies,
-	},
-#endif
 #ifdef CONFIG_NUMA
 	{
 		.ctl_name	= VM_ZONE_RECLAIM_MODE,
@@ -1022,7 +1021,40 @@ static ctl_table vm_table[] = {
 		.extra2		= &one_hundred,
 	},
 #endif
-#ifdef CONFIG_X86_32
+#ifdef CONFIG_SMP
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "stat_interval",
+		.data		= &sysctl_stat_interval,
+		.maxlen		= sizeof(sysctl_stat_interval),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_jiffies,
+		.strategy	= &sysctl_jiffies,
+	},
+#endif
+#ifdef CONFIG_SECURITY
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "mmap_min_addr",
+		.data		= &mmap_min_addr,
+		.maxlen         = sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= &proc_doulongvec_minmax,
+	},
+#endif
+#ifdef CONFIG_NUMA
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "numa_zonelist_order",
+		.data		= &numa_zonelist_order,
+		.maxlen		= NUMA_ZONELIST_ORDER_LEN,
+		.mode		= 0644,
+		.proc_handler	= &numa_zonelist_order_handler,
+		.strategy	= &sysctl_string,
+	},
+#endif
+#if defined(CONFIG_X86_32) || \
+   (defined(CONFIG_SUPERH) && defined(CONFIG_VSYSCALL))
 	{
 		.ctl_name	= VM_VDSO_ENABLED,
 		.procname	= "vdso_enabled",
@@ -1034,8 +1066,18 @@ static ctl_table vm_table[] = {
 		.extra1		= &zero,
 	},
 #endif
+/*
+ * NOTE: do not add new entries to this table unless you have read
+ * Documentation/sysctl/ctl_unnumbered.txt
+ */
 	{ .ctl_name = 0 }
 };
+
+#if defined(CONFIG_BINFMT_MISC) || defined(CONFIG_BINFMT_MISC_MODULE)
+static ctl_table binfmt_misc_table[] = {
+	{ .ctl_name = 0 }
+};
+#endif
 
 static ctl_table fs_table[] = {
 	{
@@ -1125,7 +1167,10 @@ static ctl_table fs_table[] = {
 		.data		= &lease_break_time,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= &proc_dointvec,
+		.proc_handler	= &proc_dointvec_minmax,
+		.strategy	= &sysctl_intvec,
+		.extra1		= &zero,
+		.extra2		= &two,
 	},
 	{
 		.ctl_name	= FS_AIO_NR,
@@ -1160,18 +1205,38 @@ static ctl_table fs_table[] = {
 		.mode		= 0644,
 		.proc_handler	= &proc_dointvec,
 	},
+#if defined(CONFIG_BINFMT_MISC) || defined(CONFIG_BINFMT_MISC_MODULE)
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "binfmt_misc",
+		.mode		= 0555,
+		.child		= binfmt_misc_table,
+	},
+#endif
+/*
+ * NOTE: do not add new entries to this table unless you have read
+ * Documentation/sysctl/ctl_unnumbered.txt
+ */
 	{ .ctl_name = 0 }
 };
 
 static ctl_table debug_table[] = {
+#ifdef CONFIG_X86
+	{
+		.ctl_name	= CTL_UNNUMBERED,
+		.procname	= "exception-trace",
+		.data		= &show_unhandled_signals,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+#endif
 	{ .ctl_name = 0 }
 };
 
 static ctl_table dev_table[] = {
 	{ .ctl_name = 0 }
 };
-
-extern void init_irq_proc (void);
 
 static DEFINE_SPINLOCK(sysctl_lock);
 
@@ -1214,19 +1279,47 @@ static void start_unregistering(struct ctl_table_header *p)
 	list_del_init(&p->ctl_entry);
 }
 
-void __init sysctl_init(void)
+void sysctl_head_finish(struct ctl_table_header *head)
 {
-#ifdef CONFIG_PROC_SYSCTL
-	register_proc_table(root_table, proc_sys_root, &root_table_header);
-	init_irq_proc();
-#endif
+	if (!head)
+		return;
+	spin_lock(&sysctl_lock);
+	unuse_table(head);
+	spin_unlock(&sysctl_lock);
+}
+
+struct ctl_table_header *sysctl_head_next(struct ctl_table_header *prev)
+{
+	struct ctl_table_header *head;
+	struct list_head *tmp;
+	spin_lock(&sysctl_lock);
+	if (prev) {
+		tmp = &prev->ctl_entry;
+		unuse_table(prev);
+		goto next;
+	}
+	tmp = &root_table_header.ctl_entry;
+	for (;;) {
+		head = list_entry(tmp, struct ctl_table_header, ctl_entry);
+
+		if (!use_table(head))
+			goto next;
+		spin_unlock(&sysctl_lock);
+		return head;
+	next:
+		tmp = tmp->next;
+		if (tmp == &root_table_header.ctl_entry)
+			break;
+	}
+	spin_unlock(&sysctl_lock);
+	return NULL;
 }
 
 #ifdef CONFIG_SYSCTL_SYSCALL
 int do_sysctl(int __user *name, int nlen, void __user *oldval, size_t __user *oldlenp,
 	       void __user *newval, size_t newlen)
 {
-	struct list_head *tmp;
+	struct ctl_table_header *head;
 	int error = -ENOTDIR;
 
 	if (nlen <= 0 || nlen >= CTL_MAXNAME)
@@ -1236,29 +1329,16 @@ int do_sysctl(int __user *name, int nlen, void __user *oldval, size_t __user *ol
 		if (!oldlenp || get_user(old_len, oldlenp))
 			return -EFAULT;
 	}
-	spin_lock(&sysctl_lock);
-	tmp = &root_table_header.ctl_entry;
-	do {
-		struct ctl_table_header *head =
-			list_entry(tmp, struct ctl_table_header, ctl_entry);
-		void *context = NULL;
 
-		if (!use_table(head))
-			continue;
-
-		spin_unlock(&sysctl_lock);
-
+	for (head = sysctl_head_next(NULL); head;
+			head = sysctl_head_next(head)) {
 		error = parse_table(name, nlen, oldval, oldlenp, 
-					newval, newlen, head->ctl_table,
-					&context);
-		kfree(context);
-
-		spin_lock(&sysctl_lock);
-		unuse_table(head);
-		if (error != -ENOTDIR)
+					newval, newlen, head->ctl_table);
+		if (error != -ENOTDIR) {
+			sysctl_head_finish(head);
 			break;
-	} while ((tmp = tmp->next) != &root_table_header.ctl_entry);
-	spin_unlock(&sysctl_lock);
+		}
+	}
 	return error;
 }
 
@@ -1279,7 +1359,7 @@ asmlinkage long sys_sysctl(struct __sysctl_args __user *args)
 #endif /* CONFIG_SYSCTL_SYSCALL */
 
 /*
- * ctl_perm does NOT grant the superuser all rights automatically, because
+ * sysctl_perm does NOT grant the superuser all rights automatically, because
  * some sysctl variables are readonly even to root.
  */
 
@@ -1294,7 +1374,7 @@ static int test_perm(int mode, int op)
 	return -EACCES;
 }
 
-static inline int ctl_perm(ctl_table *table, int op)
+int sysctl_perm(ctl_table *table, int op)
 {
 	int error;
 	error = security_sysctl(table, op);
@@ -1307,7 +1387,7 @@ static inline int ctl_perm(ctl_table *table, int op)
 static int parse_table(int __user *name, int nlen,
 		       void __user *oldval, size_t __user *oldlenp,
 		       void __user *newval, size_t newlen,
-		       ctl_table *table, void **context)
+		       ctl_table *table)
 {
 	int n;
 repeat:
@@ -1318,19 +1398,11 @@ repeat:
 	for ( ; table->ctl_name || table->procname; table++) {
 		if (!table->ctl_name)
 			continue;
-		if (n == table->ctl_name || table->ctl_name == CTL_ANY) {
+		if (n == table->ctl_name) {
 			int error;
 			if (table->child) {
-				if (ctl_perm(table, 001))
+				if (sysctl_perm(table, 001))
 					return -EPERM;
-				if (table->strategy) {
-					error = table->strategy(
-						table, name, nlen,
-						oldval, oldlenp,
-						newval, newlen, context);
-					if (error)
-						return error;
-				}
 				name++;
 				nlen--;
 				table = table->child;
@@ -1338,7 +1410,7 @@ repeat:
 			}
 			error = do_sysctl_strategy(table, name, nlen,
 						   oldval, oldlenp,
-						   newval, newlen, context);
+						   newval, newlen);
 			return error;
 		}
 	}
@@ -1349,7 +1421,7 @@ repeat:
 int do_sysctl_strategy (ctl_table *table, 
 			int __user *name, int nlen,
 			void __user *oldval, size_t __user *oldlenp,
-			void __user *newval, size_t newlen, void **context)
+			void __user *newval, size_t newlen)
 {
 	int op = 0, rc;
 	size_t len;
@@ -1358,12 +1430,12 @@ int do_sysctl_strategy (ctl_table *table,
 		op |= 004;
 	if (newval) 
 		op |= 002;
-	if (ctl_perm(table, op))
+	if (sysctl_perm(table, op))
 		return -EPERM;
 
 	if (table->strategy) {
 		rc = table->strategy(table, name, nlen, oldval, oldlenp,
-				     newval, newlen, context);
+				     newval, newlen);
 		if (rc < 0)
 			return rc;
 		if (rc > 0)
@@ -1397,10 +1469,26 @@ int do_sysctl_strategy (ctl_table *table,
 }
 #endif /* CONFIG_SYSCTL_SYSCALL */
 
+static void sysctl_set_parent(struct ctl_table *parent, struct ctl_table *table)
+{
+	for (; table->ctl_name || table->procname; table++) {
+		table->parent = parent;
+		if (table->child)
+			sysctl_set_parent(table, table->child);
+	}
+}
+
+static __init int sysctl_init(void)
+{
+	sysctl_set_parent(NULL, root_table);
+	return 0;
+}
+
+core_initcall(sysctl_init);
+
 /**
  * register_sysctl_table - register a sysctl hierarchy
  * @table: the top-level table structure
- * @insert_at_head: whether the entry should be inserted in front or at the end
  *
  * Register a sysctl table hierarchy. @table should be a filled in ctl_table
  * array. An entry with a ctl_name of 0 terminates the table. 
@@ -1466,8 +1554,7 @@ int do_sysctl_strategy (ctl_table *table,
  * This routine returns %NULL on a failure to register, and a pointer
  * to the table header on success.
  */
-struct ctl_table_header *register_sysctl_table(ctl_table * table, 
-					       int insert_at_head)
+struct ctl_table_header *register_sysctl_table(ctl_table * table)
 {
 	struct ctl_table_header *tmp;
 	tmp = kmalloc(sizeof(struct ctl_table_header), GFP_KERNEL);
@@ -1477,15 +1564,10 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 	INIT_LIST_HEAD(&tmp->ctl_entry);
 	tmp->used = 0;
 	tmp->unregistering = NULL;
+	sysctl_set_parent(NULL, table);
 	spin_lock(&sysctl_lock);
-	if (insert_at_head)
-		list_add(&tmp->ctl_entry, &root_table_header.ctl_entry);
-	else
-		list_add_tail(&tmp->ctl_entry, &root_table_header.ctl_entry);
+	list_add_tail(&tmp->ctl_entry, &root_table_header.ctl_entry);
 	spin_unlock(&sysctl_lock);
-#ifdef CONFIG_PROC_SYSCTL
-	register_proc_table(table, proc_sys_root, tmp);
-#endif
 	return tmp;
 }
 
@@ -1501,16 +1583,12 @@ void unregister_sysctl_table(struct ctl_table_header * header)
 	might_sleep();
 	spin_lock(&sysctl_lock);
 	start_unregistering(header);
-#ifdef CONFIG_PROC_SYSCTL
-	unregister_proc_table(header->ctl_table, proc_sys_root);
-#endif
 	spin_unlock(&sysctl_lock);
 	kfree(header);
 }
 
 #else /* !CONFIG_SYSCTL */
-struct ctl_table_header * register_sysctl_table(ctl_table * table,
-						int insert_at_head)
+struct ctl_table_header *register_sysctl_table(ctl_table * table)
 {
 	return NULL;
 }
@@ -1527,155 +1605,6 @@ void unregister_sysctl_table(struct ctl_table_header * table)
 
 #ifdef CONFIG_PROC_SYSCTL
 
-/* Scan the sysctl entries in table and add them all into /proc */
-static void register_proc_table(ctl_table * table, struct proc_dir_entry *root, void *set)
-{
-	struct proc_dir_entry *de;
-	int len;
-	mode_t mode;
-	
-	for (; table->ctl_name || table->procname; table++) {
-		/* Can't do anything without a proc name. */
-		if (!table->procname)
-			continue;
-		/* Maybe we can't do anything with it... */
-		if (!table->proc_handler && !table->child) {
-			printk(KERN_WARNING "SYSCTL: Can't register %s\n",
-				table->procname);
-			continue;
-		}
-
-		len = strlen(table->procname);
-		mode = table->mode;
-
-		de = NULL;
-		if (table->proc_handler)
-			mode |= S_IFREG;
-		else {
-			mode |= S_IFDIR;
-			for (de = root->subdir; de; de = de->next) {
-				if (proc_match(len, table->procname, de))
-					break;
-			}
-			/* If the subdir exists already, de is non-NULL */
-		}
-
-		if (!de) {
-			de = create_proc_entry(table->procname, mode, root);
-			if (!de)
-				continue;
-			de->set = set;
-			de->data = (void *) table;
-			if (table->proc_handler)
-				de->proc_fops = &proc_sys_file_operations;
-		}
-		table->de = de;
-		if (de->mode & S_IFDIR)
-			register_proc_table(table->child, de, set);
-	}
-}
-
-/*
- * Unregister a /proc sysctl table and any subdirectories.
- */
-static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root)
-{
-	struct proc_dir_entry *de;
-	for (; table->ctl_name || table->procname; table++) {
-		if (!(de = table->de))
-			continue;
-		if (de->mode & S_IFDIR) {
-			if (!table->child) {
-				printk (KERN_ALERT "Help - malformed sysctl tree on free\n");
-				continue;
-			}
-			unregister_proc_table(table->child, de);
-
-			/* Don't unregister directories which still have entries.. */
-			if (de->subdir)
-				continue;
-		}
-
-		/*
-		 * In any case, mark the entry as goner; we'll keep it
-		 * around if it's busy, but we'll know to do nothing with
-		 * its fields.  We are under sysctl_lock here.
-		 */
-		de->data = NULL;
-
-		/* Don't unregister proc entries that are still being used.. */
-		if (atomic_read(&de->count))
-			continue;
-
-		table->de = NULL;
-		remove_proc_entry(table->procname, root);
-	}
-}
-
-static ssize_t do_rw_proc(int write, struct file * file, char __user * buf,
-			  size_t count, loff_t *ppos)
-{
-	int op;
-	struct proc_dir_entry *de = PDE(file->f_dentry->d_inode);
-	struct ctl_table *table;
-	size_t res;
-	ssize_t error = -ENOTDIR;
-	
-	spin_lock(&sysctl_lock);
-	if (de && de->data && use_table(de->set)) {
-		/*
-		 * at that point we know that sysctl was not unregistered
-		 * and won't be until we finish
-		 */
-		spin_unlock(&sysctl_lock);
-		table = (struct ctl_table *) de->data;
-		if (!table || !table->proc_handler)
-			goto out;
-		error = -EPERM;
-		op = (write ? 002 : 004);
-		if (ctl_perm(table, op))
-			goto out;
-		
-		/* careful: calling conventions are nasty here */
-		res = count;
-		error = (*table->proc_handler)(table, write, file,
-						buf, &res, ppos);
-		if (!error)
-			error = res;
-	out:
-		spin_lock(&sysctl_lock);
-		unuse_table(de->set);
-	}
-	spin_unlock(&sysctl_lock);
-	return error;
-}
-
-static int proc_opensys(struct inode *inode, struct file *file)
-{
-	if (file->f_mode & FMODE_WRITE) {
-		/*
-		 * sysctl entries that are not writable,
-		 * are _NOT_ writable, capabilities or not.
-		 */
-		if (!(inode->i_mode & S_IWUSR))
-			return -EPERM;
-	}
-
-	return 0;
-}
-
-static ssize_t proc_readsys(struct file * file, char __user * buf,
-			    size_t count, loff_t *ppos)
-{
-	return do_rw_proc(0, file, buf, count, ppos);
-}
-
-static ssize_t proc_writesys(struct file * file, const char __user * buf,
-			     size_t count, loff_t *ppos)
-{
-	return do_rw_proc(1, file, (char __user *) buf, count, ppos);
-}
-
 static int _proc_do_string(void* data, int maxlen, int write,
 			   struct file *filp, void __user *buffer,
 			   size_t *lenp, loff_t *ppos)
@@ -1683,13 +1612,12 @@ static int _proc_do_string(void* data, int maxlen, int write,
 	size_t len;
 	char __user *p;
 	char c;
-	
-	if (!data || !maxlen || !*lenp ||
-	    (*ppos && !write)) {
+
+	if (!data || !maxlen || !*lenp) {
 		*lenp = 0;
 		return 0;
 	}
-	
+
 	if (write) {
 		len = 0;
 		p = buffer;
@@ -1710,6 +1638,15 @@ static int _proc_do_string(void* data, int maxlen, int write,
 		len = strlen(data);
 		if (len > maxlen)
 			len = maxlen;
+
+		if (*ppos > len) {
+			*lenp = 0;
+			return 0;
+		}
+
+		data += *ppos;
+		len  -= *ppos;
+
 		if (len > *lenp)
 			len = *lenp;
 		if (len)
@@ -1751,70 +1688,6 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 			       buffer, lenp, ppos);
 }
 
-/*
- *	Special case of dostring for the UTS structure. This has locks
- *	to observe. Should this be in kernel/sys.c ????
- */
- 
-#ifndef CONFIG_UTS_NS
-static int proc_do_uts_string(ctl_table *table, int write, struct file *filp,
-		  void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int r;
-
-	if (!write) {
-		down_read(&uts_sem);
-		r=proc_dostring(table,0,filp,buffer,lenp, ppos);
-		up_read(&uts_sem);
-	} else {
-		down_write(&uts_sem);
-		r=proc_dostring(table,1,filp,buffer,lenp, ppos);
-		up_write(&uts_sem);
-	}
-	return r;
-}
-#else /* !CONFIG_UTS_NS */
-static int proc_do_uts_string(ctl_table *table, int write, struct file *filp,
-		  void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	int r;
-	struct uts_namespace* uts_ns = current->nsproxy->uts_ns;
-	char* which;
-
-	switch (table->ctl_name) {
-	case KERN_OSTYPE:
-		which = uts_ns->name.sysname;
-		break;
-	case KERN_NODENAME:
-		which = uts_ns->name.nodename;
-		break;
-	case KERN_OSRELEASE:
-		which = uts_ns->name.release;
-		break;
-	case KERN_VERSION:
-		which = uts_ns->name.version;
-		break;
-	case KERN_DOMAINNAME:
-		which = uts_ns->name.domainname;
-		break;
-	default:
-		r = -EINVAL;
-		goto out;
-	}
-
-	if (!write) {
-		down_read(&uts_sem);
-		r=_proc_do_string(which,table->maxlen,0,filp,buffer,lenp, ppos);
-		up_read(&uts_sem);
-	} else {
-		down_write(&uts_sem);
-		r=_proc_do_string(which,table->maxlen,1,filp,buffer,lenp, ppos);
-		up_write(&uts_sem);
-	}
- out:
-	return r;
-}
-#endif /* !CONFIG_UTS_NS */
 
 static int do_proc_dointvec_conv(int *negp, unsigned long *lvalp,
 				 int *valp,
@@ -1886,7 +1759,7 @@ static int __do_proc_dointvec(void *tbl_data, ctl_table *table,
 			p = buf;
 			if (*p == '-' && left > 1) {
 				neg = 1;
-				left--, p++;
+				p++;
 			}
 			if (*p < '0' || *p > '9')
 				break;
@@ -1979,8 +1852,6 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 #define OP_SET	0
 #define OP_AND	1
 #define OP_OR	2
-#define OP_MAX	3
-#define OP_MIN	4
 
 static int do_proc_dointvec_bset_conv(int *negp, unsigned long *lvalp,
 				      int *valp,
@@ -1993,12 +1864,6 @@ static int do_proc_dointvec_bset_conv(int *negp, unsigned long *lvalp,
 		case OP_SET:	*valp = val; break;
 		case OP_AND:	*valp &= val; break;
 		case OP_OR:	*valp |= val; break;
-		case OP_MAX:	if(*valp < val)
-					*valp = val;
-				break;
-		case OP_MIN:	if(*valp > val)
-				*valp = val;
-				break;
 		}
 	} else {
 		int val = *valp;
@@ -2022,11 +1887,27 @@ int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
 {
 	int op;
 
-	if (!capable(CAP_SYS_MODULE)) {
+	if (write && !capable(CAP_SYS_MODULE)) {
 		return -EPERM;
 	}
 
 	op = is_init(current) ? OP_SET : OP_AND;
+	return do_proc_dointvec(table,write,filp,buffer,lenp,ppos,
+				do_proc_dointvec_bset_conv,&op);
+}
+
+/*
+ *	Taint values can only be increased
+ */
+static int proc_dointvec_taint(ctl_table *table, int write, struct file *filp,
+			       void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int op;
+
+	if (write && !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	op = OP_OR;
 	return do_proc_dointvec(table,write,filp,buffer,lenp,ppos,
 				do_proc_dointvec_bset_conv,&op);
 }
@@ -2137,7 +2018,7 @@ static int __do_proc_doulongvec_minmax(void *data, ctl_table *table, int write,
 			p = buf;
 			if (*p == '-' && left > 1) {
 				neg = 1;
-				left--, p++;
+				p++;
 			}
 			if (*p < '0' || *p > '9')
 				break;
@@ -2392,49 +2273,6 @@ int proc_dointvec_ms_jiffies(ctl_table *table, int write, struct file *filp,
 				do_proc_dointvec_ms_jiffies_conv, NULL);
 }
 
-#ifdef CONFIG_SYSVIPC
-static int proc_do_ipc_string(ctl_table *table, int write, struct file *filp,
-		void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	void *data;
-	struct ipc_namespace *ns;
-
-	ns = current->nsproxy->ipc_ns;
-
-	switch (table->ctl_name) {
-	case KERN_SHMMAX:
-		data = &ns->shm_ctlmax;
-		goto proc_minmax;
-	case KERN_SHMALL:
-		data = &ns->shm_ctlall;
-		goto proc_minmax;
-	case KERN_SHMMNI:
-		data = &ns->shm_ctlmni;
-		break;
-	case KERN_MSGMAX:
-		data = &ns->msg_ctlmax;
-		break;
-	case KERN_MSGMNI:
-		data = &ns->msg_ctlmni;
-		break;
-	case KERN_MSGMNB:
-		data = &ns->msg_ctlmnb;
-		break;
-	case KERN_SEM:
-		data = &ns->sem_ctls;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return __do_proc_dointvec(data, table, write, filp, buffer,
-			lenp, ppos, NULL, NULL);
-proc_minmax:
-	return __do_proc_doulongvec_minmax(data, table, write, filp, buffer,
-			lenp, ppos, 1l, 1l);
-}
-#endif
-
 static int proc_do_cad_pid(ctl_table *table, int write, struct file *filp,
 			   void __user *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -2464,20 +2302,6 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 {
 	return -ENOSYS;
 }
-
-static int proc_do_uts_string(ctl_table *table, int write, struct file *filp,
-		void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	return -ENOSYS;
-}
-
-#ifdef CONFIG_SYSVIPC
-static int proc_do_ipc_string(ctl_table *table, int write, struct file *filp,
-		void __user *buffer, size_t *lenp, loff_t *ppos)
-{
-	return -ENOSYS;
-}
-#endif
 
 int proc_dointvec(ctl_table *table, int write, struct file *filp,
 		  void __user *buffer, size_t *lenp, loff_t *ppos)
@@ -2541,7 +2365,7 @@ int proc_doulongvec_ms_jiffies_minmax(ctl_table *table, int write,
 /* The generic string strategy routine: */
 int sysctl_string(ctl_table *table, int __user *name, int nlen,
 		  void __user *oldval, size_t __user *oldlenp,
-		  void __user *newval, size_t newlen, void **context)
+		  void __user *newval, size_t newlen)
 {
 	if (!table->data || !table->maxlen) 
 		return -ENOTDIR;
@@ -2587,7 +2411,7 @@ int sysctl_string(ctl_table *table, int __user *name, int nlen,
  */
 int sysctl_intvec(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
 
 	if (newval && newlen) {
@@ -2623,19 +2447,25 @@ int sysctl_intvec(ctl_table *table, int __user *name, int nlen,
 /* Strategy function to convert jiffies to seconds */ 
 int sysctl_jiffies(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
-	if (oldval) {
+	if (oldval && oldlenp) {
 		size_t olen;
-		if (oldlenp) { 
-			if (get_user(olen, oldlenp))
-				return -EFAULT;
-			if (olen!=sizeof(int))
-				return -EINVAL; 
-		}
-		if (put_user(*(int *)(table->data)/HZ, (int __user *)oldval) ||
-		    (oldlenp && put_user(sizeof(int),oldlenp)))
+
+		if (get_user(olen, oldlenp))
 			return -EFAULT;
+		if (olen) {
+			int val;
+
+			if (olen < sizeof(int))
+				return -EINVAL;
+
+			val = *(int *)(table->data) / HZ;
+			if (put_user(val, (int __user *)oldval))
+				return -EFAULT;
+			if (put_user(sizeof(int), oldlenp))
+				return -EFAULT;
+		}
 	}
 	if (newval && newlen) { 
 		int new;
@@ -2651,19 +2481,25 @@ int sysctl_jiffies(ctl_table *table, int __user *name, int nlen,
 /* Strategy function to convert jiffies to seconds */ 
 int sysctl_ms_jiffies(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
-	if (oldval) {
+	if (oldval && oldlenp) {
 		size_t olen;
-		if (oldlenp) { 
-			if (get_user(olen, oldlenp))
-				return -EFAULT;
-			if (olen!=sizeof(int))
-				return -EINVAL; 
-		}
-		if (put_user(jiffies_to_msecs(*(int *)(table->data)), (int __user *)oldval) ||
-		    (oldlenp && put_user(sizeof(int),oldlenp)))
+
+		if (get_user(olen, oldlenp))
 			return -EFAULT;
+		if (olen) {
+			int val;
+
+			if (olen < sizeof(int))
+				return -EINVAL;
+
+			val = jiffies_to_msecs(*(int *)(table->data));
+			if (put_user(val, (int __user *)oldval))
+				return -EFAULT;
+			if (put_user(sizeof(int), oldlenp))
+				return -EFAULT;
+		}
 	}
 	if (newval && newlen) { 
 		int new;
@@ -2675,6 +2511,8 @@ int sysctl_ms_jiffies(ctl_table *table, int __user *name, int nlen,
 	}
 	return 1;
 }
+
+
 
 #else /* CONFIG_SYSCTL_SYSCALL */
 
@@ -2714,28 +2552,28 @@ out:
 
 int sysctl_string(ctl_table *table, int __user *name, int nlen,
 		  void __user *oldval, size_t __user *oldlenp,
-		  void __user *newval, size_t newlen, void **context)
+		  void __user *newval, size_t newlen)
 {
 	return -ENOSYS;
 }
 
 int sysctl_intvec(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
 	return -ENOSYS;
 }
 
 int sysctl_jiffies(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
 	return -ENOSYS;
 }
 
 int sysctl_ms_jiffies(ctl_table *table, int __user *name, int nlen,
 		void __user *oldval, size_t __user *oldlenp,
-		void __user *newval, size_t newlen, void **context)
+		void __user *newval, size_t newlen)
 {
 	return -ENOSYS;
 }

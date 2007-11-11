@@ -61,9 +61,12 @@
 #include <linux/usb.h>
 #include <linux/firmware.h>
 #include <linux/ctype.h>
+#include <linux/sched.h>
 #include <linux/kthread.h>
 #include <linux/version.h>
 #include <linux/mutex.h>
+#include <linux/freezer.h>
+
 #include <asm/unaligned.h>
 
 #include "usbatm.h"
@@ -401,9 +404,8 @@ static int uea_send_modem_cmd(struct usb_device *usb,
 	int ret = -ENOMEM;
 	u8 *xfer_buff;
 
-	xfer_buff = kmalloc(size, GFP_KERNEL);
+	xfer_buff = kmemdup(buff, size, GFP_KERNEL);
 	if (xfer_buff) {
-		memcpy(xfer_buff, buff, size);
 		ret = usb_control_msg(usb,
 				      usb_sndctrlpipe(usb, 0),
 				      LOAD_INTERNAL,
@@ -595,13 +597,11 @@ static int uea_idma_write(struct uea_softc *sc, void *data, u32 size)
 	u8 *xfer_buff;
 	int bytes_read;
 
-	xfer_buff = kmalloc(size, GFP_KERNEL);
+	xfer_buff = kmemdup(data, size, GFP_KERNEL);
 	if (!xfer_buff) {
 		uea_err(INS_TO_USBDEV(sc), "can't allocate xfer_buff\n");
 		return ret;
 	}
-
-	memcpy(xfer_buff, data, size);
 
 	ret = usb_bulk_msg(sc->usb_dev,
 			 usb_sndbulkpipe(sc->usb_dev, UEA_IDMA_PIPE),
@@ -658,9 +658,9 @@ static int request_dsp(struct uea_softc *sc)
 /*
  * The uea_load_page() function must be called within a process context
  */
-static void uea_load_page(void *xsc)
+static void uea_load_page(struct work_struct *work)
 {
-	struct uea_softc *sc = xsc;
+	struct uea_softc *sc = container_of(work, struct uea_softc, task);
 	u16 pageno = sc->pageno;
 	u16 ovl = sc->ovl;
 	struct block_info bi;
@@ -765,12 +765,11 @@ static int uea_request(struct uea_softc *sc,
 	u8 *xfer_buff;
 	int ret = -ENOMEM;
 
-	xfer_buff = kmalloc(size, GFP_KERNEL);
+	xfer_buff = kmemdup(data, size, GFP_KERNEL);
 	if (!xfer_buff) {
 		uea_err(INS_TO_USBDEV(sc), "can't allocate xfer_buff\n");
 		return ret;
 	}
-	memcpy(xfer_buff, data, size);
 
 	ret = usb_control_msg(sc->usb_dev, usb_sndctrlpipe(sc->usb_dev, 0),
 			      UCDC_SEND_ENCAPSULATED_COMMAND,
@@ -1169,6 +1168,7 @@ static int uea_kthread(void *data)
 	struct uea_softc *sc = data;
 	int ret = -EAGAIN;
 
+	set_freezable();
 	uea_enters(INS_TO_USBDEV(sc));
 	while (!kthread_should_stop()) {
 		if (ret < 0 || sc->reset)
@@ -1308,11 +1308,13 @@ static void uea_intr(struct urb *urb)
 {
 	struct uea_softc *sc = urb->context;
 	struct intr_pkt *intr = urb->transfer_buffer;
+	int status = urb->status;
+
 	uea_enters(INS_TO_USBDEV(sc));
 
-	if (unlikely(urb->status < 0)) {
+	if (unlikely(status < 0)) {
 		uea_err(INS_TO_USBDEV(sc), "uea_intr() failed with %d\n",
-		       urb->status);
+		       status);
 		return;
 	}
 
@@ -1352,7 +1354,7 @@ static int uea_boot(struct uea_softc *sc)
 
 	uea_enters(INS_TO_USBDEV(sc));
 
-	INIT_WORK(&sc->task, uea_load_page, sc);
+	INIT_WORK(&sc->task, uea_load_page);
 	init_waitqueue_head(&sc->sync_q);
 	init_waitqueue_head(&sc->cmv_ack_wait);
 
@@ -1719,9 +1721,12 @@ static int uea_bind(struct usbatm_data *usbatm, struct usb_interface *intf,
 
 	ret = uea_boot(sc);
 	if (ret < 0)
-		goto error;
+		goto error_rm_grp;
 
 	return 0;
+
+error_rm_grp:
+	sysfs_remove_group(&intf->dev.kobj, &attr_grp);
 error:
 	kfree(sc);
 	return ret;

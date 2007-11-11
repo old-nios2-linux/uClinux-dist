@@ -97,6 +97,8 @@ int hi_ui_config_default(HTTPINSPECT_GLOBAL_CONF *GlobalConf)
     GlobalConf->global_server.ports[80] = 1;
 
     GlobalConf->global_server.flow_depth = 300;
+
+    GlobalConf->global_server.post_depth = 0;
     
     GlobalConf->global_server.chunk_length = 500000;
 

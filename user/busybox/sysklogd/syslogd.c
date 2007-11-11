@@ -81,7 +81,6 @@ static void logOneMessage(int pri, const char *msg, const char *timestamp, struc
 	char buf[1024];
 	char prefix_name_buf[32];
 	unsigned char prefix_copy_len = 0;
-	int first = 1;
 
 	memset(prefix_name_buf, '\0', 32);
 	
@@ -132,8 +131,17 @@ static void logOneMessage(int pri, const char *msg, const char *timestamp, struc
 		}
 		debug_printf("Accepting message at pri %d when target level is %d", LOG_PRI(pri), target->level);
 
-		if (first) {
-			first = 0;
+		{
+#ifdef EMBED
+			char *r1, *r2;
+			r1 = "";
+			r2 = "";
+			if (target->target == SYSLOG_TARGET_REMOTE) {
+				r1 = " ";
+				r2 = syslogd_config->local_hostname;
+			}
+#endif
+
 			debug_printf("Creating message:");
 			debug_printf("res=%s", res);
 			debug_printf("timestamp=%s", timestamp);
@@ -142,8 +150,9 @@ static void logOneMessage(int pri, const char *msg, const char *timestamp, struc
 			debug_printf("content=%s", content);
 
 #ifdef EMBED
-			snprintf(buf, sizeof(buf) - 1, "%s%s %s %s%s\n", res, timestamp, 
-					 (prefix_copy_len > 0) ? prefix_name_buf : msg, iso_time, content);
+			snprintf(buf, sizeof(buf) - 1, "%s%s%s%s %s %s%s\n", res, timestamp, 
+					r1, r2,
+					(prefix_copy_len > 0) ? prefix_name_buf : msg, iso_time, content);
 #else
 			snprintf(buf, sizeof(buf) - 1, "%s %s %s %s\n", timestamp, syslogd_config->local_hostname, res, msg);
 #endif
@@ -327,12 +336,10 @@ static int serveConnection (char* tmpbuf, int n_read)
 	return n_read;
 }
 
-static void doSyslogd(int argc, char *argv[]) __attribute__ ((noreturn));
+static void doSyslogd(int argc, char *argv[]) ATTRIBUTE_NORETURN;
 static void doSyslogd(int argc, char *argv[])
 {
 	struct sockaddr_un sunx;
-	socklen_t addrLength;
-
 	int sock_fd;
 	fd_set fds;
 
@@ -366,23 +373,15 @@ static void doSyslogd(int argc, char *argv[])
 
 	memset(&sunx, 0, sizeof(sunx));
 	sunx.sun_family = AF_UNIX;
-	strncpy(sunx.sun_path, lfile, sizeof(sunx.sun_path));
-	if ((sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
-		bb_perror_msg_and_die("Couldn't get file descriptor for socket "
-						   _PATH_LOG);
-	}
+	safe_strncpy(sunx.sun_path, lfile, sizeof(sunx.sun_path));
 
+	sock_fd = xsocket(AF_UNIX, SOCK_DGRAM, 0);
 	debug_printf("created socket");
-
-	addrLength = sizeof(sunx.sun_family) + strlen(sunx.sun_path);
-	if (bind(sock_fd, (struct sockaddr *) &sunx, addrLength) < 0) {
-		bb_perror_msg_and_die("Could not connect to socket " _PATH_LOG);
-	}
-
+    xbind(sock_fd, (struct sockaddr *) &sunx, sizeof(sunx));
 	debug_printf("did bind");
 
 	if (chmod(lfile, 0666) < 0) {
-		bb_perror_msg_and_die("Could not set permission on " _PATH_LOG);
+		bb_perror_msg_and_die("cannot set permission on " _PATH_LOG);
 	}
 #ifdef CONFIG_FEATURE_IPC_SYSLOG
 	if (syslogd_config->local.circular_logging) {
@@ -393,7 +392,8 @@ static void doSyslogd(int argc, char *argv[])
 
 	debug_printf("about to log startup message");
 
-	syslog_message(LOG_SYSLOG | LOG_INFO, "syslogd started: " BB_BANNER);
+	syslog_message(LOG_SYSLOG | LOG_INFO, "syslogd started");
+	syslog_message(LOG_SYSLOG | LOG_INFO, BB_BANNER);
 
 	for (;;) {
 		debug_printf("wait for message");
@@ -445,14 +445,56 @@ static void doSyslogd(int argc, char *argv[])
 				bb_perror_msg_and_die("UNIX socket error");
 			}
 			RELEASE_CONFIG_BUFFER(tmpbuf);
-		}				/* FD_ISSET() */
-	}					/* for main loop */
+		} /* FD_ISSET() */
+	} /* for */
 }
+
+/* Options */
+enum {
+	OPTBIT_mark = 0, // -m
+	OPTBIT_nofork, // -n
+	OPTBIT_outfile, // -O
+	OPTBIT_loglevel, // -l
+	OPTBIT_small, // -S
+	OPTBIT_configfile, // -f
+	USE_FEATURE_ROTATE_LOGFILE(OPTBIT_filesize   ,)	// -s
+	USE_FEATURE_ROTATE_LOGFILE(OPTBIT_rotatecnt  ,)	// -b
+	USE_FEATURE_REMOTE_LOG(    OPTBIT_remote     ,)	// -R
+	USE_FEATURE_REMOTE_LOG(    OPTBIT_localtoo   ,)	// -L
+	USE_FEATURE_IPC_SYSLOG(    OPTBIT_circularlog,)	// -C
+
+	OPT_mark        = 1 << OPTBIT_mark    ,
+	OPT_nofork      = 1 << OPTBIT_nofork  ,
+	OPT_outfile     = 1 << OPTBIT_outfile ,
+	OPT_loglevel    = 1 << OPTBIT_loglevel,
+	OPT_small       = 1 << OPTBIT_small   ,
+	OPT_configfile	= 1 << OPTBIT_configfile,
+	OPT_filesize    = USE_FEATURE_ROTATE_LOGFILE((1 << OPTBIT_filesize   )) + 0,
+	OPT_rotatecnt   = USE_FEATURE_ROTATE_LOGFILE((1 << OPTBIT_rotatecnt  )) + 0,
+	OPT_remotelog   = USE_FEATURE_REMOTE_LOG(    (1 << OPTBIT_remote     )) + 0,
+	OPT_locallog    = USE_FEATURE_REMOTE_LOG(    (1 << OPTBIT_localtoo   )) + 0,
+	OPT_circularlog = USE_FEATURE_IPC_SYSLOG(    (1 << OPTBIT_circularlog)) + 0,
+};
+#define OPTION_STR "m:nO:l:Sf:" \
+	USE_FEATURE_ROTATE_LOGFILE("s:" ) \
+	USE_FEATURE_ROTATE_LOGFILE("b:" ) \
+	USE_FEATURE_REMOTE_LOG(    "R:" ) \
+	USE_FEATURE_REMOTE_LOG(    "L"  ) \
+	USE_FEATURE_IPC_SYSLOG(    "C::")
+#define OPTION_DECL *opt_m, *opt_O, *opt_l, *opt_f \
+	USE_FEATURE_ROTATE_LOGFILE(,*opt_s) \
+	USE_FEATURE_ROTATE_LOGFILE(,*opt_b) \
+	USE_FEATURE_REMOTE_LOG(    ,*opt_R) \
+	USE_FEATURE_IPC_SYSLOG(    ,*opt_C = NULL)
+#define OPTION_PARAM &opt_m, &opt_O, &opt_l, &opt_f \
+	USE_FEATURE_ROTATE_LOGFILE(,&opt_s) \
+	USE_FEATURE_ROTATE_LOGFILE(,&opt_b) \
+	USE_FEATURE_REMOTE_LOG(    ,&opt_R) \
+	USE_FEATURE_IPC_SYSLOG(    ,&opt_C)
 
 static int load_config(syslogd_config_t *config, int argc, char *argv[])
 {
-	int doFork = TRUE;
-	int opt;
+	char OPTION_DECL;
 
 	debug_printf("Loading config from %s to initialise", DEFAULT_CONFIG_FILE);
 
@@ -462,91 +504,75 @@ static int load_config(syslogd_config_t *config, int argc, char *argv[])
 	debug_printf("Loaded from default config file, parsing args");
 
 	/* do normal option parsing */
-	while ((opt = getopt(argc, argv, "f:m:nO:s:b:R:LC::")) > 0) {
+	opt_complementary = "=0"; /* no non-option params */
+	getopt32(argc, argv, OPTION_STR, OPTION_PARAM);
 
-		debug_printf("opt=%c optarg=%s", opt, optarg);
-
-		switch (opt) {
-		case 'm':
-			config->local.markinterval = atoi(optarg) * 60;
-			break;
-		case 'n':
-			doFork = FALSE;
-			break;
-		case 'f':
+#ifdef SYSLOGD_MARK
+	if (option_mask32 & OPT_mark) // -m
+		config->local.markinterval = xatou_range(opt_m, 0, INT_MAX/60) * 60;
+#endif
+	if (option_mask32 & OPT_configfile) { // -f
 			/* Note: All previous command line settings will be lost */
 			debug_printf("loading config from %s", optarg);
 			syslogd_discard_config(config);
-			syslogd_load_config(optarg, config);
-			break;
-		case 'O':
-			config->local.logfile = strdup(optarg);
-			break;
+			syslogd_load_config(opt_f, config);
+	}
+	if (option_mask32 & OPT_outfile) // -O
+		config->local.logfile = opt_O;
 #ifdef CONFIG_FEATURE_ROTATE_LOGFILE
-		case 's':
-			config->local.maxsize = atoi(optarg);
-			break;
-		case 'b':
-			config->local.numfiles = atoi(optarg);
-			if( config->local.numfiles > 99 ) config->local.numfiles = 99;
-			break;
+	if (option_mask32 & OPT_filesize) // -s
+		config->local.maxsize = xatou_range(opt_s, 0, INT_MAX/1024) * 1024;
+	if (option_mask32 & OPT_rotatecnt) // -b
+		config->local.numfiles = xatou_range(opt_b, 0, 99);
 #endif
 #ifdef CONFIG_FEATURE_REMOTE_LOG
-		case 'R':
-			{
-				char *p;
+	if (option_mask32 & OPT_remotelog) { // -R
+		char *p;
 
-				syslogd_remote_config_t *remote = malloc(sizeof(*remote));
-				memset(remote, 0, sizeof(*remote));
-				remote->common.target = SYSLOG_TARGET_REMOTE;
-				remote->common.level = LOG_DEBUG;
-				remote->port = 514;
-				remote->common.next = config->local.common.next;
-				config->local.common.next = &remote->common;
+		syslogd_remote_config_t *remote = malloc(sizeof(*remote));
+		memset(remote, 0, sizeof(*remote));
+		remote->common.target = SYSLOG_TARGET_REMOTE;
+		remote->common.level = LOG_DEBUG;
+		remote->port = 514;
+		remote->common.next = config->local.common.next;
+		config->local.common.next = &remote->common;
 
-				remote->host = bb_xstrdup(optarg);
-				if ((p = strchr(remote->host, ':'))) {
-					remote->port = atoi(p + 1);
-					*p = '\0';
-				}
-			}
-			break;
-#endif
-#ifdef CONFIG_FEATURE_IPC_SYSLOG
-		case 'C':
-			if (optarg) {
-				int buf_size = atoi(optarg);
-				if (buf_size >= 4) {
-					//shm_size = buf_size * 1024;
-				}
-			}
-			syslogd_config->local.circular_logging = TRUE;
-			break;
-#endif
-		default:
-			bb_show_usage();
+		remote->host = opt_R;
+		if ((p = strchr(remote->host, ':'))) {
+			remote->port = atoi(p + 1);
+			*p = '\0';
 		}
 	}
+#endif
+#ifdef CONFIG_FEATURE_IPC_SYSLOG
+	if (option_mask32 & OPT_circularlog) { // -C
+		if (opt_C) { // -Cn
+			int shm_size;
+			shm_size = xatoul_range(opt_C, 4, INT_MAX/1024) * 1024;
+		}
+		syslogd_config->local.circular_logging = TRUE;
+	}
+#endif
 
-	return doFork;
+	return 0;
 }
 
 
-extern int syslogd_main(int argc, char **argv)
+int syslogd_main(int argc, char **argv);
+int syslogd_main(int argc, char **argv)
 {
-	int doFork;
+	syslogd_config_t config;
 	char *p;
 
-	syslogd_config_t config;
-
-	doFork = load_config(&config, argc, argv);
+	load_config(&config, argc, argv);
 
 	/* And create a global to reference it */
 	syslogd_config = &config;
 
 	/* Store away localhost's name before the fork */
 	gethostname(syslogd_config->local_hostname, sizeof(syslogd_config->local_hostname));
-	if ((p = strchr(syslogd_config->local_hostname, '.'))) {
+	p = strchr(syslogd_config->local_hostname, '.');
+	if (p) {
 		*p = '\0';
 	}
 
@@ -554,13 +580,12 @@ extern int syslogd_main(int argc, char **argv)
 
 	debug_printf("doFork=%d", doFork);
 
-	if (doFork == TRUE) {
-#if defined(__uClinux__)
+	if ((option_mask32 & OPT_nofork) == 0) {
+#ifdef BB_NOMMU
 		vfork_daemon_rexec(0, 1, argc, argv, "-n");
-#else /* __uClinux__ */
-		if(daemon(0, 1) < 0)
-			bb_perror_msg_and_die("daemon");
-#endif /* __uClinux__ */
+#else
+		bb_daemonize();
+#endif
 	}
 	doSyslogd(argc, argv);
 

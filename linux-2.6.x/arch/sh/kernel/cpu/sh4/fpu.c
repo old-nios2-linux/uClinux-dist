@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <asm/processor.h>
+#include <asm/system.h>
 #include <asm/io.h>
 
 /* The PR (precision) bit in the FP Status Register must be clear when
@@ -137,7 +138,7 @@ restore_fpu(struct task_struct *tsk)
 /*
  * Load the FPU with signalling NANS.  This bit pattern we're using
  * has the property that no matter wether considered as single or as
- * double precission represents signaling NANS.  
+ * double precision represents signaling NANS.  
  */
 
 static void
@@ -265,7 +266,7 @@ ieee_fpe_handler (struct pt_regs *regs)
 		nextpc = regs->pr;
 		finsn = *(unsigned short *) (regs->pc + 2);
 	} else {
-		nextpc = regs->pc + 2;
+		nextpc = regs->pc + instruction_size(insn);
 		finsn = insn;
 	}
 
@@ -282,11 +283,8 @@ ieee_fpe_handler (struct pt_regs *regs)
 			grab_fpu(regs);
 			restore_fpu(tsk);
 			set_tsk_thread_flag(tsk, TIF_USEDFPU);
-		} else {
-			tsk->thread.trap_no = 11;
-			tsk->thread.error_code = 0;
+		} else
 			force_sig(SIGFPE, tsk);
-		}
 
 		regs->pc = nextpc;
 		return 1;
@@ -296,29 +294,29 @@ ieee_fpe_handler (struct pt_regs *regs)
 }
 
 asmlinkage void
-do_fpu_error(unsigned long r4, unsigned long r5, unsigned long r6, unsigned long r7,
-	     struct pt_regs regs)
+do_fpu_error(unsigned long r4, unsigned long r5, unsigned long r6,
+	     unsigned long r7, struct pt_regs __regs)
 {
+	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
 	struct task_struct *tsk = current;
 
-	if (ieee_fpe_handler (&regs))
+	if (ieee_fpe_handler(regs))
 		return;
 
-	regs.pc += 2;
-	save_fpu(tsk, &regs);
-	tsk->thread.trap_no = 11;
-	tsk->thread.error_code = 0;
+	regs->pc += 2;
+	save_fpu(tsk, regs);
 	force_sig(SIGFPE, tsk);
 }
 
 asmlinkage void
 do_fpu_state_restore(unsigned long r4, unsigned long r5, unsigned long r6,
-		     unsigned long r7, struct pt_regs regs)
+		     unsigned long r7, struct pt_regs __regs)
 {
+	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
 	struct task_struct *tsk = current;
 
-	grab_fpu(&regs);
-	if (!user_mode(&regs)) {
+	grab_fpu(regs);
+	if (!user_mode(regs)) {
 		printk(KERN_ERR "BUG: FPU is used in kernel mode.\n");
 		return;
 	}

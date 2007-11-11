@@ -1,9 +1,9 @@
 /*
  *
- * $Id: exec.c,v 1.9.6.1 2004/07/21 16:53:46 bogdan Exp $
+ * $Id: exec.c,v 1.13 2004/09/01 10:12:42 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -60,7 +60,7 @@ int exec_msg(struct sip_msg *msg, char *cmd )
 	int exit_status;
 	int ret;
 
-	ret=-1; /* pesimist: assume error */
+	ret=-1; /* pessimist: assume error */
 	pipe=popen( cmd, "w" );
 	if (pipe==NULL) {
 		LOG(L_ERR, "ERROR: exec_msg: cannot open pipe: %s\n",
@@ -110,7 +110,7 @@ int exec_str(struct sip_msg *msg, char *cmd, char *param, int param_len) {
 	int uri_len;
 	int exit_status;
 
-	/* pesimist: assume error by default */
+	/* pessimist: assume error by default */
 	ret=-1;
 	
 	l1=strlen(cmd);cmd_len=l1+param_len+2;
@@ -160,7 +160,7 @@ int exec_str(struct sip_msg *msg, char *cmd, char *param, int param_len) {
 				goto error02;
 			}
 		} else {
-			if (append_branch(msg, uri_line, uri_len)==-1) {
+			if (append_branch(msg, uri_line, uri_len, 0, 0, Q_UNSPECIFIED)==-1) {
 				LOG(L_ERR, "ERROR: exec_str: append_branch failed;"
 					" too many or too long URIs?\n");
 				goto error02;

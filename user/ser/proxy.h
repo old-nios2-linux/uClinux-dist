@@ -1,8 +1,8 @@
 /*
- * $Id: proxy.h,v 1.8 2003/02/19 17:16:41 andrei Exp $
+ * $Id: proxy.h,v 1.9 2004/08/24 08:45:10 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,7 +28,7 @@
  /*
   * History:
   * -------
-  *  2003-02-13  added proto to struct proxy_l & to *_proxy fucntions (andrei)
+  *  2003-02-13  added proto to struct proxy_l & to *_proxy functions (andrei)
   */
 
 
@@ -51,7 +51,7 @@ struct proxy_l{
 
 	int addr_idx;	/* crt. addr. idx. */
 	int ok; /* 0 on error */
-	/*statisticis*/
+	/*statistics*/
 	int tx;
 	int tx_bytes;
 	int errors;

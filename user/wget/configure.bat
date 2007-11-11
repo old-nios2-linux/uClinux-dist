@@ -26,8 +26,8 @@ rem modify this file, you may extend this exception to your version of the
 rem file, but you are not obligated to do so.  If you do not wish to do
 rem so, delete this exception statement from your version.
 
-cls
 if .%1 == .--borland goto :borland
+if .%1 == .--mingw goto :mingw
 if .%1 == .--msvc goto :msvc
 if .%1 == .--watcom goto :watcom
 goto :usage
@@ -52,6 +52,15 @@ copy windows\Makefile.doc doc\Makefile > nul
 echo Type MAKE to start compiling.
 goto :end
 
+:mingw
+copy windows\config.h.mingw src\config.h > nul
+copy windows\Makefile.top.mingw Makefile > nul
+copy windows\Makefile.src.mingw src\Makefile > nul
+copy windows\Makefile.doc doc\Makefile > nul
+
+echo Type mingw32-make to start compiling.
+goto :end
+
 :watcom
 copy windows\config.h.ms src\config.h > nul
 copy windows\Makefile.watcom src\Makefile > nul
@@ -67,5 +76,5 @@ cd src
 goto :end
 
 :usage
-echo "Usage: configure [--borland | --msvc | --watcom]"
+echo "Usage: configure [--borland | --mingw | --msvc | --watcom]"
 :end

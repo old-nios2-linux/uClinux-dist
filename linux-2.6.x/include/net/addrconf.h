@@ -35,9 +35,9 @@ struct prefix_info {
 #else
 #error "Please fix <asm/byteorder.h>"
 #endif
-	__u32			valid;
-	__u32			prefered;
-	__u32			reserved2;
+	__be32			valid;
+	__be32			prefered;
+	__be32			reserved2;
 
 	struct in6_addr		prefix;
 };
@@ -61,7 +61,7 @@ extern int			addrconf_set_dstaddr(void __user *arg);
 extern int			ipv6_chk_addr(struct in6_addr *addr,
 					      struct net_device *dev,
 					      int strict);
-#ifdef CONFIG_IPV6_MIP6
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 extern int			ipv6_chk_home_addr(struct in6_addr *addr);
 #endif
 extern struct inet6_ifaddr *	ipv6_get_ifaddr(struct in6_addr *addr,
@@ -73,7 +73,9 @@ extern int			ipv6_get_saddr(struct dst_entry *dst,
 extern int			ipv6_dev_get_saddr(struct net_device *dev, 
 					       struct in6_addr *daddr,
 					       struct in6_addr *saddr);
-extern int			ipv6_get_lladdr(struct net_device *dev, struct in6_addr *);
+extern int			ipv6_get_lladdr(struct net_device *dev,
+						struct in6_addr *addr,
+						unsigned char banned_flags);
 extern int			ipv6_rcv_saddr_equal(const struct sock *sk, 
 						      const struct sock *sk2);
 extern void			addrconf_join_solict(struct net_device *dev,
@@ -183,7 +185,7 @@ static __inline__ u8 ipv6_addr_hash(const struct in6_addr *addr)
 	 * This will include the IEEE address token on links that support it.
 	 */
 
-	word = addr->s6_addr32[2] ^ addr->s6_addr32[3];
+	word = (__force u32)(addr->s6_addr32[2] ^ addr->s6_addr32[3]);
 	word ^= (word >> 16);
 	word ^= (word >> 8);
 

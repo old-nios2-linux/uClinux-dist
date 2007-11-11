@@ -1,36 +1,29 @@
 /* mpf_add_ui -- Add a float and an unsigned integer.
 
-Copyright (C) 1993, 1994, 1996 Free Software Foundation, Inc.
+Copyright 1993, 1994, 1996, 2000, 2001 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpf_add_ui (mpf_ptr sum, mpf_srcptr u, unsigned long int v)
-#else
-mpf_add_ui (sum, u, v)
-     mpf_ptr sum;
-     mpf_srcptr u;
-     unsigned long int v;
-#endif
 {
   mp_srcptr up = u->_mp_d;
   mp_ptr sump = sum->_mp_d;
@@ -112,7 +105,7 @@ mpf_add_ui (sum, u, v)
 		  usize -= usize - prec; /* Eq. usize = prec */
 		}
 	      if (sump != up)
-		MPN_COPY (sump, up, usize - uexp);
+		MPN_COPY_INCR (sump, up, usize - uexp);
 	      cy_limb = mpn_add_1 (sump + usize - uexp, up + usize - uexp,
 				   uexp, (mp_limb_t) v);
 	      sump[usize] = cy_limb;
@@ -141,7 +134,7 @@ mpf_add_ui (sum, u, v)
 	      usize -= usize + (-uexp) + 1 - prec;
 	    }
 	  if (sump != up)
-	    MPN_COPY (sump, up, usize);
+	    MPN_COPY_INCR (sump, up, usize);
 	  MPN_ZERO (sump + usize, -uexp);
 	  sump[usize + (-uexp)] = v;
 	  sum->_mp_size = usize + (-uexp) + 1;

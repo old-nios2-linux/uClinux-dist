@@ -332,14 +332,13 @@ int CheckTtlRG(Packet *p, struct _OptTreeNode *otn, OptFpList *fp_list)
         return fp_list->next->OptTestFunc(p, otn, fp_list->next);
     }
 #ifdef DEBUG
-    else
+    else if (p->iph != NULL)
     {
         /* you can put debug comments here or not */
         DebugMessage(DEBUG_PLUGIN, "CheckTtlLT: Not Within the range %d - %d (%d)\n", 
-        ((TtlCheckData *)otn->ds_list[PLUGIN_TTL_CHECK])->ttl,
-        ((TtlCheckData
-        *)otn->ds_list[PLUGIN_TTL_CHECK])->h_ttl,
-        p->iph->ip_ttl);
+                     ((TtlCheckData *)otn->ds_list[PLUGIN_TTL_CHECK])->ttl,
+                     ((TtlCheckData *)otn->ds_list[PLUGIN_TTL_CHECK])->h_ttl,
+                     p->iph->ip_ttl);
     }
 #endif
 

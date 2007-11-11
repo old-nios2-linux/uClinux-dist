@@ -1,16 +1,10 @@
-# $Id: AUTHORS,v 1.11.6.1 2004/07/19 14:06:21 agprojects Exp $
+# $Id: AUTHORS,v 1.13 2004/12/16 17:39:46 andrei Exp $
 # The format of this file was inspired by the Linux kernel CREDITS file.
 # 
 # Authors and contributors are listed alphabetically (first name).
 # 
 # The fields are: name (N), email (E), web-address (W), CVS account login (C),
 # PGP key ID and fingerprint (P), description (D), and snail-mail address (S).
-
-N: Adrian Georgescu
-C: agprojects
-E: ag@ag-projects.com
-P: 
-D: 
 
 N: Andrei Pelinescu - Onciul
 C: andrei
@@ -28,18 +22,28 @@ C: dcm
 E: mierla@fokus.fraunhofer.de
 D:
 
-N: Dan Pascu
-C: danp
-E: dan@ag-projects.com
-P: 
-D: 
+N: Gabriel Vasile
+C: gabriel
+E:
+D:
+
+N: Greg Fausak
+C: lgfausak
+E:
+D:
 
 N: Jan Janak
 C: janakj
 E: jan@iptel.org
 W: http://iptel.org/~janakj
-P: 705D3F2A   3263 244B 607A 285D 5E1E  FD9B 1D5E A3DA 705D 3F2A
+P: F8190A31   FCC0 3F4A 1ACB 84C2 505C  573E CC03 B08E F819 0A31
 D:
+
+N: Jamey Hicks
+C: jamey
+E: 
+D:
+
 
 N: Jiri Kuthan
 C: jiri

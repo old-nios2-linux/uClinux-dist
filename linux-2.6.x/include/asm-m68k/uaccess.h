@@ -7,6 +7,7 @@
 #include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/sched.h>
 #include <asm/segment.h>
 
 #define VERIFY_READ	0
@@ -360,7 +361,9 @@ __constant_copy_to_user(void __user *to, const void *from, unsigned long n)
 
 long strncpy_from_user(char *dst, const char __user *src, long count);
 long strnlen_user(const char __user *src, long n);
-unsigned long clear_user(void __user *to, unsigned long n);
+unsigned long __clear_user(void __user *to, unsigned long n);
+
+#define clear_user	__clear_user
 
 #define strlen_user(str) strnlen_user(str, 32767)
 

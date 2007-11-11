@@ -17,6 +17,9 @@ config MMU
 	bool
 	default y
 
+config QUICKLIST
+	def_bool y
+
 config RWSEM_GENERIC_SPINLOCK
 	bool
 	default y
@@ -36,8 +39,16 @@ config GENERIC_CALIBRATE_DELAY
 config RWSEM_XCHGADD_ALGORITHM
 	bool
 
-config GENERIC_ISA_DMA
+config ARCH_HAS_ILOG2_U32
 	bool
+	default n
+
+config ARCH_HAS_ILOG2_U64
+	bool
+	default n
+
+config ARCH_NO_VIRT_TO_BUS
+	def_bool y
 
 source init/Kconfig
 

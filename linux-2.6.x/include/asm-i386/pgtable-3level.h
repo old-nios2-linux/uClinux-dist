@@ -1,8 +1,6 @@
 #ifndef _I386_PGTABLE_3LEVEL_H
 #define _I386_PGTABLE_3LEVEL_H
 
-#include <asm-generic/pgtable-nopud.h>
-
 /*
  * Intel Physical Address Extension (PAE) Mode - three-level page
  * tables on PPro+ CPUs.
@@ -22,26 +20,11 @@
 #define pud_present(pud)			1
 
 /*
- * Is the pte executable?
- */
-static inline int pte_x(pte_t pte)
-{
-	return !(pte_val(pte) & _PAGE_NX);
-}
-
-/*
- * All present user-pages with !NX bit are user-executable:
- */
-static inline int pte_exec(pte_t pte)
-{
-	return pte_user(pte) && pte_x(pte);
-}
-/*
  * All present pages with !NX bit are kernel-executable:
  */
 static inline int pte_exec_kernel(pte_t pte)
 {
-	return pte_x(pte);
+	return !(pte_val(pte) & _PAGE_NX);
 }
 
 /* Rules for using set_pte: the pte being assigned *must* be
@@ -50,13 +33,17 @@ static inline int pte_exec_kernel(pte_t pte)
  * not possible, use pte_get_and_clear to obtain the old pte
  * value and then use set_pte to update it.  -ben
  */
-static inline void set_pte(pte_t *ptep, pte_t pte)
+static inline void native_set_pte(pte_t *ptep, pte_t pte)
 {
 	ptep->pte_high = pte.pte_high;
 	smp_wmb();
 	ptep->pte_low = pte.pte_low;
 }
-#define set_pte_at(mm,addr,ptep,pteval) set_pte(ptep,pteval)
+static inline void native_set_pte_at(struct mm_struct *mm, unsigned long addr,
+				     pte_t *ptep , pte_t pte)
+{
+	native_set_pte(ptep, pte);
+}
 
 /*
  * Since this is only called on user PTEs, and the page fault handler
@@ -64,7 +51,8 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
  * we are justified in merely clearing the PTE present bit, followed
  * by a set.  The ordering here is important.
  */
-static inline void set_pte_present(struct mm_struct *mm, unsigned long addr, pte_t *ptep, pte_t pte)
+static inline void native_set_pte_present(struct mm_struct *mm, unsigned long addr,
+					  pte_t *ptep, pte_t pte)
 {
 	ptep->pte_low = 0;
 	smp_wmb();
@@ -73,12 +61,49 @@ static inline void set_pte_present(struct mm_struct *mm, unsigned long addr, pte
 	ptep->pte_low = pte.pte_low;
 }
 
-#define set_pte_atomic(pteptr,pteval) \
-		set_64bit((unsigned long long *)(pteptr),pte_val(pteval))
-#define set_pmd(pmdptr,pmdval) \
-		set_64bit((unsigned long long *)(pmdptr),pmd_val(pmdval))
-#define set_pud(pudptr,pudval) \
-		(*(pudptr) = (pudval))
+static inline void native_set_pte_atomic(pte_t *ptep, pte_t pte)
+{
+	set_64bit((unsigned long long *)(ptep),native_pte_val(pte));
+}
+static inline void native_set_pmd(pmd_t *pmdp, pmd_t pmd)
+{
+	set_64bit((unsigned long long *)(pmdp),native_pmd_val(pmd));
+}
+static inline void native_set_pud(pud_t *pudp, pud_t pud)
+{
+	*pudp = pud;
+}
+
+/*
+ * For PTEs and PDEs, we must clear the P-bit first when clearing a page table
+ * entry, so clear the bottom half first and enforce ordering with a compiler
+ * barrier.
+ */
+static inline void native_pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
+{
+	ptep->pte_low = 0;
+	smp_wmb();
+	ptep->pte_high = 0;
+}
+
+static inline void native_pmd_clear(pmd_t *pmd)
+{
+	u32 *tmp = (u32 *)pmd;
+	*tmp = 0;
+	smp_wmb();
+	*(tmp + 1) = 0;
+}
+
+#ifndef CONFIG_PARAVIRT
+#define set_pte(ptep, pte)			native_set_pte(ptep, pte)
+#define set_pte_at(mm, addr, ptep, pte)		native_set_pte_at(mm, addr, ptep, pte)
+#define set_pte_present(mm, addr, ptep, pte)	native_set_pte_present(mm, addr, ptep, pte)
+#define set_pte_atomic(ptep, pte)		native_set_pte_atomic(ptep, pte)
+#define set_pmd(pmdp, pmd)			native_set_pmd(pmdp, pmd)
+#define set_pud(pudp, pud)			native_set_pud(pudp, pud)
+#define pte_clear(mm, addr, ptep)		native_pte_clear(mm, addr, ptep)
+#define pmd_clear(pmd)				native_pmd_clear(pmd)
+#endif
 
 /*
  * Pentium-II erratum A13: in PAE mode we explicitly have to flush
@@ -99,28 +124,8 @@ static inline void pud_clear (pud_t * pud) { }
 #define pmd_offset(pud, address) ((pmd_t *) pud_page(*(pud)) + \
 			pmd_index(address))
 
-/*
- * For PTEs and PDEs, we must clear the P-bit first when clearing a page table
- * entry, so clear the bottom half first and enforce ordering with a compiler
- * barrier.
- */
-static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
-{
-	ptep->pte_low = 0;
-	smp_wmb();
-	ptep->pte_high = 0;
-}
-
-static inline void pmd_clear(pmd_t *pmd)
-{
-	u32 *tmp = (u32 *)pmd;
-	*tmp = 0;
-	smp_wmb();
-	*(tmp + 1) = 0;
-}
-
-#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
-static inline pte_t ptep_get_and_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
+#ifdef CONFIG_SMP
+static inline pte_t native_ptep_get_and_clear(pte_t *ptep)
 {
 	pte_t res;
 
@@ -131,6 +136,9 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm, unsigned long addr,
 
 	return res;
 }
+#else
+#define native_ptep_get_and_clear(xp) native_local_ptep_get_and_clear(xp)
+#endif
 
 #define __HAVE_ARCH_PTE_SAME
 static inline int pte_same(pte_t a, pte_t b)
@@ -147,28 +155,21 @@ static inline int pte_none(pte_t pte)
 
 static inline unsigned long pte_pfn(pte_t pte)
 {
-	return (pte.pte_low >> PAGE_SHIFT) |
-		(pte.pte_high << (32 - PAGE_SHIFT));
+	return pte_val(pte) >> PAGE_SHIFT;
 }
 
 extern unsigned long long __supported_pte_mask;
 
 static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 {
-	pte_t pte;
-
-	pte.pte_high = (page_nr >> (32 - PAGE_SHIFT)) | \
-					(pgprot_val(pgprot) >> 32);
-	pte.pte_high &= (__supported_pte_mask >> 32);
-	pte.pte_low = ((page_nr << PAGE_SHIFT) | pgprot_val(pgprot)) & \
-							__supported_pte_mask;
-	return pte;
+	return __pte((((unsigned long long)page_nr << PAGE_SHIFT) |
+		      pgprot_val(pgprot)) & __supported_pte_mask);
 }
 
 static inline pmd_t pfn_pmd(unsigned long page_nr, pgprot_t pgprot)
 {
-	return __pmd((((unsigned long long)page_nr << PAGE_SHIFT) | \
-			pgprot_val(pgprot)) & __supported_pte_mask);
+	return __pmd((((unsigned long long)page_nr << PAGE_SHIFT) |
+		      pgprot_val(pgprot)) & __supported_pte_mask);
 }
 
 /*
@@ -187,7 +188,5 @@ static inline pmd_t pfn_pmd(unsigned long page_nr, pgprot_t pgprot)
 #define __swp_entry_to_pte(x)		((pte_t){ 0, (x).val })
 
 #define __pmd_free_tlb(tlb, x)		do { } while (0)
-
-#define vmalloc_sync_all() ((void)0)
 
 #endif /* _I386_PGTABLE_3LEVEL_H */

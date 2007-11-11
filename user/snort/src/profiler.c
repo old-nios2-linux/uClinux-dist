@@ -317,14 +317,12 @@ void RegisterPreprocessorProfile(char *keyword, PreprocStats *stats, int layer, 
     if (node == NULL)
     {
         /* alloc the node */
-        PreprocStatsNodeList = (PreprocStatsNode *)
-            calloc(sizeof(PreprocStatsNode), 1);
+        PreprocStatsNodeList = (PreprocStatsNode *)SnortAlloc(sizeof(PreprocStatsNode));
 
-        PreprocStatsNodeList->name = (char *)calloc(strlen(keyword) +1,
-            sizeof(char));
+        PreprocStatsNodeList->name = (char *)SnortAlloc((strlen(keyword) + 1) * sizeof(char));
 
         /* copy the keyword */
-        strncpy(PreprocStatsNodeList->name, keyword, strlen(keyword) +1);
+        SnortStrncpy(PreprocStatsNodeList->name, keyword, strlen(keyword) +1);
 
         /* Set the stats reference */
         PreprocStatsNodeList->stats = stats;
@@ -342,15 +340,14 @@ void RegisterPreprocessorProfile(char *keyword, PreprocStats *stats, int layer, 
             node = node->next;
         }
 
-        node->next = (PreprocStatsNode *)
-            calloc(sizeof(PreprocStatsNode), 1);
+        node->next = (PreprocStatsNode *)SnortAlloc(sizeof(PreprocStatsNode));
 
         node = node->next;
 
-        node->name = (char *)calloc(strlen(keyword) +1, sizeof(char));
+        node->name = (char *)SnortAlloc((strlen(keyword) + 1) * sizeof(char));
 
         /* copy the keyword */
-        strncpy(node->name, keyword, strlen(keyword) +1);
+        SnortStrncpy(node->name, keyword, strlen(keyword) +1);
 
         /* Set the stats reference */
         node->stats = stats;
@@ -576,7 +573,7 @@ void ShowPreprocProfiles()
 
             ticks_per_check = (double)idx->stats->ticks/idx->stats->checks;
 
-            new = calloc(1, sizeof(Preproc_WorstPerformer));
+            new = SnortAlloc(sizeof(Preproc_WorstPerformer));
             new->node = idx;
             new->ticks_per_check = ticks_per_check;
 

@@ -158,6 +158,8 @@ static int UDecode(HI_SESSION *Session, u_char *start,
 
     iNorm = 0;
 
+    hi_stats.unicode++;
+
     for(iCtr = 0; iCtr < 4; iCtr++)
     {
         iByte = get_byte(Session, start, end, ptr, norm_state);
@@ -165,7 +167,10 @@ static int UDecode(HI_SESSION *Session, u_char *start,
             return iByte;
 
         if(valid_lookup[(u_char)iByte] < 0)
+        {
+            hi_stats.non_ascii++;
             return NON_ASCII_CHAR;
+        }
 
         iNorm <<= 4;
         iNorm = (iNorm | (hex_lookup[(u_char)iByte]));
@@ -185,7 +190,8 @@ static int UDecode(HI_SESSION *Session, u_char *start,
             iNorm = ServerConf->iis_unicode_map[iNorm];
 
             if(iNorm == HI_UI_NON_ASCII_CODEPOINT)
-            {
+            {   
+                hi_stats.non_ascii++;
                 iNorm = NON_ASCII_CHAR;
             }
 
@@ -198,6 +204,7 @@ static int UDecode(HI_SESSION *Session, u_char *start,
         }
         else
         {
+            hi_stats.non_ascii++;
             return NON_ASCII_CHAR;
         }
     }
@@ -208,8 +215,7 @@ static int UDecode(HI_SESSION *Session, u_char *start,
     if(hi_eo_generate_event(Session, ServerConf->u_encoding.alert) &&
        !norm_state->param)
     {
-        hi_eo_client_event_log(Session, HI_EO_CLIENT_U_ENCODE,
-                                         NULL, NULL);
+        hi_eo_client_event_log(Session, HI_EO_CLIENT_U_ENCODE, NULL, NULL);
     }
 
     return iNorm;
@@ -319,6 +325,7 @@ static int PercentDecode(HI_SESSION *Session, u_char *start,
         else if(!ServerConf->base36.on ||
                 valid_lookup[(u_char)iByte] != BASE36_VAL)
         {
+            hi_stats.non_ascii++;
             return NON_ASCII_CHAR;
         }
 
@@ -326,6 +333,7 @@ static int PercentDecode(HI_SESSION *Session, u_char *start,
         **  The logic above dictates that if we get to this point, we
         **  have a valid base36 encoding, so let's log the event.
         */
+        hi_stats.base36++;
         if(hi_eo_generate_event(Session, ServerConf->base36.alert) &&
            !norm_state->param)
         {
@@ -351,6 +359,7 @@ static int PercentDecode(HI_SESSION *Session, u_char *start,
     {
         if(!ServerConf->base36.on || valid_lookup[(u_char)iByte] != BASE36_VAL)
         {
+            hi_stats.non_ascii++;
             return NON_ASCII_CHAR;
         }
 
@@ -358,6 +367,7 @@ static int PercentDecode(HI_SESSION *Session, u_char *start,
         **  Once again, we know we have a valid base36 encoding, let's alert
         **  if possible.
         */
+        hi_stats.base36++;
         if(hi_eo_generate_event(Session, ServerConf->base36.alert) &&
            !norm_state->param)
         {
@@ -470,7 +480,7 @@ static int GetChar(HI_SESSION *Session, u_char *start,
 **  NAME
 **    UTF8Decode::
 */
-/**
+/*
 **  Decode the UTF-8 sequences and check for valid codepoints via the
 **  Unicode standard and the IIS standard.
 **  
@@ -521,6 +531,7 @@ static int UTF8Decode(HI_SESSION *Session, u_char *start,
     }
     else
     {
+        hi_stats.non_ascii++;
         /*
         **  This means that we have an invalid first sequence byte for
         **  a unicode sequence.  So we just return the byte and move on.
@@ -537,7 +548,7 @@ static int UTF8Decode(HI_SESSION *Session, u_char *start,
     for(iCtr = 0; iCtr < iNumBytes; iCtr++)
     {
         iByte = GetChar(Session, start, end, ptr, &iBareByte, norm_state);
-        if(iByte == END_OF_BUFFER || iBareByte)
+        if(iByte == END_OF_BUFFER || iByte == NON_ASCII_CHAR || iBareByte)
             return NON_ASCII_CHAR;
 
         if((iByte & 0xc0) == 0x80)
@@ -547,6 +558,7 @@ static int UTF8Decode(HI_SESSION *Session, u_char *start,
         }
         else
         {
+            hi_stats.non_ascii++;
             /*
             **  This means that we don't have a valid unicode sequence, so
             **  we just bail.
@@ -577,10 +589,12 @@ static int UTF8Decode(HI_SESSION *Session, u_char *start,
                                        NULL, NULL);
             }
 
+            hi_stats.unicode++;
             return iNorm;
         }
         else
         {
+            hi_stats.non_ascii++;
             iNorm = NON_ASCII_CHAR;
         }
     }
@@ -662,10 +676,13 @@ static int GetByte(HI_SESSION *Session, u_char *start, u_char *end,
     if(iChar == END_OF_BUFFER)
         return END_OF_BUFFER;
 
+    if (iChar == NON_ASCII_CHAR)
+        return NON_ASCII_CHAR;
+
     /*
     **  We now check for unicode bytes
     */
-    if((iChar & 0x80) && (iChar != NON_ASCII_CHAR) && !iBareByte)
+    if((iChar & 0x80) && !iBareByte)
     {
         iChar = UnicodeDecode(Session, start, end, ptr, iChar, norm_state);
     }
@@ -832,7 +849,8 @@ static int GetDecodedByte(HI_SESSION *Session, u_char *start,
     */
     if(ServerConf->iis_backslash.on && (u_char)iChar == 0x5c)
     {
-        if(hi_eo_generate_event(Session, ServerConf->iis_backslash.alert) &&
+        if(!(Session->norm_flags & HI_BODY) && 
+           hi_eo_generate_event(Session, ServerConf->iis_backslash.alert) &&
            !norm_state->param)
         {
             hi_eo_client_event_log(Session, HI_EO_CLIENT_IIS_BACKSLASH, 
@@ -870,6 +888,7 @@ static int DirTrav(HI_SESSION *Session, URI_NORM_STATE *norm_state,
 {
     HTTPINSPECT_CONF *ServerConf = Session->server_conf;
 
+    hi_stats.dir_trav++;
     if(norm_state->dir_count)
     {
         *ub_ptr = norm_state->dir_track[norm_state->dir_count - 1];
@@ -895,7 +914,8 @@ static int DirTrav(HI_SESSION *Session, URI_NORM_STATE *norm_state,
         /*
         **  Let's put the alert here for webroot dir traversal.
         */
-        if(hi_eo_generate_event(Session, ServerConf->webroot.alert) &&
+        if(!(Session->norm_flags & HI_BODY) &&
+           hi_eo_generate_event(Session, ServerConf->webroot.alert) &&
            !norm_state->param)
         {
             hi_eo_client_event_log(Session, HI_EO_CLIENT_WEBROOT_DIR,
@@ -1021,7 +1041,9 @@ static int DirNorm(HI_SESSION *Session, u_char *start, u_char *end,
             */
             if(ServerConf->multiple_slash.on && (u_char)iChar == '/')
             {
-                if(hi_eo_generate_event(Session,
+                hi_stats.slashes++;
+                if(!(Session->norm_flags & HI_BODY) &&
+                    hi_eo_generate_event(Session,
                                         ServerConf->multiple_slash.alert) &&
                    !norm_state->param)
                 {
@@ -1057,13 +1079,15 @@ static int DirNorm(HI_SESSION *Session, u_char *start, u_char *end,
                         {
                             if((u_char)iDir == '/')
                             {
+                                hi_stats.self_ref++;
                                 /*
                                 **  We found a real live directory traversal
                                 **  so we reset the pointer to before the
                                 **  '/' and finish up after the return.
                                 */
-                                if(hi_eo_generate_event(Session,
-                                                 ServerConf->directory.alert)&&
+                                if(!(Session->norm_flags & HI_BODY) &&
+                                     hi_eo_generate_event(Session,
+                                             ServerConf->directory.alert) &&
                                    !norm_state->param)
                                 {
                                     hi_eo_client_event_log(Session,
@@ -1087,7 +1111,8 @@ static int DirNorm(HI_SESSION *Session, u_char *start, u_char *end,
                         **  Keep processing until we stop seeing self
                         **  referential directories.
                         */
-                        if(hi_eo_generate_event(Session,
+                        if(!(Session->norm_flags & HI_BODY) && 
+                            hi_eo_generate_event(Session,
                                                 ServerConf->directory.alert) &&
                            !norm_state->param)
                         {
@@ -1138,6 +1163,10 @@ static int CheckLongDir(HI_SESSION *Session, URI_NORM_STATE *norm_state,
 {
     int    iDirLen;
     u_char *LastDir;
+
+    /* Don't do this check if we're in the body of a request */
+    if(Session->norm_flags & HI_BODY)
+        return HI_SUCCESS;
 
     /*
     **  First check that we are alerting on long directories and then
@@ -1306,7 +1335,8 @@ static INLINE int InspectUriChar(HI_SESSION *Session, int iChar,
             **  Look for user-defined Non-Rfc chars.  If we find them
             **  then log an alert.
             */
-            if(ServerConf->non_rfc_chars[(u_char)iDir])
+            if(!(Session->norm_flags & HI_BODY) &&
+                ServerConf->non_rfc_chars[(u_char)iDir])
             {
                 if(hi_eo_generate_event(Session, HI_EO_CLIENT_NON_RFC_CHAR) &&
                    !norm_state->param)
@@ -1417,7 +1447,8 @@ int hi_norm_uri(HI_SESSION *Session, u_char *uribuf, int *uribuf_size,
         **  Look for user-defined Non-Rfc chars.  If we find them
         **  then log an alert.
         */
-        if(ServerConf->non_rfc_chars[(u_char)iChar])
+        if(!(Session->norm_flags & HI_BODY) && 
+            ServerConf->non_rfc_chars[(u_char)iChar])
         {
             if(hi_eo_generate_event(Session, HI_EO_CLIENT_NON_RFC_CHAR) &&
                !norm_state.param)

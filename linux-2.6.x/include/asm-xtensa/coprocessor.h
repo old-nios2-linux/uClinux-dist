@@ -11,7 +11,16 @@
 #ifndef _XTENSA_COPROCESSOR_H
 #define _XTENSA_COPROCESSOR_H
 
-#include <xtensa/config/core.h>
+#include <asm/variant/core.h>
+#include <asm/variant/tie.h>
+
+#if !XCHAL_HAVE_CP
+
+#define XTENSA_CP_EXTRA_OFFSET 	0
+#define XTENSA_CP_EXTRA_ALIGN	1	/* must be a power of 2 */
+#define XTENSA_CP_EXTRA_SIZE	0
+
+#else
 
 #define XTOFS(last_start,last_size,align) \
 	((last_start+last_size+align-1) & -align)
@@ -55,6 +64,7 @@ typedef struct {
 #  define COPROCESSOR_INFO_SIZE 8
 # endif
 #endif
+#endif	/* XCHAL_HAVE_CP */
 
 
 #ifndef __ASSEMBLY__
@@ -65,6 +75,11 @@ extern void save_coprocessor_registers(void*, int);
 # else
 #  define release_coprocessors(task)
 # endif
-#endif
+
+typedef unsigned char cp_state_t[XTENSA_CP_EXTRA_SIZE]
+	__attribute__ ((aligned (XTENSA_CP_EXTRA_ALIGN)));
+
+#endif	/* !__ASSEMBLY__ */
+
 
 #endif	/* _XTENSA_COPROCESSOR_H */

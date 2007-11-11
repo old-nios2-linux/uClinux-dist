@@ -140,7 +140,7 @@ fw_in(unsigned int hooknum,
 						   pskb);
 
 			/* ip_conntrack_confirm return NF_DROP or NF_ACCEPT */
-			if (ip_conntrack_confirm(*pskb) == NF_DROP)
+			if (ip_conntrack_confirm(hooknum, *pskb) == NF_DROP)
 				ret = FW_BLOCK;
 		}
 		break;
@@ -205,7 +205,7 @@ static unsigned int fw_confirm(unsigned int hooknum,
 			       const struct net_device *out,
 			       int (*okfn)(struct sk_buff *))
 {
-	return ip_conntrack_confirm(*pskb);
+	return ip_conntrack_confirm(hooknum, *pskb);
 }
 
 extern int ip_fw_ctl(int optval, void *m, unsigned int len);

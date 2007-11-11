@@ -1,7 +1,7 @@
 /*
- * $Id: main.c,v 1.168.4.3 2004/06/28 15:41:21 andrei Exp $
+ * $Id: main.c,v 1.197.2.1 2005/07/25 16:56:24 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,7 +35,8 @@
  *  2003-04-08  init_mallocs split into init_{pkg,shm}_mallocs and 
  *               init_shm_mallocs called after cmd. line parsing (andrei)
  *  2003-04-15  added tcp_disable support (andrei)
- *  2003-05-09  closelog() before openlog to force opening a new fd (needed on solaris) (andrei)
+ *  2003-05-09  closelog() before openlog to force opening a new fd 
+ *               (needed on solaris) (andrei)
  *  2003-06-11  moved all signal handlers init. in install_sigs and moved it
  *               after daemonize (so that we won't catch anymore our own
  *               SIGCHLD generated when becoming session leader) (andrei)
@@ -44,7 +45,19 @@
  *                see comment above it for explanations. (andrei)
  *  2003-06-29  replaced port_no_str snprintf w/ int2str (andrei)
  *  2003-10-10  added switch for config check (-c) (andrei)
- *
+ *  2003-10-24  converted to the new socket_info lists (andrei)
+ *  2004-03-30  core dump is enabled by default
+ *              added support for increasing the open files limit    (andrei)
+ *  2004-04-28  sock_{user,group,uid,gid,mode} added
+ *              user2uid() & user2gid() added  (andrei)
+ *  2004-09-11  added timeout on children shutdown and final cleanup
+ *               (if it takes more than 60s => something is definitely wrong
+ *                => kill all or abort)  (andrei)
+ *              force a shm_unlock before cleaning-up, in case we have a
+ *               crashed childvwhich still holds the lock  (andrei)
+ *  2004-12-02  removed -p, extended -l to support [proto:]address[:port],
+ *               added parse_phostport, parse_proto (andrei)
+ *  2005-07-25  use sigaction for setting the signal handlers (andrei)
  */
 
 
@@ -77,6 +90,7 @@
 
 #include "config.h"
 #include "dprint.h"
+#include "daemonize.h"
 #include "route.h"
 #include "udp_server.h"
 #include "globals.h"
@@ -92,6 +106,7 @@
 #include "parser/parse_hname2.h"
 #include "parser/digest/digest_parser.h"
 #include "fifo_server.h"
+#include "unixsock_server.h"
 #include "name_alias.h"
 #include "hash_func.h"
 #include "pt.h"
@@ -111,103 +126,25 @@
 #ifdef DEBUG_DMALLOC
 #include <dmalloc.h>
 #endif
+#include "version.h"
 
-#ifndef DEV_RANDOM
-	#define DEV_RANDOM "/dev/urandom"
-#endif
+static char id[]="@(#) $Id: main.c,v 1.197.2.1 2005/07/25 16:56:24 andrei Exp $";
+static char* version=SER_FULL_VERSION;
+static char* flags=SER_COMPILE_FLAGS;
+char compiled[]= __TIME__ " " __DATE__ ;
 
-static char id[]="@(#) $Id: main.c,v 1.168.4.3 2004/06/28 15:41:21 andrei Exp $";
-static char version[]=  NAME " " VERSION " (" ARCH "/" OS ")" ;
-static char compiled[]= __TIME__ " " __DATE__ ;
-static char flags[]=
-"STATS:"
-#ifdef STATS
-"On"
-#else
-"Off"
-#endif
-#ifdef USE_IPV6
-", USE_IPV6"
-#endif
-#ifdef USE_TCP
-", USE_TCP"
-#endif
-#ifdef USE_TLS
-", USE_TLS"
-#endif
-#ifdef DISABLE_NAGLE
-", DISABLE_NAGLE"
-#endif
-#ifdef NO_DEBUG
-", NO_DEBUG"
-#endif
-#ifdef NO_LOG
-", NO_LOG"
-#endif
-#ifdef EXTRA_DEBUG
-", EXTRA_DEBUG"
-#endif
-#ifdef DNS_IP_HACK
-", DNS_IP_HACK"
-#endif
-#ifdef SHM_MEM
-", SHM_MEM"
-#endif
-#ifdef SHM_MMAP
-", SHM_MMAP"
-#endif
-#ifdef PKG_MALLOC
-", PKG_MALLOC"
-#endif
-#ifdef VQ_MALLOC
-", VQ_MALLOC"
-#endif
-#ifdef F_MALLOC
-", F_MALLOC"
-#endif
-#ifdef USE_SHM_MEM
-", USE_SHM_MEM"
-#endif
-#ifdef DBG_QM_MALLOC
-", DBG_QM_MALLOC"
-#endif
-#ifdef DEBUG_DMALLOC
-", DEBUG_DMALLOC"
-#endif
-#ifdef FAST_LOCK
-", FAST_LOCK"
-#ifdef BUSY_WAIT
-"-BUSY_WAIT"
-#endif
-#ifdef USE_PTHREAD_MUTEX
-", USE_PTHREAD_MUTEX"
-#endif
-#ifdef USE_POSIX_SEM
-", USE_POSIX_SEM"
-#endif
-#ifdef USE_SYSV_SEM
-", USE_SYSV_SEM"
-#endif
-#ifdef ADAPTIVE_WAIT
-"-ADAPTIVE_WAIT"
-#endif
-#ifdef NOSMP
-"-NOSMP"
-#endif
-#endif /*FAST_LOCK*/
-;
 
 static char help_msg[]= "\
 Usage: " NAME " -l address [-p port] [-l address [-p port]...] [options]\n\
 Options:\n\
     -f file      Configuration file (default " CFG_FILE ")\n\
     -c           Check configuration file for errors\n\
-    -p port      Listen on the specified port (default: 5060)\n\
-                  applies to the last address in -l and to all \n\
-                  following that do not have a corespponding -p\n\
     -l address   Listen on the specified address/interface (multiple -l\n\
-                  mean listening on more addresses). The default behaviour\n\
-                  is to listen on all the interfaces\n\
+                  mean listening on more addresses).  The address format is\n\
+                  [proto:]addr[:port], where proto=udp|tcp and \n\
+                  addr= host|ip_address|interface_name. E.g: -l locahost, \n\
+                  -l udp:127.0.0.1:5080, -l eth0:5062 The default behavior\n\
+                  is to listen on all the interfaces.\n\
     -n processes Number of child processes to fork per interface\n\
                   (default: 8)\n\
     -r           Use dns to check if is necessary to add a \"received=\"\n\
@@ -232,7 +169,9 @@ Options:\n\
     -u uid       Change uid \n\
     -g gid       Change gid \n\
     -P file      Create a pid file\n\
-    -i fifo_path Create a fifo (usefull for monitoring " NAME ") \n"
+    -G file      Create a pgid file\n\
+    -i fifo_path Create a fifo (useful for monitoring " NAME ") \n\
+    -x socket    Create a unix domain socket \n"
 #ifdef STATS
 "    -s file     File to which statistics is dumped (disabled otherwise)\n"
 #endif
@@ -255,7 +194,7 @@ void print_ct_constants()
 		BUF_SIZE );
 }
 
-/* debuging function */
+/* debugging function */
 /*
 void receive_stdin_loop()
 {
@@ -278,7 +217,7 @@ int own_pgid = 0; /* whether or not we have our own pgid (and it's ok
 					 to use kill(0, sig) */
 char* cfg_file = 0;
 unsigned int maxbuffer = MAX_RECV_BUFFER_SIZE; /* maximum buffer size we do
-												  not want to exceed durig the
+												  not want to exceed during the
 												  auto-probing procedure; may 
 												  be re-configured */
 int children_no = 0;			/* number of children processing requests */
@@ -289,7 +228,7 @@ int tcp_disable = 0; /* 1 if tcp is disabled */
 #ifdef USE_TLS
 int tls_disable = 0; /* 1 if tls is disabled */
 #endif
-struct process_table *pt=0;		/*array with childrens pids, 0= main proc,
+struct process_table *pt=0;		/*array with children pids, 0= main proc,
 									alloc'ed in shared mem if possible*/
 int sig_flag = 0;              /* last signal received */
 int debug = L_NOTICE;
@@ -325,10 +264,24 @@ char* user=0;
 char* group=0;
 int uid = 0;
 int gid = 0;
+char* sock_user=0;
+char* sock_group=0;
+int sock_uid= -1;
+int sock_gid= -1;
+int sock_mode= S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP; /* rw-rw---- */
+
+/* more config stuff */
+int disable_core_dump=0; /* by default enabled */
+int open_files_limit=-1; /* don't touch it by default */
 /* a hint to reply modules whether they should send reply
    to IP advertised in Via or IP from which a request came
 */
 int reply_to_via=0;
+
+#ifdef USE_MCAST
+int mcast_loopback = 0;
+int mcast_ttl = -1; /* if -1, don't touch it, use the default (usually 1) */
+#endif /* USE_MCAST */
 
 #if 0
 char* names[MAX_LISTEN];              /* our names */
@@ -336,17 +289,15 @@ int names_len[MAX_LISTEN];            /* lengths of the names*/
 struct ip_addr addresses[MAX_LISTEN]; /* our ips */
 int addresses_no=0;                   /* number of names/ips */
 #endif
-struct socket_info sock_info[MAX_LISTEN];/*all addresses we listen/send from*/
+struct socket_info* udp_listen=0;
 #ifdef USE_TCP
-struct socket_info tcp_info[MAX_LISTEN];/*all tcp addresses we listen on*/
+struct socket_info* tcp_listen=0;
 #endif
 #ifdef USE_TLS
-struct socket_info tls_info[MAX_LISTEN]; /* all tls addresses we listen on*/
+struct socket_info* tls_listen=0;
 #endif
-int sock_no=0; /* number of addresses/open sockets*/
 struct socket_info* bind_address=0; /* pointer to the crt. proc.
 									 listening address*/
-int bind_idx; /* same as above but index in the bound[] array */
 struct socket_info* sendipv4; /* ipv4 socket to use when msg. comes from ipv6*/
 struct socket_info* sendipv6; /* same as above for ipv6 */
 #ifdef USE_TCP
@@ -375,7 +326,7 @@ int process_no = 0;
 int cfg_errors=0;
 
 /* shared memory (in MB) */
-unsigned int shm_mem_size=SHM_MEM_SIZE * 1024 * 1024;
+unsigned long shm_mem_size=SHM_MEM_SIZE * 1024 * 1024;
 
 /* export command-line to anywhere else */
 int my_argc;
@@ -392,13 +343,17 @@ extern int yyparse();
 int is_main=1; /* flag = is this the  "main" process? */
 
 char* pid_file = 0; /* filename as asked by use */
+char* pgid_file = 0;
 
 
-
-/* callit before exiting; if show_status==1, mem status is displayed */
+/* call it before exiting; if show_status==1, mem status is displayed */
 void cleanup(show_status)
 {
 	/*clean-up*/
+	if (mem_lock) 
+		shm_unlock(); /* hack: force-unlock the shared memory lock in case
+					 some process crashed and let it locked; this will 
+					 allow an almost gracious shutdown */
 	destroy_modules();
 #ifdef USE_TCP
 	destroy_tcp();
@@ -407,6 +362,7 @@ void cleanup(show_status)
 	destroy_tls();
 #endif
 	destroy_timer();
+	close_unixsock_server();
 	destroy_fifo();
 	destroy_script_cb();
 #ifdef PKG_MALLOC
@@ -426,132 +382,8 @@ void cleanup(show_status)
 	shm_mem_destroy();
 #endif
 	if (pid_file) unlink(pid_file);
+	if (pgid_file) unlink(pgid_file);
 }
-
-
-
-/* daemon init, return 0 on success, -1 on error */
-int daemonize(char*  name)
-{
-	FILE *pid_stream;
-	pid_t pid;
-	int r, p;
-
-
-	p=-1;
-
-	/* flush std file descriptors to avoid flushes after fork
-	 *  (same message appearing multiple times)
-	 *  and switch to unbuffered
-	 */
-	setbuf(stdout, 0);
-	setbuf(stderr, 0);
-	if (chroot_dir&&(chroot(chroot_dir)<0)){
-		LOG(L_CRIT, "Cannot chroot to %s: %s\n", chroot_dir, strerror(errno));
-		goto error;
-	}
-	
-	if (chdir(working_dir)<0){
-		LOG(L_CRIT,"cannot chdir to %s: %s\n", working_dir, strerror(errno));
-		goto error;
-	}
-
-	if (gid&&(setgid(gid)<0)){
-		LOG(L_CRIT, "cannot change gid to %d: %s\n", gid, strerror(errno));
-		goto error;
-	}
-	
-	if(uid&&(setuid(uid)<0)){
-		LOG(L_CRIT, "cannot change uid to %d: %s\n", uid, strerror(errno));
-		goto error;
-	}
-
-	/* fork to become!= group leader*/
-	if ((pid=fork())<0){
-		LOG(L_CRIT, "Cannot fork:%s\n", strerror(errno));
-		goto error;
-	}else if (pid!=0){
-		/* parent process => exit*/
-		exit(0);
-	}
-	/* become session leader to drop the ctrl. terminal */
-	if (setsid()<0){
-		LOG(L_WARN, "setsid failed: %s\n",strerror(errno));
-	}else{
-		own_pgid=1; /* we have our own process group */
-	}
-	/* fork again to drop group  leadership */
-	if ((pid=fork())<0){
-		LOG(L_CRIT, "Cannot  fork:%s\n", strerror(errno));
-		goto error;
-	}else if (pid!=0){
-		/*parent process => exit */
-		exit(0);
-	}
-
-	/* added by noh: create a pid file for the main process */
-	if (pid_file!=0){
-		
-		if ((pid_stream=fopen(pid_file, "r"))!=NULL){
-			fscanf(pid_stream, "%d", &p);
-			fclose(pid_stream);
-			if (p==-1){
-				LOG(L_CRIT, "pid file %s exists, but doesn't contain a valid"
-					" pid number\n", pid_file);
-				goto error;
-			}
-			if (kill((pid_t)p, 0)==0 || errno==EPERM){
-				LOG(L_CRIT, "running process found in the pid file %s\n",
-					pid_file);
-				goto error;
-			}else{
-				LOG(L_WARN, "pid file contains old pid, replacing pid\n");
-			}
-		}
-		pid=getpid();
-		if ((pid_stream=fopen(pid_file, "w"))==NULL){
-			LOG(L_WARN, "unable to create pid file %s: %s\n", 
-				pid_file, strerror(errno));
-			goto error;
-		}else{
-			fprintf(pid_stream, "%i\n", (int)pid);
-			fclose(pid_stream);
-		}
-	}
-	
-	/* try to replace stdin, stdout & stderr with /dev/null */
-	if (freopen("/dev/null", "r", stdin)==0){
-		LOG(L_ERR, "unable to replace stdin with /dev/null: %s\n",
-				strerror(errno));
-		/* continue, leave it open */
-	};
-	if (freopen("/dev/null", "w", stdout)==0){
-		LOG(L_ERR, "unable to replace stdout with /dev/null: %s\n",
-				strerror(errno));
-		/* continue, leave it open */
-	};
-	/* close stderr only if log_stderr=0 */
-	if ((!log_stderr) &&(freopen("/dev/null", "w", stderr)==0)){
-		LOG(L_ERR, "unable to replace stderr with /dev/null: %s\n",
-				strerror(errno));
-		/* continue, leave it open */
-	};
-	
-	/* close any open file descriptors */
-	closelog();
-	for (r=3;r<MAX_FD; r++){
-			close(r);
-	}
-	
-	if (log_stderr==0)
-		openlog(name, LOG_PID|LOG_CONS, log_facility);
-		/* LOG_CONS, LOG_PERRROR ? */
-	return  0;
-
-error:
-	return -1;
-}
-
 
 
 /* tries to send a signal to all our processes
@@ -569,10 +401,56 @@ error:
 static void kill_all_children(int signum)
 {
 	int r;
+
 	if (own_pgid) kill(0, signum);
 	else if (pt)
 		for (r=1; r<process_count(); r++)
 			if (pt[r].pid) kill(pt[r].pid, signum);
+}
+
+
+
+#ifdef USE_SIGACTION
+static void (*set_sig_h(int sig, void (*handler) (int) ))(int)
+{
+	struct sigaction act;
+	struct sigaction old;
+	
+	memset(&act, 0, sizeof(act));
+	act.sa_handler=handler;
+	/*
+	sigemptyset(&act.sa_mask);
+	act.sa_flags=0;
+	*/
+	LOG(L_CRIT, "setting signal %d to %p\n", sig, handler);
+	/* sa_sigaction not set, we use sa_hanlder instead */ 
+	return (sigaction (sig, &act, &old)==-1)?SIG_ERR:old.sa_handler;
+}
+#else
+#define set_sig_h signal
+#endif
+
+
+
+/* if this handler is called, a critical timeout has occured while
+ * waiting for the children to finish => we should kill everything and exit */
+static void sig_alarm_kill(int signo)
+{
+	kill_all_children(SIGKILL); /* this will kill the whole group
+								  including "this" process;
+								  for debugging replace with SIGABRT
+								  (but warning: it might generate lots
+								   of cores) */
+}
+
+
+/* like sig_alarm_kill, but the timeout has occured when cleaning up
+ * => try to leave a core for future diagnostics */
+static void sig_alarm_abort(int signo)
+{
+	/* LOG is not signal safe, but who cares, we are abort-ing anyway :-) */
+	LOG(L_CRIT, "BUG: shutdown timeout triggered, dying...");
+	abort();
 }
 
 
@@ -650,8 +528,17 @@ void handle_sigs()
 #endif
 			/* exit */
 			kill_all_children(SIGTERM);
+			if (set_sig_h(SIGALRM, sig_alarm_kill) == SIG_ERR ) {
+				LOG(L_ERR, "ERROR: could not install SIGALARM handler\n");
+				/* continue, the process will die anyway if no
+				 * alarm is installed which is exactly what we want */
+			}
+			alarm(60); /* 1 minute close timeout */
 			while(wait(0) > 0); /* wait for all the children to terminate*/
+			set_sig_h(SIGALRM, sig_alarm_abort);
 			cleanup(1); /* cleanup & show status*/
+			alarm(0);
+			set_sig_h(SIGALRM, SIG_IGN);
 			DBG("terminating due to SIGCHLD\n");
 			exit(0);
 			break;
@@ -710,7 +597,7 @@ static void sig_usr(int signo)
 					break;
 			case SIGCHLD:
 #ifndef 			STOP_JIRIS_CHANGES
-					DBG("INFO: SIGCHLD received: "
+					DBG("SIGCHLD received: "
 						"we do not worry about grand-children\n");
 #else
 					exit(0); /* terminate if one child died */
@@ -725,33 +612,32 @@ static void sig_usr(int signo)
 int install_sigs()
 {
 	/* added by jku: add exit handler */
-	if (signal(SIGINT, sig_usr) == SIG_ERR ) {
+	if (set_sig_h(SIGINT, sig_usr) == SIG_ERR ) {
 		DPrint("ERROR: no SIGINT signal handler can be installed\n");
 		goto error;
 	}
 	/* if we debug and write to a pipe, we want to exit nicely too */
-	if (signal(SIGPIPE, sig_usr) == SIG_ERR ) {
+	if (set_sig_h(SIGPIPE, sig_usr) == SIG_ERR ) {
 		DPrint("ERROR: no SIGINT signal handler can be installed\n");
 		goto error;
 	}
-	
-	if (signal(SIGUSR1, sig_usr)  == SIG_ERR ) {
+	if (set_sig_h(SIGUSR1, sig_usr)  == SIG_ERR ) {
 		DPrint("ERROR: no SIGUSR1 signal handler can be installed\n");
 		goto error;
 	}
-	if (signal(SIGCHLD , sig_usr)  == SIG_ERR ) {
+	if (set_sig_h(SIGCHLD , sig_usr)  == SIG_ERR ) {
 		DPrint("ERROR: no SIGCHLD signal handler can be installed\n");
 		goto error;
 	}
-	if (signal(SIGTERM , sig_usr)  == SIG_ERR ) {
+	if (set_sig_h(SIGTERM , sig_usr)  == SIG_ERR ) {
 		DPrint("ERROR: no SIGTERM signal handler can be installed\n");
 		goto error;
 	}
-	if (signal(SIGHUP , sig_usr)  == SIG_ERR ) {
+	if (set_sig_h(SIGHUP , sig_usr)  == SIG_ERR ) {
 		DPrint("ERROR: no SIGHUP signal handler can be installed\n");
 		goto error;
 	}
-	if (signal(SIGUSR2 , sig_usr)  == SIG_ERR ) {
+	if (set_sig_h(SIGUSR2 , sig_usr)  == SIG_ERR ) {
 		DPrint("ERROR: no SIGUSR2 signal handler can be installed\n");
 		goto error;
 	}
@@ -762,19 +648,186 @@ error:
 
 
 
+/* converts a username into uid:gid,
+ * returns -1 on error & 0 on success */
+static int user2uid(int* uid, int* gid, char* user)
+{
+	char* tmp;
+	struct passwd *pw_entry;
+	
+	if (user){
+		*uid=strtol(user, &tmp, 10);
+		if ((tmp==0) ||(*tmp)){
+			/* maybe it's a string */
+			pw_entry=getpwnam(user);
+			if (pw_entry==0){
+				goto error;
+			}
+			*uid=pw_entry->pw_uid;
+			if (gid) *gid=pw_entry->pw_gid;
+		}
+		return 0;
+	}
+error:
+	return -1;
+}
+
+
+
+/* converts a group name into a gid
+ * returns -1 on error, 0 on success */
+static int group2gid(int* gid, char* group)
+{
+	char* tmp;
+	struct group  *gr_entry;
+	
+	if (group){
+		*gid=strtol(group, &tmp, 10);
+		if ((tmp==0) ||(*tmp)){
+			/* maybe it's a string */
+			gr_entry=getgrnam(group);
+			if (gr_entry==0){
+				goto error;
+			}
+			*gid=gr_entry->gr_gid;
+		}
+		return 0;
+	}
+error:
+	return -1;
+}
+
+
+
+/* returns -1 on error, 0 on success
+ * sets proto */
+static int parse_proto(unsigned char* s, long len, int* proto)
+{
+#define PROTO2UINT(a, b, c) ((	(((unsigned int)(a))<<16)+ \
+								(((unsigned int)(b))<<8)+  \
+								((unsigned int)(c)) ) | 0x20202020)
+	unsigned int i;
+	if (len!=3) return -1;
+	i=PROTO2UINT(s[0], s[1], s[2]);
+	switch(i){
+		case PROTO2UINT('u', 'd', 'p'):
+			*proto=PROTO_UDP;
+			break;
+#ifdef USE_TCP
+		case PROTO2UINT('t', 'c', 'p'):
+			*proto=PROTO_TCP;
+			break;
+#ifdef USE_TLS
+		case PROTO2UINT('t', 'l', 's'):
+			*proto=PROTO_TLS;
+			break;
+#endif
+#endif
+		default:
+			return -1;
+	}
+	return 0;
+}
+
+
+
+/*
+ * parses [proto:]host[:port]
+ * where proto= udp|tcp|tls
+ * returns 0 on success and -1 on failure
+ */
+static int parse_phostport(char* s, char** host, int* hlen, int* port,
+							int* proto)
+{
+	char* first; /* first ':' occurrence */
+	char* second; /* second ':' occurrence */
+	char* p;
+	int bracket;
+	char* tmp;
+	
+	first=second=0;
+	bracket=0;
+	
+	/* find the first 2 ':', ignoring possible ipv6 addresses
+	 * (substrings between [])
+	 */
+	for(p=s; *p; p++){
+		switch(*p){
+			case '[':
+				bracket++;
+				if (bracket>1) goto error_brackets;
+				break;
+			case ']':
+				bracket--;
+				if (bracket<0) goto error_brackets;
+				break;
+			case ':':
+				if (bracket==0){
+					if (first==0) first=p;
+					else if( second==0) second=p;
+					else goto error_colons;
+				}
+				break;
+		}
+	}
+	if (p==s) return -1;
+	if (*(p-1)==':') goto error_colons;
+	
+	if (first==0){ /* no ':' => only host */
+		*host=s;
+		*hlen=(int)(p-s);
+		*port=0;
+		*proto=0;
+		return 0;
+	}
+	if (second){ /* 2 ':' found => check if valid */
+		if (parse_proto((unsigned char*)s, first-s, proto)<0) goto error_proto;
+		*port=strtol(second+1, &tmp, 10);
+		if ((tmp==0)||(*tmp)||(tmp==second+1)) goto error_port;
+		*host=first+1;
+		*hlen=(int)(second-*host);
+		return 0;
+	}
+	/* only 1 ':' found => it's either proto:host or host:port */
+	*port=strtol(first+1, &tmp, 10);
+	if ((tmp==0)||(*tmp)||(tmp==first+1)){
+		/* invalid port => it's proto:host */
+		if (parse_proto((unsigned char*)s, first-s, proto)<0) goto error_proto;
+		*port=0;
+		*host=first+1;
+		*hlen=(int)(p-*host);
+	}else{
+		/* valid port => its host:port */
+		*proto=0;
+		*host=s;
+		*hlen=(int)(first-*host);
+	}
+	return 0;
+error_brackets:
+	LOG(L_ERR, "ERROR: parse_phostport: too many brackets in %s\n", s);
+	return -1;
+error_colons:
+	LOG(L_ERR, "ERROR: parse_phostport: too many colons in %s\n", s);
+	return -1;
+error_proto:
+	LOG(L_ERR, "ERROR: parse_phostport: bad protocol in %s\n", s);
+	return -1;
+error_port:
+	LOG(L_ERR, "ERROR: parse_phostport: bad port number in %s\n", s);
+	return -1;
+}
+
+
+
 /* main loop */
 int main_loop()
 {
-	int r, i;
+	int  i;
 	pid_t pid;
+	struct socket_info* si;
 #ifdef USE_TCP
 	int sockfd[2];
 #endif
-#ifdef USE_TLS
-	char* tmp;
-	int len;
-#endif
-		
 
 	/* one "main" process and n children handling i/o */
 
@@ -783,17 +836,33 @@ int main_loop()
 #ifdef STATS
 		setstats( 0 );
 #endif
+		if (udp_listen==0){
+			LOG(L_ERR, "ERROR: no fork mode requires at least one"
+					" udp listen address, exiting...\n");
+			goto error;
+		}
 		/* only one address, we ignore all the others */
-		if (udp_init(&sock_info[0])==-1) goto error;
-		bind_address=&sock_info[0];
+		if (udp_init(udp_listen)==-1) goto error;
+		bind_address=udp_listen;
 		sendipv4=bind_address;
 		sendipv6=bind_address; /*FIXME*/
-		bind_idx=0;
-		if (sock_no>1){
+		if (udp_listen->next){
 			LOG(L_WARN, "WARNING: using only the first listen address"
 						" (no fork)\n");
 		}
-
+		/* initialize fifo server -- we need to open the fifo before
+		 * do_suid() and start the fifo server after all the socket 
+		 * are initialized, to inherit them*/
+		if (init_fifo_server()<0) {
+			LOG(L_ERR, "initializing fifo server failed\n");
+			goto error;
+		}
+		 /* Initialize Unix domain socket server */
+		if (init_unixsock_socket()<0) {
+			LOG(L_ERR, "Error while creating unix domain sockets\n");
+			goto error;
+		}
+		if (do_suid()==-1) goto error; /* try to drop privileges */
 		/* process_no now initialized to zero -- increase from now on
 		   as new processes are forked (while skipping 0 reserved for main 
 		*/
@@ -828,16 +897,24 @@ int main_loop()
 						timer_ticker();
 					}
 				}else{
-						pt[process_no].pid=pid; /*should be shared mem anway*/
+						pt[process_no].pid=pid; /*should be shared mem anyway*/
 						strncpy(pt[process_no].desc, "timer", MAX_PT_DESC );
 				}
 		}
 
-		/* if configured to do so, start a server for accepting FIFO commands */
-		if (open_fifo_server()<0) {
-			LOG(L_ERR, "opening fifo server failed\n");
+		/* if configured, start a server for accepting FIFO commands,
+		 * we need to do it after all the sockets are initialized, to 
+		 * inherit them*/
+		if (start_fifo_server()<0) {
+			LOG(L_ERR, "starting fifo server failed\n");
 			goto error;
 		}
+
+		if (init_unixsock_children()<0) {
+			LOG(L_ERR, "Error while initializing Unix domain socket server\n");
+			goto error;
+		}
+
 		/* main process, receive loop */
 		process_no=0; /*main process number*/
 		pt[process_no].pid=getpid();
@@ -864,66 +941,88 @@ int main_loop()
 		/* process_no now initialized to zero -- increase from now on
 		   as new processes are forked (while skipping 0 reserved for main )
 		*/
-		for(r=0;r<sock_no;r++){
+
+		for(si=udp_listen;si;si=si->next){
 			/* create the listening socket (for each address)*/
 			/* udp */
-			if (udp_init(&sock_info[r])==-1) goto error;
+			if (udp_init(si)==-1) goto error;
 			/* get first ipv4/ipv6 socket*/
-			if ((sock_info[r].address.af==AF_INET)&&
-					((sendipv4==0)||(sendipv4->is_lo)))
-				sendipv4=&sock_info[r];
+			if ((si->address.af==AF_INET)&&
+					((sendipv4==0)||(sendipv4->flags&SI_IS_LO)))
+				sendipv4=si;
 	#ifdef USE_IPV6
-			if((sendipv6==0)&&(sock_info[r].address.af==AF_INET6))
-				sendipv6=&sock_info[r];
+			if((sendipv6==0)&&(si->address.af==AF_INET6))
+				sendipv6=si;
 	#endif
+		}
 #ifdef USE_TCP
-			if (!tcp_disable){
-				tcp_info[r]=sock_info[r]; /* copy the sockets */
+		if (!tcp_disable){
+			for(si=tcp_listen; si; si=si->next){
 				/* same thing for tcp */
-				if (tcp_init(&tcp_info[r])==-1)  goto error;
+				if (tcp_init(si)==-1)  goto error;
 				/* get first ipv4/ipv6 socket*/
-				if ((tcp_info[r].address.af==AF_INET)&&
-						((sendipv4_tcp==0)||(sendipv4_tcp->is_lo)))
-					sendipv4_tcp=&tcp_info[r];
+				if ((si->address.af==AF_INET)&&
+						((sendipv4_tcp==0)||(sendipv4_tcp->flags&SI_IS_LO)))
+					sendipv4_tcp=si;
 		#ifdef USE_IPV6
-				if((sendipv6_tcp==0)&&(tcp_info[r].address.af==AF_INET6))
-					sendipv6_tcp=&tcp_info[r];
+				if((sendipv6_tcp==0)&&(si->address.af==AF_INET6))
+					sendipv6_tcp=si;
 		#endif
 			}
+		}
 #ifdef USE_TLS
-			if (!tls_disable){
-				tls_info[r]=sock_info[r]; /* copy the sockets */
-				/* fix the port number -- there is no way so far to set-up
-				 * individual tls port numbers */
-				tls_info[r].port_no=tls_port_no; /* FIXME: */
-				tmp=int2str(tls_info[r].port_no, &len);
-				/* we don't need to free the previous content, is uesd
-				 * by tcp & udp! */
-				tls_info[r].port_no_str.s=(char*)pkg_malloc(len+1);
-				if (tls_info[r].port_no_str.s==0){
-					LOG(L_CRIT, "memory allocation failure\n");
-					goto error;
-				}
-				strncpy(tls_info[r].port_no_str.s, tmp, len+1);
-				tls_info[r].port_no_str.len=len;
-				
+		if (!tls_disable){
+			for(si=tls_listen; si; si=si->next){
 				/* same as for tcp*/
-				if (tls_init(&tls_info[r])==-1)  goto error;
+				if (tls_init(si)==-1)  goto error;
 				/* get first ipv4/ipv6 socket*/
-				if ((tls_info[r].address.af==AF_INET)&&
-						((sendipv4_tls==0)||(sendipv4_tls->is_lo)))
-					sendipv4_tls=&tls_info[r];
+				if ((si->address.af==AF_INET)&&
+						((sendipv4_tls==0)||(sendipv4_tls->flags&SI_IS_LO)))
+					sendipv4_tls=si;
 		#ifdef USE_IPV6
-				if((sendipv6_tls==0)&&(tls_info[r].address.af==AF_INET6))
-					sendipv6_tls=&tls_info[r];
+				if((sendipv6_tls==0)&&(si->address.af==AF_INET6))
+					sendipv6_tls=si;
 		#endif
 			}
+		}
 #endif /* USE_TLS */
 #endif /* USE_TCP */
-			/* all procs should have access to all the sockets (for sending)
-			 * so we open all first*/
+
+		/* initialize fifo server -- we need to open the fifo before
+		 * do_suid() and start the fifo server after all the socket 
+		 * are initialized, to inherit them*/
+		if (init_fifo_server()<0) {
+			LOG(L_ERR, "initializing fifo server failed\n");
+			goto error;
 		}
-		for(r=0; r<sock_no;r++){
+		 /* Initialize Unix domain socket server */
+		     /* Create the unix domain sockets */
+		if (init_unixsock_socket()<0) {
+			LOG(L_ERR, "ERROR: Could not create unix domain sockets\n");
+			goto error;
+		}
+
+			/* all processes should have access to all the sockets (for sending)
+			 * so we open all first*/
+		if (do_suid()==-1) goto error; /* try to drop privileges */
+
+		/* if configured, start a server for accepting FIFO commands,
+		 * we need to do it after all the sockets are initialized, to 
+		 * inherit them*/
+		if (start_fifo_server()<0) {
+			LOG(L_ERR, "starting fifo server failed\n");
+			goto error;
+		}
+		     /* Spawn children listening on unix domain socket if and only if
+		      * the unix domain socket server has not been disabled (i == 0)
+		      */
+		if (init_unixsock_children()<0) {
+			LOG(L_ERR, "ERROR: Could not initialize unix domain socket server\n");
+			goto error;
+		}
+
+		/* udp processes */
+		for(si=udp_listen; si; si=si->next){
 			for(i=0;i<children_no;i++){
 				process_no++;
 #ifdef USE_TCP
@@ -946,8 +1045,7 @@ int main_loop()
 						unix_tcp_sock=sockfd[1];
 					}
 #endif
-					bind_address=&sock_info[r]; /* shortcut */
-					bind_idx=r;
+					bind_address=si; /* shortcut */
 					if (init_child(i + 1) < 0) {
 						LOG(L_ERR, "init_child failed\n");
 						goto error;
@@ -959,8 +1057,8 @@ int main_loop()
 				}else{
 						pt[process_no].pid=pid; /*should be in shared mem.*/
 						snprintf(pt[process_no].desc, MAX_PT_DESC,
-							"receiver child=%d sock=%d @ %s:%s", i, r, 	
-							sock_info[r].name.s, sock_info[r].port_no_str.s );
+							"receiver child=%d sock= %s:%s", i, 	
+							si->name.s, si->port_no_str.s );
 #ifdef USE_TCP
 						if (!tcp_disable){
 							close(sockfd[1]);
@@ -978,14 +1076,7 @@ int main_loop()
 
 	/*this is the main process*/
 	bind_address=0;				/* main proc -> it shouldn't send anything, */
-	bind_idx=0;					/* if it does get_send_sock should return
-	                               a good socket */
 	
-	/* if configured to do so, start a server for accepting FIFO commands */
-	if (open_fifo_server()<0) {
-		LOG(L_ERR, "opening fifo server failed\n");
-		goto error;
-	}
 
 #ifdef USE_TCP
 	/* if we are using tcp we always need the timer */
@@ -1023,7 +1114,7 @@ int main_loop()
 			}
 			
 			for(;;){
-				/* debug:  instead of doing something usefull */
+				/* debug:  instead of doing something useful */
 				/* (placeholder for timers, etc.) */
 				sleep(TIMER_TICK);
 				/* if we received a signal => TIMER_TICK may have not elapsed*/
@@ -1079,8 +1170,9 @@ int main_loop()
 #endif
 	/*DEBUG- remove it*/
 #ifdef DEBUG
-	fprintf(stderr, "\n% 3d processes (%3d), % 3d children * % 3d listening addresses"
-			"+ main + fifo %s\n", process_no+1, process_count(), children_no, sock_no,
+	fprintf(stderr, "\n% 3d processes (%3d), % 3d children * "
+			"listening addresses + tcp listeners + tls listeners"
+			"+ main + fifo %s\n", process_no+1, process_count(), children_no,
 			(timer_list)?"+ timer":"");
 	for (r=0; r<=process_no; r++){
 		fprintf(stderr, "% 3d   % 5d - %s\n", r, pt[r].pid, pt[r].desc);
@@ -1102,138 +1194,13 @@ int main_loop()
 	
 	/*return 0; */
  error:
+	is_main=1;  /* if we are here, we are the "main process",
+				  any forked children should exit with exit(-1) and not
+				  ever use return */
 	return -1;
 
 }
 
-/* add all family type addresses of interface if_name to the socket_info array
- * if if_name==0, adds all addresses on all interfaces
- * WARNING: it only works with ipv6 addresses on FreeBSD
- * return: -1 on error, 0 on success
- */
-int add_interfaces(char* if_name, int family, unsigned short port)
-{
-	struct ifconf ifc;
-	struct ifreq ifr;
-	struct ifreq ifrcopy;
-	char*  last;
-	char* p;
-	int size;
-	int lastlen;
-	int s;
-	char* tmp;
-	struct ip_addr addr;
-	int ret;
-
-#ifdef HAVE_SOCKADDR_SA_LEN
-	#ifndef MAX
-		#define MAX(a,b) ( ((a)>(b))?(a):(b))
-	#endif
-#endif
-	/* ipv4 or ipv6 only*/
-	s=socket(family, SOCK_DGRAM, 0);
-	ret=-1;
-	lastlen=0;
-	ifc.ifc_req=0;
-	for (size=10; ; size*=2){
-		ifc.ifc_len=size*sizeof(struct ifreq);
-		ifc.ifc_req=(struct ifreq*) pkg_malloc(size*sizeof(struct ifreq));
-		if (ifc.ifc_req==0){
-			fprintf(stderr, "memory allocation failure\n");
-			goto error;
-		}
-		if (ioctl(s, SIOCGIFCONF, &ifc)==-1){
-			if(errno==EBADF) return 0; /* invalid descriptor => no such ifs*/
-			fprintf(stderr, "ioctl failed: %s\n", strerror(errno));
-			goto error;
-		}
-		if  ((lastlen) && (ifc.ifc_len==lastlen)) break; /*success,
-														   len not changed*/
-		lastlen=ifc.ifc_len;
-		/* try a bigger array*/
-		pkg_free(ifc.ifc_req);
-	}
-	
-	last=(char*)ifc.ifc_req+ifc.ifc_len;
-	for(p=(char*)ifc.ifc_req; p<last;
-			p+=(sizeof(ifr.ifr_name)+
-			#ifdef  HAVE_SOCKADDR_SA_LEN
-				MAX(ifr.ifr_addr.sa_len, sizeof(struct sockaddr))
-			#else
-				( (ifr.ifr_addr.sa_family==AF_INET)?
-					sizeof(struct sockaddr_in):
-					((ifr.ifr_addr.sa_family==AF_INET6)?
-						sizeof(struct sockaddr_in6):sizeof(struct sockaddr)) )
-			#endif
-				)
-		)
-	{
-		/* copy contents into ifr structure
-		 * warning: it might be longer (e.g. ipv6 address) */
-		memcpy(&ifr, p, sizeof(ifr));
-		if (ifr.ifr_addr.sa_family!=family){
-			/*printf("strange family %d skipping...\n",
-					ifr->ifr_addr.sa_family);*/
-			continue;
-		}
-		
-		/*get flags*/
-		ifrcopy=ifr;
-		if (ioctl(s, SIOCGIFFLAGS,  &ifrcopy)!=-1){ /* ignore errors */
-			/* ignore down ifs only if listening on all of them*/
-			if (if_name==0){ 
-				/* if if not up, skip it*/
-				if (!(ifrcopy.ifr_flags & IFF_UP)) continue;
-			}
-		}
-		
-		
-		
-		if ((if_name==0)||
-			(strncmp(if_name, ifr.ifr_name, sizeof(ifr.ifr_name))==0)){
-			
-				/*add address*/
-			if (sock_no<MAX_LISTEN){
-				sockaddr2ip_addr(&addr, 
-					(struct sockaddr*)(p+(long)&((struct ifreq*)0)->ifr_addr));
-				if ((tmp=ip_addr2a(&addr))==0) goto error;
-				/* fill the strings*/
-				sock_info[sock_no].name.s=(char*)pkg_malloc(strlen(tmp)+1);
-				if(sock_info[sock_no].name.s==0){
-					fprintf(stderr, "Out of memory.\n");
-					goto error;
-				}
-				/* fill in the new name and port */
-				sock_info[sock_no].name.len=strlen(tmp);
-				strncpy(sock_info[sock_no].name.s, tmp, 
-							sock_info[sock_no].name.len+1);
-				sock_info[sock_no].port_no=port;
-				/* mark if loopback */
-				if (ifrcopy.ifr_flags & IFF_LOOPBACK) 
-					sock_info[sock_no].is_lo=1;
-				sock_no++;
-				ret=0;
-			}else{
-				fprintf(stderr, "Too many addresses (max %d)\n", MAX_LISTEN);
-				goto error;
-			}
-		}
-			/*
-			printf("%s:\n", ifr->ifr_name);
-			printf("        ");
-			print_sockaddr(&(ifr->ifr_addr));
-			printf("        ");
-			ls_ifflags(ifr->ifr_name, family, options);
-			printf("\n");*/
-	}
-	pkg_free(ifc.ifc_req); /*clean up*/
-	close(s);
-	return  ret;
-error:
-	if (ifc.ifc_req) pkg_free(ifc.ifc_req);
-	close(s);
-	return -1;
-}
 
 
 
@@ -1241,17 +1208,13 @@ int main(int argc, char** argv)
 {
 
 	FILE* cfg_stream;
-	struct hostent* he;
-	int c,r,t;
+	int c,r;
 	char *tmp;
-	char** h;
-	struct host_alias* a;
-	struct utsname myname;
+	int tmp_len;
+	int port;
+	int proto;
 	char *options;
-	int len;
 	int ret;
-	struct passwd *pw_entry;
-	struct group  *gr_entry;
 	unsigned int seed;
 	int rfd;
 
@@ -1267,9 +1230,6 @@ int main(int argc, char** argv)
 	fprintf(stderr, "WARNING: ser startup: "
 		"DBG_MSG_QA enabled, ser may exit abruptly\n");
 #endif
-#ifndef NO_DEBUG
-	openlog("ser", LOG_PID, LOG_USER);
-#endif
 
 
 
@@ -1279,7 +1239,7 @@ int main(int argc, char** argv)
 #ifdef STATS
 	"s:"
 #endif
-	"f:cp:m:b:l:n:N:rRvdDETVhw:t:u:g:P:i:";
+	"f:cm:b:l:n:N:rRvdDETVhw:t:u:g:P:G:i:x:";
 	
 	while((c=getopt(argc,argv,options))!=-1){
 		switch(c){
@@ -1295,15 +1255,6 @@ int main(int argc, char** argv)
 					stat_file=optarg;
 				#endif
 					break;
-			case 'p':
-					port_no=strtol(optarg, &tmp, 10);
-					if (tmp &&(*tmp)){
-						fprintf(stderr, "bad port number: -p %s\n", optarg);
-						goto error;
-					}
-					if (sock_no>0) sock_info[sock_no-1].port_no=port_no;
-					break;
-
 			case 'm':
 					shm_mem_size=strtol(optarg, &tmp, 10) * 1024 * 1024;
 					if (tmp &&(*tmp)){
@@ -1311,7 +1262,7 @@ int main(int argc, char** argv)
 										optarg);
 						goto error;
 					};
-					LOG(L_INFO, "ser: shared memory allocated: %d MByte\n",
+					LOG(L_INFO, "ser: shared memory: %ld bytes\n",
 									shm_mem_size );
 					break;
 
@@ -1324,24 +1275,16 @@ int main(int argc, char** argv)
 					}
 					break;
 			case 'l':
+					if (parse_phostport(optarg, &tmp, &tmp_len,
+											&port, &proto)<0){
+						fprintf(stderr, "bad -l address specifier: %s\n",
+										optarg);
+						goto error;
+					}
+					tmp[tmp_len]=0; /* null terminate the host */
 					/* add a new addr. to our address list */
-					if (sock_no < MAX_LISTEN){
-						sock_info[sock_no].name.s=
-										(char*)pkg_malloc(strlen(optarg)+1);
-						if (sock_info[sock_no].name.s==0){
-							fprintf(stderr, "Out of memory.\n");
-							goto error;
-						}
-						strncpy(sock_info[sock_no].name.s, optarg,
-												strlen(optarg)+1);
-						sock_info[sock_no].name.len=strlen(optarg);
-						/* set default port */
-						sock_info[sock_no].port_no=port_no;
-						sock_no++;
-					}else{
-						fprintf(stderr, 
-									"Too many addresses (max. %d).\n",
-									MAX_LISTEN);
+					if (add_listen_iface(tmp, port, proto, 0)!=0){
+						fprintf(stderr, "failed to add new listen address\n");
 						goto error;
 					}
 					break;
@@ -1419,8 +1362,14 @@ int main(int argc, char** argv)
 			case 'P':
 					pid_file=optarg;
 					break;
+		        case 'G':
+				        pgid_file=optarg;
+				        break;
 			case 'i':
 					fifo=optarg;
+					break;
+			case 'x':
+					unixsock_name=optarg;
 					break;
 			case '?':
 					if (isprint(optopt))
@@ -1452,19 +1401,19 @@ int main(int argc, char** argv)
 	}
 
 	/* seed the prng */
-	/* try to use /dev/random if possible */
+	/* try to use /dev/urandom if possible */
 	seed=0;
-	if ((rfd=open(DEV_RANDOM, O_RDONLY))!=-1){
+	if ((rfd=open("/dev/urandom", O_RDONLY))!=-1){
 try_again:
 		if (read(rfd, (void*)&seed, sizeof(seed))==-1){
 			if (errno==EINTR) goto try_again; /* interrupted by signal */
-			LOG(L_WARN, "WARNING: could not read from " DEV_RANDOM " (%d)\n",
+			LOG(L_WARN, "WARNING: could not read from /dev/urandom (%d)\n",
 						errno);
 		}
-		DBG("read %u from " DEV_RANDOM "\n", seed);
+		DBG("read %u from /dev/urandom\n", seed);
 			close(rfd);
 	}else{
-		LOG(L_WARN, "WARNING: could not open " DEV_RANDOM " (%d)\n", errno);
+		LOG(L_WARN, "WARNING: could not open /dev/urandom (%d)\n", errno);
 	}
 	seed+=getpid()+time(0);
 	DBG("seeding PRNG with %u\n", seed);
@@ -1472,26 +1421,12 @@ try_again:
 	DBG("test random number %u\n", rand());
 	
 	
-
-
-	/*init shm mallocs (before parsing cfg !)
-	 *  this must be here to allow setting shm mem size from the command line
-	 *  and it must also be before init_timer and init_tcp
-	 *  => if shm_mem should be settable from the cfg file move everything
-	 *  after --andrei */
-	if (init_shm_mallocs()==-1)
-		goto error;
-	/*init timer, before parsing the cfg!*/
-	if (init_timer()<0){
-		LOG(L_CRIT, "could not initialize timer, exiting...\n");
-		goto error;
-	}
 	
-	/* register a diagnostic FIFO command */
+	/* register a diagnostic FIFO command  - moved to fifo server - bogdan
 	if (register_core_fifo()<0) {
 		LOG(L_CRIT, "unable to register core FIFO commands\n");
 		goto error;
-	}
+	}*/
 
 	/*register builtin  modules*/
 	register_builtin_modules();
@@ -1524,215 +1459,69 @@ try_again:
 	
 	/* get uid/gid */
 	if (user){
-		uid=strtol(user, &tmp, 10);
-		if ((tmp==0) ||(*tmp)){
-			/* maybe it's a string */
-			pw_entry=getpwnam(user);
-			if (pw_entry==0){
-				fprintf(stderr, "bad user name/uid number: -u %s\n", user);
-				goto error;
-			}
-			uid=pw_entry->pw_uid;
-			gid=pw_entry->pw_gid;
+		if (user2uid(&uid, &gid, user)<0){
+			fprintf(stderr, "bad user name/uid number: -u %s\n", user);
+			goto error;
 		}
 	}
 	if (group){
-		gid=strtol(group, &tmp, 10);
-		if ((tmp==0) ||(*tmp)){
-			/* maybe it's a string */
-			gr_entry=getgrnam(group);
-			if (gr_entry==0){
+		if (group2gid(&gid, group)<0){
 				fprintf(stderr, "bad group name/gid number: -u %s\n", group);
-				goto error;
-			}
-			gid=gr_entry->gr_gid;
-		}
-	}
-
-	if (sock_no==0) {
-		/* try to get all listening ipv4 interfaces */
-		if (add_interfaces(0, AF_INET, 0)==-1){
-			/* if error fall back to get hostname*/
-			/* get our address, only the first one */
-			if (uname (&myname) <0){
-				fprintf(stderr, "cannot determine hostname, try -l address\n");
-				goto error;
-			}
-			sock_info[sock_no].name.s=
-								(char*)pkg_malloc(strlen(myname.nodename)+1);
-			if (sock_info[sock_no].name.s==0){
-				fprintf(stderr, "Out of memory.\n");
-				goto error;
-			}
-			sock_info[sock_no].name.len=strlen(myname.nodename);
-			strncpy(sock_info[sock_no].name.s, myname.nodename,
-					sock_info[sock_no].name.len+1);
-			sock_no++;
-		}
-	}
-
-	/* try to change all the interface names into addresses
-	 *  --ugly hack */
-	for (r=0; r<sock_no;){
-		if (add_interfaces(sock_info[r].name.s, AF_INET,
-					sock_info[r].port_no)!=-1){
-			/* success => remove current entry (shift the entire array)*/
-			pkg_free(sock_info[r].name.s);
-			memmove(&sock_info[r], &sock_info[r+1], 
-						(sock_no-r)*sizeof(struct socket_info));
-			sock_no--;
-			continue;
-		}
-		r++;
-	}
-	/* get ips & fill the port numbers*/
-#ifdef EXTRA_DEBUG
-	printf("Listening on \n");
-#endif
-	for (r=0; r<sock_no;r++){
-		/* fix port number, port_no should be !=0 here */
-		if (sock_info[r].port_no==0) sock_info[r].port_no=port_no;
-		tmp=int2str(sock_info[r].port_no, &len);
-		if (len>=MAX_PORT_LEN){
-			fprintf(stderr, "ERROR: bad port number: %d\n", 
-						sock_info[r].port_no);
 			goto error;
 		}
-		sock_info[r].port_no_str.s=(char*)pkg_malloc(len+1);
-		if (sock_info[r].port_no_str.s==0){
-			fprintf(stderr, "Out of memory.\n");
-			goto error;
-		}
-		strncpy(sock_info[r].port_no_str.s, tmp, len+1);
-		sock_info[r].port_no_str.len=len;
-		
-		/* get "official hostnames", all the aliases etc. */
-		he=resolvehost(sock_info[r].name.s);
-		if (he==0){
-			DPrint("ERROR: could not resolve %s\n", sock_info[r].name.s);
-			goto error;
-		}
-		/* check if we got the official name */
-		if (strcasecmp(he->h_name, sock_info[r].name.s)!=0){
-			if (add_alias(sock_info[r].name.s, sock_info[r].name.len,
-							sock_info[r].port_no)<0){
-				LOG(L_ERR, "ERROR: main: add_alias failed\n");
-			}
-			/* change the oficial name */
-			pkg_free(sock_info[r].name.s);
-			sock_info[r].name.s=(char*)pkg_malloc(strlen(he->h_name)+1);
-			if (sock_info[r].name.s==0){
-				fprintf(stderr, "Out of memory.\n");
-				goto error;
-			}
-			sock_info[r].name.len=strlen(he->h_name);
-			strncpy(sock_info[r].name.s, he->h_name, sock_info[r].name.len+1);
-		}
-		/* add the aliases*/
-		for(h=he->h_aliases; h && *h; h++)
-			if (add_alias(*h, strlen(*h), sock_info[r].port_no)<0){
-				LOG(L_ERR, "ERROR: main: add_alias failed\n");
-			}
-		hostent2ip_addr(&sock_info[r].address, he, 0); /*convert to ip_addr 
-														 format*/
-		if ((tmp=ip_addr2a(&sock_info[r].address))==0) goto error;
-		sock_info[r].address_str.s=(char*)pkg_malloc(strlen(tmp)+1);
-		if (sock_info[r].address_str.s==0){
-			fprintf(stderr, "Out of memory.\n");
-			goto error;
-		}
-		strncpy(sock_info[r].address_str.s, tmp, strlen(tmp)+1);
-		/* set is_ip (1 if name is an ip address, 0 otherwise) */
-		sock_info[r].address_str.len=strlen(tmp);
-		if 	(	(sock_info[r].address_str.len==sock_info[r].name.len)&&
-				(strncasecmp(sock_info[r].address_str.s, sock_info[r].name.s,
-						 sock_info[r].address_str.len)==0)
-			){
-				sock_info[r].is_ip=1;
-				/* do rev. dns on it (for aliases)*/
-				he=rev_resolvehost(&sock_info[r].address);
-				if (he==0){
-					DPrint("WARNING: could not rev. resolve %s\n",
-							sock_info[r].name.s);
-				}else{
-					/* add the aliases*/
-					if (add_alias(he->h_name, strlen(he->h_name),
-									sock_info[r].port_no)<0){
-						LOG(L_ERR, "ERROR: main: add_alias failed\n");
-					}
-					for(h=he->h_aliases; h && *h; h++)
-						if (add_alias(*h,strlen(*h),sock_info[r].port_no)<0){
-							LOG(L_ERR, "ERROR: main: add_alias failed\n");
-						}
-				}
-		}else{ sock_info[r].is_ip=0; };
-			
-#ifdef EXTRA_DEBUG
-		printf("              %.*s [%s]:%s\n", sock_info[r].name.len, 
-				sock_info[r].name.s,
-				sock_info[r].address_str.s, sock_info[r].port_no_str.s);
-#endif
 	}
-	/* removing duplicate addresses*/
-	for (r=0; r<sock_no; r++){
-		for (t=r+1; t<sock_no;){
-			if ((sock_info[r].port_no==sock_info[t].port_no) &&
-				(sock_info[r].address.af==sock_info[t].address.af) &&
-				(memcmp(sock_info[r].address.u.addr, 
-						sock_info[t].address.u.addr,
-						sock_info[r].address.len)  == 0)
-				){
-#ifdef EXTRA_DEBUG
-				printf("removing duplicate (%d) %s [%s] == (%d) %s [%s]\n",
-						r, sock_info[r].name.s, sock_info[r].address_str.s,
-						t, sock_info[t].name.s, sock_info[t].address_str.s);
-#endif
-				/* add the name to the alias list*/
-				if ((!sock_info[t].is_ip) && (
-						(sock_info[t].name.len!=sock_info[r].name.len)||
-						(strncmp(sock_info[t].name.s, sock_info[r].name.s,
-								 sock_info[r].name.len)!=0))
-					)
-					add_alias(sock_info[t].name.s, sock_info[t].name.len,
-								sock_info[t].port_no);
-						
-				/* free space*/
-				pkg_free(sock_info[t].name.s);
-				pkg_free(sock_info[t].address_str.s);
-				pkg_free(sock_info[t].port_no_str.s);
-				/* shift the array*/
-				memmove(&sock_info[t], &sock_info[t+1], 
-							(sock_no-t)*sizeof(struct socket_info));
-				sock_no--;
-				continue;
-			}
-			t++;
+	/* fix sock/fifo uid/gid */
+	if (sock_user){
+		if (user2uid(&sock_uid, 0, sock_user)<0){
+			fprintf(stderr, "bad socket user name/uid number %s\n", user);
+			goto error;
 		}
+	}
+	if (sock_group){
+		if (group2gid(&sock_gid, sock_group)<0){
+			fprintf(stderr, "bad group name/gid number: -u %s\n", group);
+			goto error;
+		}
+	}
+	if (fix_all_socket_lists()!=0){
+		fprintf(stderr,  "failed to initialize list addresses\n");
+		goto error;
 	}
 	/* print all the listen addresses */
 	printf("Listening on \n");
-	for (r=0; r<sock_no; r++)
-		printf("              %s [%s]:%s\n",sock_info[r].name.s,
-				sock_info[r].address_str.s, sock_info[r].port_no_str.s);
-
-	printf("Aliases: ");
-	for(a=aliases; a; a=a->next) 
-		if (a->port)
-			printf("%.*s:%d ", a->alias.len, a->alias.s, a->port);
-		else
-			printf("%.*s:* ", a->alias.len, a->alias.s);
+	print_all_socket_lists();
+	printf("Aliases: \n");
+	/*print_aliases();*/
+	print_aliases();
 	printf("\n");
-	if (sock_no==0){
-		fprintf(stderr, "ERROR: no listening sockets");
-		goto error;
-	}
+	
 	if (dont_fork){
 		fprintf(stderr, "WARNING: no fork mode %s\n", 
-				(sock_no>1)?" and more than one listen address found (will"
-							" use only the the first one)":"");
+				(udp_listen)?(
+				(udp_listen->next)?" and more than one listen address found"
+				"(will use only the the first one)":""
+				):"and no udp listen address found" );
 	}
 	if (config_check){
 		fprintf(stderr, "config file ok, exiting...\n");
+		goto error;
+	}
+
+
+	/*init shm mallocs
+	 *  this must be here 
+	 *     -to allow setting shm mem size from the command line
+	 *       => if shm_mem should be settable from the cfg file move
+	 *       everything after
+	 *     -it must be also before init_timer and init_tcp
+	 *     -it must be after we know uid (so that in the SYSV sems case,
+	 *        the sems will have the correct euid)
+	 * --andrei */
+	if (init_shm_mallocs()==-1)
+		goto error;
+	/*init timer, before parsing the cfg!*/
+	if (init_timer()<0){
+		LOG(L_CRIT, "could not initialize timer, exiting...\n");
 		goto error;
 	}
 	
@@ -1763,10 +1552,6 @@ try_again:
 		goto error;
 	}
 	
-	if (init_modules() != 0) {
-		fprintf(stderr, "ERROR: error while initializing modules\n");
-		goto error;
-	}
 	
 	/*alloc pids*/
 #ifdef SHM_MEM
@@ -1779,9 +1564,23 @@ try_again:
 		goto error;
 	}
 	memset(pt, 0, sizeof(struct process_table)*process_count());
+
+	if (disable_core_dump) set_core_dump(0, 0);
+	else set_core_dump(1, shm_mem_size+PKG_MEM_POOL_SIZE+4*1024*1024);
+	if (open_files_limit>0){
+		if(increase_open_fds(open_files_limit)<0){ 
+			fprintf(stderr, "ERROR: error could not increase file limits\n");
+			goto error;
+		}
+	}
+	
+	if (init_modules() != 0) {
+		fprintf(stderr, "ERROR: error while initializing modules\n");
+		goto error;
+	}
 	/* fix routing lists */
 	if ( (r=fix_rls())!=0){
-		fprintf(stderr, "ERROR: error %x while trying to fix configuration\n",
+		fprintf(stderr, "ERROR: error %d while trying to fix configuration\n",
 						r);
 		goto error;
 	};

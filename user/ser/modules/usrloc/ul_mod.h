@@ -1,9 +1,9 @@
 /*
- * $Id: ul_mod.h,v 1.10.4.1.2.1 2004/07/21 10:34:45 sobomax Exp $
+ * $Id: ul_mod.h,v 1.16.2.1 2005/03/29 11:54:35 janakj Exp $
  *
- * Usrlocation module interface
+ * User location module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,38 +37,39 @@
 
 
 #include "../../db/db.h"
+#include "../../str.h"
 
 
 /*
  * Module parameters
  */
 
-enum db_modes {
-	NO_DB = 0,
-	WRITE_THROUGH,
-	WRITE_BACK,
-	NO_CACHE
-};
 
-extern char* user_col;
-extern char* domain_col;
-extern char* contact_col;
-extern char* expires_col;
-extern char* q_col;
-extern char* callid_col;
-extern char* cseq_col;
-extern char* method_col;
-extern char* replicate_col;
-extern char* flags_col;
-extern char* state_col;
-extern char* user_agent_col;
-extern char* db_url;
-extern int   timer_interval;
-extern int   db_mode;
-extern int   use_domain;
-extern int   desc_time_order;
+#define NO_DB         0
+#define WRITE_THROUGH 1
+#define WRITE_BACK    2
 
-extern db_con_t* db;   /* Dabase connection handle */
+#define TABLE_VERSION 6
+
+extern str user_col;
+extern str domain_col;
+extern str contact_col;
+extern str expires_col;
+extern str q_col;
+extern str callid_col;
+extern str cseq_col;
+extern str method_col;
+extern str flags_col;
+extern str user_agent_col;
+extern str received_col;
+extern str db_url;
+extern int timer_interval;
+extern int db_mode;
+extern int use_domain;
+extern int desc_time_order;
+
+extern db_con_t* ul_dbh;   /* Database connection handle */
+extern db_func_t ul_dbf;
 
 
 #endif /* UL_MOD_H */

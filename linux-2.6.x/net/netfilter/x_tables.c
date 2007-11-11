@@ -21,6 +21,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
+#include <linux/mm.h>
 
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_arp.h>
@@ -55,8 +56,8 @@ enum {
 };
 
 static const char *xt_prefix[NPROTO] = {
-	[AF_INET] 	= "ip",
-	[AF_INET6] 	= "ip6",
+	[AF_INET]	= "ip",
+	[AF_INET6]	= "ip6",
 	[NF_ARP]	= "arp",
 };
 
@@ -304,7 +305,7 @@ int xt_find_revision(int af, const char *name, u8 revision, int target,
 EXPORT_SYMBOL_GPL(xt_find_revision);
 
 int xt_check_match(const struct xt_match *match, unsigned short family,
-                   unsigned int size, const char *table, unsigned int hook_mask,
+		   unsigned int size, const char *table, unsigned int hook_mask,
 		   unsigned short proto, int inv_proto)
 {
 	if (XT_ALIGN(match->matchsize) != size) {
@@ -319,8 +320,8 @@ int xt_check_match(const struct xt_match *match, unsigned short family,
 		return -EINVAL;
 	}
 	if (match->hooks && (hook_mask & ~match->hooks) != 0) {
-		printk("%s_tables: %s match: bad hook_mask %u\n",
-		       xt_prefix[family], match->name, hook_mask);
+		printk("%s_tables: %s match: bad hook_mask %u/%u\n",
+		       xt_prefix[family], match->name, hook_mask, match->hooks);
 		return -EINVAL;
 	}
 	if (match->proto && (match->proto != proto || inv_proto)) {
@@ -376,7 +377,7 @@ int xt_compat_match_to_user(struct xt_entry_match *m, void __user **dstptr,
 
 	if (copy_to_user(cm, m, sizeof(*cm)) ||
 	    put_user(msize, &cm->u.user.match_size))
-	    	return -EFAULT;
+		return -EFAULT;
 
 	if (match->compat_to_user) {
 		if (match->compat_to_user((void __user *)cm->data, m->data))
@@ -409,8 +410,9 @@ int xt_check_target(const struct xt_target *target, unsigned short family,
 		return -EINVAL;
 	}
 	if (target->hooks && (hook_mask & ~target->hooks) != 0) {
-		printk("%s_tables: %s target: bad hook_mask %u\n",
-		       xt_prefix[family], target->name, hook_mask);
+		printk("%s_tables: %s target: bad hook_mask %u/%u\n",
+		       xt_prefix[family], target->name, hook_mask,
+		       target->hooks);
 		return -EINVAL;
 	}
 	if (target->proto && (target->proto != proto || inv_proto)) {
@@ -431,7 +433,7 @@ int xt_compat_target_offset(struct xt_target *target)
 EXPORT_SYMBOL_GPL(xt_compat_target_offset);
 
 void xt_compat_target_from_user(struct xt_entry_target *t, void **dstptr,
-			        int *size)
+				int *size)
 {
 	struct xt_target *target = t->u.kernel.target;
 	struct compat_xt_entry_target *ct = (struct compat_xt_entry_target *)t;
@@ -466,7 +468,7 @@ int xt_compat_target_to_user(struct xt_entry_target *t, void __user **dstptr,
 
 	if (copy_to_user(ct, t, sizeof(*ct)) ||
 	    put_user(tsize, &ct->u.user.target_size))
-	    	return -EFAULT;
+		return -EFAULT;
 
 	if (target->compat_to_user) {
 		if (target->compat_to_user((void __user *)ct->data, t->data))
@@ -650,12 +652,6 @@ void *xt_unregister_table(struct xt_table *table)
 EXPORT_SYMBOL_GPL(xt_unregister_table);
 
 #ifdef CONFIG_PROC_FS
-static char *xt_proto_prefix[NPROTO] = {
-	[AF_INET]	= "ip",
-	[AF_INET6]	= "ip6",
-	[NF_ARP]	= "arp",
-};
-
 static struct list_head *xt_get_idx(struct list_head *list, struct seq_file *seq, loff_t pos)
 {
 	struct list_head *head = list->next;
@@ -709,7 +705,7 @@ static void *xt_tgt_seq_start(struct seq_file *seq, loff_t *pos)
 
 	if (mutex_lock_interruptible(&xt[af].mutex) != 0)
 		return NULL;
-	
+
 	return xt_get_idx(list, seq, *pos);
 }
 
@@ -722,7 +718,7 @@ static void *xt_tgt_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 
 	if (af >= NPROTO)
 		return NULL;
-	
+
 	list = type2list(af, type);
 	if (!list)
 		return NULL;
@@ -749,7 +745,7 @@ static int xt_name_seq_show(struct seq_file *seq, void *v)
 		return 0;
 }
 
-static struct seq_operations xt_tgt_seq_ops = {
+static const struct seq_operations xt_tgt_seq_ops = {
 	.start	= xt_tgt_seq_start,
 	.next	= xt_tgt_seq_next,
 	.stop	= xt_tgt_seq_stop,
@@ -771,7 +767,7 @@ static int xt_tgt_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static struct file_operations xt_file_ops = {
+static const struct file_operations xt_file_ops = {
 	.owner	 = THIS_MODULE,
 	.open	 = xt_tgt_open,
 	.read	 = seq_read,
@@ -797,7 +793,7 @@ int xt_proto_init(int af)
 
 
 #ifdef CONFIG_PROC_FS
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	proc = proc_net_fops_create(buf, 0440, &xt_file_ops);
 	if (!proc)
@@ -805,14 +801,14 @@ int xt_proto_init(int af)
 	proc->data = (void *) ((unsigned long) af | (TABLE << 16));
 
 
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	proc = proc_net_fops_create(buf, 0440, &xt_file_ops);
 	if (!proc)
 		goto out_remove_tables;
 	proc->data = (void *) ((unsigned long) af | (MATCH << 16));
 
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
 	proc = proc_net_fops_create(buf, 0440, &xt_file_ops);
 	if (!proc)
@@ -824,12 +820,12 @@ int xt_proto_init(int af)
 
 #ifdef CONFIG_PROC_FS
 out_remove_matches:
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	proc_net_remove(buf);
 
 out_remove_tables:
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	proc_net_remove(buf);
 out:
@@ -843,15 +839,15 @@ void xt_proto_fini(int af)
 #ifdef CONFIG_PROC_FS
 	char buf[XT_FUNCTION_MAXNAMELEN];
 
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	proc_net_remove(buf);
 
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
 	proc_net_remove(buf);
 
-	strlcpy(buf, xt_proto_prefix[af], sizeof(buf));
+	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	proc_net_remove(buf);
 #endif /*CONFIG_PROC_FS*/

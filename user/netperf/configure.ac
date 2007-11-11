@@ -2,15 +2,15 @@
 # Process this file with autoconf to produce a configure script.
 
 FULL-PACKAGE-NAME=netperf
-VERSION=2.4.1
+VERSION=2.4.3
 BUG-REPORT-ADDRESS=netperf-feedback@netperf.org
 
 AC_PREREQ(2.59)
-AC_INIT(netperf, 2.4.1)
+AC_INIT(netperf, 2.4.3)
 # use the target version rather than host - one day we may want cross-compile
 AC_CANONICAL_TARGET
 AC_CONFIG_SRCDIR([src/hist.h])
-AM_INIT_AUTOMAKE(netperf, 2.4.1)
+AM_INIT_AUTOMAKE([dist-zip])
 AM_CONFIG_HEADER(config.h)
 # AC_CONFIG_HEADER(config.h)
 
@@ -27,12 +27,14 @@ AC_HAVE_LIBRARY(m)
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h malloc.h netdb.h netinet/in.h stdlib.h string.h strings.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h endian.h errno.h fcntl.h limits.h malloc.h netdb.h netinet/in.h signal.h stdlib.h string.h strings.h sys/ioctl.h sys/mman.h sys/param.h sys/socket.h sys/time.h unistd.h])
 
 # Some platforms require these.  There may be a better way.
 AC_HAVE_LIBRARY(socket)
 if test "$ac_cv_lib_socket_main" = yes ; then
     AC_HAVE_LIBRARY(nsl)
+    AC_HAVE_LIBRARY(sendfile)
+    AC_SYS_LARGEFILE
 fi
 
 # this one is for Tru64 and bind_to_cpu_id
@@ -84,14 +86,15 @@ fi
 
 AC_CHECK_FUNCS(sendfile)
 
-AC_CHECK_FUNCS(mpctl processor_bind sched_setaffinity bind_to_cpu_id)
+# check for the various CPU binding calls
+AC_CHECK_FUNCS(mpctl processor_bind sched_setaffinity bind_to_cpu_id bindprocessor)
 
 # see if we should be enabling histogram support
 
 AC_MSG_CHECKING(whether to include histogram support)
 
 AC_ARG_ENABLE(histogram,
-	[  --enable-histogram   include individual op timing, may affect result ])
+	[AS_HELP_STRING([--enable-histogram],[include individual op timing, may affect result]) ])
 
 case "$enable_histogram" in
 	yes)
@@ -120,13 +123,47 @@ if $use_histogram
 then
 	AC_DEFINE([WANT_HISTOGRAM],,[Define to one to enable histogram support. May affect results.])
 fi
+# see if we should be enabling histogram support
+
+AC_MSG_CHECKING(whether to include dirty support)
+
+AC_ARG_ENABLE(dirty,
+	[AS_HELP_STRING([--enable-dirty],[write to buffers each time, may affect result]) ])
+
+case "$enable_dirty" in
+	yes)
+		use_dirty=true
+		;;
+	no)
+		use_dirty=false
+		;;
+	'')
+		# whatever
+		use_dirty=false
+		;;
+	*)
+		AC_MSG_ERROR([--enable-dirty takes yes or no])
+		;;
+esac
+
+if $use_dirty
+then
+	AC_MSG_RESULT(yes)
+else
+	AC_MSG_RESULT(no)
+fi
+
+if $use_dirty
+then
+	AC_DEFINE([DIRTY],,[Define to one to enable dirty buffer support. May affect results.])
+fi
 
 # see if we should be enabling demo support
 
 AC_MSG_CHECKING(whether to include demo support)
 
 AC_ARG_ENABLE(demo,
-	[  --enable-demo   emit interim results during the run. May affect results.])
+	[AS_HELP_STRING([--enable-demo],[emit interim results during the run. May affect results.])])
 
 case "$enable_demo" in
 	yes)
@@ -161,7 +198,7 @@ fi
 AC_MSG_CHECKING(whether to include Unix-domain socket tests)
 
 AC_ARG_ENABLE(unixdomain,
-	[  --enable-unixdomain  include Unix Domain socket tests])
+	[AS_HELP_STRING([--enable-unixdomain],[include Unix Domain socket tests])])
 
 case "$enable_unixdomain" in
      yes)
@@ -195,7 +232,7 @@ fi
 AC_MSG_CHECKING(whether to include DLPI tests)
 
 AC_ARG_ENABLE(dlpi,
-	[  --enable-dlpi  include Unix Domain socket tests])
+	[AS_HELP_STRING([--enable-dlpi],[include DLPI (link-layer) tests])])
 
 case "$enable_dlpi" in
      yes)
@@ -230,7 +267,7 @@ fi
 AC_MSG_CHECKING(whether to include XTI tests)
 
 AC_ARG_ENABLE(xti,
-	[  --enable-xti  include Unix Domain socket tests])
+	[AS_HELP_STRING([--enable-xti],[include XTI socket tests])])
 
 case "$enable_xti" in
      yes)
@@ -266,7 +303,7 @@ fi
 AC_MSG_CHECKING(whether to include ICSC-EXS tests)
 
 AC_ARG_ENABLE(exs,
-	[  --enable-exs  include ICSC async sockets tests])
+	[AS_HELP_STRING([--enable-exs],[include ICSC async sockets tests])])
 
 case "$enable_exs" in
      yes)
@@ -301,7 +338,7 @@ fi
 
 
 AC_ARG_ENABLE(sctp,
-	[  --enable-sctp   include tests to measure SCTP performance ])
+	[AS_HELP_STRING([--enable-sctp],[include tests to measure SCTP performance ])])
 
 case "$enable_sctp" in
 	yes)
@@ -343,7 +380,7 @@ fi
 AC_MSG_CHECKING([whether to include paced send (intervals) support])
 
 AC_ARG_ENABLE(intervals,
-	[  --enable-intervals  include ability to pace operations, may affect result])
+	[AS_HELP_STRING([--enable-intervals],[include ability to pace operations, may affect result])])
 
 case "$enable_intervals" in
 	yes)
@@ -372,12 +409,47 @@ then
 	AC_DEFINE([WANT_INTERVALS],,[Define to one to enable paced operation support. May affect results.])
 fi
 
+# see if paced sends should wait and spin
+
+AC_MSG_CHECKING([whether paced sends should spin])
+
+AC_ARG_ENABLE(spin,
+	[AS_HELP_STRING([--enable-spin],[paced operations (--enable-intervals) should sit and spin - WILL affect result])])
+
+case "$enable_spin" in
+	yes)
+		use_spin=true
+		;;
+	no)
+		use_spin=false
+		;;
+	'')
+		use_spin=false
+		;;
+	*)
+		AC_MSG_ERROR([--enable-spin takes yes or no])
+		;;
+esac
+
+if $use_spin
+then
+	AC_MSG_RESULT(yes)
+else
+	AC_MSG_RESULT(no)
+fi
+
+if $use_spin
+then
+	AC_DEFINE([WANT_INTERVALS],,[Define to one to enable paced operation support. May affect results.])
+	AC_DEFINE([WANT_SPIN],,[Define to one to spin waiting on paced operation. WILL AFFEFCT CPU UTILIZATION])
+fi
+
 # see if we should be enabling initial request bursts
 
 AC_MSG_CHECKING([whether to include initial burst support in _RR tests])
 
 AC_ARG_ENABLE(burst,
-	[  --enable-burst  include intial request burst ability in _RR tests, may affect result])
+	[AS_HELP_STRING([--enable-burst],[include intial request burst ability in _RR tests, may affect result])])
 
 case "$enable_burst" in
 	yes)
@@ -411,7 +483,7 @@ fi
 AC_MSG_CHECKING([which CPU utilization measurement type to use])
 
 AC_ARG_ENABLE(cpuutil,
-	[  --enable-cpuutil  include code to measure CPU utilization using specified mechanism])
+	[AS_HELP_STRING([--enable-cpuutil],[include code to measure CPU utilization using specified mechanism])])
 
 NETCPU_SOURCE="$enable_cpuutil"
 case "$enable_cpuutil" in
@@ -446,6 +518,10 @@ case "$enable_cpuutil" in
 		use_cpuutil=true
 		AC_DEFINE([USE_KSTAT],,[Use Solaris's kstat interface to measure CPU util.])
 		AC_HAVE_LIBRARY(kstat)
+		;;
+	osx)
+		use_cpuutil=true
+		AC_DEFINE([USE_OSX],,[Use MacOS X's host_info interface to measure CPU util.])
 		;;
 	'')
 # ia64-hp-hpux11.23
@@ -491,11 +567,17 @@ case "$enable_cpuutil" in
 			enable_cpuutil="kstat - auto"
 			NETCPU_SOURCE="kstat"
 			;;
-                     *-*-freebsd4.*)
+                     *-*-freebsd4.* | *-*-freebsd5.* | *-*-freebsd6.* | *-*-freebsd7.* )
 			use_cpuutil=true
 			AC_DEFINE([USE_SYSCTL],,[Use FreeBSD's sysctl interface to measure CPU util.])
 			enable_cpuutil="sysctl - auto"
 			NETCPU_SOURCE="sysctl"
+			;;
+		    *-*-darwin*)
+			use_cpuutil=true
+			AC_DEFINE([USE_OSX],,[Use MacOS X's host_info interface to measure CPU util.])
+			enable_cpuutil="osx - auto"
+			NETCPU_SOURCE="osx"
 			;;
 		     *)
 			use_cpuutil=false
@@ -521,6 +603,5 @@ AC_SUBST(LIBOJBS)
 AC_CONFIG_FILES([Makefile
                  src/Makefile
 		 doc/Makefile])
-
 
 AC_OUTPUT

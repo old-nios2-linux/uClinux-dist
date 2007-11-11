@@ -42,7 +42,6 @@
 #include <linux/seq_file.h>
 #include <linux/security.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/spinlock.h>
 #include <linux/stat.h>
 #include <linux/string.h>
@@ -413,8 +412,8 @@ static struct file_system_type cpuset_fs_type = {
  *
  *
  * When reading/writing to a file:
- *	- the cpuset to use in file->f_dentry->d_parent->d_fsdata
- *	- the 'cftype' of the file is file->f_dentry->d_fsdata
+ *	- the cpuset to use in file->f_path.dentry->d_parent->d_fsdata
+ *	- the 'cftype' of the file is file->f_path.dentry->d_fsdata
  */
 
 struct cftype {
@@ -517,7 +516,7 @@ static void cpuset_release_agent(const char *pathbuf)
 	envp[i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
 	envp[i] = NULL;
 
-	call_usermodehelper(argv[0], argv, envp, 0);
+	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
 	kfree(pathbuf);
 }
 
@@ -729,8 +728,10 @@ static int validate_change(const struct cpuset *cur, const struct cpuset *trial)
 	}
 
 	/* Remaining checks don't apply to root cpuset */
-	if ((par = cur->parent) == NULL)
+	if (cur == &top_cpuset)
 		return 0;
+
+	par = cur->parent;
 
 	/* We must be a subset of our parent cpuset */
 	if (!is_cpuset_subset(trial, par))
@@ -820,11 +821,22 @@ static int update_cpumask(struct cpuset *cs, char *buf)
 		return -EACCES;
 
 	trialcs = *cs;
-	retval = cpulist_parse(buf, trialcs.cpus_allowed);
-	if (retval < 0)
-		return retval;
+
+	/*
+	 * We allow a cpuset's cpus_allowed to be empty; if it has attached
+	 * tasks, we'll catch it later when we validate the change and return
+	 * -ENOSPC.
+	 */
+	if (!buf[0] || (buf[0] == '\n' && !buf[1])) {
+		cpus_clear(trialcs.cpus_allowed);
+	} else {
+		retval = cpulist_parse(buf, trialcs.cpus_allowed);
+		if (retval < 0)
+			return retval;
+	}
 	cpus_and(trialcs.cpus_allowed, trialcs.cpus_allowed, cpu_online_map);
-	if (cpus_empty(trialcs.cpus_allowed))
+	/* cpus_allowed cannot be empty for a cpuset with attached tasks. */
+	if (atomic_read(&cs->count) && cpus_empty(trialcs.cpus_allowed))
 		return -ENOSPC;
 	retval = validate_change(cs, &trialcs);
 	if (retval < 0)
@@ -917,16 +929,27 @@ static int update_nodemask(struct cpuset *cs, char *buf)
 		return -EACCES;
 
 	trialcs = *cs;
-	retval = nodelist_parse(buf, trialcs.mems_allowed);
-	if (retval < 0)
-		goto done;
+
+	/*
+	 * We allow a cpuset's mems_allowed to be empty; if it has attached
+	 * tasks, we'll catch it later when we validate the change and return
+	 * -ENOSPC.
+	 */
+	if (!buf[0] || (buf[0] == '\n' && !buf[1])) {
+		nodes_clear(trialcs.mems_allowed);
+	} else {
+		retval = nodelist_parse(buf, trialcs.mems_allowed);
+		if (retval < 0)
+			goto done;
+	}
 	nodes_and(trialcs.mems_allowed, trialcs.mems_allowed, node_online_map);
 	oldmem = cs->mems_allowed;
 	if (nodes_equal(oldmem, trialcs.mems_allowed)) {
 		retval = 0;		/* Too easy - nothing to do */
 		goto done;
 	}
-	if (nodes_empty(trialcs.mems_allowed)) {
+	/* mems_allowed cannot be empty for a cpuset with attached tasks. */
+	if (atomic_read(&cs->count) && nodes_empty(trialcs.mems_allowed)) {
 		retval = -ENOSPC;
 		goto done;
 	}
@@ -958,10 +981,10 @@ static int update_nodemask(struct cpuset *cs, char *buf)
 		mmarray = kmalloc(ntasks * sizeof(*mmarray), GFP_KERNEL);
 		if (!mmarray)
 			goto done;
-		write_lock_irq(&tasklist_lock);		/* block fork */
+		read_lock(&tasklist_lock);		/* block fork */
 		if (atomic_read(&cs->count) <= ntasks)
 			break;				/* got enough */
-		write_unlock_irq(&tasklist_lock);	/* try again */
+		read_unlock(&tasklist_lock);		/* try again */
 		kfree(mmarray);
 	}
 
@@ -983,7 +1006,7 @@ static int update_nodemask(struct cpuset *cs, char *buf)
 			continue;
 		mmarray[n++] = mm;
 	} while_each_thread(g, p);
-	write_unlock_irq(&tasklist_lock);
+	read_unlock(&tasklist_lock);
 
 	/*
 	 * Now that we've dropped the tasklist spinlock, we can
@@ -1060,10 +1083,7 @@ static int update_flag(cpuset_flagbits_t bit, struct cpuset *cs, char *buf)
 	cpu_exclusive_changed =
 		(is_cpu_exclusive(cs) != is_cpu_exclusive(&trialcs));
 	mutex_lock(&callback_mutex);
-	if (turning_on)
-		set_bit(bit, &cs->flags);
-	else
-		clear_bit(bit, &cs->flags);
+	cs->flags = trialcs.flags;
 	mutex_unlock(&callback_mutex);
 
 	if (cpu_exclusive_changed)
@@ -1281,18 +1301,19 @@ typedef enum {
 	FILE_TASKLIST,
 } cpuset_filetype_t;
 
-static ssize_t cpuset_common_file_write(struct file *file, const char __user *userbuf,
+static ssize_t cpuset_common_file_write(struct file *file,
+					const char __user *userbuf,
 					size_t nbytes, loff_t *unused_ppos)
 {
-	struct cpuset *cs = __d_cs(file->f_dentry->d_parent);
-	struct cftype *cft = __d_cft(file->f_dentry);
+	struct cpuset *cs = __d_cs(file->f_path.dentry->d_parent);
+	struct cftype *cft = __d_cft(file->f_path.dentry);
 	cpuset_filetype_t type = cft->private;
 	char *buffer;
 	char *pathbuf = NULL;
 	int retval = 0;
 
 	/* Crude upper limit on largest legitimate cpulist user might write. */
-	if (nbytes > 100 + 6 * NR_CPUS)
+	if (nbytes > 100 + 6 * max(NR_CPUS, MAX_NUMNODES))
 		return -E2BIG;
 
 	/* +1 for nul-terminator */
@@ -1367,7 +1388,7 @@ static ssize_t cpuset_file_write(struct file *file, const char __user *buf,
 						size_t nbytes, loff_t *ppos)
 {
 	ssize_t retval = 0;
-	struct cftype *cft = __d_cft(file->f_dentry);
+	struct cftype *cft = __d_cft(file->f_path.dentry);
 	if (!cft)
 		return -ENODEV;
 
@@ -1417,8 +1438,8 @@ static int cpuset_sprintf_memlist(char *page, struct cpuset *cs)
 static ssize_t cpuset_common_file_read(struct file *file, char __user *buf,
 				size_t nbytes, loff_t *ppos)
 {
-	struct cftype *cft = __d_cft(file->f_dentry);
-	struct cpuset *cs = __d_cs(file->f_dentry->d_parent);
+	struct cftype *cft = __d_cft(file->f_path.dentry);
+	struct cpuset *cs = __d_cs(file->f_path.dentry->d_parent);
 	cpuset_filetype_t type = cft->private;
 	char *page;
 	ssize_t retval = 0;
@@ -1476,7 +1497,7 @@ static ssize_t cpuset_file_read(struct file *file, char __user *buf, size_t nbyt
 								loff_t *ppos)
 {
 	ssize_t retval = 0;
-	struct cftype *cft = __d_cft(file->f_dentry);
+	struct cftype *cft = __d_cft(file->f_path.dentry);
 	if (!cft)
 		return -ENODEV;
 
@@ -1498,7 +1519,7 @@ static int cpuset_file_open(struct inode *inode, struct file *file)
 	if (err)
 		return err;
 
-	cft = __d_cft(file->f_dentry);
+	cft = __d_cft(file->f_path.dentry);
 	if (!cft)
 		return -ENODEV;
 	if (cft->open)
@@ -1511,7 +1532,7 @@ static int cpuset_file_open(struct inode *inode, struct file *file)
 
 static int cpuset_file_release(struct inode *inode, struct file *file)
 {
-	struct cftype *cft = __d_cft(file->f_dentry);
+	struct cftype *cft = __d_cft(file->f_path.dentry);
 	if (cft->release)
 		return cft->release(inode, file);
 	return 0;
@@ -1532,7 +1553,7 @@ static int cpuset_rename(struct inode *old_dir, struct dentry *old_dentry,
 	return simple_rename(old_dir, old_dentry, new_dir, new_dentry);
 }
 
-static struct file_operations cpuset_file_operations = {
+static const struct file_operations cpuset_file_operations = {
 	.read = cpuset_file_read,
 	.write = cpuset_file_write,
 	.llseek = generic_file_llseek,
@@ -1540,7 +1561,7 @@ static struct file_operations cpuset_file_operations = {
 	.release = cpuset_file_release,
 };
 
-static struct inode_operations cpuset_dir_inode_operations = {
+static const struct inode_operations cpuset_dir_inode_operations = {
 	.lookup = simple_lookup,
 	.mkdir = cpuset_mkdir,
 	.rmdir = cpuset_rmdir,
@@ -1661,9 +1682,9 @@ static int pid_array_load(pid_t *pidarray, int npids, struct cpuset *cs)
 
 	do_each_thread(g, p) {
 		if (p->cpuset == cs) {
-			pidarray[n++] = p->pid;
 			if (unlikely(n == npids))
 				goto array_full;
+			pidarray[n++] = p->pid;
 		}
 	} while_each_thread(g, p);
 
@@ -1700,7 +1721,7 @@ static int pid_array_to_buf(char *buf, int sz, pid_t *a, int npids)
  */
 static int cpuset_tasks_open(struct inode *unused, struct file *file)
 {
-	struct cpuset *cs = __d_cs(file->f_dentry->d_parent);
+	struct cpuset *cs = __d_cs(file->f_path.dentry->d_parent);
 	struct ctr_struct *ctr;
 	pid_t *pidarray;
 	int npids;
@@ -1751,12 +1772,7 @@ static ssize_t cpuset_tasks_read(struct file *file, char __user *buf,
 {
 	struct ctr_struct *ctr = file->private_data;
 
-	if (*ppos + nbytes > ctr->bufsz)
-		nbytes = ctr->bufsz - *ppos;
-	if (copy_to_user(buf, ctr->buf + *ppos, nbytes))
-		return -EFAULT;
-	*ppos += nbytes;
-	return nbytes;
+	return simple_read_from_buffer(buf, nbytes, ppos, ctr->buf, ctr->bufsz);
 }
 
 static int cpuset_tasks_release(struct inode *unused_inode, struct file *file)
@@ -2045,7 +2061,6 @@ out:
 	return err;
 }
 
-#if defined(CONFIG_HOTPLUG_CPU) || defined(CONFIG_MEMORY_HOTPLUG)
 /*
  * If common_cpu_mem_hotplug_unplug(), below, unplugs any CPUs
  * or memory nodes, we need to walk over the cpuset hierarchy,
@@ -2109,9 +2124,7 @@ static void common_cpu_mem_hotplug_unplug(void)
 	mutex_unlock(&callback_mutex);
 	mutex_unlock(&manage_mutex);
 }
-#endif
 
-#ifdef CONFIG_HOTPLUG_CPU
 /*
  * The top_cpuset tracks what CPUs and Memory Nodes are online,
  * period.  This is necessary in order to make cpusets transparent
@@ -2125,10 +2138,12 @@ static void common_cpu_mem_hotplug_unplug(void)
 static int cpuset_handle_cpuhp(struct notifier_block *nb,
 				unsigned long phase, void *cpu)
 {
+	if (phase == CPU_DYING || phase == CPU_DYING_FROZEN)
+		return NOTIFY_DONE;
+
 	common_cpu_mem_hotplug_unplug();
 	return 0;
 }
-#endif
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 /*
@@ -2204,10 +2219,6 @@ void cpuset_fork(struct task_struct *child)
  * it is holding that mutex while calling check_for_release(),
  * which calls kmalloc(), so can't be called holding callback_mutex().
  *
- * We don't need to task_lock() this reference to tsk->cpuset,
- * because tsk is already marked PF_EXITING, so attach_task() won't
- * mess with it, or task is a failed fork, never visible to attach_task.
- *
  * the_top_cpuset_hack:
  *
  *    Set the exiting tasks cpuset to the root cpuset (top_cpuset).
@@ -2246,8 +2257,10 @@ void cpuset_exit(struct task_struct *tsk)
 {
 	struct cpuset *cs;
 
+	task_lock(current);
 	cs = tsk->cpuset;
 	tsk->cpuset = &top_cpuset;	/* the_top_cpuset_hack - see above */
+	task_unlock(current);
 
 	if (notify_on_release(cs)) {
 		char *pathbuf = NULL;
@@ -2346,32 +2359,51 @@ static const struct cpuset *nearest_exclusive_ancestor(const struct cpuset *cs)
 }
 
 /**
- * cpuset_zone_allowed - Can we allocate memory on zone z's memory node?
+ * cpuset_zone_allowed_softwall - Can we allocate on zone z's memory node?
  * @z: is this zone on an allowed node?
- * @gfp_mask: memory allocation flags (we use __GFP_HARDWALL)
+ * @gfp_mask: memory allocation flags
  *
- * If we're in interrupt, yes, we can always allocate.  If zone
+ * If we're in interrupt, yes, we can always allocate.  If
+ * __GFP_THISNODE is set, yes, we can always allocate.  If zone
  * z's node is in our tasks mems_allowed, yes.  If it's not a
  * __GFP_HARDWALL request and this zone's nodes is in the nearest
  * mem_exclusive cpuset ancestor to this tasks cpuset, yes.
+ * If the task has been OOM killed and has access to memory reserves
+ * as specified by the TIF_MEMDIE flag, yes.
  * Otherwise, no.
  *
- * GFP_USER allocations are marked with the __GFP_HARDWALL bit,
- * and do not allow allocations outside the current tasks cpuset.
- * GFP_KERNEL allocations are not so marked, so can escape to the
- * nearest mem_exclusive ancestor cpuset.
+ * If __GFP_HARDWALL is set, cpuset_zone_allowed_softwall()
+ * reduces to cpuset_zone_allowed_hardwall().  Otherwise,
+ * cpuset_zone_allowed_softwall() might sleep, and might allow a zone
+ * from an enclosing cpuset.
  *
- * Scanning up parent cpusets requires callback_mutex.  The __alloc_pages()
- * routine only calls here with __GFP_HARDWALL bit _not_ set if
- * it's a GFP_KERNEL allocation, and all nodes in the current tasks
- * mems_allowed came up empty on the first pass over the zonelist.
- * So only GFP_KERNEL allocations, if all nodes in the cpuset are
- * short of memory, might require taking the callback_mutex mutex.
+ * cpuset_zone_allowed_hardwall() only handles the simpler case of
+ * hardwall cpusets, and never sleeps.
+ *
+ * The __GFP_THISNODE placement logic is really handled elsewhere,
+ * by forcibly using a zonelist starting at a specified node, and by
+ * (in get_page_from_freelist()) refusing to consider the zones for
+ * any node on the zonelist except the first.  By the time any such
+ * calls get to this routine, we should just shut up and say 'yes'.
+ *
+ * GFP_USER allocations are marked with the __GFP_HARDWALL bit,
+ * and do not allow allocations outside the current tasks cpuset
+ * unless the task has been OOM killed as is marked TIF_MEMDIE.
+ * GFP_KERNEL allocations are not so marked, so can escape to the
+ * nearest enclosing mem_exclusive ancestor cpuset.
+ *
+ * Scanning up parent cpusets requires callback_mutex.  The
+ * __alloc_pages() routine only calls here with __GFP_HARDWALL bit
+ * _not_ set if it's a GFP_KERNEL allocation, and all nodes in the
+ * current tasks mems_allowed came up empty on the first pass over
+ * the zonelist.  So only GFP_KERNEL allocations, if all nodes in the
+ * cpuset are short of memory, might require taking the callback_mutex
+ * mutex.
  *
  * The first call here from mm/page_alloc:get_page_from_freelist()
- * has __GFP_HARDWALL set in gfp_mask, enforcing hardwall cpusets, so
- * no allocation on a node outside the cpuset is allowed (unless in
- * interrupt, of course).
+ * has __GFP_HARDWALL set in gfp_mask, enforcing hardwall cpusets,
+ * so no allocation on a node outside the cpuset is allowed (unless
+ * in interrupt, of course).
  *
  * The second pass through get_page_from_freelist() doesn't even call
  * here for GFP_ATOMIC calls.  For those calls, the __alloc_pages()
@@ -2380,16 +2412,17 @@ static const struct cpuset *nearest_exclusive_ancestor(const struct cpuset *cs)
  * affect that:
  *	in_interrupt - any node ok (current task context irrelevant)
  *	GFP_ATOMIC   - any node ok
+ *	TIF_MEMDIE   - any node ok
  *	GFP_KERNEL   - any node in enclosing mem_exclusive cpuset ok
  *	GFP_USER     - only nodes in current tasks mems allowed ok.
  *
  * Rule:
- *    Don't call cpuset_zone_allowed() if you can't sleep, unless you
+ *    Don't call cpuset_zone_allowed_softwall if you can't sleep, unless you
  *    pass in the __GFP_HARDWALL flag set in gfp_flag, which disables
  *    the code that might scan up ancestor cpusets and sleep.
- **/
+ */
 
-int __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
+int __cpuset_zone_allowed_softwall(struct zone *z, gfp_t gfp_mask)
 {
 	int node;			/* node that zone z is on */
 	const struct cpuset *cs;	/* current cpuset ancestors */
@@ -2400,6 +2433,12 @@ int __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
 	node = zone_to_nid(z);
 	might_sleep_if(!(gfp_mask & __GFP_HARDWALL));
 	if (node_isset(node, current->mems_allowed))
+		return 1;
+	/*
+	 * Allow tasks that have access to memory reserves because they have
+	 * been OOM killed to get memory anywhere.
+	 */
+	if (unlikely(test_thread_flag(TIF_MEMDIE)))
 		return 1;
 	if (gfp_mask & __GFP_HARDWALL)	/* If hardwall request, stop here */
 		return 0;
@@ -2417,6 +2456,48 @@ int __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
 	allowed = node_isset(node, cs->mems_allowed);
 	mutex_unlock(&callback_mutex);
 	return allowed;
+}
+
+/*
+ * cpuset_zone_allowed_hardwall - Can we allocate on zone z's memory node?
+ * @z: is this zone on an allowed node?
+ * @gfp_mask: memory allocation flags
+ *
+ * If we're in interrupt, yes, we can always allocate.
+ * If __GFP_THISNODE is set, yes, we can always allocate.  If zone
+ * z's node is in our tasks mems_allowed, yes.   If the task has been
+ * OOM killed and has access to memory reserves as specified by the
+ * TIF_MEMDIE flag, yes.  Otherwise, no.
+ *
+ * The __GFP_THISNODE placement logic is really handled elsewhere,
+ * by forcibly using a zonelist starting at a specified node, and by
+ * (in get_page_from_freelist()) refusing to consider the zones for
+ * any node on the zonelist except the first.  By the time any such
+ * calls get to this routine, we should just shut up and say 'yes'.
+ *
+ * Unlike the cpuset_zone_allowed_softwall() variant, above,
+ * this variant requires that the zone be in the current tasks
+ * mems_allowed or that we're in interrupt.  It does not scan up the
+ * cpuset hierarchy for the nearest enclosing mem_exclusive cpuset.
+ * It never sleeps.
+ */
+
+int __cpuset_zone_allowed_hardwall(struct zone *z, gfp_t gfp_mask)
+{
+	int node;			/* node that zone z is on */
+
+	if (in_interrupt() || (gfp_mask & __GFP_THISNODE))
+		return 1;
+	node = zone_to_nid(z);
+	if (node_isset(node, current->mems_allowed))
+		return 1;
+        /*
+         * Allow tasks that have access to memory reserves because they have
+         * been OOM killed to get memory anywhere.
+         */
+        if (unlikely(test_thread_flag(TIF_MEMDIE)))
+                return 1;
+	return 0;
 }
 
 /**
@@ -2610,7 +2691,7 @@ static int cpuset_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_cpuset_show, pid);
 }
 
-struct file_operations proc_cpuset_operations = {
+const struct file_operations proc_cpuset_operations = {
 	.open		= cpuset_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,

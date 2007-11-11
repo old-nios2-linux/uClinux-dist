@@ -341,7 +341,38 @@ static inline int cs89x_set_irq(struct net_device *dev)
 
 	return 0;
 }
+#elif defined(CONFIG_UC5272)
+extern unsigned char cs8900a_hwaddr[6];
+static inline int cs89x_hw_init_hook(struct net_device *dev, int unit)
+{
+	dev->base_addr = 0x30000000;
+	dev->irq = 65;
+	memcpy(dev->dev_addr, cs8900a_hwaddr, 6);
 
+	return 0;
+}
+
+static inline int cs89x_set_irq(struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+        volatile unsigned long  *icrp = (volatile unsigned long *) 0x10000020;
+
+	writereg(dev, PP_BusCTL, 0);    /* Disable Interrupts. */
+	write_irq(dev, lp->chip_type, dev->irq);
+
+
+        *(volatile unsigned long *) 0x10000034 |= 0x80000000;  /* low-to-high (positive edge triggered) */
+
+        if (request_irq(dev->irq, &net_interrupt, 0, "cs8900a", dev)){
+		if (net_debug)
+			printk(KERN_DEBUG "cs89x0: request_irq(%d) failed\n", dev->irq);
+		return 1;
+	}
+
+        *icrp = (*icrp & 0x07777777) | 0xC0000000;  /* clear the interrupt latch and set priority to 4 (100)  */
+	writereg(dev, PP_BusCTL, readreg(dev, PP_BusCTL)|ENABLE_IRQ );
+	return 0;
+}
 #endif
 
 #endif

@@ -99,6 +99,7 @@ static inline int emulate_load_store_insn(struct pt_regs *regs,
 	union mips_instruction insn;
 	unsigned long value, fixup;
 	unsigned int res;
+	unsigned long tmpvalue;
 
 	regs->regs[0] = 0;
 	*regptr=NULL;
@@ -180,23 +181,41 @@ static inline int emulate_load_store_insn(struct pt_regs *regs,
 
 		__asm__ __volatile__ (
 #ifdef __BIG_ENDIAN
-			"1:\tlwl\t%0, (%2)\n"
-			"2:\tlwr\t%0, 3(%2)\n\t"
+#if !defined(CONFIG_RTL865X)
+			"1:\tlwl\t%0, (%3)\n"
+			"2:\tlwr\t%0, 3(%3)\n\t"
+#else
+			"1:\tlbu\t%2, (%3)\n"
+			"\tnop\n"
+			"sll\t%2, 24\n"
+			"move\t%0,	%2\n"
+			"\tlbu\t%2,	1(%3)\n"
+			"\tnop\n"
+			"sll\t%2,	16\n"
+			"or\t%0,	%2\n"
+			"2:\tlbu\t%2, 2(%3)\n"
+			"\tnop\n"
+			"sll\t%2, 	8\n"
+			"or\t%0,	%2\n"
+			"\tlbu\t%2,	3(%3)\n"
+			"\tnop\n"
+			"or\t%0,	%2\n"
+#endif
 #endif
 #ifdef __LITTLE_ENDIAN
-			"1:\tlwl\t%0, 3(%2)\n"
-			"2:\tlwr\t%0, (%2)\n\t"
+			"1:\tlwl\t%0, 3(%3)\n"
+			"2:\tlwr\t%0, (%3)\n\t"
 #endif
 			"li\t%1, 0\n"
 			"3:\t.section\t.fixup,\"ax\"\n\t"
-			"4:\tli\t%1, %3\n\t"
+			"4:\tli\t%1, %4\n\t"
 			"j\t3b\n\t"
 			".previous\n\t"
 			".section\t__ex_table,\"a\"\n\t"
 			STR(PTR)"\t1b, 4b\n\t"
 			STR(PTR)"\t2b, 4b\n\t"
 			".previous"
-			: "=&r" (value), "=r" (res)
+			: "=&r" (value), "=r" (res), "=&r" (tmpvalue)
 			: "r" (addr), "i" (-EFAULT));
 		if (res)
 			goto fault;
@@ -367,8 +386,18 @@ static inline int emulate_load_store_insn(struct pt_regs *regs,
 		value = regs->regs[insn.i_format.rt];
 		__asm__ __volatile__ (
 #ifdef __BIG_ENDIAN
+#if !defined(CONFIG_RTL865X)
 			"1:\tswl\t%1,(%2)\n"
 			"2:\tswr\t%1, 3(%2)\n\t"
+#else
+			"1:\tsb\t%1, 3(%2)\n"
+			"  \tsrl\t%1, 8\n"
+			"  \tsb\t%1, 2(%2)\n"
+			"  \tsrl\t%1, 8\n"
+			"2:\tsb\t%1, 1(%2)\n"
+			"  \tsrl\t%1, 8\n"
+			"  \tsb\t%1, 0(%2)\n"
+#endif
 #endif
 #ifdef __LITTLE_ENDIAN
 			"1:\tswl\t%1, 3(%2)\n"

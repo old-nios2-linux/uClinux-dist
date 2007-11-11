@@ -338,7 +338,7 @@ static int ps_filter_ignore(PS_PKT *ps_pkt)
 
     if(p->tcph)
     {
-        if(!g_ps_init.detect_scans & PS_PROTO_TCP)
+        if(!(g_ps_init.detect_scans & PS_PROTO_TCP))
             return 1;
    
         /*
@@ -375,20 +375,20 @@ static int ps_filter_ignore(PS_PKT *ps_pkt)
     }
     else if(p->udph)
     {
-        if(!g_ps_init.detect_scans & PS_PROTO_UDP)
+        if(!(g_ps_init.detect_scans & PS_PROTO_UDP))
             return 1;
     }
     else if(p->icmph)
     {
         if(p->icmph->type != ICMP_DEST_UNREACH &&
-           !g_ps_init.detect_scans & PS_PROTO_ICMP)
+           !(g_ps_init.detect_scans & PS_PROTO_ICMP))
         {
             return 1;
         }
     }
     else
     {
-        if(!g_ps_init.detect_scans & PS_PROTO_IP)
+        if(!(g_ps_init.detect_scans & PS_PROTO_IP))
             return 1;
     }
 

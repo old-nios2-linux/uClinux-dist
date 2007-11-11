@@ -169,7 +169,7 @@ static int event_to_source_target(Packet *p, idmef_alert_t *alert)
         if ( ret < 0 )
                 return ret;
         
-        snprintf(saddr, sizeof(saddr), "%s", inet_ntoa(p->iph->ip_src));
+        SnortSnprintf(saddr, sizeof(saddr), "%s", inet_ntoa(p->iph->ip_src));
         prelude_string_set_ref(string, saddr);
 
         ret = idmef_alert_new_target(alert, &target, IDMEF_LIST_APPEND);
@@ -205,7 +205,7 @@ static int event_to_source_target(Packet *p, idmef_alert_t *alert)
         if ( ret < 0 )
                 return ret;
                 
-        snprintf(daddr, sizeof(daddr), "%s", inet_ntoa(p->iph->ip_dst));
+        SnortSnprintf(daddr, sizeof(daddr), "%s", inet_ntoa(p->iph->ip_dst));
         prelude_string_set_ref(string, daddr);
         
         return 0;

@@ -7,7 +7,6 @@
  * of the GNU General Public License version 2.
  */
 
-#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
@@ -16,12 +15,12 @@
 #include <linux/uio.h>
 #include <linux/blkdev.h>
 #include <linux/mm.h>
-#include <linux/smp_lock.h>
 #include <linux/fs.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/ext2_fs.h>
 #include <linux/crc32.h>
 #include <linux/lm_interface.h>
+#include <linux/writeback.h>
 #include <asm/uaccess.h>
 
 #include "gfs2.h"
@@ -41,15 +40,6 @@
 #include "trans.h"
 #include "util.h"
 #include "eaops.h"
-
-/* For regular, non-NFS */
-struct filldir_reg {
-	struct gfs2_sbd *fdr_sbd;
-	int fdr_prefetch;
-
-	filldir_t fdr_filldir;
-	void *fdr_opaque;
-};
 
 /*
  * Most fields left uninitialised to catch anybody who tries to
@@ -71,7 +61,7 @@ static int gfs2_read_actor(read_descriptor_t *desc, struct page *page,
 		size = count;
 
 	kaddr = kmap(page);
-	memcpy(desc->arg.buf, kaddr + offset, size);
+	memcpy(desc->arg.data, kaddr + offset, size);
 	kunmap(page);
 
 	desc->count = count - size;
@@ -86,7 +76,7 @@ int gfs2_internal_read(struct gfs2_inode *ip, struct file_ra_state *ra_state,
 	struct inode *inode = &ip->i_inode;
 	read_descriptor_t desc;
 	desc.written = 0;
-	desc.arg.buf = buf;
+	desc.arg.data = buf;
 	desc.count = size;
 	desc.error = 0;
 	do_generic_mapping_read(inode->i_mapping, ra_state,
@@ -127,41 +117,6 @@ static loff_t gfs2_llseek(struct file *file, loff_t offset, int origin)
 }
 
 /**
- * filldir_func - Report a directory entry to the caller of gfs2_dir_read()
- * @opaque: opaque data used by the function
- * @name: the name of the directory entry
- * @length: the length of the name
- * @offset: the entry's offset in the directory
- * @inum: the inode number the entry points to
- * @type: the type of inode the entry points to
- *
- * Returns: 0 on success, 1 if buffer full
- */
-
-static int filldir_func(void *opaque, const char *name, unsigned int length,
-			u64 offset, struct gfs2_inum *inum,
-			unsigned int type)
-{
-	struct filldir_reg *fdr = (struct filldir_reg *)opaque;
-	struct gfs2_sbd *sdp = fdr->fdr_sbd;
-	int error;
-
-	error = fdr->fdr_filldir(fdr->fdr_opaque, name, length, offset,
-				 inum->no_addr, type);
-	if (error)
-		return 1;
-
-	if (fdr->fdr_prefetch && !(length == 1 && *name == '.')) {
-		gfs2_glock_prefetch_num(sdp, inum->no_addr, &gfs2_inode_glops,
-				       LM_ST_SHARED, LM_FLAG_TRY | LM_FLAG_ANY);
-		gfs2_glock_prefetch_num(sdp, inum->no_addr, &gfs2_iopen_glops,
-				       LM_ST_SHARED, LM_FLAG_TRY);
-	}
-
-	return 0;
-}
-
-/**
  * gfs2_readdir - Read directory entries from a directory
  * @file: The directory to read from
  * @dirent: Buffer for dirents
@@ -174,15 +129,9 @@ static int gfs2_readdir(struct file *file, void *dirent, filldir_t filldir)
 {
 	struct inode *dir = file->f_mapping->host;
 	struct gfs2_inode *dip = GFS2_I(dir);
-	struct filldir_reg fdr;
 	struct gfs2_holder d_gh;
 	u64 offset = file->f_pos;
 	int error;
-
-	fdr.fdr_sbd = GFS2_SB(dir);
-	fdr.fdr_prefetch = 1;
-	fdr.fdr_filldir = filldir;
-	fdr.fdr_opaque = dirent;
 
 	gfs2_holder_init(dip->i_gl, LM_ST_SHARED, GL_ATIME, &d_gh);
 	error = gfs2_glock_nq_atime(&d_gh);
@@ -191,7 +140,7 @@ static int gfs2_readdir(struct file *file, void *dirent, filldir_t filldir)
 		return error;
 	}
 
-	error = gfs2_dir_read(dir, &offset, &fdr, filldir_func);
+	error = gfs2_dir_read(dir, &offset, dirent, filldir);
 
 	gfs2_glock_dq_uninit(&d_gh);
 
@@ -228,8 +177,8 @@ static const u32 fsflags_to_gfs2[32] = {
 	[5] = GFS2_DIF_APPENDONLY,
 	[7] = GFS2_DIF_NOATIME,
 	[12] = GFS2_DIF_EXHASH,
-	[14] = GFS2_DIF_JDATA,
-	[20] = GFS2_DIF_DIRECTIO,
+	[14] = GFS2_DIF_INHERIT_JDATA,
+	[20] = GFS2_DIF_INHERIT_DIRECTIO,
 };
 
 static const u32 gfs2_to_fsflags[32] = {
@@ -238,32 +187,54 @@ static const u32 gfs2_to_fsflags[32] = {
 	[gfs2fl_AppendOnly] = FS_APPEND_FL,
 	[gfs2fl_NoAtime] = FS_NOATIME_FL,
 	[gfs2fl_ExHash] = FS_INDEX_FL,
-	[gfs2fl_Jdata] = FS_JOURNAL_DATA_FL,
-	[gfs2fl_Directio] = FS_DIRECTIO_FL,
 	[gfs2fl_InheritDirectio] = FS_DIRECTIO_FL,
 	[gfs2fl_InheritJdata] = FS_JOURNAL_DATA_FL,
 };
 
 static int gfs2_get_flags(struct file *filp, u32 __user *ptr)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_holder gh;
 	int error;
 	u32 fsflags;
 
 	gfs2_holder_init(ip->i_gl, LM_ST_SHARED, GL_ATIME, &gh);
-	error = gfs2_glock_nq_m_atime(1, &gh);
+	error = gfs2_glock_nq_atime(&gh);
 	if (error)
 		return error;
 
 	fsflags = fsflags_cvt(gfs2_to_fsflags, ip->i_di.di_flags);
+	if (!S_ISDIR(inode->i_mode)) {
+		if (ip->i_di.di_flags & GFS2_DIF_JDATA)
+			fsflags |= FS_JOURNAL_DATA_FL;
+		if (ip->i_di.di_flags & GFS2_DIF_DIRECTIO)
+			fsflags |= FS_DIRECTIO_FL;
+	}
 	if (put_user(fsflags, ptr))
 		error = -EFAULT;
 
 	gfs2_glock_dq_m(1, &gh);
 	gfs2_holder_uninit(&gh);
 	return error;
+}
+
+void gfs2_set_inode_flags(struct inode *inode)
+{
+	struct gfs2_inode *ip = GFS2_I(inode);
+	struct gfs2_dinode_host *di = &ip->i_di;
+	unsigned int flags = inode->i_flags;
+
+	flags &= ~(S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC);
+	if (di->di_flags & GFS2_DIF_IMMUTABLE)
+		flags |= S_IMMUTABLE;
+	if (di->di_flags & GFS2_DIF_APPENDONLY)
+		flags |= S_APPEND;
+	if (di->di_flags & GFS2_DIF_NOATIME)
+		flags |= S_NOATIME;
+	if (di->di_flags & GFS2_DIF_SYNC)
+		flags |= S_SYNC;
+	inode->i_flags = flags;
 }
 
 /* Flags that can be set by user space */
@@ -286,7 +257,7 @@ static int gfs2_get_flags(struct file *filp, u32 __user *ptr)
  */
 static int do_gfs2_set_flags(struct file *filp, u32 reqflags, u32 mask)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
 	struct buffer_head *bh;
@@ -302,13 +273,6 @@ static int do_gfs2_set_flags(struct file *filp, u32 reqflags, u32 mask)
 	new_flags = (flags & ~mask) | (reqflags & mask);
 	if ((new_flags ^ flags) == 0)
 		goto out;
-
-	if (S_ISDIR(inode->i_mode)) {
-		if ((new_flags ^ flags) & GFS2_DIF_JDATA)
-			new_flags ^= (GFS2_DIF_JDATA|GFS2_DIF_INHERIT_JDATA);
-		if ((new_flags ^ flags) & GFS2_DIF_DIRECTIO)
-			new_flags ^= (GFS2_DIF_DIRECTIO|GFS2_DIF_INHERIT_DIRECTIO);
-	}
 
 	error = -EINVAL;
 	if ((new_flags ^ flags) & ~GFS2_FLAGS_USER_SET)
@@ -336,8 +300,9 @@ static int do_gfs2_set_flags(struct file *filp, u32 reqflags, u32 mask)
 		goto out_trans_end;
 	gfs2_trans_add_bh(ip->i_gl, bh, 1);
 	ip->i_di.di_flags = new_flags;
-	gfs2_dinode_out(&ip->i_di, bh->b_data);
+	gfs2_dinode_out(ip, bh->b_data);
 	brelse(bh);
+	gfs2_set_inode_flags(inode);
 out_trans_end:
 	gfs2_trans_end(sdp);
 out:
@@ -347,11 +312,19 @@ out:
 
 static int gfs2_set_flags(struct file *filp, u32 __user *ptr)
 {
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	u32 fsflags, gfsflags;
 	if (get_user(fsflags, ptr))
 		return -EFAULT;
 	gfsflags = fsflags_cvt(fsflags_to_gfs2, fsflags);
-	return do_gfs2_set_flags(filp, gfsflags, ~0);
+	if (!S_ISDIR(inode->i_mode)) {
+		if (gfsflags & GFS2_DIF_INHERIT_JDATA)
+			gfsflags ^= (GFS2_DIF_JDATA | GFS2_DIF_INHERIT_JDATA);
+		if (gfsflags & GFS2_DIF_INHERIT_DIRECTIO)
+			gfsflags ^= (GFS2_DIF_DIRECTIO | GFS2_DIF_INHERIT_DIRECTIO);
+		return do_gfs2_set_flags(filp, gfsflags, ~0);
+	}
+	return do_gfs2_set_flags(filp, gfsflags, ~GFS2_DIF_JDATA);
 }
 
 static long gfs2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -425,7 +398,7 @@ static int gfs2_open(struct inode *inode, struct file *file)
 	gfs2_assert_warn(GFS2_SB(inode), !file->private_data);
 	file->private_data = fp;
 
-	if (S_ISREG(ip->i_di.di_mode)) {
+	if (S_ISREG(ip->i_inode.i_mode)) {
 		error = gfs2_glock_nq_init(ip->i_gl, LM_ST_SHARED, LM_FLAG_ANY,
 					   &i_gh);
 		if (error)
@@ -484,16 +457,63 @@ static int gfs2_close(struct inode *inode, struct file *file)
  * @file: the file that points to the dentry (we ignore this)
  * @dentry: the dentry that points to the inode to sync
  *
+ * The VFS will flush "normal" data for us. We only need to worry
+ * about metadata here. For journaled data, we just do a log flush
+ * as we can't avoid it. Otherwise we can just bale out if datasync
+ * is set. For stuffed inodes we must flush the log in order to
+ * ensure that all data is on disk.
+ *
+ * The call to write_inode_now() is there to write back metadata and
+ * the inode itself. It does also try and write the data, but thats
+ * (hopefully) a no-op due to the VFS having already called filemap_fdatawrite()
+ * for us.
+ *
  * Returns: errno
  */
 
 static int gfs2_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
-	struct gfs2_inode *ip = GFS2_I(dentry->d_inode);
+	struct inode *inode = dentry->d_inode;
+	int sync_state = inode->i_state & (I_DIRTY_SYNC|I_DIRTY_DATASYNC);
+	int ret = 0;
 
-	gfs2_log_flush(ip->i_gl->gl_sbd, ip->i_gl);
+	if (gfs2_is_jdata(GFS2_I(inode))) {
+		gfs2_log_flush(GFS2_SB(inode), GFS2_I(inode)->i_gl);
+		return 0;
+	}
 
-	return 0;
+	if (sync_state != 0) {
+		if (!datasync)
+			ret = write_inode_now(inode, 0);
+
+		if (gfs2_is_stuffed(GFS2_I(inode)))
+			gfs2_log_flush(GFS2_SB(inode), GFS2_I(inode)->i_gl);
+	}
+
+	return ret;
+}
+
+/**
+ * gfs2_setlease - acquire/release a file lease
+ * @file: the file pointer
+ * @arg: lease type
+ * @fl: file lock
+ *
+ * Returns: errno
+ */
+
+static int gfs2_setlease(struct file *file, long arg, struct file_lock **fl)
+{
+	struct gfs2_sbd *sdp = GFS2_SB(file->f_mapping->host);
+
+	/*
+	 * We don't currently have a way to enforce a lease across the whole
+	 * cluster; until we do, disable leases (by just returning -EINVAL),
+	 * unless the administrator has requested purely local locking.
+	 */
+	if (!sdp->sd_args.ar_localflocks)
+		return -EINVAL;
+	return generic_setlease(file, arg, fl);
 }
 
 /**
@@ -510,28 +530,28 @@ static int gfs2_lock(struct file *file, int cmd, struct file_lock *fl)
 	struct gfs2_inode *ip = GFS2_I(file->f_mapping->host);
 	struct gfs2_sbd *sdp = GFS2_SB(file->f_mapping->host);
 	struct lm_lockname name =
-		{ .ln_number = ip->i_num.no_addr,
+		{ .ln_number = ip->i_no_addr,
 		  .ln_type = LM_TYPE_PLOCK };
 
 	if (!(fl->fl_flags & FL_POSIX))
 		return -ENOLCK;
-	if ((ip->i_di.di_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+	if ((ip->i_inode.i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return -ENOLCK;
 
 	if (sdp->sd_args.ar_localflocks) {
 		if (IS_GETLK(cmd)) {
-			struct file_lock tmp;
-			int ret;
-			ret = posix_test_lock(file, fl, &tmp);
-			fl->fl_type = F_UNLCK;
-			if (ret)
-				memcpy(fl, &tmp, sizeof(struct file_lock));
+			posix_test_lock(file, fl);
 			return 0;
 		} else {
 			return posix_lock_file_wait(file, fl);
 		}
 	}
 
+	if (cmd == F_CANCELLK) {
+		/* Hack: */
+		cmd = F_SETLK;
+		fl->fl_type = F_UNLCK;
+	}
 	if (IS_GETLK(cmd))
 		return gfs2_lm_plock_get(sdp, &name, file, fl);
 	else if (fl->fl_type == F_UNLCK)
@@ -544,7 +564,7 @@ static int do_flock(struct file *file, int cmd, struct file_lock *fl)
 {
 	struct gfs2_file *fp = file->private_data;
 	struct gfs2_holder *fl_gh = &fp->f_fl_gh;
-	struct gfs2_inode *ip = GFS2_I(file->f_dentry->d_inode);
+	struct gfs2_inode *ip = GFS2_I(file->f_path.dentry->d_inode);
 	struct gfs2_glock *gl;
 	unsigned int state;
 	int flags;
@@ -565,7 +585,7 @@ static int do_flock(struct file *file, int cmd, struct file_lock *fl)
 		gfs2_glock_dq_uninit(fl_gh);
 	} else {
 		error = gfs2_glock_get(GFS2_SB(&ip->i_inode),
-				      ip->i_num.no_addr, &gfs2_flock_glops,
+				      ip->i_no_addr, &gfs2_flock_glops,
 				      CREATE, &gl);
 		if (error)
 			goto out;
@@ -617,7 +637,7 @@ static int gfs2_flock(struct file *file, int cmd, struct file_lock *fl)
 
 	if (!(fl->fl_flags & FL_FLOCK))
 		return -ENOLCK;
-	if ((ip->i_di.di_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+	if ((ip->i_inode.i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return -ENOLCK;
 
 	if (sdp->sd_args.ar_localflocks)
@@ -643,10 +663,10 @@ const struct file_operations gfs2_file_fops = {
 	.release	= gfs2_close,
 	.fsync		= gfs2_fsync,
 	.lock		= gfs2_lock,
-	.sendfile	= generic_file_sendfile,
 	.flock		= gfs2_flock,
 	.splice_read	= generic_file_splice_read,
 	.splice_write	= generic_file_splice_write,
+	.setlease	= gfs2_setlease,
 };
 
 const struct file_operations gfs2_dir_fops = {

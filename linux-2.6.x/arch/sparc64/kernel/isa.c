@@ -22,34 +22,14 @@ static void __init report_dev(struct sparc_isa_device *isa_dev, int child)
 		printk(" [%s", isa_dev->prom_node->name);
 }
 
-static struct linux_prom_registers * __init
-isa_dev_get_resource(struct sparc_isa_device *isa_dev)
+static void __init isa_dev_get_resource(struct sparc_isa_device *isa_dev)
 {
-	struct linux_prom_registers *pregs;
-	unsigned long base, len;
-	int prop_len;
+	struct of_device *op = of_find_device_by_node(isa_dev->prom_node);
 
-	pregs = of_get_property(isa_dev->prom_node, "reg", &prop_len);
-
-	/* Only the first one is interesting. */
-	len = pregs[0].reg_size;
-	base = (((unsigned long)pregs[0].which_io << 32) |
-		(unsigned long)pregs[0].phys_addr);
-	base += isa_dev->bus->parent->io_space.start;
-
-	isa_dev->resource.start = base;
-	isa_dev->resource.end   = (base + len - 1UL);
-	isa_dev->resource.flags = IORESOURCE_IO;
-	isa_dev->resource.name  = isa_dev->prom_node->name;
-
-	request_resource(&isa_dev->bus->parent->io_space,
-			 &isa_dev->resource);
-
-	return pregs;
+	memcpy(&isa_dev->resource, &op->resource[0], sizeof(struct resource));
 }
 
-static void __init isa_dev_get_irq(struct sparc_isa_device *isa_dev,
-				   struct linux_prom_registers *pregs)
+static void __init isa_dev_get_irq(struct sparc_isa_device *isa_dev)
 {
 	struct of_device *op = of_find_device_by_node(isa_dev->prom_node);
 
@@ -69,16 +49,13 @@ static void __init isa_fill_children(struct sparc_isa_device *parent_isa_dev)
 
 	printk(" ->");
 	while (dp) {
-		struct linux_prom_registers *regs;
 		struct sparc_isa_device *isa_dev;
 
-		isa_dev = kmalloc(sizeof(*isa_dev), GFP_KERNEL);
+		isa_dev = kzalloc(sizeof(*isa_dev), GFP_KERNEL);
 		if (!isa_dev) {
 			fatal_err("cannot allocate child isa_dev");
 			prom_halt();
 		}
-
-		memset(isa_dev, 0, sizeof(*isa_dev));
 
 		/* Link it in to parent. */
 		isa_dev->next = parent_isa_dev->child;
@@ -87,8 +64,8 @@ static void __init isa_fill_children(struct sparc_isa_device *parent_isa_dev)
 		isa_dev->bus = parent_isa_dev->bus;
 		isa_dev->prom_node = dp;
 
-		regs = isa_dev_get_resource(isa_dev);
-		isa_dev_get_irq(isa_dev, regs);
+		isa_dev_get_resource(isa_dev);
+		isa_dev_get_irq(isa_dev);
 
 		report_dev(isa_dev, 1);
 
@@ -101,16 +78,20 @@ static void __init isa_fill_devices(struct sparc_isa_bridge *isa_br)
 	struct device_node *dp = isa_br->prom_node->child;
 
 	while (dp) {
-		struct linux_prom_registers *regs;
 		struct sparc_isa_device *isa_dev;
+		struct dev_archdata *sd;
 
-		isa_dev = kmalloc(sizeof(*isa_dev), GFP_KERNEL);
+		isa_dev = kzalloc(sizeof(*isa_dev), GFP_KERNEL);
 		if (!isa_dev) {
 			printk(KERN_DEBUG "ISA: cannot allocate isa_dev");
 			return;
 		}
 
-		memset(isa_dev, 0, sizeof(*isa_dev));
+		sd = &isa_dev->ofdev.dev.archdata;
+		sd->prom_node = dp;
+		sd->op = &isa_dev->ofdev;
+		sd->iommu = isa_br->ofdev.dev.parent->archdata.iommu;
+		sd->stc = isa_br->ofdev.dev.parent->archdata.stc;
 
 		isa_dev->ofdev.node = dp;
 		isa_dev->ofdev.dev.parent = &isa_br->ofdev.dev;
@@ -141,8 +122,8 @@ static void __init isa_fill_devices(struct sparc_isa_bridge *isa_br)
 		isa_dev->bus = isa_br;
 		isa_dev->prom_node = dp;
 
-		regs = isa_dev_get_resource(isa_dev);
-		isa_dev_get_irq(isa_dev, regs);
+		isa_dev_get_resource(isa_dev);
+		isa_dev_get_irq(isa_dev);
 
 		report_dev(isa_dev, 0);
 
@@ -166,27 +147,16 @@ void __init isa_init(void)
 
 	pdev = NULL;
 	while ((pdev = pci_get_device(vendor, device, pdev)) != NULL) {
-		struct pcidev_cookie *pdev_cookie;
-		struct pci_pbm_info *pbm;
 		struct sparc_isa_bridge *isa_br;
 		struct device_node *dp;
 
-		pdev_cookie = pdev->sysdata;
-		if (!pdev_cookie) {
-			printk("ISA: Warning, ISA bridge ignored due to "
-			       "lack of OBP data.\n");
-			continue;
-		}
-		pbm = pdev_cookie->pbm;
-		dp = pdev_cookie->prom_node;
+		dp = pci_device_to_OF_node(pdev);
 
-		isa_br = kmalloc(sizeof(*isa_br), GFP_KERNEL);
+		isa_br = kzalloc(sizeof(*isa_br), GFP_KERNEL);
 		if (!isa_br) {
 			printk(KERN_DEBUG "isa: cannot allocate sparc_isa_bridge");
 			return;
 		}
-
-		memset(isa_br, 0, sizeof(*isa_br));
 
 		isa_br->ofdev.node = dp;
 		isa_br->ofdev.dev.parent = &pdev->dev;
@@ -205,10 +175,9 @@ void __init isa_init(void)
 		isa_br->next = isa_chain;
 		isa_chain = isa_br;
 
-		isa_br->parent = pbm;
 		isa_br->self = pdev;
 		isa_br->index = index++;
-		isa_br->prom_node = pdev_cookie->prom_node;
+		isa_br->prom_node = dp;
 
 		printk("isa%d:", isa_br->index);
 

@@ -699,7 +699,7 @@ static int __devinit snd_bt87x_pcm(struct snd_bt87x *chip, int device, char *nam
 						     SNDRV_DMA_TYPE_DEV_SG,
 						     snd_dma_pci_data(chip->pci),
 							128 * 1024,
-							(255 * 4092 + 1023) & ~1023);
+							ALIGN(255 * 4092, 1024));
 }
 
 static int __devinit snd_bt87x_create(struct snd_card *card,
@@ -747,7 +747,7 @@ static int __devinit snd_bt87x_create(struct snd_card *card,
 	snd_bt87x_writel(chip, REG_INT_MASK, 0);
 	snd_bt87x_writel(chip, REG_INT_STAT, MY_INTERRUPTS);
 
-	if (request_irq(pci->irq, snd_bt87x_interrupt, IRQF_DISABLED | IRQF_SHARED,
+	if (request_irq(pci->irq, snd_bt87x_interrupt, IRQF_SHARED,
 			"Bt87x audio", chip)) {
 		snd_bt87x_free(chip);
 		snd_printk(KERN_ERR "cannot grab irq\n");
@@ -781,6 +781,10 @@ static struct pci_device_id snd_bt87x_ids[] = {
 	BT_DEVICE(PCI_DEVICE_ID_BROOKTREE_879, 0x0070, 0x13eb, 32000),
 	/* Viewcast Osprey 200 */
 	BT_DEVICE(PCI_DEVICE_ID_BROOKTREE_878, 0x0070, 0xff01, 44100),
+	/* Viewcast Osprey 440 (rate is configurable via gpio) */
+	BT_DEVICE(PCI_DEVICE_ID_BROOKTREE_878, 0x0070, 0xff07, 32000),
+	/* ATI TV-Wonder */
+	BT_DEVICE(PCI_DEVICE_ID_BROOKTREE_878, 0x1002, 0x0001, 32000),
 	/* Leadtek Winfast tv 2000xp delux */
 	BT_DEVICE(PCI_DEVICE_ID_BROOKTREE_878, 0x107d, 0x6606, 32000),
 	/* Voodoo TV 200 */
@@ -804,6 +808,7 @@ static struct {
 	{0x1822, 0x0001}, /* Twinhan VisionPlus DVB-T */
 	{0x18ac, 0xd500}, /* DVICO FusionHDTV 5 Lite */
 	{0x18ac, 0xdb10}, /* DVICO FusionHDTV DVB-T Lite */
+	{0x18ac, 0xdb11}, /* Ultraview DVB-T Lite */
 	{0x270f, 0xfc00}, /* Chaintech Digitop DST-1000 DVB-S */
 	{0x7063, 0x2000}, /* pcHDTV HD-2000 TV */
 };
@@ -832,7 +837,7 @@ static int __devinit snd_bt87x_detect_card(struct pci_dev *pci)
 	           pci->device, pci->subsystem_vendor, pci->subsystem_device);
 	snd_printk(KERN_DEBUG "please mail id, board name, and, "
 		   "if it works, the correct digital_rate option to "
-		   "<alsa-devel@lists.sf.net>\n");
+		   "<alsa-devel@alsa-project.org>\n");
 	return 32000; /* default rate */
 }
 

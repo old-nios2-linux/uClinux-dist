@@ -153,8 +153,9 @@ static void pl011_rx_chars(struct uart_amba_port *uap)
 	ignore_char:
 		status = readw(uap->port.membase + UART01x_FR);
 	}
+	spin_unlock(&uap->port.lock);
 	tty_flip_buffer_push(tty);
-	return;
+	spin_lock(&uap->port.lock);
 }
 
 static void pl011_tx_chars(struct uart_amba_port *uap)
@@ -412,8 +413,8 @@ static void pl011_shutdown(struct uart_port *port)
 }
 
 static void
-pl011_set_termios(struct uart_port *port, struct termios *termios,
-		     struct termios *old)
+pl011_set_termios(struct uart_port *port, struct ktermios *termios,
+		     struct ktermios *old)
 {
 	unsigned int lcr_h, old_cr;
 	unsigned long flags;
@@ -661,6 +662,8 @@ static int __init pl011_console_setup(struct console *co, char *options)
 	if (co->index >= UART_NR)
 		co->index = 0;
 	uap = amba_ports[co->index];
+	if (!uap)
+		return -ENODEV;
 
 	uap->port.uartclk = clk_get_rate(uap->clk);
 
@@ -713,7 +716,7 @@ static int pl011_probe(struct amba_device *dev, void *id)
 		goto out;
 	}
 
-	uap = kmalloc(sizeof(struct uart_amba_port), GFP_KERNEL);
+	uap = kzalloc(sizeof(struct uart_amba_port), GFP_KERNEL);
 	if (uap == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -725,7 +728,6 @@ static int pl011_probe(struct amba_device *dev, void *id)
 		goto free;
 	}
 
-	memset(uap, 0, sizeof(struct uart_amba_port));
 	uap->clk = clk_get(&dev->dev, "UARTCLK");
 	if (IS_ERR(uap->clk)) {
 		ret = PTR_ERR(uap->clk);

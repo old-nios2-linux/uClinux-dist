@@ -1,9 +1,9 @@
 /* 
- * $Id: hslot.c,v 1.5 2002/09/19 12:23:55 jku Rel $ 
+ * $Id: hslot.c,v 1.6 2004/08/24 09:00:46 janakj Exp $ 
  *
  * Hash table collision slot related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

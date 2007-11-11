@@ -21,26 +21,26 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 
-char *screen;
+static char *screen;
 
-int nrows = 25;
-int ncols = 80;
-int scr_size;
-int interv = 1;
-int fd=1;
-int dly=5;
-jmp_buf jb;
+static int nrows = 25;
+static int ncols = 80;
+static int scr_size;
+static int fd=1;
+static int dly=5;
+static jmp_buf jb;
 
 extern int optind;
 extern char *optarg;
 
-void alrm(int n)
+static void alrm(int signo)
 {
+    (void)signo;
     signal(SIGALRM, alrm);
     alarm(dly);
 }
 
-void setsize(int i)
+static void setsize(int i)
 {
     struct winsize win;
 

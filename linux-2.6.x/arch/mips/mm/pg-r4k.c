@@ -209,7 +209,7 @@ static inline void build_cdex_p(void)
 	}
 
 	if (R4600_V2_HIT_CACHEOP_WAR && cpu_is_r4600_v2_x())
-		build_insn_word(0x3c01a000);	/* lui     $at, 0xa000  */
+		build_insn_word(0x8c200000);	/* lw      $zero, ($at) */
 
 	mi.c_format.opcode     = cache_op;
 	mi.c_format.rs         = 4;		/* $a0 */
@@ -243,11 +243,10 @@ static void __init __build_store_reg(int reg)
 
 static inline void build_store_reg(int reg)
 {
-	if (cpu_has_prefetch)
-		if (reg)
-			build_dst_pref(pref_offset_copy);
-		else
-			build_dst_pref(pref_offset_clear);
+	int pref_off = cpu_has_prefetch ?
+		(reg ? pref_offset_copy : pref_offset_clear) : 0;
+	if (pref_off)
+		build_dst_pref(pref_off);
 	else if (cpu_has_cache_cdex_s)
 		build_cdex_s();
 	else if (cpu_has_cache_cdex_p)

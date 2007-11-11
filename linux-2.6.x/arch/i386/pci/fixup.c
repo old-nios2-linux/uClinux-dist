@@ -25,9 +25,9 @@ static void __devinit pci_fixup_i450nx(struct pci_dev *d)
 		pci_read_config_byte(d, reg++, &subb);
 		DBG("i450NX PXB %d: %02x/%02x/%02x\n", pxb, busno, suba, subb);
 		if (busno)
-			pci_scan_bus(busno, &pci_root_ops, NULL);	/* Bus A */
+			pci_scan_bus_with_sysdata(busno);	/* Bus A */
 		if (suba < subb)
-			pci_scan_bus(suba+1, &pci_root_ops, NULL);	/* Bus B */
+			pci_scan_bus_with_sysdata(suba+1);	/* Bus B */
 	}
 	pcibios_last_bus = -1;
 }
@@ -42,7 +42,7 @@ static void __devinit pci_fixup_i450gx(struct pci_dev *d)
 	u8 busno;
 	pci_read_config_byte(d, 0x4a, &busno);
 	printk(KERN_INFO "PCI: i440KX/GX host bridge %s: secondary bus %02x\n", pci_name(d), busno);
-	pci_scan_bus(busno, &pci_root_ops, NULL);
+	pci_scan_bus_with_sysdata(busno);
 	pcibios_last_bus = -1;
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82454GX, pci_fixup_i450gx);
@@ -73,52 +73,6 @@ static void __devinit  pci_fixup_ncr53c810(struct pci_dev *d)
 	}
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_53C810, pci_fixup_ncr53c810);
-
-static void __devinit pci_fixup_ide_bases(struct pci_dev *d)
-{
-	int i;
-
-	/*
-	 * PCI IDE controllers use non-standard I/O port decoding, respect it.
-	 */
-	if ((d->class >> 8) != PCI_CLASS_STORAGE_IDE)
-		return;
-	DBG("PCI: IDE base address fixup for %s\n", pci_name(d));
-	for(i=0; i<4; i++) {
-		struct resource *r = &d->resource[i];
-		if ((r->start & ~0x80) == 0x374) {
-			r->start |= 2;
-			r->end = r->start;
-		}
-	}
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pci_fixup_ide_bases);
-
-static void __devinit  pci_fixup_ide_trash(struct pci_dev *d)
-{
-	int i;
-
-	/*
-	 * Runs the fixup only for the first IDE controller
-	 * (Shai Fultheim - shai@ftcon.com)
-	 */
-	static int called = 0;
-	if (called)
-		return;
-	called = 1;
-
-	/*
-	 * There exist PCI IDE controllers which have utter garbage
-	 * in first four base registers. Ignore that.
-	 */
-	DBG("PCI: IDE base address trash cleared for %s\n", pci_name(d));
-	for(i=0; i<4; i++)
-		d->resource[i].start = d->resource[i].end = d->resource[i].flags = 0;
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_5513, pci_fixup_ide_trash);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801CA_10, pci_fixup_ide_trash);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801CA_11, pci_fixup_ide_trash);
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801DB_9, pci_fixup_ide_trash);
 
 static void __devinit  pci_fixup_latency(struct pci_dev *d)
 {
@@ -161,14 +115,11 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, pci
 #define VIA_8363_KL133_REVISION_ID 0x81
 #define VIA_8363_KM133_REVISION_ID 0x84
 
-static void __devinit pci_fixup_via_northbridge_bug(struct pci_dev *d)
+static void pci_fixup_via_northbridge_bug(struct pci_dev *d)
 {
 	u8 v;
-	u8 revision;
 	int where = 0x55;
 	int mask = 0x1f; /* clear bits 5, 6, 7 by default */
-
-	pci_read_config_byte(d, PCI_REVISION_ID, &revision);
 
 	if (d->device == PCI_DEVICE_ID_VIA_8367_0) {
 		/* fix pci bus latency issues resulted by NB bios error
@@ -179,8 +130,8 @@ static void __devinit pci_fixup_via_northbridge_bug(struct pci_dev *d)
 		where = 0x95; /* the memory write queue timer register is 
 				different for the KT266x's: 0x95 not 0x55 */
 	} else if (d->device == PCI_DEVICE_ID_VIA_8363_0 &&
-			(revision == VIA_8363_KL133_REVISION_ID || 
-			revision == VIA_8363_KM133_REVISION_ID)) {
+			(d->revision == VIA_8363_KL133_REVISION_ID ||
+			d->revision == VIA_8363_KM133_REVISION_ID)) {
 			mask = 0x3f; /* clear only bits 6 and 7; clearing bit 5
 					causes screen corruption on the KL133/KM133 */
 	}
@@ -188,7 +139,7 @@ static void __devinit pci_fixup_via_northbridge_bug(struct pci_dev *d)
 	pci_read_config_byte(d, where, &v);
 	if (v & ~mask) {
 		printk(KERN_WARNING "Disabling VIA memory write queue (PCI ID %04x, rev %02x): [%02x] %02x & %02x -> %02x\n", \
-			d->device, revision, where, v, mask, v & mask);
+			d->device, d->revision, where, v, mask, v & mask);
 		v &= mask;
 		pci_write_config_byte(d, where, v);
 	}
@@ -197,6 +148,10 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8363_0, pci_fixup_
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8622, pci_fixup_via_northbridge_bug);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8361, pci_fixup_via_northbridge_bug);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8367_0, pci_fixup_via_northbridge_bug);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8363_0, pci_fixup_via_northbridge_bug);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8622, pci_fixup_via_northbridge_bug);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8361, pci_fixup_via_northbridge_bug);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8367_0, pci_fixup_via_northbridge_bug);
 
 /*
  * For some reasons Intel decided that certain parts of their
@@ -227,7 +182,7 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, PCI_ANY_ID, pci_fixup_transparent_
  * issue another HALT within 80 ns of the initial HALT, the failure condition
  * is avoided.
  */
-static void __init pci_fixup_nforce2(struct pci_dev *dev)
+static void pci_fixup_nforce2(struct pci_dev *dev)
 {
 	u32 val;
 
@@ -250,6 +205,7 @@ static void __init pci_fixup_nforce2(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_NFORCE2, pci_fixup_nforce2);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_NFORCE2, pci_fixup_nforce2);
 
 /* Max PCI Express root ports */
 #define MAX_PCIEROOT	6
@@ -395,7 +351,7 @@ static void __devinit pci_fixup_video(struct pci_dev *pdev)
 		printk(KERN_DEBUG "Boot video device is %s\n", pci_name(pdev));
 	}
 }
-DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, pci_fixup_video);
+DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, pci_fixup_video);
 
 /*
  * Some Toshiba laptops need extra code to enable their TI TSB43AB22/A.
@@ -465,7 +421,7 @@ DECLARE_PCI_FIXUP_ENABLE(PCI_VENDOR_ID_TI, 0x8032,
  * Prevent the BIOS trapping accesses to the Cyrix CS5530A video device
  * configuration space.
  */
-static void __devinit pci_early_fixup_cyrix_5530(struct pci_dev *dev)
+static void pci_early_fixup_cyrix_5530(struct pci_dev *dev)
 {
 	u8 r;
 	/* clear 'F4 Video Configuration Trap' bit */
@@ -475,3 +431,16 @@ static void __devinit pci_early_fixup_cyrix_5530(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5530_LEGACY,
 			pci_early_fixup_cyrix_5530);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5530_LEGACY,
+			pci_early_fixup_cyrix_5530);
+
+/*
+ * Siemens Nixdorf AG FSC Multiprocessor Interrupt Controller:
+ * prevent update of the BAR0, which doesn't look like a normal BAR.
+ */
+static void __devinit pci_siemens_interrupt_controller(struct pci_dev *dev)
+{
+	dev->resource[0].flags |= IORESOURCE_PCI_FIXED;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_SIEMENS, 0x0015,
+			  pci_siemens_interrupt_controller);

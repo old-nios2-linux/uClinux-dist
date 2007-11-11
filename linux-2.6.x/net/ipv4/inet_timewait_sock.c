@@ -14,7 +14,8 @@
 #include <net/ip.h>
 
 /* Must be called with locally disabled BHs. */
-void __inet_twsk_kill(struct inet_timewait_sock *tw, struct inet_hashinfo *hashinfo)
+static void __inet_twsk_kill(struct inet_timewait_sock *tw,
+			     struct inet_hashinfo *hashinfo)
 {
 	struct inet_bind_hashbucket *bhead;
 	struct inet_bind_bucket *tb;
@@ -47,8 +48,6 @@ void __inet_twsk_kill(struct inet_timewait_sock *tw, struct inet_hashinfo *hashi
 	inet_twsk_put(tw);
 }
 
-EXPORT_SYMBOL_GPL(__inet_twsk_kill);
-
 /*
  * Enter the time wait state. This is called with locally disabled BH.
  * Essentially we whip up a timewait bucket, copy the relevant info into it
@@ -78,8 +77,8 @@ void __inet_twsk_hashdance(struct inet_timewait_sock *tw, struct sock *sk,
 	if (__sk_del_node_init(sk))
 		sock_prot_dec_use(sk->sk_prot);
 
-	/* Step 3: Hash TW into TIMEWAIT half of established hash table. */
-	inet_twsk_add_node(tw, &(ehead + hashinfo->ehash_size)->chain);
+	/* Step 3: Hash TW into TIMEWAIT chain. */
+	inet_twsk_add_node(tw, &ehead->twchain);
 	atomic_inc(&tw->tw_refcnt);
 
 	write_unlock(&ehead->lock);
@@ -91,7 +90,7 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk, const int stat
 {
 	struct inet_timewait_sock *tw =
 		kmem_cache_alloc(sk->sk_prot_creator->twsk_prot->twsk_slab,
-				 SLAB_ATOMIC);
+				 GFP_ATOMIC);
 	if (tw != NULL) {
 		const struct inet_sock *inet = inet_sk(sk);
 
@@ -178,7 +177,6 @@ void inet_twdr_hangman(unsigned long data)
 	need_timer = 0;
 	if (inet_twdr_do_twkill_work(twdr, twdr->slot)) {
 		twdr->thread_slots |= (1 << twdr->slot);
-		mb();
 		schedule_work(&twdr->twkill_work);
 		need_timer = 1;
 	} else {
@@ -197,9 +195,10 @@ EXPORT_SYMBOL_GPL(inet_twdr_hangman);
 
 extern void twkill_slots_invalid(void);
 
-void inet_twdr_twkill_work(void *data)
+void inet_twdr_twkill_work(struct work_struct *work)
 {
-	struct inet_timewait_death_row *twdr = data;
+	struct inet_timewait_death_row *twdr =
+		container_of(work, struct inet_timewait_death_row, twkill_work);
 	int i;
 
 	if ((INET_TWDR_TWKILL_SLOTS - 1) > (sizeof(twdr->thread_slots) * 8))

@@ -28,6 +28,8 @@
 #ifndef _SMB_ANDX_DECODE_H_
 #define _SMB_ANDX_DECODE_H_
 
+typedef unsigned short uni_char_t;
+
 int ProcessSMBSetupXReq(SMB_HDR *smbHdr, u_int8_t *data, u_int16_t size, u_int16_t total_size);
 int ProcessSMBTreeConnXReq(SMB_HDR *smbHdr, u_int8_t *data, u_int16_t size, u_int16_t total_size);
 int ProcessSMBNTCreateX(SMB_HDR *smbHdr, u_int8_t *data, u_int16_t size, u_int16_t total_size);

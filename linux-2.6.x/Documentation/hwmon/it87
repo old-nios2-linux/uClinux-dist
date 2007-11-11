@@ -9,15 +9,15 @@ Supported chips:
                http://www.ite.com.tw/
   * IT8712F
     Prefix: 'it8712'
-    Addresses scanned: I2C 0x2d
-                       from Super I/O config space (8 I/O ports)
+    Addresses scanned: from Super I/O config space (8 I/O ports)
     Datasheet: Publicly available at the ITE website
                http://www.ite.com.tw/
-  * IT8716F
+  * IT8716F/IT8726F
     Prefix: 'it8716'
     Addresses scanned: from Super I/O config space (8 I/O ports)
     Datasheet: Publicly available at the ITE website
                http://www.ite.com.tw/product_info/file/pc/IT8716F_V0.3.ZIP
+               http://www.ite.com.tw/product_info/file/pc/IT8726F_V0.3.pdf
   * IT8718F
     Prefix: 'it8718'
     Addresses scanned: from Super I/O config space (8 I/O ports)
@@ -53,11 +53,23 @@ Module Parameters
   misconfigured by BIOS - PWM values would be inverted. This option tries
   to fix this. Please contact your BIOS manufacturer and ask him for fix.
 
+
+Hardware Interfaces
+-------------------
+
+All the chips suported by this driver are LPC Super-I/O chips, accessed
+through the LPC bus (ISA-like I/O ports). The IT8712F additionally has an
+SMBus interface to the hardware monitoring functions. This driver no
+longer supports this interface though, as it is slower and less reliable
+than the ISA access, and was only available on a small number of
+motherboard models.
+
+
 Description
 -----------
 
 This driver implements support for the IT8705F, IT8712F, IT8716F,
-IT8718F and SiS950 chips.
+IT8718F, IT8726F and SiS950 chips.
 
 These chips are 'Super I/O chips', supporting floppy disks, infrared ports,
 joysticks and other miscellaneous stuff. For hardware monitoring, they
@@ -85,6 +97,10 @@ The IT8716F and IT8718F, and late IT8712F and IT8705F also have optional
 clock divider mess) but not compatible with the older chips and
 revisions. For now, the driver only uses the 16-bit mode on the
 IT8716F and IT8718F.
+
+The IT8726F is just bit enhanced IT8716F with additional hardware
+for AMD power sequencing. Therefore the chip will appear as IT8716F
+to userspace applications.
 
 Temperatures are measured in degrees Celsius. An alarm is triggered once
 when the Overtemperature Shutdown limit is crossed.
@@ -124,6 +140,16 @@ Give 0 for unused sensor. Any other value is invalid. To configure this at
 startup, consult lm_sensors's /etc/sensors.conf. (2 = thermistor;
 3 = thermal diode)
 
+
+Fan speed control
+-----------------
+
 The fan speed control features are limited to manual PWM mode. Automatic
 "Smart Guardian" mode control handling is not implemented. However
 if you want to go for "manual mode" just write 1 to pwmN_enable.
+
+If you are only able to control the fan speed with very small PWM values,
+try lowering the PWM base frequency (pwm1_freq). Depending on the fan,
+it may give you a somewhat greater control range. The same frequency is
+used to drive all fan outputs, which is why pwm2_freq and pwm3_freq are
+read-only.

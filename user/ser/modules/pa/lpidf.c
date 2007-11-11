@@ -1,9 +1,9 @@
 /*
  * Presence Agent, LPIDF document support
  *
- * $Id: lpidf.c,v 1.4 2003/04/30 17:49:29 janakj Exp $
+ * $Id: lpidf.c,v 1.7.2.1 2005/07/20 17:11:52 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -84,6 +84,7 @@ int lpidf_add_address(str* _b, int _l, str* _addr, lpidf_status_t _st)
 	switch(_st) {
 	case LPIDF_ST_OPEN:   s.s = Q_OPEN; s.len = Q_OPEN_L;     break;
 	case LPIDF_ST_CLOSED: s.s = Q_CLOSED; s.len = Q_CLOSED_L; break;
+	default: s.s=0; s.len=0;
 	}
 
 	if (_l < (CONTACT_START_L + _addr->len + CONTACT_MIDDLE_L + s.len + 2)) {

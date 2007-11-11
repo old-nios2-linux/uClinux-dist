@@ -65,6 +65,7 @@
 @  r2  = faulted PC+4
 @  r9  = successful return
 @  r10 = vfp_state union
+@  r11 = CPU number
 @  lr  = failure return
 
 	.globl	vfp_support_entry
@@ -73,14 +74,14 @@ vfp_support_entry:
 
 	VFPFMRX	r1, FPEXC		@ Is the VFP enabled?
 	DBGSTR1	"fpexc %08x", r1
-	tst	r1, #FPEXC_ENABLE
+	tst	r1, #FPEXC_EN
 	bne	look_for_VFP_exceptions	@ VFP is already enabled
 
 	DBGSTR1 "enable %x", r10
 	ldr	r3, last_VFP_context_address
-	orr	r1, r1, #FPEXC_ENABLE	@ user FPEXC has the enable bit set
-	ldr	r4, [r3]		@ last_VFP_context pointer
-	bic	r5, r1, #FPEXC_EXCEPTION @ make sure exceptions are disabled
+	orr	r1, r1, #FPEXC_EN	@ user FPEXC has the enable bit set
+	ldr	r4, [r3, r11, lsl #2]	@ last_VFP_context pointer
+	bic	r5, r1, #FPEXC_EX	@ make sure exceptions are disabled
 	cmp	r4, r10
 	beq	check_for_exception	@ we are returning to the same
 					@ process, so the registers are
@@ -91,7 +92,9 @@ vfp_support_entry:
 					@ exceptions, so we can get at the
 					@ rest of it
 
+#ifndef CONFIG_SMP
 	@ Save out the current registers to the old thread state
+	@ No need for SMP since this is not done lazily
 
 	DBGSTR1	"save old state %p", r4
 	cmp	r4, #0
@@ -105,10 +108,11 @@ vfp_support_entry:
 	stmia	r4, {r1, r5, r6, r8}	@ save FPEXC, FPSCR, FPINST, FPINST2
 					@ and point r4 at the word at the
 					@ start of the register dump
+#endif
 
 no_old_VFP_process:
 	DBGSTR1	"load state %p", r10
-	str	r10, [r3]		@ update the last_VFP_context pointer
+	str	r10, [r3, r11, lsl #2]	@ update the last_VFP_context pointer
 					@ Load the saved state back into the VFP
 	VFPFLDMIA r10	 		@ reload the working registers while
 					@ FPEXC is in a safe state
@@ -120,7 +124,7 @@ no_old_VFP_process:
 	VFPFMXR	FPSCR, r5		@ restore status
 
 check_for_exception:
-	tst	r1, #FPEXC_EXCEPTION
+	tst	r1, #FPEXC_EX
 	bne	process_exception	@ might as well handle the pending
 					@ exception before retrying branch
 					@ out before setting an FPEXC that
@@ -132,10 +136,10 @@ check_for_exception:
 
 
 look_for_VFP_exceptions:
-	tst	r1, #FPEXC_EXCEPTION
+	tst	r1, #FPEXC_EX
 	bne	process_exception
 	VFPFMRX	r5, FPSCR
-	tst	r5, #FPSCR_IXE		@ IXE doesn't set FPEXC_EXCEPTION !
+	tst	r5, #FPSCR_IXE		@ IXE doesn't set FPEXC_EX !
 	bne	process_exception
 
 	@ Fall into hand on to next handler - appropriate coproc instr
@@ -161,6 +165,24 @@ process_exception:
 					@ code will raise an exception if
 					@ required. If not, the user code will
 					@ retry the faulted instruction
+
+#ifdef CONFIG_SMP
+	.globl	vfp_save_state
+	.type	vfp_save_state, %function
+vfp_save_state:
+	@ Save the current VFP state
+	@ r0 - save location
+	@ r1 - FPEXC
+	DBGSTR1	"save VFP state %p", r0
+	VFPFMRX	r2, FPSCR		@ current status
+	VFPFMRX	r3, FPINST		@ FPINST (always there, rev0 onwards)
+	tst	r1, #FPEXC_FPV2		@ is there an FPINST2 to read?
+	VFPFMRX	r12, FPINST2, NE	@ FPINST2 if needed - avoids reading
+					@ nonexistant reg on rev0
+	VFPFSTMIA r0 			@ save the working registers
+	stmia	r0, {r1, r2, r3, r12}	@ save FPEXC, FPSCR, FPINST, FPINST2
+	mov	pc, lr
+#endif
 
 last_VFP_context_address:
 	.word	last_VFP_context

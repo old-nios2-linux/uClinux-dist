@@ -3,6 +3,7 @@
 
 #include <asm/types.h>
 #include <asm/mpspec.h>
+#include <asm/apicdef.h>
 
 /*
  * Intel IO-APIC support for SMP and UP systems.
@@ -85,18 +86,8 @@ struct IO_APIC_route_entry {
 		mask		:  1,	/* 0: enabled, 1: disabled */
 		__reserved_2	: 15;
 
-	union {		struct { __u32
-					__reserved_1	: 24,
-					physical_dest	:  4,
-					__reserved_2	:  4;
-			} physical;
-
-			struct { __u32
-					__reserved_1	: 24,
-					logical_dest	:  8;
-			} logical;
-	} dest;
-
+	__u32	__reserved_3	: 24,
+		dest		:  8;
 } __attribute__ ((packed));
 
 /*
@@ -117,6 +108,12 @@ extern int mpc_default_type;
 
 /* 1 if "noapic" boot option passed */
 extern int skip_ioapic_setup;
+
+static inline void disable_ioapic_setup(void)
+{
+	skip_ioapic_setup = 1;
+}
+
 
 /*
  * If we use the IO-APIC for IRQ routing, disable automatic

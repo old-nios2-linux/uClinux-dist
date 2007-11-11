@@ -1,7 +1,7 @@
 /*
  * Definitions for tcp compression routines.
  *
- * $Id: slcompress.h,v 1.1.1.1 1999/11/22 03:47:53 christ Exp $
+ * $Id: slcompress.h,v 1.2 2007/06/08 04:02:37 gerg Exp $
  *
  * Copyright (c) 1989 Regents of the University of California.
  * All rights reserved.

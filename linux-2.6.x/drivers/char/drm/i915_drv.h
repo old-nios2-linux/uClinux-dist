@@ -46,9 +46,11 @@
  * 1.3: Add vblank support
  * 1.4: Fix cmdbuffer path, add heap destroy
  * 1.5: Add vblank pipe configuration
+ * 1.6: - New ioctl for scheduling buffer swaps on vertical blank
+ *      - Support vertical blank on secondary display pipe
  */
 #define DRIVER_MAJOR		1
-#define DRIVER_MINOR		5
+#define DRIVER_MINOR		6
 #define DRIVER_PATCHLEVEL	0
 
 typedef struct _drm_i915_ring_buffer {
@@ -71,6 +73,13 @@ struct mem_block {
 	DRMFILE filp;		/* 0: free, -1: heap, other: real files */
 };
 
+typedef struct _drm_i915_vbl_swap {
+	struct list_head head;
+	drm_drawable_t drw_id;
+	unsigned int pipe;
+	unsigned int sequence;
+} drm_i915_vbl_swap_t;
+
 typedef struct drm_i915_private {
 	drm_local_map_t *sarea;
 	drm_local_map_t *mmio_map;
@@ -82,7 +91,10 @@ typedef struct drm_i915_private {
 	void *hw_status_page;
 	dma_addr_t dma_status_page;
 	unsigned long counter;
+	unsigned int status_gfx_addr;
+	drm_local_map_t hws_map;
 
+	unsigned int cpp;
 	int back_offset;
 	int front_offset;
 	int current_page;
@@ -98,17 +110,21 @@ typedef struct drm_i915_private {
 	struct mem_block *agp_heap;
 	unsigned int sr01, adpa, ppcr, dvob, dvoc, lvds;
 	int vblank_pipe;
+
+	spinlock_t swaps_lock;
+	drm_i915_vbl_swap_t vbl_swaps;
+	unsigned int swaps_pending;
 } drm_i915_private_t;
 
 extern drm_ioctl_desc_t i915_ioctls[];
 extern int i915_max_ioctl;
 
 				/* i915_dma.c */
-extern void i915_kernel_lost_context(drm_device_t * dev);
+extern void i915_kernel_lost_context(struct drm_device * dev);
 extern int i915_driver_load(struct drm_device *, unsigned long flags);
-extern void i915_driver_lastclose(drm_device_t * dev);
-extern void i915_driver_preclose(drm_device_t * dev, DRMFILE filp);
-extern int i915_driver_device_is_agp(drm_device_t * dev);
+extern void i915_driver_lastclose(struct drm_device * dev);
+extern void i915_driver_preclose(struct drm_device * dev, DRMFILE filp);
+extern int i915_driver_device_is_agp(struct drm_device * dev);
 extern long i915_compat_ioctl(struct file *filp, unsigned int cmd,
 			      unsigned long arg);
 
@@ -116,13 +132,15 @@ extern long i915_compat_ioctl(struct file *filp, unsigned int cmd,
 extern int i915_irq_emit(DRM_IOCTL_ARGS);
 extern int i915_irq_wait(DRM_IOCTL_ARGS);
 
-extern int i915_driver_vblank_wait(drm_device_t *dev, unsigned int *sequence);
+extern int i915_driver_vblank_wait(struct drm_device *dev, unsigned int *sequence);
+extern int i915_driver_vblank_wait2(struct drm_device *dev, unsigned int *sequence);
 extern irqreturn_t i915_driver_irq_handler(DRM_IRQ_ARGS);
-extern void i915_driver_irq_preinstall(drm_device_t * dev);
-extern void i915_driver_irq_postinstall(drm_device_t * dev);
-extern void i915_driver_irq_uninstall(drm_device_t * dev);
+extern void i915_driver_irq_preinstall(struct drm_device * dev);
+extern void i915_driver_irq_postinstall(struct drm_device * dev);
+extern void i915_driver_irq_uninstall(struct drm_device * dev);
 extern int i915_vblank_pipe_set(DRM_IOCTL_ARGS);
 extern int i915_vblank_pipe_get(DRM_IOCTL_ARGS);
+extern int i915_vblank_swap(DRM_IOCTL_ARGS);
 
 /* i915_mem.c */
 extern int i915_mem_alloc(DRM_IOCTL_ARGS);
@@ -130,7 +148,7 @@ extern int i915_mem_free(DRM_IOCTL_ARGS);
 extern int i915_mem_init_heap(DRM_IOCTL_ARGS);
 extern int i915_mem_destroy_heap(DRM_IOCTL_ARGS);
 extern void i915_mem_takedown(struct mem_block **heap);
-extern void i915_mem_release(drm_device_t * dev,
+extern void i915_mem_release(struct drm_device * dev,
 			     DRMFILE filp, struct mem_block *heap);
 
 #define I915_READ(reg)          DRM_READ32(dev_priv->mmio_map, (reg))
@@ -170,7 +188,7 @@ extern void i915_mem_release(drm_device_t * dev,
 	I915_WRITE(LP_RING + RING_TAIL, outring);			\
 } while(0)
 
-extern int i915_wait_ring(drm_device_t * dev, int n, const char *caller);
+extern int i915_wait_ring(struct drm_device * dev, int n, const char *caller);
 
 #define GFX_OP_USER_INTERRUPT 		((0<<29)|(2<<23))
 #define GFX_OP_BREAKPOINT_INTERRUPT	((0<<29)|(1<<23))
@@ -191,6 +209,12 @@ extern int i915_wait_ring(drm_device_t * dev, int n, const char *caller);
 #define I915REG_INT_IDENTITY_R	0x020a4
 #define I915REG_INT_MASK_R 	0x020a8
 #define I915REG_INT_ENABLE_R	0x020a0
+
+#define I915REG_PIPEASTAT	0x70024
+#define I915REG_PIPEBSTAT	0x71024
+
+#define I915_VBLANK_INTERRUPT_ENABLE	(1UL<<17)
+#define I915_VBLANK_CLEAR		(1UL<<1)
 
 #define SRX_INDEX		0x3c4
 #define SRX_DATA		0x3c5
@@ -256,10 +280,15 @@ extern int i915_wait_ring(drm_device_t * dev, int n, const char *caller);
 
 #define GFX_OP_DRAWRECT_INFO_I965 ((0x7900<<16)|0x2)
 
+#define XY_SRC_COPY_BLT_CMD		((2<<29)|(0x53<<22)|6)
+#define XY_SRC_COPY_BLT_WRITE_ALPHA	(1<<21)
+#define XY_SRC_COPY_BLT_WRITE_RGB	(1<<20)
+
 #define MI_BATCH_BUFFER 	((0x30<<23)|1)
 #define MI_BATCH_BUFFER_START 	(0x31<<23)
 #define MI_BATCH_BUFFER_END 	(0xA<<23)
 #define MI_BATCH_NON_SECURE	(1)
+#define MI_BATCH_NON_SECURE_I965 (1<<8)
 
 #define MI_WAIT_FOR_EVENT       ((0x3<<23))
 #define MI_WAIT_FOR_PLANE_A_FLIP      (1<<2)

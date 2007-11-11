@@ -1,9 +1,9 @@
 /*
  *
- * $Id: config.h,v 1.2 2002/09/19 12:23:53 jku Rel $
+ * $Id: config.h,v 1.3 2004/08/24 08:58:29 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: net.c,v 1.24 2001/07/10 13:48:44 hughesj Exp $
+ *	$Id: net.c,v 1.52 2006/12/13 16:59:44 ldv Exp $
  */
 
 #include "defs.h"
@@ -36,11 +36,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-//#if !defined(__UC_LIBC__) && defined(HAVE_SIN6_SCOPE_ID_LINUX)
+#if defined(HAVE_SIN6_SCOPE_ID_LINUX)
 #define in6_addr in6_addr_libc
 #define ipv6_mreq ipv6_mreq_libc
 #define sockaddr_in6 sockaddr_in6_libc
-//#endif
+#endif
 
 #include <netinet/in.h>
 #ifdef HAVE_NETINET_TCP_H
@@ -53,15 +53,14 @@
 #include <net/if.h>
 #if defined(LINUX)
 #include <asm/types.h>
-#if defined(__GLIBC__) && !defined(__UCLIBC__) && (__GLIBC__ >= 2) && (__GLIBC__ + __GLIBC_MINOR__ >= 3)
+#if defined(__GLIBC__) && (__GLIBC__ >= 2) && (__GLIBC__ + __GLIBC_MINOR__ >= 3)
 #  include <netipx/ipx.h>
 #else
-#  include <linux/types.h>
 #  include <linux/ipx.h>
 #endif
 #endif /* LINUX */
 
-#if (!defined(__UC_LIBC__)) && ((defined (__GLIBC__) ) && (((__GLIBC__ < 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 1)) || defined(HAVE_SIN6_SCOPE_ID_LINUX)))
+#if defined (__GLIBC__) && (((__GLIBC__ < 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 1)) || defined(HAVE_SIN6_SCOPE_ID_LINUX))
 #if defined(HAVE_LINUX_IN6_H)
 #if defined(HAVE_SIN6_SCOPE_ID_LINUX)
 #undef in6_addr
@@ -72,7 +71,7 @@
 #define sockaddr_in6 sockaddr_in6_kernel
 #endif
 #include <linux/in6.h>
-#if !defined(__UC_LIBC__) && defined(HAVE_SIN6_SCOPE_ID_LINUX)
+#if defined(HAVE_SIN6_SCOPE_ID_LINUX)
 #undef in6_addr
 #undef ipv6_mreq
 #undef sockaddr_in6
@@ -117,94 +116,205 @@
 #define IPPROTO_MAX IPPROTO_MAX
 #endif
 
-static struct xlat domains[] = {
-	{ PF_UNSPEC,	"PF_UNSPEC"	},
-	{ PF_UNIX,	"PF_UNIX"	},
-	{ PF_INET,	"PF_INET"	},
-#ifdef PF_NETLINK
-	{ PF_NETLINK,	"PF_NETLINK"	},
-#endif
-#ifdef PF_PACKET
-	{ PF_PACKET,	"PF_PACKET"	},
-#endif
-#ifdef PF_INET6
-	{ PF_INET6,	"PF_INET6"	},
-#endif
-#ifdef PF_ATMSVC
-	{ PF_ATMSVC,	"PF_INET6"	},
-#endif
-#ifdef PF_INET6
-	{ PF_INET6,	"PF_INET6"	},
-#endif
-#ifdef PF_LOCAL
-	{ PF_LOCAL,	"PS_LOCAL"	},
-#endif
-#ifdef PF_ISO
-	{ PF_ISO,	"PF_ISO"	},
-#endif
-#ifdef PF_AX25
-	{ PF_AX25,	"PF_AX25"	},
-#endif
-#ifdef PF_IPX
-	{ PF_IPX,	"PF_IPX"	},
+static const struct xlat domains[] = {
+#ifdef PF_AAL5
+	{ PF_AAL5,	"PF_AAL5"	},
 #endif
 #ifdef PF_APPLETALK
 	{ PF_APPLETALK,	"PF_APPLETALK"	},
 #endif
-#ifdef PF_NETROM
-	{ PF_NETROM,	"PF_NETROM"	},
+#ifdef PF_ASH
+	{ PF_ASH,	"PF_ASH"	},
+#endif
+#ifdef PF_ATMPVC
+	{ PF_ATMPVC,	"PF_ATMPVC"	},
+#endif
+#ifdef PF_ATMSVC
+	{ PF_ATMSVC,	"PF_ATMSVC"	},
+#endif
+#ifdef PF_AX25
+	{ PF_AX25,	"PF_AX25"	},
+#endif
+#ifdef PF_BLUETOOTH
+	{ PF_BLUETOOTH,	"PF_BLUETOOTH"	},
 #endif
 #ifdef PF_BRIDGE
 	{ PF_BRIDGE,	"PF_BRIDGE"	},
 #endif
-#ifdef PF_AAL5
-	{ PF_AAL5,	"PF_AAL5"	},
-#endif
-#ifdef PF_X25
-	{ PF_X25,	"PF_X25"	},
-#endif
-#ifdef PF_ROSE
-	{ PF_ROSE,	"PF_ROSE"	},
+#ifdef PF_DECnet
+	{ PF_DECnet,	"PF_DECnet"	},
 #endif
 #ifdef PF_DECNET
 	{ PF_DECNET,	"PF_DECNET"	},
 #endif
-#ifdef PF_NETBEUI
-	{ PF_NETBEUI,	"PF_NETBEUI"	},
+#ifdef PF_ECONET
+	{ PF_ECONET,	"PF_ECONET"	},
+#endif
+#ifdef PF_FILE
+	{ PF_FILE,	"PF_FILE"	},
 #endif
 #ifdef PF_IMPLINK
 	{ PF_IMPLINK,	"PF_IMPLINK"	},
 #endif
+#ifdef PF_INET
+	{ PF_INET,	"PF_INET"	},
+#endif
+#ifdef PF_INET6
+	{ PF_INET6,	"PF_INET6"	},
+#endif
+#ifdef PF_IPX
+	{ PF_IPX,	"PF_IPX"	},
+#endif
+#ifdef PF_IRDA
+	{ PF_IRDA,	"PF_IRDA"	},
+#endif
+#ifdef PF_ISO
+	{ PF_ISO,	"PF_ISO"	},
+#endif
+#ifdef PF_KEY
+	{ PF_KEY,	"PF_KEY"	},
+#endif
+#ifdef PF_UNIX
+	{ PF_UNIX,	"PF_UNIX"	},
+#endif
+#ifdef PF_LOCAL
+	{ PF_LOCAL,	"PF_LOCAL"	},
+#endif
+#ifdef PF_NETBEUI
+	{ PF_NETBEUI,	"PF_NETBEUI"	},
+#endif
+#ifdef PF_NETLINK
+	{ PF_NETLINK,	"PF_NETLINK"	},
+#endif
+#ifdef PF_NETROM
+	{ PF_NETROM,	"PF_NETROM"	},
+#endif
+#ifdef PF_PACKET
+	{ PF_PACKET,	"PF_PACKET"	},
+#endif
+#ifdef PF_PPPOX
+	{ PF_PPPOX,	"PF_PPPOX"	},
+#endif
+#ifdef PF_ROSE
+	{ PF_ROSE,	"PF_ROSE"	},
+#endif
+#ifdef PF_ROUTE
+	{ PF_ROUTE,	"PF_ROUTE"	},
+#endif
+#ifdef PF_SECURITY
+	{ PF_SECURITY,	"PF_SECURITY"	},
+#endif
+#ifdef PF_SNA
+	{ PF_SNA,	"PF_SNA"	},
+#endif
+#ifdef PF_UNSPEC
+	{ PF_UNSPEC,	"PF_UNSPEC"	},
+#endif
+#ifdef PF_WANPIPE
+	{ PF_WANPIPE,	"PF_WANPIPE"	},
+#endif
+#ifdef PF_X25
+	{ PF_X25,	"PF_X25"	},
+#endif
 	{ 0,		NULL		},
 };
-static struct xlat addrfams[] = {
-	{ AF_UNSPEC,	"AF_UNSPEC"	},
-	{ AF_UNIX,	"AF_UNIX"	},
-	{ AF_INET,	"AF_INET"	},
-#ifdef AF_INET6
-	{ AF_INET6,	"AF_INET6"	},
+const struct xlat addrfams[] = {
+#ifdef AF_APPLETALK
+	{ AF_APPLETALK,	"AF_APPLETALK"	},
+#endif
+#ifdef AF_ASH
+	{ AF_ASH,	"AF_ASH"	},
+#endif
+#ifdef AF_ATMPVC
+	{ AF_ATMPVC,	"AF_ATMPVC"	},
+#endif
+#ifdef AF_ATMSVC
+	{ AF_ATMSVC,	"AF_ATMSVC"	},
+#endif
+#ifdef AF_AX25
+	{ AF_AX25,	"AF_AX25"	},
+#endif
+#ifdef AF_BLUETOOTH
+	{ AF_BLUETOOTH,	"AF_BLUETOOTH"	},
+#endif
+#ifdef AF_BRIDGE
+	{ AF_BRIDGE,	"AF_BRIDGE"	},
 #endif
 #ifdef AF_DECnet
 	{ AF_DECnet,	"AF_DECnet"	},
 #endif
-#ifdef PF_ATMSVC
-	{ AF_ATMSVC,	"AF_ATMSVC"	},
+#ifdef AF_ECONET
+	{ AF_ECONET,	"AF_ECONET"	},
 #endif
-#ifdef AF_PACKET
-	{ AF_PACKET,	"AF_PACKET"	},
-#endif
-#ifdef AF_NETLINK
-	{ AF_NETLINK,	"AF_NETLINK"	},
-#endif
-#ifdef AF_ISO
-	{ AF_ISO,	"AF_ISO"	},
+#ifdef AF_FILE
+	{ AF_FILE,	"AF_FILE"	},
 #endif
 #ifdef AF_IMPLINK
 	{ AF_IMPLINK,	"AF_IMPLINK"	},
 #endif
+#ifdef AF_INET
+	{ AF_INET,	"AF_INET"	},
+#endif
+#ifdef AF_INET6
+	{ AF_INET6,	"AF_INET6"	},
+#endif
+#ifdef AF_IPX
+	{ AF_IPX,	"AF_IPX"	},
+#endif
+#ifdef AF_IRDA
+	{ AF_IRDA,	"AF_IRDA"	},
+#endif
+#ifdef AF_ISO
+	{ AF_ISO,	"AF_ISO"	},
+#endif
+#ifdef AF_KEY
+	{ AF_KEY,	"AF_KEY"	},
+#endif
+#ifdef AF_UNIX
+	{ AF_UNIX,	"AF_UNIX"	},
+#endif
+#ifdef AF_LOCAL
+	{ AF_LOCAL,	"AF_LOCAL"	},
+#endif
+#ifdef AF_NETBEUI
+	{ AF_NETBEUI,	"AF_NETBEUI"	},
+#endif
+#ifdef AF_NETLINK
+	{ AF_NETLINK,	"AF_NETLINK"	},
+#endif
+#ifdef AF_NETROM
+	{ AF_NETROM,	"AF_NETROM"	},
+#endif
+#ifdef AF_PACKET
+	{ AF_PACKET,	"AF_PACKET"	},
+#endif
+#ifdef AF_PPPOX
+	{ AF_PPPOX,	"AF_PPPOX"	},
+#endif
+#ifdef AF_ROSE
+	{ AF_ROSE,	"AF_ROSE"	},
+#endif
+#ifdef AF_ROUTE
+	{ AF_ROUTE,	"AF_ROUTE"	},
+#endif
+#ifdef AF_SECURITY
+	{ AF_SECURITY,	"AF_SECURITY"	},
+#endif
+#ifdef AF_SNA
+	{ AF_SNA,	"AF_SNA"	},
+#endif
+#ifdef AF_UNSPEC
+	{ AF_UNSPEC,	"AF_UNSPEC"	},
+#endif
+#ifdef AF_WANPIPE
+	{ AF_WANPIPE,	"AF_WANPIPE"	},
+#endif
+#ifdef AF_X25
+	{ AF_X25,	"AF_X25"	},
+#endif
 	{ 0,		NULL		},
 };
-static struct xlat socktypes[] = {
+static const struct xlat socktypes[] = {
 	{ SOCK_STREAM,	"SOCK_STREAM"	},
 	{ SOCK_DGRAM,	"SOCK_DGRAM"	},
 #ifdef SOCK_RAW
@@ -221,7 +331,7 @@ static struct xlat socktypes[] = {
 #endif
 	{ 0,		NULL		},
 };
-static struct xlat socketlayers[] = {
+static const struct xlat socketlayers[] = {
 #if defined(SOL_IP)
 	{ SOL_IP,	"SOL_IP"	},
 #endif
@@ -281,7 +391,9 @@ static struct xlat socketlayers[] = {
 #endif
 	{ SOL_SOCKET,	"SOL_SOCKET"	},	/* Never used! */
 };
-static struct xlat protocols[] = {
+/*** WARNING: DANGER WILL ROBINSON: NOTE "socketlayers" array above
+     falls into "protocols" array below!!!!   This is intended!!! ***/
+static const struct xlat protocols[] = {
 	{ IPPROTO_IP,	"IPPROTO_IP"	},
 	{ IPPROTO_ICMP,	"IPPROTO_ICMP"	},
 	{ IPPROTO_TCP,	"IPPROTO_TCP"	},
@@ -324,7 +436,7 @@ static struct xlat protocols[] = {
 #endif
 	{ 0,		NULL		},
 };
-static struct xlat msg_flags[] = {
+static const struct xlat msg_flags[] = {
 	{ MSG_OOB,	"MSG_OOB"	},
 #ifdef MSG_DONTROUTE
 	{ MSG_DONTROUTE,"MSG_DONTROUTE"	},
@@ -362,152 +474,323 @@ static struct xlat msg_flags[] = {
 #ifdef MSG_PROBE
 	{ MSG_PROBE,	"MSG_PROBE"	},
 #endif
+#ifdef MSG_FIN
+	{ MSG_FIN,	"MSG_FIN"	},
+#endif
+#ifdef MSG_SYN
+	{ MSG_SYN,	"MSG_SYN"	},
+#endif
+#ifdef MSG_RST
+	{ MSG_RST,	"MSG_RST"	},
+#endif
+#ifdef MSG_NOSIGNAL
+	{ MSG_NOSIGNAL,	"MSG_NOSIGNAL"	},
+#endif
+#ifdef MSG_MORE
+	{ MSG_MORE,	"MSG_MORE"	},
+#endif
 	{ 0,		NULL		},
 };
 
-static struct xlat sockoptions[] = {
-#ifdef SO_PEERCRED
-	{ SO_PEERCRED,	"SO_PEERCRED"	},
+static const struct xlat sockoptions[] = {
+#ifdef SO_ACCEPTCONN
+	{ SO_ACCEPTCONN,	"SO_ACCEPTCONN"	},
 #endif
-#ifdef SO_PASSCRED
-	{ SO_PASSCRED,	"SO_PASSCRED"	},
+#ifdef SO_ALLRAW
+	{ SO_ALLRAW,	"SO_ALLRAW"	},
 #endif
-#ifdef SO_DEBUG
-	{ SO_DEBUG,	"SO_DEBUG"	},
+#ifdef SO_ATTACH_FILTER
+	{ SO_ATTACH_FILTER,	"SO_ATTACH_FILTER"	},
 #endif
-#ifdef SO_REUSEADDR
-	{ SO_REUSEADDR,	"SO_REUSEADDR"	},
-#endif
-#ifdef SO_KEEPALIVE
-	{ SO_KEEPALIVE,	"SO_KEEPALIVE"	},
-#endif
-#ifdef SO_DONTROUTE
-	{ SO_DONTROUTE,	"SO_DONTROUTE"	},
+#ifdef SO_BINDTODEVICE
+	{ SO_BINDTODEVICE,	"SO_BINDTODEVICE"	},
 #endif
 #ifdef SO_BROADCAST
 	{ SO_BROADCAST,	"SO_BROADCAST"	},
 #endif
-#ifdef SO_LINGER
-	{ SO_LINGER,	"SO_LINGER"	},
+#ifdef SO_BSDCOMPAT
+	{ SO_BSDCOMPAT,	"SO_BSDCOMPAT"	},
 #endif
-#ifdef SO_OOBINLINE
-	{ SO_OOBINLINE,	"SO_OOBINLINE"	},
+#ifdef SO_DEBUG
+	{ SO_DEBUG,	"SO_DEBUG"	},
 #endif
-#ifdef SO_TYPE
-	{ SO_TYPE,	"SO_TYPE"	},
+#ifdef SO_DETACH_FILTER
+	{ SO_DETACH_FILTER,	"SO_DETACH_FILTER"	},
+#endif
+#ifdef SO_DONTROUTE
+	{ SO_DONTROUTE,	"SO_DONTROUTE"	},
 #endif
 #ifdef SO_ERROR
 	{ SO_ERROR,	"SO_ERROR"	},
 #endif
-#ifdef SO_SNDBUF
-	{ SO_SNDBUF,	"SO_SNDBUF"	},
+#ifdef SO_ICS
+	{ SO_ICS,	"SO_ICS"	},
 #endif
-#ifdef SO_RCVBUF
-	{ SO_RCVBUF,	"SO_RCVBUF"	},
+#ifdef SO_IMASOCKET
+	{ SO_IMASOCKET,	"SO_IMASOCKET"	},
+#endif
+#ifdef SO_KEEPALIVE
+	{ SO_KEEPALIVE,	"SO_KEEPALIVE"	},
+#endif
+#ifdef SO_LINGER
+	{ SO_LINGER,	"SO_LINGER"	},
+#endif
+#ifdef SO_LISTENING
+	{ SO_LISTENING,	"SO_LISTENING"	},
+#endif
+#ifdef SO_MGMT
+	{ SO_MGMT,	"SO_MGMT"	},
 #endif
 #ifdef SO_NO_CHECK
 	{ SO_NO_CHECK,	"SO_NO_CHECK"	},
 #endif
+#ifdef SO_OOBINLINE
+	{ SO_OOBINLINE,	"SO_OOBINLINE"	},
+#endif
+#ifdef SO_ORDREL
+	{ SO_ORDREL,	"SO_ORDREL"	},
+#endif
+#ifdef SO_PARALLELSVR
+	{ SO_PARALLELSVR,	"SO_PARALLELSVR"	},
+#endif
+#ifdef SO_PASSCRED
+	{ SO_PASSCRED,	"SO_PASSCRED"	},
+#endif
+#ifdef SO_PEERCRED
+	{ SO_PEERCRED,	"SO_PEERCRED"	},
+#endif
+#ifdef SO_PEERNAME
+	{ SO_PEERNAME,	"SO_PEERNAME"	},
+#endif
+#ifdef SO_PEERSEC
+	{ SO_PEERSEC,	"SO_PEERSEC"	},
+#endif
 #ifdef SO_PRIORITY
 	{ SO_PRIORITY,	"SO_PRIORITY"	},
 #endif
-#ifdef SO_ACCEPTCONN
-	{ SO_ACCEPTCONN,"SO_ACCEPTCONN"	},
+#ifdef SO_PROTOTYPE
+	{ SO_PROTOTYPE,	"SO_PROTOTYPE"	},
 #endif
-#ifdef SO_USELOOPBACK
-	{ SO_USELOOPBACK,"SO_USELOOPBACK"},
-#endif
-#ifdef SO_SNDLOWAT
-	{ SO_SNDLOWAT,	"SO_SNDLOWAT"	},
+#ifdef SO_RCVBUF
+	{ SO_RCVBUF,	"SO_RCVBUF"	},
 #endif
 #ifdef SO_RCVLOWAT
 	{ SO_RCVLOWAT,	"SO_RCVLOWAT"	},
 #endif
-#ifdef SO_SNDTIMEO
-	{ SO_SNDTIMEO,	"SO_SNDTIMEO"	},
-#endif
 #ifdef SO_RCVTIMEO
 	{ SO_RCVTIMEO,	"SO_RCVTIMEO"	},
 #endif
-#ifdef SO_BSDCOMPAT
-	{ SO_BSDCOMPAT,	"SO_BSDCOMPAT"	},
+#ifdef SO_RDWR
+	{ SO_RDWR,	"SO_RDWR"	},
+#endif
+#ifdef SO_REUSEADDR
+	{ SO_REUSEADDR,	"SO_REUSEADDR"	},
 #endif
 #ifdef SO_REUSEPORT
 	{ SO_REUSEPORT,	"SO_REUSEPORT"	},
 #endif
-#ifdef SO_RCVLOWAT
-	{ SO_RCVLOWAT, "SO_RCVLOWAT"	},
+#ifdef SO_SECURITY_AUTHENTICATION
+	{ SO_SECURITY_AUTHENTICATION,"SO_SECURITY_AUTHENTICATION"},
+#endif
+#ifdef SO_SECURITY_ENCRYPTION_NETWORK
+	{ SO_SECURITY_ENCRYPTION_NETWORK,"SO_SECURITY_ENCRYPTION_NETWORK"},
+#endif
+#ifdef SO_SECURITY_ENCRYPTION_TRANSPORT
+	{ SO_SECURITY_ENCRYPTION_TRANSPORT,"SO_SECURITY_ENCRYPTION_TRANSPORT"},
+#endif
+#ifdef SO_SEMA
+	{ SO_SEMA,	"SO_SEMA"	},
+#endif
+#ifdef SO_SNDBUF
+	{ SO_SNDBUF,	"SO_SNDBUF"	},
 #endif
 #ifdef SO_SNDLOWAT
-	{ SO_SNDLOWAT, "SO_SNDLOWAT"	},
-#endif
-#ifdef SO_RCVTIMEO
-	{ SO_RCVTIMEO, "SO_RCVTIMEO"	},
+	{ SO_SNDLOWAT,	"SO_SNDLOWAT"	},
 #endif
 #ifdef SO_SNDTIMEO
-	{ SO_SNDTIMEO, "SO_SNDTIMEO"	},
+	{ SO_SNDTIMEO,	"SO_SNDTIMEO"	},
+#endif
+#ifdef SO_TIMESTAMP
+	{ SO_TIMESTAMP,	"SO_TIMESTAMP"	},
+#endif
+#ifdef SO_TYPE
+	{ SO_TYPE,	"SO_TYPE"	},
+#endif
+#ifdef SO_USELOOPBACK
+	{ SO_USELOOPBACK,	"SO_USELOOPBACK"	},
 #endif
 	{ 0,		NULL		},
 };
 
+#if !defined (SOL_IP) && defined (IPPROTO_IP)
+#define SOL_IP IPPROTO_IP
+#endif
+
 #ifdef SOL_IP
-static struct xlat sockipoptions[] = {
+static const struct xlat sockipoptions[] = {
+#ifdef IP_TOS
 	{ IP_TOS,		"IP_TOS"		},
+#endif
+#ifdef IP_TTL
 	{ IP_TTL,		"IP_TTL"		},
-#if defined(IP_HDRINCL)
+#endif
+#ifdef IP_HDRINCL
 	{ IP_HDRINCL,		"IP_HDRINCL"		},
 #endif
-#if defined(IP_OPTIONS)
+#ifdef IP_OPTIONS
 	{ IP_OPTIONS,		"IP_OPTIONS"		},
 #endif
-#if defined(IP_ROUTER_ALERT)
+#ifdef IP_ROUTER_ALERT
 	{ IP_ROUTER_ALERT,	"IP_ROUTER_ALERT"	},
 #endif
-#if defined(IP_RECVOPTIONS)
+#ifdef IP_RECVOPTIONS
 	{ IP_RECVOPTIONS,	"IP_RECVOPTIONS"	},
 #endif
-#if defined(IP_RETOPTS)
+#ifdef IP_RECVOPTS
+	{ IP_RECVOPTS,		"IP_RECVOPTS"		},
+#endif
+#ifdef IP_RECVRETOPTS
+	{ IP_RECVRETOPTS,	"IP_RECVRETOPTS"	},
+#endif
+#ifdef IP_RECVDSTADDR
+	{ IP_RECVDSTADDR,	"IP_RECVDSTADDR"	},
+#endif
+#ifdef IP_RETOPTS
 	{ IP_RETOPTS,		"IP_RETOPTS"		},
 #endif
-#if defined(IP_PKTINFO)
+#ifdef IP_PKTINFO
 	{ IP_PKTINFO,		"IP_PKTINFO"		},
 #endif
-#if defined(IP_PKTOPTIONS)
-	{ IP_PKTOPTIONS,	"IP_PKTOPTIONS"	},
+#ifdef IP_PKTOPTIONS
+	{ IP_PKTOPTIONS,	"IP_PKTOPTIONS"		},
 #endif
-#if defined(IP_MTU_DISCOVER)
+#ifdef IP_MTU_DISCOVER
 	{ IP_MTU_DISCOVER,	"IP_MTU_DISCOVER"	},
 #endif
-#if defined(IP_RECVERR)
+#ifdef IP_RECVERR
 	{ IP_RECVERR,		"IP_RECVERR"		},
 #endif
-#if defined(IP_RECVTTL)
-	{ IP_RECVTTL,		"IP_RECRECVTTL"		},
+#ifdef IP_RECVTTL
+	{ IP_RECVTTL,		"IP_RECVTTL"		},
 #endif
-#if defined(IP_RECVTOS)
-	{ IP_RECVTOS,		"IP_RECRECVTOS"		},
+#ifdef IP_RECVTOS
+	{ IP_RECVTOS,		"IP_RECVTOS"		},
 #endif
-#if defined(IP_MTU)
+#ifdef IP_MTU
 	{ IP_MTU,		"IP_MTU"		},
 #endif
+#ifdef IP_MULTICAST_IF
 	{ IP_MULTICAST_IF,	"IP_MULTICAST_IF"	},
+#endif
+#ifdef IP_MULTICAST_TTL
 	{ IP_MULTICAST_TTL,	"IP_MULTICAST_TTL"	},
+#endif
+#ifdef IP_MULTICAST_LOOP
 	{ IP_MULTICAST_LOOP,	"IP_MULTICAST_LOOP"	},
+#endif
+#ifdef IP_ADD_MEMBERSHIP
 	{ IP_ADD_MEMBERSHIP,	"IP_ADD_MEMBERSHIP"	},
+#endif
+#ifdef IP_DROP_MEMBERSHIP
 	{ IP_DROP_MEMBERSHIP,	"IP_DROP_MEMBERSHIP"	},
+#endif
+#ifdef IP_BROADCAST_IF
+	{ IP_BROADCAST_IF,	"IP_BROADCAST_IF"	},
+#endif
+#ifdef IP_RECVIFINDEX
+	{ IP_RECVIFINDEX,	"IP_RECVIFINDEX"	},
+#endif
+#ifdef IP_MSFILTER
+	{ IP_MSFILTER,		"IP_MSFILTER"		},
+#endif
+#ifdef MCAST_MSFILTER
+	{ MCAST_MSFILTER,	"MCAST_MSFILTER"	},
+#endif
+#ifdef IP_FREEBIND
+	{ IP_FREEBIND,		"IP_FREEBIND"		},
+#endif
 	{ 0,			NULL			},
 };
 #endif /* SOL_IP */
 
+#ifdef SOL_IPV6
+static const struct xlat sockipv6options[] = {
+#ifdef IPV6_ADDRFORM
+	{ IPV6_ADDRFORM,	"IPV6_ADDRFORM"		},
+#endif
+#ifdef MCAST_FILTER
+	{ MCAST_FILTER,		"MCAST_FILTER"		},
+#endif
+#ifdef IPV6_PKTOPTIONS
+	{ IPV6_PKTOPTIONS,	"IPV6_PKTOPTIONS"	},
+#endif
+#ifdef IPV6_MTU
+	{ IPV6_MTU,		"IPV6_MTU"		},
+#endif
+#ifdef IPV6_V6ONLY
+	{ IPV6_V6ONLY,		"IPV6_V6ONLY"		},
+#endif
+#ifdef IPV6_PKTINFO
+	{ IPV6_PKTINFO,		"IPV6_PKTINFO"		},
+#endif
+#ifdef IPV6_HOPLIMIT
+	{ IPV6_HOPLIMIT,	"IPV6_HOPLIMIT"		},
+#endif
+#ifdef IPV6_RTHDR
+	{ IPV6_RTHDR,		"IPV6_RTHDR"		},
+#endif
+#ifdef IPV6_HOPOPTS
+	{ IPV6_HOPOPTS,		"IPV6_HOPOPTS"		},
+#endif
+#ifdef IPV6_DSTOPTS
+	{ IPV6_DSTOPTS,		"IPV6_DSTOPTS"		},
+#endif
+#ifdef IPV6_FLOWINFO
+	{ IPV6_FLOWINFO,	"IPV6_FLOWINFO"		},
+#endif
+#ifdef IPV6_UNICAST_HOPS
+	{ IPV6_UNICAST_HOPS,	"IPV6_UNICAST_HOPS"	},
+#endif
+#ifdef IPV6_MULTICAST_HOPS
+	{ IPV6_MULTICAST_HOPS,	"IPV6_MULTICAST_HOPS"	},
+#endif
+#ifdef IPV6_MULTICAST_LOOP
+	{ IPV6_MULTICAST_LOOP,	"IPV6_MULTICAST_LOOP"	},
+#endif
+#ifdef IPV6_MULTICAST_IF
+	{ IPV6_MULTICAST_IF,	"IPV6_MULTICAST_IF"	},
+#endif
+#ifdef IPV6_MTU_DISCOVER
+	{ IPV6_MTU_DISCOVER,	"IPV6_MTU_DISCOVER"	},
+#endif
+#ifdef IPV6_RECVERR
+	{ IPV6_RECVERR,		"IPV6_RECVERR"		},
+#endif
+#ifdef IPV6_FLOWINFO_SEND
+	{ IPV6_FLOWINFO_SEND,	"IPV6_FLOWINFO_SEND"	},
+#endif
+#ifdef IPV6_ADD_MEMBERSHIP
+	{ IPV6_ADD_MEMBERSHIP,	"IPV6_ADD_MEMBERSHIP"	},
+#endif
+#ifdef IPV6_DROP_MEMBERSHIP
+	{ IPV6_DROP_MEMBERSHIP,	"IPV6_DROP_MEMBERSHIP"	},
+#endif
+#ifdef IPV6_ROUTER_ALERT
+	{ IPV6_ROUTER_ALERT,	"IPV6_ROUTER_ALERT"	},
+#endif
+	{ 0,			NULL			},
+};
+#endif /* SOL_IPV6 */
+
 #ifdef SOL_IPX
-static struct xlat sockipxoptions[] = {
+static const struct xlat sockipxoptions[] = {
 	{ IPX_TYPE,     "IPX_TYPE"      },
 	{ 0,            NULL            },
 };
 #endif /* SOL_IPX */
 
 #ifdef SOL_RAW
-static struct xlat sockrawoptions[] = {
+static const struct xlat sockrawoptions[] = {
 #if defined(ICMP_FILTER)
 	{ ICMP_FILTER,		"ICMP_FILTER"	},
 #endif
@@ -516,7 +799,7 @@ static struct xlat sockrawoptions[] = {
 #endif /* SOL_RAW */
 
 #ifdef SOL_PACKET
-static struct xlat sockpacketoptions[] = {
+static const struct xlat sockpacketoptions[] = {
 	{ PACKET_ADD_MEMBERSHIP,	"PACKET_ADD_MEMBERSHIP"	},
 	{ PACKET_DROP_MEMBERSHIP,	"PACKET_DROP_MEMBERSHIP"},
 #if defined(PACKET_RECV_OUTPUT)
@@ -532,19 +815,53 @@ static struct xlat sockpacketoptions[] = {
 };
 #endif /* SOL_PACKET */
 
-#ifdef SOL_TCP
-static struct xlat socktcpoptions[] = {
-	{ TCP_NODELAY,	"TCP_NODELAY"	},
-	{ TCP_MAXSEG,	"TCP_MAXSEG"	},
-#if defined(TCP_CORK)
-	{ TCP_CORK,	"TCP_CORK"	},
+#if  !defined (SOL_TCP) && defined (IPPROTO_TCP)
+#define SOL_TCP IPPROTO_TCP
 #endif
-	{ 0,		NULL		},
+
+#ifdef SOL_TCP
+static const struct xlat socktcpoptions[] = {
+	{ TCP_NODELAY,		"TCP_NODELAY"	},
+	{ TCP_MAXSEG,		"TCP_MAXSEG"	},
+#if defined(TCP_CORK)
+	{ TCP_CORK,		"TCP_CORK"	},
+#endif
+#if defined(TCP_KEEPIDLE)
+	{ TCP_KEEPIDLE,		"TCP_KEEPIDLE" },
+#endif
+#if defined(TCP_KEEPINTVL)
+	{ TCP_KEEPINTVL,	"TCP_KEEPINTVL" },
+#endif
+#if defined(TCP_KEEPCNT)
+	{ TCP_KEEPCNT,		"TCP_KEEPCNT" },
+#endif
+#if defined(TCP_NKEEP)
+	{ TCP_NKEEP,		"TCP_NKEEP"	},
+#endif
+#if defined(TCP_SYNCNT)
+	{ TCP_SYNCNT,		"TCP_SYNCNT" },
+#endif
+#if defined(TCP_LINGER2)
+	{ TCP_LINGER2,		"TCP_LINGER2" },
+#endif
+#if defined(TCP_DEFER_ACCEPT)
+	{ TCP_DEFER_ACCEPT,	"TCP_DEFER_ACCEPT" },
+#endif
+#if defined(TCP_WINDOW_CLAMP)
+	{ TCP_WINDOW_CLAMP,	"TCP_WINDOW_CLAMP" },
+#endif
+#if defined(TCP_INFO)
+	{ TCP_INFO,		"TCP_INFO" },
+#endif
+#if defined(TCP_QUICKACK)
+	{ TCP_QUICKACK,		"TCP_QUICKACK" },
+#endif
+	{ 0,			NULL		},
 };
 #endif /* SOL_TCP */
 
 #ifdef SOL_RAW
-static struct xlat icmpfilterflags[] = {
+static const struct xlat icmpfilterflags[] = {
 #if defined(ICMP_ECHOREPLY)
 	{ (1<<ICMP_ECHOREPLY),		"ICMP_ECHOREPLY"	},
 #endif
@@ -588,6 +905,33 @@ static struct xlat icmpfilterflags[] = {
 };
 #endif /* SOL_RAW */
 
+#if defined(AF_PACKET) /* from e.g. linux/if_packet.h */
+static const struct xlat af_packet_types[] = {
+#if defined(PACKET_HOST)
+	{ PACKET_HOST,			"PACKET_HOST"		},
+#endif
+#if defined(PACKET_BROADCAST)
+	{ PACKET_BROADCAST,		"PACKET_BROADCAST"	},
+#endif
+#if defined(PACKET_MULTICAST)
+	{ PACKET_MULTICAST,		"PACKET_MULTICAST"	},
+#endif
+#if defined(PACKET_OTHERHOST)
+	{ PACKET_OTHERHOST,		"PACKET_OTHERHOST"	},
+#endif
+#if defined(PACKET_OUTGOING)
+	{ PACKET_OUTGOING,		"PACKET_OUTGOING"	},
+#endif
+#if defined(PACKET_LOOPBACK)
+	{ PACKET_LOOPBACK,		"PACKET_LOOPBACK"	},
+#endif
+#if defined(PACKET_FASTROUTE)
+	{ PACKET_FASTROUTE,		"PACKET_FASTROUTE"	},
+#endif
+	{ 0,				NULL			},
+};
+#endif /* defined(AF_PACKET) */
+
 
 void
 printsock(tcp, addr, addrlen)
@@ -606,16 +950,14 @@ int addrlen;
 #if defined(LINUX) && defined(AF_IPX)
 		struct sockaddr_ipx sipx;
 #endif
-#if defined(AF_PACKET) && (!defined(LINUX) || LINUX_VERSION_CODE >= 0x020100)
+#ifdef AF_PACKET
 		struct sockaddr_ll ll;
 #endif
 #ifdef AF_NETLINK
 		struct sockaddr_nl nl;
 #endif
 	} addrbuf;
-#if defined(AF_INET6) && defined(HAVE_INET_NTOP)
 	char string_addr[100];
-#endif
 
 	if (addr == 0) {
 		tprintf("NULL");
@@ -633,7 +975,7 @@ int addrlen;
 		return;
 	}
 
-	tprintf("{sin_family=");
+	tprintf("{sa_family=");
 	printxval(addrfams, addrbuf.sa.sa_family, "AF_???");
 	tprintf(", ");
 
@@ -648,30 +990,30 @@ int addrlen;
 		}
 		break;
 	case AF_INET:
-		tprintf("sin_port=htons(%u), sin_addr=inet_addr(\"%s\")}",
+		tprintf("sin_port=htons(%u), sin_addr=inet_addr(\"%s\")",
 			ntohs(addrbuf.sin.sin_port), inet_ntoa(addrbuf.sin.sin_addr));
 		break;
-#if defined(AF_INET6) && defined(HAVE_INET_NTOP)
+#ifdef HAVE_INET_NTOP
 	case AF_INET6:
 		inet_ntop(AF_INET6, &addrbuf.sa6.sin6_addr, string_addr, sizeof(string_addr));
 		tprintf("sin6_port=htons(%u), inet_pton(AF_INET6, \"%s\", &sin6_addr), sin6_flowinfo=%u",
 				ntohs(addrbuf.sa6.sin6_port), string_addr,
 				addrbuf.sa6.sin6_flowinfo);
-#ifdef HAVE_SIN6_SCOPE_ID
+#ifdef HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID
 		{
 #if defined(HAVE_IF_INDEXTONAME) && defined(IN6_IS_ADDR_LINKLOCAL) && defined(IN6_IS_ADDR_MC_LINKLOCAL)
 		    int numericscope = 0;
 		    if (IN6_IS_ADDR_LINKLOCAL (&addrbuf.sa6.sin6_addr)
 			    || IN6_IS_ADDR_MC_LINKLOCAL (&addrbuf.sa6.sin6_addr)) {
 			char scopebuf[IFNAMSIZ + 1];
-			
+
 			if (if_indextoname (addrbuf.sa6.sin6_scope_id, scopebuf) == NULL)
 			    numericscope++;
 			else
 			    tprintf(", sin6_scope_id=if_nametoindex(\"%s\")", scopebuf);
 		    } else
 			numericscope++;
-		    
+
 		    if (numericscope)
 #endif
 			tprintf(", sin6_scope_id=%u", addrbuf.sa6.sin6_scope_id);
@@ -683,13 +1025,13 @@ int addrlen;
 	case AF_IPX:
 		{
 			int i;
-			tprintf("{sipx_port=htons(%u), ",
+			tprintf("sipx_port=htons(%u), ",
 					ntohs(addrbuf.sipx.sipx_port));
 			/* Yes, I know, this does not look too
 			 * strace-ish, but otherwise the IPX
 			 * addresses just look monstrous...
 			 * Anyways, feel free if you don't like
-			 * this way.. :) 
+			 * this way.. :)
 			 */
 			tprintf("%08lx:", (unsigned long)ntohl(addrbuf.sipx.sipx_network));
 			for (i = 0; i<IPX_NODE_LEN; i++)
@@ -698,23 +1040,24 @@ int addrlen;
 		}
 		break;
 #endif /* AF_IPX && linux */
-#if defined(AF_PACKET) && (!defined(LINUX) || LINUX_VERSION_CODE >= 0x020100)
+#ifdef AF_PACKET
 	case AF_PACKET:
 		{
 			int i;
-			tprintf("proto=%#04x, if%d, pkttype=%d, addr(%d)={%d, ",
+			tprintf("proto=%#04x, if%d, pkttype=",
 					ntohs(addrbuf.ll.sll_protocol),
-					addrbuf.ll.sll_ifindex,
-					addrbuf.ll.sll_pkttype,
+					addrbuf.ll.sll_ifindex);
+			printxval(af_packet_types, addrbuf.ll.sll_pkttype, "?");
+			tprintf(", addr(%d)={%d, ",
 					addrbuf.ll.sll_halen,
 					addrbuf.ll.sll_hatype);
-			for (i=0; i<addrbuf.ll.sll_addr[i]; i++) 
+			for (i=0; i<addrbuf.ll.sll_halen; i++)
 				tprintf("%02x", addrbuf.ll.sll_addr[i]);
 		}
 		break;
 
 #endif /* AF_APACKET */
-#ifdef AF_NETLINLK
+#ifdef AF_NETLINK
 	case AF_NETLINK:
 		tprintf("pid=%d, groups=%08x", addrbuf.nl.nl_pid, addrbuf.nl.nl_groups);
 		break;
@@ -723,7 +1066,7 @@ int addrlen;
 	AF_X25 AF_ROSE etc. still need to be done */
 
 	default:
-		tprintf("{sa_family=%u, sa_data=", addrbuf.sa.sa_family);
+		tprintf("sa_data=");
 		printstr(tcp, (long) &((struct sockaddr *) addr)->sa_data,
 			sizeof addrbuf.sa.sa_data);
 		break;
@@ -732,6 +1075,69 @@ int addrlen;
 }
 
 #if HAVE_SENDMSG
+static const struct xlat scmvals[] = {
+#ifdef SCM_RIGHTS
+	{ SCM_RIGHTS,		"SCM_RIGHTS"		},
+#endif
+#ifdef SCM_CREDENTIALS
+	{ SCM_CREDENTIALS,	"SCM_CREDENTIALS"	},
+#endif
+	{ 0,			NULL			}
+};
+
+static void
+printcmsghdr(tcp, addr, len)
+struct tcb *tcp;
+unsigned long addr;
+unsigned long len;
+{
+	struct cmsghdr *cmsg = len < sizeof(struct cmsghdr) ?
+			       NULL : malloc(len);
+	if (cmsg == NULL || umoven(tcp, addr, len, (char *) cmsg) < 0) {
+		tprintf(", msg_control=%#lx", addr);
+		free(cmsg);
+		return;
+	}
+
+	tprintf(", {cmsg_len=%zu, cmsg_level=", cmsg->cmsg_len);
+	printxval(socketlayers, cmsg->cmsg_level, "SOL_???");
+	tprintf(", cmsg_type=");
+
+	if (cmsg->cmsg_level == SOL_SOCKET) {
+		unsigned long cmsg_len;
+
+		printxval(scmvals, cmsg->cmsg_type, "SCM_???");
+		cmsg_len = (len < cmsg->cmsg_len) ? len : cmsg->cmsg_len;
+
+		if (cmsg->cmsg_type == SCM_RIGHTS
+		    && CMSG_LEN(sizeof(int)) <= cmsg_len) {
+			int *fds = (int *) CMSG_DATA (cmsg);
+			int first = 1;
+
+			tprintf(", {");
+			while ((char *) fds < ((char *) cmsg + cmsg_len)) {
+				if (!first)
+					tprintf(", ");
+				tprintf("%d", *fds++);
+				first = 0;
+			}
+			tprintf("}}");
+			free(cmsg);
+			return;
+		}
+		if (cmsg->cmsg_type == SCM_CREDENTIALS
+		    && CMSG_LEN(sizeof(struct ucred)) <= cmsg_len) {
+			struct ucred *uc = (struct ucred *) CMSG_DATA (cmsg);
+
+			tprintf("{pid=%ld, uid=%ld, gid=%ld}}",
+				(long)uc->pid, (long)uc->uid, (long)uc->gid);
+			free(cmsg);
+			return;
+		}
+	}
+	free(cmsg);
+	tprintf(", ...}");
+}
 
 static void
 printmsghdr(tcp, addr)
@@ -748,19 +1154,20 @@ long addr;
 	printsock(tcp, (long)msg.msg_name, msg.msg_namelen);
 
 	tprintf(", msg_iov(%lu)=", (unsigned long)msg.msg_iovlen);
-	tprint_iov(tcp, msg.msg_iovlen, (long) msg.msg_iov);
+	tprint_iov(tcp, (unsigned long)msg.msg_iovlen,
+		   (unsigned long)msg.msg_iov);
 
-#ifdef HAVE_MSG_CONTROL
+#ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
 	tprintf(", msg_controllen=%lu", (unsigned long)msg.msg_controllen);
-	if (msg.msg_controllen) 
-		tprintf(", msg_control=%#lx, ", (unsigned long) msg.msg_control);
+	if (msg.msg_controllen)
+		printcmsghdr(tcp, (unsigned long) msg.msg_control,
+			     msg.msg_controllen);
 	tprintf(", msg_flags=");
-	if (printflags(msg_flags, msg.msg_flags)==0)
-		tprintf("0");
-#else /* !HAVE_MSG_CONTROL */
+	printflags(msg_flags, msg.msg_flags, "MSG_???");
+#else /* !HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	tprintf("msg_accrights=%#lx, msg_accrightslen=%u",
 		(unsigned long) msg.msg_accrights, msg.msg_accrightslen);
-#endif /* !HAVE_MSG_CONTROL */
+#endif /* !HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	tprintf("}");
 }
 
@@ -777,6 +1184,9 @@ struct tcb *tcp;
 		tprintf(", ");
 		switch (tcp->u_arg[0]) {
 		case PF_INET:
+#ifdef PF_INET6
+		case PF_INET6:
+#endif
 			printxval(protocols, tcp->u_arg[2], "IPPROTO_???");
 			break;
 #ifdef PF_IPX
@@ -795,6 +1205,7 @@ struct tcb *tcp;
 	return 0;
 }
 
+#ifdef SVR4
 int
 sys_so_socket(tcp)
 struct tcb *tcp;
@@ -821,6 +1232,7 @@ struct tcb *tcp;
 	}
 	return 0;
 }
+#endif /* SVR4 */
 
 int
 sys_bind(tcp)
@@ -880,8 +1292,7 @@ struct tcb *tcp;
 		printstr(tcp, tcp->u_arg[1], tcp->u_arg[2]);
 		tprintf(", %lu, ", tcp->u_arg[2]);
 		/* flags */
-		if (printflags(msg_flags, tcp->u_arg[3]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[3], "MSG_???");
 	}
 	return 0;
 }
@@ -895,8 +1306,7 @@ struct tcb *tcp;
 		printstr(tcp, tcp->u_arg[1], tcp->u_arg[2]);
 		tprintf(", %lu, ", tcp->u_arg[2]);
 		/* flags */
-		if (printflags(msg_flags, tcp->u_arg[3]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[3], "MSG_???");
 		/* to address */
 		tprintf(", ");
 		printsock(tcp, tcp->u_arg[4], tcp->u_arg[5]);
@@ -917,8 +1327,7 @@ struct tcb *tcp;
 		printmsghdr(tcp, tcp->u_arg[1]);
 		/* flags */
 		tprintf(", ");
-		if (printflags(msg_flags, tcp->u_arg[2]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[2], "MSG_???");
 	}
 	return 0;
 }
@@ -938,8 +1347,7 @@ struct tcb *tcp;
 			printstr(tcp, tcp->u_arg[1], tcp->u_rval);
 
 		tprintf(", %lu, ", tcp->u_arg[2]);
-		if (printflags(msg_flags, tcp->u_arg[3]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[3], "MSG_???");
 	}
 	return 0;
 }
@@ -964,8 +1372,7 @@ struct tcb *tcp;
 		/* len */
 		tprintf(", %lu, ", tcp->u_arg[2]);
 		/* flags */
-		if (printflags(msg_flags, tcp->u_arg[3]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[3], "MSG_???");
 		/* from address, len */
 		if (!tcp->u_arg[4] || !tcp->u_arg[5]) {
 			if (tcp->u_arg[4] == 0)
@@ -1005,8 +1412,7 @@ struct tcb *tcp;
 			printmsghdr(tcp, tcp->u_arg[1]);
 		/* flags */
 		tprintf(", ");
-		if (printflags(msg_flags, tcp->u_arg[2]) == 0)
-			tprintf("0");
+		printflags(msg_flags, tcp->u_arg[2], "MSG_???");
 	}
 	return 0;
 }
@@ -1053,7 +1459,7 @@ sys_pipe(tcp)
 struct tcb *tcp;
 {
 
-#if defined(LINUX) && !defined(SPARC)
+#if defined(LINUX) && !defined(SPARC) && !defined(SPARC64) && !defined(SH) && !defined(IA64)
 	int fds[2];
 
 	if (exiting(tcp)) {
@@ -1066,7 +1472,7 @@ struct tcb *tcp;
 		else
 			tprintf("[%u, %u]", fds[0], fds[1]);
 	}
-#elif defined(SPARC) || defined(SVR4) || defined(FREEBSD)
+#elif defined(SPARC) || defined(SPARC64) || defined(SH) || defined(SVR4) || defined(FREEBSD) || defined(IA64)
 	if (exiting(tcp))
 		tprintf("[%lu, %lu]", tcp->u_rval, getrval2(tcp));
 #endif
@@ -1098,7 +1504,7 @@ struct tcb *tcp;
 			tprintf("]");
 			break;
 #endif /* PF_IPX */
-		default:	
+		default:
 			tprintf("%lu", tcp->u_arg[2]);
 			break;
 		}
@@ -1126,58 +1532,84 @@ struct tcb *tcp;
 {
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
+		printxval(socketlayers, tcp->u_arg[1], "SOL_???");
+		tprintf (", ");
 		switch (tcp->u_arg[1]) {
 		case SOL_SOCKET:
-			tprintf("SOL_SOCKET, ");
 			printxval(sockoptions, tcp->u_arg[2], "SO_???");
-			tprintf(", ");
 			break;
 #ifdef SOL_IP
 		case SOL_IP:
-			tprintf("SOL_IP, ");
 			printxval(sockipoptions, tcp->u_arg[2], "IP_???");
-			tprintf(", ");
+			break;
+#endif
+#ifdef SOL_IPV6
+		case SOL_IPV6:
+			printxval(sockipv6options, tcp->u_arg[2], "IPV6_???");
 			break;
 #endif
 #ifdef SOL_IPX
 		case SOL_IPX:
-			tprintf("SOL_IPX, ");
 			printxval(sockipxoptions, tcp->u_arg[2], "IPX_???");
-			tprintf(", ");
 			break;
 #endif
 #ifdef SOL_PACKET
 		case SOL_PACKET:
-			tprintf("SOL_PACKET, ");
 			printxval(sockpacketoptions, tcp->u_arg[2], "PACKET_???");
-			tprintf(", ");
 			break;
 #endif
 #ifdef SOL_TCP
 		case SOL_TCP:
-			tprintf("SOL_TCP, ");
 			printxval(socktcpoptions, tcp->u_arg[2], "TCP_???");
-			tprintf(", ");
 			break;
 #endif
 
 		/* SOL_AX25 SOL_ROSE SOL_ATALK SOL_NETROM SOL_UDP SOL_DECNET SOL_X25
 		 * etc. still need work */
-		default: 
-			/* XXX - should know socket family here */
-			printxval(socketlayers, tcp->u_arg[1], "SOL_???");
-			tprintf(", %lu, ", tcp->u_arg[2]);
+		default:
+			tprintf("%lu", tcp->u_arg[2]);
 			break;
 		}
 	} else {
-		if (syserror(tcp)) {
-			tprintf("%#lx, %#lx",
+		int len;
+		if (syserror(tcp) || umove (tcp, tcp->u_arg[4], &len) < 0) {
+			tprintf(", %#lx, %#lx",
 				tcp->u_arg[3], tcp->u_arg[4]);
 			return 0;
 		}
-		printnum(tcp, tcp->u_arg[3], "%ld");
-		tprintf(", ");
-		printnum(tcp, tcp->u_arg[4], "%ld");
+
+		switch (tcp->u_arg[1]) {
+		case SOL_SOCKET:
+			switch (tcp->u_arg[2]) {
+#ifdef SO_LINGER
+			case SO_LINGER:
+			        if (len == sizeof (struct linger)) {
+					struct linger linger;
+					if (umove (tcp,
+						   tcp->u_arg[3],
+						   &linger) < 0)
+						break;
+					tprintf(", {onoff=%d, linger=%d}, "
+						"[%d]",
+						linger.l_onoff,
+						linger.l_linger,
+						len);
+					return 0;
+				}
+				break;
+#endif
+			}
+			break;
+		}
+
+		tprintf (", ");
+		if (len == sizeof (int)) {
+			printnum(tcp, tcp->u_arg[3], "%ld");
+		}
+		else {
+			printstr (tcp, tcp->u_arg[3], len);
+		}
+		tprintf(", [%d]", len);
 	}
 	return 0;
 }
@@ -1203,11 +1635,138 @@ long addr;
 	}
 
 	tprintf("~(");
-	if (printflags(icmpfilterflags, ~filter.data) == 0)
-		tprintf("0");
+	printflags(icmpfilterflags, ~filter.data, "ICMP_???");
 	tprintf(")");
 }
 #endif /* ICMP_FILTER */
+
+static int
+printsockopt (tcp, level, name, addr, len)
+struct tcb *tcp;
+int level;
+int name;
+long addr;
+int len;
+{
+	printxval(socketlayers, level, "SOL_??");
+	tprintf (", ");
+	switch (level) {
+	    case SOL_SOCKET:
+		printxval(sockoptions, name, "SO_???");
+		switch (name) {
+#if defined(SO_LINGER)
+		    case SO_LINGER:
+			if (len == sizeof (struct linger)) {
+				struct linger linger;
+				if (umove (tcp, addr, &linger) < 0)
+					break;
+				tprintf(", {onoff=%d, linger=%d}",
+					linger.l_onoff,
+					linger.l_linger);
+				return 0;
+			}
+			break;
+#endif
+		}
+		break;
+#ifdef SOL_IP
+	    case SOL_IP:
+		printxval(sockipoptions, name, "IP_???");
+		break;
+#endif
+#ifdef SOL_IPV6
+	    case SOL_IPV6:
+		printxval(sockipv6options, name, "IPV6_???");
+		break;
+#endif
+#ifdef SOL_IPX
+	    case SOL_IPX:
+		printxval(sockipxoptions, name, "IPX_???");
+		break;
+#endif
+#ifdef SOL_PACKET
+	    case SOL_PACKET:
+		printxval(sockpacketoptions, name, "PACKET_???");
+		/* TODO: decode packate_mreq for PACKET_*_MEMBERSHIP */
+		break;
+#endif
+#ifdef SOL_TCP
+	    case SOL_TCP:
+		printxval(socktcpoptions, name, "TCP_???");
+		break;
+#endif
+#ifdef SOL_RAW
+	    case SOL_RAW:
+		printxval(sockrawoptions, name, "RAW_???");
+		switch (name) {
+#if defined(ICMP_FILTER)
+		    case ICMP_FILTER:
+			tprintf(", ");
+			printicmpfilter(tcp, addr);
+			return 0;
+#endif
+		}
+		break;
+#endif
+
+		/* SOL_AX25 SOL_ATALK SOL_NETROM SOL_UDP SOL_DECNET SOL_X25
+		 * etc. still need work  */
+
+	    default:
+		tprintf("%u", name);
+	}
+
+	/* default arg printing */
+
+	tprintf (", ");
+
+	if (len == sizeof (int)) {
+		printnum_int (tcp, addr, "%d");
+	}
+	else {
+		printstr (tcp, addr, len);
+	}
+	return 0;
+}
+
+
+#ifdef HAVE_STRUCT_OPTHDR
+
+void
+print_sock_optmgmt (tcp, addr, len)
+struct tcb *tcp;
+long addr;
+int len;
+{
+	int c = 0;
+	struct opthdr hdr;
+
+	while (len >= (int) sizeof hdr) {
+		if (umove(tcp, addr, &hdr) < 0) break;
+		if (c++) {
+			tprintf (", ");
+		}
+		else if (len > hdr.len + sizeof hdr) {
+			tprintf ("[");
+		}
+		tprintf ("{");
+		addr += sizeof hdr;
+		len -= sizeof hdr;
+		printsockopt (tcp, hdr.level, hdr.name, addr, hdr.len);
+		if (hdr.len > 0) {
+			addr += hdr.len;
+			len -= hdr.len;
+		}
+		tprintf ("}");
+	}
+	if (len > 0) {
+		if (c++) tprintf (", ");
+		printstr (tcp, addr, len);
+	}
+	if (c > 1) tprintf ("]");
+}
+
+#endif
 
 int
 sys_setsockopt(tcp)
@@ -1215,87 +1774,16 @@ struct tcb *tcp;
 {
 	if (entering(tcp)) {
 		tprintf("%ld, ", tcp->u_arg[0]);
-		switch (tcp->u_arg[1]) {
-		case SOL_SOCKET:
-			tprintf("SOL_SOCKET, ");
-			printxval(sockoptions, tcp->u_arg[2], "SO_???");
-			tprintf(", ");
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#ifdef SOL_IP
-		case SOL_IP:
-			tprintf("SOL_IP, ");
-			printxval(sockipoptions, tcp->u_arg[2], "IP_???");
-			tprintf(", ");
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#endif
-#ifdef SOL_IPX
-		case SOL_IPX:
-			tprintf("SOL_IPX, ");
-			printxval(sockipxoptions, tcp->u_arg[2], "IPX_???");
-			tprintf(", ");
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#endif
-#ifdef SOL_PACKET
-		case SOL_PACKET:
-			tprintf("SOL_PACKET, ");
-			printxval(sockpacketoptions, tcp->u_arg[2], "PACKET_???");
-			tprintf(", ");
-			/* TODO: decode packate_mreq for PACKET_*_MEMBERSHIP */
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#endif
-#ifdef SOL_TCP
-		case SOL_TCP:
-			tprintf("SOL_TCP, ");
-			printxval(socktcpoptions, tcp->u_arg[2], "TCP_???");
-			tprintf(", ");
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#endif
-#ifdef SOL_RAW
-		case SOL_RAW:
-			tprintf("SOL_RAW, ");
-			printxval(sockrawoptions, tcp->u_arg[2], "RAW_???");
-			tprintf(", ");
-			switch (tcp->u_arg[2]) {
-#if defined(ICMP_FILTER)
-				case ICMP_FILTER:
-					printicmpfilter(tcp, tcp->u_arg[3]);
-					break;
-#endif
-				default:
-					printnum(tcp, tcp->u_arg[3], "%ld");
-					break;
-			}
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-#endif
-
-		/* SOL_AX25 SOL_ATALK SOL_NETROM SOL_UDP SOL_DECNET SOL_X25 
-		 * etc. still need work  */
-		default:
-			/* XXX - should know socket family here */
-			printxval(socketlayers, tcp->u_arg[1], "IPPROTO_???");
-			tprintf(", %lu, ", tcp->u_arg[2]);
-			printnum(tcp, tcp->u_arg[3], "%ld");
-			tprintf(", %lu", tcp->u_arg[4]);
-			break;
-		}
+		printsockopt (tcp, tcp->u_arg[1], tcp->u_arg[2],
+			      tcp->u_arg[3], tcp->u_arg[4]);
+		tprintf(", %lu", tcp->u_arg[4]);
 	}
 	return 0;
 }
 
 #if UNIXWARE >= 7
 
-static struct xlat sock_version[] = {
+static const struct xlat sock_version[] = {
 	{ __NETLIB_UW211_SVR4,	"UW211_SVR4" },
 	{ __NETLIB_UW211_XPG4,	"UW211_XPG4" },
 	{ __NETLIB_GEMINI_SVR4,	"GEMINI_SVR4" },
@@ -1319,7 +1807,7 @@ int (*func) ();
 		for (i = 0; i < tcp->u_nargs; i++)
 			tcp->u_arg[i] = tcp->u_arg[i + 1];
 		return func (tcp);
-		
+
 	}
 
 	return func (tcp);
@@ -1398,7 +1886,7 @@ struct tcb *tcp;
 			tprintf ("%ld, ", tcp->u_arg [1]);
 		}
 		tprintf ("%ld, ", tcp->u_arg [2]);
-	} 
+	}
 	else {
 		if (tcp->u_arg[3] == 0 || syserror(tcp)) {
 			tprintf("%#lx", tcp->u_arg[3]);

@@ -1,7 +1,7 @@
 /**
- * $Id: xlog.c,v 1.5 2003/10/12 13:07:40 ramona Exp $
+ * $Id: xlog.c,v 1.8 2004/10/27 10:12:39 ramona Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -106,7 +106,7 @@ static int mod_init(void)
 }
 
 /**
- * Initialize childs
+ * Initialize children
  */
 static int child_init(int rank)
 {
@@ -125,8 +125,8 @@ static int xlog(struct sip_msg* msg, char* lev, char* frm)
 	if(xl_print_log(msg, (xl_elog_t*)frm, log_buf, &log_len)<0)
 		return -1;
 
-	log_buf[log_len] = '\0';
-	LOG((int)(long)lev, log_buf);
+	/* log_buf[log_len] = '\0'; */
+	LOG((int)(long)lev, "%.*s", log_len, log_buf);
 
 	return 1;
 }
@@ -142,8 +142,8 @@ static int xdbg(struct sip_msg* msg, char* frm, char* str2)
 	if(xl_print_log(msg, (xl_elog_t*)frm, log_buf, &log_len)<0)
 		return -1;
 
-	log_buf[log_len] = '\0';
-	DBG(log_buf);
+	/* log_buf[log_len] = '\0'; */
+	DBG("%.*s", log_len, log_buf);
 
 	return 1;
 }

@@ -80,7 +80,8 @@ struct timer_list mcfrs_timer_struct;
  */
 #if defined(CONFIG_ARNEWSH) || defined(CONFIG_MOTOROLA) || \
     defined(CONFIG_COBRA5272) || defined(CONFIG_AVNET) || \
-    defined(CONFIG_COBRA5282) || defined(CONFIG_SNEHA)
+    defined(CONFIG_COBRA5282) || defined(CONFIG_SNEHA) || \
+    defined(CONFIG_SERRA)
 #define	CONSOLE_BAUD_RATE	19200
 #define	DEFAULT_CBAUD		B19200
 #endif

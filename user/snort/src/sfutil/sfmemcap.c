@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "sfmemcap.h"
+#include "util.h"
 
 /*
 *   Set max # bytes & init other variables.
@@ -68,7 +69,9 @@ void * sfmemcap_alloc( MEMCAP * mc, unsigned nbytes )
       }
    }
 
-   data = (long *) malloc( nbytes );
+   //data = (long *) malloc( nbytes );
+   data = (long *)SnortAlloc( nbytes );
+
    if( data == NULL )
    {
         return 0;
@@ -112,12 +115,19 @@ void sfmemcap_showmem( MEMCAP * mc )
 */
 char * sfmemcap_strdup( MEMCAP * mc, const char *str )
 {
-    char * data = (char *)sfmemcap_alloc( mc, strlen(str) + 1 );
+    char *data = NULL;
+    int data_size;
+
+    data_size = strlen(str) + 1;
+    data = (char *)sfmemcap_alloc(mc, data_size);
+
     if(data == NULL)
     {
         return  0 ;
     }
-    strcpy(data,str);
+
+    SnortStrncpy(data, str, data_size);
+
     return data;
 }
 

@@ -3,8 +3,8 @@
  * Intersil Prism2/2.5/3 - hostap.o module, common routines
  *
  * Copyright (c) 2001-2002, SSH Communications Security Corp and Jouni Malinen
- * <jkmaline@cc.hut.fi>
- * Copyright (c) 2002-2005, Jouni Malinen <jkmaline@cc.hut.fi>
+ * <j@w1.fi>
+ * Copyright (c) 2002-2005, Jouni Malinen <j@w1.fi>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -37,7 +37,6 @@
 MODULE_AUTHOR("Jouni Malinen");
 MODULE_DESCRIPTION("Host AP common routines");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(PRISM2_VERSION);
 
 #define TX_TIMEOUT (2 * HZ)
 
@@ -84,7 +83,7 @@ struct net_device * hostap_add_interface(struct local_info *local,
 	if (strchr(dev->name, '%'))
 		ret = dev_alloc_name(dev, dev->name);
 
-	SET_NETDEV_DEV(dev, mdev->class_dev.dev);
+	SET_NETDEV_DEV(dev, mdev->dev.parent);
 	if (ret >= 0)
 		ret = register_netdevice(dev);
 
@@ -250,7 +249,7 @@ u16 hostap_tx_callback_register(local_info_t *local,
 	unsigned long flags;
 	struct hostap_tx_callback_info *entry;
 
-	entry = (struct hostap_tx_callback_info *) kmalloc(sizeof(*entry),
+	entry = kmalloc(sizeof(*entry),
 							   GFP_ATOMIC);
 	if (entry == NULL)
 		return 0;
@@ -590,20 +589,20 @@ void hostap_dump_tx_header(const char *name, const struct hfa384x_tx_frame *tx)
 
 int hostap_80211_header_parse(struct sk_buff *skb, unsigned char *haddr)
 {
-	memcpy(haddr, skb->mac.raw + 10, ETH_ALEN); /* addr2 */
+	memcpy(haddr, skb_mac_header(skb) + 10, ETH_ALEN); /* addr2 */
 	return ETH_ALEN;
 }
 
 
 int hostap_80211_prism_header_parse(struct sk_buff *skb, unsigned char *haddr)
 {
-	if (*(u32 *)skb->mac.raw == LWNG_CAP_DID_BASE) {
-		memcpy(haddr, skb->mac.raw +
-		       sizeof(struct linux_wlan_ng_prism_hdr) + 10,
+	const unsigned char *mac = skb_mac_header(skb);
+
+	if (*(u32 *)mac == LWNG_CAP_DID_BASE) {
+		memcpy(haddr, mac + sizeof(struct linux_wlan_ng_prism_hdr) + 10,
 		       ETH_ALEN); /* addr2 */
-	} else { /* (*(u32 *)skb->mac.raw == htonl(LWNG_CAPHDR_VERSION)) */
-		memcpy(haddr, skb->mac.raw +
-		       sizeof(struct linux_wlan_ng_cap_hdr) + 10,
+	} else { /* (*(u32 *)mac == htonl(LWNG_CAPHDR_VERSION)) */
+		memcpy(haddr, mac + sizeof(struct linux_wlan_ng_cap_hdr) + 10,
 		       ETH_ALEN); /* addr2 */
 	}
 	return ETH_ALEN;
@@ -767,14 +766,14 @@ static int prism2_set_mac_address(struct net_device *dev, void *p)
 
 /* TODO: to be further implemented as soon as Prism2 fully supports
  *       GroupAddresses and correct documentation is available */
-void hostap_set_multicast_list_queue(void *data)
+void hostap_set_multicast_list_queue(struct work_struct *work)
 {
-	struct net_device *dev = (struct net_device *) data;
+	local_info_t *local =
+		container_of(work, local_info_t, set_multicast_list_queue);
+	struct net_device *dev = local->dev;
 	struct hostap_interface *iface;
-	local_info_t *local;
 
 	iface = netdev_priv(dev);
-	local = iface->local;
 	if (hostap_set_word(dev, HFA384X_RID_PROMISCUOUSMODE,
 			    local->is_promisc)) {
 		printk(KERN_INFO "%s: %sabling promiscuous mode failed\n",
@@ -1063,7 +1062,8 @@ int prism2_sta_send_mgmt(local_info_t *local, u8 *dst, u16 stype,
 	meta->iface = netdev_priv(dev);
 
 	skb->dev = dev;
-	skb->mac.raw = skb->nh.raw = skb->data;
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
 	dev_queue_xmit(skb);
 
 	return 0;

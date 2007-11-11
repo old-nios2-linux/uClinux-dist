@@ -1,6 +1,6 @@
 /*
 
-$Log: pitsyn.c,v $
+$Log$
 Revision 1.16  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 
@@ -45,22 +45,22 @@ extern int pitsyn_(integer *order, integer *voice, integer *pitch, real *rms, re
 
 /* 	PITSYN Version 53 */
 
-/* $Log: pitsyn.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/11/23 22:14:32  markster
-/* Various warning cleanups
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/11/23 22:14:32  markster
+ * Various warning cleanups
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:40:12  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_decoder_state that is passed as an
@@ -160,22 +160,22 @@ extern int pitsyn_(integer *order, integer *voice, integer *pitch, real *rms, re
     real xxy;
 
 /*       Arguments */
-/* $Log: pitsyn.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/11/23 22:14:32  markster
-/* Various warning cleanups
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/11/23 22:14:32  markster
+ * Various warning cleanups
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:40:12  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_decoder_state that is passed as an
@@ -465,9 +465,9 @@ after */
 	    i__1 = lsamp;
 	    for (i__ = istart; i__ <= i__1; ++i__) {
 		r__1 = *ipito + slope * i__;
-		ip = r__1 + .5f;
+		ip = (integer)(r__1 + .5f);
 		if (uvpit != 0.f) {
-		    ip = uvpit;
+		    ip = (integer)uvpit;
 		}
 		if (ip <= i__ - jused) {
 		    ++(*nout);
@@ -487,14 +487,14 @@ over 16. */
 		    prop = (jused - ip / 2) / (real) lsamp;
 		    i__2 = *order;
 		    for (j = 1; j <= i__2; ++j) {
-			alro = log((rco[j - 1] + 1) / (1 - rco[j - 1]));
-			alrn = log((rc[j] + 1) / (1 - rc[j]));
+			alro = (real)log((rco[j - 1] + 1) / (1 - rco[j - 1]));
+			alrn = (real)log((rc[j] + 1) / (1 - rc[j]));
 			xxy = alro + prop * (alrn - alro);
-			xxy = exp(xxy);
+			xxy = (real)exp(xxy);
 			rci[j + *nout * rci_dim1] = (xxy - 1) / (xxy + 1);
 		    }
-		    rmsi[*nout] = log(*rmso) + prop * (log(*rms) - log(*rmso));
-		    rmsi[*nout] = exp(rmsi[*nout]);
+		    rmsi[*nout] = (real)(log(*rmso) + prop * (log(*rms) - log(*rmso)));
+		    rmsi[*nout] = (real)exp(rmsi[*nout]);
 		}
 	    }
 	    if (vflag != 1) {

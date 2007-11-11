@@ -1,7 +1,7 @@
 /*
- * $Id: parse_uri.c,v 1.16 2003/07/03 15:41:07 andrei Exp $
+ * $Id: parse_uri.c,v 1.17.2.1 2005/07/20 17:11:52 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -312,6 +312,8 @@ int parse_uri(char* buf, int len, struct sip_uri* uri)
 	b=v=0;
 	param=param_val=0;
 	pass=0;
+	password.s=0; /* fixes gcc 4.0 warning */
+	password.len=0;
 	port_no=0;
 	state=URI_INIT;
 	memset(uri, 0, sizeof(struct sip_uri)); /* zero it all, just to be sure*/
@@ -799,7 +801,7 @@ int parse_uri(char* buf, int len, struct sip_uri* uri)
 						break;
 					case '?':
 						if (pass){
-							found_user=1; /* no user, pass cannot conaint '?'*/
+							found_user=1; /* no user, pass cannot contain '?'*/
 							pass=0;
 						}
 						break;
@@ -811,7 +813,7 @@ int parse_uri(char* buf, int len, struct sip_uri* uri)
 	}
 	/*end of uri */
 	switch (state){
-		case URI_INIT: /* error empy uri */
+		case URI_INIT: /* error empty uri */
 			goto error_too_short;
 		case URI_USER:
 			/* this is the host, it can't be the user */

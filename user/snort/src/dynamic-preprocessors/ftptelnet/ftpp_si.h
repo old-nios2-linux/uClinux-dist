@@ -105,25 +105,6 @@ typedef struct s_TELNET_SESSION
 #define AUTH_SSL_ENCRYPTED        0x10
 #define AUTH_UNKNOWN_ENCRYPTED    0x20
 
-#define USER_CMD_ISSUED           0x01
-#define PASS_REQUIRED             0x02
-#define PASS_CMD_ISSUED           0x04
-#define USER_LOGGED_IN            0x08
-
-#define PWD_CMD_ISSUED            0x01
-#define CWD_CMD_ISSUED            0x02
-#define CDUP_CMD_ISSUED           0x04
-
-/* #define MAINTAIN_DIR_STATE */
-#ifdef MAINTAIN_DIR_STATE
-typedef struct s_FTP_DIR_NODE
-{
-    char *name;
-    struct s_FTP_DIR_NODE *parent;
-    struct s_FTP_DIR_NODE *next;
-} FTP_DIR_NODE;
-#endif
-
 /*
  * The FTP_SESSION structure contains the complete FTP session, both the
  * client and the server constructs.  This structure is the structure that 
@@ -159,37 +140,6 @@ typedef struct s_FTP_SESSION
      * The global configuration for this session
      */
     FTPTELNET_GLOBAL_CONF *global_conf;
-
-#ifdef MAINTAIN_USER_STATE
-    /*
-     * The current user
-     */
-    char *user;
-
-    /*
-     * Login state
-     */
-    int user_state;
-#endif
-
-#ifdef MAINTAIN_DIR_STATE
-    /*
-     * The current directory
-     */
-    FTP_DIR_NODE *curr_directory;
-    FTP_DIR_NODE *head_directory;
-
-    /*
-     * The current directory
-     */
-    char *dir_adjust;
-    
-    /*
-     * Dir state
-     */
-    int dir_state;
-    int expected_dir_response;
-#endif
 
     /*
      * The data channel info
@@ -237,10 +187,6 @@ typedef struct s_FTPP_SI_INPUT
 
 int ftpp_si_determine_proto(SFSnortPacket *p, FTPTELNET_GLOBAL_CONF *GlobalConf,
         FTPP_SI_INPUT *SiInput, int *piInspectMode);
-
-#ifdef MAINTAIN_DIR_STATE
-void FTPFreeDirectory(FTP_DIR_NODE *directory);
-#endif
 
 #endif
 

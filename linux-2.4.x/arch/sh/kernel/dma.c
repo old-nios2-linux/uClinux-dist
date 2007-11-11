@@ -116,7 +116,7 @@ int get_dma_residue(unsigned int dmanr)
 	return ctrl_inl(DMATCR[info->chan])<<ts_shift(calc_chcr(info));
 }
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 static void dma_err(int irq, void *dev_id, struct pt_regs *regs)
 {
 	printk(KERN_WARNING "DMAE: DMAOR=%lx\n",ctrl_inl(DMAOR));
@@ -129,7 +129,7 @@ static struct irqaction irq_err = { dma_err, SA_INTERRUPT, 0, "dma_err", NULL, N
 
 int __init init_dma(void)
 {
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	make_ipr_irq(DMAE_IRQ, DMA_IPR_ADDR, DMA_IPR_POS, DMA_PRIORITY);
 	setup_irq(DMAE_IRQ, &irq_err);
 #endif

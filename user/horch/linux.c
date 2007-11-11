@@ -632,7 +632,7 @@ volatile Command_par_t cmd;
 /* fill line with status info */
 void getStat(char *line)
 {
-CanSja1000Status_par_t status;
+CanStatusPar_t status;
     ioctl(can_fd, STATUS, &status);
     sprintf(line, ":: sja1000 %d %d %d %d %d %d",
     	status.baud,

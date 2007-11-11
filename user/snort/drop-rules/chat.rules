@@ -20,7 +20,7 @@ drop tcp $EXTERNAL_NET any -> $HONEYNET 1863 (msg:"CHAT MSN login attempt"; flow
 drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC nick change"; flow:to_server,established; content: "NICK "; offset:0; classtype:misc-activity; sid:542;  rev:8;)
 drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC DCC file transfer request"; flow:to_server,established; content:"PRIVMSG "; nocase; offset:0; content:" \:.DCC SEND"; nocase; classtype:misc-activity; sid:1639;  rev:3;)
 drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC DCC chat request"; flow:to_server,established; content:"PRIVMSG "; nocase; offset:0; content:" \:.DCC CHAT chat"; nocase; classtype:misc-activity; sid:1640;  rev:3;)
-drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC channel join"; flow:to_server,established; content:"JOIN \: \#"; nocase; offset:0; classtype:misc-activity; sid:1729;  rev:2;)
+drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC channel join"; flow:to_server,established; content:"JOIN \: #"; nocase; offset:0; classtype:misc-activity; sid:1729;  rev:2;)
 drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC message"; flow:to_server,established; content:"PRIVMSG "; nocase; offset:0; classtype:misc-activity; sid:1463;  rev:3;)
 drop tcp $EXTERNAL_NET any -> $HONEYNET 6666:7000 (msg:"CHAT IRC dns request"; flow:to_server,established; content:"USERHOST "; nocase; offset:0; classtype:misc-activity; sid:1789; rev:1;)
 drop tcp $HONEYNET 6666:7000 -> $EXTERNAL_NET any (msg:"CHAT IRC dns response"; flow:to_client,established; content:"\:"; offset:0; content:" 302 "; content:"=+"; classtype:misc-activity; sid:1790; rev:2;)

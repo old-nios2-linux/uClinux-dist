@@ -7,17 +7,17 @@ struct icmp6hdr {
 
 	__u8		icmp6_type;
 	__u8		icmp6_code;
-	__u16		icmp6_cksum;
+	__sum16		icmp6_cksum;
 
 
 	union {
-		__u32			un_data32[1];
-		__u16			un_data16[2];
+		__be32			un_data32[1];
+		__be16			un_data16[2];
 		__u8			un_data8[4];
 
 		struct icmpv6_echo {
-			__u16		identifier;
-			__u16		sequence;
+			__be16		identifier;
+			__be16		sequence;
 		} u_echo;
 
                 struct icmpv6_nd_advt {
@@ -53,7 +53,7 @@ struct icmp6hdr {
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
-			__u16		rt_lifetime;
+			__be16		rt_lifetime;
                 } u_nd_ra;
 
 	} icmp6_dataun;
@@ -74,6 +74,15 @@ struct icmp6hdr {
 #define icmp6_rt_lifetime	icmp6_dataun.u_nd_ra.rt_lifetime
 #define icmp6_router_pref	icmp6_dataun.u_nd_ra.router_pref
 };
+
+#ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+static inline struct icmp6hdr *icmp6_hdr(const struct sk_buff *skb)
+{
+	return (struct icmp6hdr *)skb_transport_header(skb);
+}
+#endif
 
 #define ICMPV6_ROUTER_PREF_LOW		0x3
 #define ICMPV6_ROUTER_PREF_MEDIUM	0x0

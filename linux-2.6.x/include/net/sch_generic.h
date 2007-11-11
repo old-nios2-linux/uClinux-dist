@@ -5,10 +5,10 @@
 #include <linux/types.h>
 #include <linux/rcupdate.h>
 #include <linux/module.h>
-#include <linux/rtnetlink.h>
 #include <linux/pkt_sched.h>
 #include <linux/pkt_cls.h>
 #include <net/gen_stats.h>
+#include <net/rtnetlink.h>
 
 struct Qdisc_ops;
 struct qdisc_walker;
@@ -60,6 +60,7 @@ struct Qdisc_class_ops
 	int			(*graft)(struct Qdisc *, unsigned long cl,
 					struct Qdisc *, struct Qdisc **);
 	struct Qdisc *		(*leaf)(struct Qdisc *, unsigned long cl);
+	void			(*qlen_notify)(struct Qdisc *, unsigned long);
 
 	/* Class manipulation routines */
 	unsigned long		(*get)(struct Qdisc *, u32 classid);
@@ -144,7 +145,7 @@ struct tcf_proto
 	void			*root;
 	int			(*classify)(struct sk_buff*, struct tcf_proto*,
 					struct tcf_result *);
-	u32			protocol;
+	__be16			protocol;
 
 	/* All the rest */
 	u32			prio;
@@ -172,17 +173,12 @@ extern void dev_activate(struct net_device *dev);
 extern void dev_deactivate(struct net_device *dev);
 extern void qdisc_reset(struct Qdisc *qdisc);
 extern void qdisc_destroy(struct Qdisc *qdisc);
+extern void qdisc_tree_decrease_qlen(struct Qdisc *qdisc, unsigned int n);
 extern struct Qdisc *qdisc_alloc(struct net_device *dev, struct Qdisc_ops *ops);
 extern struct Qdisc *qdisc_create_dflt(struct net_device *dev,
-				       struct Qdisc_ops *ops);
-
-static inline void
-tcf_destroy(struct tcf_proto *tp)
-{
-	tp->ops->destroy(tp);
-	module_put(tp->ops->owner);
-	kfree(tp);
-}
+				       struct Qdisc_ops *ops, u32 parentid);
+extern void tcf_destroy(struct tcf_proto *tp);
+extern void tcf_destroy_chain(struct tcf_proto *fl);
 
 static inline int __qdisc_enqueue_tail(struct sk_buff *skb, struct Qdisc *sch,
 				       struct sk_buff_head *list)
@@ -294,7 +290,7 @@ static inline int qdisc_reshape_fail(struct sk_buff *skb, struct Qdisc *sch)
 {
 	sch->qstats.drops++;
 
-#ifdef CONFIG_NET_CLS_POLICE
+#ifdef CONFIG_NET_CLS_ACT
 	if (sch->reshape_fail == NULL || sch->reshape_fail(skb, sch))
 		goto drop;
 

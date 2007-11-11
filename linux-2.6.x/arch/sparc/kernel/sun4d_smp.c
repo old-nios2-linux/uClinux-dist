@@ -12,7 +12,6 @@
 #include <linux/sched.h>
 #include <linux/threads.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
@@ -37,6 +36,7 @@
 #include <asm/cacheflush.h>
 #include <asm/cpudata.h>
 
+#include "irq.h"
 #define IRQ_CROSS_CALL		15
 
 extern ctxd_t *srmmu_ctx_table_phys;
@@ -164,7 +164,7 @@ void __init smp4d_boot_cpus(void)
 	local_flush_cache_all();
 }
 
-int smp4d_boot_one_cpu(int i)
+int __cpuinit smp4d_boot_one_cpu(int i)
 {
 			extern unsigned long sun4d_cpu_startup;
 			unsigned long *entry = &sun4d_cpu_startup;

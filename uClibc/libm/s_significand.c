@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -22,6 +22,8 @@ static char rcsid[] = "$NetBSD: s_significand.c,v 1.6 1995/05/10 20:48:11 jtc Ex
 
 #include "math.h"
 #include "math_private.h"
+
+libm_hidden_proto(ilogb)
 
 #ifdef __STDC__
 	double significand(double x)

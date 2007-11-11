@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -20,11 +20,12 @@ static char rcsid[] = "$NetBSD: w_lgamma.c,v 1.6 1995/05/10 20:49:24 jtc Exp $";
  * Method: call __ieee754_lgamma_r
  */
 
-#include "math.h"
+#include <math.h>
 #include "math_private.h"
 
-extern int signgam;
+libm_hidden_proto(signgam)
 
+libm_hidden_proto(lgamma)
 #ifdef __STDC__
 	double lgamma(double x)
 #else
@@ -46,4 +47,5 @@ extern int signgam;
         } else
             return y;
 #endif
-}             
+}
+libm_hidden_def(lgamma)

@@ -1,10 +1,9 @@
 /*
- *  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -28,20 +28,21 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <pthread.h>
-#include <clamav.h>
+
+#include "libclamav/clamav.h"
+
+#include "shared/cfgparser.h"
+#include "shared/output.h"
 
 #include "server.h"
 #include "others.h"
-#include "cfgparser.h"
 #include "dazukoio.h"
 #include "clamuko.h"
-#include "defaults.h"
-#include "output.h"
 
 struct dazuko_access *acc;
 short int clamuko_scanning;
 
-void clamuko_exit(int sig)
+static void clamuko_exit(int sig)
 {
 
     logg("*Clamuko: clamuko_exit(), signal %d\n", sig);
@@ -93,15 +94,15 @@ void *clamukoth(void *arg)
 	logg("Clamuko: Correctly registered with Dazuko.\n");
 
     /* access mask */
-    if(cfgopt(tharg->copt, "ClamukoScanOnOpen")) {
+    if(cfgopt(tharg->copt, "ClamukoScanOnOpen")->enabled) {
 	logg("Clamuko: Scan-on-open mode activated.\n");
 	mask |= DAZUKO_ON_OPEN;
     }
-    if(cfgopt(tharg->copt, "ClamukoScanOnClose")) {
+    if(cfgopt(tharg->copt, "ClamukoScanOnClose")->enabled) {
 	logg("Clamuko: Scan-on-close mode activated.\n");
 	mask |= DAZUKO_ON_CLOSE;
     }
-    if(cfgopt(tharg->copt, "ClamukoScanOnExec")) {
+    if(cfgopt(tharg->copt, "ClamukoScanOnExec")->enabled) {
 	logg("Clamuko: Scan-on-exec mode activated.\n");
 	mask |= DAZUKO_ON_EXEC;
     }
@@ -118,7 +119,7 @@ void *clamukoth(void *arg)
 	return NULL;
     }
 
-    if((pt = cfgopt(tharg->copt, "ClamukoIncludePath"))) {
+    if((pt = cfgopt(tharg->copt, "ClamukoIncludePath"))->enabled) {
 	while(pt) {
 	    if((dazukoAddIncludePath(pt->strarg))) {
 		logg("!Clamuko: Dazuko -> Can't include path %s\n", pt->strarg);
@@ -135,7 +136,7 @@ void *clamukoth(void *arg)
 	return NULL;
     }
 
-    if((pt = cfgopt(tharg->copt, "ClamukoExcludePath"))) {
+    if((pt = cfgopt(tharg->copt, "ClamukoExcludePath"))->enabled) {
 	while(pt) {
 	    if((dazukoAddExcludePath(pt->strarg))) {
 		logg("!Clamuko: Dazuko -> Can't exclude path %s\n", pt->strarg);
@@ -148,11 +149,7 @@ void *clamukoth(void *arg)
 	}
     }
 
-    if((pt = cfgopt(tharg->copt, "ClamukoMaxFileSize"))) {
-	sizelimit = pt->numarg;
-    } else
-	sizelimit = CL_DEFAULT_CLAMUKOMAXFILESIZE;
-
+    sizelimit = cfgopt(tharg->copt, "ClamukoMaxFileSize")->numarg;
     if(sizelimit)
 	logg("Clamuko: Max file size limited to %d bytes.\n", sizelimit);
     else
@@ -172,7 +169,7 @@ void *clamukoth(void *arg)
 		}
 	    }
 
-	    if(scan && cl_scanfile(acc->filename, &virname, NULL, tharg->root, tharg->limits, tharg->options) == CL_VIRUS) {
+	    if(scan && cl_scanfile(acc->filename, &virname, NULL, tharg->engine, tharg->limits, tharg->options) == CL_VIRUS) {
 		logg("Clamuko: %s: %s FOUND\n", acc->filename, virname);
 		virusaction(acc->filename, virname, tharg->copt);
 		acc->deny = 1;

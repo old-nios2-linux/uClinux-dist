@@ -527,6 +527,7 @@ struct daemon {
 
 /* cache.c */
 void cache_init(int cachesize, int log);
+void incr_unresolved_counter(void);
 void log_query(unsigned int flags, char *name, struct all_addr *addr, 
 	       unsigned short type, struct hostsfile *addn_hosts, int index);
 struct crec *cache_find_by_addr(struct crec *crecp,

@@ -1,7 +1,7 @@
 #ifndef __ASM_SH_SHMPARAM_H
 #define __ASM_SH_SHMPARAM_H
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 /*
  * SH-4 has D-cache alias issue
  */

@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,13 +14,14 @@
 static char rcsid[] = "$NetBSD: w_sinh.c,v 1.6 1995/05/10 20:49:51 jtc Exp $";
 #endif
 
-/* 
+/*
  * wrapper sinh(x)
  */
 
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(sinh)
 #ifdef __STDC__
 	double sinh(double x)		/* wrapper sinh */
 #else
@@ -31,7 +32,7 @@ static char rcsid[] = "$NetBSD: w_sinh.c,v 1.6 1995/05/10 20:49:51 jtc Exp $";
 #ifdef _IEEE_LIBM
 	return __ieee754_sinh(x);
 #else
-	double z; 
+	double z;
 	z = __ieee754_sinh(x);
 	if(_LIB_VERSION == _IEEE_) return z;
 	if(!finite(z)&&finite(x)) {
@@ -40,3 +41,4 @@ static char rcsid[] = "$NetBSD: w_sinh.c,v 1.6 1995/05/10 20:49:51 jtc Exp $";
 	    return z;
 #endif
 }
+libm_hidden_def(sinh)

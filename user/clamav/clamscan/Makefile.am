@@ -1,5 +1,5 @@
 #
-#  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+#  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
 #  Fixes by Arkadiusz Miskiewicz <misiek@pld.org.pl>
 #
 #  This program is free software; you can redistribute it and/or modify
@@ -14,7 +14,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 bin_PROGRAMS = clamscan
 
@@ -23,24 +24,22 @@ clamscan_SOURCES = \
     $(top_srcdir)/shared/output.h \
     $(top_srcdir)/shared/getopt.c \
     $(top_srcdir)/shared/getopt.h \
-    $(top_srcdir)/shared/memory.c \
-    $(top_srcdir)/shared/memory.h \
     $(top_srcdir)/shared/cfgparser.c \
     $(top_srcdir)/shared/cfgparser.h \
     $(top_srcdir)/shared/misc.c \
     $(top_srcdir)/shared/misc.h \
+    $(top_srcdir)/shared/options.c \
+    $(top_srcdir)/shared/options.h \
     clamscan.c \
-    options.c \
-    options.h \
+    clamscan_opt.h \
     others.c \
     others.h \
-    shared.h \
+    global.h \
     manager.c \
     manager.h \
     treewalk.c \
-    treewalk.h \
-    defaults.h
+    treewalk.h
 
 DEFS = @DEFS@ -DCL_NOTHREADS
-LIBS = $(top_builddir)/libclamav/libclamav.la @ADDITIONAL_LIBS@
+LIBS = $(top_builddir)/libclamav/libclamav.la @THREAD_LIBS@
 INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav

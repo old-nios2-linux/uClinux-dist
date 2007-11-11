@@ -1,5 +1,5 @@
 /*
- * linux/fs/transaction.c
+ * linux/fs/jbd2/transaction.c
  *
  * Written by Stephen C. Tweedie <sct@redhat.com>, 1998
  *
@@ -23,9 +23,10 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/timer.h>
-#include <linux/smp_lock.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
+
+static void __jbd2_journal_temp_unlink_buffer(struct journal_head *jh);
 
 /*
  * jbd2_get_transaction: obtain a new transaction_t object.

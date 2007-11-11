@@ -181,13 +181,12 @@ NCR_D700_probe_one(struct NCR_D700_private *p, int siop, int irq,
 	struct Scsi_Host *host;
 	int ret;
 
-	hostdata = kmalloc(sizeof(*hostdata), GFP_KERNEL);
+	hostdata = kzalloc(sizeof(*hostdata), GFP_KERNEL);
 	if (!hostdata) {
 		printk(KERN_ERR "NCR D700: SIOP%d: Failed to allocate host"
 		       "data, detatching\n", siop);
 		return -ENOMEM;
 	}
-	memset(hostdata, 0, sizeof(*hostdata));
 
 	if (!request_region(region, 64, "NCR_D700")) {
 		printk(KERN_ERR "NCR D700: Failed to reserve IO region 0x%x\n",
@@ -200,6 +199,7 @@ NCR_D700_probe_one(struct NCR_D700_private *p, int siop, int irq,
 	hostdata->base = ioport_map(region, 64);
 	hostdata->differential = (((1<<siop) & differential) != 0);
 	hostdata->clock = NCR_D700_CLOCK_MHZ;
+	hostdata->burst_length = 8;
 
 	/* and register the siop */
 	host = NCR_700_detect(&NCR_D700_driver_template, hostdata, p->dev);

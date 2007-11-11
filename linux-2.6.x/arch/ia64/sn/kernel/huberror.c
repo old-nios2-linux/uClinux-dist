@@ -3,12 +3,11 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1992 - 1997, 2000,2002-2005 Silicon Graphics, Inc. All rights reserved.
+ * Copyright (C) 1992 - 1997, 2000,2002-2007 Silicon Graphics, Inc. All rights reserved.
  */
 
 #include <linux/types.h>
 #include <linux/interrupt.h>
-#include <linux/pci.h>
 #include <asm/delay.h>
 #include <asm/sn/sn_sal.h>
 #include "ioerror.h"
@@ -38,12 +37,20 @@ static irqreturn_t hub_eint_handler(int irq, void *arg)
 			(u64) nasid, 0, 0, 0, 0, 0, 0);
 
 		if ((int)ret_stuff.v0)
-			panic("hubii_eint_handler(): Fatal TIO Error");
+			panic("%s: Fatal %s Error", __FUNCTION__,
+				((nasid & 1) ? "TIO" : "HUBII"));
 
 		if (!(nasid & 1)) /* Not a TIO, handle CRB errors */
 			(void)hubiio_crb_error_handler(hubdev_info);
-	} else 
-		bte_error_handler((unsigned long)NODEPDA(nasid_to_cnodeid(nasid)));
+	} else
+		if (nasid & 1) {	/* TIO errors */
+			SAL_CALL_NOLOCK(ret_stuff, SN_SAL_HUB_ERROR_INTERRUPT,
+				(u64) nasid, 0, 0, 0, 0, 0, 0);
+
+			if ((int)ret_stuff.v0)
+				panic("%s: Fatal TIO Error", __FUNCTION__);
+		} else
+			bte_error_handler((unsigned long)NODEPDA(nasid_to_cnodeid(nasid)));
 
 	return IRQ_HANDLED;
 }
@@ -178,11 +185,14 @@ void hubiio_crb_error_handler(struct hubdev_info *hubdev_info)
  */
 void hub_error_init(struct hubdev_info *hubdev_info)
 {
+
 	if (request_irq(SGI_II_ERROR, hub_eint_handler, IRQF_SHARED,
-			"SN_hub_error", (void *)hubdev_info))
+			"SN_hub_error", (void *)hubdev_info)) {
 		printk("hub_error_init: Failed to request_irq for 0x%p\n",
 		    hubdev_info);
-	return;
+		return;
+	}
+	sn_set_err_irq_affinity(SGI_II_ERROR);
 }
 
 
@@ -195,11 +205,14 @@ void hub_error_init(struct hubdev_info *hubdev_info)
  */
 void ice_error_init(struct hubdev_info *hubdev_info)
 {
+
         if (request_irq
             (SGI_TIO_ERROR, (void *)hub_eint_handler, IRQF_SHARED, "SN_TIO_error",
-             (void *)hubdev_info))
+             (void *)hubdev_info)) {
                 printk("ice_error_init: request_irq() error hubdev_info 0x%p\n",
                        hubdev_info);
-        return;
+		return;
+	}
+	sn_set_err_irq_affinity(SGI_TIO_ERROR);
 }
 

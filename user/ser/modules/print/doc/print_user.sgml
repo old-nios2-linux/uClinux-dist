@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.1 $</revnumber>
-		<date>$Date: 2003/07/16 18:06:50 $</date>
+		<revnumber>$Revision: 1.2 $</revnumber>
+		<date>$Date: 2004/08/24 09:00:37 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -16,7 +16,7 @@
 	<para>Module description</para>
 	<para>
 	    This is an example module. It implements only one function that prints its string
-	    parameter to stdout (it won't work if ser is started in dameon mode). It also shows how
+	    parameter to stdout (it won't work if ser is started in daemon mode). It also shows how
 	    module parameters can be declared.
 	</para>
     </section>

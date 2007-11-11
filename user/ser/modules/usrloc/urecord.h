@@ -1,9 +1,9 @@
 /* 
- * $Id: urecord.h,v 1.11.6.1 2004/07/21 10:34:45 sobomax Exp $ 
+ * $Id: urecord.h,v 1.16.2.1 2005/03/29 11:54:35 janakj Exp $ 
  *
  * Usrloc record structure
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -40,6 +40,7 @@
 #include <time.h>
 #include "hslot.h"
 #include "../../str.h"
+#include "../../qvalue.h"
 #include "ucontact.h"
 #include "notify.h"
 
@@ -86,8 +87,8 @@ void print_urecord(FILE* _f, urecord_t* _r);
 /*
  * Add a new contact
  */
-int mem_insert_ucontact(urecord_t* _r, str* _c, time_t _e, float _q, str* _cid, int _cs, 
-			unsigned int _flags, int _rep, struct ucontact** _con, str *_ua);
+int mem_insert_ucontact(urecord_t* _r, str* _c, time_t _e, qvalue_t _q, str* _cid, int _cs, 
+			unsigned int _flags, struct ucontact** _con, str *_ua, str* _recv);
 
 
 
@@ -130,18 +131,15 @@ void release_urecord(urecord_t* _r);
  * Create and insert new contact
  * into urecord with additional replication argument
  */
-typedef int (*insert_ucontact_t)(urecord_t* _r, str* _c, time_t _e, float _q, str* _cid, int _cs, 
-				 unsigned int _flags, struct ucontact** _con, str *_ua);
-int insert_ucontact_rep(urecord_t* _r, str* _c, time_t _e, float _q, str* _cid, int _cs, 
-			unsigned int _flags, int _rep, struct ucontact** _con, str *_ua);
+typedef int (*insert_ucontact_t)(urecord_t* _r, str* _c, time_t _e, qvalue_t _q, str* _cid, int _cs, 
+				 unsigned int _flags, struct ucontact** _con, str *_ua, str* _recv);
 
 /*
  * Create and insert new contact
  * into urecord without replication
  */
-
-int insert_ucontact(urecord_t* _r, str* _c, time_t _e, float _q, str* _cid, int _cs, 
-		    unsigned int _flags, struct ucontact** _con, str *_ua);
+int insert_ucontact(urecord_t* _r, str* _c, time_t _e, qvalue_t _q, str* _cid, int _cs, 
+		    unsigned int _flags, struct ucontact** _con, str *_ua, str* _recv);
 
 
 /*

@@ -1,6 +1,10 @@
 /***********************************************************************
  * linux/drivers/net/eth_c5471.h
  *
+ *   Copyright (C) 2004-2006 Arcturus Networks Inc. 
+ *                 by Ted Ma and David Wu 
+ *                 <www.ArcturusNetworks.com>
+ *
  *   Copyright (C) 2003 Cadenux, LLC. All rights reserved.
  *   todd.fischer@cadenux.com  <www.cadenux.com>
  *
@@ -36,13 +40,14 @@
  ***********************************************************************/
 
 #include <asm/arch/sysdep.h> /* LINUX_20 */
-
+#include <linux/netdevice.h>
 /***********************************************************************
  * Compilation Switches
  ***********************************************************************/
 
-/* #define ETHER_DEBUG 1 */
-/* #define VERBOSE     1 */
+//#define ETHER_DEBUG 1 
+//#define VERBOSE     1 
+//#define PHY_DEBUG   1 
 
 /* This is the most common case for modern hardware. */
 
@@ -274,9 +279,20 @@
 #define CLKM_CTL_RST_EXT_RESET  0x00000002
 
 /* Number of TX/RX descriptors */
+
+#ifdef CONFIG_MACH_UC5471DSP
+#define CONFIG_FEC_LXT972  /* may define it in config*/
+#define CADENUX_ETHERNET_PHY CONFIG_FEC_LXT972  /* may define it in .config*/
+
+/* 16KB packet memory, over NFS, cannot receive 3 packets(4096Byte or more) and cause overrun error.
+ * Total Descriptors are 0x6C0/8 = 216 but only 215(64+4 Bytes) buffers, so NUM_DESC_TX+NUM_DESC_RX should less than 216
+ */
+#define NUM_DESC_TX             47
+#define NUM_DESC_RX             168
+#else
 #define NUM_DESC_TX             32
 #define NUM_DESC_RX             64
-
+#endif
 
 /* IRQ for the c5471 ethernet hardware */
 
@@ -314,6 +330,147 @@
 #define MODE_10MBIT_FULLDUP    0x0100
 #define MODE_100MBIT_FULLDUP   0x2100
 #define MODE_100MBIT_HALFDUP   0x2000
+
+#ifdef CONFIG_FEC_LXT972
+#define LXT972_ID_val          0x001378E2
+#define ETH_5471_LINK_IRQ      3
+
+
+/* Register definitions for the PHY. */
+
+#define MII_REG_CR          0  /* Control Register                         */
+#define MII_REG_SR          1  /* Status Register                          */
+#define MII_REG_PHYIR1      2  /* PHY Identification Register 1            */
+#define MII_REG_PHYIR2      3  /* PHY Identification Register 2            */
+#define MII_REG_ANAR        4  /* A-N Advertisement Register               */ 
+#define MII_REG_ANLPAR      5  /* A-N Link Partner Ability Register        */
+#define MII_REG_ANER        6  /* A-N Expansion Register                   */
+#define MII_REG_ANNPTR      7  /* A-N Next Page Transmit Register          */
+#define MII_REG_ANLPRNPR    8  /* A-N Link Partner Received Next Page Reg. */
+
+/* values for phy_status */
+
+#define PHY_CONF_ANE    0x0001  /* 1 auto-negotiation enabled */
+#define PHY_CONF_LOOP   0x0002  /* 1 loopback mode enabled */
+#define PHY_CONF_SPMASK 0x00f0  /* mask for speed */
+#define PHY_CONF_10HDX  0x0010  /* 10 Mbit half duplex supported */
+#define PHY_CONF_10FDX  0x0020  /* 10 Mbit full duplex supported */ 
+#define PHY_CONF_100HDX 0x0040  /* 100 Mbit half duplex supported */
+#define PHY_CONF_100FDX 0x0080  /* 100 Mbit full duplex supported */ 
+
+#define PHY_STAT_LINK   0x0100  /* 1 up - 0 down */
+#define PHY_STAT_FAULT  0x0200  /* 1 remote fault */
+#define PHY_STAT_ANC    0x0400  /* 1 auto-negotiation complete  */
+#define PHY_STAT_SPMASK 0xf000  /* mask for speed */
+#define PHY_STAT_10HDX  0x1000  /* 10 Mbit half duplex selected */
+#define PHY_STAT_10FDX  0x2000  /* 10 Mbit full duplex selected */ 
+#define PHY_STAT_100HDX 0x4000  /* 100 Mbit half duplex selected */
+#define PHY_STAT_100FDX 0x8000  /* 100 Mbit full duplex selected */
+
+/***********************************************
+ * PHYS defines
+ * PHY - LX972 register and defines
+ **********************************************/
+#define PHYAddr    0x0001       /* Address of the LX972 for HEI board   */
+//#define PHYAddr    0xffff0000   // Address of the LX972 for C5471 uCdimm 
+/******* registers *********/
+#define PHYCtl          0       // Control Register Refer to Table 37 on page 58 
+#define PHYStat         1       // Status Register #1 Refer to Table 38 on page 58
+#define PHYId1          2       // PHY Identification Register 1 Refer to Table 39
+                                // on page 59
+#define PHYId2          3       // PHY Identification Register 2 Refer to 
+                                // Table 40 on page 60
+#define PHYANegAd       4       // Auto-Negotiation Advertisement Register
+                                // Refer to Table 41 on page 61
+#define PHYANegLink     5       // Auto-Negotiation Link Partner Base Page Ability 
+                                // Register Refer to Table 42 on page 62
+#define PHYANegEx       6       // Auto-Negotiation Expansion Register Refer to 
+                                // Table 43 on page 63
+#define PHYANegNext     7       // Auto-Negotiation Next Page Transmit Register
+                                // Refer to Table 44 on page 63
+#define PHYANegLPart    8       // Auto-Negotiation Link Partner Received Next Page
+                                // Register Refer to Table 45 on page 64
+#define PHY100Ctl       9       // 1000BASE-T/100BASE-T2 Control Register Not 
+                                // Implemented
+#define PHY100Stat      10      // 1000BASE-T/100BASE-T2 Status Register Not 
+                                // Implemented
+#define PHYExStat       15      // Extended Status Register Not Implemented
+#define PHYPortCfg      16      // Port Configuration Register Refer to Table 
+                                // 46 on page 64
+#define PHYStat2        17      // Status Register #2 Refer to Table 47 on page 65
+#define PHYIntEn        18      // Interrupt Enable Register Refer to Table 48 
+                                // on page 66
+#define PHYIntStat      19      // Interrupt Status Register Refer to Table 49
+                                // on page 66
+#define PHYLedCfg       20      // LED Configuration Register Refer to Table 50
+                                // on page 68
+                  // 21 - 29 Reserved
+#define PHYTxCtl        30      // Transmit Control Register Refer to Table 51
+                                //      on page 69
+#define PHYCtlReset    0x8000  // reset
+#define PHYANegAdMask  0x1e0   // bits for duplex and speed (972)
+#define PHYB8          0x100   // bit 8
+#define PHYB7          0x080   // bit 7
+#define PHYB6          0x040   // bit 6
+#define PHYB5          0x020   // bit 5
+#define PHYLEDCFG      0xD0F2  // LED 1 (left - link and activity
+                               //     2 (right - Speed)
+#define PHYLEDANEG     0x1e1   // Advertize AutoNeg all speed / duplex
+
+#define PHY_BUSYLOOP_COUNT    100  // each loop is 10mS -> 1S
+#define PHY_RESETLOOP_COUNT   10   // number of times to check reset 
+                                   //  10 ms between checks - manual
+                                   //  states 300 uS max fro reset to work
+#define PHY_NEGLOOP_COUNT     150  // 1.5 seconds for Autoneg to complete
+
+#define ANDONE     0x0080   // auto negotiation interrupt
+#define SPEEDCHG   0x0040   // speed change interrupt 
+#define DUPLEXCHG  0x0020   // duplex change interrupt
+#define LINKCHG    0x0010   // link change interrupt
+
+#define ENET0_ERR  0x00000004  // ENET ERR bit in EIM ESM Status Register
+
+/**********************************
+ * Bit Defines for PHY972_CONTROL
+ **********************************/
+#define PHY_CONTROL_RESET           0x8000
+#define PHY_CONTROL_LOOPBACK        0x4000
+#define PHY_CONTROL_SELECT_SPEED    0x2000
+#define PHY_CONTROL_AUTONEG         0x1000
+#define PHY_CONTROL_POWERDOWN       0x0800
+#define PHY_CONTROL_ISOLATE         0x0400
+#define PHY_CONTROL_RESTART_AUTONEG 0x0200
+#define PHY_CONTROL_DUPLEXMODE      0x0100
+#define PHY_CONTROL_COLLISION_TEST  0x0080
+#define PHY_CONTROL_SPEED_10_HALF   0x0000
+#define PHY_CONTROL_SPEED_10_FULL   (PHY_CONTROL_DUPLEXMODE)
+#define PHY_CONTROL_SPEED_100_HALF  (PHY_CONTROL_SELECT_SPEED )
+#define PHY_CONTROL_SPEED_100_FULL  (PHY_CONTROL_SELECT_SPEED | PHY_CONTROL_DUPLEXMODE)
+#define PHY_CONTROL_AUTONEG_HALF_10     (0x1000 | PHY_CONTROL_RESTART_AUTONEG)
+#define PHY_CONTROL_AUTONEG_FULL_10     (0X1100 | PHY_CONTROL_RESTART_AUTONEG)
+#define PHY_CONTROL_AUTONEG_HALF_100    (0x3000 | PHY_CONTROL_RESTART_AUTONEG)
+#define PHY_CONTROL_AUTONEG_FULL_100    (0X3100 | PHY_CONTROL_RESTART_AUTONEG)
+
+/*****************************************
+ * Bit Defines for PHY972_STATUS_REG_TWO
+ *****************************************/
+    /* not used                                     0x8000  */
+#define PHY_STATUS_REG_TWO_MODE_100             0x4000
+#define PHY_STATUS_REG_TWO_TX_STATUS            0x2000
+#define PHY_STATUS_REG_TWO_RX_STATUS            0x1000
+#define PHY_STATUS_REG_TWO_COLLISION_STATUS     0x0800
+#define PHY_STATUS_REG_TWO_LINK                 0x0400
+#define PHY_STATUS_REG_TWO_DUPLEX_MODE          0x0200
+#define PHY_STATUS_REG_TWO_AUTO_NEGOTIATION     0x0100
+#define PHY_STATUS_REG_TWO_AUTO_NEGO_COMPLETE   0x0080
+    /* not used                                 0x0040  */
+#define PHY_STATUS_REG_TWO_POLARITY             0x0020
+#define PHY_STATUS_REG_TWO_PAUSE                0x0010
+#define PHY_STATUS_REG_TWO_ERROR                0x0008
+    /* not used                                 0x0004  */
+    /* not used                                 0x0002  */
+    /* not used                                 0x0001  */
+#endif
 
 /* You'll notice a few places that reference ROUNDUP. The idea here is
  * that we want to xfer bytes out of packet memory into the client's
@@ -382,6 +539,24 @@
  * Public Type Declarations
  ***********************************************************************/
 
+struct net_local
+{
+  struct NET_DEVICE_STATS stats;
+  long   open_time;                 /* Useless example local info. */
+  int    phySpeed;               // 00-Auto, 0x1-10 Mbs, 0x2-100Mbs, 0x3-Auto
+  int    phyDpx;                 // duplex 00-Half, 0x1-Full (not valid with??)
+
+#ifndef LINUX_20
+  /* Tx control lock.  This protects the transmit buffer ring
+   * state along with the "tx full" state of the driver.  This
+   * means all netif_queue flow control actions are protected
+   * by this lock as well.
+   */
+
+  spinlock_t lock;
+#endif /* LINUX_20 */
+};
+
 /***********************************************************************
  * Public Variables
  ***********************************************************************/
@@ -391,22 +566,6 @@ extern int LAN_Rate;
 /***********************************************************************
  * Public Functions
  ***********************************************************************/
-
-extern int  eth_tx_errors(void);
-extern int  eth_tx_window_errors(void);
-extern int  eth_tx_heartbeat_errors(void);
-extern int  eth_tx_fifo_errors(void);
-extern int  eth_tx_carrier_errors(void);
-extern int  eth_tx_aborted_errors(void);
-
-extern int  eth_rx_missed_errors(void);
-extern int  eth_rx_fifo_errors(void);
-extern int  eth_rx_frame_errors(void);
-extern int  eth_rx_crc_errors(void);
-extern int  eth_rx_over_errors(void);
-extern int  eth_rx_length_errors(void);
-extern int  eth_rx_errors(void);
-
 extern int  eth_recv_int_active(void);
 extern int  eth_xmit_int_active(void);
 
@@ -418,12 +577,14 @@ extern void eth_multicast_promiscuous(void);
 extern void eth_set_hast_multicast(long hash_table);
 extern void eth_set_addressing(int eim_addr);
 extern void eth_set_filter(int cpu_fltr);
-
-extern void eth_turn_on_ethernet(void);
-extern void eth_turn_off_ethernet(void);
-
+extern void eth_turn_on_ethernet(struct net_device * dev);
+extern void eth_turn_off_ethernet(struct net_device * dev);
 extern void eth_get_received_packet_len(int *numbytes);
 extern void eth_get_received_packet_data(unsigned char *buf, int *numbytes);
-extern void eth_send_packet(unsigned char *buf, int numbytes);
-
+extern void eth_send_packet(unsigned char *buf, int numbytes, struct net_device * dev);
+extern void enable_link_interrupt(void);
+extern void eth_reset_enet(struct net_device * dev);
+extern void eth_5471_link_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
+extern unsigned long eth_read_enet_sys_err_reg(void);
+extern void eth_free_received_packet(void);
 #endif /* _ETH_C5471_H_ */

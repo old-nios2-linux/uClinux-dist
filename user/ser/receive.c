@@ -1,7 +1,7 @@
 /* 
- *$Id: receive.c,v 1.45.4.1.2.1 2004/07/21 13:41:53 bogdan Exp $
+ *$Id: receive.c,v 1.50 2004/08/24 08:45:10 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,10 +33,10 @@
  * 2003-02-10 moved zero-term in the calling functions (udp_receive &
  *            tcp_read_req)
  * 2003-08-13 fixed exec_pre_cb returning 0 (backported from stable) (andrei)
+ * 2004-02-06 added user preferences support - destroy_avps() (bogdan)
  * 2004-04-30 exec_pre_cb is called after basic sanity checks (at least one
  *            via present & parsed ok)  (andrei)
- * 2004-07-21 added user avp (attribute value pairs) support;
- *            reset_avps() (bogdan)
+ * 2004-08-23 avp core changed - destroy_avp-> reset_avps (bogdan)
  */
 
 
@@ -57,6 +57,9 @@
 #include "script_cb.h"
 #include "dset.h"
 #include "usr_avp.h"
+
+
+#include "tcp_server.h" /* for tcpconn_add_alias */
 
 
 #ifdef DEBUG_DMALLOC
@@ -100,7 +103,7 @@ int receive_msg(char* buf, unsigned int len, struct receive_info* rcv_info)
 	msg->buf=buf;
 	msg->len=len;
 	/* zero termination (termination of orig message bellow not that
-	   useful as most of the work is done with scrath-pad; -jiri  */
+	   useful as most of the work is done with scratch-pad; -jiri  */
 	/* buf[len]=0; */ /* WARNING: zero term removed! */
 	msg->rcv=*rcv_info;
 	msg->id=msg_no;
@@ -124,7 +127,23 @@ int receive_msg(char* buf, unsigned int len, struct receive_info* rcv_info)
 			LOG(L_ERR, "ERROR: receive_msg: no via found in request\n");
 			goto error;
 		}
-		/* check if neccesarry to add receive?->moved to forward_req */
+		/* check if necessary to add receive?->moved to forward_req */
+		/* check for the alias stuff */
+#ifdef USE_TCP
+		if (msg->via1->alias && tcp_accept_aliases && 
+				(((rcv_info->proto==PROTO_TCP) && !tcp_disable)
+#ifdef USE_TLS
+					|| ((rcv_info->proto==PROTO_TLS) && !tls_disable)
+#endif
+				)
+			){
+			if (tcpconn_add_alias(rcv_info->proto_reserved1, msg->via1->port,
+									rcv_info->proto)!=0){
+				LOG(L_ERR, " ERROR: receive_msg: tcp alias failed\n");
+				/* continue */
+			}
+		}
+#endif
 
 		DBG("preparing to run routing scripts...\n");
 #ifdef  STATS
@@ -143,7 +162,7 @@ int receive_msg(char* buf, unsigned int len, struct receive_info* rcv_info)
 			else goto end; /* drop the message -- no error -- andrei */
 		}
 		/* exec the routing script */
-		if (run_actions(rlist[0], msg)<0){
+		if (run_actions(rlist[0], msg)<0) {
 			LOG(L_WARN, "WARNING: receive_msg: "
 					"error while trying script\n");
 			goto error;
@@ -154,7 +173,7 @@ int receive_msg(char* buf, unsigned int len, struct receive_info* rcv_info)
 		diff = (tve.tv_sec-tvb.tv_sec)*1000000+(tve.tv_usec-tvb.tv_usec);
 		stats->processed_requests++;
 		stats->acc_req_time += diff;
-		DBG("succesfully ran routing scripts...(%d usec)\n", diff);
+		DBG("successfully ran routing scripts...(%d usec)\n", diff);
 		STATS_RX_REQUEST( msg->first_line.u.request.method_value );
 #endif
 	}else if (msg->first_line.type==SIP_REPLY){
@@ -199,7 +218,7 @@ int receive_msg(char* buf, unsigned int len, struct receive_info* rcv_info)
 		diff = (tve.tv_sec-tvb.tv_sec)*1000000+(tve.tv_usec-tvb.tv_usec);
 		stats->processed_responses++;
 		stats->acc_res_time+=diff;
-		DBG("succesfully ran reply processing...(%d usec)\n", diff);
+		DBG("successfully ran reply processing...(%d usec)\n", diff);
 #endif
 	}
 end:

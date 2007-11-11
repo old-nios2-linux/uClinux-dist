@@ -302,7 +302,7 @@ module_param(lockdoor, bool, 0);
 module_param(check_media_type, bool, 0);
 module_param(mrw_format_restart, bool, 0);
 
-static DEFINE_SPINLOCK(cdrom_lock);
+static DEFINE_MUTEX(cdrom_mutex);
 
 static const char *mrw_format_status[] = {
 	"not mrw",
@@ -336,6 +336,12 @@ static const char *mrw_address_space[] = { "DMA", "GAA" };
 
 /* used in the audio ioctls */
 #define CHECKAUDIO if ((ret=check_for_audio_disc(cdi, cdo))) return ret
+
+/*
+ * Another popular OS uses 7 seconds as the hard timeout for default
+ * commands, so it is a good choice for us as well.
+ */
+#define CDROM_DEF_TIMEOUT	(7 * HZ)
 
 /* Not-exported routines. */
 static int open_for_data(struct cdrom_device_info * cdi);
@@ -432,10 +438,10 @@ int register_cdrom(struct cdrom_device_info *cdi)
 		cdo->generic_packet = cdrom_dummy_generic_packet;
 
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
-	spin_lock(&cdrom_lock);
+	mutex_lock(&cdrom_mutex);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
-	spin_unlock(&cdrom_lock);
+	mutex_unlock(&cdrom_mutex);
 	return 0;
 }
 #undef ENSURE
@@ -446,7 +452,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 	cdinfo(CD_OPEN, "entering unregister_cdrom\n"); 
 
 	prev = NULL;
-	spin_lock(&cdrom_lock);
+	mutex_lock(&cdrom_mutex);
 	cdi = topCdromPtr;
 	while (cdi && cdi != unreg) {
 		prev = cdi;
@@ -454,7 +460,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 	}
 
 	if (cdi == NULL) {
-		spin_unlock(&cdrom_lock);
+		mutex_unlock(&cdrom_mutex);
 		return -2;
 	}
 	if (prev)
@@ -462,7 +468,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 	else
 		topCdromPtr = cdi->next;
 
-	spin_unlock(&cdrom_lock);
+	mutex_unlock(&cdrom_mutex);
 
 	if (cdi->exit)
 		cdi->exit(cdi);
@@ -1026,6 +1032,10 @@ int cdrom_open(struct cdrom_device_info *cdi, struct inode *ip, struct file *fp)
 	check_disk_change(ip->i_bdev);
 	return 0;
 err_release:
+	if (CDROM_CAN(CDC_LOCK) && cdi->options & CDO_LOCK) {
+		cdi->ops->lock_door(cdi, 0);
+		cdinfo(CD_OPEN, "door unlocked.\n");
+	}
 	cdi->ops->release(cdi);
 err:
 	cdi->use_count--;
@@ -1528,7 +1538,7 @@ void init_cdrom_command(struct packet_command *cgc, void *buf, int len,
 	cgc->buffer = (char *) buf;
 	cgc->buflen = len;
 	cgc->data_direction = type;
-	cgc->timeout = 5*HZ;
+	cgc->timeout = CDROM_DEF_TIMEOUT;
 }
 
 /* DVD handling */
@@ -1810,7 +1820,7 @@ static int dvd_read_disckey(struct cdrom_device_info *cdi, dvd_struct *s)
 
 	size = sizeof(s->disckey.value) + 4;
 
-	if ((buf = (u_char *) kmalloc(size, GFP_KERNEL)) == NULL)
+	if ((buf = kmalloc(size, GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
 	init_cdrom_command(&cgc, buf, size, CGC_DATA_READ);
@@ -1861,7 +1871,7 @@ static int dvd_read_manufact(struct cdrom_device_info *cdi, dvd_struct *s)
 
 	size = sizeof(s->manufact.value) + 4;
 
-	if ((buf = (u_char *) kmalloc(size, GFP_KERNEL)) == NULL)
+	if ((buf = kmalloc(size, GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
 	init_cdrom_command(&cgc, buf, size, CGC_DATA_READ);
@@ -2088,7 +2098,7 @@ out:
 static int cdrom_read_cdda_bpc(struct cdrom_device_info *cdi, __u8 __user *ubuf,
 			       int lba, int nframes)
 {
-	request_queue_t *q = cdi->disk->queue;
+	struct request_queue *q = cdi->disk->queue;
 	struct request *rq;
 	struct bio *bio;
 	unsigned int len;
@@ -2133,16 +2143,13 @@ static int cdrom_read_cdda_bpc(struct cdrom_device_info *cdi, __u8 __user *ubuf,
 		rq->timeout = 60 * HZ;
 		bio = rq->bio;
 
-		if (rq->bio)
-			blk_queue_bounce(q, &rq->bio);
-
 		if (blk_execute_rq(q, cdi->disk, rq, 0)) {
 			struct request_sense *s = rq->sense;
 			ret = -EIO;
 			cdi->last_sense = s->sense_key;
 		}
 
-		if (blk_rq_unmap_user(bio, len))
+		if (blk_rq_unmap_user(bio))
 			ret = -EFAULT;
 
 		if (ret)
@@ -2381,7 +2388,7 @@ static int cdrom_ioctl_reset(struct cdrom_device_info *cdi,
 		return -EACCES;
 	if (!CDROM_CAN(CDC_RESET))
 		return -ENOSYS;
-	invalidate_bdev(bdev, 0);
+	invalidate_bdev(bdev);
 	return cdi->ops->reset(cdi);
 }
 
@@ -2692,11 +2699,12 @@ int cdrom_ioctl(struct file * file, struct cdrom_device_info *cdi,
 {
 	void __user *argp = (void __user *)arg;
 	int ret;
+	struct gendisk *disk = ip->i_bdev->bd_disk;
 
 	/*
 	 * Try the generic SCSI command ioctl's first.
 	 */
-	ret = scsi_cmd_ioctl(file, ip->i_bdev->bd_disk, cmd, argp);
+	ret = scsi_cmd_ioctl(file, disk->queue, disk, cmd, argp);
 	if (ret != -ENOTTY)
 		return ret;
 
@@ -2851,7 +2859,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		/* FIXME: we need upper bound checking, too!! */
 		if (lba < 0)
 			return -EINVAL;
-		cgc.buffer = (char *) kmalloc(blocksize, GFP_KERNEL);
+		cgc.buffer = kmalloc(blocksize, GFP_KERNEL);
 		if (cgc.buffer == NULL)
 			return -ENOMEM;
 		memset(&sense, 0, sizeof(sense));
@@ -3033,7 +3041,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		int size = sizeof(dvd_struct);
 		if (!CDROM_CAN(CDC_DVD))
 			return -ENOSYS;
-		if ((s = (dvd_struct *) kmalloc(size, GFP_KERNEL)) == NULL)
+		if ((s = kmalloc(size, GFP_KERNEL)) == NULL)
 			return -ENOMEM;
 		cdinfo(CD_DO_IOCTL, "entering DVD_READ_STRUCT\n"); 
 		if (copy_from_user(s, (dvd_struct __user *)arg, size)) {
@@ -3286,103 +3294,137 @@ static struct cdrom_sysctl_settings {
 	int	check;			/* check media type */
 } cdrom_sysctl_settings;
 
+enum cdrom_print_option {
+	CTL_NAME,
+	CTL_SPEED,
+	CTL_SLOTS,
+	CTL_CAPABILITY
+};
+
+static int cdrom_print_info(const char *header, int val, char *info,
+				int *pos, enum cdrom_print_option option)
+{
+	const int max_size = sizeof(cdrom_sysctl_settings.info);
+	struct cdrom_device_info *cdi;
+	int ret;
+
+	ret = scnprintf(info + *pos, max_size - *pos, header);
+	if (!ret)
+		return 1;
+
+	*pos += ret;
+
+	for (cdi = topCdromPtr; cdi; cdi = cdi->next) {
+		switch (option) {
+		case CTL_NAME:
+			ret = scnprintf(info + *pos, max_size - *pos,
+					"\t%s", cdi->name);
+			break;
+		case CTL_SPEED:
+			ret = scnprintf(info + *pos, max_size - *pos,
+					"\t%d", cdi->speed);
+			break;
+		case CTL_SLOTS:
+			ret = scnprintf(info + *pos, max_size - *pos,
+					"\t%d", cdi->capacity);
+			break;
+		case CTL_CAPABILITY:
+			ret = scnprintf(info + *pos, max_size - *pos,
+					"\t%d", CDROM_CAN(val) != 0);
+			break;
+		default:
+			printk(KERN_INFO "cdrom: invalid option%d\n", option);
+			return 1;
+		}
+		if (!ret)
+			return 1;
+		*pos += ret;
+	}
+
+	return 0;
+}
+
 static int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
                            void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-        int pos;
-	struct cdrom_device_info *cdi;
+	int pos;
 	char *info = cdrom_sysctl_settings.info;
+	const int max_size = sizeof(cdrom_sysctl_settings.info);
 	
 	if (!*lenp || (*ppos && !write)) {
 		*lenp = 0;
 		return 0;
 	}
 
+	mutex_lock(&cdrom_mutex);
+
 	pos = sprintf(info, "CD-ROM information, " VERSION "\n");
 	
-	pos += sprintf(info+pos, "\ndrive name:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%s", cdi->name);
-
-	pos += sprintf(info+pos, "\ndrive speed:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", cdi->speed);
-
-	pos += sprintf(info+pos, "\ndrive # of slots:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", cdi->capacity);
-
-	pos += sprintf(info+pos, "\nCan close tray:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_CLOSE_TRAY) != 0);
-
-	pos += sprintf(info+pos, "\nCan open tray:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_OPEN_TRAY) != 0);
-
-	pos += sprintf(info+pos, "\nCan lock tray:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_LOCK) != 0);
-
-	pos += sprintf(info+pos, "\nCan change speed:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_SELECT_SPEED) != 0);
-
-	pos += sprintf(info+pos, "\nCan select disk:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_SELECT_DISC) != 0);
-
-	pos += sprintf(info+pos, "\nCan read multisession:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MULTI_SESSION) != 0);
-
-	pos += sprintf(info+pos, "\nCan read MCN:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MCN) != 0);
-
-	pos += sprintf(info+pos, "\nReports media changed:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MEDIA_CHANGED) != 0);
-
-	pos += sprintf(info+pos, "\nCan play audio:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_PLAY_AUDIO) != 0);
-
-	pos += sprintf(info+pos, "\nCan write CD-R:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_CD_R) != 0);
-
-	pos += sprintf(info+pos, "\nCan write CD-RW:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_CD_RW) != 0);
-
-	pos += sprintf(info+pos, "\nCan read DVD:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_DVD) != 0);
-
-	pos += sprintf(info+pos, "\nCan write DVD-R:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_DVD_R) != 0);
-
-	pos += sprintf(info+pos, "\nCan write DVD-RAM:");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_DVD_RAM) != 0);
-
-	pos += sprintf(info+pos, "\nCan read MRW:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MRW) != 0);
-
-	pos += sprintf(info+pos, "\nCan write MRW:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MRW_W) != 0);
-
-	pos += sprintf(info+pos, "\nCan write RAM:\t");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_RAM) != 0);
-
-	strcpy(info+pos,"\n\n");
-		
-        return proc_dostring(ctl, write, filp, buffer, lenp, ppos);
+	if (cdrom_print_info("\ndrive name:\t", 0, info, &pos, CTL_NAME))
+		goto done;
+	if (cdrom_print_info("\ndrive speed:\t", 0, info, &pos, CTL_SPEED))
+		goto done;
+	if (cdrom_print_info("\ndrive # of slots:", 0, info, &pos, CTL_SLOTS))
+		goto done;
+	if (cdrom_print_info("\nCan close tray:\t",
+				CDC_CLOSE_TRAY, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan open tray:\t",
+				CDC_OPEN_TRAY, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan lock tray:\t",
+				CDC_LOCK, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan change speed:",
+				CDC_SELECT_SPEED, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan select disk:",
+				CDC_SELECT_DISC, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan read multisession:",
+				CDC_MULTI_SESSION, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan read MCN:\t",
+				CDC_MCN, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nReports media changed:",
+				CDC_MEDIA_CHANGED, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan play audio:\t",
+				CDC_PLAY_AUDIO, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write CD-R:\t",
+				CDC_CD_R, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write CD-RW:",
+				CDC_CD_RW, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan read DVD:\t",
+				CDC_DVD, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write DVD-R:",
+				CDC_DVD_R, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write DVD-RAM:",
+				CDC_DVD_RAM, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan read MRW:\t",
+				CDC_MRW, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write MRW:\t",
+				CDC_MRW_W, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (cdrom_print_info("\nCan write RAM:\t",
+				CDC_RAM, info, &pos, CTL_CAPABILITY))
+		goto done;
+	if (!scnprintf(info + pos, max_size - pos, "\n\n"))
+		goto done;
+doit:
+	mutex_unlock(&cdrom_mutex);
+	return proc_dostring(ctl, write, filp, buffer, lenp, ppos);
+done:
+	printk(KERN_INFO "cdrom: info buffer too small\n");
+	goto doit;
 }
 
 /* Unfortunately, per device settings are not implemented through
@@ -3550,9 +3592,7 @@ static void cdrom_sysctl_register(void)
 	if (initialized == 1)
 		return;
 
-	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
-	if (cdrom_root_table->ctl_name && cdrom_root_table->child->de)
-		cdrom_root_table->child->de->owner = THIS_MODULE;
+	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table);
 
 	/* set the defaults */
 	cdrom_sysctl_settings.autoclose = autoclose;

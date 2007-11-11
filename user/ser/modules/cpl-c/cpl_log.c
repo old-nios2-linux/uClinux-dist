@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_log.c,v 1.1 2003/09/23 00:25:15 bogdan Exp $
+ * $Id: cpl_log.c,v 1.2 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -91,7 +91,7 @@ void compile_logs( str *log)
 	/* get a buffer */
 	log->s = (char*)pkg_malloc(log->len);
 	if (log->s==0) {
-		LOG(L_ERR,"ERROR:cpl-c:compil_logs: no more pkg mem\n");
+		LOG(L_ERR,"ERROR:cpl-c:compile_logs: no more pkg mem\n");
 		log->len = 0;
 		return;
 	}

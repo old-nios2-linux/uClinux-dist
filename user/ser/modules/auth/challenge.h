@@ -1,9 +1,9 @@
 /*
- * $Id: challenge.h,v 1.3 2003/03/06 15:32:39 janakj Exp $
+ * $Id: challenge.h,v 1.4 2004/08/24 08:58:24 janakj Exp $
  *
  * Challenge related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -1,5 +1,5 @@
 /* ====================================================================
- * $Id: xsnprintf.c,v 1.2 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xsnprintf.c,v 1.2.10.1 2005/07/20 17:11:51 andrei Exp $
  *
  * Copyright (c) 1995-1998 The Apache Group.  All rights reserved.
  *
@@ -558,6 +558,7 @@ static int format_converter(register buffy * odp, const char *fmt,
     boolean_e adjust_width;
     bool_int is_negative;
 
+    s_len=0; /* warning fix */
     sp = odp->nextb;
     bep = odp->buf_end;
 

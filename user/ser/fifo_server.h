@@ -1,8 +1,8 @@
 /*
- * $Id: fifo_server.h,v 1.13 2003/03/29 02:30:35 jiri Exp $
+ * $Id: fifo_server.h,v 1.15 2004/08/24 08:45:10 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -74,14 +74,15 @@ int read_line_set(char *buf, int max_len, FILE *fifo, int *len);
 /* consume a set of EoL-terminated lines terminated by a single dot line */
 int read_body(char *buf, int max_len, FILE *fifo, int *len);
 
-int open_fifo_server();
+int init_fifo_server();
+int start_fifo_server();
 
-/* regsiter core FIFO command set */
+/* register core FIFO command set */
 int register_core_fifo();
 
 FILE *open_reply_pipe( char *pipe_name );
 
-/* tell FIFO client an error occured via reply pipe */
+/* tell FIFO client an error occurred via reply pipe */
 void fifo_reply( char *reply_fifo, char *reply_fmt, ... );
 
 /* memory deallocation */

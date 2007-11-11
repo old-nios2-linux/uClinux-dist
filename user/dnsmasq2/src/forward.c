@@ -10,6 +10,7 @@
    GNU General Public License for more details.
 */
 
+#include <config/autoconf.h>
 #include "dnsmasq.h"
 
 static struct frec *frec_list = NULL;
@@ -658,6 +659,10 @@ void receive_query(struct listener *listen, struct daemon *daemon, time_t now)
 
   m = answer_request (header, ((char *) header) + PACKETSZ, (size_t)n, daemon, 
 		      dst_addr_4, netmask, now);
+#ifdef CONFIG_PROP_STATSD_STATSD
+  (m > 0)?system("statsd -a incr dns hits \\; incr dns total"):
+          system("statsd -a incr dns total");
+#endif
   if (m >= 1)
     send_from(listen->fd, daemon->options & OPT_NOWILD, (char *)header, m, &source_addr, &dst_addr, if_index);
   else
@@ -716,6 +721,10 @@ unsigned char *tcp_request(struct daemon *daemon, int confd, time_t now,
       m = answer_request(header, ((char *) header) + 65536, (unsigned int)size, daemon, 
 			 local_addr, netmask, now);
       
+#ifdef CONFIG_PROP_STATSD_STATSD
+      (m > 0)?system("statsd -a incr dns hits \\; incr dns total"):
+              system("statsd -a incr dns total");
+#endif
       if (m == 0)
 	{
 	  unsigned short flags = 0;

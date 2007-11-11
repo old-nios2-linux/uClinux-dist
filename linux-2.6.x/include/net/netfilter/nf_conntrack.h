@@ -21,6 +21,7 @@
 
 #include <linux/netfilter/nf_conntrack_tcp.h>
 #include <linux/netfilter/nf_conntrack_sctp.h>
+#include <linux/netfilter/nf_conntrack_proto_gre.h>
 #include <net/netfilter/ipv4/nf_conntrack_icmp.h>
 #include <net/netfilter/ipv6/nf_conntrack_icmpv6.h>
 
@@ -33,6 +34,7 @@ union nf_conntrack_proto {
 	struct ip_ct_tcp tcp;
 	struct ip_ct_icmp icmp;
 	struct nf_ct_icmpv6 icmpv6;
+	struct nf_ct_gre gre;
 };
 
 union nf_conntrack_expect_proto {
@@ -41,15 +43,22 @@ union nf_conntrack_expect_proto {
 
 /* Add protocol helper include file here */
 #include <linux/netfilter/nf_conntrack_ftp.h>
+#include <linux/netfilter/nf_conntrack_pptp.h>
+#include <linux/netfilter/nf_conntrack_h323.h>
+#include <linux/netfilter/nf_conntrack_sane.h>
 
 /* per conntrack: application helper private data */
 union nf_conntrack_help {
 	/* insert conntrack helper private data (master) here */
-	struct ip_ct_ftp_master ct_ftp_info;
+	struct nf_ct_ftp_master ct_ftp_info;
+	struct nf_ct_pptp_master ct_pptp_info;
+	struct nf_ct_h323_master ct_h323_info;
+	struct nf_ct_sane_master ct_sane_info;
 };
 
 #include <linux/types.h>
 #include <linux/skbuff.h>
+#include <linux/timer.h>
 
 #ifdef CONFIG_NETFILTER_DEBUG
 #define NF_CT_ASSERT(x)							\
@@ -73,12 +82,16 @@ struct nf_conn_help {
 
 	union nf_conntrack_help help;
 
+	struct hlist_head expectations;
+
 	/* Current number of expected connections */
 	unsigned int expecting;
 };
 
 
 #include <net/netfilter/ipv4/nf_conntrack_ipv4.h>
+#include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
+
 struct nf_conn
 {
 	/* Usage count in here is 1 for hash table/destruct timer, 1 per skb,
@@ -106,9 +119,6 @@ struct nf_conn
 	/* Unique ID that identifies this conntrack*/
 	unsigned int id;
 
-	/* features - nat, helper, ... used by allocating system */
-	u_int32_t features;
-
 #if defined(CONFIG_NF_CONNTRACK_MARK)
 	u_int32_t mark;
 #endif
@@ -117,50 +127,28 @@ struct nf_conn
 	u_int32_t secmark;
 #endif
 
+#if defined(CONFIG_NETFILTER_XT_MATCH_LAYER7) || \
+    defined(CONFIG_NETFILTER_XT_MATCH_LAYER7_MODULE)
+	struct {
+		/*
+		 * e.g. "http". NULL before decision. "unknown" after decision
+		 * if no match.
+		 */
+		char *app_proto;
+		/*
+		 * application layer data so far. NULL after match decision.
+		 */
+		char *app_data;
+		unsigned int app_data_len;
+	} layer7;
+#endif
+
 	/* Storage reserved for other modules: */
 	union nf_conntrack_proto proto;
 
-	/* features dynamically at the end: helper, nat (both optional) */
-	char data[0];
+	/* Extensions */
+	struct nf_ct_ext *ext;
 };
-
-struct nf_conntrack_expect
-{
-	/* Internal linked list (global expectation list) */
-	struct list_head list;
-
-	/* We expect this tuple, with the following mask */
-	struct nf_conntrack_tuple tuple, mask;
- 
-	/* Function to call after setup and insertion */
-	void (*expectfn)(struct nf_conn *new,
-			 struct nf_conntrack_expect *this);
-
-	/* The conntrack of the master connection */
-	struct nf_conn *master;
-
-	/* Timer function; deletes the expectation. */
-	struct timer_list timeout;
-
-	/* Usage count. */
-	atomic_t use;
-
-	/* Unique ID */
-	unsigned int id;
-
-	/* Flags */
-	unsigned int flags;
-
-#ifdef CONFIG_NF_NAT_NEEDED
-	/* This is the original per-proto part, used to map the
-	 * expected connection the way the recipient expects. */
-	union nf_conntrack_manip_proto saved_proto;
-	/* Direction relative to the master connection. */
-	enum ip_conntrack_dir dir;
-#endif
-};
-
-#define NF_CT_EXPECT_PERMANENT 0x1
 
 static inline struct nf_conn *
 nf_ct_tuplehash_to_ctrack(const struct nf_conntrack_tuple_hash *hash)
@@ -202,31 +190,22 @@ static inline void nf_ct_put(struct nf_conn *ct)
 extern int nf_ct_l3proto_try_module_get(unsigned short l3proto);
 extern void nf_ct_l3proto_module_put(unsigned short l3proto);
 
+extern struct hlist_head *nf_ct_alloc_hashtable(int *sizep, int *vmalloced);
+extern void nf_ct_free_hashtable(struct hlist_head *hash, int vmalloced,
+				 int size);
+
 extern struct nf_conntrack_tuple_hash *
 __nf_conntrack_find(const struct nf_conntrack_tuple *tuple,
 		    const struct nf_conn *ignored_conntrack);
 
 extern void nf_conntrack_hash_insert(struct nf_conn *ct);
 
-extern struct nf_conntrack_expect *
-__nf_conntrack_expect_find(const struct nf_conntrack_tuple *tuple);
-
-extern struct nf_conntrack_expect *
-nf_conntrack_expect_find(const struct nf_conntrack_tuple *tuple);
-
-extern void nf_ct_unlink_expect(struct nf_conntrack_expect *exp);
-
-extern void nf_ct_remove_expectations(struct nf_conn *ct);
-
 extern void nf_conntrack_flush(void);
 
-extern struct nf_conntrack_helper *
-nf_ct_helper_find_get( const struct nf_conntrack_tuple *tuple);
-extern void nf_ct_helper_put(struct nf_conntrack_helper *helper);
-
-extern struct nf_conntrack_helper *
-__nf_conntrack_helper_find_byname(const char *name);
-
+extern int nf_ct_get_tuplepr(const struct sk_buff *skb,
+			     unsigned int nhoff,
+			     u_int16_t l3num,
+			     struct nf_conntrack_tuple *tuple);
 extern int nf_ct_invert_tuplepr(struct nf_conntrack_tuple *inverse,
 				const struct nf_conntrack_tuple *orig);
 
@@ -260,9 +239,6 @@ extern void nf_conntrack_tcp_update(struct sk_buff *skb,
 				    struct nf_conn *conntrack,
 				    int dir);
 
-/* Call me when a conntrack is destroyed. */
-extern void (*nf_conntrack_destroyed)(struct nf_conn *conntrack);
-
 /* Fake conntrack entry for untracked connections */
 extern struct nf_conn nf_conntrack_untracked;
 
@@ -287,117 +263,29 @@ static inline int nf_ct_is_dying(struct nf_conn *ct)
 	return test_bit(IPS_DYING_BIT, &ct->status);
 }
 
+static inline int nf_ct_is_untracked(const struct sk_buff *skb)
+{
+	return (skb->nfct == &nf_conntrack_untracked.ct_general);
+}
+
 extern unsigned int nf_conntrack_htable_size;
 extern int nf_conntrack_checksum;
+extern atomic_t nf_conntrack_count;
+extern int nf_conntrack_max;
 
+DECLARE_PER_CPU(struct ip_conntrack_stat, nf_conntrack_stat);
 #define NF_CT_STAT_INC(count) (__get_cpu_var(nf_conntrack_stat).count++)
-
-#ifdef CONFIG_NF_CONNTRACK_EVENTS
-#include <linux/notifier.h>
-#include <linux/interrupt.h>
-
-struct nf_conntrack_ecache {
-	struct nf_conn *ct;
-	unsigned int events;
-};
-DECLARE_PER_CPU(struct nf_conntrack_ecache, nf_conntrack_ecache);
-
-#define CONNTRACK_ECACHE(x)	(__get_cpu_var(nf_conntrack_ecache).x)
-
-extern struct atomic_notifier_head nf_conntrack_chain;
-extern struct atomic_notifier_head nf_conntrack_expect_chain;
-
-static inline int nf_conntrack_register_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_register(&nf_conntrack_chain, nb);
-}
-
-static inline int nf_conntrack_unregister_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&nf_conntrack_chain, nb);
-}
-
-static inline int
-nf_conntrack_expect_register_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_register(&nf_conntrack_expect_chain, nb);
-}
-
-static inline int
-nf_conntrack_expect_unregister_notifier(struct notifier_block *nb)
-{
-	return atomic_notifier_chain_unregister(&nf_conntrack_expect_chain,
-			nb);
-}
-
-extern void nf_ct_deliver_cached_events(const struct nf_conn *ct);
-extern void __nf_ct_event_cache_init(struct nf_conn *ct);
-
-static inline void
-nf_conntrack_event_cache(enum ip_conntrack_events event,
-			 const struct sk_buff *skb)
-{
-	struct nf_conn *ct = (struct nf_conn *)skb->nfct;
-	struct nf_conntrack_ecache *ecache;
-
-	local_bh_disable();
-	ecache = &__get_cpu_var(nf_conntrack_ecache);
-	if (ct != ecache->ct)
-		__nf_ct_event_cache_init(ct);
-	ecache->events |= event;
-	local_bh_enable();
-}
-
-static inline void nf_conntrack_event(enum ip_conntrack_events event,
-				      struct nf_conn *ct)
-{
-	if (nf_ct_is_confirmed(ct) && !nf_ct_is_dying(ct))
-		atomic_notifier_call_chain(&nf_conntrack_chain, event, ct);
-}
-
-static inline void
-nf_conntrack_expect_event(enum ip_conntrack_expect_events event,
-			  struct nf_conntrack_expect *exp)
-{
-	atomic_notifier_call_chain(&nf_conntrack_expect_chain, event, exp);
-}
-#else /* CONFIG_NF_CONNTRACK_EVENTS */
-static inline void nf_conntrack_event_cache(enum ip_conntrack_events event,
-					    const struct sk_buff *skb) {}
-static inline void nf_conntrack_event(enum ip_conntrack_events event,
-				      struct nf_conn *ct) {}
-static inline void nf_ct_deliver_cached_events(const struct nf_conn *ct) {}
-static inline void
-nf_conntrack_expect_event(enum ip_conntrack_expect_events event,
-			  struct nf_conntrack_expect *exp) {}
-#endif /* CONFIG_NF_CONNTRACK_EVENTS */
-
-/* no helper, no nat */
-#define	NF_CT_F_BASIC	0
-/* for helper */
-#define	NF_CT_F_HELP	1
-/* for nat. */
-#define	NF_CT_F_NAT	2
-#define NF_CT_F_NUM	4
+#define NF_CT_STAT_INC_ATOMIC(count)			\
+do {							\
+	local_bh_disable();				\
+	__get_cpu_var(nf_conntrack_stat).count++;	\
+	local_bh_enable();				\
+} while (0)
 
 extern int
 nf_conntrack_register_cache(u_int32_t features, const char *name, size_t size);
 extern void
 nf_conntrack_unregister_cache(u_int32_t features);
-
-/* valid combinations:
- * basic: nf_conn, nf_conn .. nf_conn_help
- * nat: nf_conn .. nf_conn_nat, nf_conn .. nf_conn_nat, nf_conn help
- */
-static inline struct nf_conn_help *nfct_help(const struct nf_conn *ct)
-{
-	unsigned int offset = sizeof(struct nf_conn);
-
-	if (!(ct->features & NF_CT_F_HELP))
-		return NULL;
-
-	return (struct nf_conn_help *) ((void *)ct + offset);
-}
 
 #endif /* __KERNEL__ */
 #endif /* _NF_CONNTRACK_H */

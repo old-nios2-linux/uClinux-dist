@@ -36,7 +36,7 @@
 #define CU_CMD			0x00F0
 #define RU_CMD			0x0007
 
-int 
+int
 e100_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 {
 	u32 *regs_buff = (u32 *)regs->data;
@@ -45,7 +45,7 @@ e100_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	u8 regs_len = regs->len / sizeof(u32);
 	u32 reg;
 	u16 scb_status, scb_cmd;
-	
+
 	if(version != 1)
 		return -1;
 
@@ -232,7 +232,7 @@ e100_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 				fprintf(stdout, "Unknown\n");
 		}
 	}
-	
+
 	return 0;
 }
 

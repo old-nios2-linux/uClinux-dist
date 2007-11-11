@@ -1,9 +1,9 @@
 /*
- * $Id: tcp_comm.c,v 1.1.2.2 2003/11/13 18:36:47 andrei Exp $
+ * $Id: tcp_comm.c,v 1.4 2004/08/24 08:58:25 janakj Exp $
  *
  * Digest Authentication - Diameter support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -58,13 +58,11 @@
 #define MAX_TRIES	10
 
 /* it initializes the TCP connection */ 
-int init_mytcp(char* host, char* port)
+int init_mytcp(char* host, int port)
 {
-	int portno, sockfd;
+	int sockfd;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
-
-	portno = atoi(port);
     
 	sockfd = socket(PF_INET, SOCK_STREAM, 0);
 	
@@ -81,11 +79,11 @@ int init_mytcp(char* host, char* port)
 		return -1;
     }
 
-	memset((char *) &serv_addr, 0, sizeof(serv_addr));
+    memset((char *) &serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = PF_INET;
     memcpy((char *)&serv_addr.sin_addr.s_addr, (char *)server->h_addr,
 					server->h_length);
-    serv_addr.sin_port = htons(portno);
+    serv_addr.sin_port = htons(port);
 	
     if (connect(sockfd, (const struct sockaddr *)&serv_addr, 
 							sizeof(serv_addr)) < 0) 
@@ -287,7 +285,7 @@ int tcp_send_recv(int sockfd, char* buf, int len, rd_buf_t* rb,
 	LOG(L_ERR, M_NAME": too many old messages received\n");
 	return AAA_TIMEOUT;
 next:
-	/* endlich die richtige Antworte */
+	/* Finally die correct answer */
 	avp = AAAFindMatchingAVP(msg, NULL, AVP_Service_Type,
 							vendorID, AAA_FORWARD_SEARCH);
 	if(!avp)

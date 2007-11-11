@@ -92,6 +92,14 @@ typedef struct _SessionHashKey
     u_int8_t  proto;
 } SessionHashKey;
 
+typedef struct _StreamApplicationData
+{
+    u_int8_t preproc_proto;
+    void *preproc_data;    /* preprocessor layer data structure */
+    void (*preproc_free)(void *); /* function to free preproc_data */
+    struct _StreamApplicationData *next;
+} StreamApplicationData;
+
 typedef struct _Session
 {
     Stream server;
@@ -110,10 +118,9 @@ typedef struct _Session
 
     u_int32_t  flush_point;
     u_int8_t  ttl; /* track the ttl of this current session ( only done on client side ) */
+
+    StreamApplicationData *application_data;
     
-    u_int8_t preproc_proto;
-    void *preproc_data;    /* preprocessor layer data structure */
-    void (*preproc_free)(void *); /* function to free preproc_data */
     SessionHashKey hashKey;
 } Session;
 

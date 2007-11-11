@@ -21,7 +21,6 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <net/pkt_sched.h>
 #include <net/red.h>
@@ -335,7 +334,7 @@ static void gred_reset(struct Qdisc* sch)
 
 	qdisc_reset_queue(sch);
 
-        for (i = 0; i < t->DPs; i++) {
+	for (i = 0; i < t->DPs; i++) {
 		struct gred_sched_data *q = t->tab[i];
 
 		if (!q)
@@ -393,7 +392,7 @@ static inline int gred_change_table_def(struct Qdisc *sch, struct rtattr *dps)
 			       "shadowed VQ 0x%x\n", i);
 			gred_destroy_vq(table->tab[i]);
 			table->tab[i] = NULL;
-  		}
+		}
 	}
 
 	return 0;

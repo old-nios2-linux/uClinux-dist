@@ -142,15 +142,15 @@ static void __devinit p20575_init_iops(ide_hwif_t *hwif)
 
 	hwif->INB = p20575_inb;
 	hwif->INW = p20575_inw;
-	hwif->INL = p20575_inl;
+	/*hwif->INL = p20575_inl;*/
 	hwif->OUTB = p20575_outb;
 	hwif->OUTBSYNC = p20575_outbsync;
 	hwif->OUTW = p20575_outw;
-	hwif->OUTL = p20575_outl;
+	/*hwif->OUTL = p20575_outl;*/
 	hwif->OUTSW = p20575_outsw;
 	hwif->INSW = p20575_insw;
 
-	hwif->mmio = 2;
+	hwif->mmio = 1;
 
 	memcpy(&hwif->hw, &hw, sizeof(hw));
 	memcpy(hwif->io_ports, hwif->hw.io_ports, sizeof(hwif->hw.io_ports));
@@ -189,10 +189,8 @@ static ide_pci_device_t p20575_chipset __devinitdata = {
 	.init_chipset	= p20575_init_chipset,
 	.init_iops	= p20575_init_iops,
 	.init_hwif	= p20575_init_hwif,
-	.channels	= 1,
 	.autodma	= AUTODMA,
 	.bootable	= ON_BOARD,
-	.flags		= IDEPCI_FLAG_ISA_PORTS,
 };
 
 static int __devinit p20575_init_one(struct pci_dev *dev, const struct pci_device_id *id)

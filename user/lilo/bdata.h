@@ -1,9 +1,17 @@
 /* bdata.h */
+/*
+Copyright 2000-2004 John Coffman.
+All rights reserved.
+
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
 
 #ifndef _BDATA_H
 #define _BDATA_H
 
-#define PROBE_VERSION 4
+#define PROBE_VERSION 6
 
 /* GET_VIDEO defines how much video information to retrieve
  *

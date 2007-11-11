@@ -63,6 +63,13 @@ char copyright[] =
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 
+#ifndef ICMP_FILTER
+#define ICMP_FILTER	1
+struct icmp_filter {
+	__u32	data;
+};
+#endif
+
 
 #define	MAXIPLEN	60
 #define	MAXICMPLEN	76
@@ -119,7 +126,10 @@ main(int argc, char **argv)
 	socket_errno = errno;
 
 	uid = getuid();
-	setuid(uid);
+	if (setuid(uid)) {
+		perror("ping: setuid");
+		exit(-1);
+	}
 
 	source.sin_family = AF_INET;
 
@@ -249,7 +259,7 @@ main(int argc, char **argv)
 	}
 
 	if (source.sin_addr.s_addr == 0) {
-		int alen;
+		socklen_t alen;
 		struct sockaddr_in dst = whereto;
 		int probe_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -1187,7 +1197,7 @@ void install_filter(void)
 	once = 1;
 
 	/* Patch bpflet for current identifier. */
-	insns[2] = (struct sock_filter)BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __constant_htons(ident), 0, 1);
+	insns[2] = (struct sock_filter)BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, htons(ident), 0, 1);
 
 	if (setsockopt(icmp_sock, SOL_SOCKET, SO_ATTACH_FILTER, &filter, sizeof(filter)))
 		perror("WARNING: failed to install socket filter\n");

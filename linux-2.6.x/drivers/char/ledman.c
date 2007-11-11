@@ -755,12 +755,12 @@ static leddef_t enterasys_def = {
 static void
 nettel_set(unsigned long bits)
 {
-	unsigned long		flags;
+	unsigned long flags;
 
-	save_flags(flags); cli();
+	local_irq_save(flags);
 	* (volatile char *) NETtel_LEDADDR = (~bits & 0xff);
 	mcf_setppleds(0x60, ~(bits >> 3) & 0x60);
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 /****************************************************************************/
@@ -964,9 +964,9 @@ static void se5410_set(unsigned long bits)
 {
 	unsigned long flags;
 
-	save_and_cli(flags);
+	local_irq_save(flags);
 	SECUREEDGE_WRITE_IOPORT(~bits, 0x207f);
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 /****************************************************************************/
@@ -1034,11 +1034,11 @@ static leddef_t	elia_def = {
 static void
 elia_set(unsigned long bits)
 {
-	unsigned long		flags;
+	unsigned long flags;
 
-	save_flags(flags); cli();
+	local_irq_save(flags);
 	mcf_setppleds(0x3000, ~(bits << 12) & 0x3000);
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 /****************************************************************************/
@@ -1797,22 +1797,39 @@ static leddef_t	snapgear425_def = {
 /*
  *	Here is the definition of the LEDs on the CyberGuard/SG560
  *	and CyberGuard/SG580, as per the labels next to them.
- *
- *	LED -  D2   D3   D4   D5   D6   D7   D8
- *	HEX - 0004 0008 0010 0400 0040 0020 0080
  */
+
+#define LED_D2  0x0004
+#define LED_D3  0x0008
+#define LED_D4  0x0010
+#define LED_D5  0x0400
+#define LED_D6  0x0040
+#define LED_D7  0x0020
+#define LED_D8  0x0080
+#define LEDMASK 0x04fc
+
 static ledmap_t	snapgear425_std = {
-	0x4fc, 0x000, 0x004, 0x040, 0x040, 0x040, 0x040, 0x008, 0x008, 0x010,
-	0x010, 0x000, 0x000, 0x000, 0x000, 0x0ac, 0x450, 0x080, 0x4fc, 0x000,
-	0x000, 0x000, 0x020, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
-	0x000, 0x000, 0x000, 0x400
+	[LEDMAN_ALL]       = LEDMASK,
+	[LEDMAN_HEARTBEAT] = LED_D2,
+	[LEDMAN_LAN1_RX]   = LED_D3,
+	[LEDMAN_LAN1_TX]   = LED_D3,
+	[LEDMAN_LAN2_RX]   = LED_D4,
+	[LEDMAN_LAN2_TX]   = LED_D4,
+	[LEDMAN_HIGHAVAIL] = LED_D5,
+	[LEDMAN_COM1_RX]   = LED_D6,
+	[LEDMAN_COM1_TX]   = LED_D6,
+	[LEDMAN_COM2_RX]   = LED_D6,
+	[LEDMAN_COM2_TX]   = LED_D6,
+	[LEDMAN_ONLINE]    = LED_D7,
+	[LEDMAN_VPN]       = LED_D8,
+	[LEDMAN_NVRAM_1]   = LED_D2 | LED_D3 | LED_D7 | LED_D8,
+	[LEDMAN_NVRAM_2]   = LED_D4 | LED_D5 | LED_D6,
+	[LEDMAN_LAN1_DHCP] = LEDMASK,
 };
 
 static leddef_t	snapgear425_def = {
-	0x0000, 0x0000, 0x0000, 0x0004,
+	[LEDS_FLASH] = LED_D2,
 };
-
-#define	LEDMASK		0x04fc
 
 #elif defined(CONFIG_MACH_SG590)
 /*
@@ -1936,6 +1953,7 @@ static void ledman_initarch(void)
 	/* Configure GPIO9 as interrupt input (ERASE switch) */
 	gpio_line_config(ERASEGPIO, IXP4XX_GPIO_IN);
 	set_irq_type(ERASEIRQ, IRQT_FALLING);
+	gpio_line_isr_clear(ERASEGPIO);
 
 #if !defined(CONFIG_MACH_SG720) && !defined(CONFIG_MACH_SG590)
 	/* De-assert reset for the hub/switch - just in case... */
@@ -2035,12 +2053,12 @@ static void ivpn_set(unsigned long bits)
 		}
 	}
 
-	save_flags(flags); cli();
+	local_irq_save(flags);
 	gpio_line_set(2, val & 0x4 ? 0 : 1);
 	gpio_line_set(11, val & 0x8 ? 0 : 1);
 	gpio_line_set(12, val & 0x1 ? 0 : 1);
 	gpio_line_set(13, val & 0x2 ? 0 : 1);
-	restore_flags(flags);
+	local_irq_restore(flags);
 }
 
 static void ledman_initarch(void)

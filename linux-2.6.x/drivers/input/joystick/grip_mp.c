@@ -320,10 +320,10 @@ static int multiport_io(struct gameport* gameport, int sendflags, int sendcode, 
 
 static int dig_mode_start(struct gameport *gameport, u32 *packet)
 {
-	int i, seq_len = sizeof(init_seq)/sizeof(int);
+	int i;
 	int flags, tries = 0, bads = 0;
 
-	for (i = 0; i < seq_len; i++) {     /* Send magic sequence */
+	for (i = 0; i < ARRAY_SIZE(init_seq); i++) {     /* Send magic sequence */
 		if (init_seq[i])
 			gameport_trigger(gameport);
 		udelay(GRIP_INIT_DELAY);
@@ -423,7 +423,10 @@ static int get_and_decode_packet(struct grip_mp *grip, int flags)
 
 		if (!port->registered) {
 			dbg("New Grip pad in multiport slot %d.\n", slot);
-			register_slot(slot, grip);
+			if (register_slot(slot, grip)) {
+				port->mode = GRIP_MODE_RESET;
+				port->dirty = 0;
+			}
 		}
 		return flags;
 	}
@@ -559,7 +562,7 @@ static void grip_poll(struct gameport *gameport)
 
 static int grip_open(struct input_dev *dev)
 {
-	struct grip_mp *grip = dev->private;
+	struct grip_mp *grip = input_get_drvdata(dev);
 
 	gameport_start_polling(grip->gameport);
 	return 0;
@@ -571,9 +574,9 @@ static int grip_open(struct input_dev *dev)
 
 static void grip_close(struct input_dev *dev)
 {
-	struct grip_mp *grip = dev->private;
+	struct grip_mp *grip = input_get_drvdata(dev);
 
-	gameport_start_polling(grip->gameport);
+	gameport_stop_polling(grip->gameport);
 }
 
 /*
@@ -585,6 +588,7 @@ static int register_slot(int slot, struct grip_mp *grip)
 	struct grip_port *port = grip->port[slot];
 	struct input_dev *input_dev;
 	int j, t;
+	int err;
 
 	port->dev = input_dev = input_allocate_device();
 	if (!input_dev)
@@ -595,8 +599,9 @@ static int register_slot(int slot, struct grip_mp *grip)
 	input_dev->id.vendor = GAMEPORT_ID_VENDOR_GRAVIS;
 	input_dev->id.product = 0x0100 + port->mode;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &grip->gameport->dev;
-	input_dev->private = grip;
+	input_dev->dev.parent = &grip->gameport->dev;
+
+	input_set_drvdata(input_dev, grip);
 
 	input_dev->open = grip_open;
 	input_dev->close = grip_close;
@@ -610,7 +615,12 @@ static int register_slot(int slot, struct grip_mp *grip)
 		if (t > 0)
 			set_bit(t, input_dev->keybit);
 
-	input_register_device(port->dev);
+	err = input_register_device(port->dev);
+	if (err) {
+		input_free_device(port->dev);
+		return err;
+	}
+
 	port->registered = 1;
 
 	if (port->dirty)	            /* report initial state, if any */

@@ -25,12 +25,31 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 /* Forward decl of Function that initializes/registers
  * the preproc config keywords. */
 extern void DynamicInitialize();
 
 DynamicPreprocessorData _dpd;
+
+#define STD_BUF 1024
+
+NORETURN void DynamicPreprocessorFatalMessage(const char *format, ...)
+{
+    char buf[STD_BUF];
+    va_list ap;
+
+    va_start(ap, format);
+    vsnprintf(buf, STD_BUF, format, ap);
+    va_end(ap);
+
+    buf[STD_BUF - 1] = '\0';
+
+    _dpd.fatalMsg("%s", buf);
+
+    exit(1);
+}
 
 PREPROC_LINKAGE int InitializePreprocessor(DynamicPreprocessorData *dpd)
 {

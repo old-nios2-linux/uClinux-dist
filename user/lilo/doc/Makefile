@@ -44,7 +44,7 @@ clean:		tidy
 		rm -Rf user tech
 
 spotless:	clean
-		rm -f *.dvi $(IMAGES)
+#		rm -f *.dvi $(IMAGES)
 
 dummies:
 		for n in $(IMAGES); do echo '(omitted)' >$$n; done

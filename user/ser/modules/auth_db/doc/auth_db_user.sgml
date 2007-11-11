@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.2 $</revnumber>
-		<date>$Date: 2003/09/15 19:47:02 $</date>
+		<revnumber>$Revision: 1.4.2.1 $</revnumber>
+		<date>$Date: 2005/06/22 23:12:01 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -44,16 +44,16 @@
 	    <para>
 		This is URL of the database to be used. Value of the parameter depends on the
 		database module used. For example for mysql and postgres modules this is something
-		like sql://username:password@host:port/database. For dbtext module (which stores
-		data in plaintex files) it is directory in which the database resides.
+		like mysql://username:password@host:port/database. For dbtext module (which stores
+		data in plaintext files) it is directory in which the database resides.
 	    </para>
 	    <para>
-		Default value is <quote>sql://serro:47serro11@localhost/ser</quote>.
+		Default value is <quote>mysql://serro:47serro11@localhost/ser</quote>.
 	    </para>
 	    <example>
 		<title><varname>db_url</varname> parameter usage</title>
 		<programlisting format="linespecific">
-modparam("auth_db", "db_url", "sql://foo:bar@foobar.org/ser")
+modparam("auth_db", "db_url", "mysql://foo:bar@foobar.org/ser")
 </programlisting>
 	    </example>
 	</section>
@@ -191,6 +191,45 @@ modparam("auth_db", "use_rpid", 1)
 </programlisting>
 	    </example>
 	</section>
+
+	<section>
+	    <title><varname>avps_column_int</varname> (string)</title>
+	    <para>
+		List of AVP names separated by | character to be loaded from
+		database if authentication is successful. The type of all AVPs
+		is integer. Values will be loaded from columns with same name
+		from subscriber table. Columns must exist.
+	    </para>
+	    <para>
+		Default value of this parameter is ""
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>avps_column_str</varname> (string)</title>
+	    <para>
+		List of AVP names separated by | character to be loaded from
+		database if authentication is successful. The type of all AVPs
+		is string. Values will be loaded from columns with same name
+		from subscriber table. Columns must exist.
+	    </para>
+	    <para>
+		Default value of this parameter is "rpid".
+	    </para>
+	</section>
+
+	<section>
+	    <title><varname>use_domain</varname> (integer)</title>
+	    <para>
+		When enabled accounting modules will use username,domain pair
+		as the key in database queries. If disabled only username will
+		be used.
+	    </para>
+	    <para>
+		Default value of this parameter is 0.
+	    </para>
+	</section>
+
     </section>
 
     <section>
@@ -198,8 +237,8 @@ modparam("auth_db", "use_rpid", 1)
 	<section>
 	    <title><function moreinfo="none">www_authorize(realm, table)</function></title>
 	    <para>
-		The function verifies credencials according to RFC2617. If the credentials are
-		verified sucessfully then the function will succeed and mark the credentials as
+		The function verifies credentials according to RFC2617. If the credentials are
+		verified successfully then the function will succeed and mark the credentials as
 		authorized (marked credentials can be later used by some other functions). If the
 		function was unable to verify the credentials for some reason then it will fail and
 		the script should call <function moreinfo="none">www_challenge</function> which will
@@ -210,7 +249,7 @@ modparam("auth_db", "use_rpid", 1)
 		<listitem>
 		    <para><emphasis>realm</emphasis> - Realm is a opaque string that the user agent
 		    should present to the user so he can decide what username and password to
-		    use. Usualy this is domain of the host the server is running on.
+		    use. Usually this is domain of the host the server is running on.
 		    </para>
 		    <para>
 			If an empty string <quote></quote> is used then the server will generate it
@@ -221,7 +260,7 @@ modparam("auth_db", "use_rpid", 1)
 		</listitem>
 		<listitem>
 		    <para><emphasis>table</emphasis> - Table to be used to lookup usernames and
-			passwords (usualy subscribers table).
+			passwords (usually subscribers table).
 		    </para>
 		</listitem>
 	    </itemizedlist>
@@ -240,8 +279,8 @@ if (www_authorize("iptel.org", "subscriber")) {
 	<section>
 	    <title><function moreinfo="none">proxy_authorize(realm, table)</function></title>
 	    <para>
-		The function verifies credencials according to RFC2617. If the credentials are
-		verified sucessfully then the function will succeed and mark the credentials as
+		The function verifies credentials according to RFC2617. If the credentials are
+		verified successfully then the function will succeed and mark the credentials as
 		authorized (marked credentials can be later used by some other functions). If the
 		function was unable to verify the credentials for some reason then it will fail and
 		the script should call <function moreinfo="none">proxy_challenge</function> which will
@@ -252,7 +291,7 @@ if (www_authorize("iptel.org", "subscriber")) {
 		<listitem>
 		    <para><emphasis>realm</emphasis> - Realm is a opaque string that the user agent
 		    should present to the user so he can decide what username and password to
-		    use. Usualy this is domain of the host the server is running on.
+		    use. Usually this is domain of the host the server is running on.
 		    </para>
 		    <para>
 			If an empty string <quote></quote> is used then the server will generate it
@@ -261,7 +300,7 @@ if (www_authorize("iptel.org", "subscriber")) {
 		</listitem>
 		<listitem>
 		    <para><emphasis>table</emphasis> - Table to be used to lookup usernames and
-			passwords (usualy subscribers table).
+			passwords (usually subscribers table).
 		    </para>
 		</listitem>
 	    </itemizedlist>

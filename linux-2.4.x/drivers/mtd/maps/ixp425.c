@@ -125,37 +125,37 @@ static struct mtd_partition ixp425_partitions[] = {
 	{
 		name:	"RedBoot",
 		offset:	0x00000000,
-		size:	0x00040000
+		size:	0x00080000
 	},
 	{
 		name:	"config",
-		offset:	0x00040000,
+		offset:	0x00080000,
 		size:	0x00040000
 	},
 	{
 		name:	"image",
-		offset:	0x00080000,
-		size:	0x00f40000
+		offset:	0x000c0000,
+		size:	0x00f00000
 	},
 	{
 		name:	"zImage",
-		offset:	0x00080000,
+		offset:	0x000c0000,
 		size:	0x00100000
 	},
 	{
 		name:	"ramdisk",
-		offset:	0x00180000,
-		size:	0x00e40000
-	},
-	{
-		name:	"RedBoot config",
-		offset:	0x00fc0000,
-		size:	0x00020000
+		offset:	0x001c0000,
+		size:	0x00e00000
 	},
 	{
 		name:	"FIS directory",
 		offset:	0x00fe0000,
 		size:	0x00020000
+	},
+	{
+		name:	"RedBoot config",
+		offset:	0x00fff000,
+		size:	0x00001000
 	},
 	{
 		name:	"all",

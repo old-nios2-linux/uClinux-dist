@@ -17,7 +17,7 @@
 #include <asm/machvec.h>
 #include <linux/module.h>
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 /* I'm not sure SH7709 has this kind of bug */
 #define SH3_PCMCIA_BUG_WORKAROUND 1
 #define DUMMY_READ_AREA6	  0xba000000

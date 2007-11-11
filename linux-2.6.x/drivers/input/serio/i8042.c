@@ -76,13 +76,6 @@ module_param_named(debug, i8042_debug, bool, 0600);
 MODULE_PARM_DESC(debug, "Turn i8042 debugging mode on and off");
 #endif
 
-__obsolete_setup("i8042_noaux");
-__obsolete_setup("i8042_nomux");
-__obsolete_setup("i8042_unlock");
-__obsolete_setup("i8042_reset");
-__obsolete_setup("i8042_direct");
-__obsolete_setup("i8042_dumbkbd");
-
 #include "i8042.h"
 
 static DEFINE_SPINLOCK(i8042_lock);
@@ -255,25 +248,10 @@ static int i8042_kbd_write(struct serio *port, unsigned char c)
 static int i8042_aux_write(struct serio *serio, unsigned char c)
 {
 	struct i8042_port *port = serio->port_data;
-	int retval;
 
-/*
- * Send the byte out.
- */
-
-	if (port->mux == -1)
-		retval = i8042_command(&c, I8042_CMD_AUX_SEND);
-	else
-		retval = i8042_command(&c, I8042_CMD_MUX_SEND + port->mux);
-
-/*
- * Make sure the interrupt happens and the character is received even
- * in the case the IRQ isn't wired, so that we can receive further
- * characters later.
- */
-
-	i8042_interrupt(0, NULL);
-	return retval;
+	return i8042_command(&c, port->mux == -1 ?
+					I8042_CMD_AUX_SEND :
+					I8042_CMD_MUX_SEND + port->mux);
 }
 
 /*
@@ -337,23 +315,27 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 		dfl = 0;
 		if (str & I8042_STR_MUXERR) {
 			dbg("MUX error, status is %02x, data is %02x", str, data);
-			switch (data) {
-				default:
 /*
  * When MUXERR condition is signalled the data register can only contain
  * 0xfd, 0xfe or 0xff if implementation follows the spec. Unfortunately
- * it is not always the case. Some KBC just get confused which port the
- * data came from and signal error leaving the data intact. They _do not_
- * revert to legacy mode (actually I've never seen KBC reverting to legacy
- * mode yet, when we see one we'll add proper handling).
- * Anyway, we will assume that the data came from the same serio last byte
+ * it is not always the case. Some KBCs also report 0xfc when there is
+ * nothing connected to the port while others sometimes get confused which
+ * port the data came from and signal error leaving the data intact. They
+ * _do not_ revert to legacy mode (actually I've never seen KBC reverting
+ * to legacy mode yet, when we see one we'll add proper handling).
+ * Anyway, we process 0xfc, 0xfd, 0xfe and 0xff as timeouts, and for the
+ * rest assume that the data came from the same serio last byte
  * was transmitted (if transmission happened not too long ago).
  */
+
+			switch (data) {
+				default:
 					if (time_before(jiffies, last_transmit + HZ/10)) {
 						str = last_str;
 						break;
 					}
 					/* fall through - report timeout */
+				case 0xfc:
 				case 0xfd:
 				case 0xfe: dfl = SERIO_TIMEOUT; data = 0xfe; break;
 				case 0xff: dfl = SERIO_PARITY;  data = 0xfe; break;
@@ -382,7 +364,7 @@ static irqreturn_t i8042_interrupt(int irq, void *dev_id)
 	if (unlikely(i8042_suppress_kbd_ack))
 		if (port_no == I8042_KBD_PORT_NO &&
 		    (data == 0xfa || data == 0xfe)) {
-			i8042_suppress_kbd_ack = 0;
+			i8042_suppress_kbd_ack--;
 			goto out;
 		}
 
@@ -530,6 +512,7 @@ static irqreturn_t __devinit i8042_aux_test_irq(int irq, void *dev_id)
 {
 	unsigned long flags;
 	unsigned char str, data;
+	int ret = 0;
 
 	spin_lock_irqsave(&i8042_lock, flags);
 	str = i8042_read_status();
@@ -538,12 +521,40 @@ static irqreturn_t __devinit i8042_aux_test_irq(int irq, void *dev_id)
 		if (i8042_irq_being_tested &&
 		    data == 0xa5 && (str & I8042_STR_AUXDATA))
 			complete(&i8042_aux_irq_delivered);
+		ret = 1;
 	}
 	spin_unlock_irqrestore(&i8042_lock, flags);
 
-	return IRQ_HANDLED;
+	return IRQ_RETVAL(ret);
 }
 
+/*
+ * i8042_toggle_aux - enables or disables AUX port on i8042 via command and
+ * verifies success by readinng CTR. Used when testing for presence of AUX
+ * port.
+ */
+static int __devinit i8042_toggle_aux(int on)
+{
+	unsigned char param;
+	int i;
+
+	if (i8042_command(&param,
+			on ? I8042_CMD_AUX_ENABLE : I8042_CMD_AUX_DISABLE))
+		return -1;
+
+	/* some chips need some time to set the I8042_CTR_AUXDIS bit */
+	for (i = 0; i < 100; i++) {
+		udelay(50);
+
+		if (i8042_command(&param, I8042_CMD_CTL_RCTR))
+			return -1;
+
+		if (!(param & I8042_CTR_AUXDIS) == on)
+			return 0;
+	}
+
+	return -1;
+}
 
 /*
  * i8042_check_aux() applies as much paranoia as it can at detecting
@@ -554,6 +565,7 @@ static int __devinit i8042_check_aux(void)
 {
 	int retval = -1;
 	int irq_registered = 0;
+	int aux_loop_broken = 0;
 	unsigned long flags;
 	unsigned char param;
 
@@ -570,7 +582,8 @@ static int __devinit i8042_check_aux(void)
  */
 
 	param = 0x5a;
-	if (i8042_command(&param, I8042_CMD_AUX_LOOP) || param != 0x5a) {
+	retval = i8042_command(&param, I8042_CMD_AUX_LOOP);
+	if (retval || param != 0x5a) {
 
 /*
  * External connection test - filters out AT-soldered PS/2 i8042's
@@ -583,22 +596,25 @@ static int __devinit i8042_check_aux(void)
 		if (i8042_command(&param, I8042_CMD_AUX_TEST) ||
 		    (param && param != 0xfa && param != 0xff))
 			return -1;
+
+/*
+ * If AUX_LOOP completed without error but returned unexpected data
+ * mark it as broken
+ */
+		if (!retval)
+			aux_loop_broken = 1;
 	}
 
 /*
  * Bit assignment test - filters out PS/2 i8042's in AT mode
  */
 
-	if (i8042_command(&param, I8042_CMD_AUX_DISABLE))
-		return -1;
-	if (i8042_command(&param, I8042_CMD_CTL_RCTR) || (~param & I8042_CTR_AUXDIS)) {
+	if (i8042_toggle_aux(0)) {
 		printk(KERN_WARNING "Failed to disable AUX port, but continuing anyway... Is this a SiS?\n");
 		printk(KERN_WARNING "If AUX port is really absent please use the 'i8042.noaux' option.\n");
 	}
 
-	if (i8042_command(&param, I8042_CMD_AUX_ENABLE))
-		return -1;
-	if (i8042_command(&param, I8042_CMD_CTL_RCTR) || (param & I8042_CTR_AUXDIS))
+	if (i8042_toggle_aux(1))
 		return -1;
 
 /*
@@ -606,7 +622,7 @@ static int __devinit i8042_check_aux(void)
  * used it for a PCI card or somethig else.
  */
 
-	if (i8042_noloop) {
+	if (i8042_noloop || aux_loop_broken) {
 /*
  * Without LOOP command we can't test AUX IRQ delivery. Assume the port
  * is working and hope we are right.
@@ -732,7 +748,7 @@ static int i8042_controller_init(void)
 	if (~i8042_read_status() & I8042_STR_KEYLOCK) {
 		if (i8042_unlock)
 			i8042_ctr |= I8042_CTR_IGNKEYLOCK;
-		 else
+		else
 			printk(KERN_WARNING "i8042.c: Warning: Keylock active.\n");
 	}
 	spin_unlock_irqrestore(&i8042_lock, flags);
@@ -777,6 +793,13 @@ static void i8042_controller_reset(void)
 	i8042_flush();
 
 /*
+ * Disable both KBD and AUX interfaces so they don't get in the way
+ */
+
+	i8042_ctr |= I8042_CTR_KBDDIS | I8042_CTR_AUXDIS;
+	i8042_ctr &= ~(I8042_CTR_KBDINT | I8042_CTR_AUXINT);
+
+/*
  * Disable MUX mode if present.
  */
 
@@ -795,27 +818,6 @@ static void i8042_controller_reset(void)
 
 	if (i8042_command(&i8042_initial_ctr, I8042_CMD_CTL_WCTR))
 		printk(KERN_WARNING "i8042.c: Can't restore CTR.\n");
-}
-
-
-/*
- * Here we try to reset everything back to a state in which the BIOS will be
- * able to talk to the hardware when rebooting.
- */
-
-static void i8042_controller_cleanup(void)
-{
-	int i;
-
-/*
- * Reset anything that is connected to the ports.
- */
-
-	for (i = 0; i < I8042_NUM_PORTS; i++)
-		if (i8042_ports[i].serio)
-			serio_cleanup(i8042_ports[i].serio);
-
-	i8042_controller_reset();
 }
 
 
@@ -849,13 +851,14 @@ static long i8042_panic_blink(long count)
 	led ^= 0x01 | 0x04;
 	while (i8042_read_status() & I8042_STR_IBF)
 		DELAY;
-	i8042_suppress_kbd_ack = 1;
+	dbg("%02x -> i8042 (panic blink)", 0xed);
+	i8042_suppress_kbd_ack = 2;
 	i8042_write_data(0xed); /* set leds */
 	DELAY;
 	while (i8042_read_status() & I8042_STR_IBF)
 		DELAY;
 	DELAY;
-	i8042_suppress_kbd_ack = 1;
+	dbg("%02x -> i8042 (panic blink)", led);
 	i8042_write_data(led);
 	DELAY;
 	last_blink = count;
@@ -864,13 +867,22 @@ static long i8042_panic_blink(long count)
 
 #undef DELAY
 
+#ifdef CONFIG_PM
 /*
- * Here we try to restore the original BIOS settings
+ * Here we try to restore the original BIOS settings. We only want to
+ * do that once, when we really suspend, not when we taking memory
+ * snapshot for swsusp (in this case we'll perform required cleanup
+ * as part of shutdown process).
  */
 
 static int i8042_suspend(struct platform_device *dev, pm_message_t state)
 {
-	i8042_controller_cleanup();
+	if (dev->dev.power.power_state.event != state.event) {
+		if (state.event == PM_EVENT_SUSPEND)
+			i8042_controller_reset();
+
+		dev->dev.power.power_state = state;
+	}
 
 	return 0;
 }
@@ -884,6 +896,12 @@ static int i8042_resume(struct platform_device *dev)
 {
 	int error;
 
+/*
+ * Do not bother with restoring state if we haven't suspened yet
+ */
+	if (dev->dev.power.power_state.event == PM_EVENT_ON)
+		return 0;
+
 	error = i8042_controller_check();
 	if (error)
 		return error;
@@ -893,9 +911,12 @@ static int i8042_resume(struct platform_device *dev)
 		return error;
 
 /*
- * Restore pre-resume CTR value and disable all ports
+ * Restore original CTR value and disable all ports
  */
 
+	i8042_ctr = i8042_initial_ctr;
+	if (i8042_direct)
+		i8042_ctr &= ~I8042_CTR_XLATE;
 	i8042_ctr |= I8042_CTR_AUXDIS | I8042_CTR_KBDDIS;
 	i8042_ctr &= ~(I8042_CTR_AUXINT | I8042_CTR_KBDINT);
 	if (i8042_command(&i8042_ctr, I8042_CMD_CTL_WCTR)) {
@@ -916,8 +937,11 @@ static int i8042_resume(struct platform_device *dev)
 
 	i8042_interrupt(0, NULL);
 
+	dev->dev.power.power_state = PMSG_ON;
+
 	return 0;
 }
+#endif /* CONFIG_PM */
 
 /*
  * We need to reset the 8042 back to original mode on system shutdown,
@@ -926,7 +950,7 @@ static int i8042_resume(struct platform_device *dev)
 
 static void i8042_shutdown(struct platform_device *dev)
 {
-	i8042_controller_cleanup();
+	i8042_controller_reset();
 }
 
 static int __devinit i8042_create_kbd_port(void)
@@ -1016,7 +1040,7 @@ static void __devinit i8042_register_ports(void)
 	}
 }
 
-static void __devinit i8042_unregister_ports(void)
+static void __devexit i8042_unregister_ports(void)
 {
 	int i;
 
@@ -1161,9 +1185,11 @@ static struct platform_driver i8042_driver = {
 	},
 	.probe		= i8042_probe,
 	.remove		= __devexit_p(i8042_remove),
+	.shutdown	= i8042_shutdown,
+#ifdef CONFIG_PM
 	.suspend	= i8042_suspend,
 	.resume		= i8042_resume,
-	.shutdown	= i8042_shutdown,
+#endif
 };
 
 static int __init i8042_init(void)

@@ -1,9 +1,9 @@
 /*
- * $Id: dbt_file.c,v 1.6 2003/06/02 15:41:21 dcm Exp $
+ * $Id: dbt_file.c,v 1.7 2004/08/24 08:58:26 janakj Exp $
  *
  * DBText library
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -417,7 +417,7 @@ done:
 		fclose(fin);
 	return dtp;
 clean:
-	/// ????? FILL IT IN - incomlete row/column
+	/// ????? FILL IT IN - incomplete row/column
 	// memory leak?!?! with last incomplete row
 	DBG("DBT:dbt_load_file: error at row=%d col=%d c=%c\n", crow+1, ccol+1, c);
 	if(dtp)

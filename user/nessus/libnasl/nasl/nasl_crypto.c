@@ -23,8 +23,12 @@
 #include <includes.h>
 #include <endian.h>
 #ifdef HAVE_SSL
+#ifdef HAVE_OPENSSL_MD2_H
 #include <openssl/md2.h>
+#endif
+#ifdef HAVE_OPENSSL_MD4_H
 #include <openssl/md4.h>
+#endif
 #include <openssl/md5.h>
 #include <openssl/ripemd.h>
 #include <openssl/sha.h>
@@ -46,6 +50,7 @@
 
 
 /*-------------------[  Std. HASH ]-------------------------------------*/
+#ifdef HAVE_OPENSSL_MD2_H
 tree_cell * nasl_md2(lex_ctxt * lexic)
 {
  char * data = get_str_var_by_num(lexic, 0);
@@ -64,7 +69,9 @@ tree_cell * nasl_md2(lex_ctxt * lexic)
  retc->size = MD2_DIGEST_LENGTH;
  return retc;
 }
+#endif	/* HAVE_OPENSSL_MD2_H */
 
+#ifdef HAVE_OPENSSL_MD4_H
 tree_cell * nasl_md4(lex_ctxt * lexic)
 {
  char * data = get_str_var_by_num(lexic, 0);
@@ -83,6 +90,7 @@ tree_cell * nasl_md4(lex_ctxt * lexic)
  retc->size = MD4_DIGEST_LENGTH;
  return retc;
 }
+#endif /* HAvE_OPENSSL_MD4_H */
 
 tree_cell * nasl_md5(lex_ctxt * lexic)
 {
@@ -194,10 +202,12 @@ static tree_cell * nasl_hmac(lex_ctxt * lexic, const EVP_MD * evp_md)
 }
 
 
+#ifdef HAVE_OPENSSL_MD2_H
 tree_cell * nasl_hmac_md2(lex_ctxt * lexic)
 {
  return nasl_hmac(lexic, EVP_md2());
 }
+#endif
 
 
 tree_cell * nasl_hmac_md5(lex_ctxt * lexic)

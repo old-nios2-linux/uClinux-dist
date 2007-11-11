@@ -6,7 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-#include <linux/pci.h>
+#include <linux/device.h>
 
 #include <asm/system.h>
 #include <asm/sbus.h>
@@ -17,13 +17,26 @@
 #include <asm/bpp.h>
 #include <asm/irq.h>
 
+static ssize_t
+show_sbusobppath_attr(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	struct sbus_dev *sbus;
+
+	sbus = to_sbus_device(dev);
+
+	return snprintf (buf, PAGE_SIZE, "%s\n", sbus->ofdev.node->full_name);
+}
+
+static DEVICE_ATTR(obppath, S_IRUSR | S_IRGRP | S_IROTH, show_sbusobppath_attr, NULL);
+
 struct sbus_bus *sbus_root;
 
 static void __init fill_sbus_device(struct device_node *dp, struct sbus_dev *sdev)
 {
+	struct dev_archdata *sd;
 	unsigned long base;
-	void *pval;
-	int len;
+	const void *pval;
+	int len, err;
 
 	sdev->prom_node = dp->node;
 	strcpy(sdev->prom_name, dp->name);
@@ -55,6 +68,10 @@ static void __init fill_sbus_device(struct device_node *dp, struct sbus_dev *sde
 
 	sbus_fill_device_irq(sdev);
 
+	sd = &sdev->ofdev.dev.archdata;
+	sd->prom_node = dp;
+	sd->op = &sdev->ofdev;
+
 	sdev->ofdev.node = dp;
 	if (sdev->parent)
 		sdev->ofdev.dev.parent = &sdev->parent->ofdev.dev;
@@ -66,11 +83,14 @@ static void __init fill_sbus_device(struct device_node *dp, struct sbus_dev *sde
 	if (of_device_register(&sdev->ofdev) != 0)
 		printk(KERN_DEBUG "sbus: device registration error for %s!\n",
 		       dp->path_component_name);
+
+	/* WE HAVE BEEN INVADED BY ALIENS! */
+	err = sysfs_create_file(&sdev->ofdev.dev.kobj, &dev_attr_obppath.attr);
 }
 
 static void __init sbus_bus_ranges_init(struct device_node *dp, struct sbus_bus *sbus)
 {
-	void *pval;
+	const void *pval;
 	int len;
 
 	pval = of_get_property(dp, "ranges", &len);
@@ -190,6 +210,10 @@ static void __init walk_children(struct device_node *dp, struct sbus_dev *parent
 
 			sdev->bus = sbus;
 			sdev->parent = parent;
+			sdev->ofdev.dev.archdata.iommu =
+				sbus->ofdev.dev.archdata.iommu;
+			sdev->ofdev.dev.archdata.stc =
+				sbus->ofdev.dev.archdata.stc;
 
 			fill_sbus_device(dp, sdev);
 
@@ -249,6 +273,11 @@ static void __init build_one_sbus(struct device_node *dp, int num_sbus)
 
 			sdev->bus = sbus;
 			sdev->parent = NULL;
+			sdev->ofdev.dev.archdata.iommu =
+				sbus->ofdev.dev.archdata.iommu;
+			sdev->ofdev.dev.archdata.stc =
+				sbus->ofdev.dev.archdata.stc;
+
 			fill_sbus_device(dev_dp, sdev);
 
 			walk_children(dev_dp, sdev, sbus);

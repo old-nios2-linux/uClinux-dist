@@ -19,29 +19,12 @@
  */
 
 #include <linux/module.h>
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <linux/bitops.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/mm.h>
-#include <linux/socket.h>
-#include <linux/sockios.h>
-#include <linux/in.h>
 #include <linux/errno.h>
-#include <linux/interrupt.h>
-#include <linux/if_ether.h>
-#include <linux/inet.h>
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/notifier.h>
-#include <linux/netfilter.h>
-#include <net/ip.h>
-#include <net/route.h>
 #include <linux/skbuff.h>
-#include <net/sock.h>
+#include <net/netlink.h>
 #include <net/act_api.h>
 #include <net/pkt_cls.h>
 
@@ -91,7 +74,7 @@ static __inline__ int fw_hash(u32 handle)
 	else if (HTSIZE == 256) {
 		u8 *t = (u8 *) &handle;
 		return t[0] ^ t[1] ^ t[2] ^ t[3];
-	} else 
+	} else
 		return handle & (HTSIZE - 1);
 }
 
@@ -101,13 +84,10 @@ static int fw_classify(struct sk_buff *skb, struct tcf_proto *tp,
 	struct fw_head *head = (struct fw_head*)tp->root;
 	struct fw_filter *f;
 	int r;
-#ifdef CONFIG_NETFILTER
-	u32 id = skb->nfmark & head->mask;
-#else
-	u32 id = 0;
-#endif
+	u32 id = skb->mark;
 
 	if (head != NULL) {
+		id &= head->mask;
 		for (f=head->ht[fw_hash(id)]; f; f=f->next) {
 			if (f->id == id) {
 				*res = f->res;
@@ -352,7 +332,7 @@ static int fw_dump(struct tcf_proto *tp, unsigned long fh,
 {
 	struct fw_head *head = (struct fw_head *)tp->root;
 	struct fw_filter *f = (struct fw_filter*)fh;
-	unsigned char	 *b = skb->tail;
+	unsigned char *b = skb_tail_pointer(skb);
 	struct rtattr *rta;
 
 	if (f == NULL)
@@ -378,7 +358,7 @@ static int fw_dump(struct tcf_proto *tp, unsigned long fh,
 	if (tcf_exts_dump(skb, &f->exts, &fw_ext_map) < 0)
 		goto rtattr_failure;
 
-	rta->rta_len = skb->tail - b;
+	rta->rta_len = skb_tail_pointer(skb) - b;
 
 	if (tcf_exts_dump_stats(skb, &f->exts, &fw_ext_map) < 0)
 		goto rtattr_failure;
@@ -386,7 +366,7 @@ static int fw_dump(struct tcf_proto *tp, unsigned long fh,
 	return skb->len;
 
 rtattr_failure:
-	skb_trim(skb, b - skb->data);
+	nlmsg_trim(skb, b);
 	return -1;
 }
 
@@ -410,7 +390,7 @@ static int __init init_fw(void)
 	return register_tcf_proto_ops(&cls_fw_ops);
 }
 
-static void __exit exit_fw(void) 
+static void __exit exit_fw(void)
 {
 	unregister_tcf_proto_ops(&cls_fw_ops);
 }

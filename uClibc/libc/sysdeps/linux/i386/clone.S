@@ -1,4 +1,4 @@
-/* Copyright (C) 1996,1997,98,99,2000,02,03 Free Software Foundation, Inc.
+/* Copyright (C) 1996-2000,02,03,04,2005 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Richard Henderson (rth@tamu.edu)
 
@@ -24,8 +24,8 @@
 */
 
 #define _ERRNO_H	1
-#include <features.h>
 #include <bits/errno.h>
+#include <sys/syscall.h>
 
 /* int clone(int (*fn)(void *arg), void *child_stack, int flags, void *arg,
 	     pid_t *ptid, struct user_desc *tls, pid_t *ctid); */
@@ -41,32 +41,35 @@
 #define TLS         PTID+PTR_SIZE
 #define CTID        TLS+PTR_SIZE
 
-#define __NR_clone        120
-#define __NR_exit         1
-
 .text
-.type clone,@function;
-.weak clone ; clone = __clone
-
-.type __clone,@function;
-.globl __clone;
-
-__clone:
+.global clone
+.type   clone,%function
+clone:
 	/* Sanity check arguments.  */
 	movl	$-EINVAL,%eax
 
 	/* no NULL function pointers */
 	movl	FUNC(%esp),%ecx
-	jecxz	.Lclone_error
+#ifdef __PIC__
+	jecxz	__error
+#else
+	testl	%ecx,%ecx
+	jz	__error
+#endif
 
 	/* no NULL stack pointers */
 	movl	STACK(%esp),%ecx
-	jecxz	.Lclone_error
+#ifdef __PIC__
+	jecxz	__error
+#else
+	testl	%ecx,%ecx
+	jz	__error
+#endif
 
 	/* Insert the argument onto the new stack.  Make sure the new
 	   thread is started with an alignment of (mod 16).  */
 	andl	$0xfffffff0, %ecx
-	subl	$24,%ecx
+	subl	$28,%ecx
 	movl	ARG(%esp),%eax		/* no negative argument counts */
 	movl	%eax,12(%ecx)
 
@@ -86,21 +89,20 @@ __clone:
 	movl	PTID+12(%esp),%edx
 	movl	FLAGS+12(%esp),%ebx
 	movl	CTID+12(%esp),%edi
-	movl	$__NR_clone,%eax
+	movl	$ __NR_clone,%eax
 	int	$0x80
 	popl	%edi
 	popl	%esi
 	popl	%ebx
 
 	test	%eax,%eax
-	jl	.Lclone_error
+	jl	__error
 	jz	.Lthread_start
-
-.Lpseudo_end:
 	ret
 
 .Lthread_start:
-	subl	%ebp,%ebp	/* terminate the stack frame */
+	/* Note: %esi is zero.  */
+	movl	%esi,%ebp	/* terminate the stack frame */
 	call	*%ebx
 #ifdef __PIC__
 	call	.Lhere
@@ -109,41 +111,13 @@ __clone:
 	addl	$_GLOBAL_OFFSET_TABLE_+[.-.Lhere], %ebx
 #endif
 	movl	%eax, %ebx
-	movl	$__NR_exit, %eax
+	movl	$ __NR_exit, %eax
 	int	$0x80
 
-#ifdef __PIC__
+/* Need to indirect jump to syscall error 
+ * or we end up with TEXTREL's
+ */
+__error:
+	jmp __syscall_error
 
-.Lthere:
-	movl	(%esp), %ebx
-	ret
-
-.Lclone_error:
-	pushl %ebx
-	call .Lthere
-	addl $_GLOBAL_OFFSET_TABLE_, %ebx
-	xorl %edx, %edx
-	subl %eax, %edx
-	pushl %edx
-	call __errno_location@PLT
-	popl %ecx
-	popl %ebx
-	movl %ecx, (%eax)
-	orl $-1, %eax
-	jmp .Lpseudo_end
-
-#else	/* __PIC__ */
-
-.Lclone_error:
-	negl    %eax
-	pushl   %eax
-	call	__errno_location
-	popl	%ecx
-	movl	%ecx, (%eax)
-	xorl	%eax, %eax
-	decl	%eax
-
-#endif
-
-.size __clone,.-__clone
-
+.size clone,.-clone

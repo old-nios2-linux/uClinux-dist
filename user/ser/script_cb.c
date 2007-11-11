@@ -1,12 +1,12 @@
 /*
- * $Id: script_cb.c,v 1.5 2003/03/29 02:30:35 jiri Exp $
+ * $Id: script_cb.c,v 1.6 2004/08/24 08:45:10 janakj Exp $
  *
  * Script callbacks -- they add the ability to register callback
  * functions which are always called when script for request
  * processing is entered or left
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

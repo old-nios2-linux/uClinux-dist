@@ -1,5 +1,5 @@
 /*
- * $Id: tm.c,v 1.86.4.4.2.1 2004/07/15 16:39:27 andrei Exp $
+ * $Id: tm.c,v 1.118.2.1 2005/02/16 23:24:14 bogdan Exp $
  *
  * TM module
  *
@@ -16,7 +16,7 @@
  * * his fatherly eye watching over us day and night.*
  * *                                                 *
  * * Please, preserve this codework heritage, as     *
- * * it's unlikly for fresh, juicy pices of code to  *
+ * * it's unlikely for fresh, juicy pieces of code to  *
  * * arise to give him the again the chance to       *
  * * demonstrate his clean-up and improvement skills.*
  * *                                                 *
@@ -28,7 +28,7 @@
  * ***************************************************
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -69,6 +69,9 @@
  *              removed t_relay_{udp,tcp,tls} (andrei)
  *  2003-09-26  added t_forward_nonack_uri() - same as t_forward_nonack() but
  *              takes no parameters -> forwards to uri (bogdan)
+ *  2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
+ *  2004-02-18  t_reply exported via FIFO - imported from VM (bogdan)
+ *  2004-10-01  added a new param.: restart_fr_on_each_reply (andrei)
  */
 
 
@@ -85,22 +88,25 @@
 #include "../../ut.h"
 #include "../../script_cb.h"
 #include "../../fifo_server.h"
+#include "../../usr_avp.h"
 #include "../../mem/mem.h"
+#include "../../unixsock_server.h"
 
 #include "sip_msg.h"
 #include "h_table.h"
-#include "t_funcs.h"
 #include "t_hooks.h"
 #include "tm_load.h"
 #include "ut.h"
 #include "t_reply.h"
 #include "uac.h"
 #include "uac_fifo.h"
+#include "uac_unixsock.h"
 #include "t_fwd.h"
 #include "t_lookup.h"
 #include "t_stats.h"
 #include "callid.h"
 #include "t_cancel.h"
+#include "t_fifo.h"
 
 MODULE_VERSION
 
@@ -162,8 +168,10 @@ inline static int w_t_forward_nonack_tls(struct sip_msg* msg, char* str,char*);
 inline static int w_t_on_negative(struct sip_msg* msg, char *go_to, char *foo);
 inline static int w_t_on_reply(struct sip_msg* msg, char *go_to, char *foo );
 inline static int t_check_status(struct sip_msg* msg, char *regexp, char *foo);
-inline static int t_flush_flags(struct sip_msg* msg, char *dir, char *foo);
 
+
+static char *fr_timer_param = FR_TIMER_AVP;
+static char *fr_inv_timer_param = FR_INV_TIMER_AVP;
 
 
 static cmd_export_t cmds[]={
@@ -221,8 +229,10 @@ static cmd_export_t cmds[]={
 			REQUEST_ROUTE | FAILURE_ROUTE | ONREPLY_ROUTE },
 	{"t_check_status",     t_check_status,          1, fixup_str2regexp,
 			REQUEST_ROUTE | FAILURE_ROUTE | ONREPLY_ROUTE },
-	{"t_flush_flags",     t_flush_flags,            1, fixup_str2int,
-			REQUEST_ROUTE | FAILURE_ROUTE | ONREPLY_ROUTE },
+	{"t_write_req",       t_write_req,              2, fixup_t_write,
+			REQUEST_ROUTE | FAILURE_ROUTE },
+	{"t_write_unix",      t_write_unix,             2, fixup_t_write,
+	                REQUEST_ROUTE | FAILURE_ROUTE },
 
 	/* not applicable from the script */
 	{"register_tmcb",      (cmd_function)register_tmcb,     NO_SCRIPT,   0, 0},
@@ -241,22 +251,29 @@ static cmd_export_t cmds[]={
 	{"dlg_request_uas",    (cmd_function)dlg_request_uas,   NO_SCRIPT,   0, 0},
 	{"free_dlg",           (cmd_function)free_dlg,          NO_SCRIPT,   0, 0},
 	{"print_dlg",          (cmd_function)print_dlg,         NO_SCRIPT,   0, 0},
+	{T_GETT,               (cmd_function)get_t,             NO_SCRIPT,   0,0},
 	{0,0,0,0,0}
 };
 
+
 static param_export_t params[]={
-	{"ruri_matching", INT_PARAM, &ruri_matching                         },
-	{"via1_matching", INT_PARAM, &via1_matching                         },
-	{"fr_timer",      INT_PARAM, &(timer_id2timeout[FR_TIMER_LIST])     },
-	{"fr_inv_timer",  INT_PARAM, &(timer_id2timeout[FR_INV_TIMER_LIST]) },
-	{"wt_timer",      INT_PARAM, &(timer_id2timeout[WT_TIMER_LIST])     },
-	{"delete_timer",  INT_PARAM, &(timer_id2timeout[DELETE_LIST])       },
-	{"retr_timer1p1", INT_PARAM, &(timer_id2timeout[RT_T1_TO_1])        },
-	{"retr_timer1p2", INT_PARAM, &(timer_id2timeout[RT_T1_TO_2])        },
-	{"retr_timer1p3", INT_PARAM, &(timer_id2timeout[RT_T1_TO_3])        },
-	{"retr_timer2",   INT_PARAM, &(timer_id2timeout[RT_T2])             },
-	{"noisy_ctimer",  INT_PARAM, &noisy_ctimer                          },
-	{"uac_from",      STR_PARAM, &uac_from                              },
+	{"ruri_matching",       INT_PARAM, &ruri_matching                        },
+	{"via1_matching",       INT_PARAM, &via1_matching                        },
+	{"fr_timer",            INT_PARAM, &(timer_id2timeout[FR_TIMER_LIST])    },
+	{"fr_inv_timer",        INT_PARAM, &(timer_id2timeout[FR_INV_TIMER_LIST])},
+	{"wt_timer",            INT_PARAM, &(timer_id2timeout[WT_TIMER_LIST])    },
+	{"delete_timer",        INT_PARAM, &(timer_id2timeout[DELETE_LIST])      },
+	{"retr_timer1p1",       INT_PARAM, &(timer_id2timeout[RT_T1_TO_1])       },
+	{"retr_timer1p2",       INT_PARAM, &(timer_id2timeout[RT_T1_TO_2])       },
+	{"retr_timer1p3",       INT_PARAM, &(timer_id2timeout[RT_T1_TO_3])       },
+	{"retr_timer2",         INT_PARAM, &(timer_id2timeout[RT_T2])            },
+	{"noisy_ctimer",        INT_PARAM, &noisy_ctimer                         },
+	{"uac_from",            STR_PARAM, &uac_from                             },
+	{"unix_tx_timeout",     INT_PARAM, &tm_unix_tx_timeout                   },
+	{"restart_fr_on_each_reply", INT_PARAM, &restart_fr_on_each_reply        },
+	{"fr_timer_avp",        STR_PARAM, &fr_timer_param                       },
+	{"fr_inv_timer_avp",    STR_PARAM, &fr_inv_timer_param                   },
+	{"tw_append",           STR_PARAM|USE_FUNC_PARAM, (void*)parse_tw_append },
 	{0,0,0}
 };
 
@@ -312,16 +329,16 @@ static int fixup_hostport2proxy(void** param, int param_no)
 	struct proxy_l *proxy;
 	str s;
 	
-	DBG("TM module: fixup_t_forward(%s, %d)\n", (char*)*param, param_no);
+	DBG("TM module: fixup_hostport2proxy(%s, %d)\n", (char*)*param, param_no);
 	if (param_no==1){
-		DBG("TM module: fixup_t_forward: param 1.. do nothing, wait for #2\n");
+		DBG("TM module: fixup_hostport2proxy: param 1.. do nothing, wait for #2\n");
 		return 0;
 	} else if (param_no==2) {
 
 		host=(char *) (*(param-1)); 
 		port=str2s(*param, strlen(*param), &err);
 		if (err!=0) {
-			LOG(L_ERR, "TM module:fixup_t_forward: bad port number <%s>\n",
+			LOG(L_ERR, "TM module:fixup_hostport2proxy: bad port number <%s>\n",
 				(char*)(*param));
 			 return E_UNSPEC;
 		}
@@ -329,7 +346,7 @@ static int fixup_hostport2proxy(void** param, int param_no)
 		s.len = strlen(host);
 		proxy=mk_proxy(&s, port, 0); /* FIXME: udp or tcp? */
 		if (proxy==0) {
-			LOG(L_ERR, "ERROR: fixup_t_forwardv6: bad host name in URI <%s>\n",
+			LOG(L_ERR, "ERROR: fixup_hostport2proxy: bad host name in URI <%s>\n",
 				host );
 			return E_BAD_ADDRESS;
 		}
@@ -340,7 +357,7 @@ static int fixup_hostport2proxy(void** param, int param_no)
 		*(param-1)=proxy;
 		return 0;
 	} else {
-		LOG(L_ERR,"ERROR: fixup_t_forwardv6 called with parameter #<>{1,2}\n");
+		LOG(L_ERR,"ERROR: fixup_hostport2proxy called with parameter #<>{1,2}\n");
 		return E_BUG;
 	}
 }
@@ -426,7 +443,8 @@ static int script_init( struct sip_msg *foo, void *bar)
 
 static int mod_init(void)
 {
-	DBG( "TM - initializing...\n");
+	DBG( "TM - (size of cell=%ld, sip_msg=%ld) initializing...\n", 
+			(long)sizeof(struct cell), (long)sizeof(struct sip_msg));
 	/* checking if we have sufficient bitmap capacity for given
 	   maximum number of  branches */
 	if (MAX_BRANCHES+1>31) {
@@ -436,7 +454,7 @@ static int mod_init(void)
 	}
 
 	if (init_callid() < 0) {
-		LOG(L_CRIT, "Error while initializin Call-ID generator\n");
+		LOG(L_CRIT, "Error while initializing Call-ID generator\n");
 		return -1;
 	}
 
@@ -455,11 +473,36 @@ static int mod_init(void)
 		return -1;
 	}
 
+	if (register_fifo_cmd(fifo_t_reply, "t_reply", 0)<0) {
+		LOG(L_CRIT, "cannot register t_reply\n");
+		return -1;
+	}
+
+	if (unixsock_register_cmd("t_uac_dlg", unixsock_uac) < 0) {
+		LOG(L_CRIT, "cannot register t_uac with the unix server\n");
+		return -1;
+	}
+
+	if (unixsock_register_cmd("t_uac_cancel", unixsock_uac_cancel) < 0) {
+		LOG(L_CRIT, "cannot register t_uac_cancel with the unix server\n");
+		return -1;
+	}
+
+	if (unixsock_register_cmd("t_hash", unixsock_hash) < 0) {
+		LOG(L_CRIT, "cannot register t_hash with the unix server\n");
+		return -1;
+	}
+
+	if (unixsock_register_cmd("t_reply", unixsock_t_reply) < 0) {
+		LOG(L_CRIT, "cannot register t_reply with the unix server\n");
+		return -1;
+	}
+
+	/* building the hash table*/
 	if (!init_hash_table()) {
 		LOG(L_ERR, "ERROR: mod_init: initializing hash_table failed\n");
 		return -1;
 	}
-
 
 	/* init static hidden values */
 	init_t();
@@ -483,19 +526,33 @@ static int mod_init(void)
 		return -1;
 	}
 
-	/* building the hash table*/
-
 	if (uac_init()==-1) {
 		LOG(L_ERR, "ERROR: mod_init: uac_init failed\n");
 		return -1;
 	}
+
+	if (init_tmcb_lists()!=1) {
+		LOG(L_CRIT, "ERROR:tm:mod_init: failed to init tmcb lists\n");
+		return -1;
+	}
+
+	tm_init_tags();
+	init_twrite_lines();
+	if (init_twrite_sock() < 0) {
+		LOG(L_ERR, "ERROR:tm:mod_init: Unable to create socket\n");
+		return -1;
+	}
+
 	/* register post-script clean-up function */
 	register_script_cb( w_t_unref, POST_SCRIPT_CB, 
 			0 /* empty param */ );
 	register_script_cb( script_init, PRE_SCRIPT_CB , 
 			0 /* empty param */ );
 
-	tm_init_tags();
+	if (init_avp_params( fr_timer_param, fr_inv_timer_param)<0 ){
+		LOG(L_ERR,"ERROR:tm:mod_init: failed to process timer AVPs\n");
+		return -1;
+	}
 
 	return 0;
 }
@@ -567,35 +624,6 @@ static int t_check_status(struct sip_msg* msg, char *regexp, char *foo)
 }
 
 
-static int t_flush_flags(struct sip_msg* msg, char *dir, char *foo)
-{
-	struct cell *t;
-
-	/* first get the transaction */
-	if (t_check( msg , 0 )==-1) return -1;
-	if ( (t=get_t())==0) {
-		LOG(L_ERR, "ERROR: t_flush_flags: cannot flush flags for a message "
-			"which has no T-state established\n");
-		return -1;
-	}
-
-	/* do the flush */
-	switch ((long)dir) {
-		case  1:
-			t->uas.request->flags = msg->flags;
-			break;
-		case  2:
-			msg->flags = t->uas.request->flags;
-			break;
-		default:
-			LOG(L_ERR,"ERROR:t_flush_flags: unknown direction %ld\n",
-					(long)dir);
-			return -1;
-	}
-	return 1;
-}
-
-
 inline static int w_t_check(struct sip_msg* msg, char* str, char* str2)
 {
 	return t_check( msg , 0  ) ? 1 : -1;
@@ -619,7 +647,7 @@ inline static int _w_t_forward_nonack(struct sip_msg* msg, char* proxy,
 		}
 		return t_forward_nonack(t, msg, ( struct proxy_l *) proxy, proto );
 	} else {
-		DBG("DEBUG: t_forward_nonack: no transaction found\n");
+		DBG("DEBUG: forward_nonack: no transaction found\n");
 		return -1;
 	}
 }
@@ -716,7 +744,7 @@ inline static int w_t_retransmit_reply( struct sip_msg* p_msg, char* foo, char* 
 	t=get_t();
 	if (t) {
 		if (p_msg->REQ_METHOD==METHOD_ACK) {
-			LOG(L_WARN, "WARNING: : ACKs ansmit_replies not replied\n");
+			LOG(L_WARN, "WARNING: : ACKs transmit_replies not replied\n");
 			return -1;
 		}
 		return t_retransmit_reply( t );
@@ -728,59 +756,24 @@ inline static int w_t_retransmit_reply( struct sip_msg* p_msg, char* foo, char* 
 inline static int w_t_newtran( struct sip_msg* p_msg, char* foo, char* bar ) 
 {
 	/* t_newtran returns 0 on error (negative value means
-	   'transaction exists'
-	*/
+	   'transaction exists' */
 	return t_newtran( p_msg );
 }
 
 
-inline static int w_t_on_negative( struct sip_msg* msg, char *go_to, char *foo )
+inline static int w_t_on_negative( struct sip_msg* msg, char *go_to, char *foo)
 {
-	struct cell *t;
-
-	if (rmode==MODE_REQUEST || rmode==MODE_ONFAILURE) {
-		t_on_negative( (unsigned int )(long) go_to );
-		return 1;
-	}
-	if (rmode==MODE_ONREPLY ) {
-		/* transaction state is established */
-		t=get_t();
-		if (!t || t==T_UNDEFINED) {
-			LOG(L_CRIT, "BUG: w_t_on_negative entered without t\n");
-			return -1;
-		}
-		t->on_negative=(unsigned int)(long)go_to;
-		return 1;
-	}
-	LOG(L_CRIT, "BUG: w_t_on_negative entered in unsupported mode\n");
-	return -1;
+	t_on_negative( (unsigned int )(long) go_to );
+	return 1;
 }
 
 
 inline static int w_t_on_reply( struct sip_msg* msg, char *go_to, char *foo )
 {
-	struct cell *t;
-
-	if (rmode==MODE_REQUEST) {
-		/* it's still in initial request processing stage, transaction
-		 * state is not estabslihed yet, store it in private memory ...
-		 * it will be copied to transaction state when it is set up */
-		t_on_reply( (unsigned int )(long) go_to );
-		return 1;
-	}
-	if (rmode==MODE_ONREPLY || rmode==MODE_ONFAILURE) {
-		/* transaction state is established */
-		t=get_t();
-		if (!t || t==T_UNDEFINED) {
-			LOG(L_CRIT, "BUG: w_t_on_reply entered without t\n");
-			return -1;
-		}
-		t->on_reply=(unsigned int) (long)go_to;
-		return 1;
-	}
-	LOG(L_CRIT, "BUG: w_t_on_reply entered in unsupported mode\n");
-	return -1;
+	t_on_reply( (unsigned int )(long) go_to );
+	return 1;
 }
+
 
 
 inline static int _w_t_relay_to( struct sip_msg  *p_msg , 
@@ -795,7 +788,7 @@ inline static int _w_t_relay_to( struct sip_msg  *p_msg ,
 			return -1;
 		}
 		if (t_forward_nonack(t, p_msg, proxy, PROTO_NONE)<=0 ) {
-			LOG(L_ERR, "ERROR: failure_route: t_relay_to failed\n");
+			LOG(L_ERR, "ERROR: w_t_relay_to: t_relay_to failed\n");
 			return -1;
 		}
 		return 1;

@@ -160,6 +160,11 @@ static void platform_device_release(struct device *dev)
  *
  *	Create a platform device object which can have other objects attached
  *	to it, and which will have attached objects freed when it is released.
+ *
+ *	This device will be marked as not supporting hotpluggable drivers; no
+ *	device add/remove uevents will be generated.  In the unusual case that
+ *	the device isn't being dynamically allocated as a legacy "probe the
+ *	hardware" driver, infrastructure code should reverse this marking.
  */
 struct platform_device *platform_device_alloc(const char *name, unsigned int id)
 {
@@ -172,6 +177,12 @@ struct platform_device *platform_device_alloc(const char *name, unsigned int id)
 		pa->pdev.id = id;
 		device_initialize(&pa->pdev.dev);
 		pa->pdev.dev.release = platform_device_release;
+
+		/* prevent hotplug "modprobe $(MODALIAS)" from causing trouble in
+		 * legacy probe-the-hardware drivers, which don't properly split
+		 * out device enumeration logic from drivers.
+		 */
+		pa->pdev.dev.uevent_suppress = 1;
 	}
 
 	return pa ? &pa->pdev : NULL;
@@ -212,7 +223,7 @@ EXPORT_SYMBOL_GPL(platform_device_add_resources);
  *	pointer.  The memory associated with the platform data will be freed
  *	when the platform device is released.
  */
-int platform_device_add_data(struct platform_device *pdev, void *data, size_t size)
+int platform_device_add_data(struct platform_device *pdev, const void *data, size_t size)
 {
 	void *d;
 
@@ -292,20 +303,22 @@ EXPORT_SYMBOL_GPL(platform_device_add);
  *	@pdev:	platform device we're removing
  *
  *	Note that this function will also release all memory- and port-based
- *	resources owned by the device (@dev->resource).
+ *	resources owned by the device (@dev->resource).  This function
+ *	must _only_ be externally called in error cases.  All other usage
+ *	is a bug.
  */
 void platform_device_del(struct platform_device *pdev)
 {
 	int i;
 
 	if (pdev) {
+		device_del(&pdev->dev);
+
 		for (i = 0; i < pdev->num_resources; i++) {
 			struct resource *r = &pdev->resource[i];
 			if (r->flags & (IORESOURCE_MEM|IORESOURCE_IO))
 				release_resource(r);
 		}
-
-		device_del(&pdev->dev);
 	}
 }
 EXPORT_SYMBOL_GPL(platform_device_del);
@@ -347,8 +360,15 @@ EXPORT_SYMBOL_GPL(platform_device_unregister);
  *	This function creates a simple platform device that requires minimal
  *	resource and memory management. Canned release function freeing
  *	memory allocated for the device allows drivers using such devices
- *	to be unloaded iwithout waiting for the last reference to the device
+ *	to be unloaded without waiting for the last reference to the device
  *	to be dropped.
+ *
+ *	This interface is primarily intended for use with legacy drivers
+ *	which probe hardware directly.  Because such drivers create sysfs
+ *	device nodes themselves, rather than letting system infrastructure
+ *	handle such device enumeration tasks, they don't fully conform to
+ *	the Linux driver model.  In particular, when such drivers are built
+ *	as modules, they can't be "hotplugged".
  */
 struct platform_device *platform_device_register_simple(char *name, unsigned int id,
 							struct resource *res, unsigned int num)
@@ -386,6 +406,11 @@ static int platform_drv_probe(struct device *_dev)
 	struct platform_device *dev = to_platform_device(_dev);
 
 	return drv->probe(dev);
+}
+
+static int platform_drv_probe_fail(struct device *_dev)
+{
+	return -ENXIO;
 }
 
 static int platform_drv_remove(struct device *_dev)
@@ -451,6 +476,49 @@ void platform_driver_unregister(struct platform_driver *drv)
 }
 EXPORT_SYMBOL_GPL(platform_driver_unregister);
 
+/**
+ * platform_driver_probe - register driver for non-hotpluggable device
+ * @drv: platform driver structure
+ * @probe: the driver probe routine, probably from an __init section
+ *
+ * Use this instead of platform_driver_register() when you know the device
+ * is not hotpluggable and has already been registered, and you want to
+ * remove its run-once probe() infrastructure from memory after the driver
+ * has bound to the device.
+ *
+ * One typical use for this would be with drivers for controllers integrated
+ * into system-on-chip processors, where the controller devices have been
+ * configured as part of board setup.
+ *
+ * Returns zero if the driver registered and bound to a device, else returns
+ * a negative error code and with the driver not registered.
+ */
+int __init_or_module platform_driver_probe(struct platform_driver *drv,
+		int (*probe)(struct platform_device *))
+{
+	int retval, code;
+
+	/* temporary section violation during probe() */
+	drv->probe = probe;
+	retval = code = platform_driver_register(drv);
+
+	/* Fixup that section violation, being paranoid about code scanning
+	 * the list of drivers in order to probe new devices.  Check to see
+	 * if the probe was successful, and make sure any forced probes of
+	 * new devices fail.
+	 */
+	spin_lock(&platform_bus_type.klist_drivers.k_lock);
+	drv->probe = NULL;
+	if (code == 0 && list_empty(&drv->driver.klist_devices.k_list))
+		retval = -ENODEV;
+	drv->driver.probe = platform_drv_probe_fail;
+	spin_unlock(&platform_bus_type.klist_drivers.k_lock);
+
+	if (code != retval)
+		platform_driver_unregister(drv);
+	return retval;
+}
+EXPORT_SYMBOL_GPL(platform_driver_probe);
 
 /* modalias support enables more hands-off userspace setup:
  * (a) environment variable lets new-style hotplug events work once system is
@@ -563,8 +631,15 @@ EXPORT_SYMBOL_GPL(platform_bus_type);
 
 int __init platform_bus_init(void)
 {
-	device_register(&platform_bus);
-	return bus_register(&platform_bus_type);
+	int error;
+
+	error = device_register(&platform_bus);
+	if (error)
+		return error;
+	error =  bus_register(&platform_bus_type);
+	if (error)
+		device_unregister(&platform_bus);
+	return error;
 }
 
 #ifndef ARCH_HAS_DMA_GET_REQUIRED_MASK

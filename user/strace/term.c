@@ -24,22 +24,31 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: term.c,v 1.5 2000/09/03 23:57:48 wichert Exp $
+ *	$Id: term.c,v 1.8 2005/06/01 19:02:38 roland Exp $
  */
 
 #include "defs.h"
+
+#ifdef LINUX
+/*
+ * The C library's definition of struct termios might differ from
+ * the kernel one, and we need to use the kernel layout.
+ */
+#include <linux/termios.h>
+#else
 
 #ifdef HAVE_TERMIO_H
 #include <termio.h>
 #endif /* HAVE_TERMIO_H */
 
 #include <termios.h>
+#endif
 
 #ifdef HAVE_SYS_FILIO_H
 #include <sys/filio.h>
 #endif
 
-static struct xlat tcxonc_options[] = {
+static const struct xlat tcxonc_options[] = {
 	{ TCOOFF,	"TCOOFF"	},
 	{ TCOON,	"TCOON"		},
 	{ TCIOFF,	"TCIOFF"	},
@@ -48,7 +57,7 @@ static struct xlat tcxonc_options[] = {
 };
 
 #ifdef TCLFLSH
-static struct xlat tcflsh_options[] = {
+static const struct xlat tcflsh_options[] = {
 	{ TCIFLUSH,	"TCIFLUSH"	},
 	{ TCOFLUSH,	"TCOFLUSH"	},
 	{ TCIOFLUSH,	"TCIOFLUSH"	},
@@ -56,7 +65,7 @@ static struct xlat tcflsh_options[] = {
 };
 #endif
 
-static struct xlat baud_options[] = {
+static const struct xlat baud_options[] = {
 	{ B0,		"B0"		},
 	{ B50,		"B50"		},
 	{ B75,		"B75"		},
@@ -131,7 +140,7 @@ static struct xlat baud_options[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat modem_flags[] = {
+static const struct xlat modem_flags[] = {
 #ifdef TIOCM_LE
 	{ TIOCM_LE,	"TIOCM_LE",	},
 #endif
@@ -182,7 +191,7 @@ long code, arg;
 	#define TCSETS	TIOCSETA
 	#define TCSETSW	TIOCSETAW
 	#define TCSETSF	TIOCSETAF
-#endif	
+#endif
 	struct winsize ws;
 #ifdef TIOCGSIZE
 	struct  ttysize ts;
@@ -207,7 +216,7 @@ long code, arg;
 			return 0;
 		if (abbrev(tcp)) {
 			tprintf(", {");
-#ifndef FREEBSD			
+#ifndef FREEBSD
 			printxval(baud_options, tios.c_cflag & CBAUD, "B???");
 #else
 			printxval(baud_options, tios.c_ispeed, "B???");
@@ -216,7 +225,7 @@ long code, arg;
 				printxval(baud_options, tios.c_ospeed, "B???");
 				tprintf(" (out)");
 			}
-#endif			
+#endif
 			tprintf(" %sopost %sisig %sicanon %secho ...}",
 				(tios.c_oflag & OPOST) ? "" : "-",
 				(tios.c_lflag & ISIG) ? "" : "-",
@@ -331,8 +340,7 @@ long code, arg;
 		if (umove(tcp, arg, &arg) < 0)
 			return 0;
 		tprintf(", [");
-		if (!printflags(modem_flags, arg))
-			tprintf("0");
+		printflags(modem_flags, arg, "TIOCM_???");
 		tprintf("]");
 		return 1;
 #endif /* TIOCMGET */
@@ -451,4 +459,3 @@ long code, arg;
 		return 0;
 	}
 }
-

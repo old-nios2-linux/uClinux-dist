@@ -4,8 +4,9 @@
  * (C) Copyright 2004 Linus Torvalds
  */
 #include <linux/pci.h>
+#include <linux/io.h>
+
 #include <linux/module.h>
-#include <asm/io.h>
 
 /*
  * Read/write from/to an (offsettable) iomem cookie. It might be a PIO
@@ -34,47 +35,80 @@
 #define PIO_RESERVED	0x40000UL
 #endif
 
+static void bad_io_access(unsigned long port, const char *access)
+{
+	static int count = 10;
+	if (count) {
+		count--;
+		printk(KERN_ERR "Bad IO access at port %lx (%s)\n", port, access);
+		WARN_ON(1);
+	}
+}
+
 /*
  * Ugly macros are a way of life.
  */
-#define VERIFY_PIO(port) BUG_ON((port & ~PIO_MASK) != PIO_OFFSET)
-
 #define IO_COND(addr, is_pio, is_mmio) do {			\
 	unsigned long port = (unsigned long __force)addr;	\
-	if (port < PIO_RESERVED) {				\
-		VERIFY_PIO(port);				\
+	if (port >= PIO_RESERVED) {				\
+		is_mmio;					\
+	} else if (port > PIO_OFFSET) {				\
 		port &= PIO_MASK;				\
 		is_pio;						\
-	} else {						\
-		is_mmio;					\
-	}							\
+	} else							\
+		bad_io_access(port, #is_pio );			\
 } while (0)
+
+#ifndef pio_read16be
+#define pio_read16be(port) swab16(inw(port))
+#define pio_read32be(port) swab32(inl(port))
+#endif
+
+#ifndef mmio_read16be
+#define mmio_read16be(addr) be16_to_cpu(__raw_readw(addr))
+#define mmio_read32be(addr) be32_to_cpu(__raw_readl(addr))
+#endif
 
 unsigned int fastcall ioread8(void __iomem *addr)
 {
 	IO_COND(addr, return inb(port), return readb(addr));
+	return 0xff;
 }
 unsigned int fastcall ioread16(void __iomem *addr)
 {
 	IO_COND(addr, return inw(port), return readw(addr));
+	return 0xffff;
 }
 unsigned int fastcall ioread16be(void __iomem *addr)
 {
-	IO_COND(addr, return inw(port), return be16_to_cpu(__raw_readw(addr)));
+	IO_COND(addr, return pio_read16be(port), return mmio_read16be(addr));
+	return 0xffff;
 }
 unsigned int fastcall ioread32(void __iomem *addr)
 {
 	IO_COND(addr, return inl(port), return readl(addr));
+	return 0xffffffff;
 }
 unsigned int fastcall ioread32be(void __iomem *addr)
 {
-	IO_COND(addr, return inl(port), return be32_to_cpu(__raw_readl(addr)));
+	IO_COND(addr, return pio_read32be(port), return mmio_read32be(addr));
+	return 0xffffffff;
 }
 EXPORT_SYMBOL(ioread8);
 EXPORT_SYMBOL(ioread16);
 EXPORT_SYMBOL(ioread16be);
 EXPORT_SYMBOL(ioread32);
 EXPORT_SYMBOL(ioread32be);
+
+#ifndef pio_write16be
+#define pio_write16be(val,port) outw(swab16(val),port)
+#define pio_write32be(val,port) outl(swab32(val),port)
+#endif
+
+#ifndef mmio_write16be
+#define mmio_write16be(val,port) __raw_writew(be16_to_cpu(val),port)
+#define mmio_write32be(val,port) __raw_writel(be32_to_cpu(val),port)
+#endif
 
 void fastcall iowrite8(u8 val, void __iomem *addr)
 {
@@ -86,7 +120,7 @@ void fastcall iowrite16(u16 val, void __iomem *addr)
 }
 void fastcall iowrite16be(u16 val, void __iomem *addr)
 {
-	IO_COND(addr, outw(val,port), __raw_writew(cpu_to_be16(val), addr));
+	IO_COND(addr, pio_write16be(val,port), mmio_write16be(val, addr));
 }
 void fastcall iowrite32(u32 val, void __iomem *addr)
 {
@@ -94,7 +128,7 @@ void fastcall iowrite32(u32 val, void __iomem *addr)
 }
 void fastcall iowrite32be(u32 val, void __iomem *addr)
 {
-	IO_COND(addr, outl(val,port), __raw_writel(cpu_to_be32(val), addr));
+	IO_COND(addr, pio_write32be(val,port), mmio_write32be(val, addr));
 }
 EXPORT_SYMBOL(iowrite8);
 EXPORT_SYMBOL(iowrite16);
@@ -108,6 +142,7 @@ EXPORT_SYMBOL(iowrite32be);
  * convert to CPU byte order. We write in "IO byte
  * order" (we also don't have IO barriers).
  */
+#ifndef mmio_insb
 static inline void mmio_insb(void __iomem *addr, u8 *dst, int count)
 {
 	while (--count >= 0) {
@@ -132,7 +167,9 @@ static inline void mmio_insl(void __iomem *addr, u32 *dst, int count)
 		dst++;
 	}
 }
+#endif
 
+#ifndef mmio_outsb
 static inline void mmio_outsb(void __iomem *addr, const u8 *src, int count)
 {
 	while (--count >= 0) {
@@ -154,6 +191,7 @@ static inline void mmio_outsl(void __iomem *addr, const u32 *src, int count)
 		src++;
 	}
 }
+#endif
 
 void fastcall ioread8_rep(void __iomem *addr, void *dst, unsigned long count)
 {
@@ -202,7 +240,20 @@ void ioport_unmap(void __iomem *addr)
 EXPORT_SYMBOL(ioport_map);
 EXPORT_SYMBOL(ioport_unmap);
 
-/* Create a virtual mapping cookie for a PCI BAR (memory or IO) */
+/**
+ * pci_iomap - create a virtual mapping cookie for a PCI BAR
+ * @dev: PCI device that owns the BAR
+ * @bar: BAR number
+ * @maxlen: length of the memory to map
+ *
+ * Using this function you will get a __iomem address to your device BAR.
+ * You can access it using ioread*() and iowrite*(). These functions hide
+ * the details if this is a MMIO or PIO address space and will just do what
+ * you expect from them in the correct way.
+ *
+ * @maxlen specifies the maximum length to map. If you want to get access to
+ * the complete BAR without checking for its length first, pass %0 here.
+ * */
 void __iomem *pci_iomap(struct pci_dev *dev, int bar, unsigned long maxlen)
 {
 	unsigned long start = pci_resource_start(dev, bar);

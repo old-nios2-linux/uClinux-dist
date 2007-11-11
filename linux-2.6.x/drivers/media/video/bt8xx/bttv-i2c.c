@@ -412,7 +412,7 @@ static void do_i2c_scan(char *name, struct i2c_client *c)
 	unsigned char buf;
 	int i,rc;
 
-	for (i = 0; i < 128; i++) {
+	for (i = 0; i < ARRAY_SIZE(i2c_devs); i++) {
 		c->addr = i;
 		rc = i2c_master_recv(c,&buf,0);
 		if (rc < 0)
@@ -479,11 +479,7 @@ int __devexit fini_bttv_i2c(struct bttv *btv)
 	if (0 != btv->i2c_rc)
 		return 0;
 
-	if (btv->use_i2c_hw) {
-		return i2c_del_adapter(&btv->c.i2c_adap);
-	} else {
-		return i2c_bit_del_bus(&btv->c.i2c_adap);
-	}
+	return i2c_del_adapter(&btv->c.i2c_adap);
 }
 
 /*

@@ -95,6 +95,8 @@ enum {
 /* The master ring of all esp hosts we are managing in this driver. */
 static struct NCR_ESP *espchain;
 int nesps = 0, esps_in_use = 0, esps_running = 0;
+EXPORT_SYMBOL(nesps);
+EXPORT_SYMBOL(esps_running);
 
 irqreturn_t esp_intr(int irq, void *dev_id);
 
@@ -524,16 +526,21 @@ void esp_bootup_reset(struct NCR_ESP *esp, struct ESP_regs *eregs)
 	/* Eat any bitrot in the chip and we are done... */
 	trash = esp_read(eregs->esp_intrpt);
 }
+EXPORT_SYMBOL(esp_bootup_reset);
 
 /* Allocate structure and insert basic data such as SCSI chip frequency
  * data and a pointer to the device
  */
-struct NCR_ESP* esp_allocate(struct scsi_host_template *tpnt, void *esp_dev)
+struct NCR_ESP* esp_allocate(struct scsi_host_template *tpnt, void *esp_dev,
+			     int hotplug)
 {
 	struct NCR_ESP *esp, *elink;
 	struct Scsi_Host *esp_host;
 
-	esp_host = scsi_register(tpnt, sizeof(struct NCR_ESP));
+	if (hotplug)
+		esp_host = scsi_host_alloc(tpnt, sizeof(struct NCR_ESP));
+	else
+		esp_host = scsi_register(tpnt, sizeof(struct NCR_ESP));
 	if(!esp_host)
 		panic("Cannot register ESP SCSI host");
 	esp = (struct NCR_ESP *) esp_host->hostdata;
@@ -768,6 +775,7 @@ const char *esp_info(struct Scsi_Host *host)
 		panic("Bogon ESP revision");
 	};
 }
+EXPORT_SYMBOL(esp_info);
 
 /* From Wolfgang Stanglmeier's NCR scsi driver. */
 struct info_str
@@ -898,6 +906,7 @@ int esp_proc_info(struct Scsi_Host *shost, char *buffer, char **start, off_t off
 		*start = buffer;
 	return esp_host_info(esp, buffer, offset, length);
 }
+EXPORT_SYMBOL(esp_proc_info);
 
 static void esp_get_dmabufs(struct NCR_ESP *esp, Scsi_Cmnd *sp)
 {
@@ -3531,6 +3540,7 @@ state_machine:
 	if(esp->dma_irq_exit)
 		esp->dma_irq_exit(esp);
 }
+EXPORT_SYMBOL(esp_handle);
 
 #ifndef CONFIG_SMP
 irqreturn_t esp_intr(int irq, void *dev_id)
@@ -3602,11 +3612,10 @@ out:
 int esp_slave_alloc(struct scsi_device *SDptr)
 {
 	struct esp_device *esp_dev =
-		kmalloc(sizeof(struct esp_device), GFP_ATOMIC);
+		kzalloc(sizeof(struct esp_device), GFP_ATOMIC);
 
 	if (!esp_dev)
 		return -ENOMEM;
-	memset(esp_dev, 0, sizeof(struct esp_device));
 	SDptr->hostdata = esp_dev;
 	return 0;
 }
@@ -3628,6 +3637,7 @@ void esp_release(void)
 	esps_in_use--;
 	esps_running = esps_in_use;
 }
+EXPORT_SYMBOL(esp_release);
 #endif
 
 EXPORT_SYMBOL(esp_abort);

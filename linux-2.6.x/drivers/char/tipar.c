@@ -285,7 +285,7 @@ static ssize_t
 tipar_write (struct file *file, const char __user *buf, size_t count,
 		loff_t * ppos)
 {
-	unsigned int minor = iminor(file->f_dentry->d_inode) - TIPAR_MINOR;
+	unsigned int minor = iminor(file->f_path.dentry->d_inode) - TIPAR_MINOR;
 	ssize_t n;
 
 	parport_claim_or_block(table[minor].dev);
@@ -313,7 +313,7 @@ static ssize_t
 tipar_read(struct file *file, char __user *buf, size_t count, loff_t * ppos)
 {
 	int b = 0;
-	unsigned int minor = iminor(file->f_dentry->d_inode) - TIPAR_MINOR;
+	unsigned int minor = iminor(file->f_path.dentry->d_inode) - TIPAR_MINOR;
 	ssize_t retval = 0;
 	ssize_t n = 0;
 
@@ -442,7 +442,7 @@ tipar_register(int nr, struct parport *port)
 	}
 
 	class_device_create(tipar_class, NULL, MKDEV(TIPAR_MAJOR,
-			TIPAR_MINOR + nr), NULL, "par%d", nr);
+			TIPAR_MINOR + nr), port->dev, "par%d", nr);
 
 	/* Display informations */
 	pr_info("tipar%d: using %s (%s)\n", nr, port->name, (port->irq ==

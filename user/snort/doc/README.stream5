@@ -97,9 +97,9 @@ Can have multiple occurances, per policy that is bound to an IP address.
                                once in a given config, ie:
                                  ports client 21 23 25 42 53 80 110 111 135
                                               136 137 139 143 445 513 1433 1521
-                                              3306 (these it the default)
-                                 ports both 80
-                                 ports server 37
+                                              3306 (these are the default)
+                                 ports both 80 (example)
+                                 ports server 37 (example)
 
 UDP Configuration
 -----------------

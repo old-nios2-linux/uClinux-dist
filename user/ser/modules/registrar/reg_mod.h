@@ -1,9 +1,9 @@
 /* 
- * $Id: reg_mod.h,v 1.6.4.2.2.1 2004/07/11 08:34:41 andrei Exp $ 
+ * $Id: reg_mod.h,v 1.18 2004/12/03 19:09:33 andrei Exp $ 
  *
  * registrar module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,23 +32,29 @@
 #define REG_MOD_H
 
 #include "../../parser/msg_parser.h"
-#include "../../str.h"
+#include "../../qvalue.h"
+#include "../../usr_avp.h"
 #include "../usrloc/usrloc.h"
 
 extern int default_expires;
-extern int default_q;
+extern qvalue_t default_q;
 extern int append_branches;
-extern int use_domain;
 extern int case_sensitive;
 extern int desc_time_order;
 extern int nat_flag;
-extern str realm_prefix;
 extern int min_expires;
 extern int max_expires;
-
+extern int received_avp;
+extern int use_domain;
+extern str realm_prefix;
 extern float def_q;
 
-extern usrloc_api_t ul;  /* Structure containing pointers to usrloc functions */
+extern str rcv_param;
+extern int rcv_avp_no;
+extern int max_contacts;
+extern int retry_after;
+
+usrloc_api_t ul;  /* Structure containing pointers to usrloc functions */
 
 extern int (*sl_reply)(struct sip_msg* _m, char* _s1, char* _s2);
 

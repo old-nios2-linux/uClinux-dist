@@ -13,6 +13,8 @@
 
 #define COMMAND_LINE_SIZE 256
 
+#ifdef __KERNEL__
+
 /* Magic number indicating that a tag table is present */
 #define ATAG_MAGIC	0xa2a25441
 
@@ -108,7 +110,7 @@ struct tagtable {
 	int	(*parse)(struct tag *);
 };
 
-#define __tag __attribute_used__ __attribute__((__section__(".taglist")))
+#define __tag __attribute_used__ __attribute__((__section__(".taglist.init")))
 #define __tagtable(tag, fn)						\
 	static struct tagtable __tagtable_##fn __tag = { tag, fn }
 
@@ -122,20 +124,15 @@ struct tagtable {
 #define for_each_tag(t,base)						\
 	for (t = base; t->hdr.size; t = tag_next(t))
 
-extern struct tag_mem_range *mem_phys;
-extern struct tag_mem_range *mem_reserved;
-extern struct tag_mem_range *mem_ramdisk;
-
 extern struct tag *bootloader_tags;
 
-extern void setup_bootmem(void);
-extern void setup_processor(void);
-extern void board_setup_fbmem(unsigned long fbmem_start,
-			      unsigned long fbmem_size);
+extern resource_size_t fbmem_start;
+extern resource_size_t fbmem_size;
 
-/* Chip-specific hook to enable the use of SDRAM */
-void chip_enable_sdram(void);
+void setup_processor(void);
 
 #endif /* !__ASSEMBLY__ */
+
+#endif  /*  __KERNEL__  */
 
 #endif /* __ASM_AVR32_SETUP_H__ */

@@ -32,12 +32,13 @@ extern int numbytes;
 extern int numdropped;
 extern int numversion;
 
-extern int flat_restorefs(void);
-extern int flat_savefs(int version);
+extern int flat_restorefs(char *configdir);
+extern int flat_savefs(int version, char *configdir);
 extern int flat_new(const char *dir);
-extern int flat_clean(int realclean);
-extern int flat_filecount(void);
+extern int flat_clean(void);
+extern int flat_filecount(char *configdir);
 extern int flat_needinit(void);
+extern int flat_requestinit(void);
 extern int flat_check(void);
 
 #define ERROR_CODE()	(-(__LINE__)) /* unique failure codes :-) */

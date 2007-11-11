@@ -1,35 +1,29 @@
 /* mpz_nextprime(p,t) - compute the next prime > t and store that in p.
 
-Copyright (C) 1999, 2000 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpz_nextprime (mpz_ptr p, mpz_srcptr t)
-#else
-mpz_nextprime (p, t)
-     mpz_ptr    p;
-     mpz_srcptr t;
-#endif
 {
   mpz_add_ui (p, t, 1L);
   while (! mpz_probab_prime_p (p, 5))
@@ -37,7 +31,7 @@ mpz_nextprime (p, t)
 }
 
 #if 0
-/* This code is not yet tested.  Will be enabled in 3.1. */
+/* This code is not yet tested.  Will be enabled some time. */
 
 status unsigned short primes[] =
 {
@@ -53,149 +47,62 @@ status unsigned short primes[] =
 953,967,971,977,983,991,997
 };
 
-#define NUMBER_OF_PRIMES 67
+#define NUMBER_OF_PRIMES 167
 
 void
-#if __STDC__
-mpz_nextprime (mpz_ptr p, mpz_srcptr n, int count, int prime_limit)
-#else
-mpz_nextprime (p, n, count, prime_limit)
-     mpz_ptr p;
-     mpz_srcptr n;
-     int count;
-     int prime_limit;
-#endif
+mpz_nextprime (mpz_ptr p, mpz_srcptr n)
 {
   mpz_t tmp;
-  unsigned long *moduli;
+  unsigned short *moduli;
   unsigned long difference;
   int i;
   int composite;
-  TMP_DECL (marker);
 
   /* First handle tiny numbers */
-  if (mpz_cmp_ui (n, 2) <= 0)
+  if (mpz_cmp_ui (n, 2) < 0)
     {
       mpz_set_ui (p, 2);
       return;
     }
-  mpz_set (p, n);
+  mpz_add_ui (p, n, 1);
   mpz_setbit (p, 0);
 
-  if (mpz_cmp_ui (n, 5) <= 0)
+  if (mpz_cmp_ui (p, 7) <= 0)
     return;
 
-  TMP_MARK (marker);
-  mpz_init (tmp);
-
-  if (prime_limit > (NUMBER_OF_PRIMES - 1))
-    prime_limit = NUMBER_OF_PRIMES - 1;
-  if (prime_limit != 0 && mpz_cmp_ui (p, primes[prime_limit]) <= 0)
-    /* Don't use table for small numbers */
-    prime_limit = 0;
+  prime_limit = NUMBER_OF_PRIMES - 1;
+  if (mpz_cmp_ui (p, primes[prime_limit]) <= 0)
+    /* Just use first three entries (3,5,7) of table for small numbers */
+    prime_limit = 3;
   if (prime_limit)
     {
       /* Compute residues modulo small odd primes */
-      moduli = (unsigned long*) TMP_ALLOC ((prime_limit - 1) * sizeof (*moduli));
+      moduli = (unsigned short *) TMP_ALLOC (prime_limit * sizeof moduli[0]);
       for (i = 0; i < prime_limit; i++)
-       moduli[i] = mpz_fdiv_ui (p, primes[i + 1]);
+	moduli[i] = mpz_fdiv_ui (p, primes[i]);
     }
   for (difference = 0; ; difference += 2)
     {
-      if (difference >= (~(unsigned long) 0) - 10)
-       { /* Should not happen, at least not very often... */
-	 mpz_add_ui (p, p, difference);
-	 difference = 0;
-       }
       composite = 0;
 
       /* First check residues */
-      if (prime_limit)
-       for (i = 0; i < prime_limit; i++)
-	 {
-	   if (moduli[i] == 0)
-	     composite = 1;
-	   moduli[i] = (moduli[i] + 2) % primes[i + 1];
-	 }
+      for (i = 0; i < prime_limit; i++)
+	{
+	  int acc, pr;
+	  composite |= (moduli[i] == 0);
+	  acc = moduli[i] + 2;
+	  pr = primes[i];
+	  moduli[i] = acc >= pr ? acc - pr : acc;
+	}
       if (composite)
-       continue;
+	continue;
 
       mpz_add_ui (p, p, difference);
       difference = 0;
 
-      /* Fermat test, with respect to 2 */
-      mpz_set_ui (tmp, 2);
-      mpz_powm (tmp, tmp, p, p);
-      if (mpz_cmp_ui (tmp, 2) != 0)
-       continue;
-
       /* Miller-Rabin test */
-      if (mpz_millerrabin (p, count))
+      if (mpz_millerrabin (p, 2))
 	break;
     }
-  mpz_clear (tmp);
-  TMP_FREE (marker);
-}
-
-static int
-mpz_millerrabin (n, nruns)
-     mpz_srcptr n;
-     int nruns;
-{
-  unsigned long int i;
-  mpz_t x, y;
-  mpz_t n_minus_1, q;
-  mp_size_t nn;
-  unsigned long int nb;
-  gmp_randstate_t rstate;
-  unsigned long int k;
-  int run;
-  TMP_DECL (marker);
-
-  TMP_MARK (marker);
-
-  nn = ABSIZ (n);
-
-  MPZ_TMP_INIT (x, nn + 40);	/* mpz_urandomb needs mysteriously much memory */
-  MPZ_TMP_INIT (y, nn + 1);
-  MPZ_TMP_INIT (n_minus_1, nn + 1);
-  MPZ_TMP_INIT (q, nn);
-
-  gmp_randinit (rstate, 32L, GMP_RAND_ALG_DEFAULT);
-
-  mpz_sub_ui (n_minus_1, n, 1L);
-  k = mpz_scan1 (n_minus_1, 0L);
-  mpz_tdiv_q_2exp (q, n_minus_1, k);
-
-  nb = mpz_sizeinbase (n, 2);
-
-  for (run = 0; run < nruns; run++)
-    {
-      /* find random x s.t. 1 < x < n */
-      do
-	{
-	  mpz_urandomb (x, rstate, nb);
-	  mpz_tdiv_r (x, x, n);
-	}
-      while (mpz_cmp_ui (x, 1L) <= 0);
-
-      mpz_powm (y, x, q, n);
-
-      if (mpz_cmp_ui (y, 1L) == 0 || mpz_cmp (y, n_minus_1) == 0)
-	continue;
-
-      for (i = 1; i < k; i++)
-	{
-	  mpz_powm_ui (y, y, 2L, n);
-	  if (mpz_cmp (y, n_minus_1) == 0)
-	    continue;
-	  if (mpz_cmp_ui (y, 1L) == 0)
-	    return 0;
-	}
-      return 0;
-    }
-
-  gmp_randclear (rstate);
-  TMP_FREE (marker);
 }
 #endif

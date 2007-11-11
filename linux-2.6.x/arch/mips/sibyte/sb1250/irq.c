@@ -44,11 +44,9 @@
  */
 
 
-#define shutdown_sb1250_irq	disable_sb1250_irq
 static void end_sb1250_irq(unsigned int irq);
 static void enable_sb1250_irq(unsigned int irq);
 static void disable_sb1250_irq(unsigned int irq);
-static unsigned int startup_sb1250_irq(unsigned int irq);
 static void ack_sb1250_irq(unsigned int irq);
 #ifdef CONFIG_SMP
 static void sb1250_set_affinity(unsigned int irq, cpumask_t mask);
@@ -63,18 +61,17 @@ static int kgdb_irq;
 
 /* Default to UART1 */
 int kgdb_port = 1;
-#ifdef CONFIG_SIBYTE_SB1250_DUART
+#ifdef CONFIG_SERIAL_SB1250_DUART
 extern char sb1250_duart_present[];
 #endif
 #endif
 
 static struct irq_chip sb1250_irq_type = {
-	.typename = "SB1250-IMR",
-	.startup = startup_sb1250_irq,
-	.shutdown = shutdown_sb1250_irq,
-	.enable = enable_sb1250_irq,
-	.disable = disable_sb1250_irq,
+	.name = "SB1250-IMR",
 	.ack = ack_sb1250_irq,
+	.mask = disable_sb1250_irq,
+	.mask_ack = ack_sb1250_irq,
+	.unmask = enable_sb1250_irq,
 	.end = end_sb1250_irq,
 #ifdef CONFIG_SMP
 	.set_affinity = sb1250_set_affinity
@@ -163,14 +160,6 @@ static void sb1250_set_affinity(unsigned int irq, cpumask_t mask)
 
 /*****************************************************************************/
 
-static unsigned int startup_sb1250_irq(unsigned int irq)
-{
-	sb1250_unmask_irq(sb1250_irq_owner[irq], irq);
-
-	return 0;		/* never anything pending */
-}
-
-
 static void disable_sb1250_irq(unsigned int irq)
 {
 	sb1250_mask_irq(sb1250_irq_owner[irq], irq);
@@ -239,16 +228,9 @@ void __init init_sb1250_irqs(void)
 {
 	int i;
 
-	for (i = 0; i < NR_IRQS; i++) {
-		irq_desc[i].status = IRQ_DISABLED;
-		irq_desc[i].action = 0;
-		irq_desc[i].depth = 1;
-		if (i < SB1250_NR_IRQS) {
-			irq_desc[i].chip = &sb1250_irq_type;
-			sb1250_irq_owner[i] = 0;
-		} else {
-			irq_desc[i].chip = &no_irq_chip;
-		}
+	for (i = 0; i < SB1250_NR_IRQS; i++) {
+		set_irq_chip(i, &sb1250_irq_type);
+		sb1250_irq_owner[i] = 0;
 	}
 }
 
@@ -377,7 +359,7 @@ void __init arch_init_irq(void)
 	if (kgdb_flag) {
 		kgdb_irq = K_INT_UART_0 + kgdb_port;
 
-#ifdef CONFIG_SIBYTE_SB1250_DUART
+#ifdef CONFIG_SERIAL_SB1250_DUART
 		sb1250_duart_present[kgdb_port] = 0;
 #endif
 		/* Setup uart 1 settings, mapper */
@@ -439,7 +421,7 @@ asmlinkage void plat_irq_dispatch(void)
 	 * blasting the high 32 bits.
 	 */
 
-	pending = read_c0_cause() & read_c0_status();
+	pending = read_c0_cause() & read_c0_status() & ST0_IM;
 
 #ifdef CONFIG_SIBYTE_SB1250_PROF
 	if (pending & CAUSEF_IP7) /* Cpu performance counter interrupt */

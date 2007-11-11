@@ -29,7 +29,6 @@
 #include <linux/proc_fs.h>
 #include <linux/workqueue.h>
 #include <linux/swap.h>
-#include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
 #include <linux/netfilter.h>
@@ -221,10 +220,10 @@ static void update_defense_level(void)
  *	Timer for checking the defense
  */
 #define DEFENSE_TIMER_PERIOD	1*HZ
-static void defense_work_handler(void *data);
-static DECLARE_WORK(defense_work, defense_work_handler, NULL);
+static void defense_work_handler(struct work_struct *work);
+static DECLARE_DELAYED_WORK(defense_work, defense_work_handler);
 
-static void defense_work_handler(void *data)
+static void defense_work_handler(struct work_struct *work)
 {
 	update_defense_level();
 	if (atomic_read(&ip_vs_dropentry))
@@ -909,7 +908,7 @@ ip_vs_edit_dest(struct ip_vs_service *svc, struct ip_vs_dest_user *udest)
 	write_lock_bh(&__ip_vs_svc_lock);
 
 	/* Wait until all other svc users go away */
-	while (atomic_read(&svc->usecnt) > 1) {};
+	IP_VS_WAIT_WHILE(atomic_read(&svc->usecnt) > 1);
 
 	/* call the update_service, because server weight may be changed */
 	svc->scheduler->update_service(svc);
@@ -1783,7 +1782,7 @@ static int ip_vs_info_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static struct seq_operations ip_vs_info_seq_ops = {
+static const struct seq_operations ip_vs_info_seq_ops = {
 	.start = ip_vs_info_seq_start,
 	.next  = ip_vs_info_seq_next,
 	.stop  = ip_vs_info_seq_stop,
@@ -1812,7 +1811,7 @@ out_kfree:
 	goto out;
 }
 
-static struct file_operations ip_vs_info_fops = {
+static const struct file_operations ip_vs_info_fops = {
 	.owner	 = THIS_MODULE,
 	.open    = ip_vs_info_open,
 	.read    = seq_read,
@@ -1859,7 +1858,7 @@ static int ip_vs_stats_seq_open(struct inode *inode, struct file *file)
 	return single_open(file, ip_vs_stats_show, NULL);
 }
 
-static struct file_operations ip_vs_stats_fops = {
+static const struct file_operations ip_vs_stats_fops = {
 	.owner = THIS_MODULE,
 	.open = ip_vs_stats_seq_open,
 	.read = seq_read,
@@ -2340,6 +2339,7 @@ static struct nf_sockopt_ops ip_vs_sockopts = {
 	.get_optmin	= IP_VS_BASE_CTL,
 	.get_optmax	= IP_VS_SO_GET_MAX+1,
 	.get		= do_ip_vs_get_ctl,
+	.owner		= THIS_MODULE,
 };
 
 
@@ -2359,7 +2359,7 @@ int ip_vs_control_init(void)
 	proc_net_fops_create("ip_vs", 0, &ip_vs_info_fops);
 	proc_net_fops_create("ip_vs_stats",0, &ip_vs_stats_fops);
 
-	sysctl_header = register_sysctl_table(vs_root_table, 0);
+	sysctl_header = register_sysctl_table(vs_root_table);
 
 	/* Initialize ip_vs_svc_table, ip_vs_svc_fwm_table, ip_vs_rtable */
 	for(idx = 0; idx < IP_VS_SVC_TAB_SIZE; idx++)  {
@@ -2387,6 +2387,7 @@ void ip_vs_control_cleanup(void)
 	EnterFunction(2);
 	ip_vs_trash_cleanup();
 	cancel_rearming_delayed_work(&defense_work);
+	cancel_work_sync(&defense_work.work);
 	ip_vs_kill_estimator(&ip_vs_stats);
 	unregister_sysctl_table(sysctl_header);
 	proc_net_remove("ip_vs_stats");

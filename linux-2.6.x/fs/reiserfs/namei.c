@@ -16,7 +16,6 @@
 #include <linux/reiserfs_fs.h>
 #include <linux/reiserfs_acl.h>
 #include <linux/reiserfs_xattr.h>
-#include <linux/smp_lock.h>
 #include <linux/quotaops.h>
 
 #define INC_DIR_INODE_NLINK(i) if (i->i_nlink != 1) { inc_nlink(i); if (i->i_nlink >= REISERFS_LINK_MAX) i->i_nlink=1; }
@@ -54,7 +53,7 @@ static int bin_search_in_dir_item(struct reiserfs_dir_entry *de, loff_t off)
 
 // comment?  maybe something like set de to point to what the path points to?
 static inline void set_de_item_location(struct reiserfs_dir_entry *de,
-					struct path *path)
+					struct treepath *path)
 {
 	de->de_bh = get_last_bh(path);
 	de->de_ih = get_ih(path);
@@ -113,7 +112,7 @@ entry position in the item
 
 /* The function is NOT SCHEDULE-SAFE! */
 int search_by_entry_key(struct super_block *sb, const struct cpu_key *key,
-			struct path *path, struct reiserfs_dir_entry *de)
+			struct treepath *path, struct reiserfs_dir_entry *de)
 {
 	int retval;
 
@@ -282,7 +281,7 @@ static int linear_search_in_dir_item(struct cpu_key *key,
 // may return NAME_FOUND, NAME_FOUND_INVISIBLE, NAME_NOT_FOUND
 // FIXME: should add something like IOERROR
 static int reiserfs_find_entry(struct inode *dir, const char *name, int namelen,
-			       struct path *path_to_entry,
+			       struct treepath *path_to_entry,
 			       struct reiserfs_dir_entry *de)
 {
 	struct cpu_key key_to_search;
@@ -1525,7 +1524,7 @@ static int reiserfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 /*
  * directories can handle most operations...
  */
-struct inode_operations reiserfs_dir_inode_operations = {
+const struct inode_operations reiserfs_dir_inode_operations = {
 	//&reiserfs_dir_operations,   /* default_file_ops */
 	.create = reiserfs_create,
 	.lookup = reiserfs_lookup,
@@ -1548,7 +1547,7 @@ struct inode_operations reiserfs_dir_inode_operations = {
  * symlink operations.. same as page_symlink_inode_operations, with xattr
  * stuff added
  */
-struct inode_operations reiserfs_symlink_inode_operations = {
+const struct inode_operations reiserfs_symlink_inode_operations = {
 	.readlink = generic_readlink,
 	.follow_link = page_follow_link_light,
 	.put_link = page_put_link,
@@ -1564,7 +1563,7 @@ struct inode_operations reiserfs_symlink_inode_operations = {
 /*
  * special file operations.. just xattr/acl stuff
  */
-struct inode_operations reiserfs_special_inode_operations = {
+const struct inode_operations reiserfs_special_inode_operations = {
 	.setattr = reiserfs_setattr,
 	.setxattr = reiserfs_setxattr,
 	.getxattr = reiserfs_getxattr,

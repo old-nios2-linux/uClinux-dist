@@ -108,6 +108,7 @@ int BoyerContentSetup(Rule *rule, ContentInfo *content)
  *      normalized(alt-decode)
  *      raw
  *      uri
+ *      post
  *      
  */
 ENGINE_LINKAGE int contentMatch(void *p, ContentInfo* content, u_int8_t **cursor)
@@ -130,10 +131,24 @@ ENGINE_LINKAGE int contentMatch(void *p, ContentInfo* content, u_int8_t **cursor
         relative = 1;
     }
 
-    if (content->flags & CONTENT_BUF_URI)
+    if (content->flags & (CONTENT_BUF_URI | CONTENT_BUF_POST))
     {
         for (i=0;i<sp->num_uris; i++)
         {
+            if ((content->flags & CONTENT_BUF_URI) && (i != HTTP_BUFFER_URI))
+            {
+                /* Not looking at the "URI" buffer...
+                 * keep going. */
+                continue;
+            }
+
+            if ((content->flags & CONTENT_BUF_POST) && (i != HTTP_BUFFER_CLIENT_BODY))
+            {
+                /* Not looking at the "POST" buffer...
+                 * keep going. */
+                continue;
+            }
+
             if (relative)
             {
                 if (checkCursorInternal(p, content->flags, content->offset, *cursor) <= 0)

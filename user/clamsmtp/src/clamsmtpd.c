@@ -35,15 +35,23 @@
  *  Nate Nielsen <nielsen@memberwebs.com>
  */ 
 
+#include <config/autoconf.h>
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <ctype.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <errno.h>
+#include <netdb.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "usuals.h"
 
@@ -53,6 +61,11 @@
 
 #define SP_LEGACY_OPTIONS
 #include "smtppass.h"
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+#include "librep.h"
+#include "query.h"
+#endif
 
 /* -----------------------------------------------------------------------
  *  STRUCTURES
@@ -68,6 +81,7 @@ typedef struct clstate
     int bounce;                     /* Send back a reject line */
     int quarantine;                 /* Leave virus files in temp dir */
     int debug_files;                /* Leave all files in temp dir */
+    int passthrough;                /* if the server is running in passthrough (no AV */
 }
 clstate_t;
 
@@ -126,12 +140,34 @@ clctx_t;
 #define CFG_QUARANTINE  "Quarantine"
 #define CFG_DEBUGFILES  "DebugFiles"
 #define CFG_VIRUSACTION "VirusAction"
+#define CFG_TRUSTEDSOURCE "TrustedSourceServer"
+#define CFG_SPAMTHRESHOLD "SpamThreshold"
+#define CFG_TRUSTEDSOURCE_ENABLED "TrustedSourceEnabled"
+#define CFG_SERIALKEY    "SerialKey"
+#define CFG_VENDORSTRING "VendorString"
+#define CFG_TRUSTEDSOURCEV2_ENABLED "TrustedSourcev2Enabled"
+#define CFG_TRUSTEDSOURCEV2_SERVER "TrustedSourcev2Server"
+#define CFG_TRUSTEDSOURCEV2_THRESHOLD "TrustedSourcev2Threshold"
+#define CFG_PASSTHROUGH  "Passthrough"
+
 
 /* -----------------------------------------------------------------------
  *  GLOBALS
  */
  
 clstate_t g_clstate;
+
+/*
+ * Anti-spam globals
+ */
+char *g_trustedsource_server = NULL;        /* server address */
+char *g_serial = NULL;                      /* serial/key */
+char *g_vendor = NULL;                      /* vendor string */
+int g_threshold = 0;                        /* reject threshold */
+int g_trustedsource_enabled = 0;            /* lookups enabled or disabled */
+int g_trustedsourcev2_enabled = 0;          /* ver 2 lookups enabled or disabled */
+
+extern int h_errno;
 
 /* -----------------------------------------------------------------------
  *  FORWARD DECLARATIONS
@@ -338,6 +374,13 @@ int cb_check_data(spctx_t* sp)
     const char* virus;
     clctx_t* ctx = (clctx_t*)sp;
 
+    /* if it's configured as a passthrough, then no av */
+    /* shouldn't ever get here anyway */
+    if(g_clstate.passthrough) {
+        return sp_done_data(sp);
+    }
+
+#ifdef CONFIG_USER_CLAMAV_CLAMAV
     /* ClamAV doesn't like empty files */
     if((r = sp_cache_data(sp)) > 0)
     {    
@@ -348,7 +391,7 @@ int cb_check_data(spctx_t* sp)
         if(r != -1)
             r = clam_scan_file(ctx, &virus);
     }
-        
+
     switch(r)
     {
       
@@ -366,6 +409,9 @@ int cb_check_data(spctx_t* sp)
      * and transfer the file to it.
      */ 
     case 0:
+#ifdef CONFIG_PROP_STATSD_STATSD
+		system("statsd -a incr clamav-smtp total");
+#endif
         if(sp_done_data(sp) == -1)
             return -1;
         break;
@@ -380,6 +426,10 @@ int cb_check_data(spctx_t* sp)
         /* Any special post operation actions on the virus */
         virus_action(ctx, virus);
         
+#ifdef CONFIG_PROP_STATSD_STATSD
+		system("statsd -a incr clamav-smtp infected \\;"
+			            " incr clamav-smtp total");
+#endif
         if(sp_fail_data(sp, g_clstate.bounce ? 
                             SMTP_DATAVIRUS : SMTP_DATAVIRUSOK) == -1)
             return -1;
@@ -391,10 +441,14 @@ int cb_check_data(spctx_t* sp)
     };
     
     return 0;
+#else
+    return 0;
+#endif
 }
 
 int cb_parse_option(const char* name, const char* value)
 {
+    char *t;
     if(strcasecmp(CFG_CLAMADDR, name) == 0)
     {
         if(sock_any_pton(value, &(g_clstate.clamaddr), SANY_OPT_DEFLOCAL) == -1)
@@ -442,7 +496,72 @@ int cb_parse_option(const char* name, const char* value)
         g_clstate.virusaction = value;
         return 1;
     }
-        
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE
+    else if(strcasecmp(CFG_TRUSTEDSOURCE, name) == 0)
+    {
+        g_trustedsource_server = (char *)value;
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_SPAMTHRESHOLD, name) == 0)
+    {
+        g_threshold = strtol(value, &t, 10);
+        if(*t)
+            errx(2, "invalid setting for " CFG_SPAMTHRESHOLD);
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_TRUSTEDSOURCE_ENABLED, name) == 0)
+    {
+        if((g_trustedsource_enabled = strtob(value)) == -1)
+            errx(2, "invalid value for " CFG_TRUSTEDSOURCE_ENABLED);
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_SERIALKEY, name) == 0)
+    {
+        g_serial = (char *)value;
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_VENDORSTRING, name) == 0)
+    {
+        g_vendor = (char *)value;
+        return 1;
+    }
+
+#endif
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+    else if(strcasecmp(CFG_TRUSTEDSOURCEV2_ENABLED, name) == 0)
+    {
+        if((g_trustedsourcev2_enabled = strtob(value)) == -1)
+            errx(2, "invalid value for " CFG_TRUSTEDSOURCEV2_ENABLED);
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_TRUSTEDSOURCEV2_SERVER, name) == 0)
+    {
+        g_trustedsource_server = (char *)value;
+        return 1;
+    }
+
+    else if(strcasecmp(CFG_TRUSTEDSOURCEV2_THRESHOLD, name) == 0)
+    {
+        g_threshold = strtol(value, &t, 10);
+        if(*t)
+            errx(2, "invalid setting for " CFG_TRUSTEDSOURCEV2_THRESHOLD);
+        return 1;
+    }
+
+#endif
+   else if(strcasecmp(CFG_PASSTHROUGH, name) == 0)
+    {
+        if((g_clstate.passthrough = strtob(value)) == -1)
+            errx(2, "invalid value for " CFG_PASSTHROUGH);
+        return 1;
+    }
+
     return 0;
 }
 
@@ -476,6 +595,162 @@ void cb_del_context(spctx_t* sp)
             ;
     }
 }
+
+int cb_check_client(spctx_t* sp, struct sockaddr_any* peeraddr)
+{
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+    RepQuery_t *repqu;
+    RepResponse_t *resp;
+#endif
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE
+    char* namebuf = NULL;
+    struct hostent *response = NULL;
+    int x = 0, z = 0; 
+    int score = 0;
+    unsigned long my_ip;
+
+    if (!g_trustedsource_enabled) goto trustedsourcev2;
+
+    sp_messagex(sp, LOG_DEBUG, "checking client");
+
+    /* piece together the 'domain name' to lookup */
+    namebuf = malloc(sizeof(char) * 256);
+    if (namebuf == NULL) {
+        sp_message(sp, LOG_ERR, "error creating anti-spam lookup");
+        return 1; 
+    }
+
+    my_ip = ntohl(peeraddr->s.in.sin_addr.s_addr);
+
+    /* b.<SERIAL>-<VENDOR>.d.c.b.a.ts-api.ciphertrust.net */
+    sprintf(namebuf, "b.%s-%s.%d.%d.%d.%d.%s",
+        g_serial,
+        g_vendor,
+        (my_ip >> 0) & 0xff,
+        (my_ip >> 8) & 0xff,
+        (my_ip >> 16) & 0xff,
+        (my_ip >> 24) & 0xff,
+        g_trustedsource_server
+        );
+
+    sp_messagex(sp, LOG_DEBUG, "doing trustedsource lookup for %s", namebuf);
+
+    /* do the gethostbyname lookup */
+    response = gethostbyname(namebuf);
+    free(namebuf);
+
+    if (response == NULL) {
+        /* on error, log it ... */
+        sp_messagex(NULL, LOG_ALERT, "error %d getting trusted source rating", h_errno);
+        /* ... and allow it through */
+        return 1; 
+    }
+    my_ip = ntohl(*(unsigned long *)(response->h_addr));
+
+    sp_messagex(sp, LOG_DEBUG, "trustedsource response: %s\n", inet_ntoa(*((struct in_addr *)response->h_addr)));
+
+    /* on success, decode the response and allow or deny appropriately:
+     * if response is w.x.y.z then the score is as follows:
+     * if (x & 1) == 1 then score = -z
+     * else score = z
+     */
+
+    x = (my_ip >> 16) & 0x01;
+    z = (my_ip >> 0) & 0xff;
+
+    if (x) {
+        score = -z;
+    } else {
+        score = z;
+    }
+
+    /* check the score against the threshold and decide to drop or allow */
+    /* The higher the score the 'worse' the client's reputation */
+    if (score >= g_threshold) {
+        sp_messagex(NULL, LOG_ALERT, "client connection from %s is untrusted (score: %d)", inet_ntoa(peeraddr->s.in.sin_addr), score);
+#ifdef CONFIG_PROP_STATSD_STATSD
+		system("statsd -a incr trustedsource spam \\;"
+			            " incr trustedsource total");
+#endif
+        return -1;
+    } else {
+#ifdef CONFIG_PROP_STATSD_STATSD
+		system("statsd -a incr trustedsource total");
+#endif
+        sp_messagex(NULL, LOG_INFO, "client connection from %s is trusted (score: %d)", inet_ntoa(peeraddr->s.in.sin_addr), score);
+
+        return 1;
+    }
+trustedsourcev2:
+
+#endif
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+    /* If there are any failures in performing the query, we return success */
+
+    /*
+     * DEBUG
+     * sp_messagex(sp, LOG_ERR, "DEBUG - Trusted Source v2:");
+     * sp_messagex(sp, LOG_ERR, "DEBUG -   enabled:   %d", g_trustedsourcev2_enabled);
+     * sp_messagex(sp, LOG_ERR, "DEBUG -   server:    %s", g_trustedsource_server);
+     * sp_messagex(sp, LOG_ERR, "DEBUG -   threshold: %d", g_threshold);
+     */
+
+    if (!g_trustedsourcev2_enabled)
+    {
+        return 1;
+    }
+
+    repqu = RepQuery_New();
+    if (repqu == NULL)
+    {
+        sp_messagex(sp, LOG_ERR, "error creating Trusted Source v2 query");
+        return 1;
+    }
+
+    RepQuery_NewQuery(repqu);
+    RepQuery_NewChunk(repqu, C_IM);
+    RepQuery_AddDeviceSerial(repqu, g_serial);
+    RepQuery_AddIP(repqu, peeraddr->s.in.sin_addr.s_addr);
+
+    if(RepQuery_Connect(repqu, g_trustedsource_server)) {
+      sp_message(sp, LOG_ERR, "error connecting to Trusted Source v2 server");
+      return 1;
+    }
+
+    resp = RepQuery_DoQuery(repqu);
+    if (resp == NULL)
+    {
+        sp_message(sp, LOG_ERR, "error invalid or no response from Trusted Source v2 server");
+        return 1;
+    }
+
+    if (VALUE_IS_SET(resp->error)) {
+        sp_messagex(sp, LOG_ERR, "error querying Trusted Source v2 server, code: %d", VALUE_GET(resp->error));
+        return 1;
+    } else {
+        /* DEBUG sp_message(sp, LOG_ERR, "IP Trusted Source v2 reputation: %d", VALUE_GET(resp->pr_ip)); */
+
+        if (VALUE_GET(resp->pr_ip) >= g_threshold) {
+            sp_messagex(sp, LOG_ERR, "client connection from %s is untrusted (score: %d)", inet_ntoa(peeraddr->s.in.sin_addr), VALUE_GET(resp->pr_ip));
+            return -1;
+        } else {
+            sp_messagex(sp, LOG_DEBUG, "client connection from %s is acceptable (score: %d is below threshold of %d)\n", 
+                        inet_ntoa(peeraddr->s.in.sin_addr), VALUE_GET(resp->pr_ip), g_threshold);
+            return 1;
+        }
+    }
+
+    RepResponse_Delete(resp);
+    RepQuery_Delete(repqu);
+#endif
+
+#if !(defined(CONFIG_USER_TRUSTEDSOURCE_V2))
+    return 1;
+#endif
+}
+
 
 /* ----------------------------------------------------------------------------------
  *  CLAM AV
@@ -667,7 +942,7 @@ static int virus_action(clctx_t* ctx, const char* virus)
             *t = 0;
             strlcat(qfilename, "XXXXXX", MAXPATHLEN);
             
-            if(!mktemp(qfilename))
+            if(!mkstemp(qfilename))
             {
                 sp_message(sp, LOG_ERR, "couldn't create quarantine file name");
                 return -1;

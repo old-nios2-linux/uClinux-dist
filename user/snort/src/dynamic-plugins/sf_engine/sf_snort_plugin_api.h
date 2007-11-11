@@ -91,6 +91,7 @@ typedef long int32_t;
 #define CONTENT_BUF_NORMALIZED  0x100
 #define CONTENT_BUF_RAW         0x200
 #define CONTENT_BUF_URI         0x400
+#define CONTENT_BUF_POST        0x800
 
 #define BYTE_LITTLE_ENDIAN      0x0000
 #define BYTE_BIG_ENDIAN         0x1000

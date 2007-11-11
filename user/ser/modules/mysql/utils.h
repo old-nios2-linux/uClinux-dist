@@ -1,9 +1,9 @@
 /* 
- * $Id: utils.h,v 1.4 2002/09/19 12:23:54 jku Rel $ 
+ * $Id: utils.h,v 1.7 2004/08/24 08:58:31 janakj Exp $ 
  *
  * MySQL module utilities
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,29 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-char* trim(char* _s);
+#include <time.h>
+
+
+/*
+ * Convert time_t structure to format accepted by MySQL database
+ */
+int time2mysql(time_t _time, char* _result, int _res_len);
+
+
+/*
+ * Convert MySQL time representation to time_t structure
+ */
+time_t mysql2time(const char* _str);
+
+
+/*
+ * Parse a mysql database URL of form 
+ * mysql://[username[:password]@]hostname[:port]/database
+ *
+ * Returns 0 if parsing was successful and -1 otherwise
+ */
+int parse_mysql_url(char* _url, char** _user, char** _pass,
+		    char** _host, char** _port, char** _db);
+
 
 #endif /* UTILS_H */

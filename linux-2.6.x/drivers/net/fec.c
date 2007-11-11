@@ -47,6 +47,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/cacheflush.h>
 
 #if defined(CONFIG_M523x) || defined(CONFIG_M527x) || \
     defined(CONFIG_M5272) || defined(CONFIG_M528x) || \
@@ -98,8 +99,6 @@ static unsigned char	fec_mac_default[] = {
 #define	FEC_FLASHMAC	0xf0006006
 #elif defined(CONFIG_GILBARCONAP) || defined(CONFIG_SCALES)
 #define	FEC_FLASHMAC	0xf0006000
-#elif defined (CONFIG_MTD_KeyTechnology)
-#define	FEC_FLASHMAC	0xffe04000
 #elif defined(CONFIG_CANCam)
 #define	FEC_FLASHMAC	0xf0020000
 #elif defined (CONFIG_M5272C3)
@@ -190,6 +189,8 @@ typedef struct {
 struct fec_enet_private {
 	/* Hardware registers of the FEC device */
 	volatile fec_t	*hwp;
+
+	struct net_device *netdev;
 
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	unsigned char *tx_bounce[TX_RING_SIZE];
@@ -647,9 +648,8 @@ while (!((status = bdp->cbd_sc) & BD_ENET_RX_EMPTY)) {
 		printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 		fep->stats.rx_dropped++;
 	} else {
-		skb->dev = dev;
 		skb_put(skb,pkt_len-4);	/* Make room */
-		eth_copy_and_sum(skb, data, pkt_len-4, 0);
+		skb_copy_to_linear_data(skb, data, pkt_len-4);
 		skb->protocol=eth_type_trans(skb,dev);
 		netif_rx(skb);
 	}
@@ -753,13 +753,11 @@ mii_queue(struct net_device *dev, int regval, void (*func)(uint, struct net_devi
 		if (mii_head) {
 			mii_tail->mii_next = mip;
 			mii_tail = mip;
-		}
-		else {
+		} else {
 			mii_head = mii_tail = mip;
 			fep->hwp->fec_mii_data = regval;
 		}
-	}
-	else {
+	} else {
 		retval = 1;
 	}
 
@@ -770,14 +768,11 @@ mii_queue(struct net_device *dev, int regval, void (*func)(uint, struct net_devi
 
 static void mii_do_cmd(struct net_device *dev, const phy_cmd_t *c)
 {
-	int k;
-
 	if(!c)
 		return;
 
-	for(k = 0; (c+k)->mii_data != mk_mii_end; k++) {
-		mii_queue(dev, (c+k)->mii_data, (c+k)->funct);
-	}
+	for (; c->mii_data != mk_mii_end; c++)
+		mii_queue(dev, c->mii_data, c->funct);
 }
 
 static void mii_parse_sr(uint mii_reg, struct net_device *dev)
@@ -794,7 +789,6 @@ static void mii_parse_sr(uint mii_reg, struct net_device *dev)
 		status |= PHY_STAT_FAULT;
 	if (mii_reg & 0x0020)
 		status |= PHY_STAT_ANC;
-
 	*s = status;
 }
 
@@ -1241,7 +1235,6 @@ mii_link_interrupt(int irq, void * dev_id);
 #endif
 
 #if defined(CONFIG_M5272)
-
 /*
  *	Code specific to Coldfire 5272 setup.
  */
@@ -1270,7 +1263,7 @@ static void __inline__ fec_request_intrs(struct net_device *dev)
 	icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR3);
 	*icrp = 0x00000ddd;
 	icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
-	*icrp = (*icrp & 0x70777777) | 0x0d000000;
+	*icrp = 0x0d000000;
 }
 
 static void __inline__ fec_set_mii(struct net_device *dev, struct fec_enet_private *fep)
@@ -1332,7 +1325,7 @@ static void __inline__ fec_disable_phy_intr(void)
 {
 	volatile unsigned long *icrp;
 	icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
-	*icrp = (*icrp & 0x70777777) | 0x08000000;
+	*icrp = 0x08000000;
 }
 
 static void __inline__ fec_phy_ack_intr(void)
@@ -1340,7 +1333,7 @@ static void __inline__ fec_phy_ack_intr(void)
 	volatile unsigned long *icrp;
 	/* Acknowledge the interrupt */
 	icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
-	*icrp = (*icrp & 0x77777777) | 0x08000000;
+	*icrp = 0x0d000000;
 }
 
 static void __inline__ fec_localhw_setup(void)
@@ -1964,9 +1957,10 @@ static void mii_display_status(struct net_device *dev)
 	printk(".\n");
 }
 
-static void mii_display_config(struct net_device *dev)
+static void mii_display_config(struct work_struct *work)
 {
-	struct fec_enet_private *fep = netdev_priv(dev);
+	struct fec_enet_private *fep = container_of(work, struct fec_enet_private, phy_task);
+	struct net_device *dev = fep->netdev;
 	uint status = fep->phy_status;
 
 	/*
@@ -2000,9 +1994,10 @@ static void mii_display_config(struct net_device *dev)
 	fep->sequence_done = 1;
 }
 
-static void mii_relink(struct net_device *dev)
+static void mii_relink(struct work_struct *work)
 {
-	struct fec_enet_private *fep = netdev_priv(dev);
+	struct fec_enet_private *fep = container_of(work, struct fec_enet_private, phy_task);
+	struct net_device *dev = fep->netdev;
 	int duplex;
 
 	/*
@@ -2020,8 +2015,7 @@ static void mii_relink(struct net_device *dev)
 		    & (PHY_STAT_100FDX | PHY_STAT_10FDX))
 			duplex = 1;
 		fec_restart(dev, duplex);
-	}
-	else
+	} else
 		fec_stop(dev);
 
 #if 0
@@ -2046,7 +2040,7 @@ static void mii_queue_relink(uint mii_reg, struct net_device *dev)
 		return;
 
 	fep->mii_phy_task_queued = 1;
-	INIT_WORK(&fep->phy_task, (void*)mii_relink, dev);
+	INIT_WORK(&fep->phy_task, mii_relink);
 	schedule_work(&fep->phy_task);
 }
 
@@ -2059,7 +2053,7 @@ static void mii_queue_config(uint mii_reg, struct net_device *dev)
 		return;
 
 	fep->mii_phy_task_queued = 1;
-	INIT_WORK(&fep->phy_task, (void*)mii_display_config, dev);
+	INIT_WORK(&fep->phy_task, mii_display_config);
 	schedule_work(&fep->phy_task);
 }
 
@@ -2119,8 +2113,7 @@ mii_discover_phy(uint mii_reg, struct net_device *dev)
 			fep->phy_id = phytype << 16;
 			mii_queue(dev, mk_mii_read(MII_REG_PHYIR2),
 							mii_discover_phy3);
-		}
-		else {
+		} else {
 			fep->phy_addr++;
 			mii_queue(dev, mk_mii_read(MII_REG_PHYIR1),
 							mii_discover_phy);
@@ -2354,6 +2347,7 @@ int __init fec_enet_init(struct net_device *dev)
 
 	fep->index = index;
 	fep->hwp = fecp;
+	fep->netdev = dev;
 
 	/* Whack a reset.  We should wait for this.
 	*/
@@ -2581,8 +2575,7 @@ fec_restart(struct net_device *dev, int duplex)
 	if (duplex) {
 		fecp->fec_r_cntrl = OPT_FRAME_SIZE | 0x04;/* MII enable */
 		fecp->fec_x_cntrl = 0x04;		  /* FD enable */
-	}
-	else {
+	} else {
 		/* MII enable|No Rcv on Xmit */
 		fecp->fec_r_cntrl = OPT_FRAME_SIZE | 0x06;
 		fecp->fec_x_cntrl = 0x00;

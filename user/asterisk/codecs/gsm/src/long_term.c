@@ -4,7 +4,7 @@
  * details.  THERE IS ABSOLUTELY NO WARRANTY FOR THIS SOFTWARE.
  */
 
-/* $Header: /usr/cvsroot/asterisk/codecs/gsm/src/long_term.c,v 1.16 2003/02/12 13:59:14 matteo Exp $ */
+/* $Header$ */
 
 #include <stdio.h>
 #include <assert.h>
@@ -278,8 +278,8 @@ static void Calculation_of_the_LTP_parameters P4((d,dp,bc_out,Nc_out),
 
 	temp = gsm_norm( L_power );
 
-	R = SASR( L_max   << temp, 16 );
-	S = SASR( L_power << temp, 16 );
+	R = (word)SASR( L_max   << temp, 16 );
+	S = (word)SASR( L_power << temp, 16 );
 
 	/*  Coding of the LTP gain
 	 */
@@ -852,12 +852,11 @@ static void Long_term_analysis_filtering P6((bc,Nc,dp,d,dpp,e),
  */
 {
 	register int      k;
-	register longword ltmp;
 
 #	undef STEP
 #	define STEP(BP)					\
 	for (k = 0; k <= 39; k++) {			\
-		dpp[k]  = GSM_MULT_R( BP, dp[k - Nc]);	\
+		dpp[k]  = (word)GSM_MULT_R( BP, dp[k - Nc]);	\
 		e[k]	= GSM_SUB( d[k], dpp[k] );	\
 	}
 
@@ -921,7 +920,6 @@ void Gsm_Long_Term_Synthesis_Filtering P5((S,Ncr,bcr,erp,drp),
  *  table 4.3b.
  */
 {
-	register longword	ltmp;	/* for ADD */
 	register int 		k;
 	word			brp, drpp, Nr;
 
@@ -941,7 +939,7 @@ void Gsm_Long_Term_Synthesis_Filtering P5((S,Ncr,bcr,erp,drp),
 	assert(brp != MIN_WORD);
 
 	for (k = 0; k <= 39; k++) {
-		drpp   = GSM_MULT_R( brp, drp[ k - Nr ] );
+		drpp   = (word)GSM_MULT_R( brp, drp[ k - Nr ] );
 		drp[k] = GSM_ADD( erp[k], drpp );
 	}
 

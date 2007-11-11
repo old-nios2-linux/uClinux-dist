@@ -20,7 +20,7 @@
 #include <linux/fs.h>
 #include <linux/kthread.h>
 #include <linux/file.h>
-#include <linux/suspend.h>
+#include <linux/freezer.h>
 
 #include <media/video-buf.h>
 #include <media/video-buf-dvb.h>
@@ -47,6 +47,7 @@ static int videobuf_dvb_thread(void *data)
 	int err;
 
 	dprintk("dvb thread started\n");
+	set_freezable();
 	videobuf_read_start(&dvb->dvbq);
 
 	for (;;) {

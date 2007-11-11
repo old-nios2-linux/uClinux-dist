@@ -88,7 +88,7 @@ static int jfs_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-struct inode_operations jfs_file_inode_operations = {
+const struct inode_operations jfs_file_inode_operations = {
 	.truncate	= jfs_truncate,
 	.setxattr	= jfs_setxattr,
 	.getxattr	= jfs_getxattr,
@@ -108,7 +108,6 @@ const struct file_operations jfs_file_operations = {
 	.aio_read	= generic_file_aio_read,
 	.aio_write	= generic_file_aio_write,
 	.mmap		= generic_file_mmap,
-	.sendfile	= generic_file_sendfile,
 	.splice_read	= generic_file_splice_read,
 	.splice_write	= generic_file_splice_write,
 	.fsync		= jfs_fsync,

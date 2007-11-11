@@ -78,6 +78,8 @@
 #define STREAM_FLPOLICY_CONSUMED        0x05 /* purge consumed bytes */
 #define STREAM_FLPOLICY_IGNORE          0x06 /* ignore this traffic */
 
+#define STREAM_FLPOLICY_MAX STREAM_FLPOLICY_IGNORE
+
 #define STREAM_FLPOLICY_SET_ABSOLUTE    0x01
 #define STREAM_FLPOLICY_SET_APPEND      0x02
 

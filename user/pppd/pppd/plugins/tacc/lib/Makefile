@@ -1,7 +1,3 @@
-#CC = gcc
-#AR = ar
-#DEBUG = -ggdb3 #-DDEBUGTAC
-
 #CFLAGS = -pipe -fPIC -I../include $(OPTIMIZE)
 CFLAGS += -I../include
 LIBRARY = libtac.a
@@ -41,6 +37,8 @@ ifneq ($(findstring uClibc,$(LIBCDIR)),uClibc)
 LIBOBJS += md5.o
 LIBSRCS += md5.c
 endif
+
+all: $(LIBRARY)
 
 $(LIBRARY): $(LIBOBJS) Makefile
 	$(AR) rc $(LIBRARY) $(LIBOBJS)

@@ -1,9 +1,9 @@
 /*
- * $Id: usrloc.h,v 1.11 2003/10/08 21:56:33 janakj Exp $
+ * $Id: usrloc.h,v 1.15 2004/12/04 18:33:31 janakj Exp $
  *
  * Convenience usrloc header file
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -36,24 +36,30 @@
 #include "udomain.h"
 #include "urecord.h"
 #include "ucontact.h"
+#include "ul_callback.h"
 
 
 typedef struct usrloc_api {
-	register_udomain_t  register_udomain;
-	get_all_ucontacts_t get_all_ucontacts;
+	int use_domain;
+	register_udomain_t   register_udomain;
+	get_all_ucontacts_t  get_all_ucontacts;
 
-	insert_urecord_t    insert_urecord;
-	delete_urecord_t    delete_urecord;
-	get_urecord_t       get_urecord;
-	lock_udomain_t      lock_udomain;
-	unlock_udomain_t    unlock_udomain;
+	insert_urecord_t     insert_urecord;
+	delete_urecord_t     delete_urecord;
+	get_urecord_t        get_urecord;
+	lock_udomain_t       lock_udomain;
+	unlock_udomain_t     unlock_udomain;
 
-	release_urecord_t   release_urecord;
-	insert_ucontact_t   insert_ucontact;
-	delete_ucontact_t   delete_ucontact;
-	get_ucontact_t      get_ucontact;
+	release_urecord_t    release_urecord;
+	insert_ucontact_t    insert_ucontact;
+	delete_ucontact_t    delete_ucontact;
+	get_ucontact_t       get_ucontact;
 
-	update_ucontact_t   update_ucontact;
+	update_ucontact_t    update_ucontact;
+
+	register_watcher_t   register_watcher;
+	unregister_watcher_t unregister_watcher;
+	register_ulcb_t      register_ulcb;
 } usrloc_api_t;
 
 

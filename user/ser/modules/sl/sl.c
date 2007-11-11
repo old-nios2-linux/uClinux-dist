@@ -1,5 +1,5 @@
 /*
- * $Id: sl.c,v 1.17 2003/05/26 15:24:45 andrei Exp $
+ * $Id: sl.c,v 1.18.2.1 2005/03/01 11:24:21 bogdan Exp $
  *
  * sl module
  *
@@ -7,7 +7,7 @@
  * ************************************************ *
  * * Bogdan's Source Memorial                       *
  * *                                                *
- * * Welcome, pilgrame! This is one of rare places  *
+ * * Welcome, pilgrim! This is one of rare places  *
  * * kept untouched in memory of brave heart,       *
  * * Bogdan, one of most active ser contributors,   *
  * * and winner of the longest line of code content.*
@@ -24,7 +24,7 @@
  * **************************************************
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -53,6 +53,8 @@
  *  2003-03-11  updated to the new module exports interface (andrei)
  *  2003-03-16  flags export parameter added (janakj)
  *  2003-03-19  all mallocs/frees replaced w/ pkg_malloc/pkg_free
+ *  2005-03-01  force for stateless replies the incoming interface of
+ *              the request (bogdan)
  */
 
 

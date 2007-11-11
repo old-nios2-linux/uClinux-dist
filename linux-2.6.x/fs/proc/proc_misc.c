@@ -35,17 +35,17 @@
 #include <linux/signal.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/smp_lock.h>
 #include <linux/seq_file.h>
 #include <linux/times.h>
 #include <linux/profile.h>
+#include <linux/utsname.h>
 #include <linux/blkdev.h>
 #include <linux/hugetlb.h>
 #include <linux/jiffies.h>
 #include <linux/sysrq.h>
 #include <linux/vmalloc.h>
 #include <linux/crash_dump.h>
-#include <linux/pspace.h>
+#include <linux/pid_namespace.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
@@ -92,7 +92,7 @@ static int loadavg_read_proc(char *page, char **start, off_t off,
 		LOAD_INT(a), LOAD_FRAC(a),
 		LOAD_INT(b), LOAD_FRAC(b),
 		LOAD_INT(c), LOAD_FRAC(c),
-		nr_running(), nr_threads, init_pspace.last_pid);
+		nr_running(), nr_threads, current->nsproxy->pid_ns->last_pid);
 	return proc_calc_metrics(page, start, off, count, eof, len);
 }
 
@@ -105,6 +105,7 @@ static int uptime_read_proc(char *page, char **start, off_t off,
 	cputime_t idletime = cputime_add(init_task.utime, init_task.stime);
 
 	do_posix_clock_monotonic_gettime(&uptime);
+	monotonic_to_bootbased(&uptime);
 	cputime_to_timespec(idletime, &idle);
 	len = sprintf(page,"%lu.%02lu %lu.%02lu\n",
 			(unsigned long) uptime.tv_sec,
@@ -120,15 +121,10 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
 {
 	struct sysinfo i;
 	int len;
-	unsigned long inactive;
-	unsigned long active;
-	unsigned long free;
 	unsigned long committed;
 	unsigned long allowed;
 	struct vmalloc_info vmi;
 	long cached;
-
-	get_zone_counts(&active, &inactive, &free);
 
 /*
  * display in kilobytes.
@@ -186,8 +182,8 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
 		K(i.bufferram),
 		K(cached),
 		K(total_swapcache_pages),
-		K(active),
-		K(inactive),
+		K(global_page_state(NR_ACTIVE)),
+		K(global_page_state(NR_INACTIVE)),
 #ifdef CONFIG_HIGHMEM
 		K(i.totalhigh),
 		K(i.freehigh),
@@ -227,7 +223,7 @@ static int fragmentation_open(struct inode *inode, struct file *file)
 	return seq_open(file, &fragmentation_op);
 }
 
-static struct file_operations fragmentation_file_operations = {
+static const struct file_operations fragmentation_file_operations = {
 	.open		= fragmentation_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -240,7 +236,7 @@ static int zoneinfo_open(struct inode *inode, struct file *file)
 	return seq_open(file, &zoneinfo_op);
 }
 
-static struct file_operations proc_zoneinfo_file_operations = {
+static const struct file_operations proc_zoneinfo_file_operations = {
 	.open		= zoneinfo_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -252,8 +248,10 @@ static int version_read_proc(char *page, char **start, off_t off,
 {
 	int len;
 
-	strcpy(page, linux_banner);
-	len = strlen(page);
+	len = snprintf(page, PAGE_SIZE, linux_proc_banner,
+		utsname()->sysname,
+		utsname()->release,
+		utsname()->version);
 	return proc_calc_metrics(page, start, off, count, eof, len);
 }
 
@@ -263,7 +261,7 @@ static int cpuinfo_open(struct inode *inode, struct file *file)
 	return seq_open(file, &cpuinfo_op);
 }
 
-static struct file_operations proc_cpuinfo_operations = {
+static const struct file_operations proc_cpuinfo_operations = {
 	.open		= cpuinfo_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -322,7 +320,7 @@ static int devinfo_open(struct inode *inode, struct file *filp)
 	return seq_open(filp, &devinfo_ops);
 }
 
-static struct file_operations proc_devinfo_operations = {
+static const struct file_operations proc_devinfo_operations = {
 	.open		= devinfo_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -334,7 +332,7 @@ static int vmstat_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &vmstat_op);
 }
-static struct file_operations proc_vmstat_file_operations = {
+static const struct file_operations proc_vmstat_file_operations = {
 	.open		= vmstat_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -365,7 +363,7 @@ static int partitions_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &partitions_op);
 }
-static struct file_operations proc_partitions_operations = {
+static const struct file_operations proc_partitions_operations = {
 	.open		= partitions_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -377,7 +375,7 @@ static int diskstats_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &diskstats_op);
 }
-static struct file_operations proc_diskstats_operations = {
+static const struct file_operations proc_diskstats_operations = {
 	.open		= diskstats_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -391,7 +389,7 @@ static int modules_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &modules_op);
 }
-static struct file_operations proc_modules_operations = {
+static const struct file_operations proc_modules_operations = {
 	.open		= modules_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -400,13 +398,11 @@ static struct file_operations proc_modules_operations = {
 #endif
 
 #ifdef CONFIG_SLAB
-extern struct seq_operations slabinfo_op;
-extern ssize_t slabinfo_write(struct file *, const char __user *, size_t, loff_t *);
 static int slabinfo_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &slabinfo_op);
 }
-static struct file_operations proc_slabinfo_operations = {
+static const struct file_operations proc_slabinfo_operations = {
 	.open		= slabinfo_open,
 	.read		= seq_read,
 	.write		= slabinfo_write,
@@ -433,18 +429,11 @@ static int slabstats_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static int slabstats_release(struct inode *inode, struct file *file)
-{
-	struct seq_file *m = file->private_data;
-	kfree(m->private);
-	return seq_release(inode, file);
-}
-
-static struct file_operations proc_slabstats_operations = {
+static const struct file_operations proc_slabstats_operations = {
 	.open		= slabstats_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= slabstats_release,
+	.release	= seq_release_private,
 };
 #endif
 #endif
@@ -455,12 +444,17 @@ static int show_stat(struct seq_file *p, void *v)
 	unsigned long jif;
 	cputime64_t user, nice, system, idle, iowait, irq, softirq, steal;
 	u64 sum = 0;
+	struct timespec boottime;
+	unsigned int *per_irq_sum;
+
+	per_irq_sum = kzalloc(sizeof(unsigned int)*NR_IRQS, GFP_KERNEL);
+	if (!per_irq_sum)
+		return -ENOMEM;
 
 	user = nice = system = idle = iowait =
 		irq = softirq = steal = cputime64_zero;
-	jif = - wall_to_monotonic.tv_sec;
-	if (wall_to_monotonic.tv_nsec)
-		--jif;
+	getboottime(&boottime);
+	jif = boottime.tv_sec;
 
 	for_each_possible_cpu(i) {
 		int j;
@@ -473,8 +467,11 @@ static int show_stat(struct seq_file *p, void *v)
 		irq = cputime64_add(irq, kstat_cpu(i).cpustat.irq);
 		softirq = cputime64_add(softirq, kstat_cpu(i).cpustat.softirq);
 		steal = cputime64_add(steal, kstat_cpu(i).cpustat.steal);
-		for (j = 0 ; j < NR_IRQS ; j++)
-			sum += kstat_cpu(i).irqs[j];
+		for (j = 0; j < NR_IRQS; j++) {
+			unsigned int temp = kstat_cpu(i).irqs[j];
+			sum += temp;
+			per_irq_sum[j] += temp;
+		}
 	}
 
 	seq_printf(p, "cpu  %llu %llu %llu %llu %llu %llu %llu %llu\n",
@@ -510,9 +507,10 @@ static int show_stat(struct seq_file *p, void *v)
 	}
 	seq_printf(p, "intr %llu", (unsigned long long)sum);
 
-#if !defined(CONFIG_PPC64) && !defined(CONFIG_ALPHA) && !defined(CONFIG_IA64)
+#ifndef CONFIG_SMP
+	/* Touches too many cache lines on SMP setups */
 	for (i = 0; i < NR_IRQS; i++)
-		seq_printf(p, " %u", kstat_irqs(i));
+		seq_printf(p, " %u", per_irq_sum[i]);
 #endif
 
 	seq_printf(p,
@@ -527,6 +525,7 @@ static int show_stat(struct seq_file *p, void *v)
 		nr_running(),
 		nr_iowait());
 
+	kfree(per_irq_sum);
 	return 0;
 }
 
@@ -553,7 +552,7 @@ static int stat_open(struct inode *inode, struct file *file)
 		kfree(buf);
 	return res;
 }
-static struct file_operations proc_stat_operations = {
+static const struct file_operations proc_stat_operations = {
 	.open		= stat_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -595,7 +594,7 @@ static int interrupts_open(struct inode *inode, struct file *filp)
 	return seq_open(filp, &int_seq_ops);
 }
 
-static struct file_operations proc_interrupts_operations = {
+static const struct file_operations proc_interrupts_operations = {
 	.open		= interrupts_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -652,7 +651,7 @@ static ssize_t write_sysrq_trigger(struct file *file, const char __user *buf,
 	return count;
 }
 
-static struct file_operations proc_sysrq_trigger_operations = {
+static const struct file_operations proc_sysrq_trigger_operations = {
 	.write		= write_sysrq_trigger,
 };
 #endif
@@ -669,7 +668,6 @@ void create_seq_entry(char *name, mode_t mode, const struct file_operations *f)
 
 void __init proc_misc_init(void)
 {
-	struct proc_dir_entry *entry;
 	static struct {
 		char *name;
 		int (*read_proc)(char*,char**,off_t,int,int*,void*);
@@ -696,9 +694,14 @@ void __init proc_misc_init(void)
 	proc_symlink("mounts", NULL, "self/mounts");
 
 	/* And now for trickier ones */
-	entry = create_proc_entry("kmsg", S_IRUSR, &proc_root);
-	if (entry)
-		entry->proc_fops = &proc_kmsg_operations;
+#ifdef CONFIG_PRINTK
+	{
+		struct proc_dir_entry *entry;
+		entry = create_proc_entry("kmsg", S_IRUSR, &proc_root);
+		if (entry)
+			entry->proc_fops = &proc_kmsg_operations;
+	}
+#endif
 	create_seq_entry("devices", 0, &proc_devinfo_operations);
 	create_seq_entry("cpuinfo", 0, &proc_cpuinfo_operations);
 #ifdef CONFIG_BLOCK
@@ -738,8 +741,11 @@ void __init proc_misc_init(void)
 		proc_vmcore->proc_fops = &proc_vmcore_operations;
 #endif
 #ifdef CONFIG_MAGIC_SYSRQ
-	entry = create_proc_entry("sysrq-trigger", S_IWUSR, NULL);
-	if (entry)
-		entry->proc_fops = &proc_sysrq_trigger_operations;
+	{
+		struct proc_dir_entry *entry;
+		entry = create_proc_entry("sysrq-trigger", S_IWUSR, NULL);
+		if (entry)
+			entry->proc_fops = &proc_sysrq_trigger_operations;
+	}
 #endif
 }

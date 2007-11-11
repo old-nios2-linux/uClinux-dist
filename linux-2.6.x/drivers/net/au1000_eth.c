@@ -34,10 +34,9 @@
  *
  *
  */
-
+#include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
@@ -46,7 +45,6 @@
 #include <linux/bitops.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
-#include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -360,7 +358,8 @@ static int mii_probe (struct net_device *dev)
 	BUG_ON(!phydev);
 	BUG_ON(phydev->attached_dev);
 
-	phydev = phy_connect(dev, phydev->dev.bus_id, &au1000_adjust_link, 0);
+	phydev = phy_connect(dev, phydev->dev.bus_id, &au1000_adjust_link, 0,
+			PHY_INTERFACE_MODE_MII);
 
 	if (IS_ERR(phydev)) {
 		printk(KERN_ERR "%s: Could not attach to PHY\n", dev->name);
@@ -1125,7 +1124,7 @@ static int au1000_tx(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	pDB = aup->tx_db_inuse[aup->tx_head];
-	memcpy((void *)pDB->vaddr, skb->data, skb->len);
+	skb_copy_from_linear_data(skb, pDB->vaddr, skb->len);
 	if (skb->len < ETH_ZLEN) {
 		for (i=skb->len; i<ETH_ZLEN; i++) {
 			((char *)pDB->vaddr)[i] = 0;
@@ -1205,10 +1204,9 @@ static int au1000_rx(struct net_device *dev)
 				aup->stats.rx_dropped++;
 				continue;
 			}
-			skb->dev = dev;
 			skb_reserve(skb, 2);	/* 16 byte IP header align */
-			eth_copy_and_sum(skb,
-				(unsigned char *)pDB->vaddr, frmlen, 0);
+			skb_copy_to_linear_data(skb,
+				(unsigned char *)pDB->vaddr, frmlen);
 			skb_put(skb, frmlen);
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);	/* pass the packet to upper layers */

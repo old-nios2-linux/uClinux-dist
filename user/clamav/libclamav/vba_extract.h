@@ -17,7 +17,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __VBA_EXTRACT_H
@@ -36,6 +37,7 @@ typedef struct vba_project_tag {
 
 vba_project_t *vba56_dir_read(const char *dir);
 unsigned char *vba_decompress(int fd, uint32_t offset, int *size);
+int cli_decode_ole_object(int fd, const char *dir);
 
 char *ppt_vba_read(const char *dir);
 

@@ -19,6 +19,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <linux/types.h>
 
 void usage(void) __attribute__((noreturn));
 
@@ -120,7 +121,7 @@ long rtt_sigma = 0;
 int
 measure(struct sockaddr_in * addr)
 {
-	int length;
+	socklen_t length;
 	int msgcount;
 	int cc, count;
 	fd_set ready;
@@ -209,7 +210,7 @@ empty:
 
 			if ((count = select(FD_SETSIZE, &ready, (fd_set *)0,
 			    (fd_set *)0, &tout)) <= 0)
-				goto send_next;
+				break;
 
 			(void)gettimeofday(&tv1, (struct timezone *)0);
 			cc = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0, 
@@ -286,7 +287,6 @@ empty:
         		}
                       }
 		}
-send_next: ;
 	}
 
 good_exit:
@@ -299,7 +299,7 @@ char *myname, *hisname;
 int
 measure_opt(struct sockaddr_in * addr)
 {
-	int length;
+	socklen_t length;
 	int msgcount;
 	int cc, count;
 	fd_set ready;
@@ -391,7 +391,7 @@ empty:
 
 			if ((count = select(FD_SETSIZE, &ready, (fd_set *)0,
 			    (fd_set *)0, &tout)) <= 0)
-				goto send_next;
+				break;
 
 			(void)gettimeofday(&tv1, (struct timezone *)0);
 			cc = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0, 
@@ -494,7 +494,6 @@ empty:
 				}
 			}
 		}
-send_next: ;
 	}
 
 good_exit:
@@ -540,14 +539,20 @@ main(int argc, char *argv[])
 	int s_errno = 0;
 
 	if (argc < 2) {
-		setuid(getuid());
+		if (setuid(getuid())) {
+			perror("clockdiff: setuid");
+			exit(-1);
+		}
 		usage();
 	}
 
 	sock_raw = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	s_errno = errno;
 
-	setuid(getuid());
+	if (setuid(getuid())) {
+		perror("clockdiff: setuid");
+		exit(-1);
+	}
 
 	if (argc == 3) {
 		if (strcmp(argv[1], "-o") == 0) {
@@ -597,7 +602,7 @@ main(int argc, char *argv[])
 	}
 	if (ip_opt_len) {
 		struct sockaddr_in myaddr;
-		int addrlen = sizeof(myaddr);
+		socklen_t addrlen = sizeof(myaddr);
 		unsigned char rspace[ip_opt_len];
 
 	        bzero(rspace, sizeof(rspace));

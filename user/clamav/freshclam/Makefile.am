@@ -14,7 +14,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 bin_PROGRAMS = freshclam
 
@@ -25,17 +26,15 @@ freshclam_SOURCES = \
     $(top_srcdir)/shared/cfgparser.h \
     $(top_srcdir)/shared/getopt.c \
     $(top_srcdir)/shared/getopt.h \
-    $(top_srcdir)/shared/memory.c \
-    $(top_srcdir)/shared/memory.h \
     $(top_srcdir)/shared/misc.c \
     $(top_srcdir)/shared/misc.h \
+    $(top_srcdir)/shared/options.c \
+    $(top_srcdir)/shared/options.h \
+    $(top_srcdir)/shared/cdiff.c \
+    $(top_srcdir)/shared/cdiff.h \
     freshclam.c \
-    freshclam.h \
-    options.c \
-    options.h \
     manager.c \
     manager.h \
-    defaults.h \
     notify.c \
     notify.h \
     dns.c \
@@ -43,8 +42,10 @@ freshclam_SOURCES = \
     execute.c \
     execute.h \
     nonblock.c \
-    nonblock.h
+    nonblock.h \
+    mirman.c \
+    mirman.h
 
 DEFS = @DEFS@ -DCL_NOTHREADS
 INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
-LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @ADDITIONAL_LIBS@
+LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @THREAD_LIBS@

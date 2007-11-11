@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
@@ -36,7 +35,7 @@
 #define DBG(x...)
 #endif
 
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 
 /* This function is needed to translate 32 bit pt_regs offsets in to
  * 64 bit pt_regs offsets.  For example, a 32 bit gdb under a 64 bit kernel
@@ -88,10 +87,9 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	switch (request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 	case PTRACE_PEEKDATA: {
-		int copied;
-
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 		if (__is_compat_task(child)) {
+			int copied;
 			unsigned int tmp;
 
 			addr &= 0xffffffffL;
@@ -106,15 +104,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 		}
 		else
 #endif
-		{
-			unsigned long tmp;
-
-			copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
-			ret = -EIO;
-			if (copied != sizeof(tmp))
-				goto out_tsk;
-			ret = put_user(tmp,(unsigned long *) data);
-		}
+			ret = generic_ptrace_peekdata(child, addr, data);
 		goto out_tsk;
 	}
 
@@ -122,7 +112,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
 		ret = 0;
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 		if (__is_compat_task(child)) {
 			unsigned int tmp = (unsigned int)data;
 			DBG("sys_ptrace(POKE%s, %d, %lx, %lx)\n",
@@ -145,7 +135,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	   processes, the kernel saves all regs on a syscall. */
 	case PTRACE_PEEKUSR: {
 		ret = -EIO;
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 		if (__is_compat_task(child)) {
 			unsigned int tmp;
 
@@ -204,7 +194,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 			ret = 0;
 			goto out_tsk;
 		}
-#ifdef __LP64__
+#ifdef CONFIG_64BIT
 		if (__is_compat_task(child)) {
 			if (addr & (sizeof(int)-1))
 				goto out_tsk;

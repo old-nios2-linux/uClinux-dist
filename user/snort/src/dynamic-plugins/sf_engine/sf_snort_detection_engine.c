@@ -32,6 +32,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <stdarg.h>
 #include "sf_snort_packet.h"
 #include "sf_snort_plugin_api.h"
 #include "sf_dynamic_meta.h"
@@ -52,6 +53,25 @@
 #define DEBUG_WRAP(x)
 
 DynamicEngineData _ded;
+
+#define STD_BUF 1024
+
+NORETURN void DynamicEngineFatalMessage(const char *format, ...)
+{
+    char buf[STD_BUF];
+    va_list ap;
+
+    va_start(ap, format);
+    vsnprintf(buf, STD_BUF, format, ap);
+    va_end(ap);
+
+    buf[STD_BUF - 1] = '\0';
+
+    _ded.fatalMsg("%s", buf);
+
+    exit(1);
+}
+
 
 extern int BoyerContentSetup(Rule *rule, ContentInfo *content);
 extern int PCRESetup(Rule *rule, PCREInfo *pcreInfo);
@@ -182,10 +202,15 @@ int GetFPContent(void *r, int buf, FPContentInfo** contents, int maxNumContents)
         if (option->optionType == OPTION_TYPE_CONTENT)
         {
             if ((option->option_u.content->flags & CONTENT_FAST_PATTERN) &&
-                (((option->option_u.content->flags & CONTENT_BUF_URI) && (buf == FASTPATTERN_URI)) ||
-                 (!(option->option_u.content->flags & CONTENT_BUF_URI) && (buf == FASTPATTERN_NORMAL)) ))
+                (((option->option_u.content->flags & (CONTENT_BUF_URI | CONTENT_BUF_POST)) && (buf == FASTPATTERN_URI)) ||
+                 (!(option->option_u.content->flags & (CONTENT_BUF_URI | CONTENT_BUF_POST)) && (buf == FASTPATTERN_NORMAL)) ))
             {
                 FPContentInfo *content = (FPContentInfo *)calloc(1, sizeof(FPContentInfo));
+                if (content == NULL)
+                {
+                    DynamicEngineFatalMessage("Failed to allocate memory\n");
+                }
+
                 content->content = option->option_u.content->patternByteForm;
                 content->length = option->option_u.content->patternByteFormLength;
                 content->noCaseFlag = (char)(option->option_u.content->flags & CONTENT_NOCASE);
@@ -261,9 +286,9 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
                         */
                         if(!hex_len || hex_len % 2)
                         {
-                            _ded.fatalMsg("Content hexmode argument has invalid "
-                                       "number of hex digits for dynamic rule [%d:%d].\n", 
-                                       rule->info.genID, rule->info.sigID);
+                            DynamicEngineFatalMessage("Content hexmode argument has invalid "
+                                                      "number of hex digits for dynamic rule [%d:%d].\n", 
+                                                      rule->info.genID, rule->info.sigID);
                         }
 
                         hex_encoding = 0;
@@ -304,8 +329,8 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
             case '"':
                 if (!escaped)
                 {
-                    _ded.fatalMsg("Non-escaped '\"' character in dynamic rule [%d:%d]!\n",
-                            rule->info.genID, rule->info.sigID);
+                    DynamicEngineFatalMessage("Non-escaped '\"' character in dynamic rule [%d:%d]!\n",
+                                              rule->info.genID, rule->info.sigID);
                 }
                 /* otherwise process the character as default */
             default:
@@ -336,10 +361,10 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
                             }
                             else
                             {
-                                _ded.fatalMsg("ParsePattern() buffer overflow, "
-                                        "make a smaller pattern please for dynamic "
-                                        "rule [%d:%d]! (Max size = 2048)\n",
-                                        rule->info.genID, rule->info.sigID);
+                                DynamicEngineFatalMessage("ParsePattern() buffer overflow, "
+                                                          "make a smaller pattern please for dynamic "
+                                                          "rule [%d:%d]! (Max size = 2048)\n",
+                                                          rule->info.genID, rule->info.sigID);
                             }
                         }
                     }
@@ -347,12 +372,12 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
                     {
                         if(*pat_idx != ' ')
                         {
-                            _ded.fatalMsg("What is this \"%c\"(0x%X) doing in your "
-                                    "binary buffer for dynamic rule [%d:%d]? "
-                                    "Valid hex values only please! "
-                                    "(0x0 - 0xF) Position: %d\n",
-                                    (char) *pat_idx, (char) *pat_idx, 
-                                    rule->info.genID, rule->info.sigID, char_count);
+                            DynamicEngineFatalMessage("What is this \"%c\"(0x%X) doing in your "
+                                                      "binary buffer for dynamic rule [%d:%d]? "
+                                                      "Valid hex values only please! "
+                                                      "(0x0 - 0xF) Position: %d\n",
+                                                      (char) *pat_idx, (char) *pat_idx, 
+                                                      rule->info.genID, rule->info.sigID, char_count);
                         }
                     }
                 }
@@ -367,9 +392,9 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
                         }
                         else
                         {
-                            _ded.fatalMsg("ParsePattern() buffer overflow in "
-                                "dynamic rule [%d:%d]!\n",
-                                rule->info.genID, rule->info.sigID);
+                            DynamicEngineFatalMessage("ParsePattern() buffer overflow in "
+                                                      "dynamic rule [%d:%d]!\n",
+                                                      rule->info.genID, rule->info.sigID);
                         }
 
                         if(escaped)
@@ -388,9 +413,9 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
                         }
                         else
                         {
-                            _ded.fatalMsg("character value out of range, try a "
-                                    "binary buffer for dynamic rule [%d:%d]\n", 
-                                    rule->info.genID, rule->info.sigID);
+                            DynamicEngineFatalMessage("character value out of range, try a "
+                                                      "binary buffer for dynamic rule [%d:%d]\n", 
+                                                      rule->info.genID, rule->info.sigID);
                         }
                     }
                 }
@@ -404,7 +429,12 @@ static int DecodeContentPattern(Rule *rule, ContentInfo *content)
     }
     
     /* Now, tmp_buf contains the decoded ascii & raw binary from the patter */
-    content->patternByteForm = calloc(1, tmp_len);
+    content->patternByteForm = (u_int8_t *)calloc(tmp_len, sizeof(u_int8_t));
+    if (content->patternByteForm == NULL)
+    {
+        DynamicEngineFatalMessage("Failed to allocate memory\n");
+    }
+
     memcpy(content->patternByteForm, tmp_buf, tmp_len);
     content->patternByteFormLength = tmp_len;
 
@@ -452,7 +482,7 @@ int RegisterOneRule(Rule *rule, int registerRule)
                 BoyerContentSetup(rule, content);
                 if (content->flags & CONTENT_FAST_PATTERN)
                 {
-                    if (content->flags & CONTENT_BUF_URI)
+                    if (content->flags & (CONTENT_BUF_URI | CONTENT_BUF_POST))
                         fpContentFlags |= FASTPATTERN_URI;
                     else
                         fpContentFlags |= FASTPATTERN_NORMAL;
@@ -568,7 +598,7 @@ int RegisterOneRule(Rule *rule, int registerRule)
         {
             ContentInfo *content = option->option_u.content;
 
-            if (content->flags & CONTENT_BUF_URI)
+            if (content->flags & (CONTENT_BUF_URI | CONTENT_BUF_POST))
                 fpContentFlags |= FASTPATTERN_URI;
             else
                 fpContentFlags |= FASTPATTERN_NORMAL;
@@ -682,8 +712,8 @@ ENGINE_LINKAGE int DumpRules(char *rulesFileName, Rule **rules)
     if ((strlen(_ded.dataDumpDirectory) + strlen(DIR_SEP) + strlen(rulesFileName) + strlen(".rules")) > PATH_MAX)
         return -1;
 
-    snprintf(ruleFile, PATH_MAX, "%s%s%s.rules", 
-                _ded.dataDumpDirectory, DIR_SEP, rulesFileName);
+    snprintf(ruleFile, PATH_MAX, "%s%s%s.rules", _ded.dataDumpDirectory, DIR_SEP, rulesFileName);
+    ruleFile[PATH_MAX] = '\0';
     ruleFP = fopen(ruleFile, "w");
     if (ruleFP)
     {

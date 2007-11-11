@@ -1,10 +1,9 @@
 /*
- *  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,8 +12,13 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
+
+#ifdef	_MSC_VER
+#include <winsock.h>
+#endif
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -23,58 +27,48 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <sys/types.h>
+#ifndef	C_WINDOWS
+#include <dirent.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#endif
 #include <pthread.h>
 #include <time.h>
-#include <signal.h>
 #include <errno.h>
+#include <stddef.h>
 
-#include "cfgparser.h"
+#include "libclamav/clamav.h"
+#include "libclamav/str.h"
+
+#include "shared/cfgparser.h"
+#include "shared/output.h"
+#include "shared/misc.h"
+
 #include "others.h"
-#include "defaults.h"
 #include "scanner.h"
 #include "server.h"
-#include "clamuko.h"
 #include "session.h"
-#include "str.h" /* libclamav */
-#include "clamav.h"
-#include "output.h"
-#include "memory.h"
 
-pthread_mutex_t ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
-struct thrsession *ths;
+static pthread_mutex_t ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-int command(int desc, const struct cl_node *root, const struct cl_limits *limits, int options, const struct cfgstruct *copt, int timeout)
+int command(int desc, const struct cl_engine *engine, const struct cl_limits *limits, unsigned int options, const struct cfgstruct *copt, int timeout)
 {
 	char buff[1025];
-	int bread, opt, retval;
-	struct cfgstruct *cpt;
+	int bread, opt;
 
 
-    retval = poll_fd(desc, timeout);
-    switch (retval) {
-    case 0: /* timeout */
+    bread = readsock(desc, buff, sizeof(buff)-1, '\n', timeout, 0, 1);
+    if(bread == -2) /* timeout */
 	return -2;
-    case -1:
-	mdprintf(desc, "ERROR\n");
-	logg("!Command: poll_fd failed.\n");
+    if(bread == 0) /* Connection closed */
 	return -1;
-    }
-
-    while((bread = readsock(desc, buff, 1024)) == -1 && errno == EINTR);
-
-    if(bread == 0) {
-	/* Connection closed */
-	return -1;
-    }
-
     if(bread < 0) {
-	logg("!Command parser: read() failed.\n");
-	/* at least try to display this error message */
-	/* mdprintf(desc, "ERROR: Command parser: read() failed.\n"); */
+	mdprintf(desc, "ERROR\n");
+	logg("!Command: readsock() failed.\n");
 	return -1;
     }
 
@@ -82,14 +76,14 @@ int command(int desc, const struct cl_node *root, const struct cl_limits *limits
     cli_chomp(buff);
 
     if(!strncmp(buff, CMD1, strlen(CMD1))) { /* SCAN */
-	if(scan(buff + strlen(CMD1) + 1, NULL, root, limits, options, copt, desc, 0) == -2)
-	    if(cfgopt(copt, "ExitOnOOM"))
+	if(scan(buff + strlen(CMD1) + 1, NULL, engine, limits, options, copt, desc, TYPE_SCAN) == -2)
+	    if(cfgopt(copt, "ExitOnOOM")->enabled)
 		return COMMAND_SHUTDOWN;
 
     } else if(!strncmp(buff, CMD2, strlen(CMD2))) { /* RAWSCAN */
 	opt = options & ~CL_SCAN_ARCHIVE;
-	if(scan(buff + strlen(CMD2) + 1, NULL, root, NULL, opt, copt, desc, 0) == -2)
-	    if(cfgopt(copt, "ExitOnOOM"))
+	if(scan(buff + strlen(CMD2) + 1, NULL, engine, NULL, opt, copt, desc, TYPE_SCAN) == -2)
+	    if(cfgopt(copt, "ExitOnOOM")->enabled)
 		return COMMAND_SHUTDOWN;
 
     } else if(!strncmp(buff, CMD3, strlen(CMD3))) { /* QUIT */
@@ -103,26 +97,25 @@ int command(int desc, const struct cl_node *root, const struct cl_limits *limits
 	mdprintf(desc, "PONG\n");
 
     } else if(!strncmp(buff, CMD6, strlen(CMD6))) { /* CONTSCAN */
-	if(scan(buff + strlen(CMD6) + 1, NULL, root, limits, options, copt, desc, 1) == -2)
-	    if(cfgopt(copt, "ExitOnOOM"))
+	if(scan(buff + strlen(CMD6) + 1, NULL, engine, limits, options, copt, desc, TYPE_CONTSCAN) == -2)
+	    if(cfgopt(copt, "ExitOnOOM")->enabled)
 		return COMMAND_SHUTDOWN;
 
     } else if(!strncmp(buff, CMD7, strlen(CMD7))) { /* VERSION */
-	    const char *dbdir;
+	    const char *dbdir = cfgopt(copt, "DatabaseDirectory")->strarg;
 	    char *path;
 	    struct cl_cvd *daily;
+	    struct stat foo;
 
-	if((cpt = cfgopt(copt, "DatabaseDirectory")) || (cpt = cfgopt(copt, "DataDirectory")))
-	    dbdir = cpt->strarg;
-	else
-	    dbdir = cl_retdbdir();
 
-	if(!(path = mmalloc(strlen(dbdir) + 11))) {
+	if(!(path = malloc(strlen(dbdir) + 30))) {
 	    mdprintf(desc, "Memory allocation error - SHUTDOWN forced\n");
 	    return COMMAND_SHUTDOWN;
 	}
 
 	sprintf(path, "%s/daily.cvd", dbdir);
+	if(stat(path, &foo) == -1)
+	    sprintf(path, "%s/daily.inc/daily.info", dbdir);
 
 	if((daily = cl_cvdhead(path))) {
 		time_t t = (time_t) daily->stime;
@@ -138,8 +131,8 @@ int command(int desc, const struct cl_node *root, const struct cl_limits *limits
 	free(path);
 
     } else if(!strncmp(buff, CMD8, strlen(CMD8))) { /* STREAM */
-	if(scanstream(desc, NULL, root, limits, options, copt) == CL_EMEM)
-	    if(cfgopt(copt, "ExitOnOOM"))
+	if(scanstream(desc, NULL, engine, limits, options, copt) == CL_EMEM)
+	    if(cfgopt(copt, "ExitOnOOM")->enabled)
 		return COMMAND_SHUTDOWN;
 
     } else if(!strncmp(buff, CMD9, strlen(CMD9))) { /* SESSION */
@@ -154,8 +147,13 @@ int command(int desc, const struct cl_node *root, const struct cl_limits *limits
     } else if(!strncmp(buff, CMD12, strlen(CMD12))) { /* FD */
 	    int fd = atoi(buff + strlen(CMD12) + 1);
 
-	scanfd(fd, NULL, root, limits, options, copt, desc, 0);
+	scanfd(fd, NULL, engine, limits, options, copt, desc);
 	close(fd); /* FIXME: should we close it here? */
+
+    } else if(!strncmp(buff, CMD13, strlen(CMD13))) { /* MULTISCAN */
+	if(scan(buff + strlen(CMD13) + 1, NULL, engine, limits, options, copt, desc, TYPE_MULTISCAN) == -2)
+	    if(cfgopt(copt, "ExitOnOOM")->enabled)
+		return COMMAND_SHUTDOWN;
 
     } else {
 	mdprintf(desc, "UNKNOWN COMMAND\n");

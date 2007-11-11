@@ -44,7 +44,6 @@
 #define PAGE_READONLY	__pgprot(0)
 #define PAGE_KERNEL	__pgprot(0)
 
-//extern void paging_init(struct meminfo *, struct machine_desc *);
 #define swapper_pg_dir ((pgd_t *) 0)
 
 #define __swp_type(x)		(0)
@@ -75,7 +74,6 @@ static inline int pte_file(pte_t pte) { return 0; }
  * These would be in other places but having them here reduces the diffs.
  */
 extern unsigned int kobjsize(const void *objp);
-extern int is_in_rom(unsigned long);
 
 /*
  * No page table caches to initialise.
@@ -83,10 +81,6 @@ extern int is_in_rom(unsigned long);
 #define pgtable_cache_init()	do { } while (0)
 #define io_remap_page_range	remap_page_range
 #define io_remap_pfn_range	remap_pfn_range
-
-#define MK_IOSPACE_PFN(space, pfn)	(pfn)
-#define GET_IOSPACE(pfn)		0
-#define GET_PFN(pfn)			(pfn)
 
 
 /*
@@ -98,6 +92,8 @@ extern int is_in_rom(unsigned long);
 
 #define FIRST_USER_ADDRESS      (0)
 
+#include <asm-generic/pgtable.h>
+
 #else 
 
 /*
@@ -107,7 +103,8 @@ extern int is_in_rom(unsigned long);
 #define v4_tlb_fns	(0)
 #define v4wb_tlb_fns	(0)
 #define v4wbi_tlb_fns	(0)
-#define v6_tlb_fns	(0)
+#define v6wbi_tlb_fns	(0)
+#define v7wbi_tlb_fns	(0)
 
 #define v3_user_fns	(0)
 #define v4_user_fns	(0)

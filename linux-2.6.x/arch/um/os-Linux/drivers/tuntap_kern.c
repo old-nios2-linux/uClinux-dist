@@ -43,7 +43,7 @@ static int tuntap_read(int fd, struct sk_buff **skb,
 {
 	*skb = ether_adjust_skb(*skb, ETH_HEADER_OTHER);
 	if(*skb == NULL) return(-ENOMEM);
-	return(net_read(fd, (*skb)->mac.raw, 
+	return(net_read(fd, skb_mac_header(*skb),
 			(*skb)->dev->mtu + ETH_HEADER_OTHER));
 }
 
@@ -90,4 +90,4 @@ static int register_tuntap(void)
 	return 0;
 }
 
-__initcall(register_tuntap);
+late_initcall(register_tuntap);

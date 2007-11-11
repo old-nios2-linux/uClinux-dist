@@ -23,7 +23,6 @@
 
 #include <sound/driver.h>
 #include <linux/init.h>
-#include <linux/pci.h>
 #include <sound/core.h>
 #include "hda_codec.h"
 #include "hda_local.h"
@@ -45,7 +44,7 @@ static const char *get_wid_type_name(unsigned int wid_value)
 	if (names[wid_value])
 		return names[wid_value];
 	else
-		return "UNKOWN Widget";
+		return "UNKNOWN Widget";
 }
 
 static void print_amp_caps(struct snd_info_buffer *buffer,
@@ -88,6 +87,48 @@ static void print_amp_vals(struct snd_info_buffer *buffer,
 	snd_iprintf(buffer, "\n");
 }
 
+static void print_pcm_rates(struct snd_info_buffer *buffer, unsigned int pcm)
+{
+	static unsigned int rates[] = {
+		8000, 11025, 16000, 22050, 32000, 44100, 48000, 88200,
+		96000, 176400, 192000, 384000
+	};
+	int i;
+
+	pcm &= AC_SUPPCM_RATES;
+	snd_iprintf(buffer, "    rates [0x%x]:", pcm);
+	for (i = 0; i < ARRAY_SIZE(rates); i++) 
+		if (pcm & (1 << i))
+			snd_iprintf(buffer, " %d", rates[i]);
+	snd_iprintf(buffer, "\n");
+}
+
+static void print_pcm_bits(struct snd_info_buffer *buffer, unsigned int pcm)
+{
+	static unsigned int bits[] = { 8, 16, 20, 24, 32 };
+	int i;
+
+	pcm = (pcm >> 16) & 0xff;
+	snd_iprintf(buffer, "    bits [0x%x]:", pcm);
+	for (i = 0; i < ARRAY_SIZE(bits); i++)
+		if (pcm & (1 << i))
+			snd_iprintf(buffer, " %d", bits[i]);
+	snd_iprintf(buffer, "\n");
+}
+
+static void print_pcm_formats(struct snd_info_buffer *buffer,
+			      unsigned int streams)
+{
+	snd_iprintf(buffer, "    formats [0x%x]:", streams & 0xf);
+	if (streams & AC_SUPFMT_PCM)
+		snd_iprintf(buffer, " PCM");
+	if (streams & AC_SUPFMT_FLOAT32)
+		snd_iprintf(buffer, " FLOAT");
+	if (streams & AC_SUPFMT_AC3)
+		snd_iprintf(buffer, " AC3");
+	snd_iprintf(buffer, "\n");
+}
+
 static void print_pcm_caps(struct snd_info_buffer *buffer,
 			   struct hda_codec *codec, hda_nid_t nid)
 {
@@ -97,8 +138,9 @@ static void print_pcm_caps(struct snd_info_buffer *buffer,
 		snd_iprintf(buffer, "N/A\n");
 		return;
 	}
-	snd_iprintf(buffer, "rates 0x%03x, bits 0x%02x, types 0x%x\n",
-		    pcm & AC_SUPPCM_RATES, (pcm >> 16) & 0xff, stream & 0xf);
+	print_pcm_rates(buffer, pcm);
+	print_pcm_bits(buffer, pcm);
+	print_pcm_formats(buffer, stream);
 }
 
 static const char *get_jack_location(u32 cfg)
@@ -208,9 +250,15 @@ static void print_codec_info(struct snd_info_entry *entry, struct snd_info_buffe
 	snd_iprintf(buffer, "Vendor Id: 0x%x\n", codec->vendor_id);
 	snd_iprintf(buffer, "Subsystem Id: 0x%x\n", codec->subsystem_id);
 	snd_iprintf(buffer, "Revision Id: 0x%x\n", codec->revision_id);
+
+	if (codec->mfg)
+		snd_iprintf(buffer, "Modem Function Group: 0x%x\n", codec->mfg);
+	else
+		snd_iprintf(buffer, "No Modem Function Group found\n");
+
 	if (! codec->afg)
 		return;
-	snd_iprintf(buffer, "Default PCM: ");
+	snd_iprintf(buffer, "Default PCM:\n");
 	print_pcm_caps(buffer, codec, codec->afg);
 	snd_iprintf(buffer, "Default Amp-In caps: ");
 	print_amp_caps(buffer, codec, codec->afg, HDA_INPUT);
@@ -278,7 +326,7 @@ static void print_codec_info(struct snd_info_entry *entry, struct snd_info_buffe
 
 		if ((wid_type == AC_WID_AUD_OUT || wid_type == AC_WID_AUD_IN) &&
 		    (wid_caps & AC_WCAP_FORMAT_OVRD)) {
-			snd_iprintf(buffer, "  PCM: ");
+			snd_iprintf(buffer, "  PCM:\n");
 			print_pcm_caps(buffer, codec, nid);
 		}
 

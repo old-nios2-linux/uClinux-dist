@@ -1,30 +1,52 @@
 /*
- *	Setup for Titan
+ * arch/sh/boards/titan/setup.c - Setup for Titan
+ *
+ *  Copyright (C) 2006  Jamie Lenehan
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  */
-
 #include <linux/init.h>
-#include <asm/irq.h>
+#include <linux/irq.h>
 #include <asm/titan.h>
 #include <asm/io.h>
 
-extern void __init pcibios_init_platform(void);
-
-static struct ipr_data titan_ipr_map[] = {
-	{ TITAN_IRQ_WAN,	IRL0_IPR_ADDR,	IRL0_IPR_POS,	IRL0_PRIORITY },
-	{ TITAN_IRQ_LAN,	IRL1_IPR_ADDR,	IRL1_IPR_POS,	IRL1_PRIORITY },
-	{ TITAN_IRQ_MPCIA,	IRL2_IPR_ADDR,	IRL2_IPR_POS,	IRL2_PRIORITY },
-	{ TITAN_IRQ_USB,	IRL3_IPR_ADDR,	IRL3_IPR_POS,	IRL3_PRIORITY },
+static struct ipr_data ipr_irq_table[] = {
+	/* IRQ, IPR idx, shift, prio */
+	{ TITAN_IRQ_WAN,   3, 12, 8 },	/* eth0 (WAN) */
+	{ TITAN_IRQ_LAN,   3,  8, 8 },	/* eth1 (LAN) */
+	{ TITAN_IRQ_MPCIA, 3,  4, 8 },	/* mPCI A (top) */
+	{ TITAN_IRQ_USB,   3,  0, 8 },	/* mPCI B (bottom), USB */
 };
 
+static unsigned long ipr_offsets[] = { /* stolen from setup-sh7750.c */
+	0xffd00004UL,	/* 0: IPRA */
+	0xffd00008UL,	/* 1: IPRB */
+	0xffd0000cUL,	/* 2: IPRC */
+	0xffd00010UL,	/* 3: IPRD */
+};
+
+static struct ipr_desc ipr_irq_desc = {
+	.ipr_offsets	= ipr_offsets,
+	.nr_offsets	= ARRAY_SIZE(ipr_offsets),
+
+	.ipr_data	= ipr_irq_table,
+	.nr_irqs	= ARRAY_SIZE(ipr_irq_table),
+
+	.chip = {
+		.name	= "IPR-titan",
+	},
+};
 static void __init init_titan_irq(void)
 {
 	/* enable individual interrupt mode for externals */
-	ctrl_outw(ctrl_inw(INTC_ICR) | INTC_ICR_IRLM, INTC_ICR);
-
-	make_ipr_irq(titan_ipr_map, ARRAY_SIZE(titan_ipr_map));
+	ipr_irq_enable_irlm();
+	/* register ipr irqs */
+	register_ipr_controller(&ipr_irq_desc);
 }
 
-struct sh_machine_vector mv_titan __initmv = {
+static struct sh_machine_vector mv_titan __initmv = {
 	.mv_name =	"Titan",
 
 	.mv_inb =	titan_inb,
@@ -47,6 +69,4 @@ struct sh_machine_vector mv_titan __initmv = {
 	.mv_ioport_map = titan_ioport_map,
 
 	.mv_init_irq =	init_titan_irq,
-	.mv_init_pci =	pcibios_init_platform,
 };
-ALIAS_MV(titan)

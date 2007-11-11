@@ -23,7 +23,6 @@
 #include "hostap_wlan.h"
 
 
-static char *version = PRISM2_VERSION " (Jouni Malinen <jkmaline@cc.hut.fi>)";
 static char *dev_info = "hostap_plx";
 
 
@@ -32,7 +31,6 @@ MODULE_DESCRIPTION("Support for Intersil Prism2-based 802.11 wireless LAN "
 		   "cards (PLX).");
 MODULE_SUPPORTED_DEVICE("Intersil Prism2-based WLAN cards (PLX)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(PRISM2_VERSION);
 
 
 static int ignore_cis;
@@ -447,10 +445,9 @@ static int prism2_plx_probe(struct pci_dev *pdev,
 	int tmd7160;
 	struct hostap_plx_priv *hw_priv;
 
-	hw_priv = kmalloc(sizeof(*hw_priv), GFP_KERNEL);
+	hw_priv = kzalloc(sizeof(*hw_priv), GFP_KERNEL);
 	if (hw_priv == NULL)
 		return -ENOMEM;
-	memset(hw_priv, 0, sizeof(*hw_priv));
 
 	if (pci_enable_device(pdev))
 		goto err_out_free;
@@ -616,16 +613,11 @@ static struct pci_driver prism2_plx_drv_id = {
 	.id_table	= prism2_plx_id_table,
 	.probe		= prism2_plx_probe,
 	.remove		= prism2_plx_remove,
-	.suspend	= NULL,
-	.resume		= NULL,
-	.enable_wake	= NULL
 };
 
 
 static int __init init_prism2_plx(void)
 {
-	printk(KERN_INFO "%s: %s\n", dev_info, version);
-
 	return pci_register_driver(&prism2_plx_drv_id);
 }
 
@@ -633,7 +625,6 @@ static int __init init_prism2_plx(void)
 static void __exit exit_prism2_plx(void)
 {
 	pci_unregister_driver(&prism2_plx_drv_id);
-	printk(KERN_INFO "%s: Driver unloaded\n", dev_info);
 }
 
 

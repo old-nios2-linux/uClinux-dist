@@ -1,8 +1,8 @@
 /* 
- * $Id: timer.h,v 1.8.6.1 2004/05/12 12:41:05 bogdan Exp $
+ * $Id: timer.h,v 1.11 2004/11/05 14:21:00 bogdan Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,6 +24,10 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * History:
+ * --------
+ *
  */
 
 
@@ -47,10 +51,13 @@ struct list_link {
 
 
 void append_to_timer(struct list_link *head, struct list_link *ll );
+
 void remove_from_timer(struct list_link *head, struct list_link *ll);
+
 void update_in_timer(struct list_link *head, struct list_link *ll);
+
 void check_and_split_timer(struct list_link *head, int time,
-								struct list_link *split, unsigned char *mask);
+		struct list_link *split, unsigned char *mask);
 
 #endif
 

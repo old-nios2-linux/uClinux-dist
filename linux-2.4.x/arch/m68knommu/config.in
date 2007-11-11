@@ -105,6 +105,7 @@ choice 'CPU CLOCK Frequency' \
 	 64MHz	CONFIG_CLOCK_64MHz \
 	 66MHz	CONFIG_CLOCK_66MHz \
 	 70MHz	CONFIG_CLOCK_70MHz \
+	 80MHz	CONFIG_CLOCK_80MHz \
 	 100MHz	CONFIG_CLOCK_100MHz \
 	 140MHz	CONFIG_CLOCK_140MHz \
 	 150MHz	CONFIG_CLOCK_150MHz \
@@ -136,10 +137,8 @@ if [ "$CONFIG_M68EZ328" = "y" ]; then
 	bool 'Motorola M68EZ328ADS board support' CONFIG_M68EZ328ADS
 	bool 'ALMA Electronics board support' CONFIG_ALMA_ANS
 	bool 'uCsimm module support' CONFIG_UCSIMM
-	if [ "CONFIG_UCSIMM" = "y" ]; then
-		define_bool CONFIG_UCBOOTSTRAP y
-		bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP
-	fi
+	dep_bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP $CONFIG_UCSIMM
+
 	bool 'Cwlinux cwez328 support' CONFIG_CWEZ328
 	bool 'PalmV support' CONFIG_PILOT5
 	bool 'Use RTC as system timer' CONFIG_M68EZ328_USE_RTC
@@ -147,11 +146,14 @@ fi
 
 if [ "$CONFIG_M68VZ328" = "y" ]; then
 	bool 'uCdimm module support' CONFIG_UCDIMM
+	dep_bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP $CONFIG_UCDIMM
+	dep_bool '  RAM Kernel loads itself from ROM' CONFIG_RELOCATE $CONFIG_UCDIMM
 	if [ "$CONFIG_UCDIMM" = "y" ]; then
-		define_bool CONFIG_UCBOOTSTRAP y
-		bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP
-		bool '  RAM Kernel loads itself from ROM' CONFIG_RELOCATE
+		choice 'Flash ROM Origin' \
+		"0x10C00000   CONFIG_UCDIMM_V1 \
+		 0x11000000   CONFIG_UCDIMM_V2" CONFIG_UCDIMM_V1
 	fi
+
 	bool 'DragonEngine II board support' CONFIG_DRAGEN2
 	bool 'Dragonix VZ' CONFIG_DRAGONIXVZ
 	bool 'Cwlinux cwvz328 support' CONFIG_CWVZ328
@@ -198,10 +200,7 @@ fi
 
 if [ "$CONFIG_M68360" = "y" ]; then
 	bool 'Arcturus uCquicc board support' CONFIG_UCQUICC
-	if [ "$CONFIG_UCQUICC" = "y" ]; then
-		define_bool CONFIG_UCBOOTSTRAP y
-		bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP
-	fi
+	dep_bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP $CONFIG_UCQUICC
 fi
 
 if [ "$CONFIG_M5206" = "y" ]; then
@@ -245,10 +244,9 @@ if [ "$CONFIG_M5272" = "y" ]; then
 	
 	bool 'Netburner MOD5272 board support' CONFIG_BOARD_MOD5272
 	bool 'Arcturus Networks uC5272 dimm board support' CONFIG_BOARD_UC5272
-	if [ "$CONFIG_BOARD_UC5272" = "y" ]; then
-		bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP
-		bool '  ROMFS appended to kernel (image.bin format)' CONFIG_ROMFS_IMAGE
-	fi
+	dep_bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP $CONFIG_BOARD_UC5272
+	dep_bool '  ROMFS appended to kernel (image.bin format)' CONFIG_ROMFS_IMAGE $CONFIG_BOARD_UC5272
+
 	bool 'senTec COBRA5272 board support' CONFIG_COBRA5272
 	if [ "$CONFIG_COBRA5272" = "y" ]; then
 		bool '   Include framebuffer support on COBRA5272' CONFIG_FB_COBRA5272
@@ -270,7 +268,9 @@ if [ "$CONFIG_M5282" = "y" ]; then
  	bool 'Netburner MOD5282 board support' CONFIG_NETBURNER
 	bool 'Future/Netburner 5282 Badge board support' CONFIG_FUTURENETBURNER
  	bool 'Avnet M5282 board support' CONFIG_AVNET5282
+	bool 'SERRRA MFC3000 board support' CONFIG_MFC3000
 	bool 'Arcturus Networks uC5282 dimm board support' CONFIG_BOARD_UC5282
+	dep_bool '  Use uCbootstrap system calls' CONFIG_UCBOOTSTRAP $CONFIG_BOARD_UC5282
 	if [ "$CONFIG_BOARD_UC5282" = "y" ]; then
 		define_bool CONFIG_ARCTURUS y
 	fi
@@ -297,6 +297,9 @@ if [ "$CONFIG_M5307" = "y" -o \
 fi
 if [ "$CONFIG_AVNET5282" = "y" ]; then
 	define_bool CONFIG_AVNET y
+fi
+if [ "$CONFIG_MFC3000" = "y" ]; then
+  define_bool CONFIG_SERRA y
 fi
 
 if [ "$CONFIG_M5206e" = "y" -o \
@@ -587,10 +590,8 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	dep_bool '  include /proc/mem_map' CONFIG_MEM_MAP $CONFIG_CONTIGUOUS_PAGE_ALLOC
 fi
 
-if [ "$CONFIG_HW_FEITH" = "y" ]; then
-  if [ "$CONFIG_CONTIGUOUS_PAGE_ALLOC" != "y" ]; then
-    bool 'Allow allocating large blocks (> 1MB) of memory' CONFIG_NO_MMU_LARGE_ALLOCS
-  fi
+if [ "$CONFIG_CONTIGUOUS_PAGE_ALLOC" != "y" ]; then
+  bool 'Allow allocating large blocks (> 1MB) of memory' CONFIG_NO_MMU_LARGE_ALLOCS
 fi
 
 bool 'Kernel profiling support' CONFIG_PROFILE

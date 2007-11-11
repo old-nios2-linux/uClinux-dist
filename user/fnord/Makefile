@@ -21,6 +21,10 @@ FLTFLAGS += -s 15000
 
 OBJS += httpd.o
 
+ifdef CONFIG_PROP_FNORD_SECURITY_COUNT
+CFLAGS += -DSECURITY_COUNTS
+endif
+
 ifndef CONFIG_USER_FNORD_NOAUTH
 # These are for auth
 CFLAGS += -DUSE_AUTH
@@ -52,7 +56,17 @@ install: httpd
 	cp httpd /usr/local/bin/fnord
 
 clean:
-	-rm -f *.[oa] httpd *.gdb *.elf
+	rm -f *.[oa] httpd fnord fnord-cgi fnord-idx
+	rm -f *.gdb *.elf
+
+install:
+	test -d /command || mkdir /command
+
+CURNAME=$(notdir $(shell pwd))
+VERSION=fnord-$(shell head -n 1 CHANGES|sed 's/://')
+
+tar: rename
+	cd .. && tar cvvf $(VERSION).tar.bz2 --use=bzip2 --exclude CVS --exclude bin-* --exclude .cvsignore --exclude default $(VERSION)
 
 romfs:
 	$(ROMFSINST) /bin/httpd

@@ -104,6 +104,15 @@
 
 struct spu_context;
 struct spu_runqueue;
+struct device_node;
+
+enum spu_utilization_state {
+	SPU_UTIL_USER,
+	SPU_UTIL_SYSTEM,
+	SPU_UTIL_IOWAIT,
+	SPU_UTIL_IDLE_LOADED,
+	SPU_UTIL_MAX
+};
 
 struct spu {
 	const char *name;
@@ -111,18 +120,17 @@ struct spu {
 	u8 *local_store;
 	unsigned long problem_phys;
 	struct spu_problem __iomem *problem;
-	struct spu_priv1 __iomem *priv1;
 	struct spu_priv2 __iomem *priv2;
-	struct list_head list;
-	struct list_head sched_list;
+	struct list_head cbe_list;
+	struct list_head full_list;
+	enum { SPU_FREE, SPU_USED } alloc_state;
 	int number;
-	int nid;
 	unsigned int irqs[3];
-	u32 isrc;
 	u32 node;
 	u64 flags;
 	u64 dar;
 	u64 dsisr;
+	u64 class_0_pending;
 	size_t ls_size;
 	unsigned int slb_replace;
 	struct mm_struct *mm;
@@ -130,8 +138,7 @@ struct spu {
 	struct spu_runqueue *rq;
 	unsigned long long timestamp;
 	pid_t pid;
-	int prio;
-	int class_0_pending;
+	pid_t tgid;
 	spinlock_t register_lock;
 
 	void (* wbox_callback)(struct spu *spu);
@@ -144,15 +151,83 @@ struct spu {
 	char irq_c1[8];
 	char irq_c2[8];
 
+	u64 spe_id;
+
+	void* pdata; /* platform private data */
+
+	/* of based platforms only */
+	struct device_node *devnode;
+
+	/* native only */
+	struct spu_priv1 __iomem *priv1;
+
+	/* beat only */
+	u64 shadow_int_mask_RW[3];
+
 	struct sys_device sysdev;
+
+	int has_mem_affinity;
+	struct list_head aff_list;
+
+	struct {
+		/* protected by interrupt reentrancy */
+		enum spu_utilization_state util_state;
+		unsigned long long tstamp;
+		unsigned long long times[SPU_UTIL_MAX];
+		unsigned long long vol_ctx_switch;
+		unsigned long long invol_ctx_switch;
+		unsigned long long min_flt;
+		unsigned long long maj_flt;
+		unsigned long long hash_flt;
+		unsigned long long slb_flt;
+		unsigned long long class2_intr;
+		unsigned long long libassist;
+	} stats;
 };
 
-struct spu *spu_alloc(void);
-struct spu *spu_alloc_node(int node);
-void spu_free(struct spu *spu);
+struct cbe_spu_info {
+	struct mutex list_mutex;
+	struct list_head spus;
+	int n_spus;
+	int nr_active;
+	atomic_t reserved_spus;
+};
+
+extern struct cbe_spu_info cbe_spu_info[];
+
+void spu_init_channels(struct spu *spu);
 int spu_irq_class_0_bottom(struct spu *spu);
 int spu_irq_class_1_bottom(struct spu *spu);
 void spu_irq_setaffinity(struct spu *spu, int cpu);
+
+#ifdef CONFIG_KEXEC
+void crash_register_spus(struct list_head *list);
+#else
+static inline void crash_register_spus(struct list_head *list)
+{
+}
+#endif
+
+extern void spu_invalidate_slbs(struct spu *spu);
+extern void spu_associate_mm(struct spu *spu, struct mm_struct *mm);
+
+/* Calls from the memory management to the SPU */
+struct mm_struct;
+extern void spu_flush_all_slbs(struct mm_struct *mm);
+
+/* This interface allows a profiler (e.g., OProfile) to store a ref
+ * to spu context information that it creates.	This caching technique
+ * avoids the need to recreate this information after a save/restore operation.
+ *
+ * Assumes the caller has already incremented the ref count to
+ * profile_info; then spu_context_destroy must call kref_put
+ * on prof_info_kref.
+ */
+void spu_set_profile_private_kref(struct spu_context *ctx,
+				  struct kref *prof_info_kref,
+				  void ( * prof_info_release) (struct kref *kref));
+
+void *spu_get_profile_private_kref(struct spu_context *ctx);
 
 /* system callbacks from the SPU */
 struct spu_syscall_block {
@@ -162,13 +237,22 @@ struct spu_syscall_block {
 extern long spu_sys_callback(struct spu_syscall_block *s);
 
 /* syscalls implemented in spufs */
+struct file;
 extern struct spufs_calls {
 	asmlinkage long (*create_thread)(const char __user *name,
-					unsigned int flags, mode_t mode);
+					unsigned int flags, mode_t mode,
+					struct file *neighbor);
 	asmlinkage long (*spu_run)(struct file *filp, __u32 __user *unpc,
 						__u32 __user *ustatus);
 	struct module *owner;
 } spufs_calls;
+
+/* coredump calls implemented in spufs */
+struct spu_coredump_calls {
+	asmlinkage int (*arch_notes_size)(void);
+	asmlinkage void (*arch_write_notes)(struct file *file);
+	struct module *owner;
+};
 
 /* return status from spu_run, same as in libspe */
 #define SPE_EVENT_DMA_ALIGNMENT		0x0008	/*A DMA alignment error */
@@ -182,8 +266,12 @@ extern struct spufs_calls {
  */
 #define SPU_CREATE_EVENTS_ENABLED	0x0001
 #define SPU_CREATE_GANG			0x0002
+#define SPU_CREATE_NOSCHED		0x0004
+#define SPU_CREATE_ISOLATE		0x0008
+#define SPU_CREATE_AFFINITY_SPU		0x0010
+#define SPU_CREATE_AFFINITY_MEM		0x0020
 
-#define SPU_CREATE_FLAG_ALL		0x0003 /* mask of all valid flags */
+#define SPU_CREATE_FLAG_ALL		0x003f /* mask of all valid flags */
 
 
 #ifdef CONFIG_SPU_FS_MODULE
@@ -198,6 +286,15 @@ static inline void unregister_spu_syscalls(struct spufs_calls *calls)
 {
 }
 #endif /* MODULE */
+
+int register_arch_coredump_calls(struct spu_coredump_calls *calls);
+void unregister_arch_coredump_calls(struct spu_coredump_calls *calls);
+
+int spu_add_sysdev_attr(struct sysdev_attribute *attr);
+void spu_remove_sysdev_attr(struct sysdev_attribute *attr);
+
+int spu_add_sysdev_attr_group(struct attribute_group *attrs);
+void spu_remove_sysdev_attr_group(struct attribute_group *attrs);
 
 
 /*
@@ -215,6 +312,7 @@ static inline void unregister_spu_syscalls(struct spufs_calls *calls)
  * to object-id spufs file from user space and the notifer
  * function can assume that spu->ctx is valid.
  */
+struct notifier_block;
 int spu_switch_event_register(struct notifier_block * n);
 int spu_switch_event_unregister(struct notifier_block * n);
 
@@ -277,6 +375,7 @@ struct spu_problem {
 	u32 spu_runcntl_RW;					/* 0x401c */
 #define SPU_RUNCNTL_STOP	0L
 #define SPU_RUNCNTL_RUNNABLE	1L
+#define SPU_RUNCNTL_ISOLATE	2L
 	u8  pad_0x4020_0x4024[0x4];				/* 0x4020 */
 	u32 spu_status_R;					/* 0x4024 */
 #define SPU_STOP_STATUS_SHIFT           16
@@ -289,8 +388,8 @@ struct spu_problem {
 #define SPU_STATUS_INVALID_INSTR        0x20
 #define SPU_STATUS_INVALID_CH           0x40
 #define SPU_STATUS_ISOLATED_STATE       0x80
-#define SPU_STATUS_ISOLATED_LOAD_STAUTUS 0x200
-#define SPU_STATUS_ISOLATED_EXIT_STAUTUS 0x400
+#define SPU_STATUS_ISOLATED_LOAD_STATUS 0x200
+#define SPU_STATUS_ISOLATED_EXIT_STATUS 0x400
 	u8  pad_0x4028_0x402c[0x4];				/* 0x4028 */
 	u32 spu_spe_R;						/* 0x402c */
 	u8  pad_0x4030_0x4034[0x4];				/* 0x4030 */
@@ -341,6 +440,7 @@ struct spu_priv2 {
 #define MFC_CNTL_RESUME_DMA_QUEUE		(0ull << 0)
 #define MFC_CNTL_SUSPEND_DMA_QUEUE		(1ull << 0)
 #define MFC_CNTL_SUSPEND_DMA_QUEUE_MASK		(1ull << 0)
+#define MFC_CNTL_SUSPEND_MASK			(1ull << 4)
 #define MFC_CNTL_NORMAL_DMA_QUEUE_OPERATION	(0ull << 8)
 #define MFC_CNTL_SUSPEND_IN_PROGRESS		(1ull << 8)
 #define MFC_CNTL_SUSPEND_COMPLETE		(3ull << 8)
@@ -409,6 +509,7 @@ struct spu_priv1 {
 #define MFC_STATE1_PROBLEM_STATE_MASK		0x08ull
 #define MFC_STATE1_RELOCATE_MASK		0x10ull
 #define MFC_STATE1_MASTER_RUN_CONTROL_MASK	0x20ull
+#define MFC_STATE1_TABLE_SEARCH_MASK		0x40ull
 	u64 mfc_lpid_RW;					/* 0x008 */
 	u64 spu_idr_RW;						/* 0x010 */
 	u64 mfc_vr_RO;						/* 0x018 */

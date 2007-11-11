@@ -17,7 +17,6 @@
 #include <linux/kdev_t.h>
 #include <linux/delay.h>
 #include <linux/seq_file.h>
-#include <linux/root_dev.h>
 
 #include <asm/system.h>
 #include <asm/time.h>
@@ -30,6 +29,7 @@
 #include <asm/udbg.h>
 
 #include <sysdev/fsl_soc.h>
+#include <sysdev/fsl_pci.h>
 #include "mpc85xx.h"
 
 #ifdef CONFIG_CPM2
@@ -39,28 +39,14 @@
 #include <asm/fs_pd.h>
 #endif
 
-#ifndef CONFIG_PCI
-unsigned long isa_io_base = 0;
-unsigned long isa_mem_base = 0;
-#endif
-
 #ifdef CONFIG_PCI
-int
-mpc85xx_exclude_device(u_char bus, u_char devfn)
+static int mpc85xx_exclude_device(struct pci_controller *hose,
+				   u_char bus, u_char devfn)
 {
 	if (bus == 0 && PCI_SLOT(devfn) == 0)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	else
 		return PCIBIOS_SUCCESSFUL;
-}
-
-void __init
-mpc85xx_pcibios_fixup(void)
-{
-	struct pci_dev *dev = NULL;
-
-	for_each_pci_dev(dev)
-		pci_read_irq_line(dev);
 }
 #endif /* CONFIG_PCI */
 
@@ -78,7 +64,7 @@ static void cpm2_cascade(unsigned int irq, struct irq_desc *desc)
 
 #endif /* CONFIG_CPM2 */
 
-void __init mpc85xx_ads_pic_init(void)
+static void __init mpc85xx_ads_pic_init(void)
 {
 	struct mpic *mpic;
 	struct resource r;
@@ -102,29 +88,9 @@ void __init mpc85xx_ads_pic_init(void)
 
 	mpic = mpic_alloc(np, r.start,
 			MPIC_PRIMARY | MPIC_WANTS_RESET | MPIC_BIG_ENDIAN,
-			4, 0, " OpenPIC  ");
+			0, 256, " OpenPIC  ");
 	BUG_ON(mpic == NULL);
 	of_node_put(np);
-
-	mpic_assign_isu(mpic, 0, r.start + 0x10200);
-	mpic_assign_isu(mpic, 1, r.start + 0x10280);
-	mpic_assign_isu(mpic, 2, r.start + 0x10300);
-	mpic_assign_isu(mpic, 3, r.start + 0x10380);
-	mpic_assign_isu(mpic, 4, r.start + 0x10400);
-	mpic_assign_isu(mpic, 5, r.start + 0x10480);
-	mpic_assign_isu(mpic, 6, r.start + 0x10500);
-	mpic_assign_isu(mpic, 7, r.start + 0x10580);
-
-	/* Unused on this platform (leave room for 8548) */
-	mpic_assign_isu(mpic, 8, r.start + 0x10600);
-	mpic_assign_isu(mpic, 9, r.start + 0x10680);
-	mpic_assign_isu(mpic, 10, r.start + 0x10700);
-	mpic_assign_isu(mpic, 11, r.start + 0x10780);
-
-	/* External Interrupts */
-	mpic_assign_isu(mpic, 12, r.start + 0x10000);
-	mpic_assign_isu(mpic, 13, r.start + 0x10080);
-	mpic_assign_isu(mpic, 14, r.start + 0x10100);
 
 	mpic_init(mpic);
 
@@ -238,7 +204,7 @@ static void __init mpc85xx_ads_setup_arch(void)
 	if (cpu != 0) {
 		const unsigned int *fp;
 
-		fp = get_property(cpu, "clock-frequency", NULL);
+		fp = of_get_property(cpu, "clock-frequency", NULL);
 		if (fp != 0)
 			loops_per_jiffy = *fp / HZ;
 		else
@@ -252,20 +218,12 @@ static void __init mpc85xx_ads_setup_arch(void)
 
 #ifdef CONFIG_PCI
 	for (np = NULL; (np = of_find_node_by_type(np, "pci")) != NULL;)
-		add_bridge(np);
-
-	ppc_md.pcibios_fixup = mpc85xx_pcibios_fixup;
+		fsl_add_bridge(np, 1);
 	ppc_md.pci_exclude_device = mpc85xx_exclude_device;
-#endif
-
-#ifdef  CONFIG_ROOT_NFS
-	ROOT_DEV = Root_NFS;
-#else
-	ROOT_DEV = Root_HDA1;
 #endif
 }
 
-void mpc85xx_ads_show_cpuinfo(struct seq_file *m)
+static void mpc85xx_ads_show_cpuinfo(struct seq_file *m)
 {
 	uint pvid, svid, phid1;
 	uint memsize = total_memory;
@@ -291,10 +249,9 @@ void mpc85xx_ads_show_cpuinfo(struct seq_file *m)
  */
 static int __init mpc85xx_ads_probe(void)
 {
-	/* We always match for now, eventually we should look at the flat
-	   dev tree to ensure this is the board we are suppose to run on
-	*/
-	return 1;
+        unsigned long root = of_get_flat_dt_root();
+
+        return of_flat_dt_is_compatible(root, "MPC85xxADS");
 }
 
 define_machine(mpc85xx_ads) {

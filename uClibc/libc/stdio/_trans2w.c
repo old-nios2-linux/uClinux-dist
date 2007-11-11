@@ -7,6 +7,8 @@
 
 #include "_stdio.h"
 
+libc_hidden_proto(fseek)
+
 /* Function to handle transition to writing.
  *   Initialize or verify the stream's orientation (even if readonly).
  *   Check that the stream is writable.
@@ -21,9 +23,9 @@
  */
 
 #ifdef __UCLIBC_HAS_WCHAR__
-int __stdio_trans2w_o(FILE * __restrict stream, int oflag)
+int attribute_hidden __stdio_trans2w_o(FILE * __restrict stream, int oflag)
 #else
-int __stdio_trans2w(FILE * __restrict stream)
+int attribute_hidden __stdio_trans2w(FILE * __restrict stream)
 #endif
 {
 	__STDIO_STREAM_VALIDATE(stream);
@@ -40,9 +42,13 @@ int __stdio_trans2w(FILE * __restrict stream)
 #endif
 
 	if (stream->__modeflags & __FLAG_READONLY) {
+#if defined(__UCLIBC_HAS_WCHAR__) || !defined(__UCLIBC_HAS_STDIO_AUTO_RW_TRANSITION__)
 	DO_EBADF:
+#endif
 		__set_errno(EBADF);
+#ifdef __UCLIBC_HAS_STDIO_AUTO_RW_TRANSITION__
 	ERROR:
+#endif
 		__STDIO_STREAM_SET_ERROR(stream);
 		__STDIO_STREAM_VALIDATE(stream);
 		return EOF;

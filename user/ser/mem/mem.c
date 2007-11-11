@@ -1,7 +1,7 @@
 /*
- * $Id: mem.c,v 1.9 2003/04/08 16:02:45 andrei Exp $
+ * $Id: mem.c,v 1.11 2004/11/10 21:51:24 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -90,7 +90,7 @@ int init_shm_mallocs()
 #ifdef SHM_MEM
 	if (shm_mem_init()<0) {
 		LOG(L_CRIT, "could not initialize shared memory pool, exiting...\n");
-		 fprintf(stderr, "Too much shared memory demanded: %d\n",
+		 fprintf(stderr, "Too much shared memory demanded: %ld\n",
 			shm_mem_size );
 		return -1;
 	}

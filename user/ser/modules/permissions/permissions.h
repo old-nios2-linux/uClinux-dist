@@ -1,5 +1,5 @@
 /*
- * $Id: permissions.h,v 1.2 2003/09/03 17:13:57 andrei Exp $
+ * $Id: permissions.h,v 1.6 2004/06/08 10:55:31 andrei Exp $
  *
  * PERMISSIONS module
  *
@@ -37,12 +37,32 @@
 #define PERMISSIONS_H 1
 
 #include "../../sr_module.h"
+#include "../../db/db.h"
+#include "rule.h"
 
-#define ALLOW_FILE CFG_DIR "permissions.allow"
-#define DENY_FILE  CFG_DIR "permissions.deny"
+#define DEFAULT_ALLOW_FILE "permissions.allow"
+#define DEFAULT_DENY_FILE  "permissions.deny"
 
-int mod_init(void);
-void mod_exit(void);
-int allow_routing(struct sip_msg* msg, char* str1, char* str2);
+typedef struct rule_file {
+	rule* rules;    /* Parsed rule set */
+	char* filename; /* The name of the file */
+} rule_file_t;
+
+/*
+ * Maximum number if allow/deny file pairs that can be opened
+ * at any time
+ */
+#define MAX_RULE_FILES 64
+
+extern char* db_url;        /* Database URL */
+extern int db_mode;	    /* Database usage mode: 0=no cache, 1=cache */
+extern char* trusted_table; /* Name of trusted table */
+extern char* source_col;    /* Name of source address column */
+extern char* proto_col;     /* Name of protocol column */
+extern char* from_col;      /* Name of from pattern column */
+
+
+#define DISABLE_CACHE 0
+#define ENABLE_CACHE 1
 
 #endif

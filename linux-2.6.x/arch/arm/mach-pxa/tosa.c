@@ -28,6 +28,7 @@
 #include <asm/hardware.h>
 #include <asm/irq.h>
 #include <asm/system.h>
+#include <asm/arch/pxa-regs.h>
 #include <asm/arch/irda.h>
 #include <asm/arch/mmc.h>
 #include <asm/arch/udc.h>
@@ -35,15 +36,13 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
-
-#include <asm/arch/pxa-regs.h>
 #include <asm/arch/tosa.h>
 
 #include <asm/hardware/scoop.h>
 #include <asm/mach/sharpsl_param.h>
 
 #include "generic.h"
-
+#include "devices.h"
 
 /*
  * SCOOP Device
@@ -333,7 +332,7 @@ MACHINE_START(TOSA, "SHARP Tosa")
 	.io_pg_offst	= (io_p2v(0x40000000) >> 18) & 0xfffc,
 	.fixup          = fixup_tosa,
 	.map_io         = pxa_map_io,
-	.init_irq       = pxa_init_irq,
+	.init_irq       = pxa25x_init_irq,
 	.init_machine   = tosa_init,
 	.timer          = &pxa_timer,
 MACHINE_END

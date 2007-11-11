@@ -100,6 +100,9 @@
 	{ PCI_VENDOR_ID_ATI, id, PCI_ANY_ID, PCI_ANY_ID, 0, 0, (flags) | (CHIP_FAMILY_##family) }
 
 static struct pci_device_id radeonfb_pci_table[] = {
+        /* Radeon Xpress 200m */
+	CHIP_DEF(PCI_CHIP_RS480_5955,   RS480,  CHIP_HAS_CRTC2 | CHIP_IS_IGP | CHIP_IS_MOBILITY),
+	CHIP_DEF(PCI_CHIP_RS482_5975,	RS480,	CHIP_HAS_CRTC2 | CHIP_IS_IGP | CHIP_IS_MOBILITY),
 	/* Mobility M6 */
 	CHIP_DEF(PCI_CHIP_RADEON_LY, 	RV100,	CHIP_HAS_CRTC2 | CHIP_IS_MOBILITY),
 	CHIP_DEF(PCI_CHIP_RADEON_LZ,	RV100,	CHIP_HAS_CRTC2 | CHIP_IS_MOBILITY),
@@ -268,6 +271,11 @@ static int nomtrr = 0;
 #endif
 static int force_sleep;
 static int ignore_devlist;
+#ifdef CONFIG_PMAC_BACKLIGHT
+static int backlight = 1;
+#else
+static int backlight = 0;
+#endif
 
 /*
  * prototypes
@@ -405,7 +413,7 @@ static int  __devinit radeon_find_mem_vbios(struct radeonfb_info *rinfo)
 }
 #endif
 
-#ifdef CONFIG_PPC_OF
+#if defined(CONFIG_PPC_OF) || defined(CONFIG_SPARC)
 /*
  * Read XTAL (ref clock), SCLK and MCLK from Open Firmware device
  * tree. Hopefully, ATI OF driver is kind enough to fill these
@@ -417,7 +425,7 @@ static int __devinit radeon_read_xtal_OF (struct radeonfb_info *rinfo)
 
 	if (dp == NULL)
 		return -ENODEV;
-	val = get_property(dp, "ATY,RefCLK", NULL);
+	val = of_get_property(dp, "ATY,RefCLK", NULL);
 	if (!val || !*val) {
 		printk(KERN_WARNING "radeonfb: No ATY,RefCLK property !\n");
 		return -EINVAL;
@@ -425,17 +433,17 @@ static int __devinit radeon_read_xtal_OF (struct radeonfb_info *rinfo)
 
 	rinfo->pll.ref_clk = (*val) / 10;
 
-	val = get_property(dp, "ATY,SCLK", NULL);
+	val = of_get_property(dp, "ATY,SCLK", NULL);
 	if (val && *val)
 		rinfo->pll.sclk = (*val) / 10;
 
-	val = get_property(dp, "ATY,MCLK", NULL);
+	val = of_get_property(dp, "ATY,MCLK", NULL);
 	if (val && *val)
 		rinfo->pll.mclk = (*val) / 10;
 
        	return 0;
 }
-#endif /* CONFIG_PPC_OF */
+#endif /* CONFIG_PPC_OF || CONFIG_SPARC */
 
 /*
  * Read PLL infos from chip registers
@@ -640,7 +648,7 @@ static void __devinit radeon_get_pllinfo(struct radeonfb_info *rinfo)
 	rinfo->pll.ref_div = INPLL(PPLL_REF_DIV) & PPLL_REF_DIV_MASK;
 
 
-#ifdef CONFIG_PPC_OF
+#if defined(CONFIG_PPC_OF) || defined(CONFIG_SPARC)
 	/*
 	 * Retrieve PLL infos from Open Firmware first
 	 */
@@ -648,7 +656,7 @@ static void __devinit radeon_get_pllinfo(struct radeonfb_info *rinfo)
        		printk(KERN_INFO "radeonfb: Retrieved PLL infos from Open Firmware\n");
 		goto found;
 	}
-#endif /* CONFIG_PPC_OF */
+#endif /* CONFIG_PPC_OF || CONFIG_SPARC */
 
 	/*
 	 * Check out if we have an X86 which gave us some PLL informations
@@ -1026,8 +1034,7 @@ int radeon_screen_blank(struct radeonfb_info *rinfo, int blank, int mode_switch)
 		break;
 	}
 
-	/* let fbcon do a soft blank for us */
-	return (blank == FB_BLANK_NORMAL) ? -EINVAL : 0;
+	return 0;
 }
 
 static int radeonfb_blank (int blank, struct fb_info *info)
@@ -1277,7 +1284,8 @@ static void radeon_write_pll_regs(struct radeonfb_info *rinfo, struct radeon_reg
 	if (rinfo->family == CHIP_FAMILY_R300 ||
 	    rinfo->family == CHIP_FAMILY_RS300 ||
 	    rinfo->family == CHIP_FAMILY_R350 ||
-	    rinfo->family == CHIP_FAMILY_RV350) {
+	    rinfo->family == CHIP_FAMILY_RV350 ||
+	    rinfo->family == CHIP_FAMILY_RV380 ) {
 		if (mode->ppll_ref_div & R300_PPLL_REF_DIV_ACC_MASK) {
 			/* When restoring console mode, use saved PPLL_REF_DIV
 			 * setting.
@@ -1990,7 +1998,8 @@ static void radeon_identify_vram(struct radeonfb_info *rinfo)
 	/* framebuffer size */
         if ((rinfo->family == CHIP_FAMILY_RS100) ||
             (rinfo->family == CHIP_FAMILY_RS200) ||
-            (rinfo->family == CHIP_FAMILY_RS300)) {
+            (rinfo->family == CHIP_FAMILY_RS300) ||
+	    (rinfo->family == CHIP_FAMILY_RS480) ) {
           u32 tom = INREG(NB_TOM);
           tmp = ((((tom >> 16) - (tom & 0xffff) + 1) << 6) * 1024);
 
@@ -2095,7 +2104,9 @@ static ssize_t radeon_show_one_edid(char *buf, loff_t off, size_t count, const u
 }
 
 
-static ssize_t radeon_show_edid1(struct kobject *kobj, char *buf, loff_t off, size_t count)
+static ssize_t radeon_show_edid1(struct kobject *kobj,
+				 struct bin_attribute *bin_attr,
+				 char *buf, loff_t off, size_t count)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -2106,7 +2117,9 @@ static ssize_t radeon_show_edid1(struct kobject *kobj, char *buf, loff_t off, si
 }
 
 
-static ssize_t radeon_show_edid2(struct kobject *kobj, char *buf, loff_t off, size_t count)
+static ssize_t radeon_show_edid2(struct kobject *kobj,
+				 struct bin_attribute *bin_attr,
+				 char *buf, loff_t off, size_t count)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -2119,7 +2132,6 @@ static ssize_t radeon_show_edid2(struct kobject *kobj, char *buf, loff_t off, si
 static struct bin_attribute edid1_attr = {
 	.attr   = {
 		.name	= "edid1",
-		.owner	= THIS_MODULE,
 		.mode	= 0444,
 	},
 	.size	= EDID_LENGTH,
@@ -2129,7 +2141,6 @@ static struct bin_attribute edid1_attr = {
 static struct bin_attribute edid2_attr = {
 	.attr   = {
 		.name	= "edid2",
-		.owner	= THIS_MODULE,
 		.mode	= 0444,
 	},
 	.size	= EDID_LENGTH,
@@ -2227,7 +2238,7 @@ static int __devinit radeonfb_pci_register (struct pci_dev *pdev,
 	    rinfo->family == CHIP_FAMILY_RS200)
 		rinfo->errata |= CHIP_ERRATA_PLL_DELAY;
 
-#ifdef CONFIG_PPC_OF
+#if defined(CONFIG_PPC_OF) || defined(CONFIG_SPARC)
 	/* On PPC, we obtain the OF device-node pointer to the firmware
 	 * data for this chip
 	 */
@@ -2236,6 +2247,8 @@ static int __devinit radeonfb_pci_register (struct pci_dev *pdev,
 		printk(KERN_WARNING "radeonfb (%s): Cannot match card to OF node !\n",
 		       pci_name(rinfo->pdev));
 
+#endif /* CONFIG_PPC_OF || CONFIG_SPARC */
+#ifdef CONFIG_PPC_OF
 	/* On PPC, the firmware sets up a memory mapping that tends
 	 * to cause lockups when enabling the engine. We reconfigure
 	 * the card internal memory mappings properly
@@ -2349,7 +2362,8 @@ static int __devinit radeonfb_pci_register (struct pci_dev *pdev,
 						 MTRR_TYPE_WRCOMB, 1);
 #endif
 
-	radeonfb_bl_init(rinfo);
+	if (backlight)
+		radeonfb_bl_init(rinfo);
 
 	printk ("radeonfb (%s): %s\n", pci_name(rinfo->pdev), rinfo->name);
 
@@ -2393,7 +2407,6 @@ static void __devexit radeonfb_pci_unregister (struct pci_dev *pdev)
         if (!rinfo)
                 return;
 
-	radeonfb_bl_exit(rinfo);
 	radeonfb_pm_exit(rinfo);
 
 	if (rinfo->mon1_EDID)
@@ -2419,6 +2432,8 @@ static void __devexit radeonfb_pci_unregister (struct pci_dev *pdev)
 #endif
 
         unregister_framebuffer(info);
+
+        radeonfb_bl_exit(rinfo);
 
         iounmap(rinfo->mmio_base);
         iounmap(rinfo->fb_base);
@@ -2469,6 +2484,8 @@ static int __init radeonfb_setup (char *options)
 			force_dfp = 1;
 		} else if (!strncmp(this_opt, "panel_yres:", 11)) {
 			panel_yres = simple_strtoul((this_opt+11), NULL, 0);
+		} else if (!strncmp(this_opt, "backlight:", 10)) {
+			backlight = simple_strtoul(this_opt+10, NULL, 0);
 #ifdef CONFIG_MTRR
 		} else if (!strncmp(this_opt, "nomtrr", 6)) {
 			nomtrr = 1;

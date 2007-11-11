@@ -2,9 +2,9 @@
  * defaults.h
  *
  * This file contains some tuneable parameters, most of which can be overriden
- * at run-time (note, MAX_CONNECTIONS can't!).
+ * at run-time.
  *
- * $Id: defaults.h,v 1.3 2004/10/07 06:00:47 toby Exp $
+ * $Id: defaults.h,v 1.4 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifndef _PPTPD_DEFAULTS_H
@@ -29,11 +29,11 @@
 
 /* Default configuration values, mostly configurable */
 
-#if !defined(PPPD_IP_ALLOC)
-#define MAX_CONNECTIONS			256
+#define CONNECTIONS_DEFAULT		100
 #define DEFAULT_LOCAL_IP_LIST		"192.168.0.1-100"
 #define DEFAULT_REMOTE_IP_LIST		"192.168.1.1-100"
-#endif
+
+#define MAX_CALLS_PER_TCP_LINK		128
 
 #ifdef PNS_MODE
 #define MAX_CALLS			60
@@ -47,22 +47,31 @@
 #endif
 #define PIDFILE_DEFAULT			"/var/run/pptpd.pid"
 
-#define STIMEOUT_DEFAULT	10 /* seconds */
+#define STIMEOUT_DEFAULT		10 /* seconds */
 
 /* Location of binaries */
 
 #define PPTP_CTRL_BIN			SBINDIR "/pptpctrl"
 #define PPTPD_BIN			SBINDIR "/pptpd"
+#define BCRELAY_BIN			SBINDIR "/bcrelay"
 
 /* Parameters permitted in the config file */
 
+#define CONNECTIONS_KEYWORD		"connections"
 #define SPEED_KEYWORD			"speed"
 #define PPPD_OPTION_KEYWORD		"option"
 #define DEBUG_KEYWORD			"debug"
+#ifdef BCRELAY
+#define BCRELAY_KEYWORD			"bcrelay"
+#endif
 #define LOCALIP_KEYWORD			"localip"
 #define REMOTEIP_KEYWORD		"remoteip"
 #define LISTEN_KEYWORD			"listen"
 #define PIDFILE_KEYWORD			"pidfile"
 #define STIMEOUT_KEYWORD		"stimeout"
+#define NOIPPARAM_KEYWORD		"noipparam"
+#define PPP_BINARY_KEYWORD		"ppp"
+#define LOGWTMP_KEYWORD			"logwtmp"
+#define DELEGATE_KEYWORD		"delegate"
 
 #endif	/* !_PPTPD_DEFAULTS_H */

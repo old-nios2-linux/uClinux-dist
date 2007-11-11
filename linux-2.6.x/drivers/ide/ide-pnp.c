@@ -42,7 +42,7 @@ static int idepnp_probe(struct pnp_dev * dev, const struct pnp_device_id *dev_id
 	hw.irq = pnp_irq(dev, 0);
 	hw.dma = NO_DMA;
 
-	index = ide_register_hw(&hw, &hwif);
+	index = ide_register_hw(&hw, 1, &hwif);
 
 	if (index != -1) {
 	    	printk(KERN_INFO "ide%d: generic PnP IDE interface\n", index);
@@ -72,4 +72,9 @@ static struct pnp_driver idepnp_driver = {
 void __init pnpide_init(void)
 {
 	pnp_register_driver(&idepnp_driver);
+}
+
+void __exit pnpide_exit(void)
+{
+	pnp_unregister_driver(&idepnp_driver);
 }

@@ -47,30 +47,33 @@ so, delete this exception statement from your version.  */
 #include "wget.h"
 #include "utils.h"
 #include "url.h"
-#include "rbuf.h"
 #include "retr.h"
 #include "ftp.h"
 #include "connect.h"
 #include "host.h"
 #include "netrc.h"
 #include "convert.h"		/* for downloaded_file */
+#include "recur.h"		/* for INFINITE_RECURSION */
 
 #ifndef errno
 extern int errno;
 #endif
 
-extern LARGE_INT total_downloaded_bytes;
+extern SUM_SIZE_INT total_downloaded_bytes;
 
 /* File where the "ls -al" listing will be saved.  */
 #define LIST_FILENAME ".listing"
 
 extern char ftp_last_respline[];
 
+extern FILE *output_stream;
+extern int output_stream_regular;
+
 typedef struct
 {
   int st;			/* connection status */
   int cmd;			/* command code */
-  struct rbuf rbuf;		/* control connection buffer */
+  int csock;			/* control connection socket */
   double dltime;		/* time of the download in msecs */
   enum stype rs;		/* remote system reported by ftp server */ 
   char *id;			/* initial directory */
@@ -80,12 +83,12 @@ typedef struct
 
 
 /* Look for regexp "( *[0-9]+ *byte" (literal parenthesis) anywhere in
-   the string S, and return the number converted to long, if found, 0
+   the string S, and return the number converted to wgint, if found, 0
    otherwise.  */
-static long
+static wgint
 ftp_expected_bytes (const char *s)
 {
-  long res;
+  wgint res;
 
   while (1)
     {
@@ -93,18 +96,8 @@ ftp_expected_bytes (const char *s)
 	++s;
       if (!*s)
 	return 0;
-      for (++s; *s && ISSPACE (*s); s++);
-      if (!*s)
-	return 0;
-      if (!ISDIGIT (*s))
-	continue;
-      res = 0;
-      do
-	{
-	  res = (*s - '0') + 10 * res;
-	  ++s;
-	}
-      while (*s && ISDIGIT (*s));
+      ++s;			/* skip the '(' */
+      res = str_to_wgint (s, (char **) &s, 10);
       if (!*s)
 	return 0;
       while (*s && ISSPACE (*s))
@@ -121,20 +114,148 @@ ftp_expected_bytes (const char *s)
   return res;
 }
 
+#ifdef ENABLE_IPV6
+/* 
+ * This function sets up a passive data connection with the FTP server.
+ * It is merely a wrapper around ftp_epsv, ftp_lpsv and ftp_pasv.
+ */
+static uerr_t
+ftp_do_pasv (int csock, ip_address *addr, int *port)
+{
+  uerr_t err;
+
+  /* We need to determine the address family and need to call
+     getpeername, so while we're at it, store the address to ADDR.
+     ftp_pasv and ftp_lpsv can simply override it.  */
+  if (!socket_ip_address (csock, addr, ENDPOINT_PEER))
+    abort ();
+
+  /* If our control connection is over IPv6, then we first try EPSV and then 
+   * LPSV if the former is not supported. If the control connection is over 
+   * IPv4, we simply issue the good old PASV request. */
+  switch (addr->type)
+    {
+    case IPV4_ADDRESS:
+      if (!opt.server_response)
+        logputs (LOG_VERBOSE, "==> PASV ... ");
+      err = ftp_pasv (csock, addr, port);
+      break;
+    case IPV6_ADDRESS:
+      if (!opt.server_response)
+        logputs (LOG_VERBOSE, "==> EPSV ... ");
+      err = ftp_epsv (csock, addr, port);
+
+      /* If EPSV is not supported try LPSV */
+      if (err == FTPNOPASV)
+        {
+          if (!opt.server_response)
+            logputs (LOG_VERBOSE, "==> LPSV ... ");
+          err = ftp_lpsv (csock, addr, port);
+        }
+      break;
+    default:
+      abort ();
+    }
+
+  return err;
+}
+
+/* 
+ * This function sets up an active data connection with the FTP server.
+ * It is merely a wrapper around ftp_eprt, ftp_lprt and ftp_port.
+ */
+static uerr_t
+ftp_do_port (int csock, int *local_sock)
+{
+  uerr_t err;
+  ip_address cip;
+
+  if (!socket_ip_address (csock, &cip, ENDPOINT_PEER))
+    abort ();
+
+  /* If our control connection is over IPv6, then we first try EPRT and then 
+   * LPRT if the former is not supported. If the control connection is over 
+   * IPv4, we simply issue the good old PORT request. */
+  switch (cip.type)
+    {
+    case IPV4_ADDRESS:
+      if (!opt.server_response)
+        logputs (LOG_VERBOSE, "==> PORT ... ");
+      err = ftp_port (csock, local_sock);
+      break;
+    case IPV6_ADDRESS:
+      if (!opt.server_response)
+        logputs (LOG_VERBOSE, "==> EPRT ... ");
+      err = ftp_eprt (csock, local_sock);
+
+      /* If EPRT is not supported try LPRT */
+      if (err == FTPPORTERR)
+        {
+          if (!opt.server_response)
+            logputs (LOG_VERBOSE, "==> LPRT ... ");
+          err = ftp_lprt (csock, local_sock);
+        }
+      break;
+    default:
+      abort ();
+    }
+  return err;
+}
+#else
+
+static uerr_t
+ftp_do_pasv (int csock, ip_address *addr, int *port)
+{
+  if (!opt.server_response)
+    logputs (LOG_VERBOSE, "==> PASV ... ");
+  return ftp_pasv (csock, addr, port);
+}
+
+static uerr_t
+ftp_do_port (int csock, int *local_sock)
+{
+  if (!opt.server_response)
+    logputs (LOG_VERBOSE, "==> PORT ... ");
+  return ftp_port (csock, local_sock);
+}
+#endif
+
+static void
+print_length (wgint size, wgint start, int authoritative)
+{
+  logprintf (LOG_VERBOSE, _("Length: %s"), with_thousand_seps (size));
+  if (size >= 1024)
+    logprintf (LOG_VERBOSE, " (%s)", human_readable (size));
+  if (start > 0)
+    {
+      if (start >= 1024)
+	logprintf (LOG_VERBOSE, _(", %s (%s) remaining"),
+		   with_thousand_seps (size - start),
+		   human_readable (size - start));
+      else
+	logprintf (LOG_VERBOSE, _(", %s remaining"),
+		   with_thousand_seps (size - start));
+    }
+  logputs (LOG_VERBOSE, !authoritative ? _(" (unauthoritative)\n") : "\n");
+}
+
 /* Retrieves a file with denoted parameters through opening an FTP
    connection to the server.  It always closes the data connection,
    and closes the control connection in case of error.  */
 static uerr_t
-getftp (struct url *u, long *len, long restval, ccon *con)
+getftp (struct url *u, wgint *len, wgint restval, ccon *con)
 {
-  int csock, dtsock, res;
-  uerr_t err;
+  int csock, dtsock, local_sock, res;
+  uerr_t err = RETROK;		/* appease the compiler */
   FILE *fp;
   char *user, *passwd, *respline;
   char *tms, *tmrate;
   int cmd = con->cmd;
   int pasv_mode_open = 0;
-  long expected_bytes = 0L;
+  wgint expected_bytes = 0;
+  int rest_failed = 0;
+  int flags;
+  wgint rd_size;
 
   assert (con != NULL);
   assert (con->target != NULL);
@@ -149,20 +270,20 @@ getftp (struct url *u, long *len, long restval, ccon *con)
   user = u->user;
   passwd = u->passwd;
   search_netrc (u->host, (const char **)&user, (const char **)&passwd, 1);
-  user = user ? user : opt.ftp_acc;
-  passwd = passwd ? passwd : opt.ftp_pass;
-  assert (user && passwd);
+  user = user ? user : (opt.ftp_user ? opt.ftp_user : opt.user);
+  if (!user) user = "anonymous";
+  passwd = passwd ? passwd : (opt.ftp_passwd ? opt.ftp_passwd : opt.passwd);
+  if (!passwd) passwd = "-wget@";
 
   dtsock = -1;
+  local_sock = -1;
   con->dltime = 0;
 
   if (!(cmd & DO_LOGIN))
-    csock = RBUF_FD (&con->rbuf);
+    csock = con->csock;
   else				/* cmd & DO_LOGIN */
     {
       char type_char;
-      struct address_list *al;
-
       char    *host = con->proxy ? con->proxy->host : u->host;
       int      port = con->proxy ? con->proxy->port : u->port;
       char *logname = user;
@@ -170,39 +291,30 @@ getftp (struct url *u, long *len, long restval, ccon *con)
       if (con->proxy)
 	{
 	  /* If proxy is in use, log in as username@target-site. */
-	  logname = xmalloc (strlen (user) + 1 + strlen (u->host) + 1);
-	  sprintf (logname, "%s@%s", user, u->host);
+	  logname = concat_strings (user, "@", u->host, (char *) 0);
 	}
 
       /* Login to the server: */
 
       /* First: Establish the control connection.  */
 
-      al = lookup_host (host, 0);
-      if (!al)
+      csock = connect_to_host (host, port);
+      if (csock == E_HOST)
 	return HOSTERR;
-      set_connection_host_name (host);
-      csock = connect_to_many (al, port, 0);
-      set_connection_host_name (NULL);
-      address_list_release (al);
-
-      if (csock < 0)
-	return CONNECT_ERROR (errno);
+      else if (csock < 0)
+	return (retryable_socket_connect_error (errno)
+		? CONERROR : CONIMPOSSIBLE);
 
       if (cmd & LEAVE_PENDING)
-	rbuf_initialize (&con->rbuf, csock);
+	con->csock = csock;
       else
-	rbuf_uninitialize (&con->rbuf);
-
-      /* Since this is a new connection, we may safely discard
-	 anything left in the buffer.  */
-      rbuf_discard (&con->rbuf);
+	con->csock = -1;
 
       /* Second: Login with proper USER/PASS sequence.  */
-      logprintf (LOG_VERBOSE, _("Logging in as %s ... "), user);
+      logprintf (LOG_VERBOSE, _("Logging in as %s ... "), escnonprint (user));
       if (opt.server_response)
 	logputs (LOG_ALWAYS, "\n");
-      err = ftp_login (&con->rbuf, logname, passwd);
+      err = ftp_login (csock, logname, passwd);
 
       if (con->proxy)
 	xfree (logname);
@@ -214,52 +326,45 @@ getftp (struct url *u, long *len, long restval, ccon *con)
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPSRVERR:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("Error in server greeting.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case WRITEFAILED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
 		   _("Write failed, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPLOGREFUSED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("The server refuses login.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return FTPLOGREFUSED;
-	  break;
 	case FTPLOGINC:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("Login incorrect.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return FTPLOGINC;
-	  break;
 	case FTPOK:
 	  if (!opt.server_response)
 	    logputs (LOG_VERBOSE, _("Logged in!\n"));
 	  break;
 	default:
 	  abort ();
-	  exit (1);
-	  break;
 	}
       /* Third: Get the system type */
       if (!opt.server_response)
 	logprintf (LOG_VERBOSE, "==> SYST ... ");
-      err = ftp_syst (&con->rbuf, &con->rs);
+      err = ftp_syst (csock, &con->rs);
       /* FTPRERR */
       switch (err)
 	{
@@ -267,10 +372,9 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPSRVERR:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
@@ -281,7 +385,6 @@ Error in server response, closing control connection.\n"));
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
       if (!opt.server_response && err != FTPSRVERR)
 	logputs (LOG_VERBOSE, _("done.    "));
@@ -290,7 +393,7 @@ Error in server response, closing control connection.\n"));
 
       if (!opt.server_response)
 	logprintf (LOG_VERBOSE, "==> PWD ... ");
-      err = ftp_pwd(&con->rbuf, &con->id);
+      err = ftp_pwd (csock, &con->id);
       /* FTPRERR */
       switch (err)
 	{
@@ -298,13 +401,12 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPSRVERR :
 	  /* PWD unsupported -- assume "/". */
-	  FREE_MAYBE (con->id);
+	  xfree_null (con->id);
 	  con->id = xstrdup ("/");
 	  break;
 	case FTPOK:
@@ -312,7 +414,6 @@ Error in server response, closing control connection.\n"));
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
       /* VMS will report something like "PUB$DEVICE:[INITIAL.FOLDER]".
          Convert it to "/INITIAL/FOLDER" */ 
@@ -344,7 +445,7 @@ Error in server response, closing control connection.\n"));
       type_char = ftp_process_type (u->params);
       if (!opt.server_response)
 	logprintf (LOG_VERBOSE, "==> TYPE %c ... ", type_char);
-      err = ftp_type (&con->rbuf, type_char);
+      err = ftp_type (csock, type_char);
       /* FTPRERR, WRITEFAILED, FTPUNKNOWNTYPE */
       switch (err)
 	{
@@ -352,32 +453,29 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case WRITEFAILED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
 		   _("Write failed, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPUNKNOWNTYPE:
 	  logputs (LOG_VERBOSE, "\n");
 	  logprintf (LOG_NOTQUIET,
 		     _("Unknown type `%c', closing control connection.\n"),
 		     type_char);
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
 	case FTPOK:
 	  /* Everything is OK.  */
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
       if (!opt.server_response)
 	logputs (LOG_VERBOSE, _("done.  "));
@@ -458,8 +556,8 @@ Error in server response, closing control connection.\n"));
 	    }
 
 	  if (!opt.server_response)
-	    logprintf (LOG_VERBOSE, "==> CWD %s ... ", target);
-	  err = ftp_cwd (&con->rbuf, target);
+	    logprintf (LOG_VERBOSE, "==> CWD %s ... ", escnonprint (target));
+	  err = ftp_cwd (csock, target);
 	  /* FTPRERR, WRITEFAILED, FTPNSFOD */
 	  switch (err)
 	    {
@@ -467,32 +565,27 @@ Error in server response, closing control connection.\n"));
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	      CLOSE (csock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
 	      return err;
-	      break;
 	    case WRITEFAILED:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET,
 		       _("Write failed, closing control connection.\n"));
-	      CLOSE (csock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
 	      return err;
-	      break;
 	    case FTPNSFOD:
 	      logputs (LOG_VERBOSE, "\n");
 	      logprintf (LOG_NOTQUIET, _("No such directory `%s'.\n\n"),
-			 u->dir);
-	      CLOSE (csock);
-	      rbuf_uninitialize (&con->rbuf);
+			 escnonprint (u->dir));
+	      fd_close (csock);
+	      con->csock = -1;
 	      return err;
-	      break;
 	    case FTPOK:
-	      /* fine and dandy */
 	      break;
 	    default:
 	      abort ();
-	      break;
 	    }
 	  if (!opt.server_response)
 	    logputs (LOG_VERBOSE, _("done.\n"));
@@ -506,10 +599,10 @@ Error in server response, closing control connection.\n"));
       if (opt.verbose)
 	{
           if (!opt.server_response)
-	    logprintf (LOG_VERBOSE, "==> SIZE %s ... ", u->file);
+	    logprintf (LOG_VERBOSE, "==> SIZE %s ... ", escnonprint (u->file));
 	}
 
-      err = ftp_size(&con->rbuf, u->file, len);
+      err = ftp_size (csock, u->file, len);
       /* FTPRERR */
       switch (err)
 	{
@@ -518,16 +611,14 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
 	  return err;
-	  break;
 	case FTPOK:
 	  /* Everything is OK.  */
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
 	if (!opt.server_response)
 	  logputs (LOG_VERBOSE, _("done.\n"));
@@ -538,11 +629,9 @@ Error in server response, closing control connection.\n"));
     {
       if (opt.ftp_pasv > 0)
 	{
-  	  ip_address     passive_addr;
-  	  unsigned short passive_port;
-	  if (!opt.server_response)
-	    logputs (LOG_VERBOSE, "==> PASV ... ");
-	  err = ftp_pasv (&con->rbuf, &passive_addr, &passive_port);
+  	  ip_address passive_addr;
+  	  int        passive_port;
+	  err = ftp_do_pasv (csock, &passive_addr, &passive_port);
 	  /* FTPRERR, WRITEFAILED, FTPNOPASV, FTPINVPASV */
 	  switch (err)
 	    {
@@ -550,18 +639,16 @@ Error in server response, closing control connection.\n"));
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	      CLOSE (csock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
 	      return err;
-	      break;
 	    case WRITEFAILED:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET,
 		       _("Write failed, closing control connection.\n"));
-	      CLOSE (csock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
 	      return err;
-	      break;
 	    case FTPNOPASV:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET, _("Cannot initiate PASV transfer.\n"));
@@ -571,24 +658,26 @@ Error in server response, closing control connection.\n"));
 	      logputs (LOG_NOTQUIET, _("Cannot parse PASV response.\n"));
 	      break;
 	    case FTPOK:
-	      /* fine and dandy */
 	      break;
 	    default:
 	      abort ();
-	      break;
-	    }	/* switch(err) */
+	    }	/* switch (err) */
 	  if (err==FTPOK)
 	    {
-	      dtsock = connect_to_one (&passive_addr, passive_port, 1);
+	      DEBUGP (("trying to connect to %s port %d\n", 
+		      pretty_print_address (&passive_addr),
+		      passive_port));
+	      dtsock = connect_to_ip (&passive_addr, passive_port, NULL);
 	      if (dtsock < 0)
 		{
 		  int save_errno = errno;
-		  CLOSE (csock);
-		  rbuf_uninitialize (&con->rbuf);
-		  logprintf (LOG_VERBOSE, _("couldn't connect to %s:%hu: %s\n"),
+		  fd_close (csock);
+		  con->csock = -1;
+		  logprintf (LOG_VERBOSE, _("couldn't connect to %s port %d: %s\n"),
 			     pretty_print_address (&passive_addr), passive_port,
 			     strerror (save_errno));
-		  return CONNECT_ERROR (save_errno);
+		  return (retryable_socket_connect_error (save_errno)
+			  ? CONERROR : CONIMPOSSIBLE);
 		}
 
 	      pasv_mode_open = 1;  /* Flag to avoid accept port */
@@ -599,61 +688,55 @@ Error in server response, closing control connection.\n"));
 
       if (!pasv_mode_open)   /* Try to use a port command if PASV failed */
 	{
-	  if (!opt.server_response)
-	    logputs (LOG_VERBOSE, "==> PORT ... ");
-	  err = ftp_port (&con->rbuf);
-	  /* FTPRERR, WRITEFAILED, bindport (CONSOCKERR, CONPORTERR, BINDERR,
-	     LISTENERR), HOSTERR, FTPPORTERR */
+	  err = ftp_do_port (csock, &local_sock);
+	  /* FTPRERR, WRITEFAILED, bindport (FTPSYSERR), HOSTERR,
+	     FTPPORTERR */
 	  switch (err)
 	    {
 	    case FTPRERR:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	      CLOSE (csock);
-	      closeport (dtsock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
+	      fd_close (dtsock);
+	      fd_close (local_sock);
 	      return err;
-	      break;
 	    case WRITEFAILED:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET,
 		       _("Write failed, closing control connection.\n"));
-	      CLOSE (csock);
-	      closeport (dtsock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
+	      fd_close (dtsock);
+	      fd_close (local_sock);
 	      return err;
-	      break;
 	    case CONSOCKERR:
 	      logputs (LOG_VERBOSE, "\n");
 	      logprintf (LOG_NOTQUIET, "socket: %s\n", strerror (errno));
-	      CLOSE (csock);
-	      closeport (dtsock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
+	      fd_close (dtsock);
+	      fd_close (local_sock);
 	      return err;
-	      break;
-	    case CONPORTERR: case BINDERR: case LISTENERR:
-	      /* What now?  These problems are local...  */
+	    case FTPSYSERR:
 	      logputs (LOG_VERBOSE, "\n");
 	      logprintf (LOG_NOTQUIET, _("Bind error (%s).\n"),
 			 strerror (errno));
-	      closeport (dtsock);
+	      fd_close (dtsock);
 	      return err;
-	      break;
 	    case FTPPORTERR:
 	      logputs (LOG_VERBOSE, "\n");
 	      logputs (LOG_NOTQUIET, _("Invalid PORT.\n"));
-	      CLOSE (csock);
-	      closeport (dtsock);
-	      rbuf_uninitialize (&con->rbuf);
+	      fd_close (csock);
+	      con->csock = -1;
+	      fd_close (dtsock);
+	      fd_close (local_sock);
 	      return err;
-	      break;
 	    case FTPOK:
-	      /* fine and dandy */
 	      break;
 	    default:
 	      abort ();
-	      break;
 	    } /* port switch */
 	  if (!opt.server_response)
 	    logputs (LOG_VERBOSE, _("done.    "));
@@ -664,8 +747,9 @@ Error in server response, closing control connection.\n"));
   if (restval && (cmd & DO_RETR))
     {
       if (!opt.server_response)
-	logprintf (LOG_VERBOSE, "==> REST %ld ... ", restval);
-      err = ftp_rest (&con->rbuf, restval);
+	logprintf (LOG_VERBOSE, "==> REST %s ... ",
+		   number_to_static_string (restval));
+      err = ftp_rest (csock, restval);
 
       /* FTPRERR, WRITEFAILED, FTPRESTFAIL */
       switch (err)
@@ -674,43 +758,28 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case WRITEFAILED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
 		   _("Write failed, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case FTPRESTFAIL:
-	  /* If `-c' is specified and the file already existed when
-	     Wget was started, it would be a bad idea for us to start
-	     downloading it from scratch, effectively truncating it.  */
-	  if (opt.always_rest && (cmd & NO_TRUNCATE))
-	    {
-	      logprintf (LOG_NOTQUIET,
-			 _("\nREST failed; will not truncate `%s'.\n"),
-			 con->target);
-	      CLOSE (csock);
-	      closeport (dtsock);
-	      rbuf_uninitialize (&con->rbuf);
-	      return CONTNOTSUPPORTED;
-	    }
 	  logputs (LOG_VERBOSE, _("\nREST failed, starting from scratch.\n"));
-	  restval = 0L;
+	  rest_failed = 1;
 	  break;
 	case FTPOK:
-	  /* fine and dandy */
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
       if (err != FTPRESTFAIL && !opt.server_response)
 	logputs (LOG_VERBOSE, _("done.    "));
@@ -724,9 +793,10 @@ Error in server response, closing control connection.\n"));
 	 request.  */
       if (opt.spider)
 	{
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return RETRFINISHED;
 	}
 
@@ -736,10 +806,11 @@ Error in server response, closing control connection.\n"));
 	    {
 	      if (restval)
 		logputs (LOG_VERBOSE, "\n");
-	      logprintf (LOG_VERBOSE, "==> RETR %s ... ", u->file);
+	      logprintf (LOG_VERBOSE, "==> RETR %s ... ", escnonprint (u->file));
 	    }
 	}
-      err = ftp_retr (&con->rbuf, u->file);
+
+      err = ftp_retr (csock, u->file);
       /* FTPRERR, WRITEFAILED, FTPNSFOD */
       switch (err)
 	{
@@ -747,32 +818,31 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case WRITEFAILED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
 		   _("Write failed, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case FTPNSFOD:
 	  logputs (LOG_VERBOSE, "\n");
-	  logprintf (LOG_NOTQUIET, _("No such file `%s'.\n\n"), u->file);
-	  closeport (dtsock);
+	  logprintf (LOG_NOTQUIET, _("No such file `%s'.\n\n"),
+		     escnonprint (u->file));
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case FTPOK:
-	  /* fine and dandy */
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
 
       if (!opt.server_response)
@@ -787,7 +857,7 @@ Error in server response, closing control connection.\n"));
       /* As Maciej W. Rozycki (macro@ds2.pg.gda.pl) says, `LIST'
 	 without arguments is better than `LIST .'; confirmed by
 	 RFC959.  */
-      err = ftp_list (&con->rbuf, NULL);
+      err = ftp_list (csock, NULL);
       /* FTPRERR, WRITEFAILED */
       switch (err)
 	{
@@ -795,33 +865,31 @@ Error in server response, closing control connection.\n"));
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET, _("\
 Error in server response, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case WRITEFAILED:
 	  logputs (LOG_VERBOSE, "\n");
 	  logputs (LOG_NOTQUIET,
 		   _("Write failed, closing control connection.\n"));
-	  CLOSE (csock);
-	  closeport (dtsock);
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case FTPNSFOD:
 	  logputs (LOG_VERBOSE, "\n");
 	  logprintf (LOG_NOTQUIET, _("No such file or directory `%s'.\n\n"),
 		     ".");
-	  closeport (dtsock);
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return err;
-	  break;
 	case FTPOK:
-	  /* fine and dandy */
 	  break;
 	default:
 	  abort ();
-	  break;
 	}
       if (!opt.server_response)
 	logputs (LOG_VERBOSE, _("done.\n"));
@@ -844,99 +912,103 @@ Error in server response, closing control connection.\n"));
   if (!pasv_mode_open)  /* we are not using pasive mode so we need
 			      to accept */
     {
-      /* Open the data transmission socket by calling acceptport().  */
-      err = acceptport (&dtsock);
-      /* Possible errors: ACCEPTERR.  */
-      if (err == ACCEPTERR)
+      /* Wait for the server to connect to the address we're waiting
+	 at.  */
+      dtsock = accept_connection (local_sock);
+      if (dtsock < 0)
 	{
 	  logprintf (LOG_NOTQUIET, "accept: %s\n", strerror (errno));
 	  return err;
 	}
     }
 
-  /* Open the file -- if opt.dfp is set, use it instead.  */
-  if (!opt.dfp || con->cmd & DO_LIST)
+  /* Open the file -- if output_stream is set, use it instead.  */
+  if (!output_stream || con->cmd & DO_LIST)
     {
       mkalldirs (con->target);
       if (opt.backups)
 	rotate_backups (con->target);
-      /* #### Is this correct? */
-      chmod (con->target, 0600);
 
-      fp = fopen (con->target, restval ? "ab" : "wb");
+      if (restval)
+	fp = fopen (con->target, "ab");
+      else if (opt.noclobber || opt.always_rest || opt.timestamping || opt.dirstruct
+	       || opt.output_document)
+	fp = fopen (con->target, "wb");
+      else
+	{
+	  fp = fopen_excl (con->target, 1);
+	  if (!fp && errno == EEXIST)
+	    {
+	      /* We cannot just invent a new name and use it (which is
+		 what functions like unique_create typically do)
+		 because we told the user we'd use this name.
+		 Instead, return and retry the download.  */
+	      logprintf (LOG_NOTQUIET, _("%s has sprung into existence.\n"),
+			 con->target);
+	      fd_close (csock);
+	      con->csock = -1;
+	      fd_close (dtsock);
+	      fd_close (local_sock);
+	      return FOPEN_EXCL_ERR;
+	    }
+	}
       if (!fp)
 	{
 	  logprintf (LOG_NOTQUIET, "%s: %s\n", con->target, strerror (errno));
-	  CLOSE (csock);
-	  rbuf_uninitialize (&con->rbuf);
-	  closeport (dtsock);
+	  fd_close (csock);
+	  con->csock = -1;
+	  fd_close (dtsock);
+	  fd_close (local_sock);
 	  return FOPENERR;
 	}
     }
   else
-    {
-      extern int global_download_count;
-      fp = opt.dfp;
-
-      /* Rewind the output document if the download starts over and if
-	 this is the first download.  See gethttp() for a longer
-	 explanation.  */
-      if (!restval && global_download_count == 0 && opt.dfp != stdout)
-	{
-	  /* This will silently fail for streams that don't correspond
-	     to regular files, but that's OK.  */
-	  rewind (fp);
-	  /* ftruncate is needed because opt.dfp is opened in append
-	     mode if opt.always_rest is set.  */
-	  ftruncate (fileno (fp), 0);
-	  clearerr (fp);
-	}
-    }
+    fp = output_stream;
 
   if (*len)
     {
-      logprintf (LOG_VERBOSE, _("Length: %s"), legible (*len));
-      if (restval)
-	logprintf (LOG_VERBOSE, _(" [%s to go]"), legible (*len - restval));
-      logputs (LOG_VERBOSE, "\n");
+      print_length (*len, restval, 1);
       expected_bytes = *len;	/* for get_contents/show_progress */
     }
   else if (expected_bytes)
-    {
-      logprintf (LOG_VERBOSE, _("Length: %s"), legible (expected_bytes));
-      if (restval)
-	logprintf (LOG_VERBOSE, _(" [%s to go]"),
-		   legible (expected_bytes - restval));
-      logputs (LOG_VERBOSE, _(" (unauthoritative)\n"));
-    }
+    print_length (expected_bytes, restval, 0);
 
   /* Get the contents of the document.  */
-  res = get_contents (dtsock, fp, len, restval, expected_bytes, &con->rbuf,
-		      0, &con->dltime);
+  flags = 0;
+  if (restval && rest_failed)
+    flags |= rb_skip_startpos;
+  *len = restval;
+  rd_size = 0;
+  res = fd_read_body (dtsock, fp,
+		      expected_bytes ? expected_bytes - restval : 0,
+		      restval, &rd_size, len, &con->dltime, flags);
+
   tms = time_str (NULL);
-  tmrate = retr_rate (*len - restval, con->dltime, 0);
+  tmrate = retr_rate (rd_size, con->dltime, 0);
   /* Close data connection socket.  */
-  closeport (dtsock);
+  fd_close (dtsock);
+  fd_close (local_sock);
   /* Close the local file.  */
   {
     /* Close or flush the file.  We have to be careful to check for
        error here.  Checking the result of fwrite() is not enough --
        errors could go unnoticed!  */
     int flush_res;
-    if (!opt.dfp || con->cmd & DO_LIST)
+    if (!output_stream || con->cmd & DO_LIST)
       flush_res = fclose (fp);
     else
       flush_res = fflush (fp);
     if (flush_res == EOF)
       res = -2;
   }
+
   /* If get_contents couldn't write to fp, bail out.  */
   if (res == -2)
     {
       logprintf (LOG_NOTQUIET, _("%s: %s, closing control connection.\n"),
 		 con->target, strerror (errno));
-      CLOSE (csock);
-      rbuf_uninitialize (&con->rbuf);
+      fd_close (csock);
+      con->csock = -1;
       return FWRITEERR;
     }
   else if (res == -1)
@@ -948,12 +1020,9 @@ Error in server response, closing control connection.\n"));
     }
 
   /* Get the server to tell us if everything is retrieved.  */
-  err = ftp_response (&con->rbuf, &respline);
-  /* ...and empty the buffer.  */
-  rbuf_discard (&con->rbuf);
+  err = ftp_response (csock, &respline);
   if (err != FTPOK)
     {
-      xfree (respline);
       /* The control connection is decidedly closed.  Print the time
 	 only if it hasn't already been printed.  */
       if (res != -1)
@@ -963,8 +1032,8 @@ Error in server response, closing control connection.\n"));
 	 return FTPRETRINT, since there is a possibility that the
 	 whole file was retrieved nevertheless (but that is for
 	 ftp_loop_internal to decide).  */
-      CLOSE (csock);
-      rbuf_uninitialize (&con->rbuf);
+      fd_close (csock);
+      con->csock = -1;
       return FTPRETRINT;
     } /* err != FTPOK */
   /* If retrieval failed for any reason, return FTPRETRINT, but do not
@@ -990,10 +1059,10 @@ Error in server response, closing control connection.\n"));
 
   if (!(cmd & LEAVE_PENDING))
     {
-      /* I should probably send 'QUIT' and check for a reply, but this
-	 is faster.  #### Is it OK, though?  */
-      CLOSE (csock);
-      rbuf_uninitialize (&con->rbuf);
+      /* Closing the socket is faster than sending 'QUIT' and the
+	 effect is the same.  */
+      fd_close (csock);
+      con->csock = -1;
     }
   /* If it was a listing, and opt.server_response is true,
      print it out.  */
@@ -1008,9 +1077,12 @@ Error in server response, closing control connection.\n"));
 	  char *line;
 	  /* The lines are being read with read_whole_line because of
 	     no-buffering on opt.lfile.  */
-	  while ((line = read_whole_line (fp)))
+	  while ((line = read_whole_line (fp)) != NULL)
 	    {
-	      logprintf (LOG_ALWAYS, "%s\n", line);
+	      char *p = strchr (line, '\0');
+	      while (p > line && (p[-1] == '\n' || p[-1] == '\r'))
+		*--p = '\0';
+	      logprintf (LOG_ALWAYS, "%s\n", escnonprint (line));
 	      xfree (line);
 	    }
 	  fclose (fp);
@@ -1029,11 +1101,11 @@ static uerr_t
 ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 {
   int count, orig_lp;
-  long restval, len;
+  wgint restval, len = 0;
   char *tms, *locf;
   char *tmrate = NULL;
   uerr_t err;
-  struct stat st;
+  struct_stat st;
 
   if (!con->target)
     con->target = url_file_name (u);
@@ -1041,7 +1113,7 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
   if (opt.noclobber && file_exists_p (con->target))
     {
       logprintf (LOG_VERBOSE,
-		 _("File `%s' already there, not retrieving.\n"), con->target);
+		 _("File `%s' already there; not retrieving.\n"), con->target);
       /* If the file is there, we suppose it's retrieved OK.  */
       return RETROK;
     }
@@ -1070,14 +1142,14 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 	{
 	  con->cmd = 0;
 	  con->cmd |= (DO_RETR | LEAVE_PENDING);
-	  if (rbuf_initialized_p (&con->rbuf))
+	  if (con->csock != -1)
 	    con->cmd &= ~ (DO_LOGIN | DO_CWD);
 	  else
 	    con->cmd |= (DO_LOGIN | DO_CWD);
 	}
       else /* not on your own */
 	{
-	  if (rbuf_initialized_p (&con->rbuf))
+	  if (con->csock != -1)
 	    con->cmd &= ~DO_LOGIN;
 	  else
 	    con->cmd |= DO_LOGIN;
@@ -1087,20 +1159,18 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 	    con->cmd |= DO_CWD;
 	}
 
-      /* Assume no restarting.  */
-      restval = 0L;
-      if ((count > 1 || opt.always_rest)
-	  && !(con->cmd & DO_LIST)
-	  && file_exists_p (locf))
-	if (stat (locf, &st) == 0 && S_ISREG (st.st_mode))
-	  restval = st.st_size;
-
-      /* In `-c' is used, check whether the file we're writing to
-	 exists and is of non-zero length.  If so, we'll refuse to
-	 truncate it if the server doesn't support continued
-	 downloads.  */
-      if (opt.always_rest && restval > 0)
-	con->cmd |= NO_TRUNCATE;
+      /* Decide whether or not to restart.  */
+      if (opt.always_rest
+	  && stat (locf, &st) == 0
+	  && S_ISREG (st.st_mode))
+	/* When -c is used, continue from on-disk size.  (Can't use
+	   hstat.len even if count>1 because we don't want a failed
+	   first attempt to clobber existing data.)  */
+	restval = st.st_size;
+      else if (count > 1)
+	restval = len;		/* start where the previous run left off */
+      else
+	restval = 0;
 
       /* Get the current time string.  */
       tms = time_str (NULL);
@@ -1108,14 +1178,14 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
       if (opt.verbose)
 	{
 	  char *hurl = url_string (u, 1);
-	  char tmp[15];
+	  char tmp[256];
 	  strcpy (tmp, "        ");
 	  if (count > 1)
 	    sprintf (tmp, _("(try:%2d)"), count);
 	  logprintf (LOG_VERBOSE, "--%s--  %s\n  %s => `%s'\n",
 		     tms, hurl, tmp, locf);
 #ifdef WINDOWS
-	  ws_changetitle (hurl, 1);
+	  ws_changetitle (hurl);
 #endif
 	  xfree (hurl);
 	}
@@ -1126,26 +1196,31 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 	len = 0;
       err = getftp (u, &len, restval, con);
 
-      if (!rbuf_initialized_p (&con->rbuf))
+      if (con->csock != -1)
 	con->st &= ~DONE_CWD;
       else
 	con->st |= DONE_CWD;
 
       switch (err)
 	{
-	case HOSTERR: case CONREFUSED: case FWRITEERR: case FOPENERR:
+	case HOSTERR: case CONIMPOSSIBLE: case FWRITEERR: case FOPENERR:
 	case FTPNSFOD: case FTPLOGINC: case FTPNOPASV: case CONTNOTSUPPORTED:
 	  /* Fatal errors, give up.  */
 	  return err;
-	  break;
 	case CONSOCKERR: case CONERROR: case FTPSRVERR: case FTPRERR:
-	case WRITEFAILED: case FTPUNKNOWNTYPE: case CONPORTERR:
-	case BINDERR: case LISTENERR: case ACCEPTERR:
+	case WRITEFAILED: case FTPUNKNOWNTYPE: case FTPSYSERR:
 	case FTPPORTERR: case FTPLOGREFUSED: case FTPINVPASV:
+	case FOPEN_EXCL_ERR:
 	  printwhat (count, opt.ntry);
 	  /* non-fatal errors */
+	  if (err == FOPEN_EXCL_ERR)
+	    {
+	      /* Re-determine the file name. */
+	      xfree_null (con->target);
+	      con->target = url_file_name (u);
+	      locf = con->target;
+	    }
 	  continue;
-	  break;
 	case FTPRETRINT:
 	  /* If the control connection was closed, the retrieval
 	     will be considered OK if f->size == len.  */
@@ -1162,7 +1237,6 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 	  /* Not as great.  */
 	  abort ();
 	}
-      /* Time?  */
       tms = time_str (NULL);
       if (!opt.spider)
         tmrate = retr_rate (len - restval, con->dltime, 0);
@@ -1173,20 +1247,20 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 
       if (con->st & ON_YOUR_OWN)
 	{
-	  CLOSE (RBUF_FD (&con->rbuf));
-	  rbuf_uninitialize (&con->rbuf);
+	  fd_close (con->csock);
+	  con->csock = -1;
 	}
       if (!opt.spider)
-        logprintf (LOG_VERBOSE, _("%s (%s) - `%s' saved [%ld]\n\n"),
-		   tms, tmrate, locf, len);
+        logprintf (LOG_VERBOSE, _("%s (%s) - `%s' saved [%s]\n\n"),
+		   tms, tmrate, locf, number_to_static_string (len));
       if (!opt.verbose && !opt.quiet)
 	{
 	  /* Need to hide the password from the URL.  The `if' is here
              so that we don't do the needless allocation every
              time. */
 	  char *hurl = url_string (u, 1);
-	  logprintf (LOG_NONVERBOSE, "%s URL: %s [%ld] -> \"%s\" [%d]\n",
-		     tms, hurl, len, locf, count);
+	  logprintf (LOG_NONVERBOSE, "%s URL: %s [%s] -> \"%s\" [%d]\n",
+		     tms, hurl, number_to_static_string (len), locf, count);
 	  xfree (hurl);
 	}
 
@@ -1217,14 +1291,14 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
 
 	  if (opt.delete_after)
 	    {
-	      DEBUGP (("Removing file due to --delete-after in"
-		       " ftp_loop_internal():\n"));
+	      DEBUGP (("\
+Removing file due to --delete-after in ftp_loop_internal():\n"));
 	      logprintf (LOG_VERBOSE, _("Removing %s.\n"), locf);
 	      if (unlink (locf))
 		logprintf (LOG_NOTQUIET, "unlink: %s\n", strerror (errno));
 	    }
 	}
-      
+
       /* Restore the original leave-pendingness.  */
       if (orig_lp)
 	con->cmd |= LEAVE_PENDING;
@@ -1233,10 +1307,10 @@ ftp_loop_internal (struct url *u, struct fileinfo *f, ccon *con)
       return RETROK;
     } while (!opt.ntry || (count < opt.ntry));
 
-  if (rbuf_initialized_p (&con->rbuf) && (con->st & ON_YOUR_OWN))
+  if (con->csock != -1 && (con->st & ON_YOUR_OWN))
     {
-      CLOSE (RBUF_FD (&con->rbuf));
-      rbuf_uninitialize (&con->rbuf);
+      fd_close (con->csock);
+      con->csock = -1;
     }
   return TRYLIMEXC;
 }
@@ -1303,7 +1377,7 @@ ftp_retrieve_list (struct url *u, struct fileinfo *f, ccon *con)
   static int depth = 0;
   uerr_t err;
   struct fileinfo *orig;
-  long local_size;
+  wgint local_size;
   time_t tml;
   int dlthis;
 
@@ -1327,7 +1401,7 @@ ftp_retrieve_list (struct url *u, struct fileinfo *f, ccon *con)
     con->cmd &= ~DO_CWD;
   con->cmd |= (DO_RETR | LEAVE_PENDING);
 
-  if (!rbuf_initialized_p (&con->rbuf))
+  if (con->csock < 0)
     con->cmd |= DO_LOGIN;
   else
     con->cmd &= ~DO_LOGIN;
@@ -1354,7 +1428,7 @@ ftp_retrieve_list (struct url *u, struct fileinfo *f, ccon *con)
       dlthis = 1;
       if (opt.timestamping && f->type == FT_PLAINFILE)
         {
-	  struct stat st;
+	  struct_stat st;
 	  /* If conversion of HTML files retrieved via FTP is ever implemented,
 	     we'll need to stat() <file>.orig here when -K has been specified.
 	     I'm not implementing it now since files on an FTP server are much
@@ -1396,7 +1470,8 @@ Remote file is newer than local file `%s' -- retrieving.\n\n"),
                 {
                   /* Sizes do not match */
                   logprintf (LOG_VERBOSE, _("\
-The sizes do not match (local %ld) -- retrieving.\n\n"), local_size);
+The sizes do not match (local %s) -- retrieving.\n\n"),
+			     number_to_static_string (local_size));
                 }
             }
 	}	/* opt.timestamping && f->type == FT_PLAINFILE */
@@ -1415,7 +1490,7 @@ The sizes do not match (local %ld) -- retrieving.\n\n"), local_size);
 			 _("Invalid name of the symlink, skipping.\n"));
 	      else
 		{
-                  struct stat st;
+                  struct_stat st;
 		  /* Check whether we already have the correct
                      symbolic link.  */
                   int rc = lstat (con->target, &st);
@@ -1431,19 +1506,18 @@ The sizes do not match (local %ld) -- retrieving.\n\n"), local_size);
 			    {
 			      logprintf (LOG_VERBOSE, _("\
 Already have correct symlink %s -> %s\n\n"),
-					 con->target, f->linkto);
+					 con->target, escnonprint (f->linkto));
                               dlthis = 0;
 			      break;
 			    }
 			}
 		    }
 		  logprintf (LOG_VERBOSE, _("Creating symlink %s -> %s\n"),
-			     con->target, f->linkto);
+			     con->target, escnonprint (f->linkto));
 		  /* Unlink before creating symlink!  */
 		  unlink (con->target);
 		  if (symlink (f->linkto, con->target) == -1)
-		    logprintf (LOG_NOTQUIET, "symlink: %s\n",
-			       strerror (errno));
+		    logprintf (LOG_NOTQUIET, "symlink: %s\n", strerror (errno));
 		  logputs (LOG_VERBOSE, "\n");
 		} /* have f->linkto */
 #else  /* not HAVE_SYMLINK */
@@ -1461,7 +1535,7 @@ Already have correct symlink %s -> %s\n\n"),
 	case FT_DIRECTORY:
 	  if (!opt.recursive)
 	    logprintf (LOG_NOTQUIET, _("Skipping directory `%s'.\n"),
-		       f->name);
+		       escnonprint (f->name));
 	  break;
 	case FT_PLAINFILE:
 	  /* Call the retrieve loop.  */
@@ -1470,7 +1544,7 @@ Already have correct symlink %s -> %s\n\n"),
 	  break;
 	case FT_UNKNOWN:
 	  logprintf (LOG_NOTQUIET, _("%s: unknown/unsupported file type.\n"),
-		     f->name);
+		     escnonprint (f->name));
 	  break;
 	}	/* switch */
 
@@ -1487,7 +1561,7 @@ Already have correct symlink %s -> %s\n\n"),
 	  const char *fl = NULL;
 	  if (opt.output_document)
 	    {
-	      if (opt.od_known_regular)
+	      if (output_stream_regular)
 		fl = opt.output_document;
 	    }
 	  else
@@ -1499,7 +1573,10 @@ Already have correct symlink %s -> %s\n\n"),
 	logprintf (LOG_NOTQUIET, _("%s: corrupt time-stamp.\n"), con->target);
 
       if (f->perms && f->type == FT_PLAINFILE && dlthis)
-	chmod (con->target, f->perms);
+        {
+	  if (opt.preserve_perm)
+	    chmod (con->target, f->perms);
+        }
       else
 	DEBUGP (("Unrecognized permissions for %s.\n", con->target));
 
@@ -1572,7 +1649,8 @@ ftp_retrieve_dirs (struct url *u, struct fileinfo *f, ccon *con)
       if (!accdir (newdir, ALLABS))
 	{
 	  logprintf (LOG_VERBOSE, _("\
-Not descending to `%s' as it is excluded/not-included.\n"), newdir);
+Not descending to `%s' as it is excluded/not-included.\n"),
+		     escnonprint (newdir));
 	  continue;
 	}
 
@@ -1581,7 +1659,7 @@ Not descending to `%s' as it is excluded/not-included.\n"), newdir);
       odir = xstrdup (u->dir);	/* because url_set_dir will free
 				   u->dir. */
       url_set_dir (u, newdir);
-      ftp_retrieve_glob (u, con, GETALL);
+      ftp_retrieve_glob (u, con, GLOB_GETALL);
       url_set_dir (u, odir);
       xfree (odir);
 
@@ -1601,7 +1679,7 @@ has_insecure_name_p (const char *s)
   if (*s == '/')
     return 1;
 
-  if (strstr(s, "../") != 0)
+  if (strstr (s, "../") != 0)
     return 1;
 
   return 0;
@@ -1612,9 +1690,10 @@ has_insecure_name_p (const char *s)
    Then it weeds out the file names that do not match the pattern.
    ftp_retrieve_list is called with this updated list as an argument.
 
-   If the argument ACTION is GETONE, just download the file (but first
-   get the listing, so that the time-stamp is heeded); if it's GLOBALL,
-   use globbing; if it's GETALL, download the whole directory.  */
+   If the argument ACTION is GLOB_GETONE, just download the file (but
+   first get the listing, so that the time-stamp is heeded); if it's
+   GLOB_GLOBALL, use globbing; if it's GLOB_GETALL, download the whole
+   directory.  */
 static uerr_t
 ftp_retrieve_glob (struct url *u, ccon *con, int action)
 {
@@ -1635,7 +1714,8 @@ ftp_retrieve_glob (struct url *u, ccon *con, int action)
 	{
 	  if (f->type != FT_DIRECTORY && !acceptable (f->name))
 	    {
-	      logprintf (LOG_VERBOSE, _("Rejecting `%s'.\n"), f->name);
+	      logprintf (LOG_VERBOSE, _("Rejecting `%s'.\n"),
+			 escnonprint (f->name));
 	      f = delelement (f, &start);
 	    }
 	  else
@@ -1648,7 +1728,8 @@ ftp_retrieve_glob (struct url *u, ccon *con, int action)
     {
       if (has_insecure_name_p (f->name))
 	{
-	  logprintf (LOG_VERBOSE, _("Rejecting `%s'.\n"), f->name);
+	  logprintf (LOG_VERBOSE, _("Rejecting `%s'.\n"),
+		     escnonprint (f->name));
 	  f = delelement (f, &start);
 	}
       else
@@ -1656,7 +1737,7 @@ ftp_retrieve_glob (struct url *u, ccon *con, int action)
     }
   /* Now weed out the files that do not match our globbing pattern.
      If we are dealing with a globbing pattern, that is.  */
-  if (*u->file && (action == GLOBALL || action == GETONE))
+  if (*u->file && (action == GLOB_GLOBALL || action == GLOB_GETONE))
     {
       int matchres = 0;
 
@@ -1681,7 +1762,6 @@ ftp_retrieve_glob (struct url *u, ccon *con, int action)
 	  return RETRBADPATTERN;
 	}
     }
-  res = RETROK;
   if (start)
     {
       /* Just get everything.  */
@@ -1689,14 +1769,15 @@ ftp_retrieve_glob (struct url *u, ccon *con, int action)
     }
   else if (!start)
     {
-      if (action == GLOBALL)
+      if (action == GLOB_GLOBALL)
 	{
 	  /* No luck.  */
 	  /* #### This message SUCKS.  We should see what was the
 	     reason that nothing was retrieved.  */
-	  logprintf (LOG_VERBOSE, _("No matches on pattern `%s'.\n"), u->file);
+	  logprintf (LOG_VERBOSE, _("No matches on pattern `%s'.\n"),
+		     escnonprint (u->file));
 	}
-      else /* GETONE or GETALL */
+      else /* GLOB_GETONE or GLOB_GETALL */
 	{
 	  /* Let's try retrieving it anyway.  */
 	  con->st |= ON_YOUR_OWN;
@@ -1723,14 +1804,13 @@ ftp_loop (struct url *u, int *dt, struct url *proxy)
 
   *dt = 0;
 
-  memset (&con, 0, sizeof (con));
+  xzero (con);
 
-  rbuf_uninitialize (&con.rbuf);
+  con.csock = -1;
   con.st = ON_YOUR_OWN;
   con.rs = ST_UNIX;
   con.id = NULL;
   con.proxy = proxy;
-  res = RETROK;			/* in case it's not used */
 
   /* If the file name is empty, the user probably wants a directory
      index.  We'll provide one, properly HTML-ized.  Unless
@@ -1753,15 +1833,15 @@ ftp_loop (struct url *u, int *dt, struct url *proxy)
 		{
 		  if (!opt.output_document)
 		    {
-		      struct stat st;
-		      long sz;
+		      struct_stat st;
+		      wgint sz;
 		      if (stat (filename, &st) == 0)
 			sz = st.st_size;
 		      else
 			sz = -1;
 		      logprintf (LOG_NOTQUIET,
-				 _("Wrote HTML-ized index to `%s' [%ld].\n"),
-				 filename, sz);
+				 _("Wrote HTML-ized index to `%s' [%s].\n"),
+				 filename, number_to_static_string (sz));
 		    }
 		  else
 		    logprintf (LOG_NOTQUIET,
@@ -1775,14 +1855,25 @@ ftp_loop (struct url *u, int *dt, struct url *proxy)
     }
   else
     {
-      int wild = has_wildcards_p (u->file);
-      if ((opt.ftp_glob && wild) || opt.recursive || opt.timestamping)
+      int ispattern = 0;
+      if (opt.ftp_glob)
+	{
+	  /* Treat the URL as a pattern if the file name part of the
+	     URL path contains wildcards.  (Don't check for u->file
+	     because it is unescaped and therefore doesn't leave users
+	     the option to escape literal '*' as %2A.)  */
+	  char *file_part = strrchr (u->path, '/');
+	  if (!file_part)
+	    file_part = u->path;
+	  ispattern = has_wildcards_p (file_part);
+	}
+      if (ispattern || opt.recursive || opt.timestamping)
 	{
 	  /* ftp_retrieve_glob is a catch-all function that gets called
 	     if we need globbing, time-stamping or recursion.  Its
 	     third argument is just what we really need.  */
 	  res = ftp_retrieve_glob (u, &con,
-				   (opt.ftp_glob && wild) ? GLOBALL : GETONE);
+				   ispattern ? GLOB_GLOBALL : GLOB_GETONE);
 	}
       else
 	res = ftp_loop_internal (u, NULL, &con);
@@ -1792,11 +1883,11 @@ ftp_loop (struct url *u, int *dt, struct url *proxy)
   if (res == RETROK)
     *dt |= RETROKF;
   /* If a connection was left, quench it.  */
-  if (rbuf_initialized_p (&con.rbuf))
-    CLOSE (RBUF_FD (&con.rbuf));
-  FREE_MAYBE (con.id);
+  if (con.csock != -1)
+    fd_close (con.csock);
+  xfree_null (con.id);
   con.id = NULL;
-  FREE_MAYBE (con.target);
+  xfree_null (con.target);
   con.target = NULL;
   return res;
 }
@@ -1811,7 +1902,7 @@ delelement (struct fileinfo *f, struct fileinfo **start)
   struct fileinfo *next = f->next;
 
   xfree (f->name);
-  FREE_MAYBE (f->linkto);
+  xfree_null (f->linkto);
   xfree (f);
 
   if (next)

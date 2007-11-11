@@ -1,24 +1,34 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * JPEG File format support.
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief JPEG File format support.
+ * 
+ * \arg File name extension: jpeg, jpg
+ * \ingroup formats
  */
  
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
 #include <sys/types.h>
-#include <asterisk/channel.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/sched.h>
-#include <asterisk/module.h>
-#include <asterisk/image.h>
-#include <asterisk/lock.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -27,22 +37,22 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#ifdef __linux__
-#include <endian.h>
-#else
-#include <machine/endian.h>
-#endif
 
-
-static char *desc = "JPEG (Joint Picture Experts Group) Image Format";
-
+#include "asterisk/channel.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/sched.h"
+#include "asterisk/module.h"
+#include "asterisk/image.h"
+#include "asterisk/lock.h"
+#include "asterisk/endian.h"
 
 static struct ast_frame *jpeg_read_image(int fd, int len)
 {
 	struct ast_frame fr;
 	int res;
 	char buf[65536];
-	if (len > sizeof(buf)) {
+	if (len > sizeof(buf) || len < 0) {
 		ast_log(LOG_WARNING, "JPEG image too large to read\n");
 		return NULL;
 	}
@@ -102,30 +112,16 @@ static struct ast_imager jpeg_format = {
 	jpeg_write_image,
 };
 
-int load_module()
+static int load_module(void)
 {
 	return ast_image_register(&jpeg_format);
 }
 
-int unload_module()
+static int unload_module(void)
 {
 	ast_image_unregister(&jpeg_format);
+
 	return 0;
 }	
 
-int usecount()
-{
-	/* We never really have any users */
-	return 0;
-}
-
-char *description()
-{
-	return desc;
-}
-
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "JPEG (Joint Picture Experts Group) Image Format");

@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/hugetlb.h>
 #include <linux/pagemap.h>
-#include <linux/smp_lock.h>
 #include <linux/slab.h>
 #include <linux/sysctl.h>
 
@@ -61,6 +60,11 @@ pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr)
 	}
 
 	return pte;
+}
+
+int huge_pmd_unshare(struct mm_struct *mm, unsigned long *addr, pte_t *ptep)
+{
+	return 0;
 }
 
 struct page *follow_huge_addr(struct mm_struct *mm,

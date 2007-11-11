@@ -1,9 +1,9 @@
 /*
  * Route & Record-Route module
  *
- * $Id: rr_mod.c,v 1.31 2003/07/15 10:05:23 dcm Exp $
+ * $Id: rr_mod.c,v 1.33 2004/08/24 09:00:38 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -55,6 +55,7 @@ char *ignore_user = NULL;
 int append_fromtag = 1;
 int enable_double_rr = 1; /* Enable using of 2 RR by default */
 int enable_full_lr = 0;   /* Disabled by default */
+int add_username = 0;     /* Do not add username by default */
 
 MODULE_VERSION
 
@@ -91,6 +92,7 @@ static param_export_t params[] ={
 #ifdef ENABLE_USER_CHECK
 	{"ignore_user",      STR_PARAM, &ignore_user     },
 #endif
+	{"add_username",     INT_PARAM, &add_username    },
 	{0, 0, 0 }
 };
 

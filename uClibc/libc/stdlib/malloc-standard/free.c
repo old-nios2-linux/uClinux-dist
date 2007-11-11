@@ -16,38 +16,7 @@
 
 #include "malloc.h"
 
-static int __malloc_trim(size_t pad, mstate av);
-
-/* ------------------------- malloc_trim -------------------------
-  malloc_trim(size_t pad);
-
-  If possible, gives memory back to the system (via negative
-  arguments to sbrk) if there is unused memory at the `high' end of
-  the malloc pool. You can call this after freeing large blocks of
-  memory to potentially reduce the system-level memory requirements
-  of a program. However, it cannot guarantee to reduce memory. Under
-  some allocation patterns, some large free blocks of memory will be
-  locked between two used chunks, so they cannot be given back to
-  the system.
-  
-  The `pad' argument to malloc_trim represents the amount of free
-  trailing space to leave untrimmed. If this argument is zero,
-  only the minimum amount of memory to maintain internal data
-  structures will be left (one page or less). Non-zero arguments
-  can be supplied to maintain enough trailing space to service
-  future expected allocations without having to re-obtain memory
-  from the system.
-  
-  Malloc_trim returns 1 if it actually released any memory, else 0.
-  On systems that do not support "negative sbrks", it will always
-  return 0.
-*/
-int malloc_trim(size_t pad)
-{
-  mstate av = get_malloc_state();
-  __malloc_consolidate(av);
-  return __malloc_trim(pad, av);
-}
+libc_hidden_proto(munmap)
 
 /* ------------------------- __malloc_trim -------------------------
    __malloc_trim is an inverse of sorts to __malloc_alloc.  It gives memory
@@ -110,6 +79,37 @@ static int __malloc_trim(size_t pad, mstate av)
     return 0;
 }
 
+/* ------------------------- malloc_trim -------------------------
+  malloc_trim(size_t pad);
+
+  If possible, gives memory back to the system (via negative
+  arguments to sbrk) if there is unused memory at the `high' end of
+  the malloc pool. You can call this after freeing large blocks of
+  memory to potentially reduce the system-level memory requirements
+  of a program. However, it cannot guarantee to reduce memory. Under
+  some allocation patterns, some large free blocks of memory will be
+  locked between two used chunks, so they cannot be given back to
+  the system.
+
+  The `pad' argument to malloc_trim represents the amount of free
+  trailing space to leave untrimmed. If this argument is zero,
+  only the minimum amount of memory to maintain internal data
+  structures will be left (one page or less). Non-zero arguments
+  can be supplied to maintain enough trailing space to service
+  future expected allocations without having to re-obtain memory
+  from the system.
+
+  Malloc_trim returns 1 if it actually released any memory, else 0.
+  On systems that do not support "negative sbrks", it will always
+  return 0.
+*/
+int malloc_trim(size_t pad)
+{
+  mstate av = get_malloc_state();
+  __malloc_consolidate(av);
+  return __malloc_trim(pad, av);
+}
+
 /*
   Initialize a malloc_state struct.
 
@@ -168,7 +168,7 @@ static void malloc_init_state(mstate av)
   malloc anyway, it turns out to be the perfect place to trigger
   initialization code.
 */
-void __malloc_consolidate(mstate av)
+void attribute_hidden __malloc_consolidate(mstate av)
 {
     mfastbinptr*    fb;                 /* current fastbin being consolidated */
     mfastbinptr*    maxfb;              /* last fastbin (for loop control) */
@@ -282,7 +282,7 @@ void free(void* mem)
     if (mem == NULL)
 	return;
 
-    LOCK;
+    __MALLOC_LOCK;
     av = get_malloc_state();
     p = mem2chunk(mem);
     size = chunksize(p);
@@ -401,14 +401,11 @@ void free(void* mem)
        */
 
     else {
-	int ret;
 	size_t offset = p->prev_size;
 	av->n_mmaps--;
 	av->mmapped_mem -= (size + offset);
-	ret = munmap((char*)p - offset, size + offset);
-	/* munmap returns non-zero on failure */
-	assert(ret == 0);
+	munmap((char*)p - offset, size + offset);
     }
-    UNLOCK;
+    __MALLOC_UNLOCK;
 }
 

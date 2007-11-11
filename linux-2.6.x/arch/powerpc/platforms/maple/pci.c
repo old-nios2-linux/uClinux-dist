@@ -44,11 +44,11 @@ static int __init fixup_one_level_bus_range(struct device_node *node, int higher
 		int len;
 
 		/* For PCI<->PCI bridges or CardBus bridges, we go down */
-		class_code = get_property(node, "class-code", NULL);
+		class_code = of_get_property(node, "class-code", NULL);
 		if (!class_code || ((*class_code >> 8) != PCI_CLASS_BRIDGE_PCI &&
 			(*class_code >> 8) != PCI_CLASS_BRIDGE_CARDBUS))
 			continue;
-		bus_range = get_property(node, "bus-range", &len);
+		bus_range = of_get_property(node, "bus-range", &len);
 		if (bus_range != NULL && len > 2 * sizeof(int)) {
 			if (bus_range[1] > higher)
 				higher = bus_range[1];
@@ -77,7 +77,7 @@ static void __init fixup_bus_range(struct device_node *bridge)
 			       bridge->full_name);
 		return;
 	}
-	bus_range = (int *)prop->value;
+	bus_range = prop->value;
 	bus_range[1] = fixup_one_level_bus_range(bridge->child, bus_range[1]);
 }
 
@@ -425,14 +425,6 @@ static void __init setup_u4_pcie(struct pci_controller* hose)
         hose->cfg_addr = ioremap(0xf0000000 + 0x800000, 0x1000);
         hose->cfg_data = ioremap(0xf0000000 + 0xc00000, 0x1000);
 
-        /* The bus contains a bridge from root -> device, we need to
-         * make it visible on bus 0 so that we pick the right type
-         * of config cycles. If we didn't, we would have to force all
-         * config cycles to be type 1. So we override the "bus-range"
-         * property here
-         */
-        hose->first_busno = 0x00;
-        hose->last_busno = 0xff;
         u4_pcie = hose;
 }
 
@@ -452,7 +444,7 @@ static void __init setup_u3_ht(struct pci_controller* hose)
 	u3_ht = hose;
 }
 
-static int __init add_bridge(struct device_node *dev)
+static int __init maple_add_bridge(struct device_node *dev)
 {
 	int len;
 	struct pci_controller *hose;
@@ -462,7 +454,7 @@ static int __init add_bridge(struct device_node *dev)
 
 	DBG("Adding PCI host bridge %s\n", dev->full_name);
 
-	bus_range = get_property(dev, "bus-range", &len);
+	bus_range = of_get_property(dev, "bus-range", &len);
 	if (bus_range == NULL || len < 2 * sizeof(int)) {
 		printk(KERN_WARNING "Can't get bus-range for %s, assume bus 0\n",
 		dev->full_name);
@@ -475,15 +467,15 @@ static int __init add_bridge(struct device_node *dev)
 	hose->last_busno = bus_range ? bus_range[1] : 0xff;
 
 	disp_name = NULL;
-	if (device_is_compatible(dev, "u3-agp")) {
+	if (of_device_is_compatible(dev, "u3-agp")) {
 		setup_u3_agp(hose);
 		disp_name = "U3-AGP";
 		primary = 0;
-	} else if (device_is_compatible(dev, "u3-ht")) {
+	} else if (of_device_is_compatible(dev, "u3-ht")) {
 		setup_u3_ht(hose);
 		disp_name = "U3-HT";
 		primary = 1;
-        } else if (device_is_compatible(dev, "u4-pcie")) {
+        } else if (of_device_is_compatible(dev, "u4-pcie")) {
                 setup_u4_pcie(hose);
                 disp_name = "U4-PCIE";
                 primary = 0;
@@ -498,59 +490,36 @@ static int __init add_bridge(struct device_node *dev)
 	/* Fixup "bus-range" OF property */
 	fixup_bus_range(dev);
 
+	/* Check for legacy IOs */
+	isa_bridge_find_early(hose);
+
 	return 0;
 }
 
 
-void __init maple_pcibios_fixup(void)
+void __devinit maple_pci_irq_fixup(struct pci_dev *dev)
 {
-	struct pci_dev *dev = NULL;
+	DBG(" -> maple_pci_irq_fixup\n");
 
-	DBG(" -> maple_pcibios_fixup\n");
-
-	for_each_pci_dev(dev) {
-		/* Fixup IRQ for PCIe host */
-		if (u4_pcie != NULL && dev->bus->number == 0 &&
-		    pci_bus_to_host(dev->bus) == u4_pcie) {
-			printk(KERN_DEBUG "Fixup U4 PCIe IRQ\n");
-			dev->irq = irq_create_mapping(NULL, 1);
-			if (dev->irq != NO_IRQ)
-				set_irq_type(dev->irq, IRQ_TYPE_LEVEL_LOW);
-			continue;
-		}
-
-		/* Hide AMD8111 IDE interrupt when in legacy mode so
-		 * the driver calls pci_get_legacy_ide_irq()
-		 */
-		if (dev->vendor == PCI_VENDOR_ID_AMD &&
-		    dev->device == PCI_DEVICE_ID_AMD_8111_IDE &&
-		    (dev->class & 5) != 5) {
-			dev->irq = NO_IRQ;
-			continue;
-		}
-
-		/* For all others, map the interrupt from the device-tree */
-		pci_read_irq_line(dev);
+	/* Fixup IRQ for PCIe host */
+	if (u4_pcie != NULL && dev->bus->number == 0 &&
+	    pci_bus_to_host(dev->bus) == u4_pcie) {
+		printk(KERN_DEBUG "Fixup U4 PCIe IRQ\n");
+		dev->irq = irq_create_mapping(NULL, 1);
+		if (dev->irq != NO_IRQ)
+			set_irq_type(dev->irq, IRQ_TYPE_LEVEL_LOW);
 	}
 
-	DBG(" <- maple_pcibios_fixup\n");
-}
-
-static void __init maple_fixup_phb_resources(void)
-{
-	struct pci_controller *hose, *tmp;
-	
-	list_for_each_entry_safe(hose, tmp, &hose_list, list_node) {
-		unsigned long offset = (unsigned long)hose->io_base_virt - pci_io_base;
-
-		hose->io_resource.start += offset;
-		hose->io_resource.end += offset;
-
-		printk(KERN_INFO "PCI Host %d, io start: %llx; io end: %llx\n",
-		       hose->global_number,
-		       (unsigned long long)hose->io_resource.start,
-		       (unsigned long long)hose->io_resource.end);
+	/* Hide AMD8111 IDE interrupt when in legacy mode so
+	 * the driver calls pci_get_legacy_ide_irq()
+	 */
+	if (dev->vendor == PCI_VENDOR_ID_AMD &&
+	    dev->device == PCI_DEVICE_ID_AMD_8111_IDE &&
+	    (dev->class & 5) != 5) {
+		dev->irq = NO_IRQ;
 	}
+
+	DBG(" <- maple_pci_irq_fixup\n");
 }
 
 void __init maple_pci_init(void)
@@ -569,13 +538,16 @@ void __init maple_pci_init(void)
 		return;
 	}
 	for (np = NULL; (np = of_get_next_child(root, np)) != NULL;) {
-		if (np->name == NULL)
+		if (!np->type)
 			continue;
-		if (strcmp(np->name, "pci") == 0) {
-			if (add_bridge(np) == 0)
-				of_node_get(np);
-		}
-		if (strcmp(np->name, "ht") == 0) {
+		if (strcmp(np->type, "pci") && strcmp(np->type, "ht"))
+			continue;
+		if ((of_device_is_compatible(np, "u4-pcie") ||
+		     of_device_is_compatible(np, "u3-agp")) &&
+		    maple_add_bridge(np) == 0)
+			of_node_get(np);
+
+		if (of_device_is_compatible(np, "u3-ht")) {
 			of_node_get(np);
 			ht = np;
 		}
@@ -584,26 +556,8 @@ void __init maple_pci_init(void)
 
 	/* Now setup the HyperTransport host if we found any
 	 */
-	if (ht && add_bridge(ht) != 0)
+	if (ht && maple_add_bridge(ht) != 0)
 		of_node_put(ht);
-
-        /*
-         * We need to call pci_setup_phb_io for the HT bridge first
-         * so it gets the I/O port numbers starting at 0, and we
-         * need to call it for the AGP bridge after that so it gets
-         * small positive I/O port numbers.
-         */
-        if (u3_ht)
-                pci_setup_phb_io(u3_ht, 1);
-        if (u3_agp)
-                pci_setup_phb_io(u3_agp, 0);
-        if (u4_pcie)
-                pci_setup_phb_io(u4_pcie, 0);
-
-	/* Fixup the IO resources on our host bridges as the common code
-	 * does it only for childs of the host bridges
-	 */
-	maple_fixup_phb_resources();
 
 	/* Setup the linkage between OF nodes and PHBs */ 
 	pci_devs_phb_init();

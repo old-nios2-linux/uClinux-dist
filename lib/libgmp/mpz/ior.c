@@ -1,45 +1,39 @@
 /* mpz_ior -- Logical inclusive or.
 
-Copyright (C) 1991, 1993, 1994, 1996, 1997 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 1997, 2000, 2001, 2005 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpz_ior (mpz_ptr res, mpz_srcptr op1, mpz_srcptr op2)
-#else
-mpz_ior (res, op1, op2)
-     mpz_ptr res;
-     mpz_srcptr op1;
-     mpz_srcptr op2;
-#endif
 {
   mp_srcptr op1_ptr, op2_ptr;
   mp_size_t op1_size, op2_size;
   mp_ptr res_ptr;
   mp_size_t res_size;
   mp_size_t i;
-  TMP_DECL (marker);
+  TMP_DECL;
 
-  TMP_MARK (marker);
+  TMP_MARK;
   op1_size = op1->_mp_size;
   op2_size = op2->_mp_size;
 
@@ -156,16 +150,15 @@ mpz_ior (res, op1, op2)
 	    }
 
 	  res->_mp_size = -res_size;
-	  TMP_FREE (marker);
+	  TMP_FREE;
 	  return;
 	}
       else
 	{
 	  /* We should compute -OP1 | OP2.  Swap OP1 and OP2 and fall
 	     through to the code that handles OP1 | -OP2.  */
-	  {mpz_srcptr t = op1; op1 = op2; op2 = t;}
-	  {mp_srcptr t = op1_ptr; op1_ptr = op2_ptr; op2_ptr = t;}
-	  {mp_size_t t = op1_size; op1_size = op2_size; op2_size = t;}
+          MPZ_SRCPTR_SWAP (op1, op2);
+          MPN_SRCPTR_SWAP (op1_ptr,op1_size, op2_ptr,op2_size);
 	}
     }
 
@@ -240,5 +233,5 @@ mpz_ior (res, op1, op2)
 
     res->_mp_size = -res_size;
   }
-  TMP_FREE (marker);
+  TMP_FREE;
 }

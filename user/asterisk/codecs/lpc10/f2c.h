@@ -1,6 +1,6 @@
 /*
 
-$Log: f2c.h,v $
+$Log$
 Revision 1.15  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 

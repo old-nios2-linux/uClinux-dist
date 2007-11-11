@@ -1,6 +1,13 @@
 /* cfg.h  -  Configuration file parser */
+/*
+Copyright 1992-1998 Werner Almesberger.
+Copyright 1999-2004 John Coffman.
+All rights reserved.
 
-/* Copyright 1992-1996 Werner Almesberger. See file COPYING for details. */
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
 
 
 #ifndef CFG_H
@@ -21,7 +28,7 @@ typedef struct {
 extern CONFIG cf_top[],cf_identify[],cf_options[],cf_all[],cf_kernel[],
   cf_image[],cf_other[],cf_disk[],cf_partitions[],cf_partition[],
   cf_map_drive[],cf_change_rules[],cf_change_rule[],cf_change[],
-  cf_change_dsc[];
+  cf_change_dsc[],cf_bitmap[];
 
 extern FILE *pw_file;
 
@@ -68,5 +75,14 @@ char *cfg_get_strg(CONFIG *table,char *item);
 
 FILE *cfg_pw_open(void);
 /* open the password file, creating a new file if  passw  is set. */
+
+void cfg_bitmap_only(void);
+/* allow only the "bitmap" keywords */
+
+#if BETA_TEST
+void cfg_alpha_check(void);
+/* check for tables in alphabetical order */
+#endif
+
 
 #endif

@@ -27,10 +27,14 @@ char *version = "1.0.0";
 /*****************************************************************************/
 
 struct stats {
-	unsigned int	user;
-	unsigned int	nice;
-	unsigned int	system;
-	unsigned int	idle;
+	unsigned int	user;    // user (application) usage
+	unsigned int	nice;    // user usage with "niced" priority
+	unsigned int	system;  // system (kernel) level usage
+	unsigned int	idle;    // CPU idle and no disk I/O outstanding
+	unsigned int	iowait;  // CPU idle but with outstanding disk I/O
+	unsigned int	irq;     // Interrupt requests
+	unsigned int	softirq; // Soft interrupt requests
+	unsigned int	steal;   // Invol wait, hypervisor svcing other virtual CPU
 	unsigned int	total;
 };
 
@@ -42,10 +46,12 @@ int getdata(FILE *fp, struct stats *st)
 
 	if (fseek(fp, 0, SEEK_SET) < 0)
 		return(-1);
-	fscanf(fp, "%s %d %d %d %d", &buf[0], &st->user, &st->nice,
-		&st->system, &st->idle);
+	fscanf(fp, "%s %d %d %d %d %d %d %d", &buf[0],
+			&st->user, &st->nice, &st->system, &st->idle,
+			&st->iowait, &st->irq, &st->softirq, &st->steal);
 
-	st->total = st->user + st->nice + st->system + st->idle;
+	st->total = st->user + st->nice  + st->system + st->idle + st->iowait +
+				st->irq  + st->steal + st->softirq;
 	return(0);
 }
 
@@ -148,11 +154,14 @@ int main(int argc, char *argv[])
 	getdata(fp, &st);
 
 	if (average) {
-		printf("CPU:  average %d%%  (system=%d%% user=%d%% "
-			"nice=%d%% idle=%d%%)\n",
-			(st.system + st.user + st.nice) * 100 / st.total,
-			st.system * 100 / st.total, st.user * 100 / st.total,
-			st.nice * 100 / st.total, st.idle * 100 / st.total);
+		printf("CPU:  average %d%%  (system=%d%% user=%d%% nice=%d%%"
+			   "idle=%d%% iowait=%d%% irq=%d%% softirq=%d%% steal=%d%%)\n",
+			(st.system + st.user  + st.nice + st.iowait +
+			 st.irq    + st.steal + st.softirq)   * 100 / st.total,
+			st.system  * 100 / st.total, st.user  * 100 / st.total,
+			st.nice    * 100 / st.total, st.idle  * 100 / st.total,
+			st.iowait  * 100 / st.total, st.irq   * 100 / st.total,
+			st.softirq * 100 / st.total, st.steal * 100 / st.total);
 		cnt = repeat = 0;
 	}
 
@@ -204,14 +213,19 @@ int main(int argc, char *argv[])
 			idlepercent = (st.idle - stold.idle) * 100 / curtotal;
 		}
 
-		printf("CPU:  busy %d%%  (system=%d%% user=%d%% "
-			"nice=%d%% idle=%d%%)\n",
-			((st.system + st.user + st.nice) -
-			 (stold.system + stold.user + stold.nice)) *
+		printf("CPU:  busy %d%%  (system=%d%% user=%d%% nice=%d%% "
+		       "iowait=%d%% irq=%d%% softirq=%d%% steal=%d%% idle=%d%%)\n",
+			((st.system + st.user + st.nice + st.iowait + st.irq + st.softirq +
+			  st.steal) - (stold.system + stold.user + stold.nice +
+				  stold.iowait + stold.irq + stold.softirq + stold.steal)) *
 			 100 / curtotal,
-			(st.system - stold.system) * 100 / curtotal,
-			(st.user - stold.user) * 100 / curtotal,
-			(st.nice - stold.nice) * 100 / curtotal,
+			(st.system  - stold.system ) * 100 / curtotal,
+			(st.user    - stold.user   ) * 100 / curtotal,
+			(st.nice    - stold.nice   ) * 100 / curtotal,
+			(st.iowait  - stold.iowait ) * 100 / curtotal,
+			(st.irq     - stold.irq    ) * 100 / curtotal,
+			(st.softirq - stold.softirq) * 100 / curtotal,
+			(st.steal   - stold.steal  ) * 100 / curtotal,
 			idlepercent);
 	}
 

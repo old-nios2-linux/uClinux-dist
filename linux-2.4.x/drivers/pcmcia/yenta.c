@@ -503,6 +503,31 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		spin_unlock(&socket->event_lock);
 		schedule_task(&socket->tq_task);
 	}
+
+#ifdef CONFIG_MACH_SG8100
+{
+	static int jiffies_last;
+	static int intr_cnt = 0;
+	if (jiffies_last != jiffies) {
+		jiffies_last = jiffies;
+		intr_cnt = 0;
+	} else {
+		if (intr_cnt++ > 1000) {
+			intr_cnt = 0;
+			printk("\n%s(%d): looping in CardBus interrupt?\n", __FILE__, __LINE__);
+			if ((cb_readl(socket, 8) & 0x40) == 0) {
+				unsigned short bcr;
+				printk("%s(%d): reseting device!\n", __FILE__, __LINE__);
+				bcr = config_readw(socket, CB_BRIDGE_CONTROL);
+				config_writew(socket, CB_BRIDGE_CONTROL, 0x300);
+				mdelay(250);
+				config_writew(socket, CB_BRIDGE_CONTROL, bcr);
+
+			}
+		}
+	}
+}
+#endif /* CONFIG_MACH_SG8100 */
 }
 
 static void yenta_interrupt_wrapper(unsigned long data)

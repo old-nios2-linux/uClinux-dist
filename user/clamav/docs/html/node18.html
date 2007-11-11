@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>On-access scanning</TITLE>
-<META NAME="description" CONTENT="On-access scanning">
+<TITLE>clamav-milter</TITLE>
+<META NAME="description" CONTENT="clamav-milter">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -19,79 +19,69 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
 
-<LINK REL="previous" HREF="node17.html">
-<LINK REL="up" HREF="node17.html">
+<LINK REL="next" HREF="node19.html">
+<LINK REL="previous" HREF="node16.html">
+<LINK REL="up" HREF="node15.html">
 <LINK REL="next" HREF="node19.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html811"
+<A NAME="tex2html422"
   HREF="node19.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html807"
-  HREF="node17.html">
+<A NAME="tex2html418"
+  HREF="node15.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html803"
+<A NAME="tex2html412"
   HREF="node17.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html809"
+<A NAME="tex2html420"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html812"
-  HREF="node19.html">clamav-milter</A>
-<B> Up:</B> <A NAME="tex2html808"
-  HREF="node17.html">clamd</A>
-<B> Previous:</B> <A NAME="tex2html804"
-  HREF="node17.html">clamd</A>
- &nbsp <B>  <A NAME="tex2html810"
+<B> Next:</B> <A NAME="tex2html423"
+  HREF="node19.html">Testing</A>
+<B> Up:</B> <A NAME="tex2html419"
+  HREF="node15.html">Configuration</A>
+<B> Previous:</B> <A NAME="tex2html413"
+  HREF="node17.html">On-access scanning</A>
+ &nbsp <B>  <A NAME="tex2html421"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H3><A NAME="SECTION00051100000000000000">
-On-access scanning</A>
-</H3>
-    An interesting feature of <code>clamd</code> is on-access scanning based on the
-    Dazuko module, available from <TT><A NAME="tex2html30"
-  HREF="http://dazuko.org/">http://dazuko.org/</A></TT>. <B>It is not
-    required to run clamd - furthermore, you shouldn't run Dazuko on production
-    systems</B>. The special thread in <code>clamd</code> responsible for the
-    communication with Dazuko is called "Clamuko" (due to the funny name of
-    Dazuko) and it's only supported on Linux and FreeBSD. To compile dazuko
-    execute:
+<H2><A NAME="SECTION00052000000000000000">
+clamav-milter</A>
+</H2>
+    Nigel Horne's <code>clamav-milter</code> is a very efficient email scanner
+    designed for Sendmail. It's written entirely in C and only depends on
+    <code>libclamav</code> or <code>clamd</code>. You can find detailed installation
+    instructions in the <code>INSTALL</code> file that comes with the clamav-milter
+    sources. Basically, to connect it with Sendmail add the following lines to
+    <code>/etc/mail/sendmail.mc</code>:
     <PRE>
-	$ tar zxpvf dazuko-a.b.c.tar.gz
-	$ cd dazuko-a.b.c
-	$ make dazuko
-	or
-	$ make dazuko-smp (for smp kernels)
-	$ su
-	# insmod dazuko.o
-	# cp dazuko.o /lib/modules/`uname -r`/misc
-	# depmod -a
+INPUT_MAIL_FILTER(`clmilter',`S=local:/var/run/clamav/clmilter.sock,
+F=, T=S:4m;R:4m')dnl
+define(`confINPUT_MAIL_FILTERS', `clmilter')
 </PRE>
-    Depending on your Linux distribution you have to add a "dazuko" entry to
-    <I>/etc/modules</I> or run the module during system's startup by adding
+    If you're running it in <code>--external</code> mode, check entry in
+    <code>clamd.conf</code> of the form:
     <PRE>
-	modprobe dazuko
+	LocalSocket /var/run/clamav/clamd.sock
 </PRE>
-    to some startup file. You must also create a new device:
+    Start clamav-milter
     <PRE>
-	$ cat /proc/devices | grep dazuko
-	254 dazuko
-	$ su -c "mknod -m 600 /dev/dazuko c 254 0"
+	/usr/local/sbin/clamav-milter -lo /var/run/clamav/clmilter.sock
 </PRE>
-    Now configure Clamuko in <code>clamd.conf</code> and read the <A HREF="node26.html#clamuko">5.3</A>
-    section.
+    and restart sendmail.
 
 <P>
 <BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

@@ -237,6 +237,7 @@ void GenObfuscationMask(char *netdata)
  ****************************************************************************/
 void DefineAllIfaceVars()
 {
+#ifndef SOURCEFIRE
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_if_t *alldevs;
     bpf_u_int32 net, netmask;
@@ -257,6 +258,7 @@ void DefineAllIfaceVars()
     }
 
     pcap_freealldevs(alldevs);
+#endif
 }
 
 /****************************************************************************
@@ -273,12 +275,12 @@ void DefineIfaceVar(char *iname, u_char * network, u_char * netmask)
     char valbuf[32];
     char varbuf[BUFSIZ];
 
-    snprintf(varbuf, BUFSIZ, "%s_ADDRESS", iname);
+    SnortSnprintf(varbuf, BUFSIZ, "%s_ADDRESS", iname);
 
-    snprintf(valbuf, 32, "%d.%d.%d.%d/%d.%d.%d.%d",
-            network[0] & 0xff, network[1] & 0xff, network[2] & 0xff, 
-            network[3] & 0xff, netmask[0] & 0xff, netmask[1] & 0xff, 
-            netmask[2] & 0xff, netmask[3] & 0xff);
+    SnortSnprintf(valbuf, 32, "%d.%d.%d.%d/%d.%d.%d.%d",
+                  network[0] & 0xff, network[1] & 0xff, network[2] & 0xff, 
+                  network[3] & 0xff, netmask[0] & 0xff, netmask[1] & 0xff, 
+                  netmask[2] & 0xff, netmask[3] & 0xff);
 
     VarDefine(varbuf, valbuf);
 }
@@ -336,7 +338,7 @@ int DisplayBanner()
         "   ,,_     -*> Snort! <*-\n"
         "  o\"  )~   Version %s (Build %s) %s %s\n"
         "   ''''    By Martin Roesch & The Snort Team: http://www.snort.org/team.html\n"
-        "           (C) Copyright 1998-2006 Sourcefire Inc., et al.\n"   
+        "           (C) Copyright 1998-2007 Sourcefire Inc., et al.\n"   
         "\n"
         , VERSION, BUILD, 
 #ifdef GIDS
@@ -398,18 +400,18 @@ void ts_print(register const struct timeval *tvp, char *timebuf)
 
     if(pv.include_year)
     {
-        (void) snprintf(timebuf, TIMEBUF_SIZE, 
-                        "%02d/%02d/%02d-%02d:%02d:%02d.%06u ", 
-                        lt->tm_mon + 1, lt->tm_mday, lt->tm_year - 100, 
-                        s / 3600, (s % 3600) / 60, s % 60, 
-                        (u_int) tvp->tv_usec);
+        (void) SnortSnprintf(timebuf, TIMEBUF_SIZE, 
+                             "%02d/%02d/%02d-%02d:%02d:%02d.%06u ", 
+                             lt->tm_mon + 1, lt->tm_mday, lt->tm_year - 100, 
+                             s / 3600, (s % 3600) / 60, s % 60, 
+                             (u_int) tvp->tv_usec);
     } 
     else 
     {
-        (void) snprintf(timebuf, TIMEBUF_SIZE,
-                        "%02d/%02d-%02d:%02d:%02d.%06u ", lt->tm_mon + 1,
-                        lt->tm_mday, s / 3600, (s % 3600) / 60, s % 60,
-                        (u_int) tvp->tv_usec);
+        (void) SnortSnprintf(timebuf, TIMEBUF_SIZE,
+                             "%02d/%02d-%02d:%02d:%02d.%06u ", lt->tm_mon + 1,
+                             lt->tm_mday, s / 3600, (s % 3600) / 60, s % 60,
+                             (u_int) tvp->tv_usec);
     }
 }
 
@@ -513,10 +515,16 @@ char *copy_argv(char **argv)
  *
  * Arguments: data => ptr to the data buf to be stripped
  *
- * Returns: size of the newly stripped string
+ * Returns: void
  *
+ * 3/7/07 - changed to return void - use strlen to get size of string
+ *
+ * Note that this function will turn all '\n' and '\r' into null chars
+ * so, e.g. 'Hello\nWorld\n' => 'Hello\x00World\x00'
+ * note that the string is now just 'Hello' and the length is shortened
+ * by more than just an ending '\n' or '\r'
  ****************************************************************************/
-int strip(char *data)
+void strip(char *data)
 {
     int size;
     char *end;
@@ -540,8 +548,6 @@ int strip(char *data)
         }
         idx++;
     }
-
-    return size;
 }
 
 
@@ -635,6 +641,7 @@ void ErrorMessage(const char *format,...)
     if(pv.daemon_flag || pv.logtosyslog_flag)
     {
         vsnprintf(buf, STD_BUF, format, ap);
+        buf[STD_BUF] = '\0';
         syslog(LOG_CONS | LOG_DAEMON | LOG_ERR, "%s", buf);
     }
     else
@@ -667,6 +674,7 @@ void LogMessage(const char *format,...)
     if(pv.daemon_flag || pv.logtosyslog_flag)
     {
         vsnprintf(buf, STD_BUF, format, ap);
+        buf[STD_BUF] = '\0';
         syslog(LOG_DAEMON | LOG_NOTICE, "%s", buf);
     }
     else
@@ -740,6 +748,7 @@ void FatalError(const char *format,...)
     va_start(ap, format);
 
     vsnprintf(buf, STD_BUF, format, ap);
+    buf[STD_BUF] = '\0';
 
     if(pv.daemon_flag || pv.logtosyslog_flag)
     {
@@ -841,7 +850,7 @@ void CreatePidFile(char *intf)
                             "PID path to log directory (%s)\n", pv.pid_path,
                             pv.log_dir);
                     CheckLogDir();
-                    snprintf(pv.pid_path, STD_BUF, "%s/", pv.log_dir);
+                    SnortSnprintf(pv.pid_path, STD_BUF, "%s/", pv.log_dir);
                     break; /* default path (log dir) is okay, continue to
                               next step */
                 }
@@ -866,8 +875,8 @@ void CreatePidFile(char *intf)
         FatalError("CreatePidFile() failed to lookup interface or pid_path is unknown!\n");
     }
 
-    snprintf(pv.pid_filename, STD_BUF,  "%s/snort_%s%s.pid", pv.pid_path, intf,
-            pv.pidfile_suffix);
+    SnortSnprintf(pv.pid_filename, STD_BUF,  "%s/snort_%s%s.pid", pv.pid_path, intf,
+                  pv.pidfile_suffix);
 
 #ifndef WIN32
     if (!pv.nolock_pid_file)
@@ -876,7 +885,7 @@ void CreatePidFile(char *intf)
         int lock_fd;
 
         /* First, lock the PID file */
-        snprintf(pid_lockfilename, STD_BUF, "%s.lck", pv.pid_filename);
+        SnortSnprintf(pid_lockfilename, STD_BUF, "%s.lck", pv.pid_filename);
         pid_lockfile = fopen(pid_lockfilename, "w");
 
         if (pid_lockfile)
@@ -1388,6 +1397,8 @@ void DropStats(int iParamIgnored)
                 pc.str_mem_faults);
     }
 
+    HttpInspectDropStats();
+
     LogMessage("=============================================="
             "=================================\n");
 
@@ -1429,7 +1440,7 @@ void InitProtoNames()
         }
         else
         {
-            snprintf(protoname, 10, "PROTO%03d", i);
+            SnortSnprintf(protoname, 10, "PROTO%03d", i);
             protocol_names[i] = strdup(protoname);
         }
     }
@@ -1486,6 +1497,10 @@ char *read_infile(char *fname)
         FatalError("can't stat %s: %s\n", fname, pcap_strerror(errno));
 
     cp = malloc((u_int) buf.st_size + 1);
+    if(cp == NULL)
+    {
+        FatalError("malloc() failed: %s\n", strerror(errno));
+    }
 
     cc = read(fd, cp, (int) buf.st_size);
 
@@ -1534,7 +1549,7 @@ void CheckLogDir(void)
     struct stat st;
     char log_dir[STD_BUF];
 
-    snprintf(log_dir, STD_BUF, "%s", pv.log_dir);
+    SnortSnprintf(log_dir, STD_BUF, "%s", pv.log_dir);
     stat(log_dir, &st);
 
     if(!S_ISDIR(st.st_mode) || access(log_dir, W_OK) == -1)
@@ -1728,6 +1743,164 @@ void *SPAlloc(unsigned long size, struct _SPMemControl *spmc)
     return tmp;
 }
 
+/* Guaranteed to be '\0' terminated even if truncation occurs.
+ *
+ * returns  SNORT_SNPRINTF_SUCCESS if successful
+ * returns  SNORT_SNPRINTF_TRUNCATION on truncation
+ * returns  SNORT_SNPRINTF_ERROR on error
+ */
+int SnortSnprintf(char *buf, size_t buf_size, const char *format, ...)
+{
+    va_list ap;
+    int ret;
+
+    if (buf == NULL || buf_size <= 0 || format == NULL)
+        return SNORT_SNPRINTF_ERROR;
+
+    /* zero first byte in case an error occurs with
+     * vsnprintf, so buffer is null terminated with
+     * zero length */
+    buf[0] = '\0';
+    buf[buf_size - 1] = '\0';
+
+    va_start(ap, format);
+
+    ret = vsnprintf(buf, buf_size, format, ap);
+
+    va_end(ap);
+
+    if (ret < 0)
+        return SNORT_SNPRINTF_ERROR;
+
+    if (buf[buf_size - 1] != '\0' || ret >= buf_size)
+    {
+        /* result was truncated */
+        buf[buf_size - 1] = '\0';
+        return SNORT_SNPRINTF_TRUNCATION;
+    }
+
+    return SNORT_SNPRINTF_SUCCESS;
+}
+
+/* Appends to a given string
+ * Guaranteed to be '\0' terminated even if truncation occurs.
+ * 
+ * returns SNORT_SNPRINTF_SUCCESS if successful
+ * returns SNORT_SNPRINTF_TRUNCATION on truncation
+ * returns SNORT_SNPRINTF_ERROR on error
+ */
+int SnortSnprintfAppend(char *buf, size_t buf_size, const char *format, ...)
+{
+    int str_len;
+    int ret;
+    va_list ap;
+
+    if (buf == NULL || buf_size <= 0 || format == NULL)
+        return SNORT_SNPRINTF_ERROR;
+
+    str_len = SnortStrnlen(buf, buf_size);
+
+    /* since we've already checked buf and buf_size an error
+     * indicates no null termination, so just start at
+     * beginning of buffer */
+    if (str_len == SNORT_STRNLEN_ERROR)
+        str_len = 0;
+
+    buf[buf_size - 1] = '\0';
+
+    va_start(ap, format);
+
+    ret = vsnprintf(buf + str_len, buf_size - (size_t)str_len, format, ap);
+
+    va_end(ap);
+
+    if (ret < 0)
+        return SNORT_SNPRINTF_ERROR;
+
+    if (buf[buf_size - 1] != '\0' || ret >= buf_size)
+    {
+        /* truncation occured */
+        buf[buf_size - 1] = '\0';
+        return SNORT_SNPRINTF_TRUNCATION;
+    }
+
+    return SNORT_SNPRINTF_SUCCESS;
+}
+
+/* Guaranteed to be '\0' terminated even if truncation occurs.
+ *
+ * returns SNORT_STRNCPY_SUCCESS if successful
+ * returns SNORT_STRNCPY_TRUNCATION on truncation
+ * returns SNORT_STRNCPY_ERROR on error
+ */
+int SnortStrncpy(char *dst, char *src, size_t dst_size)
+{
+    char *ret = NULL;
+
+    if (dst == NULL || src == NULL || dst_size <= 0)
+        return SNORT_STRNCPY_ERROR;
+
+    if (src == dst)
+        return SNORT_STRNCPY_ERROR;
+
+    dst[dst_size - 1] = '\0';
+
+    ret = strncpy(dst, src, dst_size);
+
+    /* Not sure if this ever happens but might as
+     * well be on the safe side */
+    if (ret == NULL)
+        return SNORT_STRNCPY_ERROR;
+
+    if (dst[dst_size - 1] != '\0')
+    {
+        /* result was truncated */
+        dst[dst_size - 1] = '\0';
+        return SNORT_STRNCPY_TRUNCATION;
+    }
+
+    return SNORT_STRNCPY_SUCCESS;
+}
+
+/* Determines whether a buffer is '\0' terminated and returns the
+ * string length if so
+ *
+ * returns the string length if '\0' terminated
+ * returns SNORT_STRNLEN_ERROR if not '\0' terminated
+ */
+int SnortStrnlen(char *buf, int buf_size)
+{
+    int i = 0;
+
+    if (buf == NULL || buf_size <= 0)
+        return SNORT_STRNLEN_ERROR;
+
+    for (i = 0; i < buf_size; i++)
+    {
+        if (buf[i] == '\0')
+            break;
+    }
+
+    if (i == buf_size)
+        return SNORT_STRNLEN_ERROR;
+
+    return i;
+}
+
+
+char * SnortStrdup(char *str)
+{
+    char *copy = NULL;
+
+    copy = strdup(str);
+
+    if (copy == NULL)
+    {
+        FatalError("Unable to duplicate string: %s!\n", str);
+    }
+
+    return copy;
+}
 
 void *SnortAlloc(unsigned long size)
 {
@@ -1738,6 +1911,31 @@ void *SnortAlloc(unsigned long size)
     if(tmp == NULL)
     {
         FatalError("Unable to allocate memory!  (%lu requested)\n", size);
+    }
+
+    return tmp;
+}
+
+void * SnortAlloc2(size_t size, const char *format, ...)
+{
+    void *tmp;
+
+    tmp = (void *)calloc(size, sizeof(char));
+
+    if(tmp == NULL)
+    {
+        va_list ap;
+        char buf[STD_BUF];
+
+        buf[STD_BUF - 1] = '\0';
+
+        va_start(ap, format);
+
+        vsnprintf(buf, STD_BUF - 1, format, ap);
+
+        va_end(ap);
+
+        FatalError("%s", buf);
     }
 
     return tmp;

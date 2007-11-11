@@ -1,106 +1,13 @@
-# Makefile for uClibc
-#
-# Copyright (C) 2000,2001 Erik Andersen <andersen@uclibc.org>
-#
-# This program is free software; you can redistribute it and/or modify it under
-# the terms of the GNU Library General Public License as published by the Free
-# Software Foundation; either version 2 of the License, or (at your option) any
-# later version.
-#
-# This program is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-# FOR A PARTICULAR PURPOSE. See the GNU Library General Public License for more
-# details.
-#
-# You should have received a copy of the GNU Library General Public License
-# along with this program; if not, write to the Free Software Foundation, Inc.,
-# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+# uClibc unistd tests
+# Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
 
-TESTDIR=../
-include $(TESTDIR)/Rules.mak
+include ../Test.mak
 
-
-
-TARGETS=fork fork_glibc vfork vfork_glibc getcwd getopt getopt_long preadwrite 
-all: $(TARGETS)
-
-getcwd: getcwd.c Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	-@ echo "-------"
-	-@ echo " "
-	-@ echo "Compiling vs uClibc: "
-	-@ echo " "
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@
-	-@ echo " "
-
-fork: fork.c ../testsuite.h Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	-@ echo "-------"
-	-@ echo " "
-	-@ echo "Compiling vs uClibc: "
-	-@ echo " "
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@
-	-@ echo " "
-
-fork_glibc: fork.c ../testsuite.h Makefile
-	-@ echo "-------"
-	-@ echo " "
-	-@ echo "Compiling vs GNU libc: "
-	-@ echo " "
-	$(HOSTCC) $(GLIBC_CFLAGS) -c $< -o $@.o
-	$(HOSTCC) $(GLIBC_LDFLAGS) $@.o -o $@
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	-./$@
-	-@ echo " "
-
-vfork: vfork.c ../testsuite.h Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	-@ echo "-------"
-	-@ echo " "
-	-@ echo "Compiling vs uClibc: "
-	-@ echo " "
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@
-	-@ echo " "
-
-vfork_glibc: vfork.c ../testsuite.h Makefile
-	-@ echo "-------"
-	-@ echo " "
-	-@ echo "Compiling vs GNU libc: "
-	-@ echo " "
-	$(HOSTCC) $(GLIBC_CFLAGS) -c $< -o $@.o
-	$(HOSTCC) $(GLIBC_LDFLAGS) $@.o -o $@
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	-./$@
-	-@ echo " "
-
-getopt: getopt.c Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@ -abcXXX -9
-	-@ echo " "
-
-getopt_long: getopt_long.c Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@ --add XXX --delete YYY --verbose
-	-@ echo " "
-
-preadwrite: preadwrite.c Makefile $(TESTDIR)/Config $(TESTDIR)/Rules.mak
-	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LIBS)
-	$(STRIPTOOL) -x -R .note -R .comment $@
-	./$@
-	-@ echo " "
-
-clean:
-	$(RM) *.[oa] *~ core $(TARGETS)
-
-
+OPTS_getopt      := -abcXXX -9
+OPTS_getopt_long := --add XXX --delete YYY --verbose
+ifeq ($(UCLIBC_HAS_GNU_GETOPT),y)
+OPTS_tstgetopt   := -a -b -cfoobar --required foobar --optional=bazbug --none random --col --color --colour
+else
+# reordering is not supported, behaves as if POSIXLY_CORRECT would be set
+OPTS_tstgetopt   := -a -b -cfoobar --required foobar --optional=bazbug --none --colou --color --colour random
+endif

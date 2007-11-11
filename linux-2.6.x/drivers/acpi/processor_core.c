@@ -60,24 +60,22 @@
 
 #define ACPI_PROCESSOR_COMPONENT	0x01000000
 #define ACPI_PROCESSOR_CLASS		"processor"
-#define ACPI_PROCESSOR_DRIVER_NAME	"ACPI Processor Driver"
 #define ACPI_PROCESSOR_DEVICE_NAME	"Processor"
 #define ACPI_PROCESSOR_FILE_INFO	"info"
 #define ACPI_PROCESSOR_FILE_THROTTLING	"throttling"
 #define ACPI_PROCESSOR_FILE_LIMIT	"limit"
 #define ACPI_PROCESSOR_NOTIFY_PERFORMANCE 0x80
 #define ACPI_PROCESSOR_NOTIFY_POWER	0x81
+#define ACPI_PROCESSOR_NOTIFY_THROTTLING	0x82
 
 #define ACPI_PROCESSOR_LIMIT_USER	0
 #define ACPI_PROCESSOR_LIMIT_THERMAL	1
 
-#define ACPI_STA_PRESENT 0x00000001
-
 #define _COMPONENT		ACPI_PROCESSOR_COMPONENT
-ACPI_MODULE_NAME("acpi_processor")
+ACPI_MODULE_NAME("processor_core");
 
-    MODULE_AUTHOR("Paul Diefenbaugh");
-MODULE_DESCRIPTION(ACPI_PROCESSOR_DRIVER_NAME);
+MODULE_AUTHOR("Paul Diefenbaugh");
+MODULE_DESCRIPTION("ACPI Processor Driver");
 MODULE_LICENSE("GPL");
 
 static int acpi_processor_add(struct acpi_device *device);
@@ -87,15 +85,25 @@ static int acpi_processor_info_open_fs(struct inode *inode, struct file *file);
 static void acpi_processor_notify(acpi_handle handle, u32 event, void *data);
 static acpi_status acpi_processor_hotadd_init(acpi_handle handle, int *p_cpu);
 static int acpi_processor_handle_eject(struct acpi_processor *pr);
+extern int acpi_processor_tstate_has_changed(struct acpi_processor *pr);
+
+
+static const struct acpi_device_id processor_device_ids[] = {
+	{ACPI_PROCESSOR_HID, 0},
+	{"", 0},
+};
+MODULE_DEVICE_TABLE(acpi, processor_device_ids);
 
 static struct acpi_driver acpi_processor_driver = {
-	.name = ACPI_PROCESSOR_DRIVER_NAME,
+	.name = "processor",
 	.class = ACPI_PROCESSOR_CLASS,
-	.ids = ACPI_PROCESSOR_HID,
+	.ids = processor_device_ids,
 	.ops = {
 		.add = acpi_processor_add,
 		.remove = acpi_processor_remove,
 		.start = acpi_processor_start,
+		.suspend = acpi_processor_suspend,
+		.resume = acpi_processor_resume,
 		},
 };
 
@@ -118,7 +126,6 @@ struct acpi_processor_errata errata __read_mostly;
 
 static int acpi_processor_errata_piix4(struct pci_dev *dev)
 {
-	u8 rev = 0;
 	u8 value1 = 0;
 	u8 value2 = 0;
 
@@ -130,9 +137,7 @@ static int acpi_processor_errata_piix4(struct pci_dev *dev)
 	 * Note that 'dev' references the PIIX4 ACPI Controller.
 	 */
 
-	pci_read_config_byte(dev, PCI_REVISION_ID, &rev);
-
-	switch (rev) {
+	switch (dev->revision) {
 	case 0:
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Found PIIX4 A-step\n"));
 		break;
@@ -150,7 +155,7 @@ static int acpi_processor_errata_piix4(struct pci_dev *dev)
 		break;
 	}
 
-	switch (rev) {
+	switch (dev->revision) {
 
 	case 0:		/* PIIX4 A-step */
 	case 1:		/* PIIX4 B-step */
@@ -277,7 +282,7 @@ static struct proc_dir_entry *acpi_processor_dir = NULL;
 
 static int acpi_processor_info_seq_show(struct seq_file *seq, void *offset)
 {
-	struct acpi_processor *pr = (struct acpi_processor *)seq->private;
+	struct acpi_processor *pr = seq->private;
 
 
 	if (!pr)
@@ -375,30 +380,126 @@ static int acpi_processor_remove_fs(struct acpi_device *device)
 }
 
 /* Use the acpiid in MADT to map cpus in case of SMP */
+
 #ifndef CONFIG_SMP
-#define convert_acpiid_to_cpu(acpi_id) (-1)
+static int get_cpu_id(acpi_handle handle, u32 acpi_id) {return -1;}
 #else
+
+static struct acpi_table_madt *madt;
+
+static int map_lapic_id(struct acpi_subtable_header *entry,
+		 u32 acpi_id, int *apic_id)
+{
+	struct acpi_madt_local_apic *lapic =
+		(struct acpi_madt_local_apic *)entry;
+	if ((lapic->lapic_flags & ACPI_MADT_ENABLED) &&
+	    lapic->processor_id == acpi_id) {
+		*apic_id = lapic->id;
+		return 1;
+	}
+	return 0;
+}
+
+static int map_lsapic_id(struct acpi_subtable_header *entry,
+		  u32 acpi_id, int *apic_id)
+{
+	struct acpi_madt_local_sapic *lsapic =
+		(struct acpi_madt_local_sapic *)entry;
+	/* Only check enabled APICs*/
+	if (lsapic->lapic_flags & ACPI_MADT_ENABLED) {
+		/* First check against id */
+		if (lsapic->processor_id == acpi_id) {
+			*apic_id = (lsapic->id << 8) | lsapic->eid;
+			return 1;
+		/* Check against optional uid */
+		} else if (entry->length >= 16 &&
+			lsapic->uid == acpi_id) {
+			*apic_id = lsapic->uid;
+			return 1;
+		}
+	}
+	return 0;
+}
 
 #ifdef CONFIG_IA64
-#define arch_acpiid_to_apicid 	ia64_acpiid_to_sapicid
 #define arch_cpu_to_apicid 	ia64_cpu_to_sapicid
-#define ARCH_BAD_APICID		(0xffff)
 #else
-#define arch_acpiid_to_apicid 	x86_acpiid_to_apicid
 #define arch_cpu_to_apicid 	x86_cpu_to_apicid
-#define ARCH_BAD_APICID		(0xff)
 #endif
 
-static int convert_acpiid_to_cpu(u8 acpi_id)
+static int map_madt_entry(u32 acpi_id)
 {
-	u16 apic_id;
+	unsigned long madt_end, entry;
+	int apic_id = -1;
+
+	if (!madt)
+		return apic_id;
+
+	entry = (unsigned long)madt;
+	madt_end = entry + madt->header.length;
+
+	/* Parse all entries looking for a match. */
+
+	entry += sizeof(struct acpi_table_madt);
+	while (entry + sizeof(struct acpi_subtable_header) < madt_end) {
+		struct acpi_subtable_header *header =
+			(struct acpi_subtable_header *)entry;
+		if (header->type == ACPI_MADT_TYPE_LOCAL_APIC) {
+			if (map_lapic_id(header, acpi_id, &apic_id))
+				break;
+		} else if (header->type == ACPI_MADT_TYPE_LOCAL_SAPIC) {
+			if (map_lsapic_id(header, acpi_id, &apic_id))
+				break;
+		}
+		entry += header->length;
+	}
+	return apic_id;
+}
+
+static int map_mat_entry(acpi_handle handle, u32 acpi_id)
+{
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object *obj;
+	struct acpi_subtable_header *header;
+	int apic_id = -1;
+
+	if (ACPI_FAILURE(acpi_evaluate_object(handle, "_MAT", NULL, &buffer)))
+		goto exit;
+
+	if (!buffer.length || !buffer.pointer)
+		goto exit;
+
+	obj = buffer.pointer;
+	if (obj->type != ACPI_TYPE_BUFFER ||
+	    obj->buffer.length < sizeof(struct acpi_subtable_header)) {
+		goto exit;
+	}
+
+	header = (struct acpi_subtable_header *)obj->buffer.pointer;
+	if (header->type == ACPI_MADT_TYPE_LOCAL_APIC) {
+		map_lapic_id(header, acpi_id, &apic_id);
+	} else if (header->type == ACPI_MADT_TYPE_LOCAL_SAPIC) {
+		map_lsapic_id(header, acpi_id, &apic_id);
+	}
+
+exit:
+	if (buffer.pointer)
+		kfree(buffer.pointer);
+	return apic_id;
+}
+
+static int get_cpu_id(acpi_handle handle, u32 acpi_id)
+{
 	int i;
+	int apic_id = -1;
 
-	apic_id = arch_acpiid_to_apicid[acpi_id];
-	if (apic_id == ARCH_BAD_APICID)
-		return -1;
+	apic_id = map_mat_entry(handle, acpi_id);
+	if (apic_id == -1)
+		apic_id = map_madt_entry(acpi_id);
+	if (apic_id == -1)
+		return apic_id;
 
-	for (i = 0; i < NR_CPUS; i++) {
+	for (i = 0; i < NR_CPUS; ++i) {
 		if (arch_cpu_to_apicid[i] == apic_id)
 			return i;
 	}
@@ -410,7 +511,7 @@ static int convert_acpiid_to_cpu(u8 acpi_id)
                                  Driver Interface
    -------------------------------------------------------------------------- */
 
-static int acpi_processor_get_info(struct acpi_processor *pr)
+static int acpi_processor_get_info(struct acpi_processor *pr, unsigned has_uid)
 {
 	acpi_status status = 0;
 	union acpi_object object = { 0 };
@@ -431,7 +532,7 @@ static int acpi_processor_get_info(struct acpi_processor *pr)
 	 * Check to see if we have bus mastering arbitration control.  This
 	 * is required for proper C3 usage (to maintain cache coherency).
 	 */
-	if (acpi_fadt.V1_pm2_cnt_blk && acpi_fadt.pm2_cnt_len) {
+	if (acpi_gbl_FADT.pm2_control_block && acpi_gbl_FADT.pm2_control_length) {
 		pr->flags.bm_control = 1;
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 				  "Bus mastering arbitration control present\n"));
@@ -439,24 +540,35 @@ static int acpi_processor_get_info(struct acpi_processor *pr)
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 				  "No bus mastering arbitration control\n"));
 
-	/*
-	 * Evalute the processor object.  Note that it is common on SMP to
-	 * have the first (boot) processor with a valid PBLK address while
-	 * all others have a NULL address.
-	 */
-	status = acpi_evaluate_object(pr->handle, NULL, NULL, &buffer);
-	if (ACPI_FAILURE(status)) {
-		printk(KERN_ERR PREFIX "Evaluating processor object\n");
-		return -ENODEV;
+	/* Check if it is a Device with HID and UID */
+	if (has_uid) {
+		unsigned long value;
+		status = acpi_evaluate_integer(pr->handle, METHOD_NAME__UID,
+						NULL, &value);
+		if (ACPI_FAILURE(status)) {
+			printk(KERN_ERR PREFIX "Evaluating processor _UID\n");
+			return -ENODEV;
+		}
+		pr->acpi_id = value;
+	} else {
+		/*
+		* Evalute the processor object.  Note that it is common on SMP to
+		* have the first (boot) processor with a valid PBLK address while
+		* all others have a NULL address.
+		*/
+		status = acpi_evaluate_object(pr->handle, NULL, NULL, &buffer);
+		if (ACPI_FAILURE(status)) {
+			printk(KERN_ERR PREFIX "Evaluating processor object\n");
+			return -ENODEV;
+		}
+
+		/*
+		* TBD: Synch processor ID (via LAPIC/LSAPIC structures) on SMP.
+		*      >>> 'acpi_get_processor_id(acpi_id, &id)' in arch/xxx/acpi.c
+		*/
+		pr->acpi_id = object.processor.proc_id;
 	}
-
-	/*
-	 * TBD: Synch processor ID (via LAPIC/LSAPIC structures) on SMP.
-	 *      >>> 'acpi_get_processor_id(acpi_id, &id)' in arch/xxx/acpi.c
-	 */
-	pr->acpi_id = object.processor.proc_id;
-
-	cpu_index = convert_acpiid_to_cpu(pr->acpi_id);
+	cpu_index = get_cpu_id(pr->handle, pr->acpi_id);
 
 	/* Handle UP system running SMP kernel, with no LAPIC in MADT */
 	if (!cpu0_initialized && (cpu_index == -1) &&
@@ -473,12 +585,9 @@ static int acpi_processor_get_info(struct acpi_processor *pr)
 	 *  less than the max # of CPUs. They should be ignored _iff
 	 *  they are physically not present.
 	 */
-	if (cpu_index == -1) {
+	if (pr->id == -1) {
 		if (ACPI_FAILURE
 		    (acpi_processor_hotadd_init(pr->handle, &pr->id))) {
-			printk(KERN_ERR PREFIX
-				    "Getting cpuindex for acpiid 0x%x\n",
-				    pr->acpi_id);
 			return -ENODEV;
 		}
 	}
@@ -493,8 +602,8 @@ static int acpi_processor_get_info(struct acpi_processor *pr)
 			    object.processor.pblk_length);
 	else {
 		pr->throttling.address = object.processor.pblk_address;
-		pr->throttling.duty_offset = acpi_fadt.duty_offset;
-		pr->throttling.duty_width = acpi_fadt.duty_width;
+		pr->throttling.duty_offset = acpi_gbl_FADT.duty_offset;
+		pr->throttling.duty_width = acpi_gbl_FADT.duty_width;
 
 		pr->pblk = object.processor.pblk_address;
 
@@ -528,7 +637,7 @@ static int __cpuinit acpi_processor_start(struct acpi_device *device)
 
 	pr = acpi_driver_data(device);
 
-	result = acpi_processor_get_info(pr);
+	result = acpi_processor_get_info(pr, device->flags.unique_id);
 	if (result) {
 		/* Processor is physically not present */
 		return 0;
@@ -542,12 +651,12 @@ static int __cpuinit acpi_processor_start(struct acpi_device *device)
 	 * Don't trust it blindly
 	 */
 	if (processor_device_array[pr->id] != NULL &&
-	    processor_device_array[pr->id] != (void *)device) {
+	    processor_device_array[pr->id] != device) {
 		printk(KERN_WARNING "BIOS reported wrong ACPI id"
 			"for the processor\n");
 		return -ENODEV;
 	}
-	processor_device_array[pr->id] = (void *)device;
+	processor_device_array[pr->id] = device;
 
 	processors[pr->id] = pr;
 
@@ -578,7 +687,7 @@ static int __cpuinit acpi_processor_start(struct acpi_device *device)
 
 static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 {
-	struct acpi_processor *pr = (struct acpi_processor *)data;
+	struct acpi_processor *pr = data;
 	struct acpi_device *device = NULL;
 
 
@@ -591,13 +700,23 @@ static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 	switch (event) {
 	case ACPI_PROCESSOR_NOTIFY_PERFORMANCE:
 		acpi_processor_ppc_has_changed(pr);
-		acpi_bus_generate_event(device, event,
+		acpi_bus_generate_proc_event(device, event,
 					pr->performance_platform_limit);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  device->dev.bus_id, event,
+						  pr->performance_platform_limit);
 		break;
 	case ACPI_PROCESSOR_NOTIFY_POWER:
 		acpi_processor_cst_has_changed(pr);
-		acpi_bus_generate_event(device, event, 0);
+		acpi_bus_generate_proc_event(device, event, 0);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  device->dev.bus_id, event, 0);
 		break;
+	case ACPI_PROCESSOR_NOTIFY_THROTTLING:
+		acpi_processor_tstate_has_changed(pr);
+		acpi_bus_generate_proc_event(device, event, 0);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  device->dev.bus_id, event, 0);
 	default:
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 				  "Unsupported event [0x%x]\n", event));
@@ -607,6 +726,25 @@ static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 	return;
 }
 
+static int acpi_cpu_soft_notify(struct notifier_block *nfb,
+		unsigned long action, void *hcpu)
+{
+	unsigned int cpu = (unsigned long)hcpu;
+	struct acpi_processor *pr = processors[cpu];
+
+	if (action == CPU_ONLINE && pr) {
+		acpi_processor_ppc_has_changed(pr);
+		acpi_processor_cst_has_changed(pr);
+		acpi_processor_tstate_has_changed(pr);
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block acpi_cpu_notifier =
+{
+	    .notifier_call = acpi_cpu_soft_notify,
+};
+
 static int acpi_processor_add(struct acpi_device *device)
 {
 	struct acpi_processor *pr = NULL;
@@ -615,10 +753,9 @@ static int acpi_processor_add(struct acpi_device *device)
 	if (!device)
 		return -EINVAL;
 
-	pr = kmalloc(sizeof(struct acpi_processor), GFP_KERNEL);
+	pr = kzalloc(sizeof(struct acpi_processor), GFP_KERNEL);
 	if (!pr)
 		return -ENOMEM;
-	memset(pr, 0, sizeof(struct acpi_processor));
 
 	pr->handle = device->handle;
 	strcpy(acpi_device_name(device), ACPI_PROCESSOR_DEVICE_NAME);
@@ -637,7 +774,7 @@ static int acpi_processor_remove(struct acpi_device *device, int type)
 	if (!device || !acpi_driver_data(device))
 		return -EINVAL;
 
-	pr = (struct acpi_processor *)acpi_driver_data(device);
+	pr = acpi_driver_data(device);
 
 	if (pr->id >= NR_CPUS) {
 		kfree(pr);
@@ -677,7 +814,7 @@ static int is_processor_present(acpi_handle handle)
 
 
 	status = acpi_evaluate_integer(handle, "_STA", NULL, &sta);
-	if (ACPI_FAILURE(status) || !(sta & ACPI_STA_PRESENT)) {
+	if (ACPI_FAILURE(status) || !(sta & ACPI_STA_DEVICE_PRESENT)) {
 		ACPI_EXCEPTION((AE_INFO, status, "Processor Device is not present"));
 		return 0;
 	}
@@ -711,7 +848,7 @@ int acpi_processor_device_add(acpi_handle handle, struct acpi_device **device)
 		return -ENODEV;
 
 	if ((pr->id >= 0) && (pr->id < NR_CPUS)) {
-		kobject_uevent(&(*device)->kobj, KOBJ_ONLINE);
+		kobject_uevent(&(*device)->dev.kobj, KOBJ_ONLINE);
 	}
 	return 0;
 }
@@ -749,13 +886,13 @@ acpi_processor_hotplug_notify(acpi_handle handle, u32 event, void *data)
 		}
 
 		if (pr->id >= 0 && (pr->id < NR_CPUS)) {
-			kobject_uevent(&device->kobj, KOBJ_OFFLINE);
+			kobject_uevent(&device->dev.kobj, KOBJ_OFFLINE);
 			break;
 		}
 
 		result = acpi_processor_start(device);
 		if ((!result) && ((pr->id >= 0) && (pr->id < NR_CPUS))) {
-			kobject_uevent(&device->kobj, KOBJ_ONLINE);
+			kobject_uevent(&device->dev.kobj, KOBJ_ONLINE);
 		} else {
 			printk(KERN_ERR PREFIX "Device [%s] failed to start\n",
 				    acpi_device_bid(device));
@@ -778,7 +915,7 @@ acpi_processor_hotplug_notify(acpi_handle handle, u32 event, void *data)
 		}
 
 		if ((pr->id < NR_CPUS) && (cpu_present(pr->id)))
-			kobject_uevent(&device->kobj, KOBJ_OFFLINE);
+			kobject_uevent(&device->dev.kobj, KOBJ_OFFLINE);
 		break;
 	default:
 		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
@@ -871,6 +1008,7 @@ void acpi_processor_install_hotplug_notify(void)
 			    ACPI_UINT32_MAX,
 			    processor_walk_namespace_cb, &action, NULL);
 #endif
+	register_hotcpu_notifier(&acpi_cpu_notifier);
 }
 
 static
@@ -883,6 +1021,7 @@ void acpi_processor_uninstall_hotplug_notify(void)
 			    ACPI_UINT32_MAX,
 			    processor_walk_namespace_cb, &action, NULL);
 #endif
+	unregister_hotcpu_notifier(&acpi_cpu_notifier);
 }
 
 /*
@@ -899,15 +1038,21 @@ static int __init acpi_processor_init(void)
 	memset(&processors, 0, sizeof(processors));
 	memset(&errata, 0, sizeof(errata));
 
+#ifdef CONFIG_SMP
+	if (ACPI_FAILURE(acpi_get_table(ACPI_SIG_MADT, 0,
+				(struct acpi_table_header **)&madt)))
+		madt = NULL;
+#endif
+
 	acpi_processor_dir = proc_mkdir(ACPI_PROCESSOR_CLASS, acpi_root_dir);
 	if (!acpi_processor_dir)
-		return 0;
+		return -ENOMEM;
 	acpi_processor_dir->owner = THIS_MODULE;
 
 	result = acpi_bus_register_driver(&acpi_processor_driver);
 	if (result < 0) {
 		remove_proc_entry(ACPI_PROCESSOR_CLASS, acpi_root_dir);
-		return 0;
+		return result;
 	}
 
 	acpi_processor_install_hotplug_notify();

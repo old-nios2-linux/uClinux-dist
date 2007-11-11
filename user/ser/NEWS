@@ -1,72 +1,201 @@
 Release notes for SIP Express Router (ser)
 ***********************************************
 
-$Id: NEWS,v 1.17.2.2.2.4.2.3 2004/07/26 23:18:35 andrei Exp $
+$Id: NEWS,v 1.38.2.3 2005/09/06 13:22:43 andrei Exp $
 
-***********************************************
-* Changes/fixes introduced in 0.8.14
-***********************************************
-+--------------------------------------------------------+
-| WARNING: if you are using 0.8.12 you need to:          |
-|          - update the database: ser_mysql.sh reinstall |
-|            (but make a backup copy first)              |
-|          - if you are using enum, replace              |
-|            enum_query("") with enum_query()            |
-|          - if you are using nathelper, switch to the   |
-|             latest rtpproxy (cvs  co rtpproxy)         |
-|          - if you are using one of the radius modules  |
-|            you need to upgrade the radiusclient library|
-|            to at least version 0.4.1                   |
-+--------------------------------------------------------+
+0.9.4 fixes/improvements (0.9.4 is a bug fix release for 0.9.3)
+ 
+general:
+ - gcc 4.0 support
+ - mutlicast options are set for all the sockets
+ - mediaproxy: memory leak, unchecked memory allocations
+ - postgress: some bugs and cleanups (compiles cleanly now)
+ - tm: shm cloned lumps (SER-55) 
+ - tm: t_fifo: 64-bit fix
+ - tm: dst_uri clone fix
+ - tm: t_newtran/t_restransmit* races  (!)
+ - usloc: memory leak
 
-0.8.14 is mainly a bug-fix release. It doesn't introduce many new features. It
-was created from the cvs stable tree (rel_0_8_12), so if you have an up-to-date
-0.8.12 from cvs  you don't need to upgrade to 0.8.14.
+solaris:
+ - serctl, better ISA detection, signals
+*bsd:
+ - multicast options are properly set
+openbsd:
+ - tcp 64 bit fix
 
-New Features
-============
 
- - experimental OS X (darwin) support
+
+0.9.3 changes
+
+
+new archs:
+ - alpha experimental support
+ - mips2/cobalt experimental support
+ - x86_64 support
+ - OS X (darwin) support
+ - sparc32 single cpu highly experimental support
+ - ppc64 experimental support
+
+modules:
+ - enum - support for more than one NAPTR
+ - msilo - explicit multidomain support -- recipient's user ID is stored in
+   the columns username and domain -- r_uri column kept for compatibility
+   reasons (will be removed in future) but not filled by this version of
+   module
+ - mysql - implements a connection pool, all modules will use same connection
+   to access the database
+ - nathelper received port  test (flag 16 for nat_uac_test): compares the
+   source port of the message with sip port in the first Via and returns
+   true if different.
+ - permsions - support for multiple allow/deny files, allow_register function
+ - TM has a new parameter: restart_fr_on_each_reply. If set (default)
+   fr_inv timer will be restarted for each provisional reply, if not set
+   it will be restarted only for the first reply and for replies >=180
+   (but only if increasing, eg.: 180, 181 ...). Usefull when dealing with bad
+   UAs that re-transmit 180s.
+ - TM saves the avp list into transactions, and make it available into
+   callbacks, failure and reply routes.
+ - TM contains new command - t_write_unix("/tmp/sems.sock", "announcement")
+   sends a message using unix socket interface instead of FIFO interface.
+ - TM contains new config variable - unix_tx_timeout -- it specifies the
+   transmit timeout of t_write_sock
+ - VM functionality was transfered into TM module. Instead of fetching the
+   email value from DB (as VM), TM looks for the "email" attribute to get the
+   value.
+   vm() function was replaced with t_write_req()
+   vm_reply() fifo functions was replcated by TM with t_reply() fifo function
+   NOTE!! because current version of SEMS/AA try to send reply via vm_reply,
+   it will not work with the TM version.
+ - xlog - printing the body of any header by specifying the name; new
+   specifiers for user-agent, message buffer, message length, message's flags,
+   message id.
+
+new modules:
+ - avp / avp_db / avp_radius - load and check avps per caller or callee
+ - avpops - flexible module for operations with avps and database, introducing
+   a pseudo-varible support in SER configuration file
+ - cpl-c - implementation of Call Processing Language
+ - dispatcher - implements a dispatcher for incoming requests using hashes
+   over parts of the request to select the destination
+ - diversion - implements the Diversion extensions as per 
+   draft-levy-sip-diversion-08
+ - flatstore - simple module that implements very fast inserts for accounting
+   purposes
+ - gflags - keeps a bitmap of flags in shared memory and may be used to change
+   behaviour of server based on value of the flags
+ - options - answer server options requests
+ - speeddial - provides on-server speed dial facilities
+ - uri_db - split from uri module, performs various checks related to SIP URI
+   over database fields
+
+removed modules:
+ - vm - the functionality was transfered to tm module (see t_write_req(...)
+   method)
 
 core:
- - basic avp support (no db conectivity yet)
-tm:
- - avp list inherit by transaction and made available in failure and onreply
-   routes;
-enum:
- - support for multiple private enum trees, e.g.: 
-      enum_query("foo.bar.", "voice");
-nathelper:
- - lots of improvements, new flags, bridge mode a.s.o
- - requires the latest rtpproxy
- (cvs -d:pserver:anonymous@cvs.ser.berlios.de:/cvsroot/ser co rtpproxy)
-usrloc:
- - database format changed (user agent field added); if you are upgrading
-   from an older ser version you need to run ser_mysql.sh reinstall to
-   update the location and alias tables
-*_radius:
- - switched to radiusclient-ng, use at least version 0.4.1
-  (http://developer.berlios.de/projects/radiusclient-ng)
-mediaproxy:
- - nathelper like nat traversal module
+ - new parts:
+       UNIX domain socket server implemented
+ - changes: 
+    - command line: removed -p port and extended -l:
+       -l [proto:]addr[:port] , where proto=udp|tcp and 
+       addr= host|ip_address|interface_name. The format is the same
+       as for listen in the config file. ipv6 addresses must be enclosed in
+       [].
+    - added from_uri & to_uri: behave exactly like uri but use the
+      "From:"/"To:" uris
+       (e.g.: if (from_uri==myself) ..., if (to_uri=~"^sip:test@")... )
+    - config: better escape support in strings (e.g. \", \<cr>, \x0a, \012)
+    - bad network addresses are now automatically fixed
+      (e.g. 192.168.1.80/27 => 192.168.1.64/27)
+    - avp (Attribute-Value Pair) support added
+    - avp alias support added
+    - multicast support added (see mcast_loopback & mcast_ttl)
+    - saving of procces group id enabled, if the -G option is specified
+      (a safe way to quickly kill all ser processes)
+    - core dump-ing is enabled by default, see also disable_core_dump
+    - protocol and port can be specified in the alias and listen lines, e.g.:
+        alias= tcp:foo.bar:* udp:test.bar:5080 foo.com
+        listen= eth0   tcp:eth0:5065 udp:127.0.0.1 [3ffe::1]
+    - multiple operator support: ==, != for special operations (e.g myself, ip)
+                              ==, !=, ~= for strings
+                              ==, !=, >, <, >=, <= for integers
+    - database api changed to support usage of different drivers
+      simultaneously. The database URL must start now with the name of the
+      driver (module). Example: for mysql the DB URL
+      'sql://user:password@dbhost:port/database' must be specified now as
+      'mysql://user:password@dbhost:port/database'
+ - new config variables:
+   mcast_loopback = <yes/no> - loopback sent multicast datagram, default no.
+   mcast_ttl = number - set multicast ttl, default OS specific (usually 1).
+   sock_mode = <permissions> (e.g. sock_mode=0600:  default value = 0660)
+       ser unix sockets and fifo will be created with this permissions
+       (old name fifo_mode is still supported, but deprecated)
+   sock_user = username|"uid"
+   sock_group = groupname|"gid"
+      change the owner and/or group of the ser unix sockets or fifo
+      Short example config snippet:
+           sock_mode=0600        # ser socket/fifo mode
+           sock_user="www-data"  # ser socket/fifo owner
+           sock_group=nogroup  
+           user=nobody       # ser user (ser will suid to it)
+   disable_core_dump= yes|no 
+       by default core dump limits are set to unlimited or a high enough
+       value, set this config variable o yes to disable core dump-ing
+       (will set core limits to 0)
+   open_files_limit= number
+       if set and bigger than the current open file limit, ser will try
+       to increase its open file limit to this number. Note: ser must be
+       started as root to be able to increase a limit past the hard limit
+       (which, for open files, is 1024 on most systems)
+   tcp_connect_timeout= seconds
+       time before an ongoing connect will be aborted
+   tcp_send_timeout= seconds
+       time after a tcp connection will be closed if it is not available 
+       for writing in this interval (and ser wants to send something on it)
+   tcp_accept_aliases= yes|no
+       if a message received over a tcp connection has "alias" in its via
+       a new tcp alias port will be created for the connection the message
+       came from (the alias port will be set to the via one).
+       Based on draft-ietf-sip-connect-reuse-00.txt, but using only the port
+       (host aliases are too dangerous IMHO, involve extra DNS
+        lookups and the need for them is questionable)
+       See force_tcp_alias for more details.
+   log_facility = LOG_LOCAL0
+       if ser logs to syslog, you can control the facility for logging. Very
+       useful when you want to divert all ser logs to a different log file.
+       See man page syslog(3) for more detailes.
+   unix_sock = "/tmp/ser.sock"
+       The name of the socket the unixsock server should listen on.
+   unix_sock_children = 1
+       The number of children that will listen on the unix domain socket.
+   unix_tx_timeout = 2000
+       Timeout (in ms) used when sending replies through unix sockets.
+ - new script commands:
+   force_send_socket([proto:]address[:port])
+       sends the message from the specified socket (it _must_ be one of the
+       sockets ser listens on). If the protocol doesn't match (e.g. udp
+       message "forced" to a tcp socket) the closest socket of the same
+       protocol is used.
+   force_tcp_alias()
+   force_tcp_alias(port)
+       adds a tcp port alias for the current connection (if tcp).
+       Usefull if you want to send all the trafic to port_alias through
+       the same connection this request came from [it could help 
+       for firewall or nat traversal].
+       With no parameters adds the port from the message via as the alias.
+       When the "aliased" connection is closed (e.g. it's idle for too
+       much time), all the port aliases are removed.
+       Note: by default ser closes idle connection after 3 minutes (stable)
+       or 1 minute (unstable) so to take full advantage of tcp aliases for
+       things like firewall and nat traversal, redefine TCP_CON_*TIMEOUT
+       in tcp_conn.h and recompile. Also right now there can be maximum
+       3 port aliases to a connection (you shouldn't need more than one).
+       To change this redefine TCP_CON_MAX_ALIASES in the same file
+       (set it to you desired value + 1; 1 is needed for the real port).
 
-
-
- ***********************************************
-* Changes/fixes introduced in 0.8.12-r1
-***********************************************
-
- - new config variables:$
-   tcp_connect_timeout= seconds$
-       time before an ongoing connect will be aborted$
-   tcp_send_timeout= seconds$
-       time after a tcp connection will be closed if it is not available.$
-       for writing in this interval (and ser wants to sen something on it)
-
- - full nathelper support (backported from HEAD)
- - openbsd 3.4 support
- - group fixed (ser crashed when started with a group)
- - cpl-c (fast cpl interpreter) introduced
+utilities:
+ - ngrep patch for displaying new lines in captured SIP messages is no longer
+   needed; use ngrep V 1.42 with the option "-W byline"
 
 
 
@@ -144,7 +273,7 @@ Performance improvements
 - tuned internal malloc implementation parameters to better reflect the
 actual workload (malloc is a little bit faster now)
 
- 
+
 
 ***********************************************
 * Changes introduced in 0.8.11
@@ -167,7 +296,7 @@ New features
 	- ENUM support [enum]
 	- presence agent [pa]
 	- dynamic domain management -- allows to manipulate 
-  	  hosting of multiple domains in run-time [module]
+	  hosting of multiple domains in run-time [module]
 	- flat-text-file database support [dbtext]
 	- rich access control lists [permissions]
 - Feature Improvements

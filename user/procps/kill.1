@@ -1,32 +1,36 @@
-,\" t
+'\" t
 .\" (The preceding line is a note to broken versions of man to tell
 .\" them to pre-process this man page with tbl)
 .\" Man page for kill.
 .\" Licensed under version 2 of the GNU General Public License.
 .\" Written by Albert Cahalan; converted to a man page by
 .\" Michael K. Johnson
-.TH KILL 1 "March 12, 1999" "Linux" "Linux User's Manual"
+.TH KILL 1 "November 21, 1999" "Linux" "Linux User's Manual"
 .SH NAME
-kill \- report process status
+kill \- send a signal to a process
 
 .SH SYNOPSIS
 .TS
 l l.
 kill pid ...	Send SIGTERM to every process listed.
-kill signal pid ...	Send a signal to every process listed.
+kill -signal pid ...	Send a signal to every process listed.
 kill -s signal pid ...	Send a signal to every process listed.
 kill -l	List all signal names.
 kill -L	List all signal names in a nice table.
 kill -l signal	Convert a signal number into a name.
+kill -V,--version	Show version of program
 .TE
 
 .SH DESCRIPTION
 The default signal for kill is TERM. Use -l or -L to list available signals.
 Particularly useful signals include HUP, INT, KILL, STOP, CONT, and 0.
 Alternate signals may be specified in three ways: -9 -SIGKILL -KILL.
+Negative PID values may be used to choose whole process groups; see the
+PGID column in ps command output. A PID of -1 is special; it indicates
+all processes except the kill process itself and init.
 
-SIGNALS
-The signals listed below are available for use with kill.
+.SH SIGNALS
+The signals listed below may be available for use with kill.
 When known constant, numbers and default behavior are shown.
 
 .TS
@@ -34,6 +38,7 @@ lB rB lB lB
 lfCW r l l.
 Name	Num	Action	Description
 .TH
+0	0	n/a	exit code indicates if a signal may be sent
 ALRM	14	exit
 HUP	1	exit
 INT	2	exit
@@ -45,17 +50,16 @@ TERM	15	exit
 USR1		exit
 USR2		exit
 VTALRM		exit
-STKFLT		exit	i386, m68k, arm and ppc hardware only
-UNUSED		exit	i386, m68k, arm and ppc hardware only
-TSTP		stop	context-dependent behavior may appear random
-TTIN		stop	context-dependent behavior may appear random
-TTOU		stop	context-dependent behavior may appear random
-STOP		stop	this signal may not be blocked
-CONT		restart	continue if stopped, otherwise ignore
+STKFLT		exit	may not be implemented
 PWR		ignore	may exit on some systems
 WINCH		ignore
 CHLD		ignore
 URG		ignore
+TSTP		stop	may interact with the shell
+TTIN		stop	may interact with the shell
+TTOU		stop	may interact with the shell
+STOP		stop	this signal may not be blocked
+CONT		restart	continue if stopped, otherwise ignore
 ABRT	6	core
 FPE	8	core
 ILL	4	core
@@ -74,27 +78,41 @@ Your shell (command line interpreter) may have a built-in kill command.
 You may need to run the command described here as /bin/kill to solve
 the conflict.
 
-The STKFLT and UNUSED signals may not be supported in the future,
-and are currently unavailable on some systems.
-
 .SH EXAMPLES
-kill -9 -1
-.br
-kill -l 11
-.br
-kill -L
-.br
-kill 123 543 2341 3453
 
+.SS
+.B "kill -9 -1"
+.nf
+Kill all processes you can kill.
+.fi
+.PP
+.SS
+.B "kill -l 11"
+.nf
+Translate number 11 into a signal name.
+.fi
+.PP
+.SS
+.B "kill -L"
+.nf
+List the available signal choices in a nice table.
+.fi
+.PP
+.SS
+.B "kill 123 543 2341 3453"
+.nf
+Send the default signal, SIGTERM, to all those processes.
+.fi
+.PP
 .SH "SEE ALSO"
-top(1) skill(1) kill(2) renice(1) nice(1)
+pkill(1) skill(1) kill(2) renice(1) nice(1) signal(7) killall(1)
 
 .SH STANDARDS
 This command meets appropriate standards. The -L flag is Linux-specific.
 
 .SH AUTHOR
-Albert Cahalan <acahalan@cs.uml.edu> wrote kill in 1999 to replace the
-version that was not standards compliant. Michael K. Johnson
-<johnsonm@redhat.com> is the current maintainer of the procps collection.
+Albert Cahalan <albert@users.sf.net> wrote kill in 1999 to replace a
+bsdutils one that was not standards compliant. The util-linux one might
+also work correctly.
 
-Please send bug reports to <procps-bugs@redhat.com>
+Please send bug reports to <procps-feedback@lists.sf.net>

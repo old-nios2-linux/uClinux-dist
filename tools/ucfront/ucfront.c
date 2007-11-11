@@ -602,6 +602,7 @@ static void process_args(int argc, char **argv)
 	}
 	else {
 		char *startfile;
+		char *rpath;
 
 		if (mode == MODE_LINK) {
 			cc_log("Assuming link mode\n");
@@ -651,6 +652,9 @@ static void process_args(int argc, char **argv)
 		}
 
 		if (libtype != LIBTYPE_NONE && !nodefaultlibs) {
+			x_asprintf(&rpath, "-Wl,-rpath-link,%s", libc_libdir);
+			args_add_prefix(stripped_args, rpath);
+
 			args_add_prefix(stripped_args, libc_libdir);
 			args_add_prefix(stripped_args, "-L");
 			libpaths[num_lib_paths++] = libc_libdir;
@@ -659,6 +663,10 @@ static void process_args(int argc, char **argv)
 
 		/* Need to be able to find all the libs */
 		x_asprintf(&e, "%s/lib", rootdir);
+
+		x_asprintf(&rpath, "-Wl,-rpath-link,%s", e);
+		args_add_prefix(stripped_args, rpath);
+
 		args_add_prefix(stripped_args, e);
 		args_add_prefix(stripped_args, "-L");
 		libpaths[num_lib_paths++] = e;
@@ -730,7 +738,7 @@ static void process_args(int argc, char **argv)
 
 	x_asprintf(&e, "%s/include/include-linux", rootdir);
 	args_add_prefix(stripped_args, e);
-	args_add_prefix(stripped_args, "-I");
+	args_add_prefix(stripped_args, "-idirafter");
 
 	if (libtype != LIBTYPE_NONE) {
 		/* Don't add this option since we still need some compiler-specific includes */

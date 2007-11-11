@@ -2,7 +2,7 @@
  * $Id: iforce-main.c,v 1.19 2002/07/07 10:22:50 jdeneux Exp $
  *
  *  Copyright (c) 2000-2002 Vojtech Pavlik <vojtech@ucw.cz>
- *  Copyright (c) 2001-2002 Johann Deneux <deneux@ifrance.com>
+ *  Copyright (c) 2001-2002, 2007 Johann Deneux <johann.deneux@gmail.com>
  *
  *  USB/RS232 I-Force joysticks and wheels.
  */
@@ -29,7 +29,7 @@
 
 #include "iforce.h"
 
-MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>, Johann Deneux <deneux@ifrance.com>");
+MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>, Johann Deneux <johann.deneux@gmail.com>");
 MODULE_DESCRIPTION("USB/RS232 I-Force joysticks and wheels driver");
 MODULE_LICENSE("GPL");
 
@@ -220,7 +220,7 @@ static void iforce_release(struct input_dev *dev)
 		/* Check: no effects should be present in memory */
 		for (i = 0; i < dev->ff->max_effects; i++) {
 			if (test_bit(FF_CORE_IS_USED, iforce->core_effects[i].flags)) {
-				printk(KERN_WARNING "iforce_release: Device still owns effects\n");
+				warn("iforce_release: Device still owns effects");
 				break;
 			}
 		}
@@ -232,7 +232,7 @@ static void iforce_release(struct input_dev *dev)
 	switch (iforce->bus) {
 #ifdef CONFIG_JOYSTICK_IFORCE_USB
 		case IFORCE_USB:
-			usb_unlink_urb(iforce->irq);
+			usb_kill_urb(iforce->irq);
 
 			/* The device was unplugged before the file
 			 * was released */
@@ -287,13 +287,13 @@ int iforce_init_device(struct iforce *iforce)
 #ifdef CONFIG_JOYSTICK_IFORCE_USB
 	case IFORCE_USB:
 		input_dev->id.bustype = BUS_USB;
-		input_dev->cdev.dev = &iforce->usbdev->dev;
+		input_dev->dev.parent = &iforce->usbdev->dev;
 		break;
 #endif
 #ifdef CONFIG_JOYSTICK_IFORCE_232
 	case IFORCE_232:
 		input_dev->id.bustype = BUS_RS232;
-		input_dev->cdev.dev = &iforce->serio->dev;
+		input_dev->dev.parent = &iforce->serio->dev;
 		break;
 #endif
 	}
@@ -324,9 +324,9 @@ int iforce_init_device(struct iforce *iforce)
 			break;
 
 	if (i == 20) { /* 5 seconds */
-		printk(KERN_ERR "iforce-main.c: Timeout waiting for response from device.\n");
-		input_free_device(input_dev);
-		return -ENODEV;
+		err("Timeout waiting for response from device.");
+		error = -ENODEV;
+		goto fail;
 	}
 
 /*
@@ -336,26 +336,26 @@ int iforce_init_device(struct iforce *iforce)
 	if (!iforce_get_id_packet(iforce, "M"))
 		input_dev->id.vendor = (iforce->edata[2] << 8) | iforce->edata[1];
 	else
-		printk(KERN_WARNING "iforce-main.c: Device does not respond to id packet M\n");
+		warn("Device does not respond to id packet M");
 
 	if (!iforce_get_id_packet(iforce, "P"))
 		input_dev->id.product = (iforce->edata[2] << 8) | iforce->edata[1];
 	else
-		printk(KERN_WARNING "iforce-main.c: Device does not respond to id packet P\n");
+		warn("Device does not respond to id packet P");
 
 	if (!iforce_get_id_packet(iforce, "B"))
 		iforce->device_memory.end = (iforce->edata[2] << 8) | iforce->edata[1];
 	else
-		printk(KERN_WARNING "iforce-main.c: Device does not respond to id packet B\n");
+		warn("Device does not respond to id packet B");
 
 	if (!iforce_get_id_packet(iforce, "N"))
 		ff_effects = iforce->edata[1];
 	else
-		printk(KERN_WARNING "iforce-main.c: Device does not respond to id packet N\n");
+		warn("Device does not respond to id packet N");
 
 	/* Check if the device can store more effects than the driver can really handle */
 	if (ff_effects > IFORCE_EFFECTS_MAX) {
-		printk(KERN_WARNING "iforce: Limiting number of effects to %d (device reports %d)\n",
+		warn("Limiting number of effects to %d (device reports %d)",
 		       IFORCE_EFFECTS_MAX, ff_effects);
 		ff_effects = IFORCE_EFFECTS_MAX;
 	}
@@ -370,10 +370,8 @@ int iforce_init_device(struct iforce *iforce)
 
 /*
  * Disable spring, enable force feedback.
- * FIXME: We should use iforce_set_autocenter() et al here.
  */
-
-	iforce_send_packet(iforce, FF_CMD_AUTOCENTER, "\004\000");
+	iforce_set_autocenter(input_dev, 0);
 
 /*
  * Find appropriate device entry
@@ -439,10 +437,8 @@ int iforce_init_device(struct iforce *iforce)
 			set_bit(iforce->type->ff[i], input_dev->ffbit);
 
 		error = input_ff_create(input_dev, ff_effects);
-		if (error) {
-			input_free_device(input_dev);
-			return error;
-		}
+		if (error)
+			goto fail;
 
 		ff = input_dev->ff;
 		ff->upload = iforce_upload_effect;
@@ -455,22 +451,33 @@ int iforce_init_device(struct iforce *iforce)
  * Register input device.
  */
 
-	input_register_device(iforce->dev);
-
-	printk(KERN_DEBUG "iforce->dev->open = %p\n", iforce->dev->open);
+	error = input_register_device(iforce->dev);
+	if (error)
+		goto fail;
 
 	return 0;
+
+ fail:	input_free_device(input_dev);
+	return error;
 }
 
 static int __init iforce_init(void)
 {
+	int err = 0;
+
 #ifdef CONFIG_JOYSTICK_IFORCE_USB
-	usb_register(&iforce_usb_driver);
+	err = usb_register(&iforce_usb_driver);
+	if (err)
+		return err;
 #endif
 #ifdef CONFIG_JOYSTICK_IFORCE_232
-	serio_register_driver(&iforce_serio_drv);
+	err = serio_register_driver(&iforce_serio_drv);
+#ifdef CONFIG_JOYSTICK_IFORCE_USB
+	if (err)
+		usb_deregister(&iforce_usb_driver);
 #endif
-	return 0;
+#endif
+	return err;
 }
 
 static void __exit iforce_exit(void)

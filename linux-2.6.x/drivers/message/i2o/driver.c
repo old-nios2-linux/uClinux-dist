@@ -34,9 +34,7 @@ static spinlock_t i2o_drivers_lock;
 static struct i2o_driver **i2o_drivers;
 
 /**
- *	i2o_bus_match - Tell if a I2O device class id match the class ids of
- *			the I2O driver (OSM)
- *
+ *	i2o_bus_match - Tell if I2O device class id matches the class ids of the I2O driver (OSM)
  *	@dev: device which should be verified
  *	@drv: the driver to match against
  *
@@ -125,8 +123,12 @@ int i2o_driver_register(struct i2o_driver *drv)
 	}
 
 	rc = driver_register(&drv->driver);
-	if (rc)
-		destroy_workqueue(drv->event_queue);
+	if (rc) {
+		if (drv->event) {
+			destroy_workqueue(drv->event_queue);
+			drv->event_queue = NULL;
+		}
+	}
 
 	return rc;
 };
@@ -232,7 +234,7 @@ int i2o_driver_dispatch(struct i2o_controller *c, u32 m)
 			break;
 		}
 
-		INIT_WORK(&evt->work, (void (*)(void *))drv->event, evt);
+		INIT_WORK(&evt->work, drv->event);
 		queue_work(drv->event_queue, &evt->work);
 		return 1;
 	}
@@ -248,7 +250,7 @@ int i2o_driver_dispatch(struct i2o_controller *c, u32 m)
 
 /**
  *	i2o_driver_notify_controller_add_all - Send notify of added controller
- *					       to all I2O drivers
+ *	@c: newly added controller
  *
  *	Send notifications to all registered drivers that a new controller was
  *	added.
@@ -258,7 +260,7 @@ void i2o_driver_notify_controller_add_all(struct i2o_controller *c)
 	int i;
 	struct i2o_driver *drv;
 
-	for (i = 0; i < I2O_MAX_DRIVERS; i++) {
+	for (i = 0; i < i2o_max_drivers; i++) {
 		drv = i2o_drivers[i];
 
 		if (drv)
@@ -267,8 +269,8 @@ void i2o_driver_notify_controller_add_all(struct i2o_controller *c)
 }
 
 /**
- *	i2o_driver_notify_controller_remove_all - Send notify of removed
- *						  controller to all I2O drivers
+ *	i2o_driver_notify_controller_remove_all - Send notify of removed controller
+ *	@c: controller that is being removed
  *
  *	Send notifications to all registered drivers that a controller was
  *	removed.
@@ -278,7 +280,7 @@ void i2o_driver_notify_controller_remove_all(struct i2o_controller *c)
 	int i;
 	struct i2o_driver *drv;
 
-	for (i = 0; i < I2O_MAX_DRIVERS; i++) {
+	for (i = 0; i < i2o_max_drivers; i++) {
 		drv = i2o_drivers[i];
 
 		if (drv)
@@ -287,8 +289,8 @@ void i2o_driver_notify_controller_remove_all(struct i2o_controller *c)
 }
 
 /**
- *	i2o_driver_notify_device_add_all - Send notify of added device to all
- *					   I2O drivers
+ *	i2o_driver_notify_device_add_all - Send notify of added device
+ *	@i2o_dev: newly added I2O device
  *
  *	Send notifications to all registered drivers that a device was added.
  */
@@ -297,7 +299,7 @@ void i2o_driver_notify_device_add_all(struct i2o_device *i2o_dev)
 	int i;
 	struct i2o_driver *drv;
 
-	for (i = 0; i < I2O_MAX_DRIVERS; i++) {
+	for (i = 0; i < i2o_max_drivers; i++) {
 		drv = i2o_drivers[i];
 
 		if (drv)
@@ -306,8 +308,8 @@ void i2o_driver_notify_device_add_all(struct i2o_device *i2o_dev)
 }
 
 /**
- *	i2o_driver_notify_device_remove_all - Send notify of removed device to
- *					      all I2O drivers
+ *	i2o_driver_notify_device_remove_all - Send notify of removed device
+ *	@i2o_dev: device that is being removed
  *
  *	Send notifications to all registered drivers that a device was removed.
  */
@@ -316,7 +318,7 @@ void i2o_driver_notify_device_remove_all(struct i2o_device *i2o_dev)
 	int i;
 	struct i2o_driver *drv;
 
-	for (i = 0; i < I2O_MAX_DRIVERS; i++) {
+	for (i = 0; i < i2o_max_drivers; i++) {
 		drv = i2o_drivers[i];
 
 		if (drv)
@@ -337,17 +339,15 @@ int __init i2o_driver_init(void)
 
 	spin_lock_init(&i2o_drivers_lock);
 
-	if ((i2o_max_drivers < 2) || (i2o_max_drivers > 64) ||
-	    ((i2o_max_drivers ^ (i2o_max_drivers - 1)) !=
-	     (2 * i2o_max_drivers - 1))) {
-		osm_warn("max_drivers set to %d, but must be >=2 and <= 64 and "
-			 "a power of 2\n", i2o_max_drivers);
+	if ((i2o_max_drivers < 2) || (i2o_max_drivers > 64)) {
+		osm_warn("max_drivers set to %d, but must be >=2 and <= 64\n",
+			 i2o_max_drivers);
 		i2o_max_drivers = I2O_MAX_DRIVERS;
 	}
 	osm_info("max drivers = %d\n", i2o_max_drivers);
 
 	i2o_drivers =
-	    kzalloc(i2o_max_drivers * sizeof(*i2o_drivers), GFP_KERNEL);
+	    kcalloc(i2o_max_drivers, sizeof(*i2o_drivers), GFP_KERNEL);
 	if (!i2o_drivers)
 		return -ENOMEM;
 
@@ -362,9 +362,9 @@ int __init i2o_driver_init(void)
 /**
  *	i2o_driver_exit - clean up I2O drivers (OSMs)
  *
- *	Unregisters the I2O bus and free driver array.
+ *	Unregisters the I2O bus and frees driver array.
  */
-void __exit i2o_driver_exit(void)
+void i2o_driver_exit(void)
 {
 	bus_unregister(&i2o_bus_type);
 	kfree(i2o_drivers);

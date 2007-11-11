@@ -104,7 +104,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
-#include <linux/smp_lock.h>
 #include <linux/workqueue.h>
 #include <linux/init.h>
 #include <linux/ip.h>	/* for iph */
@@ -414,10 +413,10 @@ struct rx_info {
 
 	struct sk_buff	*skbs[NR_RX_DESC];
 
-	u32		*next_rx_desc;
+	__le32		*next_rx_desc;
 	u16		next_rx, next_empty;
 
-	u32		*descs;
+	__le32		*descs;
 	dma_addr_t	phy_descs;
 };
 
@@ -427,6 +426,7 @@ struct ns83820 {
 	u8			__iomem *base;
 
 	struct pci_dev		*pci_dev;
+	struct net_device	*ndev;
 
 #ifdef NS83820_VLAN_ACCEL_SUPPORT
 	struct vlan_group	*vlgrp;
@@ -459,7 +459,7 @@ struct ns83820 {
 	struct sk_buff	*tx_skbs[NR_TX_DESC];
 
 	char		pad[16] __attribute__((aligned(16)));
-	u32		*tx_descs;
+	__le32		*tx_descs;
 	dma_addr_t	tx_phy_descs;
 
 	struct timer_list	tx_watchdog;
@@ -506,18 +506,6 @@ static void ns83820_vlan_rx_register(struct net_device *ndev, struct vlan_group 
 	spin_unlock(&dev->tx_lock);
 	spin_unlock_irq(&dev->misc_lock);
 }
-
-static void ns83820_vlan_rx_kill_vid(struct net_device *ndev, unsigned short vid)
-{
-	struct ns83820 *dev = PRIV(ndev);
-
-	spin_lock_irq(&dev->misc_lock);
-	spin_lock(&dev->tx_lock);
-	if (dev->vlgrp)
-		dev->vlgrp->vlan_devices[vid] = NULL;
-	spin_unlock(&dev->tx_lock);
-	spin_unlock_irq(&dev->misc_lock);
-}
 #endif
 
 /* Packet Receiver
@@ -533,7 +521,7 @@ static void ns83820_vlan_rx_kill_vid(struct net_device *ndev, unsigned short vid
  * conditions, still route realtime traffic with as low jitter as
  * possible.
  */
-static inline void build_rx_desc(struct ns83820 *dev, u32 *desc, dma_addr_t link, dma_addr_t buf, u32 cmdsts, u32 extsts)
+static inline void build_rx_desc(struct ns83820 *dev, __le32 *desc, dma_addr_t link, dma_addr_t buf, u32 cmdsts, u32 extsts)
 {
 	desc_addr_set(desc + DESC_LINK, link);
 	desc_addr_set(desc + DESC_BUFPTR, buf);
@@ -547,7 +535,7 @@ static inline int ns83820_add_rx_skb(struct ns83820 *dev, struct sk_buff *skb)
 {
 	unsigned next_empty;
 	u32 cmdsts;
-	u32 *sg;
+	__le32 *sg;
 	dma_addr_t buf;
 
 	next_empty = dev->rx_info.next_empty;
@@ -607,7 +595,6 @@ static inline int rx_refill(struct net_device *ndev, gfp_t gfp)
 		res &= 0xf;
 		skb_reserve(skb, res);
 
-		skb->dev = ndev;
 		if (gfp != GFP_ATOMIC)
 			spin_lock_irqsave(&dev->rx_info.lock, flags);
 		res = ns83820_add_rx_skb(dev, skb);
@@ -631,10 +618,10 @@ static void fastcall rx_refill_atomic(struct net_device *ndev)
 }
 
 /* REFILL */
-static inline void queue_refill(void *_dev)
+static inline void queue_refill(struct work_struct *work)
 {
-	struct net_device *ndev = _dev;
-	struct ns83820 *dev = PRIV(ndev);
+	struct ns83820 *dev = container_of(work, struct ns83820, tq_refill);
+	struct net_device *ndev = dev->ndev;
 
 	rx_refill(ndev, GFP_KERNEL);
 	if (dev->rx_info.up)
@@ -874,7 +861,8 @@ static void fastcall rx_irq(struct net_device *ndev)
 	struct rx_info *info = &dev->rx_info;
 	unsigned next_rx;
 	int rx_rc, len;
-	u32 cmdsts, *desc;
+	u32 cmdsts;
+	__le32 *desc;
 	unsigned long flags;
 	int nr = 0;
 
@@ -1010,7 +998,8 @@ static inline void kick_tx(struct ns83820 *dev)
 static void do_tx_done(struct net_device *ndev)
 {
 	struct ns83820 *dev = PRIV(ndev);
-	u32 cmdsts, tx_done_idx, *desc;
+	u32 cmdsts, tx_done_idx;
+	__le32 *desc;
 
 	dprintk("do_tx_done(%p)\n", ndev);
 	tx_done_idx = dev->tx_done_idx;
@@ -1077,7 +1066,7 @@ static void ns83820_cleanup_tx(struct ns83820 *dev)
 		struct sk_buff *skb = dev->tx_skbs[i];
 		dev->tx_skbs[i] = NULL;
 		if (skb) {
-			u32 *desc = dev->tx_descs + (i * DESC_SIZE);
+			__le32 *desc = dev->tx_descs + (i * DESC_SIZE);
 			pci_unmap_single(dev->pci_dev,
 					desc_addr_get(desc + DESC_BUFPTR),
 					le32_to_cpu(desc[DESC_CMDSTS]) & CMDSTS_LEN_MASK,
@@ -1107,7 +1096,7 @@ static int ns83820_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	skb_frag_t *frag;
 	int stopped = 0;
 	int do_intr = 0;
-	volatile u32 *first_desc;
+	volatile __le32 *first_desc;
 
 	dprintk("ns83820_hard_start_xmit\n");
 
@@ -1155,9 +1144,9 @@ again:
 	extsts = 0;
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		extsts |= EXTSTS_IPPKT;
-		if (IPPROTO_TCP == skb->nh.iph->protocol)
+		if (IPPROTO_TCP == ip_hdr(skb)->protocol)
 			extsts |= EXTSTS_TCPPKT;
-		else if (IPPROTO_UDP == skb->nh.iph->protocol)
+		else if (IPPROTO_UDP == ip_hdr(skb)->protocol)
 			extsts |= EXTSTS_UDPPKT;
 	}
 
@@ -1180,7 +1169,7 @@ again:
 	first_desc = dev->tx_descs + (free_idx * DESC_SIZE);
 
 	for (;;) {
-		volatile u32 *desc = dev->tx_descs + (free_idx * DESC_SIZE);
+		volatile __le32 *desc = dev->tx_descs + (free_idx * DESC_SIZE);
 
 		dprintk("frag[%3u]: %4u @ 0x%08Lx\n", free_idx, len,
 			(unsigned long long)buf);
@@ -1455,7 +1444,8 @@ static int ns83820_stop(struct net_device *ndev)
 static void ns83820_tx_timeout(struct net_device *ndev)
 {
 	struct ns83820 *dev = PRIV(ndev);
-        u32 tx_done_idx, *desc;
+        u32 tx_done_idx;
+	__le32 *desc;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->tx_lock, flags);
@@ -1592,7 +1582,7 @@ static void ns83820_set_multicast(struct net_device *ndev)
 	else
 		and_mask &= ~(RFCR_AAU | RFCR_AAM);
 
-	if (ndev->flags & IFF_ALLMULTI)
+	if (ndev->flags & IFF_ALLMULTI || ndev->mc_count)
 		or_mask |= RFCR_AAM;
 	else
 		and_mask &= ~RFCR_AAM;
@@ -1841,9 +1831,12 @@ static int __devinit ns83820_init_one(struct pci_dev *pci_dev, const struct pci_
 
 	ndev = alloc_etherdev(sizeof(struct ns83820));
 	dev = PRIV(ndev);
+
 	err = -ENOMEM;
 	if (!dev)
 		goto out;
+
+	dev->ndev = ndev;
 
 	spin_lock_init(&dev->rx_info.lock);
 	spin_lock_init(&dev->tx_lock);
@@ -1853,7 +1846,7 @@ static int __devinit ns83820_init_one(struct pci_dev *pci_dev, const struct pci_
 	SET_MODULE_OWNER(ndev);
 	SET_NETDEV_DEV(ndev, &pci_dev->dev);
 
-	INIT_WORK(&dev->tq_refill, queue_refill, ndev);
+	INIT_WORK(&dev->tq_refill, queue_refill);
 	tasklet_init(&dev->rx_tasklet, rx_action, (unsigned long)ndev);
 
 	err = pci_enable_device(pci_dev);
@@ -2081,7 +2074,6 @@ static int __devinit ns83820_init_one(struct pci_dev *pci_dev, const struct pci_
 	/* We also support hardware vlan acceleration */
 	ndev->features |= NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
 	ndev->vlan_rx_register = ns83820_vlan_rx_register;
-	ndev->vlan_rx_kill_vid = ns83820_vlan_rx_kill_vid;
 #endif
 
 	if (using_dac) {

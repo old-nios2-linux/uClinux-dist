@@ -1,9 +1,9 @@
 /*
  * mangler module
  *
- * $Id: utils.c,v 1.3.6.1 2003/11/24 14:00:34 janakj Exp $
+ * $Id: utils.c,v 1.5 2004/08/24 08:58:30 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -91,7 +91,7 @@ patch_content_length (struct sip_msg *msg, unsigned int newValue)
 		contentLength = msg->content_length;
 		if (contentLength == NULL)
 		{
-			LOG (L_ERR,"ERROR: patch_content_length: parse headers on Content-Length succeded but msg->content_length is still NULL\n");
+			LOG (L_ERR,"ERROR: patch_content_length: parse headers on Content-Length succeeded but msg->content_length is still NULL\n");
 			return -2;
 		}
 	}
@@ -105,7 +105,7 @@ patch_content_length (struct sip_msg *msg, unsigned int newValue)
 		return -3;
 	}
 	memcpy (s, pos, len);
-	/* perhaps we made it and no one called int2str,migth use sprintf */
+	/* perhaps we made it and no one called int2str,might use sprintf */
 	if (patch
 	    (msg, contentLength->body.s, contentLength->body.len, s, len) < 0)
 	{
@@ -114,7 +114,7 @@ patch_content_length (struct sip_msg *msg, unsigned int newValue)
 		return -4;
 	}
 
-	DBG ("DEBUG: Succeded in altering Content-Length to new value %u\n",newValue);
+	DBG ("DEBUG: Succeeded in altering Content-Length to new value %u\n",newValue);
 
 	return 0;
 

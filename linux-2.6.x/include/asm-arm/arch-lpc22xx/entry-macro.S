@@ -7,9 +7,12 @@
  *  included in the arch/armnommu/kernel/entry.S
  *  
  */
+ 
+ #include "irqs.h"
+ 
 .EQU	VICIrqStatus,	0xFFFFF000
 
-#if defined(CONFIG_ARCH_LPC22xx)
+#if defined(CONFIG_ARCH_LPC22XX)
         .macro  disable_fiq
         .endm
 

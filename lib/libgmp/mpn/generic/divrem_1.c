@@ -1,78 +1,247 @@
-/* mpn_divrem_1(quot_ptr, qsize, dividend_ptr, dividend_size, divisor_limb) --
-   Divide (DIVIDEND_PTR,,DIVIDEND_SIZE) by DIVISOR_LIMB.
-   Write DIVIDEND_SIZE limbs of quotient at QUOT_PTR.
-   Return the single-limb remainder.
-   There are no constraints on the value of the divisor.
+/* mpn_divrem_1 -- mpn by limb division.
 
-   QUOT_PTR and DIVIDEND_PTR might point to the same limb.
-
-Copyright (C) 1996, 1998, 1999, 2000 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 1998, 1999, 2000, 2002, 2003 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-mp_limb_t
-#if __STDC__
-mpn_divrem_1 (mp_ptr qp, mp_size_t qxn,
-	      mp_srcptr np, mp_size_t nn,
-	      mp_limb_t d)
-#else
-mpn_divrem_1 (qp, qxn, np, nn, d)
-     mp_ptr qp;
-     mp_size_t qxn;
-     mp_srcptr np;
-     mp_size_t nn;
-     mp_limb_t d;
+
+/* The size where udiv_qrnnd_preinv should be used rather than udiv_qrnnd,
+   meaning the quotient size where that should happen, the quotient size
+   being how many udiv divisions will be done.
+
+   The default is to use preinv always, CPUs where this doesn't suit have
+   tuned thresholds.  Note in particular that preinv should certainly be
+   used if that's the only division available (USE_PREINV_ALWAYS).  */
+
+#ifndef DIVREM_1_NORM_THRESHOLD
+#define DIVREM_1_NORM_THRESHOLD  0
 #endif
+#ifndef DIVREM_1_UNNORM_THRESHOLD
+#define DIVREM_1_UNNORM_THRESHOLD  0
+#endif
+
+
+
+/* If the cpu only has multiply-by-inverse division (eg. alpha), then NORM
+   and UNNORM thresholds are 0 and only the inversion code is included.
+
+   If multiply-by-inverse is never viable, then NORM and UNNORM thresholds
+   will be MP_SIZE_T_MAX and only the plain division code is included.
+
+   Otherwise mul-by-inverse is better than plain division above some
+   threshold, and best results are obtained by having code for both present.
+
+   The main reason for separating the norm and unnorm cases is that not all
+   CPUs give zero for "n0 >> BITS_PER_MP_LIMB" which would arise in the
+   unnorm code used on an already normalized divisor.
+
+   If UDIV_NEEDS_NORMALIZATION is false then plain division uses the same
+   non-shifting code for both the norm and unnorm cases, though with
+   different criteria for skipping a division, and with different thresholds
+   of course.  And in fact if inversion is never viable, then that simple
+   non-shifting division would be all that's left.
+
+   The NORM and UNNORM thresholds might not differ much, but if there's
+   going to be separate code for norm and unnorm then it makes sense to have
+   separate thresholds.  One thing that's possible is that the
+   mul-by-inverse might be better only for normalized divisors, due to that
+   case not needing variable bit shifts.
+
+   Notice that the thresholds are tested after the decision to possibly skip
+   one divide step, so they're based on the actual number of divisions done.
+
+   For the unnorm case, it would be possible to call mpn_lshift to adjust
+   the dividend all in one go (into the quotient space say), rather than
+   limb-by-limb in the loop.  This might help if mpn_lshift is a lot faster
+   than what the compiler can generate for EXTRACT.  But this is left to CPU
+   specific implementations to consider, especially since EXTRACT isn't on
+   the dependent chain.  */
+
+mp_limb_t
+mpn_divrem_1 (mp_ptr qp, mp_size_t qxn,
+	      mp_srcptr up, mp_size_t un, mp_limb_t d)
 {
-  mp_limb_t rlimb;
-  mp_size_t i;
+  mp_size_t  n;
+  mp_size_t  i;
+  mp_limb_t  n1, n0;
+  mp_limb_t  r = 0;
 
-  /* Develop integer part of quotient.  */
-  rlimb = mpn_divmod_1 (qp + qxn, np, nn, d);
+  ASSERT (qxn >= 0);
+  ASSERT (un >= 0);
+  ASSERT (d != 0);
+  /* FIXME: What's the correct overlap rule when qxn!=0? */
+  ASSERT (MPN_SAME_OR_SEPARATE_P (qp+qxn, up, un));
 
-  /* Develop fraction part of quotient.  This is not as fast as it should;
-     the preinvert stuff from mpn_divmod_1 ought to be used here too.  */
-  if (UDIV_NEEDS_NORMALIZATION)
+  n = un + qxn;
+  if (n == 0)
+    return 0;
+
+  d <<= GMP_NAIL_BITS;
+
+  qp += (n - 1);   /* Make qp point at most significant quotient limb */
+
+  if ((d & GMP_LIMB_HIGHBIT) != 0)
     {
-      int normalization_steps;
-
-      count_leading_zeros (normalization_steps, d);
-      if (normalization_steps != 0)
+      if (un != 0)
 	{
-	  d <<= normalization_steps;
-	  rlimb <<= normalization_steps;
+	  /* High quotient limb is 0 or 1, skip a divide step. */
+	  mp_limb_t q;
+	  r = up[un - 1] << GMP_NAIL_BITS;
+	  q = (r >= d);
+	  *qp-- = q;
+	  r -= (d & -q);
+	  r >>= GMP_NAIL_BITS;
+	  n--;
+	  un--;
+	}
 
+      if (BELOW_THRESHOLD (n, DIVREM_1_NORM_THRESHOLD))
+	{
+	plain:
+	  for (i = un - 1; i >= 0; i--)
+	    {
+	      n0 = up[i] << GMP_NAIL_BITS;
+	      udiv_qrnnd (*qp, r, r, n0, d);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
 	  for (i = qxn - 1; i >= 0; i--)
-	    udiv_qrnnd (qp[i], rlimb, rlimb, 0, d);
-
-	  return rlimb >> normalization_steps;
+	    {
+	      udiv_qrnnd (*qp, r, r, CNST_LIMB(0), d);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  return r;
 	}
       else
-	/* fall out */
-	;
+	{
+	  /* Multiply-by-inverse, divisor already normalized. */
+	  mp_limb_t dinv;
+	  invert_limb (dinv, d);
+
+	  for (i = un - 1; i >= 0; i--)
+	    {
+	      n0 = up[i] << GMP_NAIL_BITS;
+	      udiv_qrnnd_preinv (*qp, r, r, n0, d, dinv);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  for (i = qxn - 1; i >= 0; i--)
+	    {
+	      udiv_qrnnd_preinv (*qp, r, r, CNST_LIMB(0), d, dinv);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  return r;
+	}
     }
+  else
+    {
+      /* Most significant bit of divisor == 0.  */
+      int norm;
 
-  for (i = qxn - 1; i >= 0; i--)
-    udiv_qrnnd (qp[i], rlimb, rlimb, 0, d);
+      /* Skip a division if high < divisor (high quotient 0).  Testing here
+	 before normalizing will still skip as often as possible.  */
+      if (un != 0)
+	{
+	  n1 = up[un - 1] << GMP_NAIL_BITS;
+	  if (n1 < d)
+	    {
+	      r = n1 >> GMP_NAIL_BITS;
+	      *qp-- = 0;
+	      n--;
+	      if (n == 0)
+		return r;
+	      un--;
+	    }
+	}
 
-  return rlimb;
+      if (! UDIV_NEEDS_NORMALIZATION
+	  && BELOW_THRESHOLD (n, DIVREM_1_UNNORM_THRESHOLD))
+	goto plain;
+
+      count_leading_zeros (norm, d);
+      d <<= norm;
+      r <<= norm;
+
+      if (UDIV_NEEDS_NORMALIZATION
+	  && BELOW_THRESHOLD (n, DIVREM_1_UNNORM_THRESHOLD))
+	{
+	  if (un != 0)
+	    {
+	      n1 = up[un - 1] << GMP_NAIL_BITS;
+	      r |= (n1 >> (GMP_LIMB_BITS - norm));
+	      for (i = un - 2; i >= 0; i--)
+		{
+		  n0 = up[i] << GMP_NAIL_BITS;
+		  udiv_qrnnd (*qp, r, r,
+			      (n1 << norm) | (n0 >> (GMP_NUMB_BITS - norm)),
+			      d);
+		  r >>= GMP_NAIL_BITS;
+		  qp--;
+		  n1 = n0;
+		}
+	      udiv_qrnnd (*qp, r, r, n1 << norm, d);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  for (i = qxn - 1; i >= 0; i--)
+	    {
+	      udiv_qrnnd (*qp, r, r, CNST_LIMB(0), d);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  return r >> norm;
+	}
+      else
+	{
+	  mp_limb_t  dinv;
+	  invert_limb (dinv, d);
+	  if (un != 0)
+	    {
+	      n1 = up[un - 1] << GMP_NAIL_BITS;
+	      r |= (n1 >> (GMP_LIMB_BITS - norm));
+	      for (i = un - 2; i >= 0; i--)
+		{
+		  n0 = up[i] << GMP_NAIL_BITS;
+		  udiv_qrnnd_preinv (*qp, r, r, 
+				     ((n1 << norm) | (n0 >> (GMP_NUMB_BITS - norm))),
+				     d, dinv);
+		  r >>= GMP_NAIL_BITS;
+		  qp--;
+		  n1 = n0;
+		}
+	      udiv_qrnnd_preinv (*qp, r, r, n1 << norm, d, dinv);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  for (i = qxn - 1; i >= 0; i--)
+	    {
+	      udiv_qrnnd_preinv (*qp, r, r, CNST_LIMB(0), d, dinv);
+	      r >>= GMP_NAIL_BITS;
+	      qp--;
+	    }
+	  return r >> norm;
+	}
+    }
 }

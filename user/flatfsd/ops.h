@@ -18,14 +18,14 @@ extern unsigned int flat_sum;
 /*
  * Just like read() against the flat device.
  */
-int flat_read(char *buf, size_t len);
+int flat_read(void *buf, size_t len);
 
 /*
  * Write bytes to an erased flat device.
  * Writes at the given offset.
  * Updates the checksum.
  */
-int flat_write(off_t offset, const char *buf, size_t len);
+int flat_write(off_t offset, const void *buf, size_t len);
 
 /*
  * Returns the total length of the flat device.
@@ -62,7 +62,7 @@ int flat_erase(void);
  * Checksum the contents of FLASH file.
  * Pretty bogus check-sum really, but better than nothing :-)
  */
-unsigned int chksum(const unsigned char *sp, unsigned int len);
+unsigned int chksum(const void *buf, unsigned int len);
 
 /*****************************************************************************/
 #endif /* FLAT_OPS_INCLUDED */

@@ -29,8 +29,6 @@
  * Note: for more information, please refer "AMD Alchemy Au1200/Au1550 IDE
  *       Interface and Linux Device Driver" Application Note.
  */
-#undef REALLY_SLOW_IO           /* most systems can safely undef this */
-
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -108,7 +106,7 @@ static void auide_tune_drive(ide_drive_t *drive, byte pio)
 	u8 speed;
 
 	/* get the best pio mode for the drive */
-	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
+	pio = ide_get_best_pio_mode(drive, pio, 4);
 
 	printk(KERN_INFO "%s: setting Au1XXX IDE to PIO mode%d\n",
 	       drive->name, pio);
@@ -181,12 +179,6 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed)
 {
 	int mem_sttime;
 	int mem_stcfg;
-	unsigned long mode;
-
-#ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
-	if (ide_use_dma(drive))
-		mode = ide_dma_speed(drive, 0);
-#endif
 
 	mem_sttime = 0;
 	mem_stcfg  = au_readl(MEM_STCFG2);
@@ -195,7 +187,7 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed)
 		auide_tune_drive(drive, speed - XFER_PIO_0);
 		return 0;
 	}
-	      
+
 	switch(speed) {
 #ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
 	case XFER_MW_DMA_2:
@@ -207,7 +199,6 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed)
 		mem_stcfg &= ~TOECS_MASK;
 		mem_stcfg |= SBC_IDE_MDMA2_TCSOE | SBC_IDE_MDMA2_TOECS;
 
-		mode = XFER_MW_DMA_2;
 		break;
 	case XFER_MW_DMA_1:
 		mem_sttime = SBC_IDE_TIMING(MDMA1);
@@ -218,7 +209,6 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed)
 		mem_stcfg &= ~TOECS_MASK;
 		mem_stcfg |= SBC_IDE_MDMA1_TCSOE | SBC_IDE_MDMA1_TOECS;
 
-		mode = XFER_MW_DMA_1;
 		break;
 	case XFER_MW_DMA_0:
 		mem_sttime = SBC_IDE_TIMING(MDMA0);
@@ -229,14 +219,13 @@ static int auide_tune_chipset (ide_drive_t *drive, u8 speed)
 		mem_stcfg &= ~TOECS_MASK;
 		mem_stcfg |= SBC_IDE_MDMA0_TCSOE | SBC_IDE_MDMA0_TOECS;
 
-		mode = XFER_MW_DMA_0;
 		break;
 #endif
 	default:
 		return 1;
 	}
-	
-	if (ide_config_drive_speed(drive, mode))
+
+	if (ide_config_drive_speed(drive, speed))
 		return 1;
 
 	au_writel(mem_sttime,MEM_STTIME2);
@@ -392,9 +381,7 @@ static int auide_dma_setup(ide_drive_t *drive)
 
 static int auide_dma_check(ide_drive_t *drive)
 {
-	u8 speed;
-
-#ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
+	u8 speed = ide_max_dma_mode(drive);
 
 	if( dbdma_init_done == 0 ){
 		auide_hwif.white_list = ide_in_drive_list(drive->id,
@@ -405,7 +392,6 @@ static int auide_dma_check(ide_drive_t *drive)
 		auide_ddma_init(&auide_hwif);
 		dbdma_init_done = 1;
 	}
-#endif
 
 	/* Is the drive in our DMA black list? */
 
@@ -420,12 +406,10 @@ static int auide_dma_check(ide_drive_t *drive)
 	else
 		drive->using_dma = 1;
 
-	speed = ide_find_best_mode(drive, XFER_PIO | XFER_MWDMA);
-	
 	if (drive->autodma && (speed & XFER_MODE) != XFER_PIO)
-		return HWIF(drive)->ide_dma_on(drive);
+		return 0;
 
-	return HWIF(drive)->ide_dma_off_quietly(drive);
+	return -1;
 }
 
 static int auide_dma_test_irq(ide_drive_t *drive)
@@ -447,33 +431,29 @@ static int auide_dma_test_irq(ide_drive_t *drive)
 	return 0;
 }
 
-static int auide_dma_host_on(ide_drive_t *drive)
+static void auide_dma_host_on(ide_drive_t *drive)
 {
-	return 0;
 }
 
 static int auide_dma_on(ide_drive_t *drive)
 {
 	drive->using_dma = 1;
-	return auide_dma_host_on(drive);
-}
 
-
-static int auide_dma_host_off(ide_drive_t *drive)
-{
 	return 0;
 }
 
-static int auide_dma_off_quietly(ide_drive_t *drive)
+static void auide_dma_host_off(ide_drive_t *drive)
+{
+}
+
+static void auide_dma_off_quietly(ide_drive_t *drive)
 {
 	drive->using_dma = 0;
-	return auide_dma_host_off(drive);
 }
 
-static int auide_dma_lostirq(ide_drive_t *drive)
+static void auide_dma_lost_irq(ide_drive_t *drive)
 {
 	printk(KERN_ERR "%s: IRQ lost\n", drive->name);
-	return 0;
 }
 
 static void auide_ddma_tx_callback(int irq, void *param)
@@ -503,16 +483,16 @@ static void auide_init_dbdma_dev(dbdev_tab_t *dev, u32 dev_id, u32 tsize, u32 de
   
 #if defined(CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA)
 
-static int auide_dma_timeout(ide_drive_t *drive)
+static void auide_dma_timeout(ide_drive_t *drive)
 {
-//      printk("%s\n", __FUNCTION__);
+	ide_hwif_t *hwif = HWIF(drive);
 
 	printk(KERN_ERR "%s: DMA timeout occurred: ", drive->name);
 
-	if (HWIF(drive)->ide_dma_test_irq(drive))
-		return 0;
+	if (hwif->ide_dma_test_irq(drive))
+		return;
 
-	return HWIF(drive)->ide_dma_end(drive);
+	hwif->ide_dma_end(drive);
 }
 					
 
@@ -653,6 +633,7 @@ static int au_ide_probe(struct device *dev)
 	_auide_hwif *ahwif = &auide_hwif;
 	ide_hwif_t *hwif;
 	struct resource *res;
+	hw_regs_t *hw;
 	int ret = 0;
 
 #if defined(CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA)
@@ -695,7 +676,7 @@ static int au_ide_probe(struct device *dev)
 	/* FIXME:  This might possibly break PCMCIA IDE devices */
 
 	hwif                            = &ide_hwifs[pdev->id];
-	hw_regs_t *hw 			= &hwif->hw;
+	hw 				= &hwif->hw;
 	hwif->irq = hw->irq             = ahwif->irq;
 	hwif->chipset                   = ide_au1xxx;
 
@@ -711,13 +692,16 @@ static int au_ide_probe(struct device *dev)
 	hwif->swdma_mask                = 0x0;
 #endif
 
+	hwif->pio_mask = ATA_PIO4;
+
 	hwif->noprobe = 0;
 	hwif->drives[0].unmask          = 1;
 	hwif->drives[1].unmask          = 1;
 
 	/* hold should be on in all cases */
 	hwif->hold                      = 1;
-	hwif->mmio                      = 2;
+
+	hwif->mmio  = 1;
 
 	/* If the user has selected DDMA assisted copies,
 	   then set up a few local I/O function entry points 
@@ -732,8 +716,8 @@ static int au_ide_probe(struct device *dev)
 	hwif->speedproc                 = &auide_tune_chipset;
 
 #ifdef CONFIG_BLK_DEV_IDE_AU1XXX_MDMA2_DBDMA
-	hwif->ide_dma_off_quietly       = &auide_dma_off_quietly;
-	hwif->ide_dma_timeout           = &auide_dma_timeout;
+	hwif->dma_off_quietly		= &auide_dma_off_quietly;
+	hwif->dma_timeout		= &auide_dma_timeout;
 
 	hwif->ide_dma_check             = &auide_dma_check;
 	hwif->dma_exec_cmd              = &auide_dma_exec_cmd;
@@ -741,9 +725,9 @@ static int au_ide_probe(struct device *dev)
 	hwif->ide_dma_end               = &auide_dma_end;
 	hwif->dma_setup                 = &auide_dma_setup;
 	hwif->ide_dma_test_irq          = &auide_dma_test_irq;
-	hwif->ide_dma_host_off          = &auide_dma_host_off;
-	hwif->ide_dma_host_on           = &auide_dma_host_on;
-	hwif->ide_dma_lostirq           = &auide_dma_lostirq;
+	hwif->dma_host_off		= &auide_dma_host_off;
+	hwif->dma_host_on		= &auide_dma_host_on;
+	hwif->dma_lost_irq		= &auide_dma_lost_irq;
 	hwif->ide_dma_on                = &auide_dma_on;
 
 	hwif->autodma                   = 1;
@@ -772,6 +756,9 @@ static int au_ide_probe(struct device *dev)
 #endif
 
 	probe_hwif_init(hwif);
+
+	ide_proc_register_port(hwif);
+
 	dev_set_drvdata(dev, hwif);
 
 	printk(KERN_INFO "Au1xxx IDE(builtin) configured for %s\n", mode );

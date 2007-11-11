@@ -149,6 +149,37 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
+#ifdef CONFIG_MTD_NETtel
+	/* AMD SC520 based hardware platforms */
+	#include <asm/io.h>
+
+	static unsigned long mmcr;
+	static volatile u16 *wdtmrctl;
+
+	static inline void enable_dog(void)
+	{
+		mmcr = ioremap(0xfffef000, 4096);
+		if (mmcr) {
+			wdtmrctl = (volatile u16 *) (mmcr + 0xcb0);
+			*wdtmrctl = 0x3333;
+			*wdtmrctl = 0xcccc;
+			*wdtmrctl = 0xc008;
+		}
+	}
+
+	static inline void poke_the_dog(void)
+	{
+		if (wdtmrctl) {
+			*wdtmrctl = 0xaaaa;
+			*wdtmrctl = 0x5555;
+		}
+	}
+
+	static inline void the_dog_is_dead(void) {}
+
+	#define HAS_HW_SERVICE 1
+#endif
+
 #ifndef HAS_HW_SERVICE
 	static inline void enable_dog(void) {}
 	static inline void poke_the_dog(void) {}

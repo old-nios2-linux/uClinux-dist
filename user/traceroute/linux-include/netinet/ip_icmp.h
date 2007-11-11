@@ -77,7 +77,7 @@ struct icmp {
 			struct ip idi_ip;
 			/* options and then 64 bits of data */
 		} id_ip;
-		u_long	id_mask;
+		u_int	id_mask;
 		char	id_data[1];
 	} icmp_dun;
 #define	icmp_otime	icmp_dun.id_ts.its_otime
@@ -152,7 +152,7 @@ struct icmp {
 	(type) == ICMP_MASKREQ || (type) == ICMP_MASKREPLY)
 
 #ifdef KERNEL
-void	icmp_error __P((struct mbuf *, int, int, n_long, struct ifnet *));
+void	icmp_error __P((struct mbuf *, int, int, n_int, struct ifnet *));
 void	icmp_input __P((struct mbuf *, int));
 void	icmp_reflect __P((struct mbuf *));
 void	icmp_send __P((struct mbuf *, struct mbuf *));

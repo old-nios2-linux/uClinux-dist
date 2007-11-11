@@ -1,9 +1,9 @@
 /* 
- * $Id: sterman.c,v 1.7.6.1 2004/07/18 22:56:23 sobomax Exp $
+ * $Id: sterman.c,v 1.13.2.4 2005/06/17 11:25:43 janakj Exp $
  *
  * Digest Authentication - Radius support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -34,14 +34,21 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef HAVE_ALLOCA_H
+#include <alloca.h>
+#endif  /* else alloca() it's defined in stdlib.h */
 #include "../../mem/mem.h"
 #include "../../dprint.h"
 #include "../auth/api.h"
 #include "../../modules/acc/dict.h"
 #include "sterman.h"
 #include "authrad_mod.h"
-#include <radiusclient.h>
 
+#ifdef RADIUSCLIENT_NG_4
+#  include <radiusclient.h>
+#else
+#  include <radiusclient-ng.h>
+#endif
 
 /*
  * This function creates and submits radius authentication request as per
@@ -193,7 +200,7 @@ int radius_authorize_sterman(struct sip_msg* _msg, dig_cred_t* _cred, str* _meth
 	 	return -19;  	
 	}
 
-	if (ciscopec != -1) {
+	if (attrs[A_CISCO_AVPAIR].n != NULL) {
 		/* Add SIP Call-ID as a Cisco VSA, like IOS does */
 		if (_msg->callid == NULL || _msg->callid->body.s == NULL) {
 			LOG(L_ERR, "sterman(): Call-ID is missed\n");
@@ -210,7 +217,7 @@ int radius_authorize_sterman(struct sip_msg* _msg, dig_cred_t* _cred, str* _meth
 		memcpy(callid.s, "call-id=", 8);
 		memcpy(callid.s + 8, _msg->callid->body.s, _msg->callid->body.len);
 		if (rc_avpair_add(rh, &send, attrs[A_CISCO_AVPAIR].v, callid.s,
-		    callid.len, ciscopec) == 0) {
+		    callid.len, VENDOR(attrs[A_CISCO_AVPAIR].v)) == 0) {
 			LOG(L_ERR, "sterman(): Unable to add Cisco-AVPair attribute\n");
 			rc_avpair_free(send);
 			return -22;

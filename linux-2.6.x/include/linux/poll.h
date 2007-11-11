@@ -8,7 +8,8 @@
 #include <linux/compiler.h>
 #include <linux/wait.h>
 #include <linux/string.h>
-#include <linux/mm.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 
 /* ~832 bytes of stack space used max in sys_select/sys_poll before allocating
@@ -19,6 +20,8 @@
 #define POLL_STACK_ALLOC	FRONTEND_STACK_ALLOC
 #define WQUEUES_STACK_ALLOC	(MAX_STACK_ALLOC - FRONTEND_STACK_ALLOC)
 #define N_INLINE_POLL_ENTRIES	(WQUEUES_STACK_ALLOC / sizeof(struct poll_table_entry))
+
+#define DEFAULT_POLLMASK (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM)
 
 struct poll_table_struct;
 

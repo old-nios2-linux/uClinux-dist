@@ -60,6 +60,7 @@ typedef struct spstate
     const char* outname;
     struct sockaddr_any listenaddr; /* Address to listen on */
     const char* listenname;
+    int passthrough;                /* Don't cache message data to a file */
            
     /* State --------------------------------- */   
     const char* name;               /* The name of the program */

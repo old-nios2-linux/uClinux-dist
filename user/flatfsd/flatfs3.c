@@ -50,9 +50,9 @@
 struct flatzfs_s {
 	off_t		offset;
 	z_stream	strm;
-	char		*output;
+	unsigned char	*output;
 	size_t		output_size;
-	char		*input;
+	unsigned char	*input;
 	size_t		input_size;
 	int		write;
 	int		read_initialised;
@@ -102,7 +102,7 @@ static int flatz_open(const char *mode)
 
 		flatzfs.write = 1;
 		flatzfs.output_size = OUTPUT_SIZE;
-		flatzfs.output = (char *)malloc(flatzfs.output_size);
+		flatzfs.output = (unsigned char *)malloc(flatzfs.output_size);
 
 		flatzfs.strm.next_out = flatzfs.output;
 		flatzfs.strm.avail_out = flatzfs.output_size;
@@ -110,7 +110,7 @@ static int flatz_open(const char *mode)
 	} else {
 		flatzfs.write = 0;
 		flatzfs.input_size = INPUT_SIZE;
-		flatzfs.input = (char *)malloc(flatzfs.input_size);
+		flatzfs.input = (unsigned char *)malloc(flatzfs.input_size);
 	}
 
 	return 0;
@@ -176,11 +176,11 @@ static int flatz_finalise(int dowrite)
  * Compressed data write.
  */
 
-static int flatz_write(const char *buf, size_t len, int do_write)
+static int flatz_write(const void *buf, size_t len, int do_write)
 {
 	int res;
 
-	flatzfs.strm.next_in = (char *)buf;
+	flatzfs.strm.next_in = (unsigned char *) buf;
 	flatzfs.strm.avail_in = len;
 
 	for (;;) {
@@ -208,7 +208,7 @@ static int flatz_write(const char *buf, size_t len, int do_write)
  * Just like flat_read, but reads from a compressed romfs thing.
  */
 
-static int flatz_read(char *buf, size_t len)
+static int flatz_read(void *buf, size_t len)
 {
 	int res;
 	int flush = Z_NO_FLUSH;
@@ -466,6 +466,101 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 /*****************************************************************************/
 
 /*
+ * Helper functions to deal with tstamp generation and comparison.
+ */
+
+/* Returns the next tstamp in sequence */
+static inline unsigned next_tstamp(unsigned tstamp)
+{
+	return (tstamp + 1) & 0xffff;
+}
+
+/* Returns true if tstamp tstamp0 is higher in sequence than tstamp1 */
+static inline int tstamp_gt(unsigned tstamp0, unsigned tstamp1)
+{
+	return (short)(tstamp0 - tstamp1) > 0;
+}
+
+
+/* Return the checksum value to write out based on a given tstamp */
+#define CHKSUM_VALID	0x80000000
+static inline unsigned tstamp_chksum(unsigned tstamp)
+{
+	return ((~tstamp) & 0xffff) | CHKSUM_VALID;
+}
+
+/*
+ * Returns true if we will need to write the configuration twice,
+ * to wrap tstamp on the other partition.  This ensures that the
+ * correct configuration will be read if we roll back to another 
+ * non chksum-aware firmware version.
+ */
+static inline int need_rewrite(unsigned previous_tstamp)
+{
+	return previous_tstamp >= 0xffff;
+}
+
+/*****************************************************************************/
+
+/*
+ * Given two headers, return which one is the "oldest" (should be
+ * overwritten first), taking into account header/checksum validity
+ * and tstamp wrapping.
+ *
+ * Returns 1 if hdr1 is "older" than hdr0, 0 otherwise.
+ */
+
+static int oldest_header(struct flathdr3 *hdr1, struct flathdr3 *hdr0)
+{
+	unsigned stamp1, stamp0;
+
+	/* Partition without magic is invalid */
+	if (hdr0->magic != FLATFS_MAGIC_V3)
+		return 0;
+	if (hdr1->magic != FLATFS_MAGIC_V3)
+		return 1;
+
+	/* Partition with tstamp of 0xffffffff indicates that 
+	 * the previous write was incomplete. */
+	if (hdr0->tstamp == 0xffffffff)
+		return 0;
+	if (hdr1->tstamp == 0xffffffff)
+		return 1;
+
+	/* Old style comparison for checksum-less flash header */
+	if (hdr0->chksum == 0 && hdr1->chksum == 0)
+		return (hdr0->tstamp > hdr1->tstamp) ? 1 : 0;
+
+	/* Invalidiate tstamp if checksum is present but invalid. */
+	stamp1 = hdr1->tstamp;
+	stamp0 = hdr0->tstamp;
+	if (hdr0->chksum != 0 && hdr0->chksum != tstamp_chksum(stamp0))
+		stamp0 = stamp1 - 1;
+	else if (hdr1->chksum != 0 && hdr1->chksum != tstamp_chksum(stamp1))
+		stamp1 = stamp0 - 1;
+
+	/* If stamp0 is higher in sequence than stamp1 then partition1 is older */
+	return tstamp_gt(stamp0, stamp1) ? 1 : 0;
+}
+
+/*****************************************************************************/
+
+/*
+ * Given two headers, return which one is the "newest" (was written
+ * last and most likely to have a valid configuration), taking into
+ * account header/checksum validity and tstamp wrapping.
+ *
+ * Returns 1 if hdr1 is "newer" than hdr0, 0 otherwise.
+ */
+
+static inline int newest_header(struct flathdr3 *hdr1, struct flathdr3 *hdr0)
+{
+	return oldest_header(hdr1, hdr0) ? 0 : 1;
+}
+
+/*****************************************************************************/
+
+/*
  * Restore the flat filesystem contents with the most up-to-date config
  * that can be found in the flash parition. For partitions with 2 images
  * we pick the most recent. If 'dowrite' is zero then we don't actually
@@ -502,8 +597,7 @@ int flat3_restorefs(int version, int dowrite)
 		}
 
 		/* Use which ever is most recent */
-		if (hdr[1].tstamp > hdr[0].tstamp)
-			part = 1;
+		part = newest_header(&hdr[1], &hdr[0]);
 
 		off = (part) ? psize : 0;
 
@@ -589,20 +683,20 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 
 	ent.namelen = size;
 	ent.filelen = st.st_size;
-	if (flatz_write((char *) &ent, sizeof(ent), dowrite) < 0)
+	if (flatz_write(&ent, sizeof(ent), dowrite) < 0)
 		return ERROR_CODE();
 
 	/* Write file name out, with padding to align */
 	if (flatz_write(name, size, dowrite) < 0)
 		return ERROR_CODE();
 	size = ((size + 3) & ~0x3) - size;
-	if (flatz_write((char *)&zero, size, dowrite) < 0)
+	if (flatz_write(&zero, size, dowrite) < 0)
 		return ERROR_CODE();
 
 	/* Write out the permissions */
 	mode = (mode_t) st.st_mode;
 	size = sizeof(mode);
-	if (flatz_write((char *) &mode, size, dowrite) < 0)
+	if (flatz_write(&mode, size, dowrite) < 0)
 		return ERROR_CODE();
 
 	/* Write the contents of the file. */
@@ -641,7 +735,7 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 
 		/* Pad to align */
 		written = ((st.st_size + 3) & ~0x3)- st.st_size;
-		if (flatz_write((char *)&zero, written, dowrite) < 0)
+		if (flatz_write(&zero, written, dowrite) < 0)
 			return ERROR_CODE();
 	}
 
@@ -731,7 +825,7 @@ int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned
 	/* Write the terminating entry */
 	ent.namelen = FLATFS_EOF;
 	ent.filelen = FLATFS_EOF;
-	rc = flatz_write((char *) &ent, sizeof(ent), dowrite);
+	rc = flatz_write(&ent, sizeof(ent), dowrite);
 	if (rc < 0 && !ret)
 		ret = rc;
 
@@ -740,13 +834,16 @@ int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned
 	*total += flatzfs.strm.total_out;
 
 	if (dowrite) {
+		/* Get next tstamp in sequence */
+		numstamp = next_tstamp(numstamp);
+
 		/* Construct header */
 		hdr.magic = FLATFS_MAGIC_V3;
-		hdr.chksum = 0;
+		hdr.chksum = tstamp_chksum(numstamp);
 		hdr.nrparts = nrparts;
-		hdr.tstamp = ++numstamp;
+		hdr.tstamp = numstamp;
 
-		rc = flat_dev_write(off, (char *)&hdr, sizeof(hdr));
+		rc = flat_dev_write(off, &hdr, sizeof(hdr));
 		if ((rc < 0) && !ret)
 			ret = rc;
 	}
@@ -764,15 +861,15 @@ int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned
 
 /*
  * Write out the filesystem to flash/disk. If we store 2 parititions then
- * we need to figure out which one to write too. Run through a restorefs
- * (with no writing) to make sure we replace the oldest image.
+ * we need to figure out which one to write too.  Use the flatfs headers
+ * to determine the oldest image and replace it.
  */
 
-int flat3_savefs(int dowrite, unsigned int *total)
+int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
 {
 	struct flathdr3 hdr[2];
 	unsigned int off, size, psize;
-	int nrparts, part, rc;
+	int nrparts, part, rc, rewrite = 0;
 
 	part = 0;
 	numvalid = -1;
@@ -791,28 +888,16 @@ int flat3_savefs(int dowrite, unsigned int *total)
 		flat3_gethdroffset(psize, &hdr[1]);
 
 		/* Choose a partition */
-		if (hdr[0].magic != FLATFS_MAGIC_V3)
-			part = 0;
-		else if (hdr[1].magic != FLATFS_MAGIC_V3)
-			part = 1;
-		else if (hdr[0].tstamp == 0xffffffff)
-			part = 0;
-		else if (hdr[1].tstamp == 0xffffffff)
-			part = 1;
-		else if (hdr[0].tstamp > hdr[1].tstamp)
-			part = 1;
-		else
-			part = 0;
+		part = oldest_header(&hdr[1], &hdr[0]);
 
 		/* Set highest current tstamp */
-		if (hdr[0].tstamp == 0xffffffff)
-			hdr[0].tstamp = 0;
-		if (hdr[1].tstamp == 0xffffffff)
-			hdr[1].tstamp = 0;
-		if (hdr[1].tstamp > hdr[0].tstamp)
+		if (part == 0)
 			numstamp = hdr[1].tstamp;
 		else
 			numstamp = hdr[0].tstamp;
+
+		/* Check if tstamp will wrap and we need to write twice */
+		rewrite = need_rewrite(numstamp);
 	}
 
 	off = (part) ? psize : 0;
@@ -820,15 +905,34 @@ int flat3_savefs(int dowrite, unsigned int *total)
 #ifdef LOGGING
 		char ecmd[64];
 		sprintf(ecmd, "/bin/logd write-partition %d, tstamp=%d",
-			part, numstamp+1);
+			part, next_tstamp(numstamp));
 		system(ecmd);
 #endif
 		syslog(LOG_INFO, "saving fs to partition %d, tstamp=%d\n",
-			part, numstamp+1);
+			part, next_tstamp(numstamp));
 	}
 	
 	rc = flat3_savefsoffset(dowrite, off, psize, nrparts, total);
+	if (rc < 0 || rewriting)
+		return rc;
+
+	/* Write the configuration to the other parititon if tstamp wrapped */
+	if (dowrite && rewrite && (rc = flat3_restorefsoffset(off, 0)) >= 0) {
+#ifdef LOGGING
+		char ecmd[64];
+		sprintf(ecmd, "/bin/logd message rewriting fs for "
+			      "backwards compatibility");
+		system(ecmd);
+#endif
+		syslog(LOG_INFO, "rewriting fs for backwards compatibility\n");
+		rc = _flat3_savefs(dowrite, total, 1);
+	}
 	return rc;
+}
+
+int flat3_savefs(int dowrite, unsigned int *total)
+{
+	return _flat3_savefs(dowrite, total, 0);
 }
 
 /*****************************************************************************/

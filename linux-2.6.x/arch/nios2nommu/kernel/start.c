@@ -383,19 +383,6 @@ int  Test_Flash_Regions(void)
 int main(void) {
 	extern void start_kernel(void);
 
-#if 0
-	//	extern unsigned long __data_rom_start;
-	extern unsigned long __data_start;
-	extern unsigned long __data_end;
-	extern unsigned long __bss_start;
-	extern unsigned long __bss_end;
-
-	unsigned long *src;
-	unsigned long *dest;
-	unsigned long tmp;
-#endif
-
-
 #ifdef DEBUG
 	puts("MAIN: starting c\n");
 #endif
@@ -411,49 +398,6 @@ int main(void) {
 #endif
 
 #endif	/* CONFIG_KGDB */
-
-
-#if 0
-	puts("Testing RAM\n");
-
-	puts("Write...\n");
-	for (dest = (unsigned long *)0x40000000; dest < (unsigned long *)0x40080000; dest++) {
-		*dest = (unsigned long)0x5a5a5a5a ^ (unsigned long)dest;
-	}
- 
-	puts("Read...\n");
-	for (dest = (unsigned long *)0x40000000; dest < (unsigned long *)0x40080000; dest++) {
-		tmp = (unsigned long)0x5a5a5a5a ^ (unsigned long)dest;
-		if (*dest != tmp) {
-			puts("Failed.");
-			outhex32((unsigned long)dest);
-			puts("is");
-			outhex32(*dest);
-			puts("wrote");
-			outhex32(tmp);
-			while(1);
-		}
-	}
- 
-	puts("512k RAM\n");
-	if (testvar == 0xdeadbeef) puts("Found my key\n");
-	else puts("My keys are missing!\n");
-
-	//	src = &__data_rom_start;
-	src = &__data_start;
-	dest = &__data_start;
-	while (dest < &__data_end) *(dest++) = *(src++);
-
-	dest = &__bss_start;
-	while (dest < &__bss_end) *(dest++) = 0;
-
-	puts("Moved .data\n");
-	if (testvar == 0xdeadbeef) puts("Found my key\n");
-	else puts("My keys are missing!\n");
-
-	testvar = 0;
-#endif
-
 
 #ifdef CONFIG_CRC_CHECK
     #ifdef CONFIG_PROMPT_ON_MISSING_CRC_TABLES

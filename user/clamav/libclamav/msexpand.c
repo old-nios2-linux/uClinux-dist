@@ -18,12 +18,15 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <string.h>
 
 #if HAVE_CONFIG_H
@@ -31,6 +34,7 @@
 #endif
 #include "cltypes.h"
 #include "others.h"
+#include "msexpand.h"
 
 int cli_msexpand(FILE *in, FILE *out)
 {
@@ -44,11 +48,7 @@ int cli_msexpand(FILE *in, FILE *out)
 	return -1;
     }
 
-#if WORDS_BIGENDIAN == 1
-    if(magic1 == 0x535A4444L)
-#else
-    if(magic1 == 0x44445A53L)
-#endif
+    if(magic1 == le32_to_host(0x44445A53L))
     {
 	if(fread(&magic2, sizeof(magic2), 1, in) != 1) {
 	    return -1;
@@ -62,22 +62,14 @@ int cli_msexpand(FILE *in, FILE *out)
 	    return -1;
 	}
 
-#if WORDS_BIGENDIAN == 1
-	if(magic2 != 0x88F02733L)
-#else
-	if(magic2 != 0x3327F088L)
-#endif
+	if(magic2 != le32_to_host(0x3327F088L))
 	{
 	    cli_warnmsg("msexpand: Not a MS-compressed file\n");
 	    return -1;
 	}
 
     } else
-#if WORDS_BIGENDIAN == 1
-    if(magic1 == 0x4B57414AL)
-#else
-    if(magic1 == 0x4A41574BL)
-#endif
+    if(magic1 == le32_to_host(0x4A41574BL))
     {
 	if(fread(&magic2, sizeof(magic2), 1, in) != 1) {
 	    return -1;
@@ -91,11 +83,7 @@ int cli_msexpand(FILE *in, FILE *out)
 	    return -1;
 	}
 
-#if WORDS_BIGENDIAN == 1
-	if(magic2 != 0x88F027D1L || magic3 != 0x03001200L)
-#else
-	if(magic2 != 0xD127F088L || magic3 != 0x00120003L)
-#endif
+	if(magic2 != le32_to_host(0xD127F088L) || magic3 != le32_to_host(0x00120003L))
 	{
 	    cli_warnmsg("msexpand: Not a MS-compressed file\n");
 	    return -1;

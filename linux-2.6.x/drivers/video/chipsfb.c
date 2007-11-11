@@ -24,6 +24,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/fb.h>
+#include <linux/pm.h>
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/console.h>
@@ -145,26 +146,6 @@ static int chipsfb_set_par(struct fb_info *info)
 
 static int chipsfb_blank(int blank, struct fb_info *info)
 {
-#ifdef CONFIG_PMAC_BACKLIGHT
-	mutex_lock(&pmac_backlight_mutex);
-
-	if (pmac_backlight) {
-		/* used to disable backlight only for blank > 1, but it seems
-		 * useful at blank = 1 too (saves battery, extends backlight
-		 * life)
-	 	 */
-		down(&pmac_backlight->sem);
-		if (blank)
-			pmac_backlight->props->power = FB_BLANK_POWERDOWN;
-		else
-			pmac_backlight->props->power = FB_BLANK_UNBLANK;
-		pmac_backlight->props->update_status(pmac_backlight);
-		up(&pmac_backlight->sem);
-	}
-
-	mutex_unlock(&pmac_backlight_mutex);
-#endif /* CONFIG_PMAC_BACKLIGHT */
-
 	return 1;	/* get fb_blank to set the colormap to all black */
 }
 
@@ -312,7 +293,7 @@ static void __init chips_hw_init(void)
 		write_fr(chips_init_fr[i].addr, chips_init_fr[i].data);
 }
 
-static struct fb_fix_screeninfo chipsfb_fix __initdata = {
+static struct fb_fix_screeninfo chipsfb_fix __devinitdata = {
 	.id =		"C&T 65550",
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_PSEUDOCOLOR,
@@ -329,7 +310,7 @@ static struct fb_fix_screeninfo chipsfb_fix __initdata = {
 	.smem_len =	0x100000,	/* 1MB */
 };
 
-static struct fb_var_screeninfo chipsfb_var __initdata = {
+static struct fb_var_screeninfo chipsfb_var __devinitdata = {
 	.xres = 800,
 	.yres = 600,
 	.xres_virtual = 800,
@@ -350,7 +331,7 @@ static struct fb_var_screeninfo chipsfb_var __initdata = {
 	.vsync_len = 8,
 };
 
-static void __init init_chips(struct fb_info *p, unsigned long addr)
+static void __devinit init_chips(struct fb_info *p, unsigned long addr)
 {
 	memset(p->screen_base, 0, 0x100000);
 
@@ -415,10 +396,8 @@ chipsfb_pci_init(struct pci_dev *dp, const struct pci_device_id *ent)
 	/* turn on the backlight */
 	mutex_lock(&pmac_backlight_mutex);
 	if (pmac_backlight) {
-		down(&pmac_backlight->sem);
-		pmac_backlight->props->power = FB_BLANK_UNBLANK;
-		pmac_backlight->props->update_status(pmac_backlight);
-		up(&pmac_backlight->sem);
+		pmac_backlight->props.power = FB_BLANK_UNBLANK;
+		backlight_update_status(pmac_backlight);
 	}
 	mutex_unlock(&pmac_backlight_mutex);
 #endif /* CONFIG_PMAC_BACKLIGHT */
@@ -480,7 +459,7 @@ static int chipsfb_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 
 	if (state.event == pdev->dev.power.power_state.event)
 		return 0;
-	if (state.event != PM_SUSPEND_MEM)
+	if (state.event != PM_EVENT_SUSPEND)
 		goto done;
 
 	acquire_console_sem();

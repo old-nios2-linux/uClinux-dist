@@ -1,0 +1,5 @@
+6 Feb 2007
+* Compile the haserl startup code into the binary, rather than having
+h_luascript.c use uncompiled source.
+
+* Investigate fastcgi for the lua version of haserl

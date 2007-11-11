@@ -29,7 +29,7 @@
  * 0xB8001000 : Common Memory
  * 0xBA000000 : I/O
  */
-#if defined(CONFIG_IDE) && defined(__SH4__)
+#if defined(CONFIG_IDE) && defined(CONFIG_CPU_SH4)
 /* SH4 can't access PCMCIA interface through P2 area.
  * we must remap it with appropreate attribute bit of the page set.
  * this part is based on Greg Banks' hd64465_ss.c implementation - Masahiro Abe */
@@ -76,7 +76,7 @@ static int __init cf_init_default(void)
 /* You must have enabled the card, and set the level interrupt
  * before reaching this point. Possibly in boot ROM or boot loader.
  */
-#if defined(CONFIG_IDE) && defined(__SH4__)
+#if defined(CONFIG_IDE) && defined(CONFIG_CPU_SH4)
 	allocate_cf_area();
 #endif
 #if defined(CONFIG_SH_UNKNOWN)

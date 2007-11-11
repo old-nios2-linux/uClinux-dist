@@ -1,7 +1,7 @@
 /* 
- * $Id: parse_nameaddr.c,v 1.6 2003/04/28 22:08:52 janakj Exp $
+ * $Id: parse_nameaddr.c,v 1.8 2004/08/24 09:01:25 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,7 +39,7 @@
 
 /*
  * Parse name-addr part, the given string can be longer,
- * it will be updated to point right behind the name-addr part
+ * parsing will stop when closing > is found
  */
 int parse_nameaddr(str* _s, name_addr_t* _a)
 {
@@ -69,7 +69,7 @@ int parse_nameaddr(str* _s, name_addr_t* _a)
 		return -4;
 	}
 
-	     /* Totat length of the field including <> */
+	     /* Total length of the field including <> */
 	_a->len = uri_end - _a->name.s + 1;
 	
 	_a->uri.len = uri_end - _a->uri.s;

@@ -17,6 +17,7 @@
 #include <linux/highuid.h>
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
+#include <linux/sched.h>
 
 #include <linux/ncp_fs.h>
 
@@ -35,7 +36,7 @@ static int
 ncp_get_fs_info(struct ncp_server * server, struct file *file,
 		struct ncp_fs_info __user *arg)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	struct ncp_fs_info info;
 
 	if ((file_permission(file, MAY_WRITE) != 0)
@@ -65,7 +66,7 @@ static int
 ncp_get_fs_info_v2(struct ncp_server * server, struct file *file,
 		   struct ncp_fs_info_v2 __user * arg)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	struct ncp_fs_info_v2 info2;
 
 	if ((file_permission(file, MAY_WRITE) != 0)
@@ -136,7 +137,7 @@ static int
 ncp_get_compat_fs_info_v2(struct ncp_server * server, struct file *file,
 		   struct compat_ncp_fs_info_v2 __user * arg)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	struct compat_ncp_fs_info_v2 info2;
 
 	if ((file_permission(file, MAY_WRITE) != 0)
@@ -824,7 +825,7 @@ outrel:
 #ifdef CONFIG_COMPAT
 long ncp_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *inode = file->f_path.dentry->d_inode;
 	int ret;
 
 	lock_kernel();

@@ -1,27 +1,51 @@
+Copyright 2000, 2001 Free Software Foundation, Inc.
 
-                        INTEL P6 MPN SUBROUTINES
+This file is part of the GNU MP Library.
+
+The GNU MP Library is free software; you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
+option) any later version.
+
+The GNU MP Library is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.
+
+
+
+
+
+                      INTEL P6 MPN SUBROUTINES
 
 
 
 This directory contains code optimized for Intel P6 class CPUs, meaning
-PentiumPro, Pentium II and Pentium III.
+PentiumPro, Pentium II and Pentium III.  The mmx and p3mmx subdirectories
+have routines using MMX instructions.
 
 
 
 STATUS
 
 Times for the loops, with all code and data in L1 cache, are as follows.
-Some of these can be improved.
+Some of these might be able to be improved.
 
                                cycles/limb
 
 	mpn_add_n/sub_n           3.7
 
 	mpn_copyi                 0.75
-	mpn_copyd                 2.4
+	mpn_copyd                 1.75 (or 0.75 if no overlap)
 
-	mpn_divrem_1             40.0
-	mpn_mod_1                40.0
+	mpn_divrem_1             39.0
+	mpn_mod_1                21.5
+	mpn_divexact_by3          8.5
 
 	mpn_mul_1                 5.5
 	mpn_addmul/submul_1       6.35
@@ -29,11 +53,12 @@ Some of these can be improved.
 	mpn_l/rshift              2.5
 
 	mpn_mul_basecase          8.2 cycles/crossproduct (approx)
-
-	mpn_sqr_basecase          5.8 cycles/crossproduct (approx)
-	                          or 11.2 cycles/triangleproduct (approx)
+	mpn_sqr_basecase          4.0 cycles/crossproduct (approx)
+	                          or 7.75 cycles/triangleproduct (approx)
 
 Pentium II and III have MMX and get the following improvements.
+
+	mpn_divrem_1             25.0 integer part, 17.5 fractional part
 
 	mpn_l/rshift              1.75
 

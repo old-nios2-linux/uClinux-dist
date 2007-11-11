@@ -1,6 +1,7 @@
 /* tdate_parse - parse string dates into internal form, stripped-down version
 **
-** Copyright (C) 1995 by Jef Poskanzer <jef@acme.com>.  All rights reserved.
+** Copyright © 1995 by Jef Poskanzer <jef@mail.acme.com>.
+** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -10,7 +11,7 @@
 ** 2. Redistributions in binary form must reproduce the above copyright
 **    notice, this list of conditions and the following disclaimer in the
 **    documentation and/or other materials provided with the distribution.
-** 
+**
 ** THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
 ** ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 ** IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -115,7 +116,7 @@ scan_wday( char* str_wday, long* tm_wdayP )
 	sorted = 1;
 	}
     pound_case( str_wday );
-    return strlong_search( 
+    return strlong_search(
 	str_wday, wday_tab, sizeof(wday_tab)/sizeof(struct strlong), tm_wdayP );
     }
 
@@ -147,7 +148,7 @@ scan_mon( char* str_mon, long* tm_monP )
 	sorted = 1;
 	}
     pound_case( str_mon );
-    return strlong_search( 
+    return strlong_search(
 	str_mon, mon_tab, sizeof(mon_tab)/sizeof(struct strlong), tm_monP );
     }
 
@@ -170,11 +171,11 @@ tm_to_time( struct tm* tmP )
     /* Years since epoch, converted to days. */
     t = ( tmP->tm_year - 70 ) * 365;
     /* Leap days for previous years. */
-    t += ( tmP->tm_year - 68 ) / 4;
+    t += ( tmP->tm_year - 69 ) / 4;
     /* Days for the beginning of this month. */
     t += monthtab[tmP->tm_mon];
     /* Leap day for this year. */
-    if ( tmP->tm_mon >= 2 && is_leap( tmP->tm_year ) )
+    if ( tmP->tm_mon >= 2 && is_leap( tmP->tm_year + 1900 ) )
 	++t;
     /* Days since the beginning of this month. */
     t += tmP->tm_mday - 1;	/* 1-based field */
@@ -198,11 +199,11 @@ tdate_parse( char* str )
     time_t t;
 
     /* Initialize. */
-    memset( (char*) &tm, 0, sizeof(struct tm) );
+    (void) memset( (char*) &tm, 0, sizeof(struct tm) );
 
     /* Skip initial whitespace ourselves - sscanf is clumsy at this. */
     for ( cp = str; *cp == ' ' || *cp == '\t'; ++cp )
-	;
+	continue;
 
     /* And do the sscanfs.  WARNING: you can add more formats here,
     ** but be careful!  You can easily screw up the parsing of existing
@@ -210,7 +211,7 @@ tdate_parse( char* str )
     */
 
     /* DD-mth-YY HH:MM:SS GMT */
-    if ( sscanf( cp, "%d-%[a-zA-Z]-%d %d:%d:%d GMT",
+    if ( sscanf( cp, "%d-%400[a-zA-Z]-%d %d:%d:%d GMT",
 		&tm_mday, str_mon, &tm_year, &tm_hour, &tm_min,
 		&tm_sec ) == 6 &&
 	    scan_mon( str_mon, &tm_mon ) )
@@ -224,7 +225,7 @@ tdate_parse( char* str )
 	}
 
     /* DD mth YY HH:MM:SS GMT */
-    else if ( sscanf( cp, "%d %[a-zA-Z] %d %d:%d:%d GMT",
+    else if ( sscanf( cp, "%d %400[a-zA-Z] %d %d:%d:%d GMT",
 		&tm_mday, str_mon, &tm_year, &tm_hour, &tm_min,
 		&tm_sec) == 6 &&
 	    scan_mon( str_mon, &tm_mon ) )
@@ -238,7 +239,7 @@ tdate_parse( char* str )
 	}
 
     /* HH:MM:SS GMT DD-mth-YY */
-    else if ( sscanf( cp, "%d:%d:%d GMT %d-%[a-zA-Z]-%d",
+    else if ( sscanf( cp, "%d:%d:%d GMT %d-%400[a-zA-Z]-%d",
 		&tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon,
 		&tm_year ) == 6 &&
 	    scan_mon( str_mon, &tm_mon ) )
@@ -252,7 +253,7 @@ tdate_parse( char* str )
 	}
 
     /* HH:MM:SS GMT DD mth YY */
-    else if ( sscanf( cp, "%d:%d:%d GMT %d %[a-zA-Z] %d",
+    else if ( sscanf( cp, "%d:%d:%d GMT %d %400[a-zA-Z] %d",
 		&tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon,
 		&tm_year ) == 6 &&
 	    scan_mon( str_mon, &tm_mon ) )
@@ -266,7 +267,7 @@ tdate_parse( char* str )
 	}
 
     /* wdy, DD-mth-YY HH:MM:SS GMT */
-    else if ( sscanf( cp, "%[a-zA-Z], %d-%[a-zA-Z]-%d %d:%d:%d GMT",
+    else if ( sscanf( cp, "%400[a-zA-Z], %d-%400[a-zA-Z]-%d %d:%d:%d GMT",
 		str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min,
 		&tm_sec ) == 7 &&
 	    scan_wday( str_wday, &tm_wday ) &&
@@ -282,7 +283,7 @@ tdate_parse( char* str )
 	}
 
     /* wdy, DD mth YY HH:MM:SS GMT */
-    else if ( sscanf( cp, "%[a-zA-Z], %d %[a-zA-Z] %d %d:%d:%d GMT",
+    else if ( sscanf( cp, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d GMT",
 		str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min,
 		&tm_sec ) == 7 &&
 	    scan_wday( str_wday, &tm_wday ) &&
@@ -298,7 +299,7 @@ tdate_parse( char* str )
 	}
 
     /* wdy mth DD HH:MM:SS GMT YY */
-    else if ( sscanf( cp, "%[a-zA-Z] %[a-zA-Z] %d %d:%d:%d GMT %d",
+    else if ( sscanf( cp, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d GMT %d",
 		str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec,
 		&tm_year ) == 7 &&
 	    scan_wday( str_wday, &tm_wday ) &&

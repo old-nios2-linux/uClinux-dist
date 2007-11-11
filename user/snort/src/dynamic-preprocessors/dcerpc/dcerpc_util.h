@@ -44,6 +44,6 @@ typedef enum _dcerpc_event_e
 void *DCERPC_FragAlloc(void *p, u_int16_t old_size, u_int16_t *new_size);
 int DCERPC_FragFree(void *p, u_int16_t size);
 void DCERPC_GenerateAlert(dcerpc_event_e event, char *msg);
-void PrintBuffer(u_int8_t * title, u_int8_t *buf, u_int16_t buf_len);
+void PrintBuffer(char * title, u_int8_t *buf, u_int16_t buf_len);
 
 #endif  /*  _DCERPC_UTIL_H_  */

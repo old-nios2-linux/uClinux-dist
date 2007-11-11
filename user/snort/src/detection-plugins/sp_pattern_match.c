@@ -49,6 +49,8 @@ static void PayloadSearchInit(char *, OptTreeNode *, int);
 static void PayloadSearchListInit(char *, OptTreeNode *, int);
 static void ParseContentListFile(char *, OptTreeNode *, int);
 static void PayloadSearchUri(char *, OptTreeNode *, int);
+static void PayloadSearchHttpBody(char *, OptTreeNode *, int);
+static void PayloadSearchHttpUri(char *, OptTreeNode *, int);
 static void ParsePattern(char *, OptTreeNode *, int);
 static int CheckANDPatternMatch(Packet *, struct _OptTreeNode *, OptFpList *);
 static int CheckORPatternMatch(Packet *, struct _OptTreeNode *, OptFpList *);
@@ -93,6 +95,8 @@ void SetupPatternMatch()
     RegisterPlugin("rawbytes", PayloadSearchRawbytes);
     RegisterPlugin("regex", PayloadSearchRegex);
     RegisterPlugin("uricontent", PayloadSearchUri);
+    RegisterPlugin("http_client_body", PayloadSearchHttpBody);
+    RegisterPlugin("http_uri", PayloadSearchHttpUri);
     RegisterPlugin("distance", PayloadSearchDistance);
     RegisterPlugin("within", PayloadSearchWithin);
     RegisterPlugin("replace", PayloadReplaceInit);
@@ -161,6 +165,7 @@ PatternMatchData * ParseReplacePattern(char *rule, OptTreeNode * otn)
     int literal = 0;
     int exception_flag = 0;
     PatternMatchData *ds_idx;
+    int ret;
 
     /* clear out the temp buffer */
     bzero(tmp_buf, MAX_PATTERN_SIZE);
@@ -417,8 +422,13 @@ PatternMatchData * ParseReplacePattern(char *rule, OptTreeNode * otn)
     }
 
     //memcpy(ds_idx->replace_buf, tmp_buf, dummy_size);
-    SafeMemcpy(ds_idx->replace_buf, tmp_buf, dummy_size, 
-               ds_idx->replace_buf, (ds_idx->replace_buf+dummy_size+1));
+    ret = SafeMemcpy(ds_idx->replace_buf, tmp_buf, dummy_size, 
+                     ds_idx->replace_buf, (ds_idx->replace_buf+dummy_size));
+
+    if (ret == SAFEMEM_ERROR)
+    {
+        FatalError("ERROR %s Line %d => SafeMemcpy failed\n", file_name, file_line);
+    }
 
     ds_idx->replace_size = dummy_size;
 
@@ -444,6 +454,7 @@ int PayloadReplace(Packet *p, struct _OptTreeNode *otn,
     struct pseudoheader ph;
     unsigned int ip_len;
     unsigned int hlen;
+    int ret;
 
     //idx = (PatternMatchData *)otn->ds_list[PLUGIN_PATTERN_MATCH];
     idx = (PatternMatchData *)fp_list->context;
@@ -451,8 +462,15 @@ int PayloadReplace(Packet *p, struct _OptTreeNode *otn,
     if (depth >= 0)
     {
         //memcpy(p->data+depth, idx->replace_buf, strlen(idx->replace_buf));
-        SafeMemcpy( (p->data + depth), idx->replace_buf, strlen(idx->replace_buf), 
-        p->data, (p->data + p->dsize + 1) );
+        ret = SafeMemcpy( (p->data + depth), idx->replace_buf, strlen(idx->replace_buf), 
+                          p->data, (p->data + p->dsize) );
+
+        if (ret == SAFEMEM_ERROR)
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_PATTERN_MATCH, 
+                                    "PayloadReplace() => SafeMemcpy() failed\n"););
+            return 0;
+        }
 
 #ifdef GIDS
         InlineReplace();
@@ -888,6 +906,8 @@ void PayloadSearchUri(char *data, OptTreeNode * otn, int protocol)
     /* set up the pattern buffer */
     ParsePattern(data, otn, PLUGIN_PATTERN_MATCH_URI);
 
+    pmd->uri_buffer = HTTP_BUFFER_URI;
+
 #ifdef PATTERN_FAST
     pmd->search = uniSearch;
     make_precomp(pmd);
@@ -907,7 +927,134 @@ void PayloadSearchUri(char *data, OptTreeNode * otn, int protocol)
 }
 
 
+void PayloadSearchHttpBody(char *data, OptTreeNode * otn, int protocol)
+{
+    PatternMatchData *idx = NULL;
+    PatternMatchData *uriidx = NULL, *previdx = NULL;
 
+    idx = (PatternMatchData *) otn->ds_list[lastType];
+
+    if(idx == NULL)
+    {
+        FatalError("(%s)%d => Please place \"content\" rules before"
+           " http_client_body modifier.\n", file_name, file_line);
+    }
+    while(idx->next != NULL)
+    {
+        previdx = idx;
+        idx = idx->next;
+    }
+
+    if (lastType != PLUGIN_PATTERN_MATCH_URI)
+    {
+        /* Need to move this PatternMatchData structure to the
+         * PLUGIN_PATTERN_MATCH_URI */
+        
+        /* Remove it from the tail of the old list */
+        if (previdx)
+        {
+            previdx->next = idx->next;
+        }
+        if (idx)
+        {
+            idx->next = NULL;
+        }
+
+        uriidx = (PatternMatchData *) otn->ds_list[PLUGIN_PATTERN_MATCH_URI];
+
+        if (uriidx)
+        {
+            /* There are some uri/post patterns in this rule already */
+            while (uriidx->next != NULL)
+            {
+                uriidx = uriidx->next;
+            }
+            uriidx->next = idx;
+        }
+        else
+        {
+            /* This is the first uri/post patterns in this rule */
+            otn->ds_list[PLUGIN_PATTERN_MATCH_URI] = idx;
+        }
+        lastType = PLUGIN_PATTERN_MATCH_URI;
+        idx->fpl->OptTestFunc = CheckUriPatternMatch;
+    }
+
+    idx->uri_buffer = HTTP_BUFFER_CLIENT_BODY;
+
+    if (idx->rawbytes == 1)
+    {
+        FatalError("(%s)%d => Cannot use 'rawbytes' and 'http_client_body'"
+            " as modifiers for the same \"content\".\n", file_name, file_line);
+    }
+
+    return;
+}
+
+
+void PayloadSearchHttpUri(char *data, OptTreeNode * otn, int protocol)
+{
+    PatternMatchData *idx = NULL;
+    PatternMatchData *uriidx = NULL, *previdx = NULL;
+
+    idx = (PatternMatchData *) otn->ds_list[lastType];
+
+    if(idx == NULL)
+    {
+        FatalError("(%s)%d => Please place \"content\" rules before"
+           " http_uri offset modifiers.\n", file_name, file_line);
+    }
+    while(idx->next != NULL)
+    {
+        previdx = idx;
+        idx = idx->next;
+    }
+
+    if (lastType != PLUGIN_PATTERN_MATCH_URI)
+    {
+        /* Need to move this PatternMatchData structure to the
+         * PLUGIN_PATTERN_MATCH_URI */
+        
+        /* Remove it from the tail of the old list */
+        if (previdx)
+        {
+            previdx->next = idx->next;
+        }
+        if (idx)
+        {
+            idx->next = NULL;
+        }
+
+        uriidx = (PatternMatchData *) otn->ds_list[PLUGIN_PATTERN_MATCH_URI];
+
+        if (uriidx)
+        {
+            /* There are some uri/post patterns in this rule already */
+            while (uriidx->next != NULL)
+            {
+                uriidx = uriidx->next;
+            }
+            uriidx->next = idx;
+        }
+        else
+        {
+            /* This is the first uri/post patterns in this rule */
+            otn->ds_list[PLUGIN_PATTERN_MATCH_URI] = idx;
+        }
+        lastType = PLUGIN_PATTERN_MATCH_URI;
+        idx->fpl->OptTestFunc = CheckUriPatternMatch;
+    }
+
+    idx->uri_buffer = HTTP_BUFFER_URI;
+
+    if (idx->rawbytes == 1)
+    {
+        FatalError("(%s)%d => Cannot use 'rawbytes' and 'http_uri'"
+            " as modifiers for the same \"content\".\n", file_name, file_line);
+    }
+
+    return;
+}
 
 void PayloadSearchOffset(char *data, OptTreeNode * otn, int protocol)
 {
@@ -1052,6 +1199,16 @@ void PayloadSearchRawbytes(char *data, OptTreeNode * otn, int protocol)
     /* mark this as inspecting a raw pattern match rather than a
        decoded application buffer */
     idx->rawbytes = 1;    
+
+    if (lastType == PLUGIN_PATTERN_MATCH_URI)
+    {
+        FatalError("(%s)%d => Cannot use 'rawbytes' and '%s' as modifiers for "
+            "the same \"content\" nor use 'rawbytes' with \"uricontent\".\n",
+            file_name, file_line,
+            idx->uri_buffer == HTTP_BUFFER_CLIENT_BODY ?
+                "http_client_body" : "http_uri" );
+    }
+
     return;
 }
 
@@ -1725,6 +1882,7 @@ static int CheckANDPatternMatch(Packet *p, struct _OptTreeNode *otn_idx,
     char *dp;
     int origUseDoe;
     char *tmp_doe, *orig_doe, *start_doe;
+    int ret;
 
     PatternMatchData *idx;
 
@@ -1772,7 +1930,10 @@ static int CheckANDPatternMatch(Packet *p, struct _OptTreeNode *otn_idx,
     {
         //fix the packet buffer to have the new string
         detect_depth = (char *)doe_ptr - idx->pattern_size - dp;
-        PayloadReplace(p, otn_idx, fp_list, detect_depth);
+
+        ret = PayloadReplace(p, otn_idx, fp_list, detect_depth);
+        if (ret == 0)
+            return 0;
     }
 
     while (found)
@@ -1945,6 +2106,20 @@ static int CheckUriPatternMatch(Packet *p, struct _OptTreeNode *otn_idx,
         DebugMessage(DEBUG_HTTP_DECODE,"\n");
 
 #endif /* DEBUG */
+        DEBUG_WRAP(DebugMessage(DEBUG_HTTP_DECODE,"Checking for %s pattern in "
+            "buffer %d: ",
+            idx->uri_buffer == HTTP_BUFFER_CLIENT_BODY ?
+                "http_client_body" : "http_uri", i););
+
+        if (idx->uri_buffer != i)
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_HTTP_DECODE,"Continuing past buffer "
+                "for %s, looking for buffer %s\n",
+                i == HTTP_BUFFER_CLIENT_BODY ? "http_client_body" : "http_uri",
+                idx->uri_buffer == HTTP_BUFFER_CLIENT_BODY ?
+                    "http_client_body" : "http_uri"););
+            continue;
+        }
 
         /* 
          * have to reset the doe_ptr for each new UriBuf 

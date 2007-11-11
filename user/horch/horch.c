@@ -4,7 +4,7 @@
  *
  * Copyright (c) 1999-2001 port GmbH, Halle
  *------------------------------------------------------------------
- * $Header: /cvs/sw/new-wave/user/horch/horch.c,v 1.1 2003/07/18 00:11:46 gerg Exp $
+ * $Header: /cvs/sw/new-wave/user/horch/horch.c,v 1.2 2007/04/04 05:20:33 gerg Exp $
  *
  *--------------------------------------------------------------------------
  *
@@ -12,6 +12,13 @@
  * modification history
  * --------------------
  * $Log: horch.c,v $
+ * Revision 1.2  2007/04/04 05:20:33  gerg
+ * #10381
+ *
+ * Little changes to make horch listen to the CAN
+ *
+ * Patch submitted by Thomas Brinker <tb@emlix.com>
+ *
  * Revision 1.1  2003/07/18 00:11:46  gerg
  * I followed as much rules as possible (I hope) and generated a patch for the
  * uClinux distribution. It contains an additional driver, the CAN driver, first
@@ -774,7 +781,7 @@ char *pname;
 # if defined(LINUX_ARM) || defined(CPC_LINUX)
 # else /* defined(LINUX_ARM) || defined(CPC_LINUX) */
 itimerval value1, ovalue;
-CanSja1000Status_par_t status;
+CanStatusPar_t status;
 int can_fd;
 # endif /* defined(LINUX_ARM) || defined(CPC_LINUX) */
 #endif /* TARGET_LINUX */

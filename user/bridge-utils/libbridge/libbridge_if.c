@@ -22,82 +22,96 @@
 #include <string.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/utsname.h>
+
 #include "libbridge.h"
 #include "libbridge_private.h"
 
-static int br_ioctl32(unsigned long arg0, unsigned long arg1, unsigned long arg2)
+
+int br_add_bridge(const char *brname)
 {
-	unsigned long arg[3];
+	int ret;
 
-	arg[0] = arg0;
-	arg[1] = arg1;
-	arg[2] = arg2;
+#ifdef SIOCBRADDBR
+	ret = ioctl(br_socket_fd, SIOCBRADDBR, brname);
+	if (ret < 0)
+#endif
+	{
+		char _br[IFNAMSIZ];
+		unsigned long arg[3] 
+			= { BRCTL_ADD_BRIDGE, (unsigned long) _br };
 
-	return ioctl(br_socket_fd, SIOCGIFBR, arg);
+		strncpy(_br, brname, IFNAMSIZ);
+		ret = ioctl(br_socket_fd, SIOCSIFBR, arg);
+	} 
+
+	return ret < 0 ? errno : 0;
 }
 
-#ifdef __sparc__
-static int br_ioctl64(unsigned long arg0, unsigned long arg1, unsigned long arg2)
+int br_del_bridge(const char *brname)
 {
-	unsigned long long arg[3];
+	int ret;
 
-	arg[0] = arg0;
-	arg[1] = arg1;
-	arg[2] = arg2;
+#ifdef SIOCBRDELBR	
+	ret = ioctl(br_socket_fd, SIOCBRDELBR, brname);
+	if (ret < 0)
+#endif
+	{
+		char _br[IFNAMSIZ];
+		unsigned long arg[3] 
+			= { BRCTL_DEL_BRIDGE, (unsigned long) _br };
 
-	return ioctl(br_socket_fd, SIOCGIFBR, arg);
+		strncpy(_br, brname, IFNAMSIZ);
+		ret = ioctl(br_socket_fd, SIOCSIFBR, arg);
+	} 
+	return  ret < 0 ? errno : 0;
 }
 
-int __kernel_is_64_bit()
+int br_add_interface(const char *bridge, const char *dev)
 {
-	static int kernel_is_64_bit = -1;
+	struct ifreq ifr;
+	int err;
+	int ifindex = if_nametoindex(dev);
 
-	if (kernel_is_64_bit == -1) {
-		struct utsname buf;
-
-		uname(&buf);
-		kernel_is_64_bit = !strcmp(buf.machine, "sparc64");
+	if (ifindex == 0) 
+		return ENODEV;
+	
+	strncpy(ifr.ifr_name, bridge, IFNAMSIZ);
+#ifdef SIOCBRADDIF
+	ifr.ifr_ifindex = ifindex;
+	err = ioctl(br_socket_fd, SIOCBRADDIF, &ifr);
+	if (err < 0)
+#endif
+	{
+		unsigned long args[4] = { BRCTL_ADD_IF, ifindex, 0, 0 };
+					  
+		ifr.ifr_data = (char *) args;
+		err = ioctl(br_socket_fd, SIOCDEVPRIVATE, &ifr);
 	}
 
-	return kernel_is_64_bit;
-}
-#endif
-
-int br_ioctl(unsigned long arg0, unsigned long arg1, unsigned long arg2)
-{
-#ifdef __sparc__
-	if (__kernel_is_64_bit())
-		return br_ioctl64(arg0, arg1, arg2);
-#endif
-
-	return br_ioctl32(arg0, arg1, arg2);
+	return err < 0 ? errno : 0;
 }
 
-int br_get_version()
+int br_del_interface(const char *bridge, const char *dev)
 {
-	return br_ioctl(BRCTL_GET_VERSION, 0, 0);
-}
+	struct ifreq ifr;
+	int err;
+	int ifindex = if_nametoindex(dev);
 
-int br_add_bridge(char *brname)
-{
-	char _br[IFNAMSIZ];
+	if (ifindex == 0) 
+		return ENODEV;
+	
+	strncpy(ifr.ifr_name, bridge, IFNAMSIZ);
+#ifdef SIOCBRDELIF
+	ifr.ifr_ifindex = ifindex;
+	err = ioctl(br_socket_fd, SIOCBRDELIF, &ifr);
+	if (err < 0)
+#endif		
+	{
+		unsigned long args[4] = { BRCTL_DEL_IF, ifindex, 0, 0 };
+					  
+		ifr.ifr_data = (char *) args;
+		err = ioctl(br_socket_fd, SIOCDEVPRIVATE, &ifr);
+	}
 
-	memcpy(_br, brname, IFNAMSIZ);
-	if (br_ioctl(BRCTL_ADD_BRIDGE, (unsigned long)_br, 0) < 0)
-		return errno;
-
-	return 0;
-}
-
-int br_del_bridge(char *brname)
-{
-	char _br[IFNAMSIZ];
-
-	memcpy(_br, brname, IFNAMSIZ);
-	if (br_ioctl(BRCTL_DEL_BRIDGE, (unsigned long)_br, 0) < 0)
-		return errno;
-
-	return 0;
+	return err < 0 ? errno : 0;
 }

@@ -1,5 +1,6 @@
 /* Declarations for windows
-   Copyright (C) 1995, 1997, 1997, 1998 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1997, 1997, 1998, 2004
+   Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -34,16 +35,16 @@ so, delete this exception statement from your version.  */
 #error Include mswindows.h inside or after "wget.h"
 #endif
 
+/* Prevent inclusion of <winsock*.h> in <windows.h>.  */
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN  /* Prevent inclusion of <winsock*.h> in <windows.h> */
+#define WIN32_LEAN_AND_MEAN
 #endif
 
 #include <windows.h>
 
-/* Use the correct winsock header; <ws2tcpip.h> includes <winsock2.h> only on
- * Watcom/MingW. We cannot use <winsock.h> for IPv6. Using getaddrinfo() requires
- * <ws2tcpip.h>
- */
+/* Use the correct winsock header; <ws2tcpip.h> includes <winsock2.h> only
+   on Watcom/MingW.  We cannot use <winsock.h> for IPv6.  Using
+   getaddrinfo() requires <ws2tcpip.h>.  */
 #if defined(ENABLE_IPV6) || defined(HAVE_GETADDRINFO)
 # include <winsock2.h>
 # include <ws2tcpip.h>
@@ -55,13 +56,13 @@ so, delete this exception statement from your version.  */
 # define EAI_SYSTEM -1   /* value doesn't matter */
 #endif
 
-/* Must include <sys/stat.h> because of 'stat' define below. */
+/* Must include <sys/stat.h> because of 'stat' define below.  */
 #include <sys/stat.h>
 
-/* Missing in several .c files. Include here. */
+/* Missing in several .c files.  Include here.  */
 #include <io.h>
 
-/* Apparently needed for alloca(). */
+/* Apparently needed for alloca().  */
 #include <malloc.h>
 
 #ifndef S_ISDIR
@@ -71,7 +72,7 @@ so, delete this exception statement from your version.  */
 # define S_ISLNK(a) 0
 #endif
 
-/* We have strcasecmp and strncasecmp, just under a different name. */
+/* We have strcasecmp and strncasecmp, just under a different name.  */
 #define strcasecmp stricmp
 #define strncasecmp strnicmp
 
@@ -79,40 +80,117 @@ so, delete this exception statement from your version.  */
 #define snprintf _snprintf
 #define vsnprintf _vsnprintf
 
-/* No stat on Windows.  */
+/* Define a wgint type under Windows. */
+typedef __int64 wgint;
+#define SIZEOF_WGINT 8
+
+#ifdef __GNUC__
+#define WGINT_MAX 9223372036854775807LL
+#else
+#define WGINT_MAX 9223372036854775807I64
+#endif
+
+#if defined __MINGW32__
+# define str_to_wgint strtoll
+#elif defined(_MSC_VER) && _MSC_VER >= 1300 && !defined(__BORLANDC__)
+# define str_to_wgint _strtoi64
+#else
+# define str_to_wgint strtoll
+# define NEED_STRTOLL
+# define strtoll_return __int64
+#endif
+
+/* Windows has no symlink, therefore no lstat.  Without symlinks lstat
+   is equivalent to stat anyway.  */
 #define lstat stat
+
+/* Transparently support statting large files, like POSIX's LFS API
+   does.  All Windows compilers we support use _stati64 (but have
+   different names for 2nd argument type, see below), so we use
+   that.  */
+#define stat(fname, buf) _stati64 (fname, buf)
+
+/* On Windows the 64-bit stat requires an explicitly different type
+   for the 2nd argument, so we define a struct_stat macro that expands
+   to the appropriate type on Windows, and to the regular struct stat
+   on Unix.
+
+   Note that Borland C 5.5 has 64-bit stat (_stati64), but not a
+   64-bit fstat!  Because of that we also need a struct_fstat that
+   points to struct_stat on Unix and on Windows, except under Borland,
+   where it points to the 32-bit struct stat.  */
+
+#ifndef __BORLANDC__
+# define fstat(fd, buf) _fstati64 (fd, buf)
+# define struct_stat  struct _stati64
+# define struct_fstat struct _stati64
+#else  /* __BORLANDC__ */
+# define struct_stat  struct stati64
+# define struct_fstat struct stat
+#endif /* __BORLANDC__ */
 
 #define PATH_SEPARATOR '\\'
 
-/* Microsoft says stat is _stat, Borland doesn't */
-#ifdef _MSC_VER
-# define stat _stat
-#endif
-
 #ifdef HAVE_ISATTY
-/* Microsoft VC supports _isatty; Borland ? */
 #ifdef _MSC_VER
 # define isatty _isatty
 #endif
 #endif
 
-#define REALCLOSE(x) closesocket (x)
-
-/* read & write don't work with sockets on Windows 95.  */
-#define READ(fd, buf, cnt) recv ((fd), (buf), (cnt), 0)
-#define WRITE(fd, buf, cnt) send ((fd), (buf), (cnt), 0)
-
 /* #### Do we need this?  */
 #include <direct.h>
 
-/* Windows compilers accept only one arg to mkdir. */
-#ifndef __BORLANDC__
-# define mkdir(a, b) _mkdir(a)
-#else  /* __BORLANDC__ */
-# define mkdir(a, b) mkdir(a)
-#endif /* __BORLANDC__ */
+/* Windows compilers accept only one arg to mkdir.  */
+#define mkdir(a, b) _mkdir(a)
 
-/* Declarations of various socket errors: */
+#ifndef INHIBIT_WRAP
+
+/* Winsock functions don't set errno, so we provide wrappers
+   that do. */
+
+#define socket wrapped_socket
+#define bind wrapped_bind
+#define connect wrapped_connect
+#define listen wrapped_listen
+#define accept wrapped_accept
+#define recv wrapped_recv
+#define send wrapped_send
+#define select wrapped_select
+#define getsockname wrapped_getsockname
+#define getpeername wrapped_getpeername
+#define setsockopt wrapped_setsockopt
+#define closesocket wrapped_closesocket
+
+#endif /* not INHIBIT_WRAP */
+
+int wrapped_socket (int, int, int);
+int wrapped_bind (int, struct sockaddr *, int);
+int wrapped_connect (int, const struct sockaddr *, int);
+int wrapped_listen (int s, int backlog);
+int wrapped_accept (int s, struct sockaddr *a, int *alen);
+int wrapped_recv (int, void *, int, int);
+int wrapped_send (int, const void *, int, int);
+int wrapped_select (int, fd_set *, fd_set *, fd_set *, const struct timeval *);
+int wrapped_getsockname (int, struct sockaddr *, int *);
+int wrapped_getpeername (int, struct sockaddr *, int *);
+int wrapped_setsockopt (int, int, int, const void *, int);
+int wrapped_closesocket (int);
+
+/* Finally, provide a private version of strerror that does the
+   right thing with Winsock errors. */
+#ifndef INHIBIT_WRAP
+# define strerror windows_strerror
+#endif
+const char *windows_strerror (int);
+
+/* MingW 3.7 (or older) prototypes gai_strerror(), but is missing
+   from all import libraries. */
+#if defined(__MINGW32__) && defined(ENABLE_IPV6)
+# undef gai_strerror
+# define gai_strerror windows_strerror
+#endif
+
+/* Declarations of various socket errors:  */
 
 #define EWOULDBLOCK             WSAEWOULDBLOCK
 #define EINPROGRESS             WSAEINPROGRESS
@@ -152,27 +230,16 @@ so, delete this exception statement from your version.  */
 
 /* Public functions.  */
 
-#ifndef HAVE_SLEEP
-unsigned int sleep (unsigned);
-#endif
-#ifndef HAVE_USLEEP
-int usleep (unsigned long);
-#endif
-
 void ws_startup (void);
-void ws_changetitle (const char*, int);
+void ws_changetitle (const char *);
 void ws_percenttitle (double);
 char *ws_mypath (void);
-void ws_help (const char *);
-void windows_main_junk (int *, char **, char **);
+void windows_main (int *, char **, char **);
 
-/* Things needed for IPv6; missing in <ws2tcpip.h>. */
+/* Things needed for IPv6; missing in <ws2tcpip.h>.  */
 #ifdef ENABLE_IPV6
-# ifndef HAVE_NTOP
-  extern const char *inet_ntop (int af, const void *src, char *dst, size_t size);
-# endif
-# ifndef HAVE_PTON
-  extern int inet_pton (int af, const char *src, void *dst);
+# ifndef HAVE_INET_NTOP
+extern const char *inet_ntop (int af, const void *src, char *dst, size_t size);
 # endif
 #endif /* ENABLE_IPV6 */
 

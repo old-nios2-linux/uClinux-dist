@@ -7,7 +7,7 @@
  * Copyright (C) 2000 Silicon Graphics, Inc.
  * Modified for further R[236]000 support by Paul M. Antoine, 1996.
  * Kevin D. Kissell, kevink@mips.com and Carsten Langgaard, carstenl@mips.com
- * Copyright (C) 2000 MIPS Technologies, Inc.  All rights reserved.
+ * Copyright (C) 2000, 07 MIPS Technologies, Inc.
  * Copyright (C) 2003, 2004  Maciej W. Rozycki
  */
 #ifndef _ASM_MIPSREGS_H
@@ -15,6 +15,7 @@
 
 #include <linux/linkage.h>
 #include <asm/hazards.h>
+#include <asm/war.h>
 
 /*
  * The following macros are especially useful for __asm__
@@ -533,6 +534,12 @@
 #define MIPS_CONF3_VEIC		(_ULCAST_(1) <<  6)
 #define MIPS_CONF3_LPA		(_ULCAST_(1) <<  7)
 #define MIPS_CONF3_DSP		(_ULCAST_(1) << 10)
+#define MIPS_CONF3_ULRI		(_ULCAST_(1) << 13)
+
+#define MIPS_CONF7_WII		(_ULCAST_(1) << 31)
+
+#define MIPS_CONF7_RPS		(_ULCAST_(1) << 2)
+
 
 /*
  * Bits in the MIPS32/64 coprocessor 1 (FPU) revision register.
@@ -544,62 +551,6 @@
 #define MIPS_FPIR_W		(_ULCAST_(1) << 20)
 #define MIPS_FPIR_L		(_ULCAST_(1) << 21)
 #define MIPS_FPIR_F64		(_ULCAST_(1) << 22)
-
-/*
- * R10000 performance counter definitions.
- *
- * FIXME: The R10000 performance counter opens a nice way to implement CPU
- *        time accounting with a precission of one cycle.  I don't have
- *        R10000 silicon but just a manual, so ...
- */
-
-/*
- * Events counted by counter #0
- */
-#define CE0_CYCLES			0
-#define CE0_INSN_ISSUED			1
-#define CE0_LPSC_ISSUED			2
-#define CE0_S_ISSUED			3
-#define CE0_SC_ISSUED			4
-#define CE0_SC_FAILED			5
-#define CE0_BRANCH_DECODED		6
-#define CE0_QW_WB_SECONDARY		7
-#define CE0_CORRECTED_ECC_ERRORS	8
-#define CE0_ICACHE_MISSES		9
-#define CE0_SCACHE_I_MISSES		10
-#define CE0_SCACHE_I_WAY_MISSPREDICTED	11
-#define CE0_EXT_INTERVENTIONS_REQ	12
-#define CE0_EXT_INVALIDATE_REQ		13
-#define CE0_VIRTUAL_COHERENCY_COND	14
-#define CE0_INSN_GRADUATED		15
-
-/*
- * Events counted by counter #1
- */
-#define CE1_CYCLES			0
-#define CE1_INSN_GRADUATED		1
-#define CE1_LPSC_GRADUATED		2
-#define CE1_S_GRADUATED			3
-#define CE1_SC_GRADUATED		4
-#define CE1_FP_INSN_GRADUATED		5
-#define CE1_QW_WB_PRIMARY		6
-#define CE1_TLB_REFILL			7
-#define CE1_BRANCH_MISSPREDICTED	8
-#define CE1_DCACHE_MISS			9
-#define CE1_SCACHE_D_MISSES		10
-#define CE1_SCACHE_D_WAY_MISSPREDICTED	11
-#define CE1_EXT_INTERVENTION_HITS	12
-#define CE1_EXT_INVALIDATE_REQ		13
-#define CE1_SP_HINT_TO_CEXCL_SC_BLOCKS	14
-#define CE1_SP_HINT_TO_SHARED_SC_BLOCKS	15
-
-/*
- * These flags define in which privilege mode the counters count events
- */
-#define CEB_USER	8	/* Count events in user mode, EXL = ERL = 0 */
-#define CEB_SUPERVISOR	4	/* Count events in supvervisor mode EXL = ERL = 0 */
-#define CEB_KERNEL	2	/* Count events in kernel mode EXL = ERL = 0 */
-#define CEB_EXL		1	/* Count events with EXL = 1, ERL = 0 */
 
 #ifndef __ASSEMBLY__
 
@@ -756,10 +707,10 @@ do {									\
  */
 #define __read_64bit_c0_split(source, sel)				\
 ({									\
-	unsigned long long val;						\
-	unsigned long flags;						\
+	unsigned long long __val;					\
+	unsigned long __flags;						\
 									\
-	local_irq_save(flags);						\
+	local_irq_save(__flags);					\
 	if (sel == 0)							\
 		__asm__ __volatile__(					\
 			".set\tmips64\n\t"				\
@@ -768,7 +719,7 @@ do {									\
 			"dsrl\t%M0, %M0, 32\n\t"			\
 			"dsrl\t%L0, %L0, 32\n\t"			\
 			".set\tmips0"					\
-			: "=r" (val));					\
+			: "=r" (__val));				\
 	else								\
 		__asm__ __volatile__(					\
 			".set\tmips64\n\t"				\
@@ -777,17 +728,17 @@ do {									\
 			"dsrl\t%M0, %M0, 32\n\t"			\
 			"dsrl\t%L0, %L0, 32\n\t"			\
 			".set\tmips0"					\
-			: "=r" (val));					\
-	local_irq_restore(flags);					\
+			: "=r" (__val));				\
+	local_irq_restore(__flags);					\
 									\
-	val;								\
+	__val;								\
 })
 
 #define __write_64bit_c0_split(source, sel, val)			\
 do {									\
-	unsigned long flags;						\
+	unsigned long __flags;						\
 									\
-	local_irq_save(flags);						\
+	local_irq_save(__flags);					\
 	if (sel == 0)							\
 		__asm__ __volatile__(					\
 			".set\tmips64\n\t"				\
@@ -808,7 +759,7 @@ do {									\
 			"dmtc0\t%L0, " #source ", " #sel "\n\t"		\
 			".set\tmips0"					\
 			: : "r" (val));					\
-	local_irq_restore(flags);					\
+	local_irq_restore(__flags);					\
 } while (0)
 
 #define read_c0_index()		__read_32bit_c0_register($0, 0)
@@ -825,6 +776,9 @@ do {									\
 
 #define read_c0_context()	__read_ulong_c0_register($4, 0)
 #define write_c0_context(val)	__write_ulong_c0_register($4, 0, val)
+
+#define read_c0_userlocal()	__read_ulong_c0_register($4, 2)
+#define write_c0_userlocal(val)	__write_ulong_c0_register($4, 2, val)
 
 #define read_c0_pagemask()	__read_32bit_c0_register($5, 0)
 #define write_c0_pagemask(val)	__write_32bit_c0_register($5, 0, val)
@@ -1348,10 +1302,39 @@ static inline void tlb_probe(void)
 
 static inline void tlb_read(void)
 {
+#if MIPS34K_MISSED_ITLB_WAR
+	int res = 0;
+
+	__asm__ __volatile__(
+	"	.set	push					\n"
+	"	.set	noreorder				\n"
+	"	.set	noat					\n"
+	"	.set	mips32r2				\n"
+	"	.word	0x41610001		# dvpe $1	\n"
+	"	move	%0, $1					\n"
+	"	ehb						\n"
+	"	.set	pop					\n"
+	: "=r" (res));
+
+	instruction_hazard();
+#endif
+
 	__asm__ __volatile__(
 		".set noreorder\n\t"
 		"tlbr\n\t"
 		".set reorder");
+
+#if MIPS34K_MISSED_ITLB_WAR
+	if ((res & _ULCAST_(1)))
+		__asm__ __volatile__(
+		"	.set	push				\n"
+		"	.set	noreorder			\n"
+		"	.set	noat				\n"
+		"	.set	mips32r2			\n"
+		"	.word	0x41600021	# evpe		\n"
+		"	ehb					\n"
+		"	.set	pop				\n");
+#endif
 }
 
 static inline void tlb_write_indexed(void)

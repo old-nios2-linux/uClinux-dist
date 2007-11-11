@@ -1,61 +1,75 @@
 /* vi: set sw=4 ts=4: */
 /*
- * Mini halt implementation for busybox
+ * Poweroff reboot and halt, oh my.
  *
- * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
+ * Copyright 2006 by Rob Landley <rob@landley.net>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under GPL version 2, see file LICENSE in this tarball for details.
  */
 
-#include <signal.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <getopt.h>
+#include "busybox.h"
 #include <sys/reboot.h>
 #include <config/autoconf.h>
-#include "busybox.h"
-#include "init_shared.h"
 
-#define OPT_DELAY 1
-#define OPT_FORCE 2
-
-extern int halt_main(int argc, char **argv)
+int halt_main(int argc, char *argv[]);
+int halt_main(int argc, char *argv[])
 {
-	unsigned long opt;
-	char *delay; /* delay in seconds before halting */
-
-	opt = bb_getopt_ulflags(argc, argv, "d:f", &delay);
-	if (opt & OPT_DELAY) {
-		sleep(atoi(delay));
-	}
+	static const int magic[] = {
+#ifdef RB_HALT_SYSTEM
+RB_HALT_SYSTEM,
+#elif defined RB_HALT
+RB_HALT,
+#endif
+#ifdef RB_POWER_OFF
+RB_POWER_OFF,
+#elif defined RB_POWERDOWN
+RB_POWERDOWN,
+#endif
+RB_AUTOBOOT
+	};
 #ifdef CONFIG_USER_FLATFSD_FLATFSD
-	if (!(opt & OPT_FORCE)) {
+	static const char *flatfsd[] = {
+		"exec /bin/flatfsd -H",
+		"exec /bin/flatfsd -H",
+		"exec /bin/flatfsd -b",
+	};
+#endif
+	static const int signals[] = { SIGUSR1, SIGUSR2, SIGTERM };
+
+	char *delay;
+	int which, flags, rc = 1;
+
+	/* Figure out which applet we're running */
+	for (which = 0; "hpr"[which] != *applet_name; which++);
+
+	/* Parse and handle arguments */
+	flags = getopt32(argc, argv, "d:nf", &delay);
+	if (flags & 1) sleep(xatou(delay));
+	if (!(flags & 2)) sync();
+#ifdef CONFIG_USER_FLATFSD_FLATFSD
+	if (!(flags & 4)) {
 		/* Ask flatfsd to halt us safely */
-		if (system("exec /bin/flatfsd -H") != -1) {
+		if (system(flatfsd[which]) != -1) {
 			exit(0);
 		}
 	}
 #endif
 
-#ifndef CONFIG_INIT
-#ifndef RB_HALT_SYSTEM
-#define RB_HALT_SYSTEM		0xcdef0123
-#endif
-	return(bb_shutdown_system(RB_HALT_SYSTEM));
-#else
-	return kill_init(SIGUSR1);
-#endif
+	/* Perform action. */
+	if (ENABLE_INIT && !(flags & 4)) {
+		if (ENABLE_FEATURE_INITRD) {
+			pid_t *pidlist = find_pid_by_name("linuxrc");
+			if (pidlist[0] > 0)
+				rc = kill(pidlist[0], signals[which]);
+			if (ENABLE_FEATURE_CLEAN_UP)
+				free(pidlist);
+		}
+		if (rc)
+			rc = kill(1, signals[which]);
+	} else
+		rc = reboot(magic[which]);
+
+	if (rc)
+		bb_error_msg("no");
+	return rc;
 }

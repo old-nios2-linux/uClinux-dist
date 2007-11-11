@@ -2942,6 +2942,3 @@ problems are obscure and so are the work-arounds.
   - On some systems, using LINEAR and COMPACT or LBA32 and COMPACT together 
     leads to a boot failure. The exact circumstances under which this 
     happens are still unknown. 
-  - If the kernel crashes after booting on a multi-processor system, LILO 
-    may have overwritten data structures set up by the BIOS. Try the option  
-    LARGE_EBDA  in this case. 

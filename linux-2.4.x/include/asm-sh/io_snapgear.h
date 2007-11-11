@@ -14,7 +14,7 @@
 
 #include <asm/irq.h>
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 /*
  * The external interrupt lines, these take up ints 0 - 15 inclusive
  * depending on the priority for the interrupt.  In fact the priority

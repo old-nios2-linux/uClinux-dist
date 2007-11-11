@@ -86,17 +86,17 @@ fix_conf_files()
 	replace_line CONFIG_LIBCDIR= "CONFIG_LIBCDIR=$LIBCDIR"    .config
 
 	replace_line CONFIG_VENDOR "#define CONFIG_VENDOR \"$VENDOR\"" \
-			 config/autoconf.h
+		 autoconf.h
 	replace_line CONFIG_PRODUCT "#define CONFIG_PRODUCT \"$PRODUCT\"" \
-			 config/autoconf.h
+		 autoconf.h
 	replace_line CONFIG_LINUXDIR "#define CONFIG_LINUXDIR \"$LINUXDIR\"" \
-			 config/autoconf.h
+		 autoconf.h
 	replace_line CONFIG_LIBCDIR "#define CONFIG_LIBCDIR \"$LIBCDIR\"" \
-			 config/autoconf.h
+		 autoconf.h
 	replace_line VENDORS_AUTOCONF_INCLUDED \
-			 "#define VENDORS_AUTOCONF_INCLUDED" config/autoconf.h
+		 "#define VENDORS_AUTOCONF_INCLUDED" autoconf.h
 	replace_line "#undef AUTOCONF_INCLUDED" "#undef AUTOCONF_INCLUDED" \
-			 config/autoconf.h
+		 autoconf.h
 
 	replace_line OLD_VENDOR   "OLD_VENDOR=\"$VENDOR\""   ./.oldconfig
 	replace_line OLD_PRODUCT  "OLD_PRODUCT=\"$PRODUCT\"" ./.oldconfig
@@ -225,17 +225,23 @@ if [ "$PASS" != "final" ]; then
 
 	if [ ! -f $LINUXDIR/.config ] || var_isset CONFIG_DEFAULTS_OVERRIDE; then
 		if [ ! -f "vendors/$VENDOR/$PRODUCT/config.$LINUXDIR" ]; then
-			echo; echo; echo; echo
-			echo "*********************** NOTICE ****************************"
-			echo "There is no preset config for $LINUXDIR on platform $VENDOR/$PRODUCT." 
-			echo "If you choose to continue you will have to setup a linux"
-			echo "config from scratch which is a very complex task."
-			echo "You will find it easier if you can copy a config.$LINUXDIR"
-			echo "from another platform that is similar."
-			echo
-			echo "If you know what you are doing press <ENTER> otherwise"
-			echo "Type ^C to abort."
-			read dummy
+			ARCH=$(echo -e "e:\\n\\t@echo \$(ARCH)\\ninclude config.arch" | \
+			       ROOTDIR=$PWD make --no-print-directory -s -f - 2>/dev/null)
+			if [ ! -f "$LINUXDIR/arch/$ARCH/configs/${PRODUCT}_defconfig" ]; then
+				echo; echo; echo; echo
+				echo "*********************** NOTICE ****************************"
+				echo "There is no preset config for $LINUXDIR on platform $VENDOR/$PRODUCT." 
+				echo "If you choose to continue you will have to setup a linux"
+				echo "config from scratch which is a very complex task."
+				echo "You will find it easier if you can copy a config.$LINUXDIR"
+				echo "from another platform that is similar."
+				echo
+				echo "If you know what you are doing press <ENTER> otherwise"
+				echo "Type ^C to abort."
+				read dummy
+			else
+				cp "$LINUXDIR/arch/$ARCH/configs/${PRODUCT}_defconfig" $LINUXDIR/.config
+			fi
 		else
 			cp "vendors/$VENDOR/$PRODUCT/config.$LINUXDIR" $LINUXDIR/.config
 		fi

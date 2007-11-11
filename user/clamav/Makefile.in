@@ -29,7 +29,8 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 
 
 srcdir = @srcdir@
@@ -58,12 +59,18 @@ target_triplet = @target@
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/clamav-config.h.in \
 	$(srcdir)/clamav-config.in $(srcdir)/libclamav.pc.in \
-	$(top_srcdir)/configure $(top_srcdir)/docs/man/clamd.8.in \
+	$(top_srcdir)/configure \
+	$(top_srcdir)/docs/man/clamav-milter.8.in \
+	$(top_srcdir)/docs/man/clamconf.1.in \
+	$(top_srcdir)/docs/man/clamd.8.in \
 	$(top_srcdir)/docs/man/clamd.conf.5.in \
+	$(top_srcdir)/docs/man/clamdscan.1.in \
+	$(top_srcdir)/docs/man/clamscan.1.in \
 	$(top_srcdir)/docs/man/freshclam.1.in \
-	$(top_srcdir)/docs/man/freshclam.conf.5.in AUTHORS COPYING \
-	ChangeLog INSTALL NEWS TODO config.guess config.sub depcomp \
-	install-sh ltmain.sh missing mkinstalldirs
+	$(top_srcdir)/docs/man/freshclam.conf.5.in \
+	$(top_srcdir)/docs/man/sigtool.1.in AUTHORS COPYING ChangeLog \
+	INSTALL NEWS config.guess config.sub depcomp install-sh \
+	ltmain.sh missing mkinstalldirs
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
@@ -74,9 +81,11 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno configure.status.lineno
 mkinstalldirs = $(SHELL) $(top_srcdir)/mkinstalldirs
 CONFIG_HEADER = clamav-config.h
-CONFIG_CLEAN_FILES = clamav-config libclamav.pc docs/man/clamd.8 \
-	docs/man/clamd.conf.5 docs/man/freshclam.1 \
-	docs/man/freshclam.conf.5
+CONFIG_CLEAN_FILES = clamav-config libclamav.pc \
+	docs/man/clamav-milter.8 docs/man/clamconf.1 docs/man/clamd.8 \
+	docs/man/clamd.conf.5 docs/man/clamdscan.1 docs/man/clamscan.1 \
+	docs/man/freshclam.1 docs/man/freshclam.conf.5 \
+	docs/man/sigtool.1
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkgconfigdir)"
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
 SCRIPTS = $(bin_SCRIPTS)
@@ -111,10 +120,10 @@ GZIP_ENV = --best
 distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
-ADDITIONAL_LIBS = @ADDITIONAL_LIBS@
 AMDEP_FALSE = @AMDEP_FALSE@
 AMDEP_TRUE = @AMDEP_TRUE@
 AMTAR = @AMTAR@
+AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -131,6 +140,10 @@ CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
 CLAMD_LIBS = @CLAMD_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CXX = @CXX@
+CXXCPP = @CXXCPP@
+CXXDEPMODE = @CXXDEPMODE@
+CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DBDIR = @DBDIR@
 DEFS = @DEFS@
@@ -141,6 +154,8 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
+F77 = @F77@
+FFLAGS = @FFLAGS@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
 GETENT = @GETENT@
 GREP = @GREP@
@@ -171,14 +186,20 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 RANLIB = @RANLIB@
+SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+THREAD_LIBS = @THREAD_LIBS@
 TH_SAFE = @TH_SAFE@
 VERSION = @VERSION@
 ac_ct_CC = @ac_ct_CC@
+ac_ct_CXX = @ac_ct_CXX@
+ac_ct_F77 = @ac_ct_F77@
 am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
 am__fastdepCC_TRUE = @am__fastdepCC_TRUE@
+am__fastdepCXX_FALSE = @am__fastdepCXX_FALSE@
+am__fastdepCXX_TRUE = @am__fastdepCXX_TRUE@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -224,8 +245,8 @@ target_alias = @target_alias@
 target_cpu = @target_cpu@
 target_os = @target_os@
 target_vendor = @target_vendor@
-SUBDIRS = libclamav clamscan clamd clamdscan freshclam sigtool database docs etc clamav-milter
-EXTRA_DIST = FAQ contrib test examples BUGS shared libclamav.pc.in UPGRADE
+SUBDIRS = libclamav clamscan clamd clamdscan freshclam sigtool clamconf database docs etc clamav-milter
+EXTRA_DIST = FAQ contrib test examples BUGS shared libclamav.pc.in UPGRADE COPYING.nsis
 bin_SCRIPTS = clamav-config
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libclamav.pc
@@ -287,13 +308,23 @@ clamav-config: $(top_builddir)/config.status $(srcdir)/clamav-config.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 libclamav.pc: $(top_builddir)/config.status $(srcdir)/libclamav.pc.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
+docs/man/clamav-milter.8: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamav-milter.8.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+docs/man/clamconf.1: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamconf.1.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 docs/man/clamd.8: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamd.8.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 docs/man/clamd.conf.5: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamd.conf.5.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
+docs/man/clamdscan.1: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamdscan.1.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+docs/man/clamscan.1: $(top_builddir)/config.status $(top_srcdir)/docs/man/clamscan.1.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 docs/man/freshclam.1: $(top_builddir)/config.status $(top_srcdir)/docs/man/freshclam.1.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 docs/man/freshclam.conf.5: $(top_builddir)/config.status $(top_srcdir)/docs/man/freshclam.conf.5.in
+	cd $(top_builddir) && $(SHELL) ./config.status $@
+docs/man/sigtool.1: $(top_builddir)/config.status $(top_srcdir)/docs/man/sigtool.1.in
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 install-binSCRIPTS: $(bin_SCRIPTS)
 	@$(NORMAL_INSTALL)

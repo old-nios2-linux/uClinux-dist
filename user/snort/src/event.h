@@ -34,6 +34,8 @@
 #include <sys/time.h>
 #endif
 
+#include "snort_packet_header.h"
+
 typedef struct _Event
 {
     u_int32_t sig_generator;   /* which part of snort generated the alert? */
@@ -45,7 +47,7 @@ typedef struct _Event
     u_int32_t event_reference; /* reference to other events that have gone off,
                                 * such as in the case of tagged packets...
                                 */
-    struct timeval ref_time;   /* reference time for the event reference */
+    struct pcap_timeval ref_time;   /* reference time for the event reference */
 
     /* Don't add to this structure because this is the serialized data
      * struct for unified logging.

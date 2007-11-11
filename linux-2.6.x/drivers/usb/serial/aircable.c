@@ -9,7 +9,7 @@
  * The device works as an standard CDC device, it has 2 interfaces, the first
  * one is for firmware access and the second is the serial one.
  * The protocol is very simply, there are two posibilities reading or writing.
- * When writting the first urb must have a Header that starts with 0x20 0x29 the
+ * When writing the first urb must have a Header that starts with 0x20 0x29 the
  * next two bytes must say how much data will be sended.
  * When reading the process is almost equal except that the header starts with
  * 0x00 0x20.
@@ -18,7 +18,7 @@
  * buffer: The First and Second byte is used for a Header, the Third and Fourth
  * tells the  device the amount of information the package holds.
  * Packages are 60 bytes long Header Stuff.
- * When writting to the device the first two bytes of the header are 0x20 0x29
+ * When writing to the device the first two bytes of the header are 0x20 0x29
  * When reading the bytes are 0x00 0x20, or 0x00 0x10, there is an strange
  * situation, when too much data arrives to the device because it sends the data
  * but with out the header. I will use a simply hack to override this situation,
@@ -92,6 +92,7 @@ struct aircable_private {
 	struct circ_buf *rx_buf;	/* read buffer */
 	int rx_flags;			/* for throttilng */
 	struct work_struct rx_work;	/* work cue for the receiving line */
+	struct usb_serial_port *port;	/* USB port with which associated */
 };
 
 /* Private methods */
@@ -208,6 +209,7 @@ static void aircable_send(struct usb_serial_port *port)
 	int count, result;
 	struct aircable_private *priv = usb_get_serial_port_data(port);
 	unsigned char* buf;
+	u16 *dbuf;
 	dbg("%s - port %d", __FUNCTION__, port->number);
 	if (port->write_urb_busy)
 		return;
@@ -225,8 +227,8 @@ static void aircable_send(struct usb_serial_port *port)
 
 	buf[0] = TX_HEADER_0;
 	buf[1] = TX_HEADER_1;
-	buf[2] = (unsigned char)count;
-	buf[3] = (unsigned char)(count >> 8);
+	dbuf = (u16 *)&buf[2];
+	*dbuf = cpu_to_le16((u16)count);
 	serial_buf_get(priv->tx_buf,buf + HCI_HEADER_LENGTH, MAX_HCI_FRAMESIZE);
 
 	memcpy(port->write_urb->transfer_buffer, buf,
@@ -251,10 +253,11 @@ static void aircable_send(struct usb_serial_port *port)
 	schedule_work(&port->work);
 }
 
-static void aircable_read(void *params)
+static void aircable_read(struct work_struct *work)
 {
-	struct usb_serial_port *port = params;
-	struct aircable_private *priv = usb_get_serial_port_data(port);
+	struct aircable_private *priv =
+		container_of(work, struct aircable_private, rx_work);
+	struct usb_serial_port *port = priv->port;
 	struct tty_struct *tty;
 	unsigned char *data;
 	int count;
@@ -270,8 +273,11 @@ static void aircable_read(void *params)
 	 */
 	tty = port->tty;
 
-	if (!tty)
+	if (!tty) {
 		schedule_work(&priv->rx_work);
+		err("%s - No tty available", __FUNCTION__);
+		return ;
+	}
 
 	count = min(64, serial_buf_data_avail(priv->rx_buf));
 
@@ -305,9 +311,7 @@ static int aircable_probe(struct usb_serial *serial,
 
 	for (i = 0; i < iface_desc->desc.bNumEndpoints; i++) {
 		endpoint = &iface_desc->endpoint[i].desc;
-		if (((endpoint->bEndpointAddress & 0x80) == 0x00) &&
-			((endpoint->bmAttributes & 3) == 0x02)) {
-			/* we found our bulk out endpoint */
+		if (usb_endpoint_is_bulk_out(endpoint)) {
 			dbg("found bulk out on endpoint %d", i);
 			++num_bulk_out;
 		}
@@ -348,7 +352,8 @@ static int aircable_attach (struct usb_serial *serial)
 	}
 
 	priv->rx_flags &= ~(THROTTLED | ACTUALLY_THROTTLED);
-	INIT_WORK(&priv->rx_work, aircable_read, port);
+	priv->port = port;
+	INIT_WORK(&priv->rx_work, aircable_read);
 
 	usb_set_serial_port_data(serial->port[0], priv);
 
@@ -406,12 +411,13 @@ static int aircable_write(struct usb_serial_port *port,
 static void aircable_write_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
+	int status = urb->status;
 	int result;
 
-	dbg("%s - urb->status: %d", __FUNCTION__ , urb->status);
+	dbg("%s - urb status: %d", __FUNCTION__ , status);
 
 	/* This has been taken from cypress_m8.c cypress_write_int_callback */
-	switch (urb->status) {
+	switch (status) {
 		case 0:
 			/* success */
 			break;
@@ -420,17 +426,17 @@ static void aircable_write_bulk_callback(struct urb *urb)
 		case -ESHUTDOWN:
 			/* this urb is terminated, clean up */
 			dbg("%s - urb shutting down with status: %d",
-			    __FUNCTION__, urb->status);
+			    __FUNCTION__, status);
 			port->write_urb_busy = 0;
 			return;
 		default:
 			/* error in the urb, so we have to resubmit it */
 			dbg("%s - Overflow in write", __FUNCTION__);
 			dbg("%s - nonzero write bulk status received: %d",
-			    __FUNCTION__, urb->status);
+			    __FUNCTION__, status);
 			port->write_urb->transfer_buffer_length = 1;
 			port->write_urb->dev = port->serial->dev;
-			result = usb_submit_urb(port->write_urb, GFP_KERNEL);
+			result = usb_submit_urb(port->write_urb, GFP_ATOMIC);
 			if (result)
 				dev_err(&urb->dev->dev,
 					"%s - failed resubmitting write urb, error %d\n",
@@ -452,16 +458,17 @@ static void aircable_read_bulk_callback(struct urb *urb)
 	unsigned long no_packages, remaining, package_length, i;
 	int result, shift = 0;
 	unsigned char *temp;
+	int status = urb->status;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
-	if (urb->status) {
-		dbg("%s - urb->status = %d", __FUNCTION__, urb->status);
+	if (status) {
+		dbg("%s - urb status = %d", __FUNCTION__, status);
 		if (!port->open_count) {
 			dbg("%s - port is closed, exiting.", __FUNCTION__);
 			return;
 		}
-		if (urb->status == -EPROTO) {
+		if (status == -EPROTO) {
 			dbg("%s - caught -EPROTO, resubmitting the urb",
 			    __FUNCTION__);
 			usb_fill_bulk_urb(port->read_urb, port->serial->dev,
@@ -515,7 +522,7 @@ static void aircable_read_bulk_callback(struct urb *urb)
 					package_length - shift);
 			}
 		}
-		aircable_read(port);
+		aircable_read(&priv->rx_work);
 	}
 
 	/* Schedule the next read _if_ we are still open */
@@ -568,8 +575,20 @@ static void aircable_unthrottle(struct usb_serial_port *port)
 		schedule_work(&priv->rx_work);
 }
 
+static struct usb_driver aircable_driver = {
+	.name =		"aircable",
+	.probe =	usb_serial_probe,
+	.disconnect =	usb_serial_disconnect,
+	.id_table =	id_table,
+	.no_dynamic_id =	1,
+};
+
 static struct usb_serial_driver aircable_device = {
-	.description =		"aircable",
+	.driver = {
+		.owner =	THIS_MODULE,
+		.name =		"aircable",
+	},
+	.usb_driver = 		&aircable_driver,
 	.id_table = 		id_table,
 	.num_ports =		1,
 	.attach =		aircable_attach,
@@ -581,13 +600,6 @@ static struct usb_serial_driver aircable_device = {
 	.read_bulk_callback =	aircable_read_bulk_callback,
 	.throttle =		aircable_throttle,
 	.unthrottle =		aircable_unthrottle,
-};
-
-static struct usb_driver aircable_driver = {
-	.name =		"aircable",
-	.probe =	usb_serial_probe,
-	.disconnect =	usb_serial_disconnect,
-	.id_table =	id_table,
 };
 
 static int __init aircable_init (void)

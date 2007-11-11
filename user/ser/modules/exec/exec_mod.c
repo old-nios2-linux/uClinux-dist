@@ -1,9 +1,9 @@
 /*
  * execution module
  *
- * $Id: exec_mod.c,v 1.10 2003/06/20 14:23:25 jiri Exp $
+ * $Id: exec_mod.c,v 1.11 2004/08/24 08:58:29 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

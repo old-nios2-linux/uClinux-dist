@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: bjm.c,v 1.9 2000/04/10 22:22:31 wakkerma Exp $
+ *	$Id: bjm.c,v 1.16 2005/08/03 11:27:30 roland Exp $
  */
 #include "defs.h"
 
@@ -39,12 +39,7 @@
 #include <sys/wait.h>
 #include <sys/resource.h>
 #include <sys/utsname.h>
-#ifdef HAVE_SYS_USER_H
 #include <sys/user.h>
-#else
-#undef PTRACE_SYSCALL
-#include <linux/user.h>
-#endif
 #include <sys/syscall.h>
 #include <signal.h>
 
@@ -81,8 +76,7 @@ struct module_info
 	long usecount;
 };
 
-#ifdef __NR_query_module
-static struct xlat which[] = {
+static const struct xlat which[] = {
 	{ 0,		"0"		},
 	{ QM_MODULES,	"QM_MODULES"	},
 	{ QM_DEPS,	"QM_DEPS"	},
@@ -91,26 +85,18 @@ static struct xlat which[] = {
 	{ QM_INFO,	"QM_INFO"	},
 	{ 0,		NULL		},
 };
-#endif
 
-#ifdef __NR_query_module
-static struct xlat modflags[] = {
+static const struct xlat modflags[] = {
 	{ MOD_UNINITIALIZED,	"MOD_UNINITIALIZED"	},
 	{ MOD_RUNNING,		"MOD_RUNNING"		},
 	{ MOD_DELETED,		"MOD_DELETED"		},
 	{ MOD_AUTOCLEAN,	"MOD_AUTOCLEAN"		},
 	{ MOD_VISITED,		"MOD_VISITED"		},
-#ifdef MOD_USER_ONCE
 	{ MOD_USED_ONCE,	"MOD_USED_ONCE"		},
-#endif
-#ifdef MOD_JUST_FREED
 	{ MOD_JUST_FREED,	"MOD_JUST_FREED"	},
-#endif
 	{ 0,			NULL			},
 };
-#endif /* __NR_query_module */
 
-#ifdef __NR_query_module
 int
 sys_query_module(tcp)
 struct tcb *tcp;
@@ -132,7 +118,7 @@ struct tcb *tcp;
 			size_t			ret;
 			umove(tcp, tcp->u_arg[2], &mi);
 			tprintf("{address=%#lx, size=%lu, flags=", mi.addr, mi.size);
-			printflags(modflags, mi.flags);
+			printflags(modflags, mi.flags, "MOD_???");
 			tprintf(", usecount=%lu}", mi.usecount);
 			umove(tcp, tcp->u_arg[4], &ret);
 			tprintf(", %Zu", ret);
@@ -149,7 +135,7 @@ struct tcb *tcp;
 				size_t	idx;
 
 				if (data==NULL) {
-					fprintf(stderr, "sys_query_module: No memory\n");
+					fprintf(stderr, "out of memory\n");
 					tprintf(" /* %Zu entries */ ", ret);
 				} else {
 					umoven(tcp, tcp->u_arg[2], tcp->u_arg[3], data);
@@ -161,7 +147,7 @@ struct tcb *tcp;
 					}
 					free(data);
 				}
-			} else 
+			} else
 				tprintf(" /* %Zu entries */ ", ret);
 			tprintf("}, %Zu", ret);
 		} else if (tcp->u_arg[1]==QM_SYMBOLS) {
@@ -174,7 +160,7 @@ struct tcb *tcp;
 				size_t			idx;
 
 				if (data==NULL) {
-					fprintf(stderr, "sys_query_module: No memory\n");
+					fprintf(stderr, "out of memory\n");
 					tprintf(" /* %Zu entries */ ", ret);
 				} else {
 					umoven(tcp, tcp->u_arg[2], tcp->u_arg[3], data);
@@ -194,7 +180,6 @@ struct tcb *tcp;
 	}
 	return 0;
 }
-#endif
 
 int
 sys_create_module(tcp)
@@ -212,10 +197,10 @@ sys_init_module(tcp)
 struct tcb *tcp;
 {
 	if (entering(tcp)) {
-		printpath(tcp, tcp->u_arg[0]);
-		tprintf(", %#lx", tcp->u_arg[1]);
+		tprintf("%#lx, ", tcp->u_arg[0]);
+		tprintf("%lu, ", tcp->u_arg[1]);
+		printstr(tcp, tcp->u_arg[2], -1);
 	}
 	return 0;
 }
 #endif /* LINUX */
-

@@ -31,6 +31,7 @@
 #include <linux/module.h>
 #include <linux/kexec.h>
 #include <linux/pfn.h>
+#include <linux/swap.h>
 
 #include <asm/e820.h>
 #include <asm/setup.h>
@@ -97,15 +98,8 @@ unsigned long node_memmap_size_bytes(int nid, unsigned long start_pfn,
 #endif
 
 extern unsigned long find_max_low_pfn(void);
-extern void find_max_pfn(void);
 extern void add_one_highpage_init(struct page *, int, int);
-
-extern struct e820map e820;
-extern unsigned long init_pg_tables_end;
 extern unsigned long highend_pfn, highstart_pfn;
-extern unsigned long max_low_pfn;
-extern unsigned long totalram_pages;
-extern unsigned long totalhigh_pages;
 
 #define LARGE_PAGE_BYTES (PTRS_PER_PTE * PAGE_SIZE)
 
@@ -168,7 +162,7 @@ static void __init allocate_pgdat(int nid)
 	if (nid && node_has_online_mem(nid))
 		NODE_DATA(nid) = (pg_data_t *)node_remap_start_vaddr[nid];
 	else {
-		NODE_DATA(nid) = (pg_data_t *)(__va(min_low_pfn << PAGE_SHIFT));
+		NODE_DATA(nid) = (pg_data_t *)(pfn_to_kaddr(min_low_pfn));
 		min_low_pfn += PFN_UP(sizeof(pg_data_t));
 	}
 }
@@ -361,7 +355,9 @@ void __init zone_sizes_init(void)
 	max_zone_pfns[ZONE_DMA] =
 		virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
 	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+#ifdef CONFIG_HIGHMEM
 	max_zone_pfns[ZONE_HIGHMEM] = highend_pfn;
+#endif
 
 	/* If SRAT has not registered memory, register it now */
 	if (find_max_pfn_with_active_regions() == 0) {
@@ -405,3 +401,31 @@ void __init set_highmem_pages_init(int bad_ppro)
 	totalram_pages += totalhigh_pages;
 #endif
 }
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+int paddr_to_nid(u64 addr)
+{
+	int nid;
+	unsigned long pfn = PFN_DOWN(addr);
+
+	for_each_node(nid)
+		if (node_start_pfn[nid] <= pfn &&
+		    pfn < node_end_pfn[nid])
+			return nid;
+
+	return -1;
+}
+
+/*
+ * This function is used to ask node id BEFORE memmap and mem_section's
+ * initialization (pfn_to_nid() can't be used yet).
+ * If _PXM is not defined on ACPI's DSDT, node id must be found by this.
+ */
+int memory_add_physaddr_to_nid(u64 addr)
+{
+	int nid = paddr_to_nid(addr);
+	return (nid >= 0) ? nid : 0;
+}
+
+EXPORT_SYMBOL_GPL(memory_add_physaddr_to_nid);
+#endif

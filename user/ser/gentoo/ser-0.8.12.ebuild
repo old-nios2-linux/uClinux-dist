@@ -1,6 +1,6 @@
 # Copyright 1999-2003 Fraunhofer Fokus
 # Distributed under the terms of the GNU General Public License v2
-# $Header: /cvsroot/ser/sip_router/gentoo/Attic/ser-0.8.12.ebuild,v 1.1.2.1 2003/11/14 15:55:58 andrei Exp $
+# $Header: /cvsroot/ser/sip_router/gentoo/ser-0.8.12.ebuild,v 1.1.4.1 2005/06/23 17:03:28 andrei Exp $
 
 DESCRIPTION="SIP Express Router"
 

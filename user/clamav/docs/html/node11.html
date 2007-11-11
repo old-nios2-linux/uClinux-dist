@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>Requirements</TITLE>
-<META NAME="description" CONTENT="Requirements">
+<TITLE>Installing on shell account</TITLE>
+<META NAME="description" CONTENT="Installing on shell account">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -21,75 +21,61 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="next" HREF="node12.html">
 <LINK REL="previous" HREF="node10.html">
-<LINK REL="up" HREF="node10.html">
+<LINK REL="up" HREF="node9.html">
 <LINK REL="next" HREF="node12.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html724"
+<A NAME="tex2html335"
   HREF="node12.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html720"
-  HREF="node10.html">
+<A NAME="tex2html331"
+  HREF="node9.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html714"
+<A NAME="tex2html325"
   HREF="node10.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html722"
+<A NAME="tex2html333"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html725"
-  HREF="node12.html">Installing on a shell</A>
-<B> Up:</B> <A NAME="tex2html721"
-  HREF="node10.html">Installation</A>
-<B> Previous:</B> <A NAME="tex2html715"
-  HREF="node10.html">Installation</A>
- &nbsp <B>  <A NAME="tex2html723"
+<B> Next:</B> <A NAME="tex2html336"
+  HREF="node12.html">Adding new system user</A>
+<B> Up:</B> <A NAME="tex2html332"
+  HREF="node9.html">Installation</A>
+<B> Previous:</B> <A NAME="tex2html326"
+  HREF="node10.html">Requirements</A>
+ &nbsp <B>  <A NAME="tex2html334"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H2><A NAME="SECTION00041000000000000000">
-Requirements</A>
+<H2><A NAME="SECTION00042000000000000000">
+Installing on shell account</A>
 </H2>
-    The following elements are required to compile ClamAV:
-    
-<UL>
-<LI>zlib and zlib-devel packages
-</LI>
-<LI>gcc compiler suite (both 2.9x and 3.x are supported)
-    
-</LI>
-</UL>
-    The following packages are optional but <B>highly recommended</B>:
-    
-<UL>
-<LI>bzip2 and bzip2-devel library
-</LI>
-<LI>GNU MP 3
-<BR>
-It's very important to install the GMP package because it allows
-	<code>freshclam</code> to verify the digital signatures of the virus
-	databases. If freshclam was compiled without GMP support it will
-	display "SECURITY WARNING: NO SUPPORT FOR DIGITAL SIGNATURES" on every
-	update. You can download GNU MP at <TT><A NAME="tex2html28"
-  HREF="http://www.swox.com/gmp/">http://www.swox.com/gmp/</A></TT>
-<BR>
-A note for Solaris/SPARC users: you must set the <I>ABI</I> system
-	variable to 32 (e.g. <code>setenv ABI 32</code>) before running the
-	configuration script of GMP.
-    
-</LI>
-</UL>
+    To install ClamAV locally on an unprivileged shell account you need not
+    create any additional users or groups. Assuming your home directory is
+    <code>/home/gary</code> you should build it as follows:
+    <PRE>
+	$ ./configure --prefix=/home/gary/clamav --disable-clamav
+	$ make; make install
+</PRE>
+    To test your installation execute:
+    <PRE>
+	$ ~/clamav/bin/freshclam
+	$ ~/clamav/bin/clamscan ~
+</PRE>
+    The <code>--disable-clamav</code> switch disables the check for existence of
+    the <I>clamav</I> user and group but <code>clamscan</code> would still require an
+    unprivileged account to work in a superuser mode.
 
 <P>
 <BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

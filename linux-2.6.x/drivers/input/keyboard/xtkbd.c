@@ -95,7 +95,7 @@ static int xtkbd_connect(struct serio *serio, struct serio_driver *drv)
 	xtkbd = kmalloc(sizeof(struct xtkbd), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!xtkbd || !input_dev)
-		goto fail;
+		goto fail1;
 
 	xtkbd->serio = serio;
 	xtkbd->dev = input_dev;
@@ -108,8 +108,7 @@ static int xtkbd_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.vendor  = 0x0001;
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &serio->dev;
-	input_dev->private = xtkbd;
+	input_dev->dev.parent = &serio->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP);
 	input_dev->keycode = xtkbd->keycode;
@@ -124,13 +123,17 @@ static int xtkbd_connect(struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open(serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
-	input_register_device(xtkbd->dev);
+	err = input_register_device(xtkbd->dev);
+	if (err)
+		goto fail3;
+
 	return 0;
 
- fail:	serio_set_drvdata(serio, NULL);
-	input_free_device(input_dev);
+ fail3:	serio_close(serio);
+ fail2:	serio_set_drvdata(serio, NULL);
+ fail1:	input_free_device(input_dev);
 	kfree(xtkbd);
 	return err;
 }
@@ -170,8 +173,7 @@ static struct serio_driver xtkbd_drv = {
 
 static int __init xtkbd_init(void)
 {
-	serio_register_driver(&xtkbd_drv);
-	return 0;
+	return serio_register_driver(&xtkbd_drv);
 }
 
 static void __exit xtkbd_exit(void)

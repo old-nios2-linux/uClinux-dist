@@ -1,9 +1,9 @@
 /*
  * Presence Agent, domain list
  *
- * $Id: dlist.h,v 1.1.4.1 2003/11/12 20:00:10 andrei Exp $
+ * $Id: dlist.h,v 1.4 2004/08/24 08:58:32 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -72,8 +72,6 @@ void print_all_pdomains(FILE* _f);
 /*
  * Called from timer
  */
-int timer_all_udomains(void);
 int timer_all_pdomains(void);
-
 
 #endif /* DLIST_H */

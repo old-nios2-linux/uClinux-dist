@@ -1,7 +1,7 @@
 /*
- * $Id: action.c,v 1.55 2003/10/03 07:19:41 andrei Exp $
+ * $Id: action.c,v 1.66 2004/11/30 16:28:23 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,8 @@
  *  2003-04-12  FORCE_RPORT_T added (andrei)
  *  2003-04-22  strip_tail added (jiri)
  *  2003-10-02  added SET_ADV_ADDR_T & SET_ADV_PORT_T (andrei)
+ *  2003-10-29  added FORCE_TCP_ALIAS_T (andrei)
+ *  2004-11-30  added FORCE_SEND_SOCKET_T (andrei)
  */
 
 
@@ -87,12 +89,12 @@ int do_action(struct action* a, struct sip_msg* msg)
 	int len;
 	int user;
 	struct sip_uri uri, next_hop;
-	struct sip_uri* u;
+	struct sip_uri *u;
 	unsigned short port;
 	int proto;
 
 	/* reset the value of error to E_UNSPEC so avoid unknowledgable
-	   functions to return with errror (status<0) and not setting it
+	   functions to return with error (status<0) and not setting it
 	   leaving there previous error; cache the previous value though
 	   for functions which want to process it */
 	prev_ser_error=ser_error;
@@ -119,7 +121,7 @@ int do_action(struct action* a, struct sip_msg* msg)
 #ifdef USE_TLS
 			else if (a->type==FORWARD_TLS_T) proto= PROTO_TLS;
 #endif
-			else proto=msg->rcv.proto;
+			else proto= PROTO_NONE;
 			if (a->p1_type==URIHOST_ST){
 				/*parse uri*/
 
@@ -150,36 +152,39 @@ int do_action(struct action* a, struct sip_msg* msg)
 							ret=E_UNSPEC;
 							goto error_fwd_uri;
 				}
-				switch(u->proto){
-					case PROTO_NONE:
-						proto=PROTO_UDP;
-						break;
-					case PROTO_UDP:
+				if (proto == PROTO_NONE){ /* only if proto not set get it
+											 from the uri */
+					switch(u->proto){
+						case PROTO_NONE:
+							proto=PROTO_UDP;
+							break;
+						case PROTO_UDP:
 #ifdef USE_TCP
-					case PROTO_TCP:
+						case PROTO_TCP:
 #endif
 #ifdef USE_TLS
-					case PROTO_TLS:
+						case PROTO_TLS:
 #endif
-						proto=u->proto;
-						break;
-					default:
-						LOG(L_ERR,"ERROR: do action: forward: bad uri"
-								" transport %d\n", u->proto);
-						ret=E_BAD_PROTO;
-						goto error_fwd_uri;
-				}
-#ifdef USE_TLS
-				if (u->secure){
-					if (u->proto==PROTO_UDP){
-						LOG(L_ERR, "ERROR: do_action: forward: secure uri"
-								" incompatible with transport %d\n", u->proto);
-						ret=E_BAD_PROTO;
-						goto error_fwd_uri;
+							proto=u->proto;
+							break;
+						default:
+							LOG(L_ERR,"ERROR: do action: forward: bad uri"
+									" transport %d\n", u->proto);
+							ret=E_BAD_PROTO;
+							goto error_fwd_uri;
 					}
-					proto=PROTO_TLS;
-				}
+#ifdef USE_TLS
+					if (u->secure){
+						if (u->proto==PROTO_UDP){
+							LOG(L_ERR, "ERROR: do_action: forward: secure uri"
+									" incompatible with transport %d\n", u->proto);
+							ret=E_BAD_PROTO;
+							goto error_fwd_uri;
+						}
+						proto=PROTO_TLS;
+					}
 #endif
+				}
 				/* create a temporary proxy*/
 				p=mk_proxy(&u->host, port, proto);
 				if (p==0){
@@ -194,6 +199,8 @@ int do_action(struct action* a, struct sip_msg* msg)
 				pkg_free(p);
 				if (ret>=0) ret=1;
 			}else if ((a->p1_type==PROXY_ST) && (a->p2_type==NUMBER_ST)){
+				if (proto==PROTO_NONE)
+					proto=msg->rcv.proto;
 				ret=forward_request(msg,(struct proxy_l*)a->p1.data, proto);
 				if (ret>=0) ret=1;
 			}else{
@@ -235,7 +242,7 @@ int do_action(struct action* a, struct sip_msg* msg)
 				p->tx_bytes+=msg->len;
 				if (a->type==SEND_T){
 					/*udp*/
-					send_sock=get_send_socket(to, PROTO_UDP);
+					send_sock=get_send_socket(msg, to, PROTO_UDP);
 					if (send_sock!=0){
 						ret=udp_send(send_sock, msg->buf, msg->len, to);
 					}else{
@@ -276,7 +283,8 @@ int do_action(struct action* a, struct sip_msg* msg)
 				break;
 			}
 			ret=append_branch( msg, a->p1.string, 
-				a->p1.string ? strlen(a->p1.string):0 );
+					   a->p1.string ? strlen(a->p1.string):0,
+					   0, 0, a->p2.number);
 			break;
 
 		/* jku begin: is_length_greater_than */
@@ -627,6 +635,43 @@ int do_action(struct action* a, struct sip_msg* msg)
 				break;
 			}
 			msg->set_global_port=*((str*)a->p1.data);
+			ret=1; /* continue processing */
+			break;
+#ifdef USE_TCP
+		case FORCE_TCP_ALIAS_T:
+			if ( msg->rcv.proto==PROTO_TCP
+#ifdef USE_TLS
+					|| msg->rcv.proto==PROTO_TLS
+#endif
+			   ){
+				
+				if (a->p1_type==NOSUBTYPE)	port=msg->via1->port;
+				else if (a->p1_type==NUMBER_ST) port=(int)a->p1.number;
+				else{
+					LOG(L_CRIT, "BUG: do_action: bad force_tcp_alias"
+							" port type %d\n", a->p1_type);
+					ret=E_BUG;
+					break;
+				}
+						
+				if (tcpconn_add_alias(msg->rcv.proto_reserved1, port,
+									msg->rcv.proto)!=0){
+					LOG(L_ERR, " ERROR: receive_msg: tcp alias failed\n");
+					ret=E_UNSPEC;
+					break;
+				}
+			}
+#endif
+			ret=1; /* continue processing */
+			break;
+		case FORCE_SEND_SOCKET_T:
+			if (a->p1_type!=SOCKETINFO_ST){
+				LOG(L_CRIT, "BUG: do_action: bad force_send_socket argument"
+						" type: %d\n", a->p1_type);
+				ret=E_BUG;
+				break;
+			}
+			msg->force_send_socket=(struct socket_info*)a->p1.data;
 			ret=1; /* continue processing */
 			break;
 		default:

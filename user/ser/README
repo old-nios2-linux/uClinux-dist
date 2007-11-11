@@ -1,4 +1,4 @@
-$Id: README,v 1.10 2003/01/05 20:14:56 jiri Exp $
+$Id: README,v 1.12 2004/12/16 17:46:44 andrei Exp $
 
 
              iptel.org SIP Express Router (ser)
@@ -10,7 +10,7 @@ I.   About SIP Express Router (ser)
 II.  Feature List
 III. About iptel.org
 IV.  Obtaining Help
-V.   Contact, Licencing and More Information
+V.   Contact, Licensing and More Information
 
 
  SIP Express Router (SER) is an industrial-strength, free VoIP 
@@ -90,13 +90,6 @@ To participate in the mailing list, subscribe at the following web address:
          http://mail.iptel.org/mailman/listinfo/serusers.
 Send your questions to 
          serusers@iptel.org. 
-
-If you are concerned about your privacy and do not wish your queries 
-to be posted and archived publicly, you may post to 
-                  serhelp@iptel.org. 
-E-mails to this address are only forwarded to iptel.org's ser development 
-team. However, as the team is quite busy you should not be surprised to 
-get replies with considerable delay. 
 
 V. Contact, Licensing and More Information
 

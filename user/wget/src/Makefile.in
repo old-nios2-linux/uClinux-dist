@@ -54,13 +54,13 @@ CPPFLAGS = @CPPFLAGS@
 DEFS     = @DEFS@ -DSYSTEM_WGETRC=\"$(sysconfdir)/wgetrc\" -DLOCALEDIR=\"$(localedir)\"
 CFLAGS   = @CFLAGS@
 LDFLAGS  = @LDFLAGS@
-LIBS     = @LIBS@
+LIBS     = @LIBS@ @LIBSSL@
 exeext   = @exeext@
 
-INCLUDES = -I. -I$(srcdir) @SSL_INCLUDES@
+INCLUDES = -I. -I$(srcdir)
 
 COMPILE = $(CC) $(INCLUDES) $(CPPFLAGS)  $(DEFS) $(CFLAGS)
-LINK    = @LIBTOOL@ --mode=link $(CC) $(CFLAGS) $(LDFLAGS) -o $@
+LINK    = $(CC) $(CFLAGS) $(LDFLAGS) -o $@
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 RM = rm -f
@@ -70,15 +70,16 @@ ETAGS = etags
 ALLOCA     = @ALLOCA@
 MD5_OBJ    = @MD5_OBJ@
 OPIE_OBJ   = @OPIE_OBJ@
+NTLM_OBJ   = @NTLM_OBJ@
 SSL_OBJ    = @SSL_OBJ@
 GETOPT_OBJ = @GETOPT_OBJ@
 
 OBJ = $(ALLOCA) cmpt$o connect$o convert$o cookies$o              \
       ftp$o ftp-basic$o ftp-ls$o $(OPIE_OBJ) $(GETOPT_OBJ) hash$o \
-      headers$o host$o html-parse$o html-url$o http$o init$o      \
-      log$o main$o $(MD5_OBJ) netrc$o progress$o rbuf$o recur$o   \
+      host$o html-parse$o html-url$o http$o $(NTLM_OBJ) init$o    \
+      log$o main$o $(MD5_OBJ) netrc$o progress$o ptimer$o recur$o \
       res$o retr$o safe-ctype$o snprintf$o $(SSL_OBJ) url$o       \
-      utils$o version$o
+      utils$o version$o xmalloc$o 
 
 .SUFFIXES:
 .SUFFIXES: .c .o ._c ._o
@@ -108,7 +109,18 @@ wget$(exeext): $(OBJ)
 ansi2knr: ansi2knr.o
 	$(CC) -o ansi2knr ansi2knr.o $(LIBS)
 
-$(OBJ): $(ANSI2KNR)
+# We make object files depend on every header.  Rather than attempt to
+# track dependencies, everything gets recompiled when a header
+# changes.  With a program of Wget's size this doesn't waste much
+# time, and it's a lot safer than attempting to get all the
+# dependencies right.
+
+$(OBJ): $(ANSI2KNR) \
+        config-post.h connect.h convert.h cookies.h ftp.h gen-md5.h \
+        getopt.h gnu-md5.h hash.h host.h html-parse.h http-ntlm.h   \
+        init.h log.h mswindows.h netrc.h options.h progress.h       \
+        ptimer.h recur.h res.h retr.h safe-ctype.h ssl.h sysdep.h   \
+        url.h utils.h wget.h xmalloc.h
 
 #
 # Dependencies for installing
@@ -131,13 +143,12 @@ uninstall.bin:
 
 clean:
 	$(RM) *.o wget$(exeext) *~ *.bak core core.[0-9]* $(ANSI2KNR) *._o *._c
-	$(RM) -r .libs
 
 distclean: clean
 	$(RM) Makefile config.h
 
 realclean: distclean
-	$(RM) TAGS
+	$(RM) TAGS config.h.in
 
 #
 # Dependencies for maintenance
@@ -150,54 +161,3 @@ Makefile: Makefile.in ../config.status
 
 TAGS: *.c *.h
 	-$(ETAGS) *.c *.h
-
-# DO NOT DELETE THIS LINE -- make depend depends on it.
-
-alloca$o:
-cmpt$o: wget.h sysdep.h options.h safe-ctype.h
-connect$o: wget.h sysdep.h options.h safe-ctype.h utils.h connect.h host.h
-convert$o: wget.h convert.h url.h recur.h utils.h hash.h
-cookies$o: wget.h sysdep.h options.h safe-ctype.h cookies.h hash.h url.h utils.h
-ftp-basic$o: wget.h sysdep.h options.h safe-ctype.h utils.h rbuf.h connect.h \
-	host.h ftp.h
-ftp-ls$o: wget.h sysdep.h options.h safe-ctype.h utils.h ftp.h rbuf.h host.h \
-	url.h
-ftp-opie$o: wget.h sysdep.h options.h safe-ctype.h gen-md5.h
-ftp$o: wget.h sysdep.h options.h safe-ctype.h utils.h url.h rbuf.h retr.h \
-	ftp.h host.h connect.h netrc.h
-gen-md5$o: wget.h sysdep.h options.h safe-ctype.h gen-md5.h
-gen_sslfunc$o: wget.h sysdep.h options.h safe-ctype.h utils.h connect.h host.h \
-	url.h
-getopt$o: wget.h sysdep.h options.h safe-ctype.h getopt.h
-gnu-md5$o: wget.h sysdep.h options.h safe-ctype.h gnu-md5.h
-hash$o: wget.h sysdep.h options.h safe-ctype.h utils.h hash.h
-headers$o: wget.h sysdep.h options.h safe-ctype.h connect.h host.h rbuf.h \
-	headers.h
-host$o: wget.h sysdep.h options.h safe-ctype.h utils.h host.h url.h hash.h
-html-parse$o: wget.h sysdep.h options.h safe-ctype.h html-parse.h
-html-url$o: wget.h sysdep.h options.h safe-ctype.h html-parse.h url.h utils.h
-http$o: wget.h sysdep.h options.h safe-ctype.h utils.h url.h host.h rbuf.h \
-	retr.h headers.h connect.h host.h netrc.h gen_sslfunc.h \
-	cookies.h gen-md5.h
-init$o: wget.h sysdep.h options.h safe-ctype.h utils.h init.h host.h recur.h \
-	netrc.h cookies.h progress.h
-log$o: wget.h sysdep.h options.h safe-ctype.h utils.h
-main$o: wget.h sysdep.h options.h safe-ctype.h utils.h init.h retr.h rbuf.h \
-	recur.h host.h cookies.h url.h progress.h gen_sslfunc.h getopt.h
-gnu-md5$o: wget.h sysdep.h options.h safe-ctype.h gnu-md5.h
-mswindows$o: wget.h sysdep.h options.h safe-ctype.h utils.h url.h
-netrc$o: wget.h sysdep.h options.h safe-ctype.h utils.h netrc.h init.h
-progress$o: wget.h sysdep.h options.h safe-ctype.h progress.h utils.h retr.h \
-	rbuf.h
-rbuf$o: wget.h sysdep.h options.h safe-ctype.h rbuf.h connect.h host.h \
-	gen_sslfunc.h
-recur$o: wget.h sysdep.h options.h safe-ctype.h url.h recur.h utils.h retr.h \
-	rbuf.h ftp.h host.h hash.h
-res$o: wget.h sysdep.h options.h safe-ctype.h utils.h hash.h url.h retr.h res.h
-retr$o: wget.h sysdep.h options.h safe-ctype.h utils.h retr.h rbuf.h url.h \
-	recur.h ftp.h host.h connect.h hash.h
-snprintf$o: safe-ctype.h
-safe-ctype$o: safe-ctype.h
-url$o: wget.h sysdep.h options.h safe-ctype.h utils.h url.h host.h hash.h
-utils$o: wget.h sysdep.h options.h safe-ctype.h utils.h hash.h
-version$o:

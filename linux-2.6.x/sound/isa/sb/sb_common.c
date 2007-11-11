@@ -128,7 +128,7 @@ static int snd_sbdsp_probe(struct snd_sb * chip)
 	minor = version & 0xff;
 	snd_printdd("SB [0x%lx]: DSP chip found, version = %i.%i\n",
 		    chip->port, major, minor);
-	
+
 	switch (chip->hardware) {
 	case SB_HW_AUTO:
 		switch (major) {
@@ -167,6 +167,9 @@ static int snd_sbdsp_probe(struct snd_sb * chip)
 		break;
 	case SB_HW_DT019X:
 		str = "(DT019X/ALS007)";
+		break;
+	case SB_HW_CS5530:
+		str = "16 (CS5530)";
 		break;
 	default:
 		return -ENODEV;
@@ -232,7 +235,7 @@ int snd_sbdsp_create(struct snd_card *card,
 	chip->port = port;
 	
 	if (request_irq(irq, irq_handler, hardware == SB_HW_ALS4000 ?
-			IRQF_DISABLED | IRQF_SHARED : IRQF_DISABLED,
+			IRQF_SHARED : IRQF_DISABLED,
 			"SoundBlaster", (void *) chip)) {
 		snd_printk(KERN_ERR "sb: can't grab irq %d\n", irq);
 		snd_sbdsp_free(chip);

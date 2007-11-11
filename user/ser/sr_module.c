@@ -1,6 +1,6 @@
-/* $Id: sr_module.c,v 1.34 2003/08/20 18:21:12 andrei Exp $
+/* $Id: sr_module.c,v 1.37 2004/09/19 20:22:51 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,6 +32,7 @@
  *  2003-03-19  Support for flags in find_export (janakj)
  *  2003-03-29  cleaning pkg_mallocs introduced (jiri)
  *  2003-04-24  module version checking introduced (jiri)
+ *  2004-09-19  compile flags are checked too (andrei)
  */
 
 
@@ -156,6 +157,7 @@ error:
 static inline int version_control(void *handle, char *path)
 {
 	char **m_ver;
+	char **m_flags;
 	char* error;
 
 	m_ver=(char **)dlsym(handle, DLSYM_PREFIX "module_version");
@@ -164,14 +166,33 @@ static inline int version_control(void *handle, char *path)
 			path, error );
 		return 0;
 	}
+	m_flags=(char **)dlsym(handle, DLSYM_PREFIX "module_flags");
+	if ((error=(char *)dlerror())!=0) {
+		LOG(L_ERR, "ERROR: no compile flags info in module <%s>: %s\n",
+			path, error );
+		return 0;
+	}
 	if (!m_ver || !(*m_ver)) {
 		LOG(L_ERR, "ERROR: no version in module <%s>\n", path );
 		return 0;
 	}
-	if (strcmp(VERSION,*m_ver)==0)
-		return 1;
+	if (!m_flags || !(*m_flags)) {
+		LOG(L_ERR, "ERROR: no compile flags in module <%s>\n", path );
+		return 0;
+	}
+	
+	if (strcmp(SER_FULL_VERSION, *m_ver)==0){
+		if (strcmp(SER_COMPILE_FLAGS, *m_flags)==0)
+			return 1;
+		else {
+			LOG(L_ERR, "ERROR: module compile flags mismatch for %s "
+						" \ncore: %s \nmodule: %s\n",
+						path, SER_COMPILE_FLAGS, *m_flags);
+			return 0;
+		}
+	}
 	LOG(L_ERR, "ERROR: module version mismatch for %s; "
-		"core: %s; module: %s\n", path, VERSION, *m_ver );
+		"core: %s; module: %s\n", path, SER_FULL_VERSION, *m_ver );
 	return 0;
 }
 
@@ -223,9 +244,9 @@ skip:
 
 
 
-/* searches the module list and returns a pointer to the "name" function or
+/* searches the module list and returns pointer to the "name" function or
  * 0 if not found 
- * flags parameter os OR value of all flags that must match
+ * flags parameter is OR value of all flags that must match
  */
 cmd_function find_export(char* name, int param_no, int flags)
 {
@@ -247,6 +268,39 @@ cmd_function find_export(char* name, int param_no, int flags)
 	DBG("find_export: <%s> not found \n", name);
 	return 0;
 }
+
+
+
+/*
+ * searches the module list and returns pointer to "name" function in module "mod"
+ * 0 if not found
+ * flags parameter is OR value of all flags that must match
+ */
+cmd_function find_mod_export(char* mod, char* name, int param_no, int flags)
+{
+	struct sr_module* t;
+	cmd_export_t* cmd;
+
+	for (t = modules; t; t = t->next) {
+		if (strcmp(t->exports->name, mod) == 0) {
+			for (cmd = t->exports->cmds;  cmd && cmd->name; cmd++) {
+				if ((strcmp(name, cmd->name) == 0) &&
+				    (cmd->param_no == param_no) &&
+				    ((cmd->flags & flags) == flags)
+				   ){
+					DBG("find_mod_export: found <%s> in module %s [%s]\n",
+					    name, t->exports->name, t->path);
+					return cmd->function;
+				}
+			}
+		}
+	}
+
+	DBG("find_mod_export: <%s> in module %s not found\n", name, mod);
+	return 0;
+}
+
+
 
 
 void* find_param_export(char* mod, char* name, modparam_t type)

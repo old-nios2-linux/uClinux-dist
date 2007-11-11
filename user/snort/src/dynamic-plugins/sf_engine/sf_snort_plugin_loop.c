@@ -63,12 +63,17 @@ int ByteExtractInitialize(Rule *rule, ByteExtract *extractData)
     if (memoryLocation)
     {
         /* Cannot re-use refId */
-        _ded.fatalMsg("Cannot re-use ByteExtract location '%s' for rule [%d:%d]\n",
-            extractData->refId, rule->info.genID, rule->info.sigID);
+        DynamicEngineFatalMessage("Cannot re-use ByteExtract location '%s' for rule [%d:%d]\n",
+                                  extractData->refId, rule->info.genID, rule->info.sigID);
         return -1;
     }
 
     memoryLocation = calloc(sizeof(u_int32_t), 1);
+    if (memoryLocation == NULL)
+    {
+        DynamicEngineFatalMessage("Failed to allocate memory\n");
+    }
+
     ret = sfghash_add((SFGHASH*)rule->ruleData, extractData->refId, memoryLocation);
     if (ret != SFGHASH_OK)
     {
@@ -89,8 +94,8 @@ int DynamicElementInitialize(Rule *rule, DynamicElement *element)
 
     if (!rule->ruleData)
     {
-        _ded.fatalMsg("Runtime rule data location '%s' for rule [%d:%d] is unknown\n",
-            element->refId, rule->info.genID, rule->info.sigID);
+        DynamicEngineFatalMessage("Runtime rule data location '%s' for rule [%d:%d] is unknown\n",
+                                  element->refId, rule->info.genID, rule->info.sigID);
     }
 
     switch (element->dynamicType)
@@ -104,8 +109,8 @@ int DynamicElementInitialize(Rule *rule, DynamicElement *element)
         else
         {
             element->data.dynamicInt = NULL;
-            _ded.fatalMsg("Runtime rule data location '%s' for rule [%d:%d] is unknown\n",
-                element->refId, rule->info.genID, rule->info.sigID);
+            DynamicEngineFatalMessage("Runtime rule data location '%s' for rule [%d:%d] is unknown\n",
+                                      element->refId, rule->info.genID, rule->info.sigID);
             return -1;
         }
         break;

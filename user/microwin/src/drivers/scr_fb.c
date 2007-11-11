@@ -273,9 +273,9 @@ fb_open(PSD psd)
 		goto fail;
 	}
 #else
-	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,0,fb,0);
+	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_PRIVATE,fb,0);
 	if(psd->addr == MAP_FAILED) {
-		EPRINTF("Error mmaping %s: %m\n", env);
+		EPRINTF("ttError mmaping %s: %m\n", env);
 		goto fail;
 	}
 #endif

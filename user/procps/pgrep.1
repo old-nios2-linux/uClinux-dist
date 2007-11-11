@@ -7,13 +7,13 @@
 pgrep, pkill \- look up or signal processes based on name and other attributes
 
 .SH SYNOPSIS
-pgrep [\-flnvx] [\-d \fIdelimiter\fP] [\-P \fIppid\fP,...] [\-g \fIpgrp\fP,...]
+pgrep [\-flvx] [\-d \fIdelimiter\fP] [\-n|\-o] [\-P \fIppid\fP,...] [\-g \fIpgrp\fP,...]
 .br
 	[\-s \fIsid\fP,...] [\-u \fIeuid\fP,...] [\-U \fIuid\fP,...] [\-G \fIgid\fP,...]
 .br
 	[\-t \fIterm\fP,...] [\fIpattern\fP]
 
-pkill [\-\fIsignal\fP] [\-fnvx] [\-P \fIppid\fP,...] [\-g \fIpgrp\fP,...]
+pkill [\-\fIsignal\fP] [\-fvx] [\-n|\-o] [\-P \fIppid\fP,...] [\-g \fIpgrp\fP,...]
 .br
 	[\-s \fIsid\fP,...] [\-u \fIeuid\fP,...] [\-U \fIuid\fP,...] [\-G \fIgid\fP,...]
 .br
@@ -59,6 +59,10 @@ List the process name as well as the process ID. (\fBpgrep\fP only.)
 .TP
 \-n
 Select only the newest (most recently started) of the matching
+processes.
+.TP
+\-o
+Select only the oldest (least recently started) of the matching
 processes.
 .TP
 \-P \fIppid\fP,...
@@ -137,13 +141,13 @@ The running \fBpgrep\fP or \fBpkill\fP process will never report
 itself as a match.
 
 .SH BUGS
-The options \-n and \-v can not be combined.  Let me know if you need
-to do this.
+The options \-n and \-o and \-v can not be combined.  Let me know if
+you need to do this.
 
 Defunct processes are reported.
 
 .SH "SEE ALSO"
-ps(1) proc(5) regex(5)
+ps(1) regex(7) signal(7) killall(1) skill(1) kill(1) kill(2)
 
 .SH STANDARDS
 \fBpkill\fP and \fBpgrep\fP were introduced in Sun's Solaris 7.  This
@@ -152,7 +156,7 @@ implementation is fully compatible.
 .SH AUTHOR
 Kjetil Torgrim Homme <kjetilho@ifi.uio.no>
 
-Michael K. Johnson <johnsonm@redhat.com> is the current maintainer of
+Albert Cahalan <albert@users.sf.net> is the current maintainer of
 the procps package.
 
-Please send bug reports to <procps-bugs@redhat.com>
+Please send bug reports to <procps-feedback@lists.sf.net>

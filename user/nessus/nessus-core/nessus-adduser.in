@@ -250,6 +250,7 @@ esac
 #echo "$login:$password" > $TMPDIR/adduser.$$
 	
 
+mkdir -p "$localstatedir/nessus"
 chmod 0700 "$localstatedir/nessus/"
 mkdir -p "$localstatedir/nessus/users/$login"
 chmod 0700 "$localstatedir/nessus/users/$login"

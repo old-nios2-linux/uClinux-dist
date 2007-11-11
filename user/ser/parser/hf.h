@@ -1,7 +1,7 @@
 /* 
- * $Id: hf.h,v 1.11.4.1 2004/02/28 02:13:48 bogdan Exp $ 
+ * $Id: hf.h,v 1.16 2004/12/03 17:11:36 jamey Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -57,7 +57,7 @@
 #define HDR_CONTENTLENGTH      (1 << 11)  /* Content-Length header field */
 #define HDR_AUTHORIZATION      (1 << 12)  /* Authorization header field */
 #define HDR_EXPIRES            (1 << 13)  /* Expires header field */
-#define HDR_PROXYAUTH          (1 << 14)  /* Proxy-Authorization header field */
+#define HDR_PROXYAUTH          (1 << 14)  /* Proxy-Authorization hdr field */
 #define HDR_SUPPORTED          (1 << 15)  /* Supported  header field */
 #define HDR_PROXYREQUIRE       (1 << 16)  /* Proxy-Require header field */
 #define HDR_UNSUPPORTED        (1 << 17)  /* Unsupported header field */
@@ -69,16 +69,18 @@
 #define HDR_PRIORITY           (1 << 23)  /* Priority header field */
 #define HDR_SUBJECT            (1 << 24)  /* Subject header field */
 #define HDR_USERAGENT          (1 << 25)  /* User-Agent header field */
-#define HDR_ACCEPTDISPOSITION  (1 << 26)  /* Accept-Disposition header field */
-#define HDR_CONTENTDISPOSITION (1 << 27)  /* Content-Disposition header field */
-#define HDR_OTHER              (1 << 28)  /* Some other header field */
+#define HDR_ACCEPTDISPOSITION  (1 << 26)  /* Accept-Disposition hdr field */
+#define HDR_CONTENTDISPOSITION (1 << 27)  /* Content-Disposition hdr field */
+#define HDR_DIVERSION          (1 << 28)  /* Diversion header field */
+#define HDR_RPID               (1 << 29)  /* Remote-Party-ID header field */
+#define HDR_OTHER              (1 << 30)  /* Some other header field */
 
 
 /* returns true if the header links allocated memory on parse field */
 #define hdr_allocs_parse( _hdr ) \
 	(((_hdr)->type)&(HDR_VIA|HDR_TO|HDR_FROM|HDR_CONTACT|HDR_ROUTE|\
 		HDR_RECORDROUTE|HDR_AUTHORIZATION|HDR_EXPIRES|HDR_PROXYAUTH|\
-		HDR_EVENT|HDR_ACCEPT|HDR_CONTENTDISPOSITION))
+		HDR_EVENT|HDR_ACCEPT|HDR_CONTENTDISPOSITION|HDR_DIVERSION|HDR_RPID))
 
 
 
@@ -89,7 +91,7 @@ struct hdr_field {
 	int type;               /* Header field type */
 	str name;               /* Header field name */
 	str body;               /* Header field body (may not include CRLF) */
-	int len;				/* length from hdr start until EoHF (incl.CRLF) */
+	int len;		/* length from hdr start until EoHF (incl.CRLF) */
 	void* parsed;           /* Parsed data structures */
 	struct hdr_field* next; /* Next header field in the list */
 };

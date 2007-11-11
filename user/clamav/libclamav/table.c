@@ -13,7 +13,12 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
+ *
+ * TODO: Allow individual items to be updated or removed
+ *
+ * It is up to the caller to create a mutex for the table if needed
  */
 
 #if HAVE_CONFIG_H
@@ -26,7 +31,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef	HAVE_STRINGS_H
 #include <strings.h>
+#endif
 #include <assert.h>
 
 #include "table.h"
@@ -50,9 +57,8 @@ tableDestroy(table_t *table)
 	while(tableItem) {
 		tableEntry *tableNext = tableItem->next;
 
-		assert(tableItem->key != NULL);
-
-		free(tableItem->key);
+		if(tableItem->key)
+			free(tableItem->key);
 		free(tableItem);
 
 		tableItem = tableNext;
@@ -76,22 +82,43 @@ tableInsert(table_t *table, const char *key, int value)
 
 	if(table->tableHead == NULL)
 		table->tableLast = table->tableHead = (tableEntry *)cli_malloc(sizeof(tableEntry));
-	else
+	else {
+		/*
+		 * Re-use deleted items
+		 */
+		if(table->flags&TABLE_HAS_DELETED_ENTRIES) {
+			tableEntry *tableItem;
+
+			assert(table->tableHead != NULL);
+
+			for(tableItem = table->tableHead; tableItem; tableItem = tableItem->next)
+				if(tableItem->key == NULL) {
+					/* This item has been deleted */
+					tableItem->key = cli_strdup(key);
+					tableItem->value = value;
+					return value;
+				}
+
+			table->flags &= ~TABLE_HAS_DELETED_ENTRIES;
+		}
+
 		table->tableLast = table->tableLast->next =
 			(tableEntry *)cli_malloc(sizeof(tableEntry));
+	}
 
 	if(table->tableLast == NULL)
 		return -1;
 
 	table->tableLast->next = NULL;
-	table->tableLast->key = strdup(key);
+	table->tableLast->key = cli_strdup(key);
 	table->tableLast->value = value;
 
 	return value;
 }
 
 /*
- * Returns the value - -1 for not found
+ * Returns the value - -1 for not found. This means the value of a valid key
+ *	can't be -1 :-(
  */
 int
 tableFind(const table_t *table, const char *key)
@@ -106,9 +133,6 @@ tableFind(const table_t *table, const char *key)
 	if(key == NULL)
 		return -1;	/* not treated as a fatal error */
 
-	if(table->tableHead == NULL)
-		return -1;	/* not populated yet */
-
 #ifdef	CL_DEBUG
 	cost = 0;
 #endif
@@ -117,7 +141,7 @@ tableFind(const table_t *table, const char *key)
 #ifdef	CL_DEBUG
 		cost++;
 #endif
-		if(strcasecmp(tableItem->key, key) == 0) {
+		if(tableItem->key && (strcasecmp(tableItem->key, key) == 0)) {
 #ifdef	CL_DEBUG
 			cli_dbgmsg("tableFind: Cost of '%s' = %d\n", key, cost);
 #endif
@@ -126,4 +150,63 @@ tableFind(const table_t *table, const char *key)
 	}
 
 	return -1;	/* not found */
+}
+
+/*
+ * Change a value in the table. If the key isn't in the table insert it
+ * Returns -1 for error, otherwise the new value
+ */
+int
+tableUpdate(table_t *table, const char *key, int new_value)
+{
+	tableEntry *tableItem;
+
+	assert(table != NULL);
+
+	if(key == NULL)
+		return -1;	/* not treated as a fatal error */
+
+	for(tableItem = table->tableHead; tableItem; tableItem = tableItem->next)
+		if(tableItem->key && (strcasecmp(tableItem->key, key) == 0)) {
+			tableItem->value = new_value;
+			return new_value;
+		}
+
+	/* not found */
+	return tableInsert(table, key, new_value);
+}
+
+/*
+ * Remove an item from the table
+ */
+void
+tableRemove(table_t *table, const char *key)
+{
+	tableEntry *tableItem;
+
+	assert(table != NULL);
+
+	if(key == NULL)
+		return;	/* not treated as a fatal error */
+
+	for(tableItem = table->tableHead; tableItem; tableItem = tableItem->next)
+		if(tableItem->key && (strcasecmp(tableItem->key, key) == 0)) {
+			free(tableItem->key);
+			tableItem->key = NULL;
+			table->flags |= TABLE_HAS_DELETED_ENTRIES;
+			/* don't break, duplicate keys are allowed */
+		}
+}
+
+void
+tableIterate(table_t *table, void(*callback)(char *key, int value, void *arg), void *arg)
+{
+	tableEntry *tableItem;
+
+	if(table == NULL)
+		return;
+
+	for(tableItem = table->tableHead; tableItem; tableItem = tableItem->next)
+		if(tableItem->key)	/* check node has not been deleted */
+			(*callback)(tableItem->key, tableItem->value, arg);
 }

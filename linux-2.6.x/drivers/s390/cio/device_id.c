@@ -11,70 +11,19 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 
 #include <asm/ccwdev.h>
 #include <asm/delay.h>
 #include <asm/cio.h>
 #include <asm/lowcore.h>
+#include <asm/diag.h>
 
 #include "cio.h"
 #include "cio_debug.h"
 #include "css.h"
 #include "device.h"
 #include "ioasm.h"
-
-/*
- * diag210 is used under VM to get information about a virtual device
- */
-#ifdef CONFIG_64BIT
-int
-diag210(struct diag210 * addr)
-{
-	/*
-	 * diag 210 needs its data below the 2GB border, so we
-	 * use a static data area to be sure
-	 */
-	static struct diag210 diag210_tmp;
-	static DEFINE_SPINLOCK(diag210_lock);
-	unsigned long flags;
-	int ccode;
-
-	spin_lock_irqsave(&diag210_lock, flags);
-	diag210_tmp = *addr;
-
-	asm volatile(
-		"	lhi	%0,-1\n"
-		"	sam31\n"
-		"	diag	%1,0,0x210\n"
-		"0:	ipm	%0\n"
-		"	srl	%0,28\n"
-		"1:	sam64\n"
-		EX_TABLE(0b,1b)
-		: "=&d" (ccode) : "a" (__pa(&diag210_tmp)) : "cc", "memory");
-
-	*addr = diag210_tmp;
-	spin_unlock_irqrestore(&diag210_lock, flags);
-
-	return ccode;
-}
-#else
-int
-diag210(struct diag210 * addr)
-{
-	int ccode;
-
-	asm volatile(
-		"	lhi	%0,-1\n"
-		"	diag	%1,0,0x210\n"
-		"0:	ipm	%0\n"
-		"	srl	%0,28\n"
-		"1:\n"
-		EX_TABLE(0b,1b)
-		: "=&d" (ccode) : "a" (__pa(addr)) : "cc", "memory");
-
-	return ccode;
-}
-#endif
 
 /*
  * Input :
@@ -138,7 +87,7 @@ VM_virtual_device_info (__u16 devno, struct senseid *ps)
 		ps->cu_model = 0x60;
 		return;
 	}
-	for (i = 0; i < sizeof(vm_devices) / sizeof(vm_devices[0]); i++)
+	for (i = 0; i < ARRAY_SIZE(vm_devices); i++)
 		if (diag_data.vrdcvcla == vm_devices[i].vrdcvcla &&
 		    diag_data.vrdcvtyp == vm_devices[i].vrdcvtyp) {
 			ps->cu_type = vm_devices[i].cu_type;
@@ -191,6 +140,8 @@ __ccw_device_sense_id_start(struct ccw_device *cdev)
 		if ((sch->opm & cdev->private->imask) != 0 &&
 		    cdev->private->iretry > 0) {
 			cdev->private->iretry--;
+			/* Reset internal retry indication. */
+			cdev->private->flags.intretry = 0;
 			ret = cio_start (sch, cdev->private->iccws,
 					 cdev->private->imask);
 			/* ret is 0, -EBUSY, -EACCES or -ENODEV */
@@ -237,8 +188,14 @@ ccw_device_check_sense_id(struct ccw_device *cdev)
 		return 0; /* Success */
 	}
 	/* Check the error cases. */
-	if (irb->scsw.fctl & (SCSW_FCTL_HALT_FUNC | SCSW_FCTL_CLEAR_FUNC))
+	if (irb->scsw.fctl & (SCSW_FCTL_HALT_FUNC | SCSW_FCTL_CLEAR_FUNC)) {
+		/* Retry Sense ID if requested. */
+		if (cdev->private->flags.intretry) {
+			cdev->private->flags.intretry = 0;
+			return -EAGAIN;
+		}
 		return -ETIME;
+	}
 	if (irb->esw.esw0.erw.cons && (irb->ecw[0] & SNS0_CMD_REJECT)) {
 		/*
 		 * if the device doesn't support the SenseID
@@ -348,5 +305,3 @@ ccw_device_sense_id_irq(struct ccw_device *cdev, enum dev_event dev_event)
 		break;
 	}
 }
-
-EXPORT_SYMBOL(diag210);

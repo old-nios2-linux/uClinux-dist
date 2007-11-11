@@ -47,7 +47,7 @@ struct mem {
 /*
  * Detect installed memory, do some sanity checks and notify kernel about it
  */
-static void probe_memory(void)
+static void __init probe_memory(void)
 {
 	int i, j, found, cnt = 0;
 	struct mem bank[4];
@@ -202,7 +202,6 @@ void __init sgimc_init(void)
 }
 
 void __init prom_meminit(void) {}
-unsigned long __init prom_free_prom_memory(void)
+void __init prom_free_prom_memory(void)
 {
-	return 0;
 }

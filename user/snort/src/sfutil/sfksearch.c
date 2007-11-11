@@ -44,9 +44,7 @@ static void * KTRIE_MALLOC( int n )
 {
    void * p;
 
-   p = malloc( n );
-
-   memset(p,0,n);
+   p = calloc( 1, n );
 
    return p;
 }

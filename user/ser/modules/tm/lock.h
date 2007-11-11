@@ -1,7 +1,7 @@
 /*
- * $Id: lock.h,v 1.25.8.1 2004/07/26 23:18:36 andrei Exp $
+ * $Id: lock.h,v 1.27 2004/08/24 09:00:41 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

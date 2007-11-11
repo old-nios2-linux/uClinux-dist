@@ -38,6 +38,7 @@ dir_$(CONFIG_USER_AGETTY_AGETTY)            += agetty
 dir_$(CONFIG_USER_APPWEB_APPWEB)            += appWeb
 dir_$(CONFIG_USER_ARJ_ARJ)                  += arj
 dir_$(CONFIG_USER_ASTERISK)                 += asterisk
+dir_$(CONFIG_USER_ASTERISK_MYSQL)           += asterisk-addons
 dir_$(CONFIG_USER_AT_AT)                    += at
 dir_$(CONFIG_USER_AT_ATD)                   += at
 dir_$(CONFIG_USER_AT_ATRUN)                 += at
@@ -62,12 +63,12 @@ dir_$(CONFIG_USER_CTORRENT_CTORRENT)        += ctorrent
 dir_$(CONFIG_USER_CAN_HORCH)                += horch
 dir_$(CONFIG_USER_CGI_GENERIC)              += cgi_generic
 dir_$(CONFIG_USER_CGIHTML)                  += cgihtml/examples
-dir_$(CONFIG_USER_CHAT_CHAT)                += pppd/chat
+dir_$(CONFIG_USER_CHAT_CHAT)                += pppd
 dir_$(CONFIG_USER_CKSUM_CKSUM)              += cksum
 dir_$(CONFIG_USER_CLAMAV_CLAMAV)            += clamav
 dir_$(CONFIG_USER_CLAMAV_CLAMSMTP)          += clamsmtp
 dir_$(CONFIG_USER_CLOCK_CLOCK)              += clock
-dir_$(CONFIG_USER_CONNTRACK_CONNTRACK)      += conntrack
+dir_$(CONFIG_USER_CONNTRACK_CONNTRACK)      += conntrack-tools
 dir_$(CONFIG_USER_CPU_CPU)                  += cpu
 dir_$(CONFIG_USER_CRAMFS_MKCRAMFS)          += cramfs
 dir_$(CONFIG_USER_CRAMFS_CRAMFSCK)          += cramfs
@@ -93,8 +94,9 @@ dir_$(CONFIG_USER_DOSFSTOOLS_MKDOSFS)       += dosfstools/mkdosfs
 dir_$(CONFIG_USER_DOSFSTOOLS_DOSFSCK)       += dosfstools/dosfsck
 ifneq ($(CONFIG_USER_DNSMASQ2_DNSMASQ2),y)
 dir_$(CONFIG_USER_DNSMASQ_DNSMASQ)          += dnsmasq
-endif
+else
 dir_$(CONFIG_USER_DNSMASQ2_DNSMASQ2)        += dnsmasq2
+endif
 dir_$(CONFIG_USER_DROPBEAR_DROPBEAR)        += dropbear
 dir_$(CONFIG_USER_E2FSPROGS_E2FSCK_E2FSCK)  += e2fsprogs
 dir_$(CONFIG_USER_E2FSPROGS_MISC_BADBLOCKS) += e2fsprogs
@@ -112,8 +114,10 @@ dir_$(CONFIG_USER_ETHATTACH_ETHATTACH)      += ethattach
 dir_$(CONFIG_USER_ETHERWAKE)				+= etherwake
 dir_$(CONFIG_USER_ETHTOOL_ETHTOOL)          += ethtool
 dir_$(CONFIG_USER_EXPAT_EXAMPLES)           += expat-examples
+dir_$(CONFIG_USER_EXPECT_EXPECT)            += expect
 dir_$(CONFIG_USER_EZIPUPDATE_EZIPUPDATE)    += ez-ipupdate
 dir_$(CONFIG_USER_FAKEIDENTD_IDENTD)        += fakeidentd
+dir_$(CONFIG_USER_FERRET_FERRET)            += ferret
 dir_$(CONFIG_USER_FCONFIG_FCONFIG)          += fconfig
 dir_$(CONFIG_USER_FDISK_FDISK)              += fdisk
 dir_$(CONFIG_USER_FDISK_SFDISK)             += fdisk
@@ -154,11 +158,14 @@ dir_$(CONFIG_USER_GDB_GDBREPLAY)            += gdb
 dir_$(CONFIG_USER_GDB_GDBSERVER)            += gdb
 dir_$(CONFIG_USER_GDB_TARGET)		    += gdb
 dir_$(CONFIG_USER_GETTYD_GETTYD)            += gettyd
+dir_$(CONFIG_USER_GNUGK_GNUGK)              += gnugk
 dir_$(CONFIG_USER_GREP_GREP)                += grep
+dir_$(CONFIG_USER_HASERL_HASERL)            += haserl
 dir_$(CONFIG_USER_HD_HD)                    += hd
 dir_$(CONFIG_USER_HOSTAP_HOSTAP)            += hostap
 dir_$(CONFIG_USER_HOSTAP_HOSTAP)            += hostap/utils
 dir_$(CONFIG_USER_HOSTAP_HOSTAPD)           += hostap/hostapd
+dir_$(CONFIG_USER_HPING_HPING)              += hping
 dir_$(CONFIG_USER_HTTPD_HTTPD)              += httpd
 dir_$(CONFIG_USER_HTTPTUNNEL_CLIENT)        += httptunnel
 dir_$(CONFIG_USER_HTTPTUNNEL_SERVER)        += httptunnel
@@ -175,6 +182,7 @@ dir_$(CONFIG_USER_IPPORTFW_IPPORTFW)        += ipportfw
 dir_$(CONFIG_USER_IPREDIR_IPREDIR)          += ipredir
 dir_$(CONFIG_USER_IPROUTE2)                 += iproute2
 dir_$(CONFIG_USER_IPSENTINEL_IPSENTINEL)    += ip-sentinel
+dir_$(CONFIG_USER_IPSET_IPSET)              += ipset
 dir_$(CONFIG_USER_IPTABLES_IPTABLES)        += iptables
 dir_$(CONFIG_USER_IPTABLES_IP6TABLES)       += iptables
 dir_$(CONFIG_USER_IPUTILS_IPUTILS)          += iputils
@@ -199,6 +207,7 @@ dir_$(CONFIG_USER_LOGIN_PASSWD)             += login
 dir_$(CONFIG_USER_LPR)                      += lpr
 dir_$(CONFIG_USER_LRPSTAT_LRPSTAT)          += lrpstat
 dir_$(CONFIG_USER_LRZSZ_LRZSZ)              += lrzsz
+dir_$(CONFIG_USER_LSOF_LSOF)                += lsof
 dir_$(CONFIG_USER_LUA_LUA)                  += lua
 dir_$(CONFIG_USER_MAIL_MAIL_IP)             += mail
 dir_$(CONFIG_USER_MATH_TEST)                += mathtest
@@ -214,14 +223,15 @@ dir_$(CONFIG_USER_MSNTP_MSNTP)              += msntp
 dir_$(CONFIG_USER_MUSICBOX_MUSICBOX)        += musicbox
 dir_$(CONFIG_USER_MYSQL)                    += mysql
 dir_$(CONFIG_USER_NBENCH_NBENCH)            += nbench
-#dir_$(CONFIG_USER_NESSUS_NASL)              += nessus
-#dir_$(CONFIG_USER_NESSUS_CORE)              += nessus
-#dir_$(CONFIG_USER_NESSUS_PLUGINS)           += nessus
-#dir_$(CONFIG_USER_NESSUS_LIBRARIES)         += nessus
+dir_$(CONFIG_USER_NESSUS_NASL)              += nessus
+dir_$(CONFIG_USER_NESSUS_CORE)              += nessus
+dir_$(CONFIG_USER_NESSUS_PLUGINS)           += nessus
+dir_$(CONFIG_USER_NESSUS_LIBRARIES)         += nessus
 dir_$(CONFIG_USER_NETCAT_NETCAT)            += netcat
 dir_$(CONFIG_USER_NETFLASH_NETFLASH)        += netflash
 dir_$(CONFIG_USER_NETPERF_NETPERF)          += netperf
 dir_$(CONFIG_USER_NETPERF_NETSERVER)        += netperf
+dir_$(CONFIG_USER_NETPIPE_NETPIPE)          += netpipe
 dir_$(CONFIG_USER_NET_TOOLS_ARP)            += net-tools
 dir_$(CONFIG_USER_NET_TOOLS_HOSTNAME)       += net-tools
 dir_$(CONFIG_USER_NET_TOOLS_IFCONFIG)       += net-tools
@@ -237,6 +247,7 @@ dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL)       += net-tools
 dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL_FEC)   += mii-tool-fec
 dir_$(CONFIG_USER_NETSTAT_NAT_NETSTAT_NAT)  += netstat-nat
 dir_$(CONFIG_USER_NOOOM_NOOOM)              += nooom
+dir_$(CONFIG_USER_NMAP_NMAP)                += nmap
 dir_$(CONFIG_USER_NTPCLIENT_NTPCLIENT)      += ntpclient
 dir_$(CONFIG_USER_NTPCLIENT_ADJTIMEX)       += ntpclient
 dir_$(CONFIG_USER_NTPD_NTPD)                += ntp
@@ -250,15 +261,17 @@ dir_$(CONFIG_USER_OGGPLAY_OGG123)           += oggplay
 dir_$(CONFIG_USER_OPENSSL_APPS)             += openssl
 dir_$(CONFIG_USER_OPENSWAN)                 += openswan
 dir_$(CONFIG_USER_OPENVPN_OPENVPN)          += openvpn
+dir_$(CONFIG_USER_OPROFILE)                 += oprofile
 dir_$(CONFIG_USER_P7ZIP_7ZA)                += p7zip
 dir_$(CONFIG_USER_PALMBOT_PALMBOT)          += palmbot
 dir_$(CONFIG_USER_PAM_LDAP)                 += pam_ldap
+dir_$(CONFIG_USER_PAM_RADIUS)               += pam_radius
 dir_$(CONFIG_USER_PAM_SMB)                  += pam_smb
 dir_$(CONFIG_USER_PAM_TACACS)               += pam_tacplus
 dir_$(CONFIG_USER_PCIUTILS_LSPCI)           += pciutils
 dir_$(CONFIG_USER_PCIUTILS_SETPCI)          += pciutils
 dir_$(CONFIG_USER_PCMCIA_CS)                += pcmcia-cs
-dir_$(CONFIG_USER_PERL_PERL)                += perl
+dir_$(CONFIG_USER_PERL_PERL)                += perl/Cross
 dir_$(CONFIG_USER_PING_PING)                += ping
 dir_$(CONFIG_USER_PLAY_PLAY)                += play
 dir_$(CONFIG_USER_PLAY_TONE)                += play
@@ -266,6 +279,7 @@ dir_$(CONFIG_USER_PLAYRT_PLAYRT)            += playrt
 dir_$(CONFIG_USER_PLUG_PLUG)                += plug
 dir_$(CONFIG_USER_POP3PROXY_POP3PROXY)      += pop3proxy
 dir_$(CONFIG_USER_PORTMAP_PORTMAP)          += portmap
+dir_$(CONFIG_USER_POTRACE_POTRACE)          += potrace
 dir_$(CONFIG_USER_PPPD_PPPD_PPPD)           += pppd
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP)         += pptp-client
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
@@ -420,6 +434,7 @@ all: config
 #
 .PHONY: $(sort $(dir_y) $(dir_p))
 snort: mysql
+asterisk-addons: mysql asterisk
 
 $(sort $(dir_y) $(dir_p)):  config
 	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -j1 -C $@ ) || exit $$?
@@ -429,6 +444,9 @@ $(sort $(dir_y) $(dir_p)):  config
 
 %_clean:
 	$(MAKE) -j1 -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_user; true
+
+%_romfs:
+	$(MAKE) -j1 -C $(@:_romfs=) romfs
 
 romfs:
 	for i in $(sort $(dir_y)) $(dir_p) ; do \

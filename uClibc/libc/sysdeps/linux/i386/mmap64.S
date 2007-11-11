@@ -37,10 +37,10 @@
 #define OFFLO	FD+4
 #define OFFHI	OFFLO+4
 
-        .text
-	.globl mmap64;
-	.type mmap64,@function;
-	.align 1<<4;
+.text
+.global mmap64
+.type   mmap64,%function
+.align 1<<4
 
 mmap64:
 	/* Save registers.  */
@@ -64,7 +64,8 @@ mmap64:
 	movl FLAGS(%esp), %esi
 	movl FD(%esp), %edi
 
-	movl $__NR_mmap2, %eax	/* System call number in %eax.  */
+	movl $ __NR_mmap2, %eax	/* System call number in %eax.  */
+	/* Do the system call trap.  */
 	int $0x80
 
 	/* Restore registers.  */
@@ -75,7 +76,8 @@ mmap64:
 
 	/* If 0 > %eax > -4096 there was an error.  */
 	cmpl $-4095,%eax
-	jae __syscall_error
+	ja __syscall_error
+	/* Successful; return the syscall's value.  */
 	ret
 
 	/* This means the offset value is too large.  */
@@ -87,26 +89,6 @@ L_einval:
 	movl $-EINVAL, %eax
 	jmp __syscall_error
 
-
-__syscall_error:
-	negl    %eax
-	pushl   %eax
-#ifdef __PIC__
-	call .Lthere
-.Lthere:
-	popl	%ebx
-	addl	$_GLOBAL_OFFSET_TABLE_+[.- .Lthere  ], %ebx
-	call    __errno_location@PLT
-#else
-	call	__errno_location
-#endif
-	popl	%ecx
-	movl	%ecx, (%eax)
-	xorl	%eax, %eax
-	decl	%eax
-
-.Lsize:
-	.size	 mmap64,.Lsize-mmap64
+.size mmap64,.-mmap64
 
 #endif
-

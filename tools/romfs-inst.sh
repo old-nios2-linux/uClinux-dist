@@ -70,6 +70,7 @@ file_copy()
 			rc=$?
 			# And make sure these files are still writable
 			find . -print | grep -E -v '/CVS|/\.svn' | ( cd ${ROMFSDIR}${dst}; xargs chmod u+w )
+			setperm ${ROMFSDIR}${dst}
 		)
 	else
 		if [ -d ${dst} ]; then
@@ -79,6 +80,14 @@ file_copy()
 		fi
 		rm -f ${dstfile}
 		[ "$v" ] && echo "cp ${src} ${dstfile}"
+		if [ ! -d "$IMAGEDIR" ]
+		then
+			mkdir -p $IMAGEDIR
+		fi
+		case "$src" in
+			/*) echo "${src} ${dstfile}" ;;
+			*)  echo "`pwd`/${src} ${dstfile}" ;;
+		esac >> $IMAGEDIR/romfs-inst.log
 		cp ${src} ${dstfile} && setperm ${dstfile}
 		rc=$?
 		if [ $rc -eq 0 -a -n "$strip" ]; then
@@ -140,7 +149,7 @@ then
 	exit 1
 fi
 
-v=
+v=1
 option=y
 pattern=
 perm=

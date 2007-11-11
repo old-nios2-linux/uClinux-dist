@@ -1,9 +1,9 @@
 /*
- * $Id: lookup.c,v 1.16.2.1.4.1 2004/07/21 09:28:31 janakj Exp $
+ * $Id: lookup.c,v 1.29.2.3 2005/10/04 09:24:07 janakj Exp $
  *
  * Lookup contacts in usrloc
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,7 +32,6 @@
  */
 
 
-#include "lookup.h"
 #include <string.h>
 #include "../../ut.h"
 #include "../../dset.h"
@@ -43,36 +42,8 @@
 #include "common.h"
 #include "regtime.h"
 #include "reg_mod.h"
+#include "lookup.h"
 
-
-/*
- * Rewrite Request-URI
- */
-static inline int rwrite(struct sip_msg* _m, str* _s)
-{
-	char buffer[MAX_URI_SIZE];
-	struct action act;
-	
-	if (_s->len > MAX_URI_SIZE - 1) {
-		LOG(L_ERR, "rwrite(): URI too long\n");
-		return -1;
-	}
-	
-	memcpy(buffer, _s->s, _s->len);
-	buffer[_s->len] = '\0';
-	
-	DBG("rwrite(): Rewriting Request-URI with '%s'\n", buffer);
-	act.type = SET_URI_T;
-	act.p1_type = STRING_ST;
-	act.p1.string = buffer;
-	act.next = 0;
-	
-	if (do_action(&act, _m) < 0) {
-		LOG(L_ERR, "rwrite(): Error in do_action\n");
-		return -1;
-	}
-	return 0;
-}
 
 
 /*
@@ -113,16 +84,25 @@ int lookup(struct sip_msg* _m, char* _t, char* _s)
 	}
 
 	ptr = r->contacts;
-	while ((ptr) && ((ptr->expires <= act_time) || 
-			(ptr->state >= CS_ZOMBIE_N)))
+	while ((ptr) && !VALID_CONTACT(ptr, act_time))
 		ptr = ptr->next;
 	
 	if (ptr) {
-		if (rwrite(_m, &ptr->c) < 0) {
+		if (rewrite_uri(_m, &ptr->c) < 0) {
 			LOG(L_ERR, "lookup(): Unable to rewrite Request-URI\n");
 			ul.unlock_udomain((udomain_t*)_t);
 			return -4;
 		}
+
+		if (ptr->received.s && ptr->received.len) {
+			if (set_dst_uri(_m, &ptr->received) < 0) {
+				ul.unlock_udomain((udomain_t*)_t);
+				return -4;
+			}
+		}
+
+		set_ruri_q(ptr->q);
+
 		nat |= ptr->flags & FL_NAT;
 		ptr = ptr->next;
 	} else {
@@ -135,19 +115,22 @@ int lookup(struct sip_msg* _m, char* _t, char* _s)
 	if (!append_branches) goto skip;
 
 	while(ptr) {
-		if (ptr->expires > act_time && (ptr->state < CS_ZOMBIE_N)) {
-			if (append_branch(_m, ptr->c.s, ptr->c.len) == -1) {
+		if (VALID_CONTACT(ptr, act_time)) {
+			if (append_branch(_m, ptr->c.s, ptr->c.len, ptr->received.s, ptr->received.len, ptr->q) == -1) {
 				LOG(L_ERR, "lookup(): Error while appending a branch\n");
-				goto skip; /* Return OK here so the function succeeds */
-			}
-			nat |= ptr->flags & FL_NAT;
+				     /* Return 1 here so the function succeeds even if appending of
+				      * a branch failed
+				      */
+				goto skip; 
+			} 
+			
+			nat |= ptr->flags & FL_NAT; 
 		} 
-		ptr = ptr->next;
+		ptr = ptr->next; 
 	}
 	
  skip:
 	ul.unlock_udomain((udomain_t*)_t);
-
 	if (nat) setflag(_m, nat_flag);
 	return 1;
 }
@@ -162,6 +145,7 @@ int registered(struct sip_msg* _m, char* _t, char* _s)
 {
 	str uri, aor;
 	urecord_t* r;
+        ucontact_t* ptr;
 	int res;
 
 	if (_m->new_uri.s) uri = _m->new_uri;
@@ -174,16 +158,27 @@ int registered(struct sip_msg* _m, char* _t, char* _s)
 	
 	ul.lock_udomain((udomain_t*)_t);
 	res = ul.get_urecord((udomain_t*)_t, &aor, &r);
-	ul.unlock_udomain((udomain_t*)_t);
 
 	if (res < 0) {
+		ul.unlock_udomain((udomain_t*)_t);
 		LOG(L_ERR, "registered(): Error while querying usrloc\n");
 		return -1;
-	} else if (res == 0) {
-		DBG("registered(): '%.*s' found in usrloc\n", aor.len, ZSW(aor.s));
-		return 1;
-	} else {
-		DBG("registered(): '%.*s' not found in usrloc\n", aor.len, ZSW(aor.s));
-		return -1;
 	}
+
+	if (res == 0) {
+		ptr = r->contacts;
+		while (ptr && !VALID_CONTACT(ptr, act_time)) {
+			ptr = ptr->next;
+		}
+
+		if (ptr) {
+			ul.unlock_udomain((udomain_t*)_t);
+			DBG("registered(): '%.*s' found in usrloc\n", aor.len, ZSW(aor.s));
+			return 1;
+		}
+	}
+
+	ul.unlock_udomain((udomain_t*)_t);
+	DBG("registered(): '%.*s' not found in usrloc\n", aor.len, ZSW(aor.s));
+	return -1;
 }

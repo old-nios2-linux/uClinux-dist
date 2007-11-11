@@ -93,12 +93,12 @@ HBM_STRUCT * hbm_prep(unsigned char * pat, int m, int nocase)
      p = (HBM_STRUCT*)malloc(sizeof(HBM_STRUCT));
      if (!p)
      {
-         _ded.fatalMsg("Failed to allocate memory for pattern matching.");
+         DynamicEngineFatalMessage("Failed to allocate memory for pattern matching.");
      }
 
      if( !hbm_prepx( p, pat, m, nocase) ) 
      {
-          _ded.fatalMsg("Error initializing pattern matching. Check arguments.");
+         DynamicEngineFatalMessage("Error initializing pattern matching. Check arguments.");
      }
 
      return p;

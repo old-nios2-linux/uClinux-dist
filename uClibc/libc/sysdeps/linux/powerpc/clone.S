@@ -17,6 +17,7 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
+#include <features.h>
 #include "ppc_asm.h"
 #define _ERRNO_H	1
 #include <bits/errno.h>
@@ -30,12 +31,11 @@
    		  int flags [r5], void *arg [r6]); */
 
 #ifdef __NR_clone
-.globl      __clone;
-.type      __clone, @function;
-.align  2;
+	.globl clone
+	.type clone,@function
+	.align 2
 
-
-__clone:
+clone:
 	/* Check for child_stack == NULL || fn == NULL.  */
 	cmpwi	cr0,r4,0
 	cmpwi	cr1,r3,0
@@ -79,32 +79,20 @@ __clone:
 	mr	r3,r31
 	bctrl
 	/* Call _exit with result from procedure.  */
-#ifdef __PIC__
-	b	_exit@plt
-#else
-	b	_exit
-#endif
+	b	HIDDEN_JUMPTARGET(_exit)
 
 .Lparent:
 	/* Parent.  Restore registers & return.  */
 	lmw	r29,16(r1)
 	addi	r1,r1,32
 	bnslr+
-#ifdef __PIC__
-	b	__syscall_error@plt
-#else
+
 	b	__syscall_error
-#endif
 
 .Lbadargs:
 	li	r3,EINVAL
-#ifdef __PIC__
-	b	__syscall_error@plt
-#else
-	b	__syscall_error
-#endif
 
-.size __clone,.-__clone
-.weak clone;
-clone=__clone
+	b	__syscall_error
+
+	.size clone,.-clone
 #endif

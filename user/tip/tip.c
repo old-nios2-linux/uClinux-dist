@@ -528,7 +528,7 @@ int loopit()
 
 /*****************************************************************************/
 
-int opensoc(void)
+void opensoc(void)
 {
 	struct sockaddr_in	s;
 	struct sockaddr		p;

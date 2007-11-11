@@ -373,6 +373,17 @@ printk("do something with color palette!\n");
 }
 /* ------------------------------------------------------------------------- */
 
+/* We implement our own mmap to set MAY_SHARE and add the correct size */
+static int m532xfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+{
+	vma->vm_flags |= VM_MAYSHARE| VM_SHARED;
+
+	vma->vm_start = info->fix.smem_start;
+	vma->vm_end   = info->fix.smem_start + info->fix.smem_len;
+	return 0;
+}
+
+
 /*
  *  Frame buffer operations
  */
@@ -383,6 +394,7 @@ static struct fb_ops m532xfb_ops = {
 	.fb_copyarea	= cfb_copyarea,		/* Needed !!! */
 	.fb_imageblit	= cfb_imageblit,	/* Needed !!! */
 	.fb_cursor	= soft_cursor,		/* Needed !!! */
+	.fb_mmap	= m532xfb_mmap,
 };
 
 /*

@@ -15,6 +15,7 @@
 #include <linux/console.h>
 #include <linux/efi.h>
 #include <linux/serial.h>
+#include <linux/serial_8250.h>
 #include <asm/vga.h>
 #include "pcdp.h"
 
@@ -26,8 +27,8 @@ setup_serial_console(struct pcdp_uart *uart)
 	static char options[64], *p = options;
 	char parity;
 
-	mmio = (uart->addr.address_space_id == ACPI_ADR_SPACE_SYSTEM_MEMORY);
-	p += sprintf(p, "console=uart,%s,0x%lx",
+	mmio = (uart->addr.space_id == ACPI_ADR_SPACE_SYSTEM_MEMORY);
+	p += sprintf(p, "uart8250,%s,0x%lx",
 		mmio ? "mmio" : "io", uart->addr.address);
 	if (uart->baud) {
 		p += sprintf(p, ",%lu", uart->baud);
@@ -41,7 +42,8 @@ setup_serial_console(struct pcdp_uart *uart)
 		}
 	}
 
-	return early_serial_console_init(options);
+	add_preferred_console("uart", 8250, &options[9]);
+	return setup_early_serial8250_console(options);
 #else
 	return -ENODEV;
 #endif

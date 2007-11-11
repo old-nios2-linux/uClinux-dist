@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/elf-fdpic.h>
+#include <asm/mman.h>
 
 /*****************************************************************************/
 /*
@@ -64,6 +65,10 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 	if (len > TASK_SIZE)
 		return -ENOMEM;
 
+	/* handle MAP_FIXED */
+	if (flags & MAP_FIXED)
+		return addr;
+
 	/* only honour a hint if we're not going to clobber something doing so */
 	if (addr) {
 		addr = PAGE_ALIGN(addr);
@@ -110,14 +115,14 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 
 #if 0
 	printk("[area] l=%lx (ENOMEM) f='%s'\n",
-	       len, filp ? filp->f_dentry->d_name.name : "");
+	       len, filp ? filp->f_path.dentry->d_name.name : "");
 #endif
 	return -ENOMEM;
 
  success:
 #if 0
 	printk("[area] l=%lx ad=%lx f='%s'\n",
-	       len, addr, filp ? filp->f_dentry->d_name.name : "");
+	       len, addr, filp ? filp->f_path.dentry->d_name.name : "");
 #endif
 	return addr;
 } /* end arch_get_unmapped_area() */

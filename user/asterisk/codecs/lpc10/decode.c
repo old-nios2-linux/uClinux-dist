@@ -1,6 +1,6 @@
 /*
 
-$Log: decode.c,v $
+$Log$
 Revision 1.16  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 
@@ -61,22 +61,22 @@ static integer c__2 = 2;
 
 /* 	DECODE Version 54 */
 
-/* $Log: decode.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.2  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:14  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ * 
+ * Revision 1.2  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:14  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:22:39  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_decoder_state that is passed as an
@@ -205,22 +205,22 @@ static integer c__2 = 2;
     extern integer median_(integer *, integer *, integer *);
     integer ishift, errcnt, lsb;
 
-/* $Log: decode.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.2  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:14  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ *
+ * Revision 1.2  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:14  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:22:39  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_decoder_state that is passed as an
@@ -245,22 +245,22 @@ static integer c__2 = 2;
 /*   LPC Configuration parameters: */
 /* Frame size, Prediction order, Pitch period */
 /*       Arguments */
-/* $Log: decode.c,v $
-/* Revision 1.16  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.15  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.2  2003/09/19 01:20:22  markster
-/* Code cleanups (bug #66)
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:14  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.16  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.15  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ *
+ * Revision 1.2  2003/09/19 01:20:22  markster
+ * Code cleanups (bug #66)
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:14  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.2  1996/08/20  20:22:39  jaf
  * Removed all static local variables that were SAVE'd in the Fortran
  * code, and put them in struct lpc10_decoder_state that is passed as an
@@ -518,7 +518,7 @@ static integer c__2 = 2;
 	    drc[(5 - i__) * 3 - 2] = iout;
 	}
 /*  Determine error rate */
-	*erate = *erate * .96875f + errcnt * 102;
+	*erate = (integer)(*erate * .96875f + errcnt * 102);
     }
 /*  Get unsmoothed RMS, RC's, and PITCH */
     *irms = drms[1];
@@ -611,7 +611,7 @@ L900:
 	ishift = 15 - nbit[i__ - 1];
 	i2 *= pow_ii(&c__2, &ishift);
 	i2 += qb[i__ - 3];
-	irc[i__] = i2 * descl[i__ - 3] + deadd[i__ - 3];
+	irc[i__] = (integer)(i2 * descl[i__ - 3] + deadd[i__ - 3]);
     }
 /* 	IF (LISTL.GE.3) WRITE(FDEBUG,811) IRMS, (IRC(I),I=1,ORDER) */
 /* 811	FORMAT(1X,'<<DECODE OUT>>',T45,I4,1X,10I8) */

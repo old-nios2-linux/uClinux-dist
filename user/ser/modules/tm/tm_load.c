@@ -1,7 +1,7 @@
 /*
- * $Id: tm_load.c,v 1.15.4.1 2004/01/22 14:35:00 bogdan Exp $
+ * $Id: tm_load.c,v 1.20.2.1 2005/02/14 20:36:53 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -49,10 +49,12 @@ int load_tm( struct tm_binds *tmb)
 		LOG(L_ERR, LOAD_ERROR "'t_newtran' not found\n");
 		return -1;
 	}
+#ifdef USE_TCP
 	if (!( tmb->t_relay_to_tcp=find_export(T_RELAY_TO_TCP, 2, 0)) ) {
 		LOG(L_ERR, LOAD_ERROR "'t_relay_to_tcp' not found\n");
 		return -1;
 	}
+#endif
 	if (!( tmb->t_relay_to_udp=find_export(T_RELAY_TO_UDP, 2, 0)) ) {
 		LOG(L_ERR, LOAD_ERROR "'t_relay_to_udp' not found\n");
 		return -1;
@@ -134,6 +136,11 @@ int load_tm( struct tm_binds *tmb)
 		LOG( L_ERR, LOAD_ERROR "'print_dlg' not found\n");
 		return -1;
 	}
+	if (!(tmb->t_gett=(tgett_f)find_export(T_GETT,NO_SCRIPT,0))) {
+		LOG( L_ERR, LOAD_ERROR "'" T_GETT "' not found\n");
+		return -1;
+	}
 
+	tmb->route_mode = &rmode;
 	return 1;
 }

@@ -1,14 +1,23 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * AGI Extension interfaces
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ * \brief AGI Extension interfaces - Asterisk Gateway Interface
  */
 
 #ifndef _ASTERISK_AGI_H
@@ -37,13 +46,11 @@ typedef struct agi_command {
 	struct agi_command *next;
 } agi_command;
 
-int agi_register(agi_command *cmd);
-void agi_unregister(agi_command *cmd);
+int ast_agi_register(agi_command *cmd);
+void ast_agi_unregister(agi_command *cmd);
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }
 #endif
 
-
-
-#endif
+#endif /* _ASTERISK_AGI_H */

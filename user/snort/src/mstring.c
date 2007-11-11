@@ -47,16 +47,11 @@
 #include "mstring.h"
 #include "debug.h"
 #include "plugbase.h" /* needed for fasthex() */
+#include "util.h"
 
 #ifdef GIDS
 extern int detect_depth;
 #endif /* GIDS */
-
-#ifdef TEST_MSTRING
-#define FatalPrintError perror
-#else
-void FatalPrintError(char *);
-#endif
 
 extern u_int8_t *doe_ptr;
 

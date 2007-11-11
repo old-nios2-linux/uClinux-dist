@@ -52,6 +52,7 @@ struct ipc_perm
 #ifdef __KERNEL__
 
 #include <linux/kref.h>
+#include <linux/spinlock.h>
 
 #define IPCMNI 32768  /* <= MAX_INT limit for ipc arrays (including sysctl changes) */
 
@@ -92,24 +93,21 @@ extern struct ipc_namespace init_ipc_ns;
 
 #ifdef CONFIG_SYSVIPC
 #define INIT_IPC_NS(ns)		.ns		= &init_ipc_ns,
+extern void free_ipc_ns(struct kref *kref);
+extern struct ipc_namespace *copy_ipcs(unsigned long flags,
+						struct ipc_namespace *ns);
 #else
 #define INIT_IPC_NS(ns)
-#endif
-
-#ifdef CONFIG_IPC_NS
-extern void free_ipc_ns(struct kref *kref);
-extern int copy_ipcs(unsigned long flags, struct task_struct *tsk);
-extern int unshare_ipcs(unsigned long flags, struct ipc_namespace **ns);
-#else
-static inline int copy_ipcs(unsigned long flags, struct task_struct *tsk)
+static inline struct ipc_namespace *copy_ipcs(unsigned long flags,
+						struct ipc_namespace *ns)
 {
-	return 0;
+	return ns;
 }
 #endif
 
 static inline struct ipc_namespace *get_ipc_ns(struct ipc_namespace *ns)
 {
-#ifdef CONFIG_IPC_NS
+#ifdef CONFIG_SYSVIPC
 	if (ns)
 		kref_get(&ns->kref);
 #endif
@@ -118,7 +116,7 @@ static inline struct ipc_namespace *get_ipc_ns(struct ipc_namespace *ns)
 
 static inline void put_ipc_ns(struct ipc_namespace *ns)
 {
-#ifdef CONFIG_IPC_NS
+#ifdef CONFIG_SYSVIPC
 	kref_put(&ns->kref, free_ipc_ns);
 #endif
 }
@@ -126,5 +124,3 @@ static inline void put_ipc_ns(struct ipc_namespace *ns)
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_IPC_H */
-
-

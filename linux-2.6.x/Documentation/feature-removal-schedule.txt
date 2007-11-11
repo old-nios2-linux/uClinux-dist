@@ -6,9 +6,27 @@ be removed from this file.
 
 ---------------------------
 
-What:	/sys/devices/.../power/state
-	dev->power.power_state
-	dpm_runtime_{suspend,resume)()
+What:	MXSER
+When:	December 2007
+Why:	Old mxser driver is obsoleted by the mxser_new. Give it some time yet
+	and remove it.
+Who:	Jiri Slaby <jirislaby@gmail.com>
+
+---------------------------
+
+What:	V4L2 VIDIOC_G_MPEGCOMP and VIDIOC_S_MPEGCOMP
+When:	October 2007
+Why:	Broken attempt to set MPEG compression parameters. These ioctls are
+	not able to implement the wide variety of parameters that can be set
+	by hardware MPEG encoders. A new MPEG control mechanism was created
+	in kernel 2.6.18 that replaces these ioctls. See the V4L2 specification
+	(section 1.9: Extended controls) for more information on this topic.
+Who:	Hans Verkuil <hverkuil@xs4all.nl> and
+	Mauro Carvalho Chehab <mchehab@infradead.org>
+
+---------------------------
+
+What:	dev->power.power_state
 When:	July 2007
 Why:	Broken design for runtime control over driver power states, confusing
 	driver-internal runtime power management with:  mechanisms to support
@@ -21,25 +39,19 @@ Who:	Pavel Machek <pavel@suse.cz>
 
 ---------------------------
 
-What:	RAW driver (CONFIG_RAW_DRIVER)
-When:	December 2005
-Why:	declared obsolete since kernel 2.6.3
-	O_DIRECT can be used instead
-Who:	Adrian Bunk <bunk@stusta.de>
-
----------------------------
-
-What:	raw1394: requests of type RAW1394_REQ_ISO_SEND, RAW1394_REQ_ISO_LISTEN
-When:	November 2006
-Why:	Deprecated in favour of the new ioctl-based rawiso interface, which is
-	more efficient.  You should really be using libraw1394 for raw1394
-	access anyway.
-Who:	Jody McIntyre <scjody@modernduck.com>
+What:	old NCR53C9x driver
+When:	October 2007
+Why:	Replaced by the much better esp_scsi driver.  Actual low-level
+	driver can be ported over almost trivially.
+Who:	David Miller <davem@davemloft.net>
+	Christoph Hellwig <hch@lst.de>
 
 ---------------------------
 
 What:	Video4Linux API 1 ioctls and video_decoder.h from Video devices.
 When:	December 2006
+Files:	include/linux/video_decoder.h
+Check:	include/linux/video_decoder.h
 Why:	V4L1 AP1 was replaced by V4L2 API. during migration from 2.4 to 2.6
 	series. The old API have lots of drawbacks and don't provide enough
 	means to work with all video and audio standards. The newer API is
@@ -70,21 +82,10 @@ Who:	Dominik Brodowski <linux@brodo.de>
 
 ---------------------------
 
-What:	ip_queue and ip6_queue (old ipv4-only and ipv6-only netfilter queue)
-When:	December 2005
-Why:	This interface has been obsoleted by the new layer3-independent
-	"nfnetlink_queue".  The Kernel interface is compatible, so the old
-	ip[6]tables "QUEUE" targets still work and will transparently handle
-	all packets into nfnetlink queue number 0.  Userspace users will have
-	to link against API-compatible library on top of libnfnetlink_queue 
-	instead of the current 'libipq'.
-Who:	Harald Welte <laforge@netfilter.org>
-
----------------------------
-
 What:	remove EXPORT_SYMBOL(kernel_thread)
 When:	August 2006
 Files:	arch/*/kernel/*_ksyms.c
+Check:	kernel_thread
 Why:	kernel_thread is a low-level implementation detail.  Drivers should
         use the <linux/kthread.h> API instead which shields them from
 	implementation details and provides a higherlevel interface that
@@ -109,41 +110,6 @@ Who:    Adrian Bunk <bunk@stusta.de>
 
 ---------------------------
 
-What:  drivers depending on OSS_OBSOLETE_DRIVER
-When:  options in 2.6.20, code in 2.6.22
-Why:   OSS drivers with ALSA replacements
-Who:   Adrian Bunk <bunk@stusta.de>
-
----------------------------
-
-What:	pci_module_init(driver)
-When:	January 2007
-Why:	Is replaced by pci_register_driver(pci_driver).
-Who:	Richard Knutsson <ricknu-0@student.ltu.se> and Greg Kroah-Hartman <gregkh@suse.de>
-
----------------------------
-
-What:	Usage of invalid timevals in setitimer
-When:	March 2007
-Why:	POSIX requires to validate timevals in the setitimer call. This
-	was never done by Linux. The invalid (e.g. negative timevals) were
-	silently converted to more or less random timeouts and intervals.
-	Until the removal a per boot limited number of warnings is printed
-	and the timevals are sanitized.
-
-Who:	Thomas Gleixner <tglx@linutronix.de>
-
----------------------------
-
-What:	I2C interface of the it87 driver
-When:	January 2007
-Why:	The ISA interface is faster and should be always available. The I2C
-	probing is also known to cause trouble in at least one case (see
-	bug #5889.)
-Who:	Jean Delvare <khali@linux-fr.org>
-
----------------------------
-
 What:	Unused EXPORT_SYMBOL/EXPORT_SYMBOL_GPL exports
 	(temporary transition config option provided until then)
 	The transition config option will also be removed at the same time.
@@ -151,15 +117,6 @@ When:	before 2.6.19
 Why:	Unused symbols are both increasing the size of the kernel binary
 	and are often a sign of "wrong API"
 Who:	Arjan van de Ven <arjan@linux.intel.com>
-
----------------------------
-
-What:	mount/umount uevents
-When:	February 2007
-Why:	These events are not correct, and do not properly let userspace know
-	when a file system has been mounted or unmounted.  Userspace should
-	poll the /proc/mounts file instead to detect this properly.
-Who:	Greg Kroah-Hartman <gregkh@suse.de>
 
 ---------------------------
 
@@ -179,68 +136,23 @@ Who:	Greg Kroah-Hartman <gregkh@suse.de>
 
 ---------------------------
 
-What:	find_trylock_page
-When:	January 2007
-Why:	The interface no longer has any callers left in the kernel. It
-	is an odd interface (compared with other find_*_page functions), in
-	that it does not take a refcount to the page, only the page lock.
-	It should be replaced with find_get_page or find_lock_page if possible.
-	This feature removal can be reevaluated if users of the interface
-	cannot cleanly use something else.
+What:	vm_ops.nopage
+When:	Soon, provided in-kernel callers have been converted
+Why:	This interface is replaced by vm_ops.fault, but it has been around
+	forever, is used by a lot of drivers, and doesn't cost much to
+	maintain.
 Who:	Nick Piggin <npiggin@suse.de>
 
 ---------------------------
 
 What:	Interrupt only SA_* flags
-When:	Januar 2007
+When:	September 2007
 Why:	The interrupt related SA_* flags are replaced by IRQF_* to move them
 	out of the signal namespace.
 
 Who:	Thomas Gleixner <tglx@linutronix.de>
 
 ---------------------------
-
-What:	i2c-ite and i2c-algo-ite drivers
-When:	September 2006
-Why:	These drivers never compiled since they were added to the kernel
-	tree 5 years ago. This feature removal can be reevaluated if
-	someone shows interest in the drivers, fixes them and takes over
-	maintenance.
-	http://marc.theaimsgroup.com/?l=linux-mips&m=115040510817448
-Who:	Jean Delvare <khali@linux-fr.org>
-
----------------------------
-
-What:	Bridge netfilter deferred IPv4/IPv6 output hook calling
-When:	January 2007
-Why:	The deferred output hooks are a layering violation causing unusual
-	and broken behaviour on bridge devices. Examples of things they
-	break include QoS classifation using the MARK or CLASSIFY targets,
-	the IPsec policy match and connection tracking with VLANs on a
-	bridge. Their only use is to enable bridge output port filtering
-	within iptables with the physdev match, which can also be done by
-	combining iptables and ebtables using netfilter marks. Until it
-	will get removed the hook deferral is disabled by default and is
-	only enabled when needed.
-
-Who:	Patrick McHardy <kaber@trash.net>
-
----------------------------
-
-What:	frame diverter
-When:	November 2006
-Why:	The frame diverter is included in most distribution kernels, but is
-	broken. It does not correctly handle many things:
-	- IPV6
-	- non-linear skb's
-	- network device RCU on removal
-	- input frames not correctly checked for protocol errors
-	It also adds allocation overhead even if not enabled.
-	It is not clear if anyone is still using it.
-Who:	Stephen Hemminger <shemminger@osdl.org>
-
----------------------------
-
 
 What:	PHYSDEVPATH, PHYSDEVBUS, PHYSDEVDRIVER in the uevent environment
 When:	October 2008
@@ -252,19 +164,145 @@ Who:	Kay Sievers <kay.sievers@suse.de>
 
 ---------------------------
 
-What:	i2c-isa
-When:	December 2006
-Why:	i2c-isa is a non-sense and doesn't fit in the device driver
-	model. Drivers relying on it are better implemented as platform
-	drivers.
+What:	i2c_adapter.list
+When:	July 2007
+Why:	Superfluous, this list duplicates the one maintained by the driver
+	core.
+Who:	Jean Delvare <khali@linux-fr.org>,
+	David Brownell <dbrownell@users.sourceforge.net>
+
+---------------------------
+
+What:  drivers depending on OBSOLETE_OSS
+When:  options in 2.6.22, code in 2.6.24
+Why:   OSS drivers with ALSA replacements
+Who:   Adrian Bunk <bunk@stusta.de>
+
+---------------------------
+
+What:	ACPI procfs interface
+When:	July 2008
+Why:	ACPI sysfs conversion should be finished by January 2008.
+	ACPI procfs interface will be removed in July 2008 so that
+	there is enough time for the user space to catch up.
+Who:	Zhang Rui <rui.zhang@intel.com>
+
+---------------------------
+
+What:	/proc/acpi/button
+When:	August 2007
+Why:	/proc/acpi/button has been replaced by events to the input layer
+	since 2.6.20.
+Who:	Len Brown <len.brown@intel.com>
+
+---------------------------
+
+What:	/proc/acpi/event
+When:	February 2008
+Why:	/proc/acpi/event has been replaced by events via the input layer
+	and netlink since 2.6.23.
+Who:	Len Brown <len.brown@intel.com>
+
+---------------------------
+
+What:	Compaq touchscreen device emulation
+When:	Oct 2007
+Files:	drivers/input/tsdev.c
+Why:	The code says it was obsolete when it was written in 2001.
+	tslib is a userspace library which does anything tsdev can do and
+	much more besides in userspace where this code belongs. There is no
+	longer any need for tsdev and applications should have converted to
+	use tslib by now.
+	The name "tsdev" is also extremely confusing and lots of people have
+	it loaded when they don't need/use it.
+Who:	Richard Purdie <rpurdie@rpsys.net>
+
+---------------------------
+
+What:	i2c-ixp2000, i2c-ixp4xx and scx200_i2c drivers
+When:	September 2007
+Why:	Obsolete. The new i2c-gpio driver replaces all hardware-specific
+	I2C-over-GPIO drivers.
 Who:	Jean Delvare <khali@linux-fr.org>
 
 ---------------------------
 
-What:	ftape
-When:	2.6.20
-Why:	Orphaned for ages.  SMP bugs long unfixed.  Few users left
-	in the world.
-Who:	Jeff Garzik <jeff@garzik.org>
+What:	'time' kernel boot parameter
+When:	January 2008
+Why:	replaced by 'printk.time=<value>' so that printk timestamps can be
+	enabled or disabled as needed
+Who:	Randy Dunlap <randy.dunlap@oracle.com>
+
+---------------------------
+
+What:  drivers depending on OSS_OBSOLETE
+When:  options in 2.6.23, code in 2.6.25
+Why:   obsolete OSS drivers
+Who:   Adrian Bunk <bunk@stusta.de>
+
+---------------------------
+
+What: libata spindown skipping and warning
+When: Dec 2008
+Why:  Some halt(8) implementations synchronize caches for and spin
+      down libata disks because libata didn't use to spin down disk on
+      system halt (only synchronized caches).
+      Spin down on system halt is now implemented.  sysfs node
+      /sys/class/scsi_disk/h:c:i:l/manage_start_stop is present if
+      spin down support is available.
+      Because issuing spin down command to an already spun down disk
+      makes some disks spin up just to spin down again, libata tracks
+      device spindown status to skip the extra spindown command and
+      warn about it.
+      This is to give userspace tools the time to get updated and will
+      be removed after userspace is reasonably updated.
+Who:  Tejun Heo <htejun@gmail.com>
+
+---------------------------
+
+What:	Legacy RTC drivers (under drivers/i2c/chips)
+When:	November 2007
+Why:	Obsolete. We have a RTC subsystem with better drivers.
+Who:	Jean Delvare <khali@linux-fr.org>
+
+---------------------------
+
+What:	iptables SAME target
+When:	1.1. 2008
+Files:	net/ipv4/netfilter/ipt_SAME.c, include/linux/netfilter_ipv4/ipt_SAME.h
+Why:	Obsolete for multiple years now, NAT core provides the same behaviour.
+	Unfixable broken wrt. 32/64 bit cleanness.
+Who:	Patrick McHardy <kaber@trash.net>
+
+---------------------------
+
+What: The arch/ppc and include/asm-ppc directories
+When: Jun 2008
+Why:  The arch/powerpc tree is the merged architecture for ppc32 and ppc64
+      platforms.  Currently there are efforts underway to port the remaining
+      arch/ppc platforms to the merged tree.  New submissions to the arch/ppc
+      tree have been frozen with the 2.6.22 kernel release and that tree will
+      remain in bug-fix only mode until its scheduled removal.  Platforms
+      that are not ported by June 2008 will be removed due to the lack of an
+      interested maintainer.
+Who:  linuxppc-dev@ozlabs.org
+
+---------------------------
+
+What:	mthca driver's MSI support
+When:	January 2008
+Files:	drivers/infiniband/hw/mthca/*.[ch]
+Why:	All mthca hardware also supports MSI-X, which provides
+	strictly more functionality than MSI.  So there is no point in
+	having both MSI-X and MSI support in the driver.
+Who:	Roland Dreier <rolandd@cisco.com>
+
+---------------------------
+
+What:   sk98lin network driver
+When:   Feburary 2008
+Why:    In kernel tree version of driver is unmaintained. Sk98lin driver
+	replaced by the skge driver. 
+Who:    Stephen Hemminger <shemminger@linux-foundation.org>
 
 ---------------------------

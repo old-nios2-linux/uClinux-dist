@@ -174,7 +174,7 @@ static void FTPTelnetInit(u_char *args)
         {
             snprintf(ErrorString, iErrStrLen,
                     "Error initializing Global Configuration.");
-            _dpd.fatalMsg("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
+            DynamicPreprocessorFatalMessage("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
 
             return;
         }
@@ -183,7 +183,7 @@ static void FTPTelnetInit(u_char *args)
         {
             snprintf(ErrorString, iErrStrLen,
                     "Error configuring default global configuration.");
-            _dpd.fatalMsg("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
+            DynamicPreprocessorFatalMessage("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
 
             return;
         }
@@ -193,7 +193,7 @@ static void FTPTelnetInit(u_char *args)
         {
             snprintf(ErrorString, iErrStrLen,
                     "Error initializing client module.");
-            _dpd.fatalMsg("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
+            DynamicPreprocessorFatalMessage("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
 
             return;
         }
@@ -202,7 +202,7 @@ static void FTPTelnetInit(u_char *args)
         {
             snprintf(ErrorString, iErrStrLen,
                      "Error initializing normalization module.");
-            _dpd.fatalMsg("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
+            DynamicPreprocessorFatalMessage("%s(%d) => %s\n", *(_dpd.config_file), *(_dpd.config_line), ErrorString);
 
             return;
         }
@@ -231,8 +231,8 @@ static void FTPTelnetInit(u_char *args)
              */
             if(ErrorString)
             {
-                _dpd.fatalMsg("%s(%d) => %s\n", 
-                        *(_dpd.config_file), *(_dpd.config_line), ErrorString);
+                DynamicPreprocessorFatalMessage("%s(%d) => %s\n", 
+                                                *(_dpd.config_file), *(_dpd.config_line), ErrorString);
             }
             else
             {
@@ -241,13 +241,13 @@ static void FTPTelnetInit(u_char *args)
                  */
                 if(iRet == -2)
                 {
-                    _dpd.fatalMsg("%s(%d) => ErrorString is undefined.\n", 
-                            *(_dpd.config_file), *(_dpd.config_line));
+                    DynamicPreprocessorFatalMessage("%s(%d) => ErrorString is undefined.\n", 
+                                                    *(_dpd.config_file), *(_dpd.config_line));
                 }
                 else
                 {
-                    _dpd.fatalMsg("%s(%d) => Undefined Error.\n", 
-                            *(_dpd.config_file), *(_dpd.config_line));
+                    DynamicPreprocessorFatalMessage("%s(%d) => Undefined Error.\n", 
+                                                    *(_dpd.config_file), *(_dpd.config_line));
                 }
             }
         }

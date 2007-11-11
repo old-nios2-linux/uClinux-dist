@@ -1,7 +1,7 @@
 /*
- * $Id: dbexample.c,v 1.9 2003/09/15 22:34:28 janakj Exp $
+ * $Id: dbexample.c,v 1.12 2004/08/24 08:45:12 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,7 +31,7 @@
 #include "../../db/db.h"
 
 
-#define DB_URL   "sql://root@localhost/ser"
+#define DB_URL   "mysql://root@localhost/ser"
 #define DB_TABLE "location"
 
 #define TRUE 1
@@ -39,7 +39,7 @@
 
 
 /*
- * Dabase module client example
+ * Database module client example
  */
 
 
@@ -188,7 +188,7 @@ struct module_exports* mod_register()
 	     /*
 	      * Create a database connection
 	      * DB_URL is database URL of form
-	      * sql://user:password@host:port/database
+	      * mysql://user:password@host:port/database
 	      * The function returns handle, that
 	      * represents a database connection
 	      */
@@ -263,7 +263,7 @@ struct module_exports* mod_register()
 	      * Free the result because we don't need it
 	      * anymore
 	      */
-	if (db_free_query(h, res) < 0) {
+	if (db_free_result(h, res) < 0) {
 		fprintf(stderr, "Error while freeing result of query\n");
 		return &dbex_exports;
 	}

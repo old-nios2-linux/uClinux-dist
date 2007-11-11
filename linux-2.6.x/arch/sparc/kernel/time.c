@@ -44,6 +44,8 @@
 #include <asm/of_device.h>
 #include <asm/irq_regs.h>
 
+#include "irq.h"
+
 DEFINE_SPINLOCK(rtc_lock);
 enum sparc_clock_type sp_clock_typ;
 DEFINE_SPINLOCK(mostek_lock);
@@ -78,7 +80,6 @@ unsigned long profile_pc(struct pt_regs *regs)
 	extern char __copy_user_begin[], __copy_user_end[];
 	extern char __atomic_begin[], __atomic_end[];
 	extern char __bzero_begin[], __bzero_end[];
-	extern char __bitops_begin[], __bitops_end[];
 
 	unsigned long pc = regs->pc;
 
@@ -88,9 +89,7 @@ unsigned long profile_pc(struct pt_regs *regs)
 	    (pc >= (unsigned long) __atomic_begin &&
 	     pc < (unsigned long) __atomic_end) ||
 	    (pc >= (unsigned long) __bzero_begin &&
-	     pc < (unsigned long) __bzero_end) ||
-	    (pc >= (unsigned long) __bitops_begin &&
-	     pc < (unsigned long) __bitops_end))
+	     pc < (unsigned long) __bzero_end))
 		pc = regs->u_regs[UREG_RETPC];
 	return pc;
 }
@@ -151,7 +150,7 @@ irqreturn_t timer_interrupt(int irq, void *dev_id)
 }
 
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
-static void __init kick_start_clock(void)
+static void __devinit kick_start_clock(void)
 {
 	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 	unsigned char sec;
@@ -226,7 +225,7 @@ static __inline__ int has_low_battery(void)
 	return (data1 == data2);	/* Was the write blocked? */
 }
 
-static void __init mostek_set_system_time(void)
+static void __devinit mostek_set_system_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
@@ -304,7 +303,7 @@ static __inline__ void sun4_clock_probe(void)
 static int __devinit clock_probe(struct of_device *op, const struct of_device_id *match)
 {
 	struct device_node *dp = op->node;
-	char *model = of_get_property(dp, "model", NULL);
+	const char *model = of_get_property(dp, "model", NULL);
 
 	if (!model)
 		return -ENODEV;
@@ -357,7 +356,7 @@ static struct of_platform_driver clock_driver = {
 /* Probe for the mostek real time clock chip. */
 static int __init clock_init(void)
 {
-	return of_register_driver(&clock_driver, &of_bus_type);
+	return of_register_driver(&clock_driver, &of_platform_bus_type);
 }
 
 /* Must be after subsys_initcall() so that busses are probed.  Must
@@ -437,15 +436,6 @@ void __init time_init(void)
 static inline unsigned long do_gettimeoffset(void)
 {
 	return (*master_l10_counter >> 10) & 0x1fffff;
-}
-
-/*
- * Returns nanoseconds
- * XXX This is a suboptimal implementation.
- */
-unsigned long long sched_clock(void)
-{
-	return (unsigned long long)jiffies * (1000000000 / HZ);
 }
 
 /* Ok, my cute asm atomicity trick doesn't work anymore.

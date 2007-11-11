@@ -203,7 +203,7 @@ static int erase_effect(struct input_dev *dev, int effect_id,
 }
 
 /**
- * input_ff_erase - erase an effect from device
+ * input_ff_erase - erase a force-feedback effect from device
  * @dev: input device to erase effect from
  * @effect_id: id of the ffect to be erased
  * @file: purported owner of the request
@@ -281,7 +281,8 @@ int input_ff_event(struct input_dev *dev, unsigned int type,
 		break;
 
 	default:
-		ff->playback(dev, code, value);
+		if (check_effect_access(ff, code, NULL) == 0)
+			ff->playback(dev, code, value);
 		break;
 	}
 
@@ -347,7 +348,7 @@ EXPORT_SYMBOL_GPL(input_ff_create);
 
 /**
  * input_ff_free() - frees force feedback portion of input device
- * @dev: input device supporintg force feedback
+ * @dev: input device supporting force feedback
  *
  * This function is only needed in error path as input core will
  * automatically free force feedback structures when device is

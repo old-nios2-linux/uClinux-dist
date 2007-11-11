@@ -17,10 +17,8 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <linux/miscdevice.h>
-#include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/hdreg.h>
 
@@ -57,17 +55,16 @@ static void nftl_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 
 	DEBUG(MTD_DEBUG_LEVEL1, "NFTL: add_mtd for %s\n", mtd->name);
 
-	nftl = kmalloc(sizeof(struct NFTLrecord), GFP_KERNEL);
+	nftl = kzalloc(sizeof(struct NFTLrecord), GFP_KERNEL);
 
 	if (!nftl) {
 		printk(KERN_WARNING "NFTL: out of memory for data structures\n");
 		return;
 	}
-	memset(nftl, 0, sizeof(*nftl));
 
 	nftl->mbd.mtd = mtd;
 	nftl->mbd.devnum = -1;
-	nftl->mbd.blksize = 512;
+
 	nftl->mbd.tr = tr;
 
         if (NFTL_mount(nftl) < 0) {
@@ -147,10 +144,9 @@ int nftl_read_oob(struct mtd_info *mtd, loff_t offs, size_t len,
 	ops.ooblen = len;
 	ops.oobbuf = buf;
 	ops.datbuf = NULL;
-	ops.len = len;
 
 	res = mtd->read_oob(mtd, offs & ~(mtd->writesize - 1), &ops);
-	*retlen = ops.retlen;
+	*retlen = ops.oobretlen;
 	return res;
 }
 
@@ -168,10 +164,9 @@ int nftl_write_oob(struct mtd_info *mtd, loff_t offs, size_t len,
 	ops.ooblen = len;
 	ops.oobbuf = buf;
 	ops.datbuf = NULL;
-	ops.len = len;
 
 	res = mtd->write_oob(mtd, offs & ~(mtd->writesize - 1), &ops);
-	*retlen = ops.retlen;
+	*retlen = ops.oobretlen;
 	return res;
 }
 
@@ -797,6 +792,7 @@ static struct mtd_blktrans_ops nftl_tr = {
 	.name		= "nftl",
 	.major		= NFTL_MAJOR,
 	.part_bits	= NFTL_PARTN_BITS,
+	.blksize 	= 512,
 	.getgeo		= nftl_getgeo,
 	.readsect	= nftl_readblock,
 #ifdef CONFIG_NFTL_RW

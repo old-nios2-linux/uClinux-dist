@@ -120,8 +120,7 @@ int sfSetPerformanceStatisticsEx(SFPERF *sfPerf, int iFlag, void * p)
     {
         sfPerf->iPerfFlags = sfPerf->iPerfFlags | SFPERF_FILE;
         
-        strncpy( sfPerf->file, p, sizeof(sfPerf->file)-1 );
-        sfPerf->file[sizeof(sfPerf->file)-1] = 0x00;
+        SnortStrncpy(sfPerf->file, (char *)p, sizeof(sfPerf->file));
 
         /* this file needs to be readable by everyone */
 #ifndef WIN32
@@ -192,7 +191,7 @@ int sfRotatePerformanceStatisticsFile(SFPERF *sfPerf)
     }
     
     /* Rename current stats file with yesterday's date */
-    strncpy(dir, sfPerf->file, PATH_MAX-1);
+    SnortStrncpy(dir, sfPerf->file, PATH_MAX);
     ptr = strrchr(dir, '/');
     if ( ptr != NULL )
         *ptr = '\0';
@@ -201,8 +200,8 @@ int sfRotatePerformanceStatisticsFile(SFPERF *sfPerf)
     t = time(&t);
     t -= (24*60*60);
     tm = localtime(&t);
-    snprintf(newfile, FILE_MAX - 1, "%s/%d-%02d-%02d",
-                        dir, tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+    SnortSnprintf(newfile, FILE_MAX, "%s/%d-%02d-%02d",
+                  dir, tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
 
     /* Checking return code from rename */
     if(rename(sfPerf->file, newfile) != 0)

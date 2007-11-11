@@ -7,7 +7,7 @@
 
 LDFLAGS		:=
 OBJCOPYFLAGS	:= -O binary -R .note -R .comment -S
-LDFLAGS_vmlinux	:= -e startup_32
+LDFLAGS_vmlinux	:=
 
 CFLAGS += -pipe -fno-schedule-insns
 CFLAGS_KERNEL += -mmodel=medium
@@ -36,7 +36,8 @@ LIBGCC	:= $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 libs-y	+= arch/m32r/lib/ $(LIBGCC)
 core-y	+= arch/m32r/kernel/	\
 	   arch/m32r/mm/	\
-	   arch/m32r/boot/
+	   arch/m32r/boot/	\
+	   arch/m32r/platforms/
 
 drivers-$(CONFIG_OPROFILE)	+= arch/m32r/oprofile/
 

@@ -1133,6 +1133,7 @@ int dev_queue_xmit(struct sk_buff *skb)
   =======================================================================*/
 
 int netdev_max_backlog = 300;
+EXPORT_SYMBOL(netdev_max_backlog);
 int weight_p = 64;            /* old backlog weight */
 /* These numbers are selected based on intuition and some
  * experimentatiom, if you have more scientific way of doing this

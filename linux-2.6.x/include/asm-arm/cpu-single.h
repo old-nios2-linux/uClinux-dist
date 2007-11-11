@@ -2,7 +2,6 @@
  *  linux/include/asm-arm/cpu-single.h
  *
  *  Copyright (C) 2000 Russell King
- *  Modified by Hyok S. Choi, 2004
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -29,9 +28,7 @@
 #define cpu_do_idle			__cpu_fn(CPU_NAME,_do_idle)
 #define cpu_dcache_clean_area		__cpu_fn(CPU_NAME,_dcache_clean_area)
 #define cpu_do_switch_mm		__cpu_fn(CPU_NAME,_switch_mm)
-#ifdef CONFIG_MMU
-#define cpu_set_pte			__cpu_fn(CPU_NAME,_set_pte)
-#endif
+#define cpu_set_pte_ext			__cpu_fn(CPU_NAME,_set_pte_ext)
 
 #include <asm/page.h>
 
@@ -43,7 +40,5 @@ extern void cpu_proc_fin(void);
 extern int cpu_do_idle(void);
 extern void cpu_dcache_clean_area(void *, int);
 extern void cpu_do_switch_mm(unsigned long pgd_phys, struct mm_struct *mm);
-#ifdef CONFIG_MMU
-extern void cpu_set_pte(pte_t *ptep, pte_t pte);
-#endif
+extern void cpu_set_pte_ext(pte_t *ptep, pte_t pte, unsigned int ext);
 extern void cpu_reset(unsigned long addr) __attribute__((noreturn));

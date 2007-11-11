@@ -1,33 +1,51 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Translate between signed linear and LPC10 (Linear Predictor Code)
+ * Copyright (C) 1999 - 2005, Digium, Inc.
+ *
+ * Mark Spencer <markster@digium.com>
  *
  * The lpc10 code is from a library used by nautilus, modified to be a bit
  * nicer to the compiler.
- *
  * See http://www.arl.wustl.edu/~jaf/ 
- * 
- * Copyright (C) 1999, Mark Spencer
  *
- * Mark Spencer <markster@linux-support.net>
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Translate between signed linear and LPC10 (Linear Predictor Code)
+ *
+ * \ingroup codecs
+ */
 
-#include <asterisk/lock.h>
-#include <asterisk/translate.h>
-#include <asterisk/module.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 42477 $")
+
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <stdio.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/translate.h"
+#include "asterisk/config.h"
+#include "asterisk/options.h"
+#include "asterisk/module.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/utils.h"
 
 #include "lpc10/lpc10.h"
 
@@ -42,60 +60,32 @@
 
 #define LPC10_BYTES_IN_COMPRESSED_FRAME (LPC10_BITS_IN_COMPRESSED_FRAME + 7)/8
 
-AST_MUTEX_DEFINE_STATIC(localuser_lock);
-static int localusecnt=0;
+#define	BUFFER_SAMPLES	8000
 
-static char *tdesc = "LPC10 2.4kbps (signed linear) Voice Coder";
-
-struct ast_translator_pvt {
+struct lpc10_coder_pvt {
 	union {
 		struct lpc10_encoder_state *enc;
 		struct lpc10_decoder_state *dec;
 	} lpc10;
-	struct ast_frame f;
-	/* Space to build offset */
-	char offset[AST_FRIENDLY_OFFSET];
-	/* Buffer for our outgoing frame */
-	short outbuf[8000];
 	/* Enough to store a full second */
-	short buf[8000];
-	int tail;
+	short buf[BUFFER_SAMPLES];
 	int longer;
 };
 
-#define lpc10_coder_pvt ast_translator_pvt
-
-static struct ast_translator_pvt *lpc10_enc_new(void)
+static int lpc10_enc_new(struct ast_trans_pvt *pvt)
 {
-	struct lpc10_coder_pvt *tmp;
-	tmp = malloc(sizeof(struct lpc10_coder_pvt));
-	if (tmp) {
-		if (!(tmp->lpc10.enc = create_lpc10_encoder_state())) {
-			free(tmp);
-			tmp = NULL;
-		}
-		tmp->tail = 0;
-		tmp->longer = 0;
-		localusecnt++;
-	}
-	return tmp;
+	struct lpc10_coder_pvt *tmp = pvt->pvt;
+
+	return (tmp->lpc10.enc = create_lpc10_encoder_state()) ? 0 : -1;
 }
 
-static struct ast_translator_pvt *lpc10_dec_new(void)
+static int lpc10_dec_new(struct ast_trans_pvt *pvt)
 {
-	struct lpc10_coder_pvt *tmp;
-	tmp = malloc(sizeof(struct lpc10_coder_pvt));
-	if (tmp) {
-		if (!(tmp->lpc10.dec = create_lpc10_decoder_state())) {
-			free(tmp);
-			tmp = NULL;
-		}
-		tmp->tail = 0;
-		tmp->longer = 0;
-		localusecnt++;
-	}
-	return tmp;
+	struct lpc10_coder_pvt *tmp = pvt->pvt;
+
+	return (tmp->lpc10.dec = create_lpc10_decoder_state()) ? 0 : -1;
 }
+
 static struct ast_frame *lintolpc10_sample(void)
 {
 	static struct ast_frame f;
@@ -127,39 +117,6 @@ static struct ast_frame *lpc10tolin_sample(void)
 	return &f;
 }
 
-static struct ast_frame *lpc10tolin_frameout(struct ast_translator_pvt *tmp)
-{
-	if (!tmp->tail)
-		return NULL;
-	/* Signed linear is no particular frame size, so just send whatever
-	   we have in the buffer in one lump sum */
-	tmp->f.frametype = AST_FRAME_VOICE;
-	tmp->f.subclass = AST_FORMAT_SLINEAR;
-	tmp->f.datalen = tmp->tail * 2;
-	/* Assume 8000 Hz */
-	tmp->f.samples = tmp->tail;
-	tmp->f.mallocd = 0;
-	tmp->f.offset = AST_FRIENDLY_OFFSET;
-	tmp->f.src = __PRETTY_FUNCTION__;
-	tmp->f.data = tmp->buf;
-	/* Reset tail pointer */
-	tmp->tail = 0;
-
-#if 0
-	/* Save a sample frame */
-	{ static int samplefr = 0;
-	if (samplefr == 80) {
-		int fd;
-		fd = open("lpc10.example", O_WRONLY | O_CREAT, 0644);
-		write(fd, tmp->f.data, tmp->f.datalen);
-		close(fd);
-	} 		
-	samplefr++;
-	}
-#endif
-	return &tmp->f;	
-}
-
 static void extract_bits(INT32 *bits, unsigned char *c)
 {
 	int x;
@@ -173,6 +130,7 @@ static void extract_bits(INT32 *bits, unsigned char *c)
 	}
 }
 
+/* XXX note lpc10_encode() produces one bit per word in bits[] */
 static void build_bits(unsigned char *c, INT32 *bits)
 {
 	unsigned char mask=0x80;
@@ -190,33 +148,32 @@ static void build_bits(unsigned char *c, INT32 *bits)
 	}
 }
 
-static int lpc10tolin_framein(struct ast_translator_pvt *tmp, struct ast_frame *f)
+static int lpc10tolin_framein(struct ast_trans_pvt *pvt, struct ast_frame *f)
 {
-	/* Assuming there's space left, decode into the current buffer at
-	   the tail location */
-	int x;
-	int len=0;
-	float tmpbuf[LPC10_SAMPLES_PER_FRAME];
-	short *sd;
-	INT32 bits[LPC10_BITS_IN_COMPRESSED_FRAME];
-	while(len + LPC10_BYTES_IN_COMPRESSED_FRAME <= f->datalen) {
-		if (tmp->tail + LPC10_SAMPLES_PER_FRAME < sizeof(tmp->buf)/2) {
-			sd = tmp->buf + tmp->tail;
-			extract_bits(bits, f->data + len);
-			if (lpc10_decode(bits, tmpbuf, tmp->lpc10.dec)) {
-				ast_log(LOG_WARNING, "Invalid lpc10 data\n");
-				return -1;
-			}
-			for (x=0;x<LPC10_SAMPLES_PER_FRAME;x++) {
-				/* Convert to a real between -1.0 and 1.0 */
-				sd[x] = 32768.0 * tmpbuf[x];
-			}
-			
-			tmp->tail+=LPC10_SAMPLES_PER_FRAME;
-		} else {
+	struct lpc10_coder_pvt *tmp = pvt->pvt;
+	int16_t *dst = (int16_t *)pvt->outbuf;
+	int len = 0;
+
+	while (len + LPC10_BYTES_IN_COMPRESSED_FRAME <= f->datalen) {
+		int x;
+		float tmpbuf[LPC10_SAMPLES_PER_FRAME];
+		INT32 bits[LPC10_BITS_IN_COMPRESSED_FRAME]; /* XXX see note */
+		if (pvt->samples + LPC10_SAMPLES_PER_FRAME > BUFFER_SAMPLES) {
 			ast_log(LOG_WARNING, "Out of buffer space\n");
 			return -1;
 		}
+		extract_bits(bits, f->data + len);
+		if (lpc10_decode(bits, tmpbuf, tmp->lpc10.dec)) {
+			ast_log(LOG_WARNING, "Invalid lpc10 data\n");
+			return -1;
+		}
+		for (x=0;x<LPC10_SAMPLES_PER_FRAME;x++) {
+			/* Convert to a short between -1.0 and 1.0 */
+			dst[pvt->samples + x] = (int16_t)(32768.0 * tmpbuf[x]);
+		}
+
+		pvt->samples += LPC10_SAMPLES_PER_FRAME;
+		pvt->datalen += 2*LPC10_SAMPLES_PER_FRAME;
 		len += LPC10_BYTES_IN_COMPRESSED_FRAME;
 	}
 	if (len != f->datalen) 
@@ -224,145 +181,137 @@ static int lpc10tolin_framein(struct ast_translator_pvt *tmp, struct ast_frame *
 	return 0;
 }
 
-static int lintolpc10_framein(struct ast_translator_pvt *tmp, struct ast_frame *f)
+static int lintolpc10_framein(struct ast_trans_pvt *pvt, struct ast_frame *f)
 {
+	struct lpc10_coder_pvt *tmp = pvt->pvt;
+
 	/* Just add the frames to our stream */
-	/* XXX We should look at how old the rest of our stream is, and if it
-	   is too old, then we should overwrite it entirely, otherwise we can
-	   get artifacts of earlier talk that do not belong */
-	if (tmp->tail + f->datalen < sizeof(tmp->buf) / 2) {
-		memcpy((tmp->buf + tmp->tail), f->data, f->datalen);
-		tmp->tail += f->datalen/2;
-	} else {
+	if (pvt->samples + f->samples > BUFFER_SAMPLES) {
 		ast_log(LOG_WARNING, "Out of buffer space\n");
 		return -1;
 	}
+	memcpy(tmp->buf + pvt->samples, f->data, f->datalen);
+	pvt->samples += f->samples;
 	return 0;
 }
 
-static struct ast_frame *lintolpc10_frameout(struct ast_translator_pvt *tmp)
+static struct ast_frame *lintolpc10_frameout(struct ast_trans_pvt *pvt)
 {
+	struct lpc10_coder_pvt *tmp = pvt->pvt;
 	int x;
-	int consumed = 0;
+	int datalen = 0;	/* output frame */
+	int samples = 0;	/* output samples */
 	float tmpbuf[LPC10_SAMPLES_PER_FRAME];
-	INT32 bits[LPC10_BITS_IN_COMPRESSED_FRAME];
+	INT32 bits[LPC10_BITS_IN_COMPRESSED_FRAME];	/* XXX what ??? */
 	/* We can't work on anything less than a frame in size */
-	if (tmp->tail < LPC10_SAMPLES_PER_FRAME)
+	if (pvt->samples < LPC10_SAMPLES_PER_FRAME)
 		return NULL;
-	/* Start with an empty frame */
-	tmp->f.samples = 0;
-	tmp->f.datalen = 0;
-	tmp->f.frametype = AST_FRAME_VOICE;
-	tmp->f.subclass = AST_FORMAT_LPC10;
-	while(tmp->tail >=  LPC10_SAMPLES_PER_FRAME) {
-		if (tmp->f.datalen + LPC10_BYTES_IN_COMPRESSED_FRAME > sizeof(tmp->outbuf)) {
-			ast_log(LOG_WARNING, "Out of buffer space\n");
-			return NULL;
-		}
+	while (pvt->samples >=  LPC10_SAMPLES_PER_FRAME) {
 		/* Encode a frame of data */
-		for (x=0;x<LPC10_SAMPLES_PER_FRAME;x++) {
-			tmpbuf[x] = (float)tmp->buf[x+consumed] / 32768.0;
-		}
+		for (x=0;x<LPC10_SAMPLES_PER_FRAME;x++)
+			tmpbuf[x] = (float)tmp->buf[x + samples] / 32768.0;
 		lpc10_encode(tmpbuf, bits, tmp->lpc10.enc);
-		build_bits(((unsigned char *)tmp->outbuf) + tmp->f.datalen, bits);
-		tmp->f.datalen += LPC10_BYTES_IN_COMPRESSED_FRAME;
-		tmp->f.samples += LPC10_SAMPLES_PER_FRAME;
+		build_bits((unsigned char *) pvt->outbuf + datalen, bits);
+		datalen += LPC10_BYTES_IN_COMPRESSED_FRAME;
+		samples += LPC10_SAMPLES_PER_FRAME;
+		pvt->samples -= LPC10_SAMPLES_PER_FRAME;
 		/* Use one of the two left over bits to record if this is a 22 or 23 ms frame...
 		   important for IAX use */
 		tmp->longer = 1 - tmp->longer;
-#if 0	/* what the heck was this for? */
-		((char *)(tmp->f.data))[consumed - 1] |= tmp->longer;
-#endif		
-		tmp->tail -= LPC10_SAMPLES_PER_FRAME;
-		consumed += LPC10_SAMPLES_PER_FRAME;
 	}
-	tmp->f.mallocd = 0;
-	tmp->f.offset = AST_FRIENDLY_OFFSET;
-	tmp->f.src = __PRETTY_FUNCTION__;
-	tmp->f.data = tmp->outbuf;
 	/* Move the data at the end of the buffer to the front */
-	if (tmp->tail)
-		memmove(tmp->buf, tmp->buf + consumed, tmp->tail * 2);
-#if 0
-	/* Save a sample frame */
-	{ static int samplefr = 0;
-	if (samplefr == 0) {
-		int fd;
-		fd = open("lpc10.example", O_WRONLY | O_CREAT, 0644);
-		write(fd, tmp->f.data, tmp->f.datalen);
-		close(fd);
-	} 		
-	samplefr++;
-	}
-#endif
-	return &tmp->f;	
+	if (pvt->samples)
+		memmove(tmp->buf, tmp->buf + samples, pvt->samples * 2);
+	return ast_trans_frameout(pvt, datalen, samples);
 }
 
-static void lpc10_destroy(struct ast_translator_pvt *pvt)
+
+static void lpc10_destroy(struct ast_trans_pvt *arg)
 {
+	struct lpc10_coder_pvt *pvt = arg->pvt;
 	/* Enc and DEC are both just allocated, so they can be freed */
 	free(pvt->lpc10.enc);
-	free(pvt);
-	localusecnt--;
 }
 
-static struct ast_translator lpc10tolin =
-	{ "lpc10tolin", 
-	   AST_FORMAT_LPC10, AST_FORMAT_SLINEAR,
-	   lpc10_dec_new,
-	   lpc10tolin_framein,
-	   lpc10tolin_frameout,
-	   lpc10_destroy,
-	   lpc10tolin_sample
-	   };
+static struct ast_translator lpc10tolin = {
+	.name = "lpc10tolin", 
+	.srcfmt = AST_FORMAT_LPC10,
+	.dstfmt = AST_FORMAT_SLINEAR,
+	.newpvt = lpc10_dec_new,
+	.framein = lpc10tolin_framein,
+	.destroy = lpc10_destroy,
+	.sample = lpc10tolin_sample,
+	.desc_size = sizeof(struct lpc10_coder_pvt),
+	.buffer_samples = BUFFER_SAMPLES,
+	.plc_samples = LPC10_SAMPLES_PER_FRAME,
+	.buf_size = BUFFER_SAMPLES * 2,
+};
 
-static struct ast_translator lintolpc10 =
-	{ "lintolpc10", 
-	   AST_FORMAT_SLINEAR, AST_FORMAT_LPC10,
-	   lpc10_enc_new,
-	   lintolpc10_framein,
-	   lintolpc10_frameout,
-	   lpc10_destroy,
-	   lintolpc10_sample
-	   };
+static struct ast_translator lintolpc10 = {
+	.name = "lintolpc10", 
+	.srcfmt = AST_FORMAT_SLINEAR,
+	.dstfmt = AST_FORMAT_LPC10,
+	.newpvt = lpc10_enc_new,
+	.framein = lintolpc10_framein,
+	.frameout = lintolpc10_frameout,
+	.destroy = lpc10_destroy,
+	.sample = lintolpc10_sample,
+	.desc_size = sizeof(struct lpc10_coder_pvt),
+	.buffer_samples = BUFFER_SAMPLES,
+	.buf_size = LPC10_BYTES_IN_COMPRESSED_FRAME * (1 + BUFFER_SAMPLES / LPC10_SAMPLES_PER_FRAME),
+};
 
-int unload_module(void)
+static void parse_config(void)
+{
+        struct ast_variable *var;
+        struct ast_config *cfg = ast_config_load("codecs.conf");
+	if (!cfg)
+		return;
+	for (var = ast_variable_browse(cfg, "plc"); var; var = var->next) {
+	       if (!strcasecmp(var->name, "genericplc")) {
+			lpc10tolin.useplc = ast_true(var->value) ? 1 : 0;
+			if (option_verbose > 2)
+			       ast_verbose(VERBOSE_PREFIX_3 "codec_lpc10: %susing generic PLC\n",
+					lpc10tolin.useplc ? "" : "not ");
+		}
+        }
+	ast_config_destroy(cfg);
+}
+
+static int reload(void)
+{
+        parse_config();
+
+        return 0;
+}
+
+
+static int unload_module(void)
 {
 	int res;
-	ast_mutex_lock(&localuser_lock);
+
 	res = ast_unregister_translator(&lintolpc10);
-	if (!res)
-		res = ast_unregister_translator(&lpc10tolin);
-	if (localusecnt)
-		res = -1;
-	ast_mutex_unlock(&localuser_lock);
+	res |= ast_unregister_translator(&lpc10tolin);
+
 	return res;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	int res;
+
+	parse_config();
 	res=ast_register_translator(&lpc10tolin);
 	if (!res) 
 		res=ast_register_translator(&lintolpc10);
 	else
 		ast_unregister_translator(&lpc10tolin);
+
 	return res;
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "LPC10 2.4kbps Coder/Decoder",
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload,
+	       );

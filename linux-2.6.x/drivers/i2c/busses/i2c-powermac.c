@@ -25,7 +25,6 @@
 #include <linux/types.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
-#include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <asm/prom.h>
@@ -122,8 +121,7 @@ static s32 i2c_powermac_smbus_xfer(	struct i2c_adapter*	adap,
 		if (rc)
 			goto bail;
 		rc = pmac_i2c_xfer(bus, addrdir, 1, command,
-				   read ? data->block : &data->block[1],
-				   data->block[0]);
+				   &data->block[1], data->block[0]);
 		break;
 
         default:

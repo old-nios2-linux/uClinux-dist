@@ -16,6 +16,10 @@ mod-subdirs	+=	fslfifo
 subdir-$(CONFIG_MICROBLAZE_FSLFIFO) += fslfifo
 obj-$(CONFIG_MICROBLAZE_FSLFIFO) += fslfifo/fslfifo.o
 
+mod-subdirs	+=	xilinx_hwicap
+subdir-$(CONFIG_XILINX_HWICAP) += xilinx_hwicap
+obj-$(CONFIG_XILINX_HWICAP) += xilinx_hwicap/xilinx_hwicap.o
+
 include $(TOPDIR)/Rules.make
 
 fastdep:

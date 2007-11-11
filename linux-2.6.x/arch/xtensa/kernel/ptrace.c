@@ -19,7 +19,6 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/security.h>
 #include <linux/signal.h>
 
@@ -51,18 +50,8 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	switch (request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */
 	case PTRACE_PEEKDATA:
-	{
-		unsigned long tmp;
-		int copied;
-
-		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
-		ret = -EIO;
-		if (copied != sizeof(tmp))
-			break;
-		ret = put_user(tmp,(unsigned long *) data);
-
+		ret = generic_ptrace_peekdata(child, addr, data);
 		goto out;
-	}
 
 	/* Read the word at location addr in the USER area.  */
 
@@ -96,7 +85,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 			/* Note:  PS.EXCM is not set while user task is running;
 			 * its being set in regs is for exception handling
 			 * convenience.  */
-			tmp = (regs->ps & ~XCHAL_PS_EXCM_MASK);
+			tmp = (regs->ps & ~(1 << PS_EXCM_BIT));
 			break;
 		case REG_WB:
 			tmp = regs->windowbase;
@@ -139,10 +128,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
-		if (access_process_vm(child, addr, &data, sizeof(data), 1)
-		    == sizeof(data))
-			break;
-		ret = -EIO;
+		ret = generic_ptrace_pokedata(child, addr, data);
 		goto out;
 
 	case PTRACE_POKEUSR:
@@ -332,12 +318,6 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 
 void do_syscall_trace(void)
 {
-	if (!test_thread_flag(TIF_SYSCALL_TRACE))
-		return;
-
-	if (!(current->ptrace & PT_PTRACED))
-		return;
-
 	/*
 	 * The 0x80 provides a way for the tracing parent to distinguish
 	 * between a syscall stop and SIGTRAP delivery
@@ -354,3 +334,23 @@ void do_syscall_trace(void)
 		current->exit_code = 0;
 	}
 }
+
+void do_syscall_trace_enter(struct pt_regs *regs)
+{
+	if (test_thread_flag(TIF_SYSCALL_TRACE)
+			&& (current->ptrace & PT_PTRACED))
+		do_syscall_trace();
+
+#if 0
+	if (unlikely(current->audit_context))
+		audit_syscall_entry(current, AUDIT_ARCH_XTENSA..);
+#endif
+}
+
+void do_syscall_trace_leave(struct pt_regs *regs)
+{
+	if ((test_thread_flag(TIF_SYSCALL_TRACE))
+			&& (current->ptrace & PT_PTRACED))
+		do_syscall_trace();
+}
+

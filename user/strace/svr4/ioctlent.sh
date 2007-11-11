@@ -24,7 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#	$Id: ioctlent.sh,v 1.1.1.1 1999/02/19 00:23:30 wichert Exp $
+#	$Id: ioctlent.sh,v 1.4 2002/05/17 14:04:24 hughesj Exp $
 
 if [ $# -ne 1 ]
 then
@@ -32,14 +32,14 @@ then
 	exit 1
 fi
 
-bad_includes='cg[48]var\.h'
+bad_includes='cg[48]var\.h|sys/spad\.h'
 bad_defines='cg[48]var\.h|READSLICE|I_E_RECVFD|FBIOGPIXRECT|JTIMO|TTYTYPE|TIOCCONS|TCL_LINK|TCL_UNLINK'
 
 (
 	cd $1 || exit
 	find sys -name '*.h' -print |
-		xargs grep '^[	 ]*#[	 ]*define[	 ][ 	]*[A-Z_][A-Za-z0-9_]*[ 	][	 ]*([A-Za-z_][A-Za-z0-9_]*|[0-9][0-9]*)' /dev/null |
-		sed 's/\(.*\):#[ 	]*define[ 	]*\([A-Z_][A-Za-z0-9_]*\)[ 	]*\(([^)]*)\)[ 	]*\(.*\)/	{ "\1",	"\2",	\2	},	\4/'
+		xargs grep '^[	 ]*#[	 ]*define[	 ][ 	]*[A-Z_][A-Za-z0-9_]*[ 	][	 ]*( *[A-Za-z_][A-Za-z0-9_]* *| *[0-9][0-9]* *)' /dev/null |
+		sed 's/\(.*\):#[ 	]*define[ 	]*\([A-Z_][A-Za-z0-9_]*\)[ 	]*\(([^)]*)\)[ 	]*\(.*\)/	{ "\1",	"\2",	\2	},	\4 \/**\//'
 ) >ioctlent.tmp
 cat ioctlent.tmp |
 	awk '{ print "#include <" substr($2, 2, length($2) - 3) ">" }' |
@@ -47,6 +47,7 @@ cat ioctlent.tmp |
 	egrep -v "$bad_includes"
 echo xyzzy
 echo "struct ioctlent ioctlent[] = {"
-egrep -v "$bad_defines" ioctlent.tmp
+egrep -v "$bad_defines" ioctlent.tmp |
+awk '{ print "#ifdef " $4; print $0; print "#endif" }'
 echo "};"
 rm -f ioctlent.tmp

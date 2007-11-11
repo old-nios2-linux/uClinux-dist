@@ -1,8 +1,8 @@
-/* $Id: shm_mem.c,v 1.25.4.1.4.1 2004/07/26 23:18:35 andrei Exp $
+/* $Id: shm_mem.c,v 1.31 2004/12/08 19:06:12 andrei Exp $
  *
  * Shared memory functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,9 +28,10 @@
 /*
  * History:
  * --------
- *  2003-03-12  splited shm_mem_init in shm_getmem & shm_mem_init_mallocs
+ *  2003-03-12  split shm_mem_init in shm_getmem & shm_mem_init_mallocs
  *               (andrei)
  *  2004-07-27  ANON mmap support, needed on darwin (andrei)
+ *  2004-09-19  shm_mem_destroy: destroy first the lock & then unmap (andrei)
  */
 
 
@@ -81,7 +82,7 @@ inline static void* sh_realloc(void* p, unsigned int size)
 }
 
 /* look at a buffer if there is perhaps enough space for the new size
-   (It is benefitial to do so because vq_malloc is pretty stateful
+   (It is beneficial to do so because vq_malloc is pretty stateful
     and if we ask for a new buffer size, we can still make it happy
     with current buffer); if so, we return current buffer again;
     otherwise, we free it, allocate a new one and return it; no
@@ -90,7 +91,8 @@ inline static void* sh_realloc(void* p, unsigned int size)
 */
 
 #ifdef DBG_QM_MALLOC
-void* _shm_resize( void* p, unsigned int s, char* file, char* func, int line)
+void* _shm_resize( void* p, unsigned int s, const char* file, const char* func,
+							int line)
 #else
 void* _shm_resize( void* p , unsigned int s)
 #endif
@@ -177,7 +179,7 @@ int shm_getmem()
 
 
 
-int shm_mem_init_mallocs(void* mempool, int pool_size)
+int shm_mem_init_mallocs(void* mempool, unsigned long pool_size)
 {
 	/* init it for malloc*/
 	shm_block=shm_malloc_init(mempool, pool_size);
@@ -223,6 +225,10 @@ void shm_mem_destroy()
 #endif
 	
 	DBG("shm_mem_destroy\n");
+	if (mem_lock){
+		DBG("destroying the shared memory lock\n");
+		lock_destroy(mem_lock); /* we don't need to dealloc it*/
+	}
 	if (shm_mempool && (shm_mempool!=(void*)-1)) {
 #ifdef SHM_MMAP
 		munmap(shm_mempool, /* SHM_MEM_SIZE */ shm_mem_size );
@@ -237,10 +243,6 @@ void shm_mem_destroy()
 		shm_shmid=-1;
 	}
 #endif
-	if (mem_lock){
-		DBG("destroying the shared memory lock\n");
-		lock_destroy(mem_lock); /* we don't need to dealloc it*/
-	}
 }
 
 

@@ -9,7 +9,7 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 */
-
+#include <config/autoconf.h>
 #include "dnsmasq.h"
 
 static struct crec *cache_head, *cache_tail, **hash_table;
@@ -21,9 +21,12 @@ static struct crec *new_chain;
 #ifdef DO_PRELOAD
 static struct crec *dontpurge_chain;
 static int dontpurge_needed;
-static int dontpurge_chain_matches, dontpurge_chain_inserts, dontpurge_chain_deletes;
+static int dontpurge_chain_matches, dontpurge_chain_inserts, dontpurge_chain_deletes, dontpurge_chain_unresol;
 #endif
 static int cache_inserted, cache_live_freed, insert_error;
+#ifdef CONFIG_PROP_STATSD_STATSD
+static int cache_freed;
+#endif
 #ifdef USE_BIGNAMES
 static union bigname *big_free;
 static int bignames_left, log_queries, cache_size, hash_size;
@@ -74,6 +77,11 @@ static char *record_source(struct hostsfile *add_hosts, int index);
 static void rehash(int size);
 static void cache_hash(struct crec *crecp);
 
+void incr_unresolved_counter(void)
+{
+  dontpurge_chain_unresol++;
+}
+
 void cache_init(int size, int logq)
 {
   struct crec *crecp;
@@ -101,6 +109,9 @@ void cache_init(int size, int logq)
   uid = 0;
 
   cache_inserted = cache_live_freed = 0;
+#ifdef CONFIG_PROP_STATSD_STATSD
+  cache_freed = 0;
+#endif
 
   if (cache_size > 0)
     {
@@ -207,7 +218,10 @@ static void cache_free(struct crec *crecp)
   crecp->prev = cache_tail;
   crecp->next = NULL;
   cache_tail = crecp;
-  
+#ifdef CONFIG_PROP_STATSD_STATSD
+  cache_freed++; 
+#endif
+
   /* retrieve big name for further use. */
   if (crecp->flags & F_BIGNAME)
     {
@@ -455,6 +469,7 @@ void cache_start_insert(void)
   dontpurge_chain_matches = 0;
   dontpurge_chain_inserts = 0;
   dontpurge_chain_deletes = 0;
+  dontpurge_chain_unresol = 0;
   dontpurge_needed = 0;
   dontpurge_chain = NULL;
 #endif
@@ -514,6 +529,7 @@ struct crec *cache_insert(char *name, struct all_addr *addr,
        cache_unlink(new);
        dontpurge_chain_matches++;
        dontpurge_chain_deletes++;
+       dontpurge_chain_unresol++;
        goto just_ttl;
     }
 #endif
@@ -712,6 +728,20 @@ void cache_end_insert(void)
   if (dontpurge_chain_inserts != dontpurge_chain_matches ||
       dontpurge_chain_inserts != dontpurge_chain_deletes)
     preload_addrlist_updated++;
+#endif
+#ifdef CONFIG_PROP_STATSD_STATSD
+  {
+  char buf[250];
+  snprintf(buf, sizeof(buf), "statsd -a push dns cache_size %d \\;"
+                                      " push dns cache_unres_fixed_entries %d \\;"
+                                      " push dns cache_tot_entries %d \\;"
+                                      " push dns cache_tot_fixed_entries %d",
+          cache_size,
+          dontpurge_chain_unresol,
+          cache_inserted-cache_freed, 
+          dontpurge_chain_inserts-dontpurge_chain_deletes);
+  system(buf);
+  }
 #endif
 }
 
@@ -1001,6 +1031,9 @@ void cache_reload(int opts, char *buff, char *domain_suffix, struct hostsfile *a
   int i, total_size = cache_size;
 
   cache_inserted = cache_live_freed = 0;
+#ifdef CONFIG_PROP_STATSD_STATSD
+  cache_freed = 0;
+#endif
   
   for (i=0; i<hash_size; i++)
     for (cache = hash_table[i], up = &hash_table[i]; cache; cache = tmp)

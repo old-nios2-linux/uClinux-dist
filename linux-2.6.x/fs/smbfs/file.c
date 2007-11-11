@@ -17,6 +17,7 @@
 #include <linux/pagemap.h>
 #include <linux/smp_lock.h>
 #include <linux/net.h>
+#include <linux/aio.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -102,7 +103,7 @@ static int
 smb_readpage(struct file *file, struct page *page)
 {
 	int		error;
-	struct dentry  *dentry = file->f_dentry;
+	struct dentry  *dentry = file->f_path.dentry;
 
 	page_cache_get(page);
 	error = smb_readpage_sync(dentry, page);
@@ -205,7 +206,7 @@ static int
 smb_updatepage(struct file *file, struct page *page, unsigned long offset,
 	       unsigned int count)
 {
-	struct dentry *dentry = file->f_dentry;
+	struct dentry *dentry = file->f_path.dentry;
 
 	DEBUG1("(%s/%s %d@%lld)\n", DENTRY_PATH(dentry), count,
 		((unsigned long long)page->index << PAGE_CACHE_SHIFT) + offset);
@@ -218,7 +219,7 @@ smb_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 			unsigned long nr_segs, loff_t pos)
 {
 	struct file * file = iocb->ki_filp;
-	struct dentry * dentry = file->f_dentry;
+	struct dentry * dentry = file->f_path.dentry;
 	ssize_t	status;
 
 	VERBOSE("file %s/%s, count=%lu@%lu\n", DENTRY_PATH(dentry),
@@ -243,7 +244,7 @@ out:
 static int
 smb_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
-	struct dentry * dentry = file->f_dentry;
+	struct dentry * dentry = file->f_path.dentry;
 	int	status;
 
 	VERBOSE("file %s/%s, address %lu - %lu\n",
@@ -261,10 +262,11 @@ out:
 }
 
 static ssize_t
-smb_file_sendfile(struct file *file, loff_t *ppos,
-		  size_t count, read_actor_t actor, void *target)
+smb_file_splice_read(struct file *file, loff_t *ppos,
+		     struct pipe_inode_info *pipe, size_t count,
+		     unsigned int flags)
 {
-	struct dentry *dentry = file->f_dentry;
+	struct dentry *dentry = file->f_path.dentry;
 	ssize_t status;
 
 	VERBOSE("file %s/%s, pos=%Ld, count=%d\n",
@@ -276,7 +278,7 @@ smb_file_sendfile(struct file *file, loff_t *ppos,
 			 DENTRY_PATH(dentry), status);
 		goto out;
 	}
-	status = generic_file_sendfile(file, ppos, count, actor, target);
+	status = generic_file_splice_read(file, ppos, pipe, count, flags);
 out:
 	return status;
 }
@@ -323,7 +325,7 @@ smb_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 			       unsigned long nr_segs, loff_t pos)
 {
 	struct file * file = iocb->ki_filp;
-	struct dentry * dentry = file->f_dentry;
+	struct dentry * dentry = file->f_path.dentry;
 	ssize_t	result;
 
 	VERBOSE("file %s/%s, count=%lu@%lu\n",
@@ -355,7 +357,7 @@ static int
 smb_file_open(struct inode *inode, struct file * file)
 {
 	int result;
-	struct dentry *dentry = file->f_dentry;
+	struct dentry *dentry = file->f_path.dentry;
 	int smb_mode = (file->f_mode & O_ACCMODE) - 1;
 
 	lock_kernel();
@@ -415,10 +417,10 @@ const struct file_operations smb_file_operations =
 	.open		= smb_file_open,
 	.release	= smb_file_release,
 	.fsync		= smb_fsync,
-	.sendfile	= smb_file_sendfile,
+	.splice_read	= smb_file_splice_read,
 };
 
-struct inode_operations smb_file_inode_operations =
+const struct inode_operations smb_file_inode_operations =
 {
 	.permission	= smb_file_permission,
 	.getattr	= smb_getattr,

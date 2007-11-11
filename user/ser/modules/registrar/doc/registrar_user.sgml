@@ -4,8 +4,8 @@
     <chapterinfo>
 	<revhistory>
 	    <revision>
-		<revnumber>$Revision: 1.1.6.2.2.1 $</revnumber>
-		<date>$Date: 2004/07/21 09:28:31 $</date>
+		<revnumber>$Revision: 1.7.2.1 $</revnumber>
+		<date>$Date: 2005/06/22 23:12:07 $</date>
 	    </revision>
 	</revhistory>
     </chapterinfo>
@@ -73,46 +73,6 @@ modparam("registrar", "default_expires", 1800)
 </programlisting>
 	    </example>
 	</section>
-	<section>
-	    <title><varname>min_expires</varname> (integer)</title>
-	    <para>
-		The minimum expires value of a Contact, values lower than this minimum will be
-		automatically set to the minimum. Value 0 disables the checking.
-	    </para>
-	    <para>
-		<emphasis>
-		    Default value is 60.
-		</emphasis>
-	    </para>
-	    <example>
-		<title>Set <varname>min_expires</varname> parameter</title>
-		<programlisting format="linespecific">
-...
-modparam("registrar", "min_expires", 60)
-...
-</programlisting>
-	    </example>
-	</section>
-	<section>
-	    <title><varname>max_expires</varname> (integer)</title>
-	    <para>
-		The maximum expires value of a Contact, values higher than this maximum will be
-		automatically set to the maximum. Value 0 disables the checking.
-	    </para>
-	    <para>
-		<emphasis>
-		    Default value is 0.
-		</emphasis>
-	    </para>
-	    <example>
-		<title>Set <varname>max_expires</varname> parameter</title>
-		<programlisting format="linespecific">
-...
-modparam("registrar", "max_expires", 120)
-...
-</programlisting>
-	    </example>
-	</section>
 
 	<section>
 	    <title><varname>default_q</varname> (integer)</title>
@@ -140,7 +100,7 @@ modparam("registrar", "default_q", 100)
 	    <title><varname>append_branches</varname> (integer)</title>
 	    <para>
 		The parameter controls how lookup function processes multiple contacts.  If there
-		are multiple contacts for the given username in usrloc and this parametr is set to
+		are multiple contacts for the given username in usrloc and this parameter is set to
 		1, Request-URI will be overwritten with the highest-q rated contact and the rest
 		will be appended to sip_msg structure and can be later used by tm for forking. If
 		the parameter is set to 0, only Request-URI will be overwritten with the highest-q
@@ -156,27 +116,6 @@ modparam("registrar", "default_q", 100)
 		<programlisting format="linespecific">
 ...
 modparam("registrar", "append_branches", 0)
-...
-</programlisting>
-	    </example>
-	</section>
-
-	<section>
-	    <title><varname>use_domain</varname> (integer)</title>
-	    <para>
-		If set to 1 then the registrar will use username@domain as address of record. If
-		the variable is set to 0 then only username will be used as the address of record.
-	    </para>
-	    <para>
-		<emphasis>
-		    Default value is 0.
-		</emphasis>
-	    </para>
-	    <example>
-		<title>Set <varname>use_domain</varname> parameter</title>
-		<programlisting format="linespecific">
-...
-modparam("registrar", "use_domain", 1)
 ...
 </programlisting>
 	    </example>
@@ -224,6 +163,212 @@ modparam("registrar", "desc_time_order", 1)
 	    </example>
 	</section>
 
+	<section>
+	    <title><varname>nat_flag</varname> (integer)</title>
+	    <para>
+		The number of the NAT-flag. This is the flag which is set when
+		the originator of a message is behind NAT. This flag will be
+		saved in the user location database when save function is
+		executed and recovered later by lookup function.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 4.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>nat_flag</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "nat_flag", 6)
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>realm_prefix</varname> (string)</title>
+	    <para>
+		The prefix to be stripped from the beginning of hostname
+		part. This is useful when dealing with user agents that do not
+		allow to specify different hostname part and outbound
+		server. Such user agents would typically resolve a domain using
+		SRV and put the hostname obtained from SRV in From and To
+		header field of REGISTER message. For example, if SRV for
+		iptel.org points to sip.iptel.org then such user agents would
+		create From: sip:user@sip.iptel.org and in this case this
+		parameter can be used to strip "sip." prefix.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is "".
+		</emphasis>
+	    </para>
+	</section>
+
+
+	<section>
+	    <title><varname>min_expires</varname> (integer)</title>
+	    <para>
+		The minimum expires value of a Contact, values lower than this minimum will be
+		automatically set to the minimum. Value 0 disables the checking.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 60.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>min_expires</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "min_expires", 60)
+...
+</programlisting>
+	    </example>
+	</section>
+	<section>
+	    <title><varname>max_expires</varname> (integer)</title>
+	    <para>
+		The maximum expires value of a Contact, values higher than this maximum will be
+		automatically set to the maximum. Value 0 disables the checking.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>max_expires</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "max_expires", 120)
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>received_param</varname> (integer)</title>
+	    <para>
+		The name of the parameter that will be appended to Contacts of 200 OK when the
+		received URI was set by nathelper module.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is "received".
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>received_param</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "received_param", "rcv")
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>received_avp</varname> (integer)</title>
+	    <para>
+		Registrar will store the value of the AVP configured by this parameter in the
+		received column in the user location database. It will leave the column empty if the
+		AVP is empty. The AVP should contain a SIP URI consisting of the source IP, port,
+		and protocol of the REGISTER message being processed.
+	    </para>
+	    <note>
+		<para>
+		    The value of this parameter should be the same as the value of corresponding
+		    parameter of nathelper module.
+		</para>
+	    </note>
+	    <para>
+		<emphasis>
+		    Default value is 42.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>received_avp</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "received_avp", 43)
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>use_domain</varname> (integer)</title>
+	    <para>
+		If set to 1 then the registrar will use username@domain as address of record. If
+		the variable is set to 0 then only username will be used as the address of record.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>use_domain</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "use_domain", 1)
+...
+</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>max_contacts</varname> (integer)</title>
+	    <para>
+		The parameter can be used to limit the number of contacts per AOR (Address of
+		Record) in the user location database. Value 0 disables the check.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0.
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>max_contacts</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+# Allow no more than 10 contacts per AOR
+modparam("registrar", "max_contacts", 10)
+...
+		</programlisting>
+	    </example>
+	</section>
+
+	<section>
+	    <title><varname>retry_after</varname> (integer)</title>
+	    <para>
+		The registrar can generate 5xx reply to REGISTER in various situations. It can, for
+		example, happen when the <varname>max_contacts</varname> parameter is set and the
+		processing of REGISTER request would exceed the limit. In this case the registrar
+		would generate "503 Service Unavailable" response.
+	    </para>
+	    <para>
+		If you want to add the Retry-After header field in 5xx replies, set this parameter
+		to a value grater than zero (0 means do not add the header field). See section 
+		20.33 of RFC3261 for more details.
+	    </para>
+	    <para>
+		<emphasis>
+		    Default value is 0 (disabled).
+		</emphasis>
+	    </para>
+	    <example>
+		<title>Set <varname>retry_after</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("registrar", "retry_after", 30)
+...
+		</programlisting>
+	    </example>
+	</section>
+
     </section>
     <section>
 	<title>Exported Functions</title>
@@ -241,7 +386,7 @@ modparam("registrar", "desc_time_order", 1)
 	    <itemizedlist>
 		<listitem>
 		    <para>
-			<emphasis>domain</emphasis> - Logical domain within registrar. If dababase
+			<emphasis>domain</emphasis> - Logical domain within registrar. If database
 			is used then this must be name of the table which stores the contacts.
 		    </para>
 		</listitem>
@@ -284,6 +429,30 @@ save_noreply("location");
 
 	<section>
 	    <title>
+		<function moreinfo="none">save_memory(domain)</function>
+	    </title>
+	    <para>
+		Same as <function>save()</function> but it does update the
+		memory cache only. The contents of the database will be not
+		updated. This is useful for REGISTER replication where two
+		machines updating the same database would generate a
+		conflict. In such a scenario one machine could update the
+		database, replicate the message to the other machine and that
+		one would only update memory cache.
+	    </para>
+	    <para>Meaning of the parameters is as follows:</para>
+	    <itemizedlist>
+		<listitem>
+		    <para>
+			<emphasis>domain</emphasis> - Logical domain within registrar. If database is
+			used then this must be na e of the table which stores the contacts.
+		    </para>
+		</listitem>
+	    </itemizedlist>
+	</section>
+
+	<section>
+	    <title>
 		<function moreinfo="none">lookup(domain)</function>
 	    </title>
 	    <para>
@@ -311,6 +480,7 @@ lookup("location");
 </programlisting>
 	    </example>
 	</section>
+
 	<section>
 	    <title>
 		<function moreinfo="none">registered(domain)</function>

@@ -229,11 +229,11 @@ static inline void conv66(gsm_byte * d, wav_byte * c) {
     sr = sr >> 4;
     *c = sr >> 8;
     frame_chain = *c;
-    readGSM_33(d+33);// puts all the parameters into LARc etc.
+    readGSM_33(d+33); /* puts all the parameters into LARc etc. */
 
 
     sr = 0;
-//                      sr = (sr >> 4 )|( s->frame_chain << 12);
+/*                       sr = (sr >> 4 )|( s->frame_chain << 12); */
     sr = (sr >> 4 )|( frame_chain << 12);
 
     sr = (sr >> 6 )|( LARc[0] << 10);
@@ -456,7 +456,9 @@ static inline void conv65( wav_byte * c, gsm_byte * d){
 
                 unsigned int sr = 0;
                 unsigned int frame_chain;
-				unsigned int    LARc[8], Nc[4], Mc[4], bc[4], xmaxc[4], xmc[13*4];
+		unsigned int LARc[8], Nc[4], Mc[4], bc[4], xmaxc[4];
+		/* silence bogus compiler warning */
+		unsigned int xmc[13*4] = { 0, };
  
                         sr = *c++;
                         LARc[0] = sr & 0x3f;  sr >>= 6;
@@ -570,7 +572,7 @@ static inline void conv65( wav_byte * c, gsm_byte * d){
                         frame_chain = sr & 0xf;
 
 
-                        writeGSM_33(d);// LARc etc. -> array of 33 GSM bytes
+                        writeGSM_33(d);/* LARc etc. -> array of 33 GSM bytes */
 
 
                         sr = frame_chain;

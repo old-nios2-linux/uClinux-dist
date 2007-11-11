@@ -89,7 +89,7 @@
  * issue a redirect to strcat($REDIRECT_HOST,uri).  Otherwise, if
  * $REDIRECT_URI is set, fnord will issue a redirect to $REDIRECT_URI.
  * Only if those fail will a 404 error be returned. */
-/* #define OLD_STYLE_REDIRECT */
+#define OLD_STYLE_REDIRECT
 
 /* uncomment the following line to get full-host redirection.
  * if the virtual host directory/symlink is a broken symlink, fnord will
@@ -680,7 +680,7 @@ static void start_cgi(int nph,const char* pathinfo,const char *const *envp) {
   if ((pid=fork())) {
     if (pid>0) {
       struct pollfd pfd[2];
-      int nr=1;
+      int nr=2;
       int startup=1;
       size_t size=0;
 
@@ -696,9 +696,6 @@ static void start_cgi(int nph,const char* pathinfo,const char *const *envp) {
       pfd[1].fd=df[1];
       pfd[1].events=POLLOUT;
       pfd[1].revents=0;
-
-      if (post_len) ++nr;	/* have post data */
-      else close(df[1]);	/* no post data */
 
       while((poll(pfd,nr,-1)!=-1) || (errno==EINTR)) {
 	/* read from cgi */
@@ -744,21 +741,31 @@ static void start_cgi(int nph,const char* pathinfo,const char *const *envp) {
 //	  if (pfd[0].revents&POLLHUP) break;
 	}
 	/* write to cgi the post data */
-	else if (nr>1 && pfd[1].revents&POLLOUT) {
+	else if (df[1]>=0 && pfd[1].revents&POLLOUT) {
 	  if (post_miss) {
 	    write(df[1],post_miss,post_mlen);
 	    post_miss=0;
 	  }
 	  else if (post_mlen<post_len) {
-	    n=read(0,obuf,sizeof(obuf));
+	    n=post_len-post_mlen;
+	    if (n>sizeof(obuf))
+	      n=sizeof(obuf);
+	    n=read(0,obuf,n);
 	    if (n<1) goto cgi_500;
 	    post_mlen+=n;
 	    write(df[1],obuf,n);
 	  }
 	  else {
-	    --nr;
 	    close(df[1]);
+	    df[1]=-1;
+	    pfd[1].fd=0;
+	    pfd[1].events=POLLIN;
+	    pfd[1].revents=0;
 	  }
+	}
+	else if (df[1]<0 && pfd[1].revents&POLLIN) {
+	  read(0,obuf,sizeof(obuf));
+	  if (n<1) goto cgi_500;
 	}
 	//else if (pfd[0].revents&POLLHUP) break;
 	else {
@@ -868,6 +875,7 @@ static struct mimeentry { const char* name, *type; } mimetab[] = {
   { "gif",	"image/gif" },
   { "png",	"image/png" },
   { "jpeg",	"image/jpeg" },
+  { "bild",	"image/jpeg" },
   { "jpg",	"image/jpeg" },
   { "mpeg",	"video/mpeg" },
   { "mpg",	"video/mpeg" },
@@ -1014,6 +1022,10 @@ done:
 
 static struct stat st;
 
+static void redirectboilerplate() {
+  buffer_puts(buffer_1,"HTTP/1.0 301 Go Away\r\nConnection: close\r\nLocation: ");
+}
+
 /* try to return a file */
 static int doit(char* buf,int buflen,char* url,int explicit) {
   int fd=-1;
@@ -1042,7 +1054,20 @@ ok:
   if ((fd=open(url,O_RDONLY))>=0) {
     if (fstat(fd,&st)) goto bad;
     /* no directories */
-    if (S_ISDIR(st.st_mode)) goto bad;
+    if (S_ISDIR(st.st_mode)) {
+	  if (url[strlen(url) - 1] != '/') {
+		/* it is a dir.  Do a redirection */
+		redirectboilerplate();
+		buffer_puts(buffer_1,url);
+		buffer_puts(buffer_1,"/");
+		retcode=301;
+		buffer_puts(buffer_1,"\r\n\r\n");
+		dolog(0);
+		buffer_flush(buffer_1);
+		exit(0);
+	  }
+	  goto bad;
+	}
     /* see if the peer accepts MIME type */
     /* see if the document has been changed */
     ims=parsedate(header(buf,buflen,"If-Modified-Since"));
@@ -1078,10 +1103,6 @@ bad:
     if (fd>=0) close(fd);
   }
   return -1;
-}
-
-static void redirectboilerplate() {
-  buffer_puts(buffer_1,"HTTP/1.0 301 Go Away\r\nConnection: close\r\nLocation: ");
 }
 
 static void handleredirect(const char *url,const char* origurl) {
@@ -1233,7 +1254,7 @@ static void handledirlist(const char*origurl) {
 #endif
 
 #ifdef INDEX_CGI
-static int handleindexcgi(const char *testurl,const char* origurl) {
+static int handleindexcgi(const char *testurl,const char* origurl,char* space) {
   unsigned int ul,ol=str_len(origurl);
   while (testurl[0]=='/') ++testurl,--ol;
 
@@ -2068,15 +2089,18 @@ tuttikaputti:
 #endif
   switch (retcode) {
   case 404:
+    {
+      char* space=alloca(strlen(url)+2);
 #ifdef INDEX_CGI
-    /*syslog(LOG_INFO, "XXX: handleindexcgi(%s, %s)\n", url, origurl);*/
-    if (handleindexcgi(url,origurl)) goto indexcgi;
+      /*syslog(LOG_INFO, "XXX: handleindexcgi(%s, %s)\n", url, origurl);*/
+      if (handleindexcgi(url,origurl,space)) goto indexcgi;
 #endif
-    handleredirect(url,origurl);
+      handleredirect(url,origurl);
 #ifdef DIR_LIST
-    handledirlist(origurl);
+      handledirlist(origurl);
 #endif
-    badrequest(404,"Not Found","<title>Not Found</title>No such file or directory.");
+      badrequest(404,"Not Found","<title>Not Found</title>No such file or directory.");
+    }
   case 406: badrequest(406,"Not Acceptable","<title>Not Acceptable</title>Nothing acceptable found.");
   case 416: badrequest(416,"Requested Range Not Satisfiable","");
   case 304: badrequest(304,"Not Changed","");

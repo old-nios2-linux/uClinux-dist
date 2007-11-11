@@ -1,9 +1,9 @@
 /* 
- * $Id: authdb_mod.c,v 1.15 2003/09/15 19:47:02 janakj Exp $
+ * $Id: authdb_mod.c,v 1.22.2.3 2005/04/26 10:14:57 janakj Exp $
  *
  * Digest Authentication Module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,6 +33,7 @@
  * 2003-03-16: flags export parameter added (janakj)
  * 2003-03-19  all mallocs/frees replaced w/ pkg_malloc/pkg_free (andrei)
  * 2003-04-05: default_uri #define used (jiri)
+ * 2004-06-06  cleanup: static & auth_db_{init,bind,close.ver} used (andrei)
  */
 
 #include <stdio.h>
@@ -44,9 +45,11 @@
 #include "../../mem/mem.h"
 #include "authorize.h"
 #include "../auth/api.h"
+#include "aaa_avps.h"
 
 MODULE_VERSION
 
+#define TABLE_VERSION 3
 
 /*
  * Module destroy function prototype
@@ -77,20 +80,43 @@ post_auth_f post_auth_func = 0;
  */
 int (*sl_reply)(struct sip_msg* _msg, char* _str1, char* _str2);
 
+
+#define USER_COL "username"
+#define USER_COL_LEN (sizeof(USER_COL) - 1)
+
+#define DOMAIN_COL "domain"
+#define DOMAIN_COL_LEN (sizeof(DOMAIN_COL) - 1)
+
+#define PASS_COL "ha1"
+#define PASS_COL_LEN (sizeof(PASS_COL) - 1)
+
+#define PASS_COL_2 "ha1b"
+#define PASS_COL_2_LEN (sizeof(PASS_COL_2) - 1)
+
+#define AVPS_COL_INT ""
+#define AVPS_COL_INT_LEN (sizeof(AVPS_COL_INT) - 1)
+
+#define AVPS_COL_STR "rpid"
+#define AVPS_COL_STR_LEN (sizeof(AVPS_COL_STR) - 1)
+
+
 /*
  * Module parameter variables
  */
-char* db_url           = DEFAULT_RODB_URL;
-char* user_column      = "username";
-char* domain_column    = "domain";
-char* rpid_column      = "rpid";
-char* pass_column      = "ha1";
-char* pass_column_2    = "ha1b";
-int   calc_ha1         = 0;
-int   use_domain       = 1;    /* Use also domain when looking up a table row */
-int   use_rpid         = 0;    /* Fetch Remote-Party-ID */
+static str db_url           = {DEFAULT_RODB_URL, DEFAULT_RODB_URL_LEN};
+str user_column      = {USER_COL, USER_COL_LEN};
+str domain_column    = {DOMAIN_COL, DOMAIN_COL_LEN};
+str pass_column      = {PASS_COL, PASS_COL_LEN};
+str pass_column_2    = {PASS_COL_2, PASS_COL_2_LEN};
+static str avps_column_int  = {AVPS_COL_INT, AVPS_COL_INT_LEN};
+static str avps_column_str  = {AVPS_COL_STR, AVPS_COL_STR_LEN};
+str *avps_int        = NULL;
+str *avps_str        = NULL;
+int avps_int_n       = 0;
+int avps_str_n       = 0;
+int calc_ha1         = 0;
+int use_domain       = 0;    /* Use also domain when looking up a table row */
 
-db_con_t* db_handle;   /* Database connection handle */
 
 
 /*
@@ -107,15 +133,15 @@ static cmd_export_t cmds[] = {
  * Exported parameters
  */
 static param_export_t params[] = {
-	{"db_url",            STR_PARAM, &db_url       },
-	{"user_column",       STR_PARAM, &user_column  },
-	{"domain_column",     STR_PARAM, &domain_column},
-	{"rpid_column",       STR_PARAM, &rpid_column  },
-	{"password_column",   STR_PARAM, &pass_column  },
-	{"password_column_2", STR_PARAM, &pass_column_2},
-	{"calculate_ha1",     INT_PARAM, &calc_ha1     },
-	{"use_domain",        INT_PARAM, &use_domain   },
-	{"use_rpid",          INT_PARAM, &use_rpid     },
+	{"db_url",            STR_PARAM, &db_url.s         },
+	{"user_column",       STR_PARAM, &user_column.s    },
+	{"domain_column",     STR_PARAM, &domain_column.s  },
+	{"password_column",   STR_PARAM, &pass_column.s    },
+	{"password_column_2", STR_PARAM, &pass_column_2.s  },
+	{"avps_column_int",   STR_PARAM, &avps_column_int.s},
+	{"avps_column_str",   STR_PARAM, &avps_column_str.s},
+	{"calculate_ha1",     INT_PARAM, &calc_ha1         },
+	{"use_domain",        INT_PARAM, &use_domain       },
 	{0, 0, 0}
 };
 
@@ -137,38 +163,42 @@ struct module_exports exports = {
 
 static int child_init(int rank)
 {
-	db_handle = db_init(db_url);
-	if (!db_handle) {
-		LOG(L_ERR, "auth_db:init_child(): Unable to connect database\n");
-		return -1;
-	}
-	return 0;
-
+	     /* Close connection opened in mod_init */
+	return auth_db_init(db_url.s);
 }
 
 
 static int mod_init(void)
 {
+
 	DBG("auth_db module - initializing\n");
-	
-	     /* Find a database module */
-	if (bind_dbmod()) {
-		LOG(L_ERR, "mod_init(): Unable to bind database module\n");
+
+	db_url.len = strlen(db_url.s);
+	user_column.len = strlen(user_column.s);
+	domain_column.len = strlen(domain_column.s);
+	pass_column.len = strlen(pass_column.s);
+	pass_column_2.len = strlen(pass_column.s);
+
+	if (aaa_avps_init(&avps_column_int, &avps_column_str, &avps_int,
+	    &avps_str, &avps_int_n, &avps_str_n) == -1)
 		return -1;
-	}
+
+	     /* Find a database module */
+	if (auth_db_bind(db_url.s)<0)
+		return -2;
 
 	pre_auth_func = (pre_auth_f)find_export("pre_auth", 0, 0);
 	post_auth_func = (post_auth_f)find_export("post_auth", 0, 0);
 
 	if (!(pre_auth_func && post_auth_func)) {
 		LOG(L_ERR, "auth_db:mod_init(): This module requires auth module\n");
-		return -2;
+		return -3;
 	}
 
 	sl_reply = find_export("sl_send_reply", 2, 0);
 	if (!sl_reply) {
 		LOG(L_ERR, "auth_db:mod_init(): This module requires sl module\n");
-		return -2;
+		return -4;
 	}
 
 	return 0;
@@ -178,7 +208,7 @@ static int mod_init(void)
 
 static void destroy(void)
 {
-	if (db_handle) db_close(db_handle);
+	auth_db_close();
 }
 
 
@@ -188,6 +218,8 @@ static void destroy(void)
 static int str_fixup(void** param, int param_no)
 {
 	str* s;
+	int ver;
+	str name;
 
 	if (param_no == 1) {
 		s = (str*)pkg_malloc(sizeof(str));
@@ -199,6 +231,18 @@ static int str_fixup(void** param, int param_no)
 		s->s = (char*)*param;
 		s->len = strlen(s->s);
 		*param = (void*)s;
+	} else if (param_no == 2) {
+		name.s = (char*)*param;
+		name.len = strlen(name.s);
+
+		ver=auth_db_ver(db_url.s, &name);
+		if (ver < 0) {
+			LOG(L_ERR, "auth_db:str_fixup(): Error while querying table version\n");
+			return -1;
+		} else if (ver < TABLE_VERSION) {
+			LOG(L_ERR, "auth_db:str_fixup(): Invalid table version (use ser_mysql.sh reinstall)\n");
+			return -1;
+		}
 	}
 
 	return 0;

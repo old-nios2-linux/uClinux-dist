@@ -118,17 +118,72 @@ extern void iounmap(void *addr);
  * 24-31 on SNI.
  * XXX more SNI hacks.
  */
+
+#ifdef CONFIG_RTL865X
+
+//These are defined in mipsnommu/rtl865x/pci.c
+u8 rtl865x_pci_ioread8(u32 addr);
+u16 rtl865x_pci_ioread16(u32 addr);
+u32 rtl865x_pci_ioread32(u32 addr);
+void rtl865x_pci_iowrite8(u32 addr, u8 val);
+void rtl865x_pci_iowrite16(u32 addr, u16 val);
+void rtl865x_pci_iowrite32(u32 addr, u32 val);
+
+static __inline__ u8 rtl865x_ioread8(u32 addr)
+{
+	return rtl865x_pci_ioread8(addr);
+}
+
+static __inline__ u16 rtl865x_ioread16(u32 addr)
+{
+	return rtl865x_pci_ioread16(addr);
+}
+
+static __inline__ u32 rtl865x_ioread32(u32 addr)
+{
+	return rtl865x_pci_ioread32(addr);
+}
+
+static __inline__ void rtl865x_iowrite8(u32 addr, u8 val)
+{
+	rtl865x_pci_iowrite8(addr,val);
+}
+
+static __inline__ void rtl865x_iowrite16(u32 addr, u16 val)
+{
+	rtl865x_pci_iowrite16(addr,val);
+}
+
+static __inline__ void rtl865x_iowrite32(u32 addr, u32 val)
+{
+	rtl865x_pci_iowrite32(addr,val);
+}
+#endif /*CONFIG_RTL865X*/
+
+
+#ifdef CONFIG_RTL865X
+#define readb(addr) (rtl865x_ioread8((u32)addr))
+#define readw(addr) (rtl865x_ioread16((u32)addr))
+#define readl(addr) (rtl865x_ioread32((u32)addr))
+#define writeb(val,addr) (rtl865x_iowrite8((u32)addr,val))
+#define writew(val,addr) (rtl865x_iowrite16((u32)addr,val))
+#define writel(val,addr) (rtl865x_iowrite32((u32)addr,val))
+
+#else
+
 #define readb(addr)		(*(volatile unsigned char *)(addr))
 #define readw(addr)		__ioswab16((*(volatile unsigned short *)(addr)))
 #define readl(addr)		__ioswab32((*(volatile unsigned int *)(addr)))
 
-#define __raw_readb(addr)	(*(volatile unsigned char *)(addr))
-#define __raw_readw(addr)	(*(volatile unsigned short *)(addr))
-#define __raw_readl(addr)	(*(volatile unsigned int *)(addr))
-
 #define writeb(b,addr) ((*(volatile unsigned char *)(addr)) = (b))
 #define writew(b,addr) ((*(volatile unsigned short *)(addr)) = (__ioswab16(b)))
 #define writel(b,addr) ((*(volatile unsigned int *)(addr)) = (__ioswab32(b)))
+
+#endif
+
+#define __raw_readb(addr)	(*(volatile unsigned char *)(addr))
+#define __raw_readw(addr)	(*(volatile unsigned short *)(addr))
+#define __raw_readl(addr)	(*(volatile unsigned int *)(addr))
 
 #define __raw_writeb(b,addr)	((*(volatile unsigned char *)(addr)) = (b))
 #define __raw_writew(w,addr)	((*(volatile unsigned short *)(addr)) = (w))
@@ -310,6 +365,70 @@ extern const unsigned long mips_io_port_base;
 #define SLOW_DOWN_IO
 #endif
 
+
+#ifdef CONFIG_RTL865X
+static inline void outb(u8 val ,unsigned long port)
+{
+	rtl865x_pci_iowrite8(port , val);
+}
+
+static inline void outw(u16 val,unsigned long port)
+{
+	rtl865x_pci_iowrite16( port,  val);
+}
+
+static inline void outl(u32 val,unsigned long port)
+{
+	rtl865x_pci_iowrite32( port,  val );
+}
+
+static inline void outb_p(u8 val ,unsigned long port)
+{
+	rtl865x_pci_iowrite8(port , val);
+}
+
+static inline void outw_p(u16 val,unsigned long port)
+{
+	rtl865x_pci_iowrite16( port,  val);
+}
+
+static inline void outl_p(u32 val,unsigned long port)
+{
+	rtl865x_pci_iowrite32( port,  val );
+}
+
+static inline unsigned char inb(unsigned long addr)
+{
+	return rtl865x_pci_ioread8(addr);
+}
+
+static inline unsigned short inw(unsigned long port)
+{
+	return rtl865x_pci_ioread16(port);
+}
+
+static inline unsigned int inl(unsigned long port)
+{
+	return rtl865x_pci_ioread32(port);
+}
+
+static inline unsigned char inb_p(unsigned long port)
+{
+	return rtl865x_pci_ioread8(port);
+}
+
+static inline unsigned short inw_p(unsigned long port)
+{
+	return rtl865x_pci_ioread16(port);
+}
+
+static inline unsigned int inl_p(unsigned long port)
+{
+	return rtl865x_pci_ioread32(port);
+}
+
+#else
+
 #define outb(val,port)							\
 do {									\
 	*(volatile u8 *)(mips_io_port_base + (port)) = (val);		\
@@ -391,6 +510,8 @@ static inline unsigned int inl_p(unsigned long port)
 	SLOW_DOWN_IO;
 	return __ioswab32(__val);
 }
+
+#endif /* CONFIG_RTL865X */
 
 static inline void __outsb(unsigned long port, void *addr, unsigned int count)
 {

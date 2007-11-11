@@ -130,9 +130,9 @@ char *print_interface(char *szInterface)
     /* Device always ends with a double \0, so this way to
        determine its length should be always valid */
     if(IsTextUnicode(szInterface, wcslen((short*)szInterface), NULL))
-        sprintf(device, "%ws", szInterface);
+        SnortSnprintf(device, sizeof(device), "%ws", szInterface);
     else
-        sprintf(device, "%s", szInterface);
+        SnortSnprintf(device, sizeof(device), "%s", szInterface);
 
     return(device);
 }

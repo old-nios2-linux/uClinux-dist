@@ -110,6 +110,7 @@ typedef struct ide_scsi_obj {
 } idescsi_scsi_t;
 
 static DEFINE_MUTEX(idescsi_ref_mutex);
+static int idescsi_nocd;			/* Set by module param to skip cd */
 
 #define ide_scsi_g(disk) \
 	container_of((disk)->private_data, struct ide_scsi_obj, driver)
@@ -327,17 +328,15 @@ static int idescsi_check_condition(ide_drive_t *drive, struct request *failed_co
 	u8             *buf;
 
 	/* stuff a sense request in front of our current request */
-	pc = kmalloc (sizeof (idescsi_pc_t), GFP_ATOMIC);
-	rq = kmalloc (sizeof (struct request), GFP_ATOMIC);
-	buf = kmalloc(SCSI_SENSE_BUFFERSIZE, GFP_ATOMIC);
-	if (pc == NULL || rq == NULL || buf == NULL) {
+	pc = kzalloc(sizeof(idescsi_pc_t), GFP_ATOMIC);
+	rq = kmalloc(sizeof(struct request), GFP_ATOMIC);
+	buf = kzalloc(SCSI_SENSE_BUFFERSIZE, GFP_ATOMIC);
+	if (!pc || !rq || !buf) {
 		kfree(buf);
 		kfree(rq);
 		kfree(pc);
 		return -ENOMEM;
 	}
-	memset (pc, 0, sizeof (idescsi_pc_t));
-	memset (buf, 0, SCSI_SENSE_BUFFERSIZE);
 	ide_init_drive_cmd(rq);
 	rq->special = (char *) pc;
 	pc->rq = rq;
@@ -462,7 +461,7 @@ static inline unsigned long get_timeout(idescsi_pc_t *pc)
 
 static int idescsi_expiry(ide_drive_t *drive)
 {
-	idescsi_scsi_t *scsi = drive->driver_data;
+	idescsi_scsi_t *scsi = drive_to_idescsi(drive);
 	idescsi_pc_t   *pc   = scsi->pc;
 
 #if IDESCSI_DEBUG_LOG
@@ -720,19 +719,23 @@ static ide_startstop_t idescsi_do_request (ide_drive_t *drive, struct request *r
 	return ide_stopped;
 }
 
+#ifdef CONFIG_IDE_PROC_FS
 static void idescsi_add_settings(ide_drive_t *drive)
 {
 	idescsi_scsi_t *scsi = drive_to_idescsi(drive);
 
 /*
- *			drive	setting name	read/write	ioctl	ioctl		data type	min	max	mul_factor	div_factor	data pointer		set function
+ *			drive	setting name	read/write	data type	min	max	mul_factor	div_factor	data pointer		set function
  */
-	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
-	ide_add_setting(drive,	"bios_head",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	255,	1,		1,		&drive->bios_head,	NULL);
-	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	63,	1,		1,		&drive->bios_sect,	NULL);
-	ide_add_setting(drive,	"transform",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	3,	1,		1,		&scsi->transform,	NULL);
-	ide_add_setting(drive,	"log",		SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1,	1,		1,		&scsi->log,		NULL);
+	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	TYPE_INT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
+	ide_add_setting(drive,	"bios_head",	SETTING_RW,	TYPE_BYTE,	0,	255,	1,		1,		&drive->bios_head,	NULL);
+	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	TYPE_BYTE,	0,	63,	1,		1,		&drive->bios_sect,	NULL);
+	ide_add_setting(drive,	"transform",	SETTING_RW,	TYPE_INT,	0,	3,	1,		1,		&scsi->transform,	NULL);
+	ide_add_setting(drive,	"log",		SETTING_RW,	TYPE_INT,	0,	1,	1,		1,		&scsi->log,		NULL);
 }
+#else
+static inline void idescsi_add_settings(ide_drive_t *drive) { ; }
+#endif
 
 /*
  *	Driver initialization.
@@ -755,7 +758,7 @@ static void ide_scsi_remove(ide_drive_t *drive)
 	struct ide_scsi_obj *scsi = scsihost_to_idescsi(scsihost);
 	struct gendisk *g = scsi->disk;
 
-	ide_unregister_subdriver(drive, scsi->driver);
+	ide_proc_unregister_driver(drive, scsi->driver);
 
 	ide_unregister_region(g);
 
@@ -769,13 +772,11 @@ static void ide_scsi_remove(ide_drive_t *drive)
 
 static int ide_scsi_probe(ide_drive_t *);
 
-#ifdef CONFIG_PROC_FS
+#ifdef CONFIG_IDE_PROC_FS
 static ide_proc_entry_t idescsi_proc[] = {
 	{ "capacity", S_IFREG|S_IRUGO, proc_ide_read_capacity, NULL },
 	{ NULL, 0, NULL, NULL }
 };
-#else
-# define idescsi_proc	NULL
 #endif
 
 static ide_driver_t idescsi_driver = {
@@ -789,25 +790,22 @@ static ide_driver_t idescsi_driver = {
 	.version		= IDESCSI_VERSION,
 	.media			= ide_scsi,
 	.supports_dsc_overlap	= 0,
-	.proc			= idescsi_proc,
 	.do_request		= idescsi_do_request,
 	.end_request		= idescsi_end_request,
 	.error                  = idescsi_atapi_error,
 	.abort                  = idescsi_atapi_abort,
+#ifdef CONFIG_IDE_PROC_FS
+	.proc			= idescsi_proc,
+#endif
 };
 
 static int idescsi_ide_open(struct inode *inode, struct file *filp)
 {
 	struct gendisk *disk = inode->i_bdev->bd_disk;
 	struct ide_scsi_obj *scsi;
-	ide_drive_t *drive;
 
 	if (!(scsi = ide_scsi_get(disk)))
 		return -ENXIO;
-
-	drive = scsi->drive;
-
-	drive->usage++;
 
 	return 0;
 }
@@ -816,9 +814,6 @@ static int idescsi_ide_release(struct inode *inode, struct file *filp)
 {
 	struct gendisk *disk = inode->i_bdev->bd_disk;
 	struct ide_scsi_obj *scsi = ide_scsi_g(disk);
-	ide_drive_t *drive = scsi->drive;
-
-	drive->usage--;
 
 	ide_scsi_put(scsi);
 
@@ -1127,6 +1122,9 @@ static int ide_scsi_probe(ide_drive_t *drive)
 		warned = 1;
 	}
 
+	if (idescsi_nocd && drive->media == ide_cdrom)
+		return -ENODEV;
+
 	if (!strstr("ide-scsi", drive->driver_req) ||
 	    !drive->present ||
 	    drive->media == ide_disk ||
@@ -1157,7 +1155,7 @@ static int ide_scsi_probe(ide_drive_t *drive)
 	idescsi->host = host;
 	idescsi->disk = g;
 	g->private_data = &idescsi->driver;
-	ide_register_subdriver(drive, &idescsi_driver);
+	ide_proc_register_driver(drive, &idescsi_driver);
 	err = 0;
 	idescsi_setup(drive, idescsi);
 	g->fops = &idescsi_ops;
@@ -1169,7 +1167,7 @@ static int ide_scsi_probe(ide_drive_t *drive)
 	}
 	/* fall through on error */
 	ide_unregister_region(g);
-	ide_unregister_subdriver(drive, &idescsi_driver);
+	ide_proc_unregister_driver(drive, &idescsi_driver);
 
 	put_disk(g);
 out_host_put:
@@ -1187,6 +1185,8 @@ static void __exit exit_idescsi_module(void)
 	driver_unregister(&idescsi_driver.gen_driver);
 }
 
+module_param(idescsi_nocd, int, 0600);
+MODULE_PARM_DESC(idescsi_nocd, "Disable handling of CD-ROMs so they may be driven by ide-cd");
 module_init(init_idescsi_module);
 module_exit(exit_idescsi_module);
 MODULE_LICENSE("GPL");

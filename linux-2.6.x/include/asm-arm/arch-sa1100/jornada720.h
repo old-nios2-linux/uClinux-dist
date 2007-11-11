@@ -1,42 +1,27 @@
 /*
- * linux/include/asm-arm/arch-sa1100/jornada720.h
+ * include/asm-arm/arch-sa1100/jornada720.h
  *
- * Created 2000/11/29 by John Ankcorn <jca@lcs.mit.edu>
+ * This file contains SSP/MCU communication definitions for HP Jornada 710/720/728
  *
- * This file contains the hardware specific definitions for HP Jornada 720
+ * Copyright (C) 2007 Kristoffer Ericson <Kristoffer.Ericson@gmail.com>
+ *  Copyright (C) 2000 John Ankcorn <jca@lcs.mit.edu>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  *
  */
 
-#ifndef __ASM_ARCH_HARDWARE_H
-#error "include <asm/hardware.h> instead"
-#endif
-
-#define SA1111_BASE             (0x40000000)
-
-#define GPIO_JORNADA720_KEYBOARD	GPIO_GPIO(0)
-#define GPIO_JORNADA720_MOUSE		GPIO_GPIO(9)
-
-#define GPIO_JORNADA720_KEYBOARD_IRQ	IRQ_GPIO0
-#define GPIO_JORNADA720_MOUSE_IRQ		IRQ_GPIO9
-
-/* MCU COMMANDS */
-#define MCU_GetBatteryData  0xc0
-#define MCU_GetScanKeyCode  0x90
-#define MCU_GetTouchSamples 0xa0
-#define MCU_GetContrast     0xD0
-#define MCU_SetContrast     0xD1
-#define MCU_GetBrightness   0xD2
-#define MCU_SetBrightness   0xD3
-#define MCU_ContrastOff     0xD8
-#define MCU_BrightnessOff   0xD9
-#define MCU_PWMOFF          0xDF
-#define MCU_TxDummy         0x11
-#define MCU_ErrorCode       0x00
-
-#ifndef __ASSEMBLY__
-
-void jornada720_mcu_init(void);
-void jornada_contrast(int arg_contrast);
-void jornada720_battery(void);
-int jornada720_getkey(unsigned char *data, int size);
-#endif
+ /* HP Jornada 7xx microprocessor commands */
+#define GETBATTERYDATA		0xc0
+#define GETSCANKEYCODE		0x90
+#define GETTOUCHSAMPLES		0xa0
+#define GETCONTRAST		0xD0
+#define SETCONTRAST		0xD1
+#define GETBRIGHTNESS		0xD2
+#define SETBRIGHTNESS		0xD3
+#define CONTRASTOFF		0xD8
+#define BRIGHTNESSOFF		0xD9
+#define PWMOFF			0xDF
+#define TXDUMMY			0x11
+#define ERRORCODE		0x00

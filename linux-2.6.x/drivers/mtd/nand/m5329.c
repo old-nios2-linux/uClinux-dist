@@ -2,11 +2,11 @@
  *  drivers/mtd/nand/m5329.c
  *
  *  Yaroslav Vinogradov (Yaroslav.Vinogradov@freescale.com)
- *  
- *  Copyright Freescale Semiconductor, Inc 2006
+ *  Matt Waddel (Matt.Waddel@freescale.com@freescale.com)
+ *  Copyright Freescale Semiconductor, Inc 2006-2007
  *
  *  Using as template code from:
- *    drivers/mtd/nand/spia.c  Copyright (C) 2000 Steven J. Hill (sjhill@realitydiluted.com)
+ *    spia.c  Copyright (C) 2000 Steven J. Hill (sjhill@realitydiluted.com)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 or any later
@@ -15,7 +15,7 @@
  *  Overview:
  *   This is a device driver for the NAND flash device found on the
  *   M5329EVB board which utilizes the Toshiba part. This is
- *   a 16MB NAND Flash device
+ *   a 16MB NAND Flash device.
  */
 
 #include <linux/kernel.h>
@@ -33,18 +33,8 @@
  */
 static struct mtd_info *m5329_mtd = NULL;
 
-/*
- * Values specific to the SPIA board (used with EP7212 processor)
- */
-#define NAND_FLASH_ADDRESS	0xd0000000	/* Fash address mapping */
-
-#define CLE_ADDR_BIT		4
-#define ALE_ADDR_BIT		3
-#define NCE_ADDR_BIT		19
-
-/*
- * Module stuff
- */
+#define NAND_FLASH_CE		((u8 *)0x10080000)
+#define NAND_FLASH_ADDRESS	0xd0000000	   /* Flash address mapping */
 
 static unsigned int m5329_fio_base = NAND_FLASH_ADDRESS;
 
@@ -62,49 +52,32 @@ const static struct mtd_partition partition_info[] = {
 };
 #define NUM_PARTITIONS 1
 
-
 /* 
- *	hardware specific access to control-lines
+ * Hardware specific access to control-lines
+ *   NCE bit 0 -> bit 2 in GPIO register
+ *   CLE bit 1 -> bit 4
+ *   ALE bit 2 -> bit 3
  */
-static void m5329_hwcontrol(struct mtd_info *mtd, int cmd){
-	struct nand_chip *this;
-	unsigned int base;
+static void m5329_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
+{
+	struct nand_chip *chip = mtd->priv;
+	unsigned char bits;
 
+	if (ctrl & NAND_NCE)
+		*NAND_FLASH_CE &= ~(ctrl & NAND_NCE) << 2;
+	else
+		*NAND_FLASH_CE |= (ctrl & NAND_NCE) << 2;
 
-	/* Get pointer to private data */
-	this = (struct nand_chip *) (&m5329_mtd[1]);
-	m5329_fio_base = (unsigned int)this->IO_ADDR_R;
-	base = m5329_fio_base;
-
-	switch(cmd){
-	case NAND_CTL_SETCLE: 
-		m5329_fio_base |= 1<<CLE_ADDR_BIT;
-		break;
-	case NAND_CTL_CLRCLE: 
-		m5329_fio_base &= ~(1<<CLE_ADDR_BIT);
-		break;
-	case NAND_CTL_SETALE: 
-		m5329_fio_base |= 1<<ALE_ADDR_BIT;
-		break;
-	case NAND_CTL_CLRALE: 
-		m5329_fio_base &= ~(1<<ALE_ADDR_BIT);
-		break;
-	case NAND_CTL_SETNCE: 
-		m5329_fio_base &= ~(1<<NCE_ADDR_BIT);
-		break;
-	case NAND_CTL_CLRNCE: 
-		m5329_fio_base |= 1<NCE_ADDR_BIT;
-		break;
-	}
-	/* Set address of NAND IO lines */
-	this->IO_ADDR_R = (void __iomem *) m5329_fio_base;
-	this->IO_ADDR_W = (void __iomem *) m5329_fio_base;
+	bits = (ctrl & NAND_CLE) << 3;
+	bits |= (ctrl & NAND_ALE) << 1;
+	if (cmd != NAND_CMD_NONE)
+		writeb(cmd, chip->IO_ADDR_W+bits);
 }
 
 /*
  * Main initialization routine
  */
-int __init m5329_init (void)
+static int __init m5329_init (void)
 {
 	struct nand_chip *this;
 
@@ -135,15 +108,18 @@ int __init m5329_init (void)
 
 	/* Link the private data with the MTD structure */
 	m5329_mtd->priv = this;
+	m5329_mtd->owner = THIS_MODULE;
 
 	/* Set address of NAND IO lines */
 	this->IO_ADDR_R = (void __iomem *) m5329_fio_base;
 	this->IO_ADDR_W = (void __iomem *) m5329_fio_base;
+
 	/* Set address of hardware control function */
-	this->hwcontrol = m5329_hwcontrol;
+	this->cmd_ctrl = m5329_hwcontrol;
+
 	/* 50 us command delay time */
 	this->chip_delay = 50;
-	this->eccmode = NAND_ECC_SOFT;
+	this->ecc.mode = NAND_ECC_SOFT;
 
 	/* Scan to find existence of the device */
 	if (nand_scan (m5329_mtd, 1)) {

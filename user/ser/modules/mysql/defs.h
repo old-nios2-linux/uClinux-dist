@@ -1,9 +1,9 @@
 /* 
- * $Id: defs.h,v 1.4 2002/09/19 12:23:54 jku Rel $ 
+ * $Id: defs.h,v 1.5 2004/08/24 08:58:31 janakj Exp $ 
  *
  * MySQL module various definitions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

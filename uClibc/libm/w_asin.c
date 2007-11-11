@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,7 +14,7 @@
 static char rcsid[] = "$NetBSD: w_asin.c,v 1.6 1995/05/10 20:48:35 jtc Exp $";
 #endif
 
-/* 
+/*
  * wrapper asin(x)
  */
 
@@ -23,6 +23,7 @@ static char rcsid[] = "$NetBSD: w_asin.c,v 1.6 1995/05/10 20:48:35 jtc Exp $";
 #include "math_private.h"
 
 
+libm_hidden_proto(asin)
 #ifdef __STDC__
 	double asin(double x)		/* wrapper asin */
 #else
@@ -42,3 +43,4 @@ static char rcsid[] = "$NetBSD: w_asin.c,v 1.6 1995/05/10 20:48:35 jtc Exp $";
 	    return z;
 #endif
 }
+libm_hidden_def(asin)

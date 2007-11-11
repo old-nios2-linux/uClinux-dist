@@ -1,6 +1,5 @@
 /* This file defines standard ELF types, structures, and macros.
-   Copyright (C) 1995-1999, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+   Copyright (C) 1995-2003, 2004, 2005 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -143,6 +142,7 @@ typedef struct
 #define ELFOSABI_HPUX		1	/* HP-UX */
 #define ELFOSABI_NETBSD		2	/* NetBSD.  */
 #define ELFOSABI_LINUX		3	/* Linux.  */
+#define ELFOSABI_HURD		4	/* GNU/Hurd */
 #define ELFOSABI_SOLARIS	6	/* Sun Solaris.  */
 #define ELFOSABI_AIX		7	/* IBM AIX.  */
 #define ELFOSABI_IRIX		8	/* SGI Irix.  */
@@ -150,6 +150,9 @@ typedef struct
 #define ELFOSABI_TRU64		10	/* Compaq TRU64 UNIX.  */
 #define ELFOSABI_MODESTO	11	/* Novell Modesto.  */
 #define ELFOSABI_OPENBSD	12	/* OpenBSD.  */
+#define ELFOSABI_OPENVMS	13	/* OpenVMS */
+#define ELFOSABI_NSK		14	/* Hewlett-Packard Non-Stop Kernel */
+#define ELFOSABI_AROS		15	/* Amiga Research OS */
 #define ELFOSABI_ARM		97	/* ARM */
 #define ELFOSABI_STANDALONE	255	/* Standalone (embedded) application */
 
@@ -178,6 +181,7 @@ typedef struct
 #define EM_386		 3		/* Intel 80386 */
 #define EM_68K		 4		/* Motorola m68k family */
 #define EM_88K		 5		/* Motorola m88k family */
+#define EM_486		 6		/* Intel 80486 *//* Reserved for future use */
 #define EM_860		 7		/* Intel 80860 */
 #define EM_MIPS		 8		/* MIPS R3000 big-endian */
 #define EM_S370		 9		/* IBM System/370 */
@@ -194,7 +198,8 @@ typedef struct
 #define EM_V800		36		/* NEC V800 series */
 #define EM_FR20		37		/* Fujitsu FR20 */
 #define EM_RH32		38		/* TRW RH-32 */
-#define EM_RCE		39		/* Motorola RCE */
+#define EM_MCORE	39		/* Motorola M*Core */ /* May also be taken by Fujitsu MMA */
+#define EM_RCE		39		/* Old name for MCore */
 #define EM_ARM		40		/* ARM */
 #define EM_FAKE_ALPHA	41		/* Digital Alpha */
 #define EM_SH		42		/* Renesas SH */
@@ -228,7 +233,7 @@ typedef struct
 #define EM_68HC08	71		/* Motorola MC68HC08 microcontroller */
 #define EM_68HC05	72		/* Motorola MC68HC05 microcontroller */
 #define EM_SVX		73		/* Silicon Graphics SVx */
-#define EM_AT19		74		/* STMicroelectronics ST19 8 bit mc */
+#define EM_ST19		74		/* STMicroelectronics ST19 8 bit mc */
 #define EM_VAX		75		/* Digital VAX */
 #define EM_CRIS		76		/* Axis Communications 32-bit embedded processor */
 #define EM_JAVELIN	77		/* Infineon Technologies 32-bit embedded processor */
@@ -249,22 +254,108 @@ typedef struct
 #define EM_OPENRISC	92		/* OpenRISC 32-bit embedded processor */
 #define EM_ARC_A5	93		/* ARC Cores Tangent-A5 */
 #define EM_XTENSA	94		/* Tensilica Xtensa Architecture */
+#define EM_IP2K		101		/* Ubicom IP2022 micro controller */
+#define EM_CR		103		/* National Semiconductor CompactRISC */
+#define EM_MSP430	105		/* TI msp430 micro controller */
+#define EM_BLACKFIN	106		/* Analog Devices Blackfin */
+#define EM_ALTERA_NIOS2	113	/* Altera Nios II soft-core processor */
+#define EM_CRX		114		/* National Semiconductor CRX */
 #define EM_NUM		95
 
-/* If it is necessary to assign new unofficial EM_* values, please
-   pick large random numbers (0x8523, 0xa7f2, etc.) to minimize the
-   chances of collision with official or non-GNU unofficial values.  */
+/* If it is necessary to assign new unofficial EM_* values, please pick large
+   random numbers (0x8523, 0xa7f2, etc.) to minimize the chances of collision
+   with official or non-GNU unofficial values.
 
-/* Fujitsu FR-V.  */
+   NOTE: Do not just increment the most recent number by one.
+   Somebody else somewhere will do exactly the same thing, and you
+   will have a collision.  Instead, pick a random number.
+
+   Normally, each entity or maintainer responsible for a machine with an
+   unofficial e_machine number should eventually ask registry@caldera.com for
+   an officially blessed number to be added to the list above.  */
+
+/* picoJava */
+#define EM_PJ_OLD	99
+
+/* Cygnus PowerPC ELF backend.  Written in the absence of an ABI.  */
+#define EM_CYGNUS_POWERPC 0x9025
+
+/* Old version of Sparc v9, from before the ABI; this should be
+   removed shortly.  */
+#define EM_OLD_SPARCV9	11
+
+/* Old version of PowerPC, this should be removed shortly. */
+#define EM_PPC_OLD	17
+
+/* (Deprecated) Temporary number for the OpenRISC processor.  */
+#define EM_OR32		0x8472
+
+/* Renesas M32C and M16C.  */
+#define EM_M32C			0xFEB0
+
+/* Cygnus M32R ELF backend.  Written in the absence of an ABI.  */
+#define EM_CYGNUS_M32R	0x9041
+
+/* old S/390 backend magic number. Written in the absence of an ABI.  */
+#define EM_S390_OLD	0xa390
+
+/* D10V backend magic number.  Written in the absence of an ABI.  */
+#define EM_CYGNUS_D10V	0x7650
+
+/* D30V backend magic number.  Written in the absence of an ABI.  */
+#define EM_CYGNUS_D30V	0x7676
+
+/* V850 backend magic number.  Written in the absense of an ABI.  */
+#define EM_CYGNUS_V850	0x9080
+
+/* mn10200 and mn10300 backend magic numbers.
+   Written in the absense of an ABI.  */
+#define EM_CYGNUS_MN10200	0xdead
+#define EM_CYGNUS_MN10300	0xbeef
+
+/* FR30 magic number - no EABI available.  */
+#define EM_CYGNUS_FR30		0x3330
+
+/* AVR magic number
+   Written in the absense of an ABI.  */
+#define EM_AVR_OLD		0x1057
+
+/* OpenRISC magic number
+   Written in the absense of an ABI.  */
+#define EM_OPENRISC_OLD		0x3426
+
+/* DLX magic number
+   Written in the absense of an ABI.  */
+#define EM_DLX			0x5aa5
+
+#define EM_XSTORMY16		0xad45
+
+/* FRV magic number - no EABI available??.  */
 #define EM_CYGNUS_FRV	0x5441
 
+/* Ubicom IP2xxx; no ABI */
+#define EM_IP2K_OLD		0x8217
+
+#define EM_MT                   0x2530  /* Morpho MT; no ABI */
+
+/* MSP430 magic number
+      Written in the absense everything.  */
+#define EM_MSP430_OLD		0x1059
+
+/* Vitesse IQ2000.  */
+#define EM_IQ2000		0xFEBA
+
+/* Old, unofficial value for Xtensa.  */
+#define EM_XTENSA_OLD		0xabc7
+
+/* Alpha backend magic number.  Written in the absence of an ABI.  */
 #define EM_ALPHA	0x9026
-#define EM_NIOS32	0xfebb		/* Altera Nios 32 */
-#define EM_ALTERA_NIOS2  0x9ee5	/* Altera Nios II */
+
+/* NIOS magic number - no EABI available.  */
+#define EM_NIOS32	0xFEBB
 
 /* V850 backend magic number.  Written in the absense of an ABI.  */
 #define EM_CYGNUS_V850 0x9080
-
 
 /* Legal values for e_version (version).  */
 
@@ -307,6 +398,10 @@ typedef struct
 #define SHN_UNDEF	0		/* Undefined section */
 #define SHN_LORESERVE	0xff00		/* Start of reserved indices */
 #define SHN_LOPROC	0xff00		/* Start of processor-specific */
+#define SHN_BEFORE	0xff00		/* Order section before all others
+					   (Solaris).  */
+#define SHN_AFTER	0xff01		/* Order section after all others
+					   (Solaris).  */
 #define SHN_HIPROC	0xff1f		/* End of processor-specific */
 #define SHN_LOOS	0xff20		/* Start of OS-specific */
 #define SHN_HIOS	0xff3f		/* End of OS-specific */
@@ -367,6 +462,10 @@ typedef struct
 #define SHF_TLS		     (1 << 10)	/* Section hold thread-local data.  */
 #define SHF_MASKOS	     0x0ff00000	/* OS-specific.  */
 #define SHF_MASKPROC	     0xf0000000	/* Processor-specific */
+#define SHF_ORDERED	     (1 << 30)	/* Special ordering requirement
+					   (Solaris).  */
+#define SHF_EXCLUDE	     (1 << 31)	/* Section is excluded unless
+					   referenced or allocated (Solaris).*/
 
 /* Section group handling.  */
 #define GRP_COMDAT	0x1		/* Mark group as COMDAT.  */
@@ -914,23 +1013,25 @@ typedef struct
 
 typedef struct
 {
-  int a_type;			/* Entry type */
+  uint32_t a_type;		/* Entry type */
   union
     {
-      long int a_val;		/* Integer value */
-      void *a_ptr;		/* Pointer value */
-      void (*a_fcn) (void);	/* Function pointer value */
+      uint32_t a_val;		/* Integer value */
+      /* We use to have pointer elements added here.  We cannot do that,
+	 though, since it does not work when using 32-bit definitions
+	 on 64-bit platforms and vice versa.  */
     } a_un;
 } Elf32_auxv_t;
 
 typedef struct
 {
-  long int a_type;		/* Entry type */
+  uint64_t a_type;		/* Entry type */
   union
     {
-      long int a_val;		/* Integer value */
-      void *a_ptr;		/* Pointer value */
-      void (*a_fcn) (void);	/* Function pointer value */
+      uint64_t a_val;		/* Integer value */
+      /* We use to have pointer elements added here.  We cannot do that,
+	 though, since it does not work when using 32-bit definitions
+	 on 64-bit platforms and vice versa.  */
     } a_un;
 } Elf64_auxv_t;
 
@@ -978,6 +1079,12 @@ typedef struct
 #define AT_SYSINFO	32
 #define AT_SYSINFO_EHDR	33
 
+/* Shapes of the caches.  Bits 0-3 contains associativity; bits 4-7 contains
+   log2 of line size; mask those to get cache size.  */
+#define AT_L1I_CACHESHAPE	34
+#define AT_L1D_CACHESHAPE	35
+#define AT_L2_CACHESHAPE	36
+#define AT_L3_CACHESHAPE	37
 
 /* Note section contents.  Each entry in the note section begins with
    a header of a fixed form.  */
@@ -1146,6 +1253,48 @@ typedef struct
 /* Keep this the last entry.  */
 #define R_386_NUM	   38
 
+/* Blackfin specific definitions.  */
+#define R_BFIN_unused0			0x00
+#define R_BFIN_pcrel5m2			0x01
+#define R_BFIN_unused1			0x02
+#define R_BFIN_pcrel10			0x03
+#define R_BFIN_pcrel12_jump		0x04
+#define R_BFIN_rimm16			0x05
+#define R_BFIN_luimm16			0x06
+#define R_BFIN_huimm16			0x07
+#define R_BFIN_pcrel12_jump_s		0x08
+#define R_BFIN_pcrel24_jump_x		0x09
+#define R_BFIN_pcrel24			0x0a
+#define R_BFIN_unusedb			0x0b
+#define R_BFIN_unusedc			0x0c
+#define R_BFIN_pcrel24_jump_l		0x0d
+#define R_BFIN_pcrel24_call_x		0x0e
+#define R_BFIN_var_eq_symb		0x0f
+#define R_BFIN_byte_data		0x10
+#define R_BFIN_byte2_data		0x11
+#define R_BFIN_byte4_data		0x12
+#define R_BFIN_pcrel11			0x13
+
+#define R_BFIN_GOT17M4			0x14
+#define R_BFIN_GOTHI			0x15
+#define R_BFIN_GOTLO			0x16
+#define R_BFIN_FUNCDESC			0x17
+#define R_BFIN_FUNCDESC_GOT17M4		0x18
+#define R_BFIN_FUNCDESC_GOTHI		0x19
+#define R_BFIN_FUNCDESC_GOTLO		0x1a
+#define R_BFIN_FUNCDESC_VALUE		0x1b
+#define R_BFIN_FUNCDESC_GOTOFF17M4	0x1c
+#define R_BFIN_FUNCDESC_GOTOFFHI	0x1d
+#define R_BFIN_FUNCDESC_GOTOFFLO	0x1e
+#define R_BFIN_GOTOFF17M4		0x1f
+#define R_BFIN_GOTOFFHI			0x20
+#define R_BFIN_GOTOFFLO			0x21
+
+#define EF_BFIN_PIC		0x00000001	/* -fpic */
+#define EF_BFIN_FDPIC		0x00000002      /* -mfdpic */
+#define EF_BFIN_CODE_IN_L1	0x00000010	/* --code-in-l1 */
+#define EF_BFIN_DATA_IN_L1	0x00000020	/* --data-in-l1 */
+
 /* FR-V specific definitions.  */
 #define R_FRV_NONE		0	/* No reloc.  */
 #define R_FRV_32		1	/* Direct 32 bit.  */
@@ -1172,7 +1321,7 @@ typedef struct
 
 /* Legal values for ST_TYPE subfield of st_info (symbol type).  */
 
-#define STT_REGISTER	13		/* Global register reserved to app. */
+#define STT_SPARC_REGISTER	13	/* Global register reserved to app. */
 
 /* Values for Elf64_Ehdr.e_flags.  */
 
@@ -1522,8 +1671,21 @@ typedef struct
 #define R_MIPS_PJUMP		35
 #define R_MIPS_RELGOT		36
 #define R_MIPS_JALR		37
+#define R_MIPS_TLS_DTPMOD32	38	/* Module number 32 bit */
+#define R_MIPS_TLS_DTPREL32	39	/* Module-relative offset 32 bit */
+#define R_MIPS_TLS_DTPMOD64	40	/* Module number 64 bit */
+#define R_MIPS_TLS_DTPREL64	41	/* Module-relative offset 64 bit */
+#define R_MIPS_TLS_GD		42	/* 16 bit GOT offset for GD */
+#define R_MIPS_TLS_LDM		43	/* 16 bit GOT offset for LDM */
+#define R_MIPS_TLS_DTPREL_HI16	44	/* Module-relative offset, high 16 bits */
+#define R_MIPS_TLS_DTPREL_LO16	45	/* Module-relative offset, low 16 bits */
+#define R_MIPS_TLS_GOTTPREL	46	/* 16 bit GOT offset for IE */
+#define R_MIPS_TLS_TPREL32	47	/* TP-relative offset, 32 bit */
+#define R_MIPS_TLS_TPREL64	48	/* TP-relative offset, 64 bit */
+#define R_MIPS_TLS_TPREL_HI16	49	/* TP-relative offset, high 16 bits */
+#define R_MIPS_TLS_TPREL_LO16	50	/* TP-relative offset, low 16 bits */
 /* Keep this the last entry.  */
-#define R_MIPS_NUM		38
+#define R_MIPS_NUM		51
 
 /* Legal values for p_type field of Elf32_Phdr.  */
 
@@ -1882,6 +2044,9 @@ typedef Elf32_Addr Elf32_Conflict;
 #define LITUSE_ALPHA_TLS_GD	4
 #define LITUSE_ALPHA_TLS_LDM	5
 
+/* Legal values for d_tag of Elf64_Dyn.  */
+#define DT_ALPHA_PLTRO		(DT_LOPROC + 0)
+#define DT_ALPHA_NUM		1
 
 /* PowerPC specific declarations */
 
@@ -1992,10 +2157,19 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_PPC_DIAB_RELSDA_HI	184	/* like EMB_RELSDA, but high 16 bit */
 #define R_PPC_DIAB_RELSDA_HA	185	/* like EMB_RELSDA, adjusted high 16 */
 
+/* GNU relocs used in PIC code sequences.  */
+#define R_PPC_REL16		249	/* word32   (sym-.) */
+#define R_PPC_REL16_LO		250	/* half16   (sym-.)@l */
+#define R_PPC_REL16_HI		251	/* half16   (sym-.)@h */
+#define R_PPC_REL16_HA		252	/* half16   (sym-.)@ha */
+
 /* This is a phony reloc to handle any old fashioned TOC16 references
    that may still be in object files.  */
 #define R_PPC_TOC16		255
 
+/* PowerPC specific values for the Dyn d_tag field.  */
+#define DT_PPC_GOT		(DT_LOPROC + 0)
+#define DT_PPC_NUM		1
 
 /* PowerPC64 relocations defined by the ABIs */
 #define R_PPC64_NONE		R_PPC_NONE
@@ -2114,7 +2288,10 @@ typedef Elf32_Addr Elf32_Conflict;
 
 /* PowerPC64 specific values for the Dyn d_tag field.  */
 #define DT_PPC64_GLINK  (DT_LOPROC + 0)
-#define DT_PPC64_NUM    1
+#define DT_PPC64_OPD	(DT_LOPROC + 1)
+#define DT_PPC64_OPDSZ	(DT_LOPROC + 2)
+#define DT_PPC64_NUM    3
+
 
 /* ARM specific declarations */
 
@@ -2153,7 +2330,11 @@ typedef Elf32_Addr Elf32_Conflict;
 #define PF_ARM_SB          0x10000000   /* Segment contains the location
 					   addressed by the static base */
 
+/* Processor specific values for the Phdr p_type field.  */
+#define PT_ARM_EXIDX	0x70000001	/* .ARM.exidx segment */
+
 /* ARM relocs.  */
+
 #define R_ARM_NONE		0	/* No reloc */
 #define R_ARM_PC24		1	/* PC relative 26 bit branch */
 #define R_ARM_ABS32		2	/* Direct 32 bit  */
@@ -2209,6 +2390,9 @@ typedef Elf32_Addr Elf32_Conflict;
 /* Processor specific values for the Phdr p_type field.  */
 #define PT_IA_64_ARCHEXT	(PT_LOPROC + 0)	/* arch extension bits */
 #define PT_IA_64_UNWIND		(PT_LOPROC + 1)	/* ia64 unwind bits */
+#define PT_IA_64_HP_OPT_ANOT	(PT_LOOS + 0x12)
+#define PT_IA_64_HP_HSL_ANOT	(PT_LOOS + 0x13)
+#define PT_IA_64_HP_STACK	(PT_LOOS + 0x14)
 
 /* Processor specific flags for the Phdr p_flags field.  */
 #define PF_IA_64_NORECOV	0x80000000	/* spec insns w/o recovery */
@@ -2225,7 +2409,6 @@ typedef Elf32_Addr Elf32_Conflict;
 #define DT_IA_64_PLT_RESERVE	(DT_LOPROC + 0)
 #define DT_IA_64_NUM		1
 
-/* IA-64 relocations.  */
 /* IA-64 relocations.  */
 #define R_IA64_NONE		0x00	/* none */
 #define R_IA64_IMM14		0x21	/* symbol + addend, add imm14 */
@@ -2311,6 +2494,12 @@ typedef Elf32_Addr Elf32_Conflict;
 
 /* SH specific declarations */
 
+/* SH specific values for `st_other'.  */
+
+/* If set, this is a symbol pointing to SHmedia code, which will be branched
+   to, so need to add 1 to the symbol value. */
+#define STO_SH5_ISA32 (1 << 2)
+
 /* SH relocs.  */
 #define	R_SH_NONE		0
 #define	R_SH_DIR32		1
@@ -2349,6 +2538,13 @@ typedef Elf32_Addr Elf32_Conflict;
 #define	R_SH_RELATIVE		165
 #define	R_SH_GOTOFF		166
 #define	R_SH_GOTPC		167
+#define	R_SH_RELATIVE_LOW16	197
+#define	R_SH_RELATIVE_MEDLOW16	198
+#define	R_SH_IMM_LOW16		246
+#define	R_SH_IMM_LOW16_PCREL	247
+#define	R_SH_IMM_MEDLOW16	248
+#define	R_SH_IMM_MEDLOW16_PCREL	249
+
 /* Keep this the last entry.  */
 #define	R_SH_NUM		256
 
@@ -2368,11 +2564,6 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_390_JMP_SLOT		11	/* Create PLT entry.  */
 #define R_390_RELATIVE		12	/* Adjust by program base.  */
 #define R_390_GOTOFF32		13	/* 32 bit offset to GOT.	 */
-
-/* Those crazy binutils folks changed their 
- * abi.  Add this so older apps can cope. */
-#define R_390_GOTOFF R_390_GOTOFF32
-
 #define R_390_GOTPC		14	/* 32 bit PC relative offset to GOT.  */
 #define R_390_GOT16		15	/* 16 bit GOT offset.  */
 #define R_390_PC16		16	/* PC relative 16 bit.	*/
@@ -2433,9 +2624,20 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_390_TLS_DTPOFF	55	/* Offset in TLS block.	 */
 #define R_390_TLS_TPOFF		56	/* Negated offset in static TLS
 					   block.  */
-
+#define R_390_20		57	/* Direct 20 bit.  */
+#define R_390_GOT20		58	/* 20 bit GOT offset.  */
+#define R_390_GOTPLT20		59	/* 20 bit offset to jump slot.  */
+#define R_390_TLS_GOTIE20	60	/* 20 bit GOT offset for static TLS
+					   block offset.  */
 /* Keep this the last entry.  */
-#define R_390_NUM		57
+#define R_390_NUM		61
+
+
+/* CRIS flags.  */
+#define EF_CRIS_VARIANT_MASK           0x0000000e
+#define EF_CRIS_VARIANT_ANY_V0_V10     0x00000000
+#define EF_CRIS_VARIANT_V32            0x00000002
+#define EF_CRIS_VARIANT_COMMON_V10_V32 0x00000004
 
 /* CRIS relocations.  */
 #define R_CRIS_NONE		0
@@ -2461,6 +2663,7 @@ typedef Elf32_Addr Elf32_Conflict;
 
 /* Keep this the last entry.  */
 #define R_CRIS_NUM		20
+
 
 /* AMD x86-64 relocations.  */
 #define R_X86_64_NONE		0	/* No reloc */
@@ -2494,9 +2697,89 @@ typedef Elf32_Addr Elf32_Conflict;
 
 #define R_X86_64_NUM		24
 
-/* Keep this the last entry.  */
-#define R_X86_64_NUM		24
 
+/* AM33 relocations.  */
+#define R_MN10300_NONE		0	/* No reloc.  */
+#define R_MN10300_32		1	/* Direct 32 bit.  */
+#define R_MN10300_16		2	/* Direct 16 bit.  */
+#define R_MN10300_8		3	/* Direct 8 bit.  */
+#define R_MN10300_PCREL32	4	/* PC-relative 32-bit.  */
+#define R_MN10300_PCREL16	5	/* PC-relative 16-bit signed.  */
+#define R_MN10300_PCREL8	6	/* PC-relative 8-bit signed.  */
+#define R_MN10300_GNU_VTINHERIT	7	/* Ancient C++ vtable garbage... */
+#define R_MN10300_GNU_VTENTRY	8	/* ... collection annotation.  */
+#define R_MN10300_24		9	/* Direct 24 bit.  */
+#define R_MN10300_GOTPC32	10	/* 32-bit PCrel offset to GOT.  */
+#define R_MN10300_GOTPC16	11	/* 16-bit PCrel offset to GOT.  */
+#define R_MN10300_GOTOFF32	12	/* 32-bit offset from GOT.  */
+#define R_MN10300_GOTOFF24	13	/* 24-bit offset from GOT.  */
+#define R_MN10300_GOTOFF16	14	/* 16-bit offset from GOT.  */
+#define R_MN10300_PLT32		15	/* 32-bit PCrel to PLT entry.  */
+#define R_MN10300_PLT16		16	/* 16-bit PCrel to PLT entry.  */
+#define R_MN10300_GOT32		17	/* 32-bit offset to GOT entry.  */
+#define R_MN10300_GOT24		18	/* 24-bit offset to GOT entry.  */
+#define R_MN10300_GOT16		19	/* 16-bit offset to GOT entry.  */
+#define R_MN10300_COPY		20	/* Copy symbol at runtime.  */
+#define R_MN10300_GLOB_DAT	21	/* Create GOT entry.  */
+#define R_MN10300_JMP_SLOT	22	/* Create PLT entry.  */
+#define R_MN10300_RELATIVE	23	/* Adjust by program base.  */
+
+#define R_MN10300_NUM		24
+
+
+/* M32R relocs.  */
+#define R_M32R_NONE		0	/* No reloc. */
+#define R_M32R_16		1	/* Direct 16 bit. */
+#define R_M32R_32		2	/* Direct 32 bit. */
+#define R_M32R_24		3	/* Direct 24 bit. */
+#define R_M32R_10_PCREL		4	/* PC relative 10 bit shifted. */
+#define R_M32R_18_PCREL		5	/* PC relative 18 bit shifted. */
+#define R_M32R_26_PCREL		6	/* PC relative 26 bit shifted. */
+#define R_M32R_HI16_ULO		7	/* High 16 bit with unsigned low. */
+#define R_M32R_HI16_SLO		8	/* High 16 bit with signed low. */
+#define R_M32R_LO16		9	/* Low 16 bit. */
+#define R_M32R_SDA16		10	/* 16 bit offset in SDA. */
+#define R_M32R_GNU_VTINHERIT	11
+#define R_M32R_GNU_VTENTRY	12
+/* M32R relocs use SHT_RELA.  */
+#define R_M32R_16_RELA		33	/* Direct 16 bit. */
+#define R_M32R_32_RELA		34	/* Direct 32 bit. */
+#define R_M32R_24_RELA		35	/* Direct 24 bit. */
+#define R_M32R_10_PCREL_RELA	36	/* PC relative 10 bit shifted. */
+#define R_M32R_18_PCREL_RELA	37	/* PC relative 18 bit shifted. */
+#define R_M32R_26_PCREL_RELA	38	/* PC relative 26 bit shifted. */
+#define R_M32R_HI16_ULO_RELA	39	/* High 16 bit with unsigned low */
+#define R_M32R_HI16_SLO_RELA	40	/* High 16 bit with signed low */
+#define R_M32R_LO16_RELA	41	/* Low 16 bit */
+#define R_M32R_SDA16_RELA	42	/* 16 bit offset in SDA */
+#define R_M32R_RELA_GNU_VTINHERIT	43
+#define R_M32R_RELA_GNU_VTENTRY	44
+
+#define R_M32R_GOT24		48	/* 24 bit GOT entry */
+#define R_M32R_26_PLTREL	49	/* 26 bit PC relative to PLT shifted */
+#define R_M32R_COPY		50	/* Copy symbol at runtime */
+#define R_M32R_GLOB_DAT		51	/* Create GOT entry */
+#define R_M32R_JMP_SLOT		52	/* Create PLT entry */
+#define R_M32R_RELATIVE		53	/* Adjust by program base */
+#define R_M32R_GOTOFF		54	/* 24 bit offset to GOT */
+#define R_M32R_GOTPC24		55	/* 24 bit PC relative offset to GOT */
+#define R_M32R_GOT16_HI_ULO	56	/* High 16 bit GOT entry with unsigned
+					   low */
+#define R_M32R_GOT16_HI_SLO	57	/* High 16 bit GOT entry with signed
+					   low */
+#define R_M32R_GOT16_LO		58	/* Low 16 bit GOT entry */
+#define R_M32R_GOTPC_HI_ULO	59	/* High 16 bit PC relative offset to
+					   GOT with unsigned low */
+#define R_M32R_GOTPC_HI_SLO	60	/* High 16 bit PC relative offset to
+					   GOT with signed low */
+#define R_M32R_GOTPC_LO		61	/* Low 16 bit PC relative offset to
+					   GOT */
+#define R_M32R_GOTOFF_HI_ULO	62	/* High 16 bit offset to GOT
+					   with unsigned low */
+#define R_M32R_GOTOFF_HI_SLO	63	/* High 16 bit offset to GOT
+					   with signed low */
+#define R_M32R_GOTOFF_LO	64	/* Low 16 bit offset to GOT */
+#define R_M32R_NUM		256	/* Keep this the last entry. */
 
 /* i960 Relocations */
 #define R_960_NONE      0
@@ -2565,6 +2848,7 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_MICROBLAZE_NUM 11
 
 
+/* Renesas H8/300 Relocations */
 #define R_H8_NONE       0
 #define R_H8_DIR32      1
 #define R_H8_DIR32_28   2
@@ -2608,8 +2892,7 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_H8_DIR32A16  63
 #define R_H8_ABS32     65
 #define R_H8_ABS32A16 127
-
-/* Altera NIOS specific definitions.  */
+#define R_H8_NUM      128
 
 /* NIOS relocations. */
 #define R_NIOS_NONE				0

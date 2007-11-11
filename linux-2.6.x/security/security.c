@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/security.h>
 
 #define SECURITY_FRAMEWORK_VERSION	"1.0.0"
@@ -25,6 +24,7 @@ extern struct security_operations dummy_security_ops;
 extern void security_fixup_ops(struct security_operations *ops);
 
 struct security_operations *security_ops;	/* Initialized to NULL */
+unsigned long mmap_min_addr;		/* 0 means no protection */
 
 static inline int verify(struct security_operations *ops)
 {

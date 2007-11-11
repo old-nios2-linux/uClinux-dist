@@ -108,8 +108,7 @@ static int skbd_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.vendor = SERIO_STOWAWAY;
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &serio->dev;
-	input_dev->private = skbd;
+	input_dev->dev.parent = &serio->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP);
 	input_dev->keycode = skbd->keycode;
@@ -173,8 +172,7 @@ static struct serio_driver skbd_drv = {
 
 static int __init skbd_init(void)
 {
-	serio_register_driver(&skbd_drv);
-	return 0;
+	return serio_register_driver(&skbd_drv);
 }
 
 static void __exit skbd_exit(void)

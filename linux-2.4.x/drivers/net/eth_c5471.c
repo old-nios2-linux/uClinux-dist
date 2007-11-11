@@ -5,6 +5,10 @@
  * and on the linux/drivers/net/skeleton.c from the linux 2.0.38
  * distribution:
  *
+ *   Copyright (C) 2004-2006 Arcturus Networks Inc. 
+ *                 by Ted Ma and David Wu 
+ *                 <www.ArcturusNetworks.com>
+ *
  *   Copyright (C) 2003 Cadenux, LLC. All rights reserved.
  *   todd.fischer@cadenux.com  <www.cadenux.com>
  *
@@ -42,6 +46,7 @@
  ***********************************************************************/
 
 #include <linux/module.h>
+#include <asm/arch/sysdep.h> /* LINUX_20 */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -57,7 +62,6 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-#include <asm/arch/sysdep.h> /* LINUX_20 */
 
 #ifdef LINUX_20
 #undef dev_kfree_skb
@@ -105,23 +109,6 @@ int LAN_Rate = C5471_LAN_RATE;
 
 static const char cardname[] = "ethernet";
 
-/* Information that needs to be kept for each each port. */
-
-struct net_local
-{
-  struct NET_DEVICE_STATS stats;
-  long open_time;                 /* Useless example local info. */
-
-#ifndef LINUX_20
-  /* Tx control lock.  This protects the transmit buffer ring
-   * state along with the "tx full" state of the driver.  This
-   * means all netif_queue flow control actions are protected
-   * by this lock as well.
-   */
-
-  spinlock_t lock;
-#endif /* LINUX_20 */
-};
 
 #ifndef LINUX_20
 static int (*eth_set_mac_address)(struct NET_DEVICE *dev, void *addr) = NULL;
@@ -139,7 +126,7 @@ extern int  c5471_net_probe(struct NET_DEVICE *dev);
 static int  net_open(struct NET_DEVICE *dev);
 static int  net_send_packet(struct sk_buff *skb, struct NET_DEVICE *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void net_rx(struct NET_DEVICE *dev);
+static int net_rx(struct NET_DEVICE *dev);
 #if TX_EVENT
 static void net_tx(struct NET_DEVICE *dev);
 #endif /* TX_EVENT */
@@ -339,10 +326,19 @@ net_open(struct NET_DEVICE *dev)
    */
 
   net_reset_mac_address(dev);
-
-  /* Reset the hardware here. Don't forget to set the station address. */
-
-  eth_turn_on_ethernet();
+  /* Reset the hardware here. */
+  eth_turn_on_ethernet(dev);
+#ifdef CONFIG_FEC_LXT972  
+   irqval = request_irq(ETH_5471_LINK_IRQ, &eth_5471_link_interrupt, SA_SHIRQ, "link", dev);
+   if (irqval){
+        printk("Unable to get link interrupt for %s rc=%d\n", dev->name, (int) irqval);
+   }
+   else {
+        dbg("link(%s) irq == %d", dev->name, ETH_5471_LINK_IRQ);
+   	/* HW enable the link interrupt */
+	enable_link_interrupt();
+   }
+#endif
   np->open_time  = jiffies;
 
 #ifdef LINUX_20
@@ -478,17 +474,19 @@ net_send_packet(struct sk_buff *skb, struct NET_DEVICE *dev)
     }
   else
     {
-      eth_send_packet(skb->data, length);
+      eth_send_packet(skb->data, length, dev);
       dev->trans_start = jiffies;
     }
   dev_kfree_skb(skb,FREE_WRITE);
 #else /* LINUX_20 */
-  eth_send_packet(skb->data, length);
+  spin_lock_irq(&np->lock);
+  eth_send_packet(skb->data, length, dev);
   np->stats.tx_bytes += skb->len;
 
   dev->trans_start = jiffies;
 
   dev_kfree_skb(skb);
+  spin_unlock_irq(&np->lock);
 #endif /* LINUX_20 */
 #endif
 
@@ -519,11 +517,36 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
   np = (struct net_local *)dev->priv;
 
+#ifndef LINUX_20
+  spin_lock_irq(&np->lock);
+#endif /* LINUX_20 */
+   if(eth_read_enet_sys_err_reg() & 0x00000002) // RX Buffer memory overflow
+   {
+        eth_reset_enet(dev);
+	np->stats.rx_over_errors++;
+	np->stats.rx_errors++;
+#ifdef LINUX_20
+	dev->interrupt = 0;
+#endif /* LINUX_20 */
+#ifndef LINUX_20
+        spin_unlock_irq(&np->lock);
+#endif
+	return;	
+   }
+
   if (eth_recv_int_active())
     {
       /* Got packet(s) */
 
-      net_rx(dev);
+      if( net_rx(dev) ){   /* only be set when eth_reset_enet() is called */
+#ifdef LINUX_20
+	dev->interrupt = 0;
+#endif /* LINUX_20 */
+#ifndef LINUX_20
+        spin_unlock_irq(&np->lock);
+#endif /* LINUX_20 */
+	return;   /* just return and ignore the transmit routine below because enet has been reset */
+      };
     }
 
 #if TX_EVENT
@@ -544,6 +567,9 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #ifdef LINUX_20
   dev->interrupt = 0;
 #endif /* LINUX_20 */
+#ifndef LINUX_20
+  spin_unlock_irq(&np->lock);
+#endif /* LINUX_20 */
 }
 
 /***********************************************************************
@@ -553,7 +579,8 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  *
  ***********************************************************************/
 
-static void
+extern unsigned long cached_rx_status;
+static int
 net_rx(struct NET_DEVICE *dev)
 {
   struct net_local *lp = (struct net_local *)dev->priv;
@@ -570,6 +597,57 @@ net_rx(struct NET_DEVICE *dev)
     {
       verbose("packet_len=%d", packet_len);
 
+      if(eth_read_enet_sys_err_reg() & 0x00000002){ // RX Buffer memory overflow
+        eth_reset_enet(dev);
+	lp->stats.rx_errors++;
+	lp->stats.rx_over_errors++;
+        return 1;
+      }
+
+      if (cached_rx_status) // = eth_rx_errors()) != 0)
+      {
+	lp->stats.rx_errors++;
+	dbg("rx_errors=%ld", lp->stats.rx_errors);
+
+	eth_free_received_packet();
+
+        if ((RXSTATUS_VLAN_BIT  & cached_rx_status) ||
+            (RXSTATUS_ALIGN_BIT & cached_rx_status)) //eth_rx_length_errors()
+	{
+	  lp->stats.rx_length_errors++;
+	  dbg("rx_length_errors=%ld", lp->stats.rx_length_errors);
+	}
+        if (RXSTATUS_OVER_BIT & cached_rx_status) //eth_rx_over_errors()
+	{
+	  lp->stats.rx_over_errors++;
+	  dbg("rx_over_errors=%ld", lp->stats.rx_over_errors);
+	}
+        if (RXSTATUS_CRC_BIT & cached_rx_status) //eth_rx_crc_errors()
+	{
+	  lp->stats.rx_crc_errors++;
+	  dbg("rx_crc_errors=%ld", lp->stats.rx_crc_errors);
+	}
+        if ((RXSTATUS_LONG_BIT  & cached_rx_status) ||
+            (RXSTATUS_SHORT_BIT & cached_rx_status)) //eth_rx_frame_errors()
+	{
+	  lp->stats.rx_frame_errors++;
+	  dbg("rx_frame_errors=%ld", lp->stats.rx_frame_errors);
+	}
+/* not implemented yet
+        if (eth_rx_fifo_errors())
+	{
+	  lp->stats.rx_fifo_errors++;
+	  dbg("rx_fifo_errors=%ld", lp->stats.rx_fifo_errors);
+	}
+*/
+        if (RXSTATUS_MISS_BIT & cached_rx_status) //eth_rx_missed_errors()
+	{
+	  lp->stats.rx_missed_errors++;
+	  dbg("rx_missed_errors=%ld", lp->stats.rx_missed_errors);
+	}
+	goto polling;
+      }
+
       /* Allocate memory for the packet data. */
 
 #ifdef LINUX_20
@@ -582,7 +660,7 @@ net_rx(struct NET_DEVICE *dev)
 	  warn("%s: Memory squeeze, dropping packet", dev->name);
 	  lp->stats.rx_dropped++;
 	  dbg("rx_dropped=%ld", lp->stats.rx_dropped);
-	  return;
+	  return 0;
 	}
 
       skb_reserve(skb, 2);  /* align the buffer */
@@ -593,41 +671,6 @@ net_rx(struct NET_DEVICE *dev)
 
       eth_get_received_packet_data(skb->data,(int *)(&(skb->len)));
 
-      if (eth_rx_errors())
-	{
-	  lp->stats.rx_errors++;
-	  dbg("rx_errors=%ld", lp->stats.rx_errors);
-	}
-      if (eth_rx_length_errors())
-	{
-	  lp->stats.rx_length_errors++;
-	  dbg("rx_length_errors=%ld", lp->stats.rx_length_errors);
-	}
-      if (eth_rx_over_errors())
-	{
-	  lp->stats.rx_over_errors++;
-	  dbg("rx_over_errors=%ld", lp->stats.rx_over_errors);
-	}
-      if (eth_rx_crc_errors())
-	{
-	  lp->stats.rx_crc_errors++;
-	  dbg("rx_crc_errors=%ld", lp->stats.rx_crc_errors);
-	}
-      if (eth_rx_frame_errors())
-	{
-	  lp->stats.rx_frame_errors++;
-	  dbg("rx_frame_errors=%ld", lp->stats.rx_frame_errors);
-	}
-      if (eth_rx_fifo_errors())
-	{
-	  lp->stats.rx_fifo_errors++;
-	  dbg("rx_fifo_errors=%ld", lp->stats.rx_fifo_errors);
-	}
-      if (eth_rx_missed_errors())
-	{
-	  lp->stats.rx_missed_errors++;
-	  dbg("rx_missed_errors=%ld", lp->stats.rx_missed_errors);
-	}
 
       /* This INET call also modifies skb->pkt_type, skb->mac.raw, etc */
 
@@ -646,16 +689,17 @@ net_rx(struct NET_DEVICE *dev)
 #endif /* LINUX_20 */
 
       /* Get the length of the next packet. */
-
+polling:
       eth_get_received_packet_len(&packet_len);
     }  
-  return;
+  return 0;
 }
 
 /***********************************************************************
  * net_tx
  ***********************************************************************/
 
+extern  unsigned long cached_tx_status;
 #if TX_EVENT
 static void
 net_tx(struct NET_DEVICE *dev)
@@ -706,35 +750,44 @@ net_tx(struct NET_DEVICE *dev)
   np->stats.tx_packets++;
   verbose("tx_packets=%ld", np->stats.rx_errors);
 
-  if (eth_tx_errors())
+  if (cached_tx_status) // = eth_tx_errors()) != 0)
     {
-      np->stats.tx_errors++;
-      dbg("tx_errors=%ld", np->stats.tx_errors);
-    }
-  if (eth_tx_aborted_errors())
-    {
+    np->stats.tx_errors++;
+    dbg("tx_errors=%ld", np->stats.tx_errors);
+
+/* not implemented yet
+    if (eth_tx_aborted_errors()) // eth_tx_aborted_errors()
+      {
       np->stats.tx_aborted_errors++;
       dbg("tx_aborted_errors=%ld", np->stats.tx_aborted_errors);
-    }
-  if (eth_tx_carrier_errors())
-    {
+      }
+*/
+    if (TXSTATUS_LOSS_BIT & cached_tx_status) //eth_tx_carrier_errors()
+      {
       np->stats.tx_carrier_errors++;
       dbg("tx_carrier_errors=%ld", np->stats.tx_carrier_errors);
-    }
-  if (eth_tx_fifo_errors())
-    {
+      }
+/* not implemented yet
+    if (eth_tx_fifo_errors()) //eth_tx_fifo_errors()
+      {
       np->stats.tx_fifo_errors++;
       dbg("tx_fifo_errors=%ld", np->stats.tx_fifo_errors);
-    }
-  if (eth_tx_heartbeat_errors())
-    {
+      }
+*/
+    if (TXSTATUS_HEART_BIT & cached_tx_status) //eth_tx_heartbeat_errors()
+	{
       np->stats.tx_heartbeat_errors++;
       dbg("tx_heartbeat_errors=%ld", np->stats.tx_heartbeat_errors);
-    }
-  if (eth_tx_window_errors())
-    {
+      }
+    if((TXSTATUS_RETRY_BIT    & cached_tx_status) ||
+      (TXSTATUS_UNDER_BIT     & cached_tx_status) ||
+      (TXSTATUS_CRC_BIT       & cached_tx_status) ||
+      (TXSTATUS_COLLISION_BIT & cached_tx_status) ||
+      (TXSTATUS_LATE_COL_BIT  & cached_tx_status)) //eth_tx_window_errors()
+      {
       np->stats.tx_window_errors++;
       dbg("tx_window_errors=%ld", np->stats.tx_window_errors);
+      }
     }
 #endif /* TX_RING */
 
@@ -758,7 +811,7 @@ net_close(struct NET_DEVICE *dev)
   dbg("");
 
 #ifdef LINUX_20
-  eth_turn_off_ethernet();
+  eth_turn_off_ethernet(dev);
   free_irq(dev->irq, dev);
 
   np->open_time = 0;
@@ -772,8 +825,11 @@ net_close(struct NET_DEVICE *dev)
 
   netif_stop_queue(dev);
 
-  eth_turn_off_ethernet();
-  free_irq(dev->irq, dev);  
+  eth_turn_off_ethernet(dev);
+  free_irq(dev->irq, dev);
+#ifdef CONFIG_FEC_LXT972  
+  free_irq(ETH_5471_LINK_IRQ, dev);
+#endif  
 #endif
 
   /* Update statistics here */
@@ -799,7 +855,24 @@ static struct NET_DEVICE_STATS *net_get_stats(struct NET_DEVICE *dev)
 /***********************************************************************
  * set_multicast_list
  ***********************************************************************/
+/*
+cpu_fltr_mode:
+   EIM CPU Filtering Control Register (EIM_FILTER) 0xffff0014
+   Bit 4 MCLAEN. When set, enables matching on Logical Address and Multicast filtering. 
+         LOGICALEN and MULTICASTEN must be cleared when MCLAEN is set. 
+   Bit 3 LOGICALEN. When set, enables use of the Logical Filtering mechanism of the ENET 
+   Bit 2 MULTICASTEN. When set, enables the Multicast Filter matching 
+   Bit 1 BROADCASTEN. When set, enables Broadcast matching 
+   Bit 0 DAEN. When set, enables CPU Destination Address matching
 
+eim_addr_mode:
+   EIM ENET0 Address Mode Enable Register (EIM_ADR_MODE_E0) Address = 0xFFFF0138
+   Bit 3 ESAC. Enables Snoop Address Compare (Promiscuous) when set.
+   Bit 2 EBAC. Enables Broadcast Address Compare when set.
+   Bit 1 ELAC. Enables Logical Address Compare when set.
+   Bit 0 EPAC. Enables Physical Address Compare when set.
+
+*/
 static void set_multicast_list(struct NET_DEVICE *dev)
 {
   int eim_addr_mode;              /* ENET_ADR_ defines */
@@ -825,7 +898,7 @@ static void set_multicast_list(struct NET_DEVICE *dev)
 	{
 		/* Accept all multicast packets and
 		   rely on higher-level filtering */
-    eim_addr_mode = ENET_ADR_PROMISCUOUS;
+    eim_addr_mode = ENET_ADR_BROADCAST | ENET_ADR_HAST_FLTR | ENET_ADR_DEST_ADDR;
     cpu_fltr_mode = EIM_FILTER_MULTICAST | 
                     EIM_FILTER_BROADCAST | 
                     EIM_FILTER_UNICAST;
@@ -834,7 +907,7 @@ static void set_multicast_list(struct NET_DEVICE *dev)
 	else {
     /* just accept broadcast packets and packets
        sent to this device */     
-    eim_addr_mode = ENET_ADR_PROMISCUOUS;
+    eim_addr_mode = ENET_ADR_BROADCAST | ENET_ADR_DEST_ADDR;
     cpu_fltr_mode = EIM_FILTER_BROADCAST | 
                     EIM_FILTER_UNICAST;
   }
@@ -856,7 +929,7 @@ static void net_tx_timeout(struct NET_DEVICE *dev)
 
   /* Try to restart the adaptor. */
 
-  eth_turn_on_ethernet();
+  eth_turn_on_ethernet(dev);
 
   np->stats.tx_errors++;
   dbg("tx_errors=%ld", np->stats.tx_errors);
@@ -1016,7 +1089,7 @@ static int __init net_init(void)
 {
   int result;
 
-  printk("C5471 C5471 Ethernet Driver, LAN_Rate=%d\n", LAN_Rate);
+  printk("C5471 Ethernet Driver, LAN_Rate=%d\n", LAN_Rate);
 
   if (io == 0)
     {

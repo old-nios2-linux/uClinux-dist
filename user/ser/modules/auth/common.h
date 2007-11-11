@@ -1,9 +1,9 @@
 /*
- * $Id: common.h,v 1.8 2003/03/16 17:59:20 janakj Exp $
+ * $Id: common.h,v 1.9 2004/08/24 08:58:24 janakj Exp $
  *
  * Digest Authentication Module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,7 +44,7 @@ int get_realm(struct sip_msg* _m, int _hftype, struct sip_uri* _u);
 
 /*
  * Create a response with given code and reason phrase
- * Optionaly add new headers specified in _hdr
+ * Optionally add new headers specified in _hdr
  */
 int send_resp(struct sip_msg* _m, int _code, char* _reason, char* _hdr, int _hdr_len);
 

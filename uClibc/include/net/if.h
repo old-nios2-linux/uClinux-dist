@@ -77,8 +77,8 @@ enum
 # define IFF_PORTSEL	IFF_PORTSEL
     IFF_AUTOMEDIA = 0x4000,	/* Auto media select active.  */
 # define IFF_AUTOMEDIA	IFF_AUTOMEDIA
-	IFF_DYNAMIC = 0x8000      /* dialup device with changing addresses*/
-# define IFF_DYNAMIC IFF_DYNAMIC
+    IFF_DYNAMIC = 0x8000	/* Dialup device with changing addresses.  */
+# define IFF_DYNAMIC	IFF_DYNAMIC
   };
 
 /* The ifaddr structure contains information about one address of an

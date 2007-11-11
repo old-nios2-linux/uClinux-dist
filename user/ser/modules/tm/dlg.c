@@ -1,7 +1,7 @@
 /*
- * $Id: dlg.c,v 1.13.4.2 2004/04/25 20:36:32 janakj Exp $
+ * $Id: dlg.c,v 1.16 2004/08/24 09:00:40 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -350,7 +350,7 @@ static inline int get_route_set(struct sip_msg* _m, rr_t** _rs, unsigned char _o
 
 
 /*
- * Extract all necessarry information from a response and put it
+ * Extract all necessary information from a response and put it
  * in a dialog structure
  */
 static inline int response2dlg(struct sip_msg* _m, dlg_t* _d)
@@ -425,7 +425,7 @@ static inline int dlg_new_resp_uac(dlg_t* _d, struct sip_msg* _m)
 	} else {
 		     /* 
 		      * A negative final response, mark the dialog as destroyed
-		      * Again, I do not update the structures here becuase it
+		      * Again, I do not update the structures here because it
 		      * makes no sense to me, a dialog shouldn't be used after
 		      * it is destroyed
 		      */
@@ -641,7 +641,6 @@ static inline int get_dlg_uri(struct hdr_field* _h, str* _s)
 		
 		if (ptr->next) {
 			tag_len = ptr->value.s + ptr->value.len - tag;
-			     /* tag_len = ptr->next->name.s - tag; */
 		} else {
 			tag_len = _h->body.s + _h->body.len - tag;
 		}

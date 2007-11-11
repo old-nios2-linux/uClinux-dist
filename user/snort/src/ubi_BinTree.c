@@ -328,6 +328,10 @@ static ubi_btNodePtr Border( ubi_btRootPtr RootPtr,
     q = p->Link[ubi_trPARENT];
     }
 
+  /* explicit check that tmp is in bounds */
+  if (whichway > ubi_trRIGHT)
+    return NULL;
+
   /* Next, move back down in the "whichway" direction. */
   q = p->Link[whichway];
   while( NULL != q )
@@ -516,10 +520,20 @@ ubi_trBool ubi_btInsert( ubi_btRootPtr  RootPtr,
       parent = q;
       if( tmp == ubi_trEQUAL )
         tmp = ubi_trRIGHT;
+
+      /* explicit check that tmp is in bounds */
+      if (tmp > ubi_trRIGHT)
+        return ubi_trFALSE;
+
       q = q->Link[(int)tmp];
       if ( q )
         tmp = ubi_trAbNormal( (*(RootPtr->cmp))(ItemPtr, q) );
       }
+
+    /* explicit check that tmp is in bounds */
+    if (tmp > ubi_trRIGHT)
+        return ubi_trFALSE;
+
     parent->Link[(int)tmp]       = NewNode;
     NewNode->Link[ubi_trPARENT]  = parent;
     NewNode->gender              = tmp;

@@ -38,8 +38,8 @@
 #endif
 #endif
 
-#ifdef CONFIG_AMAZON
-#include "../../login/logcnt.c"
+#ifdef SECURITY_COUNTS
+#include "../login/logcnt.c"
 #endif
 
 #include "base64.h"
@@ -60,7 +60,9 @@
 
 struct _auth_dir_ {
 	char *directory;
-#ifndef AUTH_PAM
+#ifdef AUTH_PAM
+	char *service;
+#else
 	FILE *authfile;
 #endif
 	int dir_len;
@@ -78,25 +80,32 @@ static auth_dir *auth_list = 0;
  */
 void auth_add(char *directory,char *file)
 {
-	auth_dir *new_a,*old;
-	
-	old = auth_list;
-	while (old)
+	auth_dir *new_a,*old, **next;
+	int cmp;
+
+	for (next = &auth_list; *next; next = &(*next)->next)
 	{
-		if (!strcmp(directory,old->directory))
+		cmp = strcmp(directory, (*next)->directory);
+		if (cmp == 0)
+			/* Duplicate entry, ignore */
 			return;
-		old = old->next;
+		if (cmp > 0)
+			/* Reverse sorted so that more specific come first */
+			break;
 	}
 
 	new_a = (auth_dir *)malloc(sizeof(auth_dir));
 	/* success of this call will be checked later... */
-#ifndef AUTH_PAM
+#ifdef AUTH_PAM
+	new_a->service = strdup(file);
+#else
 	new_a->authfile = fopen(file,"rt");
 #endif
 	new_a->directory = strdup(directory);
 	new_a->dir_len = strlen(directory);
 	new_a->next = auth_list;
-	auth_list = new_a;
+	new_a->next = *next;
+	*next = new_a;
 }
 
 #ifndef AUTH_PAM
@@ -198,13 +207,13 @@ static struct pam_conv conv = {
 	NULL
 };
 
-static int auth_check_pam(const char *user, const char *pass, char idbuf[15]) {
+static int auth_check_pam(const char *user, const char *pass, const char *service, char idbuf[15]) {
 	int r, result;
 	pam_handle_t *pamh = NULL;
 
 	pam_pw = pass;
 
-	r = pam_start("fnord", user, &conv, &pamh);
+	r = pam_start(service, user, &conv, &pamh);
 	if (r != PAM_SUCCESS) {
 		syslog(LOG_ERR, "couldn't initialise PAM: %s", pam_strerror (pamh, r));
 		return 3;
@@ -266,7 +275,12 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 			}
 
 			if (authorization) {
-#ifndef AUTH_PAM
+				int denied;
+#ifdef AUTH_PAM
+				if (current->service==0) {
+					return 0;
+				}
+#else
 				if (current->authfile==0) {
 					return 0;
 				}
@@ -285,13 +299,15 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 				
 				*pwd++=0;
 #ifdef AUTH_PAM
-				const int denied = auth_check_pam(auth_userpass, pwd, id);
+				denied = auth_check_pam(auth_userpass, pwd, current->service, id);
 #else
 				rewind(current->authfile);
 
-				const int denied = auth_check_userpass(auth_userpass,pwd,current->authfile, id);
+				denied = auth_check_userpass(auth_userpass,pwd,current->authfile, id);
 #endif
-#ifdef CONFIG_AMAZON
+#ifdef SECURITY_COUNTS
+				if (! access__permitted(auth_userpass))
+					denied = 3;
 				access__attempted(denied, auth_userpass);
 #endif
 				if (denied) {
@@ -303,6 +319,13 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 						case 2:
 							syslog(LOG_ERR, "Authentication attempt failed for %s from %s because: Invalid Username\n",
 									auth_userpass, remote_ip_addr);
+							break;
+#ifdef SECURITY_COUNTS
+						case 3:
+							syslog(LOG_ERR, "Authentication attempt failed for %s from %s because: Too Many Recect Authentication Failures\n",
+									auth_userpass, remote_ip_addr);
+							break;
+#endif
 					}
 					return 0;
 				}

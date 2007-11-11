@@ -5,6 +5,7 @@
 #include <linux/interrupt.h>
 #include <asm/io.h>
 #include <asm/clock.h>
+#include <asm/snapgear.h>
 
 #define FAST_POLL_INTR
 
@@ -42,7 +43,7 @@ fast_timer_interrupt(int irq, void *dev_id)
 static void fast_timer_set(void)
 {
 	unsigned long interval;
-	struct clk *clk = clk_get("module_clk");
+	struct clk *clk = clk_get(NULL, "module_clk");
 
 #ifdef FAST_POLL_INTR
 	if (clk) {
@@ -64,10 +65,22 @@ static int __init fast_timer_setup(void)
 	static struct ipr_data fast_timer_ipr_map[] = { 
 		{ FASTTIMER_IRQ, FASTTIMER_IPR_ADDR, FASTTIMER_IPR_POS, FASTTIMER_PRIORITY},
 	};
+	static unsigned long fast_timer_offsets[] = {
+		INTC_IPRD,
+	};
+	static struct ipr_desc fast_timer_ipr_irq_desc = {
+		.ipr_offsets	= fast_timer_offsets,
+		.nr_offsets	= ARRAY_SIZE(fast_timer_offsets),
+		.ipr_data	= fast_timer_ipr_map,
+		.nr_irqs	= ARRAY_SIZE(fast_timer_ipr_map),
+		.chip = {
+			.name	= "IPR-fast-timer",
+		},
+	};
 
-	make_ipr_irq(fast_timer_ipr_map, ARRAY_SIZE(fast_timer_ipr_map));
+	register_ipr_controller(&fast_timer_ipr_irq_desc);
 
-	if (request_irq(FASTTIMER_IRQ, fast_timer_interrupt, SA_INTERRUPT,
+	if (request_irq(FASTTIMER_IRQ, fast_timer_interrupt, IRQF_DISABLED,
 			"fast timer", NULL))
 		return -EBUSY;
 #endif

@@ -3,7 +3,7 @@
  *
  * PPTP Control Message packet reading, formatting and writing.
  *
- * $Id: ctrlpacket.c,v 1.7 2006/10/02 01:13:46 cpascoe Exp $
+ * $Id: ctrlpacket.c,v 1.8 2007/07/05 23:33:09 gerg Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <time.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -69,7 +70,7 @@ int read_pptp_packet(int clientFd, unsigned char *packet, unsigned char *rply_pa
 {
 
 	size_t bytes_read;
-	int pptp_ctrl_type;	/* Control Message Type */
+	int pptp_ctrl_type = 0;	/* Control Message Type */
 
 	/* read a packet and parse header */
 	if ((bytes_read = read_pptp_header(clientFd, packet, &pptp_ctrl_type)) <= 0) {
@@ -208,6 +209,7 @@ ssize_t read_pptp_header(int clientFd, unsigned char *packet, int *pptp_ctrl_typ
 	static char *buffer = NULL;	/* buffer between calls */
 	static int buffered = 0;	/* size of buffer */
 
+	*pptp_ctrl_type = 0;		/* initialise return arg	*/
 
 	/* read any previously buffered data */
 	if (buffered) {
@@ -257,8 +259,7 @@ ssize_t read_pptp_header(int clientFd, unsigned char *packet, int *pptp_ctrl_typ
 			}
 		}
 	}
-	/*
-	 * OK, we have (at least) the first 2 bytes, and there is data waiting
+	/* OK, we have (at least) the first 2 bytes, and there is data waiting
 	 *
 	 * length includes the header,  so a length less than 2 is someone
 	 * trying to hack into us or a badly corrupted packet.
@@ -377,9 +378,9 @@ void deal_start_ctrl_conn(unsigned char *packet, unsigned char *rply_packet, ssi
 	start_ctrl_conn_rply.max_channels = htons(MAX_CHANNELS);
 	start_ctrl_conn_rply.firmware_rev = htons(PPTP_FIRMWARE_VERSION);
 	bzero(start_ctrl_conn_rply.hostname, MAX_HOSTNAME_SIZE);
-	strncpy(start_ctrl_conn_rply.hostname, PPTP_HOSTNAME, MAX_HOSTNAME_SIZE);
+	strncpy((char *)start_ctrl_conn_rply.hostname, PPTP_HOSTNAME, MAX_HOSTNAME_SIZE);
 	bzero(start_ctrl_conn_rply.vendor, MAX_VENDOR_SIZE);
-	strncpy(start_ctrl_conn_rply.vendor, PPTP_VENDOR, MAX_VENDOR_SIZE);
+	strncpy((char *)start_ctrl_conn_rply.vendor, PPTP_VENDOR, MAX_VENDOR_SIZE);
 	COPY_CTRL_PACKET(start_ctrl_conn_rply, rply_packet, rply_size);
 	DEBUG_PACKET("START CTRL CONN RPLY");
 }
@@ -423,7 +424,7 @@ void deal_out_call(unsigned char *packet, unsigned char *rply_packet, ssize_t * 
 
 	out_call_rqst = (struct pptp_out_call_rqst *) packet;
 
-	if ((pac_call_id = getcall()) == (u_int16_t)htons(-1)) {
+	if ((pac_call_id = getcall()) == htons(-1)) {
 		/* XXX should reject call */
 		syslog(LOG_ERR, "CTRL: No free Call IDs!");
 		pac_call_id = 0;
@@ -446,7 +447,7 @@ void deal_out_call(unsigned char *packet, unsigned char *rply_packet, ssize_t * 
 	out_call_rply.pckt_recv_size = out_call_rqst->pckt_recv_size;
 	if(pptpctrl_debug)
 		syslog(LOG_DEBUG, "CTRL: Set parameters to %d maxbps, %d window size",
-			ntohs(out_call_rply.speed), ntohs(out_call_rply.pckt_recv_size));
+			ntohl(out_call_rply.speed), ntohs(out_call_rply.pckt_recv_size));
 	out_call_rply.pckt_delay = htons(PCKT_PROCESS_DELAY);
 	out_call_rply.channel_id = htonl(CHANNEL_ID);
 	COPY_CTRL_PACKET(out_call_rply, rply_packet, rply_size);
@@ -505,7 +506,7 @@ void deal_call_clr(unsigned char *packet, unsigned char *rply_packet, ssize_t *r
 	 * The reply packet is a CALL-DISCONECT-NOTIFY
 	 * In single call mode we don't care what peer's call ID is, so don't even bother looking
 	 */
-	if ((pac_call_id = freecall()) == (u_int16_t)htons(-1)) {
+	if ((pac_call_id = freecall()) == htons(-1)) {
 		/* XXX should return an error */
 		syslog(LOG_ERR, "CTRL: Could not free Call ID [call clear]!");
 	}
@@ -577,7 +578,7 @@ void make_call_admin_shutdown(unsigned char *rply_packet, ssize_t * rply_size)
 	 * The reply packet is a CALL-DISCONECT-NOTIFY
 	 * In single call mode we don't care what peer's call ID is, so don't even bother looking
 	 */
-	if ((pac_call_id = freecall()) == (u_int16_t)htons(-1)) {
+	if ((pac_call_id = freecall()) == htons(-1)) {
 		/* XXX should return an error */
 		syslog(LOG_ERR, "CTRL: Could not free Call ID [admin shutdown]!");
 	}
@@ -648,17 +649,35 @@ static u_int16_t _pac_init = 0;
 u_int16_t getcall()
 {
 	static u_int16_t i = 0;
+	extern u_int16_t unique_call_id;
+
+	/* Start with a random Call ID.  This is to allocate unique
+	 * Call ID's across multiple TCP PPTP connections.  In this
+	 * way remote clients masqueraded by a firewall will put
+	 * unique peer call ID's into GRE packets that will have the
+	 * same source IP address of the firewall. */
+
+	if (!i) {
+		if (unique_call_id == 0xFFFF) {
+			struct timeval tv;
+			if (gettimeofday(&tv, NULL) == 0) {
+				i = ((tv.tv_sec & 0x0FFF) << 4) + 
+				    (tv.tv_usec >> 16);
+			}
+		} else {
+			i = unique_call_id;
+		}
+	}
 
 	if(!_pac_init) {
-		srandom(time(NULL));
-		i = random();
 		_pac_call_id = htons(-1);
 		_pac_init = 1;
 	}
 	if(_pac_call_id != htons(-1))
 		syslog(LOG_ERR, "CTRL: Asked to allocate call id when call open, not handled well");
-	_pac_call_id = i;
-	return i++;
+	_pac_call_id = htons(i);
+	i++;
+	return _pac_call_id;
 }
 
 /*
@@ -674,6 +693,7 @@ u_int16_t freecall()
 
 	if(!_pac_init) {
 		_pac_call_id = htons(-1);
+		_pac_init = 1;
 	}
 	ret = _pac_call_id;
 	if(_pac_call_id == htons(-1))

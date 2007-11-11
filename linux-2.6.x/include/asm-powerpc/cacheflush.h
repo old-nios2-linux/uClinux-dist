@@ -18,6 +18,7 @@
  */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
+#define flush_cache_dup_mm(mm)			do { } while (0)
 #define flush_cache_range(vma, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr, pfn)	do { } while (0)
 #define flush_icache_page(vma, page)		do { } while (0)
@@ -62,6 +63,12 @@ extern void flush_dcache_phys_range(unsigned long start, unsigned long stop);
 #define copy_from_user_page(vma, page, vaddr, dst, src, len) \
 	memcpy(dst, src, len)
 
+
+
+#ifdef CONFIG_DEBUG_PAGEALLOC
+/* internal debugging function */
+void kernel_map_pages(struct page *page, int numpages, int enable);
+#endif
 
 #endif /* __KERNEL__ */
 

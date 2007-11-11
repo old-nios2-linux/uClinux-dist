@@ -35,7 +35,7 @@ void sh_rtc_gettimeofday(struct timeval *tv)
 		wk  = ctrl_inb(RWKCNT);
 		day = ctrl_inb(RDAYCNT);
 		mon = ctrl_inb(RMONCNT);
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 		yr  = ctrl_inw(RYRCNT);
 		yr100 = (yr >> 8);
 		yr &= 0xff;
@@ -78,7 +78,7 @@ bad_time:
 		ctrl_outb(6, RWKCNT);
 		ctrl_outb(1, RDAYCNT);
 		ctrl_outb(1, RMONCNT);
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 		ctrl_outw(0x2000, RYRCNT);
 #else
 		ctrl_outb(0, RYRCNT);

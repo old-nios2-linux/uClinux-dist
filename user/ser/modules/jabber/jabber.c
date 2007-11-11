@@ -1,10 +1,10 @@
 /*
- * $Id: jabber.c,v 1.50 2003/08/05 11:14:28 bogdan Exp $
+ * $Id: jabber.c,v 1.57.2.1 2005/07/20 17:11:51 andrei Exp $
  *
  * XJAB module
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,6 +39,7 @@
  * 2003-04-06 rank 0 changed to 1 in child_init (janakj)
  * 2003-06-19 fixed too many Jabber workers bug (mostly on RH9.0) (dcm)
  * 2003-08-05 adapted to the new parse_content_type_hdr function (bogdan)
+ * 2004-06-07 db API update (andrei)
  */
 
 
@@ -94,11 +95,12 @@ int xjab_connections(ih_req_p _irp, void *_p, char *_bb, int *_bl,
 xj_wlist jwl = NULL;
 
 /** Structure that represents database connection */
-db_con_t** db_con;
+static db_con_t** db_con;
+static db_func_t jabber_dbf;
 
 /** parameters */
 
-char *db_url   = "sql://root@127.0.0.1/sip_jab";
+static char *db_url   = "mysql://root@127.0.0.1/sip_jab";
 char *db_table = "jusers";
 char *registrar=NULL; //"sip:registrar@iptel.org";
 
@@ -200,11 +202,17 @@ static int mod_init(void)
 	}
 
 	/* import mysql functions */
-	if (bind_dbmod())
+	if (bind_dbmod(db_url, &jabber_dbf)<0)
 	{
 		LOG(L_ERR, "XJAB:mod_init: error - database module not found\n");
 		return -1;
 	}
+
+	if (!DB_CAPABILITY(jabber_dbf, DB_CAP_QUERY)) {
+		LOG(L_ERR, "XJAB:mod_init: Database module does not implement 'query' function\n");
+		return -1;
+	}
+
 	db_con = (db_con_t**)shm_malloc(nrw*sizeof(db_con_t*));
 	if (db_con == NULL)
 	{
@@ -251,7 +259,7 @@ static int mod_init(void)
 	
 	for(i=0; i<nrw; i++)
 	{
-		db_con[i] = db_init(db_url);
+		db_con[i] = jabber_dbf.init(db_url);
 		if (!db_con[i])
 		{
 			LOG(L_ERR, "XJAB:mod_init: Error while connecting database\n");
@@ -259,13 +267,16 @@ static int mod_init(void)
 		}
 		else
 		{
-			db_use_table(db_con[i], db_table);
-			DBG("XJAB:mod_init: Database connection opened successfuly\n");
+			if (jabber_dbf.use_table(db_con[i], db_table) < 0) {
+				LOG(L_ERR, "XJAB:mod_init: Error in use_table\n");
+				return -1;
+			}
+			DBG("XJAB:mod_init: Database connection opened successfully\n");
 		}
 	}
 
 	
-	/** creating the pipees */
+	/** creating the pipes */
 	
 	for(i=0;i<nrw;i++)
 	{
@@ -296,7 +307,7 @@ static int mod_init(void)
 }
 
 /*
- * Initialize childs
+ * Initialize children
  */
 static int child_init(int rank)
 {
@@ -340,7 +351,8 @@ static int child_init(int rank)
 										" pid\n");
 						return -1;
 					}
-					xj_worker_process(jwl,jaddress,jport,i,db_con[i]);
+					xj_worker_process(jwl,jaddress,jport,i,db_con[i],
+							&jabber_dbf);
 					exit(0);
 				}
 			}
@@ -417,7 +429,9 @@ int xjab_manage_sipmsg(struct sip_msg *msg, int type)
 	int pipe, fl;
 	t_xj_jkey jkey, *p;
 	int mime;
-
+	
+	body.s=0;  /* fixes gcc 4.0 warning */
+	body.len=0;
 	// extract message body - after that whole SIP MESSAGE is parsed
 	if (type==XJ_SEND_MESSAGE)
 	{
@@ -628,7 +642,7 @@ prepare_job:
 	fl = write(pipe, &jsmsg, sizeof(jsmsg));
 	if(fl != sizeof(jsmsg))
 	{
-		DBG("XJAB:xjab_manage_sipmsg: error when writting to worker pipe!\n");
+		DBG("XJAB:xjab_manage_sipmsg: error when writing to worker pipe!\n");
 		if(type == XJ_SEND_MESSAGE)
 			shm_free(jsmsg->msg.s);
 		shm_free(jsmsg->to.s);
@@ -667,7 +681,7 @@ void destroy(void)
 	if(db_con != NULL)
 	{
 		for(i = 0; i<nrw; i++)
-			db_close(db_con[i]);
+			jabber_dbf.close(db_con[i]);
 		shm_free(db_con);
 	}
 			
@@ -690,7 +704,7 @@ void xj_register_watcher(str *from, str *to, void *cbf, void *pp)
 
 #ifdef XJ_EXTRA_DEBUG
 	DBG("XJAB:xj_register_watcher: from=[%.*s] to=[%.*s]\n", from->len,
-			from->s, to->len, to->s);
+	    from->s, to->len, to->s);
 #endif
 	from_uri.s = from->s;
 	from_uri.len = from->len;
@@ -710,10 +724,10 @@ void xj_register_watcher(str *from, str *to, void *cbf, void *pp)
 	}
 	
 	//putting the SIP message parts in share memory to be accessible by workers
-    jsmsg = (xj_sipmsg)shm_malloc(sizeof(t_xj_sipmsg));
+	jsmsg = (xj_sipmsg)shm_malloc(sizeof(t_xj_sipmsg));
 	memset(jsmsg, 0, sizeof(t_xj_sipmsg));
-    if(jsmsg == NULL)
-    	goto error;
+	if(jsmsg == NULL)
+		goto error;
 	
 	jsmsg->msg.len = 0;
 	jsmsg->msg.s = NULL;
@@ -728,7 +742,7 @@ void xj_register_watcher(str *from, str *to, void *cbf, void *pp)
 	}
 #ifdef XJ_EXTRA_DEBUG
 	DBG("XJAB:xj_register_watcher: DESTINATION after correction [%.*s].\n",
-				to_uri.len, to_uri.s);
+	    to_uri.len, to_uri.s);
 #endif
 
 	jsmsg->to.len = to_uri.len;
@@ -751,13 +765,13 @@ void xj_register_watcher(str *from, str *to, void *cbf, void *pp)
 
 #ifdef XJ_EXTRA_DEBUG
 	DBG("XJAB:xj_register_watcher:%d: sending <%p> to worker through <%d>\n",
-			getpid(), jsmsg, pipe);
+	    getpid(), jsmsg, pipe);
 #endif
 	// sending the SHM pointer of SIP message to the worker
 	fl = write(pipe, &jsmsg, sizeof(jsmsg));
 	if(fl != sizeof(jsmsg))
 	{
-		DBG("XJAB:xj_register_watcher: error when writting to worker pipe!\n");
+		DBG("XJAB:xj_register_watcher: error when writing to worker pipe!\n");
 		if(jsmsg->msg.s)
 			shm_free(jsmsg->msg.s);
 		shm_free(jsmsg->to.s);
@@ -765,7 +779,7 @@ void xj_register_watcher(str *from, str *to, void *cbf, void *pp)
 		goto error;
 	}
 	
-error:
+ error:
 	return;
 }
 
@@ -825,7 +839,7 @@ void xjab_check_workers(int mpid)
 					" worker's pid - w[%d]\n", i);
 				return;
 			}
-			xj_worker_process(jwl,jaddress,jport,i,db_con[i]);
+			xj_worker_process(jwl,jaddress,jport,i,db_con[i], &jabber_dbf);
 			exit(0);
 		}
 	}			

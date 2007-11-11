@@ -33,9 +33,20 @@ pci_update_resource(struct pci_dev *dev, struct resource *res, int resno)
 	u32 new, check, mask;
 	int reg;
 
-	/* Ignore resources for unimplemented BARs and unused resource slots
-	   for 64 bit BARs. */
+	/*
+	 * Ignore resources for unimplemented BARs and unused resource slots
+	 * for 64 bit BARs.
+	 */
 	if (!res->flags)
+		return;
+
+	/*
+	 * Ignore non-moveable resources.  This might be legacy resources for
+	 * which no functional BAR register exists or another important
+	 * system resource we should better not move around in system address
+	 * space.
+	 */
+	if (res->flags & IORESOURCE_PCI_FIXED)
 		return;
 
 	pcibios_resource_to_bus(dev, &region, res);
@@ -90,8 +101,7 @@ pci_update_resource(struct pci_dev *dev, struct resource *res, int resno)
 		new & ~PCI_REGION_FLAG_MASK);
 }
 
-int __devinit
-pci_claim_resource(struct pci_dev *dev, int resource)
+int pci_claim_resource(struct pci_dev *dev, int resource)
 {
 	struct resource *res = &dev->resource[resource];
 	struct resource *root = NULL;
@@ -201,8 +211,7 @@ EXPORT_SYMBOL_GPL(pci_assign_resource_fixed);
 #endif
 
 /* Sort resources by alignment */
-void __devinit
-pdev_sort_resources(struct pci_dev *dev, struct resource_list *head)
+void pdev_sort_resources(struct pci_dev *dev, struct resource_list *head)
 {
 	int i;
 
@@ -212,6 +221,10 @@ pdev_sort_resources(struct pci_dev *dev, struct resource_list *head)
 		resource_size_t r_align;
 
 		r = &dev->resource[i];
+
+		if (r->flags & IORESOURCE_PCI_FIXED)
+			continue;
+
 		r_align = r->end - r->start;
 		
 		if (!(r->flags) || r->parent)

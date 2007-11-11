@@ -1,13 +1,14 @@
 /*
  * JFFS2 -- Journalling Flash File System, Version 2.
  *
- * Copyright (C) 2006  NEC Corporation
+ * Copyright © 2006  NEC Corporation
  *
  * Created by KaiGai Kohei <kaigai@ak.jp.nec.com>
  *
  * For licensing information, see the file 'LICENCE' in this directory.
  *
  */
+
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
@@ -399,8 +400,6 @@ static void unrefer_xattr_datum(struct jffs2_sb_info *c, struct jffs2_xattr_datu
 {
 	/* must be called under down_write(xattr_sem) */
 	if (atomic_dec_and_lock(&xd->refcnt, &c->erase_completion_lock)) {
-		uint32_t xid = xd->xid, version = xd->version;
-
 		unload_xattr_datum(c, xd);
 		xd->flags |= JFFS2_XFLAGS_DEAD;
 		if (xd->node == (void *)xd) {
@@ -411,7 +410,8 @@ static void unrefer_xattr_datum(struct jffs2_sb_info *c, struct jffs2_xattr_datu
 		}
 		spin_unlock(&c->erase_completion_lock);
 
-		dbg_xattr("xdatum(xid=%u, version=%u) was removed.\n", xid, version);
+		dbg_xattr("xdatum(xid=%u, version=%u) was removed.\n",
+			  xd->xid, xd->version);
 	}
 }
 
@@ -754,6 +754,10 @@ void jffs2_clear_xattr_subsystem(struct jffs2_sb_info *c)
 		list_del(&xd->xindex);
 		jffs2_free_xattr_datum(xd);
 	}
+	list_for_each_entry_safe(xd, _xd, &c->xattr_unchecked, xindex) {
+		list_del(&xd->xindex);
+		jffs2_free_xattr_datum(xd);
+	}
 }
 
 #define XREF_TMPHASH_SIZE	(128)
@@ -825,7 +829,7 @@ void jffs2_build_xattr_subsystem(struct jffs2_sb_info *c)
 			   ref->xd and ref->ic are not valid yet. */
 			xd = jffs2_find_xattr_datum(c, ref->xid);
 			ic = jffs2_get_ino_cache(c, ref->ino);
-			if (!xd || !ic) {
+			if (!xd || !ic || !ic->nlink) {
 				dbg_xattr("xref(ino=%u, xid=%u, xseqno=%u) is orphan.\n",
 					  ref->ino, ref->xid, ref->xseqno);
 				ref->xseqno |= XREF_DELETE_MARKER;

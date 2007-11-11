@@ -5,9 +5,31 @@
  *
  * It's OK if the min/max values are zero.
  */
+enum ads7846_filter {
+	ADS7846_FILTER_OK,
+	ADS7846_FILTER_REPEAT,
+	ADS7846_FILTER_IGNORE,
+};
+
 struct ads7846_platform_data {
 	u16	model;			/* 7843, 7845, 7846. */
 	u16	vref_delay_usecs;	/* 0 for external vref; etc */
+	int	keep_vref_on:1;		/* set to keep vref on for differential
+					 * measurements as well */
+
+	/* Settling time of the analog signals; a function of Vcc and the
+	 * capacitance on the X/Y drivers.  If set to non-zero, two samples
+	 * are taken with settle_delay us apart, and the second one is used.
+	 * ~150 uSec with 0.01uF caps.
+	 */
+	u16	settle_delay_usecs;
+
+	/* If set to non-zero, after samples are taken this delay is applied
+	 * and penirq is rechecked, to help avoid false events.  This value
+	 * is affected by the material used to build the touch layer.
+	 */
+	u16	penirq_recheck_delay_usecs;
+
 	u16	x_plate_ohms;
 	u16	y_plate_ohms;
 
@@ -21,5 +43,9 @@ struct ads7846_platform_data {
 	u16	debounce_rep;		/* additional consecutive good readings
 					 * required after the first two */
 	int	(*get_pendown_state)(void);
+	int	(*filter_init)	(struct ads7846_platform_data *pdata,
+				 void **filter_data);
+	int	(*filter)	(void *filter_data, int data_idx, int *val);
+	void	(*filter_cleanup)(void *filter_data);
 };
 

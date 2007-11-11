@@ -29,6 +29,8 @@
 #include <linux/timer.h>
 #include <linux/irq.h>
 
+#include <linux/mc146818rtc.h>
+
 #include <asm/leds.h>
 #include <asm/thread_info.h>
 #include <asm/mach/time.h>
@@ -38,12 +40,14 @@
  */
 struct sys_timer *system_timer;
 
+#if defined(CONFIG_RTC_DRV_CMOS) || defined(CONFIG_RTC_DRV_CMOS_MODULE)
 /* this needs a better home */
 DEFINE_SPINLOCK(rtc_lock);
 
-#ifdef CONFIG_SA1100_RTC_MODULE
+#ifdef CONFIG_RTC_DRV_CMOS_MODULE
 EXPORT_SYMBOL(rtc_lock);
 #endif
+#endif	/* pc-style 'CMOS' RTC support */
 
 /* change this if you have some constant time drift */
 #define USECS_PER_JIFFY	(1000000/HZ)
@@ -76,13 +80,14 @@ static unsigned long dummy_gettimeoffset(void)
 #endif
 
 /*
- * Scheduler clock - returns current time in nanosec units.
- * This is the default implementation.  Sub-architecture
- * implementations can override this.
+ * An implementation of printk_clock() independent from
+ * sched_clock().  This avoids non-bootable kernels when
+ * printk_clock is enabled.
  */
-unsigned long long __attribute__((weak)) sched_clock(void)
+unsigned long long printk_clock(void)
 {
-	return (unsigned long long)jiffies * (1000000000 / HZ);
+	return (unsigned long long)(jiffies - INITIAL_JIFFIES) *
+			(1000000000 / HZ);
 }
 
 static unsigned long next_rtc_update;
@@ -322,6 +327,7 @@ void restore_time_delta(struct timespec *delta, struct timespec *rtc)
 }
 EXPORT_SYMBOL(restore_time_delta);
 
+#ifndef CONFIG_GENERIC_CLOCKEVENTS
 /*
  * Kernel system timer support.
  */
@@ -335,8 +341,9 @@ void timer_tick(void)
 	update_process_times(user_mode(get_irq_regs()));
 #endif
 }
+#endif
 
-#ifdef CONFIG_PM
+#if defined(CONFIG_PM) && !defined(CONFIG_GENERIC_CLOCKEVENTS)
 static int timer_suspend(struct sys_device *dev, pm_message_t state)
 {
 	struct sys_timer *timer = container_of(dev, struct sys_timer, dev);
@@ -505,7 +512,7 @@ void __init time_init(void)
 
 #ifdef CONFIG_NO_IDLE_HZ
 	if (system_timer->dyn_tick)
-		system_timer->dyn_tick->lock = SPIN_LOCK_UNLOCKED;
+		spin_lock_init(&system_timer->dyn_tick->lock);
 #endif
 }
 

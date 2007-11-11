@@ -308,13 +308,13 @@ void TcpdumpInitLogFile(LogTcpdumpData *data)
     //strftime(timebuf,9,"%m%d@%H%M",loc_time);
 
     if(data->filename[0] == '/')
-        value = snprintf(logdir, STD_BUF-1, "%s.%lu", data->filename, 
-                (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s.%lu", data->filename, 
+                              (unsigned long)curr_time);
     else
-        value = snprintf(logdir, STD_BUF-1, "%s/%s.%lu", pv.log_dir, 
-                data->filename, (unsigned long)curr_time);
+        value = SnortSnprintf(logdir, STD_BUF, "%s/%s.%lu", pv.log_dir, 
+                              data->filename, (unsigned long)curr_time);
 
-    if(value == -1)
+    if(value != SNORT_SNPRINTF_SUCCESS)
         FatalError("log file logging path and file name are too long\n");
 
     DEBUG_WRAP(DebugMessage(DEBUG_LOG, "Opening %s\n", logdir););

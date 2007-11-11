@@ -1,6 +1,6 @@
 /* linux/include/asm-arm/arch-s3c2410/anubis-map.h
  *
- * (c) 2005 Simtec Electronics
+ * Copyright (c) 2005 Simtec Electronics
  *	http://www.simtec.co.uk/products/
  *	Ben Dooks <ben@simtec.co.uk>
  *
@@ -27,14 +27,8 @@
 #define ANUBIS_VA_CTRL1	    ANUBIS_IOADDR(0x00000000)	 /* 0x01800000 */
 #define ANUBIS_PA_CTRL1	    (ANUBIS_PA_CPLD)
 
-#define ANUBIS_VA_CTRL2	    ANUBIS_IOADDR(0x00100000)	 /* 0x01900000 */
-#define ANUBIS_PA_CTRL2	    (ANUBIS_PA_CPLD)
-
-#define ANUBIS_VA_CTRL3	    ANUBIS_IOADDR(0x00200000)	 /* 0x01A00000 */
-#define ANUBIS_PA_CTRL3	    (ANUBIS_PA_CPLD)
-
-#define ANUBIS_VA_CTRL4	    ANUBIS_IOADDR(0x00300000)	 /* 0x01B00000 */
-#define ANUBIS_PA_CTRL4	    (ANUBIS_PA_CPLD)
+#define ANUBIS_VA_IDREG	    ANUBIS_IOADDR(0x00300000)	 /* 0x01B00000 */
+#define ANUBIS_PA_IDREG	    (ANUBIS_PA_CPLD + (3<<23))
 
 #define ANUBIS_IDEPRI	    ANUBIS_IOADDR(0x01000000)
 #define ANUBIS_IDEPRIAUX    ANUBIS_IOADDR(0x01100000)

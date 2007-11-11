@@ -149,9 +149,12 @@ struct log_c {
 		FORCESYNC,	/* Force a sync to happen */
 	} sync;
 
+	struct dm_io_request io_req;
+
 	/*
 	 * Disk log fields
 	 */
+	int log_dev_failed;
 	struct dm_dev *log_dev;
 	struct log_header header;
 
@@ -199,13 +202,20 @@ static void header_from_disk(struct log_header *core, struct log_header *disk)
 	core->nr_regions = le64_to_cpu(disk->nr_regions);
 }
 
+static int rw_header(struct log_c *lc, int rw)
+{
+	lc->io_req.bi_rw = rw;
+	lc->io_req.mem.ptr.vma = lc->disk_header;
+	lc->io_req.notify.fn = NULL;
+
+	return dm_io(&lc->io_req, 1, &lc->header_location, NULL);
+}
+
 static int read_header(struct log_c *log)
 {
 	int r;
-	unsigned long ebits;
 
-	r = dm_io_sync_vm(1, &log->header_location, READ,
-			  log->disk_header, &ebits);
+	r = rw_header(log, READ);
 	if (r)
 		return r;
 
@@ -233,11 +243,8 @@ static int read_header(struct log_c *log)
 
 static inline int write_header(struct log_c *log)
 {
-	unsigned long ebits;
-
 	header_to_disk(&log->header, log->disk_header);
-	return dm_io_sync_vm(1, &log->header_location, WRITE,
-			     log->disk_header, &ebits);
+	return rw_header(log, WRITE);
 }
 
 /*----------------------------------------------------------------
@@ -256,6 +263,7 @@ static int create_log_context(struct dirty_log *log, struct dm_target *ti,
 	uint32_t region_size;
 	unsigned int region_count;
 	size_t bitset_size, buf_size;
+	int r;
 
 	if (argc < 1 || argc > 2) {
 		DMWARN("wrong number of arguments to mirror log");
@@ -315,6 +323,7 @@ static int create_log_context(struct dirty_log *log, struct dm_target *ti,
 		lc->disk_header = NULL;
 	} else {
 		lc->log_dev = dev;
+		lc->log_dev_failed = 0;
 		lc->header_location.bdev = lc->log_dev->bdev;
 		lc->header_location.sector = 0;
 
@@ -324,6 +333,15 @@ static int create_log_context(struct dirty_log *log, struct dm_target *ti,
 		buf_size = dm_round_up((LOG_OFFSET << SECTOR_SHIFT) +
 				       bitset_size, ti->limits.hardsect_size);
 		lc->header_location.count = buf_size >> SECTOR_SHIFT;
+		lc->io_req.mem.type = DM_IO_VMA;
+		lc->io_req.client = dm_io_client_create(dm_div_up(buf_size,
+								   PAGE_SIZE));
+		if (IS_ERR(lc->io_req.client)) {
+			r = PTR_ERR(lc->io_req.client);
+			DMWARN("couldn't allocate disk io client");
+			kfree(lc);
+			return -ENOMEM;
+		}
 
 		lc->disk_header = vmalloc(buf_size);
 		if (!lc->disk_header) {
@@ -424,6 +442,7 @@ static void disk_dtr(struct dirty_log *log)
 
 	dm_put_device(lc->ti, lc->log_dev);
 	vfree(lc->disk_header);
+	dm_io_client_destroy(lc->io_req.client);
 	destroy_log_context(lc);
 }
 
@@ -437,6 +456,15 @@ static int count_bits32(uint32_t *addr, unsigned size)
 	return count;
 }
 
+static void fail_log_device(struct log_c *lc)
+{
+	if (lc->log_dev_failed)
+		return;
+
+	lc->log_dev_failed = 1;
+	dm_table_event(lc->ti->table);
+}
+
 static int disk_resume(struct dirty_log *log)
 {
 	int r;
@@ -446,8 +474,19 @@ static int disk_resume(struct dirty_log *log)
 
 	/* read the disk header */
 	r = read_header(lc);
-	if (r)
-		return r;
+	if (r) {
+		DMWARN("%s: Failed to read header on mirror log device",
+		       lc->log_dev->name);
+		fail_log_device(lc);
+		/*
+		 * If the log device cannot be read, we must assume
+		 * all regions are out-of-sync.  If we simply return
+		 * here, the state will be uninitialized and could
+		 * lead us to return 'in-sync' status for regions
+		 * that are actually 'out-of-sync'.
+		 */
+		lc->header.nr_regions = 0;
+	}
 
 	/* set or clear any new bits -- device has grown */
 	if (lc->sync == NOSYNC)
@@ -466,18 +505,33 @@ static int disk_resume(struct dirty_log *log)
 	/* copy clean across to sync */
 	memcpy(lc->sync_bits, lc->clean_bits, size);
 	lc->sync_count = count_bits32(lc->clean_bits, lc->bitset_uint32_count);
+	lc->sync_search = 0;
 
 	/* set the correct number of regions in the header */
 	lc->header.nr_regions = lc->region_count;
 
 	/* write the new header */
-	return write_header(lc);
+	r = write_header(lc);
+	if (r) {
+		DMWARN("%s: Failed to write header on mirror log device",
+		       lc->log_dev->name);
+		fail_log_device(lc);
+	}
+
+	return r;
 }
 
 static uint32_t core_get_region_size(struct dirty_log *log)
 {
 	struct log_c *lc = (struct log_c *) log->context;
 	return lc->region_size;
+}
+
+static int core_resume(struct dirty_log *log)
+{
+	struct log_c *lc = (struct log_c *) log->context;
+	lc->sync_search = 0;
+	return 0;
 }
 
 static int core_is_clean(struct dirty_log *log, region_t region)
@@ -508,7 +562,9 @@ static int disk_flush(struct dirty_log *log)
 		return 0;
 
 	r = write_header(lc);
-	if (!r)
+	if (r)
+		fail_log_device(lc);
+	else
 		lc->touched = 0;
 
 	return r;
@@ -549,16 +605,19 @@ static int core_get_resync_work(struct dirty_log *log, region_t *region)
 	return 1;
 }
 
-static void core_complete_resync_work(struct dirty_log *log, region_t region,
-				      int success)
+static void core_set_region_sync(struct dirty_log *log, region_t region,
+				 int in_sync)
 {
 	struct log_c *lc = (struct log_c *) log->context;
 
 	log_clear_bit(lc, lc->recovering_bits, region);
-	if (success) {
+	if (in_sync) {
 		log_set_bit(lc, lc->sync_bits, region);
                 lc->sync_count++;
-        }
+        } else if (log_test_bit(lc->sync_bits, region)) {
+		lc->sync_count--;
+		log_clear_bit(lc, lc->sync_bits, region);
+	}
 }
 
 static region_t core_get_sync_count(struct dirty_log *log)
@@ -580,6 +639,7 @@ static int core_status(struct dirty_log *log, status_type_t status,
 
 	switch(status) {
 	case STATUSTYPE_INFO:
+		DMEMIT("1 %s", log->type->name);
 		break;
 
 	case STATUSTYPE_TABLE:
@@ -595,17 +655,17 @@ static int disk_status(struct dirty_log *log, status_type_t status,
 		       char *result, unsigned int maxlen)
 {
 	int sz = 0;
-	char buffer[16];
 	struct log_c *lc = log->context;
 
 	switch(status) {
 	case STATUSTYPE_INFO:
+		DMEMIT("3 %s %s %c", log->type->name, lc->log_dev->name,
+		       lc->log_dev_failed ? 'D' : 'A');
 		break;
 
 	case STATUSTYPE_TABLE:
-		format_dev_t(buffer, lc->log_dev->bdev->bd_dev);
 		DMEMIT("%s %u %s %u ", log->type->name,
-		       lc->sync == DEFAULTSYNC ? 2 : 3, buffer,
+		       lc->sync == DEFAULTSYNC ? 2 : 3, lc->log_dev->name,
 		       lc->region_size);
 		DMEMIT_SYNC;
 	}
@@ -618,6 +678,7 @@ static struct dirty_log_type _core_type = {
 	.module = THIS_MODULE,
 	.ctr = core_ctr,
 	.dtr = core_dtr,
+	.resume = core_resume,
 	.get_region_size = core_get_region_size,
 	.is_clean = core_is_clean,
 	.in_sync = core_in_sync,
@@ -625,7 +686,7 @@ static struct dirty_log_type _core_type = {
 	.mark_region = core_mark_region,
 	.clear_region = core_clear_region,
 	.get_resync_work = core_get_resync_work,
-	.complete_resync_work = core_complete_resync_work,
+	.set_region_sync = core_set_region_sync,
 	.get_sync_count = core_get_sync_count,
 	.status = core_status,
 };
@@ -644,7 +705,7 @@ static struct dirty_log_type _disk_type = {
 	.mark_region = core_mark_region,
 	.clear_region = core_clear_region,
 	.get_resync_work = core_get_resync_work,
-	.complete_resync_work = core_complete_resync_work,
+	.set_region_sync = core_set_region_sync,
 	.get_sync_count = core_get_sync_count,
 	.status = disk_status,
 };

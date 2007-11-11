@@ -14,31 +14,32 @@
 
 #include "dnsmasq.h"
 
-static struct irec *add_iface(struct irec *list, unsigned int flags, 
-			      char *name, union mysockaddr *addr, 
-			      struct iname *names, struct iname *addrs)
+static char  *add_iface(struct irec **list, unsigned int flags, 
+			char *name, union mysockaddr *addr, 
+			struct iname *names, struct iname *addrs, struct iname *except)
 {
   struct irec *iface;
-
+  int fd, opt;
+  
   /* we may need to check the whitelist */
   if (names)
     { 
       struct iname *tmp;
-      for(tmp = names; tmp; tmp = tmp->next)
-	if (strcmp(tmp->name, name) == 0)
+      for (tmp = names; tmp; tmp = tmp->next)
+	if (tmp->name && (strcmp(tmp->name, name) == 0))
 	  {
 	    tmp->found = 1;
 	    break;
 	  }
       if (!(flags & IFF_LOOPBACK) && !tmp) 
 	/* not on whitelist and not loopback */
-	return list;
+	return NULL;
     }
   
   if (addrs)
     { 
       struct iname *tmp;
-      for(tmp = addrs; tmp; tmp = tmp->next)
+      for (tmp = addrs; tmp; tmp = tmp->next)
 	if (sockaddr_isequal(&tmp->addr, addr))
 	  {
 	    tmp->found = 1;
@@ -47,49 +48,106 @@ static struct irec *add_iface(struct irec *list, unsigned int flags,
       
       if (!tmp) 
 	/* not on whitelist */
-	return list;
+	return NULL;
     }
   
+  /* check blacklist */
+  if (except)
+    {
+      struct iname *tmp;
+      for (tmp = except; tmp; tmp = tmp->next)
+	if (tmp->name && strcmp(tmp->name, name) == 0)
+	  return NULL;
+    }
+
   /* check whether the interface IP has been added already 
-     it is possible to have multiple interfaces with the same address. */
-  for (iface = list; iface; iface = iface->next) 
+     it is possible to have multiple interfaces with the same address
+     and we may be re-scanning. */
+  for (iface = *list; iface; iface = iface->next) 
     if (sockaddr_isequal(&iface->addr, addr))
       break;
-  if (iface) 
-    return list;
+  if (iface)
+    {
+      iface->valid = 1;
+      return NULL;
+    }
+
+  fd = socket(addr->sa.sa_family, SOCK_DGRAM, 0);
+  if (fd == -1)
+    return "failed to create socket: %s";
+
+  /* Set SO_REUSEADDR on the socket, this allows is to bind 
+     specific addresses even if BIND is running and has bound *:53 */
+  opt = 1;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
   
+  if (bind(fd, &addr->sa, sa_len(addr)))
+    {
+      int errsave = errno;
+      close(fd);
+      errno = errsave;
+      return "failed to bind socket: %s";
+    }
+
   /* If OK, add it to the head of the list */
-  iface = safe_malloc(sizeof(struct irec));
+  if (!(iface = malloc(sizeof(struct irec))))
+    {
+      close(fd);
+      return "cannot allocate interface";
+    }
+
+  iface->fd = fd;
   iface->addr = *addr;
-  iface->next = list;
-  return iface;
+  iface->next = *list;
+  iface->valid = 1;
+  *list = iface;
+  
+  return NULL;
 }
 
-struct irec *find_all_interfaces(struct iname *names,
-				 struct iname *addrs,
-				 int port)
+/* get all interfaces in system and for each one allowed add it to the chain 
+   at interfacep. May be called more that once: interfaces which still exist
+   are left on the chain, those which have gone have sockets close()ed an are
+   unlinked. Return value is NULL if OK, an error string and the value of errno
+   on error. */
+char *enumerate_interfaces(struct irec **interfacep,
+			   struct iname *names,
+			   struct iname *addrs,
+			   struct iname *except,
+			   int port)
 {
   /* this code is adapted from Stevens, page 434. It finally
      destroyed my faith in the C/unix API */
   int len = 100 * sizeof(struct ifreq);
-  int lastlen = 0;
-  char *buf, *ptr;
+  int errsave, lastlen = 0;
+  struct irec *iface, *prev;
+  char *buf, *ptr, *err = NULL;
   struct ifconf ifc;
-  struct irec *ret = NULL;
   int fd = socket(PF_INET, SOCK_DGRAM, 0);
   
   if (fd == -1)
-    die("cannot create socket to enumerate interfaces: %s", NULL);
-        
+    return "cannot create socket to enumerate interfaces: %s";
+  
+  /* make all interfaces as old. Any left that way after the scan are reaped. */
+  for (iface = *interfacep; iface; iface = iface->next)
+    iface->valid = 0;
+
   while (1)
     {
-      buf = safe_malloc(len);
+      if (!(buf = malloc(len)))
+	{
+	  err = "cannot allocate buffer";
+	  goto end;
+	}
       ifc.ifc_len = len;
       ifc.ifc_buf = buf;
       if (ioctl(fd, SIOCGIFCONF, &ifc) < 0)
 	{
 	  if (errno != EINVAL || lastlen != 0)
-	    die("ioctl error while enumerating interfaces: %s", NULL);
+	    {
+	      err = "ioctl error while enumerating interfaces: %s";
+	      goto end;
+	    }
 	}
       else
 	{
@@ -97,7 +155,7 @@ struct irec *find_all_interfaces(struct iname *names,
 	    break; /* got a big enough buffer now */
 	  lastlen = ifc.ifc_len;
 	}
-      len += 10* sizeof(struct ifreq);
+      len += 10*sizeof(struct ifreq);
       free(buf);
     }
 
@@ -118,10 +176,13 @@ struct irec *find_all_interfaces(struct iname *names,
 	  addr.in.sin_port = htons(port);
 	  
 	  if (ioctl(fd, SIOCGIFFLAGS, ifr) < 0)
-	    die ("ioctl error getting interface flags: %s", NULL);
-	      	  
-	  ret = add_iface(ret, ifr->ifr_flags, ifr->ifr_name, &addr, 
-			  names, addrs);
+	    {
+	      err = "ioctl error getting interface flags: %m";
+	      goto end;
+	    }
+	  
+	  if ((err = add_iface(interfacep, ifr->ifr_flags, ifr->ifr_name, &addr, names, addrs, except)))
+	    goto end;
 	}
 #ifdef HAVE_IPV6
       else if (ifr->ifr_addr.sa_family == AF_INET6)
@@ -135,17 +196,29 @@ struct irec *find_all_interfaces(struct iname *names,
 	  addr.in6.sin6_flowinfo = htonl(0);
 	  
 	  if (ioctl(fd, SIOCGIFFLAGS, ifr) < 0)
-	    die("ioctl error getting interface flags: %s", NULL);
-	    	  
-	  ret = add_iface(ret, ifr->ifr_flags, ifr->ifr_name, &addr, 
-			      names, addrs);
+	    {
+	      err = "ioctl error getting interface flags: %m";
+	      goto end;
+	    }
+	  
+	  if ((err = add_iface(interfacep, ifr->ifr_flags, ifr->ifr_name, &addr, names, addrs, except)))
+	    goto end;
 	}
 #endif /* IPV6 */
-	
+      
     }
-  free(buf);
+
+ end:
+  errsave = errno; /* since errno gets overwritten by close */
+  if (buf)
+    free(buf);
   close(fd);
-  
+  if (err)
+    { 
+      errno = errsave;
+      return err;
+    }
+
 #if defined(HAVE_LINUX_IPV6_PROC) && defined(HAVE_IPV6)
   /* IPv6 addresses don't seem to work with SIOCGIFCONF. Barf */
   /* This code snarfed from net-tools 1.60 and certainly linux specific, though
@@ -180,7 +253,13 @@ struct irec *find_all_interfaces(struct iname *names,
 	    addr.in6.sin6_flowinfo = htonl(0);
 	    addr.in6.sin6_scope_id = htonl(scope);
 	    
-	    ret = add_iface(ret, flags, devname, &addr, names, addrs);
+	    if ((err = add_iface(interfacep, flags, devname, &addr, names, addrs, except)))
+	      {
+		errsave = errno;
+		fclose(f);
+		errno = errsave;
+		return err;
+	      }
 	  }
 	
 	fclose(f);
@@ -188,108 +267,145 @@ struct irec *find_all_interfaces(struct iname *names,
   }
 #endif /* LINUX */
 
-  /* if a whitelist provided, make sure the if names on it were OK */
-  while(names)
+  /* now remove interfaces which were not found on this scan */
+  for(prev = NULL, iface = *interfacep; iface; )
     {
-      if (!names->found)
-	die("unknown interface %s", names->name);
-      
-      names = names->next;
-    }
-   
-  while(addrs)
-    {
-      if (!addrs->found)
+      if (iface->valid)
 	{
-#ifdef HAVE_IPV6
-	  char addrbuff[INET6_ADDRSTRLEN];
-#else
-	  char addrbuff[INET_ADDRSTRLEN];
-#endif
-	  if (addrs->addr.sa.sa_family == AF_INET)
-	    inet_ntop(AF_INET, &addrs->addr.in.sin_addr,
-		      addrbuff, INET_ADDRSTRLEN);
-#ifdef HAVE_IPV6
-	  else
-	    inet_ntop(AF_INET6, &addrs->addr.in6.sin6_addr,
-		      addrbuff, INET6_ADDRSTRLEN);
-#endif
-	  die("no interface with address %s", addrbuff);
+	  prev = iface;
+	  iface = iface->next;
 	}
-      addrs = addrs->next;
+      else
+	{
+	  struct irec *tmp = iface;
+	  close(iface->fd);
+	  /* remove pending queries from this interface */
+	  reap_forward(iface->fd); 
+	  /* unlink */
+	  if (prev)
+	    prev->next = iface->next;
+	  else
+	    *interfacep = iface->next;
+	  iface = iface->next;
+	  free(tmp);
+	}
     }
-    
-  return ret;
+ 
+  return NULL; /* no error */
 }
 
-struct server *check_servers(struct server *new,
-			     struct irec *interfaces, int peerfd, int peerfd6)
+static struct serverfd *allocate_sfd(union mysockaddr *addr, struct serverfd **sfds)
 {
-#ifdef HAVE_IPV6
-  char addrbuff[INET6_ADDRSTRLEN];
-#else
-  char addrbuff[INET_ADDRSTRLEN];
-#endif
-  struct server *ret = NULL;
+  struct serverfd *sfd;
   
+  /* may have a suitable one already */
+  for (sfd = *sfds; sfd; sfd = sfd->next )
+    if (sockaddr_isequal(&sfd->source_addr, addr))
+      return sfd;
+  
+  /* need to make a new one. */
+  errno = ENOMEM; /* in case malloc fails. */
+  if (!(sfd = malloc(sizeof(struct serverfd))))
+    return NULL;
+  
+  if ((sfd->fd = socket(addr->sa.sa_family, SOCK_DGRAM, 0)) == -1)
+    {
+      free(sfd);
+      return NULL;
+    }
+  
+  if (bind(sfd->fd, (struct sockaddr *)addr, sa_len(addr)) == -1)
+    {
+      int errsave = errno; /* save error from bind. */
+      close(sfd->fd);
+      free(sfd);
+      errno = errsave;
+      return NULL;
+    }
+  
+  sfd->source_addr = *addr;
+  sfd->next = *sfds;
+  *sfds = sfd;
+  
+  return sfd;
+}
+
+struct server *check_servers(struct server *new, struct irec *interfaces, struct serverfd **sfds)
+{
+  char addrbuff[ADDRSTRLEN];
+  struct irec *iface;
+  struct server *tmp, *ret = NULL;
+  int port = 0;
+
   /* forward table rules reference servers, so have to blow them away */
   forward_init(0);
   
-  while (new)
+  for (;new; new = tmp)
     {
-      struct server *tmp = new->next;
-
-      if (new->addr.sa.sa_family == AF_INET)
-	inet_ntop(AF_INET, &new->addr.in.sin_addr, addrbuff, INET_ADDRSTRLEN);
+      tmp = new->next;
+      
+      if (!(new->flags & (SERV_LITERAL_ADDRESS | SERV_NO_ADDR)))
+	{
 #ifdef HAVE_IPV6
-      else if (new->addr.sa.sa_family == AF_INET6)
-	inet_ntop(AF_INET6, &new->addr.in6.sin6_addr, addrbuff, INET6_ADDRSTRLEN);
+	  if (new->addr.sa.sa_family == AF_INET)
+	    {
+	      inet_ntop(AF_INET, &new->addr.in.sin_addr, addrbuff, ADDRSTRLEN);
+	      port = ntohs(new->addr.in.sin_port);
+	    }
+	  else if (new->addr.sa.sa_family == AF_INET6)
+	    {
+	      inet_ntop(AF_INET6, &new->addr.in6.sin6_addr, addrbuff, ADDRSTRLEN);
+	      port = ntohs(new->addr.in6.sin6_port);
+	    }
+#else
+	  strcpy(addrbuff, inet_ntoa(new->addr.in.sin_addr));
+	  port = ntohs(new->addr.in.sin_port); 
 #endif
-
-      if (new->addr.sa.sa_family == AF_INET && peerfd == -1)
-	{
-	  syslog(LOG_WARNING, 
-		 "ignoring nameserver %s - no IPv4 kernel support", addrbuff);
-	  free(new);
-	}
-#ifdef HAVE_IPV6
-      else if (new->addr.sa.sa_family == AF_INET6 && peerfd6 == -1)
-	{
-	  syslog(LOG_WARNING, 
-		 "ignoring nameserver %s - no IPv6 kernel support", addrbuff);
-	  free(new);
-	}
-#endif
-      else 
-	{
-	  struct irec *iface;
 	  for (iface = interfaces; iface; iface = iface->next)
 	    if (sockaddr_isequal(&new->addr, &iface->addr))
-	      {
-		syslog(LOG_WARNING, "ignoring nameserver %s - local interface", addrbuff);
-		break;
-	      }
+	      break;
 	  if (iface)
-	    free(new);
-	  else
 	    {
-	      /* reverse order - gets it right. */
-	      new->next = ret;
-	      ret = new;
-	      if (new->domain)
-		syslog(LOG_INFO, "using nameserver %s for domain %s", addrbuff, new->domain);
-	      else
-		syslog(LOG_INFO, "using nameserver %s", addrbuff); 
+	      syslog(LOG_WARNING, "ignoring nameserver %s - local interface", addrbuff);
+	      free(new);
+	      continue;
+	    }
+	  
+	  /* Do we need a socket set? */
+	  if (!new->sfd && !(new->sfd = allocate_sfd(&new->source_addr, sfds)))
+	    {
+	      syslog(LOG_WARNING, 
+		     "ignoring nameserver %s - cannot make/bind socket: %m", addrbuff);
+	      free(new);
+	      continue;
 	    }
 	}
       
-      new = tmp;
+      /* reverse order - gets it right. */
+      new->next = ret;
+      ret = new;
+      
+      if (new->flags & (SERV_HAS_DOMAIN | SERV_FOR_NODOTS))
+	{
+	  char *s1, *s2;
+	  if (new->flags & SERV_HAS_DOMAIN)
+	    s1 = "domain", s2 = new->domain;
+	  else
+	    s1 = "unqualified", s2 = "domains";
+	  
+	  if (new->flags & SERV_NO_ADDR)
+	    syslog(LOG_INFO, "using local addresses only for %s %s", s1, s2);
+	  else if (!(new->flags & SERV_LITERAL_ADDRESS))
+	    syslog(LOG_INFO, "using nameserver %s#%d for %s %s", addrbuff, port, s1, s2);
+	}
+      else
+	syslog(LOG_INFO, "using nameserver %s#%d", addrbuff, port); 
     }
- 
+  
  return ret;
 }
   
-struct server *reload_servers(char *fname, char *buff, struct server *serv)
+struct server *reload_servers(char *fname, char *buff, struct server *serv, int query_port)
 {
   FILE *f;
   char *line;
@@ -302,7 +418,7 @@ struct server *reload_servers(char *fname, char *buff, struct server *serv)
   while (serv)
     {
       struct server *tmp = serv->next;
-      if (serv->from_resolv)
+      if (serv->flags & SERV_FROM_RESOLV)
 	{
 	  serv->next = old_servers;
 	  old_servers = serv;
@@ -326,8 +442,8 @@ struct server *reload_servers(char *fname, char *buff, struct server *serv)
       syslog(LOG_INFO, "reading %s", fname);
       while ((line = fgets(buff, MAXDNAME, f)))
 	{
-	  union  mysockaddr addr;
-	  char *token = strtok(line, " \t\n");
+	  union  mysockaddr addr, source_addr;
+	  char *token = strtok(line, " \t\n\r");
 	  struct server *serv;
 	  
 	  if (!token || strcmp(token, "nameserver") != 0)
@@ -335,23 +451,31 @@ struct server *reload_servers(char *fname, char *buff, struct server *serv)
 	  if (!(token = strtok(NULL, " \t\n")))
 	    continue;
 	  
-	  if (inet_pton(AF_INET, token, &addr.in.sin_addr))
+#ifdef HAVE_IPV6
+          if (inet_pton(AF_INET, token, &addr.in.sin_addr))
+#else
+          if ((addr.in.sin_addr.s_addr = inet_addr(token)) != (in_addr_t) -1)
+#endif
 	    {
 #ifdef HAVE_SOCKADDR_SA_LEN
-	      addr.in.sin_len = sizeof(struct sockaddr_in);
+	      source_addr.in.sin_len = addr.in.sin_len = sizeof(struct sockaddr_in);
 #endif
-	      addr.in.sin_family = AF_INET;
+	      source_addr.in.sin_family = addr.in.sin_family = AF_INET;
 	      addr.in.sin_port = htons(NAMESERVER_PORT);
+	      source_addr.in.sin_addr.s_addr = INADDR_ANY;
+	      source_addr.in.sin_port = htons(query_port);
 	    }
 #ifdef HAVE_IPV6
 	  else if (inet_pton(AF_INET6, token, &addr.in6.sin6_addr))
 	    {
 #ifdef HAVE_SOCKADDR_SA_LEN
-	      addr.in6.sin6_len = sizeof(struct sockaddr_in6);
+	      source_addr.in6.sin6_len = addr.in6.sin6_len = sizeof(struct sockaddr_in6);
 #endif
-	      addr.in6.sin6_family = AF_INET6;
+	      source_addr.in6.sin6_family = addr.in6.sin6_family = AF_INET6;
 	      addr.in6.sin6_port = htons(NAMESERVER_PORT);
-	      addr.in6.sin6_flowinfo = htonl(0);
+	      source_addr.in6.sin6_flowinfo = addr.in6.sin6_flowinfo = htonl(0);
+	      source_addr.in6.sin6_addr= in6addr_any;
+	      source_addr.in6.sin6_port = htons(query_port);
 	    }
 #endif /* IPV6 */
 	  else
@@ -370,8 +494,10 @@ struct server *reload_servers(char *fname, char *buff, struct server *serv)
 	  serv->next = new_servers;
 	  new_servers = serv;
 	  serv->addr = addr;
+	  serv->source_addr = source_addr;
 	  serv->domain = NULL;
-	  serv->from_resolv = 1;
+	  serv->sfd = NULL;
+	  serv->flags = SERV_FROM_RESOLV;
 	}
   
       fclose(f);

@@ -1,9 +1,9 @@
 /* 
- * $Id: case_acce.h,v 1.3 2003/08/05 17:14:27 janakj Exp $ 
+ * $Id: case_acce.h,v 1.4 2004/08/24 09:01:24 janakj Exp $ 
  *
  * Accept and Accept-Language Header Field Name Parsing Macros
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

@@ -7,17 +7,9 @@
  *
  * Author:
  *	Yasuyuki Kozakai @USAGI <yasuyuki.kozakai@toshiba.co.jp>
- *
- * 16 Dec 2003: Yasuyuki Kozakai @USAGI <yasuyuki.kozakai@toshiba.co.jp>
- *	- ICMPv6 tracking support. Derived from the original ip_conntrack code
- *	  net/ipv4/netfilter/ip_conntrack_proto_icmp.c which had the following
- *	  copyright information:
- *		(C) 1999-2001 Paul `Rusty' Russell
- *		(C) 2002-2004 Netfilter Core Team <coreteam@netfilter.org>
  */
 
 #include <linux/types.h>
-#include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/module.h>
 #include <linux/netfilter.h>
@@ -29,17 +21,11 @@
 #include <linux/seq_file.h>
 #include <linux/netfilter_ipv6.h>
 #include <net/netfilter/nf_conntrack_tuple.h>
-#include <net/netfilter/nf_conntrack_protocol.h>
+#include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/ipv6/nf_conntrack_icmpv6.h>
 
-unsigned long nf_ct_icmpv6_timeout __read_mostly = 30*HZ;
-
-#if 0
-#define DEBUGP printk
-#else
-#define DEBUGP(format, args...)
-#endif
+static unsigned long nf_ct_icmpv6_timeout __read_mostly = 30*HZ;
 
 static int icmpv6_pkt_to_tuple(const struct sk_buff *skb,
 			       unsigned int dataoff,
@@ -104,9 +90,9 @@ static int icmpv6_packet(struct nf_conn *ct,
 		       unsigned int hooknum)
 {
 	/* Try to delete connection immediately after all replies:
-           won't actually vanish as we still have skb, and del_timer
-           means this will only run once even if count hits zero twice
-           (theoretically possible with SMP) */
+	   won't actually vanish as we still have skb, and del_timer
+	   means this will only run once even if count hits zero twice
+	   (theoretically possible with SMP) */
 	if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
 		if (atomic_dec_and_test(&ct->proto.icmp.count)
 		    && del_timer(&ct->timeout))
@@ -133,8 +119,8 @@ static int icmpv6_new(struct nf_conn *conntrack,
 
 	if (type < 0 || type >= sizeof(valid_new) || !valid_new[type]) {
 		/* Can't create a new ICMPv6 `conn' with this. */
-		DEBUGP("icmpv6: can't create new conn with type %u\n",
-		       type + 128);
+		pr_debug("icmpv6: can't create new conn with type %u\n",
+			 type + 128);
 		NF_CT_DUMP_TUPLE(&conntrack->tuplehash[0].tuple);
 		return 0;
 	}
@@ -142,9 +128,6 @@ static int icmpv6_new(struct nf_conn *conntrack,
 	return 1;
 }
 
-extern int
-nf_ct_ipv6_skip_exthdr(struct sk_buff *skb, int start, u8 *nexthdrp, int len);
-extern struct nf_conntrack_l3proto nf_conntrack_l3proto_ipv6;
 static int
 icmpv6_error_message(struct sk_buff *skb,
 		     unsigned int icmp6off,
@@ -153,60 +136,36 @@ icmpv6_error_message(struct sk_buff *skb,
 {
 	struct nf_conntrack_tuple intuple, origtuple;
 	struct nf_conntrack_tuple_hash *h;
-	struct icmp6hdr _hdr, *hp;
-	unsigned int inip6off;
-	struct nf_conntrack_protocol *inproto;
-	u_int8_t inprotonum;
-	unsigned int inprotoff;
+	struct nf_conntrack_l4proto *inproto;
 
 	NF_CT_ASSERT(skb->nfct == NULL);
 
-	hp = skb_header_pointer(skb, icmp6off, sizeof(_hdr), &_hdr);
-	if (hp == NULL) {
-		DEBUGP("icmpv6_error: Can't get ICMPv6 hdr.\n");
-		return -NF_ACCEPT;
-	}
-
-	inip6off = icmp6off + sizeof(_hdr);
-	if (skb_copy_bits(skb, inip6off+offsetof(struct ipv6hdr, nexthdr),
-			  &inprotonum, sizeof(inprotonum)) != 0) {
-		DEBUGP("icmpv6_error: Can't get nexthdr in inner IPv6 header.\n");
-		return -NF_ACCEPT;
-	}
-	inprotoff = nf_ct_ipv6_skip_exthdr(skb,
-					   inip6off + sizeof(struct ipv6hdr),
-					   &inprotonum,
-					   skb->len - inip6off
-						    - sizeof(struct ipv6hdr));
-
-	if ((inprotoff < 0) || (inprotoff > skb->len) ||
-	    (inprotonum == NEXTHDR_FRAGMENT)) {
-		DEBUGP("icmpv6_error: Can't get protocol header in ICMPv6 payload.\n");
-		return -NF_ACCEPT;
-	}
-
-	inproto = __nf_ct_proto_find(PF_INET6, inprotonum);
-
 	/* Are they talking about one of our connections? */
-	if (!nf_ct_get_tuple(skb, inip6off, inprotoff, PF_INET6, inprotonum,
-			     &origtuple, &nf_conntrack_l3proto_ipv6, inproto)) {
-		DEBUGP("icmpv6_error: Can't get tuple\n");
+	if (!nf_ct_get_tuplepr(skb,
+			       skb_network_offset(skb)
+				+ sizeof(struct ipv6hdr)
+				+ sizeof(struct icmp6hdr),
+			       PF_INET6, &origtuple)) {
+		pr_debug("icmpv6_error: Can't get tuple\n");
 		return -NF_ACCEPT;
 	}
+
+	/* rcu_read_lock()ed by nf_hook_slow */
+	inproto = __nf_ct_l4proto_find(PF_INET6, origtuple.dst.protonum);
 
 	/* Ordinarily, we'd expect the inverted tupleproto, but it's
 	   been preserved inside the ICMP. */
 	if (!nf_ct_invert_tuple(&intuple, &origtuple,
 				&nf_conntrack_l3proto_ipv6, inproto)) {
-		DEBUGP("icmpv6_error: Can't invert tuple\n");
+		pr_debug("icmpv6_error: Can't invert tuple\n");
 		return -NF_ACCEPT;
 	}
 
 	*ctinfo = IP_CT_RELATED;
 
-	h = nf_conntrack_find_get(&intuple, NULL);
+	h = nf_conntrack_find_get(&intuple);
 	if (!h) {
-		DEBUGP("icmpv6_error: no match\n");
+		pr_debug("icmpv6_error: no match\n");
 		return -NF_ACCEPT;
 	} else {
 		if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY)
@@ -247,8 +206,7 @@ icmpv6_error(struct sk_buff *skb, unsigned int dataoff,
 	return icmpv6_error_message(skb, dataoff, ctinfo, hooknum);
 }
 
-#if defined(CONFIG_NF_CT_NETLINK) || \
-    defined(CONFIG_NF_CT_NETLINK_MODULE)
+#if defined(CONFIG_NF_CT_NETLINK) || defined(CONFIG_NF_CT_NETLINK_MODULE)
 
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/nfnetlink_conntrack.h>
@@ -290,7 +248,7 @@ static int icmpv6_nfattr_to_tuple(struct nfattr *tb[],
 	tuple->dst.u.icmp.code =
 			*(u_int8_t *)NFA_DATA(tb[CTA_PROTO_ICMPV6_CODE-1]);
 	tuple->src.u.icmp.id =
-			*(u_int16_t *)NFA_DATA(tb[CTA_PROTO_ICMPV6_ID-1]);
+			*(__be16 *)NFA_DATA(tb[CTA_PROTO_ICMPV6_ID-1]);
 
 	if (tuple->dst.u.icmp.type < 128
 	    || tuple->dst.u.icmp.type - 128 >= sizeof(invmap)
@@ -301,10 +259,27 @@ static int icmpv6_nfattr_to_tuple(struct nfattr *tb[],
 }
 #endif
 
-struct nf_conntrack_protocol nf_conntrack_protocol_icmpv6 =
+#ifdef CONFIG_SYSCTL
+static struct ctl_table_header *icmpv6_sysctl_header;
+static struct ctl_table icmpv6_sysctl_table[] = {
+	{
+		.ctl_name	= NET_NF_CONNTRACK_ICMPV6_TIMEOUT,
+		.procname	= "nf_conntrack_icmpv6_timeout",
+		.data		= &nf_ct_icmpv6_timeout,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_jiffies,
+	},
+	{
+		.ctl_name	= 0
+	}
+};
+#endif /* CONFIG_SYSCTL */
+
+struct nf_conntrack_l4proto nf_conntrack_l4proto_icmpv6 __read_mostly =
 {
 	.l3proto		= PF_INET6,
-	.proto			= IPPROTO_ICMPV6,
+	.l4proto		= IPPROTO_ICMPV6,
 	.name			= "icmpv6",
 	.pkt_to_tuple		= icmpv6_pkt_to_tuple,
 	.invert_tuple		= icmpv6_invert_tuple,
@@ -313,11 +288,12 @@ struct nf_conntrack_protocol nf_conntrack_protocol_icmpv6 =
 	.packet			= icmpv6_packet,
 	.new			= icmpv6_new,
 	.error			= icmpv6_error,
-#if defined(CONFIG_NF_CT_NETLINK) || \
-    defined(CONFIG_NF_CT_NETLINK_MODULE)
+#if defined(CONFIG_NF_CT_NETLINK) || defined(CONFIG_NF_CT_NETLINK_MODULE)
 	.tuple_to_nfattr	= icmpv6_tuple_to_nfattr,
 	.nfattr_to_tuple	= icmpv6_nfattr_to_tuple,
 #endif
+#ifdef CONFIG_SYSCTL
+	.ctl_table_header	= &icmpv6_sysctl_header,
+	.ctl_table		= icmpv6_sysctl_table,
+#endif
 };
-
-EXPORT_SYMBOL(nf_conntrack_protocol_icmpv6);

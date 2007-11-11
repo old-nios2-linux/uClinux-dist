@@ -1,10 +1,10 @@
 /*
- * $Id: pike.c,v 1.18.6.3 2004/05/26 19:15:18 bogdan Exp $
+ * $Id: pike.c,v 1.23 2004/11/05 14:21:00 bogdan Exp $
  *
  * PIKE module
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -26,8 +26,8 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- */
-/* History:
+ *
+ * History:
  * --------
  *  2003-03-11  updated to the new module exports interface (andrei)
  *  2003-03-11  converted to the new locking interface: locking.h --
@@ -132,7 +132,7 @@ static int pike_init(void)
 	}
 	timer->next = timer->prev = timer;
 
-	/* registering timeing functions  */
+	/* registering timing functions  */
 	register_timer( clean_routine , 0, 1 );
 	register_timer( swap_routine , 0, time_unit );
 
@@ -148,6 +148,7 @@ static int pike_init(void)
 			PIKE_PRINT_IP_TREE);
 		goto error4;
 	}
+
 	return 0;
 error4:
 	shm_free( timer );
@@ -165,7 +166,7 @@ error1:
 
 static int pike_exit(void)
 {
-	LOG(L_INFO,"PIKE - destroing module\n");
+	LOG(L_INFO,"PIKE - destroying module\n");
 
 	/* destroy semaphore */
 	if (timer_lock) {

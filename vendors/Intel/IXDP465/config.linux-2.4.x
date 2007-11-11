@@ -141,6 +141,7 @@ CONFIG_MACH_IXDP465=y
 # CONFIG_MACH_SGARMAUTO is not set
 # CONFIG_MACH_IVPN is not set
 # CONFIG_MACH_SE5100 is not set
+# CONFIG_IXP425_DEBUG_FIQ is not set
 
 #
 # AT91RM9200 Implementations
@@ -628,6 +629,7 @@ CONFIG_E1000=m
 #
 # CONFIG_INPUT is not set
 # CONFIG_INPUT_KEYBDEV is not set
+# CONFIG_DUMMY_KEYB is not set
 # CONFIG_INPUT_MOUSEDEV is not set
 # CONFIG_INPUT_JOYDEV is not set
 # CONFIG_INPUT_EVDEV is not set

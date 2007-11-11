@@ -43,7 +43,7 @@
 */
 int hi_ui_server_lookup_init(SERVER_LOOKUP **ServerLookup)
 {
-    *ServerLookup = KMapNew(NULL); 
+    *ServerLookup = KMapNew(free); 
     if(*ServerLookup == NULL)
     {
         return HI_MEM_ALLOC_FAIL;

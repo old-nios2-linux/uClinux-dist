@@ -1,8 +1,8 @@
 /* 
- * $Id: pike_funcs.h,v 1.11.6.1 2004/05/12 12:41:05 bogdan Exp $
+ * $Id: pike_funcs.h,v 1.14 2004/11/05 14:21:00 bogdan Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,11 +32,6 @@
 
 #include "../../parser/msg_parser.h"
 #include "../../locking.h"
-
-
-//extern int                     time_unit;
-//extern int                     max_value;
-//extern gen_lock_t              *timer_lock;
 
 
 int  pike_check_req(struct sip_msg *msg, char *foo, char *bar);

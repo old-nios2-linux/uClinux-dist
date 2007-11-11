@@ -1,5 +1,5 @@
 /* Conversion of links to local files.
-   Copyright (C) 1996, 1997, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2005 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -49,15 +49,13 @@ so, delete this exception statement from your version.  */
 #include "recur.h"
 #include "utils.h"
 #include "hash.h"
+#include "ptimer.h"
 
 static struct hash_table *dl_file_url_map;
 struct hash_table *dl_url_file_map;
 
-/* List of HTML files downloaded in this Wget run, used for link
-   conversion after Wget is done.  The list and the set contain the
-   same information, except the list maintains the order.  Perhaps I
-   should get rid of the list, it's there for historical reasons.  */
-static slist *downloaded_html_list;
+/* Set of HTML files downloaded in this Wget run, used for link
+   conversion after Wget is done.  */
 struct hash_table *downloaded_html_set;
 
 static void convert_links PARAMS ((const char *, struct urlpos *));
@@ -80,21 +78,28 @@ static void convert_links PARAMS ((const char *, struct urlpos *));
 void
 convert_all_links (void)
 {
-  slist *html;
-  long msecs;
+  int i;
+  double secs;
   int file_count = 0;
 
-  struct wget_timer *timer = wtimer_new ();
+  struct ptimer *timer = ptimer_new ();
 
-  /* Destructively reverse downloaded_html_files to get it in the right order.
-     recursive_retrieve() used slist_prepend() consistently.  */
-  downloaded_html_list = slist_nreverse (downloaded_html_list);
+  int cnt;
+  char **file_array;
 
-  for (html = downloaded_html_list; html; html = html->next)
+  cnt = 0;
+  if (downloaded_html_set)
+    cnt = hash_table_count (downloaded_html_set);
+  if (cnt == 0)
+    return;
+  file_array = alloca_array (char *, cnt);
+  string_set_to_array (downloaded_html_set, file_array);
+
+  for (i = 0; i < cnt; i++)
     {
       struct urlpos *urls, *cur_url;
       char *url;
-      char *file = html->string;
+      char *file = file_array[i];
 
       /* Determine the URL of the HTML file.  get_urls_html will need
 	 it.  */
@@ -166,10 +171,10 @@ convert_all_links (void)
       free_urlpos (urls);
     }
 
-  msecs = wtimer_elapsed (timer);
-  wtimer_delete (timer);
-  logprintf (LOG_VERBOSE, _("Converted %d files in %.2f seconds.\n"),
-	     file_count, (double)msecs / 1000);
+  secs = ptimer_measure (timer) / 1000;
+  ptimer_destroy (timer);
+  logprintf (LOG_VERBOSE, _("Converted %d files in %.*f seconds.\n"),
+	     file_count, secs < 10 ? 3 : 1, secs);
 }
 
 static void write_backup_file PARAMS ((const char *, downloaded_file_t));
@@ -201,7 +206,7 @@ convert_links (const char *file, struct urlpos *links)
        any URL needs to be converted in the first place.  If not, just
        leave the file alone.  */
     int dry_count = 0;
-    struct urlpos *dry = links;
+    struct urlpos *dry;
     for (dry = links; dry; dry = dry->next)
       if (dry->convert != CO_NOCONVERT)
 	++dry_count;
@@ -327,59 +332,72 @@ convert_links (const char *file, struct urlpos *links)
   logprintf (LOG_VERBOSE, "%d-%d\n", to_file_count, to_url_count);
 }
 
-/* Construct and return a malloced copy of the relative link from two
-   pieces of information: local name S1 of the referring file and
-   local name S2 of the referred file.
+/* Construct and return a link that points from BASEFILE to LINKFILE.
+   Both files should be local file names, BASEFILE of the referrering
+   file, and LINKFILE of the referred file.
 
-   So, if S1 is "jagor.srce.hr/index.html" and S2 is
-   "jagor.srce.hr/images/news.gif", the function will return
-   "images/news.gif".
+   Examples:
 
-   Alternately, if S1 is "fly.cc.fer.hr/ioccc/index.html", and S2 is
-   "fly.cc.fer.hr/images/fly.gif", the function will return
-   "../images/fly.gif".
+   cr("foo", "bar")         -> "bar"
+   cr("A/foo", "A/bar")     -> "bar"
+   cr("A/foo", "A/B/bar")   -> "B/bar"
+   cr("A/X/foo", "A/Y/bar") -> "../Y/bar"
+   cr("X/", "Y/bar")        -> "../Y/bar" (trailing slash does matter in BASE)
 
-   Caveats: S1 should not begin with `/', unless S2 also begins with
-   '/'.  S1 should not contain things like ".." and such --
-   construct_relative ("fly/ioccc/../index.html",
-   "fly/images/fly.gif") will fail.  (A workaround is to call
-   something like path_simplify() on S1).  */
+   Both files should be absolute or relative, otherwise strange
+   results might ensue.  The function makes no special efforts to
+   handle "." and ".." in links, so make sure they're not there
+   (e.g. using path_simplify).  */
+
 static char *
-construct_relative (const char *s1, const char *s2)
+construct_relative (const char *basefile, const char *linkfile)
 {
-  int i, cnt, sepdirs1;
-  char *res;
+  char *link;
+  int basedirs;
+  const char *b, *l;
+  int i, start;
 
-  if (*s2 == '/')
-    return xstrdup (s2);
-  /* S1 should *not* be absolute, if S2 wasn't.  */
-  assert (*s1 != '/');
-  i = cnt = 0;
-  /* Skip the directories common to both strings.  */
-  while (1)
+  /* First, skip the initial directory components common to both
+     files.  */
+  start = 0;
+  for (b = basefile, l = linkfile; *b == *l && *b != '\0'; ++b, ++l)
     {
-      while (s1[i] && s2[i]
-	     && (s1[i] == s2[i])
-	     && (s1[i] != '/')
-	     && (s2[i] != '/'))
-	++i;
-      if (s1[i] == '/' && s2[i] == '/')
-	cnt = ++i;
-      else
-	break;
+      if (*b == '/')
+	start = (b - basefile) + 1;
     }
-  for (sepdirs1 = 0; s1[i]; i++)
-    if (s1[i] == '/')
-      ++sepdirs1;
-  /* Now, construct the file as of:
-     - ../ repeated sepdirs1 time
-     - all the non-mutual directories of S2.  */
-  res = (char *)xmalloc (3 * sepdirs1 + strlen (s2 + cnt) + 1);
-  for (i = 0; i < sepdirs1; i++)
-    memcpy (res + 3 * i, "../", 3);
-  strcpy (res + 3 * i, s2 + cnt);
-  return res;
+  basefile += start;
+  linkfile += start;
+
+  /* With common directories out of the way, the situation we have is
+     as follows:
+         b - b1/b2/[...]/bfile
+         l - l1/l2/[...]/lfile
+
+     The link we're constructing needs to be:
+       lnk - ../../l1/l2/[...]/lfile
+
+     Where the number of ".."'s equals the number of bN directory
+     components in B.  */
+
+  /* Count the directory components in B. */
+  basedirs = 0;
+  for (b = basefile; *b; b++)
+    {
+      if (*b == '/')
+	++basedirs;
+    }
+
+  /* Construct LINK as explained above. */
+  link = (char *)xmalloc (3 * basedirs + strlen (linkfile) + 1);
+  for (i = 0; i < basedirs; i++)
+    memcpy (link + 3 * i, "../", 3);
+  strcpy (link + 3 * i, linkfile);
+  return link;
 }
+
+/* Used by write_backup_file to remember which files have been
+   written. */
+static struct hash_table *converted_files;
 
 static void
 write_backup_file (const char *file, downloaded_file_t downloaded_file_return)
@@ -390,11 +408,8 @@ write_backup_file (const char *file, downloaded_file_t downloaded_file_return)
      clobber .orig files sitting around from previous invocations. */
 
   /* Construct the backup filename as the original name plus ".orig". */
-  size_t         filename_len = strlen(file);
+  size_t         filename_len = strlen (file);
   char*          filename_plus_orig_suffix;
-  boolean        already_wrote_backup_file = FALSE;
-  slist*         converted_file_ptr;
-  static slist*  converted_files = NULL;
 
   if (downloaded_file_return == FILE_DOWNLOADED_AND_HTML_EXTENSION_ADDED)
     {
@@ -406,36 +421,29 @@ write_backup_file (const char *file, downloaded_file_t downloaded_file_return)
 	 ".html", so we need to compare vs. the original URL plus
 	 ".orig", not the original URL plus ".html.orig". */
       filename_plus_orig_suffix = alloca (filename_len + 1);
-      strcpy(filename_plus_orig_suffix, file);
-      strcpy((filename_plus_orig_suffix + filename_len) - 4, "orig");
+      strcpy (filename_plus_orig_suffix, file);
+      strcpy ((filename_plus_orig_suffix + filename_len) - 4, "orig");
     }
   else /* downloaded_file_return == FILE_DOWNLOADED_NORMALLY */
     {
       /* Append ".orig" to the name. */
-      filename_plus_orig_suffix = alloca (filename_len + sizeof(".orig"));
-      strcpy(filename_plus_orig_suffix, file);
-      strcpy(filename_plus_orig_suffix + filename_len, ".orig");
+      filename_plus_orig_suffix = alloca (filename_len + sizeof (".orig"));
+      strcpy (filename_plus_orig_suffix, file);
+      strcpy (filename_plus_orig_suffix + filename_len, ".orig");
     }
+
+  if (!converted_files)
+    converted_files = make_string_hash_table (0);
 
   /* We can get called twice on the same URL thanks to the
      convert_all_links() call in main().  If we write the .orig file
      each time in such a case, it'll end up containing the first-pass
      conversion, not the original file.  So, see if we've already been
      called on this file. */
-  converted_file_ptr = converted_files;
-  while (converted_file_ptr != NULL)
-    if (strcmp(converted_file_ptr->string, file) == 0)
-      {
-	already_wrote_backup_file = TRUE;
-	break;
-      }
-    else
-      converted_file_ptr = converted_file_ptr->next;
-
-  if (!already_wrote_backup_file)
+  if (!string_set_contains (converted_files, file))
     {
       /* Rename <file> to <file>.orig before former gets written over. */
-      if (rename(file, filename_plus_orig_suffix) != 0)
+      if (rename (file, filename_plus_orig_suffix) != 0)
 	logprintf (LOG_NOTQUIET, _("Cannot back up %s as %s: %s\n"),
 		   file, filename_plus_orig_suffix, strerror (errno));
 
@@ -456,10 +464,7 @@ write_backup_file (const char *file, downloaded_file_t downloaded_file_return)
          list.
 	 -- Hrvoje Niksic <hniksic@xemacs.org>
       */
-      converted_file_ptr = xmalloc(sizeof(*converted_file_ptr));
-      converted_file_ptr->string = xstrdup(file);  /* die on out-of-mem. */
-      converted_file_ptr->next = converted_files;
-      converted_files = converted_file_ptr;
+      string_set_add (converted_files, file);
     }
 }
 
@@ -566,49 +571,52 @@ find_fragment (const char *beg, int size, const char **bp, const char **ep)
    "index.html%3Ffoo=bar" would break local browsing, as the latter
    isn't even recognized as an HTML file!  However, converting
    "index.html?foo=bar.html" to "index.html%3Ffoo=bar.html" should be
-   safe for both local and HTTP-served browsing.  */
+   safe for both local and HTTP-served browsing.
+
+   We always quote "#" as "%23" and "%" as "%25" because those
+   characters have special meanings in URLs.  */
 
 static char *
 local_quote_string (const char *file)
 {
-  const char *file_sans_qmark;
-  int qm;
+  const char *from;
+  char *newname, *to;
 
-  if (!opt.html_extension)
+  char *any = strpbrk (file, "?#%");
+  if (!any)
     return html_quote_string (file);
 
-  qm = count_char (file, '?');
+  /* Allocate space assuming the worst-case scenario, each character
+     having to be quoted.  */
+  to = newname = (char *)alloca (3 * strlen (file) + 1);
+  for (from = file; *from; from++)
+    switch (*from)
+      {
+      case '%':
+	*to++ = '%';
+	*to++ = '2';
+	*to++ = '5';
+	break;
+      case '#':
+	*to++ = '%';
+	*to++ = '2';
+	*to++ = '3';
+	break;
+      case '?':
+	if (opt.html_extension)
+	  {
+	    *to++ = '%';
+	    *to++ = '3';
+	    *to++ = 'F';
+	    break;
+	  }
+	/* fallthrough */
+      default:
+	*to++ = *from;
+      }
+  *to = '\0';
 
-  if (qm)
-    {
-      const char *from = file;
-      char *to, *newname;
-
-      /* qm * 2 because we replace each question mark with "%3F",
-	 i.e. replace one char with three, hence two more.  */
-      int fsqlen = strlen (file) + qm * 2;
-
-      to = newname = (char *)alloca (fsqlen + 1);
-      for (; *from; from++)
-	{
-	  if (*from != '?')
-	    *to++ = *from;
-	  else
-	    {
-	      *to++ = '%';
-	      *to++ = '3';
-	      *to++ = 'F';
-	    }
-	}
-      assert (to - newname == fsqlen);
-      *to = '\0';
-
-      file_sans_qmark = newname;
-    }
-  else
-    file_sans_qmark = file;
-
-  return html_quote_string (file_sans_qmark);
+  return html_quote_string (newname);
 }
 
 /* Book-keeping code for dl_file_url_map, dl_url_file_map,
@@ -826,18 +834,13 @@ register_html (const char *url, const char *file)
 {
   if (!downloaded_html_set)
     downloaded_html_set = make_string_hash_table (0);
-  else if (hash_table_contains (downloaded_html_set, file))
-    return;
-
-  /* The set and the list should use the same copy of FILE, but the
-     slist interface insists on strduping the string it gets.  Oh
-     well. */
   string_set_add (downloaded_html_set, file);
-  downloaded_html_list = slist_prepend (downloaded_html_list, file);
 }
 
-/* Cleanup the data structures associated with recursive retrieving
-   (the variables above).  */
+static void downloaded_files_free PARAMS ((void));
+
+/* Cleanup the data structures associated with this file.  */
+
 void
 convert_cleanup (void)
 {
@@ -855,8 +858,9 @@ convert_cleanup (void)
     }
   if (downloaded_html_set)
     string_set_free (downloaded_html_set);
-  slist_free (downloaded_html_list);
-  downloaded_html_list = NULL;
+  downloaded_files_free ();
+  if (converted_files)
+    string_set_free (converted_files);
 }
 
 /* Book-keeping code for downloaded files that enables extension
@@ -947,7 +951,7 @@ df_free_mapper (void *key, void *value, void *ignored)
   return 0;
 }
 
-void
+static void
 downloaded_files_free (void)
 {
   if (downloaded_files_hash)
@@ -956,4 +960,76 @@ downloaded_files_free (void)
       hash_table_destroy (downloaded_files_hash);
       downloaded_files_hash = NULL;
     }
+}
+
+/* The function returns the pointer to the malloc-ed quoted version of
+   string s.  It will recognize and quote numeric and special graphic
+   entities, as per RFC1866:
+
+   `&' -> `&amp;'
+   `<' -> `&lt;'
+   `>' -> `&gt;'
+   `"' -> `&quot;'
+   SP  -> `&#32;'
+
+   No other entities are recognized or replaced.  */
+char *
+html_quote_string (const char *s)
+{
+  const char *b = s;
+  char *p, *res;
+  int i;
+
+  /* Pass through the string, and count the new size.  */
+  for (i = 0; *s; s++, i++)
+    {
+      if (*s == '&')
+	i += 4;			/* `amp;' */
+      else if (*s == '<' || *s == '>')
+	i += 3;			/* `lt;' and `gt;' */
+      else if (*s == '\"')
+	i += 5;			/* `quot;' */
+      else if (*s == ' ')
+	i += 4;			/* #32; */
+    }
+  res = (char *)xmalloc (i + 1);
+  s = b;
+  for (p = res; *s; s++)
+    {
+      switch (*s)
+	{
+	case '&':
+	  *p++ = '&';
+	  *p++ = 'a';
+	  *p++ = 'm';
+	  *p++ = 'p';
+	  *p++ = ';';
+	  break;
+	case '<': case '>':
+	  *p++ = '&';
+	  *p++ = (*s == '<' ? 'l' : 'g');
+	  *p++ = 't';
+	  *p++ = ';';
+	  break;
+	case '\"':
+	  *p++ = '&';
+	  *p++ = 'q';
+	  *p++ = 'u';
+	  *p++ = 'o';
+	  *p++ = 't';
+	  *p++ = ';';
+	  break;
+	case ' ':
+	  *p++ = '&';
+	  *p++ = '#';
+	  *p++ = '3';
+	  *p++ = '2';
+	  *p++ = ';';
+	  break;
+	default:
+	  *p++ = *s;
+	}
+    }
+  *p = '\0';
+  return res;
 }

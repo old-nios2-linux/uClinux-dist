@@ -20,7 +20,6 @@
 #include <linux/bitops.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/socket.h>
@@ -45,8 +44,8 @@
 
 #include "fib_lookup.h"
 
-static kmem_cache_t *fn_hash_kmem __read_mostly;
-static kmem_cache_t *fn_alias_kmem __read_mostly;
+static struct kmem_cache *fn_hash_kmem __read_mostly;
+static struct kmem_cache *fn_alias_kmem __read_mostly;
 
 struct fib_node {
 	struct hlist_node	fn_hash;
@@ -146,7 +145,7 @@ static void fn_rehash_zone(struct fn_zone *fz)
 	struct hlist_head *ht, *old_ht;
 	int old_divisor, new_divisor;
 	u32 new_hashmask;
-		
+
 	old_divisor = fz->fz_divisor;
 
 	switch (old_divisor) {
@@ -457,6 +456,8 @@ static int fn_hash_insert(struct fib_table *tb, struct fib_config *cfg)
 			fib_release_info(fi_drop);
 			if (state & FA_S_ACCESSED)
 				rt_cache_flush(-1);
+			rtmsg_fib(RTM_NEWROUTE, key, fa, cfg->fc_dst_len, tb->tb_id,
+				  &cfg->fc_nlinfo, NLM_F_REPLACE);
 			return 0;
 		}
 
@@ -485,13 +486,13 @@ static int fn_hash_insert(struct fib_table *tb, struct fib_config *cfg)
 		goto out;
 
 	err = -ENOBUFS;
-	new_fa = kmem_cache_alloc(fn_alias_kmem, SLAB_KERNEL);
+	new_fa = kmem_cache_alloc(fn_alias_kmem, GFP_KERNEL);
 	if (new_fa == NULL)
 		goto out;
 
 	new_f = NULL;
 	if (!f) {
-		new_f = kmem_cache_alloc(fn_hash_kmem, SLAB_KERNEL);
+		new_f = kmem_cache_alloc(fn_hash_kmem, GFP_KERNEL);
 		if (new_f == NULL)
 			goto out_free_new_fa;
 
@@ -524,7 +525,7 @@ static int fn_hash_insert(struct fib_table *tb, struct fib_config *cfg)
 	rt_cache_flush(-1);
 
 	rtmsg_fib(RTM_NEWROUTE, key, new_fa, cfg->fc_dst_len, tb->tb_id,
-		  &cfg->fc_nlinfo);
+		  &cfg->fc_nlinfo, 0);
 	return 0;
 
 out_free_new_fa:
@@ -590,7 +591,7 @@ static int fn_hash_delete(struct fib_table *tb, struct fib_config *cfg)
 
 		fa = fa_to_delete;
 		rtmsg_fib(RTM_DELROUTE, key, fa, cfg->fc_dst_len,
-			  tb->tb_id, &cfg->fc_nlinfo);
+			  tb->tb_id, &cfg->fc_nlinfo, 0);
 
 		kill_fn = 0;
 		write_lock_bh(&fib_hash_lock);
@@ -770,13 +771,13 @@ struct fib_table * __init fib_hash_init(u32 id)
 		fn_hash_kmem = kmem_cache_create("ip_fib_hash",
 						 sizeof(struct fib_node),
 						 0, SLAB_HWCACHE_ALIGN,
-						 NULL, NULL);
+						 NULL);
 
 	if (fn_alias_kmem == NULL)
 		fn_alias_kmem = kmem_cache_create("ip_fib_alias",
 						  sizeof(struct fib_alias),
 						  0, SLAB_HWCACHE_ALIGN,
-						  NULL, NULL);
+						  NULL);
 
 	tb = kmalloc(sizeof(struct fib_table) + sizeof(struct fn_hash),
 		     GFP_KERNEL);
@@ -911,7 +912,7 @@ static struct fib_alias *fib_get_next(struct seq_file *seq)
 
 		if (!iter->zone)
 			goto out;
-		
+
 		iter->bucket = 0;
 		iter->hash_head = iter->zone->fz_hash;
 
@@ -932,7 +933,7 @@ static struct fib_alias *fib_get_idx(struct seq_file *seq, loff_t pos)
 {
 	struct fib_iter_state *iter = seq->private;
 	struct fib_alias *fa;
-	
+
 	if (iter->valid && pos >= iter->pos && iter->genid == fib_hash_genid) {
 		fa   = iter->fa;
 		pos -= iter->pos;
@@ -981,7 +982,7 @@ static unsigned fib_flag_trans(int type, __be32 mask, struct fib_info *fi)
 	return flags;
 }
 
-/* 
+/*
  *	This outputs /proc/net/route.
  *
  *	It always works in backward compatibility mode.
@@ -1028,7 +1029,7 @@ out:
 	return 0;
 }
 
-static struct seq_operations fib_seq_ops = {
+static const struct seq_operations fib_seq_ops = {
 	.start  = fib_seq_start,
 	.next   = fib_seq_next,
 	.stop   = fib_seq_stop,
@@ -1040,7 +1041,7 @@ static int fib_seq_open(struct inode *inode, struct file *file)
 	struct seq_file *seq;
 	int rc = -ENOMEM;
 	struct fib_iter_state *s = kzalloc(sizeof(*s), GFP_KERNEL);
-       
+
 	if (!s)
 		goto out;
 
@@ -1057,7 +1058,7 @@ out_kfree:
 	goto out;
 }
 
-static struct file_operations fib_seq_fops = {
+static const struct file_operations fib_seq_fops = {
 	.owner		= THIS_MODULE,
 	.open           = fib_seq_open,
 	.read           = seq_read,

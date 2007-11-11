@@ -61,7 +61,7 @@ static int blkpg_ioctl(struct block_device *bdev, struct blkpg_ioctl_arg __user 
 				}
 			}
 			/* all seems OK */
-			add_partition(disk, part, start, length);
+			add_partition(disk, part, start, length, ADDPART_FLAG_NONE);
 			mutex_unlock(&bdev->bd_mutex);
 			return 0;
 		case BLKPG_DEL_PARTITION:
@@ -72,7 +72,7 @@ static int blkpg_ioctl(struct block_device *bdev, struct blkpg_ioctl_arg __user 
 			bdevp = bdget_disk(disk, part);
 			if (!bdevp)
 				return -ENOMEM;
-			mutex_lock_nested(&bdevp->bd_mutex, BD_MUTEX_PARTITION);
+			mutex_lock(&bdevp->bd_mutex);
 			if (bdevp->bd_openers) {
 				mutex_unlock(&bdevp->bd_mutex);
 				bdput(bdevp);
@@ -80,9 +80,9 @@ static int blkpg_ioctl(struct block_device *bdev, struct blkpg_ioctl_arg __user 
 			}
 			/* all seems OK */
 			fsync_bdev(bdevp);
-			invalidate_bdev(bdevp, 0);
+			invalidate_bdev(bdevp);
 
-			mutex_lock_nested(&bdev->bd_mutex, BD_MUTEX_WHOLE);
+			mutex_lock_nested(&bdev->bd_mutex, 1);
 			delete_partition(disk, part);
 			mutex_unlock(&bdev->bd_mutex);
 			mutex_unlock(&bdevp->bd_mutex);
@@ -236,7 +236,7 @@ int blkdev_ioctl(struct inode *inode, struct file *file, unsigned cmd,
 
 		lock_kernel();
 		fsync_bdev(bdev);
-		invalidate_bdev(bdev, 0);
+		invalidate_bdev(bdev);
 		unlock_kernel();
 		return 0;
 
@@ -290,7 +290,7 @@ int blkdev_ioctl(struct inode *inode, struct file *file, unsigned cmd,
    ENOIOCTLCMD for unknown ioctls. */
 long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 {
-	struct block_device *bdev = file->f_dentry->d_inode->i_bdev;
+	struct block_device *bdev = file->f_path.dentry->d_inode->i_bdev;
 	struct gendisk *disk = bdev->bd_disk;
 	int ret = -ENOIOCTLCMD;
 	if (disk->fops->compat_ioctl) {

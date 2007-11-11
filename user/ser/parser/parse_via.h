@@ -1,7 +1,7 @@
 /*
- * $Id: parse_via.h,v 1.9 2003/01/27 14:22:07 andrei Exp $
+ * $Id: parse_via.h,v 1.12 2004/08/24 09:01:27 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,7 @@
  *  2003-01-21  added extra via param parsing code (i=...), used
  *               by tcp to identify the sending socket, by andrei
  *  2003-01-27  added a new member (start) to via_param, by andrei
+ *  2003-10-27  added alias to via && PARAM_ALIAS (andrei)
  */
 
 
@@ -42,10 +43,12 @@
 
 /* via param types
  * WARNING: keep in sync with parse_via.c FIN_HIDDEN... 
+ * and with tm/sip_msg.c via_body_cloner
  */
 enum {
 	PARAM_HIDDEN=230, PARAM_TTL, PARAM_BRANCH, 
-	PARAM_MADDR, PARAM_RECEIVED, PARAM_RPORT, PARAM_I, GEN_PARAM,
+	PARAM_MADDR, PARAM_RECEIVED, PARAM_RPORT, PARAM_I, PARAM_ALIAS,
+	GEN_PARAM,
 	PARAM_ERROR
 };
 
@@ -64,6 +67,7 @@ struct via_param {
 
 
 /* Format: name/version/transport host:port;params comment */
+ /* WARNING: keep in sync with tm/sip_msg.c via_body_cloner */
 struct via_body { 
 	int error;
 	str hdr;   /* Contains "Via" or "v" */
@@ -86,7 +90,7 @@ struct via_body {
 	struct via_param* received;
 	struct via_param* rport;
 	struct via_param* i;
-	
+	struct via_param* alias; /* alias see draft-ietf-sip-connect-reuse-00 */
 	struct via_body* next; /* pointer to next via body string if
 				  compact via or null */
 };

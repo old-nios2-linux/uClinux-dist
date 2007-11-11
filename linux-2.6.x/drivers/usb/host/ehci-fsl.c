@@ -67,7 +67,8 @@ int usb_hcd_fsl_probe(const struct hc_driver *driver,
 	 * in host mode.
 	 */
 	if (!((pdata->operating_mode == FSL_USB2_DR_HOST) ||
-	      (pdata->operating_mode == FSL_USB2_MPH_HOST))) {
+	      (pdata->operating_mode == FSL_USB2_MPH_HOST) ||
+	      (pdata->operating_mode == FSL_USB2_DR_OTG))) {
 		dev_err(&pdev->dev,
 			"Non Host Mode configured for %s. Wrong driver linked.\n",
 			pdev->dev.bus_id);
@@ -177,7 +178,7 @@ static void mpc83xx_setup_phy(struct ehci_hcd *ehci,
 	case FSL_USB2_PHY_NONE:
 		break;
 	}
-	writel(portsc, &ehci->regs->port_status[port_offset]);
+	ehci_writel(ehci, portsc, &ehci->regs->port_status[port_offset]);
 }
 
 static void mpc83xx_usb_setup(struct usb_hcd *hcd)
@@ -185,15 +186,31 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	struct fsl_usb2_platform_data *pdata;
 	void __iomem *non_ehci = hcd->regs;
+	u32 temp;
 
 	pdata =
 	    (struct fsl_usb2_platform_data *)hcd->self.controller->
 	    platform_data;
 	/* Enable PHY interface in the control reg. */
-	out_be32(non_ehci + FSL_SOC_USB_CTRL, 0x00000004);
+	temp = in_be32(non_ehci + FSL_SOC_USB_CTRL);
+	out_be32(non_ehci + FSL_SOC_USB_CTRL, temp | 0x00000004);
 	out_be32(non_ehci + FSL_SOC_USB_SNOOP1, 0x0000001b);
 
-	if (pdata->operating_mode == FSL_USB2_DR_HOST)
+#if defined(CONFIG_PPC32) && !defined(CONFIG_NOT_COHERENT_CACHE)
+	/*
+	 * Turn on cache snooping hardware, since some PowerPC platforms
+	 * wholly rely on hardware to deal with cache coherent
+	 */
+
+	/* Setup Snooping for all the 4GB space */
+	/* SNOOP1 starts from 0x0, size 2G */
+	out_be32(non_ehci + FSL_SOC_USB_SNOOP1, 0x0 | SNOOP_SIZE_2GB);
+	/* SNOOP2 starts from 0x80000000, size 2G */
+	out_be32(non_ehci + FSL_SOC_USB_SNOOP2, 0x80000000 | SNOOP_SIZE_2GB);
+#endif
+
+	if ((pdata->operating_mode == FSL_USB2_DR_HOST) ||
+			(pdata->operating_mode == FSL_USB2_DR_OTG))
 		mpc83xx_setup_phy(ehci, pdata->phy_mode, 0);
 
 	if (pdata->operating_mode == FSL_USB2_MPH_HOST) {
@@ -214,7 +231,7 @@ static void mpc83xx_usb_setup(struct usb_hcd *hcd)
 	}
 
 	/* put controller in host mode. */
-	writel(0x00000003, non_ehci + FSL_SOC_USB_USBMODE);
+	ehci_writel(ehci, 0x00000003, non_ehci + FSL_SOC_USB_USBMODE);
 	out_be32(non_ehci + FSL_SOC_USB_PRICTRL, 0x0000000c);
 	out_be32(non_ehci + FSL_SOC_USB_AGECNTTHRSH, 0x00000040);
 	out_be32(non_ehci + FSL_SOC_USB_SICTRL, 0x00000001);
@@ -238,12 +255,12 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
 	/* EHCI registers start at offset 0x100 */
 	ehci->caps = hcd->regs + 0x100;
 	ehci->regs = hcd->regs + 0x100 +
-	    HC_LENGTH(readl(&ehci->caps->hc_capbase));
+	    HC_LENGTH(ehci_readl(ehci, &ehci->caps->hc_capbase));
 	dbg_hcs_params(ehci, "reset");
 	dbg_hcc_params(ehci, "reset");
 
 	/* cache this readonly data; minimize chip reads */
-	ehci->hcs_params = readl(&ehci->caps->hcs_params);
+	ehci->hcs_params = ehci_readl(ehci, &ehci->caps->hcs_params);
 
 	retval = ehci_halt(ehci);
 	if (retval)

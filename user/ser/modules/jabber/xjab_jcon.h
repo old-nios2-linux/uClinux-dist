@@ -1,10 +1,10 @@
 /*
- * $Id: xjab_jcon.h,v 1.6 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xjab_jcon.h,v 1.7 2004/08/24 08:58:30 janakj Exp $
  *
- * eXtended JABber module - headers for functions used for JABBER srv conection
+ * eXtended JABber module - headers for functions used for JABBER srv connection
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -68,7 +68,7 @@ typedef struct _xj_jcon
 	int port;			// port of the server
 	int juid;			// internal id of the Jabber user
 	int seq_nr;			// sequence number
-	char *hostname;		// hosname of the Jabber server
+	char *hostname;		// hostname of the Jabber server
 	char *stream_id;	// stream id of the session
 
 	char *resource;		// resource ID

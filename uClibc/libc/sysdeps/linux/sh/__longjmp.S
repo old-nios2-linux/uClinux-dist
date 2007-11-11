@@ -20,6 +20,7 @@
 #define _SETJMP_H
 #define _ASM
 #include <bits/setjmp.h>
+#include <features.h>
 
 /* __longjmp(jmpbuf, val) */
 
@@ -60,5 +61,5 @@ __longjmp:
 	rts
 	 ldc.l	@r4+, gbr
 #endif		
-.size __longjmp,.-__longjmp;
-
+.size __longjmp,.-__longjmp
+libc_hidden_def(__longjmp)

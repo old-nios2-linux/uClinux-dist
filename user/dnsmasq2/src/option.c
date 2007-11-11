@@ -452,9 +452,9 @@ static char *one_opt(struct daemon *daemon, int option, char *arg, char *problem
       {
 	struct stat buf;
 
+	if (daemon->preload_file != NULL)
+	  die(_("only one preload file is allowed."), NULL);
 	daemon->preload_file = safe_string_alloc(arg);
-	if (stat(daemon->preload_file, &buf) == -1)
-	      die(_("cannot access preload file %s: %s"), daemon->preload_file);
 	break;
       }
 #endif

@@ -1,29 +1,45 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Random application
- * 
- * Copyright (c) 2003-2004 Tilghman Lesher.  All rights reserved.
+ * Copyright (c) 2003 - 2005 Tilghman Lesher.  All rights reserved.
  *
- * Tilghman Lesher <asterisk__app_random__20040111@the-tilghman.com>
+ * Tilghman Lesher <asterisk__app_random__200508@the-tilghman.com>
  *
  * This code is released by the author with no restrictions on usage or distribution.
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  */
 
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/options.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
+/*! \file
+ *
+ * \brief Random application
+ *
+ * \author Tilghman Lesher <asterisk__app_random__200508@the-tilghman.com>
+ * \ingroup applications
+ */
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/options.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
 
-static char *tdesc = "Random goto";
+/*! \todo The Random() app should be removed from trunk following the release of 1.4 */
 
 static char *app_random = "Random";
 
@@ -31,98 +47,62 @@ static char *random_synopsis = "Conditionally branches, based upon a probability
 
 static char *random_descrip =
 "Random([probability]:[[context|]extension|]priority)\n"
-"  probability := INTEGER in the range 1 to 100\n";
+"  probability := INTEGER in the range 1 to 100\n"
+"DEPRECATED: Use GotoIf($[${RAND(1,100)} > <number>]?<label>)\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int random_exec(struct ast_channel *chan, void *data)
 {
 	int res=0;
-	struct localuser *u;
+	struct ast_module_user *u;
 
 	char *s;
-	char *exten, *pri, *context;
 	char *prob;
-	int probint, priorityint;
+	int probint;
+	static int deprecated = 0;
 
-	if (!data) {
+	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "Random requires an argument ([probability]:[[context|]extension|]priority)\n");
 		return -1;
 	}
-	LOCAL_USER_ADD(u);
-	s = ast_strdupa((void *) data);
+	
+	u = ast_module_user_add(chan);
+
+	s = ast_strdupa(data);
 
 	prob = strsep(&s,":");
 	if ((!prob) || (sscanf(prob, "%d", &probint) != 1))
 		probint = 0;
 
-	if ((random() % 100) + probint > 100) {
-		context = strsep(&s, "|");
-		exten = strsep(&s, "|");
-		if (!exten) {
-			/* Only a priority */
-			pri = context;
-			exten = NULL;
-			context = NULL;
-		} else {
-			pri = strsep(&s, "|");
-			if (!pri) {
-				pri = exten;
-				exten = context;
-				context = NULL;
-			}
-		}
-		if (!pri) {
-			ast_log(LOG_WARNING, "No label specified\n");
-			LOCAL_USER_REMOVE(u);
-			return -1;
-		} else if (sscanf(pri, "%d", &priorityint) != 1) {
-			ast_log(LOG_WARNING, "Priority '%s' must be a number > 0\n", pri);
-			LOCAL_USER_REMOVE(u);
-			return -1;
-		}
-		/* At this point we have a priority and */
-		/* maybe an extension and a context     */
-		chan->priority = priorityint - 1;
-		if (exten && strcasecmp(exten, "BYEXTENSION"))
-			strncpy(chan->exten, exten, sizeof(chan->exten)-1);
-		if (context)
-			strncpy(chan->context, context, sizeof(chan->context)-1);
+	if (!deprecated) {
+		deprecated = 1;
+		ast_log(LOG_WARNING, "Random is deprecated in Asterisk 1.4.  Replace with GotoIf($[${RAND(0,99)} + %d >= 100]?%s)\n", probint, s);
+	}
+
+	if ((ast_random() % 100) + probint >= 100) {
+		res = ast_parseable_goto(chan, s);
 		if (option_verbose > 2)
 			ast_verbose( VERBOSE_PREFIX_3 "Random branches to (%s,%s,%d)\n",
 				chan->context,chan->exten, chan->priority+1);
-		LOCAL_USER_REMOVE(u);
 	}
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app_random);
+	int res;
+	
+	res = ast_unregister_application(app_random);
+	
+	ast_module_user_hangup_all();
+
+	return res;	
 }
 
-int load_module(void)
+static int load_module(void)
 {
-	srandom((unsigned int)getpid() + (unsigned int)time(NULL));
 	return ast_register_application(app_random, random_exec, random_synopsis, random_descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Random goto");

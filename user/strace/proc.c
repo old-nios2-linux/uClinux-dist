@@ -24,7 +24,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: proc.c,v 1.5 2000/09/01 21:03:06 wichert Exp $
+ *	$Id: proc.c,v 1.7 2005/06/01 19:02:36 roland Exp $
  */
 
 #include "defs.h"
@@ -32,7 +32,7 @@
 #ifdef SVR4
 #ifndef HAVE_MP_PROCFS
 
-static struct xlat proc_status_flags[] = {
+static const struct xlat proc_status_flags[] = {
 	{ PR_STOPPED,	"PR_STOPPED"	},
 	{ PR_ISTOP,	"PR_ISTOP"	},
 	{ PR_DSTOP,	"PR_DSTOP"	},
@@ -57,7 +57,7 @@ static struct xlat proc_status_flags[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat proc_status_why[] = {
+static const struct xlat proc_status_why[] = {
 	{ PR_REQUESTED,	"PR_REQUESTED"	},
 	{ PR_SIGNALLED,	"PR_SIGNALLED"	},
 	{ PR_SYSENTRY,	"PR_SYSENTRY"	},
@@ -73,7 +73,7 @@ static struct xlat proc_status_why[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat proc_run_flags[] = {
+static const struct xlat proc_run_flags[] = {
 	{ PRCSIG,	"PRCSIG"	},
 	{ PRCFAULT,	"PRCFAULT"	},
 	{ PRSTRACE,	"PRSTRACE"	},
@@ -110,8 +110,7 @@ int code, arg;
 			tprintf(", {...}");
 		else {
 			tprintf(", {pr_flags=");
-			if (!printflags(proc_status_flags, status.pr_flags))
-				tprintf("0");
+			printflags(proc_status_flags, status.pr_flags, "PR_???");
 			if (status.pr_why) {
 				tprintf(", pr_why=");
 				printxval(proc_status_why, status.pr_why,
@@ -142,8 +141,7 @@ int code, arg;
 			tprintf(", {...}");
 		else {
 			tprintf(", {pr_flags=");
-			if (!printflags(proc_run_flags, run.pr_flags))
-				tprintf("0");
+			printflags(proc_run_flags, run.pr_flags, "PR???");
 			tprintf(", ...}");
 		}
 		return 1;
@@ -154,8 +152,7 @@ int code, arg;
 			tprintf(", [?]");
 		else {
 			tprintf(", [");
-			if (!printflags(proc_status_flags, val))
-				tprintf("0");
+			printflags(proc_status_flags, val, "PR_???");
 			tprintf("]");
 		}
 		return 1;
@@ -189,7 +186,7 @@ int code, arg;
 #ifdef FREEBSD
 #include <sys/pioctl.h>
 
-static struct xlat proc_status_why[] = {
+static const struct xlat proc_status_why[] = {
 	{ S_EXEC,	"S_EXEC"	},
 	{ S_SIG,	"S_SIG"		},
 	{ S_SCE,	"S_SCE"		},
@@ -199,7 +196,7 @@ static struct xlat proc_status_why[] = {
 	{ 0,		NULL		}
 };
 
-static struct xlat proc_status_flags[] = {
+static const struct xlat proc_status_flags[] = {
 	{ PF_LINGER,	"PF_LINGER"	},
 	{ PF_ISUGID,	"PF_ISUGID"	},
 	{ 0,		NULL		}
@@ -227,29 +224,22 @@ int code, arg;
 			tprintf(", {...}");
 		else {
 			tprintf(", {state=%d, flags=", status.state);
-			if (!printflags(proc_status_flags, status.flags))
-				tprintf("0");
+			printflags(proc_status_flags, status.flags, "PF_???");
 			tprintf(", events=");
-			printflags(proc_status_why, status.events);
+			printflags(proc_status_why, status.events, "S_???");
 			tprintf(", why=");
 			printxval(proc_status_why, status.why, "S_???");
 			tprintf(", val=%lu}", status.val);
 		}
 		return 1;
 	case PIOCBIS:
-		if (arg) {
-			tprintf(", ");
-			printflags(proc_status_why, arg);
-		} else
-			tprintf(", 0");
+		tprintf(", ");
+		printflags(proc_status_why, arg, "S_???");
 		return 1;
 		return 1;
 	case PIOCSFL:
-		if (arg) {
-			tprintf(", ");
-			printflags(proc_status_flags, arg);
-		} else
-			tprintf(", 0");
+		tprintf(", ");
+		printflags(proc_status_flags, arg, "PF_???");
 		return 1;
 	case PIOCGFL:
 	        if (syserror(tcp))
@@ -258,10 +248,7 @@ int code, arg;
 			tprintf(", {...}");
 		else {
 			tprintf(", [");
-			if (val)
-				printflags(proc_status_flags, val);
-			else
-				tprintf("0");
+			printflags(proc_status_flags, val, "PF_???");
 			tprintf("]");
 		}
 		return 1;

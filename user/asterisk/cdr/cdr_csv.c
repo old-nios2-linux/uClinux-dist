@@ -1,36 +1,38 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Comma Separated Value CDR records.
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
- *
- * This program is free software, distributed under the terms of
- * the GNU General Public License.
+ * Mark Spencer <markster@digium.com>
  *
  * Includes code and algorithms from the Zapata library.
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
+ * This program is free software, distributed under the terms of
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Comma Separated Value CDR records.
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \arg See also \ref AstCDR
+ * \ingroup cdr_drivers
+ */
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 69392 $")
+
 #include <sys/types.h>
-#include <asterisk/channel.h>
-#include <asterisk/cdr.h>
-#include <asterisk/module.h>
-#include <asterisk/logger.h>
-#include <asterisk/utils.h>
-#include "../asterisk.h"
-#include "../astconf.h"
-
-#define CSV_LOG_DIR "/cdr-csv"
-#define CSV_MASTER  "/Master.csv"
-
-#define DATE_FORMAT "%Y-%m-%d %T"
-
-/* #define CSV_LOGUNIQUEID 1 */
-/* #define CSV_LOGUSERFIELD 1 */
-
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -39,38 +41,109 @@
 #include <unistd.h>
 #include <time.h>
 
-/* The values are as follows:
+#include "asterisk/config.h"
+#include "asterisk/channel.h"
+#include "asterisk/cdr.h"
+#include "asterisk/module.h"
+#include "asterisk/logger.h"
+#include "asterisk/utils.h"
+
+#define CSV_LOG_DIR "/cdr-csv"
+#define CSV_MASTER  "/Master.csv"
+
+#define DATE_FORMAT "%Y-%m-%d %T"
+
+static int usegmtime = 0;
+static int loguniqueid = 0;
+static int loguserfield = 0;
+static char *config = "cdr.conf";
+
+/* #define CSV_LOGUNIQUEID 1 */
+/* #define CSV_LOGUSERFIELD 1 */
+
+/*----------------------------------------------------
+  The values are as follows:
 
 
-  "accountcode", 	// accountcode is the account name of detail records, Master.csv contains all records
-  			// Detail records are configured on a channel basis, IAX and SIP are determined by user
-			// Zap is determined by channel in zaptel.conf
+  "accountcode", 	accountcode is the account name of detail records, Master.csv contains all records *
+  			Detail records are configured on a channel basis, IAX and SIP are determined by user *
+			Zap is determined by channel in zaptel.conf 
   "source",
   "destination",
   "destination context", 
   "callerid",
   "channel",
   "destination channel",	(if applicable)
-  "last application",	// Last application run on the channel
-  "last app argument",	// argument to the last channel
+  "last application",	Last application run on the channel 
+  "last app argument",	argument to the last channel 
   "start time", 
   "answer time", 
   "end time", 
-  duration,   		// Duration is the whole length that the entire call lasted. ie. call rx'd to hangup 
-  			// "end time" minus "start time"
-  billable seconds, 	// the duration that a call was up after other end answered which will be <= to duration 
-  			// "end time" minus "answer time"
-  "disposition",    	// ANSWERED, NO ANSWER, BUSY
-  "amaflags",       	// DOCUMENTATION, BILL, IGNORE etc, specified on a per channel basis like accountcode.
-  "uniqueid",           // unique call identifier
-  "userfield"		// user field set via SetCDRUserField
-*/
-
-static char *desc = "Comma Separated Values CDR Backend";
+  duration,   		Duration is the whole length that the entire call lasted. ie. call rx'd to hangup  
+  			"end time" minus "start time" 
+  billable seconds, 	the duration that a call was up after other end answered which will be <= to duration  
+  			"end time" minus "answer time" 
+  "disposition",    	ANSWERED, NO ANSWER, BUSY 
+  "amaflags",       	DOCUMENTATION, BILL, IGNORE etc, specified on a per channel basis like accountcode. 
+  "uniqueid",           unique call identifier 
+  "userfield"		user field set via SetCDRUserField 
+----------------------------------------------------------*/
 
 static char *name = "csv";
 
 static FILE *mf = NULL;
+
+
+static int load_config(void)
+{
+	struct ast_config *cfg;
+	struct ast_variable *var;
+	const char *tmp;
+
+	usegmtime = 0;
+	loguniqueid = 0;
+	loguserfield = 0;
+	
+	cfg = ast_config_load(config);
+	
+	if (!cfg) {
+		ast_log(LOG_WARNING, "unable to load config: %s\n", config);
+		return 0;
+	} 
+	
+	var = ast_variable_browse(cfg, "csv");
+	if (!var) {
+		ast_config_destroy(cfg);
+		return 0;
+	}
+	
+	tmp = ast_variable_retrieve(cfg, "csv", "usegmtime");
+	if (tmp) {
+		usegmtime = ast_true(tmp);
+		if (usegmtime) {
+			ast_log(LOG_DEBUG, "logging time in GMT\n");
+		}
+	}
+
+	tmp = ast_variable_retrieve(cfg, "csv", "loguniqueid");
+	if (tmp) {
+		loguniqueid = ast_true(tmp);
+		if (loguniqueid) {
+			ast_log(LOG_DEBUG, "logging CDR field UNIQUEID\n");
+		}
+	}
+
+	tmp = ast_variable_retrieve(cfg, "csv", "loguserfield");
+	if (tmp) {
+		loguserfield = ast_true(tmp);
+		if (loguserfield) {
+			ast_log(LOG_DEBUG, "logging CDR user-defined field\n");
+		}
+	}
+
+	ast_config_destroy(cfg);
+	return 1;
+}
 
 static int append_string(char *buf, char *s, size_t bufsize)
 {
@@ -119,11 +192,15 @@ static int append_date(char *buf, struct timeval tv, size_t bufsize)
 	t = tv.tv_sec;
 	if (strlen(buf) > bufsize - 3)
 		return -1;
-	if (!tv.tv_sec && !tv.tv_usec) {
+	if (ast_tvzero(tv)) {
 		strncat(buf, ",", bufsize - strlen(buf) - 1);
 		return 0;
 	}
-	localtime_r(&t,&tm);
+	if (usegmtime) {
+		gmtime_r(&t,&tm);
+	} else {
+		ast_localtime(&t, &tm, NULL);
+	}
 	strftime(tmp, sizeof(tmp), DATE_FORMAT, &tm);
 	return append_string(buf, tmp, bufsize);
 }
@@ -164,15 +241,12 @@ static int build_csv_record(char *buf, size_t bufsize, struct ast_cdr *cdr)
 	append_string(buf, ast_cdr_disp2str(cdr->disposition), bufsize);
 	/* AMA Flags */
 	append_string(buf, ast_cdr_flags2str(cdr->amaflags), bufsize);
-
-#ifdef CSV_LOGUNIQUEID
 	/* Unique ID */
-	append_string(buf, cdr->uniqueid, bufsize);
-#endif
-#ifdef CSV_LOGUSERFIELD
+	if (loguniqueid)
+		append_string(buf, cdr->uniqueid, bufsize);
 	/* append the user field */
-	append_string(buf, cdr->userfield,bufsize);	
-#endif
+	if(loguserfield)
+		append_string(buf, cdr->userfield,bufsize);	
 	/* If we hit the end of our buffer, log an error */
 	if (strlen(buf) < bufsize - 5) {
 		/* Trim off trailing comma */
@@ -185,7 +259,7 @@ static int build_csv_record(char *buf, size_t bufsize, struct ast_cdr *cdr)
 
 static int writefile(char *s, char *acc)
 {
-	char tmp[AST_CONFIG_MAX_PATH];
+	char tmp[PATH_MAX];
 	FILE *f;
 	if (strchr(acc, '/') || (acc[0] == '.')) {
 		ast_log(LOG_WARNING, "Account code '%s' insecure for writing file\n", acc);
@@ -206,7 +280,7 @@ static int csv_log(struct ast_cdr *cdr)
 {
 	/* Make sure we have a big enough buf */
 	char buf[1024];
-	char csvmaster[AST_CONFIG_MAX_PATH];
+	char csvmaster[PATH_MAX];
 	snprintf(csvmaster, sizeof(csvmaster),"%s/%s/%s", ast_config_AST_LOG_DIR, CSV_LOG_DIR, CSV_MASTER);
 #if 0
 	printf("[CDR] %s ('%s' -> '%s') Dur: %ds Bill: %ds Disp: %s Flags: %s Account: [%s]\n", cdr->channel, cdr->src, cdr->dst, cdr->duration, cdr->billsec, ast_cdr_disp2str(cdr->disposition), ast_cdr_flags2str(cdr->amaflags), cdr->accountcode);
@@ -235,12 +309,7 @@ static int csv_log(struct ast_cdr *cdr)
 	return 0;
 }
 
-char *description(void)
-{
-	return desc;
-}
-
-int unload_module(void)
+static int unload_module(void)
 {
 	if (mf)
 		fclose(mf);
@@ -248,11 +317,14 @@ int unload_module(void)
 	return 0;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	int res;
+	
+	if(!load_config())
+		return AST_MODULE_LOAD_DECLINE;
 
-	res = ast_cdr_register(name, desc, csv_log);
+	res = ast_cdr_register(name, ast_module_info->description, csv_log);
 	if (res) {
 		ast_log(LOG_ERROR, "Unable to register CSV CDR handling\n");
 		if (mf)
@@ -261,17 +333,15 @@ int load_module(void)
 	return res;
 }
 
-int reload(void)
+static int reload(void)
 {
+	load_config();
+
 	return 0;
 }
 
-int usecount(void)
-{
-	return 0;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, "Comma Separated Values CDR Backend",
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload,
+	       );

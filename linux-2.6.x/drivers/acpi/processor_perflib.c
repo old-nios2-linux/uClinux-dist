@@ -44,10 +44,9 @@
 
 #define ACPI_PROCESSOR_COMPONENT	0x01000000
 #define ACPI_PROCESSOR_CLASS		"processor"
-#define ACPI_PROCESSOR_DRIVER_NAME	"ACPI Processor Driver"
 #define ACPI_PROCESSOR_FILE_PERFORMANCE	"performance"
 #define _COMPONENT		ACPI_PROCESSOR_COMPONENT
-ACPI_MODULE_NAME("acpi_processor")
+ACPI_MODULE_NAME("processor_perflib");
 
 static DEFINE_MUTEX(performance_mutex);
 
@@ -236,7 +235,7 @@ static int acpi_processor_get_performance_states(struct acpi_processor *pr)
 		return -ENODEV;
 	}
 
-	pss = (union acpi_object *)buffer.pointer;
+	pss = buffer.pointer;
 	if (!pss || (pss->type != ACPI_TYPE_PACKAGE)) {
 		printk(KERN_ERR PREFIX "Invalid _PSS data\n");
 		result = -EFAULT;
@@ -322,10 +321,6 @@ static int acpi_processor_get_performance_info(struct acpi_processor *pr)
 	if (result)
 		return result;
 
-	result = acpi_processor_get_platform_limit(pr);
-	if (result)
-		return result;
-
 	return 0;
 }
 
@@ -356,31 +351,24 @@ int acpi_processor_notify_smm(struct module *calling_module)
 
 	is_done = -EIO;
 
-	/* Can't write pstate_cnt to smi_cmd if either value is zero */
-	if ((!acpi_fadt.smi_cmd) || (!acpi_fadt.pstate_cnt)) {
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "No SMI port or pstate_cnt\n"));
+	/* Can't write pstate_control to smi_command if either value is zero */
+	if ((!acpi_gbl_FADT.smi_command) || (!acpi_gbl_FADT.pstate_control)) {
+		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "No SMI port or pstate_control\n"));
 		module_put(calling_module);
 		return 0;
 	}
 
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-			  "Writing pstate_cnt [0x%x] to smi_cmd [0x%x]\n",
-			  acpi_fadt.pstate_cnt, acpi_fadt.smi_cmd));
+			  "Writing pstate_control [0x%x] to smi_command [0x%x]\n",
+			  acpi_gbl_FADT.pstate_control, acpi_gbl_FADT.smi_command));
 
-	/* FADT v1 doesn't support pstate_cnt, many BIOS vendors use
-	 * it anyway, so we need to support it... */
-	if (acpi_fadt_is_v1) {
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-				  "Using v1.0 FADT reserved value for pstate_cnt\n"));
-	}
-
-	status = acpi_os_write_port(acpi_fadt.smi_cmd,
-				    (u32) acpi_fadt.pstate_cnt, 8);
+	status = acpi_os_write_port(acpi_gbl_FADT.smi_command,
+				    (u32) acpi_gbl_FADT.pstate_control, 8);
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status,
-				"Failed to write pstate_cnt [0x%x] to "
-				"smi_cmd [0x%x]", acpi_fadt.pstate_cnt,
-				acpi_fadt.smi_cmd));
+				"Failed to write pstate_control [0x%x] to "
+				"smi_command [0x%x]", acpi_gbl_FADT.pstate_control,
+				acpi_gbl_FADT.smi_command));
 		module_put(calling_module);
 		return status;
 	}
@@ -410,7 +398,7 @@ static struct file_operations acpi_processor_perf_fops = {
 
 static int acpi_processor_perf_seq_show(struct seq_file *seq, void *offset)
 {
-	struct acpi_processor *pr = (struct acpi_processor *)seq->private;
+	struct acpi_processor *pr = seq->private;
 	int i;
 
 
@@ -445,49 +433,6 @@ static int acpi_processor_perf_open_fs(struct inode *inode, struct file *file)
 			   PDE(inode)->data);
 }
 
-static ssize_t
-acpi_processor_write_performance(struct file *file,
-				 const char __user * buffer,
-				 size_t count, loff_t * data)
-{
-	int result = 0;
-	struct seq_file *m = (struct seq_file *)file->private_data;
-	struct acpi_processor *pr = (struct acpi_processor *)m->private;
-	struct acpi_processor_performance *perf;
-	char state_string[12] = { '\0' };
-	unsigned int new_state = 0;
-	struct cpufreq_policy policy;
-
-
-	if (!pr || (count > sizeof(state_string) - 1))
-		return -EINVAL;
-
-	perf = pr->performance;
-	if (!perf)
-		return -EINVAL;
-
-	if (copy_from_user(state_string, buffer, count))
-		return -EFAULT;
-
-	state_string[count] = '\0';
-	new_state = simple_strtoul(state_string, NULL, 0);
-
-	if (new_state >= perf->state_count)
-		return -EINVAL;
-
-	cpufreq_get_policy(&policy, pr->id);
-
-	policy.cpu = pr->id;
-	policy.min = perf->states[new_state].core_frequency * 1000;
-	policy.max = perf->states[new_state].core_frequency * 1000;
-
-	result = cpufreq_set_policy(&policy);
-	if (result)
-		return result;
-
-	return count;
-}
-
 static void acpi_cpufreq_add_file(struct acpi_processor *pr)
 {
 	struct proc_dir_entry *entry = NULL;
@@ -499,10 +444,9 @@ static void acpi_cpufreq_add_file(struct acpi_processor *pr)
 
 	/* add file 'performance' [R/W] */
 	entry = create_proc_entry(ACPI_PROCESSOR_FILE_PERFORMANCE,
-				  S_IFREG | S_IRUGO | S_IWUSR,
+				  S_IFREG | S_IRUGO,
 				  acpi_device_dir(device));
 	if (entry){
-		acpi_processor_perf_fops.write = acpi_processor_write_performance;
 		entry->proc_fops = &acpi_processor_perf_fops;
 		entry->data = acpi_driver_data(device);
 		entry->owner = THIS_MODULE;
@@ -551,7 +495,7 @@ static int acpi_processor_get_psd(struct acpi_processor	*pr)
 		return -ENODEV;
 	}
 
-	psd = (union acpi_object *) buffer.pointer;
+	psd = buffer.pointer;
 	if (!psd || (psd->type != ACPI_TYPE_PACKAGE)) {
 		ACPI_DEBUG_PRINT((ACPI_DB_ERROR, "Invalid _PSD data\n"));
 		result = -EFAULT;
@@ -595,7 +539,7 @@ end:
 }
 
 int acpi_processor_preregister_performance(
-		struct acpi_processor_performance **performance)
+		struct acpi_processor_performance *performance)
 {
 	int count, count_target;
 	int retval = 0;
@@ -623,12 +567,12 @@ int acpi_processor_preregister_performance(
 			continue;
 		}
 
-		if (!performance || !performance[i]) {
+		if (!performance || !percpu_ptr(performance, i)) {
 			retval = -EINVAL;
 			continue;
 		}
 
-		pr->performance = performance[i];
+		pr->performance = percpu_ptr(performance, i);
 		cpu_set(i, pr->performance->shared_cpu_map);
 		if (acpi_processor_get_psd(pr)) {
 			retval = -EINVAL;
@@ -736,10 +680,6 @@ int acpi_processor_preregister_performance(
 	}
 
 err_ret:
-	if (retval) {
-		ACPI_DEBUG_PRINT((ACPI_DB_ERROR, "Error while parsing _PSD domain information. Assuming no coordination\n"));
-	}
-
 	for_each_possible_cpu(i) {
 		pr = processors[i];
 		if (!pr || !pr->performance)

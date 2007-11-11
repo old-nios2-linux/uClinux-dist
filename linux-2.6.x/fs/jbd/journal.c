@@ -28,10 +28,9 @@
 #include <linux/jbd.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/mm.h>
-#include <linux/suspend.h>
+#include <linux/freezer.h>
 #include <linux/pagemap.h>
 #include <linux/kthread.h>
 #include <linux/poison.h>
@@ -211,10 +210,16 @@ end_loop:
 	return 0;
 }
 
-static void journal_start_thread(journal_t *journal)
+static int journal_start_thread(journal_t *journal)
 {
-	kthread_run(kjournald, journal, "kjournald");
+	struct task_struct *t;
+
+	t = kthread_run(kjournald, journal, "kjournald");
+	if (IS_ERR(t))
+		return PTR_ERR(t);
+
 	wait_event(journal->j_wait_done_commit, journal->j_task != 0);
+	return 0;
 }
 
 static void journal_kill_thread(journal_t *journal)
@@ -840,8 +845,7 @@ static int journal_reset(journal_t *journal)
 
 	/* Add the dynamic fields and write it to disk. */
 	journal_update_superblock(journal, 1);
-	journal_start_thread(journal);
-	return 0;
+	return journal_start_thread(journal);
 }
 
 /**
@@ -1630,7 +1634,7 @@ void * __jbd_kmalloc (const char *where, size_t size, gfp_t flags, int retry)
 #define JBD_MAX_SLABS 5
 #define JBD_SLAB_INDEX(size)  (size >> 11)
 
-static kmem_cache_t *jbd_slab[JBD_MAX_SLABS];
+static struct kmem_cache *jbd_slab[JBD_MAX_SLABS];
 static const char *jbd_slab_names[JBD_MAX_SLABS] = {
 	"jbd_1k", "jbd_2k", "jbd_4k", NULL, "jbd_8k"
 };
@@ -1664,7 +1668,7 @@ static int journal_create_jbd_slab(size_t slab_size)
 	 * boundary.
 	 */
 	jbd_slab[i] = kmem_cache_create(jbd_slab_names[i],
-				slab_size, slab_size, 0, NULL, NULL);
+				slab_size, slab_size, 0, NULL);
 	if (!jbd_slab[i]) {
 		printk(KERN_EMERG "JBD: no memory for jbd_slab cache\n");
 		return -ENOMEM;
@@ -1693,7 +1697,7 @@ void jbd_slab_free(void *ptr,  size_t size)
 /*
  * Journal_head storage management
  */
-static kmem_cache_t *journal_head_cache;
+static struct kmem_cache *journal_head_cache;
 #ifdef CONFIG_JBD_DEBUG
 static atomic_t nr_journal_heads = ATOMIC_INIT(0);
 #endif
@@ -1707,8 +1711,7 @@ static int journal_init_journal_head_cache(void)
 				sizeof(struct journal_head),
 				0,		/* offset */
 				0,		/* flags */
-				NULL,		/* ctor */
-				NULL);		/* dtor */
+				NULL);		/* ctor */
 	retval = 0;
 	if (journal_head_cache == 0) {
 		retval = -ENOMEM;
@@ -1996,7 +1999,7 @@ static void __exit remove_jbd_proc_entry(void)
 
 #endif
 
-kmem_cache_t *jbd_handle_cache;
+struct kmem_cache *jbd_handle_cache;
 
 static int __init journal_init_handle_cache(void)
 {
@@ -2004,8 +2007,7 @@ static int __init journal_init_handle_cache(void)
 				sizeof(handle_t),
 				0,		/* offset */
 				0,		/* flags */
-				NULL,		/* ctor */
-				NULL);		/* dtor */
+				NULL);		/* ctor */
 	if (jbd_handle_cache == NULL) {
 		printk(KERN_EMERG "JBD: failed to create handle cache\n");
 		return -ENOMEM;

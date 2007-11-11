@@ -1,7 +1,7 @@
-/* $Id: data_lump.c,v 1.14.6.1 2003/11/24 14:00:34 janakj Exp $
+/* $Id: data_lump.c,v 1.18.2.1 2005/07/27 12:32:22 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,10 +28,10 @@
  * --------
  *  2003-01-19  support for duplication lump lists added (jiri)
  *  2003-03-31  added subst lumps --they expand in ip addr, port a.s.o (andrei)
- *  2003-04-01  added conditional lump suport functions (andrei)
+ *  2003-04-01  added conditional lump support functions (andrei)
  *  2003-10-20  anchor_lump & del_lump will automatically choose the lump list
  *              based on  msg->eoh comparisons (andrei)
- *  
+ *  2003-10-28  added extra checks (paranoia) for {anchor,del}_lump (andrei)
  */
 
 
@@ -257,7 +257,7 @@ struct lump* insert_cond_lump_before(	struct lump* before,
 
 
 /* removes an already existing header/data lump */
-/* WARNING: thist function adds the lump either to the msg->add_rm or
+/* WARNING: this function adds the lump either to the msg->add_rm or
  * msg->body_lumps list, depending on the offset being greater than msg->eoh,
  * so msg->eoh must be parsed (parse with HDR_EOH) if you think your lump
  *  might affect the body!! */
@@ -267,6 +267,22 @@ struct lump* del_lump(struct sip_msg* msg, int offset, int len, int type)
 	struct lump* prev, *t;
 	struct lump** list;
 
+	/* extra checks */
+	if (offset>msg->len){
+		LOG(L_CRIT, "BUG: del_lump: offset exceeds message size (%d > %d)"
+					" aborting...\n", offset, msg->len);
+		abort();
+	}
+	if (offset+len>msg->len){
+		LOG(L_CRIT, " BUG: del_lump: offset + len exceeds message"
+				" size (%d + %d > %d)\n", offset, len,  msg->len);
+		abort();
+	}
+	if (len==0){
+		LOG(L_WARN, "WARNING: del_lump: called with 0 len (offset =%d)\n",
+				offset);
+	}
+	
 	tmp=pkg_malloc(sizeof(struct lump));
 	if (tmp==0){
 		LOG(L_ERR, "ERROR: insert_new_lump_before: out of memory\n");
@@ -297,7 +313,7 @@ struct lump* del_lump(struct sip_msg* msg, int offset, int len, int type)
 
 
 /* add an anchor
- * WARNING: thist function adds the lump either to the msg->add_rm or
+ * WARNING: this function adds the lump either to the msg->add_rm or
  * msg->body_lumps list, depending on the offset being greater than msg->eoh,
  * so msg->eoh must be parsed (parse with HDR_EOH) if you think your lump
  *  might affect the body!! */
@@ -307,6 +323,19 @@ struct lump* anchor_lump(struct sip_msg* msg, int offset, int len, int type)
 	struct lump* prev, *t;
 	struct lump** list;
 
+	
+	/* extra checks */
+	if (offset>msg->len){
+		LOG(L_CRIT, "BUG: anchor_lump: offset exceeds message size (%d > %d)"
+					" aborting...\n", offset, msg->len);
+		abort();
+	}
+	if (len){
+		LOG(L_WARN, "WARNING: anchor_lump: called with len !=0 (%d)\n", len);
+		if (offset+len>msg->len)
+			LOG(L_WARN, "WARNING: anchor_lump: offset + len exceeds message"
+					" size (%d + %d > %d)\n", offset, len,  msg->len);
+	}
 	
 	tmp=pkg_malloc(sizeof(struct lump));
 	if (tmp==0){
@@ -343,9 +372,17 @@ struct lump* anchor_lump(struct sip_msg* msg, int offset, int len, int type)
 void free_lump(struct lump* lmp)
 {
 	if (lmp && (lmp->op==LUMP_ADD)){
-		if (lmp->u.value) pkg_free(lmp->u.value);
-		lmp->u.value=0;
-		lmp->len=0;
+		if (lmp->u.value){
+			if (lmp->flags &(LUMPFLAG_DUPED|LUMPFLAG_SHMEM)){
+				LOG(L_CRIT, "BUG: free_lump: called on a not free-able lump:"
+						"%p flags=%x\n", lmp, lmp->flags);
+				abort();
+			}else{
+				pkg_free(lmp->u.value);
+				lmp->u.value=0;
+				lmp->len=0;
+			}
+		}
 	}
 }
 
@@ -455,6 +492,8 @@ deeperror:
 	return 0;
 }
 
+
+
 /* shallow pkg copy of a lump list
  *
  * if either original list empty or error occur returns, 0
@@ -468,6 +507,8 @@ struct lump* dup_lump_list( struct lump *l )
 	return dup_lump_list_r(l, LD_NEXT, &deep_error);
 }
 
+
+
 void free_duped_lump_list(struct lump* l)
 {
 	struct lump *r, *foo,*crt;
@@ -480,7 +521,7 @@ void free_duped_lump_list(struct lump* l)
 			foo=r; r=r->before;
 			/* (+): if a new item was introduced to the shallow-ly
 			 * duped list, remove it completely, preserve it
-			 * othewise (it is still refered by original list)
+			 * otherwise (it is still referred by original list)
 			 */
 			if (foo->flags!=LUMPFLAG_DUPED) 
 					free_lump(foo);
@@ -498,6 +539,59 @@ void free_duped_lump_list(struct lump* l)
 		if (crt->flags!=LUMPFLAG_DUPED) /* (+) ... see above */
 			free_lump(crt);
 		pkg_free(crt);
+	}
+}
+
+
+
+void del_nonshm_lump( struct lump** lump_list )
+{
+	struct lump *r, *foo, *crt, **prev, *prev_r;
+
+	prev = lump_list;
+	crt = *lump_list;
+
+	while (crt) {
+		if (crt->flags!=LUMPFLAG_SHMEM) {
+			/* unlink it */
+			foo = crt;
+			crt = crt->next;
+			foo->next = 0;
+			/* update the 'next' link of the previous lump */
+			*prev = crt;
+			/* entire before/after list must be removed */
+			free_lump_list( foo );
+		} else {
+			/* check on before and prev list for non-shmem lumps */
+			r = crt->after;
+			prev_r = crt;
+			while(r){
+				foo=r; r=r->after;
+				if (foo->flags!=LUMPFLAG_SHMEM) {
+					prev_r->after = r;
+					free_lump(foo);
+					pkg_free(foo);
+				} else {
+					prev_r = foo;
+				}
+			}
+			/* before */
+			r = crt->before;
+			prev_r = crt;
+			while(r){
+				foo=r; r=r->before;
+				if (foo->flags!=LUMPFLAG_SHMEM) {
+					prev_r->before = r;
+					free_lump(foo);
+					pkg_free(foo);
+				} else {
+					prev_r = foo;
+				}
+			}
+			/* go to next lump */
+			prev = &(crt->next);
+			crt = crt->next;
+		}
 	}
 }
 

@@ -10,7 +10,7 @@
 
 #ifdef WANT_UNIX
 char	nettest_unix_id[]="\
-@(#)nettest_unix.c (c) Copyright 1994-2004 Hewlett-Packard Co. Version 2.4.1";
+@(#)nettest_unix.c (c) Copyright 1994-2007 Hewlett-Packard Co. Version 2.4.3";
      
 /****************************************************************/
 /*								*/
@@ -3369,6 +3369,12 @@ scan_unix_args(int argc, char *argv[])
     arg2[BUFSIZ];
   
   init_test_vars();
+
+  if (no_control) {
+    fprintf(where,
+	    "The UNIX tests do not know how to run with no control connection\n");
+    exit(-1);
+  }
 
   /* Go through all the command line arguments and break them */
   /* out. For those options that take two parms, specifying only */

@@ -214,7 +214,7 @@ extern int ppd;
 extern int switch_io;           /* jz */
 extern int control_fd;
 extern int start_pppd (struct call *c, struct ppp_opts *);
-extern void magic_lac_dial (void *);
+extern int magic_lac_dial (void *);
 extern int get_entropy (char *, int);
 
 #ifndef MIN

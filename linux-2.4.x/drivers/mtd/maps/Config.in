@@ -199,6 +199,10 @@ if [ "$CONFIG_COBRA5282" = "y" ]; then
 	dep_tristate '  CFI Flash device mapped on COBRA5282' CONFIG_MTD_COBRA5282 $CONFIG_MTD_CFI
 fi
 
+if [ "$CONFIG_mfc3000" ]; then
+   dep_tristate '  CFI Flash device mapped on Serra mfc3000' CONFIG_MTD_mfc3000 $CONFIG_MTD_CFI
+fi
+
 if [ "$CONFIG_BLACKFIN" = "y" ]; then
    dep_tristate '  ADDS-BF533-EZLITE Flash support' CONFIG_MTD_BLACKFIN_533 $CONFIG_MTD_PARTITIONS $CONFIG_BLACKFIN_EZKIT
 fi

@@ -19,7 +19,8 @@
  */
  
 #include <includes.h>
-#ifndef _CYGWIN_
+
+#if !defined (_CYGWIN_) && defined (_HAVE_RESOLV_)
 #include "hosts_gatherer.h"
 #include "hg_filter.h"
 #include "hg_utils.h"

@@ -27,6 +27,7 @@
  *    <int>         byte location to check if there is data
  *    ["relative"]  look for byte location relative to the end of the last
  *                  pattern match
+ *    ["rawbytes"]  force use of the non-normalized buffer.
  *   
  * Sample:
  *   alert tcp any any -> any 110 (msg:"POP3 user overflow"; \
@@ -62,10 +63,14 @@ extern int file_line;    /* this is the file line number from rules.c that is
 
 extern u_int8_t *doe_ptr;
 
+#define ISDATAAT_RELATIVE_FLAG 0x01
+#define ISDATAAT_RAWBYTES_FLAG 0x02
+
 typedef struct _IsDataAtData
 {
     u_int32_t offset;        /* byte location into the packet */
-    u_int8_t  relative_flag; /* relative to the doe_ptr? */
+    u_int8_t  flags;         /* relative to the doe_ptr? */
+                             /* rawbytes buffer? */
 } IsDataAtData;
 
 extern u_int8_t DecodeBuffer[DECODE_BLEN];
@@ -135,7 +140,7 @@ void IsDataAtInit(char *data, OptTreeNode *otn, int protocol)
      */
     fpl->context = (void *) idx;
 
-    if (idx->relative_flag)
+    if (idx->flags & ISDATAAT_RELATIVE_FLAG)
         fpl->isRelative = 1;
 }
 
@@ -159,12 +164,13 @@ void IsDataAtParse(char *data, IsDataAtData *idx, OptTreeNode *otn)
 {
     char **toks;
     int num_toks;
+    int i;
     char *cptr;
     char *endp;
 
-    toks = mSplit(data, ",", 2, &num_toks, 0);
+    toks = mSplit(data, ",", 3, &num_toks, 0);
 
-    if(num_toks > 2) 
+    if(num_toks > 3) 
         FatalError("ERROR %s (%d): Bad arguments to IsDataAt: %s\n", file_name,
                 file_line, data);
 
@@ -183,16 +189,21 @@ void IsDataAtParse(char *data, IsDataAtData *idx, OptTreeNode *otn)
                 file_name, file_line);
     }
 
-    if(num_toks > 1)
+    for (i=1; i< num_toks; i++)
     {
-        cptr = toks[1];
+        cptr = toks[i];
 
         while(isspace((int)*cptr)) {cptr++;}
 
         if(!strcasecmp(cptr, "relative"))
         {
             /* the offset is relative to the last pattern match */
-            idx->relative_flag = 1;
+            idx->flags |= ISDATAAT_RELATIVE_FLAG;
+        }
+        else if(!strcasecmp(cptr, "rawbytes"))
+        {
+            /* the offset is to be applied to the non-normalized buffer */
+            idx->flags |= ISDATAAT_RAWBYTES_FLAG;
         }
         else
         {
@@ -226,8 +237,24 @@ int IsDataAt(Packet *p, struct _OptTreeNode *otn, OptFpList *fp_list)
     int dsize;
     char *base_ptr, *end_ptr, *start_ptr;
 
-    if(p->packet_flags & PKT_ALT_DECODE)
+    isdata = (IsDataAtData *) fp_list->context;
+
+    if (!isdata)
     {
+        return 0;
+    }
+
+    if (isdata->flags & ISDATAAT_RAWBYTES_FLAG)
+    {
+        /* Rawbytes specified, force use of that buffer */
+        dsize = p->dsize;
+        start_ptr = (char *) p->data;
+        DEBUG_WRAP(DebugMessage(DEBUG_PATTERN_MATCH, 
+                    "Using RAWBYTES buffer!\n"););
+    }
+    else if(p->packet_flags & PKT_ALT_DECODE)
+    {
+        /* If normalized buffer available, use it... */
         dsize = p->alt_dsize;
         start_ptr = (char *)DecodeBuffer;
         DEBUG_WRAP(DebugMessage(DEBUG_PATTERN_MATCH, 
@@ -252,9 +279,7 @@ int IsDataAt(Packet *p, struct _OptTreeNode *otn, OptFpList *fp_list)
         }
     }
 
-    isdata = (IsDataAtData *) fp_list->context;
-
-    if(isdata->relative_flag && doe_ptr)
+    if((isdata->flags & ISDATAAT_RELATIVE_FLAG) && doe_ptr)
     {
         DEBUG_WRAP(DebugMessage(DEBUG_PATTERN_MATCH,
                                 "Checking relative offset!\n"););

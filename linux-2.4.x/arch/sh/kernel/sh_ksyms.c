@@ -99,13 +99,13 @@ DECLARE_EXPORT(__ashldi3);
 DECLARE_EXPORT(__lshrdi3);
 DECLARE_EXPORT(__movstr);
 
-#if defined(__sh3__) || defined(__SH4__)
+#if defined(CONFIG_CPU_SH3) || defined(CONFIG_CPU_SH4)
 EXPORT_SYMBOL(__flush_purge_region);
 EXPORT_SYMBOL(__flush_wback_region);
 EXPORT_SYMBOL(__flush_invalidate_region);
 #endif
 
-#ifdef __SH4__
+#ifdef CONFIG_CPU_SH4
  
 DECLARE_EXPORT(__sdivsi3_i4);
 DECLARE_EXPORT(__movstr_i4_even);

@@ -1,44 +1,37 @@
 /* mpf_mul -- Multiply two floats.
 
-Copyright (C) 1993, 1994, 1996 Free Software Foundation, Inc.
+Copyright 1993, 1994, 1996, 2001, 2005 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 void
-#if __STDC__
 mpf_mul (mpf_ptr r, mpf_srcptr u, mpf_srcptr v)
-#else
-mpf_mul (r, u, v)
-     mpf_ptr r;
-     mpf_srcptr u;
-     mpf_srcptr v;
-#endif
 {
   mp_srcptr up, vp;
   mp_size_t usize, vsize;
   mp_size_t sign_product;
   mp_size_t prec = r->_mp_prec;
-  TMP_DECL (marker);
+  TMP_DECL;
 
-  TMP_MARK (marker);
+  TMP_MARK;
   usize = u->_mp_size;
   vsize = v->_mp_size;
   sign_product = usize ^ vsize;
@@ -90,5 +83,5 @@ mpf_mul (r, u, v)
       r->_mp_exp = u->_mp_exp + v->_mp_exp - adj;
       r->_mp_size = sign_product >= 0 ? rsize : -rsize;
     }
-  TMP_FREE (marker);
+  TMP_FREE;
 }

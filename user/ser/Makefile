@@ -1,5 +1,4 @@
--include hostbuild.mak
-# $Id: Makefile,v 1.120.2.2.4.3 2004/07/26 23:18:34 andrei Exp $
+# $Id: Makefile,v 1.136.2.5 2005/11/02 17:45:38 andrei Exp $
 #
 # sip_router makefile
 #
@@ -28,105 +27,12 @@
 #  2003-08-29  install-modules-doc split from install-doc, added 
 #               install-modules-all, removed README.cfg (andrei)
 #              added skip_cfg_install (andrei)
+#  2004-09-02  install-man will automatically "fix" the path of the files
+#               referred in the man pages
 #
 
-# Set this if you have a /dev/random which really works
-# HAVE_DEV_RANDOM=1
-
-#
-# Keep the flexibility of the original Makefile by recursively calling it
-# with the required parameters.
-#
-ifndef HAVE_RUN_SNAPGEAR_WRAPPER
-
-export HAVE_RUN_SNAPGEAR_WRAPPER = true
-PWD = $(shell pwd)
-
-MODULES = \
-	modules/auth \
-	modules/auth_db \
-	modules/dbtext \
-	modules/maxfwd \
-	modules/mysql \
-	modules/registrar \
-	modules/rr \
-	modules/sl \
-	modules/textops \
-	modules/tm \
-	modules/usrloc
-
-# The Real-Time-Proxy requires an external App and the nathelper module
-ifeq ($(CONFIG_USER_SER_RTPPROXY),y)
-MODULES  += modules/nathelper
-RTPPROXY = rtpproxy/build/rtpproxy
-GEN_HA1 = utils/gen_ha1/gen_ha1
-endif # CONFIG_USER_SER_RTPPROXY
-
-.PHONY: all
-all: $(GEN_HA1) $(RTPPROXY)
-	$(MAKE) ser -C $(PWD)
-	$(MAKE) modules="$(MODULES)" modules -C $(PWD)
-
-$(GEN_HA1):
-	$(MAKE) -C utils/gen_ha1
-
-ifeq ($(CONFIG_USER_SER_RTPPROXY),y)
-
-$(RTPPROXY):
-	$(MAKE) -C rtpproxy/
-
-endif # CONFIG_USER_SER_RTPPROXY
-
-	
-.PHONY: romfs
-romfs:
-	$(ROMFSINST) -e CONFIG_USER_SER_SER /bin/ser
-	$(ROMFSINST) -e CONFIG_USER_SER_SER $(GEN_HA1) /bin/gen_ha1
-ifeq ($(CONFIG_USER_SER_SER),y)
-	if test \! -e $(ROMFSDIR)/lib/ser; then mkdir $(ROMFSDIR)/lib/ser; fi
-	chmod 700 $(ROMFSDIR)/lib/ser
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/auth/auth.so /lib/ser/auth.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/auth_db/auth_db.so /lib/ser/auth_db.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/dbtext/dbtext.so /lib/ser/dbtext.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/maxfwd/maxfwd.so /lib/ser/maxfwd.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/mysql/mysql.so /lib/ser/mysql.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/registrar/registrar.so /lib/ser/registrar.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/rr/rr.so /lib/ser/rr.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/sl/sl.so /lib/ser/sl.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/textops/textops.so /lib/ser/textops.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/tm/tm.so /lib/ser/tm.so
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/usrloc/usrloc.so /lib/ser/usrloc.so
-
-# Install synchronous RTP client support
-ifeq ($(CONFIG_USER_SER_RTPPROXY),y)
-
-	$(ROMFSINST) -e CONFIG_USER_SER_SER modules/nathelper/nathelper.so /lib/ser/nathelper.so
-	$(MAKE) romfs -C rtpproxy/
-
-endif # CONFIG_USER_SER_RTPPROXY
-
-endif # CONFIG_USER_SER_SER
-
-.PHONY: clean 
-clean: modules_clean rtpproxy_clean
-	$(MAKE) clean
-
-.PHONY: modules_clean
-modules_clean:
-	for r in $(MODULES) "" ; do \
-		if [ -n "$$r" ]; then \
-			echo "module $$r" ; \
-			$(MAKE) -C $$r clean ; \
-		fi ; \
-	done
-
-.PHONY: rtpproxy_clean
-rtpproxy_clean:
-	@$(MAKE) clean -C rtpproxy/
-
-else # HAVE_RUN_SNAPGEAR_WRAPPER
-
-auto_gen=lex.yy.c cfg.tab.c   #lexx, yacc etc
+auto_gen=lex.yy.c cfg.tab.c #lexx, yacc etc
+auto_gen_others=cfg.tab.h  # auto generated, non-c
 
 #include  source related defs
 include Makefile.sources
@@ -140,11 +46,13 @@ skip_cfg_install?=
 skip_modules?=
 
 # if not set on the cmd. line or the env, exclude this modules:
-exclude_modules?= 			cpl cpl-c extcmd \
+exclude_modules?= 			cpl ext extcmd \
 							postgres snmp \
 							im \
 							jabber mysql \
-							auth_radius group_radius uri_radius 
+							cpl-c \
+							auth_radius group_radius uri_radius avp_radius \
+							pa
 # always exclude the CVS dir
 override exclude_modules+= CVS $(skip_modules)
 
@@ -188,14 +96,11 @@ makefile_defs=0
 DEFS:=
 include Makefile.defs
 
-ifdef HAVE_DEV_RANDOM
-CFLAGS += -DDEV_RANDOM=\"/dev/random\"
-endif
-
 NAME=$(MAIN_NAME)
 
 #export relevant variables to the sub-makes
-export DEFS PROFILE CC  LD MKDEP MKTAGS CFLAGS LDFLAGS MOD_CFLAGS MOD_LDFLAGS
+export DEFS PROFILE CC LD MKDEP MKTAGS CFLAGS LDFLAGS MOD_CFLAGS MOD_LDFLAGS 
+export LIBS
 export LEX YACC YACC_FLAGS
 export PREFIX LOCALBASE
 # export relevant variables for recursive calls of this makefile 
@@ -209,6 +114,8 @@ export PREFIX LOCALBASE
 #export INSTALL INSTALL-CFG INSTALL-BIN INSTALL-MODULES INSTALL-DOC INSTALL-MAN 
 #export INSTALL-TOUCH
 
+tar_extra_args+=$(addprefix --exclude=$(notdir $(CURDIR))/, \
+					$(auto_gen) $(auto_gen_others))
 ifneq ($(TLS),)
 	tar_extra_args+=
 else
@@ -219,7 +126,7 @@ include Makefile.rules
 
 #extra targets 
 
-$(NAME): static_modules
+$(NAME): $(extra_objs) # static_modules
 
 lex.yy.c: cfg.lex cfg.tab.h $(ALLDEP)
 	$(LEX) $<
@@ -242,8 +149,7 @@ modules:
 		fi ; \
 	done 
 
-.PHONY: static_modules
-static_modules:
+$(extra_objs):
 	-@echo "Extra objs: $(extra_objs)" 
 	-@for r in $(static_modules_path) "" ; do \
 		if [ -n "$$r" ]; then \
@@ -267,7 +173,8 @@ tar:
 	$(TAR) -C .. \
 		--exclude=$(notdir $(CURDIR))/test* \
 		--exclude=$(notdir $(CURDIR))/tmp* \
-		--exclude=$(notdir $(CURDIR))/debian/ser* \
+		--exclude=$(notdir $(CURDIR))/debian/ser \
+		--exclude=$(notdir $(CURDIR))/debian/ser-* \
 		--exclude=$(notdir $(CURDIR))/ser_tls* \
 		--exclude=CVS* \
 		--exclude=.cvsignore \
@@ -320,6 +227,7 @@ sunpkg:
 	rm -rf tmp/ser_sun_pkg
 
 
+.PHONY: install
 install: all mk-install-dirs install-cfg install-bin install-modules \
 	install-doc install-man
 
@@ -332,6 +240,7 @@ dbinstall:
 mk-install-dirs: $(cfg-prefix)/$(cfg-dir) $(bin-prefix)/$(bin-dir) \
 			$(modules-prefix)/$(modules-dir) $(doc-prefix)/$(doc-dir) \
 			$(man-prefix)/$(man-dir)/man8 $(man-prefix)/$(man-dir)/man5
+
 
 $(cfg-prefix)/$(cfg-dir): 
 		mkdir -p $(cfg-prefix)/$(cfg-dir)
@@ -362,9 +271,12 @@ install-cfg: $(cfg-prefix)/$(cfg-dir)
 			mv -f $(cfg-prefix)/$(cfg-dir)ser.cfg.sample \
 				$(cfg-prefix)/$(cfg-dir)ser.cfg; \
 		fi
+		# radius dictionary
+		$(INSTALL-TOUCH) $(cfg-prefix)/$(cfg-dir)/dictionary.ser 
+		$(INSTALL-CFG) etc/dictionary.ser $(cfg-prefix)/$(cfg-dir)
 #		$(INSTALL-CFG) etc/ser.cfg $(cfg-prefix)/$(cfg-dir)
 
-install-bin: $(bin-prefix)/$(bin-dir) utils/gen_ha1/gen_ha1
+install-bin: $(bin-prefix)/$(bin-dir) utils/gen_ha1/gen_ha1 utils/serunix/serunix
 		$(INSTALL-TOUCH) $(bin-prefix)/$(bin-dir)/ser 
 		$(INSTALL-BIN) ser $(bin-prefix)/$(bin-dir)
 		$(INSTALL-TOUCH)   $(bin-prefix)/$(bin-dir)/sc
@@ -374,9 +286,14 @@ install-bin: $(bin-prefix)/$(bin-dir) utils/gen_ha1/gen_ha1
 		$(INSTALL-BIN) scripts/ser_mysql.sh  $(bin-prefix)/$(bin-dir)
 		$(INSTALL-TOUCH)   $(bin-prefix)/$(bin-dir)/gen_ha1
 		$(INSTALL-BIN) utils/gen_ha1/gen_ha1 $(bin-prefix)/$(bin-dir)
+		$(INSTALL-TOUCH)   $(bin-prefix)/$(bin-dir)/serunix
+		$(INSTALL-BIN) utils/serunix/serunix $(bin-prefix)/$(bin-dir)
 
 utils/gen_ha1/gen_ha1:
 		cd utils/gen_ha1; $(MAKE) all
+
+utils/serunix/serunix:
+		cd utils/serunix; $(MAKE) all
 
 install-modules: modules $(modules-prefix)/$(modules-dir)
 	-@for r in $(modules_full_path) "" ; do \
@@ -423,9 +340,15 @@ install-modules-doc: $(doc-prefix)/$(doc-dir)
 
 
 install-man: $(man-prefix)/$(man-dir)/man8 $(man-prefix)/$(man-dir)/man5
-	$(INSTALL-TOUCH)  $(man-prefix)/$(man-dir)/man8/ser.8 
-	$(INSTALL-MAN)  ser.8 $(man-prefix)/$(man-dir)/man8
-	$(INSTALL-TOUCH)  $(man-prefix)/$(man-dir)/man5/ser.cfg.5 
-	$(INSTALL-MAN)  ser.cfg.5 $(man-prefix)/$(man-dir)/man5
-
-endif # HAVE_RUN_SNAPGEAR_WRAPPER
+		sed -e "s#/etc/ser/ser\.cfg#$(cfg-target)ser.cfg#g" \
+			-e "s#/usr/sbin/#$(bin-target)#g" \
+			-e "s#/usr/lib/ser/modules/#$(modules-target)#g" \
+			-e "s#/usr/share/doc/ser/#$(doc-target)#g" \
+			< ser.8 >  $(man-prefix)/$(man-dir)/man8/ser.8
+		chmod 644  $(man-prefix)/$(man-dir)/man8/ser.8
+		sed -e "s#/etc/ser/ser\.cfg#$(cfg-target)ser.cfg#g" \
+			-e "s#/usr/sbin/#$(bin-target)#g" \
+			-e "s#/usr/lib/ser/modules/#$(modules-target)#g" \
+			-e "s#/usr/share/doc/ser/#$(doc-target)#g" \
+			< ser.cfg.5 >  $(man-prefix)/$(man-dir)/man5/ser.cfg.5
+		chmod 644  $(man-prefix)/$(man-dir)/man5/ser.cfg.5

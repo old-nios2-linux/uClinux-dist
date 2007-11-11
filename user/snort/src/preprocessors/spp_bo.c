@@ -269,17 +269,17 @@ static void ProcessArgs(u_char *args)
     if ( args == NULL )
         return;
 
-    arg = strtok(args, CONF_SEPARATORS);
+    arg = strtok((char *)args, CONF_SEPARATORS);
     
     while ( arg != NULL )
     {
         if ( !strcasecmp("noalert", arg) )
         {
-            noalert_flags = ProcessOptionList();
+            noalert_flags = (u_int16_t)ProcessOptionList();
         }
         else if ( !strcasecmp("drop", arg) )
         {
-            drop_flags = ProcessOptionList();
+            drop_flags = (u_int16_t)ProcessOptionList();
         }
         else
         {
@@ -321,7 +321,7 @@ static int ProcessOptionList(void)
         return 0;
     }
     
-    while ( (arg = strtok(NULL, CONF_SEPARATORS)) )
+    while ( (arg = strtok(NULL, CONF_SEPARATORS)) != NULL )
     {
         if ( !strcmp(END_LIST, arg) )
         {
@@ -434,6 +434,9 @@ static void PrecalcPrefix()
     int cookie_index;
     char *cp_ptr;       /* cookie plaintext indexing pointer */
     u_int16_t cyphertext_referent;
+
+    memset(&lookup1[0], 0, sizeof(lookup1));
+    memset(&lookup2[0], 0, sizeof(lookup2));
     
     for(key=0;key<65536;key++)
     {
@@ -460,16 +463,16 @@ static void PrecalcPrefix()
         {
             if(lookup1[cyphertext_referent][1] != 0)
             {
-                lookup1[cyphertext_referent][2] = key;
+                lookup1[cyphertext_referent][2] = (u_int16_t)key;
             }
             else
             {
-                lookup1[cyphertext_referent][1] = key;
+                lookup1[cyphertext_referent][1] = (u_int16_t)key;
             }
         }
         else
         {
-            lookup1[cyphertext_referent][0] = key;
+            lookup1[cyphertext_referent][0] = (u_int16_t)key;
         }
 
         /* 
@@ -581,7 +584,7 @@ void BoFind(Packet *p, void *context)
             DEBUG_WRAP(DebugMessage(DEBUG_PLUGIN, 
                         "Detected Back Orifice Data!\n");
             DebugMessage(DEBUG_PLUGIN, "hash value: %d\n", key););
-            
+
             bo_direction = BoGetDirection(p, pkt_data);
 
             if ( bo_direction == BO_FROM_CLIENT )
@@ -663,7 +666,7 @@ static int BoGetDirection(Packet *p, char *pkt_data)
     char type;
     static char buf1[BO_BUF_SIZE];
     char plaintext;
-    
+
     /* Check for the default port on either side */
     if ( p->dp == BACKORIFICE_DEFAULT_PORT )
     {
@@ -715,31 +718,32 @@ static int BoGetDirection(Packet *p, char *pkt_data)
     }
 
     /* Adjust for BO packet header length */
-    len -= BACKORIFICE_MIN_SIZE;
-
-    if( len == 0 )
+    if (len <= BACKORIFICE_MIN_SIZE)
     {
         /* Need some data, or we can't figure out client or server */
         return BO_FROM_UNKNOWN; 
     }
-    
+    else
+    {
+        len -= BACKORIFICE_MIN_SIZE;
+    }
+
     if( len > 7 )
     {
         len = 7; /* we need no more than  7 variable chars */
     }
 
-    /* length must be 7 OR LESS due to above logic  */
-  
-    if( p->dsize < len )
+    /* Continue parsing BO header */
+    type = (char) (*pkt_data ^ BoRand());
+    pkt_data++;
+
+    /* check to make sure we don't run off end of packet */
+    if (p->dsize - ((u_int8_t *)pkt_data - p->data) < len)
     {
         /* We don't have enough data to inspect */
         return BO_FROM_UNKNOWN;
     }
     
-    /* Continue parsing BO header */
-    type = (char) (*pkt_data ^ BoRand());
-    pkt_data++;
-        
     if ( type & 0x80 )
     {
         DEBUG_WRAP(DebugMessage(DEBUG_PLUGIN, "Partial packet\n"););

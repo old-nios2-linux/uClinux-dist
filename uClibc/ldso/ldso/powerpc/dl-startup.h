@@ -1,28 +1,62 @@
 /* Any assmbly language/system dependent hacks needed to setup boot1.c so it
  * will work as expected and cope with whatever platform specific wierdness is
- * needed for this architecture.  */
+ * needed for this architecture.
+ * Copyright (C) 2005 by Joakim Tjernlund
+ */
 
-/* Overrive the default _dl_boot function, and replace it with a bit of asm.
- * Then call the real _dl_boot function, which is now named _dl_boot2. */
 asm(
     "	.text\n"
-    "	.globl	_dl_boot\n"
-    "	.type	_dl_boot,@function\n"
-    "_dl_boot:\n"
-    "	mr	3,1\n" /* Pass SP to _dl_boot2 in r3 */
-    "	addi	1,1,-16\n" /* Make room on stack for _dl_boot2 to store LR */
-    "	li	4,0\n"
-    "	stw	4,0(1)\n" /* Clear Stack frame */
-    "	bl	_dl_boot2@local\n" /* Perform relocation */
+    "	.globl	_start\n"
+    "	.type	_start,@function\n"
+    "_start:\n"
+    "	mr	3,1\n" /* Pass SP to _dl_start in r3 */
+    "	li	0,0\n"
+    "	stwu	1,-16(1)\n" /* Make room on stack for _dl_start to store LR */
+    "	stw	0,0(1)\n" /* Clear Stack frame */
+    "	bl	_dl_start@local\n" /* Perform relocation */
+    /*  Save the address of the apps entry point in CTR register */
+    "	mtctr	3\n" /* application entry point */
+#ifdef HAVE_ASM_PPC_REL16
+    "	bcl	20,31,1f\n"
+    "1:	mflr	31\n"
+    "	addis	31,31,_GLOBAL_OFFSET_TABLE_-1b@ha\n"
+    "	addi	31,31,_GLOBAL_OFFSET_TABLE_-1b@l\n"
+#else
+    "	bl	_GLOBAL_OFFSET_TABLE_-4@local\n" /*  Put our GOT pointer in r31, */
+    "	mflr	31\n"
+#endif
     "	addi	1,1,16\n" /* Restore SP */
-    "	mtctr	3\n" /* Load applications entry point */
+    "	lwz	7,_dl_skip_args@got(31)\n" /* load EA of _dl_skip_args */
+    "	lwz	7,0(7)\n"	/* Load word from _dl_skip_args */
+    "	lwz	8,0(1)\n"	/* Load argc from stack */
+    "	subf	8,7,8\n"	/* Subtract _dl_skip_args from argc. */
+    "	slwi	7,7,2\n"	/* Multiply by 4 */
+    "	stwux	8,1,7\n"	/* Adjust the stack pointer to skip _dl_skip_args words and store adjusted argc on stack. */
+#if 0
+    /* Try beeing SVR4 ABI compliant?, even though it is not needed for uClibc on Linux */
+    /* argc */
+    "	lwz	3,0(1)\n"
+    /* find argv one word offset from the stack pointer */
+    "	addi	4,1,4\n"
+    /* find environment pointer (argv+argc+1) */
+    "	lwz	5,0(1)\n"
+    "	addi	5,5,1\n"
+    "	rlwinm	5,5,2,0,29\n"
+    "	add	5,5,4\n"
+    /* pass the auxilary vector in r6. This is passed to us just after _envp.  */
+    "2:	lwzu	0,4(6)\n"
+    "	cmpwi	0,0\n"
+    "	bne	2b\n"
+    "	addi	6,6,4\n"
+#endif
+    /* Pass a termination function pointer (in this case _dl_fini) in r3. */
+    /* Paulus promized he would keep r3 zero in the exec ABI. */
+    "	lwz	3,_dl_fini@got(31)\n"
+    "	mr	7,3\n"		/* Pass _dl_fini in r7 to maintain compat */
     "	bctr\n" /* Jump to entry point */
-    "	.size	_dl_boot,.-_dl_boot\n"
+    "	.size	_start,.-_start\n"
     "	.previous\n"
 );
-
-
-#define DL_BOOT(X) static void* __attribute_used__ _dl_boot2(X)
 
 /*
  * Get a pointer to the argv array.  On many platforms this can be just
@@ -53,9 +87,3 @@ asm(
 		_dl_exit(100+ELF32_R_TYPE((RELP)->r_info));\
 	}						\
 	}
-/*
- * Transfer control to the user's application, once the dynamic loader
- * is done.  This routine has to exit the current function, then
- * call the _dl_elf_main function.
- */
-#define START()	    return _dl_elf_main

@@ -31,7 +31,7 @@ static int INLINE IsIPv4Packet(FLOWPACKET *p)
 {
     FLOWASSERT(p);
 
-    if(p->iph)
+    if(p && p->iph)
         return 1;
     
     return 0;

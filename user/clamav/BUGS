@@ -1,8 +1,1 @@
-If you want to help, compile clamav with:
-./configure --enable-debug
-and enable Foreground option in clamd.conf.
-
-Known bugs:
------------
-
--) unrarlib doesn't work on 64-bit systems (FIXED IN CVS!)
+http://bugs.clamav.net/

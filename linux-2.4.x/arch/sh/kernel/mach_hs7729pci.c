@@ -29,7 +29,7 @@ void init_hs7729pci_IRQ(void);
 struct sh_machine_vector mv_hs7729pci __initmv = {
 	mv_name:		"HS7729PCI",
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	mv_nr_irqs:		48,
 #elif defined(CONFIG_CPU_SUBTYPE_SH7708)
 	mv_nr_irqs:		32,

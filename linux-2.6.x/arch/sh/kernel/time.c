@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 1999  Tetsuya Okada & Niibe Yutaka
  *  Copyright (C) 2000  Philipp Rumpf <prumpf@tux.org>
- *  Copyright (C) 2002 - 2006  Paul Mundt
+ *  Copyright (C) 2002 - 2007  Paul Mundt
  *  Copyright (C) 2002  M. R. Brown  <mrbrown@linux-sh.org>
  *
  *  Some code taken from i386 version.
@@ -13,6 +13,9 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/profile.h>
+#include <linux/timex.h>
+#include <linux/sched.h>
+#include <linux/clockchips.h>
 #include <asm/clock.h>
 #include <asm/rtc.h>
 #include <asm/timer.h>
@@ -36,29 +39,34 @@ static int null_rtc_set_time(const time_t secs)
 	return 0;
 }
 
+/*
+ * Null high precision timer functions for systems lacking one.
+ */
+static cycle_t null_hpt_read(void)
+{
+	return 0;
+}
+
 void (*rtc_sh_get_time)(struct timespec *) = null_rtc_get_time;
 int (*rtc_sh_set_time)(const time_t) = null_rtc_set_time;
-
-/*
- * Scheduler clock - returns current time in nanosec units.
- */
-unsigned long long __attribute__ ((weak)) sched_clock(void)
-{
-	return (unsigned long long)jiffies * (1000000000 / HZ);
-}
 
 #ifndef CONFIG_GENERIC_TIME
 void do_gettimeofday(struct timeval *tv)
 {
+	unsigned long flags;
 	unsigned long seq;
 	unsigned long usec, sec;
 
 	do {
-		seq = read_seqbegin(&xtime_lock);
+		/*
+		 * Turn off IRQs when grabbing xtime_lock, so that
+		 * the sys_timer get_offset code doesn't have to handle it.
+		 */
+		seq = read_seqbegin_irqsave(&xtime_lock, flags);
 		usec = get_timer_offset();
 		sec = xtime.tv_sec;
-		usec += xtime.tv_nsec / 1000;
-	} while (read_seqretry(&xtime_lock, seq));
+		usec += xtime.tv_nsec / NSEC_PER_USEC;
+	} while (read_seqretry_irqrestore(&xtime_lock, seq, flags));
 
 	while (usec >= 1000000) {
 		usec -= 1000000;
@@ -85,7 +93,7 @@ int do_settimeofday(struct timespec *tv)
 	 * wall time.  Discover what correction gettimeofday() would have
 	 * made, and then undo it!
 	 */
-	nsec -= 1000 * get_timer_offset();
+	nsec -= get_timer_offset() * NSEC_PER_USEC;
 
 	wtm_sec  = wall_to_monotonic.tv_sec + (xtime.tv_sec - sec);
 	wtm_nsec = wall_to_monotonic.tv_nsec + (xtime.tv_nsec - nsec);
@@ -102,6 +110,7 @@ int do_settimeofday(struct timespec *tv)
 EXPORT_SYMBOL(do_settimeofday);
 #endif /* !CONFIG_GENERIC_TIME */
 
+#ifndef CONFIG_GENERIC_CLOCKEVENTS
 /* last time the RTC clock got updated */
 static long last_rtc_update;
 
@@ -139,6 +148,7 @@ void handle_timer_tick(void)
 			last_rtc_update = xtime.tv_sec - 600;
 	}
 }
+#endif /* !CONFIG_GENERIC_CLOCKEVENTS */
 
 #ifdef CONFIG_PM
 int timer_suspend(struct sys_device *dev, pm_message_t state)
@@ -182,6 +192,45 @@ device_initcall(timer_init_sysfs);
 
 void (*board_time_init)(void);
 
+/*
+ * Shamelessly based on the MIPS and Sparc64 work.
+ */
+static unsigned long timer_ticks_per_nsec_quotient __read_mostly;
+unsigned long sh_hpt_frequency = 0;
+
+#define NSEC_PER_CYC_SHIFT	10
+
+struct clocksource clocksource_sh = {
+	.name		= "SuperH",
+	.rating		= 200,
+	.mask		= CLOCKSOURCE_MASK(32),
+	.read		= null_hpt_read,
+	.shift		= 16,
+	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+static void __init init_sh_clocksource(void)
+{
+	if (!sh_hpt_frequency || clocksource_sh.read == null_hpt_read)
+		return;
+
+	clocksource_sh.mult = clocksource_hz2mult(sh_hpt_frequency,
+						  clocksource_sh.shift);
+
+	timer_ticks_per_nsec_quotient =
+		clocksource_hz2mult(sh_hpt_frequency, NSEC_PER_CYC_SHIFT);
+
+	clocksource_register(&clocksource_sh);
+}
+
+#ifdef CONFIG_GENERIC_TIME
+unsigned long long sched_clock(void)
+{
+	unsigned long long ticks = clocksource_sh.read();
+	return (ticks * timer_ticks_per_nsec_quotient) >> NSEC_PER_CYC_SHIFT;
+}
+#endif
+
 void __init time_init(void)
 {
 	if (board_time_init)
@@ -199,6 +248,16 @@ void __init time_init(void)
 	 */
 	sys_timer = get_sys_timer();
 	printk(KERN_INFO "Using %s for system timer\n", sys_timer->name);
+
+	if (sys_timer->ops->read)
+		clocksource_sh.read = sys_timer->ops->read;
+
+	init_sh_clocksource();
+
+	if (sh_hpt_frequency)
+		printk("Using %lu.%03lu MHz high precision timer.\n",
+		       ((sh_hpt_frequency + 500) / 1000) / 1000,
+		       ((sh_hpt_frequency + 500) / 1000) % 1000);
 
 #if defined(CONFIG_SH_KGDB)
 	/*

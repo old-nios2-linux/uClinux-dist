@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,13 +14,14 @@
 static char rcsid[] = "$NetBSD: w_acosh.c,v 1.6 1995/05/10 20:48:31 jtc Exp $";
 #endif
 
-/* 
+/*
  * wrapper acosh(x)
  */
 
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(acosh)
 #ifdef __STDC__
 	double acosh(double x)		/* wrapper acosh */
 #else
@@ -40,3 +41,4 @@ static char rcsid[] = "$NetBSD: w_acosh.c,v 1.6 1995/05/10 20:48:31 jtc Exp $";
 	    return z;
 #endif
 }
+libm_hidden_def(acosh)

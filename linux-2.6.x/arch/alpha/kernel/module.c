@@ -119,8 +119,7 @@ module_frob_arch_sections(Elf64_Ehdr *hdr, Elf64_Shdr *sechdrs,
 	}
 
 	nsyms = symtab->sh_size / sizeof(Elf64_Sym);
-	chains = kmalloc(nsyms * sizeof(struct got_entry), GFP_KERNEL);
-	memset(chains, 0, nsyms * sizeof(struct got_entry));
+	chains = kcalloc(nsyms, sizeof(struct got_entry), GFP_KERNEL);
 
 	got->sh_size = 0;
 	got->sh_addralign = 8;
@@ -285,12 +284,12 @@ apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
 		reloc_overflow:
 			if (ELF64_ST_TYPE (sym->st_info) == STT_SECTION)
 			  printk(KERN_ERR
-			         "module %s: Relocation overflow vs section %d\n",
-			         me->name, sym->st_shndx);
+			         "module %s: Relocation (type %lu) overflow vs section %d\n",
+			         me->name, r_type, sym->st_shndx);
 			else
 			  printk(KERN_ERR
-			         "module %s: Relocation overflow vs %s\n",
-			         me->name, strtab + sym->st_name);
+			         "module %s: Relocation (type %lu) overflow vs %s\n",
+			         me->name, r_type, strtab + sym->st_name);
 			return -ENOEXEC;
 		}
 	}

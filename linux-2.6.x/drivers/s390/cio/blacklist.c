@@ -43,7 +43,7 @@ typedef enum {add, free} range_action;
  * Function: blacklist_range
  * (Un-)blacklist the devices from-to
  */
-static inline void
+static void
 blacklist_range (range_action action, unsigned int from, unsigned int to,
 		 unsigned int ssid)
 {
@@ -51,7 +51,7 @@ blacklist_range (range_action action, unsigned int from, unsigned int to,
 		to = from;
 
 	if (from > to || to > __MAX_SUBCHANNEL || ssid > __MAX_SSID) {
-		printk (KERN_WARNING "Invalid blacklist range "
+		printk (KERN_WARNING "cio: Invalid blacklist range "
 			"0.%x.%04x to 0.%x.%04x, skipping\n",
 			ssid, from, ssid, to);
 		return;
@@ -69,7 +69,7 @@ blacklist_range (range_action action, unsigned int from, unsigned int to,
  * Get devno/busid from given string.
  * Shamelessly grabbed from dasd_devmap.c.
  */
-static inline int
+static int
 blacklist_busid(char **str, int *id0, int *ssid, int *devno)
 {
 	int val, old_style;
@@ -119,14 +119,14 @@ blacklist_busid(char **str, int *id0, int *ssid, int *devno)
 	return 0;
 confused:
 	strsep(str, ",\n");
-	printk(KERN_WARNING "Invalid cio_ignore parameter '%s'\n", sav);
+	printk(KERN_WARNING "cio: Invalid cio_ignore parameter '%s'\n", sav);
 	return 1;
 }
 
-static inline int
+static int
 blacklist_parse_parameters (char *str, range_action action)
 {
-	unsigned int from, to, from_id0, to_id0, from_ssid, to_ssid;
+	int from, to, from_id0, to_id0, from_ssid, to_ssid;
 
 	while (*str != 0 && *str != '\n') {
 		range_action ra = action;
@@ -166,22 +166,19 @@ blacklist_parse_parameters (char *str, range_action action)
 					continue;
 			}
 			if (*str == '-') {
-				printk(KERN_WARNING "invalid cio_ignore "
+				printk(KERN_WARNING "cio: invalid cio_ignore "
 					"parameter '%s'\n",
 					strsep(&str, ",\n"));
 				continue;
 			}
 			if ((from_id0 != to_id0) ||
 			    (from_ssid != to_ssid)) {
-				printk(KERN_WARNING "invalid cio_ignore range "
-					"%x.%x.%04x-%x.%x.%04x\n",
-					from_id0, from_ssid, from,
-					to_id0, to_ssid, to);
+				printk(KERN_WARNING "cio: invalid cio_ignore "
+				       "range %x.%x.%04x-%x.%x.%04x\n",
+				       from_id0, from_ssid, from,
+				       to_id0, to_ssid, to);
 				continue;
 			}
-			pr_debug("blacklist_setup: adding range "
-				 "from %x.%x.%04x to %x.%x.%04x\n",
-				 from_id0, from_ssid, from, to_id0, to_ssid, to);
 			blacklist_range (ra, from, to, to_ssid);
 		}
 	}
@@ -227,7 +224,7 @@ is_blacklisted (int ssid, int devno)
  * Function: blacklist_parse_proc_parameters
  * parse the stuff which is piped to /proc/cio_ignore
  */
-static inline void
+static void
 blacklist_parse_proc_parameters (char *buf)
 {
 	if (strncmp (buf, "free ", 5) == 0) {
@@ -239,7 +236,7 @@ blacklist_parse_proc_parameters (char *buf)
 		 */
 		blacklist_parse_parameters (buf + 4, add);
 	} else {
-		printk (KERN_WARNING "cio_ignore: Parse error; \n"
+		printk (KERN_WARNING "cio: cio_ignore: Parse error; \n"
 			KERN_WARNING "try using 'free all|<devno-range>,"
 				     "<devno-range>,...'\n"
 			KERN_WARNING "or 'add <devno-range>,"
@@ -364,7 +361,7 @@ cio_ignore_proc_open(struct inode *inode, struct file *file)
 	return seq_open(file, &cio_ignore_proc_seq_ops);
 }
 
-static struct file_operations cio_ignore_proc_fops = {
+static const struct file_operations cio_ignore_proc_fops = {
 	.open    = cio_ignore_proc_open,
 	.read    = seq_read,
 	.llseek  = seq_lseek,

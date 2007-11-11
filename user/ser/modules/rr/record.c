@@ -1,9 +1,9 @@
 /*
- * $Id: record.c,v 1.7.2.2.2.1 2003/11/24 14:00:34 janakj Exp $
+ * $Id: record.c,v 1.14 2004/08/24 09:00:38 janakj Exp $
  *
  * Route & Record-Route module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -109,10 +109,10 @@ static inline int build_rr(struct lump* _l, struct lump* _l2, int _lr, str* user
 	prefix = pkg_malloc(prefix_len);
 	if (enable_full_lr) {
 		suffix_len = (_lr ? RR_LR_FULL_TERM_LEN : RR_SR_TERM_LEN) + 
-			((tag && tag->len) ? (RR_FROMTAG_LEN + tag->len) : 0);
+				((tag && tag->len) ? (RR_FROMTAG_LEN + tag->len) : 0);
 	} else {
 		suffix_len = (_lr ? RR_LR_TERM_LEN : RR_SR_TERM_LEN) + 
-			((tag && tag->len) ? (RR_FROMTAG_LEN + tag->len) : 0);
+				((tag && tag->len) ? (RR_FROMTAG_LEN + tag->len) : 0);
 	}
 	suffix = pkg_malloc(suffix_len);
 	
@@ -132,6 +132,17 @@ static inline int build_rr(struct lump* _l, struct lump* _l2, int _lr, str* user
 	memcpy(prefix, RR_PREFIX, RR_PREFIX_LEN);
 	if (user->len) {
 		memcpy(prefix + RR_PREFIX_LEN, user->s, user->len);
+#ifdef ENABLE_USER_CHECK
+		/* don't add the ignored user into a RR */
+		if(i_user.len && i_user.len == user->len && 
+				!strncmp(i_user.s, user->s, i_user.len))
+		{
+			if(prefix[RR_PREFIX_LEN]=='x')
+				prefix[RR_PREFIX_LEN]='y';
+			else
+				prefix[RR_PREFIX_LEN]='x';
+		}
+#endif
 		prefix[RR_PREFIX_LEN + user->len] = '@';
 	}
 	
@@ -184,20 +195,23 @@ static inline int build_rr(struct lump* _l, struct lump* _l2, int _lr, str* user
 /*
  * Insert a new Record-Route header field
  * And also 2nd one if it is enabled and realm changed so
- * the 2nd record-route header will be necessarry
+ * the 2nd record-route header will be necessary
  */
 static inline int insert_RR(struct sip_msg* _m, int _lr)
 {
 	struct lump* l, *l2;
 	str user;
+	struct to_body* from;
 	str* tag;
 	
-	tag=0;
+	from = 0; /* Makes gcc happy */
 	user.len = 0;
 	
-	if (get_username(_m, &user) < 0) {
-		LOG(L_ERR, "insert_RR(): Error while extracting username\n");
-		return -1;
+	if (add_username) {
+		if (get_username(_m, &user) < 0) {
+			LOG(L_ERR, "insert_RR(): Error while extracting username\n");
+			return -1;
+		}
 	}
 
 	if (append_fromtag) {
@@ -205,7 +219,10 @@ static inline int insert_RR(struct sip_msg* _m, int _lr)
 			LOG(L_ERR, "insert_RR(): From parsing failed\n");
 			return -2;
 		}
-		tag=&((struct to_body*)_m->from->parsed)->tag_value;
+		from = (struct to_body*)_m->from->parsed;
+		tag = &from->tag_value;
+	} else {
+		tag = 0;
 	}
 
 	if (enable_double_rr) {
@@ -235,7 +252,7 @@ static inline int insert_RR(struct sip_msg* _m, int _lr)
 	}
 	
 	if (build_rr(l, l2, _lr, &user, tag, INBOUND) < 0) {
-		LOG(L_ERR, "insert_RR(): Error while insering inbound Record-Route\n");
+		LOG(L_ERR, "insert_RR(): Error while inserting inbound Record-Route\n");
 		return -4;
 	}
 
@@ -276,7 +293,7 @@ int record_route(struct sip_msg* _m, char* _s1, char* _s2)
 
 
 /*
- * Insert manualy created Record-Route header, no checks, no restrictions,
+ * Insert manually created Record-Route header, no checks, no restrictions,
  * always adds lr parameter, only fromtag is added automatically when requested
  */
 int record_route_preset(struct sip_msg* _m, char* _data, char* _s2)

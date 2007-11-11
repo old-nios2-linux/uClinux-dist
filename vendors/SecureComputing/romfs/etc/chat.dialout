@@ -4,7 +4,7 @@ ABORT 'NO CARRIER'
 ''
 ATZ\d\d\d
 ''
-ATE1V1Q0
+@/etc/config/initstring
 OK
 ATDT\T
 TIMEOUT 60

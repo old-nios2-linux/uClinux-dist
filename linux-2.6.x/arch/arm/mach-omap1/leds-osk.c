@@ -35,7 +35,7 @@ static u8 hw_led_state;
 
 static u8 tps_leds_change;
 
-static void tps_work(void *unused)
+static void tps_work(struct work_struct *unused)
 {
 	for (;;) {
 		u8	leds;
@@ -61,7 +61,7 @@ static void tps_work(void *unused)
 	}
 }
 
-static DECLARE_WORK(work, tps_work, NULL);
+static DECLARE_WORK(work, tps_work);
 
 #ifdef	CONFIG_OMAP_OSK_MISTRAL
 
@@ -133,13 +133,13 @@ void osk_leds_event(led_event_t evt)
 		mistral_setled();
 		break;
 
-	case led_idle_start:
-		hw_led_state |= IDLE_LED;
+	case led_idle_start:	/* idle == off */
+		hw_led_state &= ~IDLE_LED;
 		mistral_setled();
 		break;
 
 	case led_idle_end:
-		hw_led_state &= ~IDLE_LED;
+		hw_led_state |= IDLE_LED;
 		mistral_setled();
 		break;
 

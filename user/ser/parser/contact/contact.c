@@ -1,9 +1,9 @@
 /*
- * $Id: contact.c,v 1.6 2003/07/02 12:08:23 janakj Exp $
+ * $Id: contact.c,v 1.9 2004/09/01 20:08:23 janakj Exp $
  *
  * Parses one Contact in Contact HF body
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -190,7 +190,7 @@ int parse_contacts(str* _s, contact_t** _c)
 	param_hooks_t hooks;
 
 	while(1) {
-		     /* Allocate and clear contact stucture */
+		     /* Allocate and clear contact structure */
 		c = (contact_t*)pkg_malloc(sizeof(contact_t));
 		if (c == 0) {
 			LOG(L_ERR, "parse_contacts(): No memory left\n");
@@ -245,12 +245,14 @@ int parse_contacts(str* _s, contact_t** _c)
 
 			c->q = hooks.contact.q;
 			c->expires = hooks.contact.expires;
+			c->received = hooks.contact.received;
 			c->method = hooks.contact.method;
 
 			if (_s->len == 0) goto ok;
 		}
 
 		     /* Next character is comma */
+		c->len = _s->s - c->name.s;
 		_s->s++;
 		_s->len--;
 		trim_leading(_s);
@@ -270,6 +272,7 @@ int parse_contacts(str* _s, contact_t** _c)
 	return -1;
 
  ok:
+	c->len = _s->s - c->name.s;
 	c->next = *_c;
 	*_c = c;
 	return 0;
@@ -306,11 +309,13 @@ void print_contacts(FILE* _o, contact_t* _c)
 
 	while(ptr) {
 		fprintf(_o, "---Contact---\n");
-		fprintf(_o, "name   : '%.*s'\n", ptr->name.len, ptr->name.s);
-		fprintf(_o, "URI    : '%.*s'\n", ptr->uri.len, ptr->uri.s);
-		fprintf(_o, "q      : %p\n", ptr->q);
-		fprintf(_o, "expires: %p\n", ptr->expires);
-		fprintf(_o, "method : %p\n", ptr->method);
+		fprintf(_o, "name    : '%.*s'\n", ptr->name.len, ptr->name.s);
+		fprintf(_o, "URI     : '%.*s'\n", ptr->uri.len, ptr->uri.s);
+		fprintf(_o, "q       : %p\n", ptr->q);
+		fprintf(_o, "expires : %p\n", ptr->expires);
+		fprintf(_o, "received: %p\n", ptr->received);
+		fprintf(_o, "method  : %p\n", ptr->method);
+		fprintf(_o, "len     : %d\n", ptr->len);
 		if (ptr->params) {
 			print_params(_o, ptr->params);
 		}

@@ -17,8 +17,11 @@
 #include <linux/version.h>
 #include <linux/nsproxy.h>
 #include <linux/init_task.h>
-#include <linux/namespace.h>
+#include <linux/mnt_namespace.h>
 #include <linux/utsname.h>
+#include <linux/pid_namespace.h>
+
+static struct kmem_cache *nsproxy_cachep;
 
 struct nsproxy init_nsproxy = INIT_NSPROXY(init_nsproxy);
 
@@ -37,45 +40,88 @@ void get_task_namespaces(struct task_struct *tsk)
 
 /*
  * creates a copy of "orig" with refcount 1.
- * This does not grab references to the contained namespaces,
- * so that needs to be done by dup_namespaces.
  */
-static inline struct nsproxy *clone_namespaces(struct nsproxy *orig)
+static inline struct nsproxy *clone_nsproxy(struct nsproxy *orig)
 {
 	struct nsproxy *ns;
 
-	ns = kmemdup(orig, sizeof(struct nsproxy), GFP_KERNEL);
-	if (ns)
+	ns = kmem_cache_alloc(nsproxy_cachep, GFP_KERNEL);
+	if (ns) {
+		memcpy(ns, orig, sizeof(struct nsproxy));
 		atomic_set(&ns->count, 1);
+	}
 	return ns;
 }
 
 /*
- * copies the nsproxy, setting refcount to 1, and grabbing a
- * reference to all contained namespaces.  Called from
- * sys_unshare()
+ * Create new nsproxy and all of its the associated namespaces.
+ * Return the newly created nsproxy.  Do not attach this to the task,
+ * leave it to the caller to do proper locking and attach it to task.
  */
-struct nsproxy *dup_namespaces(struct nsproxy *orig)
+static struct nsproxy *create_new_namespaces(unsigned long flags,
+			struct task_struct *tsk, struct fs_struct *new_fs)
 {
-	struct nsproxy *ns = clone_namespaces(orig);
+	struct nsproxy *new_nsp;
+	int err;
 
-	if (ns) {
-		if (ns->namespace)
-			get_namespace(ns->namespace);
-		if (ns->uts_ns)
-			get_uts_ns(ns->uts_ns);
-		if (ns->ipc_ns)
-			get_ipc_ns(ns->ipc_ns);
+	new_nsp = clone_nsproxy(tsk->nsproxy);
+	if (!new_nsp)
+		return ERR_PTR(-ENOMEM);
+
+	new_nsp->mnt_ns = copy_mnt_ns(flags, tsk->nsproxy->mnt_ns, new_fs);
+	if (IS_ERR(new_nsp->mnt_ns)) {
+		err = PTR_ERR(new_nsp->mnt_ns);
+		goto out_ns;
 	}
 
-	return ns;
+	new_nsp->uts_ns = copy_utsname(flags, tsk->nsproxy->uts_ns);
+	if (IS_ERR(new_nsp->uts_ns)) {
+		err = PTR_ERR(new_nsp->uts_ns);
+		goto out_uts;
+	}
+
+	new_nsp->ipc_ns = copy_ipcs(flags, tsk->nsproxy->ipc_ns);
+	if (IS_ERR(new_nsp->ipc_ns)) {
+		err = PTR_ERR(new_nsp->ipc_ns);
+		goto out_ipc;
+	}
+
+	new_nsp->pid_ns = copy_pid_ns(flags, tsk->nsproxy->pid_ns);
+	if (IS_ERR(new_nsp->pid_ns)) {
+		err = PTR_ERR(new_nsp->pid_ns);
+		goto out_pid;
+	}
+
+	new_nsp->user_ns = copy_user_ns(flags, tsk->nsproxy->user_ns);
+	if (IS_ERR(new_nsp->user_ns)) {
+		err = PTR_ERR(new_nsp->user_ns);
+		goto out_user;
+	}
+
+	return new_nsp;
+
+out_user:
+	if (new_nsp->pid_ns)
+		put_pid_ns(new_nsp->pid_ns);
+out_pid:
+	if (new_nsp->ipc_ns)
+		put_ipc_ns(new_nsp->ipc_ns);
+out_ipc:
+	if (new_nsp->uts_ns)
+		put_uts_ns(new_nsp->uts_ns);
+out_uts:
+	if (new_nsp->mnt_ns)
+		put_mnt_ns(new_nsp->mnt_ns);
+out_ns:
+	kmem_cache_free(nsproxy_cachep, new_nsp);
+	return ERR_PTR(err);
 }
 
 /*
  * called from clone.  This now handles copy for nsproxy and all
  * namespaces therein.
  */
-int copy_namespaces(int flags, struct task_struct *tsk)
+int copy_namespaces(unsigned long flags, struct task_struct *tsk)
 {
 	struct nsproxy *old_ns = tsk->nsproxy;
 	struct nsproxy *new_ns;
@@ -86,52 +132,69 @@ int copy_namespaces(int flags, struct task_struct *tsk)
 
 	get_nsproxy(old_ns);
 
-	if (!(flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC)))
+	if (!(flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWUSER)))
 		return 0;
 
-	new_ns = clone_namespaces(old_ns);
-	if (!new_ns) {
-		err = -ENOMEM;
+	if (!capable(CAP_SYS_ADMIN)) {
+		err = -EPERM;
+		goto out;
+	}
+
+	new_ns = create_new_namespaces(flags, tsk, tsk->fs);
+	if (IS_ERR(new_ns)) {
+		err = PTR_ERR(new_ns);
 		goto out;
 	}
 
 	tsk->nsproxy = new_ns;
-
-	err = copy_namespace(flags, tsk);
-	if (err)
-		goto out_ns;
-
-	err = copy_utsname(flags, tsk);
-	if (err)
-		goto out_uts;
-
-	err = copy_ipcs(flags, tsk);
-	if (err)
-		goto out_ipc;
-
 out:
 	put_nsproxy(old_ns);
 	return err;
-
-out_ipc:
-	if (new_ns->uts_ns)
-		put_uts_ns(new_ns->uts_ns);
-out_uts:
-	if (new_ns->namespace)
-		put_namespace(new_ns->namespace);
-out_ns:
-	tsk->nsproxy = old_ns;
-	kfree(new_ns);
-	goto out;
 }
 
 void free_nsproxy(struct nsproxy *ns)
 {
-		if (ns->namespace)
-			put_namespace(ns->namespace);
-		if (ns->uts_ns)
-			put_uts_ns(ns->uts_ns);
-		if (ns->ipc_ns)
-			put_ipc_ns(ns->ipc_ns);
-		kfree(ns);
+	if (ns->mnt_ns)
+		put_mnt_ns(ns->mnt_ns);
+	if (ns->uts_ns)
+		put_uts_ns(ns->uts_ns);
+	if (ns->ipc_ns)
+		put_ipc_ns(ns->ipc_ns);
+	if (ns->pid_ns)
+		put_pid_ns(ns->pid_ns);
+	if (ns->user_ns)
+		put_user_ns(ns->user_ns);
+	kmem_cache_free(nsproxy_cachep, ns);
 }
+
+/*
+ * Called from unshare. Unshare all the namespaces part of nsproxy.
+ * On success, returns the new nsproxy.
+ */
+int unshare_nsproxy_namespaces(unsigned long unshare_flags,
+		struct nsproxy **new_nsp, struct fs_struct *new_fs)
+{
+	int err = 0;
+
+	if (!(unshare_flags & (CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC |
+			       CLONE_NEWUSER)))
+		return 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	*new_nsp = create_new_namespaces(unshare_flags, current,
+				new_fs ? new_fs : current->fs);
+	if (IS_ERR(*new_nsp))
+		err = PTR_ERR(*new_nsp);
+	return err;
+}
+
+static int __init nsproxy_cache_init(void)
+{
+	nsproxy_cachep = kmem_cache_create("nsproxy", sizeof(struct nsproxy),
+					   0, SLAB_PANIC, NULL);
+	return 0;
+}
+
+module_init(nsproxy_cache_init);

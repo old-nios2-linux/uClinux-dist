@@ -150,6 +150,9 @@ int flowps_server_stats_enabled(PS_TRACKER *trackerp)
 int flowps_server_watch(PS_TRACKER *trackerp, u_int32_t address)
 {
     FLOWASSERT(trackerp != NULL);
+
+    if (trackerp == NULL)
+        return FLOW_DISABLED;
         
     if(trackerp->config.server_watchnet_ipv4 == NULL)
         return FLOW_DISABLED;

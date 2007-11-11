@@ -104,7 +104,7 @@ static unsigned char PADDING[64] = {
 /* The routine MD5Init initializes the message-digest context
    mdContext. All fields are set to zero.
  */
-void MD5Init (mdContext)
+void MD5_Init (mdContext)
 MD5_CTX *mdContext;
 {
   mdContext->i[0] = mdContext->i[1] = (UINT4)0;
@@ -121,7 +121,7 @@ MD5_CTX *mdContext;
    account for the presence of each of the characters inBuf[0..inLen-1]
    in the message whose digest is being computed.
  */
-void MD5Update (mdContext, inBuf, inLen)
+void MD5_Update (mdContext, inBuf, inLen)
 MD5_CTX *mdContext;
 unsigned char *inBuf;
 unsigned int inLen;
@@ -159,7 +159,7 @@ unsigned int inLen;
 /* The routine MD5Final terminates the message-digest computation and
    ends with the desired message digest in mdContext->digest[0...15].
  */
-void MD5Final (hash, mdContext)
+void MD5_Final (hash, mdContext)
 unsigned char hash[];
 MD5_CTX *mdContext;
 {

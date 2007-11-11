@@ -38,7 +38,7 @@ EXPORT_SYMBOL(ip_fast_csum);
 EXPORT_SYMBOL(kernel_thread);
 
 /* Networking helper routines. */
-EXPORT_SYMBOL(csum_partial_copy);
+EXPORT_SYMBOL(csum_partial_copy_nocheck);
 
 /* The following are special because they're not called
    explicitly (the C compiler generates them).  Fortunately,
@@ -80,8 +80,6 @@ EXPORT_SYMBOL(__muldi3);
 EXPORT_SYMBOL(__mulsi3);
 EXPORT_SYMBOL(__udivsi3);
 EXPORT_SYMBOL(__umodsi3);
-
-EXPORT_SYMBOL(is_in_rom);
 
 #ifdef CONFIG_COLDFIRE
 extern unsigned int *dma_device_address;

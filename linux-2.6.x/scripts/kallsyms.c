@@ -24,14 +24,12 @@
  *
  */
 
-#define _GNU_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
-#define KSYM_NAME_LEN		127
+#define KSYM_NAME_LEN		128
 
 
 struct sym_entry {
@@ -43,7 +41,7 @@ struct sym_entry {
 
 static struct sym_entry *table;
 static unsigned int table_size, table_cnt;
-static unsigned long long _stext, _etext, _sinittext, _einittext, _sextratext, _eextratext;
+static unsigned long long _text, _stext, _etext, _sinittext, _einittext, _sextratext, _eextratext;
 static int all_symbols = 0;
 static char symbol_prefix_char = '\0';
 
@@ -91,7 +89,9 @@ static int read_symbol(FILE *in, struct sym_entry *s)
 		sym++;
 
 	/* Ignore most absolute/undefined (?) symbols. */
-	if (strcmp(sym, "_stext") == 0)
+	if (strcmp(sym, "_text") == 0)
+		_text = s->addr;
+	else if (strcmp(sym, "_stext") == 0)
 		_stext = s->addr;
 	else if (strcmp(sym, "_etext") == 0)
 		_etext = s->addr;
@@ -252,7 +252,7 @@ static void write_src(void)
 	unsigned int i, k, off;
 	unsigned int best_idx[256];
 	unsigned int *markers;
-	char buf[KSYM_NAME_LEN+1];
+	char buf[KSYM_NAME_LEN];
 
 	printf("#include <asm/types.h>\n");
 	printf("#if BITS_PER_LONG == 64\n");
@@ -263,11 +263,27 @@ static void write_src(void)
 	printf("#define ALGN .align 4\n");
 	printf("#endif\n");
 
-	printf(".data\n");
+	printf("\t.section .rodata, \"a\"\n");
 
+	/* Provide proper symbols relocatability by their '_text'
+	 * relativeness.  The symbol names cannot be used to construct
+	 * normal symbol references as the list of symbols contains
+	 * symbols that are declared static and are private to their
+	 * .o files.  This prevents .tmp_kallsyms.o or any other
+	 * object from referencing them.
+	 */
 	output_label("kallsyms_addresses");
 	for (i = 0; i < table_cnt; i++) {
-		printf("\tPTR\t%#llx\n", table[i].addr);
+		if (toupper(table[i].sym[0]) != 'A') {
+			if (_text <= table[i].addr)
+				printf("\tPTR\t_text + %#llx\n",
+					table[i].addr - _text);
+			else
+				printf("\tPTR\t_text - %#llx\n",
+					_text - table[i].addr);
+		} else {
+			printf("\tPTR\t%#llx\n", table[i].addr);
+		}
 	}
 	printf("\n");
 
@@ -360,6 +376,17 @@ static void build_initial_tok_table(void)
 	table_cnt = pos;
 }
 
+static void *find_token(unsigned char *str, int len, unsigned char *token)
+{
+	int i;
+
+	for (i = 0; i < len - 1; i++) {
+		if (str[i] == token[0] && str[i+1] == token[1])
+			return &str[i];
+	}
+	return NULL;
+}
+
 /* replace a given token in all the valid symbols. Use the sampled symbols
  * to update the counts */
 static void compress_symbols(unsigned char *str, int idx)
@@ -373,7 +400,7 @@ static void compress_symbols(unsigned char *str, int idx)
 		p1 = table[i].sym;
 
 		/* find the token on the symbol */
-		p2 = memmem(p1, len, str, 2);
+		p2 = find_token(p1, len, str);
 		if (!p2) continue;
 
 		/* decrease the counts for this symbol's tokens */
@@ -392,7 +419,7 @@ static void compress_symbols(unsigned char *str, int idx)
 			if (size < 2) break;
 
 			/* find the token on the symbol */
-			p2 = memmem(p1, size, str, 2);
+			p2 = find_token(p1, size, str);
 
 		} while (p2);
 

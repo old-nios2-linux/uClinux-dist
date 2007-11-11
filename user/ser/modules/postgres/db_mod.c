@@ -1,9 +1,9 @@
 /* 
- * $Id: db_mod.c,v 1.3 2003/10/08 13:07:22 janakj Exp $ 
+ * $Id: db_mod.c,v 1.7 2004/08/24 09:00:35 janakj Exp $ 
  *
  * Postgres module interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,7 @@
 
 #include <stdio.h>
 #include "../../sr_module.h"
+#include "../../db/db_con.h"
 #include "dbase.h"
 
 MODULE_VERSION
@@ -48,15 +49,15 @@ static int mod_init(void);
 
 
 static cmd_export_t cmds[]={
-	{"db_use_table",  (cmd_function)use_table,     2, 0, 0},
-	{"db_init",       (cmd_function)db_init,       1, 0, 0},
-	{"db_close",      (cmd_function)db_close,      2, 0, 0},
-	{"db_query",      (cmd_function)db_query,      2, 0, 0},
-	{"db_raw_query",  (cmd_function)db_raw_query,  2, 0, 0},
-	{"db_free_query", (cmd_function)db_free_query, 2, 0, 0},
-	{"db_insert",     (cmd_function)db_insert,     2, 0, 0},
-	{"db_delete",     (cmd_function)db_delete,     2, 0, 0},
-	{"db_update",     (cmd_function)db_update,     2, 0, 0},
+	{"db_use_table",   (cmd_function)use_table,     2, 0, 0},
+	{"db_init",        (cmd_function)db_init,       1, 0, 0},
+	{"db_close",       (cmd_function)db_close,      2, 0, 0},
+	{"db_query",       (cmd_function)db_query,      2, 0, 0},
+	{"db_raw_query",   (cmd_function)db_raw_query,  2, 0, 0},
+	{"db_free_result", (cmd_function)db_free_query, 2, 0, 0},
+	{"db_insert",      (cmd_function)db_insert,     2, 0, 0},
+	{"db_delete",      (cmd_function)db_delete,     2, 0, 0},
+	{"db_update",      (cmd_function)db_update,     2, 0, 0},
 	{0,0,0,0,0}
 };
 
@@ -65,7 +66,7 @@ static cmd_export_t cmds[]={
 struct module_exports exports = {	
 	"postgres",
 	cmds,
-	0,   /*  module paramers */
+	0,   /*  module parameters */
 
 	mod_init, /* module initialization function */
 	0,        /* response function*/

@@ -312,7 +312,7 @@ nsm_negotiation_done (struct ospf_neighbor *nbr)
   if (CHECK_FLAG (nbr->options, OSPF_OPTION_NP))
     {
       LSDB_LOOP (NSSA_LSDB (area), rn, lsa)
-	 ospf_db_summary_add (nbr, lsa);
+	ospf_db_summary_add (nbr, lsa);
     }
 
   if (nbr->oi->type != OSPF_IFTYPE_VIRTUALLINK
@@ -440,6 +440,11 @@ nsm_kill_nbr (struct ospf_neighbor *nbr)
   nsm_change_state (nbr, NSM_Down);
   
   /* Reset neighbor. */
+  /* killing nbr_self is invalid */
+  assert (nbr != nbr->oi->nbr_self);
+  if (nbr == nbr->oi->nbr_self)
+    return 1;
+  
   nsm_reset_nbr (nbr);
 
   if (nbr->oi->type == OSPF_IFTYPE_NBMA && nbr->nbr_nbma != NULL)

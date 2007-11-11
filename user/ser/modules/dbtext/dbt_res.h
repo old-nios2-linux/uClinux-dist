@@ -1,9 +1,9 @@
 /*
- * $Id: dbt_res.h,v 1.2 2003/06/02 15:41:21 dcm Exp $
+ * $Id: dbt_res.h,v 1.3 2004/08/24 08:58:26 janakj Exp $
  *
  * DBText module core functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

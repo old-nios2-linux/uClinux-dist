@@ -1,9 +1,9 @@
 /*
- * $Id: resolve.h,v 1.19.6.1.2.1 2004/07/26 23:18:35 andrei Exp $
+ * $Id: resolve.h,v 1.23 2004/08/24 08:45:10 janakj Exp $
  *
  * resolver related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -293,7 +293,9 @@ static inline struct hostent* resolvehost(char* name)
 	static struct hostent* he2=0;
 #endif
 #ifndef DNS_IP_HACK
+#ifdef USE_IPV6
 	int len;
+#endif
 #endif
 #ifdef DNS_IP_HACK
 	struct ip_addr* ip;
@@ -313,6 +315,7 @@ static inline struct hostent* resolvehost(char* name)
 	}
 	
 #else /* DNS_IP_HACK */
+#ifdef USE_IPV6
 	len=0;
 	if (*name=='['){
 		len=strlen(name);
@@ -322,6 +325,7 @@ static inline struct hostent* resolvehost(char* name)
 			goto skip_ipv4;
 		}
 	}
+#endif
 #endif
 	/* ipv4 */
 	he=gethostbyname(name);

@@ -1,6 +1,6 @@
 # (C) Copyright 2001-2004, Martin Roesch, Brian Caswell, et al.
 #    All rights reserved.
-# $Id: web-misc.rules,v 1.1 2006/06/06 03:45:11 pauli Exp $
+# $Id: web-misc.rules,v 1.2 2007/05/17 02:41:02 pauli Exp $
 #---------------
 # WEB-MISC RULES
 #---------------
@@ -77,8 +77,8 @@ alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC guestboo
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC handler attempt"; flow:to_server,established; uricontent:"/handler"; uricontent:"|7C|"; nocase; reference:arachnids,235; reference:bugtraq,380; reference:cve,1999-0148; reference:nessus,10100; classtype:web-application-attack; sid:1613; rev:7;)
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC handler access"; flow:to_server,established; uricontent:"/handler"; nocase; reference:arachnids,235; reference:bugtraq,380; reference:cve,1999-0148; reference:nessus,10100; classtype:web-application-activity; sid:1141; rev:10;)
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC /.... access"; flow:to_server,established; content:"/...."; classtype:attempted-recon; sid:1142; rev:5;)
-alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC ///cgi-bin access"; flow:to_server,established; uricontent:"///cgi-bin"; nocase; rawbytes; reference:nessus,11032; classtype:attempted-recon; sid:1143; rev:7;)
-alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC /cgi-bin/// access"; flow:to_server,established; uricontent:"/cgi-bin///"; nocase; rawbytes; reference:nessus,11032; classtype:attempted-recon; sid:1144; rev:7;)
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC ///cgi-bin access"; flow:to_server,established; uricontent:"///cgi-bin"; nocase; reference:nessus,11032; classtype:attempted-recon; sid:1143; rev:7;)
+alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC /cgi-bin/// access"; flow:to_server,established; uricontent:"/cgi-bin///"; nocase; reference:nessus,11032; classtype:attempted-recon; sid:1144; rev:7;)
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC /~root access"; flow:to_server,established; uricontent:"/~root"; nocase; classtype:attempted-recon; sid:1145; rev:7;)
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC /~ftp access"; flow:to_server,established; uricontent:"/~ftp"; nocase; classtype:attempted-recon; sid:1662; rev:5;)
 alert tcp $EXTERNAL_NET any -> $HTTP_SERVERS $HTTP_PORTS (msg:"WEB-MISC Ecommerce import.txt access"; flow:to_server,established; uricontent:"/config/import.txt"; nocase; classtype:attempted-recon; sid:1146; rev:5;)

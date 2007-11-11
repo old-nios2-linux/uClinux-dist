@@ -158,41 +158,43 @@ static int MakeProtoInfo(PS_PROTO *proto, u_char *buffer, u_int *total_size)
     if(proto->alerts == PS_ALERT_PORTSWEEP ||
        proto->alerts == PS_ALERT_PORTSWEEP_FILTERED)
     {
-        dsize = snprintf((char *)buffer, PROTO_BUFFER_SIZE,
-                "Priority Count: %d\n"
-                "Connection Count: %d\n"
-                "IP Count: %d\n"
-                "Scanned IP Range: %d.%d.%d.%d:%d.%d.%d.%d\n"
-                "Port/Proto Count: %d\n"
-                "Port/Proto Range: %d:%d\n",
-                proto->priority_count,
-                proto->connection_count,
-                proto->u_ip_count,
-                ip1[0],ip1[1],ip1[2],ip1[3],
-                ip2[0],ip2[1],ip2[2],ip2[3],
-                proto->u_port_count,
-                proto->low_p,
-                proto->high_p);
+        SnortSnprintf((char *)buffer, PROTO_BUFFER_SIZE,
+                      "Priority Count: %d\n"
+                      "Connection Count: %d\n"
+                      "IP Count: %d\n"
+                      "Scanned IP Range: %d.%d.%d.%d:%d.%d.%d.%d\n"
+                      "Port/Proto Count: %d\n"
+                      "Port/Proto Range: %d:%d\n",
+                      proto->priority_count,
+                      proto->connection_count,
+                      proto->u_ip_count,
+                      ip1[0],ip1[1],ip1[2],ip1[3],
+                      ip2[0],ip2[1],ip2[2],ip2[3],
+                      proto->u_port_count,
+                      proto->low_p,
+                      proto->high_p);
     }
     else
     {
-        dsize = snprintf((char *)buffer, PROTO_BUFFER_SIZE,
-                "Priority Count: %d\n"
-                "Connection Count: %d\n"
-                "IP Count: %d\n"
-                "Scanner IP Range: %d.%d.%d.%d:%d.%d.%d.%d\n"
-                "Port/Proto Count: %d\n"
-                "Port/Proto Range: %d:%d\n",
-                proto->priority_count,
-                proto->connection_count,
-                proto->u_ip_count,
-                ip1[0],ip1[1],ip1[2],ip1[3],
-                ip2[0],ip2[1],ip2[2],ip2[3],
-                proto->u_port_count,
-                proto->low_p,
-                proto->high_p);
+        SnortSnprintf((char *)buffer, PROTO_BUFFER_SIZE,
+                      "Priority Count: %d\n"
+                      "Connection Count: %d\n"
+                      "IP Count: %d\n"
+                      "Scanner IP Range: %d.%d.%d.%d:%d.%d.%d.%d\n"
+                      "Port/Proto Count: %d\n"
+                      "Port/Proto Range: %d:%d\n",
+                      proto->priority_count,
+                      proto->connection_count,
+                      proto->u_ip_count,
+                      ip1[0],ip1[1],ip1[2],ip1[3],
+                      ip2[0],ip2[1],ip2[2],ip2[3],
+                      proto->u_port_count,
+                      proto->low_p,
+                      proto->high_p);
     }
 
+    /* guaranteed to be null terminated */
+    dsize = SnortStrnlen(buffer, PROTO_BUFFER_SIZE);
     *total_size += dsize;
 
     /*
@@ -339,9 +341,11 @@ static int MakeOpenPortInfo(PS_PROTO *proto, u_char *buffer, u_int *total_size,
     if(dsize < PROTO_BUFFER_SIZE)
        return -1; 
 
-    dsize = snprintf((char *)buffer, PROTO_BUFFER_SIZE,
-              "Open Port: %u\n", *((unsigned short *)user));
+    SnortSnprintf((char *)buffer, PROTO_BUFFER_SIZE,
+                  "Open Port: %u\n", *((unsigned short *)user));
 
+    /* guaranteed to be null terminated */
+    dsize = SnortStrnlen(buffer, PROTO_BUFFER_SIZE);
     *total_size += dsize;
 
     /*
@@ -757,7 +761,7 @@ static void PortscanDetect(Packet *p, void *context)
     return;
 }
 
-static void FatalErrorNoOption(u_char *option)
+NORETURN static void FatalErrorNoOption(u_char *option)
 {
     FatalError("%s(%d) => No argument to '%s' config option.\n", 
             file_name, file_line, option);
@@ -765,19 +769,19 @@ static void FatalErrorNoOption(u_char *option)
     return;
 }
 
-static void FatalErrorNoEnd(char *option)
+NORETURN static void FatalErrorNoEnd(char *option)
 {
     FatalError("%s(%d) => No ending brace to '%s' config option.\n", 
             file_name, file_line, option);
 }
 
-static void FatalErrorInvalidArg(char *option)
+NORETURN static void FatalErrorInvalidArg(char *option)
 {
     FatalError("%s(%d) => Invalid argument to '%s' config option.\n", 
             file_name, file_line, option);
 }
 
-static void FatalErrorInvalidOption(char *option)
+NORETURN static void FatalErrorInvalidOption(char *option)
 {
     FatalError("%s(%d) => Invalid option '%s' to portscan preprocessor.\n", 
             file_name, file_line, option);
@@ -1064,9 +1068,9 @@ static void ParseLogFile(FILE **flog, u_char *logfile, int logfile_size)
         FatalErrorNoEnd("logfile");
 
     if(pcTok[0] == '/')
-        snprintf(logfile, logfile_size, "%s", pcTok);
+        SnortSnprintf(logfile, logfile_size, "%s", pcTok);
     else
-        snprintf(logfile, logfile_size, "%s/%s", pv.log_dir,pcTok);
+        SnortSnprintf(logfile, logfile_size, "%s/%s", pv.log_dir,pcTok);
 
     pcTok = strtok(NULL, DELIMITERS);
     if(!pcTok)

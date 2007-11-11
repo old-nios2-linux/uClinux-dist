@@ -1,14 +1,14 @@
 /*
- * $Id: t_lookup.c,v 1.80.4.3.2.1 2004/07/15 21:18:34 andrei Exp $
+ * $Id: t_lookup.c,v 1.91.2.5 2005/11/29 19:39:45 andrei Exp $
  *
  * This C-file takes care of matching requests and replies with
  * existing transactions. Note that we do not do SIP-compliant
  * request matching as asked by SIP spec. We do bitwise matching of 
  * all header fields in requests which form a transaction key. 
- * It is much faster and it worx pretty well -- we haven't 
+ * It is much faster and it works pretty well -- we haven't 
  * had any interop issue neither in lab nor in bake-offs. The reason
  * is that retransmissions do look same as original requests
- * (it would be really silly if they wuld be mangled). The only
+ * (it would be really silly if they would be mangled). The only
  * exception is we parse To as To in ACK is compared to To in
  * reply and both  of them are constructed by different software.
  * 
@@ -26,7 +26,7 @@
  * -jiri
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -68,16 +68,22 @@
  * 2003-04-04  bug_fix: RESPONSE_IN callback not called for local
  *             UAC transactions (jiri)
  * 2003-04-07  new transactions inherit on_negative and on_relpy from script
- *             variables on instatntiation (jiri)
+ *             variables on instantiation (jiri)
  * 2003-04-30  t_newtran clean up (jiri)
  * 2003-08-21  request lookups fixed to skip UAC transactions, 
  *             thanks Ed (jiri)
+ * 2003-12-04  global TM callbacks switched to per transaction callbacks
+ *             (bogdan)
+ * 2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
+ * 2004-02-13: t->is_invite and t->local replaced with flags (bogdan)
+ * 2004-10-10: use of mhomed disabled for replies (jiri)
+ * 2005-02-01: use the incoming request interface for sending the replies
+ *             - changes in init_rb() (bogdan)
  */
 
 #include "defs.h"
 
 
-#include <assert.h>
 #include "../../comp_defs.h"
 #include "../../dprint.h"
 #include "../../config.h"
@@ -159,15 +165,16 @@ void init_t() {global_msg_id=0; set_t(T_UNDEFINED);}
 static inline int parse_dlg( struct sip_msg *msg )
 {
 	if (parse_headers(msg, HDR_FROM | HDR_CSEQ | HDR_TO, 0)==-1) {
-		LOG(L_ERR, "ERROR: tid_matching: From or Cseq or To invalid\n");
+		LOG(L_ERR, "ERROR: parse_dlg: From or Cseq or To invalid\n");
 		return 0;
 	}
 	if ((msg->from==0)||(msg->cseq==0)||(msg->to==0)) {
-		LOG(L_ERR, "ERROR: tid_matching: missing From or Cseq or To\n");
+		LOG(L_ERR, "ERROR: parse_dlg: missing From or Cseq or To\n");
 		return 0;
 	}
+
 	if (parse_from_header(msg)==-1) {
-		LOG(L_ERR, "ERROR: tid_matching: From broken\n");
+		LOG(L_ERR, "ERROR: parse_dlg: From broken\n");
 		return 0;
 	}
 	/* To is automatically parsed through HDR_TO in parse bitmap,
@@ -249,7 +256,7 @@ static inline int via_matching( struct via_body *inv_via,
 				ack_via->tid.len)!=0)
 		return 0;
 	/* ok, tid matches -- now make sure that the
-	 * originater matches too to avoid confusion with
+	 * originator matches too to avoid confusion with
 	 * different senders generating the same tid
 	 */
 	if (inv_via->host.len!=ack_via->host.len)
@@ -285,8 +292,10 @@ static int matching_3261( struct sip_msg *p_msg, struct cell **trans,
 	struct via_body *via1;
 	int is_ack;
 	int dlg_parsed;
-	int ret;
+	int ret = 0;
+	struct cell *e2e_ack_trans;
 
+	e2e_ack_trans=0;
 	via1=p_msg->via1;
 	is_ack=p_msg->REQ_METHOD==METHOD_ACK;
 	dlg_parsed=0;
@@ -301,21 +310,34 @@ static int matching_3261( struct sip_msg *p_msg, struct cell **trans,
 		if (!t_msg) continue;  /* don't try matching UAC transactions */
 		if (skip_method & t_msg->REQ_METHOD) continue;
 
+		     /* here we do an exercise which will be removed from future code
+		      *	versions: we try to match end-2-end ACKs if they appear at our
+		      * server. This allows some applications bound to TM via callbacks
+		      * to correlate the e2e ACKs with transaction context, e.g., for
+		      * purpose of accounting. We think it is a bad place here, among
+		      * other things because it is not reliable. If a transaction loops
+		      * via SER the ACK can't be matched to proper INVITE transaction
+		      * (it is a separate transactino with its own branch ID) and it
+		      * matches all transaction instances in the loop dialog-wise.
+		      * Eventually, regardless to which transaction in the loop the
+		      * ACK belongs, only the first one will match.
+		      */
+
 		/* dialog matching needs to be applied for ACK/200s */
-		if (is_ack && p_cell->uas.status<300) {
+		if (is_ack && p_cell->uas.status<300 && e2e_ack_trans==0) {
 			/* make sure we have parsed all things we need for dialog
 			 * matching */
 			if (!dlg_parsed) {
 				dlg_parsed=1;
 				if (!parse_dlg(p_msg)) {
-					LOG(L_ERR, "ERROR: tid_matching: dlg parsing failed\n");
+					LOG(L_ERR, "ERROR: matching_3261: dlg parsing failed\n");
 					return 0;
 				}
 			}
 			ret=ack_matching(p_cell /* t w/invite */, p_msg /* ack */);
 			if (ret>0) {
-				*trans=p_cell;
-				return ret; /* 2: e2e proxied ACK, 1 e2e UAS ACK */
+				e2e_ack_trans=p_cell;
+				break;
 			}
 			/* this ACK is neither local "negative" one, nor a proxied
 			 * end-2-end one, nor an end-2-end one for a UAS transaction
@@ -334,6 +356,12 @@ static int matching_3261( struct sip_msg *p_msg, struct cell **trans,
 		return 1;
 	}
 	/* :-( ... we didn't find any */
+	
+	/* just check if it we found an e2e ACK previously */
+	if (e2e_ack_trans) {
+		*trans=e2e_ack_trans;
+		return ret;
+	}
 	DBG("DEBUG: RFC3261 transaction matching failed\n");
 	return 0;
 }
@@ -353,6 +381,7 @@ int t_lookup_request( struct sip_msg* p_msg , int leave_new_locked )
 	int ret;
 	struct via_param *branch;
 	int match_status;
+	struct cell *e2e_ack_trans;
 
 	/* parse all*/
 	if (check_transaction_quadruple(p_msg)==0)
@@ -371,8 +400,9 @@ int t_lookup_request( struct sip_msg* p_msg , int leave_new_locked )
 		p_msg->hash_index,isACK);
 
 
-	/* asume not found */
+	/* assume not found */
 	ret=-1;
+	e2e_ack_trans=0;
 
 	/* first of all, look if there is RFC3261 magic cookie in branch; if
 	 * so, we can do very quick matching and skip the old-RFC bizzar
@@ -457,10 +487,12 @@ int t_lookup_request( struct sip_msg* p_msg , int leave_new_locked )
 				get_to(t_msg)->uri.len)!=0) continue;
 
 			/* it is e2e ACK/200 */
-			if (p_cell->uas.status<300) {
+			if (p_cell->uas.status<300 && e2e_ack_trans==0) {
 				/* all criteria for proxied ACK are ok */
-				if (p_cell->relaied_reply_branch!=-2) 
-					goto e2e_ack;
+				if (p_cell->relaied_reply_branch!=-2) {
+					e2e_ack_trans=p_cell;
+					continue;
+				}
 				/* it's a local UAS transaction */
 				if (dlg_matching(p_cell, p_msg))
 					goto found;
@@ -484,6 +516,12 @@ int t_lookup_request( struct sip_msg* p_msg , int leave_new_locked )
 	} /* synonym loop */
 
 notfound:
+
+	if (e2e_ack_trans) {
+		p_cell=e2e_ack_trans;
+		goto e2e_ack;
+	}
+		
 	/* no transaction found */
 	set_t(0);
 	if (!leave_new_locked) {
@@ -512,7 +550,7 @@ found:
 
 
 
-/* function lookups transaction being cancelled by CANCEL in p_msg;
+/* function lookups transaction being canceled by CANCEL in p_msg;
  * it returns:
  *       0 - transaction wasn't found
  *       T - transaction found
@@ -536,7 +574,7 @@ struct cell* t_lookupOriginalT(  struct sip_msg* p_msg )
 	 * comparison of many header fields
 	 */
 	if (!p_msg->via1) {
-		LOG(L_ERR, "ERROR: t_lookup_request: no via\n");
+		LOG(L_ERR, "ERROR: t_lookupOriginalT: no via\n");
 		set_t(0);
 		return 0;
 	}
@@ -619,7 +657,7 @@ struct cell* t_lookupOriginalT(  struct sip_msg* p_msg )
 
 notfound:
 	/* no transaction found */
-	DBG("DEBUG: t_lookupOriginalT: no CANCEL maching found! \n" );
+	DBG("DEBUG: t_lookupOriginalT: no CANCEL matching found! \n" );
 	UNLOCK_HASH(hash_index);
 	DBG("DEBUG: t_lookupOriginalT completed\n");
 	return 0;
@@ -642,9 +680,9 @@ found:
 int t_reply_matching( struct sip_msg *p_msg , int *p_branch )
 {
 	struct cell*  p_cell;
-	int hash_index   = 0;
-	int entry_label  = 0;
-	int branch_id    = 0;
+	unsigned int hash_index   = 0;
+	unsigned int entry_label  = 0;
+	unsigned int branch_id    = 0;
 	char  *hashi, *branchi, *p, *n;
 	int hashl, branchl;
 	int scan_space;
@@ -658,7 +696,7 @@ int t_reply_matching( struct sip_msg *p_msg , int *p_branch )
 	
 	short is_cancel;
 
-	/* make compiler warnnings happy */
+	/* make compiler warnings happy */
 	loopi=0;
 	loopl=0;
 	syni=0;
@@ -716,15 +754,15 @@ int t_reply_matching( struct sip_msg *p_msg , int *p_branch )
 	branchi=p;
 
 	/* sanity check */
-	if ((hash_index=reverse_hex2int(hashi, hashl))<0
+	if (reverse_hex2int(hashi, hashl, &hash_index)<0
 		||hash_index>=TABLE_ENTRIES
-		|| (branch_id=reverse_hex2int(branchi, branchl))<0
+		|| reverse_hex2int(branchi, branchl, &branch_id)<0
 		||branch_id>=MAX_BRANCHES
-		|| (syn_branch ? (entry_label=reverse_hex2int(syni, synl))<0 
+		|| (syn_branch ? (reverse_hex2int(syni, synl, &entry_label))<0 
 			: loopl!=MD5_LEN )
 	) {
-		DBG("DEBUG: t_reply_matching: poor reply lables %d label %d "
-			"branch %d\n",hash_index, entry_label, branch_id );
+		DBG("DEBUG: t_reply_matching: poor reply labels %d label %d "
+			"branch %d\n", hash_index, entry_label, branch_id );
 		goto nomatch2;
 	}
 
@@ -758,16 +796,16 @@ int t_reply_matching( struct sip_msg *p_msg , int *p_branch )
 			continue;
 
 		/* does method match ? (remember -- CANCELs have the same branch
-		   as cancelled transactions) */
+		   as canceled transactions) */
 		req_method=p_cell->method;
 		if ( /* method match */
 			! ((cseq_method.len==req_method.len 
 			&& memcmp( cseq_method.s, req_method.s, cseq_method.len )==0)
 			/* or it is a local cancel */
-			|| (is_cancel && p_cell->is_invite 
+			|| (is_cancel && is_invite(p_cell)
 				/* commented out -- should_cancel_branch set it to
-				   BUSY_BUFFER to avoid collisions with repliesl;
-				   thus, we test here by bbuffer size
+				   BUSY_BUFFER to avoid collisions with replies;
+				   thus, we test here by buffer size
 				*/
 				/* && p_cell->uac[branch_id].local_cancel.buffer ))) */
 				&& p_cell->uac[branch_id].local_cancel.buffer_len ))) 
@@ -778,28 +816,30 @@ int t_reply_matching( struct sip_msg *p_msg , int *p_branch )
 		   matched !
 		*/
 		set_t(p_cell);
-		*p_branch = branch_id;
+		*p_branch =(int) branch_id;
 		REF_UNSAFE( T );
 		UNLOCK_HASH(hash_index);
 		DBG("DEBUG: t_reply_matching: reply matched (T=%p)!\n",T);
 		/* if this is a 200 for INVITE, we will wish to store to-tags to be
-		 * able to distuingish retransmissions later and not to call
+		 * able to distinguish retransmissions later and not to call
  		 * TMCB_RESPONSE_OUT uselessly; we do it only if callbacks are
 		 * enabled -- except callback customers, nobody cares about 
 		 * retransmissions of multiple 200/INV or ACK/200s
 		 */
-		if (p_cell->is_invite && p_msg->REPLY_STATUS>=200 
-				&& p_msg->REPLY_STATUS<300 
-				&& ( (!p_cell->local && 
-					(callback_array[TMCB_RESPONSE_OUT]||
-						callback_array[TMCB_E2EACK_IN]))
-					|| (p_cell->local && callback_array[TMCB_LOCAL_COMPLETED]) )) {
+		if (is_invite(p_cell) && p_msg->REPLY_STATUS>=200 
+		&& p_msg->REPLY_STATUS<300 
+		&& ( (!is_local(p_cell) &&
+				has_tran_tmcbs(p_cell,TMCB_RESPONSE_OUT|TMCB_E2EACK_IN) )
+			|| (is_local(p_cell)&&has_tran_tmcbs(p_cell,TMCB_LOCAL_COMPLETED))
+		)) {
 			if (parse_headers(p_msg, HDR_TO, 0)==-1) {
 				LOG(L_ERR, "ERROR: t_reply_matching: to parsing failed\n");
 			}
 		}
-		if (!p_cell->local) 
-			callback_event(TMCB_RESPONSE_IN, T, p_msg, p_msg->REPLY_STATUS);
+		if (!is_local(p_cell)) {
+			run_trans_callbacks( TMCB_RESPONSE_IN, T, T->uas.request, p_msg,
+				p_msg->REPLY_STATUS);
+		}
 		return 1;
 	} /* for cycle */
 
@@ -889,7 +929,7 @@ int t_check( struct sip_msg* p_msg , int *param_branch )
 			p_msg->id,global_msg_id,T);
 	} else {
 		if (T)
-			DBG("DEBUG: t_check: T alredy found!\n");
+			DBG("DEBUG: t_check: T already found!\n");
 		else
 			DBG("DEBUG: t_check: T previously sought and not found\n");
 	}
@@ -899,9 +939,10 @@ int t_check( struct sip_msg* p_msg , int *param_branch )
 
 int init_rb( struct retr_buf *rb, struct sip_msg *msg)
 {
-	struct socket_info* send_sock;
+	/*struct socket_info* send_sock;*/
 	struct via_body* via;
 	int proto;
+	int backup_mhomed;
 
 	via=msg->via1;
 	if (!reply_to_via) {
@@ -919,16 +960,22 @@ int init_rb( struct retr_buf *rb, struct sip_msg *msg)
 	}
 	rb->dst.proto=proto;
 	rb->dst.proto_reserved1=msg->rcv.proto_reserved1;
-	send_sock=get_send_socket(&rb->dst.to, proto);
+	/* turn off mhomed for generating replies -- they are ideally sent to where
+	   request came from to make life with NATs and other beasts easier
+	*/
+	backup_mhomed=mhomed;
+	mhomed=0;
+	mhomed=backup_mhomed;
+	/* use for sending replies the incoming interface of the request -bogdan */
+	/*send_sock=get_send_socket(msg, &rb->dst.to, proto);
 	if (send_sock==0) {
 		LOG(L_ERR, "ERROR: init_rb: cannot fwd to af %d, proto %d "
 			"no socket\n", rb->dst.to.s.sa_family, proto);
 		ser_error=E_BAD_VIA;
 		return 0;
-	}
-	rb->dst.send_sock=send_sock;
-	
-    return 1;
+	}*/
+	rb->dst.send_sock=msg->rcv.bind_address;
+	return 1;
 }
 
 
@@ -949,7 +996,7 @@ static inline void init_new_t(struct cell *new_cell, struct sip_msg *p_msg)
 		-shm_msg->cseq->name.s;
 
 	new_cell->method=new_cell->uas.request->first_line.u.request.method;
-	new_cell->is_invite=p_msg->REQ_METHOD==METHOD_INVITE;
+	if (p_msg->REQ_METHOD==METHOD_INVITE) new_cell->flags |= T_IS_INVITE_FLAG;
 	new_cell->on_negative=get_on_negative();
 	new_cell->on_reply=get_on_reply();
 }
@@ -992,7 +1039,7 @@ static inline int new_t(struct sip_msg *p_msg)
 
 	+1	if a request did not match a transaction
 		- it that was an ack, the calling function
-		  shall forward statelessy
+		  shall forward statelessly
 		- otherwise it means, a new transaction was
 		  introduced and the calling function
 		  shall reply/relay/whatever_appropriate
@@ -1005,7 +1052,7 @@ int t_newtran( struct sip_msg* p_msg )
 
 
 	/* is T still up-to-date ? */
-	DBG("DEBUG: t_addifnew: msg id=%d , global msg id=%d ,"
+	DBG("DEBUG: t_newtran: msg id=%d , global msg id=%d ,"
 		" T on entrance=%p\n",p_msg->id,global_msg_id,T);
 
 	if ( T && T!=T_UNDEFINED  ) {
@@ -1031,7 +1078,7 @@ int t_newtran( struct sip_msg* p_msg )
 			LOG(L_ERR, "ERROR: t_newtran: EoH not parsed\n");
 			return E_OUT_OF_MEM;
 	}
-	/* t_lookup_requests attmpts to find the transaction; 
+	/* t_lookup_requests attempts to find the transaction; 
 	   it also calls check_transaction_quadruple -> it is
 	   safe to assume we have from/callid/cseq/to
 	*/ 
@@ -1056,21 +1103,20 @@ int t_newtran( struct sip_msg* p_msg )
 
 	if (lret==-2) { /* was it an e2e ACK ? if so, trigger a callback */
 		/* no callbacks? complete quickly */
-		if (!callback_array[TMCB_E2EACK_IN]) {
+		if ( !has_tran_tmcbs(t_ack,TMCB_E2EACK_IN) ) {
 			UNLOCK_HASH(p_msg->hash_index);
 			return 1;
 		} 
 		REF_UNSAFE(t_ack);
 		UNLOCK_HASH(p_msg->hash_index);
 		/* we don't call from within REPLY_LOCK -- that introduces
-	   	   a race condition; however, it is so unlikely and the
-	   	   impact is so small (callback called multiple times of
-           multiple ACK/200s received in parallel), that we do not
-	   	    better waste time in locks
-		 */
+		 * a race condition; however, it is so unlikely and the
+		 * impact is so small (callback called multiple times of
+		 * multiple ACK/200s received in parallel), that we do not
+		 * better waste time in locks  */
 		if (unmatched_totag(t_ack, p_msg)) {
-			callback_event( TMCB_E2EACK_IN, t_ack, p_msg, 
-				p_msg->REQ_METHOD );
+			run_trans_callbacks( TMCB_E2EACK_IN , t_ack, p_msg, 0,
+				-p_msg->REQ_METHOD );
 		}
 		UNREF(t_ack);
 		return 1;
@@ -1102,7 +1148,7 @@ int t_newtran( struct sip_msg* p_msg )
   	   the transaction 
 	*/
 	if (!init_rb( &T->uas.response, p_msg)) {
-		LOG(L_ERR, "ERROR: t_newtran: unresolveable via1\n");
+		LOG(L_ERR, "ERROR: t_newtran: unresolvable via1\n");
 		put_on_wait( T );
 		t_unref(p_msg);
 		return E_BAD_VIA;
@@ -1203,7 +1249,7 @@ int t_is_local(struct sip_msg* p_msg)
 	return -1;
     }
     
-    return t->local;
+    return is_local(t);
 }
 
 /* lookup a transaction by callid and cseq, parameters are pure
@@ -1213,7 +1259,7 @@ int t_lookup_callid(struct cell ** trans, str callid, str cseq) {
 	struct cell* p_cell;
 	unsigned hash_index;
 
-	/* I use MAX_HEADER, not shure if this is a good choice... */
+	/* I use MAX_HEADER, not sure if this is a good choice... */
 	char callid_header[MAX_HEADER];
 	char cseq_header[MAX_HEADER];
 	/* save return value of print_* functions here */
@@ -1251,7 +1297,7 @@ int t_lookup_callid(struct cell ** trans, str callid, str cseq) {
 	for ( p_cell = get_tm_table()->entrys[hash_index].first_cell;
 	  p_cell; p_cell = p_cell->next_cell ) {
 		
-		/* compare complete header fields, casecmp to make shure invite=INVITE */
+		/* compare complete header fields, casecmp to make sure invite=INVITE */
 		if ( (strncmp(callid_header, p_cell->callid.s, p_cell->callid.len) == 0)
 			&& (strncasecmp(cseq_header, p_cell->cseq_n.s, p_cell->cseq_n.len) == 0) ) {
 			DBG("we have a match: callid=>>%.*s<< cseq=>>%.*s<<\n", p_cell->callid.len, 

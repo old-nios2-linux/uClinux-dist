@@ -1,9 +1,9 @@
 /*
- * $Id: urirad_mod.h,v 1.2.8.1 2004/07/18 22:56:24 sobomax Exp $
+ * $Id: urirad_mod.h,v 1.4.2.1 2005/07/20 17:11:52 andrei Exp $
  *
  * URI checks using Radius
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -33,6 +33,8 @@
 
 #ifndef URIRAD_MOD_H
 #define URIRAD_MOD_H
+
+#include "../../modules/acc/dict.h" /* attr & val */
 
 extern struct attr attrs[];
 extern struct val vals[];

@@ -1,9 +1,9 @@
 /*
- * $Id: callid.h,v 1.1 2003/04/09 11:48:42 janakj Exp $
+ * $Id: callid.h,v 1.2 2004/08/24 09:00:40 janakj Exp $
  *
  * Fast Call-ID Generator
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

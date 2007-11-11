@@ -41,6 +41,8 @@ Table of Contents
   2.11	/proc/sys/fs/mqueue - POSIX message queues filesystem
   2.12	/proc/<pid>/oom_adj - Adjust the oom-killer score
   2.13	/proc/<pid>/oom_score - Display current oom-killer score
+  2.14	/proc/<pid>/io - Display the IO accounting fields
+  2.15	/proc/<pid>/coredump_filter - Core dump filtering settings
 
 ------------------------------------------------------------------------------
 Preface
@@ -121,21 +123,22 @@ subdirectory has the entries listed in Table 1-1.
 
 Table 1-1: Process specific entries in /proc 
 ..............................................................................
- File    Content                                        
- cmdline Command line arguments                         
- cpu	 Current and last cpu in which it was executed		(2.4)(smp)
- cwd	 Link to the current working directory
- environ Values of environment variables      
- exe	 Link to the executable of this process
- fd      Directory, which contains all file descriptors 
- maps	 Memory maps to executables and library files		(2.4)
- mem     Memory held by this process                    
- root	 Link to the root directory of this process
- stat    Process status                                 
- statm   Process memory status information              
- status  Process status in human readable form          
- wchan   If CONFIG_KALLSYMS is set, a pre-decoded wchan
- smaps	 Extension based on maps, presenting the rss size for each mapped file
+ File		Content
+ clear_refs	Clears page referenced bits shown in smaps output
+ cmdline	Command line arguments
+ cpu		Current and last cpu in which it was executed	(2.4)(smp)
+ cwd		Link to the current working directory
+ environ	Values of environment variables
+ exe		Link to the executable of this process
+ fd		Directory, which contains all file descriptors
+ maps		Memory maps to executables and library files	(2.4)
+ mem		Memory held by this process
+ root		Link to the root directory of this process
+ stat		Process status
+ statm		Process memory status information
+ status		Process status in human readable form
+ wchan		If CONFIG_KALLSYMS is set, a pre-decoded wchan
+ smaps		Extension based on maps, the rss size for each mapped file
 ..............................................................................
 
 For example, to get the status information of a process, all you have to do is
@@ -169,7 +172,9 @@ read the file /proc/PID/status:
 This shows you nearly the same information you would get if you viewed it with
 the ps  command.  In  fact,  ps  uses  the  proc  file  system  to  obtain its
 information. The  statm  file  contains  more  detailed  information about the
-process memory usage. Its seven fields are explained in Table 1-2.
+process memory usage. Its seven fields are explained in Table 1-2.  The stat
+file contains details information about the process itself.  Its fields are
+explained in Table 1-3.
 
 
 Table 1-2: Contents of the statm files (as of 2.6.8-rc3)
@@ -186,16 +191,65 @@ Table 1-2: Contents of the statm files (as of 2.6.8-rc3)
  dt       number of dirty pages			(always 0 on 2.6)
 ..............................................................................
 
+
+Table 1-3: Contents of the stat files (as of 2.6.22-rc3)
+..............................................................................
+ Field          Content
+  pid           process id
+  tcomm         filename of the executable
+  state         state (R is running, S is sleeping, D is sleeping in an
+                uninterruptible wait, Z is zombie, T is traced or stopped)
+  ppid          process id of the parent process
+  pgrp          pgrp of the process
+  sid           session id
+  tty_nr        tty the process uses
+  tty_pgrp      pgrp of the tty
+  flags         task flags
+  min_flt       number of minor faults
+  cmin_flt      number of minor faults with child's
+  maj_flt       number of major faults
+  cmaj_flt      number of major faults with child's
+  utime         user mode jiffies
+  stime         kernel mode jiffies
+  cutime        user mode jiffies with child's
+  cstime        kernel mode jiffies with child's
+  priority      priority level
+  nice          nice level
+  num_threads   number of threads
+  start_time    time the process started after system boot
+  vsize         virtual memory size
+  rss           resident set memory size
+  rsslim        current limit in bytes on the rss
+  start_code    address above which program text can run
+  end_code      address below which program text can run
+  start_stack   address of the start of the stack
+  esp           current value of ESP
+  eip           current value of EIP
+  pending       bitmap of pending signals (obsolete)
+  blocked       bitmap of blocked signals (obsolete)
+  sigign        bitmap of ignored signals (obsolete)
+  sigcatch      bitmap of catched signals (obsolete)
+  wchan         address where process went to sleep
+  0             (place holder)
+  0             (place holder)
+  exit_signal   signal to send to parent thread on exit
+  task_cpu      which CPU the task is scheduled on
+  rt_priority   realtime priority
+  policy        scheduling policy (man sched_setscheduler)
+  blkio_ticks   time spent waiting for block IO
+..............................................................................
+
+
 1.2 Kernel data
 ---------------
 
 Similar to  the  process entries, the kernel data files give information about
 the running kernel. The files used to obtain this information are contained in
-/proc and  are  listed  in Table 1-3. Not all of these will be present in your
+/proc and  are  listed  in Table 1-4. Not all of these will be present in your
 system. It  depends  on the kernel configuration and the loaded modules, which
 files are there, and which are missing.
 
-Table 1-3: Kernel info in /proc 
+Table 1-4: Kernel info in /proc
 ..............................................................................
  File        Content                                           
  apm         Advanced power management info                    
@@ -227,7 +281,7 @@ Table 1-3: Kernel info in /proc
  mounts      Mounted filesystems                               
  net         Networking info (see text)                        
  partitions  Table of partitions known to the system           
- pci	     Depreciated info of PCI bus (new way -> /proc/bus/pci/, 
+ pci	     Deprecated info of PCI bus (new way -> /proc/bus/pci/,
              decoupled by lspci					(2.4)
  rtc         Real time clock                                   
  scsi        SCSI info (see text)                              
@@ -471,10 +525,10 @@ IDE devices:
 
 More detailed  information  can  be  found  in  the  controller  specific
 subdirectories. These  are  named  ide0,  ide1  and  so  on.  Each  of  these
-directories contains the files shown in table 1-4.
+directories contains the files shown in table 1-5.
 
 
-Table 1-4: IDE controller info in  /proc/ide/ide? 
+Table 1-5: IDE controller info in  /proc/ide/ide?
 ..............................................................................
  File    Content                                 
  channel IDE channel (0 or 1)                    
@@ -484,11 +538,11 @@ Table 1-4: IDE controller info in  /proc/ide/ide?
 ..............................................................................
 
 Each device  connected  to  a  controller  has  a separate subdirectory in the
-controllers directory.  The  files  listed in table 1-5 are contained in these
+controllers directory.  The  files  listed in table 1-6 are contained in these
 directories.
 
 
-Table 1-5: IDE device information 
+Table 1-6: IDE device information
 ..............................................................................
  File             Content                                    
  cache            The cache                                  
@@ -1012,6 +1066,13 @@ check the amount of free space (value is in seconds). Default settings are: 4,
 resume it  if we have a value of 3 or more percent; consider information about
 the amount of free space valid for 30 seconds
 
+audit_argv_kb
+-------------
+
+The file contains a single value denoting the limit on the argv array size
+for execve (in KiB). This limit is only applied when system call auditing for
+execve is enabled, otherwise the value is ignored.
+
 ctrl-alt-del
 ------------
 
@@ -1136,6 +1197,13 @@ determine whether or not they are still functioning properly.
 Because the NMI watchdog shares registers with oprofile, by disabling the NMI
 watchdog, oprofile may have more registers to utilize.
 
+maps_protect
+------------
+
+Enables/Disables the protection of the per-process proc entries "maps" and
+"smaps".  When enabled, the contents of these files are visible only to
+readers that are allowed to ptrace() the given process.
+
 
 2.4 /proc/sys/vm - The virtual memory subsystem
 -----------------------------------------------
@@ -1220,9 +1288,9 @@ applications are using mlock(), or if you are running with no swap then
 you probably should increase the lower_zone_protection setting.
 
 The units of this tunable are fairly vague.  It is approximately equal
-to "megabytes".  So setting lower_zone_protection=100 will protect around 100
+to "megabytes," so setting lower_zone_protection=100 will protect around 100
 megabytes of the lowmem zone from user allocations.  It will also make
-those 100 megabytes unavaliable for use by applications and by
+those 100 megabytes unavailable for use by applications and by
 pagecache, so there is a cost.
 
 The effects of this tunable may be observed by monitoring
@@ -1287,6 +1355,21 @@ nr_hugepages configures number of hugetlb page reserved for the system.
 
 hugetlb_shm_group contains group id that is allowed to create SysV shared
 memory segment using hugetlb page.
+
+hugepages_treat_as_movable
+--------------------------
+
+This parameter is only useful when kernelcore= is specified at boot time to
+create ZONE_MOVABLE for pages that may be reclaimed or migrated. Huge pages
+are not movable so are not normally allocated from ZONE_MOVABLE. A non-zero
+value written to hugepages_treat_as_movable allows huge pages to be allocated
+from ZONE_MOVABLE.
+
+Once enabled, the ZONE_MOVABLE is treated as an area of memory the huge
+pages pool can easily grow or shrink within. Assuming that applications are
+not running that mlock() a lot of memory, it is likely the huge pages pool
+can grow to the size of ZONE_MOVABLE by repeatedly entering the desired value
+into nr_hugepages and triggering page reclaim.
 
 laptop_mode
 -----------
@@ -1420,6 +1503,15 @@ fewer messages that will be written. Message_burst controls when messages will
 be dropped.  The  default  settings  limit  warning messages to one every five
 seconds.
 
+warnings
+--------
+
+This controls console messages from the networking stack that can occur because
+of problems on the network like duplicate address or bad checksums. Normally,
+this should be enabled, but if the problem persists the messages can be
+disabled.
+
+
 netdev_max_backlog
 ------------------
 
@@ -1538,10 +1630,10 @@ TCP settings
 tcp_ecn
 -------
 
-This file controls the use of the ECN bit in the IPv4 headers, this is a new
+This file controls the use of the ECN bit in the IPv4 headers. This is a new
 feature about Explicit Congestion Notification, but some routers and firewalls
-block trafic that has this bit set, so it could be necessary to echo 0 to
-/proc/sys/net/ipv4/tcp_ecn, if you want to talk to this sites. For more info
+block traffic that has this bit set, so it could be necessary to echo 0 to
+/proc/sys/net/ipv4/tcp_ecn if you want to talk to these sites. For more info
 you could read RFC2481.
 
 tcp_retrans_collapse
@@ -1989,4 +2081,145 @@ need to  recompile  the kernel, or even to reboot the system. The files in the
 /proc/sys tree  can  not only be read, but also modified. You can use the echo
 command to write value into these files, thereby changing the default settings
 of the kernel.
+------------------------------------------------------------------------------
+
+2.14  /proc/<pid>/io - Display the IO accounting fields
+-------------------------------------------------------
+
+This file contains IO statistics for each running process
+
+Example
+-------
+
+test:/tmp # dd if=/dev/zero of=/tmp/test.dat &
+[1] 3828
+
+test:/tmp # cat /proc/3828/io
+rchar: 323934931
+wchar: 323929600
+syscr: 632687
+syscw: 632675
+read_bytes: 0
+write_bytes: 323932160
+cancelled_write_bytes: 0
+
+
+Description
+-----------
+
+rchar
+-----
+
+I/O counter: chars read
+The number of bytes which this task has caused to be read from storage. This
+is simply the sum of bytes which this process passed to read() and pread().
+It includes things like tty IO and it is unaffected by whether or not actual
+physical disk IO was required (the read might have been satisfied from
+pagecache)
+
+
+wchar
+-----
+
+I/O counter: chars written
+The number of bytes which this task has caused, or shall cause to be written
+to disk. Similar caveats apply here as with rchar.
+
+
+syscr
+-----
+
+I/O counter: read syscalls
+Attempt to count the number of read I/O operations, i.e. syscalls like read()
+and pread().
+
+
+syscw
+-----
+
+I/O counter: write syscalls
+Attempt to count the number of write I/O operations, i.e. syscalls like
+write() and pwrite().
+
+
+read_bytes
+----------
+
+I/O counter: bytes read
+Attempt to count the number of bytes which this process really did cause to
+be fetched from the storage layer. Done at the submit_bio() level, so it is
+accurate for block-backed filesystems. <please add status regarding NFS and
+CIFS at a later time>
+
+
+write_bytes
+-----------
+
+I/O counter: bytes written
+Attempt to count the number of bytes which this process caused to be sent to
+the storage layer. This is done at page-dirtying time.
+
+
+cancelled_write_bytes
+---------------------
+
+The big inaccuracy here is truncate. If a process writes 1MB to a file and
+then deletes the file, it will in fact perform no writeout. But it will have
+been accounted as having caused 1MB of write.
+In other words: The number of bytes which this process caused to not happen,
+by truncating pagecache. A task can cause "negative" IO too. If this task
+truncates some dirty pagecache, some IO which another task has been accounted
+for (in it's write_bytes) will not be happening. We _could_ just subtract that
+from the truncating task's write_bytes, but there is information loss in doing
+that.
+
+
+Note
+----
+
+At its current implementation state, this is a bit racy on 32-bit machines: if
+process A reads process B's /proc/pid/io while process B is updating one of
+those 64-bit counters, process A could see an intermediate result.
+
+
+More information about this can be found within the taskstats documentation in
+Documentation/accounting.
+
+2.15 /proc/<pid>/coredump_filter - Core dump filtering settings
+---------------------------------------------------------------
+When a process is dumped, all anonymous memory is written to a core file as
+long as the size of the core file isn't limited. But sometimes we don't want
+to dump some memory segments, for example, huge shared memory. Conversely,
+sometimes we want to save file-backed memory segments into a core file, not
+only the individual files.
+
+/proc/<pid>/coredump_filter allows you to customize which memory segments
+will be dumped when the <pid> process is dumped. coredump_filter is a bitmask
+of memory types. If a bit of the bitmask is set, memory segments of the
+corresponding memory type are dumped, otherwise they are not dumped.
+
+The following 4 memory types are supported:
+  - (bit 0) anonymous private memory
+  - (bit 1) anonymous shared memory
+  - (bit 2) file-backed private memory
+  - (bit 3) file-backed shared memory
+
+  Note that MMIO pages such as frame buffer are never dumped and vDSO pages
+  are always dumped regardless of the bitmask status.
+
+Default value of coredump_filter is 0x3; this means all anonymous memory
+segments are dumped.
+
+If you don't want to dump all shared memory segments attached to pid 1234,
+write 1 to the process's proc file.
+
+  $ echo 0x1 > /proc/1234/coredump_filter
+
+When a new process is created, the process inherits the bitmask status from its
+parent. It is useful to set up coredump_filter before the program runs.
+For example:
+
+  $ echo 0x7 > /proc/self/coredump_filter
+  $ ./some_program
+
 ------------------------------------------------------------------------------

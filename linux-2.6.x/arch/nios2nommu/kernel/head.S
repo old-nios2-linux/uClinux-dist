@@ -114,7 +114,7 @@ chkadr:
 	beq	r1,r2,finish_move	/* We are running in RAM done */
 	addi	r1,r1,(_start - chkadr)	/* Source */
 	movia	r2,_start		/* Destination */
-	movia	r3,__data_end		/* End of copy */
+	movia	r3,__bss_start		/* End of copy */
 	
 loop_move:				// r1: src, r2: dest, r3: last dest
 	ldw	r8,0(r1)		// load a word from [r1]

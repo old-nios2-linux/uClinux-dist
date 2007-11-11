@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -41,12 +41,16 @@ static char rcsid[] = "$NetBSD: s_tanh.c,v 1.7 1995/05/10 20:48:22 jtc Exp $";
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(expm1)
+libm_hidden_proto(fabs)
+
 #ifdef __STDC__
 static const double one=1.0, two=2.0, tiny = 1.0e-300;
 #else
 static double one=1.0, two=2.0, tiny = 1.0e-300;
 #endif
 
+libm_hidden_proto(tanh)
 #ifdef __STDC__
 	double tanh(double x)
 #else
@@ -62,7 +66,7 @@ static double one=1.0, two=2.0, tiny = 1.0e-300;
 	ix = jx&0x7fffffff;
 
     /* x is INF or NaN */
-	if(ix>=0x7ff00000) { 
+	if(ix>=0x7ff00000) {
 	    if (jx>=0) return one/x+one;    /* tanh(+-inf)=+-1 */
 	    else       return one/x-one;    /* tanh(NaN) = NaN */
 	}
@@ -84,3 +88,4 @@ static double one=1.0, two=2.0, tiny = 1.0e-300;
 	}
 	return (jx>=0)? z: -z;
 }
+libm_hidden_def(tanh)

@@ -5,8 +5,8 @@
  *      For use with LSI Logic PCI chip/adapter(s)
  *      running LSI Logic Fusion MPT (Message Passing Technology) firmware.
  *
- *  Copyright (c) 1999-2005 LSI Logic Corporation
- *  (mailto:mpt_linux_developer@lsil.com)
+ *  Copyright (c) 1999-2007 LSI Logic Corporation
+ *  (mailto:DL-MPTFusionLinux@lsi.com)
  *
  */
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
@@ -64,6 +64,7 @@
 #endif
 
 #include "mptbase.h"
+#include "lsi/mpi_log_fc.h"
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 #define my_NAME		"Fusion MPT base driver"
@@ -73,6 +74,7 @@
 MODULE_AUTHOR(MODULEAUTHOR);
 MODULE_DESCRIPTION(my_NAME);
 MODULE_LICENSE("GPL");
+MODULE_VERSION(my_VERSION);
 
 /*
  *  cmd line parameters
@@ -80,6 +82,16 @@ MODULE_LICENSE("GPL");
 static int mpt_msi_enable;
 module_param(mpt_msi_enable, int, 0);
 MODULE_PARM_DESC(mpt_msi_enable, " MSI Support Enable (default=0)");
+
+static int mpt_channel_mapping;
+module_param(mpt_channel_mapping, int, 0);
+MODULE_PARM_DESC(mpt_channel_mapping, " Mapping id's to channels (default=0)");
+
+static int mpt_debug_level;
+static int mpt_set_debug_level(const char *val, struct kernel_param *kp);
+module_param_call(mpt_debug_level, mpt_set_debug_level, param_get_int,
+		  &mpt_debug_level, 0600);
+MODULE_PARM_DESC(mpt_debug_level, " debug level - refer to mptdebug.h - (default=0)");
 
 #ifdef MFCNT
 static int mfcounter = 0;
@@ -155,6 +167,7 @@ static int	mpt_readScsiDevicePageHeaders(MPT_ADAPTER *ioc, int portnum);
 static void 	mpt_read_ioc_pg_1(MPT_ADAPTER *ioc);
 static void 	mpt_read_ioc_pg_4(MPT_ADAPTER *ioc);
 static void	mpt_timer_expired(unsigned long data);
+static void	mpt_get_manufacturing_pg_0(MPT_ADAPTER *ioc);
 static int	SendEventNotification(MPT_ADAPTER *ioc, u8 EvSwitch);
 static int	SendEventAck(MPT_ADAPTER *ioc, EventNotificationReply_t *evnp);
 static int	mpt_host_page_access_control(MPT_ADAPTER *ioc, u8 access_control_value, int sleepFlag);
@@ -172,11 +185,12 @@ static void	mpt_get_fw_exp_ver(char *buf, MPT_ADAPTER *ioc);
 
 //int		mpt_HardResetHandler(MPT_ADAPTER *ioc, int sleepFlag);
 static int	ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *evReply, int *evHandlers);
-static void	mpt_sp_ioc_info(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf);
+static void	mpt_iocstatus_info(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf);
 static void	mpt_fc_log_info(MPT_ADAPTER *ioc, u32 log_info);
 static void	mpt_spi_log_info(MPT_ADAPTER *ioc, u32 log_info);
 static void	mpt_sas_log_info(MPT_ADAPTER *ioc, u32 log_info);
 static int	mpt_read_ioc_pg_3(MPT_ADAPTER *ioc);
+static void	mpt_inactive_raid_list_free(MPT_ADAPTER *ioc);
 
 /* module entry point */
 static int  __init    fusion_init  (void);
@@ -208,6 +222,19 @@ pci_enable_io_access(struct pci_dev *pdev)
 	pci_write_config_word(pdev, PCI_COMMAND, command_reg);
 }
 
+static int mpt_set_debug_level(const char *val, struct kernel_param *kp)
+{
+	int ret = param_set_int(val, kp);
+	MPT_ADAPTER *ioc;
+
+	if (ret)
+		return ret;
+
+	list_for_each_entry(ioc, &ioc_list, list)
+		ioc->debug_level = mpt_debug_level;
+	return 0;
+}
+
 /*
  *  Process turbo (context) reply...
  */
@@ -219,7 +246,7 @@ mpt_turbo_reply(MPT_ADAPTER *ioc, u32 pa)
 	int req_idx = 0;
 	int cb_idx;
 
-	dmfprintk((MYIOC_s_INFO_FMT "Got TURBO reply req_idx=%08x\n",
+	dmfprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Got TURBO reply req_idx=%08x\n",
 				ioc->name, pa));
 
 	switch (pa >> MPI_CONTEXT_REPLY_TYPE_SHIFT) {
@@ -302,9 +329,9 @@ mpt_reply(MPT_ADAPTER *ioc, u32 pa)
 	cb_idx = mr->u.frame.hwhdr.msgctxu.fld.cb_idx;
 	mf = MPT_INDEX_2_MFPTR(ioc, req_idx);
 
-	dmfprintk((MYIOC_s_INFO_FMT "Got non-TURBO reply=%p req_idx=%x cb_idx=%x Function=%x\n",
+	dmfprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Got non-TURBO reply=%p req_idx=%x cb_idx=%x Function=%x\n",
 			ioc->name, mr, req_idx, cb_idx, mr->u.hdr.Function));
-	DBG_DUMP_REPLY_FRAME(mr)
+	DBG_DUMP_REPLY_FRAME(ioc, (u32 *)mr)
 
 	 /*  Check/log IOC log info
 	 */
@@ -318,13 +345,9 @@ mpt_reply(MPT_ADAPTER *ioc, u32 pa)
 		else if (ioc->bus_type == SAS)
 			mpt_sas_log_info(ioc, log_info);
 	}
-	if (ioc_stat & MPI_IOCSTATUS_MASK) {
-		if (ioc->bus_type == SPI &&
-		    cb_idx != mpt_stm_index &&
-		    cb_idx != mpt_lan_index)
-			mpt_sp_ioc_info(ioc, (u32)ioc_stat, mf);
-	}
 
+	if (ioc_stat & MPI_IOCSTATUS_MASK)
+		mpt_iocstatus_info(ioc, (u32)ioc_stat, mf);
 
 	/*  Check for (valid) IO callback!  */
 	if (cb_idx < 1 || cb_idx >= MPT_MAX_PROTOCOL_DRIVERS ||
@@ -347,7 +370,7 @@ mpt_reply(MPT_ADAPTER *ioc, u32 pa)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_interrupt - MPT adapter (IOC) specific interrupt handler.
  *	@irq: irq number (not used)
  *	@bus_id: bus identifier cookie == pointer to MPT_ADAPTER structure
@@ -387,13 +410,15 @@ mpt_interrupt(int irq, void *bus_id)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mpt_base_reply - MPT base driver's callback routine; all base driver
- *	"internal" request/reply processing is routed here.
- *	Currently used for EventNotification and EventAck handling.
+/**
+ *	mpt_base_reply - MPT base driver's callback routine
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@mf: Pointer to original MPT request frame
  *	@reply: Pointer to MPT reply frame (NULL if TurboReply)
+ *
+ *	MPT base driver's callback routine; all base driver
+ *	"internal" request/reply processing is routed here.
+ *	Currently used for EventNotification and EventAck handling.
  *
  *	Returns 1 indicating original alloc'd request frame ptr
  *	should be freed, or 0 if it shouldn't.
@@ -404,17 +429,17 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
 	int freereq = 1;
 	u8 func;
 
-	dmfprintk((MYIOC_s_INFO_FMT "mpt_base_reply() called\n", ioc->name));
-
-#if defined(MPT_DEBUG_MSG_FRAME)
-	if (!(reply->u.hdr.MsgFlags & MPI_MSGFLAGS_CONTINUATION_REPLY)) {
-		dmfprintk((KERN_INFO MYNAM ": Original request frame (@%p) header\n", mf));
-		DBG_DUMP_REQUEST_FRAME_HDR(mf)
+	dmfprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mpt_base_reply() called\n", ioc->name));
+#ifdef CONFIG_FUSION_LOGGING
+	if ((ioc->debug_level & MPT_DEBUG_MSG_FRAME) &&
+			!(reply->u.hdr.MsgFlags & MPI_MSGFLAGS_CONTINUATION_REPLY)) {
+		dmfprintk(ioc, printk(KERN_INFO MYNAM ": Original request frame (@%p) header\n", mf));
+		DBG_DUMP_REQUEST_FRAME_HDR(ioc, (u32 *)mf)
 	}
 #endif
 
 	func = reply->u.hdr.Function;
-	dmfprintk((MYIOC_s_INFO_FMT "mpt_base_reply, Function=%02Xh\n",
+	dmfprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mpt_base_reply, Function=%02Xh\n",
 			ioc->name, func));
 
 	if (func == MPI_FUNCTION_EVENT_NOTIFICATION) {
@@ -425,7 +450,7 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
 		results = ProcessEventNotification(ioc, pEvReply, &evHandlers);
 		if (results != evHandlers) {
 			/* CHECKME! Any special handling needed here? */
-			devtverboseprintk((MYIOC_s_WARN_FMT "Called %d event handlers, sum results = %d\n",
+			devtverboseprintk(ioc, printk(MYIOC_s_WARN_FMT "Called %d event handlers, sum results = %d\n",
 					ioc->name, evHandlers, results));
 		}
 
@@ -436,7 +461,7 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
 		if (pEvReply->MsgFlags & MPI_MSGFLAGS_CONTINUATION_REPLY) {
 			freereq = 0;
 		} else {
-			devtverboseprintk((MYIOC_s_WARN_FMT "EVENT_NOTIFICATION reply %p returns Request frame\n",
+			devtverboseprintk(ioc, printk(MYIOC_s_WARN_FMT "EVENT_NOTIFICATION reply %p returns Request frame\n",
 				ioc->name, pEvReply));
 		}
 
@@ -445,13 +470,13 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
 #endif
 
 	} else if (func == MPI_FUNCTION_EVENT_ACK) {
-		dprintk((MYIOC_s_INFO_FMT "mpt_base_reply, EventAck reply received\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mpt_base_reply, EventAck reply received\n",
 				ioc->name));
 	} else if (func == MPI_FUNCTION_CONFIG) {
 		CONFIGPARMS *pCfg;
 		unsigned long flags;
 
-		dcprintk((MYIOC_s_INFO_FMT "config_complete (mf=%p,mr=%p)\n",
+		dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "config_complete (mf=%p,mr=%p)\n",
 				ioc->name, mf, reply));
 
 		pCfg = * ((CONFIGPARMS **)((u8 *) mf + ioc->req_sz - sizeof(void *)));
@@ -474,7 +499,7 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
 				u16		 status;
 
 				status = le16_to_cpu(pReply->IOCStatus) & MPI_IOCSTATUS_MASK;
-				dcprintk((KERN_NOTICE "  IOCStatus=%04xh, IOCLogInfo=%08xh\n",
+				dcprintk(ioc, printk(KERN_NOTICE "  IOCStatus=%04xh, IOCLogInfo=%08xh\n",
 				     status, le32_to_cpu(pReply->IOCLogInfo)));
 
 				pCfg->status = status;
@@ -530,7 +555,7 @@ mpt_base_reply(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf, MPT_FRAME_HDR *reply)
  *	@dclass: Protocol driver's class (%MPT_DRIVER_CLASS enum value)
  *
  *	This routine is called by a protocol-specific driver (SCSI host,
- *	LAN, SCSI target) to register it's reply callback routine.  Each
+ *	LAN, SCSI target) to register its reply callback routine.  Each
  *	protocol-specific driver must do this before it will be able to
  *	use any IOC resources, such as obtaining request frames.
  *
@@ -572,7 +597,7 @@ mpt_register(MPT_CALLBACK cbfunc, MPT_DRIVER_CLASS dclass)
  *	mpt_deregister - Deregister a protocol drivers resources.
  *	@cb_idx: previously registered callback handle
  *
- *	Each protocol-specific driver should call this routine when it's
+ *	Each protocol-specific driver should call this routine when its
  *	module is unloaded.
  */
 void
@@ -617,7 +642,7 @@ mpt_event_register(int cb_idx, MPT_EVHANDLER ev_cbfunc)
  *
  *	Each protocol-specific driver should call this routine
  *	when it does not (or can no longer) handle events,
- *	or when it's module is unloaded.
+ *	or when its module is unloaded.
  */
 void
 mpt_event_deregister(int cb_idx)
@@ -656,7 +681,7 @@ mpt_reset_register(int cb_idx, MPT_RESETHANDLER reset_func)
  *
  *	Each protocol-specific driver should call this routine
  *	when it does not (or can no longer) handle IOC reset handling,
- *	or when it's module is unloaded.
+ *	or when its module is unloaded.
  */
 void
 mpt_reset_deregister(int cb_idx)
@@ -670,6 +695,8 @@ mpt_reset_deregister(int cb_idx)
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
  *	mpt_device_driver_register - Register device driver hooks
+ *	@dd_cbfunc: driver callbacks struct
+ *	@cb_idx: MPT protocol driver index
  */
 int
 mpt_device_driver_register(struct mpt_pci_driver * dd_cbfunc, int cb_idx)
@@ -696,6 +723,7 @@ mpt_device_driver_register(struct mpt_pci_driver * dd_cbfunc, int cb_idx)
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
  *	mpt_device_driver_deregister - DeRegister device driver hooks
+ *	@cb_idx: MPT protocol driver index
  */
 void
 mpt_device_driver_deregister(int cb_idx)
@@ -776,7 +804,7 @@ mpt_get_msg_frame(int handle, MPT_ADAPTER *ioc)
 		printk(KERN_INFO "MF Count 0x%x Max 0x%x \n", ioc->mfcnt, ioc->req_depth);
 #endif
 
-	dmfprintk((KERN_INFO MYNAM ": %s: mpt_get_msg_frame(%d,%d), got mf=%p\n",
+	dmfprintk(ioc, printk(KERN_INFO MYNAM ": %s: mpt_get_msg_frame(%d,%d), got mf=%p\n",
 			ioc->name, handle, ioc->id, mf));
 	return mf;
 }
@@ -807,27 +835,10 @@ mpt_put_msg_frame(int handle, MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf)
 	mf->u.frame.hwhdr.msgctxu.fld.req_idx = cpu_to_le16(req_idx);
 	mf->u.frame.hwhdr.msgctxu.fld.rsvd = 0;
 
-#ifdef MPT_DEBUG_MSG_FRAME
-	{
-		u32	*m = mf->u.frame.hwhdr.__hdr;
-		int	 ii, n;
-
-		printk(KERN_INFO MYNAM ": %s: About to Put msg frame @ %p:\n" KERN_INFO " ",
-				ioc->name, m);
-		n = ioc->req_sz/4 - 1;
-		while (m[n] == 0)
-			n--;
-		for (ii=0; ii<=n; ii++) {
-			if (ii && ((ii%8)==0))
-				printk("\n" KERN_INFO " ");
-			printk(" %08x", le32_to_cpu(m[ii]));
-		}
-		printk("\n");
-	}
-#endif
+	DBG_DUMP_PUT_MSG_FRAME(ioc, (u32 *)mf);
 
 	mf_dma_addr = (ioc->req_frames_low_dma + req_offset) | ioc->RequestNB[req_idx];
-	dsgprintk((MYIOC_s_INFO_FMT "mf_dma_addr=%x req_idx=%d RequestNB=%x\n", ioc->name, mf_dma_addr, req_idx, ioc->RequestNB[req_idx]));
+	dsgprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mf_dma_addr=%x req_idx=%d RequestNB=%x\n", ioc->name, mf_dma_addr, req_idx, ioc->RequestNB[req_idx]));
 	CHIPREG_WRITE32(&ioc->chip->RequestFifo, mf_dma_addr);
 }
 
@@ -887,8 +898,7 @@ mpt_add_sge(char *pAddr, u32 flagslength, dma_addr_t dma_addr)
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- *	mpt_send_handshake_request - Send MPT request via doorbell
- *	handshake method.
+ *	mpt_send_handshake_request - Send MPT request via doorbell handshake method.
  *	@handle: Handle of registered MPT protocol driver
  *	@ioc: Pointer to MPT adapter structure
  *	@reqBytes: Size of the request in bytes
@@ -906,7 +916,7 @@ mpt_add_sge(char *pAddr, u32 flagslength, dma_addr_t dma_addr)
 int
 mpt_send_handshake_request(int handle, MPT_ADAPTER *ioc, int reqBytes, u32 *req, int sleepFlag)
 {
-	int		 r = 0;
+	int	r = 0;
 	u8	*req_as_bytes;
 	int	 ii;
 
@@ -943,7 +953,7 @@ mpt_send_handshake_request(int handle, MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 	if (!(CHIPREG_READ32(&ioc->chip->Doorbell) & MPI_DOORBELL_ACTIVE))
 		return -5;
 
-	dhsprintk((KERN_INFO MYNAM ": %s: mpt_send_handshake_request start, WaitCnt=%d\n",
+	dhsprintk(ioc, printk(KERN_INFO MYNAM ": %s: mpt_send_handshake_request start, WaitCnt=%d\n",
 		ioc->name, ii));
 
 	CHIPREG_WRITE32(&ioc->chip->IntStatus, 0);
@@ -981,10 +991,13 @@ mpt_send_handshake_request(int handle, MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- * mpt_host_page_access_control - provides mechanism for the host
- * driver to control the IOC's Host Page Buffer access.
+ * mpt_host_page_access_control - control the IOC's Host Page Buffer access
  * @ioc: Pointer to MPT adapter structure
  * @access_control_value: define bits below
+ * @sleepFlag: Specifies whether the process can sleep
+ *
+ * Provides mechanism for the host driver to control the IOC's
+ * Host Page Buffer access.
  *
  * Access Control Value - bits[15:12]
  * 0h Reserved
@@ -1022,10 +1035,10 @@ mpt_host_page_access_control(MPT_ADAPTER *ioc, u8 access_control_value, int slee
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
  *	mpt_host_page_alloc - allocate system memory for the fw
- *	If we already allocated memory in past, then resend the same pointer.
- *	ioc@: Pointer to pointer to IOC adapter
- *	ioc_init@: Pointer to ioc init config page
+ *	@ioc: Pointer to pointer to IOC adapter
+ *	@ioc_init: Pointer to ioc init config page
  *
+ *	If we already allocated memory in past, then resend the same pointer.
  *	Returns 0 for success, non-zero for failure.
  */
 static int
@@ -1051,7 +1064,7 @@ mpt_host_page_alloc(MPT_ADAPTER *ioc, pIOCInit_t ioc_init)
 			    host_page_buffer_sz,
 			    &ioc->HostPageBuffer_dma)) != NULL) {
 
-				dinitprintk((MYIOC_s_INFO_FMT
+				dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 				    "host_page_buffer @ %p, dma @ %x, sz=%d bytes\n",
 				    ioc->name, ioc->HostPageBuffer,
 				    (u32)ioc->HostPageBuffer_dma,
@@ -1091,12 +1104,15 @@ return 0;
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- *	mpt_verify_adapter - Given a unique IOC identifier, set pointer to
- *	the associated MPT adapter structure.
+ *	mpt_verify_adapter - Given IOC identifier, set pointer to its adapter structure.
  *	@iocid: IOC unique identifier (integer)
  *	@iocpp: Pointer to pointer to IOC adapter
  *
- *	Returns iocid and sets iocpp.
+ *	Given a unique IOC identifier, set pointer to the associated MPT
+ *	adapter structure.
+ *
+ *	Returns iocid and sets iocpp if iocid is found.
+ *	Returns -1 if iocid is not found.
  */
 int
 mpt_verify_adapter(int iocid, MPT_ADAPTER **iocpp)
@@ -1114,10 +1130,253 @@ mpt_verify_adapter(int iocid, MPT_ADAPTER **iocpp)
 	return -1;
 }
 
+/**
+ *	mpt_get_product_name - returns product string
+ *	@vendor: pci vendor id
+ *	@device: pci device id
+ *	@revision: pci revision id
+ *	@prod_name: string returned
+ *
+ *	Returns product string displayed when driver loads,
+ *	in /proc/mpt/summary and /sysfs/class/scsi_host/host<X>/version_product
+ *
+ **/
+static void
+mpt_get_product_name(u16 vendor, u16 device, u8 revision, char *prod_name)
+{
+	char *product_str = NULL;
+
+	if (vendor == PCI_VENDOR_ID_BROCADE) {
+		switch (device)
+		{
+		case MPI_MANUFACTPAGE_DEVICEID_FC949E:
+			switch (revision)
+			{
+			case 0x00:
+				product_str = "BRE040 A0";
+				break;
+			case 0x01:
+				product_str = "BRE040 A1";
+				break;
+			default:
+				product_str = "BRE040";
+				break;
+			}
+			break;
+		}
+		goto out;
+	}
+
+	switch (device)
+	{
+	case MPI_MANUFACTPAGE_DEVICEID_FC909:
+		product_str = "LSIFC909 B1";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC919:
+		product_str = "LSIFC919 B0";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC929:
+		product_str = "LSIFC929 B0";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC919X:
+		if (revision < 0x80)
+			product_str = "LSIFC919X A0";
+		else
+			product_str = "LSIFC919XL A1";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC929X:
+		if (revision < 0x80)
+			product_str = "LSIFC929X A0";
+		else
+			product_str = "LSIFC929XL A1";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC939X:
+		product_str = "LSIFC939X A1";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC949X:
+		product_str = "LSIFC949X A1";
+		break;
+	case MPI_MANUFACTPAGE_DEVICEID_FC949E:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSIFC949E A0";
+			break;
+		case 0x01:
+			product_str = "LSIFC949E A1";
+			break;
+		default:
+			product_str = "LSIFC949E";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_53C1030:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSI53C1030 A0";
+			break;
+		case 0x01:
+			product_str = "LSI53C1030 B0";
+			break;
+		case 0x03:
+			product_str = "LSI53C1030 B1";
+			break;
+		case 0x07:
+			product_str = "LSI53C1030 B2";
+			break;
+		case 0x08:
+			product_str = "LSI53C1030 C0";
+			break;
+		case 0x80:
+			product_str = "LSI53C1030T A0";
+			break;
+		case 0x83:
+			product_str = "LSI53C1030T A2";
+			break;
+		case 0x87:
+			product_str = "LSI53C1030T A3";
+			break;
+		case 0xc1:
+			product_str = "LSI53C1020A A1";
+			break;
+		default:
+			product_str = "LSI53C1030";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_1030_53C1035:
+		switch (revision)
+		{
+		case 0x03:
+			product_str = "LSI53C1035 A2";
+			break;
+		case 0x04:
+			product_str = "LSI53C1035 B0";
+			break;
+		default:
+			product_str = "LSI53C1035";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_SAS1064:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSISAS1064 A1";
+			break;
+		case 0x01:
+			product_str = "LSISAS1064 A2";
+			break;
+		case 0x02:
+			product_str = "LSISAS1064 A3";
+			break;
+		case 0x03:
+			product_str = "LSISAS1064 A4";
+			break;
+		default:
+			product_str = "LSISAS1064";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_SAS1064E:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSISAS1064E A0";
+			break;
+		case 0x01:
+			product_str = "LSISAS1064E B0";
+			break;
+		case 0x02:
+			product_str = "LSISAS1064E B1";
+			break;
+		case 0x04:
+			product_str = "LSISAS1064E B2";
+			break;
+		case 0x08:
+			product_str = "LSISAS1064E B3";
+			break;
+		default:
+			product_str = "LSISAS1064E";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_SAS1068:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSISAS1068 A0";
+			break;
+		case 0x01:
+			product_str = "LSISAS1068 B0";
+			break;
+		case 0x02:
+			product_str = "LSISAS1068 B1";
+			break;
+		default:
+			product_str = "LSISAS1068";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_SAS1068E:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSISAS1068E A0";
+			break;
+		case 0x01:
+			product_str = "LSISAS1068E B0";
+			break;
+		case 0x02:
+			product_str = "LSISAS1068E B1";
+			break;
+		case 0x04:
+			product_str = "LSISAS1068E B2";
+			break;
+		case 0x08:
+			product_str = "LSISAS1068E B3";
+			break;
+		default:
+			product_str = "LSISAS1068E";
+			break;
+		}
+		break;
+	case MPI_MANUFACTPAGE_DEVID_SAS1078:
+		switch (revision)
+		{
+		case 0x00:
+			product_str = "LSISAS1078 A0";
+			break;
+		case 0x01:
+			product_str = "LSISAS1078 B0";
+			break;
+		case 0x02:
+			product_str = "LSISAS1078 C0";
+			break;
+		case 0x03:
+			product_str = "LSISAS1078 C1";
+			break;
+		case 0x04:
+			product_str = "LSISAS1078 C2";
+			break;
+		default:
+			product_str = "LSISAS1078";
+			break;
+		}
+		break;
+	}
+
+ out:
+	if (product_str)
+		sprintf(prod_name, "%s", product_str);
+}
+
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_attach - Install a PCI intelligent MPT adapter.
  *	@pdev: Pointer to pci_dev structure
+ *	@id: PCI device ID information
  *
  *	This routine performs all the steps necessary to bring the IOC of
  *	a MPT adapter to a OPERATIONAL state.  This includes registering
@@ -1149,31 +1408,37 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct proc_dir_entry *dent, *ent;
 #endif
 
+	ioc = kzalloc(sizeof(MPT_ADAPTER), GFP_ATOMIC);
+	if (ioc == NULL) {
+		printk(KERN_ERR MYNAM ": ERROR - Insufficient memory to add adapter!\n");
+		return -ENOMEM;
+	}
+
+	ioc->debug_level = mpt_debug_level;
+	if (mpt_debug_level)
+		printk(KERN_INFO MYNAM ": mpt_debug_level=%xh\n", mpt_debug_level);
+
 	if (pci_enable_device(pdev))
 		return r;
 
-	dinitprintk((KERN_WARNING MYNAM ": mpt_adapter_install\n"));
+	dinitprintk(ioc, printk(KERN_WARNING MYNAM ": mpt_adapter_install\n"));
 
 	if (!pci_set_dma_mask(pdev, DMA_64BIT_MASK)) {
-		dprintk((KERN_INFO MYNAM
+		dprintk(ioc, printk(KERN_INFO MYNAM
 			": 64 BIT PCI BUS DMA ADDRESSING SUPPORTED\n"));
 	} else if (pci_set_dma_mask(pdev, DMA_32BIT_MASK)) {
 		printk(KERN_WARNING MYNAM ": 32 BIT PCI BUS DMA ADDRESSING NOT SUPPORTED\n");
 		return r;
 	}
 
-	if (!pci_set_consistent_dma_mask(pdev, DMA_64BIT_MASK))
-		dprintk((KERN_INFO MYNAM
+	if (!pci_set_consistent_dma_mask(pdev, DMA_64BIT_MASK)) {
+		dprintk(ioc, printk(KERN_INFO MYNAM
 			": Using 64 bit consistent mask\n"));
-	else
-		dprintk((KERN_INFO MYNAM
+	} else {
+		dprintk(ioc, printk(KERN_INFO MYNAM
 			": Not using 64 bit consistent mask\n"));
-
-	ioc = kzalloc(sizeof(MPT_ADAPTER), GFP_ATOMIC);
-	if (ioc == NULL) {
-		printk(KERN_ERR MYNAM ": ERROR - Insufficient memory to add adapter!\n");
-		return -ENOMEM;
 	}
+
 	ioc->alloc_total = sizeof(MPT_ADAPTER);
 	ioc->req_sz = MPT_DEFAULT_FRAME_SIZE;		/* avoid div by zero! */
 	ioc->reply_sz = MPT_REPLY_FRAME_SIZE;
@@ -1241,9 +1506,9 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 		return -EINVAL;
 	}
 	ioc->memmap = mem;
-	dinitprintk((KERN_INFO MYNAM ": mem = %p, mem_phys = %lx\n", mem, mem_phys));
+	dinitprintk(ioc, printk(KERN_INFO MYNAM ": mem = %p, mem_phys = %lx\n", mem, mem_phys));
 
-	dinitprintk((KERN_INFO MYNAM ": facts @ %p, pfacts[0] @ %p\n",
+	dinitprintk(ioc, printk(KERN_INFO MYNAM ": facts @ %p, pfacts[0] @ %p\n",
 			&ioc->facts, &ioc->pfacts[0]));
 
 	ioc->mem_phys = mem_phys;
@@ -1256,23 +1521,23 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 		ioc->pio_chip = (SYSIF_REGS __iomem *)pmem;
 	}
 
-	if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC909) {
-		ioc->prod_name = "LSIFC909";
+	pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
+	mpt_get_product_name(pdev->vendor, pdev->device, revision, ioc->prod_name);
+
+	switch (pdev->device)
+	{
+	case MPI_MANUFACTPAGE_DEVICEID_FC939X:
+	case MPI_MANUFACTPAGE_DEVICEID_FC949X:
+		ioc->errata_flag_1064 = 1;
+	case MPI_MANUFACTPAGE_DEVICEID_FC909:
+	case MPI_MANUFACTPAGE_DEVICEID_FC929:
+	case MPI_MANUFACTPAGE_DEVICEID_FC919:
+	case MPI_MANUFACTPAGE_DEVICEID_FC949E:
 		ioc->bus_type = FC;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC929) {
-		ioc->prod_name = "LSIFC929";
-		ioc->bus_type = FC;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC919) {
-		ioc->prod_name = "LSIFC919";
-		ioc->bus_type = FC;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC929X) {
-		pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
-		ioc->bus_type = FC;
+		break;
+
+	case MPI_MANUFACTPAGE_DEVICEID_FC929X:
 		if (revision < XL_929) {
-			ioc->prod_name = "LSIFC929X";
 			/* 929X Chip Fix. Set Split transactions level
 		 	* for PCIX. Set MOST bits to zero.
 		 	*/
@@ -1280,75 +1545,46 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 			pcixcmd &= 0x8F;
 			pci_write_config_byte(pdev, 0x6a, pcixcmd);
 		} else {
-			ioc->prod_name = "LSIFC929XL";
 			/* 929XL Chip Fix. Set MMRBC to 0x08.
 		 	*/
 			pci_read_config_byte(pdev, 0x6a, &pcixcmd);
 			pcixcmd |= 0x08;
 			pci_write_config_byte(pdev, 0x6a, pcixcmd);
 		}
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC919X) {
-		ioc->prod_name = "LSIFC919X";
 		ioc->bus_type = FC;
+		break;
+
+	case MPI_MANUFACTPAGE_DEVICEID_FC919X:
 		/* 919X Chip Fix. Set Split transactions level
 		 * for PCIX. Set MOST bits to zero.
 		 */
 		pci_read_config_byte(pdev, 0x6a, &pcixcmd);
 		pcixcmd &= 0x8F;
 		pci_write_config_byte(pdev, 0x6a, pcixcmd);
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC939X) {
-		ioc->prod_name = "LSIFC939X";
 		ioc->bus_type = FC;
-		ioc->errata_flag_1064 = 1;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC949X) {
-		ioc->prod_name = "LSIFC949X";
-		ioc->bus_type = FC;
-		ioc->errata_flag_1064 = 1;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVICEID_FC949E) {
-		ioc->prod_name = "LSIFC949E";
-		ioc->bus_type = FC;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_53C1030) {
-		ioc->prod_name = "LSI53C1030";
-		ioc->bus_type = SPI;
+		break;
+
+	case MPI_MANUFACTPAGE_DEVID_53C1030:
 		/* 1030 Chip Fix. Disable Split transactions
 		 * for PCIX. Set MOST bits to zero if Rev < C0( = 8).
 		 */
-		pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
 		if (revision < C0_1030) {
 			pci_read_config_byte(pdev, 0x6a, &pcixcmd);
 			pcixcmd &= 0x8F;
 			pci_write_config_byte(pdev, 0x6a, pcixcmd);
 		}
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_1030_53C1035) {
-		ioc->prod_name = "LSI53C1035";
+
+	case MPI_MANUFACTPAGE_DEVID_1030_53C1035:
 		ioc->bus_type = SPI;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_SAS1064) {
-		ioc->prod_name = "LSISAS1064";
-		ioc->bus_type = SAS;
+		break;
+
+	case MPI_MANUFACTPAGE_DEVID_SAS1064:
+	case MPI_MANUFACTPAGE_DEVID_SAS1068:
 		ioc->errata_flag_1064 = 1;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_SAS1068) {
-		ioc->prod_name = "LSISAS1068";
-		ioc->bus_type = SAS;
-		ioc->errata_flag_1064 = 1;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_SAS1064E) {
-		ioc->prod_name = "LSISAS1064E";
-		ioc->bus_type = SAS;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_SAS1068E) {
-		ioc->prod_name = "LSISAS1068E";
-		ioc->bus_type = SAS;
-	}
-	else if (pdev->device == MPI_MANUFACTPAGE_DEVID_SAS1078) {
-		ioc->prod_name = "LSISAS1078";
+
+	case MPI_MANUFACTPAGE_DEVID_SAS1064E:
+	case MPI_MANUFACTPAGE_DEVID_SAS1068E:
+	case MPI_MANUFACTPAGE_DEVID_SAS1078:
 		ioc->bus_type = SAS;
 	}
 
@@ -1417,10 +1653,9 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_detach - Remove a PCI intelligent MPT adapter.
  *	@pdev: Pointer to pci_dev structure
- *
  */
 
 void
@@ -1466,10 +1701,10 @@ mpt_detach(struct pci_dev *pdev)
  */
 #ifdef CONFIG_PM
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_suspend - Fusion MPT base driver suspend routine.
- *
- *
+ *	@pdev: Pointer to pci_dev structure
+ *	@state: new state to enter
  */
 int
 mpt_suspend(struct pci_dev *pdev, pm_message_t state)
@@ -1505,10 +1740,9 @@ mpt_suspend(struct pci_dev *pdev, pm_message_t state)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_resume - Fusion MPT base driver resume routine.
- *
- *
+ *	@pdev: Pointer to pci_dev structure
  */
 int
 mpt_resume(struct pci_dev *pdev)
@@ -1516,6 +1750,7 @@ mpt_resume(struct pci_dev *pdev)
 	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
 	u32 device_state = pdev->current_state;
 	int recovery_state;
+	int err;
 
 	printk(MYIOC_s_INFO_FMT
 	"pci-resume: pdev=0x%p, slot=%s, Previous operating state [D%d]\n",
@@ -1523,7 +1758,9 @@ mpt_resume(struct pci_dev *pdev)
 
 	pci_set_power_state(pdev, 0);
 	pci_restore_state(pdev);
-	pci_enable_device(pdev);
+	err = pci_enable_device(pdev);
+	if (err)
+		return err;
 
 	/* enable interrupts */
 	CHIPREG_WRITE32(&ioc->chip->IntMask, MPI_HIM_DIM);
@@ -1566,7 +1803,7 @@ mpt_signal_reset(int index, MPT_ADAPTER *ioc, int reset_phase)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_do_ioc_recovery - Initialize or recover MPT adapter.
  *	@ioc: Pointer to MPT adapter structure
  *	@reason: Event word / reason
@@ -1597,6 +1834,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 	int	 ret = 0;
 	int	 reset_alt_ioc_active = 0;
 	int	 irq_allocated = 0;
+	u8	*a;
 
 	printk(KERN_INFO MYNAM ": Initiating %s %s\n",
 			ioc->name, reason==MPT_HOSTEVENT_IOC_BRINGUP ? "bringup" : "recovery");
@@ -1625,7 +1863,8 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 
 			if (reset_alt_ioc_active && ioc->alt_ioc) {
 				/* (re)Enable alt-IOC! (reply interrupt, FreeQ) */
-				dprintk((KERN_INFO MYNAM ": alt-%s reply irq re-enabled\n",
+				dprintk(ioc, printk(KERN_INFO MYNAM
+					": alt-%s reply irq re-enabled\n",
 						ioc->alt_ioc->name));
 				CHIPREG_WRITE32(&ioc->alt_ioc->chip->IntMask, MPI_HIM_DIM);
 				ioc->alt_ioc->active = 1;
@@ -1658,7 +1897,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 
 
 	if (ii == 5) {
-		dinitprintk((MYIOC_s_INFO_FMT "Retry IocFacts failed rc=%x\n", ioc->name, rc));
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Retry IocFacts failed rc=%x\n", ioc->name, rc));
 		ret = -2;
 	} else if (reason == MPT_HOSTEVENT_IOC_BRINGUP) {
 		MptDisplayIocCapabilities(ioc);
@@ -1666,13 +1905,15 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 
 	if (alt_ioc_ready) {
 		if ((rc = GetIocFacts(ioc->alt_ioc, sleepFlag, reason)) != 0) {
-			dinitprintk((MYIOC_s_INFO_FMT "Initial Alt IocFacts failed rc=%x\n", ioc->name, rc));
+			dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+				"Initial Alt IocFacts failed rc=%x\n", ioc->name, rc));
 			/* Retry - alt IOC was initialized once
 			 */
 			rc = GetIocFacts(ioc->alt_ioc, sleepFlag, reason);
 		}
 		if (rc) {
-			dinitprintk((MYIOC_s_INFO_FMT "Retry Alt IocFacts failed rc=%x\n", ioc->name, rc));
+			dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+				"Retry Alt IocFacts failed rc=%x\n", ioc->name, rc));
 			alt_ioc_ready = 0;
 			reset_alt_ioc_active = 0;
 		} else if (reason == MPT_HOSTEVENT_IOC_BRINGUP) {
@@ -1705,7 +1946,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 			ioc->pci_irq = ioc->pcidev->irq;
 			pci_set_master(ioc->pcidev);		/* ?? */
 			pci_set_drvdata(ioc->pcidev, ioc);
-			dprintk((KERN_INFO MYNAM ": %s installed at interrupt "
+			dprintk(ioc, printk(KERN_INFO MYNAM ": %s installed at interrupt "
 				"%d\n", ioc->name, ioc->pcidev->irq));
 		}
 	}
@@ -1743,7 +1984,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 
 	if (reason == MPT_HOSTEVENT_IOC_BRINGUP){
 		if (ioc->upload_fw) {
-			ddlprintk((MYIOC_s_INFO_FMT
+			ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 				"firmware upload required!\n", ioc->name));
 
 			/* Controller is not operational, cannot do upload
@@ -1759,7 +2000,8 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 						 * chips (mpt_adapter_disable,
 						 * mpt_diag_reset)
 						 */
-						ddlprintk((MYIOC_s_INFO_FMT ": mpt_upload:  alt_%s has cached_fw=%p \n",
+						ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+							": mpt_upload:  alt_%s has cached_fw=%p \n",
 							ioc->name, ioc->alt_ioc->name, ioc->alt_ioc->cached_fw));
 						ioc->alt_ioc->cached_fw = NULL;
 					}
@@ -1779,7 +2021,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 
 	if (reset_alt_ioc_active && ioc->alt_ioc) {
 		/* (re)Enable alt-IOC! (reply interrupt) */
-		dinitprintk((KERN_INFO MYNAM ": alt-%s reply irq re-enabled\n",
+		dinitprintk(ioc, printk(KERN_INFO MYNAM ": alt-%s reply irq re-enabled\n",
 				ioc->alt_ioc->name));
 		CHIPREG_WRITE32(&ioc->alt_ioc->chip->IntMask, MPI_HIM_DIM);
 		ioc->alt_ioc->active = 1;
@@ -1801,6 +2043,13 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 	 *	and we try GetLanConfigPages again...
 	 */
 	if ((ret == 0) && (reason == MPT_HOSTEVENT_IOC_BRINGUP)) {
+
+		/*
+		 * Initalize link list for inactive raid volumes.
+		 */
+		init_MUTEX(&ioc->raid_data.inactive_list_mutex);
+		INIT_LIST_HEAD(&ioc->raid_data.inactive_list);
+
 		if (ioc->bus_type == SAS) {
 
 			/* clear persistency table */
@@ -1824,13 +2073,13 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 				 *  (LANPage1_t stuff)
 				 */
 				(void) GetLanConfigPages(ioc);
-#ifdef MPT_DEBUG
-				{
-					u8 *a = (u8*)&ioc->lan_cnfg_page1.HardwareAddressLow;
-					dprintk((MYIOC_s_INFO_FMT "LanAddr = %02X:%02X:%02X:%02X:%02X:%02X\n",
-							ioc->name, a[5], a[4], a[3], a[2], a[1], a[0] ));
-				}
-#endif
+				a = (u8*)&ioc->lan_cnfg_page1.HardwareAddressLow;
+				dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"LanAddr = %02X:%02X:%02X:"
+					"%02X:%02X:%02X\n",
+					ioc->name, a[5], a[4],
+					a[3], a[2], a[1], a[0] ));
+
 			}
 		} else {
 			/* Get NVRAM and adapter maximums from SPP 0 and 2
@@ -1854,6 +2103,7 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 		}
 
 		GetIoUnitPage2(ioc);
+		mpt_get_manufacturing_pg_0(ioc);
 	}
 
 	/*
@@ -1866,15 +2116,17 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 		rc = handlers = 0;
 		for (ii=MPT_MAX_PROTOCOL_DRIVERS-1; ii; ii--) {
 			if ((ret == 0) && MptResetHandlers[ii]) {
-				dprintk((MYIOC_s_INFO_FMT "Calling IOC post_reset handler #%d\n",
-						ioc->name, ii));
+				dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"Calling IOC post_reset handler #%d\n",
+					ioc->name, ii));
 				rc += mpt_signal_reset(ii, ioc, MPT_IOC_POST_RESET);
 				handlers++;
 			}
 
 			if (alt_ioc_ready && MptResetHandlers[ii]) {
-				drsprintk((MYIOC_s_INFO_FMT "Calling alt-%s post_reset handler #%d\n",
-						ioc->name, ioc->alt_ioc->name, ii));
+				drsprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"Calling alt-%s post_reset handler #%d\n",
+					ioc->name, ioc->alt_ioc->name, ii));
 				rc += mpt_signal_reset(ii, ioc->alt_ioc, MPT_IOC_POST_RESET);
 				handlers++;
 			}
@@ -1892,12 +2144,14 @@ mpt_do_ioc_recovery(MPT_ADAPTER *ioc, u32 reason, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mpt_detect_bound_ports - Search for PCI bus/dev_function
- *	which matches PCI bus/dev_function (+/-1) for newly discovered 929,
- *	929X, 1030 or 1035.
+/**
+ *	mpt_detect_bound_ports - Search for matching PCI bus/dev_function
  *	@ioc: Pointer to MPT adapter structure
  *	@pdev: Pointer to (struct pci_dev) structure
+ *
+ *	Search for PCI bus/dev_function which matches
+ *	PCI bus/dev_function (+/-1) for newly discovered 929,
+ *	929X, 1030 or 1035.
  *
  *	If match on PCI dev_function +/-1 is found, bind the two MPT adapters
  *	using alt_ioc pointer fields in their %MPT_ADAPTER structures.
@@ -1910,7 +2164,7 @@ mpt_detect_bound_ports(MPT_ADAPTER *ioc, struct pci_dev *pdev)
 	unsigned int func = PCI_FUNC(pdev->devfn);
 	MPT_ADAPTER *ioc_srch;
 
-	dprintk((MYIOC_s_INFO_FMT "PCI device %s devfn=%x/%x,"
+	dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "PCI device %s devfn=%x/%x,"
 	    " searching for devfn match on %x or %x\n",
 		ioc->name, pci_name(pdev), pdev->bus->number,
 		pdev->devfn, func-1, func+1));
@@ -1935,7 +2189,7 @@ mpt_detect_bound_ports(MPT_ADAPTER *ioc, struct pci_dev *pdev)
 					ioc_srch->name, ioc_srch->alt_ioc->name);
 				break;
 			}
-			dprintk((KERN_INFO MYNAM ": FOUND! binding %s <==> %s\n",
+			dprintk(ioc, printk(KERN_INFO MYNAM ": FOUND! binding %s <==> %s\n",
 				ioc->name, ioc_srch->name));
 			ioc_srch->alt_ioc = ioc;
 			ioc->alt_ioc = ioc_srch;
@@ -1945,9 +2199,9 @@ mpt_detect_bound_ports(MPT_ADAPTER *ioc, struct pci_dev *pdev)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_adapter_disable - Disable misbehaving MPT adapter.
- *	@this: Pointer to MPT adapter structure
+ *	@ioc: Pointer to MPT adapter structure
  */
 static void
 mpt_adapter_disable(MPT_ADAPTER *ioc)
@@ -1956,7 +2210,7 @@ mpt_adapter_disable(MPT_ADAPTER *ioc)
 	int ret;
 
 	if (ioc->cached_fw != NULL) {
-		ddlprintk((KERN_INFO MYNAM ": mpt_adapter_disable: Pushing FW onto adapter\n"));
+		ddlprintk(ioc, printk(KERN_INFO MYNAM ": mpt_adapter_disable: Pushing FW onto adapter\n"));
 		if ((ret = mpt_downloadboot(ioc, (MpiFwHeader_t *)ioc->cached_fw, NO_SLEEP)) < 0) {
 			printk(KERN_WARNING MYNAM
 				": firmware downloadboot failure (%d)!\n", ret);
@@ -1971,7 +2225,7 @@ mpt_adapter_disable(MPT_ADAPTER *ioc)
 
 	if (ioc->alloc != NULL) {
 		sz = ioc->alloc_sz;
-		dexitprintk((KERN_INFO MYNAM ": %s.free  @ %p, sz=%d bytes\n",
+		dexitprintk(ioc, printk(KERN_INFO MYNAM ": %s.free  @ %p, sz=%d bytes\n",
 		 	ioc->name, ioc->alloc, ioc->alloc_sz));
 		pci_free_consistent(ioc->pcidev, sz,
 				ioc->alloc, ioc->alloc_dma);
@@ -2005,13 +2259,15 @@ mpt_adapter_disable(MPT_ADAPTER *ioc)
 	}
 
 	kfree(ioc->spi_data.nvram);
+	mpt_inactive_raid_list_free(ioc);
+	kfree(ioc->raid_data.pIocPg2);
 	kfree(ioc->raid_data.pIocPg3);
 	ioc->spi_data.nvram = NULL;
 	ioc->raid_data.pIocPg3 = NULL;
 
 	if (ioc->spi_data.pIocPg4 != NULL) {
 		sz = ioc->spi_data.IocPg4Sz;
-		pci_free_consistent(ioc->pcidev, sz, 
+		pci_free_consistent(ioc->pcidev, sz,
 			ioc->spi_data.pIocPg4,
 			ioc->spi_data.IocPg4_dma);
 		ioc->spi_data.pIocPg4 = NULL;
@@ -2034,7 +2290,7 @@ mpt_adapter_disable(MPT_ADAPTER *ioc)
 			   ": %s: host page buffers free failed (%d)!\n",
 			    __FUNCTION__, ret);
 		}
-		dexitprintk((KERN_INFO MYNAM ": %s HostPageBuffer free  @ %p, sz=%d bytes\n",
+		dexitprintk(ioc, printk(KERN_INFO MYNAM ": %s HostPageBuffer free  @ %p, sz=%d bytes\n",
 		 	ioc->name, ioc->HostPageBuffer, ioc->HostPageBuffer_sz));
 		pci_free_consistent(ioc->pcidev, ioc->HostPageBuffer_sz,
 				ioc->HostPageBuffer,
@@ -2046,9 +2302,8 @@ mpt_adapter_disable(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mpt_adapter_dispose - Free all resources associated with a MPT
- *	adapter.
+/**
+ *	mpt_adapter_dispose - Free all resources associated with an MPT adapter
  *	@ioc: Pointer to MPT adapter structure
  *
  *	This routine unregisters h/w resources and frees all alloc'd memory
@@ -2081,7 +2336,7 @@ mpt_adapter_dispose(MPT_ADAPTER *ioc)
 #if defined(CONFIG_MTRR) && 0
 	if (ioc->mtrr_reg > 0) {
 		mtrr_del(ioc->mtrr_reg, 0, 0);
-		dprintk((KERN_INFO MYNAM ": %s: MTRR region de-registered\n", ioc->name));
+		dprintk(ioc, printk(KERN_INFO MYNAM ": %s: MTRR region de-registered\n", ioc->name));
 	}
 #endif
 
@@ -2089,7 +2344,7 @@ mpt_adapter_dispose(MPT_ADAPTER *ioc)
 	list_del(&ioc->list);
 
 	sz_last = ioc->alloc_total;
-	dprintk((KERN_INFO MYNAM ": %s: free'd %d of %d bytes\n",
+	dprintk(ioc, printk(KERN_INFO MYNAM ": %s: free'd %d of %d bytes\n",
 			ioc->name, sz_first-sz_last+(int)sizeof(*ioc), sz_first));
 
 	if (ioc->alt_ioc)
@@ -2099,8 +2354,8 @@ mpt_adapter_dispose(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	MptDisplayIocCapabilities - Disply IOC's capacilities.
+/**
+ *	MptDisplayIocCapabilities - Disply IOC's capabilities.
  *	@ioc: Pointer to MPT adapter structure
  */
 static void
@@ -2109,8 +2364,8 @@ MptDisplayIocCapabilities(MPT_ADAPTER *ioc)
 	int i = 0;
 
 	printk(KERN_INFO "%s: ", ioc->name);
-	if (ioc->prod_name && strlen(ioc->prod_name) > 3)
-		printk("%s: ", ioc->prod_name+3);
+	if (ioc->prod_name)
+		printk("%s: ", ioc->prod_name);
 	printk("Capabilities={");
 
 	if (ioc->pfacts[0].ProtocolFlags & MPI_PORTFACTS_PROTOCOL_INITIATOR) {
@@ -2142,7 +2397,7 @@ MptDisplayIocCapabilities(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	MakeIocReady - Get IOC to a READY state, using KickStart if needed.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@force: Force hard KickStart of IOC
@@ -2169,7 +2424,7 @@ MakeIocReady(MPT_ADAPTER *ioc, int force, int sleepFlag)
 
 	/* Get current [raw] IOC state  */
 	ioc_state = mpt_GetIocState(ioc, 0);
-	dhsprintk((KERN_INFO MYNAM "::MakeIocReady, %s [raw] state=%08x\n", ioc->name, ioc_state));
+	dhsprintk(ioc, printk(KERN_INFO MYNAM "::MakeIocReady, %s [raw] state=%08x\n", ioc->name, ioc_state));
 
 	/*
 	 *	Check to see if IOC got left/stuck in doorbell handshake
@@ -2200,7 +2455,7 @@ MakeIocReady(MPT_ADAPTER *ioc, int force, int sleepFlag)
 	 *	Hmmm...  Did it get left operational?
 	 */
 	if ((ioc_state & MPI_IOC_STATE_MASK) == MPI_IOC_STATE_OPERATIONAL) {
-		dinitprintk((MYIOC_s_INFO_FMT "IOC operational unexpected\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "IOC operational unexpected\n",
 				ioc->name));
 
 		/* Check WhoInit.
@@ -2209,7 +2464,7 @@ MakeIocReady(MPT_ADAPTER *ioc, int force, int sleepFlag)
 		 * Else, fall through to KickStart case
 		 */
 		whoinit = (ioc_state & MPI_DOORBELL_WHO_INIT_MASK) >> MPI_DOORBELL_WHO_INIT_SHIFT;
-		dinitprintk((KERN_INFO MYNAM
+		dinitprintk(ioc, printk(KERN_INFO MYNAM
 			": whoinit 0x%x statefault %d force %d\n",
 			whoinit, statefault, force));
 		if (whoinit == MPI_WHOINIT_PCI_PEER)
@@ -2279,7 +2534,7 @@ MakeIocReady(MPT_ADAPTER *ioc, int force, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_GetIocState - Get the current state of a MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@cooked: Request raw or cooked IOC state
@@ -2304,7 +2559,7 @@ mpt_GetIocState(MPT_ADAPTER *ioc, int cooked)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	GetIocFacts - Send IOCFacts request to MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@sleepFlag: Specifies whether the process can sleep
@@ -2345,7 +2600,7 @@ GetIocFacts(MPT_ADAPTER *ioc, int sleepFlag, int reason)
 	get_facts.Function = MPI_FUNCTION_IOC_FACTS;
 	/* Assert: All other get_facts fields are zero! */
 
-	dinitprintk((MYIOC_s_INFO_FMT
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 	    "Sending get IocFacts request req_sz=%d reply_sz=%d\n",
 	    ioc->name, req_sz, reply_sz));
 
@@ -2402,6 +2657,9 @@ GetIocFacts(MPT_ADAPTER *ioc, int sleepFlag, int reason)
 			facts->FWVersion.Word = le32_to_cpu(facts->FWVersion.Word);
 
 		facts->ProductID = le16_to_cpu(facts->ProductID);
+		if ((ioc->facts.ProductID & MPI_FW_HEADER_PID_PROD_MASK)
+		    > MPI_FW_HEADER_PID_PROD_TARGET_SCSI)
+			ioc->ir_firmware = 1;
 		facts->CurrentHostMfaHighAddr =
 				le32_to_cpu(facts->CurrentHostMfaHighAddr);
 		facts->GlobalCredits = le16_to_cpu(facts->GlobalCredits);
@@ -2444,8 +2702,9 @@ GetIocFacts(MPT_ADAPTER *ioc, int sleepFlag, int reason)
 			sz = sz >> 1;
 		}
 		ioc->NBShiftFactor  = shiftFactor;
-		dinitprintk((MYIOC_s_INFO_FMT "NB_for_64_byte_frame=%x NBShiftFactor=%x BlockSize=%x\n",
-					ioc->name, vv, shiftFactor, r));
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+			"NB_for_64_byte_frame=%x NBShiftFactor=%x BlockSize=%x\n",
+			ioc->name, vv, shiftFactor, r));
 
 		if (reason == MPT_HOSTEVENT_IOC_BRINGUP) {
 			/*
@@ -2457,9 +2716,9 @@ GetIocFacts(MPT_ADAPTER *ioc, int sleepFlag, int reason)
 			ioc->reply_sz = MPT_REPLY_FRAME_SIZE;
 			ioc->reply_depth = min_t(int, MPT_DEFAULT_REPLY_DEPTH, facts->ReplyQueueDepth);
 
-			dinitprintk((MYIOC_s_INFO_FMT "reply_sz=%3d, reply_depth=%4d\n",
+			dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "reply_sz=%3d, reply_depth=%4d\n",
 				ioc->name, ioc->reply_sz, ioc->reply_depth));
-			dinitprintk((MYIOC_s_INFO_FMT "req_sz  =%3d, req_depth  =%4d\n",
+			dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "req_sz  =%3d, req_depth  =%4d\n",
 				ioc->name, ioc->req_sz, ioc->req_depth));
 
 			/* Get port facts! */
@@ -2478,7 +2737,7 @@ GetIocFacts(MPT_ADAPTER *ioc, int sleepFlag, int reason)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	GetPortFacts - Send PortFacts request to MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@portnum: Port number
@@ -2494,6 +2753,7 @@ GetPortFacts(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 	int			 ii;
 	int			 req_sz;
 	int			 reply_sz;
+	int			 max_id;
 
 	/* IOC *must* NOT be in RESET state! */
 	if (ioc->last_state == MPI_IOC_STATE_RESET) {
@@ -2517,7 +2777,7 @@ GetPortFacts(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 	get_pfacts.PortNumber = portnum;
 	/* Assert: All other get_pfacts fields are zero! */
 
-	dinitprintk((MYIOC_s_INFO_FMT "Sending get PortFacts(%d) request\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending get PortFacts(%d) request\n",
 			ioc->name, portnum));
 
 	/* No non-zero fields in the get_pfacts request are greater than
@@ -2541,11 +2801,26 @@ GetPortFacts(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 	pfacts->MaxPersistentIDs = le16_to_cpu(pfacts->MaxPersistentIDs);
 	pfacts->MaxLanBuckets = le16_to_cpu(pfacts->MaxLanBuckets);
 
+	max_id = (ioc->bus_type == SAS) ? pfacts->PortSCSIID :
+	    pfacts->MaxDevices;
+	ioc->devices_per_bus = (max_id > 255) ? 256 : max_id;
+	ioc->number_of_buses = (ioc->devices_per_bus < 256) ? 1 : max_id/256;
+
+	/*
+	 * Place all the devices on channels
+	 *
+	 * (for debuging)
+	 */
+	if (mpt_channel_mapping) {
+		ioc->devices_per_bus = 1;
+		ioc->number_of_buses = (max_id > 255) ? 255 : max_id;
+	}
+
 	return 0;
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	SendIocInit - Send IOCInit request to MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@sleepFlag: Specifies whether the process can sleep
@@ -2578,17 +2853,12 @@ SendIocInit(MPT_ADAPTER *ioc, int sleepFlag)
 		ioc->upload_fw = 1;
 	else
 		ioc->upload_fw = 0;
-	ddlprintk((MYIOC_s_INFO_FMT "upload_fw %d facts.Flags=%x\n",
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "upload_fw %d facts.Flags=%x\n",
 		   ioc->name, ioc->upload_fw, ioc->facts.Flags));
 
-	if(ioc->bus_type == SAS)
-		ioc_init.MaxDevices = ioc->facts.MaxDevices;
-	else if(ioc->bus_type == FC)
-		ioc_init.MaxDevices = MPT_MAX_FC_DEVICES;
-	else
-		ioc_init.MaxDevices = MPT_MAX_SCSI_DEVICES;
-	ioc_init.MaxBuses = MPT_MAX_BUS;
-	dinitprintk((MYIOC_s_INFO_FMT "facts.MsgVersion=%x\n",
+	ioc_init.MaxDevices = (U8)ioc->devices_per_bus;
+	ioc_init.MaxBuses = (U8)ioc->number_of_buses;
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "facts.MsgVersion=%x\n",
 		   ioc->name, ioc->facts.MsgVersion));
 	if (ioc->facts.MsgVersion >= MPI_VERSION_01_05) {
 		// set MsgVersion and HeaderVersion host driver was built with
@@ -2619,7 +2889,7 @@ SendIocInit(MPT_ADAPTER *ioc, int sleepFlag)
 	ioc->facts.MaxDevices = ioc_init.MaxDevices;
 	ioc->facts.MaxBuses = ioc_init.MaxBuses;
 
-	dhsprintk((MYIOC_s_INFO_FMT "Sending IOCInit (req @ %p)\n",
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending IOCInit (req @ %p)\n",
 			ioc->name, &ioc_init));
 
 	r = mpt_handshake_req_reply_wait(ioc, sizeof(IOCInit_t), (u32*)&ioc_init,
@@ -2630,10 +2900,10 @@ SendIocInit(MPT_ADAPTER *ioc, int sleepFlag)
 	}
 
 	/* No need to byte swap the multibyte fields in the reply
-	 * since we don't even look at it's contents.
+	 * since we don't even look at its contents.
 	 */
 
-	dhsprintk((MYIOC_s_INFO_FMT "Sending PortEnable (req @ %p)\n",
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending PortEnable (req @ %p)\n",
 			ioc->name, &ioc_init));
 
 	if ((r = SendPortEnable(ioc, 0, sleepFlag)) != 0) {
@@ -2664,7 +2934,7 @@ SendIocInit(MPT_ADAPTER *ioc, int sleepFlag)
 		state = mpt_GetIocState(ioc, 1);
 		count++;
 	}
-	dinitprintk((MYIOC_s_INFO_FMT "INFO - Wait IOC_OPERATIONAL state (cnt=%d)\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "INFO - Wait IOC_OPERATIONAL state (cnt=%d)\n",
 			ioc->name, count));
 
 	ioc->aen_event_read_flag=0;
@@ -2672,7 +2942,7 @@ SendIocInit(MPT_ADAPTER *ioc, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	SendPortEnable - Send PortEnable request to MPT adapter port.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@portnum: Port number to enable
@@ -2704,14 +2974,12 @@ SendPortEnable(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 /*	port_enable.MsgFlags = 0;		*/
 /*	port_enable.MsgContext = 0;		*/
 
-	dinitprintk((MYIOC_s_INFO_FMT "Sending Port(%d)Enable (req @ %p)\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending Port(%d)Enable (req @ %p)\n",
 			ioc->name, portnum, &port_enable));
 
 	/* RAID FW may take a long time to enable
 	 */
-	if (((ioc->facts.ProductID & MPI_FW_HEADER_PID_PROD_MASK)
-	    > MPI_FW_HEADER_PID_PROD_TARGET_SCSI) ||
-	    (ioc->bus_type == SAS)) {
+	if (ioc->ir_firmware || ioc->bus_type == SAS) {
 		rc = mpt_handshake_req_reply_wait(ioc, req_sz,
 		(u32*)&port_enable, reply_sz, (u16*)&reply_buf,
 		300 /*seconds*/, sleepFlag);
@@ -2723,9 +2991,13 @@ SendPortEnable(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 	return rc;
 }
 
-/*
- *	ioc: Pointer to MPT_ADAPTER structure
- *      size - total FW bytes
+/**
+ *	mpt_alloc_fw_memory - allocate firmware memory
+ *	@ioc: Pointer to MPT_ADAPTER structure
+ *      @size: total FW bytes
+ *
+ *	If memory has already been allocated, the same (cached) value
+ *	is returned.
  */
 void
 mpt_alloc_fw_memory(MPT_ADAPTER *ioc, int size)
@@ -2742,9 +3014,12 @@ mpt_alloc_fw_memory(MPT_ADAPTER *ioc, int size)
 			ioc->alloc_total += size;
 	}
 }
-/*
- * If alt_img is NULL, delete from ioc structure.
- * Else, delete a secondary image in same format.
+/**
+ *	mpt_free_fw_memory - free firmware memory
+ *	@ioc: Pointer to MPT_ADAPTER structure
+ *
+ *	If alt_img is NULL, delete from ioc structure.
+ *	Else, delete a secondary image in same format.
  */
 void
 mpt_free_fw_memory(MPT_ADAPTER *ioc)
@@ -2752,7 +3027,7 @@ mpt_free_fw_memory(MPT_ADAPTER *ioc)
 	int sz;
 
 	sz = ioc->facts.FWImageSize;
-	dinitprintk((KERN_INFO MYNAM "free_fw_memory: FW Image  @ %p[%p], sz=%d[%x] bytes\n",
+	dinitprintk(ioc, printk(KERN_INFO MYNAM "free_fw_memory: FW Image  @ %p[%p], sz=%d[%x] bytes\n",
 		 ioc->cached_fw, (void *)(ulong)ioc->cached_fw_dma, sz, sz));
 	pci_free_consistent(ioc->pcidev, sz,
 			ioc->cached_fw, ioc->cached_fw_dma);
@@ -2763,7 +3038,7 @@ mpt_free_fw_memory(MPT_ADAPTER *ioc)
 
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_do_upload - Construct and Send FWUpload request to MPT adapter port.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@sleepFlag: Specifies whether the process can sleep
@@ -2796,7 +3071,7 @@ mpt_do_upload(MPT_ADAPTER *ioc, int sleepFlag)
 
 	mpt_alloc_fw_memory(ioc, sz);
 
-	dinitprintk((KERN_INFO MYNAM ": FW Image  @ %p[%p], sz=%d[%x] bytes\n",
+	dinitprintk(ioc, printk(KERN_INFO MYNAM ": FW Image  @ %p[%p], sz=%d[%x] bytes\n",
 		 ioc->cached_fw, (void *)(ulong)ioc->cached_fw_dma, sz, sz));
 
 	if (ioc->cached_fw == NULL) {
@@ -2828,14 +3103,14 @@ mpt_do_upload(MPT_ADAPTER *ioc, int sleepFlag)
 	mpt_add_sge(&request[sgeoffset], flagsLength, ioc->cached_fw_dma);
 
 	sgeoffset += sizeof(u32) + sizeof(dma_addr_t);
-	dinitprintk((KERN_INFO MYNAM ": Sending FW Upload (req @ %p) sgeoffset=%d \n",
+	dinitprintk(ioc, printk(KERN_INFO MYNAM ": Sending FW Upload (req @ %p) sgeoffset=%d \n",
 			prequest, sgeoffset));
-	DBG_DUMP_FW_REQUEST_FRAME(prequest)
+	DBG_DUMP_FW_REQUEST_FRAME(ioc, (u32 *)prequest)
 
 	ii = mpt_handshake_req_reply_wait(ioc, sgeoffset, (u32*)prequest,
 				reply_sz, (u16*)preply, 65 /*seconds*/, sleepFlag);
 
-	dinitprintk((KERN_INFO MYNAM ": FW Upload completed rc=%x \n", ii));
+	dinitprintk(ioc, printk(KERN_INFO MYNAM ": FW Upload completed rc=%x \n", ii));
 
 	cmdStatus = -EFAULT;
 	if (ii == 0) {
@@ -2850,13 +3125,13 @@ mpt_do_upload(MPT_ADAPTER *ioc, int sleepFlag)
 				cmdStatus = 0;
 		}
 	}
-	dinitprintk((MYIOC_s_INFO_FMT ": do_upload cmdStatus=%d \n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT ": do_upload cmdStatus=%d \n",
 			ioc->name, cmdStatus));
 
 
 	if (cmdStatus) {
 
-		ddlprintk((MYIOC_s_INFO_FMT ": fw upload failed, freeing image \n",
+		ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT ": fw upload failed, freeing image \n",
 			ioc->name));
 		mpt_free_fw_memory(ioc);
 	}
@@ -2865,10 +3140,10 @@ mpt_do_upload(MPT_ADAPTER *ioc, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_downloadboot - DownloadBoot code
  *	@ioc: Pointer to MPT_ADAPTER structure
- *	@flag: Specify which part of IOC memory is to be uploaded.
+ *	@pFwHeader: Pointer to firmware header info
  *	@sleepFlag: Specifies whether the process can sleep
  *
  *	FwDownloadBoot requires Programmed IO access.
@@ -2891,7 +3166,7 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 	u32			 load_addr;
 	u32 			 ioc_state=0;
 
-	ddlprintk((MYIOC_s_INFO_FMT "downloadboot: fw size 0x%x (%d), FW Ptr %p\n",
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "downloadboot: fw size 0x%x (%d), FW Ptr %p\n",
 				ioc->name, pFwHeader->ImageSize, pFwHeader->ImageSize, pFwHeader));
 
 	CHIPREG_WRITE32(&ioc->chip->WriteSequence, 0xFF);
@@ -2916,7 +3191,7 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 	for (count = 0; count < 30; count ++) {
 		diag0val = CHIPREG_READ32(&ioc->chip->Diagnostic);
 		if (!(diag0val & MPI_DIAG_RESET_ADAPTER)) {
-			ddlprintk((MYIOC_s_INFO_FMT "RESET_ADAPTER cleared, count=%d\n",
+			ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "RESET_ADAPTER cleared, count=%d\n",
 				ioc->name, count));
 			break;
 		}
@@ -2929,7 +3204,7 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 	}
 
 	if ( count == 30 ) {
-		ddlprintk((MYIOC_s_INFO_FMT "downloadboot failed! "
+		ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "downloadboot failed! "
 		"Unable to get MPI_DIAG_DRWE mode, diag0val=%x\n",
 		ioc->name, diag0val));
 		return -3;
@@ -2955,10 +3230,10 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 		pci_enable_io_access(ioc->pcidev);
 
 	CHIPREG_PIO_WRITE32(&ioc->pio_chip->DiagRwAddress, pFwHeader->LoadStartAddress);
-	ddlprintk((MYIOC_s_INFO_FMT "LoadStart addr written 0x%x \n",
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "LoadStart addr written 0x%x \n",
 		ioc->name, pFwHeader->LoadStartAddress));
 
-	ddlprintk((MYIOC_s_INFO_FMT "Write FW Image: 0x%x bytes @ %p\n",
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Write FW Image: 0x%x bytes @ %p\n",
 				ioc->name, fwSize*4, ptrFw));
 	while (fwSize--) {
 		CHIPREG_PIO_WRITE32(&ioc->pio_chip->DiagRwData, *ptrFw++);
@@ -2973,7 +3248,7 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 		fwSize = (pExtImage->ImageSize + 3) >> 2;
 		ptrFw = (u32 *)pExtImage;
 
-		ddlprintk((MYIOC_s_INFO_FMT "Write Ext Image: 0x%x (%d) bytes @ %p load_addr=%x\n",
+		ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Write Ext Image: 0x%x (%d) bytes @ %p load_addr=%x\n",
 						ioc->name, fwSize*4, fwSize*4, ptrFw, load_addr));
 		CHIPREG_PIO_WRITE32(&ioc->pio_chip->DiagRwAddress, load_addr);
 
@@ -2984,11 +3259,11 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 	}
 
 	/* Write the IopResetVectorRegAddr */
-	ddlprintk((MYIOC_s_INFO_FMT "Write IopResetVector Addr=%x! \n", ioc->name, 	pFwHeader->IopResetRegAddr));
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Write IopResetVector Addr=%x! \n", ioc->name, 	pFwHeader->IopResetRegAddr));
 	CHIPREG_PIO_WRITE32(&ioc->pio_chip->DiagRwAddress, pFwHeader->IopResetRegAddr);
 
 	/* Write the IopResetVectorValue */
-	ddlprintk((MYIOC_s_INFO_FMT "Write IopResetVector Value=%x! \n", ioc->name, pFwHeader->IopResetVectorValue));
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Write IopResetVector Value=%x! \n", ioc->name, pFwHeader->IopResetVectorValue));
 	CHIPREG_PIO_WRITE32(&ioc->pio_chip->DiagRwData, pFwHeader->IopResetVectorValue);
 
 	/* Clear the internal flash bad bit - autoincrementing register,
@@ -3022,11 +3297,11 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 		pci_disable_io_access(ioc->pcidev);
 
 	diag0val = CHIPREG_READ32(&ioc->chip->Diagnostic);
-	ddlprintk((MYIOC_s_INFO_FMT "downloadboot diag0val=%x, "
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "downloadboot diag0val=%x, "
 		"turning off PREVENT_IOC_BOOT, DISABLE_ARM, RW_ENABLE\n",
 		ioc->name, diag0val));
 	diag0val &= ~(MPI_DIAG_PREVENT_IOC_BOOT | MPI_DIAG_DISABLE_ARM | MPI_DIAG_RW_ENABLE);
-	ddlprintk((MYIOC_s_INFO_FMT "downloadboot now diag0val=%x\n",
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "downloadboot now diag0val=%x\n",
 		ioc->name, diag0val));
 	CHIPREG_WRITE32(&ioc->chip->Diagnostic, diag0val);
 
@@ -3037,7 +3312,7 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 		ioc_state = mpt_GetIocState(ioc, 0);
 		if ( (GetIocFacts(ioc, sleepFlag,
 				MPT_HOSTEVENT_IOC_BRINGUP)) != 0 ) {
-			ddlprintk((MYIOC_s_INFO_FMT "GetIocFacts failed: IocState=%x\n",
+			ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT "GetIocFacts failed: IocState=%x\n",
 					ioc->name, ioc_state));
 			return -EFAULT;
 		}
@@ -3045,17 +3320,20 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 
 	for (count=0; count<HZ*20; count++) {
 		if ((ioc_state = mpt_GetIocState(ioc, 0)) & MPI_IOC_STATE_READY) {
-			ddlprintk((MYIOC_s_INFO_FMT "downloadboot successful! (count=%d) IocState=%x\n",
-					ioc->name, count, ioc_state));
+			ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+				"downloadboot successful! (count=%d) IocState=%x\n",
+				ioc->name, count, ioc_state));
 			if (ioc->bus_type == SAS) {
 				return 0;
 			}
 			if ((SendIocInit(ioc, sleepFlag)) != 0) {
-				ddlprintk((MYIOC_s_INFO_FMT "downloadboot: SendIocInit failed\n",
+				ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"downloadboot: SendIocInit failed\n",
 					ioc->name));
 				return -EFAULT;
 			}
-			ddlprintk((MYIOC_s_INFO_FMT "downloadboot: SendIocInit successful\n",
+			ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"downloadboot: SendIocInit successful\n",
 					ioc->name));
 			return 0;
 		}
@@ -3065,13 +3343,13 @@ mpt_downloadboot(MPT_ADAPTER *ioc, MpiFwHeader_t *pFwHeader, int sleepFlag)
 			mdelay (10);
 		}
 	}
-	ddlprintk((MYIOC_s_INFO_FMT "downloadboot failed! IocState=%x\n",
-		ioc->name, ioc_state));
+	ddlprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+		"downloadboot failed! IocState=%x\n",ioc->name, ioc_state));
 	return -EFAULT;
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	KickStart - Perform hard reset of MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@force: Force hard reset
@@ -3103,7 +3381,7 @@ KickStart(MPT_ADAPTER *ioc, int force, int sleepFlag)
 	u32 ioc_state=0;
 	int cnt,cntdn;
 
-	dinitprintk((KERN_WARNING MYNAM ": KickStarting %s!\n", ioc->name));
+	dinitprintk(ioc, printk(KERN_WARNING MYNAM ": KickStarting %s!\n", ioc->name));
 	if (ioc->bus_type == SPI) {
 		/* Always issue a Msg Unit Reset first. This will clear some
 		 * SCSI bus hang conditions.
@@ -3121,14 +3399,14 @@ KickStart(MPT_ADAPTER *ioc, int force, int sleepFlag)
 	if (hard_reset_done < 0)
 		return hard_reset_done;
 
-	dinitprintk((MYIOC_s_INFO_FMT "Diagnostic reset successful!\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Diagnostic reset successful!\n",
 			ioc->name));
 
 	cntdn = ((sleepFlag == CAN_SLEEP) ? HZ : 1000) * 2;	/* 2 seconds */
 	for (cnt=0; cnt<cntdn; cnt++) {
 		ioc_state = mpt_GetIocState(ioc, 1);
 		if ((ioc_state == MPI_IOC_STATE_READY) || (ioc_state == MPI_IOC_STATE_OPERATIONAL)) {
-			dinitprintk((MYIOC_s_INFO_FMT "KickStart successful! (cnt=%d)\n",
+			dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "KickStart successful! (cnt=%d)\n",
  					ioc->name, cnt));
 			return hard_reset_done;
 		}
@@ -3145,12 +3423,12 @@ KickStart(MPT_ADAPTER *ioc, int force, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_diag_reset - Perform hard reset of the adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@ignore: Set if to honor and clear to ignore
  *		the reset history bit
- *	@sleepflag: CAN_SLEEP if called in a non-interrupt thread,
+ *	@sleepFlag: CAN_SLEEP if called in a non-interrupt thread,
  *		else set to NO_SLEEP (use mdelay instead)
  *
  *	This routine places the adapter in diagnostic mode via the
@@ -3171,12 +3449,13 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 	u32 doorbell;
 	int hard_reset_done = 0;
 	int count = 0;
-#ifdef MPT_DEBUG
 	u32 diag1val = 0;
-#endif
+
+	/* Clear any existing interrupts */
+	CHIPREG_WRITE32(&ioc->chip->IntStatus, 0);
 
 	if (ioc->pcidev->device == MPI_MANUFACTPAGE_DEVID_SAS1078) {
-		drsprintk((MYIOC_s_WARN_FMT "%s: Doorbell=%p; 1078 reset "
+		drsprintk(ioc, printk(MYIOC_s_WARN_FMT "%s: Doorbell=%p; 1078 reset "
 			"address=%p\n",  ioc->name, __FUNCTION__,
 			&ioc->chip->Doorbell, &ioc->chip->Reset_1078));
 		CHIPREG_WRITE32(&ioc->chip->Reset_1078, 0x07);
@@ -3189,12 +3468,12 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 			doorbell = CHIPREG_READ32(&ioc->chip->Doorbell);
 			doorbell &= MPI_IOC_STATE_MASK;
 
-			drsprintk((MYIOC_s_INFO_FMT
+			drsprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 				"looking for READY STATE: doorbell=%x"
 			        " count=%d\n",
 				ioc->name, doorbell, count));
 			if (doorbell == MPI_IOC_STATE_READY) {
-				return 0;
+				return 1;
 			}
 
 			/* wait 1 sec */
@@ -3206,18 +3485,15 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 		return -1;
 	}
 
-	/* Clear any existing interrupts */
-	CHIPREG_WRITE32(&ioc->chip->IntStatus, 0);
-
 	/* Use "Diagnostic reset" method! (only thing available!) */
 	diag0val = CHIPREG_READ32(&ioc->chip->Diagnostic);
 
-#ifdef MPT_DEBUG
-	if (ioc->alt_ioc)
-		diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
-	dprintk((MYIOC_s_INFO_FMT "DbG1: diag0=%08x, diag1=%08x\n",
+	if (ioc->debug_level & MPT_DEBUG) {
+		if (ioc->alt_ioc)
+			diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "DbG1: diag0=%08x, diag1=%08x\n",
 			ioc->name, diag0val, diag1val));
-#endif
+	}
 
 	/* Do the reset if we are told to ignore the reset history
 	 * or if the reset history is 0
@@ -3251,16 +3527,16 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 
 			diag0val = CHIPREG_READ32(&ioc->chip->Diagnostic);
 
-			dprintk((MYIOC_s_INFO_FMT "Wrote magic DiagWriteEn sequence (%x)\n",
+			dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Wrote magic DiagWriteEn sequence (%x)\n",
 					ioc->name, diag0val));
 		}
 
-#ifdef MPT_DEBUG
-		if (ioc->alt_ioc)
-			diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
-		dprintk((MYIOC_s_INFO_FMT "DbG2: diag0=%08x, diag1=%08x\n",
+		if (ioc->debug_level & MPT_DEBUG) {
+			if (ioc->alt_ioc)
+				diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
+			dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "DbG2: diag0=%08x, diag1=%08x\n",
 				ioc->name, diag0val, diag1val));
-#endif
+		}
 		/*
 		 * Disable the ARM (Bug fix)
 		 *
@@ -3274,7 +3550,7 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 		 */
 		CHIPREG_WRITE32(&ioc->chip->Diagnostic, diag0val | MPI_DIAG_RESET_ADAPTER);
 		hard_reset_done = 1;
-		dprintk((MYIOC_s_INFO_FMT "Diagnostic reset performed\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Diagnostic reset performed\n",
 				ioc->name));
 
 		/*
@@ -3289,12 +3565,14 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 
 			for (ii=MPT_MAX_PROTOCOL_DRIVERS-1; ii; ii--) {
 				if (MptResetHandlers[ii]) {
-					dprintk((MYIOC_s_INFO_FMT "Calling IOC pre_reset handler #%d\n",
-							ioc->name, ii));
+					dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+						"Calling IOC pre_reset handler #%d\n",
+						ioc->name, ii));
 					r += mpt_signal_reset(ii, ioc, MPT_IOC_PRE_RESET);
 					if (ioc->alt_ioc) {
-						dprintk((MYIOC_s_INFO_FMT "Calling alt-%s pre_reset handler #%d\n",
-								ioc->name, ioc->alt_ioc->name, ii));
+						dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+							"Calling alt-%s pre_reset handler #%d\n",
+							ioc->name, ioc->alt_ioc->name, ii));
 						r += mpt_signal_reset(ii, ioc->alt_ioc, MPT_IOC_PRE_RESET);
 					}
 				}
@@ -3317,7 +3595,7 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 					break;
 				}
 
-				dprintk((MYIOC_s_INFO_FMT "cached_fw: diag0val=%x count=%d\n",
+				dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "cached_fw: diag0val=%x count=%d\n",
 					iocp->name, diag0val, count));
 				/* wait 1 sec */
 				if (sleepFlag == CAN_SLEEP) {
@@ -3358,12 +3636,12 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 	}
 
 	diag0val = CHIPREG_READ32(&ioc->chip->Diagnostic);
-#ifdef MPT_DEBUG
-	if (ioc->alt_ioc)
-		diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
-	dprintk((MYIOC_s_INFO_FMT "DbG3: diag0=%08x, diag1=%08x\n",
-		ioc->name, diag0val, diag1val));
-#endif
+	if (ioc->debug_level & MPT_DEBUG) {
+		if (ioc->alt_ioc)
+			diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "DbG3: diag0=%08x, diag1=%08x\n",
+			ioc->name, diag0val, diag1val));
+	}
 
 	/* Clear RESET_HISTORY bit!  Place board in the
 	 * diagnostic mode to update the diag register.
@@ -3417,12 +3695,12 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 		return -3;
 	}
 
-#ifdef MPT_DEBUG
-	if (ioc->alt_ioc)
-		diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
-	dprintk((MYIOC_s_INFO_FMT "DbG4: diag0=%08x, diag1=%08x\n",
+	if (ioc->debug_level & MPT_DEBUG) {
+		if (ioc->alt_ioc)
+			diag1val = CHIPREG_READ32(&ioc->alt_ioc->chip->Diagnostic);
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "DbG4: diag0=%08x, diag1=%08x\n",
 			ioc->name, diag0val, diag1val));
-#endif
+	}
 
 	/*
 	 * Reset flag that says we've enabled event notification
@@ -3436,11 +3714,12 @@ mpt_diag_reset(MPT_ADAPTER *ioc, int ignore, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	SendIocReset - Send IOCReset request to MPT adapter.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@reset_type: reset type, expected values are
  *	%MPI_FUNCTION_IOC_MESSAGE_UNIT_RESET or %MPI_FUNCTION_IO_UNIT_RESET
+ *	@sleepFlag: Specifies whether the process can sleep
  *
  *	Send IOCReset request to the MPT adapter.
  *
@@ -3453,7 +3732,7 @@ SendIocReset(MPT_ADAPTER *ioc, u8 reset_type, int sleepFlag)
 	u32 state;
 	int cntdn, count;
 
-	drsprintk((KERN_INFO MYNAM ": %s: Sending IOC reset(0x%02x)!\n",
+	drsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending IOC reset(0x%02x)!\n",
 			ioc->name, reset_type));
 	CHIPREG_WRITE32(&ioc->chip->Doorbell, reset_type<<MPI_DOORBELL_FUNCTION_SHIFT);
 	if ((r = WaitForDoorbellAck(ioc, 5, sleepFlag)) < 0)
@@ -3494,11 +3773,12 @@ SendIocReset(MPT_ADAPTER *ioc, u8 reset_type, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	initChainBuffers - Allocate memory for and initialize
- *	chain buffers, chain buffer control arrays and spinlock.
- *	@hd: Pointer to MPT_SCSI_HOST structure
- *	@init: If set, initialize the spin lock.
+/**
+ *	initChainBuffers - Allocate memory for and initialize chain buffers
+ *	@ioc: Pointer to MPT_ADAPTER structure
+ *
+ *	Allocates memory for and initializes chain buffers,
+ *	chain buffer control arrays and spinlock.
  */
 static int
 initChainBuffers(MPT_ADAPTER *ioc)
@@ -3517,14 +3797,14 @@ initChainBuffers(MPT_ADAPTER *ioc)
 			return -1;
 
 		ioc->ReqToChain = (int *) mem;
-		dinitprintk((KERN_INFO MYNAM ": %s ReqToChain alloc  @ %p, sz=%d bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ReqToChain alloc  @ %p, sz=%d bytes\n",
 			 	ioc->name, mem, sz));
 		mem = kmalloc(sz, GFP_ATOMIC);
 		if (mem == NULL)
 			return -1;
 
 		ioc->RequestNB = (int *) mem;
-		dinitprintk((KERN_INFO MYNAM ": %s RequestNB alloc  @ %p, sz=%d bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "RequestNB alloc  @ %p, sz=%d bytes\n",
 			 	ioc->name, mem, sz));
 	}
 	for (ii = 0; ii < ioc->req_depth; ii++) {
@@ -3536,7 +3816,7 @@ initChainBuffers(MPT_ADAPTER *ioc)
 	 * index = chain_idx
 	 *
 	 * Calculate the number of chain buffers needed(plus 1) per I/O
-	 * then multiply the the maximum number of simultaneous cmds
+	 * then multiply the maximum number of simultaneous cmds
 	 *
 	 * num_sge = num sge in request frame + last chain buffer
 	 * scale = num sge per chain buffer if no chain element
@@ -3554,7 +3834,7 @@ initChainBuffers(MPT_ADAPTER *ioc)
 		numSGE = 1 + (scale - 1) * (ioc->facts.MaxChainDepth-1) + scale +
 			(ioc->req_sz - 64) / (sizeof(dma_addr_t) + sizeof(u32));
 	}
-	dinitprintk((KERN_INFO MYNAM ": %s num_sge=%d numSGE=%d\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "num_sge=%d numSGE=%d\n",
 		ioc->name, num_sge, numSGE));
 
 	if ( numSGE > MPT_SCSI_SG_DEPTH	)
@@ -3567,7 +3847,7 @@ initChainBuffers(MPT_ADAPTER *ioc)
 	}
 	num_chain++;
 
-	dinitprintk((KERN_INFO MYNAM ": %s Now numSGE=%d num_sge=%d num_chain=%d\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Now numSGE=%d num_sge=%d num_chain=%d\n",
 		ioc->name, numSGE, num_sge, num_chain));
 
 	if (ioc->bus_type == SPI)
@@ -3584,7 +3864,7 @@ initChainBuffers(MPT_ADAPTER *ioc)
 			return -1;
 
 		ioc->ChainToChain = (int *) mem;
-		dinitprintk((KERN_INFO MYNAM ": %s ChainToChain alloc @ %p, sz=%d bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ChainToChain alloc @ %p, sz=%d bytes\n",
 			 	ioc->name, mem, sz));
 	} else {
 		mem = (u8 *) ioc->ChainToChain;
@@ -3594,7 +3874,7 @@ initChainBuffers(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	PrimeIocFifos - Initialize IOC request and reply FIFOs.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *
@@ -3620,22 +3900,22 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 			return -1;
 
 		total_size = reply_sz = (ioc->reply_sz * ioc->reply_depth);
-		dinitprintk((KERN_INFO MYNAM ": %s.ReplyBuffer sz=%d bytes, ReplyDepth=%d\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ReplyBuffer sz=%d bytes, ReplyDepth=%d\n",
 			 	ioc->name, ioc->reply_sz, ioc->reply_depth));
-		dinitprintk((KERN_INFO MYNAM ": %s.ReplyBuffer sz=%d[%x] bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ReplyBuffer sz=%d[%x] bytes\n",
 			 	ioc->name, reply_sz, reply_sz));
 
 		sz = (ioc->req_sz * ioc->req_depth);
-		dinitprintk((KERN_INFO MYNAM ": %s.RequestBuffer sz=%d bytes, RequestDepth=%d\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "RequestBuffer sz=%d bytes, RequestDepth=%d\n",
 			 	ioc->name, ioc->req_sz, ioc->req_depth));
-		dinitprintk((KERN_INFO MYNAM ": %s.RequestBuffer sz=%d[%x] bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "RequestBuffer sz=%d[%x] bytes\n",
 			 	ioc->name, sz, sz));
 		total_size += sz;
 
 		sz = num_chain * ioc->req_sz; /* chain buffer pool size */
-		dinitprintk((KERN_INFO MYNAM ": %s.ChainBuffer sz=%d bytes, ChainDepth=%d\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ChainBuffer sz=%d bytes, ChainDepth=%d\n",
 			 	ioc->name, ioc->req_sz, num_chain));
-		dinitprintk((KERN_INFO MYNAM ": %s.ChainBuffer sz=%d[%x] bytes num_chain=%d\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ChainBuffer sz=%d[%x] bytes num_chain=%d\n",
 			 	ioc->name, sz, sz, num_chain));
 
 		total_size += sz;
@@ -3646,7 +3926,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 			goto out_fail;
 		}
 
-		dinitprintk((KERN_INFO MYNAM ": %s.Total alloc @ %p[%p], sz=%d[%x] bytes\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Total alloc @ %p[%p], sz=%d[%x] bytes\n",
 			 	ioc->name, mem, (void *)(ulong)alloc_dma, total_size, total_size));
 
 		memset(mem, 0, total_size);
@@ -3657,7 +3937,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 		ioc->reply_frames = (MPT_FRAME_HDR *) mem;
 		ioc->reply_frames_low_dma = (u32) (alloc_dma & 0xFFFFFFFF);
 
-		dinitprintk((KERN_INFO MYNAM ": %s ReplyBuffers @ %p[%p]\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ReplyBuffers @ %p[%p]\n",
 	 		ioc->name, ioc->reply_frames, (void *)(ulong)alloc_dma));
 
 		alloc_dma += reply_sz;
@@ -3668,7 +3948,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 		ioc->req_frames = (MPT_FRAME_HDR *) mem;
 		ioc->req_frames_dma = alloc_dma;
 
-		dinitprintk((KERN_INFO MYNAM ": %s RequestBuffers @ %p[%p]\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "RequestBuffers @ %p[%p]\n",
 			 	ioc->name, mem, (void *)(ulong)alloc_dma));
 
 		ioc->req_frames_low_dma = (u32) (alloc_dma & 0xFFFFFFFF);
@@ -3682,7 +3962,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 		ioc->mtrr_reg = mtrr_add(ioc->req_frames_dma,
 					 sz,
 					 MTRR_TYPE_WRCOMB, 1);
-		dprintk((MYIOC_s_INFO_FMT "MTRR region registered (base:size=%08x:%x)\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "MTRR region registered (base:size=%08x:%x)\n",
 				ioc->name, ioc->req_frames_dma, sz));
 #endif
 
@@ -3694,7 +3974,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 		ioc->ChainBuffer = mem;
 		ioc->ChainBufferDMA = alloc_dma;
 
-		dinitprintk((KERN_INFO MYNAM " :%s ChainBuffers @ %p(%p)\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ChainBuffers @ %p(%p)\n",
 			ioc->name, ioc->ChainBuffer, (void *)(ulong)ioc->ChainBufferDMA));
 
 		/* Initialize the free chain Q.
@@ -3739,7 +4019,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 
 		ioc->sense_buf_low_dma = (u32) (ioc->sense_buf_pool_dma & 0xFFFFFFFF);
 		ioc->alloc_total += sz;
-		dinitprintk((KERN_INFO MYNAM ": %s.SenseBuffers @ %p[%p]\n",
+		dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "SenseBuffers @ %p[%p]\n",
  			ioc->name, ioc->sense_buf_pool, (void *)(ulong)ioc->sense_buf_pool_dma));
 
 	}
@@ -3747,7 +4027,7 @@ PrimeIocFifos(MPT_ADAPTER *ioc)
 	/* Post Reply frames to FIFO
 	 */
 	alloc_dma = ioc->alloc_dma;
-	dinitprintk((KERN_INFO MYNAM ": %s.ReplyBuffers @ %p[%p]\n",
+	dinitprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ReplyBuffers @ %p[%p]\n",
 	 	ioc->name, ioc->reply_frames, (void *)(ulong)alloc_dma));
 
 	for (i = 0; i < ioc->reply_depth; i++) {
@@ -3828,7 +4108,7 @@ mpt_handshake_req_reply_wait(MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 	if ((t = WaitForDoorbellInt(ioc, 5, sleepFlag)) < 0)
 		failcnt++;
 
-	dhsprintk((MYIOC_s_INFO_FMT "HandShake request start reqBytes=%d, WaitCnt=%d%s\n",
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "HandShake request start reqBytes=%d, WaitCnt=%d%s\n",
 			ioc->name, reqBytes, t, failcnt ? " - MISSING DOORBELL HANDSHAKE!" : ""));
 
 	/* Read doorbell and check for active bit */
@@ -3863,10 +4143,10 @@ mpt_handshake_req_reply_wait(MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 				failcnt++;
 		}
 
-		dhsprintk((KERN_INFO MYNAM ": Handshake request frame (@%p) header\n", req));
-		DBG_DUMP_REQUEST_FRAME_HDR(req)
+		dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Handshake request frame (@%p) header\n", ioc->name, req));
+		DBG_DUMP_REQUEST_FRAME_HDR(ioc, (u32 *)req)
 
-		dhsprintk((MYIOC_s_INFO_FMT "HandShake request post done, WaitCnt=%d%s\n",
+		dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "HandShake request post done, WaitCnt=%d%s\n",
 				ioc->name, t, failcnt ? " - MISSING DOORBELL ACK!" : ""));
 
 		/*
@@ -3875,7 +4155,7 @@ mpt_handshake_req_reply_wait(MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 		if (!failcnt && (t = WaitForDoorbellReply(ioc, maxwait, sleepFlag)) < 0)
 			failcnt++;
 
-		dhsprintk((MYIOC_s_INFO_FMT "HandShake reply count=%d%s\n",
+		dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "HandShake reply count=%d%s\n",
 				ioc->name, t, failcnt ? " - MISSING DOORBELL REPLY!" : ""));
 
 		/*
@@ -3891,15 +4171,15 @@ mpt_handshake_req_reply_wait(MPT_ADAPTER *ioc, int reqBytes, u32 *req,
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	WaitForDoorbellAck - Wait for IOC to clear the IOP_DOORBELL_STATUS bit
- *	in it's IntStatus register.
+/**
+ *	WaitForDoorbellAck - Wait for IOC doorbell handshake acknowledge
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@howlong: How long to wait (in seconds)
  *	@sleepFlag: Specifies whether the process can sleep
  *
  *	This routine waits (up to ~2 seconds max) for IOC doorbell
- *	handshake ACKnowledge.
+ *	handshake ACKnowledge, indicated by the IOP_DOORBELL_STATUS
+ *	bit in its IntStatus register being clear.
  *
  *	Returns a negative value on failure, else wait loop count.
  */
@@ -3922,7 +4202,7 @@ WaitForDoorbellAck(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 		}
 	} else {
 		while (--cntdn) {
-			mdelay (1);
+			udelay (1000);
 			intstat = CHIPREG_READ32(&ioc->chip->IntStatus);
 			if (! (intstat & MPI_HIS_IOP_DOORBELL_STATUS))
 				break;
@@ -3931,7 +4211,7 @@ WaitForDoorbellAck(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 	}
 
 	if (cntdn) {
-		dprintk((MYIOC_s_INFO_FMT "WaitForDoorbell ACK (count=%d)\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "WaitForDoorbell ACK (count=%d)\n",
 				ioc->name, count));
 		return count;
 	}
@@ -3942,14 +4222,14 @@ WaitForDoorbellAck(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	WaitForDoorbellInt - Wait for IOC to set the HIS_DOORBELL_INTERRUPT bit
- *	in it's IntStatus register.
+/**
+ *	WaitForDoorbellInt - Wait for IOC to set its doorbell interrupt bit
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@howlong: How long to wait (in seconds)
  *	@sleepFlag: Specifies whether the process can sleep
  *
- *	This routine waits (up to ~2 seconds max) for IOC doorbell interrupt.
+ *	This routine waits (up to ~2 seconds max) for IOC doorbell interrupt
+ *	(MPI_HIS_DOORBELL_INTERRUPT) to be set in the IntStatus register.
  *
  *	Returns a negative value on failure, else wait loop count.
  */
@@ -3974,13 +4254,13 @@ WaitForDoorbellInt(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 			intstat = CHIPREG_READ32(&ioc->chip->IntStatus);
 			if (intstat & MPI_HIS_DOORBELL_INTERRUPT)
 				break;
-			mdelay(1);
+			udelay (1000);
 			count++;
 		}
 	}
 
 	if (cntdn) {
-		dprintk((MYIOC_s_INFO_FMT "WaitForDoorbell INT (cnt=%d) howlong=%d\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "WaitForDoorbell INT (cnt=%d) howlong=%d\n",
 				ioc->name, count, howlong));
 		return count;
 	}
@@ -3991,8 +4271,8 @@ WaitForDoorbellInt(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	WaitForDoorbellReply - Wait for and capture a IOC handshake reply.
+/**
+ *	WaitForDoorbellReply - Wait for and capture an IOC handshake reply.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@howlong: How long to wait (in seconds)
  *	@sleepFlag: Specifies whether the process can sleep
@@ -4032,7 +4312,7 @@ WaitForDoorbellReply(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 		}
 	}
 
-	dhsprintk((MYIOC_s_INFO_FMT "WaitCnt=%d First handshake reply word=%08x%s\n",
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "WaitCnt=%d First handshake reply word=%08x%s\n",
 			ioc->name, t, le32_to_cpu(*(u32 *)hs_reply),
 			failcnt ? " - MISSING DOORBELL HANDSHAKE!" : ""));
 
@@ -4068,16 +4348,16 @@ WaitForDoorbellReply(MPT_ADAPTER *ioc, int howlong, int sleepFlag)
 	}
 #endif
 
-	dhsprintk((MYIOC_s_INFO_FMT "Got Handshake reply:\n", ioc->name));
-	DBG_DUMP_REPLY_FRAME(mptReply)
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Got Handshake reply:\n", ioc->name));
+	DBG_DUMP_REPLY_FRAME(ioc, (u32 *)mptReply)
 
-	dhsprintk((MYIOC_s_INFO_FMT "WaitForDoorbell REPLY WaitCnt=%d (sz=%d)\n",
+	dhsprintk(ioc, printk(MYIOC_s_DEBUG_FMT "WaitForDoorbell REPLY WaitCnt=%d (sz=%d)\n",
 			ioc->name, t, u16cnt/2));
 	return u16cnt/2;
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	GetLanConfigPages - Fetch LANConfig pages.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *
@@ -4188,12 +4468,9 @@ GetLanConfigPages(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mptbase_sas_persist_operation - Perform operation on SAS Persitent Table
+/**
+ *	mptbase_sas_persist_operation - Perform operation on SAS Persistent Table
  *	@ioc: Pointer to MPT_ADAPTER structure
- *	@sas_address: 64bit SAS Address for operation.
- *	@target_id: specified target for operation
- *	@bus: specified bus for operation
  *	@persist_opcode: see below
  *
  *	MPI_SAS_OP_CLEAR_NOT_PRESENT - Free all persist TargetID mappings for
@@ -4202,7 +4479,7 @@ GetLanConfigPages(MPT_ADAPTER *ioc)
  *
  *	NOTE: Don't use not this function during interrupt time.
  *
- *	Returns: 0 for success, non-zero error
+ *	Returns 0 for success, non-zero error
  */
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
@@ -4293,8 +4570,8 @@ mptbase_raid_process_event_data(MPT_ADAPTER *ioc,
 	if ((reason >= MPI_EVENT_RAID_RC_PHYSDISK_CREATED &&
 	     reason <= MPI_EVENT_RAID_RC_PHYSDISK_STATUS_CHANGED) ||
 	    (reason == MPI_EVENT_RAID_RC_SMART_DATA)) {
-		printk(MYIOC_s_INFO_FMT "RAID STATUS CHANGE for PhysDisk %d\n",
-			ioc->name, disk);
+		printk(MYIOC_s_INFO_FMT "RAID STATUS CHANGE for PhysDisk %d id=%d\n",
+			ioc->name, disk, volume);
 	} else {
 		printk(MYIOC_s_INFO_FMT "RAID STATUS CHANGE for VolumeID %d\n",
 			ioc->name, volume);
@@ -4399,7 +4676,7 @@ mptbase_raid_process_event_data(MPT_ADAPTER *ioc,
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	GetIoUnitPage2 - Retrieve BIOS version and boot order information.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *
@@ -4457,7 +4734,8 @@ GetIoUnitPage2(MPT_ADAPTER *ioc)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*	mpt_GetScsiPortSettings - read SCSI Port Page 0 and 2
+/**
+ *	mpt_GetScsiPortSettings - read SCSI Port Page 0 and 2
  *	@ioc: Pointer to a Adapter Strucutre
  *	@portnum: IOC port number
  *
@@ -4498,7 +4776,7 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 
 		ioc->spi_data.nvram = (int *) mem;
 
-		dprintk((MYIOC_s_INFO_FMT "SCSI device NVRAM settings @ %p, sz=%d\n",
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "SCSI device NVRAM settings @ %p, sz=%d\n",
 			ioc->name, ioc->spi_data.nvram, sz));
 	}
 
@@ -4534,7 +4812,8 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 				ioc->spi_data.minSyncFactor = MPT_ASYNC;
 				ioc->spi_data.busType = MPT_HOST_BUS_UNKNOWN;
 				rc = 1;
-				ddvprintk((MYIOC_s_INFO_FMT "Unable to read PortPage0 minSyncFactor=%x\n",
+				ddvprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+					"Unable to read PortPage0 minSyncFactor=%x\n",
 					ioc->name, ioc->spi_data.minSyncFactor));
 			} else {
 				/* Save the Port Page 0 data
@@ -4545,7 +4824,8 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 
 				if ( (pPP0->Capabilities & MPI_SCSIPORTPAGE0_CAP_QAS) == 0 ) {
 					ioc->spi_data.noQas |= MPT_TARGET_NO_NEGO_QAS;
-					ddvprintk((KERN_INFO MYNAM " :%s noQas due to Capabilities=%x\n",
+					ddvprintk(ioc, printk(KERN_INFO MYNAM
+						" :%s noQas due to Capabilities=%x\n",
 						ioc->name, pPP0->Capabilities));
 				}
 				ioc->spi_data.maxBusWidth = pPP0->Capabilities & MPI_SCSIPORTPAGE0_CAP_WIDE ? 1 : 0;
@@ -4554,7 +4834,8 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 					ioc->spi_data.maxSyncOffset = (u8) (data >> 16);
 					data = pPP0->Capabilities & MPI_SCSIPORTPAGE0_CAP_MIN_SYNC_PERIOD_MASK;
 					ioc->spi_data.minSyncFactor = (u8) (data >> 8);
-					ddvprintk((MYIOC_s_INFO_FMT "PortPage0 minSyncFactor=%x\n",
+					ddvprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+						"PortPage0 minSyncFactor=%x\n",
 						ioc->name, ioc->spi_data.minSyncFactor));
 				} else {
 					ioc->spi_data.maxSyncOffset = 0;
@@ -4570,7 +4851,8 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 
 					if (ioc->spi_data.minSyncFactor < MPT_ULTRA) {
 						ioc->spi_data.minSyncFactor = MPT_ULTRA;
-						ddvprintk((MYIOC_s_INFO_FMT "HVD or SE detected, minSyncFactor=%x\n",
+						ddvprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+							"HVD or SE detected, minSyncFactor=%x\n",
 							ioc->name, ioc->spi_data.minSyncFactor));
 					}
 				}
@@ -4644,7 +4926,8 @@ mpt_GetScsiPortSettings(MPT_ADAPTER *ioc, int portnum)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*	mpt_readScsiDevicePageHeaders - save version and length of SDP1
+/**
+ *	mpt_readScsiDevicePageHeaders - save version and length of SDP1
  *	@ioc: Pointer to a Adapter Strucutre
  *	@portnum: IOC port number
  *
@@ -4685,15 +4968,187 @@ mpt_readScsiDevicePageHeaders(MPT_ADAPTER *ioc, int portnum)
 	ioc->spi_data.sdp0version = cfg.cfghdr.hdr->PageVersion;
 	ioc->spi_data.sdp0length = cfg.cfghdr.hdr->PageLength;
 
-	dcprintk((MYIOC_s_INFO_FMT "Headers: 0: version %d length %d\n",
+	dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Headers: 0: version %d length %d\n",
 			ioc->name, ioc->spi_data.sdp0version, ioc->spi_data.sdp0length));
 
-	dcprintk((MYIOC_s_INFO_FMT "Headers: 1: version %d length %d\n",
+	dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Headers: 1: version %d length %d\n",
 			ioc->name, ioc->spi_data.sdp1version, ioc->spi_data.sdp1length));
 	return 0;
 }
 
-/*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
+/**
+ * mpt_inactive_raid_list_free - This clears this link list.
+ * @ioc : pointer to per adapter structure
+ **/
+static void
+mpt_inactive_raid_list_free(MPT_ADAPTER *ioc)
+{
+	struct inactive_raid_component_info *component_info, *pNext;
+
+	if (list_empty(&ioc->raid_data.inactive_list))
+		return;
+
+	down(&ioc->raid_data.inactive_list_mutex);
+	list_for_each_entry_safe(component_info, pNext,
+	    &ioc->raid_data.inactive_list, list) {
+		list_del(&component_info->list);
+		kfree(component_info);
+	}
+	up(&ioc->raid_data.inactive_list_mutex);
+}
+
+/**
+ * mpt_inactive_raid_volumes - sets up link list of phy_disk_nums for devices belonging in an inactive volume
+ *
+ * @ioc : pointer to per adapter structure
+ * @channel : volume channel
+ * @id : volume target id
+ **/
+static void
+mpt_inactive_raid_volumes(MPT_ADAPTER *ioc, u8 channel, u8 id)
+{
+	CONFIGPARMS			cfg;
+	ConfigPageHeader_t		hdr;
+	dma_addr_t			dma_handle;
+	pRaidVolumePage0_t		buffer = NULL;
+	int				i;
+	RaidPhysDiskPage0_t 		phys_disk;
+	struct inactive_raid_component_info *component_info;
+	int				handle_inactive_volumes;
+
+	memset(&cfg, 0 , sizeof(CONFIGPARMS));
+	memset(&hdr, 0 , sizeof(ConfigPageHeader_t));
+	hdr.PageType = MPI_CONFIG_PAGETYPE_RAID_VOLUME;
+	cfg.pageAddr = (channel << 8) + id;
+	cfg.cfghdr.hdr = &hdr;
+	cfg.action = MPI_CONFIG_ACTION_PAGE_HEADER;
+
+	if (mpt_config(ioc, &cfg) != 0)
+		goto out;
+
+	if (!hdr.PageLength)
+		goto out;
+
+	buffer = pci_alloc_consistent(ioc->pcidev, hdr.PageLength * 4,
+	    &dma_handle);
+
+	if (!buffer)
+		goto out;
+
+	cfg.physAddr = dma_handle;
+	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
+
+	if (mpt_config(ioc, &cfg) != 0)
+		goto out;
+
+	if (!buffer->NumPhysDisks)
+		goto out;
+
+	handle_inactive_volumes =
+	   (buffer->VolumeStatus.Flags & MPI_RAIDVOL0_STATUS_FLAG_VOLUME_INACTIVE ||
+	   (buffer->VolumeStatus.Flags & MPI_RAIDVOL0_STATUS_FLAG_ENABLED) == 0 ||
+	    buffer->VolumeStatus.State == MPI_RAIDVOL0_STATUS_STATE_FAILED ||
+	    buffer->VolumeStatus.State == MPI_RAIDVOL0_STATUS_STATE_MISSING) ? 1 : 0;
+
+	if (!handle_inactive_volumes)
+		goto out;
+
+	down(&ioc->raid_data.inactive_list_mutex);
+	for (i = 0; i < buffer->NumPhysDisks; i++) {
+		if(mpt_raid_phys_disk_pg0(ioc,
+		    buffer->PhysDisk[i].PhysDiskNum, &phys_disk) != 0)
+			continue;
+
+		if ((component_info = kmalloc(sizeof (*component_info),
+		 GFP_KERNEL)) == NULL)
+			continue;
+
+		component_info->volumeID = id;
+		component_info->volumeBus = channel;
+		component_info->d.PhysDiskNum = phys_disk.PhysDiskNum;
+		component_info->d.PhysDiskBus = phys_disk.PhysDiskBus;
+		component_info->d.PhysDiskID = phys_disk.PhysDiskID;
+		component_info->d.PhysDiskIOC = phys_disk.PhysDiskIOC;
+
+		list_add_tail(&component_info->list,
+		    &ioc->raid_data.inactive_list);
+	}
+	up(&ioc->raid_data.inactive_list_mutex);
+
+ out:
+	if (buffer)
+		pci_free_consistent(ioc->pcidev, hdr.PageLength * 4, buffer,
+		    dma_handle);
+}
+
+/**
+ *	mpt_raid_phys_disk_pg0 - returns phys disk page zero
+ *	@ioc: Pointer to a Adapter Structure
+ *	@phys_disk_num: io unit unique phys disk num generated by the ioc
+ *	@phys_disk: requested payload data returned
+ *
+ *	Return:
+ *	0 on success
+ *	-EFAULT if read of config page header fails or data pointer not NULL
+ *	-ENOMEM if pci_alloc failed
+ **/
+int
+mpt_raid_phys_disk_pg0(MPT_ADAPTER *ioc, u8 phys_disk_num, pRaidPhysDiskPage0_t phys_disk)
+{
+	CONFIGPARMS		 	cfg;
+	ConfigPageHeader_t	 	hdr;
+	dma_addr_t			dma_handle;
+	pRaidPhysDiskPage0_t		buffer = NULL;
+	int				rc;
+
+	memset(&cfg, 0 , sizeof(CONFIGPARMS));
+	memset(&hdr, 0 , sizeof(ConfigPageHeader_t));
+
+	hdr.PageType = MPI_CONFIG_PAGETYPE_RAID_PHYSDISK;
+	cfg.cfghdr.hdr = &hdr;
+	cfg.physAddr = -1;
+	cfg.action = MPI_CONFIG_ACTION_PAGE_HEADER;
+
+	if (mpt_config(ioc, &cfg) != 0) {
+		rc = -EFAULT;
+		goto out;
+	}
+
+	if (!hdr.PageLength) {
+		rc = -EFAULT;
+		goto out;
+	}
+
+	buffer = pci_alloc_consistent(ioc->pcidev, hdr.PageLength * 4,
+	    &dma_handle);
+
+	if (!buffer) {
+		rc = -ENOMEM;
+		goto out;
+	}
+
+	cfg.physAddr = dma_handle;
+	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
+	cfg.pageAddr = phys_disk_num;
+
+	if (mpt_config(ioc, &cfg) != 0) {
+		rc = -EFAULT;
+		goto out;
+	}
+
+	rc = 0;
+	memcpy(phys_disk, buffer, sizeof(*buffer));
+	phys_disk->MaxLBA = le32_to_cpu(buffer->MaxLBA);
+
+ out:
+
+	if (buffer)
+		pci_free_consistent(ioc->pcidev, hdr.PageLength * 4, buffer,
+		    dma_handle);
+
+	return rc;
+}
+
 /**
  *	mpt_findImVolumes - Identify IDs of hidden disks and RAID Volumes
  *	@ioc: Pointer to a Adapter Strucutre
@@ -4703,21 +5158,27 @@ mpt_readScsiDevicePageHeaders(MPT_ADAPTER *ioc, int portnum)
  *	0 on success
  *	-EFAULT if read of config page header fails or data pointer not NULL
  *	-ENOMEM if pci_alloc failed
- */
+ **/
 int
 mpt_findImVolumes(MPT_ADAPTER *ioc)
 {
 	IOCPage2_t		*pIoc2;
 	u8			*mem;
-	ConfigPageIoc2RaidVol_t	*pIocRv;
 	dma_addr_t		 ioc2_dma;
 	CONFIGPARMS		 cfg;
 	ConfigPageHeader_t	 header;
-	int			 jj;
 	int			 rc = 0;
 	int			 iocpage2sz;
-	u8			 nVols, nPhys;
-	u8			 vid, vbus, vioc;
+	int			 i;
+
+	if (!ioc->ir_firmware)
+		return 0;
+
+	/* Free the old page
+	 */
+	kfree(ioc->raid_data.pIocPg2);
+	ioc->raid_data.pIocPg2 = NULL;
+	mpt_inactive_raid_list_free(ioc);
 
 	/* Read IOCP2 header then the page.
 	 */
@@ -4745,55 +5206,23 @@ mpt_findImVolumes(MPT_ADAPTER *ioc)
 	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
 	cfg.physAddr = ioc2_dma;
 	if (mpt_config(ioc, &cfg) != 0)
-		goto done_and_free;
+		goto out;
 
-	if ( (mem = (u8 *)ioc->raid_data.pIocPg2) == NULL ) {
-		mem = kmalloc(iocpage2sz, GFP_ATOMIC);
-		if (mem) {
-			ioc->raid_data.pIocPg2 = (IOCPage2_t *) mem;
-		} else {
-			goto done_and_free;
-		}
-	}
+	mem = kmalloc(iocpage2sz, GFP_KERNEL);
+	if (!mem)
+		goto out;
+
 	memcpy(mem, (u8 *)pIoc2, iocpage2sz);
+	ioc->raid_data.pIocPg2 = (IOCPage2_t *) mem;
 
-	/* Identify RAID Volume Id's */
-	nVols = pIoc2->NumActiveVolumes;
-	if ( nVols == 0) {
-		/* No RAID Volume.
-		 */
-		goto done_and_free;
-	} else {
-		/* At least 1 RAID Volume
-		 */
-		pIocRv = pIoc2->RaidVolume;
-		ioc->raid_data.isRaid = 0;
-		for (jj = 0; jj < nVols; jj++, pIocRv++) {
-			vid = pIocRv->VolumeID;
-			vbus = pIocRv->VolumeBus;
-			vioc = pIocRv->VolumeIOC;
+	mpt_read_ioc_pg_3(ioc);
 
-			/* find the match
-			 */
-			if (vbus == 0) {
-				ioc->raid_data.isRaid |= (1 << vid);
-			} else {
-				/* Error! Always bus 0
-				 */
-			}
-		}
-	}
+	for (i = 0; i < pIoc2->NumActiveVolumes ; i++)
+		mpt_inactive_raid_volumes(ioc,
+		    pIoc2->RaidVolume[i].VolumeBus,
+		    pIoc2->RaidVolume[i].VolumeID);
 
-	/* Identify Hidden Physical Disk Id's */
-	nPhys = pIoc2->NumActivePhysDisks;
-	if (nPhys == 0) {
-		/* No physical disks.
-		 */
-	} else {
-		mpt_read_ioc_pg_3(ioc);
-	}
-
-done_and_free:
+ out:
 	pci_free_consistent(ioc->pcidev, iocpage2sz, pIoc2, ioc2_dma);
 
 	return rc;
@@ -4846,7 +5275,7 @@ mpt_read_ioc_pg_3(MPT_ADAPTER *ioc)
 	cfg.physAddr = ioc3_dma;
 	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
 	if (mpt_config(ioc, &cfg) == 0) {
-		mem = kmalloc(iocpage3sz, GFP_ATOMIC);
+		mem = kmalloc(iocpage3sz, GFP_KERNEL);
 		if (mem) {
 			memcpy(mem, (u8 *)pIoc3, iocpage3sz);
 			ioc->raid_data.pIocPg3 = (IOCPage3_t *) mem;
@@ -4951,12 +5380,12 @@ mpt_read_ioc_pg_1(MPT_ADAPTER *ioc)
 	cfg.physAddr = ioc1_dma;
 	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
 	if (mpt_config(ioc, &cfg) == 0) {
-		
+
 		tmp = le32_to_cpu(pIoc1->Flags) & MPI_IOCPAGE1_REPLY_COALESCING;
 		if (tmp == MPI_IOCPAGE1_REPLY_COALESCING) {
 			tmp = le32_to_cpu(pIoc1->CoalescingTimeout);
 
-			dprintk((MYIOC_s_INFO_FMT "Coalescing Enabled Timeout = %d\n",
+			dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Coalescing Enabled Timeout = %d\n",
 					ioc->name, tmp));
 
 			if (tmp > MPT_COALESCING_TIMEOUT) {
@@ -4967,26 +5396,29 @@ mpt_read_ioc_pg_1(MPT_ADAPTER *ioc)
 				cfg.dir = 1;
 				cfg.action = MPI_CONFIG_ACTION_PAGE_WRITE_CURRENT;
 				if (mpt_config(ioc, &cfg) == 0) {
-					dprintk((MYIOC_s_INFO_FMT "Reset Current Coalescing Timeout to = %d\n",
+					dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Reset Current Coalescing Timeout to = %d\n",
 							ioc->name, MPT_COALESCING_TIMEOUT));
 
 					cfg.action = MPI_CONFIG_ACTION_PAGE_WRITE_NVRAM;
 					if (mpt_config(ioc, &cfg) == 0) {
-						dprintk((MYIOC_s_INFO_FMT "Reset NVRAM Coalescing Timeout to = %d\n",
+						dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+								"Reset NVRAM Coalescing Timeout to = %d\n",
 								ioc->name, MPT_COALESCING_TIMEOUT));
 					} else {
-						dprintk((MYIOC_s_INFO_FMT "Reset NVRAM Coalescing Timeout Failed\n",
-									ioc->name));
+						dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+								"Reset NVRAM Coalescing Timeout Failed\n",
+								ioc->name));
 					}
 
 				} else {
-					dprintk((MYIOC_s_WARN_FMT "Reset of Current Coalescing Timeout Failed!\n",
-								ioc->name));
+					dprintk(ioc, printk(MYIOC_s_WARN_FMT
+						"Reset of Current Coalescing Timeout Failed!\n",
+						ioc->name));
 				}
 			}
 
 		} else {
-			dprintk((MYIOC_s_WARN_FMT "Coalescing Disabled\n", ioc->name));
+			dprintk(ioc, printk(MYIOC_s_WARN_FMT "Coalescing Disabled\n", ioc->name));
 		}
 	}
 
@@ -4995,10 +5427,52 @@ mpt_read_ioc_pg_1(MPT_ADAPTER *ioc)
 	return;
 }
 
+static void
+mpt_get_manufacturing_pg_0(MPT_ADAPTER *ioc)
+{
+	CONFIGPARMS		cfg;
+	ConfigPageHeader_t	hdr;
+	dma_addr_t		buf_dma;
+	ManufacturingPage0_t	*pbuf = NULL;
+
+	memset(&cfg, 0 , sizeof(CONFIGPARMS));
+	memset(&hdr, 0 , sizeof(ConfigPageHeader_t));
+
+	hdr.PageType = MPI_CONFIG_PAGETYPE_MANUFACTURING;
+	cfg.cfghdr.hdr = &hdr;
+	cfg.physAddr = -1;
+	cfg.action = MPI_CONFIG_ACTION_PAGE_HEADER;
+	cfg.timeout = 10;
+
+	if (mpt_config(ioc, &cfg) != 0)
+		goto out;
+
+	if (!cfg.cfghdr.hdr->PageLength)
+		goto out;
+
+	cfg.action = MPI_CONFIG_ACTION_PAGE_READ_CURRENT;
+	pbuf = pci_alloc_consistent(ioc->pcidev, hdr.PageLength * 4, &buf_dma);
+	if (!pbuf)
+		goto out;
+
+	cfg.physAddr = buf_dma;
+
+	if (mpt_config(ioc, &cfg) != 0)
+		goto out;
+
+	memcpy(ioc->board_name, pbuf->BoardName, sizeof(ioc->board_name));
+	memcpy(ioc->board_assembly, pbuf->BoardAssembly, sizeof(ioc->board_assembly));
+	memcpy(ioc->board_tracer, pbuf->BoardTracerNumber, sizeof(ioc->board_tracer));
+
+	out:
+
+	if (pbuf)
+		pci_free_consistent(ioc->pcidev, hdr.PageLength * 4, pbuf, buf_dma);
+}
+
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	SendEventNotification - Send EventNotification (on or off) request
- *	to MPT adapter.
+/**
+ *	SendEventNotification - Send EventNotification (on or off) request to adapter
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@EvSwitch: Event switch flags
  */
@@ -5009,13 +5483,13 @@ SendEventNotification(MPT_ADAPTER *ioc, u8 EvSwitch)
 
 	evnp = (EventNotification_t *) mpt_get_msg_frame(mpt_base_index, ioc);
 	if (evnp == NULL) {
-		devtverboseprintk((MYIOC_s_WARN_FMT "Unable to allocate event request frame!\n",
+		devtverboseprintk(ioc, printk(MYIOC_s_WARN_FMT "Unable to allocate event request frame!\n",
 				ioc->name));
 		return 0;
 	}
 	memset(evnp, 0, sizeof(*evnp));
 
-	devtverboseprintk((MYIOC_s_INFO_FMT "Sending EventNotification (%d) request %p\n", ioc->name, EvSwitch, evnp));
+	devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending EventNotification (%d) request %p\n", ioc->name, EvSwitch, evnp));
 
 	evnp->Function = MPI_FUNCTION_EVENT_NOTIFICATION;
 	evnp->ChainOffset = 0;
@@ -5039,12 +5513,12 @@ SendEventAck(MPT_ADAPTER *ioc, EventNotificationReply_t *evnp)
 	EventAck_t	*pAck;
 
 	if ((pAck = (EventAck_t *) mpt_get_msg_frame(mpt_base_index, ioc)) == NULL) {
-		dfailprintk((MYIOC_s_WARN_FMT "%s, no msg frames!!\n",
+		dfailprintk(ioc, printk(MYIOC_s_WARN_FMT "%s, no msg frames!!\n",
 		    ioc->name,__FUNCTION__));
 		return -1;
 	}
 
-	devtverboseprintk((MYIOC_s_INFO_FMT "Sending EventAck\n", ioc->name));
+	devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending EventAck\n", ioc->name));
 
 	pAck->Function     = MPI_FUNCTION_EVENT_ACK;
 	pAck->ChainOffset  = 0;
@@ -5062,8 +5536,8 @@ SendEventAck(MPT_ADAPTER *ioc, EventNotificationReply_t *evnp)
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
  *	mpt_config - Generic function to issue config message
- *	@ioc - Pointer to an adapter structure
- *	@cfg - Pointer to a configuration structure. Struct contains
+ *	@ioc:   Pointer to an adapter structure
+ *	@pCfg:  Pointer to a configuration structure. Struct contains
  *		action, page address, direction, physical address
  *		and pointer to a configuration page header
  *		Page header is updated.
@@ -5089,7 +5563,7 @@ mpt_config(MPT_ADAPTER *ioc, CONFIGPARMS *pCfg)
 	 */
 	in_isr = in_interrupt();
 	if (in_isr) {
-		dcprintk((MYIOC_s_WARN_FMT "Config request not allowed in ISR context!\n",
+		dcprintk(ioc, printk(MYIOC_s_WARN_FMT "Config request not allowed in ISR context!\n",
 				ioc->name));
 		return -EPERM;
 	}
@@ -5097,7 +5571,7 @@ mpt_config(MPT_ADAPTER *ioc, CONFIGPARMS *pCfg)
 	/* Get and Populate a free Frame
 	 */
 	if ((mf = mpt_get_msg_frame(mpt_base_index, ioc)) == NULL) {
-		dcprintk((MYIOC_s_WARN_FMT "mpt_config: no msg frames!\n",
+		dcprintk(ioc, printk(MYIOC_s_WARN_FMT "mpt_config: no msg frames!\n",
 				ioc->name));
 		return -EAGAIN;
 	}
@@ -5142,13 +5616,13 @@ mpt_config(MPT_ADAPTER *ioc, CONFIGPARMS *pCfg)
 	if ((pCfg->cfghdr.hdr->PageType & MPI_CONFIG_PAGETYPE_MASK) == MPI_CONFIG_PAGETYPE_EXTENDED) {
 		flagsLength |= pExtHdr->ExtPageLength * 4;
 
-		dcprintk((MYIOC_s_INFO_FMT "Sending Config request type %d, page %d and action %d\n",
+		dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending Config request type %d, page %d and action %d\n",
 			ioc->name, pReq->ExtPageType, pReq->Header.PageNumber, pReq->Action));
 	}
 	else {
 		flagsLength |= pCfg->cfghdr.hdr->PageLength * 4;
 
-		dcprintk((MYIOC_s_INFO_FMT "Sending Config request type %d, page %d and action %d\n",
+		dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Sending Config request type %d, page %d and action %d\n",
 			ioc->name, pReq->Header.PageType, pReq->Header.PageNumber, pReq->Action));
 	}
 
@@ -5188,8 +5662,8 @@ mpt_config(MPT_ADAPTER *ioc, CONFIGPARMS *pCfg)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mpt_timer_expired - Call back for timer process.
+/**
+ *	mpt_timer_expired - Callback for timer process.
  *	Used only internal config functionality.
  *	@data: Pointer to MPT_SCSI_HOST recast as an unsigned long
  */
@@ -5198,7 +5672,7 @@ mpt_timer_expired(unsigned long data)
 {
 	MPT_ADAPTER *ioc = (MPT_ADAPTER *) data;
 
-	dcprintk((MYIOC_s_WARN_FMT "mpt_timer_expired! \n", ioc->name));
+	dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mpt_timer_expired! \n", ioc->name));
 
 	/* Perform a FW reload */
 	if (mpt_HardResetHandler(ioc, NO_SLEEP) < 0)
@@ -5208,18 +5682,18 @@ mpt_timer_expired(unsigned long data)
 	 * Hard reset clean-up will wake up
 	 * process and free all resources.
 	 */
-	dcprintk((MYIOC_s_WARN_FMT "mpt_timer_expired complete!\n", ioc->name));
+	dcprintk(ioc, printk(MYIOC_s_DEBUG_FMT "mpt_timer_expired complete!\n", ioc->name));
 
 	return;
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_ioc_reset - Base cleanup for hard reset
  *	@ioc: Pointer to the adapter structure
  *	@reset_phase: Indicates pre- or post-reset functionality
  *
- *	Remark: Free's resources with internally generated commands.
+ *	Remark: Frees resources with internally generated commands.
  */
 static int
 mpt_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
@@ -5227,7 +5701,7 @@ mpt_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
 	CONFIGPARMS *pCfg;
 	unsigned long flags;
 
-	dprintk((KERN_WARNING MYNAM
+	dprintk(ioc, printk(KERN_DEBUG MYNAM
 			": IOC %s_reset routed to MPT base driver!\n",
 			reset_phase==MPT_IOC_SETUP_RESET ? "setup" : (
 			reset_phase==MPT_IOC_PRE_RESET ? "pre" : "post")));
@@ -5271,7 +5745,7 @@ mpt_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
  *	procfs (%MPT_PROCFS_MPTBASEDIR/...) support stuff...
  */
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	procmpt_create - Create %MPT_PROCFS_MPTBASEDIR entries.
  *
  *	Returns 0 for success, non-zero for failure.
@@ -5297,7 +5771,7 @@ procmpt_create(void)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	procmpt_destroy - Tear down %MPT_PROCFS_MPTBASEDIR entries.
  *
  *	Returns 0 for success, non-zero for failure.
@@ -5311,16 +5785,16 @@ procmpt_destroy(void)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	procmpt_summary_read - Handle read request from /proc/mpt/summary
- *	or from /proc/mpt/iocN/summary.
+/**
+ *	procmpt_summary_read - Handle read request of a summary file
  *	@buf: Pointer to area to write information
  *	@start: Pointer to start pointer
  *	@offset: Offset to start writing
- *	@request:
+ *	@request: Amount of read data requested
  *	@eof: Pointer to EOF integer
  *	@data: Pointer
  *
+ *	Handles read request from /proc/mpt/summary or /proc/mpt/iocN/summary.
  *	Returns number of characters written to process performing the read.
  */
 static int
@@ -5355,12 +5829,12 @@ procmpt_summary_read(char *buf, char **start, off_t offset, int request, int *eo
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	procmpt_version_read - Handle read request from /proc/mpt/version.
  *	@buf: Pointer to area to write information
  *	@start: Pointer to start pointer
  *	@offset: Offset to start writing
- *	@request:
+ *	@request: Amount of read data requested
  *	@eof: Pointer to EOF integer
  *	@data: Pointer
  *
@@ -5411,12 +5885,12 @@ procmpt_version_read(char *buf, char **start, off_t offset, int request, int *eo
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	procmpt_iocinfo_read - Handle read request from /proc/mpt/iocN/info.
  *	@buf: Pointer to area to write information
  *	@start: Pointer to start pointer
  *	@offset: Offset to start writing
- *	@request:
+ *	@request: Amount of read data requested
  *	@eof: Pointer to EOF integer
  *	@data: Pointer
  *
@@ -5577,16 +6051,17 @@ mpt_print_ioc_summary(MPT_ADAPTER *ioc, char *buffer, int *size, int len, int sh
  */
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- *	mpt_HardResetHandler - Generic reset handler, issue SCSI Task
- *	Management call based on input arg values.  If TaskMgmt fails,
- *	return associated SCSI request.
+ *	mpt_HardResetHandler - Generic reset handler
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@sleepFlag: Indicates if sleep or schedule must be called.
+ *
+ *	Issues SCSI Task Management call based on input arg values.
+ *	If TaskMgmt fails, returns associated SCSI request.
  *
  *	Remark: _HardResetHandler can be invoked from an interrupt thread (timer)
  *	or a non-interrupt thread.  In the former, must not call schedule().
  *
- *	Remark: A return of -1 is a FATAL error case, as it means a
+ *	Note: A return of -1 is a FATAL error case, as it means a
  *	FW reload/initialization failed.
  *
  *	Returns 0 for SUCCESS or -1 if FAILED.
@@ -5597,7 +6072,7 @@ mpt_HardResetHandler(MPT_ADAPTER *ioc, int sleepFlag)
 	int		 rc;
 	unsigned long	 flags;
 
-	dtmprintk((MYIOC_s_INFO_FMT "HardResetHandler Entered!\n", ioc->name));
+	dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT "HardResetHandler Entered!\n", ioc->name));
 #ifdef MFCNT
 	printk(MYIOC_s_INFO_FMT "HardResetHandler Entered!\n", ioc->name);
 	printk("MF count 0x%x !\n", ioc->mfcnt);
@@ -5629,11 +6104,11 @@ mpt_HardResetHandler(MPT_ADAPTER *ioc, int sleepFlag)
 
 		for (ii=MPT_MAX_PROTOCOL_DRIVERS-1; ii; ii--) {
 			if (MptResetHandlers[ii]) {
-				dtmprintk((MYIOC_s_INFO_FMT "Calling IOC reset_setup handler #%d\n",
+				dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Calling IOC reset_setup handler #%d\n",
 						ioc->name, ii));
 				r += mpt_signal_reset(ii, ioc, MPT_IOC_SETUP_RESET);
 				if (ioc->alt_ioc) {
-					dtmprintk((MYIOC_s_INFO_FMT "Calling alt-%s setup reset handler #%d\n",
+					dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Calling alt-%s setup reset handler #%d\n",
 							ioc->name, ioc->alt_ioc->name, ii));
 					r += mpt_signal_reset(ii, ioc->alt_ioc, MPT_IOC_SETUP_RESET);
 				}
@@ -5655,12 +6130,10 @@ mpt_HardResetHandler(MPT_ADAPTER *ioc, int sleepFlag)
 		ioc->alt_ioc->diagPending = 0;
 	spin_unlock_irqrestore(&ioc->diagLock, flags);
 
-	dtmprintk((MYIOC_s_INFO_FMT "HardResetHandler rc = %d!\n", ioc->name, rc));
+	dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT "HardResetHandler rc = %d!\n", ioc->name, rc));
 
 	return rc;
 }
-
-# define EVENT_DESCR_STR_SZ		100
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 static void
@@ -5689,9 +6162,6 @@ EventDescriptionStr(u8 event, u32 evData0, char *evStr)
 		break;
 	case MPI_EVENT_RESCAN:
 		ds = "Bus Rescan Event";
-		/* Ok, do we need to do anything here? As far as
-		   I can tell, this is when a new device gets added
-		   to the loop. */
 		break;
 	case MPI_EVENT_LINK_STATUS_CHANGE:
 		if (evData0 == MPI_EVENT_LINK_STATUS_FAILURE)
@@ -5768,48 +6238,63 @@ EventDescriptionStr(u8 event, u32 evData0, char *evStr)
 	case MPI_EVENT_SAS_DEVICE_STATUS_CHANGE:
 	{
 		u8 id = (u8)(evData0);
+		u8 channel = (u8)(evData0 >> 8);
 		u8 ReasonCode = (u8)(evData0 >> 16);
 		switch (ReasonCode) {
 		case MPI_EVENT_SAS_DEV_STAT_RC_ADDED:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Added: id=%d", id);
+			    "SAS Device Status Change: Added: "
+			    "id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_NOT_RESPONDING:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Deleted: id=%d", id);
+			    "SAS Device Status Change: Deleted: "
+			    "id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_SMART_DATA:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: SMART Data: id=%d",
-			    id);
+			    "SAS Device Status Change: SMART Data: "
+			    "id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_NO_PERSIST_ADDED:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: No Persistancy: id=%d", id);
+			    "SAS Device Status Change: No Persistancy: "
+			    "id=%d channel=%d", id, channel);
+			break;
+		case MPI_EVENT_SAS_DEV_STAT_RC_UNSUPPORTED:
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS Device Status Change: Unsupported Device "
+			    "Discovered : id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_INTERNAL_DEVICE_RESET:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Internal Device Reset : id=%d", id);
+			    "SAS Device Status Change: Internal Device "
+			    "Reset : id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_TASK_ABORT_INTERNAL:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Internal Task Abort : id=%d", id);
+			    "SAS Device Status Change: Internal Task "
+			    "Abort : id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_ABORT_TASK_SET_INTERNAL:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Internal Abort Task Set : id=%d", id);
+			    "SAS Device Status Change: Internal Abort "
+			    "Task Set : id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_CLEAR_TASK_SET_INTERNAL:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Internal Clear Task Set : id=%d", id);
+			    "SAS Device Status Change: Internal Clear "
+			    "Task Set : id=%d channel=%d", id, channel);
 			break;
 		case MPI_EVENT_SAS_DEV_STAT_RC_QUERY_TASK_INTERNAL:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Internal Query Task : id=%d", id);
+			    "SAS Device Status Change: Internal Query "
+			    "Task : id=%d channel=%d", id, channel);
 			break;
 		default:
 			snprintf(evStr, EVENT_DESCR_STR_SZ,
-			    "SAS Device Status Change: Unknown: id=%d", id);
+			    "SAS Device Status Change: Unknown: "
+			    "id=%d channel=%d", id, channel);
 			break;
 		}
 		break;
@@ -5818,8 +6303,16 @@ EventDescriptionStr(u8 event, u32 evData0, char *evStr)
 		ds = "Bus Timer Expired";
 		break;
 	case MPI_EVENT_QUEUE_FULL:
-		ds = "Queue Full";
+	{
+		u16 curr_depth = (u16)(evData0 >> 16);
+		u8 channel = (u8)(evData0 >> 8);
+		u8 id = (u8)(evData0);
+
+		snprintf(evStr, EVENT_DESCR_STR_SZ,
+		   "Queue Full: channel=%d id=%d depth=%d",
+		   channel, id, curr_depth);
 		break;
+	}
 	case MPI_EVENT_SAS_SES:
 		ds = "SAS SES Event";
 		break;
@@ -5923,6 +6416,76 @@ EventDescriptionStr(u8 event, u32 evData0, char *evStr)
 		ds = "SAS Log Entry Added";
 		break;
 
+	case MPI_EVENT_SAS_BROADCAST_PRIMITIVE:
+	{
+		u8 phy_num = (u8)(evData0);
+		u8 port_num = (u8)(evData0 >> 8);
+		u8 port_width = (u8)(evData0 >> 16);
+		u8 primative = (u8)(evData0 >> 24);
+		snprintf(evStr, EVENT_DESCR_STR_SZ,
+		    "SAS Broadcase Primative: phy=%d port=%d "
+		    "width=%d primative=0x%02x",
+		    phy_num, port_num, port_width, primative);
+		break;
+	}
+
+	case MPI_EVENT_SAS_INIT_DEVICE_STATUS_CHANGE:
+	{
+		u8 reason = (u8)(evData0);
+		u8 port_num = (u8)(evData0 >> 8);
+		u16 handle = le16_to_cpu(evData0 >> 16);
+
+		snprintf(evStr, EVENT_DESCR_STR_SZ,
+		    "SAS Initiator Device Status Change: reason=0x%02x "
+		    "port=%d handle=0x%04x",
+		    reason, port_num, handle);
+		break;
+	}
+
+	case MPI_EVENT_SAS_INIT_TABLE_OVERFLOW:
+	{
+		u8 max_init = (u8)(evData0);
+		u8 current_init = (u8)(evData0 >> 8);
+
+		snprintf(evStr, EVENT_DESCR_STR_SZ,
+		    "SAS Initiator Device Table Overflow: max initiators=%02d "
+		    "current initators=%02d",
+		    max_init, current_init);
+		break;
+	}
+	case MPI_EVENT_SAS_SMP_ERROR:
+	{
+		u8 status = (u8)(evData0);
+		u8 port_num = (u8)(evData0 >> 8);
+		u8 result = (u8)(evData0 >> 16);
+
+		if (status == MPI_EVENT_SAS_SMP_FUNCTION_RESULT_VALID)
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d result=0x%02x",
+			    port_num, result);
+		else if (status == MPI_EVENT_SAS_SMP_CRC_ERROR)
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d : CRC Error",
+			    port_num);
+		else if (status == MPI_EVENT_SAS_SMP_TIMEOUT)
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d : Timeout",
+			    port_num);
+		else if (status == MPI_EVENT_SAS_SMP_NO_DESTINATION)
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d : No Destination",
+			    port_num);
+		else if (status == MPI_EVENT_SAS_SMP_BAD_DESTINATION)
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d : Bad Destination",
+			    port_num);
+		else
+			snprintf(evStr, EVENT_DESCR_STR_SZ,
+			    "SAS SMP Error: port=%d : status=0x%02x",
+			    port_num, status);
+		break;
+	}
+
 	/*
 	 *  MPT base "custom" events may be added here...
 	 */
@@ -5935,13 +6498,14 @@ EventDescriptionStr(u8 event, u32 evData0, char *evStr)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	ProcessEventNotification - Route a received EventNotificationReply to
- *	all currently regeistered event handlers.
+/**
+ *	ProcessEventNotification - Route EventNotificationReply to all event handlers
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@pEventReply: Pointer to EventNotification reply frame
  *	@evHandlers: Pointer to integer, number of event handlers
  *
+ *	Routes a received EventNotificationReply to all currently registered
+ *	event handlers.
  *	Returns sum of event handlers return values.
  */
 static int
@@ -5967,16 +6531,18 @@ ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *pEventReply
 	}
 
 	EventDescriptionStr(event, evData0, evStr);
-	devtprintk((MYIOC_s_INFO_FMT "MPT event:(%02Xh) : %s\n",
+	devtprintk(ioc, printk(MYIOC_s_DEBUG_FMT "MPT event:(%02Xh) : %s\n",
 			ioc->name,
 			event,
 			evStr));
 
-#if defined(MPT_DEBUG) || defined(MPT_DEBUG_VERBOSE_EVENTS)
-	printk(KERN_INFO MYNAM ": Event data:\n" KERN_INFO);
+#ifdef CONFIG_FUSION_LOGGING
+	devtverboseprintk(ioc, printk(KERN_DEBUG MYNAM
+	    ": Event data:\n"));
 	for (ii = 0; ii < evDataLen; ii++)
-		printk(" %08x", le32_to_cpu(pEventReply->Data[ii]));
-	printk("\n");
+		devtverboseprintk(ioc, printk(" %08x",
+		    le32_to_cpu(pEventReply->Data[ii])));
+	devtverboseprintk(ioc, printk(KERN_DEBUG "\n"));
 #endif
 
 	/*
@@ -6031,7 +6597,7 @@ ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *pEventReply
 	 */
 	for (ii=MPT_MAX_PROTOCOL_DRIVERS-1; ii; ii--) {
 		if (MptEvHandlers[ii]) {
-			devtverboseprintk((MYIOC_s_INFO_FMT "Routing Event to event handler #%d\n",
+			devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT "Routing Event to event handler #%d\n",
 					ioc->name, ii));
 			r += (*(MptEvHandlers[ii]))(ioc, pEventReply);
 			handlers++;
@@ -6043,10 +6609,10 @@ ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *pEventReply
 	 *  If needed, send (a single) EventAck.
 	 */
 	if (pEventReply->AckRequired == MPI_EVENT_NOTIFICATION_ACK_REQUIRED) {
-		devtverboseprintk((MYIOC_s_WARN_FMT
+		devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 			"EventAck required\n",ioc->name));
 		if ((ii = SendEventAck(ioc, pEventReply)) != 0) {
-			devtverboseprintk((MYIOC_s_WARN_FMT "SendEventAck returned %d\n",
+			devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT "SendEventAck returned %d\n",
 					ioc->name, ii));
 		}
 	}
@@ -6056,7 +6622,7 @@ ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *pEventReply
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_fc_log_info - Log information returned from Fibre Channel IOC.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@log_info: U32 LogInfo reply word from the IOC
@@ -6066,18 +6632,41 @@ ProcessEventNotification(MPT_ADAPTER *ioc, EventNotificationReply_t *pEventReply
 static void
 mpt_fc_log_info(MPT_ADAPTER *ioc, u32 log_info)
 {
-	static char *subcl_str[8] = {
-		"FCP Initiator", "FCP Target", "LAN", "MPI Message Layer",
-		"FC Link", "Context Manager", "Invalid Field Offset", "State Change Info"
-	};
-	u8 subcl = (log_info >> 24) & 0x7;
+	char *desc = "unknown";
 
-	printk(MYIOC_s_INFO_FMT "LogInfo(0x%08x): SubCl={%s}\n",
-			ioc->name, log_info, subcl_str[subcl]);
+	switch (log_info & 0xFF000000) {
+	case MPI_IOCLOGINFO_FC_INIT_BASE:
+		desc = "FCP Initiator";
+		break;
+	case MPI_IOCLOGINFO_FC_TARGET_BASE:
+		desc = "FCP Target";
+		break;
+	case MPI_IOCLOGINFO_FC_LAN_BASE:
+		desc = "LAN";
+		break;
+	case MPI_IOCLOGINFO_FC_MSG_BASE:
+		desc = "MPI Message Layer";
+		break;
+	case MPI_IOCLOGINFO_FC_LINK_BASE:
+		desc = "FC Link";
+		break;
+	case MPI_IOCLOGINFO_FC_CTX_BASE:
+		desc = "Context Manager";
+		break;
+	case MPI_IOCLOGINFO_FC_INVALID_FIELD_BYTE_OFFSET:
+		desc = "Invalid Field Offset";
+		break;
+	case MPI_IOCLOGINFO_FC_STATE_CHANGE:
+		desc = "State Change Info";
+		break;
+	}
+
+	printk(MYIOC_s_INFO_FMT "LogInfo(0x%08x): SubClass={%s}, Value=(0x%06x)\n",
+			ioc->name, log_info, desc, (log_info & 0xFFFFFF));
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_spi_log_info - Log information returned from SCSI Parallel IOC.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@mr: Pointer to MPT reply frame
@@ -6185,10 +6774,11 @@ mpt_spi_log_info(MPT_ADAPTER *ioc, u32 log_info)
 		"Abort",					/* 12h */
 		"IO Not Yet Executed",				/* 13h */
 		"IO Executed",					/* 14h */
-		"Persistant Reservation Out Not Affiliation Owner", /* 15h */
+		"Persistent Reservation Out Not Affiliation "
+		    "Owner", 					/* 15h */
 		"Open Transmit DMA Abort",			/* 16h */
 		"IO Device Missing Delay Retry",		/* 17h */
-		NULL,						/* 18h */
+		"IO Cancelled Due to Recieve Error",		/* 18h */
 		NULL,						/* 19h */
 		NULL,						/* 1Ah */
 		NULL,						/* 1Bh */
@@ -6198,15 +6788,105 @@ mpt_spi_log_info(MPT_ADAPTER *ioc, u32 log_info)
 		NULL,						/* 1Fh */
 		"Enclosure Management"				/* 20h */
 	};
+	static char *ir_code_str[] = {
+		"Raid Action Error",				/* 00h */
+		NULL,						/* 00h */
+		NULL,						/* 01h */
+		NULL,						/* 02h */
+		NULL,						/* 03h */
+		NULL,						/* 04h */
+		NULL,						/* 05h */
+		NULL,						/* 06h */
+		NULL						/* 07h */
+	};
+	static char *raid_sub_code_str[] = {
+		NULL, 						/* 00h */
+		"Volume Creation Failed: Data Passed too "
+		    "Large", 					/* 01h */
+		"Volume Creation Failed: Duplicate Volumes "
+		    "Attempted", 				/* 02h */
+		"Volume Creation Failed: Max Number "
+		    "Supported Volumes Exceeded",		/* 03h */
+		"Volume Creation Failed: DMA Error",		/* 04h */
+		"Volume Creation Failed: Invalid Volume Type",	/* 05h */
+		"Volume Creation Failed: Error Reading "
+		    "MFG Page 4", 				/* 06h */
+		"Volume Creation Failed: Creating Internal "
+		    "Structures", 				/* 07h */
+		NULL,						/* 08h */
+		NULL,						/* 09h */
+		NULL,						/* 0Ah */
+		NULL,						/* 0Bh */
+		NULL,						/* 0Ch */
+		NULL,						/* 0Dh */
+		NULL,						/* 0Eh */
+		NULL,						/* 0Fh */
+		"Activation failed: Already Active Volume", 	/* 10h */
+		"Activation failed: Unsupported Volume Type", 	/* 11h */
+		"Activation failed: Too Many Active Volumes", 	/* 12h */
+		"Activation failed: Volume ID in Use", 		/* 13h */
+		"Activation failed: Reported Failure", 		/* 14h */
+		"Activation failed: Importing a Volume", 	/* 15h */
+		NULL,						/* 16h */
+		NULL,						/* 17h */
+		NULL,						/* 18h */
+		NULL,						/* 19h */
+		NULL,						/* 1Ah */
+		NULL,						/* 1Bh */
+		NULL,						/* 1Ch */
+		NULL,						/* 1Dh */
+		NULL,						/* 1Eh */
+		NULL,						/* 1Fh */
+		"Phys Disk failed: Too Many Phys Disks", 	/* 20h */
+		"Phys Disk failed: Data Passed too Large",	/* 21h */
+		"Phys Disk failed: DMA Error", 			/* 22h */
+		"Phys Disk failed: Invalid <channel:id>", 	/* 23h */
+		"Phys Disk failed: Creating Phys Disk Config "
+		    "Page", 					/* 24h */
+		NULL,						/* 25h */
+		NULL,						/* 26h */
+		NULL,						/* 27h */
+		NULL,						/* 28h */
+		NULL,						/* 29h */
+		NULL,						/* 2Ah */
+		NULL,						/* 2Bh */
+		NULL,						/* 2Ch */
+		NULL,						/* 2Dh */
+		NULL,						/* 2Eh */
+		NULL,						/* 2Fh */
+		"Compatibility Error: IR Disabled",		/* 30h */
+		"Compatibility Error: Inquiry Comand Failed",	/* 31h */
+		"Compatibility Error: Device not Direct Access "
+		    "Device ",					/* 32h */
+		"Compatibility Error: Removable Device Found",	/* 33h */
+		"Compatibility Error: Device SCSI Version not "
+		    "2 or Higher", 				/* 34h */
+		"Compatibility Error: SATA Device, 48 BIT LBA "
+		    "not Supported", 				/* 35h */
+		"Compatibility Error: Device doesn't have "
+		    "512 Byte Block Sizes", 			/* 36h */
+		"Compatibility Error: Volume Type Check Failed", /* 37h */
+		"Compatibility Error: Volume Type is "
+		    "Unsupported by FW", 			/* 38h */
+		"Compatibility Error: Disk Drive too Small for "
+		    "use in Volume", 				/* 39h */
+		"Compatibility Error: Phys Disk for Create "
+		    "Volume not Found", 			/* 3Ah */
+		"Compatibility Error: Too Many or too Few "
+		    "Disks for Volume Type", 			/* 3Bh */
+		"Compatibility Error: Disk stripe Sizes "
+		    "Must be 64KB", 				/* 3Ch */
+		"Compatibility Error: IME Size Limited to < 2TB", /* 3Dh */
+	};
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	mpt_sas_log_info - Log information returned from SAS IOC.
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@log_info: U32 LogInfo reply word from the IOC
  *
  *	Refer to lsi/mpi_log_sas.h.
- */
+ **/
 static void
 mpt_sas_log_info(MPT_ADAPTER *ioc, u32 log_info)
 {
@@ -6220,56 +6900,164 @@ union loginfo_type {
 	}dw;
 };
 	union loginfo_type sas_loginfo;
+	char *originator_desc = NULL;
 	char *code_desc = NULL;
+	char *sub_code_desc = NULL;
 
 	sas_loginfo.loginfo = log_info;
 	if ((sas_loginfo.dw.bus_type != 3 /*SAS*/) &&
 	    (sas_loginfo.dw.originator < sizeof(originator_str)/sizeof(char*)))
 		return;
-	if ((sas_loginfo.dw.originator == 0 /*IOP*/) &&
-	    (sas_loginfo.dw.code < sizeof(iop_code_str)/sizeof(char*))) {
-		code_desc = iop_code_str[sas_loginfo.dw.code];
-	}else if ((sas_loginfo.dw.originator == 1 /*PL*/) &&
-	    (sas_loginfo.dw.code < sizeof(pl_code_str)/sizeof(char*) )) {
-		code_desc = pl_code_str[sas_loginfo.dw.code];
+
+	originator_desc = originator_str[sas_loginfo.dw.originator];
+
+	switch (sas_loginfo.dw.originator) {
+
+		case 0:  /* IOP */
+			if (sas_loginfo.dw.code <
+			    sizeof(iop_code_str)/sizeof(char*))
+				code_desc = iop_code_str[sas_loginfo.dw.code];
+			break;
+		case 1:  /* PL */
+			if (sas_loginfo.dw.code <
+			    sizeof(pl_code_str)/sizeof(char*))
+				code_desc = pl_code_str[sas_loginfo.dw.code];
+			break;
+		case 2:  /* IR */
+			if (sas_loginfo.dw.code >=
+			    sizeof(ir_code_str)/sizeof(char*))
+				break;
+			code_desc = ir_code_str[sas_loginfo.dw.code];
+			if (sas_loginfo.dw.subcode >=
+			    sizeof(raid_sub_code_str)/sizeof(char*))
+			break;
+			if (sas_loginfo.dw.code == 0)
+				sub_code_desc =
+				    raid_sub_code_str[sas_loginfo.dw.subcode];
+			break;
+		default:
+			return;
 	}
 
-	if (code_desc != NULL)
+	if (sub_code_desc != NULL)
+		printk(MYIOC_s_INFO_FMT
+			"LogInfo(0x%08x): Originator={%s}, Code={%s},"
+			" SubCode={%s}\n",
+			ioc->name, log_info, originator_desc, code_desc,
+			sub_code_desc);
+	else if (code_desc != NULL)
 		printk(MYIOC_s_INFO_FMT
 			"LogInfo(0x%08x): Originator={%s}, Code={%s},"
 			" SubCode(0x%04x)\n",
-			ioc->name,
-			log_info,
-			originator_str[sas_loginfo.dw.originator],
-			code_desc,
+			ioc->name, log_info, originator_desc, code_desc,
 			sas_loginfo.dw.subcode);
 	else
 		printk(MYIOC_s_INFO_FMT
 			"LogInfo(0x%08x): Originator={%s}, Code=(0x%02x),"
 			" SubCode(0x%04x)\n",
-			ioc->name,
-			log_info,
-			originator_str[sas_loginfo.dw.originator],
-			sas_loginfo.dw.code,
-			sas_loginfo.dw.subcode);
+			ioc->name, log_info, originator_desc,
+			sas_loginfo.dw.code, sas_loginfo.dw.subcode);
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
- *	mpt_sp_ioc_info - IOC information returned from SCSI Parallel IOC.
+/**
+ *	mpt_iocstatus_info_config - IOCSTATUS information for config pages
  *	@ioc: Pointer to MPT_ADAPTER structure
  *	@ioc_status: U32 IOCStatus word from IOC
  *	@mf: Pointer to MPT request frame
  *
  *	Refer to lsi/mpi.h.
- */
+ **/
 static void
-mpt_sp_ioc_info(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf)
+mpt_iocstatus_info_config(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf)
+{
+	Config_t *pReq = (Config_t *)mf;
+	char extend_desc[EVENT_DESCR_STR_SZ];
+	char *desc = NULL;
+	u32 form;
+	u8 page_type;
+
+	if (pReq->Header.PageType == MPI_CONFIG_PAGETYPE_EXTENDED)
+		page_type = pReq->ExtPageType;
+	else
+		page_type = pReq->Header.PageType;
+
+	/*
+	 * ignore invalid page messages for GET_NEXT_HANDLE
+	 */
+	form = le32_to_cpu(pReq->PageAddress);
+	if (ioc_status == MPI_IOCSTATUS_CONFIG_INVALID_PAGE) {
+		if (page_type == MPI_CONFIG_EXTPAGETYPE_SAS_DEVICE ||
+		    page_type == MPI_CONFIG_EXTPAGETYPE_SAS_EXPANDER ||
+		    page_type == MPI_CONFIG_EXTPAGETYPE_ENCLOSURE) {
+			if ((form >> MPI_SAS_DEVICE_PGAD_FORM_SHIFT) ==
+				MPI_SAS_DEVICE_PGAD_FORM_GET_NEXT_HANDLE)
+				return;
+		}
+		if (page_type == MPI_CONFIG_PAGETYPE_FC_DEVICE)
+			if ((form & MPI_FC_DEVICE_PGAD_FORM_MASK) ==
+				MPI_FC_DEVICE_PGAD_FORM_NEXT_DID)
+				return;
+	}
+
+	snprintf(extend_desc, EVENT_DESCR_STR_SZ,
+	    "type=%02Xh, page=%02Xh, action=%02Xh, form=%08Xh",
+	    page_type, pReq->Header.PageNumber, pReq->Action, form);
+
+	switch (ioc_status) {
+
+	case MPI_IOCSTATUS_CONFIG_INVALID_ACTION: /* 0x0020 */
+		desc = "Config Page Invalid Action";
+		break;
+
+	case MPI_IOCSTATUS_CONFIG_INVALID_TYPE:   /* 0x0021 */
+		desc = "Config Page Invalid Type";
+		break;
+
+	case MPI_IOCSTATUS_CONFIG_INVALID_PAGE:   /* 0x0022 */
+		desc = "Config Page Invalid Page";
+		break;
+
+	case MPI_IOCSTATUS_CONFIG_INVALID_DATA:   /* 0x0023 */
+		desc = "Config Page Invalid Data";
+		break;
+
+	case MPI_IOCSTATUS_CONFIG_NO_DEFAULTS:    /* 0x0024 */
+		desc = "Config Page No Defaults";
+		break;
+
+	case MPI_IOCSTATUS_CONFIG_CANT_COMMIT:    /* 0x0025 */
+		desc = "Config Page Can't Commit";
+		break;
+	}
+
+	if (!desc)
+		return;
+
+	printk(MYIOC_s_INFO_FMT "IOCStatus(0x%04X): %s: %s\n",
+	    ioc->name, ioc_status, desc, extend_desc);
+}
+
+/**
+ *	mpt_iocstatus_info - IOCSTATUS information returned from IOC.
+ *	@ioc: Pointer to MPT_ADAPTER structure
+ *	@ioc_status: U32 IOCStatus word from IOC
+ *	@mf: Pointer to MPT request frame
+ *
+ *	Refer to lsi/mpi.h.
+ **/
+static void
+mpt_iocstatus_info(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf)
 {
 	u32 status = ioc_status & MPI_IOCSTATUS_MASK;
 	char *desc = NULL;
 
 	switch (status) {
+
+/****************************************************************************/
+/*  Common IOCStatus values for all replies                                 */
+/****************************************************************************/
+
 	case MPI_IOCSTATUS_INVALID_FUNCTION: /* 0x0001 */
 		desc = "Invalid Function";
 		break;
@@ -6302,83 +7090,178 @@ mpt_sp_ioc_info(MPT_ADAPTER *ioc, u32 ioc_status, MPT_FRAME_HDR *mf)
 		desc = "Invalid State";
 		break;
 
+/****************************************************************************/
+/*  Config IOCStatus values                                                 */
+/****************************************************************************/
+
 	case MPI_IOCSTATUS_CONFIG_INVALID_ACTION: /* 0x0020 */
 	case MPI_IOCSTATUS_CONFIG_INVALID_TYPE:   /* 0x0021 */
 	case MPI_IOCSTATUS_CONFIG_INVALID_PAGE:   /* 0x0022 */
 	case MPI_IOCSTATUS_CONFIG_INVALID_DATA:   /* 0x0023 */
 	case MPI_IOCSTATUS_CONFIG_NO_DEFAULTS:    /* 0x0024 */
 	case MPI_IOCSTATUS_CONFIG_CANT_COMMIT:    /* 0x0025 */
-		/* No message for Config IOCStatus values */
+		mpt_iocstatus_info_config(ioc, status, mf);
 		break;
+
+/****************************************************************************/
+/*  SCSIIO Reply (SPI, FCP, SAS) initiator values                           */
+/*                                                                          */
+/*  Look at mptscsih_iocstatus_info_scsiio in mptscsih.c */
+/*                                                                          */
+/****************************************************************************/
 
 	case MPI_IOCSTATUS_SCSI_RECOVERED_ERROR: /* 0x0040 */
-		/* No message for recovered error
-		desc = "SCSI Recovered Error";
-		*/
-		break;
-
-	case MPI_IOCSTATUS_SCSI_INVALID_BUS: /* 0x0041 */
-		desc = "SCSI Invalid Bus";
-		break;
-
-	case MPI_IOCSTATUS_SCSI_INVALID_TARGETID: /* 0x0042 */
-		desc = "SCSI Invalid TargetID";
-		break;
-
-	case MPI_IOCSTATUS_SCSI_DEVICE_NOT_THERE: /* 0x0043 */
-	  {
-		SCSIIORequest_t *pScsiReq = (SCSIIORequest_t *) mf;
-		U8 cdb = pScsiReq->CDB[0];
-		if (cdb != 0x12) { /* Inquiry is issued for device scanning */
-			desc = "SCSI Device Not There";
-		}
-		break;
-	  }
-
-	case MPI_IOCSTATUS_SCSI_DATA_OVERRUN: /* 0x0044 */
-		desc = "SCSI Data Overrun";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_DATA_UNDERRUN: /* 0x0045 */
-		/* This error is checked in scsi_io_done(). Skip.
-		desc = "SCSI Data Underrun";
-		*/
-		break;
-
+	case MPI_IOCSTATUS_SCSI_INVALID_BUS: /* 0x0041 */
+	case MPI_IOCSTATUS_SCSI_INVALID_TARGETID: /* 0x0042 */
+	case MPI_IOCSTATUS_SCSI_DEVICE_NOT_THERE: /* 0x0043 */
+	case MPI_IOCSTATUS_SCSI_DATA_OVERRUN: /* 0x0044 */
 	case MPI_IOCSTATUS_SCSI_IO_DATA_ERROR: /* 0x0046 */
-		desc = "SCSI I/O Data Error";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_PROTOCOL_ERROR: /* 0x0047 */
-		desc = "SCSI Protocol Error";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_TASK_TERMINATED: /* 0x0048 */
-		desc = "SCSI Task Terminated";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_RESIDUAL_MISMATCH: /* 0x0049 */
-		desc = "SCSI Residual Mismatch";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_TASK_MGMT_FAILED: /* 0x004A */
-		desc = "SCSI Task Management Failed";
-		break;
-
 	case MPI_IOCSTATUS_SCSI_IOC_TERMINATED: /* 0x004B */
-		desc = "SCSI IOC Terminated";
+	case MPI_IOCSTATUS_SCSI_EXT_TERMINATED: /* 0x004C */
 		break;
 
-	case MPI_IOCSTATUS_SCSI_EXT_TERMINATED: /* 0x004C */
-		desc = "SCSI Ext Terminated";
+/****************************************************************************/
+/*  SCSI Target values                                                      */
+/****************************************************************************/
+
+	case MPI_IOCSTATUS_TARGET_PRIORITY_IO: /* 0x0060 */
+		desc = "Target: Priority IO";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_INVALID_PORT: /* 0x0061 */
+		desc = "Target: Invalid Port";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_INVALID_IO_INDEX: /* 0x0062 */
+		desc = "Target Invalid IO Index:";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_ABORTED: /* 0x0063 */
+		desc = "Target: Aborted";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_NO_CONN_RETRYABLE: /* 0x0064 */
+		desc = "Target: No Conn Retryable";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_NO_CONNECTION: /* 0x0065 */
+		desc = "Target: No Connection";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_XFER_COUNT_MISMATCH: /* 0x006A */
+		desc = "Target: Transfer Count Mismatch";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_STS_DATA_NOT_SENT: /* 0x006B */
+		desc = "Target: STS Data not Sent";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_DATA_OFFSET_ERROR: /* 0x006D */
+		desc = "Target: Data Offset Error";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_TOO_MUCH_WRITE_DATA: /* 0x006E */
+		desc = "Target: Too Much Write Data";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_IU_TOO_SHORT: /* 0x006F */
+		desc = "Target: IU Too Short";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_ACK_NAK_TIMEOUT: /* 0x0070 */
+		desc = "Target: ACK NAK Timeout";
+		break;
+
+	case MPI_IOCSTATUS_TARGET_NAK_RECEIVED: /* 0x0071 */
+		desc = "Target: Nak Received";
+		break;
+
+/****************************************************************************/
+/*  Fibre Channel Direct Access values                                      */
+/****************************************************************************/
+
+	case MPI_IOCSTATUS_FC_ABORTED: /* 0x0066 */
+		desc = "FC: Aborted";
+		break;
+
+	case MPI_IOCSTATUS_FC_RX_ID_INVALID: /* 0x0067 */
+		desc = "FC: RX ID Invalid";
+		break;
+
+	case MPI_IOCSTATUS_FC_DID_INVALID: /* 0x0068 */
+		desc = "FC: DID Invalid";
+		break;
+
+	case MPI_IOCSTATUS_FC_NODE_LOGGED_OUT: /* 0x0069 */
+		desc = "FC: Node Logged Out";
+		break;
+
+	case MPI_IOCSTATUS_FC_EXCHANGE_CANCELED: /* 0x006C */
+		desc = "FC: Exchange Canceled";
+		break;
+
+/****************************************************************************/
+/*  LAN values                                                              */
+/****************************************************************************/
+
+	case MPI_IOCSTATUS_LAN_DEVICE_NOT_FOUND: /* 0x0080 */
+		desc = "LAN: Device not Found";
+		break;
+
+	case MPI_IOCSTATUS_LAN_DEVICE_FAILURE: /* 0x0081 */
+		desc = "LAN: Device Failure";
+		break;
+
+	case MPI_IOCSTATUS_LAN_TRANSMIT_ERROR: /* 0x0082 */
+		desc = "LAN: Transmit Error";
+		break;
+
+	case MPI_IOCSTATUS_LAN_TRANSMIT_ABORTED: /* 0x0083 */
+		desc = "LAN: Transmit Aborted";
+		break;
+
+	case MPI_IOCSTATUS_LAN_RECEIVE_ERROR: /* 0x0084 */
+		desc = "LAN: Receive Error";
+		break;
+
+	case MPI_IOCSTATUS_LAN_RECEIVE_ABORTED: /* 0x0085 */
+		desc = "LAN: Receive Aborted";
+		break;
+
+	case MPI_IOCSTATUS_LAN_PARTIAL_PACKET: /* 0x0086 */
+		desc = "LAN: Partial Packet";
+		break;
+
+	case MPI_IOCSTATUS_LAN_CANCELED: /* 0x0087 */
+		desc = "LAN: Canceled";
+		break;
+
+/****************************************************************************/
+/*  Serial Attached SCSI values                                             */
+/****************************************************************************/
+
+	case MPI_IOCSTATUS_SAS_SMP_REQUEST_FAILED: /* 0x0090 */
+		desc = "SAS: SMP Request Failed";
+		break;
+
+	case MPI_IOCSTATUS_SAS_SMP_DATA_OVERRUN: /* 0x0090 */
+		desc = "SAS: SMP Data Overrun";
 		break;
 
 	default:
 		desc = "Others";
 		break;
 	}
-	if (desc != NULL)
-		printk(MYIOC_s_INFO_FMT "IOCStatus(0x%04x): %s\n", ioc->name, status, desc);
+
+	if (!desc)
+		return;
+
+	printk(MYIOC_s_INFO_FMT "IOCStatus(0x%04X): %s\n", ioc->name, status, desc);
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
@@ -6414,9 +7297,10 @@ EXPORT_SYMBOL(mpt_findImVolumes);
 EXPORT_SYMBOL(mpt_alloc_fw_memory);
 EXPORT_SYMBOL(mpt_free_fw_memory);
 EXPORT_SYMBOL(mptbase_sas_persist_operation);
+EXPORT_SYMBOL(mpt_raid_phys_disk_pg0);
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	fusion_init - Fusion MPT base driver initialization routine.
  *
  *	Returns 0 for success, non-zero for failure.
@@ -6443,11 +7327,7 @@ fusion_init(void)
 
 	/* Register for hard reset handling callbacks.
 	 */
-	if (mpt_reset_register(mpt_base_index, mpt_ioc_reset) == 0) {
-		dprintk((KERN_INFO MYNAM ": Register for IOC reset notification\n"));
-	} else {
-		/* FIXME! */
-	}
+	mpt_reset_register(mpt_base_index, mpt_ioc_reset);
 
 #ifdef CONFIG_PROC_FS
 	(void) procmpt_create();
@@ -6456,7 +7336,7 @@ fusion_init(void)
 }
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-/*
+/**
  *	fusion_exit - Perform driver unload cleanup.
  *
  *	This routine frees all resources associated with each MPT adapter
@@ -6465,8 +7345,6 @@ fusion_init(void)
 static void __exit
 fusion_exit(void)
 {
-
-	dexitprintk((KERN_INFO MYNAM ": fusion_exit() called!\n"));
 
 	mpt_reset_deregister(mpt_base_index);
 

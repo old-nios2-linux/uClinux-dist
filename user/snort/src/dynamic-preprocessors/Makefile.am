@@ -2,6 +2,7 @@
 AUTOMAKE_OPTIONS=foreign no-dependencies
 
 BUILT_SOURCES = \
+	include/bounds.h \
 	include/debug.h \
 	include/preprocids.h \
 	include/profiler.h \
@@ -63,6 +64,9 @@ include/profiler.h: $(srcdir)/../profiler.h
 include/snort_packet_header.h: $(srcdir)/../snort_packet_header.h
 	@src_header=$?; dst_header=$@; $(copy_headers)
     
+include/bounds.h: $(srcdir)/../bounds.h 
+	@src_header=$?; dst_header=$@; $(copy_headers)
+
 # From dynamic-plugins
 include/sf_dynamic_common.h: $(srcdir)/../dynamic-plugins/sf_dynamic_common.h
 	@src_header=$?; dst_header=$@; $(copy_headers)

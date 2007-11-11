@@ -1,7 +1,7 @@
 /*
  * Derived from include/asm-powerpc/iommu.h
  *
- * Copyright (C) IBM Corporation, 2006
+ * Copyright IBM Corporation, 2006-2007
  *
  * Author: Jon Mason <jdmason@us.ibm.com>
  * Author: Muli Ben-Yehuda <muli@il.ibm.com>
@@ -27,9 +27,11 @@
 #include <linux/spinlock.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/timer.h>
 #include <asm/types.h>
 
 struct iommu_table {
+	struct cal_chipset_ops *chip_ops; /* chipset specific funcs */
 	unsigned long  it_base;      /* mapped address of tce table */
 	unsigned long  it_hint;      /* Hint for next alloc */
 	unsigned long *it_map;       /* A simple allocation bitmap for now */
@@ -41,6 +43,12 @@ struct iommu_table {
 	unsigned char  it_busno;     /* Bus number this table belongs to */
 };
 
+struct cal_chipset_ops {
+	void (*handle_quirks)(struct iommu_table *tbl, struct pci_dev *dev);
+	void (*tce_cache_blast)(struct iommu_table *tbl);
+	void (*dump_error_regs)(struct iommu_table *tbl);
+};
+
 #define TCE_TABLE_SIZE_UNSPECIFIED	~0
 #define TCE_TABLE_SIZE_64K		0
 #define TCE_TABLE_SIZE_128K		1
@@ -50,6 +58,8 @@ struct iommu_table {
 #define TCE_TABLE_SIZE_2M		5
 #define TCE_TABLE_SIZE_4M		6
 #define TCE_TABLE_SIZE_8M		7
+
+extern int use_calgary;
 
 #ifdef CONFIG_CALGARY_IOMMU
 extern int calgary_iommu_init(void);

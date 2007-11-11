@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,13 +14,14 @@
 static char rcsid[] = "$NetBSD: w_remainder.c,v 1.6 1995/05/10 20:49:44 jtc Exp $";
 #endif
 
-/* 
+/*
  * wrapper remainder(x,p)
  */
 
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(remainder)
 #ifdef __STDC__
 	double remainder(double x, double y)	/* wrapper remainder */
 #else
@@ -34,9 +35,10 @@ static char rcsid[] = "$NetBSD: w_remainder.c,v 1.6 1995/05/10 20:49:44 jtc Exp 
 	double z;
 	z = __ieee754_remainder(x,y);
 	if(_LIB_VERSION == _IEEE_ || isnan(y)) return z;
-	if(y==0.0) 
+	if(y==0.0)
 	    return __kernel_standard(x,y,28); /* remainder(x,0) */
 	else
 	    return z;
 #endif
 }
+libm_hidden_def(remainder)

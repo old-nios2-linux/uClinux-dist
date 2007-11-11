@@ -1,7 +1,7 @@
 /*
  *  Extract component parts of OLE2 files (e.g. MS Office Documents)
  *
- *  Copyright (C) 2004 trog@uncon.org
+ *  Copyright (C) 2004-2007 trog@uncon.org
  *
  *  This code is based on the OpenOffice and libgsf sources.
  *                  
@@ -17,7 +17,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -29,10 +30,12 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <ctype.h>
 #include <stdlib.h>
-#include <clamav.h>
+#include "clamav.h"
 
 #if HAVE_MMAP
 #if HAVE_SYS_MMAN_H
@@ -44,34 +47,13 @@
 
 #include "cltypes.h"
 #include "others.h"
+#include "ole2_extract.h"
 
-#ifndef FALSE
-#define FALSE (0)
-#define TRUE (1)
-#endif
+#include "mbox.h"
+#include "blob.h" /* sanitiseName() */
 
-#ifndef MIN
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
-#endif
-
-#if WORDS_BIGENDIAN == 0
-#define ole2_endian_convert_16(v)	(v)
-#else
-static uint16_t ole2_endian_convert_16(uint16_t v)
-{
-	return ((v >> 8) + (v << 8));
-}
-#endif
-
-#if WORDS_BIGENDIAN == 0
-#define ole2_endian_convert_32(v)    (v)
-#else
-static uint32_t ole2_endian_convert_32(uint32_t v)
-{
-        return ((v >> 24) | ((v & 0x00FF0000) >> 8) |
-                ((v & 0x0000FF00) << 8) | (v << 24));
-}
-#endif
+#define ole2_endian_convert_16(v) le16_to_host(v)
+#define ole2_endian_convert_32(v) le32_to_host(v)
 
 #ifndef HAVE_ATTRIB_PACKED
 #define __attribute__(x)
@@ -81,10 +63,18 @@ static uint32_t ole2_endian_convert_32(uint32_t v)
 #pragma pack(1)
 #endif
 
+#ifdef HAVE_PRAGMA_PACK_HPPA
+#pragma pack 1
+#endif
+
+#ifndef	O_BINARY
+#define	O_BINARY	0
+#endif
+
 typedef struct ole2_header_tag
 {
-	unsigned char magic[8] __attribute__ ((packed));		/* should be: 0xd0cf11e0a1b11ae1 */
-	unsigned char clsid[16] __attribute__ ((packed));
+	unsigned char magic[8];		/* should be: 0xd0cf11e0a1b11ae1 */
+	unsigned char clsid[16];
 	uint16_t minor_version __attribute__ ((packed));
 	uint16_t dll_version __attribute__ ((packed));
 	int16_t byte_order __attribute__ ((packed));			/* -2=intel */
@@ -112,35 +102,40 @@ typedef struct ole2_header_tag
 	unsigned char *m_area;
 	off_t m_length;
 	bitset_t *bitset;
+	uint32_t max_block_no;
 } ole2_header_t;
 
 typedef struct property_tag
 {
-	unsigned char name[64] __attribute__ ((packed));		/* in unicode */
-	int16_t name_size __attribute__ ((packed));
-	unsigned char type __attribute__ ((packed));			/* 1=dir 2=file 5=root */
-	unsigned char color __attribute__ ((packed));			/* black or red */
-	int32_t prev __attribute__ ((packed));
-	int32_t next __attribute__ ((packed));
-	int32_t child __attribute__ ((packed));
+	char name[64];		/* in unicode */
+	uint16_t name_size __attribute__ ((packed));
+	unsigned char type;		/* 1=dir 2=file 5=root */
+	unsigned char color;		/* black or red */
+	uint32_t prev __attribute__ ((packed));
+	uint32_t next __attribute__ ((packed));
+	uint32_t child __attribute__ ((packed));
 
-	unsigned char clsid[16] __attribute__ ((packed));
+	unsigned char clsid[16];
 	uint32_t user_flags __attribute__ ((packed));
 
 	uint32_t create_lowdate __attribute__ ((packed));
 	uint32_t create_highdate __attribute__ ((packed));
 	uint32_t mod_lowdate __attribute__ ((packed));
 	uint32_t mod_highdate __attribute__ ((packed));
-	int32_t start_block __attribute__ ((packed));
-	int32_t size __attribute__ ((packed));
-	unsigned char reserved[4] __attribute__ ((packed));
+	uint32_t start_block __attribute__ ((packed));
+	uint32_t size __attribute__ ((packed));
+	unsigned char reserved[4];
 } property_t;
 
 #ifdef HAVE_PRAGMA_PACK
 #pragma pack()
 #endif
 
-unsigned char magic_id[] = { 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1};
+#ifdef HAVE_PRAGMA_PACK_HPPA
+#pragma pack
+#endif
+
+static unsigned char magic_id[] = { 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1};
 
 static char *get_property_name(char *name, int size)
 {
@@ -151,19 +146,28 @@ static char *get_property_name(char *name, int size)
 		return NULL;
 	}
 
-	newname = (char *) cli_malloc(size*2);
+	newname = (char *) cli_malloc(size*7);
 	if (!newname) {
 		return NULL;
 	}
 	j=0;
 	/* size-2 to ignore trailing NULL */
 	for (i=0 ; i < size-2; i+=2) {
-		if (isprint(name[i])) {
+		if((!(name[i]&0x80)) && isprint(name[i])) {
 			newname[j++] = name[i];
 		} else {
 			if (name[i] < 10 && name[i] >= 0) {
 				newname[j++] = '_';
 				newname[j++] = name[i] + '0';
+			}
+			else {
+				const uint16_t x = (((uint16_t)name[i]) << 8) | name[i+1];
+				newname[j++] = '_';
+				newname[j++] = 'a'+((x&0xF));
+				newname[j++] = 'a'+((x>>4)&0xF);
+				newname[j++] = 'a'+((x>>8)&0xF);
+				newname[j++] = 'a'+((x>>16)&0xF);
+				newname[j++] = 'a'+((x>>24)&0xF);
 			}
 			newname[j++] = '_';
 		}
@@ -195,7 +199,7 @@ static void print_ole2_property(property_t *property)
                 cli_dbgmsg("[err name len: %d]\n", property->name_size);
                 return;
         }
-	print_property_name((char *) property->name, property->name_size);
+	print_property_name(property->name, property->name_size);
 	switch (property->type) {
 	case 2:
 		cli_dbgmsg(" [file] ");
@@ -219,7 +223,7 @@ static void print_ole2_property(property_t *property)
 	default:
 		cli_dbgmsg(" u ");
 	}
-	cli_dbgmsg(" %d %x\n", property->size, property->user_flags);
+	cli_dbgmsg(" 0x%.8x 0x%.8x\n", property->size, property->user_flags);
 }
 
 static void print_ole2_header(ole2_header_t *hdr)
@@ -338,7 +342,7 @@ static int32_t ole2_get_next_xbat_block(int fd, ole2_header_t *hdr, int32_t curr
 		xbat_block_index--;
 	}
 
-	if (!ole2_read_block(fd, hdr, &bat, xbat[bat_blockno])) {
+	if (!ole2_read_block(fd, hdr, &bat, ole2_endian_convert_32(xbat[bat_blockno]))) {
 		return -1;
 	}
 
@@ -407,6 +411,7 @@ static int32_t ole2_get_sbat_data_block(int fd, ole2_header_t *hdr, void *buff, 
 
 /* Read the property tree.
    It is read as just an array rather than a tree */
+/*
 static void ole2_read_property_tree(int fd, ole2_header_t *hdr, const char *dir,
 				int (*handler)(int fd, ole2_header_t *hdr, property_t *prop, const char *dir))
 {
@@ -448,7 +453,6 @@ static void ole2_read_property_tree(int fd, ole2_header_t *hdr, const char *dir,
 			}
 		}
 		current_block = ole2_get_next_block_number(fd, hdr, current_block);
-		/* Loop detection */
 		if (++count > 100000) {
 			cli_dbgmsg("ERROR: loop detected\n");
 			return;
@@ -456,17 +460,19 @@ static void ole2_read_property_tree(int fd, ole2_header_t *hdr, const char *dir,
 	}
 	return;
 }
+*/
 
 static void ole2_walk_property_tree(int fd, ole2_header_t *hdr, const char *dir, int32_t prop_index,
 				int (*handler)(int fd, ole2_header_t *hdr, property_t *prop, const char *dir),
-				int rec_level, int *file_count, const struct cl_limits *limits)
+				unsigned int rec_level, unsigned int *file_count, const struct cl_limits *limits)
 {
 	property_t prop_block[4];
 	int32_t index, current_block, i;
 	char *dirname;
+
 	current_block = hdr->prop_start;
-	
-	if ((prop_index < 0) || (rec_level > 100) || (*file_count > 100000)) {
+
+	if ((prop_index < 0) || (prop_index > hdr->max_block_no) || (rec_level > 100) || (*file_count > 100000)) {
 		return;
 	}
 
@@ -479,7 +485,7 @@ static void ole2_walk_property_tree(int fd, ole2_header_t *hdr, const char *dir,
 		cli_dbgmsg("OLE2: Recursion limit reached (max: %d)\n", limits->maxreclevel);
 		return;
 	}
-	
+
 	index = prop_index / 4;
 	for (i=0 ; i < index ; i++) {
 		current_block = ole2_get_next_block_number(fd, hdr, current_block);
@@ -583,6 +589,7 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 	unsigned char *buff;
 	int32_t current_block, ofd, len, offset;
 	char *name, *newname;
+	bitset_t *blk_bitset;
 
 	if (prop->type != 2) {
 		/* Not a file */
@@ -594,7 +601,7 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 		return FALSE;
 	}
 
-	if (! (name = get_property_name((char *)prop->name, prop->name_size))) {
+	if (! (name = get_property_name(prop->name, prop->name_size))) {
 		/* File without a name - create a name for it */
 		off_t i;
                                                                                                                             
@@ -606,29 +613,19 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 		snprintf(name, 11, "%.10ld", i + (long int) prop);
 	} else {
 		/* Sanitize the file name */
-                for(newname = name; *newname; newname++) {
-#ifdef  C_DARWIN
-                        *newname &= '\177';
-#endif
-#if     defined(MSDOS) || defined(C_CYGWIN) || defined(WIN32) || defined(C_OS2)
-                        if(strchr("/*?<>|\"+=,;: ", *newname))
-#else
-                        if(*newname == '/')
-#endif
-                                *newname = '_';
-                }
+		sanitiseName(name);
 	}
-
 
 	newname = (char *) cli_malloc(strlen(name) + strlen(dir) + 2);
 	if (!newname) {
 		free(name);
 		return FALSE;
 	}
+
 	sprintf(newname, "%s/%s", dir, name);
 	free(name);
 
-	ofd = open(newname, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
+	ofd = open(newname, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU);
 	if (ofd < 0) {
 		cli_errmsg("ERROR: failed to create file: %s\n", newname);
 		free(newname);
@@ -643,14 +640,43 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 		close(ofd);
 		return FALSE;
 	}
-
+	
+	blk_bitset = cli_bitset_init();
+	if (!blk_bitset) {
+		cli_errmsg("ERROR [handler_writefile]: init bitset failed\n");
+		close(ofd);
+		return FALSE;
+	}
 	while((current_block >= 0) && (len > 0)) {
+		if (current_block > hdr->max_block_no) {
+                        cli_dbgmsg("OLE2: Max block number for file size exceeded: %d\n", current_block);
+                        close(ofd);
+                        free(buff);
+                        cli_bitset_free(blk_bitset);
+                        return FALSE;
+                }
+		/* Check we aren't in a loop */
+		if (cli_bitset_test(blk_bitset, (unsigned long) current_block)) {
+			/* Loop in block list */
+			cli_dbgmsg("OLE2: Block list loop detected\n");
+			close(ofd);
+			free(buff);
+			cli_bitset_free(blk_bitset);
+			return FALSE;
+		}
+		if (!cli_bitset_set(blk_bitset, (unsigned long) current_block)) {
+			close(ofd);
+			free(buff);
+			cli_bitset_free(blk_bitset);
+			return FALSE;
+		}			
 		if (prop->size < (int64_t)hdr->sbat_cutoff) {
 			/* Small block file */
 			if (!ole2_get_sbat_data_block(fd, hdr, buff, current_block)) {
 				cli_dbgmsg("ole2_get_sbat_data_block failed\n");
 				close(ofd);
 				free(buff);
+				cli_bitset_free(blk_bitset);
 				return FALSE;
 			}
 			/* buff now contains the block with 8 small blocks in it */
@@ -658,6 +684,7 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 			if (cli_writen(ofd, &buff[offset], MIN(len,64)) != MIN(len,64)) {
 				close(ofd);
 				free(buff);
+				cli_bitset_free(blk_bitset);
 				return FALSE;
 			}
 
@@ -668,12 +695,14 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 			if (!ole2_read_block(fd, hdr, buff, current_block)) {
 				close(ofd);
 				free(buff);
+				cli_bitset_free(blk_bitset);
 				return FALSE;
 			}
 			if (cli_writen(ofd, buff, MIN(len,(1 << hdr->log2_big_block_size))) !=
 							MIN(len,(1 << hdr->log2_big_block_size))) {
 				close(ofd);
 				free(buff);
+				cli_bitset_free(blk_bitset);
 				return FALSE;
 			}
 
@@ -683,9 +712,11 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 	}
 	close(ofd);
 	free(buff);
+	cli_bitset_free(blk_bitset);
 	return TRUE;
 }
 
+#if !defined(HAVE_ATTRIB_PACKED) && !defined(HAVE_PRAGMA_PACK) && !defined(HAVE_PRAGMA_PACK_HPPA)
 static int ole2_read_header(int fd, ole2_header_t *hdr)
 {
 	int i;
@@ -745,27 +776,29 @@ static int ole2_read_header(int fd, ole2_header_t *hdr)
 	}
 	return TRUE;
 }
+#endif
 
 int cli_ole2_extract(int fd, const char *dirname, const struct cl_limits *limits)
 {
 	ole2_header_t hdr;
 	int hdr_size;
 	struct stat statbuf;
-	int file_count=0;
+	unsigned int file_count=0;
 	
 	cli_dbgmsg("in cli_ole2_extract()\n");
 	
 	/* size of header - size of other values in struct */
 	hdr_size = sizeof(struct ole2_header_tag) - sizeof(int32_t) -
-			sizeof(unsigned char *) - sizeof(off_t) - sizeof(bitset_t *);
+			sizeof(unsigned char *) - sizeof(off_t) - sizeof(bitset_t *) -
+			sizeof(uint32_t);
 
 	hdr.m_area = NULL;
 
-#ifdef HAVE_MMAP
 	if (fstat(fd, &statbuf) == 0) {
 		if (statbuf.st_size < hdr_size) {
 			return 0;
 		}
+#ifdef HAVE_MMAP
 		hdr.m_length = statbuf.st_size;
 		hdr.m_area = (unsigned char *) mmap(NULL, hdr.m_length, PROT_READ, MAP_PRIVATE, fd, 0);
 		if (hdr.m_area == MAP_FAILED) {
@@ -774,11 +807,11 @@ int cli_ole2_extract(int fd, const char *dirname, const struct cl_limits *limits
 			cli_dbgmsg("mmap'ed file\n");
 			memcpy(&hdr, hdr.m_area, hdr_size);
 		}
-	}
 #endif
+	}
 
 	if (hdr.m_area == NULL) {
-#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK)
+#if defined(HAVE_ATTRIB_PACKED) || defined(HAVE_PRAGMA_PACK) || defined(HAVE_PRAGMA_PACK_HPPA)
 		if (cli_readn(fd, &hdr, hdr_size) != hdr_size) {
 			return 0;
 		}
@@ -809,7 +842,7 @@ int cli_ole2_extract(int fd, const char *dirname, const struct cl_limits *limits
 		return CL_EOLE2;
 	}
 
-	if (strncmp((char *) hdr.magic, (char *) magic_id, 8) != 0) {
+	if (memcmp(hdr.magic, magic_id, 8) != 0) {
 		cli_dbgmsg("OLE2 magic failed!\n");
 #ifdef HAVE_MMAP
 		if (hdr.m_area != NULL) {
@@ -832,8 +865,12 @@ int cli_ole2_extract(int fd, const char *dirname, const struct cl_limits *limits
 		cli_errmsg("WARNING: not scanned; untested sbat cutoff - please report\n");
 		goto abort;
 	}
+
+	/* 8 SBAT blocks per file block */
+	hdr.max_block_no = ((statbuf.st_size / hdr.log2_big_block_size) + 1) * 8;
 	
 	print_ole2_header(&hdr);
+	cli_dbgmsg("Max block number: %lu\n", hdr.max_block_no);
 
 	/* NOTE: Select only ONE of the following two methods */
 	

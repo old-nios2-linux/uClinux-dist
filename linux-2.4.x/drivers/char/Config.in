@@ -44,13 +44,16 @@ if [ "$CONFIG_M68VZ328" = "y" ]; then
         bool 'Enable RTS/CTS support on 2nd 68328 serial port' CONFIG_68328_SERIAL_UART2_RTS_CTS
     fi
   fi
-  if [ "$CONFIG_DRAGONIXVZ" = "y"]; then
+  if [ "$CONFIG_DRAGONIXVZ" = "y" ]; then
     bool 'Dragonix VZ SPI driver' CONFIG_DRAGONIX_SPI
   fi
   if [ "$CONFIG_DRAGEN2" = "y" ]; then
     tristate 'DragonEngine EEPROM driver' CONFIG_DRAGEN2_EEPROM
     tristate 'DragonEngine Touchscreen driver' CONFIG_DRAGEN2_TS
     tristate 'DragonEngine FPGA driver' CONFIG_DRAGEN2_FPGA
+  fi
+  if [ "$CONFIG_UCDIMM" = "y" ]; then
+    tristate 'Touchscreen digitizer support' CONFIG_68328_DIGI
   fi
 fi
 
@@ -628,6 +631,9 @@ if [ "$CONFIG_CAN4LINUX" != "n" ]; then
    tristate '  ColdFire Flex CAN' CONFIG_CAN_MCF5282
    tristate '  CPC-PCI' CONFIG_CAN_CPC_PCI
    tristate '  I+ME Slimline ISA' CONFIG_CAN_IME_SLIMLINE
+   if [ "CONFIG_CAN_MCF5282" != "n" ]; then
+      define_bool CONFIG_CAN_CFFLEXCAN y
+   fi
 fi
 endmenu
 

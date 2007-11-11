@@ -1,9 +1,9 @@
 /*
- * $Id: route_struct.c,v 1.26 2003/10/03 07:19:41 andrei Exp $
+ * $Id: route_struct.c,v 1.32.2.2 2005/12/06 12:17:17 andrei Exp $
  *
  * route structures helping functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -32,6 +32,7 @@
  *  2003-03-19  replaced all mallocs/frees w/ pkg_malloc/pkg_free (andrei)
  *  2003-04-12  FORCE_RPORT_T added (andrei)
  *  2003-10-02  added SET_ADV_ADDRESS & SET_ADV_PORT (andrei)
+ *  2004-02-24  added LOAD_AVP_T and AVP_TO_URI_T (bogdan)
  */
 
 
@@ -45,6 +46,7 @@
 #include "dprint.h"
 #include "ip_addr.h"
 #include "mem/mem.h"
+#include "ut.h" /* ZSW() */
 
 
 struct expr* mk_exp(int op, struct expr* left, struct expr* right)
@@ -145,6 +147,12 @@ void print_expr(struct expr* exp)
 			case URI_O:
 				DBG("uri");
 				break;
+			case FROM_URI_O:
+				DBG("from_uri");
+				break;
+			case TO_URI_O:
+				DBG("to_uri");
+				break;
 			case SRCIP_O:
 				DBG("srcip");
 				break;
@@ -154,10 +162,12 @@ void print_expr(struct expr* exp)
 			case DSTIP_O:
 				DBG("dstip");
 				break;
+			case DSTPORT_O:
+				DBG("dstport");
+				break;
 			case NUMBER_O:
 				break;
 			case ACTION_O:
-				print_action((struct action*) exp->r.param);
 				break;
 			default:
 				DBG("UNKNOWN");
@@ -171,6 +181,21 @@ void print_expr(struct expr* exp)
 				break;
 			case NO_OP:
 				break;
+			case GT_OP:
+				DBG(">");
+				break;
+			case GTE_OP:
+				DBG(">=");
+				break;
+			case LT_OP:
+				DBG("<");
+				break;
+			case LTE_OP:
+				DBG("<=");
+				break;
+			case DIFF_OP:
+				DBG("!=");
+				break;
 			default:
 				DBG("<UNKNOWN>");
 		}
@@ -179,7 +204,7 @@ void print_expr(struct expr* exp)
 					DBG("N/A");
 					break;
 			case STRING_ST:
-					DBG("\"%s\"", (char*)exp->r.param);
+					DBG("\"%s\"", ZSW((char*)exp->r.param));
 					break;
 			case NET_ST:
 					print_net((struct net*)exp->r.param);
@@ -324,12 +349,24 @@ void print_action(struct action* a)
 			case SET_ADV_PORT_T:
 					DBG("set_advertised_port(");
 					break;
+			case FORCE_TCP_ALIAS_T:
+					DBG("force_tcp_alias(");
+					break;
+			case LOAD_AVP_T:
+					DBG("load_avp(");
+					break;
+			case AVP_TO_URI_T:
+					DBG("avp_to_attr");
+					break;
+			case FORCE_SEND_SOCKET_T:
+					DBG("force_send_socket");
+					break;
 			default:
 					DBG("UNKNOWN(");
 		}
 		switch(t->p1_type){
 			case STRING_ST:
-					DBG("\"%s\"", t->p1.string);
+					DBG("\"%s\"", ZSW(t->p1.string));
 					break;
 			case NUMBER_ST:
 					DBG("%lu",t->p1.number);
@@ -346,6 +383,13 @@ void print_action(struct action* a)
 			case CMDF_ST:
 					DBG("f_ptr<%p>",t->p1.data);
 					break;
+			case SOCKID_ST:
+					DBG("%d:%s:%d",
+							((struct socket_id*)t->p1.data)->proto,
+							ZSW(((struct socket_id*)t->p1.data)->name),
+							((struct socket_id*)t->p1.data)->port
+							);
+					break;
 			default:
 					DBG("type<%d>", t->p1_type);
 		}
@@ -354,7 +398,7 @@ void print_action(struct action* a)
 			case NOSUBTYPE:
 					break;
 			case STRING_ST:
-					DBG(", \"%s\"", t->p2.string);
+					DBG(", \"%s\"", ZSW(t->p2.string));
 					break;
 			case NUMBER_ST:
 					DBG(", %lu",t->p2.number);
@@ -365,6 +409,13 @@ void print_action(struct action* a)
 			case ACTIONS_ST:
 					print_action((struct action*)t->p2.data);
 					break;
+			case SOCKID_ST:
+					DBG("%d:%s:%d",
+							((struct socket_id*)t->p1.data)->proto,
+							ZSW(((struct socket_id*)t->p1.data)->name),
+							((struct socket_id*)t->p1.data)->port
+							);
+					break;
 			default:
 					DBG(", type<%d>", t->p2_type);
 		}
@@ -373,7 +424,7 @@ void print_action(struct action* a)
 			case NOSUBTYPE:
 					break;
 			case STRING_ST:
-					DBG(", \"%s\"", t->p3.string);
+					DBG(", \"%s\"", ZSW(t->p3.string));
 					break;
 			case NUMBER_ST:
 					DBG(", %lu",t->p3.number);
@@ -383,6 +434,13 @@ void print_action(struct action* a)
 					break;
 			case ACTIONS_ST:
 					print_action((struct action*)t->p3.data);
+					break;
+			case SOCKID_ST:
+					DBG("%d:%s:%d",
+							((struct socket_id*)t->p1.data)->proto,
+							ZSW(((struct socket_id*)t->p1.data)->name),
+							((struct socket_id*)t->p1.data)->port
+							);
 					break;
 			default:
 					DBG(", type<%d>", t->p3_type);

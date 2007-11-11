@@ -38,15 +38,18 @@ _start:
 _stext:	movew	#0x2700,%sr
 #ifdef CONFIG_INIT_LCD
 	movel	#splash_bits, 0xfffffA00 /* LSSA */
-	moveb	#0x28,   0xfffffA05	/* LVPW */
-	movew	#0x280,  0xFFFFFa08	/* LXMAX */
-	movew	#0x1df,  0xFFFFFa0a	/* LYMAX */
-	moveb	#0,      0xfffffa29	/* LBAR */
-	moveb	#0,      0xfffffa25	/* LPXCD */
-	moveb	#0x08,   0xFFFFFa20	/* LPICF */
-	moveb	#0x01,   0xFFFFFA21	/* -ve pol */
-	moveb	#0x81,   0xfffffA27	/* LCKCON */
-	movew	#0xff00, 0xfffff412	/* LCD pins */
+	moveb	#0x28,   0xfffffA05	/* LVPW:	640 bits wide */
+	movew	#0x280,  0xFFFFFa08	/* LXMAX:	640 pixels */
+	movew	#0x1df,  0xFFFFFa0a	/* LYMAX:	lines=479+1 */
+	moveb	#0,      0xfffffa29	/* LBAR:	
+					 * - actually LRRA - frame period
+					 * = (12+xmax+rra)*ymax*(pxcd+1)*
+					 *   ldclk_period */
+	moveb	#0,      0xfffffa25	/* LPXCD:	lcdclk divisor-1 */
+	moveb	#0x08,   0xFFFFFa20	/* LPICF:	panel bus w.= 4bit */
+	moveb	#0x01,   0xFFFFFA21	/* LPOLCF:	-ve polarity */
+	moveb	#0xff,   0xfffff413	/* PCSEL:	LCD pins */
+	moveb	#0x81,   0xfffffA27	/* LCKCON:	lcd enable (+1?) */
 #endif
 
 #ifdef CONFIG_DIRECT_IO_ACCESS

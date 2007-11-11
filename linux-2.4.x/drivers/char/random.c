@@ -837,6 +837,65 @@ void add_blkdev_randomness(int major)
 	add_timer_randomness(blkdev_timer_state[major], 0x200+major);
 }
 
+/*
+ * random_input_words - add bulk entropy to pool
+ *
+ * @buf: buffer to add
+ * @wordcount: number of __u32 words to add
+ * @ent_count: total amount of entropy (in bits) to credit
+ *
+ * this provides bulk input of entropy to the input pool
+ *
+ */
+void random_input_words(__u32 *buf, size_t wordcount, int ent_count)
+{
+	if (!random_state)
+		return;
+	add_entropy_words(random_state, buf, wordcount);
+
+	credit_entropy_store(random_state, ent_count);
+
+	DEBUG_ENT("credited %d bits => %d\n",
+		  ent_count, random_state->entropy_count);
+	/*
+	 * Wake up waiting processes if we have enough
+	 * entropy.
+	 */
+	if (random_state->entropy_count >= random_read_wakeup_thresh)
+		wake_up_interruptible(&random_read_wait);
+}
+EXPORT_SYMBOL(random_input_words);
+
+/*
+ * random_input_wait - wait until random needs entropy
+ *
+ * this function sleeps until the /dev/random subsystem actually
+ * needs more entropy, and then return the amount of entropy
+ * that it would be nice to have added to the system.
+ */
+int random_input_wait(void)
+{
+	int count;
+
+	if (!random_state)
+		return -1;
+
+	wait_event_interruptible(random_write_wait, 
+			 random_state->entropy_count < random_write_wakeup_thresh);
+
+	count = random_write_wakeup_thresh - random_state->entropy_count;
+
+	/* likely we got woken up due to a signal */
+	if (count < 0) count = random_read_wakeup_thresh; 
+
+	DEBUG_ENT("requesting %d bits from input_wait()er %d<%d\n",
+		  count,
+		  random_state->entropy_count, random_write_wakeup_thresh);
+
+	return count;
+}
+EXPORT_SYMBOL(random_input_wait);
+
 
 /******************************************************************
  *

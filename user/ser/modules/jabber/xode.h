@@ -1,5 +1,5 @@
 /*
- * $Id: xode.h,v 1.2 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xode.h,v 1.3 2004/08/24 08:58:30 janakj Exp $
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -179,7 +179,7 @@ void       xode_spool_free        ( xode_spool       s            ); /* Free's t
 #define XODE_TYPE_UNDEF  -1
 
 /* -------------------------------------------------------------------------- 
-   Node structure. Do not use directly! Always use accessor macros 
+   Node structure. Do not use directly! Always use accessors macros 
    and methods!
    -------------------------------------------------------------------------- */
 typedef struct xode_struct
@@ -292,7 +292,7 @@ typedef struct xode_stream_struct
 xode_stream xode_stream_new(xode_pool p, xode_stream_onNode f, void *arg); /* create a new xstream */
 int xode_stream_eat(xode_stream xs, char *buff, int len); /* parse new data for this xstream, returns last XSTREAM_* status */
 
-/* convience functions */
+/* convenience functions */
 
 #ifdef __cplusplus
 }

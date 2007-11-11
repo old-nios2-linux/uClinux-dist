@@ -80,10 +80,9 @@ ip_vs_app_inc_new(struct ip_vs_app *app, __u16 proto, __u16 port)
 	if (!pp->unregister_app)
 		return -EOPNOTSUPP;
 
-	inc = kmalloc(sizeof(struct ip_vs_app), GFP_KERNEL);
+	inc = kmemdup(app, sizeof(*inc), GFP_KERNEL);
 	if (!inc)
 		return -ENOMEM;
-	memcpy(inc, app, sizeof(*inc));
 	INIT_LIST_HEAD(&inc->p_list);
 	INIT_LIST_HEAD(&inc->incs_list);
 	inc->app = app;
@@ -332,14 +331,14 @@ static inline int app_tcp_pkt_out(struct ip_vs_conn *cp, struct sk_buff **pskb,
 				  struct ip_vs_app *app)
 {
 	int diff;
-	unsigned int tcp_offset = (*pskb)->nh.iph->ihl*4;
+	const unsigned int tcp_offset = ip_hdrlen(*pskb);
 	struct tcphdr *th;
 	__u32 seq;
 
 	if (!ip_vs_make_skb_writable(pskb, tcp_offset + sizeof(*th)))
 		return 0;
 
-	th = (struct tcphdr *)((*pskb)->nh.raw + tcp_offset);
+	th = (struct tcphdr *)(skb_network_header(*pskb) + tcp_offset);
 
 	/*
 	 *	Remember seq number in case this pkt gets resized
@@ -407,14 +406,14 @@ static inline int app_tcp_pkt_in(struct ip_vs_conn *cp, struct sk_buff **pskb,
 				 struct ip_vs_app *app)
 {
 	int diff;
-	unsigned int tcp_offset = (*pskb)->nh.iph->ihl*4;
+	const unsigned int tcp_offset = ip_hdrlen(*pskb);
 	struct tcphdr *th;
 	__u32 seq;
 
 	if (!ip_vs_make_skb_writable(pskb, tcp_offset + sizeof(*th)))
 		return 0;
 
-	th = (struct tcphdr *)((*pskb)->nh.raw + tcp_offset);
+	th = (struct tcphdr *)(skb_network_header(*pskb) + tcp_offset);
 
 	/*
 	 *	Remember seq number in case this pkt gets resized
@@ -550,7 +549,7 @@ static int ip_vs_app_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static struct seq_operations ip_vs_app_seq_ops = {
+static const struct seq_operations ip_vs_app_seq_ops = {
 	.start = ip_vs_app_seq_start,
 	.next  = ip_vs_app_seq_next,
 	.stop  = ip_vs_app_seq_stop,
@@ -562,7 +561,7 @@ static int ip_vs_app_open(struct inode *inode, struct file *file)
 	return seq_open(file, &ip_vs_app_seq_ops);
 }
 
-static struct file_operations ip_vs_app_fops = {
+static const struct file_operations ip_vs_app_fops = {
 	.owner	 = THIS_MODULE,
 	.open	 = ip_vs_app_open,
 	.read	 = seq_read,
@@ -578,7 +577,6 @@ static struct file_operations ip_vs_app_fops = {
 int ip_vs_skb_replace(struct sk_buff *skb, gfp_t pri,
 		      char *o_buf, int o_len, char *n_buf, int n_len)
 {
-	struct iphdr *iph;
 	int diff;
 	int o_offset;
 	int o_left;
@@ -604,12 +602,11 @@ int ip_vs_skb_replace(struct sk_buff *skb, gfp_t pri,
 		skb_put(skb, diff);
 		memmove(skb->data + o_offset + n_len,
 			skb->data + o_offset + o_len, o_left);
-		memcpy(skb->data + o_offset, n_buf, n_len);
+		skb_copy_to_linear_data_offset(skb, o_offset, n_buf, n_len);
 	}
 
 	/* must update the iph total length here */
-	iph = skb->nh.iph;
-	iph->tot_len = htons(skb->len);
+	ip_hdr(skb)->tot_len = htons(skb->len);
 
 	LeaveFunction(9);
 	return 0;

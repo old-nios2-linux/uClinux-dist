@@ -1,9 +1,9 @@
 /*
- * $Id: checks.h,v 1.2.6.1 2004/02/20 00:39:55 jiri Exp $
+ * $Id: checks.h,v 1.7 2004/08/24 09:00:45 janakj Exp $
  *
  * Various URI checks
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,6 +29,7 @@
  * History:
  * --------
  * 2003-03-26 created by janakj
+ * 2004-04-14 uri_param and add_uri_param introduced (jih)
  */
 
 
@@ -45,28 +46,34 @@ int is_user(struct sip_msg* _msg, char* _user, char* _str2);
 
 
 /*
- * Check if To header field contains the same username
- * as digest credentials
- */
-int check_to(struct sip_msg* _msg, char* _str1, char* _str2);
-
-
-/*
- * Check if From header field contains the same username
- * as digest credentials
- */
-int check_from(struct sip_msg* _msg, char* _str1, char* _str2);
-
-
-/*
- * Check if uri belongs to a local user, contributed by Juha Heinanen
- */
-int does_uri_exist(struct sip_msg* _msg, char* _table, char* _s2);
-
-/*
  * Check if message includes a to-tag
  */
 int has_totag(struct sip_msg* _m, char* _foo, char* _bar);
 
+
+/*
+ * Find if Request URI has a given parameter with no value
+ */
+int uri_param_1(struct sip_msg* _msg, char* _param, char* _str2);
+
+
+/*
+ * Find if Request URI has a given parameter with matching value
+ */
+int uri_param_2(struct sip_msg* _msg, char* _param, char* _value);
+
+
+/*
+ * Adds a new parameter to Request URI
+ */
+int add_uri_param(struct sip_msg* _msg, char* _param, char* _s2);
+
+
+/*
+ * Converts Request-URI, if it is tel URI, to SIP URI.  Returns 1, if
+ * conversion succeeded or if no conversion was needed, i.e., Request-URI
+ * was not tel URI.  Returns -1, if conversion failed.
+ */
+int tel2sip(struct sip_msg* _msg, char* _s1, char* _s2);
 
 #endif /* CHECKS_H */

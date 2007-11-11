@@ -13,7 +13,7 @@
 #include <asm/tlbflush.h>
 #include <asm/io.h>
 
-static inline pte_t *lookup_address(unsigned long address) 
+pte_t *lookup_address(unsigned long address)
 { 
 	pgd_t *pgd = pgd_offset_k(address);
 	pud_t *pud;
@@ -61,34 +61,41 @@ static struct page *split_large_page(unsigned long address, pgprot_t prot,
 	return base;
 } 
 
-
-static void flush_kernel_map(void *address) 
+static void cache_flush_page(void *adr)
 {
-	if (0 && address && cpu_has_clflush) {
-		/* is this worth it? */ 
-		int i;
-		for (i = 0; i < PAGE_SIZE; i += boot_cpu_data.x86_clflush_size) 
-			asm volatile("clflush (%0)" :: "r" (address + i)); 
-	} else
-		asm volatile("wbinvd":::"memory"); 
-	if (address)
-		__flush_tlb_one(address);
-	else
-		__flush_tlb_all();
+	int i;
+	for (i = 0; i < PAGE_SIZE; i += boot_cpu_data.x86_clflush_size)
+		asm volatile("clflush (%0)" :: "r" (adr + i));
 }
 
+static void flush_kernel_map(void *arg)
+{
+	struct list_head *l = (struct list_head *)arg;
+	struct page *pg;
 
-static inline void flush_map(unsigned long address)
+	/* When clflush is available always use it because it is
+	   much cheaper than WBINVD. */
+	/* clflush is still broken. Disable for now. */
+	if (1 || !cpu_has_clflush)
+		asm volatile("wbinvd" ::: "memory");
+	else list_for_each_entry(pg, l, lru) {
+		void *adr = page_address(pg);
+		cache_flush_page(adr);
+	}
+	__flush_tlb_all();
+}
+
+static inline void flush_map(struct list_head *l)
 {	
-	on_each_cpu(flush_kernel_map, (void *)address, 1, 1);
+	on_each_cpu(flush_kernel_map, l, 1, 1);
 }
 
-static struct page *deferred_pages; /* protected by init_mm.mmap_sem */
+static LIST_HEAD(deferred_pages); /* protected by init_mm.mmap_sem */
 
 static inline void save_page(struct page *fpage)
 {
-	fpage->lru.next = (struct list_head *)deferred_pages;
-	deferred_pages = fpage;
+	if (!test_and_set_bit(PG_arch_1, &fpage->flags))
+		list_add(&fpage->lru, &deferred_pages);
 }
 
 /* 
@@ -101,6 +108,7 @@ static void revert_page(unsigned long address, pgprot_t ref_prot)
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t large_pte;
+	unsigned long pfn;
 
 	pgd = pgd_offset_k(address);
 	BUG_ON(pgd_none(*pgd));
@@ -108,7 +116,8 @@ static void revert_page(unsigned long address, pgprot_t ref_prot)
 	BUG_ON(pud_none(*pud));
 	pmd = pmd_offset(pud, address);
 	BUG_ON(pmd_val(*pmd) & _PAGE_PSE);
-	large_pte = mk_pte_phys(__pa(address) & LARGE_PAGE_MASK, ref_prot);
+	pfn = (__pa(address) & LARGE_PAGE_MASK) >> PAGE_SHIFT;
+	large_pte = pfn_pte(pfn, ref_prot);
 	large_pte = pte_mkhuge(large_pte);
 	set_pte((pte_t *)pmd, large_pte);
 }      
@@ -120,9 +129,12 @@ __change_page_attr(unsigned long address, unsigned long pfn, pgprot_t prot,
 	pte_t *kpte; 
 	struct page *kpte_page;
 	pgprot_t ref_prot2;
+
 	kpte = lookup_address(address);
 	if (!kpte) return 0;
 	kpte_page = virt_to_page(((unsigned long)kpte) & PAGE_MASK);
+	BUG_ON(PageLRU(kpte_page));
+	BUG_ON(PageCompound(kpte_page));
 	if (pgprot_val(prot) != pgprot_val(ref_prot)) { 
 		if (!pte_huge(*kpte)) {
 			set_pte(kpte, pfn_pte(pfn, prot));
@@ -150,10 +162,9 @@ __change_page_attr(unsigned long address, unsigned long pfn, pgprot_t prot,
 	/* on x86-64 the direct mapping set at boot is not using 4k pages */
  	BUG_ON(PageReserved(kpte_page));
 
-	if (page_private(kpte_page) == 0) {
-		save_page(kpte_page);
+	save_page(kpte_page);
+	if (page_private(kpte_page) == 0)
 		revert_page(address, ref_prot);
- 	}
 	return 0;
 } 
 
@@ -172,16 +183,24 @@ __change_page_attr(unsigned long address, unsigned long pfn, pgprot_t prot,
  */
 int change_page_attr_addr(unsigned long address, int numpages, pgprot_t prot)
 {
-	int err = 0; 
+	int err = 0, kernel_map = 0;
 	int i; 
+
+	if (address >= __START_KERNEL_map
+	    && address < __START_KERNEL_map + KERNEL_TEXT_SIZE) {
+		address = (unsigned long)__va(__pa(address));
+		kernel_map = 1;
+	}
 
 	down_write(&init_mm.mmap_sem);
 	for (i = 0; i < numpages; i++, address += PAGE_SIZE) {
 		unsigned long pfn = __pa(address) >> PAGE_SHIFT;
 
-		err = __change_page_attr(address, pfn, prot, PAGE_KERNEL);
-		if (err) 
-			break; 
+		if (!kernel_map || pte_present(pfn_pte(0, prot))) {
+			err = __change_page_attr(address, pfn, prot, PAGE_KERNEL);
+			if (err)
+				break;
+		}
 		/* Handle kernel mapping too which aliases part of the
 		 * lowmem */
 		if (__pa(address) < KERNEL_TEXT_SIZE) {
@@ -207,18 +226,22 @@ int change_page_attr(struct page *page, int numpages, pgprot_t prot)
 
 void global_flush_tlb(void)
 { 
-	struct page *dpage;
+	struct page *pg, *next;
+	struct list_head l;
 
 	down_read(&init_mm.mmap_sem);
-	dpage = xchg(&deferred_pages, NULL);
+	list_replace_init(&deferred_pages, &l);
 	up_read(&init_mm.mmap_sem);
 
-	flush_map((dpage && !dpage->lru.next) ? (unsigned long)page_address(dpage) : 0);
-	while (dpage) {
-		struct page *tmp = dpage;
-		dpage = (struct page *)dpage->lru.next;
-		ClearPagePrivate(tmp);
-		__free_page(tmp);
+	flush_map(&l);
+
+	list_for_each_entry_safe(pg, next, &l, lru) {
+		list_del(&pg->lru);
+		clear_bit(PG_arch_1, &pg->flags);
+		if (page_private(pg) != 0)
+			continue;
+		ClearPagePrivate(pg);
+		__free_page(pg);
 	} 
 } 
 

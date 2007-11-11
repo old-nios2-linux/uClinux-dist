@@ -20,7 +20,7 @@
 #include <fcntl.h>
 
 #include "radius.h"
-#include "md5.h"
+#include <openssl/md5.h>
 
 
 /*************************************************************************
@@ -47,6 +47,7 @@ typedef struct radius_server_t {
 typedef struct radius_conf_t {
   radius_server_t *server;
   int retries;
+  int localifdown;
   char *client_id;
   int accounting_bug;
   int sockfd;
@@ -82,8 +83,8 @@ typedef struct radius_conf_t {
 #define PAM_SKIP_PASSWD    2
 #define PAM_USE_FIRST_PASS 4
 #define PAM_TRY_FIRST_PASS 8
+#define PAM_RUSER_ARG      16
 
-#define PAM_RETRY          0x30
 
 /* Module defines */
 #ifndef BUFFER_SIZE

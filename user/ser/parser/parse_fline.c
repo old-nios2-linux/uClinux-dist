@@ -1,10 +1,10 @@
 /*
- * $Id: parse_fline.c,v 1.7 2003/04/26 20:28:46 jiri Exp $
+ * $Id: parse_fline.c,v 1.8 2004/08/24 09:01:25 janakj Exp $
  * 
  * sip first line parsing automaton
  * 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -79,7 +79,7 @@ char* parse_fline(char* buffer, char* end, struct msg_start* fl)
 			case ' ':
 			case '\t':
 				switch(state){
-					case START: /*allow space at the beginnig, althoug not
+					case START: /*allow space at the begining, although not
 								  legal*/
 						break;
 					case L_URI:

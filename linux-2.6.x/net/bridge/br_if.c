@@ -29,35 +29,24 @@
  * Determine initial path cost based on speed.
  * using recommendations from 802.1d standard
  *
- * Need to simulate user ioctl because not all device's that support
- * ethtool, use ethtool_ops.  Also, since driver might sleep need to
- * not be holding any locks.
+ * Since driver might sleep need to not be holding any locks.
  */
 static int port_cost(struct net_device *dev)
 {
-	struct ethtool_cmd ecmd = { ETHTOOL_GSET };
-	struct ifreq ifr;
-	mm_segment_t old_fs;
-	int err;
+	if (dev->ethtool_ops && dev->ethtool_ops->get_settings) {
+		struct ethtool_cmd ecmd = { .cmd = ETHTOOL_GSET, };
 
-	strncpy(ifr.ifr_name, dev->name, IFNAMSIZ);
-	ifr.ifr_data = (void __user *) &ecmd;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	err = dev_ethtool(&ifr);
-	set_fs(old_fs);
-	
-	if (!err) {
-		switch(ecmd.speed) {
-		case SPEED_100:
-			return 19;
-		case SPEED_1000:
-			return 4;
-		case SPEED_10000:
-			return 2;
-		case SPEED_10:
-			return 100;
+		if (!dev->ethtool_ops->get_settings(dev, &ecmd)) {
+			switch(ecmd.speed) {
+			case SPEED_10000:
+				return 2;
+			case SPEED_1000:
+				return 4;
+			case SPEED_100:
+				return 19;
+			case SPEED_10:
+				return 100;
+			}
 		}
 	}
 
@@ -77,22 +66,15 @@ static int port_cost(struct net_device *dev)
  * Called from work queue to allow for calling functions that
  * might sleep (such as speed check), and to debounce.
  */
-static void port_carrier_check(void *arg)
+void br_port_carrier_check(struct net_bridge_port *p)
 {
-	struct net_device *dev = arg;
-	struct net_bridge_port *p;
-	struct net_bridge *br;
-
-	rtnl_lock();
-	p = dev->br_port;
-	if (!p)
-		goto done;
-	br = p->br;
+	struct net_device *dev = p->dev;
+	struct net_bridge *br = p->br;
 
 	if (netif_carrier_ok(dev))
 		p->path_cost = port_cost(dev);
 
-	if (br->dev->flags & IFF_UP) {
+	if (netif_running(br->dev)) {
 		spin_lock_bh(&br->lock);
 		if (netif_carrier_ok(dev)) {
 			if (p->state == BR_STATE_DISABLED)
@@ -103,8 +85,6 @@ static void port_carrier_check(void *arg)
 		}
 		spin_unlock_bh(&br->lock);
 	}
-done:
-	rtnl_unlock();
 }
 
 static void release_nbp(struct kobject *kobj)
@@ -157,11 +137,11 @@ static void del_nbp(struct net_bridge_port *p)
 
 	dev_set_promiscuity(dev, -1);
 
-	cancel_delayed_work(&p->carrier_check);
-
 	spin_lock_bh(&br->lock);
 	br_stp_disable_port(p);
 	spin_unlock_bh(&br->lock);
+
+	br_ifinfo_notify(RTM_DELLINK, p);
 
 	br_fdb_delete_by_port(br, p, 1);
 
@@ -187,7 +167,7 @@ static void del_br(struct net_bridge *br)
 	del_timer_sync(&br->gc_timer);
 
 	br_sysfs_delbr(br->dev);
- 	unregister_netdevice(br->dev);
+	unregister_netdevice(br->dev);
 }
 
 static struct net_device *new_bridge_dev(const char *name)
@@ -197,7 +177,7 @@ static struct net_device *new_bridge_dev(const char *name)
 
 	dev = alloc_netdev(sizeof(struct net_bridge), name,
 			   br_dev_setup);
-	
+
 	if (!dev)
 		return NULL;
 
@@ -214,7 +194,7 @@ static struct net_device *new_bridge_dev(const char *name)
 	memcpy(br->group_addr, br_group_address, ETH_ALEN);
 
 	br->feature_mask = dev->features;
-	br->stp_enabled = 0;
+	br->stp_enabled = BR_NO_STP;
 	br->designated_root = br->bridge_id;
 	br->root_path_cost = 0;
 	br->root_port = 0;
@@ -254,12 +234,12 @@ static int find_portno(struct net_bridge *br)
 }
 
 /* called with RTNL but without bridge lock */
-static struct net_bridge_port *new_nbp(struct net_bridge *br, 
+static struct net_bridge_port *new_nbp(struct net_bridge *br,
 				       struct net_device *dev)
 {
 	int index;
 	struct net_bridge_port *p;
-	
+
 	index = find_portno(br);
 	if (index < 0)
 		return ERR_PTR(index);
@@ -272,17 +252,16 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	dev_hold(dev);
 	p->dev = dev;
 	p->path_cost = port_cost(dev);
- 	p->priority = 0x8000 >> BR_PORT_BITS;
+	p->priority = 0x8000 >> BR_PORT_BITS;
 	p->port_no = index;
 	br_init_port(p);
 	p->state = BR_STATE_DISABLED;
-	INIT_WORK(&p->carrier_check, port_carrier_check, dev);
 	br_stp_port_timer_init(p);
 
 	kobject_init(&p->kobj);
 	kobject_set_name(&p->kobj, SYSFS_BRIDGE_PORT_ATTR);
 	p->kobj.ktype = &brport_ktype;
-	p->kobj.parent = &(dev->class_dev.kobj);
+	p->kobj.parent = &(dev->dev.kobj);
 	p->kobj.kset = NULL;
 
 	return p;
@@ -294,7 +273,7 @@ int br_add_bridge(const char *name)
 	int ret;
 
 	dev = new_bridge_dev(name);
-	if (!dev) 
+	if (!dev)
 		return -ENOMEM;
 
 	rtnl_lock();
@@ -325,7 +304,7 @@ int br_del_bridge(const char *name)
 
 	rtnl_lock();
 	dev = __dev_get_by_name(name);
-	if (dev == NULL) 
+	if (dev == NULL)
 		ret =  -ENXIO; 	/* Could not find device */
 
 	else if (!(dev->priv_flags & IFF_EBRIDGE)) {
@@ -336,9 +315,9 @@ int br_del_bridge(const char *name)
 	else if (dev->flags & IFF_UP) {
 		/* Not shutdown yet. */
 		ret = -EBUSY;
-	} 
+	}
 
-	else 
+	else
 		del_br(netdev_priv(dev));
 
 	rtnl_unlock();
@@ -370,35 +349,15 @@ int br_min_mtu(const struct net_bridge *br)
 void br_features_recompute(struct net_bridge *br)
 {
 	struct net_bridge_port *p;
-	unsigned long features, checksum;
+	unsigned long features;
 
-	checksum = br->feature_mask & NETIF_F_ALL_CSUM ? NETIF_F_NO_CSUM : 0;
-	features = br->feature_mask & ~NETIF_F_ALL_CSUM;
+	features = br->feature_mask;
 
 	list_for_each_entry(p, &br->port_list, list) {
-		unsigned long feature = p->dev->features;
-
-		if (checksum & NETIF_F_NO_CSUM && !(feature & NETIF_F_NO_CSUM))
-			checksum ^= NETIF_F_NO_CSUM | NETIF_F_HW_CSUM;
-		if (checksum & NETIF_F_HW_CSUM && !(feature & NETIF_F_HW_CSUM))
-			checksum ^= NETIF_F_HW_CSUM | NETIF_F_IP_CSUM;
-		if (!(feature & NETIF_F_IP_CSUM))
-			checksum = 0;
-
-		if (feature & NETIF_F_GSO)
-			feature |= NETIF_F_GSO_SOFTWARE;
-		feature |= NETIF_F_GSO;
-
-		features &= feature;
+		features = netdev_compute_features(features, p->dev->features);
 	}
 
-	if (!(checksum & NETIF_F_ALL_CSUM))
-		features &= ~NETIF_F_SG;
-	if (!(features & NETIF_F_SG))
-		features &= ~NETIF_F_GSO_MASK;
-
-	br->dev->features = features | checksum | NETIF_F_LLTX |
-			    NETIF_F_GSO_ROBUST;
+	br->dev->features = features;
 }
 
 /* called with RTNL */
@@ -424,7 +383,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	if (err)
 		goto err0;
 
- 	err = br_fdb_insert(br, p, dev->dev_addr);
+	err = br_fdb_insert(br, p, dev->dev_addr);
 	if (err)
 		goto err1;
 
@@ -440,10 +399,16 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	spin_lock_bh(&br->lock);
 	br_stp_recalculate_bridge_id(br);
 	br_features_recompute(br);
-	schedule_delayed_work(&p->carrier_check, BR_PORT_DEBOUNCE);
+
+	if ((dev->flags & IFF_UP) && netif_carrier_ok(dev) &&
+	    (br->dev->flags & IFF_UP))
+		br_stp_enable_port(p);
 	spin_unlock_bh(&br->lock);
 
+	br_ifinfo_notify(RTM_NEWLINK, p);
+
 	dev_set_mtu(br->dev, br_min_mtu(br));
+
 	kobject_uevent(&p->kobj, KOBJ_ADD);
 
 	return 0;
@@ -460,8 +425,8 @@ err0:
 int br_del_if(struct net_bridge *br, struct net_device *dev)
 {
 	struct net_bridge_port *p = dev->br_port;
-	
-	if (!p || p->br != br) 
+
+	if (!p || p->br != br)
 		return -EINVAL;
 
 	del_nbp(p);
@@ -479,11 +444,9 @@ void __exit br_cleanup_bridges(void)
 	struct net_device *dev, *nxt;
 
 	rtnl_lock();
-	for (dev = dev_base; dev; dev = nxt) {
-		nxt = dev->next;
+	for_each_netdev_safe(dev, nxt)
 		if (dev->priv_flags & IFF_EBRIDGE)
 			del_br(dev->priv);
-	}
 	rtnl_unlock();
 
 }

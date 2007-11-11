@@ -1,10 +1,10 @@
 /*
- * $Id: xjab_worker.c,v 1.31 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xjab_worker.c,v 1.36.2.1 2005/06/16 10:30:08 andrei Exp $
  *
- * eXtended JABber module - worker implemetation
+ * eXtended JABber module - worker implementation
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,6 +44,8 @@
  * 2003-05-09  new xj_worker_precess function cleaning - some part of it moved
  *             to xj_worker_check_qmsg and xj_worker_check_watcher functions,
  *             (dcm)
+ * 2004-06-07  new DB api => xj_worker_process takes another parameter: dbf
+ *              (andrei)
  */
 
 #include <string.h>
@@ -94,7 +96,7 @@ extern char *registrar;
 static str jab_gw_name = {"jabber_gateway@127.0.0.1", 24};
 
 /**
- * address corection
+ * address correction
  * alias A~B: flag == 0 => A->B, otherwise B->A
  */
 int xj_address_translation(str *src, str *dst, xj_jalias als, int flag)
@@ -254,10 +256,11 @@ done:
  * - jport : port of the jabber server
  * - rank : worker's rank
  * - db_con : connection to database
+ *   dbf: database module callbacks structure
  * #return : 0 on success or <0 on error
  */
 int xj_worker_process(xj_wlist jwl, char* jaddress, int jport, int rank,
-		db_con_t* db_con)
+		db_con_t* db_con, db_func_t* dbf)
 {
 	int pipe, ret, i, pos, maxfd, flag;
 	xj_jcon_pool jcp;
@@ -349,7 +352,7 @@ int xj_worker_process(xj_wlist jwl, char* jaddress, int jport, int rank,
 		if(!FD_ISSET(pipe, &mset))
 			goto step_y;
 		
-		if(read(pipe, &jsmsg, sizeof(jsmsg)) < sizeof(jsmsg))
+		if(read(pipe, &jsmsg, sizeof(jsmsg)) < (int)sizeof(jsmsg))
 		{
 			DBG("XJAB:xj_worker:%d: BROKEN PIPE - exiting\n", _xj_pid);
 			break;
@@ -417,7 +420,7 @@ int xj_worker_process(xj_wlist jwl, char* jaddress, int jport, int rank,
 #ifdef XJ_EXTRA_DEBUG
 		DBG("XJAB:xj_worker:%d: new connection for <%s>.\n", _xj_pid, buff);
 #endif		
-		if(db_query(db_con, keys, 0, vals, col, 2, 2, NULL, &res) != 0 ||
+		if(dbf->query(db_con, keys, 0, vals, col, 2, 2, NULL, &res) != 0 ||
 			RES_ROW_N(res) <= 0)
 		{
 #ifdef XJ_EXTRA_DEBUG
@@ -489,7 +492,7 @@ int xj_worker_process(xj_wlist jwl, char* jaddress, int jport, int rank,
 		/** wait for a while - the worker is tired */
 		//sleep(3);
 		
-		if ((res != NULL) && (db_free_query(db_con,res) < 0))
+		if ((res != NULL) && (dbf->free_result(db_con,res) < 0))
 		{
 			DBG("XJAB:xj_worker:%d:Error while freeing"
 				" SQL result - worker terminated\n", _xj_pid);
@@ -551,7 +554,7 @@ step_z:
 				DBG("XJAB:xj_worker:%d: SENDING the message to Jabber"
 					" network ...\n", _xj_pid);
 #endif
-				/*** address corection ***/
+				/*** address correction ***/
 				sto.s = buff; 
 				sto.len = 0;
 				flag |= XJ_ADDRTR_S2J;
@@ -607,7 +610,7 @@ step_v: // error connecting to Jabber server
 		xj_wlist_del(jwl, jsmsg->jkey, _xj_pid);
 
 		// cleaning db_query
-		if ((res != NULL) && (db_free_query(db_con,res) < 0))
+		if ((res != NULL) && (dbf->free_result(db_con,res) < 0))
 		{
 			DBG("XJAB:xj_worker:%d:Error while freeing"
 				" SQL result - worker terminated\n", _xj_pid);
@@ -816,12 +819,12 @@ int xj_manage_jab(char *buf, int len, int *pos, xj_jalias als, xj_jcon jbc)
 					strcat(lbuf, " - ");
 				}
 				strcat(lbuf, emsg);
-				strcat(lbuf, ") when trying to send following messge}");
+				strcat(lbuf, ") when trying to send following message}");
 			}
 
 		}
 
-		// is from a conferece?!?!
+		// is from a conference?!?!
 		if((jcf=xj_jcon_check_jconf(jbc, from))!=NULL)
 		{
 			if(lbuf[0] == 0)
@@ -1126,7 +1129,7 @@ call_pa_cbf:
 			DBG("XJAB:xj_manage_jab: calling CBF(%.*s,%d)\n",
 				tf.len, tf.s, prc->state);
 #endif
-			(*(prc->cbf))(&tf, prc->state, prc->cbp);
+			(*(prc->cbf))(&tf, &tf, prc->state, prc->cbp);
 		}
 	}
 ready:
@@ -1163,7 +1166,6 @@ int xj_send_sip_msg(str *proxy, str *to, str *from, str *msg, int *cbp)
 	char buf[512];
 	str  tfrom;
 	str  str_hdr;
-	int **pcbp = NULL;//, beg, end, crt;
 	char buf1[1024];
 
 	if( !to || !to->s || to->len <= 0 
@@ -1198,11 +1200,8 @@ int xj_send_sip_msg(str *proxy, str *to, str *from, str *msg, int *cbp)
 		DBG("XJAB:xj_send_sip_msg: uac callback parameter [%p==%d]\n", 
 				cbp, *cbp);
 #endif
-		if((pcbp = (int**)shm_malloc(sizeof(int*))) == NULL)
-			return -1;
-		*pcbp = cbp;
 		return tmb.t_request(&msg_type, 0, to, &tfrom, &str_hdr, msg, 
-					     xj_tuac_callback, (void*)pcbp);
+					     xj_tuac_callback, (void*)cbp);
 	}
 	else
 		return tmb.t_request(&msg_type, 0, to, &tfrom, &str_hdr, msg, 0, 0);
@@ -1269,33 +1268,32 @@ int xj_wlist_clean_jobs(xj_wlist jwl, int idx, int fl)
 /**
  * callback function for TM
  */
-void xj_tuac_callback( struct cell *t, struct sip_msg *msg,
-			int code, void *param)
+void xj_tuac_callback( struct cell *t, int type, struct tmcb_params *ps)
 {
 #ifdef XJ_EXTRA_DEBUG
-	DBG("XJAB: xj_tuac_callback: completed with status %d\n", code);
+	DBG("XJAB: xj_tuac_callback: completed with status %d\n", ps->code);
 #endif
-	if(!t->cbp)
+	if(!ps->param)
 	{
 		DBG("XJAB: m_tuac_callback: parameter not received\n");
 		return;
 	}
 #ifdef XJ_EXTRA_DEBUG
-	DBG("XJAB: xj_tuac_callback: parameter [%p : ex-value=%d]\n", t->cbp,
-					*(*((int**)t->cbp)) );
+	DBG("XJAB: xj_tuac_callback: parameter [%p : ex-value=%d]\n", ps->param,
+					*((int*)ps->param) );
 #endif
-	if(code < 200 || code >= 300)
+	if(ps->code < 200 || ps->code >= 300)
 	{
 #ifdef XJ_EXTRA_DEBUG
 		DBG("XJAB: xj_tuac_callback: no 2XX return code - connection set"
 			" as expired \n");
 #endif
-		*(*((int**)t->cbp)) = XJ_FLAG_CLOSE;	
+		*((int*)ps->param) = XJ_FLAG_CLOSE;
 	}
 }
 
 /**
- * check for expired conections
+ * check for expired connections
  */
 void xj_worker_check_jcons(xj_wlist jwl, xj_jcon_pool jcp, int ltime, fd_set *pset)
 {
@@ -1416,7 +1414,7 @@ void xj_worker_check_qmsg(xj_wlist jwl, xj_jcon_pool jcp)
 				jcp->jmqueue.jsm[i]->to.len, jwl->aliases->dlm))
 			continue;
 		
-		/*** address corection ***/
+		/*** address correction ***/
 		flag = XJ_ADDRTR_S2J;
 		if(!xj_jconf_check_addr(&jcp->jmqueue.jsm[i]->to,jwl->aliases->dlm))
 		flag |= XJ_ADDRTR_CON;
@@ -1481,7 +1479,7 @@ void xj_worker_check_watcher(xj_wlist jwl, xj_jcon_pool jcp,
 			" conference.\n", _xj_pid);
 #endif
 		// set as offline
-		(*(jsmsg->cbf))(&jsmsg->to, XJ_PS_OFFLINE, jsmsg->p);
+		(*(jsmsg->cbf))(&jsmsg->to, &jsmsg->to, XJ_PS_OFFLINE, jsmsg->p);
 		return;
 	}
 			
@@ -1530,7 +1528,7 @@ void xj_worker_check_watcher(xj_wlist jwl, xj_jcon_pool jcp,
 				_xj_pid, jsmsg->to.len, jsmsg->to.s, prc->state);
 #endif
 			// send presence info to SIP subscriber
-			(*(prc->cbf))(&jsmsg->to, prc->state, prc->cbp);
+			(*(prc->cbf))(&jsmsg->to, &jsmsg->to, prc->state, prc->cbp);
 		}
 	}
 }

@@ -1,4 +1,4 @@
-/* $Header: /cvs/sw/linux-2.4.x/drivers/misc/xilinx_hwicap/xhwicap_set_configuration.c,v 1.2 2006/11/14 06:48:08 gerg Exp $ */
+/* $Header: /var/cvs/uClinux-2.4.x/drivers/misc/xilinx_hwicap/xhwicap_set_configuration.c,v 1.1 2006/11/09 22:33:52 jwilliams Exp $ */
 /*****************************************************************************
 *
 *       XILINX IS PROVIDING THIS DESIGN, CODE, OR INFORMATION "AS IS"

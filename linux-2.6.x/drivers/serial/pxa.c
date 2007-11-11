@@ -433,8 +433,8 @@ static void serial_pxa_shutdown(struct uart_port *port)
 }
 
 static void
-serial_pxa_set_termios(struct uart_port *port, struct termios *termios,
-		       struct termios *old)
+serial_pxa_set_termios(struct uart_port *port, struct ktermios *termios,
+		       struct ktermios *old)
 {
 	struct uart_pxa_port *up = (struct uart_pxa_port *)port;
 	unsigned char cval, fcr = 0;
@@ -717,7 +717,7 @@ struct uart_ops serial_pxa_pops = {
 static struct uart_pxa_port serial_pxa_ports[] = {
      {	/* FFUART */
 	.name	= "FFUART",
-	.cken	= CKEN6_FFUART,
+	.cken	= CKEN_FFUART,
 	.port	= {
 		.type		= PORT_PXA,
 		.iotype		= UPIO_MEM,
@@ -731,7 +731,7 @@ static struct uart_pxa_port serial_pxa_ports[] = {
 	},
   }, {	/* BTUART */
 	.name	= "BTUART",
-	.cken	= CKEN7_BTUART,
+	.cken	= CKEN_BTUART,
 	.port	= {
 		.type		= PORT_PXA,
 		.iotype		= UPIO_MEM,
@@ -745,7 +745,7 @@ static struct uart_pxa_port serial_pxa_ports[] = {
 	},
   }, {	/* STUART */
 	.name	= "STUART",
-	.cken	= CKEN5_STUART,
+	.cken	= CKEN_STUART,
 	.port	= {
 		.type		= PORT_PXA,
 		.iotype		= UPIO_MEM,
@@ -759,7 +759,7 @@ static struct uart_pxa_port serial_pxa_ports[] = {
 	},
   }, {  /* HWUART */
 	.name	= "HWUART",
-	.cken	= CKEN4_HWUART,
+	.cken	= CKEN_HWUART,
 	.port = {
 		.type		= PORT_PXA,
 		.iotype		= UPIO_MEM,

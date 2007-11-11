@@ -1,9 +1,9 @@
 /*
- * $Id: sip_msg.c,v 1.8.6.3 2004/07/08 14:25:40 andrei Exp $
+ * $Id: sip_msg.c,v 1.15 2004/08/24 09:00:37 janakj Exp $
  *
  * SIP message related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,14 +29,15 @@
 
 
 
-#include "sip_msg.h"
 #include "../../parser/hf.h"
-#include "../../dprint.h"
+#include <dprint.h>
 #include "../../parser/parse_expires.h"  
 #include "../../ut.h"
+#include "../../qvalue.h"
 #include "reg_mod.h"                     /* Module parameters */
 #include "regtime.h"                     /* act_time */
 #include "rerrno.h"
+#include "sip_msg.h"
 
 
 static struct hdr_field* act_contact;
@@ -66,7 +67,7 @@ static inline int get_expires_hf(struct sip_msg* _m)
 
 
 /*
- * Parse the whole messsage and bodies of all header fieds
+ * Parse the whole message and bodies of all header fields
  * that will be needed by registrar
  */
 int parse_message(struct sip_msg* _m)
@@ -218,8 +219,6 @@ contact_t* get_next_contact(contact_t* _c)
  *    header field in the same way
  * 3) If the message contained no expires header field, use
  *    the default value
- * 4) If min_expires parameter is non-zero and the resulting
- *    expires value is shorter, use min_expires
  */
 int calc_contact_expires(struct sip_msg* _m, param_t* _ep, int* _e)
 {
@@ -228,11 +227,6 @@ int calc_contact_expires(struct sip_msg* _m, param_t* _ep, int* _e)
 	} else {
 		if (str2int(&_ep->body, (unsigned int*)_e) < 0) {
 			*_e = 3600;
-			     /*
-			       rerrno = R_INV_EXP;
-			       LOG(L_ERR, "calc_contact_expires(): Invalid expires parameter\n");
-			       return -1;
-			     */
 		}
 		     /* Convert to absolute value */
 		if (*_e != 0) *_e += act_time;
@@ -253,14 +247,14 @@ int calc_contact_expires(struct sip_msg* _m, param_t* _ep, int* _e)
 /*
  * Calculate contact q value as follows:
  * 1) If q parameter exists, use it
- * 2) If the parameter doesn't exist, use default value
+ * 2) If the parameter doesn't exist, use the default value
  */
-int calc_contact_q(param_t* _q, float* _r)
+int calc_contact_q(param_t* _q, qvalue_t* _r)
 {
 	if (!_q || (_q->body.len == 0)) {
-		*_r = def_q;
+		*_r = default_q;
 	} else {
-		if (str2float(&_q->body, _r) < 0) {
+		if (str2q(_r, _q->body.s, _q->body.len) < 0) {
 			rerrno = R_INV_Q; /* Invalid q parameter */
 			LOG(L_ERR, "calc_contact_q(): Invalid q parameter\n");
 			return -1;

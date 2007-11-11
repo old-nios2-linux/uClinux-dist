@@ -106,7 +106,7 @@ void SetPerfmonitorFile( char * s )
 {
    if( strlen(s) < sizeof(perf_file)-1 )
    {
-      strcpy(perf_file,s);
+      SnortStrncpy(perf_file, s, sizeof(perf_file));
    }
 }
 
@@ -387,7 +387,7 @@ static void ProcessPerfMonitor(Packet *p, void *context)
     {
         extern pcap_t * pd;
         struct pcap_stat pcapStats;
-        if(pd) pcap_stats(pd,&pcapStats);
+        pcap_stats(pd,&pcapStats);
         first=0;
         sfPerf.sfBase.pkt_stats.pkts_recv = pcapStats.ps_recv;
         sfPerf.sfBase.pkt_stats.pkts_drop = pcapStats.ps_drop;

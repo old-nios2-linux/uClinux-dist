@@ -2,11 +2,11 @@
 #
 #  A minimal 'Makefile', by Alan DeKok <aland@freeradius.org>
 #
-# $Id: Makefile,v 1.12 2003/09/19 14:41:45 aland Exp $
+# $Id: Makefile,v 1.13 2007/03/26 04:22:11 fcusack Exp $
 #
 #############################################################################
 
-VERSION=1.3.16
+VERSION=1.3.17
 
 ######################################################################
 #
@@ -23,8 +23,10 @@ CFLAGS += -Wall -fPIC
 # Then copy pam_radius_auth.so to /usr/freeware/lib32/security (PAM dir)
 # CFLAGS =
 
-LIBS=-lpam -ldl
-OBJ= pam_radius_auth.o md5.o
+LIBS=$(LIBCRYPTO) -lpam -ldl #-Wl,-Bstatic -lcrypto -Wl,-Bdynamic
+OBJ= pam_radius_auth.o
+
+CFLAGS += -DMD5Init=MD5_Init -DMD5Update=MD5_Update -DMD5Final=MD5_Final
 
 ######################################################################
 #
@@ -58,7 +60,7 @@ md5.o: md5.c md5.h
 #
 #	gcc -shared pam_radius_auth.o md5.o -lpam -lc -o pam_radius_auth.so
 #
-pam_radius_auth.so: pam_radius_auth.o md5.o
+pam_radius_auth.so: pam_radius_auth.o
 	$(CC) -shared $(OPTIM) -Xlinker -x -o pam_radius.so $(OBJ) $(LIBS)
 #	ld -Bshareable pam_radius_auth.o md5.o -lpam -o pam_radius_auth.so
 

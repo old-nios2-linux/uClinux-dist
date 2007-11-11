@@ -65,7 +65,8 @@ struct timer_list mcfrs_timer_struct;
 #define CONSOLE_BAUD_RATE 	115200
 #define DEFAULT_CBAUD		B115200
 #elif defined(CONFIG_ARNEWSH) || defined(CONFIG_FREESCALE) || \
-      defined(CONFIG_senTec) || defined(CONFIG_SNEHA) || defined(CONFIG_AVNET)
+      defined(CONFIG_senTec) || defined(CONFIG_SNEHA) || defined(CONFIG_AVNET) || \
+      defined(CONFIG_SAVANT)
 #define	CONSOLE_BAUD_RATE	19200
 #define	DEFAULT_CBAUD		B19200
 #endif
@@ -425,15 +426,13 @@ irqreturn_t mcfrs_interrupt(int irq, void *dev_id)
  * -------------------------------------------------------------------
  */
 
-static void mcfrs_offintr(void *private)
+static void mcfrs_offintr(struct work_struct *work)
 {
-	struct mcf_serial	*info = (struct mcf_serial *) private;
-	struct tty_struct	*tty;
+	struct mcf_serial *info = container_of(work, struct mcf_serial, tqueue);
+	struct tty_struct *tty = info->tty;
 	
-	tty = info->tty;
-	if (!tty)
-		return;
-	tty_wakeup(tty);
+	if (tty)
+		tty_wakeup(tty);
 }
 
 
@@ -497,16 +496,13 @@ static void mcfrs_timer(void)
  * 	do_serial_hangup() -> tty->hangup() -> mcfrs_hangup()
  * 
  */
-static void do_serial_hangup(void *private)
+static void do_serial_hangup(struct work_struct *work)
 {
-	struct mcf_serial	*info = (struct mcf_serial *) private;
-	struct tty_struct	*tty;
+	struct mcf_serial *info = container_of(work, struct mcf_serial, tqueue_hangup);
+	struct tty_struct *tty = info->tty;
 	
-	tty = info->tty;
-	if (!tty)
-		return;
-
-	tty_hangup(tty);
+	if (tty)
+		tty_hangup(tty);
 }
 
 static int startup(struct mcf_serial * info)
@@ -1132,7 +1128,7 @@ static int mcfrs_ioctl(struct tty_struct *tty, struct file * file,
 	return 0;
 }
 
-static void mcfrs_set_termios(struct tty_struct *tty, struct termios *old_termios)
+static void mcfrs_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	struct mcf_serial *info = (struct mcf_serial *)tty->driver_data;
 
@@ -1535,14 +1531,22 @@ static void mcfrs_irqinit(struct mcf_serial *info)
 	imrp = (volatile unsigned long *) (MCF_MBAR + MCFICM_INTC0 +
 		MCFINTC_IMRL);
 	*imrp &= ~((1 << (info->irq - MCFINT_VECBASE)) | 1);
+
+#if defined(CONFIG_M523x)
+	{
+		volatile unsigned short *par_uartp;
+		par_uartp = (volatile unsigned short *) (MCF_MBAR + MCF523x_GPIO_PAR_UART);
+		*par_uartp = 0x3FFF; /* setup GPIO for UART0, UART1 & UART2 */
+	}
+#endif
 #if defined(CONFIG_M527x)
 	{
 		/*
 		 * External Pin Mask Setting & Enable External Pin for Interface
 		 * mrcbis@aliceposta.it
         	 */
-		unsigned short *serpin_enable_mask;
-		serpin_enable_mask = (MCF_IPSBAR + MCF_GPIO_PAR_UART);
+		u16 *serpin_enable_mask;
+		serpin_enable_mask = (u16 *) (MCF_IPSBAR + MCF_GPIO_PAR_UART);
 		if (info->line == 0)
 			*serpin_enable_mask |= UART0_ENABLE_MASK;
 		else if (info->line == 1)
@@ -1790,8 +1794,8 @@ mcfrs_init(void)
 		info->event = 0;
 		info->count = 0;
 		info->blocked_open = 0;
-		INIT_WORK(&info->tqueue, mcfrs_offintr, info);
-		INIT_WORK(&info->tqueue_hangup, do_serial_hangup, info);
+		INIT_WORK(&info->tqueue, mcfrs_offintr);
+		INIT_WORK(&info->tqueue_hangup, do_serial_hangup);
 		init_waitqueue_head(&info->open_wait);
 		init_waitqueue_head(&info->close_wait);
 

@@ -67,7 +67,7 @@ static void fill(char *patp)
 	int ii, jj, kk;
 	int pat[16];
 	char *cp;
-	char *bp = outpack+8;
+	u_char *bp = outpack+8;
 
 	for (cp = patp; *cp; cp++) {
 		if (!isxdigit(*cp)) {
@@ -393,7 +393,7 @@ resend:
 void sock_setbufs(int icmp_sock, int alloc)
 {
 	int rcvbuf, hold;
-	int tmplen = sizeof(hold);
+	socklen_t tmplen = sizeof(hold);
 
 	if (!sndbuf)
 		sndbuf = alloc;
@@ -464,7 +464,7 @@ void setup(int icmp_sock)
 
 	if (!(options & F_PINGFILLED)) {
 		int i;
-		char *p = outpack+8;
+		u_char *p = outpack+8;
 
 		/* Do not forget about case of small datalen,
 		 * fill timestamp area too!
@@ -584,6 +584,7 @@ void main_loop(int icmp_sock, __u8 *packet, int packlen)
 					   * destined to other running pings. */
 
 			iov.iov_len = packlen;
+			memset(&msg, 0, sizeof(msg));
 			msg.msg_name = addrbuf;
 			msg.msg_namelen = sizeof(addrbuf);
 			msg.msg_iov = &iov;
@@ -809,10 +810,10 @@ void finish(void)
 		tmdev = llsqrt(tsum2 - tsum * tsum);
 
 		printf("rtt min/avg/max/mdev = %ld.%03ld/%lu.%03ld/%ld.%03ld/%ld.%03ld ms",
-		       tmin/1000, tmin%1000,
+		       (long)tmin/1000, (long)tmin%1000,
 		       (unsigned long)(tsum/1000), (long)(tsum%1000),
-		       tmax/1000, tmax%1000,
-		       tmdev/1000, tmdev%1000
+		       (long)tmax/1000, (long)tmax%1000,
+		       (long)tmdev/1000, (long)tmdev%1000
 		       );
 	}
 	if (pipesize > 1)
@@ -843,10 +844,10 @@ void status(void)
 		tavg = tsum / (nreceived + nrepeats);
 
 		fprintf(stderr, ", min/avg/ewma/max = %ld.%03ld/%lu.%03ld/%d.%03d/%ld.%03ld ms",
-		       tmin/1000, tmin%1000,
+		       (long)tmin/1000, (long)tmin%1000,
 		       tavg/1000, tavg%1000,
 		       rtt/8000, (rtt/8)%1000,
-		       tmax/1000, tmax%1000
+		       (long)tmax/1000, (long)tmax%1000
 		       );
 	}
 	fprintf(stderr, "\n");

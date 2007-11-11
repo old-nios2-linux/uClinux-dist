@@ -6,6 +6,8 @@
 #include <linux/elf-em.h>
 #include <asm/elf.h>
 
+struct file;
+
 #ifndef elf_read_implies_exec
   /* Executables for which elf_read_implies_exec() returns TRUE will
      have the READ_IMPLIES_EXEC personality flag set automatically.
@@ -81,6 +83,23 @@ typedef __s64	Elf64_Sxword;
 #define DT_DEBUG	21
 #define DT_TEXTREL	22
 #define DT_JMPREL	23
+#define DT_ENCODING	32
+#define OLD_DT_LOOS	0x60000000
+#define DT_LOOS		0x6000000d
+#define DT_HIOS		0x6ffff000
+#define DT_VALRNGLO	0x6ffffd00
+#define DT_VALRNGHI	0x6ffffdff
+#define DT_ADDRRNGLO	0x6ffffe00
+#define DT_ADDRRNGHI	0x6ffffeff
+#define DT_VERSYM	0x6ffffff0
+#define DT_RELACOUNT	0x6ffffff9
+#define DT_RELCOUNT	0x6ffffffa
+#define DT_FLAGS_1	0x6ffffffb
+#define DT_VERDEF	0x6ffffffc
+#define	DT_VERDEFNUM	0x6ffffffd
+#define DT_VERNEED	0x6ffffffe
+#define	DT_VERNEEDNUM	0x6fffffff
+#define OLD_DT_HIOS     0x6fffffff
 #define DT_LOPROC	0x70000000
 #define DT_HIPROC	0x7fffffff
 
@@ -358,6 +377,7 @@ extern Elf32_Dyn _DYNAMIC [];
 #define elfhdr		elf32_hdr
 #define elf_phdr	elf32_phdr
 #define elf_note	elf32_note
+#define elf_addr_t	Elf32_Off
 
 #else
 
@@ -365,8 +385,16 @@ extern Elf64_Dyn _DYNAMIC [];
 #define elfhdr		elf64_hdr
 #define elf_phdr	elf64_phdr
 #define elf_note	elf64_note
+#define elf_addr_t	Elf64_Off
 
 #endif
 
+#ifndef ARCH_HAVE_EXTRA_ELF_NOTES
+static inline int arch_notes_size(void) { return 0; }
+static inline void arch_write_notes(struct file *file) { }
+
+#define ELF_CORE_EXTRA_NOTES_SIZE arch_notes_size()
+#define ELF_CORE_WRITE_EXTRA_NOTES arch_write_notes(file)
+#endif /* ARCH_HAVE_EXTRA_ELF_NOTES */
 
 #endif /* _LINUX_ELF_H */

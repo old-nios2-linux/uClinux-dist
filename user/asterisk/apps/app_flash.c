@@ -1,36 +1,54 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * App to flash a zap trunk
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief App to flash a zap trunk
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <asterisk/image.h>
-#include <asterisk/options.h>
-#include <sys/ioctl.h>
-#ifdef __linux__
-#include <linux/zaptel.h>
-#else
-#include <zaptel.h>
-#endif /* __linux__ */
+/*** MODULEINFO
+	<depend>zaptel</depend>
+ ***/
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <zaptel/zaptel.h>
 
-static char *tdesc = "Flash zap trunk application";
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/image.h"
+#include "asterisk/options.h"
 
 static char *app = "Flash";
 
@@ -39,12 +57,8 @@ static char *synopsis = "Flashes a Zap Trunk";
 static char *descrip = 
 "  Flash(): Sends a flash on a zap trunk.  This is only a hack for\n"
 "people who want to perform transfers and such via AGI and is generally\n"
-"quite useless otherwise.  Returns 0 on success or -1 if this is not\n"
-"a zap trunk\n";
+"quite useless oths application will only work on Zap trunks.\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static inline int zt_wait_event(int fd)
 {
@@ -60,10 +74,10 @@ static int flash_exec(struct ast_channel *chan, void *data)
 {
 	int res = -1;
 	int x;
-	struct localuser *u;
+	struct ast_module_user *u;
 	struct zt_params ztp;
-	LOCAL_USER_ADD(u);
-	if (!strcasecmp(chan->type, "Zap")) {
+	u = ast_module_user_add(chan);
+	if (!strcasecmp(chan->tech->type, "Zap")) {
 		memset(&ztp, 0, sizeof(ztp));
 		res = ioctl(chan->fds[0], ZT_GET_PARAMS, &ztp);
 		if (!res) {
@@ -86,34 +100,25 @@ static int flash_exec(struct ast_channel *chan, void *data)
 			ast_log(LOG_WARNING, "Unable to get parameters of %s: %s\n", chan->name, strerror(errno));
 	} else
 		ast_log(LOG_WARNING, "%s is not a Zap channel\n", chan->name);
-	LOCAL_USER_REMOVE(u);
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+
+	ast_module_user_hangup_all();
+
+	return res;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, flash_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Flash channel application");
 
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}

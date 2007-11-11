@@ -262,6 +262,10 @@ int ftpp_ui_config_reset_ftp_server(FTP_SERVER_PROTO_CONF *ServerConf,
 
         ftp_cmd_lookup_cleanup(&ServerConf->cmd_lookup);
     }
+    if (ServerConf->serverAddr)
+    {
+        free(ServerConf->serverAddr);
+    }
 
     memset(ServerConf, 0x00, sizeof(FTP_SERVER_PROTO_CONF));
 
@@ -349,6 +353,10 @@ int ftpp_ui_config_reset_ftp_client(FTP_CLIENT_PROTO_CONF *ClientConf,
         while ((NextBounceTo != NULL) && (iRet == FTPP_SUCCESS));
 
         ftp_bounce_lookup_cleanup(&ClientConf->bounce_lookup);
+    }
+    if (ClientConf->clientAddr)
+    {
+        free(ClientConf->clientAddr);
     }
 
     memset(ClientConf, 0x00, sizeof(FTP_CLIENT_PROTO_CONF));

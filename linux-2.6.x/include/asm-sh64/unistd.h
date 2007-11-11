@@ -9,14 +9,14 @@
  * include/asm-sh64/unistd.h
  *
  * Copyright (C) 2000, 2001  Paolo Alberelli
- * Copyright (C) 2003  Paul Mundt
+ * Copyright (C) 2003 - 2007 Paul Mundt
  * Copyright (C) 2004  Sean McGoogan
  *
  * This file contains the system call numbers.
  *
  */
 
-#define __NR_setup		  0	/* used only by init, to get system going */
+#define __NR_restart_syscall	  0
 #define __NR_exit		  1
 #define __NR_fork		  2
 #define __NR_read		  3
@@ -196,8 +196,8 @@
 #define __NR_rt_sigtimedwait	177
 #define __NR_rt_sigqueueinfo	178
 #define __NR_rt_sigsuspend	179
-#define __NR_pread		180
-#define __NR_pwrite		181
+#define __NR_pread64		180
+#define __NR_pwrite64		181
 #define __NR_chown		182
 #define __NR_getcwd		183
 #define __NR_capget		184
@@ -343,152 +343,42 @@
 #define __NR_inotify_init	318
 #define __NR_inotify_add_watch	319
 #define __NR_inotify_rm_watch	320
+/* 321 is unused */
+#define __NR_migrate_pages	322
+#define __NR_openat		323
+#define __NR_mkdirat		324
+#define __NR_mknodat		325
+#define __NR_fchownat		326
+#define __NR_futimesat		327
+#define __NR_fstatat64		328
+#define __NR_unlinkat		329
+#define __NR_renameat		330
+#define __NR_linkat		331
+#define __NR_symlinkat		332
+#define __NR_readlinkat		333
+#define __NR_fchmodat		334
+#define __NR_faccessat		335
+#define __NR_pselect6		336
+#define __NR_ppoll		337
+#define __NR_unshare		338
+#define __NR_set_robust_list	339
+#define __NR_get_robust_list	340
+#define __NR_splice		341
+#define __NR_sync_file_range	342
+#define __NR_tee		343
+#define __NR_vmsplice		344
+#define __NR_move_pages		345
+#define __NR_getcpu		346
+#define __NR_epoll_pwait	347
+#define __NR_utimensat		348
+#define __NR_signalfd		349
+#define __NR_timerfd		350
+#define __NR_eventfd		351
+#define __NR_fallocate		352
 
-#ifdef __KERNEL__ 
+#ifdef __KERNEL__
 
-#define NR_syscalls 321
-#include <linux/err.h>
-
-/* user-visible error numbers are in the range -1 - -MAX_ERRNO:
- * see <asm-sh64/errno.h> */
-
-#define __syscall_return(type, res) \
-do { \
-	/* Note: when returning from kernel the return value is in r9	    \
-	**       This prevents conflicts between return value and arg1      \
-	**       when dispatching signal handler, in other words makes	    \
-	**       life easier in the system call epilogue (see entry.S)      \
-	*/								    \
-        register unsigned long __sr2 __asm__ ("r2") = res;		    \
-	if ((unsigned long)(res) >= (unsigned long)(-MAX_ERRNO)) {	    \
-		errno = -(res);						    \
-		__sr2 = -1; 						    \
-	} \
-	return (type) (__sr2); 						    \
-} while (0)
-
-/* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
-
-#define _syscall0(type,name) \
-type name(void) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x10 << 16) | __NR_##name); \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "()"			    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0) ); 						    \
-__syscall_return(type,__sc0); 						    \
-}
-
-	/*
-	 * The apparent spurious "dummy" assembler comment is *needed*,
-	 * as without it, the compiler treats the arg<n> variables
-	 * as no longer live just before the asm. The compiler can
-	 * then optimize the storage into any registers it wishes.
-	 * The additional dummy statement forces the compiler to put
-	 * the arguments into the correct registers before the TRAPA.
-	 */
-#define _syscall1(type,name,type1,arg1) \
-type name(type1 arg1) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x11 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2)"		    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2));					    \
-__asm__ __volatile__ ("!dummy	%0 %1"				   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2));					    \
-__syscall_return(type,__sc0); 						    \
-}
-
-#define _syscall2(type,name,type1,arg1,type2,arg2) \
-type name(type1 arg1,type2 arg2) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x12 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-register unsigned long __sc3 __asm__ ("r3") = (unsigned long) arg2;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2,%3)"		    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3) );			    \
-__asm__ __volatile__ ("!dummy	%0 %1 %2"			   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3) );			    \
-__syscall_return(type,__sc0); 						    \
-}
-
-#define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3) \
-type name(type1 arg1,type2 arg2,type3 arg3) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x13 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-register unsigned long __sc3 __asm__ ("r3") = (unsigned long) arg2;	    \
-register unsigned long __sc4 __asm__ ("r4") = (unsigned long) arg3;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2,%3,%4)"		    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4) );		    \
-__asm__ __volatile__ ("!dummy	%0 %1 %2 %3"			   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4) );	   	    \
-__syscall_return(type,__sc0); 						    \
-}
-
-#define _syscall4(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4) \
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x14 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-register unsigned long __sc3 __asm__ ("r3") = (unsigned long) arg2;	    \
-register unsigned long __sc4 __asm__ ("r4") = (unsigned long) arg3;	    \
-register unsigned long __sc5 __asm__ ("r5") = (unsigned long) arg4;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2,%3,%4,%5)"	    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5) );\
-__asm__ __volatile__ ("!dummy	%0 %1 %2 %3 %4"			   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5) );\
-__syscall_return(type,__sc0); 						    \
-}
-
-#define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5) \
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x15 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-register unsigned long __sc3 __asm__ ("r3") = (unsigned long) arg2;	    \
-register unsigned long __sc4 __asm__ ("r4") = (unsigned long) arg3;	    \
-register unsigned long __sc5 __asm__ ("r5") = (unsigned long) arg4;	    \
-register unsigned long __sc6 __asm__ ("r6") = (unsigned long) arg5;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2,%3,%4,%5,%6)"	    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5),  \
-	  "r" (__sc6));							    \
-__asm__ __volatile__ ("!dummy	%0 %1 %2 %3 %4 %5"		   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5),  \
-	  "r" (__sc6));							    \
-__syscall_return(type,__sc0); 						    \
-}
-
-#define _syscall6(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5, type6, arg6) \
-type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5, type6 arg6) \
-{ \
-register unsigned long __sc0 __asm__ ("r9") = ((0x16 << 16) | __NR_##name); \
-register unsigned long __sc2 __asm__ ("r2") = (unsigned long) arg1;	    \
-register unsigned long __sc3 __asm__ ("r3") = (unsigned long) arg2;	    \
-register unsigned long __sc4 __asm__ ("r4") = (unsigned long) arg3;	    \
-register unsigned long __sc5 __asm__ ("r5") = (unsigned long) arg4;	    \
-register unsigned long __sc6 __asm__ ("r6") = (unsigned long) arg5;	    \
-register unsigned long __sc7 __asm__ ("r7") = (unsigned long) arg6;	    \
-__asm__ __volatile__ ("trapa	%1 !\t\t\t" #name "(%2,%3,%4,%5,%6,%7)"	    \
-	: "=r" (__sc0) 							    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5),  \
-	  "r" (__sc6), "r" (__sc7));					    \
-__asm__ __volatile__ ("!dummy	%0 %1 %2 %3 %4 %5 %6"		   	    \
-	:								    \
-	: "r" (__sc0), "r" (__sc2), "r" (__sc3), "r" (__sc4), "r" (__sc5),  \
-	  "r" (__sc6), "r" (__sc7));					    \
-__syscall_return(type,__sc0); 						    \
-}
+#define NR_syscalls 353
 
 #define __ARCH_WANT_IPC_PARSE_VERSION
 #define __ARCH_WANT_OLD_READDIR

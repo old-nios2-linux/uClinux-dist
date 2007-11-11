@@ -1,6 +1,14 @@
-/* identify.h  -  Translate label names to kernel paths */
+/* identify.h  -  Translate label names to kernel paths
 
-/* Copyright 1992-1995 Werner Almesberger. See file COPYING for details. */
+Copyright 1992-1995 Werner Almesberger.
+Copyright 1999-2004 John Coffman.
+All rights reserved.
+
+Licensed under the terms contained in the file 'COPYING' in the 
+source directory.
+
+*/
+
 
 
 #ifndef IDENTIFY_H

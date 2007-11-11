@@ -285,21 +285,6 @@ void blk_queue_make_request(request_queue_t * q, make_request_fn * mfn)
 void blk_queue_bounce_limit(request_queue_t *q, u64 dma_addr)
 {
 	unsigned long bounce_pfn = dma_addr >> PAGE_SHIFT;
-	unsigned long mb = dma_addr >> 20;
-	static request_queue_t *old_q;
-
-	/*
-	 * keep this for debugging for now...
-	 */
-	if (dma_addr != BLK_BOUNCE_HIGH && q != old_q) {
-		old_q = q;
-		printk("blk: queue %p, ", q);
-		if (dma_addr == BLK_BOUNCE_ANY)
-			printk("no I/O memory limit\n");
-		else
-			printk("I/O limit %luMb (mask 0x%Lx)\n", mb,
-			       (long long) dma_addr);
-	}
 
 	q->bounce_pfn = bounce_pfn;
 }
@@ -590,6 +575,7 @@ static struct request *get_request(request_queue_t *q, int rw)
 		rq->rq_status = RQ_ACTIVE;
 		rq->cmd = rw;
 		rq->special = NULL;
+		rq->io_account = 0;
 		rq->q = q;
 	}
 
@@ -828,6 +814,7 @@ void req_new_io(struct request *req, int merge, int sectors)
 	struct hd_struct *hd1, *hd2;
 
 	locate_hd_struct(req, &hd1, &hd2);
+	req->io_account = 1;
 	if (hd1)
 		account_io_start(hd1, req, merge, sectors);
 	if (hd2)
@@ -838,6 +825,8 @@ void req_merged_io(struct request *req)
 {
 	struct hd_struct *hd1, *hd2;
 
+	if (unlikely(req->io_account == 0))
+		return;
 	locate_hd_struct(req, &hd1, &hd2);
 	if (hd1)
 		down_ios(hd1);
@@ -849,6 +838,8 @@ void req_finished_io(struct request *req)
 {
 	struct hd_struct *hd1, *hd2;
 
+	if (unlikely(req->io_account == 0))
+		return;
 	locate_hd_struct(req, &hd1, &hd2);
 	if (hd1)
 		account_io_end(hd1, req);

@@ -1,9 +1,9 @@
 /* 
- * $Id: case_rout.h,v 1.4 2002/11/18 19:08:16 janakj Exp $ 
+ * $Id: case_rout.h,v 1.5 2004/08/24 09:01:24 janakj Exp $ 
  *
  * Route Header Field Name Parsing Macros
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

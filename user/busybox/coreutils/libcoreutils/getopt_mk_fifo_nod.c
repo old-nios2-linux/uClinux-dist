@@ -26,20 +26,26 @@
 #include "libbb.h"
 #include "coreutils.h"
 
-extern mode_t getopt_mk_fifo_nod(int argc, char **argv)
+mode_t getopt_mk_fifo_nod(int argc, char **argv)
 {
 	mode_t mode = 0666;
+	char *smode = NULL;
+#if ENABLE_SELINUX
+	security_context_t scontext;
+#endif
 	int opt;
-
-	while ((opt = getopt(argc, argv, "m:")) > 0) {
-		if (opt == 'm') {
-			mode = 0666;
-			if (bb_parse_mode(optarg, &mode)) {
-				umask(0);
-				continue;
-			}
-		}
-		bb_show_usage();
+	opt = getopt32(argc, argv, "m:" USE_SELINUX("Z:"), &smode USE_SELINUX(,&scontext));
+	if (opt & 1) {
+		if (bb_parse_mode(smode, &mode))
+			umask(0);
 	}
+
+#if ENABLE_SELINUX
+	if (opt & 2) {
+		selinux_or_die();
+		setfscreatecon_or_die(scontext);
+	}
+#endif
+
 	return mode;
 }

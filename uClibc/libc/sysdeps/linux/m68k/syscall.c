@@ -1,6 +1,7 @@
 /* syscall for m68k/uClibc
  *
- * Copyright (C) 2004 by Christian Magnusson <mag@mag.cx>
+ * Copyright (C) 2005-2006 by Christian Magnusson <mag@mag.cx>
+ * Copyright (C) 2005-2006 Erik Andersen <andersen@uclibc.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Library General Public License as published by
@@ -44,14 +45,5 @@ long syscall(long sysnum, long a, long b, long c, long d, long e, long f)
 			"g" ((long)f)\
                         : "cc", "%d0", "%d1", "%d2", "%d3",\
 			"%d4", "%d5", "%d6");
-
-#if 1
   __syscall_return(long,__res);
-#else			    
-  if ((unsigned long)(__res) >= (unsigned long)(-125)) {
-    errno = -__res;
-    __res = -1;
-  }
-  return (long)__res;
-#endif
 }

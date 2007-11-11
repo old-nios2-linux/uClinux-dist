@@ -45,7 +45,7 @@ static void ebsa110_unmask_irq(unsigned int irq)
 	__raw_writeb(1 << irq, IRQ_MSET);
 }
 
-static struct irqchip ebsa110_irq_chip = {
+static struct irq_chip ebsa110_irq_chip = {
 	.ack	= ebsa110_mask_irq,
 	.mask	= ebsa110_mask_irq,
 	.unmask = ebsa110_unmask_irq,
@@ -67,7 +67,7 @@ static void __init ebsa110_init_irq(void)
 
 	for (irq = 0; irq < NR_IRQS; irq++) {
 		set_irq_chip(irq, &ebsa110_irq_chip);
-		set_irq_handler(irq, do_level_IRQ);
+		set_irq_handler(irq, handle_level_irq);
 		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 	}
 }
@@ -199,7 +199,7 @@ ebsa110_timer_interrupt(int irq, void *dev_id)
 
 static struct irqaction ebsa110_timer_irq = {
 	.name		= "EBSA110 Timer Tick",
-	.flags		= IRQF_DISABLED | IRQF_TIMER,
+	.flags		= IRQF_DISABLED | IRQF_TIMER | IRQF_IRQPOLL,
 	.handler	= ebsa110_timer_interrupt,
 };
 

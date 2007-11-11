@@ -16,11 +16,10 @@
 #include <asm/uaccess.h>
 #include <linux/reiserfs_fs.h>
 #include <linux/reiserfs_fs_sb.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 
-#if defined( REISERFS_PROC_INFO )
+#ifdef CONFIG_REISERFS_PROC_INFO
 
 /*
  * LOCKING:
@@ -295,7 +294,7 @@ static int show_oidmap(struct seq_file *m, struct super_block *sb)
 	}
 #if defined( REISERFS_USE_OIDMAPF )
 	if (sb_info->oidmap.use_file && (sb_info->oidmap.mapf != NULL)) {
-		loff_t size = sb_info->oidmap.mapf->f_dentry->d_inode->i_size;
+		loff_t size = sb_info->oidmap.mapf->f_path.dentry->d_inode->i_size;
 		total_used += size / sizeof(reiserfs_oidinterval_d_t);
 	}
 #endif

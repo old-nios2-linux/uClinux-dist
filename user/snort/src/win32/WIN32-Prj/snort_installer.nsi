@@ -11,7 +11,7 @@
 ; Note that this NSIS script is designed for NSIS version 2.09.
 ;
 
-Name "Snort 2.6.1.1"
+Name "Snort 2.6.1.5"
 
 CRCCheck On
 

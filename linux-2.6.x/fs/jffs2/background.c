@@ -1,13 +1,11 @@
 /*
  * JFFS2 -- Journalling Flash File System, Version 2.
  *
- * Copyright (C) 2001-2003 Red Hat, Inc.
+ * Copyright © 2001-2007 Red Hat, Inc.
  *
  * Created by David Woodhouse <dwmw2@infradead.org>
  *
  * For licensing information, see the file 'LICENCE' in this directory.
- *
- * $Id: background.c,v 1.54 2005/05/20 21:37:12 gleixner Exp $
  *
  */
 
@@ -16,6 +14,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/completion.h>
 #include <linux/sched.h>
+#include <linux/freezer.h>
 #include "nodelist.h"
 
 
@@ -82,9 +81,10 @@ static int jffs2_garbage_collect_thread(void *_c)
 
 	set_user_nice(current, 10);
 
+	set_freezable();
 	for (;;) {
 		allow_signal(SIGHUP);
-
+	again:
 		if (!jffs2_thread_should_wake(c)) {
 			set_current_state (TASK_INTERRUPTIBLE);
 			D1(printk(KERN_DEBUG "jffs2_garbage_collect_thread sleeping...\n"));
@@ -95,16 +95,22 @@ static int jffs2_garbage_collect_thread(void *_c)
 			schedule();
 		}
 
-		if (try_to_freeze())
-			continue;
-
-		cond_resched();
+		/* This thread is purely an optimisation. But if it runs when
+		   other things could be running, it actually makes things a
+		   lot worse. Use yield() and put it at the back of the runqueue
+		   every time. Especially during boot, pulling an inode in
+		   with read_inode() is much preferable to having the GC thread
+		   get there first. */
+		yield();
 
 		/* Put_super will send a SIGKILL and then wait on the sem.
 		 */
 		while (signal_pending(current)) {
 			siginfo_t info;
 			unsigned long signr;
+
+			if (try_to_freeze())
+				goto again;
 
 			signr = dequeue_signal_lock(current, &current->blocked, &info);
 

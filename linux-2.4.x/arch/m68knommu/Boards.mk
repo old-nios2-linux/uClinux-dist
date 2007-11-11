@@ -188,6 +188,9 @@ endif
 ifdef CONFIG_BOARD_UC5282
 BOARD := uC5282
 endif
+ifdef CONFIG_SERRA
+BOARD := SERRA
+endif
 endif
 
 ifdef CONFIG_M5307

@@ -277,5 +277,12 @@ extern int cb_check_data(spctx_t* ctx);
  */
 extern int cb_parse_option(const char* name, const char* value);
 
+/*
+ * Called just after the incoming connection is received.
+ * 
+ * Return -1 to close the connection and not allow the client 
+ * connection to be established
+ */
+extern int cb_check_client(spctx_t* ctx, struct sockaddr_any* peeraddr);
 
 #endif /* __SMTPPASS_H__ */

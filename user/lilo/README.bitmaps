@@ -1,6 +1,22 @@
 	Notes on the use of Bitmap boot screens
+	        LILO 22.3 -- 11-Apr-2002
 
-(lilo 21.8 and later -- 07-May-2001)
+
+SUMMARY OF CHANGES (LILO 22.3)
+==============================
+
+LILO 22.3 no longer requires placement parameters in the configuration
+file (/etc/lilo.conf).  Instead, text menu size, placement, and colors
+may be edited into the bitmap file header using "lilo -E file.bmp".  The
+parameters may also be saved from the bitmap file header to a companion
+configuration file, "file.dat", as an option to the edit command. Param-
+eters may be transferred from the companion '.dat' file to the bitmap
+file header using the command "lilo -E file.dat".  LILO 22.3 still rec-
+ognizes bitmap file formating commands in '/etc/lilo.conf'.
+
+This change allows bitmap graphics to be exchanged among users without the
+tedious need to exchange the color/positioning information separately.
+
 
 
 MOTIVATION
@@ -21,10 +37,10 @@ of graphics hardware in use today.  VGA is the common standard, and this
 dictates a choice of two color modes:  320x200x256 and 640x480x16.  The
 VGA/VESA standard extends the modes to add 640x400x256, 640x480x256, and
 800x600x256 as possible choices.  However, most high-end graphics cards
-provide graphics acceleration through other that the VESA standard; and,
-in actual fact, are moving away from supporting the full spectrum of VESA
-modes.  Older VGA systems often do not have VESA extensions in ROM BIOS,
-so the choice narrows to the two modes in the original IBM VGA BIOS.
+provide graphics acceleration through other means than the VESA standard;
+and, in actual fact, are moving away from supporting the full spectrum of
+VESA modes.  Older VGA systems often do not have VESA extensions in ROM
+BIOS, so the choice narrows to the two modes in the original IBM VGA BIOS.
 
 Character generation in the 320x200x256 mode is generally limited to an
 8x8 character cell, and is not visually appealing.  The 640x480x16 mode
@@ -39,12 +55,12 @@ among the 256K available.  Good dithering algorithms exist, and the screens
 that I produced with dithered 16-color images, in my opinion, were more
 acceptable than 256-color images.  In these latter cases, as a color area
 transitions from one shade to another, the stepping effect is more notice-
-able, and more objectionable, that a good dither.
+able, and more objectionable, than a good dither.
 
 With this said, the choice of VGA 640x480x16 (mode 0x12) was settled upon.
 
-Then the choice of a graphics screen file format had to be chosen.  It had
-to be universally supported, be well documented, allow for image
+Then the choice of a graphics screen file format had to be settled.  It
+had to be universally supported, be well documented, allow for image
 compression, and allow for easy decompression.  File formats considered
 included PCX, GIF, and BMP.  The last was chosen because it is understand-
 able, and the run-length compression is very easy to expand.
@@ -52,6 +68,12 @@ able, and the run-length compression is very easy to expand.
 
 USAGE
 =====
+
+Update (22.3):  The three keywords 'bmp-table', 'bmp-colors', and 'bmp-timer'
+are now primarily to be used in the configuration file used as a companion
+to a bitmap file.  The bitmap file must have the filename extension ".bmp",
+and the companion configuration file must have the filename extension
+".dat".
 
 Four keywords are added to 'lilo.conf' to allow the usage of bitmap screens:
 
@@ -89,10 +111,10 @@ by commas, and containing no spaces.  Values may be omitted in order to use
 default values, but the comma separators are required as placeholders.  In
 designing the bmp-table layout, consideration must be given to the upper
 limit on kernel image/other names.  LILO guarantees that up to 16 may be
-specified, and the current implementation allow up to 19.  It is suggested
+specified, and the current implementation allows up to 19.  It is suggested
 that the table layout design allow for 18 entries.
 
-  bmp-table = [x],[y],[ncol],[nrow],[xspc]
+  bmp-table = [x],[y],[ncol],[nrow],[xspc],[spill]
 
 	[x]	specifies the column position [1..80] of the first column
 		of the table.  Character addressing is assumed, unless the
@@ -103,9 +125,9 @@ that the table layout design allow for 18 entries.
 		table.  All screen text is placed on a 30 row grid.  Pixel
 		addressing [0p..464p] is allowed.
 
-	[ncol]	specifies the number of colums used for the display of the
+	[ncol]	specifies the number of columns used for the display of the
 		kernel image/other entries.  The current implementation
-		requires the number of colums to be in the range [1..4].
+		requires the number of columns to be in the range [1..4].
 
 	[nrow]	specifies the number of rows in each column; i.e., the
 		height of each column in the table.
@@ -118,24 +140,28 @@ that the table layout design allow for 18 entries.
 		spill characters beyond the edge of the screen.  Pixel
 		addressing is allowed, if the value is suffixed with a 'p'.
 
+	[spill]	specifies the number of entries which may fill a column
+		before the column spills to the next column.  The default
+		value for this is 4 entries.  (LILO 22.3)
+
 
 'bmp-colors=<list>' specifies a list of six color numbers, each in the range
 [0..15].  The first three specify the color attributes of normal text in the
 boot selection table, and the second three specify the color attributes of
-the highlighted text in the menu.  The list is comma or semi-colon
-separated, with no spaces.  However, default values may be indicated by 
-omitting a numerical value altogether.  Each of the two triples consists
-of a foreground color, background color, and a shadow color.  The foreground
-color is the color used to display the letter or numeral.  The background
-color is the fill-color of the 8x16 box which encloses the character.  If
-the background color value is omitted from the list, then "transparent" is
-assumed.  The shadow color is the color used to display a character shadow
-displaced one pixel in both X & Y toward the lower right.  If shadows are
-used, they generally specify a color of low luminance.
+the highlighted text in the menu.  The list is comma or semicolon separated,
+with no spaces.  However, default values may be indicated by omitting a
+numerical value altogether.  Each of the two triples consists of a fore-
+ground color, background color, and a shadow color.  The foreground color is
+the color used to display the letter or numeral.  The background color is
+the fill-color of the 8x16 box which encloses the character.  If the back-
+ground color value is omitted from the list, then "transparent" is assumed.
+The shadow color is the color used to display a character shadow displaced
+one pixel in both X & Y toward the lower right.  If shadows are used, they
+generally specify a color of low luminance.
 
   bmp-colors = [fg],[bg],[sh];[h-fg],[h-bg],[h-sh]
 
-	[fg]	specifies the forground color for normal text.
+	[fg]	specifies the foreground color for normal text.
 
 	[bg]	specifies the background color for normal text.  If omitted,
 		the background is taken to be transparent, and the
@@ -144,7 +170,7 @@ used, they generally specify a color of low luminance.
 	[sh]	specifies the shadow color for the character.  If omitted,
 		no shadow is displayed.
 
-	[h-fg]	specifes the forground color for the line of highlighted
+	[h-fg]	specifies the foreground color for the line of highlighted
 		text.
 
 	[h-bg]	specifies the background color for highlighted text.  If
@@ -154,7 +180,7 @@ used, they generally specify a color of low luminance.
 	[h-sh]	specifies the shadow color for highlighted text.  If
 		omitted, no shadow is displayed.
 
-		Note:  in the list specification above, the semi-colon has
+		Note:  in the list specification above, the semicolon has
 		no special significance; it could have been a comma.  Its
 		use is suggested merely for distinguishing the two triples,
 		as spaces (blanks) are not allowed in the list.
@@ -163,12 +189,13 @@ used, they generally specify a color of low luminance.
 'bmp-timer=<list>' specifies the position at which the 'timeout=' timer will
 be displayed, as well as the color attributes of the characters in the
 display.  If the line 'bmp-timer=' is not used, then no timer will be
-displayed.
+displayed.  If the <list> is specified as "none", then no timer (as speci-
+fied in the bitmap file header) will be displayed.
 
   bmp-timer = [tx],[ty];[t-fg],[t-bg],[t-sh]
 
-	[tx]	specifies the column at which the first of five chacters in
-		the timer display will be positioned.  It must be in the
+	[tx]	specifies the column at which the first of five characters
+                in the timer display will be positioned.  It must be in the
 		range [1..80], or [0p..632p] if pixel addresses are used.
 
 	[ty]	specifies the character row position of the timer display. 
@@ -176,7 +203,7 @@ displayed.
 		addresses are used.
 
 	[t-fg]	specifies the foreground color of the timer characters.  If
-		omitted, the normal forground text color will be used.
+		omitted, the normal foreground text color will be used.
 
 	[t-bg]	specifies the background color of the timer character
 		display.  If omitted, color '0' will be used.  It is not
@@ -185,8 +212,8 @@ displayed.
 	[t-sh]	specifies the shadow color for timer display characters.  If
 		omitted, no shadow is displayed.
 
-		Note:  the semi-colon in the list specification is for
-		readablilty only; a comma could have been used as well.
+		Note:  the semicolon in the list specification is for
+		readability only; a comma could have been used as well.
 
 
 
@@ -201,30 +228,82 @@ File:  bmp.conf (substitute for 'lilo.conf'):
 	...
 	#
 	#  The following parameters select appropriate colors
-	#  and proper screen positions for the 'logo64a.bmp' graphic
+	#  and proper screen positions for the 'logo64a.bmp' graphic.
 	#
 	bitmap=logo64a.bmp
 	bmp-colors=6,9,0;15,9,0
 	bmp-table=59,5,1,19,
-	bmp-timer=66,29,6,8,0
+	bmp-timer=66,28,6,8,0
 	...
+
+Update (22.3):  If the color information and screen positions specified on
+the last three lines above have been transferred to the LILO sub-header in
+the bitmap file "logo64a.bmp", then the entry in 'lilo.conf' can be
+shortened to:
+
+	...
+	#
+	#  Select the bitmap file to display.  Text positioning information
+	#  is in the LILO subheader in the bitmap file.
+	#
+	bitmap=logo64a.bmp
+	...
+
 
 	...
 	#
 	#  The following parameters select appropriate colors
-	#  and proper screen positions for the 'ins64a.bmp' graphic
+	#  and proper screen positions for the 'ins64a.bmp' graphic.
 	#
 	bitmap=ins64a.bmp
-	bmp-colors=14,11,;15,9,0
-	bmp-table=21,287p,2,4,175p
-	bmp-timer=73,29,12,8,0
+	bmp-colors=14,11,;15,9,0	# omit this line for lilo 22.3
+	bmp-table=21,287p,2,4,175p	#  ditto
+	bmp-timer=73,29,12,8,0		#  ditto
 	...
 
-Both bitmap files I have been using are available in the 'experimental'
-directory at:
+Both bitmap files are available in the source code tarball at:
 
-	ftp://brun.dyndns.org/pub/linux/lilo
+	http://lilo.go.dyndns.org/pub/linux/lilo
 
+They are located in the 'sample' subdirectory, along with companion
+'.dat' configuration files.
+
+
+USAGE COMMAND
+=============
+
+With version 22.3, '/sbin/lilo' becomes, in addition to the boot installer,
+the bitmap file header editor.  A single switch, '-E' is added to accomplish
+this new task.  It has two uses:
+
+	lilo -E filename.bmp
+ 		or
+	lilo -E filename.dat
+
+In the first case, if the bitmap file is fresh out of a graphics editor, it
+will have no LILO sub-header.  The first edit command is used to alter the
+default values for color and positioning information, and to save the new
+values to the LILO sub-header in the bitmap file.  The editor is
+interactive, and allows you to change one parameter at a time.  When you
+write out the updated bitmap file, you are given the chance to create a
+companion text configuration file, 'filename.dat', which contains a readable
+copy of all of the text color and positioning information in the header.
+
+In the second case, the abbreviated configuration file, 'filename.dat',
+contains only the commands:  "bitmap=", "bmp-table=", "bmp-colors=", or
+"bmp-timer="; all are optional.  If "bitmap=" is omitted, then
+'filename.dat' is taken to correspond to the bitmap file 'filename.bmp';
+i.e., same name, diffenent file extension.  Otherwise, the configuartion
+file corresponds to the bitmap file specified by the "bitmap=" option.  The
+color, positioning, and timer information in the configuration file is
+transferred to the LILO header in the bitmap file.  If no such header
+exists, one is created.
+
+The primary use for the '.dat' file is to save the LILO header information,
+so that the bitmap graphic may be edited with a graphics editor.  No
+graphichs editor recognizes the LILO header, so an updated bitmap graphic
+file will be without the LILO header.  The second form of the edit command
+allows the header to be recreated very quickly, exacltly as it was before.
 
 
 TRADEMARKS
@@ -236,3 +315,6 @@ OS/2 and OS2 are trademarks of IBM Corporation.
 (end)
 written 05/07/2001 -- John Coffman <johninsd@san.rr.com>
 updated 05/10/2001 -- John Coffman
+updated 11/25/2001 -- John Coffman (typos corrected)
+updated 04/11/2002 -- John Coffman (update to LILO 22.3)
+

@@ -101,11 +101,11 @@ static ssize_t test_irq_store(struct device *dev,
 	retval = count;
 	local_irq_disable();
 	if (strncmp(buf, "tick", 4) == 0)
-		rtc_update_irq(&rtc->class_dev, 1, RTC_PF | RTC_IRQF);
+		rtc_update_irq(rtc, 1, RTC_PF | RTC_IRQF);
 	else if (strncmp(buf, "alarm", 5) == 0)
-		rtc_update_irq(&rtc->class_dev, 1, RTC_AF | RTC_IRQF);
+		rtc_update_irq(rtc, 1, RTC_AF | RTC_IRQF);
 	else if (strncmp(buf, "update", 6) == 0)
-		rtc_update_irq(&rtc->class_dev, 1, RTC_UF | RTC_IRQF);
+		rtc_update_irq(rtc, 1, RTC_UF | RTC_IRQF);
 	else
 		retval = -EINVAL;
 	local_irq_enable();
@@ -123,11 +123,18 @@ static int test_probe(struct platform_device *plat_dev)
 		err = PTR_ERR(rtc);
 		return err;
 	}
-	device_create_file(&plat_dev->dev, &dev_attr_irq);
+
+	err = device_create_file(&plat_dev->dev, &dev_attr_irq);
+	if (err)
+		goto err;
 
 	platform_set_drvdata(plat_dev, rtc);
 
 	return 0;
+
+err:
+	rtc_device_unregister(rtc);
+	return err;
 }
 
 static int __devexit test_remove(struct platform_device *plat_dev)

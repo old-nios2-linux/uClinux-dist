@@ -13,28 +13,36 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
-static	char	const	rcsid[] = "$Id: uuencode.c,v 1.2 2006/01/23 10:35:38 nigelhorne Exp $";
+static	char	const	rcsid[] = "$Id: uuencode.c,v 1.8 2006/12/11 11:55:11 njh Exp $";
 
 #include "clamav.h"
 
-#if HAVE_CONFIG_H
+#if	HAVE_CONFIG_H
 #include "clamav-config.h"
 #endif
 
-#include <strings.h>
+#ifdef	HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
 #include <stdio.h>
 #include <memory.h>
 #include <sys/stat.h>
+#ifdef	HAVE_STRINGS_H
+#include <strings.h>
+#endif
 #include "others.h"
-#include "mbox.h"
-#include "blob.h"
-#include "line.h"
-#include "text.h"
-#include "message.h"
-#include "uuencode.h"
 #include "str.h"
+
+#ifdef	C_WINDOWS
+#include <io.h>
+#endif
+
+#include "mbox.h"
+#include "uuencode.h"
 
 /* Maximum line length according to RFC821 */
 #define	RFC2821LENGTH	1000
@@ -137,4 +145,3 @@ uudecodeFile(message *m, const char *firstline, const char *dir, FILE *fin)
 
 	return 1;
 }
-

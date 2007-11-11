@@ -521,7 +521,7 @@ static int check_supported_cpu(unsigned int cpu)
 
 	if ((eax & CPUID_XFAM) == CPUID_XFAM_K8) {
 		if (((eax & CPUID_USE_XFAM_XMOD) != CPUID_USE_XFAM_XMOD) ||
-		    ((eax & CPUID_XMOD) > CPUID_XMOD_REV_G)) {
+		    ((eax & CPUID_XMOD) > CPUID_XMOD_REV_MASK)) {
 			printk(KERN_INFO PFX "Processor cpuid %x not supported\n", eax);
 			goto out;
 		}
@@ -599,14 +599,17 @@ static void print_basics(struct powernow_k8_data *data)
 	for (j = 0; j < data->numps; j++) {
 		if (data->powernow_table[j].frequency != CPUFREQ_ENTRY_INVALID) {
 			if (cpu_family == CPU_HW_PSTATE) {
-			printk(KERN_INFO PFX "   %d : fid 0x%x gid 0x%x (%d MHz)\n", j, (data->powernow_table[j].index & 0xff00) >> 8,
-				(data->powernow_table[j].index & 0xff0000) >> 16,
-				data->powernow_table[j].frequency/1000);
+				printk(KERN_INFO PFX "   %d : fid 0x%x did 0x%x (%d MHz)\n",
+					j,
+					(data->powernow_table[j].index & 0xff00) >> 8,
+					(data->powernow_table[j].index & 0xff0000) >> 16,
+					data->powernow_table[j].frequency/1000);
 			} else {
-			printk(KERN_INFO PFX "   %d : fid 0x%x (%d MHz), vid 0x%x\n", j,
-				data->powernow_table[j].index & 0xff,
-				data->powernow_table[j].frequency/1000,
-				data->powernow_table[j].index >> 8);
+				printk(KERN_INFO PFX "   %d : fid 0x%x (%d MHz), vid 0x%x\n",
+					j,
+					data->powernow_table[j].index & 0xff,
+					data->powernow_table[j].frequency/1000,
+					data->powernow_table[j].index >> 8);
 			}
 		}
 	}
@@ -661,7 +664,8 @@ static int fill_powernow_table(struct powernow_k8_data *data, struct pst_s *pst,
 
 	dprintk("cfid 0x%x, cvid 0x%x\n", data->currfid, data->currvid);
 	data->powernow_table = powernow_table;
-	print_basics(data);
+	if (first_cpu(cpu_core_map[data->cpu]) == data->cpu)
+		print_basics(data);
 
 	for (j = 0; j < data->numps; j++)
 		if ((pst[j].fid==data->currfid) && (pst[j].vid==data->currvid))
@@ -814,7 +818,8 @@ static int powernow_k8_cpu_init_acpi(struct powernow_k8_data *data)
 
 	/* fill in data */
 	data->numps = data->acpi_data.state_count;
-	print_basics(data);
+	if (first_cpu(cpu_core_map[data->cpu]) == data->cpu)
+		print_basics(data);
 	powernow_k8_acpi_pst_values(data, 0);
 
 	/* notify BIOS that we exist */
@@ -1084,7 +1089,7 @@ static int powernowk8_target(struct cpufreq_policy *pol, unsigned targfreq, unsi
 
 	if (cpu_family == CPU_HW_PSTATE)
 		dprintk("targ: curr fid 0x%x, did 0x%x\n",
-			data->currfid, data->currvid);
+			data->currfid, data->currdid);
 	else {
 		dprintk("targ: curr fid 0x%x, vid 0x%x\n",
 		data->currfid, data->currvid);
@@ -1289,7 +1294,11 @@ static unsigned int powernowk8_get (unsigned int cpu)
 	if (query_current_values_with_pending_wait(data))
 		goto out;
 
-	khz = find_khz_freq_from_fid(data->currfid);
+	if (cpu_family == CPU_HW_PSTATE)
+		khz = find_khz_freq_from_fiddid(data->currfid, data->currdid);
+	else
+		khz = find_khz_freq_from_fid(data->currfid);
+
 
 out:
 	set_cpus_allowed(current, oldmask);
@@ -1316,16 +1325,22 @@ static struct cpufreq_driver cpufreq_amd64_driver = {
 static int __cpuinit powernowk8_init(void)
 {
 	unsigned int i, supported_cpus = 0;
+	unsigned int booted_cores = 1;
 
 	for_each_online_cpu(i) {
 		if (check_supported_cpu(i))
 			supported_cpus++;
 	}
 
+#ifdef CONFIG_SMP
+	booted_cores = cpu_data[0].booted_cores;
+#endif
+
 	if (supported_cpus == num_online_cpus()) {
 		printk(KERN_INFO PFX "Found %d %s "
-			"processors (" VERSION ")\n", supported_cpus,
-			boot_cpu_data.x86_model_id);
+			"processors (%d cpu cores) (" VERSION ")\n",
+			supported_cpus/booted_cores,
+			boot_cpu_data.x86_model_id, supported_cpus);
 		return cpufreq_register_driver(&cpufreq_amd64_driver);
 	}
 

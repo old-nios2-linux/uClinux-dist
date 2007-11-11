@@ -85,29 +85,33 @@ static int mv88x201x_reset(struct cphy *cphy, int wait)
 
 static int mv88x201x_interrupt_enable(struct cphy *cphy)
 {
-	u32 elmer;
-
 	/* Enable PHY LASI interrupts. */
 	mdio_write(cphy, 0x1, 0x9002, 0x1);
 
 	/* Enable Marvell interrupts through Elmer0. */
-	t1_tpi_read(cphy->adapter, A_ELMER0_INT_ENABLE, &elmer);
-	elmer |= ELMER0_GP_BIT6;
-	t1_tpi_write(cphy->adapter, A_ELMER0_INT_ENABLE, elmer);
+	if (t1_is_asic(cphy->adapter)) {
+		u32 elmer;
+
+		t1_tpi_read(cphy->adapter, A_ELMER0_INT_ENABLE, &elmer);
+		elmer |= ELMER0_GP_BIT6;
+		t1_tpi_write(cphy->adapter, A_ELMER0_INT_ENABLE, elmer);
+	}
 	return 0;
 }
 
 static int mv88x201x_interrupt_disable(struct cphy *cphy)
 {
-	u32 elmer;
-
 	/* Disable PHY LASI interrupts. */
 	mdio_write(cphy, 0x1, 0x9002, 0x0);
 
 	/* Disable Marvell interrupts through Elmer0. */
-	t1_tpi_read(cphy->adapter, A_ELMER0_INT_ENABLE, &elmer);
-	elmer &= ~ELMER0_GP_BIT6;
-	t1_tpi_write(cphy->adapter, A_ELMER0_INT_ENABLE, elmer);
+	if (t1_is_asic(cphy->adapter)) {
+		u32 elmer;
+
+		t1_tpi_read(cphy->adapter, A_ELMER0_INT_ENABLE, &elmer);
+		elmer &= ~ELMER0_GP_BIT6;
+		t1_tpi_write(cphy->adapter, A_ELMER0_INT_ENABLE, elmer);
+	}
 	return 0;
 }
 
@@ -140,9 +144,11 @@ static int mv88x201x_interrupt_clear(struct cphy *cphy)
 #endif
 
 	/* Clear Marvell interrupts through Elmer0. */
-	t1_tpi_read(cphy->adapter, A_ELMER0_INT_CAUSE, &elmer);
-	elmer |= ELMER0_GP_BIT6;
-	t1_tpi_write(cphy->adapter, A_ELMER0_INT_CAUSE, elmer);
+	if (t1_is_asic(cphy->adapter)) {
+		t1_tpi_read(cphy->adapter, A_ELMER0_INT_CAUSE, &elmer);
+		elmer |= ELMER0_GP_BIT6;
+		t1_tpi_write(cphy->adapter, A_ELMER0_INT_CAUSE, elmer);
+	}
 	return 0;
 }
 
@@ -202,14 +208,14 @@ static struct cphy_ops mv88x201x_ops = {
 };
 
 static struct cphy *mv88x201x_phy_create(adapter_t *adapter, int phy_addr,
-					 struct mdio_ops *mdio_ops)
+					 const struct mdio_ops *mdio_ops)
 {
 	u32 val;
-	struct cphy *cphy = kmalloc(sizeof(*cphy), GFP_KERNEL);
+	struct cphy *cphy = kzalloc(sizeof(*cphy), GFP_KERNEL);
 
 	if (!cphy)
 		return NULL;
-	memset(cphy, 0, sizeof(*cphy));
+
 	cphy_init(cphy, adapter, phy_addr, &mv88x201x_ops, mdio_ops);
 
 	/* Commands the PHY to enable XFP's clock. */
@@ -246,7 +252,7 @@ static int mv88x201x_phy_reset(adapter_t *adapter)
 	return 0;
 }
 
-struct gphy t1_mv88x201x_ops = {
-	mv88x201x_phy_create,
-	mv88x201x_phy_reset
+const struct gphy t1_mv88x201x_ops = {
+	.create = mv88x201x_phy_create,
+	.reset = mv88x201x_phy_reset
 };

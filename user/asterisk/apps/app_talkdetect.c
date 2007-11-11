@@ -1,29 +1,47 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Playback a file with audio detect
- * 
- * Copyright (C) 2004, Digium, Inc.
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
  * Mark Spencer <markster@digium.com>
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Playback a file with audio detect
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <asterisk/utils.h>
-#include <asterisk/dsp.h>
-#include <string.h>
-#include <stdlib.h>
+#include "asterisk.h"
 
-static char *tdesc = "Playback with Talk Detection";
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/utils.h"
+#include "asterisk/dsp.h"
 
 static char *app = "BackgroundDetect";
 
@@ -38,34 +56,35 @@ static char *descrip =
 "yet less than 'max' ms is followed by silence for at least 'sil' ms then\n"
 "the audio playback is aborted and processing jumps to the 'talk' extension\n"
 "if available.  If unspecified, sil, min, and max default to 1000, 100, and\n"
-"infinity respectively.  Returns -1 on hangup, and 0 on successful playback\n"
-"completion with no exit conditions.\n";
+"infinity respectively.\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int background_detect_exec(struct ast_channel *chan, void *data)
 {
 	int res = 0;
-	struct localuser *u;
-	char tmp[256];
+	struct ast_module_user *u;
+	char *tmp;
 	char *options;
 	char *stringp;
 	struct ast_frame *fr;
 	int notsilent=0;
-	struct timeval start = { 0, 0}, end = {0, 0};
+	struct timeval start = { 0, 0};
 	int sil = 1000;
 	int min = 100;
 	int max = -1;
 	int x;
 	int origrformat=0;
 	struct ast_dsp *dsp;
-	if (!data || ast_strlen_zero((char *)data)) {
+	
+	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "BackgroundDetect requires an argument (filename)\n");
 		return -1;
 	}
-	strncpy(tmp, (char *)data, sizeof(tmp)-1);
+
+	u = ast_module_user_add(chan);
+
+	tmp = ast_strdupa(data);
+
 	stringp=tmp;
 	strsep(&stringp, "|");
 	options = strsep(&stringp, "|");
@@ -85,7 +104,6 @@ static int background_detect_exec(struct ast_channel *chan, void *data)
 	}
 	ast_log(LOG_DEBUG, "Preparing detect of '%s', sil=%d,min=%d,max=%d\n", 
 						tmp, sil, min, max);
-	LOCAL_USER_ADD(u);
 	if (chan->_state != AST_STATE_UP) {
 		/* Otherwise answer unless we're supposed to send this while on-hook */
 		res = ast_answer(chan);
@@ -124,7 +142,7 @@ static int background_detect_exec(struct ast_channel *chan, void *data)
 						char t[2];
 						t[0] = fr->subclass;
 						t[1] = '\0';
-						if (ast_canmatch_extension(chan, chan->context, t, 1, chan->callerid)) {
+						if (ast_canmatch_extension(chan, chan->context, t, 1, chan->cid.cid_num)) {
 							/* They entered a valid  extension, or might be anyhow */
 							res = fr->subclass;
 							ast_frfree(fr);
@@ -138,18 +156,19 @@ static int background_detect_exec(struct ast_channel *chan, void *data)
 							/* We've been quiet a little while */
 							if (notsilent) {
 								/* We had heard some talking */
-								gettimeofday(&end, NULL);
-								ms = (end.tv_sec - start.tv_sec) * 1000;
-								ms += (end.tv_usec - start.tv_usec) / 1000;
+								ms = ast_tvdiff_ms(ast_tvnow(), start);
 								ms -= sil;
 								if (ms < 0)
 									ms = 0;
 								if ((ms > min) && ((max < 0) || (ms < max))) {
+									char ms_str[10];
 									ast_log(LOG_DEBUG, "Found qualified token of %d ms\n", ms);
-									if (ast_exists_extension(chan, chan->context, "talk", 1, chan->callerid)) {
-										strncpy(chan->exten, "talk", sizeof(chan->exten) -1 );
-										chan->priority = 0;
-									}
+
+									/* Save detected talk time (in milliseconds) */ 
+									sprintf(ms_str, "%d", ms );	
+									pbx_builtin_setvar_helper(chan, "TALK_DETECTED", ms_str);
+									
+									ast_goto_if_exists(chan, chan->context, "talk", 1);
 									res = 0;
 									ast_frfree(fr);
 									break;
@@ -160,7 +179,7 @@ static int background_detect_exec(struct ast_channel *chan, void *data)
 						} else {
 							if (!notsilent) {
 								/* Heard some audio, mark the begining of the token */
-								gettimeofday(&start, NULL);
+								start = ast_tvnow();
 								ast_log(LOG_DEBUG, "Start of voice token!\n");
 								notsilent = 1;
 							}
@@ -185,34 +204,24 @@ static int background_detect_exec(struct ast_channel *chan, void *data)
 	}
 	if (dsp)
 		ast_dsp_free(dsp);
-	LOCAL_USER_REMOVE(u);
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+	
+	ast_module_user_hangup_all();
+
+	return res;	
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, background_detect_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Playback with Talk Detection");

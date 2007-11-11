@@ -1,10 +1,10 @@
 /*
- * $Id: timer.h,v 1.5 2003/01/20 18:35:09 andrei Exp $
+ * $Id: timer.h,v 1.6 2004/08/24 08:45:10 janakj Exp $
  *
  *
  * timer related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -56,7 +56,7 @@ extern struct sr_timer* timer_list;
 int init_timer();
 void destroy_timer();
 /*register a periodic timer;
- * ret: <0 on errror*/
+ * ret: <0 on error*/
 int register_timer(timer_function f, void* param, unsigned int interval);
 unsigned int get_ticks();
 void timer_ticker();

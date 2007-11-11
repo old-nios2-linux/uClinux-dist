@@ -1,152 +1,122 @@
-/* free.c - a /proc implementation of free */
-/* Dec14/92 by Brian Edmonds */
-/* Thanks to Rafal Maszkowski for the Total line */
+// free.c - free(1)
+// procps utility to display free memory information
+//
+// All new, Robert Love <rml@tech9.net>             18 Nov 2002
+// Original by Brian Edmonds and Rafal Maszkowski   14 Dec 1992
+//
+// This program is licensed under the GNU Library General Public License, v2
+//
+// Copyright 2003 Robert Love
+// Copyright 2004 Albert Cahalan
 
 #include "proc/sysinfo.h"
 #include "proc/version.h"
+//#include <errno.h>
+#include <fcntl.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <getopt.h>
 
-/* set this to whatever you want by default */
-int byteshift = 10  ;
-int total = 0;
+#define S(X) ( ((unsigned long long)(X) << 10) >> shift)
 
-int main( int argc, char **argv ) {
-    char buf1[80], buf2[80];
-    char *titles[6], name[32];
-    int i, n = 0, col[6] = {0}, rtime = 0, old_fmt = 0, first_line;
-    int old_meminfo = 0;
-    long long **mem;
+const char help_message[] =
+"usage: free [-b|-k|-m|-g] [-l] [-o] [-t] [-s delay] [-c count] [-V]\n"
+"  -b,-k,-m,-g show output in bytes, KB, MB, or GB\n"
+"  -l show detailed low and high memory statistics\n"
+"  -o use old format (no -/+buffers/cache line)\n"
+"  -t display total for RAM + swap\n"
+"  -s update every [delay] seconds\n"
+"  -c update [count] times\n"
+"  -V display version information and exit\n"
+;
 
-    static int sum[6]; /* statics get initialized to zero */
+int main(int argc, char *argv[]){
+    int i;
+    int count = 0;
+    int shift = 10;
+    int pause_length = 0;
+    int show_high = 0;
+    int show_total = 0;
+    int old_fmt = 0;
 
     /* check startup flags */
-    while( (i = getopt( argc, argv, "bkmos:tV") ) != -1 )
+    while( (i = getopt(argc, argv, "bkmglotc:s:V") ) != -1 )
         switch (i) {
-        case 'b': byteshift = 0; break;
-        case 'k': byteshift = 10; break;
-        case 'm': byteshift = 20; break;
+        case 'b': shift = 0;  break;
+        case 'k': shift = 10; break;
+        case 'm': shift = 20; break;
+        case 'g': shift = 30; break;
+        case 'l': show_high = 1; break;
         case 'o': old_fmt = 1; break;
-        case 's': rtime = 1000000 * atof(optarg); break;
-        case 't': total = 1; break;
+        case 't': show_total = 1; break;
+        case 's': pause_length = 1000000 * atof(optarg); break;
+        case 'c': count = strtoul(optarg, NULL, 10); break;
 	case 'V': display_version(); exit(0);
         default:
-	  fprintf(stderr, "usage: %s [-b|-k|-m] [-o] [-s delay] [-t] [-V]\n", argv[0]);
-	  return 1;
+            fwrite(help_message,1,strlen(help_message),stderr);
+	    return 1;
     }
 
-    /* redirect stdin to /proc/meminfo */
-    if (linux_version_code < LINUX_VERSION(2,0,0)) {
-        close(0);
-        if (open( "/proc/meminfo", O_RDONLY ) < 0) {
-            perror("open");
-            return 2;
-        }
-    }
     do {
-        if (linux_version_code < LINUX_VERSION(2,0,0)) {
-            for(i=0; i<6; i++)
-                sum[i]=0;
-            first_line = 1;
-            /* get the column titles */
-            fseek(stdin, 0L, SEEK_SET);
-            fgets( buf1, 80, stdin );
-            for (i=0; i<6; i++) {
-                titles[i] = strtok( ( i ? NULL : buf1 ), " \t:\n" );
-                if (!titles[i]) {
-                    if (i != 5) {
-                        fprintf( stderr, "free: error reading /proc/meminfo\n" );
-                        return 3;
-                    } else
-                        ++old_meminfo;
-                }
-            }
-            
-            if (old_meminfo) {
-                fprintf(stdout, "%-7s %10s %10s %10s %10s %10s\n",
-                        "", titles[0], titles[1], titles[2], titles[3],
-                        titles[4]);
-            } else {
-                fprintf(stdout, "%-7s %10s %10s %10s %10s %10s %10s\n",
-                        "", titles[0], titles[1], titles[2], titles[3],
-                        titles[4], titles[5]);
-            }
-            
-            /* read and translate data lines */
-            while (fgets(buf2, 80, stdin)) {
-                if (old_meminfo) {
-                    n = sscanf(buf2, "%s %d %d %d %d %d", name,
-                               &col[0], &col[1], &col[2], &col[3], &col[4]);
-                } else {
-                    n = sscanf(buf2, "%s %d %d %d %d %d %d", name,
-                               &col[0], &col[1], &col[2], &col[3], &col[4],
-                               &col[5]);
-                }
-                if (n < 4)
-                    continue;
-                fprintf( stdout, "%-7s", name );
-                for (i=1 ; i<n ; i++) {
-                    fprintf(stdout, " %10d", col[i-1]>>byteshift);
-                    sum[i-1] += col[i-1];
-                }
-                fputc('\n', stdout);
-                if (first_line && !old_fmt) {
-                    first_line = 0;
-                    fprintf( stdout, "-/+ buffers: %16d %10d\n",
-                             (col[1] - col[4] - col[5])>>byteshift,
-                             (col[2] + col[4] + col[5])>>byteshift);
-                }
-            }
-            if (total == 1) {
-                fprintf( stdout, "Total: ");
-                for( i=1 ; i<n ; i++ )
-                    fprintf(stdout, " %10d", sum[i-1]>>byteshift);
-                fputc('\n', stdout);
-            }
-        } else {
-            /* memory printing from top.c using meminfo() */
-            if (!(mem = get_meminfo ()) || mem[meminfo_main][meminfo_total] == 0) {
-                fprintf (stderr, "Cannot get size of memory from /proc/meminfo\n");
-                exit (1);
-            }
-            printf("             total       used       free     shared    buffers     cached\n");
-            printf ("%-7s %10Ld %10Ld %10Ld %10Ld %10Ld %10Ld\n", "Mem:",
-                    mem[meminfo_main][meminfo_total] >> byteshift,
-                    mem[meminfo_main][meminfo_used] >> byteshift,
-                    mem[meminfo_main][meminfo_free] >> byteshift,
-                    mem[meminfo_main][meminfo_shared] >> byteshift,
-                    mem[meminfo_main][meminfo_buffers] >> byteshift,
-                    mem[meminfo_main][meminfo_cached] >> byteshift);
-            if (!old_fmt) printf("-/+ buffers/cache: %10Ld %10Ld\n", 
-                   (mem[meminfo_main][meminfo_used]
-                    -mem[meminfo_main][meminfo_buffers]
-		    -mem[meminfo_main][meminfo_cached])>> byteshift,
-                   (mem[meminfo_main][meminfo_free]
-                    +mem[meminfo_main][meminfo_buffers]
-		    +mem[meminfo_main][meminfo_cached])>> byteshift);
-            printf ("%-7s %10Ld %10Ld %10Ld\n", "Swap:",
-                    mem[meminfo_swap][meminfo_total] >> byteshift,
-                    mem[meminfo_swap][meminfo_used] >> byteshift,
-                    mem[meminfo_swap][meminfo_free] >> byteshift);
-            if (total == 1) printf("%-7s %10Ld %10Ld %10Ld\n", "Total:",
-                       (mem[meminfo_main][meminfo_total] +
-                        mem[meminfo_swap][meminfo_total]) >> byteshift,
-                       (mem[meminfo_main][meminfo_used] +
-                        mem[meminfo_swap][meminfo_used]) >> byteshift,
-                       (mem[meminfo_main][meminfo_free] +
-                        mem[meminfo_swap][meminfo_free]) >> byteshift);
+        meminfo();
+        printf("             total       used       free     shared    buffers     cached\n");
+        printf(
+            "%-7s %10Lu %10Lu %10Lu %10Lu %10Lu %10Lu\n", "Mem:",
+            S(kb_main_total),
+            S(kb_main_used),
+            S(kb_main_free),
+            S(kb_main_shared),
+            S(kb_main_buffers),
+            S(kb_main_cached)
+        );
+        // Print low vs. high information, if the user requested it.
+        // Note we check if low_total==0: if so, then this kernel does
+        // not export the low and high stats.  Note we still want to
+        // print the high info, even if it is zero.
+        if (show_high) {
+            printf(
+                "%-7s %10Lu %10Lu %10Lu\n", "Low:",
+                S(kb_low_total),
+                S(kb_low_total - kb_low_free),
+                S(kb_low_free)
+            );
+            printf(
+                "%-7s %10Lu %10Lu %10Lu\n", "High:",
+                S(kb_high_total),
+                S(kb_high_total - kb_high_free),
+                S(kb_high_free)
+            );
         }
-        
-        if (rtime) {
+        if(!old_fmt){
+            unsigned KLONG buffers_plus_cached = kb_main_buffers + kb_main_cached;
+            printf(
+                "-/+ buffers/cache: %10Lu %10Lu\n", 
+                S(kb_main_used - buffers_plus_cached),
+                S(kb_main_free + buffers_plus_cached)
+            );
+        }
+        printf(
+            "%-7s %10Lu %10Lu %10Lu\n", "Swap:",
+            S(kb_swap_total),
+            S(kb_swap_used),
+            S(kb_swap_free)
+        );
+        if(show_total){
+            printf(
+                "%-7s %10Lu %10Lu %10Lu\n", "Total:",
+                S(kb_main_total + kb_swap_total),
+                S(kb_main_used  + kb_swap_used),
+                S(kb_main_free  + kb_swap_free)
+            );
+        }
+        if(pause_length){
 	    fputc('\n', stdout);
 	    fflush(stdout);
-	    usleep(rtime);
+	    if (count != 1) usleep(pause_length);
 	}
-    } while (rtime);
+    } while(pause_length && --count);
 
     return 0;
 }

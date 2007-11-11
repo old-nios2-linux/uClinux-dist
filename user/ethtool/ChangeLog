@@ -1,3 +1,54 @@
+
+
+NOTE:  For further changelog entries, see BitKeeper repository.
+
+
+Tue Aug 17 2004  Jeff Garzik <jgarzik@pobox.com>
+
+	* NEWS, configure.ac:  Release version 2
+
+Fri Jul  2 2004  Jeff Garzik <jgarzik@pobox.com>
+
+	Merged
+	* fec_8xx.c, ethtool-util.h, Makefile.am: Add fec_8xx register dump.
+	Contributed by Pantelis Antoniou <panto@intracom.gr>
+
+	* Update ethtool.c to iterate through a list of drivers
+	* Fixed fec_8xx.c warnings on 64-bit
+
+Fri Jul  2 2004  Jim Lewis <jim@jklewis.com>
+
+	* pcnet32.c, ethtool-util.h, Makefile.am: Add pcnet32 register dump.
+
+Fri Apr  9 2004  Jason Lunz <lunz@reflexsecurity.com>
+
+	* ethtool.c: Remove incorrect restriction on ethernet interface
+	names.
+
+Fri Apr  9 2004  OGAWA Hirofumi <hirofumi@mail.parknet.co.jp>
+
+	* ethtool.c: This fixes the bogus tail backslash that I did.
+
+Fri Apr  9 2004  Jim Lewis <jim@jklewis.com>
+
+	* ethtool.c:  Return results of self-test back to OS,
+	via exit(2).
+
+Fri Apr  9 2004  Jeb Cramer  <cramerj@intel.com>
+
+	* e1000.c: Update device id list and add printout of phy type in
+	register dump.  Set default mac_type to 82543 since register offsets
+	haven't changed.
+
+Fri Apr  9 2004  Jeff Garzik  <jgarzik@pobox.com>
+
+	* configure.ac, Makefile.am, ethtool.c, etc.:
+	convert to more recent autoconf.
+
+Sat Aug 30 2003  OGAWA Hirofumi  <hirofumi@mail.parknet.co.jp>
+
+	* ethtool.8, ethtool.c: ethtool register dump raw mode
+
 Sat Jul 19 2003  Scott Feldman  <scott.feldman@intel.com>
 
 	* ethtool.8, ethtool.c, ethtool-copy.h:
@@ -30,7 +81,7 @@ Fri Mar 28 2003   Jeb Cramer  <cramerj@intel.com>
 	speed and width to register dump printout.
 	* ethtool.c (show_usage): Add -S to printout of supported commands.
 
-Tue Jan 32 2003   Jeff Garzik  <jgarzik@pobox.com>
+Tue Jan 22 2003   Jeff Garzik  <jgarzik@pobox.com>
 
 	* natsemi.c (PRINT_INTR, __print_intr): Decompose PRINT_INTR
 	macro into macro abuse and function call portions.  Move the
@@ -83,12 +134,12 @@ Fri Jun 14 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
 	* realtek.c (realtek_dump_regs): dump RTL8139C+ registers
 
 Fri Jun 14 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
-	
+
 	* realtek.c: new file, dumps RealTek RTL8169 PCI NIC's registers
 	* Makefile.am, ethtool.c, ethtool-util.h: use it
 
 Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
-	
+
 	* NEWS: list new commands added recently
 	* ethtool.c (do_gcoalesce, do_scoalesce, dump_coalesce): new
 	(parse_cmdline, doit): handle get/set coalesce parameters (-c,-C)
@@ -96,7 +147,7 @@ Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
 	* ethtool.8: document -c and -C
 
 Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
-	
+
 	* ethtool.c (do_gring, do_sring, dump_ring,
 	parse_ring_cmdline): new functions
 	(parse_cmdline, doit): handle get/set ring parameters (-g,-G)
@@ -104,13 +155,13 @@ Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
 	* ethtool.8: document -g and -G
 
 Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
-	
+
 	* ethtool.c (do_gpause, do_spause, dump_pause,
 	parse_pause_cmdline): new functions
 	(parse_cmdline, doit): handle get/set pause parameters (-a,-A)
 	* ethtool.8: document -a, -A, -e, and -p
 
-2002-05-22  Chris Leech <christopher.leech@intel.com>
+Wed May 22 2002  Chris Leech <christopher.leech@intel.com>
             Scott Feldman <scott.feldman@intel.com>
 
 	* ethtool-copy.h: add support for ETHTOOL_PHYS_ID function.
@@ -120,26 +171,26 @@ Tue Jun 11 2002   Jeff Garzik  <jgarzik@mandrakesoft.com>
 	* e1000.c: reg dump support for Intel(R) PRO/1000 adapters.
 	* ethtool-util.h: add e1000 reg dump support.
 
-2002-05-11  Eli Kupermann  <eli.kupermann@intel.com>
+Sat May 11 2002  Eli Kupermann  <eli.kupermann@intel.com>
 
 	* ethtool.c (do_test): add support for online/offline test modes
 	Elsewhere: document "-t" arg usage, and handle usage
 
-2002-05-11  Jes Sorensen  <jes@wildopensource.com>
+Sat May 11 2002  Jes Sorensen  <jes@wildopensource.com>
 
 	* ethtool.c (dump_ecmd): If unknown value is
 	encountered in speed, duplex, or port ETHTOOL_GSET
 	return data, print the numeric value returned.
 
-2002-05-01  Eli Kupermann  <eli.kupermann@intel.com>
+Wed May 1 2002  Eli Kupermann  <eli.kupermann@intel.com>
 
 	* ethtool.8: document new -t test option
 
-2002-05-01  Christoph Hellwig  <hch@lst.de>
+Wed May 1 2002  Christoph Hellwig  <hch@lst.de>
 
 	* Makefile.am (dist-hook): Use $(top-srcdir) for refering to sources.
 
-2002-04-29  Christoph Hellwig  <hch@lst.de>
+Mon Apr 29 2002  Christoph Hellwig  <hch@lst.de>
 
 	* Makefile.am (SUBDIRS): Remove.
 	(RPMSRCS): Likewise.
@@ -200,7 +251,7 @@ Sun Nov 18 2001  Jeff Garzik  <jgarzik@mandrakesoft.com>
 	  Support register dumps for de2104x driver.
 
 Tue Nov 13 2001  Tim Hockin  <thockin@sun.com>
-	
+
 	* natsemi.c, ethtool.c: use u8 data for ethtool_regs
 	* ethtool-copy.h: latest from kernel
 	* natsemi.c, ethtool.c: support ETHTOOL_GEEPROM via -e param

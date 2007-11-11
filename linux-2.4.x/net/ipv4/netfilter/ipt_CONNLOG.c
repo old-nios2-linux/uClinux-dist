@@ -5,6 +5,7 @@
 #include <linux/spinlock.h>
 
 #include <linux/netfilter_ipv4/ip_tables.h>
+#include <linux/netfilter_ipv4/ipt_CONNLOG.h>
 #include <linux/netfilter_ipv4/ip_conntrack.h>
 #include <linux/netfilter_ipv4/ip_conntrack_protocol.h>
 #include <linux/netfilter_ipv4/ip_conntrack_core.h>
@@ -20,11 +21,16 @@ target(struct sk_buff **pskb,
        const void *targinfo,
        void *userinfo)
 {
+	const struct ipt_connlog_target_info *loginfo = targinfo;
 	enum ip_conntrack_info ctinfo;
 	struct ip_conntrack *ct = ip_conntrack_get((*pskb), &ctinfo);
 
-	if (ct)
-		set_bit(IPS_LOG_BIT, &ct->status);
+	if (ct) {
+		if (!loginfo->events || (loginfo->events & IPT_CONNLOG_CONFIRM))
+			set_bit(IPS_LOG_CONFIRM_BIT, &ct->status);
+		if (!loginfo->events || (loginfo->events & IPT_CONNLOG_DESTROY))
+			set_bit(IPS_LOG_DESTROY_BIT, &ct->status);
+	}
 
 	return IPT_CONTINUE;
 }
@@ -36,8 +42,12 @@ checkentry(const char *tablename,
            unsigned int targinfosize,
            unsigned int hook_mask)
 {
-	if (targinfosize != IPT_ALIGN(0))
+	if (targinfosize != IPT_ALIGN(sizeof(struct ipt_connlog_target_info))) {
+		printk(KERN_WARNING "CONNLOG: targinfosize %u != %Zu\n",
+		       targinfosize,
+		       IPT_ALIGN(sizeof(struct ipt_connlog_target_info)));
 		return 0;
+	}
 
 	return 1;
 }
@@ -50,19 +60,34 @@ static struct ipt_target ipt_connlog_reg = {
 };
 
 static void dump_tuple(char *buffer, const struct ip_conntrack_tuple *tuple,
-		       struct ip_conntrack_protocol *proto)
+		       struct ip_conntrack_protocol *proto,
+		       const char *prefix)
 {
-	printk("src=%u.%u.%u.%u dst=%u.%u.%u.%u ",
-		NIPQUAD(tuple->src.ip), NIPQUAD(tuple->dst.ip));
+	char *p, *q;
 
-	if (proto->print_tuple(buffer, tuple))
-		printk("%s", buffer);
+	printk("%ssrc=%u.%u.%u.%u %sdst=%u.%u.%u.%u ",
+		prefix, NIPQUAD(tuple->src.ip),
+		prefix, NIPQUAD(tuple->dst.ip));
+
+	if (proto->print_tuple(buffer, tuple)) {
+		for (p = q = buffer; *p; p++) {
+			if (*p == ' ') {
+				*p = 0;
+				if (*q)
+					printk("%s%s ", prefix, q);
+				q = p + 1;
+			}
+
+		}
+	}
 }
 
 #ifdef CONFIG_IP_NF_CT_ACCT
-static void dump_counters(struct ip_conntrack_counter *counter)
+static void dump_counters(struct ip_conntrack_counter *counter,
+		const char *prefix)
 {
-	printk("packets=%llu bytes=%llu ", counter->packets, counter->bytes);
+	printk("%spackets=%llu %sbytes=%llu ", prefix, counter->packets,
+			prefix, counter->bytes);
 }
 #else
 static inline void dump_counters(struct ip_conntrack_counter *counter) {}
@@ -70,9 +95,12 @@ static inline void dump_counters(struct ip_conntrack_counter *counter) {}
 
 static void dump_conntrack(struct ip_conntrack *ct)
 {
+	struct ip_conntrack_tuple *orig_t
+		= &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
+	struct ip_conntrack_tuple *reply_t
+		= &ct->tuplehash[IP_CT_DIR_REPLY].tuple;
 	struct ip_conntrack_protocol *proto
-		= __ip_ct_find_proto(ct->tuplehash[IP_CT_DIR_ORIGINAL]
-			       .tuple.dst.protonum);
+		= __ip_ct_find_proto(orig_t->dst.protonum);
 	char buffer[256];
 
 	printk("id=%p ", ct);
@@ -81,11 +109,15 @@ static void dump_conntrack(struct ip_conntrack *ct)
 	if (proto->print_conntrack(buffer, ct))
 		printk("%s", buffer);
 
-	dump_tuple(buffer, &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple, proto);
-	dump_counters(&ct->counters[IP_CT_DIR_ORIGINAL]);
+#ifdef CONFIG_IP_NF_CT_DEV
+	printk("in=%s out=%s ", ct->indev, ct->outdev);
+#endif
 
-	dump_tuple(buffer, &ct->tuplehash[IP_CT_DIR_REPLY].tuple, proto);
-	dump_counters(&ct->counters[IP_CT_DIR_REPLY]);
+	dump_tuple(buffer, orig_t, proto, "tx-");
+	dump_counters(&ct->counters[IP_CT_DIR_ORIGINAL], "tx-");
+
+	dump_tuple(buffer, reply_t, proto, "rx-");
+	dump_counters(&ct->counters[IP_CT_DIR_REPLY], "rx-");
 
 #if defined(CONFIG_IP_NF_CONNTRACK_MARK)
 	printk("mark=%ld ", ct->mark);
@@ -97,21 +129,24 @@ static int conntrack_event(struct notifier_block *this,
 			   void *ptr)
 {
 	struct ip_conntrack *ct = ptr;
-	const char *log_prefix = NULL;
+	const char *log_prefix;
 
-	if (event & (IPCT_NEW|IPCT_RELATED))
+	if ((event & (IPCT_NEW|IPCT_RELATED)) &&
+	    test_bit(IPS_LOG_CONFIRM_BIT, &ct->status))
 		log_prefix = "create";
-	else if (event & (IPCT_DESTROY))
+	else if ((event & (IPCT_DESTROY)) &&
+	    test_bit(IPS_LOG_DESTROY_BIT, &ct->status))
 		log_prefix = "destroy";
+	else
+		goto done;
 
-	if (log_prefix && test_bit(IPS_LOG_BIT, &ct->status)) {
-		spin_lock_bh(&log_lock);
-		printk(KERN_INFO "conntrack %s: ", log_prefix);
-		dump_conntrack(ct);
-		printk("\n");
-		spin_unlock_bh(&log_lock);
-	}
+	spin_lock_bh(&log_lock);
+	printk(KERN_INFO "conntrack %s: ", log_prefix);
+	dump_conntrack(ct);
+	printk("\n");
+	spin_unlock_bh(&log_lock);
 
+done:
 	return NOTIFY_DONE;
 }
 

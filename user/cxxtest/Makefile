@@ -1,14 +1,18 @@
 SUBDIRS=sharedlib helloworld constructor exceptions iostream
 
-BUILD_SUBS=for i in $(SUBDIRS); do \
-		make -C $$i $@; done
 
 all:
 %:
-	$(BUILD_SUBS)
+	for i in $(SUBDIRS); do \
+		make -C $$i $@ || exit 1; \
+	done
 
 #romfs:
-#	$(BUILD_SUBS)
+#	for i in $(SUBDIRS); do \
+#		make -C $$i $@ || exit 1; \
+#	done
 
 #clean:
-#	$(BUILD_SUBS)
+#	for i in $(SUBDIRS); do \
+#		make -C $$i $@; \
+#	done

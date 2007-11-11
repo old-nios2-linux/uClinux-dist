@@ -1,9 +1,9 @@
 /*
- * $Id: group.h,v 1.1 2003/02/26 14:03:47 janakj Exp $
+ * $Id: group.h,v 1.3 2004/08/24 08:58:29 janakj Exp $
  *
  * Group membership
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,5 +44,10 @@
  */
 int is_user_in(struct sip_msg* _msg, char* _hf, char* _grp);
 
+
+int group_db_init(char* db_url);
+int group_db_bind(char* db_url);
+void group_db_close();
+int group_db_ver(char* db_url, str* name);
 
 #endif /* GROUP_H */

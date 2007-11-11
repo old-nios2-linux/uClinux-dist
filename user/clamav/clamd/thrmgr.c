@@ -13,41 +13,53 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
+#if HAVE_CONFIG_H
+#include "clamav-config.h"
+#endif
+
+#include <stdio.h>
 #include <pthread.h>
 #include <time.h>
 #include <errno.h>
 
-#include "thrmgr.h"
+#include "shared/output.h"
 
+#include "thrmgr.h"
 #include "others.h"
-#include "memory.h"
-#include "output.h"
 
 #define FALSE (0)
 #define TRUE (1)
 
-work_queue_t *work_queue_new()
+static work_queue_t *work_queue_new(void)
 {
 	work_queue_t *work_q;
 	
-	work_q = (work_queue_t *) mmalloc(sizeof(work_queue_t));
+	work_q = (work_queue_t *) malloc(sizeof(work_queue_t));
+	if (!work_q) {
+		return NULL;
+	}
 	
 	work_q->head = work_q->tail = NULL;
 	work_q->item_count = 0;
 	return work_q;
 }
 
-void work_queue_add(work_queue_t *work_q, void *data)
+static int work_queue_add(work_queue_t *work_q, void *data)
 {
 	work_item_t *work_item;
 	
 	if (!work_q) {
-		return;
+		return FALSE;
 	}
-	work_item = (work_item_t *) mmalloc(sizeof(work_item_t));
+	work_item = (work_item_t *) malloc(sizeof(work_item_t));
+	if (!work_item) {
+		return FALSE;
+	}
+	
 	work_item->next = NULL;
 	work_item->data = data;
 	gettimeofday(&(work_item->time_queued), NULL);
@@ -60,10 +72,10 @@ void work_queue_add(work_queue_t *work_q, void *data)
 		work_q->tail = work_item;
 		work_q->item_count++;
 	}
-	return;
+	return TRUE;
 }
 
-void *work_queue_pop(work_queue_t *work_q)
+static void *work_queue_pop(work_queue_t *work_q)
 {
 	work_item_t *work_item;
 	void *data;
@@ -129,7 +141,10 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 		return NULL;
 	}
 	
-	threadpool = (threadpool_t *) mmalloc(sizeof(threadpool_t));
+	threadpool = (threadpool_t *) malloc(sizeof(threadpool_t));
+	if (!threadpool) {
+		return NULL;
+	}
 
 	threadpool->queue = work_queue_new();
 	if (!threadpool->queue) {
@@ -144,16 +159,25 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 	
 	pthread_mutex_init(&(threadpool->pool_mutex), NULL);
 	if (pthread_cond_init(&(threadpool->pool_cond), NULL) != 0) {
+		pthread_mutex_destroy(&(threadpool->pool_mutex));
+		free(threadpool->queue);
 		free(threadpool);
 		return NULL;
 	}
 		
 	if (pthread_attr_init(&(threadpool->pool_attr)) != 0) {
+		pthread_cond_destroy(&(threadpool->pool_cond));
+		pthread_mutex_destroy(&(threadpool->pool_mutex));
+		free(threadpool->queue);
 		free(threadpool);
 		return NULL;
 	}
 	
 	if (pthread_attr_setdetachstate(&(threadpool->pool_attr), PTHREAD_CREATE_DETACHED) != 0) {
+		pthread_attr_destroy(&(threadpool->pool_attr));
+		pthread_cond_destroy(&(threadpool->pool_cond));
+		pthread_mutex_destroy(&(threadpool->pool_mutex));
+		free(threadpool->queue);
 		free(threadpool);
 		return NULL;
 	}
@@ -162,16 +186,15 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 	pthread_attr_getstacksize(&(threadpool->pool_attr), &stacksize);
 	stacksize = stacksize + 64 * 1024;
 	if (stacksize < 1048576) stacksize = 1048576; /* at least 1MB please */
-	logg("Set stack size to %u\n", stacksize);
+	logg("Set stacksize to %u\n", stacksize);
 	pthread_attr_setstacksize(&(threadpool->pool_attr), stacksize);
 #endif
-
 	threadpool->state = POOL_VALID;
 
 	return threadpool;
 }
 
-void *thrmgr_worker(void *arg)
+static void *thrmgr_worker(void *arg)
 {
 	threadpool_t *threadpool = (threadpool_t *) arg;
 	void *job_data;
@@ -253,7 +276,13 @@ int thrmgr_dispatch(threadpool_t *threadpool, void *user_data)
 		}
 		return FALSE;
 	}
-	work_queue_add(threadpool->queue, user_data);
+	if (!work_queue_add(threadpool->queue, user_data)) {
+		if (pthread_mutex_unlock(&(threadpool->pool_mutex)) != 0) {
+			logg("!Mutex unlock failed\n");
+			return FALSE;
+		}
+		return FALSE;
+	}
 
 	if ((threadpool->thr_idle == 0) &&
 			(threadpool->thr_alive < threadpool->thr_max)) {

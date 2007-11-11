@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_loader.h,v 1.2.4.1 2003/11/28 13:21:07 bogdan Exp $
+ * $Id: cpl_loader.h,v 1.4 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

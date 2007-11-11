@@ -1,5 +1,5 @@
 /*
- * $Id: sha.c,v 1.5 2002/10/16 14:12:42 dcm Exp $
+ * $Id: sha.c,v 1.6 2004/08/24 08:58:30 janakj Exp $
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -167,7 +167,7 @@ sha_hash(int *data, int *hash)
 
 /*
   Takes a pointer to a 160 bit block of data (five 32 bit ints) and
-  intializes it to the start constants of the SHA1 algorithm.  This
+  initializes it to the start constants of the SHA1 algorithm.  This
   must be called before using hash in the call to sha_hash
 */
 int 

@@ -122,8 +122,6 @@ struct efivar_entry {
 	struct kobject kobj;
 };
 
-#define get_efivar_entry(n) list_entry(n, struct efivar_entry, list)
-
 struct efivar_attribute {
 	struct attribute attr;
 	ssize_t (*show) (struct efivar_entry *entry, char *buf);
@@ -133,21 +131,21 @@ struct efivar_attribute {
 
 #define EFI_ATTR(_name, _mode, _show, _store) \
 struct subsys_attribute efi_attr_##_name = { \
-	.attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE}, \
+	.attr = {.name = __stringify(_name), .mode = _mode}, \
 	.show = _show, \
 	.store = _store, \
 };
 
 #define EFIVAR_ATTR(_name, _mode, _show, _store) \
 struct efivar_attribute efivar_attr_##_name = { \
-	.attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE}, \
+	.attr = {.name = __stringify(_name), .mode = _mode}, \
 	.show = _show, \
 	.store = _store, \
 };
 
 #define VAR_SUBSYS_ATTR(_name, _mode, _show, _store) \
 struct subsys_attribute var_subsys_attr_##_name = { \
-	.attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE}, \
+	.attr = {.name = __stringify(_name), .mode = _mode}, \
 	.show = _show, \
 	.store = _store, \
 };
@@ -386,9 +384,6 @@ static struct sysfs_ops efivar_attr_ops = {
 static void efivar_release(struct kobject *kobj)
 {
 	struct efivar_entry *var = container_of(kobj, struct efivar_entry, kobj);
-	spin_lock(&efivars_lock);
-	list_del(&var->list);
-	spin_unlock(&efivars_lock);
 	kfree(var);
 }
 
@@ -414,7 +409,7 @@ static struct kobj_type ktype_efivar = {
 };
 
 static ssize_t
-dummy(struct subsystem *sub, char *buf)
+dummy(struct kset *kset, char *buf)
 {
 	return -ENODEV;
 }
@@ -427,12 +422,11 @@ efivar_unregister(struct efivar_entry *var)
 
 
 static ssize_t
-efivar_create(struct subsystem *sub, const char *buf, size_t count)
+efivar_create(struct kset *kset, const char *buf, size_t count)
 {
 	struct efi_variable *new_var = (struct efi_variable *)buf;
-	struct efivar_entry *search_efivar = NULL;
+	struct efivar_entry *search_efivar, *n;
 	unsigned long strsize1, strsize2;
-	struct list_head *pos, *n;
 	efi_status_t status = EFI_NOT_FOUND;
 	int found = 0;
 
@@ -444,8 +438,7 @@ efivar_create(struct subsystem *sub, const char *buf, size_t count)
 	/*
 	 * Does this variable already exist?
 	 */
-	list_for_each_safe(pos, n, &efivar_list) {
-		search_efivar = get_efivar_entry(pos);
+	list_for_each_entry_safe(search_efivar, n, &efivar_list, list) {
 		strsize1 = utf8_strsize(search_efivar->var.VariableName, 1024);
 		strsize2 = utf8_strsize(new_var->VariableName, 1024);
 		if (strsize1 == strsize2 &&
@@ -487,12 +480,11 @@ efivar_create(struct subsystem *sub, const char *buf, size_t count)
 }
 
 static ssize_t
-efivar_delete(struct subsystem *sub, const char *buf, size_t count)
+efivar_delete(struct kset *kset, const char *buf, size_t count)
 {
 	struct efi_variable *del_var = (struct efi_variable *)buf;
-	struct efivar_entry *search_efivar = NULL;
+	struct efivar_entry *search_efivar, *n;
 	unsigned long strsize1, strsize2;
-	struct list_head *pos, *n;
 	efi_status_t status = EFI_NOT_FOUND;
 	int found = 0;
 
@@ -504,8 +496,7 @@ efivar_delete(struct subsystem *sub, const char *buf, size_t count)
 	/*
 	 * Does this variable already exist?
 	 */
-	list_for_each_safe(pos, n, &efivar_list) {
-		search_efivar = get_efivar_entry(pos);
+	list_for_each_entry_safe(search_efivar, n, &efivar_list, list) {
 		strsize1 = utf8_strsize(search_efivar->var.VariableName, 1024);
 		strsize2 = utf8_strsize(del_var->VariableName, 1024);
 		if (strsize1 == strsize2 &&
@@ -537,9 +528,9 @@ efivar_delete(struct subsystem *sub, const char *buf, size_t count)
 		spin_unlock(&efivars_lock);
 		return -EIO;
 	}
+	list_del(&search_efivar->list);
 	/* We need to release this lock before unregistering. */
 	spin_unlock(&efivars_lock);
-
 	efivar_unregister(search_efivar);
 
 	/* It's dead Jim.... */
@@ -560,11 +551,11 @@ static struct subsys_attribute *var_subsys_attrs[] = {
  * the efivars driver
  */
 static ssize_t
-systab_read(struct subsystem *entry, char *buf)
+systab_read(struct kset *kset, char *buf)
 {
 	char *str = buf;
 
-	if (!entry || !buf)
+	if (!kset || !buf)
 		return -EINVAL;
 
 	if (efi.mps != EFI_INVALID_TABLE_ADDR)
@@ -696,7 +687,7 @@ efivars_init(void)
 		goto out_free;
 	}
 
-	kset_set_kset_s(&vars_subsys, efi_subsys);
+	kobj_set_kset_s(&vars_subsys, efi_subsys);
 
 	error = subsystem_register(&vars_subsys);
 
@@ -768,10 +759,14 @@ out_free:
 static void __exit
 efivars_exit(void)
 {
-	struct list_head *pos, *n;
+	struct efivar_entry *entry, *n;
 
-	list_for_each_safe(pos, n, &efivar_list)
-		efivar_unregister(get_efivar_entry(pos));
+	list_for_each_entry_safe(entry, n, &efivar_list, list) {
+		spin_lock(&efivars_lock);
+		list_del(&entry->list);
+		spin_unlock(&efivars_lock);
+		efivar_unregister(entry);
+	}
 
 	subsystem_unregister(&vars_subsys);
 	firmware_unregister(&efi_subsys);

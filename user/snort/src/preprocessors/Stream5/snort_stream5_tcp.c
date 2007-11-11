@@ -333,7 +333,7 @@ int default_ports[] =
     , 12345
 #endif
 };
-static FlushPolicy ignore_flush_policy[MAX_PORTS];
+static FlushPolicy *ignore_flush_policy;
 
 /*  P R O T O T Y P E S  ********************************************/
 static void Stream5ParseTcpArgs(u_char *, Stream5TcpPolicy *);
@@ -497,6 +497,9 @@ void Stream5InitTcp()
         mempool_init(&tcp_session_mempool, s5_global_config.max_tcp_sessions, sizeof(TcpSession));
     }
 
+    ignore_flush_policy = (FlushPolicy *)SnortAlloc(MAX_PORTS * sizeof(FlushPolicy));
+    memset(ignore_flush_policy, 0, MAX_PORTS * sizeof(FlushPolicy));
+
     /* Default is to ignore, for all ports */
     for(i=0;i<MAX_PORTS;i++)
     {
@@ -567,7 +570,7 @@ static void Stream5ParseTcpArgs(u_char *args, Stream5TcpPolicy *s5TcpPolicy)
     char *index;
     char **stoks = NULL;
     int s_toks;
-    char *endPtr;
+    char *endPtr = NULL;
     char use_static = 0;
     char set_flush_policy = 0;
     int reassembly_direction = SSN_DIR_CLIENT;
@@ -889,16 +892,21 @@ static void Stream5PrintTcpConfig(Stream5TcpPolicy *s5TcpPolicy)
         char client_policy_str[STD_BUF];
         char server_policy_str[STD_BUF];
         client_policy_str[0] = server_policy_str[0] = '\0';
+        client_policy_str[STD_BUF - 1] = server_policy_str[STD_BUF - 1] = '\0';
 
         if (client_flushpolicy != STREAM_FLPOLICY_IGNORE)
         {
             direction |= SSN_DIR_CLIENT;
-            snprintf(client_policy_str, STD_BUF, "client (%s)", flush_policy_names[client_flushpolicy]);
+
+            if (client_flushpolicy <= STREAM_FLPOLICY_MAX)
+                snprintf(client_policy_str, STD_BUF - 1, "client (%s)", flush_policy_names[client_flushpolicy]);
         }
         if (server_flushpolicy != STREAM_FLPOLICY_IGNORE)
         {
             direction |= SSN_DIR_SERVER;
-            snprintf(server_policy_str, STD_BUF, "server (%s)", flush_policy_names[server_flushpolicy]);
+
+            if (server_flushpolicy <= STREAM_FLPOLICY_MAX)
+                snprintf(server_policy_str, STD_BUF - 1, "server (%s)", flush_policy_names[server_flushpolicy]);
         }
         if (direction)
         {
@@ -1261,6 +1269,11 @@ static void Stream5InitPacket()
             ETHERNET_HEADER_LEN +
             SPARC_TWIDDLE + IP_MAXPACKET,
             sizeof(char));
+    
+    if (s5_pkt->pkth == NULL)
+    {
+        FatalError("Stream5InitPacket() => Failed to allocate memory\n");
+    }
 
     s5_pkt->pkt = ((u_int8_t *)s5_pkt->pkth) + sizeof(SnortPktHeader);
     s5_pkt->eh = (EtherHdr *)((u_int8_t *)s5_pkt->pkt + SPARC_TWIDDLE);
@@ -1287,7 +1300,7 @@ static void Stream5InitPacket()
     SET_TCP_OFFSET(s5_pkt->tcph,0x5);
     s5_pkt->tcph->th_flags = TH_PUSH|TH_ACK;
 
-    s5_pkt->preprocessor_bits = calloc(sizeof(BITOP), 1);
+    s5_pkt->preprocessor_bits = (BITOP *)SnortAlloc(sizeof(BITOP));
     boInitBITOP(s5_pkt->preprocessor_bits, num_preprocs + 1);
 }
 
@@ -1666,6 +1679,7 @@ static int FlushStream(StreamTracker *st, Packet *p, u_int8_t *flushbuf,
     u_int32_t last_seq = 0;
     u_int32_t segs = 0;
     u_int8_t *flushbuf_end;
+    int ret;
     PROFILE_VARS;
 
     if(st->seg_count == 0 || st->seglist == NULL || st->seglist_tail == NULL)
@@ -1740,17 +1754,21 @@ static int FlushStream(StreamTracker *st, Packet *p, u_int8_t *flushbuf,
              * offsets to adjust true seq to correct value, sans UrgP
              * data.
              */
-            if(!SafeMemcpy(flushbuf+(ss->seq-base_seq), ss->data, 
-                        ss->urg_offset-1, flushbuf, flushbuf_end))
+            ret = SafeMemcpy(flushbuf+(ss->seq-base_seq), ss->data, 
+                             ss->urg_offset-1, flushbuf, flushbuf_end);
+
+            if (ret == SAFEMEM_ERROR)
             {
                 STREAM5_DEBUG_WRAP(DebugMessage(DEBUG_STREAM_STATE,
                         "ERROR writing flushbuf attempting to "
                         "write flushbuf out of range!\n"););
             }
 
-            if(SafeMemcpy(flushbuf+(ss->seq-base_seq+(u_int32_t)ss->urg_offset),
-                        ss->data+ss->urg_offset+1, ss->size-ss->urg_offset, 
-                        flushbuf, flushbuf_end))
+            ret = SafeMemcpy(flushbuf+(ss->seq-base_seq+(u_int32_t)ss->urg_offset),
+                             ss->data+ss->urg_offset+1, ss->size-ss->urg_offset, 
+                             flushbuf, flushbuf_end);
+
+            if (ret == SAFEMEM_ERROR)
             {
                 STREAM5_DEBUG_WRAP(DebugMessage(DEBUG_STREAM_STATE,
                         "ERROR writing flushbuf attempting to "
@@ -1766,8 +1784,10 @@ static int FlushStream(StreamTracker *st, Packet *p, u_int8_t *flushbuf,
                         flushbuf, flushbuf_end, flushbuf_end - flushbuf, 
                         ss->seq-base_seq, ss->data, ss->size););
 
-            if(!SafeMemcpy(flushbuf+(ss->seq-base_seq), ss->data, 
-                        ss->size, flushbuf, flushbuf_end))
+            ret = SafeMemcpy(flushbuf+(ss->seq-base_seq), ss->data, 
+                             ss->size, flushbuf, flushbuf_end);
+
+            if (ret == SAFEMEM_ERROR)
             {
                 STREAM5_DEBUG_WRAP(DebugMessage(DEBUG_STREAM_STATE,
                             "ERROR writing flushbuf attempting to "
@@ -2198,7 +2218,7 @@ int Stream5ProcessTcp(Packet *p)
                     midstream_allowed = 0;
                 }
 
-                /* XXX: maybe look at drop stats before printing this
+                /* TODO: maybe look at drop stats before printing this
                  * warning -- or make this a configurable alert when
                  * requiring 3WAY. */
                 LogMessage("Stream5: Requiring 3-way Handshake, but"
@@ -3293,7 +3313,7 @@ static int StreamQueue(StreamTracker *st, Packet *p, TcpDataBlock *tdb,
                      (right->size >= p->dsize))
             {
                 /* Strange -- different size data.  New is same or smaller.  */
-                /* XXX: Log Evasion attempt? */
+                /* TODO: Log Evasion attempt? */
             }
 
             switch(s5TcpPolicy->reassembly_policy)
@@ -3519,7 +3539,7 @@ static void ProcessTcpStream(StreamTracker *rcv, TcpSession *tcpssn,
                 }
 
                 /* Alert on overlap limit */
-                /* XXX: Alert should cause drop of packet & reset of session */
+                /* TODO: Alert should cause drop of packet & reset of session */
                 /* FYI: Mark session as dead/drop remaining packets */
                 /* FYI: Issue Drop/Reset packets for this session */
                 EventExcessiveOverlap(s5TcpPolicy);
@@ -3954,8 +3974,11 @@ static int ProcessTcp(Stream5LWSession *lwssn, Packet *p, TcpDataBlock *tdb,
         return ACTION_NOTHING;
     }
 
-    if (lwssn->session_flags & (STREAM5_STATE_DROP_CLIENT|STREAM5_STATE_DROP_SERVER))
+    if (InlineMode() &&
+        (lwssn->session_flags & (STREAM5_STATE_DROP_CLIENT|STREAM5_STATE_DROP_SERVER)))
     {
+        /* figure out direction of this packet */
+        GetPacketDirection(p, lwssn);
         /* Got a packet on a session that was dropped (by a rule). */
 
         /* TODO: Send reset to other side if not already done for inline mode */
@@ -3969,7 +3992,22 @@ static int ProcessTcp(Stream5LWSession *lwssn, Packet *p, TcpDataBlock *tdb,
         //    Send Client Reset
         //    ssn->session_flags |= STREAM5_STATE_CLIENT_RESET;
         //}
-        /* TODO: Drop this packet */
+        /* Drop this packet */
+        if (((p->packet_flags & PKT_FROM_SERVER) &&
+             (lwssn->session_flags & STREAM5_STATE_DROP_SERVER)) ||
+            ((p->packet_flags & PKT_FROM_CLIENT) &&
+             (lwssn->session_flags & STREAM5_STATE_DROP_CLIENT)))
+        {
+            DEBUG_WRAP(DebugMessage(DEBUG_STREAM_STATE,
+                        "Blocking %s packet as session was blocked\n",
+                        p->packet_flags & PKT_FROM_SERVER ?
+                        "server" : "client"););
+            DisableDetect(p);
+            /* Still want to add this number of bytes to totals */
+            SetPreprocBit(p, PP_PERFMONITOR);
+            InlineDrop(p);
+            return ACTION_NOTHING;
+        }
     }
 
     if (lwssn->proto_specific_data)

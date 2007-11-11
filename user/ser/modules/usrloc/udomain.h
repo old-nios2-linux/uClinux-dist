@@ -1,9 +1,9 @@
 /* 
- * $Id: udomain.h,v 1.9 2003/10/08 21:56:33 janakj Exp $ 
+ * $Id: udomain.h,v 1.11 2004/08/24 09:00:46 janakj Exp $ 
  *
  * Usrloc domain structure
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include "../../locking.h"
 #include "../../str.h"
+#include "../../db/db.h"
 #include "urecord.h"
 #include "hslot.h"
 
@@ -93,7 +94,7 @@ void print_udomain(FILE* _f, udomain_t* _d);
 /*
  * Load data from a database
  */
-int preload_udomain(udomain_t* _d);
+int preload_udomain(db_con_t* _c, udomain_t* _d);
 
 
 /*

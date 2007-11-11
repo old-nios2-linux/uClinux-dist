@@ -5,147 +5,103 @@
  *
  * Copyright (C) 2002 by Bart Visscher <magick@linux-fan.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
  * 2002-04-20
  * IPV6 support added by Bart Visscher <magick@linux-fan.com>
+ *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include "inet_common.h"
 #include "busybox.h"
-#include "pwd_.h"
+#include "inet_common.h"
 
-#ifdef CONFIG_ROUTE
-extern void displayroutes(int noresolve, int netstatfmt);
-#endif
+#define NETSTAT_CONNECTED 0x01
+#define NETSTAT_LISTENING 0x02
+#define NETSTAT_NUMERIC   0x04
+/* Must match getopt32 option string */
+#define NETSTAT_TCP       0x10
+#define NETSTAT_UDP       0x20
+#define NETSTAT_RAW       0x40
+#define NETSTAT_UNIX      0x80
+#define NETSTAT_ALLPROTO  (NETSTAT_TCP|NETSTAT_UDP|NETSTAT_RAW|NETSTAT_UNIX)
 
-#define NETSTAT_CONNECTED	0x01
-#define NETSTAT_LISTENING	0x02
-#define NETSTAT_NUMERIC		0x04
-#define NETSTAT_TCP			0x10
-#define NETSTAT_UDP			0x20
-#define NETSTAT_RAW			0x40
-#define NETSTAT_UNIX		0x80
-
-static int flags = NETSTAT_CONNECTED |
-			NETSTAT_TCP | NETSTAT_UDP | NETSTAT_RAW | NETSTAT_UNIX;
-
-#define PROGNAME_WIDTHs PROGNAME_WIDTH1(PROGNAME_WIDTH)
-#define PROGNAME_WIDTH1(s) PROGNAME_WIDTH2(s)
-#define PROGNAME_WIDTH2(s) #s
-
-#define PRG_HASH_SIZE 211
+static int flags = NETSTAT_CONNECTED | NETSTAT_ALLPROTO;
 
 enum {
-    TCP_ESTABLISHED = 1,
-    TCP_SYN_SENT,
-    TCP_SYN_RECV,
-    TCP_FIN_WAIT1,
-    TCP_FIN_WAIT2,
-    TCP_TIME_WAIT,
-    TCP_CLOSE,
-    TCP_CLOSE_WAIT,
-    TCP_LAST_ACK,
-    TCP_LISTEN,
-    TCP_CLOSING			/* now a valid state */
+	TCP_ESTABLISHED = 1,
+	TCP_SYN_SENT,
+	TCP_SYN_RECV,
+	TCP_FIN_WAIT1,
+	TCP_FIN_WAIT2,
+	TCP_TIME_WAIT,
+	TCP_CLOSE,
+	TCP_CLOSE_WAIT,
+	TCP_LAST_ACK,
+	TCP_LISTEN,
+	TCP_CLOSING /* now a valid state */
 };
 
 static const char * const tcp_state[] =
 {
-    "",
-    "ESTABLISHED",
-    "SYN_SENT",
-    "SYN_RECV",
-    "FIN_WAIT1",
-    "FIN_WAIT2",
-    "TIME_WAIT",
-    "CLOSE",
-    "CLOSE_WAIT",
-    "LAST_ACK",
-    "LISTEN",
-    "CLOSING"
+	"",
+	"ESTABLISHED",
+	"SYN_SENT",
+	"SYN_RECV",
+	"FIN_WAIT1",
+	"FIN_WAIT2",
+	"TIME_WAIT",
+	"CLOSE",
+	"CLOSE_WAIT",
+	"LAST_ACK",
+	"LISTEN",
+	"CLOSING"
 };
 
 typedef enum {
-    SS_FREE = 0,		/* not allocated                */
-    SS_UNCONNECTED,		/* unconnected to any socket    */
-    SS_CONNECTING,		/* in process of connecting     */
-    SS_CONNECTED,		/* connected to socket          */
-    SS_DISCONNECTING		/* in process of disconnecting  */
+	SS_FREE = 0,     /* not allocated                */
+	SS_UNCONNECTED,  /* unconnected to any socket    */
+	SS_CONNECTING,   /* in process of connecting     */
+	SS_CONNECTED,    /* connected to socket          */
+	SS_DISCONNECTING /* in process of disconnecting  */
 } socket_state;
 
-#define SO_ACCEPTCON    (1<<16)	/* performed a listen           */
-#define SO_WAITDATA     (1<<17)	/* wait data to read            */
-#define SO_NOSPACE      (1<<18)	/* no space to write            */
+#define SO_ACCEPTCON (1<<16)	/* performed a listen           */
+#define SO_WAITDATA  (1<<17)	/* wait data to read            */
+#define SO_NOSPACE   (1<<18)	/* no space to write            */
 
-static char *itoa(unsigned int i)
+static const char *get_sname(int port, const char *proto, int num)
 {
-	/* 21 digits plus null terminator, good for 64-bit or smaller ints */
-	static char local[22];
-	char *p = &local[21];
-	*p-- = '\0';
-	do {
-		*p-- = '0' + i % 10;
-		i /= 10;
-	} while (i > 0);
-	return p + 1;
-}
-
-static char *get_sname(int port, const char *proto, int num)
-{
-	char *str=itoa(ntohs(port));
-	if (num) {
-	} else {
-		struct servent *se=getservbyport(port,proto);
+	/* hummm, we return static buffer here!! */
+	const char *str = itoa(ntohs(port));
+	if (!num) {
+		struct servent *se = getservbyport(port, proto);
 		if (se)
-			str=se->s_name;
+			str = se->s_name;
 	}
 	if (!port) {
-		str="*";
+		str = "*";
 	}
 	return str;
 }
 
-static void snprint_ip_port(char *ip_port, int size, struct sockaddr *addr, int port, char *proto, int numeric)
+static void snprint_ip_port(char *ip_port, int size, struct sockaddr *addr, int port, const char *proto, int numeric)
 {
-	char *port_name;
+	const char *port_name;
 
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 	if (addr->sa_family == AF_INET6) {
 		INET6_rresolve(ip_port, size, (struct sockaddr_in6 *)addr,
-					   (numeric&NETSTAT_NUMERIC) ? 0x0fff : 0);
+			(numeric & NETSTAT_NUMERIC) ? 0x0fff : 0);
 	} else
 #endif
 	{
-	INET_rresolve(ip_port, size, (struct sockaddr_in *)addr,
-		0x4000 | ((numeric&NETSTAT_NUMERIC) ? 0x0fff : 0),
-		0xffffffff);
+		INET_rresolve(ip_port, size, (struct sockaddr_in *)addr,
+			0x4000 | ((numeric & NETSTAT_NUMERIC) ? 0x0fff : 0),
+			0xffffffff);
 	}
-	port_name=get_sname(htons(port), proto, numeric);
+	port_name = get_sname(htons(port), proto, numeric);
 	if ((strlen(ip_port) + strlen(port_name)) > 22)
 		ip_port[22 - strlen(port_name)] = '\0';
-	ip_port+=strlen(ip_port);
+	ip_port += strlen(ip_port);
 	strcat(ip_port, ":");
 	strcat(ip_port, port_name);
 }
@@ -156,7 +112,7 @@ static void tcp_do_one(int lnr, const char *line)
 	const char *state_str;
 	char more[512];
 	int num, local_port, rem_port, d, state, timer_run, uid, timeout;
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 	struct sockaddr_in6 localaddr, remaddr;
 	char addr6[INET6_ADDRSTRLEN];
 	struct in6_addr in6;
@@ -176,7 +132,7 @@ static void tcp_do_one(int lnr, const char *line)
 				 &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, more);
 
 	if (strlen(local_addr) > 8) {
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 		sscanf(local_addr, "%08X%08X%08X%08X",
 			   &in6.s6_addr32[0], &in6.s6_addr32[1],
 			   &in6.s6_addr32[2], &in6.s6_addr32[3]);
@@ -200,33 +156,33 @@ static void tcp_do_one(int lnr, const char *line)
 	}
 
 	if (num < 10) {
-		bb_error_msg("warning, got bogus tcp line.");
+		bb_error_msg("warning, got bogus tcp line");
 		return;
 	}
 	state_str = tcp_state[state];
-	if ((rem_port && (flags&NETSTAT_CONNECTED)) ||
-		(!rem_port && (flags&NETSTAT_LISTENING)))
-	{
+	if ((rem_port && (flags & NETSTAT_CONNECTED))
+	 || (!rem_port && (flags & NETSTAT_LISTENING))
+	) {
 		snprint_ip_port(local_addr, sizeof(local_addr),
 						(struct sockaddr *) &localaddr, local_port,
-						"tcp", flags&NETSTAT_NUMERIC);
+						"tcp", flags & NETSTAT_NUMERIC);
 
 		snprint_ip_port(rem_addr, sizeof(rem_addr),
 						(struct sockaddr *) &remaddr, rem_port,
-						"tcp", flags&NETSTAT_NUMERIC);
+						"tcp", flags & NETSTAT_NUMERIC);
 
 		printf("tcp   %6ld %6ld %-23s %-23s %-12s\n",
 			   rxq, txq, local_addr, rem_addr, state_str);
-
 	}
 }
 
 static void udp_do_one(int lnr, const char *line)
 {
 	char local_addr[64], rem_addr[64];
-	char *state_str, more[512];
+	const char *state_str;
+	char more[512];
 	int num, local_port, rem_port, d, state, timer_run, uid, timeout;
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 	struct sockaddr_in6 localaddr, remaddr;
 	char addr6[INET6_ADDRSTRLEN];
 	struct in6_addr in6;
@@ -246,8 +202,8 @@ static void udp_do_one(int lnr, const char *line)
 				 &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, more);
 
 	if (strlen(local_addr) > 8) {
-#ifdef CONFIG_FEATURE_IPV6
-        /* Demangle what the kernel gives us */
+#if ENABLE_FEATURE_IPV6
+	/* Demangle what the kernel gives us */
 		sscanf(local_addr, "%08X%08X%08X%08X",
 			   &in6.s6_addr32[0], &in6.s6_addr32[1],
 			   &in6.s6_addr32[2], &in6.s6_addr32[3]);
@@ -271,7 +227,7 @@ static void udp_do_one(int lnr, const char *line)
 	}
 
 	if (num < 10) {
-		bb_error_msg("warning, got bogus udp line.");
+		bb_error_msg("warning, got bogus udp line");
 		return;
 	}
 	switch (state) {
@@ -288,7 +244,7 @@ static void udp_do_one(int lnr, const char *line)
 			break;
 	}
 
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 # define notnull(A) (((A.sin6_family == AF_INET6) &&            \
 					 ((A.sin6_addr.s6_addr32[0]) ||            \
 					  (A.sin6_addr.s6_addr32[1]) ||            \
@@ -299,20 +255,19 @@ static void udp_do_one(int lnr, const char *line)
 #else
 # define notnull(A) (A.sin_addr.s_addr)
 #endif
-	if ((notnull(remaddr) && (flags&NETSTAT_CONNECTED)) ||
-		(!notnull(remaddr) && (flags&NETSTAT_LISTENING)))
-	{
+	if ((notnull(remaddr) && (flags & NETSTAT_CONNECTED))
+	 || (!notnull(remaddr) && (flags & NETSTAT_LISTENING))
+	) {
 		snprint_ip_port(local_addr, sizeof(local_addr),
 						(struct sockaddr *) &localaddr, local_port,
-						"udp", flags&NETSTAT_NUMERIC);
+						"udp", flags & NETSTAT_NUMERIC);
 
 		snprint_ip_port(rem_addr, sizeof(rem_addr),
 						(struct sockaddr *) &remaddr, rem_port,
-						"udp", flags&NETSTAT_NUMERIC);
+						"udp", flags & NETSTAT_NUMERIC);
 
 		printf("udp   %6ld %6ld %-23s %-23s %-12s\n",
 			   rxq, txq, local_addr, rem_addr, state_str);
-
 	}
 }
 
@@ -321,7 +276,7 @@ static void raw_do_one(int lnr, const char *line)
 	char local_addr[64], rem_addr[64];
 	char *state_str, more[512];
 	int num, local_port, rem_port, d, state, timer_run, uid, timeout;
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 	struct sockaddr_in6 localaddr, remaddr;
 	char addr6[INET6_ADDRSTRLEN];
 	struct in6_addr in6;
@@ -341,7 +296,7 @@ static void raw_do_one(int lnr, const char *line)
 				 &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, more);
 
 	if (strlen(local_addr) > 8) {
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 		sscanf(local_addr, "%08X%08X%08X%08X",
 			   &in6.s6_addr32[0], &in6.s6_addr32[1],
 			   &in6.s6_addr32[2], &in6.s6_addr32[3]);
@@ -365,12 +320,12 @@ static void raw_do_one(int lnr, const char *line)
 	}
 
 	if (num < 10) {
-		bb_error_msg("warning, got bogus raw line.");
+		bb_error_msg("warning, got bogus raw line");
 		return;
 	}
-	state_str=itoa(state);
+	state_str = itoa(state);
 
-#ifdef CONFIG_FEATURE_IPV6
+#if ENABLE_FEATURE_IPV6
 # define notnull(A) (((A.sin6_family == AF_INET6) &&            \
 					 ((A.sin6_addr.s6_addr32[0]) ||            \
 					  (A.sin6_addr.s6_addr32[1]) ||            \
@@ -381,20 +336,19 @@ static void raw_do_one(int lnr, const char *line)
 #else
 # define notnull(A) (A.sin_addr.s_addr)
 #endif
-	if ((notnull(remaddr) && (flags&NETSTAT_CONNECTED)) ||
-		(!notnull(remaddr) && (flags&NETSTAT_LISTENING)))
-	{
+	if ((notnull(remaddr) && (flags & NETSTAT_CONNECTED))
+	 || (!notnull(remaddr) && (flags & NETSTAT_LISTENING))
+	) {
 		snprint_ip_port(local_addr, sizeof(local_addr),
 						(struct sockaddr *) &localaddr, local_port,
-						"raw", flags&NETSTAT_NUMERIC);
+						"raw", flags & NETSTAT_NUMERIC);
 
 		snprint_ip_port(rem_addr, sizeof(rem_addr),
 						(struct sockaddr *) &remaddr, rem_port,
-						"raw", flags&NETSTAT_NUMERIC);
+						"raw", flags & NETSTAT_NUMERIC);
 
 		printf("raw   %6ld %6ld %-23s %-23s %-12s\n",
 			   rxq, txq, local_addr, rem_addr, state_str);
-
 	}
 }
 
@@ -404,7 +358,7 @@ static void unix_do_one(int nr, const char *line)
 {
 	static int has = 0;
 	char path[PATH_MAX], ss_flags[32];
-	char *ss_proto, *ss_state, *ss_type;
+	const char *ss_proto, *ss_state, *ss_type;
 	int num, state, type, inode;
 	void *d;
 	unsigned long refcnt, proto, unix_flags;
@@ -418,18 +372,18 @@ static void unix_do_one(int nr, const char *line)
 	num = sscanf(line, "%p: %lX %lX %lX %X %X %d %s",
 				 &d, &refcnt, &proto, &unix_flags, &type, &state, &inode, path);
 	if (num < 6) {
-		bb_error_msg("warning, got bogus unix line.");
+		bb_error_msg("warning, got bogus unix line");
 		return;
 	}
 	if (!(has & HAS_INODE))
 		snprintf(path,sizeof(path),"%d",inode);
 
-	if ((flags&(NETSTAT_LISTENING|NETSTAT_CONNECTED))!=(NETSTAT_LISTENING|NETSTAT_CONNECTED)) {
+	if ((flags & (NETSTAT_LISTENING|NETSTAT_CONNECTED)) != (NETSTAT_LISTENING|NETSTAT_CONNECTED)) {
 		if ((state == SS_UNCONNECTED) && (unix_flags & SO_ACCEPTCON)) {
-			if (!(flags&NETSTAT_LISTENING))
+			if (!(flags & NETSTAT_LISTENING))
 				return;
 		} else {
-			if (!(flags&NETSTAT_CONNECTED))
+			if (!(flags & NETSTAT_CONNECTED))
 				return;
 		}
 	}
@@ -530,132 +484,113 @@ static void unix_do_one(int nr, const char *line)
 
 static void do_info(const char *file, const char *name, void (*proc)(int, const char *))
 {
-	char buffer[8192];
 	int lnr = 0;
 	FILE *procinfo;
 
 	procinfo = fopen(file, "r");
 	if (procinfo == NULL) {
 		if (errno != ENOENT) {
-			perror(file);
+			bb_perror_msg("%s", file);
 		} else {
-		bb_error_msg("no support for `%s' on this system.", name);
+			bb_error_msg("no support for '%s' on this system", name);
 		}
-	} else {
-		do {
-			if (fgets(buffer, sizeof(buffer), procinfo))
-				(proc)(lnr++, buffer);
-		} while (!feof(procinfo));
-		fclose(procinfo);
+		return;
 	}
+	do {
+		char *buffer = xmalloc_fgets(procinfo);
+		if (buffer) {
+			(proc)(lnr++, buffer);
+			free(buffer);
+		}
+	} while (!feof(procinfo));
+	fclose(procinfo);
 }
 
 /*
  * Our main function.
  */
 
+int netstat_main(int argc, char **argv);
 int netstat_main(int argc, char **argv)
 {
-	int opt;
-	int new_flags=0;
-	int showroute = 0, extended = 0;
-#ifdef CONFIG_FEATURE_IPV6
-	int inet=1;
-	int inet6=1;
+	enum {
+		OPT_extended = 0x4,
+		OPT_showroute = 0x100,
+	};
+	unsigned opt;
+#if ENABLE_FEATURE_IPV6
+	int inet = 1;
+	int inet6 = 1;
 #else
-# define inet 1
-# define inet6 0
+	enum { inet = 1, inet6 = 0 };
 #endif
-	while ((opt = getopt(argc, argv, "laenrtuwx")) != -1)
-		switch (opt) {
-		case 'l':
-			flags &= ~NETSTAT_CONNECTED;
-			flags |= NETSTAT_LISTENING;
-			break;
-		case 'a':
-			flags |= NETSTAT_LISTENING | NETSTAT_CONNECTED;
-			break;
-		case 'n':
-			flags |= NETSTAT_NUMERIC;
-			break;
-		case 'r':
-			showroute = 1;
-			break;
-		case 'e':
-			extended = 1;
-			break;
-		case 't':
-			new_flags |= NETSTAT_TCP;
-			break;
-		case 'u':
-			new_flags |= NETSTAT_UDP;
-			break;
-		case 'w':
-			new_flags |= NETSTAT_RAW;
-			break;
-		case 'x':
-			new_flags |= NETSTAT_UNIX;
-			break;
-		default:
-			bb_show_usage();
-		}
-	if ( showroute ) {
-#ifdef CONFIG_ROUTE
-		displayroutes ( flags & NETSTAT_NUMERIC, !extended );
+
+	/* Option string must match NETSTAT_xxx constants */
+	opt = getopt32(argc, argv, "laentuwxr");
+	if (opt & 0x1) { // -l
+		flags &= ~NETSTAT_CONNECTED;
+		flags |= NETSTAT_LISTENING;
+	}
+	if (opt & 0x2) flags |= NETSTAT_LISTENING | NETSTAT_CONNECTED; // -a
+	//if (opt & 0x4) // -e
+	if (opt & 0x8) flags |= NETSTAT_NUMERIC; // -n
+	//if (opt & 0x10) // -t: NETSTAT_TCP
+	//if (opt & 0x20) // -u: NETSTAT_UDP
+	//if (opt & 0x40) // -w: NETSTAT_RAW
+	//if (opt & 0x80) // -x: NETSTAT_UNIX
+	if (opt & OPT_showroute) { // -r
+#if ENABLE_ROUTE
+		bb_displayroutes(flags & NETSTAT_NUMERIC, !(opt & OPT_extended));
 		return 0;
 #else
-		bb_error_msg_and_die( "-r (display routing table) is not compiled in." );
+		bb_error_msg_and_die("-r (display routing table) is not compiled in");
 #endif
 	}
 
-	if (new_flags) {
-		flags &= ~(NETSTAT_TCP|NETSTAT_UDP|NETSTAT_RAW|NETSTAT_UNIX);
-		flags |= new_flags;
+	opt &= NETSTAT_ALLPROTO;
+	if (opt) {
+		flags &= ~NETSTAT_ALLPROTO;
+		flags |= opt;
 	}
-	if (flags&(NETSTAT_TCP|NETSTAT_UDP|NETSTAT_RAW)) {
+	if (flags & (NETSTAT_TCP|NETSTAT_UDP|NETSTAT_RAW)) {
 		printf("Active Internet connections ");	/* xxx */
 
-		if ((flags&(NETSTAT_LISTENING|NETSTAT_CONNECTED))==(NETSTAT_LISTENING|NETSTAT_CONNECTED))
+		if ((flags & (NETSTAT_LISTENING|NETSTAT_CONNECTED)) == (NETSTAT_LISTENING|NETSTAT_CONNECTED))
 			printf("(servers and established)");
-		else {
-			if (flags&NETSTAT_LISTENING)
-				printf("(only servers)");
-			else
-				printf("(w/o servers)");
-		}
-		printf("\nProto Recv-Q Send-Q Local Address           Foreign Address         State      \n");
+		else if (flags & NETSTAT_LISTENING)
+			printf("(only servers)");
+		else
+			printf("(w/o servers)");
+		printf("\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n");
 	}
-	if (inet && flags&NETSTAT_TCP)
-		do_info(_PATH_PROCNET_TCP,"AF INET (tcp)",tcp_do_one);
-#ifdef CONFIG_FEATURE_IPV6
-	if (inet6 && flags&NETSTAT_TCP)
-		do_info(_PATH_PROCNET_TCP6,"AF INET6 (tcp)",tcp_do_one);
+	if (inet && flags & NETSTAT_TCP)
+		do_info(_PATH_PROCNET_TCP, "AF INET (tcp)", tcp_do_one);
+#if ENABLE_FEATURE_IPV6
+	if (inet6 && flags & NETSTAT_TCP)
+		do_info(_PATH_PROCNET_TCP6, "AF INET6 (tcp)", tcp_do_one);
 #endif
-	if (inet && flags&NETSTAT_UDP)
-		do_info(_PATH_PROCNET_UDP,"AF INET (udp)",udp_do_one);
-#ifdef CONFIG_FEATURE_IPV6
-	if (inet6 && flags&NETSTAT_UDP)
-		do_info(_PATH_PROCNET_UDP6,"AF INET6 (udp)",udp_do_one);
+	if (inet && flags & NETSTAT_UDP)
+		do_info(_PATH_PROCNET_UDP, "AF INET (udp)", udp_do_one);
+#if ENABLE_FEATURE_IPV6
+	if (inet6 && flags & NETSTAT_UDP)
+		do_info(_PATH_PROCNET_UDP6, "AF INET6 (udp)", udp_do_one);
 #endif
-	if (inet && flags&NETSTAT_RAW)
-		do_info(_PATH_PROCNET_RAW,"AF INET (raw)",raw_do_one);
-#ifdef CONFIG_FEATURE_IPV6
-	if (inet6 && flags&NETSTAT_RAW)
-		do_info(_PATH_PROCNET_RAW6,"AF INET6 (raw)",raw_do_one);
+	if (inet && flags & NETSTAT_RAW)
+		do_info(_PATH_PROCNET_RAW, "AF INET (raw)", raw_do_one);
+#if ENABLE_FEATURE_IPV6
+	if (inet6 && flags & NETSTAT_RAW)
+		do_info(_PATH_PROCNET_RAW6, "AF INET6 (raw)", raw_do_one);
 #endif
-	if (flags&NETSTAT_UNIX) {
+	if (flags & NETSTAT_UNIX) {
 		printf("Active UNIX domain sockets ");
-		if ((flags&(NETSTAT_LISTENING|NETSTAT_CONNECTED))==(NETSTAT_LISTENING|NETSTAT_CONNECTED))
+		if ((flags & (NETSTAT_LISTENING|NETSTAT_CONNECTED)) == (NETSTAT_LISTENING|NETSTAT_CONNECTED))
 			printf("(servers and established)");
-		else {
-			if (flags&NETSTAT_LISTENING)
-				printf("(only servers)");
-			else
-				printf("(w/o servers)");
-		}
-
+		else if (flags & NETSTAT_LISTENING)
+			printf("(only servers)");
+		else
+			printf("(w/o servers)");
 		printf("\nProto RefCnt Flags       Type       State         I-Node Path\n");
-		do_info(_PATH_PROCNET_UNIX,"AF UNIX",unix_do_one);
+		do_info(_PATH_PROCNET_UNIX, "AF UNIX", unix_do_one);
 	}
 	return 0;
 }

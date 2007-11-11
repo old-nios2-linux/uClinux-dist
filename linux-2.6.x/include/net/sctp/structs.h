@@ -201,13 +201,15 @@ extern struct sctp_globals {
 	struct sctp_bind_hashbucket *port_hashtable;
 
 	/* This is the global local address list.
-	 * We actively maintain this complete list of interfaces on
-	 * the system by catching routing events.
+	 * We actively maintain this complete list of addresses on
+	 * the system by catching address add/delete events.
 	 *
 	 * It is a list of sctp_sockaddr_entry.
 	 */
 	struct list_head local_addr_list;
-	spinlock_t local_addr_lock;
+
+	/* Lock that protects the local_addr_list writers */
+	spinlock_t addr_list_lock;
 	
 	/* Flag to indicate if addip is enabled. */
 	int addip_enable;
@@ -243,7 +245,7 @@ extern struct sctp_globals {
 #define sctp_port_alloc_lock		(sctp_globals.port_alloc_lock)
 #define sctp_port_hashtable		(sctp_globals.port_hashtable)
 #define sctp_local_addr_list		(sctp_globals.local_addr_list)
-#define sctp_local_addr_lock		(sctp_globals.local_addr_lock)
+#define sctp_local_addr_lock		(sctp_globals.addr_list_lock)
 #define sctp_addip_enable		(sctp_globals.addip_enable)
 #define sctp_prsctp_enable		(sctp_globals.prsctp_enable)
 
@@ -277,6 +279,8 @@ struct sctp_sock {
 	__u16 default_flags;
 	__u32 default_context;
 	__u32 default_timetolive;
+	__u32 default_rcv_context;
+	int max_burst;
 
 	/* Heartbeat interval: The endpoint sends out a Heartbeat chunk to
 	 * the destination address every heartbeat interval. This value
@@ -305,10 +309,12 @@ struct sctp_sock {
 	__u32 autoclose;
 	__u8 nodelay;
 	__u8 disable_fragments;
-	__u8 pd_mode;
 	__u8 v4mapped;
-	__u32 adaption_ind;
+	__u8 frag_interleave;
+	__u32 adaptation_ind;
+	__u32 pd_point;
 
+	atomic_t pd_mode;
 	/* Receive to here while partial delivery is in effect. */
 	struct sk_buff_head pd_lobby;
 };
@@ -389,7 +395,7 @@ struct sctp_cookie {
 	/* Padding for future use */
 	__u8 padding;  		
 
-	__u32 adaption_ind;	
+	__u32 adaptation_ind;
 
 
 	/* This is a shim for my peer's INIT packet, followed by
@@ -415,6 +421,7 @@ struct sctp_signed_cookie {
  * internally.
  */
 union sctp_addr_param {
+	struct sctp_paramhdr p;
 	struct sctp_ipv4addr_param v4;
 	struct sctp_ipv6addr_param v6;
 };
@@ -432,7 +439,7 @@ union sctp_params {
 	struct sctp_ipv4addr_param *v4;
 	struct sctp_ipv6addr_param *v6;
 	union sctp_addr_param *addr;
-	struct sctp_adaption_ind_param *aind;
+	struct sctp_adaptation_ind_param *aind;
 };
 
 /* RFC 2960.  Section 3.3.5 Heartbeat.
@@ -537,7 +544,7 @@ struct sctp_af {
 					  struct net_device *);
 	void		(*dst_saddr)	(union sctp_addr *saddr,
 					 struct dst_entry *dst,
-					 unsigned short port);
+					 __be16 port);
 	int		(*cmp_addr)	(const union sctp_addr *addr1,
 					 const union sctp_addr *addr2);
 	void		(*addr_copy)	(union sctp_addr *dst,
@@ -553,14 +560,14 @@ struct sctp_af {
 					 struct sock *sk);
 	void		(*from_addr_param) (union sctp_addr *,
 					    union sctp_addr_param *,
-					    __u16 port, int iif);	
+					    __be16 port, int iif);
 	int		(*to_addr_param) (const union sctp_addr *,
 					  union sctp_addr_param *); 
 	int		(*addr_valid)	(union sctp_addr *,
 					 struct sctp_sock *,
 					 const struct sk_buff *);
 	sctp_scope_t	(*scope) (union sctp_addr *);
-	void		(*inaddr_any)	(union sctp_addr *, unsigned short);
+	void		(*inaddr_any)	(union sctp_addr *, __be16);
 	int		(*is_any)	(const union sctp_addr *);
 	int		(*available)	(union sctp_addr *,
 					 struct sctp_sock *);
@@ -587,7 +594,7 @@ struct sctp_pf {
 			  struct sctp_sock *);
 	int  (*bind_verify) (struct sctp_sock *, union sctp_addr *);
 	int  (*send_verify) (struct sctp_sock *, union sctp_addr *);
-	int  (*supported_addrs)(const struct sctp_sock *, __u16 *);
+	int  (*supported_addrs)(const struct sctp_sock *, __be16 *);
 	struct sock *(*create_accept_sk) (struct sock *sk,
 					  struct sctp_association *asoc);
 	void (*addr_v4map) (struct sctp_sock *, union sctp_addr *);
@@ -724,6 +731,7 @@ int sctp_user_addto_chunk(struct sctp_chunk *chunk, int off, int len,
 			  struct iovec *data);
 void sctp_chunk_free(struct sctp_chunk *);
 void  *sctp_addto_chunk(struct sctp_chunk *, int len, const void *data);
+void  *sctp_addto_param(struct sctp_chunk *, int len, const void *data);
 struct sctp_chunk *sctp_chunkify(struct sk_buff *,
 				 const struct sctp_association *,
 				 struct sock *);
@@ -734,8 +742,10 @@ const union sctp_addr *sctp_source(const struct sctp_chunk *chunk);
 /* This is a structure for holding either an IPv6 or an IPv4 address.  */
 struct sctp_sockaddr_entry {
 	struct list_head list;
+	struct rcu_head	rcu;
 	union sctp_addr a;
 	__u8 use_as_src;
+	__u8 valid;
 };
 
 typedef struct sctp_chunk *(sctp_packet_phandler_t)(struct sctp_association *);
@@ -910,6 +920,9 @@ struct sctp_transport {
 	 */
 	__u16 pathmaxrxt;
 
+	/* is the Path MTU update pending on this tranport */
+	__u8 pmtu_pending;
+
 	/* PMTU	      : The current known path MTU.  */
 	__u32 pathmtu;
 
@@ -1003,6 +1016,8 @@ void sctp_transport_update_rto(struct sctp_transport *, __u32);
 void sctp_transport_raise_cwnd(struct sctp_transport *, __u32, __u32);
 void sctp_transport_lower_cwnd(struct sctp_transport *, sctp_lower_cwnd_t);
 unsigned long sctp_transport_timeout(struct sctp_transport *);
+void sctp_transport_reset(struct sctp_transport *);
+void sctp_transport_update_pmtu(struct sctp_transport *, u32);
 
 
 /* This is the structure we use to queue packets as they come into
@@ -1030,7 +1045,7 @@ void sctp_inq_init(struct sctp_inq *);
 void sctp_inq_free(struct sctp_inq *);
 void sctp_inq_push(struct sctp_inq *, struct sctp_chunk *packet);
 struct sctp_chunk *sctp_inq_pop(struct sctp_inq *);
-void sctp_inq_set_th_handler(struct sctp_inq *, void (*)(void *), void *);
+void sctp_inq_set_th_handler(struct sctp_inq *, work_func_t);
 
 /* This is the structure we use to hold outbound chunks.  You push
  * chunks in and they automatically pop out the other end as bundled
@@ -1141,7 +1156,9 @@ int sctp_bind_addr_copy(struct sctp_bind_addr *dest,
 			int flags);
 int sctp_add_bind_addr(struct sctp_bind_addr *, union sctp_addr *,
 		       __u8 use_as_src, gfp_t gfp);
-int sctp_del_bind_addr(struct sctp_bind_addr *, union sctp_addr *);
+int sctp_del_bind_addr(struct sctp_bind_addr *, union sctp_addr *,
+			void fastcall (*rcu_call)(struct rcu_head *,
+					  void (*func)(struct rcu_head *)));
 int sctp_bind_addr_match(struct sctp_bind_addr *, const union sctp_addr *,
 			 struct sctp_sock *);
 union sctp_addr *sctp_find_unmatch_addr(struct sctp_bind_addr	*bp,
@@ -1212,9 +1229,6 @@ struct sctp_ep_common {
 	 * bind_addr.address_list is our set of local IP addresses.
 	 */
 	struct sctp_bind_addr bind_addr;
-
-	/* Protection during address list comparisons. */
-	rwlock_t   addr_lock;
 };
 
 
@@ -1270,7 +1284,7 @@ struct sctp_endpoint {
  	 * 	    this here so we pre-allocate this once and can re-use
  	 * 	    on every receive.
  	 */
- 	__u8 digest[SCTP_SIGNATURE_SIZE];
+ 	__u8 *digest;
  
 	/* sendbuf acct. policy.	*/
 	__u32 sndbuf_policy;
@@ -1314,6 +1328,13 @@ int sctp_process_init(struct sctp_association *, sctp_cid_t cid,
 __u32 sctp_generate_tag(const struct sctp_endpoint *);
 __u32 sctp_generate_tsn(const struct sctp_endpoint *);
 
+struct sctp_inithdr_host {
+	__u32 init_tag;
+	__u32 a_rwnd;
+	__u16 num_outbound_streams;
+	__u16 num_inbound_streams;
+	__u32 initial_tsn;
+};
 
 /* RFC2960
  *
@@ -1477,14 +1498,14 @@ struct sctp_association {
 		__u8    asconf_capable;  /* Does peer support ADDIP? */
 		__u8    prsctp_capable;  /* Can peer do PR-SCTP? */
 
-		__u32   adaption_ind;	 /* Adaption Code point. */
+		__u32   adaptation_ind;	 /* Adaptation Code point. */
 
 		/* This mask is used to disable sending the ASCONF chunk
 		 * with specified parameter to peer.
 		 */
-		__u16 addip_disabled_mask;
+		__be16 addip_disabled_mask;
 
-		struct sctp_inithdr i;
+		struct sctp_inithdr_host i;
 		int cookie_len;
 		void *cookie;
 
@@ -1554,6 +1575,9 @@ struct sctp_association {
 	 * association.
 	 */
 	__u16 pathmaxrxt;
+
+	/* Flag that path mtu update is pending */
+	__u8   pmtu_pending;
 
 	/* Association : The smallest PMTU discovered for all of the
 	 * PMTU	       : peer's transport addresses.
@@ -1651,6 +1675,9 @@ struct sctp_association {
 	__u32 default_ppid;
 	__u32 default_context;
 	__u32 default_timetolive;
+
+	/* Default receive parameters */
+	__u32 default_rcv_context;
 
 	/* This tracks outbound ssn for a given stream.	 */
 	struct sctp_ssnmap *ssnmap;
@@ -1844,6 +1871,7 @@ int sctp_assoc_set_bind_addr_from_ep(struct sctp_association *,
 int sctp_assoc_set_bind_addr_from_cookie(struct sctp_association *,
 					 struct sctp_cookie*,
 					 gfp_t gfp);
+int sctp_assoc_set_id(struct sctp_association *, gfp_t);
 
 int sctp_cmp_addr_exact(const union sctp_addr *ss1,
 			const union sctp_addr *ss2);

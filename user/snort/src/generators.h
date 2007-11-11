@@ -190,6 +190,12 @@
 #define     DECODE_ICMP_ORIG_PAYLOAD_GT_576       254
 #define     DECODE_ICMP_ORIG_IP_WITH_FRAGOFFSET   255
 
+#define     DECODE_IPV6_MIN_TTL                   270 
+#define     DECODE_IPV6_IS_NOT                    271
+#define     DECODE_IPV6_TRUNCATED_EXT             272
+#define     DECODE_IPV6_TRUNCATED                 273
+
+
 #define GENERATOR_SPP_SCAN2         117
 #define     SCAN_TYPE                             1
 
@@ -276,6 +282,8 @@
 #define     FRAG3_ANOMALY_BADSIZE_SM                6
 #define     FRAG3_ANOMALY_BADSIZE_LG                7
 #define     FRAG3_ANOMALY_OVLP                      8
+#define     FRAG3_IPV6_BSD_ICMP_FRAG                9
+#define     FRAG3_IPV6_BAD_FRAG_PKT                10
 
 #define GENERATOR_SMTP                             124
 #define     SMTP_COMMAND_OVERFLOW                  1
@@ -406,6 +414,8 @@
 #define FRAG3_ANOM_BADSIZE_SM_STR "(spp_frag3) Bad fragment size, packet size is negative"
 #define FRAG3_ANOM_BADSIZE_LG_STR "(spp_frag3) Bad fragment size, packet size is greater than 65536"
 #define FRAG3_ANOM_OVLP_STR "(spp_frag3) Fragmentation overlap"
+#define FRAG3_IPV6_BSD_ICMP_FRAG_STR "(spp_frag3) IPv6 BSD mbufs remote kernel buffer overflow"
+#define FRAG3_IPV6_BAD_FRAG_PKT_STR "(spp_frag3) Bogus fragmentation packet. Possible BSD attack"
 
 /*   Stream5 strings */
 #define     STREAM5_SYN_ON_EST_STR "Syn on established session"
@@ -476,6 +486,12 @@
 #define DECODE_ICMP_ORIG_PAYLOAD_LT_64_STR "(snort_decoder) WARNING: ICMP Original IP Payload < 64 bits!"
 #define DECODE_ICMP_ORIG_PAYLOAD_GT_576_STR "(snort_decoder) WARNING: ICMP Origianl IP Payload > 576 bytes!"
 #define DECODE_ICMP_ORIG_IP_WITH_FRAGOFFSET_STR "(snort_decoder) WARNING: ICMP Original IP Fragmented and Offset Not 0!"
+
+#define DECODE_IPV6_MIN_TTL_STR "(snort decoder) IPV6 packet exceeded TTL limit"
+#define DECODE_IPV6_IS_NOT_STR "(snort decoder) IPv6 header claims to not be IPv6"
+#define DECODE_IPV6_TRUNCATED_EXT_STR "(snort decoder) IPV6 truncated extension header"
+#define DECODE_IPV6_TRUNCATED_STR "(snort decoder) IPV6 truncated header"
+
 
 /*  Portscan2 strings */
 #define SCAN2_PREFIX_STR "(spp_portscan2) Portscan detected from "

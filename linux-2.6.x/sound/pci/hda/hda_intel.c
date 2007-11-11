@@ -83,10 +83,13 @@ MODULE_SUPPORTED_DEVICE("{{Intel, ICH6},"
 			 "{Intel, ICH7},"
 			 "{Intel, ESB2},"
 			 "{Intel, ICH8},"
+			 "{Intel, ICH9},"
 			 "{ATI, SB450},"
 			 "{ATI, SB600},"
 			 "{ATI, RS600},"
 			 "{ATI, RS690},"
+			 "{ATI, RS780},"
+			 "{ATI, R600},"
 			 "{VIA, VT8251},"
 			 "{VIA, VT8237A},"
 			 "{SiS, SIS966},"
@@ -197,8 +200,8 @@ enum { SDI0, SDI1, SDI2, SDI3, SDO0, SDO1, SDO2, SDO3 };
 #define RIRB_INT_MASK		0x05
 
 /* STATESTS int mask: SD2,SD1,SD0 */
+#define AZX_MAX_CODECS		3
 #define STATESTS_INT_MASK	0x07
-#define AZX_MAX_CODECS		4
 
 /* SD_CTL bits */
 #define SD_CTL_STREAM_RESET	0x01	/* stream reset bit */
@@ -338,6 +341,9 @@ struct azx {
 	unsigned int single_cmd :1;
 	unsigned int polling_mode :1;
 	unsigned int msi :1;
+
+	/* for debugging */
+	unsigned int last_cmd;	/* last issued command (to sync) */
 };
 
 /* driver types */
@@ -463,18 +469,10 @@ static void azx_free_cmd_io(struct azx *chip)
 }
 
 /* send a command */
-static int azx_corb_send_cmd(struct hda_codec *codec, hda_nid_t nid, int direct,
-			     unsigned int verb, unsigned int para)
+static int azx_corb_send_cmd(struct hda_codec *codec, u32 val)
 {
 	struct azx *chip = codec->bus->private_data;
 	unsigned int wp;
-	u32 val;
-
-	val = (u32)(codec->addr & 0x0f) << 28;
-	val |= (u32)direct << 27;
-	val |= (u32)nid << 20;
-	val |= verb << 8;
-	val |= para;
 
 	/* add command to corb */
 	wp = azx_readb(chip, CORBWP);
@@ -535,12 +533,12 @@ static unsigned int azx_rirb_get_response(struct hda_codec *codec)
 		}
 		if (! chip->rirb.cmds)
 			return chip->rirb.res; /* the last value */
-		schedule_timeout_interruptible(1);
+		schedule_timeout(1);
 	} while (time_after_eq(timeout, jiffies));
 
 	if (chip->msi) {
 		snd_printk(KERN_WARNING "hda_intel: No response from codec, "
-			   "disabling MSI...\n");
+			   "disabling MSI: last cmd=0x%08x\n", chip->last_cmd);
 		free_irq(chip->irq, chip);
 		chip->irq = -1;
 		pci_disable_msi(chip->pci);
@@ -552,13 +550,15 @@ static unsigned int azx_rirb_get_response(struct hda_codec *codec)
 
 	if (!chip->polling_mode) {
 		snd_printk(KERN_WARNING "hda_intel: azx_get_response timeout, "
-			   "switching to polling mode...\n");
+			   "switching to polling mode: last cmd=0x%08x\n",
+			   chip->last_cmd);
 		chip->polling_mode = 1;
 		goto again;
 	}
 
 	snd_printk(KERN_ERR "hda_intel: azx_get_response timeout, "
-		   "switching to single_cmd mode...\n");
+		   "switching to single_cmd mode: last cmd=0x%08x\n",
+		   chip->last_cmd);
 	chip->rirb.rp = azx_readb(chip, RIRBWP);
 	chip->rirb.cmds = 0;
 	/* switch to single_cmd mode */
@@ -578,19 +578,10 @@ static unsigned int azx_rirb_get_response(struct hda_codec *codec)
  */
 
 /* send a command */
-static int azx_single_send_cmd(struct hda_codec *codec, hda_nid_t nid,
-			       int direct, unsigned int verb,
-			       unsigned int para)
+static int azx_single_send_cmd(struct hda_codec *codec, u32 val)
 {
 	struct azx *chip = codec->bus->private_data;
-	u32 val;
 	int timeout = 50;
-
-	val = (u32)(codec->addr & 0x0f) << 28;
-	val |= (u32)direct << 27;
-	val |= (u32)nid << 20;
-	val |= verb << 8;
-	val |= para;
 
 	while (timeout--) {
 		/* check ICB busy bit */
@@ -636,10 +627,19 @@ static int azx_send_cmd(struct hda_codec *codec, hda_nid_t nid,
 			unsigned int para)
 {
 	struct azx *chip = codec->bus->private_data;
+	u32 val;
+
+	val = (u32)(codec->addr & 0x0f) << 28;
+	val |= (u32)direct << 27;
+	val |= (u32)nid << 20;
+	val |= verb << 8;
+	val |= para;
+	chip->last_cmd = val;
+
 	if (chip->single_cmd)
-		return azx_single_send_cmd(codec, nid, direct, verb, para);
+		return azx_single_send_cmd(codec, val);
 	else
-		return azx_corb_send_cmd(codec, nid, direct, verb, para);
+		return azx_corb_send_cmd(codec, val);
 }
 
 /* get a response */
@@ -965,10 +965,20 @@ static int azx_setup_controller(struct azx *chip, struct azx_dev *azx_dev)
  * Codec initialization
  */
 
+static unsigned int azx_max_codecs[] __devinitdata = {
+	[AZX_DRIVER_ICH] = 3,
+	[AZX_DRIVER_ATI] = 4,
+	[AZX_DRIVER_ATIHDMI] = 4,
+	[AZX_DRIVER_VIA] = 3,		/* FIXME: correct? */
+	[AZX_DRIVER_SIS] = 3,		/* FIXME: correct? */
+	[AZX_DRIVER_ULI] = 3,		/* FIXME: correct? */
+	[AZX_DRIVER_NVIDIA] = 3,	/* FIXME: correct? */
+};
+
 static int __devinit azx_codec_create(struct azx *chip, const char *model)
 {
 	struct hda_bus_template bus_temp;
-	int c, codecs, err;
+	int c, codecs, audio_codecs, err;
 
 	memset(&bus_temp, 0, sizeof(bus_temp));
 	bus_temp.private_data = chip;
@@ -980,16 +990,30 @@ static int __devinit azx_codec_create(struct azx *chip, const char *model)
 	if ((err = snd_hda_bus_new(chip->card, &bus_temp, &chip->bus)) < 0)
 		return err;
 
-	codecs = 0;
+	codecs = audio_codecs = 0;
 	for (c = 0; c < AZX_MAX_CODECS; c++) {
 		if ((chip->codec_mask & (1 << c)) & probe_mask) {
-			err = snd_hda_codec_new(chip->bus, c, NULL);
+			struct hda_codec *codec;
+			err = snd_hda_codec_new(chip->bus, c, &codec);
 			if (err < 0)
 				continue;
 			codecs++;
+			if (codec->afg)
+				audio_codecs++;
 		}
 	}
-	if (! codecs) {
+	if (!audio_codecs) {
+		/* probe additional slots if no codec is found */
+		for (; c < azx_max_codecs[chip->driver_type]; c++) {
+			if ((chip->codec_mask & (1 << c)) & probe_mask) {
+				err = snd_hda_codec_new(chip->bus, c, NULL);
+				if (err < 0)
+					continue;
+				codecs++;
+			}
+		}
+	}
+	if (!codecs) {
 		snd_printk(KERN_ERR SFX "no codecs initialized\n");
 		return -ENXIO;
 	}
@@ -1077,6 +1101,10 @@ static int azx_pcm_open(struct snd_pcm_substream *substream)
 	runtime->hw.rates = hinfo->rates;
 	snd_pcm_limit_hw_rates(runtime);
 	snd_pcm_hw_constraint_integer(runtime, SNDRV_PCM_HW_PARAM_PERIODS);
+	snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
+				   128);
+	snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
+				   128);
 	if ((err = hinfo->ops.open(hinfo, apcm->codec, substream)) < 0) {
 		azx_release_device(azx_dev);
 		mutex_unlock(&chip->open_mutex);
@@ -1284,7 +1312,7 @@ static int __devinit create_codec_pcm(struct azx *chip, struct hda_codec *codec,
 		snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE, &azx_pcm_ops);
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
 					      snd_dma_pci_data(chip->pci),
-					      1024 * 64, 1024 * 128);
+					      1024 * 64, 1024 * 1024);
 	chip->pcm[pcm_dev] = pcm;
 	if (chip->pcm_devs < pcm_dev + 1)
 		chip->pcm_devs = pcm_dev + 1;
@@ -1380,7 +1408,8 @@ static int __devinit azx_init_stream(struct azx *chip)
 
 static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 {
-	if (request_irq(chip->pci->irq, azx_interrupt, IRQF_DISABLED|IRQF_SHARED,
+	if (request_irq(chip->pci->irq, azx_interrupt,
+			chip->msi ? 0 : IRQF_SHARED,
 			"HDA Intel", chip)) {
 		printk(KERN_ERR "hda-intel: unable to grab IRQ %d, "
 		       "disabling device\n", chip->pci->irq);
@@ -1389,6 +1418,7 @@ static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 		return -1;
 	}
 	chip->irq = chip->pci->irq;
+	pci_intx(chip->pci, !chip->msi);
 	return 0;
 }
 
@@ -1500,6 +1530,31 @@ static int azx_dev_free(struct snd_device *device)
 }
 
 /*
+ * white/black-listing for position_fix
+ */
+static struct snd_pci_quirk position_fix_list[] __devinitdata = {
+	SND_PCI_QUIRK(0x1028, 0x01cc, "Dell D820", POS_FIX_NONE),
+	{}
+};
+
+static int __devinit check_position_fix(struct azx *chip, int fix)
+{
+	const struct snd_pci_quirk *q;
+
+	if (fix == POS_FIX_AUTO) {
+		q = snd_pci_quirk_lookup(chip->pci, position_fix_list);
+		if (q) {
+			snd_printdd(KERN_INFO
+				    "hda_intel: position_fix set to %d "
+				    "for device %04x:%04x\n",
+				    q->value, q->subvendor, q->subdevice);
+			return q->value;
+		}
+	}
+	return fix;
+}
+
+/*
  * constructor
  */
 static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
@@ -1533,7 +1588,8 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	chip->driver_type = driver_type;
 	chip->msi = enable_msi;
 
-	chip->position_fix = position_fix;
+	chip->position_fix = check_position_fix(chip, position_fix);
+
 	chip->single_cmd = single_cmd;
 
 #if BITS_PER_LONG != 64
@@ -1710,16 +1766,31 @@ static struct pci_device_id azx_ids[] = {
 	{ 0x8086, 0x27d8, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ICH }, /* ICH7 */
 	{ 0x8086, 0x269a, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ICH }, /* ESB2 */
 	{ 0x8086, 0x284b, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ICH }, /* ICH8 */
+	{ 0x8086, 0x293e, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ICH }, /* ICH9 */
+	{ 0x8086, 0x293f, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ICH }, /* ICH9 */
 	{ 0x1002, 0x437b, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATI }, /* ATI SB450 */
 	{ 0x1002, 0x4383, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATI }, /* ATI SB600 */
 	{ 0x1002, 0x793b, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATIHDMI }, /* ATI RS600 HDMI */
 	{ 0x1002, 0x7919, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATIHDMI }, /* ATI RS690 HDMI */
+	{ 0x1002, 0x960c, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATIHDMI }, /* ATI RS780 HDMI */
+	{ 0x1002, 0xaa00, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ATIHDMI }, /* ATI R600 HDMI */
 	{ 0x1106, 0x3288, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_VIA }, /* VIA VT8251/VT8237A */
 	{ 0x1039, 0x7502, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_SIS }, /* SIS966 */
 	{ 0x10b9, 0x5461, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_ULI }, /* ULI M5461 */
-	{ 0x10de, 0x026c, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA 026c */
-	{ 0x10de, 0x0371, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA 0371 */
-	{ 0x10de, 0x03f0, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA 03f0 */
+	{ 0x10de, 0x026c, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP51 */
+	{ 0x10de, 0x0371, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP55 */
+	{ 0x10de, 0x03e4, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP61 */
+	{ 0x10de, 0x03f0, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP61 */
+	{ 0x10de, 0x044a, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP65 */
+	{ 0x10de, 0x044b, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP65 */
+	{ 0x10de, 0x055c, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP67 */
+	{ 0x10de, 0x055d, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP67 */
+	{ 0x10de, 0x07fc, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP73 */
+	{ 0x10de, 0x07fd, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP73 */
+	{ 0x10de, 0x0774, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP77 */
+	{ 0x10de, 0x0775, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP77 */
+	{ 0x10de, 0x0776, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP77 */
+	{ 0x10de, 0x0777, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AZX_DRIVER_NVIDIA }, /* NVIDIA MCP77 */
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, azx_ids);

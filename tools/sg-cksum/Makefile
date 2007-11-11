@@ -10,3 +10,6 @@ MLINKS=	cksum.1 sum.1
 
 $(PROG): $(SRCS)
 	$(HOSTCC) -Werror -Wall -DHAVE_MKSTEMP -o $@ $^
+
+clean:
+	-rm -f $(PROG)

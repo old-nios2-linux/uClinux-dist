@@ -12,8 +12,11 @@ O_TARGET := ks8695e.o
 obj-y   := ks8695_main.o ks8695_fxhw.o ks8695_cache.o
 obj-m   := $(O_TARGET)
 
+export-objs := ks8695_main.o
+
 #EXTRA_CFLAGS += -I. -DPCI -DMEM_MAPPED_IO -Wno-strict-prototypes 
-EXTRA_CFLAGS += -DRX_TASK -DTX_TASK -I. -DARM_LINUX -DEXPORT_SYMTAB -Wno-strict-prototypes 
+#EXTRA_CFLAGS += -DRX_TASK -DTX_TASK -I. -DARM_LINUX -DEXPORT_SYMTAB -Wno-strict-prototypes 
+EXTRA_CFLAGS += -DRX_TASK -DTX_TASK -I. -DARM_LINUX -Wno-strict-prototypes 
 include $(TOPDIR)/Rules.make
 
 clean:

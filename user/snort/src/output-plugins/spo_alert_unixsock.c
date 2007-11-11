@@ -272,7 +272,7 @@ void OpenAlertSock(void)
     char srv[STD_BUF];
 
     /* srv is our filename workspace. Set it to file UNSOCK_FILE inside the log directory. */
-    snprintf(srv, STD_BUF - 1, "%s%s/%s", pv.chroot_dir == NULL ? "" : pv.chroot_dir, pv.log_dir, UNSOCK_FILE);
+    SnortSnprintf(srv, STD_BUF, "%s%s/%s", pv.chroot_dir == NULL ? "" : pv.chroot_dir, pv.log_dir, UNSOCK_FILE);
 
     if(access(srv, W_OK))
     {

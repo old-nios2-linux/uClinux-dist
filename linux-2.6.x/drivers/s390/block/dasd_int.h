@@ -13,10 +13,6 @@
 
 #ifdef __KERNEL__
 
-/* erp debugging in dasd.c and dasd_3990_erp.c */
-#define ERP_DEBUG
-
-
 /* we keep old device allocation scheme; IOW, minors are still in 0..255 */
 #define DASD_PER_MAJOR (1U << (MINORBITS - DASD_PARTN_BITS))
 #define DASD_PARTN_MASK ((1 << DASD_PARTN_BITS) - 1)
@@ -297,7 +293,7 @@ struct dasd_uid {
 struct dasd_device {
 	/* Block device stuff. */
 	struct gendisk *gdp;
-	request_queue_t *request_queue;
+	struct request_queue *request_queue;
 	spinlock_t request_queue_lock;
 	struct block_device *bdev;
         unsigned int devindex;
@@ -474,7 +470,7 @@ extern struct dasd_profile_info_t dasd_global_profile;
 extern unsigned int dasd_profile_level;
 extern struct block_device_operations dasd_device_operations;
 
-extern kmem_cache_t *dasd_page_cache;
+extern struct kmem_cache *dasd_page_cache;
 
 struct dasd_ccw_req *
 dasd_kmalloc_request(char *, int, int, struct dasd_device *);
@@ -512,6 +508,8 @@ void dasd_generic_remove (struct ccw_device *cdev);
 int dasd_generic_set_online(struct ccw_device *, struct dasd_discipline *);
 int dasd_generic_set_offline (struct ccw_device *cdev);
 int dasd_generic_notify(struct ccw_device *, int);
+
+int dasd_generic_read_dev_chars(struct dasd_device *, char *, void **, int);
 
 /* externals in dasd_devmap.c */
 extern int dasd_max_devindex;
@@ -563,7 +561,6 @@ struct dasd_ccw_req *dasd_alloc_erp_request(char *, int, int,
 					    struct dasd_device *);
 void dasd_free_erp_request(struct dasd_ccw_req *, struct dasd_device *);
 void dasd_log_sense(struct dasd_ccw_req *, struct irb *);
-void dasd_log_ccw(struct dasd_ccw_req *, int, __u32);
 
 /* externals in dasd_3370_erp.c */
 dasd_era_t dasd_3370_erp_examine(struct dasd_ccw_req *, struct irb *);

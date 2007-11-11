@@ -99,7 +99,7 @@
 #define DCSR_SETCMPST	(1 << 25)       /* Set Descriptor Compare Status */
 #define DCSR_CLRCMPST	(1 << 24)       /* Clear Descriptor Compare Status */
 #define DCSR_CMPST	(1 << 10)       /* The Descriptor Compare Status */
-#define DCSR_ENRINTR	(1 << 9)        /* The end of Receive */
+#define DCSR_EORINTR	(1 << 9)        /* The end of Receive */
 #endif
 #define DCSR_REQPEND	(1 << 8)	/* Request Pending (read-only) */
 #define DCSR_STOPSTATE	(1 << 3)	/* Stop State (read-only) */
@@ -463,9 +463,6 @@
  * Serial Audio Controller
  */
 
-/* FIXME: This clash with SA1111 defines */
-#ifndef _ASM_ARCH_SA1111
-
 #define SACR0		__REG(0x40400000)  /* Global Control Register */
 #define SACR1		__REG(0x40400004)  /* Serial Audio I 2 S/MSB-Justified Control Register */
 #define SASR0		__REG(0x4040000C)  /* Serial Audio I 2 S/MSB-Justified Interface and FIFO Status Register */
@@ -474,8 +471,8 @@
 #define SADIV		__REG(0x40400060)  /* Audio Clock Divider Register. */
 #define SADR		__REG(0x40400080)  /* Serial Audio Data Register (TX and RX FIFO access Register). */
 
-#define SACR0_RFTH(x)	(x << 12)	/* Rx FIFO Interrupt or DMA Trigger Threshold */
-#define SACR0_TFTH(x)	(x << 8)	/* Tx FIFO Interrupt or DMA Trigger Threshold */
+#define SACR0_RFTH(x)	((x) << 12)	/* Rx FIFO Interrupt or DMA Trigger Threshold */
+#define SACR0_TFTH(x)	((x) << 8)	/* Tx FIFO Interrupt or DMA Trigger Threshold */
 #define SACR0_STRF	(1 << 5)	/* FIFO Select for EFWR Special Function */
 #define SACR0_EFWR	(1 << 4)	/* Enable EFWR Function  */
 #define SACR0_RST	(1 << 3)	/* FIFO, i2s Register Reset */
@@ -502,8 +499,6 @@
 #define SAIMR_TUR	(1 << 5)	/* Enable Tx FIFO Underrun Condition Interrupt */
 #define SAIMR_RFS	(1 << 4)	/* Enable Rx FIFO Service Interrupt */
 #define SAIMR_TFS	(1 << 3)	/* Enable Tx FIFO Service Interrupt */
-
-#endif
 
 /*
  * AC97 Controller registers
@@ -803,12 +798,11 @@
 #define UDCISR0         __REG(0x4060000C) /* UDC Interrupt Status Register 0 */
 #define UDCISR1         __REG(0x40600010) /* UDC Interrupt Status Register 1 */
 #define UDCISR_INT(n,intr) (((intr) & 0x03) << (((n) & 0x0F) * 2))
-#define UDCISR1_IECC	(1 << 31)	/* IntEn - Configuration Change */
-#define UDCISR1_IESOF	(1 << 30)	/* IntEn - Start of Frame */
-#define UDCISR1_IERU	(1 << 29)	/* IntEn - Resume */
-#define UDCISR1_IESU	(1 << 28)	/* IntEn - Suspend */
-#define UDCISR1_IERS	(1 << 27)	/* IntEn - Reset */
-
+#define UDCISR1_IRCC	(1 << 31)	/* IntReq - Configuration Change */
+#define UDCISR1_IRSOF	(1 << 30)	/* IntReq - Start of Frame */
+#define UDCISR1_IRRU	(1 << 29)	/* IntReq - Resume */
+#define UDCISR1_IRSU	(1 << 28)	/* IntReq - Suspend */
+#define UDCISR1_IRRS	(1 << 27)	/* IntReq - Reset */
 
 #define UDCFNR          __REG(0x40600014) /* UDC Frame Number Register */
 #define UDCOTGICR	__REG(0x40600018) /* UDC On-The-Go interrupt control */
@@ -1482,7 +1476,7 @@
 #define GPIO112_MMCCMD_MD	(112 | GPIO_ALT_FN_1_OUT)
 #define GPIO113_I2S_SYSCLK_MD	(113 | GPIO_ALT_FN_1_OUT)
 #define GPIO113_AC97_RESET_N_MD	(113 | GPIO_ALT_FN_2_OUT)
-#define GPIO117_I2CSCL_MD	(117 | GPIO_ALT_FN_1_OUT)
+#define GPIO117_I2CSCL_MD	(117 | GPIO_ALT_FN_1_IN)
 #define GPIO118_I2CSDA_MD	(118 | GPIO_ALT_FN_1_IN)
 
 /*
@@ -1627,7 +1621,7 @@
 #define SSCR0_RIM	(1 << 22)	/* Receive FIFO overrrun interrupt mask */
 #define SSCR0_TUM	(1 << 23)	/* Transmit FIFO underrun interrupt mask */
 #define SSCR0_FRDC	(0x07000000)	/* Frame rate divider control (mask) */
-#define SSCR0_SlotsPerFrm(x) ((x) - 1)	/* Time slots per frame [1..8] */
+#define SSCR0_SlotsPerFrm(x) (((x) - 1) << 24)	/* Time slots per frame [1..8] */
 #define SSCR0_ADC	(1 << 30)	/* Audio clock select */
 #define SSCR0_MOD	(1 << 31)	/* Mode (normal or network) */
 #endif
@@ -1656,6 +1650,7 @@
 #define SSCR0_EDSS		(1 << 20)	/* Extended Data Size Select */
 
 /* extra bits in PXA255, PXA26x and PXA27x SSP ports */
+#define SSCR0_TISSP		(1 << 4)	/* TI Sync Serial Protocol */
 #define SSCR0_PSP		(3 << 4)	/* PSP - Programmable Serial Protocol */
 #define SSCR1_TTELP		(1 << 31)	/* TXD Tristate Enable Last Phase */
 #define SSCR1_TTE		(1 << 30)	/* TXD Tristate Enable */
@@ -1682,15 +1677,18 @@
 #define SSSR_PINT		(1 << 18)	/* Peripheral Trailing Byte Interrupt */
 
 #define SSPSP_FSRT		(1 << 25)	/* Frame Sync Relative Timing */
-#define SSPSP_DMYSTOP(x)	(x << 23)	/* Dummy Stop */
-#define SSPSP_SFRMWDTH(x)	(x << 16)	/* Serial Frame Width */
-#define SSPSP_SFRMDLY(x)	(x << 9)	/* Serial Frame Delay */
-#define SSPSP_DMYSTRT(x)	(x << 7)	/* Dummy Start */
-#define SSPSP_STRTDLY(x)	(x << 4)	/* Start Delay */
+#define SSPSP_DMYSTOP(x)	((x) << 23)	/* Dummy Stop */
+#define SSPSP_SFRMWDTH(x)	((x) << 16)	/* Serial Frame Width */
+#define SSPSP_SFRMDLY(x)	((x) << 9)	/* Serial Frame Delay */
+#define SSPSP_DMYSTRT(x)	((x) << 7)	/* Dummy Start */
+#define SSPSP_STRTDLY(x)	((x) << 4)	/* Start Delay */
 #define SSPSP_ETDS			(1 << 3)	/* End of Transfer data State */
 #define SSPSP_SFRMP			(1 << 2)	/* Serial Frame Polarity */
-#define SSPSP_SCMODE(x)		(x << 0)	/* Serial Bit Rate Clock Mode */
+#define SSPSP_SCMODE(x)		((x) << 0)	/* Serial Bit Rate Clock Mode */
 
+#define SSACD_SCDB		(1 << 3)	/* SSPSYSCLK Divider Bypass */
+#define SSACD_ACPS(x)		((x) << 4)	/* Audio clock PLL select */
+#define SSACD_ACDS(x)		((x) << 0)	/* Audio clock divider select */
 
 #define SSCR0_P1	__REG(0x41000000)  /* SSP Port 1 Control Register 0 */
 #define SSCR1_P1	__REG(0x41000004)  /* SSP Port 1 Control Register 1 */
@@ -1767,28 +1765,8 @@
 #define SSACD_P(x) (*(((x) == 1) ? &SSACD_P1 : ((x) == 2) ? &SSACD_P2 : ((x) == 3) ? &SSACD_P3 : NULL))
 
 /*
- * MultiMediaCard (MMC) controller
+ * MultiMediaCard (MMC) controller - see drivers/mmc/host/pxamci.h
  */
-
-#define MMC_STRPCL	__REG(0x41100000)  /* Control to start and stop MMC clock */
-#define MMC_STAT	__REG(0x41100004)  /* MMC Status Register (read only) */
-#define MMC_CLKRT	__REG(0x41100008)  /* MMC clock rate */
-#define MMC_SPI		__REG(0x4110000c)  /* SPI mode control bits */
-#define MMC_CMDAT	__REG(0x41100010)  /* Command/response/data sequence control */
-#define MMC_RESTO	__REG(0x41100014)  /* Expected response time out */
-#define MMC_RDTO	__REG(0x41100018)  /* Expected data read time out */
-#define MMC_BLKLEN	__REG(0x4110001c)  /* Block length of data transaction */
-#define MMC_NOB		__REG(0x41100020)  /* Number of blocks, for block mode */
-#define MMC_PRTBUF	__REG(0x41100024)  /* Partial MMC_TXFIFO FIFO written */
-#define MMC_I_MASK	__REG(0x41100028)  /* Interrupt Mask */
-#define MMC_I_REG	__REG(0x4110002c)  /* Interrupt Register (read only) */
-#define MMC_CMD		__REG(0x41100030)  /* Index of current command */
-#define MMC_ARGH	__REG(0x41100034)  /* MSW part of the current command argument */
-#define MMC_ARGL	__REG(0x41100038)  /* LSW part of the current command argument */
-#define MMC_RES		__REG(0x4110003c)  /* Response FIFO (read only) */
-#define MMC_RXFIFO	__REG(0x41100040)  /* Receive FIFO (read only) */
-#define MMC_TXFIFO	__REG(0x41100044)  /* Transmit FIFO (write only) */
-
 
 /*
  * Core Clock
@@ -1803,35 +1781,35 @@
 #define CCCR_M_MASK	0x0060		/* Memory Frequency to Run Mode Frequency Multiplier */
 #define CCCR_L_MASK	0x001f		/* Crystal Frequency to Memory Frequency Multiplier */
 
-#define CKEN24_CAMERA	(1 << 24)	/* Camera Interface Clock Enable */
-#define CKEN23_SSP1	(1 << 23)	/* SSP1 Unit Clock Enable */
-#define CKEN22_MEMC	(1 << 22)	/* Memory Controller Clock Enable */
-#define CKEN21_MEMSTK	(1 << 21)	/* Memory Stick Host Controller */
-#define CKEN20_IM	(1 << 20)	/* Internal Memory Clock Enable */
-#define CKEN19_KEYPAD	(1 << 19)	/* Keypad Interface Clock Enable */
-#define CKEN18_USIM	(1 << 18)	/* USIM Unit Clock Enable */
-#define CKEN17_MSL	(1 << 17)	/* MSL Unit Clock Enable */
-#define CKEN16_LCD	(1 << 16)	/* LCD Unit Clock Enable */
-#define CKEN15_PWRI2C	(1 << 15)	/* PWR I2C Unit Clock Enable */
-#define CKEN14_I2C	(1 << 14)	/* I2C Unit Clock Enable */
-#define CKEN13_FICP	(1 << 13)	/* FICP Unit Clock Enable */
-#define CKEN12_MMC	(1 << 12)	/* MMC Unit Clock Enable */
-#define CKEN11_USB	(1 << 11)	/* USB Unit Clock Enable */
-#define CKEN10_ASSP	(1 << 10)	/* ASSP (SSP3) Clock Enable */
-#define CKEN10_USBHOST	(1 << 10)	/* USB Host Unit Clock Enable */
-#define CKEN9_OSTIMER	(1 << 9)	/* OS Timer Unit Clock Enable */
-#define CKEN9_NSSP	(1 << 9)	/* NSSP (SSP2) Clock Enable */
-#define CKEN8_I2S	(1 << 8)	/* I2S Unit Clock Enable */
-#define CKEN7_BTUART	(1 << 7)	/* BTUART Unit Clock Enable */
-#define CKEN6_FFUART	(1 << 6)	/* FFUART Unit Clock Enable */
-#define CKEN5_STUART	(1 << 5)	/* STUART Unit Clock Enable */
-#define CKEN4_HWUART	(1 << 4)	/* HWUART Unit Clock Enable */
-#define CKEN4_SSP3	(1 << 4)	/* SSP3 Unit Clock Enable */
-#define CKEN3_SSP	(1 << 3)	/* SSP Unit Clock Enable */
-#define CKEN3_SSP2	(1 << 3)	/* SSP2 Unit Clock Enable */
-#define CKEN2_AC97	(1 << 2)	/* AC97 Unit Clock Enable */
-#define CKEN1_PWM1	(1 << 1)	/* PWM1 Clock Enable */
-#define CKEN0_PWM0	(1 << 0)	/* PWM0 Clock Enable */
+#define CKEN_CAMERA	(24)	/* Camera Interface Clock Enable */
+#define CKEN_SSP1	(23)	/* SSP1 Unit Clock Enable */
+#define CKEN_MEMC	(22)	/* Memory Controller Clock Enable */
+#define CKEN_MEMSTK	(21)	/* Memory Stick Host Controller */
+#define CKEN_IM		(20)	/* Internal Memory Clock Enable */
+#define CKEN_KEYPAD	(19)	/* Keypad Interface Clock Enable */
+#define CKEN_USIM	(18)	/* USIM Unit Clock Enable */
+#define CKEN_MSL	(17)	/* MSL Unit Clock Enable */
+#define CKEN_LCD	(16)	/* LCD Unit Clock Enable */
+#define CKEN_PWRI2C	(15)	/* PWR I2C Unit Clock Enable */
+#define CKEN_I2C	(14)	/* I2C Unit Clock Enable */
+#define CKEN_FICP	(13)	/* FICP Unit Clock Enable */
+#define CKEN_MMC	(12)	/* MMC Unit Clock Enable */
+#define CKEN_USB	(11)	/* USB Unit Clock Enable */
+#define CKEN_ASSP	(10)	/* ASSP (SSP3) Clock Enable */
+#define CKEN_USBHOST	(10)	/* USB Host Unit Clock Enable */
+#define CKEN_OSTIMER	(9)	/* OS Timer Unit Clock Enable */
+#define CKEN_NSSP	(9)	/* NSSP (SSP2) Clock Enable */
+#define CKEN_I2S	(8)	/* I2S Unit Clock Enable */
+#define CKEN_BTUART	(7)	/* BTUART Unit Clock Enable */
+#define CKEN_FFUART	(6)	/* FFUART Unit Clock Enable */
+#define CKEN_STUART	(5)	/* STUART Unit Clock Enable */
+#define CKEN_HWUART	(4)	/* HWUART Unit Clock Enable */
+#define CKEN_SSP3	(4)	/* SSP3 Unit Clock Enable */
+#define CKEN_SSP	(3)	/* SSP Unit Clock Enable */
+#define CKEN_SSP2	(3)	/* SSP2 Unit Clock Enable */
+#define CKEN_AC97	(2)	/* AC97 Unit Clock Enable */
+#define CKEN_PWM1	(1)	/* PWM1 Clock Enable */
+#define CKEN_PWM0	(0)	/* PWM0 Clock Enable */
 
 #define OSCC_OON	(1 << 1)	/* 32.768kHz OON (write-once only bit) */
 #define OSCC_OOK	(1 << 0)	/* 32.768kHz OOK (read-only bit) */

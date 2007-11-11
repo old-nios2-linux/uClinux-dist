@@ -23,10 +23,31 @@ char   preload_lookup_pbuf[MAXDNAME + 32 + sizeof(HEADER)];
 int    preload_disabled = 0;
 int    preload_addrlist_updated = 0;
 
-void preload_notify(void)
+void preload_notify(struct daemon *daemon)
 {
-  /* XXX: Notify firewall etc */
+  struct stat st;
+  pid_t p;
+
   syslog(LOG_NOTICE, _("The preloaded address list was updated."));
+
+  if (stat("/bin/preload_notify", &st) != 0)
+    return;
+
+  if ((p = fork()) != 0)
+    {
+      if (p != -1)
+	{
+	  int i;
+	  for (i = 0; i < MAX_PROCS; i++)
+	    if (daemon->tcp_pids[i] == 0)
+	      {
+		daemon->tcp_pids[i] = p;
+		break;
+	      }
+	}
+      return;
+    }
+  execl("/bin/preload_notify", "preload_notify", NULL);
 }
 
 int preload_lookup_search(char *name, int flush)
@@ -243,10 +264,12 @@ next_line:
     }
 
   r = preload_lookup(fline, now);
-  if (r >= 0)
+  if (r >= 0)  {
     fline_valid = 0;
-  else
+  }	else {
+	incr_unresolved_counter();
     fline_valid = 1;
+  }
 
   return 1;
 }
@@ -286,6 +309,8 @@ void preload_tick(struct daemon *daemon, time_t now)
       else
 	{
 	  /* stat failed */
+	  if (daemon->preload_last_poll == 0 || daemon->preload_file_mtime != 0)
+	    syslog(LOG_WARNING, _("cannot access preload file %s: %s"), daemon->preload_file, strerror(errno));
 	  if (daemon->preload_file_mtime)
 	    {
 	      if (daemon->preload_stream)
@@ -302,7 +327,7 @@ void preload_tick(struct daemon *daemon, time_t now)
   else if (daemon->preload_last_poll != 0 && preload_addrlist_updated &&
 	   ((diff = difftime(now, daemon->preload_last_poll)) > PRELOAD_QUERY_TIMEOUT || diff < -PRELOAD_QUERY_TIMEOUT))
     {
-      preload_notify();
+      preload_notify(daemon);
       preload_addrlist_updated = 0;
     }
 }

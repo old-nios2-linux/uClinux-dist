@@ -15,6 +15,10 @@
  * Changelog:
  *            v1.01:
  *                   - added -p <preload> to preload values from a file
+ *            Horms: 
+ *                   - added -q to be quiet when modifying values
+ *
+ * Changes by Albert Cahalan, 2002.
  */
 
 
@@ -26,113 +30,51 @@
 #include <dirent.h>
 #include <string.h>
 #include <errno.h>
-#include <config/autoconf.h>
+#include "proc/procps.h"
+#include "proc/version.h"
 
-/*
- *    Additional types we might need.
- */
+
+// Proof that C++ causes brain damage:
 typedef int bool;
-
 static bool true  = 1;
 static bool false = 0;
-
-
-/*
- *    Function Prototypes
- */
-int Usage(const char *name);
-void Preload(const char *filename);
-int WriteSetting(const char *setting);
-int ReadSetting(const char *setting);
-int DisplayAll(const char *path, bool ShowTableUtil);
-
 
 /*
  *    Globals...
  */
 
-const char *PROC_PATH = "/proc/sys/";
-#ifdef CONFIG_USER_FLATFSD_FLATFSD
-const char *DEFAULT_PRELOAD = "/etc/config/sysctl.conf";
-#else
-const char *DEFAULT_PRELOAD = "/etc/sysctl.conf";
-#endif
+static const char PROC_PATH[] = "/proc/sys/";
+static const char DEFAULT_PRELOAD[] = "/etc/sysctl.conf";
+static bool NameOnly;
 static bool PrintName;
+static bool PrintNewline;
+static bool IgnoreError;
+static bool Quiet;
 
 /* error messages */
-const char *ERR_UNKNOWN_PARAMETER = "error: Unknown parameter '%s'\n";
-const char *ERR_MALFORMED_SETTING = "error: Malformed setting '%s'\n";
-const char *ERR_NO_EQUALS = "error: '%s' must be of the form name=value\n";
-const char *ERR_INVALID_KEY = "error: '%s' is an unknown key\n";
-const char *ERR_UNKNOWN_WRITING = "error: unknown error %d setting key '%s'\n";
-const char *ERR_UNKNOWN_READING = "error: unknown error %d reading key '%s'\n";
-const char *ERR_PERMISSION_DENIED = "error: permission denied on key '%s'\n";
-const char *ERR_OPENING_DIR = "error: unable to open directory '%s'\n";
-const char *ERR_PRELOAD_FILE = "error: unable to open preload file '%s'\n";
-const char *WARN_BAD_LINE = "warning: %s(%d): invalid syntax, continuing...\n";
+static const char ERR_UNKNOWN_PARAMETER[] = "error: Unknown parameter \"%s\"\n";
+static const char ERR_MALFORMED_SETTING[] = "error: Malformed setting \"%s\"\n";
+static const char ERR_NO_EQUALS[] = "error: \"%s\" must be of the form name=value\n";
+static const char ERR_INVALID_KEY[] = "error: \"%s\" is an unknown key\n";
+static const char ERR_UNKNOWN_WRITING[] = "error: \"%s\" setting key \"%s\"\n";
+static const char ERR_UNKNOWN_READING[] = "error: \"%s\" reading key \"%s\"\n";
+static const char ERR_PERMISSION_DENIED[] = "error: permission denied on key '%s'\n";
+static const char ERR_OPENING_DIR[] = "error: unable to open directory \"%s\"\n";
+static const char ERR_PRELOAD_FILE[] = "error: unable to open preload file \"%s\"\n";
+static const char WARN_BAD_LINE[] = "warning: %s(%d): invalid syntax, continuing...\n";
 
 
-/*
- *    Main... 
- *
- */
-int main(int argc, char **argv) {
-const char *me = (const char *)basename(argv[0]);
-bool SwitchesAllowed = true;
-bool WriteMode = false;
-int ReturnCode = 0;
-const char *preloadfile = DEFAULT_PRELOAD;
-
-   PrintName = true;
-
-   if (argc < 2) {
-       return Usage(me);
-   } /* endif */
-
-   argv++;
-
-   for (; argv && *argv && **argv; argv++) {
-      if (SwitchesAllowed && **argv == '-') {        /* we have a switch */
-         switch((*argv)[1]) {
-         case 'n':
-              PrintName = false;
-           break;
-         case 'w':
-              SwitchesAllowed = false;
-              WriteMode = true;
-           break;
-         case 'p':
-              argv++;
-              if (argv && *argv && **argv) {
-                 preloadfile = *argv;
-              } /* endif */
-
-              Preload(preloadfile);
-              return(0);
-           break;
-         case 'a':
-         case 'A':
-              SwitchesAllowed = false;
-              return DisplayAll(PROC_PATH, ((*argv)[1] == 'a') ? false : true);
-         case 'h':
-         case '?':
-              return Usage(me);
-         default:
-              fprintf(stderr, ERR_UNKNOWN_PARAMETER, *argv);
-              return Usage(me);
-         } /* end switch */
-      } else {
-         SwitchesAllowed = false;
-         if (WriteMode)
-            ReturnCode = WriteSetting(*argv);
-         else ReadSetting(*argv);
-      } /* end if */
-   } /* end for */      
-
-return ReturnCode;
-} /* end main */
-
-
+static void slashdot(char *restrict p, char old, char new){
+  p = strpbrk(p,"/.");
+  if(!p) return;            /* nothing -- can't be, but oh well */
+  if(*p==new) return;       /* already in desired format */
+  while(p){
+    char c = *p;
+    if(c==old) *p=new;
+    if(c==new) *p=old;
+    p = strpbrk(p+1,"/.");
+  }
+}
 
 
 
@@ -140,39 +82,272 @@ return ReturnCode;
  *     Display the usage format
  *
  */
-int Usage(const char *name) {
-   printf("usage:  %s [-n] variable ... \n"
-          "        %s [-n] -w variable=value ... \n" 
-          "        %s [-n] -a \n" 
-          "        %s [-n] -p <file>   (default %s) \n"
-          "        %s [-n] -A\n", name, name, name, name, DEFAULT_PRELOAD, name);
-return -1;
-}  /* end Usage() */
+static int Usage(const char *restrict const name) {
+   printf("usage:  %s [-n] [-e] variable ... \n"
+          "        %s [-n] [-e] [-q] -w variable=value ... \n" 
+          "        %s [-n] [-e] -a \n" 
+          "        %s [-n] [-e] [-q] -p <file>   (default /etc/sysctl.conf) \n"
+          "        %s [-n] [-e] -A\n", name, name, name, name, name);
+   return -1;
+}
 
 
 /*
  *     Strip the leading and trailing spaces from a string
  *
  */
-char *StripLeadingAndTrailingSpaces(char *oneline) {
-char *t;
+static char *StripLeadingAndTrailingSpaces(char *oneline) {
+   char *t;
 
-if (!oneline || !*oneline)
-   return oneline;
+   if (!oneline || !*oneline)
+      return oneline;
 
-t = oneline;
-t += strlen(oneline)-1;
+   t = oneline;
+   t += strlen(oneline)-1;
 
-while ((*t == ' ' || *t == '\t' || *t == '\n' || *t == '\r') && t != oneline)
-   *t-- = 0;
+   while ((*t==' ' || *t=='\t' || *t=='\n' || *t=='\r') && t!=oneline)
+      *t-- = 0;
 
-t = oneline;
+   t = oneline;
 
-while ((*t == ' ' || *t == '\t') && *t != 0)
-   t++;
+   while ((*t==' ' || *t=='\t') && *t!=0)
+      t++;
 
-return t;
-} /* end StripLeadingAndTrailingSpaces() */
+   return t;
+}
+
+static int DisplayAll(const char *restrict const path);
+
+/*
+ *     Read a sysctl setting 
+ *
+ */
+static int ReadSetting(const char *restrict const name) {
+   int rc = 0;
+   char *restrict tmpname;
+   char *restrict outname;
+   char inbuf[1025];
+   FILE *restrict fp;
+
+   if (!name || !*name) {
+      fprintf(stderr, ERR_INVALID_KEY, name);
+      return -1;
+   }
+
+   /* used to open the file */
+   tmpname = malloc(strlen(name)+strlen(PROC_PATH)+1);
+   strcpy(tmpname, PROC_PATH);
+   strcat(tmpname, name); 
+   slashdot(tmpname+strlen(PROC_PATH),'.','/'); /* change . to / */
+
+   /* used to display the output */
+   outname = strdup(name);
+   slashdot(outname,'/','.'); /* change / to . */
+
+   fp = fopen(tmpname, "r");
+
+   if (!fp) {
+      switch(errno) {
+      case ENOENT:
+         if (!IgnoreError) {
+            fprintf(stderr, ERR_INVALID_KEY, outname);
+            rc = -1;
+         }
+         break;
+      case EACCES:
+         fprintf(stderr, ERR_PERMISSION_DENIED, outname);
+         rc = -1;
+         break;
+      default:
+         fprintf(stderr, ERR_UNKNOWN_READING, strerror(errno), outname);
+         rc = -1;
+         break;
+      }
+   } else {
+      if(fgets(inbuf, sizeof inbuf - 1, fp)) {
+         // this loop is required, see
+         // /sbin/sysctl -a | egrep -6 dev.cdrom.info
+         do {
+            if (NameOnly) {
+               fprintf(stdout, "%s\n", outname);
+            } else {
+               /* already has the \n in it */
+               if (PrintName) {
+                  fprintf(stdout, "%s = %s", outname, inbuf);
+               } else {
+                  if (!PrintNewline) {
+                    char *nlptr = strchr(inbuf,'\n');
+                    if(nlptr) *nlptr='\0';
+                  }
+                  fprintf(stdout, "%s", inbuf);
+               }
+            }
+         } while(fgets(inbuf, sizeof inbuf - 1, fp));
+      } else {
+         switch(errno) {
+         case EACCES:
+            fprintf(stderr, ERR_PERMISSION_DENIED, outname);
+            rc = -1;
+            break;
+         case EISDIR:{
+            size_t len;
+            len = strlen(tmpname);
+            tmpname[len] = '/';
+            tmpname[len+1] = '\0';
+            rc = DisplayAll(tmpname);
+            break;
+         }
+         default:
+            fprintf(stderr, ERR_UNKNOWN_READING, strerror(errno), outname);
+            rc = -1;
+            break;
+         }
+      }
+      fclose(fp);
+   }
+
+   free(tmpname);
+   free(outname);
+   return rc;
+}
+
+
+
+/*
+ *     Display all the sysctl settings 
+ *
+ */
+static int DisplayAll(const char *restrict const path) {
+   int rc = 0;
+   int rc2;
+   DIR *restrict dp;
+   struct dirent *restrict de;
+   struct stat ts;
+
+   dp = opendir(path);
+
+   if (!dp) {
+      fprintf(stderr, ERR_OPENING_DIR, path);
+      rc = -1;
+   } else {
+      readdir(dp);  // skip .
+      readdir(dp);  // skip ..
+      while (( de = readdir(dp) )) {
+         char *restrict tmpdir;
+         tmpdir = (char *restrict)malloc(strlen(path)+strlen(de->d_name)+2);
+         sprintf(tmpdir, "%s%s", path, de->d_name);
+         rc2 = stat(tmpdir, &ts);
+         if (rc2 != 0) {
+            perror(tmpdir);
+         } else {
+            if (S_ISDIR(ts.st_mode)) {
+               strcat(tmpdir, "/");
+               DisplayAll(tmpdir);
+            } else {
+               rc |= ReadSetting(tmpdir+strlen(PROC_PATH));
+            }
+         }
+         free(tmpdir);
+      }
+      closedir(dp);
+   }
+   return rc;
+}
+
+
+/*
+ *     Write a sysctl setting 
+ *
+ */
+static int WriteSetting(const char *setting) {
+   int rc = 0;
+   const char *name = setting;
+   const char *value;
+   const char *equals;
+   char *tmpname;
+   FILE *fp;
+   char *outname;
+
+   if (!name) {        /* probably don't want to display this err */
+      return 0;
+   } /* end if */
+
+   equals = index(setting, '=');
+ 
+   if (!equals) {
+      fprintf(stderr, ERR_NO_EQUALS, setting);
+      return -1;
+   }
+
+   value = equals + 1;      /* point to the value in name=value */   
+
+   if (!*name || !*value || name == equals) { 
+      fprintf(stderr, ERR_MALFORMED_SETTING, setting);
+      return -2;
+   }
+
+   /* used to open the file */
+   tmpname = malloc(equals-name+1+strlen(PROC_PATH));
+   strcpy(tmpname, PROC_PATH);
+   strncat(tmpname, name, (int)(equals-name)); 
+   tmpname[equals-name+strlen(PROC_PATH)] = 0;
+   slashdot(tmpname+strlen(PROC_PATH),'.','/'); /* change . to / */
+
+   /* used to display the output */
+   outname = malloc(equals-name+1);                       
+   strncpy(outname, name, (int)(equals-name)); 
+   outname[equals-name] = 0;
+   slashdot(outname,'/','.'); /* change / to . */
+ 
+   fp = fopen(tmpname, "w");
+
+   if (!fp) {
+      switch(errno) {
+      case ENOENT:
+         if (!IgnoreError) {
+            fprintf(stderr, ERR_INVALID_KEY, outname);
+            rc = -1;
+         }
+         break;
+      case EACCES:
+         fprintf(stderr, ERR_PERMISSION_DENIED, outname);
+         rc = -1;
+         break;
+      default:
+         fprintf(stderr, ERR_UNKNOWN_WRITING, strerror(errno), outname);
+         rc = -1;
+         break;
+      }
+   } else {
+      rc = fprintf(fp, "%s\n", value);
+      if (rc < 0) {
+         fprintf(stderr, ERR_UNKNOWN_WRITING, strerror(errno), outname);
+         fclose(fp);
+      } else {
+         rc=fclose(fp);
+         if (rc != 0) 
+            fprintf(stderr, ERR_UNKNOWN_WRITING, strerror(errno), outname);
+      }
+      if (rc==0 && !Quiet) {
+         if (NameOnly) {
+            fprintf(stdout, "%s\n", outname);
+         } else {
+            if (PrintName) {
+               fprintf(stdout, "%s = %s\n", outname, value);
+            } else {
+               if (PrintNewline)
+                  fprintf(stdout, "%s\n", value);
+               else
+                  fprintf(stdout, "%s", value);
+            }
+         }
+      }
+   }
+
+   free(tmpname);
+   free(outname);
+   return rc;
+}
 
 
 
@@ -181,21 +356,26 @@ return t;
  *           - we parse the file and then reform it (strip out whitespace)
  *
  */
-void Preload(const char *filename) {
-FILE *fp;
-char oneline[257];
-char buffer[257];
-char *t;
-int n = 0;
-char *name, *value;
+static int Preload(const char *restrict const filename) {
+   char oneline[256];
+   char buffer[256];
+   FILE *fp;
+   char *t;
+   int n = 0;
+   int rc = 0;
+   char *name, *value;
 
-   if (!filename || ((fp = fopen(filename, "r")) == NULL)) {
+   fp = (filename[0]=='-' && !filename[1])
+      ? stdin
+      : fopen(filename, "r")
+   ;
+
+   if (!fp) {
       fprintf(stderr, ERR_PRELOAD_FILE, filename);
-      return;
-   } /* endif */
+      return -1;
+   }
 
-   while (fgets(oneline, 256, fp)) {
-      oneline[256] = 0;
+   while (fgets(oneline, sizeof oneline, fp)) {
       n++;
       t = StripLeadingAndTrailingSpaces(oneline);
 
@@ -209,7 +389,7 @@ char *name, *value;
       if (!name || !*name) {
          fprintf(stderr, WARN_BAD_LINE, filename, n);
          continue;
-      } /* endif */
+      }
 
       StripLeadingAndTrailingSpaces(name);
 
@@ -217,197 +397,120 @@ char *name, *value;
       if (!value || !*value) {
          fprintf(stderr, WARN_BAD_LINE, filename, n);
          continue;
-      } /* endif */
+      }
 
       while ((*value == ' ' || *value == '\t') && *value != 0)
          value++;
 
+      // should NameOnly affect this?
       sprintf(buffer, "%s=%s", name, value);
-      WriteSetting(buffer);
-   } /* endwhile */
+      rc |= WriteSetting(buffer);
+   }
 
    fclose(fp);
-} /* end Preload() */
+   return rc;
+}
 
 
 
 /*
- *     Write a sysctl setting 
+ *    Main... 
  *
  */
-int WriteSetting(const char *setting) {
-int rc = 0;
-const char *name = setting;
-const char *value;
-const char *equals;
-char *tmpname;
-char *cptr;
-FILE *fp;
-char *outname;
+int main(int argc, char *argv[]) {
+   const char *me = (const char *)basename(argv[0]);
+   bool SwitchesAllowed = true;
+   bool WriteMode = false;
+   int ReturnCode = 0;
+   const char *preloadfile = DEFAULT_PRELOAD;
 
-   if (!name) {                /* probably dont' want to display this  err */
-      return 0;
-   } /* end if */
+   PrintName = true;
+   PrintNewline = true;
+   IgnoreError = false;
+   Quiet = false;
 
-   equals = index(setting, '=');
- 
-   if (!equals) {
-      fprintf(stderr, ERR_NO_EQUALS, setting);
-      return -1;
-   } /* end if */
+   if (argc < 2) {
+       return Usage(me);
+   }
 
-   value = equals + sizeof(char);      /* point to the value in name=value */   
+   argv++;
 
-   if (!*name || !*value || name == equals) { 
-      fprintf(stderr, ERR_MALFORMED_SETTING, setting);
-      return -2;
-   } /* end if */
+   for (; argv && *argv && **argv; argv++) {
+      if (SwitchesAllowed && **argv == '-') {        /* we have a switch */
+         if ((*argv)[1] && (*argv)[2]){       // don't yet handle "sysctl -ew"
+              if (!strcmp("--help",*argv)) {
+                 Usage(me);
+                 exit(0);
+              }
+              if (!strcmp("--version",*argv)) {
+                 fprintf(stdout, "sysctl (%s)\n",procps_version);
+                 exit(0);
+              }
+              fprintf(stderr, ERR_UNKNOWN_PARAMETER, *argv);
+              return Usage(me);
+         }
+         switch((*argv)[1]) {
+         case 'b':
+              /* This is "binary" format, which means more for BSD. */
+              PrintNewline = false;
+           /* FALL THROUGH */
+         case 'n':
+              PrintName = false;
+           break;
+         case 'e':
+              // For FreeBSD, -e means a "%s=%s\n" format. ("%s: %s\n" default)
+              // We (and NetBSD) use "%s = %s\n" always, and -e to ignore errors.
+              IgnoreError = true;
+           break;
+         case 'N':
+              NameOnly = true;
+           break;
+         case 'w':
+              SwitchesAllowed = false;
+              WriteMode = true;
+           break;
+         case 'f':  // the NetBSD way
+         case 'p':
+              argv++;
+              if (argv && *argv && **argv) {
+                 preloadfile = *argv;
+              }
+              return Preload(preloadfile);
+	 case 'q':
+	      Quiet = true;
+	   break;
+	 case 'o':  // BSD: binary values too, 1st 16 bytes in hex
+	 case 'x':  // BSD: binary values too, whole thing in hex
+	      /* does nothing */ ;
+	   break;
+         case 'a': // string and integer values (for Linux, all of them)
+         case 'A': // same as -a -o
+         case 'X': // same as -a -x
+              SwitchesAllowed = false;
+              return DisplayAll(PROC_PATH);
+         case 'V':
+              fprintf(stdout, "sysctl (%s)\n",procps_version);
+              exit(0);
+         case 'd':   // BSD: print description ("vm.kvm_size: Size of KVM")
+         case 'h':   // BSD: human-readable (did FreeBSD 5 make -e default?)
+         case '?':
+              return Usage(me);
+         default:
+              fprintf(stderr, ERR_UNKNOWN_PARAMETER, *argv);
+              return Usage(me);
+         }
+      } else {
+         if (NameOnly && Quiet)   // nonsense
+            return Usage(me);
+         SwitchesAllowed = false;
+         if (WriteMode || index(*argv, '='))
+            ReturnCode = WriteSetting(*argv);
+         else
+            ReturnCode = ReadSetting(*argv);
+      }
+   }
 
-   tmpname = (char *)malloc((equals-name+1+strlen(PROC_PATH))*sizeof(char));
-   outname = (char *)malloc((equals-name+1)*sizeof(char));
-
-   strcpy(tmpname, PROC_PATH);
-   strncat(tmpname, name, (int)(equals-name)); 
-   tmpname[equals-name+strlen(PROC_PATH)] = 0;
-   strncpy(outname, name, (int)(equals-name)); 
-   outname[equals-name] = 0;
- 
-   while (cptr = strchr(tmpname, '.')) {      /* change . to / */
-      *cptr = '/';
-   } /* endwhile */
-
-   while (cptr = strchr(outname, '/')) {      /* change / to . */
-      *cptr = '.';
-   } /* endwhile */
-
-   fp = fopen(tmpname, "w");
-
-   if (!fp) {
-      switch(errno) {
-      case ENOENT:
-         fprintf(stderr, ERR_INVALID_KEY, outname);
-        break;
-      case EACCES:
-         fprintf(stderr, ERR_PERMISSION_DENIED, outname);
-        break;
-      default:
-         fprintf(stderr, ERR_UNKNOWN_WRITING, errno, outname);
-        break;
-      } /* end switch */
-      rc = -1;
-   } else {
-      fprintf(fp, "%s\n", value);
-      fclose(fp);
-      if (PrintName)
-         fprintf(stdout, "%s = ", outname);
-      fprintf(stdout, "%s\n", value);
-   } /* endif */
-
-   free(tmpname);
-   free(outname);
-return rc;
-} /* end WriteSetting() */
-
-
-
-/*
- *     Read a sysctl setting 
- *
- */
-int ReadSetting(const char *setting) {
-int rc = 0;
-char *tmpname, *outname, *cptr;
-char inbuf[1025];
-const char *name = setting;
-FILE *fp;
-
-   if (!setting || !*setting) {
-      fprintf(stderr, ERR_INVALID_KEY, setting);
-   } /* endif */
-
-   tmpname = (char *)malloc((strlen(name)+strlen(PROC_PATH)+1)*sizeof(char));
-   outname = (char *)malloc((strlen(name)+1)*sizeof(char));
-
-   strcpy(tmpname, PROC_PATH);
-   strcat(tmpname, name); 
-   strcpy(outname, name); 
- 
-   while (cptr = strchr(tmpname, '.')) {      /* change . to / */
-      *cptr = '/';
-   } /* endwhile */
-
-   while (cptr = strchr(outname, '/')) {      /* change / to . */
-      *cptr = '.';
-   } /* endwhile */
-
-   fp = fopen(tmpname, "r");
-
-   if (!fp) {
-      switch(errno) {
-      case ENOENT:
-         fprintf(stderr, ERR_INVALID_KEY, outname);
-        break;
-      case EACCES:
-         fprintf(stderr, ERR_PERMISSION_DENIED, outname);
-        break;
-      default:
-         fprintf(stderr, ERR_UNKNOWN_READING, errno, outname);
-        break;
-      } /* end switch */
-      rc = -1;
-   } else {
-      while(fgets(inbuf, 1024, fp)) {
-         if (PrintName)
-            fprintf(stdout, "%s = ", outname);
-         fprintf(stdout, "%s", inbuf);  /* this already has the CR in it */
-      } /* endwhile */
-      fclose(fp);
-   } /* endif */
-
-   free(tmpname);
-   free(outname);
-return rc;
-} /* end ReadSetting() */
+   return ReturnCode;
+}
 
 
-
-/*
- *     Display all the sysctl settings 
- *
- */
-int DisplayAll(const char *path, bool ShowTableUtil) {
-int rc = 0;
-int rc2;
-DIR *dp;
-struct dirent *de;
-char *tmpdir;
-struct stat ts;
-
-   dp = opendir(path);
-
-   if (!dp) {
-      fprintf(stderr, ERR_OPENING_DIR, path);
-      rc = -1;
-   } else {
-      readdir(dp); readdir(dp);   /* skip . and .. */
-      while (de = readdir(dp)) {
-         tmpdir = (char *)malloc(strlen(path)+strlen(de->d_name)+2);
-         sprintf(tmpdir, "%s%s", path, de->d_name);
-         rc2 = stat(tmpdir, &ts);       /* should check this return code */
-         if (rc2 != 0) {
-            perror(tmpdir);
-         } else {
-            if (S_ISDIR(ts.st_mode)) {
-               strcat(tmpdir, "/");
-               DisplayAll(tmpdir, ShowTableUtil);
-            } else {
-               rc |= ReadSetting(tmpdir+strlen(PROC_PATH));
-            } /* endif */
-         } /* endif */
-         free(tmpdir);
-      } /* end while */
-      closedir(dp);
-   } /* endif */
-
-return rc;
-} /* end DisplayAll() */

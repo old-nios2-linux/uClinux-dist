@@ -71,8 +71,8 @@ void SMTP_GenerateAlert(smtp_event_e event, char *format, ...)
         //int len = strlen(_smtp_event[event]);
         char debugstr[EVENT_STR_LEN];
         strncpy(debugstr, _smtp_event[event], EVENT_STR_LEN);
-        debugstr[EVENT_STR_LEN-2] = '\0';
-        strcat(debugstr, "\n");
+        debugstr[EVENT_STR_LEN - 2] = '\n';
+        debugstr[EVENT_STR_LEN - 1] = '\0';
         
         DEBUG_WRAP(_dpd.debugMsg(DEBUG_SMTP, debugstr););
     }

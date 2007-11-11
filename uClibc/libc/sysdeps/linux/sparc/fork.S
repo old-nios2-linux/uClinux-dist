@@ -19,12 +19,13 @@
 
 /* Code taken from glibc2.2.2/sysdeps/unix/sysv/linux/sparc/vfork.S */
 
+#include <features.h>
 #include <sys/syscall.h>
 
-.text;
-.global	__libc_fork;
-.align 4;
-.type	__libc_fork,@function;
+.text
+.global	__libc_fork
+.type	__libc_fork,%function
+.align 4
 
 __libc_fork:
 	mov __NR_fork, %g1
@@ -43,6 +44,6 @@ __libc_fork:
 	retl
 	and	%o0, %o1, %o0
 
-.size __libc_fork,.-__libc_fork;
-.weak fork; fork = __libc_fork
-
+.size __libc_fork,.-__libc_fork
+weak_alias(__libc_fork,fork)
+libc_hidden_weak(fork)

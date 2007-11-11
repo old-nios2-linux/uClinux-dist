@@ -2411,16 +2411,19 @@ static int __init init(void)
 		/* fall through */
 	case PXA250_C0: case PXA210_C0:
 		break;
-#elif	defined(CONFIG_ARCH_IXP425)
-	case IXP425_A0:
-		out_dma = 0;
-		break;
-#endif
 	default:
 		out_dma = 0;
 		printk(KERN_ERR "%s: unrecognized processor: %08x\n",
 			driver_name, chiprev);
 		return -ENODEV;
+#elif	defined(CONFIG_ARCH_IXP425)
+	case IXP425_A0:
+		out_dma = 0;
+		break;
+	default:
+		/* Any other IXP425 stepping is fine */
+		break;
+#endif
 	}
 
 	pr_debug("%s: IRQ %d%s%s%s\n", driver_name, IRQ_USB,

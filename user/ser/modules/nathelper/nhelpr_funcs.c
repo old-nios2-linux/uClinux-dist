@@ -1,8 +1,8 @@
 /*
- * $Id: nhelpr_funcs.c,v 1.3.4.1.2.3.2.1 2004/07/13 12:23:53 andrei Exp $
+ * $Id: nhelpr_funcs.c,v 1.8 2004/08/24 08:58:32 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -150,7 +150,7 @@ error_1:
 error:
 	return -1;
 other:
-	LOG(L_ERR,"ERROR:check_content_type: invlaid type for a message\n");
+	LOG(L_ERR,"ERROR:check_content_type: invalid type for a message\n");
 	return -1;
 }
 
@@ -168,13 +168,13 @@ int extract_body(struct sip_msg *msg, str *body )
 	}
 	body->len = msg->len -(int)(body->s-msg->buf);
 	if (body->len==0) {
-		LOG(L_ERR, "ERROR: extract_body: message body has lenght zero\n");
+		LOG(L_ERR, "ERROR: extract_body: message body has length zero\n");
 		goto error;
 	}
 	
 	/* no need for parse_headers(msg, EOH), get_body will 
 	 * parse everything */
-	/*is the content type corect?*/
+	/*is the content type correct?*/
 	if (check_content_type(msg)==-1)
 	{
 		LOG(L_ERR,"ERROR: extract_body: content type mismatching\n");

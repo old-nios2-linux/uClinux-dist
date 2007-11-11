@@ -143,7 +143,7 @@ static int stinger_connect(struct serio *serio, struct serio_driver *drv)
 	stinger = kmalloc(sizeof(struct stinger), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!stinger || !input_dev)
-		goto fail;
+		goto fail1;
 
 	stinger->dev = input_dev;
 	snprintf(stinger->phys, sizeof(stinger->phys), "%s/serio0", serio->phys);
@@ -154,8 +154,7 @@ static int stinger_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.vendor = SERIO_STINGER;
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &serio->dev;
-	input_dev->private = stinger;
+	input_dev->dev.parent = &serio->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);
 	input_dev->keybit[LONG(BTN_A)] = BIT(BTN_A) | BIT(BTN_B) | BIT(BTN_C) | BIT(BTN_X) |
@@ -168,13 +167,17 @@ static int stinger_connect(struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open(serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
-	input_register_device(stinger->dev);
+	err = input_register_device(stinger->dev);
+	if (err)
+		goto fail3;
+
 	return 0;
 
- fail:	serio_set_drvdata(serio, NULL);
-	input_free_device(input_dev);
+ fail3:	serio_close(serio);
+ fail2:	serio_set_drvdata(serio, NULL);
+ fail1:	input_free_device(input_dev);
 	kfree(stinger);
 	return err;
 }
@@ -212,8 +215,7 @@ static struct serio_driver stinger_drv = {
 
 static int __init stinger_init(void)
 {
-	serio_register_driver(&stinger_drv);
-	return 0;
+	return serio_register_driver(&stinger_drv);
 }
 
 static void __exit stinger_exit(void)

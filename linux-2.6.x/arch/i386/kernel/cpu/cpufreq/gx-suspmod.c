@@ -79,7 +79,7 @@
 #include <linux/smp.h>
 #include <linux/cpufreq.h>
 #include <linux/pci.h>
-#include <asm/processor.h>
+#include <asm/processor-cyrix.h>
 #include <asm/errno.h>
 
 /* PCI config registers, all at F0 */
@@ -115,7 +115,6 @@ struct gxfreq_params {
 	u8 pci_suscfg;
 	u8 pci_pmer1;
 	u8 pci_pmer2;
-	u8 pci_rev;
 	struct pci_dev *cs55x0;
 };
 
@@ -276,7 +275,7 @@ static void gx_set_cpuspeed(unsigned int khz)
 			pci_write_config_byte(gx_params->cs55x0, PCI_VIDTC, 100);/* typical 50 to 100ms */
 			pci_write_config_byte(gx_params->cs55x0, PCI_PMER1, pmer1);
 
-			if (gx_params->pci_rev < 0x10) {   /* CS5530(rev 1.2, 1.3) */
+			if (gx_params->cs55x0->revision < 0x10) {   /* CS5530(rev 1.2, 1.3) */
 				suscfg = gx_params->pci_suscfg | SUSMOD;
 			} else {                           /* CS5530A,B.. */
 				suscfg = gx_params->pci_suscfg | SUSMOD | PWRSVE;
@@ -447,7 +446,6 @@ static int __init cpufreq_gx_init(void)
 	int ret;
 	struct gxfreq_params *params;
 	struct pci_dev *gx_pci;
-	u32 class_rev;
 
 	/* Test if we have the right hardware */
 	if ((gx_pci = gx_detect_chipset()) == NULL)
@@ -472,8 +470,6 @@ static int __init cpufreq_gx_init(void)
 	pci_read_config_byte(params->cs55x0, PCI_PMER2, &(params->pci_pmer2));
 	pci_read_config_byte(params->cs55x0, PCI_MODON, &(params->on_duration));
 	pci_read_config_byte(params->cs55x0, PCI_MODOFF, &(params->off_duration));
-        pci_read_config_dword(params->cs55x0, PCI_CLASS_REVISION, &class_rev);
-	params->pci_rev = class_rev && 0xff;
 
 	if ((ret = cpufreq_register_driver(&gx_suspmod_driver))) {
 		kfree(params);

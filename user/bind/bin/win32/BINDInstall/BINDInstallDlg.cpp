@@ -1,5 +1,5 @@
 /*
- * Portions Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: BINDInstallDlg.cpp,v 1.6.2.6.2.12.6.2 2006/10/04 07:06:02 marka Exp $ */
+/* $Id: BINDInstallDlg.cpp,v 1.15.18.10.12.2 2007/06/27 01:06:14 marka Exp $ */
 
 /*
  * Copyright (c) 1999-2000 by Nortel Networks Corporation
@@ -114,22 +114,33 @@ const FileData installFiles[] =
 #  endif
 #endif
 #if _MSC_VER >= 1400
-	{"mfc80.dll", FileData::WinSystem, FileData::Critical, TRUE},
-	{"msvcr80.dll", FileData::WinSystem, FileData::Critical, TRUE},
-#elif _MSC_VER >= 1310
+	{"MFC80CHS.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80CHT.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80DEU.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80ENU.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80ESP.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80FRA.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80ITA.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80JPN.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"MFC80KOR.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"Microsoft.VC80.MFCLOC.manifest", FileData::BinDir, FileData::Critical, FALSE},
+#endif
+#if _MSC_VER < 1400
+#if _MSC_VER >= 1310
 	{"mfc71.dll", FileData::WinSystem, FileData::Critical, TRUE},
 	{"msvcr71.dll", FileData::WinSystem, FileData::Critical, TRUE},
-#elif _MSC_VER > 1200
+#elif _MSC_VER > 1200 && _MSC_VER < 1310
 	{"mfc70.dll", FileData::WinSystem, FileData::Critical, TRUE},
 	{"msvcr70.dll", FileData::WinSystem, FileData::Critical, TRUE},
 #endif
-	{"bindevt.dll", FileData::WinSystem, FileData::Normal, FALSE},
-	{"libbind9.dll", FileData::WinSystem, FileData::Critical, FALSE},
-	{"libisc.dll", FileData::WinSystem, FileData::Critical, FALSE},
-	{"libisccfg.dll", FileData::WinSystem, FileData::Critical, FALSE},
-	{"libisccc.dll", FileData::WinSystem, FileData::Critical, FALSE},
-	{"libdns.dll", FileData::WinSystem, FileData::Critical, FALSE},
-	{"liblwres.dll", FileData::WinSystem, FileData::Critical, FALSE},
+#endif
+	{"bindevt.dll", FileData::BinDir, FileData::Normal, FALSE},
+	{"libbind9.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"libisc.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"libisccfg.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"libisccc.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"libdns.dll", FileData::BinDir, FileData::Critical, FALSE},
+	{"liblwres.dll", FileData::BinDir, FileData::Critical, FALSE},
 	{"libeay32.dll", FileData::BinDir, FileData::Critical, FALSE},
 	{"named.exe", FileData::BinDir, FileData::Critical, FALSE},
 	{"nsupdate.exe", FileData::BinDir, FileData::Normal, FALSE},
@@ -143,6 +154,7 @@ const FileData installFiles[] =
 	{"dnssec-signzone.exe", FileData::BinDir, FileData::Normal, FALSE},
 	{"named-checkconf.exe", FileData::BinDir, FileData::Normal, FALSE},
 	{"named-checkzone.exe", FileData::BinDir, FileData::Normal, FALSE},
+	{"named-compilezone.exe", FileData::BinDir, FileData::Normal, FALSE},
 	{"readme1st.txt", FileData::BinDir, FileData::Trivial, FALSE},
 	{NULL, -1, -1}
 };
@@ -419,25 +431,27 @@ void CBINDInstallDlg::OnInstall() {
 	}
 	
 	/*
-	 * Check that the Password is not null.
-	 */
-	if (m_accountPassword.GetLength() == 0) {
-		MsgBox(IDS_ERR_NULLPASSWORD);
-		return;
-	}
-
-	/*
 	 * Check the entered account name.
 	 */
 	if (ValidateServiceAccount() == FALSE)
 		return;
 
-
 	/*
 	 * For Registration we need to know if account was changed.
 	 */
-	if(m_accountName != m_currentAccount)
+	if (m_accountName != m_currentAccount)
 		m_accountUsed = FALSE;
+
+	if (m_accountUsed == FALSE && m_serviceExists == FALSE)
+	{
+	/*
+	 * Check that the Password is not null.
+	 */
+		if (m_accountPassword.GetLength() == 0) {
+			MsgBox(IDS_ERR_NULLPASSWORD);
+			return;
+		}
+	}
 
 	/* Directories */
 	m_etcDir = m_targetDir + "\\etc";
@@ -471,6 +485,16 @@ void CBINDInstallDlg::OnInstall() {
 
 	ProgramGroup(FALSE);
 
+#if _MSC_VER >= 1400
+	/*
+	 * Install Visual Studio libraries.  As per:
+	 * http://blogs.msdn.com/astebner/archive/2006/08/23/715755.aspx
+	 *
+	 * Vcredist_x86.exe /q:a /c:"msiexec /i vcredist.msi /qn /l*v %temp%\vcredist_x86.log"
+	 */
+	/*system(".\\Vcredist_x86.exe /q:a /c:\"msiexec /i vcredist.msi /qn /l*v %temp%\vcredist_x86.log\"");*/
+	system(".\\Vcredist_x86.exe");
+#endif
 	try {
 		CreateDirs();
  		CopyFiles();

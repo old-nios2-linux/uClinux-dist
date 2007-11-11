@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2006  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
 
 /*
  * Principal Author: Brian Wellington
- * $Id: opensslrsa_link.c,v 1.1.4.1.10.5 2006/10/11 03:58:50 marka Exp $
+ * $Id: opensslrsa_link.c,v 1.1.6.11 2006/11/07 21:28:49 marka Exp $
  */
 #ifdef OPENSSL
 
@@ -49,8 +49,8 @@
  */
 #ifdef WIN32
 #if !((OPENSSL_VERSION_NUMBER >= 0x009070cfL && \
-       OPENSSL_VERSION_NUMBER < 0x009080000L) || \
-      OPENSSL_VERSION_NUMBER >= 0x0090804fL) 
+       OPENSSL_VERSION_NUMBER < 0x00908000L) || \
+      OPENSSL_VERSION_NUMBER >= 0x0090804fL)
 #error Please upgrade OpenSSL to 0.9.8d/0.9.7l or greater.
 #endif
 #endif
@@ -84,6 +84,12 @@
 	(rsa)->flags &= ~(RSA_FLAG_CACHE_PUBLIC | RSA_FLAG_CACHE_PRIVATE); \
 	(rsa)->flags &= ~RSA_FLAG_BLINDING; \
 	} while (0)
+#elif defined(RSA_FLAG_NO_BLINDING)
+#define SET_FLAGS(rsa) \
+	do { \
+		(rsa)->flags &= ~RSA_FLAG_BLINDING; \
+		(rsa)->flags |= RSA_FLAG_NO_BLINDING; \
+	} while (0)
 #else
 #define SET_FLAGS(rsa) \
 	do { \
@@ -103,12 +109,16 @@ opensslrsa_createctx(dst_key_t *key, dst_context_t *dctx) {
 		isc_md5_t *md5ctx;
 
 		md5ctx = isc_mem_get(dctx->mctx, sizeof(isc_md5_t));
+		if (md5ctx == NULL)
+			return (ISC_R_NOMEMORY);
 		isc_md5_init(md5ctx);
 		dctx->opaque = md5ctx;
 	} else {
 		isc_sha1_t *sha1ctx;
 
 		sha1ctx = isc_mem_get(dctx->mctx, sizeof(isc_sha1_t));
+		if (sha1ctx == NULL)
+			return (ISC_R_NOMEMORY);
 		isc_sha1_init(sha1ctx);
 		dctx->opaque = sha1ctx;
 	}
@@ -288,7 +298,7 @@ opensslrsa_generate(dst_key_t *key, int exp) {
 		/* RSA_F4 0x10001 */
 		BN_set_bit(e, 0);
 		BN_set_bit(e, 16);
-	 } else {
+	} else {
 		/* F5 0x100000001 */
 		BN_set_bit(e, 0);
 		BN_set_bit(e, 32);
@@ -303,7 +313,7 @@ opensslrsa_generate(dst_key_t *key, int exp) {
 		return (ISC_R_SUCCESS);
 	}
 
- err:
+err:
 	if (e != NULL)
 		BN_free(e);
 	if (rsa != NULL)
@@ -314,12 +324,12 @@ opensslrsa_generate(dst_key_t *key, int exp) {
 	unsigned long e;
 
 	if (exp == 0)
-		e = RSA_F4;
+	       e = RSA_F4;
 	else
-		e = 0x40000003;
+	       e = 0x40000003;
 	rsa = RSA_generate_key(key->key_size, e, NULL, NULL);
 	if (rsa == NULL)
-		return (dst__openssl_toresult(DST_R_OPENSSLFAILURE));
+	       return (dst__openssl_toresult(DST_R_OPENSSLFAILURE));
 	SET_FLAGS(rsa);
 	key->opaque = rsa;
 
@@ -357,7 +367,7 @@ opensslrsa_todns(const dst_key_t *key, isc_buffer_t *data) {
 	e_bytes = BN_num_bytes(rsa->e);
 	mod_bytes = BN_num_bytes(rsa->n);
 
-	if (e_bytes < 256) {	/* key exponent is <= 2040 bits */
+	if (e_bytes < 256) {	/*%< key exponent is <= 2040 bits */
 		if (r.length < 1)
 			return (ISC_R_NOSPACE);
 		isc_buffer_putuint8(data, (isc_uint8_t) e_bytes);
@@ -393,7 +403,7 @@ opensslrsa_fromdns(dst_key_t *key, isc_buffer_t *data) {
 
 	rsa = RSA_new();
 	if (rsa == NULL)
-		return (ISC_R_NOMEMORY);
+		return (dst__openssl_toresult(ISC_R_NOMEMORY));
 	SET_FLAGS(rsa);
 
 	if (r.length < 1) {
@@ -588,9 +598,9 @@ static dst_func_t opensslrsa_functions = {
 	opensslrsa_adddata,
 	opensslrsa_sign,
 	opensslrsa_verify,
-	NULL, /* computesecret */
+	NULL, /*%< computesecret */
 	opensslrsa_compare,
-	NULL, /* paramcompare */
+	NULL, /*%< paramcompare */
 	opensslrsa_generate,
 	opensslrsa_isprivate,
 	opensslrsa_destroy,
@@ -598,7 +608,7 @@ static dst_func_t opensslrsa_functions = {
 	opensslrsa_fromdns,
 	opensslrsa_tofile,
 	opensslrsa_parse,
-	NULL, /* cleanup */
+	NULL, /*%< cleanup */
 };
 
 isc_result_t
@@ -616,3 +626,4 @@ dst__opensslrsa_init(dst_func_t **funcp) {
 EMPTY_TRANSLATION_UNIT
 
 #endif /* OPENSSL */
+/*! \file */

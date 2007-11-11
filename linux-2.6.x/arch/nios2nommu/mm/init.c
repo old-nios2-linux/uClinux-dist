@@ -157,8 +157,7 @@ void mem_init(void)
 {
 	int codek = 0, datak = 0, initk = 0;
 	unsigned long tmp;
-	extern char _etext, _stext, _sdata, _ebss, __init_begin, __init_end;
-	extern unsigned char _ramend, _rambase;
+	extern char _etext, _stext, __init_begin, __init_end, _end;
 	unsigned long start_mem = memory_start; /* DAVIDM - these must start at end of kernel */
 	unsigned long end_mem   = memory_end; /* DAVIDM - this must not include kernel stack at top */
 
@@ -176,13 +175,13 @@ void mem_init(void)
 	totalram_pages = free_all_bootmem();
 
 	codek = (&_etext - &_stext) >> 10;
-	datak = (&_ebss - &_sdata) >> 10;
+	datak = (&_end - &_etext) >> 10;
 	initk = (&__init_begin - &__init_end) >> 10;
 
 	tmp = nr_free_pages() << PAGE_SHIFT;
 	printk(KERN_INFO "Memory available: %luk/%luk RAM, %luk/%luk ROM (%dk kernel code, %dk data)\n",
 	       tmp >> 10,
-	       (&_ramend - &_rambase) >> 10,
+	       (&_end - &_stext) >> 10,
 	       (rom_length > 0) ? ((rom_length >> 10) - codek) : 0,
 	       rom_length >> 10,
 	       codek,

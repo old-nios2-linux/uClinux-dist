@@ -550,7 +550,6 @@ static void seeq8005_rx(struct net_device *dev)
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->dev = dev;
 			skb_reserve(skb, 2);	/* align data on 16 byte */
 			buf = skb_put(skb,pkt_len);
 
@@ -750,7 +749,7 @@ int __init init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	unregister_netdev(dev_seeq);
 	release_region(dev_seeq->base_addr, SEEQ8005_IO_EXTENT);

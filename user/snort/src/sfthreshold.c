@@ -255,7 +255,7 @@ void ProcessThresholdOptions(char *options)
 void ParseSFThreshold( FILE * fp, char * rule )
 {
      char        **args, **oargs;
-     int         nargs, noargs;
+     int         nargs = 0, noargs = 0;
      THDX_STRUCT thdx;
      int         count_flag=0;
      int         seconds_flag=0;
@@ -626,7 +626,7 @@ void print_thdx( THDX_STRUCT * thdx )
 static 
 void ntoa( char * buff, int blen, unsigned ip )
 {
-   snprintf(buff,blen,"%d.%d.%d.%d", ip&0xff,(ip>>8)&0xff,(ip>>16)&0xff,(ip>>24)&0xff );
+   SnortSnprintf(buff,blen,"%d.%d.%d.%d", ip&0xff,(ip>>8)&0xff,(ip>>16)&0xff,(ip>>24)&0xff );
 }
 
 #define PRINT_GLOBAL   0
@@ -666,19 +666,19 @@ int print_thd_node( THD_NODE *p , int type )
     
     if( p->gen_id == 0 )
     {
-        sfsnprintfappend(buf, STD_BUF, "| gen-id=global");
+        SnortSnprintfAppend(buf, STD_BUF, "| gen-id=global");
     }
     else
     {
-        sfsnprintfappend(buf, STD_BUF, "| gen-id=%-6d", p->gen_id );
+        SnortSnprintfAppend(buf, STD_BUF, "| gen-id=%-6d", p->gen_id );
     }
     if( p->sig_id == 0 )
     {
-        sfsnprintfappend(buf, STD_BUF, " sig-id=global" );
+        SnortSnprintfAppend(buf, STD_BUF, " sig-id=global" );
     }
     else
     {
-        sfsnprintfappend(buf, STD_BUF, " sig-id=%-10d", p->sig_id );
+        SnortSnprintfAppend(buf, STD_BUF, " sig-id=%-10d", p->sig_id );
     }
     
     /*               
@@ -688,31 +688,31 @@ int print_thd_node( THD_NODE *p , int type )
     if( p->type != THD_TYPE_SUPPRESS )
     {
         if( p->type == THD_TYPE_LIMIT )
-            sfsnprintfappend(buf, STD_BUF, " type=Limit    ");
+            SnortSnprintfAppend(buf, STD_BUF, " type=Limit    ");
         
         if( p->type == THD_TYPE_THRESHOLD )
-            sfsnprintfappend(buf, STD_BUF, " type=Threshold");
+            SnortSnprintfAppend(buf, STD_BUF, " type=Threshold");
         
         if( p->type == THD_TYPE_BOTH )
-            sfsnprintfappend(buf, STD_BUF, " type=Both     ");
+            SnortSnprintfAppend(buf, STD_BUF, " type=Both     ");
     }
     
-    sfsnprintfappend(buf, STD_BUF, " tracking=%s", (!p->tracking) ? "src" : "dst" );
+    SnortSnprintfAppend(buf, STD_BUF, " tracking=%s", (!p->tracking) ? "src" : "dst" );
 
     if( p->type == THD_TYPE_SUPPRESS )
     {
         ntoa(buffer,80,p->ip_address);
         if (p->not_flag)
-            sfsnprintfappend(buf, STD_BUF, "ip=!%-16s", buffer);
+            SnortSnprintfAppend(buf, STD_BUF, "ip=!%-16s", buffer);
         else
-            sfsnprintfappend(buf, STD_BUF, "ip=%-17s", buffer);
+            SnortSnprintfAppend(buf, STD_BUF, "ip=%-17s", buffer);
         ntoa(buffer,80,p->ip_mask);
-        sfsnprintfappend(buf, STD_BUF, " mask=%-15s", buffer );
+        SnortSnprintfAppend(buf, STD_BUF, " mask=%-15s", buffer );
     }
     else
     {
-        sfsnprintfappend(buf, STD_BUF, " count=%-3d", p->count);
-        sfsnprintfappend(buf, STD_BUF, " seconds=%-3d", p->seconds);
+        SnortSnprintfAppend(buf, STD_BUF, " count=%-3d", p->count);
+        SnortSnprintfAppend(buf, STD_BUF, " seconds=%-3d", p->seconds);
     }
     
     LogMessage("%s\n", buf);

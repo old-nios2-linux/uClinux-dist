@@ -7,7 +7,6 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
@@ -21,11 +20,15 @@
 
 #include <media/tuner.h>
 #include <media/v4l2-common.h>
+#include "tuner-driver.h"
 
 #define UNSET (-1U)
 
 /* standard i2c insmod options */
 static unsigned short normal_i2c[] = {
+#ifdef CONFIG_TUNER_TEA5761
+	0x10,
+#endif
 	0x42, 0x43, 0x4a, 0x4b,			/* tda8290 */
 	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
 	0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f,
@@ -78,7 +81,7 @@ static void set_tv_freq(struct i2c_client *c, unsigned int freq)
 		tuner_warn ("tuner type not set\n");
 		return;
 	}
-	if (NULL == t->set_tv_freq) {
+	if (NULL == t->ops.set_tv_freq) {
 		tuner_warn ("Tuner has no way to set tv freq\n");
 		return;
 	}
@@ -93,7 +96,7 @@ static void set_tv_freq(struct i2c_client *c, unsigned int freq)
 		else
 			freq = tv_range[1] * 16;
 	}
-	t->set_tv_freq(c, freq);
+	t->ops.set_tv_freq(c, freq);
 }
 
 static void set_radio_freq(struct i2c_client *c, unsigned int freq)
@@ -104,7 +107,7 @@ static void set_radio_freq(struct i2c_client *c, unsigned int freq)
 		tuner_warn ("tuner type not set\n");
 		return;
 	}
-	if (NULL == t->set_radio_freq) {
+	if (NULL == t->ops.set_radio_freq) {
 		tuner_warn ("tuner has no way to set radio frequency\n");
 		return;
 	}
@@ -120,7 +123,7 @@ static void set_radio_freq(struct i2c_client *c, unsigned int freq)
 			freq = radio_range[1] * 16000;
 	}
 
-	t->set_radio_freq(c, freq);
+	t->ops.set_radio_freq(c, freq);
 }
 
 static void set_freq(struct i2c_client *c, unsigned long freq)
@@ -145,7 +148,8 @@ static void set_freq(struct i2c_client *c, unsigned long freq)
 }
 
 static void set_type(struct i2c_client *c, unsigned int type,
-		     unsigned int new_mode_mask)
+		     unsigned int new_mode_mask, unsigned int new_config,
+		     int (*tuner_callback) (void *dev, int command,int arg))
 {
 	struct tuner *t = i2c_get_clientdata(c);
 	unsigned char buffer[4];
@@ -160,15 +164,28 @@ static void set_type(struct i2c_client *c, unsigned int type,
 		return;
 	}
 
+	t->type = type;
+	t->config = new_config;
+	if (tuner_callback != NULL) {
+		tuner_dbg("defining GPIO callback\n");
+		t->tuner_callback = tuner_callback;
+	}
+
 	/* This code detects calls by card attach_inform */
 	if (NULL == t->i2c.dev.driver) {
 		tuner_dbg ("tuner 0x%02x: called during i2c_client register by adapter's attach_inform\n", c->addr);
 
-		t->type=type;
 		return;
 	}
 
-	t->type = type;
+	/* discard private data, in case set_type() was previously called */
+	if (t->ops.release)
+		t->ops.release(c);
+	else {
+		kfree(t->priv);
+		t->priv = NULL;
+	}
+
 	switch (t->type) {
 	case TUNER_MT2032:
 		microtune_init(c);
@@ -184,6 +201,16 @@ static void set_type(struct i2c_client *c, unsigned int type,
 		}
 		t->mode_mask = T_RADIO;
 		break;
+#ifdef CONFIG_TUNER_TEA5761
+	case TUNER_TEA5761:
+		if (tea5761_tuner_init(c) == EINVAL) {
+			t->type = TUNER_ABSENT;
+			t->mode_mask = T_UNINITIALIZED;
+			return;
+		}
+		t->mode_mask = T_RADIO;
+		break;
+#endif
 	case TUNER_PHILIPS_FMD1216ME_MK3:
 		buffer[0] = 0x0b;
 		buffer[1] = 0xdc;
@@ -235,10 +262,11 @@ static void set_addr(struct i2c_client *c, struct tuner_setup *tun_setup)
 
 	tuner_dbg("set addr for type %i\n", t->type);
 
-	if ( t->type == UNSET && ((tun_setup->addr == ADDR_UNSET &&
-		(t->mode_mask & tun_setup->mode_mask)) ||
-		tun_setup->addr == c->addr)) {
-			set_type(c, tun_setup->type, tun_setup->mode_mask);
+	if ( (t->type == UNSET && ((tun_setup->addr == ADDR_UNSET) &&
+		(t->mode_mask & tun_setup->mode_mask))) ||
+		(tun_setup->addr == c->addr)) {
+			set_type(c, tun_setup->type, tun_setup->mode_mask,
+				 tun_setup->config, tun_setup->tuner_callback);
 	}
 }
 
@@ -267,6 +295,10 @@ static int tuner_fixup_std(struct tuner *t)
 {
 	if ((t->std & V4L2_STD_PAL) == V4L2_STD_PAL) {
 		switch (pal[0]) {
+		case '6':
+			tuner_dbg ("insmod fixup: PAL => PAL-60\n");
+			t->std = V4L2_STD_PAL_60;
+			break;
 		case 'b':
 		case 'B':
 		case 'g':
@@ -398,11 +430,11 @@ static void tuner_status(struct i2c_client *client)
 	tuner_info("Standard:        0x%08lx\n", (unsigned long)t->std);
 	if (t->mode != V4L2_TUNER_RADIO)
 	       return;
-	if (t->has_signal) {
-		tuner_info("Signal strength: %d\n", t->has_signal(client));
+	if (t->ops.has_signal) {
+		tuner_info("Signal strength: %d\n", t->ops.has_signal(client));
 	}
-	if (t->is_stereo) {
-		tuner_info("Stereo:          %s\n", t->is_stereo(client) ? "yes" : "no");
+	if (t->ops.is_stereo) {
+		tuner_info("Stereo:          %s\n", t->ops.is_stereo(client) ? "yes" : "no");
 	}
 }
 
@@ -427,10 +459,9 @@ static int tuner_attach(struct i2c_adapter *adap, int addr, int kind)
 	memcpy(&t->i2c, &client_template, sizeof(struct i2c_client));
 	i2c_set_clientdata(&t->i2c, t);
 	t->type = UNSET;
-	t->radio_if2 = 10700 * 1000;	/* 10.7MHz - FM radio */
 	t->audmode = V4L2_TUNER_MODE_STEREO;
 	t->mode_mask = T_UNINITIALIZED;
-	t->tuner_status = tuner_status;
+	t->ops.tuner_status = tuner_status;
 
 	if (show_i2c) {
 		unsigned char buffer[16];
@@ -443,9 +474,26 @@ static int tuner_attach(struct i2c_adapter *adap, int addr, int kind)
 			printk("%02x ",buffer[i]);
 		printk("\n");
 	}
+	/* HACK: This test were added to avoid tuner to probe tda9840 and tea6415c on the MXB card */
+	if (adap->id == I2C_HW_SAA7146 && addr < 0x4a)
+		return -ENODEV;
+
 	/* autodetection code based on the i2c addr */
 	if (!no_autodetect) {
 		switch (addr) {
+#ifdef CONFIG_TUNER_TEA5761
+		case 0x10:
+			if (tea5761_autodetection(&t->i2c) != EINVAL) {
+				t->type = TUNER_TEA5761;
+				t->mode_mask = T_RADIO;
+				t->mode = T_STANDBY;
+				t->radio_freq = 87.5 * 16000; /* Sets freq to FM range */
+				default_mode_mask &= ~T_RADIO;
+
+				goto register_client;
+			}
+			break;
+#endif
 		case 0x42:
 		case 0x43:
 		case 0x4a:
@@ -489,7 +537,7 @@ static int tuner_attach(struct i2c_adapter *adap, int addr, int kind)
 register_client:
 	tuner_info("chip found @ 0x%x (%s)\n", addr << 1, adap->name);
 	i2c_attach_client (&t->i2c);
-	set_type (&t->i2c,t->type, t->mode_mask);
+	set_type (&t->i2c,t->type, t->mode_mask, t->config, t->tuner_callback);
 	return 0;
 }
 
@@ -519,6 +567,11 @@ static int tuner_detach(struct i2c_client *client)
 		return err;
 	}
 
+	if (t->ops.release)
+		t->ops.release(client);
+	else {
+		kfree(t->priv);
+	}
 	kfree(t);
 	return 0;
 }
@@ -539,8 +592,8 @@ static inline int set_mode(struct i2c_client *client, struct tuner *t, int mode,
 
 	if (check_mode(t, cmd) == EINVAL) {
 		t->mode = T_STANDBY;
-		if (t->standby)
-			t->standby (client);
+		if (t->ops.standby)
+			t->ops.standby (client);
 		return EINVAL;
 	}
 	return 0;
@@ -569,10 +622,11 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 	switch (cmd) {
 	/* --- configuration --- */
 	case TUNER_SET_TYPE_ADDR:
-		tuner_dbg ("Calling set_type_addr for type=%d, addr=0x%02x, mode=0x%02x\n",
+		tuner_dbg ("Calling set_type_addr for type=%d, addr=0x%02x, mode=0x%02x, config=0x%02x\n",
 				((struct tuner_setup *)arg)->type,
 				((struct tuner_setup *)arg)->addr,
-				((struct tuner_setup *)arg)->mode_mask);
+				((struct tuner_setup *)arg)->mode_mask,
+				((struct tuner_setup *)arg)->config);
 
 		set_addr(client, (struct tuner_setup *)arg);
 		break;
@@ -587,8 +641,8 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 		if (check_mode(t, "TUNER_SET_STANDBY") == EINVAL)
 			return 0;
 		t->mode = T_STANDBY;
-		if (t->standby)
-			t->standby (client);
+		if (t->ops.standby)
+			t->ops.standby (client);
 		break;
 #ifdef CONFIG_VIDEO_V4L1
 	case VIDIOCSAUDIO:
@@ -647,10 +701,10 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 				return 0;
 
 			if (V4L2_TUNER_RADIO == t->mode) {
-				if (t->has_signal)
-					vt->signal = t->has_signal(client);
-				if (t->is_stereo) {
-					if (t->is_stereo(client))
+				if (t->ops.has_signal)
+					vt->signal = t->ops.has_signal(client);
+				if (t->ops.is_stereo) {
+					if (t->ops.is_stereo(client))
 						vt->flags |=
 						    VIDEO_TUNER_STEREO_ON;
 					else
@@ -678,8 +732,8 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 			if (check_v4l2(t) == EINVAL)
 				return 0;
 
-			if (V4L2_TUNER_RADIO == t->mode && t->is_stereo)
-				va->mode = t->is_stereo(client)
+			if (V4L2_TUNER_RADIO == t->mode && t->ops.is_stereo)
+				va->mode = t->ops.is_stereo(client)
 				    ? VIDEO_SOUND_STEREO : VIDEO_SOUND_MONO;
 			return 0;
 		}
@@ -744,8 +798,8 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 			switch_v4l2();
 
 			tuner->type = t->mode;
-			if (t->get_afc)
-				tuner->afc=t->get_afc(client);
+			if (t->ops.get_afc)
+				tuner->afc=t->ops.get_afc(client);
 			if (t->mode == V4L2_TUNER_ANALOG_TV)
 				tuner->capability |= V4L2_TUNER_CAP_NORM;
 			if (t->mode != V4L2_TUNER_RADIO) {
@@ -755,13 +809,13 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 			}
 
 			/* radio mode */
-			if (t->has_signal)
-				tuner->signal = t->has_signal(client);
+			if (t->ops.has_signal)
+				tuner->signal = t->ops.has_signal(client);
 
 			tuner->rxsubchans =
 				V4L2_TUNER_SUB_MONO | V4L2_TUNER_SUB_STEREO;
-			if (t->is_stereo) {
-				tuner->rxsubchans = t->is_stereo(client) ?
+			if (t->ops.is_stereo) {
+				tuner->rxsubchans = t->ops.is_stereo(client) ?
 					V4L2_TUNER_SUB_STEREO : V4L2_TUNER_SUB_MONO;
 			}
 
@@ -789,17 +843,16 @@ static int tuner_command(struct i2c_client *client, unsigned int cmd, void *arg)
 			break;
 		}
 	case VIDIOC_LOG_STATUS:
-		if (t->tuner_status)
-			t->tuner_status(client);
+		if (t->ops.tuner_status)
+			t->ops.tuner_status(client);
 		break;
 	}
 
 	return 0;
 }
 
-static int tuner_suspend(struct device *dev, pm_message_t state)
+static int tuner_suspend(struct i2c_client *c, pm_message_t state)
 {
-	struct i2c_client *c = container_of (dev, struct i2c_client, dev);
 	struct tuner *t = i2c_get_clientdata (c);
 
 	tuner_dbg ("suspend\n");
@@ -807,9 +860,8 @@ static int tuner_suspend(struct device *dev, pm_message_t state)
 	return 0;
 }
 
-static int tuner_resume(struct device *dev)
+static int tuner_resume(struct i2c_client *c)
 {
-	struct i2c_client *c = container_of (dev, struct i2c_client, dev);
 	struct tuner *t = i2c_get_clientdata (c);
 
 	tuner_dbg ("resume\n");
@@ -830,10 +882,10 @@ static struct i2c_driver driver = {
 	.attach_adapter = tuner_probe,
 	.detach_client = tuner_detach,
 	.command = tuner_command,
+	.suspend = tuner_suspend,
+	.resume  = tuner_resume,
 	.driver = {
 		.name    = "tuner",
-		.suspend = tuner_suspend,
-		.resume  = tuner_resume,
 	},
 };
 static struct i2c_client client_template = {

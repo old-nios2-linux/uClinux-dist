@@ -1,55 +1,56 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * App to set callerid
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief App to set callerid
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <asterisk/image.h>
-#include <asterisk/callerid.h>
-#include <string.h>
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/image.h"
+#include "asterisk/callerid.h"
 
 static char *app2 = "SetCallerPres";
 
 static char *synopsis2 = "Set CallerID Presentation";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
-
-static struct {
-	int val;
-	char *name;
-} preses[] = {
-	{  AST_PRES_ALLOWED_USER_NUMBER_NOT_SCREENED, "allowed_not_screened" },
-	{  AST_PRES_ALLOWED_USER_NUMBER_PASSED_SCREEN, "allowed_passed_screen" },
-	{  AST_PRES_ALLOWED_USER_NUMBER_FAILED_SCREEN, "allowed_failed_screen" },
-	{  AST_PRES_ALLOWED_NETWORK_NUMBER, "allowed" },
-	{  AST_PRES_PROHIB_USER_NUMBER_NOT_SCREENED	, "prohib_not_screened" },
-	{  AST_PRES_PROHIB_USER_NUMBER_PASSED_SCREEN, "prohib_passed_screen" },
-	{  AST_PRES_PROHIB_USER_NUMBER_FAILED_SCREEN, "prohib_failed_screen" },
-	{  AST_PRES_PROHIB_NETWORK_NUMBER, "prohib" },
-	{  AST_PRES_NUMBER_NOT_AVAILABLE, "unavailable" },
-};
 
 static char *descrip2 = 
-"  SetCallerPres(presentation): Set Caller*ID presentation on\n"
-"a call to a new value.  Sets ANI as well if a flag is used.\n"
-"Always returns 0.  Valid presentations are:\n"
+"  SetCallerPres(presentation): Set Caller*ID presentation on a call.\n"
+"  Valid presentations are:\n"
 "\n"
 "      allowed_not_screened    : Presentation Allowed, Not Screened\n"
 "      allowed_passed_screen   : Presentation Allowed, Passed Screen\n" 
@@ -65,38 +66,24 @@ static char *descrip2 =
 
 static int setcallerid_pres_exec(struct ast_channel *chan, void *data)
 {
-	int res = 0;
-	char tmp[256] = "";
-	struct localuser *u;
-	int x;
-	char *opts;
+	struct ast_module_user *u;
 	int pres = -1;
-	if (data)
-		strncpy(tmp, (char *)data, sizeof(tmp) - 1);
-	opts = strchr(tmp, '|');
-	if (opts) {
-		*opts = '\0';
-		opts++;
-	}
-	for (x=0;x<sizeof(preses) / sizeof(preses[0]);x++) {
-		if (!strcasecmp(preses[x].name, tmp)) {
-			pres = preses[x].val;
-			break;
-		}
-	}
+
+	u = ast_module_user_add(chan);
+	
+	pres = ast_parse_caller_presentation(data);
+
 	if (pres < 0) {
-		ast_log(LOG_WARNING, "'%s' is not a valid presentation (see 'show application SetCallerPres')\n", tmp);
+		ast_log(LOG_WARNING, "'%s' is not a valid presentation (see 'show application SetCallerPres')\n",
+			(char *) data);
+		ast_module_user_remove(u);
 		return 0;
 	}
-	LOCAL_USER_ADD(u);
-	chan->callingpres = pres;
-	LOCAL_USER_REMOVE(u);
-	return res;
+	
+	chan->cid.cid_pres = pres;
+	ast_module_user_remove(u);
+	return 0;
 }
-
-
-
-static char *tdesc = "Set CallerID Application";
 
 static char *app = "SetCallerID";
 
@@ -104,17 +91,33 @@ static char *synopsis = "Set CallerID";
 
 static char *descrip = 
 "  SetCallerID(clid[|a]): Set Caller*ID on a call to a new\n"
-"value.  Sets ANI as well if a flag is used.  Always returns 0\n";
+"value.  Sets ANI as well if a flag is used. \n";
 
 static int setcallerid_exec(struct ast_channel *chan, void *data)
 {
 	int res = 0;
-	char tmp[256] = "";
-	struct localuser *u;
+	char *tmp = NULL;
+	char name[256];
+	char num[256];
+	struct ast_module_user *u;
 	char *opt;
 	int anitoo = 0;
-	if (data)
-		strncpy(tmp, (char *)data, sizeof(tmp) - 1);
+	static int dep_warning = 0;
+
+	if (ast_strlen_zero(data)) {
+		ast_log(LOG_WARNING, "SetCallerID requires an argument!\n");
+		return 0;
+	}
+	
+	u = ast_module_user_add(chan);
+
+	if (!dep_warning) {
+		dep_warning = 1;
+		ast_log(LOG_WARNING, "SetCallerID is deprecated.  Please use Set(CALLERID(all)=...) or Set(CALLERID(ani)=...) instead.\n");
+	}
+
+	tmp = ast_strdupa(data);
+	
 	opt = strchr(tmp, '|');
 	if (opt) {
 		*opt = '\0';
@@ -122,38 +125,35 @@ static int setcallerid_exec(struct ast_channel *chan, void *data)
 		if (*opt == 'a')
 			anitoo = 1;
 	}
-	LOCAL_USER_ADD(u);
-	ast_set_callerid(chan, strlen(tmp) ? tmp : NULL, anitoo);
-	LOCAL_USER_REMOVE(u);
+	
+	ast_callerid_split(tmp, name, sizeof(name), num, sizeof(num));
+	ast_set_callerid(chan, num, name, anitoo ? num : NULL);
+
+	ast_module_user_remove(u);
+	
 	return res;
 }
 
-int unload_module(void)
-{
-	STANDARD_HANGUP_LOCALUSERS;
-	ast_unregister_application(app2);
-	return ast_unregister_application(app);
-}
-
-int load_module(void)
-{
-	ast_register_application(app2, setcallerid_pres_exec, synopsis2, descrip2);
-	return ast_register_application(app, setcallerid_exec, synopsis, descrip);
-}
-
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
+static int unload_module(void)
 {
 	int res;
-	STANDARD_USECOUNT(res);
+
+	res = ast_unregister_application(app2);
+	res |= ast_unregister_application(app);
+
+	ast_module_user_hangup_all();
+
 	return res;
 }
 
-char *key()
+static int load_module(void)
 {
-	return ASTERISK_GPL_KEY;
+	int res;
+	
+	res = ast_register_application(app2, setcallerid_pres_exec, synopsis2, descrip2);
+	res |= ast_register_application(app, setcallerid_exec, synopsis, descrip);
+
+	return res;
 }
+
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Set CallerID Application");

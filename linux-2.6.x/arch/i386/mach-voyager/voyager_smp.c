@@ -16,7 +16,6 @@
 #include <linux/mc146818rtc.h>
 #include <linux/cache.h>
 #include <linux/interrupt.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/bootmem.h>
@@ -422,6 +421,7 @@ find_smp_config(void)
 	     VOYAGER_SUS_IN_CONTROL_PORT);
 
 	current_thread_info()->cpu = boot_cpu_id;
+	x86_write_percpu(cpu_number, boot_cpu_id);
 }
 
 /*
@@ -434,7 +434,7 @@ smp_store_cpu_info(int id)
 
 	*c = boot_cpu_data;
 
-	identify_cpu(c);
+	identify_secondary_cpu(c);
 }
 
 /* set up the trampoline and return the physical address of the code */
@@ -534,15 +534,6 @@ do_boot_cpu(__u8 cpu)
 		& ~( voyager_extended_vic_processors
 		     & voyager_allowed_boot_processors);
 
-	/* For the 486, we can't use the 4Mb page table trick, so
-	 * must map a region of memory */
-#ifdef CONFIG_M486
-	int i;
-	unsigned long *page_table_copies = (unsigned long *)
-		__get_free_page(GFP_KERNEL);
-#endif
-	pgd_t orig_swapper_pg_dir0;
-
 	/* This is an area in head.S which was used to set up the
 	 * initial kernel stack.  We need to alter this to give the
 	 * booting CPU a new stack (taken from its idle process) */
@@ -571,6 +562,8 @@ do_boot_cpu(__u8 cpu)
 	hijack_source.idt.Segment = (start_phys_address >> 4) & 0xFFFF;
 
 	cpucount++;
+	alternatives_smp_switch(1);
+
 	idle = fork_idle(cpu);
 	if(IS_ERR(idle))
 		panic("failed fork for CPU%d", cpu);
@@ -578,30 +571,20 @@ do_boot_cpu(__u8 cpu)
 	/* init_tasks (in sched.c) is indexed logically */
 	stack_start.esp = (void *) idle->thread.esp;
 
+	init_gdt(cpu);
+ 	per_cpu(current_task, cpu) = idle;
+	early_gdt_descr.address = (unsigned long)get_cpu_gdt_table(cpu);
 	irq_ctx_init(cpu);
 
 	/* Note: Don't modify initial ss override */
 	VDEBUG(("VOYAGER SMP: Booting CPU%d at 0x%lx[%x:%x], stack %p\n", cpu, 
 		(unsigned long)hijack_source.val, hijack_source.idt.Segment,
 		hijack_source.idt.Offset, stack_start.esp));
-	/* set the original swapper_pg_dir[0] to map 0 to 4Mb transparently
-	 * (so that the booting CPU can find start_32 */
-	orig_swapper_pg_dir0 = swapper_pg_dir[0];
-#ifdef CONFIG_M486
-	if(page_table_copies == NULL)
-		panic("No free memory for 486 page tables\n");
-	for(i = 0; i < PAGE_SIZE/sizeof(unsigned long); i++)
-		page_table_copies[i] = (i * PAGE_SIZE) 
-			| _PAGE_RW | _PAGE_USER | _PAGE_PRESENT;
 
-	((unsigned long *)swapper_pg_dir)[0] = 
-		((virt_to_phys(page_table_copies)) & PAGE_MASK)
-		| _PAGE_RW | _PAGE_USER | _PAGE_PRESENT;
-#else
-	((unsigned long *)swapper_pg_dir)[0] = 
-		(virt_to_phys(pg0) & PAGE_MASK)
-		| _PAGE_RW | _PAGE_USER | _PAGE_PRESENT;
-#endif
+	/* init lowmem identity mapping */
+	clone_pgd_range(swapper_pg_dir, swapper_pg_dir + USER_PGD_PTRS,
+			min_t(unsigned long, KERNEL_PGD_PTRS, USER_PGD_PTRS));
+	flush_tlb_all();
 
 	if(quad_boot) {
 		printk("CPU %d: non extended Quad boot\n", cpu);
@@ -644,11 +627,7 @@ do_boot_cpu(__u8 cpu)
 		udelay(100);
 	}
 	/* reset the page table */
-	swapper_pg_dir[0] = orig_swapper_pg_dir0;
-	local_flush_tlb();
-#ifdef CONFIG_M486
-	free_page((unsigned long)page_table_copies);
-#endif
+	zap_low_mappings();
 	  
 	if (cpu_booted_map) {
 		VDEBUG(("CPU%d: Booted successfully, back in CPU %d\n",
@@ -881,8 +860,8 @@ smp_invalidate_interrupt(void)
 
 /* This routine is called with a physical cpu mask */
 static void
-flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
-						unsigned long va)
+voyager_flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
+			  unsigned long va)
 {
 	int stuck = 50000;
 
@@ -934,7 +913,7 @@ flush_tlb_current_task(void)
 	cpu_mask = cpus_addr(mm->cpu_vm_mask)[0] & ~(1 << smp_processor_id());
 	local_flush_tlb();
 	if (cpu_mask)
-		flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
+		voyager_flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
 
 	preempt_enable();
 }
@@ -956,7 +935,7 @@ flush_tlb_mm (struct mm_struct * mm)
 			leave_mm(smp_processor_id());
 	}
 	if (cpu_mask)
-		flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
+		voyager_flush_tlb_others(cpu_mask, mm, FLUSH_ALL);
 
 	preempt_enable();
 }
@@ -977,7 +956,7 @@ void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 	}
 
 	if (cpu_mask)
-		flush_tlb_others(cpu_mask, mm, va);
+		voyager_flush_tlb_others(cpu_mask, mm, va);
 
 	preempt_enable();
 }
@@ -1065,20 +1044,13 @@ smp_call_function_interrupt(void)
 	}
 }
 
-/* Call this function on all CPUs using the function_interrupt above 
-    <func> The function to run. This must be fast and non-blocking.
-    <info> An arbitrary pointer to pass to the function.
-    <retry> If true, keep retrying until ready.
-    <wait> If true, wait until function has completed on other CPUs.
-    [RETURNS] 0 on success, else a negative status code. Does not return until
-    remote CPUs are nearly ready to execute <<func>> or are or have executed.
-*/
-int
-smp_call_function (void (*func) (void *info), void *info, int retry,
-		   int wait)
+static int
+voyager_smp_call_function_mask (cpumask_t cpumask,
+				void (*func) (void *info), void *info,
+				int wait)
 {
 	struct call_data_struct data;
-	__u32 mask = cpus_addr(cpu_online_map)[0];
+	u32 mask = cpus_addr(cpumask)[0];
 
 	mask &= ~(1<<smp_processor_id());
 
@@ -1099,7 +1071,7 @@ smp_call_function (void (*func) (void *info), void *info, int retry,
 	call_data = &data;
 	wmb();
 	/* Send a message to all other CPUs and wait for them to respond */
-	send_CPI_allbutself(VIC_CALL_FUNCTION_CPI);
+	send_CPI(mask, VIC_CALL_FUNCTION_CPI);
 
 	/* Wait for response */
 	while (data.started)
@@ -1113,7 +1085,6 @@ smp_call_function (void (*func) (void *info), void *info, int retry,
 
 	return 0;
 }
-EXPORT_SYMBOL(smp_call_function);
 
 /* Sorry about the name.  In an APIC based system, the APICs
  * themselves are programmed to send a timer interrupt.  This is used
@@ -1228,8 +1199,8 @@ smp_alloc_memory(void)
 }
 
 /* send a reschedule CPI to one CPU by physical CPU number*/
-void
-smp_send_reschedule(int cpu)
+static void
+voyager_smp_send_reschedule(int cpu)
 {
 	send_one_CPI(cpu, VIC_RESCHEDULE_CPI);
 }
@@ -1258,8 +1229,8 @@ safe_smp_processor_id(void)
 }
 
 /* broadcast a halt to all other CPUs */
-void
-smp_send_stop(void)
+static void
+voyager_smp_send_stop(void)
 {
 	smp_call_function(smp_stop_cpu_function, NULL, 1, 1);
 }
@@ -1921,23 +1892,26 @@ smp_voyager_power_off(void *dummy)
 		smp_stop_cpu_function(NULL);
 }
 
-void __init
-smp_prepare_cpus(unsigned int max_cpus)
+static void __init
+voyager_smp_prepare_cpus(unsigned int max_cpus)
 {
 	/* FIXME: ignore max_cpus for now */
 	smp_boot_cpus();
 }
 
-void __devinit smp_prepare_boot_cpu(void)
+static void __devinit voyager_smp_prepare_boot_cpu(void)
 {
+	init_gdt(smp_processor_id());
+	switch_to_new_gdt();
+
 	cpu_set(smp_processor_id(), cpu_online_map);
 	cpu_set(smp_processor_id(), cpu_callout_map);
 	cpu_set(smp_processor_id(), cpu_possible_map);
 	cpu_set(smp_processor_id(), cpu_present_map);
 }
 
-int __devinit
-__cpu_up(unsigned int cpu)
+static int __devinit
+voyager_cpu_up(unsigned int cpu)
 {
 	/* This only works at boot for x86.  See "rewrite" above. */
 	if (cpu_isset(cpu, smp_commenced_mask))
@@ -1953,8 +1927,8 @@ __cpu_up(unsigned int cpu)
 	return 0;
 }
 
-void __init 
-smp_cpus_done(unsigned int max_cpus)
+static void __init
+voyager_smp_cpus_done(unsigned int max_cpus)
 {
 	zap_low_mappings();
 }
@@ -1963,4 +1937,16 @@ void __init
 smp_setup_processor_id(void)
 {
 	current_thread_info()->cpu = hard_smp_processor_id();
+	x86_write_percpu(cpu_number, hard_smp_processor_id());
 }
+
+struct smp_ops smp_ops = {
+	.smp_prepare_boot_cpu = voyager_smp_prepare_boot_cpu,
+	.smp_prepare_cpus = voyager_smp_prepare_cpus,
+	.cpu_up = voyager_cpu_up,
+	.smp_cpus_done = voyager_smp_cpus_done,
+
+	.smp_send_stop = voyager_smp_send_stop,
+	.smp_send_reschedule = voyager_smp_send_reschedule,
+	.smp_call_function_mask = voyager_smp_call_function_mask,
+};

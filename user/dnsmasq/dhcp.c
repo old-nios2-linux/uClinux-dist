@@ -15,16 +15,12 @@
 
 #include "dnsmasq.h"
 
-static char *next_token (char *token, FILE * fp);
-static void process_lease(struct crec **empty_cache, char *host_name, 
-			  struct in_addr host_address, time_t ttd, int flags);
+static int next_token (char *token, int buffsize, FILE * fp);
 
-void load_dhcp(char *file, char *suffix)
+void load_dhcp(char *file, char *suffix, time_t now, char *hostname)
 {
-  struct crec *spares;
-  static char token[MAXLIN]; 
-  static char hostname[MAXDNAME];
-  struct in_addr host_address;
+  char token[MAXTOK], *dot;
+  struct all_addr host_address;
   time_t ttd, tts;
   FILE *fp = fopen (file, "r");
   
@@ -36,50 +32,49 @@ void load_dhcp(char *file, char *suffix)
   
   syslog (LOG_INFO, "reading %s", file);
 
-  /* remove all existing DHCP cache entries onto temp. freelist */
-  spares = cache_clear_dhcp();
+  /* remove all existing DHCP cache entries */
+  cache_unhash_dhcp();
   
-  while ((next_token(token, fp)))
+  while ((next_token(token, MAXTOK, fp)))
     {
       if (strcmp(token, "lease") == 0)
         {
           hostname[0] = '\0';
 	  ttd = tts = (time_t)(-1);
-
-          if (next_token(token, fp) && inet_pton(AF_INET, token, &host_address))
+#ifdef HAVE_IPV6
+          if (next_token(token, MAXTOK, fp) && 
+	      inet_pton(AF_INET, token, &host_address))
+#else
+	  if (next_token(token, MAXTOK, fp) && 
+	      (host_address.addr.addr4.s_addr = inet_addr(token)) != (in_addr_t) -1)
+#endif
             {
-              if (next_token(token, fp) && *token == '{')
+              if (next_token(token, MAXTOK, fp) && *token == '{')
                 {
-                  while (next_token(token, fp) && *token != '}')
+                  while (next_token(token, MAXTOK, fp) && *token != '}')
                     {
                       if ((strcmp(token, "client-hostname") == 0) ||
 			  (strcmp(token, "hostname") == 0))
-                        {
-			  if (next_token(token, fp))
-			    {
-			      if (*token == '"')
-				{
-				  *(token + strlen(token) - 1) = 0;
-				  strncpy(hostname, token+1, MAXDNAME);
-				}
-			      else 
-				strncpy(hostname, token, MAXDNAME);
-			      hostname[MAXDNAME - 1] = 0;
-			    }
+			{
+			  if (next_token(hostname, MAXDNAME, fp))
+			    if (!canonicalise(hostname))
+			      {
+				*hostname = 0;
+				syslog(LOG_ERR, "bad name in %s", file); 
+			      }
 			}
-
                       else if ((strcmp(token, "ends") == 0) ||
 			       (strcmp(token, "starts") == 0))
                         {
                           struct tm lease_time;
 			  int is_ends = (strcmp(token, "ends") == 0);
-			  if (next_token(token, fp) &&  /* skip weekday */
-			      next_token(token, fp) &&  /* Get date from lease file */
+			  if (next_token(token, MAXTOK, fp) &&  /* skip weekday */
+			      next_token(token, MAXTOK, fp) &&  /* Get date from lease file */
 			      sscanf (token, "%d/%d/%d", 
 				      &lease_time.tm_year,
 				      &lease_time.tm_mon,
 				      &lease_time.tm_mday) == 3 &&
-			      next_token(token, fp) &&
+			      next_token(token, MAXTOK, fp) &&
 			      sscanf (token, "%d:%d:%d:", 
 				      &lease_time.tm_hour,
 				      &lease_time.tm_min, 
@@ -109,46 +104,50 @@ void load_dhcp(char *file, char *suffix)
 				tts = time;			    }
                         }
 		    }
+		  
+		  /* missing info? */
+		  if (!*hostname)
+		    continue;
+		  if (ttd == (time_t)(-1))
+		    continue;
+		  
+		  /* infinite lease to is represented by -1 */
+		  /* This makes is to the lease file as 
+		     start time one less than end time. */
+		  /* We use -1 as infinite in ttd */
+		  if ((tts != -1) && (ttd == tts - 1))
+		    ttd = (time_t)(-1);
+		  else if (ttd < now)
+		    continue;
 
-		  if (*hostname && ttd != (time_t)(-1))
-		    {
-		      char *dot;
-		      /* infinite lease to is represented by -1 */
-		      /* This makes is to the lease file as 
-                         start time one less than end time. */
-		      /* We use -1 as infinite in ttd */
-		      if ((tts != -1) && (ttd == tts - 1))
-			ttd = (time_t)(-1);
-		      
-		      dot = strchr(hostname, '.');
-		      if (suffix)
-			{ 
-			  if (dot) 
-			    { /* suffix and lease has ending: must match */
-			      if (strcmp(dot+1, suffix) != 0)
-				syslog(LOG_WARNING, 
-				       "Ignoring DHCP lease for %s because it has an illegal domain part", hostname);
-			      else
-				process_lease(&spares, hostname, host_address, ttd, F_REVERSE);
-			    }
+		  dot = strchr(hostname, '.');
+		  if (suffix)
+		    { 
+		      if (dot) 
+			{ /* suffix and lease has ending: must match */
+			  if (strcmp(dot+1, suffix) != 0)
+			    syslog(LOG_WARNING, 
+				   "Ignoring DHCP lease for %s because it has an illegal domain part", hostname);
 			  else
-			    { /* suffix exists but lease has no ending - add lease and lease.suffix */
-			      process_lease(&spares, hostname, host_address, ttd, 0);
-			      strncat(hostname, ".", MAXDNAME);
-			      strncat(hostname, suffix, MAXDNAME);
-			      hostname[MAXDNAME-1] = 0; /* in case strncat hit limit */
-			      /* Make FQDN canonical for reverse lookups */
-			      process_lease(&spares, hostname, host_address, ttd, F_REVERSE);
-			    }
+			    cache_add_dhcp_entry(hostname, &host_address, ttd, F_REVERSE);
 			}
 		      else
-			{ /* no suffix */
-			  if (dot) /* no lease ending allowed */
-			    syslog(LOG_WARNING, 
-				   "Ignoring DHCP lease for %s because it has a domain part", hostname);
-			  else
-			    process_lease(&spares, hostname, host_address, ttd, F_REVERSE);
+			{ /* suffix exists but lease has no ending - add lease and lease.suffix */
+			  cache_add_dhcp_entry(hostname, &host_address, ttd, 0);
+			  strncat(hostname, ".", MAXDNAME);
+			  strncat(hostname, suffix, MAXDNAME);
+			  hostname[MAXDNAME-1] = 0; /* in case strncat hit limit */
+			  /* Make FQDN canonical for reverse lookups */
+			  cache_add_dhcp_entry(hostname, &host_address, ttd, F_REVERSE);
 			}
+		    }
+		  else
+		    { /* no suffix */
+		      if (dot) /* no lease ending allowed */
+			syslog(LOG_WARNING, 
+			       "Ignoring DHCP lease for %s because it has a domain part", hostname);
+		      else
+			cache_add_dhcp_entry(hostname, &host_address, ttd, F_REVERSE);
 		    }
 		}
 	    }
@@ -156,19 +155,11 @@ void load_dhcp(char *file, char *suffix)
     }
   fclose(fp);
   
-  /* free any still-unused cache structs */
-  while (spares)
-    { 
-      struct crec *tmp = spares->next;
-      free(spares);
-      spares = tmp;
-    }
 }
 
-static char *next_token (char *token, FILE * fp)
+static int next_token (char *token, int buffsize, FILE * fp)
 {
-  int count = 0;
-  int c;
+  int c, count = 0;
   char *cp = token;
   
   while((c = getc(fp)) != EOF)
@@ -179,97 +170,18 @@ static char *next_token (char *token, FILE * fp)
       if (c == ' ' || c == '\t' || c == '\n' || c == ';')
 	{
 	  if (count)
-	    {
-	      *cp = 0;
-	      return token;
-	    }
+	    break;
 	}
-      else if (count<MAXLIN-1)
+      else if ((c != '"') && (count<buffsize-1))
 	{
 	  *cp++ = c;
 	  count++;
 	}
-      
     }
   
-  if (count)
-    {
-      *cp = 0;
-      return token;
-    }
-  
-  return NULL;
+  *cp = 0;
+  return count ? 1 : 0;
 }
-
-static void process_lease(struct crec **empty_cache, char *host_name, 
-			  struct in_addr host_address, time_t ttd, int flags) 
-{
-  struct crec *crec;
-  char *cp;
-  
-  if ((crec = cache_find_by_name(NULL, host_name, 0, F_IPV4)))
-    {
-      if (crec->flags & F_HOSTS)
-	syslog(LOG_WARNING, "Ignoring DHCP lease for %s because it clashes with an /etc/hosts entry.", crec->name);
-      else if (!(crec->flags & F_DHCP))
-	{
-	  if (crec->flags & F_NEG)
-	    {
-	      /* name may have been searched for before being allocated to DHCP and 
-		 therefore got a negative cache entry. If so delete it and continue. */
-	      crec->flags &= ~F_FORWARD;
-	      goto newrec;
-	    }
-	  else
-	    syslog(LOG_WARNING, "Ignoring DHCP lease for %s because it clashes with a cached name.", crec->name);
-	}
-      else if (ttd > crec->ttd || ttd == (time_t)-1)
-	{
-	  /* simply a later entry in the leases file which supercedes and earlier one. */
-	  memcpy(&crec->addr, &host_address, INADDRSZ);
-	  if (ttd == (time_t)-1)
-	    crec->flags |= F_IMMORTAL;
-	  else
-	    crec->ttd = ttd;
-	}
-    }
-  else
-    { /* can't find it in cache. */
-    newrec:
-      crec = *empty_cache;
-      if (crec) /* old entries to reuse */
-	*empty_cache =(*empty_cache)->next;
-      else /* need new one */
-	crec = malloc(sizeof(struct crec));
-      
-      if (crec) /* malloc may fail */
-	{
-	  crec->flags = F_DHCP | F_FORWARD | F_IPV4 | flags;
-	  if (ttd == (time_t)-1)
-	    crec->flags |= F_IMMORTAL;
-	  else
-	    crec->ttd = ttd;
-	  memcpy(&crec->addr, &host_address, INADDRSZ);
-	  crec->nameSize = strlen(host_name) + 1;
-	  crec->name = malloc(crec->nameSize);
-	  if (!crec->name)
-	    {
-	      free(crec);
-	      return;
-	    }
-	  for (cp = crec->name; *host_name; host_name++, cp++)
-	    *cp = tolower(*host_name);
-	  *cp = 0;
-	  cache_insert(crec);
-	}
-    }
-}
-
-
-
-
-
-
 
 
 

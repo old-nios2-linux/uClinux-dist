@@ -99,6 +99,8 @@
 #include <linux/bitops.h>
 #include <linux/mutex.h>
 
+#include <scsi/scsi_ioctl.h>
+
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
@@ -279,6 +281,7 @@ typedef struct ide_floppy_obj {
 	ide_driver_t	*driver;
 	struct gendisk	*disk;
 	struct kref	kref;
+	unsigned int	openers;	/* protected by BKL for now */
 
 	/* Current packet command */
 	idefloppy_pc_t *pc;
@@ -866,7 +869,7 @@ static ide_startstop_t idefloppy_pc_intr (ide_drive_t *drive)
 	if (test_and_clear_bit(PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk(KERN_ERR "ide-floppy: The floppy wants to issue "
 			"more interrupts in DMA mode\n");
-		(void)__ide_dma_off(drive);
+		ide_dma_off(drive);
 		return ide_do_reset(drive);
 	}
 
@@ -1096,9 +1099,9 @@ static ide_startstop_t idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *p
 	pc->current_position = pc->buffer;
 	bcount.all = min(pc->request_transfer, 63 * 1024);
 
-	if (test_and_clear_bit(PC_DMA_ERROR, &pc->flags)) {
-		(void)__ide_dma_off(drive);
-	}
+	if (test_and_clear_bit(PC_DMA_ERROR, &pc->flags))
+		ide_dma_off(drive);
+
 	feature.all = 0;
 
 	if (test_bit(PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
@@ -1257,19 +1260,25 @@ static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t 
 	set_bit(PC_DMA_RECOMMENDED, &pc->flags);
 }
 
-static int
+static void
 idefloppy_blockpc_cmd(idefloppy_floppy_t *floppy, idefloppy_pc_t *pc, struct request *rq)
 {
-	/*
-	 * just support eject for now, it would not be hard to make the
-	 * REQ_BLOCK_PC support fully-featured
-	 */
-	if (rq->cmd[0] != IDEFLOPPY_START_STOP_CMD)
-		return 1;
-
 	idefloppy_init_pc(pc);
+	pc->callback = &idefloppy_rw_callback;
 	memcpy(pc->c, rq->cmd, sizeof(pc->c));
-	return 0;
+	pc->rq = rq;
+	pc->b_count = rq->data_len;
+	if (rq->data_len && rq_data_dir(rq) == WRITE)
+		set_bit(PC_WRITING, &pc->flags);
+	pc->buffer = rq->data;
+	if (rq->bio)
+		set_bit(PC_DMA_RECOMMENDED, &pc->flags);
+		
+	/*
+	 * possibly problematic, doesn't look like ide-floppy correctly
+	 * handled scattered requests if dma fails...
+	 */
+	pc->request_transfer = pc->buffer_size = rq->data_len;
 }
 
 /*
@@ -1316,10 +1325,7 @@ static ide_startstop_t idefloppy_do_request (ide_drive_t *drive, struct request 
 		pc = (idefloppy_pc_t *) rq->buffer;
 	} else if (blk_pc_request(rq)) {
 		pc = idefloppy_next_pc_storage(drive);
-		if (idefloppy_blockpc_cmd(floppy, pc, rq)) {
-			idefloppy_do_end_request(drive, 0, 0);
-			return ide_stopped;
-		}
+		idefloppy_blockpc_cmd(floppy, pc, rq);
 	} else {
 		blk_dump_rq_flags(rq,
 			"ide-floppy: unsupported command in queue");
@@ -1433,7 +1439,8 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 	
 	drive->bios_cyl = 0;
 	drive->bios_head = drive->bios_sect = 0;
-	floppy->blocks = floppy->bs_factor = 0;
+	floppy->blocks = 0;
+	floppy->bs_factor = 1;
 	set_capacity(floppy->disk, 0);
 
 	idefloppy_create_read_capacity_cmd(&pc);
@@ -1635,7 +1642,7 @@ static int idefloppy_begin_format(ide_drive_t *drive, int __user *arg)
 /*
 ** Get ATAPI_FORMAT_UNIT progress indication.
 **
-** Userland gives a pointer to an int.  The int is set to a progresss
+** Userland gives a pointer to an int.  The int is set to a progress
 ** indicator 0-65536, with 65536=100%.
 **
 ** If the drive does not support format progress indication, we just check
@@ -1809,18 +1816,22 @@ static int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 	return 0;
 }
 
+#ifdef CONFIG_IDE_PROC_FS
 static void idefloppy_add_settings(ide_drive_t *drive)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
 
 /*
- *			drive	setting name	read/write	ioctl	ioctl		data type	min	max	mul_factor	div_factor	data pointer		set function
+ *			drive	setting name	read/write	data type	min	max	mul_factor	div_factor	data pointer		set function
  */
-	ide_add_setting(drive,	"bios_cyl",		SETTING_RW,					-1,			-1,			TYPE_INT,	0,	1023,				1,	1,	&drive->bios_cyl,		NULL);
-	ide_add_setting(drive,	"bios_head",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	255,				1,	1,	&drive->bios_head,		NULL);
-	ide_add_setting(drive,	"bios_sect",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	63,				1,	1,	&drive->bios_sect,		NULL);
-	ide_add_setting(drive,	"ticks",		SETTING_RW,					-1,			-1,			TYPE_BYTE,	0,	255,				1,	1,	&floppy->ticks,		NULL);
+	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	TYPE_INT,	0,	1023,		1,		1,	&drive->bios_cyl,	NULL);
+	ide_add_setting(drive,	"bios_head",	SETTING_RW,	TYPE_BYTE,	0,	255,		1,		1,	&drive->bios_head,	NULL);
+	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	TYPE_BYTE,	0,	63,		1,		1,	&drive->bios_sect,	NULL);
+	ide_add_setting(drive,	"ticks",	SETTING_RW,	TYPE_BYTE,	0,	255,		1,		1,	&floppy->ticks,		NULL);
 }
+#else
+static inline void idefloppy_add_settings(ide_drive_t *drive) { ; }
+#endif
 
 /*
  *	Driver initialization.
@@ -1871,7 +1882,7 @@ static void ide_floppy_remove(ide_drive_t *drive)
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	struct gendisk *g = floppy->disk;
 
-	ide_unregister_subdriver(drive, floppy->driver);
+	ide_proc_unregister_driver(drive, floppy->driver);
 
 	del_gendisk(g);
 
@@ -1890,8 +1901,7 @@ static void ide_floppy_release(struct kref *kref)
 	kfree(floppy);
 }
 
-#ifdef CONFIG_PROC_FS
-
+#ifdef CONFIG_IDE_PROC_FS
 static int proc_idefloppy_read_capacity
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -1907,12 +1917,7 @@ static ide_proc_entry_t idefloppy_proc[] = {
 	{ "geometry",	S_IFREG|S_IRUGO,	proc_ide_read_geometry,	NULL },
 	{ NULL, 0, NULL, NULL }
 };
-
-#else
-
-#define	idefloppy_proc	NULL
-
-#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_IDE_PROC_FS */
 
 static int ide_floppy_probe(ide_drive_t *);
 
@@ -1931,7 +1936,9 @@ static ide_driver_t idefloppy_driver = {
 	.end_request		= idefloppy_do_end_request,
 	.error			= __ide_error,
 	.abort			= __ide_abort,
+#ifdef CONFIG_IDE_PROC_FS
 	.proc			= idefloppy_proc,
+#endif
 };
 
 static int idefloppy_open(struct inode *inode, struct file *filp)
@@ -1949,9 +1956,9 @@ static int idefloppy_open(struct inode *inode, struct file *filp)
 
 	drive = floppy->drive;
 
-	drive->usage++;
+	floppy->openers++;
 
-	if (drive->usage == 1) {
+	if (floppy->openers == 1) {
 		clear_bit(IDEFLOPPY_FORMAT_IN_PROGRESS, &floppy->flags);
 		/* Just in case */
 
@@ -1969,13 +1976,11 @@ static int idefloppy_open(struct inode *inode, struct file *filp)
 		    ** capacity of the drive or begin the format - Sam
 		    */
 		    ) {
-			drive->usage--;
 			ret = -EIO;
 			goto out_put_floppy;
 		}
 
 		if (floppy->wp && (filp->f_mode & 2)) {
-			drive->usage--;
 			ret = -EROFS;
 			goto out_put_floppy;
 		}
@@ -1987,13 +1992,13 @@ static int idefloppy_open(struct inode *inode, struct file *filp)
 		}
 		check_disk_change(inode->i_bdev);
 	} else if (test_bit(IDEFLOPPY_FORMAT_IN_PROGRESS, &floppy->flags)) {
-		drive->usage--;
 		ret = -EBUSY;
 		goto out_put_floppy;
 	}
 	return 0;
 
 out_put_floppy:
+	floppy->openers--;
 	ide_floppy_put(floppy);
 	return ret;
 }
@@ -2007,7 +2012,7 @@ static int idefloppy_release(struct inode *inode, struct file *filp)
 	
 	debug_log(KERN_INFO "Reached idefloppy_release\n");
 
-	if (drive->usage == 1) {
+	if (floppy->openers == 1) {
 		/* IOMEGA Clik! drives do not support lock/unlock commands */
                 if (!test_bit(IDEFLOPPY_CLIK_DRIVE, &floppy->flags)) {
 			idefloppy_create_prevent_cmd(&pc, 0);
@@ -2016,7 +2021,8 @@ static int idefloppy_release(struct inode *inode, struct file *filp)
 
 		clear_bit(IDEFLOPPY_FORMAT_IN_PROGRESS, &floppy->flags);
 	}
-	drive->usage--;
+
+	floppy->openers--;
 
 	ide_floppy_put(floppy);
 
@@ -2050,7 +2056,7 @@ static int idefloppy_ioctl(struct inode *inode, struct file *file,
 		prevent = 0;
 		/* fall through */
 	case CDROM_LOCKDOOR:
-		if (drive->usage > 1)
+		if (floppy->openers > 1)
 			return -EBUSY;
 
 		/* The IOMEGA Clik! Drive doesn't support this command - no room for an eject mechanism */
@@ -2072,7 +2078,7 @@ static int idefloppy_ioctl(struct inode *inode, struct file *file,
 		if (!(file->f_mode & 2))
 			return -EPERM;
 
-		if (drive->usage > 1) {
+		if (floppy->openers > 1) {
 			/* Don't format if someone is using the disk */
 
 			clear_bit(IDEFLOPPY_FORMAT_IN_PROGRESS,
@@ -2095,7 +2101,21 @@ static int idefloppy_ioctl(struct inode *inode, struct file *file,
 	case IDEFLOPPY_IOCTL_FORMAT_GET_PROGRESS:
 		return idefloppy_get_format_progress(drive, argp);
 	}
-	return generic_ide_ioctl(drive, file, bdev, cmd, arg);
+
+	/*
+	 * skip SCSI_IOCTL_SEND_COMMAND (deprecated)
+	 * and CDROM_SEND_PACKET (legacy) ioctls
+	 */
+	if (cmd != CDROM_SEND_PACKET && cmd != SCSI_IOCTL_SEND_COMMAND)
+		err = scsi_cmd_ioctl(file, bdev->bd_disk->queue,
+					bdev->bd_disk, cmd, argp);
+	else
+		err = -ENOTTY;
+
+	if (err == -ENOTTY)
+		err = generic_ide_ioctl(drive, file, bdev, cmd, arg);
+
+	return err;
 }
 
 static int idefloppy_media_changed(struct gendisk *disk)
@@ -2147,7 +2167,7 @@ static int ide_floppy_probe(ide_drive_t *drive)
 		printk("ide-floppy: passing drive %s to ide-scsi emulation.\n", drive->name);
 		goto failed;
 	}
-	if ((floppy = (idefloppy_floppy_t *) kzalloc (sizeof (idefloppy_floppy_t), GFP_KERNEL)) == NULL) {
+	if ((floppy = kzalloc(sizeof (idefloppy_floppy_t), GFP_KERNEL)) == NULL) {
 		printk (KERN_ERR "ide-floppy: %s: Can't allocate a floppy structure\n", drive->name);
 		goto failed;
 	}
@@ -2158,7 +2178,7 @@ static int ide_floppy_probe(ide_drive_t *drive)
 
 	ide_init_disk(g, drive);
 
-	ide_register_subdriver(drive, &idefloppy_driver);
+	ide_proc_register_driver(drive, &idefloppy_driver);
 
 	kref_init(&floppy->kref);
 

@@ -95,6 +95,7 @@ obj-$(CONFIG_MTD_VC547X)	+= vc547x-flash.o
 obj-$(CONFIG_MTD_TIBURON)	+= tiburon.o
 obj-$(CONFIG_MTD_UCBOOTSTRAP)	+= uCbootmap.o
 obj-$(CONFIG_MTD_EB67DIP)       += eb67dip.o
+obj-$(CONFIG_MTD_mfc3000)     += mfc3000.o
 
 include $(TOPDIR)/Rules.make
 

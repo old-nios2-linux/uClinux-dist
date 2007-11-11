@@ -50,7 +50,7 @@ MODULE_PARM_DESC(cidmode, "Call-ID mode");
 #define USB_M105_PRODUCT_ID	0x0009
 
 /* table of devices that work with this driver */
-static struct usb_device_id gigaset_table [] = {
+static const struct usb_device_id gigaset_table [] = {
 	{ USB_DEVICE(USB_M105_VENDOR_ID, USB_M105_PRODUCT_ID) },
 	{ }					/* Terminating entry */
 };
@@ -137,8 +137,6 @@ struct usb_cardstate {
 
 	char			bchars[6];		/* for request 0x19 */
 };
-
-struct usb_bc_state {};
 
 static inline unsigned tiocm_to_gigaset(unsigned state)
 {
@@ -410,7 +408,7 @@ static void gigaset_read_int_callback(struct urb *urb)
 
 	if (resubmit) {
 		spin_lock_irqsave(&cs->lock, flags);
-		r = cs->connected ? usb_submit_urb(urb, SLAB_ATOMIC) : -ENODEV;
+		r = cs->connected ? usb_submit_urb(urb, GFP_ATOMIC) : -ENODEV;
 		spin_unlock_irqrestore(&cs->lock, flags);
 		if (r)
 			dev_err(cs->dev, "error %d when resubmitting urb.\n",
@@ -486,7 +484,7 @@ static int send_cb(struct cardstate *cs, struct cmdbuf_t *cb)
 			atomic_set(&ucs->busy, 1);
 
 			spin_lock_irqsave(&cs->lock, flags);
-			status = cs->connected ? usb_submit_urb(ucs->bulk_out_urb, SLAB_ATOMIC) : -ENODEV;
+			status = cs->connected ? usb_submit_urb(ucs->bulk_out_urb, GFP_ATOMIC) : -ENODEV;
 			spin_unlock_irqrestore(&cs->lock, flags);
 
 			if (status) {
@@ -579,25 +577,21 @@ static int gigaset_brkchars(struct cardstate *cs, const unsigned char buf[6])
 
 static int gigaset_freebcshw(struct bc_state *bcs)
 {
-	if (!bcs->hw.usb)
-		return 0;
-	//FIXME
-	kfree(bcs->hw.usb);
+	/* unused */
 	return 1;
 }
 
 /* Initialize the b-channel structure */
 static int gigaset_initbcshw(struct bc_state *bcs)
 {
-	bcs->hw.usb = kmalloc(sizeof(struct usb_bc_state), GFP_KERNEL);
-	if (!bcs->hw.usb)
-		return 0;
-
+	/* unused */
+	bcs->hw.usb = NULL;
 	return 1;
 }
 
 static void gigaset_reinitbcshw(struct bc_state *bcs)
 {
+	/* nothing to do for M10x */
 }
 
 static void gigaset_freecshw(struct cardstate *cs)
@@ -652,7 +646,7 @@ static int write_modem(struct cardstate *cs)
 	 * transmit data
 	 */
 	count = min(bcs->tx_skb->len, (unsigned) ucs->bulk_out_size);
-	memcpy(ucs->bulk_out_buffer, bcs->tx_skb->data, count);
+	skb_copy_from_linear_data(bcs->tx_skb, ucs->bulk_out_buffer, count);
 	skb_pull(bcs->tx_skb, count);
 	atomic_set(&ucs->busy, 1);
 	gig_dbg(DEBUG_OUTPUT, "write_modem: send %d bytes", count);
@@ -664,7 +658,7 @@ static int write_modem(struct cardstate *cs)
 						  ucs->bulk_out_endpointAddr & 0x0f),
 				  ucs->bulk_out_buffer, count,
 				  gigaset_write_bulk_callback, cs);
-		ret = usb_submit_urb(ucs->bulk_out_urb, SLAB_ATOMIC);
+		ret = usb_submit_urb(ucs->bulk_out_urb, GFP_ATOMIC);
 	} else {
 		ret = -ENODEV;
 	}
@@ -763,7 +757,7 @@ static int gigaset_probe(struct usb_interface *interface,
 		goto error;
 	}
 
-	ucs->bulk_out_urb = usb_alloc_urb(0, SLAB_KERNEL);
+	ucs->bulk_out_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!ucs->bulk_out_urb) {
 		dev_err(cs->dev, "Couldn't allocate bulk_out_urb\n");
 		retval = -ENOMEM;
@@ -774,7 +768,7 @@ static int gigaset_probe(struct usb_interface *interface,
 
 	atomic_set(&ucs->busy, 0);
 
-	ucs->read_urb = usb_alloc_urb(0, SLAB_KERNEL);
+	ucs->read_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!ucs->read_urb) {
 		dev_err(cs->dev, "No free urbs available\n");
 		retval = -ENOMEM;
@@ -797,7 +791,7 @@ static int gigaset_probe(struct usb_interface *interface,
 			 gigaset_read_int_callback,
 			 cs->inbuf + 0, endpoint->bInterval);
 
-	retval = usb_submit_urb(ucs->read_urb, SLAB_KERNEL);
+	retval = usb_submit_urb(ucs->read_urb, GFP_KERNEL);
 	if (retval) {
 		dev_err(cs->dev, "Could not submit URB (error %d)\n", -retval);
 		goto error;
@@ -815,14 +809,11 @@ static int gigaset_probe(struct usb_interface *interface,
 	return 0;
 
 error:
-	if (ucs->read_urb)
-		usb_kill_urb(ucs->read_urb);
+	usb_kill_urb(ucs->read_urb);
 	kfree(ucs->bulk_out_buffer);
-	if (ucs->bulk_out_urb != NULL)
-		usb_free_urb(ucs->bulk_out_urb);
+	usb_free_urb(ucs->bulk_out_urb);
 	kfree(cs->inbuf[0].rcvbuf);
-	if (ucs->read_urb != NULL)
-		usb_free_urb(ucs->read_urb);
+	usb_free_urb(ucs->read_urb);
 	usb_set_intfdata(interface, NULL);
 	ucs->read_urb = ucs->bulk_out_urb = NULL;
 	cs->inbuf[0].rcvbuf = ucs->bulk_out_buffer = NULL;
@@ -850,11 +841,9 @@ static void gigaset_disconnect(struct usb_interface *interface)
 	usb_kill_urb(ucs->bulk_out_urb);	/* FIXME: only if active? */
 
 	kfree(ucs->bulk_out_buffer);
-	if (ucs->bulk_out_urb != NULL)
-		usb_free_urb(ucs->bulk_out_urb);
+	usb_free_urb(ucs->bulk_out_urb);
 	kfree(cs->inbuf[0].rcvbuf);
-	if (ucs->read_urb != NULL)
-		usb_free_urb(ucs->read_urb);
+	usb_free_urb(ucs->read_urb);
 	ucs->read_urb = ucs->bulk_out_urb = NULL;
 	cs->inbuf[0].rcvbuf = ucs->bulk_out_buffer = NULL;
 
@@ -865,7 +854,7 @@ static void gigaset_disconnect(struct usb_interface *interface)
 	gigaset_unassign(cs);
 }
 
-static struct gigaset_ops ops = {
+static const struct gigaset_ops ops = {
 	gigaset_write_cmd,
 	gigaset_write_room,
 	gigaset_chars_in_buffer,

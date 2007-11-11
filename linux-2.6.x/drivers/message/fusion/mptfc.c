@@ -3,8 +3,8 @@
  *      For use with LSI Logic PCI chip/adapter(s)
  *      running LSI Logic Fusion MPT (Message Passing Technology) firmware.
  *
- *  Copyright (c) 1999-2005 LSI Logic Corporation
- *  (mailto:mpt_linux_developer@lsil.com)
+ *  Copyright (c) 1999-2007 LSI Logic Corporation
+ *  (mailto:DL-MPTFusionLinux@lsi.com)
  *
  */
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
@@ -43,7 +43,6 @@
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
-#include "linux_compat.h"	/* linux-2.6 tweaks */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -53,7 +52,6 @@
 #include <linux/delay.h>	/* for mdelay */
 #include <linux/interrupt.h>	/* needed for in_interrupt() proto */
 #include <linux/reboot.h>	/* notifier code */
-#include <linux/sched.h>
 #include <linux/workqueue.h>
 #include <linux/sort.h>
 
@@ -75,6 +73,7 @@
 MODULE_AUTHOR(MODULEAUTHOR);
 MODULE_DESCRIPTION(my_NAME);
 MODULE_LICENSE("GPL");
+MODULE_VERSION(my_VERSION);
 
 /* Command line args */
 #define MPTFC_DEV_LOSS_TMO (60)
@@ -84,6 +83,12 @@ MODULE_PARM_DESC(mptfc_dev_loss_tmo, " Initial time the driver programs the "
     				     " transport to wait for an rport to "
 				     " return following a device loss event."
 				     "  Default=60.");
+
+/* scsi-mid layer global parmeter is max_report_luns, which is 511 */
+#define MPTFC_MAX_LUN (16895)
+static int max_lun = MPTFC_MAX_LUN;
+module_param(max_lun, int, 0);
+MODULE_PARM_DESC(max_lun, " max lun, default=16895 ");
 
 static int	mptfcDoneCtx = -1;
 static int	mptfcTaskCtx = -1;
@@ -125,6 +130,7 @@ static struct scsi_host_template mptfc_driver_template = {
 	.max_sectors			= 8192,
 	.cmd_per_lun			= 7,
 	.use_clustering			= ENABLE_CLUSTERING,
+	.shost_attrs			= mptscsih_host_attrs,
 };
 
 /****************************************************************************
@@ -147,6 +153,8 @@ static struct pci_device_id mptfc_pci_table[] = {
 	{ PCI_VENDOR_ID_LSI_LOGIC, MPI_MANUFACTPAGE_DEVICEID_FC949X,
 		PCI_ANY_ID, PCI_ANY_ID },
 	{ PCI_VENDOR_ID_LSI_LOGIC, MPI_MANUFACTPAGE_DEVICEID_FC949E,
+		PCI_ANY_ID, PCI_ANY_ID },
+	{ PCI_VENDOR_ID_BROCADE, MPI_MANUFACTPAGE_DEVICEID_FC949E,
 		PCI_ANY_ID, PCI_ANY_ID },
 	{0}	/* Terminating entry */
 };
@@ -180,16 +188,18 @@ mptfc_block_error_handler(struct scsi_cmnd *SCpnt,
 			  int (*func)(struct scsi_cmnd *SCpnt),
 			  const char *caller)
 {
+	MPT_SCSI_HOST		*hd;
 	struct scsi_device	*sdev = SCpnt->device;
 	struct Scsi_Host	*shost = sdev->host;
 	struct fc_rport		*rport = starget_to_rport(scsi_target(sdev));
 	unsigned long		flags;
 	int			ready;
 
+	hd = (MPT_SCSI_HOST *) SCpnt->device->host->hostdata;
 	spin_lock_irqsave(shost->host_lock, flags);
 	while ((ready = fc_remote_port_chkready(rport) >> 16) == DID_IMM_RETRY) {
 		spin_unlock_irqrestore(shost->host_lock, flags);
-		dfcprintk ((MYIOC_s_INFO_FMT
+		dfcprintk (hd->ioc, printk(MYIOC_s_DEBUG_FMT
 			"mptfc_block_error_handler.%d: %d:%d, port status is "
 			"DID_IMM_RETRY, deferring %s recovery.\n",
 			((MPT_SCSI_HOST *) shost->hostdata)->ioc->name,
@@ -201,7 +211,7 @@ mptfc_block_error_handler(struct scsi_cmnd *SCpnt,
 	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	if (ready == DID_NO_CONNECT || !SCpnt->device->hostdata) {
-		dfcprintk ((MYIOC_s_INFO_FMT
+		dfcprintk (hd->ioc, printk(MYIOC_s_DEBUG_FMT
 			"%s.%d: %d:%d, failing recovery, "
 			"port state %d, vdev %p.\n", caller,
 			((MPT_SCSI_HOST *) shost->hostdata)->ioc->name,
@@ -210,7 +220,7 @@ mptfc_block_error_handler(struct scsi_cmnd *SCpnt,
 			SCpnt->device->hostdata));
 		return FAILED;
 	}
-	dfcprintk ((MYIOC_s_INFO_FMT
+	dfcprintk (hd->ioc, printk(MYIOC_s_DEBUG_FMT
 		"%s.%d: %d:%d, executing recovery.\n", caller,
 		((MPT_SCSI_HOST *) shost->hostdata)->ioc->name,
 		((MPT_SCSI_HOST *) shost->hostdata)->ioc->sh->host_no,
@@ -291,10 +301,9 @@ mptfc_GetFcDevPage0(MPT_ADAPTER *ioc, int ioc_port,
 	U32			 port_id = 0xffffff;
 	int			 num_targ = 0;
 	int			 max_bus = ioc->facts.MaxBuses;
-	int			 max_targ = ioc->facts.MaxDevices;
+	int			 max_targ;
 
-	if (max_bus == 0 || max_targ == 0)
-		goto out;
+	max_targ = (ioc->facts.MaxDevices == 0) ? 256 : ioc->facts.MaxDevices;
 
 	data_sz = sizeof(FCDevicePage0_t) * max_bus * max_targ;
 	p_p0 = p0_array =  kzalloc(data_sz, GFP_KERNEL);
@@ -466,8 +475,8 @@ mptfc_register_dev(MPT_ADAPTER *ioc, int channel, FCDevicePage0_t *pg0)
 			if (ri->starget) {
 				vtarget = ri->starget->hostdata;
 				if (vtarget) {
-					vtarget->target_id = pg0->CurrentTargetID;
-					vtarget->bus_id = pg0->CurrentBus;
+					vtarget->id = pg0->CurrentTargetID;
+					vtarget->channel = pg0->CurrentBus;
 				}
 			}
 			*((struct mptfc_rport_info **)rport->dd_data) = ri;
@@ -476,7 +485,7 @@ mptfc_register_dev(MPT_ADAPTER *ioc, int channel, FCDevicePage0_t *pg0)
 
 			pn = (u64)ri->pg0.WWPN.High << 32 | (u64)ri->pg0.WWPN.Low;
 			nn = (u64)ri->pg0.WWNN.High << 32 | (u64)ri->pg0.WWNN.Low;
-			dfcprintk ((MYIOC_s_INFO_FMT
+			dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
 				"mptfc_reg_dev.%d: %x, %llx / %llx, tid %d, "
 				"rport tid %d, tmo %d\n",
 					ioc->name,
@@ -539,8 +548,8 @@ mptfc_target_alloc(struct scsi_target *starget)
 	if (rport) {
 		ri = *((struct mptfc_rport_info **)rport->dd_data);
 		if (ri) {	/* better be! */
-			vtarget->target_id = ri->pg0.CurrentTargetID;
-			vtarget->bus_id = ri->pg0.CurrentBus;
+			vtarget->id = ri->pg0.CurrentTargetID;
+			vtarget->channel = ri->pg0.CurrentBus;
 			ri->starget = starget;
 			rc = 0;
 		}
@@ -552,6 +561,35 @@ mptfc_target_alloc(struct scsi_target *starget)
 
 	return rc;
 }
+/*
+ *	mptfc_dump_lun_info
+ *	@ioc
+ *	@rport
+ *	@sdev
+ *
+ */
+static void
+mptfc_dump_lun_info(MPT_ADAPTER *ioc, struct fc_rport *rport, struct scsi_device *sdev,
+		VirtTarget *vtarget)
+{
+	u64 nn, pn;
+	struct mptfc_rport_info *ri;
+
+	ri = *((struct mptfc_rport_info **)rport->dd_data);
+	pn = (u64)ri->pg0.WWPN.High << 32 | (u64)ri->pg0.WWPN.Low;
+	nn = (u64)ri->pg0.WWNN.High << 32 | (u64)ri->pg0.WWNN.Low;
+	dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
+		"mptfc_slv_alloc.%d: num_luns %d, sdev.id %d, "
+		"CurrentTargetID %d, %x %llx %llx\n",
+		ioc->name,
+		sdev->host->host_no,
+		vtarget->num_luns,
+		sdev->id, ri->pg0.CurrentTargetID,
+		ri->pg0.PortIdentifier,
+		(unsigned long long)pn,
+		(unsigned long long)nn));
+}
+
 
 /*
  *	OS entry point to allow host driver to alloc memory
@@ -591,7 +629,6 @@ mptfc_slave_alloc(struct scsi_device *sdev)
 	if (vtarget->num_luns == 0) {
 		vtarget->ioc_id = hd->ioc->id;
 		vtarget->tflags = MPT_TARGET_FLAGS_Q_YES;
-		hd->Targets[sdev->id] = vtarget;
 	}
 
 	vdev->vtarget = vtarget;
@@ -600,25 +637,7 @@ mptfc_slave_alloc(struct scsi_device *sdev)
 	vtarget->num_luns++;
 
 
-#ifdef DMPT_DEBUG_FC
-	{
-	u64 nn, pn;
-	struct mptfc_rport_info *ri;
-	ri = *((struct mptfc_rport_info **)rport->dd_data);
-	pn = (u64)ri->pg0.WWPN.High << 32 | (u64)ri->pg0.WWPN.Low;
-	nn = (u64)ri->pg0.WWNN.High << 32 | (u64)ri->pg0.WWNN.Low;
-	dfcprintk ((MYIOC_s_INFO_FMT
-		"mptfc_slv_alloc.%d: num_luns %d, sdev.id %d, "
-	        "CurrentTargetID %d, %x %llx %llx\n",
-		hd->ioc->name,
-		sdev->host->host_no,
-		vtarget->num_luns,
-		sdev->id, ri->pg0.CurrentTargetID,
-		ri->pg0.PortIdentifier,
-		(unsigned long long)pn,
-		(unsigned long long)nn));
-	}
-#endif
+	mptfc_dump_lun_info(hd->ioc, rport, sdev, vtarget);
 
 	return 0;
 }
@@ -629,6 +648,13 @@ mptfc_qcmd(struct scsi_cmnd *SCpnt, void (*done)(struct scsi_cmnd *))
 	struct mptfc_rport_info	*ri;
 	struct fc_rport	*rport = starget_to_rport(scsi_target(SCpnt->device));
 	int		err;
+	VirtDevice	*vdev = SCpnt->device->hostdata;
+
+	if (!vdev || !vdev->vtarget) {
+		SCpnt->result = DID_NO_CONNECT << 16;
+		done(SCpnt);
+		return 0;
+	}
 
 	err = fc_remote_port_chkready(rport);
 	if (unlikely(err)) {
@@ -637,36 +663,15 @@ mptfc_qcmd(struct scsi_cmnd *SCpnt, void (*done)(struct scsi_cmnd *))
 		return 0;
 	}
 
-	if (!SCpnt->device->hostdata) {	/* vdev */
-		SCpnt->result = DID_NO_CONNECT << 16;
-		done(SCpnt);
-		return 0;
-	}
-
 	/* dd_data is null until finished adding target */
 	ri = *((struct mptfc_rport_info **)rport->dd_data);
 	if (unlikely(!ri)) {
-		dfcprintk ((MYIOC_s_INFO_FMT
-			"mptfc_qcmd.%d: %d:%d, dd_data is null.\n",
-			((MPT_SCSI_HOST *) SCpnt->device->host->hostdata)->ioc->name,
-			((MPT_SCSI_HOST *) SCpnt->device->host->hostdata)->ioc->sh->host_no,
-			SCpnt->device->id,SCpnt->device->lun));
 		SCpnt->result = DID_IMM_RETRY << 16;
 		done(SCpnt);
 		return 0;
 	}
 
-	err = mptscsih_qcmd(SCpnt,done);
-#ifdef DMPT_DEBUG_FC
-	if (unlikely(err)) {
-		dfcprintk ((MYIOC_s_INFO_FMT
-			"mptfc_qcmd.%d: %d:%d, mptscsih_qcmd returns non-zero, (%x).\n",
-			((MPT_SCSI_HOST *) SCpnt->device->host->hostdata)->ioc->name,
-			((MPT_SCSI_HOST *) SCpnt->device->host->hostdata)->ioc->sh->host_no,
-			SCpnt->device->id,SCpnt->device->lun,err));
-	}
-#endif
-	return err;
+	return mptscsih_qcmd(SCpnt,done);
 }
 
 /*
@@ -1018,9 +1023,10 @@ mptfc_init_host_attr(MPT_ADAPTER *ioc,int portnum)
 }
 
 static void
-mptfc_setup_reset(void *arg)
+mptfc_setup_reset(struct work_struct *work)
 {
-	MPT_ADAPTER		*ioc = (MPT_ADAPTER *)arg;
+	MPT_ADAPTER		*ioc =
+		container_of(work, MPT_ADAPTER, fc_setup_reset_work);
 	u64			pn;
 	struct mptfc_rport_info *ri;
 
@@ -1033,7 +1039,7 @@ mptfc_setup_reset(void *arg)
 
 			pn = (u64)ri->pg0.WWPN.High << 32 |
 			     (u64)ri->pg0.WWPN.Low;
-			dfcprintk ((MYIOC_s_INFO_FMT
+			dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
 				"mptfc_setup_reset.%d: %llx deleted\n",
 				ioc->name,
 				ioc->sh->host_no,
@@ -1043,9 +1049,10 @@ mptfc_setup_reset(void *arg)
 }
 
 static void
-mptfc_rescan_devices(void *arg)
+mptfc_rescan_devices(struct work_struct *work)
 {
-	MPT_ADAPTER		*ioc = (MPT_ADAPTER *)arg;
+	MPT_ADAPTER		*ioc =
+		container_of(work, MPT_ADAPTER, fc_rescan_work);
 	int			ii;
 	u64			pn;
 	struct mptfc_rport_info *ri;
@@ -1079,7 +1086,7 @@ mptfc_rescan_devices(void *arg)
 
 			pn = (u64)ri->pg0.WWPN.High << 32 |
 			     (u64)ri->pg0.WWPN.Low;
-			dfcprintk ((MYIOC_s_INFO_FMT
+			dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
 				"mptfc_rescan.%d: %llx deleted\n",
 				ioc->name,
 				ioc->sh->host_no,
@@ -1140,7 +1147,7 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		printk(MYIOC_s_WARN_FMT
 			"Skipping ioc=%p because SCSI Initiator mode is NOT enabled!\n",
 			ioc->name, ioc);
-		return -ENODEV;
+		return 0;
 	}
 
 	sh = scsi_host_alloc(&mptfc_driver_template, sizeof(MPT_SCSI_HOST));
@@ -1154,8 +1161,8 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
         }
 
 	spin_lock_init(&ioc->fc_rescan_work_lock);
-	INIT_WORK(&ioc->fc_rescan_work, mptfc_rescan_devices,(void *)ioc);
-	INIT_WORK(&ioc->fc_setup_reset_work, mptfc_setup_reset, (void *)ioc);
+	INIT_WORK(&ioc->fc_rescan_work, mptfc_rescan_devices);
+	INIT_WORK(&ioc->fc_setup_reset_work, mptfc_setup_reset);
 
 	spin_lock_irqsave(&ioc->FreeQlock, flags);
 
@@ -1170,10 +1177,9 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* set 16 byte cdb's */
 	sh->max_cmd_len = 16;
 
-	sh->max_id = MPT_MAX_FC_DEVICES<256 ? MPT_MAX_FC_DEVICES : 255;
+	sh->max_id = ioc->pfacts->MaxDevices;
+	sh->max_lun = max_lun;
 
-	sh->max_lun = MPT_LAST_LUN + 1;
-	sh->max_channel = 0;
 	sh->this_id = ioc->pfacts[0].PortSCSIID;
 
 	/* Required entry.
@@ -1204,7 +1210,7 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	if (numSGE < sh->sg_tablesize) {
 		/* Reset this value */
-		dprintk((MYIOC_s_INFO_FMT
+		dprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 		  "Resetting sg_tablesize to %d from %d\n",
 		  ioc->name, numSGE, sh->sg_tablesize));
 		sh->sg_tablesize = numSGE;
@@ -1224,21 +1230,8 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_mptfc_probe;
 	}
 
-	dprintk((MYIOC_s_INFO_FMT "ScsiLookup @ %p\n",
+	dprintk(ioc, printk(MYIOC_s_DEBUG_FMT "ScsiLookup @ %p\n",
 		 ioc->name, hd->ScsiLookup));
-
-	/* Allocate memory for the device structures.
-	 * A non-Null pointer at an offset
-	 * indicates a device exists.
-	 * max_id = 1 + maximum id (hosts.h)
-	 */
-	hd->Targets = kcalloc(sh->max_id, sizeof(void *), GFP_ATOMIC);
-	if (!hd->Targets) {
-		error = -ENOMEM;
-		goto out_mptfc_probe;
-	}
-
-	dprintk((KERN_INFO "  vdev @ %p\n", hd->Targets));
 
 	/* Clear the TM flags
 	 */
@@ -1269,7 +1262,7 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	sh->transportt = mptfc_transport_template;
 	error = scsi_add_host (sh, &ioc->pcidev->dev);
 	if(error) {
-		dprintk((KERN_ERR MYNAM
+		dprintk(ioc, printk(KERN_ERR MYNAM
 		  "scsi_add_host failed\n"));
 		goto out_mptfc_probe;
 	}
@@ -1328,7 +1321,7 @@ mptfc_event_process(MPT_ADAPTER *ioc, EventNotificationReply_t *pEvReply)
 	unsigned long flags;
 	int rc=1;
 
-	devtverboseprintk((MYIOC_s_INFO_FMT "MPT event (=%02Xh) routed to SCSI host driver!\n",
+	devtverboseprintk(ioc, printk(MYIOC_s_DEBUG_FMT "MPT event (=%02Xh) routed to SCSI host driver!\n",
 			ioc->name, event));
 
 	if (ioc->sh == NULL ||
@@ -1362,8 +1355,8 @@ mptfc_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
 		return rc;
 
 
-	dtmprintk((KERN_WARNING MYNAM
-		": IOC %s_reset routed to FC host driver!\n",
+	dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT
+		": IOC %s_reset routed to FC host driver!\n",ioc->name,
 		reset_phase==MPT_IOC_SETUP_RESET ? "setup" : (
 		reset_phase==MPT_IOC_PRE_RESET ? "pre" : "post")));
 
@@ -1393,8 +1386,7 @@ mptfc_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- *	mptfc_init - Register MPT adapter(s) as SCSI host(s) with
- *	linux scsi mid-layer.
+ *	mptfc_init - Register MPT adapter(s) as SCSI host(s) with SCSI mid-layer.
  *
  *	Returns 0 for success, non-zero for failure.
  */
@@ -1419,15 +1411,8 @@ mptfc_init(void)
 	mptfcTaskCtx = mpt_register(mptscsih_taskmgmt_complete, MPTFC_DRIVER);
 	mptfcInternalCtx = mpt_register(mptscsih_scandv_complete, MPTFC_DRIVER);
 
-	if (mpt_event_register(mptfcDoneCtx, mptfc_event_process) == 0) {
-		devtverboseprintk((KERN_INFO MYNAM
-		  ": Registered for IOC event notifications\n"));
-	}
-
-	if (mpt_reset_register(mptfcDoneCtx, mptfc_ioc_reset) == 0) {
-		dprintk((KERN_INFO MYNAM
-		  ": Registered for IOC reset notifications\n"));
-	}
+	mpt_event_register(mptfcDoneCtx, mptfc_event_process);
+	mpt_reset_register(mptfcDoneCtx, mptfc_ioc_reset);
 
 	error = pci_register_driver(&mptfc_driver);
 	if (error)
@@ -1438,7 +1423,7 @@ mptfc_init(void)
 
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
- *	mptfc_remove - Removed fc infrastructure for devices
+ *	mptfc_remove - Remove fc infrastructure for devices
  *	@pdev: Pointer to pci_dev structure
  *
  */
@@ -1492,12 +1477,7 @@ mptfc_exit(void)
 	fc_release_transport(mptfc_transport_template);
 
 	mpt_reset_deregister(mptfcDoneCtx);
-	dprintk((KERN_INFO MYNAM
-	  ": Deregistered for IOC reset notifications\n"));
-
 	mpt_event_deregister(mptfcDoneCtx);
-	dprintk((KERN_INFO MYNAM
-	  ": Deregistered for IOC event notifications\n"));
 
 	mpt_deregister(mptfcInternalCtx);
 	mpt_deregister(mptfcTaskCtx);

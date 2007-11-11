@@ -48,7 +48,7 @@ event_wrapper.c event_wrapper.h \
 smalloc.h \
 snort_packet_header.h \
 event_queue.c event_queue.h \
-inline.c inline.h
+inline.c inline.h ipv6.c ipv6.h
 
 snort_LDADD = output-plugins/libspo.a \
 detection-plugins/libspd.a            \

@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -23,6 +23,7 @@ static char rcsid[] = "$NetBSD: s_ilogb.c,v 1.9 1995/05/10 20:47:28 jtc Exp $";
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(ilogb)
 #ifdef __STDC__
 	int ilogb(double x)
 #else
@@ -36,7 +37,7 @@ static char rcsid[] = "$NetBSD: s_ilogb.c,v 1.9 1995/05/10 20:47:28 jtc Exp $";
 	hx &= 0x7fffffff;
 	if(hx<0x00100000) {
 	    GET_LOW_WORD(lx,x);
-	    if((hx|lx)==0) 
+	    if((hx|lx)==0)
 		return 0x80000001;	/* ilogb(0) = 0x80000001 */
 	    else			/* subnormal x */
 		if(hx==0) {
@@ -49,3 +50,4 @@ static char rcsid[] = "$NetBSD: s_ilogb.c,v 1.9 1995/05/10 20:47:28 jtc Exp $";
 	else if (hx<0x7ff00000) return (hx>>20)-1023;
 	else return 0x7fffffff;
 }
+libm_hidden_def(ilogb)

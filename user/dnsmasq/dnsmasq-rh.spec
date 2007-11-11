@@ -5,7 +5,7 @@
 ###############################################################################
 
 Name: dnsmasq
-Version: 1.10
+Version: 1.18
 Release: 1
 Copyright: GPL
 Group: System Environment/Daemons
@@ -47,7 +47,7 @@ mkdir -p -m 755 $RPM_BUILD_ROOT/usr/sbin
 mkdir -p -m 755 $RPM_BUILD_ROOT/etc/rc.d/init.d
 mkdir -p -m 755 $RPM_BUILD_ROOT/usr/share/man/man8
 
-cp dnsmasq.rh $RPM_BUILD_ROOT/etc/rc.d/init.d/dnsmasq
+cp rpm/dnsmasq.rh $RPM_BUILD_ROOT/etc/rc.d/init.d/dnsmasq
 strip dnsmasq
 cp dnsmasq $RPM_BUILD_ROOT/usr/sbin
 cp dnsmasq.8 $RPM_BUILD_ROOT/usr/share/man/man8
@@ -114,7 +114,7 @@ fi
 
 %files
 %defattr(-,root,root)
-%doc CHANGELOG COPYING doc.html setup.html
+%doc CHANGELOG COPYING FAQ doc.html setup.html rpm/dnsmasq.conf.sample
 %attr(0755,root,root) /etc/rc.d/init.d/dnsmasq
 %attr(0755,root,root) /usr/sbin/dnsmasq
 %attr(0644,root,root) /usr/share/man/man8/dnsmasq.8.gz

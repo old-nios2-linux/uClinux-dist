@@ -1,9 +1,9 @@
 /*
- * $Id: uri_mod.h,v 1.6.6.2 2004/02/20 00:39:55 jiri Exp $
+ * $Id: uri_mod.h,v 1.10 2004/08/24 09:00:45 janakj Exp $
  *
  * Various URI related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,20 +37,5 @@
 
 #include "../../db/db.h"
 #include "../../str.h"
-
-/*
- * Module parameters variables
- */
-extern char* db_url;                    /* Database URL */
-extern char* uri_table;                 /* Name of URI table */
-extern char* uri_user_col;              /* Name of username column in URI table */
-extern char* uri_domain_col;            /* Name of domain column in URI table */
-extern char* uri_uriuser_col;           /* Name of uri_user column in URI table */
-extern char* subscriber_table;          /* Name of subscriber table */
-extern char* subscriber_user_col;       /* Name of user column in subscriber table */
-extern char* subscriber_domain_col;     /* Name of domain column in subscriber table */
-extern int use_uri_table;               /* Whether or not should be uri table used */
-extern int use_domain;                  /* Should does_uri_exist honor the domain part ? */
-extern db_con_t* db_handle;             /* Database connection handle */
 
 #endif /* URI_MOD_H */

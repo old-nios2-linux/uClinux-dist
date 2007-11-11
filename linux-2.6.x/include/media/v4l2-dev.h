@@ -43,6 +43,7 @@
 
 /*  Video standard functions  */
 extern unsigned int v4l2_video_std_fps(struct v4l2_standard *vs);
+extern char *v4l2_norm_to_name(v4l2_std_id id);
 extern int v4l2_video_std_construct(struct v4l2_standard *vs,
 				    int id, char *name);
 
@@ -81,12 +82,6 @@ extern long v4l_compat_ioctl32(struct file *file, unsigned int cmd,
  * 	This version moves redundant code from video device code to
  *	the common handler
  */
-struct v4l2_tvnorm {
-	char          *name;
-	v4l2_std_id   id;
-
-	void          *priv_data;
-};
 
 struct video_device
 {
@@ -104,9 +99,8 @@ struct video_device
 	int debug;	/* Activates debug level*/
 
 	/* Video standard vars */
-	int tvnormsize;	/* Size of tvnorm array */
-	v4l2_std_id current_norm; /* Current tvnorm */
-	struct v4l2_tvnorm *tvnorms;
+	v4l2_std_id tvnorms;		/* Supported tv norms */
+	v4l2_std_id current_norm;	/* Current tvnorm */
 
 	/* callbacks */
 	void (*release)(struct video_device *vfd);
@@ -133,6 +127,8 @@ struct video_device
 					    struct v4l2_fmtdesc *f);
 	int (*vidioc_enum_fmt_video_output)(struct file *file, void *fh,
 					    struct v4l2_fmtdesc *f);
+	int (*vidioc_enum_fmt_output_overlay) (struct file *file, void *fh,
+					    struct v4l2_fmtdesc *f);
 	int (*vidioc_enum_fmt_vbi_output)  (struct file *file, void *fh,
 					    struct v4l2_fmtdesc *f);
 	int (*vidioc_enum_fmt_type_private)(struct file *file, void *fh,
@@ -151,6 +147,8 @@ struct video_device
 					struct v4l2_format *f);
 	int (*vidioc_g_fmt_video_output)(struct file *file, void *fh,
 					struct v4l2_format *f);
+	int (*vidioc_g_fmt_output_overlay) (struct file *file, void *fh,
+					struct v4l2_format *f);
 	int (*vidioc_g_fmt_type_private)(struct file *file, void *fh,
 					struct v4l2_format *f);
 
@@ -168,6 +166,8 @@ struct video_device
 					struct v4l2_format *f);
 	int (*vidioc_s_fmt_video_output)(struct file *file, void *fh,
 					struct v4l2_format *f);
+	int (*vidioc_s_fmt_output_overlay) (struct file *file, void *fh,
+					struct v4l2_format *f);
 	int (*vidioc_s_fmt_type_private)(struct file *file, void *fh,
 					struct v4l2_format *f);
 
@@ -183,6 +183,8 @@ struct video_device
 	int (*vidioc_try_fmt_vbi_capture)(struct file *file, void *fh,
 					  struct v4l2_format *f);
 	int (*vidioc_try_fmt_video_output)(struct file *file, void *fh,
+					  struct v4l2_format *f);
+	int (*vidioc_try_fmt_output_overlay)(struct file *file, void *fh,
 					  struct v4l2_format *f);
 	int (*vidioc_try_fmt_type_private)(struct file *file, void *fh,
 					  struct v4l2_format *f);
@@ -211,7 +213,7 @@ struct video_device
 		/* Standard handling
 			G_STD and ENUMSTD are handled by videodev.c
 		 */
-	int (*vidioc_s_std)    (struct file *file, void *fh, v4l2_std_id a);
+	int (*vidioc_s_std) (struct file *file, void *fh, v4l2_std_id *norm);
 	int (*vidioc_querystd) (struct file *file, void *fh, v4l2_std_id *a);
 
 		/* Input handling */
@@ -277,6 +279,12 @@ struct video_device
 					struct v4l2_jpegcompression *a);
 	int (*vidioc_s_jpegcomp)       (struct file *file, void *fh,
 					struct v4l2_jpegcompression *a);
+	int (*vidioc_g_enc_index)      (struct file *file, void *fh,
+					struct v4l2_enc_idx *a);
+	int (*vidioc_encoder_cmd)      (struct file *file, void *fh,
+					struct v4l2_encoder_cmd *a);
+	int (*vidioc_try_encoder_cmd)  (struct file *file, void *fh,
+					struct v4l2_encoder_cmd *a);
 
 	/* Stream type-dependent parameter ioctls */
 	int (*vidioc_g_parm)           (struct file *file, void *fh,
@@ -302,6 +310,17 @@ struct video_device
 	int (*vidioc_log_status)       (struct file *file, void *fh);
 
 
+	/* Debugging ioctls */
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	int (*vidioc_g_register)       (struct file *file, void *fh,
+					struct v4l2_register *reg);
+	int (*vidioc_s_register)       (struct file *file, void *fh,
+					struct v4l2_register *reg);
+#endif
+	int (*vidioc_g_chip_ident)     (struct file *file, void *fh,
+					struct v4l2_chip_ident *chip);
+
+
 #ifdef OBSOLETE_OWNER /* to be removed soon */
 /* obsolete -- fops->owner is used instead */
 struct module *owner;
@@ -317,6 +336,9 @@ void *priv;
 	struct mutex lock;             /* ... helper function uses these   */
 	struct class_device class_dev; /* sysfs */
 };
+
+/* Class-dev to video-device */
+#define to_video_device(cd) container_of(cd, struct video_device, class_dev)
 
 /* Version 2 functions */
 extern int video_register_device(struct video_device *vfd, int type, int nr);
@@ -335,11 +357,9 @@ extern int video_usercopy(struct inode *inode, struct file *file,
 			  int (*func)(struct inode *inode, struct file *file,
 				      unsigned int cmd, void *arg));
 
-
 #ifdef CONFIG_VIDEO_V4L1_COMPAT
 #include <linux/mm.h>
 
-#define to_video_device(cd) container_of(cd, struct video_device, class_dev)
 static inline int __must_check
 video_device_create_file(struct video_device *vfd,
 			 struct class_device_attribute *attr)

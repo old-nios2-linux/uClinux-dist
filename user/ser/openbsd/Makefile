@@ -4,17 +4,17 @@
 #
 # $OpenBSD$
 #
-# $Id: Makefile,v 1.3.2.1 2003/11/14 15:55:58 andrei Exp $
+# $Id: Makefile,v 1.4.2.5 2005/12/15 17:11:20 andrei Exp $
 #
 
 COMMENT= "SIP Express Router"
 
 PORTNAME= ser
-PORTVERSION= 0.8.12
+PORTVERSION= 0.9.5
 CATEGORIES= net
-MASTER_SITES= ftp://ftp.berlios.de/pub/ser/0.8.12/src/
+MASTER_SITES= ftp://ftp.berlios.de/pub/ser/0.9.5/src/
 
-MAINTAINER= pelinescu-onciul@fokus.fraunhofer.de
+MAINTAINER= andrei@iptel.org 
 
 MAN8=ser.8
 MAN5=ser.cfg.5
@@ -34,13 +34,15 @@ DISTFILES= ${DISTNAME}_src.tar.gz
 WRKSRC= ${WRKDIR}/${PORTNAME}-${PORTVERSION}
 
 # build by default mysql and jabber
-MAKE_ENV= include_modules="mysql jabber"
+MAKE_ENV= include_modules="mysql jabber cpl-c pa"
 
 # depends on mysql and libexpat because of the above modules
 BUILD_DEPENDS= :expat-1.*:textproc/expat \
-               :mysql-client-3.23.*:databases/mysql
+               :mysql-client-[3-].*:databases/mysql \
+               :libxml-2.*:textproc/libxml
 LIB_DEPENDS=   expat.2:expat-1.*:textproc/expat \
-               lib/mysql/mysqlclient.10:mysql-client-3.23.*:databases/mysql
+               lib/mysql/mysqlclient.10:mysql-client-[3-].*:databases/mysql \
+               xml2:libxml-2.*:textproc/libxml
 
 
 

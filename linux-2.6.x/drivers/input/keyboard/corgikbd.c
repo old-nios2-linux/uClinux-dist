@@ -291,15 +291,12 @@ static int __init corgikbd_probe(struct platform_device *pdev)
 {
 	struct corgikbd *corgikbd;
 	struct input_dev *input_dev;
-	int i;
+	int i, err = -ENOMEM;
 
 	corgikbd = kzalloc(sizeof(struct corgikbd), GFP_KERNEL);
 	input_dev = input_allocate_device();
-	if (!corgikbd || !input_dev) {
-		kfree(corgikbd);
-		input_free_device(input_dev);
-		return -ENOMEM;
-	}
+	if (!corgikbd || !input_dev)
+		goto fail;
 
 	platform_set_drvdata(pdev, corgikbd);
 
@@ -326,8 +323,7 @@ static int __init corgikbd_probe(struct platform_device *pdev)
 	input_dev->id.vendor = 0x0001;
 	input_dev->id.product = 0x0001;
 	input_dev->id.version = 0x0100;
-	input_dev->cdev.dev = &pdev->dev;
-	input_dev->private = corgikbd;
+	input_dev->dev.parent = &pdev->dev;
 
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_REP) | BIT(EV_PWR) | BIT(EV_SW);
 	input_dev->keycode = corgikbd->keycode;
@@ -341,7 +337,9 @@ static int __init corgikbd_probe(struct platform_device *pdev)
 	set_bit(SW_TABLET_MODE, input_dev->swbit);
 	set_bit(SW_HEADPHONE_INSERT, input_dev->swbit);
 
-	input_register_device(corgikbd->input);
+	err = input_register_device(corgikbd->input);
+	if (err)
+		goto fail;
 
 	mod_timer(&corgikbd->htimer, jiffies + msecs_to_jiffies(HINGE_SCAN_INTERVAL));
 
@@ -362,6 +360,10 @@ static int __init corgikbd_probe(struct platform_device *pdev)
 	pxa_gpio_mode(CORGI_GPIO_AK_INT | GPIO_IN);
 
 	return 0;
+
+ fail:	input_free_device(input_dev);
+	kfree(corgikbd);
+	return err;
 }
 
 static int corgikbd_remove(struct platform_device *pdev)

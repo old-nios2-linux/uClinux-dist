@@ -20,7 +20,7 @@
 
 #define MAJOR_VERSION   1
 #define MINOR_VERSION   0
-#define BUILD_VERSION   1
+#define BUILD_VERSION   2
 #define PREPROC_NAME    "SF_DNS"
 
 #define DYNAMIC_PREPROC_SETUP SetupDNS

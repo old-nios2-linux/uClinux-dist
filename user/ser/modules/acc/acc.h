@@ -1,7 +1,7 @@
 /*
- * $Id: acc.h,v 1.9.4.1.4.1 2004/07/18 22:56:23 sobomax Exp $
+ * $Id: acc.h,v 1.14.2.1 2005/07/20 17:11:50 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,12 +28,13 @@
  * --------
  * 2003-04-04  grand acc cleanup (jiri)
  * 2003-11-04  multidomain support for mysql introduced (jiri)
+ * 2004-06-06  cleanup: acc_db_{bind,init,close} added (andrei)
  */
 
 #ifndef _ACC_H
 #define _ACC_H
 
-/* what is printed if value unknonw */
+/* what is printed if value unknown */
 #define NA "n/a"
 #define NA_LEN (sizeof(NA)-1)
 /* syslog prefix */
@@ -100,6 +101,7 @@
 
 
 #ifdef RAD_ACC
+#include "dict.h"
 extern struct attr attrs[];
 extern struct val vals[];
 #endif
@@ -114,6 +116,9 @@ void acc_log_reply(  struct cell* t , struct sip_msg *reply,
 	unsigned int code);
 
 #ifdef SQL_ACC
+int acc_db_bind(char* db_url);
+int acc_db_init();
+void acc_db_close();
 int acc_db_request( struct sip_msg *rq, struct hdr_field *to,
 		str* phrase,  char *table, char *fmt);
 void acc_db_missed( struct cell* t, struct sip_msg *reply,
@@ -133,10 +138,19 @@ void acc_rad_reply(  struct cell* t , struct sip_msg *reply,
 	unsigned int code);
 #endif
 
+#ifdef DIAM_ACC
+int acc_diam_request( struct sip_msg *rq, struct hdr_field *to,
+		str* phrase);
+void acc_diam_missed( struct cell* t, struct sip_msg *reply,
+	unsigned int code );
+void acc_diam_ack(  struct cell* t , struct sip_msg *ack );
+void acc_diam_reply(  struct cell* t , struct sip_msg *reply,
+	unsigned int code);
+#endif
+
 inline static int skip_cancel(struct sip_msg *msg)
 {
 	return (msg->REQ_METHOD==METHOD_CANCEL) && report_cancels==0;
 }
-
 
 #endif

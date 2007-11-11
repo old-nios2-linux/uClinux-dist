@@ -1,0 +1,259 @@
+\documentclass[a4paper,titlepage,12pt]{article}
+\usepackage{amssymb}
+\usepackage{pslatex}
+\usepackage[dvips]{graphicx}
+\usepackage{wrapfig}
+\usepackage{url}
+\date{}
+
+\begin{document}
+
+    \begin{center}
+	\huge Creating signatures for ClamAV\\
+	\vspace{2cm}
+    \end{center}
+
+    \noindent
+    \section{Introduction}
+    CVD (ClamAV Virus Database) is a digitally signed tarball file that
+    contains one or more databases. The header is a 512 bytes long string
+    with colon separated fields:
+    \begin{verbatim}
+ClamAV-VDB:build time:version:number of signatures:functionality
+level required:MD5 checksum:digital signature:builder name:build time (sec)
+    \end{verbatim}
+    \verb+sigtool --info+ displays detailed information about a CVD file:
+    \begin{verbatim}
+zolw@localhost:/usr/local/share/clamav$ sigtool -i main.cvd
+Build time: 09 Jun 2006 22-19 +0200
+Version: 39
+# of signatures: 58116
+Functionality level: 8
+Builder: tkojm
+MD5: a9a400e70dcbfe2c9e11d78416e1c0cc
+Digital signature: 0s12V8OxLWO95fNNv+kTxj7CEWBW/1TKOGC7G4RelhogruBYw8dJeIX2+yhxex/XsLohxoEuXxC2CaFXiiTbrbvpK2USIxkpn53n6LYVV6jKgkP5sa08MdJE7cl29H1slfCrdaevBUZ1Z/UefkRnV6p3iQVpDPsBwqFRbrem33b
+Verification OK.
+    \end{verbatim}
+    There are two CVD databases in ClamAV: \emph{main.cvd} and \emph{daily.cvd}
+    for daily updates.
+
+    \section{Signature format}
+
+    \subsection{MD5}
+    There's an easy way to create signatures for static malware using MD5
+    checksums. To create a signature for \verb+test.exe+ use the \verb+--md5+
+    option of sigtool:
+    \begin{verbatim}
+zolw@localhost:/tmp/test$ sigtool --md5 test.exe > test.hdb
+zolw@localhost:/tmp/test$ cat test.hdb 
+48c4533230e1ae1c118c741c0db19dfb:17387:test.exe
+    \end{verbatim}
+    That's it! The signature is ready to use:
+    \begin{verbatim}
+zolw@localhost:/tmp/test$ clamscan -d test.hdb test.exe 
+test.exe: test.exe FOUND
+
+----------- SCAN SUMMARY -----------
+Known viruses: 1
+Scanned directories: 0
+Engine version: 0.88.2
+Scanned files: 1
+Infected files: 1
+Data scanned: 0.02 MB
+Time: 0.024 sec (0 m 0 s)
+    \end{verbatim}
+    You can edit it to change the name (by default sigtool uses the file name).
+    Remember that all MD5 signatures must be placed inside \verb+*.hdb+ files
+    and you can include any number of signatures inside a single file. To get
+    them automatically loaded every time clamscan/clamd starts just copy them
+    to the local virus database directory.
+
+    \subsection{MD5, PE section based}
+    You can create an MD5 signature for a specific section in a PE file.
+    Such signatures are stored in .mdb files in the following format:
+    \begin{verbatim}
+PESectionSize:MD5:MalwareName
+    \end{verbatim}
+
+    \subsection{Hexadecimal signatures}
+    ClamAV keeps viral fragments in hexadecimal format. If you don't know how
+    to get a proper signature please try the MD5 method or submit your sample
+    at \url{http://www.clamav.net/sendvirus}
+
+    \subsubsection{Hexadecimal format}
+    You can use \verb+sigtool --hex-dump+ to convert arbitrary data into
+    hexadecimal format:
+    \begin{verbatim}
+zolw@localhost:/tmp/test$ sigtool --hex-dump
+How do I look in hex?
+486f7720646f2049206c6f6f6b20696e206865783f0a
+    \end{verbatim}
+
+    \subsubsection{Wildcards}
+    ClamAV supports the following extensions inside hex signatures:
+    \begin{itemize}
+	\item \verb+??+\\
+	Match any byte.
+	\item \verb+a?+\\
+	Match high nibble (high four bits). \textbf{IMPORTANT NOTE:} Nibble
+	matching is only available in libclamav with the functionality level
+	17 therefore please only use it with .ndb signatures, each followed
+	by ":17" (MinEngineFunctionalityLevel, see \ref{ndb}).
+	\item \verb+?a+\\
+	Match low nibble (low four bits).
+	\item \verb+*+\\
+	Match any number of bytes.
+	\item \verb+{n}+\\
+	Match n bytes.
+	\item \verb+{-n}+\\
+	Match n or less bytes.
+	\item \verb+{n-}+\\
+	Match n or more bytes.
+	\item \verb+(a|b)+\\
+	Match a or b (you can use more alternate characters).
+    \end{itemize}
+
+    \subsubsection{Basic signature format}
+    The simplest signatures are of the format:
+    \begin{verbatim}
+MalwareName=HexSignature
+    \end{verbatim}
+    ClamAV will analyse a whole content of a file trying to match it. All
+    signatures of this type must be placed in \verb+*.db+ files.
+
+    \subsubsection{Extended signature format}\label{ndb}
+    Extended signature format allows on including additional information about
+    target file type, virus offset and required engine version.
+    The format is:
+    \begin{verbatim}
+MalwareName:TargetType:Offset:HexSignature[:MinEngineFunctionalityLevel:[Max]]
+    \end{verbatim}
+    where \verb+TargetType+ is one of the following decimal numbers describing
+    the target file type:
+    \begin{itemize}
+	\item 0 = any file
+	\item 1 = Portable Executable
+	\item 2 = OLE2 component (e.g. VBA script)
+	\item 3 = HTML (normalised)
+	\item 4 = Mail file
+	\item 5 = Graphics (to help catching exploits in JPEG files)
+	\item 6 = ELF
+    \end{itemize}
+    And	\verb+Offset+ is an asterisk or a decimal number \verb+n+ possibly
+    combined with a special string:
+    \begin{itemize}
+	\item \verb+*+ = any
+	\item \verb+n+ = absolute offset
+	\item \verb+EOF-n+ = end of file minus \verb+n+ bytes
+    \end{itemize}
+    Signatures for Portable Executables files (target = 1) also support:
+    \begin{itemize}
+	\item \verb#EP+n# = entry point plus n bytes (\verb#EP+0# if you
+	want to anchor to \verb+EP+)
+	\item \verb#EP-n# = entry point minus n bytes
+	\item \verb#Sx+n# = start of section \verb+x+'s (counted from 0)
+	data plus \verb+n+ bytes
+	\item \verb#Sx-n# = start of section \verb+x+'s data minus \verb+n+ bytes
+	\item \verb#SL+n# = start of last section plus \verb+n+ bytes
+	\item \verb#SL-n# = start of last section minus \verb+n+ bytes
+    \end{itemize}
+    All the above offsets except \verb+*+ can be turned into
+    \textbf{floating offsets} and represented as \verb+Offset,MaxShift+ where
+    \verb+MaxShift+ is an unsigned integer. A floating offset will match every
+    offset between \verb+Offset+ and \verb#Offset+MaxShift#, eg. \verb+10,5+
+    will match all offsets from 10 to 15 and \verb#EP+n,y# will match all
+    offsets from \verb#EP+n# to \verb#EP+n+y#. Versions of ClamAV older than
+    0.91 will silently ignore the \verb+MaxShift+ extension and only use
+    \verb+Offset+.\\
+
+    All signatures in the extended format must be placed inside \verb+*.ndb+ files.
+
+    \subsection{Signatures based on archive metadata}
+    In order to detect some malware which spreads inside of Zip or RAR archives
+    (especially encrypted ones) you can try to create a signature describing
+    a malicious archived file. The general format is:
+\begin{verbatim}
+virname:encrypted:filename:normal size:csize:crc32:cmethod:fileno:max depth
+\end{verbatim}
+    \begin{itemize}
+	\item Virus name
+	\item Encryption flag (1 -- encrypted, 0 -- not encrypted)
+	\item File name (* to ignore)
+	\item Normal (uncompressed) size (* to ignore)
+	\item Compressed size (* to ignore)
+	\item CRC32 (* to ignore)
+	\item Compression method (* to ignore)
+	\item File position in archive (* to ignore)
+	\item Maximum number of nested archives (* to ignore)
+    \end{itemize}
+    The database should have the extension \verb+.zmd+ or \verb+.rmd+ for
+    Zip or RAR archive respectively.
+
+    \subsection{Whitelist database}
+    To whitelist a specific file use the MD5 signature format and place
+    it in the database with the extension \verb+.fp+.
+
+    \subsection{Signature names}
+    ClamAV uses the following prefixes for particular malware:
+    \begin{itemize}
+	\item \emph{Worm} for Internet worms
+	\item \emph{Trojan} for backdoor programs
+	\item \emph{Adware} for adware
+	\item \emph{Flooder} for flooders
+        \item \emph{HTML} for HTML files
+        \item \emph{Email} for email messages
+        \item \emph{IRC} for IRC trojans
+	\item \emph{JS} for Java Script malware
+	\item \emph{PHP} for PHP malware
+	\item \emph{ASP} for ASP malware
+	\item \emph{VBS} for VBS malware
+	\item \emph{BAT} for BAT malware
+	\item \emph{W97M}, \emph{W2000M} for Word macro viruses
+	\item \emph{X97M}, \emph{X2000M} for Excel macro viruses
+	\item \emph{O97M}, \emph{O2000M} for general Office macro viruses
+	\item \emph{DoS} for Denial of Service attack software
+	\item \emph{DOS} for old DOS malware
+	\item \emph{Exploit} for popular exploits
+	\item \emph{VirTool} for virus construction kits
+	\item \emph{Dialer} for dialers
+	\item \emph{Joke} for hoaxes
+    \end{itemize}
+    Important rules of the naming convention:
+    \begin{itemize}
+	\item always use a -zippwd suffix in the malware name for signatures of	      type zmd,
+	\item always use a -rarpwd suffix in the malware name for signatures
+	      of type rmd,
+	\item only use alphanumeric characters, dash (-), dot (.), underscores
+	      (\_) in malware names, never use space, apostrophe or quote mark.
+    \end{itemize}
+
+    \section{Special files}
+
+    \subsection{HTML}
+    ClamAV contains a special HTML normalisation code required to detect
+    HTML exploits. Running \verb+sigtool --html-normalise+ on a HTML file
+    should create the following files:
+    \begin{itemize}
+	\item comment.html - the whole file normalised
+	\item nocomment.html - the file normalised, with all comments removed
+	\item script.html - the parts of the file in \verb+<script>+ tags
+	      (lowercased)
+    \end{itemize}
+    The code automatically decodes JScript.encode parts and char ref's (e.g.
+    \verb+&#102;+). You need to create a signature against one of the created
+    files. To eliminate potential false positive alerts you should use
+    extended signature format with target type of 3.
+
+    \subsection{Compressed Portable Executable files}
+    If the file is compressed with UPX, FSG, Petite or other executable packer
+    (supported by libclamav) run \verb+clamscan+ with
+    \verb+--debug --leave-temps+. Example output on FSG compressed file:
+    \begin{verbatim}
+LibClamAV debug: UPX/FSG: empty section found - assuming compression
+LibClamAV debug: FSG: found old EP @1554
+LibClamAV debug: FSG: Successfully decompressed
+LibClamAV debug: UPX/FSG: Decompressed data saved in /tmp/clamav-4eba73ff4050a26
+    \end{verbatim}
+    and then create a signature for \verb+/tmp/clamav-4eba73ff4050a26+
+
+\end{document}

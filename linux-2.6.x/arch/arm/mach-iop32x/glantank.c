@@ -31,6 +31,7 @@
 #include <asm/mach/time.h>
 #include <asm/mach-types.h>
 #include <asm/page.h>
+#include <asm/arch/time.h>
 
 /*
  * GLAN Tank timer tick configuration.
@@ -38,12 +39,12 @@
 static void __init glantank_timer_init(void)
 {
 	/* 33.333 MHz crystal.  */
-	iop3xx_init_time(200000000);
+	iop_init_time(200000000);
 }
 
 static struct sys_timer glantank_timer = {
 	.init		= glantank_timer_init,
-	.offset		= iop3xx_gettimeoffset,
+	.offset		= iop_gettimeoffset,
 };
 
 
@@ -74,7 +75,7 @@ void __init glantank_map_io(void)
 #define INTC	IRQ_IOP32X_XINT2
 #define INTD	IRQ_IOP32X_XINT3
 
-static inline int __init
+static int __init
 glantank_pci_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static int pci_irq_table[][4] = {
@@ -179,6 +180,8 @@ static void __init glantank_init_machine(void)
 	platform_device_register(&iop3xx_i2c1_device);
 	platform_device_register(&glantank_flash_device);
 	platform_device_register(&glantank_serial_device);
+	platform_device_register(&iop3xx_dma_0_channel);
+	platform_device_register(&iop3xx_dma_1_channel);
 
 	pm_power_off = glantank_power_off;
 }

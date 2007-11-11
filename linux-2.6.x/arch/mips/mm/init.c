@@ -8,6 +8,7 @@
  * Kevin D. Kissell, kevink@mips.com and Carsten Langgaard, carstenl@mips.com
  * Copyright (C) 2000 MIPS Technologies, Inc.  All rights reserved.
  */
+#include <linux/bug.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/signal.h>
@@ -26,6 +27,7 @@
 #include <linux/proc_fs.h>
 #include <linux/pfn.h>
 
+#include <asm/asm-offsets.h>
 #include <asm/bootinfo.h>
 #include <asm/cachectl.h>
 #include <asm/cpu.h>
@@ -61,8 +63,6 @@
 
 DEFINE_PER_CPU(struct mmu_gather, mmu_gathers);
 
-unsigned long highstart_pfn, highend_pfn;
-
 /*
  * We have up to 8 empty zeroed pages so we can map one of the right colour
  * when needed.  This is necessary only on R4000 / R4400 SC and MC versions
@@ -90,9 +90,9 @@ unsigned long setup_zero_pages(void)
 	if (!empty_zero_page)
 		panic("Oh boy, that early out of memory?");
 
-	page = virt_to_page(empty_zero_page);
+	page = virt_to_page((void *)empty_zero_page);
 	split_page(page, order);
-	while (page < virt_to_page(empty_zero_page + (PAGE_SIZE << order))) {
+	while (page < virt_to_page((void *)(empty_zero_page + (PAGE_SIZE << order)))) {
 		SetPageReserved(page);
 		page++;
 	}
@@ -125,13 +125,15 @@ static void __init kmap_coherent_init(void)
 static inline void kmap_coherent_init(void) {}
 #endif
 
-static inline void *kmap_coherent(struct page *page, unsigned long addr)
+void *kmap_coherent(struct page *page, unsigned long addr)
 {
 	enum fixed_addresses idx;
 	unsigned long vaddr, flags, entrylo;
 	unsigned long old_ctx;
 	pte_t pte;
 	int tlbidx;
+
+	BUG_ON(Page_dcache_dirty(page));
 
 	inc_preempt_count();
 	idx = (addr >> PAGE_SHIFT) & (FIX_N_COLOURS - 1);
@@ -179,7 +181,7 @@ static inline void *kmap_coherent(struct page *page, unsigned long addr)
 
 #define UNIQUE_ENTRYHI(idx) (CKSEG0 + ((idx) << (PAGE_SHIFT + 1)))
 
-static inline void kunmap_coherent(struct page *page)
+void kunmap_coherent(void)
 {
 #ifndef CONFIG_MIPS_MT_SMTC
 	unsigned int wired;
@@ -203,6 +205,31 @@ static inline void kunmap_coherent(struct page *page)
 	preempt_check_resched();
 }
 
+void copy_user_highpage(struct page *to, struct page *from,
+	unsigned long vaddr, struct vm_area_struct *vma)
+{
+	void *vfrom, *vto;
+
+	vto = kmap_atomic(to, KM_USER1);
+	if (cpu_has_dc_aliases && !Page_dcache_dirty(from)) {
+		vfrom = kmap_coherent(from, vaddr);
+		copy_page(vto, vfrom);
+		kunmap_coherent();
+	} else {
+		vfrom = kmap_atomic(from, KM_USER0);
+		copy_page(vto, vfrom);
+		kunmap_atomic(vfrom, KM_USER0);
+	}
+	if (((vma->vm_flags & VM_EXEC) && !cpu_has_ic_fills_f_dc) ||
+	    pages_do_alias((unsigned long)vto, vaddr & PAGE_MASK))
+		flush_data_cache_page((unsigned long)vto);
+	kunmap_atomic(vto, KM_USER1);
+	/* Make sure this page is cleared on other CPU's too before using it */
+	smp_wmb();
+}
+
+EXPORT_SYMBOL(copy_user_highpage);
+
 void copy_to_user_page(struct vm_area_struct *vma,
 	struct page *page, unsigned long vaddr, void *dst, const void *src,
 	unsigned long len)
@@ -210,7 +237,7 @@ void copy_to_user_page(struct vm_area_struct *vma,
 	if (cpu_has_dc_aliases) {
 		void *vto = kmap_coherent(page, vaddr) + (vaddr & ~PAGE_MASK);
 		memcpy(vto, src, len);
-		kunmap_coherent(page);
+		kunmap_coherent();
 	} else
 		memcpy(dst, src, len);
 	if ((vma->vm_flags & VM_EXEC) && !cpu_has_ic_fills_f_dc)
@@ -227,7 +254,7 @@ void copy_from_user_page(struct vm_area_struct *vma,
 		void *vfrom =
 			kmap_coherent(page, vaddr) + (vaddr & ~PAGE_MASK);
 		memcpy(dst, vfrom, len);
-		kunmap_coherent(page);
+		kunmap_coherent();
 	} else
 		memcpy(dst, src, len);
 }
@@ -236,6 +263,8 @@ EXPORT_SYMBOL(copy_from_user_page);
 
 
 #ifdef CONFIG_HIGHMEM
+unsigned long highstart_pfn, highend_pfn;
+
 pte_t *kmap_pte;
 pgprot_t kmap_prot;
 
@@ -289,8 +318,6 @@ void __init fixrange_init(unsigned long start, unsigned long end,
 }
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
-extern void pagetable_init(void);
-
 static int __init page_is_ram(unsigned long pagenr)
 {
 	int i;
@@ -316,7 +343,6 @@ static int __init page_is_ram(unsigned long pagenr)
 void __init paging_init(void)
 {
 	unsigned long zones_size[MAX_NR_ZONES] = { 0, };
-	unsigned long max_dma, high, low;
 #ifndef CONFIG_FLATMEM
 	unsigned long zholes_size[MAX_NR_ZONES] = { 0, };
 	unsigned long i, j, pfn;
@@ -329,34 +355,30 @@ void __init paging_init(void)
 #endif
 	kmap_coherent_init();
 
-	max_dma = virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT;
-	low = max_low_pfn;
-	high = highend_pfn;
-
-#ifdef CONFIG_ISA
-	if (low < max_dma)
-		zones_size[ZONE_DMA] = low;
-	else {
-		zones_size[ZONE_DMA] = max_dma;
-		zones_size[ZONE_NORMAL] = low - max_dma;
-	}
-#else
-	zones_size[ZONE_DMA] = low;
+#ifdef CONFIG_ZONE_DMA
+	if (min_low_pfn < MAX_DMA_PFN && MAX_DMA_PFN <= max_low_pfn) {
+		zones_size[ZONE_DMA] = MAX_DMA_PFN - min_low_pfn;
+		zones_size[ZONE_NORMAL] = max_low_pfn - MAX_DMA_PFN;
+	} else if (max_low_pfn < MAX_DMA_PFN)
+		zones_size[ZONE_DMA] = max_low_pfn - min_low_pfn;
+	else
 #endif
+	zones_size[ZONE_NORMAL] = max_low_pfn - min_low_pfn;
+
 #ifdef CONFIG_HIGHMEM
-	if (cpu_has_dc_aliases) {
-		printk(KERN_WARNING "This processor doesn't support highmem.");
-		if (high - low)
-			printk(" %ldk highmem ignored", high - low);
-		printk("\n");
-	} else
-		zones_size[ZONE_HIGHMEM] = high - low;
+	zones_size[ZONE_HIGHMEM] = highend_pfn - highstart_pfn;
+
+	if (cpu_has_dc_aliases && zones_size[ZONE_HIGHMEM]) {
+		printk(KERN_WARNING "This processor doesn't support highmem."
+		       " %ldk highmem ignored\n", zones_size[ZONE_HIGHMEM]);
+		zones_size[ZONE_HIGHMEM] = 0;
+	}
 #endif
 
 #ifdef CONFIG_FLATMEM
 	free_area_init(zones_size);
 #else
-	pfn = 0;
+	pfn = min_low_pfn;
 	for (i = 0; i < MAX_NR_ZONES; i++)
 		for (j = 0; j < zones_size[i]; j++, pfn++)
 			if (!page_is_ram(pfn))
@@ -406,9 +428,6 @@ void __init mem_init(void)
 			continue;
 		}
 		ClearPageReserved(page);
-#ifdef CONFIG_LIMITED_DMA
-		set_page_address(page, lowmem_page_address(page));
-#endif
 		init_page_count(page);
 		__free_page(page);
 		totalhigh_pages++;
@@ -443,15 +462,18 @@ void __init mem_init(void)
 }
 #endif /* !CONFIG_NEED_MULTIPLE_NODES */
 
-void free_init_pages(char *what, unsigned long begin, unsigned long end)
+void free_init_pages(const char *what, unsigned long begin, unsigned long end)
 {
-	unsigned long addr;
+	unsigned long pfn;
 
-	for (addr = begin; addr < end; addr += PAGE_SIZE) {
-		ClearPageReserved(virt_to_page(addr));
-		init_page_count(virt_to_page(addr));
-		memset((void *)addr, 0xcc, PAGE_SIZE);
-		free_page(addr);
+	for (pfn = PFN_UP(begin); pfn < PFN_DOWN(end); pfn++) {
+		struct page *page = pfn_to_page(pfn);
+		void *addr = phys_to_virt(PFN_PHYS(pfn));
+
+		ClearPageReserved(page);
+		init_page_count(page);
+		memset(addr, POISON_FREE_INITMEM, PAGE_SIZE);
+		__free_page(page);
 		totalram_pages++;
 	}
 	printk(KERN_INFO "Freeing %s: %ldk freed\n", what, (end - begin) >> 10);
@@ -460,30 +482,37 @@ void free_init_pages(char *what, unsigned long begin, unsigned long end)
 #ifdef CONFIG_BLK_DEV_INITRD
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
-#ifdef CONFIG_64BIT
-	/* Switch from KSEG0 to XKPHYS addresses */
-	start = (unsigned long)phys_to_virt(CPHYSADDR(start));
-	end = (unsigned long)phys_to_virt(CPHYSADDR(end));
-#endif
-	free_init_pages("initrd memory", start, end);
+	free_init_pages("initrd memory",
+			virt_to_phys((void *)start),
+			virt_to_phys((void *)end));
 }
 #endif
 
-extern unsigned long prom_free_prom_memory(void);
-
-void free_initmem(void)
+void __init_refok free_initmem(void)
 {
-	unsigned long start, end, freed;
-
-	freed = prom_free_prom_memory();
-	if (freed)
-		printk(KERN_INFO "Freeing firmware memory: %ldk freed\n",freed);
-
-	start = (unsigned long)(&__init_begin);
-	end = (unsigned long)(&__init_end);
-#ifdef CONFIG_64BIT
-	start = PAGE_OFFSET | CPHYSADDR(start);
-	end = PAGE_OFFSET | CPHYSADDR(end);
-#endif
-	free_init_pages("unused kernel memory", start, end);
+	prom_free_prom_memory();
+	free_init_pages("unused kernel memory",
+			__pa_symbol(&__init_begin),
+			__pa_symbol(&__init_end));
 }
+
+unsigned long pgd_current[NR_CPUS];
+/*
+ * On 64-bit we've got three-level pagetables with a slightly
+ * different layout ...
+ */
+#define __page_aligned(order) __attribute__((__aligned__(PAGE_SIZE<<order)))
+
+/*
+ * gcc 3.3 and older have trouble determining that PTRS_PER_PGD and PGD_ORDER
+ * are constants.  So we use the variants from asm-offset.h until that gcc
+ * will officially be retired.
+ */
+pgd_t swapper_pg_dir[_PTRS_PER_PGD] __page_aligned(_PGD_ORDER);
+#ifdef CONFIG_64BIT
+#ifdef MODULE_START
+pgd_t module_pg_dir[PTRS_PER_PGD] __page_aligned(PGD_ORDER);
+#endif
+pmd_t invalid_pmd_table[PTRS_PER_PMD] __page_aligned(PMD_ORDER);
+#endif
+pte_t invalid_pte_table[PTRS_PER_PTE] __page_aligned(PTE_ORDER);

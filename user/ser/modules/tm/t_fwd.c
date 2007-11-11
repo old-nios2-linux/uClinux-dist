@@ -1,8 +1,8 @@
 /*
- * $Id: t_fwd.c,v 1.52.4.1 2003/11/28 15:22:24 andrei Exp $
+ * $Id: t_fwd.c,v 1.61.2.1 2005/09/20 09:31:40 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -39,6 +39,9 @@
  *  2003-03-30  we now watch downstream delivery and if it fails, send an
  *              error message upstream (jiri)
  *  2003-04-14  use protocol from uri (jiri)
+ *  2003-12-04  global TM callbacks switched to per transaction callbacks
+ *              (bogdan)
+ *  2004-02-13: t->is_invite and t->local replaced with flags (bogdan)
  */
 
 #include "defs.h"
@@ -83,8 +86,8 @@ char *print_uac_request( struct cell *t, struct sip_msg *i_req,
 	/* ... update uri ... */
 	i_req->new_uri=*uri;
 
-	/* ... give apps a chance to change things ... */
-	callback_event( TMCB_REQUEST_FWDED, t, i_req, -i_req->REQ_METHOD);
+	/* run the specific callbacks for this transaction */
+	run_trans_callbacks( TMCB_REQUEST_FWDED , t, i_req, 0, -i_req->REQ_METHOD);
 
 	/* ... and build it now */
 	buf=build_req_buf_from_sip_req( i_req, len, send_sock, proto );
@@ -144,7 +147,7 @@ int add_blind_uac( /*struct cell *t*/ )
 		return -1;
 	}
 	/* make sure it will be replied */
-	t->noisy_ctimer=1; 
+	t->flags |= T_NOISY_CTIMER_FLAG;
 	t->nr_of_outgoings++;
 	/* start FR timer -- protocol set by default to PROTO_NONE,
        which means retransmission timer will not be started
@@ -212,7 +215,7 @@ int add_uac( struct cell *t, struct sip_msg *request, str *uri, str* next_hop,
 	hostent2su( &to, &proxy->host, proxy->addr_idx, 
 		proxy->port ? proxy->port:SIP_PORT);
 
-	send_sock=get_send_socket( &to , proto);
+	send_sock=get_send_socket( request, &to , proto);
 	if (send_sock==0) {
 		LOG(L_ERR, "ERROR: add_uac: can't fwd to af %d, proto %d "
 			" (no corresponding listening socket)\n",
@@ -305,7 +308,7 @@ error:
 void e2e_cancel( struct sip_msg *cancel_msg, 
 	struct cell *t_cancel, struct cell *t_invite )
 {
-	branch_bm_t cancel_bm;
+	branch_bm_t cancel_bm, tmp_bm;
 	int i;
 	int lowest_error;
 	str backup_uri;
@@ -332,15 +335,31 @@ void e2e_cancel( struct sip_msg *cancel_msg,
 	/* send them out */
 	for (i=0; i<t_cancel->nr_of_outgoings; i++) {
 		if (cancel_bm & (1<<i)) {
+			/* Provisional reply received on this branch, send CANCEL */
+			/* No need to stop timers as they have already been stopped by the reply */
 			if (SEND_BUFFER( &t_cancel->uac[i].request)==-1) {
 				LOG(L_ERR, "ERROR: e2e_cancel: send failed\n");
 			}
 			start_retr( &t_cancel->uac[i].request );
+		} else {
+			if (t_invite->uac[i].last_received < 100) {
+				     /* No provisional response received, stop
+				      * retransmission timers
+				      */
+				reset_timer(&t_invite->uac[i].request.retr_timer);
+				reset_timer(&t_invite->uac[i].request.fr_timer);
+
+				/* Generate faked reply */
+				LOCK_REPLIES(t_invite);
+				if (relay_reply(t_invite, FAKED_REPLY, i, 487, &tmp_bm) == RPS_ERROR) {
+					lowest_error = -1;
+				}
+			}
 		}
 	}
 
 
-	/* if error occured, let it know upstream (final reply
+	/* if error occurred, let it know upstream (final reply
 	   will also move the transaction on wait state
 	*/
 	if (lowest_error<0) {
@@ -351,14 +370,23 @@ void e2e_cancel( struct sip_msg *cancel_msg,
 	*/
 	} else if (cancel_bm) {
 		DBG("DEBUG: e2e_cancel: e2e cancel proceeding\n");
-		t_reply( t_cancel, cancel_msg, 200, CANCELLING );
+		t_reply( t_cancel, cancel_msg, 200, CANCELING );
 	/* if the transaction exists, but there is no more pending
-	   branch, tell usptream we're done
+	   branch, tell upstream we're done
 	*/
 	} else {
 		DBG("DEBUG: e2e_cancel: e2e cancel -- no more pending branches\n");
 		t_reply( t_cancel, cancel_msg, 200, CANCEL_DONE );
 	}
+
+#ifdef LOCAL_487
+
+	/* local 487s have been deprecated -- it better handles
+	 * race conditions (UAS sending 200); hopefully there are
+	 * no longer UACs who go crazy waiting for the 487 whose
+	 * forwarding is being blocked by other unresponsive branch
+	 */
+
 	/* we could await downstream UAS's 487 replies; however,
 	   if some of the branches does not do that, we could wait
 	   long time and annoy upstream UAC which wants to see 
@@ -374,12 +402,13 @@ void e2e_cancel( struct sip_msg *cancel_msg,
 	   try, and the later one will result in error message 
 	   "can't reply twice"
 	*/
-	t_reply(t_invite, t_invite->uas.request, 487, CANCELLED );
+	t_reply(t_invite, t_invite->uas.request, 487, CANCELED );
+#endif
 }
 
 
 /* function returns:
- *       1 - forward successfull
+ *       1 - forward successful
  *      -1 - error during forward
  */
 int t_forward_nonack( struct cell *t, struct sip_msg* p_msg , 
@@ -390,10 +419,11 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 	str current_uri;
 	branch_bm_t	added_branches;
 	int first_branch;
-	int i;
+	int i, q;
 	struct cell *t_invite;
 	int success_branch;
 	int try_new;
+	str dst_uri;
 
 	/* make -Wall happy */
 	current_uri.s=0;
@@ -431,10 +461,10 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 	} else try_new=0;
 
 	init_branch_iterator();
-	while((current_uri.s=next_branch( &current_uri.len))) {
+	while((current_uri.s=next_branch( &current_uri.len, &q, &dst_uri.s, &dst_uri.len))) {
 		try_new++;
 		branch_ret=add_uac( t, p_msg, &current_uri, 
-				    (p_msg->dst_uri.len) ? (&p_msg->dst_uri) : &current_uri, 
+				    (dst_uri.len) ? (&dst_uri) : &current_uri, 
 				    proxy, proto);
 		/* pick some of the errors in case things go wrong;
 		   note that picking lowest error is just as good as
@@ -456,18 +486,12 @@ int t_forward_nonack( struct cell *t, struct sip_msg* p_msg ,
 	/* things went wrong ... no new branch has been fwd-ed at all */
 	if (added_branches==0) {
 		if (try_new==0) {
-			LOG(L_ERR, "ERROR: t_forward_nonack: no branched for fwding\n");
+			LOG(L_ERR, "ERROR: t_forward_nonack: no branched for forwarding\n");
 			return -1;
 		}
 		LOG(L_ERR, "ERROR: t_forward_nonack: failure to add branches\n");
 		return lowest_ret;
 	}
-
-	/* store script processing value of failure route to transactional
-	   context; if currently 0, this forwarding attempt will no longer 
-	   result in failure_route on error
-	*/
-	t->on_negative=get_on_negative();
 
 	/* send them out now */
 	success_branch=0;

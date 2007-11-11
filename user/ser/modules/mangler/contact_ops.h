@@ -1,9 +1,9 @@
 /*
  *  mangler module
  *
- * $Id: contact_ops.h,v 1.6 2003/04/16 10:42:29 gabriel Exp $
+ * $Id: contact_ops.h,v 1.7 2004/08/24 08:58:30 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

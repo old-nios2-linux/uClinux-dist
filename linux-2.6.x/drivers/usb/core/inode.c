@@ -36,7 +36,6 @@
 #include <linux/usb.h>
 #include <linux/namei.h>
 #include <linux/usbdevice_fs.h>
-#include <linux/smp_lock.h>
 #include <linux/parser.h>
 #include <linux/notifier.h>
 #include <asm/byteorder.h>
@@ -379,7 +378,7 @@ static loff_t default_file_lseek (struct file *file, loff_t offset, int orig)
 {
 	loff_t retval = -EINVAL;
 
-	mutex_lock(&file->f_dentry->d_inode->i_mutex);
+	mutex_lock(&file->f_path.dentry->d_inode->i_mutex);
 	switch(orig) {
 	case 0:
 		if (offset > 0) {
@@ -396,7 +395,7 @@ static loff_t default_file_lseek (struct file *file, loff_t offset, int orig)
 	default:
 		break;
 	}
-	mutex_unlock(&file->f_dentry->d_inode->i_mutex);
+	mutex_unlock(&file->f_path.dentry->d_inode->i_mutex);
 	return retval;
 }
 
@@ -662,7 +661,7 @@ static void usbfs_add_device(struct usb_device *dev)
 	sprintf (name, "%03d", dev->devnum);
 	dev->usbfs_dentry = fs_create_file (name, devmode | S_IFREG,
 					    dev->bus->usbfs_dentry, dev,
-					    &usbfs_device_file_operations,
+					    &usbdev_file_operations,
 					    devuid, devgid);
 	if (dev->usbfs_dentry == NULL) {
 		err ("error creating usbfs device entry");

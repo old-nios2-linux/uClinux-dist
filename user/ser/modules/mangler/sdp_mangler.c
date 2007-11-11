@@ -1,9 +1,9 @@
 /*
  * mangler module
  *
- * $Id: sdp_mangler.c,v 1.7.4.2 2004/07/02 15:32:55 andrei Exp $
+ * $Id: sdp_mangler.c,v 1.12 2004/08/24 08:58:30 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -113,7 +113,7 @@ sdp_mangle_port (struct sip_msg *msg, char *offset, char *unused)
 	begin = get_body(msg); //msg->buf + msg->first_line.len;	// inlocuiesc cu begin = getbody */
 	ret = -1;
 
-	/* try to use precompiled expressions */
+	/* try to use pre-compiled expressions */
 	needToDealocate = 0;
 	if (portExpression != NULL) 
 		{
@@ -122,7 +122,7 @@ sdp_mangle_port (struct sip_msg *msg, char *offset, char *unused)
 		fprintf(stdout,"Using PRECOMPILED expression for port ...\n");
 #endif
 		}
-		else /* we are not using precompiled expressions */
+		else /* we are not using pre-compiled expressions */
 			{
 			re = pkg_malloc(sizeof(regex_t));
 			if (re == NULL)
@@ -234,7 +234,8 @@ sdp_mangle_port (struct sip_msg *msg, char *offset, char *unused)
 		/* replaced five div's + 1 add with most probably 1 comparison or 2 */							
 		
 		/* deleting old port */
-		if ((l = del_lump (msg,pmatch.rm_so + off + (pos -(begin + pmatch.rm_so)),oldlen, 0)) == 0)
+		if ((l = del_lump (msg, pmatch.rm_so + off + 
+						(pos -(begin + pmatch.rm_so)),oldlen, 0)) == 0)
 		{
 			LOG (L_ERR,"ERROR: sdp_mangle_port: del_lump failed\n");
 			return -10;
@@ -268,7 +269,7 @@ continue1:
 		regfree (re);
 		pkg_free(re);
 #ifdef DEBUG
-		fprintf(stdout,"Dealocating expression for port ...\n");
+		fprintf(stdout,"Deallocating expression for port ...\n");
 #endif
 		}
 	
@@ -364,7 +365,7 @@ sdp_mangle_ip (struct sip_msg *msg, char *oldip, char *newip)
 	ret = -1;
 	len = strlen (newip);
 
-	/* try to use precompiled expressions */
+	/* try to use pre-compiled expressions */
 	needToDealocate = 0;
 	if (ipExpression != NULL) 
 		{
@@ -374,7 +375,7 @@ sdp_mangle_ip (struct sip_msg *msg, char *oldip, char *newip)
 #endif
 
 		}
-		else /* we are not using precompiled expressions */
+		else /* we are not using pre-compiled expressions */
 			{
 			re = pkg_malloc(sizeof(regex_t));
 			if (re == NULL)
@@ -447,7 +448,7 @@ sdp_mangle_ip (struct sip_msg *msg, char *oldip, char *newip)
 #ifdef DEBUG
 		fprintf(stdout,"Extracted ip is %s and not mangling \n",buffer);
 #endif
-			goto continue2;	/* not in the same net, skiping */
+			goto continue2;	/* not in the same net, skipping */
 		}
 #ifdef DEBUG
 		fprintf(stdout,"Extracted ip is %s and mangling to %s\n",buffer,newip);
@@ -457,7 +458,8 @@ sdp_mangle_ip (struct sip_msg *msg, char *oldip, char *newip)
 		/* replacing ip */
 
 		/* deleting old ip */
-		if ((l = del_lump (msg,pmatch.rm_so + off + (pos - (begin + pmatch.rm_so)),oldlen, 0)) == 0)
+		if ((l = del_lump (msg,pmatch.rm_so + off + 
+						(pos - (begin + pmatch.rm_so)),oldlen, 0)) == 0)
 		{
 			LOG (L_ERR,"ERROR: sdp_mangle_ip: del_lump failed\n");
 			return -12;
@@ -485,10 +487,10 @@ continue2:
 	}			/* while */
 	if (needToDealocate)
 	{
-	regfree (re);		/* if I am going to use precompiled expressions to be removed */
+	regfree (re);		/* if I am going to use pre-compiled expressions to be removed */
 	pkg_free(re);
 #ifdef DEBUG
-		fprintf(stdout,"Dealocating expression for ip ...\n");
+		fprintf(stdout,"Deallocating expression for ip ...\n");
 #endif
 	}
 	

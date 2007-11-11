@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 2003/08/29 18:56:20 ramona Exp $
+# $Id: Makefile,v 1.1.8.1 2005/06/03 00:56:21 andrei Exp $
 #
 # Digest Authentication - Diameter support
 #
@@ -8,6 +8,6 @@
 auto_gen=
 NAME=auth_diameter.so
 #LIBS=-Llib -ldiameter_msg
-#LIBS=-L$(LOCALBASE)/lib -L/usr/pkg/lib -lradiusclient
+#LIBS=-L$(LOCALBASE)/lib  -lradiusclient
 
 include ../../Makefile.modules

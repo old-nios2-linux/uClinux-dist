@@ -12,11 +12,7 @@
 
 LINKHDRS = \
 	$(ROOTDIR)/lib/STLport/stlport/*,STLport \
-	$(ROOTDIR)/lib/libgmp/gmp.h,. \
-	$(ROOTDIR)/lib/libgmp/mp.h,. \
-	$(ROOTDIR)/lib/libgmp/gmp-impl.h,. \
-	$(ROOTDIR)/lib/libgmp/longlong.h,. \
-	$(ROOTDIR)/lib/libgmp/urandom.h,. \
+	$(ROOTDIR)/lib/libgmp/build/install/include/*.h,. \
 	$(ROOTDIR)/lib/pcre/builddir/pcre.h,. \
 	$(ROOTDIR)/lib/pcre/pcreposix.h,. \
 	$(ROOTDIR)/lib/libjpeg/*.h,. \
@@ -47,6 +43,7 @@ LINKHDRS = \
 	$(ROOTDIR)/$(LINUXDIR)/include/asm-*,. \
 	$(ROOTDIR)/$(LINUXDIR)/include/asm,. \
 	$(ROOTDIR)/$(LINUXDIR)/include/mtd,. \
+	$(ROOTDIR)/autoconf.h,vendor \
 	$(ROOTDIR)/config,. \
 	$(ROOTDIR)/lib/expat/lib/expat.h,. \
 	$(ROOTDIR)/user/tinytcl/*.h,. \
@@ -64,10 +61,19 @@ LINKHDRS = \
 	$(ROOTDIR)/modules/ocf/cryptodev.h,crypto \
 	$(ROOTDIR)/prop/libsscep/*.h,. \
 	$(ROOTDIR)/prop/statsd/libstatsd.h,. \
+	$(ROOTDIR)/lib/libnl/include/netlink*,. \
 	$(ROOTDIR)/lib/libnfnetlink/include/libnfnetlink,. \
 	$(ROOTDIR)/lib/libnetfilter_conntrack/include/libnetfilter_conntrack,. \
 	$(ROOTDIR)/lib/libnetfilter_log/include/libnetfilter_log,. \
-	$(ROOTDIR)/lib/osip2/build/install/include/osip*2,.
+	$(ROOTDIR)/lib/bfd/build/bfd.h,. \
+	$(ROOTDIR)/user/gdb/include/ansidecl.h,. \
+	$(ROOTDIR)/user/gdb/include/symcat.h,. \
+	$(ROOTDIR)/lib/popt/popt.h,. \
+	$(ROOTDIR)/lib/osip2/build/install/include/osip*2,. \
+	$(ROOTDIR)/prop/librep/librep.h,. \
+	$(ROOTDIR)/prop/librep/librep_c++compatibility.h,. \
+	$(ROOTDIR)/prop/librep/librep_vector.h,. \
+	$(ROOTDIR)/prop/librep/query.h,.
 
 #
 # Both freeswan and openswan can provide des and crypto headers
@@ -121,6 +127,16 @@ ifndef CONFIG_DEFAULTS_LIBC_NONE
 	done
 	@ln -s c++ `$(CC) --version | head -1 | cut -d " " -f3`
 	@ln -s c++ g++-v3
+	@rm -f bits ; \
+	 GCCVER=`$(CC) --version | head -1 | cut -d " " -f3` ; \
+	 GCCMACH=`$(CC) -dumpmachine` ; \
+	 GCCMULTI=`$(CC) -print-multi-directory` ; \
+	 GCCPATH=`$(CC) -print-libgcc-file-name | sed -e 's?/lib/gcc/.*$$??g'` ; \
+	 GPLUSBITS=$$GCCPATH/$$GCCMACH/include/c++/$$GCCVER/$$GCCMACH/$$GCCMULTI/bits ; \
+	 echo "Checking for modern c++ bits, $$GPLUSBITS" ; \
+	 if [ -d $$GPLUSBITS ] ; then \
+		ln -s $$GPLUSBITS bits ; \
+	fi
 endif
 
 romfs:

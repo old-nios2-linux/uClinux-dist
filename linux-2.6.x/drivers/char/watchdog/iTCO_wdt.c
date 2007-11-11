@@ -1,7 +1,7 @@
 /*
  *	intel TCO Watchdog Driver (Used in i82801 and i6300ESB chipsets)
  *
- *	(c) Copyright 2006 Wim Van Sebroeck <wim@iguana.be>.
+ *	(c) Copyright 2006-2007 Wim Van Sebroeck <wim@iguana.be>.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -39,7 +39,12 @@
  *	82801HR  (ICH8R)     : document number 313056-002, 313057-004,
  *	82801HH  (ICH8DH)    : document number 313056-002, 313057-004,
  *	82801HO  (ICH8DO)    : document number 313056-002, 313057-004,
- *	6300ESB  (6300ESB)   : document number 300641-003
+ *	82801IB  (ICH9)      : document number 316972-001, 316973-001,
+ *	82801IR  (ICH9R)     : document number 316972-001, 316973-001,
+ *	82801IH  (ICH9DH)    : document number 316972-001, 316973-001,
+ *	6300ESB  (6300ESB)   : document number 300641-003, 300884-010,
+ *	631xESB  (631xESB)   : document number 313082-001, 313075-005,
+ *	632xESB  (632xESB)   : document number 313082-001, 313075-005
  */
 
 /*
@@ -48,8 +53,8 @@
 
 /* Module and version information */
 #define DRV_NAME        "iTCO_wdt"
-#define DRV_VERSION     "1.00"
-#define DRV_RELDATE     "08-Oct-2006"
+#define DRV_VERSION     "1.02"
+#define DRV_RELDATE     "26-Jul-2007"
 #define PFX		DRV_NAME ": "
 
 /* Includes */
@@ -92,6 +97,10 @@ enum iTCO_chipsets {
 	TCO_ICH8,	/* ICH8 & ICH8R */
 	TCO_ICH8DH,	/* ICH8DH */
 	TCO_ICH8DO,	/* ICH8DO */
+	TCO_ICH9,	/* ICH9 */
+	TCO_ICH9R,	/* ICH9R */
+	TCO_ICH9DH,	/* ICH9DH */
+	TCO_631XESB,	/* 631xESB/632xESB */
 };
 
 static struct {
@@ -118,6 +127,10 @@ static struct {
 	{"ICH8 or ICH8R", 2},
 	{"ICH8DH", 2},
 	{"ICH8DO", 2},
+	{"ICH9", 2},
+	{"ICH9R", 2},
+	{"ICH9DH", 2},
+	{"631xESB/632xESB", 2},
 	{NULL,0}
 };
 
@@ -148,6 +161,25 @@ static struct pci_device_id iTCO_wdt_pci_tbl[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH8_0,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH8    },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH8_2,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH8DH  },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH8_3,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH8DO  },
+	{ PCI_VENDOR_ID_INTEL, 0x2918,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH9    },
+	{ PCI_VENDOR_ID_INTEL, 0x2916,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH9R    },
+	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH9_2,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_ICH9DH    },
+	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ESB2_0,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2671,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2672,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2673,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2674,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2675,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2676,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2677,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2678,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x2679,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267a,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267b,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267c,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267d,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267e,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
+	{ PCI_VENDOR_ID_INTEL, 0x267f,	PCI_ANY_ID, PCI_ANY_ID, 0, 0, TCO_631XESB },
 	{ 0, },			/* End of list */
 };
 MODULE_DEVICE_TABLE (pci, iTCO_wdt_pci_tbl);
@@ -187,7 +219,22 @@ MODULE_PARM_DESC(heartbeat, "Watchdog heartbeat in seconds. (2<heartbeat<39 (TCO
 
 static int nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, int, 0);
-MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default=CONFIG_WATCHDOG_NOWAYOUT)");
+MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default=" __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+
+/* iTCO Vendor Specific Support hooks */
+#ifdef CONFIG_ITCO_VENDOR_SUPPORT
+extern void iTCO_vendor_pre_start(unsigned long, unsigned int);
+extern void iTCO_vendor_pre_stop(unsigned long);
+extern void iTCO_vendor_pre_keepalive(unsigned long, unsigned int);
+extern void iTCO_vendor_pre_set_heartbeat(unsigned int);
+extern int iTCO_vendor_check_noreboot_on(void);
+#else
+#define iTCO_vendor_pre_start(acpibase, heartbeat)	{}
+#define iTCO_vendor_pre_stop(acpibase)			{}
+#define iTCO_vendor_pre_keepalive(acpibase,heartbeat)	{}
+#define iTCO_vendor_pre_set_heartbeat(heartbeat)	{}
+#define iTCO_vendor_check_noreboot_on()			1	/* 1=check noreboot; 0=don't check */
+#endif
 
 /*
  * Some TCO specific functions
@@ -249,6 +296,8 @@ static int iTCO_wdt_start(void)
 
 	spin_lock(&iTCO_wdt_private.io_lock);
 
+	iTCO_vendor_pre_start(iTCO_wdt_private.ACPIBASE, heartbeat);
+
 	/* disable chipset's NO_REBOOT bit */
 	if (iTCO_wdt_unset_NO_REBOOT_bit()) {
 		printk(KERN_ERR PFX "failed to reset NO_REBOOT flag, reboot disabled by hardware\n");
@@ -273,6 +322,8 @@ static int iTCO_wdt_stop(void)
 
 	spin_lock(&iTCO_wdt_private.io_lock);
 
+	iTCO_vendor_pre_stop(iTCO_wdt_private.ACPIBASE);
+
 	/* Bit 11: TCO Timer Halt -> 1 = The TCO timer is disabled */
 	val = inw(TCO1_CNT);
 	val |= 0x0800;
@@ -292,6 +343,8 @@ static int iTCO_wdt_stop(void)
 static int iTCO_wdt_keepalive(void)
 {
 	spin_lock(&iTCO_wdt_private.io_lock);
+
+	iTCO_vendor_pre_keepalive(iTCO_wdt_private.ACPIBASE, heartbeat);
 
 	/* Reload the timer by writing to the TCO Timer Counter register */
 	if (iTCO_wdt_private.iTCO_version == 2) {
@@ -318,6 +371,8 @@ static int iTCO_wdt_set_heartbeat(int t)
 	if (((iTCO_wdt_private.iTCO_version == 2) && (tmrval > 0x3ff)) ||
 	    ((iTCO_wdt_private.iTCO_version == 1) && (tmrval > 0x03f)))
 		return -EINVAL;
+
+	iTCO_vendor_pre_set_heartbeat(tmrval);
 
 	/* Write new heartbeat to watchdog */
 	if (iTCO_wdt_private.iTCO_version == 2) {
@@ -516,7 +571,7 @@ static int iTCO_wdt_ioctl (struct inode *inode, struct file *file,
  *	Kernel Interfaces
  */
 
-static struct file_operations iTCO_wdt_fops = {
+static const struct file_operations iTCO_wdt_fops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
 	.write =	iTCO_wdt_write,
@@ -548,7 +603,7 @@ static int iTCO_wdt_init(struct pci_dev *pdev, const struct pci_device_id *ent, 
 	 *      ACPIBASE is bits [15:7] from 0x40-0x43
 	 */
 	pci_read_config_dword(pdev, 0x40, &base_address);
-	base_address &= 0x00007f80;
+	base_address &= 0x0000ff80;
 	if (base_address == 0x00000000) {
 		/* Something's wrong here, ACPIBASE has to be set */
 		printk(KERN_ERR PFX "failed to get TCOBASE address\n");
@@ -569,7 +624,7 @@ static int iTCO_wdt_init(struct pci_dev *pdev, const struct pci_device_id *ent, 
 	}
 
 	/* Check chipset's NO_REBOOT bit */
-	if (iTCO_wdt_unset_NO_REBOOT_bit()) {
+	if (iTCO_wdt_unset_NO_REBOOT_bit() && iTCO_vendor_check_noreboot_on()) {
 		printk(KERN_ERR PFX "failed to reset NO_REBOOT flag, reboot disabled by hardware\n");
 		ret = -ENODEV;	/* Cannot reset NO_REBOOT bit */
 		goto out;

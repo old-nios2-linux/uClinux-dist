@@ -110,11 +110,17 @@ struct exception_table_entry {
 	__get_user_nocheck((x), (ptr), sizeof(*(ptr)))
 #define __put_user(x, ptr) \
 	__put_user_nocheck((__typeof__(*(ptr)))(x), (ptr), sizeof(*(ptr)))
+
 #ifndef __powerpc64__
 #define __get_user64(x, ptr) \
 	__get_user64_nocheck((x), (ptr), sizeof(*(ptr)))
 #define __put_user64(x, ptr) __put_user(x, ptr)
 #endif
+
+#define __get_user_inatomic(x, ptr) \
+	__get_user_nosleep((x), (ptr), sizeof(*(ptr)))
+#define __put_user_inatomic(x, ptr) \
+	__put_user_nosleep((__typeof__(*(ptr)))(x), (ptr), sizeof(*(ptr)))
 
 #define __get_user_unaligned __get_user
 #define __put_user_unaligned __put_user
@@ -197,6 +203,16 @@ do {								\
 		__put_user_size((x), __pu_addr, (size), __pu_err);	\
 	__pu_err;							\
 })
+
+#define __put_user_nosleep(x, ptr, size)			\
+({								\
+	long __pu_err;						\
+	__typeof__(*(ptr)) __user *__pu_addr = (ptr);		\
+	__chk_user_ptr(ptr);					\
+	__put_user_size((x), __pu_addr, (size), __pu_err);	\
+	__pu_err;						\
+})
+
 
 extern long __get_user_bad(void);
 
@@ -297,6 +313,18 @@ do {								\
 	__gu_err;							\
 })
 
+#define __get_user_nosleep(x, ptr, size)			\
+({								\
+	long __gu_err;						\
+	unsigned long __gu_val;					\
+	const __typeof__(*(ptr)) __user *__gu_addr = (ptr);	\
+	__chk_user_ptr(ptr);					\
+	__get_user_size(__gu_val, __gu_addr, (size), __gu_err);	\
+	(x) = (__typeof__(*(ptr)))__gu_val;			\
+	__gu_err;						\
+})
+
+
 /* more complex routines */
 
 extern unsigned long __copy_tofrom_user(void __user *to,
@@ -304,7 +332,7 @@ extern unsigned long __copy_tofrom_user(void __user *to,
 
 #ifndef __powerpc64__
 
-extern inline unsigned long copy_from_user(void *to,
+static inline unsigned long copy_from_user(void *to,
 		const void __user *from, unsigned long n)
 {
 	unsigned long over;
@@ -319,7 +347,7 @@ extern inline unsigned long copy_from_user(void *to,
 	return n;
 }
 
-extern inline unsigned long copy_to_user(void __user *to,
+static inline unsigned long copy_to_user(void __user *to,
 		const void *from, unsigned long n)
 {
 	unsigned long over;

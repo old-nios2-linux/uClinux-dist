@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -20,10 +20,10 @@ static char rcsid[] = "$NetBSD: w_gamma.c,v 1.7 1995/11/20 22:06:43 jtc Exp $";
  * Method: call gamma_r
  */
 
-#include "math.h"
+#include <math.h>
 #include "math_private.h"
 
-extern int signgam;
+libm_hidden_proto(signgam)
 
 #ifdef __STDC__
 	double gamma(double x)
@@ -46,4 +46,4 @@ extern int signgam;
         } else
             return y;
 #endif
-}             
+}

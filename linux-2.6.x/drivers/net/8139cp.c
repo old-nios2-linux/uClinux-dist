@@ -26,7 +26,6 @@
 
 	TODO:
 	* Test Tx checksumming thoroughly
-	* Implement dev->tx_timeout
 
 	Low priority TODO:
 	* Complete reset on PciErr
@@ -116,11 +115,6 @@ module_param(multicast_filter_limit, int, 0);
 MODULE_PARM_DESC (multicast_filter_limit, "8139cp: maximum number of filtered multicast addresses");
 
 #define PFX			DRV_NAME ": "
-
-#ifndef TRUE
-#define FALSE 0
-#define TRUE (!FALSE)
-#endif
 
 #define CP_DEF_MSG_ENABLE	(NETIF_MSG_DRV		| \
 				 NETIF_MSG_PROBE 	| \
@@ -463,21 +457,12 @@ static void cp_vlan_rx_register(struct net_device *dev, struct vlan_group *grp)
 
 	spin_lock_irqsave(&cp->lock, flags);
 	cp->vlgrp = grp;
-	cp->cpcmd |= RxVlanOn;
-	cpw16(CpCmd, cp->cpcmd);
-	spin_unlock_irqrestore(&cp->lock, flags);
-}
+	if (grp)
+		cp->cpcmd |= RxVlanOn;
+	else
+		cp->cpcmd &= ~RxVlanOn;
 
-static void cp_vlan_rx_kill_vid(struct net_device *dev, unsigned short vid)
-{
-	struct cp_private *cp = netdev_priv(dev);
-	unsigned long flags;
-
-	spin_lock_irqsave(&cp->lock, flags);
-	cp->cpcmd &= ~RxVlanOn;
 	cpw16(CpCmd, cp->cpcmd);
-	if (cp->vlgrp)
-		cp->vlgrp->vlan_devices[vid] = NULL;
 	spin_unlock_irqrestore(&cp->lock, flags);
 }
 #endif /* CP_VLAN_TAG_USED */
@@ -640,7 +625,6 @@ rx_status_loop:
 		}
 
 		skb_reserve(new_skb, RX_OFFSET);
-		new_skb->dev = dev;
 
 		pci_unmap_single(cp->pdev, mapping,
 				 buflen, PCI_DMA_FROMDEVICE);
@@ -693,13 +677,15 @@ rx_next:
 	 * this round of polling
 	 */
 	if (rx_work) {
+		unsigned long flags;
+
 		if (cpr16(IntrStatus) & cp_rx_intr_mask)
 			goto rx_status_loop;
 
-		local_irq_disable();
+		local_irq_save(flags);
 		cpw16_f(IntrMask, cp_intr_mask);
 		__netif_rx_complete(dev);
-		local_irq_enable();
+		local_irq_restore(flags);
 
 		return 0;	/* done */
 	}
@@ -755,7 +741,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	if (status & (TxOK | TxErr | TxEmpty | SWInt))
 		cp_tx(cp);
 	if (status & LinkChg)
-		mii_check_media(&cp->mii_if, netif_msg_link(cp), FALSE);
+		mii_check_media(&cp->mii_if, netif_msg_link(cp), false);
 
 	spin_unlock(&cp->lock);
 
@@ -861,18 +847,19 @@ static int cp_start_xmit (struct sk_buff *skb, struct net_device *dev)
 	struct cp_private *cp = netdev_priv(dev);
 	unsigned entry;
 	u32 eor, flags;
+	unsigned long intr_flags;
 #if CP_VLAN_TAG_USED
 	int do_vlan = 0;
 	u32 vlan_tag = 0;
 #endif
 	int mss = 0;
 
-	spin_lock_irq(&cp->lock);
+	spin_lock_irqsave(&cp->lock, intr_flags);
 
 	/* This is a hard error, log it. */
 	if (TX_BUFFS_AVAIL(cp) <= (skb_shinfo(skb)->nr_frags + 1)) {
 		netif_stop_queue(dev);
-		spin_unlock_irq(&cp->lock);
+		spin_unlock_irqrestore(&cp->lock, intr_flags);
 		printk(KERN_ERR PFX "%s: BUG! Tx Ring full when queue awake!\n",
 		       dev->name);
 		return 1;
@@ -906,7 +893,7 @@ static int cp_start_xmit (struct sk_buff *skb, struct net_device *dev)
 		if (mss)
 			flags |= LargeSend | ((mss & MSSMask) << MSSShift);
 		else if (skb->ip_summed == CHECKSUM_PARTIAL) {
-			const struct iphdr *ip = skb->nh.iph;
+			const struct iphdr *ip = ip_hdr(skb);
 			if (ip->protocol == IPPROTO_TCP)
 				flags |= IPCS | TCPCS;
 			else if (ip->protocol == IPPROTO_UDP)
@@ -925,7 +912,7 @@ static int cp_start_xmit (struct sk_buff *skb, struct net_device *dev)
 		u32 first_len, first_eor;
 		dma_addr_t first_mapping;
 		int frag, first_entry = entry;
-		const struct iphdr *ip = skb->nh.iph;
+		const struct iphdr *ip = ip_hdr(skb);
 
 		/* We must give this initial chunk to the device last.
 		 * Otherwise we could race with the device.
@@ -1007,7 +994,7 @@ static int cp_start_xmit (struct sk_buff *skb, struct net_device *dev)
 	if (TX_BUFFS_AVAIL(cp) <= (MAX_SKB_FRAGS + 1))
 		netif_stop_queue(dev);
 
-	spin_unlock_irq(&cp->lock);
+	spin_unlock_irqrestore(&cp->lock, intr_flags);
 
 	cpw8(TxPoll, NormalTxPoll);
 	dev->trans_start = jiffies;
@@ -1183,7 +1170,6 @@ static int cp_refill_rx (struct cp_private *cp)
 		if (!skb)
 			goto err_out;
 
-		skb->dev = cp->dev;
 		skb_reserve(skb, RX_OFFSET);
 
 		mapping = pci_map_single(cp->pdev, skb->data, cp->rx_buf_sz,
@@ -1304,7 +1290,7 @@ static int cp_open (struct net_device *dev)
 #endif
 
 	netif_carrier_off(dev);
-	mii_check_media(&cp->mii_if, netif_msg_link(cp), TRUE);
+	mii_check_media(&cp->mii_if, netif_msg_link(cp), true);
 	netif_start_queue(dev);
 
 	return 0;
@@ -1343,6 +1329,30 @@ static int cp_close (struct net_device *dev)
 
 	cp_free_rings(cp);
 	return 0;
+}
+
+static void cp_tx_timeout(struct net_device *dev)
+{
+	struct cp_private *cp = netdev_priv(dev);
+	unsigned long flags;
+	int rc;
+
+	printk(KERN_WARNING "%s: Transmit timeout, status %2x %4x %4x %4x\n",
+	       dev->name, cpr8(Cmd), cpr16(CpCmd),
+	       cpr16(IntrStatus), cpr16(IntrMask));
+
+	spin_lock_irqsave(&cp->lock, flags);
+
+	cp_stop_hw(cp);
+	cp_clean_rings(cp);
+	rc = cp_init_rings(cp);
+	cp_start_hw(cp);
+
+	netif_wake_queue(dev);
+
+	spin_unlock_irqrestore(&cp->lock, flags);
+
+	return;
 }
 
 #ifdef BROKEN
@@ -1764,7 +1774,6 @@ static const struct ethtool_ops cp_ethtool_ops = {
 	.set_wol		= cp_set_wol,
 	.get_strings		= cp_get_strings,
 	.get_ethtool_stats	= cp_get_ethtool_stats,
-	.get_perm_addr		= ethtool_op_get_perm_addr,
 	.get_eeprom_len		= cp_get_eeprom_len,
 	.get_eeprom		= cp_get_eeprom,
 	.set_eeprom		= cp_set_eeprom,
@@ -2009,7 +2018,6 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 	void __iomem *regs;
 	resource_size_t pciaddr;
 	unsigned int i, pci_using_dac;
-	u8 pci_rev;
 
 #ifndef MODULE
 	static int version_printed;
@@ -2017,15 +2025,12 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 		printk("%s", version);
 #endif
 
-	pci_read_config_byte(pdev, PCI_REVISION_ID, &pci_rev);
-
 	if (pdev->vendor == PCI_VENDOR_ID_REALTEK &&
-	    	(pdev->device == PCI_DEVICE_ID_REALTEK_8139 ||
-			 	pdev->device == PCI_DEVICE_ID_REALTEK_8129)
-			 && pci_rev < 0x20) {
+	    (pdev->device == PCI_DEVICE_ID_REALTEK_8139 || pdev->device == PCI_DEVICE_ID_REALTEK_8129) &&
+	    pdev->revision < 0x20) {
 		dev_err(&pdev->dev,
 			   "This (id %04x:%04x rev %02x) is not an 8139C+ compatible chip\n",
-		           pdev->vendor, pdev->device, pci_rev);
+		           pdev->vendor, pdev->device, pdev->revision);
 		dev_err(&pdev->dev, "Try the \"8139too\" driver instead.\n");
 		return -ENODEV;
 	}
@@ -2150,15 +2155,12 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 	dev->change_mtu = cp_change_mtu;
 #endif
 	dev->ethtool_ops = &cp_ethtool_ops;
-#if 0
 	dev->tx_timeout = cp_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
-#endif
 
 #if CP_VLAN_TAG_USED
 	dev->features |= NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
 	dev->vlan_rx_register = cp_vlan_rx_register;
-	dev->vlan_rx_kill_vid = cp_vlan_rx_kill_vid;
 #endif
 
 	if (pci_using_dac)
@@ -2282,7 +2284,7 @@ static int cp_resume (struct pci_dev *pdev)
 
 	spin_lock_irqsave (&cp->lock, flags);
 
-	mii_check_media(&cp->mii_if, netif_msg_link(cp), FALSE);
+	mii_check_media(&cp->mii_if, netif_msg_link(cp), false);
 
 	spin_unlock_irqrestore (&cp->lock, flags);
 

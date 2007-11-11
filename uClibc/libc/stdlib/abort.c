@@ -18,7 +18,6 @@ Cambridge, MA 02139, USA.  */
 
 /* Hacked up for uClibc by Erik Andersen */
 
-#define _GNU_SOURCE
 #include <features.h>
 #include <signal.h>
 #include <stdio.h>
@@ -28,101 +27,95 @@ Cambridge, MA 02139, USA.  */
 #include <signal.h>
 #include <errno.h>
 
+libc_hidden_proto(abort)
+
+libc_hidden_proto(memset)
+libc_hidden_proto(sigaction)
+libc_hidden_proto(sigprocmask)
+libc_hidden_proto(raise)
+libc_hidden_proto(_exit)
 
 /* Our last ditch effort to commit suicide */
-#if defined(__i386__)
-#define ABORT_INSTRUCTION asm ("hlt")
-#elif defined(__ia64__)
-#define ABORT_INSTRUCTION asm ("break 0")
-#elif defined(__mc68000__)
-#define ABORT_INSTRUCTION asm (".long 0xffffffff")
-#elif defined(__mips__)
-#define ABORT_INSTRUCTION asm ("break 255")
-#elif defined(__s390__)
-#define ABORT_INSTRUCTION asm (".word 0")
-#elif defined(__sparc__)
-#define ABORT_INSTRUCTION asm ("unimp 0xf00")
-#elif defined(__x86_64__)
-#define ABORT_INSTRUCTION asm ("hlt")
-#elif defined(__hppa__)
-#define ABORT_INSTRUCTION asm ("iitlbp %r0,(%r0)")
-#elif defined(__powerpc__)
-#define ABORT_INSTRUCTION asm (".long 0")
-#elif defined(__SH5__)
-#define ABORT_INSTRUCTION asm ("movi 0x10, r9; shori 0xff, r9; trapa r9")
-#elif defined(__sh2__)
-#define ABORT_INSTRUCTION asm ("trapa #32")
-#elif defined(__sh__)
-#define ABORT_INSTRUCTION asm ("trapa #0xff")
+#ifdef __UCLIBC_ABORT_INSTRUCTION__
+# define ABORT_INSTRUCTION __asm__(__UCLIBC_ABORT_INSTRUCTION__)
 #else
-#define ABORT_INSTRUCTION
+# define ABORT_INSTRUCTION
+# warning "no abort instruction defined for your arch"
 #endif
 
-extern void _exit __P((int __status)) __attribute__ ((__noreturn__));
+#ifdef __UCLIBC_HAS_STDIO_SHUTDOWN_ON_ABORT__
+extern void weak_function _stdio_term(void) attribute_hidden;
+#endif
 static int been_there_done_that = 0;
 
-/* Be prepared in case multiple threads try to abort().  */
-#ifdef __UCLIBC_HAS_THREADS__
-#include <pthread.h>
-static pthread_mutex_t mylock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-# define LOCK	__pthread_mutex_lock(&mylock)
-# define UNLOCK	__pthread_mutex_unlock(&mylock);
-#else
-# define LOCK
-# define UNLOCK
-#endif
+/* Be prepared in case multiple threads try to abort() */
+#include <bits/uClibc_mutex.h>
+__UCLIBC_MUTEX_STATIC(mylock, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP);
 
-
-/* Cause an abnormal program termination with core-dump.  */
+/* Cause an abnormal program termination with core-dump */
 void abort(void)
 {
-    sigset_t sigset;
+	sigset_t sigs;
 
-      /* Make sure we acquire the lock before proceeding.  */
-      LOCK;
+	/* Make sure we acquire the lock before proceeding */
+	__UCLIBC_MUTEX_LOCK_CANCEL_UNSAFE(mylock);
 
-    /* Unmask SIGABRT to be sure we can get it */
-    if (__sigemptyset(&sigset) == 0 && __sigaddset(&sigset, SIGABRT) == 0) {
-	sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *) NULL);
-    }
-
-    while (1) {
-	/* Try to suicide with a SIGABRT.  */
-	if (been_there_done_that == 0) {
-	    been_there_done_that++;
-	    UNLOCK;
-	    raise(SIGABRT);
-	    LOCK;
+	/* Unmask SIGABRT to be sure we can get it */
+	if (__sigemptyset(&sigs) == 0 && __sigaddset(&sigs, SIGABRT) == 0) {
+		sigprocmask(SIG_UNBLOCK, &sigs, (sigset_t *) NULL);
 	}
 
-	/* Still here?  Try to remove any signal handlers.  */
-	if (been_there_done_that == 1) {
-	    struct sigaction act;
+	while (1) {
+		/* Try to suicide with a SIGABRT */
+		if (been_there_done_that == 0) {
+			been_there_done_that++;
 
-	    been_there_done_that++;
-	    memset (&act, '\0', sizeof (struct sigaction));
-	    act.sa_handler = SIG_DFL;
-	    __sigfillset (&act.sa_mask);
-	    act.sa_flags = 0;
-	    sigaction (SIGABRT, &act, NULL);
+#ifdef __UCLIBC_HAS_STDIO_SHUTDOWN_ON_ABORT__
+			/* If we are using stdio, try to shut it down.  At the very least,
+			 * this will attempt to commit all buffered writes.  It may also
+			 * unbuffer all writable files, or close them outright.
+			 * Check the stdio routines for details. */
+			if (_stdio_term) {
+				_stdio_term();
+			}
+#endif
+
+abort_it:
+			__UCLIBC_MUTEX_UNLOCK_CANCEL_UNSAFE(mylock);
+			raise(SIGABRT);
+			__UCLIBC_MUTEX_LOCK_CANCEL_UNSAFE(mylock);
+		}
+
+		/* Still here?  Try to remove any signal handlers */
+		if (been_there_done_that == 1) {
+			struct sigaction act;
+
+			been_there_done_that++;
+			memset(&act, '\0', sizeof(struct sigaction));
+			act.sa_handler = SIG_DFL;
+			__sigfillset(&act.sa_mask);
+			act.sa_flags = 0;
+			sigaction(SIGABRT, &act, NULL);
+
+			goto abort_it;
+		}
+
+		/* Still here?  Try to suicide with an illegal instruction */
+		if (been_there_done_that == 2) {
+			been_there_done_that++;
+			ABORT_INSTRUCTION;
+		}
+
+		/* Still here?  Try to at least exit */
+		if (been_there_done_that == 3) {
+			been_there_done_that++;
+			_exit(127);
+		}
+
+		/* Still here?  We're screwed.  Sleepy time.  Good night. */
+		while (1)
+			/* Try for ever and ever */
+			ABORT_INSTRUCTION;
 	}
-
-	/* Still here?  Try to suicide with an illegal instruction */
-	if (been_there_done_that == 2) {
-	    been_there_done_that++;
-	    ABORT_INSTRUCTION;
-	}
-
-	/* Still here?  Try to at least exit */
-	if (been_there_done_that == 3) {
-	    been_there_done_that++;
-	    _exit (127);
-	}
-
-	/* Still here?  We're screwed.  Sleepy time.  Good night */
-	while (1)
-	    /* Try for ever and ever.  */
-	    ABORT_INSTRUCTION;
-    }
 }
-
+libc_hidden_def(abort)

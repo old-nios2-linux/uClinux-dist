@@ -40,7 +40,11 @@
 
 #ifndef PCI_DEVICE_ID_QLOGIC_ISP4022
 #define PCI_DEVICE_ID_QLOGIC_ISP4022	0x4022
-#endif				/*  */
+#endif
+
+#ifndef PCI_DEVICE_ID_QLOGIC_ISP4032
+#define PCI_DEVICE_ID_QLOGIC_ISP4032	0x4032
+#endif
 
 #define QLA_SUCCESS			0
 #define QLA_ERROR			1
@@ -118,8 +122,7 @@
 
 #define ISCSI_IPADDR_SIZE		4	/* IP address size */
 #define ISCSI_ALIAS_SIZE		32	/* ISCSI Alais name size */
-#define ISCSI_NAME_SIZE			255	/* ISCSI Name size -
-						 * usually a string */
+#define ISCSI_NAME_SIZE			0xE0	/* ISCSI Name size */
 
 #define LSDW(x) ((u32)((u64)(x)))
 #define MSDW(x) ((u32)((((u64)(x)) >> 16) >> 16))
@@ -183,9 +186,21 @@ struct srb {
 	u_long u_start;		/* Time when we handed the cmd to F/W */
 };
 
-	/*
-	 * Device Database (DDB) structure
-	 */
+/*
+ * Asynchronous Event Queue structure
+ */
+struct aen {
+        uint32_t mbox_sts[MBOX_AEN_REG_COUNT];
+};
+
+struct ql4_aen_log {
+        int count;
+        struct aen entry[MAX_AEN_ENTRIES];
+};
+
+/*
+ * Device Database (DDB) structure
+ */
 struct ddb_entry {
 	struct list_head list;	/* ddb list */
 	struct scsi_qla_host *ha;
@@ -250,13 +265,6 @@ struct ddb_entry {
 #define DF_ISNS_DISCOVERED	2	/* Device was discovered via iSNS */
 #define DF_FO_MASKED		3
 
-/*
- * Asynchronous Event Queue structure
- */
-struct aen {
-	uint32_t mbox_sts[MBOX_AEN_REG_COUNT];
-};
-
 
 #include "ql4_fw.h"
 #include "ql4_nvram.h"
@@ -266,32 +274,31 @@ struct aen {
  */
 struct scsi_qla_host {
 	/* Linux adapter configuration data */
-	struct Scsi_Host *host; /* pointer to host data */
-	uint32_t tot_ddbs;
 	unsigned long flags;
 
-#define AF_ONLINE		      0 /* 0x00000001 */
-#define AF_INIT_DONE		      1 /* 0x00000002 */
-#define AF_MBOX_COMMAND		      2 /* 0x00000004 */
-#define AF_MBOX_COMMAND_DONE	      3 /* 0x00000008 */
-#define AF_INTERRUPTS_ON	      6 /* 0x00000040 Not Used */
-#define AF_GET_CRASH_RECORD	      7 /* 0x00000080 */
-#define AF_LINK_UP		      8 /* 0x00000100 */
-#define AF_TOPCAT_CHIP_PRESENT	      9 /* 0x00000200 */
-#define AF_IRQ_ATTACHED		     10 /* 0x00000400 */
-#define AF_ISNS_CMD_IN_PROCESS	     12 /* 0x00001000 */
-#define AF_ISNS_CMD_DONE	     13 /* 0x00002000 */
+#define AF_ONLINE			0 /* 0x00000001 */
+#define AF_INIT_DONE			1 /* 0x00000002 */
+#define AF_MBOX_COMMAND			2 /* 0x00000004 */
+#define AF_MBOX_COMMAND_DONE		3 /* 0x00000008 */
+#define AF_INTERRUPTS_ON		6 /* 0x00000040 */
+#define AF_GET_CRASH_RECORD		7 /* 0x00000080 */
+#define AF_LINK_UP			8 /* 0x00000100 */
+#define AF_IRQ_ATTACHED			10 /* 0x00000400 */
+#define AF_DISABLE_ACB_COMPLETE		11 /* 0x00000800 */
 
 	unsigned long dpc_flags;
 
-#define DPC_RESET_HA		      1 /* 0x00000002 */
-#define DPC_RETRY_RESET_HA	      2 /* 0x00000004 */
-#define DPC_RELOGIN_DEVICE	      3 /* 0x00000008 */
-#define DPC_RESET_HA_DESTROY_DDB_LIST 4 /* 0x00000010 */
-#define DPC_RESET_HA_INTR	      5 /* 0x00000020 */
-#define DPC_ISNS_RESTART	      7 /* 0x00000080 */
-#define DPC_AEN			      9 /* 0x00000200 */
-#define DPC_GET_DHCP_IP_ADDR	     15 /* 0x00008000 */
+#define DPC_RESET_HA			1 /* 0x00000002 */
+#define DPC_RETRY_RESET_HA		2 /* 0x00000004 */
+#define DPC_RELOGIN_DEVICE		3 /* 0x00000008 */
+#define DPC_RESET_HA_DESTROY_DDB_LIST	4 /* 0x00000010 */
+#define DPC_RESET_HA_INTR		5 /* 0x00000020 */
+#define DPC_ISNS_RESTART		7 /* 0x00000080 */
+#define DPC_AEN				9 /* 0x00000200 */
+#define DPC_GET_DHCP_IP_ADDR		15 /* 0x00008000 */
+
+	struct Scsi_Host *host; /* pointer to host data */
+	uint32_t tot_ddbs;
 
 	uint16_t	iocb_cnt;
 	uint16_t	iocb_hiwat;
@@ -317,16 +324,17 @@ struct scsi_qla_host {
 	/* NVRAM registers */
 	struct eeprom_data *nvram;
 	spinlock_t hardware_lock ____cacheline_aligned;
-	spinlock_t list_lock;
 	uint32_t   eeprom_cmd_data;
 
 	/* Counters for general statistics */
+	uint64_t isr_count;
 	uint64_t adapter_error_count;
 	uint64_t device_error_count;
 	uint64_t total_io_count;
 	uint64_t total_mbytes_xferred;
 	uint64_t link_failure_count;
 	uint64_t invalid_crc_count;
+	uint32_t bytes_xfered;
 	uint32_t spurious_int_count;
 	uint32_t aborted_io_count;
 	uint32_t io_timeout_count;
@@ -340,6 +348,7 @@ struct scsi_qla_host {
 	uint32_t firmware_version[2];
 	uint32_t patch_number;
 	uint32_t build_number;
+	uint32_t board_id;
 
 	/* --- From Init_FW --- */
 	/* init_cb_t *init_cb; */
@@ -359,7 +368,6 @@ struct scsi_qla_host {
 
 	/* --- From GetFwState --- */
 	uint32_t firmware_state;
-	uint32_t board_id;
 	uint32_t addl_fw_state;
 
 	/* Linux kernel thread */
@@ -410,11 +418,12 @@ struct scsi_qla_host {
 	uint16_t aen_out;
 	struct aen aen_q[MAX_AEN_ENTRIES];
 
+	struct ql4_aen_log aen_log;/* tracks all aens */
+
 	/* This mutex protects several threads to do mailbox commands
 	 * concurrently.
 	 */
 	struct mutex  mbox_sem;
-	wait_queue_head_t mailbox_wait_queue;
 
 	/* temporary mailbox status registers */
 	volatile uint8_t mbox_status_count;
@@ -438,6 +447,11 @@ static inline int is_qla4022(struct scsi_qla_host *ha)
 	return ha->pdev->device == PCI_DEVICE_ID_QLOGIC_ISP4022;
 }
 
+static inline int is_qla4032(struct scsi_qla_host *ha)
+{
+	return ha->pdev->device == PCI_DEVICE_ID_QLOGIC_ISP4032;
+}
+
 static inline int adapter_up(struct scsi_qla_host *ha)
 {
 	return (test_bit(AF_ONLINE, &ha->flags) != 0) &&
@@ -451,58 +465,58 @@ static inline struct scsi_qla_host* to_qla_host(struct Scsi_Host *shost)
 
 static inline void __iomem* isp_semaphore(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u1.isp4022.semaphore :
-		&ha->reg->u1.isp4010.nvram);
+	return (is_qla4010(ha) ?
+		&ha->reg->u1.isp4010.nvram :
+		&ha->reg->u1.isp4022.semaphore);
 }
 
 static inline void __iomem* isp_nvram(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u1.isp4022.nvram :
-		&ha->reg->u1.isp4010.nvram);
+	return (is_qla4010(ha) ?
+		&ha->reg->u1.isp4010.nvram :
+		&ha->reg->u1.isp4022.nvram);
 }
 
 static inline void __iomem* isp_ext_hw_conf(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u2.isp4022.p0.ext_hw_conf :
-		&ha->reg->u2.isp4010.ext_hw_conf);
+	return (is_qla4010(ha) ?
+		&ha->reg->u2.isp4010.ext_hw_conf :
+		&ha->reg->u2.isp4022.p0.ext_hw_conf);
 }
 
 static inline void __iomem* isp_port_status(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u2.isp4022.p0.port_status :
-		&ha->reg->u2.isp4010.port_status);
+	return (is_qla4010(ha) ?
+		&ha->reg->u2.isp4010.port_status :
+		&ha->reg->u2.isp4022.p0.port_status);
 }
 
 static inline void __iomem* isp_port_ctrl(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u2.isp4022.p0.port_ctrl :
-		&ha->reg->u2.isp4010.port_ctrl);
+	return (is_qla4010(ha) ?
+		&ha->reg->u2.isp4010.port_ctrl :
+		&ha->reg->u2.isp4022.p0.port_ctrl);
 }
 
 static inline void __iomem* isp_port_error_status(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u2.isp4022.p0.port_err_status :
-		&ha->reg->u2.isp4010.port_err_status);
+	return (is_qla4010(ha) ?
+		&ha->reg->u2.isp4010.port_err_status :
+		&ha->reg->u2.isp4022.p0.port_err_status);
 }
 
 static inline void __iomem * isp_gp_out(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		&ha->reg->u2.isp4022.p0.gp_out :
-		&ha->reg->u2.isp4010.gp_out);
+	return (is_qla4010(ha) ?
+		&ha->reg->u2.isp4010.gp_out :
+		&ha->reg->u2.isp4022.p0.gp_out);
 }
 
 static inline int eeprom_ext_hw_conf_offset(struct scsi_qla_host *ha)
 {
-	return (is_qla4022(ha) ?
-		offsetof(struct eeprom_data, isp4022.ext_hw_conf) / 2 :
-		offsetof(struct eeprom_data, isp4010.ext_hw_conf) / 2);
+	return (is_qla4010(ha) ?
+		offsetof(struct eeprom_data, isp4010.ext_hw_conf) / 2 :
+		offsetof(struct eeprom_data, isp4022.ext_hw_conf) / 2);
 }
 
 int ql4xxx_sem_spinlock(struct scsi_qla_host * ha, u32 sem_mask, u32 sem_bits);
@@ -511,59 +525,59 @@ int ql4xxx_sem_lock(struct scsi_qla_host * ha, u32 sem_mask, u32 sem_bits);
 
 static inline int ql4xxx_lock_flash(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
+	if (is_qla4010(a))
+		return ql4xxx_sem_spinlock(a, QL4010_FLASH_SEM_MASK,
+					   QL4010_FLASH_SEM_BITS);
+	else
 		return ql4xxx_sem_spinlock(a, QL4022_FLASH_SEM_MASK,
 					   (QL4022_RESOURCE_BITS_BASE_CODE |
 					    (a->mac_index)) << 13);
-	else
-		return ql4xxx_sem_spinlock(a, QL4010_FLASH_SEM_MASK,
-					   QL4010_FLASH_SEM_BITS);
 }
 
 static inline void ql4xxx_unlock_flash(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
-		ql4xxx_sem_unlock(a, QL4022_FLASH_SEM_MASK);
-	else
+	if (is_qla4010(a))
 		ql4xxx_sem_unlock(a, QL4010_FLASH_SEM_MASK);
+	else
+		ql4xxx_sem_unlock(a, QL4022_FLASH_SEM_MASK);
 }
 
 static inline int ql4xxx_lock_nvram(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
+	if (is_qla4010(a))
+		return ql4xxx_sem_spinlock(a, QL4010_NVRAM_SEM_MASK,
+					   QL4010_NVRAM_SEM_BITS);
+	else
 		return ql4xxx_sem_spinlock(a, QL4022_NVRAM_SEM_MASK,
 					   (QL4022_RESOURCE_BITS_BASE_CODE |
 					    (a->mac_index)) << 10);
-	else
-		return ql4xxx_sem_spinlock(a, QL4010_NVRAM_SEM_MASK,
-					   QL4010_NVRAM_SEM_BITS);
 }
 
 static inline void ql4xxx_unlock_nvram(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
-		ql4xxx_sem_unlock(a, QL4022_NVRAM_SEM_MASK);
-	else
+	if (is_qla4010(a))
 		ql4xxx_sem_unlock(a, QL4010_NVRAM_SEM_MASK);
+	else
+		ql4xxx_sem_unlock(a, QL4022_NVRAM_SEM_MASK);
 }
 
 static inline int ql4xxx_lock_drvr(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
+	if (is_qla4010(a))
+		return ql4xxx_sem_lock(a, QL4010_DRVR_SEM_MASK,
+				       QL4010_DRVR_SEM_BITS);
+	else
 		return ql4xxx_sem_lock(a, QL4022_DRVR_SEM_MASK,
 				       (QL4022_RESOURCE_BITS_BASE_CODE |
 					(a->mac_index)) << 1);
-	else
-		return ql4xxx_sem_lock(a, QL4010_DRVR_SEM_MASK,
-				       QL4010_DRVR_SEM_BITS);
 }
 
 static inline void ql4xxx_unlock_drvr(struct scsi_qla_host *a)
 {
-	if (is_qla4022(a))
-		ql4xxx_sem_unlock(a, QL4022_DRVR_SEM_MASK);
-	else
+	if (is_qla4010(a))
 		ql4xxx_sem_unlock(a, QL4010_DRVR_SEM_MASK);
+	else
+		ql4xxx_sem_unlock(a, QL4022_DRVR_SEM_MASK);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -576,11 +590,5 @@ static inline void ql4xxx_unlock_drvr(struct scsi_qla_host *a)
 #define PROCESS_ALL_AENS	 0
 #define FLUSH_DDB_CHANGED_AENS	 1
 #define RELOGIN_DDB_CHANGED_AENS 2
-
-#include "ql4_version.h"
-#include "ql4_glbl.h"
-#include "ql4_dbg.h"
-#include "ql4_inline.h"
-
 
 #endif	/*_QLA4XXX_H */

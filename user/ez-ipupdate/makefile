@@ -1,4 +1,4 @@
-CONFOPTS=
+CONFOPTS="--enable-debug"
 
 all: build/build
 	$(MAKE) -C build

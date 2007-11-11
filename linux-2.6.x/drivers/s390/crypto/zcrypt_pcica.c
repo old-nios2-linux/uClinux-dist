@@ -70,6 +70,7 @@ static struct ap_driver zcrypt_pcica_driver = {
 	.remove = zcrypt_pcica_remove,
 	.receive = zcrypt_pcica_receive,
 	.ids = zcrypt_pcica_ids,
+	.request_timeout = PCICA_CLEANUP_TIME,
 };
 
 /**
@@ -191,10 +192,10 @@ static int ICACRT_msg_to_type4CRT_msg(struct zcrypt_device *zdev,
  *
  * Returns 0 on success or -EFAULT.
  */
-static inline int convert_type84(struct zcrypt_device *zdev,
-				 struct ap_message *reply,
-				 char __user *outputdata,
-				 unsigned int outputdatalength)
+static int convert_type84(struct zcrypt_device *zdev,
+			  struct ap_message *reply,
+			  char __user *outputdata,
+			  unsigned int outputdatalength)
 {
 	struct type84_hdr *t84h = reply->message;
 	char *data;
@@ -279,7 +280,7 @@ static long zcrypt_pcica_modexpo(struct zcrypt_device *zdev,
 	struct completion work;
 	int rc;
 
-	ap_msg.message = (void *) kmalloc(PCICA_MAX_MESSAGE_SIZE, GFP_KERNEL);
+	ap_msg.message = kmalloc(PCICA_MAX_MESSAGE_SIZE, GFP_KERNEL);
 	if (!ap_msg.message)
 		return -ENOMEM;
 	ap_msg.psmid = (((unsigned long long) current->pid) << 32) +
@@ -290,18 +291,13 @@ static long zcrypt_pcica_modexpo(struct zcrypt_device *zdev,
 		goto out_free;
 	init_completion(&work);
 	ap_queue_message(zdev->ap_dev, &ap_msg);
-	rc = wait_for_completion_interruptible_timeout(
-				&work, PCICA_CLEANUP_TIME);
-	if (rc > 0)
+	rc = wait_for_completion_interruptible(&work);
+	if (rc == 0)
 		rc = convert_response(zdev, &ap_msg, mex->outputdata,
 				      mex->outputdatalength);
-	else {
-		/* Signal pending or message timed out. */
+	else
+		/* Signal pending. */
 		ap_cancel_message(zdev->ap_dev, &ap_msg);
-		if (rc == 0)
-			/* Message timed out. */
-			rc = -ETIME;
-	}
 out_free:
 	kfree(ap_msg.message);
 	return rc;
@@ -321,7 +317,7 @@ static long zcrypt_pcica_modexpo_crt(struct zcrypt_device *zdev,
 	struct completion work;
 	int rc;
 
-	ap_msg.message = (void *) kmalloc(PCICA_MAX_MESSAGE_SIZE, GFP_KERNEL);
+	ap_msg.message = kmalloc(PCICA_MAX_MESSAGE_SIZE, GFP_KERNEL);
 	if (!ap_msg.message)
 		return -ENOMEM;
 	ap_msg.psmid = (((unsigned long long) current->pid) << 32) +
@@ -332,18 +328,13 @@ static long zcrypt_pcica_modexpo_crt(struct zcrypt_device *zdev,
 		goto out_free;
 	init_completion(&work);
 	ap_queue_message(zdev->ap_dev, &ap_msg);
-	rc = wait_for_completion_interruptible_timeout(
-				&work, PCICA_CLEANUP_TIME);
-	if (rc > 0)
+	rc = wait_for_completion_interruptible(&work);
+	if (rc == 0)
 		rc = convert_response(zdev, &ap_msg, crt->outputdata,
 				      crt->outputdatalength);
-	else {
-		/* Signal pending or message timed out. */
+	else
+		/* Signal pending. */
 		ap_cancel_message(zdev->ap_dev, &ap_msg);
-		if (rc == 0)
-			/* Message timed out. */
-			rc = -ETIME;
-	}
 out_free:
 	kfree(ap_msg.message);
 	return rc;

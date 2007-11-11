@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "util_net.h"
+#include "util.h"
 
 /** 
  * give a textual representation of tcp flags
@@ -93,7 +94,7 @@ char *inet_ntoax(u_int32_t ip)
         which = 1;
     }
 
-    snprintf(buf, 16, "%s", net_str);
+    SnortSnprintf(buf, 16, "%s", net_str);
 
     return buf;    
 }

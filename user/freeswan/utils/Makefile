@@ -15,7 +15,7 @@ PERMINDEX=html2four four2perm
 LOCALS= #man_xref $(PERMINDEX)
 CFLAGS += -I$(srcdir)/../lib -I$(ROOTDIR)/lib/libgmp
 LIB    = ../lib/libfreeswan.a
-LIBGMP = $(ROOTDIR)/lib/libgmp/libgmp.a
+LIBGMP = $(ROOTDIR)/lib/libgmp.a
 SECRETBITS=256
 RSAKEYBITS=2048
 

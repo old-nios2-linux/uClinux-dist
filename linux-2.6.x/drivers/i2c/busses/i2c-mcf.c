@@ -321,6 +321,28 @@ static s32 coldfire_i2c_access(struct i2c_adapter *adap, u16 addr,
 					dev_info(&adap->dev, "data->block[%d] = %.2x\n", i, data->block[i]);
 			} */
 			break;
+		case I2C_SMBUS_BLOCK_PROC_CALL:
+		{
+			// dev_info(&adap->dev, "size = I2C_SMBUS_BLOCK_PROC_CALL \n");
+			rc = coldfire_i2c_start(I2C_SMBUS_WRITE, addr, FIRST_START);
+			rc += coldfire_write_data(command);
+			if (read_write == I2C_SMBUS_READ) {
+				// This is SMBUS READ BLOCK request. Peform REPEAT START
+				rc += coldfire_i2c_start(I2C_SMBUS_READ, addr, REPEAT_START);
+				coldfire_read_data(&rxData, ACK);        // dummy read
+				len = data->block[0];
+				if (len < 0) len = 0;
+				if (len > 32) len = 32;
+				for (i = 1; i < len; i++) {
+					// read byte from the device
+					rc += coldfire_read_data(&data->block[i], ACK);
+				}
+				// read last byte from the device
+				rc += coldfire_read_data(&data->block[i], NACK);
+			}
+			*MCF_I2C_I2CR &= ~MCF_I2C_I2CR_TXAK;
+			break;
+		}
 		default:
 			printk("Unsupported I2C size \n");
 			rc = -1;
@@ -489,7 +511,7 @@ static int __init i2c_coldfire_init(void)
 	int retval;
 	u8  dummyRead;
 
-#if defined(CONFIG_M532x)
+#if defined(CONFIG_M532x) || defined(CONFIG_M523x)
 	/*
 	 * Initialize the GPIOs for I2C
 	 */
@@ -501,7 +523,7 @@ static int __init i2c_coldfire_init(void)
 	/* Port AS Pin Assignment Register (PASPAR)		*/
 	/*		PASPA1 = 11 = AS1 pin is I2C SDA	*/
 	/*		PASPA0 = 11 = AS0 pin is I2C SCL	*/
-	*MCF_GPIO_PASPAR |= 0x000F;		/* u16 declaration */
+	*MCF5282_GPIO_PASPAR |= 0x000F;		/* u16 declaration */
 #endif
 
 

@@ -13,9 +13,40 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  * $Log: text.c,v $
+ * Revision 1.25  2007/02/12 20:46:09  njh
+ * Various tidy
+ *
+ * Revision 1.24  2006/09/13 20:53:50  njh
+ * Added debug
+ *
+ * Revision 1.23  2006/07/14 12:13:08  njh
+ * Typo
+ *
+ * Revision 1.22  2006/07/01 21:03:36  njh
+ * Better use of destroy mode
+ *
+ * Revision 1.21  2006/07/01 16:17:35  njh
+ * Added destroy flag
+ *
+ * Revision 1.20  2006/07/01 03:47:50  njh
+ * Don't loop if binhex runs out of memory
+ *
+ * Revision 1.19  2006/05/19 11:02:12  njh
+ * Just include mbox.h
+ *
+ * Revision 1.18  2006/05/04 10:37:03  nigelhorne
+ * Speed up scanning of clean files
+ *
+ * Revision 1.17  2006/05/03 09:36:40  nigelhorne
+ * Pass full ctx into the mbox code
+ *
+ * Revision 1.16  2006/04/09 19:59:28  kojm
+ * update GPL headers with new address for FSF
+ *
  * Revision 1.15  2005/03/10 08:50:49  nigelhorne
  * Tidy
  *
@@ -54,7 +85,7 @@
  *
  */
 
-static	char	const	rcsid[] = "$Id: text.c,v 1.15 2005/03/10 08:50:49 nigelhorne Exp $";
+static	char	const	rcsid[] = "$Id: text.c,v 1.25 2007/02/12 20:46:09 njh Exp $";
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -80,17 +111,15 @@ static	char	const	rcsid[] = "$Id: text.c,v 1.15 2005/03/10 08:50:49 nigelhorne E
 #include <assert.h>
 #include <stdio.h>
 
-#include "line.h"
-#include "mbox.h"
-#include "blob.h"
-#include "text.h"
 #include "others.h"
+
+#include "mbox.h"
 
 static	text	*textCopy(const text *t_head);
 static	void	addToFileblob(const line_t *line, void *arg);
 static	void	getLength(const line_t *line, void *arg);
 static	void	addToBlob(const line_t *line, void *arg);
-static	void	*textIterate(const text *t_text, void (*cb)(const line_t *line, void *arg), void *arg);
+static	void	*textIterate(text *t_text, void (*cb)(const line_t *line, void *arg), void *arg, int destroy);
 
 void
 textDestroy(text *t_head)
@@ -219,7 +248,7 @@ textAddMessage(text *aText, message *aMessage)
  * The caller must free the returned blob if b is NULL
  */
 blob *
-textToBlob(const text *t, blob *b)
+textToBlob(text *t, blob *b, int destroy)
 {
 	size_t s;
 	blob *bin;
@@ -229,14 +258,14 @@ textToBlob(const text *t, blob *b)
 
 	s = 0;
 
-	(void)textIterate(t, getLength, &s);
+	(void)textIterate(t, getLength, &s, 0);
 
 	if(s == 0)
 		return b;
 
 	/*
 	 * copy b. If b is NULL and an error occurs we know we need to free
-	 * before returning
+	 *	before returning
 	 */
 	bin = b;
 	if(b == NULL) {
@@ -246,13 +275,31 @@ textToBlob(const text *t, blob *b)
 			return NULL;
 	}
 
-	if(blobGrow(b, s) != 0) {
+	if(blobGrow(b, s) != CL_SUCCESS) {
+		cli_warnmsg("Couldn't grow the blob: we may be low on memory\n");
+#if	0
+		if(!destroy) {
+			if(bin == NULL)
+				blobDestroy(b);
+			return NULL;
+		}
+		/*
+		 * We may be able to recover enough memory as we destroy to
+		 * create the blob
+		 */
+#else
 		if(bin == NULL)
 			blobDestroy(b);
 		return NULL;
+#endif
 	}
 
-	(void)textIterate(t, addToBlob, b);
+	(void)textIterate(t, addToBlob, b, destroy);
+
+	if(destroy && t->t_next) {
+		textDestroy(t->t_next);
+		t->t_next = NULL;
+	}
 
 	blobClose(b);
 
@@ -260,19 +307,30 @@ textToBlob(const text *t, blob *b)
 }
 
 fileblob *
-textToFileblob(const text *t, fileblob *fb)
+textToFileblob(text *t, fileblob *fb, int destroy)
 {
 	assert(fb != NULL);
 	assert(t != NULL);
 
 	if(fb == NULL) {
+		cli_dbgmsg("textToFileBlob, destroy = %d\n", destroy);
 		fb = fileblobCreate();
 
 		if(fb == NULL)
 			return NULL;
+	} else {
+		cli_dbgmsg("textToFileBlob to %s, destroy = %d\n",
+			fileblobGetFilename(fb), destroy);
+
+		fb->ctx = NULL;	/* no need to scan */
 	}
 
-	return textIterate(t, addToFileblob, fb);
+	fb = textIterate(t, addToFileblob, fb, destroy);
+	if(destroy && t->t_next) {
+		textDestroy(t->t_next);
+		t->t_next = NULL;
+	}
+	return fb;
 }
 
 static void
@@ -294,9 +352,9 @@ addToBlob(const line_t *line, void *arg)
 	if(line) {
 		const char *l = lineGetData(line);
 
-		blobAddData(b, (unsigned char *)l, strlen(l));
+		blobAddData(b, (const unsigned char *)l, strlen(l));
 	}
-	blobAddData(b, (unsigned char *)"\n", 1);
+	blobAddData(b, (const unsigned char *)"\n", 1);
 }
 
 static void
@@ -307,16 +365,22 @@ addToFileblob(const line_t *line, void *arg)
 	if(line) {
 		const char *l = lineGetData(line);
 
-		fileblobAddData(fb, (unsigned char *)l, strlen(l));
+		fileblobAddData(fb, (const unsigned char *)l, strlen(l));
 	}
-	fileblobAddData(fb, (unsigned char *)"\n", 1);
+	fileblobAddData(fb, (const unsigned char *)"\n", 1);
 }
 
 static void *
-textIterate(const text *t_text, void (*cb)(const line_t *item, void *arg), void *arg)
+textIterate(text *t_text, void (*cb)(const line_t *item, void *arg), void *arg, int destroy)
 {
 	while(t_text) {
 		(*cb)(t_text->t_line, arg);
+
+		if(destroy && t_text->t_line) {
+			lineUnlink(t_text->t_line);
+			t_text->t_line = NULL;
+		}
+
 		t_text = t_text->t_next;
 	}
 	return arg;

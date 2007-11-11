@@ -11,9 +11,9 @@
 #include <linux/module.h>
 #include <linux/kernel_stat.h>
 #include <linux/seq_file.h>
-#include <linux/io.h>
-#include <asm/irq.h>
+#include <linux/irq.h>
 #include <asm/processor.h>
+#include <asm/machvec.h>
 #include <asm/uaccess.h>
 #include <asm/thread_info.h>
 #include <asm/cpu/mmu_context.h>
@@ -45,7 +45,7 @@ int show_interrupts(struct seq_file *p, void *v)
 		seq_putc(p, '\n');
 	}
 
-	if (i < NR_IRQS) {
+	if (i < sh_mv.mv_nr_irqs) {
 		spin_lock_irqsave(&irq_desc[i].lock, flags);
 		action = irq_desc[i].action;
 		if (!action)
@@ -62,7 +62,7 @@ int show_interrupts(struct seq_file *p, void *v)
 		seq_putc(p, '\n');
 unlock:
 		spin_unlock_irqrestore(&irq_desc[i].lock, flags);
-	} else if (i == NR_IRQS)
+	} else if (i == sh_mv.mv_nr_irqs)
 		seq_printf(p, "Err: %10u\n", atomic_read(&irq_err_count));
 
 	return 0;
@@ -78,16 +78,13 @@ union irq_ctx {
 	u32			stack[THREAD_SIZE/sizeof(u32)];
 };
 
-static union irq_ctx *hardirq_ctx[NR_CPUS];
-static union irq_ctx *softirq_ctx[NR_CPUS];
+static union irq_ctx *hardirq_ctx[NR_CPUS] __read_mostly;
+static union irq_ctx *softirq_ctx[NR_CPUS] __read_mostly;
 #endif
 
-asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
-		      unsigned long r6, unsigned long r7,
-		      struct pt_regs regs)
+asmlinkage int do_IRQ(unsigned int irq, struct pt_regs *regs)
 {
-	struct pt_regs *old_regs = set_irq_regs(&regs);
-	int irq;
+	struct pt_regs *old_regs = set_irq_regs(regs);
 #ifdef CONFIG_4KSTACKS
 	union irq_ctx *curctx, *irqctx;
 #endif
@@ -110,13 +107,7 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	}
 #endif
 
-#ifdef CONFIG_CPU_HAS_INTEVT
-	irq = (ctrl_inl(INTEVT) >> 5) - 16;
-#else
-	irq = r4;
-#endif
-
-	irq = irq_demux(irq);
+	irq = irq_demux(evt2irq(irq));
 
 #ifdef CONFIG_4KSTACKS
 	curctx = (union irq_ctx *)current_thread_info();
@@ -135,17 +126,24 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 		irqctx->tinfo.task = curctx->tinfo.task;
 		irqctx->tinfo.previous_sp = current_stack_pointer;
 
+		/*
+		 * Copy the softirq bits in preempt_count so that the
+		 * softirq checks work in the hardirq context.
+		 */
+		irqctx->tinfo.preempt_count =
+			(irqctx->tinfo.preempt_count & ~SOFTIRQ_MASK) |
+			(curctx->tinfo.preempt_count & SOFTIRQ_MASK);
+
 		__asm__ __volatile__ (
 			"mov	%0, r4		\n"
-			"mov	r15, r9		\n"
+			"mov	r15, r8		\n"
 			"jsr	@%1		\n"
 			/* swith to the irq stack */
 			" mov	%2, r15		\n"
 			/* restore the stack (ring zero) */
-			"mov	r9, r15		\n"
+			"mov	r8, r15		\n"
 			: /* no outputs */
 			: "r" (irq), "r" (generic_handle_irq), "r" (isp)
-			/* XXX: A somewhat excessive clobber list? -PFM */
 			: "memory", "r0", "r1", "r2", "r3", "r4",
 			  "r5", "r6", "r7", "r8", "t", "pr"
 		);
@@ -160,15 +158,11 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 }
 
 #ifdef CONFIG_4KSTACKS
-/*
- * These should really be __section__(".bss.page_aligned") as well, but
- * gcc's 3.0 and earlier don't handle that correctly.
- */
 static char softirq_stack[NR_CPUS * THREAD_SIZE]
-		__attribute__((__aligned__(THREAD_SIZE)));
+		__attribute__((__section__(".bss.page_aligned")));
 
 static char hardirq_stack[NR_CPUS * THREAD_SIZE]
-		__attribute__((__aligned__(THREAD_SIZE)));
+		__attribute__((__section__(".bss.page_aligned")));
 
 /*
  * allocate per-cpu stacks for hardirq and for softirq processing
@@ -193,7 +187,7 @@ void irq_ctx_init(int cpu)
 	irqctx->tinfo.task		= NULL;
 	irqctx->tinfo.exec_domain	= NULL;
 	irqctx->tinfo.cpu		= cpu;
-	irqctx->tinfo.preempt_count	= SOFTIRQ_OFFSET;
+	irqctx->tinfo.preempt_count	= 0;
 	irqctx->tinfo.addr_limit	= MAKE_MM_SEG(0);
 
 	softirq_ctx[cpu] = irqctx;
@@ -239,13 +233,31 @@ asmlinkage void do_softirq(void)
 			"mov	r9, r15		\n"
 			: /* no outputs */
 			: "r" (__do_softirq), "r" (isp)
-			/* XXX: A somewhat excessive clobber list? -PFM */
 			: "memory", "r0", "r1", "r2", "r3", "r4",
 			  "r5", "r6", "r7", "r8", "r9", "r15", "t", "pr"
 		);
+
+		/*
+		 * Shouldnt happen, we returned above if in_interrupt():
+		 */
+		WARN_ON_ONCE(softirq_count());
 	}
 
 	local_irq_restore(flags);
 }
 EXPORT_SYMBOL(do_softirq);
 #endif
+
+void __init init_IRQ(void)
+{
+#ifdef CONFIG_CPU_HAS_PINT_IRQ
+	init_IRQ_pint();
+#endif
+	plat_irq_setup();
+
+	/* Perform the machine specific initialisation */
+	if (sh_mv.mv_init_irq)
+		sh_mv.mv_init_irq();
+
+	irq_ctx_init(smp_processor_id());
+}

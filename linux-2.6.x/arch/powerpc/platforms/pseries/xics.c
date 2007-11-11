@@ -156,9 +156,9 @@ static inline void lpar_qirr_info(int n_cpu , u8 value)
 
 
 #ifdef CONFIG_SMP
-static int get_irq_server(unsigned int virq)
+static int get_irq_server(unsigned int virq, unsigned int strict_check)
 {
-	unsigned int server;
+	int server;
 	/* For the moment only implement delivery to all cpus or one cpu */
 	cpumask_t cpumask = irq_desc[virq].affinity;
 	cpumask_t tmp = CPU_MASK_NONE;
@@ -166,22 +166,25 @@ static int get_irq_server(unsigned int virq)
 	if (!distribute_irqs)
 		return default_server;
 
-	if (cpus_equal(cpumask, CPU_MASK_ALL)) {
-		server = default_distrib_server;
-	} else {
+	if (!cpus_equal(cpumask, CPU_MASK_ALL)) {
 		cpus_and(tmp, cpu_online_map, cpumask);
 
-		if (cpus_empty(tmp))
-			server = default_distrib_server;
-		else
-			server = get_hard_smp_processor_id(first_cpu(tmp));
+		server = first_cpu(tmp);
+
+		if (server < NR_CPUS)
+			return get_hard_smp_processor_id(server);
+
+		if (strict_check)
+			return -1;
 	}
 
-	return server;
+	if (cpus_equal(cpu_online_map, cpu_present_map))
+		return default_distrib_server;
 
+	return default_server;
 }
 #else
-static int get_irq_server(unsigned int virq)
+static int get_irq_server(unsigned int virq, unsigned int strict_check)
 {
 	return default_server;
 }
@@ -192,7 +195,7 @@ static void xics_unmask_irq(unsigned int virq)
 {
 	unsigned int irq;
 	int call_status;
-	unsigned int server;
+	int server;
 
 	pr_debug("xics: unmask virq %d\n", virq);
 
@@ -201,7 +204,7 @@ static void xics_unmask_irq(unsigned int virq)
 	if (irq == XICS_IPI || irq == XICS_IRQ_SPURIOUS)
 		return;
 
-	server = get_irq_server(virq);
+	server = get_irq_server(virq, 0);
 
 	call_status = rtas_call(ibm_set_xive, 3, 1, NULL, irq, server,
 				DEFAULT_PRIORITY);
@@ -224,7 +227,6 @@ static void xics_unmask_irq(unsigned int virq)
 static void xics_mask_real_irq(unsigned int irq)
 {
 	int call_status;
-	unsigned int server;
 
 	if (irq == XICS_IPI)
 		return;
@@ -236,9 +238,9 @@ static void xics_mask_real_irq(unsigned int irq)
 		return;
 	}
 
-	server = get_irq_server(irq);
 	/* Have to set XIVE to 0xff to be able to remove a slot */
-	call_status = rtas_call(ibm_set_xive, 3, 1, NULL, irq, server, 0xff);
+	call_status = rtas_call(ibm_set_xive, 3, 1, NULL, irq,
+				default_server, 0xff);
 	if (call_status != 0) {
 		printk(KERN_ERR "xics_disable_irq: irq=%u: ibm_set_xive(0xff)"
 		       " returned %d\n", irq, call_status);
@@ -399,8 +401,7 @@ static void xics_set_affinity(unsigned int virq, cpumask_t cpumask)
 	unsigned int irq;
 	int status;
 	int xics_status[2];
-	unsigned long newmask;
-	cpumask_t tmp = CPU_MASK_NONE;
+	int irq_server;
 
 	irq = (unsigned int)irq_map[virq].hwirq;
 	if (irq == XICS_IPI || irq == XICS_IRQ_SPURIOUS)
@@ -414,18 +415,21 @@ static void xics_set_affinity(unsigned int virq, cpumask_t cpumask)
 		return;
 	}
 
-	/* For the moment only implement delivery to all cpus or one cpu */
-	if (cpus_equal(cpumask, CPU_MASK_ALL)) {
-		newmask = default_distrib_server;
-	} else {
-		cpus_and(tmp, cpu_online_map, cpumask);
-		if (cpus_empty(tmp))
-			return;
-		newmask = get_hard_smp_processor_id(first_cpu(tmp));
+	/*
+	 * For the moment only implement delivery to all cpus or one cpu.
+	 * Get current irq_server for the given irq
+	 */
+	irq_server = get_irq_server(virq, 1);
+	if (irq_server == -1) {
+		char cpulist[128];
+		cpumask_scnprintf(cpulist, sizeof(cpulist), cpumask);
+		printk(KERN_WARNING "xics_set_affinity: No online cpus in "
+				"the mask %s for irq %d\n", cpulist, virq);
+		return;
 	}
 
 	status = rtas_call(ibm_set_xive, 3, 1, NULL,
-				irq, newmask, xics_status[1]);
+				irq, irq_server, xics_status[1]);
 
 	if (status) {
 		printk(KERN_ERR "xics_set_affinity: irq=%u ibm,set-xive "
@@ -478,7 +482,7 @@ static int xics_host_match(struct irq_host *h, struct device_node *node)
 	 * like vdevices, events, etc... The trick we use here is to match
 	 * everything here except the legacy 8259 which is compatible "chrp,iic"
 	 */
-	return !device_is_compatible(node, "chrp,iic");
+	return !of_device_is_compatible(node, "chrp,iic");
 }
 
 static int xics_host_map_direct(struct irq_host *h, unsigned int virq,
@@ -577,7 +581,7 @@ static void __init xics_init_one_node(struct device_node *np,
 	 * This happens to be the case so far but we are playing with fire...
 	 * should be fixed one of these days. -BenH.
 	 */
-	ireg = get_property(np, "ibm,interrupt-server-ranges", NULL);
+	ireg = of_get_property(np, "ibm,interrupt-server-ranges", NULL);
 
 	/* Do that ever happen ? we'll know soon enough... but even good'old
 	 * f80 does have that property ..
@@ -589,7 +593,7 @@ static void __init xics_init_one_node(struct device_node *np,
 		 */
 		*indx = *ireg;
 	}
-	ireg = get_property(np, "reg", &ilen);
+	ireg = of_get_property(np, "reg", &ilen);
 	if (!ireg)
 		panic("xics_init_IRQ: can't find interrupt reg property");
 
@@ -619,7 +623,7 @@ static void __init xics_setup_8259_cascade(void)
 	unsigned long intack = 0;
 
 	for_each_node_by_type(np, "interrupt-controller")
-		if (device_is_compatible(np, "chrp,iic")) {
+		if (of_device_is_compatible(np, "chrp,iic")) {
 			found = np;
 			break;
 		}
@@ -641,10 +645,10 @@ static void __init xics_setup_8259_cascade(void)
 			break;
 		if (strcmp(np->name, "pci") != 0)
 			continue;
-		addrp = get_property(np, "8259-interrupt-acknowledge", NULL);
+		addrp = of_get_property(np, "8259-interrupt-acknowledge", NULL);
 		if (addrp == NULL)
 			continue;
-		naddr = prom_n_addr_cells(np);
+		naddr = of_n_addr_cells(np);
 		intack = addrp[naddr-1];
 		if (naddr > 1)
 			intack |= ((unsigned long)addrp[naddr-2]) << 32;
@@ -656,13 +660,39 @@ static void __init xics_setup_8259_cascade(void)
 	set_irq_chained_handler(cascade, pseries_8259_cascade);
 }
 
+static struct device_node *cpuid_to_of_node(int cpu)
+{
+	struct device_node *np;
+	u32 hcpuid = get_hard_smp_processor_id(cpu);
+
+	for_each_node_by_type(np, "cpu") {
+		int i, len;
+		const u32 *intserv;
+
+		intserv = of_get_property(np, "ibm,ppc-interrupt-server#s",
+					&len);
+
+		if (!intserv)
+			intserv = of_get_property(np, "reg", &len);
+
+		i = len / sizeof(u32);
+
+		while (i--)
+			if (intserv[i] == hcpuid)
+				return np;
+	}
+
+	return NULL;
+}
+
 void __init xics_init_IRQ(void)
 {
-	int i;
+	int i, j;
 	struct device_node *np;
 	u32 ilen, indx = 0;
-	const u32 *ireg;
+	const u32 *ireg, *isize;
 	int found = 0;
+	u32 hcpuid;
 
 	ppc64_boot_msg(0x20, "XICS Init");
 
@@ -683,26 +713,31 @@ void __init xics_init_IRQ(void)
 	xics_init_host();
 
 	/* Find the server numbers for the boot cpu. */
-	for (np = of_find_node_by_type(NULL, "cpu");
-	     np;
-	     np = of_find_node_by_type(np, "cpu")) {
-		ireg = get_property(np, "reg", &ilen);
-		if (ireg && ireg[0] == get_hard_smp_processor_id(boot_cpuid)) {
-			ireg = get_property(np,
-					"ibm,ppc-interrupt-gserver#s", &ilen);
-			i = ilen / sizeof(int);
-			if (ireg && i > 0) {
-				default_server = ireg[0];
-				/* take last element */
-				default_distrib_server = ireg[i-1];
-			}
-			ireg = get_property(np,
+	np = cpuid_to_of_node(boot_cpuid);
+	BUG_ON(!np);
+	ireg = of_get_property(np, "ibm,ppc-interrupt-gserver#s", &ilen);
+	if (!ireg)
+		goto skip_gserver_check;
+	i = ilen / sizeof(int);
+	hcpuid = get_hard_smp_processor_id(boot_cpuid);
+
+	/* Global interrupt distribution server is specified in the last
+	 * entry of "ibm,ppc-interrupt-gserver#s" property. Get the last
+	 * entry fom this property for current boot cpu id and use it as
+	 * default distribution server
+	 */
+	for (j = 0; j < i; j += 2) {
+		if (ireg[j] == hcpuid) {
+			default_server = hcpuid;
+			default_distrib_server = ireg[j+1];
+
+			isize = of_get_property(np,
 					"ibm,interrupt-server#-size", NULL);
-			if (ireg)
-				interrupt_server_size = *ireg;
-			break;
+			if (isize)
+				interrupt_server_size = *isize;
 		}
 	}
+skip_gserver_check:
 	of_node_put(np);
 
 	if (firmware_has_feature(FW_FEATURE_LPAR))
@@ -722,6 +757,7 @@ void __init xics_init_IRQ(void)
 void xics_request_IPIs(void)
 {
 	unsigned int ipi;
+	int rc;
 
 	ipi = irq_create_mapping(xics_host, XICS_IPI);
 	BUG_ON(ipi == NO_IRQ);
@@ -732,11 +768,12 @@ void xics_request_IPIs(void)
 	 */
 	set_irq_handler(ipi, handle_percpu_irq);
 	if (firmware_has_feature(FW_FEATURE_LPAR))
-		request_irq(ipi, xics_ipi_action_lpar, IRQF_DISABLED,
-			    "IPI", NULL);
+		rc = request_irq(ipi, xics_ipi_action_lpar, IRQF_DISABLED,
+				"IPI", NULL);
 	else
-		request_irq(ipi, xics_ipi_action_direct, IRQF_DISABLED,
-			    "IPI", NULL);
+		rc = request_irq(ipi, xics_ipi_action_direct, IRQF_DISABLED,
+				"IPI", NULL);
+	BUG_ON(rc);
 }
 #endif /* CONFIG_SMP */
 

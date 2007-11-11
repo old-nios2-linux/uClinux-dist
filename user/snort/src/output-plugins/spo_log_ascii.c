@@ -131,7 +131,15 @@ void LogAscii(Packet *p, char *msg, void *arg, Event *event)
     if(msg)
     {
         fwrite("[**] ", 5, 1, log_ptr);
-        fwrite(msg, strlen(msg), 1, log_ptr);
+
+        /*
+         * Protect against potential log injection,
+         * check for delimiters and newlines in msg 
+         */
+        if(  !strstr(msg,"[**]") && !strchr(msg,'\n') )
+        {
+          fwrite(msg, strlen(msg), 1, log_ptr);
+        }
         fwrite(" [**]\n", 6, 1, log_ptr);
     }
     if(p)
@@ -178,7 +186,7 @@ FILE *OpenLogFile(int mode, Packet * p)
     char suffix[5];     /* filename suffix */
     FILE *log_ptr = NULL;
 #ifdef WIN32
-    strcpy(suffix,".ids");
+    SnortStrncpy(suffix, ".ids", sizeof(suffix));
 #else
     suffix[0] = '\0';
 #endif
@@ -191,7 +199,7 @@ FILE *OpenLogFile(int mode, Packet * p)
     if(mode == GENERIC_LOG || mode == DUMP || mode == BOGUS ||
             mode == NON_IP || mode == ARP)
     {
-        snprintf(log_file, STD_BUF, "%s/%s", pv.log_dir, logfile[mode]);
+        SnortSnprintf(log_file, STD_BUF, "%s/%s", pv.log_dir, logfile[mode]);
 
         if(!(log_ptr = fopen(log_file, "a")))
         {
@@ -205,7 +213,7 @@ FILE *OpenLogFile(int mode, Packet * p)
     {
         if(otn_tmp->logto != NULL)
         {
-            snprintf(log_file, STD_BUF, "%s/%s", pv.log_dir, otn_tmp->logto);
+            SnortSnprintf(log_file, STD_BUF, "%s/%s", pv.log_dir, otn_tmp->logto);
 
             if(!(log_ptr = fopen(log_file, "a")))
             {
@@ -220,20 +228,20 @@ FILE *OpenLogFile(int mode, Packet * p)
     {
         if((p->iph->ip_src.s_addr & pv.netmask) != pv.homenet)
         {
-            snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                    inet_ntoa(p->iph->ip_src));
+            SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                          inet_ntoa(p->iph->ip_src));
         }
         else
         {
             if(p->sp >= p->dp)
             {
-                snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                        inet_ntoa(p->iph->ip_src));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                              inet_ntoa(p->iph->ip_src));
             }
             else
             {
-                snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                        inet_ntoa(p->iph->ip_dst));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                              inet_ntoa(p->iph->ip_dst));
             }
         }
     }
@@ -241,20 +249,20 @@ FILE *OpenLogFile(int mode, Packet * p)
     {
         if((p->iph->ip_src.s_addr & pv.netmask) == pv.homenet)
         {
-            snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                    inet_ntoa(p->iph->ip_dst));
+            SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                          inet_ntoa(p->iph->ip_dst));
         }
         else
         {
             if(p->sp >= p->dp)
             {
-                snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                        inet_ntoa(p->iph->ip_src));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                              inet_ntoa(p->iph->ip_src));
             }
             else
             {
-                snprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
-                        inet_ntoa(p->iph->ip_dst));
+                SnortSnprintf(log_path, STD_BUF, "%s/%s", pv.log_dir, 
+                              inet_ntoa(p->iph->ip_dst));
             }
         }
     }
@@ -280,28 +288,28 @@ FILE *OpenLogFile(int mode, Packet * p)
     {
         if(p->frag_flag)
         {
-            snprintf(log_file, STD_BUF, "%s/IP_FRAG%s", log_path, suffix);
+            SnortSnprintf(log_file, STD_BUF, "%s/IP_FRAG%s", log_path, suffix);
         }
         else
         {
             if(p->sp >= p->dp)
             {
 #ifdef WIN32
-                snprintf(log_file, STD_BUF, "%s/%s_%d-%d%s", log_path,
-                        protocol_names[p->iph->ip_proto], p->sp, p->dp, suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/%s_%d-%d%s", log_path,
+                              protocol_names[p->iph->ip_proto], p->sp, p->dp, suffix);
 #else
-                snprintf(log_file, STD_BUF, "%s/%s:%d-%d%s", log_path,
-                        protocol_names[p->iph->ip_proto], p->sp, p->dp, suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/%s:%d-%d%s", log_path,
+                              protocol_names[p->iph->ip_proto], p->sp, p->dp, suffix);
 #endif
             }
             else
             {
 #ifdef WIN32
-                snprintf(log_file, STD_BUF, "%s/%s_%d-%d%s", log_path,
-                        protocol_names[p->iph->ip_proto], p->dp, p->sp, suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/%s_%d-%d%s", log_path,
+                              protocol_names[p->iph->ip_proto], p->dp, p->sp, suffix);
 #else
-                snprintf(log_file, STD_BUF, "%s/%s:%d-%d%s", log_path,
-                        protocol_names[p->iph->ip_proto], p->dp, p->sp, suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/%s:%d-%d%s", log_path,
+                              protocol_names[p->iph->ip_proto], p->dp, p->sp, suffix);
 #endif
             }
         }
@@ -310,19 +318,19 @@ FILE *OpenLogFile(int mode, Packet * p)
     {
         if(p->frag_flag)
         {
-            snprintf(log_file, STD_BUF, "%s/IP_FRAG%s", log_path, suffix);
+            SnortSnprintf(log_file, STD_BUF, "%s/IP_FRAG%s", log_path, suffix);
         }
         else
         {
             if(p->iph->ip_proto == IPPROTO_ICMP)
             {
-                snprintf(log_file, STD_BUF, "%s/%s_%s%s", log_path, "ICMP",
-                         IcmpFileName(p), suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/%s_%s%s", log_path, "ICMP",
+                              IcmpFileName(p), suffix);
             }
             else
             {
-                snprintf(log_file, STD_BUF, "%s/PROTO%d%s", log_path,
-                         p->iph->ip_proto, suffix);
+                SnortSnprintf(log_file, STD_BUF, "%s/PROTO%d%s", log_path,
+                              p->iph->ip_proto, suffix);
             }
         }
     }

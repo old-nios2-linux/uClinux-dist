@@ -1,5 +1,5 @@
 /*
- * $Id: aug_alloc.h,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: aug_alloc.h,v 1.1.10.1 2005/07/20 17:11:52 andrei Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -40,10 +40,10 @@
 **
 **
 **                      $RCSfile: aug_alloc.h,v $
-**                     $Revision: 1.1 $
+**                     $Revision: 1.1.10.1 $
 **
-**             Last change $Date: 2003/04/08 01:25:35 $
-**           Last change $Author: lgfausak $
+**             Last change $Date: 2005/07/20 17:11:52 $
+**           Last change $Author: andrei $
 **                        $State: Exp $
 **                       $Locker:  $
 **
@@ -84,9 +84,10 @@ extern augNoMemFunc *aug_set_nomem_func(augNoMemFunc *new_func);
 
 extern void *aug_alloc_loc(size_t size, void *parent, char *file, int line);
 extern void *aug_realloc_loc(size_t size, void *prev, char *file, int line);
-extern char *aug_strdup_loc(char *str, void *parent, char *file, int line);
+extern char *aug_strdup_loc(const char *str, void *parent, char *file,
+								int line);
 extern char **aug_vecdup_loc(char **vec, void *parent, char *file, int line);
-extern void aug_free_loc(void *mem, char *file, int line);
+extern void aug_free_loc(const void *mem, char *file, int line);
 extern void aug_foster_loc(void *mem, void *new_parent, char *file, int line);
 
 extern augAllocStats *aug_alloc_stats(void);

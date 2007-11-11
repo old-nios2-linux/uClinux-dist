@@ -1,8 +1,8 @@
 /*
- * $Id: fifo_server.c,v 1.39.2.1.2.1 2003/12/03 12:15:04 andrei Exp $
+ * $Id: fifo_server.c,v 1.51 2004/09/28 18:10:08 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -58,6 +58,12 @@
  *  2003-01-29  new built-in fifo commands: arg and pwd (jiri)
  *  2003-10-07  fifo security fixes: permissions, always delete old fifo,
  *               reply fifo checks -- added fifo_check (andrei)
+ *  2003-10-13  added fifo_dir for reply fifos (andrei)
+ *  2003-10-30  DB interface exported via FIFO (bogdan)
+ *  2004-03-09  open_fifo_server split into init_ and start_ (andrei)
+ *  2004-04-29  added chown(sock_user, sock_group)  (andrei)
+ *  2004-06-06  updated to the new DB interface  & init_db_fifo (andrei)
+ *  2004-09-19  fifo is deleted on exit (destroy_fifo)  (andrei)
  */
 
 
@@ -86,15 +92,19 @@
 #include "mem/mem.h"
 #include "sr_module.h"
 #include "pt.h"
+#include "db/db_fifo.h"
 
 /* FIFO server vars */
 char *fifo=0; /* FIFO name */
-int fifo_mode=S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP ;
+char* fifo_dir=DEFAULT_FIFO_DIR; /* dir where reply fifos are allowed */
+char *fifo_db_url = 0;
 pid_t fifo_pid;
+
+
 /* file descriptors */
 static int fifo_read=0;
 static int fifo_write=0;
-static FILE *fifo_stream;
+static FILE *fifo_stream=0;
 
 /* list of fifo command */
 static struct fifo_command *cmd_list=0;
@@ -147,6 +157,17 @@ void destroy_fifo()
 		foo=c->next;
 		pkg_free(c);
 		c=foo;
+	}
+	if (fifo_stream){
+			fclose(fifo_stream);
+			fifo_stream=0;
+		/* if  FIFO was created, delete it */
+		if (fifo && strlen(fifo)){
+			if (unlink(fifo)<0){
+				LOG(L_ERR, "WARNING: destroy_fifo: cannot delete fifo (%s):"
+							" %s\n", fifo, strerror(errno));
+			}
+		}
 	}
 }
 
@@ -286,14 +307,14 @@ static char *trim_filename( char * file )
 			, file);
 		return 0;
 	}
-	prefix_len=strlen(FIFO_DIR); fn_len=strlen(file);
+	prefix_len=strlen(fifo_dir); fn_len=strlen(file);
 	new_fn=pkg_malloc(prefix_len+fn_len+1);
 	if (new_fn==0) {
 		LOG(L_ERR, "ERROR: trim_filename: no mem\n");
 		return 0;
 	}
 
-	memcpy(new_fn, FIFO_DIR, prefix_len);
+	memcpy(new_fn, fifo_dir, prefix_len);
 	memcpy(new_fn+prefix_len, file, fn_len );
 	new_fn[prefix_len+fn_len]=0;
 
@@ -324,7 +345,7 @@ static int fifo_check(int fd, char* fname)
 	/* check if hard-linked */
 	if (fst.st_nlink>1){
 		LOG(L_ERR, "ERROR: security: fifo_check: %s is hard-linked %d times\n",
-				fname, fst.st_nlink);
+				fname, (unsigned)fst.st_nlink);
 		return -1;
 	}
 	
@@ -461,6 +482,9 @@ static void fifo_server(FILE *fifo_stream)
 
 	file_sep=command=file=0;
 
+	/* register a diagnostic FIFO command */
+	register_core_fifo();
+
 	while(1) {
 
 		/* commands must look this way ':<command>:[filename]' */
@@ -522,17 +546,16 @@ static void fifo_server(FILE *fifo_stream)
 consume:
 		if (file) { pkg_free(file); file=0;}
 		consume_request(fifo_stream);
+		DBG("**** done consume\n");
 	}
 }
 
-int open_fifo_server()
+int init_fifo_server()
 {
 	char *t;
 	struct stat filestat;
 	int n;
-#ifdef USE_TCP
-	int sockfd[2];
-#endif
+	long opt;
 
 	if (fifo==NULL) {
 		DBG("DBG: open_fifo_server: no fifo will be opened\n");
@@ -556,21 +579,31 @@ int open_fifo_server()
 		LOG(L_DBG, "DEBUG: open_fifo_server: FIFO stat failed: %s\n",
 			strerror(errno));
 	}
-	/* create FIFO ... */
-		if ((mkfifo(fifo, fifo_mode)<0)) {
+		/* create FIFO ... */
+		if ((mkfifo(fifo, sock_mode)<0)) {
 			LOG(L_ERR, "ERROR: open_fifo_server; can't create FIFO: "
 					"%s (mode=%d)\n",
-					strerror(errno), fifo_mode);
+					strerror(errno), sock_mode);
 			return -1;
 		} 
 		DBG("DEBUG: FIFO created @ %s\n", fifo );
-		if ((chmod(fifo, fifo_mode)<0)) {
+		if ((chmod(fifo, sock_mode)<0)) {
 			LOG(L_ERR, "ERROR: open_fifo_server; can't chmod FIFO: "
 					"%s (mode=%d)\n",
-					strerror(errno), fifo_mode);
+					strerror(errno), sock_mode);
 			return -1;
 		}
-	DBG("DEBUG: fifo %s opened, mode=%d\n", fifo, fifo_mode );
+		if ((sock_uid!=-1) || (sock_gid!=-1)){
+			if (chown(fifo, sock_uid, sock_gid)<0){
+			LOG(L_ERR, "ERROR: open_fifo_server: failed to change the"
+					" owner/group for %s  to %d.%d; %s[%d]\n",
+					fifo, sock_uid, sock_gid, strerror(errno), errno);
+			return -1;
+		}
+	}
+
+		
+	DBG("DEBUG: fifo %s opened, mode=%d\n", fifo, sock_mode );
 	time(&up_since);
 	t=ctime(&up_since);
 	if (strlen(t)+1>=MAX_CTIME_LEN) {
@@ -579,6 +612,49 @@ int open_fifo_server()
 		return -1;
 	}
 	memcpy(up_since_ctime,t,strlen(t)+1);
+	/* open it non-blocking or else wait here until someone
+	 * opens it for writing */
+	fifo_read=open(fifo, O_RDONLY|O_NONBLOCK, 0);
+	if (fifo_read<0) {
+		LOG(L_ERR, "ERROR: init_fifo_server: fifo_read did not open: %s\n",
+			strerror(errno));
+		return -1;
+	}
+	fifo_stream=fdopen(fifo_read, "r");
+	if (fifo_stream==NULL) {
+		LOG(L_ERR, "ERROR: init_fifo_server: fdopen failed: %s\n",
+			strerror(errno));
+		return -1;
+	}
+	/* make sure the read fifo will not close */
+	fifo_write=open(fifo, O_WRONLY|O_NONBLOCK, 0);
+	if (fifo_write<0) {
+		LOG(L_ERR, "ERROR: init_fifo_server: fifo_write did not open: %s\n",
+			strerror(errno));
+		return -1;
+	}
+	/* set read fifo blocking mode */
+	if ((opt=fcntl(fifo_read, F_GETFL))==-1){
+		LOG(L_ERR, "ERROR: init_fifo_server: fcntl(F_GETFL) failed: %s [%d]\n",
+				strerror(errno), errno);
+		return -1;
+	}
+	if (fcntl(fifo_read, F_SETFL, opt & (~O_NONBLOCK))==-1){
+		LOG(L_ERR, "ERROR: init_fifo_server: fcntl(F_SETFL) failed: %s [%d]\n",
+				strerror(errno), errno);
+		return -1;
+	}
+	return 0;
+}
+
+
+
+int start_fifo_server()
+{
+#ifdef USE_TCP
+	int sockfd[2];
+#endif
+	if (fifo_stream==0) return 1; /* no error, we just don't start it */
 #ifdef USE_TCP
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockfd)<0){
 			LOG(L_ERR, "ERROR: open_fifo_server: socketpair failed: %s\n",
@@ -606,23 +682,11 @@ int open_fifo_server()
 			LOG(L_ERR, "ERROR: open_uac_fifo: init_child failed\n");
 			return -1;
 		}
-		fifo_read=open(fifo, O_RDONLY, 0);
-		if (fifo_read<0) {
-			LOG(L_ERR, "ERROR: open_uac_fifo: fifo_read did not open: %s\n",
-				strerror(errno));
-			return -1;
-		}
-		fifo_stream=fdopen(fifo_read, "r"	);
-		if (fifo_stream==NULL) {
-			LOG(L_ERR, "SER: open_uac_fifo: fdopen failed: %s\n",
-				strerror(errno));
-			return -1;
-		}
 		/* a real server doesn't die if writing to reply fifo fails */
 		signal(SIGPIPE, SIG_IGN);
 		LOG(L_INFO, "SER: open_uac_fifo: fifo server up at %s...\n",
 			fifo);
-		fifo_server( fifo_stream ); /* never retruns */
+		fifo_server( fifo_stream ); /* never returns */
 	}
 	/* dad process */
 	pt[process_no].pid=fifo_pid;
@@ -632,13 +696,6 @@ int open_fifo_server()
 	pt[process_no].unix_sock=sockfd[0];
 	pt[process_no].idx=-1; /* this is not "tcp" process*/
 #endif
-	/* make sure the read fifo will not close */
-	fifo_write=open(fifo, O_WRONLY, 0);
-	if (fifo_write<0) {
-		LOG(L_ERR, "SER: open_uac_fifo: fifo_write did not open: %s\n",
-			strerror(errno));
-		return -1;
-	}
 	return 1;
 }
 
@@ -814,35 +871,41 @@ static int ps_fifo_cmd(FILE *stream, char *response_file )
 int register_core_fifo()
 {
 	if (register_fifo_cmd(print_fifo_cmd, FIFO_PRINT, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_PRINT);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_PRINT);
 		return -1;
 	}
 	if (register_fifo_cmd(uptime_fifo_cmd, FIFO_UPTIME, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_UPTIME);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_UPTIME);
 		return -1;
 	}
 	if (register_fifo_cmd(print_version_cmd, FIFO_VERSION, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_VERSION);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n",FIFO_VERSION);
 		return -1;
 	}
 	if (register_fifo_cmd(pwd_cmd, FIFO_PWD, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_PWD);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_PWD);
 		return -1;
 	}
 	if (register_fifo_cmd(arg_cmd, FIFO_ARG, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_ARG);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_ARG);
 		return -1;
 	}
 	if (register_fifo_cmd(which_fifo_cmd, FIFO_WHICH, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_WHICH);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_WHICH);
 		return -1;
 	}
 	if (register_fifo_cmd(ps_fifo_cmd, FIFO_PS, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_PS);
+		LOG(L_ERR, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_PS);
 		return -1;
 	}
 	if (register_fifo_cmd(kill_fifo_cmd, FIFO_KILL, 0)<0) {
-		LOG(L_CRIT, "unable to register '%s' FIFO cmd\n", FIFO_KILL);
+		LOG(L_CRIT, "ERROR: unable to register '%s' FIFO cmd\n", FIFO_KILL);
+		return -1;
+	}
+	if (fifo_db_url==0) {
+		LOG(L_WARN,"WARNING: no fifo_db_url given - "
+			"fifo DB commands disabled!\n");
+	} else if (init_db_fifo(fifo_db_url)<0){
 		return -1;
 	}
 	return 1;

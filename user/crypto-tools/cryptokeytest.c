@@ -1,4 +1,4 @@
-/* $FreeBSD: src/tools/tools/crypto/cryptokeytest.c,v 1.1 2003/01/06 22:11:56 sam Exp $ */
+/* $FreeBSD: src/tools/tools/crypto/cryptokeytest.c,v 1.2 2007/03/21 03:42:51 sam Exp $ */
 /*
  * The big num stuff is a bit broken at the moment and I've not yet fixed it.
  * The symtom is that odd size big nums will fail.  Test code below (it only
@@ -12,15 +12,56 @@
 #include <sys/time.h>
 #include <crypto/cryptodev.h>
 #include <openssl/bn.h>
+
+#include <paths.h>
 #include <fcntl.h>
 #include <err.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <time.h>
 
-static int crypto_fd = -1;
+int	crid = CRYPTO_FLAG_HARDWARE;
+int	verbose = 0;
 static int errs;
+
+static int
+devcrypto(void)
+{
+	static int fd = -1;
+
+	if (fd < 0) {
+		fd = open(_PATH_DEV "crypto", O_RDWR, 0);
+		if (fd < 0)
+			err(1, _PATH_DEV "crypto");
+		if (fcntl(fd, F_SETFD, 1) == -1)
+			err(1, "fcntl(F_SETFD) (devcrypto)");
+	}
+	return fd;
+}
+
+static int
+crlookup(const char *devname)
+{
+	struct crypt_find_op find;
+
+	find.crid = -1;
+	strlcpy(find.name, devname, sizeof(find.name));
+	if (ioctl(devcrypto(), CIOCFINDDEV, &find) == -1)
+		err(1, "ioctl(CIOCFINDDEV)");
+	return find.crid;
+}
+
+static const char *
+crfind(int crid)
+{
+	static struct crypt_find_op find;
+
+	bzero(&find, sizeof(find));
+	find.crid = crid;
+	if (ioctl(devcrypto(), CIOCFINDDEV, &find) == -1)
+		err(1, "ioctl(CIOCFINDDEV)");
+	return find.name;
+}
 
 /*
  * Convert a little endian byte string in 'p' that
@@ -87,17 +128,10 @@ UB_mod_exp(BIGNUM *res, BIGNUM *a, BIGNUM *b, BIGNUM *c, BN_CTX *ctx)
 {
 	struct crypt_kop kop;
 	u_int8_t *ale, *ble, *cle;
+	static int crypto_fd = -1;
 
-	if (crypto_fd == -1) {
-		int fd, fdc = open("/dev/crypto", O_RDONLY);
-
-		if (fdc == -1)
-			err(1, "/dev/crypto");
-		if (ioctl(fdc, CRIOGET, &fd) == -1)
-			err(1, "CRIOGET");
-		close(fdc);
-		crypto_fd = fd;
-	}
+	if (crypto_fd == -1 && ioctl(devcrypto(), CRIOGET, &crypto_fd) == -1)
+		err(1, "CRIOGET");
 
 	if ((ale = bignum_to_le(a, NULL)) == NULL)
 		err(1, "bignum_to_le, a");
@@ -110,6 +144,7 @@ UB_mod_exp(BIGNUM *res, BIGNUM *a, BIGNUM *b, BIGNUM *c, BN_CTX *ctx)
 	kop.crk_op = CRK_MOD_EXP;
 	kop.crk_iparams = 3;
 	kop.crk_oparams = 1;
+	kop.crk_crid = crid;
 	kop.crk_param[0].crp_p = ale;
 	kop.crk_param[0].crp_nbits = BN_num_bytes(a) * 8;
 	kop.crk_param[1].crp_p = ble;
@@ -119,8 +154,10 @@ UB_mod_exp(BIGNUM *res, BIGNUM *a, BIGNUM *b, BIGNUM *c, BN_CTX *ctx)
 	kop.crk_param[3].crp_p = cle;
 	kop.crk_param[3].crp_nbits = BN_num_bytes(c) * 8;
 
-	if (ioctl(crypto_fd, CIOCKEY, &kop) == -1)
+	if (ioctl(crypto_fd, CIOCKEY2, &kop) == -1)
 		warn("CIOCKEY");
+	if (verbose)
+		printf("device = %s\n", crfind(kop.crk_crid));
 
 	bzero(ale, BN_num_bytes(a));
 	free(ale);
@@ -217,10 +254,35 @@ testit(void)
 	BN_CTX_free(ctx);
 }
 
-int
-main()
+static void
+usage(const char* cmd)
 {
-	int i;
+	printf("usage: %s [-d dev] [-v] [count]\n", cmd);
+	printf("count is the number of bignum ops to do\n");
+	printf("\n");
+	printf("-d use specific device\n");
+	printf("-v be verbose\n");
+	exit(-1);
+}
+
+int
+main(int argc, char *argv[])
+{
+	int c, i;
+
+	while ((c = getopt(argc, argv, "d:v")) != -1) {
+		switch (c) {
+		case 'd':
+			crid = crlookup(optarg);
+			break;
+		case 'v':
+			verbose = 1;
+			break;
+		default:
+			usage(argv[0]);
+		}
+	}
+	argc -= optind, argv += optind;
 
 	for (i = 0; i < 1000; i++) {
 		fprintf(stderr, "test %d, errs=%d\n", i, errs);

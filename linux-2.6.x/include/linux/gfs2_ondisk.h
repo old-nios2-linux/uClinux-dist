@@ -54,13 +54,6 @@ struct gfs2_inum {
 	__be64 no_addr;
 };
 
-static inline int gfs2_inum_equal(const struct gfs2_inum *ino1,
-				  const struct gfs2_inum *ino2)
-{
-	return ino1->no_formal_ino == ino2->no_formal_ino &&
-	       ino1->no_addr == ino2->no_addr;
-}
-
 /*
  * Generic metadata head structure
  * Every inplace buffer logged in the journal must start with this.
@@ -266,8 +259,11 @@ struct gfs2_dinode {
 	struct gfs2_inum __pad4; /* Unused even in current gfs1 */
 
 	__be64 di_eattr;	/* extended attribute block number */
+	__be32 di_atime_nsec;   /* nsec portion of atime */
+	__be32 di_mtime_nsec;   /* nsec portion of mtime */
+	__be32 di_ctime_nsec;   /* nsec portion of ctime */
 
-	__u8 di_reserved[56];
+	__u8 di_reserved[44];
 };
 
 /*
@@ -410,34 +406,12 @@ struct gfs2_quota_change {
 	__be32 qc_id;
 };
 
-#ifdef __KERNEL__
-/* Translation functions */
-
-extern void gfs2_inum_in(struct gfs2_inum *no, const void *buf);
-extern void gfs2_inum_out(const struct gfs2_inum *no, void *buf);
-extern void gfs2_sb_in(struct gfs2_sb *sb, const void *buf);
-extern void gfs2_rindex_in(struct gfs2_rindex *ri, const void *buf);
-extern void gfs2_rindex_out(const struct gfs2_rindex *ri, void *buf);
-extern void gfs2_rgrp_in(struct gfs2_rgrp *rg, const void *buf);
-extern void gfs2_rgrp_out(const struct gfs2_rgrp *rg, void *buf);
-extern void gfs2_quota_in(struct gfs2_quota *qu, const void *buf);
-extern void gfs2_quota_out(const struct gfs2_quota *qu, void *buf);
-extern void gfs2_dinode_in(struct gfs2_dinode *di, const void *buf);
-extern void gfs2_dinode_out(const struct gfs2_dinode *di, void *buf);
-extern void gfs2_ea_header_in(struct gfs2_ea_header *ea, const void *buf);
-extern void gfs2_ea_header_out(const struct gfs2_ea_header *ea, void *buf);
-extern void gfs2_log_header_in(struct gfs2_log_header *lh, const void *buf);
-extern void gfs2_inum_range_in(struct gfs2_inum_range *ir, const void *buf);
-extern void gfs2_inum_range_out(const struct gfs2_inum_range *ir, void *buf);
-extern void gfs2_statfs_change_in(struct gfs2_statfs_change *sc, const void *buf);
-extern void gfs2_statfs_change_out(const struct gfs2_statfs_change *sc, void *buf);
-extern void gfs2_quota_change_in(struct gfs2_quota_change *qc, const void *buf);
-
-/* Printing functions */
-
-extern void gfs2_rindex_print(const struct gfs2_rindex *ri);
-extern void gfs2_dinode_print(const struct gfs2_dinode *di);
-
-#endif /* __KERNEL__ */
+struct gfs2_quota_lvb {
+        __be32 qb_magic;
+        __u32 __pad;
+        __be64 qb_limit;      /* Hard limit of # blocks to alloc */
+        __be64 qb_warn;       /* Warn user when alloc is above this # */
+        __be64 qb_value;       /* Current # blocks allocated */
+};
 
 #endif /* __GFS2_ONDISK_DOT_H__ */

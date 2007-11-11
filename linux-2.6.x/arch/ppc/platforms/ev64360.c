@@ -358,13 +358,12 @@ ev64360_setup_mtd(void)
 
 	ptbl_entries = 3;
 
-	if ((ptbl = kmalloc(ptbl_entries * sizeof(struct mtd_partition),
+	if ((ptbl = kzalloc(ptbl_entries * sizeof(struct mtd_partition),
 		GFP_KERNEL)) == NULL) {
 
 		printk(KERN_WARNING "Can't alloc MTD partition table\n");
 		return -ENOMEM;
 	}
-	memset(ptbl, 0, ptbl_entries * sizeof(struct mtd_partition));
 
 	ptbl[0].name = "reserved";
 	ptbl[0].offset = 0;
@@ -474,7 +473,7 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	 * are non-zero, then we should use the board info from the bd_t
 	 * structure and the cmdline pointed to by r6 instead of the
 	 * information from birecs, if any.  Otherwise, use the information
-	 * from birecs as discovered by the preceeding call to
+	 * from birecs as discovered by the preceding call to
 	 * parse_bootinfo().  This rule should work with both PPCBoot, which
 	 * uses a bd_t board info structure, and the kernel boot wrapper,
 	 * which uses birecs.

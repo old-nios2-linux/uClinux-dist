@@ -1,9 +1,9 @@
 /*
  * Presence Agent, hash table
  *
- * $Id: hslot.h,v 1.1 2002/11/14 14:29:48 janakj Exp $
+ * $Id: hslot.h,v 1.2 2004/08/24 08:58:32 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *

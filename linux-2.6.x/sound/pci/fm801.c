@@ -1157,7 +1157,7 @@ static int snd_fm801_put_mux(struct snd_kcontrol *kcontrol,
 	return snd_fm801_update_bits(chip, FM801_REC_SRC, 7, val);
 }
 
-static DECLARE_TLV_DB_SCALE(db_scale_dsp, -3450, 150, 0);
+static const DECLARE_TLV_DB_SCALE(db_scale_dsp, -3450, 150, 0);
 
 #define FM801_CONTROLS ARRAY_SIZE(snd_fm801_controls)
 
@@ -1369,7 +1369,6 @@ static int __devinit snd_fm801_create(struct snd_card *card,
 				      struct fm801 ** rchip)
 {
 	struct fm801 *chip;
-	unsigned char rev;
 	int err;
 	static struct snd_device_ops ops = {
 		.dev_free =	snd_fm801_dev_free,
@@ -1395,7 +1394,7 @@ static int __devinit snd_fm801_create(struct snd_card *card,
 	}
 	chip->port = pci_resource_start(pci, 0);
 	if ((tea575x_tuner & 0x0010) == 0) {
-		if (request_irq(pci->irq, snd_fm801_interrupt, IRQF_DISABLED|IRQF_SHARED,
+		if (request_irq(pci->irq, snd_fm801_interrupt, IRQF_SHARED,
 				"FM801", chip)) {
 			snd_printk(KERN_ERR "unable to grab IRQ %d\n", chip->irq);
 			snd_fm801_free(chip);
@@ -1405,8 +1404,7 @@ static int __devinit snd_fm801_create(struct snd_card *card,
 		pci_set_master(pci);
 	}
 
-	pci_read_config_byte(pci, PCI_REVISION_ID, &rev);
-	if (rev >= 0xb1)	/* FM801-AU */
+	if (pci->revision >= 0xb1)	/* FM801-AU */
 		chip->multichannel = 1;
 
 	snd_fm801_chip_init(chip, 0);

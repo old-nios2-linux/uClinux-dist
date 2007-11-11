@@ -80,10 +80,8 @@ static void cpu5wdt_trigger(unsigned long unused)
 	outb(1, port + CPU5WDT_TRIGGER_REG);
 
 	/* requeue?? */
-	if( cpu5wdt_device.queue && ticks ) {
-		cpu5wdt_device.timer.expires = jiffies + CPU5WDT_INTERVAL;
-		add_timer(&cpu5wdt_device.timer);
-	}
+	if (cpu5wdt_device.queue && ticks)
+		mod_timer(&cpu5wdt_device.timer, jiffies + CPU5WDT_INTERVAL);
 	else {
 		/* ticks doesn't matter anyway */
 		complete(&cpu5wdt_device.stop);
@@ -109,8 +107,7 @@ static void cpu5wdt_start(void)
 		outb(1, port + CPU5WDT_MODE_REG);
 		outb(0, port + CPU5WDT_RESET_REG);
 		outb(0, port + CPU5WDT_ENABLE_REG);
-		cpu5wdt_device.timer.expires = jiffies + CPU5WDT_INTERVAL;
-		add_timer(&cpu5wdt_device.timer);
+		mod_timer(&cpu5wdt_device.timer, jiffies + CPU5WDT_INTERVAL);
 	}
 	/* if process dies, counter is not decremented */
 	cpu5wdt_device.running++;
@@ -162,6 +159,10 @@ static int cpu5wdt_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		case WDIOC_GETSTATUS:
 			value = inb(port + CPU5WDT_STATUS_REG);
 			value = (value >> 2) & 1;
+			if ( copy_to_user(argp, &value, sizeof(int)) )
+				return -EFAULT;
+			break;
+		case WDIOC_GETBOOTSTATUS:
 			if ( copy_to_user(argp, &value, sizeof(int)) )
 				return -EFAULT;
 			break;
@@ -223,15 +224,15 @@ static int __devinit cpu5wdt_init(void)
 	if ( verbose )
 		printk(KERN_DEBUG PFX "port=0x%x, verbose=%i\n", port, verbose);
 
-	if ( (err = misc_register(&cpu5wdt_misc)) < 0 ) {
-		printk(KERN_ERR PFX "misc_register failed\n");
-		goto no_misc;
-	}
-
 	if ( !request_region(port, CPU5WDT_EXTENT, PFX) ) {
 		printk(KERN_ERR PFX "request_region failed\n");
 		err = -EBUSY;
 		goto no_port;
+	}
+
+	if ( (err = misc_register(&cpu5wdt_misc)) < 0 ) {
+		printk(KERN_ERR PFX "misc_register failed\n");
+		goto no_misc;
 	}
 
 	/* watchdog reboot? */
@@ -245,9 +246,7 @@ static int __devinit cpu5wdt_init(void)
 
 	clear_bit(0, &cpu5wdt_device.inuse);
 
-	init_timer(&cpu5wdt_device.timer);
-	cpu5wdt_device.timer.function = cpu5wdt_trigger;
-	cpu5wdt_device.timer.data = 0;
+	setup_timer(&cpu5wdt_device.timer, cpu5wdt_trigger, 0);
 
 	cpu5wdt_device.default_ticks = ticks;
 
@@ -255,9 +254,9 @@ static int __devinit cpu5wdt_init(void)
 
 	return 0;
 
-no_port:
-	misc_deregister(&cpu5wdt_misc);
 no_misc:
+	release_region(port, CPU5WDT_EXTENT);
+no_port:
 	return err;
 }
 

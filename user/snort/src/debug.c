@@ -87,6 +87,7 @@ void DebugMessageFunc(int level, char *fmt, ...)
     if(pv.daemon_flag)
     {
         vsnprintf(buf, STD_BUF, fmt, ap);
+        buf[STD_BUF] = '\0';
         syslog(LOG_DAEMON | LOG_DEBUG, "%s", buf);
     }
     else

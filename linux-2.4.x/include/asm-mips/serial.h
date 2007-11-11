@@ -467,6 +467,108 @@
 #define DDB5477_SERIAL_PORT_DEFNS
 #endif
 
+
+#if defined(CONFIG_RTL865X)
+
+#ifdef CONFIG_RTL865XC
+#include <asm/rtl865x/interrupt.h>
+#define R8650_UART_REGS_BASE    (u8*)(0xb8002000)
+#define R8650_UART1_REGS_BASE   (u8*)(0xb8002100)
+#define UART_REGS_BASE    	(0xb8002000)
+#define	UART_BASE_BAUD  38400
+#define R8650_BASE_BAUD_RATE (  CPU_CLOCK_RATE/ 16 ) 
+#define	RTL865X_SERIAL_PORT_DEFNS	\
+	{\
+	.baud_base= R8650_BASE_BAUD_RATE,\
+	.irq=ICU_UART0,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base= R8650_UART_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type= SERIAL_IO_MEM,\
+	.type=PORT_16550},\
+	{\
+	.baud_base= R8650_BASE_BAUD_RATE,\
+	.irq=ICU_UART1,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base=R8650_UART1_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type=SERIAL_IO_MEM,\
+	.type=PORT_16550},
+
+#else
+
+#include <asm/rtl865x/interrupt.h>
+#define R8650_UART_REGS_BASE    (u8*)(0xbd011100)
+#define R8650_UART1_REGS_BASE   (u8*)(0xbd011000)
+#define UART_REGS_BASE    	(0xbd011100)
+#define	UART_BASE_BAUD  38400
+#define R8650_BASE_BAUD_RATE (  CPU_CLOCK_RATE/ 16 ) 
+#define	RTL865X_SERIAL_PORT_DEFNS	\
+	{\
+	.baud_base= R8650_BASE_BAUD_RATE,\
+	.irq=ICU_UART0,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base= R8650_UART_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type= SERIAL_IO_MEM,\
+	.type=PORT_16550},\
+	{\
+	.baud_base= R8650_BASE_BAUD_RATE,\
+	.irq=ICU_UART1,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base=R8650_UART1_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type=SERIAL_IO_MEM,\
+	.type=PORT_16550},
+
+#endif
+		
+#else
+#define RTL865X_SERIAL_PORT_DEFNS
+#endif
+
+#if defined(CONFIG_RTL8186)
+#define R8186_UART_REGS_BASE    (u8*)(0xbd0100c3)
+#define R8186_UART1_REGS_BASE   (u8*)(0xbd0100e3)
+#define UART_REGS_BASE    	(0xbd0100c3)
+#define	UART_BASE_BAUD  38400
+#define R8186_BASE_BAUD_RATE (  153600000 / 16 ) 
+#define	RTL8186_SERIAL_PORT_DEFNS	\
+	{\
+	.baud_base= R8186_BASE_BAUD_RATE,\
+	.irq=4,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base= R8186_UART_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type= SERIAL_IO_MEM,\
+	.type=PORT_16550},\
+	{\
+	.baud_base= R8186_BASE_BAUD_RATE,\
+	.irq=4,\
+	.flags= STD_COM_FLAGS,\
+	.iomem_base=R8186_UART1_REGS_BASE,\
+	.iomem_reg_shift=2,\
+	.io_type=SERIAL_IO_MEM,\
+	.type=PORT_16550},
+
+		
+#else
+#define RTL8186_SERIAL_PORT_DEFNS
+#endif
+
+#if 0
+#define RTL865X_UART0_REGS_BASE    (0xbd011000)
+#define UART_REGS_BASE    	(0xbd011000)
+#define RTL865X_BASE_BAUD ( 100000000/16) 
+#define UART_BASE_BAUD 38400
+#define ICU_UART0 3
+#define	RTL865X_SERIAL_PORT_DEFNS	\
+	{ .baud_base = RTL865X_BASE_BAUD, .irq = ICU_UART0, .flags = STD_COM_FLAGS,	\
+	  .iomem_base = (u8 *) RTL865X_UART0_REGS_BASE, .iomem_reg_shift = 2,			\
+	  .io_type = SERIAL_IO_MEM,.type=0x3 }
+#endif
+
+
 #define SERIAL_PORT_DFNS			\
 	ATLAS_SERIAL_PORT_DEFNS			\
 	AU1000_SERIAL_PORT_DEFNS		\
@@ -486,6 +588,8 @@
 	SEAD_SERIAL_PORT_DEFNS			\
 	STD_SERIAL_PORT_DEFNS			\
 	TITAN_SERIAL_PORT_DEFNS			\
-	TXX927_SERIAL_PORT_DEFNS
+	TXX927_SERIAL_PORT_DEFNS		\
+	RTL865X_SERIAL_PORT_DEFNS		\
+	RTL8186_SERIAL_PORT_DEFNS
 
 #endif /* _ASM_SERIAL_H */

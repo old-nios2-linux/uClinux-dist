@@ -167,7 +167,7 @@ prune_non_exact (struct robot_specs *specs)
   for (i = 0; i < specs->count; i++)
     if (specs->paths[i].user_agent_exact_p)
       ++cnt;
-  newpaths = xmalloc (cnt * sizeof (struct path_info));
+  newpaths = xnew_array (struct path_info, cnt);
   for (i = 0, j = 0; i < specs->count; i++)
     if (specs->paths[i].user_agent_exact_p)
       newpaths[j++] = specs->paths[i];
@@ -240,8 +240,7 @@ res_parse (const char *source, int length)
      the last `user-agent' instructions.  */
   int record_count = 0;
 
-  struct robot_specs *specs = xmalloc (sizeof (struct robot_specs));
-  memset (specs, '\0', sizeof (struct robot_specs));
+  struct robot_specs *specs = xnew0 (struct robot_specs);
 
   while (1)
     {
@@ -392,7 +391,7 @@ res_parse_from_file (const char *filename)
   struct file_memory *fm = read_file (filename);
   if (!fm)
     {
-      logprintf (LOG_NOTQUIET, "Cannot open %s: %s",
+      logprintf (LOG_NOTQUIET, _("Cannot open %s: %s"),
 		 filename, strerror (errno));
       return NULL;
     }
@@ -407,7 +406,7 @@ free_specs (struct robot_specs *specs)
   int i;
   for (i = 0; i < specs->count; i++)
     xfree (specs->paths[i].path);
-  FREE_MAYBE (specs->paths);
+  xfree_null (specs->paths);
   xfree (specs);
 }
 
@@ -502,11 +501,7 @@ res_register_specs (const char *host, int port, struct robot_specs *specs)
   if (!registered_specs)
     registered_specs = make_nocase_string_hash_table (0);
 
-  /* Required to shut up the compiler. */
-  old    = NULL;
-  hp_old = NULL;
-
-  if (hash_table_get_pair (registered_specs, hp, hp_old, old))
+  if (hash_table_get_pair (registered_specs, hp, &hp_old, &old))
     {
       if (old)
 	free_specs (old);

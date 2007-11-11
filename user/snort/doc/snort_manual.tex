@@ -100,7 +100,7 @@
 
 \begin{document}
 
-\title{Snort\texttrademark  Users Manual\\  2.6.1.1 }
+\title{Snort\texttrademark  Users Manual\\  2.6.1.5 }
 
 \author{The Snort Project}
 
@@ -1360,7 +1360,7 @@ overlap.\\
 \hline
 \texttt{max\_udp\_sessions <num sessions>} & The maximum number of UDP sessions to be tracked. Default is 8192 if UDP sessions are enabled.\\
 \hline
-\texttt{udp\_ignore\_any} & Ignore traffic on port without port-specific rules.\\
+\texttt{udp\_ignore\_any} & Ignore traffic on port without port-specific rules.  The result of this is that NO rules (include IP only rules) are applied to UDP traffic that has a source/destination port that is listed in a port-specific ruls.\\
 \hline
 \end{tabular}
 
@@ -5323,16 +5323,19 @@ alert tcp any any -> any 80 (content:!"GET";)
 
 \subsubsection{Changing content behavior}
 
-The \texttt{content} keyword has a number of modifier keywords.  The modifier keywords change 
-how the previously specified content works.  These modifier keywords are:
+The \texttt{content} keyword has a number of modifier keywords.  The modifier
+keywords change how the previously specified content works.  These modifier
+keywords are:
 
 \begin{slist}
+\item nocase
+\item rawbytes
 \item depth
 \item offset
 \item distance
 \item within
-\item nocase
-\item rawbytes
+\item http\_client\_body
+\item http\_uri
 \end{slist}
 
 
@@ -5485,13 +5488,78 @@ alert tcp any any -> any any (content:"ABC"; content: "EFG"; within:10;)
 \end{figure}
 
 
-\subsection{uricontent}
+\subsection{http\_client\_body\label{sub:HttpClientBody}}
 
-The \texttt{uricontent} parameter in the Snort rule language searches the NORMALIZED
-request \textsc{URI} field.  This means that if you are writing rules that include
-things that are normalized, such as \%2f or directory traversals, these rules
-will not alert.  The reason is that the things you are looking for are
-normalized out of the URI buffer.  
+The http\_client\_body keyword is a content modifier that restricts
+the search to the NORMALIZED body of an HTTP client request.
+
+The rule listed in Figure \ref{fig:HttpClientBody} constrains the
+search for the pattern "EFG" to the NORMALIZED body of an HTTP client request.
+
+As this keyword is a modifier to the previous 'content' keyword, there must be
+a content in the rule before 'http\_client\_body' is specified.
+
+\subsubsection{Format}
+
+\begin{verbatim}
+http_client_body;
+\end{verbatim}
+
+\subsubsection{Examples}
+
+\begin{figure}[!hbpt]
+\begin{verbatim}
+alert tcp any any -> any 80 (content:"ABC"; content: "EFG"; http_client_body;)
+\end{verbatim}
+\caption{http\_client\_body usage example \label{fig:HttpClientBody}}
+\end{figure}
+
+\begin{note}
+The \texttt{http\_client\_body} modifier is not allowed to be used with
+the \texttt{rawbytes} modifier for the same content.
+\end{note}
+
+
+\subsection{http\_uri\label{sub:HttpUri}}
+
+The http\_uri keyword is a content modifier that restricts
+the search to the NORMALIZED request \textsc{URI} field .  Using a
+content rule option followed by a http\_uri modifier is the
+same as using a uricontent by itself (see: \ref{sub:UriContent}).
+
+The rule listed in Figure \ref{fig:HttpUri} constrains the
+search for the pattern "EFG" to the NORMALIZED URI.
+
+As this keyword is a modifier to the previous 'content' keyword, there must be
+a content in the rule before 'http\_uri' is specified.
+
+\subsubsection{Format}
+
+\begin{verbatim}
+http_uri;
+\end{verbatim}
+
+\subsubsection{Examples}
+
+\begin{figure}[!hbpt]
+\begin{verbatim}
+alert tcp any any -> any 80 (content:"ABC"; content: "EFG"; http_uri;)
+\end{verbatim}
+\caption{http\_uri usage example \label{fig:HttpUri}}
+\end{figure}
+
+\begin{note}
+The \texttt{http\_uri} modifier is not allowed to be used with
+the \texttt{rawbytes} modifier for the same content.
+\end{note}
+
+\subsection{uricontent\label{sub:UriContent}}
+
+The \texttt{uricontent} parameter in the Snort rule language searches the
+NORMALIZED request \textsc{URI} field.  This means that if you are writing
+rules that include things that are normalized, such as \%2f or directory
+traversals, these rules will not alert.  The reason is that the things you
+are looking for are normalized out of the URI buffer.  
 
 For example, the URI: 
 \begin{verbatim}/scripts/..%c0%af../winnt/system32/cmd.exe?/c+ver\end{verbatim}
@@ -5503,10 +5571,12 @@ Another example, the URI:
 will get normalized into:
 \begin{verbatim}/cgi-bin/phf?\end{verbatim}
 
-When writing a \texttt{uricontent} rule, write the content that you want to find in the
-context that the URI will be normalized.  For example, if Snort normalizes directory traversals, do not include directory traversals.  
+When writing a \texttt{uricontent} rule, write the content that you want to
+find in the context that the URI will be normalized.  For example, if Snort
+normalizes directory traversals, do not include directory traversals.  
 
-You can write rules that look for the non-normalized content by using the content option.  (See Section \ref{sub:content})
+You can write rules that look for the non-normalized content by using the
+content option.  (See Section \ref{sub:content})
 
 For a description of the parameters to this function, see the content rule
 options in Section \ref{sub:content}. 
@@ -5520,6 +5590,10 @@ in Section \ref{sub:http-inspect}.
 uricontent:[!]<content string>;
 \end{verbatim}
 
+\begin{note}
+\texttt{uricontent} cannot be modified by a \texttt{rawbytes} modifier.
+\end{note}
+
 \subsection{isdataat}
 
 Verify that the payload has data at a specified location, optionally looking for data relative to the end of the previous content match.
@@ -5527,8 +5601,21 @@ Verify that the payload has data at a specified location, optionally looking for
 \subsubsection{Format}
 
 \begin{verbatim}
-isdataat:<int>[,relative];
+isdataat:<int>[,relative] [,rawbytes];
 \end{verbatim}
+
+\begin{tabular}{| l | p{5in} |}
+\hline
+{\bf Option} & {\bf Description}\\
+\hline
+\hline
+\hline
+\texttt{relative} & Use an offset relative to last pattern match\\
+\hline
+\texttt{rawbytes} & Do not use the decoded buffers \\
+\hline
+\end{tabular}
+
 
 \subsubsection{Example}
 \begin{verbatim}

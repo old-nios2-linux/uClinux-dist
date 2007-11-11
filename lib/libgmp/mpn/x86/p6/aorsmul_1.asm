@@ -1,29 +1,40 @@
-# Intel P6 mpn_addmul_1/mpn_submul_1 -- add or subtract mpn multiple.
-#
-# P6: 6.35 cycles/limb (at 16 limbs/loop).
+dnl  Intel P6 mpn_addmul_1/mpn_submul_1 -- add or subtract mpn multiple.
 
-
-# Copyright (C) 1999, 2000 Free Software Foundation, Inc.
-#
-# This file is part of the GNU MP Library.
-#
-# The GNU MP Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Library General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or (at your
-# option) any later version.
-#
-# The GNU MP Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
-# License for more details.
-#
-# You should have received a copy of the GNU Library General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
-
+dnl  Copyright 1999, 2000, 2001, 2002, 2005 Free Software Foundation, Inc.
+dnl
+dnl  This file is part of the GNU MP Library.
+dnl
+dnl  The GNU MP Library is free software; you can redistribute it and/or
+dnl  modify it under the terms of the GNU Lesser General Public License as
+dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  License, or (at your option) any later version.
+dnl
+dnl  The GNU MP Library is distributed in the hope that it will be useful,
+dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+dnl  Lesser General Public License for more details.
+dnl
+dnl  You should have received a copy of the GNU Lesser General Public
+dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
+dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
+dnl  Fifth Floor, Boston, MA 02110-1301, USA.
 
 include(`../config.m4')
+
+
+C                           cycles/limb
+C P5:
+C P6 model 0-8,10-12)            6.44
+C P6 model 9  (Banias)
+C P6 model 13 (Dothan)           6.11
+C P4 model 0  (Willamette)
+C P4 model 1  (?)
+C P4 model 2  (Northwood)
+C P4 model 3  (Prescott)
+C P4 model 4  (Nocona)
+C K6:
+C K7:
+C K8:
 
 
 dnl  P6 UNROLL_COUNT cycles/limb
@@ -54,21 +65,21 @@ ifdef(`OPERATION_addmul_1', `
 MULFUNC_PROLOGUE(mpn_addmul_1 mpn_addmul_1c mpn_submul_1 mpn_submul_1c)
 
 
-`#' mp_limb_t M4_function_1 (mp_ptr dst, mp_srcptr src, mp_size_t size,
-`#'                            mp_limb_t mult);
-`#' mp_limb_t M4_function_1c (mp_ptr dst, mp_srcptr src, mp_size_t size,
-`#'                             mp_limb_t mult, mp_limb_t carry);
-`#'
-`#' Calculate src,size multiplied by mult and M4_description dst,size.
-`#' Return the M4_desc_retval limb from the top of the result.
-#
-# This code is pretty much the same as the K6 code.  The unrolled loop is
-# the same, but there's just a few scheduling tweaks in the setups and the
-# simple loop.
-#
-# A number of variations have been tried for the unrolled loop, with one or
-# two carries, and with loads scheduled earlier, but nothing faster than 6
-# cycles/limb has been found.
+C mp_limb_t M4_function_1 (mp_ptr dst, mp_srcptr src, mp_size_t size,
+C                            mp_limb_t mult);
+C mp_limb_t M4_function_1c (mp_ptr dst, mp_srcptr src, mp_size_t size,
+C                             mp_limb_t mult, mp_limb_t carry);
+C
+C Calculate src,size multiplied by mult and M4_description dst,size.
+C Return the M4_desc_retval limb from the top of the result.
+C
+C This code is pretty much the same as the K6 code.  The unrolled loop is
+C the same, but there's just a few scheduling tweaks in the setups and the
+C simple loop.
+C
+C A number of variations have been tried for the unrolled loop, with one or
+C two carries, and with loads scheduled earlier, but nothing faster than 6
+C cycles/limb has been found.
 
 ifdef(`PIC',`
 deflit(UNROLL_THRESHOLD, 5)
@@ -82,20 +93,20 @@ defframe(PARAM_SIZE,      12)
 defframe(PARAM_SRC,       8)
 defframe(PARAM_DST,       4)
 
-	.text
+	TEXT
 	ALIGN(32)
 
 PROLOGUE(M4_function_1c)
 	pushl	%ebx
 deflit(`FRAME',4)
 	movl	PARAM_CARRY, %ebx
-	jmp	LF(M4_function_1,start_nc)
+	jmp	L(start_nc)
 EPILOGUE()
 
 PROLOGUE(M4_function_1)
 	push	%ebx
 deflit(`FRAME',4)
-	xorl	%ebx, %ebx	# initial carry
+	xorl	%ebx, %ebx	C initial carry
 
 L(start_nc):
 	movl	PARAM_SIZE, %ecx
@@ -114,17 +125,17 @@ deflit(`FRAME',16)
 	movl	PARAM_MULTIPLIER, %ebp
 	jae	L(unroll)
 
-	
-	# simple loop
-	# this is offset 0x22, so close enough to aligned
+
+	C simple loop
+	C this is offset 0x22, so close enough to aligned
 L(simple):
-	# eax	scratch
-	# ebx	carry
-	# ecx	counter
-	# edx	scratch
-	# esi	src
-	# edi	dst
-	# ebp	multiplier
+	C eax	scratch
+	C ebx	carry
+	C ecx	counter
+	C edx	scratch
+	C esi	src
+	C edi	dst
+	C ebp	multiplier
 
 	movl	(%esi), %eax
 	addl	$4, %edi
@@ -155,28 +166,28 @@ L(simple):
 
 
 
-#------------------------------------------------------------------------------
-# VAR_JUMP holds the computed jump temporarily because there's not enough
-# registers when doing the mul for the initial two carry limbs.
-#
-# The add/adc for the initial carry in %ebx is necessary only for the
-# mpn_add/submul_1c entry points.  Duplicating the startup code to
-# eliminiate this for the plain mpn_add/submul_1 doesn't seem like a good
-# idea.
+C------------------------------------------------------------------------------
+C VAR_JUMP holds the computed jump temporarily because there's not enough
+C registers when doing the mul for the initial two carry limbs.
+C
+C The add/adc for the initial carry in %ebx is necessary only for the
+C mpn_add/submul_1c entry points.  Duplicating the startup code to
+C eliminiate this for the plain mpn_add/submul_1 doesn't seem like a good
+C idea.
 
 dnl  overlapping with parameters already fetched
 define(VAR_COUNTER,`PARAM_SIZE')
 define(VAR_JUMP,   `PARAM_DST')
 
-	# this is offset 0x43, so close enough to aligned
+	C this is offset 0x43, so close enough to aligned
 L(unroll):
-	# eax
-	# ebx	initial carry
-	# ecx	size
-	# edx
-	# esi	src
-	# edi	dst
-	# ebp
+	C eax
+	C ebx	initial carry
+	C ecx	size
+	C edx
+	C esi	src
+	C edi	dst
+	C ebp
 
 	movl	%ecx, %edx
 	decl	%ecx
@@ -190,7 +201,7 @@ L(unroll):
 	movl	%edx, VAR_COUNTER
 	movl	%ecx, %edx
 
-	# 15 code bytes per limb
+	C 15 code bytes per limb
 ifdef(`PIC',`
 	call	L(pic_calc)
 L(here):
@@ -200,25 +211,25 @@ L(here):
 
 	leal	L(entry) (%edx,%ecx,1), %edx
 ')
-	movl	(%esi), %eax		# src low limb
+	movl	(%esi), %eax		C src low limb
 
 	movl	%edx, VAR_JUMP
 	leal	ifelse(UNROLL_BYTES,256,128+) 4(%esi,%ecx,4), %esi
 
 	mull	%ebp
 
-	addl	%ebx, %eax	# initial carry (from _1c)
+	addl	%ebx, %eax	C initial carry (from _1c)
 	adcl	$0, %edx
 
-	movl	%edx, %ebx	# high carry
+	movl	%edx, %ebx	C high carry
 	leal	ifelse(UNROLL_BYTES,256,128) (%edi,%ecx,4), %edi
 
 	movl	VAR_JUMP, %edx
 	testl	$1, %ecx
-	movl	%eax, %ecx	# low carry
+	movl	%eax, %ecx	C low carry
 
-	cmovnz_ebx_ecx		# high,low carry other way around
-	cmovnz_eax_ebx
+	cmovnz(	%ebx, %ecx)	C high,low carry other way around
+	cmovnz(	%eax, %ebx)
 
 	jmp	*%edx
 
@@ -228,31 +239,31 @@ L(pic_calc):
 	shll	$4, %edx
 	negl	%ecx
 
-	# See README.family about old gas bugs
+	C See mpn/x86/README about old gas bugs
 	leal	(%edx,%ecx,1), %edx
 	addl	$L(entry)-L(here), %edx
 
 	addl	(%esp), %edx
 
-	ret
+	ret_internal
 ')
 
 
-# -----------------------------------------------------------
+C -----------------------------------------------------------
 	ALIGN(32)
 L(top):
 deflit(`FRAME',16)
-	# eax	scratch
-	# ebx	carry hi
-	# ecx	carry lo
-	# edx	scratch
-	# esi	src
-	# edi	dst
-	# ebp	multiplier
-	#
-	# VAR_COUNTER	loop counter
-	#
-	# 15 code bytes per limb
+	C eax	scratch
+	C ebx	carry hi
+	C ecx	carry lo
+	C edx	scratch
+	C esi	src
+	C edi	dst
+	C ebp	multiplier
+	C
+	C VAR_COUNTER	loop counter
+	C
+	C 15 code bytes per limb
 
 	addl	$UNROLL_BYTES, %edi
 

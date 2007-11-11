@@ -1,0 +1,3 @@
+
+char *stralloc(char *);  
+

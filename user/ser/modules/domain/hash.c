@@ -1,5 +1,5 @@
 /*
- * $Id: hash.c,v 1.6 2003/04/28 22:05:33 janakj Exp $
+ * $Id: hash.c,v 1.7.2.2 2005/11/21 16:45:15 janakj Exp $
  *
  * Hash functions for cached domain table
  *
@@ -49,7 +49,7 @@ unsigned int hash (str *domain)
   len = domain->len;
 
   for (i = 0; i < len; i++) {
-	  h = ( h << 5 ) - h + *(p + i);
+	  h = ( h << 5 ) - h + tolower(*(p + i));
   }
 
   return h % HASH_SIZE;
@@ -72,6 +72,7 @@ int hash_table_install (struct domain_list **hash_table, char *domain)
 	np->domain.s = (char *) shm_malloc(np->domain.len);
 	if (np->domain.s == NULL) {
 		LOG(L_CRIT, "hash_install(): Cannot allocate memory for domain string\n");
+		shm_free(np);
 		return -1;
 	}
 	(void) strncpy(np->domain.s, domain, np->domain.len);
@@ -84,7 +85,7 @@ int hash_table_install (struct domain_list **hash_table, char *domain)
 }
 
 
-/* Check if domain exsist in hash table */
+/* Check if domain exists in hash table */
 int hash_table_lookup (str *domain)
 {
 	struct domain_list *np;

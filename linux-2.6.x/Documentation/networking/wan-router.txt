@@ -250,7 +250,6 @@ PRODUCT COMPONENTS AND RELATED FILES
 	sdladrv.h	SDLA support module API definitions
 	sdlasfm.h	SDLA firmware module definitions
 	if_wanpipe.h	WANPIPE Socket definitions
-	if_wanpipe_common.h	WANPIPE Socket/Driver common definitions.
 	sdlapci.h	WANPIPE PCI definitions
 	
 
@@ -336,7 +335,7 @@ REVISION HISTORY
 				creating applications using BiSync
    				streaming.        
 
-2.0.5   Aug 04, 1999 		CHDLC initializatin bug fix.
+2.0.5   Aug 04, 1999 		CHDLC initialization bug fix.
 				PPP interrupt driven driver: 
   				Fix to the PPP line hangup problem.
 				New PPP firmware
@@ -373,7 +372,7 @@ REVISION HISTORY
 				o cfgft1 GUI csu/dsu configurator
 				o wancfg GUI configuration file 
 				  configurator.
-				o Architectual directory changes.
+				o Architectural directory changes.
 
 beta-2.1.4 Jul 2000		o Dynamic interface configuration:
 					Network interfaces reflect the state
@@ -412,7 +411,7 @@ beta-2.1.4 Jul 2000		o Dynamic interface configuration:
 
 beta3-2.1.4 Jul 2000		o X25 M_BIT Problem fix.
 				o Added the Multi-Port PPP
-				  Updated utilites for the Multi-Port PPP.
+				  Updated utilities for the Multi-Port PPP.
 
 2.1.4	Aut 2000
 				o In X25API:
@@ -444,13 +443,13 @@ beta1-2.1.5 	Nov 15 2000
 					
 				o Cpipemon
 					- Added set FT1 commands to the cpipemon. Thus CSU/DSU
-					  configuraiton can be performed using cpipemon.
+					  configuration can be performed using cpipemon.
 					  All systems that cannot run cfgft1 GUI utility should
 					  use cpipemon to configure the on board CSU/DSU.
 
 
 				o Keyboard Led Monitor/Debugger
-					- A new utilty /usr/sbin/wpkbdmon uses keyboard leds
+					- A new utility /usr/sbin/wpkbdmon uses keyboard leds
 					  to convey operational statistic information of the 
 					  Sangoma WANPIPE cards.
 					NUM_LOCK    = Line State  (On=connected,    Off=disconnected)
@@ -464,7 +463,7 @@ beta1-2.1.5 	Nov 15 2000
 					- Appropriate number of devices are dynamically loaded 
 					  based on the number of Sangoma cards found.
 
-					  Note: The kernel configuraiton option 
+					  Note: The kernel configuration option 
 						CONFIG_WANPIPE_CARDS has been taken out.
 					
 				o Fixed the Frame Relay and Chdlc network interfaces so they are

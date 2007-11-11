@@ -11,7 +11,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/ptrace.h>
 
 #include <asm/hardware.h>
 #include <asm/irq.h>
@@ -161,13 +160,13 @@ void __init lh7a404_init_irq (void)
 			set_irq_chip (irq, irq < 32
 				      ? &lh7a404_gpio_vic1_chip
 				      : &lh7a404_gpio_vic2_chip);
-			set_irq_handler (irq, do_level_IRQ); /* OK default */
+			set_irq_handler (irq, handle_level_irq); /* OK default */
 			break;
 		default:
 			set_irq_chip (irq, irq < 32
 				      ? &lh7a404_vic1_chip
 				      : &lh7a404_vic2_chip);
-			set_irq_handler (irq, do_level_IRQ);
+			set_irq_handler (irq, handle_level_irq);
 		}
 		set_irq_flags (irq, IRQF_VALID);
 	}

@@ -127,6 +127,7 @@ struct dvb_net_priv {
 	int in_use;
 	struct net_device_stats stats;
 	u16 pid;
+	struct net_device *net;
 	struct dvb_net *host;
 	struct dmx_demux *demux;
 	struct dmx_section_feed *secfeed;
@@ -173,7 +174,7 @@ static unsigned short dvb_net_eth_type_trans(struct sk_buff *skb,
 	struct ethhdr *eth;
 	unsigned char *rawp;
 
-	skb->mac.raw=skb->data;
+	skb_reset_mac_header(skb);
 	skb_pull(skb,dev->hard_header_len);
 	eth = eth_hdr(skb);
 
@@ -346,7 +347,8 @@ static void dvb_net_ule( struct net_device *dev, const u8 *buf, size_t buf_len )
 {
 	struct dvb_net_priv *priv = dev->priv;
 	unsigned long skipped = 0L;
-	u8 *ts, *ts_end, *from_where = NULL, ts_remain = 0, how_much = 0, new_ts = 1;
+	const u8 *ts, *ts_end, *from_where = NULL;
+	u8 ts_remain = 0, how_much = 0, new_ts = 1;
 	struct ethhdr *ethh = NULL;
 
 #ifdef ULE_DEBUG
@@ -363,7 +365,7 @@ static void dvb_net_ule( struct net_device *dev, const u8 *buf, size_t buf_len )
 	/* For all TS cells in current buffer.
 	 * Appearently, we are called for every single TS cell.
 	 */
-	for (ts = (char *)buf, ts_end = (char *)buf + buf_len; ts < ts_end; /* no default incr. */ ) {
+	for (ts = buf, ts_end = buf + buf_len; ts < ts_end; /* no default incr. */ ) {
 
 		if (new_ts) {
 			/* We are about to process a new TS cell. */
@@ -599,12 +601,13 @@ static void dvb_net_ule( struct net_device *dev, const u8 *buf, size_t buf_len )
 			/* Check CRC32, we've got it in our skb already. */
 			unsigned short ulen = htons(priv->ule_sndu_len);
 			unsigned short utype = htons(priv->ule_sndu_type);
+			const u8 *tail;
 			struct kvec iov[3] = {
 				{ &ulen, sizeof ulen },
 				{ &utype, sizeof utype },
 				{ priv->ule_skb->data, priv->ule_skb->len - 4 }
 			};
-			unsigned long ule_crc = ~0L, expected_crc;
+			u32 ule_crc = ~0L, expected_crc;
 			if (priv->ule_dbit) {
 				/* Set D-bit for CRC32 verification,
 				 * if it was set originally. */
@@ -612,12 +615,13 @@ static void dvb_net_ule( struct net_device *dev, const u8 *buf, size_t buf_len )
 			}
 
 			ule_crc = iov_crc32(ule_crc, iov, 3);
-			expected_crc = *((u8 *)priv->ule_skb->tail - 4) << 24 |
-				       *((u8 *)priv->ule_skb->tail - 3) << 16 |
-				       *((u8 *)priv->ule_skb->tail - 2) << 8 |
-				       *((u8 *)priv->ule_skb->tail - 1);
+			tail = skb_tail_pointer(priv->ule_skb);
+			expected_crc = *(tail - 4) << 24 |
+				       *(tail - 3) << 16 |
+				       *(tail - 2) << 8 |
+				       *(tail - 1);
 			if (ule_crc != expected_crc) {
-				printk(KERN_WARNING "%lu: CRC32 check FAILED: %#lx / %#lx, SNDU len %d type %#x, ts_remain %d, next 2: %x.\n",
+				printk(KERN_WARNING "%lu: CRC32 check FAILED: %08x / %08x, SNDU len %d type %#x, ts_remain %d, next 2: %x.\n",
 				       priv->ts_count, ule_crc, expected_crc, priv->ule_sndu_len, priv->ule_sndu_type, ts_remain, ts_remain > 2 ? *(unsigned short *)from_where : 0);
 
 #ifdef ULE_DEBUG
@@ -694,7 +698,9 @@ static void dvb_net_ule( struct net_device *dev, const u8 *buf, size_t buf_len )
 					}
 					else
 					{
-						memcpy(dest_addr,  priv->ule_skb->data, ETH_ALEN);
+						skb_copy_from_linear_data(priv->ule_skb,
+							      dest_addr,
+							      ETH_ALEN);
 						skb_pull(priv->ule_skb, ETH_ALEN);
 					}
 				}
@@ -794,7 +800,8 @@ static int dvb_net_ts_callback(const u8 *buffer1, size_t buffer1_len,
 }
 
 
-static void dvb_net_sec(struct net_device *dev, u8 *pkt, int pkt_len)
+static void dvb_net_sec(struct net_device *dev, const u8 *pkt, int
+pkt_len)
 {
 	u8 *eth;
 	struct sk_buff *skb;
@@ -896,7 +903,7 @@ static int dvb_net_sec_callback(const u8 *buffer1, size_t buffer1_len,
 	 * we rely on the DVB API definition where exactly one complete
 	 * section is delivered in buffer1
 	 */
-	dvb_net_sec (dev, (u8*) buffer1, buffer1_len);
+	dvb_net_sec (dev, buffer1, buffer1_len);
 	return 0;
 }
 
@@ -1123,10 +1130,11 @@ static int dvb_set_mc_filter (struct net_device *dev, struct dev_mc_list *mc)
 }
 
 
-static void wq_set_multicast_list (void *data)
+static void wq_set_multicast_list (struct work_struct *work)
 {
-	struct net_device *dev = data;
-	struct dvb_net_priv *priv = dev->priv;
+	struct dvb_net_priv *priv =
+		container_of(work, struct dvb_net_priv, set_multicast_list_wq);
+	struct net_device *dev = priv->net;
 
 	dvb_net_feed_stop(dev);
 	priv->rx_mode = RX_MODE_UNI;
@@ -1167,9 +1175,11 @@ static void dvb_net_set_multicast_list (struct net_device *dev)
 }
 
 
-static void wq_restart_net_feed (void *data)
+static void wq_restart_net_feed (struct work_struct *work)
 {
-	struct net_device *dev = data;
+	struct dvb_net_priv *priv =
+		container_of(work, struct dvb_net_priv, restart_net_feed_wq);
+	struct net_device *dev = priv->net;
 
 	if (netif_running(dev)) {
 		dvb_net_feed_stop(dev);
@@ -1276,6 +1286,7 @@ static int dvb_net_add_if(struct dvb_net *dvbnet, u16 pid, u8 feedtype)
 	dvbnet->device[if_num] = net;
 
 	priv = net->priv;
+	priv->net = net;
 	priv->demux = dvbnet->demux;
 	priv->pid = pid;
 	priv->rx_mode = RX_MODE_UNI;
@@ -1284,8 +1295,8 @@ static int dvb_net_add_if(struct dvb_net *dvbnet, u16 pid, u8 feedtype)
 	priv->feedtype = feedtype;
 	reset_ule(priv);
 
-	INIT_WORK(&priv->set_multicast_list_wq, wq_set_multicast_list, net);
-	INIT_WORK(&priv->restart_net_feed_wq, wq_restart_net_feed, net);
+	INIT_WORK(&priv->set_multicast_list_wq, wq_set_multicast_list);
+	INIT_WORK(&priv->restart_net_feed_wq, wq_restart_net_feed);
 	mutex_init(&priv->mutex);
 
 	net->base_addr = pid;
@@ -1430,11 +1441,36 @@ static int dvb_net_ioctl(struct inode *inode, struct file *file,
 	return dvb_usercopy(inode, file, cmd, arg, dvb_net_do_ioctl);
 }
 
+static int dvb_net_close(struct inode *inode, struct file *file)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_net *dvbnet = dvbdev->priv;
+
+	if (!dvbdev)
+		return -ENODEV;
+
+	if ((file->f_flags & O_ACCMODE) == O_RDONLY) {
+		dvbdev->readers++;
+	} else {
+		dvbdev->writers++;
+	}
+
+	dvbdev->users++;
+
+	if(dvbdev->users == 1 && dvbnet->exit==1) {
+		fops_put(file->f_op);
+		file->f_op = NULL;
+		wake_up(&dvbdev->wait_queue);
+	}
+	return 0;
+}
+
+
 static struct file_operations dvb_net_fops = {
 	.owner = THIS_MODULE,
 	.ioctl = dvb_net_ioctl,
 	.open =	dvb_generic_open,
-	.release = dvb_generic_release,
+	.release = dvb_net_close,
 };
 
 static struct dvb_device dvbdev_net = {
@@ -1448,6 +1484,11 @@ static struct dvb_device dvbdev_net = {
 void dvb_net_release (struct dvb_net *dvbnet)
 {
 	int i;
+
+	dvbnet->exit = 1;
+	if (dvbnet->dvbdev->users < 1)
+		wait_event(dvbnet->dvbdev->wait_queue,
+				dvbnet->dvbdev->users==1);
 
 	dvb_unregister_device(dvbnet->dvbdev);
 

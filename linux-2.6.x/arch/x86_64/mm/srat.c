@@ -101,14 +101,14 @@ static __init inline int srat_disabled(void)
 static __init int slit_valid(struct acpi_table_slit *slit)
 {
 	int i, j;
-	int d = slit->localities;
+	int d = slit->locality_count;
 	for (i = 0; i < d; i++) {
 		for (j = 0; j < d; j++)  {
 			u8 val = slit->entry[d*i + j];
 			if (i == j) {
-				if (val != 10)
+				if (val != LOCAL_DISTANCE)
 					return 0;
-			} else if (val <= 10)
+			} else if (val <= LOCAL_DISTANCE)
 				return 0;
 		}
 	}
@@ -127,18 +127,18 @@ void __init acpi_numa_slit_init(struct acpi_table_slit *slit)
 
 /* Callback for Proximity Domain -> LAPIC mapping */
 void __init
-acpi_numa_processor_affinity_init(struct acpi_table_processor_affinity *pa)
+acpi_numa_processor_affinity_init(struct acpi_srat_cpu_affinity *pa)
 {
 	int pxm, node;
 	if (srat_disabled())
 		return;
-	if (pa->header.length != sizeof(struct acpi_table_processor_affinity)) {
+	if (pa->header.length != sizeof(struct acpi_srat_cpu_affinity)) {
 		bad_srat();
 		return;
 	}
-	if (pa->flags.enabled == 0)
+	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
 		return;
-	pxm = pa->proximity_domain;
+	pxm = pa->proximity_domain_lo;
 	node = setup_node(pxm);
 	if (node < 0) {
 		printk(KERN_ERR "SRAT: Too many proximity domains %x\n", pxm);
@@ -254,21 +254,21 @@ static int reserve_hotadd(int node, unsigned long start, unsigned long end)
 	/* Looks good */
 
 	if (nd->start == nd->end) {
- 		nd->start = start;
- 		nd->end = end;
+		nd->start = start;
+		nd->end = end;
 		changed = 1;
- 	} else {
- 		if (nd->start == end) {
- 			nd->start = start;
+	} else {
+		if (nd->start == end) {
+			nd->start = start;
 			changed = 1;
 		}
- 		if (nd->end == start) {
- 			nd->end = end;
+		if (nd->end == start) {
+			nd->end = end;
 			changed = 1;
 		}
 		if (!changed)
 			printk(KERN_ERR "SRAT: Hotplug zone not continuous. Partly ignored\n");
- 	}
+	}
 
 	ret = update_end_of_memory(nd->end);
 
@@ -279,7 +279,7 @@ static int reserve_hotadd(int node, unsigned long start, unsigned long end)
 
 /* Callback for parsing of the Proximity Domain <-> Memory Area mappings */
 void __init
-acpi_numa_memory_affinity_init(struct acpi_table_memory_affinity *ma)
+acpi_numa_memory_affinity_init(struct acpi_srat_mem_affinity *ma)
 {
 	struct bootnode *nd, oldnode;
 	unsigned long start, end;
@@ -288,16 +288,17 @@ acpi_numa_memory_affinity_init(struct acpi_table_memory_affinity *ma)
 
 	if (srat_disabled())
 		return;
-	if (ma->header.length != sizeof(struct acpi_table_memory_affinity)) {
+	if (ma->header.length != sizeof(struct acpi_srat_mem_affinity)) {
 		bad_srat();
 		return;
 	}
-	if (ma->flags.enabled == 0)
+	if ((ma->flags & ACPI_SRAT_MEM_ENABLED) == 0)
 		return;
- 	if (ma->flags.hot_pluggable && !save_add_info())
+
+	if ((ma->flags & ACPI_SRAT_MEM_HOT_PLUGGABLE) && !save_add_info())
 		return;
-	start = ma->base_addr_lo | ((u64)ma->base_addr_hi << 32);
-	end = start + (ma->length_lo | ((u64)ma->length_hi << 32));
+	start = ma->base_address;
+	end = start + ma->length;
 	pxm = ma->proximity_domain;
 	node = setup_node(pxm);
 	if (node < 0) {
@@ -337,7 +338,8 @@ acpi_numa_memory_affinity_init(struct acpi_table_memory_affinity *ma)
 	push_node_boundaries(node, nd->start >> PAGE_SHIFT,
 						nd->end >> PAGE_SHIFT);
 
- 	if (ma->flags.hot_pluggable && (reserve_hotadd(node, start, end) < 0)) {
+	if ((ma->flags & ACPI_SRAT_MEM_HOT_PLUGGABLE) &&
+	    (reserve_hotadd(node, start, end) < 0)) {
 		/* Ignore hotadd region. Undo damage */
 		printk(KERN_NOTICE "SRAT: Hotplug region ignored\n");
 		*nd = oldnode;
@@ -348,7 +350,7 @@ acpi_numa_memory_affinity_init(struct acpi_table_memory_affinity *ma)
 
 /* Sanity check to catch more bad SRATs (they are amazingly common).
    Make sure the PXMs cover all memory. */
-static int nodes_cover_memory(void)
+static int __init nodes_cover_memory(const struct bootnode *nodes)
 {
 	int i;
 	unsigned long pxmram, e820ram;
@@ -392,19 +394,19 @@ int __init acpi_scan_nodes(unsigned long start, unsigned long end)
 {
 	int i;
 
+	if (acpi_numa <= 0)
+		return -1;
+
 	/* First clean up the node list */
 	for (i = 0; i < MAX_NUMNODES; i++) {
- 		cutoff_node(i, start, end);
+		cutoff_node(i, start, end);
 		if ((nodes[i].end - nodes[i].start) < NODE_MIN_SIZE) {
 			unparse_node(i);
 			node_set_offline(i);
 		}
 	}
 
-	if (acpi_numa <= 0)
-		return -1;
-
-	if (!nodes_cover_memory()) {
+	if (!nodes_cover_memory(nodes)) {
 		bad_srat();
 		return -1;
 	}
@@ -417,24 +419,106 @@ int __init acpi_scan_nodes(unsigned long start, unsigned long end)
 		return -1;
 	}
 
+	node_possible_map = nodes_parsed;
+
 	/* Finally register nodes */
-	for_each_node_mask(i, nodes_parsed)
+	for_each_node_mask(i, node_possible_map)
 		setup_node_bootmem(i, nodes[i].start, nodes[i].end);
 	/* Try again in case setup_node_bootmem missed one due
 	   to missing bootmem */
-	for_each_node_mask(i, nodes_parsed)
+	for_each_node_mask(i, node_possible_map)
 		if (!node_online(i))
 			setup_node_bootmem(i, nodes[i].start, nodes[i].end);
 
-	for (i = 0; i < NR_CPUS; i++) { 
+	for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_to_node[i] == NUMA_NO_NODE)
 			continue;
-		if (!node_isset(cpu_to_node[i], nodes_parsed))
+		if (!node_isset(cpu_to_node[i], node_possible_map))
 			numa_set_node(i, NUMA_NO_NODE);
 	}
 	numa_init_array();
 	return 0;
 }
+
+#ifdef CONFIG_NUMA_EMU
+static int __init find_node_by_addr(unsigned long addr)
+{
+	int ret = NUMA_NO_NODE;
+	int i;
+
+	for_each_node_mask(i, nodes_parsed) {
+		/*
+		 * Find the real node that this emulated node appears on.  For
+		 * the sake of simplicity, we only use a real node's starting
+		 * address to determine which emulated node it appears on.
+		 */
+		if (addr >= nodes[i].start && addr < nodes[i].end) {
+			ret = i;
+			break;
+		}
+	}
+	return i;
+}
+
+/*
+ * In NUMA emulation, we need to setup proximity domain (_PXM) to node ID
+ * mappings that respect the real ACPI topology but reflect our emulated
+ * environment.  For each emulated node, we find which real node it appears on
+ * and create PXM to NID mappings for those fake nodes which mirror that
+ * locality.  SLIT will now represent the correct distances between emulated
+ * nodes as a result of the real topology.
+ */
+void __init acpi_fake_nodes(const struct bootnode *fake_nodes, int num_nodes)
+{
+	int i, j;
+	int fake_node_to_pxm_map[MAX_NUMNODES] = {
+		[0 ... MAX_NUMNODES-1] = PXM_INVAL
+	};
+	unsigned char fake_apicid_to_node[MAX_LOCAL_APIC] = {
+		[0 ... MAX_LOCAL_APIC-1] = NUMA_NO_NODE
+	};
+
+	printk(KERN_INFO "Faking PXM affinity for fake nodes on real "
+			 "topology.\n");
+	for (i = 0; i < num_nodes; i++) {
+		int nid, pxm;
+
+		nid = find_node_by_addr(fake_nodes[i].start);
+		if (nid == NUMA_NO_NODE)
+			continue;
+		pxm = node_to_pxm(nid);
+		if (pxm == PXM_INVAL)
+			continue;
+		fake_node_to_pxm_map[i] = pxm;
+		/*
+		 * For each apicid_to_node mapping that exists for this real
+		 * node, it must now point to the fake node ID.
+		 */
+		for (j = 0; j < MAX_LOCAL_APIC; j++)
+			if (apicid_to_node[j] == nid)
+				fake_apicid_to_node[j] = i;
+	}
+	for (i = 0; i < num_nodes; i++)
+		__acpi_map_pxm_to_node(fake_node_to_pxm_map[i], i);
+	memcpy(apicid_to_node, fake_apicid_to_node, sizeof(apicid_to_node));
+
+	nodes_clear(nodes_parsed);
+	for (i = 0; i < num_nodes; i++)
+		if (fake_nodes[i].start != fake_nodes[i].end)
+			node_set(i, nodes_parsed);
+	WARN_ON(!nodes_cover_memory(fake_nodes));
+}
+
+static int null_slit_node_compare(int a, int b)
+{
+	return node_to_pxm(a) == node_to_pxm(b);
+}
+#else
+static int null_slit_node_compare(int a, int b)
+{
+	return a == b;
+}
+#endif /* CONFIG_NUMA_EMU */
 
 void __init srat_reserve_add_area(int nodeid)
 {
@@ -460,8 +544,9 @@ int __node_distance(int a, int b)
 	int index;
 
 	if (!acpi_slit)
-		return a == b ? 10 : 20;
-	index = acpi_slit->localities * node_to_pxm(a);
+		return null_slit_node_compare(a, b) ? LOCAL_DISTANCE :
+						      REMOTE_DISTANCE;
+	index = acpi_slit->locality_count * node_to_pxm(a);
 	return acpi_slit->entry[index + node_to_pxm(b)];
 }
 

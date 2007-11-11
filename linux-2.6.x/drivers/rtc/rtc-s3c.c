@@ -29,7 +29,7 @@
 
 #include <asm/mach/time.h>
 
-#include <asm/arch/regs-rtc.h>
+#include <asm/plat-s3c/regs-rtc.h>
 
 /* I have yet to find an S3C implementation with more than one
  * of these rtc blocks in */
@@ -50,7 +50,7 @@ static irqreturn_t s3c_rtc_alarmirq(int irq, void *id)
 {
 	struct rtc_device *rdev = id;
 
-	rtc_update_irq(&rdev->class_dev, 1, RTC_AF | RTC_IRQF);
+	rtc_update_irq(rdev, 1, RTC_AF | RTC_IRQF);
 	return IRQ_HANDLED;
 }
 
@@ -58,7 +58,7 @@ static irqreturn_t s3c_rtc_tickirq(int irq, void *id)
 {
 	struct rtc_device *rdev = id;
 
-	rtc_update_irq(&rdev->class_dev, tick_count++, RTC_PF | RTC_IRQF);
+	rtc_update_irq(rdev, tick_count++, RTC_PF | RTC_IRQF);
 	return IRQ_HANDLED;
 }
 
@@ -190,6 +190,8 @@ static int s3c_rtc_getalarm(struct device *dev, struct rtc_wkalrm *alrm)
 	alm_tm->tm_year = readb(base + S3C2410_ALMYEAR);
 
 	alm_en = readb(base + S3C2410_RTCALM);
+
+	alrm->enabled = (alm_en & S3C2410_RTCALM_ALMEN) ? 1 : 0;
 
 	pr_debug("read alarm %02x %02x.%02x.%02x %02x/%02x/%02x\n",
 		 alm_en,
@@ -331,11 +333,7 @@ static int s3c_rtc_ioctl(struct device *dev,
 
 static int s3c_rtc_proc(struct device *dev, struct seq_file *seq)
 {
-	unsigned int rtcalm = readb(s3c_rtc_base + S3C2410_RTCALM);
 	unsigned int ticnt = readb(s3c_rtc_base + S3C2410_TICNT);
-
-	seq_printf(seq, "alarm_IRQ\t: %s\n",
-		   (rtcalm & S3C2410_RTCALM_ALMEN) ? "yes" : "no" );
 
 	seq_printf(seq, "periodic_IRQ\t: %s\n",
 		     (ticnt & S3C2410_TICNT_ENABLE) ? "yes" : "no" );
@@ -352,7 +350,7 @@ static int s3c_rtc_open(struct device *dev)
 	int ret;
 
 	ret = request_irq(s3c_rtc_alarmno, s3c_rtc_alarmirq,
-			  SA_INTERRUPT,  "s3c2410-rtc alarm", rtc_dev);
+			  IRQF_DISABLED,  "s3c2410-rtc alarm", rtc_dev);
 
 	if (ret) {
 		dev_err(dev, "IRQ%d error %d\n", s3c_rtc_alarmno, ret);
@@ -360,7 +358,7 @@ static int s3c_rtc_open(struct device *dev)
 	}
 
 	ret = request_irq(s3c_rtc_tickno, s3c_rtc_tickirq,
-			  SA_INTERRUPT,  "s3c2410-rtc tick", rtc_dev);
+			  IRQF_DISABLED,  "s3c2410-rtc tick", rtc_dev);
 
 	if (ret) {
 		dev_err(dev, "IRQ%d error %d\n", s3c_rtc_tickno, ret);
@@ -550,37 +548,15 @@ static int ticnt_save;
 
 static int s3c_rtc_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct rtc_time tm;
-	struct timespec time;
-
-	time.tv_nsec = 0;
-
 	/* save TICNT for anyone using periodic interrupts */
-
 	ticnt_save = readb(s3c_rtc_base + S3C2410_TICNT);
-
-	/* calculate time delta for suspend */
-
-	s3c_rtc_gettime(&pdev->dev, &tm);
-	rtc_tm_to_time(&tm, &time.tv_sec);
-	save_time_delta(&s3c_rtc_delta, &time);
 	s3c_rtc_enable(pdev, 0);
-
 	return 0;
 }
 
 static int s3c_rtc_resume(struct platform_device *pdev)
 {
-	struct rtc_time tm;
-	struct timespec time;
-
-	time.tv_nsec = 0;
-
 	s3c_rtc_enable(pdev, 1);
-	s3c_rtc_gettime(&pdev->dev, &tm);
-	rtc_tm_to_time(&tm, &time.tv_sec);
-	restore_time_delta(&s3c_rtc_delta, &time);
-
 	writeb(ticnt_save, s3c_rtc_base + S3C2410_TICNT);
 	return 0;
 }

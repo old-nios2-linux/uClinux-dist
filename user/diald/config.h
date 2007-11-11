@@ -73,13 +73,8 @@
  * with our firewall rules,  but can also be overriden
  */
 
-#ifdef CONFIG_USER_FIREWALL_TOOLS
-#define	DEFAULT_INTERFACE_METRIC	0
-#define	DEFAULT_DEFAULT_ROUTE_METRIC	3 /* METRIC_ALL_DEFROUTE */
-#else
 #define	DEFAULT_INTERFACE_METRIC	0
 #define	DEFAULT_DEFAULT_ROUTE_METRIC	0
-#endif
 
 /*
  * Diald needs to know where to find the bootpc binary in order to

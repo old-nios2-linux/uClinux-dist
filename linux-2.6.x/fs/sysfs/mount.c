@@ -8,6 +8,7 @@
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
+#include <asm/semaphore.h>
 
 #include "sysfs.h"
 
@@ -16,19 +17,18 @@
 
 struct vfsmount *sysfs_mount;
 struct super_block * sysfs_sb = NULL;
-kmem_cache_t *sysfs_dir_cachep;
+struct kmem_cache *sysfs_dir_cachep;
 
-static struct super_operations sysfs_ops = {
+static const struct super_operations sysfs_ops = {
 	.statfs		= simple_statfs,
-	.drop_inode	= generic_delete_inode,
+	.drop_inode	= sysfs_delete_inode,
 };
 
-static struct sysfs_dirent sysfs_root = {
-	.s_sibling	= LIST_HEAD_INIT(sysfs_root.s_sibling),
-	.s_children	= LIST_HEAD_INIT(sysfs_root.s_children),
-	.s_element	= NULL,
-	.s_type		= SYSFS_ROOT,
-	.s_iattr	= NULL,
+struct sysfs_dirent sysfs_root = {
+	.s_count	= ATOMIC_INIT(1),
+	.s_flags	= SYSFS_ROOT,
+	.s_mode		= S_IFDIR | S_IRWXU | S_IRUGO | S_IXUGO,
+	.s_ino		= 1,
 };
 
 static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
@@ -43,24 +43,26 @@ static int sysfs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_time_gran = 1;
 	sysfs_sb = sb;
 
-	inode = sysfs_new_inode(S_IFDIR | S_IRWXU | S_IRUGO | S_IXUGO,
-				 &sysfs_root);
-	if (inode) {
-		inode->i_op = &sysfs_dir_inode_operations;
-		inode->i_fop = &sysfs_dir_operations;
-		/* directory inodes start off with i_nlink == 2 (for "." entry) */
-		inc_nlink(inode);
-	} else {
+	/* get root inode, initialize and unlock it */
+	inode = sysfs_get_inode(&sysfs_root);
+	if (!inode) {
 		pr_debug("sysfs: could not get root inode\n");
 		return -ENOMEM;
 	}
 
+	inode->i_op = &sysfs_dir_inode_operations;
+	inode->i_fop = &sysfs_dir_operations;
+	inc_nlink(inode); /* directory, account for "." */
+	unlock_new_inode(inode);
+
+	/* instantiate and link root dentry */
 	root = d_alloc_root(inode);
 	if (!root) {
 		pr_debug("%s: could not get root dentry!\n",__FUNCTION__);
 		iput(inode);
 		return -ENOMEM;
 	}
+	sysfs_root.s_dentry = root;
 	root->d_fsdata = &sysfs_root;
 	sb->s_root = root;
 	return 0;
@@ -84,7 +86,7 @@ int __init sysfs_init(void)
 
 	sysfs_dir_cachep = kmem_cache_create("sysfs_dir_cache",
 					      sizeof(struct sysfs_dirent),
-					      0, 0, NULL, NULL);
+					      0, 0, NULL);
 	if (!sysfs_dir_cachep)
 		goto out;
 

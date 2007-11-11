@@ -177,6 +177,7 @@ struct NCR_700_command_slot {
 	__u8	state;
 	#define NCR_700_FLAG_AUTOSENSE	0x01
 	__u8	flags;
+	__u8	pad1[2];	/* Needed for m68k where min alignment is 2 bytes */
 	int	tag;
 	__u32	resume_offset;
 	struct scsi_cmnd *cmnd;
@@ -196,6 +197,8 @@ struct NCR_700_Host_Parameters {
 	void __iomem	*base;		/* the base for the port (copied to host) */
 	struct device	*dev;
 	__u32	dmode_extra;	/* adjustable bus settings */
+	__u32	dcntl_extra;	/* adjustable bus settings */
+	__u32	ctest7_extra;	/* adjustable bus settings */
 	__u32	differential:1;	/* if we are differential */
 #ifdef CONFIG_53C700_LE_ON_BE
 	/* This option is for HP only.  Set it if your chip is wired for
@@ -203,7 +206,7 @@ struct NCR_700_Host_Parameters {
 	__u32	force_le_on_be:1;
 #endif
 	__u32	chip710:1;	/* set if really a 710 not 700 */
-	__u32	burst_disable:1;	/* set to 1 to disable 710 bursting */
+	__u32	burst_length:4;	/* set to 0 to disable 710 bursting */
 
 	/* NOTHING BELOW HERE NEEDS ALTERING */
 	__u32	fast:1;		/* if we can alter the SCSI bus clock
@@ -352,6 +355,7 @@ struct NCR_700_Host_Parameters {
 #define		SEL_TIMEOUT_DISABLE	0x10 /* 710 only */
 #define         DFP                     0x08
 #define         EVP                     0x04
+#define         CTEST7_TT1              0x02
 #define		DIFF			0x01
 #define CTEST6_REG                      0x1A
 #define	TEMP_REG			0x1C
@@ -385,6 +389,7 @@ struct NCR_700_Host_Parameters {
 #define		SOFTWARE_RESET		0x01
 #define		COMPAT_700_MODE		0x01
 #define 	SCRPTS_16BITS		0x20
+#define		EA_710			0x20
 #define		ASYNC_DIV_2_0		0x00
 #define		ASYNC_DIV_1_5		0x40
 #define		ASYNC_DIV_1_0		0x80
@@ -415,31 +420,31 @@ struct NCR_700_Host_Parameters {
 #define NCR_710_MIN_XFERP	0
 #define NCR_700_MIN_PERIOD	25 /* for SDTR message, 100ns */
 
-#define script_patch_32(script, symbol, value) \
+#define script_patch_32(dev, script, symbol, value) \
 { \
 	int i; \
 	for(i=0; i< (sizeof(A_##symbol##_used) / sizeof(__u32)); i++) { \
 		__u32 val = bS_to_cpu((script)[A_##symbol##_used[i]]) + value; \
 		(script)[A_##symbol##_used[i]] = bS_to_host(val); \
-		dma_cache_sync(&(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
+		dma_cache_sync((dev), &(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
 		DEBUG((" script, patching %s at %d to 0x%lx\n", \
 		       #symbol, A_##symbol##_used[i], (value))); \
 	} \
 }
 
-#define script_patch_32_abs(script, symbol, value) \
+#define script_patch_32_abs(dev, script, symbol, value) \
 { \
 	int i; \
 	for(i=0; i< (sizeof(A_##symbol##_used) / sizeof(__u32)); i++) { \
 		(script)[A_##symbol##_used[i]] = bS_to_host(value); \
-		dma_cache_sync(&(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
+		dma_cache_sync((dev), &(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
 		DEBUG((" script, patching %s at %d to 0x%lx\n", \
 		       #symbol, A_##symbol##_used[i], (value))); \
 	} \
 }
 
 /* Used for patching the SCSI ID in the SELECT instruction */
-#define script_patch_ID(script, symbol, value) \
+#define script_patch_ID(dev, script, symbol, value) \
 { \
 	int i; \
 	for(i=0; i< (sizeof(A_##symbol##_used) / sizeof(__u32)); i++) { \
@@ -447,13 +452,13 @@ struct NCR_700_Host_Parameters {
 		val &= 0xff00ffff; \
 		val |= ((value) & 0xff) << 16; \
 		(script)[A_##symbol##_used[i]] = bS_to_host(val); \
-		dma_cache_sync(&(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
+		dma_cache_sync((dev), &(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
 		DEBUG((" script, patching ID field %s at %d to 0x%x\n", \
 		       #symbol, A_##symbol##_used[i], val)); \
 	} \
 }
 
-#define script_patch_16(script, symbol, value) \
+#define script_patch_16(dev, script, symbol, value) \
 { \
 	int i; \
 	for(i=0; i< (sizeof(A_##symbol##_used) / sizeof(__u32)); i++) { \
@@ -461,7 +466,7 @@ struct NCR_700_Host_Parameters {
 		val &= 0xffff0000; \
 		val |= ((value) & 0xffff); \
 		(script)[A_##symbol##_used[i]] = bS_to_host(val); \
-		dma_cache_sync(&(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
+		dma_cache_sync((dev), &(script)[A_##symbol##_used[i]], 4, DMA_TO_DEVICE); \
 		DEBUG((" script, patching short field %s at %d to 0x%x\n", \
 		       #symbol, A_##symbol##_used[i], val)); \
 	} \

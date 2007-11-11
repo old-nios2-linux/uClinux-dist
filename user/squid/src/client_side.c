@@ -34,6 +34,7 @@
  */
 
 #include "squid.h"
+#include <config/autoconf.h>
 
 #if IPF_TRANSPARENT
 #if HAVE_SYS_IOCTL_H
@@ -759,8 +760,21 @@ clientUpdateCounters(clientHttpRequest * http)
     ping_data *i;
     HierarchyLogEntry *H;
     statCounter.client_http.requests++;
+#ifdef CONFIG_PROP_STATSD_STATSD
+    system("statsd -a incr squid client_http_requests");
+#endif
     if (isTcpHit(http->log_type))
+	{
+#ifdef CONFIG_PROP_STATSD_STATSD
+        system("statsd -a incr squid client_http_hits");
+        char buf[70];
+        snprintf(buf, sizeof(buf), "statsd -a push squid kb_saved %lld",
+                 statCounter.client_http.kbytes_out.kb -
+                 statCounter.server.all.kbytes_in.kb);
+        system(buf);
+#endif
 	statCounter.client_http.hits++;
+	}
     if (http->log_type == LOG_TCP_HIT)
 	statCounter.client_http.disk_hits++;
     else if (http->log_type == LOG_TCP_MEM_HIT)

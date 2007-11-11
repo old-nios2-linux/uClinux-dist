@@ -1,5 +1,5 @@
 /*
- * Copyright 1998 by Albert Cahalan; all rights resered.
+ * Copyright 1998-2002 by Albert Cahalan; all rights resered.
  * This file may be used subject to the terms and conditions of the
  * GNU Library General Public License Version 2, or any later version
  * at your option, as published by the Free Software Foundation.
@@ -21,14 +21,18 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include "proc/pwcache.h"
+#include "proc/sig.h"
+#include "proc/devname.h"
+#include "proc/procps.h"  /* char *user_from_uid(uid_t uid) */
+#include "proc/version.h" /* procps_version */
 
 static int f_flag, i_flag, v_flag, w_flag, n_flag;
 
 static int tty_count, uid_count, cmd_count, pid_count;
 static int *ttys;
-static int *uids;
-static char **cmds;
+static uid_t *uids;
+static const char **cmds;
 static int *pids;
 
 #define ENLIST(thing,addme) do{ \
@@ -39,7 +43,6 @@ thing##s[thing##_count++] = addme; \
 
 static int my_pid;
 static int saved_argc;
-static char **saved_argv;
 
 static int sig_or_pri;
 
@@ -50,207 +53,36 @@ static int program;
 /* #define PROG_NICE  3 */ /* easy, but the old one isn't broken */
 #define PROG_SNICE 4
 
-/***********************************************************************/
-
-/* Linux signals:
- *
- * SIGSYS is required by Unix98.
- * SIGEMT is part of SysV, BSD, and ancient UNIX tradition.
- *
- * They are provided by these Linux ports: alpha, mips, sparc, and sparc64.
- * You get SIGSTKFLT and SIGUNUSED instead on i386, m68k, ppc, and arm.
- * (this is a Linux & libc bug -- both must be fixed)
- *
- * Total garbage: SIGIO SIGINFO SIGIOT SIGLOST SIGCLD
- * Nearly garbage: SIGSTKFLT SIGUNUSED (nothing else to fill slots)
- */
-
-#ifdef SIGSYS
-#  undef SIGUNUSED
-#  undef SIGSTKFLT
-#endif
-
-#ifndef SIGRTMIN
-#  define SIGRTMIN 32
-#endif
-
-int sigvals[] = {
-SIGABRT,
-SIGALRM,
-SIGBUS,
-SIGCHLD,
-SIGCONT,
-#ifdef SIGEMT
-SIGEMT,
-#endif
-SIGFPE,
-SIGHUP,
-SIGILL,
-SIGINT,
-SIGKILL,
-SIGPIPE,
-SIGPOLL,
-SIGPROF,
-#ifdef SIGPWR
-SIGPWR,
-#endif
-SIGQUIT,
-SIGSEGV,
-#ifdef SIGSTKFLT
-SIGSTKFLT,
-#endif
-SIGSTOP,
-#ifdef SIGSYS
-SIGSYS,
-#endif
-SIGTERM,
-SIGTRAP,
-SIGTSTP,
-SIGTTIN,
-SIGTTOU,
-#ifdef SIGUNUSED
-SIGUNUSED,
-#endif
-SIGURG,
-SIGUSR1,
-SIGUSR2,
-SIGVTALRM,
-SIGWINCH,
-SIGXCPU,
-SIGXFSZ,
-};
-
-char *signames[] = {
-"ABRT",
-"ALRM",
-"BUS",
-"CHLD",
-"CONT",
-#ifdef SIGEMT
-"EMT",
-#endif
-"FPE",
-"HUP",
-"ILL",
-"INT",
-"KILL",
-"PIPE",
-"POLL",
-"PROF",
-"PWR",
-"QUIT",
-"SEGV",
-#ifdef SIGSTKFLT
-"STKFLT",
-#endif
-"STOP",
-#ifdef SIGSYS
-"SYS",
-#endif
-"TERM",
-"TRAP",
-"TSTP",
-"TTIN",
-"TTOU",
-#ifdef SIGUNUSED
-"UNUSED",
-#endif
-"URG",
-"USR1",
-"USR2",
-"VTALRM",
-"WINCH",
-"XCPU",
-"XFSZ"
-};
-
-const int number_of_signals = sizeof(sigvals)/sizeof(int);
-
-static int compare_signal_names(const void *a, const void *b){
-  return strcasecmp(*(char**)a,*(char**)b);
-}
-
-static int signal_name_to_number(char *name){
-  const char **ptr;
-  if(!strncasecmp(name,"SIG",3)) name += 3;
-  ptr = bsearch(&name, signames, number_of_signals,
-     sizeof(char *), compare_signal_names
-  );
-  if(!ptr){
-    long val;
-    char *endp;
-    val = strtol(name,&endp,10);
-    if(*endp) return -1; /* not valid */
-    if(val>127) return -1; /* not valid */
-    return val;
-  }
-  return sigvals[((unsigned long)ptr-(unsigned long)signames)/sizeof(char *)];
-}
-
-static const char *signal_name(int signo){
-  static char buf[32];
-  int n = number_of_signals;
-  signo &= 0x7f; /* need to process exit values too */
-  while(n--){
-    if(sigvals[n]==signo) return signames[n];
-  }
-  if(signo) sprintf(buf, "RTMIN+%d", signo-SIGRTMIN);
-  else      strcpy(buf,"0");  /* AIX would use "NULL" */
-  return buf;
-}
-
-static void pretty_print_signals(void){
-  int i = 0;
-  while(++i <= number_of_signals){
-    int n;
-    n = printf("%2d %s", i, signal_name(i));
-    if(i%7) printf("           \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" + n);
-    else printf("\n");
-  }
-  if((i-1)%7) printf("\n");
-}
-
-static void unix_print_signals(void){
-  int pos = 0;
-  int i = 0;
-  while(++i <= number_of_signals){
-    if(i-1) printf("%c", (pos>73)?(pos=0,'\n'):(pos++,' ') );
-    pos += printf("%s", signal_name(i));
-  }
-  printf("\n");
-}
 
 /********************************************************************/
 
-/* This is junk of course, to be replaced soon */
-const char *uid_to_user(int uid){
-  static struct passwd *p;
-  static char txt[64];
-  p = getpwuid(uid);
-  if(p) return p->pw_name;
-  sprintf(txt, "%d", uid);
-  return txt;
+static void display_kill_version(void){
+  switch(program) {
+    case PROG_KILL:
+      fprintf(stdout, "kill (%s)\n",procps_version);
+      return;
+    case PROG_SKILL:
+      fprintf(stdout, "skill (%s)\n",procps_version);
+      return;
+    case PROG_SNICE:
+      fprintf(stdout, "snice (%s)\n",procps_version);
+      return;
+    default:
+      fprintf(stdout, "unknown (%s)\n",procps_version);
+      return;
+  }
 }
-
-/* this must be replaced soon... */
-const char *dev_to_tty(int tty){
-  static char txt[64];
-  sprintf(txt, "%d,%d", (tty>>8)&0xff, tty&0xff);
-  return txt;
-}
-
-
-/********************************************************************/
-
 
 /***** kill or nice a process */
-static void hurt_proc(int tty, int user, int pid, char *cmd){
+static void hurt_proc(int tty, int uid, int pid, const char *restrict const cmd){
   int failed;
   int saved_errno;
+  char dn_buf[1000];
+  dev_to_tty(dn_buf, 999, tty, pid, ABBREV_DEV);
   if(i_flag){
     char buf[8];
-    fprintf(stderr, "%-8.8s %-8.8s %5d %-16.16s   ? ",
-      dev_to_tty(tty),uid_to_user(user),pid,cmd
+    fprintf(stderr, "%-8s %-8s %5d %-16.16s   ? ",
+      (char*)dn_buf,user_from_uid(uid),pid,cmd
     );
     if(!fgets(buf,7,stdin)){
       printf("\n");
@@ -263,8 +95,8 @@ static void hurt_proc(int tty, int user, int pid, char *cmd){
   else                    failed=setpriority(PRIO_PROCESS,pid,sig_or_pri);
   saved_errno = errno;
   if(w_flag && failed){
-    fprintf(stderr, "%-8.8s %-8.8s %5d %-16.16s   ",
-      dev_to_tty(tty),uid_to_user(user),pid,cmd
+    fprintf(stderr, "%-8s %-8s %5d %-16.16s   ",
+      (char*)dn_buf,user_from_uid(uid),pid,cmd
     );
     errno = saved_errno;
     perror("");
@@ -272,8 +104,8 @@ static void hurt_proc(int tty, int user, int pid, char *cmd){
   }
   if(i_flag) return;
   if(v_flag){
-    printf("%-8.8s %-8.8s %5d %-16.16s\n",
-      dev_to_tty(tty),uid_to_user(user),pid,cmd
+    printf("%-8s %-8s %5d %-16.16s\n",
+      (char*)dn_buf,user_from_uid(uid),pid,cmd
     );
     return;
   }
@@ -383,16 +215,22 @@ static void iterate(void){
   if(!ttys && !cmds && !pids && !i_flag){
   }
 #endif
-  if (!(d = opendir ("/proc"))) {
-    perror ("/proc"); exit (1);
+  d = opendir("/proc");
+  if(!d){
+    perror("/proc");
+    exit(1);
   }
-  while (de = readdir (d))
-    if (pid = atoi (de->d_name))
-	check_proc (pid);
+  while(( de = readdir(d) )){
+    if(de->d_name[0] > '9') continue;
+    if(de->d_name[0] < '1') continue;
+    pid = atoi(de->d_name);
+    if(pid) check_proc(pid);
+  }
   closedir (d);
 }
 
 /***** kill help */
+static void kill_usage(void) NORETURN;
 static void kill_usage(void){
   fprintf(stderr,
     "Usage:\n"
@@ -401,39 +239,39 @@ static void kill_usage(void){
     "  kill -s signal pid ...    Send a signal to every process listed.\n"
     "  kill -l                   List all signal names.\n"
     "  kill -L                   List all signal names in a nice table.\n"
-    "  kill -l signal            Convert a signal number into a name.\n"
+    "  kill -l signal            Convert between signal numbers and names.\n"
   );
   exit(1);
 }
 
 /***** kill */
-static void kill_main(int argc, char *argv[]){
-  char *sigptr;
+static void kill_main(int argc, const char *restrict const *restrict argv) NORETURN;
+static void kill_main(int argc, const char *restrict const *restrict argv){
+  const char *sigptr;
   int signo = SIGTERM;
   int exitvalue = 0;
   if(argc<2) kill_usage();
+  if(!strcmp(argv[1],"-V")|| !strcmp(argv[1],"--version")){
+    display_kill_version();
+    exit(0);
+  }
   if(argv[1][0]!='-'){
     argv++;
     argc--;
     goto no_more_args;
   }
+
   /* The -l option prints out signal names. */
   if(argv[1][1]=='l' && argv[1][2]=='\0'){
     if(argc==2){
       unix_print_signals();
       exit(0);
     }
-    if(argc==3 && argv[2][0]>'0' && argv[2][0]<='9'){
-      long arg;
-      char *endp;
-      arg = strtol(argv[2],&endp,10);
-      if(!*endp){
-        printf("%s\n", signal_name(arg));
-        exit(0);
-      }
-    }
-    kill_usage();
+    /* at this point, argc must be 3 or more */
+    if(argc>128 || argv[2][0] == '-') kill_usage();
+    exit(print_given_signals(argc-2, argv+2, 80));
   }
+
   /* The -L option prints out signal names in a nice table. */
   if(argv[1][1]=='L' && argv[1][2]=='\0'){
     if(argc==2){
@@ -448,7 +286,8 @@ static void kill_main(int argc, char *argv[]){
     goto no_more_args;
   }
   if(argv[1][1]=='-') kill_usage(); /* likely --help */
-  if(argv[1][1]=='s' && argv[1][2]=='\0'){
+  // FIXME: "kill -sWINCH $$" not handled
+  if(argv[1][2]=='\0' && (argv[1][1]=='s' || argv[1][1]=='n')){
     sigptr = argv[2];
     argv+=3;
     argc-=3;
@@ -480,6 +319,7 @@ no_more_args:
 }
 
 /***** skill/snice help */
+static void skillsnice_usage(void) NORETURN;
 static void skillsnice_usage(void){
   if(program==PROG_SKILL){
     fprintf(stderr,
@@ -530,12 +370,13 @@ static void _skillsnice_usage(int line){
 #define NEXTARG (argc?( argc--, ((argptr=*++argv)) ):NULL)
 
 /***** common skill/snice argument parsing code */
-static void skillsnice_parse(int argc, char *argv[]){
+#define NO_PRI_VAL ((int)0xdeafbeef)
+static void skillsnice_parse(int argc, const char *restrict const *restrict argv){
   int signo = -1;
-  int prino = 0xdeafbeef;
+  int prino = NO_PRI_VAL;
   int force = 0;
   int num_found = 0;
-  char *argptr;
+  const char *restrict argptr;
   if(argc<2) skillsnice_usage();
   if(argc==2 && argv[1][0]=='-'){
     if(!strcmp(argv[1],"-L")){
@@ -544,6 +385,10 @@ static void skillsnice_parse(int argc, char *argv[]){
     }
     if(!strcmp(argv[1],"-l")){
       unix_print_signals();
+      exit(0);
+    }
+    if(!strcmp(argv[1],"-V")|| !strcmp(argv[1],"--version")){
+      display_kill_version();
       exit(0);
     }
     skillsnice_usage();
@@ -563,7 +408,7 @@ static void skillsnice_parse(int argc, char *argv[]){
         continue;
       }
     }
-    if(program==PROG_SNICE && prino==0xdeafbeef
+    if(program==PROG_SNICE && prino==NO_PRI_VAL
     && (*argptr=='+' || *argptr=='-') && argptr[1]){
       long val;
       char *endp;
@@ -627,7 +472,7 @@ selection_collection:
           case '-':
           case '?':
             num_found++;
-            ENLIST(tty,-1);
+            ENLIST(tty,0);
             if(!NEXTARG) break;
           }
         }
@@ -682,16 +527,8 @@ selection_collection:
     fprintf(stderr,"ERROR: -v makes no sense with -i and -f.\n");
     skillsnice_usage();
   }
-  if(n_flag && signo>=0){
-    fprintf(stderr,"ERROR: -n makes no sense with a signal.\n");
-    skillsnice_usage();
-  }
-  if(n_flag && prino!=0xdeafbeef){
-    fprintf(stderr,"ERROR: -n makes no sense with a priority value.\n");
-    skillsnice_usage();
-  }
   /* OK, set up defaults */
-  if(prino==0xdeadbeef) prino=4;
+  if(prino==NO_PRI_VAL) prino=4;
   if(signo<0) signo=SIGTERM;
   if(n_flag){
     program=PROG_SKILL;
@@ -702,11 +539,9 @@ selection_collection:
 }
 
 /***** main body */
-int main(int argc, char *argv[]){
-  char *tmpstr;
-
+int main(int argc, const char *argv[]){
+  const char *tmpstr;
   my_pid = getpid();
-  saved_argv = argv;
   saved_argc = argc;
   if(!argc){
     fprintf(stderr,"ERROR: could not determine own name.\n");

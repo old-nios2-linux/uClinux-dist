@@ -15,7 +15,7 @@
  * contain a copyright notice related to this source.
  *
  * $Id: dict.h,v 1.2 2004/09/10 20:48:21 hasso Exp $
- * $Name: quagga_0_98_stable $
+ * $Name:  $
  */
 
 #ifndef DICT_H

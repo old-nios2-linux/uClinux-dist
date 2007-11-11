@@ -66,7 +66,8 @@ static int sn_hwperf_enum_objects(int *nobj, struct sn_hwperf_object_info **ret)
 	}
 
 	sz = sn_hwperf_obj_cnt * sizeof(struct sn_hwperf_object_info);
-	if ((objbuf = (struct sn_hwperf_object_info *) vmalloc(sz)) == NULL) {
+	objbuf = vmalloc(sz);
+	if (objbuf == NULL) {
 		printk("sn_hwperf_enum_objects: vmalloc(%d) failed\n", (int)sz);
 		e = -ENOMEM;
 		goto out;
@@ -189,7 +190,7 @@ static void print_pci_topology(struct seq_file *s)
 	int e;
 
 	for (sz = PAGE_SIZE; sz < 16 * PAGE_SIZE; sz += PAGE_SIZE) {
-		if (!(p = (char *)kmalloc(sz, GFP_KERNEL)))
+		if (!(p = kmalloc(sz, GFP_KERNEL)))
 			break;
 		e = ia64_sn_ioif_get_pci_topology(__pa(p), sz);
 		if (e == SALRET_OK)
@@ -750,9 +751,10 @@ sn_hwperf_ioctl(struct inode *in, struct file *fp, u32 op, u64 arg)
 			goto error;
 		} else
 		if ((r = sn_hwperf_enum_objects(&nobj, &objs)) == 0) {
+			int cpuobj_index = 0;
+
 			memset(p, 0, a.sz);
 			for (i = 0; i < nobj; i++) {
-				int cpuobj_index = 0;
 				if (!SN_HWPERF_IS_NODE(objs + i))
 					continue;
 				node = sn_hwperf_obj_to_cnode(objs + i);
@@ -865,7 +867,7 @@ error:
 	return r;
 }
 
-static struct file_operations sn_hwperf_fops = {
+static const struct file_operations sn_hwperf_fops = {
 	.ioctl = sn_hwperf_ioctl,
 };
 

@@ -231,6 +231,8 @@ typedef struct _progvars
     char initialization_done_flag;
     char pass_thread_running_flag;
     pthread_t pass_thread_id;
+    pid_t pass_thread_pid;
+    int pass_thread_pktcount;
     char inline_failopen_disabled_flag;
 #endif
 #ifdef GIDS
@@ -340,6 +342,9 @@ typedef struct _progvars
     int treat_drop_as_alert;
     int process_all_events;
     int alert_before_pass;
+    /* XXX Move to IPv6 frag preprocessor once written */
+    u_int32_t ipv6_frag_timeout;
+    u_int32_t ipv6_max_frag_sessions;
 } PV;
 
 /* struct to collect packet statistics */

@@ -1,8 +1,9 @@
 /*
  *  linux/arch/$(ARCH)/platform/$(PLATFORM)/config.c
  *
- *  Copyright (C) 1993 Hamish Macdonald
+ *  Copyright (C) 2003-2007 Arcturus Networks Inc. <www.ArcturusNetworks.com>
  *  Copyright (C) 1999 D. Jeff Dionne
+ *  Copyright (C) 1993 Hamish Macdonald
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -128,12 +129,14 @@ static int errno;
 _bsc0(char *, getserialnum)
 _bsc1(unsigned char *, gethwaddr, int, a)
 _bsc1(char *, getbenv, char *, a)
+_bsc1(int,    setbenv, char *, a)
 
 void config_BSP(char *command, int len)
 {
   unsigned char *p;
+  int index = 0;
 
-  printk("\n68VZ328 DragonBallVZ support (c) 2003 Arcturus Networks, Inc.\n");
+  printk("\n68VZ328 DragonBallVZ support (c) 2003 Arcturus Networks Inc.\n");
 
   printk("uCdimm serial string [%s]\n",getserialnum());
 
@@ -143,11 +146,31 @@ void config_BSP(char *command, int len)
   printk("uCdimm hwaddr %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n",
          p[0], p[1], p[2], p[3], p[4], p[5]);
 
+  p = getbenv("CONSOLE");
+  if (p != NULL) {
+        sprintf(command, " console=%s", p);
+
+        index = strlen(command);
+        p = getbenv("CONSOLE_SPEED");
+        if (p != NULL) {
+            strcat (command, ",");
+            strncat(command, p, len-index);
+        } else {
+            /* The fact that the uC68VZ328 has as its default baud rate
+             * 19200bps complicates a few things. Make life a little
+             * easier here by making the speed explicit to both kernel
+             * and userland (mleslie)
+             */
+            strncat(command, ",19200", len-index);
+            setbenv ("CONSOLE_SPEED=19200");
+        }
+        strcat(command, " ");
+  }
+
+  index = strlen(command);
   p = getbenv("APPEND");
   if (p)
-	  strcpy(command, p);
-  else
-	  command[0] = 0;
+	  strncat(command, p, len-index);
  
   mach_sched_init      = BSP_sched_init;
   mach_tick            = BSP_tick;

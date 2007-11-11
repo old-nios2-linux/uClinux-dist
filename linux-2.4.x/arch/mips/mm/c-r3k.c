@@ -23,13 +23,60 @@
 #include <asm/bootinfo.h>
 #include <asm/cpu.h>
 
+/* =====================================================================
+	the MIPS's I-cache/D-cache size discovery is not supported
+	by LEXTRA series processors.
+   ===================================================================== */
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
+#undef _CACHE_DISCOVERY
+#else
+#define _CACHE_DISCOVERY 1
+#endif
+
+#ifdef _CACHE_DISCOVERY
+/* =====================================================================
+	MIPS's I-cache/D-cache size discovery is supported.
+	No any constant is needed.
+   ===================================================================== */
+#undef _ICACHE_SIZE					/* I-CACHE size */
+#undef _DCACHE_SIZE					/* D-CACHE size */
+#undef _CACHE_LINE_SIZE					/* I-CACHE/D-CACHE line size */
+
+#else /* _CACHE_DISCOVERY */
+/* =====================================================================
+	MIPS's I-cache/D-cache size discovery is NOT supported.
+	System should defined I-cache/D-cache size by them-self.
+   ===================================================================== */
+#ifdef CONFIG_RTL865XC
+/* For Realtek RTL865XC Network platform series */
+#define _ICACHE_SIZE		(16 * 1024)		/* 16K bytes */
+#define _DCACHE_SIZE		(8 * 1024)		/* 8K bytes */
+#define _CACHE_LINE_SIZE	4			/* 4 words */
+#elif defined (CONFIG_RTL865XB)
+/* For Realtek RTL865XB Network platform series */
+#define _ICACHE_SIZE	(4 * 1024)			/* 4K bytes */
+#define _DCACHE_SIZE	(4 * 1024)			/* 4K bytes */
+#define _CACHE_LINE_SIZE	4			/* 4 words */
+#else
+#error "Least one chip would be selected to decide I-cache/D-cache size"
+#endif
+
+#endif /* _CACHE_DISCOVERY */
+
 static unsigned long icache_size, dcache_size;		/* Size in bytes */
 static unsigned long icache_lsize, dcache_lsize;	/* Size in bytes */
 
 #undef DEBUG_CACHE
 
-unsigned long __init r3k_cache_size(unsigned long ca_flags)
+/*
+ * 	Removing the paramter "__init" because
+ * 	the function would be called by other functions
+ * 	and can not be reused.
+ */
+unsigned long r3k_cache_size(unsigned long ca_flags)
 {
+#ifdef _CACHE_DISCOVERY
+
 	unsigned long flags, status, dummy, size;
 	volatile unsigned long *p;
 
@@ -61,10 +108,39 @@ unsigned long __init r3k_cache_size(unsigned long ca_flags)
 	write_c0_status(flags);
 
 	return size * sizeof(*p);
+
+#else /* _CACHE_DISCOVERY */
+
+	unsigned long cacheSize;
+
+	switch (ca_flags)
+	{
+		case ST0_ISC:
+			/* D-cache size */
+			cacheSize = _DCACHE_SIZE;
+			break;
+		case (ST0_ISC|ST0_SWC):
+			/* I-cache size */
+			cacheSize = _ICACHE_SIZE;
+			break;
+		default:
+			cacheSize = 0;
+	}
+
+	return cacheSize;
+
+#endif /* _CACHE_DISCOVERY */
 }
 
-unsigned long __init r3k_cache_lsize(unsigned long ca_flags)
+/*
+ * 	Removing the paramter "__init" because
+ * 	the function would be called by other functions
+ * 	and can not be reused.
+ */
+unsigned long r3k_cache_lsize(unsigned long ca_flags)
 {
+#ifdef _CACHE_DISCOVERY
+
 	unsigned long flags, status, lsize, i;
 	volatile unsigned long *p;
 
@@ -90,6 +166,28 @@ unsigned long __init r3k_cache_lsize(unsigned long ca_flags)
 	write_c0_status(flags);
 
 	return lsize * sizeof(*p);
+
+#else /* _CACHE_DISCOVERY */
+
+	unsigned long cacheLineSize;
+
+	switch (ca_flags)
+	{
+		case ST0_ISC:
+			/* D-cache Line size */
+			cacheLineSize = _CACHE_LINE_SIZE;
+			break;
+		case (ST0_ISC|ST0_SWC):
+			/* I-cache Line size */
+			cacheLineSize = _CACHE_LINE_SIZE;
+			break;
+		default:
+			cacheLineSize = 0;
+	}
+
+	return cacheLineSize;
+
+#endif /* _CACHE_DISCOVERY */
 }
 
 static void __init r3k_probe_cache(void)
@@ -105,6 +203,21 @@ static void __init r3k_probe_cache(void)
 
 static void r3k_flush_icache_range(unsigned long start, unsigned long end)
 {
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
+	/*Invalidate I-Cache*/
+	__asm__ volatile(
+		"mtc0 $0,$20\n\t"
+		"nop\n\t"
+		"li $8,2\n\t"
+		"mtc0 $8,$20\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		"mtc0 $0,$20\n\t"
+		"nop"
+		: /* no output */
+		: /* no input */
+			);
+#else
 	unsigned long size, i, flags;
 	volatile unsigned char *p;
 
@@ -158,10 +271,41 @@ static void r3k_flush_icache_range(unsigned long start, unsigned long end)
 	}
 
 	write_c0_status(flags);
+#endif	
 }
 
 static void r3k_flush_dcache_range(unsigned long start, unsigned long end)
 {
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
+	/*Invalidate I-Cache*/
+#ifdef CONFIG_RTL865XC
+	__asm__ volatile(
+		"mtc0 $0,$20\n\t"
+		"nop\n\t"
+		"li $8,512\n\t"
+		"mtc0 $8,$20\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		"mtc0 $0,$20\n\t"
+		"nop"
+		: /* no output */
+		: /* no input */
+			);
+#else
+	__asm__ volatile(
+		"mtc0 $0,$20\n\t"
+		"nop\n\t"
+		"li $8,1\n\t"
+		"mtc0 $8,$20\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		"mtc0 $0,$20\n\t"
+		"nop"
+		: /* no output */
+		: /* no input */
+			);
+#endif
+#else /* defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB) */
 	unsigned long size, i, flags;
 	volatile unsigned char *p;
 
@@ -215,6 +359,7 @@ static void r3k_flush_dcache_range(unsigned long start, unsigned long end)
 	}
 
 	write_c0_status(flags);
+#endif	
 }
 
 static inline unsigned long get_phys_page (unsigned long addr,
@@ -287,6 +432,14 @@ static void r3k_flush_cache_sigtramp(unsigned long addr)
 {
 	unsigned long flags;
 
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
+	save_and_cli(flags);
+    
+	r3k___flush_cache_all();
+	restore_flags(flags);
+
+#else /* defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB) */
+
 #ifdef DEBUG_CACHE
 	printk("csigtramp[%08lx]", addr);
 #endif
@@ -307,13 +460,11 @@ static void r3k_flush_cache_sigtramp(unsigned long addr)
 		: : "r" (addr) );
 
 	write_c0_status(flags);
+#endif
 }
 
 static void r3k_dma_cache_wback_inv(unsigned long start, unsigned long size)
 {
-	/* Catch bad driver code */
-	BUG_ON(size == 0);
-
 	iob();
 	r3k_flush_dcache_range(start, start + size);
 }
@@ -324,6 +475,9 @@ void __init ld_mmu_r23000(void)
 	extern void build_copy_page(void);
 
 	r3k_probe_cache();
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
+	r3k_flush_icache_range(0,0);
+#endif
 
 	_flush_cache_all = r3k_flush_cache_all;
 	___flush_cache_all = r3k___flush_cache_all;
@@ -337,8 +491,10 @@ void __init ld_mmu_r23000(void)
 	_flush_data_cache_page = r3k_flush_data_cache_page;
 
 	_dma_cache_wback_inv = r3k_dma_cache_wback_inv;
+#if defined(CONFIG_RTL865XC) || defined(CONFIG_RTL865XB)
 	_dma_cache_wback = r3k_dma_cache_wback_inv;
 	_dma_cache_inv = r3k_dma_cache_wback_inv;
+#endif
 
 	printk("Primary instruction cache %ldkB, linesize %ld bytes.\n",
 		icache_size >> 10, icache_lsize);

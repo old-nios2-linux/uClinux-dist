@@ -37,7 +37,7 @@
 #define PA_VERREG	0xa4000032	/* FPGA Version Register */
 #define PA_INPORT	0xa4000034	/* KEY Input Port control */
 #define PA_OUTPORT	0xa4000036	/* LED control */
-#define PA_DMPORT	0xa4000038	/* DM270 Output Port control */
+#define PA_BVERREG	0xa4000038	/* Board Revision Register */
 
 #define PA_AX88796L	0xaa000400	/* AX88796L Area */
 #define PA_VOYAGER	0xab000000	/* VOYAGER GX Area */
@@ -67,6 +67,10 @@
 #define IRQ_PCISLOT1	9		/* PCI Slot #1 IRQ */
 #define IRQ_PCISLOT2	10		/* PCI Slot #2 IRQ */
 #define	IRQ_EXTENTION	11		/* EXTn IRQ */
+
+/* arch/sh/boards/renesas/rts7751r2d/irq.c */
+void init_rts7751r2d_IRQ(void);
+int rts7751r2d_irq_demux(int);
 
 #define __IO_PREFIX rts7751r2d
 #include <asm/io_generic.h>

@@ -1,21 +1,19 @@
 /* Factoring with Pollard's rho method.
 
-   Copyright (C) 1995, 1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+Copyright 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005 Free Software
+Foundation, Inc.
 
-   This program is free software; you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published by the
-   Free Software Foundation; either version 2, or (at your option) any
-   later version.
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2, or (at your option) any later version.
 
-   This program is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with this program; see the file COPYING.  If not, write to the Free
-   Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+You should have received a copy of the GNU General Public License along with
+this program; see the file COPYING.  If not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,9 +26,7 @@ int flag_verbose = 0;
 static unsigned add[] = {4, 2, 4, 2, 4, 6, 2, 6};
 
 void
-factor_using_division (t, limit)
-     mpz_t t;
-     unsigned int limit;
+factor_using_division (mpz_t t, unsigned int limit)
 {
   mpz_t q, r;
   unsigned long int f;
@@ -106,14 +102,17 @@ factor_using_division (t, limit)
 }
 
 void
-factor_using_division_2kp (t, limit, p)
-     mpz_t t;
-     unsigned int limit;
-     unsigned long p;
+factor_using_division_2kp (mpz_t t, unsigned int limit, unsigned long p)
 {
   mpz_t r;
   mpz_t f;
   unsigned int k;
+
+  if (flag_verbose)
+    {
+      printf ("[trial division (%u)] ", limit);
+      fflush (stdout);
+    }
 
   mpz_init (r);
   mpz_init_set_ui (f, 2 * p);
@@ -137,10 +136,7 @@ factor_using_division_2kp (t, limit, p)
 }
 
 void
-factor_using_pollard_rho (n, a_int, p)
-     mpz_t n;
-     int a_int;
-     unsigned long p;
+factor_using_pollard_rho (mpz_t n, int a_int, unsigned long p)
 {
   mpz_t x, x1, y, P;
   mpz_t a;
@@ -190,7 +186,7 @@ S2:
 	}
 S3:
       k--;
-      if (k != 0)
+      if (k > 0)
 	goto S2;
 
       mpz_gcd (g, P, n);
@@ -229,10 +225,16 @@ S4:
 	}
       while (mpz_cmp_ui (g, 1) == 0);
 
+      mpz_div (n, n, g);	/* divide by g, before g is overwritten */
+
       if (!mpz_probab_prime_p (g, 3))
 	{
 	  do
-	    a_int = mrand48 ();
+            {
+              mp_limb_t a_limb;
+              mpn_random (&a_limb, (mp_size_t) 1);
+              a_int = (int) a_limb;
+            }
 	  while (a_int == -2 || a_int == 0);
 
 	  if (flag_verbose)
@@ -241,7 +243,6 @@ S4:
 	      fflush (stdout);
 	    }
 	  factor_using_pollard_rho (g, a_int, p);
-	  break;
 	}
       else
 	{
@@ -249,7 +250,6 @@ S4:
 	  fflush (stdout);
 	  fputc (' ', stdout);
 	}
-      mpz_div (n, n, g);
       mpz_mod (x, x, n);
       mpz_mod (x1, x1, n);
       mpz_mod (y, y, n);
@@ -273,11 +273,12 @@ S4:
 }
 
 void
-factor (t, p)
-     mpz_t t;
-     unsigned long p;
+factor (mpz_t t, unsigned long p)
 {
   unsigned int division_limit;
+
+  if (mpz_sgn (t) == 0)
+    return;
 
   /* Set the trial division limit according the size of t.  */
   division_limit = mpz_sizeinbase (t, 2);
@@ -305,9 +306,7 @@ factor (t, p)
     }
 }
 
-main (argc, argv)
-     int argc;
-     char *argv[];
+main (int argc, char *argv[])
 {
   mpz_t t;
   unsigned long p;
@@ -320,41 +319,50 @@ main (argc, argv)
       argc--;
     }
 
-  p = 0;
-  for (i = 1; i < argc; i++)
+  mpz_init (t);
+  if (argc > 1)
     {
-      if (!strncmp (argv[i], "-Mp", 3))
+      p = 0;
+      for (i = 1; i < argc; i++)
 	{
-	  p = atoi (argv[i] + 3);
-	  mpz_init_set_ui (t, 1);
-	  mpz_mul_2exp (t, t, p);
-	  mpz_sub_ui (t, t, 1);
-	}
-      else if (!strncmp (argv[i], "-2kp", 4))
-	{
-	  p = atoi (argv[i] + 4);
-	  continue;
-	}
-      else
-	{
-	  mpz_init_set_str (t, argv[i], 0);
-	}
+	  if (!strncmp (argv[i], "-Mp", 3))
+	    {
+	      p = atoi (argv[i] + 3);
+	      mpz_set_ui (t, 1);
+	      mpz_mul_2exp (t, t, p);
+	      mpz_sub_ui (t, t, 1);
+	    }
+	  else if (!strncmp (argv[i], "-2kp", 4))
+	    {
+	      p = atoi (argv[i] + 4);
+	      continue;
+	    }
+	  else
+	    {
+	      mpz_set_str (t, argv[i], 0);
+	    }
 
-      if (mpz_cmp_ui (t, 0) == 0)
-	puts ("-");
-      else
+	  if (mpz_cmp_ui (t, 0) == 0)
+	    puts ("-");
+	  else
+	    {
+	      factor (t, p);
+	      puts ("");
+	    }
+	}
+    }
+  else
+    {
+      for (;;)
 	{
-	  factor (t, p);
+	  mpz_inp_str (t, stdin, 0);
+	  if (feof (stdin))
+	    break;
+	  mpz_out_str (stdout, 10, t); printf (" = ");
+	  factor (t, 0);
 	  puts ("");
 	}
     }
-  exit (0);
-}
 
-void
-dmp (x)
-     mpz_t x;
-{
-  mpz_out_str (stdout, 10, x);
-  puts ("");
+  exit (0);
 }

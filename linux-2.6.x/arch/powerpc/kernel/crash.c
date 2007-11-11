@@ -46,61 +46,6 @@ int crashing_cpu = -1;
 static cpumask_t cpus_in_crash = CPU_MASK_NONE;
 cpumask_t cpus_in_sr = CPU_MASK_NONE;
 
-static u32 *append_elf_note(u32 *buf, char *name, unsigned type, void *data,
-							       size_t data_len)
-{
-	struct elf_note note;
-
-	note.n_namesz = strlen(name) + 1;
-	note.n_descsz = data_len;
-	note.n_type   = type;
-	memcpy(buf, &note, sizeof(note));
-	buf += (sizeof(note) +3)/4;
-	memcpy(buf, name, note.n_namesz);
-	buf += (note.n_namesz + 3)/4;
-	memcpy(buf, data, note.n_descsz);
-	buf += (note.n_descsz + 3)/4;
-
-	return buf;
-}
-
-static void final_note(u32 *buf)
-{
-	struct elf_note note;
-
-	note.n_namesz = 0;
-	note.n_descsz = 0;
-	note.n_type   = 0;
-	memcpy(buf, &note, sizeof(note));
-}
-
-static void crash_save_this_cpu(struct pt_regs *regs, int cpu)
-{
-	struct elf_prstatus prstatus;
-	u32 *buf;
-
-	if ((cpu < 0) || (cpu >= NR_CPUS))
-		return;
-
-	/* Using ELF notes here is opportunistic.
-	 * I need a well defined structure format
-	 * for the data I pass, and I need tags
-	 * on the data to indicate what information I have
-	 * squirrelled away.  ELF notes happen to provide
-	 * all of that that no need to invent something new.
-	 */
-	buf = (u32*)per_cpu_ptr(crash_notes, cpu);
-	if (!buf) 
-		return;
-
-	memset(&prstatus, 0, sizeof(prstatus));
-	prstatus.pr_pid = current->pid;
-	elf_core_copy_regs(&prstatus.pr_reg, regs);
-	buf = append_elf_note(buf, "CORE", NT_PRSTATUS, &prstatus,
-			sizeof(prstatus));
-	final_note(buf);
-}
-
 #ifdef CONFIG_SMP
 static atomic_t enter_on_soft_reset = ATOMIC_INIT(0);
 
@@ -111,9 +56,9 @@ void crash_ipi_callback(struct pt_regs *regs)
 	if (!cpu_online(cpu))
 		return;
 
-	local_irq_disable();
+	hard_irq_disable();
 	if (!cpu_isset(cpu, cpus_in_crash))
-		crash_save_this_cpu(regs, cpu);
+		crash_save_cpu(regs, cpu);
 	cpu_set(cpu, cpus_in_crash);
 
 	/*
@@ -274,6 +219,72 @@ void crash_kexec_secondary(struct pt_regs *regs)
 	cpus_in_sr = CPU_MASK_NONE;
 }
 #endif
+#ifdef CONFIG_SPU_BASE
+
+#include <asm/spu.h>
+#include <asm/spu_priv1.h>
+
+struct crash_spu_info {
+	struct spu *spu;
+	u32 saved_spu_runcntl_RW;
+	u32 saved_spu_status_R;
+	u32 saved_spu_npc_RW;
+	u64 saved_mfc_sr1_RW;
+	u64 saved_mfc_dar;
+	u64 saved_mfc_dsisr;
+};
+
+#define CRASH_NUM_SPUS	16	/* Enough for current hardware */
+static struct crash_spu_info crash_spu_info[CRASH_NUM_SPUS];
+
+static void crash_kexec_stop_spus(void)
+{
+	struct spu *spu;
+	int i;
+	u64 tmp;
+
+	for (i = 0; i < CRASH_NUM_SPUS; i++) {
+		if (!crash_spu_info[i].spu)
+			continue;
+
+		spu = crash_spu_info[i].spu;
+
+		crash_spu_info[i].saved_spu_runcntl_RW =
+			in_be32(&spu->problem->spu_runcntl_RW);
+		crash_spu_info[i].saved_spu_status_R =
+			in_be32(&spu->problem->spu_status_R);
+		crash_spu_info[i].saved_spu_npc_RW =
+			in_be32(&spu->problem->spu_npc_RW);
+
+		crash_spu_info[i].saved_mfc_dar    = spu_mfc_dar_get(spu);
+		crash_spu_info[i].saved_mfc_dsisr  = spu_mfc_dsisr_get(spu);
+		tmp = spu_mfc_sr1_get(spu);
+		crash_spu_info[i].saved_mfc_sr1_RW = tmp;
+
+		tmp &= ~MFC_STATE1_MASTER_RUN_CONTROL_MASK;
+		spu_mfc_sr1_set(spu, tmp);
+
+		__delay(200);
+	}
+}
+
+void crash_register_spus(struct list_head *list)
+{
+	struct spu *spu;
+
+	list_for_each_entry(spu, list, full_list) {
+		if (WARN_ON(spu->number >= CRASH_NUM_SPUS))
+			continue;
+
+		crash_spu_info[spu->number].spu = spu;
+	}
+}
+
+#else
+static inline void crash_kexec_stop_spus(void)
+{
+}
+#endif /* CONFIG_SPU_BASE */
 
 void default_machine_crash_shutdown(struct pt_regs *regs)
 {
@@ -289,7 +300,7 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 	 * an SMP system.
 	 * The kernel is broken so disable interrupts.
 	 */
-	local_irq_disable();
+	hard_irq_disable();
 
 	for_each_irq(irq) {
 		struct irq_desc *desc = irq_desc + irq;
@@ -306,9 +317,10 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 	 * such that another IPI will not be sent.
 	 */
 	crashing_cpu = smp_processor_id();
-	crash_save_this_cpu(regs, crashing_cpu);
+	crash_save_cpu(regs, crashing_cpu);
 	crash_kexec_prepare_cpus(crashing_cpu);
 	cpu_set(crashing_cpu, cpus_in_crash);
+	crash_kexec_stop_spus();
 	if (ppc_md.kexec_cpu_down)
 		ppc_md.kexec_cpu_down(1, 0);
 }

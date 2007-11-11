@@ -1,7 +1,7 @@
 /*
- * $Id: tcp_main.c,v 1.41.2.5.2.3.2.1 2004/07/15 21:18:34 andrei Exp $
+ * $Id: tcp_main.c,v 1.58.2.2 2005/06/16 10:30:07 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -42,6 +42,8 @@
  *  2003-06-30  moved tcp new connect checking & handling to
  *               handle_new_connect (andrei)
  *  2003-07-09  tls_close called before closing the tcp connection (andrei)
+ *  2003-10-24  converted to the new socket_info lists (andrei)
+ *  2003-10-27  tcp port aliases support added (andrei)
  *  2003-11-04  always lock before manipulating refcnt; sendchild
  *              does not inc refcnt by itself anymore (andrei)
  *  2003-11-07  different unix sockets are used for fd passing
@@ -49,6 +51,7 @@
  *  2003-11-17  handle_new_connect & tcp_connect will close the 
  *              new socket if tcpconn_new return 0 (e.g. out of mem) (andrei)
  *  2003-11-28  tcp_blocking_write & tcp_blocking_connect added (andrei)
+ *  2004-11-08  dropped find_tcp_si and replaced with find_si (andrei)
  */
 
 
@@ -91,6 +94,7 @@
 #include "sr_module.h"
 #include "tcp_server.h"
 #include "tcp_init.h"
+#include "tsend.h"
 #ifdef USE_TLS
 #include "tls/tls_server.h"
 #endif
@@ -112,11 +116,12 @@ struct tcp_child{
 };
 
 
+int tcp_accept_aliases=0; /* by default don't accept aliases */
 int tcp_connect_timeout=DEFAULT_TCP_CONNECT_TIMEOUT;
 int tcp_send_timeout=DEFAULT_TCP_SEND_TIMEOUT;
 
-/* connection hash table (after ip&port) */
-struct tcp_connection** tcpconn_addr_hash=0;
+/* connection hash table (after ip&port) , includes also aliases */
+struct tcp_conn_alias** tcpconn_aliases_hash=0;
 /* connection hash table (after connection id) */
 struct tcp_connection** tcpconn_id_hash=0;
 gen_lock_t* tcpconn_lock=0;
@@ -233,6 +238,7 @@ end:
 
 
 
+#if 0
 /* blocking write even on non-blocking sockets 
  * if TCP_TIMEOUT will return with error */
 static int tcp_blocking_write(struct tcp_connection* c, int fd, char* buf,
@@ -300,6 +306,7 @@ error:
 end:
 		return initial_len;
 }
+#endif
 
 
 
@@ -314,6 +321,7 @@ struct tcp_connection* tcpconn_new(int sock, union sockaddr_union* su,
 		LOG(L_ERR, "ERROR: tcpconn_new: mem. allocation failure\n");
 		goto error;
 	}
+	memset(c, 0, sizeof(struct tcp_connection)); /* zero init */
 	c->s=sock;
 	c->fd=-1; /* not initialized */
 	if (lock_init(&c->write_lock)==0){
@@ -361,22 +369,6 @@ error:
 
 
 
-
-struct socket_info* find_tcp_si(union sockaddr_union* s)
-{
-	int r;
-	struct ip_addr ip;
-	
-	su2ip_addr(&ip, s);
-	for (r=0; r<sock_no; r++)
-		if (ip_addr_cmp(&ip, &tcp_info[r].address)){
-			/* found it, we use first match */
-			return &tcp_info[r];
-		}
-	return 0; /* no match */
-}
-
-
 struct tcp_connection* tcpconn_connect(union sockaddr_union* server, int type)
 {
 	int s;
@@ -384,6 +376,7 @@ struct tcp_connection* tcpconn_connect(union sockaddr_union* server, int type)
 	union sockaddr_union my_name;
 	socklen_t my_name_len;
 	struct tcp_connection* con;
+	struct ip_addr ip;
 
 	s=socket(AF2PF(server->s.sa_family), SOCK_STREAM, 0);
 	if (s==-1){
@@ -405,15 +398,16 @@ struct tcp_connection* tcpconn_connect(union sockaddr_union* server, int type)
 				strerror(errno), errno);
 		si=0; /* try to go on */
 	}
+	su2ip_addr(&ip, &my_name);
 #ifdef USE_TLS
 	if (type==PROTO_TLS)
-		si=find_tls_si(&my_name);
+		si=find_si(&ip, 0, PROTO_TLS);
 	else
 #endif
-		si=find_tcp_si(&my_name);
+		si=find_si(&ip, 0, PROTO_TCP);
 
 	if (si==0){
-		LOG(L_ERR, "ERROR: tcp_connect: could not find coresponding"
+		LOG(L_ERR, "ERROR: tcp_connect: could not find corresponding"
 				" listening socket, using default...\n");
 		if (server->s.sa_family==AF_INET) si=sendipv4_tcp;
 #ifdef USE_IPV6
@@ -442,14 +436,20 @@ struct tcp_connection*  tcpconn_add(struct tcp_connection *c)
 	if (c){
 		TCPCONN_LOCK;
 		/* add it at the begining of the list*/
-		hash=tcp_addr_hash(&c->rcv.src_ip, c->rcv.src_port);
-		c->addr_hash=hash;
-		tcpconn_listadd(tcpconn_addr_hash[hash], c, next, prev);
 		hash=tcp_id_hash(c->id);
 		c->id_hash=hash;
 		tcpconn_listadd(tcpconn_id_hash[hash], c, id_next, id_prev);
+		
+		hash=tcp_addr_hash(&c->rcv.src_ip, c->rcv.src_port);
+		/* set the first alias */
+		c->con_aliases[0].port=c->rcv.src_port;
+		c->con_aliases[0].hash=hash;
+		c->con_aliases[0].parent=c;
+		tcpconn_listadd(tcpconn_aliases_hash[hash], &c->con_aliases[0],
+						next, prev);
+		c->aliases++;
 		TCPCONN_UNLOCK;
-		DBG("tcpconn_add: hashes: %d, %d\n", c->addr_hash, c->id_hash);
+		DBG("tcpconn_add: hashes: %d, %d\n", hash, c->id_hash);
 		return c;
 	}else{
 		LOG(L_CRIT, "tcpconn_add: BUG: null connection pointer\n");
@@ -461,8 +461,12 @@ struct tcp_connection*  tcpconn_add(struct tcp_connection *c)
 /* unsafe tcpconn_rm version (nolocks) */
 void _tcpconn_rm(struct tcp_connection* c)
 {
-	tcpconn_listrm(tcpconn_addr_hash[c->addr_hash], c, next, prev);
+	int r;
 	tcpconn_listrm(tcpconn_id_hash[c->id_hash], c, id_next, id_prev);
+	/* remove all the aliases */
+	for (r=0; r<c->aliases; r++)
+		tcpconn_listrm(tcpconn_aliases_hash[c->con_aliases[r].hash], 
+						&c->con_aliases[r], next, prev);
 	lock_destroy(&c->write_lock);
 #ifdef USE_TLS
 	if (c->type==PROTO_TLS) tls_tcpconn_clean(c);
@@ -474,9 +478,13 @@ void _tcpconn_rm(struct tcp_connection* c)
 
 void tcpconn_rm(struct tcp_connection* c)
 {
+	int r;
 	TCPCONN_LOCK;
-	tcpconn_listrm(tcpconn_addr_hash[c->addr_hash], c, next, prev);
 	tcpconn_listrm(tcpconn_id_hash[c->id_hash], c, id_next, id_prev);
+	/* remove all the aliases */
+	for (r=0; r<c->aliases; r++)
+		tcpconn_listrm(tcpconn_aliases_hash[c->con_aliases[r].hash], 
+						&c->con_aliases[r], next, prev);
 	TCPCONN_UNLOCK;
 	lock_destroy(&c->write_lock);
 #ifdef USE_TLS
@@ -493,11 +501,12 @@ struct tcp_connection* _tcpconn_find(int id, struct ip_addr* ip, int port)
 {
 
 	struct tcp_connection *c;
+	struct tcp_conn_alias* a;
 	unsigned hash;
 	
 #ifdef EXTRA_DEBUG
 	DBG("tcpconn_find: %d  port %d\n",id, port);
-	print_ip("tcpconn_find: ip ", ip, "\n");
+	if (ip) print_ip("tcpconn_find: ip ", ip, "\n");
 #endif
 	if (id){
 		hash=tcp_id_hash(id);
@@ -510,14 +519,15 @@ struct tcp_connection* _tcpconn_find(int id, struct ip_addr* ip, int port)
 		}
 	}else if (ip){
 		hash=tcp_addr_hash(ip, port);
-		for (c=tcpconn_addr_hash[hash]; c; c=c->next){
+		for (a=tcpconn_aliases_hash[hash]; a; a=a->next){
 #ifdef EXTRA_DEBUG
-			DBG("c=%p, c->id=%d, port=%d\n",c, c->id, c->rcv.src_port);
-			print_ip("ip=",&c->rcv.src_ip,"\n");
+			DBG("a=%p, c=%p, c->id=%d, alias port= %d port=%d\n", a, a->parent,
+					a->parent->id, a->port, a->parent->rcv.src_port);
+			print_ip("ip=",&a->parent->rcv.src_ip,"\n");
 #endif
-			if ( (c->state!=S_CONN_BAD) && (port==c->rcv.src_port) &&
-					(ip_addr_cmp(ip, &c->rcv.src_ip)) )
-				return c;
+			if ( (a->parent->state!=S_CONN_BAD) && (port==a->port) &&
+					(ip_addr_cmp(ip, &a->parent->rcv.src_ip)) )
+				return a->parent;
 		}
 	}
 	return 0;
@@ -538,6 +548,67 @@ struct tcp_connection* tcpconn_get(int id, struct ip_addr* ip, int port,
 	}
 	TCPCONN_UNLOCK;
 	return c;
+}
+
+
+
+/* add port as an alias for the "id" connection
+ * returns 0 on success,-1 on failure */
+int tcpconn_add_alias(int id, int port, int proto)
+{
+	struct tcp_connection* c;
+	unsigned hash;
+	struct tcp_conn_alias* a;
+	
+	a=0;
+	/* fix the port */
+	port=port?port:((proto==PROTO_TLS)?SIPS_PORT:SIP_PORT);
+	TCPCONN_LOCK;
+	/* check if alias already exists */
+	c=_tcpconn_find(id, 0, 0);
+	if (c){
+		hash=tcp_addr_hash(&c->rcv.src_ip, port);
+		/* search the aliases for an already existing one */
+		for (a=tcpconn_aliases_hash[hash]; a; a=a->next){
+			if ( (a->parent->state!=S_CONN_BAD) && (port==a->port) &&
+					(ip_addr_cmp(&c->rcv.src_ip, &a->parent->rcv.src_ip)) ){
+				/* found */
+				if (a->parent!=c) goto error_sec;
+				else goto ok;
+			}
+		}
+		if (c->aliases>=TCP_CON_MAX_ALIASES) goto error_aliases;
+		c->con_aliases[c->aliases].parent=c;
+		c->con_aliases[c->aliases].port=port;
+		c->con_aliases[c->aliases].hash=hash;
+		tcpconn_listadd(tcpconn_aliases_hash[hash], 
+								&c->con_aliases[c->aliases], next, prev);
+		c->aliases++;
+	}else goto error_not_found;
+ok:
+	TCPCONN_UNLOCK;
+#ifdef EXTRA_DEBUG
+	if (a) DBG("tcpconn_add_alias: alias already present\n");
+	else   DBG("tcpconn_add_alias: alias port %d for hash %d, id %d\n",
+			port, hash, c->id);
+#endif
+	return 0;
+error_aliases:
+	TCPCONN_UNLOCK;
+	LOG(L_ERR, "ERROR: tcpconn_add_alias: too many aliases for connection %p"
+				" (%d)\n", c, c->id);
+	return -1;
+error_not_found:
+	TCPCONN_UNLOCK;
+	LOG(L_ERR, "ERROR: tcpconn_add_alias: no connection found for id %d\n",id);
+	return -1;
+error_sec:
+	TCPCONN_UNLOCK;
+	LOG(L_ERR, "ERROR: tcpconn_add_alias: possible port hijack attempt\n");
+	LOG(L_ERR, "ERROR: tcpconn_add_alias: alias already present and points"
+			" to another connection (%d : %d and %d : %d)\n",
+			a->parent->id,  port, c->id, port);
+	return -1;
 }
 
 
@@ -673,7 +744,8 @@ send_it:
 		n=tls_blocking_write(c, fd, buf, len);
 	else
 #endif
-		n=tcp_blocking_write(c, fd, buf, len);
+		/* n=tcp_blocking_write(c, fd, buf, len); */
+		n=tsend_stream(fd, buf, len, tcp_send_timeout*1000); 
 	lock_release(&c->write_lock);
 	DBG("tcp_send: after write: c= %p n=%d fd=%d\n",c, n, fd);
 	DBG("tcp_send: buf=\n%.*s\n", (int)len, buf);
@@ -704,7 +776,7 @@ release_c:
 
 
 
-/* very ineficient for now - FIXME*/
+/* very inefficient for now - FIXME*/
 void tcpconn_timeout(fd_set* set)
 {
 	struct tcp_connection *c, *next;
@@ -715,10 +787,10 @@ void tcpconn_timeout(fd_set* set)
 	
 	ticks=get_ticks();
 	TCPCONN_LOCK; /* fixme: we can lock only on delete IMO */
-	for(h=0; h<TCP_ADDR_HASH_SIZE; h++){
-		c=tcpconn_addr_hash[h];
+	for(h=0; h<TCP_ID_HASH_SIZE; h++){
+		c=tcpconn_id_hash[h];
 		while(c){
-			next=c->next;
+			next=c->id_next;
 			if ((c->refcnt==0) && (ticks>c->timeout)) {
 				DBG("tcpconn_timeout: timeout for hash=%d - %p (%d > %d)\n",
 						h, c, ticks, c->timeout);
@@ -761,7 +833,7 @@ int tcp_init(struct socket_info* sock_info)
 #endif
 	
 	addr=&sock_info->su;
-	sock_info->proto=PROTO_TCP;
+	/* sock_info->proto=PROTO_TCP; */
 	if (init_su(addr, &sock_info->address, sock_info->port_no)<0){
 		LOG(L_ERR, "ERROR: tcp_init: could no init sockaddr_union\n");
 		goto error;
@@ -810,7 +882,7 @@ int tcp_init(struct socket_info* sock_info)
 	if (bind(sock_info->socket, &addr->s, sockaddru_len(*addr))==-1){
 		LOG(L_ERR, "ERROR: tcp_init: bind(%x, %p, %d) on %s: %s\n",
 				sock_info->socket, &addr->s, 
-				sockaddru_len(*addr),
+				(unsigned)sockaddru_len(*addr),
 				sock_info->address_str.s,
 				strerror(errno));
 		goto error;
@@ -818,7 +890,7 @@ int tcp_init(struct socket_info* sock_info)
 	if (listen(sock_info->socket, 10)==-1){
 		LOG(L_ERR, "ERROR: tcp_init: listen(%x, %p, %d) on %s: %s\n",
 				sock_info->socket, &addr->s, 
-				sockaddru_len(*addr),
+				(unsigned)sockaddru_len(*addr),
 				sock_info->address_str.s,
 				strerror(errno));
 		goto error;
@@ -857,7 +929,7 @@ static int send2child(struct tcp_connection* tcpconn)
 	tcp_children[idx].busy++;
 	tcp_children[idx].n_reqs++;
 	if (min_busy){
-		LOG(L_WARN, "WARNING: send2child: no free tcp receiver, "
+		DBG("WARNING: send2child: no free tcp receiver, "
 				" connection passed to the least busy one (%d)\n",
 				min_busy);
 	}
@@ -970,24 +1042,33 @@ void tcp_main_loop()
 	int bytes;
 	struct timeval timeout;
 	int fd;
+	struct socket_info* si;
 
 	/*init */
 	maxfd=0;
 	FD_ZERO(&master_set);
 	/* set all the listen addresses */
-	for (r=0; r<sock_no; r++){
-		if ((tcp_info[r].proto==PROTO_TCP) &&(tcp_info[r].socket!=-1)){
-			FD_SET(tcp_info[r].socket, &master_set);
-			if (tcp_info[r].socket>maxfd) maxfd=tcp_info[r].socket;
+	for (si=tcp_listen; si; si=si->next){
+		if ((si->proto==PROTO_TCP) &&(si->socket!=-1)){
+			FD_SET(si->socket, &master_set);
+			if (si->socket>maxfd) maxfd=si->socket;
+		}else{
+			LOG(L_CRIT, "BUG: tcp_main_loop: non tcp address in tcp_listen\n");
 		}
-#ifdef USE_TLS
-		if ((!tls_disable)&&(tls_info[r].proto==PROTO_TLS) &&
-				(tls_info[r].socket!=-1)){
-			FD_SET(tls_info[r].socket, &master_set);
-			if (tls_info[r].socket>maxfd) maxfd=tls_info[r].socket;
-		}
-#endif
 	}
+#ifdef USE_TLS
+	if (!tls_disable){
+		for (si=tls_listen; si; si=si->next){
+			if ((si->proto==PROTO_TLS) && (si->socket!=-1)){
+				FD_SET(si->socket, &master_set);
+				if (si->socket>maxfd) maxfd=si->socket;
+			}else{
+				LOG(L_CRIT, "BUG: tcp_main_loop: non tls address"
+						" in tls_listen\n");
+			}
+		}
+	}
+#endif
 	/* set all the unix sockets used for child comm */
 	for (r=1; r<process_no; r++){
 		if (pt[r].unix_sock>0){ /* we can't have 0, we never close it!*/
@@ -1020,18 +1101,18 @@ void tcp_main_loop()
 			n=0;
 		}
 		
-		for (r=0; r<sock_no && n; r++){
-			handle_new_connect(&tcp_info[r], &sel_set, &n);
+		for (si=tcp_listen; si && n; si=si->next)
+			handle_new_connect(si, &sel_set, &n);
 #ifdef USE_TLS
 			if (!tls_disable)
-				handle_new_connect(&tls_info[r], &sel_set, &n);
+				for (si=tls_listen; si && n; si=si->next)
+					handle_new_connect(si, &sel_set, &n);
 #endif
-		}
 		
 		/* check all the read fds (from the tcpconn_addr_hash ) */
-		for (h=0; h<TCP_ADDR_HASH_SIZE; h++){
-			for(tcpconn=tcpconn_addr_hash[h]; tcpconn && n; 
-					tcpconn=tcpconn->next){
+		for (h=0; h<TCP_ID_HASH_SIZE; h++){
+			for(tcpconn=tcpconn_id_hash[h]; tcpconn && n; 
+					tcpconn=tcpconn->id_next){
 				/* FIXME: is refcnt==0 really necessary? */
 				if ((tcpconn->refcnt==0)&&(FD_ISSET(tcpconn->s, &sel_set))){
 					/* new data available */
@@ -1108,7 +1189,7 @@ void tcp_main_loop()
 					case CONN_DESTROY:
 					case CONN_EOF:
 						/* WARNING: this will auto-dec. refcnt! */
-						tcp_children[pt[r].idx].busy--;
+						tcp_children[r].busy--;
 						if (tcpconn){
 							if (tcpconn->s!=-1)
 								FD_CLR(tcpconn->s, &master_set);
@@ -1179,7 +1260,7 @@ void tcp_main_loop()
 						if (tcpconn){
 							bytes=receive_fd(pt[r].unix_sock, &tcpconn,
 									sizeof(tcpconn), &tcpconn->s);
-								if (bytes<sizeof(tcpconn)){
+								if (bytes<(int)sizeof(tcpconn)){
 									if (bytes<0){
 										LOG(L_CRIT, "BUG: tcp_main_loop:"
 												" CONN_NEW: receive_fd "
@@ -1241,10 +1322,9 @@ int init_tcp()
 	}
 	*connection_id=1;
 	/* alloc hashtables*/
-	tcpconn_addr_hash=(struct tcp_connection**)shm_malloc(TCP_ADDR_HASH_SIZE*
-								sizeof(struct tcp_connection*));
-
-	if (tcpconn_addr_hash==0){
+	tcpconn_aliases_hash=(struct tcp_conn_alias**)
+			shm_malloc(TCP_ALIAS_HASH_SIZE* sizeof(struct tcp_conn_alias*));
+	if (tcpconn_aliases_hash==0){
 		LOG(L_CRIT, "ERROR: init_tcp: could not alloc address hashtable\n");
 		shm_free(connection_id);
 		connection_id=0;
@@ -1260,16 +1340,16 @@ int init_tcp()
 		LOG(L_CRIT, "ERROR: init_tcp: could not alloc id hashtable\n");
 		shm_free(connection_id);
 		connection_id=0;
-		shm_free(tcpconn_addr_hash);
-		tcpconn_addr_hash=0;
+		shm_free(tcpconn_aliases_hash);
+		tcpconn_aliases_hash=0;
 		lock_destroy(tcpconn_lock);
 		lock_dealloc((void*)tcpconn_lock);
 		tcpconn_lock=0;
 		goto error;
 	}
 	/* init hashtables*/
-	memset((void*)tcpconn_addr_hash, 0, 
-			TCP_ADDR_HASH_SIZE * sizeof(struct tcp_connection*));
+	memset((void*)tcpconn_aliases_hash, 0, 
+			TCP_ALIAS_HASH_SIZE * sizeof(struct tcp_conn_alias*));
 	memset((void*)tcpconn_id_hash, 0, 
 			TCP_ID_HASH_SIZE * sizeof(struct tcp_connection*));
 	return 0;
@@ -1287,9 +1367,9 @@ void destroy_tcp()
 		lock_dealloc((void*)tcpconn_lock);
 		tcpconn_lock=0;
 	}
-	if(tcpconn_addr_hash){
-		shm_free(tcpconn_addr_hash);
-		tcpconn_addr_hash=0;
+	if(tcpconn_aliases_hash){
+		shm_free(tcpconn_aliases_hash);
+		tcpconn_aliases_hash=0;
 	}
 	if(tcpconn_id_hash){
 		shm_free(tcpconn_id_hash);
@@ -1354,7 +1434,6 @@ int tcp_init_children()
 			unix_tcp_sock=sockfd[1];
 			bind_address=0; /* force a SEGFAULT if someone uses a non-init.
 							   bind address on tcp */
-			bind_idx=0;
 			if (init_child(r+children_no+1) < 0) {
 				LOG(L_ERR, "init_children failed\n");
 				goto error;

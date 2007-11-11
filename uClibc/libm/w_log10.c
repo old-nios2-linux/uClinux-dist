@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -14,14 +14,14 @@
 static char rcsid[] = "$NetBSD: w_log10.c,v 1.6 1995/05/10 20:49:35 jtc Exp $";
 #endif
 
-/* 
+/*
  * wrapper log10(X)
  */
 
 #include "math.h"
 #include "math_private.h"
 
-
+libm_hidden_proto(log10)
 #ifdef __STDC__
 	double log10(double x)		/* wrapper log10 */
 #else
@@ -38,9 +38,10 @@ static char rcsid[] = "$NetBSD: w_log10.c,v 1.6 1995/05/10 20:49:35 jtc Exp $";
 	if(x<=0.0) {
 	    if(x==0.0)
 	        return __kernel_standard(x,x,18); /* log10(0) */
-	    else 
+	    else
 	        return __kernel_standard(x,x,19); /* log10(x<0) */
 	} else
 	    return z;
 #endif
 }
+libm_hidden_def(log10)

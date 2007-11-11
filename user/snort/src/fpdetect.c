@@ -428,21 +428,26 @@ static INLINE int fpAddMatch(OTNX_MATCH_DATA *omd, OTNX *otnx, int pLen )
     int evalIndex;
 
     evalIndex = otnx->otn->rtn->listhead->ruleListNode->evalIndex;
-    
+   
+    /* bounds check index */
+    if( evalIndex >= omd->iMatchInfoArraySize )
+        return 1;
+
     pmi = &omd->matchInfo[evalIndex];
 
     /*
     **  If we hit the max number of unique events for any rule type alert,
     **  log or pass, then we don't add it to the list.
     */
-    if( pmi->iMatchCount == fpDetect->max_queue_events || 
-        pmi->iMatchCount == MAX_EVENT_MATCH)
+    if( pmi->iMatchCount >= fpDetect->max_queue_events || 
+        pmi->iMatchCount >= MAX_EVENT_MATCH)
     {
         return 1;
     }
 
     /*
     **  Add the event to the appropriate list
+    **  Warning: C6386 is a false positive dues to bounds check above.:427
     */
     pmi->MatchArray[ pmi->iMatchCount ] = otnx;
 

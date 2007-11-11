@@ -1,9 +1,9 @@
 /*
  * Presence Agent, domain support
  *
- * $Id: pdomain.c,v 1.5.4.1 2003/11/11 14:32:27 janakj Exp $
+ * $Id: pdomain.c,v 1.15 2004/09/03 15:23:46 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,7 @@
 
 #include "pdomain.h"
 #include "paerrno.h"
+#include "presentity.h"
 #include "../../ut.h"
 #include "../../dprint.h"
 #include "../../mem/shm_mem.h"
@@ -154,14 +155,15 @@ void print_pdomain(FILE* _f, pdomain_t* _d)
 
 int timer_pdomain(pdomain_t* _d)
 {
-	struct presentity* ptr, *t;
+	struct presentity* presentity, *t;
 
 	lock_pdomain(_d);
 
-	ptr = _d->first;
+	presentity = _d->first;
 
-	while(ptr) {
-		if (timer_presentity(ptr) < 0) {
+	if (0) LOG(L_ERR, "timer_pdomain: _d=%s d->first=%p\n", _d->name->s, presentity);
+	while(presentity) {
+		if (timer_presentity(presentity) < 0) {
 			LOG(L_ERR, "timer_pdomain(): Error in timer_pdomain\n");
 			unlock_pdomain(_d);
 			return -1;
@@ -170,13 +172,13 @@ int timer_pdomain(pdomain_t* _d)
 		     /* Remove the entire record
 		      * if it is empty
 		      */
-		if (ptr->watchers == 0) {
-			t = ptr;
-			ptr = ptr->next;
+		if (presentity->watchers == 0 && presentity->winfo_watchers==0) {
+			t = presentity;
+			presentity = presentity->next;
 			remove_presentity(_d, t);
 			free_presentity(t);
 		} else {
-			ptr = ptr->next;
+			presentity = presentity->next;
 		}
 	}
 	
@@ -185,12 +187,16 @@ int timer_pdomain(pdomain_t* _d)
 }
 
 
+static int in_pdomain = 0; /* this only works with single or multiprocess execution model, but not multi-threaded */
+
 /*
- * Get lock
+ * Get lock if this process does not already have it
  */
 void lock_pdomain(pdomain_t* _d)
 {
-	lock_get(&_d->lock);
+	DBG("lock_pdomain\n");
+	if (!in_pdomain++)
+	     lock_get(&_d->lock);
 }
 
 
@@ -199,7 +205,10 @@ void lock_pdomain(pdomain_t* _d)
  */
 void unlock_pdomain(pdomain_t* _d)
 {
-	lock_release(&_d->lock);
+	DBG("unlock_pdomain\n");
+	in_pdomain--;
+	if (!in_pdomain)
+	     lock_release(&_d->lock);
 }
 
 
@@ -211,6 +220,10 @@ int find_presentity(pdomain_t* _d, str* _uri, struct presentity** _p)
 	int sl, i;
 	struct presentity* p;
 	
+	if (!_d->first) {
+	     pdomain_load_presentities(_d);
+	}
+
 	sl = hash_func(_d, _uri->s, _uri->len);
 	
 	p = _d->table[sl].first;
@@ -223,7 +236,7 @@ int find_presentity(pdomain_t* _d, str* _uri, struct presentity** _p)
 		
 		p = p->next;
 	}
-	
+
 	return 1;   /* Nothing found */
 }
 
@@ -231,6 +244,8 @@ int find_presentity(pdomain_t* _d, str* _uri, struct presentity** _p)
 void add_presentity(pdomain_t* _d, struct presentity* _p)
 {
 	int sl;
+
+	LOG(L_WARN, "add_presentity _p=%p p_uri=%.*s\n", _p, _p->uri.len, _p->uri.s);
 
 	sl = hash_func(_d, _p->uri.s, _p->uri.len);
 
@@ -240,5 +255,7 @@ void add_presentity(pdomain_t* _d, struct presentity* _p)
 
 void remove_presentity(pdomain_t* _d, struct presentity* _p)
 {
+	return;
+	LOG(L_WARN, "remove_presentity _p=%p p_uri=%.*s\n", _p, _p->uri.len, _p->uri.s);
 	slot_rem(_p->slot, _p, &_d->first, &_d->last);
 }

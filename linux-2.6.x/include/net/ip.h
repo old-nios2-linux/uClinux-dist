@@ -25,6 +25,7 @@
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/in.h>
+#include <linux/skbuff.h>
 
 #include <net/inet_sock.h>
 #include <net/snmp.h>
@@ -42,6 +43,11 @@ struct inet_skb_parm
 #define IPSKB_FRAG_COMPLETE	8
 #define IPSKB_REROUTED		16
 };
+
+static inline unsigned int ip_hdrlen(const struct sk_buff *skb)
+{
+	return ip_hdr(skb)->ihl * 4;
+}
 
 struct ipcm_cookie
 {
@@ -74,7 +80,6 @@ struct msghdr;
 struct net_device;
 struct packet_type;
 struct rtable;
-struct sk_buff;
 struct sockaddr;
 
 extern void		ip_mc_dropsocket(struct sock *);
@@ -123,7 +128,7 @@ extern int		ip4_datagram_connect(struct sock *sk,
  *      multicast packets.
  */
 
-static inline void ip_tr_mc_map(u32 addr, char *buf)
+static inline void ip_tr_mc_map(__be32 addr, char *buf)
 {
 	buf[0]=0xC0;
 	buf[1]=0x00;
@@ -135,9 +140,10 @@ static inline void ip_tr_mc_map(u32 addr, char *buf)
 
 struct ip_reply_arg {
 	struct kvec iov[1];   
-	u32 	    csum; 
+	__wsum 	    csum;
 	int	    csumoffset; /* u16 offset of csum in iov[0].iov_base */
 				/* -1 if not needed */ 
+	int	    bound_dev_if;
 }; 
 
 void ip_send_reply(struct sock *sk, struct sk_buff *skb, struct ip_reply_arg *arg,
@@ -160,6 +166,10 @@ DECLARE_SNMP_STAT(struct linux_mib, net_statistics);
 #define NET_INC_STATS_USER(field) 	SNMP_INC_STATS_USER(net_statistics, field)
 #define NET_ADD_STATS_BH(field, adnd)	SNMP_ADD_STATS_BH(net_statistics, field, adnd)
 #define NET_ADD_STATS_USER(field, adnd)	SNMP_ADD_STATS_USER(net_statistics, field, adnd)
+
+extern unsigned long snmp_fold_field(void *mib[], int offt);
+extern int snmp_mib_init(void *ptr[2], size_t mibsize, size_t mibalign);
+extern void snmp_mib_free(void *ptr[2]);
 
 extern int sysctl_local_port_range[2];
 extern int sysctl_ip_default_ttl;
@@ -192,9 +202,9 @@ extern void ipfrag_init(void);
 static inline
 int ip_decrease_ttl(struct iphdr *iph)
 {
-	u32 check = iph->check;
-	check += htons(0x0100);
-	iph->check = check + (check>=0xFFFF);
+	u32 check = (__force u32)iph->check;
+	check += (__force u32)htons(0x0100);
+	iph->check = (__force __sum16)(check + (check>=0xFFFF));
 	return --iph->ttl;
 }
 
@@ -238,9 +248,9 @@ static inline void ip_select_ident_more(struct iphdr *iph, struct dst_entry *dst
  *	Map a multicast IP onto multicast MAC for type ethernet.
  */
 
-static inline void ip_eth_mc_map(u32 addr, char *buf)
+static inline void ip_eth_mc_map(__be32 naddr, char *buf)
 {
-	addr=ntohl(addr);
+	__u32 addr=ntohl(naddr);
 	buf[0]=0x01;
 	buf[1]=0x00;
 	buf[2]=0x5e;
@@ -256,13 +266,14 @@ static inline void ip_eth_mc_map(u32 addr, char *buf)
  *	Leave P_Key as 0 to be filled in by driver.
  */
 
-static inline void ip_ib_mc_map(u32 addr, char *buf)
+static inline void ip_ib_mc_map(__be32 naddr, char *buf)
 {
+	__u32 addr;
 	buf[0]  = 0;		/* Reserved */
 	buf[1]  = 0xff;		/* Multicast QPN */
 	buf[2]  = 0xff;
 	buf[3]  = 0xff;
-	addr    = ntohl(addr);
+	addr    = ntohl(naddr);
 	buf[4]  = 0xff;
 	buf[5]  = 0x12;		/* link local scope */
 	buf[6]  = 0x40;		/* IPv4 signature */
@@ -375,8 +386,7 @@ int ipv4_doint_and_flush(ctl_table *ctl, int write,
 			 size_t *lenp, loff_t *ppos);
 int ipv4_doint_and_flush_strategy(ctl_table *table, int __user *name, int nlen,
 				  void __user *oldval, size_t __user *oldlenp,
-				  void __user *newval, size_t newlen, 
-				  void **context);
+				  void __user *newval, size_t newlen);
 #ifdef CONFIG_PROC_FS
 extern int ip_misc_proc_init(void);
 #endif

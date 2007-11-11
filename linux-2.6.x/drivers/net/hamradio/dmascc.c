@@ -252,7 +252,7 @@ static inline void z8530_isr(struct scc_info *info);
 static irqreturn_t scc_isr(int irq, void *dev_id);
 static void rx_isr(struct scc_priv *priv);
 static void special_condition(struct scc_priv *priv, int rc);
-static void rx_bh(void *arg);
+static void rx_bh(struct work_struct *);
 static void tx_isr(struct scc_priv *priv);
 static void es_isr(struct scc_priv *priv);
 static void tm_isr(struct scc_priv *priv);
@@ -264,12 +264,6 @@ static int io[MAX_NUM_DEVS] __initdata = { 0, };
 
 /* Beware! hw[] is also used in cleanup_module(). */
 static struct scc_hardware hw[NUM_TYPES] __initdata_or_module = HARDWARE;
-static char ax25_broadcast[7] __initdata =
-    { 'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1,
-'0' << 1 };
-static char ax25_test[7] __initdata =
-    { 'L' << 1, 'I' << 1, 'N' << 1, 'U' << 1, 'X' << 1, ' ' << 1,
-'1' << 1 };
 
 
 /* Global variables */
@@ -443,8 +437,8 @@ static void __init dev_setup(struct net_device *dev)
 	dev->mtu = 1500;
 	dev->addr_len = AX25_ADDR_LEN;
 	dev->tx_queue_len = 64;
-	memcpy(dev->broadcast, ax25_broadcast, AX25_ADDR_LEN);
-	memcpy(dev->dev_addr, ax25_test, AX25_ADDR_LEN);
+	memcpy(dev->broadcast, &ax25_bcast, AX25_ADDR_LEN);
+	memcpy(dev->dev_addr, &ax25_defaddr, AX25_ADDR_LEN);
 }
 
 static int __init setup_adapter(int card_base, int type, int n)
@@ -459,8 +453,8 @@ static int __init setup_adapter(int card_base, int type, int n)
 	int scc_base = card_base + hw[type].scc_offset;
 	char *chipnames[] = CHIPNAMES;
 
-	/* Allocate memory */
-	info = kmalloc(sizeof(struct scc_info), GFP_KERNEL | GFP_DMA);
+	/* Initialize what is necessary for write_scc and write_scc_data */
+	info = kzalloc(sizeof(struct scc_info), GFP_KERNEL | GFP_DMA);
 	if (!info) {
 		printk(KERN_ERR "dmascc: "
 		       "could not allocate memory for %s at %#3x\n",
@@ -468,8 +462,6 @@ static int __init setup_adapter(int card_base, int type, int n)
 		goto out;
 	}
 
-	/* Initialize what is necessary for write_scc and write_scc_data */
-	memset(info, 0, sizeof(struct scc_info));
 
 	info->dev[0] = alloc_netdev(0, "", dev_setup);
 	if (!info->dev[0]) {
@@ -579,7 +571,7 @@ static int __init setup_adapter(int card_base, int type, int n)
 		priv->param.clocks = TCTRxCP | RCRTxCP;
 		priv->param.persist = 256;
 		priv->param.dma = -1;
-		INIT_WORK(&priv->rx_work, rx_bh, priv);
+		INIT_WORK(&priv->rx_work, rx_bh);
 		dev->priv = priv;
 		sprintf(dev->name, "dmascc%i", 2 * n + i);
 		dev->base_addr = card_base;
@@ -936,7 +928,7 @@ static int scc_send_packet(struct sk_buff *skb, struct net_device *dev)
 
 	/* Transfer data to DMA buffer */
 	i = priv->tx_head;
-	memcpy(priv->tx_buf[i], skb->data + 1, skb->len - 1);
+	skb_copy_from_linear_data_offset(skb, 1, priv->tx_buf[i], skb->len - 1);
 	priv->tx_len[i] = skb->len - 1;
 
 	/* Clear interrupts while we touch our circular buffers */
@@ -1272,9 +1264,9 @@ static void special_condition(struct scc_priv *priv, int rc)
 }
 
 
-static void rx_bh(void *arg)
+static void rx_bh(struct work_struct *ugli_api)
 {
-	struct scc_priv *priv = arg;
+	struct scc_priv *priv = container_of(ugli_api, struct scc_priv, rx_work);
 	int i = priv->rx_tail;
 	int cb;
 	unsigned long flags;

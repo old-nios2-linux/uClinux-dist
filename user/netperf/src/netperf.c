@@ -1,6 +1,6 @@
 /*
  
-	   Copyright (C) 1993-2005 Hewlett-Packard Company
+	   Copyright (C) 1993-2007 Hewlett-Packard Company
                          ALL RIGHTS RESERVED.
  
   The enclosed software and documentation includes copyrighted works
@@ -42,11 +42,15 @@
  
 */
 char	netperf_id[]="\
-@(#)netperf.c (c) Copyright 1993-2004 Hewlett-Packard Company. Version 2.3";
+@(#)netperf.c (c) Copyright 1993-2007 Hewlett-Packard Company. Version 2.4.3";
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
-#if HAVE_STRINGS_H
+#ifdef HAVE_STRINGS_H
 #include <strings.h>
 #endif
 
@@ -81,8 +85,11 @@ char	netperf_id[]="\
 #include "nettest_dlpi.h"
 #endif /* WANT_DLPI */
 
+/* The DNS tests have been removed from netperf2. Those wanting to do
+   DNS_RR tests should use netperf4 instead. */
+
 #ifdef DO_DNS
-#include "nettest_dns.h"
+#error DNS tests have been removed from netperf. Use netperf4 instead
 #endif /* DO_DNS */
 
 #ifdef WANT_SCTP
@@ -122,8 +129,10 @@ main(int argc, char *argv[])
   }
   
   
-  establish_control(host_name,test_port,address_family,
-		    local_host_name,local_test_port,local_address_family);
+  if (!no_control) {
+    establish_control(host_name,test_port,address_family,
+		      local_host_name,local_test_port,local_address_family);
+  }
   
   if (strcasecmp(test_name,"TCP_STREAM") == 0) {
     send_tcp_stream(host_name);
@@ -242,7 +251,9 @@ main(int argc, char *argv[])
     exit(1);
   }
   
-  shutdown_control();
+  if (!no_control) {
+    shutdown_control();
+  }
   
 #ifdef WIN32
   /* Cleanup the winsock lib */

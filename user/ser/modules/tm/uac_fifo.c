@@ -1,7 +1,7 @@
 /*
- * $Id: uac_fifo.c,v 1.3.6.4 2004/03/24 14:50:43 andrei Exp $
+ * $Id: uac_fifo.c,v 1.12 2004/11/09 15:15:12 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,7 +24,10 @@
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * 
+ * History:
+ * --------
+ *  2003-12-03 : fifo_callback() updated for changes in tm callbacks (bogdan)
+ *  2004-02-11: fix: TM callback writes to fifo changed to non-blocking (jiri)
  */
 
 #include <string.h>
@@ -56,8 +59,8 @@ struct cb_data {
 
 
 struct str_list {
-        str s;
-        struct str_list *next;
+	str s;
+	struct str_list *next;
 };
 
 
@@ -74,8 +77,8 @@ struct str_list {
  */
 static inline void fifo_uac_error(char *reply_fifo, int code, char *msg)
 {
-	LOG(L_ERR, "ERROR: fifo_uac: %s\n", msg ); 
-	fifo_reply(reply_fifo, "%d fifo_uac: %s", code, msg);
+	LOG(L_ERR, "ERROR: fifo_uac_error: %s\n", msg ); 
+	fifo_reply(reply_fifo, "%d fifo_uac_error: %s", code, msg);
 }
 
 
@@ -211,7 +214,7 @@ static inline struct str_list *new_str(char *s, int len, struct str_list **last,
 	struct str_list *new;
 	new=pkg_malloc(sizeof(struct str_list));
 	if (!new) {
-		LOG(L_ERR, "ERROR: get_hfblock: not enough mem\n");
+		LOG(L_ERR, "ERROR: new_str: not enough mem\n");
 		return 0;
 	}
 	new->s.s=s;
@@ -235,7 +238,7 @@ static char *get_hfblock(str *uri, struct hdr_field *hf, int *l, int proto)
 	union sockaddr_union to_su;
 	struct socket_info* send_sock;
 
-	ret=0; /* pesimist: assume failure */
+	ret=0; /* pessimist: assume failure */
 	total_len=0;
 	last=&sl;
 	last->next=0;
@@ -264,9 +267,9 @@ static char *get_hfblock(str *uri, struct hdr_field *hf, int *l, int proto)
 						if (!new) goto error;
 						/* substitute */
 						if (!sock_name) {
-							send_sock=uri2sock( uri, &to_su, proto );
+							send_sock=uri2sock(0, uri, &to_su, proto );
 							if (!send_sock) {
-								LOG(L_ERR, "ERROR: get_hf_block: send_sock failed\n");
+								LOG(L_ERR, "ERROR: get_hfblock: send_sock failed\n");
 								goto error;
 							}
 							sock_name=&send_sock->address_str;
@@ -294,14 +297,14 @@ static char *get_hfblock(str *uri, struct hdr_field *hf, int *l, int proto)
 		/* proceed to next header */
 		/* new=new_str(CRLF, CRLF_LEN, &last, &total_len );
 		if (!new) goto error; */
-		DBG("DEBUG: get_hf_block: one more hf processed\n");
+		DBG("DEBUG: get_hfblock: one more hf processed\n");
 	} /* header loop */
 
 
 	/* construct a single header block now */
 	ret=pkg_malloc(total_len);
 	if (!ret) {
-		LOG(L_ERR, "ERROR: get_hf_block no pkg mem for hf block\n");
+		LOG(L_ERR, "ERROR: get_hfblock no pkg mem for hf block\n");
 		goto error;
 	}
 	i=sl.next;
@@ -426,7 +429,7 @@ static inline int fifo_check_msg(struct sip_msg* msg, str* method, char* resp, s
 			if (c >= '0' && c <= '9' ) *cseq = (*cseq) * 10 + c - '0';
 			else {
 			        DBG("found non-numerical in CSeq: <%i>='%c'\n",(unsigned int)c,c);
-				fifo_uac_error(resp, 400, "non-nummerical CSeq");
+				fifo_uac_error(resp, 400, "non-numerical CSeq");
 				return -6;
 			}
 		}
@@ -495,13 +498,13 @@ static inline int print_uris(FILE* out, struct sip_msg* reply)
 	
 	dlg = (dlg_t*)shm_malloc(sizeof(dlg_t));
 	if (!dlg) {
-		LOG(L_ERR, "print_routes(): No memory left\n");
+		LOG(L_ERR, "print_uris(): No memory left\n");
 		return -1;
 	}
 
 	memset(dlg, 0, sizeof(dlg_t));
 	if (dlg_response_uac(dlg, reply) < 0) {
-		LOG(L_ERR, "print_routes(): Error while creating dialog structure\n");
+		LOG(L_ERR, "print_uris(): Error while creating dialog structure\n");
 		free_dlg(dlg);
 		return -2;
 	}
@@ -528,8 +531,7 @@ static inline int print_uris(FILE* out, struct sip_msg* reply)
 }
 
 
-static void fifo_callback(struct cell *t, struct sip_msg *reply,
-			  int code, void *param)
+static void fifo_callback( struct cell *t, int type, struct tmcb_params *ps )
 {
 	
 	char *filename;
@@ -538,35 +540,38 @@ static void fifo_callback(struct cell *t, struct sip_msg *reply,
 
 	DBG("!!!!! ref_counter: %d\n", t->ref_count);
 
-	DBG("DEBUG: fifo UAC completed with status %d\n", code);
-	if (!t->cbp) {
-		LOG(L_INFO, "INFO: fifo UAC completed with status %d\n", code);
+	DBG("DEBUG: fifo UAC completed with status %d\n", ps->code);
+	if (!*ps->param) {
+		LOG(L_INFO, "INFO: fifo UAC completed with status %d\n", ps->code);
 		return;
 	}
 
-	filename=(char *)(t->cbp);
-	if (reply==FAKED_REPLY) {
-		get_reply_status(&text,reply,code);
+	filename=(char *)(*ps->param);
+	if (ps->rpl==FAKED_REPLY) {
+		get_reply_status( &text, ps->rpl, ps->code);
 		if (text.s==0) {
 			LOG(L_ERR, "ERROR: fifo_callback: get_reply_status failed\n");
-			fifo_reply(filename, "500 fifo_callback: get_reply_status failed\n");
-			return;
+			fifo_reply( filename,
+				"500 fifo_callback: get_reply_status failed\n");
+			goto done;
 		}
 		fifo_reply(filename, "%.*s\n", text.len, text.s );
 		pkg_free(text.s);
 	} else {
-		text.s=reply->first_line.u.reply.reason.s;
-		text.len=reply->first_line.u.reply.reason.len;
+		text.s = ps->rpl->first_line.u.reply.reason.s;
+		text.len = ps->rpl->first_line.u.reply.reason.len;
 
 		f = open_reply_pipe(filename);
 		if (!f) return;
-		fprintf(f, "%d %.*s\n", reply->first_line.u.reply.statuscode, text.len, text.s);
-		print_uris(f, reply);
-		fprintf(f, "%s\n", reply->headers->name.s);
+		fprintf(f, "%d %.*s\n", ps->rpl->first_line.u.reply.statuscode, text.len, text.s);
+		print_uris(f, ps->rpl);
+		fprintf(f, "%s\n", ps->rpl->headers->name.s);
 		fclose(f);
 	}
-	DBG("DEBUG: fifo_callback sucesssfuly completed\n");
-}	
+	DBG("DEBUG: fifo_callback successfully completed\n");
+done:
+	shm_free(filename);
+}
 
 
 int fifo_uac(FILE *stream, char *response_file)
@@ -650,7 +655,7 @@ int fifo_uac(FILE *stream, char *response_file)
 
 	if (ret <= 0) {
 		err_ret = err2reason_phrase(ret, &sip_error, err_buf,
-					    sizeof(err_buf), "FIFO/UAC") ;
+			sizeof(err_buf), "FIFO/UAC") ;
 		if (err_ret > 0 )
 		{
 			fifo_uac_error(response_file, sip_error, err_buf);

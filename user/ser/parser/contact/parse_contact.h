@@ -1,9 +1,9 @@
 /*
- * $Id: parse_contact.h,v 1.4 2003/04/10 12:38:18 janakj Exp $
+ * $Id: parse_contact.h,v 1.7 2004/09/02 14:03:08 janakj Exp $
  *
  * Contact header field body parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include "../hf.h"
 #include "../../str.h"
+#include "../msg_parser.h"
 #include "contact.h"
 
 
@@ -63,6 +64,13 @@ void free_contact(contact_body_t** _c);
  * Print structure, for debugging only
  */
 void print_contact(FILE* _o, contact_body_t* _c);
+
+
+/*
+ * Contact header field iterator, returns next contact if any, it doesn't
+ * parse message header if not absolutely necessary
+ */
+int contact_iterator(contact_t** c, struct sip_msg* msg, contact_t* prev);
 
 
 #endif /* PARSE_CONTACT_H */

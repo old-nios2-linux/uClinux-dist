@@ -1552,9 +1552,11 @@ PlugExport int plugin_run(struct arglist * desc)
     else
       max_cnx = 80 * max_checks;
 
+#ifdef _HAVE_GET_LOAD_AVG_
     getloadavg(loadavg, 3);
     for (i = 0; i < 3; i ++)
       if (loadavg[i] > maxloadavg) maxloadavg = loadavg[i];
+#endif
 
     if (maxloadavg >= 0.0)
       {

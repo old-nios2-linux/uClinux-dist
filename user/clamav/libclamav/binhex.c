@@ -13,10 +13,38 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  * Change History:
  * $Log: binhex.c,v $
+ * Revision 1.23  2007/02/12 20:46:08  njh
+ * Various tidy
+ *
+ * Revision 1.22  2006/07/31 09:19:52  njh
+ * Use MAP_PRIVATE
+ *
+ * Revision 1.21  2006/07/01 16:17:35  njh
+ * Added destroy flag
+ *
+ * Revision 1.20  2006/07/01 03:47:50  njh
+ * Don't loop if binhex runs out of memory
+ *
+ * Revision 1.19  2006/05/19 11:02:12  njh
+ * Just include mbox.h
+ *
+ * Revision 1.18  2006/04/09 19:59:27  kojm
+ * update GPL headers with new address for FSF
+ *
+ * Revision 1.17  2005/11/06 14:03:26  nigelhorne
+ * Ensure NAME_MAX isn't redefined on BeOS
+ *
+ * Revision 1.16  2005/05/14 16:13:25  nigelhorne
+ * Ensure munmap is the right size
+ *
+ * Revision 1.15  2005/05/13 19:30:34  nigelhorne
+ * Clean cli_realloc call
+ *
  * Revision 1.14  2005/03/10 08:51:30  nigelhorne
  * Tidy
  *
@@ -57,7 +85,7 @@
  * First draft of binhex.c
  *
  */
-static	char	const	rcsid[] = "$Id: binhex.c,v 1.14 2005/03/10 08:51:30 nigelhorne Exp $";
+static	char	const	rcsid[] = "$Id: binhex.c,v 1.23 2007/02/12 20:46:08 njh Exp $";
 
 #include "clamav.h"
 
@@ -75,7 +103,7 @@ static	char	const	rcsid[] = "$Id: binhex.c,v 1.14 2005/03/10 08:51:30 nigelhorne
 #endif
 #endif
 
-#if HAVE_MMAP
+#ifdef	HAVE_MMAP
 #if HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #else /* HAVE_SYS_MMAN_H */
@@ -86,13 +114,11 @@ static	char	const	rcsid[] = "$Id: binhex.c,v 1.14 2005/03/10 08:51:30 nigelhorne
 #include <stdio.h>
 #include <memory.h>
 #include <sys/stat.h>
-#include "line.h"
-#include "mbox.h"
-#include "table.h"
-#include "blob.h"
-#include "text.h"
-#include "binhex.h"
 #include "others.h"
+
+#include "mbox.h"
+#include "binhex.h"
+
 int
 cli_binhex(const char *dir, int desc)
 {
@@ -119,7 +145,7 @@ cli_binhex(const char *dir, int desc)
 	if(m == NULL)
 		return CL_EMEM;
 
-	start = buf = mmap(NULL, size, PROT_READ, MAP_SHARED, desc, 0);
+	start = buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, desc, 0);
 	if(buf == MAP_FAILED) {
 		messageDestroy(m);
 		return CL_EMEM;
@@ -174,11 +200,11 @@ cli_binhex(const char *dir, int desc)
 		cli_errmsg("No binhex line found\n");
 		return CL_EFORMAT;
 	}
-	
+
 	/* similar to binhexMessage */
 	messageSetEncoding(m, "x-binhex");
 
-	fb = messageToFileblob(m, dir);
+	fb = messageToFileblob(m, dir, 1);
 	if(fb) {
 		cli_dbgmsg("Binhex file decoded to %s\n", fileblobGetFilename(fb));
 		fileblobDestroy(fb);
@@ -188,6 +214,6 @@ cli_binhex(const char *dir, int desc)
 
 	if(fb)
 		return CL_CLEAN;	/* a lie - but it gets things going */
-	return CL_EIO;
+	return CL_EIO;	/* probably CL_EMEM, but we can't tell at this layer */
 #endif
 }

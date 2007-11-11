@@ -5,8 +5,6 @@
  *  Copyright (C) 2000 Deep Blue Solutions Ltd.
  *  Copyright (C) 2002 RidgeRun, Inc.
  *  Copyright (C) 2002-2003 MontaVista Software, Inc.
- *  Copyright (C) 2003 Hyok S. Choi <hyok.choi@samsung.com>
- *  modified for NON-PAGED MMU version.
  *
  *  Update for Linux-2.6 and cache flush improvements
  *  Copyright (C) 2004 Nokia Corporation by Tony Lindgren <tony@atomide.com>
@@ -54,9 +52,9 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <asm/assembler.h>
+#include <asm/elf.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/pgtable.h>
-#include <asm/procinfo.h>
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include "proc-macros.S"
@@ -392,14 +390,13 @@ ENTRY(cpu_arm925_switch_mm)
 #endif
 	mov	pc, lr
 
-#ifdef CONFIG_MMU
 /*
- * cpu_arm925_set_pte(ptep, pte)
+ * cpu_arm925_set_pte_ext(ptep, pte, ext)
  *
  * Set a PTE and flush it out
  */
 	.align	5
-ENTRY(cpu_arm925_set_pte)
+ENTRY(cpu_arm925_set_pte_ext)
 #ifdef CONFIG_MMU
 	str	r1, [r0], #-2048		@ linux version
 
@@ -431,7 +428,7 @@ ENTRY(cpu_arm925_set_pte)
 	mcr	p15, 0, r0, c7, c10, 4		@ drain WB
 #endif /* CONFIG_MMU */
 	mov	pc, lr
-#endif /* CONFIG_MMU */
+
 	__INIT
 
 	.type	__arm925_setup, #function
@@ -493,9 +490,7 @@ arm925_processor_functions:
 	.word   cpu_arm925_do_idle
 	.word	cpu_arm925_dcache_clean_area
 	.word	cpu_arm925_switch_mm
-#ifdef CONFIG_MMU
-	.word	cpu_arm925_set_pte
-#endif
+	.word	cpu_arm925_set_pte_ext
 	.size	arm925_processor_functions, . - arm925_processor_functions
 
 	.section ".rodata"

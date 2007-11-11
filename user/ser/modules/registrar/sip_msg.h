@@ -1,9 +1,9 @@
 /*
- * $Id: sip_msg.h,v 1.3 2003/03/26 16:44:50 janakj Exp $
+ * $Id: sip_msg.h,v 1.7 2004/08/24 09:00:37 janakj Exp $
  *
  * SIP message related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,13 +31,13 @@
 #ifndef SIP_MSG_H
 #define SIP_MSG_H
 
-
+#include "../../qvalue.h"
 #include "../../parser/msg_parser.h"
 #include "../../parser/contact/parse_contact.h"
 
 
 /*
- * Parse the whole messsage and bodies of all header fieds
+ * Parse the whole message and bodies of all header fields
  * that will be needed by registrar
  */
 int parse_message(struct sip_msg* _m);
@@ -80,7 +80,7 @@ int calc_contact_expires(struct sip_msg* _m, param_t* _ep, int* _e);
  * 1) If q parameter exist, use it
  * 2) If the parameter doesn't exist, use default value
  */
-int calc_contact_q(param_t* _q, float* _r);
+int calc_contact_q(param_t* _q, qvalue_t* _r);
 
 
 #endif /* SIP_MSG_H */

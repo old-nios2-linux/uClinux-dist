@@ -20,7 +20,7 @@
 #include <linux/module.h>
 #include <linux/sysfs.h>
 #include <linux/seq_file.h>
-#include <linux/namespace.h>
+#include <linux/mnt_namespace.h>
 #include <linux/namei.h>
 #include <linux/security.h>
 #include <linux/mount.h>
@@ -28,6 +28,7 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 #include "pnode.h"
+#include "internal.h"
 
 /* spinlock for vfsmount related operations, inplace of dcache_lock */
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(vfsmount_lock);
@@ -36,7 +37,7 @@ static int event;
 
 static struct list_head *mount_hashtable __read_mostly;
 static int hash_mask __read_mostly, hash_bits __read_mostly;
-static kmem_cache_t *mnt_cache __read_mostly;
+static struct kmem_cache *mnt_cache __read_mostly;
 static struct rw_semaphore namespace_sem;
 
 /* /sys/fs */
@@ -53,9 +54,8 @@ static inline unsigned long hash(struct vfsmount *mnt, struct dentry *dentry)
 
 struct vfsmount *alloc_vfsmnt(const char *name)
 {
-	struct vfsmount *mnt = kmem_cache_alloc(mnt_cache, GFP_KERNEL);
+	struct vfsmount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
 	if (mnt) {
-		memset(mnt, 0, sizeof(struct vfsmount));
 		atomic_set(&mnt->mnt_count, 1);
 		INIT_LIST_HEAD(&mnt->mnt_hash);
 		INIT_LIST_HEAD(&mnt->mnt_child);
@@ -133,10 +133,10 @@ struct vfsmount *lookup_mnt(struct vfsmount *mnt, struct dentry *dentry)
 
 static inline int check_mnt(struct vfsmount *mnt)
 {
-	return mnt->mnt_namespace == current->nsproxy->namespace;
+	return mnt->mnt_ns == current->nsproxy->mnt_ns;
 }
 
-static void touch_namespace(struct namespace *ns)
+static void touch_mnt_namespace(struct mnt_namespace *ns)
 {
 	if (ns) {
 		ns->event = ++event;
@@ -144,7 +144,7 @@ static void touch_namespace(struct namespace *ns)
 	}
 }
 
-static void __touch_namespace(struct namespace *ns)
+static void __touch_mnt_namespace(struct mnt_namespace *ns)
 {
 	if (ns && ns->event != event) {
 		ns->event = event;
@@ -187,19 +187,19 @@ static void commit_tree(struct vfsmount *mnt)
 	struct vfsmount *parent = mnt->mnt_parent;
 	struct vfsmount *m;
 	LIST_HEAD(head);
-	struct namespace *n = parent->mnt_namespace;
+	struct mnt_namespace *n = parent->mnt_ns;
 
 	BUG_ON(parent == mnt);
 
 	list_add_tail(&head, &mnt->mnt_list);
 	list_for_each_entry(m, &head, mnt_list)
-		m->mnt_namespace = n;
+		m->mnt_ns = n;
 	list_splice(&head, n->list.prev);
 
 	list_add_tail(&mnt->mnt_hash, mount_hashtable +
 				hash(parent, mnt->mnt_mountpoint));
 	list_add_tail(&mnt->mnt_child, &parent->mnt_mounts);
-	touch_namespace(n);
+	touch_mnt_namespace(n);
 }
 
 static struct vfsmount *next_mnt(struct vfsmount *p, struct vfsmount *root)
@@ -320,23 +320,17 @@ EXPORT_SYMBOL(mnt_unpin);
 /* iterator */
 static void *m_start(struct seq_file *m, loff_t *pos)
 {
-	struct namespace *n = m->private;
-	struct list_head *p;
-	loff_t l = *pos;
+	struct mnt_namespace *n = m->private;
 
 	down_read(&namespace_sem);
-	list_for_each(p, &n->list)
-		if (!l--)
-			return list_entry(p, struct vfsmount, mnt_list);
-	return NULL;
+	return seq_list_start(&n->list, *pos);
 }
 
 static void *m_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	struct namespace *n = m->private;
-	struct list_head *p = ((struct vfsmount *)v)->mnt_list.next;
-	(*pos)++;
-	return p == &n->list ? NULL : list_entry(p, struct vfsmount, mnt_list);
+	struct mnt_namespace *n = m->private;
+
+	return seq_list_next(v, &n->list, pos);
 }
 
 static void m_stop(struct seq_file *m, void *v)
@@ -351,7 +345,7 @@ static inline void mangle(struct seq_file *m, const char *s)
 
 static int show_vfsmnt(struct seq_file *m, void *v)
 {
-	struct vfsmount *mnt = v;
+	struct vfsmount *mnt = list_entry(v, struct vfsmount, mnt_list);
 	int err = 0;
 	static struct proc_fs_info {
 		int flag;
@@ -368,6 +362,7 @@ static int show_vfsmnt(struct seq_file *m, void *v)
 		{ MNT_NOEXEC, ",noexec" },
 		{ MNT_NOATIME, ",noatime" },
 		{ MNT_NODIRATIME, ",nodiratime" },
+		{ MNT_RELATIME, ",relatime" },
 		{ 0, NULL }
 	};
 	struct proc_fs_info *fs_infop;
@@ -377,6 +372,10 @@ static int show_vfsmnt(struct seq_file *m, void *v)
 	seq_path(m, mnt, mnt->mnt_root, " \t\n\\");
 	seq_putc(m, ' ');
 	mangle(m, mnt->mnt_sb->s_type->name);
+	if (mnt->mnt_sb->s_subtype && mnt->mnt_sb->s_subtype[0]) {
+		seq_putc(m, '.');
+		mangle(m, mnt->mnt_sb->s_subtype);
+	}
 	seq_puts(m, mnt->mnt_sb->s_flags & MS_RDONLY ? " ro" : " rw");
 	for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
 		if (mnt->mnt_sb->s_flags & fs_infop->flag)
@@ -401,7 +400,7 @@ struct seq_operations mounts_op = {
 
 static int show_vfsstat(struct seq_file *m, void *v)
 {
-	struct vfsmount *mnt = v;
+	struct vfsmount *mnt = list_entry(v, struct vfsmount, mnt_list);
 	int err = 0;
 
 	/* device */
@@ -495,7 +494,7 @@ void release_mounts(struct list_head *head)
 {
 	struct vfsmount *mnt;
 	while (!list_empty(head)) {
-		mnt = list_entry(head->next, struct vfsmount, mnt_hash);
+		mnt = list_first_entry(head, struct vfsmount, mnt_hash);
 		list_del_init(&mnt->mnt_hash);
 		if (mnt->mnt_parent != mnt) {
 			struct dentry *dentry;
@@ -526,8 +525,8 @@ void umount_tree(struct vfsmount *mnt, int propagate, struct list_head *kill)
 	list_for_each_entry(p, kill, mnt_hash) {
 		list_del_init(&p->mnt_expire);
 		list_del_init(&p->mnt_list);
-		__touch_namespace(p->mnt_namespace);
-		p->mnt_namespace = NULL;
+		__touch_mnt_namespace(p->mnt_ns);
+		p->mnt_ns = NULL;
 		list_del_init(&p->mnt_child);
 		if (p->mnt_parent != p)
 			p->mnt_mountpoint->d_mounted--;
@@ -830,7 +829,7 @@ static int attach_recursive_mnt(struct vfsmount *source_mnt,
 	if (parent_nd) {
 		detach_mnt(source_mnt, parent_nd);
 		attach_mnt(source_mnt, nd);
-		touch_namespace(current->nsproxy->namespace);
+		touch_mnt_namespace(current->nsproxy->mnt_ns);
 	} else {
 		mnt_set_mountpoint(dest_mnt, dest_dentry, source_mnt);
 		commit_tree(source_mnt);
@@ -881,6 +880,9 @@ static int do_change_type(struct nameidata *nd, int flag)
 	struct vfsmount *m, *mnt = nd->mnt;
 	int recurse = flag & MS_REC;
 	int type = flag & ~MS_REC;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	if (nd->dentry != nd->mnt->mnt_root)
 		return -EINVAL;
@@ -1145,9 +1147,9 @@ static void expire_mount(struct vfsmount *mnt, struct list_head *mounts,
 	 */
 	if (!propagate_mount_busy(mnt, 2)) {
 		/* delete from the namespace */
-		touch_namespace(mnt->mnt_namespace);
+		touch_mnt_namespace(mnt->mnt_ns);
 		list_del_init(&mnt->mnt_list);
-		mnt->mnt_namespace = NULL;
+		mnt->mnt_ns = NULL;
 		umount_tree(mnt, 1, umounts);
 		spin_unlock(&vfsmount_lock);
 	} else {
@@ -1168,20 +1170,20 @@ static void expire_mount(struct vfsmount *mnt, struct list_head *mounts,
  */
 static void expire_mount_list(struct list_head *graveyard, struct list_head *mounts)
 {
-	struct namespace *namespace;
+	struct mnt_namespace *ns;
 	struct vfsmount *mnt;
 
 	while (!list_empty(graveyard)) {
 		LIST_HEAD(umounts);
-		mnt = list_entry(graveyard->next, struct vfsmount, mnt_expire);
+		mnt = list_first_entry(graveyard, struct vfsmount, mnt_expire);
 		list_del_init(&mnt->mnt_expire);
 
 		/* don't do anything if the namespace is dead - all the
 		 * vfsmounts from it are going away anyway */
-		namespace = mnt->mnt_namespace;
-		if (!namespace || !namespace->root)
+		ns = mnt->mnt_ns;
+		if (!ns || !ns->root)
 			continue;
-		get_namespace(namespace);
+		get_mnt_ns(ns);
 
 		spin_unlock(&vfsmount_lock);
 		down_write(&namespace_sem);
@@ -1189,7 +1191,7 @@ static void expire_mount_list(struct list_head *graveyard, struct list_head *mou
 		up_write(&namespace_sem);
 		release_mounts(&umounts);
 		mntput(mnt);
-		put_namespace(namespace);
+		put_mnt_ns(ns);
 		spin_lock(&vfsmount_lock);
 	}
 }
@@ -1405,9 +1407,11 @@ long do_mount(char *dev_name, char *dir_name, char *type_page,
 		mnt_flags |= MNT_NOATIME;
 	if (flags & MS_NODIRATIME)
 		mnt_flags |= MNT_NODIRATIME;
+	if (flags & MS_RELATIME)
+		mnt_flags |= MNT_RELATIME;
 
 	flags &= ~(MS_NOSUID | MS_NOEXEC | MS_NODEV | MS_ACTIVE |
-		   MS_NOATIME | MS_NODIRATIME);
+		   MS_NOATIME | MS_NODIRATIME | MS_RELATIME);
 
 	/* ... and get the mountpoint */
 	retval = path_lookup(dir_name, LOOKUP_FOLLOW, &nd);
@@ -1439,16 +1443,16 @@ dput_out:
  * Allocate a new namespace structure and populate it with contents
  * copied from the namespace of the passed in task structure.
  */
-struct namespace *dup_namespace(struct task_struct *tsk, struct fs_struct *fs)
+static struct mnt_namespace *dup_mnt_ns(struct mnt_namespace *mnt_ns,
+		struct fs_struct *fs)
 {
-	struct namespace *namespace = tsk->nsproxy->namespace;
-	struct namespace *new_ns;
+	struct mnt_namespace *new_ns;
 	struct vfsmount *rootmnt = NULL, *pwdmnt = NULL, *altrootmnt = NULL;
 	struct vfsmount *p, *q;
 
-	new_ns = kmalloc(sizeof(struct namespace), GFP_KERNEL);
+	new_ns = kmalloc(sizeof(struct mnt_namespace), GFP_KERNEL);
 	if (!new_ns)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	atomic_set(&new_ns->count, 1);
 	INIT_LIST_HEAD(&new_ns->list);
@@ -1457,12 +1461,12 @@ struct namespace *dup_namespace(struct task_struct *tsk, struct fs_struct *fs)
 
 	down_write(&namespace_sem);
 	/* First pass: copy the tree topology */
-	new_ns->root = copy_tree(namespace->root, namespace->root->mnt_root,
+	new_ns->root = copy_tree(mnt_ns->root, mnt_ns->root->mnt_root,
 					CL_COPY_ALL | CL_EXPIRE);
 	if (!new_ns->root) {
 		up_write(&namespace_sem);
 		kfree(new_ns);
-		return NULL;
+		return ERR_PTR(-ENOMEM);;
 	}
 	spin_lock(&vfsmount_lock);
 	list_add_tail(&new_ns->list, &new_ns->root->mnt_list);
@@ -1473,10 +1477,10 @@ struct namespace *dup_namespace(struct task_struct *tsk, struct fs_struct *fs)
 	 * as belonging to new namespace.  We have already acquired a private
 	 * fs_struct, so tsk->fs->lock is not needed.
 	 */
-	p = namespace->root;
+	p = mnt_ns->root;
 	q = new_ns->root;
 	while (p) {
-		q->mnt_namespace = new_ns;
+		q->mnt_ns = new_ns;
 		if (fs) {
 			if (p == fs->rootmnt) {
 				rootmnt = p;
@@ -1491,7 +1495,7 @@ struct namespace *dup_namespace(struct task_struct *tsk, struct fs_struct *fs)
 				fs->altrootmnt = mntget(q);
 			}
 		}
-		p = next_mnt(p, namespace->root);
+		p = next_mnt(p, mnt_ns->root);
 		q = next_mnt(q, new_ns->root);
 	}
 	up_write(&namespace_sem);
@@ -1506,36 +1510,21 @@ struct namespace *dup_namespace(struct task_struct *tsk, struct fs_struct *fs)
 	return new_ns;
 }
 
-int copy_namespace(int flags, struct task_struct *tsk)
+struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
+		struct fs_struct *new_fs)
 {
-	struct namespace *namespace = tsk->nsproxy->namespace;
-	struct namespace *new_ns;
-	int err = 0;
+	struct mnt_namespace *new_ns;
 
-	if (!namespace)
-		return 0;
-
-	get_namespace(namespace);
+	BUG_ON(!ns);
+	get_mnt_ns(ns);
 
 	if (!(flags & CLONE_NEWNS))
-		return 0;
+		return ns;
 
-	if (!capable(CAP_SYS_ADMIN)) {
-		err = -EPERM;
-		goto out;
-	}
+	new_ns = dup_mnt_ns(ns, new_fs);
 
-	new_ns = dup_namespace(tsk, tsk->fs);
-	if (!new_ns) {
-		err = -ENOMEM;
-		goto out;
-	}
-
-	tsk->nsproxy->namespace = new_ns;
-
-out:
-	put_namespace(namespace);
-	return err;
+	put_mnt_ns(ns);
+	return new_ns;
 }
 
 asmlinkage long sys_mount(char __user * dev_name, char __user * dir_name,
@@ -1754,7 +1743,7 @@ asmlinkage long sys_pivot_root(const char __user * new_root,
 	detach_mnt(user_nd.mnt, &root_parent);
 	attach_mnt(user_nd.mnt, &old_nd);     /* mount old root on put_old */
 	attach_mnt(new_nd.mnt, &root_parent); /* mount new_root on / */
-	touch_namespace(current->nsproxy->namespace);
+	touch_mnt_namespace(current->nsproxy->mnt_ns);
 	spin_unlock(&vfsmount_lock);
 	chroot_fs_refs(&user_nd, &new_nd);
 	security_sb_post_pivotroot(&user_nd, &new_nd);
@@ -1779,27 +1768,27 @@ out3:
 static void __init init_mount_tree(void)
 {
 	struct vfsmount *mnt;
-	struct namespace *namespace;
+	struct mnt_namespace *ns;
 
 	mnt = do_kern_mount("rootfs", 0, "rootfs", NULL);
 	if (IS_ERR(mnt))
 		panic("Can't create rootfs");
-	namespace = kmalloc(sizeof(*namespace), GFP_KERNEL);
-	if (!namespace)
+	ns = kmalloc(sizeof(*ns), GFP_KERNEL);
+	if (!ns)
 		panic("Can't allocate initial namespace");
-	atomic_set(&namespace->count, 1);
-	INIT_LIST_HEAD(&namespace->list);
-	init_waitqueue_head(&namespace->poll);
-	namespace->event = 0;
-	list_add(&mnt->mnt_list, &namespace->list);
-	namespace->root = mnt;
-	mnt->mnt_namespace = namespace;
+	atomic_set(&ns->count, 1);
+	INIT_LIST_HEAD(&ns->list);
+	init_waitqueue_head(&ns->poll);
+	ns->event = 0;
+	list_add(&mnt->mnt_list, &ns->list);
+	ns->root = mnt;
+	mnt->mnt_ns = ns;
 
-	init_task.nsproxy->namespace = namespace;
-	get_namespace(namespace);
+	init_task.nsproxy->mnt_ns = ns;
+	get_mnt_ns(ns);
 
-	set_fs_pwd(current->fs, namespace->root, namespace->root->mnt_root);
-	set_fs_root(current->fs, namespace->root, namespace->root->mnt_root);
+	set_fs_pwd(current->fs, ns->root, ns->root->mnt_root);
+	set_fs_root(current->fs, ns->root, ns->root->mnt_root);
 }
 
 void __init mnt_init(unsigned long mempages)
@@ -1812,7 +1801,7 @@ void __init mnt_init(unsigned long mempages)
 	init_rwsem(&namespace_sem);
 
 	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct vfsmount),
-			0, SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL, NULL);
+			0, SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
 
 	mount_hashtable = (struct list_head *)__get_free_page(GFP_ATOMIC);
 
@@ -1860,11 +1849,11 @@ void __init mnt_init(unsigned long mempages)
 	init_mount_tree();
 }
 
-void __put_namespace(struct namespace *namespace)
+void __put_mnt_ns(struct mnt_namespace *ns)
 {
-	struct vfsmount *root = namespace->root;
+	struct vfsmount *root = ns->root;
 	LIST_HEAD(umount_list);
-	namespace->root = NULL;
+	ns->root = NULL;
 	spin_unlock(&vfsmount_lock);
 	down_write(&namespace_sem);
 	spin_lock(&vfsmount_lock);
@@ -1872,5 +1861,5 @@ void __put_namespace(struct namespace *namespace)
 	spin_unlock(&vfsmount_lock);
 	up_write(&namespace_sem);
 	release_mounts(&umount_list);
-	kfree(namespace);
+	kfree(ns);
 }

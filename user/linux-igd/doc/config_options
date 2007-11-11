@@ -13,7 +13,8 @@ if not suplied defaults: 614400
 port_forward
 ------------
 
-Add forward rules em forward is not by default ACCEPT, for example: port_forward yes
+Add forward rules. Forward is by default not ACCEPT.
+For example: port_forward yes
 if not suplied defaults: no
 
 X_Name

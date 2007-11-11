@@ -6,7 +6,7 @@ This file is part of GNU Wget.
 GNU Wget is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+ (at your option) any later version.
 
 GNU Wget is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,64 +44,77 @@ so, delete this exception statement from your version.  */
 struct url;
 struct address_list;
 
-/* wget_sockaddr is used instead of sockaddr where an IPV6 address
-   must fit.  */
-
-typedef union {
-	struct sockaddr     sa;   /* Generic but too small */
-	struct sockaddr_in  sin;  /* IPv4 socket address */
-#ifdef ENABLE_IPV6
-	struct sockaddr_in6 sin6; /* IPv6 socket address */
-#endif
-} wget_sockaddr;
+/* This struct defines an IP address, tagged with family type.  */
 
 typedef struct {
-  unsigned char bytes[4];
-} ip4_address;
-
-/* If compiled with IPv6 support, we internally represent all IP
-   addresses as IPv6 addresses.  IPv4 addresses are dynamically mapped
-   to IPv6, i.e. stored in the format ::ffff:<Ipv4>.  */
-
+  /* Address type. */
+  enum { 
+    IPV4_ADDRESS
 #ifdef ENABLE_IPV6
-# define MAX_IP_ADDRESS_SIZE 16
-#else
-# define MAX_IP_ADDRESS_SIZE 4
-#endif
+    , IPV6_ADDRESS 
+#endif /* ENABLE_IPV6 */
+  } type;
 
-typedef struct {
-  unsigned char bytes[MAX_IP_ADDRESS_SIZE];
+  /* Address data union: ipv6 contains IPv6-related data (address and
+     scope), and ipv4 contains the IPv4 address.  */
+  union {
+#ifdef ENABLE_IPV6
+    struct {
+      struct in6_addr addr;
+# ifdef HAVE_SOCKADDR_IN6_SCOPE_ID
+      unsigned int scope_id;
+# endif
+    } ipv6;
+#endif /* ENABLE_IPV6 */
+    struct {
+      struct in_addr addr;
+    } ipv4;
+  } u;
 } ip_address;
 
-/* Function declarations */
-struct address_list *lookup_host PARAMS ((const char *, int));
-char *herrmsg PARAMS ((int));
+/* Because C doesn't support anonymous unions, access to ip_address
+   elements is unwieldy.  Hence the accessors.
 
-void address_list_get_bounds PARAMS ((struct address_list *, int *, int *));
-void address_list_copy_one PARAMS ((struct address_list *, int,
-				    ip_address *));
-int address_list_match_all PARAMS ((struct address_list *,
-				    struct address_list *));
+   The _ADDR accessors return the address as the struct in_addr or
+   in6_addr.  The _DATA accessor returns a pointer to the address data
+   -- pretty much the same as the above, but cast to void*.  The
+   _SCOPE accessor returns the address's scope_id, and makes sense
+   only when IPv6 and HAVE_SOCKADDR_IN6_SCOPE_ID are both defined.  */
+
+#define ADDRESS_IPV4_IN_ADDR(x) ((x)->u.ipv4.addr)
+/* Don't use &x->u.ipv4.addr.s_addr because it can be #defined to a
+   bitfield, which you can't take an address of.  */
+#define ADDRESS_IPV4_DATA(x) ((void *)&(x)->u.ipv4.addr)
+
+#define ADDRESS_IPV6_IN6_ADDR(x) ((x)->u.ipv6.addr)
+#define ADDRESS_IPV6_DATA(x) ((void *)&(x)->u.ipv6.addr)
+#define ADDRESS_IPV6_SCOPE(x) ((x)->u.ipv6.scope_id)
+
+enum {
+  LH_SILENT  = 1,
+  LH_BIND    = 2,
+  LH_REFRESH = 4
+};
+struct address_list *lookup_host PARAMS ((const char *, int));
+
+void address_list_get_bounds PARAMS ((const struct address_list *,
+				      int *, int *));
+const ip_address *address_list_address_at PARAMS ((const struct address_list *,
+						   int));
+int address_list_contains PARAMS ((const struct address_list *, const ip_address *));
 void address_list_set_faulty PARAMS ((struct address_list *, int));
+void address_list_set_connected PARAMS ((struct address_list *));
+int address_list_connected_p PARAMS ((const struct address_list *));
 void address_list_release PARAMS ((struct address_list *));
 
-char *pretty_print_address PARAMS ((ip_address *));
+const char *pretty_print_address PARAMS ((const ip_address *));
+#ifdef ENABLE_IPV6
+int is_valid_ipv6_address PARAMS ((const char *, const char *));
+#endif
 
 int accept_domain PARAMS ((struct url *));
 int sufmatch PARAMS ((const char **, const char *));
 
 void host_cleanup PARAMS ((void));
-
-void wget_sockaddr_set_address PARAMS((wget_sockaddr *, int, 
-				       unsigned short, ip_address *));
-void wget_sockaddr_set_port PARAMS((wget_sockaddr *, unsigned short));
-void *wget_sockaddr_get_addr PARAMS((wget_sockaddr *));
-unsigned short wget_sockaddr_get_port PARAMS((const wget_sockaddr *));
-socklen_t sockaddr_len PARAMS(());
-void map_ipv4_to_ip PARAMS((ip4_address *, ip_address *));
-int  map_ip_to_ipv4 PARAMS((ip_address *, ip4_address *));
- 
-extern	int	ip_default_family;	/* defined in host.c */
-
 
 #endif /* HOST_H */

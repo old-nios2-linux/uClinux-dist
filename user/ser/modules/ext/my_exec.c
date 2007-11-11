@@ -1,8 +1,8 @@
 /*
- * $Id: my_exec.c,v 1.5 2003/04/06 20:25:51 janakj Exp $
+ * $Id: my_exec.c,v 1.6 2004/08/24 08:58:29 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -67,7 +67,7 @@ static void sig_chld(int signo)
 
 	if (WIFEXITED(_private_prog.stat)) {
 		status=WEXITSTATUS(_private_prog.stat);
-		DBG("DEBUG: child terminted with status %d\n", status );
+		DBG("DEBUG: child terminated with status %d\n", status );
 		if (status!=0) {
 			LOG(L_ERR, "ERROR: child terminated, status=%d \n", status);
 		}

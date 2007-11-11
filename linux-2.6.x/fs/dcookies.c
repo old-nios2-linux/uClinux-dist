@@ -20,6 +20,7 @@
 #include <linux/capability.h>
 #include <linux/dcache.h>
 #include <linux/mm.h>
+#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/dcookies.h>
 #include <linux/mutex.h>
@@ -37,7 +38,7 @@ struct dcookie_struct {
 
 static LIST_HEAD(dcookie_users);
 static DEFINE_MUTEX(dcookie_mutex);
-static kmem_cache_t *dcookie_cache __read_mostly;
+static struct kmem_cache *dcookie_cache __read_mostly;
 static struct list_head *dcookie_hashtable __read_mostly;
 static size_t hash_size __read_mostly;
 
@@ -205,7 +206,7 @@ static int dcookie_init(void)
 
 	dcookie_cache = kmem_cache_create("dcookie_cache",
 		sizeof(struct dcookie_struct),
-		0, 0, NULL, NULL);
+		0, 0, NULL);
 
 	if (!dcookie_cache)
 		goto out;

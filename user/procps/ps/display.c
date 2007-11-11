@@ -1,5 +1,5 @@
 /*
- * Copyright 1998 by Albert Cahalan; all rights resered.
+ * Copyright 1998-2003 by Albert Cahalan; all rights resered.
  * This file may be used subject to the terms and conditions of the
  * GNU Library General Public License Version 2, or any later version
  * at your option, as published by the Free Software Foundation.
@@ -14,6 +14,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#if (__GNU_LIBRARY__ >= 6)
+# include <locale.h>
+#endif
+
 /* username lookups */
 #include <sys/types.h>
 #include <pwd.h>
@@ -25,16 +29,15 @@
 #include <signal.h>   /* catch signals */
 
 #include "common.h"
-#include "../proc/procps.h"
+#include "../proc/wchan.h"
 #include "../proc/version.h"
 #include "../proc/readproc.h"
 #include "../proc/sysinfo.h"
+#include "../proc/sig.h"
 
 #ifndef SIGCHLD
 #define SIGCHLD SIGCLD
 #endif
-
-static int need_wchan;
 
 /* just reports a crash */
 static void signal_handler(int signo){
@@ -42,15 +45,16 @@ static void signal_handler(int signo){
   /* fprintf() is not reentrant, but we _exit() anyway */
   fprintf(stderr,
     "\n\n"
-    "Signal %d caught by ps (%s).\n"
-    "Please send bug reports to <procps-bugs@redhat.com>\n",
+    "Signal %d (%s) caught by ps (%s).\n"
+    "Please send bug reports to <feedback@lists.sf.net> or <albert@users.sf.net>\n",
     signo,
+    signal_number_to_name(signo),
     procps_version
   );
   _exit(signo+128);
 }
 
-
+/////////////////////////////////////////////////////////////////////////////////////
 #undef DEBUG
 #ifdef DEBUG
 void init_stack_trace(char *prog_name);
@@ -81,12 +85,12 @@ void hex_dump(void *vp){
   }
 }
 
-static void show_pid(char *s, int n, sel_union *data){
+static void show_tgid(char *s, int n, sel_union *data){
   printf("%s  ", s);
   while(--n){
-    printf("%d,", data[n].pid);
+    printf("%d,", data[n].tgid);
   }
-  printf("%d\n", data[0].pid);
+  printf("%d\n", data[0].tgid);
 }
 
 static void show_uid(char *s, int n, sel_union *data){
@@ -145,6 +149,7 @@ static void arg_show(void){
     case SEL_FGID: show_gid("FGID", walk->n, walk->u); break;
     case SEL_PGRP: show_pid("PGRP", walk->n, walk->u); break;
     case SEL_PID : show_pid("PID ", walk->n, walk->u); break;
+    case SEL_PPID: show_pid("PPID", walk->n, walk->u); break;
     case SEL_TTY : show_tty("TTY ", walk->n, walk->u); break;
     case SEL_SESS: show_pid("SESS", walk->n, walk->u); break;
     case SEL_COMM: show_cmd("COMM", walk->n, walk->u); break;
@@ -155,6 +160,7 @@ static void arg_show(void){
 }
 
 #endif
+//////////////////////////////////////////////////////////////////////////
 
 
 /***** check the header */
@@ -171,8 +177,6 @@ static void check_headers(void){
     return;
   }
   while(walk){
-    if((walk->flags & JUST_MASK) == WCHAN)
-      need_wchan = 1;
     if(!*(walk->name)){
       walk = walk->next;
       continue;
@@ -187,34 +191,194 @@ static void check_headers(void){
   if(!head_normal) lines_to_next_header = -1; /* how UNIX does --noheader */
 }
 
-/***** fill in %CPU; readproc() doesn't do it because it needs the uptime */
-static void fill_pcpu(proc_t *buf){
-  unsigned long total_time;
-  unsigned long pcpu = 0;
-  unsigned long seconds;
+/***** check sort needs */
+/* see what files need to be read, etc. */
+static unsigned check_sort_needs(sort_node *walk){
+  unsigned needs = 0;
+  while(walk){
+    needs |= walk->need;
+    walk = walk->next;
+  }
+  return needs;
+}
 
-  if(buf == NULL) return;	/* Just in case */
-  total_time = buf->utime + buf->stime;
-  if(include_dead_children) total_time += (buf->cutime + buf->cstime);
-  seconds = (seconds_since_boot - ((unsigned long)buf->start_time) / Hertz);
-  if(seconds) pcpu = ((long long)total_time * 1000 / Hertz) / seconds;
-  buf->pcpu = (pcpu > 999)? 999 : pcpu;
+/***** check needs */
+/* see what files need to be read, etc. */
+static unsigned collect_format_needs(format_node *walk){
+  unsigned needs = 0;
+  while(walk){
+    needs |= walk->need;
+    walk = walk->next;
+  }
+  return needs;
+}
+
+static format_node *proc_format_list;
+static format_node *task_format_list;
+
+static unsigned needs_for_threads;
+static unsigned needs_for_sort;
+static unsigned proc_format_needs;
+static unsigned task_format_needs;
+
+#define needs_for_format (proc_format_needs|task_format_needs)
+
+#define PROC_ONLY_FLAGS (PROC_FILLENV|PROC_FILLARG|PROC_FILLCOM|PROC_FILLMEM)
+
+/***** munge lists and determine openproc() flags */
+static void lists_and_needs(void){
+  check_headers();
+
+  // only care about the difference when showing both
+  if(thread_flags & TF_show_both){
+    format_node pfn, tfn; // junk, to handle special case at begin of list
+    format_node *walk = format_list;
+    format_node *p_end = &pfn;
+    format_node *t_end = &tfn;
+    while(walk){
+      format_node *new = malloc(sizeof(format_node));
+      memcpy(new,walk,sizeof(format_node));
+      p_end->next = walk;
+      t_end->next = new;
+      p_end       = walk;
+      t_end       = new;
+      switch(walk->flags & CF_PRINT_MASK){
+      case CF_PRINT_THREAD_ONLY:
+        p_end->pr   = pr_nop;
+        p_end->need = 0;
+        break;
+      case CF_PRINT_PROCESS_ONLY:
+        t_end->pr   = pr_nop;
+        t_end->need = 0;
+        break;
+      default:
+        fprintf(stderr, "please report this bug\n");
+        // FALL THROUGH
+      case CF_PRINT_AS_NEEDED:
+      case CF_PRINT_EVERY_TIME:
+        break;
+      }
+      walk = walk->next;
+    }
+    t_end->next = NULL;
+    p_end->next = NULL;
+    proc_format_list = pfn.next;
+    task_format_list = tfn.next;
+  }else{
+    proc_format_list = format_list;
+    task_format_list = format_list;
+  }
+
+  proc_format_needs = collect_format_needs(proc_format_list);
+  task_format_needs = collect_format_needs(task_format_list);
+
+  needs_for_sort = check_sort_needs(sort_list);
+
+  // move process-only flags to the process
+  proc_format_needs |= (task_format_needs &~ PROC_ONLY_FLAGS);
+  task_format_needs &= ~PROC_ONLY_FLAGS;
+
+  if(bsd_c_option){
+    proc_format_needs &= ~PROC_FILLARG;
+    needs_for_sort    &= ~PROC_FILLARG;
+  }
+  if(!unix_f_option){
+    proc_format_needs &= ~PROC_FILLCOM;
+    needs_for_sort    &= ~PROC_FILLCOM;
+  }
+  // convert ARG to COM as a standard
+  if(proc_format_needs & PROC_FILLARG){
+    proc_format_needs |= PROC_FILLCOM;
+    proc_format_needs &= ~PROC_FILLARG;
+  }
+  if(bsd_e_option){
+    if(proc_format_needs&PROC_FILLCOM) proc_format_needs |= PROC_FILLENV;
+  }
+  
+  /* FIXME  broken filthy hack -- got to unify some stuff here */
+  if( ( (proc_format_needs|task_format_needs|needs_for_sort) & PROC_FILLWCHAN) && !wchan_is_number)
+    if (open_psdb(namelist_file)) wchan_is_number = 1;
+
+  if(thread_flags&TF_loose_tasks) needs_for_threads |= PROC_LOOSE_TASKS;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+/***** fill in %CPU; not in libproc because of include_dead_children */
+/* Note: for sorting, not display, so 0..0x7fffffff would be OK */
+static int want_this_proc_pcpu(proc_t *buf){
+  unsigned long long used_jiffies;
+  unsigned long pcpu = 0;
+  unsigned long long avail_jiffies;
+
+  if(!want_this_proc(buf)) return 0;
+
+  used_jiffies = buf->utime + buf->stime;
+  if(include_dead_children) used_jiffies += (buf->cutime + buf->cstime);
+
+  avail_jiffies = seconds_since_boot * Hertz - buf->start_time;
+  if(avail_jiffies) pcpu = (used_jiffies << 24) / avail_jiffies;
+
+  buf->pcpu = pcpu;  // fits in an int, summing children on 128 CPUs
+
+  return 1;
 }
 
 /***** just display */
 static void simple_spew(void){
   proc_t buf;
   PROCTAB* ptp;
-  ptp = openproc(PROC_FILLBUG);
+  ptp = openproc(needs_for_format | needs_for_sort | needs_for_select | needs_for_threads);
+  if(!ptp) {
+    fprintf(stderr, "Error: can not access /proc.\n");
+    exit(1);
+  }
   memset(&buf, '#', sizeof(proc_t));
-  /* use "ps_" prefix to catch library mismatch */
-  while(ps_readproc(ptp,&buf)){
-    /* hex_dump(&buf); */
-    fill_pcpu(&buf);				/* fill in %CPU */
-    if(want_this_proc(&buf)) show_one_proc(&buf);
-    /* if(buf.cmdline) free(buf.cmdline); */   /* these crash */
-    /* if(buf.environ) free(buf.environ); */
-    memset(&buf, '#', sizeof(proc_t));
+  switch(thread_flags & (TF_show_proc|TF_loose_tasks|TF_show_task)){
+  case TF_show_proc:                   // normal non-thread output
+    while(readproc(ptp,&buf)){
+      if(want_this_proc(&buf)){
+        show_one_proc(&buf, proc_format_list);
+      }
+      if(buf.cmdline) free((void*)*buf.cmdline); // ought to reuse
+      if(buf.environ) free((void*)*buf.environ); // ought to reuse
+    }
+    break;
+  case TF_show_proc|TF_loose_tasks:    // H option
+    while(readproc(ptp,&buf)){
+      proc_t buf2;
+      // must still have the process allocated
+      while(readtask(ptp,&buf,&buf2)){
+        if(!want_this_proc(&buf)) continue;
+        show_one_proc(&buf2, task_format_list);
+      }
+      if(buf.cmdline) free((void*)*buf.cmdline); // ought to reuse
+      if(buf.environ) free((void*)*buf.environ); // ought to reuse
+    }
+    break;
+  case TF_show_proc|TF_show_task:      // m and -m options
+    while(readproc(ptp,&buf)){
+      if(want_this_proc(&buf)){
+        proc_t buf2;
+        show_one_proc(&buf, proc_format_list);
+        // must still have the process allocated
+        while(readtask(ptp,&buf,&buf2)) show_one_proc(&buf2, task_format_list);
+      }
+      if(buf.cmdline) free((void*)*buf.cmdline); // ought to reuse
+      if(buf.environ) free((void*)*buf.environ); // ought to reuse
+    }
+    break;
+  case TF_show_task:                   // -L and -T options
+    while(readproc(ptp,&buf)){
+      if(want_this_proc(&buf)){
+        proc_t buf2;
+        // must still have the process allocated
+        while(readtask(ptp,&buf,&buf2)) show_one_proc(&buf2, task_format_list);
+      }
+      if(buf.cmdline) free((void*)*buf.cmdline); // ought to reuse
+      if(buf.environ) free((void*)*buf.environ); // ought to reuse
+    }
+    break;
   }
   closeproc(ptp);
 }
@@ -231,6 +395,7 @@ static void prep_forest_sort(void){
     tmp_list->reverse = 0;
     tmp_list->typecode = '?'; /* what was this for? */
     tmp_list->sr = incoming->sr;
+    tmp_list->need = incoming->need;
     tmp_list->next = sort_list;
     sort_list = tmp_list;
   }
@@ -241,19 +406,21 @@ static void prep_forest_sort(void){
   tmp_list->reverse = 0;
   tmp_list->typecode = '?'; /* what was this for? */
   tmp_list->sr = incoming->sr;
+  tmp_list->need = incoming->need;
   tmp_list->next = sort_list;
   sort_list = tmp_list;
 }
 
 /* we rely on the POSIX requirement for zeroed memory */
-static proc_t *processes[32*1024];
+//static proc_t *processes[98*1024];  // FIXME
+static proc_t **processes;
 
 /***** compare function for qsort */
 static int compare_two_procs(const void *a, const void *b){
   sort_node *tmp_list = sort_list;
   while(tmp_list){
     int result;
-    result = (*tmp_list->sr)(*(const proc_t **)a, *(const proc_t **)b);
+    result = (*tmp_list->sr)(*(const proc_t *const*)a, *(const proc_t *const*)b);
     if(result) return (tmp_list->reverse) ? -result : result;
     tmp_list = tmp_list->next;
   }
@@ -261,20 +428,28 @@ static int compare_two_procs(const void *a, const void *b){
 }
 
 /***** show pre-sorted array of process pointers */
-static void show_proc_array(int n){
+static void show_proc_array(PROCTAB *restrict ptp, int n){
   proc_t **p = processes;
   while(n--){
-    show_one_proc(*p);
-    /* if(p->cmdline) free(p->cmdline); */   /* this crashes */
-    /* if(p->environ) free(p->environ); */   /* this crashes */
-    /* memset(*p, '%', sizeof(proc_t)); */ /* debug */
-    free(*p);
+    if(thread_flags & TF_show_proc) show_one_proc(*p, proc_format_list);
+    if(thread_flags & TF_show_task){
+      proc_t buf2;
+      // must still have the process allocated
+      while(readtask(ptp,*p,&buf2)) show_one_proc(&buf2, task_format_list);
+      // must not attempt to free cmdline and environ
+    }
+    /* no point freeing any of this -- won't need more mem */
+//    if((*p)->cmdline) free((void*)*(*p)->cmdline);
+//    if((*p)->environ) free((void*)*(*p)->environ);
+//    memset(*p, '%', sizeof(proc_t)); /* debug */
+//    free(*p);
     p++;
   }
 }
 
 /***** show tree */
 /* this needs some optimization work */
+#define ADOPTED(x) 1
 static void show_tree(const int self, const int n, const int level, const int have_sibling){
   int i = 0;
   if(level){
@@ -283,13 +458,13 @@ static void show_tree(const int self, const int n, const int level, const int ha
     else             forest_prefix[level-1] = 'L';
     forest_prefix[level] = '\0';
   }
-  show_one_proc(processes[self]);  /* first show self */
-  /* if(p->cmdline) free(p->cmdline); */   /* this crashes */
-  /* if(p->environ) free(p->environ); */   /* this crashes */
-  /* memset(*p, '%', sizeof(proc_t)); */ /* debug */
+  show_one_proc(processes[self],format_list);  /* first show self */
+  /* no point freeing any of this -- won't need more mem */
+//  if(processes[self]->cmdline) free((void*)*processes[self]->cmdline);
+//  if(processes[self]->environ) free((void*)*processes[self]->environ);
   for(;;){  /* look for children */
     if(i >= n) return; /* no children */
-    if(processes[i]->ppid == processes[self]->pid) break;
+    if(processes[i]->ppid == processes[self]->XXXID) break;
     i++;
   }
   if(level){
@@ -299,15 +474,23 @@ static void show_tree(const int self, const int n, const int level, const int ha
     forest_prefix[level] = '\0';
   }
   for(;;){
+    int self_pid;
     int more_children = 1;
     if(i >= n) break; /* over the edge */
-    if(i+1 >= n) more_children = 0;
-    else if(processes[i+1]->ppid != processes[self]->pid) more_children = 0;
-    show_tree(i++, n, level+1, more_children);
+    self_pid=processes[self]->XXXID;
+    if(i+1 >= n)
+      more_children = 0;
+    else
+      if(processes[i+1]->ppid != self_pid) more_children = 0;
+    if(self_pid==1 && ADOPTED(processes[i]) && forest_type!='u')
+      show_tree(i++, n, level,   more_children);
+    else
+      show_tree(i++, n, level+1, more_children);
     if(!more_children) break;
   }
   /* chop prefix that children added -- do we need this? */
   forest_prefix[level] = '\0';
+//  memset(processes[self], '$', sizeof(proc_t));  /* debug */
 }
 
 /***** show forest */
@@ -317,44 +500,54 @@ static void show_forest(const int n){
   while(i--){   /* cover whole array looking for trees */
     j = n;
     while(j--){   /* search for parent: if none, i is a tree! */
-      if(processes[j]->pid == processes[i]->ppid) goto not_root;
+      if(processes[j]->XXXID == processes[i]->ppid) goto not_root;
     }
     show_tree(i,n,0,0);
 not_root:
+    ;
   }
   /* don't free the array because it takes time and ps will exit anyway */
 }
 
+static int want_this_proc_nop(proc_t *dummy){
+  (void)dummy;
+  return 1;
+}
+
 /***** sorted or forest */
 static void fancy_spew(void){
-  proc_t *retbuf;
-  PROCTAB* ptp;
+  proc_data_t *pd = NULL;
+  PROCTAB *restrict ptp;
   int n = 0;  /* number of processes & index into array */
-  ptp = openproc(PROC_FILLBUG);
-  while((retbuf = ps_readproc(ptp,NULL))){
-    fill_pcpu(retbuf);			/* fill in %CPU */
-    if(want_this_proc(retbuf))  processes[n++] = retbuf;
-    else free(retbuf);
+
+  ptp = openproc(needs_for_format | needs_for_sort | needs_for_select | needs_for_threads);
+  if(!ptp) {
+    fprintf(stderr, "Error: can not access /proc.\n");
+    exit(1);
   }
-  closeproc(ptp);
+
+  if(thread_flags & TF_loose_tasks){
+    pd = readproctab2(want_this_proc_nop, want_this_proc_pcpu, ptp);
+  }else{
+    pd = readproctab2(want_this_proc_pcpu, (void*)0xdeadbeaful, ptp);
+  }
+  n = pd->n;
+  processes = pd->tab;
+
   if(!n) return;  /* no processes */
   if(forest_type) prep_forest_sort();
   qsort(processes, n, sizeof(proc_t*), compare_two_procs);
   if(forest_type) show_forest(n);
-  else show_proc_array(n);
+  else show_proc_array(ptp,n);
+  closeproc(ptp);
 }
 
 
 /***** no comment */
 int main(int argc, char *argv[]){
-  if(getuid()!=geteuid()){
-    fprintf(stderr, "This /bin/ps is not secure for setuid operation.\n");
-    exit(1);
-  }
-  if(getgid()!=getegid()){
-    fprintf(stderr, "This /bin/ps is not secure for setgid operation.\n");
-    exit(1);
-  }
+#if (__GNU_LIBRARY__ >= 6)
+  setlocale (LC_CTYPE, "");
+#endif
 
 #ifdef DEBUG
   init_stack_trace(argv[0]);
@@ -369,15 +562,15 @@ int main(int argc, char *argv[]){
     default:
       sigaction(i,&sa,NULL);
     case 0:
-    case SIGINT:  /* ^C */
-    case SIGQUIT: /* ^\ */
-    case SIGPROF: /* profiling */
-    case SIGKILL: /* can not catch */
-    case SIGSTOP: /* can not catch */
-#ifndef DEBUG
-    case SIGSEGV: /* I want core dumps to debug if I don't get a backtrace */
-#endif
-    case SIGWINCH: /* we aren't going to change output line length later... */
+    case SIGINT:   /* ^C */
+    case SIGTSTP:  /* ^Z */
+    case SIGTTOU:  /* see stty(1) man page */
+    case SIGQUIT:  /* ^\ */
+    case SIGPROF:  /* profiling */
+    case SIGKILL:  /* can not catch */
+    case SIGSTOP:  /* can not catch */
+    case SIGWINCH: /* don't care if window size changes */
+      ;
     }
   } while (0);
 #endif
@@ -391,10 +584,11 @@ int main(int argc, char *argv[]){
   trace("======= ps output follows =======\n");
 
   init_output(); /* must be between parser and output */
-  check_headers();
-  if (!need_wchan || open_psdb(namelist_file)) wchan_is_number = 1;
+
+  lists_and_needs();
+
   if(forest_type || sort_list) fancy_spew(); /* sort or forest */
   else simple_spew(); /* no sort, no forest */
-  show_one_proc((proc_t *)-1); /* no output yet? */
+  show_one_proc((proc_t *)-1,format_list); /* no output yet? */
   return 0;
 }

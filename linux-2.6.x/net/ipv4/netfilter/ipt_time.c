@@ -54,19 +54,21 @@ match(const struct sk_buff *skb,
 {
 	const struct ipt_time_info *info = matchinfo;   /* match info for rule */
 	struct tm currenttime;                          /* time human readable */
+	struct timeval tv;
 	u_int8_t days_of_week[7] = {64, 32, 16, 8, 4, 2, 1};
 	u_int16_t packet_time;
 
 	/* We might not have a timestamp, get one */
-	if (skb->tstamp.off_sec == 0)
+	tv = ktime_to_timeval(skb->tstamp);
+	if (tv.tv_sec == 0)
 		__net_timestamp((struct sk_buff *)skb);
 
 	/* First we make sure we are in the date start-stop boundaries */
-	if ((skb->tstamp.off_sec < info->date_start) || (skb->tstamp.off_sec > info->date_stop))
+	if ((tv.tv_sec < info->date_start) || (tv.tv_sec > info->date_stop))
 		return 0; /* We are outside the date boundaries */
 
 	/* Transform the timestamp of the packet, in a human readable form */
-	localtime(skb->tstamp.off_sec, &currenttime);
+	localtime(tv.tv_sec, &currenttime);
 
 	/* check if we match this timestamp, we start by the days... */
 	if ((days_of_week[currenttime.tm_wday] & info->days_match) != days_of_week[currenttime.tm_wday])

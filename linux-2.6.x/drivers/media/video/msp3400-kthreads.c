@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
+#include <linux/freezer.h>
 #include <linux/videodev.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
@@ -468,6 +469,7 @@ int msp3400c_thread(void *data)
 
 
 	v4l_dbg(1, msp_debug, client, "msp3400 daemon started\n");
+	set_freezable();
 	for (;;) {
 		v4l_dbg(2, msp_debug, client, "msp3400 thread: sleep\n");
 		msp_sleep(state, -1);
@@ -483,7 +485,6 @@ int msp3400c_thread(void *data)
 			/* no carrier scan, just unmute */
 			v4l_dbg(1, msp_debug, client, "thread: no carrier scan\n");
 			state->scan_in_progress = 0;
-			state->rxsubchans = V4L2_TUNER_SUB_STEREO;
 			msp_set_audio(client);
 			continue;
 		}
@@ -647,7 +648,7 @@ int msp3410d_thread(void *data)
 	int val, i, std, count;
 
 	v4l_dbg(1, msp_debug, client, "msp3410 daemon started\n");
-
+	set_freezable();
 	for (;;) {
 		v4l_dbg(2, msp_debug, client, "msp3410 thread: sleep\n");
 		msp_sleep(state,-1);
@@ -851,11 +852,14 @@ static void msp34xxg_set_source(struct i2c_client *client, u16 reg, int in)
 		source = 1; /* stereo or A|B */
 		matrix = 0x20;
 		break;
-	case V4L2_TUNER_MODE_STEREO:
 	case V4L2_TUNER_MODE_LANG1:
-	default:
 		source = 3; /* stereo or A */
 		matrix = 0x00;
+		break;
+	case V4L2_TUNER_MODE_STEREO:
+	default:
+		source = 3; /* stereo or A */
+		matrix = 0x20;
 		break;
 	}
 
@@ -938,7 +942,7 @@ int msp34xxg_thread(void *data)
 	int val, i;
 
 	v4l_dbg(1, msp_debug, client, "msp34xxg daemon started\n");
-
+	set_freezable();
 	for (;;) {
 		v4l_dbg(2, msp_debug, client, "msp34xxg thread: sleep\n");
 		msp_sleep(state, -1);
@@ -1029,6 +1033,9 @@ static int msp34xxg_detect_stereo(struct i2c_client *client)
 	int is_bilingual = status & 0x100;
 	int is_stereo = status & 0x40;
 	int oldrx = state->rxsubchans;
+
+	if (state->mode == MSP_MODE_EXTERN)
+		return 0;
 
 	state->rxsubchans = 0;
 	if (is_stereo)

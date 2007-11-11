@@ -222,7 +222,7 @@ get_sector(char *dev, int fd, unsigned long sno) {
 
 static int
 msdos_signature (struct sector *s) {
-    if (*(unsigned short *) (s->data + 0x1fe) != 0xaa55) {
+    if (*(unsigned short *) (s->data + 0x1fe) != htons(0x55aa)) {
 	error(_("ERROR: sector %lu does not have an msdos signature\n"),
 	       s->sectornumber);
 	return 0;
@@ -1544,7 +1544,7 @@ write_partitions(char *dev, int fd, struct disk_desc *z) {
 	if (!s) return 0;
 	s->to_be_written = 1;
 	copy_from_part(&(p->p), s->data + p->offset);
-	*(unsigned short *)(&(s->data[0x1fe])) = 0xaa55;
+	*(unsigned short *)(&(s->data[0x1fe])) = htons(0x55aa);
     }
     if (save_sector_file) {
 	if (!save_sectors(dev, fd)) {

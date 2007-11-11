@@ -2,9 +2,8 @@
  *  Copyright (C) 2004 aCaB <acab@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +12,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 /*
@@ -47,28 +47,15 @@
 #include "clamav-config.h"
 #endif
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <string.h>
 
 #include "cltypes.h"
-#include "pe.h"
 #include "rebuildpe.h"
+#include "execs.h"
 #include "others.h"
+#include "petite.h"
 
-#if WORDS_BIGENDIAN == 0
-#define EC32(v) (v)
-#else
-static inline uint32_t EC32(uint32_t v)
-{
-    return ((v >> 24) | ((v & 0x00FF0000) >> 8) | ((v & 0x0000FF00) << 8) | (v << 24));
-}
-#endif
-
-#define MAX(a,b) ((a > b) ? a : b)
 
 static int doubledl(char **scur, uint8_t *mydlptr, char *buffer, uint32_t buffersize)
 {
@@ -87,13 +74,13 @@ static int doubledl(char **scur, uint8_t *mydlptr, char *buffer, uint32_t buffer
   return (olddl>>7)&1;
 }
 
-int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_image_section_hdr *sections, unsigned int sectcount, uint32_t Imagebase, uint32_t pep, int desc, int version, uint32_t ResRva, uint32_t ResSize)
+int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct cli_exe_section *sections, unsigned int sectcount, uint32_t Imagebase, uint32_t pep, int desc, int version, uint32_t ResRva, uint32_t ResSize)
 {
   char *adjbuf = buf - minrva;
   char *packed = NULL;
   uint32_t thisrva=0, bottom = 0, enc_ep=0, irva=0, workdone=0, grown=0x355, skew=0x35;
   int j = 0, oob, mangled = 0, check4resources=0;
-  struct SECTION *usects = NULL;
+  struct cli_exe_section *usects = NULL;
   void *tmpsct = NULL;
 
   /*
@@ -108,9 +95,9 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
    */
 
   if ( version == 2 )
-    packed = adjbuf + EC32(sections[sectcount-1].VirtualAddress) + 0x1b8;
+    packed = adjbuf + sections[sectcount-1].rva + 0x1b8;
   if ( version == 1 ) {
-    packed = adjbuf + EC32(sections[sectcount-1].VirtualAddress) + 0x178;
+    packed = adjbuf + sections[sectcount-1].rva + 0x178;
     grown=0x323;    /* My name is Harry potter */
     skew=0x34;
   }
@@ -123,7 +110,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
     if ( ! CLI_ISCONTAINED(buf, bufsz, packed, 4)) {
       if (usects)
 	free(usects);
-      return -1;
+      return 1;
     }
     srva = cli_readint32(packed);
 
@@ -132,7 +119,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
       int t, upd = 1;
 
       if ( j <= 0 ) /* Some non petite compressed files will get here */
-	return -1;
+	return 1;
     
       /* Select * from sections order by rva asc; */
       while ( upd ) {
@@ -160,7 +147,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	if ( usects[t].vsz != usects[t+1].rva - usects[t].rva )
 	  usects[t].vsz = usects[t+1].rva - usects[t].rva;
       }
-     
+      
       /*
        * Our encryption is pathetic and out software is lame but
        * we need to claim it's unbreakable.
@@ -203,7 +190,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	      } else {
 		api = 0xbff01337; /* KERNEL32!leet */
 	      }
-	      if (EC32(sections[sectcount-1].VirtualAddress)+Imagebase < api )
+	      if (sections[sectcount-1].rva+Imagebase < api )
 		enc_ep--;
 	      if ( api < virtaddr )
 		enc_ep--;
@@ -214,15 +201,17 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	} else 
 	  workdone = 1;
 	enc_ep = pep+5+enc_ep;
-	if ( workdone == 1 )
+	if ( workdone == 1 ) {
 	  cli_dbgmsg("Petite: Old EP: %x\n", enc_ep);
-	else
-	  cli_dbgmsg("Petite: In troubles while attempting to decrypt old EP\n");
+	} else {
+	  enc_ep = usects[0].rva;
+	  cli_dbgmsg("Petite: In troubles while attempting to decrypt old EP, using bogus %x\n", enc_ep);
+	}
       }
 
       /* Let's compact data */
       for (t = 0; t < j ; t++) {
-	usects[t].raw = (usects[t-1].raw + usects[t-1].rsz)*(t>0);
+	usects[t].raw = (t>0)?(usects[t-1].raw + usects[t-1].rsz):0;
 	if (usects[t].rsz != 0 && CLI_ISCONTAINED(buf, bufsz, buf + usects[t].raw, usects[t].rsz))
 	  memmove(buf + usects[t].raw, adjbuf + usects[t].rva, usects[t].rsz);
       }
@@ -230,15 +219,14 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
       /* Showtime!!! */
       cli_dbgmsg("Petite: Sections dump:\n");
       for (t = 0; t < j ; t++)
-	cli_dbgmsg("Petite: .SECT%d RVA:%x VSize:%x ROffset: %x, RSize:% x\n", t, usects[t].rva, usects[t].vsz, usects[t].raw, usects[t].rsz);
-      if ( (ssrc = rebuildpe(buf, usects, j, Imagebase, enc_ep, ResRva, ResSize)) ) {
-	write(desc, ssrc, 0x148+0x80+0x28*j+usects[j-1].raw+usects[j-1].rsz);
-	free(ssrc);
-      } else
+	cli_dbgmsg("Petite: .SECT%d RVA:%x VSize:%x ROffset: %x, RSize:%x\n", t, usects[t].rva, usects[t].vsz, usects[t].raw, usects[t].rsz);
+      if (! cli_rebuildpe(buf, usects, j, Imagebase, enc_ep, ResRva, ResSize, desc)) {
 	cli_dbgmsg("Petite: Rebuilding failed\n");
-
+	free(usects);
+	return 1;
+      }
       free(usects);
-      return workdone;
+      return 0;
     }
 
 
@@ -255,7 +243,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
       if ( ! CLI_ISCONTAINED(buf, bufsz, packed+4, 8) ) {
 	if (usects)
 	  free(usects);
-	return -1;
+	return 1;
       }
       /* Save the end of current packed section for later use */
       bottom = cli_readint32(packed+8) + 4;
@@ -265,7 +253,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
       if ( !CLI_ISCONTAINED(buf, bufsz, ssrc, size*4) || !CLI_ISCONTAINED(buf, bufsz, ddst, size*4) ) {
 	if (usects)
 	  free(usects);
-	return -1;
+	return 1;
       }
 
       /* Copy packed data to the end of the current packed section */
@@ -281,27 +269,26 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
       if ( ! CLI_ISCONTAINED(buf, bufsz, packed+4, 8)) {
 	if (usects)
 	  free(usects);
-	return -1;
+	return 1;
       }
 
       size = cli_readint32(packed+4); /* How many bytes to unpack */
       thisrva=cli_readint32(packed+8); /* RVA of the original section */
       packed += 0x10;
 
-      if ( j >= 99 ) {
+      if ( j >= 96 ) {
 	cli_dbgmsg("Petite: maximum number of sections exceeded, giving up.\n");
 	free(usects);
-	return -1;
+	return 1;
       }
-
       /* Alloc 1 more struct */
-      if ( ! (tmpsct = realloc(usects, sizeof(struct SECTION) * (j+1))) ) {
+      if ( ! (tmpsct = cli_realloc(usects, sizeof(struct cli_exe_section) * (j+1))) ) {
 	if (usects)
 	  free(usects);
-	return -1;
+	return 1;
       }
 
-      usects = (struct SECTION *) tmpsct;
+      usects = (struct cli_exe_section *) tmpsct;
       /* Save section spex for later rebuilding */
       usects[j].rva = thisrva;
       usects[j].rsz = size;
@@ -324,12 +311,12 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
        */
 
       if (!check4resources) {
-	int q;
+	unsigned int q;
 	for ( q = 0 ; q < sectcount ; q++ ) {
-	  if ( thisrva <= EC32(sections[q].VirtualAddress) || thisrva >= EC32(sections[q].VirtualAddress) + EC32(sections[q].VirtualSize))
+	  if ( thisrva <= sections[q].rva || thisrva >= sections[q].rva + sections[q].vsz)
 	    continue;
-	  usects[j].rva = EC32(sections[q].VirtualAddress);
-	  usects[j].rsz = thisrva - EC32(sections[q].VirtualAddress) + size;
+	  usects[j].rva = sections[q].rva;
+	  usects[j].rsz = thisrva - sections[q].rva + size;
 	  break;
 	}
       }
@@ -361,7 +348,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 
       if ( !CLI_ISCONTAINED(buf, bufsz, ssrc, 1) || !CLI_ISCONTAINED(buf, bufsz, ddst, 1)) {
 	free(usects);
-	return -1;
+	return 1;
       }
 
       size--;
@@ -374,12 +361,12 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	oob = doubledl(&ssrc, &mydl, buf, bufsz);
 	if ( oob == -1 ) {
 	  free(usects);
-	  return -1;
+	  return 1;
 	}
 	if (!oob) {
 	  if ( !CLI_ISCONTAINED(buf, bufsz, ssrc, 1) || !CLI_ISCONTAINED(buf, bufsz, ddst, 1) ) {
 	    free(usects);
-	    return -1;
+	    return 1;
 	  }
 	  *ddst++ = (char)((*ssrc++)^(size & 0xff));
 	  size--;
@@ -389,12 +376,12 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	  while (1) {
 	    if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 	      free(usects);
-	      return -1;
+	      return 1;
 	    }
 	    backbytes = backbytes*2 + oob;
 	    if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 	      free(usects);
-	      return -1;
+	      return 1;
 	    }
 	    if (!oob)
 	      break;
@@ -405,7 +392,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	    do {
 	      if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 		free(usects);
-		return -1;
+		return 1;
 	      }
 	      backbytes = backbytes*2 + oob;
 	      backsize--;
@@ -420,12 +407,12 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 
 	  if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 	    free(usects);
-	    return -1;
+	    return 1;
 	  }
 	  backsize = backsize*2 + oob;
 	  if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 	    free(usects);
-	    return -1;
+	    return 1;
 	  }
 	  backsize = backsize*2 + oob;
 	  if (!backsize) {
@@ -433,12 +420,12 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	    while (1) {
 	      if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 		free(usects);
-		return -1;
+		return 1;
 	      }
 	      backsize = backsize*2 + oob;
 	      if ( (oob = doubledl(&ssrc, &mydl, buf, bufsz)) == -1 ) {
 		free(usects);
-		return -1;
+		return 1;
 	      }
 	      if (!oob)
 		break;
@@ -449,7 +436,7 @@ int petite_inflate2x_1to9(char *buf, uint32_t minrva, uint32_t bufsz, struct pe_
 	  size-=backsize;
 	  if(!CLI_ISCONTAINED(buf, bufsz, ddst, backsize) || !CLI_ISCONTAINED(buf, bufsz, ddst+backbytes, backsize)) {
 	    free(usects);
-	    return -1;
+	    return 1;
 	  }
 	  while(backsize--) {
 	    *ddst=*(ddst+backbytes);

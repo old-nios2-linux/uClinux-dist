@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002 - 2004 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -25,119 +26,144 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "options.h"
-#include "cfgparser.h"
-#include "defaults.h"
-#include "str.h"
-#include "memory.h"
-#include "misc.h"
+#include "shared/cfgparser.h"
+#include "shared/misc.h"
 
-struct cfgstruct *parsecfg(const char *cfgfile, int messages)
+#include "libclamav/str.h"
+
+struct cfgoption cfg_options[] = {
+    {"LogFile",	OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
+    {"LogFileUnlock", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"LogFileMaxSize", OPT_COMPSIZE, 1048576, NULL, 0, OPT_CLAMD},
+    {"LogTime", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"LogClean", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"LogVerbose", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"LogSyslog", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"LogFacility", OPT_QUOTESTR, -1, "LOG_LOCAL6", 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"PidFile", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"TemporaryDirectory", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
+    {"ScanPE", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"ScanELF", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"DetectBrokenExecutables", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ScanMail", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"MailFollowURLs", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"MailMaxRecursion", OPT_NUM, 64, NULL, 0, OPT_CLAMD},
+    {"DatabaseDropPercentage", OPT_NUM, 0, NULL, 0, OPT_CLAMD},
+    {"PhishingSignatures", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"PhishingScanURLs",OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    /* these are FP prone options, if default isn't used */
+    {"PhishingAlwaysBlockCloak", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"PhishingAlwaysBlockSSLMismatch", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"PhishingRestrictedScan", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    /* end of FP prone options */
+    {"DetectPUA", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"AlgorithmicDetection", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"ScanHTML", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"ScanOLE2", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"ScanPDF", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ScanArchive", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
+    {"ArchiveMaxFileSize", OPT_COMPSIZE, 10485760, NULL, 0, OPT_CLAMD},
+    {"ArchiveMaxRecursion", OPT_NUM, 8, NULL, 0, OPT_CLAMD},
+    {"ArchiveMaxFiles", OPT_NUM, 1000, NULL, 0, OPT_CLAMD},
+    {"ArchiveMaxCompressionRatio", OPT_NUM, 250, NULL, 0, OPT_CLAMD},
+    {"ArchiveLimitMemoryUsage", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ArchiveBlockEncrypted", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ArchiveBlockMax", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"DatabaseDirectory", OPT_QUOTESTR, -1, DATADIR, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"TCPAddr", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
+    {"TCPSocket", OPT_NUM, -1, NULL, 0, OPT_CLAMD},
+    {"LocalSocket", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
+    {"MaxConnectionQueueLength", OPT_NUM, 15, NULL, 0, OPT_CLAMD},
+    {"StreamMaxLength", OPT_COMPSIZE, 10485760, NULL, 0, OPT_CLAMD},
+    {"StreamMinPort", OPT_NUM, 1024, NULL, 0, OPT_CLAMD},
+    {"StreamMaxPort", OPT_NUM, 2048, NULL, 0, OPT_CLAMD},
+    {"MaxThreads", OPT_NUM, 10, NULL, 0, OPT_CLAMD},
+    {"ReadTimeout", OPT_NUM, 120, NULL, 0, OPT_CLAMD},
+    {"IdleTimeout", OPT_NUM, 30, NULL, 0, OPT_CLAMD},
+    {"MaxDirectoryRecursion", OPT_NUM, 15, NULL, 0, OPT_CLAMD},
+    {"FollowDirectorySymlinks", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"FollowFileSymlinks", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ExitOnOOM", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"Foreground", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"Debug", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"LeaveTemporaryFiles", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"FixStaleSocket", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"User", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
+    {"AllowSupplementaryGroups", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"SelfCheck", OPT_NUM, 1800, NULL, 0, OPT_CLAMD},
+    {"VirusEvent", OPT_FULLSTR, -1, NULL, 0, OPT_CLAMD},
+    {"NodalCoreAcceleration", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"ClamukoScanOnAccess", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
+    {"ClamukoScanOnOpen", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
+    {"ClamukoScanOnClose", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
+    {"ClamukoScanOnExec", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
+    {"ClamukoIncludePath", OPT_QUOTESTR, -1, NULL, 1, OPT_CLAMD},
+    {"ClamukoExcludePath", OPT_QUOTESTR, -1, NULL, 1, OPT_CLAMD},
+    {"ClamukoMaxFileSize", OPT_COMPSIZE, 5242880, NULL, 0, OPT_CLAMD},
+    {"DatabaseOwner", OPT_QUOTESTR, -1, CLAMAVUSER, 0, OPT_FRESHCLAM},
+    {"Checks", OPT_NUM, 12, NULL, 0, OPT_FRESHCLAM},
+    {"UpdateLogFile", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"DNSDatabaseInfo", OPT_QUOTESTR, -1, "current.cvd.clamav.net", 0, OPT_FRESHCLAM},
+    {"DatabaseMirror", OPT_QUOTESTR, -1, NULL, 1, OPT_FRESHCLAM},
+    {"MaxAttempts", OPT_NUM, 3, NULL, 0, OPT_FRESHCLAM},
+    {"ScriptedUpdates", OPT_BOOL, 1, NULL, 0, OPT_FRESHCLAM},
+    {"HTTPProxyServer", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"HTTPProxyPort", OPT_NUM, -1, NULL, 0, OPT_FRESHCLAM},
+    {"HTTPProxyUsername", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"HTTPProxyPassword", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"HTTPUserAgent", OPT_FULLSTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"NotifyClamd", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"OnUpdateExecute", OPT_FULLSTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"OnErrorExecute", OPT_FULLSTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"OnOutdatedExecute", OPT_FULLSTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"LocalIPAddress", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
+    {"ConnectTimeout", OPT_NUM, 30, NULL, 0, OPT_FRESHCLAM},
+    {"ReceiveTimeout", OPT_NUM, 30, NULL, 0, OPT_FRESHCLAM},
+    {NULL, 0, 0, NULL, 0, 0}
+};
+
+static int regcfg(struct cfgstruct **copt, const char *optname, char *strarg, int numarg, short multiple);
+
+struct cfgstruct *getcfg(const char *cfgfile, int verbose)
 {
 	char buff[LINE_LENGTH], *name, *arg, *c;
 	FILE *fs;
-	int line = 0, i, found, ctype, calc;
+	int line = 0, i, found, ctype, calc, val;
 	struct cfgstruct *copt = NULL;
 	struct cfgoption *pt;
 
-	struct cfgoption cfg_options[] = {
-	    {"LogFile", OPT_STR},
-	    {"LogFileUnlock", OPT_NOARG},
-	    {"LogFileMaxSize", OPT_COMPSIZE},
-	    {"LogTime", OPT_NOARG},
-	    {"LogClean", OPT_NOARG},
-	    {"LogVerbose", OPT_NOARG}, /* clamd + freshclam */
-	    {"LogSyslog", OPT_NOARG},
-	    {"LogFacility", OPT_STR},
-	    {"PidFile", OPT_STR},
-	    {"TemporaryDirectory", OPT_STR},
-	    {"DisableDefaultScanOptions", OPT_NOARG},
-	    {"ScanPE", OPT_NOARG},
-	    {"DetectBrokenExecutables", OPT_NOARG},
-	    {"ScanMail", OPT_NOARG},
-	    {"MailFollowURLs", OPT_NOARG},
-	    {"ScanHTML", OPT_NOARG},
-	    {"ScanOLE2", OPT_NOARG},
-	    {"ScanArchive", OPT_NOARG},
-	    {"ScanRAR", OPT_NOARG},
-	    {"ArchiveMaxFileSize", OPT_COMPSIZE},
-	    {"ArchiveMaxRecursion", OPT_NUM},
-	    {"ArchiveMaxFiles", OPT_NUM},
-	    {"ArchiveMaxCompressionRatio", OPT_NUM},
-	    {"ArchiveLimitMemoryUsage", OPT_NOARG},
-	    {"ArchiveBlockEncrypted", OPT_NOARG},
-	    {"ArchiveBlockMax", OPT_NOARG},
-	    {"DataDirectory", OPT_STR}, /* obsolete */
-	    {"DatabaseDirectory", OPT_STR}, /* clamd + freshclam */
-	    {"TCPAddr", OPT_STR},
-	    {"TCPSocket", OPT_NUM},
-	    {"LocalSocket", OPT_STR},
-	    {"MaxConnectionQueueLength", OPT_NUM},
-	    {"StreamMaxLength", OPT_COMPSIZE},
-	    {"StreamMinPort", OPT_NUM},
-	    {"StreamMaxPort", OPT_NUM},
-	    {"MaxThreads", OPT_NUM},
-	    {"ReadTimeout", OPT_NUM},
-	    {"IdleTimeout", OPT_NUM},
-	    {"MaxDirectoryRecursion", OPT_NUM},
-	    {"FollowDirectorySymlinks", OPT_NOARG},
-	    {"FollowFileSymlinks", OPT_NOARG},
-	    {"ExitOnOOM", OPT_NOARG},
-	    {"Foreground", OPT_NOARG}, /* clamd + freshclam */
-	    {"Debug", OPT_NOARG},
-	    {"LeaveTemporaryFiles", OPT_NOARG},
-	    {"FixStaleSocket", OPT_NOARG},
-	    {"User", OPT_STR},
-	    {"AllowSupplementaryGroups", OPT_NOARG},
-	    {"SelfCheck", OPT_NUM},
-	    {"VirusEvent", OPT_FULLSTR},
-	    {"ClamukoScanOnLine", OPT_NOARG}, /* old name */
-	    {"ClamukoScanOnAccess", OPT_NOARG},
-	    {"ClamukoScanOnOpen", OPT_NOARG},
-	    {"ClamukoScanOnClose", OPT_NOARG},
-	    {"ClamukoScanOnExec", OPT_NOARG},
-	    {"ClamukoIncludePath", OPT_STR},
-	    {"ClamukoExcludePath", OPT_STR},
-	    {"ClamukoMaxFileSize", OPT_COMPSIZE},
-	    {"ClamukoScanArchive", OPT_NOARG},
-	    {"DatabaseOwner", OPT_STR}, /* freshclam */
-	    {"Checks", OPT_NUM}, /* freshclam */
-	    {"UpdateLogFile", OPT_STR}, /* freshclam */
-	    {"DNSDatabaseInfo", OPT_STR}, /* freshclam */
-	    {"DatabaseMirror", OPT_STR}, /* freshclam */
-	    {"MaxAttempts", OPT_NUM}, /* freshclam */
-	    {"HTTPProxyServer", OPT_STR}, /* freshclam */
-	    {"HTTPProxyPort", OPT_NUM}, /* freshclam */
-	    {"HTTPProxyUsername", OPT_STR}, /* freshclam */
-	    {"HTTPProxyPassword", OPT_STR}, /* freshclam */
-	    {"NotifyClamd", OPT_OPTARG}, /* freshclam */
-	    {"OnUpdateExecute", OPT_FULLSTR}, /* freshclam */
-	    {"OnErrorExecute", OPT_FULLSTR}, /* freshclam */
-	    {"OnOutdatedExecute", OPT_FULLSTR}, /* freshclam */
-	    {"LocalIPAddress", OPT_STR}, /* freshclam */
-	    {"ConnectTimeout", OPT_NUM}, /* freshclam */
-	    {"ReceiveTimeout", OPT_NUM}, /* freshclam */
-	    {0, 0},
-	};
 
+    for(i = 0; ; i++) {
+	pt = &cfg_options[i];
+	if(!pt->name)
+	    break;
 
-    if((fs = fopen(cfgfile, "r")) == NULL)
+	if(regcfg(&copt, pt->name, pt->strarg ? strdup(pt->strarg) : NULL, pt->numarg, pt->multiple) < 0) {
+	    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+	    freecfg(copt);
+	    return NULL;
+	}
+    }
+
+    if((fs = fopen(cfgfile, "rb")) == NULL) {
+	/* do not print error message here! */
+	freecfg(copt);
 	return NULL;
+    }
 
     while(fgets(buff, LINE_LENGTH, fs)) {
-
 	line++;
 
 	if(buff[0] == '#')
 	    continue;
 
 	if(!strncmp("Example", buff, 7)) {
-	    if(messages)
+	    if(verbose)
 		fprintf(stderr, "ERROR: Please edit the example config file %s.\n", cfgfile);
 	    fclose(fs);
+	    freecfg(copt);
 	    return NULL;
 	}
-
 
 	if((name = cli_strtok(buff, 0, " \r\n"))) {
 	    arg = cli_strtok(buff, 1, " \r\n");
@@ -149,54 +175,125 @@ struct cfgstruct *parsecfg(const char *cfgfile, int messages)
 			found = 1;
 			switch(pt->argtype) {
 			    case OPT_STR:
+			    	/* deprecated.  Use OPT_QUOTESTR instead since it behaves like this, but supports quotes to allow values to contain whitespace */
 				if(!arg) {
-				    if(messages)
-					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires string as argument.\n", line, name);
+				    if(verbose)
+					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires string argument.\n", line, name);
 				    fclose(fs);
+				    free(name);
+				    freecfg(copt);
 				    return NULL;
 				}
-				copt = regcfg(copt, name, arg, 0);
+				if(regcfg(&copt, name, arg, -1, pt->multiple) < 0) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
 				break;
 			    case OPT_FULLSTR:
+				/* an ugly hack of the above case */
 				if(!arg) {
-				    if(messages)
-					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires string as argument.\n", line, name);
+				    if(verbose)
+					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires string argument.\n", line, name);
 				    fclose(fs);
+				    free(name);
+				    freecfg(copt);
 				    return NULL;
 				}
-				/* FIXME: this one is an ugly hack of the above case */
 				free(arg);
 				arg = strstr(buff, " ");
 				arg = strdup(++arg);
-				if((c = strpbrk(arg, "\n\r")))
+				if((arg) && (c = strpbrk(arg, "\n\r")))
 				    *c = '\0';
-				copt = regcfg(copt, name, arg, 0);
+				if((!arg) || (regcfg(&copt, name, arg, -1, pt->multiple) < 0)) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
+				break;
+			    case OPT_QUOTESTR:
+				/* an ugly hack of the above case */
+				if(!arg) {
+				    if(verbose)
+					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires string argument.\n", line, name);
+				    fclose(fs);
+				    free(name);
+				    freecfg(copt);
+				    return NULL;
+				}
+				if((*arg == '\'') || (*arg == '"')) {
+				    free(arg);
+				    c = strstr(buff, " ");
+				    arg = strdup(c+2);
+				    if(arg) {
+					if((c = strchr(arg, c[1])))
+					    *c = '\0';
+					else {
+					    if(verbose)
+						fprintf(stderr, "ERROR: Parse error at line %d: Option %s missing closing quote.\n", line, name);
+					    fclose(fs);
+					    free(name);
+					    free(arg);
+					    freecfg(copt);
+					    return NULL;
+					}
+				    }
+				}
+				if((!arg) || (regcfg(&copt, name, arg, -1, pt->multiple) < 0)) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
 				break;
 			    case OPT_NUM:
 				if(!arg || !isnumb(arg)) {
-				    if(messages)
+				    if(verbose)
 					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires numerical argument.\n", line, name);
 				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
 				    return NULL;
 				}
-				copt = regcfg(copt, name, NULL, atoi(arg));
+				if(regcfg(&copt, name, NULL, atoi(arg), pt->multiple) < 0) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
 				free(arg);
 				break;
 			    case OPT_COMPSIZE:
 				if(!arg) {
-				    if(messages)
+				    if(verbose)
 					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires argument.\n", line, name);
 				    fclose(fs);
+				    free(name);
+				    freecfg(copt);
 				    return NULL;
 				}
 				ctype = tolower(arg[strlen(arg) - 1]);
 				if(ctype == 'm' || ctype == 'k') {
-				    char *cpy = (char *) mcalloc(strlen(arg), sizeof(char));
+				    char *cpy = (char *) calloc(strlen(arg), 1);
 				    strncpy(cpy, arg, strlen(arg) - 1);
 				    if(!isnumb(cpy)) {
-					if(messages)
+					if(verbose)
 					    fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires numerical (raw/K/M) argument.\n", line, name);
 					fclose(fs);
+					free(name);
+					free(arg);
+					freecfg(copt);
 					return NULL;
 				    }
 				    if(ctype == 'm')
@@ -206,46 +303,83 @@ struct cfgstruct *parsecfg(const char *cfgfile, int messages)
 				    free(cpy);
 				} else {
 				    if(!isnumb(arg)) {
-					if(messages)
+					if(verbose)
 					    fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires numerical (raw/K/M) argument.\n", line, name);
 					fclose(fs);
+					free(name);
+					free(arg);
+					freecfg(copt);
 					return NULL;
 				    }
 				    calc = atoi(arg);
 				}
-				copt = regcfg(copt, name, NULL, calc);
 				free(arg);
-				break;
-			    case OPT_NOARG:
-				if(arg) {
-				    if(messages)
-					fprintf(stderr, "ERROR: Parse error at line %d: Option %s doesn't support arguments (got '%s').\n", line, name, arg);
+				if(regcfg(&copt, name, NULL, calc, pt->multiple) < 0) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
 				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
 				    return NULL;
 				}
-				copt = regcfg(copt, name, NULL, 0);
 				break;
-			    case OPT_OPTARG:
-				copt = regcfg(copt, name, arg, 0);
+			    case OPT_BOOL:
+
+				if(!arg) {
+				    if(verbose)
+					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires boolean argument.\n", line, name);
+				    fclose(fs);
+				    free(name);
+				    freecfg(copt);
+				    return NULL;
+				}
+
+				if(!strcasecmp(arg, "yes") || !strcmp(arg, "1") || !strcasecmp(arg, "true")) {
+				    val = 1;
+				} else if(!strcasecmp(arg, "no") || !strcmp(arg, "0") || !strcasecmp(arg, "false")) {
+				    val = 0;
+				} else {
+				    if(verbose)
+					fprintf(stderr, "ERROR: Parse error at line %d: Option %s requires boolean argument.\n", line, name);
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
+				free(arg);
+				if(regcfg(&copt, name, NULL, val, pt->multiple) < 0) {
+				    fprintf(stderr, "ERROR: Can't register new options (not enough memory)\n");
+				    fclose(fs);
+				    free(name);
+				    free(arg);
+				    freecfg(copt);
+				    return NULL;
+				}
 				break;
 			    default:
-				if(messages)
+				if(verbose)
 				    fprintf(stderr, "ERROR: Parse error at line %d: Option %s is of unknown type %d\n", line, name, pt->argtype);
+				fclose(fs);
 				free(name);
 				free(arg);
-				break;
+				freecfg(copt);
+				return NULL;
 			}
 		    }
 		} else
 		    break;
-	    } 
+	    }
 
 	    if(!found) {
-		if(messages)
+		if(verbose)
 		    fprintf(stderr, "ERROR: Parse error at line %d: Unknown option %s.\n", line, name);
+		free(name);
 		fclose(fs);
+		freecfg(copt);
 		return NULL;
 	    }
+	    free(name);
 	}
     }
 
@@ -258,7 +392,7 @@ void freecfg(struct cfgstruct *copt)
     	struct cfgstruct *handler;
     	struct cfgstruct *arg;
 
-    while (copt) {
+    while(copt) {
 	arg = copt->nextarg;
 	while(arg) {
 	    if(arg->strarg) {
@@ -270,12 +404,12 @@ void freecfg(struct cfgstruct *copt)
 	    } else
 		arg = arg->nextarg;
 	}
-	if(copt->optname) {
+	if(copt->optname)
 	    free(copt->optname);
-	}
-	if(copt->strarg) {
+
+	if(copt->strarg)
 	    free(copt->strarg);
-	}
+
 	handler = copt;
 	copt = copt->next;
 	free(handler);
@@ -283,48 +417,93 @@ void freecfg(struct cfgstruct *copt)
     return;
 }
 
-struct cfgstruct *regcfg(struct cfgstruct *copt, char *optname, char *strarg, int numarg)
+const struct cfgstruct *cfgopt(const struct cfgstruct *copt, const char *optname)
 {
-	struct cfgstruct *newnode, *pt;
+    while(copt) {
+	if(copt->optname && !strcmp(copt->optname, optname))
+	    return copt;
 
-    newnode = (struct cfgstruct *) mmalloc(sizeof(struct cfgstruct));
-    newnode->optname = optname;
-    newnode->nextarg = NULL;
-    newnode->next = NULL;
-
-    if(strarg)
-	newnode->strarg = strarg;
-    else {
-	newnode->strarg = NULL;
-	newnode->numarg = numarg;
-    }
-
-    if((pt = cfgopt(copt, optname))) {
-	while(pt->nextarg)
-	    pt = pt->nextarg;
-
-	pt->nextarg = newnode;
-	return copt;
-    } else {
-	newnode->next = copt;
-	return newnode;
-    }
-}
-
-struct cfgstruct *cfgopt(const struct cfgstruct *copt, const char *optname)
-{
-	struct cfgstruct *handler;
-
-    handler = (struct cfgstruct *) copt;
-
-    while(1) {
-	if(handler) {
-	    if(handler->optname)
-		if(!strcmp(handler->optname, optname))
-		    return handler;
-	} else break;
-	handler = handler->next;
+	copt = copt->next;
     }
 
     return NULL;
 }
+
+static struct cfgstruct *cfgopt_i(struct cfgstruct *copt, const char *optname)
+{
+    while(copt) {
+	if(copt->optname && !strcmp(copt->optname, optname))
+	    return copt;
+
+	copt = copt->next;
+    }
+
+    return NULL;
+}
+
+static int regcfg(struct cfgstruct **copt, const char *optname, char *strarg, int numarg, short multiple)
+{
+	struct cfgstruct *newnode, *pt;
+
+
+    newnode = (struct cfgstruct *) malloc(sizeof(struct cfgstruct));
+
+    if(!newnode)
+	return -1;
+
+    newnode->optname = optname ? strdup(optname) : NULL;
+    newnode->nextarg = NULL;
+    newnode->next = NULL;
+    newnode->enabled = 0;
+    newnode->multiple = multiple;
+
+    if(strarg) {
+	newnode->strarg = strarg;
+	newnode->enabled = 1;
+    } else {
+	newnode->strarg = NULL;
+    }
+
+    newnode->numarg = numarg;
+    if(numarg != -1 && numarg != 0)
+	newnode->enabled = 1;
+
+    if((pt = cfgopt_i(*copt, optname))) {
+	if(pt->multiple) {
+
+	    if(pt->enabled) {
+		while(pt->nextarg)
+		    pt = pt->nextarg;
+
+		pt->nextarg = newnode;
+	    } else {
+		if(pt->strarg)
+		    free(pt->strarg);
+		pt->strarg = newnode->strarg;
+		pt->numarg = newnode->numarg;
+		pt->enabled = newnode->enabled;
+		if(newnode->optname)
+		    free(newnode->optname);
+		free(newnode);
+	    }
+	    return 3; /* registered additional argument */
+
+	} else {
+	    if(pt->strarg)
+		free(pt->strarg);
+	    pt->strarg = newnode->strarg;
+	    pt->numarg = newnode->numarg;
+	    pt->enabled = newnode->enabled;
+	    if(newnode->optname)
+		free(newnode->optname);
+	    free(newnode);
+	    return 2;
+	}
+
+    } else {
+	newnode->next = *copt;
+	*copt = newnode;
+	return 1;
+    }
+}
+

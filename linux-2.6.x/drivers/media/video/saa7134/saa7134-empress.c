@@ -96,6 +96,10 @@ static int ts_open(struct inode *inode, struct file *file)
 	if (dev->empress_users)
 		goto done_up;
 
+	/* Unmute audio */
+	saa_writeb(SAA7134_AUDIO_MUTE_CTRL,
+		saa_readb(SAA7134_AUDIO_MUTE_CTRL) & ~(1 << 6));
+
 	dev->empress_users++;
 	file->private_data = dev;
 	err = 0;
@@ -120,6 +124,10 @@ static int ts_release(struct inode *inode, struct file *file)
 
 	/* stop the encoder */
 	ts_reset_encoder(dev);
+
+	/* Mute audio */
+	saa_writeb(SAA7134_AUDIO_MUTE_CTRL,
+		saa_readb(SAA7134_AUDIO_MUTE_CTRL) | (1 << 6));
 
 	mutex_unlock(&dev->empress_tsq.lock);
 	return 0;
@@ -319,7 +327,7 @@ static int ts_ioctl(struct inode *inode, struct file *file,
 	return video_usercopy(inode, file, cmd, arg, ts_do_ioctl);
 }
 
-static struct file_operations ts_fops =
+static const struct file_operations ts_fops =
 {
 	.owner	  = THIS_MODULE,
 	.open	  = ts_open,
@@ -343,9 +351,10 @@ static struct video_device saa7134_empress_template =
 	.minor	       = -1,
 };
 
-static void empress_signal_update(void* data)
+static void empress_signal_update(struct work_struct *work)
 {
-	struct saa7134_dev* dev = (struct saa7134_dev*) data;
+	struct saa7134_dev* dev =
+		container_of(work, struct saa7134_dev, empress_workqueue);
 
 	if (dev->nosignal) {
 		dprintk("no video signal\n");
@@ -378,7 +387,7 @@ static int empress_init(struct saa7134_dev *dev)
 		 "%s empress (%s)", dev->name,
 		 saa7134_boards[dev->board].name);
 
-	INIT_WORK(&dev->empress_workqueue, empress_signal_update, (void*) dev);
+	INIT_WORK(&dev->empress_workqueue, empress_signal_update);
 
 	err = video_register_device(dev->empress_dev,VFL_TYPE_GRABBER,
 				    empress_nr[dev->nr]);
@@ -399,7 +408,7 @@ static int empress_init(struct saa7134_dev *dev)
 			    sizeof(struct saa7134_buf),
 			    dev);
 
-	empress_signal_update(dev);
+	empress_signal_update(&dev->empress_workqueue);
 	return 0;
 }
 

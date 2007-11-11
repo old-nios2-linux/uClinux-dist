@@ -332,6 +332,7 @@ static irqreturn_t xirc2ps_interrupt(int irq, void *dev_id);
  */
 
 typedef struct local_info_t {
+	struct net_device	*dev;
 	struct pcmcia_device	*p_dev;
     dev_node_t node;
     struct net_device_stats stats;
@@ -353,7 +354,7 @@ typedef struct local_info_t {
  */
 static int do_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void do_tx_timeout(struct net_device *dev);
-static void xirc2ps_tx_timeout_task(void *data);
+static void xirc2ps_tx_timeout_task(struct work_struct *work);
 static struct net_device_stats *do_get_stats(struct net_device *dev);
 static void set_addresses(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
@@ -567,6 +568,7 @@ xirc2ps_probe(struct pcmcia_device *link)
     if (!dev)
 	    return -ENOMEM;
     local = netdev_priv(dev);
+    local->dev = dev;
     local->p_dev = link;
     link->priv = dev;
 
@@ -574,7 +576,6 @@ xirc2ps_probe(struct pcmcia_device *link)
     link->conf.Attributes = CONF_ENABLE_IRQ;
     link->conf.IntType = INT_MEMORY_AND_IO;
     link->conf.ConfigIndex = 1;
-    link->conf.Present = PRESENT_OPTION;
     link->irq.Handler = xirc2ps_interrupt;
     link->irq.Instance = dev;
 
@@ -591,7 +592,7 @@ xirc2ps_probe(struct pcmcia_device *link)
 #ifdef HAVE_TX_TIMEOUT
     dev->tx_timeout = do_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-    INIT_WORK(&local->tx_timeout_task, xirc2ps_tx_timeout_task, dev);
+    INIT_WORK(&local->tx_timeout_task, xirc2ps_tx_timeout_task);
 #endif
 
     return xirc2ps_config(link);
@@ -707,22 +708,11 @@ set_card_type(struct pcmcia_device *link, const void *s)
  * Returns: true if this is a CE2
  */
 static int
-has_ce2_string(struct pcmcia_device * link)
+has_ce2_string(struct pcmcia_device * p_dev)
 {
-    tuple_t tuple;
-    cisparse_t parse;
-    u_char buf[256];
-
-    tuple.Attributes = 0;
-    tuple.TupleData = buf;
-    tuple.TupleDataMax = 254;
-    tuple.TupleOffset = 0;
-    tuple.DesiredTuple = CISTPL_VERS_1;
-    if (!first_tuple(link, &tuple, &parse) && parse.version_1.ns > 2) {
-	if (strstr(parse.version_1.str + parse.version_1.ofs[2], "CE2"))
-	    return 1;
-    }
-    return 0;
+	if (p_dev->prod_id[2] && strstr(p_dev->prod_id[2], "CE2"))
+		return 1;
+	return 0;
 }
 
 /****************
@@ -791,13 +781,6 @@ xirc2ps_config(struct pcmcia_device * link)
 	printk(KNOT_XIRC "this card is not supported\n");
 	goto failure;
     }
-
-    /* get configuration stuff */
-    tuple.DesiredTuple = CISTPL_CONFIG;
-    if ((err=first_tuple(link, &tuple, &parse)))
-	goto cis_error;
-    link->conf.ConfigBase = parse.config.base;
-    link->conf.Present =    parse.config.rmask[0];
 
     /* get the ethernet address from the CIS */
     tuple.DesiredTuple = CISTPL_FUNCE;
@@ -1062,8 +1045,6 @@ xirc2ps_config(struct pcmcia_device * link)
     xirc2ps_release(link);
     return -ENODEV;
 
-  cis_error:
-    printk(KNOT_XIRC "unable to parse CIS\n");
   failure:
     return -ENODEV;
 } /* xirc2ps_config */
@@ -1245,7 +1226,6 @@ xirc2ps_interrupt(int irq, void *dev_id)
 			    (pktlen+1)>>1);
 		}
 		skb->protocol = eth_type_trans(skb, dev);
-		skb->dev = dev;
 		netif_rx(skb);
 		dev->last_rx = jiffies;
 		lp->stats.rx_packets++;
@@ -1344,9 +1324,11 @@ xirc2ps_interrupt(int irq, void *dev_id)
 /*====================================================================*/
 
 static void
-xirc2ps_tx_timeout_task(void *data)
+xirc2ps_tx_timeout_task(struct work_struct *work)
 {
-    struct net_device *dev = data;
+	local_info_t *local =
+		container_of(work, local_info_t, tx_timeout_task);
+	struct net_device *dev = local->dev;
     /* reset the card */
     do_reset(dev,1);
     dev->trans_start = jiffies;
@@ -1438,7 +1420,7 @@ set_addresses(struct net_device *dev)
     kio_addr_t ioaddr = dev->base_addr;
     local_info_t *lp = netdev_priv(dev);
     struct dev_mc_list *dmi = dev->mc_list;
-    char *addr;
+    unsigned char *addr;
     int i,j,k,n;
 
     SelectPage(k=0x50);
@@ -1447,6 +1429,9 @@ set_addresses(struct net_device *dev)
 	    if (++n > 9)
 		break;
 	    i = 0;
+	    if (n > 1 && n <= dev->mc_count && dmi) {
+	   	 dmi = dmi->next;
+	    }
 	}
 	if (j > 15) {
 	    j = 8;
@@ -1454,10 +1439,9 @@ set_addresses(struct net_device *dev)
 	    SelectPage(k);
 	}
 
-	if (n && n <= dev->mc_count && dmi) {
+	if (n && n <= dev->mc_count && dmi)
 	    addr = dmi->dmi_addr;
-	    dmi = dmi->next;
-	} else
+	else
 	    addr = dev->dev_addr;
 
 	if (lp->mohawk)
@@ -1483,10 +1467,10 @@ set_multicast_list(struct net_device *dev)
     if (dev->flags & IFF_PROMISC) { /* snoop */
 	PutByte(XIRCREG42_SWC1, 0x06); /* set MPE and PME */
     } else if (dev->mc_count > 9 || (dev->flags & IFF_ALLMULTI)) {
-	PutByte(XIRCREG42_SWC1, 0x06); /* set MPE */
+	PutByte(XIRCREG42_SWC1, 0x02); /* set MPE */
     } else if (dev->mc_count) {
 	/* the chip can filter 9 addresses perfectly */
-	PutByte(XIRCREG42_SWC1, 0x00);
+	PutByte(XIRCREG42_SWC1, 0x01);
 	SelectPage(0x40);
 	PutByte(XIRCREG40_CMD0, Offline);
 	set_addresses(dev);

@@ -51,7 +51,7 @@ static int vlandev_seq_show(struct seq_file *seq, void *v);
 
 
 /*
- *	Names of the proc directory entries 
+ *	Names of the proc directory entries
  */
 
 static const char name_root[]	 = "vlan";
@@ -66,10 +66,10 @@ static const char name_conf[]	 = "config";
  */
 
 /*
- *	Generic /proc/net/vlan/<file> file and inode operations 
+ *	Generic /proc/net/vlan/<file> file and inode operations
  */
 
-static struct seq_operations vlan_seq_ops = {
+static const struct seq_operations vlan_seq_ops = {
 	.start = vlan_seq_start,
 	.next = vlan_seq_next,
 	.stop = vlan_seq_stop,
@@ -81,7 +81,7 @@ static int vlan_seq_open(struct inode *inode, struct file *file)
 	return seq_open(file, &vlan_seq_ops);
 }
 
-static struct file_operations vlan_fops = {
+static const struct file_operations vlan_fops = {
 	.owner	 = THIS_MODULE,
 	.open    = vlan_seq_open,
 	.read    = seq_read,
@@ -98,7 +98,7 @@ static int vlandev_seq_open(struct inode *inode, struct file *file)
 	return single_open(file, vlandev_seq_show, PDE(inode)->data);
 }
 
-static struct file_operations vlandev_fops = {
+static const struct file_operations vlandev_fops = {
 	.owner = THIS_MODULE,
 	.open    = vlandev_seq_open,
 	.read    = seq_read,
@@ -111,13 +111,13 @@ static struct file_operations vlandev_fops = {
  */
 
 /*
- *	/proc/net/vlan 
+ *	/proc/net/vlan
  */
 
 static struct proc_dir_entry *proc_vlan_dir;
 
 /*
- *	/proc/net/vlan/config 
+ *	/proc/net/vlan/config
  */
 
 static struct proc_dir_entry *proc_vlan_conf;
@@ -237,16 +237,12 @@ int vlan_proc_rem_dev(struct net_device *vlandev)
  * The following few functions build the content of /proc/net/vlan/config
  */
 
-/* starting at dev, find a VLAN device */
-static struct net_device *vlan_skip(struct net_device *dev) 
+static inline int is_vlan_dev(struct net_device *dev)
 {
-	while (dev && !(dev->priv_flags & IFF_802_1Q_VLAN)) 
-		dev = dev->next;
-
-	return dev;
+	return dev->priv_flags & IFF_802_1Q_VLAN;
 }
 
-/* start read of /proc/net/vlan/config */ 
+/* start read of /proc/net/vlan/config */
 static void *vlan_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	struct net_device *dev;
@@ -256,20 +252,36 @@ static void *vlan_seq_start(struct seq_file *seq, loff_t *pos)
 
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
-	
-	for (dev = vlan_skip(dev_base); dev && i < *pos; 
-	     dev = vlan_skip(dev->next), ++i);
-		
-	return  (i == *pos) ? dev : NULL;
-} 
+
+	for_each_netdev(dev) {
+		if (!is_vlan_dev(dev))
+			continue;
+
+		if (i++ == *pos)
+			return dev;
+	}
+
+	return  NULL;
+}
 
 static void *vlan_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
+	struct net_device *dev;
+
 	++*pos;
 
-	return vlan_skip((v == SEQ_START_TOKEN)  
-			    ? dev_base 
-			    : ((struct net_device *)v)->next);
+	dev = (struct net_device *)v;
+	if (v == SEQ_START_TOKEN)
+		dev = net_device_entry(&dev_base_head);
+
+	for_each_netdev_continue(dev) {
+		if (!is_vlan_dev(dev))
+			continue;
+
+		return dev;
+	}
+
+	return NULL;
 }
 
 static void vlan_seq_stop(struct seq_file *seq, void *v)
@@ -287,13 +299,13 @@ static int vlan_seq_show(struct seq_file *seq, void *v)
 		if (vlan_name_type < ARRAY_SIZE(vlan_name_type_str))
 		    nmtype =  vlan_name_type_str[vlan_name_type];
 
-		seq_printf(seq, "Name-Type: %s\n", 
+		seq_printf(seq, "Name-Type: %s\n",
 			   nmtype ? nmtype :  "UNKNOWN" );
 	} else {
 		const struct net_device *vlandev = v;
 		const struct vlan_dev_info *dev_info = VLAN_DEV_INFO(vlandev);
 
-		seq_printf(seq, "%-15s| %d  | %s\n",  vlandev->name,  
+		seq_printf(seq, "%-15s| %d  | %s\n",  vlandev->name,
 			   dev_info->vlan_id,    dev_info->real_dev->name);
 	}
 	return 0;
@@ -307,7 +319,7 @@ static int vlandev_seq_show(struct seq_file *seq, void *offset)
 	static const char fmt[] = "%30s %12lu\n";
 	int i;
 
-	if ((vlandev == NULL) || (!(vlandev->priv_flags & IFF_802_1Q_VLAN)))
+	if (!(vlandev->priv_flags & IFF_802_1Q_VLAN))
 		return 0;
 
 	seq_printf(seq, "%s  VID: %d	 REORDER_HDR: %i  dev->priv_flags: %hx\n",
@@ -323,14 +335,14 @@ static int vlandev_seq_show(struct seq_file *seq, void *offset)
 	seq_puts(seq, "\n");
 	seq_printf(seq, fmt, "total frames transmitted", stats->tx_packets);
 	seq_printf(seq, fmt, "total bytes transmitted", stats->tx_bytes);
-	seq_printf(seq, fmt, "total headroom inc", 
+	seq_printf(seq, fmt, "total headroom inc",
 		   dev_info->cnt_inc_headroom_on_tx);
-	seq_printf(seq, fmt, "total encap on xmit", 
+	seq_printf(seq, fmt, "total encap on xmit",
 		   dev_info->cnt_encap_on_xmit);
 	seq_printf(seq, "Device: %s", dev_info->real_dev->name);
 	/* now show all PRIORITY mappings relating to this VLAN */
-	seq_printf(seq, 
-		       "\nINGRESS priority mappings: 0:%lu  1:%lu  2:%lu  3:%lu  4:%lu  5:%lu  6:%lu 7:%lu\n",
+	seq_printf(seq,
+		       "\nINGRESS priority mappings: 0:%u  1:%u  2:%u  3:%u  4:%u  5:%u  6:%u 7:%u\n",
 		       dev_info->ingress_priority_map[0],
 		       dev_info->ingress_priority_map[1],
 		       dev_info->ingress_priority_map[2],
@@ -345,7 +357,7 @@ static int vlandev_seq_show(struct seq_file *seq, void *offset)
 		const struct vlan_priority_tci_mapping *mp
 			= dev_info->egress_priority_map[i];
 		while (mp) {
-			seq_printf(seq, "%lu:%hu ",
+			seq_printf(seq, "%u:%hu ",
 				   mp->priority, ((mp->vlan_qos >> 13) & 0x7));
 			mp = mp->next;
 		}

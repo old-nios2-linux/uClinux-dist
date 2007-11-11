@@ -137,6 +137,9 @@ typedef struct readx_hdr
     u_int32_t maxCountHigh;
 
     u_int16_t remaining;
+    u_int32_t highOffset;
+    u_int16_t byteCount;
+
 } SMB_READX_REQ;
 
 typedef struct lockingx_hdr
@@ -224,6 +227,9 @@ typedef struct trans_hdr
     u_int16_t dataOffset;
     u_int8_t  setupCount;
     u_int8_t  reserved2;
+    u_int16_t function;
+    u_int16_t fid;
+    u_int16_t byteCount;
 
 } SMB_TRANS_REQ;
 

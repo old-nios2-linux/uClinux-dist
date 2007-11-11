@@ -72,7 +72,7 @@ static struct mtd_info
 	for (i = 0; i < MAX_MTD_DEVICES; i++) {
 		mtd = get_mtd_device(NULL, i);
 
-		if (mtd) {
+		if (!IS_ERR(mtd)) {
 			if (strcmp(mtd->name, name) == 0)
 				return(mtd);
 			put_mtd_device(mtd);

@@ -99,6 +99,10 @@ are defined:
                             - The maximum number of UDP sessions to be tracked.
                               Default is 8192 is UDP sessions are enabled.
     udp_ignore_any          - Ignore traffic on port without port-specific rules.
+                              The result of this is that NO rules (include IP
+                              only rules) are applied to UDP traffic that has
+                              a source/destination port that is listed in a
+                              port-specific ruls.
 
 If inline mode is being used, the following additional options are defined:
 

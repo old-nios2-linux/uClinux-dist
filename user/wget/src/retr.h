@@ -30,17 +30,26 @@ so, delete this exception statement from your version.  */
 #ifndef RETR_H
 #define RETR_H
 
-#include "rbuf.h"
+/* Flags for fd_read_body. */
+enum {
+  rb_read_exactly  = 1,
+  rb_skip_startpos = 2
+};
 
-int get_contents PARAMS ((int, FILE *, long *, long, long, struct rbuf *,
-			  int, double *));
+int fd_read_body PARAMS ((int, FILE *, wgint, wgint, wgint *, wgint *, double *,
+                          int));
+
+typedef const char *(*hunk_terminator_t) PARAMS ((const char *, int, int));
+
+char *fd_read_hunk PARAMS ((int, hunk_terminator_t, long, long));
+char *fd_read_line PARAMS ((int));
 
 uerr_t retrieve_url PARAMS ((const char *, char **, char **,
 			     const char *, int *));
 uerr_t retrieve_from_file PARAMS ((const char *, int, int *));
 
-char *retr_rate PARAMS ((long, double, int));
-double calc_rate PARAMS ((long, double, int *));
+char *retr_rate PARAMS ((wgint, double, int));
+double calc_rate PARAMS ((wgint, double, int *));
 void printwhat PARAMS ((int, int));
 
 void sleep_between_retrievals PARAMS ((int));
@@ -53,6 +62,7 @@ struct url;
 
 uerr_t http_loop PARAMS ((struct url *, char **, char **, const char *,
 			  int *, struct url *));
+void save_cookies PARAMS ((void));
 
 
 #endif /* RETR_H */

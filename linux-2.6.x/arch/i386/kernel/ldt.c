@@ -10,7 +10,6 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 
@@ -160,16 +159,14 @@ static int read_default_ldt(void __user * ptr, unsigned long bytecount)
 {
 	int err;
 	unsigned long size;
-	void *address;
 
 	err = 0;
-	address = &default_ldt[0];
 	size = 5*sizeof(struct desc_struct);
 	if (size > bytecount)
 		size = bytecount;
 
 	err = size;
-	if (copy_to_user(ptr, address, size))
+	if (clear_user(ptr, size))
 		err = -EFAULT;
 
 	return err;

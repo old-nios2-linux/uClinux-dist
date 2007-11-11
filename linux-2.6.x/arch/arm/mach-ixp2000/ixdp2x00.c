@@ -106,7 +106,7 @@ static void ixdp2x00_irq_unmask(unsigned int irq)
 		ixp2000_release_slowport(&old_cfg);
 }
 
-static void ixdp2x00_irq_handler(unsigned int irq, struct irqdesc *desc)
+static void ixdp2x00_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
         volatile u32 ex_interrupt = 0;
 	static struct slowport_cfg old_cfg;
@@ -129,7 +129,7 @@ static void ixdp2x00_irq_handler(unsigned int irq, struct irqdesc *desc)
 
 	for(i = 0; i < board_irq_count; i++) {
 		if(ex_interrupt & (1 << i))  {
-			struct irqdesc *cpld_desc;
+			struct irq_desc *cpld_desc;
 			int cpld_irq = IXP2000_BOARD_IRQ(0) + i;
 			cpld_desc = irq_desc + cpld_irq;
 			desc_handle_irq(cpld_irq, cpld_desc);
@@ -139,13 +139,13 @@ static void ixdp2x00_irq_handler(unsigned int irq, struct irqdesc *desc)
 	desc->chip->unmask(irq);
 }
 
-static struct irqchip ixdp2x00_cpld_irq_chip = {
+static struct irq_chip ixdp2x00_cpld_irq_chip = {
 	.ack	= ixdp2x00_irq_mask,
 	.mask	= ixdp2x00_irq_mask,
 	.unmask	= ixdp2x00_irq_unmask
 };
 
-void ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigned long *mask_reg, unsigned long nr_irqs)
+void __init ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigned long *mask_reg, unsigned long nr_irqs)
 {
 	unsigned int irq;
 
@@ -162,7 +162,7 @@ void ixdp2x00_init_irq(volatile unsigned long *stat_reg, volatile unsigned long 
 
 	for(irq = IXP2000_BOARD_IRQ(0); irq < IXP2000_BOARD_IRQ(board_irq_count); irq++) {
 		set_irq_chip(irq, &ixdp2x00_cpld_irq_chip);
-		set_irq_handler(irq, do_level_IRQ);
+		set_irq_handler(irq, handle_level_irq);
 		set_irq_flags(irq, IRQF_VALID);
 	}
 
@@ -195,7 +195,7 @@ void __init ixdp2x00_map_io(void)
  * instances  of the kernel. So far so good. Peers on the PCI bus running 
  * Linux is a common design in telecom systems. The problem is that instead 
  * of all the devices being controlled by a single host, different
- * devices are controlles by different NPUs on the same bus, leading to
+ * devices are controlled by different NPUs on the same bus, leading to
  * multiple hosts on the bus. The exact bus layout looks like:
  *
  *                   Bus 0
@@ -211,7 +211,7 @@ void __init ixdp2x00_map_io(void)
  *                  |      |         |         |      |
  *             ... Dev    PMC       Media     Eth0   Eth1 ...
  *
- * The master controlls all but Eth1, which is controlled by the
+ * The master controls all but Eth1, which is controlled by the
  * slave. What this means is that the both the master and the slave
  * have to scan the bus, but only one of them can enumerate the bus.
  * In addition, after the bus is scanned, each kernel must remove

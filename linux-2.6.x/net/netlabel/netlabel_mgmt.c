@@ -42,6 +42,10 @@
 #include "netlabel_user.h"
 #include "netlabel_mgmt.h"
 
+/* NetLabel configured protocol count */
+static DEFINE_SPINLOCK(netlabel_mgmt_protocount_lock);
+static u32 netlabel_mgmt_protocount = 0;
+
 /* Argument struct for netlbl_domhsh_walk() */
 struct netlbl_domhsh_walk_arg {
 	struct netlink_callback *nl_cb;
@@ -59,12 +63,73 @@ static struct genl_family netlbl_mgmt_gnl_family = {
 };
 
 /* NetLabel Netlink attribute policy */
-static struct nla_policy netlbl_mgmt_genl_policy[NLBL_MGMT_A_MAX + 1] = {
+static const struct nla_policy netlbl_mgmt_genl_policy[NLBL_MGMT_A_MAX + 1] = {
 	[NLBL_MGMT_A_DOMAIN] = { .type = NLA_NUL_STRING },
 	[NLBL_MGMT_A_PROTOCOL] = { .type = NLA_U32 },
 	[NLBL_MGMT_A_VERSION] = { .type = NLA_U32 },
 	[NLBL_MGMT_A_CV4DOI] = { .type = NLA_U32 },
 };
+
+/*
+ * NetLabel Misc Managment Functions
+ */
+
+/**
+ * netlbl_mgmt_protocount_inc - Increment the configured labeled protocol count
+ *
+ * Description:
+ * Increment the number of labeled protocol configurations in the current
+ * NetLabel configuration.  Keep track of this for use in determining if
+ * NetLabel label enforcement should be active/enabled or not in the LSM.
+ *
+ */
+void netlbl_mgmt_protocount_inc(void)
+{
+	rcu_read_lock();
+	spin_lock(&netlabel_mgmt_protocount_lock);
+	netlabel_mgmt_protocount++;
+	spin_unlock(&netlabel_mgmt_protocount_lock);
+	rcu_read_unlock();
+}
+
+/**
+ * netlbl_mgmt_protocount_dec - Decrement the configured labeled protocol count
+ *
+ * Description:
+ * Decrement the number of labeled protocol configurations in the current
+ * NetLabel configuration.  Keep track of this for use in determining if
+ * NetLabel label enforcement should be active/enabled or not in the LSM.
+ *
+ */
+void netlbl_mgmt_protocount_dec(void)
+{
+	rcu_read_lock();
+	spin_lock(&netlabel_mgmt_protocount_lock);
+	if (netlabel_mgmt_protocount > 0)
+		netlabel_mgmt_protocount--;
+	spin_unlock(&netlabel_mgmt_protocount_lock);
+	rcu_read_unlock();
+}
+
+/**
+ * netlbl_mgmt_protocount_value - Return the number of configured protocols
+ *
+ * Description:
+ * Return the number of labeled protocols in the current NetLabel
+ * configuration.  This value is useful in  determining if NetLabel label
+ * enforcement should be active/enabled or not in the LSM.
+ *
+ */
+u32 netlbl_mgmt_protocount_value(void)
+{
+	u32 val;
+
+	rcu_read_lock();
+	val = netlabel_mgmt_protocount;
+	rcu_read_unlock();
+
+	return val;
+}
 
 /*
  * NetLabel Command Handlers
@@ -188,12 +253,9 @@ static int netlbl_mgmt_listall_cb(struct netlbl_dom_map *entry, void *arg)
 	struct netlbl_domhsh_walk_arg *cb_arg = arg;
 	void *data;
 
-	data = netlbl_netlink_hdr_put(cb_arg->skb,
-				      NETLINK_CB(cb_arg->nl_cb->skb).pid,
-				      cb_arg->seq,
-				      netlbl_mgmt_gnl_family.id,
-				      NLM_F_MULTI,
-				      NLBL_MGMT_C_LISTALL);
+	data = genlmsg_put(cb_arg->skb, NETLINK_CB(cb_arg->nl_cb->skb).pid,
+			   cb_arg->seq, &netlbl_mgmt_gnl_family,
+			   NLM_F_MULTI, NLBL_MGMT_C_LISTALL);
 	if (data == NULL)
 		goto listall_cb_failure;
 
@@ -356,15 +418,11 @@ static int netlbl_mgmt_listdef(struct sk_buff *skb, struct genl_info *info)
 	void *data;
 	struct netlbl_dom_map *entry;
 
-	ans_skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	ans_skb = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (ans_skb == NULL)
 		return -ENOMEM;
-	data = netlbl_netlink_hdr_put(ans_skb,
-				      info->snd_pid,
-				      info->snd_seq,
-				      netlbl_mgmt_gnl_family.id,
-				      0,
-				      NLBL_MGMT_C_LISTDEF);
+	data = genlmsg_put_reply(ans_skb, info, &netlbl_mgmt_gnl_family,
+				 0, NLBL_MGMT_C_LISTDEF);
 	if (data == NULL)
 		goto listdef_failure;
 
@@ -390,7 +448,7 @@ static int netlbl_mgmt_listdef(struct sk_buff *skb, struct genl_info *info)
 
 	genlmsg_end(ans_skb, data);
 
-	ret_val = genlmsg_unicast(ans_skb, info->snd_pid);
+	ret_val = genlmsg_reply(ans_skb, info);
 	if (ret_val != 0)
 		goto listdef_failure;
 	return 0;
@@ -422,12 +480,9 @@ static int netlbl_mgmt_protocols_cb(struct sk_buff *skb,
 	int ret_val = -ENOMEM;
 	void *data;
 
-	data = netlbl_netlink_hdr_put(skb,
-				      NETLINK_CB(cb->skb).pid,
-				      cb->nlh->nlmsg_seq,
-				      netlbl_mgmt_gnl_family.id,
-				      NLM_F_MULTI,
-				      NLBL_MGMT_C_PROTOCOLS);
+	data = genlmsg_put(skb, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq,
+			   &netlbl_mgmt_gnl_family, NLM_F_MULTI,
+			   NLBL_MGMT_C_PROTOCOLS);
 	if (data == NULL)
 		goto protocols_cb_failure;
 
@@ -492,15 +547,11 @@ static int netlbl_mgmt_version(struct sk_buff *skb, struct genl_info *info)
 	struct sk_buff *ans_skb = NULL;
 	void *data;
 
-	ans_skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	ans_skb = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (ans_skb == NULL)
 		return -ENOMEM;
-	data = netlbl_netlink_hdr_put(ans_skb,
-				      info->snd_pid,
-				      info->snd_seq,
-				      netlbl_mgmt_gnl_family.id,
-				      0,
-				      NLBL_MGMT_C_VERSION);
+	data = genlmsg_put_reply(ans_skb, info, &netlbl_mgmt_gnl_family,
+				 0, NLBL_MGMT_C_VERSION);
 	if (data == NULL)
 		goto version_failure;
 
@@ -512,7 +563,7 @@ static int netlbl_mgmt_version(struct sk_buff *skb, struct genl_info *info)
 
 	genlmsg_end(ans_skb, data);
 
-	ret_val = genlmsg_unicast(ans_skb, info->snd_pid);
+	ret_val = genlmsg_reply(ans_skb, info);
 	if (ret_val != 0)
 		goto version_failure;
 	return 0;

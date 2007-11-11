@@ -40,6 +40,8 @@
 #  define DBG(x...)
 #endif
 
+unsigned long ixp4xx_exp_bus_size = SZ_16M;
+
 int (*ixp425_pci_read)(u32 addr, u32 cmd, u32* data);
 
 /*
@@ -525,3 +527,4 @@ EARLY_PCI_OP(write, dword, u32)
 EXPORT_SYMBOL(ixp425_pci_read);
 EXPORT_SYMBOL(ixp425_pci_write);
 
+EXPORT_SYMBOL(ixp4xx_exp_bus_size);

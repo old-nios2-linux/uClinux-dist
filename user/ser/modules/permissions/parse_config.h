@@ -1,5 +1,5 @@
 /*
- * $Id: parse_config.h,v 1.1 2003/03/18 07:58:14 tirpi Exp $
+ * $Id: parse_config.h,v 1.2 2003/10/22 14:15:55 janakj Exp $
  *
  * PERMISSIONS module
  *
@@ -35,4 +35,4 @@
 
 rule *parse_config_file(char *filename);
 
-#endif
+#endif /* PARSE_CONFIG_H */

@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/sysdev.h>
 #include <linux/timer.h>
+#include <linux/freezer.h>
 
 #include "rtmutex.h"
 
@@ -259,6 +260,7 @@ static int test_func(void *data)
 	int ret;
 
 	current->flags |= PF_MUTEX_TESTER;
+	set_freezable();
 	allow_signal(SIGHUP);
 
 	for(;;) {

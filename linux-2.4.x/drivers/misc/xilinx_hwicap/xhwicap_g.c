@@ -1,4 +1,4 @@
-/* $Id: xhwicap_g.c,v 1.2 2006/11/14 06:48:08 gerg Exp $ */
+/* $Id: xhwicap_g.c,v 1.1 2006/11/09 22:33:52 jwilliams Exp $ */
 /*****************************************************************************
 *
 *       XILINX IS PROVIDING THIS DESIGN, CODE, OR INFORMATION "AS IS"

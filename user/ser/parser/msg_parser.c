@@ -1,10 +1,10 @@
 /*
- * $Id: msg_parser.c,v 1.34.4.1 2003/11/24 14:00:34 janakj Exp $
+ * $Id: msg_parser.c,v 1.44.2.2 2005/03/02 18:43:19 andrei Exp $
  *
  * sip msg. header proxy parser 
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,7 @@
  *  2003-03-31  removed msg->repl_add_rm (andrei)
  *  2003-04-26 ZSW (jiri)
  *  2003-05-01  parser extended to support Accept header field (janakj)
+ *  2005-03-02  free_via_list(vb) on via parse error (andrei)
  */
 
 
@@ -62,7 +63,7 @@
 
 #define parse_hname(_b,_e,_h) parse_hname2((_b),(_e),(_h))
 
-/* number of via's encounteded */
+/* number of via's encountered */
 int via_cnt;
 
 /* returns pointer to next header line, and fill hdr_f ;
@@ -91,7 +92,7 @@ char* get_hdr_field(char* buf, char* end, struct hdr_field* hdr)
 	}
 
 	/* eliminate leading whitespace */
-	tmp=eat_lws_end(tmp, end);
+	tmp=eat_lws_end(tmp, end); 
 	if (tmp>=end) {
 		LOG(L_ERR, "ERROR: get_hdr_field: HF empty\n");
 		goto error;
@@ -116,7 +117,7 @@ char* get_hdr_field(char* buf, char* end, struct hdr_field* hdr)
 			tmp=parse_via(tmp, end, vb);
 			if (vb->error==PARSE_ERROR){
 				LOG(L_ERR, "ERROR: get_hdr_field: bad via\n");
-				pkg_free(vb);
+				free_via_list(vb);
 				goto error;
 			}
 			hdr->parsed=vb;
@@ -202,6 +203,8 @@ char* get_hdr_field(char* buf, char* end, struct hdr_field* hdr)
 	        case HDR_USERAGENT:
 	        case HDR_CONTENTDISPOSITION:
 	        case HDR_ACCEPTDISPOSITION:
+	        case HDR_DIVERSION:
+	        case HDR_RPID:
 		case HDR_OTHER:
 			/* just skip over it */
 			hdr->body.s=tmp;
@@ -250,8 +253,8 @@ error:
    for the same HF which is present only once, it will fail the second
    time; if you call it twice and the HF is found on second time too,
    it's not replaced in the well-known HF pointer but just added to
-   header list; if you want to use a dumbie convenience function which will
-   give you the first occurance of a header you are interested in,
+   header list; if you want to use a dumb convenience function which will
+   give you the first occurrence of a header you are interested in,
    look at check_transaction_quadruple
 */
 int parse_headers(struct sip_msg* msg, int flags, int next)
@@ -362,7 +365,7 @@ int parse_headers(struct sip_msg* msg, int flags, int next)
 				msg->parsed_flag|=HDR_ALLOW;
 				break;
 			case HDR_EVENT:
-				if (msg->allow==0) msg->event = hf;
+				if (msg->event==0) msg->event = hf;
 				msg->parsed_flag|=HDR_EVENT;
 				break;
 		        case HDR_ACCEPT:
@@ -396,6 +399,14 @@ int parse_headers(struct sip_msg* msg, int flags, int next)
 		        case HDR_ACCEPTDISPOSITION:
 				if (msg->accept_disposition==0) msg->accept_disposition = hf;
 				msg->parsed_flag|=HDR_ACCEPTDISPOSITION;
+				break;
+		        case HDR_DIVERSION:
+				if (msg->diversion==0) msg->diversion = hf;
+				msg->parsed_flag|=HDR_DIVERSION;
+				break;
+		        case HDR_RPID:
+				if (msg->rpid==0) msg->rpid = hf;
+				msg->parsed_flag|=HDR_RPID;
 				break;
 			case HDR_VIA:
 				msg->parsed_flag|=HDR_VIA;
@@ -586,6 +597,7 @@ void free_reply_lump( struct lump_rpl *lump)
 void free_sip_msg(struct sip_msg* msg)
 {
 	if (msg->new_uri.s) { pkg_free(msg->new_uri.s); msg->new_uri.len=0; }
+	if (msg->dst_uri.s) { pkg_free(msg->dst_uri.s); msg->dst_uri.len=0; }
 	if (msg->headers)     free_hdr_field_lst(msg->headers);
 	if (msg->add_rm)      free_lump_list(msg->add_rm);
 	if (msg->body_lumps)  free_lump_list(msg->body_lumps);
@@ -610,4 +622,35 @@ int check_transaction_quadruple( struct sip_msg* msg )
 		ser_error=E_BAD_TUPEL;
 		return 0;
 	}
+}
+
+
+/*
+ * Make a private copy of the string and assign it to dst_uri
+ */
+int set_dst_uri(struct sip_msg* msg, str* uri)
+{
+	char* ptr;
+
+	if (!msg || !uri) {
+		LOG(L_ERR, "set_dst_uri: Invalid parameter value\n");
+		return -1;
+	}
+
+	if (msg->dst_uri.s && (msg->dst_uri.len >= uri->len)) {
+		memcpy(msg->dst_uri.s, uri->s, uri->len);
+		msg->dst_uri.len = uri->len;
+	} else {
+		ptr = (char*)pkg_malloc(uri->len);
+		if (!ptr) {
+			LOG(L_ERR, "set_dst_uri: Not enough memory\n");
+			return -1;
+		}
+
+		memcpy(ptr, uri->s, uri->len);
+		if (msg->dst_uri.s) pkg_free(msg->dst_uri.s);
+		msg->dst_uri.s = ptr;
+		msg->dst_uri.len = uri->len;
+	}
+	return 0;
 }

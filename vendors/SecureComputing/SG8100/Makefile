@@ -1,5 +1,5 @@
 #
-#	Makefile -- Build instructions for CyberGuard/SG8100
+#	Makefile -- Build instructions for SecureComputing/SG8100
 #
 
 ZIMAGE     = $(IMAGEDIR)/zImage
@@ -31,7 +31,7 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc romfs.version
 	$(ROMFSINST) ../firewall.init.std /etc/firewall.init
 
 romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode
-	$(ROMFSINST) config.opts /etc/pcmcia/config.opts
+	$(ROMFSINST) -d config.opts /etc/pcmcia/config.opts
 
 image: image.configs image.dir image.arm.zimage mkcramfs
 	#mv $(ROMFSDIR)/bin/init $(ROMFSDIR)/bin/init.save

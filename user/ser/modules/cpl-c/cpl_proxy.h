@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_proxy.h,v 1.9.4.7 2004/05/30 10:32:47 bogdan Exp $
+ * $Id: cpl_proxy.h,v 1.22.2.2 2005/06/21 17:52:13 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -27,6 +27,8 @@
  * History:
  * -------
  * 2003-07-29: file created (bogdan)
+ * 2004-06-14: flag CPL_IS_STATEFUL is set now immediately after the 
+ *             transaction is created (bogdan)
  */
 
 #include "../tm/h_table.h"
@@ -65,8 +67,6 @@
 		}\
 	}while(0)
 
-
-extern int proxy_recurse;
 
 
 static inline int parse_q(str *q, unsigned int *prio)
@@ -147,32 +147,50 @@ error:
 
 
 
-static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
-																void *param )
+static void reply_callback( struct cell* t, int type, struct tmcb_params* ps)
 {
-	struct cpl_interpreter *intr = *((struct cpl_interpreter**)param);
+	struct cpl_interpreter *intr = (struct cpl_interpreter*)(*(ps->param));
 	struct location        *loc  = 0;
 	int rez;
 
-	DBG("DEBUG:cpl-c:negativ_reply: ------------------------------>\n"
-		" ---------------> negativ reply from proxy was sent\n");
-
-	if ( *((void**)param)==0 ) {
-		LOG(L_WARN,"WARNING:cpl-c:failed_reply: param=0! t=%p, code=%d\n",
-			t,code);
+	if (intr==0) {
+		LOG(L_WARN,"WARNING:cpl-c:reply_callback: param=0 for callback %d,"
+			" transaction=%p \n",type,t);
 		return;
 	}
 
+	if (type&TMCB_RESPONSE_OUT) {
+		/* the purpose of the final reply is to trash down the interpreter
+		 * structure! it's the safest place to do that, since this callback
+		 * it's called only once per transaction for final codes (>=200) ;-) */
+		if (ps->code>=200) {
+			DBG("DEBUG:cpl-c:final_reply: code=%d  -------------->\n"
+				" --------------------------> final reply received\n",
+			ps->code);
+			/* CPL interpretation done, call established -> destroy */
+			free_cpl_interpreter( intr );
+			/* set to zero the param callback*/
+			*(ps->param) = 0;
+		}
+		return;
+	} else if (!type&TMCB_ON_FAILURE) {
+		LOG(L_ERR,"BUG:cpl-c:reply_callback: unknown type %d\n",type);
+		goto exit;
+	}
+
+	DBG("DEBUG:cpl-c:negativ_reply: ------------------------------>\n"
+		" ---------------------------------> negativ reply received\n");
+
 	intr->flags |= CPL_PROXY_DONE;
-	intr->msg = cpl_tmb.t_get_fake_req();
+	intr->msg = ps->req;
 
 	/* if it's a redirect-> do I have to added to the location set ? */
-	if (intr->proxy.recurse && code/100==3) {
+	if (intr->proxy.recurse && (ps->code)/100==3) {
 		DBG("DEBUG:cpl-c:negativ_reply: recurse level %d processing..\n",
 				intr->proxy.recurse);
 		intr->proxy.recurse--;
 		/* get the locations from the Contact */
-		add_contacts_to_loc_set( msg, &(intr->loc_set));
+		add_contacts_to_loc_set( ps->rpl, &(intr->loc_set));
 		switch (intr->proxy.ordering) {
 			case SEQUENTIAL_VAL:
 				/* update the last_to_proxy to last location from set */
@@ -185,7 +203,7 @@ static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
 					intr->proxy.last_to_proxy = intr->loc_set;
 				}
 				while(intr->proxy.last_to_proxy->next)
-					intr->proxy.last_to_proxy = intr->proxy.last_to_proxy->next;
+					intr->proxy.last_to_proxy=intr->proxy.last_to_proxy->next;
 				break;
 			case PARALLEL_VAL:
 				/* push the whole new location set to be proxy */
@@ -197,8 +215,8 @@ static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
 		}
 	}
 
-	/* the current proxing failed -> do I have another location to try ?
-	 * This applyes only for SERIAL forking or if RECURSE is set */
+	/* the current proxying failed -> do I have another location to try ?
+	 * This applies only for SERIAL forking or if RECURSE is set */
 	if (intr->proxy.last_to_proxy) {
 		/* continue proxying */
 		DBG("DEBUG:cpl-c:failed_reply: resuming proxying....\n");
@@ -210,7 +228,7 @@ static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
 				cpl_proxy_to_loc_set(intr->msg,&(intr->loc_set),intr->flags );
 				break;
 			case SEQUENTIAL_VAL:
-				/* place a new brach to the next location from loc. set*/
+				/* place a new branch to the next location from loc. set*/
 				loc = remove_first_location( &(intr->loc_set) );
 				/*print_location_set(intr->loc_set);*/
 				/* update (if necessary) the last_to_proxy location  */
@@ -227,18 +245,18 @@ static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
 		return;
 	} else {
 		/* done with proxying.... -> process the final response */
-		DBG("DEBUG:cpl-c:failed_reply:final_reply: got a final %d\n",code);
+		DBG("DEBUG:cpl-c:failed_reply:final_reply: got a final %d\n",ps->code);
 		intr->ip = 0;
-		if (code==486 || code==600) {
+		if (ps->code==486 || ps->code==600) {
 			/* busy response */
 			intr->ip = intr->proxy.busy;
-		} else if (code==408) {
+		} else if (ps->code==408) {
 			/* request timeout -> no response */
 			intr->ip = intr->proxy.noanswer;
-		} else if ((code/100)==3) {
+		} else if (((ps->code)/100)==3) {
 			/* redirection */
 			/* add to the location list all the addresses from Contact */
-			add_contacts_to_loc_set( msg, &(intr->loc_set));
+			add_contacts_to_loc_set( ps->rpl, &(intr->loc_set));
 			print_location_set( intr->loc_set );
 			intr->ip = intr->proxy.redirect;
 		} else {
@@ -259,49 +277,26 @@ static void failed_reply( struct cell* t, struct sip_msg* msg, int code,
 		switch ( rez ) {
 			case SCRIPT_END:
 				/* we don't need to free the interpreter here since it will 
-				 * be freed in the final_reply callback*/
+				 * be freed in the final_reply callback */
 			case SCRIPT_TO_BE_CONTINUED:
 				return;
 			case SCRIPT_RUN_ERROR:
 			case SCRIPT_FORMAT_ERROR:
 				goto exit;
 			default:
-				LOG(L_CRIT,"BUG:cpl-c:failed_reply: improper rezult %d\n",
+				LOG(L_CRIT,"BUG:cpl-c:failed_reply: improper result %d\n",
 					rez);
 				goto exit;
 		}
 	}
 
-	LOG(L_CRIT,"BUG:cpl-c:failed_reply: we shouldn't be here!!!!!\n");
 exit:
-	/* in case of error the default response choosed by ser at the last
+	/* in case of error the default response chosen by ser at the last
 	 * proxying will be forwarded to the UAC */
-	free_cpl_interpreter( *((struct cpl_interpreter**)param) );
-	*((void**)param) = 0;
+	free_cpl_interpreter( intr );
+	/* set to zero the param callback*/
+	*(ps->param) = 0;
 	return;
-}
-
-
-
-/* the purpose of the final reply is to trash down the interpreter structure!
- * it's the safest place to do that, since this callback it's called only once
- * per transaction for final codes (>=200) ;-) */
-static void final_reply( struct cell* t, struct sip_msg* msg, int code,
-																void *param )
-{
-	DBG("DEBUG:cpl-c:final_reply: code=%d  -------------->\n"
-		" ---------------> final reply from proxy received\n",code);
-
-	if ( *((void**)param)==0 ) {
-		LOG(L_WARN,"WARNING:cpl-c:final_reply: param=0! t=%p, code=%d\n",
-			t,code);
-		return;
-	}
-
-	if (code>=200) {
-		free_cpl_interpreter( *((struct cpl_interpreter**)param) );
-		*((void**)param) = 0;
-	}
 }
 
 
@@ -315,16 +310,25 @@ static inline char *run_proxy( struct cpl_interpreter *intr )
 	int i;
 	str *s;
 	struct location *loc;
+	int_str tmp;
 
 	intr->proxy.ordering = PARALLEL_VAL;
-	intr->proxy.recurse = (unsigned short)proxy_recurse;
+	intr->proxy.recurse = (unsigned short)cpl_env.proxy_recurse;
 
-	/* indentify the attributes */
+	/* identify the attributes */
 	for( i=NR_OF_ATTR(intr->ip),p=ATTR_PTR(intr->ip) ; i>0 ; i-- ) {
 		get_basic_attr( p, attr_name, n, intr, script_error);
 		switch (attr_name) {
 			case TIMEOUT_ATTR:
-				/* useless param */
+				if (cpl_env.timer_avp.n || cpl_env.timer_avp.s) {
+					tmp.n=(int)n;
+					if ( add_avp( cpl_env.timer_avp_type,
+					cpl_env.timer_avp, tmp)<0) {
+						LOG(L_ERR,"ERROR:run_proxy: unable to set "
+							"timer AVP\n");
+						/* continue */
+					}
+				}
 				break;
 			case RECURSE_ATTR:
 				switch (n) {
@@ -358,7 +362,7 @@ static inline char *run_proxy( struct cpl_interpreter *intr )
 	intr->proxy.busy = intr->proxy.noanswer = 0;
 	intr->proxy.redirect = intr->proxy.failure = intr->proxy.default_ = 0;
 
-	/* this is quite an "expensiv" node to run, so let's make some checkings
+	/* this is quite an "expensive" node to run, so let's make some checking
 	 * before getting deeply into it */
 	for( i=0 ; i<NR_OF_KIDS(intr->ip) ; i++ ) {
 		kid = intr->ip + KID_OFFSET(intr->ip,i);
@@ -446,7 +450,7 @@ static inline char *run_proxy( struct cpl_interpreter *intr )
 			if (intr->user_agent!=STR_NOT_FOUND)
 				intr->flags |= CPL_USERAGENT_DUPLICATED;
 		}
-		/* ACCEPT_LANGUAG header - optional in SIP msg
+		/* ACCEPT_LANGUAGE header - optional in SIP msg
 		 * (can be STR_NOT_FOUND) */
 		if (intr->accept_language!=STR_NOT_FOUND) {
 			search_and_duplicate_hdr(intr,accept_language,
@@ -462,12 +466,10 @@ static inline char *run_proxy( struct cpl_interpreter *intr )
 		}
 
 		/* now is the first time doing proxy, so I can still be stateless;
-		 * as proxy is done all the time stateful, I have to be switch from
-		 * stateless to stateful if necessary.
-		 * I'm still stateless if flag CPL_IS_STATELESS or CPL_FORCE_STATEFUL
-		 * are set (CPL_IS_STATEFUL means I'm already statefull) */
-		if (!(intr->flags&CPL_IS_STATEFUL)||(intr->flags&CPL_FORCE_STATEFUL)) {
-			i = cpl_tmb.t_newtran( intr->msg );
+		 * as proxy is done all the time stateful, I have to switch from
+		 * stateless to stateful if necessary.  */
+		if ( !(intr->flags&CPL_IS_STATEFUL) ) {
+			i = cpl_fct.tmb.t_newtran( intr->msg );
 			if (i<0) {
 				LOG(L_ERR,"ERROR:cpl-c:run_proxy: failed to build new "
 					"transaction!\n");
@@ -479,20 +481,15 @@ static inline char *run_proxy( struct cpl_interpreter *intr )
 				 * script by returning EO_SCRIPT */
 				return EO_SCRIPT;
 			}
+			intr->flags |= CPL_IS_STATEFUL;
 		}
 
 		/* as I am interested in getting the responses back - I need to install
 		 * some callback functions for replies  */
-		if (cpl_tmb.register_req_cb( intr->msg, TMCB_RESPONSE_OUT, final_reply,
-		intr) <= 0 ) {
+		if (cpl_fct.tmb.register_tmcb(intr->msg,0,
+		TMCB_ON_FAILURE|TMCB_RESPONSE_OUT,reply_callback,(void*)intr) <= 0 ) {
 			LOG(L_ERR, "ERROR:cpl_c:run_proxy: failed to register "
 				"TMCB_RESPONSE_OUT callback\n");
-			goto runtime_error;
-		}
-		if (cpl_tmb.register_req_cb( intr->msg, TMCB_ON_FAILURE, failed_reply,
-		intr) <= 0 ) {
-			LOG(L_ERR, "ERROR:cpl_c:run_proxy: failed to register "
-				"TMCB_ON_FAILURE callback\n");
 			goto runtime_error;
 		}
 	}

@@ -1,52 +1,39 @@
 /* mpz/gcd.c:   Calculate the greatest common divisor of two integers.
 
-Copyright (C) 1991, 1993, 1994, 1996 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2002, 2005 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
+#ifdef BERKELEY_MP
+#include "mp.h"
+#endif
 
-void *_mpz_realloc ();
 
+void
 #ifndef BERKELEY_MP
-void
-#if __STDC__
 mpz_gcd (mpz_ptr g, mpz_srcptr u, mpz_srcptr v)
-#else
-mpz_gcd (g, u, v)
-     mpz_ptr g;
-     mpz_srcptr u;
-     mpz_srcptr v;
-#endif
 #else /* BERKELEY_MP */
-void
-#if __STDC__
 gcd (mpz_srcptr u, mpz_srcptr v, mpz_ptr g)
-#else
-gcd (u, v, g)
-     mpz_ptr g;
-     mpz_srcptr u;
-     mpz_srcptr v;
-#endif
 #endif /* BERKELEY_MP */
-
 {
   unsigned long int g_zero_bits, u_zero_bits, v_zero_bits;
   mp_size_t g_zero_limbs, u_zero_limbs, v_zero_limbs;
@@ -56,7 +43,7 @@ gcd (u, v, g)
   mp_ptr vp = v->_mp_d;
   mp_size_t vsize = ABS (v->_mp_size);
   mp_size_t gsize;
-  TMP_DECL (marker);
+  TMP_DECL;
 
   /* GCD(0, V) == V.  */
   if (usize == 0)
@@ -96,7 +83,7 @@ gcd (u, v, g)
       return;
     }
 
-  TMP_MARK (marker);
+  TMP_MARK;
 
   /*  Eliminate low zero bits from U and V and move to temporary storage.  */
   while (*up == 0)
@@ -155,7 +142,7 @@ gcd (u, v, g)
   if (g_zero_bits != 0)
     {
       mp_limb_t cy_limb;
-      gsize += (vp[vsize - 1] >> (BITS_PER_MP_LIMB - g_zero_bits)) != 0;
+      gsize += (vp[vsize - 1] >> (GMP_NUMB_BITS - g_zero_bits)) != 0;
       if (g->_mp_alloc < gsize)
 	_mpz_realloc (g, gsize);
       MPN_ZERO (g->_mp_d, g_zero_limbs);
@@ -174,5 +161,5 @@ gcd (u, v, g)
     }
 
   g->_mp_size = gsize;
-  TMP_FREE (marker);
+  TMP_FREE;
 }

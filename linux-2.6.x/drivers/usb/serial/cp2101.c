@@ -41,7 +41,7 @@ static int cp2101_open(struct usb_serial_port*, struct file*);
 static void cp2101_cleanup(struct usb_serial_port*);
 static void cp2101_close(struct usb_serial_port*, struct file*);
 static void cp2101_get_termios(struct usb_serial_port*);
-static void cp2101_set_termios(struct usb_serial_port*, struct termios*);
+static void cp2101_set_termios(struct usb_serial_port*, struct ktermios*);
 static int cp2101_tiocmget (struct usb_serial_port *, struct file *);
 static int cp2101_tiocmset (struct usb_serial_port *, struct file *,
 		unsigned int, unsigned int);
@@ -58,17 +58,23 @@ static struct usb_device_id id_table [] = {
 	{ USB_DEVICE(0x10AB, 0x10C5) }, /* Siemens MC60 Cable */
 	{ USB_DEVICE(0x10B5, 0xAC70) }, /* Nokia CA-42 USB */
 	{ USB_DEVICE(0x10C4, 0x803B) }, /* Pololu USB-serial converter */
+	{ USB_DEVICE(0x10C4, 0x8053) }, /* Enfora EDG1228 */
 	{ USB_DEVICE(0x10C4, 0x8066) }, /* Argussoft In-System Programmer */
 	{ USB_DEVICE(0x10C4, 0x807A) }, /* Crumb128 board */
 	{ USB_DEVICE(0x10C4, 0x80CA) }, /* Degree Controls Inc */
+	{ USB_DEVICE(0x10C4, 0x80DD) }, /* Tracient RFID */
 	{ USB_DEVICE(0x10C4, 0x80F6) }, /* Suunto sports instrument */
 	{ USB_DEVICE(0x10C4, 0x813D) }, /* Burnside Telecom Deskmobile */
+	{ USB_DEVICE(0x10C4, 0x814A) }, /* West Mountain Radio RIGblaster P&P */
+	{ USB_DEVICE(0x10C4, 0x814B) }, /* West Mountain Radio RIGtalk */
 	{ USB_DEVICE(0x10C4, 0x815E) }, /* Helicomm IP-Link 1220-DVM */
 	{ USB_DEVICE(0x10C4, 0x81C8) }, /* Lipowsky Industrie Elektronik GmbH, Baby-JTAG */
 	{ USB_DEVICE(0x10C4, 0x81E2) }, /* Lipowsky Industrie Elektronik GmbH, Baby-LIN */
 	{ USB_DEVICE(0x10C4, 0x8218) }, /* Lipowsky Industrie Elektronik GmbH, HARP-1 */
 	{ USB_DEVICE(0x10C4, 0xEA60) }, /* Silicon Labs factory default */
 	{ USB_DEVICE(0x10C4, 0xEA61) }, /* Silicon Labs factory default */
+	{ USB_DEVICE(0x10C5, 0xEA61) }, /* Silicon Labs MobiData GPRS USB Modem */
+	{ USB_DEVICE(0x13AD, 0x9999) }, /* Baltech card reader */
 	{ USB_DEVICE(0x16D6, 0x0001) }, /* Jablotron serial interface */
 	{ } /* Terminating Entry */
 };
@@ -88,6 +94,7 @@ static struct usb_serial_driver cp2101_device = {
 		.owner =	THIS_MODULE,
 		.name = 	"cp2101",
 	},
+	.usb_driver		= &cp2101_driver,
 	.id_table		= id_table,
 	.num_interrupt_in	= 0,
 	.num_bulk_in		= 0,
@@ -168,13 +175,13 @@ static int cp2101_get_config(struct usb_serial_port* port, u8 request,
 		unsigned int *data, int size)
 {
 	struct usb_serial *serial = port->serial;
-	u32 *buf;
+	__le32 *buf;
 	int result, i, length;
 
 	/* Number of integers required to contain the array */
 	length = (((size - 1) | 3) + 1)/4;
 
-	buf = kcalloc(length, sizeof(u32), GFP_KERNEL);
+	buf = kcalloc(length, sizeof(__le32), GFP_KERNEL);
 	if (!buf) {
 		dev_err(&port->dev, "%s - out of memory.\n", __FUNCTION__);
 		return -ENOMEM;
@@ -214,13 +221,13 @@ static int cp2101_set_config(struct usb_serial_port* port, u8 request,
 		unsigned int *data, int size)
 {
 	struct usb_serial *serial = port->serial;
-	u32 *buf;
+	__le32 *buf;
 	int result, i, length;
 
 	/* Number of integers required to contain the array */
 	length = (((size - 1) | 3) + 1)/4;
 
-	buf = kmalloc(length * sizeof(u32), GFP_KERNEL);
+	buf = kmalloc(length * sizeof(__le32), GFP_KERNEL);
 	if (!buf) {
 		dev_err(&port->dev, "%s - out of memory.\n",
 				__FUNCTION__);
@@ -349,7 +356,7 @@ static void cp2101_get_termios (struct usb_serial_port *port)
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
 
-	if ((!port->tty) || (!port->tty->termios)) {
+	if (!port->tty || !port->tty->termios) {
 		dbg("%s - no tty structures", __FUNCTION__);
 		return;
 	}
@@ -506,7 +513,7 @@ static void cp2101_get_termios (struct usb_serial_port *port)
 }
 
 static void cp2101_set_termios (struct usb_serial_port *port,
-		struct termios *old_termios)
+		struct ktermios *old_termios)
 {
 	unsigned int cflag, old_cflag=0;
 	int baud=0, bits;
@@ -519,50 +526,35 @@ static void cp2101_set_termios (struct usb_serial_port *port,
 		return;
 	}
 	cflag = port->tty->termios->c_cflag;
-
-	/* Check that they really want us to change something */
-	if (old_termios) {
-		if ((cflag == old_termios->c_cflag) &&
-				(RELEVANT_IFLAG(port->tty->termios->c_iflag)
-				== RELEVANT_IFLAG(old_termios->c_iflag))) {
-			dbg("%s - nothing to change...", __FUNCTION__);
-			return;
-		}
-
-		old_cflag = old_termios->c_cflag;
-	}
+	old_cflag = old_termios->c_cflag;
+	baud = tty_get_baud_rate(port->tty);
 
 	/* If the baud rate is to be updated*/
-	if ((cflag & CBAUD) != (old_cflag & CBAUD)) {
-		switch (cflag & CBAUD) {
-			/*
-			 * The baud rates which are commented out below
-			 * appear to be supported by the device
-			 * but are non-standard
-			 */
-			case B0:	baud = 0;	break;
-			case B600:	baud = 600;	break;
-			case B1200:	baud = 1200;	break;
-			case B1800:	baud = 1800;	break;
-			case B2400:	baud = 2400;	break;
-			case B4800:	baud = 4800;	break;
-			/*case B7200:	baud = 7200;	break;*/
-			case B9600:	baud = 9600;	break;
-			/*ase B14400:	baud = 14400;	break;*/
-			case B19200:	baud = 19200;	break;
-			/*case B28800:	baud = 28800;	break;*/
-			case B38400:	baud = 38400;	break;
-			/*case B55854:	baud = 55054;	break;*/
-			case B57600:	baud = 57600;	break;
-			case B115200:	baud = 115200;	break;
-			/*case B127117:	baud = 127117;	break;*/
-			case B230400:	baud = 230400;	break;
-			case B460800:	baud = 460800;	break;
-			case B921600:	baud = 921600;	break;
-			/*case B3686400:	baud = 3686400;	break;*/
+	if (baud != tty_termios_baud_rate(old_termios)) {
+		switch (baud) {
+			case 0:
+			case 600:
+			case 1200:
+			case 1800:
+			case 2400:
+			case 4800:
+			case 7200:
+			case 9600:
+			case 14400:
+			case 19200:
+			case 28800:
+			case 38400:
+			case 55854:
+			case 57600:
+			case 115200:
+			case 127117:
+			case 230400:
+			case 460800:
+			case 921600:
+			case 3686400:
+				break;
 			default:
-				dev_err(&port->dev, "cp2101 driver does not "
-					"support the baudrate requested\n");
+				baud = 9600;
 				break;
 		}
 

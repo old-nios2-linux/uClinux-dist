@@ -1,13 +1,13 @@
 /*
- * $Id: parse_event.c,v 1.4 2003/04/26 20:28:46 jiri Exp $
+ * $Id: parse_event.c,v 1.7 2004/08/24 09:01:25 janakj Exp $
  *
  * Event header field body parser.
  * The parser was written for Presence Agent module only.
- * it recognize presence package only, no subpackages, no parameters
- * It should be replaced by a more generic parser if subpackages or
+ * it recognize presence package only, no sub-packages, no parameters
+ * It should be replaced by a more generic parser if sub-packages or
  * parameters should be parsed too.
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -48,8 +48,18 @@
 #define PRES_STR "presence"
 #define PRES_STR_LEN 8
 
+#define PRES_WINFO_STR "presence.winfo"
+#define PRES_WINFO_STR_LEN 14
 
-static inline char* skip_token_nodot(char* _b, int _l)
+#define PRES_XCAP_CHANGE_STR "xcap-change"
+#define PRES_XCAP_CHANGE_STR_LEN 11
+
+#define PRES_LOCATION_STR "location"
+#define PRES_LOCATION_STR_LEN 8
+
+
+
+static inline char* skip_token(char* _b, int _l)
 {
 	int i = 0;
 
@@ -60,7 +70,6 @@ static inline char* skip_token_nodot(char* _b, int _l)
 		case '\n':
 		case '\t':
 		case ';':
-		case '.':
 			return _b + i;
 		}
 	}
@@ -73,6 +82,7 @@ static inline int event_parser(char* _s, int _l, event_t* _e)
 {
 	str tmp;
 	char* end;
+	char buf[128];
 
 	tmp.s = _s;
 	tmp.len = _l;
@@ -86,13 +96,25 @@ static inline int event_parser(char* _s, int _l, event_t* _e)
 
 	_e->text.s = tmp.s;
 
-	end = skip_token_nodot(tmp.s, tmp.len);
+	end = skip_token(tmp.s, tmp.len);
 
 	_e->text.len = end - tmp.s;
+
+	strncpy(buf, tmp.s, tmp.len);
+	buf[tmp.len] = 0;
 
 	if ((_e->text.len == PRES_STR_LEN) && 
 	    !strncasecmp(PRES_STR, tmp.s, _e->text.len)) {
 		_e->parsed = EVENT_PRESENCE;
+	} else if ((_e->text.len == PRES_XCAP_CHANGE_STR_LEN) && 
+		   !strncasecmp(PRES_XCAP_CHANGE_STR, tmp.s, _e->text.len)) {
+		_e->parsed = EVENT_XCAP_CHANGE;
+	} else if ((_e->text.len == PRES_LOCATION_STR_LEN) && 
+		   !strncasecmp(PRES_LOCATION_STR, tmp.s, _e->text.len)) {
+		_e->parsed = EVENT_LOCATION;
+	} else if ((_e->text.len == PRES_WINFO_STR_LEN) && 
+		   !strncasecmp(PRES_WINFO_STR, tmp.s, _e->text.len)) {
+		_e->parsed = EVENT_PRESENCE_WINFO;
 	} else {
 		_e->parsed = EVENT_OTHER;
 	}

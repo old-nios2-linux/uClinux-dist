@@ -188,6 +188,10 @@ Stream5LWSession *GetLWSession(Stream5SessionCache *sessionCache, Packet *p, Ses
          * same key before returning this node.
          */
         returned = (Stream5LWSession *)hnode->data;
+        if (returned && (returned->last_data_seen < p->pkth->ts.tv_sec))
+        {
+            returned->last_data_seen = p->pkth->ts.tv_sec;
+        }
     }
     return returned;
 }

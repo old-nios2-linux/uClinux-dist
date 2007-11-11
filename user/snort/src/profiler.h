@@ -101,6 +101,12 @@
         ppstat.ticks_start = ticks_start; \
     } 
 
+#define PREPROC_PROFILE_REENTER_START(ppstat) \
+    if (PROFILING_PREPROCS) { \
+        PROFILE_START; \
+        ppstat.ticks_start = ticks_start; \
+    } 
+
 #define PREPROC_PROFILE_TMPSTART(ppstat) \
     if (PROFILING_PREPROCS) { \
         PROFILE_START; \
@@ -110,6 +116,12 @@
     if (PROFILING_PREPROCS) { \
         PROFILE_END; \
         ppstat.exits++; \
+        ppstat.ticks += ticks_end - ppstat.ticks_start; \
+    } 
+
+#define PREPROC_PROFILE_REENTER_END(ppstat) \
+    if (PROFILING_PREPROCS) { \
+        PROFILE_END; \
         ppstat.ticks += ticks_end - ppstat.ticks_start; \
     } 
 
@@ -150,8 +162,10 @@ extern PreprocStats totalPerfStats;
 #define OTN_PROFILE_NOALERT(otn)
 #define OTN_PROFILE_ALERT(otn)
 #define PREPROC_PROFILE_START(ppstat)
+#define PREPROC_PROFILE_REENTER_START(ppstat)
 #define PREPROC_PROFILE_TMPSTART(ppstat)
 #define PREPROC_PROFILE_END(ppstat)
+#define PREPROC_PROFILE_REENTER_END(ppstat)
 #define PREPROC_PROFILE_TMPEND(ppstat)
 #endif
 

@@ -1,7 +1,7 @@
 /* 
- * $Id: udomain.c,v 1.26.4.1.2.1 2004/07/21 10:34:45 sobomax Exp $ 
+ * $Id: udomain.c,v 1.41.2.1 2005/03/29 11:54:35 janakj Exp $ 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,6 +28,10 @@
  * ---------
  * 2003-03-11 changed to the new locking scheme: locking.h (andrei)
  * 2003-03-12 added replication mark and zombie state (nils)
+ * 2004-06-07 updated to the new DB api (andrei)
+ * 2004-08-23  hash function changed to process characters as unsigned
+ *             -> no negative results occur (jku)
+ *   
  */
 
 #include "udomain.h"
@@ -37,15 +41,13 @@
 #include "../../db/db.h"
 #include "../../ut.h"
 #include "ul_mod.h"            /* usrloc module parameters */
-#include "del_list.h"
-#include "ins_list.h"
 #include "notify.h"
 
 
 /*
  * Hash function
  */
-static inline int hash_func(udomain_t* _d, char* _s, int _l)
+static inline int hash_func(udomain_t* _d, unsigned char* _s, int _l)
 {
 	int res = 0, i;
 	
@@ -164,6 +166,7 @@ void free_udomain(udomain_t* _d)
 		shm_free(_d->table);
 	}
 	unlock_udomain(_d);
+	lock_destroy(&_d->lock);/* destroy the lock (required for SYSV sems!)*/
 
         shm_free(_d);
 }
@@ -201,46 +204,52 @@ void print_udomain(FILE* _f, udomain_t* _d)
 
 
 
-int preload_udomain(udomain_t* _d)
+int preload_udomain(db_con_t* _c, udomain_t* _d)
 {
 	char b[256];
-	db_key_t columns[11];
+	db_key_t columns[10];
 	db_res_t* res;
 	db_row_t* row;
-	int i, cseq, rep, state;
+	int i, cseq;
 	unsigned int flags;
-	
-	str user, contact, callid, ua;
+
+	str user, contact, callid, ua, received;
+	str* rec;
 	char* domain;
 	time_t expires;
-	float q;
+	qvalue_t q;
 
 	urecord_t* r;
 	ucontact_t* c;
 
-	columns[0] = user_col;
-	columns[1] = contact_col;
-	columns[2] = expires_col;
-	columns[3] = q_col;
-	columns[4] = callid_col;
-	columns[5] = cseq_col;
-	columns[6] = replicate_col;
-	columns[7] = state_col;
-	columns[8] = flags_col;
-	columns[9] = user_agent_col;
-	columns[10] = domain_col;
+	columns[0] = user_col.s;
+	columns[1] = contact_col.s;
+	columns[2] = expires_col.s;
+	columns[3] = q_col.s;
+	columns[4] = callid_col.s;
+	columns[5] = cseq_col.s;
+	columns[6] = flags_col.s;
+	columns[7] = user_agent_col.s;
+	columns[8] = received_col.s;
+	columns[9] = domain_col.s;
 	
 	memcpy(b, _d->name->s, _d->name->len);
 	b[_d->name->len] = '\0';
-	db_use_table(db, b);
-	if (db_query(db, 0, 0, 0, columns, 0, (use_domain) ? (11) : (10), 0, &res) < 0) {
+
+	if (ul_dbf.use_table(_c, b) < 0) {
+		LOG(L_ERR, "preload_udomain(): Error in use_table\n");
+		return -1;
+	}
+
+	if (ul_dbf.query(_c, 0, 0, 0, columns, 0, (use_domain) ? 10 : 9, 0,
+				&res) < 0) {
 		LOG(L_ERR, "preload_udomain(): Error while doing db_query\n");
 		return -1;
 	}
 
 	if (RES_ROW_N(res) == 0) {
 		DBG("preload_udomain(): Table is empty\n");
-		db_free_query(db, res);
+		ul_dbf.free_result(_c, res);
 		return 0;
 	}
 
@@ -250,48 +259,66 @@ int preload_udomain(udomain_t* _d)
 		row = RES_ROWS(res) + i;
 		
 		user.s      = (char*)VAL_STRING(ROW_VALUES(row));
-		if (user.s==0){
-			LOG(L_CRIT, "preload_udomain: ERRROR: bad username "
+		if (user.s == 0) {
+			LOG(L_CRIT, "preload_udomain: ERROR: bad username "
 							"record in table %s\n", b);
-			LOG(L_CRIT, "preload_udomain: ERRROR: skipping...\n");
+			LOG(L_CRIT, "preload_udomain: ERROR: skipping...\n");
 			continue;
-		}else{
-			user.len    = strlen(user.s);
+		} else {
+			user.len = strlen(user.s);
 		}
-		contact.s   = (char*)VAL_STRING(ROW_VALUES(row) + 1);
-		if (contact.s==0){
-			LOG(L_CRIT, "preload_udomain: ERRROR: bad contact "
+
+		contact.s = (char*)VAL_STRING(ROW_VALUES(row) + 1);
+		if (contact.s == 0) {
+			LOG(L_CRIT, "preload_udomain: ERROR: bad contact "
 							"record in table %s\n", b);
-			LOG(L_CRIT, "preload_udomain: ERRROR: for username %.*s\n",
+			LOG(L_CRIT, "preload_udomain: ERROR: for username %.*s\n",
 							user.len, user.s);
-			LOG(L_CRIT, "preload_udomain: ERRROR: skipping...\n");
+			LOG(L_CRIT, "preload_udomain: ERROR: skipping...\n");
 			continue;
-		}else{
+		} else {
 			contact.len = strlen(contact.s);
 		}
 		expires     = VAL_TIME  (ROW_VALUES(row) + 2);
-		q           = VAL_DOUBLE(ROW_VALUES(row) + 3);
+		q           = double2q(VAL_DOUBLE(ROW_VALUES(row) + 3));
 		cseq        = VAL_INT   (ROW_VALUES(row) + 5);
-		rep         = VAL_INT   (ROW_VALUES(row) + 6);
-		state       = VAL_INT   (ROW_VALUES(row) + 7);
 		callid.s    = (char*)VAL_STRING(ROW_VALUES(row) + 4);
-		if (callid.s==0){
-			LOG(L_CRIT, "preload_udomain: ERRROR: bad callid record in"
+		if (callid.s == 0) {
+			LOG(L_CRIT, "preload_udomain: ERROR: bad callid record in"
 							" table %s\n", b);
-			LOG(L_CRIT, "preload_udomain: ERRROR: for username %.*s,"
+			LOG(L_CRIT, "preload_udomain: ERROR: for username %.*s,"
 							" contact %.*s\n",
 							user.len, user.s, contact.len, contact.s);
-			LOG(L_CRIT, "preload_udomain: ERRROR: skipping...\n");
+			LOG(L_CRIT, "preload_udomain: ERROR: skipping...\n");
 			continue;
-		}else{
+		} else {
 			callid.len  = strlen(callid.s);
 		}
-		flags       = VAL_BITMAP(ROW_VALUES(row) + 8);
-		ua.s        = (char*)VAL_STRING(ROW_VALUES(row) + 9);
-		ua.len      = strlen(ua.s);
+
+		flags  = VAL_BITMAP(ROW_VALUES(row) + 6);
+
+		ua.s  = (char*)VAL_STRING(ROW_VALUES(row) + 7);
+		if (ua.s) {
+			ua.len = strlen(ua.s);
+		} else {
+			ua.len = 0;
+		}
+
+		if (!VAL_NULL(ROW_VALUES(row) + 8)) {
+			received.s  = (char*)VAL_STRING(ROW_VALUES(row) + 8);
+			if (received.s) {
+				received.len = strlen(received.s);
+				rec = &received;
+			} else {
+				received.len = 0;
+				rec = 0;
+			}
+		} else {
+			rec = 0;
+		}
 
 		if (use_domain) {
-			domain    = (char*)VAL_STRING(ROW_VALUES(row) + 10);
+			domain  = (char*)VAL_STRING(ROW_VALUES(row) + 9);
 			snprintf(b, 256, "%.*s@%s", user.len, ZSW(user.s), domain);
 			user.s = b;
 			user.len = strlen(b);
@@ -300,15 +327,15 @@ int preload_udomain(udomain_t* _d)
 		if (get_urecord(_d, &user, &r) > 0) {
 			if (mem_insert_urecord(_d, &user, &r) < 0) {
 				LOG(L_ERR, "preload_udomain(): Can't create a record\n");
-				db_free_query(db, res);
+				ul_dbf.free_result(_c, res);
 				unlock_udomain(_d);
 				return -2;
 			}
 		}
 		
-		if (mem_insert_ucontact(r, &contact, expires, q, &callid, cseq, flags, rep, &c, &ua) < 0) {
+		if (mem_insert_ucontact(r, &contact, expires, q, &callid, cseq, flags, &c, &ua, rec) < 0) {
 			LOG(L_ERR, "preload_udomain(): Error while inserting contact\n");
-			db_free_query(db, res);
+			ul_dbf.free_result(_c, res);
 			unlock_udomain(_d);
 			return -3;
 		}
@@ -318,13 +345,10 @@ int preload_udomain(udomain_t* _d)
 			  * we also store zombies in database so we have to restore
 			  * the correct state
 		      */
-		if (state >= CS_ZOMBIE_N)
-			c->state = CS_ZOMBIE_S;
-		else
-			c->state = CS_SYNC;
+		c->state = CS_SYNC;
 	}
 
-	db_free_query(db, res);
+	ul_dbf.free_result(_c, res);
 	unlock_udomain(_d);
 	return 0;
 }
@@ -342,7 +366,7 @@ int mem_insert_urecord(udomain_t* _d, str* _aor, struct urecord** _r)
 		return -1;
 	}
 
-	sl = hash_func(_d, _aor->s, _aor->len);
+	sl = hash_func(_d, (unsigned char*)_aor->s, _aor->len);
 	slot_add(&_d->table[sl], *_r);
 	udomain_add(_d, *_r);
 	_d->users++;
@@ -393,8 +417,8 @@ int timer_udomain(udomain_t* _d)
 	}
 	
 	unlock_udomain(_d);
-	process_del_list(_d->name);
-	process_ins_list(_d->name);
+/*	process_del_list(_d->name); */
+/*	process_ins_list(_d->name); */
 	return 0;
 }
 
@@ -438,7 +462,7 @@ int get_urecord(udomain_t* _d, str* _aor, struct urecord** _r)
 	int sl, i;
 	urecord_t* r;
 
-	sl = hash_func(_d, _aor->s, _aor->len);
+	sl = hash_func(_d, (unsigned char*)_aor->s, _aor->len);
 
 	r = _d->table[sl].first;
 

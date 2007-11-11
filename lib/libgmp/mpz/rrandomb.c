@@ -1,113 +1,93 @@
-/* mpz_brandom -- Generate a positive random mpz_t of specified bit size, with
+/* mpz_rrandomb -- Generate a positive random mpz_t of specified bit size, with
    long runs of consecutive ones and zeros in the binary representation.
    Meant for testing of other MP routines.
 
-Copyright (C) 2000 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
-static void gmp_rrandomb ();
+static void gmp_rrandomb _PROTO ((mp_ptr rp, gmp_randstate_t rstate, unsigned long int nbits));
 
 void
-#if __STDC__
 mpz_rrandomb (mpz_ptr x, gmp_randstate_t rstate, unsigned long int nbits)
-#else
-mpz_rrandomb (x, rstate, nbits)
-     mpz_ptr x;
-     gmp_randstate_t rstate;
-     unsigned long int nbits;
-#endif
 {
-  mp_size_t nl = 0;
+  mp_size_t nl;
 
+  nl = (nbits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
   if (nbits != 0)
     {
-      mp_ptr xp;
-      nl = (nbits + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB;
-      if (x->_mp_alloc < nl)
-	_mpz_realloc (x, nl);
-
-      xp = PTR(x);
-      gmp_rrandomb (xp, rstate, nbits);
-      MPN_NORMALIZE (xp, nl);
+      MPZ_REALLOC (x, nl);
+      gmp_rrandomb (PTR(x), rstate, nbits);
     }
 
   SIZ(x) = nl;
 }
 
-#define BITS_PER_CHUNK 4
+/* Ask _gmp_rand for 32 bits per call unless that's more than a limb can hold.
+   Thus, we get the same random number sequence in the common cases.
+   FIXME: We should always generate the same random number sequence!  */
+#if GMP_NUMB_BITS < 32
+#define BITS_PER_RANDCALL GMP_NUMB_BITS
+#else
+#define BITS_PER_RANDCALL 32
+#endif
 
 static void
-gmp_rrandomb (rp, rstate, nbits)
-     mp_ptr rp;
-     gmp_randstate_t rstate;
-     unsigned long int nbits;
+gmp_rrandomb (mp_ptr rp, gmp_randstate_t rstate, unsigned long int nbits)
 {
-  int nb;
-  int bit_pos;
-  mp_size_t limb_pos;
-  mp_limb_t ran, ranm;
-  mp_limb_t acc;
-  mp_size_t n;
+  unsigned long int bi;
+  mp_limb_t ranm;		/* buffer for random bits */
+  unsigned cap_chunksize, chunksize;
+  mp_size_t i;
 
-  bit_pos = nbits % BITS_PER_MP_LIMB;
-  limb_pos = nbits / BITS_PER_MP_LIMB;
-  if (bit_pos == 0)
-    {
-      bit_pos = BITS_PER_MP_LIMB;
-      limb_pos--;
-    }
+  /* Set entire result to 111..1  */
+  i = (nbits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS - 1;
+  rp[i] = GMP_NUMB_MAX >> (GMP_NUMB_BITS - (nbits % GMP_NUMB_BITS)) % GMP_NUMB_BITS;
+  for (i = i - 1; i >= 0; i--)
+    rp[i] = GMP_NUMB_MAX;
 
-  acc = 0;
-  while (limb_pos >= 0)
+  _gmp_rand (&ranm, rstate, BITS_PER_RANDCALL);
+  cap_chunksize = nbits / (ranm % 4 + 1);
+  cap_chunksize += cap_chunksize == 0; /* make it at least 1 */
+
+  bi = nbits;
+
+  for (;;)
     {
-      _gmp_rand (&ranm, rstate, BITS_PER_CHUNK + 1);
-      ran = ranm;
-      nb = (ran >> 1) + 1;
-      if ((ran & 1) != 0)
-	{
-	  /* Generate a string of ones.  */
-	  if (nb > bit_pos)
-	    {
-	      rp[limb_pos--] = acc | ((((mp_limb_t) 1) << bit_pos) - 1);
-	      bit_pos += BITS_PER_MP_LIMB;
-	      bit_pos -= nb;
-	      acc = (~(mp_limb_t) 0) << bit_pos;
-	    }
-	  else
-	    {
-	      bit_pos -= nb;
-	      acc |= ((((mp_limb_t) 1) << nb) - 1) << bit_pos;
-	    }
-	}
-      else
-	{
-	  /* Generate a string of zeroes.  */
-	  if (nb > bit_pos)
-	    {
-	      rp[limb_pos--] = acc;
-	      acc = 0;
-	      bit_pos += BITS_PER_MP_LIMB;
-	    }
-	  bit_pos -= nb;
-	}
+      _gmp_rand (&ranm, rstate, BITS_PER_RANDCALL);
+      chunksize = 1 + ranm % cap_chunksize;
+      bi = (bi < chunksize) ? 0 : bi - chunksize;
+
+      if (bi == 0)
+	break;			/* low chunk is ...1 */
+
+      rp[bi / GMP_NUMB_BITS] ^= CNST_LIMB (1) << bi % GMP_NUMB_BITS;
+
+      _gmp_rand (&ranm, rstate, BITS_PER_RANDCALL);
+      chunksize = 1 + ranm % cap_chunksize;
+      bi = (bi < chunksize) ? 0 : bi - chunksize;
+
+      mpn_incr_u (rp + bi / GMP_NUMB_BITS, CNST_LIMB (1) << bi % GMP_NUMB_BITS);
+
+      if (bi == 0)
+	break;			/* low chunk is ...0 */
     }
 }

@@ -1,30 +1,30 @@
 /* mpn_gcdext -- Extended Greatest Common Divisor.
 
-Copyright (C) 1996, 1998, 2000 Free Software Foundation, Inc.
+Copyright 1996, 1998, 2000, 2001, 2002 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+You should have received a copy of the GNU Lesser General Public License
+along with the GNU MP Library; see the file COPYING.LIB.  If not, write
+to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA. */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-#ifndef THRESHOLD
-#define THRESHOLD 16
+#ifndef GCDEXT_THRESHOLD
+#define GCDEXT_THRESHOLD 17
 #endif
 
 #ifndef EXTEND
@@ -32,7 +32,7 @@ MA 02111-1307, USA. */
 #endif
 
 #if STAT
-int arr[BITS_PER_MP_LIMB];
+int arr[GMP_LIMB_BITS + 1];
 #endif
 
 
@@ -67,36 +67,72 @@ int arr[BITS_PER_MP_LIMB];
 	   do things in single-limb arithmetic until the quotients differ,
 	   and then switch to double-limb arithmetic.  */
 
-#define swapptr(xp,yp) \
-do { mp_ptr _swapptr_tmp = (xp); (xp) = (yp); (yp) = _swapptr_tmp; } while (0)
 
-/* Division optimized for small quotients.  If the quotient is more than one limb,
-   store 1 in *qh and return 0.  */
+/* One-limb division optimized for small quotients.  */
 static mp_limb_t
-#if __STDC__
-div2 (mp_limb_t *qh, mp_limb_t n1, mp_limb_t n0, mp_limb_t d1, mp_limb_t d0)
-#else
-div2 (qh, n1, n0, d1, d0)
-     mp_limb_t *qh;
-     mp_limb_t n1;
-     mp_limb_t n0;
-     mp_limb_t d1;
-     mp_limb_t d0;
-#endif
+div1 (mp_limb_t n0, mp_limb_t d0)
 {
-  if (d1 == 0)
+  if ((mp_limb_signed_t) n0 < 0)
     {
-      *qh = 1;
-      return 0;
-    }
+      mp_limb_t q;
+      int cnt;
+      for (cnt = 1; (mp_limb_signed_t) d0 >= 0; cnt++)
+	{
+	  d0 = d0 << 1;
+	}
 
+      q = 0;
+      while (cnt)
+	{
+	  q <<= 1;
+	  if (n0 >= d0)
+	    {
+	      n0 = n0 - d0;
+	      q |= 1;
+	    }
+	  d0 = d0 >> 1;
+	  cnt--;
+	}
+
+      return q;
+    }
+  else
+    {
+      mp_limb_t q;
+      int cnt;
+      for (cnt = 0; n0 >= d0; cnt++)
+	{
+	  d0 = d0 << 1;
+	}
+
+      q = 0;
+      while (cnt)
+	{
+	  d0 = d0 >> 1;
+	  q <<= 1;
+	  if (n0 >= d0)
+	    {
+	      n0 = n0 - d0;
+	      q |= 1;
+	    }
+	  cnt--;
+	}
+
+      return q;
+    }
+}
+
+/* Two-limb division optimized for small quotients.  */
+static mp_limb_t
+div2 (mp_limb_t n1, mp_limb_t n0, mp_limb_t d1, mp_limb_t d0)
+{
   if ((mp_limb_signed_t) n1 < 0)
     {
       mp_limb_t q;
       int cnt;
       for (cnt = 1; (mp_limb_signed_t) d1 >= 0; cnt++)
 	{
-	  d1 = (d1 << 1) | (d0 >> (BITS_PER_MP_LIMB - 1));
+	  d1 = (d1 << 1) | (d0 >> (GMP_LIMB_BITS - 1));
 	  d0 = d0 << 1;
 	}
 
@@ -109,12 +145,11 @@ div2 (qh, n1, n0, d1, d0)
 	      sub_ddmmss (n1, n0, n1, n0, d1, d0);
 	      q |= 1;
 	    }
-	  d0 = (d1 << (BITS_PER_MP_LIMB - 1)) | (d0 >> 1);
+	  d0 = (d1 << (GMP_LIMB_BITS - 1)) | (d0 >> 1);
 	  d1 = d1 >> 1;
 	  cnt--;
 	}
 
-      *qh = 0;
       return q;
     }
   else
@@ -123,14 +158,14 @@ div2 (qh, n1, n0, d1, d0)
       int cnt;
       for (cnt = 0; n1 > d1 || (n1 == d1 && n0 >= d0); cnt++)
 	{
-	  d1 = (d1 << 1) | (d0 >> (BITS_PER_MP_LIMB - 1));
+	  d1 = (d1 << 1) | (d0 >> (GMP_LIMB_BITS - 1));
 	  d0 = d0 << 1;
 	}
 
       q = 0;
       while (cnt)
 	{
-	  d0 = (d1 << (BITS_PER_MP_LIMB - 1)) | (d0 >> 1);
+	  d0 = (d1 << (GMP_LIMB_BITS - 1)) | (d0 >> 1);
 	  d1 = d1 >> 1;
 	  q <<= 1;
 	  if (n1 > d1 || (n1 == d1 && n0 >= d0))
@@ -141,38 +176,17 @@ div2 (qh, n1, n0, d1, d0)
 	  cnt--;
 	}
 
-      *qh = 0;
       return q;
     }
 }
 
 mp_size_t
 #if EXTEND
-#if __STDC__
 mpn_gcdext (mp_ptr gp, mp_ptr s0p, mp_size_t *s0size,
 	    mp_ptr up, mp_size_t size, mp_ptr vp, mp_size_t vsize)
 #else
-mpn_gcdext (gp, s0p, s0size, up, size, vp, vsize)
-     mp_ptr gp;
-     mp_ptr s0p;
-     mp_size_t *s0size;
-     mp_ptr up;
-     mp_size_t size;
-     mp_ptr vp;
-     mp_size_t vsize;
-#endif
-#else
-#if __STDC__
 mpn_gcd (mp_ptr gp,
 	 mp_ptr up, mp_size_t size, mp_ptr vp, mp_size_t vsize)
-#else
-mpn_gcd (gp, up, size, vp, vsize)
-     mp_ptr gp;
-     mp_ptr up;
-     mp_size_t size;
-     mp_ptr vp;
-     mp_size_t vsize;
-#endif
 #endif
 {
   mp_limb_t A, B, C, D;
@@ -188,19 +202,31 @@ mpn_gcd (gp, up, size, vp, vsize)
   int sign = 1;
 #endif
   int use_double_flag;
-  TMP_DECL (mark);
+  TMP_DECL;
 
-  TMP_MARK (mark);
+  ASSERT (size >= vsize);
+  ASSERT (vsize >= 1);
+  ASSERT (up[size-1] != 0);
+  ASSERT (vp[vsize-1] != 0);
+  ASSERT (! MPN_OVERLAP_P (up, size+1, vp, vsize+1));
+#if EXTEND
+  ASSERT (! MPN_OVERLAP_P (s0p, size, up, size+1));
+  ASSERT (! MPN_OVERLAP_P (s0p, size, vp, vsize+1));
+#endif
+  ASSERT (MPN_SAME_OR_SEPARATE_P (gp, up, size));
+  ASSERT (MPN_SAME_OR_SEPARATE2_P (gp, size, vp, vsize));
 
-  use_double_flag = (size > THRESHOLD);
+  TMP_MARK;
 
   tp = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
   wp = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
 #if EXTEND
   s1p = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
 
+#if ! WANT_GCDEXT_ONE_STEP
   MPN_ZERO (s0p, size);
   MPN_ZERO (s1p, size);
+#endif
 
   s0p[0] = 1;
   s1p[0] = 0;
@@ -209,18 +235,8 @@ mpn_gcd (gp, up, size, vp, vsize)
 
   if (size > vsize)
     {
-      /* Normalize V (and shift up U the same amount).  */
-      count_leading_zeros (cnt, vp[vsize - 1]);
-      if (cnt != 0)
-	{
-	  mp_limb_t cy;
-	  mpn_lshift (vp, vp, vsize, cnt);
-	  cy = mpn_lshift (up, up, size, cnt);
-	  up[size] = cy;
-	  size += cy != 0;
-	}
+      mpn_tdiv_qr (tp, up, (mp_size_t) 0, up, size, vp, vsize);
 
-      mpn_divmod (up + vsize, up, size, vp, vsize);
 #if EXTEND
       /* This is really what it boils down to in this case... */
       s0p[0] = 0;
@@ -228,13 +244,10 @@ mpn_gcd (gp, up, size, vp, vsize)
       sign = -sign;
 #endif
       size = vsize;
-      if (cnt != 0)
-	{
-	  mpn_rshift (up, up, size, cnt);
-	  mpn_rshift (vp, vp, size, cnt);
-	}
-      swapptr (up, vp);
+      MP_PTR_SWAP (up, vp);
     }
+
+  use_double_flag = ABOVE_THRESHOLD (size, GCDEXT_THRESHOLD);
 
   for (;;)
     {
@@ -255,18 +268,83 @@ mpn_gcd (gp, up, size, vp, vsize)
 	  ul = up[size - 2];
 	  vl = vp[size - 2];
 	  count_leading_zeros (cnt, uh);
+#if GMP_NAIL_BITS == 0
 	  if (cnt != 0)
 	    {
-	      uh = (uh << cnt) | (ul >> (BITS_PER_MP_LIMB - cnt));
-	      vh = (vh << cnt) | (vl >> (BITS_PER_MP_LIMB - cnt));
+	      uh = (uh << cnt) | (ul >> (GMP_LIMB_BITS - cnt));
+	      vh = (vh << cnt) | (vl >> (GMP_LIMB_BITS - cnt));
 	      vl <<= cnt;
 	      ul <<= cnt;
 	      if (size >= 3)
 		{
-		  ul |= (up[size - 3] >> (BITS_PER_MP_LIMB - cnt));
-		  vl |= (vp[size - 3] >> (BITS_PER_MP_LIMB - cnt));
+		  ul |= (up[size - 3] >> (GMP_LIMB_BITS - cnt));
+		  vl |= (vp[size - 3] >> (GMP_LIMB_BITS - cnt));
 		}
 	    }
+#else
+	  uh = uh << cnt;
+	  vh = vh << cnt;
+	  if (cnt < GMP_NUMB_BITS)
+	    {			     /* GMP_NAIL_BITS <= cnt < GMP_NUMB_BITS */
+	      uh |= ul >> (GMP_NUMB_BITS - cnt);
+	      vh |= vl >> (GMP_NUMB_BITS - cnt);
+	      ul <<= cnt + GMP_NAIL_BITS;
+	      vl <<= cnt + GMP_NAIL_BITS;
+	      if (size >= 3)
+		{
+		  if (cnt + GMP_NAIL_BITS > GMP_NUMB_BITS)
+		    {
+		      ul |= up[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
+		      vl |= vp[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
+		      if (size >= 4)
+			{
+			  ul |= up[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
+			  vl |= vp[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
+			}
+		    }
+		  else
+		    {
+		      ul |= up[size - 3] >> (GMP_LIMB_BITS - cnt - 2 * GMP_NAIL_BITS);
+		      vl |= vp[size - 3] >> (GMP_LIMB_BITS - cnt - 2 * GMP_NAIL_BITS);
+		    }
+		}
+	    }
+	  else
+	    {			  /* GMP_NUMB_BITS <= cnt <= GMP_LIMB_BITS-1 */
+	      uh |= ul << cnt - GMP_NUMB_BITS;	/* 0 <= c <= GMP_NAIL_BITS-1 */
+	      vh |= vl << cnt - GMP_NUMB_BITS;
+	      if (size >= 3)
+		{
+		  if (cnt - GMP_NUMB_BITS != 0)
+		    {				/* uh/vh need yet more bits! */
+		      uh |= up[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
+		      vh |= vp[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
+		      ul = up[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
+		      vl = vp[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
+		      if (size >= 4)
+			{
+			  ul |= up[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
+			  vl |= vp[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
+			}
+		    }
+		  else
+		    {
+		      ul = up[size - 3] << GMP_LIMB_BITS - cnt;
+		      vl = vp[size - 3] << GMP_LIMB_BITS - cnt;
+		      if (size >= 4)
+			{
+			  ul |= up[size - 4] >> GMP_NUMB_BITS - (GMP_LIMB_BITS - cnt);
+			  vl |= vp[size - 4] >> GMP_NUMB_BITS - (GMP_LIMB_BITS - cnt);
+			}
+		    }
+		}
+	      else
+		{
+		  ul = 0;
+		  vl = 0;
+		}
+	    }
+#endif
 
 	  A = 1;
 	  B = 0;
@@ -276,75 +354,77 @@ mpn_gcd (gp, up, size, vp, vsize)
 	  asign = 0;
 	  for (;;)
 	    {
-	      mp_limb_t T;
-	      mp_limb_t qh, q1, q2;
+	      mp_limb_t Tac, Tbd;
+	      mp_limb_t q1, q2;
 	      mp_limb_t nh, nl, dh, dl;
 	      mp_limb_t t1, t0;
 	      mp_limb_t Th, Tl;
 
 	      sub_ddmmss (dh, dl, vh, vl, 0, C);
-	      if ((dl | dh) == 0)
+	      if (dh == 0)
 		break;
 	      add_ssaaaa (nh, nl, uh, ul, 0, A);
-	      q1 = div2 (&qh, nh, nl, dh, dl);
-	      if (qh != 0)
-		break;		/* could handle this */
+	      q1 = div2 (nh, nl, dh, dl);
 
 	      add_ssaaaa (dh, dl, vh, vl, 0, D);
-	      if ((dl | dh) == 0)
+	      if (dh == 0)
 		break;
 	      sub_ddmmss (nh, nl, uh, ul, 0, B);
-	      q2 = div2 (&qh, nh, nl, dh, dl);
-	      if (qh != 0)
-		break;		/* could handle this */
+	      q2 = div2 (nh, nl, dh, dl);
 
 	      if (q1 != q2)
 		break;
 
-	      asign = ~asign;
-
-	      T = A + q1 * C;
+	      Tac = A + q1 * C;
+	      if (GMP_NAIL_BITS != 0 && Tac > GMP_NUMB_MAX)
+		break;
+	      Tbd = B + q1 * D;
+	      if (GMP_NAIL_BITS != 0 && Tbd > GMP_NUMB_MAX)
+		break;
 	      A = C;
-	      C = T;
-	      T = B + q1 * D;
+	      C = Tac;
 	      B = D;
-	      D = T;
+	      D = Tbd;
 	      umul_ppmm (t1, t0, q1, vl);
 	      t1 += q1 * vh;
 	      sub_ddmmss (Th, Tl, uh, ul, t1, t0);
 	      uh = vh, ul = vl;
 	      vh = Th, vl = Tl;
+
+	      asign = ~asign;
 
 	      add_ssaaaa (dh, dl, vh, vl, 0, C);
+/*	      if (dh == 0)	should never happen
+		break;	       */
 	      sub_ddmmss (nh, nl, uh, ul, 0, A);
-	      q1 = div2 (&qh, nh, nl, dh, dl);
-	      if (qh != 0)
-		break;		/* could handle this */
+	      q1 = div2 (nh, nl, dh, dl);
 
 	      sub_ddmmss (dh, dl, vh, vl, 0, D);
-	      if ((dl | dh) == 0)
+	      if (dh == 0)
 		break;
 	      add_ssaaaa (nh, nl, uh, ul, 0, B);
-	      q2 = div2 (&qh, nh, nl, dh, dl);
-	      if (qh != 0)
-		break;		/* could handle this */
+	      q2 = div2 (nh, nl, dh, dl);
 
 	      if (q1 != q2)
 		break;
 
-	      asign = ~asign;
-
-	      T = A + q1 * C;
+	      Tac = A + q1 * C;
+	      if (GMP_NAIL_BITS != 0 && Tac > GMP_NUMB_MAX)
+		break;
+	      Tbd = B + q1 * D;
+	      if (GMP_NAIL_BITS != 0 && Tbd > GMP_NUMB_MAX)
+		break;
 	      A = C;
-	      C = T;
-	      T = B + q1 * D;
+	      C = Tac;
 	      B = D;
-	      D = T;
+	      D = Tbd;
 	      umul_ppmm (t1, t0, q1, vl);
 	      t1 += q1 * vh;
 	      sub_ddmmss (Th, Tl, uh, ul, t1, t0);
 	      uh = vh, ul = vl;
 	      vh = Th, vl = Tl;
+
+	      asign = ~asign;
 	    }
 #if EXTEND
 	  if (asign)
@@ -359,11 +439,31 @@ mpn_gcd (gp, up, size, vp, vsize)
 	  uh = up[size - 1];
 	  vh = vp[size - 1];
 	  count_leading_zeros (cnt, uh);
+#if GMP_NAIL_BITS == 0
 	  if (cnt != 0)
 	    {
-	      uh = (uh << cnt) | (up[size - 2] >> (BITS_PER_MP_LIMB - cnt));
-	      vh = (vh << cnt) | (vp[size - 2] >> (BITS_PER_MP_LIMB - cnt));
+	      uh = (uh << cnt) | (up[size - 2] >> (GMP_LIMB_BITS - cnt));
+	      vh = (vh << cnt) | (vp[size - 2] >> (GMP_LIMB_BITS - cnt));
 	    }
+#else
+	  uh <<= cnt;
+	  vh <<= cnt;
+	  if (cnt < GMP_NUMB_BITS)
+	    {
+	      uh |= up[size - 2] >> (GMP_NUMB_BITS - cnt);
+	      vh |= vp[size - 2] >> (GMP_NUMB_BITS - cnt);
+	    }
+	  else
+	    {
+	      uh |= up[size - 2] << cnt - GMP_NUMB_BITS;
+	      vh |= vp[size - 2] << cnt - GMP_NUMB_BITS;
+	      if (size >= 3)
+		{
+		  uh |= up[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
+		  vh |= vp[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
+		}
+	    }
+#endif
 
 	  A = 1;
 	  B = 0;
@@ -381,8 +481,6 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      if (q != (uh - B) / (vh + D))
 		break;
 
-	      asign = ~asign;
-
 	      T = A + q * C;
 	      A = C;
 	      C = T;
@@ -392,6 +490,8 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      T = uh - q * vh;
 	      uh = vh;
 	      vh = T;
+
+	      asign = ~asign;
 
 	      if (vh - D == 0)
 		break;
@@ -400,8 +500,6 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      if (q != (uh + B) / (vh - D))
 		break;
 
-	      asign = ~asign;
-
 	      T = A + q * C;
 	      A = C;
 	      C = T;
@@ -411,6 +509,8 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      T = uh - q * vh;
 	      uh = vh;
 	      vh = T;
+
+	      asign = ~asign;
 	    }
 #if EXTEND
 	  if (asign)
@@ -425,82 +525,36 @@ mpn_gcd (gp, up, size, vp, vsize)
 
       if (B == 0)
 	{
-	  mp_limb_t qh;
-	  mp_size_t i;
 	  /* This is quite rare.  I.e., optimize something else!  */
 
-	  /* Normalize V (and shift up U the same amount).  */
-	  count_leading_zeros (cnt, vp[vsize - 1]);
-	  if (cnt != 0)
-	    {
-	      mp_limb_t cy;
-	      mpn_lshift (vp, vp, vsize, cnt);
-	      cy = mpn_lshift (up, up, size, cnt);
-	      up[size] = cy;
-	      size += cy != 0;
-	    }
+	  mpn_tdiv_qr (wp, up, (mp_size_t) 0, up, size, vp, vsize);
 
-	  qh = mpn_divmod (up + vsize, up, size, vp, vsize);
 #if EXTEND
 	  MPN_COPY (tp, s0p, ssize);
 	  {
 	    mp_size_t qsize;
+	    mp_size_t i;
 
-	    qsize = size - vsize; /* size of stored quotient from division */
-	    if (ssize < qsize)
+	    qsize = size - vsize + 1; /* size of stored quotient from division */
+	    MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
+
+	    for (i = 0; i < qsize; i++)
 	      {
-		MPN_ZERO (tp + ssize, qsize - ssize);
-		MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
-		for (i = 0; i < ssize; i++)
-		  {
-		    mp_limb_t cy;
-		    cy = mpn_addmul_1 (tp + i, up + vsize, qsize, s1p[i]);
-		    tp[qsize + i] = cy;
-		  }
-		if (qh != 0)
-		  {
-		    mp_limb_t cy;
-		    cy = mpn_add_n (tp + qsize, tp + qsize, s1p, ssize);
-		    if (cy != 0)
-		      abort ();
-		  }
+		mp_limb_t cy;
+		cy = mpn_addmul_1 (tp + i, s1p, ssize, wp[i]);
+		tp[ssize + i] = cy;
 	      }
-	    else
-	      {
-		MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
-		for (i = 0; i < qsize; i++)
-		  {
-		    mp_limb_t cy;
-		    cy = mpn_addmul_1 (tp + i, s1p, ssize, up[vsize + i]);
-		    tp[ssize + i] = cy;
-		  }
-		if (qh != 0)
-		  {
-		    mp_limb_t cy;
-		    cy = mpn_add_n (tp + qsize, tp + qsize, s1p, ssize);
-		    if (cy != 0)
-		      {
-			tp[qsize + ssize] = cy;
-			s1p[qsize + ssize] = 0;
-			ssize++;
-		      }
-		  }
-	      }
+
 	    ssize += qsize;
 	    ssize -= tp[ssize - 1] == 0;
 	  }
 
 	  sign = -sign;
-	  swapptr (s0p, s1p);
-	  swapptr (s1p, tp);
+	  MP_PTR_SWAP (s0p, s1p);
+	  MP_PTR_SWAP (s1p, tp);
 #endif
 	  size = vsize;
-	  if (cnt != 0)
-	    {
-	      mpn_rshift (up, up, size, cnt);
-	      mpn_rshift (vp, vp, size, cnt);
-	    }
-	  swapptr (up, vp);
+	  MP_PTR_SWAP (up, vp);
 	}
       else
 	{
@@ -514,7 +568,7 @@ mpn_gcd (gp, up, size, vp, vsize)
 
 #if STAT
 	  { mp_limb_t x; x = A | B | C | D; count_leading_zeros (cnt, x);
-	  arr[BITS_PER_MP_LIMB - cnt]++; }
+	  arr[GMP_LIMB_BITS - cnt]++; }
 #endif
 	  if (A == 0)
 	    {
@@ -523,8 +577,8 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      MPN_COPY (tp, vp, size);
 	      MPN_COPY (wp, up, size);
 	      mpn_submul_1 (wp, vp, size, D);
-	      swapptr (tp, up);
-	      swapptr (wp, vp);
+	      MP_PTR_SWAP (tp, up);
+	      MP_PTR_SWAP (wp, vp);
 #if EXTEND
 	      MPN_COPY (tp, s1p, ssize);
 	      tsize = ssize;
@@ -533,63 +587,84 @@ mpn_gcd (gp, up, size, vp, vsize)
 	      cy = mpn_addmul_1 (wp, s1p, ssize, D);
 	      wp[ssize] = cy;
 	      wsize = ssize + (cy != 0);
-	      swapptr (tp, s0p);
-	      swapptr (wp, s1p);
+	      MP_PTR_SWAP (tp, s0p);
+	      MP_PTR_SWAP (wp, s1p);
 	      ssize = MAX (wsize, tsize);
 #endif
 	    }
 	  else
 	    {
+	      mp_limb_t cy, cy1, cy2;
+
 	      if (asign)
 		{
-		  mp_limb_t cy;
 		  mpn_mul_1 (tp, vp, size, B);
 		  mpn_submul_1 (tp, up, size, A);
 		  mpn_mul_1 (wp, up, size, C);
 		  mpn_submul_1 (wp, vp, size, D);
-		  swapptr (tp, up);
-		  swapptr (wp, vp);
-#if EXTEND
-		  cy = mpn_mul_1 (tp, s1p, ssize, B);
-		  cy += mpn_addmul_1 (tp, s0p, ssize, A);
-		  tp[ssize] = cy;
-		  tsize = ssize + (cy != 0);
-		  cy = mpn_mul_1 (wp, s0p, ssize, C);
-		  cy += mpn_addmul_1 (wp, s1p, ssize, D);
-		  wp[ssize] = cy;
-		  wsize = ssize + (cy != 0);
-		  swapptr (tp, s0p);
-		  swapptr (wp, s1p);
-		  ssize = MAX (wsize, tsize);
-#endif
 		}
 	      else
 		{
-		  mp_limb_t cy;
 		  mpn_mul_1 (tp, up, size, A);
 		  mpn_submul_1 (tp, vp, size, B);
 		  mpn_mul_1 (wp, vp, size, D);
 		  mpn_submul_1 (wp, up, size, C);
-		  swapptr (tp, up);
-		  swapptr (wp, vp);
-#if EXTEND
-		  cy = mpn_mul_1 (tp, s0p, ssize, A);
-		  cy += mpn_addmul_1 (tp, s1p, ssize, B);
-		  tp[ssize] = cy;
-		  tsize = ssize + (cy != 0);
-		  cy = mpn_mul_1 (wp, s1p, ssize, D);
-		  cy += mpn_addmul_1 (wp, s0p, ssize, C);
-		  wp[ssize] = cy;
-		  wsize = ssize + (cy != 0);
-		  swapptr (tp, s0p);
-		  swapptr (wp, s1p);
-		  ssize = MAX (wsize, tsize);
-#endif
 		}
-	    }
+	      MP_PTR_SWAP (tp, up);
+	      MP_PTR_SWAP (wp, vp);
+#if EXTEND
+	      /* Compute new s0 */
+	      cy1 = mpn_mul_1 (tp, s0p, ssize, A);
+	      cy2 = mpn_addmul_1 (tp, s1p, ssize, B);
+	      cy = cy1 + cy2;
+	      tp[ssize] = cy & GMP_NUMB_MASK;
+	      tsize = ssize + (cy != 0);
+#if GMP_NAIL_BITS == 0
+	      if (cy < cy1)
+#else
+	      if (cy > GMP_NUMB_MAX)
+#endif
+		{
+		  tp[tsize] = 1;
+		  wp[tsize] = 0;
+		  tsize++;
+		  /* This happens just for nails, since we get more work done
+		     per numb there.  */
+		}
 
+	      /* Compute new s1 */
+	      cy1 = mpn_mul_1 (wp, s1p, ssize, D);
+	      cy2 = mpn_addmul_1 (wp, s0p, ssize, C);
+	      cy = cy1 + cy2;
+	      wp[ssize] = cy & GMP_NUMB_MASK;
+	      wsize = ssize + (cy != 0);
+#if GMP_NAIL_BITS == 0
+	      if (cy < cy1)
+#else
+	      if (cy > GMP_NUMB_MAX)
+#endif
+		{
+		  wp[wsize] = 1;
+		  if (wsize >= tsize)
+		    tp[wsize] = 0;
+		  wsize++;
+		}
+
+	      MP_PTR_SWAP (tp, s0p);
+	      MP_PTR_SWAP (wp, s1p);
+	      ssize = MAX (wsize, tsize);
+#endif
+	    }
 	  size -= up[size - 1] == 0;
+#if GMP_NAIL_BITS != 0
+	  size -= up[size - 1] == 0;
+#endif
 	}
+
+#if WANT_GCDEXT_ONE_STEP
+      TMP_FREE;
+      return 0;
+#endif
     }
 
 #if RECORD
@@ -597,7 +672,7 @@ mpn_gcd (gp, up, size, vp, vsize)
 #endif
 
 #if STAT
- {int i; for (i = 0; i < BITS_PER_MP_LIMB; i++) printf ("%d:%d\n", i, arr[i]);}
+ {int i; for (i = 0; i <= GMP_LIMB_BITS; i++) printf ("%d:%d\n", i, arr[i]);}
 #endif
 
   if (vsize == 0)
@@ -610,7 +685,7 @@ mpn_gcd (gp, up, size, vp, vsize)
 	MPN_COPY (orig_s0p, s0p, ssize);
       *s0size = sign >= 0 ? ssize : -ssize;
 #endif
-      TMP_FREE (mark);
+      TMP_FREE;
       return size;
     }
   else
@@ -651,8 +726,8 @@ mpn_gcd (gp, up, size, vp, vsize)
       ssize -= tp[ssize - 1] == 0;
 
       sign = -sign;
-      swapptr (s0p, s1p);
-      swapptr (s1p, tp);
+      MP_PTR_SWAP (s0p, s1p);
+      MP_PTR_SWAP (s1p, tp);
 #else
       t = mpn_mod_1 (up, size, vl);
 #endif
@@ -680,8 +755,8 @@ mpn_gcd (gp, up, size, vp, vsize)
 	  ssize -= tp[ssize - 1] == 0;
 
 	  sign = -sign;
-	  swapptr (s0p, s1p);
-	  swapptr (s1p, tp);
+	  MP_PTR_SWAP (s0p, s1p);
+	  MP_PTR_SWAP (s1p, tp);
 #else
 	  t = ul % vl;
 #endif
@@ -696,7 +771,7 @@ mpn_gcd (gp, up, size, vp, vsize)
 	MPN_COPY (orig_s0p, s0p, ssize);
       *s0size = sign >= 0 ? ssize : -ssize;
 #endif
-      TMP_FREE (mark);
+      TMP_FREE;
       return 1;
     }
 }

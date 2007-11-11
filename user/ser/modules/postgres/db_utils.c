@@ -1,5 +1,5 @@
 /*
- * $Id: db_utils.c,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: db_utils.c,v 1.3 2004/12/06 13:02:10 sobomax Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -77,7 +77,9 @@ int parse_sql_url(char* _url, char** _user, char** _pass,
 
 	at = strchr(slash, '@');
 
-	db_slash = strchr(slash, '/');
+	db_slash = strrchr(slash, '/');
+	if (db_slash <= at)
+		db_slash = NULL;
 	if (db_slash) {
 		*db_slash++ = '\0';
 		*_db = trim(db_slash);
@@ -115,7 +117,7 @@ int parse_sql_url(char* _url, char** _user, char** _pass,
 
 
 /*
- * Remove any tabs and spaces from the begining and the end of
+ * Remove any tabs and spaces from the beginning and the end of
  * a string
  */
 char* trim(char* _s)
@@ -126,7 +128,7 @@ char* trim(char* _s)
 	     /* Null pointer, there is nothing to do */
 	if (!_s) return _s;
 
-	     /* Remove spaces and tabs from the begining of string */
+	     /* Remove spaces and tabs from the beginning of string */
 	while ((*_s == ' ') || (*_s == '\t')) _s++;
 
 	len = strlen(_s);

@@ -56,7 +56,7 @@ static inline void __lock_metapage(struct metapage *mp)
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		if (metapage_locked(mp)) {
 			unlock_page(mp->page);
-			schedule();
+			io_schedule();
 			lock_page(mp->page);
 		}
 	} while (trylock_metapage(mp));
@@ -74,7 +74,7 @@ static inline void lock_metapage(struct metapage *mp)
 }
 
 #define METAPOOL_MIN_PAGES 32
-static kmem_cache_t *metapage_cache;
+static struct kmem_cache *metapage_cache;
 static mempool_t *metapage_mempool;
 
 #define MPS_PER_PAGE (PAGE_CACHE_SIZE >> L2PSIZE)
@@ -180,21 +180,18 @@ static inline void remove_metapage(struct page *page, struct metapage *mp)
 
 #endif
 
-static void init_once(void *foo, kmem_cache_t *cachep, unsigned long flags)
+static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
 	struct metapage *mp = (struct metapage *)foo;
 
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR)) ==
-	    SLAB_CTOR_CONSTRUCTOR) {
-		mp->lid = 0;
-		mp->lsn = 0;
-		mp->flag = 0;
-		mp->data = NULL;
-		mp->clsn = 0;
-		mp->log = NULL;
-		set_bit(META_free, &mp->flag);
-		init_waitqueue_head(&mp->wait);
-	}
+	mp->lid = 0;
+	mp->lsn = 0;
+	mp->flag = 0;
+	mp->data = NULL;
+	mp->clsn = 0;
+	mp->log = NULL;
+	set_bit(META_free, &mp->flag);
+	init_waitqueue_head(&mp->wait);
 }
 
 static inline struct metapage *alloc_metapage(gfp_t gfp_mask)
@@ -216,7 +213,7 @@ int __init metapage_init(void)
 	 * Allocate the metapage structures
 	 */
 	metapage_cache = kmem_cache_create("jfs_mp", sizeof(struct metapage),
-					   0, 0, init_once, NULL);
+					   0, 0, init_once);
 	if (metapage_cache == NULL)
 		return -ENOMEM;
 
@@ -475,7 +472,8 @@ add_failed:
 	printk(KERN_ERR "JFS: bio_add_page failed unexpectedly\n");
 	goto skip;
 dump_bio:
-	dump_mem("bio", bio, sizeof(*bio));
+	print_hex_dump(KERN_ERR, "JFS: dump of bio: ", DUMP_PREFIX_ADDRESS, 16,
+		       4, bio, sizeof(*bio), 0);
 skip:
 	bio_put(bio);
 	unlock_page(page);
@@ -764,22 +762,9 @@ void release_metapage(struct metapage * mp)
 	} else if (mp->lsn)	/* discard_metapage doesn't remove it */
 		remove_from_logsync(mp);
 
-#if MPS_PER_PAGE == 1
-	/*
-	 * If we know this is the only thing in the page, we can throw
-	 * the page out of the page cache.  If pages are larger, we
-	 * don't want to do this.
-	 */
-
-	/* Retest mp->count since we may have released page lock */
-	if (test_bit(META_discard, &mp->flag) && !mp->count) {
-		clear_page_dirty(page);
-		ClearPageUptodate(page);
-	}
-#else
 	/* Try to keep metapages from using up too much memory */
 	drop_metapage(page, mp);
-#endif
+
 	unlock_page(page);
 	page_cache_release(page);
 }

@@ -9,7 +9,6 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
@@ -45,7 +44,7 @@
 /*
  * Offset of eflags on child stack..
  */
-#define EFL_OFFSET ((EFL-2)*4-sizeof(struct pt_regs))
+#define EFL_OFFSET offsetof(struct pt_regs, eflags)
 
 static inline struct pt_regs *get_child_regs(struct task_struct *task)
 {
@@ -54,24 +53,24 @@ static inline struct pt_regs *get_child_regs(struct task_struct *task)
 }
 
 /*
- * this routine will get a word off of the processes privileged stack. 
- * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the privileged stacks are in our
+ * This routine will get a word off of the processes privileged stack.
+ * the offset is bytes into the pt_regs structure on the stack.
+ * This routine assumes that all the privileged stacks are in our
  * data space.
  */   
 static inline int get_stack_long(struct task_struct *task, int offset)
 {
 	unsigned char *stack;
 
-	stack = (unsigned char *)task->thread.esp0;
+	stack = (unsigned char *)task->thread.esp0 - sizeof(struct pt_regs);
 	stack += offset;
 	return (*((int *)stack));
 }
 
 /*
- * this routine will put a word on the processes privileged stack. 
- * the offset is how far from the base addr as stored in the TSS.  
- * this routine assumes that all the privileged stacks are in our
+ * This routine will put a word on the processes privileged stack.
+ * the offset is bytes into the pt_regs structure on the stack.
+ * This routine assumes that all the privileged stacks are in our
  * data space.
  */
 static inline int put_stack_long(struct task_struct *task, int offset,
@@ -79,7 +78,7 @@ static inline int put_stack_long(struct task_struct *task, int offset,
 {
 	unsigned char * stack;
 
-	stack = (unsigned char *) task->thread.esp0;
+	stack = (unsigned char *)task->thread.esp0 - sizeof(struct pt_regs);
 	stack += offset;
 	*(unsigned long *) stack = data;
 	return 0;
@@ -89,11 +88,6 @@ static int putreg(struct task_struct *child,
 	unsigned long regno, unsigned long value)
 {
 	switch (regno >> 2) {
-		case FS:
-			if (value && (value & 3) != 3)
-				return -EIO;
-			child->thread.fs = value;
-			return 0;
 		case GS:
 			if (value && (value & 3) != 3)
 				return -EIO;
@@ -101,6 +95,7 @@ static int putreg(struct task_struct *child,
 			return 0;
 		case DS:
 		case ES:
+		case FS:
 			if (value && (value & 3) != 3)
 				return -EIO;
 			value &= 0xffff;
@@ -116,9 +111,9 @@ static int putreg(struct task_struct *child,
 			value |= get_stack_long(child, EFL_OFFSET) & ~FLAG_MASK;
 			break;
 	}
-	if (regno > GS*4)
-		regno -= 2*4;
-	put_stack_long(child, regno - sizeof(struct pt_regs), value);
+	if (regno > FS*4)
+		regno -= 1*4;
+	put_stack_long(child, regno, value);
 	return 0;
 }
 
@@ -128,22 +123,19 @@ static unsigned long getreg(struct task_struct *child,
 	unsigned long retval = ~0UL;
 
 	switch (regno >> 2) {
-		case FS:
-			retval = child->thread.fs;
-			break;
 		case GS:
 			retval = child->thread.gs;
 			break;
 		case DS:
 		case ES:
+		case FS:
 		case SS:
 		case CS:
 			retval = 0xffff;
 			/* fall through */
 		default:
-			if (regno > GS*4)
-				regno -= 2*4;
-			regno = regno - sizeof(struct pt_regs);
+			if (regno > FS*4)
+				regno -= 1*4;
 			retval &= get_stack_long(child, regno);
 	}
 	return retval;
@@ -172,14 +164,22 @@ static unsigned long convert_eip_to_linear(struct task_struct *child, struct pt_
 		u32 *desc;
 		unsigned long base;
 
-		down(&child->mm->context.sem);
-		desc = child->mm->context.ldt + (seg & ~7);
-		base = (desc[0] >> 16) | ((desc[1] & 0xff) << 16) | (desc[1] & 0xff000000);
+		seg &= ~7UL;
 
-		/* 16-bit code segment? */
-		if (!((desc[1] >> 22) & 1))
-			addr &= 0xffff;
-		addr += base;
+		down(&child->mm->context.sem);
+		if (unlikely((seg >> 3) >= child->mm->context.size))
+			addr = -1L; /* bogus selector, access would fault */
+		else {
+			desc = child->mm->context.ldt + seg;
+			base = ((desc[0] >> 16) |
+				((desc[1] & 0xff) << 16) |
+				(desc[1] & 0xff000000));
+
+			/* 16-bit code segment? */
+			if (!((desc[1] >> 22) & 1))
+				addr &= 0xffff;
+			addr += base;
+		}
 		up(&child->mm->context.sem);
 	}
 	return addr;
@@ -274,7 +274,6 @@ static void clear_singlestep(struct task_struct *child)
 void ptrace_disable(struct task_struct *child)
 { 
 	clear_singlestep(child);
-	clear_tsk_thread_flag(child, TIF_SYSCALL_TRACE);
 	clear_tsk_thread_flag(child, TIF_SYSCALL_EMU);
 }
 
@@ -366,17 +365,9 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	switch (request) {
 	/* when I and D space are separate, these will need to be fixed. */
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
-	case PTRACE_PEEKDATA: {
-		unsigned long tmp;
-		int copied;
-
-		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
-		ret = -EIO;
-		if (copied != sizeof(tmp))
-			break;
-		ret = put_user(tmp, datap);
+	case PTRACE_PEEKDATA:
+		ret = generic_ptrace_peekdata(child, addr, data);
 		break;
-	}
 
 	/* read the word at location addr in the USER area. */
 	case PTRACE_PEEKUSR: {
@@ -403,10 +394,7 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/* when I and D space are separate, this will have to be fixed. */
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
-		ret = 0;
-		if (access_process_vm(child, addr, &data, sizeof(data), 1) == sizeof(data))
-			break;
-		ret = -EIO;
+		ret = generic_ptrace_pokedata(child, addr, data);
 		break;
 
 	case PTRACE_POKEUSR: /* write the word at location addr in the USER area */

@@ -256,7 +256,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 	      En/Disable High Byte LVD Termination
 
 	The upper 2 bits that deal with LVD termination only apply to Ultra2
-	controllers.  Futhermore, due to the current Ultra2 controller
+	controllers.  Furthermore, due to the current Ultra2 controller
 	designs, these bits are tied together such that setting either bit
 	enables both low and high byte LVD termination.  It is not possible
 	to only set high or low byte LVD termination in this manner.  This is
@@ -356,7 +356,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
         or enable Tagged Command Queueing (TCQ) on specific devices.  As of
 	driver version 5.1.11, TCQ is now either on or off by default
 	according to the setting you choose during the make config process.
-	In order to en/disable TCQ for certian devices at boot time, a user
+	In order to en/disable TCQ for certain devices at boot time, a user
 	may use this boot param.  The driver will then parse this message out
         and en/disable the specific device entries that are present based upon
         the value given.  The param line is parsed in the following manner:
@@ -436,7 +436,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     the commas to periods, insmod won't interpret this as more than one
     string and write junk into our binary image.  I consider it a bug in
     the insmod program that even if you wrap your string in quotes (quotes
-    that pass the shell mind you and that insmod sees) it still treates
+    that pass the shell mind you and that insmod sees) it still treats
     a comma inside of those quotes as starting a new variable, resulting
     in memory scribbles if you don't switch the commas to periods.
 

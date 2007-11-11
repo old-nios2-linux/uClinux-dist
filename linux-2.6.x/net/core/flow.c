@@ -44,7 +44,7 @@ static DEFINE_PER_CPU(struct flow_cache_entry **, flow_tables) = { NULL };
 
 #define flow_table(cpu) (per_cpu(flow_tables, cpu))
 
-static kmem_cache_t *flow_cachep __read_mostly;
+static struct kmem_cache *flow_cachep __read_mostly;
 
 static int flow_lwm, flow_hwm;
 
@@ -211,7 +211,7 @@ void *flow_cache_lookup(struct flowi *key, u16 family, u8 dir,
 		if (flow_count(cpu) > flow_hwm)
 			flow_cache_shrink(cpu);
 
-		fle = kmem_cache_alloc(flow_cachep, SLAB_ATOMIC);
+		fle = kmem_cache_alloc(flow_cachep, GFP_ATOMIC);
 		if (fle) {
 			fle->next = *head;
 			*head = fle;
@@ -231,22 +231,16 @@ nocache:
 
 		err = resolver(key, family, dir, &obj, &obj_ref);
 
-		if (fle) {
-			if (err) {
-				/* Force security policy check on next lookup */
-				*head = fle->next;
-				flow_entry_kill(cpu, fle);
-			} else {
-				fle->genid = atomic_read(&flow_cache_genid);
+		if (fle && !err) {
+			fle->genid = atomic_read(&flow_cache_genid);
 
-				if (fle->object)
-					atomic_dec(fle->object_ref);
+			if (fle->object)
+				atomic_dec(fle->object_ref);
 
-				fle->object = obj;
-				fle->object_ref = obj_ref;
-				if (obj)
-					atomic_inc(fle->object_ref);
-			}
+			fle->object = obj;
+			fle->object_ref = obj_ref;
+			if (obj)
+				atomic_inc(fle->object_ref);
 		}
 		local_bh_enable();
 
@@ -340,16 +334,14 @@ static void __devinit flow_cache_cpu_prepare(int cpu)
 	tasklet_init(tasklet, flow_cache_flush_tasklet, 0);
 }
 
-#ifdef CONFIG_HOTPLUG_CPU
 static int flow_cache_cpu(struct notifier_block *nfb,
 			  unsigned long action,
 			  void *hcpu)
 {
-	if (action == CPU_DEAD)
+	if (action == CPU_DEAD || action == CPU_DEAD_FROZEN)
 		__flow_cache_shrink((unsigned long)hcpu, 0);
 	return NOTIFY_OK;
 }
-#endif /* CONFIG_HOTPLUG_CPU */
 
 static int __init flow_cache_init(void)
 {
@@ -358,7 +350,7 @@ static int __init flow_cache_init(void)
 	flow_cachep = kmem_cache_create("flow_cache",
 					sizeof(struct flow_cache_entry),
 					0, SLAB_HWCACHE_ALIGN|SLAB_PANIC,
-					NULL, NULL);
+					NULL);
 	flow_hash_shift = 10;
 	flow_lwm = 2 * flow_hash_size;
 	flow_hwm = 4 * flow_hash_size;

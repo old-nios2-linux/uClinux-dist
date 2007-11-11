@@ -52,7 +52,14 @@ struct mdio_ops {
 /* PHY interrupt types */
 enum {
 	cphy_cause_link_change = 0x1,
-	cphy_cause_error = 0x2
+	cphy_cause_error = 0x2,
+	cphy_cause_fifo_error = 0x3
+};
+
+enum {
+	PHY_LINK_UP = 0x1,
+	PHY_AUTONEG_RDY = 0x2,
+	PHY_AUTONEG_EN = 0x4
 };
 
 struct cphy;
@@ -81,8 +88,19 @@ struct cphy_ops {
 /* A PHY instance */
 struct cphy {
 	int addr;                            /* PHY address */
+	int state;	/* Link status state machine */
 	adapter_t *adapter;                  /* associated adapter */
-	struct cphy_ops *ops;                /* PHY operations */
+
+	struct delayed_work phy_update;
+
+	u16 bmsr;
+	int count;
+	int act_count;
+	int act_on;
+
+	u32 elmer_gpo;
+
+	const struct cphy_ops *ops;            /* PHY operations */
 	int (*mdio_read)(adapter_t *adapter, int phy_addr, int mmd_addr,
 			 int reg_addr, unsigned int *val);
 	int (*mdio_write)(adapter_t *adapter, int phy_addr, int mmd_addr,
@@ -118,7 +136,7 @@ static inline int simple_mdio_write(struct cphy *cphy, int reg,
 /* Convenience initializer */
 static inline void cphy_init(struct cphy *phy, adapter_t *adapter,
 			     int phy_addr, struct cphy_ops *phy_ops,
-			     struct mdio_ops *mdio_ops)
+			     const struct mdio_ops *mdio_ops)
 {
 	phy->adapter = adapter;
 	phy->addr    = phy_addr;
@@ -133,7 +151,7 @@ static inline void cphy_init(struct cphy *phy, adapter_t *adapter,
 struct gphy {
 	/* Construct a PHY instance with the given PHY address */
 	struct cphy *(*create)(adapter_t *adapter, int phy_addr,
-			       struct mdio_ops *mdio_ops);
+			       const struct mdio_ops *mdio_ops);
 
 	/*
 	 * Reset the PHY chip.  This resets the whole PHY chip, not individual
@@ -142,7 +160,9 @@ struct gphy {
 	int (*reset)(adapter_t *adapter);
 };
 
-extern struct gphy t1_mv88x201x_ops;
-extern struct gphy t1_dummy_phy_ops;
+extern const struct gphy t1_my3126_ops;
+extern const struct gphy t1_mv88e1xxx_ops;
+extern const struct gphy t1_vsc8244_ops;
+extern const struct gphy t1_mv88x201x_ops;
 
 #endif /* _CXGB_CPHY_H_ */

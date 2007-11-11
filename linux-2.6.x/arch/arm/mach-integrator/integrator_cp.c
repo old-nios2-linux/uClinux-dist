@@ -214,7 +214,7 @@ static struct irq_chip sic_chip = {
 };
 
 static void
-sic_handle_irq(unsigned int irq, struct irqdesc *desc)
+sic_handle_irq(unsigned int irq, struct irq_desc *desc)
 {
 	unsigned long status = sic_readl(INTCP_VA_SIC_BASE + IRQ_STATUS);
 
@@ -250,7 +250,7 @@ static void __init intcp_init_irq(void)
 		if (i == 29)
 			break;
 		set_irq_chip(i, &pic_chip);
-		set_irq_handler(i, do_level_IRQ);
+		set_irq_handler(i, handle_level_irq);
 		set_irq_flags(i, IRQF_VALID | IRQF_PROBE);
 	}
 
@@ -259,7 +259,7 @@ static void __init intcp_init_irq(void)
 
 	for (i = IRQ_CIC_START; i <= IRQ_CIC_END; i++) {
 		set_irq_chip(i, &cic_chip);
-		set_irq_handler(i, do_level_IRQ);
+		set_irq_handler(i, handle_level_irq);
 		set_irq_flags(i, IRQF_VALID);
 	}
 
@@ -268,7 +268,7 @@ static void __init intcp_init_irq(void)
 
 	for (i = IRQ_SIC_START; i <= IRQ_SIC_END; i++) {
 		set_irq_chip(i, &sic_chip);
-		set_irq_handler(i, do_level_IRQ);
+		set_irq_handler(i, handle_level_irq);
 		set_irq_flags(i, IRQF_VALID | IRQF_PROBE);
 	}
 

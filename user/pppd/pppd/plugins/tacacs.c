@@ -55,15 +55,15 @@ tacacs_get_server(char **argv);
 static option_t tacacs_options[] =
 {
     { "tacacs", o_bool, &use_tacacs,
-      STR("Use TACACS+ functions"), 1 },
+      "Use TACACS+ functions", 1 },
     { "tacacs-accounting", o_bool, &use_account,
-      STR("Send TACACS+ accounting packets"), 1 },
+      "Send TACACS+ accounting packets", 1 },
     { "tacacs-authorization", o_bool, &use_authorize,
-      STR("Use TACACS+ to authorize for PPP"), 1 },
+      "Use TACACS+ to authorize for PPP", 1 },
     { "tacacs-server", o_special, tacacs_get_server,
-      STR("TACACS+ server IP address") },
+      "TACACS+ server IP address" },
     { "tacacs-secret", o_string, tac_secret_buffer,
-      STR("Key used to encrypt TACACS+ packets"),OPT_STATIC,NULL,MAXSECRETLEN},
+      "Key used to encrypt TACACS+ packets",OPT_STATIC,NULL,MAXSECRETLEN},
     { NULL }
 };
 
@@ -327,12 +327,11 @@ accounting_stop(void)
     }
 }
 
-void
-#ifdef EMBED
-tacacs_plugin_init(void)
-#else
-plugin_init(void)
+#ifdef DYNAMIC_PLUGINS
+#define	tacacs_plugin_init	plugin_init
 #endif
+
+void tacacs_plugin_init(void)
 {
     char *ptr;
 

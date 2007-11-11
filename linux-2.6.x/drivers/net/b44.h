@@ -308,8 +308,8 @@
 #define  MII_TLEDCTRL_ENABLE	0x0040
 
 struct dma_desc {
-	u32	ctrl;
-	u32	addr;
+	__le32	ctrl;
+	__le32	addr;
 };
 
 /* There are only 12 bits in the DMA engine for descriptor offsetting
@@ -327,9 +327,9 @@ struct dma_desc {
 #define RX_COPY_THRESHOLD  	256
 
 struct rx_header {
-	u16	len;
-	u16	flags;
-	u16	pad[12];
+	__le16	len;
+	__le16	flags;
+	__le16	pad[12];
 };
 #define RX_HEADER_LEN	28
 
@@ -442,8 +442,6 @@ struct b44 {
 #define B44_FLAG_RX_RING_HACK	0x20000000
 #define B44_FLAG_TX_RING_HACK	0x40000000
 #define B44_FLAG_WOL_ENABLE	0x80000000
-
-	u32			rx_offset;
 
 	u32			msg_enable;
 

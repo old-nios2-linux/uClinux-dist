@@ -1,29 +1,37 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Provide Cryptographic Signature capability
- * 
- * Copyright (C) 1999-2004, Digium, Inc.
+ * Copyright (C) 1999 - 2006, Digium, Inc.
  *
  * Mark Spencer <markster@digium.com>
  *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
+/*! \file
+ *
+ * \brief Provide Cryptographic Signature capability
+ *
+ * \author Mark Spencer <markster@digium.com> 
+ */
+
+/*** MODULEINFO
+	<depend>ssl</depend>
+ ***/
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 47051 $")
+
 #include <sys/types.h>
-#include <asterisk/file.h>
-#include <asterisk/channel.h>
-#include <asterisk/logger.h>
-#include <asterisk/say.h>
-#include <asterisk/module.h>
-#include <asterisk/options.h>
-#include <asterisk/crypto.h>
-#include <asterisk/md5.h>
-#include <asterisk/cli.h>
-#include <asterisk/io.h>
-#include <asterisk/lock.h>
-#include <asterisk/utils.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <stdio.h>
@@ -32,8 +40,19 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include "../asterisk.h"
-#include "../astconf.h"
+
+#include "asterisk/file.h"
+#include "asterisk/channel.h"
+#include "asterisk/logger.h"
+#include "asterisk/say.h"
+#include "asterisk/module.h"
+#include "asterisk/options.h"
+#include "asterisk/crypto.h"
+#include "asterisk/md5.h"
+#include "asterisk/cli.h"
+#include "asterisk/io.h"
+#include "asterisk/lock.h"
+#include "asterisk/utils.h"
 
 /*
  * Asterisk uses RSA keys with SHA-1 message digests for its
@@ -115,7 +134,7 @@ static int pw_cb(char *buf, int size, int rwflag, void *userdata)
 	return -1;
 }
 
-struct ast_key *ast_key_get(char *kname, int ktype)
+static struct ast_key *__ast_key_get(const char *kname, int ktype)
 {
 	struct ast_key *key;
 	ast_mutex_lock(&keylock);
@@ -135,7 +154,7 @@ static struct ast_key *try_load_key (char *dir, char *fname, int ifd, int ofd, i
 	int ktype = 0;
 	char *c = NULL;
 	char ffname[256];
-	char digest[16];
+	unsigned char digest[16];
 	FILE *f;
 	struct MD5Context md5;
 	struct ast_key *key;
@@ -177,7 +196,7 @@ static struct ast_key *try_load_key (char *dir, char *fname, int ifd, int ofd, i
 		memset(buf, 0, 256);
 		fgets(buf, sizeof(buf), f);
 		if (!feof(f)) {
-			MD5Update(&md5, buf, strlen(buf));
+			MD5Update(&md5, (unsigned char *) buf, strlen(buf));
 		}
 	}
 	MD5Final(digest, &md5);
@@ -200,13 +219,10 @@ static struct ast_key *try_load_key (char *dir, char *fname, int ifd, int ofd, i
 	/* Make fname just be the normal name now */
 	*c = '\0';
 	if (!key) {
-		key = (struct ast_key *)malloc(sizeof(struct ast_key));
-		if (!key) {
-			ast_log(LOG_WARNING, "Out of memory\n");
+		if (!(key = ast_calloc(1, sizeof(*key)))) {
 			fclose(f);
 			return NULL;
 		}
-		memset(key, 0, sizeof(struct ast_key));
 	}
 	/* At this point we have a key structure (old or new).  Time to
 	   fill it with what we know */
@@ -214,9 +230,9 @@ static struct ast_key *try_load_key (char *dir, char *fname, int ifd, int ofd, i
 	if (found)
 		ast_mutex_lock(&keylock);
 	/* First the filename */
-	strncpy(key->fn, ffname, sizeof(key->fn) - 1);
+	ast_copy_string(key->fn, ffname, sizeof(key->fn));
 	/* Then the name */
-	strncpy(key->name, fname, sizeof(key->name) - 1);
+	ast_copy_string(key->name, fname, sizeof(key->name));
 	key->ktype = ktype;
 	/* Yes, assume we're going to be deleted */
 	key->delme = 1;
@@ -254,7 +270,7 @@ static struct ast_key *try_load_key (char *dir, char *fname, int ifd, int ofd, i
 		ast_log(LOG_NOTICE, "Key '%s' needs passcode.\n", key->name);
 		key->ktype |= KEY_NEEDS_PASSCODE;
 		if (!notice) {
-			if (!option_initcrypto) 
+			if (!ast_opt_init_keys) 
 				ast_log(LOG_NOTICE, "Add the '-i' flag to the asterisk command line if you want to automatically initialize passcodes at launch.\n");
 			notice++;
 		}
@@ -300,10 +316,10 @@ static char *binary(int y, int len)
 
 #endif
 
-int ast_sign_bin(struct ast_key *key, char *msg, int msglen, unsigned char *dsig)
+static int __ast_sign_bin(struct ast_key *key, const char *msg, int msglen, unsigned char *dsig)
 {
 	unsigned char digest[20];
-	int siglen = 128;
+	unsigned int siglen = 128;
 	int res;
 
 	if (key->ktype != AST_KEY_PRIVATE) {
@@ -331,7 +347,7 @@ int ast_sign_bin(struct ast_key *key, char *msg, int msglen, unsigned char *dsig
 	
 }
 
-extern int ast_decrypt_bin(unsigned char *dst, const unsigned char *src, int srclen, struct ast_key *key)
+static int __ast_decrypt_bin(unsigned char *dst, const unsigned char *src, int srclen, struct ast_key *key)
 {
 	int res;
 	int pos = 0;
@@ -357,7 +373,7 @@ extern int ast_decrypt_bin(unsigned char *dst, const unsigned char *src, int src
 	return pos;
 }
 
-extern int ast_encrypt_bin(unsigned char *dst, const unsigned char *src, int srclen, struct ast_key *key)
+static int __ast_encrypt_bin(unsigned char *dst, const unsigned char *src, int srclen, struct ast_key *key)
 {
 	int res;
 	int bytes;
@@ -385,7 +401,7 @@ extern int ast_encrypt_bin(unsigned char *dst, const unsigned char *src, int src
 	return pos;
 }
 
-int ast_sign(struct ast_key *key, char *msg, char *sig)
+static int __ast_sign(struct ast_key *key, char *msg, char *sig)
 {
 	unsigned char dsig[128];
 	int siglen = sizeof(dsig);
@@ -398,7 +414,7 @@ int ast_sign(struct ast_key *key, char *msg, char *sig)
 	
 }
 
-int ast_check_signature_bin(struct ast_key *key, char *msg, int msglen, unsigned char *dsig)
+static int __ast_check_signature_bin(struct ast_key *key, const char *msg, int msglen, const unsigned char *dsig)
 {
 	unsigned char digest[20];
 	int res;
@@ -414,17 +430,17 @@ int ast_check_signature_bin(struct ast_key *key, char *msg, int msglen, unsigned
 	SHA1((unsigned char *)msg, msglen, digest);
 
 	/* Verify signature */
-	res = RSA_verify(NID_sha1, digest, sizeof(digest), dsig, 128, key->rsa);
+	res = RSA_verify(NID_sha1, digest, sizeof(digest), (unsigned char *)dsig, 128, key->rsa);
 	
 	if (!res) {
-		ast_log(LOG_DEBUG, "Key failed verification\n");
+		ast_log(LOG_DEBUG, "Key failed verification: %s\n", key->name);
 		return -1;
 	}
 	/* Pass */
 	return 0;
 }
 
-int ast_check_signature(struct ast_key *key, char *msg, char *sig)
+static int __ast_check_signature(struct ast_key *key, const char *msg, const char *sig)
 {
 	unsigned char dsig[128];
 	int res;
@@ -498,6 +514,7 @@ static int show_keys(int fd, int argc, char *argv[])
 {
 	struct ast_key *key;
 	char sum[16 * 2 + 1];
+	int count_keys = 0;
 
 	ast_mutex_lock(&keylock);
 	key = keys;
@@ -509,8 +526,10 @@ static int show_keys(int fd, int argc, char *argv[])
 			key->ktype & KEY_NEEDS_PASSCODE ? "[Needs Passcode]" : "[Loaded]", sum);
 				
 		key = key->next;
+		count_keys++;
 	}
 	ast_mutex_unlock(&keylock);
+	ast_cli(fd, "%d known RSA keys.\n", count_keys);
 	return RESULT_SUCCESS;
 }
 
@@ -526,7 +545,7 @@ static int init_keys(int fd, int argc, char *argv[])
 		/* Reload keys that need pass codes now */
 		if (key->ktype & KEY_NEEDS_PASSCODE) {
 			kn = key->fn + strlen(ast_config_AST_KEY_DIR) + 1;
-			strncpy(tmp, kn, sizeof(tmp) - 1);
+			ast_copy_string(tmp, kn, sizeof(tmp));
 			try_load_key((char *)ast_config_AST_KEY_DIR, tmp, fd, fd, &ign);
 		}
 		key = key->next;
@@ -535,62 +554,75 @@ static int init_keys(int fd, int argc, char *argv[])
 }
 
 static char show_key_usage[] =
-"Usage: show keys\n"
+"Usage: keys show\n"
 "       Displays information about RSA keys known by Asterisk\n";
 
 static char init_keys_usage[] =
-"Usage: init keys\n"
+"Usage: keys init\n"
 "       Initializes private keys (by reading in pass code from the user)\n";
 
-static struct ast_cli_entry cli_show_keys = 
-{ { "show", "keys", NULL }, show_keys, "Displays RSA key information", show_key_usage };
+static struct ast_cli_entry cli_show_keys_deprecated = {
+	{ "show", "keys", NULL },
+	show_keys, NULL,
+	NULL };
 
-static struct ast_cli_entry cli_init_keys = 
-{ { "init", "keys", NULL }, init_keys, "Initialize RSA key passcodes", init_keys_usage };
+static struct ast_cli_entry cli_init_keys_deprecated = {
+	{ "init", "keys", NULL },
+	init_keys, NULL,
+	NULL };
+
+static struct ast_cli_entry cli_crypto[] = {
+	{ { "keys", "show", NULL },
+	show_keys, "Displays RSA key information",
+	show_key_usage, NULL, &cli_show_keys_deprecated },
+
+	{ { "keys", "init", NULL },
+	init_keys, "Initialize RSA key passcodes",
+	init_keys_usage, NULL, &cli_init_keys_deprecated },
+};
 
 static int crypto_init(void)
 {
 	SSL_library_init();
 	ERR_load_crypto_strings();
-	ast_cli_register(&cli_show_keys);
-	ast_cli_register(&cli_init_keys);
+	ast_cli_register_multiple(cli_crypto, sizeof(cli_crypto) / sizeof(struct ast_cli_entry));
+
+	/* Install ourselves into stubs */
+	ast_key_get = __ast_key_get;
+	ast_check_signature = __ast_check_signature;
+	ast_check_signature_bin = __ast_check_signature_bin;
+	ast_sign = __ast_sign;
+	ast_sign_bin = __ast_sign_bin;
+	ast_encrypt_bin = __ast_encrypt_bin;
+	ast_decrypt_bin = __ast_decrypt_bin;
 	return 0;
 }
 
-int reload(void)
+static int reload(void)
 {
 	crypto_load(-1, -1);
 	return 0;
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	crypto_init();
-	if (option_initcrypto)
+	if (ast_opt_init_keys)
 		crypto_load(STDIN_FILENO, STDOUT_FILENO);
 	else
 		crypto_load(-1, -1);
 	return 0;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
 	/* Can't unload this once we're loaded */
 	return -1;
 }
 
-char *description(void)
-{
-	return "Cryptographic Digital Signatures";
-}
-
-int usecount(void)
-{
-	/* We should never be unloaded */
-	return 1;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+/* needs usecount semantics defined */
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS, "Cryptographic Digital Signatures",
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload
+	);

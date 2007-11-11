@@ -58,10 +58,10 @@
 #define CIPSO_V4_MAP_PASS             2
 
 /* limits */
-#define CIPSO_V4_MAX_REM_LVLS         256
+#define CIPSO_V4_MAX_REM_LVLS         255
 #define CIPSO_V4_INV_LVL              0x80000000
 #define CIPSO_V4_MAX_LOC_LVLS         (CIPSO_V4_INV_LVL - 1)
-#define CIPSO_V4_MAX_REM_CATS         65536
+#define CIPSO_V4_MAX_REM_CATS         65534
 #define CIPSO_V4_INV_CAT              0x80000000
 #define CIPSO_V4_MAX_LOC_CATS         (CIPSO_V4_INV_CAT - 1)
 
@@ -120,7 +120,7 @@ extern int cipso_v4_rbm_strictvalid;
  */
 
 #define CIPSO_V4_OPTEXIST(x) (IPCB(x)->opt.cipso != 0)
-#define CIPSO_V4_OPTPTR(x) ((x)->nh.raw + IPCB(x)->opt.cipso)
+#define CIPSO_V4_OPTPTR(x) (skb_network_header(x) + IPCB(x)->opt.cipso)
 
 /*
  * DOI List Functions
@@ -203,12 +203,10 @@ static inline int cipso_v4_cache_add(const struct sk_buff *skb,
 
 #ifdef CONFIG_NETLABEL
 void cipso_v4_error(struct sk_buff *skb, int error, u32 gateway);
-int cipso_v4_socket_setattr(const struct socket *sock,
-			    const struct cipso_v4_doi *doi_def,
-			    const struct netlbl_lsm_secattr *secattr);
+int cipso_v4_sock_setattr(struct sock *sk,
+			  const struct cipso_v4_doi *doi_def,
+			  const struct netlbl_lsm_secattr *secattr);
 int cipso_v4_sock_getattr(struct sock *sk, struct netlbl_lsm_secattr *secattr);
-int cipso_v4_socket_getattr(const struct socket *sock,
-			    struct netlbl_lsm_secattr *secattr);
 int cipso_v4_skbuff_getattr(const struct sk_buff *skb,
 			    struct netlbl_lsm_secattr *secattr);
 int cipso_v4_validate(unsigned char **option);
@@ -220,21 +218,15 @@ static inline void cipso_v4_error(struct sk_buff *skb,
 	return;
 }
 
-static inline int cipso_v4_socket_setattr(const struct socket *sock,
-				  const struct cipso_v4_doi *doi_def,
-				  const struct netlbl_lsm_secattr *secattr)
+static inline int cipso_v4_sock_setattr(struct sock *sk,
+				      const struct cipso_v4_doi *doi_def,
+				      const struct netlbl_lsm_secattr *secattr)
 {
 	return -ENOSYS;
 }
 
 static inline int cipso_v4_sock_getattr(struct sock *sk,
 					struct netlbl_lsm_secattr *secattr)
-{
-	return -ENOSYS;
-}
-
-static inline int cipso_v4_socket_getattr(const struct socket *sock,
-					  struct netlbl_lsm_secattr *secattr)
 {
 	return -ENOSYS;
 }

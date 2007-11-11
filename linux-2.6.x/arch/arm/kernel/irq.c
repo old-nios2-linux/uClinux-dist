@@ -27,7 +27,6 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/random.h>
 #include <linux/smp.h>
@@ -109,10 +108,10 @@ static struct irq_desc bad_irq_desc = {
  * come via this function.  Instead, they should provide their
  * own 'handler'
  */
-asmlinkage void asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
+asmlinkage void __exception asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
-	struct irqdesc *desc = irq_desc + irq;
+	struct irq_desc *desc = irq_desc + irq;
 
 	/*
 	 * Some hardware gives randomly wrong interrupts.  Rather
@@ -134,7 +133,7 @@ asmlinkage void asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
 
 void set_irq_flags(unsigned int irq, unsigned int iflags)
 {
-	struct irqdesc *desc;
+	struct irq_desc *desc;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS) {
@@ -159,8 +158,7 @@ void __init init_IRQ(void)
 	int irq;
 
 	for (irq = 0; irq < NR_IRQS; irq++)
-		irq_desc[irq].status |= IRQ_NOREQUEST | IRQ_DELAYED_DISABLE |
-			IRQ_NOPROBE;
+		irq_desc[irq].status |= IRQ_NOREQUEST | IRQ_NOPROBE;
 
 #ifdef CONFIG_SMP
 	bad_irq_desc.affinity = CPU_MASK_ALL;
@@ -171,7 +169,7 @@ void __init init_IRQ(void)
 
 #ifdef CONFIG_HOTPLUG_CPU
 
-static void route_irq(struct irqdesc *desc, unsigned int irq, unsigned int cpu)
+static void route_irq(struct irq_desc *desc, unsigned int irq, unsigned int cpu)
 {
 	pr_debug("IRQ%u: moving from cpu%u to cpu%u\n", irq, desc->cpu, cpu);
 
@@ -190,7 +188,7 @@ void migrate_irqs(void)
 	unsigned int i, cpu = smp_processor_id();
 
 	for (i = 0; i < NR_IRQS; i++) {
-		struct irqdesc *desc = irq_desc + i;
+		struct irq_desc *desc = irq_desc + i;
 
 		if (desc->cpu == cpu) {
 			unsigned int newcpu = any_online_cpu(desc->affinity);

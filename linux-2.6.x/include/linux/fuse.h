@@ -15,7 +15,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 7
+#define FUSE_KERNEL_MINOR_VERSION 8
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -92,6 +92,11 @@ struct fuse_file_lock {
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
 
+/**
+ * Release flags
+ */
+#define FUSE_RELEASE_FLUSH	(1 << 0)
+
 enum fuse_opcode {
 	FUSE_LOOKUP	   = 1,
 	FUSE_FORGET	   = 2,  /* no reply */
@@ -127,6 +132,8 @@ enum fuse_opcode {
 	FUSE_ACCESS        = 34,
 	FUSE_CREATE        = 35,
 	FUSE_INTERRUPT     = 36,
+	FUSE_BMAP          = 37,
+	FUSE_DESTROY       = 38,
 };
 
 /* The read buffer is required to be at least 8k, but may be much larger */
@@ -205,12 +212,13 @@ struct fuse_open_out {
 struct fuse_release_in {
 	__u64	fh;
 	__u32	flags;
-	__u32	padding;
+	__u32	release_flags;
+	__u64	lock_owner;
 };
 
 struct fuse_flush_in {
 	__u64	fh;
-	__u32	flush_flags;
+	__u32	unused;
 	__u32	padding;
 	__u64	lock_owner;
 };
@@ -296,6 +304,16 @@ struct fuse_interrupt_in {
 	__u64	unique;
 };
 
+struct fuse_bmap_in {
+	__u64	block;
+	__u32	blocksize;
+	__u32	padding;
+};
+
+struct fuse_bmap_out {
+	__u64	block;
+};
+
 struct fuse_in_header {
 	__u32	len;
 	__u32	opcode;
@@ -321,7 +339,7 @@ struct fuse_dirent {
 	char name[0];
 };
 
-#define FUSE_NAME_OFFSET ((unsigned) ((struct fuse_dirent *) 0)->name)
+#define FUSE_NAME_OFFSET offsetof(struct fuse_dirent, name)
 #define FUSE_DIRENT_ALIGN(x) (((x) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 #define FUSE_DIRENT_SIZE(d) \
 	FUSE_DIRENT_ALIGN(FUSE_NAME_OFFSET + (d)->namelen)

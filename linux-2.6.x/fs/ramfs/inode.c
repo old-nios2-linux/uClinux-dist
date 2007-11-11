@@ -30,18 +30,17 @@
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/string.h>
-#include <linux/smp_lock.h>
 #include <linux/backing-dev.h>
 #include <linux/ramfs.h>
-
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 #include "internal.h"
 
 /* some random number */
 #define RAMFS_MAGIC	0x858458f6
 
-static struct super_operations ramfs_ops;
-static struct inode_operations ramfs_dir_inode_operations;
+static const struct super_operations ramfs_ops;
+static const struct inode_operations ramfs_dir_inode_operations;
 
 static struct backing_dev_info ramfs_backing_dev_info = {
 	.ra_pages	= 0,	/* No readahead */
@@ -61,6 +60,7 @@ struct inode *ramfs_get_inode(struct super_block *sb, int mode, dev_t dev)
 		inode->i_blocks = 0;
 		inode->i_mapping->a_ops = &ramfs_aops;
 		inode->i_mapping->backing_dev_info = &ramfs_backing_dev_info;
+		mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
 		inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 		switch (mode & S_IFMT) {
 		default:
@@ -143,7 +143,7 @@ static int ramfs_symlink(struct inode * dir, struct dentry *dentry, const char *
 	return error;
 }
 
-static struct inode_operations ramfs_dir_inode_operations = {
+static const struct inode_operations ramfs_dir_inode_operations = {
 	.create		= ramfs_create,
 	.lookup		= simple_lookup,
 	.link		= simple_link,
@@ -155,7 +155,7 @@ static struct inode_operations ramfs_dir_inode_operations = {
 	.rename		= simple_rename,
 };
 
-static struct super_operations ramfs_ops = {
+static const struct super_operations ramfs_ops = {
 	.statfs		= simple_statfs,
 	.drop_inode	= generic_delete_inode,
 };

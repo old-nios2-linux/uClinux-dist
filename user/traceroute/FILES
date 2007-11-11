@@ -9,6 +9,11 @@ config.guess
 config.sub
 configure
 configure.in
+findsaddr-generic.c
+findsaddr-linux.c
+findsaddr-mib.c
+findsaddr-socket.c
+findsaddr.h
 ifaddrlist.c
 ifaddrlist.h
 install-sh
@@ -25,8 +30,8 @@ mean.awk
 median.awk
 mkdep
 rip_output.c
-savestr.c
-savestr.h
 strerror.c
 traceroute.8
 traceroute.c
+traceroute.h
+usleep.c

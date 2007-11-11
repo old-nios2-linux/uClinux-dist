@@ -1,6 +1,6 @@
 /*
 
-$Log: irc2pc.c,v $
+$Log$
 Revision 1.15  2004/06/26 03:50:14  markster
 Merge source cleanups (bug #1911)
 
@@ -34,19 +34,19 @@ extern int irc2pc_(real *rc, real *pc, integer *order, real *gprime, real *g2pas
 
 /* 	IRC2PC Version 48 */
 
-/* $Log: irc2pc.c,v $
-/* Revision 1.15  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.15  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.1  1996/08/19  22:31:56  jaf
  * Initial revision
  * */
@@ -93,19 +93,19 @@ extern int irc2pc_(real *rc, real *pc, integer *order, real *gprime, real *g2pas
     integer i__, j;
 
 /* 	Arguments */
-/* $Log: irc2pc.c,v $
-/* Revision 1.15  2004/06/26 03:50:14  markster
-/* Merge source cleanups (bug #1911)
-/*
-/* Revision 1.14  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.1.1.1  2003/02/12 13:59:15  matteo
-/* mer feb 12 14:56:57 CET 2003
-/*
-/* Revision 1.2  2000/01/05 08:20:39  markster
-/* Some OSS fixes and a few lpc changes to make it actually work
-/*
+/* $Log$
+ * Revision 1.15  2004/06/26 03:50:14  markster
+ * Merge source cleanups (bug #1911)
+ *
+ * Revision 1.14  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.1.1.1  2003/02/12 13:59:15  matteo
+ * mer feb 12 14:56:57 CET 2003
+ *
+ * Revision 1.2  2000/01/05 08:20:39  markster
+ * Some OSS fixes and a few lpc changes to make it actually work
+ *
  * Revision 1.1  1996/08/19  22:31:56  jaf
  * Initial revision
  * */
@@ -132,7 +132,7 @@ extern int irc2pc_(real *rc, real *pc, integer *order, real *gprime, real *g2pas
     for (i__ = 1; i__ <= i__1; ++i__) {
 	*g2pass *= 1.f - rc[i__] * rc[i__];
     }
-    *g2pass = *gprime * sqrt(*g2pass);
+    *g2pass = *gprime * (real)sqrt(*g2pass);
     pc[1] = rc[1];
     i__1 = *order;
     for (i__ = 2; i__ <= i__1; ++i__) {

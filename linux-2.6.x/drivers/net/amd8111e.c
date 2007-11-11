@@ -155,7 +155,7 @@ This function will write into PHY registers.
 */
 static int amd8111e_write_phy(struct amd8111e_priv* lp,int phy_id, int reg, u32 val)
 {
-	unsigned int repeat = REPEAT_CNT
+	unsigned int repeat = REPEAT_CNT;
 	void __iomem *mmio = lp->mmio;
 	unsigned int reg_val;
 
@@ -798,9 +798,7 @@ static int amd8111e_rx_poll(struct net_device *dev, int * budget)
 			pci_unmap_single(lp->pci_dev,lp->rx_dma_addr[rx_index],
 					 lp->rx_buff_len-2, PCI_DMA_FROMDEVICE);
 			skb_put(skb, pkt_len);
-			skb->dev = dev;
 			lp->rx_skbuff[rx_index] = new_skb;
-			new_skb->dev = dev;
 			lp->rx_dma_addr[rx_index] = pci_map_single(lp->pci_dev,
 								   new_skb->data,
 								   lp->rx_buff_len-2,
@@ -926,9 +924,7 @@ static int amd8111e_rx(struct net_device *dev)
 		pci_unmap_single(lp->pci_dev,lp->rx_dma_addr[rx_index],
 			lp->rx_buff_len-2, PCI_DMA_FROMDEVICE);
 		skb_put(skb, pkt_len);
-		skb->dev = dev;
 		lp->rx_skbuff[rx_index] = new_skb;
-		new_skb->dev = dev;
 		lp->rx_dma_addr[rx_index] = pci_map_single(lp->pci_dev,
 			new_skb->data, lp->rx_buff_len-2,PCI_DMA_FROMDEVICE);
 
@@ -1334,8 +1330,7 @@ err_no_interrupt:
 static void amd8111e_poll(struct net_device *dev)
 {
 	unsigned long flags;
-	local_save_flags(flags);
-	local_irq_disable();
+	local_irq_save(flags);
 	amd8111e_interrupt(0, dev);
 	local_irq_restore(flags);
 }
@@ -1490,32 +1485,7 @@ static void amd8111e_read_regs(struct amd8111e_priv *lp, u32 *buf)
 	buf[12] = readl(mmio + STAT0);
 }
 
-/*
-amd8111e crc generator implementation is different from the kernel
-ether_crc() function.
-*/
-static int amd8111e_ether_crc(int len, char* mac_addr)
-{
-	int i,byte;
-	unsigned char octet;
-	u32 crc= INITCRC;
 
-	for(byte=0; byte < len; byte++){
-		octet = mac_addr[byte];
-		for( i=0;i < 8; i++){
-			/*If the next bit form the input stream is 1,subtract				 the divisor (CRC32) from the dividend(crc).*/
-			if( (octet & 0x1) ^ (crc & 0x1) ){
-				crc >>= 1;
-				crc ^= CRC32;
-			}
-			else
-				crc >>= 1;
-
-			octet >>= 1;
-		}
-	}
-	return crc;
-}
 /*
 This function sets promiscuos mode, all-multi mode or the multicast address
 list to the device.
@@ -1556,7 +1526,7 @@ static void amd8111e_set_multicast_list(struct net_device *dev)
 	mc_filter[1] = mc_filter[0] = 0;
 	for (i = 0, mc_ptr = dev->mc_list; mc_ptr && i < dev->mc_count;
 		     i++, mc_ptr = mc_ptr->next) {
-		bit_num = ( amd8111e_ether_crc(ETH_ALEN,mc_ptr->dmi_addr)							 >> 26 ) & 0x3f;
+		bit_num = (ether_crc_le(ETH_ALEN, mc_ptr->dmi_addr) >> 26) & 0x3f;
 		mc_filter[bit_num >> 5] |= 1 << (bit_num & 31);
 	}
 	amd8111e_writeq(*(u64*)mc_filter,lp->mmio+ LADRF);
@@ -1758,16 +1728,8 @@ static void amd8111e_vlan_rx_register(struct net_device *dev, struct vlan_group 
 	lp->vlgrp = grp;
 	spin_unlock_irq(&lp->lock);
 }
-
-static void amd8111e_vlan_rx_kill_vid(struct net_device *dev, unsigned short vid)
-{
-	struct amd8111e_priv *lp = netdev_priv(dev);
-	spin_lock_irq(&lp->lock);
-	if (lp->vlgrp)
-		lp->vlgrp->vlan_devices[vid] = NULL;
-	spin_unlock_irq(&lp->lock);
-}
 #endif
+
 static int amd8111e_enable_magicpkt(struct amd8111e_priv* lp)
 {
 	writel( VAL1|MPPLBA, lp->mmio + CMD3);
@@ -2027,7 +1989,6 @@ static int __devinit amd8111e_probe_one(struct pci_dev *pdev,
 #if AMD8111E_VLAN_TAG_USED
 	dev->features |= NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX ;
 	dev->vlan_rx_register =amd8111e_vlan_rx_register;
-	dev->vlan_rx_kill_vid = amd8111e_vlan_rx_kill_vid;
 #endif
 
 	lp = netdev_priv(dev);
@@ -2080,7 +2041,6 @@ static int __devinit amd8111e_probe_one(struct pci_dev *pdev,
 #if AMD8111E_VLAN_TAG_USED
 	dev->features |= NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
 	dev->vlan_rx_register =amd8111e_vlan_rx_register;
-	dev->vlan_rx_kill_vid = amd8111e_vlan_rx_kill_vid;
 #endif
 	/* Probe the external PHY */
 	amd8111e_probe_ext_phy(dev);

@@ -156,7 +156,7 @@ static void guillemot_poll(struct gameport *gameport)
 
 static int guillemot_open(struct input_dev *dev)
 {
-	struct guillemot *guillemot = dev->private;
+	struct guillemot *guillemot = input_get_drvdata(dev);
 
 	gameport_start_polling(guillemot->gameport);
 	return 0;
@@ -168,7 +168,7 @@ static int guillemot_open(struct input_dev *dev)
 
 static void guillemot_close(struct input_dev *dev)
 {
-	struct guillemot *guillemot = dev->private;
+	struct guillemot *guillemot = input_get_drvdata(dev);
 
 	gameport_stop_polling(guillemot->gameport);
 }
@@ -231,8 +231,9 @@ static int guillemot_connect(struct gameport *gameport, struct gameport_driver *
 	input_dev->id.vendor = GAMEPORT_ID_VENDOR_GUILLEMOT;
 	input_dev->id.product = guillemot_type[i].id;
 	input_dev->id.version = (int)data[14] << 8 | data[15];
-	input_dev->cdev.dev = &gameport->dev;
-	input_dev->private = guillemot;
+	input_dev->dev.parent = &gameport->dev;
+
+	input_set_drvdata(input_dev, guillemot);
 
 	input_dev->open = guillemot_open;
 	input_dev->close = guillemot_close;
@@ -250,7 +251,9 @@ static int guillemot_connect(struct gameport *gameport, struct gameport_driver *
 	for (i = 0; (t = guillemot->type->btn[i]) >= 0; i++)
 		set_bit(t, input_dev->keybit);
 
-	input_register_device(guillemot->dev);
+	err = input_register_device(guillemot->dev);
+	if (err)
+		goto fail2;
 
 	return 0;
 

@@ -9,6 +9,9 @@
  *
  * based on a lot of other RTC drivers.
  *
+ * Information and datasheet:
+ * http://www.intersil.com/cda/deviceinfo/0,1477,X1205,00.html
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -26,7 +29,7 @@
  * Two bytes need to be written to read a single register,
  * while most other chips just require one and take the second
  * one as the data to be written. To prevent corrupting
- * unknown chips, the user must explicitely set the probe parameter.
+ * unknown chips, the user must explicitly set the probe parameter.
  */
 
 static unsigned short normal_i2c[] = { I2C_CLIENT_END };
@@ -372,7 +375,7 @@ static int x1205_validate_client(struct i2c_client *client)
 		};
 
 		if ((xfer = i2c_transfer(client->adapter, msgs, 2)) != 2) {
-			dev_err(&client->adapter->dev,
+			dev_err(&client->dev,
 				"%s: could not read register %x\n",
 				__FUNCTION__, probe_zero_pattern[i]);
 
@@ -380,7 +383,7 @@ static int x1205_validate_client(struct i2c_client *client)
 		}
 
 		if ((buf & probe_zero_pattern[i+1]) != 0) {
-			dev_err(&client->adapter->dev,
+			dev_err(&client->dev,
 				"%s: register=%02x, zero pattern=%d, value=%x\n",
 				__FUNCTION__, probe_zero_pattern[i], i, buf);
 
@@ -400,7 +403,7 @@ static int x1205_validate_client(struct i2c_client *client)
 		};
 
 		if ((xfer = i2c_transfer(client->adapter, msgs, 2)) != 2) {
-			dev_err(&client->adapter->dev,
+			dev_err(&client->dev,
 				"%s: could not read register %x\n",
 				__FUNCTION__, probe_limits_pattern[i].reg);
 
@@ -411,7 +414,7 @@ static int x1205_validate_client(struct i2c_client *client)
 
 		if (value > probe_limits_pattern[i].max ||
 			value < probe_limits_pattern[i].min) {
-			dev_dbg(&client->adapter->dev,
+			dev_dbg(&client->dev,
 				"%s: register=%x, lim pattern=%d, value=%d\n",
 				__FUNCTION__, probe_limits_pattern[i].reg,
 				i, value);
@@ -562,10 +565,18 @@ static int x1205_probe(struct i2c_adapter *adapter, int address, int kind)
 	else
 		dev_err(&client->dev, "couldn't read status\n");
 
-	device_create_file(&client->dev, &dev_attr_atrim);
-	device_create_file(&client->dev, &dev_attr_dtrim);
+	err = device_create_file(&client->dev, &dev_attr_atrim);
+	if (err) goto exit_devreg;
+	err = device_create_file(&client->dev, &dev_attr_dtrim);
+	if (err) goto exit_atrim;
 
 	return 0;
+
+exit_atrim:
+	device_remove_file(&client->dev, &dev_attr_atrim);
+
+exit_devreg:
+	rtc_device_unregister(rtc);
 
 exit_detach:
 	i2c_detach_client(client);

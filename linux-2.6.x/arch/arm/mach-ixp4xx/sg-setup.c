@@ -1,10 +1,10 @@
 /*
  * arch/arm/mach-ixp4xx/sg-setup.c
  *
- * SnapGear/Cyberguard board-setup 
+ * SnapGear/Cyberguard/SecureComputing board-setup 
  *
  * Copyright (C) 2003-2004 MontaVista Software, Inc.
- * Copyright (C) 2004-2006 Greg Ungerer <gerg@snapgear.com>
+ * Copyright (C) 2004-2007 Greg Ungerer <gerg@snapgear.com>
  *
  * Original Author: Deepak Saxena <dsaxena@mvista.com>
  */
@@ -95,8 +95,8 @@ static void __init sg_init(void)
 }
 
 #ifdef CONFIG_ARCH_SE4000
-MACHINE_START(SE4000, "SnapGear SE4000")
-	/* Maintainer: SnapGear Inc. */
+MACHINE_START(SE4000, "SnapGear/SE4000")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -108,8 +108,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG640) || defined(CONFIG_MACH_SGARMAUTO)
-MACHINE_START(SG640, "SecureComputing SG640")
-	/* Maintainer: Secure Computing Inc. */
+MACHINE_START(SG640, "SecureComputing/SG640")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -121,8 +121,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG560) || defined(CONFIG_MACH_SGARMAUTO)
-MACHINE_START(SG560, "CyberGuard SG560")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(SG560, "SecureComputing/SG560")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -134,8 +134,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG565) || defined(CONFIG_MACH_SGARMAUTO)
-MACHINE_START(SG565, "CyberGuard SG565")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(SG565, "SecureComputing/SG565")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -147,8 +147,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG580) || defined(CONFIG_MACH_SGARMAUTO)
-MACHINE_START(SG580, "CyberGuard SG580")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(SG580, "SecureComputing/SG580")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -160,8 +160,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG590) || defined(CONFIG_MACH_SGARMAUTO)
-MACHINE_START(SG590, "Secure Computing SG590")
-	/* Maintainer: Secure Computing Inc. */
+MACHINE_START(SG590, "SecureComputing/SG590")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -173,8 +173,8 @@ MACHINE_END
 #endif
 
 #ifdef CONFIG_MACH_SE5100
-MACHINE_START(SE5100, "CyberGuard SE5100")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(SE5100, "SecureComputing/SE5100")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -192,12 +192,7 @@ MACHINE_END
  *  128M that the hardware has.
  */
 
-static void __init
-ess710_fixup(
-	struct machine_desc *mdesc,
-	struct tag *tags,
-	char **cmdline,
-	struct meminfo *mi)
+static void __init ess710_fixup(struct machine_desc *mdesc, struct tag *tags, char **cmdline, struct meminfo *mi)
 {
 	struct tag *t = tags;
 
@@ -212,8 +207,8 @@ ess710_fixup(
 	}
 }
 
-MACHINE_START(ESS710, "CyberGuard SG710")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(ESS710, "SecureComputing/SG710")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -226,8 +221,8 @@ MACHINE_END
 #endif
 
 #if defined(CONFIG_MACH_SG720)
-MACHINE_START(SG720, "Secure Computing SG720")
-	/* Maintainer: Cyberguard Inc. */
+MACHINE_START(SG720, "SecureComputing/SG720")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,
@@ -239,8 +234,8 @@ MACHINE_END
 #endif
 
 #ifdef CONFIG_MACH_SG8100
-MACHINE_START(SG8100, "Secure Computing SG8100")
-	/* Maintainer: Secure Computing Inc. */
+MACHINE_START(SG8100, "SecureComputing/SG8100")
+	/* Maintainer: Secure Computing Corporation */
 	.phys_io	= IXP4XX_PERIPHERAL_BASE_PHYS,
 	.io_pg_offst	= ((IXP4XX_PERIPHERAL_BASE_VIRT) >> 18) & 0xfffc,
 	.map_io		= sg_map_io,

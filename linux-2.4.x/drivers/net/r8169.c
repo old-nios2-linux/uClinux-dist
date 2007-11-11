@@ -162,8 +162,8 @@ static int multicast_filter_limit = 32;
 
 #define R8169_REGS_SIZE		256
 #define R8169_NAPI_WEIGHT	64
-#define NUM_TX_DESC	64	/* Number of Tx descriptor registers */
-#define NUM_RX_DESC	256	/* Number of Rx descriptor registers */
+#define NUM_TX_DESC	256	/* Number of Tx descriptor registers */
+#define NUM_RX_DESC	1024	/* Number of Rx descriptor registers */
 #define RX_BUF_SIZE	1536	/* Rx Buffer size */
 #define R8169_TX_RING_BYTES	(NUM_TX_DESC * sizeof(struct TxDesc))
 #define R8169_RX_RING_BYTES	(NUM_RX_DESC * sizeof(struct RxDesc))
@@ -1702,11 +1702,6 @@ static int rtl8169_open(struct net_device *dev)
 
 	rtl8169_set_rxbufsize(tp, dev);
 
-	retval =
-	    request_irq(dev->irq, rtl8169_interrupt, SA_SHIRQ, dev->name, dev);
-	if (retval < 0)
-		goto out;
-
 	retval = -ENOMEM;
 
 	/*
@@ -1716,7 +1711,7 @@ static int rtl8169_open(struct net_device *dev)
 	tp->TxDescArray = pci_alloc_consistent(pdev, R8169_TX_RING_BYTES,
 					       &tp->TxPhyAddr);
 	if (!tp->TxDescArray)
-		goto err_free_irq;
+		goto out;
 
 	tp->RxDescArray = pci_alloc_consistent(pdev, R8169_RX_RING_BYTES,
 					       &tp->RxPhyAddr);
@@ -1727,6 +1722,11 @@ static int rtl8169_open(struct net_device *dev)
 	if (retval < 0)
 		goto err_free_rx;
 
+	retval =
+	    request_irq(dev->irq, rtl8169_interrupt, SA_SHIRQ, dev->name, dev);
+	if (retval < 0)
+		goto err_free_irq;
+
 	INIT_WORK(&tp->task, NULL, dev);
 
 	rtl8169_hw_start(dev);
@@ -1734,8 +1734,12 @@ static int rtl8169_open(struct net_device *dev)
 	rtl8169_request_timer(dev);
 
 	rtl8169_check_link_status(dev, tp, tp->mmio_addr);
+
 out:
 	return retval;
+
+err_free_irq:
+	free_irq(dev->irq, dev);
 
 err_free_rx:
 	pci_free_consistent(pdev, R8169_RX_RING_BYTES, tp->RxDescArray,
@@ -1743,8 +1747,6 @@ err_free_rx:
 err_free_tx:
 	pci_free_consistent(pdev, R8169_TX_RING_BYTES, tp->TxDescArray,
 			    tp->TxPhyAddr);
-err_free_irq:
-	free_irq(dev->irq, dev);
 	goto out;
 }
 

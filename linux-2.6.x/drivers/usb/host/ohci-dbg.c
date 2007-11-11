@@ -16,14 +16,14 @@
 	case PIPE_CONTROL:	temp = "ctrl"; break; \
 	case PIPE_BULK:		temp = "bulk"; break; \
 	case PIPE_INTERRUPT:	temp = "intr"; break; \
-	default: 		temp = "isoc"; break; \
+	default:		temp = "isoc"; break; \
 	}; temp;})
 #define pipestring(pipe) edstring(usb_pipetype(pipe))
 
 /* debug| print the main components of an URB
  * small: 0) header + data packets 1) just header
  */
-static void __attribute__((unused))
+static void __maybe_unused
 urb_print (struct urb * urb, char * str, int small)
 {
 	unsigned int pipe= urb->pipe;
@@ -74,7 +74,7 @@ urb_print (struct urb * urb, char * str, int small)
 
 #define ohci_dbg_sw(ohci, next, size, format, arg...) \
 	do { \
-	if (next) { \
+	if (next != NULL) { \
 		unsigned s_len; \
 		s_len = scnprintf (*next, *size, format, ## arg ); \
 		*size -= s_len; *next += s_len; \
@@ -205,13 +205,13 @@ ohci_dump_status (struct ohci_hcd *controller, char **next, unsigned *size)
 		(temp & RH_PS_PSSC) ? " PSSC" : "", \
 		(temp & RH_PS_PESC) ? " PESC" : "", \
 		(temp & RH_PS_CSC) ? " CSC" : "", \
- 		\
+		\
 		(temp & RH_PS_LSDA) ? " LSDA" : "", \
 		(temp & RH_PS_PPS) ? " PPS" : "", \
 		(temp & RH_PS_PRS) ? " PRS" : "", \
 		(temp & RH_PS_POCI) ? " POCI" : "", \
 		(temp & RH_PS_PSS) ? " PSS" : "", \
- 		\
+		\
 		(temp & RH_PS_PES) ? " PES" : "", \
 		(temp & RH_PS_CCS) ? " CCS" : "" \
 		);
@@ -338,7 +338,7 @@ static void ohci_dump_td (const struct ohci_hcd *ohci, const char *label,
 }
 
 /* caller MUST own hcd spinlock if verbose is set! */
-static void __attribute__((unused))
+static void __maybe_unused
 ohci_dump_ed (const struct ohci_hcd *ohci, const char *label,
 		const struct ed *ed, int verbose)
 {
@@ -505,7 +505,7 @@ show_periodic (struct class_device *class_dev, char *buf)
 	char			*next;
 	unsigned		i;
 
-	if (!(seen = kmalloc (DBG_SCHED_LIMIT * sizeof *seen, SLAB_ATOMIC)))
+	if (!(seen = kmalloc (DBG_SCHED_LIMIT * sizeof *seen, GFP_ATOMIC)))
 		return 0;
 	seen_count = 0;
 
@@ -563,7 +563,7 @@ show_periodic (struct class_device *class_dev, char *buf)
 					(info & ED_SKIP) ? " K" : "",
 					(ed->hwHeadP &
 						cpu_to_hc32(ohci, ED_H)) ?
- 							" H" : "");
+							" H" : "");
 				size -= temp;
 				next += temp;
 

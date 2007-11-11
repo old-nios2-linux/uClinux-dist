@@ -270,7 +270,8 @@ EOF
   -prefix | --prefix | --prefi | --pref | --pre | --pr | --p)
     ac_prev=prefix ;;
   -prefix=* | --prefix=* | --prefi=* | --pref=* | --pre=* | --pr=* | --p=*)
-    prefix="$ac_optarg" ;;
+    prefix="$ac_optarg"
+	echo "XXX $prefix XXX" ;;
 
   -program-prefix | --program-prefix | --program-prefi | --program-pref \
   | --program-pre | --program-pr | --program-p)
@@ -948,6 +949,8 @@ test "x$enable_gtk" = "x" && enable_gtk="yes"
 nessus_lib=-lnessus
 
 XPATH="$DESTDIR$prefix/bin:$PATH"
+
+echo "XXX XPATH=$XPATH XXX"
 	
 
 
@@ -2564,7 +2567,7 @@ if eval "test \"`echo '$''{'ac_cv_sizeof_unsigned_int'+set}'`\" = set"; then
   echo $ac_n "(cached) $ac_c" 1>&6
 else
   if test "$cross_compiling" = yes; then
-    { echo "configure: error: can not run test program while cross compiling" 1>&2; exit 1; }
+    { echo "configure: error: can not run test program while cross compiling" 1>&2; ac_cv_sizeof_unsigned_int=4; }
 else
   cat > conftest.$ac_ext <<EOF
 #line 2571 "configure"
@@ -2603,7 +2606,7 @@ if eval "test \"`echo '$''{'ac_cv_sizeof_unsigned_long'+set}'`\" = set"; then
   echo $ac_n "(cached) $ac_c" 1>&6
 else
   if test "$cross_compiling" = yes; then
-    { echo "configure: error: can not run test program while cross compiling" 1>&2; exit 1; }
+    { echo "configure: error: can not run test program while cross compiling" 1>&2; ac_cv_sizeof_unsigned_long=4; }
 else
   cat > conftest.$ac_ext <<EOF
 #line 2610 "configure"
@@ -2955,7 +2958,10 @@ test -z "$BROKEN_REGEXP" &&
 echo $ac_n "checking for a working regexp implementation""... $ac_c" 1>&6
 echo "configure:2957: checking for a working regexp implementation" >&5
 if test "$cross_compiling" = yes; then
-    { echo "configure: error: can not run test program while cross compiling" 1>&2; exit 1; }
+    { echo "configure: error: can not run test program while cross compiling" 1>&2; echo "$ac_t""yes" 1>&6;cat >> confdefs.h <<\EOF
+#define HAVE_REGEX_SUPPORT 1
+EOF
+	}
 else
   cat > conftest.$ac_ext <<EOF
 #line 2962 "configure"
@@ -5673,12 +5679,12 @@ CFLAGS="$saveCFLAGS"
 NESSUSD_CONFDIR='${sysconfdir}'
 NESSUSD_STATEDIR='${localstatedir}/nessus'
 NESSUSD_SHAREDSTATEDIR='${sharedstatedir}/nessus'
-NESSUSD_DATADIR='${sysconfdir}/nessus'
+NESSUSD_DATADIR='${datadir}/nessus'
 NESSUSD_LIBDIR='${libdir}/nessus'
 NESSUSD_LOGDIR='${localstatedir}/nessus/logs'
 
 NESSUSD_PLUGINS='${NESSUSD_LIBDIR}/plugins'
-NESSUSD_REPORTS='${NESSUSD_LIBDIR}/reports'
+NESSUSD_REPORTS='${NESSUSD_DATADIR}/reports'
 
  
 # The following directories are now passed into the compile

@@ -50,28 +50,29 @@ so, delete this exception statement from your version.  */
 #include "retr.h"
 
 struct progress_implementation {
-  char *name;
-  void *(*create) PARAMS ((long, long));
-  void (*update) PARAMS ((void *, long, double));
+  const char *name;
+  int interactive;
+  void *(*create) PARAMS ((wgint, wgint));
+  void (*update) PARAMS ((void *, wgint, double));
   void (*finish) PARAMS ((void *, double));
   void (*set_params) PARAMS ((const char *));
 };
 
 /* Necessary forward declarations. */
 
-static void *dot_create PARAMS ((long, long));
-static void dot_update PARAMS ((void *, long, double));
+static void *dot_create PARAMS ((wgint, wgint));
+static void dot_update PARAMS ((void *, wgint, double));
 static void dot_finish PARAMS ((void *, double));
 static void dot_set_params PARAMS ((const char *));
 
-static void *bar_create PARAMS ((long, long));
-static void bar_update PARAMS ((void *, long, double));
+static void *bar_create PARAMS ((wgint, wgint));
+static void bar_update PARAMS ((void *, wgint, double));
 static void bar_finish PARAMS ((void *, double));
 static void bar_set_params PARAMS ((const char *));
 
 static struct progress_implementation implementations[] = {
-  { "dot", dot_create, dot_update, dot_finish, dot_set_params },
-  { "bar", bar_create, bar_update, bar_finish, bar_set_params }
+  { "dot", 0, dot_create, dot_update, dot_finish, dot_set_params },
+  { "bar", 1, bar_create, bar_update, bar_finish, bar_set_params }
 };
 static struct progress_implementation *current_impl;
 static int current_impl_locked;
@@ -95,7 +96,7 @@ static int current_impl_locked;
 int
 valid_progress_implementation_p (const char *name)
 {
-  int i = 0;
+  int i;
   struct progress_implementation *pi = implementations;
   char *colon = strchr (name, ':');
   int namelen = colon ? colon - name : strlen (name);
@@ -155,7 +156,7 @@ progress_schedule_redirect (void)
    advance.  */
 
 void *
-progress_create (long initial, long total)
+progress_create (wgint initial, wgint total)
 {
   /* Check if the log status has changed under our feet. */
   if (output_redirected)
@@ -168,11 +169,22 @@ progress_create (long initial, long total)
   return current_impl->create (initial, total);
 }
 
+/* Return non-zero if the progress gauge is "interactive", i.e. if it
+   can profit from being called regularly even in absence of data.
+   The progress bar is interactive because it regularly updates the
+   ETA and current update.  */
+
+int
+progress_interactive_p (void *progress)
+{
+  return current_impl->interactive;
+}
+
 /* Inform the progress gauge of newly received bytes.  DLTIME is the
    time in milliseconds since the beginning of the download.  */
 
 void
-progress_update (void *progress, long howmuch, double dltime)
+progress_update (void *progress, wgint howmuch, double dltime)
 {
   current_impl->update (progress, howmuch, dltime);
 }
@@ -189,9 +201,9 @@ progress_finish (void *progress, double dltime)
 /* Dot-printing. */
 
 struct dot_progress {
-  long initial_length;		/* how many bytes have been downloaded
+  wgint initial_length;		/* how many bytes have been downloaded
 				   previously. */
-  long total_length;		/* expected total byte count when the
+  wgint total_length;		/* expected total byte count when the
 				   download finishes */
 
   int accumulated;
@@ -204,22 +216,19 @@ struct dot_progress {
 /* Dot-progress backend for progress_create. */
 
 static void *
-dot_create (long initial, long total)
+dot_create (wgint initial, wgint total)
 {
-  struct dot_progress *dp = xmalloc (sizeof (struct dot_progress));
-
-  memset (dp, 0, sizeof (*dp));
-
+  struct dot_progress *dp = xnew0 (struct dot_progress);
   dp->initial_length = initial;
   dp->total_length   = total;
 
   if (dp->initial_length)
     {
       int dot_bytes = opt.dot_bytes;
-      long row_bytes = opt.dot_bytes * opt.dots_in_line;
+      wgint row_bytes = opt.dot_bytes * opt.dots_in_line;
 
       int remainder = (int) (dp->initial_length % row_bytes);
-      long skipped = dp->initial_length - remainder;
+      wgint skipped = dp->initial_length - remainder;
 
       if (skipped)
 	{
@@ -235,7 +244,7 @@ dot_create (long initial, long total)
 		     2 + skipped_k_len, "", skipped_k);
 	}
 
-      logprintf (LOG_VERBOSE, "\n%5ldK", skipped / 1024);
+      logprintf (LOG_VERBOSE, "\n%5ldK", (long) (skipped / 1024));
       for (; remainder >= dot_bytes; remainder -= dot_bytes)
 	{
 	  if (dp->dots % opt.dot_spacing == 0)
@@ -253,14 +262,14 @@ dot_create (long initial, long total)
 }
 
 static void
-print_percentage (long bytes, long expected)
+print_percentage (wgint bytes, wgint expected)
 {
   int percentage = (int)(100.0 * bytes / expected);
   logprintf (LOG_VERBOSE, "%3d%%", percentage);
 }
 
 static void
-print_download_speed (struct dot_progress *dp, long bytes, double dltime)
+print_download_speed (struct dot_progress *dp, wgint bytes, double dltime)
 {
   logprintf (LOG_VERBOSE, " %s",
 	     retr_rate (bytes, dltime - dp->last_timer_value, 1));
@@ -270,11 +279,11 @@ print_download_speed (struct dot_progress *dp, long bytes, double dltime)
 /* Dot-progress backend for progress_update. */
 
 static void
-dot_update (void *progress, long howmuch, double dltime)
+dot_update (void *progress, wgint howmuch, double dltime)
 {
   struct dot_progress *dp = progress;
   int dot_bytes = opt.dot_bytes;
-  long row_bytes = opt.dot_bytes * opt.dots_in_line;
+  wgint row_bytes = opt.dot_bytes * opt.dots_in_line;
 
   log_set_flush (0);
 
@@ -282,7 +291,7 @@ dot_update (void *progress, long howmuch, double dltime)
   for (; dp->accumulated >= dot_bytes; dp->accumulated -= dot_bytes)
     {
       if (dp->dots == 0)
-	logprintf (LOG_VERBOSE, "\n%5ldK", dp->rows * row_bytes / 1024);
+	logprintf (LOG_VERBOSE, "\n%5ldK", (long) (dp->rows * row_bytes / 1024));
 
       if (dp->dots % opt.dot_spacing == 0)
 	logputs (LOG_VERBOSE, " ");
@@ -291,7 +300,7 @@ dot_update (void *progress, long howmuch, double dltime)
       ++dp->dots;
       if (dp->dots >= opt.dots_in_line)
 	{
-	  long row_qty = row_bytes;
+	  wgint row_qty = row_bytes;
 	  if (dp->rows == dp->initial_length / row_bytes)
 	    row_qty -= dp->initial_length % row_bytes;
 
@@ -314,13 +323,13 @@ dot_finish (void *progress, double dltime)
 {
   struct dot_progress *dp = progress;
   int dot_bytes = opt.dot_bytes;
-  long row_bytes = opt.dot_bytes * opt.dots_in_line;
+  wgint row_bytes = opt.dot_bytes * opt.dots_in_line;
   int i;
 
   log_set_flush (0);
 
   if (dp->dots == 0)
-    logprintf (LOG_VERBOSE, "\n%5ldK", dp->rows * row_bytes / 1024);
+    logprintf (LOG_VERBOSE, "\n%5ldK", (long) (dp->rows * row_bytes / 1024));
   for (i = dp->dots; i < opt.dots_in_line; i++)
     {
       if (i % opt.dot_spacing == 0)
@@ -336,7 +345,7 @@ dot_finish (void *progress, double dltime)
     }
 
   {
-    long row_qty = dp->dots * dot_bytes + dp->accumulated;
+    wgint row_qty = dp->dots * dot_bytes + dp->accumulated;
     if (dp->rows == dp->initial_length / row_bytes)
       row_qty -= dp->initial_length % row_bytes;
     print_download_speed (dp, row_qty, dltime);
@@ -411,7 +420,13 @@ dot_set_params (const char *params)
    create_image will overflow the buffer.  */
 #define MINIMUM_SCREEN_WIDTH 45
 
-static int screen_width = DEFAULT_SCREEN_WIDTH;
+/* The last known screen width.  This can be updated by the code that
+   detects that SIGWINCH was received (but it's never updated from the
+   signal handler).  */
+static int screen_width;
+
+/* A flag that, when set, means SIGWINCH was received.  */
+static volatile sig_atomic_t received_sigwinch;
 
 /* Size of the download speed history ring. */
 #define DLSPEED_HISTORY_SIZE 20
@@ -422,12 +437,17 @@ static int screen_width = DEFAULT_SCREEN_WIDTH;
    past.  */
 #define DLSPEED_SAMPLE_MIN 150
 
+/* The time after which the download starts to be considered
+   "stalled", i.e. the current bandwidth is not printed and the recent
+   download speeds are scratched.  */
+#define STALL_START_TIME 5000
+
 struct bar_progress {
-  long initial_length;		/* how many bytes have been downloaded
+  wgint initial_length;		/* how many bytes have been downloaded
 				   previously. */
-  long total_length;		/* expected total byte count when the
+  wgint total_length;		/* expected total byte count when the
 				   download finishes */
-  long count;			/* bytes downloaded so far */
+  wgint count;			/* bytes downloaded so far */
 
   double last_screen_update;	/* time of the last screen update,
 				   measured since the beginning of
@@ -450,36 +470,38 @@ struct bar_progress {
      details.  */
   struct bar_progress_hist {
     int pos;
-    long times[DLSPEED_HISTORY_SIZE];
-    long bytes[DLSPEED_HISTORY_SIZE];
+    wgint times[DLSPEED_HISTORY_SIZE];
+    wgint bytes[DLSPEED_HISTORY_SIZE];
 
     /* The sum of times and bytes respectively, maintained for
        efficiency. */
-    long total_time;
-    long total_bytes;
+    wgint total_time;
+    wgint total_bytes;
   } hist;
 
   double recent_start;		/* timestamp of beginning of current
 				   position. */
-  long recent_bytes;		/* bytes downloaded so far. */
+  wgint recent_bytes;		/* bytes downloaded so far. */
+
+  int stalled;			/* set when no data arrives for longer
+				   than STALL_START_TIME, then reset
+				   when new data arrives. */
 
   /* create_image() uses these to make sure that ETA information
-     doesn't flash. */
+     doesn't flicker. */
   double last_eta_time;		/* time of the last update to download
 				   speed and ETA, measured since the
 				   beginning of download. */
-  long last_eta_value;
+  wgint last_eta_value;
 };
 
 static void create_image PARAMS ((struct bar_progress *, double));
 static void display_image PARAMS ((char *));
 
 static void *
-bar_create (long initial, long total)
+bar_create (wgint initial, wgint total)
 {
-  struct bar_progress *bp = xmalloc (sizeof (struct bar_progress));
-
-  memset (bp, 0, sizeof (*bp));
+  struct bar_progress *bp = xnew0 (struct bar_progress);
 
   /* In theory, our callers should take care of this pathological
      case, but it can sometimes happen. */
@@ -489,6 +511,18 @@ bar_create (long initial, long total)
   bp->initial_length = initial;
   bp->total_length   = total;
 
+  /* Initialize screen_width if this hasn't been done or if it might
+     have changed, as indicated by receiving SIGWINCH.  */
+  if (!screen_width || received_sigwinch)
+    {
+      screen_width = determine_screen_width ();
+      if (!screen_width)
+	screen_width = DEFAULT_SCREEN_WIDTH;
+      else if (screen_width < MINIMUM_SCREEN_WIDTH)
+	screen_width = MINIMUM_SCREEN_WIDTH;
+      received_sigwinch = 0;
+    }
+
   /* - 1 because we don't want to use the last screen column. */
   bp->width = screen_width - 1;
   /* + 1 for the terminating zero. */
@@ -496,16 +530,16 @@ bar_create (long initial, long total)
 
   logputs (LOG_VERBOSE, "\n");
 
-  create_image (bp, 0);
+  create_image (bp, 0.0);
   display_image (bp->buffer);
 
   return bp;
 }
 
-static void update_speed_ring PARAMS ((struct bar_progress *, long, double));
+static void update_speed_ring PARAMS ((struct bar_progress *, wgint, double));
 
 static void
-bar_update (void *progress, long howmuch, double dltime)
+bar_update (void *progress, wgint howmuch, double dltime)
 {
   struct bar_progress *bp = progress;
   int force_screen_update = 0;
@@ -522,11 +556,23 @@ bar_update (void *progress, long howmuch, double dltime)
 
   update_speed_ring (bp, howmuch, dltime);
 
-  if (screen_width - 1 != bp->width)
+  /* If SIGWINCH (the window size change signal) been received,
+     determine the new screen size and update the screen.  */
+  if (received_sigwinch)
     {
-      bp->width = screen_width - 1;
-      bp->buffer = xrealloc (bp->buffer, bp->width + 1);
-      force_screen_update = 1;
+      int old_width = screen_width;
+      screen_width = determine_screen_width ();
+      if (!screen_width)
+	screen_width = DEFAULT_SCREEN_WIDTH;
+      else if (screen_width < MINIMUM_SCREEN_WIDTH)
+	screen_width = MINIMUM_SCREEN_WIDTH;
+      if (screen_width != old_width)
+	{
+	  bp->width = screen_width - 1;
+	  bp->buffer = xrealloc (bp->buffer, bp->width + 1);
+	  force_screen_update = 1;
+	}
+      received_sigwinch = 0;
     }
 
   if (dltime - bp->last_screen_update < 200 && !force_screen_update)
@@ -576,7 +622,7 @@ bar_finish (void *progress, double dltime)
    3-second average would be too erratic.  */
 
 static void
-update_speed_ring (struct bar_progress *bp, long howmuch, double dltime)
+update_speed_ring (struct bar_progress *bp, wgint howmuch, double dltime)
 {
   struct bar_progress_hist *hist = &bp->hist;
   double recent_age = dltime - bp->recent_start;
@@ -589,6 +635,38 @@ update_speed_ring (struct bar_progress *bp, long howmuch, double dltime)
      sample time, it will be recorded in the history ring.  */
   if (recent_age < DLSPEED_SAMPLE_MIN)
     return;
+
+  if (howmuch == 0)
+    {
+      /* If we're not downloading anything, we might be stalling,
+	 i.e. not downloading anything for an extended period of time.
+	 Since 0-reads do not enter the history ring, recent_age
+	 effectively measures the time since last read.  */
+      if (recent_age >= STALL_START_TIME)
+	{
+	  /* If we're stalling, reset the ring contents because it's
+	     stale and because it will make bar_update stop printing
+	     the (bogus) current bandwidth.  */
+	  bp->stalled = 1;
+	  xzero (*hist);
+	  bp->recent_bytes = 0;
+	}
+      return;
+    }
+
+  /* We now have a non-zero amount of to store to the speed ring.  */
+
+  /* If the stall status was acquired, reset it. */
+  if (bp->stalled)
+    {
+      bp->stalled = 0;
+      /* "recent_age" includes the the entired stalled period, which
+	 could be very long.  Don't update the speed ring with that
+	 value because the current bandwidth would start too small.
+	 Start with an arbitrary (but more reasonable) time value and
+	 let it level out.  */
+      recent_age = 1000;
+    }
 
   /* Store "recent" bytes and download time to history ring at the
      position POS.  */
@@ -641,9 +719,9 @@ static void
 create_image (struct bar_progress *bp, double dl_total_time)
 {
   char *p = bp->buffer;
-  long size = bp->initial_length + bp->count;
+  wgint size = bp->initial_length + bp->count;
 
-  char *size_legible = legible (size);
+  char *size_legible = with_thousand_seps (size);
   int size_legible_len = strlen (size_legible);
 
   struct bar_progress_hist *hist = &bp->hist;
@@ -750,17 +828,17 @@ create_image (struct bar_progress *bp, double dl_total_time)
     }
 
   /* " 234,567,890" */
-  sprintf (p, " %-11s", legible (size));
+  sprintf (p, " %-11s", size_legible);
   p += strlen (p);
 
   /* " 1012.45K/s" */
   if (hist->total_time && hist->total_bytes)
     {
-      static char *short_units[] = { "B/s", "K/s", "M/s", "G/s" };
+      static const char *short_units[] = { "B/s", "K/s", "M/s", "G/s" };
       int units = 0;
       /* Calculate the download speed using the history ring and
 	 recent data that hasn't made it to the ring yet.  */
-      long dlquant = hist->total_bytes + bp->recent_bytes;
+      wgint dlquant = hist->total_bytes + bp->recent_bytes;
       double dltime = hist->total_time + (dl_total_time - bp->recent_start);
       double dlspeed = calc_rate (dlquant, dltime, &units);
       sprintf (p, " %7.2f%s", dlspeed, short_units[units]);
@@ -772,9 +850,9 @@ create_image (struct bar_progress *bp, double dl_total_time)
   /* " ETA xx:xx:xx"; wait for three seconds before displaying the ETA.
      That's because the ETA value needs a while to become
      reliable.  */
-  if (bp->total_length > 0 && dl_total_time > 3000)
+  if (bp->total_length > 0 && bp->count > 0 && dl_total_time > 3000)
     {
-      long eta;
+      wgint eta;
       int eta_hrs, eta_min, eta_sec;
 
       /* Don't change the value of ETA more than approximately once
@@ -793,8 +871,8 @@ create_image (struct bar_progress *bp, double dl_total_time)
 	     I found that doing that results in a very jerky and
 	     ultimately unreliable ETA.  */
 	  double time_sofar = (double)dl_total_time / 1000;
-	  long bytes_remaining = bp->total_length - size;
-	  eta = (long) (time_sofar * bytes_remaining / bp->count);
+	  wgint bytes_remaining = bp->total_length - size;
+	  eta = (wgint) (time_sofar * bytes_remaining / bp->count);
 	  bp->last_eta_value = eta;
 	  bp->last_eta_time = dl_total_time;
 	}
@@ -849,7 +927,6 @@ display_image (char *buf)
 static void
 bar_set_params (const char *params)
 {
-  int sw;
   char *term = getenv ("TERM");
 
   if (params
@@ -862,8 +939,6 @@ bar_set_params (const char *params)
 	  TTY -- when logging to file, it is better to review the
 	  dots.  */
        || !isatty (fileno (stderr))
-#else
-       1
 #endif
        /* Normally we don't depend on terminal type because the
 	  progress bar only uses ^M to move the cursor to the
@@ -882,19 +957,13 @@ bar_set_params (const char *params)
       set_progress_implementation (FALLBACK_PROGRESS_IMPLEMENTATION);
       return;
     }
-
-  sw = determine_screen_width ();
-  if (sw && sw >= MINIMUM_SCREEN_WIDTH)
-    screen_width = sw;
 }
 
 #ifdef SIGWINCH
 RETSIGTYPE
 progress_handle_sigwinch (int sig)
 {
-  int sw = determine_screen_width ();
-  if (sw && sw >= MINIMUM_SCREEN_WIDTH)
-    screen_width = sw;
+  received_sigwinch = 1;
   signal (SIGWINCH, progress_handle_sigwinch);
 }
 #endif

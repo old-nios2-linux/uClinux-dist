@@ -17,12 +17,15 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #include <stdio.h>
 #include <string.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -39,8 +42,9 @@
 #include "vba_extract.h"
 #include "others.h"
 
-#define FALSE (0)
-#define TRUE (1)
+#ifndef	O_BINARY
+#define	O_BINARY	0
+#endif
 
 typedef struct vba_version_tag {
 	unsigned char signature[4];
@@ -52,38 +56,18 @@ typedef struct vba_version_tag {
 
 static uint16_t vba_endian_convert_16(uint16_t value, int is_mac)
 {
-	if (is_mac) {
-#if WORDS_BIGENDIAN == 0
-		return ((value >> 8) + (value << 8));
-#else
-		return value;
-#endif
-	} else {
-#if WORDS_BIGENDIAN == 0
-		return value;
-#else
-		return ((value >> 8) + (value << 8));
-#endif
-	}
+	if (is_mac)
+		return be16_to_host(value);
+	else
+		return le16_to_host(value);
 }
  
 static uint32_t vba_endian_convert_32(uint32_t value, int is_mac)
 {
-	if (is_mac) {
-#if WORDS_BIGENDIAN == 0
-		return ((value >> 24) | ((value & 0x00FF0000) >> 8) |
-		((value & 0x0000FF00) << 8) | (value << 24));
-#else
-		return value;
-#endif
-	} else {
-#if WORDS_BIGENDIAN == 0
-		return value;
-#else
-		return ((value >> 24) | ((value & 0x00FF0000) >> 8) |
-			((value & 0x0000FF00) << 8) | (value << 24));
-#endif
-	}
+	if (is_mac)
+		return be32_to_host(value);
+	else
+		return le32_to_host(value);
 }
 
 typedef struct byte_array_tag {
@@ -126,7 +110,7 @@ static char *get_unicode_name(char *name, int size, int is_mac)
                 return NULL;
         }
 
-        newname = (char *) cli_malloc(size*4);
+        newname = (char *) cli_malloc(size*7);
         if (!newname) {
                 return NULL;
         }
@@ -139,6 +123,15 @@ static char *get_unicode_name(char *name, int size, int is_mac)
                                 newname[j++] = '_';
                                 newname[j++] = name[i] + '0';
                         }
+			else {
+				const uint16_t x = (((uint16_t)name[i]) << 8) | name[i+1];
+				newname[j++] = '_';
+				newname[j++] = 'a'+((x&0xF));
+				newname[j++] = 'a'+((x>>4)&0xF);
+				newname[j++] = 'a'+((x>>8)&0xF);
+				newname[j++] = 'a'+((x>>16)&0xF);
+				newname[j++] = 'a'+((x>>24)&0xF);
+			}
                         newname[j++] = '_';
                 }
         }
@@ -178,8 +171,7 @@ static void vba56_test_middle(int fd)
 static int vba_read_project_strings(int fd, int is_mac)
 {
 	uint16_t length;
-	unsigned char *buff;
-	char *name;
+	unsigned char *buff, *name;
 	uint32_t offset;
 
 	for (;;) {
@@ -204,7 +196,7 @@ static int vba_read_project_strings(int fd, int is_mac)
 			free(buff);
 			break;
 		}
-		name = get_unicode_name((char *) buff, length, is_mac);
+		name = get_unicode_name(buff, length, is_mac);
 		if (name) {
 			cli_dbgmsg("name: %s\n", name);
 		} else {
@@ -287,7 +279,7 @@ vba_project_t *vba56_dir_read(const char *dir)
 		return NULL;
 	}
 	sprintf(fullname, "%s/_VBA_PROJECT", dir);
-        fd = open(fullname, O_RDONLY);
+        fd = open(fullname, O_RDONLY|O_BINARY);
 
         if (fd == -1) {
                 cli_dbgmsg("Can't open %s\n", fullname);
@@ -470,7 +462,7 @@ vba_project_t *vba56_dir_read(const char *dir)
 		close(fd);
 		return NULL;
 	}
-	vba_project->dir = strdup(dir);
+	vba_project->dir = cli_strdup(dir);
 	vba_project->offset = (uint32_t *) cli_malloc (sizeof(uint32_t) *
 					record_count);
 	if (!vba_project->offset) {
@@ -500,7 +492,7 @@ vba_project_t *vba56_dir_read(const char *dir)
 			free(buff);
 			goto out_error;
 		}
-		vba_project->name[i] = get_unicode_name((char *) buff, length, is_mac);
+		vba_project->name[i] = get_unicode_name(buff, length, is_mac);
 		if (!vba_project->name[i]) {
 			offset = lseek(fd, 0, SEEK_CUR);
 			vba_project->name[i] = (char *) cli_malloc(18);
@@ -690,11 +682,96 @@ unsigned char *vba_decompress(int fd, uint32_t offset, int *size)
 
 }
 
+static uint32_t ole_copy_file_data(int ifd, int ofd, uint32_t len)
+{
+        unsigned char data[8192];
+        unsigned int count, rem;
+        unsigned int todo;
+
+        rem = len;
+
+        while (rem > 0) {
+                todo = MIN(8192, rem);
+                count = cli_readn(ifd, data, todo);
+                if (count != todo) {
+                        return len-rem;
+                }
+                if (cli_writen(ofd, data, count) != count) {
+                        return len-rem-count;
+                }
+                rem -= count;
+        }
+        return len;
+}
+
+int cli_decode_ole_object(int fd, const char *dir)
+{
+	int ofd;
+	struct stat statbuf;
+	char ch, *fullname;
+	uint32_t object_size;
+
+	if (fstat(fd, &statbuf) == -1) {
+		return -1;
+	}
+	
+	if (cli_readn(fd, &object_size, 4) != 4) {
+		return -1;
+	}
+	object_size = vba_endian_convert_32(object_size, FALSE);
+
+	if ((statbuf.st_size -  object_size) >= 4) {
+		/* Probably the OLE type id */
+		if (lseek(fd, 2, SEEK_CUR) == -1) {
+			return -1;
+		}
+		
+		/* Skip attachment name */
+		do {
+			if (cli_readn(fd, &ch, 1) != 1) {
+				return -1;
+			}
+		} while (ch);
+		
+		/* Skip attachment full path */
+		do {
+			if (cli_readn(fd, &ch, 1) != 1) {
+				return -1;
+			}
+		} while (ch);
+		
+		/* Skip unknown data */
+		if (lseek(fd, 8, SEEK_CUR) == -1) {
+			return -1;
+		}
+		
+		/* Skip attachment full path */
+		do {
+			if (cli_readn(fd, &ch, 1) != 1) {
+				return -1;
+			}
+		} while (ch);
+		
+		if (cli_readn(fd, &object_size, 4) != 4) {
+			return -1;
+		}
+		object_size = vba_endian_convert_32(object_size, FALSE);
+	}
+	fullname = cli_malloc(strlen(dir) + 18);
+	sprintf(fullname, "%s/_clam_ole_object", dir);
+	ofd = open(fullname, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, 0600);
+	free(fullname);
+        if (ofd < 0) {
+		return -1;
+	}
+	ole_copy_file_data(fd, ofd, object_size);
+	lseek(ofd, 0, SEEK_SET);
+	return ofd;
+}
+
 /* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 /* Code to extract Power Point Embedded OLE2 Objects		     */
 /* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
-
-#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 
 typedef struct atom_header_tag {
 	off_t foffset;
@@ -752,7 +829,7 @@ static int ppt_unlzw(const char *dir, int fd, uint32_t length)
 	}
 	sprintf(fullname, "%s/ppt%.8lx.doc", dir, lseek(fd, 0, SEEK_CUR));
 	
-	ofd = open(fullname, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+	ofd = open(fullname, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0600);
 	free(fullname);
         if (ofd == -1) {
                 cli_dbgmsg("ppt_unlzw Open outfile failed\n");
@@ -884,7 +961,7 @@ char *ppt_vba_read(const char *dir)
 		return NULL;
 	}
 	sprintf(fullname, "%s/PowerPoint Document", dir);
-	fd = open(fullname, O_RDONLY);
+	fd = open(fullname, O_RDONLY|O_BINARY);
 	free(fullname);
 	if (fd == -1) {
 		cli_dbgmsg("Open  PowerPoint Document failed\n");
@@ -932,7 +1009,7 @@ typedef struct macro_info_tag {
 
 typedef struct macro_extname_tag {
 	uint8_t length;
-	char *extname;
+	unsigned char *extname;
 	uint16_t numref;
 } macro_extname_t;
 
@@ -949,7 +1026,7 @@ typedef struct macro_intnames_tag {
 typedef struct macro_intname_tag {
 	uint16_t id;
 	uint8_t length;
-	char *intname;
+	unsigned char *intname;
 } macro_intname_t;
 
 typedef struct menu_entry_tag {
@@ -1250,7 +1327,7 @@ static macro_extnames_t *wm_read_macro_extnames(int fd)
 	off_t offset_end;	
 	macro_extnames_t *macro_extnames;
 	macro_extname_t *macro_extname;
-	char *name_tmp;
+	unsigned char *name_tmp;
 	
 	macro_extnames = (macro_extnames_t *) cli_malloc(sizeof(macro_extnames_t));
 	if (!macro_extnames) {
@@ -1281,7 +1358,7 @@ static macro_extnames_t *wm_read_macro_extnames(int fd)
 	while (lseek(fd, 0, SEEK_CUR) < offset_end) {
 		macro_extnames->count++;
 		macro_extnames->macro_extname = (macro_extname_t *)
-			cli_realloc(macro_extnames->macro_extname,
+			cli_realloc2(macro_extnames->macro_extname,
 				sizeof(macro_extname_t) * macro_extnames->count);
 		if (macro_extnames->macro_extname == NULL) {
 			cli_dbgmsg("read macro_extnames failed\n");
@@ -1310,7 +1387,7 @@ static macro_extnames_t *wm_read_macro_extnames(int fd)
 				get_unicode_name(name_tmp, macro_extname->length*2, FALSE);
 			    free(name_tmp);
 			} else {
-			    macro_extname->extname = strdup("[no name]");
+			    macro_extname->extname = cli_strdup("[no name]");
 			    macro_extname->length = 10;
 			}
 		} else {
@@ -1331,7 +1408,7 @@ static macro_extnames_t *wm_read_macro_extnames(int fd)
 			    }
 			    macro_extname->extname[macro_extname->length] = '\0';
 			} else {
-			    macro_extname->extname = strdup("[no name]");
+			    macro_extname->extname = cli_strdup("[no name]");
 			    macro_extname->length = 10;
 			}
 		}
@@ -1467,7 +1544,7 @@ vba_project_t *wm_dir_read(const char *dir)
 		return NULL;
 	}
 	sprintf(fullname, "%s/WordDocument", dir);
-	fd = open(fullname, O_RDONLY);
+	fd = open(fullname, O_RDONLY|O_BINARY);
 	free(fullname);
 	if (fd == -1) {
 		cli_dbgmsg("Open WordDocument failed\n");
@@ -1558,7 +1635,7 @@ vba_project_t *wm_dir_read(const char *dir)
 			vba_project = NULL;
 			goto abort;
 		}
-		vba_project->dir = strdup(dir);
+		vba_project->dir = cli_strdup(dir);
 		vba_project->offset = (uint32_t *) cli_malloc(sizeof(uint32_t) *
 					macro_info->count);
 		if (!vba_project->offset) {
@@ -1591,7 +1668,7 @@ vba_project_t *wm_dir_read(const char *dir)
 		}
 		vba_project->count = macro_info->count;
 		for (i=0 ; i < macro_info->count ; i++) {
-			vba_project->name[i] = strdup("WordDocument");
+			vba_project->name[i] = cli_strdup("WordDocument");
 			vba_project->offset[i] = macro_info->macro_entry[i].offset;
 			vba_project->length[i] = macro_info->macro_entry[i].len;
 			vba_project->key[i] = macro_info->macro_entry[i].key;

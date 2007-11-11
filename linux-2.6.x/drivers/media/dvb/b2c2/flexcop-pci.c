@@ -63,7 +63,7 @@ struct flexcop_pci {
 
 	unsigned long last_irq;
 
-	struct work_struct irq_check_work;
+	struct delayed_work irq_check_work;
 
 	struct flexcop_device *fc_dev;
 };
@@ -97,9 +97,10 @@ static int flexcop_pci_write_ibi_reg(struct flexcop_device *fc, flexcop_ibi_regi
 	return 0;
 }
 
-static void flexcop_pci_irq_check_work(void *data)
+static void flexcop_pci_irq_check_work(struct work_struct *work)
 {
-	struct flexcop_pci *fc_pci = data;
+	struct flexcop_pci *fc_pci =
+		container_of(work, struct flexcop_pci, irq_check_work.work);
 	struct flexcop_device *fc = fc_pci->fc_dev;
 
 	flexcop_ibi_value v = fc->read_ibi_reg(fc,sram_dest_reg_714);
@@ -126,10 +127,11 @@ static irqreturn_t flexcop_pci_isr(int irq, void *dev_id)
 {
 	struct flexcop_pci *fc_pci = dev_id;
 	struct flexcop_device *fc = fc_pci->fc_dev;
+	unsigned long flags;
 	flexcop_ibi_value v;
 	irqreturn_t ret = IRQ_HANDLED;
 
-	spin_lock_irq(&fc_pci->irq_lock);
+	spin_lock_irqsave(&fc_pci->irq_lock,flags);
 
 	v = fc->read_ibi_reg(fc,irq_20c);
 
@@ -193,7 +195,7 @@ static irqreturn_t flexcop_pci_isr(int irq, void *dev_id)
 		ret = IRQ_NONE;
 	}
 
-	spin_unlock_irq(&fc_pci->irq_lock);
+	spin_unlock_irqrestore(&fc_pci->irq_lock,flags);
 
 	return ret;
 }
@@ -292,12 +294,12 @@ static int flexcop_pci_init(struct flexcop_pci *fc_pci)
 	}
 
 	pci_set_drvdata(fc_pci->pdev, fc_pci);
-
+	spin_lock_init(&fc_pci->irq_lock);
 	if ((ret = request_irq(fc_pci->pdev->irq, flexcop_pci_isr,
 					IRQF_SHARED, DRIVER_NAME, fc_pci)) != 0)
 		goto err_pci_iounmap;
 
-	spin_lock_init(&fc_pci->irq_lock);
+
 
 	fc_pci->init_state |= FC_PCI_INIT;
 	return ret;
@@ -371,7 +373,7 @@ static int flexcop_pci_probe(struct pci_dev *pdev, const struct pci_device_id *e
 	if ((ret = flexcop_pci_dma_init(fc_pci)) != 0)
 		goto err_fc_exit;
 
-	INIT_WORK(&fc_pci->irq_check_work, flexcop_pci_irq_check_work, fc_pci);
+	INIT_DELAYED_WORK(&fc_pci->irq_check_work, flexcop_pci_irq_check_work);
 
 	return ret;
 

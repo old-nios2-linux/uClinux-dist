@@ -1,9 +1,9 @@
 /* 
- * $Id: parse_param.h,v 1.7 2003/04/10 12:38:18 janakj Exp $
+ * $Id: parse_param.h,v 1.11 2004/09/01 11:56:59 janakj Exp $
  *
  * Generic Parameter Parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -47,10 +47,12 @@ typedef enum ptype {
 	P_Q,         /* Contact: q parameter */
 	P_EXPIRES,   /* Contact: expires parameter */
 	P_METHOD,    /* Contact: method parameter */
+	P_RECEIVED,  /* Contact: received parameter */
 	P_TRANSPORT, /* URI: transport parameter */
 	P_LR,        /* URI: lr parameter */
 	P_R2,        /* URI: r2 parameter (ser specific) */
-	P_MADDR      /* URI: maddr parameter */
+	P_MADDR,     /* URI: maddr parameter */
+	P_TTL,       /* URI: ttl parameter */
 } ptype_t;
 
 
@@ -71,7 +73,7 @@ typedef struct param {
 	ptype_t type;         /* Type of the parameter */
 	str name;             /* Parameter name */
 	str body;             /* Parameter body */
-	int len;              /* Total lenght of the parameter including = and quotes */
+	int len;              /* Total length of the parameter including = and quotes */
 	struct param* next;   /* Next parameter in the list */
 } param_t;
 
@@ -80,9 +82,10 @@ typedef struct param {
  * Hooks to well known parameters for contact class of parameters
  */
 struct contact_hooks {
-	struct param* expires; /* expires parameter */
-	struct param* q;       /* q parameter */
-	struct param* method;  /* method parameter */
+	struct param* expires;  /* expires parameter */
+	struct param* q;        /* q parameter */
+	struct param* method;   /* method parameter */
+	struct param* received; /* received parameter */
 };
 
 
@@ -94,6 +97,7 @@ struct uri_hooks {
 	struct param* lr;        /* lr parameter */
 	struct param* r2;        /* r2 parameter */
 	struct param* maddr;     /* maddr parameter */
+	struct param* ttl;       /* ttl parameter */
 };
 
 

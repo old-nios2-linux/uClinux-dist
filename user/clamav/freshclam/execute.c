@@ -1,5 +1,5 @@
 /*
- *  By Per Jessen <per@computer.org>
+ *  By Per Jessen <per@computer.org> with changes by the ClamAV team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #if HAVE_CONFIG_H
@@ -22,36 +23,53 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <errno.h>
+#ifdef	C_WINDOWS
+#include <process.h>
+#endif
 
-#include "defaults.h"
-#include "freshclam.h"
-#include "output.h"
+#include "shared/output.h"
+#include "execute.h"
+
+#define MAX_CHILDREN 5
 
 int active_children;
 
 void execute( const char *type, const char *text )
 {
+#ifdef        C_WINDOWS
+	if(active_children < MAX_CHILDREN) {
+		if(spawnlp(P_DETACH, text, text, NULL) == -1) {
+			logg("^%s: couldn't execute \"%s\".\n", type, text);
+			return;
+		}
+		active_children++;	/* FIXME: this is never reduced */
+	} else
+		logg("^%s: already %d processes active.\n", type, active_children);
+#else
 	pid_t pid;
 
-	if ( active_children<CL_MAX_CHILDREN )
+	if ( active_children<MAX_CHILDREN )
 	switch( pid=fork() ) {
 	case 0:
 		if ( -1==system(text) )
 		{
-		mprintf("@%s: couldn't execute \"%s\".\n", type, text);
+		logg("^%s: couldn't execute \"%s\".\n", type, text);
 		}
 		exit(0);
 	case -1:
-		mprintf("@%s::fork() failed, %s.\n", type, strerror(errno));
+		logg("^%s::fork() failed, %s.\n", type, strerror(errno));
 		break;
 	default:
 		active_children++;
 	}
 	else
 	{
-		mprintf("@%s: already %d processes active.\n", type, active_children);
+		logg("^%s: already %d processes active.\n", type, active_children);
 	}
+#endif
 }

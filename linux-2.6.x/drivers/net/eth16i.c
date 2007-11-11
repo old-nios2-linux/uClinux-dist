@@ -1175,7 +1175,6 @@ static void eth16i_rx(struct net_device *dev)
 				break;
 			}
 
-			skb->dev = dev;
 			skb_reserve(skb,2);
 
 			/*
@@ -1475,7 +1474,7 @@ int __init init_module(void)
 	return -ENXIO;
 }
 
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	int this_dev;
 

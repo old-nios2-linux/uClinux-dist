@@ -145,6 +145,9 @@ void PrintNetData(FILE * fp, u_char * start, const int len)
         AllocDumpBuf();
     }
 
+    if (data_dump_buffer == NULL)
+        FatalError("Failed allocating %X bytes to data_dump_buffer!\n", data_dump_buffer_size);
+
     /* clean it out */
     memset(data_dump_buffer, 0x20, dbuf_size);
 
@@ -165,7 +168,9 @@ void PrintNetData(FILE * fp, u_char * start, const int len)
         {
             d_ptr = frame_ptr + 8;
             c_ptr = (frame_ptr + 8 + C_OFFSET);
-            sprintf(frame_ptr, "0x%04X: ", j);
+            SnortSnprintf(frame_ptr,
+                          (data_dump_buffer + data_dump_buffer_size) - frame_ptr,
+                          "0x%04X: ", j);
             j += 16;
         }
         else
@@ -285,6 +290,9 @@ void PrintCharData(FILE * fp, char *data, int data_len)
         /* Reallocate for a bigger size. */
         AllocDumpBuf();
     }
+
+    if (data_dump_buffer == NULL)
+        FatalError("Failed allocating %X bytes to data_dump_buffer!\n", data_dump_buffer_size);
 
     /* clean it out */
     memset(data_dump_buffer, 0x20, size);
@@ -454,7 +462,7 @@ FILE *OpenAlertFile(char *filearg)
     FILE *file;
     char suffix[5];     /* filename suffix */
 #ifdef WIN32
-    strcpy(suffix,".ids");
+    SnortStrncpy(suffix, ".ids", sizeof(suffix));
 #else
     suffix[0] = '\0';
 #endif
@@ -462,14 +470,14 @@ FILE *OpenAlertFile(char *filearg)
     if(filearg == NULL)
     {
         if(!pv.daemon_flag)
-            snprintf(filename, STD_BUF, "%s/alert%s", pv.log_dir, suffix);
+            SnortSnprintf(filename, STD_BUF, "%s/alert%s", pv.log_dir, suffix);
         else
-            snprintf(filename, STD_BUF, "%s/%s", pv.log_dir, 
+            SnortSnprintf(filename, STD_BUF, "%s/%s", pv.log_dir, 
                     DEFAULT_DAEMON_ALERT_FILE);
     }
     else
     {
-        snprintf(filename, STD_BUF, "%s", filearg);
+        SnortSnprintf(filename, STD_BUF, "%s", filearg);
     }
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT,"Opening alert file: %s\n", filename););
@@ -1600,11 +1608,11 @@ void PrintTcpOptions(FILE * fp, Packet * p)
 
             case TCPOPT_SACK:
                 bzero((char *) tmp, 5);
-                if (p->tcp_options[i].data)
+                if (p->tcp_options[i].data && (p->tcp_options[i].len >= 2))
                     memcpy(tmp, p->tcp_options[i].data, 2);
                 fprintf(fp, "Sack: %u@", EXTRACT_16BITS(tmp));
                 bzero((char *) tmp, 5);
-                if (p->tcp_options[i].data)
+                if (p->tcp_options[i].data && (p->tcp_options[i].len >= 4))
                     memcpy(tmp, (p->tcp_options[i].data) + 2, 2);
                 fprintf(fp, "%u ", EXTRACT_16BITS(tmp));
                 break;
@@ -1929,7 +1937,7 @@ void PrintWifiHeader(FILE * fp, Packet * p)
     fprintf(fp, "%X:%X:%X:%X:%X:%X -> ", sa[0],
         sa[1], sa[2], sa[3], sa[4], sa[5]);
   }
-  else {
+  else if (ta != NULL) {
     fprintf(fp, "ta: %X:%X:%X:%X:%X:%X da: ", ta[0],
         ta[1], ta[2], ta[3], ta[4], ta[5]);
   } 

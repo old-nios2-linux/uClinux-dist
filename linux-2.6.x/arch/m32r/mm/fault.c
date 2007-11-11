@@ -18,7 +18,6 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/tty.h>
@@ -48,32 +47,6 @@ unsigned int tlb_entry_d_dat[NR_CPUS];
 #endif
 
 extern void init_tlb(void);
-
-/*
- * Unlock any spinlocks which will prevent us from getting the
- * message out
- */
-void bust_spinlocks(int yes)
-{
-	int loglevel_save = console_loglevel;
-
-	if (yes) {
-		oops_in_progress = 1;
-		return;
-	}
-#ifdef CONFIG_VT
-	unblank_screen();
-#endif
-	oops_in_progress = 0;
-	/*
-	 * OK, the message is on the console.  Now we call printk()
-	 * without oops_in_progress set so that printk will give klogd
-	 * a poke.  Hold onto your hats...
-	 */
-	console_loglevel = 15;		/* NMI oopser may have shut the console up */
-	printk(" ");
-	console_loglevel = loglevel_save;
-}
 
 /*======================================================================*
  * do_page_fault()
@@ -107,6 +80,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	struct vm_area_struct * vma;
 	unsigned long page, addr;
 	int write;
+	int fault;
 	siginfo_t info;
 
 	/*
@@ -173,7 +147,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code,
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-#if 0
+
 	if (error_code & ACE_USERMODE) {
 		/*
 		 * accessing the stack below "spu" is always a bug.
@@ -184,7 +158,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code,
 		if (address + 4 < regs->spu)
 			goto bad_area;
 	}
-#endif
+
 	if (expand_stack(vma, address))
 		goto bad_area;
 /*
@@ -222,20 +196,18 @@ survive:
 	 */
 	addr = (address & PAGE_MASK);
 	set_thread_fault_code(error_code);
-	switch (handle_mm_fault(mm, vma, addr, write)) {
-		case VM_FAULT_MINOR:
-			tsk->min_flt++;
-			break;
-		case VM_FAULT_MAJOR:
-			tsk->maj_flt++;
-			break;
-		case VM_FAULT_SIGBUS:
-			goto do_sigbus;
-		case VM_FAULT_OOM:
+	fault = handle_mm_fault(mm, vma, addr, write);
+	if (unlikely(fault & VM_FAULT_ERROR)) {
+		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;
-		default:
-			BUG();
+		else if (fault & VM_FAULT_SIGBUS)
+			goto do_sigbus;
+		BUG();
 	}
+	if (fault & VM_FAULT_MAJOR)
+		tsk->maj_flt++;
+	else
+		tsk->min_flt++;
 	set_thread_fault_code(0);
 	up_read(&mm->mmap_sem);
 	return;
@@ -362,8 +334,10 @@ vmalloc_fault:
 		if (!pte_present(*pte_k))
 			goto no_context;
 
-		addr = (address & PAGE_MASK) | (error_code & ACE_INSTRUCTION);
+		addr = (address & PAGE_MASK);
+		set_thread_fault_code(error_code);
 		update_mmu_cache(NULL, addr, *pte_k);
+		set_thread_fault_code(0);
 		return;
 	}
 }
@@ -377,7 +351,7 @@ vmalloc_fault:
 void update_mmu_cache(struct vm_area_struct *vma, unsigned long vaddr,
 	pte_t pte)
 {
-	unsigned long *entry1, *entry2;
+	volatile unsigned long *entry1, *entry2;
 	unsigned long pte_data, flags;
 	unsigned int *entry_dat;
 	int inst = get_thread_fault_code() & ACE_INSTRUCTION;
@@ -391,30 +365,26 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long vaddr,
 
 	vaddr = (vaddr & PAGE_MASK) | get_asid();
 
-#ifdef CONFIG_CHIP_OPSP
-	entry1 = (unsigned long *)ITLB_BASE;
-	for(i = 0 ; i < NR_TLB_ENTRIES; i++) {
-	        if(*entry1++ == vaddr) {
-	                pte_data = pte_val(pte);
-	                set_tlb_data(entry1, pte_data);
-	                break;
-	        }
-	        entry1++;
-	}
-	entry2 = (unsigned long *)DTLB_BASE;
-	for(i = 0 ; i < NR_TLB_ENTRIES ; i++) {
-	        if(*entry2++ == vaddr) {
-	                pte_data = pte_val(pte);
-	                set_tlb_data(entry2, pte_data);
-	                break;
-	        }
-	        entry2++;
-	}
-	local_irq_restore(flags);
-	return;
-#else
 	pte_data = pte_val(pte);
 
+#ifdef CONFIG_CHIP_OPSP
+	entry1 = (unsigned long *)ITLB_BASE;
+	for (i = 0; i < NR_TLB_ENTRIES; i++) {
+		if (*entry1++ == vaddr) {
+			set_tlb_data(entry1, pte_data);
+			break;
+		}
+		entry1++;
+	}
+	entry2 = (unsigned long *)DTLB_BASE;
+	for (i = 0; i < NR_TLB_ENTRIES; i++) {
+		if (*entry2++ == vaddr) {
+			set_tlb_data(entry2, pte_data);
+			break;
+		}
+		entry2++;
+	}
+#else
 	/*
 	 * Update TLB entries
 	 *  entry1: ITLB entry address
@@ -439,6 +409,7 @@ void update_mmu_cache(struct vm_area_struct *vma, unsigned long vaddr,
 		"i" (MSVA_offset), "i" (MTOP_offset), "i" (MIDXI_offset)
 		: "r4", "memory"
 	);
+#endif
 
 	if ((!inst && entry2 >= DTLB_END) || (inst && entry1 >= ITLB_END))
 		goto notfound;
@@ -482,7 +453,6 @@ notfound:
 	set_tlb_data(entry1, pte_data);
 
 	goto found;
-#endif
 }
 
 /*======================================================================*

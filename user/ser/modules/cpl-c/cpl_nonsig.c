@@ -1,7 +1,7 @@
 /*
- * $Id: cpl_nonsig.c,v 1.4.4.2 2004/02/03 10:28:28 bogdan Exp $
+ * $Id: cpl_nonsig.c,v 1.8 2004/08/24 08:58:26 janakj Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -126,7 +126,7 @@ static inline void write_log( struct cpl_cmd *cmd)
 		LOG(L_ERR,"ERROR:cpl_c:write_log: writing to log file [%s] : %s\n",
 			file, strerror(errno) );
 	}
-	close( fd );
+	close (fd);
 
 	shm_free( cmd->s1.s );
 }
@@ -145,7 +145,7 @@ static inline void send_mail( struct cpl_cmd *cmd)
 		return;
 	}
 
-	/* even if I haven't fork yet, I push the date on the pipe juat to get
+	/* even if I haven't fork yet, I push the date on the pipe just to get
 	 * rid of one more malloc + copy */
 	if (cmd->s3.len && cmd->s3.s) {
 		if ( (i=write( pfd[1], cmd->s3.s, cmd->s3.len ))!=cmd->s3.len ) {
@@ -249,10 +249,10 @@ void cpl_aux_process( int cmd_out, char *log_dir)
 		len = read( cmd_out, &cmd, sizeof(struct cpl_cmd));
 		if (len!=sizeof(struct cpl_cmd)) {
 			if (len>=0) {
-				LOG(L_ERR,"ERROR:cpl_aux_proceress: truncated message"
-					" read from pipe! -> discarted\n");
+				LOG(L_ERR,"ERROR:cpl_aux_processes: truncated message"
+					" read from pipe! -> discarded\n");
 			} else if (errno!=EAGAIN) {
-				LOG(L_ERR,"ERROR:cpl_aux_proceress: pipe reading failed: "
+				LOG(L_ERR,"ERROR:cpl_aux_process: pipe reading failed: "
 					" : %s\n",strerror(errno));
 			}
 			sleep(1);
@@ -268,8 +268,8 @@ void cpl_aux_process( int cmd_out, char *log_dir)
 				send_mail( &cmd );
 				break;
 			default:
-				LOG(L_ERR,"ERROR:cpl_aux_proceress: unknown command (%d) "
-					"recived! -> ignoring\n",cmd.code);
+				LOG(L_ERR,"ERROR:cpl_aux_process: unknown command (%d) "
+					"received! -> ignoring\n",cmd.code);
 		} /* end switch*/
 
 	}

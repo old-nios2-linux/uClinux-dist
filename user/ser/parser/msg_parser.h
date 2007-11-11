@@ -1,7 +1,7 @@
 /*
- * $Id: msg_parser.h,v 1.37.2.1.2.2 2004/05/03 16:30:01 dcm Exp $
+ * $Id: msg_parser.h,v 1.49 2004/12/03 17:11:36 jamey Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -35,6 +35,8 @@
  *  2003-04-04  structure for parsed inbound uri added (jiri)
  *  2003-04-11  updated the  sip_uri structure (lots of fields added) (andrei)
  *  2003-04-12  added msg_flags to sip_msg (andrei)
+ *  2003-11-02  added diversion header field to sip_msg (jh)
+ *  2004-11-08  added force_send_socket (andrei)
  */
 
 
@@ -66,8 +68,10 @@
 enum request_method { METHOD_UNDEF=0, METHOD_INVITE=1, METHOD_CANCEL=2, METHOD_ACK=4, 
 	METHOD_BYE=8, METHOD_OTHER=16 };
 
-#define FL_FORCE_RPORT 1 /* force rport */
-#define FL_FORCE_ACTIVE 2 /* force active SDP */
+#define FL_FORCE_RPORT 1   /* force rport */
+#define FL_FORCE_ACTIVE 2  /* force active SDP */
+#define FL_SDP_IP_AFS 4    /* SDP IP rewritten */
+#define FL_SDP_PORT_AFS 8  /* SDP port rewritten */
 
 
 #define IFISMETHOD(methodname,firstchar)                                  \
@@ -155,7 +159,7 @@ struct sip_msg {
 	int parsed_flag;               /* Already parsed header field types */
 
 	     /* Via, To, CSeq, Call-Id, From, end of header*/
-	     /* pointers to the first occurances of these headers;
+	     /* pointers to the first occurrences of these headers;
 		  * everything is also saved in 'headers'
 		  * (WARNING: do not deallocate them twice!)*/
 
@@ -187,13 +191,15 @@ struct sip_msg {
 	struct hdr_field* user_agent;
 	struct hdr_field* content_disposition;
 	struct hdr_field* accept_disposition;
+	struct hdr_field* diversion;
+	struct hdr_field* rpid;
 
 	char* eoh;        /* pointer to the end of header (if found) or null */
 	char* unparsed;   /* here we stopped parsing*/
 	
 	struct receive_info rcv; /* source & dest ip, ports, proto a.s.o*/
 
-	char* buf;        /* scratch pad, holds a modfied message,
+	char* buf;        /* scratch pad, holds a modified message,
 					   *  via, etc. point into it */
 	unsigned int len; /* message len (orig) */
 
@@ -222,7 +228,7 @@ struct sip_msg {
 	char add_to_branch_s[MAX_BRANCH_PARAM_LEN];
 	int add_to_branch_len;
 	
-	     /* index to TM hash table; stored in core to avoid unnecessary calcs */
+	     /* index to TM hash table; stored in core to avoid unnecessary calculations */
 	unsigned int  hash_index;
 	unsigned int msg_flags; /* flags used by core */
 	     /* allows to set various flags on the message; may be used for 
@@ -232,6 +238,8 @@ struct sip_msg {
 	flag_t flags;	
 	str set_global_address;
 	str set_global_port;
+	struct socket_info* force_send_socket; /* force sending on this socket,
+											  if ser */
 };
 
 /* pointer to a fakes message which was never received ;
@@ -313,5 +321,12 @@ inline static char* get_body(struct sip_msg *msg)
 
 	return msg->unparsed + offset;
 }
+
+
+/*
+ * Make a private copy of the string and assign it to dst_uri
+ */
+int set_dst_uri(struct sip_msg* msg, str* uri);
+
 
 #endif

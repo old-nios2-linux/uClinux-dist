@@ -1,9 +1,9 @@
 /* 
- * $Id: authrad_mod.c,v 1.12.6.1 2004/07/18 22:56:23 sobomax Exp $ 
+ * $Id: authrad_mod.c,v 1.16.2.4 2005/06/17 11:25:43 janakj Exp $ 
  *
  * Digest Authentication - Radius support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,7 +44,13 @@
 #include "../../mem/mem.h"
 #include "authrad_mod.h"
 #include "authorize.h"
-#include <radiusclient.h>
+
+#ifdef RADIUSCLIENT_NG_4
+#  include <radiusclient.h>
+# else
+#  include <radiusclient-ng.h>
+#endif
+
 #include "../../modules/acc/dict.h"
 
 MODULE_VERSION
@@ -55,7 +61,6 @@ post_auth_f post_auth_func = 0; /* Post authorization function from auth module 
 struct attr attrs[A_MAX];
 struct val vals[V_MAX];
 void *rh;
-int ciscopec;
 
 static int mod_init(void);                        /* Module initialization function */
 static int str_fixup(void** param, int param_no); /* char* -> str* */
@@ -146,10 +151,7 @@ static int mod_init(void)
 	if (vend == NULL) {
 		DBG("auth_radius: No `Cisco' vendor in Radius "
 			   "dictionary\n");
-		ciscopec = -1;
 		attrs[A_CISCO_AVPAIR].n = NULL;
-	} else {
-		ciscopec = vend->vendorpec;
 	}
 
 	pre_auth_func = (pre_auth_f)find_export("pre_auth", 0, 0);

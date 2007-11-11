@@ -5,8 +5,8 @@
   Portions of this file are based on the WEP enablement code provided by the
   Host AP project hostap-drivers v0.1.3
   Copyright (c) 2001-2002, SSH Communications Security Corp and Jouni Malinen
-  <jkmaline@cc.hut.fi>
-  Copyright (c) 2002-2003, Jouni Malinen <jkmaline@cc.hut.fi>
+  <j@w1.fi>
+  Copyright (c) 2002-2003, Jouni Malinen <j@w1.fi>
 
   This program is free software; you can redistribute it and/or modify it
   under the terms of version 2 of the GNU General Public License as
@@ -67,16 +67,13 @@ static int ieee80211_networks_allocate(struct ieee80211_device *ieee)
 		return 0;
 
 	ieee->networks =
-	    kmalloc(MAX_NETWORK_COUNT * sizeof(struct ieee80211_network),
+	    kzalloc(MAX_NETWORK_COUNT * sizeof(struct ieee80211_network),
 		    GFP_KERNEL);
 	if (!ieee->networks) {
 		printk(KERN_WARNING "%s: Out of memory allocating beacons\n",
 		       ieee->dev->name);
 		return -ENOMEM;
 	}
-
-	memset(ieee->networks, 0,
-	       MAX_NETWORK_COUNT * sizeof(struct ieee80211_network));
 
 	return 0;
 }
@@ -118,6 +115,21 @@ static void ieee80211_networks_initialize(struct ieee80211_device *ieee)
 			      &ieee->network_free_list);
 }
 
+static int ieee80211_change_mtu(struct net_device *dev, int new_mtu)
+{
+	if ((new_mtu < 68) || (new_mtu > IEEE80211_DATA_LEN))
+		return -EINVAL;
+	dev->mtu = new_mtu;
+	return 0;
+}
+
+static struct net_device_stats *ieee80211_generic_get_stats(
+	struct net_device *dev)
+{
+	struct ieee80211_device *ieee = netdev_priv(dev);
+	return &ieee->stats;
+}
+
 struct net_device *alloc_ieee80211(int sizeof_priv)
 {
 	struct ieee80211_device *ieee;
@@ -128,11 +140,16 @@ struct net_device *alloc_ieee80211(int sizeof_priv)
 
 	dev = alloc_etherdev(sizeof(struct ieee80211_device) + sizeof_priv);
 	if (!dev) {
-		IEEE80211_ERROR("Unable to network device.\n");
+		IEEE80211_ERROR("Unable to allocate network device.\n");
 		goto failed;
 	}
 	ieee = netdev_priv(dev);
 	dev->hard_start_xmit = ieee80211_xmit;
+	dev->change_mtu = ieee80211_change_mtu;
+
+	/* Drivers are free to override this if the generic implementation
+	 * does not meet their needs. */
+	dev->get_stats = ieee80211_generic_get_stats;
 
 	ieee->dev = dev;
 
@@ -212,6 +229,7 @@ void free_ieee80211(struct net_device *dev)
 
 static int debug = 0;
 u32 ieee80211_debug_level = 0;
+EXPORT_SYMBOL_GPL(ieee80211_debug_level);
 static struct proc_dir_entry *ieee80211_proc = NULL;
 
 static int show_debug_level(char *page, char **start, off_t offset,

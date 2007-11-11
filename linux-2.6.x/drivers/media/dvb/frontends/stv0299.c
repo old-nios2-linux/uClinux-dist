@@ -92,7 +92,7 @@ static int stv0299_writeregI (struct stv0299_state* state, u8 reg, u8 data)
 	return (ret != 1) ? -EREMOTEIO : 0;
 }
 
-int stv0299_write(struct dvb_frontend* fe, u8 *buf, int len)
+static int stv0299_write(struct dvb_frontend* fe, u8 *buf, int len)
 {
 	struct stv0299_state* state = fe->demodulator_priv;
 
@@ -249,7 +249,7 @@ static int stv0299_get_symbolrate (struct stv0299_state* state)
 	dprintk ("%s\n", __FUNCTION__);
 
 	stv0299_readregs (state, 0x1f, sfr, 3);
-	stv0299_readregs (state, 0x1a, &rtf, 1);
+	stv0299_readregs (state, 0x1a, (u8 *)&rtf, 1);
 
 	srate = (sfr[0] << 8) | sfr[1];
 	srate *= Mclk;

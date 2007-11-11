@@ -1,8 +1,8 @@
 /*
- * $Id: data_lump_rpl.c,v 1.8.4.3 2003/12/18 22:46:42 bogdan Exp $
+ * $Id: data_lump_rpl.c,v 1.14 2004/12/03 19:09:31 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -45,10 +45,10 @@ struct lump_rpl* add_lump_rpl(struct sip_msg *msg, char *s, int len, int flags)
 	struct lump_rpl *lump = 0;
 	struct lump_rpl *foo;
 
-	/* some checkings */
+	/* some checking */
 	if ( (flags&(LUMP_RPL_HDR|LUMP_RPL_BODY))==(LUMP_RPL_HDR|LUMP_RPL_BODY)
-	|| (flags&(LUMP_RPL_HDR|LUMP_RPL_BODY))==0) {
-		LOG(L_ERR,"ERROR:add_lump_rpl: bad type flags (none or both)!\n");
+	|| (flags&(LUMP_RPL_HDR|LUMP_RPL_BODY))==0 || (flags&LUMP_RPL_SHMEM) ) {
+		LOG(L_ERR,"ERROR:add_lump_rpl: bad flags combination (%d)!\n",flags);
 		goto error;
 	}
 	if (len<=0 || s==0) {
@@ -133,18 +133,25 @@ void unlink_lump_rpl(struct sip_msg * msg, struct lump_rpl* lump)
 	}
 }
 
-
-
-void del_nonshm_lump_rpl( struct lump_rpl **head_list)
+void del_nonshm_lump_rpl(struct lump_rpl** list)
 {
-	struct lump_rpl *foo;
+        struct lump_rpl* it, *tmp;
+        struct lump_rpl** pred;
 
-	while( (*head_list) && (((*head_list)->flags&LUMP_RPL_SHMEM)==0) ) {
-		foo = (*head_list);
-		(*head_list) = foo->next;
-		free_lump_rpl( foo );
-	}
+        it = *list;
+        pred = list;
+
+        while(it) {
+                if (!(it->flags & LUMP_RPL_SHMEM)) {
+                        tmp = it;
+                        *pred = it->next;
+                        it = it->next;
+                        free_lump_rpl(tmp);
+                        continue;
+                }
+
+                pred = &it->next;
+                it = it->next;
+        }
 }
-
-
 

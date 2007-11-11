@@ -19,11 +19,12 @@ char	flags['z'-'a'+1];
 char	*flag = flags-'a';
 char	*elinep = line+sizeof(line)-5;
 char	*null	= "";
-int	heedint =1;
+int	heedint = 0; //1;
 struct	env	e ={line, iostack, iostack-1,
 		    (xint *)NULL, FDBASE, (struct env *)NULL};
-
 extern	char	**environ;	/* environment pointer */
+/* purpose to release the SIGINT signal */
+sigset_t intsigs;
 
 /*
  * default shell, search rules
@@ -39,6 +40,8 @@ _PROTOTYPE(static char *findeq, (char *cp ));
 _PROTOTYPE(static char *cclass, (char *p, int sub ));
 _PROTOTYPE(void initarea, (void));
 
+extern int loop_is_called;
+extern int loop_last_areanum;
 
 #undef abort
 #define abort() exit(1)
@@ -72,7 +75,7 @@ register char **argv;
 		setval(homedir, "/");
 	export(homedir);
 
-	setval(lookup("$"), my_itoa(getpid(), 5));
+	setval(lookup("$"), itoa(getpid(), 5));
 
 	path = lookup("PATH");
 	if (path->value == null)
@@ -134,7 +137,7 @@ register char **argv;
 					talking++;
 				default:
 					if (*s>='a' && *s<='z')
-						flag[*s]++;
+						flag[(int) *s]++;
 				}
 		} else {
 			argv--;
@@ -166,22 +169,52 @@ register char **argv;
 	if (talking)
 		signal(SIGTERM, sig);
 	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
-		signal(SIGINT, onintr);
+        	signal(SIGINT, catchint);
+        signal(SIGQUIT, SIG_IGN);
+
+	/* signal set, in order to release it after longjmp. */
+	sigemptyset(&intsigs);
+	sigaddset(&intsigs, SIGINT);
+
 	dolv = argv;
 	dolc = argc;
 	dolv[0] = name;
 	if (dolc > 1)
-		for (ap = ++argv; --argc > 0;)
+		for (ap = ++argv; --argc > 0;){
 			if (assign(*ap = *argv++, !COPYV))
 				dolc--;	/* keyword */
 			else
 				ap++;
+		}
 	setval(lookup("#"), putn((--dolc < 0) ? (dolc = 0) : dolc));
 
 	for (;;) {
 		if (talking && e.iop <= iostack)
 			prs(prompt->value);
 		onecommand();
+	}
+}
+
+void catchint()
+{
+        signal(SIGINT, catchint);
+        if (intr){
+                write(1, "\n", 1);
+	}
+
+	if(talking && inparse) longjmp(failpt, 1);
+	else if (heedint) {
+		execflg = 0;
+		leave();
+	}
+}
+
+void catchquit()
+{
+        signal(SIGQUIT, catchquit);
+        if (intr){
+                write(1, "\n", 1);
+		prs(prompt->value);
 	}
 }
 
@@ -193,7 +226,7 @@ setdash()
 
 	cp = m;
 	for (c='a'; c<='z'; c++)
-		if (flag[c])
+		if (flag[(int) c])
 			*cp++ = c;
 	*cp = 0;
 	setval(lookup("-"), m);
@@ -203,7 +236,7 @@ int
 newfile(s)
 register char *s;
 {
-	register f;
+	register int f;
 
 	if (strcmp(s, "-") != 0) {
 		f = open(s, 0);
@@ -221,7 +254,7 @@ register char *s;
 void
 onecommand()
 {
-	register i;
+	register int i;
 	jmp_buf m1;
 
 	while (e.oenv)
@@ -237,11 +270,12 @@ onecommand()
 	yynerrs = 0;
 	multiline = 0;
 	inparse = 1;
-	intr = 0;
+	intr = 1;
 	execflg = 0;
-	failpt = (xint *) m1;
-	setjmp(m1);	/* Bruce Evans' fix */
-	if (setjmp(m1) || yyparse() || intr) {
+	setjmp(failpt = m1);	/* Bruce Evans' fix */
+	if (setjmp(failpt = m1) || yyparse() )  {
+		/* to release the SIGINT signal */
+		sigprocmask(SIG_UNBLOCK, &intsigs, NULL);
 		while (e.oenv)
 			quitenv();
 		scraphere();
@@ -340,7 +374,7 @@ void
 quitenv()
 {
 	register struct env *ep;
-	register fd;
+	register int fd;
 
 	if ((ep = e.oenv) != NULL) {
 		fd = e.iofd;
@@ -383,11 +417,11 @@ char *
 putn(n)
 register int n;
 {
-	return(my_itoa(n, -1));
+	return(itoa(n, -1));
 }
 
 char *
-my_itoa(u, n)
+itoa(u, n)
 register unsigned u;
 int n;
 {
@@ -438,21 +472,21 @@ int s;				/* ANSI C requires a parameter */
 
 int
 letter(c)
-register c;
+register int c;
 {
 	return((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_');
 }
 
 int
 digit(c)
-register c;
+register int c;
 {
 	return(c >= '0' && c <= '9');
 }
 
 int
 letnum(c)
-register c;
+register int c;
 {
 	return(letter(c) || digit(c));
 }
@@ -463,8 +497,11 @@ int n;
 {
 	register char *cp;
 
-	if ((cp = getcell(n)) == 0)
+	if ((cp = getcell(n)) == 0){
+            garbage();
+	    if ((cp = getcell(n)) == 0)
 		err("out of string space");
+        }
 	return(cp);
 }
 
@@ -592,7 +629,7 @@ char *val, *name;
 
 	if (vp->status & RONLY) {
 		for (xp = vp->name; *xp && *xp != '=';)
-			putc(*xp++);
+			myputc(*xp++);
 		err(" is read-only");
 		return;
 	}
@@ -794,7 +831,8 @@ register int sub;
 /* -------- area.c -------- */
 #define	REGSIZE		sizeof(struct region)
 #define GROWBY		256
-/*#define	SHRINKBY	64*/
+/* #undef	SHRINKBY	64 */
+#undef	SHRINKBY
 #define FREE 32767
 #define BUSY 0
 #define	ALIGN (sizeof(int)-1)
@@ -818,7 +856,7 @@ static void * brktop;
 static void * brkaddr;
 static void * brkstrt;
 
-#define sbrk(X) ({ void * __q = (void *)-1; if (brkaddr + (int)(X) < brktop) { __q = brkaddr; brkaddr+=(int)(X); } __q;})
+#define SBRK(X) ({ void * __q = (void *) -1; if (brkaddr + (int)(X) < brktop) { __q = brkaddr; brkaddr+=(int)(X); } __q;})
 
 void
 initarea()
@@ -826,9 +864,9 @@ initarea()
 	brkaddr = brkstrt = malloc(65000);
 	brktop = brkaddr + 65000;
 
-	while ((int)sbrk(0) & ALIGN)
-		sbrk(1);
-	areabot = (struct region *)sbrk(REGSIZE);
+	while (((int) SBRK(0)) & ALIGN)
+		SBRK(1);
+	areabot = (struct region *)SBRK(REGSIZE);
 
 	areabot->next = areabot;
 	areabot->area = BUSY;
@@ -871,7 +909,7 @@ unsigned nbytes;
 {
 	register int nregio;
 	register struct region *p, *q;
-	register i;
+	register int i;
 
 	if (nbytes == 0) {
 		puts("Boo");
@@ -882,11 +920,11 @@ unsigned nbytes;
 	 */
 	nregio = (nbytes+(REGSIZE-1))/REGSIZE + 1;
 	for (p = areanxt;;) {
-		if (p->area > areanum) {
+                if ((p->area > areanum || p->area == FREE) && p->area != loop_last_areanum){
 			/*
 			 * merge free cells
 			 */
-			while ((q = p->next)->area > areanum && q != areanxt)
+                        while (((q = p->next)->area > areanum || q->area == FREE) && q->area != loop_last_areanum &&  q != areanxt)
 				p->next = q->next;
 			/*
 			 * exit loop if cell big enough
@@ -899,7 +937,7 @@ unsigned nbytes;
 			break;
 	}
 	i = nregio >= GROWBY ? nregio : GROWBY;
-	p = (struct region *)sbrk(i * REGSIZE);
+	p = (struct region *)SBRK(i * REGSIZE);
 	if (p == (struct region *)-1)
 		return((char *)NULL);
 	p--;
@@ -956,7 +994,19 @@ register int a;
 
 	top = areatop;
 	for (p = areabot; p != top; p = p->next)
-		if (p->area >= a)
+		if (p->area >= a && p->area != loop_last_areanum)
+			p->area = FREE;
+}
+
+void
+myfreearea(a)
+register int a;
+{
+	register struct region *p, *top;
+
+	top = areatop;
+	for (p = areabot; p != top; p = p->next)
+		if (p->area == a)
 			p->area = FREE;
 }
 
@@ -982,14 +1032,12 @@ void
 garbage()
 {
 	register struct region *p, *q, *top;
-
 	top = areatop;
 	for (p = areabot; p != top; p = p->next) {
-		if (p->area > areanum) {
-			while ((q = p->next)->area > areanum)
-				p->next = q->next;
+                if ((p->area > areanum || p->area == FREE) && p->area != loop_last_areanum)
+                        while (((q = p->next)->area > areanum || q->area == FREE ) && q->area != loop_last_areanum)
+                                p->next = q->next;
 			areanxt = p;
-		}
 	}
 #ifdef SHRINKBY
 	if (areatop >= q + SHRINKBY && q->area > areanum) {

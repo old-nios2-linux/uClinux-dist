@@ -14,7 +14,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <getopt.h>
-#include <mathf.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <math.h>
 
 #include <linux/soundcard.h>
 
@@ -143,14 +145,15 @@ char *wavnames[] = {
 
 void usage(int rc)
 {
-	printf("usage: tone [-?hsqrwe] [-f replay-freq] [wave-freq]\n\n"
+	printf("usage: tone [-?hsqrwe] [-m magnitude] [-f sample-freq] [wave-freq]\n\n"
 		"\t-h?\tthis help\n"
 		"\t-s\tsine wave output\n"
 		"\t-q\tsquare wave output\n"
 		"\t-r\tramp wave output\n"
 		"\t-w\tsawtooth wave output\n"
 		"\t-e\toutput big-endian data\n"
-		"\t-f\tfrequency of replay engine\n");
+		"\t-m\tmagnitude of wave (0 <= x <= 256)\n"
+		"\t-f\tsampling frequency\n");
 	exit(rc);
 }
 
@@ -161,6 +164,7 @@ int main(int argc, char *argv[])
 	int	ofd, i, c, size, mag, endian;
 	int	replayfreq, wavefreq, wavetyp;
 
+	mag = 100;
 	replayfreq = 48000;
 	wavetyp = SINE;
 	wavefreq = 1000;

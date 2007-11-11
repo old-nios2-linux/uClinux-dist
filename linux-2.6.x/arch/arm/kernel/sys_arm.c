@@ -3,7 +3,6 @@
  *
  *  Copyright (C) People who wrote linux/arch/i386/kernel/sys_i386.c
  *  Copyright (C) 1995, 1996 Russell King.
- *  Copyright (C) 2003, 2004 Hyok S. Choi
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -115,7 +114,7 @@ sys_arm_mremap(unsigned long addr, unsigned long old_len,
 	       unsigned long new_addr)
 {
 	unsigned long ret = -EINVAL;
-#ifdef CONFIG_MMU
+
 	if (flags & MREMAP_FIXED && new_addr < FIRST_USER_ADDRESS)
 		goto out;
 
@@ -124,7 +123,6 @@ sys_arm_mremap(unsigned long addr, unsigned long old_len,
 	up_write(&current->mm->mmap_sem);
 
 out:
-#endif
 	return ret;
 }
 
@@ -322,7 +320,7 @@ int kernel_execve(const char *filename, char *const argv[], char *const envp[])
 EXPORT_SYMBOL(kernel_execve);
 
 /*
- * Since loff_t is a 64 bit type we avoid a lot of ABI hastle
+ * Since loff_t is a 64 bit type we avoid a lot of ABI hassle
  * with a different argument ordering.
  */
 asmlinkage long sys_arm_fadvise64_64(int fd, int advice,

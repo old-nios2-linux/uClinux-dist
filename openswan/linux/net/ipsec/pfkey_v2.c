@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: pfkey_v2.c,v 1.97.2.8 2006/07/10 15:56:11 paul Exp $
+ * RCSID $Id: pfkey_v2.c,v 1.97.2.12 2006/11/24 05:43:29 paul Exp $
  */
 
 /*
@@ -116,13 +116,24 @@ DEBUG_NO_STATIC int pfkey_recvmsg(struct socket *sock, struct msghdr *msg, int s
 #endif
 
 struct net_proto_family pfkey_family_ops = {
+#ifdef NETDEV_23
+	.family	= PF_KEY,
+	.create = pfkey_create,
+#ifdef NET_26
+	.owner  = THIS_MODULE,
+#endif
+#else
 	PF_KEY,
 	pfkey_create
+#endif
 };
 
 struct proto_ops SOCKOPS_WRAPPED(pfkey_ops) = {
 #ifdef NETDEV_23
 	family:		PF_KEY,
+#ifdef NET_26
+	owner:		THIS_MODULE,
+#endif
 	release:	pfkey_release,
 	bind:		sock_no_bind,
 	connect:	sock_no_connect,
@@ -498,9 +509,9 @@ pfkey_destroy_socket(struct sock *sk)
 			} else {
 				printk(" dev:NULL");
 			}
-			printk(" h:0p%p", skb->h.raw);
-			printk(" nh:0p%p", skb->nh.raw);
-			printk(" mac:0p%p", skb->mac.raw);
+			printk(" h:0p%p", skb_transport_header(skb));
+			printk(" nh:0p%p", skb_network_header(skb));
+			printk(" mac:0p%p", skb_mac_header(skb));
 			printk(" dst:0p%p", skb->dst);
 			if(sysctl_ipsec_debug_verbose) {
 				int i;
@@ -613,8 +624,8 @@ pfkey_upmsg(struct socket *sock, struct sadb_msg *pfkey_msg)
 		ipsec_kfree_skb(skb);
 		return -ENOBUFS;
 	}
-	skb->h.raw = skb_put(skb, pfkey_msg->sadb_msg_len * IPSEC_PFKEYv2_ALIGN);
-	memcpy(skb->h.raw, pfkey_msg, pfkey_msg->sadb_msg_len * IPSEC_PFKEYv2_ALIGN);
+	skb_set_transport_header(skb, ipsec_skb_offset(skb, skb_put(skb, pfkey_msg->sadb_msg_len * IPSEC_PFKEYv2_ALIGN)));
+	memcpy(skb_transport_header(skb), pfkey_msg, pfkey_msg->sadb_msg_len * IPSEC_PFKEYv2_ALIGN);
 
 	if((error = sock_queue_rcv_skb(sk, skb)) < 0) {
 		skb->sk=NULL;
@@ -1098,7 +1109,9 @@ pfkey_recvmsg(struct socket *sock
 	}
 
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size);
-#ifdef HAVE_TSTAMP
+#ifdef HAVE_KERNEL_TSTAMP
+        sk->sk_stamp = skb->tstamp;
+#elif defined(HAVE_TSTAMP)
 	sk->sk_stamp.tv_sec  = skb->tstamp.off_sec;
 	sk->sk_stamp.tv_usec = skb->tstamp.off_usec;
 #else
@@ -1158,6 +1171,8 @@ pfkey_get_info(char *buffer, char **start, off_t offset, int length
 					sk->sk_socket->state);
 #ifdef CONFIG_KLIPS_DEBUG
 		} else {
+		  struct timeval t;
+		  t = ktime_to_timeval(sk->sk_stamp);
 		  len += ipsec_snprintf(buffer+len, length-len,
 					"%8p %5d %d %8p %8p %d %d %d %d %5d %d.%06d %08lX %8X %2X\n",
 					sk,
@@ -1174,8 +1189,8 @@ pfkey_get_info(char *buffer, char **start, off_t offset, int length
 #endif					
 					sk->sk_protocol,
 					sk->sk_sndbuf,
-					(unsigned int)sk->sk_stamp.tv_sec,
-					(unsigned int)sk->sk_stamp.tv_usec,
+					(unsigned int)t.tv_sec,
+					(unsigned int)t.tv_usec,
 					sk->sk_socket->flags,
 					sk->sk_socket->type,
 					sk->sk_socket->state);
@@ -1552,6 +1567,21 @@ void pfkey_proto_init(struct net_protocol *pro)
 
 /*
  * $Log: pfkey_v2.c,v $
+ * Revision 1.97.2.12  2006/11/24 05:43:29  paul
+ * kernels after 2.6.18 do not return a code from unregister_socket()
+ * backport from git 41e54a2684dc809d7952e816860ea646a3194a72
+ *
+ * Revision 1.97.2.11  2006/11/15 16:05:57  paul
+ * fix for compiling on 2.4. kernels by Matthias Haas.
+ *
+ * Revision 1.97.2.10  2006/10/10 20:43:28  paul
+ * Add family/create/owner for pfkey_family_ops. This fixes bug #671
+ *
+ * Revision 1.97.2.9  2006/10/06 21:39:26  paul
+ * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
+ * set. This is defined through autoconf.h which is included through the
+ * linux kernel build macros.
+ *
  * Revision 1.97.2.8  2006/07/10 15:56:11  paul
  * Fix for bug #642 by Bart.
  *

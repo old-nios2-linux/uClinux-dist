@@ -1,7 +1,7 @@
 /*
- * $Id: udp_server.c,v 1.63.6.3 2004/07/05 15:18:27 andrei Exp $
+ * $Id: udp_server.c,v 1.70.2.1 2005/07/26 14:45:46 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,8 +30,12 @@
  *  2003-02-10  undoed the above changes (andrei)
  *  2003-03-19  replaced all the mallocs/frees w/ pkg_malloc/pkg_free (andrei)
  *  2003-04-14  set sockopts to TOS low delay (andrei)
+ *  2004-05-03  applied multicast support patch from janakj
+ *              added set multicast ttl support (andrei)
  *  2004-07-05  udp_rcv_loop: drop packets with 0 src port + error msg.
  *              cleanups (andrei)
+ *  2005-07-26  multicast fixes backported: multicast ttl & loop are set
+ *              for all the sockets; ipv4 ttl & loop expect a char* (andrei)
  */
 
 
@@ -76,7 +80,7 @@ static int dbg_msg_qa(char *buf, int len)
 	enum { QA_ANY, QA_SPACE, QA_EOL1 } state;
 
 
-	/* is there a zero character inthere ? */	
+	/* is there a zero character in there ? */	
 	if (memchr(buf, 0, len)) {
 		LOG(L_CRIT, "BUG: message with 0 in it\n");
 		return 0;
@@ -92,7 +96,7 @@ static int dbg_msg_qa(char *buf, int len)
 			case ' ':	if (state==QA_SPACE) {
 							space_cnt++;
 							if (space_cnt==4) {
-								LOG(L_CRIT, "BUG(propably): DBG_MSG_QA: "
+								LOG(L_CRIT, "BUG(probably): DBG_MSG_QA: "
 									"too many spaces\n");
 								return 0;
 							}
@@ -147,7 +151,7 @@ int probe_max_receive_buffer( int udp_sock )
 	}
 	if ( ioptval==0 ) 
 	{
-		LOG(L_DBG, "DEBUG: udp_init: SO_RCVBUF initialy set to 0; resetting to %d\n",
+		LOG(L_DBG, "DEBUG: udp_init: SO_RCVBUF initially set to 0; resetting to %d\n",
 			BUFFER_INCREMENT );
 		ioptval=BUFFER_INCREMENT;
 	} else LOG(L_INFO, "INFO: udp_init: SO_RCVBUF is initially %d\n", ioptval );
@@ -165,7 +169,7 @@ int probe_max_receive_buffer( int udp_sock )
 			LOG(L_DBG, "DEBUG: udp_init: SOL_SOCKET failed"
 					" for %d, phase %d: %s\n", optval, phase, strerror(errno));
 			/* if setting buffer size failed and still in the aggressive
-			   phase, try less agressively; otherwise give up 
+			   phase, try less aggressively; otherwise give up 
 			*/
 			if (phase==0) { phase=1; optval >>=1 ; continue; } 
 			else break;
@@ -186,7 +190,7 @@ int probe_max_receive_buffer( int udp_sock )
 			if (voptval<optval) {
 				LOG(L_DBG, "DEBUG: setting SO_RCVBUF has no effect\n");
 				/* if setting buffer size failed and still in the aggressive
-				phase, try less agressively; otherwise give up 
+				phase, try less aggressively; otherwise give up 
 				*/
 				if (phase==0) { phase=1; optval >>=1 ; continue; } 
 				else break;
@@ -208,11 +212,64 @@ int probe_max_receive_buffer( int udp_sock )
 	/* EoJKU */
 }
 
+
+#ifdef USE_MCAST
+
+/*
+ * Setup multicast receiver
+ */
+static int setup_mcast_rcvr(int sock, union sockaddr_union* addr)
+{
+	struct ip_mreq mreq;
+#ifdef USE_IPV6
+	struct ipv6_mreq mreq6;
+#endif /* USE_IPV6 */
+	
+	if (addr->s.sa_family==AF_INET){
+		memcpy(&mreq.imr_multiaddr, &addr->sin.sin_addr, 
+		       sizeof(struct in_addr));
+		mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+		
+		if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,&mreq,
+			       sizeof(mreq))==-1){
+			LOG(L_ERR, "ERROR: setup_mcast_rcvr: setsockopt: %s\n",
+			    strerror(errno));
+			return -1;
+		}
+#ifdef USE_IPV6
+	} else if (addr->s.sa_family==AF_INET6){
+		memcpy(&mreq6.ipv6mr_multiaddr, &addr->sin6.sin6_addr, 
+		       sizeof(struct in6_addr));
+		mreq6.ipv6mr_interface = 0;
+#ifdef __OS_linux
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &mreq6,
+#else
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6,
+#endif
+			       sizeof(mreq6))==-1){
+			LOG(L_ERR, "ERROR: setup_mcast_rcvr: setsockopt:%s\n",
+			    strerror(errno));
+			return -1;
+		}
+		
+#endif /* USE_IPV6 */
+	} else {
+		LOG(L_ERR, "ERROR: setup_mcast_rcvr: Unsupported protocol family\n");
+		return -1;
+	}
+	return 0;
+}
+
+#endif /* USE_MCAST */
+
+
 int udp_init(struct socket_info* sock_info)
 {
 	union sockaddr_union* addr;
 	int optval;
-
+#ifdef USE_MCAST
+	unsigned char m_ttl, m_loop;
+#endif
 	addr=&sock_info->su;
 /*
 	addr=(union sockaddr_union*)pkg_malloc(sizeof(union sockaddr_union));
@@ -256,13 +313,57 @@ int udp_init(struct socket_info* sock_info)
 	}
 #endif
 
+#ifdef USE_MCAST
+	if ((sock_info->flags & SI_IS_MCAST) 
+	    && (setup_mcast_rcvr(sock_info->socket, addr)<0)){
+			goto error;
+	}
+	/* set the multicast options */
+	if (addr->s.sa_family==AF_INET){
+		m_loop=mcast_loopback;
+		if (setsockopt(sock_info->socket, IPPROTO_IP, IP_MULTICAST_LOOP, 
+						&m_loop, sizeof(m_loop))==-1){
+			LOG(L_WARN, "WARNING: udp_init: setsockopt(IP_MULTICAST_LOOP):"
+						" %s\n", strerror(errno));
+			/* it's only a warning because we might get this error if the
+			  network interface doesn't support multicasting -- andrei */
+		}
+		if (mcast_ttl>=0){
+			m_ttl=mcast_ttl;
+			if (setsockopt(sock_info->socket, IPPROTO_IP, IP_MULTICAST_TTL,
+						&m_ttl, sizeof(m_ttl))==-1){
+				LOG(L_WARN, "WARNING: udp_init: setsockopt (IP_MULTICAST_TTL):"
+						" %s\n", strerror(errno));
+			}
+		}
+#ifdef USE_IPV6
+	} else if (addr->s.sa_family==AF_INET6){
+		if (setsockopt(sock_info->socket, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 
+						&mcast_loopback, sizeof(mcast_loopback))==-1){
+			LOG(L_WARN, "WARNING: udp_init: setsockopt (IPV6_MULTICAST_LOOP):"
+					" %s\n", strerror(errno));
+		}
+		if (mcast_ttl>=0){
+			if (setsockopt(sock_info->socket, IPPROTO_IP, IPV6_MULTICAST_HOPS,
+							&mcast_ttl, sizeof(mcast_ttl))==-1){
+				LOG(L_WARN, "WARNING: udp_init: setssckopt "
+						"(IPV6_MULTICAST_HOPS): %s\n", strerror(errno));
+			}
+		}
+#endif /* USE_IPV6*/
+	} else {
+		LOG(L_ERR, "ERROR: udp_init: Unsupported protocol family %d\n",
+					addr->s.sa_family);
+		goto error;
+	}
+#endif /* USE_MCAST */
 
 	if ( probe_max_receive_buffer(sock_info->socket)==-1) goto error;
 	
 	if (bind(sock_info->socket,  &addr->s, sockaddru_len(*addr))==-1){
 		LOG(L_ERR, "ERROR: udp_init: bind(%x, %p, %d) on %s: %s\n",
 				sock_info->socket, &addr->s, 
-				sockaddru_len(*addr),
+				(unsigned)sockaddru_len(*addr),
 				sock_info->address_str.s,
 				strerror(errno));
 	#ifdef USE_IPV6

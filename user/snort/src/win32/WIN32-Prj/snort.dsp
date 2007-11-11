@@ -1434,6 +1434,14 @@ SOURCE=..\..\inline.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\ipv6.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\ipv6.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\log.c
 # End Source File
 # Begin Source File

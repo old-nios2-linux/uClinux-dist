@@ -1,8 +1,8 @@
 /*
- * $Id: t_cancel.c,v 1.8.6.1 2004/02/11 02:43:26 jiri Exp $
+ * $Id: t_cancel.c,v 1.13 2004/08/24 09:00:42 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -29,7 +29,8 @@
  * ----------
  * 2003-04-14  checking if a reply sent before cancel is initiated
  *             moved here (jiri)
- *
+ * 2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
+ * 2004-02-13  timer_link.payload removed (bogdan)
  */
 
 #include <stdio.h> /* for FILE* in fifo_uac_cancel */
@@ -45,9 +46,10 @@
 #include "t_msgbuilder.h"
 #include "t_lookup.h" /* for t_lookup_callid in fifo_uac_cancel */
 #include "../../fifo_server.h" /* for read_line() and fifo_reply() */
+#include "../../unixsock_server.h"
 
 
-/* determine which branches should be cancelled; do it
+/* determine which branches should be canceled; do it
    only from within REPLY_LOCK, otherwise collisions
    could occur (e.g., two 200 for two branches processed
    by two processes might concurrently try to generate
@@ -111,7 +113,9 @@ void cancel_branch( struct cell *t, int branch )
 	crb->buffer_len=len;
 	crb->dst=irb->dst;
 	crb->branch=branch;
+	/* TO_REMOVE
 	crb->retr_timer.payload=crb->fr_timer.payload=crb;
+	*/
 	/* label it as cancel so that FR timer can better now how to
 	   deal with it */
 	crb->activ_type=TYPE_LOCAL_CANCEL;
@@ -142,9 +146,7 @@ char *build_cancel(struct cell *Trans,unsigned int branch,
 int fifo_uac_cancel( FILE* stream, char *response_file )
 {
 	struct cell *trans;
-
-	char cseq[128];
-	char callid[128];
+	static char cseq[128], callid[128];
 
 	str cseq_s;   /* cseq */
 	str callid_s; /* callid */
@@ -190,3 +192,39 @@ int fifo_uac_cancel( FILE* stream, char *response_file )
 }
 
 
+int unixsock_uac_cancel(str* msg)
+{
+	struct cell *trans;
+	str cseq, callid;
+
+	     /* first param callid read */
+	if (unixsock_read_line(&callid, msg) != 0) {
+		unixsock_reply_asciiz("400 Call-ID Expected\n");
+		unixsock_reply_send();
+		return -1;
+	}
+
+	     /* second param cseq read */
+	if (unixsock_read_line(&cseq, msg) != 0) {
+		unixsock_reply_asciiz("400 CSeq Expected\n");
+		unixsock_reply_send();
+		return -1;
+	}
+
+	if (t_lookup_callid(&trans, callid, cseq) < 0) {
+		LOG(L_ERR, "unixsock_uac_cancel: Lookup failed\n");
+		unixsock_reply_asciiz("481 uac_cancel: No such transaction\n");
+		unixsock_reply_send();
+		return 1;
+	}
+
+	     /* tell tm to cancel the call */
+	(*cancel_uacs)(trans, ~0);
+
+	     /* t_lookup_callid REF`d the transaction for us, we must UNREF here! */
+	UNREF(trans);
+
+	unixsock_reply_asciiz("200 uac_cancel succeeded\n");
+	unixsock_reply_send();
+	return 0;
+}

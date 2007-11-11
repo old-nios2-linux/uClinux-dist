@@ -17,11 +17,11 @@
 #define RAW1394_REQ_ASYNC_WRITE     101
 #define RAW1394_REQ_LOCK            102
 #define RAW1394_REQ_LOCK64          103
-#define RAW1394_REQ_ISO_SEND        104
+#define RAW1394_REQ_ISO_SEND        104 /* removed ABI, now a no-op */
 #define RAW1394_REQ_ASYNC_SEND      105
 #define RAW1394_REQ_ASYNC_STREAM    106
 
-#define RAW1394_REQ_ISO_LISTEN      200
+#define RAW1394_REQ_ISO_LISTEN      200 /* removed ABI, now a no-op */
 #define RAW1394_REQ_FCP_LISTEN      201
 #define RAW1394_REQ_RESET_BUS       202
 #define RAW1394_REQ_GET_ROM         203
@@ -178,4 +178,14 @@ struct raw1394_iso_status {
 	__s16 xmit_cycle;
 };
 
+/* argument to RAW1394_IOC_GET_CYCLE_TIMER ioctl */
+struct raw1394_cycle_timer {
+	/* contents of Isochronous Cycle Timer register,
+	   as in OHCI 1.1 clause 5.13 (also with non-OHCI hosts) */
+	__u32 cycle_timer;
+
+	/* local time in microseconds since Epoch,
+	   simultaneously read with cycle timer */
+	__u64 local_time;
+};
 #endif /* IEEE1394_RAW1394_H */

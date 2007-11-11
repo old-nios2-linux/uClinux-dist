@@ -379,7 +379,7 @@ static void *diag204_alloc_vbuf(int pages)
 static void *diag204_alloc_rbuf(void)
 {
 	diag204_buf = (void*)__get_free_pages(GFP_KERNEL,0);
-	if (diag204_buf)
+	if (!diag204_buf)
 		return ERR_PTR(-ENOMEM);
 	diag204_buf_pages = 1;
 	return diag204_buf;
@@ -481,9 +481,17 @@ out:
 
 /* Diagnose 224 functions */
 
-static void diag224(void *ptr)
+static int diag224(void *ptr)
 {
-	asm volatile("diag %0,%1,0x224" : :"d" (0), "d"(ptr) : "memory");
+	int rc = -ENOTSUPP;
+
+	asm volatile(
+		"	diag	%1,%2,0x224\n"
+		"0:	lhi	%0,0x0\n"
+		"1:\n"
+		EX_TABLE(0b,1b)
+		: "+d" (rc) :"d" (0), "d" (ptr) : "memory");
+	return rc;
 }
 
 static int diag224_get_name_table(void)
@@ -492,7 +500,10 @@ static int diag224_get_name_table(void)
 	diag224_cpu_names = kmalloc(PAGE_SIZE, GFP_KERNEL | GFP_DMA);
 	if (!diag224_cpu_names)
 		return -ENOMEM;
-	diag224(diag224_cpu_names);
+	if (diag224(diag224_cpu_names)) {
+		kfree(diag224_cpu_names);
+		return -ENOTSUPP;
+	}
 	EBCASC(diag224_cpu_names + 16, (*diag224_cpu_names + 1) * 16);
 	return 0;
 }
@@ -521,7 +532,7 @@ __init int hypfs_diag_init(void)
 	}
 	rc = diag224_get_name_table();
 	if (rc) {
-		diag224_delete_name_table();
+		diag204_free_buffer();
 		printk(KERN_ERR "hypfs: could not get name table.\n");
 	}
 	return rc;

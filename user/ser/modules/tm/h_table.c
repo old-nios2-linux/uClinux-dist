@@ -1,7 +1,7 @@
 /*
- * $Id: h_table.c,v 1.82.4.2.2.1 2004/07/21 13:41:53 bogdan Exp $
+ * $Id: h_table.c,v 1.91.2.1 2005/07/27 12:32:22 andrei Exp $
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -34,48 +34,58 @@
  * 2003-04-04  bug_fix: REQ_IN callback not called for local 
  *             UAC transactions (jiri)
  * 2003-09-12  timer_link->tg will be set only if EXTRA_DEBUG (andrei)
- * 2004-07-21  avp support added - move and remove avp list to/from
+ * 2003-12-04  global callbacks replaceed with callbacks per transaction;
+ *             completion callback merged into them as LOCAL_COMPETED (bogdan)
+ * 2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
+ * 2004-02-13  t->is_invite and t->local replaced with flags;
+ *             timer_link.payload removed (bogdan)
+ * 2004-08-23  avp support added - move and remove avp list to/from
  *             transactions (bogdan)
-*/
-
-#include "defs.h"
-
+ */
 
 #include <stdlib.h>
+
+
 #include "../../mem/shm_mem.h"
 #include "../../hash_func.h"
-#include "h_table.h"
 #include "../../dprint.h"
 #include "../../md5utils.h"
-/* bogdan test */
 #include "../../ut.h"
 #include "../../globals.h"
 #include "../../error.h"
 #include "../../fifo_server.h"
+#include "../../unixsock_server.h"
+#include "defs.h"
 #include "t_reply.h"
 #include "t_cancel.h"
 #include "t_stats.h"
+#include "h_table.h"
+#include "fix_lumps.h" /* free_via_clen_lump */
 
 static enum kill_reason kr;
 
 /* pointer to the big table where all the transaction data
-   lives
-*/
-
+   lives */
 static struct s_table*  tm_table;
+
+
 
 void set_kr( enum kill_reason _kr )
 {
 	kr|=_kr;
 }
+
+
 enum kill_reason get_kr() {
 	return kr;
 }
+
 
 void lock_hash(int i) 
 {
 	lock(&tm_table->entrys[i].mutex);
 }
+
 
 void unlock_hash(int i) 
 {
@@ -108,6 +118,7 @@ void free_cell( struct cell* dead_cell )
 	int i;
 	struct sip_msg *rpl;
 	struct totag_elem *tt, *foo;
+	struct tm_callback *cbs, *cbs_tmp;
 
 	release_cell_lock( dead_cell );
 	shm_lock();
@@ -118,8 +129,12 @@ void free_cell( struct cell* dead_cell )
 	if ( dead_cell->uas.response.buffer )
 		shm_free_unsafe( dead_cell->uas.response.buffer );
 
-	/* completion callback */
-	if (dead_cell->cbp) shm_free_unsafe(dead_cell->cbp);
+	/* callbacks */
+	for( cbs=dead_cell->tmcb_hl.first ; cbs ; ) {
+		cbs_tmp = cbs;
+		cbs = cbs->next;
+		shm_free_unsafe( cbs_tmp );
+	}
 
 	/* UA Clients */
 	for ( i =0 ; i<dead_cell->nr_of_outgoings;  i++ )
@@ -168,7 +183,7 @@ static inline void init_synonym_id( struct cell *t )
 		p_msg=t->uas.request;
 		if (p_msg) {
 			/* char value of a proxied transaction is
-			   calculated out of header-fileds forming
+			   calculated out of header-fields forming
 			   transaction key
 			*/
 			char_msg_val( p_msg, t->md5 );
@@ -202,9 +217,6 @@ static void inline init_branches(struct cell *t)
 		uac->request.fr_timer.tg = TG_FR;
 		uac->request.retr_timer.tg = TG_RT;
 #endif
-		uac->request.retr_timer.payload = 
-			uac->request.fr_timer.payload = 
-			&uac->request;
 		uac->local_cancel=uac->request;
 	}
 }
@@ -231,8 +243,6 @@ struct cell*  build_cell( struct sip_msg* p_msg )
 	new_cell->uas.response.retr_timer.tg=TG_RT;
 	new_cell->uas.response.fr_timer.tg=TG_FR;
 #endif
-	new_cell->uas.response.fr_timer.payload =
-	new_cell->uas.response.retr_timer.payload = &(new_cell->uas.response);
 	new_cell->uas.response.my_T=new_cell;
 
 	/* move the current avp list to transaction -bogdan */
@@ -241,12 +251,15 @@ struct cell*  build_cell( struct sip_msg* p_msg )
 	*old = 0;
 
 	/* enter callback, which may potentially want to parse some stuff,
-	   before the request is shmem-ized */
-	if (p_msg)
-		callback_event(TMCB_REQUEST_IN, new_cell, p_msg,p_msg->REQ_METHOD );
+	 * before the request is shmem-ized */
+	if ( p_msg && has_reqin_tmcbs() )
+		run_reqin_callbacks( new_cell, p_msg, p_msg->REQ_METHOD);
 
 	if (p_msg) {
-		new_cell->uas.request = sip_msg_cloner(p_msg, &sip_msg_len);
+		/* clean possible previous added vias/clen header or else they would 
+		 * get propagated in the failure routes */
+		free_via_clen_lump(&p_msg->add_rm);
+		new_cell->uas.request = sip_msg_cloner(p_msg,&sip_msg_len);
 		if (!new_cell->uas.request)
 			goto error;
 		new_cell->uas.end_request=((char*)new_cell->uas.request)+sip_msg_len;
@@ -255,8 +268,6 @@ struct cell*  build_cell( struct sip_msg* p_msg )
 	/* UAC */
 	init_branches(new_cell);
 
-	new_cell->wait_tl.payload = new_cell;
-	new_cell->dele_tl.payload = new_cell;
 	new_cell->relaied_reply_branch   = -1;
 	/* new_cell->T_canceled = T_UNDEFINED; */
 #ifdef EXTRA_DEBUG
@@ -266,11 +277,12 @@ struct cell*  build_cell( struct sip_msg* p_msg )
 
 	init_synonym_id(new_cell);
 	init_cell_lock(  new_cell );
-
 	return new_cell;
 
 error:
 	shm_free(new_cell);
+	/* unlink transaction AVP list and link back the global AVP list (bogdan)*/
+	reset_avps();
 	return NULL;
 }
 
@@ -343,14 +355,14 @@ error0:
 
 
 /*  Takes an already created cell and links it into hash table on the
- *  appropiate entry. */
+ *  appropriate entry. */
 void insert_into_hash_table_unsafe( struct cell * p_cell, unsigned int _hash )
 {
 	struct entry* p_entry;
 
 	p_cell->hash_index=_hash;
 
-	/* locates the apropiate entry */
+	/* locates the appropriate entry */
 	p_entry = &tm_table->entrys[ _hash ];
 
 	p_cell->label = p_entry->next_label++;
@@ -365,7 +377,7 @@ void insert_into_hash_table_unsafe( struct cell * p_cell, unsigned int _hash )
 	/* update stats */
 	p_entry->cur_entries++;
 	p_entry->acc_entries++;
-	t_stats_new(p_cell->local);
+	t_stats_new( is_local(p_cell) );
 }
 
 
@@ -407,7 +419,7 @@ void remove_from_hash_table_unsafe( struct cell * p_cell)
 	}
 #	endif
 	p_entry->cur_entries--;
-	t_stats_deleted(p_cell->local);
+	t_stats_deleted( is_local(p_cell) );
 
 	/* unlock( &(p_entry->mutex) ); */
 }
@@ -432,4 +444,30 @@ int fifo_hash( FILE *stream, char *response_file )
 	}
 	fclose(reply_file);
 	return 1;
+}
+
+
+int unixsock_hash(str* msg)
+{
+	unsigned int i, ret;
+
+	ret = 0;
+	unixsock_reply_asciiz( "200 OK\n\tcurrent\ttotal\n");
+
+	for (i = 0; i < TABLE_ENTRIES; i++) {
+		if (unixsock_reply_printf("%d.\t%lu\t%lu\n", 
+					  i, tm_table->entrys[i].cur_entries,
+					  tm_table->entrys[i].acc_entries
+					  ) < 0) {
+			unixsock_reply_reset();
+			unixsock_reply_asciiz("500 Error while creating reply\n");
+			ret = -1;
+			break;
+		}
+	}
+
+	if (unixsock_reply_send() < 0) {
+		ret = -1;
+	}
+	return ret;
 }

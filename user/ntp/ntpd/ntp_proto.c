@@ -6,6 +6,7 @@
  */
 #ifdef HAVE_CONFIG_H
 #include <config.h>
+#include <config/autoconf.h>
 #endif
 
 #include "ntpd.h"
@@ -2267,6 +2268,16 @@ clock_select(void)
 			    sys_peer->stratum);
 	}
 	clock_update();
+
+#ifdef CONFIG_PROP_STATSD_STATSD
+	if (sys_reftime.l_ui!=0) {
+		char buf[60];
+		snprintf(buf, sizeof(buf), "statsd -a push ntp update \"%s\"",
+				humandate(sys_reftime.l_ui));
+		system(buf);
+	}
+#endif
+
 }
 
 /*

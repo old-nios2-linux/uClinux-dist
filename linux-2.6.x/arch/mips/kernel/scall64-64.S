@@ -468,6 +468,14 @@ sys_call_table:
 	PTR	sys_move_pages
 	PTR	sys_set_robust_list
 	PTR	sys_get_robust_list
-	PTR	sys_ni_syscall			/* 5270 */
+	PTR	sys_kexec_load			/* 5270 */
 	PTR	sys_getcpu
 	PTR	sys_epoll_pwait
+	PTR	sys_ioprio_set
+	PTR	sys_ioprio_get
+	PTR	sys_utimensat			/* 5275 */
+	PTR	sys_signalfd
+	PTR	sys_timerfd
+	PTR	sys_eventfd
+	PTR	sys_fallocate
+	.size	sys_call_table,.-sys_call_table

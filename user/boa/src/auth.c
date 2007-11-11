@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <fcntl.h>
+#include <strings.h>
 #ifdef __UC_LIBC__
 #include <unistd.h>
 #else
@@ -342,6 +343,8 @@ int auth_authorize(request * req)
 
 				denied = auth_check_userpass(auth_userpass,pwd,current->authfile);
 #ifdef SECURITY_COUNTS
+				if (! access__permitted(auth_userpass))
+					denied = 3;
 				if (strncmp(get_mime_type(req->request_uri),"image/",6))
 					access__attempted(denied, auth_userpass);
 #endif
@@ -354,6 +357,13 @@ int auth_authorize(request * req)
 						case 2:
 							syslog(LOG_ERR, "Authentication attempt failed for %s from %s because: Invalid Username\n",
 									auth_userpass, req->remote_ip_addr);
+							break;
+#ifdef SECURITY_COUNTS
+						case 3:
+							syslog(LOG_ERR, "Authentication attempt failed for %s from %s because: Too Many Recect Authentication Failures\n",
+									auth_userpass, remote_ip_addr);
+							break;
+#endif
 					}
 					bzero(current_client, sizeof(current_client));
 					send_r_unauthorized(req,server_name);

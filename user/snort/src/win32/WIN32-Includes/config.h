@@ -87,7 +87,7 @@
  * should both match the ones specified in the
  * AM_INIT_AUTOMAKE() macro of configure.in
  */
-#define VERSION "2.6.1.1"VERSION_ENABLE_ODBC""VERSION_ENABLE_MYSQL""VERSION_ENABLE_MSSQL""VERSION_ENABLE_ORACLE""VERSION_ENABLE_RESPONSE"-WIN32"VERSION_DEBUG
+#define VERSION "2.6.1.5"VERSION_ENABLE_ODBC""VERSION_ENABLE_MYSQL""VERSION_ENABLE_MSSQL""VERSION_ENABLE_ORACLE""VERSION_ENABLE_RESPONSE"-WIN32"VERSION_DEBUG
 #define PACKAGE "snort"
 
 
@@ -114,7 +114,7 @@ typedef int            pid_t;
 #ifndef _SSIZE_T_      /* MingW */
 typedef SSIZE_T        ssize_t;
 #endif
-#include "win32/WIN32-Includes/rpc/types.h"
+#include "rpc/types.h"
 
 #undef interface
 

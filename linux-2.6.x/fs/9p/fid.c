@@ -23,11 +23,13 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/sched.h>
 #include <linux/idr.h>
+#include <asm/semaphore.h>
+#include <net/9p/9p.h>
+#include <net/9p/client.h>
 
-#include "debug.h"
 #include "v9fs.h"
-#include "9p.h"
 #include "v9fs_vfs.h"
 #include "fid.h"
 
@@ -38,92 +40,78 @@
  *
  */
 
-int v9fs_fid_insert(struct v9fs_fid *fid, struct dentry *dentry)
+int v9fs_fid_add(struct dentry *dentry, struct p9_fid *fid)
 {
-	struct list_head *fid_list = (struct list_head *)dentry->d_fsdata;
-	dprintk(DEBUG_9P, "fid %d (%p) dentry %s (%p)\n", fid->fid, fid,
-		dentry->d_iname, dentry);
-	if (dentry->d_fsdata == NULL) {
-		dentry->d_fsdata =
-		    kmalloc(sizeof(struct list_head), GFP_KERNEL);
-		if (dentry->d_fsdata == NULL) {
-			dprintk(DEBUG_ERROR, "Out of memory\n");
+	struct v9fs_dentry *dent;
+
+	P9_DPRINTK(P9_DEBUG_VFS, "fid %d dentry %s\n",
+					fid->fid, dentry->d_iname);
+
+	dent = dentry->d_fsdata;
+	if (!dent) {
+		dent = kmalloc(sizeof(struct v9fs_dentry), GFP_KERNEL);
+		if (!dent)
 			return -ENOMEM;
-		}
-		fid_list = (struct list_head *)dentry->d_fsdata;
-		INIT_LIST_HEAD(fid_list);	/* Initialize list head */
+
+		spin_lock_init(&dent->lock);
+		INIT_LIST_HEAD(&dent->fidlist);
+		dentry->d_fsdata = dent;
 	}
 
-	fid->uid = current->uid;
-	list_add(&fid->list, fid_list);
+	spin_lock(&dent->lock);
+	list_add(&fid->dlist, &dent->fidlist);
+	spin_unlock(&dent->lock);
+
 	return 0;
 }
 
 /**
- * v9fs_fid_create - allocate a FID structure
- * @dentry - dentry to link newly created fid to
- *
- */
-
-struct v9fs_fid *v9fs_fid_create(struct v9fs_session_info *v9ses, int fid)
-{
-	struct v9fs_fid *new;
-
-	dprintk(DEBUG_9P, "fid create fid %d\n", fid);
-	new = kmalloc(sizeof(struct v9fs_fid), GFP_KERNEL);
-	if (new == NULL) {
-		dprintk(DEBUG_ERROR, "Out of Memory\n");
-		return ERR_PTR(-ENOMEM);
-	}
-
-	new->fid = fid;
-	new->v9ses = v9ses;
-	new->fidopen = 0;
-	new->fidclunked = 0;
-	new->iounit = 0;
-	new->rdir_pos = 0;
-	new->rdir_fcall = NULL;
-	INIT_LIST_HEAD(&new->list);
-
-	return new;
-}
-
-/**
- * v9fs_fid_destroy - deallocate a FID structure
- * @fid: fid to destroy
- *
- */
-
-void v9fs_fid_destroy(struct v9fs_fid *fid)
-{
-	list_del(&fid->list);
-	kfree(fid);
-}
-
-/**
- * v9fs_fid_lookup - retrieve the right fid from a  particular dentry
+ * v9fs_fid_lookup - return a locked fid from a dentry
  * @dentry: dentry to look for fid in
- * @type: intent of lookup (operation or traversal)
  *
- * find a fid in the dentry
+ * find a fid in the dentry, obtain its semaphore and return a reference to it.
+ * code calling lookup is responsible for releasing lock
  *
  * TODO: only match fids that have the same uid as current user
  *
  */
 
-struct v9fs_fid *v9fs_fid_lookup(struct dentry *dentry)
+struct p9_fid *v9fs_fid_lookup(struct dentry *dentry)
 {
-	struct list_head *fid_list = (struct list_head *)dentry->d_fsdata;
-	struct v9fs_fid *return_fid = NULL;
+	struct v9fs_dentry *dent;
+	struct p9_fid *fid;
 
-	dprintk(DEBUG_9P, " dentry: %s (%p)\n", dentry->d_iname, dentry);
+	P9_DPRINTK(P9_DEBUG_VFS, " dentry: %s (%p)\n", dentry->d_iname, dentry);
+	dent = dentry->d_fsdata;
+	if (dent)
+		fid = list_entry(dent->fidlist.next, struct p9_fid, dlist);
+	else
+		fid = ERR_PTR(-EBADF);
 
-	if (fid_list)
-		return_fid = list_entry(fid_list->next, struct v9fs_fid, list);
+	P9_DPRINTK(P9_DEBUG_VFS, " fid: %p\n", fid);
+	return fid;
+}
 
-	if (!return_fid) {
-		dprintk(DEBUG_ERROR, "Couldn't find a fid in dentry\n");
-	}
+/**
+ * v9fs_fid_clone - lookup the fid for a dentry, clone a private copy and
+ * 	release it
+ * @dentry: dentry to look for fid in
+ *
+ * find a fid in the dentry and then clone to a new private fid
+ *
+ * TODO: only match fids that have the same uid as current user
+ *
+ */
 
-	return return_fid;
+struct p9_fid *v9fs_fid_clone(struct dentry *dentry)
+{
+	struct p9_fid *ofid, *fid;
+
+	P9_DPRINTK(P9_DEBUG_VFS, " dentry: %s (%p)\n", dentry->d_iname, dentry);
+	ofid = v9fs_fid_lookup(dentry);
+	if (IS_ERR(ofid))
+		return ofid;
+
+	fid = p9_client_walk(ofid, 0, NULL, 1);
+	return fid;
 }

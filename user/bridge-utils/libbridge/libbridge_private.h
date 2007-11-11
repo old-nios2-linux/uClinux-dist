@@ -19,25 +19,38 @@
 #ifndef _LIBBRIDGE_PRIVATE_H
 #define _LIBBRIDGE_PRIVATE_H
 
-#include <asm/param.h>
+#include "config.h"
+
+#include <linux/sockios.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <linux/if_bridge.h>
+
+#define MAX_BRIDGES	1024
+#define MAX_PORTS	1024
+
+#define SYSFS_CLASS_NET "/sys/class/net/"
+#define SYSFS_PATH_MAX	256
+
+#define dprintf(fmt,arg...)
 
 extern int br_socket_fd;
 
-void __jiffies_to_tv(struct timeval *tv, unsigned long jiffies);
-int __kernel_is_64_bit(void);
-unsigned long __tv_to_jiffies(struct timeval *tv);
+static inline unsigned long __tv_to_jiffies(const struct timeval *tv)
+{
+	unsigned long long jif;
 
-int br_device_ioctl(struct bridge *br,
-		     unsigned long arg0,
-		     unsigned long arg1,
-		     unsigned long arg2,
-		     unsigned long arg3);
-int br_get_version(void);
-int br_ioctl(unsigned long arg0, unsigned long arg1, unsigned long arg2);
-struct bridge *br_create_bridge_by_index(int index);
-int br_make_bridge_list(void);
-int br_make_port_list(struct bridge *br);
-int br_read_info(struct bridge *br);
-int br_read_port_info(struct port *p);
+	jif = 1000000ULL * tv->tv_sec + tv->tv_usec;
 
+	return jif/10000;
+}
+
+static inline void __jiffies_to_tv(struct timeval *tv, unsigned long jiffies)
+{
+	unsigned long long tvusec;
+
+	tvusec = 10000ULL*jiffies;
+	tv->tv_sec = tvusec/1000000;
+	tv->tv_usec = tvusec - 1000000 * tv->tv_sec;
+}
 #endif

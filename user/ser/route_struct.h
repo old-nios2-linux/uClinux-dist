@@ -1,8 +1,8 @@
 /*
- * $Id: route_struct.h,v 1.24 2003/10/12 15:09:08 andrei Exp $
+ * $Id: route_struct.h,v 1.30 2004/11/30 16:28:23 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,8 @@
  *  2003-04-12  FORCE_RPORT_T added (andrei)
  *  2003-04-22  strip_tail added (jiri)
  *  2003-10-10  >,<,>=,<=, != and MSGLEN_O added (andrei)
+ *  2003-10-28  FORCE_TCP_ALIAS added (andrei)
+ *  2004-02-24  added LOAD_AVP_T and AVP_TO_URI_T (bogdan)
  */
 
 
@@ -53,7 +55,7 @@
 enum { EXP_T=1, ELEM_T };
 enum { AND_OP=1, OR_OP, NOT_OP };
 enum { EQUAL_OP=10, MATCH_OP, GT_OP, LT_OP, GTE_OP, LTE_OP, DIFF_OP, NO_OP };
-enum { METHOD_O=1, URI_O, SRCIP_O, SRCPORT_O,
+enum { METHOD_O=1, URI_O, FROM_URI_O, TO_URI_O, SRCIP_O, SRCPORT_O,
 	   DSTIP_O, DSTPORT_O, PROTO_O, AF_O, MSGLEN_O, DEFAULT_O, ACTION_O,
 	   NUMBER_O};
 
@@ -70,11 +72,15 @@ enum { FORWARD_T=1, SEND_T, DROP_T, LOG_T, ERROR_T, ROUTE_T, EXEC_T,
 		SEND_TCP_T,
 		FORCE_RPORT_T,
 		SET_ADV_ADDR_T,
-		SET_ADV_PORT_T
+		SET_ADV_PORT_T,
+		FORCE_TCP_ALIAS_T,
+		LOAD_AVP_T,
+		AVP_TO_URI_T,
+		FORCE_SEND_SOCKET_T
 };
 enum { NOSUBTYPE=0, STRING_ST, NET_ST, NUMBER_ST, IP_ST, RE_ST, PROXY_ST,
 		EXPR_ST, ACTIONS_ST, CMDF_ST, MODFIXUP_ST, URIHOST_ST, URIPORT_ST,
-		MYSELF_ST, STR_ST };
+		MYSELF_ST, STR_ST, SOCKID_ST, SOCKETINFO_ST };
 
 	
 struct expr{

@@ -34,7 +34,7 @@ cryptokeytest: cryptokeytest.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o cryptokeytest cryptokeytest.c -lcrypto $(LDLIBS)
 
 clean:
-	rm -f ${ALL} core a.out
+	rm -f *.o ${ALL} core a.out
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_CRYPTO_TOOLS_CRYPTOTEST /bin/cryptotest

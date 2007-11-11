@@ -83,7 +83,7 @@ static __inline__ void destroy_context(struct mm_struct *mm)
 
 /* Other MMU related constants. */
 
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define MMU_PTEH	0xFFFFFFF0	/* Page table entry register HIGH */
 #define MMU_PTEL	0xFFFFFFF4	/* Page table entry register LOW */
 #define MMU_TTB		0xFFFFFFF8	/* Translation table base register */
@@ -97,7 +97,7 @@ static __inline__ void destroy_context(struct mm_struct *mm)
 #define MMU_NTLB_ENTRIES	128	/* for 7708 */
 #define MMU_CONTROL_INIT	0x007	/* SV=0, TF=1, IX=1, AT=1 */
 
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define MMU_PTEH	0xFF000000	/* Page table entry register HIGH */
 #define MMU_PTEL	0xFF000004	/* Page table entry register LOW */
 #define MMU_TTB		0xFF000008	/* Translation table base register */

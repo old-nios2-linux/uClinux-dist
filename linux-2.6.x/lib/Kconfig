@@ -4,6 +4,9 @@
 
 menu "Library routines"
 
+config BITREVERSE
+	tristate
+
 config CRC_CCITT
 	tristate "CRC-CCITT functions"
 	help
@@ -20,14 +23,31 @@ config CRC16
 	  the kernel tree does. Such modules that use library CRC16
 	  functions require M here.
 
+config CRC_ITU_T
+	tristate "CRC ITU-T V.41 functions"
+	help
+	  This option is provided for the case where no in-kernel-tree
+	  modules require CRC ITU-T V.41 functions, but a module built outside
+	  the kernel tree does. Such modules that use library CRC ITU-T V.41
+	  functions require M here.
+
 config CRC32
 	tristate "CRC32 functions"
 	default y
+	select BITREVERSE
 	help
 	  This option is provided for the case where no in-kernel-tree
 	  modules require CRC32 functions, but a module built outside the
 	  kernel tree does. Such modules that use library CRC32 functions
 	  require M here.
+
+config CRC7
+	tristate "CRC7 functions"
+	help
+	  This option is provided for the case where no in-kernel-tree
+	  modules require CRC7 functions, but a module built outside
+	  the kernel tree does. Such modules that use library CRC7
+	  functions require M here.
 
 config LIBCRC32C
 	tristate "CRC32c (Castagnoli, et al) Cyclic Redundancy-Check"
@@ -50,6 +70,12 @@ config ZLIB_INFLATE
 	tristate
 
 config ZLIB_DEFLATE
+	tristate
+
+config LZO_COMPRESS
+	tristate
+
+config LZO_DECOMPRESS
 	tristate
 
 #
@@ -96,5 +122,23 @@ config TEXTSEARCH_FSM
 #
 config PLIST
 	boolean
+
+config HAS_IOMEM
+	boolean
+	depends on !NO_IOMEM
+	default y
+
+config HAS_IOPORT
+	boolean
+	depends on HAS_IOMEM && !NO_IOPORT
+	default y
+
+config HAS_DMA
+	boolean
+	depends on !NO_DMA
+	default y
+
+config CHECK_SIGNATURE
+	bool
 
 endmenu

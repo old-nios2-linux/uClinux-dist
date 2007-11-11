@@ -74,8 +74,9 @@ static inline void WRITECFG32(u32 addr, u32 data)
 	*(u32 *)(cfg_space + (addr & ~3)) = data;
 }
 
-int pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+int pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
+	This is b0rked.
 	return dev->irq;
 }
 
@@ -216,7 +217,7 @@ static int __init bcm1480_pcibios_init(void)
 	/*
 	 * See if the PCI bus has been configured by the firmware.
 	 */
-	reg = *((volatile uint64_t *) IOADDR(A_SCD_SYSTEM_CFG));
+	reg = __raw_readq(IOADDR(A_SCD_SYSTEM_CFG));
 	if (!(reg & M_BCM1480_SYS_PCI_HOST)) {
 		bcm1480_bus_status |= PCI_DEVICE_MODE;
 	} else {

@@ -13,7 +13,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  * The algorithm is based on kdepim/ktnef/lib/ktnefparser.cpp from
  * KDE, rewritten in C by NJH. That algorithm is released under the GPL and is
@@ -24,19 +25,21 @@
 #include "clamav-config.h"
 #endif
 
-static	char	const	rcsid[] = "$Id: tnef.c,v 1.31 2006/03/14 11:39:43 nigelhorne Exp $";
+static	char	const	rcsid[] = "$Id: tnef.c,v 1.41 2007/02/12 22:22:27 njh Exp $";
 
 #include <stdio.h>
 #include <fcntl.h>
 
+#ifdef	HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
 #include "cltypes.h"
 #include "clamav.h"
 #include "others.h"
-#include "tnef.h"
-#if	CL_DEBUG
+
 #include "mbox.h"
-#endif
-#include "blob.h"
+#include "tnef.h"
 
 static	int	tnef_message(FILE *fp, uint16_t type, uint16_t tag, int32_t length, off_t fsize);
 static	int	tnef_attachment(FILE *fp, uint16_t type, uint16_t tag, int32_t length, const char *dir, fileblob **fbref, off_t fsize);
@@ -54,14 +57,8 @@ static	int	tnef_header(FILE *fp, uint8_t *part, uint16_t *type, uint16_t *tag, i
 #define	attTNEFVERSION	0x9006
 #define	attOEMCODEPAGE	0x9007
 
-#if WORDS_BIGENDIAN == 0
-#define host16(v)	(v)
-#define host32(v)	(v)
-#else
-#define	host16(v)	((v >> 8) | (v << 8))
-#define	host32(v)	((v >> 24) | ((v & 0x00FF0000) >> 8) | \
-				((v & 0x0000FF00) << 8) | (v << 24))
-#endif
+#define host16(v)	le16_to_host(v)
+#define host32(v)	le32_to_host(v)
 
 extern	short	cli_debug_flag;
 
@@ -132,7 +129,8 @@ cli_tnef(const char *dir, int desc)
 		if(length == 0)
 			continue;
 		if(length < 0) {
-			cli_warnmsg("Corrupt TNEF header detected - length %d\n", length);
+			cli_warnmsg("Corrupt TNEF header detected - length %d\n",
+				(int)length);
 			ret = CL_EFORMAT;
 			break;
 		}
@@ -155,7 +153,7 @@ cli_tnef(const char *dir, int desc)
 			case LVL_ATTACHMENT:
 				cli_dbgmsg("TNEF - found attachment\n");
 				if(tnef_attachment(fp, type, tag, length, dir, &fb, fsize) != 0) {
-					cli_errmsg("Error reading TNEF message\n");
+					cli_errmsg("Error reading TNEF attachment\n");
 					ret = CL_EFORMAT;
 					alldone = 1;
 				}
@@ -183,7 +181,7 @@ cli_tnef(const char *dir, int desc)
 					if(fout >= 0) {
 						int count;
 
-						cli_warnmsg("Saving dump to %s - send to bugs@clamav.net\n", filename);
+						cli_warnmsg("Saving dump to %s:  refer to http://www.clamav.net/bugs\n", filename);
 
 						lseek(desc, 0L, SEEK_SET);
 						while((count = cli_readn(desc, buffer, sizeof(buffer))) > 0)
@@ -219,12 +217,13 @@ tnef_message(FILE *fp, uint16_t type, uint16_t tag, int32_t length, off_t fsize)
 {
 	uint16_t i16;
 	off_t offset;
-#if	CL_DEBUG
+#ifdef	CL_DEBUG
 	uint32_t i32;
 	char *string;
 #endif
 
-	cli_dbgmsg("message tag 0x%x, type 0x%x, length %d\n", tag, type, length);
+	cli_dbgmsg("message tag 0x%x, type 0x%x, length %d\n", tag, type,
+		(int)length);
 
 	offset = ftell(fp);
 
@@ -235,7 +234,7 @@ tnef_message(FILE *fp, uint16_t type, uint16_t tag, int32_t length, off_t fsize)
 		case attBODY:
 			cli_warnmsg("TNEF body not being scanned - if you believe this file contains a virus, submit it to www.clamav.net\n");
 			break;
-#if	CL_DEBUG
+#ifdef	CL_DEBUG
 		case attTNEFVERSION:
 			/*assert(length == sizeof(uint32_t))*/
 			if(fread(&i32, sizeof(uint32_t), 1, fp) != 1)
@@ -277,7 +276,7 @@ tnef_message(FILE *fp, uint16_t type, uint16_t tag, int32_t length, off_t fsize)
 	/*cli_dbgmsg("%lu %lu\n", (long)(offset + length), ftell(fp));*/
 
 	if(!CLI_ISCONTAINED2(0, fsize, (off_t)offset, (off_t)length)) {
-		cli_errmsg("TNEF: Incorrect length field\n");
+		cli_errmsg("TNEF: Incorrect length field in tnef_message\n");
 		return -1;
 	}
 	if(fseek(fp, offset + length, SEEK_SET) < 0)
@@ -298,7 +297,8 @@ tnef_attachment(FILE *fp, uint16_t type, uint16_t tag, int32_t length, const cha
 	off_t offset;
 	char *string;
 
-	cli_dbgmsg("attachment tag 0x%x, type 0x%x, length %d\n", tag, type, length);
+	cli_dbgmsg("attachment tag 0x%x, type 0x%x, length %d\n", tag, type,
+		(int)length);
 
 	offset = ftell(fp);
 
@@ -350,14 +350,15 @@ tnef_attachment(FILE *fp, uint16_t type, uint16_t tag, int32_t length, const cha
 			}
 			break;
 		default:
-			cli_dbgmsg("TNEF - unsupported attachment tag 0x%x type 0x%d length %d\n", tag, type, length);
+			cli_dbgmsg("TNEF - unsupported attachment tag 0x%x type 0x%d length %d\n",
+				tag, type, (int)length);
 			break;
 	}
 
 	/*cli_dbgmsg("%lu %lu\n", (long)(offset + length), ftell(fp));*/
 
 	if(!CLI_ISCONTAINED2(0, fsize, (off_t)offset, (off_t)length)) {
-		cli_errmsg("TNEF: Incorrect length field\n");
+		cli_errmsg("TNEF: Incorrect length field in tnef_attachment\n");
 		return -1;
 	}
 	if(fseek(fp, (long)(offset + length), SEEK_SET) < 0)	/* shouldn't be needed */
@@ -385,8 +386,8 @@ tnef_header(FILE *fp, uint8_t *part, uint16_t *type, uint16_t *tag, int32_t *len
 		if((*part == '\n') && feof(fp)) {
 			/*
 			 * trailing newline in the file, could be caused by
-			 * quoted-printable encoding in the source message
-			 * missing a final '='
+			 * broken quoted-printable encoding in the source
+			 * message missing a final '='
 			 */
 			cli_dbgmsg("tnef_header: ignoring trailing newline\n");
 			return 0;
@@ -402,7 +403,8 @@ tnef_header(FILE *fp, uint8_t *part, uint16_t *type, uint16_t *tag, int32_t *len
 		return -1;
 	*length = (int32_t)host32(i32);
 
-	cli_dbgmsg("message tag 0x%x, type 0x%x, length %d\n", *tag, *type, *length);
+	cli_dbgmsg("message tag 0x%x, type 0x%x, length %d\n",
+		*tag, *type, (int)*length);
 
 	return 1;
 }

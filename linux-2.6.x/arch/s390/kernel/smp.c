@@ -1,12 +1,12 @@
 /*
  *  arch/s390/kernel/smp.c
  *
- *    Copyright (C) IBM Corp. 1999,2006
+ *    Copyright IBM Corp. 1999,2007
  *    Author(s): Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com),
- *               Martin Schwidefsky (schwidefsky@de.ibm.com)
- *               Heiko Carstens (heiko.carstens@de.ibm.com)
+ *		 Martin Schwidefsky (schwidefsky@de.ibm.com)
+ *		 Heiko Carstens (heiko.carstens@de.ibm.com)
  *
- *  based on other smp stuff by 
+ *  based on other smp stuff by
  *    (c) 1995 Alan Cox, CymruNET Ltd  <alan@cymru.net>
  *    (c) 1998 Ingo Molnar
  *
@@ -22,61 +22,58 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
-
 #include <linux/mm.h>
+#include <linux/err.h>
 #include <linux/spinlock.h>
 #include <linux/kernel_stat.h>
-#include <linux/smp_lock.h>
-
 #include <linux/delay.h>
 #include <linux/cache.h>
 #include <linux/interrupt.h>
 #include <linux/cpu.h>
-
+#include <linux/timex.h>
+#include <linux/bootmem.h>
+#include <asm/ipl.h>
+#include <asm/setup.h>
 #include <asm/sigp.h>
 #include <asm/pgalloc.h>
 #include <asm/irq.h>
 #include <asm/s390_ext.h>
 #include <asm/cpcmd.h>
 #include <asm/tlbflush.h>
-
-extern volatile int __cpu_logical_map[];
+#include <asm/timer.h>
+#include <asm/lowcore.h>
 
 /*
  * An array with a pointer the lowcore of every CPU.
  */
-
 struct _lowcore *lowcore_ptr[NR_CPUS];
+EXPORT_SYMBOL(lowcore_ptr);
 
 cpumask_t cpu_online_map = CPU_MASK_NONE;
+EXPORT_SYMBOL(cpu_online_map);
+
 cpumask_t cpu_possible_map = CPU_MASK_NONE;
+EXPORT_SYMBOL(cpu_possible_map);
 
 static struct task_struct *current_set[NR_CPUS];
 
-/*
- * Reboot, halt and power_off routines for SMP.
- */
-extern char vmhalt_cmd[];
-extern char vmpoff_cmd[];
-
 static void smp_ext_bitcall(int, ec_bit_sig);
-static void smp_ext_bitcall_others(ec_bit_sig);
 
 /*
-5B * Structure and data for smp_call_function(). This is designed to minimise
- * static memory requirements. It also looks cleaner.
+ * Structure and data for __smp_call_function_map(). This is designed to
+ * minimise static memory requirements. It also looks cleaner.
  */
 static DEFINE_SPINLOCK(call_lock);
 
 struct call_data_struct {
 	void (*func) (void *info);
 	void *info;
-	atomic_t started;
-	atomic_t finished;
+	cpumask_t started;
+	cpumask_t finished;
 	int wait;
 };
 
-static struct call_data_struct * call_data;
+static struct call_data_struct *call_data;
 
 /*
  * 'Call function' interrupt callback
@@ -87,124 +84,119 @@ static void do_call_function(void)
 	void *info = call_data->info;
 	int wait = call_data->wait;
 
-	atomic_inc(&call_data->started);
+	cpu_set(smp_processor_id(), call_data->started);
 	(*func)(info);
 	if (wait)
-		atomic_inc(&call_data->finished);
+		cpu_set(smp_processor_id(), call_data->finished);;
 }
 
-/*
- * this function sends a 'generic call function' IPI to all other CPUs
- * in the system.
- */
-
-int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
-			int wait)
-/*
- * [SUMMARY] Run a function on all other CPUs.
- * <func> The function to run. This must be fast and non-blocking.
- * <info> An arbitrary pointer to pass to the function.
- * <nonatomic> currently unused.
- * <wait> If true, wait (atomically) until function has completed on other CPUs.
- * [RETURNS] 0 on success, else a negative status code. Does not return until
- * remote CPUs are nearly ready to execute <<func>> or are or have executed.
- *
- * You must not call this function with disabled interrupts or from a
- * hardware interrupt handler or from a bottom half handler.
- */
+static void __smp_call_function_map(void (*func) (void *info), void *info,
+				    int nonatomic, int wait, cpumask_t map)
 {
 	struct call_data_struct data;
-	int cpus = num_online_cpus()-1;
+	int cpu, local = 0;
 
-	if (cpus <= 0)
-		return 0;
+	/*
+	 * Can deadlock when interrupts are disabled or if in wrong context.
+	 */
+	WARN_ON(irqs_disabled() || in_irq());
 
-	/* Can deadlock when called with interrupts disabled */
-	WARN_ON(irqs_disabled());
+	/*
+	 * Check for local function call. We have to have the same call order
+	 * as in on_each_cpu() because of machine_restart_smp().
+	 */
+	if (cpu_isset(smp_processor_id(), map)) {
+		local = 1;
+		cpu_clear(smp_processor_id(), map);
+	}
+
+	cpus_and(map, map, cpu_online_map);
+	if (cpus_empty(map))
+		goto out;
 
 	data.func = func;
 	data.info = info;
-	atomic_set(&data.started, 0);
+	data.started = CPU_MASK_NONE;
 	data.wait = wait;
 	if (wait)
-		atomic_set(&data.finished, 0);
+		data.finished = CPU_MASK_NONE;
 
 	spin_lock(&call_lock);
 	call_data = &data;
-	/* Send a message to all other CPUs and wait for them to respond */
-        smp_ext_bitcall_others(ec_call_function);
+
+	for_each_cpu_mask(cpu, map)
+		smp_ext_bitcall(cpu, ec_call_function);
 
 	/* Wait for response */
-	while (atomic_read(&data.started) != cpus)
+	while (!cpus_equal(map, data.started))
 		cpu_relax();
-
 	if (wait)
-		while (atomic_read(&data.finished) != cpus)
+		while (!cpus_equal(map, data.finished))
 			cpu_relax();
 	spin_unlock(&call_lock);
-
-	return 0;
+out:
+	if (local) {
+		local_irq_disable();
+		func(info);
+		local_irq_enable();
+	}
 }
 
 /*
- * Call a function on one CPU
- * cpu : the CPU the function should be executed on
+ * smp_call_function:
+ * @func: the function to run; this must be fast and non-blocking
+ * @info: an arbitrary pointer to pass to the function
+ * @nonatomic: unused
+ * @wait: if true, wait (atomically) until function has completed on other CPUs
  *
- * You must not call this function with disabled interrupts or from a
- * hardware interrupt handler. You may call it from a bottom half.
+ * Run a function on all other CPUs.
  *
- * It is guaranteed that the called function runs on the specified CPU,
- * preemption is disabled.
+ * You must not call this function with disabled interrupts, from a
+ * hardware interrupt handler or from a bottom half.
  */
-int smp_call_function_on(void (*func) (void *info), void *info,
-			 int nonatomic, int wait, int cpu)
+int smp_call_function(void (*func) (void *info), void *info, int nonatomic,
+		      int wait)
 {
-	struct call_data_struct data;
-	int curr_cpu;
+	cpumask_t map;
 
-	if (!cpu_online(cpu))
-		return -EINVAL;
-
-	/* disable preemption for local function call */
-	curr_cpu = get_cpu();
-
-	if (curr_cpu == cpu) {
-		/* direct call to function */
-		func(info);
-		put_cpu();
-		return 0;
-	}
-
-	data.func = func;
-	data.info = info;
-	atomic_set(&data.started, 0);
-	data.wait = wait;
-	if (wait)
-		atomic_set(&data.finished, 0);
-
-	spin_lock_bh(&call_lock);
-	call_data = &data;
-	smp_ext_bitcall(cpu, ec_call_function);
-
-	/* Wait for response */
-	while (atomic_read(&data.started) != 1)
-		cpu_relax();
-
-	if (wait)
-		while (atomic_read(&data.finished) != 1)
-			cpu_relax();
-
-	spin_unlock_bh(&call_lock);
-	put_cpu();
+	preempt_disable();
+	map = cpu_online_map;
+	cpu_clear(smp_processor_id(), map);
+	__smp_call_function_map(func, info, nonatomic, wait, map);
+	preempt_enable();
 	return 0;
 }
-EXPORT_SYMBOL(smp_call_function_on);
+EXPORT_SYMBOL(smp_call_function);
 
-static inline void do_send_stop(void)
+/*
+ * smp_call_function_single:
+ * @cpu: the CPU where func should run
+ * @func: the function to run; this must be fast and non-blocking
+ * @info: an arbitrary pointer to pass to the function
+ * @nonatomic: unused
+ * @wait: if true, wait (atomically) until function has completed on other CPUs
+ *
+ * Run a function on one processor.
+ *
+ * You must not call this function with disabled interrupts, from a
+ * hardware interrupt handler or from a bottom half.
+ */
+int smp_call_function_single(int cpu, void (*func) (void *info), void *info,
+			     int nonatomic, int wait)
 {
-        int cpu, rc;
+	preempt_disable();
+	__smp_call_function_map(func, info, nonatomic, wait,
+				cpumask_of_cpu(cpu));
+	preempt_enable();
+	return 0;
+}
+EXPORT_SYMBOL(smp_call_function_single);
 
-        /* stop all processors */
+static void do_send_stop(void)
+{
+	int cpu, rc;
+
+	/* stop all processors */
 	for_each_online_cpu(cpu) {
 		if (cpu == smp_processor_id())
 			continue;
@@ -214,11 +206,11 @@ static inline void do_send_stop(void)
 	}
 }
 
-static inline void do_store_status(void)
+static void do_store_status(void)
 {
-        int cpu, rc;
+	int cpu, rc;
 
-        /* store status of all processors in their lowcores (real 0) */
+	/* store status of all processors in their lowcores (real 0) */
 	for_each_online_cpu(cpu) {
 		if (cpu == smp_processor_id())
 			continue;
@@ -226,8 +218,21 @@ static inline void do_store_status(void)
 			rc = signal_processor_p(
 				(__u32)(unsigned long) lowcore_ptr[cpu], cpu,
 				sigp_store_status_at_address);
-		} while(rc == sigp_busy);
-        }
+		} while (rc == sigp_busy);
+	}
+}
+
+static void do_wait_for_stop(void)
+{
+	int cpu;
+
+	/* Wait for all other cpus to enter stopped state */
+	for_each_online_cpu(cpu) {
+		if (cpu == smp_processor_id())
+			continue;
+		while (!smp_cpu_not_running(cpu))
+			cpu_relax();
+	}
 }
 
 /*
@@ -236,11 +241,17 @@ static inline void do_store_status(void)
  */
 void smp_send_stop(void)
 {
-        /* write magic number to zero page (absolute 0) */
+	/* Disable all interrupts/machine checks */
+	__load_psw_mask(psw_kernel_bits & ~PSW_MASK_MCHECK);
+
+	/* write magic number to zero page (absolute 0) */
 	lowcore_ptr[smp_processor_id()]->panic_magic = __PANIC_MAGIC;
 
 	/* stop other processors. */
 	do_send_stop();
+
+	/* wait until other processors are stopped */
+	do_wait_for_stop();
 
 	/* store status of other processors. */
 	do_store_status();
@@ -249,89 +260,28 @@ void smp_send_stop(void)
 /*
  * Reboot, halt and power_off routines for SMP.
  */
-
-static void do_machine_restart(void * __unused)
+void machine_restart_smp(char *__unused)
 {
-	int cpu;
-	static atomic_t cpuid = ATOMIC_INIT(-1);
-
-	if (atomic_cmpxchg(&cpuid, -1, smp_processor_id()) != -1)
-		signal_processor(smp_processor_id(), sigp_stop);
-
-	/* Wait for all other cpus to enter stopped state */
-	for_each_online_cpu(cpu) {
-		if (cpu == smp_processor_id())
-			continue;
-		while(!smp_cpu_not_running(cpu))
-			cpu_relax();
-	}
-
-	/* Store status of other cpus. */
-	do_store_status();
-
-	/*
-	 * Finally call reipl. Because we waited for all other
-	 * cpus to enter this function we know that they do
-	 * not hold any s390irq-locks (the cpus have been
-	 * interrupted by an external interrupt and s390irq
-	 * locks are always held disabled).
-	 */
+	smp_send_stop();
 	do_reipl();
-}
-
-void machine_restart_smp(char * __unused) 
-{
-        on_each_cpu(do_machine_restart, NULL, 0, 0);
-}
-
-static void do_wait_for_stop(void)
-{
-	unsigned long cr[16];
-
-	__ctl_store(cr, 0, 15);
-	cr[0] &= ~0xffff;
-	cr[6] = 0;
-	__ctl_load(cr, 0, 15);
-	for (;;)
-		enabled_wait();
-}
-
-static void do_machine_halt(void * __unused)
-{
-	static atomic_t cpuid = ATOMIC_INIT(-1);
-
-	if (atomic_cmpxchg(&cpuid, -1, smp_processor_id()) == -1) {
-		smp_send_stop();
-		if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0)
-			cpcmd(vmhalt_cmd, NULL, 0, NULL);
-		signal_processor(smp_processor_id(),
-				 sigp_stop_and_store_status);
-	}
-	do_wait_for_stop();
 }
 
 void machine_halt_smp(void)
 {
-        on_each_cpu(do_machine_halt, NULL, 0, 0);
-}
-
-static void do_machine_power_off(void * __unused)
-{
-	static atomic_t cpuid = ATOMIC_INIT(-1);
-
-	if (atomic_cmpxchg(&cpuid, -1, smp_processor_id()) == -1) {
-		smp_send_stop();
-		if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
-			cpcmd(vmpoff_cmd, NULL, 0, NULL);
-		signal_processor(smp_processor_id(),
-				 sigp_stop_and_store_status);
-	}
-	do_wait_for_stop();
+	smp_send_stop();
+	if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0)
+		__cpcmd(vmhalt_cmd, NULL, 0, NULL);
+	signal_processor(smp_processor_id(), sigp_stop_and_store_status);
+	for (;;);
 }
 
 void machine_power_off_smp(void)
 {
-        on_each_cpu(do_machine_power_off, NULL, 0, 0);
+	smp_send_stop();
+	if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
+		__cpcmd(vmpoff_cmd, NULL, 0, NULL);
+	signal_processor(smp_processor_id(), sigp_stop_and_store_status);
+	for (;;);
 }
 
 /*
@@ -339,19 +289,19 @@ void machine_power_off_smp(void)
  * cpus are handled.
  */
 
-void do_ext_call_interrupt(__u16 code)
+static void do_ext_call_interrupt(__u16 code)
 {
-        unsigned long bits;
+	unsigned long bits;
 
-        /*
-         * handle bit signal external calls
-         *
-         * For the ec_schedule signal we have to do nothing. All the work
-         * is done automatically when we return from the interrupt.
-         */
+	/*
+	 * handle bit signal external calls
+	 *
+	 * For the ec_schedule signal we have to do nothing. All the work
+	 * is done automatically when we return from the interrupt.
+	 */
 	bits = xchg(&S390_lowcore.ext_call_fast, 0);
 
-	if (test_bit(ec_call_function, &bits)) 
+	if (test_bit(ec_call_function, &bits))
 		do_call_function();
 }
 
@@ -361,32 +311,12 @@ void do_ext_call_interrupt(__u16 code)
  */
 static void smp_ext_bitcall(int cpu, ec_bit_sig sig)
 {
-        /*
-         * Set signaling bit in lowcore of target cpu and kick it
-         */
+	/*
+	 * Set signaling bit in lowcore of target cpu and kick it
+	 */
 	set_bit(sig, (unsigned long *) &lowcore_ptr[cpu]->ext_call_fast);
-	while(signal_processor(cpu, sigp_emergency_signal) == sigp_busy)
+	while (signal_processor(cpu, sigp_emergency_signal) == sigp_busy)
 		udelay(10);
-}
-
-/*
- * Send an external call sigp to every other cpu in the system and
- * return without waiting for its completion.
- */
-static void smp_ext_bitcall_others(ec_bit_sig sig)
-{
-        int cpu;
-
-	for_each_online_cpu(cpu) {
-		if (cpu == smp_processor_id())
-                        continue;
-                /*
-                 * Set signaling bit in lowcore of target cpu and kick it
-                 */
-		set_bit(sig, (unsigned long *) &lowcore_ptr[cpu]->ext_call_fast);
-		while (signal_processor(cpu, sigp_emergency_signal) == sigp_busy)
-			udelay(10);
-        }
 }
 
 #ifndef CONFIG_64BIT
@@ -400,7 +330,7 @@ void smp_ptlb_callback(void *info)
 
 void smp_ptlb_all(void)
 {
-        on_each_cpu(smp_ptlb_callback, NULL, 0, 1);
+	on_each_cpu(smp_ptlb_callback, NULL, 0, 1);
 }
 EXPORT_SYMBOL(smp_ptlb_all);
 #endif /* ! CONFIG_64BIT */
@@ -412,7 +342,7 @@ EXPORT_SYMBOL(smp_ptlb_all);
  */
 void smp_send_reschedule(int cpu)
 {
-        smp_ext_bitcall(cpu, ec_schedule);
+	smp_ext_bitcall(cpu, ec_schedule);
 }
 
 /*
@@ -426,11 +356,12 @@ struct ec_creg_mask_parms {
 /*
  * callback for setting/clearing control bits
  */
-void smp_ctl_bit_callback(void *info) {
+static void smp_ctl_bit_callback(void *info)
+{
 	struct ec_creg_mask_parms *pp = info;
 	unsigned long cregs[16];
 	int i;
-	
+
 	__ctl_store(cregs, 0, 15);
 	for (i = 0; i <= 15; i++)
 		cregs[i] = (cregs[i] & pp->andvals[i]) | pp->orvals[i];
@@ -449,6 +380,7 @@ void smp_ctl_set_bit(int cr, int bit)
 	parms.orvals[cr] = 1 << bit;
 	on_each_cpu(smp_ctl_bit_callback, &parms, 0, 1);
 }
+EXPORT_SYMBOL(smp_ctl_set_bit);
 
 /*
  * Clear a bit in a control register of all cpus
@@ -462,13 +394,54 @@ void smp_ctl_clear_bit(int cr, int bit)
 	parms.andvals[cr] = ~(1L << bit);
 	on_each_cpu(smp_ctl_bit_callback, &parms, 0, 1);
 }
+EXPORT_SYMBOL(smp_ctl_clear_bit);
+
+#if defined(CONFIG_ZFCPDUMP) || defined(CONFIG_ZFCPDUMP_MODULE)
+
+/*
+ * zfcpdump_prefix_array holds prefix registers for the following scenario:
+ * 64 bit zfcpdump kernel and 31 bit kernel which is to be dumped. We have to
+ * save its prefix registers, since they get lost, when switching from 31 bit
+ * to 64 bit.
+ */
+unsigned int zfcpdump_prefix_array[NR_CPUS + 1] \
+	__attribute__((__section__(".data")));
+
+static void __init smp_get_save_area(unsigned int cpu, unsigned int phy_cpu)
+{
+	if (ipl_info.type != IPL_TYPE_FCP_DUMP)
+		return;
+	if (cpu >= NR_CPUS) {
+		printk(KERN_WARNING "Registers for cpu %i not saved since dump "
+		       "kernel was compiled with NR_CPUS=%i\n", cpu, NR_CPUS);
+		return;
+	}
+	zfcpdump_save_areas[cpu] = alloc_bootmem(sizeof(union save_area));
+	__cpu_logical_map[1] = (__u16) phy_cpu;
+	while (signal_processor(1, sigp_stop_and_store_status) == sigp_busy)
+		cpu_relax();
+	memcpy(zfcpdump_save_areas[cpu],
+	       (void *)(unsigned long) store_prefix() + SAVE_AREA_BASE,
+	       SAVE_AREA_SIZE);
+#ifdef CONFIG_64BIT
+	/* copy original prefix register */
+	zfcpdump_save_areas[cpu]->s390x.pref_reg = zfcpdump_prefix_array[cpu];
+#endif
+}
+
+union save_area *zfcpdump_save_areas[NR_CPUS + 1];
+EXPORT_SYMBOL_GPL(zfcpdump_save_areas);
+
+#else
+
+static inline void smp_get_save_area(unsigned int cpu, unsigned int phy_cpu) { }
+
+#endif /* CONFIG_ZFCPDUMP || CONFIG_ZFCPDUMP_MODULE */
 
 /*
  * Lets check how many CPUs we have.
  */
-
-static unsigned int
-__init smp_count_cpus(void)
+static unsigned int __init smp_count_cpus(void)
 {
 	unsigned int cpu, num_cpus;
 	__u16 boot_cpu_addr;
@@ -476,7 +449,6 @@ __init smp_count_cpus(void)
 	/*
 	 * cpu 0 is the boot cpu. See smp_prepare_boot_cpu.
 	 */
-
 	boot_cpu_addr = S390_lowcore.cpu_data.cpu_addr;
 	current_thread_info()->cpu = 0;
 	num_cpus = 1;
@@ -484,50 +456,42 @@ __init smp_count_cpus(void)
 		if ((__u16) cpu == boot_cpu_addr)
 			continue;
 		__cpu_logical_map[1] = (__u16) cpu;
-		if (signal_processor(1, sigp_sense) ==
-		    sigp_not_operational)
+		if (signal_processor(1, sigp_sense) == sigp_not_operational)
 			continue;
+		smp_get_save_area(num_cpus, cpu);
 		num_cpus++;
 	}
-
-	printk("Detected %d CPU's\n",(int) num_cpus);
+	printk("Detected %d CPU's\n", (int) num_cpus);
 	printk("Boot cpu address %2X\n", boot_cpu_addr);
-
 	return num_cpus;
 }
 
 /*
- *      Activate a secondary processor.
+ *	Activate a secondary processor.
  */
-extern void init_cpu_timer(void);
-extern void init_cpu_vtimer(void);
-extern int pfault_init(void);
-extern void pfault_fini(void);
-
-int __devinit start_secondary(void *cpuvoid)
+int __cpuinit start_secondary(void *cpuvoid)
 {
-        /* Setup the cpu */
-        cpu_init();
+	/* Setup the cpu */
+	cpu_init();
 	preempt_disable();
-        /* init per CPU timer */
-        init_cpu_timer();
+	/* Enable TOD clock interrupts on the secondary cpu. */
+	init_cpu_timer();
 #ifdef CONFIG_VIRT_TIMER
-        init_cpu_vtimer();
+	/* Enable cpu timer interrupts on the secondary cpu. */
+	init_cpu_vtimer();
 #endif
-#ifdef CONFIG_PFAULT
 	/* Enable pfault pseudo page faults on this cpu. */
-	if (MACHINE_IS_VM)
-		pfault_init();
-#endif
+	pfault_init();
+
 	/* Mark this cpu as online */
 	cpu_set(smp_processor_id(), cpu_online_map);
 	/* Switch on interrupts */
 	local_irq_enable();
-        /* Print info about this processor */
-        print_cpu_info(&S390_lowcore.cpu_data);
-        /* cpu_idle will call schedule for us */
-        cpu_idle();
-        return 0;
+	/* Print info about this processor */
+	print_cpu_info(&S390_lowcore.cpu_data);
+	/* cpu_idle will call schedule for us */
+	cpu_idle();
+	return 0;
 }
 
 static void __init smp_create_idle(unsigned int cpu)
@@ -544,56 +508,13 @@ static void __init smp_create_idle(unsigned int cpu)
 	current_set[cpu] = p;
 }
 
-/* Reserving and releasing of CPUs */
-
-static DEFINE_SPINLOCK(smp_reserve_lock);
-static int smp_cpu_reserved[NR_CPUS];
-
-int
-smp_get_cpu(cpumask_t cpu_mask)
-{
-	unsigned long flags;
-	int cpu;
-
-	spin_lock_irqsave(&smp_reserve_lock, flags);
-	/* Try to find an already reserved cpu. */
-	for_each_cpu_mask(cpu, cpu_mask) {
-		if (smp_cpu_reserved[cpu] != 0) {
-			smp_cpu_reserved[cpu]++;
-			/* Found one. */
-			goto out;
-		}
-	}
-	/* Reserve a new cpu from cpu_mask. */
-	for_each_cpu_mask(cpu, cpu_mask) {
-		if (cpu_online(cpu)) {
-			smp_cpu_reserved[cpu]++;
-			goto out;
-		}
-	}
-	cpu = -ENODEV;
-out:
-	spin_unlock_irqrestore(&smp_reserve_lock, flags);
-	return cpu;
-}
-
-void
-smp_put_cpu(int cpu)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&smp_reserve_lock, flags);
-	smp_cpu_reserved[cpu]--;
-	spin_unlock_irqrestore(&smp_reserve_lock, flags);
-}
-
-static inline int
-cpu_stopped(int cpu)
+static int cpu_stopped(int cpu)
 {
 	__u32 status;
 
 	/* Check for stopped state */
-	if (signal_processor_ps(&status, 0, cpu, sigp_sense) == sigp_status_stored) {
+	if (signal_processor_ps(&status, 0, cpu, sigp_sense) ==
+	    sigp_status_stored) {
 		if (status & 0x40)
 			return 1;
 	}
@@ -602,14 +523,13 @@ cpu_stopped(int cpu)
 
 /* Upping and downing of CPUs */
 
-int
-__cpu_up(unsigned int cpu)
+int __cpu_up(unsigned int cpu)
 {
 	struct task_struct *idle;
-        struct _lowcore    *cpu_lowcore;
+	struct _lowcore *cpu_lowcore;
 	struct stack_frame *sf;
-        sigp_ccode          ccode;
-	int                 curr_cpu;
+	sigp_ccode ccode;
+	int curr_cpu;
 
 	for (curr_cpu = 0; curr_cpu <= 65535; curr_cpu++) {
 		__cpu_logical_map[cpu] = (__u16) curr_cpu;
@@ -622,7 +542,7 @@ __cpu_up(unsigned int cpu)
 
 	ccode = signal_processor_p((__u32)(unsigned long)(lowcore_ptr[cpu]),
 				   cpu, sigp_set_prefix);
-	if (ccode){
+	if (ccode) {
 		printk("sigp_set_prefix failed for cpu %d "
 		       "with condition code %d\n",
 		       (int) cpu, (int) ccode);
@@ -630,9 +550,9 @@ __cpu_up(unsigned int cpu)
 	}
 
 	idle = current_set[cpu];
-        cpu_lowcore = lowcore_ptr[cpu];
+	cpu_lowcore = lowcore_ptr[cpu];
 	cpu_lowcore->kernel_stack = (unsigned long)
-		task_stack_page(idle) + (THREAD_SIZE);
+		task_stack_page(idle) + THREAD_SIZE;
 	sf = (struct stack_frame *) (cpu_lowcore->kernel_stack
 				     - sizeof(struct pt_regs)
 				     - sizeof(struct stack_frame));
@@ -644,11 +564,11 @@ __cpu_up(unsigned int cpu)
 		"	stam	0,15,0(%0)"
 		: : "a" (&cpu_lowcore->access_regs_save_area) : "memory");
 	cpu_lowcore->percpu_offset = __per_cpu_offset[cpu];
-        cpu_lowcore->current_task = (unsigned long) idle;
-        cpu_lowcore->cpu_data.cpu_nr = cpu;
+	cpu_lowcore->current_task = (unsigned long) idle;
+	cpu_lowcore->cpu_data.cpu_nr = cpu;
 	eieio();
 
-	while (signal_processor(cpu,sigp_restart) == sigp_busy)
+	while (signal_processor(cpu, sigp_restart) == sigp_busy)
 		udelay(10);
 
 	while (!cpu_online(cpu))
@@ -694,49 +614,38 @@ static int __init setup_possible_cpus(char *s)
 }
 early_param("possible_cpus", setup_possible_cpus);
 
-int
-__cpu_disable(void)
+int __cpu_disable(void)
 {
-	unsigned long flags;
 	struct ec_creg_mask_parms cr_parms;
 	int cpu = smp_processor_id();
 
-	spin_lock_irqsave(&smp_reserve_lock, flags);
-	if (smp_cpu_reserved[cpu] != 0) {
-		spin_unlock_irqrestore(&smp_reserve_lock, flags);
-		return -EBUSY;
-	}
 	cpu_clear(cpu, cpu_online_map);
 
-#ifdef CONFIG_PFAULT
 	/* Disable pfault pseudo page faults on this cpu. */
-	if (MACHINE_IS_VM)
-		pfault_fini();
-#endif
+	pfault_fini();
 
 	memset(&cr_parms.orvals, 0, sizeof(cr_parms.orvals));
 	memset(&cr_parms.andvals, 0xff, sizeof(cr_parms.andvals));
 
 	/* disable all external interrupts */
 	cr_parms.orvals[0] = 0;
-	cr_parms.andvals[0] = ~(1<<15 | 1<<14 | 1<<13 | 1<<12 |
-				1<<11 | 1<<10 | 1<< 6 | 1<< 4);
+	cr_parms.andvals[0] = ~(1 << 15 | 1 << 14 | 1 << 13 | 1 << 12 |
+				1 << 11 | 1 << 10 | 1 <<  6 | 1 <<  4);
 	/* disable all I/O interrupts */
 	cr_parms.orvals[6] = 0;
-	cr_parms.andvals[6] = ~(1<<31 | 1<<30 | 1<<29 | 1<<28 |
-				1<<27 | 1<<26 | 1<<25 | 1<<24);
+	cr_parms.andvals[6] = ~(1 << 31 | 1 << 30 | 1 << 29 | 1 << 28 |
+				1 << 27 | 1 << 26 | 1 << 25 | 1 << 24);
 	/* disable most machine checks */
 	cr_parms.orvals[14] = 0;
-	cr_parms.andvals[14] = ~(1<<28 | 1<<27 | 1<<26 | 1<<25 | 1<<24);
+	cr_parms.andvals[14] = ~(1 << 28 | 1 << 27 | 1 << 26 |
+				 1 << 25 | 1 << 24);
 
 	smp_ctl_bit_callback(&cr_parms);
 
-	spin_unlock_irqrestore(&smp_reserve_lock, flags);
 	return 0;
 }
 
-void
-__cpu_die(unsigned int cpu)
+void __cpu_die(unsigned int cpu)
 {
 	/* Wait until target cpu is down */
 	while (!smp_cpu_not_running(cpu))
@@ -744,13 +653,12 @@ __cpu_die(unsigned int cpu)
 	printk("Processor %d spun down\n", cpu);
 }
 
-void
-cpu_die(void)
+void cpu_die(void)
 {
 	idle_task_exit();
 	signal_processor(smp_processor_id(), sigp_stop);
 	BUG();
-	for(;;);
+	for (;;);
 }
 
 #endif /* CONFIG_HOTPLUG_CPU */
@@ -763,36 +671,36 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	unsigned long stack;
 	unsigned int cpu;
-        int i;
+	int i;
 
-        /* request the 0x1201 emergency signal external interrupt */
-        if (register_external_interrupt(0x1201, do_ext_call_interrupt) != 0)
-                panic("Couldn't request external interrupt 0x1201");
-        memset(lowcore_ptr,0,sizeof(lowcore_ptr));  
-        /*
-         *  Initialize prefix pages and stacks for all possible cpus
-         */
+	/* request the 0x1201 emergency signal external interrupt */
+	if (register_external_interrupt(0x1201, do_ext_call_interrupt) != 0)
+		panic("Couldn't request external interrupt 0x1201");
+	memset(lowcore_ptr, 0, sizeof(lowcore_ptr));
+	/*
+	 *  Initialize prefix pages and stacks for all possible cpus
+	 */
 	print_cpu_info(&S390_lowcore.cpu_data);
 
-        for_each_possible_cpu(i) {
+	for_each_possible_cpu(i) {
 		lowcore_ptr[i] = (struct _lowcore *)
-			__get_free_pages(GFP_KERNEL|GFP_DMA, 
-					sizeof(void*) == 8 ? 1 : 0);
-		stack = __get_free_pages(GFP_KERNEL,ASYNC_ORDER);
-		if (lowcore_ptr[i] == NULL || stack == 0ULL)
+			__get_free_pages(GFP_KERNEL | GFP_DMA,
+					 sizeof(void*) == 8 ? 1 : 0);
+		stack = __get_free_pages(GFP_KERNEL, ASYNC_ORDER);
+		if (!lowcore_ptr[i] || !stack)
 			panic("smp_boot_cpus failed to allocate memory\n");
 
 		*(lowcore_ptr[i]) = S390_lowcore;
-		lowcore_ptr[i]->async_stack = stack + (ASYNC_SIZE);
-		stack = __get_free_pages(GFP_KERNEL,0);
-		if (stack == 0ULL)
+		lowcore_ptr[i]->async_stack = stack + ASYNC_SIZE;
+		stack = __get_free_pages(GFP_KERNEL, 0);
+		if (!stack)
 			panic("smp_boot_cpus failed to allocate memory\n");
-		lowcore_ptr[i]->panic_stack = stack + (PAGE_SIZE);
+		lowcore_ptr[i]->panic_stack = stack + PAGE_SIZE;
 #ifndef CONFIG_64BIT
 		if (MACHINE_HAS_IEEE) {
 			lowcore_ptr[i]->extended_save_area_addr =
-				(__u32) __get_free_pages(GFP_KERNEL,0);
-			if (lowcore_ptr[i]->extended_save_area_addr == 0)
+				(__u32) __get_free_pages(GFP_KERNEL, 0);
+			if (!lowcore_ptr[i]->extended_save_area_addr)
 				panic("smp_boot_cpus failed to "
 				      "allocate memory\n");
 		}
@@ -809,7 +717,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 			smp_create_idle(cpu);
 }
 
-void __devinit smp_prepare_boot_cpu(void)
+void __init smp_prepare_boot_cpu(void)
 {
 	BUG_ON(smp_processor_id() != 0);
 
@@ -818,7 +726,7 @@ void __devinit smp_prepare_boot_cpu(void)
 	current_set[0] = current;
 }
 
-void smp_cpus_done(unsigned int max_cpus)
+void __init smp_cpus_done(unsigned int max_cpus)
 {
 	cpu_present_map = cpu_possible_map;
 }
@@ -831,33 +739,65 @@ void smp_cpus_done(unsigned int max_cpus)
  */
 int setup_profiling_timer(unsigned int multiplier)
 {
-        return 0;
+	return 0;
 }
 
 static DEFINE_PER_CPU(struct cpu, cpu_devices);
 
+static ssize_t show_capability(struct sys_device *dev, char *buf)
+{
+	unsigned int capability;
+	int rc;
+
+	rc = get_cpu_capability(&capability);
+	if (rc)
+		return rc;
+	return sprintf(buf, "%u\n", capability);
+}
+static SYSDEV_ATTR(capability, 0444, show_capability, NULL);
+
+static int __cpuinit smp_cpu_notify(struct notifier_block *self,
+				    unsigned long action, void *hcpu)
+{
+	unsigned int cpu = (unsigned int)(long)hcpu;
+	struct cpu *c = &per_cpu(cpu_devices, cpu);
+	struct sys_device *s = &c->sysdev;
+
+	switch (action) {
+	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+		if (sysdev_create_file(s, &attr_capability))
+			return NOTIFY_BAD;
+		break;
+	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
+		sysdev_remove_file(s, &attr_capability);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block __cpuinitdata smp_cpu_nb = {
+	.notifier_call = smp_cpu_notify,
+};
+
 static int __init topology_init(void)
 {
 	int cpu;
-	int ret;
+
+	register_cpu_notifier(&smp_cpu_nb);
 
 	for_each_possible_cpu(cpu) {
-		ret = register_cpu(&per_cpu(cpu_devices, cpu), cpu);
-		if (ret)
-			printk(KERN_WARNING "topology_init: register_cpu %d "
-			       "failed (%d)\n", cpu, ret);
+		struct cpu *c = &per_cpu(cpu_devices, cpu);
+		struct sys_device *s = &c->sysdev;
+
+		c->hotpluggable = 1;
+		register_cpu(c, cpu);
+		if (!cpu_online(cpu))
+			continue;
+		s = &c->sysdev;
+		sysdev_create_file(s, &attr_capability);
 	}
 	return 0;
 }
-
 subsys_initcall(topology_init);
-
-EXPORT_SYMBOL(cpu_online_map);
-EXPORT_SYMBOL(cpu_possible_map);
-EXPORT_SYMBOL(lowcore_ptr);
-EXPORT_SYMBOL(smp_ctl_set_bit);
-EXPORT_SYMBOL(smp_ctl_clear_bit);
-EXPORT_SYMBOL(smp_call_function);
-EXPORT_SYMBOL(smp_get_cpu);
-EXPORT_SYMBOL(smp_put_cpu);
-

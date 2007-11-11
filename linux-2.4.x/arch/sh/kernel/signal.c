@@ -186,7 +186,7 @@ struct rt_sigframe
 	u16 retcode[8];
 };
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 static inline int restore_sigcontext_fpu(struct sigcontext *sc)
 {
 	struct task_struct *tsk = current;
@@ -237,7 +237,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 	COPY(sr);	COPY(pc);
 #undef COPY
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	{
 		int owned_fp;
 		struct task_struct *tsk = current;
@@ -345,7 +345,7 @@ setup_sigcontext(struct sigcontext *sc, struct pt_regs *regs,
 	COPY(sr);	COPY(pc);
 #undef COPY
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	err |= save_sigcontext_fpu(sc);
 #endif
 

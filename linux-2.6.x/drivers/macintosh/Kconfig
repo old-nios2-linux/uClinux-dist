@@ -1,6 +1,15 @@
 
-menu "Macintosh device drivers"
-	depends on PPC || MAC
+menuconfig MACINTOSH_DRIVERS
+	bool "Macintosh device drivers"
+	depends on PPC || MAC || X86
+	default y if (PPC_PMAC || MAC)
+	---help---
+	  Say Y here to get to see options for devices used with Macintosh
+	  computers. This option alone does not add any kernel code.
+
+	  If you say N, all options in this submenu will be skipped and disabled.
+
+if MACINTOSH_DRIVERS
 
 config ADB
 	bool "Apple Desktop Bus (ADB) support"
@@ -109,7 +118,8 @@ config PMAC_SMU
 
 config PMAC_APM_EMU
 	tristate "APM emulation"
-	depends on PPC_PMAC && PPC32 && PM && ADB_PMU
+	select APM_EMULATION
+	depends on ADB_PMU && PM && PPC32
 
 config PMAC_MEDIABAY
 	bool "Support PowerBook hotswap media bay"
@@ -162,7 +172,6 @@ config INPUT_ADBHID
 
 config MAC_EMUMOUSEBTN
 	bool "Support for mouse button 2+3 emulation"
-	depends on INPUT_ADBHID
 	help
 	  This provides generic support for emulating the 2nd and 3rd mouse
 	  button with keypresses.  If you say Y here, the emulation is still
@@ -228,4 +237,11 @@ config ANSLCD
 	tristate "Support for ANS LCD display"
 	depends on ADB_CUDA && PPC_PMAC
 
-endmenu
+config PMAC_RACKMETER
+	tristate "Support for Apple XServe front panel LEDs"
+	depends on PPC_PMAC
+	help
+	  This driver provides some support to control the front panel
+          blue LEDs "vu-meter" of the XServer macs.
+
+endif # MACINTOSH_DRIVERS

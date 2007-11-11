@@ -27,37 +27,44 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: system.c,v 1.24 2001/04/18 15:11:52 hughesj Exp $
+ *	$Id: system.c,v 1.43 2007/01/16 15:10:08 ldv Exp $
  */
 
 #include "defs.h"
 
 #ifdef LINUX
+#define _LINUX_SOCKET_H
 #define _LINUX_FS_H
 
-#define MS_RDONLY   1  /* Mount read-only */
-#define MS_NOSUID   2  /* Ignore suid and sgid bits */
-#define MS_NODEV    4  /* Disallow access to device special files */
-#define MS_NOEXEC   8  /* Disallow program execution */
-#define MS_SYNCHRONOUS 16  /* Writes are synced at once */
-#define MS_REMOUNT 32  /* Alter flags of a mounted FS */
+#define MS_RDONLY	 1	/* Mount read-only */
+#define MS_NOSUID	 2	/* Ignore suid and sgid bits */
+#define MS_NODEV	 4	/* Disallow access to device special files */
+#define MS_NOEXEC	 8	/* Disallow program execution */
+#define MS_SYNCHRONOUS	16	/* Writes are synced at once */
+#define MS_REMOUNT	32	/* Alter flags of a mounted FS */
+#define MS_MANDLOCK	64	/* Allow mandatory locks on an FS */
+#define MS_DIRSYNC	128	/* Directory modifications are synchronous */
+#define MS_NOATIME	1024	/* Do not update access times. */
+#define MS_NODIRATIME	2048	/* Do not update directory access times */
+#define MS_BIND		4096
+#define MS_MOVE		8192
+#define MS_REC		16384
+#define MS_SILENT	32768
+#define MS_POSIXACL	(1<<16)	/* VFS does not apply the umask */
+#define MS_UNBINDABLE	(1<<17)	/* change to unbindable */
+#define MS_PRIVATE	(1<<18)	/* change to private */
+#define MS_SLAVE	(1<<19)	/* change to slave */
+#define MS_SHARED	(1<<20)	/* change to shared */
+#define MS_ACTIVE	(1<<30)
+#define MS_NOUSER	(1<<31)
+#define MS_MGC_VAL	0xc0ed0000	/* Magic flag number */
+#define MS_MGC_MSK	0xffff0000	/* Magic flag mask */
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include <sys/syscall.h>
-
-#ifdef SYS_personality
-/* Workaround for kernel namespace pollution. */
-#define _LINUX_PTRACE_H
-/* Yuck yuck yuck.  We can't include linux/ptrace.h, but personality.h
-   makes a declaration with struct pt_regs, which is defined there. */
-struct pt_regs;
-#define sys_personality kernel_sys_personality
-#include <linux/personality.h>
-#undef sys_personality
-#endif /* SYS_personality */
 
 #ifdef SYS_capget
 #include <linux/capability.h>
@@ -71,86 +78,122 @@ struct pt_regs;
 #include <linux/utsname.h>
 #endif
 
-#ifdef HAVE_ASM_SYSMIPS_H
+#ifdef MIPS
 #include <asm/sysmips.h>
 #endif
 
 #include <linux/sysctl.h>
 
-static struct xlat mount_flags[] = {
+static const struct xlat mount_flags[] = {
+	{ MS_MGC_VAL,	"MS_MGC_VAL"	},
 	{ MS_RDONLY,	"MS_RDONLY"	},
 	{ MS_NOSUID,	"MS_NOSUID"	},
 	{ MS_NODEV,	"MS_NODEV"	},
 	{ MS_NOEXEC,	"MS_NOEXEC"	},
-#ifdef MS_SYNCHRONOUS
 	{ MS_SYNCHRONOUS,"MS_SYNCHRONOUS"},
-#else
-	{ MS_SYNC,	"MS_SYNC"	},
-#endif
 	{ MS_REMOUNT,	"MS_REMOUNT"	},
+	{ MS_MANDLOCK,	"MS_MANDLOCK"	},
+	{ MS_NOATIME,	"MS_NOATIME"	},
+	{ MS_NODIRATIME,"MS_NODIRATIME"	},
+	{ MS_BIND,	"MS_BIND"	},
+	{ MS_MOVE,	"MS_MOVE"	},
+	{ MS_REC,	"MS_REC"	},
+	{ MS_SILENT,	"MS_SILENT"	},
+	{ MS_POSIXACL,	"MS_POSIXACL"	},
+	{ MS_UNBINDABLE,"MS_UNBINDABLE"	},
+	{ MS_PRIVATE,	"MS_PRIVATE"	},
+	{ MS_SLAVE,	"MS_SLAVE"	},
+	{ MS_SHARED,	"MS_SHARED"	},
+	{ MS_ACTIVE,	"MS_ACTIVE"	},
+	{ MS_NOUSER,	"MS_NOUSER"	},
 	{ 0,		NULL		},
 };
 
 int
-sys_mount(tcp)
-struct tcb *tcp;
+sys_mount(struct tcb *tcp)
 {
 	if (entering(tcp)) {
+		int ignore_type = 0, ignore_data = 0;
+		unsigned long flags = tcp->u_arg[3];
+
+		/* Discard magic */
+		if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
+			flags &= ~MS_MGC_MSK;
+
+		if (flags & MS_REMOUNT)
+			ignore_type = 1;
+		else if (flags & (MS_BIND | MS_MOVE))
+			ignore_type = ignore_data = 1;
+
 		printpath(tcp, tcp->u_arg[0]);
 		tprintf(", ");
+
 		printpath(tcp, tcp->u_arg[1]);
 		tprintf(", ");
-		printpath(tcp, tcp->u_arg[2]);
+
+		if (ignore_type && tcp->u_arg[2])
+			tprintf("%#lx", tcp->u_arg[2]);
+		else
+			printstr(tcp, tcp->u_arg[2], -1);
 		tprintf(", ");
-		printflags(mount_flags, tcp->u_arg[3]);
-		tprintf(", %#lx", tcp->u_arg[4]);
+
+		printflags(mount_flags, tcp->u_arg[3], "MS_???");
+		tprintf(", ");
+
+		if (ignore_data && tcp->u_arg[4])
+			tprintf("%#lx", tcp->u_arg[4]);
+		else
+			printstr(tcp, tcp->u_arg[4], -1);
 	}
 	return 0;
 }
 
+#define MNT_FORCE	0x00000001	/* Attempt to forcibily umount */
+#define MNT_DETACH	0x00000002	/* Just detach from the tree */
+#define MNT_EXPIRE	0x00000004	/* Mark for expiry */
+
+static const struct xlat umount_flags[] = {
+	{ MNT_FORCE,	"MNT_FORCE"	},
+	{ MNT_DETACH,	"MNT_DETACH"	},
+	{ MNT_EXPIRE,	"MNT_EXPIRE"	},
+	{ 0,		NULL		},
+};
+
 int
-sys_umount2(tcp)
-struct tcb *tcp;
+sys_umount2(struct tcb *tcp)
 {
 	if (entering(tcp)) {
 		printstr(tcp, tcp->u_arg[0], -1);
 		tprintf(", ");
-		if (tcp->u_arg[1] & 1)
-			tprintf("MNT_FORCE");
-		else
-			tprintf("0");
+		printflags(umount_flags, tcp->u_arg[1], "MNT_???");
 	}
 	return 0;
 }
 
-static struct xlat personality_options[] = {
-#ifdef PER_LINUX
-	{ PER_LINUX,	"PER_LINUX"	},
-#endif
-#ifdef PER_LINUX_32BIT
-	{ PER_LINUX_32BIT,	"PER_LINUX"	},
-#endif
-#ifdef PER_SVR4
-	{ PER_SVR4,	"PER_SVR4"	},
-#endif
-#ifdef PER_SVR3
-	{ PER_SVR3,	"PER_SVR3"	},
-#endif
-#ifdef PER_SCOSVR3
-	{ PER_SCOSVR3,	"PER_SCOSVR3"	},
-#endif
-#ifdef PER_WYSEV386
-	{ PER_WYSEV386,	"PER_WYSEV386"	},
-#endif
-#ifdef PER_ISCR4
-	{ PER_ISCR4,	"PER_ISCR4"	},
-#endif
-#ifdef PER_BSD
-	{ PER_BSD,	"PER_BSD"	},
-#endif
-#ifdef PER_XENIX
-	{ PER_XENIX,	"PER_XENIX"	},
-#endif
+/* These are not macros, but enums.  We just copy the values by hand
+   from Linux 2.6.9 here.  */
+static const struct xlat personality_options[] = {
+	{ 0,		"PER_LINUX"	},
+	{ 0x00800000,	"PER_LINUX_32BIT"},
+	{ 0x04100001,	"PER_SVR4"	},
+	{ 0x05000002,	"PER_SVR3"	},
+	{ 0x07000003,	"PER_SCOSVR3"	},
+	{ 0x06000003,	"PER_OSR5"	},
+	{ 0x05000004,	"PER_WYSEV386"	},
+	{ 0x04000005,	"PER_ISCR4"	},
+	{ 0x00000006,	"PER_BSD"	},
+	{ 0x04000006,	"PER_SUNOS"	},
+	{ 0x05000007,	"PER_XENIX"	},
+	{ 0x00000008,	"PER_LINUX32"	},
+	{ 0x08000008,	"PER_LINUX32_3GB"},
+	{ 0x04000009,	"PER_IRIX32"	},
+	{ 0x0400000a,	"PER_IRIXN32"	},
+	{ 0x0400000b,	"PER_IRIX64"	},
+	{ 0x0000000c,	"PER_RISCOS"	},
+	{ 0x0400000d,	"PER_SOLARIS"	},
+	{ 0x0410000e,	"PER_UW7"	},
+	{ 0x0000000f,	"PER_OSF4"	},
+	{ 0x00000010,	"PER_HPUX"	},
 	{ 0,		NULL		},
 };
 
@@ -163,44 +206,26 @@ struct tcb *tcp;
 	return 0;
 }
 
-#ifdef HAVE_LINUX_REBOOT_H
 #include <linux/reboot.h>
-#else
-#define LINUX_REBOOT_MAGIC1     0xfee1dead
-#define LINUX_REBOOT_MAGIC2     672274793
-#define LINUX_REBOOT_CMD_RESTART        0x01234567
-#define LINUX_REBOOT_CMD_HALT           0xCDEF0123
-#define LINUX_REBOOT_CMD_CAD_ON         0x89ABCDEF
-#define LINUX_REBOOT_CMD_CAD_OFF        0x00000000
-#endif
-
-static struct xlat bootflags1[] = {
+static const struct xlat bootflags1[] = {
 	{ LINUX_REBOOT_MAGIC1,	"LINUX_REBOOT_MAGIC1"	},
 	{ 0,			NULL			},
 };
 
-static struct xlat bootflags2[] = {
+static const struct xlat bootflags2[] = {
 	{ LINUX_REBOOT_MAGIC2,	"LINUX_REBOOT_MAGIC2"	},
-#ifdef LINUX_REBOOT_MAGIC2A
 	{ LINUX_REBOOT_MAGIC2A,	"LINUX_REBOOT_MAGIC2A"	},
-#endif
-#ifdef LINUX_REBOOT_MAGIC2A
 	{ LINUX_REBOOT_MAGIC2B,	"LINUX_REBOOT_MAGIC2B"	},
-#endif
 	{ 0,			NULL			},
 };
 
-static struct xlat bootflags3[] = {
+static const struct xlat bootflags3[] = {
 	{ LINUX_REBOOT_CMD_CAD_OFF,	"LINUX_REBOOT_CMD_CAD_OFF"	},
 	{ LINUX_REBOOT_CMD_RESTART,	"LINUX_REBOOT_CMD_RESTART"	},
 	{ LINUX_REBOOT_CMD_HALT,	"LINUX_REBOOT_CMD_HALT"		},
 	{ LINUX_REBOOT_CMD_CAD_ON,	"LINUX_REBOOT_CMD_CAD_ON"	},
-#ifdef LINUX_REBOOT_CMD_POWER_OFF
 	{ LINUX_REBOOT_CMD_POWER_OFF,	"LINUX_REBOOT_CMD_POWER_OFF"	},
-#endif
-#ifdef LINUX_REBOOT_CMD_RESTART2
 	{ LINUX_REBOOT_CMD_RESTART2,	"LINUX_REBOOT_CMD_RESTART2"	},
-#endif
 	{ 0,				NULL				},
 };
 
@@ -209,26 +234,21 @@ sys_reboot(tcp)
 struct tcb *tcp;
 {
 	if (entering(tcp)) {
-		if (!printflags(bootflags1, tcp->u_arg[0]))
-			tprintf("LINUX_REBOOT_MAGIC???");
+		printflags(bootflags1, tcp->u_arg[0], "LINUX_REBOOT_MAGIC_???");
 		tprintf(", ");
-		if (!printflags(bootflags2, tcp->u_arg[1]))
-			tprintf("LINUX_REBOOT_MAGIC???");
+		printflags(bootflags2, tcp->u_arg[1], "LINUX_REBOOT_MAGIC_???");
 		tprintf(", ");
-		if (!printflags(bootflags3, tcp->u_arg[2]))
-			tprintf("LINUX_REBOOT_CMD_???");
-#ifdef LINUX_REBOOT_CMD_RESTART2
+		printflags(bootflags3, tcp->u_arg[2], "LINUX_REBOOT_CMD_???");
 		if (tcp->u_arg[2] == LINUX_REBOOT_CMD_RESTART2) {
 			tprintf(", ");
 			printstr(tcp, tcp->u_arg[3], -1);
 		}
-#endif
 	}
 	return 0;
 }
 
 #ifdef M68K
-static struct xlat cacheflush_scope[] = {
+static const struct xlat cacheflush_scope[] = {
 #ifdef FLUSH_SCOPE_LINE
 	{ FLUSH_SCOPE_LINE,	"FLUSH_SCOPE_LINE" },
 #endif
@@ -241,7 +261,7 @@ static struct xlat cacheflush_scope[] = {
 	{ 0,			NULL },
 };
 
-static struct xlat cacheflush_flags[] = {
+static const struct xlat cacheflush_flags[] = {
 #ifdef FLUSH_CACHE_BOTH
 	{ FLUSH_CACHE_BOTH,	"FLUSH_CACHE_BOTH" },
 #endif
@@ -265,7 +285,7 @@ struct tcb *tcp;
 		printxval(cacheflush_scope, tcp->u_arg[1], "FLUSH_SCOPE_???");
 		tprintf(", ");
 		/* flags */
-		printflags(cacheflush_flags, tcp->u_arg[2]);
+		printflags(cacheflush_flags, tcp->u_arg[2], "FLUSH_CACHE_???");
 		/* len */
 		tprintf(", %lu", tcp->u_arg[3]);
 	}
@@ -296,7 +316,7 @@ struct tcb *tcp;
 	return 0;
 }
 
-static struct xlat bootflags[] = {
+static const struct xlat bootflags[] = {
 	{ RB_AUTOBOOT,	"RB_AUTOBOOT"	},	/* for system auto-booting itself */
 	{ RB_ASKNAME,	"RB_ASKNAME"	},	/* ask for file name to reboot from */
 	{ RB_SINGLE,	"RB_SINGLE"	},	/* reboot to single user only */
@@ -316,8 +336,7 @@ sys_reboot(tcp)
 struct tcb *tcp;
 {
 	if (entering(tcp)) {
-		if (!printflags(bootflags, tcp->u_arg[0]))
-			tprintf("RB_???");
+		printflags(bootflags, tcp->u_arg[0], "RB_???");
 		if (tcp->u_arg[0] & RB_STRING) {
 			printstr(tcp, tcp->u_arg[1], -1);
 		}
@@ -355,7 +374,7 @@ struct tcb *tcp;
 	return 0;
 }
 
-static struct xlat mountflags[] = {
+static const struct xlat mountflags[] = {
 	{ M_RDONLY,	"M_RDONLY"	},
 	{ M_NOSUID,	"M_NOSUID"	},
 	{ M_NEWTYPE,	"M_NEWTYPE"	},
@@ -375,7 +394,7 @@ static struct xlat mountflags[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat nfsflags[] = {
+static const struct xlat nfsflags[] = {
 	{ NFSMNT_SOFT,		"NFSMNT_SOFT"		},
 	{ NFSMNT_WSIZE,		"NFSMNT_WSIZE"		},
 	{ NFSMNT_RSIZE,		"NFSMNT_RSIZE"		},
@@ -415,8 +434,7 @@ struct tcb *tcp;
 		}
 		printstr(tcp, tcp->u_arg[1], -1);
 		tprintf(", ");
-		if (!printflags(mountflags, tcp->u_arg[2] & ~M_NEWTYPE))
-			tprintf("0");
+		printflags(mountflags, tcp->u_arg[2] & ~M_NEWTYPE, "M_???");
 		tprintf(", ");
 
 		if (strcmp(type, "4.2") == 0) {
@@ -436,8 +454,7 @@ struct tcb *tcp;
 			tprintf("[");
 			printsock(tcp, (int) a.addr);
 			tprintf(", ");
-			if (!printflags(nfsflags, a.flags))
-				tprintf("NFSMNT_???");
+			printflags(nfsflags, a.flags, "NFSMNT_???");
 			tprintf(", ws:%u,rs:%u,to:%u,re:%u,",
 				a.wsize, a.rsize, a.timeo, a.retrans);
 			if (a.flags & NFSMNT_HOSTNAME && a.hostname)
@@ -496,7 +513,7 @@ struct tcb *tcp;
 	return printargs(tcp);
 }
 
-static struct xlat ex_auth_flags[] = {
+static const struct xlat ex_auth_flags[] = {
 	{ AUTH_UNIX,	"AUTH_UNIX"	},
 	{ AUTH_DES,	"AUTH_DES"	},
 	{ 0,		NULL		},
@@ -542,7 +559,7 @@ struct tcb *tcp;
 	return 0;
 }
 
-static struct xlat sysconflimits[] = {
+static const struct xlat sysconflimits[] = {
 #ifdef	_SC_ARG_MAX
 	{ _SC_ARG_MAX,	"_SC_ARG_MAX"	},	/* space for argv & envp */
 #endif
@@ -583,7 +600,7 @@ struct tcb *tcp;
 #endif /* SUNOS4 */
 
 #if defined(SUNOS4) || defined(FREEBSD)
-static struct xlat pathconflimits[] = {
+static const struct xlat pathconflimits[] = {
 #ifdef	_PC_LINK_MAX
 	{ _PC_LINK_MAX,	"_PC_LINK_MAX"	},	/* max links to file/dir */
 #endif
@@ -650,7 +667,7 @@ struct tcb *tcp;
 #include <sys/systeminfo.h>
 #include <sys/utsname.h>
 
-static struct xlat sysconfig_options[] = {
+static const struct xlat sysconfig_options[] = {
 #ifdef _CONFIG_NGROUPS
 	{ _CONFIG_NGROUPS,		"_CONFIG_NGROUPS"		},
 #endif
@@ -738,7 +755,7 @@ struct tcb *tcp;
 	return 0;
 }
 
-static struct xlat sysinfo_options[] = {
+static const struct xlat sysinfo_options[] = {
 	{ SI_SYSNAME,		"SI_SYSNAME"		},
 	{ SI_HOSTNAME,		"SI_HOSTNAME"		},
 	{ SI_RELEASE,		"SI_RELEASE"		},
@@ -786,7 +803,7 @@ struct tcb *tcp;
 
 #include <sys/syssgi.h>
 
-static struct xlat syssgi_options[] = {
+static const struct xlat syssgi_options[] = {
 	{ SGI_SYSID,		"SGI_SYSID"		},
 #ifdef SGI_RDUBLK
 	{ SGI_RDUBLK,		"SGI_RDUBLK"		},
@@ -902,247 +919,247 @@ static struct xlat syssgi_options[] = {
 #ifdef SGI_GET_FP_PRECISE
 	{ SGI_GET_FP_PRECISE,	"SGI_GET_FP_PRECISE"	},
 #endif
-#ifdef SGI_GET_CONFIG_SMM	
+#ifdef SGI_GET_CONFIG_SMM
 	{ SGI_GET_CONFIG_SMM,	"SGI_GET_CONFIG_SMM"	},
 #endif
-#ifdef SGI_FP_IMPRECISE_SUPP	
+#ifdef SGI_FP_IMPRECISE_SUPP
 	{ SGI_FP_IMPRECISE_SUPP,"SGI_FP_IMPRECISE_SUPP"	},
 #endif
-#ifdef SGI_CONFIG_NSMM_SUPP	
+#ifdef SGI_CONFIG_NSMM_SUPP
 	{ SGI_CONFIG_NSMM_SUPP,	"SGI_CONFIG_NSMM_SUPP"	},
 #endif
-#ifdef SGI_RT_TSTAMP_CREATE    
+#ifdef SGI_RT_TSTAMP_CREATE
 	{ SGI_RT_TSTAMP_CREATE,	"SGI_RT_TSTAMP_CREATE"	},
 #endif
-#ifdef SGI_RT_TSTAMP_DELETE    
+#ifdef SGI_RT_TSTAMP_DELETE
 	{ SGI_RT_TSTAMP_DELETE,	"SGI_RT_TSTAMP_DELETE"	},
 #endif
-#ifdef SGI_RT_TSTAMP_START     
+#ifdef SGI_RT_TSTAMP_START
 	{ SGI_RT_TSTAMP_START,	"SGI_RT_TSTAMP_START"	},
 #endif
-#ifdef SGI_RT_TSTAMP_STOP      
+#ifdef SGI_RT_TSTAMP_STOP
 	{ SGI_RT_TSTAMP_STOP,	"SGI_RT_TSTAMP_STOP"	},
 #endif
-#ifdef SGI_RT_TSTAMP_ADDR      
+#ifdef SGI_RT_TSTAMP_ADDR
 	{ SGI_RT_TSTAMP_ADDR,	"SGI_RT_TSTAMP_ADDR"	},
 #endif
-#ifdef SGI_RT_TSTAMP_MASK      
+#ifdef SGI_RT_TSTAMP_MASK
 	{ SGI_RT_TSTAMP_MASK,	"SGI_RT_TSTAMP_MASK"	},
 #endif
-#ifdef SGI_RT_TSTAMP_EOB_MODE  
+#ifdef SGI_RT_TSTAMP_EOB_MODE
 	{ SGI_RT_TSTAMP_EOB_MODE,"SGI_RT_TSTAMP_EOB_MODE"},
 #endif
-#ifdef SGI_USE_FP_BCOPY	
+#ifdef SGI_USE_FP_BCOPY
 	{ SGI_USE_FP_BCOPY,	"SGI_USE_FP_BCOPY"	},
 #endif
-#ifdef SGI_GET_UST		
+#ifdef SGI_GET_UST
 	{ SGI_GET_UST,		"SGI_GET_UST"		},
 #endif
-#ifdef SGI_SPECULATIVE_EXEC	
+#ifdef SGI_SPECULATIVE_EXEC
 	{ SGI_SPECULATIVE_EXEC,	"SGI_SPECULATIVE_EXEC"	},
 #endif
-#ifdef SGI_XLV_NEXT_RQST	
+#ifdef SGI_XLV_NEXT_RQST
 	{ SGI_XLV_NEXT_RQST,	"SGI_XLV_NEXT_RQST"	},
 #endif
-#ifdef SGI_XLV_ATTR_CURSOR	
+#ifdef SGI_XLV_ATTR_CURSOR
 	{ SGI_XLV_ATTR_CURSOR,	"SGI_XLV_ATTR_CURSOR"	},
 #endif
-#ifdef SGI_XLV_ATTR_GET	
+#ifdef SGI_XLV_ATTR_GET
 	{ SGI_XLV_ATTR_GET,	"SGI_XLV_ATTR_GET"	},
 #endif
-#ifdef SGI_XLV_ATTR_SET	
+#ifdef SGI_XLV_ATTR_SET
 	{ SGI_XLV_ATTR_SET,	"SGI_XLV_ATTR_SET"	},
 #endif
 #ifdef SGI_BTOOLSIZE
 	{ SGI_BTOOLSIZE,	"SGI_BTOOLSIZE"		},
 #endif
-#ifdef SGI_BTOOLGET		
+#ifdef SGI_BTOOLGET
 	{ SGI_BTOOLGET,		"SGI_BTOOLGET"		},
 #endif
-#ifdef SGI_BTOOLREINIT		
+#ifdef SGI_BTOOLREINIT
 	{ SGI_BTOOLREINIT,	"SGI_BTOOLREINIT"	},
 #endif
-#ifdef SGI_CREATE_UUID		
+#ifdef SGI_CREATE_UUID
 	{ SGI_CREATE_UUID,	"SGI_CREATE_UUID"	},
 #endif
-#ifdef SGI_NOFPE		
+#ifdef SGI_NOFPE
 	{ SGI_NOFPE,		"SGI_NOFPE"		},
 #endif
-#ifdef SGI_OLD_SOFTFP		
+#ifdef SGI_OLD_SOFTFP
 	{ SGI_OLD_SOFTFP,	"SGI_OLD_SOFTFP"	},
 #endif
-#ifdef SGI_FS_INUMBERS		
+#ifdef SGI_FS_INUMBERS
 	{ SGI_FS_INUMBERS,	"SGI_FS_INUMBERS"	},
 #endif
-#ifdef SGI_FS_BULKSTAT		
+#ifdef SGI_FS_BULKSTAT
 	{ SGI_FS_BULKSTAT,	"SGI_FS_BULKSTAT"	},
 #endif
-#ifdef SGI_RT_TSTAMP_WAIT	
+#ifdef SGI_RT_TSTAMP_WAIT
 	{ SGI_RT_TSTAMP_WAIT,	"SGI_RT_TSTAMP_WAIT"	},
 #endif
-#ifdef SGI_RT_TSTAMP_UPDATE    
+#ifdef SGI_RT_TSTAMP_UPDATE
 	{ SGI_RT_TSTAMP_UPDATE,	"SGI_RT_TSTAMP_UPDATE"	},
 #endif
-#ifdef SGI_PATH_TO_HANDLE	
+#ifdef SGI_PATH_TO_HANDLE
 	{ SGI_PATH_TO_HANDLE,	"SGI_PATH_TO_HANDLE"	},
 #endif
-#ifdef SGI_PATH_TO_FSHANDLE	
+#ifdef SGI_PATH_TO_FSHANDLE
 	{ SGI_PATH_TO_FSHANDLE,	"SGI_PATH_TO_FSHANDLE"	},
 #endif
-#ifdef SGI_FD_TO_HANDLE	
+#ifdef SGI_FD_TO_HANDLE
 	{ SGI_FD_TO_HANDLE,	"SGI_FD_TO_HANDLE"	},
 #endif
-#ifdef SGI_OPEN_BY_HANDLE	
+#ifdef SGI_OPEN_BY_HANDLE
 	{ SGI_OPEN_BY_HANDLE,	"SGI_OPEN_BY_HANDLE"	},
 #endif
-#ifdef SGI_READLINK_BY_HANDLE	
+#ifdef SGI_READLINK_BY_HANDLE
 	{ SGI_READLINK_BY_HANDLE,"SGI_READLINK_BY_HANDLE"},
 #endif
-#ifdef SGI_READ_DANGID		
+#ifdef SGI_READ_DANGID
 	{ SGI_READ_DANGID,	"SGI_READ_DANGID"	},
 #endif
-#ifdef SGI_CONST		
+#ifdef SGI_CONST
 	{ SGI_CONST,		"SGI_CONST"		},
 #endif
-#ifdef SGI_XFS_FSOPERATIONS	
+#ifdef SGI_XFS_FSOPERATIONS
 	{ SGI_XFS_FSOPERATIONS,	"SGI_XFS_FSOPERATIONS"	},
 #endif
-#ifdef SGI_SETASH		
+#ifdef SGI_SETASH
 	{ SGI_SETASH,		"SGI_SETASH"		},
 #endif
-#ifdef SGI_GETASH		
+#ifdef SGI_GETASH
 	{ SGI_GETASH,		"SGI_GETASH"		},
 #endif
-#ifdef SGI_SETPRID		
+#ifdef SGI_SETPRID
 	{ SGI_SETPRID,		"SGI_SETPRID"		},
 #endif
-#ifdef SGI_GETPRID		
+#ifdef SGI_GETPRID
 	{ SGI_GETPRID,		"SGI_GETPRID"		},
 #endif
-#ifdef SGI_SETSPINFO		
+#ifdef SGI_SETSPINFO
 	{ SGI_SETSPINFO,	"SGI_SETSPINFO"		},
 #endif
-#ifdef SGI_GETSPINFO		
+#ifdef SGI_GETSPINFO
 	{ SGI_GETSPINFO,	"SGI_GETSPINFO"		},
 #endif
-#ifdef SGI_SHAREII		
+#ifdef SGI_SHAREII
 	{ SGI_SHAREII,		"SGI_SHAREII"		},
 #endif
-#ifdef SGI_NEWARRAYSESS	
+#ifdef SGI_NEWARRAYSESS
 	{ SGI_NEWARRAYSESS,	"SGI_NEWARRAYSESS"	},
 #endif
-#ifdef SGI_GETDFLTPRID		
+#ifdef SGI_GETDFLTPRID
 	{ SGI_GETDFLTPRID,	"SGI_GETDFLTPRID"	},
 #endif
-#ifdef SGI_SET_DISMISSED_EXC_CNT 
+#ifdef SGI_SET_DISMISSED_EXC_CNT
 	{ SGI_SET_DISMISSED_EXC_CNT,"SGI_SET_DISMISSED_EXC_CNT"	},
 #endif
-#ifdef SGI_GET_DISMISSED_EXC_CNT 
+#ifdef SGI_GET_DISMISSED_EXC_CNT
 	{ SGI_GET_DISMISSED_EXC_CNT,"SGI_GET_DISMISSED_EXC_CNT"	},
 #endif
-#ifdef SGI_CYCLECNTR_SIZE	
+#ifdef SGI_CYCLECNTR_SIZE
 	{ SGI_CYCLECNTR_SIZE,	"SGI_CYCLECNTR_SIZE"	},
 #endif
-#ifdef SGI_QUERY_FASTTIMER	
+#ifdef SGI_QUERY_FASTTIMER
 	{ SGI_QUERY_FASTTIMER,	"SGI_QUERY_FASTTIMER"	},
 #endif
-#ifdef SGI_PIDSINASH		
+#ifdef SGI_PIDSINASH
 	{ SGI_PIDSINASH,	"SGI_PIDSINASH"		},
 #endif
-#ifdef SGI_ULI			
+#ifdef SGI_ULI
 	{ SGI_ULI,		"SGI_ULI"		},
 #endif
-#ifdef SGI_LPG_SHMGET          
+#ifdef SGI_LPG_SHMGET
 	{ SGI_LPG_SHMGET,	"SGI_LPG_SHMGET"	},
 #endif
-#ifdef SGI_LPG_MAP             
+#ifdef SGI_LPG_MAP
 	{ SGI_LPG_MAP,		"SGI_LPG_MAP"		},
 #endif
-#ifdef SGI_CACHEFS_SYS		
+#ifdef SGI_CACHEFS_SYS
 	{ SGI_CACHEFS_SYS,	"SGI_CACHEFS_SYS"	},
 #endif
-#ifdef SGI_NFSNOTIFY		
+#ifdef SGI_NFSNOTIFY
 	{ SGI_NFSNOTIFY,	"SGI_NFSNOTIFY"		},
 #endif
-#ifdef SGI_LOCKDSYS		
+#ifdef SGI_LOCKDSYS
 	{ SGI_LOCKDSYS,		"SGI_LOCKDSYS"		},
 #endif
-#ifdef SGI_EVENTCTR            
+#ifdef SGI_EVENTCTR
 	{ SGI_EVENTCTR,		"SGI_EVENTCTR"		},
 #endif
-#ifdef SGI_GETPRUSAGE          
+#ifdef SGI_GETPRUSAGE
 	{ SGI_GETPRUSAGE,	"SGI_GETPRUSAGE"	},
 #endif
-#ifdef SGI_PROCMASK_LOCATION	
+#ifdef SGI_PROCMASK_LOCATION
 	{ SGI_PROCMASK_LOCATION,"SGI_PROCMASK_LOCATION"	},
 #endif
-#ifdef SGI_UNUSED		
+#ifdef SGI_UNUSED
 	{ SGI_UNUSED,		"SGI_UNUSED"		},
 #endif
-#ifdef SGI_CKPT_SYS		
+#ifdef SGI_CKPT_SYS
 	{ SGI_CKPT_SYS,		"SGI_CKPT_SYS"		},
 #endif
-#ifdef SGI_CKPT_SYS		
+#ifdef SGI_CKPT_SYS
 	{ SGI_CKPT_SYS,		"SGI_CKPT_SYS"		},
 #endif
-#ifdef SGI_GETGRPPID		
+#ifdef SGI_GETGRPPID
 	{ SGI_GETGRPPID,	"SGI_GETGRPPID"		},
 #endif
-#ifdef SGI_GETSESPID		
+#ifdef SGI_GETSESPID
 	{ SGI_GETSESPID,	"SGI_GETSESPID"		},
 #endif
-#ifdef SGI_ENUMASHS		
+#ifdef SGI_ENUMASHS
 	{ SGI_ENUMASHS,		"SGI_ENUMASHS"		},
 #endif
-#ifdef SGI_SETASMACHID		
+#ifdef SGI_SETASMACHID
 	{ SGI_SETASMACHID,	"SGI_SETASMACHID"	},
 #endif
-#ifdef SGI_GETASMACHID		
+#ifdef SGI_GETASMACHID
 	{ SGI_GETASMACHID,	"SGI_GETASMACHID"	},
 #endif
-#ifdef SGI_GETARSESS		
+#ifdef SGI_GETARSESS
 	{ SGI_GETARSESS,	"SGI_GETARSESS"		},
 #endif
-#ifdef SGI_JOINARRAYSESS	
+#ifdef SGI_JOINARRAYSESS
 	{ SGI_JOINARRAYSESS,	"SGI_JOINARRAYSESS"	},
 #endif
-#ifdef SGI_SPROC_KILL		
+#ifdef SGI_SPROC_KILL
 	{ SGI_SPROC_KILL,	"SGI_SPROC_KILL"	},
 #endif
-#ifdef SGI_DBA_CONFIG		
+#ifdef SGI_DBA_CONFIG
 	{ SGI_DBA_CONFIG,	"SGI_DBA_CONFIG"	},
 #endif
-#ifdef SGI_RELEASE_NAME	
+#ifdef SGI_RELEASE_NAME
 	{ SGI_RELEASE_NAME,	"SGI_RELEASE_NAME"	},
 #endif
-#ifdef SGI_SYNCH_CACHE_HANDLER 
+#ifdef SGI_SYNCH_CACHE_HANDLER
 	{ SGI_SYNCH_CACHE_HANDLER,"SGI_SYNCH_CACHE_HANDLER"},
 #endif
-#ifdef SGI_SWASH_INIT		
+#ifdef SGI_SWASH_INIT
 	{ SGI_SWASH_INIT,	"SGI_SWASH_INIT"	},
 #endif
-#ifdef SGI_NUMA_MIGR_PAGE	
+#ifdef SGI_NUMA_MIGR_PAGE
 	{ SGI_NUMA_MIGR_PAGE,	"SGI_NUMA_MIGR_PAGE"	},
 #endif
-#ifdef SGI_NUMA_MIGR_PAGE_ALT	
+#ifdef SGI_NUMA_MIGR_PAGE_ALT
 	{ SGI_NUMA_MIGR_PAGE_ALT,"SGI_NUMA_MIGR_PAGE_ALT"},
 #endif
-#ifdef SGI_KAIO_USERINIT	
+#ifdef SGI_KAIO_USERINIT
 	{ SGI_KAIO_USERINIT,	"SGI_KAIO_USERINIT"	},
 #endif
-#ifdef SGI_KAIO_READ		
+#ifdef SGI_KAIO_READ
 	{ SGI_KAIO_READ,	"SGI_KAIO_READ"		},
 #endif
-#ifdef SGI_KAIO_WRITE		
+#ifdef SGI_KAIO_WRITE
 	{ SGI_KAIO_WRITE,	"SGI_KAIO_WRITE"	},
 #endif
-#ifdef SGI_KAIO_SUSPEND	
+#ifdef SGI_KAIO_SUSPEND
 	{ SGI_KAIO_SUSPEND,	"SGI_KAIO_SUSPEND"	},
 #endif
-#ifdef SGI_KAIO_STATS		
+#ifdef SGI_KAIO_STATS
 	{ SGI_KAIO_STATS,	"SGI_KAIO_STATS"	},
 #endif
-#ifdef SGI_INITIAL_PT_SPROC	
+#ifdef SGI_INITIAL_PT_SPROC
 	{ SGI_INITIAL_PT_SPROC,	"SGI_INITIAL_PT_SPROC"	},
 #endif
 	{ 0,			NULL			},
@@ -1175,7 +1192,7 @@ struct uio;
 #include <sys/fs/nfs.h>
 #include <sys/fs/nfs_clnt.h>
 
-static struct xlat mount_flags[] = {
+static const struct xlat mount_flags[] = {
 	{ MS_RDONLY,	"MS_RDONLY"	},
 	{ MS_FSS,	"MS_FSS"	},
 	{ MS_DATA,	"MS_DATA"	},
@@ -1189,7 +1206,7 @@ static struct xlat mount_flags[] = {
 	{ 0,		NULL		},
 };
 
-static struct xlat nfs_flags[] = {
+static const struct xlat nfs_flags[] = {
 	{ NFSMNT_SOFT,		"NFSMNT_SOFT"		},
 	{ NFSMNT_WSIZE,		"NFSMNT_WSIZE"		},
 	{ NFSMNT_RSIZE,		"NFSMNT_RSIZE"		},
@@ -1230,7 +1247,7 @@ struct tcb *tcp;
 		tprintf(", ");
 		printpath(tcp, tcp->u_arg[1]);
 		tprintf(", ");
-		printflags(mount_flags, tcp->u_arg[2]);
+		printflags(mount_flags, tcp->u_arg[2], "MS_???");
 		if (tcp->u_arg[2] & (MS_FSS | MS_DATA)) {
 			tprintf(", ");
 			tprintf("%ld", tcp->u_arg[3]);
@@ -1247,8 +1264,7 @@ struct tcb *tcp;
 					tprintf("addr=");
 					printsock(tcp, (int) args.addr);
 					tprintf(", flags=");
-					if (!printflags(nfs_flags, args.flags))
-						tprintf("NFSMNT_???");
+					printflags(nfs_flags, args.flags, "NFSMNT_???");
 					tprintf(", hostname=");
 					printstr(tcp, (int) args.hostname, -1);
 					tprintf(", ...}");
@@ -1276,7 +1292,7 @@ struct tcb *tcp;
 
 #include <sys/fs/vx_ioctl.h>
 
-static struct xlat mount_flags[] = {
+static const struct xlat mount_flags[] = {
 	{ MS_RDONLY,	"MS_RDONLY"	},
 	{ MS_FSS,	"MS_FSS"	},
 	{ MS_DATA,	"MS_DATA"	},
@@ -1290,7 +1306,7 @@ static struct xlat mount_flags[] = {
 };
 
 #ifdef VX_MS_MASK
-static struct xlat vxfs_flags[] = {
+static const struct xlat vxfs_flags[] = {
 	{ VX_MS_NOLOG,		"VX_MS_NOLOG"		},
 	{ VX_MS_BLKCLEAR,	"VX_MS_BLKCLEAR"	},
 	{ VX_MS_SNAPSHOT,	"VX_MS_SNAPSHOT"	},
@@ -1312,7 +1328,7 @@ static struct xlat vxfs_flags[] = {
 };
 #endif
 
-static struct xlat nfs_flags[] = {
+static const struct xlat nfs_flags[] = {
 	{ NFSMNT_SOFT,		"NFSMNT_SOFT"		},
 	{ NFSMNT_WSIZE,		"NFSMNT_WSIZE"		},
 	{ NFSMNT_RSIZE,		"NFSMNT_RSIZE"		},
@@ -1343,7 +1359,7 @@ struct tcb *tcp;
 		tprintf(", ");
 		printpath(tcp, tcp->u_arg[1]);
 		tprintf(", ");
-		printflags(mount_flags, tcp->u_arg[2]);
+		printflags(mount_flags, tcp->u_arg[2], "MS_???");
 		/* The doc sez that the file system type is given as a
 		   fsindex, and we should use sysfs to work out the name.
 		   This appears to be untrue for UW.  Maybe it's untrue
@@ -1367,12 +1383,11 @@ struct tcb *tcp;
 					tprintf("%#lx", tcp->u_arg[4]);
 				else {
 					tprintf("{ flags=");
-					if (!printflags(vxfs_flags, args.mflags))
-						tprintf("0x%08x", args.mflags);
+					printflags(vxfs_flags, args.mflags, "VX_MS_???");
 					if (args.mflags & VX_MS_SNAPSHOT) {
 						tprintf (", snapof=");
 						printstr (tcp,
-							  (long) args.primaryspec, 
+							  (long) args.primaryspec,
 							  -1);
 						if (args.snapsize > 0)
 							tprintf (", snapsize=%ld", args.snapsize);
@@ -1401,8 +1416,7 @@ struct tcb *tcp;
 						printsock(tcp, (int) addr.buf, addr.len);
 					}
 					tprintf(", flags=");
-					if (!printflags(nfs_flags, args.flags))
-						tprintf("NFSMNT_???");
+					printflags(nfs_flags, args.flags, "NFSMNT_???");
 					tprintf(", hostname=");
 					printstr(tcp, (int) args.hostname, -1);
 					tprintf(", ...}");
@@ -1438,7 +1452,7 @@ struct tcb *tcp;
 
 #ifdef SYS_capget
 
-static struct xlat capabilities[] = {
+static const struct xlat capabilities[] = {
 	{ 1<<CAP_CHOWN,		"CAP_CHOWN"	},
 	{ 1<<CAP_DAC_OVERRIDE,	"CAP_DAC_OVERRIDE"},
 	{ 1<<CAP_DAC_READ_SEARCH,"CAP_DAC_READ_SEARCH"},
@@ -1480,14 +1494,14 @@ struct tcb *tcp;
 	if(!entering(tcp)) {
 		if (!arg0) {
 			if ((arg0 = malloc(sizeof(*arg0))) == NULL) {
-				fprintf(stderr, "sys_capget: no memory\n");
+				fprintf(stderr, "out of memory\n");
 				tprintf("%#lx, %#lx", tcp->u_arg[0], tcp->u_arg[1]);
 				return -1;
 			}
 		}
 		if (!arg1) {
 			if ((arg1 = malloc(sizeof(*arg1))) == NULL) {
-				fprintf(stderr, "sys_capget: no memory\n");
+				fprintf(stderr, "out of memory\n");
 				tprintf("%#lx, %#lx", tcp->u_arg[0], tcp->u_arg[1]);
 				return -1;
 			}
@@ -1511,13 +1525,13 @@ struct tcb *tcp;
 			tprintf("???");
 		else {
 			tprintf("{");
-			printflags(capabilities, arg1->effective);
+			printflags(capabilities, arg1->effective, "CAP_???");
 			tprintf(", ");
-			printflags(capabilities, arg1->permitted);
+			printflags(capabilities, arg1->permitted, "CAP_???");
 			tprintf(", ");
-			printflags(capabilities, arg1->inheritable);
+			printflags(capabilities, arg1->inheritable, "CAP_???");
 			tprintf("}");
-		} 
+		}
 	}
 	return 0;
 }
@@ -1532,14 +1546,14 @@ struct tcb *tcp;
 	if(entering(tcp)) {
 		if (!arg0) {
 			if ((arg0 = malloc(sizeof(*arg0))) == NULL) {
-				fprintf(stderr, "sys_capset: no memory\n");
+				fprintf(stderr, "out of memory\n");
 				tprintf("%#lx, %#lx", tcp->u_arg[0], tcp->u_arg[1]);
 				return -1;
 			}
 		}
 		if (!arg1) {
 			if ((arg1 = malloc(sizeof(*arg1))) == NULL) {
-				fprintf(stderr, "sys_capset: no memory\n");
+				fprintf(stderr, "out of memory\n");
 				tprintf("%#lx, %#lx", tcp->u_arg[0], tcp->u_arg[1]);
 				return -1;
 			}
@@ -1563,13 +1577,13 @@ struct tcb *tcp;
 			tprintf("???");
 		else {
 			tprintf("{");
-			printflags(capabilities, arg1->effective);
+			printflags(capabilities, arg1->effective, "CAP_???");
 			tprintf(", ");
-			printflags(capabilities, arg1->permitted);
+			printflags(capabilities, arg1->permitted, "CAP_???");
 			tprintf(", ");
-			printflags(capabilities, arg1->inheritable);
+			printflags(capabilities, arg1->inheritable, "CAP_???");
 			tprintf("}");
-		} 
+		}
 	}
 	return 0;
 }
@@ -1591,20 +1605,24 @@ struct tcb *tcp;
 #endif
 
 #ifdef LINUX
-static struct xlat sysctl_root[] = {
+/* Linux 2.6.18+ headers removed CTL_PROC enum.  */
+# define CTL_PROC 4
+# define CTL_CPU 10		/* older headers lack */
+static const struct xlat sysctl_root[] = {
 	{ CTL_KERN, "CTL_KERN" },
 	{ CTL_VM, "CTL_VM" },
 	{ CTL_NET, "CTL_NET" },
-#ifdef CTL_PROC
 	{ CTL_PROC, "CTL_PROC" },
-#endif
 	{ CTL_FS, "CTL_FS" },
 	{ CTL_DEBUG, "CTL_DEBUG" },
 	{ CTL_DEV, "CTL_DEV" },
+	{ CTL_BUS, "CTL_BUS" },
+	{ CTL_ABI, "CTL_ABI" },
+	{ CTL_CPU, "CTL_CPU" },
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_kern[] = {
+static const struct xlat sysctl_kern[] = {
 	{ KERN_OSTYPE, "KERN_OSTYPE" },
 	{ KERN_OSRELEASE, "KERN_OSRELEASE" },
 	{ KERN_OSREV, "KERN_OSREV" },
@@ -1613,21 +1631,6 @@ static struct xlat sysctl_kern[] = {
 	{ KERN_PROF, "KERN_PROF" },
 	{ KERN_NODENAME, "KERN_NODENAME" },
 	{ KERN_DOMAINNAME, "KERN_DOMAINNAME" },
-#ifdef KERN_NRINODE
-	{ KERN_NRINODE, "KERN_NRINODE" },
-#endif
-#ifdef KERN_MAXINODE
-	{ KERN_MAXINODE, "KERN_MAXINODE" },
-#endif
-#ifdef KERN_NRFILE
-	{ KERN_NRFILE, "KERN_NRFILE" },
-#endif
-#ifdef KERN_MAXFILE
-	{ KERN_MAXFILE, "KERN_MAXFILE" },
-#endif
-#ifdef KERN_MAXID
-	{ KERN_MAXID, "KERN_MAXID" },
-#endif
 #ifdef KERN_SECURELVL
 	{ KERN_SECURELVL, "KERN_SECURELVL" },
 #endif
@@ -1641,101 +1644,81 @@ static struct xlat sysctl_kern[] = {
 #ifdef KERN_JAVA_APPLETVIEWER
 	{ KERN_JAVA_APPLETVIEWER, "KERN_JAVA_APPLETVIEWER" },
 #endif
-#ifdef KERN_SPARC_REBOOT
 	{ KERN_SPARC_REBOOT, "KERN_SPARC_REBOOT" },
-#endif
-#ifdef KERN_CTLALTDEL
 	{ KERN_CTLALTDEL, "KERN_CTLALTDEL" },
-#endif
-#ifdef KERN_PRINTK
 	{ KERN_PRINTK, "KERN_PRINTK" },
-#endif
-#ifdef KERN_NAMETRANS
 	{ KERN_NAMETRANS, "KERN_NAMETRANS" },
-#endif
-#ifdef KERN_PPC_HTABRECLAIM
 	{ KERN_PPC_HTABRECLAIM, "KERN_PPC_HTABRECLAIM" },
-#endif
-#ifdef KERN_PPC_ZEROPAGED
 	{ KERN_PPC_ZEROPAGED, "KERN_PPC_ZEROPAGED" },
-#endif
-#ifdef KERN_PPC_POWERSAVE_NAP
 	{ KERN_PPC_POWERSAVE_NAP, "KERN_PPC_POWERSAVE_NAP" },
-#endif
-#ifdef KERN_MODPROBE
 	{ KERN_MODPROBE, "KERN_MODPROBE" },
-#endif
-#ifdef KERN_SG_BIG_BUFF
 	{ KERN_SG_BIG_BUFF, "KERN_SG_BIG_BUFF" },
-#endif
-#ifdef KERN_ACCT
 	{ KERN_ACCT, "KERN_ACCT" },
-#endif
-#ifdef KERN_PPC_L2CR
 	{ KERN_PPC_L2CR, "KERN_PPC_L2CR" },
-#endif
-#ifdef KERN_RTSIGNR
 	{ KERN_RTSIGNR, "KERN_RTSIGNR" },
-#endif
-#ifdef KERN_RTSIGMAX
 	{ KERN_RTSIGMAX, "KERN_RTSIGMAX" },
-#endif
-#ifdef KERN_SHMMAX
 	{ KERN_SHMMAX, "KERN_SHMMAX" },
-#endif
-#ifdef KERN_MSGMAX
 	{ KERN_MSGMAX, "KERN_MSGMAX" },
-#endif
-#ifdef KERN_MSGMNB
 	{ KERN_MSGMNB, "KERN_MSGMNB" },
-#endif
-#ifdef KERN_MSGPOOL
 	{ KERN_MSGPOOL, "KERN_MSGPOOL" },
-#endif
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_vm[] = {
+static const struct xlat sysctl_vm[] = {
 #ifdef VM_SWAPCTL
 	{ VM_SWAPCTL, "VM_SWAPCTL" },
 #endif
-#ifdef VM_KSWAPD
-	{ VM_KSWAPD, "VM_KSWAPD" },
+#ifdef VM_UNUSED1
+	{ VM_UNUSED1, "VM_UNUSED1" },
 #endif
 #ifdef VM_SWAPOUT
 	{ VM_SWAPOUT, "VM_SWAPOUT" },
 #endif
+#ifdef VM_UNUSED2
+	{ VM_UNUSED2, "VM_UNUSED2" },
+#endif
 #ifdef VM_FREEPG
 	{ VM_FREEPG, "VM_FREEPG" },
+#endif
+#ifdef VM_UNUSED3
+	{ VM_UNUSED3, "VM_UNUSED3" },
 #endif
 #ifdef VM_BDFLUSH
 	{ VM_BDFLUSH, "VM_BDFLUSH" },
 #endif
-#ifdef VM_MAXID
-	{ VM_MAXID, "VM_MAXID" },
+#ifdef VM_UNUSED4
+	{ VM_UNUSED4, "VM_UNUSED4" },
 #endif
-#ifdef VM_OVERCOMMIT_MEMORY
 	{ VM_OVERCOMMIT_MEMORY, "VM_OVERCOMMIT_MEMORY" },
-#endif
 #ifdef VM_BUFFERMEM
 	{ VM_BUFFERMEM, "VM_BUFFERMEM" },
+#endif
+#ifdef VM_UNUSED5
+	{ VM_UNUSED5, "VM_UNUSED5" },
 #endif
 #ifdef VM_PAGECACHE
 	{ VM_PAGECACHE, "VM_PAGECACHE" },
 #endif
+#ifdef VM_UNUSED7
+	{ VM_UNUSED7, "VM_UNUSED7" },
+#endif
 #ifdef VM_PAGERDAEMON
 	{ VM_PAGERDAEMON, "VM_PAGERDAEMON" },
+#endif
+#ifdef VM_UNUSED8
+	{ VM_UNUSED8, "VM_UNUSED8" },
 #endif
 #ifdef VM_PGT_CACHE
 	{ VM_PGT_CACHE, "VM_PGT_CACHE" },
 #endif
-#ifdef VM_PAGE_CLUSTER
-	{ VM_PAGE_CLUSTER, "VM_PAGE_CLUSTER" },
+#ifdef VM_UNUSED9
+	{ VM_UNUSED9, "VM_UNUSED9" },
 #endif
+	{ VM_PAGE_CLUSTER, "VM_PAGE_CLUSTER" },
 	{ 0, NULL },
 };
 
-static struct xlat sysctl_net[] = {
+static const struct xlat sysctl_net[] = {
 	{ NET_CORE, "NET_CORE" },
 	{ NET_ETHER, "NET_ETHER" },
 	{ NET_802, "NET_802" },
@@ -1747,26 +1730,14 @@ static struct xlat sysctl_net[] = {
 	{ NET_AX25, "NET_AX25" },
 	{ NET_BRIDGE, "NET_BRIDGE" },
 	{ NET_ROSE, "NET_ROSE" },
-#ifdef NET_IPV6
 	{ NET_IPV6, "NET_IPV6" },
-#endif
-#ifdef NET_X25
 	{ NET_X25, "NET_X25" },
-#endif
-#ifdef NET_TR
 	{ NET_TR, "NET_TR" },
-#endif
-#ifdef NET_DECNET
 	{ NET_DECNET, "NET_DECNET" },
-#endif
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_net_core[] = {
-#ifdef NET_CORE_NET_ALIAS_MAX
-	{ NET_CORE_NET_ALIAS_MAX, "NET_CORE_NET_ALIAS_MAX" },
-#endif
-#ifdef NET_CORE_WMEM_MAX
+static const struct xlat sysctl_net_core[] = {
 	{ NET_CORE_WMEM_MAX, "NET_CORE_WMEM_MAX" },
 	{ NET_CORE_RMEM_MAX, "NET_CORE_RMEM_MAX" },
 	{ NET_CORE_WMEM_DEFAULT, "NET_CORE_WMEM_DEFAULT" },
@@ -1776,24 +1747,18 @@ static struct xlat sysctl_net_core[] = {
 	{ NET_CORE_MSG_COST, "NET_CORE_MSG_COST" },
 	{ NET_CORE_MSG_BURST, "NET_CORE_MSG_BURST" },
 	{ NET_CORE_OPTMEM_MAX, "NET_CORE_OPTMEM_MAX" },
-#endif
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_net_unix[] = {
-#ifdef NET_UNIX_DESTROY_DELAY
+static const struct xlat sysctl_net_unix[] = {
 	{ NET_UNIX_DESTROY_DELAY, "NET_UNIX_DESTROY_DELAY" },
-#endif
-#ifdef NET_UNIX_DELETE_DELAY
 	{ NET_UNIX_DELETE_DELAY, "NET_UNIX_DELETE_DELAY" },
-#endif
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_net_ipv4[] = {
+static const struct xlat sysctl_net_ipv4[] = {
 	{ NET_IPV4_FORWARD, "NET_IPV4_FORWARD" },
 	{ NET_IPV4_DYNADDR, "NET_IPV4_DYNADDR" },
-#ifdef NET_IPV4_CONF
 	{ NET_IPV4_CONF, "NET_IPV4_CONF" },
 	{ NET_IPV4_NEIGH, "NET_IPV4_NEIGH" },
 	{ NET_IPV4_ROUTE, "NET_IPV4_ROUTE" },
@@ -1831,12 +1796,10 @@ static struct xlat sysctl_net_ipv4[] = {
 	{ NET_IPV4_ICMP_ECHOREPLY_RATE, "NET_IPV4_ICMP_ECHOREPLY_RATE" },
 	{ NET_IPV4_ICMP_IGNORE_BOGUS_ERROR_RESPONSES, "NET_IPV4_ICMP_IGNORE_BOGUS_ERROR_RESPONSES" },
 	{ NET_IPV4_IGMP_MAX_MEMBERSHIPS, "NET_IPV4_IGMP_MAX_MEMBERSHIPS" },
-#endif
 	{  0, NULL }
 };
 
-#ifdef NET_IPV4_ROUTE
-static struct xlat sysctl_net_ipv4_route[] = {
+static const struct xlat sysctl_net_ipv4_route[] = {
 	{ NET_IPV4_ROUTE_FLUSH, "NET_IPV4_ROUTE_FLUSH" },
 	{ NET_IPV4_ROUTE_MIN_DELAY, "NET_IPV4_ROUTE_MIN_DELAY" },
 	{ NET_IPV4_ROUTE_MAX_DELAY, "NET_IPV4_ROUTE_MAX_DELAY" },
@@ -1853,10 +1816,8 @@ static struct xlat sysctl_net_ipv4_route[] = {
 	{ NET_IPV4_ROUTE_GC_ELASTICITY, "NET_IPV4_ROUTE_GC_ELASTICITY" },
 	{ 0, NULL }
 };
-#endif
 
-#ifdef NET_IPV4_CONF
-static struct xlat sysctl_net_ipv4_conf[] = {
+static const struct xlat sysctl_net_ipv4_conf[] = {
 	{ NET_IPV4_CONF_FORWARDING, "NET_IPV4_CONF_FORWARDING" },
 	{ NET_IPV4_CONF_MC_FORWARDING, "NET_IPV4_CONF_MC_FORWARDING" },
 	{ NET_IPV4_CONF_PROXY_ARP, "NET_IPV4_CONF_PROXY_ARP" },
@@ -1870,17 +1831,15 @@ static struct xlat sysctl_net_ipv4_conf[] = {
 	{ NET_IPV4_CONF_LOG_MARTIANS, "NET_IPV4_CONF_LOG_MARTIANS" },
 	{ 0, NULL }
 };
-#endif
 
-#ifdef NET_IPV6
-static struct xlat sysctl_net_ipv6[] = {
+static const struct xlat sysctl_net_ipv6[] = {
 	{ NET_IPV6_CONF, "NET_IPV6_CONF" },
 	{ NET_IPV6_NEIGH, "NET_IPV6_NEIGH" },
 	{ NET_IPV6_ROUTE, "NET_IPV6_ROUTE" },
 	{ 0, NULL }
 };
 
-static struct xlat sysctl_net_ipv6_route[] = {
+static const struct xlat sysctl_net_ipv6_route[] = {
 	{ NET_IPV6_ROUTE_FLUSH, "NET_IPV6_ROUTE_FLUSH" },
 	{ NET_IPV6_ROUTE_GC_THRESH, "NET_IPV6_ROUTE_GC_THRESH" },
 	{ NET_IPV6_ROUTE_MAX_SIZE, "NET_IPV6_ROUTE_MAX_SIZE" },
@@ -1890,7 +1849,6 @@ static struct xlat sysctl_net_ipv6_route[] = {
 	{ NET_IPV6_ROUTE_GC_ELASTICITY, "NET_IPV6_ROUTE_GC_ELASTICITY" },
 	{ 0, NULL }
 };
-#endif
 
 int
 sys_sysctl(tcp)
@@ -1898,13 +1856,25 @@ struct tcb *tcp;
 {
 	struct __sysctl_args info;
 	int *name;
-	umove (tcp, tcp->u_arg[0], &info);
+	unsigned long size;
 
-	name = malloc (sizeof (int) * info.nlen);
-	umoven(tcp, (size_t) info.name, sizeof (int) * info.nlen, (char *) name);
+	if (umove (tcp, tcp->u_arg[0], &info) < 0)
+		return printargs(tcp);
+
+	size = sizeof (int) * (unsigned long) info.nlen;
+	name = (size / sizeof (int) != info.nlen) ? NULL : malloc (size);
+	if (name == NULL ||
+	    umoven(tcp, (unsigned long) info.name, size, (char *) name) < 0) {
+		free(name);
+		if (entering(tcp))
+			tprintf("{%p, %d, %p, %p, %p, %Zu}",
+				info.name, info.nlen, info.oldval,
+				info.oldlenp, info.newval, info.newlen);
+		return 0;
+	}
 
 	if (entering(tcp)) {
-		int cnt = 0;
+		int cnt = 0, max_cnt;
 
 		tprintf("{{");
 
@@ -1952,27 +1922,22 @@ struct tcb *tcp;
 				if (info.nlen == 3)
 					goto out;
 				switch (name[2]) {
-#ifdef NET_IPV4_ROUTE
 				case NET_IPV4_ROUTE:
 					tprintf(", ");
 					printxval(sysctl_net_ipv4_route,
 						  name[3],
 						  "NET_IPV4_ROUTE_???");
 					break;
-#endif
-#ifdef NET_IPV4_CONF
 				case NET_IPV4_CONF:
 					tprintf(", ");
 					printxval(sysctl_net_ipv4_conf,
 						  name[3],
 						  "NET_IPV4_CONF_???");
 					break;
-#endif
 				default:
 					goto out;
 				}
 				break;
-#ifdef NET_IPV6
 			case NET_IPV6:
 				tprintf(", ");
 				printxval(sysctl_net_ipv6, name[2],
@@ -1991,7 +1956,6 @@ struct tcb *tcp;
 					goto out;
 				}
 				break;
-#endif
 			default:
 				goto out;
 			}
@@ -2000,13 +1964,18 @@ struct tcb *tcp;
 			goto out;
 		}
 	out:
-		while (cnt < info.nlen)
+		max_cnt = info.nlen;
+		if (abbrev(tcp) && max_cnt > max_strlen)
+			max_cnt = max_strlen;
+		while (cnt < max_cnt)
 			tprintf(", %x", name[cnt++]);
+		if (cnt < info.nlen)
+			tprintf(", ...");
 		tprintf("}, %d, ", info.nlen);
 	} else {
 		size_t oldlen;
-		umove(tcp, (size_t)info.oldlenp, &oldlen);
-		if (info.nlen >= 2
+		if (umove(tcp, (size_t)info.oldlenp, &oldlen) >= 0
+		    && info.nlen >= 2
 		    && ((name[0] == CTL_KERN
 			 && (name[1] == KERN_OSRELEASE
 			     || name[1] == KERN_OSTYPE
@@ -2032,6 +2001,7 @@ struct tcb *tcp;
 		}
 		tprintf("}");
 	}
+
 	free(name);
 	return 0;
 }
@@ -2053,7 +2023,7 @@ struct tcb *tcp;
 	char ctl[1024];
 	size_t len;
 	int i, numeric;
-	
+
 	if (entering(tcp)) {
 		if (tcp->u_arg[1] < 0 || tcp->u_arg[1] > CTL_MAXNAME ||
 		    (umoven(tcp, tcp->u_arg[0], tcp->u_arg[1] * sizeof(int),
@@ -2084,7 +2054,7 @@ struct tcb *tcp;
 		if (!syserror(tcp) && (umove(tcp, tcp->u_arg[3], &len) >= 0)) {
 			printstr(tcp, tcp->u_arg[2], len);
 			tprintf(", [%u], ", len);
-		} else 
+		} else
 			tprintf("%#lx, %#lx, ", tcp->u_arg[2], tcp->u_arg[3]);
 		printstr(tcp, tcp->u_arg[4], tcp->u_arg[5]);
 		tprintf(", %lu", tcp->u_arg[5]);
@@ -2098,10 +2068,10 @@ struct tcb *tcp;
 #include <sys/ksym.h>
 #include <sys/elf.h>
 
-static struct xlat ksym_flags[] = {
-	{ STT_NOTYPE,	"STT_NOTYPE"	},	
-	{ STT_FUNC,	"STT_FUNC"	},	
-	{ STT_OBJECT,	"STT_OBJECT"	},	
+static const struct xlat ksym_flags[] = {
+	{ STT_NOTYPE,	"STT_NOTYPE"	},
+	{ STT_FUNC,	"STT_FUNC"	},
+	{ STT_OBJECT,	"STT_OBJECT"	},
 	{ 0,		NULL		},
 };
 
@@ -2138,9 +2108,10 @@ struct tcb *tcp;
 
 #ifdef HAVE_SYS_NSCSYS_H
 
+struct cred;
 #include <sys/nscsys.h>
 
-static struct xlat ssi_cmd [] = {
+static const struct xlat ssi_cmd [] = {
 	{ SSISYS_BADOP,	"SSISYS_BADOP"	},
 	{ SSISYS_LDLVL_INIT,"SSISYS_LDLVL_INIT"},
 	{ SSISYS_LDLVL_GETVEC,"SSISYS_LDLVL_GETVEC"},
@@ -2191,8 +2162,11 @@ int sys_ssisys (tcp)
 struct tcb *tcp;
 {
 	struct ssisys_iovec iov;
-	
+	cls_nodeinfo_args_t cni;
+	clusternode_info_t info;
+
 	if (entering (tcp)) {
+		ts_reclaim_child_inargs_t trc;
 		if (tcp->u_arg[1] != sizeof iov ||
 		    umove (tcp, tcp->u_arg[0], &iov) < 0)
 		{
@@ -2203,7 +2177,22 @@ struct tcb *tcp;
 		printxval(ssi_cmd, iov.tio_id.id_cmd, "SSISYS_???");
 		tprintf (":%d", iov.tio_id.id_ver);
 		switch (iov.tio_id.id_cmd) {
+		    case SSISYS_RECLAIM_CHILD:
+			if (iov.tio_udatainlen != sizeof trc ||
+			    umove (tcp, (long) iov.tio_udatain, &trc) < 0)
+				goto bad;
+			tprintf (", in={pid=%ld, start=%ld}",
+				 trc.trc_pid, trc.trc_start);
+			break;
+		    case SSISYS_CLUSTERNODE_INFO:
+			if (iov.tio_udatainlen != sizeof cni ||
+			    umove (tcp, (long) iov.tio_udatain, &cni) < 0)
+				goto bad;
+			tprintf (", in={node=%ld, len=%d}",
+				 cni.nodenum, cni.info_len);
+			break;
 		    default:
+		    bad:
 			if (iov.tio_udatainlen) {
 				tprintf (", in=[/* %d bytes */]",
 					 iov.tio_udatainlen);
@@ -2211,13 +2200,31 @@ struct tcb *tcp;
 		}
 	}
 	else {
+		if (tcp->u_arg[1] != sizeof iov ||
+		    umove (tcp, tcp->u_arg[0], &iov) < 0)
+		    goto done;
 		switch (iov.tio_id.id_cmd) {
+		    case SSISYS_CLUSTERNODE_INFO:
+			if (iov.tio_udatainlen != sizeof cni ||
+			    umove (tcp, (long) iov.tio_udatain, &cni) < 0)
+				goto bad_out;
+			if (cni.info_len != sizeof info ||
+			    iov.tio_udataoutlen != sizeof &info ||
+			    umove (tcp, (long) iov.tio_udataout, &info) < 0)
+				goto bad_out;
+			tprintf (", out={node=%ld, cpus=%d, online=%d}",
+				 info.node_num, info.node_totalcpus,
+				 info.node_onlinecpus);
+			break;
+
 		    default:
+		    bad_out:
 			if (iov.tio_udataoutlen) {
 				tprintf (", out=[/* %d bytes */]",
 					 iov.tio_udataoutlen);
 			}
 		}
+	    done:
 		tprintf ("}, %ld", tcp->u_arg[1]);
 	}
 	return 0;
@@ -2233,7 +2240,7 @@ struct tcb *tcp;
 #define __NEW_UTS_LEN 64
 #endif
 
-static struct xlat sysmips_operations[] = {
+static const struct xlat sysmips_operations[] = {
 	{ SETNAME,		"SETNAME"	},
 	{ FLUSH_CACHE,		"FLUSH_CACHE"	},
 	{ MIPS_FIXADE,		"MIPS_FIXADE"	},

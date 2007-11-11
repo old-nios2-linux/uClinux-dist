@@ -7,6 +7,7 @@
 #define PROVIDE32(x)	PROVIDE(x)
 #endif
 #include <asm-generic/vmlinux.lds.h>
+#include <asm/cache.h>
 
 ENTRY(_stext)
 
@@ -33,7 +34,8 @@ SECTIONS
 
 	/* Text and gots */
 	.text : {
-		*(.text .text.*)
+		_text = .;
+		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
@@ -61,11 +63,9 @@ SECTIONS
 		__stop___ex_table = .;
 	}
 
-	__bug_table : {
-		__start___bug_table = .;
-		*(__bug_table)
-		__stop___bug_table = .;
-	}
+	NOTES
+
+	BUG_TABLE
 
 /*
  * Init sections discarded at runtime
@@ -134,22 +134,19 @@ SECTIONS
 		__stop___fw_ftr_fixup = .;
 	}
 #endif
-
+#ifdef CONFIG_BLK_DEV_INITRD
 	. = ALIGN(PAGE_SIZE);
 	.init.ramfs : {
 		__initramfs_start = .;
 		*(.init.ramfs)
 		__initramfs_end = .;
 	}
-
-#ifdef CONFIG_PPC32
-	. = ALIGN(32);
-#else
-	. = ALIGN(128);
 #endif
+	. = ALIGN(PAGE_SIZE);
 	.data.percpu : {
 		__per_cpu_start = .;
 		*(.data.percpu)
+		*(.data.percpu.shared_aligned)
 		__per_cpu_end = .;
 	}
 
@@ -174,13 +171,15 @@ SECTIONS
 #ifdef CONFIG_PPC32
 	.data    :
 	{
-		*(.data)
+		DATA_DATA
 		*(.sdata)
 		*(.got.plt) *(.got)
 	}
 #else
 	.data : {
-		*(.data .data.rel* .toc1)
+		DATA_DATA
+		*(.data.rel*)
+		*(.toc1)
 		*(.branch_lt)
 	}
 
@@ -216,6 +215,11 @@ SECTIONS
 
 	.data.cacheline_aligned : {
 		*(.data.cacheline_aligned)
+	}
+
+	. = ALIGN(L1_CACHE_BYTES);
+	.data.read_mostly : {
+		*(.data.read_mostly)
 	}
 
 	. = ALIGN(PAGE_SIZE);

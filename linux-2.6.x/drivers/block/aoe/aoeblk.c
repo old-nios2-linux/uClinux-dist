@@ -12,7 +12,7 @@
 #include <linux/netdevice.h>
 #include "aoe.h"
 
-static kmem_cache_t *buf_pool_cache;
+static struct kmem_cache *buf_pool_cache;
 
 static ssize_t aoedisk_show_state(struct gendisk * disk, char *page)
 {
@@ -125,7 +125,7 @@ aoeblk_release(struct inode *inode, struct file *filp)
 }
 
 static int
-aoeblk_make_request(request_queue_t *q, struct bio *bio)
+aoeblk_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct aoedev *d;
 	struct buf *buf;
@@ -257,9 +257,9 @@ aoeblk_exit(void)
 int __init
 aoeblk_init(void)
 {
-	buf_pool_cache = kmem_cache_create("aoe_bufs", 
+	buf_pool_cache = kmem_cache_create("aoe_bufs",
 					   sizeof(struct buf),
-					   0, 0, NULL, NULL);
+					   0, 0, NULL);
 	if (buf_pool_cache == NULL)
 		return -ENOMEM;
 

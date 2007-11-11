@@ -51,7 +51,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/tty.h>
 #include <linux/console.h>
@@ -63,7 +62,6 @@
 #include <linux/selection.h>
 #include <linux/spinlock.h>
 #include <linux/kref.h>
-#include <linux/smp_lock.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/vmalloc.h>
@@ -216,18 +214,13 @@ sisusbcon_init(struct vc_data *c, int init)
 	 * are set up/restored.
 	 */
 
-	mutex_lock(&disconnect_mutex);
-
-	if (!(sisusb = sisusb_get_sisusb(c->vc_num))) {
-		mutex_unlock(&disconnect_mutex);
+	if (!(sisusb = sisusb_get_sisusb(c->vc_num)))
 		return;
-	}
 
 	mutex_lock(&sisusb->lock);
 
 	if (!sisusb_sisusb_valid(sisusb)) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		return;
 	}
 
@@ -266,8 +259,6 @@ sisusbcon_init(struct vc_data *c, int init)
 
 	mutex_unlock(&sisusb->lock);
 
-	mutex_unlock(&disconnect_mutex);
-
 	if (init) {
 		c->vc_cols = cols;
 		c->vc_rows = rows;
@@ -286,12 +277,8 @@ sisusbcon_deinit(struct vc_data *c)
 	 * and others, ie not under our control.
 	 */
 
-	mutex_lock(&disconnect_mutex);
-
-	if (!(sisusb = sisusb_get_sisusb(c->vc_num))) {
-		mutex_unlock(&disconnect_mutex);
+	if (!(sisusb = sisusb_get_sisusb(c->vc_num)))
 		return;
-	}
 
 	mutex_lock(&sisusb->lock);
 
@@ -316,14 +303,12 @@ sisusbcon_deinit(struct vc_data *c)
 
 	/* decrement the usage count on our sisusb */
 	kref_put(&sisusb->kref, sisusb_delete);
-
-	mutex_unlock(&disconnect_mutex);
 }
 
 /* interface routine */
 static u8
 sisusbcon_build_attr(struct vc_data *c, u8 color, u8 intensity,
-			    u8 blink, u8 underline, u8 reverse)
+			    u8 blink, u8 underline, u8 reverse, u8 unused)
 {
 	u8 attr = color;
 
@@ -403,7 +388,7 @@ sisusbcon_putc(struct vc_data *c, int ch, int y, int x)
 
 
 	sisusb_copy_memory(sisusb, (char *)SISUSB_VADDR(x, y),
-				(u32)SISUSB_HADDR(x, y), 2, &written);
+				(long)SISUSB_HADDR(x, y), 2, &written);
 
 	mutex_unlock(&sisusb->lock);
 }
@@ -438,7 +423,7 @@ sisusbcon_putcs(struct vc_data *c, const unsigned short *s,
 	}
 
 	sisusb_copy_memory(sisusb, (char *)SISUSB_VADDR(x, y),
-				(u32)SISUSB_HADDR(x, y), count * 2, &written);
+				(long)SISUSB_HADDR(x, y), count * 2, &written);
 
 	mutex_unlock(&sisusb->lock);
 }
@@ -492,7 +477,7 @@ sisusbcon_clear(struct vc_data *c, int y, int x, int height, int width)
 
 
 	sisusb_copy_memory(sisusb, (unsigned char *)SISUSB_VADDR(x, y),
-				(u32)SISUSB_HADDR(x, y), length, &written);
+				(long)SISUSB_HADDR(x, y), length, &written);
 
 	mutex_unlock(&sisusb->lock);
 }
@@ -564,7 +549,7 @@ sisusbcon_bmove(struct vc_data *c, int sy, int sx,
 
 
 	sisusb_copy_memory(sisusb, (unsigned char *)SISUSB_VADDR(dx, dy),
-				(u32)SISUSB_HADDR(dx, dy), length, &written);
+				(long)SISUSB_HADDR(dx, dy), length, &written);
 
 	mutex_unlock(&sisusb->lock);
 }
@@ -612,7 +597,7 @@ sisusbcon_switch(struct vc_data *c)
 								length);
 
 	sisusb_copy_memory(sisusb, (unsigned char *)c->vc_origin,
-				(u32)SISUSB_HADDR(0, 0),
+				(long)SISUSB_HADDR(0, 0),
 				length, &written);
 
 	mutex_unlock(&sisusb->lock);
@@ -939,7 +924,7 @@ sisusbcon_scroll_area(struct vc_data *c, struct sisusb_usb_data *sisusb,
 	}
 
 	sisusb_copy_memory(sisusb, (char *)SISUSB_VADDR(0, t),
-				(u32)SISUSB_HADDR(0, t), length, &written);
+				(long)SISUSB_HADDR(0, t), length, &written);
 
 	mutex_unlock(&sisusb->lock);
 
@@ -1492,14 +1477,11 @@ sisusb_console_init(struct sisusb_usb_data *sisusb, int first, int last)
 {
 	int i, ret, minor = sisusb->minor;
 
-	mutex_lock(&disconnect_mutex);
-
 	mutex_lock(&sisusb->lock);
 
 	/* Erm.. that should not happen */
 	if (sisusb->haveconsole || !sisusb->SiS_Pr) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		return 1;
 	}
 
@@ -1510,14 +1492,12 @@ sisusb_console_init(struct sisusb_usb_data *sisusb, int first, int last)
 	    first > MAX_NR_CONSOLES ||
 	    last > MAX_NR_CONSOLES) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		return 1;
 	}
 
 	/* If gfxcore not initialized or no consoles given, quit graciously */
 	if (!sisusb->gfxinit || first < 1 || last < 1) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		return 0;
 	}
 
@@ -1528,7 +1508,6 @@ sisusb_console_init(struct sisusb_usb_data *sisusb, int first, int last)
 	/* Set up text mode (and upload  default font) */
 	if (sisusb_reset_text_mode(sisusb, 1)) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		printk(KERN_ERR
 			"sisusbvga[%d]: Failed to set up text mode\n",
 			minor);
@@ -1552,7 +1531,6 @@ sisusb_console_init(struct sisusb_usb_data *sisusb, int first, int last)
 	/* Allocate screen buffer */
 	if (!(sisusb->scrbuf = (unsigned long)vmalloc(sisusb->scrbuf_size))) {
 		mutex_unlock(&sisusb->lock);
-		mutex_unlock(&disconnect_mutex);
 		printk(KERN_ERR
 			"sisusbvga[%d]: Failed to allocate screen buffer\n",
 			minor);
@@ -1560,7 +1538,6 @@ sisusb_console_init(struct sisusb_usb_data *sisusb, int first, int last)
 	}
 
 	mutex_unlock(&sisusb->lock);
-	mutex_unlock(&disconnect_mutex);
 
 	/* Now grab the desired console(s) */
 	ret = take_over_console(&sisusb_con, first - 1, last - 1, 0);

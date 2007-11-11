@@ -1,8 +1,8 @@
 /*
- * $Id: t_cancel.h,v 1.3.6.1 2004/02/11 02:43:26 jiri Exp $
+ * $Id: t_cancel.h,v 1.6 2004/08/24 09:00:42 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,6 +24,10 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * History:
+ * ---------
+ *  2004-02-11  FIFO/CANCEL + alignments (hash=f(callid,cseq)) (uli+jiri)
  */
 
 
@@ -40,7 +44,7 @@
    to generate a CANCEL, other processes are not supposed to"
    (which might happen if for example in a three-branch forking,
    two 200 would enter separate processes and compete for
-   cancelling the third branch); note that to really avoid
+   canceling the third branch); note that to really avoid
    race conditions, the value must be set in REPLY_LOCK
 */
 
@@ -51,6 +55,8 @@ void cancel_uacs( struct cell *t, branch_bm_t cancel_bm );
 void cancel_branch( struct cell *t, int branch );
 
 int fifo_uac_cancel( FILE* stream, char *response_file );
+
+int unixsock_uac_cancel(str* msg);
 
 char *build_cancel(struct cell *Trans,unsigned int branch,
 	unsigned int *len );

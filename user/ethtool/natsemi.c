@@ -322,7 +322,7 @@ static void __print_intr(int d, int intr, const char *name,
 	PRINT_INTR((d), TXRCMP, s1, s2); \
 } while (0)
 
-int 
+int
 natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 {
 	u32 *data = (u32 *)regs->data;
@@ -332,8 +332,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	fprintf(stdout, "-----------------\n");
 
 	/* command register */
-	fprintf(stdout, 
-		"0x00: CR (Command):                      0x%08x\n", 
+	fprintf(stdout,
+		"0x00: CR (Command):                      0x%08x\n",
 		data[REG_CR]);
 	fprintf(stdout,
 		"      Transmit %s\n"
@@ -344,8 +344,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Reset In Progress\n");
 
 	/* configuration register */
-	fprintf(stdout, 
-		"0x04: CFG (Configuration):               0x%08x\n", 
+	fprintf(stdout,
+		"0x04: CFG (Configuration):               0x%08x\n",
 		data[REG_CFG]);
 	fprintf(stdout,
 		"      %s Endian\n"
@@ -368,8 +368,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_CFG] & BIT_CFG_EXT_PHY ? "Enabled" : "Disabled",
 		data[REG_CFG] & BIT_CFG_ANEG_EN ? "Enabled" : "Disabled",
 		data[REG_CFG] & BIT_CFG_ANEG_EN ? "Advertise" : "Force",
-		data[REG_CFG] & BIT_CFG_ANEG_100 ? 
-			(data[REG_CFG] & BIT_CFG_ANEG_EN ? "10/100" : "100") 
+		data[REG_CFG] & BIT_CFG_ANEG_100 ?
+			(data[REG_CFG] & BIT_CFG_ANEG_EN ? "10/100" : "100")
 			: "10",
 		data[REG_CFG] & BIT_CFG_ANEG_FDUP ?
 			(data[REG_CFG] & BIT_CFG_ANEG_EN ? "Half/Full" : "Full")
@@ -381,15 +381,15 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_CFG] & BIT_CFG_FDUP ? "Full" : "Half",
 		data[REG_CFG] & BIT_CFG_SPEED100 ? 100 : 10,
 		data[REG_CFG] & BIT_CFG_LNKSTS ? "Up" : "Down");
-	
+
 	/* EEPROM access register */
-	fprintf(stdout, 
-		"0x08: MEAR (EEPROM Access):              0x%08x\n", 
+	fprintf(stdout,
+		"0x08: MEAR (EEPROM Access):              0x%08x\n",
 		data[REG_MEAR]);
 
 	/* PCI test control register */
-	fprintf(stdout, 
-		"0x0c: PTSCR (PCI Test Control):          0x%08x\n", 
+	fprintf(stdout,
+		"0x0c: PTSCR (PCI Test Control):          0x%08x\n",
 		data[REG_PTSCR]);
 	fprintf(stdout,
 		"      EEPROM Self Test %s\n"
@@ -402,10 +402,10 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_PTSCR] & BIT_PTSCR_RBIST_RXFAIL ? "Failed" : "Passed");
 	if (data[REG_PTSCR] & BIT_PTSCR_EELOAD_EN) fprintf(stdout,
 		"      EEPROM Reload In Progress\n");
-	
+
 	/* Interrupt status register */
-	fprintf(stdout, 
-		"0x10: ISR (Interrupt Status):            0x%08x\n", 
+	fprintf(stdout,
+		"0x10: ISR (Interrupt Status):            0x%08x\n",
 		data[REG_ISR]);
 	if (data[REG_ISR])
 		PRINT_INTRS(data[REG_ISR], "Active", (char *)NULL);
@@ -413,27 +413,27 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		fprintf(stdout, "      No Interrupts Active\n");
 
 	/* Interrupt mask register */
-	fprintf(stdout, 
-		"0x14: IMR (Interrupt Mask):              0x%08x\n", 
+	fprintf(stdout,
+		"0x14: IMR (Interrupt Mask):              0x%08x\n",
 		data[REG_IMR]);
 	PRINT_INTRS(data[REG_IMR], "Enabled", "Masked");
 
 	/* Interrupt enable register */
-	fprintf(stdout, 
-		"0x18: IER (Interrupt Enable):            0x%08x\n", 
+	fprintf(stdout,
+		"0x18: IER (Interrupt Enable):            0x%08x\n",
 		data[REG_IER]);
 	fprintf(stdout,
 		"      Interrupts %s\n",
 		data[REG_IER] & BIT_IER_IE ? "Enabled" : "Disabled");
 
 	/* Tx descriptor pointer register */
-	fprintf(stdout, 
-		"0x20: TXDP (Tx Descriptor Pointer):      0x%08x\n", 
+	fprintf(stdout,
+		"0x20: TXDP (Tx Descriptor Pointer):      0x%08x\n",
 		data[REG_TXDP]);
 
 	/* Tx configuration register */
-	fprintf(stdout, 
-		"0x24: TXCFG (Tx Config):                 0x%08x\n", 
+	fprintf(stdout,
+		"0x24: TXCFG (Tx Config):                 0x%08x\n",
 		data[REG_TXCFG]);
 	tmp = (data[REG_TXCFG] & BIT_TXCFG_MXDMA)>>20;
 	fprintf(stdout,
@@ -456,13 +456,13 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 
 
 	/* Rx descriptor pointer register */
-	fprintf(stdout, 
-		"0x30: RXDP (Rx Descriptor Pointer):      0x%08x\n", 
+	fprintf(stdout,
+		"0x30: RXDP (Rx Descriptor Pointer):      0x%08x\n",
 		data[REG_RXDP]);
 
 	/* Rx configuration register */
-	fprintf(stdout, 
-		"0x34: RXCFG (Rx Config):                 0x%08x\n", 
+	fprintf(stdout,
+		"0x34: RXCFG (Rx Config):                 0x%08x\n",
 		data[REG_RXCFG]);
 	tmp = (data[REG_RXCFG] & BIT_RXCFG_MXDMA)>>20;
 	fprintf(stdout,
@@ -481,8 +481,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_RXCFG] & BIT_RXCFG_AEP ? "Accepted" : "Rejected");
 
 	/* CLKRUN control/status register */
-	fprintf(stdout, 
-		"0x3c: CCSR (CLKRUN Control/Status):      0x%08x\n", 
+	fprintf(stdout,
+		"0x3c: CCSR (CLKRUN Control/Status):      0x%08x\n",
 		data[REG_CCSR]);
 	fprintf(stdout,
 		"      CLKRUNN %s\n"
@@ -493,8 +493,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Power Management Event Pending\n");
 
 	/* WoL control/status register */
-	fprintf(stdout, 
-		"0x40: WCSR (Wake-on-LAN Control/Status): 0x%08x\n", 
+	fprintf(stdout,
+		"0x40: WCSR (Wake-on-LAN Control/Status): 0x%08x\n",
 		data[REG_WCSR]);
 	if (data[REG_WCSR] & BIT_WCSR_WKPHY) fprintf(stdout,
 		"      Wake on Phy Interrupt Enabled\n");
@@ -540,10 +540,10 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Pattern 3 Received\n");
 	if (data[REG_WCSR] & BIT_WCSR_MPR) fprintf(stdout,
 		"      Magic Packet Received\n");
-		
+
 	/* Pause control/status register */
-	fprintf(stdout, 
-		"0x44: PCR (Pause Control/Status):        0x%08x\n", 
+	fprintf(stdout,
+		"0x44: PCR (Pause Control/Status):        0x%08x\n",
 		data[REG_PCR]);
 	fprintf(stdout,
 		"      Pause Counter = %d\n"
@@ -560,8 +560,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      PS_RCVD: Pause Frame Received\n");
 
 	/* Rx Filter Control */
-	fprintf(stdout, 
-		"0x48: RFCR (Rx Filter Control):          0x%08x\n", 
+	fprintf(stdout,
+		"0x48: RFCR (Rx Filter Control):          0x%08x\n",
 		data[REG_RFCR]);
 	fprintf(stdout,
 		"      Unicast Hash %s\n"
@@ -590,8 +590,8 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_RFCR] & BIT_RFCR_RFEN ? "Enabled" : "Disabled");
 
 	/* Rx filter data register */
-	fprintf(stdout, 
-		"0x4c: RFDR (Rx Filter Data):             0x%08x\n", 
+	fprintf(stdout,
+		"0x4c: RFDR (Rx Filter Data):             0x%08x\n",
 		data[REG_RFDR]);
 	if (regs->version >= 1) fprintf(stdout,
 		"      PMATCH 1-0 = 0x%08x\n"
@@ -605,28 +605,28 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_PMATCH0], data[REG_PMATCH1], data[REG_PMATCH2],
 		data[REG_PCOUNT0], data[REG_PCOUNT1],
 		data[REG_SOPASS0], data[REG_SOPASS1], data[REG_SOPASS2]);
-		
+
 
 	/* Boot ROM address register */
-	fprintf(stdout, 
-		"0x50: BRAR (Boot ROM Address):           0x%08x\n", 
+	fprintf(stdout,
+		"0x50: BRAR (Boot ROM Address):           0x%08x\n",
 		data[REG_BRAR]);
 	if (data[REG_BRAR] & BIT_BRAR_AUTOINC) fprintf(stdout,
 		"      Automatically Increment Address\n");
 
 	/* Boot ROM data register */
-	fprintf(stdout, 
-		"0x54: BRDR (Boot ROM Data):              0x%08x\n", 
+	fprintf(stdout,
+		"0x54: BRDR (Boot ROM Data):              0x%08x\n",
 		data[REG_BRDR]);
 
 	/* Silicon revison register */
-	fprintf(stdout, 
-		"0x58: SRR (Silicon Revision):            0x%08x\n", 
+	fprintf(stdout,
+		"0x58: SRR (Silicon Revision):            0x%08x\n",
 		data[REG_SRR]);
 
 	/* Management information base control register */
-	fprintf(stdout, 
-		"0x5c: MIBC (Mgmt Info Base Control):     0x%08x\n", 
+	fprintf(stdout,
+		"0x5c: MIBC (Mgmt Info Base Control):     0x%08x\n",
 		data[REG_MIBC]);
 	if (data[REG_MIBC] & BIT_MIBC_WRN) fprintf(stdout,
 		"      Counter Overflow Warning\n");
@@ -634,32 +634,32 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Counters Frozen\n");
 
 	/* MIB registers */
-	fprintf(stdout, 
-		"0x60: MIB[0] (Rx Errored Packets):       0x%04x\n", 
+	fprintf(stdout,
+		"0x60: MIB[0] (Rx Errored Packets):       0x%04x\n",
 		data[REG_MIB0]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB0]);
-	fprintf(stdout, 
-		"0x64: MIB[1] (Rx Frame Sequence Errors): 0x%02x\n", 
+	fprintf(stdout,
+		"0x64: MIB[1] (Rx Frame Sequence Errors): 0x%02x\n",
 		data[REG_MIB1]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB1]);
-	fprintf(stdout, 
-		"0x68: MIB[2] (Rx Missed Packets):        0x%02x\n", 
+	fprintf(stdout,
+		"0x68: MIB[2] (Rx Missed Packets):        0x%02x\n",
 		data[REG_MIB2]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB2]);
-	fprintf(stdout, 
-		"0x6c: MIB[3] (Rx Alignment Errors):      0x%02x\n", 
+	fprintf(stdout,
+		"0x6c: MIB[3] (Rx Alignment Errors):      0x%02x\n",
 		data[REG_MIB3]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB3]);
-	fprintf(stdout, 
-		"0x70: MIB[4] (Rx Symbol Errors):         0x%02x\n", 
+	fprintf(stdout,
+		"0x70: MIB[4] (Rx Symbol Errors):         0x%02x\n",
 		data[REG_MIB4]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB4]);
-	fprintf(stdout, 
-		"0x74: MIB[5] (Rx Long Frame Errors):     0x%02x\n", 
+	fprintf(stdout,
+		"0x74: MIB[5] (Rx Long Frame Errors):     0x%02x\n",
 		data[REG_MIB5]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB5]);
 	fprintf(stdout,
-		"0x78: MIB[6] (Tx Heartbeat Errors):      0x%02x\n", 
+		"0x78: MIB[6] (Tx Heartbeat Errors):      0x%02x\n",
 		data[REG_MIB6]);
 	fprintf(stdout, "      Value = %d\n", data[REG_MIB6]);
 
@@ -669,7 +669,7 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 
 	/* Basic mode control register */
 	fprintf(stdout,
-		"0x80: BMCR (Basic Mode Control):         0x%04x\n", 
+		"0x80: BMCR (Basic Mode Control):         0x%04x\n",
 		data[REG_BMCR]);
 	fprintf(stdout,
 		"      %s Duplex\n"
@@ -688,10 +688,10 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      Loopback Enabled\n");
 	if (data[REG_BMCR] & BIT_BMCR_RST) fprintf(stdout,
 		"      Reset In Progress\n");
-	
+
 	/* Basic mode status register */
 	fprintf(stdout,
-		"0x84: BMSR (Basic Mode Status):          0x%04x\n", 
+		"0x84: BMSR (Basic Mode Status):          0x%04x\n",
 		data[REG_BMSR]);
 	fprintf(stdout,
 		"      Link %s\n"
@@ -719,10 +719,10 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 
 	/* PHY identification registers */
 	fprintf(stdout,
-		"0x88: PHYIDR1 (PHY ID #1):               0x%04x\n", 
+		"0x88: PHYIDR1 (PHY ID #1):               0x%04x\n",
 		data[REG_PHYIDR1]);
 	fprintf(stdout,
-		"0x8c: PHYIDR2 (PHY ID #2):               0x%04x\n", 
+		"0x8c: PHYIDR2 (PHY ID #2):               0x%04x\n",
 		data[REG_PHYIDR2]);
 	fprintf(stdout,
 		"      OUI = 0x%06x\n"
@@ -731,16 +731,16 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		(data[REG_PHYIDR1] << 6) | (data[REG_PHYIDR2] >> 10),
 		(data[REG_PHYIDR2] & BIT_PHYIDR2_MODEL) >> 4 & 0x3f,
 		(data[REG_PHYIDR2] & BIT_PHYIDR2_MODEL) >> 4 & 0x3f,
-		data[REG_PHYIDR2] & BIT_PHYIDR2_REV, 
+		data[REG_PHYIDR2] & BIT_PHYIDR2_REV,
 		data[REG_PHYIDR2] & BIT_PHYIDR2_REV);
-	
+
 	/* autonegotiation advertising register */
 	fprintf(stdout,
-		"0x90: ANAR (Autoneg Advertising):        0x%04x\n", 
+		"0x90: ANAR (Autoneg Advertising):        0x%04x\n",
 		data[REG_ANAR]);
 	fprintf(stdout,
 		"      Protocol Selector = 0x%02x (%d)\n",
-		data[REG_ANAR] & BIT_ANAR_PROTO, 
+		data[REG_ANAR] & BIT_ANAR_PROTO,
 		data[REG_ANAR] & BIT_ANAR_PROTO);
 	if (data[REG_ANAR] & BIT_ANAR_10) fprintf(stdout,
 		"      Advertising 10Base-T Half Duplex\n");
@@ -761,11 +761,11 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 
 	/* Autonegotiation link partner ability register */
 	fprintf(stdout,
-		"0x94: ANLPAR (Autoneg Partner):          0x%04x\n", 
+		"0x94: ANLPAR (Autoneg Partner):          0x%04x\n",
 		data[REG_ANLPAR]);
 	fprintf(stdout,
 		"      Protocol Selector = 0x%02x (%d)\n",
-		data[REG_ANLPAR] & BIT_ANLPAR_PROTO, 
+		data[REG_ANLPAR] & BIT_ANLPAR_PROTO,
 		data[REG_ANLPAR] & BIT_ANLPAR_PROTO);
 	if (data[REG_ANLPAR] & BIT_ANLPAR_10) fprintf(stdout,
 		"      Supports 10Base-T Half Duplex\n");
@@ -788,7 +788,7 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 
 	/* Autonegotiation expansion register */
 	fprintf(stdout,
-		"0x98: ANER (Autoneg Expansion):          0x%04x\n", 
+		"0x98: ANER (Autoneg Expansion):          0x%04x\n",
 		data[REG_ANER]);
 	fprintf(stdout,
 		"      Link Partner Can %sAuto-Negotiate\n"
@@ -801,15 +801,15 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_ANER] & BIT_ANER_LP_NP_ABLE ? "" : "Not ");
 	if (data[REG_ANER] & BIT_ANER_PDF) fprintf(stdout,
 		"      Parallel Detection Fault\n");
-	
+
 	/* Autonegotiation next-page tx register */
 	fprintf(stdout,
-		"0x9c: ANNPTR (Autoneg Next Page Tx):     0x%04x\n", 
+		"0x9c: ANNPTR (Autoneg Next Page Tx):     0x%04x\n",
 		data[REG_ANNPTR]);
-	
+
 	/* Phy status register */
 	fprintf(stdout,
-		"0xc0: PHYSTS (Phy Status):               0x%04x\n", 
+		"0xc0: PHYSTS (Phy Status):               0x%04x\n",
 		data[REG_PHYSTS]);
 	fprintf(stdout,
 		"      Link %s\n"
@@ -834,16 +834,16 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		"      False Carrier Detected\n");
 	if (data[REG_PHYSTS] & BIT_PHYSTS_RXERR) fprintf(stdout,
 		"      Rx Error Detected\n");
-	
+
 	fprintf(stdout,
-		"0xc4: MICR (MII Interrupt Control):      0x%04x\n", 
+		"0xc4: MICR (MII Interrupt Control):      0x%04x\n",
 		data[REG_MICR]);
-	fprintf(stdout, 
+	fprintf(stdout,
 		"      MII Interrupts %s\n",
 		data[REG_MICR] & BIT_MICR_INTEN ? "Enabled" : "Disabled");
-	
+
 	fprintf(stdout,
-		"0xc8: MISR (MII Interrupt Status):       0x%04x\n", 
+		"0xc8: MISR (MII Interrupt Status):       0x%04x\n",
 		data[REG_MISR]);
 	fprintf(stdout,
 		"      Rx Error Counter Half-Full Interrupt %s\n"
@@ -860,27 +860,27 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_MISR] & BIT_MISR_MSK_LNK ? "Masked" : "Enabled");
 	if (data[REG_MISR] & BIT_MISR_MINT) fprintf(stdout,
 		"      MII Interrupt Pending\n");
-	
+
 	/* Page select register (from section of spec on 'suggested values') */
 	fprintf(stdout,
-		"0xcc: PGSEL (Phy Register Page Select):  0x%04x\n", 
+		"0xcc: PGSEL (Phy Register Page Select):  0x%04x\n",
 		data[REG_PGSEL]);
-	
+
 	/* counters */
 	fprintf(stdout,
-		"0xd0: FCSCR (False Carrier Counter):     0x%04x\n", 
+		"0xd0: FCSCR (False Carrier Counter):     0x%04x\n",
 		data[REG_FCSCR]);
 	fprintf(stdout,
 		"      Value = %d\n", data[REG_FCSCR] & 0xff);
 	fprintf(stdout,
-		"0xd4: RECR (Rx Error Counter):           0x%04x\n", 
+		"0xd4: RECR (Rx Error Counter):           0x%04x\n",
 		data[REG_RECR]);
 	fprintf(stdout,
 		"      Value = %d\n", data[REG_RECR] & 0xff);
-	
+
 	/* 100 Mbit configuration register */
 	fprintf(stdout,
-		"0xd8: PCSR (100Mb/s PCS Config/Status):  0x%04x\n", 
+		"0xd8: PCSR (100Mb/s PCS Config/Status):  0x%04x\n",
 		data[REG_PCSR]);
 	fprintf(stdout,
 		"      NRZI Bypass %s\n"
@@ -893,15 +893,15 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_PCSR] & BIT_PCSR_SDOPT ? "Enhanced" : "Reduced",
 		data[REG_PCSR] & BIT_PCSR_SDFORCE ? "Forced" : "Normal",
 		data[REG_PCSR] & BIT_PCSR_TQM ? "Enabled" : "Disabled",
-		data[REG_PCSR] & BIT_PCSR_CLK ? 
+		data[REG_PCSR] & BIT_PCSR_CLK ?
 			"Free-Running" : "Phase-Adjusted",
 		data[REG_PCSR] & BIT_PCSR_4B5B ? "Bypassed" : "Normal");
 	if (data[REG_PCSR] & BIT_PCSR_FORCE_100) fprintf(stdout,
 		"      Forced 100 Mb/s Good Link\n");
-	
+
 	/* Phy control register */
 	fprintf(stdout,
-		"0xe4: PHYCR (Phy Control):               0x%04x\n", 
+		"0xe4: PHYCR (Phy Control):               0x%04x\n",
 		data[REG_PHYCR]);
 	fprintf(stdout,
 		"      Phy Address = 0x%x (%d)\n"
@@ -914,14 +914,14 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_PHYCR] & BIT_PHYCR_PAUSE_STS ? "" : "Not ",
 		data[REG_PHYCR] & BIT_PHYCR_STRETCH ? "Bypassed" : "Enabled",
 		data[REG_PHYCR] & BIT_PHYCR_BIST ? "In Progress" :
-		  data[REG_PHYCR] & BIT_PHYCR_BIST_STAT ? 
+		  data[REG_PHYCR] & BIT_PHYCR_BIST_STAT ?
 		    "Passed" : "Failed or Not Run",
 		data[REG_PHYCR] & BIT_PHYCR_PSR15 ? 15 : 9);
-		
-	
+
+
 	/* 10 Mbit control and status register */
 	fprintf(stdout,
-		"0xe8: TBTSCR (10Base-T Status/Control):  0x%04x\n", 
+		"0xe8: TBTSCR (10Base-T Status/Control):  0x%04x\n",
 		data[REG_TBTSCR]);
 	fprintf(stdout,
 		"      Jabber %s\n"
@@ -933,7 +933,7 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 		data[REG_TBTSCR] & BIT_TBTSCR_JAB ? "Disabled" : "Enabled",
 		data[REG_TBTSCR] & BIT_TBTSCR_BEAT ? "Disabled" : "Enabled",
 		data[REG_TBTSCR] & BIT_TBTSCR_AUTOPOL ? "Disabled" : "Enabled",
-		data[REG_TBTSCR] & BIT_TBTSCR_AUTOPOL ? 
+		data[REG_TBTSCR] & BIT_TBTSCR_AUTOPOL ?
 			data[REG_TBTSCR]&BIT_TBTSCR_FPOL ? "Reverse":"Normal" :
 			data[REG_TBTSCR]&BIT_TBTSCR_POL ? "Reverse":"Normal",
 		data[REG_TBTSCR] & BIT_TBTSCR_AUTOPOL ? "Forced" : "Detected",
@@ -947,22 +947,22 @@ natsemi_dump_regs(struct ethtool_drvinfo *info, struct ethtool_regs *regs)
 	fprintf(stdout, "'Magic' Phy Registers\n");
 	fprintf(stdout, "---------------------\n");
 	fprintf(stdout,
-		"0xe4: PMDCSR:                            0x%04x\n", 
+		"0xe4: PMDCSR:                            0x%04x\n",
 		data[REG_PMDCSR]);
 	fprintf(stdout,
-		"0xf4: DSPCFG:                            0x%04x\n", 
+		"0xf4: DSPCFG:                            0x%04x\n",
 		data[REG_DSPCFG]);
 	fprintf(stdout,
-		"0xf8: SDCFG:                             0x%04x\n", 
+		"0xf8: SDCFG:                             0x%04x\n",
 		data[REG_SDCFG]);
 	fprintf(stdout,
-		"0xfc: TSTDAT:                            0x%04x\n", 
+		"0xfc: TSTDAT:                            0x%04x\n",
 		data[REG_TSTDAT]);
 
 	return 0;
 }
 
-int 
+int
 natsemi_dump_eeprom(struct ethtool_drvinfo *info, struct ethtool_eeprom *ee)
 {
 	int i;

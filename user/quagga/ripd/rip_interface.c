@@ -1674,6 +1674,7 @@ DEFUN (ip_rip_authentication_mode,
 {
   struct interface *ifp;
   struct rip_interface *ri;
+  int auth_type;
 
   ifp = (struct interface *)vty->index;
   ri = ifp->info;
@@ -1685,9 +1686,9 @@ DEFUN (ip_rip_authentication_mode,
     }
     
   if (strncmp ("md5", argv[0], strlen (argv[0])) == 0)
-    ri->auth_type = RIP_AUTH_MD5;
+    auth_type = RIP_AUTH_MD5;
   else if (strncmp ("text", argv[0], strlen (argv[0])) == 0)
-    ri->auth_type = RIP_AUTH_SIMPLE_PASSWORD;
+    auth_type = RIP_AUTH_SIMPLE_PASSWORD;
   else
     {
       vty_out (vty, "mode should be md5 or text%s", VTY_NEWLINE);
@@ -1695,13 +1696,16 @@ DEFUN (ip_rip_authentication_mode,
     }
 
   if (argc == 1)
-  return CMD_SUCCESS;
+    {
+      ri->auth_type = auth_type;
+      return CMD_SUCCESS;
+    }
 
-  if ( (argc == 2) && (ri->auth_type != RIP_AUTH_MD5) )
+  if ( (argc == 2) && (auth_type != RIP_AUTH_MD5) )
     {
       vty_out (vty, "auth length argument only valid for md5%s", VTY_NEWLINE);
       return CMD_WARNING;
-}
+    }
 
   if (strncmp ("r", argv[1], 1) == 0)
     ri->md5_auth_len = RIP_AUTH_MD5_SIZE;
@@ -1709,7 +1713,9 @@ DEFUN (ip_rip_authentication_mode,
     ri->md5_auth_len = RIP_AUTH_MD5_COMPAT_SIZE;
   else 
     return CMD_WARNING;
-
+  
+  ri->auth_type = auth_type;
+  
   return CMD_SUCCESS;
 }
 
@@ -1741,8 +1747,7 @@ DEFUN (no_ip_rip_authentication_mode,
   ifp = (struct interface *)vty->index;
   ri = ifp->info;
 
-  /* ri->auth_type = RIP_NO_AUTH; */
-  ri->auth_type = RIP_AUTH_SIMPLE_PASSWORD;
+  ri->auth_type = RIP_NO_AUTH;
   ri->md5_auth_len = RIP_AUTH_MD5_COMPAT_SIZE;
 
   return CMD_SUCCESS;
@@ -2080,13 +2085,19 @@ rip_interface_config_write (struct vty *vty)
 		 VTY_NEWLINE);
 
       /* RIP authentication. */
-#if 0 
-      /* RIP_AUTH_SIMPLE_PASSWORD becomes default mode. */
+      /* Prior releases silently set simple-auth as default. There is no
+       * way even to disable authentication.
+       * To deal with this in a compatible way in 0.98:
+       * - simple-auth is retained as default
+       * - 'no ip rip authentication mode' sets RIP_NO_AUTH, as it should
+       * - we explicitely write out the authentication mode
+       *   with 'no ip rip authentication mode' for NO_AUTH to config
+       */
       if (ri->auth_type == RIP_AUTH_SIMPLE_PASSWORD)
 	vty_out (vty, " ip rip authentication mode text%s", VTY_NEWLINE);
-#endif /* 0 */
-
-      if (ri->auth_type == RIP_AUTH_MD5)
+      else if (ri->auth_type == RIP_NO_AUTH)
+        vty_out (vty, " no ip rip authentication mode%s", VTY_NEWLINE);
+      else if (ri->auth_type == RIP_AUTH_MD5)
         {
           vty_out (vty, " ip rip authentication mode md5");
           if (ri->md5_auth_len == RIP_AUTH_MD5_COMPAT_SIZE)

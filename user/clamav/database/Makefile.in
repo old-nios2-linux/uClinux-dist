@@ -69,10 +69,10 @@ SOURCES =
 DIST_SOURCES =
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
-ADDITIONAL_LIBS = @ADDITIONAL_LIBS@
 AMDEP_FALSE = @AMDEP_FALSE@
 AMDEP_TRUE = @AMDEP_TRUE@
 AMTAR = @AMTAR@
+AR = @AR@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -89,6 +89,10 @@ CLAMAV_MILTER_LIBS = @CLAMAV_MILTER_LIBS@
 CLAMD_LIBS = @CLAMD_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CXX = @CXX@
+CXXCPP = @CXXCPP@
+CXXDEPMODE = @CXXDEPMODE@
+CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DBDIR = @DBDIR@
 DEFS = @DEFS@
@@ -99,6 +103,8 @@ ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
+F77 = @F77@
+FFLAGS = @FFLAGS@
 FRESHCLAM_LIBS = @FRESHCLAM_LIBS@
 GETENT = @GETENT@
 GREP = @GREP@
@@ -129,14 +135,20 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 RANLIB = @RANLIB@
+SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
+THREAD_LIBS = @THREAD_LIBS@
 TH_SAFE = @TH_SAFE@
 VERSION = @VERSION@
 ac_ct_CC = @ac_ct_CC@
+ac_ct_CXX = @ac_ct_CXX@
+ac_ct_F77 = @ac_ct_F77@
 am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
 am__fastdepCC_TRUE = @am__fastdepCC_TRUE@
+am__fastdepCXX_FALSE = @am__fastdepCXX_FALSE@
+am__fastdepCXX_TRUE = @am__fastdepCXX_TRUE@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -346,21 +358,18 @@ uninstall-am: uninstall-info-am
 
 install:
 	$(mkinstalldirs) $(DESTDIR)$(DBINST)
-	@test -f $(DESTDIR)$(DBINST)/main.cvd || $(INSTALL_DATA) $(srcdir)/main.cvd $(DESTDIR)$(DBINST)
-	@test -f $(DESTDIR)$(DBINST)/daily.cvd || $(INSTALL_DATA) $(srcdir)/daily.cvd $(DESTDIR)$(DBINST)
-	@test -f $(DESTDIR)$(DBINST)/mirrors.txt && rm -f $(DESTDIR)$(DBINST)/mirrors.txt || true
-	@test -f $(DESTDIR)$(DBINST)/viruses.db && rm -f $(DESTDIR)$(DBINST)/viruses.db || true
-	@test -f $(DESTDIR)$(DBINST)/viruses.db2 && rm -f $(DESTDIR)$(DBINST)/viruses.db2 || true
+	@test -f $(DESTDIR)$(DBINST)/main.cvd || test -d $(DESTDIR)$(DBINST)/main.inc || $(INSTALL_DATA) $(srcdir)/main.cvd $(DESTDIR)$(DBINST)
+	@test -f $(DESTDIR)$(DBINST)/daily.cvd || test -d $(DESTDIR)$(DBINST)/daily.inc || $(INSTALL_DATA) $(srcdir)/daily.cvd $(DESTDIR)$(DBINST)
 	@if test `id|sed -e 's/^.[^(]*(\([^)]*\)).*/\1/'` = "root" && test -n "${CLAMAVUSER}" && test -n "${CLAMAVGROUP}"; then \
 	    chmod 775 $(DESTDIR)$(DBINST); \
 	    chown ${CLAMAVUSER} $(DESTDIR)$(DBINST); \
 	    chgrp ${CLAMAVGROUP} $(DESTDIR)$(DBINST); \
-	    chmod 664 $(DESTDIR)$(DBINST)/main.cvd; \
-	    chown ${CLAMAVUSER} $(DESTDIR)$(DBINST)/main.cvd; \
-	    chgrp ${CLAMAVGROUP} $(DESTDIR)$(DBINST)/main.cvd; \
-	    chmod 664 $(DESTDIR)$(DBINST)/daily.cvd; \
-	    chown ${CLAMAVUSER} $(DESTDIR)$(DBINST)/daily.cvd; \
-	    chgrp ${CLAMAVGROUP} $(DESTDIR)$(DBINST)/daily.cvd; \
+	    if test -f $(DESTDIR)$(DBINST)/main.cvd; then chmod 664 $(DESTDIR)$(DBINST)/main.cvd; fi;\
+	    if test -f $(DESTDIR)$(DBINST)/main.cvd; then chown ${CLAMAVUSER} $(DESTDIR)$(DBINST)/main.cvd; fi;\
+	    if test -f $(DESTDIR)$(DBINST)/main.cvd; then chgrp ${CLAMAVGROUP} $(DESTDIR)$(DBINST)/main.cvd; fi;\
+	    if test -f $(DESTDIR)$(DBINST)/daily.cvd; then chmod 664 $(DESTDIR)$(DBINST)/daily.cvd; fi;\
+	    if test -f $(DESTDIR)$(DBINST)/daily.cvd; then chown ${CLAMAVUSER} $(DESTDIR)$(DBINST)/daily.cvd; fi;\
+	    if test -f $(DESTDIR)$(DBINST)/daily.cvd; then chgrp ${CLAMAVGROUP} $(DESTDIR)$(DBINST)/daily.cvd; fi;\
 	fi
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

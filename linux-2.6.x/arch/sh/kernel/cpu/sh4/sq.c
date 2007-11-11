@@ -19,7 +19,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
-#include <asm/io.h>
+#include <linux/io.h>
 #include <asm/page.h>
 #include <asm/cacheflush.h>
 #include <asm/cpu/sq.h>
@@ -38,7 +38,7 @@ struct sq_mapping {
 
 static struct sq_mapping *sq_mapping_list;
 static DEFINE_SPINLOCK(sq_mapping_lock);
-static kmem_cache_t *sq_cache;
+static struct kmem_cache *sq_cache;
 static unsigned long *sq_bitmap;
 
 #define store_queue_barrier()			\
@@ -67,6 +67,7 @@ void sq_flush_range(unsigned long start, unsigned int len)
 	/* Wait for completion */
 	store_queue_barrier();
 }
+EXPORT_SYMBOL(sq_flush_range);
 
 static inline void sq_mapping_list_add(struct sq_mapping *map)
 {
@@ -110,8 +111,9 @@ static int __sq_remap(struct sq_mapping *map, unsigned long flags)
 
 	vma->phys_addr = map->addr;
 
-	if (remap_area_pages((unsigned long)vma->addr, vma->phys_addr,
-			     map->size, flags)) {
+	if (ioremap_page_range((unsigned long)vma->addr,
+			       (unsigned long)vma->addr + map->size,
+			       vma->phys_addr, __pgprot(flags))) {
 		vunmap(vma->addr);
 		return -EAGAIN;
 	}
@@ -166,7 +168,7 @@ unsigned long sq_remap(unsigned long phys, unsigned int size,
 	map->size = size;
 	map->name = name;
 
-	page = bitmap_find_free_region(sq_bitmap, 0x04000000,
+	page = bitmap_find_free_region(sq_bitmap, 0x04000000 >> PAGE_SHIFT,
 				       get_order(map->size));
 	if (unlikely(page < 0)) {
 		ret = -ENOSPC;
@@ -175,7 +177,7 @@ unsigned long sq_remap(unsigned long phys, unsigned int size,
 
 	map->sq_addr = P4SEG_STORE_QUE + (page << PAGE_SHIFT);
 
-	ret = __sq_remap(map, flags);
+	ret = __sq_remap(map, pgprot_val(PAGE_KERNEL_NOCACHE) | flags);
 	if (unlikely(ret != 0))
 		goto out;
 
@@ -193,6 +195,7 @@ out:
 	kmem_cache_free(sq_cache, map);
 	return ret;
 }
+EXPORT_SYMBOL(sq_remap);
 
 /**
  * sq_unmap - Unmap a Store Queue allocation
@@ -205,7 +208,6 @@ out:
 void sq_unmap(unsigned long vaddr)
 {
 	struct sq_mapping **p, *map;
-	struct vm_struct *vma;
 	int page;
 
 	for (p = &sq_mapping_list; (map = *p); p = &map->next)
@@ -222,11 +224,18 @@ void sq_unmap(unsigned long vaddr)
 	bitmap_release_region(sq_bitmap, page, get_order(map->size));
 
 #ifdef CONFIG_MMU
-	vma = remove_vm_area((void *)(map->sq_addr & PAGE_MASK));
-	if (!vma) {
-		printk(KERN_ERR "%s: bad address 0x%08lx\n",
-		       __FUNCTION__, map->sq_addr);
-		return;
+	{
+		/*
+		 * Tear down the VMA in the MMU case.
+		 */
+		struct vm_struct *vma;
+
+		vma = remove_vm_area((void *)(map->sq_addr & PAGE_MASK));
+		if (!vma) {
+			printk(KERN_ERR "%s: bad address 0x%08lx\n",
+			       __FUNCTION__, map->sq_addr);
+			return;
+		}
 	}
 #endif
 
@@ -234,6 +243,7 @@ void sq_unmap(unsigned long vaddr)
 
 	kmem_cache_free(sq_cache, map);
 }
+EXPORT_SYMBOL(sq_unmap);
 
 /*
  * Needlessly complex sysfs interface. Unfortunately it doesn't seem like
@@ -367,8 +377,7 @@ static int __init sq_api_init(void)
 	printk(KERN_NOTICE "sq: Registering store queue API.\n");
 
 	sq_cache = kmem_cache_create("store_queue_cache",
-				sizeof(struct sq_mapping), 0, 0,
-				NULL, NULL);
+				sizeof(struct sq_mapping), 0, 0, NULL);
 	if (unlikely(!sq_cache))
 		return ret;
 
@@ -402,7 +411,3 @@ module_exit(sq_api_exit);
 MODULE_AUTHOR("Paul Mundt <lethal@linux-sh.org>, M. R. Brown <mrbrown@0xd6.org>");
 MODULE_DESCRIPTION("Simple API for SH-4 integrated Store Queues");
 MODULE_LICENSE("GPL");
-
-EXPORT_SYMBOL(sq_remap);
-EXPORT_SYMBOL(sq_unmap);
-EXPORT_SYMBOL(sq_flush_range);

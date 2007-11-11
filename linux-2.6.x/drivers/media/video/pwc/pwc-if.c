@@ -95,8 +95,8 @@ static const struct usb_device_id pwc_device_table [] = {
 	{ USB_DEVICE(0x046D, 0x08B3) }, /* Logitech QuickCam Zoom (old model) */
 	{ USB_DEVICE(0x046D, 0x08B4) }, /* Logitech QuickCam Zoom (new model) */
 	{ USB_DEVICE(0x046D, 0x08B5) }, /* Logitech QuickCam Orbit/Sphere */
-	{ USB_DEVICE(0x046D, 0x08B6) }, /* Logitech (reserved) */
-	{ USB_DEVICE(0x046D, 0x08B7) }, /* Logitech (reserved) */
+	{ USB_DEVICE(0x046D, 0x08B6) }, /* Cisco VT Camera */
+	{ USB_DEVICE(0x046D, 0x08B7) }, /* Logitech ViewPort AV 100 */
 	{ USB_DEVICE(0x046D, 0x08B8) }, /* Logitech (reserved) */
 	{ USB_DEVICE(0x055D, 0x9000) }, /* Samsung MPC-C10 */
 	{ USB_DEVICE(0x055D, 0x9001) }, /* Samsung MPC-C30 */
@@ -128,7 +128,7 @@ static int default_size = PSZ_QCIF;
 static int default_fps = 10;
 static int default_fbufs = 3;   /* Default number of frame buffers */
        int pwc_mbufs = 2;	/* Default number of mmap() buffers */
-#if CONFIG_PWC_DEBUG
+#ifdef CONFIG_USB_PWC_DEBUG
        int pwc_trace = PWC_DEBUG_LEVEL;
 #endif
 static int power_save = 0;
@@ -152,7 +152,7 @@ static int  pwc_video_ioctl(struct inode *inode, struct file *file,
 			    unsigned int ioctlnr, unsigned long arg);
 static int  pwc_video_mmap(struct file *file, struct vm_area_struct *vma);
 
-static struct file_operations pwc_fops = {
+static const struct file_operations pwc_fops = {
 	.owner =	THIS_MODULE,
 	.open =		pwc_video_open,
 	.release =     	pwc_video_close,
@@ -866,11 +866,9 @@ int pwc_isoc_init(struct pwc_device *pdev)
 	}
 	if (ret) {
 		/* De-allocate in reverse order */
-		while (i >= 0) {
-			if (pdev->sbuf[i].urb != NULL)
-				usb_free_urb(pdev->sbuf[i].urb);
+		while (i--) {
+			usb_free_urb(pdev->sbuf[i].urb);
 			pdev->sbuf[i].urb = NULL;
-			i--;
 		}
 		return ret;
 	}
@@ -1053,7 +1051,7 @@ static void pwc_remove_sysfs_files(struct video_device *vdev)
 	video_device_remove_file(vdev, &class_device_attr_button);
 }
 
-#if CONFIG_PWC_DEBUG
+#ifdef CONFIG_USB_PWC_DEBUG
 static const char *pwc_sensor_type_to_string(unsigned int sensor_type)
 {
 	switch(sensor_type) {
@@ -1095,14 +1093,13 @@ static int pwc_video_open(struct inode *inode, struct file *file)
 	PWC_DEBUG_OPEN(">> video_open called(vdev = 0x%p).\n", vdev);
 
 	pdev = (struct pwc_device *)vdev->priv;
-	if (pdev == NULL)
-		BUG();
+	BUG_ON(!pdev);
 	if (pdev->vopen) {
 		PWC_DEBUG_OPEN("I'm busy, someone is using the device.\n");
 		return -EBUSY;
 	}
 
-	down(&pdev->modlock);
+	mutex_lock(&pdev->modlock);
 	if (!pdev->usb_init) {
 		PWC_DEBUG_OPEN("Doing first time initialization.\n");
 		pdev->usb_init = 1;
@@ -1134,7 +1131,7 @@ static int pwc_video_open(struct inode *inode, struct file *file)
 	if (i < 0) {
 		PWC_DEBUG_OPEN("Failed to allocate buffers memory.\n");
 		pwc_free_buffers(pdev);
-		up(&pdev->modlock);
+		mutex_unlock(&pdev->modlock);
 		return i;
 	}
 
@@ -1175,7 +1172,7 @@ static int pwc_video_open(struct inode *inode, struct file *file)
 	if (i) {
 		PWC_DEBUG_OPEN("Second attempt at set_video_mode failed.\n");
 		pwc_free_buffers(pdev);
-		up(&pdev->modlock);
+		mutex_unlock(&pdev->modlock);
 		return i;
 	}
 
@@ -1184,7 +1181,7 @@ static int pwc_video_open(struct inode *inode, struct file *file)
 		PWC_DEBUG_OPEN("Failed to init ISOC stuff = %d.\n", i);
 		pwc_isoc_cleanup(pdev);
 		pwc_free_buffers(pdev);
-		up(&pdev->modlock);
+		mutex_unlock(&pdev->modlock);
 		return i;
 	}
 
@@ -1194,9 +1191,16 @@ static int pwc_video_open(struct inode *inode, struct file *file)
 
 	pdev->vopen++;
 	file->private_data = vdev;
-	up(&pdev->modlock);
+	mutex_unlock(&pdev->modlock);
 	PWC_DEBUG_OPEN("<< video_open() returns 0.\n");
 	return 0;
+}
+
+
+static void pwc_cleanup(struct pwc_device *pdev)
+{
+	pwc_remove_sysfs_files(pdev->vdev);
+	video_unregister_device(pdev->vdev);
 }
 
 /* Note that all cleanup is done in the reverse order as in _open */
@@ -1204,7 +1208,7 @@ static int pwc_video_close(struct inode *inode, struct file *file)
 {
 	struct video_device *vdev = file->private_data;
 	struct pwc_device *pdev;
-	int i;
+	int i, hint;
 
 	PWC_DEBUG_OPEN(">> video_close called(vdev = 0x%p).\n", vdev);
 
@@ -1227,8 +1231,9 @@ static int pwc_video_close(struct inode *inode, struct file *file)
 	pwc_isoc_cleanup(pdev);
 	pwc_free_buffers(pdev);
 
+	lock_kernel();
 	/* Turn off LEDS and power down camera, but only when not unplugged */
-	if (pdev->error_status != EPIPE) {
+	if (!pdev->unplugged) {
 		/* Turn LEDs off */
 		if (pwc_set_leds(pdev, 0, 0) < 0)
 			PWC_DEBUG_MODULE("Failed to set LED on/off time.\n");
@@ -1237,9 +1242,19 @@ static int pwc_video_close(struct inode *inode, struct file *file)
 			if (i < 0)
 				PWC_ERROR("Failed to power down camera (%d)\n", i);
 		}
+		pdev->vopen--;
+		PWC_DEBUG_OPEN("<< video_close() vopen=%d\n", pdev->vopen);
+	} else {
+		pwc_cleanup(pdev);
+		/* Free memory (don't set pdev to 0 just yet) */
+		kfree(pdev);
+		/* search device_hint[] table if we occupy a slot, by any chance */
+		for (hint = 0; hint < MAX_DEV_HINTS; hint++)
+			if (device_hint[hint].pdev == pdev)
+				device_hint[hint].pdev = NULL;
 	}
-	pdev->vopen--;
-	PWC_DEBUG_OPEN("<< video_close() vopen=%d\n", pdev->vopen);
+	unlock_kernel();
+
 	return 0;
 }
 
@@ -1496,7 +1511,7 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 		case 0x0329:
 			PWC_INFO("Philips SPC 900NC USB webcam detected.\n");
 			name = "Philips SPC 900NC webcam";
-			type_id = 720;
+			type_id = 740;
 			break;
 		default:
 			return -ENODEV;
@@ -1550,8 +1565,16 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 			features |= FEATURE_MOTOR_PANTILT;
 			break;
 		case 0x08b6:
+			PWC_INFO("Logitech/Cisco VT Camera webcam detected.\n");
+			name = "Cisco VT Camera";
+			type_id = 740; /* CCD sensor */
+			break;
 		case 0x08b7:
-		case 0x08b8:
+			PWC_INFO("Logitech ViewPort AV 100 webcam detected.\n");
+			name = "Logitech ViewPort AV 100";
+			type_id = 740; /* CCD sensor */
+			break;
+		case 0x08b8: /* Where this released? */
 			PWC_INFO("Logitech QuickCam detected (reserved ID).\n");
 			name = "Logitech QuickCam (res.)";
 			type_id = 730; /* Assuming CMOS */
@@ -1680,7 +1703,7 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 		pdev->angle_range.tilt_max =  2500;
 	}
 
-	init_MUTEX(&pdev->modlock);
+	mutex_init(&pdev->modlock);
 	spin_lock_init(&pdev->ptrlock);
 
 	pdev->udev = udev;
@@ -1786,21 +1809,21 @@ static void usb_pwc_disconnect(struct usb_interface *intf)
 	/* Alert waiting processes */
 	wake_up_interruptible(&pdev->frameq);
 	/* Wait until device is closed */
-	while (pdev->vopen)
-		schedule();
-	/* Device is now closed, so we can safely unregister it */
-	PWC_DEBUG_PROBE("Unregistering video device in disconnect().\n");
-	pwc_remove_sysfs_files(pdev->vdev);
-	video_unregister_device(pdev->vdev);
-
-	/* Free memory (don't set pdev to 0 just yet) */
-	kfree(pdev);
+	if(pdev->vopen) {
+		pdev->unplugged = 1;
+	} else {
+		/* Device is closed, so we can safely unregister it */
+		PWC_DEBUG_PROBE("Unregistering video device in disconnect().\n");
+		pwc_cleanup(pdev);
+		/* Free memory (don't set pdev to 0 just yet) */
+		kfree(pdev);
 
 disconnect_out:
-	/* search device_hint[] table if we occupy a slot, by any chance */
-	for (hint = 0; hint < MAX_DEV_HINTS; hint++)
-		if (device_hint[hint].pdev == pdev)
-			device_hint[hint].pdev = NULL;
+		/* search device_hint[] table if we occupy a slot, by any chance */
+		for (hint = 0; hint < MAX_DEV_HINTS; hint++)
+			if (device_hint[hint].pdev == pdev)
+				device_hint[hint].pdev = NULL;
+	}
 
 	unlock_kernel();
 }
@@ -1838,7 +1861,7 @@ module_param(size, charp, 0444);
 module_param(fps, int, 0444);
 module_param(fbufs, int, 0444);
 module_param(mbufs, int, 0444);
-#if CONFIG_PWC_DEBUG
+#ifdef CONFIG_USB_PWC_DEBUG
 module_param_named(trace, pwc_trace, int, 0644);
 #endif
 module_param(power_save, int, 0444);
@@ -1911,7 +1934,7 @@ static int __init usb_pwc_init(void)
 		default_fbufs = fbufs;
 		PWC_DEBUG_MODULE("Number of frame buffers set to %d.\n", default_fbufs);
 	}
-#if CONFIG_PWC_DEBUG
+#ifdef CONFIG_USB_PWC_DEBUG
 	if (pwc_trace >= 0) {
 		PWC_DEBUG_MODULE("Trace options: 0x%04x\n", pwc_trace);
 	}

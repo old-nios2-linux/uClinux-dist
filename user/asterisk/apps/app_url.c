@@ -1,139 +1,173 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * App to transmit a URL
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief App to transmit a URL
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <asterisk/image.h>
-#include <string.h>
-#include <stdlib.h>
+#include "asterisk.h"
 
-static char *tdesc = "Send URL Applications";
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 43445 $")
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
+#include "asterisk/image.h"
+#include "asterisk/options.h"
 
 static char *app = "SendURL";
 
 static char *synopsis = "Send a URL";
 
 static char *descrip = 
-"  SendURL(URL[|option]): Requests client go to URL.  If the client\n"
-"does not support html transport, and  there  exists  a  step  with\n"
-"priority  n + 101,  then  execution  will  continue  at that step.\n"
-"Otherwise, execution will continue at  the  next  priority  level.\n"
-"SendURL only returns 0  if  the  URL  was  sent  correctly  or  if\n"
-"the channel  does  not  support HTML transport,  and -1 otherwise.\n"
-"If the option 'wait' is  specified,  execution  will  wait  for an\n"
-"acknowledgement that  the  URL  has  been loaded before continuing\n"
-"and will return -1 if the peer is unable to load the URL\n";
+"  SendURL(URL[|option]): Requests client go to URL (IAX2) or sends the \n"
+"URL to the client (other channels).\n"
+"Result is returned in the SENDURLSTATUS channel variable:\n"
+"    SUCCESS       URL successfully sent to client\n"
+"    FAILURE       Failed to send URL\n"
+"    NOLOAD        Client failed to load URL (wait enabled)\n"
+"    UNSUPPORTED   Channel does not support URL transport\n"
+"\n"
+"If the option 'wait' is specified, execution will wait for an\n"
+"acknowledgement that the URL has been loaded before continuing\n"
+"\n"
+"If jumping is specified as an option (the 'j' flag), the client does not\n"
+"support Asterisk \"html\" transport, and there exists a step with priority\n"
+"n + 101, then execution will continue at that step.\n"
+"\n"
+"SendURL continues normally if the URL was sent correctly or if the channel\n"
+"does not support HTML transport.  Otherwise, the channel is hung up.\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int sendurl_exec(struct ast_channel *chan, void *data)
 {
 	int res = 0;
-	struct localuser *u;
-	char tmp[256];
+	struct ast_module_user *u;
+	char *tmp;
 	char *options;
-	int option_wait=0;
+	int local_option_wait=0;
+	int local_option_jump = 0;
 	struct ast_frame *f;
 	char *stringp=NULL;
-	if (!data || !strlen((char *)data)) {
+	char *status = "FAILURE";
+	
+	if (ast_strlen_zero(data)) {
 		ast_log(LOG_WARNING, "SendURL requires an argument (URL)\n");
+		pbx_builtin_setvar_helper(chan, "SENDURLSTATUS", status);
 		return -1;
 	}
-	strncpy(tmp, (char *)data, sizeof(tmp)-1);
+
+	u = ast_module_user_add(chan);
+
+	tmp = ast_strdupa(data);
+
 	stringp=tmp;
 	strsep(&stringp, "|");
 	options = strsep(&stringp, "|");
 	if (options && !strcasecmp(options, "wait"))
-		option_wait = 1;
-	LOCAL_USER_ADD(u);
+		local_option_wait = 1;
+	if (options && !strcasecmp(options, "j"))
+		local_option_jump = 1;
+	
 	if (!ast_channel_supports_html(chan)) {
 		/* Does not support transport */
-		if (ast_exists_extension(chan, chan->context, chan->exten, chan->priority + 101, chan->callerid))
-			chan->priority += 100;
-		LOCAL_USER_REMOVE(u);
+		if (local_option_jump || ast_opt_priority_jumping)
+			 ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101);
+		pbx_builtin_setvar_helper(chan, "SENDURLSTATUS", "UNSUPPORTED");
+		ast_module_user_remove(u);
 		return 0;
 	}
 	res = ast_channel_sendurl(chan, tmp);
-	if (res > -1) {
-		if (option_wait) {
-			for(;;) {
-				/* Wait for an event */
-				res = ast_waitfor(chan, -1);
-				if (res < 0) 
-					break;
-				f = ast_read(chan);
-				if (!f) {
-					res = -1;
-					break;
-				}
-				if (f->frametype == AST_FRAME_HTML) {
-					switch(f->subclass) {
-					case AST_HTML_LDCOMPLETE:
-						res = 0;
-						ast_frfree(f);
-						goto out;
-						break;
-					case AST_HTML_NOSUPPORT:
-						/* Does not support transport */
-						if (ast_exists_extension(chan, chan->context, chan->exten, chan->priority + 101, chan->callerid))
-							chan->priority += 100;
-						res = 0;
-						goto out;
-						break;
-					default:
-						ast_log(LOG_WARNING, "Don't know what to do with HTML subclass %d\n", f->subclass);
-					};
-				}
-				ast_frfree(f);
-			}
-		}
+	if (res == -1) {
+		pbx_builtin_setvar_helper(chan, "SENDURLSTATUS", "FAILURE");
+		ast_module_user_remove(u);
+		return res;
 	}
+	status = "SUCCESS";
+	if (local_option_wait) {
+		for(;;) {
+			/* Wait for an event */
+			res = ast_waitfor(chan, -1);
+			if (res < 0) 
+				break;
+			f = ast_read(chan);
+			if (!f) {
+				res = -1;
+				status = "FAILURE";
+				break;
+			}
+			if (f->frametype == AST_FRAME_HTML) {
+				switch(f->subclass) {
+				case AST_HTML_LDCOMPLETE:
+					res = 0;
+					ast_frfree(f);
+					status = "NOLOAD";
+					goto out;
+					break;
+				case AST_HTML_NOSUPPORT:
+					/* Does not support transport */
+					status ="UNSUPPORTED";
+					if (local_option_jump || ast_opt_priority_jumping)
+			 			ast_goto_if_exists(chan, chan->context, chan->exten, chan->priority + 101);
+					res = 0;
+					ast_frfree(f);
+					goto out;
+					break;
+				default:
+					ast_log(LOG_WARNING, "Don't know what to do with HTML subclass %d\n", f->subclass);
+				};
+			}
+			ast_frfree(f);
+		}
+	} 
 out:	
-	LOCAL_USER_REMOVE(u);
+	pbx_builtin_setvar_helper(chan, "SENDURLSTATUS", status);
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+	
+	ast_module_user_hangup_all();
+
+	return res;	
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, sendurl_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Send URL Applications");

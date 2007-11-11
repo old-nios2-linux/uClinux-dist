@@ -92,7 +92,7 @@ int RegisterPreprocessorRuleOption(char *optionName, PreprocOptionInit initFunc,
         FatalError("Duplicate Preprocessor Rule Option '%s'\n", optionName);
     }
 
-    optionInfo = malloc(sizeof(PreprocessorOptionInfo));
+    optionInfo = (PreprocessorOptionInfo *)SnortAlloc(sizeof(PreprocessorOptionInfo));
     optionInfo->optionEval = evalFunc;
     optionInfo->optionInit = initFunc;
 

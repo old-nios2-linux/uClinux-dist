@@ -13,7 +13,7 @@
 /*  Useful typedef's & defines */
 
 typedef unsigned char BYTE;
-typedef unsigned long LONG;
+typedef unsigned int  LONG;
 
 /*  The SHS block size and message digest sizes, in bytes */
 

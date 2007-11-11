@@ -31,11 +31,11 @@ int arch_register_cpu(int num)
 {
 #if defined (CONFIG_ACPI) && defined (CONFIG_HOTPLUG_CPU)
 	/*
-	 * If CPEI cannot be re-targetted, and this is
-	 * CPEI target, then dont create the control file
+	 * If CPEI can be re-targetted or if this is not
+	 * CPEI target, then it is hotpluggable
 	 */
-	if (!can_cpei_retarget() && is_cpu_cpei_target(num))
-		sysfs_cpus[num].cpu.no_control = 1;
+	if (can_cpei_retarget() || !is_cpu_cpei_target(num))
+		sysfs_cpus[num].cpu.hotpluggable = 1;
 	map_cpu_to_node(num, node_cpuid[num].nid);
 #endif
 
@@ -412,9 +412,11 @@ static int __cpuinit cache_cpu_callback(struct notifier_block *nfb,
 	sys_dev = get_cpu_sysdev(cpu);
 	switch (action) {
 	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
 		cache_add_dev(sys_dev);
 		break;
 	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
 		cache_remove_dev(sys_dev);
 		break;
 	}

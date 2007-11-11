@@ -118,6 +118,14 @@
 //# endif
 #endif
 
+#if defined(CONFIG_CPU_V7)
+//# ifdef _CACHE
+#  define MULTI_CACHE 1
+//# else
+//#  define _CACHE v7
+//# endif
+#endif
+
 #if !defined(_CACHE) && !defined(MULTI_CACHE)
 #error Unknown cache maintainence model
 #endif
@@ -201,9 +209,15 @@ struct cpu_cache_fns {
 	void (*coherent_user_range)(unsigned long, unsigned long);
 	void (*flush_kern_dcache_page)(void *);
 
-	void (*dma_inv_range)(unsigned long, unsigned long);
-	void (*dma_clean_range)(unsigned long, unsigned long);
-	void (*dma_flush_range)(unsigned long, unsigned long);
+	void (*dma_inv_range)(const void *, const void *);
+	void (*dma_clean_range)(const void *, const void *);
+	void (*dma_flush_range)(const void *, const void *);
+};
+
+struct outer_cache_fns {
+	void (*inv_range)(unsigned long, unsigned long);
+	void (*clean_range)(unsigned long, unsigned long);
+	void (*flush_range)(unsigned long, unsigned long);
 };
 
 /*
@@ -256,9 +270,40 @@ extern void __cpuc_flush_dcache_page(void *);
 #define dmac_clean_range		__glue(_CACHE,_dma_clean_range)
 #define dmac_flush_range		__glue(_CACHE,_dma_flush_range)
 
-extern void dmac_inv_range(unsigned long, unsigned long);
-extern void dmac_clean_range(unsigned long, unsigned long);
-extern void dmac_flush_range(unsigned long, unsigned long);
+extern void dmac_inv_range(const void *, const void *);
+extern void dmac_clean_range(const void *, const void *);
+extern void dmac_flush_range(const void *, const void *);
+
+#endif
+
+#ifdef CONFIG_OUTER_CACHE
+
+extern struct outer_cache_fns outer_cache;
+
+static inline void outer_inv_range(unsigned long start, unsigned long end)
+{
+	if (outer_cache.inv_range)
+		outer_cache.inv_range(start, end);
+}
+static inline void outer_clean_range(unsigned long start, unsigned long end)
+{
+	if (outer_cache.clean_range)
+		outer_cache.clean_range(start, end);
+}
+static inline void outer_flush_range(unsigned long start, unsigned long end)
+{
+	if (outer_cache.flush_range)
+		outer_cache.flush_range(start, end);
+}
+
+#else
+
+static inline void outer_inv_range(unsigned long start, unsigned long end)
+{ }
+static inline void outer_clean_range(unsigned long start, unsigned long end)
+{ }
+static inline void outer_flush_range(unsigned long start, unsigned long end)
+{ }
 
 #endif
 
@@ -335,6 +380,8 @@ extern void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
 				unsigned long len, int write);
 #endif
 
+#define flush_cache_dup_mm(mm) flush_cache_mm(mm)
+
 /*
  * flush_cache_user_range is used when we want to ensure that the
  * Harvard caches are synchronised for the user space address range.
@@ -369,6 +416,18 @@ extern void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
  */
 extern void flush_dcache_page(struct page *);
 
+extern void __flush_dcache_page(struct address_space *mapping, struct page *page);
+
+#define ARCH_HAS_FLUSH_ANON_PAGE
+static inline void flush_anon_page(struct vm_area_struct *vma,
+			 struct page *page, unsigned long vmaddr)
+{
+	extern void __flush_anon_page(struct vm_area_struct *vma,
+				struct page *, unsigned long);
+	if (PageAnon(page))
+		__flush_anon_page(vma, page, vmaddr);
+}
+
 #define flush_dcache_mmap_lock(mapping) \
 	write_lock_irq(&(mapping)->tree_lock)
 #define flush_dcache_mmap_unlock(mapping) \
@@ -383,11 +442,26 @@ extern void flush_dcache_page(struct page *);
  */
 #define flush_icache_page(vma,page)	do { } while (0)
 
-#define __cacheid_present(val)		(val != read_cpuid(CPUID_ID))
-#define __cacheid_vivt(val)		((val & (15 << 25)) != (14 << 25))
-#define __cacheid_vipt(val)		((val & (15 << 25)) == (14 << 25))
-#define __cacheid_vipt_nonaliasing(val)	((val & (15 << 25 | 1 << 23)) == (14 << 25))
-#define __cacheid_vipt_aliasing(val)	((val & (15 << 25 | 1 << 23)) == (14 << 25 | 1 << 23))
+static inline void flush_ioremap_region(unsigned long phys, void __iomem *virt,
+	unsigned offset, size_t size)
+{
+	const void *start = (void __force *)virt + offset;
+	dmac_inv_range(start, start + size);
+}
+
+#define __cacheid_present(val)			(val != read_cpuid(CPUID_ID))
+#define __cacheid_type_v7(val)			((val & (7 << 29)) == (4 << 29))
+
+#define __cacheid_vivt_prev7(val)		((val & (15 << 25)) != (14 << 25))
+#define __cacheid_vipt_prev7(val)		((val & (15 << 25)) == (14 << 25))
+#define __cacheid_vipt_nonaliasing_prev7(val)	((val & (15 << 25 | 1 << 23)) == (14 << 25))
+#define __cacheid_vipt_aliasing_prev7(val)	((val & (15 << 25 | 1 << 23)) == (14 << 25 | 1 << 23))
+
+#define __cacheid_vivt(val)			(__cacheid_type_v7(val) ? 0 : __cacheid_vivt_prev7(val))
+#define __cacheid_vipt(val)			(__cacheid_type_v7(val) ? 1 : __cacheid_vipt_prev7(val))
+#define __cacheid_vipt_nonaliasing(val)		(__cacheid_type_v7(val) ? 1 : __cacheid_vipt_nonaliasing_prev7(val))
+#define __cacheid_vipt_aliasing(val)		(__cacheid_type_v7(val) ? 0 : __cacheid_vipt_aliasing_prev7(val))
+#define __cacheid_vivt_asid_tagged_instr(val)	(__cacheid_type_v7(val) ? ((val & (3 << 14)) == (1 << 14)) : 0)
 
 #if defined(CONFIG_CPU_CACHE_VIVT) && !defined(CONFIG_CPU_CACHE_VIPT)
 
@@ -395,6 +469,7 @@ extern void flush_dcache_page(struct page *);
 #define cache_is_vipt()			0
 #define cache_is_vipt_nonaliasing()	0
 #define cache_is_vipt_aliasing()	0
+#define icache_is_vivt_asid_tagged()	0
 
 #elif defined(CONFIG_CPU_CACHE_VIPT)
 
@@ -410,6 +485,12 @@ extern void flush_dcache_page(struct page *);
 	({								\
 		unsigned int __val = read_cpuid(CPUID_CACHETYPE);	\
 		__cacheid_vipt_aliasing(__val);				\
+	})
+
+#define icache_is_vivt_asid_tagged()					\
+	({								\
+		unsigned int __val = read_cpuid(CPUID_CACHETYPE);	\
+		__cacheid_vivt_asid_tagged_instr(__val);		\
 	})
 
 #else
@@ -438,6 +519,13 @@ extern void flush_dcache_page(struct page *);
 		unsigned int __val = read_cpuid(CPUID_CACHETYPE);	\
 		__cacheid_present(__val) &&				\
 		 __cacheid_vipt_aliasing(__val);			\
+	})
+
+#define icache_is_vivt_asid_tagged()					\
+	({								\
+		unsigned int __val = read_cpuid(CPUID_CACHETYPE);	\
+		__cacheid_present(__val) &&				\
+		 __cacheid_vivt_asid_tagged_instr(__val);		\
 	})
 
 #endif

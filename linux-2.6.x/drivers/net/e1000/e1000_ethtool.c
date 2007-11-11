@@ -85,6 +85,7 @@ static const struct e1000_stats e1000_gstrings_stats[] = {
 	{ "tx_single_coll_ok", E1000_STAT(stats.scc) },
 	{ "tx_multi_coll_ok", E1000_STAT(stats.mcc) },
 	{ "tx_timeout_count", E1000_STAT(tx_timeout_count) },
+	{ "tx_restart_queue", E1000_STAT(restart_queue) },
 	{ "rx_long_length_errors", E1000_STAT(stats.roc) },
 	{ "rx_short_length_errors", E1000_STAT(stats.ruc) },
 	{ "rx_align_errors", E1000_STAT(stats.algnerrc) },
@@ -99,6 +100,9 @@ static const struct e1000_stats e1000_gstrings_stats[] = {
 	{ "rx_csum_offload_errors", E1000_STAT(hw_csum_err) },
 	{ "rx_header_split", E1000_STAT(rx_hdr_split) },
 	{ "alloc_rx_buff_failed", E1000_STAT(alloc_rx_buff_failed) },
+	{ "tx_smbus", E1000_STAT(stats.mgptc) },
+	{ "rx_smbus", E1000_STAT(stats.mgprc) },
+	{ "dropped_smbus", E1000_STAT(stats.mgpdc) },
 };
 
 #define E1000_QUEUE_STATS_LEN 0
@@ -133,9 +137,7 @@ e1000_get_settings(struct net_device *netdev, struct ethtool_cmd *ecmd)
 
 		if (hw->autoneg == 1) {
 			ecmd->advertising |= ADVERTISED_Autoneg;
-
 			/* the e1000 autoneg seems to match ethtool nicely */
-
 			ecmd->advertising |= hw->autoneg_advertised;
 		}
 
@@ -164,7 +166,7 @@ e1000_get_settings(struct net_device *netdev, struct ethtool_cmd *ecmd)
 			ecmd->transceiver = XCVR_EXTERNAL;
 	}
 
-	if (netif_carrier_ok(adapter->netdev)) {
+	if (E1000_READ_REG(&adapter->hw, STATUS) & E1000_STATUS_LU) {
 
 		e1000_get_speed_and_duplex(hw, &adapter->link_speed,
 		                                   &adapter->link_duplex);
@@ -285,7 +287,7 @@ e1000_set_pauseparam(struct net_device *netdev,
 			e1000_reset(adapter);
 	} else
 		retval = ((hw->media_type == e1000_media_type_fiber) ?
-			   e1000_setup_link(hw) : e1000_force_mac_fc(hw));
+			  e1000_setup_link(hw) : e1000_force_mac_fc(hw));
 
 	clear_bit(__E1000_RESETTING, &adapter->flags);
 	return retval;
@@ -336,7 +338,6 @@ e1000_set_tx_csum(struct net_device *netdev, uint32_t data)
 	return 0;
 }
 
-#ifdef NETIF_F_TSO
 static int
 e1000_set_tso(struct net_device *netdev, uint32_t data)
 {
@@ -350,11 +351,15 @@ e1000_set_tso(struct net_device *netdev, uint32_t data)
 	else
 		netdev->features &= ~NETIF_F_TSO;
 
+	if (data)
+		netdev->features |= NETIF_F_TSO6;
+	else
+		netdev->features &= ~NETIF_F_TSO6;
+
 	DPRINTK(PROBE, INFO, "TSO is %s\n", data ? "Enabled" : "Disabled");
 	adapter->tso_force = TRUE;
 	return 0;
 }
-#endif /* NETIF_F_TSO */
 
 static uint32_t
 e1000_get_msglevel(struct net_device *netdev)
@@ -649,13 +654,10 @@ e1000_set_ringparam(struct net_device *netdev,
 	e1000_mac_type mac_type = adapter->hw.mac_type;
 	struct e1000_tx_ring *txdr, *tx_old;
 	struct e1000_rx_ring *rxdr, *rx_old;
-	int i, err, tx_ring_size, rx_ring_size;
+	int i, err;
 
 	if ((ring->rx_mini_pending) || (ring->rx_jumbo_pending))
 		return -EINVAL;
-
-	tx_ring_size = sizeof(struct e1000_tx_ring) * adapter->num_tx_queues;
-	rx_ring_size = sizeof(struct e1000_rx_ring) * adapter->num_rx_queues;
 
 	while (test_and_set_bit(__E1000_RESETTING, &adapter->flags))
 		msleep(1);
@@ -667,11 +669,11 @@ e1000_set_ringparam(struct net_device *netdev,
 	rx_old = adapter->rx_ring;
 
 	err = -ENOMEM;
-	txdr = kzalloc(tx_ring_size, GFP_KERNEL);
+	txdr = kcalloc(adapter->num_tx_queues, sizeof(struct e1000_tx_ring), GFP_KERNEL);
 	if (!txdr)
 		goto err_alloc_tx;
 
-	rxdr = kzalloc(rx_ring_size, GFP_KERNEL);
+	rxdr = kcalloc(adapter->num_rx_queues, sizeof(struct e1000_rx_ring), GFP_KERNEL);
 	if (!rxdr)
 		goto err_alloc_rx;
 
@@ -681,12 +683,12 @@ e1000_set_ringparam(struct net_device *netdev,
 	rxdr->count = max(ring->rx_pending,(uint32_t)E1000_MIN_RXD);
 	rxdr->count = min(rxdr->count,(uint32_t)(mac_type < e1000_82544 ?
 		E1000_MAX_RXD : E1000_MAX_82544_RXD));
-	E1000_ROUNDUP(rxdr->count, REQ_RX_DESCRIPTOR_MULTIPLE);
+	rxdr->count = ALIGN(rxdr->count, REQ_RX_DESCRIPTOR_MULTIPLE);
 
 	txdr->count = max(ring->tx_pending,(uint32_t)E1000_MIN_TXD);
 	txdr->count = min(txdr->count,(uint32_t)(mac_type < e1000_82544 ?
 		E1000_MAX_TXD : E1000_MAX_82544_TXD));
-	E1000_ROUNDUP(txdr->count, REQ_TX_DESCRIPTOR_MULTIPLE);
+	txdr->count = ALIGN(txdr->count, REQ_TX_DESCRIPTOR_MULTIPLE);
 
 	for (i = 0; i < adapter->num_tx_queues; i++)
 		txdr[i].count = txdr->count;
@@ -737,7 +739,7 @@ err_setup:
 	uint32_t pat, value;                                                   \
 	uint32_t test[] =                                                      \
 		{0x5A5A5A5A, 0xA5A5A5A5, 0x00000000, 0xFFFFFFFF};              \
-	for (pat = 0; pat < sizeof(test)/sizeof(test[0]); pat++) {              \
+	for (pat = 0; pat < ARRAY_SIZE(test); pat++) {              \
 		E1000_WRITE_REG(&adapter->hw, R, (test[pat] & W));             \
 		value = E1000_READ_REG(&adapter->hw, R);                       \
 		if (value != (test[pat] & W & M)) {                             \
@@ -774,7 +776,7 @@ e1000_reg_test(struct e1000_adapter *adapter, uint64_t *data)
 	/* The status register is Read Only, so a write should fail.
 	 * Some bits that get toggled are ignored.
 	 */
-        switch (adapter->hw.mac_type) {
+	switch (adapter->hw.mac_type) {
 	/* there are several bits on newer hardware that are r/w */
 	case e1000_82571:
 	case e1000_82572:
@@ -802,12 +804,14 @@ e1000_reg_test(struct e1000_adapter *adapter, uint64_t *data)
 	}
 	/* restore previous status */
 	E1000_WRITE_REG(&adapter->hw, STATUS, before);
+
 	if (adapter->hw.mac_type != e1000_ich8lan) {
 		REG_PATTERN_TEST(FCAL, 0xFFFFFFFF, 0xFFFFFFFF);
 		REG_PATTERN_TEST(FCAH, 0x0000FFFF, 0xFFFFFFFF);
 		REG_PATTERN_TEST(FCT, 0x0000FFFF, 0xFFFFFFFF);
 		REG_PATTERN_TEST(VET, 0x0000FFFF, 0xFFFFFFFF);
 	}
+
 	REG_PATTERN_TEST(RDTR, 0x0000FFFF, 0xFFFFFFFF);
 	REG_PATTERN_TEST(RDBAH, 0xFFFFFFFF, 0xFFFFFFFF);
 	REG_PATTERN_TEST(RDLEN, 0x000FFF80, 0x000FFFFF);
@@ -820,8 +824,9 @@ e1000_reg_test(struct e1000_adapter *adapter, uint64_t *data)
 	REG_PATTERN_TEST(TDLEN, 0x000FFF80, 0x000FFFFF);
 
 	REG_SET_AND_CHECK(RCTL, 0xFFFFFFFF, 0x00000000);
+
 	before = (adapter->hw.mac_type == e1000_ich8lan ?
-			0x06C3B33E : 0x06DFB3FE);
+	          0x06C3B33E : 0x06DFB3FE);
 	REG_SET_AND_CHECK(RCTL, before, 0x003FFFFB);
 	REG_SET_AND_CHECK(TCTL, 0xFFFFFFFF, 0x00000000);
 
@@ -834,10 +839,10 @@ e1000_reg_test(struct e1000_adapter *adapter, uint64_t *data)
 		REG_PATTERN_TEST(TDBAL, 0xFFFFFFF0, 0xFFFFFFFF);
 		REG_PATTERN_TEST(TIDV, 0x0000FFFF, 0x0000FFFF);
 		value = (adapter->hw.mac_type == e1000_ich8lan ?
-				E1000_RAR_ENTRIES_ICH8LAN : E1000_RAR_ENTRIES);
+		         E1000_RAR_ENTRIES_ICH8LAN : E1000_RAR_ENTRIES);
 		for (i = 0; i < value; i++) {
 			REG_PATTERN_TEST(RA + (((i << 1) + 1) << 2), 0x8003FFFF,
-					 0xFFFFFFFF);
+			                 0xFFFFFFFF);
 		}
 
 	} else {
@@ -883,8 +888,7 @@ e1000_eeprom_test(struct e1000_adapter *adapter, uint64_t *data)
 }
 
 static irqreturn_t
-e1000_test_intr(int irq,
-		void *data)
+e1000_test_intr(int irq, void *data)
 {
 	struct net_device *netdev = (struct net_device *) data;
 	struct e1000_adapter *adapter = netdev_priv(netdev);
@@ -905,11 +909,11 @@ e1000_intr_test(struct e1000_adapter *adapter, uint64_t *data)
 
 	/* NOTE: we don't test MSI interrupts here, yet */
 	/* Hook up test interrupt handler just for this test */
-	if (!request_irq(irq, &e1000_test_intr, IRQF_PROBE_SHARED,
-			 netdev->name, netdev))
+	if (!request_irq(irq, &e1000_test_intr, IRQF_PROBE_SHARED, netdev->name,
+	                 netdev))
 		shared_int = FALSE;
 	else if (request_irq(irq, &e1000_test_intr, IRQF_SHARED,
-			      netdev->name, netdev)) {
+	         netdev->name, netdev)) {
 		*data = 1;
 		return -1;
 	}
@@ -925,6 +929,7 @@ e1000_intr_test(struct e1000_adapter *adapter, uint64_t *data)
 
 		if (adapter->hw.mac_type == e1000_ich8lan && i == 8)
 			continue;
+
 		/* Interrupt to test */
 		mask = 1 << i;
 
@@ -1045,23 +1050,24 @@ e1000_setup_desc_rings(struct e1000_adapter *adapter)
 	struct e1000_rx_ring *rxdr = &adapter->test_rx_ring;
 	struct pci_dev *pdev = adapter->pdev;
 	uint32_t rctl;
-	int size, i, ret_val;
+	int i, ret_val;
 
 	/* Setup Tx descriptor ring and Tx buffers */
 
 	if (!txdr->count)
 		txdr->count = E1000_DEFAULT_TXD;
 
-	size = txdr->count * sizeof(struct e1000_buffer);
-	if (!(txdr->buffer_info = kmalloc(size, GFP_KERNEL))) {
+	if (!(txdr->buffer_info = kcalloc(txdr->count,
+	                                  sizeof(struct e1000_buffer),
+		                          GFP_KERNEL))) {
 		ret_val = 1;
 		goto err_nomem;
 	}
-	memset(txdr->buffer_info, 0, size);
 
 	txdr->size = txdr->count * sizeof(struct e1000_tx_desc);
-	E1000_ROUNDUP(txdr->size, 4096);
-	if (!(txdr->desc = pci_alloc_consistent(pdev, txdr->size, &txdr->dma))) {
+	txdr->size = ALIGN(txdr->size, 4096);
+	if (!(txdr->desc = pci_alloc_consistent(pdev, txdr->size,
+	                                        &txdr->dma))) {
 		ret_val = 2;
 		goto err_nomem;
 	}
@@ -1108,12 +1114,12 @@ e1000_setup_desc_rings(struct e1000_adapter *adapter)
 	if (!rxdr->count)
 		rxdr->count = E1000_DEFAULT_RXD;
 
-	size = rxdr->count * sizeof(struct e1000_buffer);
-	if (!(rxdr->buffer_info = kmalloc(size, GFP_KERNEL))) {
+	if (!(rxdr->buffer_info = kcalloc(rxdr->count,
+	                                  sizeof(struct e1000_buffer),
+	                                  GFP_KERNEL))) {
 		ret_val = 4;
 		goto err_nomem;
 	}
-	memset(rxdr->buffer_info, 0, size);
 
 	rxdr->size = rxdr->count * sizeof(struct e1000_rx_desc);
 	if (!(rxdr->desc = pci_alloc_consistent(pdev, rxdr->size, &rxdr->dma))) {
@@ -1674,7 +1680,7 @@ e1000_diag_test(struct net_device *netdev,
 		if (e1000_link_test(adapter, &data[4]))
 			eth_test->flags |= ETH_TEST_FL_FAILED;
 
-		/* Offline tests aren't run; pass by default */
+		/* Online tests aren't run; pass by default */
 		data[0] = 0;
 		data[1] = 0;
 		data[2] = 0;
@@ -1700,6 +1706,7 @@ static int e1000_wol_exclusion(struct e1000_adapter *adapter, struct ethtool_wol
 	case E1000_DEV_ID_82545EM_COPPER:
 	case E1000_DEV_ID_82546GB_QUAD_COPPER:
 	case E1000_DEV_ID_82546GB_PCIE:
+	case E1000_DEV_ID_82571EB_SERDES_QUAD:
 		/* these don't support WoL at all */
 		wol->supported = 0;
 		break;
@@ -1717,6 +1724,9 @@ static int e1000_wol_exclusion(struct e1000_adapter *adapter, struct ethtool_wol
 		retval = 0;
 		break;
 	case E1000_DEV_ID_82571EB_QUAD_COPPER:
+	case E1000_DEV_ID_82571EB_QUAD_FIBER:
+	case E1000_DEV_ID_82571EB_QUAD_COPPER_LOWPROFILE:
+	case E1000_DEV_ID_82571PT_QUAD_COPPER:
 	case E1000_DEV_ID_82546GB_QUAD_COPPER_KSP3:
 		/* quad port adapters only support WoL on port A */
 		if (!adapter->quad_port_a) {
@@ -1958,17 +1968,14 @@ static const struct ethtool_ops e1000_ethtool_ops = {
 	.set_tx_csum            = e1000_set_tx_csum,
 	.get_sg                 = ethtool_op_get_sg,
 	.set_sg                 = ethtool_op_set_sg,
-#ifdef NETIF_F_TSO
 	.get_tso                = ethtool_op_get_tso,
 	.set_tso                = e1000_set_tso,
-#endif
 	.self_test_count        = e1000_diag_test_count,
 	.self_test              = e1000_diag_test,
 	.get_strings            = e1000_get_strings,
 	.phys_id                = e1000_phys_id,
 	.get_stats_count        = e1000_get_stats_count,
 	.get_ethtool_stats      = e1000_get_ethtool_stats,
-	.get_perm_addr          = ethtool_op_get_perm_addr,
 };
 
 void e1000_set_ethtool_ops(struct net_device *netdev)

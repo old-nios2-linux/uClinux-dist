@@ -1,5 +1,5 @@
 /* Miscellaneous declarations.
-   Copyright (C) 1995, 1996, 1997, 1998 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 1998, 2003 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -27,9 +27,10 @@ modify this file, you may extend this exception to your version of the
 file, but you are not obligated to do so.  If you do not wish to do
 so, delete this exception statement from your version.  */
 
-/* This file contains some declarations that don't fit anywhere else.
-   It also contains some useful includes, like the obnoxious TIME_H
-   inclusion.  */
+/* This file contains declarations that are universally useful and
+   those that don't fit elsewhere.  It also includes sysdep.h which
+   includes some often-needed system includes, like the obnoxious
+   <time.h> inclusion.  */
 
 #ifndef WGET_H
 #define WGET_H
@@ -38,11 +39,6 @@ so, delete this exception statement from your version.  */
 #ifndef ENABLE_DEBUG
 # define NDEBUG
 #endif
-
-/* Define this if you want primitive but extensive malloc debugging.
-   It will make Wget extremely slow, so only do it in development
-   builds.  */
-#undef DEBUG_MALLOC
 
 #ifndef PARAMS
 # if PROTOTYPES
@@ -58,13 +54,23 @@ so, delete this exception statement from your version.  */
 # define _(string) gettext (string)
 # ifdef HAVE_LIBINTL_H
 #  include <libintl.h>
-# endif /* HAVE_LIBINTL_H */
+# else  /* not HAVE_LIBINTL_H */
+   const char *gettext ();
+# endif /* not HAVE_LIBINTL_H */
 #else  /* not HAVE_NLS */
-# define _(string) string
+# define _(string) (string)
 #endif /* not HAVE_NLS */
 
-/* No-op version of gettext, used for constant strings. */
-#define N_(string) (string)
+/* A pseudo function call that serves as a marker for the automated
+   extraction of messages, but does not call gettext().  The run-time
+   translation is done at a different place in the code.  The purpose
+   of the N_("...") call is to make the message snarfer aware that the
+   "..." string needs to be translated.  STRING should be a string
+   literal.  Concatenated strings and other string expressions won't
+   work.  The macro's expansion is not parenthesized, so that it is
+   suitable as initializer for static 'char[]' or 'const char[]'
+   variables.  -- explanation partly taken from GNU make.  */
+#define N_(string) string
 
 /* I18N NOTE: You will notice that none of the DEBUGP messages are
    marked as translatable.  This is intentional, for a few reasons:
@@ -84,114 +90,116 @@ so, delete this exception statement from your version.  */
 
 /* Include these, so random files need not include them.  */
 #include "sysdep.h"
-#include "options.h"
 /* locale independent replacement for ctype.h */
 #include "safe-ctype.h"
 
-#define DO_NOTHING do {} while (0)
+/* Conditionalize the use of GCC's __attribute__((format)) and
+   __builtin_expect features using macros.  */
+
+#if defined(__GNUC__) && __GNUC__ >= 3
+# define GCC_FORMAT_ATTR(a, b) __attribute__ ((format (printf, a, b)))
+# define LIKELY(exp)   __builtin_expect (!!(exp), 1)
+# define UNLIKELY(exp) __builtin_expect ((exp), 0)
+#else
+# define GCC_FORMAT_ATTR(a, b)
+# define LIKELY(exp)   (exp)
+# define UNLIKELY(exp) (exp)
+#endif
 
 /* Print X if debugging is enabled; a no-op otherwise.  */
+
 #ifdef ENABLE_DEBUG
-# define DEBUGP(x) do { if (opt.debug) { debug_logprintf x; } } while (0)
+# define DEBUGP(x) do if (UNLIKELY (opt.debug)) {debug_logprintf x;} while (0)
 #else  /* not ENABLE_DEBUG */
-# define DEBUGP(x) DO_NOTHING
+# define DEBUGP(x) do {} while (0)
 #endif /* not ENABLE_DEBUG */
 
-/* Make gcc check for the format of logmsg() and debug_logmsg().  */
-#ifdef __GNUC__
-# define GCC_FORMAT_ATTR(a, b) __attribute__ ((format (printf, a, b)))
-#else  /* not __GNUC__ */
-# define GCC_FORMAT_ATTR(a, b)
-#endif /* not __GNUC__ */
+/* Define an integer type that works for file sizes, content lengths,
+   and such.  Normally we could just use off_t, but off_t is always
+   32-bit on Windows.  */
 
-/* These are from log.c, but they are used everywhere, so we declare
-   them here.  */
-enum log_options { LOG_VERBOSE, LOG_NOTQUIET, LOG_NONVERBOSE, LOG_ALWAYS };
+#ifndef WINDOWS
+typedef off_t wgint;
+# define SIZEOF_WGINT SIZEOF_OFF_T
+#endif
 
-#ifdef HAVE_STDARG_H
-void logprintf PARAMS ((enum log_options, const char *, ...))
-     GCC_FORMAT_ATTR (2, 3);
-void debug_logprintf PARAMS ((const char *, ...)) GCC_FORMAT_ATTR (1, 2);
-#else  /* not HAVE_STDARG_H */
-void logprintf ();
-void debug_logprintf ();
-#endif /* not HAVE_STDARG_H */
-void logputs PARAMS ((enum log_options, const char *));
-void logflush PARAMS ((void));
-void log_set_flush PARAMS ((int));
-int log_set_save_context PARAMS ((int));
+/* Define a strtol/strtoll clone that works with wgint.  */
+#ifndef str_to_wgint		/* mswindows.h defines its own alias */
+# if SIZEOF_WGINT == SIZEOF_LONG
+#  define str_to_wgint strtol
+#  define WGINT_MAX LONG_MAX
+# else
+#  define WGINT_MAX LLONG_MAX
+#  ifdef HAVE_STRTOLL
+#   define str_to_wgint strtoll
+#  else
+#   ifdef HAVE_STRTOIMAX
+#    define str_to_wgint strtoimax
+#   else
+#    define str_to_wgint strtoll
+#    define NEED_STRTOLL
+#    define strtoll_return long long
+#   endif
+#  endif
+# endif
+#endif
 
-/* Defined in `utils.c', but used literally everywhere.  */
-#ifndef DEBUG_MALLOC
+/* Declare our strtoll replacement. */
+#ifdef NEED_STRTOLL
+strtoll_return strtoll PARAMS ((const char *, char **, int));
+#endif
 
-#define xmalloc  xmalloc_real
-#define xrealloc xrealloc_real
-#define xstrdup  xstrdup_real
-#define xfree    free
+/* Now define a large integral type useful for storing sizes of *sums*
+   of downloads, such as the value of the --quota option.  This should
+   be a type able to hold 2G+ values even on systems without large
+   file support.  (It is useful to limit Wget's download quota to say
+   10G even if a single file cannot be that large.)
 
-void *xmalloc_real PARAMS ((size_t));
-void *xrealloc_real PARAMS ((void *, size_t));
-char *xstrdup_real PARAMS ((const char *));
+   To make sure we get the largest size possible, we use `double' on
+   systems without a 64-bit integral type.  (Since it is used in very
+   few places in Wget, this is acceptable.)  */
 
-#else  /* DEBUG_MALLOC */
+#if SIZEOF_WGINT >= 8
+/* just use wgint, which we already know how to print */
+typedef wgint SUM_SIZE_INT;
+# define with_thousand_seps_sum with_thousand_seps
+#else
+/* On systems without LFS, use double, which buys us integers up to 2^53. */
+typedef double SUM_SIZE_INT;
+#endif
 
-#define xmalloc(s)     xmalloc_debug (s, __FILE__, __LINE__)
-#define xfree(p)       xfree_debug (p, __FILE__, __LINE__)
-#define xrealloc(p, s) xrealloc_debug (p, s, __FILE__, __LINE__)
-#define xstrdup(p)     xstrdup_debug (p, __FILE__, __LINE__)
+#include "options.h"
 
-void *xmalloc_debug PARAMS ((size_t, const char *, int));
-void xfree_debug PARAMS ((void *, const char *, int));
-void *xrealloc_debug PARAMS ((void *, size_t, const char *, int));
-char *xstrdup_debug PARAMS ((const char *, const char *, int));
+/* Everything uses this, so include them here directly.  */
+#include "xmalloc.h"
 
-#endif /* DEBUG_MALLOC */
-
-/* #### Find a better place for this.  */
-/* The log file to which Wget writes to after HUP.  */
-#define DEFAULT_LOGFILE "wget-log"
-
-#define MD5_HASHLEN 16
+/* Likewise for logging functions.  */
+#include "log.h"
 
 /* Useful macros used across the code: */
 
-/* Is the string a hpyhen-only?  */
-#define HYPHENP(x) (*(x) == '-' && !*((x) + 1))
-
-/* The smaller value of the two.  */
-#define MINVAL(x, y) ((x) < (y) ? (x) : (y))
-
-/* Convert an ASCII hex digit to the corresponding number between 0
-   and 15.  X should be a hexadecimal digit that satisfies isxdigit;
-   otherwise, the result is undefined.  */
-#define XDIGIT_TO_NUM(x) ((x) < 'A' ? (x) - '0' : TOUPPER (x) - 'A' + 10)
-
-/* Convert a sequence of ASCII hex digits X and Y to a number betewen
-   0 and 255.  Uses XDIGIT_TO_NUM for conversion of individual
-   digits.  */
-#define X2DIGITS_TO_NUM(h1, h2) ((XDIGIT_TO_NUM (h1) << 4) + XDIGIT_TO_NUM (h2))
-
-/* The reverse of the above: convert a number in the [0, 16) range to
-   its ASCII representation in hex.  The A-F characters are in upper
-   case.  */
-#define XNUM_TO_DIGIT(x) ("0123456789ABCDEF"[x])
-
-/* Like XNUM_TO_DIGIT, but generates lower-case characters. */
-#define XNUM_TO_digit(x) ("0123456789abcdef"[x])
-
-/* Returns the number of elements in an array with fixed
-   initialization.  For example:
-
-   static char a[] = "foo";     -- countof(a) == 4 (for terminating \0)
-
+/* The number of elements in an array.  For example:
+   static char a[] = "foo";     -- countof(a) == 4 (note terminating \0)
    int a[5] = {1, 2};           -- countof(a) == 5
-
    char *a[] = {                -- countof(a) == 3
      "foo", "bar", "baz"
    }; */
-#define countof(array) (sizeof (array) / sizeof (*(array)))
+#define countof(array) (sizeof (array) / sizeof ((array)[0]))
 
-#define alloca_array(type, size) ((type *) alloca ((size) * sizeof (type)))
+/* Zero out a value.  */
+#define xzero(x) memset (&(x), '\0', sizeof (x))
+
+/* Convert an ASCII hex digit to the corresponding number between 0
+   and 15.  H should be a hexadecimal digit that satisfies isxdigit;
+   otherwise, the result is undefined.  */
+#define XDIGIT_TO_NUM(h) ((h) < 'A' ? (h) - '0' : TOUPPER (h) - 'A' + 10)
+#define X2DIGITS_TO_NUM(h1, h2) ((XDIGIT_TO_NUM (h1) << 4) + XDIGIT_TO_NUM (h2))
+
+/* The reverse of the above: convert a number in the [0, 16) range to
+   the ASCII representation of the corresponding hexadecimal digit.
+   `+ 0' is there so you can't accidentally use it as an lvalue.  */
+#define XNUM_TO_DIGIT(x) ("0123456789ABCDEF"[x] + 0)
+#define XNUM_TO_digit(x) ("0123456789abcdef"[x] + 0)
 
 /* Copy the data delimited with BEG and END to alloca-allocated
    storage, and zero-terminate it.  Arguments are evaluated only once,
@@ -207,28 +215,26 @@ char *xstrdup_debug PARAMS ((const char *, const char *, int));
 
 /* Return non-zero if string bounded between BEG and END is equal to
    STRING_LITERAL.  The comparison is case-sensitive.  */
-#define BOUNDED_EQUAL(beg, end, string_literal)	\
-  ((end) - (beg) == sizeof (string_literal) - 1	\
-   && !memcmp ((beg), (string_literal),		\
-	       sizeof (string_literal) - 1))
+#define BOUNDED_EQUAL(beg, end, string_literal)				\
+  ((end) - (beg) == sizeof (string_literal) - 1				\
+   && !memcmp (beg, string_literal, sizeof (string_literal) - 1))
 
 /* The same as above, except the comparison is case-insensitive. */
-#define BOUNDED_EQUAL_NO_CASE(beg, end, string_literal)	\
-  ((end) - (beg) == sizeof (string_literal) - 1		\
-   && !strncasecmp ((beg), (string_literal),		\
-	            sizeof (string_literal) - 1))
+#define BOUNDED_EQUAL_NO_CASE(beg, end, string_literal)			\
+  ((end) - (beg) == sizeof (string_literal) - 1				\
+   && !strncasecmp (beg, string_literal, sizeof (string_literal) - 1))
 
-/* Note that this much more elegant definition cannot be used:
+/* Like ptr=strdup(str), but allocates the space for PTR on the stack.
+   This cannot be an expression because this is not portable:
+     #define STRDUP_ALLOCA(str) (strcpy (alloca (strlen (str) + 1), str))
+   The problem is that some compilers can't handle alloca() being an
+   argument to a function.  */
 
-   #define STRDUP_ALLOCA(str) (strcpy ((char *)alloca (strlen (str) + 1), str))
-
-   This is because some compilers don't handle alloca() as argument to
-   function correctly.  Gcc under Intel has been reported to offend in
-   this case.  */
-
-#define STRDUP_ALLOCA(ptr, str) do {		\
-  (ptr) = (char *)alloca (strlen (str) + 1);	\
-  strcpy ((ptr), (str));			\
+#define STRDUP_ALLOCA(ptr, str) do {			\
+  char **SA_dest = &(ptr);				\
+  const char *SA_src = (str);				\
+  *SA_dest = (char *)alloca (strlen (SA_src) + 1);	\
+  strcpy (*SA_dest, SA_src);				\
 } while (0)
 
 /* Generally useful if you want to avoid arbitrary size limits but
@@ -238,23 +244,25 @@ char *xstrdup_debug PARAMS ((const char *, const char *, int));
    will realloc BASEVAR as necessary so that it can hold at least
    NEEDED_SIZE objects.  The reallocing is done by doubling, which
    ensures constant amortized time per element.  */
-#define DO_REALLOC(basevar, sizevar, needed_size, type)	do			\
-{										\
-  /* Avoid side-effectualness.  */						\
-  long do_realloc_needed_size = (needed_size);					\
-  long do_realloc_newsize = 0;							\
-  while ((sizevar) < (do_realloc_needed_size)) {				\
-    do_realloc_newsize = 2*(sizevar);						\
-    if (do_realloc_newsize < 32)						\
-      do_realloc_newsize = 32;							\
-    (sizevar) = do_realloc_newsize;						\
-  }										\
-  if (do_realloc_newsize)							\
-    basevar = (type *)xrealloc (basevar, do_realloc_newsize * sizeof (type));	\
+
+#define DO_REALLOC(basevar, sizevar, needed_size, type)	do {		\
+  long DR_needed_size = (needed_size);					\
+  long DR_newsize = 0;							\
+  while ((sizevar) < (DR_needed_size)) {				\
+    DR_newsize = sizevar << 1;						\
+    if (DR_newsize < 16)						\
+      DR_newsize = 16;							\
+    (sizevar) = DR_newsize;						\
+  }									\
+  if (DR_newsize)							\
+    basevar = (type *)xrealloc (basevar, DR_newsize * sizeof (type));	\
 } while (0)
 
-/* Free FOO if it is non-NULL.  */
-#define FREE_MAYBE(foo) do { if (foo) xfree (foo); } while (0)
+/* Used to print pointers (usually for debugging).  Print pointers
+   using printf ("%0*lx", PTR_FORMAT (p)).  (%p is too unpredictable;
+   some implementations prepend 0x, while some don't, and most don't
+   0-pad the address.)  */
+#define PTR_FORMAT(p) 2 * sizeof (void *), (unsigned long) (p)
 
 extern const char *exec_name;
 
@@ -276,41 +284,17 @@ enum
 typedef enum
 {
   NOCONERROR, HOSTERR, CONSOCKERR, CONERROR, CONSSLERR,
-  CONREFUSED, NEWLOCATION, NOTENOUGHMEM, CONPORTERR,
-  BINDERR, BINDOK, LISTENERR, ACCEPTERR, ACCEPTOK,
-  CONCLOSED, FTPOK, FTPLOGINC, FTPLOGREFUSED, FTPPORTERR,
+  CONIMPOSSIBLE, NEWLOCATION, NOTENOUGHMEM, CONPORTERR,
+  CONCLOSED, FTPOK, FTPLOGINC, FTPLOGREFUSED, FTPPORTERR, FTPSYSERR,
   FTPNSFOD, FTPRETROK, FTPUNKNOWNTYPE, FTPRERR,
   FTPREXC, FTPSRVERR, FTPRETRINT, FTPRESTFAIL, URLERROR,
-  FOPENERR, FWRITEERR, HOK, HLEXC, HEOF,
+  FOPENERR, FOPEN_EXCL_ERR, FWRITEERR, HOK, HLEXC, HEOF,
   HERR, RETROK, RECLEVELEXC, FTPACCDENIED, WRONGCODE,
   FTPINVPASV, FTPNOPASV,
   CONTNOTSUPPORTED, RETRUNNEEDED, RETRFINISHED, READERR, TRYLIMEXC,
   URLBADPATTERN, FILEBADFILE, RANGEERR, RETRBADPATTERN,
   RETNOTSUP, ROBOTSOK, NOROBOTS, PROXERR, AUTHFAILED,
-  QUOTEXC, WRITEFAILED,
-  SSLERRCERTFILE,SSLERRCERTKEY,SSLERRCTXCREATE
+  QUOTEXC, WRITEFAILED, SSLINITFAILED
 } uerr_t;
-
-typedef unsigned char  boolean;
-#ifndef FALSE
-#define FALSE 0
-#endif
-#ifndef TRUE
-#define TRUE  1
-#endif
-
-/* So we can say strcmp(a, b) == EQ rather than strcmp(a, b) == 0 or
-   the really awful !strcmp(a, b). */
-#define EQ 0
-
-/* For most options, 0 means no limits, but with -p in the picture, that causes
-   a problem on the maximum recursion depth variable.  To retain backwards
-   compatibility we allow users to consider "0" to be synonymous with "inf" for
-   -l, but internally infinite recursion is specified by -1 and 0 means to only
-   retrieve the requisites of a single document. */
-#define INFINITE_RECURSION -1
-
-#define CONNECT_ERROR(x) ((x) == ECONNREFUSED && !opt.retry_connrefused	\
-			  ? CONREFUSED : CONERROR)
 
 #endif /* WGET_H */

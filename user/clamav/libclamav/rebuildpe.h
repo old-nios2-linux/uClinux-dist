@@ -2,9 +2,8 @@
  *  Copyright (C) 2004 aCaB <acab@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,21 +12,16 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  */
 
 #ifndef __REBUILDPE_H
 #define __REBUILDPE_H
 
 #include "cltypes.h"
+#include "execs.h"
 
-struct SECTION {
-    uint32_t rva;
-    uint32_t vsz;
-    uint32_t raw;
-    uint32_t rsz;
-};
-
-char *rebuildpe(char *buffer, struct SECTION *sections, int sects, uint32_t base, uint32_t ep, uint32_t ResRva, uint32_t ResSize);
+int cli_rebuildpe(char *, struct cli_exe_section *, int, uint32_t, uint32_t, uint32_t, uint32_t, int);
 
 #endif

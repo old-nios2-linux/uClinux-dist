@@ -1,9 +1,9 @@
 /*
- * $Id: usrloc.c,v 1.35 2003/10/08 21:56:33 janakj Exp $
+ * $Id: usrloc.c,v 1.39 2004/12/04 18:33:31 janakj Exp $
  *
  * Usrloc interface
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -30,7 +30,7 @@
  
 #include "usrloc.h"
 #include "../../sr_module.h"
-
+#include "ul_mod.h"
 
 int bind_usrloc(usrloc_api_t* api)
 {
@@ -111,6 +111,29 @@ int bind_usrloc(usrloc_api_t* api)
 		LOG(L_ERR, "bind_usrloc(): Can't bind update_ucontact\n");
 		return -1;
 	}
+
+	api->register_watcher = (register_watcher_t)
+		find_export("ul_register_watcher", 1, 0);
+	if (api->register_watcher == 0) {
+		LOG(L_ERR, "bind_usrloc(): Can't bind register_watcher\n");
+		return -1;
+	}
+
+	api->unregister_watcher = (unregister_watcher_t)
+		find_export("ul_unregister_watcher", 1, 0);
+	if (api->unregister_watcher == 0) {
+		LOG(L_ERR, "bind_usrloc(): Can't bind unregister_watcher\n");
+		return -1;
+	}
+
+	api->register_ulcb = (register_ulcb_t)
+		find_export("ul_register_ulcb", 1, 0);
+	if (api->register_ulcb == 0) {
+		LOG(L_ERR, "bind_usrloc(): Can't bind register_ulcb\n");
+		return -1;
+	}
+
+	api->use_domain = use_domain;
 
 	return 0;
 }

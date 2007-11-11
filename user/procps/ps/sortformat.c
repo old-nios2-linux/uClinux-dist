@@ -1,5 +1,5 @@
 /*
- * Copyright 1998 by Albert Cahalan; all rights resered.         
+ * Copyright 1998-2004 by Albert Cahalan; all rights resered.         
  * This file may be used subject to the terms and conditions of the
  * GNU Library General Public License Version 2, or any later version  
  * at your option, as published by the Free Software Foundation.
@@ -19,6 +19,7 @@
 #include <grp.h>
 
 #include "../proc/readproc.h"
+#include "../proc/sysinfo.h"
 #include "common.h"
 
 static sf_node *sf_list = NULL;         /* deferred sorting and formatting */
@@ -26,10 +27,6 @@ static int broken;                      /* use gross Unix98 parsing? */
 static int have_gnu_sort = 0;           /* if true, "O" must be format */
 static int already_parsed_sort = 0;     /* redundantly set in & out of fn */
 static int already_parsed_format = 0;
-
-
-#define parse_sort_opt <-- arrgh! do not use this -->
-#define gnusort_parse  <-- arrgh! do not use this -->
 
 
 /****************  Parse single format specifier *******************/
@@ -42,7 +39,13 @@ static format_node *do_one_spec(const char *spec, const char *override){
     int w1, w2;
     format_node *thisnode;
     thisnode = malloc(sizeof(format_node));
-    w1 = fs->width;
+    if(fs->flags & CF_PIDMAX){
+      w1 = (int)get_pid_digits();
+      w2 = strlen(fs->head);
+      if(w2>w1) w1=w2; // FIXME w/ separate header/body column sizing
+    }else{
+      w1 = fs->width;
+    }
     if(override){
       w2 = strlen(override);
       thisnode->width = (w1>w2)?w1:w2;
@@ -54,7 +57,7 @@ static format_node *do_one_spec(const char *spec, const char *override){
       strcpy(thisnode->name, fs->head);
     }
     thisnode->pr = fs->pr;
-    thisnode->pad = fs->pad;
+    thisnode->need = fs->need;
     thisnode->vendor = fs->vendor;
     thisnode->flags = fs->flags;
     thisnode->next = NULL;
@@ -82,17 +85,15 @@ static format_node *do_one_spec(const char *spec, const char *override){
     }
     return list;
   }
-
-  fprintf(stderr,"spec value %s not found\n", spec);
-  _exit(1);
+  return NULL;   /* bad, spec not found */
 }
 
 
-/* must wrap user format in default */
+/************ must wrap user format in default *************/
 static void O_wrap(sf_node *sfn, int otype){
   format_node *fnode;
   format_node *endp;
-  char *trailer;
+  const char *trailer;
 
   trailer = (otype=='b') ? "END_BSD" : "END_SYS5" ;
 
@@ -108,95 +109,7 @@ static void O_wrap(sf_node *sfn, int otype){
   sfn->f_cooked = fnode;
 }
 
-/*
- * Used to parse option O lists. Option O is shared between
- * sorting and formatting. Users may expect one or the other.
- * The "broken" flag enables a really bad Unix98 misfeature.
- * Put each completed format_node onto the list starting at ->f_cooked
- */
-static const char *format_parse(sf_node *sfn){
-  char *buf;                   /* temp copy of arg to hack on */
-  char *sep_loc;               /* separator location: " \t,\n" */
-  char *walk;
-  const char *err;       /* error code that could or did happen */
-  format_node *fnode;
-  int items;
-  int need_item;
-
-  /*** prepare to operate ***/
-  buf = malloc(strlen(sfn->sf)+1);
-  strcpy(buf, sfn->sf);
-  
-  /*** sanity check and count items ***/
-  need_item = 1; /* true */
-  items = 0;
-  walk = buf;
-  err = "Improper format specifier list.";
-  do{
-    switch(*walk){
-    case ' ': case ',': case '\t': case '\n': case '\0':
-    /* Linux extension: allow \t and \n as delimiters */
-      if(need_item){
-        free(buf);
-        return "Improper format list";
-      }
-      need_item=1;
-      break;
-    case '=':
-      if(broken) goto out;
-      /* fall through */
-    default:
-      if(need_item) items++;
-      need_item=0;
-    }
-  } while (*++walk);
-out:
-  if(!items){
-    free(buf);
-    return "Empty format list.";
-  }
-#ifdef STRICT_LIST
-  if(need_item){    /* can't have trailing deliminator */
-    free(buf);
-    return "Improper format list.";
-  }
-#else
-  if(need_item){    /* allow 1 trailing deliminator */
-    *--walk='\0';  /* remove the trailing deliminator */
-  }
-#endif
-  /*** actually parse the list ***/
-  walk = buf;
-  while(items--){
-    format_node *endp;
-    char *equal_loc;
-    sep_loc = strpbrk(walk," ,\t\n");
-    /* if items left, then sep_loc is not in header override */
-    if(items && sep_loc) *sep_loc = '\0';
-    equal_loc = strpbrk(walk,"=");
-    if(equal_loc){   /* if header override */
-      *equal_loc = '\0';
-      equal_loc++;
-    }
-    fnode =  do_one_spec(walk,equal_loc);
-    if(!fnode){
-      free(buf);
-      return "Unknown user-defined format specifier.";
-    }
-    endp = fnode; while(endp->next) endp = endp->next;  /* find end */
-    endp->next = sfn->f_cooked;
-    sfn->f_cooked = fnode;
-    walk = sep_loc + 1; /* point to next item, if any */
-  }
-  free(buf);
-  already_parsed_format = 1;
-  return NULL;
-}
-
-
-
-
-/*
+/******************************************************************
  * Used to parse option AIX field descriptors.
  * Put each completed format_node onto the list starting at ->f_cooked
  */
@@ -204,8 +117,6 @@ static const char *aix_format_parse(sf_node *sfn){
   char *buf;                   /* temp copy of arg to hack on */
   char *walk;
   int items;
-
-trace("aix_format_parse called\n");
 
   /*** sanity check and count items ***/
   items = 0;
@@ -229,6 +140,7 @@ trace("aix_format_parse called\n");
     if(c)         goto initial;
     return "Improper AIX field descriptor.";
   looks_ok:
+    ;
   }
 
   /*** sanity check passed ***/
@@ -271,9 +183,9 @@ double_percent:
       fnode->name = malloc(len+1);
       strcpy(fnode->name, buf);
       fnode->pr = NULL;     /* checked for */
-      fnode->pad = 0;
+      fnode->need = 0;
       fnode->vendor = AIX;
-      fnode->flags = 0;
+      fnode->flags = CF_PRINT_EVERY_TIME;
       fnode->next = NULL;
     }
     
@@ -284,6 +196,126 @@ double_percent:
   free(buf);
   already_parsed_format = 1;
   return NULL;
+}
+
+/***************************************************************
+ * Used to parse option O lists. Option O is shared between
+ * sorting and formatting. Users may expect one or the other.
+ * The "broken" flag enables a really bad Unix98 misfeature.
+ * Put each completed format_node onto the list starting at ->f_cooked
+ */
+static const char *format_parse(sf_node *sfn){
+  char *buf;                   /* temp copy of arg to hack on */
+  char *sep_loc;               /* separator location: " \t,\n" */
+  char *walk;
+  const char *err;       /* error code that could or did happen */
+  format_node *fnode;
+  int items;
+  int need_item;
+  static char errbuf[80]; /* for variable-text error message */
+
+  /*** prepare to operate ***/
+  buf = malloc(strlen(sfn->sf)+1);
+  strcpy(buf, sfn->sf);
+  
+  /*** sanity check and count items ***/
+  need_item = 1; /* true */
+  items = 0;
+  walk = buf;
+  do{
+    switch(*walk){
+    case ' ': case ',': case '\t': case '\n': case '\0':
+    /* Linux extension: allow \t and \n as delimiters */
+      if(need_item){
+        free(buf);
+        goto improper;
+      }
+      need_item=1;
+      break;
+    case '=':
+      if(broken) goto out;
+      /* fall through */
+    default:
+      if(need_item) items++;
+      need_item=0;
+    }
+  } while (*++walk);
+out:
+  if(!items){
+    free(buf);
+    goto empty;
+  }
+#ifdef STRICT_LIST
+  if(need_item){    /* can't have trailing deliminator */
+    free(buf);
+    goto improper;
+  }
+#else
+  if(need_item){    /* allow 1 trailing deliminator */
+    *--walk='\0';  /* remove the trailing deliminator */
+  }
+#endif
+  /*** actually parse the list ***/
+  walk = buf;
+  while(items--){
+    format_node *endp;
+    char *equal_loc;
+    char *colon_loc;
+    sep_loc = strpbrk(walk," ,\t\n");
+    /* if items left, then sep_loc is not in header override */
+    if(items && sep_loc) *sep_loc = '\0';
+    equal_loc = strpbrk(walk,"=");
+    if(equal_loc){   /* if header override */
+      *equal_loc = '\0';
+      equal_loc++;
+    }
+    colon_loc = strpbrk(walk,":");
+    if(colon_loc){   /* if width override */
+      *colon_loc = '\0';
+      colon_loc++;
+      if(strspn(colon_loc,"0123456789") != strlen(colon_loc) || *colon_loc=='0' || !*colon_loc){
+        free(buf);
+        goto badwidth;
+      }
+    }
+    fnode =  do_one_spec(walk,equal_loc);
+    if(!fnode){
+      if(!*errbuf){  /* if didn't already create an error string */
+        snprintf(
+          errbuf,
+          sizeof(errbuf),
+          "Unknown user-defined format specifier \"%s\".",
+          walk
+        );
+      }
+      free(buf);
+      goto unknown;
+    }
+    if(colon_loc){
+      if(fnode->next){
+        free(buf);
+        goto notmacro;
+      }
+      // FIXME: enforce signal width to 8, 9, or 16 (grep: SIGNAL wide_signals)
+      fnode->width = atoi(colon_loc); // already verified to be a number
+    }
+    endp = fnode; while(endp->next) endp = endp->next;  /* find end */
+    endp->next = sfn->f_cooked;
+    sfn->f_cooked = fnode;
+    walk = sep_loc + 1; /* point to next item, if any */
+  }
+  free(buf);
+  already_parsed_format = 1;
+  return NULL;
+
+  /* errors may cause a retry looking for AIX format codes */
+  if(0) unknown:  err=errbuf;
+  if(0) empty:    err="Empty format list.";
+  if(0) improper: err="Improper format list.";
+  if(0) badwidth: err="Column widths must be unsigned decimal numbers.";
+  if(0) notmacro: err="Can't set width for a macro (multi-column) format specifier.";
+  if(strchr(sfn->sf,'%')) err = aix_format_parse(sfn);
+  return err;
 }
 
 /****************  Parse single sort specifier *******************/
@@ -297,8 +329,9 @@ static sort_node *do_one_sort_spec(const char *spec){
   fs = search_format_array(spec);
   if(fs){
     sort_node *thisnode;
-    thisnode = malloc(sizeof(format_node));
+    thisnode = malloc(sizeof(sort_node));
     thisnode->sr = fs->sr;
+    thisnode->need = fs->need;
     thisnode->reverse = reverse;
     thisnode->next = NULL;
     return thisnode;
@@ -307,7 +340,7 @@ static sort_node *do_one_sort_spec(const char *spec){
 }
 
 
-/*
+/**************************************************************
  * Used to parse long sorting options.
  * Put each completed sort_node onto the list starting at ->s_cooked
  */
@@ -315,7 +348,6 @@ static const char *long_sort_parse(sf_node *sfn){
   char *buf;                   /* temp copy of arg to hack on */
   char *sep_loc;               /* separator location: " \t,\n" */
   char *walk;
-  const char *err;       /* error code that could or did happen */
   sort_node *snode;
   int items;
   int need_item;
@@ -328,7 +360,6 @@ static const char *long_sort_parse(sf_node *sfn){
   need_item = 1; /* true */
   items = 0;
   walk = buf;
-  err = "Improper sort specifier list.";
   do{
     switch(*walk){
     case ' ': case ',': case '\t': case '\n': case '\0':
@@ -388,7 +419,7 @@ static const char *long_sort_parse(sf_node *sfn){
  * reparse as formatting codes.
  */
 static const char *verify_short_sort(const char *arg){
-  const char *all = "CGJKMNPRSTUcfgjkmnoprstuvy+-";
+  const char all[] = "CGJKMNPRSTUcfgjkmnoprstuvy+-";
   char checkoff[256];
   int i;
   const char *walk;
@@ -422,7 +453,6 @@ static const char *verify_short_sort(const char *arg){
 
 
 /************ parse short sorting option *************/
-/* must verify with short_sort_parse() before calling this */
 static const char *short_sort_parse(sf_node *sfn){
   int direction = 0;
   const char *walk;
@@ -470,7 +500,6 @@ static const char *short_sort_parse(sf_node *sfn){
  */
 static const char *parse_O_option(sf_node *sfn){
   const char *err;     /* error code that could or did happen */
-  const char *err2;
 
   if(sfn->next){
     err = parse_O_option(sfn->next);
@@ -480,17 +509,12 @@ static const char *parse_O_option(sf_node *sfn){
   switch(sfn->sf_code){
     case SF_B_o: case SF_G_format: case SF_U_o: /*** format ***/
       err = format_parse(sfn);
-      trace("Foo!\n");
-      if(err && strchr(sfn->sf,'%')) err = aix_format_parse(sfn);
-      trace("Bar!\n");
       if(!err) already_parsed_format = 1;
-      trace("Baz!\n");
       break;
     case SF_U_O:                                /*** format ***/
       /* Can have -l -f f u... set already_parsed_format like DEC does */
       if(already_parsed_format) return "option -O can not follow other format options.";
       err = format_parse(sfn);
-      if(err && strchr(sfn->sf,'%')) err = aix_format_parse(sfn);
       if(err) return err;
       already_parsed_format = 1;
       O_wrap(sfn,'u'); /* must wrap user format in default */
@@ -507,14 +531,7 @@ static const char *parse_O_option(sf_node *sfn){
         err = "option O is neither first format nor sort order.";
         break;
       }
-      err2 = format_parse(sfn);
-      if(!err2){ /* success as format code */
-        already_parsed_format = 1;
-        O_wrap(sfn,'b'); /* must wrap user format in default */
-        return NULL;
-      }
-      if(strchr(sfn->sf,'%')) err2 = aix_format_parse(sfn);
-      if(!err2){ /* success as format code */
+      if(!format_parse(sfn)){ /* if success as format code */
         already_parsed_format = 1;
         O_wrap(sfn,'b'); /* must wrap user format in default */
         return NULL;
@@ -579,17 +596,18 @@ int defer_sf_option(const char *arg, int source){
   return 0;                         /* boring, Unix98 is no change */
 }
 
-/* Since ps is not long-lived, the memory leak can be ignored. */
+/***** Since ps is not long-lived, the memory leak can be ignored. ******/
 void reset_sortformat(void){
   sf_list = NULL;          /* deferred sorting and formatting */
   format_list = NULL;      /* digested formatting options */
+  sort_list = NULL;        /* digested sorting options (redundant?) */
   have_gnu_sort = 0;
   already_parsed_sort = 0;
   already_parsed_format = 0;
 }
 
 
-/* Search format_list for findme, then insert putme after findme. */
+/***** Search format_list for findme, then insert putme after findme. ****/
 static int fmt_add_after(const char *findme, format_node *putme){
   format_node *walk;
   if(!strcmp(format_list->name, findme)){
@@ -609,7 +627,7 @@ static int fmt_add_after(const char *findme, format_node *putme){
   return 0; /* fail */
 }
 
-/* Search format_list for findme, then delete it. */
+/******* Search format_list for findme, then delete it. ********/
 static int fmt_delete(const char *findme){
   format_node *walk;
   format_node *old;
@@ -639,7 +657,7 @@ static const char *generate_sysv_list(void){
   format_node *fn;
   if((format_modifiers & FM_y) && !(format_flags & FF_Ul))
     return "Modifier -y without format -l makes no sense.";
-  if(prefer_bsd){
+  if(prefer_bsd_defaults){
     if(format_flags) PUSH("cmd");
     else PUSH("args");
     PUSH("bsdtime");
@@ -651,8 +669,18 @@ static const char *generate_sysv_list(void){
   }
   PUSH("tname");  /* Unix98 says "TTY" here, yet "tty" produces "TT". */
   if(format_flags & FF_Uf) PUSH("stime");
-  if(format_flags & FF_Ul) PUSH("wchan");
+  /* avoid duplicate columns from -FP and -Fly */
+  if(format_modifiers & FM_F){
+    /* if -FP take the Sun-style column instead (sorry about "sgi_p") */
+    if(!(format_modifiers & FM_P)) PUSH("psr");  /* should be ENG */
+    /* if -Fly take the ADDR-replacement RSS instead */
+    if(!( (format_flags & FF_Ul) && (format_modifiers & FM_y) )) PUSH("rss");
+  }
   if(format_flags & FF_Ul){
+    PUSH("wchan");
+  }
+  /* since FM_y adds RSS anyway, don't do this hack when that is true */
+  if( (format_flags & FF_Ul) && !(format_modifiers & FM_y) ){
     if(personality & PER_IRIX_l){ /* add "rss" then ':' here */
       PUSH("sgi_rss");
       fn = malloc(sizeof(format_node));
@@ -660,33 +688,43 @@ static const char *generate_sysv_list(void){
       fn->name = malloc(2);
       strcpy(fn->name, ":");
       fn->pr = NULL;     /* checked for */
-      fn->pad = 0;
+      fn->need = 0;
       fn->vendor = AIX;   /* yes, for SGI weirdness */
-      fn->flags = 0;
+      fn->flags = CF_PRINT_EVERY_TIME;
       fn->next = format_list;
       format_list=fn;
     }
+  }
+  if((format_modifiers & FM_F) || (format_flags & FF_Ul)){
     PUSH("sz");
   }
   if(format_flags & FF_Ul){
     if(format_modifiers & FM_y) PUSH("rss");
     else if(personality & (PER_ZAP_ADDR|PER_IRIX_l)) PUSH("sgi_p");
-    else PUSH("addr");
+    else PUSH("addr_1");
   }
   if(format_modifiers & FM_c){
     PUSH("pri"); PUSH("class");
   }else if(format_flags & FF_Ul){
-    PUSH("ni"); PUSH("opri");
+    PUSH("ni");
+    if(personality & PER_IRIX_l) PUSH("priority");
+    else /* is this good? */ PUSH("opri");
   }
-  if((format_modifiers & FM_L) && (format_flags & FF_Uf)) PUSH("nlwp");
+
+  // FIXME TODO XXX -- this is a serious problem
+  // These somehow got flipped around.
+  // The bug is in procps-3.1.1, procps-990211, prior too?
+  if((thread_flags & TF_U_L) && (format_flags & FF_Uf)) PUSH("nlwp");
   if( (format_flags & (FF_Uf|FF_Ul)) && !(format_modifiers & FM_c) ) PUSH("c");
+
   if(format_modifiers & FM_P) PUSH("psr");
-  if(format_modifiers & FM_L) PUSH("lwp");
+  if(thread_flags & TF_U_L) PUSH("lwp");
   if(format_modifiers & FM_j){
     PUSH("sid");
     PUSH("pgid");
   }
   if(format_flags & (FF_Uf|FF_Ul)) PUSH("ppid");
+  if(thread_flags & TF_U_T) PUSH("spid");
   PUSH("pid");
   if(format_flags & FF_Uf){
     if(personality & PER_SANE_USER) PUSH("user");
@@ -701,7 +739,6 @@ static const char *generate_sysv_list(void){
   if(format_modifiers & FM_M){
     PUSH("label");  /* Mandatory Access Control */
   }
-  format_modifiers = 0;
   return NULL;
 }
 
@@ -712,13 +749,13 @@ static const char *generate_sysv_list(void){
  * The "broken" flag enables a really bad Unix98 misfeature.
  */
 const char *process_sf_options(int localbroken){
-  const char *err;
   sf_node *sf_walk;
-  int option_source;  /* true if user-defined */
+
   if(personality & PER_BROKEN_o) localbroken = 1;
   if(personality & PER_GOOD_o)   localbroken = 0;
   broken = localbroken;
   if(sf_list){
+    const char *err;
     err = parse_O_option(sf_list);
     if(err) return err;
   }
@@ -757,12 +794,49 @@ const char *process_sf_options(int localbroken){
     sf_walk = sf_walk->next;
   }
 
+  // Get somebody to explain how -L/-T is supposed to interact
+  // with sorting. Do the threads remain grouped, with sorting
+  // by process, or do the threads get sorted by themselves?
+  if(sort_list && (thread_flags&TF_no_sort)){
+    return "Tell procps-feedback@lists.sf.net what you expected.";
+  }
+
+  // If nothing else, try to use $PS_FORMAT before the default.
+  if(!format_flags && !format_modifiers && !format_list){
+    char *tmp;
+    tmp = getenv("PS_FORMAT");  /* user override kills default */
+    if(tmp && *tmp){
+      const char *err;
+      sf_node sfn;
+      if(thread_flags&TF_must_use) return "Tell procps-feedback@sf.net what you want. (-L/-T, -m/m/H, and $PS_FORMAT)";
+      sfn.sf = tmp;
+      sfn.f_cooked = NULL;
+      err = format_parse(&sfn);
+      if(!err){
+        format_node *fmt_walk;
+        fmt_walk = sfn.f_cooked;
+        while(fmt_walk){   /* put any nodes onto format_list in opposite way */
+          format_node *travler;
+          travler = fmt_walk;
+          fmt_walk = fmt_walk->next;
+          travler->next = format_list;
+          format_list = travler;
+        }
+        return NULL;
+      }
+      // FIXME: prove that this won't be hit on valid bogus-BSD options
+      fprintf(stderr, "Warning: $PS_FORMAT ignored. (%s)\n", err);
+    }
+  }
+
   if(format_list){
     if(format_flags) return "Conflicting format options.";
-    option_source = 1;
-  }else{
-    format_node *fmt_walk;
-    format_node *fn;
+    if(format_modifiers) return "Can't use output modifiers with user-defined output";
+    if(thread_flags&TF_must_use) return "-L/-T with H/m/-m and -o/-O/o/O is nonsense";
+    return NULL;
+  }
+
+  do{
     const char *spec;
     switch(format_flags){
 
@@ -790,21 +864,17 @@ const char *process_sf_options(int localbroken){
     case FF_LX:          spec="OL_X";         break;
     case FF_Lm:          spec="OL_m";         break;
 
+    /* This is the sole FLASK security option. */
+    case FF_Fc:          spec="FLASK_context"; break;
+
     }  /* end switch(format_flags) */
 
-    option_source = 0;
-    if(!format_flags && !format_modifiers){   /* was default */
-      char *tmp;
-      tmp = getenv("PS_FORMAT");  /* user override kills default */
-      if(tmp && *tmp){
-        spec = tmp;
-        option_source = 2;
-      }
-    }
+    // not just for case 0, since sysv_l_format and such may be NULL
+    if(!spec) return generate_sysv_list();
 
-    if(spec){
-      fn = do_one_spec(spec, NULL); /* use override "" for no headers */
-      fmt_walk = fn;
+    do{
+      format_node *fmt_walk;
+      fmt_walk = do_one_spec(spec, NULL); /* use override "" for no headers */
       while(fmt_walk){   /* put any nodes onto format_list in opposite way */
         format_node *travler;
         travler = fmt_walk;
@@ -812,15 +882,11 @@ const char *process_sf_options(int localbroken){
         travler->next = format_list;
         format_list = travler;
       }
-    }else{
-      err = generate_sysv_list();
-      if(err) return err;
-      option_source = 3;
-    }
-  }
-  if(format_modifiers){  /* generate_sysv_list() may have cleared some bits */
+    }while(0);
+  }while(0);
+
+  do{
     format_node *fn;
-    if(option_source) return "Can't use output modifiers with user-defined output";
     if(format_modifiers & FM_j){
       fn = do_one_spec("pgid", NULL);
       if(!fmt_add_after("PPID", fn)) if(!fmt_add_after("PID", fn))
@@ -844,9 +910,30 @@ const char *process_sf_options(int localbroken){
       fn = do_one_spec("pri", NULL);
       if(!fmt_add_after("CLS", fn)) return "Lost my CLS!";
     }
-  }
-  if(!option_source){  /* OK to really muck with stuff */
-    format_node *fn;
+    if(thread_flags & TF_U_T){
+      fn = do_one_spec("spid", NULL);
+      if(!fmt_add_after("PID", fn) && (thread_flags&TF_must_use))
+        return "-T with H/-m/m but no PID for SPID to follow";
+    }
+    if(thread_flags & TF_U_L){
+      fn = do_one_spec("lwp", NULL);
+      if(fmt_add_after("SID",  fn)) goto did_lwp;
+      if(fmt_add_after("SESS", fn)) goto did_lwp;
+      if(fmt_add_after("PGID", fn)) goto did_lwp;
+      if(fmt_add_after("PGRP", fn)) goto did_lwp;
+      if(fmt_add_after("PPID", fn)) goto did_lwp;
+      if(fmt_add_after("PID",  fn)) goto did_lwp;
+      if(thread_flags&TF_must_use)
+        return "-L with H/-m/m but no PID/PGID/SID/SESS for NLWP to follow";
+did_lwp:
+      fn = do_one_spec("nlwp", NULL);
+      fmt_add_after("%CPU",  fn);
+    }
+    if(format_modifiers & FM_M){    // Mandatory Access Control, IRIX style
+      fn = do_one_spec("label", NULL);
+      fn->next=format_list;
+      format_list=fn;
+    }
     /* Do personality-specific translations not covered by format_flags.
      * Generally, these only get hit when personality overrides unix output.
      * That (mostly?) means the Digital and Debian personalities.
@@ -859,9 +946,8 @@ const char *process_sf_options(int localbroken){
       fn = do_one_spec("user", NULL);
       if(fmt_add_after("UID", fn)) fmt_delete("UID");
     }
-  }
+  }while(0);
 
-  /* Could scan for duplicates (format and sort) here. Digital does. */
   return NULL;
 }
 

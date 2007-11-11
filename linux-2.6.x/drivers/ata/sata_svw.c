@@ -53,9 +53,13 @@
 #endif /* CONFIG_PPC_OF */
 
 #define DRV_NAME	"sata_svw"
-#define DRV_VERSION	"2.0"
+#define DRV_VERSION	"2.3"
 
 enum {
+	/* ap->flags bits */
+	K2_FLAG_SATA_8_PORTS		= (1 << 24),
+	K2_FLAG_NO_ATAPI_DMA		= (1 << 25),
+
 	/* Taskfile registers offsets */
 	K2_SATA_TF_CMD_OFFSET		= 0x00,
 	K2_SATA_TF_DATA_OFFSET		= 0x00,
@@ -83,25 +87,37 @@ enum {
 
 	/* Port stride */
 	K2_SATA_PORT_OFFSET		= 0x100,
+
+	board_svw4			= 0,
+	board_svw8			= 1,
 };
 
 static u8 k2_stat_check_status(struct ata_port *ap);
 
 
-static u32 k2_sata_scr_read (struct ata_port *ap, unsigned int sc_reg)
+static int k2_sata_check_atapi_dma(struct ata_queued_cmd *qc)
+{
+	if (qc->ap->flags & K2_FLAG_NO_ATAPI_DMA)
+		return -1;	/* ATAPI DMA not supported */
+
+	return 0;
+}
+
+static int k2_sata_scr_read(struct ata_port *ap, unsigned int sc_reg, u32 *val)
 {
 	if (sc_reg > SCR_CONTROL)
-		return 0xffffffffU;
-	return readl((void *) ap->ioaddr.scr_addr + (sc_reg * 4));
+		return -EINVAL;
+	*val = readl(ap->ioaddr.scr_addr + (sc_reg * 4));
+	return 0;
 }
 
 
-static void k2_sata_scr_write (struct ata_port *ap, unsigned int sc_reg,
-			       u32 val)
+static int k2_sata_scr_write(struct ata_port *ap, unsigned int sc_reg, u32 val)
 {
 	if (sc_reg > SCR_CONTROL)
-		return;
-	writel(val, (void *) ap->ioaddr.scr_addr + (sc_reg * 4));
+		return -EINVAL;
+	writel(val, ap->ioaddr.scr_addr + (sc_reg * 4));
+	return 0;
 }
 
 
@@ -116,11 +132,16 @@ static void k2_sata_tf_load(struct ata_port *ap, const struct ata_taskfile *tf)
 		ata_wait_idle(ap);
 	}
 	if (is_addr && (tf->flags & ATA_TFLAG_LBA48)) {
-		writew(tf->feature | (((u16)tf->hob_feature) << 8), ioaddr->feature_addr);
-		writew(tf->nsect | (((u16)tf->hob_nsect) << 8), ioaddr->nsect_addr);
-		writew(tf->lbal | (((u16)tf->hob_lbal) << 8), ioaddr->lbal_addr);
-		writew(tf->lbam | (((u16)tf->hob_lbam) << 8), ioaddr->lbam_addr);
-		writew(tf->lbah | (((u16)tf->hob_lbah) << 8), ioaddr->lbah_addr);
+		writew(tf->feature | (((u16)tf->hob_feature) << 8),
+		       ioaddr->feature_addr);
+		writew(tf->nsect | (((u16)tf->hob_nsect) << 8),
+		       ioaddr->nsect_addr);
+		writew(tf->lbal | (((u16)tf->hob_lbal) << 8),
+		       ioaddr->lbal_addr);
+		writew(tf->lbam | (((u16)tf->hob_lbam) << 8),
+		       ioaddr->lbam_addr);
+		writew(tf->lbah | (((u16)tf->hob_lbah) << 8),
+		       ioaddr->lbah_addr);
 	} else if (is_addr) {
 		writew(tf->feature, ioaddr->feature_addr);
 		writew(tf->nsect, ioaddr->nsect_addr);
@@ -177,7 +198,8 @@ static void k2_bmdma_setup_mmio (struct ata_queued_cmd *qc)
 	struct ata_port *ap = qc->ap;
 	unsigned int rw = (qc->tf.flags & ATA_TFLAG_WRITE);
 	u8 dmactl;
-	void __iomem *mmio = (void __iomem *) ap->ioaddr.bmdma_addr;
+	void __iomem *mmio = ap->ioaddr.bmdma_addr;
+
 	/* load PRD table addr. */
 	mb();	/* make sure PRD table writes are visible to controller */
 	writel(ap->prd_dma, mmio + ATA_DMA_TABLE_OFS);
@@ -205,7 +227,7 @@ static void k2_bmdma_setup_mmio (struct ata_queued_cmd *qc)
 static void k2_bmdma_start_mmio (struct ata_queued_cmd *qc)
 {
 	struct ata_port *ap = qc->ap;
-	void __iomem *mmio = (void __iomem *) ap->ioaddr.bmdma_addr;
+	void __iomem *mmio = ap->ioaddr.bmdma_addr;
 	u8 dmactl;
 
 	/* start host DMA transaction */
@@ -233,7 +255,7 @@ static void k2_bmdma_start_mmio (struct ata_queued_cmd *qc)
 
 static u8 k2_stat_check_status(struct ata_port *ap)
 {
-       	return readl((void *) ap->ioaddr.status_addr);
+       	return readl(ap->ioaddr.status_addr);
 }
 
 #ifdef CONFIG_PPC_OF
@@ -268,7 +290,7 @@ static int k2_sata_proc_info(struct Scsi_Host *shost, char *page, char **start,
 	/* Match it to a port node */
 	index = (ap == ap->host->ports[0]) ? 0 : 1;
 	for (np = np->child; np != NULL; np = np->sibling) {
-		const u32 *reg = get_property(np, "reg", NULL);
+		const u32 *reg = of_get_property(np, "reg", NULL);
 		if (!reg)
 			continue;
 		if (index == *reg)
@@ -313,27 +335,49 @@ static const struct ata_port_operations k2_sata_ops = {
 	.check_status		= k2_stat_check_status,
 	.exec_command		= ata_exec_command,
 	.dev_select		= ata_std_dev_select,
+	.check_atapi_dma	= k2_sata_check_atapi_dma,
 	.bmdma_setup		= k2_bmdma_setup_mmio,
 	.bmdma_start		= k2_bmdma_start_mmio,
 	.bmdma_stop		= ata_bmdma_stop,
 	.bmdma_status		= ata_bmdma_status,
 	.qc_prep		= ata_qc_prep,
 	.qc_issue		= ata_qc_issue_prot,
-	.data_xfer		= ata_mmio_data_xfer,
+	.data_xfer		= ata_data_xfer,
 	.freeze			= ata_bmdma_freeze,
 	.thaw			= ata_bmdma_thaw,
 	.error_handler		= ata_bmdma_error_handler,
 	.post_internal_cmd	= ata_bmdma_post_internal_cmd,
-	.irq_handler		= ata_interrupt,
 	.irq_clear		= ata_bmdma_irq_clear,
+	.irq_on			= ata_irq_on,
+	.irq_ack		= ata_irq_ack,
 	.scr_read		= k2_sata_scr_read,
 	.scr_write		= k2_sata_scr_write,
 	.port_start		= ata_port_start,
-	.port_stop		= ata_port_stop,
-	.host_stop		= ata_pci_host_stop,
 };
 
-static void k2_sata_setup_port(struct ata_ioports *port, unsigned long base)
+static const struct ata_port_info k2_port_info[] = {
+	/* board_svw4 */
+	{
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO | K2_FLAG_NO_ATAPI_DMA,
+		.pio_mask	= 0x1f,
+		.mwdma_mask	= 0x07,
+		.udma_mask	= ATA_UDMA6,
+		.port_ops	= &k2_sata_ops,
+	},
+	/* board_svw8 */
+	{
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO | K2_FLAG_NO_ATAPI_DMA |
+				  K2_FLAG_SATA_8_PORTS,
+		.pio_mask	= 0x1f,
+		.mwdma_mask	= 0x07,
+		.udma_mask	= ATA_UDMA6,
+		.port_ops	= &k2_sata_ops,
+	},
+};
+
+static void k2_sata_setup_port(struct ata_ioports *port, void __iomem *base)
 {
 	port->cmd_addr		= base + K2_SATA_TF_CMD_OFFSET;
 	port->data_addr		= base + K2_SATA_TF_DATA_OFFSET;
@@ -356,23 +400,32 @@ static void k2_sata_setup_port(struct ata_ioports *port, unsigned long base)
 static int k2_sata_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	static int printed_version;
-	struct ata_probe_ent *probe_ent = NULL;
-	unsigned long base;
+	const struct ata_port_info *ppi[] =
+		{ &k2_port_info[ent->driver_data], NULL };
+	struct ata_host *host;
 	void __iomem *mmio_base;
-	int pci_dev_busy = 0;
-	int rc;
-	int i;
+	int n_ports, i, rc;
 
 	if (!printed_version++)
 		dev_printk(KERN_DEBUG, &pdev->dev, "version " DRV_VERSION "\n");
+
+	/* allocate host */
+	n_ports = 4;
+	if (ppi[0]->flags & K2_FLAG_SATA_8_PORTS)
+		n_ports = 8;
+
+	host = ata_host_alloc_pinfo(&pdev->dev, ppi, n_ports);
+	if (!host)
+		return -ENOMEM;
 
 	/*
 	 * If this driver happens to only be useful on Apple's K2, then
 	 * we should check that here as it has a normal Serverworks ID
 	 */
-	rc = pci_enable_device(pdev);
+	rc = pcim_enable_device(pdev);
 	if (rc)
 		return rc;
+
 	/*
 	 * Check if we have resources mapped at all (second function may
 	 * have been disabled by firmware)
@@ -380,36 +433,28 @@ static int k2_sata_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	if (pci_resource_len(pdev, 5) == 0)
 		return -ENODEV;
 
-	/* Request PCI regions */
-	rc = pci_request_regions(pdev, DRV_NAME);
-	if (rc) {
-		pci_dev_busy = 1;
-		goto err_out;
-	}
+	/* Request and iomap PCI regions */
+	rc = pcim_iomap_regions(pdev, 1 << 5, DRV_NAME);
+	if (rc == -EBUSY)
+		pcim_pin_device(pdev);
+	if (rc)
+		return rc;
+	host->iomap = pcim_iomap_table(pdev);
+	mmio_base = host->iomap[5];
+
+	/* different controllers have different number of ports - currently 4 or 8 */
+	/* All ports are on the same function. Multi-function device is no
+	 * longer available. This should not be seen in any system. */
+	for (i = 0; i < host->n_ports; i++)
+		k2_sata_setup_port(&host->ports[i]->ioaddr,
+				   mmio_base + i * K2_SATA_PORT_OFFSET);
 
 	rc = pci_set_dma_mask(pdev, ATA_DMA_MASK);
 	if (rc)
-		goto err_out_regions;
+		return rc;
 	rc = pci_set_consistent_dma_mask(pdev, ATA_DMA_MASK);
 	if (rc)
-		goto err_out_regions;
-
-	probe_ent = kmalloc(sizeof(*probe_ent), GFP_KERNEL);
-	if (probe_ent == NULL) {
-		rc = -ENOMEM;
-		goto err_out_regions;
-	}
-
-	memset(probe_ent, 0, sizeof(*probe_ent));
-	probe_ent->dev = pci_dev_to_dev(pdev);
-	INIT_LIST_HEAD(&probe_ent->node);
-
-	mmio_base = pci_iomap(pdev, 5, 0);
-	if (mmio_base == NULL) {
-		rc = -ENOMEM;
-		goto err_out_free_ent;
-	}
-	base = (unsigned long) mmio_base;
+		return rc;
 
 	/* Clear a magic bit in SCR1 according to Darwin, those help
 	 * some funky seagate drives (though so far, those were already
@@ -422,44 +467,9 @@ static int k2_sata_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	writel(0xffffffff, mmio_base + K2_SATA_SCR_ERROR_OFFSET);
 	writel(0x0, mmio_base + K2_SATA_SIM_OFFSET);
 
-	probe_ent->sht = &k2_sata_sht;
-	probe_ent->port_flags = ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
-				ATA_FLAG_MMIO;
-	probe_ent->port_ops = &k2_sata_ops;
-	probe_ent->n_ports = 4;
-	probe_ent->irq = pdev->irq;
-	probe_ent->irq_flags = IRQF_SHARED;
-	probe_ent->mmio_base = mmio_base;
-
-	/* We don't care much about the PIO/UDMA masks, but the core won't like us
-	 * if we don't fill these
-	 */
-	probe_ent->pio_mask = 0x1f;
-	probe_ent->mwdma_mask = 0x7;
-	probe_ent->udma_mask = 0x7f;
-
-	/* different controllers have different number of ports - currently 4 or 8 */
-	/* All ports are on the same function. Multi-function device is no
-	 * longer available. This should not be seen in any system. */
-	for (i = 0; i < ent->driver_data; i++)
-		k2_sata_setup_port(&probe_ent->port[i], base + i * K2_SATA_PORT_OFFSET);
-
 	pci_set_master(pdev);
-
-	/* FIXME: check ata_device_add return value */
-	ata_device_add(probe_ent);
-	kfree(probe_ent);
-
-	return 0;
-
-err_out_free_ent:
-	kfree(probe_ent);
-err_out_regions:
-	pci_release_regions(pdev);
-err_out:
-	if (!pci_dev_busy)
-		pci_disable_device(pdev);
-	return rc;
+	return ata_host_activate(host, pdev->irq, ata_interrupt, IRQF_SHARED,
+				 &k2_sata_sht);
 }
 
 /* 0x240 is device ID for Apple K2 device
@@ -469,11 +479,11 @@ err_out:
  * controller
  * */
 static const struct pci_device_id k2_sata_pci_tbl[] = {
-	{ PCI_VDEVICE(SERVERWORKS, 0x0240), 4 },
-	{ PCI_VDEVICE(SERVERWORKS, 0x0241), 4 },
-	{ PCI_VDEVICE(SERVERWORKS, 0x0242), 8 },
-	{ PCI_VDEVICE(SERVERWORKS, 0x024a), 4 },
-	{ PCI_VDEVICE(SERVERWORKS, 0x024b), 4 },
+	{ PCI_VDEVICE(SERVERWORKS, 0x0240), board_svw4 },
+	{ PCI_VDEVICE(SERVERWORKS, 0x0241), board_svw4 },
+	{ PCI_VDEVICE(SERVERWORKS, 0x0242), board_svw8 },
+	{ PCI_VDEVICE(SERVERWORKS, 0x024a), board_svw4 },
+	{ PCI_VDEVICE(SERVERWORKS, 0x024b), board_svw4 },
 
 	{ }
 };

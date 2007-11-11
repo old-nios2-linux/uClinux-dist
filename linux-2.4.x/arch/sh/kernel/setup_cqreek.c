@@ -202,7 +202,7 @@ void __init setup_cqreek(void)
 struct sh_machine_vector mv_cqreek __initmv = {
 	mv_name:		"CqREEK",
 
-#if defined(__SH4__)
+#if defined(CONFIG_CPU_SH4)
 	mv_nr_irqs:		48,
 #elif defined(CONFIG_CPU_SUBTYPE_SH7708)
 	mv_nr_irqs:		32,

@@ -24,42 +24,46 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <linux/fib_rules.h>
 
 #include "rt_names.h"
 #include "utils.h"
+#include "ip_common.h"
+
+extern struct rtnl_handle rth;
 
 static void usage(void) __attribute__((noreturn));
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: ip rule [ list | add | del ] SELECTOR ACTION\n");
-	fprintf(stderr, "SELECTOR := [ from PREFIX ] [ to PREFIX ] [ tos TOS ] [ fwmark FWMARK ]\n");
+	fprintf(stderr, "Usage: ip rule [ list | add | del | flush ] SELECTOR ACTION\n");
+	fprintf(stderr, "SELECTOR := [ not ] [ from PREFIX ] [ to PREFIX ] [ tos TOS ] [ fwmark FWMARK[/MASK] ]\n");
 	fprintf(stderr, "            [ dev STRING ] [ pref NUMBER ]\n");
-	fprintf(stderr, "ACTION := [ table TABLE_ID ] [ nat ADDRESS ]\n");
+	fprintf(stderr, "ACTION := [ table TABLE_ID ]\n");
 	fprintf(stderr, "          [ prohibit | reject | unreachable ]\n");
 	fprintf(stderr, "          [ realms [SRCREALM/]DSTREALM ]\n");
 	fprintf(stderr, "TABLE_ID := [ local | main | default | NUMBER ]\n");
 	exit(-1);
 }
 
-int print_rule(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+int print_rule(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 {
 	FILE *fp = (FILE*)arg;
 	struct rtmsg *r = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	int host_len = -1;
+	__u32 table;
 	struct rtattr * tb[RTA_MAX+1];
 	char abuf[256];
 	SPRINT_BUF(b1);
 
-	if (n->nlmsg_type != RTM_NEWRULE)
+	if (n->nlmsg_type != RTM_NEWRULE && n->nlmsg_type != RTM_DELRULE)
 		return 0;
 
 	len -= NLMSG_LENGTH(sizeof(*r));
 	if (len < 0)
 		return -1;
 
-	memset(tb, 0, sizeof(tb));
 	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
 
 	if (r->rtm_family == AF_INET)
@@ -71,10 +75,16 @@ int print_rule(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	else if (r->rtm_family == AF_IPX)
 		host_len = 80;
 
+	if (n->nlmsg_type == RTM_DELRULE)
+		fprintf(fp, "Deleted ");
+
 	if (tb[RTA_PRIORITY])
 		fprintf(fp, "%u:\t", *(unsigned*)RTA_DATA(tb[RTA_PRIORITY]));
 	else
 		fprintf(fp, "0:\t");
+
+	if (r->rtm_flags & FIB_RULE_INVERT)
+		fprintf(fp, "not ");
 
 	if (tb[RTA_SRC]) {
 		if (r->rtm_src_len != host_len) {
@@ -119,16 +129,26 @@ int print_rule(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 		SPRINT_BUF(b1);
 		fprintf(fp, "tos %s ", rtnl_dsfield_n2a(r->rtm_tos, b1, sizeof(b1)));
 	}
-	if (tb[RTA_PROTOINFO]) {
-		fprintf(fp, "fwmark %8x ", *(__u32*)RTA_DATA(tb[RTA_PROTOINFO]));
+	if (tb[RTA_PROTOINFO] || tb[RTA_FWMASK]) {
+		__u32 mark = 0, mask = 0;
+
+		if (tb[RTA_PROTOINFO])
+			mark = *(__u32*)RTA_DATA(tb[RTA_PROTOINFO]);
+
+		if (tb[RTA_FWMASK] &&
+		    (mask = *(__u32*)RTA_DATA(tb[RTA_FWMASK])) != 0xFFFFFFFF)
+			fprintf(fp, "fwmark 0x%x/0x%x ", mark, mask);
+		else
+			fprintf(fp, "fwmark 0x%x ", mark);
 	}
 
 	if (tb[RTA_IIF]) {
 		fprintf(fp, "iif %s ", (char*)RTA_DATA(tb[RTA_IIF]));
 	}
 
-	if (r->rtm_table)
-		fprintf(fp, "lookup %s ", rtnl_rttable_n2a(r->rtm_table, b1, sizeof(b1)));
+	table = rtm_get_table(r, tb);
+	if (table)
+		fprintf(fp, "lookup %s ", rtnl_rttable_n2a(table, b1, sizeof(b1)));
 
 	if (tb[RTA_FLOW]) {
 		__u32 to = *(__u32*)RTA_DATA(tb[RTA_FLOW]);
@@ -144,7 +164,7 @@ int print_rule(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 
 	if (r->rtm_type == RTN_NAT) {
 		if (tb[RTA_GATEWAY]) {
-			fprintf(fp, "map-to %s ", 
+			fprintf(fp, "map-to %s ",
 				format_host(r->rtm_family,
 					    RTA_PAYLOAD(tb[RTA_GATEWAY]),
 					    RTA_DATA(tb[RTA_GATEWAY]),
@@ -159,21 +179,17 @@ int print_rule(struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	return 0;
 }
 
-int iprule_list(int argc, char **argv)
+static int iprule_list(int argc, char **argv)
 {
-	struct rtnl_handle rth;
 	int af = preferred_family;
 
 	if (af == AF_UNSPEC)
 		af = AF_INET;
 
 	if (argc > 0) {
-		fprintf(stderr, "\"ip rule show\" need not eny arguments.\n");
+		fprintf(stderr, "\"ip rule show\" does not take any arguments.\n");
 		return -1;
 	}
-
-	if (rtnl_open(&rth, 0) < 0)
-		return 1;
 
 	if (rtnl_wilddump_request(&rth, af, RTM_GETRULE) < 0) {
 		perror("Cannot send dump request");
@@ -189,10 +205,9 @@ int iprule_list(int argc, char **argv)
 }
 
 
-int iprule_modify(int cmd, int argc, char **argv)
+static int iprule_modify(int cmd, int argc, char **argv)
 {
 	int table_ok = 0;
-	struct rtnl_handle rth;
 	struct {
 		struct nlmsghdr 	n;
 		struct rtmsg 		r;
@@ -209,6 +224,7 @@ int iprule_modify(int cmd, int argc, char **argv)
 	req.r.rtm_scope = RT_SCOPE_UNIVERSE;
 	req.r.rtm_table = 0;
 	req.r.rtm_type = RTN_UNSPEC;
+	req.r.rtm_flags = 0;
 
 	if (cmd == RTM_NEWRULE) {
 		req.n.nlmsg_flags |= NLM_F_CREATE|NLM_F_EXCL;
@@ -216,24 +232,20 @@ int iprule_modify(int cmd, int argc, char **argv)
 	}
 
 	while (argc > 0) {
-		if (strcmp(*argv, "from") == 0) {
+		if (strcmp(*argv, "not") == 0) {
+			req.r.rtm_flags |= FIB_RULE_INVERT;
+		} else if (strcmp(*argv, "from") == 0) {
 			inet_prefix dst;
 			NEXT_ARG();
 			get_prefix(&dst, *argv, req.r.rtm_family);
-			if (req.r.rtm_family == AF_UNSPEC)
-				req.r.rtm_family = dst.family;
 			req.r.rtm_src_len = dst.bitlen;
-			if (dst.bytelen)
-				addattr_l(&req.n, sizeof(req), RTA_SRC, &dst.data, dst.bytelen);
+			addattr_l(&req.n, sizeof(req), RTA_SRC, &dst.data, dst.bytelen);
 		} else if (strcmp(*argv, "to") == 0) {
 			inet_prefix dst;
 			NEXT_ARG();
 			get_prefix(&dst, *argv, req.r.rtm_family);
-			if (req.r.rtm_family == AF_UNSPEC)
-				req.r.rtm_family = dst.family;
 			req.r.rtm_dst_len = dst.bitlen;
-			if (dst.bytelen)
-				addattr_l(&req.n, sizeof(req), RTA_DST, &dst.data, dst.bytelen);
+			addattr_l(&req.n, sizeof(req), RTA_DST, &dst.data, dst.bytelen);
 		} else if (matches(*argv, "preference") == 0 ||
 			   matches(*argv, "order") == 0 ||
 			   matches(*argv, "priority") == 0) {
@@ -249,11 +261,19 @@ int iprule_modify(int cmd, int argc, char **argv)
 				invarg("TOS value is invalid\n", *argv);
 			req.r.rtm_tos = tos;
 		} else if (strcmp(*argv, "fwmark") == 0) {
-			__u32 fwmark;
+			char *slash;
+			__u32 fwmark, fwmask;
 			NEXT_ARG();
-			if (get_u32(&fwmark, *argv, 16))
+			if ((slash = strchr(*argv, '/')) != NULL)
+				*slash = '\0';
+			if (get_u32(&fwmark, *argv, 0))
 				invarg("fwmark value is invalid\n", *argv);
 			addattr32(&req.n, sizeof(req), RTA_PROTOINFO, fwmark);
+			if (slash) {
+				if (get_u32(&fwmask, slash+1, 0))
+					invarg("fwmask value is invalid\n", slash+1);
+				addattr32(&req.n, sizeof(req), RTA_FWMASK, fwmask);
+			}
 		} else if (matches(*argv, "realms") == 0) {
 			__u32 realm;
 			NEXT_ARG();
@@ -262,11 +282,16 @@ int iprule_modify(int cmd, int argc, char **argv)
 			addattr32(&req.n, sizeof(req), RTA_FLOW, realm);
 		} else if (matches(*argv, "table") == 0 ||
 			   strcmp(*argv, "lookup") == 0) {
-			int tid;
+			__u32 tid;
 			NEXT_ARG();
 			if (rtnl_rttable_a2n(&tid, *argv))
 				invarg("invalid table ID\n", *argv);
-			req.r.rtm_table = tid;
+			if (tid < 256)
+				req.r.rtm_table = tid;
+			else {
+				req.r.rtm_table = RT_TABLE_UNSPEC;
+				addattr32(&req.n, sizeof(req), RTA_TABLE, tid);
+			}
 			table_ok = 1;
 		} else if (strcmp(*argv, "dev") == 0 ||
 			   strcmp(*argv, "iif") == 0) {
@@ -275,6 +300,7 @@ int iprule_modify(int cmd, int argc, char **argv)
 		} else if (strcmp(*argv, "nat") == 0 ||
 			   matches(*argv, "map-to") == 0) {
 			NEXT_ARG();
+			fprintf(stderr, "Warning: route NAT is deprecated\n");
 			addattr32(&req.n, sizeof(req), RTA_GATEWAY, get_addr32(*argv));
 			req.r.rtm_type = RTN_NAT;
 		} else {
@@ -299,11 +325,63 @@ int iprule_modify(int cmd, int argc, char **argv)
 	if (!table_ok && cmd == RTM_NEWRULE)
 		req.r.rtm_table = RT_TABLE_MAIN;
 
-	if (rtnl_open(&rth, 0) < 0)
-		return 1;
-
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
 		return 2;
+
+	return 0;
+}
+
+
+static int flush_rule(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
+{
+	struct rtnl_handle rth2;
+	struct rtmsg *r = NLMSG_DATA(n);
+	int len = n->nlmsg_len;
+	struct rtattr * tb[RTA_MAX+1];
+
+	len -= NLMSG_LENGTH(sizeof(*r));
+	if (len < 0)
+		return -1;
+
+	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
+
+	if (tb[RTA_PRIORITY]) {
+		n->nlmsg_type = RTM_DELRULE;
+		n->nlmsg_flags = NLM_F_REQUEST;
+
+		if (rtnl_open(&rth2, 0) < 0)
+			return -1;
+
+		if (rtnl_talk(&rth2, n, 0, 0, NULL, NULL, NULL) < 0)
+			return -2;
+
+		rtnl_close(&rth2);
+	}
+
+	return 0;
+}
+
+static int iprule_flush(int argc, char **argv)
+{
+	int af = preferred_family;
+
+	if (af == AF_UNSPEC)
+		af = AF_INET;
+
+	if (argc > 0) {
+		fprintf(stderr, "\"ip rule flush\" does not allow arguments\n");
+		return -1;
+	}
+
+	if (rtnl_wilddump_request(&rth, af, RTM_GETRULE) < 0) {
+		perror("Cannot send dump request");
+		return 1;
+	}
+
+	if (rtnl_dump_filter(&rth, flush_rule, NULL, NULL, NULL) < 0) {
+		fprintf(stderr, "Flush terminated\n");
+		return 1;
+	}
 
 	return 0;
 }
@@ -320,6 +398,8 @@ int do_iprule(int argc, char **argv)
 		return iprule_modify(RTM_NEWRULE, argc-1, argv+1);
 	} else if (matches(argv[0], "delete") == 0) {
 		return iprule_modify(RTM_DELRULE, argc-1, argv+1);
+	} else if (matches(argv[0], "flush") == 0) {
+		return iprule_flush(argc-1, argv+1);
 	} else if (matches(argv[0], "help") == 0)
 		usage();
 

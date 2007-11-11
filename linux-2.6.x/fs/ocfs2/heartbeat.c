@@ -154,15 +154,20 @@ int ocfs2_register_hb_callbacks(struct ocfs2_super *osb)
 {
 	int status;
 
-	status = o2hb_register_callback(&osb->osb_hb_down);
+	if (ocfs2_mount_local(osb))
+		return 0;
+
+	status = o2hb_register_callback(osb->uuid_str, &osb->osb_hb_down);
 	if (status < 0) {
 		mlog_errno(status);
 		goto bail;
 	}
 
-	status = o2hb_register_callback(&osb->osb_hb_up);
-	if (status < 0)
+	status = o2hb_register_callback(osb->uuid_str, &osb->osb_hb_up);
+	if (status < 0) {
 		mlog_errno(status);
+		o2hb_unregister_callback(osb->uuid_str, &osb->osb_hb_down);
+	}
 
 bail:
 	return status;
@@ -170,21 +175,20 @@ bail:
 
 void ocfs2_clear_hb_callbacks(struct ocfs2_super *osb)
 {
-	int status;
+	if (ocfs2_mount_local(osb))
+		return;
 
-	status = o2hb_unregister_callback(&osb->osb_hb_down);
-	if (status < 0)
-		mlog_errno(status);
-
-	status = o2hb_unregister_callback(&osb->osb_hb_up);
-	if (status < 0)
-		mlog_errno(status);
+	o2hb_unregister_callback(osb->uuid_str, &osb->osb_hb_down);
+	o2hb_unregister_callback(osb->uuid_str, &osb->osb_hb_up);
 }
 
 void ocfs2_stop_heartbeat(struct ocfs2_super *osb)
 {
 	int ret;
 	char *argv[5], *envp[3];
+
+	if (ocfs2_mount_local(osb))
+		return;
 
 	if (!osb->uuid_str) {
 		/* This can happen if we don't get far enough in mount... */
@@ -205,7 +209,7 @@ void ocfs2_stop_heartbeat(struct ocfs2_super *osb)
 	envp[1] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
 	envp[2] = NULL;
 
-	ret = call_usermodehelper(argv[0], argv, envp, 1);
+	ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
 	if (ret < 0)
 		mlog_errno(ret);
 }

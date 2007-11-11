@@ -5,7 +5,7 @@ OBJS = alias.o auth.o boa.o cgi.o cgi_header.o config.o get.o hash.o \
 	log.o nls.o pipe.o queue.o read.o request.o response.o signals.o \
 	timestamp.o util.o
 
-FLTFLAGS += -s 8192
+FLTFLAGS += -s 16384
 
 EXTRALIBS = $(LIBCRYPT)
 

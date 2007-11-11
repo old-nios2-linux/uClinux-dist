@@ -3,7 +3,7 @@
 
 #define MAJOR_VERSION   1
 #define MINOR_VERSION   0
-#define BUILD_VERSION   6
+#define BUILD_VERSION   7
 #define PREPROC_NAME    "SF_SMTP"
 
 #define DYNAMIC_PREPROC_SETUP SetupSMTP

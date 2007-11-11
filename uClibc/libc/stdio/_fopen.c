@@ -7,6 +7,10 @@
 
 #include "_stdio.h"
 
+libc_hidden_proto(isatty)
+libc_hidden_proto(open)
+libc_hidden_proto(fcntl)
+
 /*
  * Cases:
  *  fopen64  : filename != NULL, stream == NULL, filedes == -2
@@ -27,7 +31,7 @@
 
 /* Internal function -- reentrant (locks open file list) */
 
-FILE *_stdio_fopen(intptr_t fname_or_mode,
+FILE attribute_hidden *_stdio_fopen(intptr_t fname_or_mode,
 				   register const char * __restrict mode,
 				   register FILE * __restrict stream, int filedes)
 {
@@ -165,9 +169,8 @@ FILE *_stdio_fopen(intptr_t fname_or_mode,
 			stream->__modeflags |= __FLAG_FREEBUF;
 		} else {
 # if __STDIO_BUILTIN_BUF_SIZE > 0
-#warning if builtin buffer, then need probably want to test vs that too
-			stream->__bufstart = stream->unbuf;
-			stream->__bufend = stream->unbuf + sizeof(stream->unbuf);
+			stream->__bufstart = stream->__builtinbuf;
+			stream->__bufend = stream->__builtinbuf + sizeof(stream->__builtinbuf);
 # else  /* __STDIO_BUILTIN_BUF_SIZE > 0 */
 			stream->__bufend = stream->__bufstart;
 # endif /* __STDIO_BUILTIN_BUF_SIZE > 0 */
@@ -195,10 +198,23 @@ FILE *_stdio_fopen(intptr_t fname_or_mode,
 #endif
 
 #ifdef __STDIO_HAS_OPENLIST
-	__STDIO_THREADLOCK_OPENLIST;
-	stream->__nextopen = _stdio_openlist; /* New files are inserted at */
-	_stdio_openlist = stream;			  /*   the head of the list. */
-	__STDIO_THREADUNLOCK_OPENLIST;
+#if defined(__UCLIBC_HAS_THREADS__) && defined(__STDIO_BUFFERS)
+	if (!(stream->__modeflags & __FLAG_FREEFILE))
+	{
+		/* An freopen call so the file was never removed from the list. */
+	}
+	else
+#endif
+	{
+		/* We have to lock the del mutex in case another thread wants to fclose()
+		 * the last file. */
+		__STDIO_THREADLOCK_OPENLIST_DEL;
+		__STDIO_THREADLOCK_OPENLIST_ADD;
+		stream->__nextopen = _stdio_openlist; /* New files are inserted at */
+		_stdio_openlist = stream;			  /*   the head of the list. */
+		__STDIO_THREADUNLOCK_OPENLIST_ADD;
+		__STDIO_THREADUNLOCK_OPENLIST_DEL;
+	}
 #endif
 
 	__STDIO_STREAM_VALIDATE(stream);

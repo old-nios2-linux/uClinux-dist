@@ -18,7 +18,7 @@
  * Split out from ipsec_init.c version 1.70.
  */
 
-char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.2 2006/02/13 18:48:12 paul Exp $";
+char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.4 2006/11/15 22:21:39 paul Exp $";
 
 
 #ifndef AUTOCONF_INCLUDED
@@ -28,6 +28,7 @@ char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.2 2006/02/13 18:
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/kernel.h> /* printk() */
+#include <linux/ip.h>          /* struct iphdr */
 
 #include "openswan/ipsec_kversion.h"
 #include "openswan/ipsec_param.h"
@@ -43,7 +44,6 @@ char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.2 2006/02/13 18:
 
 #include <linux/netdevice.h>   /* struct device, and other headers */
 #include <linux/etherdevice.h> /* eth_type_trans */
-#include <linux/ip.h>          /* struct iphdr */
 #include <linux/in.h>          /* struct sockaddr_in */
 #include <linux/skbuff.h>
 #include <asm/uaccess.h>       /* copy_from_user */
@@ -623,6 +623,13 @@ ipsec_version_get_info(char *buffer,
 	return len;
 }
 
+#ifdef CONFIG_IPSEC_NAT_TRAVERSAL
+unsigned int natt_available = 1;
+#else
+unsigned int natt_available = 0;
+#endif
+module_param(natt_available, int, 0444);
+
 IPSEC_PROCFS_DEBUG_NO_STATIC
 int
 ipsec_natt_get_info(char *buffer,
@@ -1022,6 +1029,14 @@ ipsec_proc_cleanup()
 
 /*
  * $Log: ipsec_proc.c,v $
+ * Revision 1.39.2.4  2006/11/15 22:21:39  paul
+ * backport of creating a /sys/ file to test for nat-t capability in kernel.
+ *
+ * Revision 1.39.2.3  2006/10/06 21:39:26  paul
+ * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
+ * set. This is defined through autoconf.h which is included through the
+ * linux kernel build macros.
+ *
  * Revision 1.39.2.2  2006/02/13 18:48:12  paul
  * Fix by  Ankit Desai <ankit@elitecore.com> for module unloading.
  *

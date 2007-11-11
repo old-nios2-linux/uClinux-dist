@@ -123,18 +123,19 @@ mcf532x_usb_init(void)
 	/*
 	 * Initialize the clock divider for the USB:
 	 */
-#ifdef CONFIG_CLOCK_240MHz
+#if CONFIG_CLOCK_FREQ == 240000000
 	/*
 	 * CPU oerating on 240Mhz (MISCCR[USBDIV]=1)
+	 * this is the default
 	 */
 	(*(volatile u16 *) (0xFC0A0010)) |= (0x0002);
-#elif defined(CONFIG_CLOCK_180MHz)
+#elif CONFIG_CLOCK_FREQ == 180000000
 	/*
 	 * CPU oerating on 180Mhz (MISCCR[USBDIV]=0)
 	 */
-	(*(volatile u16 *) (0xFC0A0010)) |= ~(0x0002);
+	(*(volatile u16 *) (0xFC0A0010)) &= ~(0x0002);
 #else
-#error "CONFIG_CLOCK_240MHz or CONFIG_CLOCK_180MHz must be defined for MCF532x."
+	#error "CLOCK must be 240MHz or 180Mhz"
 #endif
 	/*
 	 * Register USB Host device:

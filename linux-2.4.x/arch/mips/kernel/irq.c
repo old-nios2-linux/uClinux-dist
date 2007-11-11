@@ -298,8 +298,10 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction *
 
 	status = 1;	/* Force the "do bottom halves" bit */
 
+#if !defined(CONFIG_RTL865X) /* otherwise we hang */
 	if (!(action->flags & SA_INTERRUPT))
 		__sti();
+#endif
 
 	do {
 		status |= action->flags;

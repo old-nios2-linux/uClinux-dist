@@ -137,20 +137,20 @@ static int mtouch_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev = input_allocate_device();
 	if (!mtouch || !input_dev) {
 		err = -ENOMEM;
-		goto fail;
+		goto fail1;
 	}
 
 	mtouch->serio = serio;
 	mtouch->dev = input_dev;
 	snprintf(mtouch->phys, sizeof(mtouch->phys), "%s/input0", serio->phys);
 
-	input_dev->private = mtouch;
 	input_dev->name = "MicroTouch Serial TouchScreen";
 	input_dev->phys = mtouch->phys;
 	input_dev->id.bustype = BUS_RS232;
 	input_dev->id.vendor = SERIO_MICROTOUCH;
 	input_dev->id.product = 0;
 	input_dev->id.version = 0x0100;
+	input_dev->dev.parent = &serio->dev;
 	input_dev->evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);
 	input_dev->keybit[LONG(BTN_TOUCH)] = BIT(BTN_TOUCH);
 	input_set_abs_params(mtouch->dev, ABS_X, MTOUCH_MIN_XC, MTOUCH_MAX_XC, 0, 0);
@@ -160,14 +160,17 @@ static int mtouch_connect(struct serio *serio, struct serio_driver *drv)
 
 	err = serio_open(serio, drv);
 	if (err)
-		goto fail;
+		goto fail2;
 
-	input_register_device(mtouch->dev);
+	err = input_register_device(mtouch->dev);
+	if (err)
+		goto fail3;
 
 	return 0;
 
- fail:	serio_set_drvdata(serio, NULL);
-	input_free_device(input_dev);
+ fail3:	serio_close(serio);
+ fail2:	serio_set_drvdata(serio, NULL);
+ fail1:	input_free_device(input_dev);
 	kfree(mtouch);
 	return err;
 }
@@ -205,8 +208,7 @@ static struct serio_driver mtouch_drv = {
 
 static int __init mtouch_init(void)
 {
-	serio_register_driver(&mtouch_drv);
-	return 0;
+	return serio_register_driver(&mtouch_drv);
 }
 
 static void __exit mtouch_exit(void)

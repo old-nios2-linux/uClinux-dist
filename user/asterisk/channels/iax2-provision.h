@@ -1,5 +1,5 @@
 /*
- * IAX Provisioning Protocol 
+ * IAX Provisioning Protocol
  *
  * Sub-information elements
  *
@@ -7,6 +7,10 @@
  *
  * Mark Spencer <markster@digium.com>
  *
+ */
+
+/*! \file
+ *  \brief IAX2 Provisioning protocol
  */
 
 #include "iax2-parser.h"
@@ -36,9 +40,14 @@
 #define PROV_FLAG_HEARTBEAT		(1 << 2)
 #define PROV_FLAG_DEBUG			(1 << 3)
 
-extern char *iax_provflags2str(char *buf, int buflen, unsigned int flags);
-extern int iax_provision_reload(void);
-extern int iax_provision_unload(void);
-extern int iax_provision_build(struct iax_ie_data *provdata, unsigned int *signature, const char *template, int force);
-extern int iax_provision_version(unsigned int *signature, const char *template, int force);
-extern char *iax_prov_complete_template(char *line, char *word, int pos, int state);
+#define PROV_FLAG_DIS_CALLERID	(1 << 4)	/* Caller-ID Disabled */
+#define PROV_FLAG_DIS_CALLWAIT	(1 << 5)	/* Caller-ID / Call Waiting Disable */
+#define PROV_FLAG_DIS_CIDCW		(1 << 6)	/* CID/CW Disabled */
+#define PROV_FLAG_DIS_THREEWAY	(1 << 7)	/* Three-way calling, transfer disabled */
+
+char *iax_provflags2str(char *buf, int buflen, unsigned int flags);
+int iax_provision_reload(void);
+int iax_provision_unload(void);
+int iax_provision_build(struct iax_ie_data *provdata, unsigned int *signature, const char *template, int force);
+int iax_provision_version(unsigned int *signature, const char *template, int force);
+char *iax_prov_complete_template(const char *line, const char *word, int pos, int state);

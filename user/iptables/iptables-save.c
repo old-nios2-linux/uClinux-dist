@@ -144,7 +144,7 @@ static int print_match(const struct ipt_entry_match *e,
 /* print a given ip including mask if neccessary */
 static void print_ip(char *prefix, u_int32_t ip, u_int32_t mask, int invert)
 {
-	if (!mask && !ip)
+	if (!mask && !ip && !invert)
 		return;
 
 	printf("%s %s%u.%u.%u.%u",
@@ -371,7 +371,7 @@ main(int argc, char *argv[])
 	}
 
 	if (optind < argc) {
-		fprintf(stderr, "Unknown arguments found on commandline");
+		fprintf(stderr, "Unknown arguments found on commandline\n");
 		exit(1);
 	}
 

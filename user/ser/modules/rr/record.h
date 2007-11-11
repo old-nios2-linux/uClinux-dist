@@ -1,9 +1,9 @@
 /*
- * $Id: record.h,v 1.1 2003/04/03 12:21:40 janakj Exp $
+ * $Id: record.h,v 1.2 2004/08/24 09:00:38 janakj Exp $
  *
  * Route & Record-Route module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -44,7 +44,7 @@ int record_route(struct sip_msg* _m, char* _s1, char* _s2);
 
 
 /*
- * Insert manualy created Record-Route header, no checks, no restrictions,
+ * Insert manually created Record-Route header, no checks, no restrictions,
  * always adds lr parameter, only fromtag is added automatically when requested
  */
 int record_route_preset(struct sip_msg* _m, char* _ip, char* _s2);

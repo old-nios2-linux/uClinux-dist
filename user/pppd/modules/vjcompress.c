@@ -29,7 +29,7 @@
  * This version is used under SunOS 4.x, Digital UNIX, AIX 4.x,
  * and SVR4 systems including Solaris 2.
  *
- * $Id: vjcompress.c,v 1.1.1.1 1999/11/22 03:47:54 christ Exp $
+ * $Id: vjcompress.c,v 1.2 2007/06/08 04:02:37 gerg Exp $
  */
 
 #include <sys/types.h>
@@ -54,6 +54,10 @@
 typedef u_long  n_long;
 #else
 #include <netinet/in_systm.h>
+#endif
+
+#ifdef SOL2
+#include <sys/sunddi.h>
 #endif
 
 #include <netinet/ip.h>
@@ -300,19 +304,19 @@ vj_compress_tcp(ip, mlen, comp, compress_cid, vjhdrp)
 	 * with it. */
 	goto uncompressed;
 
-    if (deltaS = (u_short)(ntohs(th->th_win) - ntohs(oth->th_win))) {
+    if ((deltaS = (u_short)(ntohs(th->th_win) - ntohs(oth->th_win))) > 0) {
 	ENCODE(deltaS);
 	changes |= NEW_W;
     }
 
-    if (deltaA = ntohl(th->th_ack) - ntohl(oth->th_ack)) {
+    if ((deltaA = ntohl(th->th_ack) - ntohl(oth->th_ack)) > 0) {
 	if (deltaA > 0xffff)
 	    goto uncompressed;
 	ENCODE(deltaA);
 	changes |= NEW_A;
     }
 
-    if (deltaS = ntohl(th->th_seq) - ntohl(oth->th_seq)) {
+    if ((deltaS = ntohl(th->th_seq) - ntohl(oth->th_seq)) > 0) {
 	if (deltaS > 0xffff)
 	    goto uncompressed;
 	ENCODE(deltaS);

@@ -1,5 +1,5 @@
 /*
- * $Id: db_res.c,v 1.1 2003/04/08 01:25:35 lgfausak Exp $
+ * $Id: db_res.c,v 1.2 2004/02/08 15:30:59 lgfausak Exp $
  *
  * POSTGRES module, portions of this code were templated using
  * the mysql module, thus it's similarity.
@@ -38,6 +38,7 @@
 
 #include <stdlib.h>
 #include "../../db/db_res.h"
+#include "../../db/db_con.h"
 #include "../../dprint.h"
 #include "../../mem/mem.h"
 #include "defs.h"

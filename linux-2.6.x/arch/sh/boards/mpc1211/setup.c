@@ -10,6 +10,7 @@
 #include <linux/hdreg.h>
 #include <linux/ide.h>
 #include <linux/interrupt.h>
+#include <linux/platform_device.h>
 #include <asm/io.h>
 #include <asm/machvec.h>
 #include <asm/mpc1211/mpc1211.h>
@@ -281,6 +282,32 @@ static int put_smb_blk(unsigned char *p, int address, int command, int no)
 	return 0;
 }
 
+static struct resource heartbeat_resources[] = {
+	[0] = {
+		.start	= 0xa2000000,
+		.end	= 0xa2000000 + 8 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device heartbeat_device = {
+	.name		= "heartbeat",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(heartbeat_resources),
+	.resource	= heartbeat_resources,
+};
+
+static struct platform_device *mpc1211_devices[] __initdata = {
+	&heartbeat_device,
+};
+
+static int __init mpc1211_devices_setup(void)
+{
+	return platform_add_devices(mpc1211_devices,
+				    ARRAY_SIZE(mpc1211_devices));
+}
+__initcall(mpc1211_devices_setup);
+
 /* arch/sh/boards/mpc1211/rtc.c */
 void mpc1211_time_init(void);
 
@@ -311,15 +338,10 @@ static void __init mpc1211_setup(char **cmdline_p)
 /*
  * The Machine Vector
  */
-struct sh_machine_vector mv_mpc1211 __initmv = {
+static struct sh_machine_vector mv_mpc1211 __initmv = {
 	.mv_name		= "Interface MPC-1211(CTP/PCI/MPC-SH02)",
 	.mv_setup		= mpc1211_setup,
 	.mv_nr_irqs		= 48,
 	.mv_irq_demux		= mpc1211_irq_demux,
 	.mv_init_irq		= init_mpc1211_IRQ,
-
-#ifdef CONFIG_HEARTBEAT
-	.mv_heartbeat		= heartbeat_mpc1211,
-#endif
 };
-ALIAS_MV(mpc1211)

@@ -1,9 +1,9 @@
 /*
  * Accounting module
  *
- * $Id: acc_mod.c,v 1.27.2.1.4.1 2004/07/18 22:56:23 sobomax Exp $
- *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * $Id: acc_mod.c,v 1.39.2.3 2005/09/20 16:03:14 janakj Exp $
+ * 
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -37,10 +37,14 @@
  * 2003-04-06: Opens database connection in child_init only (janakj)
  * 2003-04-24  parameter validation (0 t->uas.request) added (jiri)
  * 2003-11-04  multidomain support for mysql introduced (jiri)
+ * 2003-12-04  global TM callbacks switched to per transaction callbacks
+ *             (bogdan)
+ * 2004-06-06  db cleanup: static db_url, calls to acc_db_{bind,init,close)
+ *              (andrei)
  */
 
-
 #include <stdio.h>
+#include <string.h>
 
 #include "../../sr_module.h"
 #include "../../dprint.h"
@@ -56,8 +60,20 @@
 #include "../tm/tm_load.h"
 
 #ifdef RAD_ACC
-#include <radiusclient.h>
+#  ifdef RADIUSCLIENT_NG_4
+#    include <radiusclient.h>
+#  else
+#    include <radiusclient-ng.h>
+#  endif
 #include "dict.h"
+#endif
+
+#ifdef DIAM_ACC
+#include "diam_dict.h"
+#include "dict.h"
+#include "diam_tcp.h"
+
+#define M_NAME	"acc"
 #endif
 
 MODULE_VERSION
@@ -68,8 +84,10 @@ static int mod_init( void );
 static void destroy(void);
 static int child_init(int rank);
 
-#ifdef SQL_ACC
-db_con_t* db_handle;   /* Database connection handle */
+
+/* buffer used to read from TCP connection*/
+#ifdef DIAM_ACC
+rd_buf_t *rb;
 #endif
 
 /* ----- Parameter variables ----------- */
@@ -102,9 +120,16 @@ struct attr attrs[A_MAX];
 struct val vals[V_MAX];
 #endif
 
+/* DIAMETER */
+#ifdef DIAM_ACC
+int diameter_flag = 1;
+int diameter_missed_flag = 2;
+char* diameter_client_host="localhost";
+int diameter_client_port=3000;
+#endif
 
 #ifdef SQL_ACC
-char *db_url=DEFAULT_DB_URL; /* Database url */
+static char *db_url=DEFAULT_DB_URL; /* Database url */
 
 /* sql flags, that need to be set for a transaction to 
  * be reported; 0=any, 1..MAX_FLAG otherwise; by default
@@ -146,13 +171,22 @@ static int w_acc_db_request(struct sip_msg *rq, char *comment, char *foo);
 static int w_acc_rad_request(struct sip_msg *rq, char *comment, char *foo);
 #endif
 
+/* DIAMETER */
+#ifdef DIAM_ACC
+static int w_acc_diam_request(struct sip_msg *rq, char *comment, char *foo);
+#endif
+
 static cmd_export_t cmds[] = {
-	{"acc_log_request", w_acc_log_request, 1, 0, REQUEST_ROUTE},
+	{"acc_log_request", w_acc_log_request, 1, 0, REQUEST_ROUTE|FAILURE_ROUTE},
 #ifdef SQL_ACC
-	{"acc_db_request", w_acc_db_request, 2, 0, REQUEST_ROUTE},
+	{"acc_db_request", w_acc_db_request, 2, 0, REQUEST_ROUTE|FAILURE_ROUTE},
 #endif
 #ifdef RAD_ACC
-	{"acc_rad_request", w_acc_rad_request, 1, 0, REQUEST_ROUTE},
+	{"acc_rad_request", w_acc_rad_request, 1, 0, REQUEST_ROUTE|FAILURE_ROUTE},
+#endif
+/* DIAMETER */
+#ifdef DIAM_ACC
+	{"acc_diam_request", w_acc_diam_request, 1, 0,REQUEST_ROUTE|FAILURE_ROUTE},
 #endif
 	{0, 0, 0, 0, 0}
 };
@@ -173,6 +207,13 @@ static param_export_t params[] = {
 	{"radius_missed_flag",		INT_PARAM, &radius_missed_flag		},
 	{"service_type", 		INT_PARAM, &service_type },
 #endif
+/* DIAMETER	*/
+#ifdef DIAM_ACC
+	{"diameter_flag",		INT_PARAM, &diameter_flag		},
+	{"diameter_missed_flag",INT_PARAM, &diameter_missed_flag},
+	{"diameter_client_host",STR_PARAM, &diameter_client_host},
+	{"diameter_client_port",INT_PARAM, &diameter_client_port},
+#endif
 	/* db-specific */
 #ifdef SQL_ACC
 	{"db_flag",				INT_PARAM, &db_flag			},
@@ -180,8 +221,9 @@ static param_export_t params[] = {
 	{"db_table_acc",          STR_PARAM, &db_table_acc         }, 
 	{"db_table_missed_calls", STR_PARAM, &db_table_mc },
 	{"db_url",                STR_PARAM, &db_url               },
+	{"db_localtime", 	  INT_PARAM, &db_localtime},
 	{"acc_sip_from_column",   STR_PARAM, &acc_sip_from_col  },
-	{"acc_sip_to_column",     STR_PARAM, &acc_sip_status_col},
+	{"acc_sip_to_column",     STR_PARAM, &acc_sip_to_col},
 	{"acc_sip_status_column", STR_PARAM, &acc_sip_status_col},
 	{"acc_sip_method_column", STR_PARAM, &acc_sip_method_col},
 	{"acc_i_uri_column",      STR_PARAM, &acc_i_uri_col     },
@@ -213,16 +255,8 @@ struct module_exports exports= {
 
 /* ------------- Callback handlers --------------- */
 
-static void acc_onreply( struct cell* t,  struct sip_msg *msg,
-	int code, void *param );
-static void acc_onack( struct cell* t,  struct sip_msg *msg,
-	int code, void *param );
-static void acc_onreq( struct cell* t, struct sip_msg *msg,
-	int code, void *param ) ;
-static void on_missed(struct cell *t, struct sip_msg *reply,
-	int code, void *param );
-static void acc_onreply_in(struct cell *t, struct sip_msg *reply,
-	int code, void *param);
+static void acc_onreq( struct cell* t, int type, struct tmcb_params *ps );
+static void tmcb_func( struct cell* t, int type, struct tmcb_params *ps );
 
 /* --------------- function definitions -------------*/
 
@@ -252,10 +286,10 @@ static int verify_fmt(char *fmt) {
 	return 1;
 }
 
+
 static int mod_init( void )
 {
-
-	load_tm_f	load_tm;
+	load_tm_f load_tm;
 
 	fprintf( stderr, "acc - initializing\n");
 
@@ -269,27 +303,17 @@ static int mod_init( void )
 
 	if (verify_fmt(log_fmt)==-1) return -1;
 
-	/* register callbacks */
-
-	/*  report on completed transactions */
-	if (tmb.register_tmcb( TMCB_RESPONSE_OUT, acc_onreply, 0 /* empty param */ ) <= 0)
+	/* register callbacks*/
+	/* listen for all incoming requests  */
+	if ( tmb.register_tmcb( 0, 0, TMCB_REQUEST_IN, acc_onreq, 0 ) <=0 ) {
+		LOG(L_ERR,"ERROR:acc:mod_init: cannot register TMCB_REQUEST_IN "
+			"callback\n");
 		return -1;
-	/* account e2e acks if configured to do so */
-	if (tmb.register_tmcb( TMCB_E2EACK_IN, acc_onack, 0 /* empty param */ ) <=0 )
-		return -1;
-	/* disable silent c-timer for registered calls */
-	if (tmb.register_tmcb( TMCB_REQUEST_IN, acc_onreq, 0 /* empty param */ ) <=0 )
-		return -1;
-	/* report on missed calls */
-	if (tmb.register_tmcb( TMCB_ON_FAILURE, on_missed, 0 /* empty param */ ) <=0 )
-		return -1;
-	/* get incoming replies ready for processing */
-	if (tmb.register_tmcb( TMCB_RESPONSE_IN, acc_onreply_in, 0 /* empty param */)<=0)
-		return -1;
+	}
 
 #ifdef SQL_ACC
-	if (bind_dbmod()) {
-		LOG(L_ERR, "ERROR: acc: init_child bind_db failed..."
+	if (acc_db_bind(db_url)<0){
+		LOG(L_ERR, "ERROR:acc_db_init: failed..."
 				"did you load a database module?\n");
 		return -1;
 	}
@@ -341,19 +365,45 @@ static int mod_init( void )
 static int child_init(int rank)
 {
 #ifdef SQL_ACC
-	db_handle = db_init(db_url);
-	if (!db_handle) {
-        LOG(L_ERR, "acc:init_child(): Unable to connect database\n");
+	if (acc_db_init()<0)
+		return -1;
+#endif
+
+/* DIAMETER */
+#ifdef DIAM_ACC
+	/* open TCP connection */
+	DBG(M_NAME": Initializing TCP connection\n");
+
+	sockfd = init_mytcp(diameter_client_host, diameter_client_port);
+	if(sockfd==-1) 
+	{
+		DBG(M_NAME": TCP connection not established\n");
 		return -1;
 	}
+
+	DBG(M_NAME": TCP connection established on sockfd=%d\n", sockfd);
+
+	/* every child with its buffer */
+	rb = (rd_buf_t*)pkg_malloc(sizeof(rd_buf_t));
+	if(!rb)
+	{
+		DBG("acc: mod_child_init: no more free memory\n");
+		return -1;
+	}
+	rb->buf = 0;
+
 #endif
+
 	return 0;
 }
 
 static void destroy(void)
 {
 #ifdef SQL_ACC
-    if (db_handle) db_close(db_handle);
+	acc_db_close();
+#endif
+#ifdef DIAM_ACC
+	close_tcp_connection(sockfd);
 #endif
 }
 
@@ -366,25 +416,46 @@ static inline void acc_preparse_req(struct sip_msg *rq)
 	 */
 	parse_headers(rq, HDR_CALLID| HDR_FROM| HDR_TO, 0 );
 	parse_from_header(rq);
-	parse_orig_ruri(rq);
+
+	if (strchr(log_fmt, 'p') || strchr(log_fmt, 'D')) {
+		parse_orig_ruri(rq);
+	}
 }
 
+
 /* prepare message and transaction context for later accounting */
-static void acc_onreq( struct cell* t, struct sip_msg *msg,
-	int code, void *param )
+static void acc_onreq( struct cell* t, int type, struct tmcb_params *ps )
 {
-	if (is_acc_on(msg) || is_mc_on(msg)) {
-		acc_preparse_req(msg);
+	int tmcb_types;
+
+	if (is_acc_on(ps->req) || is_mc_on(ps->req)) {
+		/* install addaitional handlers */
+		tmcb_types =
+			/* report on completed transactions */
+			TMCB_RESPONSE_OUT |
+			/* account e2e acks if configured to do so */
+			TMCB_E2EACK_IN |
+			/* report on missed calls */
+			TMCB_ON_FAILURE_RO |
+			/* get incoming replies ready for processing */
+			TMCB_RESPONSE_IN;
+		if (tmb.register_tmcb( 0, t, tmcb_types, tmcb_func, 0 )<=0) {
+			LOG(L_ERR,"ERROR:acc:acc_onreq: cannot register additional "
+				"callbacks\n");
+			return;
+		}
+		/* do some parsing in advance */
+		acc_preparse_req(ps->req);
 		/* also, if that is INVITE, disallow silent t-drop */
-		if (msg->REQ_METHOD==METHOD_INVITE) {
+		if (ps->req->REQ_METHOD==METHOD_INVITE) {
 			DBG("DEBUG: noisy_timer set for accounting\n");
-			t->noisy_ctimer=1;
+			t->flags |= T_NOISY_CTIMER_FLAG;
 		}
 	}
 }
 
 /* is this reply of interest for accounting ? */
-static int should_acc_reply(struct cell *t, int code)
+static inline int should_acc_reply(struct cell *t, int code)
 {
 	struct sip_msg *r;
 
@@ -396,7 +467,7 @@ static int should_acc_reply(struct cell *t, int code)
 		return 0;
 	}
 
-	/* negative transactions reported otherwise only if explicitely 
+	/* negative transactions reported otherwise only if explicitly 
 	 * demanded */
 	if (!failed_transactions && code >=300) return 0;
 	if (!is_acc_on(r))
@@ -410,7 +481,7 @@ static int should_acc_reply(struct cell *t, int code)
 }
 
 /* parse incoming replies before cloning */
-static void acc_onreply_in(struct cell *t, struct sip_msg *reply,
+static inline void acc_onreply_in(struct cell *t, struct sip_msg *reply,
 	int code, void *param)
 {
 	/* validation */
@@ -421,7 +492,7 @@ static void acc_onreply_in(struct cell *t, struct sip_msg *reply,
 
 	/* don't parse replies in which we are not interested */
 	/* missed calls enabled ? */
-	if (((t->is_invite && code>=300 && is_mc_on(t->uas.request))
+	if (((is_invite(t) && code>=300 && is_mc_on(t->uas.request))
 					|| should_acc_reply(t,code)) 
 				&& (reply && reply!=FAKED_REPLY)) {
 		parse_headers(reply, HDR_TO, 0 );
@@ -429,7 +500,7 @@ static void acc_onreply_in(struct cell *t, struct sip_msg *reply,
 }
 
 /* initiate a report if we previously enabled MC accounting for this t */
-static void on_missed(struct cell *t, struct sip_msg *reply,
+static inline void on_missed(struct cell *t, struct sip_msg *reply,
 	int code, void *param )
 {
 	int reset_lmf; 
@@ -439,6 +510,10 @@ static void on_missed(struct cell *t, struct sip_msg *reply,
 #ifdef RAD_ACC
 	int reset_rmf;
 #endif
+/* DIAMETER */
+#ifdef DIAM_ACC
+	int reset_dimf;
+#endif
 
 	/* validation */
 	if (t->uas.request==0) {
@@ -446,7 +521,7 @@ static void on_missed(struct cell *t, struct sip_msg *reply,
 		return;
 	}
 
-	if (t->is_invite && code>=300) {
+	if (is_invite(t) && code>=300) {
 		if (is_log_mc_on(t->uas.request)) {
 			acc_log_missed( t, reply, code);
 			reset_lmf=1;
@@ -463,11 +538,18 @@ static void on_missed(struct cell *t, struct sip_msg *reply,
 			reset_rmf=1;
 		} else reset_rmf=0;
 #endif
+/* DIAMETER */
+#ifdef DIAM_ACC
+		if (is_diam_mc_on(t->uas.request)) {
+			acc_diam_missed(t, reply, code );
+			reset_dimf=1;
+		} else reset_dimf=0;
+#endif
 		/* we report on missed calls when the first
 		 * forwarding attempt fails; we do not wish to
 		 * report on every attempt; so we clear the flags; 
 		 * we do it after all reporting is over to be sure
-		 * that all reporting functios got a fair chance
+		 * that all reporting functions got a fair chance
 		 */
 		if (reset_lmf) resetflag(t->uas.request, log_missed_flag);
 #ifdef SQL_ACC
@@ -476,12 +558,16 @@ static void on_missed(struct cell *t, struct sip_msg *reply,
 #ifdef RAD_ACC
 		if (reset_rmf) resetflag(t->uas.request, radius_missed_flag);
 #endif
+/* DIAMETER */	
+#ifdef DIAM_ACC
+		if (reset_dimf) resetflag(t->uas.request, diameter_missed_flag);
+#endif
 	}
 }
 
 
 /* initiate a report if we previously enabled accounting for this t */
-static void acc_onreply( struct cell* t, struct sip_msg *reply,
+static inline void acc_onreply( struct cell* t, struct sip_msg *reply,
 	int code, void *param )
 {
 	/* validation */
@@ -507,12 +593,17 @@ static void acc_onreply( struct cell* t, struct sip_msg *reply,
 	if (is_rad_acc_on(t->uas.request))
 		acc_rad_reply(t, reply, code);
 #endif
+/* DIAMETER */
+#ifdef DIAM_ACC
+	if (is_diam_acc_on(t->uas.request))
+		acc_diam_reply(t, reply, code);
+#endif
 }
 
 
 
 
-static void acc_onack( struct cell* t , struct sip_msg *ack,
+static inline void acc_onack( struct cell* t , struct sip_msg *ack,
 	int code, void *param )
 {
 	/* only for those guys who insist on seeing ACKs as well */
@@ -534,8 +625,30 @@ static void acc_onack( struct cell* t , struct sip_msg *ack,
 		acc_rad_ack(t,ack);
 	}
 #endif
+/* DIAMETER */
+#ifdef DIAM_ACC
+	if (is_diam_acc_on(t->uas.request)) {
+		acc_preparse_req(ack);
+		acc_diam_ack(t,ack);
+	}
+#endif
 	
 }
+
+
+static void tmcb_func( struct cell* t, int type, struct tmcb_params *ps )
+{
+	if (type&TMCB_RESPONSE_OUT) {
+		acc_onreply( t, ps->rpl, ps->code, ps->param );
+	} else if (type&TMCB_E2EACK_IN) {
+		acc_onack( t, ps->req, ps->code, ps->param );
+	} else if (type&TMCB_ON_FAILURE_RO) {
+		on_missed( t, ps->rpl, ps->code, ps->param );
+	} else if (type&TMCB_RESPONSE_IN) {
+		acc_onreply_in( t, ps->rpl, ps->code, ps->param);
+	}
+}
+
 
 /* these wrappers parse all what may be needed; they don't care about
  * the result -- accounting functions just display "unavailable" if there
@@ -552,6 +665,8 @@ static int w_acc_log_request(struct sip_msg *rq, char *comment, char *foo)
 	acc_preparse_req(rq);
 	return acc_log_request(rq, rq->to, &txt, &phrase);
 }
+
+
 #ifdef SQL_ACC
 static int w_acc_db_request(struct sip_msg *rq, char *comment, char *table)
 {
@@ -563,6 +678,8 @@ static int w_acc_db_request(struct sip_msg *rq, char *comment, char *table)
 	return acc_db_request(rq, rq->to,&phrase,table, SQL_MC_FMT );
 }
 #endif
+
+
 #ifdef RAD_ACC
 static int w_acc_rad_request(struct sip_msg *rq, char *comment, 
 				char *foo)
@@ -575,3 +692,19 @@ static int w_acc_rad_request(struct sip_msg *rq, char *comment,
 	return acc_rad_request(rq, rq->to,&phrase);
 }
 #endif
+
+
+/* DIAMETER */
+#ifdef DIAM_ACC
+static int w_acc_diam_request(struct sip_msg *rq, char *comment, 
+				char *foo)
+{
+	str phrase;
+
+	phrase.s=comment;
+	phrase.len=strlen(comment);	/* fix_param would be faster! */
+	acc_preparse_req(rq);
+	return acc_diam_request(rq, rq->to,&phrase);
+}
+#endif
+

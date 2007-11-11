@@ -1,9 +1,9 @@
 /*
- * $Id: callid.c,v 1.2 2003/04/10 21:44:34 janakj Exp $
+ * $Id: callid.c,v 1.4 2004/08/24 09:00:40 janakj Exp $
  *
  * Fast Call-ID Generator
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -28,13 +28,15 @@
  *
  * History:
  * ----------
- * 2003-04-09 Created by janakj
+ *  2003-04-09  Created by janakj
+ *  2003-10-24  updated to the new socket_info lists (andrei)
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../dprint.h"
 #include "../../pt.h"
+#include "../../socket_info.h"
 #include "callid.h"
 
 #define CALLID_NR_LEN 20
@@ -46,7 +48,7 @@
 #define CALLID_SUFFIX_LEN ( 1 /* - */                                            + \
 			    5 /* pid */                                          + \
                            42 /* embedded v4inv6 address can be looong '128.' */ + \
-	                    2 /* parenthessis [] */                              + \
+	                    2 /* parenthesis [] */                              + \
                             1 /* ZT 0 */                                         + \
 	                   16 /* one never knows ;-) */                            \
                           )
@@ -106,12 +108,21 @@ int init_callid(void)
  */
 int child_init_callid(int rank) 
 {
+	struct socket_info *si;
+	
+	/* on tcp/tls bind_address is 0 so try to get the first address we listen
+	 * on no matter the protocol */
+	si=bind_address?bind_address:get_first_socket();
+	if (si==0){
+		LOG(L_CRIT, "BUG: child_init_callid: null socket list\n");
+		return -1;
+	}
 	callid_suffix.s = callid_buf + callid_prefix.len;
 
 	callid_suffix.len = snprintf(callid_suffix.s, CALLID_SUFFIX_LEN,
 				     "%c%d@%.*s", CID_SEP, my_pid(), 
-				     sock_info[bind_idx].address_str.len,
-				     sock_info[bind_idx].address_str.s);
+				     si->address_str.len,
+				     si->address_str.s);
 	if ((callid_suffix.len == -1) || (callid_suffix.len > CALLID_SUFFIX_LEN)) {
 		LOG(L_ERR, "ERROR: child_init_callid: buffer too small\n");
 		return -1;

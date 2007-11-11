@@ -37,6 +37,7 @@
 #include <linux/completion.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
+#include <linux/sched.h>
 #include <asm/io.h>
 #include <rdma/ib_mad.h>
 
@@ -356,8 +357,6 @@ void mthca_cmd_event(struct mthca_dev *dev,
 	context->status    = status;
 	context->out_param = out_param;
 
-	context->token += dev->cmd.token_mask + 1;
-
 	complete(&context->done);
 }
 
@@ -379,6 +378,7 @@ static int mthca_cmd_wait(struct mthca_dev *dev,
 	spin_lock(&dev->cmd.context_lock);
 	BUG_ON(dev->cmd.free_head < 0);
 	context = &dev->cmd.context[dev->cmd.free_head];
+	context->token += dev->cmd.token_mask + 1;
 	dev->cmd.free_head = context->next;
 	spin_unlock(&dev->cmd.context_lock);
 
@@ -771,7 +771,7 @@ int mthca_QUERY_FW(struct mthca_dev *dev, u8 *status)
 
 	MTHCA_GET(dev->fw_ver,   outbox, QUERY_FW_VER_OFFSET);
 	/*
-	 * FW subminor version is at more signifant bits than minor
+	 * FW subminor version is at more significant bits than minor
 	 * version, so swap here.
 	 */
 	dev->fw_ver = (dev->fw_ver & 0xffff00000000ull) |
@@ -1051,7 +1051,11 @@ int mthca_QUERY_DEV_LIM(struct mthca_dev *dev,
 	MTHCA_GET(field, outbox, QUERY_DEV_LIM_MAX_EQ_OFFSET);
 	dev_lim->max_eqs = 1 << (field & 0x7);
 	MTHCA_GET(field, outbox, QUERY_DEV_LIM_RSVD_MTT_OFFSET);
-	dev_lim->reserved_mtts = 1 << (field >> 4);
+	if (mthca_is_memfree(dev))
+		dev_lim->reserved_mtts = ALIGN((1 << (field >> 4)) * sizeof(u64),
+					       MTHCA_MTT_SEG_SIZE) / MTHCA_MTT_SEG_SIZE;
+	else
+		dev_lim->reserved_mtts = 1 << (field >> 4);
 	MTHCA_GET(field, outbox, QUERY_DEV_LIM_MAX_MRW_SZ_OFFSET);
 	dev_lim->max_mrw_sz = 1 << field;
 	MTHCA_GET(field, outbox, QUERY_DEV_LIM_RSVD_MRW_OFFSET);
@@ -1854,7 +1858,7 @@ int mthca_MAD_IFC(struct mthca_dev *dev, int ignore_mkey, int ignore_bkey,
 
 		memset(inbox + 256, 0, 256);
 
-		MTHCA_PUT(inbox, in_wc->qp_num,     MAD_IFC_MY_QPN_OFFSET);
+		MTHCA_PUT(inbox, in_wc->qp->qp_num, MAD_IFC_MY_QPN_OFFSET);
 		MTHCA_PUT(inbox, in_wc->src_qp,     MAD_IFC_RQPN_OFFSET);
 
 		val = in_wc->sl << 4;

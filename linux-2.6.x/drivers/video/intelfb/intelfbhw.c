@@ -924,10 +924,10 @@ calc_pll_params(int index, int clock, u32 *retm1, u32 *retm2, u32 *retn, u32 *re
 			if (m > pll->max_m)
 				m = pll->max_m - 1;
 			for (testm = m - 1; testm <= m; testm++) {
-				f_out = calc_vclock3(index, m, n, p);
+				f_out = calc_vclock3(index, testm, n, p);
 				if (splitm(index, testm, &m1, &m2)) {
-					WRN_MSG("cannot split m = %d\n", m);
-					n++;
+					WRN_MSG("cannot split m = %d\n",
+						testm);
 					continue;
 				}
 				if (clock > f_out)
@@ -1352,7 +1352,7 @@ intelfbhw_program_mode(struct intelfb_info *dinfo,
 
 	/* turn off PLL */
 	tmp = INREG(dpll_reg);
-	dpll_reg &= ~DPLL_VCO_ENABLE;
+	tmp &= ~DPLL_VCO_ENABLE;
 	OUTREG(dpll_reg, tmp);
 
 	/* Set PLL parameters */
@@ -1428,6 +1428,24 @@ static void refresh_ring(struct intelfb_info *dinfo);
 static void reset_state(struct intelfb_info *dinfo);
 static void do_flush(struct intelfb_info *dinfo);
 
+static  u32 get_ring_space(struct intelfb_info *dinfo)
+{
+	u32 ring_space;
+
+	if (dinfo->ring_tail >= dinfo->ring_head)
+		ring_space = dinfo->ring.size -
+			(dinfo->ring_tail - dinfo->ring_head);
+	else
+		ring_space = dinfo->ring_head - dinfo->ring_tail;
+
+	if (ring_space > RING_MIN_FREE)
+		ring_space -= RING_MIN_FREE;
+	else
+		ring_space = 0;
+
+	return ring_space;
+}
+
 static int
 wait_ring(struct intelfb_info *dinfo, int n)
 {
@@ -1442,13 +1460,8 @@ wait_ring(struct intelfb_info *dinfo, int n)
 	end = jiffies + (HZ * 3);
 	while (dinfo->ring_space < n) {
 		dinfo->ring_head = INREG(PRI_RING_HEAD) & RING_HEAD_MASK;
-		if (dinfo->ring_tail + RING_MIN_FREE < dinfo->ring_head)
-			dinfo->ring_space = dinfo->ring_head
-				- (dinfo->ring_tail + RING_MIN_FREE);
-		else
-			dinfo->ring_space = (dinfo->ring.size +
-					     dinfo->ring_head)
-				- (dinfo->ring_tail + RING_MIN_FREE);
+		dinfo->ring_space = get_ring_space(dinfo);
+
 		if (dinfo->ring_head != last_head) {
 			end = jiffies + (HZ * 3);
 			last_head = dinfo->ring_head;
@@ -1513,12 +1526,7 @@ refresh_ring(struct intelfb_info *dinfo)
 
 	dinfo->ring_head = INREG(PRI_RING_HEAD) & RING_HEAD_MASK;
 	dinfo->ring_tail = INREG(PRI_RING_TAIL) & RING_TAIL_MASK;
-	if (dinfo->ring_tail + RING_MIN_FREE < dinfo->ring_head)
-		dinfo->ring_space = dinfo->ring_head
-			- (dinfo->ring_tail + RING_MIN_FREE);
-	else
-		dinfo->ring_space = (dinfo->ring.size + dinfo->ring_head)
-			- (dinfo->ring_tail + RING_MIN_FREE);
+	dinfo->ring_space = get_ring_space(dinfo);
 }
 
 static void
@@ -1990,7 +1998,8 @@ int
 intelfbhw_enable_irq(struct intelfb_info *dinfo, int reenable) {
 
 	if (!test_and_set_bit(0, &dinfo->irq_flags)) {
-		if (request_irq(dinfo->pdev->irq, intelfbhw_irq, SA_SHIRQ, "intelfb", dinfo)) {
+		if (request_irq(dinfo->pdev->irq, intelfbhw_irq, IRQF_SHARED,
+		     "intelfb", dinfo)) {
 			clear_bit(0, &dinfo->irq_flags);
 			return -EINVAL;
 		}

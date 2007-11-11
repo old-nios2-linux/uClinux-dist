@@ -5,9 +5,10 @@
 # header files are present in the include/linux directory of this iptables
 # package (HW)
 #
-PF_EXT_SLIB:=ah addrtype comment connlimit connmark conntrack dscp ecn esp hashlimit helper icmp iprange length limit mac mark multiport owner physdev pkttype policy realm rpc sctp standard state tcp tcpmss tos ttl udp unclean CLASSIFY CONNMARK DNAT DSCP ECN LOG MARK MASQUERADE MIRROR NETMAP NFQUEUE NOTRACK REDIRECT REJECT SAME SNAT TARPIT TCPMSS TOS TRACE TTL ULOG
+PF_EXT_SLIB:=ah addrtype comment connmark conntrack dscp ecn esp hashlimit helper icmp iprange length limit mac mark multiport owner physdev pkttype policy realm sctp standard state tcp tcpmss tos ttl udp unclean CLASSIFY CONNMARK DNAT DSCP ECN LOG MARK MASQUERADE MIRROR NETMAP NFQUEUE NOTRACK REDIRECT REJECT SAME SNAT TCPMSS TOS TTL ULOG
+PF6_EXT_SLIB:=connmark eui64 hl icmp6 length limit mac mark multiport owner physdev policy standard state tcp udp CONNMARK HL LOG NFQUEUE MARK TCPMSS
+
 PF_EXT_SLIB+=CONNLOG LED
-PF6_EXT_SLIB:=connmark eui64 hl icmp6 length limit mac mark multiport owner physdev policy standard state tcp udp CONNMARK HL LOG NFQUEUE MARK TRACE
 
 ifeq ($(DO_SELINUX), 1)
 PF_EXT_SE_SLIB:=SECMARK CONNSECMARK
@@ -52,23 +53,29 @@ ifdef NO_SHARED_LIBS
 -include $(KERNEL_DIR)/.config
 lower=$(shell echo $(1) | tr [:upper:] [:lower:])
 upper=$(shell echo $(1) | tr [:lower:] [:upper:])
+keeplower=$(filter-out $(call upper,$(1)),$(1))
+keepupper=$(filter-out $(call lower,$(1)),$(1))
 TEST_CONFIG_VAL=$(patsubst $(3)_%,%,$(filter $(3)_%,$(foreach i,$(1),$(CONFIG_$(2)_$(i))_$(i))))
 TEST_CONFIG_TYPE=$(call TEST_CONFIG_VAL,$(1),$(2),y) $(call TEST_CONFIG_VAL,$(1),$(2),m)
 TEST_CONFIG=$(call TEST_CONFIG_TYPE,$(1),$(2)_$(3)) $(call TEST_CONFIG_TYPE,$(1),NETFILTER_XT_$(3))
 
 PF_EXT_SLIB_BASE:=tcp udp icmp standard
-PF_EXT_SLIB_CONFIG:=$(sort $(call upper,$(filter-out $(PF_EXT_SLIB_BASE),$(PF_EXT_SLIB))))
+PF_EXT_SLIB_OPT:=$(filter-out $(PF_EXT_SLIB_BASE),$(PF_EXT_SLIB))
+PF_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF_EXT_SLIB_OPT))))
+PF_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF_EXT_SLIB_OPT)))
 PF_EXT_SLIB:=$(PF_EXT_SLIB_BASE)
-PF_EXT_SLIB+=$(call lower,$(call TEST_CONFIG,$(PF_EXT_SLIB_CONFIG),IP_NF,MATCH))
-PF_EXT_SLIB+=$(call TEST_CONFIG,$(PF_EXT_SLIB_CONFIG),IP_NF,TARGET)
+PF_EXT_SLIB+=$(call lower,$(call TEST_CONFIG,$(PF_EXT_SLIB_MATCH),IP_NF,MATCH))
+PF_EXT_SLIB+=$(call TEST_CONFIG,$(PF_EXT_SLIB_TARGET),IP_NF,TARGET)
 
 PF6_EXT_SLIB_BASE:=tcp udp icmp6 standard
-PF6_EXT_SLIB_CONFIG:=$(sort $(call upper,$(filter-out $(PF6_EXT_SLIB_BASE),$(PF6_EXT_SLIB))))
+PF6_EXT_SLIB_OPT:=$(filter-out $(PF6_EXT_SLIB_BASE),$(PF6_EXT_SLIB))
+PF6_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF6_EXT_SLIB_OPT))))
+PF6_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF6_EXT_SLIB_OPT)))
 PF6_EXT_SLIB:=$(PF6_EXT_SLIB_BASE)
-PF6_EXT_SLIB+=$(call lower,$(call TEST_CONFIG,$(PF6_EXT_SLIB_CONFIG),IP6_NF,MATCH))
-PF6_EXT_SLIB+=$(call TEST_CONFIG,$(PF6_EXT_SLIB_CONFIG),IP6_NF,TARGET)
+PF6_EXT_SLIB+=$(call lower,$(call TEST_CONFIG,$(PF6_EXT_SLIB_MATCH),IP6_NF,MATCH))
+PF6_EXT_SLIB+=$(call TEST_CONFIG,$(PF6_EXT_SLIB_TARGET),IP6_NF,TARGET)
 
-ifneq ($(CONFIG_IP_NF_NAT)$(CONFIG_IP_NF_NAT_MODULE),)
+ifneq ($(CONFIG_IP_NF_NAT)$(CONFIG_IP_NF_NAT_MODULE)$(CONFIG_NF_NAT)$(CONFIG_NF_NAT_MODULES),)
 PF_EXT_SLIB+=SNAT DNAT
 endif
 ifneq ($(CONFIG_IP_NF_MATCH_AH_ESP)$(CONFIG_IP_NF_MATCH_AH_ESP_MODULE),)

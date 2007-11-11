@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.2 2003/05/23 15:43:43 andrei Exp $
+# $Id: Makefile,v 1.4.2.3 2005/06/06 16:27:32 andrei Exp $
 #
 # Presence Agent
 #
@@ -9,5 +9,9 @@ include ../../Makefile.defs
 auto_gen=
 NAME=pa.so
 LIBS=
+
+DEFS+=-I/usr/include/libxml2 -I$(LOCALBASE)/include/libxml2 \
+	-I$(LOCALBASE)/include
+LIBS+=-L/usr/include/lib  -L$(LOCALBASE)/lib -lxml2
 
 include ../../Makefile.modules

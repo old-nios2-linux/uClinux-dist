@@ -1,4 +1,5 @@
-CONFOPTS=
+
+CONFOPTS = --enable-burst=yes
 
 all: build/build
 	$(MAKE) -C build
@@ -11,6 +12,11 @@ build/build: makefile
 
 clean:
 	rm -rf build
+
+perms: all
+	rm -f netperf netserver
+	ln build/src/netperf .
+	ln build/src/netserver .
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_NETPERF_NETPERF build/src/netperf /bin/netperf

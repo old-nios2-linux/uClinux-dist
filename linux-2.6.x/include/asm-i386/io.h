@@ -112,6 +112,9 @@ extern void __iomem * __ioremap(unsigned long offset, unsigned long size, unsign
  * writew/writel functions and the other mmio helpers. The returned
  * address is not guaranteed to be usable directly as a virtual
  * address. 
+ *
+ * If the area you are trying to map is a PCI BAR you should have a
+ * look at pci_iomap().
  */
 
 static inline void __iomem * ioremap(unsigned long offset, unsigned long size)
@@ -129,6 +132,7 @@ extern void iounmap(volatile void __iomem *addr);
  */
 extern void *bt_ioremap(unsigned long offset, unsigned long size);
 extern void bt_iounmap(void *addr, unsigned long size);
+extern void __iomem *fix_ioremap(unsigned idx, unsigned long phys);
 
 /* Use early IO mappings for DMI because it's initialized early */
 #define dmi_ioremap bt_ioremap
@@ -219,12 +223,6 @@ static inline void memcpy_toio(volatile void __iomem *dst, const void *src, int 
 #define __ISA_IO_base ((char __iomem *)(PAGE_OFFSET))
 
 /*
- * Again, i386 does not require mem IO specific function.
- */
-
-#define eth_io_copy_and_sum(a,b,c,d)		eth_copy_and_sum((a),(void __force *)(b),(c),(d))
-
-/*
  *	Cache management
  *
  *	This needed for two cases
@@ -256,20 +254,25 @@ static inline void flush_write_buffers(void)
 
 #endif /* __KERNEL__ */
 
-#ifdef SLOW_IO_BY_JUMPING
-#define __SLOW_DOWN_IO "jmp 1f; 1: jmp 1f; 1:"
+static inline void native_io_delay(void)
+{
+	asm volatile("outb %%al,$0x80" : : : "memory");
+}
+
+#if defined(CONFIG_PARAVIRT)
+#include <asm/paravirt.h>
 #else
-#define __SLOW_DOWN_IO "outb %%al,$0x80;"
-#endif
 
 static inline void slow_down_io(void) {
-	__asm__ __volatile__(
-		__SLOW_DOWN_IO
+	native_io_delay();
 #ifdef REALLY_SLOW_IO
-		__SLOW_DOWN_IO __SLOW_DOWN_IO __SLOW_DOWN_IO
+	native_io_delay();
+	native_io_delay();
+	native_io_delay();
 #endif
-		: : );
 }
+
+#endif
 
 #ifdef CONFIG_X86_NUMAQ
 extern void *xquad_portio;    /* Where the IO area was mapped */

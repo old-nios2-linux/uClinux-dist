@@ -16,21 +16,53 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
-#define _ERRNO_H	1
 #include <features.h>
+#define _ERRNO_H
 #include <bits/errno.h>
 #include <sys/syscall.h>
 
 #if defined __UCLIBC_HAS_LFS__ && defined __NR_mmap2
 
-
-	/* The mmap2 system call takes six arguments, all in registers.  */
-	.text
-	.global mmap64;
-	.type mmap64,%function
-	.align 4;
-
+/* The mmap2 system call takes six arguments, all in registers.  */
+.text
+.global mmap64
+.type mmap64,%function
+.align 2
 mmap64:
+
+#ifdef __ARM_EABI__
+#ifdef __ARMEB__
+# define LOW_OFFSET      8 + 4
+/* The initial + 4 is for the stack postdecrement.  */
+# define HIGH_OFFSET 4 + 8 + 0
+#else
+# define LOW_OFFSET      8 + 0
+# define HIGH_OFFSET 4 + 8 + 4
+#endif
+	ldr	ip, [sp, $LOW_OFFSET]
+	str	r5, [sp, #-4]!
+	ldr	r5, [sp, $HIGH_OFFSET]
+	str	r4, [sp, #-4]!
+	movs	r4, ip, lsl $20		@ check that offset is page-aligned
+	mov	ip, ip, lsr $12
+	moveqs	r4, r5, lsr $12		@ check for overflow
+	bne	.Linval
+	ldr	r4, [sp, $8]		@ load fd
+	orr	r5, ip, r5, lsl $20	@ compose page offset
+	DO_CALL (mmap2)
+	cmn	r0, $4096
+	ldmfd	sp!, {r4, r5}
+#if defined(__USE_BX__)
+	bxcc	lr
+#else
+	movcc	pc, lr
+#endif
+	b	__syscall_error
+.Linval:
+	mov	r0, $-EINVAL
+	ldmfd	sp!, {r4, r5}
+	b	__syscall_error
+#else
 	stmfd	sp!, {r4, r5, lr}
 	ldr	r5, [sp, $16]
 	ldr	r4, [sp, $12]
@@ -42,38 +74,27 @@ mmap64:
 	movs	ip, ip, lsr $12
 	bne	.Linval			@ check for overflow
 	mov	ip, r0
-	swi	__NR_mmap2
+	DO_CALL (mmap2)
 	cmn	r0, $4096
 	ldmccfd	sp!, {r4, r5, pc}
 	cmn	r0, $ENOSYS
 	ldmnefd	sp!, {r4, r5, lr}
-	bne	__syscall_error (PLT)
+	bne	__error
 	/* The current kernel does not support mmap2.  Fall back to plain
 	   mmap if the offset is small enough.  */
 	ldr	r5, [sp, $20]
 	mov	r0, ip			@ first arg was clobbered
 	teq	r5, $0
 	ldmeqfd	sp!, {r4, r5, lr}
-	beq	mmap (PLT)
+	beq	HIDDEN_JUMPTARGET(mmap)
 .Linval:
 	mov	r0, $-EINVAL
 	ldmfd	sp!, {r4, r5, lr}
-	b	__syscall_error (PLT)
+	b	__error
 
-__syscall_error:
-	/* Looks like the syscall choked -- set errno */
-	ldr  r3, .L4
-	/* Calculate the - of the syscall result, in case we need it */
-	rsb  r2, r0, $0
-
-	/* errno = -result */
-	str  r2, [r9,r3]
-
-	/* return -1 */
-	mvn  r0, $0
-	mov  pc, lr
-.size mmap64,.-mmap64;
-
-.L4:  .word errno
+__error:
+	b	__syscall_error
+#endif
+.size mmap64,.-mmap64
 
 #endif

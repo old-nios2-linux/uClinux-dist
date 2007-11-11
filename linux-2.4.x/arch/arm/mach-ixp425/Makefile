@@ -34,5 +34,6 @@ obj-$(CONFIG_MACH_MONTEJADE)	+= montejade-pci.o
 obj-$(CONFIG_MACH_SE5100)	+= montejade-pci.o
 
 obj-$(CONFIG_KGDB) 		+= kgdb.o
+obj-$(CONFIG_IXP425_DEBUG_FIQ)	+= fiq.o
 
 include $(TOPDIR)/Rules.make

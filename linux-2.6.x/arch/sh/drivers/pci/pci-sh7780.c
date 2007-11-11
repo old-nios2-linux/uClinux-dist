@@ -22,6 +22,20 @@
 #include <linux/delay.h>
 #include "pci-sh4.h"
 
+#define INTC_BASE	0xffd00000
+#define INTC_ICR0	(INTC_BASE+0x0)
+#define INTC_ICR1	(INTC_BASE+0x1c)
+#define INTC_INTPRI	(INTC_BASE+0x10)
+#define INTC_INTREQ	(INTC_BASE+0x24)
+#define INTC_INTMSK0	(INTC_BASE+0x44)
+#define INTC_INTMSK1	(INTC_BASE+0x48)
+#define INTC_INTMSK2	(INTC_BASE+0x40080)
+#define INTC_INTMSKCLR0	(INTC_BASE+0x64)
+#define INTC_INTMSKCLR1	(INTC_BASE+0x68)
+#define INTC_INTMSKCLR2	(INTC_BASE+0x40084)
+#define INTC_INT2MSKR	(INTC_BASE+0x40038)
+#define INTC_INT2MSKCR	(INTC_BASE+0x4003c)
+
 /*
  * Initialization. Try all known PCI access methods. Note that we support
  * using both PCI BIOS and direct access: in such cases, we use I/O ports
@@ -34,7 +48,7 @@
 static int __init sh7780_pci_init(void)
 {
 	unsigned int id;
-	int ret;
+	int ret, match = 0;
 
 	pr_debug("PCI: Starting intialization.\n");
 
@@ -42,19 +56,43 @@ static int __init sh7780_pci_init(void)
 
 	/* check for SH7780/SH7780R hardware */
 	id = pci_read_reg(SH7780_PCIVID);
-	if ((id != ((SH7780_DEVICE_ID << 16) | SH7780_VENDOR_ID)) &&
-	    (id != ((SH7781_DEVICE_ID << 16) | SH7780_VENDOR_ID))) {
+	if ((id & 0xffff) == SH7780_VENDOR_ID) {
+		switch ((id >> 16) & 0xffff) {
+		case SH7780_DEVICE_ID:
+		case SH7781_DEVICE_ID:
+		case SH7785_DEVICE_ID:
+			match = 1;
+			break;
+		}
+	}
+
+	if (unlikely(!match)) {
 		printk(KERN_ERR "PCI: This is not an SH7780 (%x)\n", id);
 		return -ENODEV;
 	}
 
 	/* Setup the INTC */
-	ctrl_outl(0x00200000, INTC_ICR0);	/* INTC SH-4 Mode */
-	ctrl_outl(0x00078000, INTC_INT2MSKCR);	/* enable PCIINTA - PCIINTD */
-	ctrl_outl(0x40000000, INTC_INTMSK1);	/* disable IRL4-7 Interrupt */
-	ctrl_outl(0x0000fffe, INTC_INTMSK2);	/* disable IRL4-7 Interrupt */
-	ctrl_outl(0x80000000, INTC_INTMSKCLR1);	/* enable IRL0-3 Interrupt */
-	ctrl_outl(0xfffe0000, INTC_INTMSKCLR2);	/* enable IRL0-3 Interrupt */
+	if (mach_is_7780se()) {
+		/* ICR0: IRL=use separately */
+		ctrl_outl(0x00C00020, INTC_ICR0);
+		/* ICR1: detect low level(for 2ndcut) */
+		ctrl_outl(0xAAAA0000, INTC_ICR1);
+		/* INTPRI: priority=3(all) */
+		ctrl_outl(0x33333333, INTC_INTPRI);
+	} else {
+		/* INTC SH-4 Mode */
+		ctrl_outl(0x00200000, INTC_ICR0);
+		/* enable PCIINTA - PCIINTD */
+		ctrl_outl(0x00078000, INTC_INT2MSKCR);
+		/* disable IRL4-7 Interrupt */
+		ctrl_outl(0x40000000, INTC_INTMSK1);
+		/* disable IRL4-7 Interrupt */
+		ctrl_outl(0x0000fffe, INTC_INTMSK2);
+		/* enable IRL0-3 Interrupt */
+		ctrl_outl(0x80000000, INTC_INTMSKCLR1);
+		/* enable IRL0-3 Interrupt */
+		ctrl_outl(0xfffe0000, INTC_INTMSKCLR2);
+	}
 
 	if ((ret = sh4_pci_check_direct()) != 0)
 		return ret;
@@ -124,9 +162,8 @@ int __init sh7780_pcic_init(struct sh4_pci_address_map *map)
 	 * DMA interrupts...
 	 */
 
-#ifdef CONFIG_SH_R7780RP
+	/* Apply any last-minute PCIC fixups */
 	pci_fixup_pcic();
-#endif
 
 	/* SH7780 init done, set central function init complete */
 	/* use round robin mode to stop a device starving/overruning */

@@ -1321,7 +1321,7 @@ static int saa_ioctl(struct inode *inode, struct file *file,
 			u32 format;
 			if (copy_from_user(&p, arg, sizeof(p)))
 				return -EFAULT;
-			if (p.palette < sizeof(palette2fmt) / sizeof(u32)) {
+			if (p.palette < ARRAY_SIZE(palette2fmt)) {
 				format = palette2fmt[p.palette];
 				saa->win.color_fmt = format;
 				saawrite(format | 0x60,
@@ -1901,7 +1901,7 @@ static int saa_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static struct file_operations saa_fops = {
+static const struct file_operations saa_fops = {
 	.owner = THIS_MODULE,
 	.open = saa_open,
 	.release = saa_release,

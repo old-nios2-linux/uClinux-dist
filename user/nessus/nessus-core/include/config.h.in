@@ -82,7 +82,7 @@
 
 
 /* derived entries */
-#define NESSUSD_CONF     NESSUSD_CONFDIR  "/nessus/nessusd.conf"
+#define NESSUSD_CONF     NESSUSD_CONFDIR  "/nessusd.conf"
 
 #define NESSUSD_MESSAGES NESSUSD_LOGS "/nessusd.messages"
 #define NESSUSD_DEBUGMSG NESSUSD_LOGS "/nessusd.dump"

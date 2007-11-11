@@ -26,7 +26,6 @@
 #include <linux/vmalloc.h>
 #include <linux/proc_fs.h>
 #include <linux/interrupt.h>
-#include <linux/smp_lock.h>
 #include <linux/delay.h>
 #include <linux/list.h>
 #include <asm/types.h>
@@ -71,24 +70,8 @@
 #define	qword  u64
 #endif
 
-#ifndef	TRUE
-#define	TRUE	1
-#endif
-
-#ifndef	FALSE
-#define	FALSE	0
-#endif
-
 #ifndef	NULL
 #define	NULL	((void *) 0)
-#endif
-
-#ifndef	MIN
-#define MIN(a,b)	((a)>(b) ? (b) : (a))
-#endif
-
-#ifndef	MAX
-#define MAX(a,b)	((a)>(b) ? (a) : (b))
 #endif
 
 #ifndef	far
@@ -138,10 +121,6 @@
 #define DIVA_OS_MEM_DETACH_ADDRESS(a, x)	do { } while(0)
 #define DIVA_OS_MEM_DETACH_CONFIG(a, x)	do { } while(0)
 #define DIVA_OS_MEM_DETACH_CONTROL(a, x)	do { } while(0)
-
-#if !defined(DIM)
-#define DIM(array)  (sizeof (array)/sizeof ((array)[0]))
-#endif
 
 #define DIVA_INVALID_FILE_HANDLE  ((dword)(-1))
 

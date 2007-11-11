@@ -1,9 +1,9 @@
 /*
- * $Id: authorize.c,v 1.2.4.2 2004/07/02 15:32:55 andrei Exp $
+ * $Id: authorize.c,v 1.5.2.1 2005/07/20 17:11:50 andrei Exp $
  *
  * Digest Authentication - Diameter support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -115,7 +115,7 @@ int get_realm(struct sip_msg* m, int hftype, struct sip_uri* u)
 		if (!m->to && ((parse_headers(m, HDR_TO, 0) == -1) || (!m->to))) 
 		{
 			LOG(L_ERR, M_NAME":get_realm(): Error while parsing TO header\n");
-			/* signal the errror */
+			/* signal the error */
 			return -1;
 		}
 		
@@ -372,6 +372,8 @@ int diameter_authorize(struct hdr_field* hdr, str* p_method, struct sip_uri uri,
 	dig_cred_t* cred;
 	unsigned int tmp;
 
+	user_name.s=0; /* fixes gcc 4.0 warning */
+	
 	if ( !p_method )
 	{
 		LOG(L_ERR, M_NAME":diameter_authorize(): Invalid parameter value\n");
@@ -633,7 +635,7 @@ int diameter_authorize(struct hdr_field* hdr, str* p_method, struct sip_uri uri,
 	/* send the message to the DIAMETER CLIENT */
 	switch( tcp_send_recv(sockfd, req->buf.s, req->buf.len, rb, m_id) )
 	{
-		case AAA_ERROR: /* a transmission error occured */
+		case AAA_ERROR: /* a transmission error occurred */
 			LOG(L_ERR, M_NAME":diameter_authorize(): message sending to the" 
 						" DIAMETER backend authorization server failed\n");
 			goto error;
@@ -709,7 +711,7 @@ int srv_response(struct sip_msg* msg, rd_buf_t * rb, int hftype)
 	
 			if (ret == -1) 
 			{
-				LOG(L_ERR, M_NAME":srv_response():Error while sending chalenge "
+				LOG(L_ERR, M_NAME":srv_response():Error while sending challenge "
 					"to the client of SER\n");
 				return -1;
 			}
@@ -723,7 +725,7 @@ int srv_response(struct sip_msg* msg, rd_buf_t * rb, int hftype)
 
 /*
  * Create a response with given code and reason phrase
- * Optionaly add new headers specified in _hdr
+ * Optionally add new headers specified in _hdr
  */
 int send_resp(struct sip_msg* m, int code, char* reason,
 					char* hdr, int hdr_len)
@@ -731,7 +733,7 @@ int send_resp(struct sip_msg* m, int code, char* reason,
 	/* Add new headers if there are any */
 	if ((hdr) && (hdr_len)) {
 		if (add_lump_rpl( m, hdr, hdr_len, LUMP_RPL_HDR)==0) {
-			LOG(L_ERR,"ERROR:auth_diamter:send_resp: unable to append hdr\n");
+			LOG(L_ERR,"ERROR:auth_diameter:send_resp: unable to append hdr\n");
 			return -1;
 		}
 	}

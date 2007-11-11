@@ -901,7 +901,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	return 0;
 }
 
-static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
+static void rs_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	struct NIOS_serial *info = (struct NIOS_serial *)tty->driver_data;
 	int	oldbaud = info->baud;
@@ -1237,8 +1237,8 @@ static int __init rs_nios_init(void)
 		info->event = 0;
 		info->count = 0;
 		info->blocked_open = 0;
-		INIT_WORK(&info->tqueue, do_softint, info);
-		INIT_WORK(&info->tqueue_hangup, do_serial_hangup, info);
+		INIT_WORK(&info->tqueue, do_softint);
+		INIT_WORK(&info->tqueue_hangup, do_serial_hangup);
 		init_waitqueue_head(&info->open_wait);
 		init_waitqueue_head(&info->close_wait);
 		info->line = i;

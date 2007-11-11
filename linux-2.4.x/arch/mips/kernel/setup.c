@@ -96,7 +96,11 @@ extern char arcs_cmdline[CL_SIZE];
  * mips_io_port_base is the begin of the address space to which x86 style
  * I/O ports are mapped.
  */
+#ifdef CONFIG_RTL865X
+const unsigned long mips_io_port_base = 0;
+#else
 const unsigned long mips_io_port_base = -1;
+#endif
 EXPORT_SYMBOL(mips_io_port_base);
 
 
@@ -119,6 +123,22 @@ asmlinkage void __init
 init_arch(int argc, char **argv, char **envp, int *prom_vec)
 {
 	/* Determine which MIPS variant we are running on. */
+
+#ifdef CONFIG_RTL865X
+	char chipVersion[16]={0};
+	int rev;
+	GetChipVersion(chipVersion,sizeof(chipVersion), &rev);
+	printk("************************************\n");
+	printk("Powered by Realtek RTL%s SoC, rev %d\n",chipVersion, rev);
+	printk("************************************\n");
+#endif
+
+#ifdef CONFIG_RTL8186
+	printk("************************************\n");
+	printk("Powered by Realtek RTL8186 SoC\n");
+	printk("************************************\n");
+#endif
+
 	cpu_probe();
 
 	prom_init(argc, argv, envp, prom_vec);
@@ -130,6 +150,14 @@ init_arch(int argc, char **argv, char **envp, int *prom_vec)
 	 * then flush the tlb and caches.  On the r4xx0
 	 * variants this also sets CP0_WIRED to zero.
 	 */
+#ifdef CONFIG_RTL865X
+#ifdef CONFIG_RTL865XB
+	printk("Init MMU (16 entries)\n");
+#endif
+#ifdef CONFIG_RTL865XC
+	printk("Init MMU (32 entries)\n");
+#endif
+#endif
 	load_mmu();
 
 	/* Disable coprocessors and set FPU for 16/32 FPR register model */
@@ -273,8 +301,8 @@ static inline void bootmem_init(void)
 		if (memcmp(&sp[0], "-rom1fs-", 8) == 0) { /* romfs */
 			len = be32_to_cpu(sp[2]);
 			printk("romfs reserved %d\n", len);
-		} else if (sp[0] == 0x28cd3d45) { /* cramfs */
-			len = sp[1];
+		} else if (le32_to_cpu(sp[0]) == 0x28cd3d45) { /* cramfs */
+			len = le32_to_cpu(sp[1]);
 			printk("cramfs reserved %d\n", len);
 		} else
 			printk("NOFS reserved @ 0x%x\n", sp);
@@ -667,7 +695,7 @@ void __init setup_arch(char **cmdline_p)
 		it8172_setup();
 		break;
 #endif
-#ifdef CONFIG_NINO
+#if defined(CONFIG_NINO) || defined(CONFIG_RTL865X) || defined(CONFIG_RTL8186)
 	case MACH_GROUP_PHILIPS:
 		nino_setup();
 		break;

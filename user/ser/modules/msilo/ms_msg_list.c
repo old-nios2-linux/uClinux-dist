@@ -1,9 +1,9 @@
 /**
- * $Id: ms_msg_list.c,v 1.7 2003/06/02 15:41:21 dcm Exp $
+ * $Id: ms_msg_list.c,v 1.8 2004/08/24 08:58:31 janakj Exp $
  *
  * MSILO module
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -100,11 +100,11 @@ msg_list msg_list_init()
 		return NULL;
 	/* init locks */
 	if (lock_init(&ml->sem_sent)==0){
-		LOG(L_CRIT, "msilo: could not intialize a lock\n");
+		LOG(L_CRIT, "msilo: could not initialize a lock\n");
 		goto clean;
 	};
 	if (lock_init(&ml->sem_done)==0){
-		LOG(L_CRIT, "msilo: could not intialize a lock\n");
+		LOG(L_CRIT, "msilo: could not initialize a lock\n");
 		lock_destroy(&ml->sem_sent);
 		goto clean;
 	};

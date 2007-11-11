@@ -54,6 +54,10 @@ extern void add_interrupt_randomness(int irq);
 extern void add_blkdev_randomness(int major);
 extern void add_true_randomness(__u32 *buf, int nwords);
 
+extern void random_input_words(__u32 *buf, size_t wordcount, int ent_count);
+extern int random_input_wait(void);
+#define HAS_RANDOM_INPUT_WAIT 1
+
 extern void get_random_bytes(void *buf, int nbytes);
 void generate_random_uuid(unsigned char uuid_out[16]);
 

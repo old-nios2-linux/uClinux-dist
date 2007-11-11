@@ -268,7 +268,7 @@ static void Stream5ParseGlobalArgs(u_char *args)
     char *index;
     char **stoks;
     int s_toks;
-    char *endPtr;
+    char *endPtr = NULL;
 
     if(args != NULL && strlen(args) != 0)
     {
@@ -723,7 +723,7 @@ static void Stream5SetApplicationData(
         /* If there isn't one for this protocol, allocate */
         if (!appData)
         {
-            appData = calloc(sizeof(Stream5AppData), 1);
+            appData = SnortAlloc(sizeof(Stream5AppData));
 
             /* And add it to the list */
             if (ssn->appDataList)

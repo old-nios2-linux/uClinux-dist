@@ -1,10 +1,10 @@
 /*
- * $Id: xjab_presence.c,v 1.6 2003/06/02 15:42:21 dcm Exp $
+ * $Id: xjab_presence.c,v 1.8 2004/08/24 08:58:30 janakj Exp $
  *
  * XJAB module
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -268,7 +268,7 @@ void xj_pres_list_notifyall(xj_pres_list prl, int s)
 	while(p)
 	{
 		if(p->cbf)
-			(*(p->cbf))(&(p->userid),(s==XJ_PS_CHECK)?p->state:s,
+			(*(p->cbf))(&(p->userid),&(p->userid), (s==XJ_PS_CHECK)?p->state:s,
 					p->cbp);
 		p = p->next;
 	}

@@ -170,7 +170,7 @@ void SnortPcreParse(char *data, PcreData *pcre_data, OptTreeNode *otn)
 
         delimit = *re;
     } 
-    else if(! *re == delimit)
+    else if(*re != delimit)
         goto syntax;
 
     /* find ending delimiter, trim delimit chars */

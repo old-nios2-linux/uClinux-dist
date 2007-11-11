@@ -2,24 +2,24 @@
    number sequences. */
 
 /*
-Copyright (C) 1999, 2000 Free Software Foundation, Inc.
+Copyright 1999, 2000 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA.
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA.
 */
 
 /* The theories for these functions are taken from D. Knuth's "The Art
@@ -63,7 +63,7 @@ for (each observation Xj)
 			rm = max (rm, a[k] - j/n)
 			j += c[k]
 			rp = max (rp, j/n - b[k])
-			
+
 Kp = sqr (n) * rp
 Km = sqr (n) * rm 
 
@@ -539,7 +539,7 @@ spectral_test (mpf_t rop[], unsigned int T, mpz_t a, mpz_t m)
   mpz_set_ui (p, 1);
   mpz_set_ui (pp, 0);
   mpz_set (r, a);
-  mpz_pow_ui (s, a, 2);		
+  mpz_pow_ui (s, a, 2);
   mpz_add_ui (s, s, 1);		/* s = 1 + a^2 */
 
   /* S2 [Euclidean step.] */
@@ -735,7 +735,7 @@ spectral_test (mpf_t rop[], unsigned int T, mpz_t a, mpz_t m)
 
       /* From Knuth p. 104: "The exhaustive search in steps S8-S10
 	 reduces the value of s only rarely." */
-#ifdef DO_SEARCH	
+#ifdef DO_SEARCH
       /* S7 [Prepare for search.] */
       /* Find minimum in (x[1], ..., x[t]) satisfying condition
 	 x[k]^2 <= f(y[1], ...,y[t]) * dot(V[k],V[k]) */
@@ -802,7 +802,7 @@ spectral_test (mpf_t rop[], unsigned int T, mpz_t a, mpz_t m)
 #endif /* DO_SEARCH */
       mpf_set_z (f_tmp1, s);
       mpf_sqrt (rop[ui_t - 1], f_tmp1);
-#ifdef DO_SEARCH	
+#ifdef DO_SEARCH
       if (g_debug > DEBUG_2)
 	printf ("done.\n");
 #endif /* DO_SEARCH */

@@ -10,26 +10,27 @@
 /* route_me_harder function, used by iptable_nat, iptable_mangle + ip_queue */
 int ip_route_me_harder(struct sk_buff **pskb, unsigned addr_type)
 {
-	struct iphdr *iph = (*pskb)->nh.iph;
+	const struct iphdr *iph = ip_hdr(*pskb);
 	struct rtable *rt;
 	struct flowi fl = {};
 	struct dst_entry *odst;
 	unsigned int hh_len;
+	unsigned int type;
 
+	type = inet_addr_type(iph->saddr);
 	if (addr_type == RTN_UNSPEC)
-		addr_type = inet_addr_type(iph->saddr);
+		addr_type = type;
 
 	/* some non-standard hacks like ipt_REJECT.c:send_reset() can cause
 	 * packets with foreign saddr to appear on the NF_IP_LOCAL_OUT hook.
 	 */
 	if (addr_type == RTN_LOCAL) {
 		fl.nl_u.ip4_u.daddr = iph->daddr;
-		fl.nl_u.ip4_u.saddr = iph->saddr;
+		if (type == RTN_LOCAL)
+			fl.nl_u.ip4_u.saddr = iph->saddr;
 		fl.nl_u.ip4_u.tos = RT_TOS(iph->tos);
 		fl.oif = (*pskb)->sk ? (*pskb)->sk->sk_bound_dev_if : 0;
-#ifdef CONFIG_IP_ROUTE_FWMARK
-		fl.nl_u.ip4_u.fwmark = (*pskb)->nfmark;
-#endif
+		fl.mark = (*pskb)->mark;
 		if (ip_route_output_key(&rt, &fl) != 0)
 			return -1;
 
@@ -52,7 +53,7 @@ int ip_route_me_harder(struct sk_buff **pskb, unsigned addr_type)
 		dst_release(&rt->u.dst);
 		dst_release(odst);
 	}
-	
+
 	if ((*pskb)->dst->error)
 		return -1;
 
@@ -69,7 +70,7 @@ int ip_route_me_harder(struct sk_buff **pskb, unsigned addr_type)
 		struct sk_buff *nskb;
 
 		nskb = skb_realloc_headroom(*pskb, hh_len);
-		if (!nskb) 
+		if (!nskb)
 			return -1;
 		if ((*pskb)->sk)
 			skb_set_owner_w(nskb, (*pskb)->sk);
@@ -141,7 +142,7 @@ static void nf_ip_saveroute(const struct sk_buff *skb, struct nf_info *info)
 	struct ip_rt_info *rt_info = nf_info_reroute(info);
 
 	if (info->hook == NF_IP_LOCAL_OUT) {
-		const struct iphdr *iph = skb->nh.iph;
+		const struct iphdr *iph = ip_hdr(skb);
 
 		rt_info->tos = iph->tos;
 		rt_info->daddr = iph->daddr;
@@ -154,7 +155,7 @@ static int nf_ip_reroute(struct sk_buff **pskb, const struct nf_info *info)
 	const struct ip_rt_info *rt_info = nf_info_reroute(info);
 
 	if (info->hook == NF_IP_LOCAL_OUT) {
-		struct iphdr *iph = (*pskb)->nh.iph;
+		const struct iphdr *iph = ip_hdr(*pskb);
 
 		if (!(iph->tos == rt_info->tos
 		      && iph->daddr == rt_info->daddr
@@ -164,19 +165,19 @@ static int nf_ip_reroute(struct sk_buff **pskb, const struct nf_info *info)
 	return 0;
 }
 
-unsigned int nf_ip_checksum(struct sk_buff *skb, unsigned int hook,
+__sum16 nf_ip_checksum(struct sk_buff *skb, unsigned int hook,
 			    unsigned int dataoff, u_int8_t protocol)
 {
-	struct iphdr *iph = skb->nh.iph;
-	unsigned int csum = 0;
+	const struct iphdr *iph = ip_hdr(skb);
+	__sum16 csum = 0;
 
 	switch (skb->ip_summed) {
 	case CHECKSUM_COMPLETE:
 		if (hook != NF_IP_PRE_ROUTING && hook != NF_IP_LOCAL_IN)
 			break;
-		if ((protocol == 0 && !(u16)csum_fold(skb->csum)) ||
+		if ((protocol == 0 && !csum_fold(skb->csum)) ||
 		    !csum_tcpudp_magic(iph->saddr, iph->daddr,
-			    	       skb->len - dataoff, protocol,
+				       skb->len - dataoff, protocol,
 				       skb->csum)) {
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			break;

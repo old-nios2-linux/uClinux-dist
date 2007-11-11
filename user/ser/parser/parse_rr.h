@@ -1,9 +1,9 @@
 /*
- * $Id: parse_rr.h,v 1.8 2003/10/13 21:40:21 janakj Exp $
+ * $Id: parse_rr.h,v 1.10 2004/08/24 09:01:26 janakj Exp $
  *
  * Route & Record-Route Parser
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -46,7 +46,7 @@ typedef struct rr {
 	param_t* r2;          /* Hook to r2 parameter */
 	param_t* params;      /* Linked list of other parameters */
 	int len;              /* Length of the whole route field */
-        struct rr* next;      /* Next RR in the list */
+	struct rr* next;      /* Next RR in the list */
 } rr_t;
 
 
@@ -55,6 +55,10 @@ typedef struct rr {
  */
 int parse_rr(struct hdr_field* _r);
 
+/*
+ * Parse the body of Route & Record-Route headers
+ */
+int parse_rr_body(char *buf, int len, rr_t **head);
 
 /*
  * Free list of rr

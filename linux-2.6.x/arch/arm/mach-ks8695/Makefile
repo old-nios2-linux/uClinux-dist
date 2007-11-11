@@ -1,7 +1,16 @@
+# arch/arm/mach-ks8695/Makefile
 #
-# Makefile for the KS8695 machines..
+# Makefile for KS8695 architecture support
 #
 
-obj-y			:= arch.o irq.o mm.o time.o
-obj-$(CONFIG_PCI)       += pci.o
+obj-y				:= cpu.o irq.o time.o gpio.o devices.o
+obj-m				:=
+obj-n				:=
+obj-				:=
+
+# PCI support is optional
+#obj-$(CONFIG_PCI)		+= pci.o
+
+# Board-specific support
+obj-$(CONFIG_MACH_KS8695)	+= board-micrel.o
 

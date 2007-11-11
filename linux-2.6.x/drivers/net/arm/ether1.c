@@ -33,11 +33,9 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/interrupt.h>
-#include <linux/ptrace.h>
 #include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/slab.h>
@@ -76,7 +74,7 @@ static void ether1_timeout(struct net_device *dev);
 
 /* ------------------------------------------------------------------------- */
 
-static char version[] __initdata = "ether1 ethernet driver (c) 2000 Russell King v1.07\n";
+static char version[] __devinitdata = "ether1 ethernet driver (c) 2000 Russell King v1.07\n";
 
 #define BUS_16 16
 #define BUS_8  8
@@ -254,7 +252,7 @@ ether1_readbuffer (struct net_device *dev, void *data, unsigned int start, unsig
 	} while (thislen);
 }
 
-static int __init
+static int __devinit
 ether1_ramtest(struct net_device *dev, unsigned char byte)
 {
 	unsigned char *buffer = kmalloc (BUFFER_SIZE, GFP_KERNEL);
@@ -308,7 +306,7 @@ ether1_reset (struct net_device *dev)
 	return BUS_16;
 }
 
-static int __init
+static int __devinit
 ether1_init_2(struct net_device *dev)
 {
 	int i;
@@ -876,7 +874,6 @@ ether1_recv_done (struct net_device *dev)
 			skb = dev_alloc_skb (length + 2);
 
 			if (skb) {
-				skb->dev = dev;
 				skb_reserve (skb, 2);
 
 				ether1_readbuffer (dev, skb_put (skb, length), rbd.rbd_bufl, length);
@@ -986,7 +983,7 @@ ether1_setmulticastlist (struct net_device *dev)
 
 /* ------------------------------------------------------------------------- */
 
-static void __init ether1_banner(void)
+static void __devinit ether1_banner(void)
 {
 	static unsigned int version_printed = 0;
 
@@ -1016,8 +1013,7 @@ ether1_probe(struct expansion_card *ec, const struct ecard_id *id)
 	SET_NETDEV_DEV(dev, &ec->dev);
 
 	dev->irq = ec->irq;
-	priv(dev)->base = ioremap(ecard_resource_start(ec, ECARD_RES_IOCFAST),
-				  ecard_resource_len(ec, ECARD_RES_IOCFAST));
+	priv(dev)->base = ecardm_iomap(ec, ECARD_RES_IOCFAST, 0, 0);
 	if (!priv(dev)->base) {
 		ret = -ENOMEM;
 		goto free;
@@ -1058,8 +1054,6 @@ ether1_probe(struct expansion_card *ec, const struct ecard_id *id)
 	return 0;
 
  free:
-	if (priv(dev)->base)
-		iounmap(priv(dev)->base);
 	free_netdev(dev);
  release:
 	ecard_release_resources(ec);
@@ -1074,7 +1068,6 @@ static void __devexit ether1_remove(struct expansion_card *ec)
 	ecard_set_drvdata(ec, NULL);	
 
 	unregister_netdev(dev);
-	iounmap(priv(dev)->base);
 	free_netdev(dev);
 	ecard_release_resources(ec);
 }

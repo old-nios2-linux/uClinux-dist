@@ -200,6 +200,7 @@ static void ps2pp_disconnect(struct psmouse *psmouse)
 static const struct ps2pp_info *get_model_info(unsigned char model)
 {
 	static const struct ps2pp_info ps2pp_list[] = {
+		{  1,	0,			0 },	/* Simple 2-button mouse */
 		{ 12,	0,			PS2PP_SIDE_BTN},
 		{ 13,	0,			0 },
 		{ 15,	PS2PP_KIND_MX,					/* MX1000 */
@@ -220,6 +221,7 @@ static const struct ps2pp_info *get_model_info(unsigned char model)
 		{ 66,	PS2PP_KIND_MX,					/* MX3100 reciver */
 				PS2PP_WHEEL | PS2PP_SIDE_BTN | PS2PP_TASK_BTN |
 				PS2PP_EXTRA_BTN | PS2PP_NAV_BTN | PS2PP_HWHEEL },
+		{ 72,	PS2PP_KIND_TRACKMAN,	0 },			/* T-CH11: TrackMan Marble */
 		{ 73,	0,			PS2PP_SIDE_BTN },
 		{ 75,	PS2PP_KIND_WHEEL,	PS2PP_WHEEL },
 		{ 76,	PS2PP_KIND_WHEEL,	PS2PP_WHEEL },
@@ -328,6 +330,7 @@ int ps2pp_init(struct psmouse *psmouse, int set_properties)
 	unsigned char model, buttons;
 	const struct ps2pp_info *model_info;
 	int use_ps2pp = 0;
+	int error;
 
 	param[0] = 0;
 	ps2_command(ps2dev, param, PSMOUSE_CMD_SETRES);
@@ -337,11 +340,11 @@ int ps2pp_init(struct psmouse *psmouse, int set_properties)
 	param[1] = 0;
 	ps2_command(ps2dev, param, PSMOUSE_CMD_GETINFO);
 
-	if (!param[1])
-		return -1;
-
 	model = ((param[0] >> 4) & 0x07) | ((param[0] << 3) & 0x78);
 	buttons = param[1];
+
+	if (!model || !buttons)
+		return -1;
 
 	if ((model_info = get_model_info(model)) != NULL) {
 
@@ -393,8 +396,14 @@ int ps2pp_init(struct psmouse *psmouse, int set_properties)
 				psmouse->set_resolution = ps2pp_set_resolution;
 				psmouse->disconnect = ps2pp_disconnect;
 
-				device_create_file(&psmouse->ps2dev.serio->dev,
-						   &psmouse_attr_smartscroll.dattr);
+				error = device_create_file(&psmouse->ps2dev.serio->dev,
+							   &psmouse_attr_smartscroll.dattr);
+				if (error) {
+					printk(KERN_ERR
+						"logips2pp.c: failed to create smartscroll "
+						"sysfs attribute, error: %d\n", error);
+					return -1;
+				}
 			}
 		}
 

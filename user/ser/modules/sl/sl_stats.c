@@ -1,9 +1,9 @@
 /*
  *
- * $Id: sl_stats.c,v 1.9 2003/06/29 20:20:06 jiri Exp $
+ * $Id: sl_stats.c,v 1.12 2004/08/24 09:00:38 janakj Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -31,6 +31,7 @@
 #include "../../mem/shm_mem.h"
 #include "../../globals.h"
 #include "../../fifo_server.h"
+#include "../../unixsock_server.h"
 #include "../../config.h"
 #include "../../pt.h"
 #include "sl_stats.h"
@@ -54,14 +55,13 @@ static void add_sl_stats( struct sl_stats *t, struct sl_stats *i)
 static int print_sl_stats(FILE *reply_file)
 {
 	struct sl_stats total;
-	int b, p;
+	int p;
 
 	memset(&total, 0, sizeof(struct sl_stats));
 	if (dont_fork) {
 		add_sl_stats(&total, &sl_stats[0]);
-	} else for (b=0; b<sock_no; b++)
-		for (p=0; p<children_no; p++) 
-			add_sl_stats(&total, &sl_stats[b*children_no+p]);
+	} else for (p=0; p<process_count(); p++)
+			add_sl_stats(&total, &sl_stats[p]);
 
 	fprintf(reply_file, "200: %ld 202: %ld 2xx: %ld" CLEANUP_EOL,
 		total.err[RT_200], total.err[RT_202], total.err[RT_2xx]);
@@ -108,6 +108,57 @@ int static sl_stats_cmd( FILE *pipe, char *response_file )
 	return 1;
 }
 
+int static sl_stats_cmd_unixsock( str* msg )
+{
+	struct sl_stats total;
+	int p;
+
+	unixsock_reply_asciiz( "200 OK\n");
+
+	memset(&total, 0, sizeof(struct sl_stats));
+	if (dont_fork) {
+		add_sl_stats(&total, &sl_stats[0]);
+	} else for (p=0; p<process_count(); p++)
+			add_sl_stats(&total, &sl_stats[p]);
+
+	if (unixsock_reply_printf("200: %ld 202: %ld 2xx: %ld" CLEANUP_EOL,
+				  total.err[RT_200], total.err[RT_202], 
+				  total.err[RT_2xx]) < 0) goto err;
+
+	if (unixsock_reply_printf("300: %ld 301: %ld 302: %ld"
+				  " 3xx: %ld" CLEANUP_EOL,
+				  total.err[RT_300], total.err[RT_301], 
+				  total.err[RT_302], total.err[RT_3xx]) < 0) goto err;
+
+	if (unixsock_reply_printf("400: %ld 401: %ld 403: %ld"
+				  " 404: %ld 407: %ld 408: %ld"
+				  " 483: %ld 4xx: %ld" CLEANUP_EOL,
+				  total.err[RT_400], total.err[RT_401], total.err[RT_403], 
+				  total.err[RT_404], total.err[RT_407], total.err[RT_408],
+				  total.err[RT_483], total.err[RT_4xx]) < 0) goto err;
+	
+	if (unixsock_reply_printf("500: %ld 5xx: %ld" CLEANUP_EOL,
+				  total.err[RT_500], total.err[RT_5xx]) < 0) goto err;
+
+	if (unixsock_reply_printf("6xx: %ld" CLEANUP_EOL,
+				  total.err[RT_6xx]) < 0) goto err;
+
+	if (unixsock_reply_printf("xxx: %ld" CLEANUP_EOL,
+				  total.err[RT_xxx]) < 0) goto err;
+	
+	if (unixsock_reply_printf("failures: %ld" CLEANUP_EOL,
+				  total.failures) < 0) goto err;
+
+	unixsock_reply_send();
+	return 0;
+
+ err:
+	unixsock_reply_reset();
+	unixsock_reply_asciiz("500 Buffer too small\n");
+	unixsock_reply_send();
+	return -1;
+}
+
 void sl_stats_destroy()
 {
 	if (sl_stats) shm_free(sl_stats);
@@ -133,6 +184,11 @@ int init_sl_stats( void )
 	memset(sl_stats, 0, len);
 	if (register_fifo_cmd(sl_stats_cmd, "sl_stats", 0)<0) {
 		LOG(L_CRIT, "cannot register sl_stats\n");
+		return -1;
+	}
+	
+	if (unixsock_register_cmd("sl_stats", sl_stats_cmd_unixsock) < 0) {
+		LOG(L_CRIT, "cannot register unixsock sl_stats\n");
 		return -1;
 	}
 	return 1;

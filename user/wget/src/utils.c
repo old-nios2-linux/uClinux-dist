@@ -1,6 +1,5 @@
-/* Various functions of utilitarian nature.
-   Copyright (C) 1995, 1996, 1997, 1998, 2000, 2001
-   Free Software Foundation, Inc.
+/* Various utility functions.
+   Copyright (C) 2005 Free Software Foundation, Inc.
 
 This file is part of GNU Wget.
 
@@ -47,7 +46,9 @@ so, delete this exception statement from your version.  */
 #ifdef HAVE_PWD_H
 # include <pwd.h>
 #endif
-#include <limits.h>
+#ifdef HAVE_LIMITS_H
+# include <limits.h>
+#endif
 #ifdef HAVE_UTIME_H
 # include <utime.h>
 #endif
@@ -60,6 +61,14 @@ so, delete this exception statement from your version.  */
 #endif
 #include <fcntl.h>
 #include <assert.h>
+#ifdef WGET_USE_STDARG
+# include <stdarg.h>
+#else
+# include <varargs.h>
+#endif
+#ifdef HAVE_LOCALE_H
+# include <locale.h>
+#endif
 
 /* For TIOCGWINSZ and friends: */
 #ifdef HAVE_SYS_IOCTL_H
@@ -102,238 +111,6 @@ so, delete this exception statement from your version.  */
 extern int errno;
 #endif
 
-/* This section implements several wrappers around the basic
-   allocation routines.  This is done for two reasons: first, so that
-   the callers of these functions need not consistently check for
-   errors.  If there is not enough virtual memory for running Wget,
-   something is seriously wrong, and Wget exits with an appropriate
-   error message.
-
-   The second reason why these are useful is that, if DEBUG_MALLOC is
-   defined, they also provide a handy (if crude) malloc debugging
-   interface that checks memory leaks.  */
-
-/* Croak the fatal memory error and bail out with non-zero exit
-   status.  */
-static void
-memfatal (const char *what)
-{
-  /* Make sure we don't try to store part of the log line, and thus
-     call malloc.  */
-  log_set_save_context (0);
-  logprintf (LOG_ALWAYS, _("%s: %s: Not enough memory.\n"), exec_name, what);
-  exit (1);
-}
-
-/* These functions end with _real because they need to be
-   distinguished from the debugging functions, and from the macros.
-   Explanation follows:
-
-   If memory debugging is not turned on, wget.h defines these:
-
-     #define xmalloc xmalloc_real
-     #define xrealloc xrealloc_real
-     #define xstrdup xstrdup_real
-     #define xfree free
-
-   In case of memory debugging, the definitions are a bit more
-   complex, because we want to provide more information, *and* we want
-   to call the debugging code.  (The former is the reason why xmalloc
-   and friends need to be macros in the first place.)  Then it looks
-   like this:
-
-     #define xmalloc(a) xmalloc_debug (a, __FILE__, __LINE__)
-     #define xfree(a)   xfree_debug (a, __FILE__, __LINE__)
-     #define xrealloc(a, b) xrealloc_debug (a, b, __FILE__, __LINE__)
-     #define xstrdup(a) xstrdup_debug (a, __FILE__, __LINE__)
-
-   Each of the *_debug function does its magic and calls the real one.  */
-
-#ifdef DEBUG_MALLOC
-# define STATIC_IF_DEBUG static
-#else
-# define STATIC_IF_DEBUG
-#endif
-
-STATIC_IF_DEBUG void *
-xmalloc_real (size_t size)
-{
-  void *ptr = malloc (size);
-  if (!ptr)
-    memfatal ("malloc");
-  return ptr;
-}
-
-STATIC_IF_DEBUG void *
-xrealloc_real (void *ptr, size_t newsize)
-{
-  void *newptr;
-
-  /* Not all Un*xes have the feature of realloc() that calling it with
-     a NULL-pointer is the same as malloc(), but it is easy to
-     simulate.  */
-  if (ptr)
-    newptr = realloc (ptr, newsize);
-  else
-    newptr = malloc (newsize);
-  if (!newptr)
-    memfatal ("realloc");
-  return newptr;
-}
-
-STATIC_IF_DEBUG char *
-xstrdup_real (const char *s)
-{
-  char *copy;
-
-#ifndef HAVE_STRDUP
-  int l = strlen (s);
-  copy = malloc (l + 1);
-  if (!copy)
-    memfatal ("strdup");
-  memcpy (copy, s, l + 1);
-#else  /* HAVE_STRDUP */
-  copy = strdup (s);
-  if (!copy)
-    memfatal ("strdup");
-#endif /* HAVE_STRDUP */
-
-  return copy;
-}
-
-#ifdef DEBUG_MALLOC
-
-/* Crude home-grown routines for debugging some malloc-related
-   problems.  Featured:
-
-   * Counting the number of malloc and free invocations, and reporting
-     the "balance", i.e. how many times more malloc was called than it
-     was the case with free.
-
-   * Making malloc store its entry into a simple array and free remove
-     stuff from that array.  At the end, print the pointers which have
-     not been freed, along with the source file and the line number.
-     This also has the side-effect of detecting freeing memory that
-     was never allocated.
-
-   Note that this kind of memory leak checking strongly depends on
-   every malloc() being followed by a free(), even if the program is
-   about to finish.  Wget is careful to free the data structure it
-   allocated in init.c.  */
-
-static int malloc_count, free_count;
-
-static struct {
-  char *ptr;
-  const char *file;
-  int line;
-} malloc_debug[100000];
-
-/* Both register_ptr and unregister_ptr take O(n) operations to run,
-   which can be a real problem.  It would be nice to use a hash table
-   for malloc_debug, but the functions in hash.c are not suitable
-   because they can call malloc() themselves.  Maybe it would work if
-   the hash table were preallocated to a huge size, and if we set the
-   rehash threshold to 1.0.  */
-
-/* Register PTR in malloc_debug.  Abort if this is not possible
-   (presumably due to the number of current allocations exceeding the
-   size of malloc_debug.)  */
-
-static void
-register_ptr (void *ptr, const char *file, int line)
-{
-  int i;
-  for (i = 0; i < countof (malloc_debug); i++)
-    if (malloc_debug[i].ptr == NULL)
-      {
-	malloc_debug[i].ptr = ptr;
-	malloc_debug[i].file = file;
-	malloc_debug[i].line = line;
-	return;
-      }
-  abort ();
-}
-
-/* Unregister PTR from malloc_debug.  Abort if PTR is not present in
-   malloc_debug.  (This catches calling free() with a bogus pointer.)  */
-
-static void
-unregister_ptr (void *ptr)
-{
-  int i;
-  for (i = 0; i < countof (malloc_debug); i++)
-    if (malloc_debug[i].ptr == ptr)
-      {
-	malloc_debug[i].ptr = NULL;
-	return;
-      }
-  abort ();
-}
-
-/* Print the malloc debug stats that can be gathered from the above
-   information.  Currently this is the count of mallocs, frees, the
-   difference between the two, and the dump of the contents of
-   malloc_debug.  The last part are the memory leaks.  */
-
-void
-print_malloc_debug_stats (void)
-{
-  int i;
-  printf ("\nMalloc:  %d\nFree:    %d\nBalance: %d\n\n",
-	  malloc_count, free_count, malloc_count - free_count);
-  for (i = 0; i < countof (malloc_debug); i++)
-    if (malloc_debug[i].ptr != NULL)
-      printf ("0x%08ld: %s:%d\n", (long)malloc_debug[i].ptr,
-	      malloc_debug[i].file, malloc_debug[i].line);
-}
-
-void *
-xmalloc_debug (size_t size, const char *source_file, int source_line)
-{
-  void *ptr = xmalloc_real (size);
-  ++malloc_count;
-  register_ptr (ptr, source_file, source_line);
-  return ptr;
-}
-
-void
-xfree_debug (void *ptr, const char *source_file, int source_line)
-{
-  assert (ptr != NULL);
-  ++free_count;
-  unregister_ptr (ptr);
-  free (ptr);
-}
-
-void *
-xrealloc_debug (void *ptr, size_t newsize, const char *source_file, int source_line)
-{
-  void *newptr = xrealloc_real (ptr, newsize);
-  if (!ptr)
-    {
-      ++malloc_count;
-      register_ptr (newptr, source_file, source_line);
-    }
-  else if (newptr != ptr)
-    {
-      unregister_ptr (ptr);
-      register_ptr (newptr, source_file, source_line);
-    }
-  return newptr;
-}
-
-char *
-xstrdup_debug (const char *s, const char *source_file, int source_line)
-{
-  char *copy = xstrdup_real (s);
-  ++malloc_count;
-  register_ptr (copy, source_file, source_line);
-  return copy;
-}
-
-#endif /* DEBUG_MALLOC */
-
 /* Utility function: like xstrdup(), but also lowercases S.  */
 
 char *
@@ -344,19 +121,6 @@ xstrdup_lower (const char *s)
   for (; *p; p++)
     *p = TOLOWER (*p);
   return copy;
-}
-
-/* Return a count of how many times CHR occurs in STRING. */
-
-int
-count_char (const char *string, char chr)
-{
-  const char *p;
-  int count = 0;
-  for (p = string; *p; p++)
-    if (*p == chr)
-      ++count;
-  return count;
 }
 
 /* Copy the string formed by two pointers (one on the beginning, other
@@ -407,23 +171,110 @@ sepstring (const char *s)
   return res;
 }
 
+#ifdef WGET_USE_STDARG
+# define VA_START(args, arg1) va_start (args, arg1)
+#else
+# define VA_START(args, ignored) va_start (args)
+#endif
+
+/* Like sprintf, but allocates a string of sufficient size with malloc
+   and returns it.  GNU libc has a similar function named asprintf,
+   which requires the pointer to the string to be passed.  */
+
+char *
+aprintf (const char *fmt, ...)
+{
+  /* This function is implemented using vsnprintf, which we provide
+     for the systems that don't have it.  Therefore, it should be 100%
+     portable.  */
+
+  int size = 32;
+  char *str = xmalloc (size);
+
+  while (1)
+    {
+      int n;
+      va_list args;
+
+      /* See log_vprintf_internal for explanation why it's OK to rely
+	 on the return value of vsnprintf.  */
+
+      VA_START (args, fmt);
+      n = vsnprintf (str, size, fmt, args);
+      va_end (args);
+
+      /* If the printing worked, return the string. */
+      if (n > -1 && n < size)
+	return str;
+
+      /* Else try again with a larger buffer. */
+      if (n > -1)		/* C99 */
+	size = n + 1;		/* precisely what is needed */
+      else
+	size <<= 1;		/* twice the old size */
+      str = xrealloc (str, size);
+    }
+}
+
+/* Concatenate the NULL-terminated list of string arguments into
+   freshly allocated space.  */
+
+char *
+concat_strings (const char *str0, ...)
+{
+  va_list args;
+  int saved_lengths[5];		/* inspired by Apache's apr_pstrcat */
+  char *ret, *p;
+
+  const char *next_str;
+  int total_length = 0;
+  int argcount;
+
+  /* Calculate the length of and allocate the resulting string. */
+
+  argcount = 0;
+  VA_START (args, str0);
+  for (next_str = str0; next_str != NULL; next_str = va_arg (args, char *))
+    {
+      int len = strlen (next_str);
+      if (argcount < countof (saved_lengths))
+	saved_lengths[argcount++] = len;
+      total_length += len;
+    }
+  va_end (args);
+  p = ret = xmalloc (total_length + 1);
+
+  /* Copy the strings into the allocated space. */
+
+  argcount = 0;
+  VA_START (args, str0);
+  for (next_str = str0; next_str != NULL; next_str = va_arg (args, char *))
+    {
+      int len;
+      if (argcount < countof (saved_lengths))
+	len = saved_lengths[argcount++];
+      else
+	len = strlen (next_str);
+      memcpy (p, next_str, len);
+      p += len;
+    }
+  va_end (args);
+  *p = '\0';
+
+  return ret;
+}
+
 /* Return pointer to a static char[] buffer in which zero-terminated
    string-representation of TM (in form hh:mm:ss) is printed.
 
-   If TM is non-NULL, the current time-in-seconds will be stored
-   there.
-
-   (#### This is misleading: one would expect TM would be used instead
-   of the current time in that case.  This design was probably
-   influenced by the design time(2), and should be changed at some
-   points.  No callers use non-NULL TM anyway.)  */
+   If TM is NULL, the current time will be used.  */
 
 char *
 time_str (time_t *tm)
 {
   static char output[15];
   struct tm *ptm;
-  time_t secs = time (tm);
+  time_t secs = tm ? *tm : time (NULL);
 
   if (secs == -1)
     {
@@ -444,7 +295,7 @@ datetime_str (time_t *tm)
 {
   static char output[20];	/* "YYYY-MM-DD hh:mm:ss" + \0 */
   struct tm *ptm;
-  time_t secs = time (tm);
+  time_t secs = tm ? *tm : time (NULL);
 
   if (secs == -1)
     {
@@ -470,12 +321,21 @@ fork_to_background (void)
 #ifndef EMBED
   pid_t pid;
   /* Whether we arrange our own version of opt.lfilename here.  */
-  int changedp = 0;
+  int logfile_changed = 0;
 
   if (!opt.lfilename)
     {
-      opt.lfilename = unique_name (DEFAULT_LOGFILE, 0);
-      changedp = 1;
+      /* We must create the file immediately to avoid either a race
+	 condition (which arises from using unique_name and failing to
+	 use fopen_excl) or lying to the user about the log file name
+	 (which arises from using unique_name, printing the name, and
+	 using fopen_excl later on.)  */
+      FILE *new_log_fp = unique_create (DEFAULT_LOGFILE, 0, &opt.lfilename);
+      if (new_log_fp)
+	{
+	  logfile_changed = 1;
+	  fclose (new_log_fp);
+	}
     }
   pid = fork ();
   if (pid < 0)
@@ -488,7 +348,7 @@ fork_to_background (void)
     {
       /* parent, no error */
       printf (_("Continuing in background, pid %d.\n"), (int)pid);
-      if (changedp)
+      if (logfile_changed)
 	printf (_("Output will be written to `%s'.\n"), opt.lfilename);
       exit (0);			/* #### should we use _exit()? */
     }
@@ -502,19 +362,23 @@ fork_to_background (void)
 }
 #endif /* not WINDOWS */
 
-/* "Touch" FILE, i.e. make its atime and mtime equal to the time
-   specified with TM.  */
+/* "Touch" FILE, i.e. make its mtime ("modified time") equal the time
+   specified with TM.  The atime ("access time") is set to the current
+   time.  */
+
 void
 touch (const char *file, time_t tm)
 {
 #ifdef HAVE_STRUCT_UTIMBUF
   struct utimbuf times;
-  times.actime = times.modtime = tm;
 #else
-  time_t times[2];
-  times[0] = times[1] = tm;
+  struct {
+    time_t actime;
+    time_t modtime;
+  } times;
 #endif
-
+  times.modtime = tm;
+  times.actime = time (NULL);
   if (utime (file, &times) == -1)
     logprintf (LOG_NOTQUIET, "utime(%s): %s\n", file, strerror (errno));
 }
@@ -525,7 +389,7 @@ int
 remove_link (const char *file)
 {
   int err = 0;
-  struct stat st;
+  struct_stat st;
 
   if (lstat (file, &st) == 0 && S_ISLNK (st.st_mode))
     {
@@ -551,7 +415,7 @@ file_exists_p (const char *filename)
 #ifdef HAVE_ACCESS
   return access (filename, F_OK) >= 0;
 #else
-  struct stat buf;
+  struct_stat buf;
   return stat (filename, &buf) >= 0;
 #endif
 }
@@ -561,7 +425,7 @@ file_exists_p (const char *filename)
 int
 file_non_directory_p (const char *path)
 {
-  struct stat buf;
+  struct_stat buf;
   /* Use lstat() rather than stat() so that symbolic links pointing to
      directories can be identified correctly.  */
   if (lstat (path, &buf) != 0)
@@ -571,20 +435,28 @@ file_non_directory_p (const char *path)
 
 /* Return the size of file named by FILENAME, or -1 if it cannot be
    opened or seeked into. */
-long
+wgint
 file_size (const char *filename)
 {
-  long size;
+#if defined(HAVE_FSEEKO) && defined(HAVE_FTELLO)
+  wgint size;
   /* We use fseek rather than stat to determine the file size because
-     that way we can also verify whether the file is readable.
-     Inspired by the POST patch by Arnaud Wylie.  */
+     that way we can also verify that the file is readable without
+     explicitly checking for permissions.  Inspired by the POST patch
+     by Arnaud Wylie.  */
   FILE *fp = fopen (filename, "rb");
   if (!fp)
     return -1;
-  fseek (fp, 0, SEEK_END);
-  size = ftell (fp);
+  fseeko (fp, 0, SEEK_END);
+  size = ftello (fp);
   fclose (fp);
   return size;
+#else
+  struct_stat st;
+  if (stat (filename, &st) < 0)
+    return -1;
+  return st.st_size;
+#endif
 }
 
 /* stat file names named PREFIX.1, PREFIX.2, etc., until one that
@@ -619,7 +491,7 @@ unique_name_1 (const char *prefix)
    exist at the point in time when the function was called.
    Therefore, where security matters, don't rely that the file created
    by this function exists until you open it with O_EXCL or
-   something.
+   equivalent.
 
    If ALLOW_PASSTHROUGH is 0, it always returns a freshly allocated
    string.  Otherwise, it may return FILE if the file doesn't exist
@@ -637,6 +509,74 @@ unique_name (const char *file, int allow_passthrough)
      and return it.  */
   return unique_name_1 (file);
 }
+
+/* Create a file based on NAME, except without overwriting an existing
+   file with that name.  Providing O_EXCL is correctly implemented,
+   this function does not have the race condition associated with
+   opening the file returned by unique_name.  */
+
+FILE *
+unique_create (const char *name, int binary, char **opened_name)
+{
+  /* unique file name, based on NAME */
+  char *uname = unique_name (name, 0);
+  FILE *fp;
+  while ((fp = fopen_excl (uname, binary)) == NULL && errno == EEXIST)
+    {
+      xfree (uname);
+      uname = unique_name (name, 0);
+    }
+  if (opened_name && fp != NULL)
+    {
+      if (fp)
+	*opened_name = uname;
+      else
+	{
+	  *opened_name = NULL;
+	  xfree (uname);
+	}
+    }
+  else
+    xfree (uname);
+  return fp;
+}
+
+/* Open the file for writing, with the addition that the file is
+   opened "exclusively".  This means that, if the file already exists,
+   this function will *fail* and errno will be set to EEXIST.  If
+   BINARY is set, the file will be opened in binary mode, equivalent
+   to fopen's "wb".
+
+   If opening the file fails for any reason, including the file having
+   previously existed, this function returns NULL and sets errno
+   appropriately.  */
+   
+FILE *
+fopen_excl (const char *fname, int binary)
+{
+  int fd;
+#ifdef O_EXCL
+  int flags = O_WRONLY | O_CREAT | O_EXCL;
+# ifdef O_BINARY
+  if (binary)
+    flags |= O_BINARY;
+# endif
+  fd = open (fname, flags, 0666);
+  if (fd < 0)
+    return NULL;
+  return fdopen (fd, binary ? "wb" : "w");
+#else  /* not O_EXCL */
+  /* Manually check whether the file exists.  This is prone to race
+     conditions, but systems without O_EXCL haven't deserved
+     better.  */
+  if (file_exists_p (fname))
+    {
+      errno = EEXIST;
+      return NULL;
+    }
+  return fopen (fname, binary ? "wb" : "w");
+#endif /* not O_EXCL */
+}
 
 /* Create DIRECTORY.  If some of the pathname components of DIRECTORY
    are missing, create them first.  In case any mkdir() call fails,
@@ -647,9 +587,7 @@ unique_name (const char *file, int allow_passthrough)
 int
 make_directory (const char *directory)
 {
-  int quit = 0;
-  int i;
-  int ret = 0;
+  int i, ret, quit = 0;
   char *dir;
 
   /* Make a copy of dir, to be able to write to it.  Otherwise, the
@@ -748,19 +686,21 @@ static char *
 proclist (char **strlist, const char *s, enum accd flags)
 {
   char **x;
-
   for (x = strlist; *x; x++)
-    if (has_wildcards_p (*x))
-      {
-	if (fnmatch (*x, s, FNM_PATHNAME) == 0)
-	  break;
-      }
-    else
-      {
-	char *p = *x + ((flags & ALLABS) && (**x == '/')); /* Remove '/' */
-	if (frontcmp (p, s))
-	  break;
-      }
+    {
+      /* Remove leading '/' if ALLABS */
+      char *p = *x + ((flags & ALLABS) && (**x == '/'));
+      if (has_wildcards_p (p))
+	{
+	  if (fnmatch (p, s, FNM_PATHNAME) == 0)
+	    break;
+	}
+      else
+	{
+	  if (frontcmp (p, s))
+	    break;
+	}
+    }
   return *x;
 }
 
@@ -1003,11 +943,11 @@ read_file (const char *file)
     fd = open (file, O_RDONLY);
   if (fd < 0)
     return NULL;
-  fm = xmalloc (sizeof (struct file_memory));
+  fm = xnew (struct file_memory);
 
 #ifdef HAVE_MMAP
   {
-    struct stat buf;
+    struct_fstat buf;
     if (fstat (fd, &buf) < 0)
       goto mmap_lose;
     fm->length = buf.st_size;
@@ -1039,7 +979,7 @@ read_file (const char *file)
   fm->content = xmalloc (size);
   while (1)
     {
-      long nread;
+      wgint nread;
       if (fm->length > size / 2)
 	{
 	  /* #### I'm not sure whether the whole exponential-growth
@@ -1151,89 +1091,28 @@ merge_vecs (char **v1, char **v2)
   return v1;
 }
 
-/* A set of simple-minded routines to store strings in a linked list.
-   This used to also be used for searching, but now we have hash
-   tables for that.  */
+/* Append a freshly allocated copy of STR to VEC.  If VEC is NULL, it
+   is allocated as needed.  Return the new value of the vector. */
 
-/* It's a shame that these simple things like linked lists and hash
-   tables (see hash.c) need to be implemented over and over again.  It
-   would be nice to be able to use the routines from glib -- see
-   www.gtk.org for details.  However, that would make Wget depend on
-   glib, and I want to avoid dependencies to external libraries for
-   reasons of convenience and portability (I suspect Wget is more
-   portable than anything ever written for Gnome).  */
-
-/* Append an element to the list.  If the list has a huge number of
-   elements, this can get slow because it has to find the list's
-   ending.  If you think you have to call slist_append in a loop,
-   think about calling slist_prepend() followed by slist_nreverse().  */
-
-slist *
-slist_append (slist *l, const char *s)
+char **
+vec_append (char **vec, const char *str)
 {
-  slist *newel = (slist *)xmalloc (sizeof (slist));
-  slist *beg = l;
-
-  newel->string = xstrdup (s);
-  newel->next = NULL;
-
-  if (!l)
-    return newel;
-  /* Find the last element.  */
-  while (l->next)
-    l = l->next;
-  l->next = newel;
-  return beg;
-}
-
-/* Prepend S to the list.  Unlike slist_append(), this is O(1).  */
-
-slist *
-slist_prepend (slist *l, const char *s)
-{
-  slist *newel = (slist *)xmalloc (sizeof (slist));
-  newel->string = xstrdup (s);
-  newel->next = l;
-  return newel;
-}
-
-/* Destructively reverse L. */
-
-slist *
-slist_nreverse (slist *l)
-{
-  slist *prev = NULL;
-  while (l)
+  int cnt;			/* count of vector elements, including
+				   the one we're about to append */
+  if (vec != NULL)
     {
-      slist *next = l->next;
-      l->next = prev;
-      prev = l;
-      l = next;
+      for (cnt = 0; vec[cnt]; cnt++)
+	;
+      ++cnt;
     }
-  return prev;
-}
-
-/* Is there a specific entry in the list?  */
-int
-slist_contains (slist *l, const char *s)
-{
-  for (; l; l = l->next)
-    if (!strcmp (l->string, s))
-      return 1;
-  return 0;
-}
-
-/* Free the whole slist.  */
-void
-slist_free (slist *l)
-{
-  while (l)
-    {
-      slist *n = l->next;
-      xfree (l->string);
-      xfree (l);
-      l = n;
-    }
+  else
+    cnt = 1;
+  /* Reallocate the array to fit the new element and the NULL. */
+  vec = xrealloc (vec, (cnt + 1) * sizeof (char *));
+  /* Append a copy of STR to the vector. */
+  vec[cnt - 1] = xstrdup (str);
+  vec[cnt] = NULL;
+  return vec;
 }
 
 /* Sometimes it's useful to create "sets" of strings, i.e. special
@@ -1266,6 +1145,22 @@ string_set_contains (struct hash_table *ht, const char *s)
 }
 
 static int
+string_set_to_array_mapper (void *key, void *value_ignored, void *arg)
+{
+  char ***arrayptr = (char ***) arg;
+  *(*arrayptr)++ = (char *) key;
+  return 0;
+}
+
+/* Convert the specified string set to array.  ARRAY should be large
+   enough to hold hash_table_count(ht) char pointers.  */
+
+void string_set_to_array (struct hash_table *ht, char **array)
+{
+  hash_table_map (ht, string_set_to_array_mapper, &array);
+}
+
+static int
 string_set_free_mapper (void *key, void *value_ignored, void *arg_ignored)
 {
   xfree (key);
@@ -1294,139 +1189,258 @@ free_keys_and_values (struct hash_table *ht)
 {
   hash_table_map (ht, free_keys_and_values_mapper, NULL);
 }
-
 
-/* Engine for legible and legible_large_int; add thousand separators
-   to numbers printed in strings.  */
-
-static char *
-legible_1 (const char *repr)
+static void
+get_grouping_data (const char **sep, const char **grouping)
 {
-  static char outbuf[48];
-  int i, i1, mod;
-  char *outptr;
-  const char *inptr;
-
-  /* Reset the pointers.  */
-  outptr = outbuf;
-  inptr = repr;
-
-  /* Ignore the sign for the purpose of adding thousand
-     separators.  */
-  if (*inptr == '-')
+  static const char *cached_sep;
+  static const char *cached_grouping;
+  static int initialized;
+  if (!initialized)
     {
-      *outptr++ = '-';
-      ++inptr;
+      /* If locale.h is present and defines LC_NUMERIC, assume C89
+	 struct lconv with "thousand_sep" and "grouping" members.  */
+#ifdef LC_NUMERIC
+      /* Get the grouping info from the locale. */
+      struct lconv *lconv;
+      const char *oldlocale = setlocale (LC_NUMERIC, NULL);
+      /* Temporarily switch to the current locale */
+      setlocale (LC_NUMERIC, "");
+      lconv = localeconv ();
+      cached_sep = xstrdup (lconv->thousands_sep);
+      cached_grouping = xstrdup (lconv->grouping);
+      /* Restore the locale to previous setting. */
+      setlocale (LC_NUMERIC, oldlocale);
+      if (!*cached_sep)
+#endif
+	/* Force separator for locales that specify no separators
+	   ("C", "hr", and probably many more.) */
+	cached_sep = ",", cached_grouping = "\x03";
+      initialized = 1;
     }
-  /* How many digits before the first separator?  */
-  mod = strlen (inptr) % 3;
-  /* Insert them.  */
-  for (i = 0; i < mod; i++)
-    *outptr++ = inptr[i];
-  /* Now insert the rest of them, putting separator before every
-     third digit.  */
-  for (i1 = i, i = 0; inptr[i1]; i++, i1++)
-    {
-      if (i % 3 == 0 && i1 != 0)
-	*outptr++ = ',';
-      *outptr++ = inptr[i1];
-    }
-  /* Zero-terminate the string.  */
-  *outptr = '\0';
-  return outbuf;
+  *sep = cached_sep;
+  *grouping = cached_grouping;
 }
 
-/* Legible -- return a static pointer to the legibly printed long.  */
+/* Add thousand separators to a number already in string form.  Used
+   by with_thousand_seps and with_thousand_seps_sum.  */
 
 char *
-legible (long l)
+add_thousand_seps (const char *repr)
+{
+  static char outbuf[48];
+  char *p = outbuf + sizeof outbuf;
+
+  const char *in = strchr (repr, '\0');
+  const char *instart = repr + (*repr == '-'); /* don't group sign */
+
+  /* Info received from locale */
+  const char *grouping, *sep;
+  int seplen;
+
+  /* State information */
+  int i = 0, groupsize;
+  const char *atgroup;
+
+  /* Initialize grouping data. */
+  get_grouping_data (&sep, &grouping);
+  seplen = strlen (sep);
+  atgroup = grouping;
+  groupsize = *atgroup++;
+
+  /* Write the number into the buffer, backwards, inserting the
+     separators as necessary.  */
+  *--p = '\0';
+  while (1)
+    {
+      *--p = *--in;
+      if (in == instart)
+	break;
+      /* Prepend SEP to every groupsize'd digit and get new groupsize.  */
+      if (++i == groupsize)
+	{
+	  if (seplen == 1)
+	    *--p = *sep;
+	  else
+	    memcpy (p -= seplen, sep, seplen);
+	  i = 0;
+	  if (*atgroup)
+	    groupsize = *atgroup++;
+	}
+    }
+  if (*repr == '-')
+    *--p = '-';
+
+  return p;
+}
+
+/* Return a printed representation of N with thousand separators.
+   This should respect locale settings, with the exception of the "C"
+   locale which mandates no separator, but we use one anyway.
+
+   Unfortunately, we cannot use %'d (in fact it would be %'j) to get
+   the separators because it's too non-portable, and it's hard to test
+   for this feature at configure time.  Besides, it wouldn't work in
+   the "C" locale, which many Unix users still work in.  */
+
+char *
+with_thousand_seps (wgint l)
 {
   char inbuf[24];
   /* Print the number into the buffer.  */
   number_to_string (inbuf, l);
-  return legible_1 (inbuf);
+  return add_thousand_seps (inbuf);
 }
 
-/* Write a string representation of LARGE_INT NUMBER into the provided
-   buffer.  The buffer should be able to accept 24 characters,
-   including the terminating zero.
+/* When SUM_SIZE_INT is wgint, with_thousand_seps_large is #defined to
+   with_thousand_seps.  The function below is used on non-LFS systems
+   where SUM_SIZE_INT typedeffed to double.  */
 
-   It would be dangerous to use sprintf, because the code wouldn't
-   work on a machine with gcc-provided long long support, but without
-   libc support for "%lld".  However, such platforms will typically
-   not have snprintf and will use our version, which does support
-   "%lld" where long longs are available.  */
-
-static void
-large_int_to_string (char *buffer, LARGE_INT number)
+#ifndef with_thousand_seps_sum
+char *
+with_thousand_seps_sum (SUM_SIZE_INT l)
 {
-  snprintf (buffer, 24, LARGE_INT_FMT, number);
+  char inbuf[32];
+  snprintf (inbuf, sizeof (inbuf), "%.0f", l);
+  return add_thousand_seps (inbuf);
 }
+#endif /* not with_thousand_seps_sum */
 
-/* The same as legible(), but works on LARGE_INT.  */
+/* N, a byte quantity, is converted to a human-readable abberviated
+   form a la sizes printed by `ls -lh'.  The result is written to a
+   static buffer, a pointer to which is returned.
+
+   Unlike `with_thousand_seps', this approximates to the nearest unit.
+   Quoting GNU libit: "Most people visually process strings of 3-4
+   digits effectively, but longer strings of digits are more prone to
+   misinterpretation.  Hence, converting to an abbreviated form
+   usually improves readability."
+
+   This intentionally uses kilobyte (KB), megabyte (MB), etc. in their
+   original computer science meaning of "powers of 1024".  Powers of
+   1000 would be useless since Wget already displays sizes with
+   thousand separators.  We don't use the "*bibyte" names invented in
+   1998, and seldom used in practice.  Wikipedia's entry on kilobyte
+   discusses this in some detail.  */
 
 char *
-legible_large_int (LARGE_INT l)
+human_readable (wgint n)
 {
-  char inbuf[48];
-  large_int_to_string (inbuf, l);
-  return legible_1 (inbuf);
+  /* These suffixes are compatible with those of GNU `ls -lh'. */
+  static char powers[] =
+    {
+      'K',			/* kilobyte, 2^10 bytes */
+      'M',			/* megabyte, 2^20 bytes */
+      'G',			/* gigabyte, 2^30 bytes */
+      'T',			/* terabyte, 2^40 bytes */
+      'P',			/* petabyte, 2^50 bytes */
+      'E',			/* exabyte,  2^60 bytes */
+    };
+  static char buf[8];
+  int i;
+
+  /* If the quantity is smaller than 1K, just print it. */
+  if (n < 1024)
+    {
+      snprintf (buf, sizeof (buf), "%d", (int) n);
+      return buf;
+    }
+
+  /* Loop over powers, dividing N with 1024 in each iteration.  This
+     works unchanged for all sizes of wgint, while still avoiding
+     non-portable `long double' arithmetic.  */
+  for (i = 0; i < countof (powers); i++)
+    {
+      /* At each iteration N is greater than the *subsequent* power.
+	 That way N/1024.0 produces a decimal number in the units of
+	 *this* power.  */
+      if ((n >> 10) < 1024 || i == countof (powers) - 1)
+	{
+	  double val = n / 1024.0;
+	  /* Print values smaller than 10 with one decimal digits, and
+	     others without any decimals.  */
+	  snprintf (buf, sizeof (buf), "%.*f%c",
+		    val < 10 ? 1 : 0, val, powers[i]);
+	  return buf;
+	}
+      n >>= 10;
+    }
+  return NULL;			/* unreached */
 }
 
-/* Count the digits in a (long) integer.  */
+/* Count the digits in the provided number.  Used to allocate space
+   when printing numbers.  */
+
 int
-numdigit (long number)
+numdigit (wgint number)
 {
   int cnt = 1;
   if (number < 0)
-    {
-      number = -number;
-      ++cnt;
-    }
-  while ((number /= 10) > 0)
+    ++cnt;			/* accomodate '-' */
+  while ((number /= 10) != 0)
     ++cnt;
   return cnt;
 }
 
-/* A half-assed implementation of INT_MAX on machines that don't
-   bother to define one. */
-#ifndef INT_MAX
-# define INT_MAX ((int) ~((unsigned)1 << 8 * sizeof (int) - 1))
+#define PR(mask) *p++ = n / (mask) + '0'
+
+/* DIGITS_<D> is used to print a D-digit number and should be called
+   with mask==10^(D-1).  It prints n/mask (the first digit), reducing
+   n to n%mask (the remaining digits), and calling DIGITS_<D-1>.
+   Recursively this continues until DIGITS_1 is invoked.  */
+
+#define DIGITS_1(mask) PR (mask)
+#define DIGITS_2(mask) PR (mask), n %= (mask), DIGITS_1 ((mask) / 10)
+#define DIGITS_3(mask) PR (mask), n %= (mask), DIGITS_2 ((mask) / 10)
+#define DIGITS_4(mask) PR (mask), n %= (mask), DIGITS_3 ((mask) / 10)
+#define DIGITS_5(mask) PR (mask), n %= (mask), DIGITS_4 ((mask) / 10)
+#define DIGITS_6(mask) PR (mask), n %= (mask), DIGITS_5 ((mask) / 10)
+#define DIGITS_7(mask) PR (mask), n %= (mask), DIGITS_6 ((mask) / 10)
+#define DIGITS_8(mask) PR (mask), n %= (mask), DIGITS_7 ((mask) / 10)
+#define DIGITS_9(mask) PR (mask), n %= (mask), DIGITS_8 ((mask) / 10)
+#define DIGITS_10(mask) PR (mask), n %= (mask), DIGITS_9 ((mask) / 10)
+
+/* DIGITS_<11-20> are only used on machines with 64-bit wgints. */
+
+#define DIGITS_11(mask) PR (mask), n %= (mask), DIGITS_10 ((mask) / 10)
+#define DIGITS_12(mask) PR (mask), n %= (mask), DIGITS_11 ((mask) / 10)
+#define DIGITS_13(mask) PR (mask), n %= (mask), DIGITS_12 ((mask) / 10)
+#define DIGITS_14(mask) PR (mask), n %= (mask), DIGITS_13 ((mask) / 10)
+#define DIGITS_15(mask) PR (mask), n %= (mask), DIGITS_14 ((mask) / 10)
+#define DIGITS_16(mask) PR (mask), n %= (mask), DIGITS_15 ((mask) / 10)
+#define DIGITS_17(mask) PR (mask), n %= (mask), DIGITS_16 ((mask) / 10)
+#define DIGITS_18(mask) PR (mask), n %= (mask), DIGITS_17 ((mask) / 10)
+#define DIGITS_19(mask) PR (mask), n %= (mask), DIGITS_18 ((mask) / 10)
+
+/* SPRINTF_WGINT is used by number_to_string to handle pathological
+   cases and to portably support strange sizes of wgint.  Ideally this
+   would just use "%j" and intmax_t, but many systems don't support
+   it, so it's used only if nothing else works.  */
+#if SIZEOF_LONG >= SIZEOF_WGINT
+#  define SPRINTF_WGINT(buf, n) sprintf (buf, "%ld", (long) (n))
+#else
+# if SIZEOF_LONG_LONG >= SIZEOF_WGINT
+#   define SPRINTF_WGINT(buf, n) sprintf (buf, "%lld", (long long) (n))
+# else
+#  ifdef WINDOWS
+#   define SPRINTF_WGINT(buf, n) sprintf (buf, "%I64d", (__int64) (n))
+#  else
+#   define SPRINTF_WGINT(buf, n) sprintf (buf, "%j", (intmax_t) (n))
+#  endif
+# endif
 #endif
 
-#define ONE_DIGIT(figure) *p++ = n / (figure) + '0'
-#define ONE_DIGIT_ADVANCE(figure) (ONE_DIGIT (figure), n %= (figure))
+/* Shorthand for casting to wgint. */
+#define W wgint
 
-#define DIGITS_1(figure) ONE_DIGIT (figure)
-#define DIGITS_2(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_1 ((figure) / 10)
-#define DIGITS_3(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_2 ((figure) / 10)
-#define DIGITS_4(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_3 ((figure) / 10)
-#define DIGITS_5(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_4 ((figure) / 10)
-#define DIGITS_6(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_5 ((figure) / 10)
-#define DIGITS_7(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_6 ((figure) / 10)
-#define DIGITS_8(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_7 ((figure) / 10)
-#define DIGITS_9(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_8 ((figure) / 10)
-#define DIGITS_10(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_9 ((figure) / 10)
-
-/* DIGITS_<11-20> are only used on machines with 64-bit longs. */
-
-#define DIGITS_11(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_10 ((figure) / 10)
-#define DIGITS_12(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_11 ((figure) / 10)
-#define DIGITS_13(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_12 ((figure) / 10)
-#define DIGITS_14(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_13 ((figure) / 10)
-#define DIGITS_15(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_14 ((figure) / 10)
-#define DIGITS_16(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_15 ((figure) / 10)
-#define DIGITS_17(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_16 ((figure) / 10)
-#define DIGITS_18(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_17 ((figure) / 10)
-#define DIGITS_19(figure) ONE_DIGIT_ADVANCE (figure); DIGITS_18 ((figure) / 10)
-
-/* Print NUMBER to BUFFER in base 10.  This should be completely
-   equivalent to `sprintf(buffer, "%ld", number)', only much faster.
+/* Print NUMBER to BUFFER in base 10.  This is equivalent to
+   `sprintf(buffer, "%lld", (long long) number)', only typically much
+   faster and portable to machines without long long.
 
    The speedup may make a difference in programs that frequently
    convert numbers to strings.  Some implementations of sprintf,
    particularly the one in GNU libc, have been known to be extremely
-   slow compared to this function.
+   slow when converting integers to strings.
 
    Return the pointer to the location where the terminating zero was
    printed.  (Equivalent to calling buffer+strlen(buffer) after the
@@ -1439,25 +1453,24 @@ numdigit (long number)
    terminating '\0'.  */
 
 char *
-number_to_string (char *buffer, long number)
+number_to_string (char *buffer, wgint number)
 {
   char *p = buffer;
-  long n = number;
+  wgint n = number;
 
-#if (SIZEOF_LONG != 4) && (SIZEOF_LONG != 8)
+#if (SIZEOF_WGINT != 4) && (SIZEOF_WGINT != 8)
   /* We are running in a strange or misconfigured environment.  Let
      sprintf cope with it.  */
-  sprintf (buffer, "%ld", n);
+  SPRINTF_WGINT (buffer, n);
   p += strlen (buffer);
-#else  /* (SIZEOF_LONG == 4) || (SIZEOF_LONG == 8) */
+#else  /* (SIZEOF_WGINT == 4) || (SIZEOF_WGINT == 8) */
 
   if (n < 0)
     {
-      if (n < -INT_MAX)
+      if (n < -WGINT_MAX)
 	{
-	  /* We cannot print a '-' and assign -n to n because -n would
-	     overflow.  Let sprintf deal with this border case.  */
-	  sprintf (buffer, "%ld", n);
+	  /* -n would overflow.  Have sprintf deal with this.  */
+	  SPRINTF_WGINT (buffer, n);
 	  p += strlen (buffer);
 	  return p;
 	}
@@ -1466,40 +1479,47 @@ number_to_string (char *buffer, long number)
       n = -n;
     }
 
-  if      (n < 10)                   { DIGITS_1 (1); }
-  else if (n < 100)                  { DIGITS_2 (10); }
-  else if (n < 1000)                 { DIGITS_3 (100); }
-  else if (n < 10000)                { DIGITS_4 (1000); }
-  else if (n < 100000)               { DIGITS_5 (10000); }
-  else if (n < 1000000)              { DIGITS_6 (100000); }
-  else if (n < 10000000)             { DIGITS_7 (1000000); }
-  else if (n < 100000000)            { DIGITS_8 (10000000); }
-  else if (n < 1000000000)           { DIGITS_9 (100000000); }
-#if SIZEOF_LONG == 4
-  /* ``if (1)'' serves only to preserve editor indentation. */
-  else if (1)                        { DIGITS_10 (1000000000); }
-#else  /* SIZEOF_LONG != 4 */
-  else if (n < 10000000000L)         { DIGITS_10 (1000000000L); }
-  else if (n < 100000000000L)        { DIGITS_11 (10000000000L); }
-  else if (n < 1000000000000L)       { DIGITS_12 (100000000000L); }
-  else if (n < 10000000000000L)      { DIGITS_13 (1000000000000L); }
-  else if (n < 100000000000000L)     { DIGITS_14 (10000000000000L); }
-  else if (n < 1000000000000000L)    { DIGITS_15 (100000000000000L); }
-  else if (n < 10000000000000000L)   { DIGITS_16 (1000000000000000L); }
-  else if (n < 100000000000000000L)  { DIGITS_17 (10000000000000000L); }
-  else if (n < 1000000000000000000L) { DIGITS_18 (100000000000000000L); }
-  else                               { DIGITS_19 (1000000000000000000L); }
-#endif /* SIZEOF_LONG != 4 */
+  /* Use the DIGITS_ macro appropriate for N's number of digits.  That
+     way printing any N is fully open-coded without a loop or jump.
+     (Also see description of DIGITS_*.)  */
+
+  if      (n < 10)                       DIGITS_1 (1);
+  else if (n < 100)                      DIGITS_2 (10);
+  else if (n < 1000)                     DIGITS_3 (100);
+  else if (n < 10000)                    DIGITS_4 (1000);
+  else if (n < 100000)                   DIGITS_5 (10000);
+  else if (n < 1000000)                  DIGITS_6 (100000);
+  else if (n < 10000000)                 DIGITS_7 (1000000);
+  else if (n < 100000000)                DIGITS_8 (10000000);
+  else if (n < 1000000000)               DIGITS_9 (100000000);
+#if SIZEOF_WGINT == 4
+  /* wgint is 32 bits wide: no number has more than 10 digits. */
+  else                                   DIGITS_10 (1000000000);
+#else
+  /* wgint is 64 bits wide: handle numbers with more than 9 decimal
+     digits.  Constants are constructed by compile-time multiplication
+     to avoid dealing with different notations for 64-bit constants
+     (nnnL, nnnLL, and nnnI64, depending on the compiler).  */
+  else if (n < 10*(W)1000000000)         DIGITS_10 (1000000000);
+  else if (n < 100*(W)1000000000)        DIGITS_11 (10*(W)1000000000);
+  else if (n < 1000*(W)1000000000)       DIGITS_12 (100*(W)1000000000);
+  else if (n < 10000*(W)1000000000)      DIGITS_13 (1000*(W)1000000000);
+  else if (n < 100000*(W)1000000000)     DIGITS_14 (10000*(W)1000000000);
+  else if (n < 1000000*(W)1000000000)    DIGITS_15 (100000*(W)1000000000);
+  else if (n < 10000000*(W)1000000000)   DIGITS_16 (1000000*(W)1000000000);
+  else if (n < 100000000*(W)1000000000)  DIGITS_17 (10000000*(W)1000000000);
+  else if (n < 1000000000*(W)1000000000) DIGITS_18 (100000000*(W)1000000000);
+  else                                   DIGITS_19 (1000000000*(W)1000000000);
+#endif
 
   *p = '\0';
-#endif /* (SIZEOF_LONG == 4) || (SIZEOF_LONG == 8) */
+#endif /* (SIZEOF_WGINT == 4) || (SIZEOF_WGINT == 8) */
 
   return p;
 }
 
-#undef ONE_DIGIT
-#undef ONE_DIGIT_ADVANCE
-
+#undef PR
+#undef W
 #undef DIGITS_1
 #undef DIGITS_2
 #undef DIGITS_3
@@ -1519,295 +1539,51 @@ number_to_string (char *buffer, long number)
 #undef DIGITS_17
 #undef DIGITS_18
 #undef DIGITS_19
-
-/* Support for timers. */
 
-#undef TIMER_WINDOWS
-#undef TIMER_GETTIMEOFDAY
-#undef TIMER_TIME
+#define RING_SIZE 3
 
-/* Depending on the OS and availability of gettimeofday(), one and
-   only one of the above constants will be defined.  Virtually all
-   modern Unix systems will define TIMER_GETTIMEOFDAY; Windows will
-   use TIMER_WINDOWS.  TIMER_TIME is a catch-all method for
-   non-Windows systems without gettimeofday.
+/* Print NUMBER to a statically allocated string and return a pointer
+   to the printed representation.
 
-   #### Perhaps we should also support ftime(), which exists on old
-   BSD 4.2-influenced systems?  (It also existed under MS DOS Borland
-   C, if memory serves me.)  */
+   This function is intended to be used in conjunction with printf.
+   It is hard to portably print wgint values:
+    a) you cannot use printf("%ld", number) because wgint can be long
+       long on 32-bit machines with LFS.
+    b) you cannot use printf("%lld", number) because NUMBER could be
+       long on 32-bit machines without LFS, or on 64-bit machines,
+       which do not require LFS.  Also, Windows doesn't support %lld.
+    c) you cannot use printf("%j", (int_max_t) number) because not all
+       versions of printf support "%j", the most notable being the one
+       on Windows.
+    d) you cannot #define WGINT_FMT to the appropriate format and use
+       printf(WGINT_FMT, number) because that would break translations
+       for user-visible messages, such as printf("Downloaded: %d
+       bytes\n", number).
 
-#ifdef WINDOWS
-# define TIMER_WINDOWS
-#else  /* not WINDOWS */
-# ifdef HAVE_GETTIMEOFDAY
-#  define TIMER_GETTIMEOFDAY
-# else
-#  define TIMER_TIME
-# endif
-#endif /* not WINDOWS */
+   What you should use instead is printf("%s", number_to_static_string
+   (number)).
 
-#ifdef TIMER_GETTIMEOFDAY
-typedef struct timeval wget_sys_time;
-#endif
+   CAVEAT: since the function returns pointers to static data, you
+   must be careful to copy its result before calling it again.
+   However, to make it more useful with printf, the function maintains
+   an internal ring of static buffers to return.  That way things like
+   printf("%s %s", number_to_static_string (num1),
+   number_to_static_string (num2)) work as expected.  Three buffers
+   are currently used, which means that "%s %s %s" will work, but "%s
+   %s %s %s" won't.  If you need to print more than three wgints,
+   bump the RING_SIZE (or rethink your message.)  */
 
-#ifdef TIMER_TIME
-typedef time_t wget_sys_time;
-#endif
-
-#ifdef TIMER_WINDOWS
-typedef ULARGE_INTEGER wget_sys_time;
-#endif
-
-struct wget_timer {
-  /* The starting point in time which, subtracted from the current
-     time, yields elapsed time. */
-  wget_sys_time start;
-
-  /* The most recent elapsed time, calculated by wtimer_elapsed().
-     Measured in milliseconds.  */
-  double elapsed_last;
-
-  /* Approximately, the time elapsed between the true start of the
-     measurement and the time represented by START.  */
-  double elapsed_pre_start;
-};
-
-/* Allocate a timer.  It is not legal to do anything with a freshly
-   allocated timer, except call wtimer_reset() or wtimer_delete().  */
-
-struct wget_timer *
-wtimer_allocate (void)
-{
-  struct wget_timer *wt =
-    (struct wget_timer *)xmalloc (sizeof (struct wget_timer));
-  return wt;
-}
-
-/* Allocate a new timer and reset it.  Return the new timer. */
-
-struct wget_timer *
-wtimer_new (void)
-{
-  struct wget_timer *wt = wtimer_allocate ();
-  wtimer_reset (wt);
-  return wt;
-}
-
-/* Free the resources associated with the timer.  Its further use is
-   prohibited.  */
-
-void
-wtimer_delete (struct wget_timer *wt)
-{
-  xfree (wt);
-}
-
-/* Store system time to WST.  */
-
-static void
-wtimer_sys_set (wget_sys_time *wst)
-{
-#ifdef TIMER_GETTIMEOFDAY
-  gettimeofday (wst, NULL);
-#endif
-
-#ifdef TIMER_TIME
-  time (wst);
-#endif
-
-#ifdef TIMER_WINDOWS
-  /* We use GetSystemTime to get the elapsed time.  MSDN warns that
-     system clock adjustments can skew the output of GetSystemTime
-     when used as a timer and gives preference to GetTickCount and
-     high-resolution timers.  But GetTickCount can overflow, and hires
-     timers are typically used for profiling, not for regular time
-     measurement.  Since we handle clock skew anyway, we just use
-     GetSystemTime.  */
-  FILETIME ft;
-  SYSTEMTIME st;
-  GetSystemTime (&st);
-
-  /* As recommended by MSDN, we convert SYSTEMTIME to FILETIME, copy
-     FILETIME to ULARGE_INTEGER, and use regular 64-bit integer
-     arithmetic on that.  */
-  SystemTimeToFileTime (&st, &ft);
-  wst->HighPart = ft.dwHighDateTime;
-  wst->LowPart  = ft.dwLowDateTime;
-#endif
-}
-
-/* Reset timer WT.  This establishes the starting point from which
-   wtimer_elapsed() will return the number of elapsed
-   milliseconds.  It is allowed to reset a previously used timer.  */
-
-void
-wtimer_reset (struct wget_timer *wt)
-{
-  /* Set the start time to the current time. */
-  wtimer_sys_set (&wt->start);
-  wt->elapsed_last = 0;
-  wt->elapsed_pre_start = 0;
-}
-
-static double
-wtimer_sys_diff (wget_sys_time *wst1, wget_sys_time *wst2)
-{
-#ifdef TIMER_GETTIMEOFDAY
-  return ((double)(wst1->tv_sec - wst2->tv_sec) * 1000
-	  + (double)(wst1->tv_usec - wst2->tv_usec) / 1000);
-#endif
-
-#ifdef TIMER_TIME
-  return 1000 * (*wst1 - *wst2);
-#endif
-
-#ifdef WINDOWS
-  /* VC++ 6 doesn't support direct cast of uint64 to double.  To work
-     around this, we subtract, then convert to signed, then finally to
-     double.  */
-  return (double)(signed __int64)(wst1->QuadPart - wst2->QuadPart) / 10000;
-#endif
-}
-
-/* Return the number of milliseconds elapsed since the timer was last
-   reset.  It is allowed to call this function more than once to get
-   increasingly higher elapsed values.  These timers handle clock
-   skew.  */
-
-double
-wtimer_elapsed (struct wget_timer *wt)
-{
-  wget_sys_time now;
-  double elapsed;
-
-  wtimer_sys_set (&now);
-  elapsed = wt->elapsed_pre_start + wtimer_sys_diff (&now, &wt->start);
-
-  /* Ideally we'd just return the difference between NOW and
-     wt->start.  However, the system timer can be set back, and we
-     could return a value smaller than when we were last called, even
-     a negative value.  Both of these would confuse the callers, which
-     expect us to return monotonically nondecreasing values.
-
-     Therefore: if ELAPSED is smaller than its previous known value,
-     we reset wt->start to the current time and effectively start
-     measuring from this point.  But since we don't want the elapsed
-     value to start from zero, we set elapsed_pre_start to the last
-     elapsed time and increment all future calculations by that
-     amount.  */
-
-  if (elapsed < wt->elapsed_last)
-    {
-      wt->start = now;
-      wt->elapsed_pre_start = wt->elapsed_last;
-      elapsed = wt->elapsed_last;
-    }
-
-  wt->elapsed_last = elapsed;
-  return elapsed;
-}
-
-/* Return the assessed granularity of the timer implementation, in
-   milliseconds.  This is used by code that tries to substitute a
-   better value for timers that have returned zero.  */
-
-double
-wtimer_granularity (void)
-{
-#ifdef TIMER_GETTIMEOFDAY
-  /* Granularity of gettimeofday varies wildly between architectures.
-     However, it appears that on modern machines it tends to be better
-     than 1ms.  Assume 100 usecs.  (Perhaps the configure process
-     could actually measure this?)  */
-  return 0.1;
-#endif
-
-#ifdef TIMER_TIME
-  return 1000;
-#endif
-
-#ifdef TIMER_WINDOWS
-  /* According to MSDN, GetSystemTime returns a broken-down time
-     structure the smallest member of which are milliseconds.  */
-  return 1;
-#endif
-}
-
-/* This should probably be at a better place, but it doesn't really
-   fit into html-parse.c.  */
-
-/* The function returns the pointer to the malloc-ed quoted version of
-   string s.  It will recognize and quote numeric and special graphic
-   entities, as per RFC1866:
-
-   `&' -> `&amp;'
-   `<' -> `&lt;'
-   `>' -> `&gt;'
-   `"' -> `&quot;'
-   SP  -> `&#32;'
-
-   No other entities are recognized or replaced.  */
 char *
-html_quote_string (const char *s)
+number_to_static_string (wgint number)
 {
-  const char *b = s;
-  char *p, *res;
-  int i;
-
-  /* Pass through the string, and count the new size.  */
-  for (i = 0; *s; s++, i++)
-    {
-      if (*s == '&')
-	i += 4;			/* `amp;' */
-      else if (*s == '<' || *s == '>')
-	i += 3;			/* `lt;' and `gt;' */
-      else if (*s == '\"')
-	i += 5;			/* `quot;' */
-      else if (*s == ' ')
-	i += 4;			/* #32; */
-    }
-  res = (char *)xmalloc (i + 1);
-  s = b;
-  for (p = res; *s; s++)
-    {
-      switch (*s)
-	{
-	case '&':
-	  *p++ = '&';
-	  *p++ = 'a';
-	  *p++ = 'm';
-	  *p++ = 'p';
-	  *p++ = ';';
-	  break;
-	case '<': case '>':
-	  *p++ = '&';
-	  *p++ = (*s == '<' ? 'l' : 'g');
-	  *p++ = 't';
-	  *p++ = ';';
-	  break;
-	case '\"':
-	  *p++ = '&';
-	  *p++ = 'q';
-	  *p++ = 'u';
-	  *p++ = 'o';
-	  *p++ = 't';
-	  *p++ = ';';
-	  break;
-	case ' ':
-	  *p++ = '&';
-	  *p++ = '#';
-	  *p++ = '3';
-	  *p++ = '2';
-	  *p++ = ';';
-	  break;
-	default:
-	  *p++ = *s;
-	}
-    }
-  *p = '\0';
-  return res;
+  static char ring[RING_SIZE][24];
+  static int ringpos;
+  char *buf = ring[ringpos];
+  number_to_string (buf, number);
+  ringpos = (ringpos + 1) % RING_SIZE;
+  return buf;
 }
-
+
 /* Determine the width of the terminal we're running on.  If that's
    not possible, return 0.  */
 
@@ -1816,9 +1592,7 @@ determine_screen_width (void)
 {
   /* If there's a way to get the terminal size using POSIX
      tcgetattr(), somebody please tell me.  */
-#ifndef TIOCGWINSZ
-  return 0;
-#else  /* TIOCGWINSZ */
+#ifdef TIOCGWINSZ
   int fd;
   struct winsize wsz;
 
@@ -1830,7 +1604,16 @@ determine_screen_width (void)
     return 0;			/* most likely ENOTTY */
 
   return wsz.ws_col;
-#endif /* TIOCGWINSZ */
+#else  /* not TIOCGWINSZ */
+# ifdef WINDOWS
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  if (!GetConsoleScreenBufferInfo (GetStdHandle (STD_ERROR_HANDLE), &csbi))
+    return 0;
+  return csbi.dwSize.X;
+# else /* neither WINDOWS nor TIOCGWINSZ */
+  return 0;
+#endif /* neither WINDOWS nor TIOCGWINSZ */
+#endif /* not TIOCGWINSZ */
 }
 
 /* Return a random number between 0 and MAX-1, inclusive.
@@ -1895,40 +1678,6 @@ random_float (void)
   int rnd3 = random_number (1000);
   return rnd1 / 1000.0 + rnd2 / 1000000.0 + rnd3 / 1000000000.0;
 }
-
-#if 0
-/* A debugging function for checking whether an MD5 library works. */
-
-#include "gen-md5.h"
-
-char *
-debug_test_md5 (char *buf)
-{
-  unsigned char raw[16];
-  static char res[33];
-  unsigned char *p1;
-  char *p2;
-  int cnt;
-  ALLOCA_MD5_CONTEXT (ctx);
-
-  gen_md5_init (ctx);
-  gen_md5_update ((unsigned char *)buf, strlen (buf), ctx);
-  gen_md5_finish (ctx, raw);
-
-  p1 = raw;
-  p2 = res;
-  cnt = 16;
-  while (cnt--)
-    {
-      *p2++ = XNUM_TO_digit (*p1 >> 4);
-      *p2++ = XNUM_TO_digit (*p1 & 0xf);
-      ++p1;
-    }
-  *p2 = '\0';
-
-  return res;
-}
-#endif
 
 /* Implementation of run_with_timeout, a generic timeout-forcing
    routine for systems with Unix-like signal handling.  */
@@ -1980,9 +1729,9 @@ alarm_set (double timeout)
 #ifdef ITIMER_REAL
   /* Use the modern itimer interface. */
   struct itimerval itv;
-  memset (&itv, 0, sizeof (itv));
+  xzero (itv);
   itv.it_value.tv_sec = (long) timeout;
-  itv.it_value.tv_usec = 1000000L * (timeout - (long)timeout);
+  itv.it_value.tv_usec = 1000000 * (timeout - (long)timeout);
   if (itv.it_value.tv_sec == 0 && itv.it_value.tv_usec == 0)
     /* Ensure that we wait for at least the minimum interval.
        Specifying zero would mean "wait forever".  */
@@ -2008,7 +1757,7 @@ alarm_cancel (void)
 {
 #ifdef ITIMER_REAL
   struct itimerval disable;
-  memset (&disable, 0, sizeof (disable));
+  xzero (disable);
   setitimer (ITIMER_REAL, &disable, NULL);
 #else  /* not ITIMER_REAL */
   alarm (0);
@@ -2034,8 +1783,8 @@ alarm_cancel (void)
      * It works with both SYSV and BSD signals because it doesn't
        depend on the default setting of SA_RESTART.
 
-     * It doesn't special handler setup beyond a simple call to
-       signal().  (It does use sigsetjmp/siglongjmp, but they're
+     * It doesn't require special handler setup beyond a simple call
+       to signal().  (It does use sigsetjmp/siglongjmp, but they're
        optional.)
 
    The only downside is that, if FUN allocates internal resources that
@@ -2087,3 +1836,257 @@ run_with_timeout (double timeout, void (*fun) (void *), void *arg)
 }
 #endif /* not WINDOWS */
 #endif /* not USE_SIGNAL_TIMEOUT */
+
+#ifndef WINDOWS
+
+/* Sleep the specified amount of seconds.  On machines without
+   nanosleep(), this may sleep shorter if interrupted by signals.  */
+
+void
+xsleep (double seconds)
+{
+#ifdef HAVE_NANOSLEEP
+  /* nanosleep is the preferred interface because it offers high
+     accuracy and, more importantly, because it allows us to reliably
+     restart receiving a signal such as SIGWINCH.  (There was an
+     actual Debian bug report about --limit-rate malfunctioning while
+     the terminal was being resized.)  */
+  struct timespec sleep, remaining;
+  sleep.tv_sec = (long) seconds;
+  sleep.tv_nsec = 1000000000 * (seconds - (long) seconds);
+  while (nanosleep (&sleep, &remaining) < 0 && errno == EINTR)
+    /* If nanosleep has been interrupted by a signal, adjust the
+       sleeping period and return to sleep.  */
+    sleep = remaining;
+#else  /* not HAVE_NANOSLEEP */
+#ifdef HAVE_USLEEP
+  /* If usleep is available, use it in preference to select.  */
+  if (seconds >= 1)
+    {
+      /* On some systems, usleep cannot handle values larger than
+	 1,000,000.  If the period is larger than that, use sleep
+	 first, then add usleep for subsecond accuracy.  */
+      sleep (seconds);
+      seconds -= (long) seconds;
+    }
+  usleep (seconds * 1000000);
+#else  /* not HAVE_USLEEP */
+#ifdef HAVE_SELECT
+  /* Note that, although Windows supports select, this sleeping
+     strategy doesn't work there because Winsock's select doesn't
+     implement timeout when it is passed NULL pointers for all fd
+     sets.  (But it does work under Cygwin, which implements its own
+     select.)  */
+  struct timeval sleep;
+  sleep.tv_sec = (long) seconds;
+  sleep.tv_usec = 1000000 * (seconds - (long) seconds);
+  select (0, NULL, NULL, NULL, &sleep);
+  /* If select returns -1 and errno is EINTR, it means we were
+     interrupted by a signal.  But without knowing how long we've
+     actually slept, we can't return to sleep.  Using gettimeofday to
+     track sleeps is slow and unreliable due to clock skew.  */
+#else  /* not HAVE_SELECT */
+  sleep (seconds);
+#endif /* not HAVE_SELECT */
+#endif /* not HAVE_USLEEP */
+#endif /* not HAVE_NANOSLEEP */
+}
+
+#endif /* not WINDOWS */
+
+/* Encode the string STR of length LENGTH to base64 format and place it
+   to B64STORE.  The output will be \0-terminated, and must point to a
+   writable buffer of at least 1+BASE64_LENGTH(length) bytes.  It
+   returns the length of the resulting base64 data, not counting the
+   terminating zero.
+
+   This implementation will not emit newlines after 76 characters of
+   base64 data.  */
+
+int
+base64_encode (const char *str, int length, char *b64store)
+{
+  /* Conversion table.  */
+  static char tbl[64] = {
+    'A','B','C','D','E','F','G','H',
+    'I','J','K','L','M','N','O','P',
+    'Q','R','S','T','U','V','W','X',
+    'Y','Z','a','b','c','d','e','f',
+    'g','h','i','j','k','l','m','n',
+    'o','p','q','r','s','t','u','v',
+    'w','x','y','z','0','1','2','3',
+    '4','5','6','7','8','9','+','/'
+  };
+  int i;
+  const unsigned char *s = (const unsigned char *) str;
+  char *p = b64store;
+
+  /* Transform the 3x8 bits to 4x6 bits, as required by base64.  */
+  for (i = 0; i < length; i += 3)
+    {
+      *p++ = tbl[s[0] >> 2];
+      *p++ = tbl[((s[0] & 3) << 4) + (s[1] >> 4)];
+      *p++ = tbl[((s[1] & 0xf) << 2) + (s[2] >> 6)];
+      *p++ = tbl[s[2] & 0x3f];
+      s += 3;
+    }
+
+  /* Pad the result if necessary...  */
+  if (i == length + 1)
+    *(p - 1) = '=';
+  else if (i == length + 2)
+    *(p - 1) = *(p - 2) = '=';
+
+  /* ...and zero-terminate it.  */
+  *p = '\0';
+
+  return p - b64store;
+}
+
+#define IS_ASCII(c) (((c) & 0x80) == 0)
+#define IS_BASE64(c) ((IS_ASCII (c) && base64_char_to_value[c] >= 0) || c == '=')
+
+/* Get next character from the string, except that non-base64
+   characters are ignored, as mandated by rfc2045.  */
+#define NEXT_BASE64_CHAR(c, p) do {			\
+  c = *p++;						\
+} while (c != '\0' && !IS_BASE64 (c))
+
+/* Decode data from BASE64 (assumed to be encoded as base64) into
+   memory pointed to by TO.  TO should be large enough to accomodate
+   the decoded data, which is guaranteed to be less than
+   strlen(base64).
+
+   Since TO is assumed to contain binary data, it is not
+   NUL-terminated.  The function returns the length of the data
+   written to TO.  -1 is returned in case of error caused by malformed
+   base64 input.  */
+
+int
+base64_decode (const char *base64, char *to)
+{
+  /* Table of base64 values for first 128 characters.  Note that this
+     assumes ASCII (but so does Wget in other places).  */
+  static short base64_char_to_value[128] =
+    {
+      -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,	/*   0-  9 */
+      -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,	/*  10- 19 */
+      -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,	/*  20- 29 */
+      -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,	/*  30- 39 */
+      -1,  -1,  -1,  62,  -1,  -1,  -1,  63,  52,  53,	/*  40- 49 */
+      54,  55,  56,  57,  58,  59,  60,  61,  -1,  -1,	/*  50- 59 */
+      -1,  -1,  -1,  -1,  -1,  0,   1,   2,   3,   4,	/*  60- 69 */
+      5,   6,   7,   8,   9,   10,  11,  12,  13,  14,	/*  70- 79 */
+      15,  16,  17,  18,  19,  20,  21,  22,  23,  24,	/*  80- 89 */
+      25,  -1,  -1,  -1,  -1,  -1,  -1,  26,  27,  28,	/*  90- 99 */
+      29,  30,  31,  32,  33,  34,  35,  36,  37,  38,	/* 100-109 */
+      39,  40,  41,  42,  43,  44,  45,  46,  47,  48,	/* 110-119 */
+      49,  50,  51,  -1,  -1,  -1,  -1,  -1		/* 120-127 */
+    };
+
+  const char *p = base64;
+  char *q = to;
+
+  while (1)
+    {
+      unsigned char c;
+      unsigned long value;
+
+      /* Process first byte of a quadruplet.  */
+      NEXT_BASE64_CHAR (c, p);
+      if (!c)
+	break;
+      if (c == '=')
+	return -1;		/* illegal '=' while decoding base64 */
+      value = base64_char_to_value[c] << 18;
+
+      /* Process scond byte of a quadruplet.  */
+      NEXT_BASE64_CHAR (c, p);
+      if (!c)
+	return -1;		/* premature EOF while decoding base64 */
+      if (c == '=')
+	return -1;		/* illegal `=' while decoding base64 */
+      value |= base64_char_to_value[c] << 12;
+      *q++ = value >> 16;
+
+      /* Process third byte of a quadruplet.  */
+      NEXT_BASE64_CHAR (c, p);
+      if (!c)
+	return -1;		/* premature EOF while decoding base64 */
+
+      if (c == '=')
+	{
+	  NEXT_BASE64_CHAR (c, p);
+	  if (!c)
+	    return -1;		/* premature EOF while decoding base64 */
+	  if (c != '=')
+	    return -1;		/* padding `=' expected but not found */
+	  continue;
+	}
+
+      value |= base64_char_to_value[c] << 6;
+      *q++ = 0xff & value >> 8;
+
+      /* Process fourth byte of a quadruplet.  */
+      NEXT_BASE64_CHAR (c, p);
+      if (!c)
+	return -1;		/* premature EOF while decoding base64 */
+      if (c == '=')
+	continue;
+
+      value |= base64_char_to_value[c];
+      *q++ = 0xff & value;
+    }
+
+  return q - to;
+}
+
+#undef IS_ASCII
+#undef IS_BASE64
+#undef NEXT_BASE64_CHAR
+
+/* Simple merge sort for use by stable_sort.  Implementation courtesy
+   Zeljko Vrba with additional debugging by Nenad Barbutov.  */
+
+static void
+mergesort_internal (void *base, void *temp, size_t size, size_t from, size_t to,
+		    int (*cmpfun) PARAMS ((const void *, const void *)))
+{
+#define ELT(array, pos) ((char *)(array) + (pos) * size)
+  if (from < to)
+    {
+      size_t i, j, k;
+      size_t mid = (to + from) / 2;
+      mergesort_internal (base, temp, size, from, mid, cmpfun);
+      mergesort_internal (base, temp, size, mid + 1, to, cmpfun);
+      i = from;
+      j = mid + 1;
+      for (k = from; (i <= mid) && (j <= to); k++)
+	if (cmpfun (ELT (base, i), ELT (base, j)) <= 0)
+	  memcpy (ELT (temp, k), ELT (base, i++), size);
+	else
+	  memcpy (ELT (temp, k), ELT (base, j++), size);
+      while (i <= mid)
+	memcpy (ELT (temp, k++), ELT (base, i++), size);
+      while (j <= to)
+	memcpy (ELT (temp, k++), ELT (base, j++), size);
+      for (k = from; k <= to; k++)
+	memcpy (ELT (base, k), ELT (temp, k), size);
+    }
+#undef ELT
+}
+
+/* Stable sort with interface exactly like standard library's qsort.
+   Uses mergesort internally, allocating temporary storage with
+   alloca.  */
+
+void
+stable_sort (void *base, size_t nmemb, size_t size,
+	     int (*cmpfun) PARAMS ((const void *, const void *)))
+{
+  if (size > 1)
+    {
+      void *temp = alloca (nmemb * size * sizeof (void *));
+      mergesort_internal (base, temp, size, 0, nmemb - 1, cmpfun);
+    }
+}

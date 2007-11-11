@@ -1,9 +1,9 @@
-/* $Id: mem.h,v 1.9 2003/07/06 18:43:16 andrei Exp $
+/* $Id: mem.h,v 1.11 2004/08/24 08:58:23 janakj Exp $
  *
  * memory related stuff (malloc & friends)
  * 
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -123,9 +123,9 @@
 #	include <stdlib.h>
 #	define pkg_malloc(s) \
 	(  { void *v; v=malloc((s)); \
-	   DBG("malloc %x size %d end %x\n", v, s, (unsigned int)v+(s));\
+	   DBG("malloc %p size %d end %p\n", v, s, (char*)v+(s));\
 	   v; } )
-#	define pkg_free(p)  do{ DBG("free %x\n", (p)); free((p)); }while(0);
+#	define pkg_free(p)  do{ DBG("free %p\n", (p)); free((p)); }while(0);
 #	define pkg_status()
 #endif
 

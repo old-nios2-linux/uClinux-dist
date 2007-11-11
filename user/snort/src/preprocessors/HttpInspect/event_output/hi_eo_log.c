@@ -104,6 +104,11 @@ int hi_eo_anom_server_event_log(HI_SESSION *Session, int iEvent, void *data,
 
     anom_server_events = &(Session->anom_server.event_list);
 
+    /* this won't happen since iEvent < HI_EO_ANOM_SERVER_EVENT_NUM and
+     * stack_count can at most equal HI_EO_ANOM_SERVER_EVENT_NUM */
+    if (anom_server_events->stack_count > HI_EO_ANOM_SERVER_EVENT_NUM)
+        return HI_INVALID_ARG;
+
     /*
     **  This is where we cycle through the current event stack.  If the event
     **  to be logged is already in the queue, then we increment the event
@@ -119,6 +124,11 @@ int hi_eo_anom_server_event_log(HI_SESSION *Session, int iEvent, void *data,
             return HI_SUCCESS;
         }
     }
+
+    /* this won't happen since iEvent will have been found above
+     * before this happens */
+    if (anom_server_events->stack_count >= HI_EO_ANOM_SERVER_EVENT_NUM)
+        return HI_INVALID_ARG;
 
     /*
     **  Initialize the event before putting it in the queue.

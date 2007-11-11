@@ -35,13 +35,17 @@
 #include <linux/root_dev.h>
 #include <linux/initrd.h>
 
-
 extern void __init lpc22xx_init_irq(void);
+
+void __init lpc22xx_init_machine(void)
+{
+}
 
 extern struct sys_timer lpc22xx_timer;
 
-MACHINE_START(LPC22xx, "LPC22xx, PHILIPS ELECTRONICS Co., Ltd.")
-	MAINTAINER(" Lucy Wang <mcu.china@philips.com>")
-	INITIRQ(lpc22xx_init_irq)
+MACHINE_START(LPC22XX, "LPC22xx, PHILIPS ELECTRONICS Co., Ltd.")
+/*	MAINTAINER(" Lucy Wang <mcu.china@philips.com>")    */
+	.init_irq = lpc22xx_init_irq,
 	.timer	= &lpc22xx_timer,
+	.init_machine = lpc22xx_init_machine
 MACHINE_END

@@ -3,7 +3,6 @@
  *
  *  Copyright (C) 1995  Linus Torvalds
  *  Modifications for ARM processor (c) 1995-2004 Russell King
- *  Modifications for nommu or non-paged, Hyok S. Choi, 2003
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -11,7 +10,6 @@
  */
 #include <linux/module.h>
 #include <linux/signal.h>
-#include <linux/ptrace.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 
@@ -22,21 +20,13 @@
 
 #include "fault.h"
 
-struct fsr_info {
-	int	(*fn)(unsigned long addr, unsigned int fsr, struct pt_regs *regs);
-	int	sig;
-	int	code;
-	const char *name;
-};
-static struct fsr_info fsr_info[];
-
-#ifdef CONFIG_MMU
 /*
  * This is useful to dump out the page tables associated with
  * 'addr' in mm 'mm'.
  */
 void show_pte(struct mm_struct *mm, unsigned long addr)
 {
+#ifdef CONFIG_MMU
 	pgd_t *pgd;
 
 	if (!mm)
@@ -81,6 +71,7 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 	} while(0);
 
 	printk("\n");
+#endif /* CONFIG_MMU */
 }
 
 /*
@@ -156,8 +147,8 @@ void do_bad_area(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		__do_kernel_fault(mm, addr, fsr, regs);
 }
 
-#define VM_FAULT_BADMAP		(-20)
-#define VM_FAULT_BADACCESS	(-21)
+#define VM_FAULT_BADMAP		0x010000
+#define VM_FAULT_BADACCESS	0x020000
 
 static int
 __do_page_fault(struct mm_struct *mm, unsigned long addr, unsigned int fsr,
@@ -194,20 +185,20 @@ good_area:
 	 */
 survive:
 	fault = handle_mm_fault(mm, vma, addr & PAGE_MASK, fsr & (1 << 11));
-
-	/*
-	 * Handle the "normal" cases first - successful and sigbus
-	 */
-	switch (fault) {
-	case VM_FAULT_MAJOR:
-		tsk->maj_flt++;
-		return fault;
-	case VM_FAULT_MINOR:
-		tsk->min_flt++;
-	case VM_FAULT_SIGBUS:
-		return fault;
+	if (unlikely(fault & VM_FAULT_ERROR)) {
+		if (fault & VM_FAULT_OOM)
+			goto out_of_memory;
+		else if (fault & VM_FAULT_SIGBUS)
+			return fault;
+		BUG();
 	}
+	if (fault & VM_FAULT_MAJOR)
+		tsk->maj_flt++;
+	else
+		tsk->min_flt++;
+	return fault;
 
+out_of_memory:
 	if (!is_init(tsk))
 		goto out;
 
@@ -240,7 +231,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_interrupt() || !mm)
+	if (in_atomic() || !mm)
 		goto no_context;
 
 	/*
@@ -260,7 +251,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	/*
 	 * Handle the "normal" case first - VM_FAULT_MAJOR / VM_FAULT_MINOR
 	 */
-	if (fault >= VM_FAULT_MINOR)
+	if (likely(!(fault & (VM_FAULT_ERROR | VM_FAULT_BADMAP | VM_FAULT_BADACCESS))))
 		return 0;
 
 	/*
@@ -270,8 +261,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (!user_mode(regs))
 		goto no_context;
 
-	switch (fault) {
-	case VM_FAULT_OOM:
+	if (fault & VM_FAULT_OOM) {
 		/*
 		 * We ran out of memory, or some other thing
 		 * happened to us that made us unable to handle
@@ -280,17 +270,15 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		printk("VM: killing process %s\n", tsk->comm);
 		do_exit(SIGKILL);
 		return 0;
-
-	case VM_FAULT_SIGBUS:
+	}
+	if (fault & VM_FAULT_SIGBUS) {
 		/*
 		 * We had some memory, but were unable to
 		 * successfully fix up this page fault.
 		 */
 		sig = SIGBUS;
 		code = BUS_ADRERR;
-		break;
-
-	default:
+	} else {
 		/*
 		 * Something tried to access memory that
 		 * isn't in our memory map..
@@ -298,7 +286,6 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		sig = SIGSEGV;
 		code = fault == VM_FAULT_BADACCESS ?
 			SEGV_ACCERR : SEGV_MAPERR;
-		break;
 	}
 
 	__do_user_fault(tsk, addr, fsr, sig, code, regs);
@@ -330,6 +317,7 @@ static int
 do_translation_fault(unsigned long addr, unsigned int fsr,
 		     struct pt_regs *regs)
 {
+#ifdef CONFIG_MMU
 	unsigned int index;
 	pgd_t *pgd, *pgd_k;
 	pmd_t *pmd, *pmd_k;
@@ -361,6 +349,7 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 	return 0;
 
 bad_area:
+#endif /* CONFIG_MMU */
 	do_bad_area(addr, fsr, regs);
 	return 0;
 }
@@ -377,112 +366,6 @@ do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 }
 
 /*
- * Dispatch a data abort to the relevant handler.
- */
-asmlinkage void
-do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	const struct fsr_info *inf = fsr_info + (fsr & 15) + ((fsr & (1 << 10)) >> 6);
-	struct siginfo info;
-
-	if (!inf->fn(addr, fsr, regs))
-		return;
-
-	printk(KERN_ALERT "Unhandled fault: %s (0x%03x) at 0x%08lx\n",
-		inf->name, fsr, addr);
-
-	info.si_signo = inf->sig;
-	info.si_errno = 0;
-	info.si_code  = inf->code;
-	info.si_addr  = (void __user *)addr;
-	notify_die("", regs, &info, fsr, 0);
-}
-
-asmlinkage void
-do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
-{
-	do_translation_fault(addr, 0, regs);
-}
-
-#else /* !CONFIG_MMU */
-
-/*
- * In nommu mode, all the handler always returns "fault".
- */
-static int
-do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	return 1;
-}
-
-static int
-do_translation_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	return 1;
-}
-
-static int
-do_sect_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	return 1;
-}
-
-/*
- * Dispatch a data abort to the relevant handler.
- */
-asmlinkage void
-do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	const struct fsr_info *inf = fsr_info + (fsr & 15) + ((fsr & (1 << 10)) >> 6);
-
-	if (!inf->fn(addr, fsr, regs))
-		return;
-
-	bust_spinlocks(1);
-	printk(KERN_ALERT "Unhandled fault: %s (0x%03x) at 0x%08lx\n",
-		inf->name, fsr, addr);
-	die("Oops", regs, fsr);
-	bust_spinlocks(0);
-	do_exit(SIGKILL);
-}
-
-asmlinkage void
-do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
-{
-	bust_spinlocks(1);
-	printk(KERN_ALERT
-		"Unable to handle %s at virtual address %08lx\n",
-		(addr < PAGE_SIZE) ? "NULL pointer dereference" :
-		"abort", addr);
-	die("Oops", regs, -1);
-	bust_spinlocks(0);
-	do_exit(SIGKILL);
-}
-
-void do_bad_area(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
-{
-	/*
-	 * Are we prepared to handle this kernel fault?
-	 */
-	if (fixup_exception(regs))
-		return;
-
-	/*
-	 * No handler, we'll have to terminate things with extreme prejudice.
-	 */
-	bust_spinlocks(1);
-	printk(KERN_ALERT
-		"Unable to handle kernel %s at virtual address %08lx\n",
-		(addr < PAGE_SIZE) ? "NULL pointer dereference" :
-		"paging request", addr);
-
-	die("Oops", regs, fsr);
-	bust_spinlocks(0);
-	do_exit(SIGKILL);
-}
-#endif /* !CONFIG_MMU */
-
-/*
  * This abort handler always returns "fault".
  */
 static int
@@ -491,7 +374,12 @@ do_bad(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	return 1;
 }
 
-static struct fsr_info fsr_info[] = {
+static struct fsr_info {
+	int	(*fn)(unsigned long addr, unsigned int fsr, struct pt_regs *regs);
+	int	sig;
+	int	code;
+	const char *name;
+} fsr_info[] = {
 	/*
 	 * The following are the standard ARMv3 and ARMv4 aborts.  ARMv5
 	 * defines these to be "precise" aborts.
@@ -545,3 +433,32 @@ hook_fault_code(int nr, int (*fn)(unsigned long, unsigned int, struct pt_regs *)
 		fsr_info[nr].name = name;
 	}
 }
+
+/*
+ * Dispatch a data abort to the relevant handler.
+ */
+asmlinkage void __exception
+do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
+{
+	const struct fsr_info *inf = fsr_info + (fsr & 15) + ((fsr & (1 << 10)) >> 6);
+	struct siginfo info;
+
+	if (!inf->fn(addr, fsr, regs))
+		return;
+
+	printk(KERN_ALERT "Unhandled fault: %s (0x%03x) at 0x%08lx\n",
+		inf->name, fsr, addr);
+
+	info.si_signo = inf->sig;
+	info.si_errno = 0;
+	info.si_code  = inf->code;
+	info.si_addr  = (void __user *)addr;
+	arm_notify_die("", regs, &info, fsr, 0);
+}
+
+asmlinkage void __exception
+do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
+{
+	do_translation_fault(addr, 0, regs);
+}
+

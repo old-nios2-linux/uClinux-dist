@@ -1,8 +1,8 @@
 /*
- * $Id: auth_diameter.c,v 1.1.2.1 2003/11/11 20:30:33 andrei Exp $ 
+ * $Id: auth_diameter.c,v 1.4 2004/08/24 08:58:25 janakj Exp $ 
  * Digest Authentication - Diameter support
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -67,7 +67,7 @@ int diameter_is_user_in(struct sip_msg* _msg, char* group, char* _s2);
  * Module parameter variables
  */
 char* diameter_client_host = "localhost";
-char* diameter_client_port = "3000";
+int diameter_client_port = 3000;
 int use_domain = 0;
 
 rd_buf_t *rb;
@@ -94,7 +94,7 @@ static int str_fixup(void** param, int param_no); /* char* -> str* */
  */
 static param_export_t params[] = {
 	{"diameter_client_host", STR_PARAM, &diameter_client_host},
-	{"diameter_client_port", STR_PARAM, &diameter_client_port},
+	{"diameter_client_port", INT_PARAM, &diameter_client_port},
 	{"use_domain", INT_PARAM, &use_domain},
 	{0, 0, 0}
 };
@@ -160,12 +160,12 @@ static int mod_child_init(int r)
 	return 0;
 }
 
-/*
+#if 0
 static void destroy(void)
 {
 	close_tcp_connection(sockfd);
 }
-*/
+#endif
 
 
 /*

@@ -115,7 +115,7 @@ SCSI standard documentations are available at SYMBIOS ftp server:
 
           ftp://ftp.symbios.com/
 
-Usefull SCSI tools written by Eric Youngdale are available at tsx-11:
+Useful SCSI tools written by Eric Youngdale are available at tsx-11:
 
           ftp://tsx-11.mit.edu/pub/linux/ALPHA/scsi/scsiinfo-X.Y.tar.gz
           ftp://tsx-11.mit.edu/pub/linux/ALPHA/scsi/scsidev-X.Y.tar.gz
@@ -561,11 +561,6 @@ features supported by the driver can be enabled at start-up.  However,
 if only one has a flaw for some SCSI feature, you can disable the
 support by the driver of this feature at linux start-up and enable
 this feature after boot-up only for devices that support it safely.
-
-CONFIG_SCSI_NCR53C8XX_PROFILE_SUPPORT  (default answer: n)
-    This option must be set for profiling information to be gathered 
-    and printed out through the proc file system. This features may 
-    impact performances.
 
 CONFIG_SCSI_NCR53C8XX_IOMAPPED       (default answer: n)
     Answer "y" if you suspect your mother board to not allow memory mapped I/O.
@@ -1265,7 +1260,7 @@ then the request of the IRQ obviously will not succeed for all the drivers.
 15.1 Problem tracking
 
 Most SCSI problems are due to a non conformant SCSI bus or to buggy
-devices.  If infortunately you have SCSI problems, you can check the
+devices.  If unfortunately you have SCSI problems, you can check the
 following things:
 
 - SCSI bus cables

@@ -542,6 +542,14 @@ void destroy_tunnel (struct tunnel *t)
      */
     if (t->lns)
         t->lns->t = NULL;
+    if (t->chal_us.challenge)
+        free (t->chal_us.challenge);
+    if (t->chal_them.challenge)
+        free (t->chal_them.challenge);
+    /* we need no free(t->chal_us.vector) here because we malloc() and free()
+       the memory pointed to by t->chal_us.vector at some other place */
+    if (t->chal_them.vector)
+        free (t->chal_them.vector);
     free (t);
     free (me);
 }
@@ -595,7 +603,7 @@ struct tunnel *l2tp_call (char *host, int port, struct lac *lac,
     return tmp->container;
 }
 
-void magic_lac_tunnel (void *data)
+int magic_lac_tunnel (void *data)
 {
     struct lac *lac;
     lac = (struct lac *) data;
@@ -603,25 +611,28 @@ void magic_lac_tunnel (void *data)
     {
         log (LOG_WARN, "%s: magic_lac_tunnel: called on NULL lac!\n",
              __FUNCTION__);
-        return;
+        return -1;
     }
     if (lac->lns)
     {
         /* FIXME: I should try different LNS's if I get failures */
-        l2tp_call (lac->lns->hostname, lac->lns->port, lac, NULL);
-        return;
+        if (l2tp_call (lac->lns->hostname, lac->lns->port, lac, NULL) == NULL) {
+            return 1;
+        }
     }
     else if (deflac && deflac->lns)
     {
-        l2tp_call (deflac->lns->hostname, deflac->lns->port, lac, NULL);
-        return;
+        if (l2tp_call (deflac->lns->hostname, deflac->lns->port, lac, NULL) == NULL) {
+        	return 1;
+        }
     }
     else
     {
         log (LOG_WARN, "%s: Unable to find hostname to dial for '%s'\n",
              __FUNCTION__, lac->entname);
-        return;
+        return -1;
     }
+    return 0;
 }
 
 struct call *lac_call (int tid, struct lac *lac, struct lns *lns)
@@ -659,36 +670,39 @@ struct call *lac_call (int tid, struct lac *lac, struct lns *lns)
     return NULL;
 }
 
-void magic_lac_dial (void *data)
+int magic_lac_dial (void *data)
 {
     struct lac *lac;
     lac = (struct lac *) data;
     if (!lac->active)
     {
         log (LOG_DEBUG, "%s: LAC %s not active", __FUNCTION__, lac->entname);
-        return;
+        return -1;
     }
     lac->rsched = NULL;
     lac->rtries++;
     if (lac->rmax && (lac->rtries > lac->rmax))
     {
         log (LOG_LOG, "%s: maximum retries exceeded.\n", __FUNCTION__);
-        return;
+        return -1;
     }
     if (!lac)
     {
         log (LOG_WARN, "%s : called on NULL lac!\n", __FUNCTION__);
-        return;
+        return -1;
     }
     if (!lac->t)
     {
 #ifdef DEGUG_MAGIC
         log (LOG_DEBUG, "%s : tunnel not up!  Connecting!\n", __FUNCTION__);
 #endif
-        magic_lac_tunnel (lac);
-        return;
+        return magic_lac_tunnel (lac);
     }
-    lac_call (lac->t->ourtid, lac, NULL);
+    if (lac_call (lac->t->ourtid, lac, NULL) == NULL) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 void lac_hangup (int cid)
@@ -803,9 +817,13 @@ struct tunnel *new_tunnel ()
     tmp->chal_us.state = 0;
     tmp->chal_us.secret[0] = 0;
     memset (tmp->chal_us.reply, 0, MD_SIG_SIZE);
+    tmp->chal_us.challenge = NULL;
+    tmp->chal_us.chal_len = 0;
     tmp->chal_them.state = 0;
     tmp->chal_them.secret[0] = 0;
     memset (tmp->chal_them.reply, 0, MD_SIG_SIZE);
+    tmp->chal_them.challenge = NULL;
+    tmp->chal_them.chal_len = 0;
     tmp->chal_them.vector = (unsigned char *) malloc (VECTOR_SIZE);
     tmp->chal_us.vector = NULL;
     tmp->hbit = 0;
@@ -1164,13 +1182,25 @@ void init (int argc,char *argv[])
     {
         if (lac->autodial)
         {
+            int ret;
+            struct timeval tv;
 #ifdef DEBUG_MAGIC
             log (LOG_DEBUG, "%s: Autodialing '%s'\n", __FUNCTION__,
                  lac->entname[0] ? lac->entname : "(unnamed)");
 #endif
             lac->active = -1;
             switch_io = 1;      /* If we're a LAC, autodials will be ICRQ's */
-            magic_lac_dial (lac);
+            ret = magic_lac_dial (lac);
+            if (ret == 1 
+                 && (lac->redial && (lac->rtimeout > 0) 
+                   && !lac->rsched && lac->active))
+            {
+                log (LOG_LOG, "Will redial in %d seconds\n",
+                     lac->rtimeout);
+                tv.tv_sec = lac->rtimeout;
+                tv.tv_usec = 0;
+                lac->rsched = schedule (tv, magic_lac_dial, lac);
+            }
         }
         lac = lac->next;
     }

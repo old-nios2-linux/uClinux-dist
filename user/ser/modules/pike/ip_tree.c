@@ -1,8 +1,8 @@
 /* 
- * $Id: ip_tree.c,v 1.6.6.2.2.1 2004/07/14 20:58:58 andrei Exp $
+ * $Id: ip_tree.c,v 1.12 2004/12/01 10:58:23 andrei Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -24,6 +24,10 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program; if not, write to the Free Software 
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * History:
+ * --------
+ *  2004-11-05: adaptiv init lock (bogdan)
  */
 
 
@@ -51,7 +55,7 @@ static inline struct ip_node* prv_get_tree_branch(unsigned char b)
 /* locks a tree branch */
 static inline void prv_lock_tree_branch(unsigned char b)
 {
-	lock_get( root->entries[b].lock);
+	lock_set_get( root->entry_lock_set, root->entries[b].lock_idx);
 }
 
 
@@ -59,7 +63,7 @@ static inline void prv_lock_tree_branch(unsigned char b)
 /* unlocks a tree branch */
 static inline void prv_unlock_tree_branch(unsigned char b)
 {
-	lock_release( root->entries[b].lock);
+	lock_set_release( root->entry_lock_set, root->entries[b].lock_idx);
 }
 
 
@@ -78,13 +82,49 @@ void unlock_tree_branch(unsigned char b)
 }
 
 
+/* size must be a power of 2  */
+static gen_lock_set_t* init_lock_set(int *size)
+{
+	gen_lock_set_t *lset;
+
+	lset=0; /* kill warnings */
+	for( ; *size ; *size=((*size)>>1) ) {
+		LOG(L_INFO,"INFO:pike:init_lock_set: probing %d set size\n",*size);
+		/* create a lock set */
+		lset = lock_set_alloc( *size );
+		if (lset==0) {
+			LOG(L_INFO,"INFO:pike:init_lock_set: cannot get %d locks\n",
+				*size);
+			continue;
+		}
+		/* init lock set */
+		if (lock_set_init(lset)==0) {
+			LOG(L_INFO,"INFO:pike:init_lock_set: cannot init %d locks\n",
+				*size);
+			lock_set_dealloc( lset );
+			lset = 0;
+			continue;
+		}
+		/* alloc and init succesfull */
+		break;
+	}
+
+	if (*size==0) {
+		LOG(L_ERR,"ERROR:pike:init_lock_set: cannot get a lock set\n");
+		return 0;
+	}
+	return lset;
+}
+
+
 
 /* Builds and Inits a new IP tree */
 int init_ip_tree(int maximum_hits)
 {
+	int size;
 	int i;
 
-	/* create thr root */
+	/* create the root */
 	root = (struct ip_tree*)shm_malloc(sizeof(struct ip_tree));
 	if (root==0) {
 		LOG(L_ERR,"ERROR:pike:init_ip_tree: shm malloc failed\n");
@@ -92,31 +132,27 @@ int init_ip_tree(int maximum_hits)
 	}
 	memset( root, 0, sizeof(struct ip_tree));
 
-	/* create a lock set for all entries */
-	root->entry_lock_set = lock_set_alloc(MAX_IP_BRANCHES);
-	if (root->entry_lock_set==0)
-		goto error;
-
 	/* init lock set */
-	if (lock_set_init(root->entry_lock_set)==0) {
-		LOG(L_ERR,"ERROR:pike:init_ip_tree: lock_set init failed\n");
+	size = MAX_IP_BRANCHES;
+	root->entry_lock_set = init_lock_set( &size );
+	if (root->entry_lock_set==0) {
+		LOG(L_ERR,"ERROR:pike:init_ip_tree: failed to create locks\n");
 		goto error;
 	}
-
+	/* assign to each branch a lock */
 	for(i=0;i<MAX_IP_BRANCHES;i++) {
 		root->entries[i].node = 0;
-		root->entries[i].lock = &(root->entry_lock_set->locks[i]);
+		root->entries[i].lock_idx = i % size;
+		DBG("DEBUG:pike:pike_ip_tree: branch %d takes lock index %d\n",
+			i, root->entries[i].lock_idx);
 	}
 
 	root->max_hits = maximum_hits;
 
 	return 0;
 error:
-	if (root) {
-		if (root->entry_lock_set)
-			lock_set_dealloc(root->entry_lock_set);
+	if (root)
 		shm_free(root);
-	}
 	return -1;
 }
 
@@ -140,7 +176,7 @@ static inline void destroy_ip_node(struct ip_node *node)
 
 
 
-/* destrtroy and free the IP tree */
+/* destroy and free the IP tree */
 void destroy_ip_tree()
 {
 	int i;
@@ -189,7 +225,7 @@ struct ip_node *split_node(struct ip_node* dad, unsigned char byte)
 {
 	struct ip_node *new_node;
 
-	/* creat a new node */
+	/* create a new node */
 	if ( (new_node=new_ip_node(byte))==0 )
 		return 0;
 	/* the child node inherits a part of his father hits */
@@ -197,7 +233,7 @@ struct ip_node *split_node(struct ip_node* dad, unsigned char byte)
 		new_node->hits[CURR_POS] = (dad->hits[CURR_POS])-1;
 	if (dad->leaf_hits[CURR_POS]>=1)
 		new_node->leaf_hits[PREV_POS] = (dad->leaf_hits[PREV_POS])-1;
-	/* link the child into father's kids list -> insert it at the begining,
+	/* link the child into father's kids list -> insert it at the beginning,
 	 * is much faster */
 	if (dad->kids) {
 		dad->kids->prev = new_node;
@@ -255,7 +291,7 @@ struct ip_node* mark_node(unsigned char *ip,int ip_len,
 		}
 	}
 
-	DBG("DEBUG:pike:mark_node: Only first %d were mached!\n",byte_pos);
+	DBG("DEBUG:pike:mark_node: Only first %d were matched!\n",byte_pos);
 	*flag = 0;
 	*father = 0;
 
@@ -263,7 +299,7 @@ struct ip_node* mark_node(unsigned char *ip,int ip_len,
 	if (byte_pos==ip_len) {
 		/* we found the entire address */
 		*flag = LEAF_NODE;
-		/* increment it, but be carefull not to overflow the value */
+		/* increment it, but be careful not to overflow the value */
 		if(node->leaf_hits[CURR_POS]<MAX_TYPE_VAL(node->leaf_hits[CURR_POS])-1)
 			node->leaf_hits[CURR_POS]++;
 		if ( is_hot_leaf(node) )
@@ -292,7 +328,7 @@ struct ip_node* mark_node(unsigned char *ip,int ip_len,
 			node = split_node(node,ip[byte_pos]);
 		} else {
 			/* to reduce memory usage, force to expire non-leaf nodes if they
-			 * have just a few hits -> basiclly, don't update the timer for
+			 * have just a few hits -> basically, don't update the timer for
 			 * them the nr of hits is small */
 			if ( !is_warm_leaf(node) )
 				*flag = NO_UPDATE;
@@ -307,7 +343,7 @@ struct ip_node* mark_node(unsigned char *ip,int ip_len,
 /* remove and destroy a IP node along with its subtree */
 void remove_node(struct ip_node *node)
 {
-	DBG("DEBUG:pike:remove_node: destroing node %p\n",node);
+	DBG("DEBUG:pike:remove_node: destroying node %p\n",node);
 	/* is it a branch root node? (these nodes have no prev (father)) */
 	if (node->prev==0) {
 		assert(root->entries[node->byte].node==node);

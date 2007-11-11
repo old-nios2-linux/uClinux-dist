@@ -1,8 +1,16 @@
 #ifndef _GATEDEVICE_H_
-	#define _GATEDEVICE_H_ 1
+#define _GATEDEVICE_H_ 1
 
 #include <upnp/upnp.h>
 
+/* interface statistics */
+typedef enum {
+        STATS_TX_BYTES,
+        STATS_RX_BYTES,
+        STATS_TX_PACKETS,
+        STATS_RX_PACKETS,
+        STATS_LIMIT
+} stats_t;
 
 // IGD Device Globals
 extern UpnpDevice_Handle deviceHandle;
@@ -32,27 +40,36 @@ extern struct portMap *pmlist_Head;
 extern struct portMap *pmlist_Current;
 
 // WanIPConnection Actions 
-extern int EventHandler(Upnp_EventType EventType, void *Event, void *Cookie);
-extern int StateTableInit(char *descDocUrl);
-extern int HandleSubscriptionRequest(struct Upnp_Subscription_Request *sr_event);
-extern int HandleGetVarRequest(struct Upnp_State_Var_Request *gv_event);
-extern int HandleActionRequest(struct Upnp_Action_Request *ca_event);
+int EventHandler(Upnp_EventType EventType, void *Event, void *Cookie);
+int StateTableInit(char *descDocUrl);
+int HandleSubscriptionRequest(struct Upnp_Subscription_Request *sr_event);
+int HandleGetVarRequest(struct Upnp_State_Var_Request *gv_event);
+int HandleActionRequest(struct Upnp_Action_Request *ca_event);
 
-extern int GetConnectionTypeInfo(struct Upnp_Action_Request *ca_event);
-extern int GetNATRSIPStatus(struct Upnp_Action_Request *ca_event);
-extern int SetConnectionType(struct Upnp_Action_Request *ca_event);
-extern int RequestConnection(struct Upnp_Action_Request *ca_event);
-extern int GetTotalBytesSent(struct Upnp_Action_Request *ca_event);
-extern int GetTotalBytesReceived(struct Upnp_Action_Request *ca_event);
-extern int GetTotalPacketsSent(struct Upnp_Action_Request *ca_event);
-extern int GetTotalPacketsReceived(struct Upnp_Action_Request *ca_event);
-extern int GetCommonLinkProperties(struct Upnp_Action_Request *ca_event);
-extern int InvalidAction(struct Upnp_Action_Request *ca_event);
-extern int GetStatusInfo(struct Upnp_Action_Request *ca_event);
-extern int AddPortMapping(struct Upnp_Action_Request *ca_event);
-extern int GetGenericPortMappingEntry(struct Upnp_Action_Request *ca_event);
-extern int GetSpecificPortMappingEntry(struct Upnp_Action_Request *ca_event);
-extern int GetExternalIPAddress(struct Upnp_Action_Request *ca_event);
-extern int DeletePortMapping(struct Upnp_Action_Request *ca_event);
+int GetConnectionTypeInfo(struct Upnp_Action_Request *ca_event);
+int GetNATRSIPStatus(struct Upnp_Action_Request *ca_event);
+int SetConnectionType(struct Upnp_Action_Request *ca_event);
+int RequestConnection(struct Upnp_Action_Request *ca_event);
+int GetTotal(struct Upnp_Action_Request *ca_event, stats_t stat);
+int GetCommonLinkProperties(struct Upnp_Action_Request *ca_event);
+int InvalidAction(struct Upnp_Action_Request *ca_event);
+int GetStatusInfo(struct Upnp_Action_Request *ca_event);
+int AddPortMapping(struct Upnp_Action_Request *ca_event);
+int GetGenericPortMappingEntry(struct Upnp_Action_Request *ca_event);
+int GetSpecificPortMappingEntry(struct Upnp_Action_Request *ca_event);
+int GetExternalIPAddress(struct Upnp_Action_Request *ca_event);
+int DeletePortMapping(struct Upnp_Action_Request *ca_event);
+
+// Definitions for mapping expiration timer thread
+#define THREAD_IDLE_TIME 5000
+#define JOBS_PER_THREAD 10
+#define MIN_THREADS 2 
+#define MAX_THREADS 12 
+
+int ExpirationTimerThreadInit(void);
+int ExpirationTimerThreadShutdown(void);
+int ScheduleMappingExpiration(struct portMap *mapping, char *DevUDN, char *ServiceID);
+int CancelMappingExpiration(int eventId);
+void DeleteAllPortMappings(void);
 
 #endif //_GATEDEVICE_H

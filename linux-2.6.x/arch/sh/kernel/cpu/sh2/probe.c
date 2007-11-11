@@ -9,30 +9,27 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  */
-
-
 #include <linux/init.h>
+#include <linux/smp.h>
 #include <asm/processor.h>
 #include <asm/cache.h>
 
 int __init detect_cpu_and_cache_system(void)
 {
-	/*
-	 * For now, assume SH7604 .. fix this later.
-	 */
-	cpu_data->type			= CPU_SH7604;
-	cpu_data->dcache.ways		= 4;
-	cpu_data->dcache.way_shift	= 6;
-	cpu_data->dcache.sets		= 64;
-	cpu_data->dcache.entry_shift	= 4;
-	cpu_data->dcache.linesz		= L1_CACHE_BYTES;
-	cpu_data->dcache.flags		= 0;
-
+#if defined(CONFIG_CPU_SUBTYPE_SH7619)
+	current_cpu_data.type			= CPU_SH7619;
+	current_cpu_data.dcache.ways		= 4;
+	current_cpu_data.dcache.way_incr	= (1<<12);
+	current_cpu_data.dcache.sets		= 256;
+	current_cpu_data.dcache.entry_shift	= 4;
+	current_cpu_data.dcache.linesz		= L1_CACHE_BYTES;
+	current_cpu_data.dcache.flags		= 0;
+#endif
 	/*
 	 * SH-2 doesn't have separate caches
 	 */
-	cpu_data->dcache.flags |= SH_CACHE_COMBINED;
-	cpu_data->icache = cpu_data->dcache;
+	current_cpu_data.dcache.flags |= SH_CACHE_COMBINED;
+	current_cpu_data.icache = current_cpu_data.dcache;
 
 	return 0;
 }

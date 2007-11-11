@@ -18,7 +18,11 @@
 #include <asm/mipsregs.h>
 #include <asm/tx3912.h>
 
+#if defined(CONFIG_RTL865X)
+#define ALLINTS (IE_IRQ0 | IE_IRQ2 | IE_IRQ3 | IE_IRQ4 | IE_IRQ5)
+#else
 #define ALLINTS (IE_IRQ0 | IE_IRQ1 | IE_IRQ2 | IE_IRQ3 | IE_IRQ4 | IE_IRQ5)
+#endif
 
 static void enable_irq6(unsigned int irq)
 {

@@ -1,4 +1,4 @@
-#  Copyright (c) 1988, 1989, 1990, 1991, 1992, 1995, 1996, 1997
+#  Copyright (c) 1988, 1989, 1990, 1991, 1992, 1995, 1996, 1997, 1998, 1999, 2000
 # 	The Regents of the University of California.  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -17,7 +17,7 @@
 #  WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
 #  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 #
-# @(#) $Header: /cvs/sw/new-wave/user/traceroute/Makefile.in,v 1.1.1.1 1999/11/22 03:48:05 christ Exp $ (LBL)
+# @(#) $Id: Makefile.in,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)
 
 #
 # Various configurable paths (remember to edit Makefile.in, not Makefile)
@@ -59,11 +59,11 @@ INSTALL = @INSTALL@
 	@rm -f $@
 	$(CC) $(CFLAGS) -c $(srcdir)/$*.c
 
-CSRC =	traceroute.c ifaddrlist.c savestr.c
+CSRC =	traceroute.c ifaddrlist.c @V_FINDSADDR@
 GENSRC = version.c
 
 SRC =	$(CSRC) $(GENSRC)
-HDR =	ifaddrlist.h savestr.h
+HDR =	findsaddr.h ifaddrlist.h
 
 TAGHDR = \
 	/usr/include/netinet/in.h \
@@ -82,9 +82,12 @@ all: traceroute
 
 traceroute: $(OBJ)
 	@rm -f $@
-	$(CC) $(CFLAGS) -o $@ $(OBJ) $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LIBS) $(LDLIBS$(LDLIBS_$@))
 
 version.o: version.c
+	@rm -f $@
+	$(CC) $(CFLAGS) -c $<
+
 version.c: $(srcdir)/VERSION
 	@rm -f $@
 	sed -e 's/.*/char version[] = "&";/' $(srcdir)/VERSION > $@
@@ -111,18 +114,18 @@ tags: $(TAGFILES)
 	ctags -wtd $(TAGFILES)
 
 tar: force
-	@cwd=`pwd` ; dir=`basename $$cwd` ; name=traceroute-`cat VERSION` ; \
-	    list="" ; tar="tar chFFf" ; \
+	@cwd=`pwd` ; name=traceroute-`cat VERSION` ; \
+	    list="" ; tar="tar chf" ; temp="$$name.tar.gz" ; \
 	    for i in `cat FILES` ; do list="$$list $$name/$$i" ; done; \
 	    echo \
-	    "rm -f ../$$name; ln -s $$dir ../$$name" ; \
-	     rm -f ../$$name; ln -s $$dir ../$$name ; \
+	    "rm -f $$name; ln -s . $$name" ; \
+	     rm -f $$name; ln -s . $$name ; \
 	    echo \
-	    "(cd .. ; $$tar - [lots of files]) | compress > /tmp/$$name.tar.Z" ; \
-	     (cd .. ; $$tar - $$list) | compress > /tmp/$$name.tar.Z ; \
+	    "$$tar - [lots of files] | gzip > $$temp" ; \
+	     $$tar - $$list | gzip > $$temp ; \
 	    echo \
-	    "rm -f ../$$name" ; \
-	     rm -f ../$$name
+	    "rm -f $$name" ; \
+	     rm -f $$name
 
 force: /tmp
 depend: $(GENSRC) force

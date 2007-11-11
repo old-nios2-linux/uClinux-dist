@@ -81,7 +81,7 @@ static void pmc_stop_ctrs(void)
 
 /* Configures the counters on this CPU based on the global
  * settings */
-static void fsl7450_cpu_setup(struct op_counter_config *ctr)
+static int fsl7450_cpu_setup(struct op_counter_config *ctr)
 {
 	/* freeze all counters */
 	pmc_stop_ctrs();
@@ -89,12 +89,14 @@ static void fsl7450_cpu_setup(struct op_counter_config *ctr)
 	mtspr(SPRN_MMCR0, mmcr0_val);
 	mtspr(SPRN_MMCR1, mmcr1_val);
 	mtspr(SPRN_MMCR2, mmcr2_val);
+
+	return 0;
 }
 
 #define NUM_CTRS 6
 
 /* Configures the global settings for the countes on all CPUs. */
-static void fsl7450_reg_setup(struct op_counter_config *ctr,
+static int fsl7450_reg_setup(struct op_counter_config *ctr,
 			     struct op_system_config *sys,
 			     int num_ctrs)
 {
@@ -126,10 +128,12 @@ static void fsl7450_reg_setup(struct op_counter_config *ctr,
 		| mmcr1_event6(ctr[5].event);
 
 	mmcr2_val = 0;
+
+	return 0;
 }
 
 /* Sets the counters on this CPU to the chosen values, and starts them */
-static void fsl7450_start(struct op_counter_config *ctr)
+static int fsl7450_start(struct op_counter_config *ctr)
 {
 	int i;
 
@@ -137,9 +141,9 @@ static void fsl7450_start(struct op_counter_config *ctr)
 
 	for (i = 0; i < NUM_CTRS; ++i) {
 		if (ctr[i].enabled)
-			ctr_write(i, reset_value[i]);
+			classic_ctr_write(i, reset_value[i]);
 		else
-			ctr_write(i, 0);
+			classic_ctr_write(i, 0);
 	}
 
 	/* Clear the freeze bit, and enable the interrupt.
@@ -148,6 +152,8 @@ static void fsl7450_start(struct op_counter_config *ctr)
 	pmc_start_ctrs();
 
 	oprofile_running = 1;
+
+	return 0;
 }
 
 /* Stop the counters on this CPU */
@@ -179,13 +185,13 @@ static void fsl7450_handle_interrupt(struct pt_regs *regs,
 	is_kernel = is_kernel_addr(pc);
 
 	for (i = 0; i < NUM_CTRS; ++i) {
-		val = ctr_read(i);
+		val = classic_ctr_read(i);
 		if (val < 0) {
 			if (oprofile_running && ctr[i].enabled) {
 				oprofile_add_ext_sample(pc, regs, i, is_kernel);
-				ctr_write(i, reset_value[i]);
+				classic_ctr_write(i, reset_value[i]);
 			} else {
-				ctr_write(i, 0);
+				classic_ctr_write(i, 0);
 			}
 		}
 	}
@@ -193,7 +199,7 @@ static void fsl7450_handle_interrupt(struct pt_regs *regs,
 	/* The freeze bit was set by the interrupt. */
 	/* Clear the freeze bit, and reenable the interrupt.
 	 * The counters won't actually start until the rfi clears
-	 * the PMM bit */
+	 * the PM/M bit */
 	pmc_start_ctrs();
 }
 

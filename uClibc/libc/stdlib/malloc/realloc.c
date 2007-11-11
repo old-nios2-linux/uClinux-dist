@@ -7,13 +7,15 @@
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License.  See the file COPYING.LIB in the main
  * directory of this archive for more details.
- * 
+ *
  * Written by Miles Bader <miles@gnu.org>
  */
 
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+libc_hidden_proto(memcpy)
 
 #include "malloc.h"
 #include "heap.h"
@@ -26,13 +28,13 @@ realloc (void *mem, size_t new_size)
   char *base_mem;
 
   /* Check for special cases.  */
-  if (! mem)
-    return malloc (new_size);
   if (! new_size)
     {
       free (mem);
       return malloc (new_size);
     }
+  if (! mem)
+    return malloc (new_size);
 
   /* Normal realloc.  */
 
@@ -43,6 +45,11 @@ realloc (void *mem, size_t new_size)
      Also make sure that we're dealing in a multiple of the heap
      allocation unit (SIZE is already guaranteed to be so).*/
   new_size = HEAP_ADJUST_SIZE (new_size + MALLOC_HEADER_SIZE);
+
+  if (new_size < sizeof (struct heap_free_area))
+    /* Because we sometimes must use a freed block to hold a free-area node,
+       we must make sure that every allocated block can hold one.  */
+    new_size = HEAP_ADJUST_SIZE (sizeof (struct heap_free_area));
 
   MALLOC_DEBUG (1, "realloc: 0x%lx, %d (base = 0x%lx, total_size = %d)",
 		(long)mem, new_size, (long)base_mem, size);

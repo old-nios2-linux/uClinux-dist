@@ -45,7 +45,6 @@ typedef struct user_i387_struct elf_fpregset_t;
 
 #ifdef __KERNEL__
 #include <asm/processor.h>
-#include <asm/compat.h>
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.
@@ -162,6 +161,19 @@ extern int dump_task_fpu (struct task_struct *, elf_fpregset_t *);
 
 /* 1GB for 64bit, 8MB for 32bit */
 #define STACK_RND_MASK (test_thread_flag(TIF_IA32) ? 0x7ff : 0x3fffff)
+
+
+#define ARCH_HAS_SETUP_ADDITIONAL_PAGES 1
+struct linux_binprm;
+extern int arch_setup_additional_pages(struct linux_binprm *bprm,
+                                       int executable_stack);
+
+extern int vdso_enabled;
+
+#define ARCH_DLINFO						\
+do if (vdso_enabled) {						\
+	NEW_AUX_ENT(AT_SYSINFO_EHDR,(unsigned long)current->mm->context.vdso);\
+} while (0)
 
 #endif
 

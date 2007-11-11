@@ -1,35 +1,52 @@
 /*
- * IAX Provisioning Protocol 
+ * Asterisk -- An open source telephony toolkit.
  *
- * Asterisk Interface
- *
- * Copyright (C) 2004 Digium, Inc.
+ * Copyright (C) 1999 - 2006, Digium, Inc.
  *
  * Mark Spencer <markster@digium.com>
  *
- * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
+ * This program is free software, distributed under the terms of
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
-#include <asterisk/config.h>
-#include <asterisk/logger.h>
-#include <asterisk/cli.h>
-#include <asterisk/lock.h>
-#include <asterisk/frame.h>
-#include <asterisk/options.h>
-#include <asterisk/md5.h>
-#include <asterisk/astdb.h>
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <sys/socket.h>
-#include <asterisk/utils.h>
+/*! \file
+ * 
+ * \brief IAX Provisioning Protocol 
+ *
+ * \author Mark Spencer <markster@digium.com>
+ */
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 43933 $")
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/ip.h>
+#include <sys/socket.h>
+
+#include "asterisk/config.h"
+#include "asterisk/logger.h"
+#include "asterisk/cli.h"
+#include "asterisk/lock.h"
+#include "asterisk/frame.h"
+#include "asterisk/options.h"
+#include "asterisk/md5.h"
+#include "asterisk/astdb.h"
+#include "asterisk/utils.h"
+#include "asterisk/acl.h"
 #include "iax2.h"
 #include "iax2-provision.h"
 #include "iax2-parser.h"
@@ -54,7 +71,7 @@ struct iax_template {
 	unsigned int altserver;
 	unsigned int flags;
 	unsigned int format;
-	int tos;	
+	unsigned int tos;	
 } *templates;
 
 static struct iax_flag {
@@ -65,25 +82,33 @@ static struct iax_flag {
 	{ "secure", PROV_FLAG_SECURE },
 	{ "heartbeat", PROV_FLAG_HEARTBEAT },
 	{ "debug", PROV_FLAG_DEBUG },
+	{ "disablecid", PROV_FLAG_DIS_CALLERID },
+	{ "disablecw", PROV_FLAG_DIS_CALLWAIT },
+	{ "disablecidcw", PROV_FLAG_DIS_CIDCW },
+	{ "disable3way", PROV_FLAG_DIS_THREEWAY },
 };
 
 char *iax_provflags2str(char *buf, int buflen, unsigned int flags)
 {
 	int x;
-	if (!buf || buflen < 1) {
-		return(NULL);
-	}
+
+	if (!buf || buflen < 1)
+		return NULL;
+	
 	buf[0] = '\0';
-	for (x=0;x<sizeof(iax_flags) / sizeof(iax_flags[0]); x++) {
+
+	for (x = 0; x < sizeof(iax_flags) / sizeof(iax_flags[0]); x++) {
 		if (flags & iax_flags[x].value){
 			strncat(buf, iax_flags[x].name, buflen - strlen(buf) - 1);
 			strncat(buf, ",", buflen - strlen(buf) - 1);
 		}
 	}
-	if (strlen(buf)) 
+
+	if (!ast_strlen_zero(buf)) 
 		buf[strlen(buf) - 1] = '\0';
 	else
 		strncpy(buf, "none", buflen - 1);
+
 	return buf;
 }
 
@@ -134,25 +159,22 @@ static struct iax_template *iax_template_find(const char *s, int allowdead)
 	return cur;
 }
 
-char *iax_prov_complete_template(char *line, char *word, int pos, int state)
+char *iax_prov_complete_template(const char *line, const char *word, int pos, int state)
 {
 	struct iax_template *c;
 	int which=0;
-	char *ret;
+	char *ret = NULL;
+	int wordlen = strlen(word);
+
 	ast_mutex_lock(&provlock);
-	c = templates;
-	while(c) {
-		if (!strncasecmp(word, c->name, strlen(word))) {
-			if (++which > state)
-				break;
+	for (c = templates; c; c = c->next) {
+		if (!strncasecmp(word, c->name, wordlen) && ++which > state) {
+			ret = strdup(c->name);
+			break;
 		}
-		c = c->next;
 	}
-	if (c) {
-		ret = strdup(c->name);
-	} else
-		ret = NULL;
 	ast_mutex_unlock(&provlock);
+	
 	return ret;
 }
 
@@ -237,7 +259,7 @@ int iax_provision_version(unsigned int *version, const char *template, int force
 	return ret;
 }
 
-static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, char *s, char *def)
+static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, const char *s, const char *def)
 {
 	struct ast_variable *v;
 	int foundportno = 0;
@@ -247,7 +269,7 @@ static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, 
 	struct hostent *hp;
 	struct ast_hostent h;
 	struct iax_template *src, tmp;
-	char *t;
+	const char *t;
 	if (def) {
 		t = ast_variable_retrieve(cfg, s ,"template");
 		src = NULL;
@@ -261,7 +283,7 @@ static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, 
 		if (!src) {
 			src = iax_template_find(def, 0);
 			if (!src)
-				ast_log(LOG_WARNING, "Unable to locate default base template '%s' for creating '%s', omitting.", def, s);
+				ast_log(LOG_WARNING, "Unable to locate default base template '%s' for creating '%s', omitting.\n", def, s);
 		}
 		if (!src)
 			return -1;
@@ -283,7 +305,7 @@ static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, 
 	v = ast_variable_browse(cfg, s);
 	while(v) {
 		if (!strcasecmp(v->name, "port") || !strcasecmp(v->name, "serverport")) {
-			if ((sscanf(v->value, "%i", &x) == 1) && (x > 0) && (x < 65535)) {
+			if ((sscanf(v->value, "%d", &x) == 1) && (x > 0) && (x < 65535)) {
 				if (!strcasecmp(v->name, "port")) {
 					cur->port = x;
 					foundportno = 1;
@@ -309,20 +331,8 @@ static int iax_template_parse(struct iax_template *cur, struct ast_config *cfg, 
 			} else
 				ast_log(LOG_WARNING, "Ignoring invalid codec '%s' for '%s' at line %d\n", v->value, s, v->lineno);
 		} else if (!strcasecmp(v->name, "tos")) {
-			if (sscanf(v->value, "%i", &x) == 1)
-				cur->tos = x & 0xff;
-			else if (!strcasecmp(v->value, "lowdelay"))
-				cur->tos = IPTOS_LOWDELAY;
-			else if (!strcasecmp(v->value, "throughput"))
-				cur->tos = IPTOS_THROUGHPUT;
-			else if (!strcasecmp(v->value, "reliability"))
-				cur->tos = IPTOS_RELIABILITY;
-			else if (!strcasecmp(v->value, "mincost"))
-				cur->tos = IPTOS_MINCOST;
-			else if (!strcasecmp(v->value, "none"))
-				cur->tos = 0;
-			else
-				ast_log(LOG_WARNING, "Invalid tos value at line %d, should be 'lowdelay', 'throughput', 'reliability', 'mincost', or 'none'\n", v->lineno);
+			if (ast_str2tos(v->value, &cur->tos))
+				ast_log(LOG_WARNING, "Invalid tos value at line %d, see doc/ip-tos.txt for more information.\n", v->lineno);
 		} else if (!strcasecmp(v->name, "user")) {
 			strncpy(cur->user, v->value, sizeof(cur->user) - 1);
 			if (strcmp(cur->user, v->value))
@@ -390,7 +400,7 @@ static int iax_process_template(struct ast_config *cfg, char *s, char *def)
 }
 
 static char show_provisioning_usage[] = 
-"Usage: iax show provisioning [template]\n"
+"Usage: iax list provisioning [template]\n"
 "       Lists all known IAX provisioning templates or a\n"
 "       specific one if specified.\n";
 
@@ -402,39 +412,47 @@ static const char *ifthere(const char *s)
 		return "<unspecified>";
 }
 
-static const char *iax_server(char *a, int alen, unsigned int addr)
+static const char *iax_server(unsigned int addr)
 {
 	struct in_addr ia;
+	
 	if (!addr)
 		return "<unspecified>";
+	
 	ia.s_addr = htonl(addr);
-	return ast_inet_ntoa(a, alen, ia);
+
+	return ast_inet_ntoa(ia);
 }
 
 
 static int iax_show_provisioning(int fd, int argc, char *argv[])
 {
 	struct iax_template *cur;
-	char iabuf[80];	/* Has to be big enough for 'flags' too */
+	char server[INET_ADDRSTRLEN];
+	char alternate[INET_ADDRSTRLEN];
+	char flags[80];	/* Has to be big enough for 'flags' too */
 	int found = 0;
 	if ((argc != 3) && (argc != 4))
 		return RESULT_SHOWUSAGE;
 	ast_mutex_lock(&provlock);
 	for (cur = templates;cur;cur = cur->next) {
 		if ((argc == 3) || (!strcasecmp(argv[3], cur->name)))  {
-			if (found) ast_cli(fd, "\n");
+			if (found) 
+				ast_cli(fd, "\n");
+			ast_copy_string(server, iax_server(cur->server), sizeof(server));
+			ast_copy_string(alternate, iax_server(cur->altserver), sizeof(alternate));
 			ast_cli(fd, "== %s ==\n", cur->name);
 			ast_cli(fd, "Base Templ:   %s\n", strlen(cur->src) ? cur->src : "<none>");
 			ast_cli(fd, "Username:     %s\n", ifthere(cur->user));
 			ast_cli(fd, "Secret:       %s\n", ifthere(cur->pass));
 			ast_cli(fd, "Language:     %s\n", ifthere(cur->lang));
 			ast_cli(fd, "Bind Port:    %d\n", cur->port);
-			ast_cli(fd, "Server:       %s\n", iax_server(iabuf, sizeof(iabuf), cur->server));
+			ast_cli(fd, "Server:       %s\n", server);
 			ast_cli(fd, "Server Port:  %d\n", cur->serverport);
-			ast_cli(fd, "Alternate:    %s\n", iax_server(iabuf, sizeof(iabuf), cur->altserver));
-			ast_cli(fd, "Flags:        %s\n", iax_provflags2str(iabuf, sizeof(iabuf), cur->flags));
+			ast_cli(fd, "Alternate:    %s\n", alternate);
+			ast_cli(fd, "Flags:        %s\n", iax_provflags2str(flags, sizeof(flags), cur->flags));
 			ast_cli(fd, "Format:       %s\n", ast_getformatname(cur->format));
-			ast_cli(fd, "TOS:          %d\n", cur->tos);
+			ast_cli(fd, "TOS:          0x%x\n", cur->tos);
 			found++;
 		}
 	}
@@ -448,12 +466,15 @@ static int iax_show_provisioning(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry  cli_show_provisioning = 
-	{ { "iax2", "show", "provisioning", NULL }, iax_show_provisioning, "Show iax provisioning", show_provisioning_usage, iax_prov_complete_template };
+static struct ast_cli_entry cli_iax2_provision[] = {
+	{ { "iax2", "show", "provisioning", NULL },
+	iax_show_provisioning, "Display iax provisioning",
+	show_provisioning_usage, iax_prov_complete_template, },
+};
 
 static int iax_provision_init(void)
 {
-	ast_cli_register(&cli_show_provisioning);
+	ast_cli_register_multiple(cli_iax2_provision, sizeof(cli_iax2_provision) / sizeof(struct ast_cli_entry));
 	provinit = 1;
 	return 0;
 }
@@ -461,7 +482,7 @@ static int iax_provision_init(void)
 int iax_provision_unload(void)
 {
 	provinit = 0;
-	ast_cli_unregister(&cli_show_provisioning);
+	ast_cli_unregister_multiple(cli_iax2_provision, sizeof(cli_iax2_provision) / sizeof(struct ast_cli_entry));
 	return 0;
 }
 
@@ -479,7 +500,7 @@ int iax_provision_reload(void)
 		cur->dead = 1;
 		cur = cur->next;
 	}
-	cfg = ast_load("iaxprov.conf");
+	cfg = ast_config_load("iaxprov.conf");
 	if (cfg) {
 		/* Load as appropriate */
 		cat = ast_category_browse(cfg, NULL);
@@ -492,6 +513,7 @@ int iax_provision_reload(void)
 			}
 			cat = ast_category_browse(cfg, cat);
 		}
+		ast_config_destroy(cfg);
 	} else
 		ast_log(LOG_NOTICE, "No IAX provisioning configuration found, IAX provisioning disabled.\n");
 	ast_mutex_lock(&provlock);

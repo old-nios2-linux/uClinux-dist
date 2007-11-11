@@ -27,11 +27,10 @@ new_skb(ulong len)
 
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (skb) {
-		skb->nh.raw = skb->mac.raw = skb->data;
+		skb_reset_mac_header(skb);
+		skb_reset_network_header(skb);
 		skb->protocol = __constant_htons(ETH_P_AOE);
 		skb->priority = 0;
-		skb_put(skb, len);
-		memset(skb->head, 0, len);
 		skb->next = skb->prev = NULL;
 
 		/* tell the network layer not to perform IP checksums
@@ -120,10 +119,10 @@ aoecmd_ata_rw(struct aoedev *d, struct frame *f)
 
 	/* initialize the headers & frame */
 	skb = f->skb;
-	h = (struct aoe_hdr *) skb->mac.raw;
+	h = aoe_hdr(skb);
 	ah = (struct aoe_atahdr *) (h+1);
-	skb->len = sizeof *h + sizeof *ah;
-	memset(h, 0, ETH_ZLEN);
+	skb_put(skb, sizeof *h + sizeof *ah);
+	memset(h, 0, skb->len);
 	f->tag = aoehdr_atainit(d, h);
 	f->waited = 0;
 	f->buf = buf;
@@ -149,7 +148,6 @@ aoecmd_ata_rw(struct aoedev *d, struct frame *f)
 		skb->len += bcnt;
 		skb->data_len = bcnt;
 	} else {
-		skb->len = ETH_ZLEN;
 		writebit = 0;
 	}
 
@@ -196,20 +194,21 @@ aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff **tail)
 	sl = sl_tail = NULL;
 
 	read_lock(&dev_base_lock);
-	for (ifp = dev_base; ifp; dev_put(ifp), ifp = ifp->next) {
+	for_each_netdev(ifp) {
 		dev_hold(ifp);
 		if (!is_aoe_netif(ifp))
-			continue;
+			goto cont;
 
 		skb = new_skb(sizeof *h + sizeof *ch);
 		if (skb == NULL) {
 			printk(KERN_INFO "aoe: skb alloc failure\n");
-			continue;
+			goto cont;
 		}
+		skb_put(skb, sizeof *h + sizeof *ch);
 		skb->dev = ifp;
 		if (sl_tail == NULL)
 			sl_tail = skb;
-		h = (struct aoe_hdr *) skb->mac.raw;
+		h = aoe_hdr(skb);
 		memset(h, 0, sizeof *h + sizeof *ch);
 
 		memset(h->dst, 0xff, sizeof h->dst);
@@ -222,6 +221,8 @@ aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff **tail)
 
 		skb->next = sl;
 		sl = skb;
+cont:
+		dev_put(ifp);
 	}
 	read_unlock(&dev_base_lock);
 
@@ -243,6 +244,7 @@ freeframe(struct aoedev *d)
 			continue;
 		if (atomic_read(&skb_shinfo(f->skb)->dataref) == 1) {
 			skb_shinfo(f->skb)->nr_frags = f->skb->data_len = 0;
+			skb_trim(f->skb, 0);
 			return f;
 		}
 		n++;
@@ -301,7 +303,7 @@ rexmit(struct aoedev *d, struct frame *f)
 	aoechr_error(buf);
 
 	skb = f->skb;
-	h = (struct aoe_hdr *) skb->mac.raw;
+	h = aoe_hdr(skb);
 	ah = (struct aoe_atahdr *) (h+1);
 	f->tag = n;
 	h->tag = cpu_to_be32(n);
@@ -408,9 +410,9 @@ rexmit_timer(ulong vp)
 /* this function performs work that has been deferred until sleeping is OK
  */
 void
-aoecmd_sleepwork(void *vp)
+aoecmd_sleepwork(struct work_struct *work)
 {
-	struct aoedev *d = (struct aoedev *) vp;
+	struct aoedev *d = container_of(work, struct aoedev, work);
 
 	if (d->flags & DEVFL_GDALLOC)
 		aoeblk_gdalloc(d);
@@ -530,8 +532,8 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 	char ebuf[128];
 	u16 aoemajor;
 
-	hin = (struct aoe_hdr *) skb->mac.raw;
-	aoemajor = be16_to_cpu(hin->major);
+	hin = aoe_hdr(skb);
+	aoemajor = be16_to_cpu(get_unaligned(&hin->major));
 	d = aoedev_by_aoeaddr(aoemajor, hin->minor);
 	if (d == NULL) {
 		snprintf(ebuf, sizeof ebuf, "aoecmd_ata_rsp: ata response "
@@ -543,7 +545,7 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 
 	spin_lock_irqsave(&d->lock, flags);
 
-	n = be32_to_cpu(hin->tag);
+	n = be32_to_cpu(get_unaligned(&hin->tag));
 	f = getframe(d, n);
 	if (f == NULL) {
 		calc_rttavg(d, -tsince(n));
@@ -551,9 +553,9 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 		snprintf(ebuf, sizeof ebuf,
 			"%15s e%d.%d    tag=%08x@%08lx\n",
 			"unexpected rsp",
-			be16_to_cpu(hin->major),
+			be16_to_cpu(get_unaligned(&hin->major)),
 			hin->minor,
-			be32_to_cpu(hin->tag),
+			be32_to_cpu(get_unaligned(&hin->tag)),
 			jiffies);
 		aoechr_error(ebuf);
 		return;
@@ -562,7 +564,7 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 	calc_rttavg(d, tsince(f->tag));
 
 	ahin = (struct aoe_atahdr *) (hin+1);
-	hout = (struct aoe_hdr *) f->skb->mac.raw;
+	hout = aoe_hdr(f->skb);
 	ahout = (struct aoe_atahdr *) (hout+1);
 	buf = f->buf;
 
@@ -632,7 +634,7 @@ aoecmd_ata_rsp(struct sk_buff *skb)
 			printk(KERN_INFO
 				"aoe: unrecognized ata command %2.2Xh for %d.%d\n",
 				ahout->cmdstat,
-				be16_to_cpu(hin->major),
+				be16_to_cpu(get_unaligned(&hin->major)),
 				hin->minor);
 		}
 	}
@@ -696,10 +698,10 @@ aoecmd_ata_id(struct aoedev *d)
 
 	/* initialize the headers & frame */
 	skb = f->skb;
-	h = (struct aoe_hdr *) skb->mac.raw;
+	h = aoe_hdr(skb);
 	ah = (struct aoe_atahdr *) (h+1);
-	skb->len = ETH_ZLEN;
-	memset(h, 0, ETH_ZLEN);
+	skb_put(skb, sizeof *h + sizeof *ah);
+	memset(h, 0, skb->len);
 	f->tag = aoehdr_atainit(d, h);
 	f->waited = 0;
 
@@ -727,14 +729,14 @@ aoecmd_cfg_rsp(struct sk_buff *skb)
 	enum { MAXFRAMES = 16 };
 	u16 n;
 
-	h = (struct aoe_hdr *) skb->mac.raw;
+	h = aoe_hdr(skb);
 	ch = (struct aoe_cfghdr *) (h+1);
 
 	/*
 	 * Enough people have their dip switches set backwards to
 	 * warrant a loud message for this special case.
 	 */
-	aoemajor = be16_to_cpu(h->major);
+	aoemajor = be16_to_cpu(get_unaligned(&h->major));
 	if (aoemajor == 0xfff) {
 		printk(KERN_ERR "aoe: Warning: shelf address is all ones.  "
 			"Check shelf dip switches.\n");

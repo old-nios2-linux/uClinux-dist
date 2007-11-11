@@ -77,7 +77,6 @@
 #include <linux/cache.h>
 #include <linux/module.h>
 #include <linux/highmem.h>
-#include <linux/divert.h>
 #include <linux/mount.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
@@ -118,7 +117,7 @@ static ssize_t sock_sendpage(struct file *file, struct page *page,
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
 
-static struct file_operations socket_file_ops = {
+static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
 	.aio_read =	sock_aio_read,
@@ -231,13 +230,13 @@ int move_addr_to_user(void *kaddr, int klen, void __user *uaddr,
 
 #define SOCKFS_MAGIC 0x534F434B
 
-static kmem_cache_t *sock_inode_cachep __read_mostly;
+static struct kmem_cache *sock_inode_cachep __read_mostly;
 
 static struct inode *sock_alloc_inode(struct super_block *sb)
 {
 	struct socket_alloc *ei;
 
-	ei = kmem_cache_alloc(sock_inode_cachep, SLAB_KERNEL);
+	ei = kmem_cache_alloc(sock_inode_cachep, GFP_KERNEL);
 	if (!ei)
 		return NULL;
 	init_waitqueue_head(&ei->socket.wait);
@@ -258,13 +257,11 @@ static void sock_destroy_inode(struct inode *inode)
 			container_of(inode, struct socket_alloc, vfs_inode));
 }
 
-static void init_once(void *foo, kmem_cache_t *cachep, unsigned long flags)
+static void init_once(void *foo, struct kmem_cache *cachep, unsigned long flags)
 {
 	struct socket_alloc *ei = (struct socket_alloc *)foo;
 
-	if ((flags & (SLAB_CTOR_VERIFY|SLAB_CTOR_CONSTRUCTOR))
-	    == SLAB_CTOR_CONSTRUCTOR)
-		inode_init_once(&ei->vfs_inode);
+	inode_init_once(&ei->vfs_inode);
 }
 
 static int init_inodecache(void)
@@ -275,8 +272,7 @@ static int init_inodecache(void)
 					      (SLAB_HWCACHE_ALIGN |
 					       SLAB_RECLAIM_ACCOUNT |
 					       SLAB_MEM_SPREAD),
-					      init_once,
-					      NULL);
+					      init_once);
 	if (sock_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -306,10 +302,28 @@ static struct file_system_type sock_fs_type = {
 
 static int sockfs_delete_dentry(struct dentry *dentry)
 {
-	return 1;
+	/*
+	 * At creation time, we pretended this dentry was hashed
+	 * (by clearing DCACHE_UNHASHED bit in d_flags)
+	 * At delete time, we restore the truth : not hashed.
+	 * (so that dput() can proceed correctly)
+	 */
+	dentry->d_flags |= DCACHE_UNHASHED;
+	return 0;
 }
+
+/*
+ * sockfs_dname() is called from d_path().
+ */
+static char *sockfs_dname(struct dentry *dentry, char *buffer, int buflen)
+{
+	return dynamic_dname(dentry, buffer, buflen, "socket:[%lu]",
+				dentry->d_inode->i_ino);
+}
+
 static struct dentry_operations sockfs_dentry_operations = {
 	.d_delete = sockfs_delete_dentry,
+	.d_dname  = sockfs_dname,
 };
 
 /*
@@ -349,21 +363,22 @@ static int sock_alloc_fd(struct file **filep)
 
 static int sock_attach_fd(struct socket *sock, struct file *file)
 {
-	struct qstr this;
-	char name[32];
+	struct qstr name = { .name = "" };
 
-	this.len = sprintf(name, "[%lu]", SOCK_INODE(sock)->i_ino);
-	this.name = name;
-	this.hash = SOCK_INODE(sock)->i_ino;
-
-	file->f_dentry = d_alloc(sock_mnt->mnt_sb->s_root, &this);
-	if (unlikely(!file->f_dentry))
+	file->f_path.dentry = d_alloc(sock_mnt->mnt_sb->s_root, &name);
+	if (unlikely(!file->f_path.dentry))
 		return -ENOMEM;
 
-	file->f_dentry->d_op = &sockfs_dentry_operations;
-	d_add(file->f_dentry, SOCK_INODE(sock));
-	file->f_vfsmnt = mntget(sock_mnt);
-	file->f_mapping = file->f_dentry->d_inode->i_mapping;
+	file->f_path.dentry->d_op = &sockfs_dentry_operations;
+	/*
+	 * We dont want to push this dentry into global dentry hash table.
+	 * We pretend dentry is already hashed, by unsetting DCACHE_UNHASHED
+	 * This permits a working /proc/$pid/fd/XXX on sockets
+	 */
+	file->f_path.dentry->d_flags &= ~DCACHE_UNHASHED;
+	d_instantiate(file->f_path.dentry, SOCK_INODE(sock));
+	file->f_path.mnt = mntget(sock_mnt);
+	file->f_mapping = file->f_path.dentry->d_inode->i_mapping;
 
 	sock->file = file;
 	file->f_op = SOCK_INODE(sock)->i_fop = &socket_file_ops;
@@ -395,24 +410,11 @@ int sock_map_fd(struct socket *sock)
 
 static struct socket *sock_from_file(struct file *file, int *err)
 {
-	struct inode *inode;
-	struct socket *sock;
-
 	if (file->f_op == &socket_file_ops)
 		return file->private_data;	/* set in sock_map_fd */
 
-	inode = file->f_dentry->d_inode;
-	if (!S_ISSOCK(inode->i_mode)) {
-		*err = -ENOTSOCK;
-		return NULL;
-	}
-
-	sock = SOCKET_I(inode);
-	if (sock->file != file) {
-		printk(KERN_ERR "socki_lookup: socket file changed!\n");
-		sock->file = file;
-	}
-	return sock;
+	*err = -ENOTSOCK;
+	return NULL;
 }
 
 /**
@@ -586,6 +588,37 @@ int kernel_sendmsg(struct socket *sock, struct msghdr *msg,
 	return result;
 }
 
+/*
+ * called from sock_recv_timestamp() if sock_flag(sk, SOCK_RCVTSTAMP)
+ */
+void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
+	struct sk_buff *skb)
+{
+	ktime_t kt = skb->tstamp;
+
+	if (!sock_flag(sk, SOCK_RCVTSTAMPNS)) {
+		struct timeval tv;
+		/* Race occurred between timestamp enabling and packet
+		   receiving.  Fill in the current time for now. */
+		if (kt.tv64 == 0)
+			kt = ktime_get_real();
+		skb->tstamp = kt;
+		tv = ktime_to_timeval(kt);
+		put_cmsg(msg, SOL_SOCKET, SCM_TIMESTAMP, sizeof(tv), &tv);
+	} else {
+		struct timespec ts;
+		/* Race occurred between timestamp enabling and packet
+		   receiving.  Fill in the current time for now. */
+		if (kt.tv64 == 0)
+			kt = ktime_get_real();
+		skb->tstamp = kt;
+		ts = ktime_to_timespec(kt);
+		put_cmsg(msg, SOL_SOCKET, SCM_TIMESTAMPNS, sizeof(ts), &ts);
+	}
+}
+
+EXPORT_SYMBOL_GPL(__sock_recv_timestamp);
+
 static inline int __sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 				 struct msghdr *msg, size_t size, int flags)
 {
@@ -744,9 +777,6 @@ static ssize_t sock_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (pos != 0)
 		return -ESPIPE;
 
-	if (iocb->ki_left == 0)	/* Match SYS5 behaviour */
-		return 0;
-
 	x = alloc_sock_iocb(iocb, &siocb);
 	if (!x)
 		return -ENOMEM;
@@ -851,11 +881,6 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			if (vlan_ioctl_hook)
 				err = vlan_ioctl_hook(argp);
 			mutex_unlock(&vlan_ioctl_mutex);
-			break;
-		case SIOCGIFDIVERT:
-		case SIOCSIFDIVERT:
-			/* Convert this to call through a hook */
-			err = divert_ioctl(cmd, argp);
 			break;
 		case SIOCADDDLCI:
 		case SIOCDELDLCI:
@@ -1140,7 +1165,7 @@ static int __sock_create(int family, int type, int protocol,
 	module_put(pf->owner);
 	err = security_socket_post_create(sock, family, type, protocol, kern);
 	if (err)
-		goto out_release;
+		goto out_sock_release;
 	*res = sock;
 
 	return 0;
@@ -1200,6 +1225,7 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 {
 	struct socket *sock1, *sock2;
 	int fd1, fd2, err;
+	struct file *newfile1, *newfile2;
 
 	/*
 	 * Obtain the first socket and check if the underlying protocol
@@ -1218,18 +1244,37 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 	if (err < 0)
 		goto out_release_both;
 
-	fd1 = fd2 = -1;
-
-	err = sock_map_fd(sock1);
-	if (err < 0)
+	fd1 = sock_alloc_fd(&newfile1);
+	if (unlikely(fd1 < 0))
 		goto out_release_both;
-	fd1 = err;
 
-	err = sock_map_fd(sock2);
-	if (err < 0)
-		goto out_close_1;
-	fd2 = err;
+	fd2 = sock_alloc_fd(&newfile2);
+	if (unlikely(fd2 < 0)) {
+		put_filp(newfile1);
+		put_unused_fd(fd1);
+		goto out_release_both;
+	}
 
+	err = sock_attach_fd(sock1, newfile1);
+	if (unlikely(err < 0)) {
+		goto out_fd2;
+	}
+
+	err = sock_attach_fd(sock2, newfile2);
+	if (unlikely(err < 0)) {
+		fput(newfile1);
+		goto out_fd1;
+	}
+
+	err = audit_fd_pair(fd1, fd2);
+	if (err < 0) {
+		fput(newfile1);
+		fput(newfile2);
+		goto out_fd;
+	}
+
+	fd_install(fd1, newfile1);
+	fd_install(fd2, newfile2);
 	/* fd1 and fd2 may be already another descriptors.
 	 * Not kernel problem.
 	 */
@@ -1244,17 +1289,23 @@ asmlinkage long sys_socketpair(int family, int type, int protocol,
 	sys_close(fd1);
 	return err;
 
-out_close_1:
-	sock_release(sock2);
-	sys_close(fd1);
-	return err;
-
 out_release_both:
 	sock_release(sock2);
 out_release_1:
 	sock_release(sock1);
 out:
 	return err;
+
+out_fd2:
+	put_filp(newfile1);
+	sock_release(sock1);
+out_fd1:
+	put_filp(newfile2);
+	sock_release(sock2);
+out_fd:
+	put_unused_fd(fd1);
+	put_unused_fd(fd2);
+	goto out;
 }
 
 /*
@@ -1272,7 +1323,7 @@ asmlinkage long sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-	if(sock) {
+	if (sock) {
 		err = move_addr_to_kernel(umyaddr, addrlen, address);
 		if (err >= 0) {
 			err = security_socket_bind(sock,
@@ -1361,7 +1412,7 @@ asmlinkage long sys_accept(int fd, struct sockaddr __user *upeer_sockaddr,
 
 	err = sock_attach_fd(newsock, newfile);
 	if (err < 0)
-		goto out_fd;
+		goto out_fd_simple;
 
 	err = security_socket_accept(sock, newsock);
 	if (err)
@@ -1394,6 +1445,11 @@ out_put:
 	fput_light(sock->file, fput_needed);
 out:
 	return err;
+out_fd_simple:
+	sock_release(newsock);
+	put_filp(newfile);
+	put_unused_fd(newfd);
+	goto out_put;
 out_fd:
 	fput(newfile);
 	put_unused_fd(newfd);
@@ -1520,8 +1576,9 @@ asmlinkage long sys_sendto(int fd, void __user *buff, size_t len,
 	struct file *sock_file;
 
 	sock_file = fget_light(fd, &fput_needed);
+	err = -EBADF;
 	if (!sock_file)
-		return -EBADF;
+		goto out;
 
 	sock = sock_from_file(sock_file, &err);
 	if (!sock)
@@ -1548,6 +1605,7 @@ asmlinkage long sys_sendto(int fd, void __user *buff, size_t len,
 
 out_put:
 	fput_light(sock_file, fput_needed);
+out:
 	return err;
 }
 
@@ -1579,12 +1637,13 @@ asmlinkage long sys_recvfrom(int fd, void __user *ubuf, size_t size,
 	int fput_needed;
 
 	sock_file = fget_light(fd, &fput_needed);
+	err = -EBADF;
 	if (!sock_file)
-		return -EBADF;
+		goto out;
 
 	sock = sock_from_file(sock_file, &err);
 	if (!sock)
-		goto out;
+		goto out_put;
 
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
@@ -1603,8 +1662,9 @@ asmlinkage long sys_recvfrom(int fd, void __user *ubuf, size_t size,
 		if (err2 < 0)
 			err = err2;
 	}
-out:
+out_put:
 	fput_light(sock_file, fput_needed);
+out:
 	return err;
 }
 
@@ -1875,9 +1935,7 @@ asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg,
 	total_len = err;
 
 	cmsg_ptr = (unsigned long)msg_sys.msg_control;
-	msg_sys.msg_flags = 0;
-	if (MSG_CMSG_COMPAT & flags)
-		msg_sys.msg_flags = MSG_CMSG_COMPAT;
+	msg_sys.msg_flags = flags & (MSG_CMSG_CLOEXEC|MSG_CMSG_COMPAT);
 
 	if (sock->file->f_flags & O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
@@ -2182,7 +2240,7 @@ done:
 }
 
 int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
-                   int flags)
+		   int flags)
 {
 	return sock->ops->connect(sock, addr, addrlen, flags);
 }

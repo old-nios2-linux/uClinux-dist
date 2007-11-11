@@ -1,27 +1,45 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Playback the special information tone to get rid of telemarketers
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Playback the special information tone to get rid of telemarketers
+ *
+ * \author Mark Spencer <markster@digium.com>
+ * 
+ * \ingroup applications
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/translate.h>
-#include <string.h>
-#include <stdlib.h>
+#include "asterisk.h"
 
-static char *tdesc = "Block Telemarketers with Special Information Tone";
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/translate.h"
 
 static char *app = "Zapateller";
 
@@ -29,30 +47,27 @@ static char *synopsis = "Block telemarketers with SIT";
 
 static char *descrip = 
 "  Zapateller(options):  Generates special information tone to block\n"
-"telemarketers from calling you.  Returns 0 normally or -1 on hangup.\n"
-"Options is a pipe-delimited list of options.  The following options\n"
-"are available: 'answer' causes the line to be answered before playing\n"
-"the tone, 'nocallerid' causes Zapateller to only play the tone if there\n"
+"telemarketers from calling you.  Options is a pipe-delimited list of\n" 
+"options.  The following options are available:\n"
+"'answer' causes the line to be answered before playing the tone,\n" 
+"'nocallerid' causes Zapateller to only play the tone if there\n"
 "is no callerid information available.  Options should be separated by |\n"
 "characters\n";
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int zapateller_exec(struct ast_channel *chan, void *data)
 {
 	int res = 0;
-	struct localuser *u;
+	struct ast_module_user *u;
 	int answer = 0, nocallerid = 0;
 	char *c;
 	char *stringp=NULL;
 	
-	LOCAL_USER_ADD(u);
+	u = ast_module_user_add(chan);
 
 	stringp=data;
         c = strsep(&stringp, "|");
-        while(c && strlen(c)) {
+        while(!ast_strlen_zero(c)) {
 		if (!strcasecmp(c, "answer"))
 			answer = 1;
 		else if (!strcasecmp(c, "nocallerid"))
@@ -70,8 +85,8 @@ static int zapateller_exec(struct ast_channel *chan, void *data)
 			res = ast_safe_sleep(chan, 500);
 		}
 	}
-	if (chan->callerid && nocallerid) {
-		LOCAL_USER_REMOVE(u);
+	if (chan->cid.cid_num && nocallerid) {
+		ast_module_user_remove(u);
 		return res;
 	} 
 	if (!res) 
@@ -82,34 +97,24 @@ static int zapateller_exec(struct ast_channel *chan, void *data)
 		res = ast_tonepair(chan, 1800, 0, 330, 0);
 	if (!res) 
 		res = ast_tonepair(chan, 0, 0, 1000, 0);
-	LOCAL_USER_REMOVE(u);
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+
+	res = ast_unregister_application(app);
+	
+	ast_module_user_hangup_all();
+
+	return res;	
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, zapateller_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Block Telemarketers with Special Information Tone");

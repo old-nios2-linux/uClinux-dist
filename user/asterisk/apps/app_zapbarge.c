@@ -1,45 +1,64 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Zap Barge support
- * 
- * Copyright (C) 2003, Digium
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
  * Mark Spencer <markster@digium.com>
  *
- * This program is free software, distributed under the terms of
- * the GNU General Public License
- *
  * Special thanks to comphealth.com for sponsoring this
  * GPL application.
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
+ *
+ * This program is free software, distributed under the terms of
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
  */
 
-#include <asterisk/lock.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/channel.h>
-#include <asterisk/pbx.h>
-#include <asterisk/module.h>
-#include <asterisk/config.h>
-#include <asterisk/app.h>
-#include <asterisk/options.h>
-#include <asterisk/cli.h>
-#include <asterisk/say.h>
-#include <asterisk/utils.h>
+/*! \file
+ *
+ * \brief Zap Barge support
+ *
+ * \author Mark Spencer <markster@digium.com>
+ *
+ * \note Special thanks to comphealth.com for sponsoring this
+ * GPL application.
+ * 
+ * \ingroup applications
+ */
+
+/*** MODULEINFO
+	<depend>zaptel</depend>
+ ***/
+
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
-#include <stdlib.h>
 #include <sys/ioctl.h>
+#include <zaptel/zaptel.h>
 
-#ifdef __linux__
-#include <linux/zaptel.h>
-#else
-#include <zaptel.h>
-#endif /* __linux__ */
-
-static char *tdesc = "Barge in on Zap channel application";
+#include "asterisk/lock.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/channel.h"
+#include "asterisk/pbx.h"
+#include "asterisk/module.h"
+#include "asterisk/config.h"
+#include "asterisk/app.h"
+#include "asterisk/options.h"
+#include "asterisk/cli.h"
+#include "asterisk/say.h"
+#include "asterisk/utils.h"
 
 static char *app = "ZapBarge";
 
@@ -50,11 +69,6 @@ static char *descrip =
 "channel or prompts if one is not specified.  Returns\n"
 "-1 when caller user hangs up and is independent of the\n"
 "state of the channel being monitored.";
-
-
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 
 #define CONF_SIZE 160
@@ -109,7 +123,7 @@ static int conf_run(struct ast_channel *chan, int confno, int confflags)
 		goto outrun;
 	}
 	ast_indicate(chan, -1);
-	retryzap = strcasecmp(chan->type, "Zap");
+	retryzap = strcasecmp(chan->tech->type, "Zap");
 zapretry:
 	origfd = chan->fds[0];
 	if (retryzap) {
@@ -195,6 +209,7 @@ zapretry:
 				break;
 			if ((f->frametype == AST_FRAME_DTMF) && (f->subclass == '#')) {
 				ret = 0;
+				ast_frfree(f);
 				break;
 			} else if (fd != chan->fds[0]) {
 				if (f->frametype == AST_FRAME_VOICE) {
@@ -245,20 +260,23 @@ outrun:
 static int conf_exec(struct ast_channel *chan, void *data)
 {
 	int res=-1;
-	struct localuser *u;
+	struct ast_module_user *u;
 	int retrycnt = 0;
 	int confflags = 0;
 	int confno = 0;
 	char confstr[80] = "";
 
-	if (data && !ast_strlen_zero(data)) {
+	u = ast_module_user_add(chan);
+	
+	if (!ast_strlen_zero(data)) {
 		if ((sscanf(data, "Zap/%d", &confno) != 1) &&
 		    (sscanf(data, "%d", &confno) != 1)) {
 			ast_log(LOG_WARNING, "ZapBarge Argument (if specified) must be a channel number, not '%s'\n", (char *)data);
+			ast_module_user_remove(u);
 			return 0;
 		}
 	}
-	LOCAL_USER_ADD(u);
+	
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
 
@@ -277,34 +295,24 @@ static int conf_exec(struct ast_channel *chan, void *data)
 	}
 out:
 	/* Do the conference */
-	LOCAL_USER_REMOVE(u);
+	ast_module_user_remove(u);
 	return res;
 }
 
-int unload_module(void)
+static int unload_module(void)
 {
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
+	int res;
+	
+	res = ast_unregister_application(app);
+	
+	ast_module_user_hangup_all();
+
+	return res;	
 }
 
-int load_module(void)
+static int load_module(void)
 {
 	return ast_register_application(app, conf_exec, synopsis, descrip);
 }
 
-char *description(void)
-{
-	return tdesc;
-}
-
-int usecount(void)
-{
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Barge in on Zap channel application");

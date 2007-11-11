@@ -768,7 +768,6 @@ net_rx(struct net_device *dev)
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->dev = dev;
 			skb_reserve(skb,2);
 
 			insw(ioaddr + DATAPORT, skb_put(skb,pkt_len), (pkt_len + 1) >> 1);
@@ -908,7 +907,7 @@ int __init init_module(void)
 	return 0;
 }
 
-void
+void __exit
 cleanup_module(void)
 {
 	unregister_netdev(dev_at1700);

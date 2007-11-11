@@ -21,6 +21,9 @@
 /* enable debugging */
 #undef CL_DEBUG
 
+/* enable experimental code */
+#undef CL_EXPERIMENTAL
+
 /* thread safe */
 #undef CL_THREAD_SAFE
 
@@ -45,6 +48,9 @@
 /* os is darwin */
 #undef C_DARWIN
 
+/* target is gnu-hurd */
+#undef C_GNU_HURD
+
 /* os is hpux */
 #undef C_HPUX
 
@@ -63,6 +69,9 @@
 /* os is OS/2 */
 #undef C_OS2
 
+/* os is osf/tru64 */
+#undef C_OSF
+
 /* os is QNX 6.x.x */
 #undef C_QNX6
 
@@ -72,17 +81,14 @@
 /* Path to virus database directory. */
 #undef DATADIR
 
-/* Name of the main database */
-#undef DB1NAME
-
-/* Name of the daily database */
-#undef DB2NAME
-
 /* "default FD_SETSIZE value" */
 #undef DEFAULT_FD_SETSIZE
 
 /* file i/o buffer size */
 #undef FILEBUFF
+
+/* enable workaround for broken DNS servers */
+#undef FRESHCLAM_DNS_FIX
 
 /* use "Cache-Control: no-cache" in freshclam */
 #undef FRESHCLAM_NO_CACHE
@@ -93,7 +99,7 @@
 /* attrib aligned */
 #undef HAVE_ATTRIB_ALIGNED
 
-/* "attrib packed" */
+/* attrib packed */
 #undef HAVE_ATTRIB_PACKED
 
 /* have bzip2 */
@@ -132,6 +138,12 @@
 /* have gmp installed */
 #undef HAVE_GMP
 
+/* Define to 1 if you have the <grp.h> header file. */
+#undef HAVE_GRP_H
+
+/* Define to 1 if you have the <iconv.h> header file. */
+#undef HAVE_ICONV_H
+
 /* Define to 1 if you have the `inet_ntop' function. */
 #undef HAVE_INET_NTOP
 
@@ -162,8 +174,14 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
+/* Define to 1 if you have the `mkstemp' function. */
+#undef HAVE_MKSTEMP
+
 /* Define to 1 if you have a working `mmap' system call. */
 #undef HAVE_MMAP
+
+/* Support for NodalCore acceleration */
+#undef HAVE_NCORE
 
 /* Define to 1 if you have the <ndir.h> header file. */
 #undef HAVE_NDIR_H
@@ -176,6 +194,12 @@
 
 /* "pragma pack" */
 #undef HAVE_PRAGMA_PACK
+
+/* "pragma pack hppa/hp-ux style" */
+#undef HAVE_PRAGMA_PACK_HPPA
+
+/* Define to 1 if you have the <pwd.h> header file. */
+#undef HAVE_PWD_H
 
 /* readdir_r takes 2 arguments */
 #undef HAVE_READDIR_R_2
@@ -192,6 +216,9 @@
 /* have resolv.h */
 #undef HAVE_RESOLV_H
 
+/* Define signed right shift implementation */
+#undef HAVE_SAR
+
 /* Define to 1 if you have the `sendmsg' function. */
 #undef HAVE_SENDMSG
 
@@ -204,8 +231,8 @@
 /* Define to 1 if you have the `snprintf' function. */
 #undef HAVE_SNPRINTF
 
-/* Define to 1 if you have the 'socklen_t' type. */
-#undef HAVE_SOCKLEN_T
+/* Define to 1 if you have the <stdbool.h> header file. */
+#undef HAVE_STDBOOL_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -257,6 +284,9 @@
 
 /* Define to 1 if you have the <tcpd.h> header file. */
 #undef HAVE_TCPD_H
+
+/* Define to 1 if you have the <termios.h> header file. */
+#undef HAVE_TERMIOS_H
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
@@ -333,9 +363,6 @@
 /* Version number of package */
 #undef VERSION
 
-/* use libcurl in mbox code */
-#undef WITH_CURL
-
 /* tcpwrappers support */
 #undef WITH_TCPWRAP
 
@@ -344,6 +371,9 @@
 
 /* Define to 1 to make fseeko visible on some hosts (e.g. glibc 2.2). */
 #undef _LARGEFILE_SOURCE
+
+/* POSIX compatibility */
+#undef _POSIX_PII_SOCKET
 
 /* thread safe */
 #undef _REENTRANT
@@ -359,3 +389,6 @@
 
 /* Define to `long int' if <sys/types.h> does not define. */
 #undef off_t
+
+/* Define to "int" if <sys/socket.h> does not define. */
+#undef socklen_t

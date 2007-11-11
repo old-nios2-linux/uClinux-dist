@@ -334,16 +334,23 @@
 #define __NR_kexec_load			(__NR_Linux + 311)
 #define __NR_getcpu			(__NR_Linux + 312)
 #define __NR_epoll_pwait		(__NR_Linux + 313)
+#define __NR_ioprio_set			(__NR_Linux + 314)
+#define __NR_ioprio_get			(__NR_Linux + 315)
+#define __NR_utimensat			(__NR_Linux + 316)
+#define __NR_signalfd			(__NR_Linux + 317)
+#define __NR_timerfd			(__NR_Linux + 318)
+#define __NR_eventfd			(__NR_Linux + 319)
+#define __NR_fallocate			(__NR_Linux + 320)
 
 /*
  * Offset of the last Linux o32 flavoured syscall
  */
-#define __NR_Linux_syscalls		313
+#define __NR_Linux_syscalls		320
 
 #endif /* _MIPS_SIM == _MIPS_SIM_ABI32 */
 
 #define __NR_O32_Linux			4000
-#define __NR_O32_Linux_syscalls		313
+#define __NR_O32_Linux_syscalls		320
 
 #if _MIPS_SIM == _MIPS_SIM_ABI64
 
@@ -624,16 +631,23 @@
 #define __NR_kexec_load			(__NR_Linux + 270)
 #define __NR_getcpu			(__NR_Linux + 271)
 #define __NR_epoll_pwait		(__NR_Linux + 272)
+#define __NR_ioprio_set			(__NR_Linux + 273)
+#define __NR_ioprio_get			(__NR_Linux + 274)
+#define __NR_utimensat			(__NR_Linux + 275)
+#define __NR_signalfd			(__NR_Linux + 276)
+#define __NR_timerfd			(__NR_Linux + 277)
+#define __NR_eventfd			(__NR_Linux + 278)
+#define __NR_fallocate			(__NR_Linux + 279)
 
 /*
  * Offset of the last Linux 64-bit flavoured syscall
  */
-#define __NR_Linux_syscalls		272
+#define __NR_Linux_syscalls		279
 
 #endif /* _MIPS_SIM == _MIPS_SIM_ABI64 */
 
 #define __NR_64_Linux			5000
-#define __NR_64_Linux_syscalls		272
+#define __NR_64_Linux_syscalls		279
 
 #if _MIPS_SIM == _MIPS_SIM_NABI32
 
@@ -918,282 +932,27 @@
 #define __NR_kexec_load			(__NR_Linux + 274)
 #define __NR_getcpu			(__NR_Linux + 275)
 #define __NR_epoll_pwait		(__NR_Linux + 276)
+#define __NR_ioprio_set			(__NR_Linux + 277)
+#define __NR_ioprio_get			(__NR_Linux + 278)
+#define __NR_utimensat			(__NR_Linux + 279)
+#define __NR_signalfd			(__NR_Linux + 280)
+#define __NR_timerfd			(__NR_Linux + 281)
+#define __NR_eventfd			(__NR_Linux + 282)
+#define __NR_fallocate			(__NR_Linux + 283)
 
 /*
  * Offset of the last N32 flavoured syscall
  */
-#define __NR_Linux_syscalls		276
+#define __NR_Linux_syscalls		283
 
 #endif /* _MIPS_SIM == _MIPS_SIM_NABI32 */
 
 #define __NR_N32_Linux			6000
-#define __NR_N32_Linux_syscalls		276
+#define __NR_N32_Linux_syscalls		283
 
 #ifdef __KERNEL__
 
 #ifndef __ASSEMBLY__
-
-/* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
-#define _syscall0(type,name) \
-type name(void) \
-{ \
-	register unsigned long __a3 asm("$7"); \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %2\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "=r" (__a3) \
-	: "i" (__NR_##name) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-/*
- * DANGER: This macro isn't usable for the pipe(2) call
- * which has a unusual return convention.
- */
-#define _syscall1(type,name,atype,a) \
-type name(atype a) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a3 asm("$7"); \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %3\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "=r" (__a3) \
-	: "r" (__a0), "i" (__NR_##name) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#define _syscall2(type,name,atype,a,btype,b) \
-type name(atype a, btype b) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a3 asm("$7"); \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %4\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "=r" (__a3) \
-	: "r" (__a0), "r" (__a1), "i" (__NR_##name) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#define _syscall3(type,name,atype,a,btype,b,ctype,c) \
-type name(atype a, btype b, ctype c) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7"); \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %5\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "=r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "i" (__NR_##name) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#define _syscall4(type,name,atype,a,btype,b,ctype,c,dtype,d) \
-type name(atype a, btype b, ctype c, dtype d) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7") = (unsigned long) d; \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %5\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "+r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "i" (__NR_##name) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#if (_MIPS_SIM == _MIPS_SIM_ABI32)
-
-/*
- * Using those means your brain needs more than an oil change ;-)
- */
-
-#define _syscall5(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e) \
-type name(atype a, btype b, ctype c, dtype d, etype e) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7") = (unsigned long) d; \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"lw\t$2, %6\n\t" \
-	"subu\t$29, 32\n\t" \
-	"sw\t$2, 16($29)\n\t" \
-	"li\t$2, %5\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	"addiu\t$29, 32\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "+r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "i" (__NR_##name), \
-	  "m" ((unsigned long)e) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#define _syscall6(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e,ftype,f) \
-type name(atype a, btype b, ctype c, dtype d, etype e, ftype f) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7") = (unsigned long) d; \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"lw\t$2, %6\n\t" \
-	"lw\t$8, %7\n\t" \
-	"subu\t$29, 32\n\t" \
-	"sw\t$2, 16($29)\n\t" \
-	"sw\t$8, 20($29)\n\t" \
-	"li\t$2, %5\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	"addiu\t$29, 32\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "+r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "i" (__NR_##name), \
-	  "m" ((unsigned long)e), "m" ((unsigned long)f) \
-	: "$2", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#endif /* (_MIPS_SIM == _MIPS_SIM_ABI32) */
-
-#if (_MIPS_SIM == _MIPS_SIM_NABI32) || (_MIPS_SIM == _MIPS_SIM_ABI64)
-
-#define _syscall5(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e) \
-type name (atype a,btype b,ctype c,dtype d,etype e) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7") = (unsigned long) d; \
-	register unsigned long __a4 asm("$8") = (unsigned long) e; \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %6\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "+r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "r" (__a4), "i" (__NR_##name) \
-	: "$2", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#define _syscall6(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e,ftype,f) \
-type name (atype a,btype b,ctype c,dtype d,etype e,ftype f) \
-{ \
-	register unsigned long __a0 asm("$4") = (unsigned long) a; \
-	register unsigned long __a1 asm("$5") = (unsigned long) b; \
-	register unsigned long __a2 asm("$6") = (unsigned long) c; \
-	register unsigned long __a3 asm("$7") = (unsigned long) d; \
-	register unsigned long __a4 asm("$8") = (unsigned long) e; \
-	register unsigned long __a5 asm("$9") = (unsigned long) f; \
-	unsigned long __v0; \
-	\
-	__asm__ volatile ( \
-	".set\tnoreorder\n\t" \
-	"li\t$2, %7\t\t\t# " #name "\n\t" \
-	"syscall\n\t" \
-	"move\t%0, $2\n\t" \
-	".set\treorder" \
-	: "=&r" (__v0), "+r" (__a3) \
-	: "r" (__a0), "r" (__a1), "r" (__a2), "r" (__a4), "r" (__a5), \
-	  "i" (__NR_##name) \
-	: "$2", "$9", "$10", "$11", "$12", "$13", "$14", "$15", "$24", \
-	  "memory"); \
-	\
-	if (__a3 == 0) \
-		return (type) __v0; \
-	errno = __v0; \
-	return (type) -1; \
-}
-
-#endif /* (_MIPS_SIM == _MIPS_SIM_NABI32) || (_MIPS_SIM == _MIPS_SIM_ABI64) */
-
 
 #define __ARCH_OMIT_COMPAT_SYS_GETDENTS64
 #define __ARCH_WANT_IPC_PARSE_VERSION
@@ -1205,7 +964,6 @@ type name (atype a,btype b,ctype c,dtype d,etype e,ftype f) \
 #define __ARCH_WANT_SYS_UTIME
 #define __ARCH_WANT_SYS_WAITPID
 #define __ARCH_WANT_SYS_SOCKETCALL
-#define __ARCH_WANT_SYS_FADVISE64
 #define __ARCH_WANT_SYS_GETPGRP
 #define __ARCH_WANT_SYS_LLSEEK
 #define __ARCH_WANT_SYS_NICE
@@ -1221,6 +979,22 @@ type name (atype a,btype b,ctype c,dtype d,etype e,ftype f) \
 # ifdef CONFIG_MIPS32_O32
 #  define __ARCH_WANT_COMPAT_SYS_TIME
 # endif
+
+/* whitelists for checksyscalls */
+#define __IGNORE_select
+#define __IGNORE_vfork
+#define __IGNORE_time
+#define __IGNORE_uselib
+#define __IGNORE_fadvise64_64
+#define __IGNORE_getdents64
+#if _MIPS_SIM == _MIPS_SIM_NABI32
+#define __IGNORE_truncate64
+#define __IGNORE_ftruncate64
+#define __IGNORE_stat64
+#define __IGNORE_lstat64
+#define __IGNORE_fstat64
+#define __IGNORE_fstatat64
+#endif
 
 #endif /* !__ASSEMBLY__ */
 

@@ -108,7 +108,7 @@ int flat_dev_erase(off_t offset, size_t len)
 
 /****************************************************************************/
 
-int flat_dev_write(off_t offset, const char *buf, size_t len)
+int flat_dev_write(off_t offset, const void *buf, size_t len)
 {
 	assert(flatinfo.fd != -1);
 	assert(flatinfo.writing);
@@ -123,7 +123,7 @@ int flat_dev_write(off_t offset, const char *buf, size_t len)
 
 /****************************************************************************/
 
-int flat_dev_read(char *buf, size_t len)
+int flat_dev_read(void *buf, size_t len)
 {
 	assert(flatinfo.fd != -1);
 	assert(!flatinfo.writing);

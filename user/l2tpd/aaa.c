@@ -266,14 +266,14 @@ int handle_challenge (struct tunnel *t, struct challenge *chal)
     bufferDump (chal->secret, strlen (chal->secret));
 
     log (LOG_DEBUG, "%s: Here comes the challenge\n", __FUNCTION__);
-    bufferDump (chal->challenge, strlen (chal->challenge));
+    bufferDump (chal->challenge, chal->chal_len);
 #endif
 
     memset (chal->response, 0, MD_SIG_SIZE);
     MD5Init (&chal->md5);
     MD5Update (&chal->md5, &chal->ss, 1);
     MD5Update (&chal->md5, chal->secret, strlen (chal->secret));
-    MD5Update (&chal->md5, chal->challenge, strlen(chal->challenge));
+    MD5Update (&chal->md5, chal->challenge, chal->chal_len);
     MD5Final (chal->response, &chal->md5);
 #ifdef DEBUG_AUTH
     log (LOG_DEBUG, "response is %X%X%X%X to '%s' and %X%X%X%X, %d\n",

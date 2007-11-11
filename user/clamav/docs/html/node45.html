@@ -7,8 +7,8 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
   Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
 <HTML>
 <HEAD>
-<TITLE>CVD format</TITLE>
-<META NAME="description" CONTENT="CVD format">
+<TITLE>Memory</TITLE>
+<META NAME="description" CONTENT="Memory">
 <META NAME="keywords" CONTENT="clamdoc">
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
@@ -19,68 +19,50 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
 
-<LINK REL="previous" HREF="node40.html">
-<LINK REL="up" HREF="node30.html">
+<LINK REL="next" HREF="node46.html">
+<LINK REL="previous" HREF="node44.html">
+<LINK REL="up" HREF="node43.html">
 <LINK REL="next" HREF="node46.html">
 </HEAD>
 
 <BODY >
 <!--Navigation Panel-->
-<A NAME="tex2html1154"
+<A NAME="tex2html779"
   HREF="node46.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html1150"
-  HREF="node30.html">
+<A NAME="tex2html775"
+  HREF="node43.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html1146"
+<A NAME="tex2html769"
   HREF="node44.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html1152"
+<A NAME="tex2html777"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html1155"
-  HREF="node46.html">Frequently Asked Questions</A>
-<B> Up:</B> <A NAME="tex2html1151"
-  HREF="node30.html">LibClamAV</A>
-<B> Previous:</B> <A NAME="tex2html1147"
-  HREF="node44.html">Example</A>
- &nbsp <B>  <A NAME="tex2html1153"
+<B> Next:</B> <A NAME="tex2html780"
+  HREF="node46.html">clamav-config</A>
+<B> Up:</B> <A NAME="tex2html776"
+  HREF="node43.html">Database reloading</A>
+<B> Previous:</B> <A NAME="tex2html770"
+  HREF="node44.html">Data scan functions</A>
+ &nbsp <B>  <A NAME="tex2html778"
   HREF="node1.html">Contents</A></B> 
 <BR>
 <BR>
 <!--End of Navigation Panel-->
 
-<H2><A NAME="SECTION00075000000000000000">
-CVD format</A>
-</H2>
-    CVD (ClamAV Virus Database) is a digitally signed tarball file that
-    contains one or more databases. The header is a 512 bytes long string
-    with colon separated fields:
-    <PRE>
-ClamAV-VDB:build time:version:number of signatures:functionality
-level required:MD5 checksum:digital signature:builder name:build time (sec)
-</PRE>
-    <code>sigtool --info</code> displays detailed information on CVD files:
-    <PRE>
-    zolw@localhost:/usr/local/share/clamav$ sigtool -i daily.cvd 
-    Build time: 11 Sep 2004 21-07 +0200
-    Version: 487
-    # of signatures: 1189
-    Functionality level: 2
-    Builder: ccordes
-    MD5: a3f4f98694229e461f17d2aa254e9a43
-    Digital signature: uwJS6d+y/9g5SXGE0Hh1rXyjZW/PGK/zqVtWWVL3/tfHEn
-    A17z6VB2IBR2I/OitKRYzmVo3ibU7bPCJNgi6fPcW1PQwvCunwAswvR0ehrvY/4ks
-    UjUOXo1VwQlW7l86HZmiMUSyAjnF/gciOSsOQa9Hli8D5uET1RDzVpoWu/id
-    Verification OK.
-</PRE>
+<H3><A NAME="SECTION00075200000000000000">
+Memory</A>
+</H3>
+    Because the engine structure consumes a few megabytes of system memory, you
+    should release it with <code>cl_free</code> if you no longer need to scan files.
 
 <P>
 <BR><HR>
 <ADDRESS>
 Tomasz Kojm
-2006-10-15
+2007-07-11
 </ADDRESS>
 </BODY>
 </HTML>

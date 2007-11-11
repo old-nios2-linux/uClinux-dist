@@ -62,8 +62,6 @@ static char const * const vec_names[] = {
 
 void __init trap_init(void)
 {
-	if (mach_trap_init)
-		mach_trap_init();
 }
 
 void die_if_kernel(char *str, struct pt_regs *fp, int nr)
@@ -82,7 +80,8 @@ void die_if_kernel(char *str, struct pt_regs *fp, int nr)
 
 	printk(KERN_EMERG "Process %s (pid: %d, stackpage=%08lx)\n",
 		current->comm, current->pid, PAGE_SIZE+(unsigned long)current);
-	show_stack(NULL, (unsigned long *)fp);
+	show_stack(NULL, (unsigned long *)(fp + 1));
+	add_taint(TAINT_DIE);
 	do_exit(SIGSEGV);
 }
 
@@ -158,7 +157,7 @@ void show_stack(struct task_struct *task, unsigned long *stack)
 void bad_super_trap(struct frame *fp)
 {
 	console_verbose();
-	if (fp->ptregs.vector < 4*sizeof(vec_names)/sizeof(vec_names[0]))
+	if (fp->ptregs.vector < 4 * ARRAY_SIZE(vec_names))
 		printk (KERN_WARNING "*** %s ***   FORMAT=%X\n",
 			vec_names[(fp->ptregs.vector) >> 2],
 			fp->ptregs.format);

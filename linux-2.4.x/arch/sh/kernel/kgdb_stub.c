@@ -196,9 +196,9 @@ int  kgdb_cflag;
 static jmp_buf rem_com_env;
 
 /* TRA differs sh3/4 */
-#if defined(__sh3__)
+#if defined(CONFIG_CPU_SH3)
 #define TRA 0xffffffd0
-#elif defined(__SH4__)
+#elif defined(CONFIG_CPU_SH4)
 #define TRA 0xff000020
 #endif
 

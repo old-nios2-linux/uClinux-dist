@@ -1,40 +1,64 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * Asterisk -- An open source telephony toolkit.
  *
- * Save GSM in the proprietary Microsoft format.
- * 
- * Copyright (C) 1999, Mark Spencer
+ * Copyright (C) 1999 - 2005, Digium, Inc.
  *
- * Mark Spencer <markster@linux-support.net>
+ * Mark Spencer <markster@digium.com>
+ *
+ * See http://www.asterisk.org for more information about
+ * the Asterisk project. Please do not directly contact
+ * any of the maintainers of this project for assistance;
+ * the project provides a web site, mailing lists and IRC
+ * channels for your use.
  *
  * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * the GNU General Public License Version 2. See the LICENSE file
+ * at the top of the source tree.
+ */
+
+/*! \file
+ *
+ * \brief Save GSM in the proprietary Microsoft format.
+ * 
+ * Microsoft WAV format (Proprietary GSM)
+ * \arg File name extension: WAV,wav49  (Upper case WAV, lower case is another format)
+ * This format can be played on Windows systems, used for
+ * e-mail attachments mainly.
+ * \ingroup formats
  */
  
-#include <asterisk/lock.h>
-#include <asterisk/channel.h>
-#include <asterisk/file.h>
-#include <asterisk/logger.h>
-#include <asterisk/sched.h>
-#include <asterisk/module.h>
+#include "asterisk.h"
+
+ASTERISK_FILE_VERSION(__FILE__, "$Revision: 40722 $")
+
+#include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#ifdef __linux__
-#include <endian.h>
-#else
-#include <machine/endian.h>
-#endif
+
+#include "asterisk/lock.h"
+#include "asterisk/channel.h"
+#include "asterisk/file.h"
+#include "asterisk/logger.h"
+#include "asterisk/sched.h"
+#include "asterisk/module.h"
+#include "asterisk/endian.h"
+
 #include "msgsm.h"
 
 /* Some Ideas for this code came from makewave.c by Jeffrey Chilton */
 
 /* Portions of the conversion code are by guido@sienanet.it */
+
+#define	GSM_FRAME_SIZE	33
+#define	MSGSM_FRAME_SIZE	65
+#define	MSGSM_DATA_OFFSET		60	/* offset of data bytes */
+#define	GSM_SAMPLES		160	/* samples in a GSM block */
+#define	MSGSM_SAMPLES		(2*GSM_SAMPLES)	/* samples in an MSGSM block */
 
 /* begin binary data: */
 char msgsm_silence[] = /* 65 */
@@ -45,29 +69,11 @@ char msgsm_silence[] = /* 65 */
 ,0x92,0x24,0x49,0x92,0x00};
 /* end binary data. size = 65 bytes */
 
-struct ast_filestream {
-	void *reserved[AST_RESERVED_POINTERS];
+struct wavg_desc {
 	/* Believe it or not, we must decode/recode to account for the
 	   weird MS format */
-	/* This is what a filestream means to us */
-	int fd; /* Descriptor */
-	int bytes;
-	struct ast_frame fr;				/* Frame information */
-	char waste[AST_FRIENDLY_OFFSET];	/* Buffer for sending frames, etc */
-	char empty;							/* Empty character */
-	unsigned char gsm[66];				/* Two Real GSM Frames */
-	int foffset;
 	int secondhalf;						/* Are we on the second half */
-	struct timeval last;
 };
-
-
-AST_MUTEX_DEFINE_STATIC(wav_lock);
-static int glistcnt = 0;
-
-static char *name = "wav49";
-static char *desc = "Microsoft WAV format (Proprietary GSM)";
-static char *exts = "WAV|wav49";
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define htoll(b) (b)
@@ -92,23 +98,23 @@ static char *exts = "WAV|wav49";
 #endif
 
 
-static int check_header(int fd)
+static int check_header(FILE *f)
 {
 	int type, size, formtype;
 	int fmt, hsize, fact;
 	short format, chans;
 	int freq;
 	int data;
-	if (read(fd, &type, 4) != 4) {
+	if (fread(&type, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (type)\n");
 		return -1;
 	}
-	if (read(fd, &size, 4) != 4) {
+	if (fread(&size, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (size)\n");
 		return -1;
 	}
 	size = ltohl(size);
-	if (read(fd, &formtype, 4) != 4) {
+	if (fread(&formtype, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (formtype)\n");
 		return -1;
 	}
@@ -120,7 +126,7 @@ static int check_header(int fd)
 		ast_log(LOG_WARNING, "Does not contain WAVE\n");
 		return -1;
 	}
-	if (read(fd, &fmt, 4) != 4) {
+	if (fread(&fmt, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (fmt)\n");
 		return -1;
 	}
@@ -128,7 +134,7 @@ static int check_header(int fd)
 		ast_log(LOG_WARNING, "Does not say fmt\n");
 		return -1;
 	}
-	if (read(fd, &hsize, 4) != 4) {
+	if (fread(&hsize, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (formtype)\n");
 		return -1;
 	}
@@ -136,7 +142,7 @@ static int check_header(int fd)
 		ast_log(LOG_WARNING, "Unexpected header size %d\n", ltohl(hsize));
 		return -1;
 	}
-	if (read(fd, &format, 2) != 2) {
+	if (fread(&format, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Read failed (format)\n");
 		return -1;
 	}
@@ -144,7 +150,7 @@ static int check_header(int fd)
 		ast_log(LOG_WARNING, "Not a GSM file %d\n", ltohs(format));
 		return -1;
 	}
-	if (read(fd, &chans, 2) != 2) {
+	if (fread(&chans, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Read failed (format)\n");
 		return -1;
 	}
@@ -152,31 +158,31 @@ static int check_header(int fd)
 		ast_log(LOG_WARNING, "Not in mono %d\n", ltohs(chans));
 		return -1;
 	}
-	if (read(fd, &freq, 4) != 4) {
+	if (fread(&freq, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (freq)\n");
 		return -1;
 	}
-	if (ltohl(freq) != 8000) {
+	if (ltohl(freq) != DEFAULT_SAMPLE_RATE) {
 		ast_log(LOG_WARNING, "Unexpected freqency %d\n", ltohl(freq));
 		return -1;
 	}
 	/* Ignore the byte frequency */
-	if (read(fd, &freq, 4) != 4) {
+	if (fread(&freq, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (X_1)\n");
 		return -1;
 	}
 	/* Ignore the two weird fields */
-	if (read(fd, &freq, 4) != 4) {
+	if (fread(&freq, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (X_2/X_3)\n");
 		return -1;
 	}
 	/* Ignore the byte frequency */
-	if (read(fd, &freq, 4) != 4) {
+	if (fread(&freq, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (Y_1)\n");
 		return -1;
 	}
 	/* Check for the word fact */
-	if (read(fd, &fact, 4) != 4) {
+	if (fread(&fact, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (fact)\n");
 		return -1;
 	}
@@ -185,16 +191,16 @@ static int check_header(int fd)
 		return -1;
 	}
 	/* Ignore the "fact value" */
-	if (read(fd, &fact, 4) != 4) {
+	if (fread(&fact, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (fact header)\n");
 		return -1;
 	}
-	if (read(fd, &fact, 4) != 4) {
+	if (fread(&fact, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (fact value)\n");
 		return -1;
 	}
 	/* Check for the word data */
-	if (read(fd, &data, 4) != 4) {
+	if (fread(&data, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (data)\n");
 		return -1;
 	}
@@ -203,244 +209,247 @@ static int check_header(int fd)
 		return -1;
 	}
 	/* Ignore the data length */
-	if (read(fd, &data, 4) != 4) {
+	if (fread(&data, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Read failed (data)\n");
 		return -1;
 	}
 	return 0;
 }
 
-static int update_header(int fd)
+static int update_header(FILE *f)
 {
 	off_t cur,end,bytes;
-	int datalen,filelen;
-	
-	cur = lseek(fd, 0, SEEK_CUR);
-	end = lseek(fd, 0, SEEK_END);
+	int datalen, filelen, samples;
+
+	cur = ftello(f);
+	fseek(f, 0, SEEK_END);
+	end = ftello(f);
 	/* in a gsm WAV, data starts 60 bytes in */
-	bytes = end - 60;
+	bytes = end - MSGSM_DATA_OFFSET;
+	samples = htoll(bytes / MSGSM_FRAME_SIZE * MSGSM_SAMPLES);
 	datalen = htoll((bytes + 1) & ~0x1);
-	filelen = htoll(52 + ((bytes + 1) & ~0x1));
+	filelen = htoll(MSGSM_DATA_OFFSET - 8 + ((bytes + 1) & ~0x1));
 	if (cur < 0) {
 		ast_log(LOG_WARNING, "Unable to find our position\n");
 		return -1;
 	}
-	if (lseek(fd, 4, SEEK_SET) != 4) {
+	if (fseek(f, 4, SEEK_SET)) {
 		ast_log(LOG_WARNING, "Unable to set our position\n");
 		return -1;
 	}
-	if (write(fd, &filelen, 4) != 4) {
-		ast_log(LOG_WARNING, "Unable to set write file size\n");
+	if (fwrite(&filelen, 1, 4, f) != 4) {
+		ast_log(LOG_WARNING, "Unable to write file size\n");
 		return -1;
 	}
-	if (lseek(fd, 56, SEEK_SET) != 56) {
+	if (fseek(f, 48, SEEK_SET)) {
 		ast_log(LOG_WARNING, "Unable to set our position\n");
 		return -1;
 	}
-	if (write(fd, &datalen, 4) != 4) {
-		ast_log(LOG_WARNING, "Unable to set write datalen\n");
+	if (fwrite(&samples, 1, 4, f) != 4) {
+		ast_log(LOG_WARNING, "Unable to write samples\n");
 		return -1;
 	}
-	if (lseek(fd, cur, SEEK_SET) != cur) {
+	if (fseek(f, 56, SEEK_SET)) {
+		ast_log(LOG_WARNING, "Unable to set our position\n");
+		return -1;
+	}
+	if (fwrite(&datalen, 1, 4, f) != 4) {
+		ast_log(LOG_WARNING, "Unable to write datalen\n");
+		return -1;
+	}
+	if (fseeko(f, cur, SEEK_SET)) {
 		ast_log(LOG_WARNING, "Unable to return to position\n");
 		return -1;
 	}
 	return 0;
 }
 
-static int write_header(int fd)
+static int write_header(FILE *f)
 {
-	unsigned int hz=htoll(8000);
-	unsigned int bhz = htoll(1625);
-	unsigned int hs = htoll(20);
+	/* Samples per second (always 8000 for this format). */
+	unsigned int sample_rate = htoll(8000);
+	/* Bytes per second (always 1625 for this format). */
+	unsigned int byte_sample_rate = htoll(1625);
+	/* This is the size of the "fmt " subchunk */
+	unsigned int fmtsize = htoll(20);
+	/* WAV #49 */
 	unsigned short fmt = htols(49);
+	/* Mono = 1 channel */
 	unsigned short chans = htols(1);
-	unsigned int fhs = htoll(4);
-	unsigned int x_1 = htoll(65);
-	unsigned short x_2 = htols(2);
-	unsigned short x_3 = htols(320);
-	unsigned int y_1 = htoll(20160);
+	/* Each block of data is exactly 65 bytes in size. */
+	unsigned int block_align = htoll(MSGSM_FRAME_SIZE);
+	/* Not actually 2, but rounded up to the nearest bit */
+	unsigned short bits_per_sample = htols(2);
+	/* Needed for compressed formats */
+	unsigned short extra_format = htols(MSGSM_SAMPLES);
+	/* This is the size of the "fact" subchunk */
+	unsigned int factsize = htoll(4);
+	/* Number of samples in the data chunk */
+	unsigned int num_samples = htoll(0);
+	/* Number of bytes in the data chunk */
 	unsigned int size = htoll(0);
 	/* Write a GSM header, ignoring sizes which will be filled in later */
-	if (write(fd, "RIFF", 4) != 4) {
+
+	/*  0: Chunk ID */
+	if (fwrite("RIFF", 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &size, 4) != 4) {
+	/*  4: Chunk Size */
+	if (fwrite(&size, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, "WAVEfmt ", 8) != 8) {
+	/*  8: Chunk Format */
+	if (fwrite("WAVE", 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &hs, 4) != 4) {
+	/* 12: Subchunk 1: ID */
+	if (fwrite("fmt ", 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &fmt, 2) != 2) {
+	/* 16: Subchunk 1: Size (minus 8) */
+	if (fwrite(&fmtsize, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &chans, 2) != 2) {
+	/* 20: Subchunk 1: Audio format (49) */
+	if (fwrite(&fmt, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &hz, 4) != 4) {
+	/* 22: Subchunk 1: Number of channels */
+	if (fwrite(&chans, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &bhz, 4) != 4) {
+	/* 24: Subchunk 1: Sample rate */
+	if (fwrite(&sample_rate, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &x_1, 4) != 4) {
+	/* 28: Subchunk 1: Byte rate */
+	if (fwrite(&byte_sample_rate, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &x_2, 2) != 2) {
+	/* 32: Subchunk 1: Block align */
+	if (fwrite(&block_align, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &x_3, 2) != 2) {
+	/* 36: Subchunk 1: Bits per sample */
+	if (fwrite(&bits_per_sample, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, "fact", 4) != 4) {
+	/* 38: Subchunk 1: Extra format bytes */
+	if (fwrite(&extra_format, 1, 2, f) != 2) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &fhs, 4) != 4) {
+	/* 40: Subchunk 2: ID */
+	if (fwrite("fact", 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &y_1, 4) != 4) {
+	/* 44: Subchunk 2: Size (minus 8) */
+	if (fwrite(&factsize, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, "data", 4) != 4) {
+	/* 48: Subchunk 2: Number of samples */
+	if (fwrite(&num_samples, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
-	if (write(fd, &size, 4) != 4) {
+	/* 52: Subchunk 3: ID */
+	if (fwrite("data", 1, 4, f) != 4) {
+		ast_log(LOG_WARNING, "Unable to write header\n");
+		return -1;
+	}
+	/* 56: Subchunk 3: Size */
+	if (fwrite(&size, 1, 4, f) != 4) {
 		ast_log(LOG_WARNING, "Unable to write header\n");
 		return -1;
 	}
 	return 0;
 }
 
-static struct ast_filestream *wav_open(int fd)
+static int wav_open(struct ast_filestream *s)
 {
 	/* We don't have any header to read or anything really, but
 	   if we did, it would go here.  We also might want to check
 	   and be sure it's a valid file.  */
-	struct ast_filestream *tmp;
-	if ((tmp = malloc(sizeof(struct ast_filestream)))) {
-		memset(tmp, 0, sizeof(struct ast_filestream));
-		if (check_header(fd)) {
-			free(tmp);
-			return NULL;
-		}
-		if (ast_mutex_lock(&wav_lock)) {
-			ast_log(LOG_WARNING, "Unable to lock wav list\n");
-			free(tmp);
-			return NULL;
-		}
-		tmp->fd = fd;
-		tmp->fr.data = tmp->gsm;
-		tmp->fr.frametype = AST_FRAME_VOICE;
-		tmp->fr.subclass = AST_FORMAT_GSM;
-		/* datalen will vary for each frame */
-		tmp->fr.src = name;
-		tmp->fr.mallocd = 0;
-		tmp->secondhalf = 0;
-		glistcnt++;
-		ast_mutex_unlock(&wav_lock);
-		ast_update_use_count();
-	}
-	return tmp;
+	struct wavg_desc *fs = (struct wavg_desc *)s->private;
+
+	if (check_header(s->f))
+		return -1;
+	fs->secondhalf = 0;	/* not strictly necessary */
+	return 0;
 }
 
-static struct ast_filestream *wav_rewrite(int fd, char *comment)
+static int wav_rewrite(struct ast_filestream *s, const char *comment)
 {
 	/* We don't have any header to read or anything really, but
 	   if we did, it would go here.  We also might want to check
 	   and be sure it's a valid file.  */
-	struct ast_filestream *tmp;
-	if ((tmp = malloc(sizeof(struct ast_filestream)))) {
-		memset(tmp, 0, sizeof(struct ast_filestream));
-		if (write_header(fd)) {
-			free(tmp);
-			return NULL;
-		}
-		if (ast_mutex_lock(&wav_lock)) {
-			ast_log(LOG_WARNING, "Unable to lock wav list\n");
-			free(tmp);
-			return NULL;
-		}
-		tmp->fd = fd;
-		glistcnt++;
-		ast_mutex_unlock(&wav_lock);
-		ast_update_use_count();
-	} else
-		ast_log(LOG_WARNING, "Out of memory\n");
-	return tmp;
+
+	if (write_header(s->f))
+		return -1;
+	return 0;
 }
 
 static void wav_close(struct ast_filestream *s)
 {
 	char zero = 0;
-	if (ast_mutex_lock(&wav_lock)) {
-		ast_log(LOG_WARNING, "Unable to lock wav list\n");
-		return;
-	}
-	glistcnt--;
-	ast_mutex_unlock(&wav_lock);
-	ast_update_use_count();
 	/* Pad to even length */
-	if (s->bytes & 0x1)
-		write(s->fd, &zero, 1);
-	close(s->fd);
-	free(s);
-	s = NULL;
+	fseek(s->f, 0, SEEK_END);
+	if (ftello(s->f) & 0x1)
+		fwrite(&zero, 1, 1, s->f);
 }
 
 static struct ast_frame *wav_read(struct ast_filestream *s, int *whennext)
 {
-	int res;
-	char msdata[66];
 	/* Send a frame from the file to the appropriate channel */
+	struct wavg_desc *fs = (struct wavg_desc *)s->private;
 
 	s->fr.frametype = AST_FRAME_VOICE;
 	s->fr.subclass = AST_FORMAT_GSM;
 	s->fr.offset = AST_FRIENDLY_OFFSET;
-	s->fr.samples = 160;
-	s->fr.datalen = 33;
+	s->fr.samples = GSM_SAMPLES;
 	s->fr.mallocd = 0;
-	if (s->secondhalf) {
+	AST_FRAME_SET_BUFFER(&s->fr, s->buf, AST_FRIENDLY_OFFSET, GSM_FRAME_SIZE);
+	if (fs->secondhalf) {
 		/* Just return a frame based on the second GSM frame */
-		s->fr.data = s->gsm + 33;
+		s->fr.data = (char *)s->fr.data + GSM_FRAME_SIZE;
+		s->fr.offset += GSM_FRAME_SIZE;
 	} else {
-		if ((res = read(s->fd, msdata, 65)) != 65) {
+		/* read and convert */
+		unsigned char msdata[MSGSM_FRAME_SIZE];
+		int res;
+		
+		if ((res = fread(msdata, 1, MSGSM_FRAME_SIZE, s->f)) != MSGSM_FRAME_SIZE) {
 			if (res && (res != 1))
 				ast_log(LOG_WARNING, "Short read (%d) (%s)!\n", res, strerror(errno));
 			return NULL;
 		}
 		/* Convert from MS format to two real GSM frames */
-		conv65(msdata, s->gsm);
-		s->fr.data = s->gsm;
+		conv65(msdata, s->fr.data);
 	}
-	s->secondhalf = !s->secondhalf;
-	*whennext = 160;
+	fs->secondhalf = !fs->secondhalf;
+	*whennext = GSM_SAMPLES;
 	return &s->fr;
 }
 
-static int wav_write(struct ast_filestream *fs, struct ast_frame *f)
+static int wav_write(struct ast_filestream *s, struct ast_frame *f)
 {
-	int res;
-	char msdata[66];
-	int len =0;
-	int alreadyms=0;
+	int len;
+	int size;
+	struct wavg_desc *fs = (struct wavg_desc *)s->private;
+
 	if (f->frametype != AST_FRAME_VOICE) {
 		ast_log(LOG_WARNING, "Asked to write non-voice frame!\n");
 		return -1;
@@ -449,130 +458,113 @@ static int wav_write(struct ast_filestream *fs, struct ast_frame *f)
 		ast_log(LOG_WARNING, "Asked to write non-GSM frame (%d)!\n", f->subclass);
 		return -1;
 	}
-	if (!(f->datalen % 65)) 
-		alreadyms = 1;
-	while(len < f->datalen) {
-		if (alreadyms) {
+	/* XXX this might fail... if the input is a multiple of MSGSM_FRAME_SIZE
+	 * we assume it is already in the correct format.
+	 */
+	if (!(f->datalen % MSGSM_FRAME_SIZE)) {
+		size = MSGSM_FRAME_SIZE;
+		fs->secondhalf = 0;
+	} else {
+		size = GSM_FRAME_SIZE;
+	}
+	for (len = 0; len < f->datalen ; len += size) {
+		int res;
+		unsigned char *src, msdata[MSGSM_FRAME_SIZE];
+		if (fs->secondhalf) {	/* second half of raw gsm to be converted */
+			memcpy(s->buf + GSM_FRAME_SIZE, f->data + len, GSM_FRAME_SIZE);
+			conv66((unsigned char *) s->buf, msdata);
+			src = msdata;
 			fs->secondhalf = 0;
-			if ((res = write(fs->fd, f->data + len, 65)) != 65) {
-				ast_log(LOG_WARNING, "Bad write (%d/65): %s\n", res, strerror(errno));
-				return -1;
-			}
-			fs->bytes += 65;
-			update_header(fs->fd);
-			len += 65;
-		} else {
-			if (fs->secondhalf) {
-				memcpy(fs->gsm + 33, f->data + len, 33);
-				conv66(fs->gsm, msdata);
-				if ((res = write(fs->fd, msdata, 65)) != 65) {
-					ast_log(LOG_WARNING, "Bad write (%d/65): %s\n", res, strerror(errno));
-					return -1;
-				}
-				fs->bytes += 65;
-				update_header(fs->fd);
-			} else {
-				/* Copy the data and do nothing */
-				memcpy(fs->gsm, f->data + len, 33);
-			}
-			fs->secondhalf = !fs->secondhalf;
-			len += 33;
+		} else if (size == GSM_FRAME_SIZE) {	/* first half of raw gsm */
+			memcpy(s->buf, f->data + len, GSM_FRAME_SIZE);
+			src = NULL;	/* nothing to write */
+			fs->secondhalf = 1;
+		} else {	/* raw msgsm data */
+			src = f->data + len;
 		}
+		if (src && (res = fwrite(src, 1, MSGSM_FRAME_SIZE, s->f)) != MSGSM_FRAME_SIZE) {
+			ast_log(LOG_WARNING, "Bad write (%d/65): %s\n", res, strerror(errno));
+			return -1;
+		}
+		update_header(s->f); /* XXX inefficient! */
 	}
 	return 0;
 }
 
-static int wav_seek(struct ast_filestream *fs, long sample_offset, int whence)
+static int wav_seek(struct ast_filestream *fs, off_t sample_offset, int whence)
 {
-	off_t offset=0,distance,cur,min,max;
-	min = 60;
-	cur = lseek(fs->fd, 0, SEEK_CUR);
-	max = lseek(fs->fd, 0, SEEK_END);
-	/* I'm getting sloppy here, I'm only going to go to even splits of the 2
-	 * frames, if you want tighter cuts use format_gsm, format_pcm, or format_wav */
-	distance = (sample_offset/320) * 65;
-	if(whence == SEEK_SET)
+	off_t offset=0, distance, max;
+	struct wavg_desc *s = (struct wavg_desc *)fs->private;
+
+	off_t min = MSGSM_DATA_OFFSET;
+	off_t cur = ftello(fs->f);
+	fseek(fs->f, 0, SEEK_END);
+	max = ftello(fs->f);	/* XXX ideally, should round correctly */
+	/* Compute the distance in bytes, rounded to the block size */
+	distance = (sample_offset/MSGSM_SAMPLES) * MSGSM_FRAME_SIZE;
+	if (whence == SEEK_SET)
 		offset = distance + min;
-	else if(whence == SEEK_CUR || whence == SEEK_FORCECUR)
+	else if (whence == SEEK_CUR || whence == SEEK_FORCECUR)
 		offset = distance + cur;
-	else if(whence == SEEK_END)
+	else if (whence == SEEK_END)
 		offset = max - distance;
-	// always protect against seeking past end of header
-	offset = (offset < min)?min:offset;
+	/* always protect against seeking past end of header */
+	if (offset < min)
+		offset = min;
 	if (whence != SEEK_FORCECUR) {
-		offset = (offset > max)?max:offset;
+		if (offset > max)
+			offset = max;
 	} else if (offset > max) {
 		int i;
-		lseek(fs->fd, 0, SEEK_END);
-		for (i=0; i< (offset - max) / 65; i++) {
-			write(fs->fd, msgsm_silence, 65);
+		fseek(fs->f, 0, SEEK_END);
+		for (i=0; i< (offset - max) / MSGSM_FRAME_SIZE; i++) {
+			fwrite(msgsm_silence, 1, MSGSM_FRAME_SIZE, fs->f);
 		}
 	}
-	fs->secondhalf = 0;
-	return lseek(fs->fd, offset, SEEK_SET);
+	s->secondhalf = 0;
+	return fseeko(fs->f, offset, SEEK_SET);
 }
 
 static int wav_trunc(struct ast_filestream *fs)
 {
-	if(ftruncate(fs->fd, lseek(fs->fd, 0, SEEK_CUR)))
+	if (ftruncate(fileno(fs->f), ftello(fs->f)))
 		return -1;
-	return update_header(fs->fd);
+	return update_header(fs->f);
 }
 
-static long wav_tell(struct ast_filestream *fs)
+static off_t wav_tell(struct ast_filestream *fs)
 {
 	off_t offset;
-	offset = lseek(fs->fd, 0, SEEK_CUR);
+	offset = ftello(fs->f);
 	/* since this will most likely be used later in play or record, lets stick
 	 * to that level of resolution, just even frames boundaries */
-	return (offset - 52)/65*320;
+	return (offset - MSGSM_DATA_OFFSET)/MSGSM_FRAME_SIZE*MSGSM_SAMPLES;
 }
 
-static char *wav_getcomment(struct ast_filestream *s)
+static const struct ast_format wav49_f = {
+	.name = "wav49",
+	.exts = "WAV|wav49",
+	.format = AST_FORMAT_GSM,
+	.open =	wav_open,
+	.rewrite = wav_rewrite,
+	.write = wav_write,
+	.seek = wav_seek,
+	.trunc = wav_trunc,
+	.tell = wav_tell,
+	.read = wav_read,
+	.close = wav_close,
+	.buf_size = 2*GSM_FRAME_SIZE + AST_FRIENDLY_OFFSET,
+	.desc_size = sizeof(struct wavg_desc),
+};
+
+static int load_module(void)
 {
-	return NULL;
+	return ast_format_register(&wav49_f);
 }
 
-int load_module()
+static int unload_module(void)
 {
-	return ast_format_register(name, exts, AST_FORMAT_GSM,
-								wav_open,
-								wav_rewrite,
-								wav_write,
-								wav_seek,
-								wav_trunc,
-								wav_tell,
-								wav_read,
-								wav_close,
-								wav_getcomment);
-								
-								
-}
-
-int unload_module()
-{
-	return ast_format_unregister(name);
+	return ast_format_unregister(wav49_f.name);
 }	
 
-int usecount()
-{
-	int res;
-	if (ast_mutex_lock(&wav_lock)) {
-		ast_log(LOG_WARNING, "Unable to lock wav list\n");
-		return -1;
-	}
-	res = glistcnt;
-	ast_mutex_unlock(&wav_lock);
-	return res;
-}
-
-char *description()
-{
-	return desc;
-}
-
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
+AST_MODULE_INFO_STANDARD(ASTERISK_GPL_KEY, "Microsoft WAV format (Proprietary GSM)");

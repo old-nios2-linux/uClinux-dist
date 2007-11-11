@@ -151,7 +151,6 @@ void setup_arch(char **cmdline_p)
 	int bootmap_size;
 	extern int _stext, _etext;
 	extern int _edata, _end;
-	extern int _ramend;
 #ifdef DEBUG
 	extern int _sdata, _sbss, _ebss;
 #ifdef CONFIG_BLK_DEV_BLKMEM
@@ -163,8 +162,8 @@ void setup_arch(char **cmdline_p)
 	int i=0;
 #endif							    // krh
 
-	memory_start = (unsigned long)&_end;
-	memory_end = (unsigned long) &_ramend;
+	memory_start = PAGE_ALIGN((unsigned long)&_end);
+	memory_end = (unsigned long) nasys_program_mem_end;
 
 #if 0                                                       //;kenw;
 	/* copy the command line from booting paramter region */

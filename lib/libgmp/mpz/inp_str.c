@@ -1,66 +1,42 @@
 /* mpz_inp_str(dest_integer, stream, base) -- Input a number in base
    BASE from stdio stream STREAM and store the result in DEST_INTEGER.
 
-Copyright (C) 1991, 1993, 1994, 1996, 1998, 2000 Free Software Foundation, Inc.
+   OF THE FUNCTIONS IN THIS FILE, ONLY mpz_inp_str IS FOR EXTERNAL USE, THE
+   REST ARE INTERNALS AND ARE ALMOST CERTAIN TO BE SUBJECT TO INCOMPATIBLE
+   CHANGES OR DISAPPEAR COMPLETELY IN FUTURE GNU MP RELEASES.
+
+Copyright 1991, 1993, 1994, 1996, 1998, 2000, 2001, 2002, 2003 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Library General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at your
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
-You should have received a copy of the GNU Library General Public License
+You should have received a copy of the GNU Lesser General Public License
 along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <ctype.h>
 #include "gmp.h"
 #include "gmp-impl.h"
 
-static int
-digit_value_in_base (c, base)
-     int c;
-     int base;
-{
-  int digit;
-
-  if (isdigit (c))
-    digit = c - '0';
-  else if (islower (c))
-    digit = c - 'a' + 10;
-  else if (isupper (c))
-    digit = c - 'A' + 10;
-  else
-    return -1;
-
-  if (digit < base)
-    return digit;
-  return -1;
-}
+extern const unsigned char __gmp_digit_value_tab[];
+#define digit_value_tab __gmp_digit_value_tab
 
 size_t
-#if __STDC__
 mpz_inp_str (mpz_ptr x, FILE *stream, int base)
-#else
-mpz_inp_str (x, stream, base)
-     mpz_ptr x;
-     FILE *stream;
-     int base;
-#endif
 {
-  char *str;
-  size_t alloc_size, str_size;
   int c;
-  int negative;
-  mp_size_t xsize;
   size_t nread;
 
   if (stream == 0)
@@ -76,6 +52,33 @@ mpz_inp_str (x, stream, base)
     }
   while (isspace (c));
 
+  return mpz_inp_str_nowhite (x, stream, base, c, nread);
+}
+
+/* shared by mpq_inp_str */
+size_t
+mpz_inp_str_nowhite (mpz_ptr x, FILE *stream, int base, int c, size_t nread)
+{
+  char *str;
+  size_t alloc_size, str_size;
+  int negative;
+  mp_size_t xsize;
+  const unsigned char *digit_value;
+
+  ASSERT_ALWAYS (EOF == -1);	/* FIXME: handle this by adding explicit */
+         			/* comparisons of c and EOF before each  */
+				/* read of digit_value[].  */
+
+  digit_value = digit_value_tab;
+  if (base > 36)
+    {
+      /* For bases > 36, use the collating sequence
+	 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.  */
+      digit_value += 224;
+      if (base > 62)
+	return 0;		/* too large base */
+    }
+
   negative = 0;
   if (c == '-')
     {
@@ -84,7 +87,7 @@ mpz_inp_str (x, stream, base)
       nread++;
     }
 
-  if (digit_value_in_base (c, base == 0 ? 10 : base) < 0)
+  if (c == EOF || digit_value[c] >= (base == 0 ? 10 : base))
     return 0;			/* error if no digits */
 
   /* If BASE is 0, try to find out the base by looking at the initial
@@ -120,44 +123,45 @@ mpz_inp_str (x, stream, base)
     }
 
   alloc_size = 100;
-  str = (char *) (*_mp_allocate_func) (alloc_size);
+  str = (char *) (*__gmp_allocate_func) (alloc_size);
   str_size = 0;
 
-  for (;;)
+  while (c != EOF)
     {
       int dig;
+      dig = digit_value[c];
+      if (dig >= base)
+	break;
       if (str_size >= alloc_size)
 	{
 	  size_t old_alloc_size = alloc_size;
 	  alloc_size = alloc_size * 3 / 2;
-	  str = (char *) (*_mp_reallocate_func) (str, old_alloc_size, alloc_size);
+	  str = (char *) (*__gmp_reallocate_func) (str, old_alloc_size, alloc_size);
 	}
-      dig = digit_value_in_base (c, base);
-      if (dig < 0)
-	break;
       str[str_size++] = dig;
       c = getc (stream);
     }
+  nread += str_size;
 
   ungetc (c, stream);
+  nread--;
 
   /* Make sure the string is not empty, mpn_set_str would fail.  */
   if (str_size == 0)
     {
       x->_mp_size = 0;
-      (*_mp_free_func) (str, alloc_size);
-      return nread;
     }
+  else
+    {
+      xsize = (((mp_size_t)
+                (str_size / __mp_bases[base].chars_per_bit_exactly))
+               / GMP_NUMB_BITS + 2);
+      MPZ_REALLOC (x, xsize);
 
-  xsize = (((mp_size_t) (str_size / __mp_bases[base].chars_per_bit_exactly))
-	   / BITS_PER_MP_LIMB + 2);
-  if (x->_mp_alloc < xsize)
-    _mpz_realloc (x, xsize);
-
-  /* Convert the byte array in base BASE to our bignum format.  */
-  xsize = mpn_set_str (x->_mp_d, (unsigned char *) str, str_size, base);
-  x->_mp_size = negative ? -xsize : xsize;
-
-  (*_mp_free_func) (str, alloc_size);
-  return str_size + nread;
+      /* Convert the byte array in base BASE to our bignum format.  */
+      xsize = mpn_set_str (x->_mp_d, (unsigned char *) str, str_size, base);
+      x->_mp_size = negative ? -xsize : xsize;
+    }
+  (*__gmp_free_func) (str, alloc_size);
+  return nread;
 }

@@ -18,6 +18,7 @@
 #include <asm/ebus.h>
 #include <asm/spitfire.h>
 #include <asm/bbc.h>
+#include <asm/io.h>
 
 #include "bbc_i2c.h"
 
@@ -155,10 +156,9 @@ struct bbc_i2c_client *bbc_i2c_attach(struct linux_ebus_child *echild)
 
 	if (!bp)
 		return NULL;
-	client = kmalloc(sizeof(*client), GFP_KERNEL);
+	client = kzalloc(sizeof(*client), GFP_KERNEL);
 	if (!client)
 		return NULL;
-	memset(client, 0, sizeof(*client));
 	client->bp = bp;
 	client->echild = echild;
 	client->bus = echild->resource[0].start;
@@ -187,19 +187,20 @@ static int wait_for_pin(struct bbc_i2c_bus *bp, u8 *status)
 	bp->waiting = 1;
 	add_wait_queue(&bp->wq, &wait);
 	while (limit-- > 0) {
-		u8 val;
+		unsigned long val;
 
-		set_current_state(TASK_INTERRUPTIBLE);
-		*status = val = readb(bp->i2c_control_regs + 0);
-		if ((val & I2C_PCF_PIN) == 0) {
+		val = wait_event_interruptible_timeout(
+				bp->wq,
+				(((*status = readb(bp->i2c_control_regs + 0))
+				  & I2C_PCF_PIN) == 0),
+				msecs_to_jiffies(250));
+		if (val > 0) {
 			ret = 0;
 			break;
 		}
-		msleep_interruptible(250);
 	}
 	remove_wait_queue(&bp->wq, &wait);
 	bp->waiting = 0;
-	current->state = TASK_RUNNING;
 
 	return ret;
 }
@@ -340,7 +341,7 @@ static irqreturn_t bbc_i2c_interrupt(int irq, void *dev_id)
 	 */
 	if (bp->waiting &&
 	    !(readb(bp->i2c_control_regs + 0x0) & I2C_PCF_PIN))
-		wake_up(&bp->wq);
+		wake_up_interruptible(&bp->wq);
 
 	return IRQ_HANDLED;
 }
@@ -356,13 +357,13 @@ static void __init reset_one_i2c(struct bbc_i2c_bus *bp)
 
 static int __init attach_one_i2c(struct linux_ebus_device *edev, int index)
 {
-	struct bbc_i2c_bus *bp = kmalloc(sizeof(*bp), GFP_KERNEL);
+	struct bbc_i2c_bus *bp;
 	struct linux_ebus_child *echild;
 	int entry;
 
+	bp = kzalloc(sizeof(*bp), GFP_KERNEL);
 	if (!bp)
 		return -ENOMEM;
-	memset(bp, 0, sizeof(*bp));
 
 	bp->i2c_control_regs = ioremap(edev->resource[0].start, 0x2);
 	if (!bp->i2c_control_regs)

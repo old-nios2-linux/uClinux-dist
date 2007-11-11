@@ -1,8 +1,8 @@
-/* $Id: shm_mem.h,v 1.20.2.1 2003/11/19 19:05:13 andrei Exp $*
+/* $Id: shm_mem.h,v 1.24.2.1 2005/07/04 12:08:00 andrei Exp $*
  *
  * shared mem stuff
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -54,6 +54,19 @@
 #include <string.h>
 #include <errno.h>
 
+/* fix DBG MALLOC stuff */
+
+/* fix debug defines, DBG_F_MALLOC <=> DBG_QM_MALLOC */
+#ifdef F_MALLOC
+	#ifdef DBG_F_MALLOC
+		#ifndef DBG_QM_MALLOC
+			#define DBG_QM_MALLOC
+		#endif
+	#elif defined(DBG_QM_MALLOC)
+		#define DBG_F_MALLOC
+	#endif
+#endif
+
 
 
 #include "../dprint.h"
@@ -66,7 +79,7 @@
 #	define MY_FREE vqm_free
 #	define MY_STATUS vqm_status
 #	define  shm_malloc_init vqm_malloc_init
-#	warn "no proper vq_realloc implementantion, try another memory allocator"
+#	warn "no proper vq_realloc implementation, try another memory allocator"
 #elif defined F_MALLOC
 #	include "f_malloc.h"
 	extern struct fm_block* shm_block;
@@ -91,27 +104,15 @@
 
 int shm_mem_init(); /* calls shm_getmem & shm_mem_init_mallocs */
 int shm_getmem();   /* allocates the memory (mmap or sysv shmap) */
-int shm_mem_init_mallocs(void* mempool, int size); /* initialized the mallocs
-													  & the lock */
+int shm_mem_init_mallocs(void* mempool, unsigned long size); /* initialize
+																the mallocs
+																& the lock */
 void shm_mem_destroy();
 
 
 
 #define shm_lock()    lock_get(mem_lock)
 #define shm_unlock()  lock_release(mem_lock)
-
-/* fix DBG MALLOC stuff */
-
-/* fix debug defines, DBG_F_MALLOC <=> DBG_QM_MALLOC */
-#ifdef F_MALLOC
-	#ifdef DBG_F_MALLOC
-		#ifndef DBG_QM_MALLOC
-			#define DBG_QM_MALLOC
-		#endif
-	#elif defined(DBG_QM_MALLOC)
-		#define DBG_F_MALLOC
-	#endif
-#endif
 
 
 #ifdef DBG_QM_MALLOC
@@ -126,7 +127,7 @@ void shm_mem_destroy();
 
 
 inline static void* _shm_malloc(unsigned int size, 
-	char *file, char *function, int line )
+	const char *file, const char *function, int line )
 {
 	void *p;
 	
@@ -167,7 +168,8 @@ do { \
 
 
 
-void* _shm_resize(void* ptr, unsigned int size, char* f, char* fn, int line);
+void* _shm_resize(void* ptr, unsigned int size, const char* f, const char* fn,
+					int line);
 #define shm_resize(_p, _s ) _shm_resize((_p), (_s), \
 		__FILE__, __FUNCTION__, __LINE__ )
 /*#define shm_resize(_p, _s ) shm_realloc( (_p), (_s))*/

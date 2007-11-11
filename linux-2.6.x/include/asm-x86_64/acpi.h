@@ -29,6 +29,7 @@
 #ifdef __KERNEL__
 
 #include <acpi/pdc_intel.h>
+#include <asm/numa.h>
 
 #define COMPILER_DEPENDENT_INT64   long long
 #define COMPILER_DEPENDENT_UINT64  unsigned long long
@@ -37,7 +38,7 @@
  * Calling conventions:
  *
  * ACPI_SYSTEM_XFACE        - Interfaces to host OS (handlers, threads)
- * ACPI_EXTERNAL_XFACE      - External ACPI interfaces 
+ * ACPI_EXTERNAL_XFACE      - External ACPI interfaces
  * ACPI_INTERNAL_XFACE      - Internal ACPI interfaces
  * ACPI_INTERNAL_VAR_XFACE  - Internal variable-parameter list interfaces
  */
@@ -54,36 +55,14 @@
 #define ACPI_ENABLE_IRQS()  local_irq_enable()
 #define ACPI_FLUSH_CPU_CACHE()	wbinvd()
 
+int __acpi_acquire_global_lock(unsigned int *lock);
+int __acpi_release_global_lock(unsigned int *lock);
 
-static inline int
-__acpi_acquire_global_lock (unsigned int *lock)
-{
-	unsigned int old, new, val;
-	do {
-		old = *lock;
-		new = (((old & ~0x3) + 2) + ((old >> 1) & 0x1));
-		val = cmpxchg(lock, old, new);
-	} while (unlikely (val != old));
-	return (new < 3) ? -1 : 0;
-}
+#define ACPI_ACQUIRE_GLOBAL_LOCK(facs, Acq) \
+	((Acq) = __acpi_acquire_global_lock(&facs->global_lock))
 
-static inline int
-__acpi_release_global_lock (unsigned int *lock)
-{
-	unsigned int old, new, val;
-	do {
-		old = *lock;
-		new = old & ~0x3;
-		val = cmpxchg(lock, old, new);
-	} while (unlikely (val != old));
-	return old & 0x1;
-}
-
-#define ACPI_ACQUIRE_GLOBAL_LOCK(GLptr, Acq) \
-	((Acq) = __acpi_acquire_global_lock((unsigned int *) GLptr))
-
-#define ACPI_RELEASE_GLOBAL_LOCK(GLptr, Acq) \
-	((Acq) = __acpi_release_global_lock((unsigned int *) GLptr))
+#define ACPI_RELEASE_GLOBAL_LOCK(facs, Acq) \
+	((Acq) = __acpi_release_global_lock(&facs->global_lock))
 
 /*
  * Math helper asm macros
@@ -109,10 +88,10 @@ extern int acpi_strict;
 extern int acpi_disabled;
 extern int acpi_pci_disabled;
 extern int acpi_ht;
-static inline void disable_acpi(void) 
-{ 
-	acpi_disabled = 1; 
-	acpi_ht = 0; 
+static inline void disable_acpi(void)
+{
+	acpi_disabled = 1;
+	acpi_ht = 0;
 	acpi_pci_disabled = 1;
 	acpi_noirq = 1;
 }
@@ -122,12 +101,21 @@ static inline void disable_acpi(void)
 
 extern int acpi_gsi_to_irq(u32 gsi, unsigned int *irq);
 static inline void acpi_noirq_set(void) { acpi_noirq = 1; }
-static inline void acpi_disable_pci(void) 
+static inline void acpi_disable_pci(void)
 {
-	acpi_pci_disabled = 1; 
+	acpi_pci_disabled = 1;
 	acpi_noirq_set();
 }
 extern int acpi_irq_balance_set(char *str);
+
+/* routines for saving/restoring kernel state */
+extern int acpi_save_state_mem(void);
+extern void acpi_restore_state_mem(void);
+
+extern unsigned long acpi_wakeup_address;
+
+/* early initialization routine */
+extern void acpi_reserve_bootmem(void);
 
 #else	/* !CONFIG_ACPI */
 
@@ -142,28 +130,23 @@ extern int acpi_numa;
 extern int acpi_scan_nodes(unsigned long start, unsigned long end);
 #define NR_NODE_MEMBLKS (MAX_NUMNODES*2)
 
-#ifdef CONFIG_ACPI_SLEEP
-
-/* routines for saving/restoring kernel state */
-extern int acpi_save_state_mem(void);
-extern void acpi_restore_state_mem(void);
-
-extern unsigned long acpi_wakeup_address;
-
-/* early initialization routine */
-extern void acpi_reserve_bootmem(void);
-
-#endif /*CONFIG_ACPI_SLEEP*/
-
 extern int acpi_disabled;
 extern int acpi_pci_disabled;
-
-extern u8 x86_acpiid_to_apicid[];
 
 #define ARCH_HAS_POWER_INIT 1
 
 extern int acpi_skip_timer_override;
 extern int acpi_use_timer_override;
+
+#ifdef CONFIG_ACPI_NUMA
+extern void __init acpi_fake_nodes(const struct bootnode *fake_nodes,
+				   int num_nodes);
+#else
+static inline void acpi_fake_nodes(const struct bootnode *fake_nodes,
+				   int num_nodes)
+{
+}
+#endif
 
 #endif /*__KERNEL__*/
 

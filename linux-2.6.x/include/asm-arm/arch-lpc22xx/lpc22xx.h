@@ -1,6 +1,6 @@
 
-#ifndef __ASM_ARCH_LPC22xx_H
-#define __ASM_ARCH_LPC22xx_H
+#ifndef __ASM_ARCH_LPC22XX_H
+#define __ASM_ARCH_LPC22XX_H
 
 /* EXTERNAL MEMORY CONTROLLER (EMC) */
 #define BCFG0           (*((volatile unsigned int *) 0xFFE00000))       /* lpc22xx only */
@@ -11,13 +11,18 @@
 /* External Interrupts */
 #define EXTINT          (*((volatile unsigned char *) 0xE01FC140))
 #define EXTWAKE         (*((volatile unsigned char *) 0xE01FC144))
-#ifdef  CONFIG_ARCH_LPC22xx
+#ifdef  CONFIG_ARCH_LPC22XX
 #define EXTMODE         (*((volatile unsigned char *) 0xE01FC148))      /* no in lpc210x*/
 #define EXTPOLAR        (*((volatile unsigned char *) 0xE01FC14C))      /* no in lpc210x*/
 #endif
 
 /* SMemory mapping control. */
 #define MEMMAP          (*((volatile unsigned char *) 0xE01FC040))
+/* SMemory mapping control registers */
+#define MEMMAP_BOOT	0
+#define MEMMAP_USER_FLASH	1
+#define MEMMAP_USER_RAM	2
+#define MEMMAP_EXT_MEM	3
 
 /* Phase Locked Loop (PLL) */
 #define PLLCON          (*((volatile unsigned char *) 0xE01FC080))
@@ -82,14 +87,15 @@
 #define VICVectCntl15   (*((volatile unsigned long *) 0xFFFFF23C))
 
 /* Pin Connect Block */
-#define PINSEL0         (*((volatile unsigned long *) 0xE002C000))
+#define REG_PINSEL0		0xE002C000
+#define PINSEL0			(*((volatile unsigned long *) REG_PINSEL0))
 #define PINSEL1         (*((volatile unsigned long *) 0xE002C004))
-#ifdef CONFIG_ARCH_LPC22xx
+#ifdef CONFIG_ARCH_LPC22XX
 #define PINSEL2         (*((volatile unsigned long *) 0xE002C014))      /* no in lpc210x*/
 #endif
 
 /* General Purpose Input/Output (GPIO) */
-#ifndef CONFIG_ARCH_LPC22xx
+#ifndef CONFIG_ARCH_LPC22XX
 
 #define IOPIN           (*((volatile unsigned long *) 0xE0028000))      /* lpc210x only */
 #define IOSET           (*((volatile unsigned long *) 0xE0028004))      /* lpc210x only */
@@ -98,7 +104,7 @@
 
 #endif
 
-#ifdef CONFIG_ARCH_LPC22xx
+#ifdef CONFIG_ARCH_LPC22XX
 #define IO0PIN          (*((volatile unsigned long *) 0xE0028000))      /* no in lpc210x*/
 #define IO0SET          (*((volatile unsigned long *) 0xE0028004))      /* no in lpc210x*/
 #define IO0DIR          (*((volatile unsigned long *) 0xE0028008))      /* no in lpc210x*/
@@ -110,7 +116,7 @@
 #define IO1CLR          (*((volatile unsigned long *) 0xE002801C))      /* no in lpc210x*/
 #endif
 
-#ifdef CONFIG_ARCH_LPC22xx
+#ifdef CONFIG_ARCH_LPC22XX
 
 #define IO2PIN          (*((volatile unsigned long *) 0xE0028020))      /* lpc22xx only */
 #define IO2SET          (*((volatile unsigned long *) 0xE0028024))      /* lpc22xx only */
@@ -125,16 +131,21 @@
 #endif
 
 /* Universal Asynchronous Receiver Transmitter 0 (UART0) */
+#define REG_U0THR		0xE000C000
+#define REG_U0LCR		0xE000C00C
+#define REG_U0DLL		0xE000C000
+#define REG_U0DLM		0xE000C004
+
 #define U0RBR           (*((volatile unsigned char *) 0xE000C000))
-#define U0THR           (*((volatile unsigned char *) 0xE000C000))
+#define U0THR			(*((volatile unsigned char *) REG_U0THR))
 #define U0IER           (*((volatile unsigned char *) 0xE000C004))
 #define U0IIR           (*((volatile unsigned char *) 0xE000C008))
 #define U0FCR           (*((volatile unsigned char *) 0xE000C008))
-#define U0LCR           (*((volatile unsigned char *) 0xE000C00C))
+#define U0LCR			(*((volatile unsigned char *) REG_U0LCR))
 #define U0LSR           (*((volatile unsigned char *) 0xE000C014))
 #define U0SCR           (*((volatile unsigned char *) 0xE000C01C))
-#define U0DLL           (*((volatile unsigned char *) 0xE000C000))
-#define U0DLM           (*((volatile unsigned char *) 0xE000C004))
+#define U0DLL			(*((volatile unsigned char *) REG_U0DLL))
+#define U0DLM			(*((volatile unsigned char *) REG_U0DLM))
 
 /* Universal Asynchronous Receiver Transmitter 1 (UART1) */
 #define U1RBR           (*((volatile unsigned char *) 0xE0010000))
@@ -167,7 +178,7 @@
 #define SPI_SPCCR       (*((volatile unsigned char *) 0xE002000C))
 #define SPI_SPINT       (*((volatile unsigned char *) 0xE002001C))
 
-#ifdef CONFIG_ARCH_LPC22xx
+#ifdef CONFIG_ARCH_LPC22XX
 #define S0PCR           (*((volatile unsigned char *) 0xE0020000))      /* no in lpc210x*/
 #define S0PSR           (*((volatile unsigned char *) 0xE0020004))      /* no in lpc210x*/
 #define S0PDR           (*((volatile unsigned char *) 0xE0020008))      /* no in lpc210x*/
@@ -301,7 +312,7 @@
 #define CAN5TDA3        (*((volatile unsigned long *) 0xE0054058))      /* lpc2119\lpc2129\lpc2292\lpc2294 only */
 #define CAN5TDB3        (*((volatile unsigned long *) 0xE005405C))      /* lpc2119\lpc2129\lpc2292\lpc2294 only */
 
-#ifdef CONFIG_ARCH_LPC22xx 
+#ifdef CONFIG_ARCH_LPC22XX 
 #define CAN6MOD         (*((volatile unsigned long *) 0xE0058000))      /* lpc2292\lpc2294 only */
 #define CAN6CMR         (*((volatile unsigned long *) 0xE0058004))      /* lpc2292\lpc2294 only */
 #define CAN6GSR         (*((volatile unsigned long *) 0xE0058008))      /* lpc2292\lpc2294 only */

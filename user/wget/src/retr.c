@@ -54,24 +54,25 @@ so, delete this exception statement from your version.  */
 #include "connect.h"
 #include "hash.h"
 #include "convert.h"
-
-#ifdef HAVE_SSL
-# include "gen_sslfunc.h"	/* for ssl_iread */
-#endif
+#include "ptimer.h"
 
 #ifndef errno
 extern int errno;
 #endif
 
-/* See the comment in gethttp() why this is needed. */
-int global_download_count;
-
 /* Total size of downloaded files.  Used to enforce quota.  */
-LARGE_INT total_downloaded_bytes;
+SUM_SIZE_INT total_downloaded_bytes;
 
+/* If non-NULL, the stream to which output should be written.  This
+   stream is initialized when `-O' is used.  */
+FILE *output_stream;
+
+/* Whether output_document is a regular file we can manipulate,
+   i.e. not `-' or a device file. */
+int output_stream_regular;
 
 static struct {
-  long chunk_bytes;
+  wgint chunk_bytes;
   double chunk_start;
   double sleep_adjust;
 } limit_data;
@@ -81,16 +82,17 @@ limit_bandwidth_reset (void)
 {
   limit_data.chunk_bytes = 0;
   limit_data.chunk_start = 0;
+  limit_data.sleep_adjust = 0;
 }
 
 /* Limit the bandwidth by pausing the download for an amount of time.
-   BYTES is the number of bytes received from the network, and DELTA
-   is the number of milliseconds it took to receive them.  */
+   BYTES is the number of bytes received from the network, and TIMER
+   is the timer that started at the beginning of download.  */
 
 static void
-limit_bandwidth (long bytes, double *dltime, struct wget_timer *timer)
+limit_bandwidth (wgint bytes, struct ptimer *timer)
 {
-  double delta_t = *dltime - limit_data.chunk_start;
+  double delta_t = ptimer_read (timer) - limit_data.chunk_start;
   double expected;
 
   limit_data.chunk_bytes += bytes;
@@ -106,96 +108,145 @@ limit_bandwidth (long bytes, double *dltime, struct wget_timer *timer)
       double t0, t1;
       if (slp < 200)
 	{
-	  DEBUGP (("deferring a %.2f ms sleep (%ld/%.2f).\n",
-		   slp, limit_data.chunk_bytes, delta_t));
+	  DEBUGP (("deferring a %.2f ms sleep (%s/%.2f).\n",
+		   slp, number_to_static_string (limit_data.chunk_bytes),
+		   delta_t));
 	  return;
 	}
-      DEBUGP (("\nsleeping %.2f ms for %ld bytes, adjust %.2f ms\n",
-	       slp, limit_data.chunk_bytes, limit_data.sleep_adjust));
+      DEBUGP (("\nsleeping %.2f ms for %s bytes, adjust %.2f ms\n",
+	       slp, number_to_static_string (limit_data.chunk_bytes),
+	       limit_data.sleep_adjust));
 
-      t0 = *dltime;
-      usleep ((unsigned long) (1000 * slp));
-      t1 = wtimer_elapsed (timer);
+      t0 = ptimer_read (timer);
+      xsleep (slp / 1000);
+      t1 = ptimer_measure (timer);
 
       /* Due to scheduling, we probably slept slightly longer (or
 	 shorter) than desired.  Calculate the difference between the
 	 desired and the actual sleep, and adjust the next sleep by
 	 that amount.  */
       limit_data.sleep_adjust = slp - (t1 - t0);
-
-      /* Since we've called wtimer_elapsed, we might as well update
-	 the caller's dltime. */
-      *dltime = t1;
+      /* If sleep_adjust is very large, it's likely due to suspension
+	 and not clock inaccuracy.  Don't enforce those.  */
+      if (limit_data.sleep_adjust > 500)
+	limit_data.sleep_adjust = 500;
+      else if (limit_data.sleep_adjust < -500)
+	limit_data.sleep_adjust = -500;
     }
 
   limit_data.chunk_bytes = 0;
-  limit_data.chunk_start = *dltime;
+  limit_data.chunk_start = ptimer_read (timer);
 }
 
-#define MIN(i, j) ((i) <= (j) ? (i) : (j))
+#ifndef MIN
+# define MIN(i, j) ((i) <= (j) ? (i) : (j))
+#endif
 
-/* Reads the contents of file descriptor FD, until it is closed, or a
-   read error occurs.  The data is read in 8K chunks, and stored to
-   stream fp, which should have been open for writing.  If BUF is
-   non-NULL and its file descriptor is equal to FD, flush RBUF first.
-   This function will *not* use the rbuf_* functions!
+/* Write data in BUF to OUT.  However, if *SKIP is non-zero, skip that
+   amount of data and decrease SKIP.  Increment *TOTAL by the amount
+   of data written.  */
 
-   The EXPECTED argument is passed to show_progress() unchanged, but
-   otherwise ignored.
-
-   If opt.verbose is set, the progress is also shown.  RESTVAL
-   represents a value from which to start downloading (which will be
-   shown accordingly).  If RESTVAL is non-zero, the stream should have
-   been open for appending.
-
-   The function exits and returns codes of 0, -1 and -2 if the
-   connection was closed, there was a read error, or if it could not
-   write to the output stream, respectively.
-
-   IMPORTANT: The function flushes the contents of the buffer in
-   rbuf_flush() before actually reading from fd.  If you wish to read
-   from fd immediately, flush or discard the buffer.  */
-int
-get_contents (int fd, FILE *fp, long *len, long restval, long expected,
-	      struct rbuf *rbuf, int use_expected, double *elapsed)
+static int
+write_data (FILE *out, const char *buf, int bufsize, wgint *skip,
+	    wgint *written)
 {
-  int res = 0;
+  if (!out)
+    return 1;
+  if (*skip > bufsize)
+    {
+      *skip -= bufsize;
+      return 1;
+    }
+  if (*skip)
+    {
+      buf += *skip;
+      bufsize -= *skip;
+      *skip = 0;
+      if (bufsize == 0)
+	return 1;
+    }
+
+  fwrite (buf, 1, bufsize, out);
+  *written += bufsize;
+
+  /* Immediately flush the downloaded data.  This should not hinder
+     performance: fast downloads will arrive in large 16K chunks
+     (which stdio would write out immediately anyway), and slow
+     downloads wouldn't be limited by disk speed.  */
+  fflush (out);
+  return !ferror (out);
+}
+
+/* Read the contents of file descriptor FD until it the connection
+   terminates or a read error occurs.  The data is read in portions of
+   up to 16K and written to OUT as it arrives.  If opt.verbose is set,
+   the progress is shown.
+
+   TOREAD is the amount of data expected to arrive, normally only used
+   by the progress gauge.
+
+   STARTPOS is the position from which the download starts, used by
+   the progress gauge.  If QTYREAD is non-NULL, the value it points to
+   is incremented by the amount of data read from the network.  If
+   QTYWRITTEN is non-NULL, the value it points to is incremented by
+   the amount of data written to disk.  The time it took to download
+   the data (in milliseconds) is stored to ELAPSED.
+
+   The function exits and returns the amount of data read.  In case of
+   error while reading data, -1 is returned.  In case of error while
+   writing data, -2 is returned.  */
+
+int
+fd_read_body (int fd, FILE *out, wgint toread, wgint startpos,
+	      wgint *qtyread, wgint *qtywritten, double *elapsed, int flags)
+{
+  int ret = 0;
 
   static char dlbuf[16384];
   int dlbufsize = sizeof (dlbuf);
 
-  void *progress = NULL;
-  struct wget_timer *timer = wtimer_allocate ();
-  double dltime = 0;
+  struct ptimer *timer = NULL;
+  double last_successful_read_tm = 0;
 
-  *len = restval;
+  /* The progress gauge, set according to the user preferences. */
+  void *progress = NULL;
+
+  /* Non-zero if the progress gauge is interactive, i.e. if it can
+     continually update the display.  When true, smaller timeout
+     values are used so that the gauge can update the display when
+     data arrives slowly. */
+  int progress_interactive = 0;
+
+  int exact = flags & rb_read_exactly;
+  wgint skip = 0;
+
+  /* How much data we've read/written.  */
+  wgint sum_read = 0;
+  wgint sum_written = 0;
+
+  if (flags & rb_skip_startpos)
+    skip = startpos;
 
   if (opt.verbose)
-    progress = progress_create (restval, expected);
-
-  if (rbuf && RBUF_FD (rbuf) == fd)
     {
-      int sz = 0;
-      while ((res = rbuf_flush (rbuf, dlbuf, sizeof (dlbuf))) != 0)
-	{
-	  fwrite (dlbuf, 1, res, fp);
-	  *len += res;
-	  sz += res;
-	}
-      if (sz)
-	fflush (fp);
-      if (ferror (fp))
-	{
-	  res = -2;
-	  goto out;
-	}
-      if (progress)
-	progress_update (progress, sz, 0);
+      /* If we're skipping STARTPOS bytes, pass 0 as the INITIAL
+	 argument to progress_create because the indicator doesn't
+	 (yet) know about "skipping" data.  */
+      progress = progress_create (skip ? 0 : startpos, startpos + toread);
+      progress_interactive = progress_interactive_p (progress);
     }
 
   if (opt.limit_rate)
     limit_bandwidth_reset ();
-  wtimer_reset (timer);
+
+  /* A timer is needed for tracking progress, for throttling, and for
+     tracking elapsed time.  If either of these are requested, start
+     the timer.  */
+  if (progress || opt.limit_rate || elapsed)
+    {
+      timer = ptimer_new ();
+      last_successful_read_tm = 0;
+    }
 
   /* Use a smaller buffer for low requested bandwidths.  For example,
      with --limit-rate=2k, it doesn't make sense to slurp in 16K of
@@ -204,70 +255,263 @@ get_contents (int fd, FILE *fp, long *len, long restval, long expected,
   if (opt.limit_rate && opt.limit_rate < dlbufsize)
     dlbufsize = opt.limit_rate;
 
-  /* Read from fd while there is available data.
-
-     Normally, if expected is 0, it means that it is not known how
-     much data is expected.  However, if use_expected is specified,
-     then expected being zero means exactly that.  */
-  while (!use_expected || (*len < expected))
+  /* Read from FD while there is data to read.  Normally toread==0
+     means that it is unknown how much data is to arrive.  However, if
+     EXACT is set, then toread==0 means what it says: that no data
+     should be read.  */
+  while (!exact || (sum_read < toread))
     {
-      int amount_to_read = (use_expected
-			    ? MIN (expected - *len, dlbufsize) : dlbufsize);
-#ifdef HAVE_SSL
-      if (rbuf->ssl!=NULL)
-	res = ssl_iread (rbuf->ssl, dlbuf, amount_to_read);
-      else
-#endif /* HAVE_SSL */
-	res = iread (fd, dlbuf, amount_to_read);
-
-      if (res <= 0)
-	break;
-
-      fwrite (dlbuf, 1, res, fp);
-      /* Always flush the contents of the network packet.  This should
-	 not hinder performance: fast downloads will be received in
-	 16K chunks (which stdio would write out anyway), and slow
-	 downloads won't be limited with disk performance.  */
-      fflush (fp);
-      if (ferror (fp))
+      int rdsize = exact ? MIN (toread - sum_read, dlbufsize) : dlbufsize;
+      double tmout = opt.read_timeout;
+      if (progress_interactive)
 	{
-	  res = -2;
-	  goto out;
+	  /* For interactive progress gauges, always specify a ~1s
+	     timeout, so that the gauge can be updated regularly even
+	     when the data arrives very slowly or stalls.  */
+	  tmout = 0.95;
+	  if (opt.read_timeout)
+	    {
+	      double waittm;
+	      waittm = (ptimer_read (timer) - last_successful_read_tm) / 1000;
+	      if (waittm + tmout > opt.read_timeout)
+		{
+		  /* Don't let total idle time exceed read timeout. */
+		  tmout = opt.read_timeout - waittm;
+		  if (tmout < 0)
+		    {
+		      /* We've already exceeded the timeout. */
+		      ret = -1, errno = ETIMEDOUT;
+		      break;
+		    }
+		}
+	    }
+	}
+      ret = fd_read (fd, dlbuf, rdsize, tmout);
+
+      if (progress_interactive && ret < 0 && errno == ETIMEDOUT)
+	ret = 0;		/* interactive timeout, handled above */
+      else if (ret <= 0)
+	break;			/* EOF or read error */
+
+      if (progress || opt.limit_rate)
+	{
+	  ptimer_measure (timer);
+	  if (ret > 0)
+	    last_successful_read_tm = ptimer_read (timer);
 	}
 
-      dltime = wtimer_elapsed (timer);
-      if (opt.limit_rate)
-	limit_bandwidth (res, &dltime, timer);
+      if (ret > 0)
+	{
+	  sum_read += ret;
+	  if (!write_data (out, dlbuf, ret, &skip, &sum_written))
+	    {
+	      ret = -2;
+	      goto out_;
+	    }
+	}
 
-      *len += res;
+      if (opt.limit_rate)
+	limit_bandwidth (ret, timer);
+
       if (progress)
-	progress_update (progress, res, dltime);
+	progress_update (progress, ret, ptimer_read (timer));
 #ifdef WINDOWS
-      if (use_expected && expected > 0)
-	ws_percenttitle (100.0 * (double)(*len) / (double)expected);
+      if (toread > 0 && !opt.quiet)
+	ws_percenttitle (100.0 *
+			 (startpos + sum_read) / (startpos + toread));
 #endif
     }
-  if (res < -1)
-    res = -1;
+  if (ret < -1)
+    ret = -1;
 
- out:
+ out_:
   if (progress)
-    progress_finish (progress, dltime);
-  if (elapsed)
-    *elapsed = dltime;
-  wtimer_delete (timer);
+    progress_finish (progress, ptimer_read (timer));
 
-  return res;
+  if (elapsed)
+    *elapsed = ptimer_read (timer);
+  if (timer)
+    ptimer_destroy (timer);
+
+  if (qtyread)
+    *qtyread += sum_read;
+  if (qtywritten)
+    *qtywritten += sum_written;
+
+  return ret;
+}
+
+/* Read a hunk of data from FD, up until a terminator.  The terminator
+   is whatever the TERMINATOR function determines it to be; for
+   example, it can be a line of data, or the head of an HTTP response.
+   The function returns the data read allocated with malloc.
+
+   In case of error, NULL is returned.  In case of EOF and no data
+   read, NULL is returned and errno set to 0.  In case of EOF with
+   data having been read, the data is returned, but it will
+   (obviously) not contain the terminator.
+
+   The idea is to be able to read a line of input, or otherwise a hunk
+   of text, such as the head of an HTTP request, without crossing the
+   boundary, so that the next call to fd_read etc. reads the data
+   after the hunk.  To achieve that, this function does the following:
+
+   1. Peek at available data.
+
+   2. Determine whether the peeked data, along with the previously
+      read data, includes the terminator.
+
+      2a. If yes, read the data until the end of the terminator, and
+          exit.
+
+      2b. If no, read the peeked data and goto 1.
+
+   The function is careful to assume as little as possible about the
+   implementation of peeking.  For example, every peek is followed by
+   a read.  If the read returns a different amount of data, the
+   process is retried until all data arrives safely.
+
+   SIZEHINT is the buffer size sufficient to hold all the data in the
+   typical case (it is used as the initial buffer size).  MAXSIZE is
+   the maximum amount of memory this function is allowed to allocate,
+   or 0 if no upper limit is to be enforced.
+
+   This function should be used as a building block for other
+   functions -- see fd_read_line as a simple example.  */
+
+char *
+fd_read_hunk (int fd, hunk_terminator_t terminator, long sizehint, long maxsize)
+{
+  long bufsize = sizehint;
+  char *hunk = xmalloc (bufsize);
+  int tail = 0;			/* tail position in HUNK */
+
+  assert (maxsize >= bufsize);
+
+  while (1)
+    {
+      const char *end;
+      int pklen, rdlen, remain;
+
+      /* First, peek at the available data. */
+
+      pklen = fd_peek (fd, hunk + tail, bufsize - 1 - tail, -1.0);
+      if (pklen < 0)
+	{
+	  xfree (hunk);
+	  return NULL;
+	}
+      end = terminator (hunk, tail, pklen);
+      if (end)
+	{
+	  /* The data contains the terminator: we'll drain the data up
+	     to the end of the terminator.  */
+	  remain = end - (hunk + tail);
+	  if (remain == 0)
+	    {
+	      /* No more data needs to be read. */
+	      hunk[tail] = '\0';
+	      return hunk;
+	    }
+	  if (bufsize - 1 < tail + remain)
+	    {
+	      bufsize = tail + remain + 1;
+	      hunk = xrealloc (hunk, bufsize);
+	    }
+	}
+      else
+	/* No terminator: simply read the data we know is (or should
+	   be) available.  */
+	remain = pklen;
+
+      /* Now, read the data.  Note that we make no assumptions about
+	 how much data we'll get.  (Some TCP stacks are notorious for
+	 read returning less data than the previous MSG_PEEK.)  */
+
+      rdlen = fd_read (fd, hunk + tail, remain, 0.0);
+      if (rdlen < 0)
+	{
+	  xfree_null (hunk);
+	  return NULL;
+	}
+      tail += rdlen;
+      hunk[tail] = '\0';
+
+      if (rdlen == 0)
+	{
+	  if (tail == 0)
+	    {
+	      /* EOF without anything having been read */
+	      xfree (hunk);
+	      errno = 0;
+	      return NULL;
+	    }
+	  else
+	    /* EOF seen: return the data we've read. */
+	    return hunk;
+	}
+      if (end && rdlen == remain)
+	/* The terminator was seen and the remaining data drained --
+	   we got what we came for.  */
+	return hunk;
+
+      /* Keep looping until all the data arrives. */
+
+      if (tail == bufsize - 1)
+	{
+	  /* Double the buffer size, but refuse to allocate more than
+	     MAXSIZE bytes.  */
+	  if (maxsize && bufsize >= maxsize)
+	    {
+	      xfree (hunk);
+	      errno = ENOMEM;
+	      return NULL;
+	    }
+	  bufsize <<= 1;
+	  if (maxsize && bufsize > maxsize)
+	    bufsize = maxsize;
+	  hunk = xrealloc (hunk, bufsize);
+	}
+    }
+}
+
+static const char *
+line_terminator (const char *hunk, int oldlen, int peeklen)
+{
+  const char *p = memchr (hunk + oldlen, '\n', peeklen);
+  if (p)
+    /* p+1 because we want the line to include '\n' */
+    return p + 1;
+  return NULL;
+}
+
+/* The maximum size of the single line we agree to accept.  This is
+   not meant to impose an arbitrary limit, but to protect the user
+   from Wget slurping up available memory upon encountering malicious
+   or buggy server output.  Define it to 0 to remove the limit.  */
+#define FD_READ_LINE_MAX 4096
+
+/* Read one line from FD and return it.  The line is allocated using
+   malloc, but is never larger than FD_READ_LINE_MAX.
+
+   If an error occurs, or if no data can be read, NULL is returned.
+   In the former case errno indicates the error condition, and in the
+   latter case, errno is NULL.  */
+
+char *
+fd_read_line (int fd)
+{
+  return fd_read_hunk (fd, line_terminator, 128, FD_READ_LINE_MAX);
 }
 
 /* Return a printed representation of the download rate, as
    appropriate for the speed.  If PAD is non-zero, strings will be
    padded to the width of 7 characters (xxxx.xx).  */
 char *
-retr_rate (long bytes, double msecs, int pad)
+retr_rate (wgint bytes, double msecs, int pad)
 {
   static char res[20];
-  static char *rate_names[] = {"B/s", "KB/s", "MB/s", "GB/s" };
+  static const char *rate_names[] = {"B/s", "KB/s", "MB/s", "GB/s" };
   int units = 0;
 
   double dlrate = calc_rate (bytes, msecs, &units);
@@ -284,7 +528,7 @@ retr_rate (long bytes, double msecs, int pad)
    UNITS is zero for B/s, one for KB/s, two for MB/s, and three for
    GB/s.  */
 double
-calc_rate (long bytes, double msecs, int *units)
+calc_rate (wgint bytes, double msecs, int *units)
 {
   double dlrate;
 
@@ -293,11 +537,12 @@ calc_rate (long bytes, double msecs, int *units)
 
   if (msecs == 0)
     /* If elapsed time is exactly zero, it means we're under the
-       granularity of the timer.  This often happens on systems that
-       use time() for the timer.  */
-    msecs = wtimer_granularity ();
+       resolution of the timer.  This can easily happen on systems
+       that use time() for the timer.  Since the interval lies between
+       0 and the timer's resolution, assume half the resolution.  */
+    msecs = ptimer_resolution () / 2.0;
 
-  dlrate = (double)1000 * bytes / msecs;
+  dlrate = 1000.0 * bytes / msecs;
   if (dlrate < 1024.0)
     *units = 0;
   else if (dlrate < 1024.0 * 1024.0)
@@ -423,14 +668,16 @@ retrieve_url (const char *origurl, char **file, char **newloc,
     }
   else if (u->scheme == SCHEME_FTP)
     {
-      /* If this is a redirection, we must not allow recursive FTP
-	 retrieval, so we save recursion to oldrec, and restore it
-	 later.  */
-      int oldrec = opt.recursive;
+      /* If this is a redirection, temporarily turn off opt.ftp_glob
+	 and opt.recursive, both being undesirable when following
+	 redirects.  */
+      int oldrec = opt.recursive, oldglob = opt.ftp_glob;
       if (redirection_count)
-	opt.recursive = 0;
+	opt.recursive = opt.ftp_glob = 0;
+
       result = ftp_loop (u, dt, proxy_url);
       opt.recursive = oldrec;
+      opt.ftp_glob = oldglob;
 
       /* There is a possibility of having HTTP being redirected to
 	 FTP.  In these cases we must decide whether the text is HTML
@@ -472,7 +719,7 @@ retrieve_url (const char *origurl, char **file, char **newloc,
       newloc_parsed = url_parse (mynewloc, &up_error_code);
       if (!newloc_parsed)
 	{
-	  logprintf (LOG_NOTQUIET, "%s: %s.\n", mynewloc,
+	  logprintf (LOG_NOTQUIET, "%s: %s.\n", escnonprint_uri (mynewloc),
 		     url_error (up_error_code));
 	  url_free (u);
 	  xfree (url);
@@ -531,7 +778,7 @@ retrieve_url (const char *origurl, char **file, char **newloc,
   if (file)
     *file = local_file ? local_file : NULL;
   else
-    FREE_MAYBE (local_file);
+    xfree_null (local_file);
 
   url_free (u);
 
@@ -549,7 +796,6 @@ retrieve_url (const char *origurl, char **file, char **newloc,
       xfree (url);
     }
 
-  ++global_download_count;
   RESTORE_POST_DATA;
 
   return result;
@@ -559,7 +805,8 @@ retrieve_url (const char *origurl, char **file, char **newloc,
    them.  If HTML is non-zero, treat the file as HTML, and construct
    the URLs accordingly.
 
-   If opt.recursive is set, call recursive_retrieve() for each file.  */
+   If opt.recursive is set, call retrieve_tree() for each file.  */
+
 uerr_t
 retrieve_from_file (const char *file, int html, int *count)
 {
@@ -584,23 +831,24 @@ retrieve_from_file (const char *file, int html, int *count)
 	  status = QUOTEXC;
 	  break;
 	}
-      if (opt.recursive && cur_url->url->scheme != SCHEME_FTP)
+      if ((opt.recursive || opt.page_requisites)
+	  && cur_url->url->scheme != SCHEME_FTP)
 	status = retrieve_tree (cur_url->url->url);
       else
 	status = retrieve_url (cur_url->url->url, &filename, &new_file, NULL, &dt);
 
       if (filename && opt.delete_after && file_exists_p (filename))
 	{
-	  DEBUGP (("Removing file due to --delete-after in"
-		   " retrieve_from_file():\n"));
+	  DEBUGP (("\
+Removing file due to --delete-after in retrieve_from_file():\n"));
 	  logprintf (LOG_VERBOSE, _("Removing %s.\n"), filename);
 	  if (unlink (filename))
 	    logprintf (LOG_NOTQUIET, "unlink: %s\n", strerror (errno));
 	  dt &= ~RETROKF;
 	}
 
-      FREE_MAYBE (new_file);
-      FREE_MAYBE (filename);
+      xfree_null (new_file);
+      xfree_null (filename);
     }
 
   /* Free the linked list of URL-s.  */
@@ -640,9 +888,9 @@ sleep_between_retrievals (int count)
       /* If opt.waitretry is specified and this is a retry, wait for
 	 COUNT-1 number of seconds, or for opt.waitretry seconds.  */
       if (count <= opt.waitretry)
-	sleep (count - 1);
+	xsleep (count - 1.0);
       else
-	usleep (1000000L * opt.waitretry);
+	xsleep (opt.waitretry);
     }
   else if (opt.wait)
     {
@@ -650,7 +898,7 @@ sleep_between_retrievals (int count)
 	/* If random-wait is not specified, or if we are sleeping
 	   between retries of the same download, sleep the fixed
 	   interval.  */
-	usleep (1000000L * opt.wait);
+	xsleep (opt.wait);
       else
 	{
 	  /* Sleep a random amount of time averaging in opt.wait
@@ -659,7 +907,7 @@ sleep_between_retrievals (int count)
 	  double waitsecs = 2 * opt.wait * random_float ();
 	  DEBUGP (("sleep_between_retrievals: avg=%f,sleep=%f\n",
 		   opt.wait, waitsecs));
-	  usleep (1000000L * waitsecs);
+	  xsleep (waitsecs);
 	}
     }
 }
@@ -673,7 +921,7 @@ free_urlpos (struct urlpos *l)
       struct urlpos *next = l->next;
       if (l->url)
 	url_free (l->url);
-      FREE_MAYBE (l->local_name);
+      xfree_null (l->local_name);
       xfree (l);
       l = next;
     }
@@ -686,7 +934,7 @@ rotate_backups(const char *fname)
   int maxlen = strlen (fname) + 1 + numdigit (opt.backups) + 1;
   char *from = (char *)alloca (maxlen);
   char *to = (char *)alloca (maxlen);
-  struct stat sb;
+  struct_stat sb;
   int i;
 
   if (stat (fname, &sb) == 0)
@@ -744,7 +992,7 @@ getproxy (struct url *u)
   rewritten_url = rewrite_shorthand_url (proxy);
   if (rewritten_url)
     {
-      strncpy (rewritten_storage, rewritten_url, sizeof(rewritten_storage));
+      strncpy (rewritten_storage, rewritten_url, sizeof (rewritten_storage));
       rewritten_storage[sizeof (rewritten_storage) - 1] = '\0';
       proxy = rewritten_storage;
     }
@@ -753,7 +1001,7 @@ getproxy (struct url *u)
 }
 
 /* Should a host be accessed through proxy, concerning no_proxy?  */
-int
+static int
 no_proxy_match (const char *host, const char **no_proxy)
 {
   if (!no_proxy)

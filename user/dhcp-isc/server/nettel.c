@@ -11,21 +11,14 @@
 
 #ifdef CONFIG_USER_FLATFSD_FLATFSD
 
-#if defined(CONFIG_USER_BUSYBOX_REBOOT) && !defined(__uClinux__)
-#define	REBOOT_BIN				"/sbin/reboot"
-#elif defined(CONFIG_USER_BUSYBOX_REBOOT) || defined(CONFIG_USER_SASH_REBOOT)
-#define	REBOOT_BIN				"/bin/reboot"
-#else
-#error No way to reboot
-#endif
-
 static void rebootDevice(void)
 {
 	if (system("exec flatfsd -b") == -1) {
 		/* If, for some reason, there is no flatfsd, or the kill fails,
 		 * we will just go ahead and reboot
 		 */
-		system(REBOOT_BIN);
+		system("/bin/reboot");
+		system("/sbin/reboot");
 	}
 	exit(10);
 }

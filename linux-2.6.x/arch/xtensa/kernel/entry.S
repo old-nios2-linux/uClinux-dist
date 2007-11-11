@@ -7,7 +7,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 2004-2005 by Tensilica Inc.
+ * Copyright (C) 2004-2007 by Tensilica Inc.
  *
  * Chris Zankel <chris@zankel.net>
  *
@@ -24,7 +24,7 @@
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/signal.h>
-#include <xtensa/coreasm.h>
+#include <asm/tlbflush.h>
 
 /* Unimplemented features. */
 
@@ -125,8 +125,9 @@ _user_exception:
 
 	movi	a2, 0
 	rsr	a3, SAR
-	wsr	a2, ICOUNTLEVEL
+	xsr	a2, ICOUNTLEVEL
 	s32i	a3, a1, PT_SAR
+	s32i	a2, a1, PT_ICOUNTLEVEL
 
 	/* Rotate ws so that the current windowbase is at bit0. */
 	/* Assume ws = xxwww1yyyy. Rotate ws right, so that a2 = yyyyxxwww1 */
@@ -168,7 +169,7 @@ _user_exception:
 	 * We have to save all registers up to the first '1' from
 	 * the right, except the current frame (bit 0).
 	 * Assume a2 is:  001001000110001
-	 * All regiser frames starting from the top fiel to the marked '1'
+	 * All register frames starting from the top field to the marked '1'
 	 * must be saved.
 	 */
 
@@ -276,8 +277,9 @@ _kernel_exception:
 
 	movi	a2, 0
 	rsr	a3, SAR
-	wsr	a2, ICOUNTLEVEL
+	xsr	a2, ICOUNTLEVEL
 	s32i	a3, a1, PT_SAR
+	s32i	a2, a1, PT_ICOUNTLEVEL
 
 	/* Rotate ws so that the current windowbase is at bit0. */
 	/* Assume ws = xxwww1yyyy. Rotate ws right, so that a2 = yyyyxxwww1 */
@@ -330,14 +332,16 @@ _kernel_exception:
 
 common_exception:
 
-	/* Save EXCVADDR, DEBUGCAUSE, and PC, and clear LCOUNT */
+	/* Save some registers, disable loops and clear the syscall flag. */
 
 	rsr	a2, DEBUGCAUSE
 	rsr	a3, EPC_1
 	s32i	a2, a1, PT_DEBUGCAUSE
 	s32i	a3, a1, PT_PC
 
+	movi	a2, -1
 	rsr	a3, EXCVADDR
+	s32i	a2, a1, PT_SYSCALL
 	movi	a2, 0
 	s32i	a3, a1, PT_EXCVADDR
 	xsr	a2, LCOUNT
@@ -364,7 +368,7 @@ common_exception:
 	movi	a2, 1
 	extui	a3, a3, 0, 1		# a3 = PS.INTLEVEL[0]
 	moveqz	a3, a2, a0		# a3 = 1 iff interrupt exception
-	movi	a2, PS_WOE_MASK
+	movi	a2, 1 << PS_WOE_BIT
 	or	a3, a3, a2
 	rsr	a0, EXCCAUSE
 	xsr	a3, PS
@@ -399,7 +403,7 @@ common_exception_return:
 	/* Jump if we are returning from kernel exceptions. */
 
 1:	l32i	a3, a1, PT_PS
-	_bbsi.l	a3, PS_UM_SHIFT, 2f
+	_bbsi.l	a3, PS_UM_BIT, 2f
 	j	kernel_exception_exit
 
 	/* Specific to a user exception exit:
@@ -422,7 +426,7 @@ common_exception_return:
 	 *       (Hint: There is only one user exception frame on stack)
 	 */
 
-	movi	a3, PS_WOE_MASK
+	movi	a3, 1 << PS_WOE_BIT
 
 	_bbsi.l	a4, TIF_NEED_RESCHED, 3f
 	_bbci.l	a4, TIF_SIGPENDING, 4f
@@ -450,26 +454,7 @@ common_exception_return:
 
 	/* Restore the state of the task and return from the exception. */
 
-
-	/* If we are returning from a user exception, and the process
-	 * to run next has PT_SINGLESTEP set, we want to setup
-	 * ICOUNT and ICOUNTLEVEL to step one instruction.
-	 * PT_SINGLESTEP is set by sys_ptrace (ptrace.c)
-	 */
-
 4:	/* a2 holds GET_CURRENT(a2,a1)  */
-
-	l32i	a3, a2, TI_TASK
-	l32i	a3, a3, TASK_PTRACE
-	bbci.l	a3, PT_SINGLESTEP_BIT, 1f # jump if single-step flag is not set
-
-	movi	a3, -2			# PT_SINGLESTEP flag is set,
-	movi	a4, 1			# icountlevel of 1 means it won't
-	wsr	a3, ICOUNT		# start counting until after rfe
-	wsr	a4, ICOUNTLEVEL		# so setup icount & icountlevel.
-	isync
-
-1:
 
 #if XCHAL_EXTRA_SA_SIZE
 
@@ -665,6 +650,13 @@ common_exception_exit:
 	wsr	a3, LEND
 	wsr	a2, LCOUNT
 
+	/* We control single stepping through the ICOUNTLEVEL register. */
+
+	l32i	a2, a1, PT_ICOUNTLEVEL
+	movi	a3, -2
+	wsr	a2, ICOUNTLEVEL
+	wsr	a3, ICOUNT
+
 	/* Check if it was double exception. */
 
 	l32i	a0, a1, PT_DEPC
@@ -694,7 +686,7 @@ common_exception_exit:
 ENTRY(debug_exception)
 
 	rsr	a0, EPS + XCHAL_DEBUGLEVEL
-	bbsi.l	a0, PS_EXCM_SHIFT, 1f	# exception mode
+	bbsi.l	a0, PS_EXCM_BIT, 1f	# exception mode
 
 	/* Set EPC_1 and EXCCAUSE */
 
@@ -707,7 +699,7 @@ ENTRY(debug_exception)
 
 	/* Restore PS to the value before the debug exc but with PS.EXCM set.*/
 
-	movi	a2, 1 << PS_EXCM_SHIFT
+	movi	a2, 1 << PS_EXCM_BIT
 	or	a2, a0, a2
 	movi	a0, debug_exception	# restore a3, debug jump vector
 	wsr	a2, PS
@@ -715,7 +707,7 @@ ENTRY(debug_exception)
 
 	/* Switch to kernel/user stack, restore jump vector, and save a0 */
 
-	bbsi.l	a2, PS_UM_SHIFT, 2f	# jump if user mode
+	bbsi.l	a2, PS_UM_BIT, 2f	# jump if user mode
 
 	addi	a2, a1, -16-PT_SIZE	# assume kernel stack
 	s32i	a0, a2, PT_AREG0
@@ -778,7 +770,7 @@ ENTRY(unrecoverable_exception)
 	wsr	a1, WINDOWBASE
 	rsync
 
-	movi	a1, PS_WOE_MASK | 1
+	movi	a1, (1 << PS_WOE_BIT) | 1
 	wsr	a1, PS
 	rsync
 
@@ -1004,12 +996,9 @@ ENTRY(fast_syscall_kernel)
 
 	rsr	a0, DEPC			# get syscall-nr
 	_beqz	a0, fast_syscall_spill_registers
-
-	addi	a0, a0, -__NR_sysxtensa
-	_beqz	a0, fast_syscall_sysxtensa
+	_beqi	a0, __NR_xtensa, fast_syscall_xtensa
 
 	j	kernel_exception
-
 
 ENTRY(fast_syscall_user)
 
@@ -1024,9 +1013,7 @@ ENTRY(fast_syscall_user)
 
 	rsr	a0, DEPC			# get syscall-nr
 	_beqz	a0, fast_syscall_spill_registers
-
-	addi	a0, a0, -__NR_sysxtensa
-	_beqz	a0, fast_syscall_sysxtensa
+	_beqi	a0, __NR_xtensa, fast_syscall_xtensa
 
 	j	user_exception
 
@@ -1047,18 +1034,19 @@ ENTRY(fast_syscall_unrecoverable)
 /*
  * sysxtensa syscall handler
  *
- * int sysxtensa (XTENSA_ATOMIC_SET, ptr, val, unused);
- * int sysxtensa (XTENSA_ATOMIC_ADD, ptr, val, unused);
- * int sysxtensa (XTENSA_ATOMIC_EXG_ADD, ptr, val, unused);
- * int sysxtensa (XTENSA_ATOMIC_CMP_SWP, ptr, oldval, newval);
- * a2                    a6              a3    a4      a5
+ * int sysxtensa (SYS_XTENSA_ATOMIC_SET,     ptr, val,    unused);
+ * int sysxtensa (SYS_XTENSA_ATOMIC_ADD,     ptr, val,    unused);
+ * int sysxtensa (SYS_XTENSA_ATOMIC_EXG_ADD, ptr, val,    unused);
+ * int sysxtensa (SYS_XTENSA_ATOMIC_CMP_SWP, ptr, oldval, newval);
+ *        a2            a6                   a3    a4      a5
  *
  * Entry condition:
  *
- *   a0:	trashed, original value saved on stack (PT_AREG0)
+ *   a0:	a2 (syscall-nr), original value saved on stack (PT_AREG0)
  *   a1:	a1
- *   a2:	new stack pointer, original in DEPC
- *   a3:	dispatch table
+ *   a2:	new stack pointer, original in a0 and DEPC
+ *   a3:	dispatch table, original in excsave_1
+ *   a4..a15:	unchanged
  *   depc:	a2, original value saved on stack (PT_DEPC)
  *   excsave_1:	a3
  *
@@ -1091,59 +1079,62 @@ ENTRY(fast_syscall_unrecoverable)
 #define CATCH								\
 67:
 
-ENTRY(fast_syscall_sysxtensa)
+ENTRY(fast_syscall_xtensa)
 
-	_beqz	a6, 1f
-	_blti	a6, SYSXTENSA_COUNT, 2f
+	xsr	a3, EXCSAVE_1		# restore a3, excsave1
 
-1:	j	user_exception
-
-2:	xsr	a3, EXCSAVE_1		# restore a3, excsave1
-	s32i	a7, a2, PT_AREG7
-
+	s32i	a7, a2, PT_AREG7	# we need an additional register
 	movi	a7, 4			# sizeof(unsigned int)
-	access_ok a0, a3, a7, a2, .Leac
+	access_ok a3, a7, a0, a2, .Leac	# a0: scratch reg, a2: sp
 
-	_beqi	a6, SYSXTENSA_ATOMIC_SET, .Lset
-	_beqi	a6, SYSXTENSA_ATOMIC_EXG_ADD, .Lexg
-	_beqi	a6, SYSXTENSA_ATOMIC_ADD, .Ladd
+	addi	a6, a6, -1		# assuming SYS_XTENSA_ATOMIC_SET = 1
+	_bgeui	a6, SYS_XTENSA_COUNT - 1, .Lill
+	_bnei	a6, SYS_XTENSA_ATOMIC_CMP_SWP - 1, .Lnswp
 
-	/* Fall through for SYSXTENSA_ATOMIC_CMP_SWP */
+	/* Fall through for ATOMIC_CMP_SWP. */
 
 .Lswp:	/* Atomic compare and swap */
 
-TRY	l32i	a7, a3, 0		# read old value
-	bne	a7, a4, 1f		# same as old value? jump
-	s32i	a5, a3, 0		# different, modify value
-	movi	a7, 1			# and return 1
-	j	.Lret
+TRY	l32i	a0, a3, 0		# read old value
+	bne	a0, a4, 1f		# same as old value? jump
+TRY	s32i	a5, a3, 0		# different, modify value
+	l32i	a7, a2, PT_AREG7	# restore a7
+	l32i	a0, a2, PT_AREG0	# restore a0
+	movi	a2, 1			# and return 1
+	addi	a6, a6, 1		# restore a6 (really necessary?)
+	rfe
 
-1:	movi	a7, 0			# same values: return 0
-	j	.Lret
+1:	l32i	a7, a2, PT_AREG7	# restore a7
+	l32i	a0, a2, PT_AREG0	# restore a0
+	movi	a2, 0			# return 0 (note that we cannot set
+	addi	a6, a6, 1		# restore a6 (really necessary?)
+	rfe
 
-.Ladd:	/* Atomic add */
-.Lexg:	/* Atomic (exchange) add */
+.Lnswp:	/* Atomic set, add, and exg_add. */
 
-TRY	l32i	a7, a3, 0
-	add	a4, a4, a7
-	s32i	a4, a3, 0
-	j	.Lret
+TRY	l32i	a7, a3, 0		# orig
+	add	a0, a4, a7		# + arg
+	moveqz	a0, a4, a6		# set
+TRY	s32i	a0, a3, 0		# write new value
 
-.Lset:	/* Atomic set */
-
-TRY	l32i	a7, a3, 0		# read old value as return value
-	s32i	a4, a3, 0		# write new value
-
-.Lret:	mov	a0, a2
+	mov	a0, a2
 	mov	a2, a7
-	l32i	a7, a0, PT_AREG7
-	l32i	a3, a0, PT_AREG3
-	l32i	a0, a0, PT_AREG0
+	l32i	a7, a0, PT_AREG7	# restore a7
+	l32i	a0, a0, PT_AREG0	# restore a0
+	addi	a6, a6, 1		# restore a6 (really necessary?)
 	rfe
 
 CATCH
-.Leac:	movi	a7, -EFAULT
-	j	.Lret
+.Leac:	l32i	a7, a2, PT_AREG7	# restore a7
+	l32i	a0, a2, PT_AREG0	# restore a0
+	movi	a2, -EFAULT
+	rfe
+
+.Lill:	l32i	a7, a2, PT_AREG0	# restore a7
+	l32i	a0, a2, PT_AREG0	# restore a0
+	movi	a2, -EINVAL
+	rfe
+
 
 
 
@@ -1491,7 +1482,7 @@ ENTRY(_spill_registers)
 	 */
 
 	rsr	a0, PS
-	_bbci.l	a0, PS_UM_SHIFT, 1f
+	_bbci.l	a0, PS_UM_BIT, 1f
 
  	/* User space: Setup a dummy frame and kill application.
 	 * Note: We assume EXC_TABLE_KSTK contains a valid stack pointer.
@@ -1510,7 +1501,7 @@ ENTRY(_spill_registers)
 	l32i	a1, a3, EXC_TABLE_KSTK
 	wsr	a3, EXCSAVE_1
 
-	movi	a4, PS_WOE_MASK | 1
+	movi	a4, (1 << PS_WOE_BIT) | 1
 	wsr	a4, PS
 	rsync
 
@@ -1581,10 +1572,12 @@ ENTRY(fast_second_level_miss)
 	l32i	a0, a1, TASK_MM		# tsk->mm
 	beqz	a0, 9f
 
-8:	rsr	a1, EXCVADDR		# fault address
-	_PGD_OFFSET(a0, a1, a1)
+
+	/* We deliberately destroy a3 that holds the exception table. */
+
+8:	rsr	a3, EXCVADDR		# fault address
+	_PGD_OFFSET(a0, a3, a1)
 	l32i	a0, a0, 0		# read pmdval
-	//beqi	a0, _PAGE_USER, 2f
 	beqz	a0, 2f
 
 	/* Read ptevaddr and convert to top of page-table page.
@@ -1597,7 +1590,7 @@ ENTRY(fast_second_level_miss)
 	 * The messy computation for 'pteval' above really simplifies
 	 * into the following:
 	 *
-	 * pteval = ((pmdval - PAGE_OFFSET) & PAGE_MASK) | PAGE_KERNEL
+	 * pteval = ((pmdval - PAGE_OFFSET) & PAGE_MASK) | PAGE_DIRECTORY
 	 */
 
 	movi	a1, -PAGE_OFFSET
@@ -1605,20 +1598,34 @@ ENTRY(fast_second_level_miss)
 	extui	a1, a0, 0, PAGE_SHIFT	# ... & PAGE_MASK
 	xor	a0, a0, a1
 
-
-	movi	a1, PAGE_DIRECTORY
+	movi	a1, _PAGE_DIRECTORY
 	or	a0, a0, a1		# ... | PAGE_DIRECTORY
 
-	rsr	a1, PTEVADDR
-	srli	a1, a1, PAGE_SHIFT
-	slli	a1, a1, PAGE_SHIFT	# ptevaddr & PAGE_MASK
-	addi	a1, a1, DTLB_WAY_PGTABLE	# ... + way_number
+	/*
+	 * We utilize all three wired-ways (7-9) to hold pmd translations.
+	 * Memory regions are mapped to the DTLBs according to bits 28 and 29.
+	 * This allows to map the three most common regions to three different
+	 * DTLBs:
+	 *  0,1 -> way 7	program (0040.0000) and virtual (c000.0000)
+	 *  2   -> way 8	shared libaries (2000.0000)
+	 *  3   -> way 0	stack (3000.0000)
+	 */
 
-	wdtlb	a0, a1
+	extui	a3, a3, 28, 2		# addr. bit 28 and 29	0,1,2,3
+	rsr	a1, PTEVADDR
+	addx2	a3, a3, a3		# ->			0,3,6,9
+	srli	a1, a1, PAGE_SHIFT
+	extui	a3, a3, 2, 2		# ->			0,0,1,2
+	slli	a1, a1, PAGE_SHIFT	# ptevaddr & PAGE_MASK
+	addi	a3, a3, DTLB_WAY_PGD
+	add	a1, a1, a3		# ... + way_number
+
+3:	wdtlb	a0, a1
 	dsync
 
 	/* Exit critical section. */
 
+4:	movi	a3, exc_table		# restore a3
 	movi	a0, 0
 	s32i	a0, a3, EXC_TABLE_FIXUP
 
@@ -1645,8 +1652,76 @@ ENTRY(fast_second_level_miss)
 9:	l32i	a0, a1, TASK_ACTIVE_MM	# unlikely case mm == 0
 	j	8b
 
+#if (DCACHE_WAY_SIZE > PAGE_SIZE)
+
+2:	/* Special case for cache aliasing.
+	 * We (should) only get here if a clear_user_page, copy_user_page
+	 * or the aliased cache flush functions got preemptively interrupted 
+	 * by another task. Re-establish temporary mapping to the 
+	 * TLBTEMP_BASE areas.
+	 */
+
+	/* We shouldn't be in a double exception */
+
+	l32i	a0, a2, PT_DEPC
+	bgeui	a0, VALID_DOUBLE_EXCEPTION_ADDRESS, 2f
+
+	/* Make sure the exception originated in the special functions */
+
+	movi	a0, __tlbtemp_mapping_start
+	rsr	a3, EPC_1
+	bltu	a3, a0, 2f
+	movi	a0, __tlbtemp_mapping_end
+	bgeu	a3, a0, 2f
+
+	/* Check if excvaddr was in one of the TLBTEMP_BASE areas. */
+
+	movi	a3, TLBTEMP_BASE_1
+	rsr	a0, EXCVADDR
+	bltu	a0, a3, 2f
+
+	addi	a1, a0, -(2 << (DCACHE_ALIAS_ORDER + PAGE_SHIFT))
+	bgeu	a1, a3, 2f
+
+	/* Check if we have to restore an ITLB mapping. */
+
+	movi	a1, __tlbtemp_mapping_itlb
+	rsr	a3, EPC_1
+	sub	a3, a3, a1
+
+	/* Calculate VPN */
+
+	movi	a1, PAGE_MASK
+	and	a1, a1, a0
+
+	/* Jump for ITLB entry */
+
+	bgez	a3, 1f
+
+	/* We can use up to two TLBTEMP areas, one for src and one for dst. */
+
+	extui	a3, a0, PAGE_SHIFT + DCACHE_ALIAS_ORDER, 1
+	add	a1, a3, a1
+
+	/* PPN is in a6 for the first TLBTEMP area and in a7 for the second. */
+
+	mov	a0, a6
+	movnez	a0, a7, a3
+	j	3b
+
+	/* ITLB entry. We only use dst in a6. */
+
+1:	witlb	a6, a1
+	isync
+	j	4b
+
+
+#endif	// DCACHE_WAY_SIZE > PAGE_SIZE
+
+
 2:	/* Invalid PGD, default exception handling */
 
+	movi	a3, exc_table
 	rsr	a1, DEPC
 	xsr	a3, EXCSAVE_1
 	s32i	a1, a2, PT_AREG2
@@ -1654,7 +1729,7 @@ ENTRY(fast_second_level_miss)
 	mov	a1, a2
 
 	rsr	a2, PS
-	bbsi.l	a2, PS_UM_SHIFT, 1f
+	bbsi.l	a2, PS_UM_BIT, 1f
 	j	_kernel_exception
 1:	j	_user_exception
 
@@ -1691,15 +1766,15 @@ ENTRY(fast_store_prohibited)
 8:	rsr	a1, EXCVADDR		# fault address
 	_PGD_OFFSET(a0, a1, a4)
 	l32i	a0, a0, 0
-	//beqi	a0, _PAGE_USER, 2f	# FIXME use _PAGE_INVALID
 	beqz	a0, 2f
+
+	/* Note that we assume _PAGE_WRITABLE_BIT is only set if pte is valid.*/
 
 	_PTE_OFFSET(a0, a1, a4)
 	l32i	a4, a0, 0		# read pteval
-	movi	a1, _PAGE_VALID | _PAGE_RW
-	bnall	a4, a1, 2f
+	bbci.l	a4, _PAGE_WRITABLE_BIT, 2f
 
-	movi	a1, _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_WRENABLE
+	movi	a1, _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_HW_WRITE
 	or	a4, a4, a1
 	rsr	a1, EXCVADDR
 	s32i	a4, a0, 0
@@ -1709,10 +1784,7 @@ ENTRY(fast_store_prohibited)
 	dhwb	a0, 0
 #endif
 	pdtlb	a0, a1
-	beqz	a0, 1f
-	idtlb	a0		// FIXME do we need this?
 	wdtlb	a4, a0
-1:
 
 	/* Exit critical section. */
 
@@ -1753,7 +1825,7 @@ ENTRY(fast_store_prohibited)
 	mov	a1, a2
 
 	rsr	a2, PS
-	bbsi.l	a2, PS_UM_SHIFT, 1f
+	bbsi.l	a2, PS_UM_BIT, 1f
 	j	_kernel_exception
 1:	j	_user_exception
 
@@ -1907,6 +1979,103 @@ ENTRY(fast_coprocessor)
 #endif /* XCHAL_EXTRA_SA_SIZE */
 
 /*
+ * System Calls.
+ *
+ * void system_call (struct pt_regs* regs, int exccause)
+ *                            a2                 a3
+ */
+
+ENTRY(system_call)
+	entry	a1, 32
+
+	/* regs->syscall = regs->areg[2] */
+
+	l32i	a3, a2, PT_AREG2
+	mov	a6, a2
+	movi	a4, do_syscall_trace_enter
+	s32i	a3, a2, PT_SYSCALL
+	callx4	a4
+
+	/* syscall = sys_call_table[syscall_nr] */
+
+	movi	a4, sys_call_table;
+	movi	a5, __NR_syscall_count
+	movi	a6, -ENOSYS
+	bgeu	a3, a5, 1f
+
+	addx4	a4, a3, a4
+	l32i	a4, a4, 0
+	movi	a5, sys_ni_syscall;
+	beq	a4, a5, 1f
+
+	/* Load args: arg0 - arg5 are passed via regs. */
+
+	l32i	a6, a2, PT_AREG6
+	l32i	a7, a2, PT_AREG3
+	l32i	a8, a2, PT_AREG4
+	l32i	a9, a2, PT_AREG5
+	l32i	a10, a2, PT_AREG8
+	l32i	a11, a2, PT_AREG9
+
+	/* Pass one additional argument to the syscall: pt_regs (on stack) */
+	s32i	a2, a1, 0
+
+	callx4	a4
+
+1:	/* regs->areg[2] = return_value */
+
+	s32i	a6, a2, PT_AREG2
+	movi	a4, do_syscall_trace_leave
+	mov	a6, a2
+	callx4	a4
+	retw
+
+
+/*
+ * Create a kernel thread
+ *
+ * int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+ * a2                    a2                 a3             a4
+ */
+
+ENTRY(kernel_thread)
+	entry	a1, 16
+
+	mov	a5, a2			# preserve fn over syscall
+	mov	a7, a3			# preserve args over syscall
+
+	movi	a3, _CLONE_VM | _CLONE_UNTRACED
+	movi	a2, __NR_clone
+	or	a6, a4, a3		# arg0: flags
+	mov	a3, a1			# arg1: sp
+	syscall
+
+	beq	a3, a1, 1f		# branch if parent
+	mov	a6, a7			# args
+	callx4	a5			# fn(args)
+
+	movi	a2, __NR_exit
+	syscall				# return value of fn(args) still in a6
+
+1:	retw
+
+/*
+ * Do a system call from kernel instead of calling sys_execve, so we end up
+ * with proper pt_regs.
+ *
+ * int kernel_execve(const char *fname, char *const argv[], charg *const envp[])
+ * a2                        a2               a3                  a4
+ */
+
+ENTRY(kernel_execve)
+	entry	a1, 16
+	mov	a6, a2			# arg0 is in a6
+	movi	a2, __NR_execve
+	syscall
+
+	retw
+
+/*
  * Task switch.
  *
  * struct task*  _switch_to (struct task* prev, struct task* next)
@@ -1924,7 +2093,7 @@ ENTRY(_switch_to)
 
 	/* Disable ints while we manipulate the stack pointer; spill regs. */
 
-	movi	a5, PS_EXCM_MASK | LOCKLEVEL
+	movi	a5, (1 << PS_EXCM_BIT) | LOCKLEVEL
 	xsr	a5, PS
 	rsr	a3, EXCSAVE_1
 	rsync
@@ -1964,33 +2133,9 @@ ENTRY(ret_from_fork)
 	movi	a4, schedule_tail
 	callx4	a4
 
-	movi	a4, do_syscall_trace
+	movi	a4, do_syscall_trace_leave
+	mov	a6, a1
 	callx4	a4
 
 	j	common_exception_return
-
-
-
-/*
- * Table of syscalls
- */
-
-.data
-.align  4
-.global sys_call_table
-sys_call_table:
-
-#define SYSCALL(call, narg) .word call
-#include "syscalls.h"
-
-/*
- * Number of arguments of each syscall
- */
-
-.global sys_narg_table
-sys_narg_table:
-
-#undef SYSCALL
-#define SYSCALL(call, narg) .byte narg
-#include "syscalls.h"
 

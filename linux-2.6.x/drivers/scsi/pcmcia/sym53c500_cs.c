@@ -54,7 +54,6 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
@@ -371,8 +370,6 @@ SYM53C500_intr(int irq, void *dev_id)
 	DEB(unsigned char seq_reg;)
 	unsigned char status, int_reg;
 	unsigned char pio_status;
-	struct scatterlist *sglist;
-	unsigned int sgcount;
 	int port_base = dev->io_port;
 	struct sym53c500_data *data =
 	    (struct sym53c500_data *)dev->hostdata;
@@ -435,20 +432,19 @@ SYM53C500_intr(int irq, void *dev_id)
 	switch (status & 0x07) {	/* scsi phase */
 	case 0x00:			/* DATA-OUT */
 		if (int_reg & 0x10) {	/* Target requesting info transfer */
+			struct scatterlist *sg;
+			int i;
+
 			curSC->SCp.phase = data_out;
 			VDEB(printk("SYM53C500: Data-Out phase\n"));
 			outb(FLUSH_FIFO, port_base + CMD_REG);
-			LOAD_DMA_COUNT(port_base, curSC->request_bufflen);	/* Max transfer size */
+			LOAD_DMA_COUNT(port_base, scsi_bufflen(curSC));	/* Max transfer size */
 			outb(TRANSFER_INFO | DMA_OP, port_base + CMD_REG);
-			if (!curSC->use_sg)	/* Don't use scatter-gather */
-				SYM53C500_pio_write(fast_pio, port_base, curSC->request_buffer, curSC->request_bufflen);
-			else {	/* use scatter-gather */
-				sgcount = curSC->use_sg;
-				sglist = curSC->request_buffer;
-				while (sgcount--) {
-					SYM53C500_pio_write(fast_pio, port_base, page_address(sglist->page) + sglist->offset, sglist->length);
-					sglist++;
-				}
+
+			scsi_for_each_sg(curSC, sg, scsi_sg_count(curSC), i) {
+				SYM53C500_pio_write(fast_pio, port_base,
+						    page_address(sg->page) + sg->offset,
+						    sg->length);
 			}
 			REG0(port_base);
 		}
@@ -456,20 +452,19 @@ SYM53C500_intr(int irq, void *dev_id)
 
 	case 0x01:		/* DATA-IN */
 		if (int_reg & 0x10) {	/* Target requesting info transfer */
+			struct scatterlist *sg;
+			int i;
+
 			curSC->SCp.phase = data_in;
 			VDEB(printk("SYM53C500: Data-In phase\n"));
 			outb(FLUSH_FIFO, port_base + CMD_REG);
-			LOAD_DMA_COUNT(port_base, curSC->request_bufflen);	/* Max transfer size */
+			LOAD_DMA_COUNT(port_base, scsi_bufflen(curSC));	/* Max transfer size */
 			outb(TRANSFER_INFO | DMA_OP, port_base + CMD_REG);
-			if (!curSC->use_sg)	/* Don't use scatter-gather */
-				SYM53C500_pio_read(fast_pio, port_base, curSC->request_buffer, curSC->request_bufflen);
-			else {	/* Use scatter-gather */
-				sgcount = curSC->use_sg;
-				sglist = curSC->request_buffer;
-				while (sgcount--) {
-					SYM53C500_pio_read(fast_pio, port_base, page_address(sglist->page) + sglist->offset, sglist->length);
-					sglist++;
-				}
+
+			scsi_for_each_sg(curSC, sg, scsi_sg_count(curSC), i) {
+				SYM53C500_pio_read(fast_pio, port_base,
+						   page_address(sg->page) + sg->offset,
+						   sg->length);
 			}
 			REG0(port_base);
 		}
@@ -545,8 +540,6 @@ SYM53C500_release(struct pcmcia_device *link)
 	*/
 	if (shost->irq)
 		free_irq(shost->irq, shost);
-	if (shost->dma_channel != 0xff)
-		free_dma(shost->dma_channel);
 	if (shost->io_port && shost->n_io_port)
 		release_region(shost->io_port, shost->n_io_port);
 
@@ -581,7 +574,7 @@ SYM53C500_queue(struct scsi_cmnd *SCpnt, void (*done)(struct scsi_cmnd *))
 
 	DEB(printk("cmd=%02x, cmd_len=%02x, target=%02x, lun=%02x, bufflen=%d\n", 
 	    SCpnt->cmnd[0], SCpnt->cmd_len, SCpnt->device->id, 
-	    SCpnt->device->lun,  SCpnt->request_bufflen));
+	    SCpnt->device->lun,  scsi_bufflen(SCpnt)));
 
 	VDEB(for (i = 0; i < SCpnt->cmd_len; i++)
 	    printk("cmd[%d]=%02x  ", i, SCpnt->cmnd[i]));
@@ -722,19 +715,11 @@ SYM53C500_config(struct pcmcia_device *link)
 
 	DEBUG(0, "SYM53C500_config(0x%p)\n", link);
 
+	info->manf_id = link->manf_id;
+
 	tuple.TupleData = (cisdata_t *)tuple_data;
 	tuple.TupleDataMax = 64;
 	tuple.TupleOffset = 0;
-	tuple.DesiredTuple = CISTPL_CONFIG;
-	CS_CHECK(GetFirstTuple, pcmcia_get_first_tuple(link, &tuple));
-	CS_CHECK(GetTupleData, pcmcia_get_tuple_data(link, &tuple));
-	CS_CHECK(ParseTuple, pcmcia_parse_tuple(link, &tuple, &parse));
-	link->conf.ConfigBase = parse.config.base;
-
-	tuple.DesiredTuple = CISTPL_MANFID;
-	if ((pcmcia_get_first_tuple(link, &tuple) == CS_SUCCESS) &&
-	    (pcmcia_get_tuple_data(link, &tuple) == CS_SUCCESS))
-		info->manf_id = le16_to_cpu(tuple.TupleData[0]);
 
 	tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
 	CS_CHECK(GetFirstTuple, pcmcia_get_first_tuple(link, &tuple));
@@ -890,10 +875,9 @@ SYM53C500_probe(struct pcmcia_device *link)
 	DEBUG(0, "SYM53C500_attach()\n");
 
 	/* Create new SCSI device */
-	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
-	memset(info, 0, sizeof(*info));
 	info->p_dev = link;
 	link->priv = info;
 	link->io.NumPorts1 = 16;
@@ -903,7 +887,6 @@ SYM53C500_probe(struct pcmcia_device *link)
 	link->irq.IRQInfo1 = IRQ_LEVEL_ID;
 	link->conf.Attributes = CONF_ENABLE_IRQ;
 	link->conf.IntType = INT_MEMORY_AND_IO;
-	link->conf.Present = PRESENT_OPTION;
 
 	return SYM53C500_config(link);
 } /* SYM53C500_attach */

@@ -26,7 +26,9 @@
 #include <linux/profile.h>
 #include <linux/module.h>
 #include <linux/fs.h>
- 
+#include <linux/oprofile.h>
+#include <linux/sched.h>
+
 #include "oprofile_stats.h"
 #include "event_buffer.h"
 #include "cpu_buffer.h"
@@ -220,8 +222,8 @@ static unsigned long get_exec_dcookie(struct mm_struct * mm)
 			continue;
 		if (!(vma->vm_flags & VM_EXECUTABLE))
 			continue;
-		cookie = fast_get_dcookie(vma->vm_file->f_dentry,
-			vma->vm_file->f_vfsmnt);
+		cookie = fast_get_dcookie(vma->vm_file->f_path.dentry,
+			vma->vm_file->f_path.mnt);
 		break;
 	}
 
@@ -246,8 +248,8 @@ static unsigned long lookup_dcookie(struct mm_struct * mm, unsigned long addr, o
 			continue;
 
 		if (vma->vm_file) {
-			cookie = fast_get_dcookie(vma->vm_file->f_dentry,
-				vma->vm_file->f_vfsmnt);
+			cookie = fast_get_dcookie(vma->vm_file->f_path.dentry,
+				vma->vm_file->f_path.mnt);
 			*offset = (vma->vm_pgoff << PAGE_SHIFT) + addr -
 				vma->vm_start;
 		} else {

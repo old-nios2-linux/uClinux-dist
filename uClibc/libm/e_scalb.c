@@ -5,7 +5,7 @@
  *
  * Developed at SunPro, a Sun Microsystems, Inc. business.
  * Permission to use, copy, modify, and distribute this
- * software is freely granted, provided that this notice 
+ * software is freely granted, provided that this notice
  * is preserved.
  * ====================================================
  */
@@ -16,25 +16,30 @@ static char rcsid[] = "$NetBSD: e_scalb.c,v 1.6 1995/05/10 20:46:09 jtc Exp $";
 
 /*
  * __ieee754_scalb(x, fn) is provide for
- * passing various standard test suite. One 
+ * passing various standard test suite. One
  * should use scalbn() instead.
  */
 
 #include "math.h"
 #include "math_private.h"
 
+libm_hidden_proto(scalbn)
+libm_hidden_proto(finite)
+libm_hidden_proto(rint)
+libm_hidden_proto(__isnan)
+
 #ifdef _SCALB_INT
 #ifdef __STDC__
-	double __ieee754_scalb(double x, int fn)
+	double attribute_hidden __ieee754_scalb(double x, int fn)
 #else
-	double __ieee754_scalb(x,fn)
+	double attribute_hidden __ieee754_scalb(x,fn)
 	double x; int fn;
 #endif
 #else
 #ifdef __STDC__
-	double __ieee754_scalb(double x, double fn)
+	double attribute_hidden __ieee754_scalb(double x, double fn)
 #else
-	double __ieee754_scalb(x,fn)
+	double attribute_hidden __ieee754_scalb(x,fn)
 	double x, fn;
 #endif
 #endif

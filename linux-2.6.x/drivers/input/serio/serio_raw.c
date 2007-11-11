@@ -160,7 +160,7 @@ static ssize_t serio_raw_read(struct file *file, char __user *buffer, size_t cou
 {
 	struct serio_raw_list *list = file->private_data;
 	struct serio_raw *serio_raw = list->serio_raw;
-	char c;
+	char uninitialized_var(c);
 	ssize_t retval = 0;
 
 	if (!serio_raw->serio)
@@ -234,7 +234,7 @@ static unsigned int serio_raw_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
-static struct file_operations serio_raw_fops = {
+static const struct file_operations serio_raw_fops = {
 	.owner =	THIS_MODULE,
 	.open =		serio_raw_open,
 	.release =	serio_raw_release,
@@ -297,7 +297,7 @@ static int serio_raw_connect(struct serio *serio, struct serio_driver *drv)
 
 	serio_raw->dev.minor = PSMOUSE_MINOR;
 	serio_raw->dev.name = serio_raw->name;
-	serio_raw->dev.dev = &serio->dev;
+	serio_raw->dev.parent = &serio->dev;
 	serio_raw->dev.fops = &serio_raw_fops;
 
 	err = misc_register(&serio_raw->dev);
@@ -389,8 +389,7 @@ static struct serio_driver serio_raw_drv = {
 
 static int __init serio_raw_init(void)
 {
-	serio_register_driver(&serio_raw_drv);
-	return 0;
+	return serio_register_driver(&serio_raw_drv);
 }
 
 static void __exit serio_raw_exit(void)

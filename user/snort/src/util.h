@@ -40,7 +40,30 @@
 #include "strlcpyu.h"
 #endif
 
+/* specifies that a function does not return
+ * used for quieting Visual Studio warnings
+ */
+#ifdef _MSC_VER
+#if _MSC_VER >= 1400
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN
+#endif
+#else
+#define NORETURN
+#endif
+
 #include "sfsnprintfappend.h"
+
+#define SNORT_SNPRINTF_SUCCESS 0
+#define SNORT_SNPRINTF_TRUNCATION 1
+#define SNORT_SNPRINTF_ERROR -1
+
+#define SNORT_STRNCPY_SUCCESS 0
+#define SNORT_STRNCPY_TRUNCATION 1
+#define SNORT_STRNCPY_ERROR -1
+
+#define SNORT_STRNLEN_ERROR -1
 
 extern u_long netmasks[33];
 
@@ -62,7 +85,7 @@ void GetTime(char *);
 int gmt2local(time_t);
 void ts_print(register const struct timeval *, char *);
 char *copy_argv(char **);
-int strip(char *);
+void strip(char *);
 float CalcPct(float, float);
 void ReadPacketsFromFile();
 void GenHomenet(char *);
@@ -77,8 +100,8 @@ void CleanupProtoNames();
 void PrintError(char *);
 void ErrorMessage(const char *, ...);
 void LogMessage(const char *, ...);
-void FatalError(const char *, ...);
-void FatalPrintError(char *);
+NORETURN void FatalError(const char *, ...);
+NORETURN void FatalPrintError(char *);
 void CreatePidFile(char *);
 void ClosePidFile();
 void SetUidGid(void);
@@ -86,7 +109,13 @@ void SetChroot(char *, char **);
 void DropStats(int);
 void GenObfuscationMask(char *);
 void *SPAlloc(unsigned long, struct _SPMemControl *);
+int SnortSnprintf(char *, size_t, const char *, ...);
+int SnortSnprintfAppend(char *, size_t, const char *, ...);
+int SnortStrncpy(char *, char *, size_t);
+int SnortStrnlen(char *, int);
+char *SnortStrdup(char *string);
 void *SnortAlloc(unsigned long);
+void *SnortAlloc2(size_t size, const char *format, ...);
 char *CurrentWorkingDir(void);
 char *GetAbsolutePath(char *dir);
 char *StripPrefixDir(char *prefix, char *dir);

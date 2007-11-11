@@ -1,9 +1,9 @@
 /*
- * $Id: challenge.c,v 1.18.6.3 2004/04/27 21:21:52 jiri Exp $
+ * $Id: challenge.c,v 1.23 2004/11/30 02:59:35 danp Exp $
  *
  * Challenge related functions
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -215,7 +215,7 @@ int consume_credentials(struct sip_msg* _m, char* _s1, char* _s2)
 		get_authorized_cred(_m->proxy_auth, &h);
 		if (!h) { 
 			if (_m->REQ_METHOD!=METHOD_ACK 
-					&& _m->REQ_METHOD==METHOD_CANCEL) {
+					&& _m->REQ_METHOD!=METHOD_CANCEL) {
 				LOG(L_ERR, "consume_credentials(): No authorized "
 					"credentials found (error in scripts)\n");
 			}

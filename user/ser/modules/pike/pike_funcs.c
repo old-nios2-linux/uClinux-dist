@@ -1,8 +1,8 @@
 /* 
- * $Id: pike_funcs.c,v 1.16.6.2.2.1 2004/07/14 20:58:58 andrei Exp $
+ * $Id: pike_funcs.c,v 1.23 2004/11/05 14:21:00 bogdan Exp $
  *
  *
- * Copyright (C) 2001-2003 Fhg Fokus
+ * Copyright (C) 2001-2003 FhG Fokus
  *
  * This file is part of ser, a free SIP server.
  *
@@ -68,7 +68,7 @@ void print_timer_list(struct list_link *head)
 }
 
 
-/*#define _test*/
+#define _test
 int pike_check_req(struct sip_msg *msg, char *foo, char *bar)
 {
 	struct ip_node *node;
@@ -95,6 +95,11 @@ int pike_check_req(struct sip_msg *msg, char *foo, char *bar)
 	/* first lock the proper tree branch and mark the IP with one more hit*/
 	lock_tree_branch( ip->u.addr[0] );
 	node = mark_node( ip->u.addr, ip->len, &father, &flags);
+	if (node==0) {
+		/* even if this is an error case, we return true in script to avoid
+		 * considering the IP as marked (bogdan) */
+		return 1;
+	}
 
 	DBG("DEBUG:pike_check_req: src IP [%s]; hits=[%d,%d],[%d,%d] flags=%d\n",
 		ip_addr2a( ip ),
@@ -119,7 +124,7 @@ int pike_check_req(struct sip_msg *msg, char *foo, char *bar)
 		/* update the timer -> in timer can be only nodes
 		 * as IP-leaf(complete address) or tree-leaf */
 		if (node->leaf_hits[CURR_POS] || node->kids==0) {
-			/* tree leafs which are not potencial red nodes are not update in
+			/* tree leafs which are not potential red nodes are not update in
 			 * order to make them to expire */
 			assert( has_timer_set(&(node->timer_ll)) ); /* debug */
 			if ( !(flags&NO_UPDATE) ) {
@@ -131,11 +136,11 @@ int pike_check_req(struct sip_msg *msg, char *foo, char *bar)
 			assert( node->hits[CURR_POS] && node->kids ); /* debug */
 		}
 	}
-	//print_timer_list( timer ); /* debug*/
+	/*print_timer_list( timer );*/ /* debug*/
 	lock_release(timer_lock);
 
 	unlock_tree_branch( ip->u.addr[0] );
-	//print_tree( 0 ); /* debug */
+	/*print_tree( 0 );*/ /* debug */
 
 	if (flags&RED_NODE) {
 		LOG(L_WARN,"DEBUG:pike_check_req: ALARM - TOO MANY HITS on "
@@ -156,7 +161,7 @@ void clean_routine(unsigned int ticks , void *param)
 	struct ip_node   *node;
 	int i;
 
-	DBG("DEBUG:pike:clean_routine:  entering (%d)\n",ticks);
+	/* DBG("DEBUG:pike:clean_routine:  entering (%d)\n",ticks); */
 	/* before locking check first if the list is not empty and if can
 	 * be at least one element removed */
 	if ( is_list_empty( timer ) || ll2ipnode(timer->next)->expires>ticks )
@@ -165,9 +170,9 @@ void clean_routine(unsigned int ticks , void *param)
 	/* get the expired elements */
 	lock_get( timer_lock );
 	check_and_split_timer( timer, ticks, &head, mask);
-	//print_timer_list(timer); /* debug */
+	/*print_timer_list(timer);*/ /* debug */
 	lock_release( timer_lock );
-	//print_tree( 0 );
+	/*print_tree( 0 );*/  /*debug*/
 
 	/* got something back? */
 	if ( is_list_empty(&head) )
@@ -260,7 +265,7 @@ void swap_routine( unsigned int ticks, void *param)
 	struct ip_node *node;
 	int i;
 
-	DBG("DEBUG:pike:swap_routine:  entering \n");
+	/* DBG("DEBUG:pike:swap_routine:  entering \n"); */
 	for(i=0;i<MAX_IP_BRANCHES;i++) {
 		node = get_tree_branch(i);
 		if (node) {
