@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Wed Nov  7 01:05:58 2007
+# Wed Nov 14 20:54:00 2007
 #
 
 #
@@ -17,6 +17,7 @@
 # CONFIG_LIB_POPT is not set
 # CONFIG_LIB_LIBAES is not set
 # CONFIG_LIB_LIBDES is not set
+# CONFIG_LIB_LIBSSL is not set
 # CONFIG_LIB_LIBGMP is not set
 # CONFIG_LIB_LIBG is not set
 # CONFIG_LIB_LIBLDAP is not set
@@ -56,60 +57,6 @@
 # Library Configuration
 #
 # CONFIG_LIB_UC_LIBC_TIMEZONE is not set
-
-#
-# SnapGear Apps/Libs
-#
-# CONFIG_USER_CGI_NO_COM2 is not set
-# CONFIG_USER_CGI_COM2_MODEM is not set
-# CONFIG_USER_CGI_NO_DIALIN is not set
-# CONFIG_USER_FIREWALL_TOOLS is not set
-# CONFIG_USER_AES_PERF is not set
-# CONFIG_USER_BR_BR is not set
-# CONFIG_USER_DESTEST_DESTEST is not set
-# CONFIG_USER_DESTEST_DESPERF is not set
-# CONFIG_USER_EMCTEST_EMCECHO is not set
-# CONFIG_USER_EMCTEST_EMCTEST is not set
-# CONFIG_USER_FACTORY_FACTTEST is not set
-# CONFIG_USER_GRE_GRE is not set
-# CONFIG_USER_IDB_IDB is not set
-# CONFIG_USER_IPSEC_CONFIGURATOR is not set
-# CONFIG_USER_REDIALER_REDIALER is not set
-# CONFIG_USER_PKTDELAY_PKTDELAY is not set
-# CONFIG_USER_PROTECT is not set
-# CONFIG_USER_SETKEY_SETKEY is not set
-# CONFIG_USER_IOD is not set
-# CONFIG_USER_SWTEST_SWCONFIG is not set
-# CONFIG_USER_SWTEST_SWTEST is not set
-# CONFIG_USER_MGMT_MGMT is not set
-# CONFIG_USER_SGSNMPD_UDP is not set
-# CONFIG_USER_SGSNMPD_AGENT is not set
-# CONFIG_USER_TQRECV_TQRECV is not set
-# CONFIG_USER_UPNPD is not set
-# CONFIG_USER_WINSD_WS is not set
-
-#
-# Supported Languages
-#
-# CONFIG_LANG_ENGLISH is not set
-# CONFIG_LANG_ENGLISH_CONTROL4 is not set
-# CONFIG_LANG_ENGLISH_EICON is not set
-# CONFIG_LANG_ENGLISH_ONIETA is not set
-# CONFIG_LANG_ENGLISH_PROCERA is not set
-# CONFIG_LANG_ENGLISH_SERVGATE is not set
-# CONFIG_LANG_ENGLISH_TAMS is not set
-# CONFIG_LANG_ENGLISH_TELCOTECH is not set
-# CONFIG_LANG_ENGLISH_TELTRONICS is not set
-# CONFIG_LANG_CHINESE is not set
-# CONFIG_LANG_JAPANESE is not set
-# CONFIG_LANG_DEBUG is not set
-
-#
-# SnapGear Device Settings
-#
-CONFIG_SIZE_VAR_PART=0
-CONFIG_SIZE_CONFIG_PART=0
-CONFIG_SIZE_SYSLOG_MAXSIZE=16
 
 #
 # Core Applications
