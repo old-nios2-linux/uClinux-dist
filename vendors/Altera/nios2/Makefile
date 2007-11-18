@@ -15,6 +15,7 @@ clean:
 	for i in $$dirs; do [ ! -d $$i ] || make -C $$i clean; done
 
 vendor_hwselect:
+	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
 	$(MAKEARCH_KERNEL) -C $(ROOTDIR)/$(LINUXDIR) hwselect
 
 romfs:
