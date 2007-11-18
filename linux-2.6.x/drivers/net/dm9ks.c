@@ -1,6 +1,6 @@
 /*
 
-  dm9ks.c: Version 2.03 2005/10/17 
+  dm9ks.c: Version 2.08 2007/02/12 
   
         A Davicom DM9000A/DM9010 ISA NIC fast Ethernet driver for Linux.
 
@@ -15,33 +15,49 @@
 	GNU General Public License for more details.
 
 
-  (C)Copyright 1997-2005 DAVICOM Semiconductor,Inc. All Rights Reserved.
+  (C)Copyright 1997-2007 DAVICOM Semiconductor,Inc. All Rights Reserved.
 
-	
-V1.00	10/13/2004	Add new function Early transmit & IP/TCP/UDP Checksum
-			offload enable & flow control is default
-V1.1	12/29/2004	Add Two packet mode & modify RX function
-V1.2	01/14/2005	Add Early transmit mode 
-V1.3	03/02/2005	Support kernel 2.6
-v1.33   06/08/2005	#define DM9KS_MDRAL		0xf4
-			#define DM9KS_MDRAH		0xf5
-			
 V2.00 Spenser - 01/10/2005
 			- Modification for PXA270 MAINSTONE.
 			- Modified dmfe_tx_done().
 			- Add dmfe_timeout().
-V2.01	10/07/2005	Modified dmfe_timer()
-			Dected network speed 10/100M
-V2.02	10/12/2005	Use link change to chage db->Speed
-			dmfe_open() wait for Link OK  
-V2.03	11/22/2005	Power-off and Power-on PHY in dmfe_init()
-			support IOL
+V2.01	10/07/2005	-Modified dmfe_timer()
+			-Dected network speed 10/100M
+V2.02	10/12/2005	-Use link change to chage db->Speed
+			-dmfe_open() wait for Link OK  
+V2.03	11/22/2005	-Power-off and Power-on PHY in dmfe_init_dm9000()
+			-support IOL
+V2.04	12/13/2005	-delay 1.6s between power-on and power-off in 
+			 dmfe_init_dm9000()
+			-set LED mode 1 in dmfe_init_dm9000()
+			-add data bus driving capability in dmfe_init_dm9000()
+			 (optional)
+10/3/2006	-Add DM8606 read/write function by MDC and MDIO
+V2.06	01/03/2007	-CONT_RX_PKT_CNT=0xFFFF
+			-modify dmfe_tx_done function
+			-check RX FIFO pointer
+			-if using physical address, re-define I/O function
+			-add db->cont_rx_pkt_cnt=0 at the front of dmfe_packet_receive()
+V2.08	02/12/2007	-module parameter macro
+			2.4  MODULE_PARM
+			2.6  module_param
+			-remove #include <linux/config>
+  			-fix dmfe_interrupt for kernel 2.6.20                  
+05/24/2007	-support ethtool and mii-tool
+05/30/2007	-fix the driver bug when ifconfig eth0 (-)promisc and (-)allmulti.
+06/05/2007	-fix dm9000b issue(ex. 10M TX idle=65mA, 10M harmonic)
+			-add flow control function (option)
 */
+
+#define DRV_NAME	"dm9KS"
+#define DRV_VERSION	"2.08"
+#define DRV_RELDATE	"2007-06-05"
 
 #if defined(MODVERSIONS)
 #include <linux/modversions.h>
 #endif
 
+//#include <linux/config.h>
 #include <linux/init.h>				
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -53,12 +69,16 @@ V2.03	11/22/2005	Power-off and Power-on PHY in dmfe_init()
 #include <asm/dma.h>
 #include <linux/spinlock.h>
 #include <linux/crc32.h>
+#include <linux/mii.h>
+#include <linux/ethtool.h>
 
 #ifdef CONFIG_ARCH_MAINSTONE
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/irq.h>
 #endif
+
+//#define DM8606
 
 #ifdef CONFIG_EXCALIBUR
 #include <asm/nios.h>
@@ -83,16 +103,20 @@ V2.03	11/22/2005	Power-off and Power-on PHY in dmfe_init()
 #define DM9KS_TCR		0x02	/* TX control Reg.*/
 #define DM9KS_RXCR		0x05	/* RX control Reg.*/
 #define DM9KS_BPTR		0x08
+#define DM9KS_FCTR		0x09
+#define DM9KS_FCR		0x0a
 #define DM9KS_EPCR		0x0b
 #define DM9KS_EPAR		0x0c
 #define DM9KS_EPDRL		0x0d
 #define DM9KS_EPDRH		0x0e
 #define DM9KS_GPR		0x1f	/* General purpose register */
+#define DM9KS_CHIPR		0x2c
 #define DM9KS_TCR2		0x2d
 #define DM9KS_SMCR		0x2f 	/* Special Mode Control Reg.*/
 #define DM9KS_ETXCSR		0x30	/* Early Transmit control/status Reg.*/
 #define	DM9KS_TCCR		0x31	/* Checksum cntrol Reg. */
 #define DM9KS_RCSR		0x32	/* Receive Checksum status Reg.*/
+#define DM9KS_BUSCR		0x38
 #define DM9KS_MRCMDX		0xf0
 #define DM9KS_MRCMD		0xf2
 #define DM9KS_MDRAL		0xf4
@@ -115,15 +139,15 @@ V2.03	11/22/2005	Power-off and Power-on PHY in dmfe_init()
 #include <asm/arch/mainstone.h>
 #define DM9KS_MIN_IO		(MST_ETH_PHYS + 0x300)
 #define DM9KS_MAX_IO            (MST_ETH_PHYS + 0x370)
-#define DM9K_IRQ		MAINSTONE_IRQ(3)
+#define DM9KS_IRQ		MAINSTONE_IRQ(3)
 #elif defined(CONFIG_EXCALIBUR)
 #define DM9KS_MIN_IO            (na_dm9000)
 #define DM9KS_MAX_IO            (DM9KS_MIN_IO + 7)
-#define DM9K_IRQ	        (na_dm9000_irq)
+#define DM9KS_IRQ	        (na_dm9000_irq)
 #else
 #define DM9KS_MIN_IO		0x300
 #define DM9KS_MAX_IO		0x370
-#define DM9K_IRQ		3
+#define DM9KS_IRQ		3
 #endif
 
 #define DM9KS_VID_L		0x28
@@ -142,7 +166,7 @@ V2.03	11/22/2005	Power-off and Power-on PHY in dmfe_init()
 #define TRUE			1
 #define FALSE			0
 /* Number of continuous Rx packets */
-#define CONT_RX_PKT_CNT	10 
+#define CONT_RX_PKT_CNT		0xFFFF
 
 #define DMFE_TIMER_WUT  jiffies+(HZ*5)	/* timer wakeup time : 5 second */
 
@@ -154,17 +178,24 @@ if (dmfe_debug||dbug_now) printk(KERN_ERR "dmfe: %s %x\n", msg, vaule)
 if (dbug_now) printk(KERN_ERR "dmfe: %s %x\n", msg, vaule)
 #endif
 
+#ifndef CONFIG_ARCH_MAINSTONE
+#pragma pack(push, 1)
+#endif
+
 typedef struct _RX_DESC
 {
 	u8 rxbyte;
 	u8 status;
 	u16 length;
-} __attribute__((__packed__)) RX_DESC;
+}RX_DESC;
 
 typedef union{
 	u8 buf[4];
 	RX_DESC desc;
-} __attribute__((__packed__)) rx_t;
+} rx_t;
+#ifndef CONFIG_ARCH_MAINSTONE
+#pragma pack(pop)
+#endif
 
 enum DM9KS_PHY_mode {
 	DM9KS_10MHD   = 0, 
@@ -175,39 +206,83 @@ enum DM9KS_PHY_mode {
 };
 
 /* Structure/enum declaration ------------------------------- */
-typedef struct board_info {
- 
-	u32 reset_counter;		/* counter: RESET */ 
-	u32 reset_tx_timeout;		/* RESET caused by TX Timeout */ 
-
-	u32 io_addr;			/* Register I/O base address */
-	u32 io_data;			/* Data I/O address */
+typedef struct board_info { 
+	u32 io_addr;/* Register I/O base address */
+	u32 io_data;/* Data I/O address */
+	u8 op_mode;/* PHY operation mode */
+	u8 io_mode;/* 0:word, 2:byte */
+	u8 Speed;	/* current speed */
+	u8 chip_revision;
+	int rx_csum;/* 0:disable, 1:enable */
+	
+	u32 reset_counter;/* counter: RESET */ 
+	u32 reset_tx_timeout;/* RESET caused by TX Timeout */
 	int tx_pkt_cnt;
-
-	u8 op_mode;			/* PHY operation mode */
-	u8 io_mode;			/* 0:word, 2:byte */
-	u8 device_wait_reset;		/* device state */
-	u8 Speed;			/* current speed */
-
 	int cont_rx_pkt_cnt;/* current number of continuos rx packets  */
-	struct timer_list timer;
 	struct net_device_stats stats;
+	
+	struct timer_list timer;
 	unsigned char srom[128];
 	spinlock_t lock;
-
+	struct mii_if_info mii;
 } board_info_t;
 /* Global variable declaration ----------------------------- */
-/* static int dmfe_debug = 1; */
+/*static int dmfe_debug = 0;*/
 static struct net_device * dmfe_dev = NULL;
-
+static struct ethtool_ops dmfe_ethtool_ops;
 /* For module input parameter */
-static int mode       = DM9KS_AUTO;
+static int mode       = DM9KS_AUTO;  
 static int media_mode = DM9KS_AUTO;
-static u8  irq        = DM9K_IRQ;
-static u32 iobase     = DM9KS_MIN_IO;
+static int  irq        = DM9KS_IRQ;
+static int iobase     = DM9KS_MIN_IO;
+
+#if 0  // use physical address; Not virtual address
+#ifdef outb
+	#undef outb
+#endif
+#ifdef outw
+	#undef outw
+#endif
+#ifdef outl
+	#undef outl
+#endif
+#ifdef inb
+	#undef inb
+#endif
+#ifdef inw
+	#undef inw
+#endif
+#ifdef inl
+	#undef inl
+#endif
+void outb(u8 reg, u32 ioaddr)
+{
+	(*(volatile u8 *)(ioaddr)) = reg;
+}
+void outw(u16 reg, u32 ioaddr)
+{
+	(*(volatile u16 *)(ioaddr)) = reg;
+}
+void outl(u32 reg, u32 ioaddr)
+{
+	(*(volatile u32 *)(ioaddr)) = reg;
+}
+u8 inb(u32 ioaddr)
+{
+	return (*(volatile u8 *)(ioaddr));
+}
+u16 inw(u32 ioaddr)
+{
+	return (*(volatile u16 *)(ioaddr));
+}
+u32 inl(u32 ioaddr)
+{
+	return (*(volatile u32 *)(ioaddr));
+}
+#endif
 
 /* function declaration ------------------------------------- */
-int dmfe_probe(struct net_device *);
+int dmfe_probe1(struct net_device *);
 static int dmfe_open(struct net_device *);
 static int dmfe_start_xmit(struct sk_buff *, struct net_device *);
 static void dmfe_tx_done(unsigned long);
@@ -215,21 +290,44 @@ static void dmfe_packet_receive(struct net_device *);
 static int dmfe_stop(struct net_device *);
 static struct net_device_stats * dmfe_get_stats(struct net_device *); 
 static int dmfe_do_ioctl(struct net_device *, struct ifreq *, int);
-static irqreturn_t dmfe_interrupt(int , void *);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
+static void dmfe_interrupt(int , void *, struct pt_regs *); 
+#else
+	#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+	static irqreturn_t dmfe_interrupt(int , void *, struct pt_regs *);
+	#else
+	static irqreturn_t dmfe_interrupt(int , void *);/* for kernel 2.6.20 */
+	#endif
+#endif
 static void dmfe_timer(unsigned long);
 static void dmfe_init_dm9000(struct net_device *);
 static unsigned long cal_CRC(unsigned char *, unsigned int, u8);
-static u8 ior(board_info_t *, int);
-static void iow(board_info_t *, int, u8);
+u8 ior(board_info_t *, int);
+void iow(board_info_t *, int, u8);
 static u16 phy_read(board_info_t *, int);
 static void phy_write(board_info_t *, int, u16);
 static u16 read_srom_word(board_info_t *, int);
 static void dm9000_hash_table(struct net_device *);
 static void dmfe_timeout(struct net_device *);
 static void dmfe_reset(struct net_device *);
+static int mdio_read(struct net_device *, int, int);
+static void mdio_write(struct net_device *, int, int, int);
+static void dmfe_get_drvinfo(struct net_device *, struct ethtool_drvinfo *);
+static int dmfe_get_settings(struct net_device *, struct ethtool_cmd *);
+static int dmfe_set_settings(struct net_device *, struct ethtool_cmd *);
+static u32 dmfe_get_link(struct net_device *);
+static int dmfe_nway_reset(struct net_device *);
+static uint32_t dmfe_get_rx_csum(struct net_device *);
+static uint32_t dmfe_get_tx_csum(struct net_device *);
+static int dmfe_set_rx_csum(struct net_device *, uint32_t );
+static int dmfe_set_tx_csum(struct net_device *, uint32_t );
 
 #if defined(CHECKSUM)
 static u8 check_rx_ready(u8);
+#endif
+
+#ifdef DM8606
+#include "dm8606.h"
 #endif
 
 //DECLARE_TASKLET(dmfe_tx_tasklet,dmfe_tx_done,0);
@@ -240,14 +338,16 @@ static u8 check_rx_ready(u8);
   Search DM9000 board, allocate space and register it
 */
 
-struct net_device * __init dm9ks_probe(void)
+struct net_device * __init dmfe_probe(void)
 {
 	struct net_device *dev;
 	int err;
+	
+	DMFE_DBUG(0, "dmfe_probe()",0);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
 	dev = init_etherdev(NULL, sizeof(struct board_info));
-	ether_setup(dev);		
+	//ether_setup(dev);		
 #else
 	dev= alloc_etherdev(sizeof(struct board_info));
 #endif
@@ -256,7 +356,7 @@ struct net_device * __init dm9ks_probe(void)
 		return ERR_PTR(-ENOMEM);
 
      	SET_MODULE_OWNER(dev);
-	err = dmfe_probe(dev);
+	err = dmfe_probe1(dev);
 	if (err)
 		goto out;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,5,0)
@@ -276,13 +376,14 @@ out:
 	return ERR_PTR(err);
 }
 
-int __init dmfe_probe(struct net_device *dev)
+int __init dmfe_probe1(struct net_device *dev)
 {
 	struct board_info *db;    /* Point a board information structure */
 	u32 id_val;
 	u16 i, dm9000_found = FALSE;
-
-	DMFE_DBUG(0, "dmfe_probe()",0);
+	u8 MAC_addr[6]={0x00,0x60,0x6E,0x33,0x44,0x55};
+	u8 HasEEPROM=0;
+	DMFE_DBUG(0, "dmfe_probe1()",0);
 
 	/* Search All DM9000 serial NIC */
 	do {
@@ -301,7 +402,7 @@ int __init dmfe_probe(struct net_device *dev)
 			if(!request_region(iobase, 2, dev->name))
 				return -ENODEV;
 
-			printk("<DM9KS> I/O: %x, VID: %x \n",iobase, id_val);
+			printk(KERN_ERR"<DM9KS> I/O: %x, VID: %x \n",iobase, id_val);
 			dm9000_found = TRUE;
 
 			/* Allocated board information structure */
@@ -309,22 +410,33 @@ int __init dmfe_probe(struct net_device *dev)
 			db = (board_info_t *)dev->priv;
 			dmfe_dev    = dev;
 			db->io_addr  = iobase;
-			db->io_data = iobase + 4;
-			/* driver system function */
-				
+			db->io_data = iobase + 4;   
+			db->chip_revision = ior(db, DM9KS_CHIPR);
+			
+			/* driver system function */				
 			dev->base_addr 		= iobase;
 			dev->irq 		= irq;
 			dev->open 		= &dmfe_open;
 			dev->hard_start_xmit 	= &dmfe_start_xmit;
-			dev->watchdog_timeo	= HZ;	
+			dev->watchdog_timeo	= 5*HZ;	
 			dev->tx_timeout		= dmfe_timeout;
 			dev->stop 		= &dmfe_stop;
 			dev->get_stats 		= &dmfe_get_stats;
 			dev->set_multicast_list = &dm9000_hash_table;
 			dev->do_ioctl 		= &dmfe_do_ioctl;
-
-#if defined(CHECKSUM)
-			dev->features = dev->features | NETIF_F_NO_CSUM;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,28)
+			dev->ethtool_ops = &dmfe_ethtool_ops;
+#endif
+#ifdef CHECKSUM
+			dev->features |=  NETIF_F_IP_CSUM;
+#endif
+			db->mii.dev = dev;
+			db->mii.mdio_read = mdio_read;
+			db->mii.mdio_write = mdio_write;
+			db->mii.phy_id = 1;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,20)
+			db->mii.phy_id_mask = 0x1F; 
+			db->mii.reg_num_mask = 0x1F; 
 #endif
 #ifdef CONFIG_EXCALIBUR
 			{
@@ -333,13 +445,26 @@ int __init dmfe_probe(struct net_device *dev)
 			  memcpy(dev->dev_addr, excalibur_enet_hwaddr, 6);
 			}
 #else
+			//db->msg_enable =(debug == 0 ? DMFE_DEF_MSG_ENABLE : ((1 << debug) - 1));
+			
 			/* Read SROM content */
 			for (i=0; i<64; i++)
 				((u16 *)db->srom)[i] = read_srom_word(db, i);
 
+			/* Get the PID and VID from EEPROM to check */
+			id_val = (((u16 *)db->srom)[4])|(((u16 *)db->srom)[5]<<16); 
+			printk("id_val=%x\n", id_val);
+			if (id_val == DM9KS_ID || id_val == DM9010_ID) 
+				HasEEPROM =1;
+			
 			/* Set Node Address */
 			for (i=0; i<6; i++)
-				dev->dev_addr[i] = db->srom[i];
+			{
+				if (HasEEPROM) /* use EEPROM */
+					dev->dev_addr[i] = db->srom[i];
+				else	/* No EEPROM */
+					dev->dev_addr[i] = MAC_addr[i];
+			}
 #endif
 		}//end of if()
 		iobase += 0x10;
@@ -360,12 +485,16 @@ static int dmfe_open(struct net_device *dev)
 	int i;
 	DMFE_DBUG(0, "dmfe_open", 0);
 
-	if (request_irq(dev->irq,&dmfe_interrupt,SA_SHIRQ,dev->name,dev)) 
+	if (request_irq(dev->irq,&dmfe_interrupt,0,dev->name,dev)) 
 		return -EAGAIN;
 
 	/* Initilize DM910X board */
 	dmfe_init_dm9000(dev);
- 
+#ifdef DM8606
+	// control DM8606
+	printk("[8606]reg0=0x%04x\n",dm8606_read(db,0));
+	printk("[8606]reg1=0x%04x\n",dm8606_read(db,0x1));
+#endif 
 	/* Init driver variable */
 	db->reset_counter 	= 0;
 	db->reset_tx_timeout 	= 0;
@@ -375,12 +504,12 @@ static int dmfe_open(struct net_device *dev)
 	db->Speed =10;
 	i=0;
 	do {
-		reg_nsr = ior(db,0x1);
+		reg_nsr = ior(db,DM9KS_NSR);
 		if(reg_nsr & 0x40) /* link OK!! */
 		{
 			/* wait for detected Speed */
 			mdelay(200);
-			reg_nsr = ior(db,0x1);
+			reg_nsr = ior(db,DM9KS_NSR);
 			if(reg_nsr & 0x80)
 				db->Speed =10;
 			else
@@ -393,7 +522,7 @@ static int dmfe_open(struct net_device *dev)
 	//printk("i=%d  Speed=%d\n",i,db->Speed);	
 	/* set and active a timer process */
 	init_timer(&db->timer);
-	db->timer.expires 	= DMFE_TIMER_WUT * 2;
+	db->timer.expires 	= DMFE_TIMER_WUT;
 	db->timer.data 		= (unsigned long)dev;
 	db->timer.function 	= &dmfe_timer;
 	add_timer(&db->timer);	//Move to DM9000 initiallization was finished.
@@ -407,8 +536,9 @@ static int dmfe_open(struct net_device *dev)
 */
 static void set_PHY_mode(board_info_t *db)
 {
-	u16 phy_reg0 = 0x1200;		/* Auto-negotiation & Restart Auto-negotiation */
-	u16 phy_reg4 = 0x01e1;		/* Default flow control disable*/
+#ifndef DM8606
+	u16 phy_reg0 = 0x1000;/* Auto-negotiation*/
+	u16 phy_reg4 = 0x01e1;
 
 	if ( !(db->op_mode & DM9KS_AUTO) ) // op_mode didn't auto sense */
 	{ 
@@ -429,8 +559,103 @@ static void set_PHY_mode(board_info_t *db)
 					   break;
 		} // end of switch
 	} // end of if
-	phy_write(db, 0, phy_reg0);
+#ifdef FLOW_CONTROL
+	phy_write(db, 4, phy_reg4|(1<<10));
+#else
 	phy_write(db, 4, phy_reg4);
+#endif //end of FLOW_CONTROL
+	phy_write(db, 0, phy_reg0|0x200);
+#else
+	/* Fiber mode */
+	phy_write(db, 16, 0x4014);
+	phy_write(db, 0, 0x2100);
+#endif //end of DM8606
+
+	if (db->chip_revision == 0x1A) /* DM9000B */
+	{
+		//set 10M TX idle =65mA (TX 100% utility is 160mA)
+		phy_write(db,20, phy_read(db,20)|(1<<11)|(1<<10));
+		
+		//DM9000B:fix harmonic
+		//For short code:
+		//PHY_REG 27 (1Bh) <- 0000h
+		phy_write(db, 27, 0x0000);
+		//PHY_REG 27 (1Bh) <- AA00h
+		phy_write(db, 27, 0xaa00);
+
+		//PHY_REG 27 (1Bh) <- 0017h
+		phy_write(db, 27, 0x0017);
+		//PHY_REG 27 (1Bh) <- AA17h
+		phy_write(db, 27, 0xaa17);
+
+		//PHY_REG 27 (1Bh) <- 002Fh
+		phy_write(db, 27, 0x002f);
+		//PHY_REG 27 (1Bh) <- AA2Fh
+		phy_write(db, 27, 0xaa2f);
+		
+		//PHY_REG 27 (1Bh) <- 0037h
+		phy_write(db, 27, 0x0037);
+		//PHY_REG 27 (1Bh) <- AA37h
+		phy_write(db, 27, 0xaa37);
+		
+		//PHY_REG 27 (1Bh) <- 0040h
+		phy_write(db, 27, 0x0040);
+		//PHY_REG 27 (1Bh) <- AA40h
+		phy_write(db, 27, 0xaa40);
+		
+		//For long code:
+		//PHY_REG 27 (1Bh) <- 0050h
+		phy_write(db, 27, 0x0050);
+		//PHY_REG 27 (1Bh) <- AA50h
+		phy_write(db, 27, 0xaa50);
+		
+		//PHY_REG 27 (1Bh) <- 006Bh
+		phy_write(db, 27, 0x006b);
+		//PHY_REG 27 (1Bh) <- AA6Bh
+		phy_write(db, 27, 0xaa6b);
+		
+		//PHY_REG 27 (1Bh) <- 007Dh
+		phy_write(db, 27, 0x007d);
+		//PHY_REG 27 (1Bh) <- AA7Dh
+		phy_write(db, 27, 0xaa7d);
+		
+		//PHY_REG 27 (1Bh) <- 008Dh
+		phy_write(db, 27, 0x008d);
+		//PHY_REG 27 (1Bh) <- AA8Dh
+		phy_write(db, 27, 0xaa8d);
+		
+		//PHY_REG 27 (1Bh) <- 009Ch
+		phy_write(db, 27, 0x009c);
+		//PHY_REG 27 (1Bh) <- AA9Ch
+		phy_write(db, 27, 0xaa9c);
+		
+		//PHY_REG 27 (1Bh) <- 00A3h
+		phy_write(db, 27, 0x00a3);
+		//PHY_REG 27 (1Bh) <- AAA3h
+		phy_write(db, 27, 0xaaa3);
+		
+		//PHY_REG 27 (1Bh) <- 00B1h
+		phy_write(db, 27, 0x00b1);
+		//PHY_REG 27 (1Bh) <- AAB1h
+		phy_write(db, 27, 0xaab1);
+		
+		//PHY_REG 27 (1Bh) <- 00C0h
+		phy_write(db, 27, 0x00c0);
+		//PHY_REG 27 (1Bh) <- AAC0h
+		phy_write(db, 27, 0xaac0);
+		
+		//PHY_REG 27 (1Bh) <- 00D2h
+		phy_write(db, 27, 0x00d2);
+		//PHY_REG 27 (1Bh) <- AAD2h
+		phy_write(db, 27, 0xaad2);
+		
+		//PHY_REG 27 (1Bh) <- 00E0h
+		phy_write(db, 27, 0x00e0);
+		//PHY_REG 27 (1Bh) <- AAE0h
+		phy_write(db, 27, 0xaae0);
+		//PHY_REG 27 (1Bh) <- 0000h
+		phy_write(db, 27, 0x0000);
+	}
 }
 
 /* 
@@ -441,11 +666,18 @@ static void dmfe_init_dm9000(struct net_device *dev)
 	board_info_t *db = (board_info_t *)dev->priv;
 	DMFE_DBUG(0, "dmfe_init_dm9000()", 0);
 
+	spin_lock_init(&db->lock);
+	
+#if 0
 	/* set the internal PHY power-on, GPIOs normal, and wait 2ms */
-	iow(db, DM9KS_GPR, 1); 	/* Power-Down PHY */
-	udelay(500);
 	iow(db, DM9KS_GPR, 0);	/* GPR (reg_1Fh)bit GPIO0=0 pre-activate PHY */
-	udelay(20);		/* wait 2ms for PHY power-on ready */
+	mdelay(20);		/* wait for PHY power-on ready */
+	iow(db, DM9KS_GPR, 1); 	/* Power-Down PHY */
+	mdelay(1000);		/* compatible with rtl8305s */
+	mdelay(600);		/* compatible with rtl8305s */
+#endif 
+	iow(db, DM9KS_GPR, 0);	/* GPR (reg_1Fh)bit GPIO0=0 pre-activate PHY */
+	mdelay(20);		/* wait for PHY power-on ready */
 
 	/* do a software reset and wait 20us */
 	iow(db, DM9KS_NCR, 3);
@@ -467,14 +699,38 @@ static void dmfe_init_dm9000(struct net_device *dev)
 	iow(db, DM9KS_SMCR, 0);		/* Special Mode */
 	iow(db, DM9KS_NSR, 0x2c);	/* clear TX status */
 	iow(db, DM9KS_ISR, 0x0f); 	/* Clear interrupt status */
-
-	/* Added by jackal at 03/29/2004 */
-#if defined(CHECKSUM)
-	iow(db, DM9KS_TCCR, 0x07);	/* TX UDP/TCP/IP checksum enable */
-	iow(db, DM9KS_RCSR, 0x02);	/*Receive checksum enable */
+	iow(db, DM9KS_TCR2, 0x80);	/* Set LED mode 1 */
+	if (db->chip_revision == 0x1A){ /* DM9000B */
+		/* Data bus current driving/sinking capability  */
+		iow(db, DM9KS_BUSCR, 0x01);	/* default: 2mA */
+	}
+#ifdef FLOW_CONTROL
+	iow(db, DM9KS_BPTR, 0x37);
+	iow(db, DM9KS_FCTR, 0x38);
+	iow(db, DM9KS_FCR, 0x29);
 #endif
 
-#if defined(ETRANS)
+#ifdef DM8606
+	iow(db,0x34,1);
+#endif
+
+	if (dev->features & NETIF_F_HW_CSUM){
+		printk(KERN_INFO "DM9KS:enable TX checksum\n");
+		iow(db, DM9KS_TCCR, 0x07);	/* TX UDP/TCP/IP checksum enable */
+	}
+	if (db->rx_csum){
+		printk(KERN_INFO "DM9KS:enable RX checksum\n");
+		iow(db, DM9KS_RCSR, 0x02);	/* RX checksum enable */
+	}
+
+#ifdef ETRANS
+	/*If TX loading is heavy, the driver can try to anbel "early transmit".
+	The programmer can tune the "Early Transmit Threshold" to get 
+	the optimization. (DM9KS_ETXCSR.[1-0])
+	
+	Side Effect: It will happen "Transmit under-run". When TX under-run
+	always happens, the programmer can increase the value of "Early 
+	Transmit Threshold". */
 	iow(db, DM9KS_ETXCSR, 0x83);
 #endif
  
@@ -482,14 +738,13 @@ static void dmfe_init_dm9000(struct net_device *dev)
 	dm9000_hash_table(dev);
 
 	/* Activate DM9000A/DM9010 */
+	iow(db, DM9KS_IMR, DM9KS_REGFF); /* Enable TX/RX interrupt mask */
 	iow(db, DM9KS_RXCR, DM9KS_REG05 | 1);	/* RX enable */
-	iow(db, DM9KS_IMR, DM9KS_REGFF); 	// Enable TX/RX interrupt mask
- 
+	
 	/* Init Driver variable */
 	db->tx_pkt_cnt 		= 0;
 		
 	netif_carrier_on(dev);
-	spin_lock_init(&db->lock);
 
 }
 
@@ -502,20 +757,32 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	board_info_t *db = (board_info_t *)dev->priv;
 	char * data_ptr;
 	int i, tmplen;
-	if(db->Speed == 10)
-		{if (db->tx_pkt_cnt >= 1) return 1;}
-	else
-		{if (db->tx_pkt_cnt >= 2) return 1;}
+	
+	DMFE_DBUG(0, "dmfe_start_xmit", 0);
+	if (db->chip_revision != 0x1A)
+	{	/* DM9000A */
+		if(db->Speed == 10)
+			{if (db->tx_pkt_cnt >= 1) return 1;}
+		else
+			{if (db->tx_pkt_cnt >= 2) return 1;}
+	}else
+		/* DM9000B */
+		if (db->tx_pkt_cnt >= 2) return 1;
 	
 	/* packet counting */
 	db->tx_pkt_cnt++;
 
 	db->stats.tx_packets++;
 	db->stats.tx_bytes+=skb->len;
-	if (db->Speed == 10)
-		{if (db->tx_pkt_cnt >= 1) netif_stop_queue(dev);}
-	else
-		{if (db->tx_pkt_cnt >= 2) netif_stop_queue(dev);}
+	if (db->chip_revision != 0x1A)
+	{	/* DM9000A */
+		if (db->Speed == 10)
+			{if (db->tx_pkt_cnt >= 1) netif_stop_queue(dev);}
+		else
+			{if (db->tx_pkt_cnt >= 2) netif_stop_queue(dev);}
+	}else
+		/* DM9000B */
+		if (db->tx_pkt_cnt >= 2) netif_stop_queue(dev);		
 
 	/* Disable all interrupt */
 	iow(db, DM9KS_IMR, DM9KS_DISINTR);
@@ -546,7 +813,7 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 			break;
 	}
 	
-#if !defined(ETRANS)
+#ifndef ETRANS
 	/* Issue TX polling command */
 	iow(db, DM9KS_TCR, 0x1); /* Cleared after TX complete*/
 #endif
@@ -583,7 +850,7 @@ static int dmfe_stop(struct net_device *dev)
 
 	/* RESET devie */
 	phy_write(db, 0x00, 0x8000);	/* PHY RESET */
-	iow(db, DM9KS_GPR, 0x01); 	/* Power-Down PHY */
+	//iow(db, DM9KS_GPR, 0x01); 	/* Power-Down PHY */
 	iow(db, DM9KS_IMR, DM9KS_DISINTR);	/* Disable all interrupt */
 	iow(db, DM9KS_RXCR, 0x00);	/* Disable RX */
 
@@ -609,18 +876,23 @@ static void dmfe_tx_done(unsigned long unused)
 	DMFE_DBUG(0, "dmfe_tx_done()", 0);
 	
 	nsr = ior(db, DM9KS_NSR);
-	if(nsr & 0x04) db->tx_pkt_cnt--;
-	if(nsr & 0x08) db->tx_pkt_cnt--;
-
-	if (db->tx_pkt_cnt < 0)
+	if (nsr & 0x0c)
 	{
-		printk("[dmfe_tx_done] tx_pkt_cnt ERROR!!\n");
-		db->tx_pkt_cnt =0;
+		if(nsr & 0x04) db->tx_pkt_cnt--;
+		if(nsr & 0x08) db->tx_pkt_cnt--;
+		if(db->tx_pkt_cnt < 0)
+		{
+			printk(KERN_DEBUG "DM9KS:tx_pkt_cnt ERROR!!\n");
+			while(ior(db,DM9KS_TCR) & 0x1){}
+			db->tx_pkt_cnt = 0;
+		}
+			
+	}else{
+		while(ior(db,DM9KS_TCR) & 0x1){}
+		db->tx_pkt_cnt = 0;
 	}
-	if (db->Speed == 10)
-		{if(db->tx_pkt_cnt < 1 ) netif_wake_queue(dev);}
-	else		
-		{if(db->tx_pkt_cnt < 2 ) netif_wake_queue(dev);}
+		
+	netif_wake_queue(dev);
 	
 	return;
 }
@@ -629,7 +901,15 @@ static void dmfe_tx_done(unsigned long unused)
   DM9000 insterrupt handler
   receive the packet to upper layer, free the transmitted packet
 */
-static irqreturn_t dmfe_interrupt(int irq, void *dev_id)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
+static void dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+#else
+	#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+	static irqreturn_t dmfe_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+	#else
+	static irqreturn_t dmfe_interrupt(int irq, void *dev_id) /* for kernel 2.6.20*/
+	#endif
+#endif
 {
 	struct net_device *dev = dev_id;
 	board_info_t *db;
@@ -710,19 +990,58 @@ static struct net_device_stats * dmfe_get_stats(struct net_device *dev)
 	DMFE_DBUG(0, "dmfe_get_stats", 0);
 	return &db->stats;
 }
+/*
+ *	Process the ethtool ioctl command
+ */
+static int dmfe_ethtool_ioctl(struct net_device *dev, void *useraddr)
+{
+	//struct dmfe_board_info *db = dev->priv;
+	struct ethtool_drvinfo info = { ETHTOOL_GDRVINFO };
+	u32 ethcmd;
 
+	if (copy_from_user(&ethcmd, useraddr, sizeof(ethcmd)))
+		return -EFAULT;
+
+	switch (ethcmd) 
+	{
+		case ETHTOOL_GDRVINFO:
+			strcpy(info.driver, DRV_NAME);
+			strcpy(info.version, DRV_VERSION);
+
+			sprintf(info.bus_info, "ISA 0x%lx %d",dev->base_addr, dev->irq);
+			if (copy_to_user(useraddr, &info, sizeof(info)))
+				return -EFAULT;
+			return 0;
+	}
+
+	return -EOPNOTSUPP;
+}
 /*
   Process the upper socket ioctl command
 */
 static int dmfe_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
+	board_info_t *db = (board_info_t *)dev->priv;
+    	int rc=0;
+    	
 	DMFE_DBUG(0, "dmfe_do_ioctl()", 0);
-	return 0;
+	
+    	if (!netif_running(dev))
+    		return -EINVAL;
+
+    	if (cmd == SIOCETHTOOL)
+        rc = dmfe_ethtool_ioctl(dev, (void *) ifr->ifr_data);
+	else {
+		spin_lock_irq(&db->lock);
+		rc = generic_mii_ioctl(&db->mii, if_mii(ifr), cmd, NULL);
+		spin_unlock_irq(&db->lock);
+	}
+
+	return rc;
 }
 
 /* Our watchdog timed out. Called by the networking layer */
-static void
-dmfe_timeout(struct net_device *dev)
+static void dmfe_timeout(struct net_device *dev)
 {
 	board_info_t *db = (board_info_t *)dev->priv;
 
@@ -737,7 +1056,6 @@ dmfe_timeout(struct net_device *dev)
 	printk("faH=0x%02x  fbH=0x%02x\n",ior(db,0xfa),ior(db,0xfb));
 #endif
 	dmfe_reset(dev);
-	
 }
 
 static void dmfe_reset(struct net_device * dev)
@@ -791,7 +1109,7 @@ static void dmfe_timer(unsigned long data)
 	return;
 }
 
-#if !defined(CHECKSUM)
+#ifndef CHECKSUM
 #define check_rx_ready(a)	((a) == 0x01)
 #else
 inline u8 check_rx_ready(u8 rxbyte)
@@ -820,6 +1138,8 @@ static void dmfe_packet_receive(struct net_device *dev)
 
 	DMFE_DBUG(0, "dmfe_packet_receive()", 0);
 
+	db->cont_rx_pkt_cnt=0;
+	
 	do {
 		/*store the value of Memory Data Read address register*/
 		MDRAH=ior(db, DM9KS_MDRAH);
@@ -940,7 +1260,7 @@ static void dmfe_packet_receive(struct net_device *dev)
 		
 			/* Pass to upper layer */
 			skb->protocol = eth_type_trans(skb,dev);
-#if defined(CHECKSUM)
+#ifdef CHECKSUM
 			if (val == 0x01)
 				skb->ip_summed = CHECKSUM_UNNECESSARY;
 #endif
@@ -949,6 +1269,29 @@ static void dmfe_packet_receive(struct net_device *dev)
 			db->stats.rx_packets++;
 			db->stats.rx_bytes += rx.desc.length;
 			db->cont_rx_pkt_cnt++;
+#ifdef DBUG /* check RX FIFO pointer */
+			u16 MDRAH1, MDRAL1;
+			u16 tmp_ptr;
+			MDRAH1 = ior(db,DM9KS_MDRAH);
+			MDRAL1 = ior(db,DM9KS_MDRAL);
+			tmp_ptr = (MDRAH<<8)|MDRAL;
+			switch (db->io_mode)
+			{
+				case DM9KS_BYTE_MODE:
+					tmp_ptr += rx.desc.length+4;
+					break;
+				case DM9KS_WORD_MODE:
+					tmp_ptr += ((rx.desc.length+1)/2)*2+4;
+					break;
+				case DM9KS_DWORD_MODE:
+					tmp_ptr += ((rx.desc.length+3)/4)*4+4;
+					break;
+			}
+			if (tmp_ptr >=0x4000)
+				tmp_ptr = (tmp_ptr - 0x4000) + 0xc00;
+			if (tmp_ptr != ((MDRAH1<<8)|MDRAL1))
+				printk("[dm9ks:RX FIFO ERROR\n");
+#endif
 				
 			if (db->cont_rx_pkt_cnt>=CONT_RX_PKT_CNT)
 			{
@@ -969,7 +1312,7 @@ static u16 read_srom_word(board_info_t *db, int offset)
 {
 	iow(db, DM9KS_EPAR, offset);
 	iow(db, DM9KS_EPCR, 0x4);
-	udelay(200);
+	while(ior(db, DM9KS_EPCR)&0x1);	/* Wait read complete */
 	iow(db, DM9KS_EPCR, 0x0);
 	return (ior(db, DM9KS_EPDRL) + (ior(db, DM9KS_EPDRH) << 8) );
 }
@@ -987,6 +1330,25 @@ static void dm9000_hash_table(struct net_device *dev)
 
 	DMFE_DBUG(0, "dm9000_hash_table()", 0);
 
+	/* enable promiscuous mode */
+	if (dev->flags & IFF_PROMISC){
+		//printk(KERN_INFO "DM9KS:enable promiscuous mode\n");
+		iow(db, DM9KS_RXCR, ior(db,DM9KS_RXCR)|(1<<1));
+		return;
+	}else{
+		//printk(KERN_INFO "DM9KS:disable promiscuous mode\n");
+		iow(db, DM9KS_RXCR, ior(db,DM9KS_RXCR)&(~(1<<1)));
+	}
+		
+	/* Receive all multicast packets */
+	if (dev->flags & IFF_ALLMULTI){
+		//printk(KERN_INFO "DM9KS:Pass all multicast\n");
+		iow(db, DM9KS_RXCR, ior(db,DM9KS_RXCR)|(1<<3));
+	}else{
+		//printk(KERN_INFO "DM9KS:Disable pass all multicast\n");
+		iow(db, DM9KS_RXCR, ior(db,DM9KS_RXCR)&(~(1<<3)));
+	}
+	
 	/* Set Node address */
 	for (i = 0, oft = 0x10; i < 6; i++, oft++)
 		iow(db, oft, dev->dev_addr[i]);
@@ -1017,21 +1379,31 @@ static void dm9000_hash_table(struct net_device *dev)
          0 : return the normal CRC (for Hash Table index)
 */
 static unsigned long cal_CRC(unsigned char * Data, unsigned int Len, u8 flag)
-{
-	
+{	
 	u32 crc = ether_crc_le(Len, Data);
 
 	if (flag) 
 		return ~crc;
 		
-	return crc;
-	 
+	return crc;	 
+}
+
+static int mdio_read(struct net_device *dev, int phy_id, int location)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	return phy_read(db, location);
+}
+
+static void mdio_write(struct net_device *dev, int phy_id, int location, int val)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	phy_write(db, location, val);
 }
 
 /*
    Read a byte from I/O port
 */
-static u8 ior(board_info_t *db, int reg)
+u8 ior(board_info_t *db, int reg)
 {
 	outb(reg, db->io_addr);
 	return inb(db->io_data);
@@ -1040,7 +1412,7 @@ static u8 ior(board_info_t *db, int reg)
 /*
    Write a byte to I/O port
 */
-static void iow(board_info_t *db, int reg, u8 value)
+void iow(board_info_t *db, int reg, u8 value)
 {
 	outb(reg, db->io_addr);
 	outb(value, db->io_data);
@@ -1055,7 +1427,7 @@ static u16 phy_read(board_info_t *db, int reg)
 	iow(db, DM9KS_EPAR, DM9KS_PHY | reg);
 
 	iow(db, DM9KS_EPCR, 0xc); 	/* Issue phyxcer read command */
-	udelay(100);			/* Wait read complete */
+	while(ior(db, DM9KS_EPCR)&0x1);	/* Wait read complete */
 	iow(db, DM9KS_EPCR, 0x0); 	/* Clear phyxcer read command */
 
 	/* The read data keeps on REG_0D & REG_0E */
@@ -1076,18 +1448,131 @@ static void phy_write(board_info_t *db, int reg, u16 value)
 	iow(db, DM9KS_EPDRH, ( (value >> 8) & 0xff));
 
 	iow(db, DM9KS_EPCR, 0xa);	/* Issue phyxcer write command */
-	udelay(500);			/* Wait write complete */
+	while(ior(db, DM9KS_EPCR)&0x1);	/* Wait read complete */
 	iow(db, DM9KS_EPCR, 0x0);	/* Clear phyxcer write command */
 }
+//====dmfe_ethtool_ops member functions====
+static void dmfe_get_drvinfo(struct net_device *dev,
+			       struct ethtool_drvinfo *info)
+{
+	//board_info_t *db = (board_info_t *)dev->priv;
+	strcpy(info->driver, DRV_NAME);
+	strcpy(info->version, DRV_VERSION);
+	sprintf(info->bus_info, "ISA 0x%lx irq=%d",dev->base_addr, dev->irq);
+}
+static int dmfe_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	spin_lock_irq(&db->lock);
+	mii_ethtool_gset(&db->mii, cmd);
+	spin_unlock_irq(&db->lock);
+	return 0;
+}
+static int dmfe_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	int rc;
 
+	spin_lock_irq(&db->lock);
+	rc = mii_ethtool_sset(&db->mii, cmd);
+	spin_unlock_irq(&db->lock);
+	return rc;
+}
+/*
+* Check the link state
+*/
+static u32 dmfe_get_link(struct net_device *dev)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	return mii_link_ok(&db->mii);
+}
+
+/*
+* Reset Auto-negitiation
+*/
+static int dmfe_nway_reset(struct net_device *dev)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	return mii_nway_restart(&db->mii);
+}
+/*
+* Get RX checksum offload state
+*/
+static uint32_t dmfe_get_rx_csum(struct net_device *dev)
+{
+	board_info_t *db = (board_info_t *)dev->priv;
+	return db->rx_csum;
+}
+/*
+* Get TX checksum offload state
+*/
+static uint32_t dmfe_get_tx_csum(struct net_device *dev)
+{
+	return (dev->features & NETIF_F_HW_CSUM) != 0;
+}
+/* 
+* Enable/Disable RX checksum offload
+*/
+static int dmfe_set_rx_csum(struct net_device *dev, uint32_t data)
+{
+#ifdef CHECKSUM
+	board_info_t *db = (board_info_t *)dev->priv;
+	db->rx_csum = data;
+
+	if(netif_running(dev)) {
+		dmfe_stop(dev);
+		dmfe_open(dev);
+	} else
+		dmfe_init_dm9000(dev);
+#else
+	printk(KERN_ERR "DM9:Don't support checksum\n");
+#endif
+	return 0;
+}
+/* 
+* Enable/Disable TX checksum offload
+*/
+static int dmfe_set_tx_csum(struct net_device *dev, uint32_t data)
+{
+#ifdef CHECKSUM
+	if (data)
+		dev->features |= NETIF_F_HW_CSUM;
+	else
+		dev->features &= ~NETIF_F_HW_CSUM;
+#else
+	printk(KERN_ERR "DM9:Don't support checksum\n");
+#endif
+
+	return 0;
+}
+//=========================================
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,28)  /* for kernel 2.4.28 */
+static struct ethtool_ops dmfe_ethtool_ops = {
+	.get_drvinfo		= dmfe_get_drvinfo,
+	.get_settings		= dmfe_get_settings,
+	.set_settings		= dmfe_set_settings,
+	.get_link			= dmfe_get_link,
+	.nway_reset		= dmfe_nway_reset,
+	.get_rx_csum		= dmfe_get_rx_csum,
+	.set_rx_csum		= dmfe_set_rx_csum,
+	.get_tx_csum		= dmfe_get_tx_csum,
+	.set_tx_csum		= dmfe_set_tx_csum,
+};
+#endif
 
 #ifdef MODULE
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Davicom DM9000A/DM9010 ISA/uP Fast Ethernet Driver");
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0) 
 MODULE_PARM(mode, "i");
 MODULE_PARM(irq, "i");
 MODULE_PARM(iobase, "i");
+#else
+module_param(mode, int, 0);
+module_param(irq, int, 0);
+module_param(iobase, int, 0);
+#endif           
 MODULE_PARM_DESC(mode,"Media Speed, 0:10MHD, 1:10MFD, 4:100MHD, 5:100MFD");
 MODULE_PARM_DESC(irq,"EtherLink IRQ number");
 MODULE_PARM_DESC(iobase, "EtherLink I/O base address");
@@ -1096,7 +1581,7 @@ MODULE_PARM_DESC(iobase, "EtherLink I/O base address");
    when user used insmod to add module, system invoked init_module()
    to initilize and register.
 */
-int init_module(void)
+int __init init_module(void)
 {
 	switch(mode) {
 		case DM9KS_10MHD:
@@ -1108,7 +1593,7 @@ int init_module(void)
 		default:
 			media_mode = DM9KS_AUTO;
 	}
-	dmfe_dev = dm9ks_probe();
+	dmfe_dev = dmfe_probe();
 	if(IS_ERR(dmfe_dev))
 		return PTR_ERR(dmfe_dev);
 	return 0;
@@ -1117,7 +1602,7 @@ int init_module(void)
    when user used rmmod to delete module, system invoked clean_module()
    to  un-register DEVICE.
 */
-void cleanup_module(void)
+void __exit cleanup_module(void)
 {
 	struct net_device *dev = dmfe_dev;
 	DMFE_DBUG(0, "clean_module()", 0);
