@@ -166,6 +166,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libatm/src/lib/.libs/*.a \
 	$(ROOTDIR)/lib/libdes/*.a \
 	$(ROOTDIR)/lib/libaes/*.a \
+	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.a \
 	$(ROOTDIR)/lib/libpam/build/libpam*/.libs/*.so \
 	$(ROOTDIR)/lib/libpcap/build/*.a \
 	$(ROOTDIR)/lib/libnet/*.a \
@@ -176,7 +177,9 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libcurl/build/lib/.libs/libcurl.so \
 	$(ROOTDIR)/lib/libssl/build/*.so* \
 	$(ROOTDIR)/lib/libssl/build/*.a \
+	$(ROOTDIR)/lib/zlib/libz.a* \
 	$(ROOTDIR)/lib/zlib/libz.so* \
+	$(ROOTDIR)/lib/libbzip2/libbz2.a* \
 	$(ROOTDIR)/lib/libbzip2/libbz2.so* \
 	$(ROOTDIR)/lib/libatm/src/lib/*.so* $(ROOTDIR)/lib/libatm/src/lib/*.a \
 	$(ROOTDIR)/lib/libcrypt_old/libcrypt_old.a \
@@ -185,6 +188,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/pcre/builddir/.libs/*.a \
 	$(ROOTDIR)/prop/libsnapgear++/*.a $(ROOTDIR)/prop/libsnapgear++/*.so* \
 	$(ROOTDIR)/prop/libsnapgear/*.a $(ROOTDIR)/prop/libsnapgear/*.so* \
+	$(ROOTDIR)/user/tinytcl/*.a $(ROOTDIR)/user/tinytcl/*.a* \
 	$(ROOTDIR)/user/tinytcl/*.a $(ROOTDIR)/user/tinytcl/*.so* \
 	$(ROOTDIR)/user/tcl/build/*.a \
 	$(ROOTDIR)/prop/config/*.a $(ROOTDIR)/prop/config/*.so* \
@@ -197,15 +201,20 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/lzo/build/src/.libs/*.a \
 	$(ROOTDIR)/lib/osip2/build/install/lib/*.a \
 	$(ROOTDIR)/prop/libsscep/*.a \
+	$(ROOTDIR)/prop/statsd/*.a \
 	$(ROOTDIR)/prop/statsd/*.so \
 	$(ROOTDIR)/lib/libefence/*.a \
 	$(ROOTDIR)/lib/termcap/*.a \
 	$(ROOTDIR)/lib/sysfsutils/build/lib/.libs/*.a \
+	$(ROOTDIR)/lib/libnl/lib/*.a* \
 	$(ROOTDIR)/lib/libnl/lib/*.so* \
+	$(ROOTDIR)/lib/libnfnetlink/build/src/.libs/*.a* \
 	$(ROOTDIR)/lib/libnfnetlink/build/src/.libs/*.so* \
 	$(ROOTDIR)/lib/libnfnetlink/build/libnfnetlink.pc \
+	$(ROOTDIR)/lib/libnetfilter_conntrack/build/src/.libs/*.a* \
 	$(ROOTDIR)/lib/libnetfilter_conntrack/build/src/.libs/*.so* \
 	$(ROOTDIR)/lib/libnetfilter_conntrack/build/libnetfilter_conntrack.pc \
+	$(ROOTDIR)/lib/libnetfilter_log/build/src/.libs/*.a* \
 	$(ROOTDIR)/lib/libnetfilter_log/build/src/.libs/*.so* \
 	$(ROOTDIR)/lib/libnetfilter_log/build/libnetfilter_log.pc \
 	$(ROOTDIR)/lib/libiberty/build/*.a \
