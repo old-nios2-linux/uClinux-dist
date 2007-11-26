@@ -42,6 +42,8 @@ romfs:
 
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
+	-rm $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio.gz
+	LDFLAGS="" $(MAKEARCH_KERNEL) -C $(ROOTDIR)/$(LINUXDIR) $(LINUXTARGET)
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/nios2/boot/zImage $(KERNELZ)
 
 
