@@ -87,6 +87,7 @@ nod /dev/tty6 666 0 0 c 4 6
 nod /dev/tty7 666 0 0 c 4 7
 nod /dev/zero 666 0 0 c 1 5
 nod /dev/console 666 0 0 c 5 1
+nod /dev/lcd16207 666 0 0 c 250 0
 nod /dev/hda10 640 0 0 b 3 10
 nod /dev/hda11 640 0 0 b 3 11
 nod /dev/hda12 640 0 0 b 3 12

@@ -98,7 +98,7 @@ config SERIAL_NONSTANDARD
 	  Most people can say N here.
 
 config NIOS_LCD_16207
-	bool "Nios LCD 16207 device support"
+	tristate "Nios LCD 16207 device support"
 	depends on NIOS || NIOS2
 	help
 	  This driver supports the Nios LCD 16207 device.
