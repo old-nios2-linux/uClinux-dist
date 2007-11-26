@@ -18,7 +18,9 @@
  */
 #define MAJOR_NUM 250
 
-//altera uses a struct for the address to na_lcd_16207_0
+/*
+ * altera uses a struct for the address to na_lcd_16207_0
+ */
 #define ADR_LCD_COMMAND na_lcd_16207_0
 #define ADR_LCD_READY (na_lcd_16207_0 +4)
 #define ADR_LCD_DATA (na_lcd_16207_0 + 8)
@@ -51,10 +53,10 @@
  * The third argument is the type we want to get from 
  * the process to the kernel.
  */
-/* 
- * Set the message of the device driver 
- */
 
+/* 
+ * Set the waiting time for scrolling up one row
+ */
 #define IOCTL_SET_DISP_WAIT _IOR(MAJOR_NUM, 1, unsigned long)
 /*
  * _IOR means that we're creating an ioctl command 
@@ -73,7 +75,7 @@
 
 
 /* 
- * Get the message of the device driver 
+ * Get the message of the display
  */
 #define IOCTL_GET_MSG _IOW(MAJOR_NUM, 2, char *)
 /* 
@@ -84,7 +86,7 @@
  */
 
 /* 
- * Get the n'th byte of the message 
+ * not working yet -Get the n'th byte of the message 
  */
 #define IOCTL_GET_NTH_BYTE _IOWR(MAJOR_NUM, 3, int)
 /* 
@@ -125,14 +127,17 @@
 #define LCD_Set_Cursor_Pos 17
 #define LCD_Blink_Off 18
 
-// Internal LCD signals
+/*
+ * Internal LCD signals
+ */
 #define    LCD_E   0x400 // R/W-signal wired to LCD_RS/LCD_RW
 #define    LCD_RS  0x200
 #define    LCD_RW  0x100
 #define    LCD_DATA  0x0FF
 
-// LCD Device Commands
-
+/*
+ * LCD Device Commands
+ */
 #define    LCD_CMD_CLEAR  0x01
 #define    LCD_CMD_HOME   0x02
 #define    LCD_CMD_MODES  0x04
@@ -146,8 +151,9 @@
 #define    LCD_CMD_RAMDDR 0x80
 #define    LCD_CMD_FILLER 0x00
 
-// Device Parameters
-
+/*
+ * Device Parameters
+ */
 #define    LCD_INTERFACE   0x10     // interface width;1 (8 BITS)/0 (4BITS)
 #define    LCD_NUMROWS     0x08  // # of display rows; 1 (2 ROWS)/0 (1ROW)
 #define    LCD_PIXEL       0x04  // character pixel;    1(5x10 dots)/0 (5x7 dot)
@@ -174,9 +180,9 @@
  */
 static void WriteNios(unsigned long addr, unsigned long value);
    
-///* 
-// * The function to read from nios
-// */
+/* 
+ * The function to read from nios
+ */
 static unsigned long ReadNios(unsigned long addr);
 
 /* 
@@ -190,7 +196,7 @@ static void WaitNios(unsigned long us);
 static void LcdWriteLines(void);
 
 /* 
- * The function to write the buffer to the display
+ * The function to read the display to a buffer
  */
 static void LcdReadLines(void);
 
