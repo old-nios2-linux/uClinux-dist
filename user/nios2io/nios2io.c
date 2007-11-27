@@ -97,25 +97,29 @@ int main(int argc, char **argv, char **envp){
                 printf("wh - write the hex string of [value] to the address\n");
                 printf("Rh - same as parameter rh but with verbose output\n"); 
                 printf("Wh - same as parameter wh but with verbose output\n");
+                printf("dd - wait for micro seconds of decimal value [address]\n");
+                printf("Dd - same as parameter dh but with verbose output\n");
+                printf("dh - wait for micro seconds of hex value [address]\n");
+                printf("Dh - same as parameter dh but with verbose output\n");
                 printf("[address]\n"); 
                 printf("address (hex) of the component on the avalon bus\n"); 
                 printf("[value]\n"); 
                 printf("This parameter is only used for writing.\n"); 
                 printf("\n");
                 printf("Examples:\n"); 
-                printf("nios wd 80681070 127\n"); 
-                printf("nios wh 80681070 F\n"); 
-                printf("nios rd 806810A0 \n"); 
-                printf("nios rh 806810A0 \n"); 
-                printf("nios dd 120\n"); 
-                printf("nios dh ABCDEF\n"); 
+                printf("nios2io wd 80681070 127\n"); 
+                printf("nios2io wh 80681070 F\n"); 
+                printf("nios2io rd 806810A0 \n"); 
+                printf("nios2io rh 806810A0 \n"); 
+                printf("nios2io dd 120\n"); 
+                printf("nios2io dh ABCDEF\n"); 
                 printf("\n");
                 return 0;
         }
 
         if (choose>0){
       
-                printf("choose:%5i, command:%10s, %10s\n", argc, y, argv[1]);
+                //printf("choose:%5i, command:%10s, %10s\n", argc, y, argv[1]);
       
                 if (choose==1) {//read value
                         char hexStr1[11];

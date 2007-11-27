@@ -6,7 +6,7 @@
 EXEC	= nios2io
 OBJS	= nios2io.o
 
-CFLAGS	 += -I$(LINUXDIR)/include
+CFLAGS	 += -I$(ROOTDIR)/$(LINUXDIR)/include
 FLTFLAGS += -s 1024
 
 all: $(EXEC)
