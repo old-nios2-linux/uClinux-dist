@@ -249,6 +249,7 @@ dir_$(CONFIG_USER_NET_TOOLS_IPTUNNEL)       += net-tools
 dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL)       += net-tools
 dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL_FEC)   += mii-tool-fec
 dir_$(CONFIG_USER_NETSTAT_NAT_NETSTAT_NAT)  += netstat-nat
+dir_$(CONFIG_USER_NIOS2IO_NIOS2IO)          += nios2io
 dir_$(CONFIG_USER_NOOOM_NOOOM)              += nooom
 dir_$(CONFIG_USER_NMAP_NMAP)                += nmap
 dir_$(CONFIG_USER_NTPCLIENT_NTPCLIENT)      += ntpclient

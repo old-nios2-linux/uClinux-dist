@@ -4355,6 +4355,13 @@ config POOR_ENTROPY
 	  The system does not produce enough entropy to make /dev/random usable,
 	  so point /dev/random to /dev/urandom.
 
+config USER_NIOS2IO_NIOS2IO
+        bool "Access the NIOS2 Avalon bus"
+        help
+          The command line tool reads and writes
+          hex and decimal values to the nios2 avalon bus.
+          Also a delay function is implemented.
+
 endmenu
 
 #############################################################################
