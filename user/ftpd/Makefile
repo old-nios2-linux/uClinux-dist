@@ -26,6 +26,10 @@ EXTRALIBS = $(LIBCRYPT)
 
 all: $(EXEC)
 
+ftpcmd.c: %.c: %.y
+	$(YACC) $<
+	-mv -f y.tab.c $@
+
 $(EXEC): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(EXTRALIBS) $(LDLIBS)
 
