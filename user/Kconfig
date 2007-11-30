@@ -2831,6 +2831,11 @@ config USER_GDBSERVER_GDBSERVER
 	  server. (old version - mk68k targets only)
 	  Approx. binary size: 14k
 
+config USER_DEBUG_DEBUG
+	bool "debug"
+	help
+	  Nios2 debug application stub
+
 config USER_GREP_GREP
 	bool "grep"
 	help
