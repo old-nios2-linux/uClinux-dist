@@ -44,13 +44,13 @@
 /* #undef HAVE_ATTR_WEAK_REFS */
 
 /* Define to 1 if you have the `bcmp' function. */
-#define HAVE_BCMP 1
+#undef HAVE_BCMP
 
 /* Define to 1 if you have the `bcopy' function. */
-#define HAVE_BCOPY 1
+#undef HAVE_BCOPY
 
 /* Define to 1 if you have the `bzero' function. */
-#define HAVE_BZERO 1
+#undef HAVE_BZERO
 
 /* Define to 1 if the system has the type `cc_t'. */
 #define HAVE_CC_T 1
