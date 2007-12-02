@@ -464,8 +464,8 @@ int main(int argc, char *argv[])
 		    while((ut = getutent())) {
 			if(ut->ut_pid == pid) {
 			    time(&ut->ut_time);
-			    bzero(&ut->ut_user, UT_NAMESIZE);
-			    bzero(&ut->ut_host, sizeof(ut->ut_host));
+			    memset(&ut->ut_user, 0, UT_NAMESIZE);
+			    memset(&ut->ut_host, 0, sizeof(ut->ut_host));
 			    ut->ut_type = DEAD_PROCESS;
 			    ut->ut_pid = 0;
 			    ut->ut_addr = 0;
@@ -625,7 +625,7 @@ void spawn(int i)
 }
 
 static void init_itab(struct initline *p) {
-	bzero(p, sizeof(struct initline));
+  memset(p, 0, sizeof(struct initline));
 	p->pid = -1;
 	p->nextrun = time(NULL);
 }
@@ -967,9 +967,9 @@ void write_wtmp(void)
     int fd;
     struct utmp ut;
     
-    bzero((char *)&ut, sizeof(ut));
+    memset((char *)&ut, 0, sizeof(ut));
     strcpy(ut.ut_line, "~");
-    bzero(ut.ut_name, sizeof(ut.ut_name));
+    memset(ut.ut_name, 0, sizeof(ut.ut_name));
     time(&ut.ut_time);
     ut.ut_type = BOOT_TIME;
     
