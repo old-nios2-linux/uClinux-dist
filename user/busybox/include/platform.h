@@ -208,7 +208,7 @@ typedef unsigned smalluint;
  * for a mmu-less system; the user should pass EXTRA_CFLAGS="-DBB_NOMMU"
  * on his own.
  */
-#if defined __uClinux__ || defined __UCLIBC__ && __UCLIBC_MAJOR__ >= 0 && __UCLIBC_MINOR__ >= 9 && \
+#if defined __UCLIBC__ && __UCLIBC_MAJOR__ >= 0 && __UCLIBC_MINOR__ >= 9 && \
     __UCLIBC_SUBLEVEL__ > 28 && !defined __ARCH_USE_MMU__
 #define BB_NOMMU
 #endif
