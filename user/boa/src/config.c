@@ -322,7 +322,7 @@ embedparse(FILE *fp)
 	if (fp == NULL)
 		return(-1);
 	
-	bzero(arg, sizeof(arg));
+	memset(arg, 0, sizeof(arg));
 	
 	line = 0;
 	while (fgets(buf, sizeof(buf), fp)) {

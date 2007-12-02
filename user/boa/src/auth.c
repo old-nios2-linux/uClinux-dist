@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <fcntl.h>
-#include <strings.h>
+#include <string.h>
 #ifdef __UC_LIBC__
 #include <unistd.h>
 #else
@@ -365,7 +365,7 @@ int auth_authorize(request * req)
 							break;
 #endif
 					}
-					bzero(current_client, sizeof(current_client));
+					memset(current_client, 0, sizeof(current_client));
 					send_r_unauthorized(req,server_name);
 					return 0;
 				}
