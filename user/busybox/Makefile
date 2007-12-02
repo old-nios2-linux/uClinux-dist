@@ -690,9 +690,12 @@ busybox_unstripped: $(busybox-all) FORCE
 	$(Q)rm -f .old_version
 
 busybox: busybox_unstripped
-	-$(Q)$(STRIP) -s --remove-section=.note --remove-section=.comment \
+ifeq ($(SKIP_STRIP),y)
+	$(Q)cp $< $@
+else
+	$(Q)$(STRIP) -s --remove-section=.note --remove-section=.comment \
 		busybox_unstripped -o $@
-	@[ -f $@ ] || cp busybox_unstripped busybox
+endif
 
 # The actual objects are generated when descending,
 # make sure no implicit rule kicks in

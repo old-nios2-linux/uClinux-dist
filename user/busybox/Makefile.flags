@@ -3,6 +3,8 @@
 # ==========================================================================
 
 BB_VER = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
+export BB_VER
+SKIP_STRIP = n
 
 # -std=gnu99 needed for [U]LLONG_MAX on some systems
 CPPFLAGS += $(call cc-option,-std=gnu99,)
@@ -58,7 +60,13 @@ endif
 ifeq ($(CONFIG_SELINUX),y)
 LDLIBS += -lselinux -lsepol
 endif
+
 #LDFLAGS += -nostdlib
+
+LDFLAGS_ELF2FLT = -Wl,-elf2flt
+ifneq (,$(findstring $(LDFLAGS_ELF2FLT),$(LDFLAGS)))
+SKIP_STRIP = y
+endif
 
 # Busybox is a stack-fatty so make sure we increase default size
 FLTFLAGS += -s 20000
