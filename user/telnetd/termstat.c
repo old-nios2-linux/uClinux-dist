@@ -39,6 +39,7 @@ char termstat_rcsid[] =
   "$Id: termstat.c,v 1.2 2003/07/21 03:11:25 davidm Exp $";
 #endif
 
+#include <string.h>
 #include "telnetd.h"
 
 /*
@@ -605,7 +606,7 @@ defer_terminit()
 	if (def_col || def_row) {
 		struct winsize ws;
 
-		bzero((char *)&ws, sizeof(ws));
+		memset((char *)&ws, 0, sizeof(ws));
 		ws.ws_col = def_col;
 		ws.ws_row = def_row;
 		(void) ioctl(pty, TIOCSWINSZ, (char *)&ws);

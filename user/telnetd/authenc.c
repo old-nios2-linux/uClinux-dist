@@ -26,6 +26,7 @@ char authenc_rcsid[] =
 #endif
 
 #if	defined(ENCRYPT) || defined(AUTHENTICATE)
+#include <string.h>
 #include "telnetd.h"
 #include <libtelnet/misc.h>
 
@@ -35,7 +36,7 @@ net_write(str, len)
     int len;
 {
     if (nfrontp + len < netobuf + BUFSIZ) {
-	bcopy((void *)str, (void *)nfrontp, len);
+	memmove((void *)nfrontp,(void *)str,  len);
 	nfrontp += len;
 	return(len);
     }

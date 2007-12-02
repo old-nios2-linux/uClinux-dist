@@ -67,8 +67,8 @@ logout(const char *line)
 		if (!ut.ut_name[0] || strncmp(ut.ut_line, line, UT_LINESIZE))
 			continue;
 		ut.ut_type = DEAD_PROCESS;
-		bzero(ut.ut_name, UT_NAMESIZE);
-		bzero(ut.ut_host, UT_HOSTSIZE);
+		memset(ut.ut_name, 0, UT_NAMESIZE);
+		memset(ut.ut_host, 0, UT_HOSTSIZE);
 		(void)time(&ut.ut_time);
 		(void)lseek(fd, -(off_t)sizeof(UTMP), L_INCR);
 		(void)write(fd, &ut, sizeof(UTMP));

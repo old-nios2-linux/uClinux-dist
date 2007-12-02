@@ -39,6 +39,7 @@ char state_rcsid[] =
   "$Id: state.c,v 1.3 2003/08/14 05:03:37 gerg Exp $";
 #endif
 
+#include <string.h>
 #include "telnetd.h"
 
 int not42 = 1;
@@ -357,7 +358,7 @@ void telrcv(void) {
 	char xbuf2[BUFSIZ];
 	register char *cp;
 	int n = pfrontp - opfrontp, oc;
-	bcopy(opfrontp, xptyobuf, n);
+	memmove(xptyobuf, opfrontp, n);
 	pfrontp = opfrontp;
 	pfrontp += term_input(xptyobuf, pfrontp, n, BUFSIZ+NETSLOP,
 			      xbuf2, &oc, BUFSIZ);

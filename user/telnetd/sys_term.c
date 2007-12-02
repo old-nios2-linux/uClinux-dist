@@ -39,6 +39,7 @@ char st_rcsid[] =
   "$Id: sys_term.c,v 1.8 2004/12/06 22:35:28 davidm Exp $";
 #endif
 
+#include <string.h>
 #include "telnetd.h"
 #include "pathnames.h"
 #include "logout.h"
@@ -205,7 +206,7 @@ void init_termbuf(void) {
 #if defined(LINEMODE) && defined(TIOCPKT_IOCTL)
 void copy_termbuf(char *cp, int len) {
     if (len > sizeof(termbuf)) len = sizeof(termbuf);
-    bcopy(cp, (char *)&termbuf, len);
+    memmove((char *)&termbuf, cp, len);
     termbuf2 = termbuf;
 }
 #endif /* defined(LINEMODE) && defined(TIOCPKT_IOCTL) */
@@ -215,11 +216,11 @@ void set_termbuf(void) {
      * Only make the necessary changes.
      */
 #ifndef	USE_TERMIO
-    if (bcmp((char *)&termbuf.sg, (char *)&termbuf2.sg, sizeof(termbuf.sg)))
+    if (memcmp((char *)&termbuf.sg, (char *)&termbuf2.sg, sizeof(termbuf.sg)))
 	(void) ioctl(pty, TIOCSETN, (char *)&termbuf.sg);
-    if (bcmp((char *)&termbuf.tc, (char *)&termbuf2.tc, sizeof(termbuf.tc)))
+    if (memcmp((char *)&termbuf.tc, (char *)&termbuf2.tc, sizeof(termbuf.tc)))
 	(void) ioctl(pty, TIOCSETC, (char *)&termbuf.tc);
-    if (bcmp((char *)&termbuf.ltc, (char *)&termbuf2.ltc, sizeof(termbuf.ltc)))
+    if (memcmp((char *)&termbuf.ltc, (char *)&termbuf2.ltc, sizeof(termbuf.ltc)))
 	(void) ioctl(pty, TIOCSLTC, (char *)&termbuf.ltc);
     if (termbuf.lflags != termbuf2.lflags)
 	(void) ioctl(pty, TIOCLSET, (char *)&termbuf.lflags);
@@ -952,7 +953,7 @@ static int getptyslave(void) {
     init_termbuf();
 # ifdef	TIOCGWINSZ
     if (def_row || def_col) {
-	bzero((char *)&ws, sizeof(ws));
+	memset((char *)&ws, 0, sizeof(ws));
 	ws.ws_col = def_col;
 	ws.ws_row = def_row;
 	ioctl(t, TIOCSWINSZ, (char *)&ws);

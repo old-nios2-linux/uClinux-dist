@@ -43,6 +43,7 @@ char telnetd_rcsid[] =
   "$Original-Id: telnetd.c,v 1.9 1996/12/29 18:16:33 dholland Exp $";
 #endif
 
+#include <string.h>
 #include <netdb.h>
 #ifdef TERMCAP
 #include <termcap.h>
@@ -498,24 +499,24 @@ getterminaltype(char *name)
     if (his_state_is_will(TELOPT_TSPEED)) {
 	static char sbbuf[] = { IAC, SB, TELOPT_TSPEED, TELQUAL_SEND, IAC, SE };
 
-	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	memmove(nfrontp, sbbuf, sizeof sbbuf);
 	nfrontp += sizeof sbbuf;
     }
     if (his_state_is_will(TELOPT_XDISPLOC)) {
 	static char sbbuf[] = { IAC, SB, TELOPT_XDISPLOC, TELQUAL_SEND, IAC, SE };
 
-	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	memmove(nfrontp, sbbuf, sizeof sbbuf);
 	nfrontp += sizeof sbbuf;
     }
     if (his_state_is_will(TELOPT_ENVIRON)) {
 	static char sbbuf[] = { IAC, SB, TELOPT_ENVIRON, TELQUAL_SEND, IAC, SE };
 
-	bcopy(sbbuf, nfrontp, sizeof sbbuf);
+	memmove(nfrontp, sbbuf, sizeof sbbuf);
 	nfrontp += sizeof sbbuf;
     }
     if (his_state_is_will(TELOPT_TTYPE)) {
 
-	bcopy(ttytype_sbbuf, nfrontp, sizeof ttytype_sbbuf);
+	memmove(nfrontp, ttytype_sbbuf, sizeof ttytype_sbbuf);
 	nfrontp += sizeof ttytype_sbbuf;
     }
     if (his_state_is_will(TELOPT_TSPEED)) {
@@ -586,7 +587,7 @@ _gettermname(void)
     if (his_state_is_wont(TELOPT_TTYPE))
 	return;
     settimer(baseline);
-    bcopy(ttytype_sbbuf, nfrontp, sizeof ttytype_sbbuf);
+    memmove(nfrontp, ttytype_sbbuf, sizeof ttytype_sbbuf);
     nfrontp += sizeof ttytype_sbbuf;
     while (sequenceIs(ttypesubopt, baseline))
 	ttloop();

@@ -39,6 +39,7 @@ char slc_rcsid[] =
   "$Id: slc.c,v 1.2 2003/07/21 03:11:25 davidm Exp $";
 #endif
 
+#include <string.h>
 #include "telnetd.h"
 
 #ifdef LINEMODE
@@ -428,7 +429,7 @@ void do_opt_slc(unsigned char  *ptr, int len) {
 	    def_slclen = len;
 	    def_slcbuf = malloc((unsigned)len);
 	    if (def_slcbuf == NULL) return;  /* too bad */
-	    bcopy(ptr, def_slcbuf, len);
+	    memset(def_slcbuf, ptr, len);
 	}
     }
 }
