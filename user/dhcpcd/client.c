@@ -157,7 +157,7 @@ clientIDsetup(char *id, char *ifname)
 	getIfInfo(&ifinfo);
 	*s++ = 7;					/* length: 6 (MAC Addr) + 1 (# field) */
 	*s++ = ARPHRD_ETHER;		/* type: Ethernet address */
-	bcopy(ifinfo.haddr, s, sizeof(ifinfo.haddr));
+	memmove(s, ifinfo.haddr, sizeof(ifinfo.haddr));
 }
 
 void
@@ -182,7 +182,7 @@ dhcpMsgInit(u_char *ifname)
 	struct ifreq intf;
 
 	logRet("Binding to interface '%s'\n", ifname);
-	bzero(&intf, sizeof(intf));
+	memset(&intf, 0, sizeof(intf));
 	strncpy(intf.ifr_name, ifname, IFNAMSIZ);
 	if (setsockopt(Ssend,SOL_SOCKET,SO_BINDTODEVICE,&intf,sizeof(intf)) < 0)
 		logSysExit("setsockopt(SO_BINDTODEVICE)");
@@ -255,7 +255,7 @@ initReboot()
 	char				filename[IFNAMSIZ + 128];
 	struct sockaddr_in	addr;
 
-	bzero((char *)&addr, sizeof(addr));
+	memset((char *)&addr, 0, sizeof(addr));
 	strcpy(filename, DHCP_CACHE_FILE);
 	strcat(filename, Ifbuf.ifname);
 	if ( (fd = open(filename, O_RDONLY)) < 0 ) {
@@ -661,10 +661,10 @@ mkDhcpDiscoverMsg(u_char *haddr, dhcpMessage *msg)
 {
 	u_char *p =	msg->options + 4; /* just after the magic cookie */
 
-	bzero((char *)msg, sizeof(*msg));
+	memset((char *)msg, 0, sizeof(*msg));
 	msg->htype = HTYPE_ETHER;	/* supports Etherenet only */
 	msg->hlen  = 6;
-	bcopy(haddr, msg->chaddr, 6);
+	memmove(msg->chaddr, haddr, 6);
 	msg->op	   = BOOTREQUEST;
 #ifdef NEED_BCAST_RESPONSE
 	msg->flags = htons(F_BROADCAST);
@@ -711,7 +711,7 @@ mkDhcpDiscoverMsg(u_char *haddr, dhcpMessage *msg)
 	*p++ = strlen(ClassId);
 	strcpy(p, ClassId);
 	p += strlen(ClassId);
-	bcopy(ClientId, p, ClientId[1]+2); /* client identifier */
+	memmove(p, ClientId, ClientId[1]+2); /* client identifier */
 	p += ClientId[1] + 2;
 	*p = endOption;				/* end */
 }
@@ -725,7 +725,7 @@ mkDhcpRequestMsg(int flag, u_long serverInaddr, u_long leaseTime,
 	msg->xid	= xid;
 	msg->ciaddr = ciaddr;
 	msg->flags = htons(0);		/* do not set the broadcast flag here */
-	bzero((char *)p, sizeof(msg->options) - 4);	/* clear DHCP option field */
+	memset((char *)p, 0, sizeof(msg->options) - 4);	/* clear DHCP option field */
 
 	/* 1. Requested IP address must not be in the DHCPREQUEST message
 	 *    under the RFC1541 mode.
@@ -792,7 +792,7 @@ mkDhcpRequestMsg(int flag, u_long serverInaddr, u_long leaseTime,
 	*p++ = strlen(ClassId);
 	strcpy(p, ClassId);
 	p += strlen(ClassId);
-	bcopy(ClientId, p, ClientId[1]+2);	/* client identifier */
+	memmove(p, ClientId, ClientId[1]+2);	/* client identifier */
 	p += ClientId[1] + 2;
 	*p = endOption;						/* end */
 }
@@ -814,7 +814,7 @@ mkDhcpDeclineMsg(int flag, u_long serverInaddr, u_long ciaddr,
 		}
 	}
 
-	bzero((char *)p, sizeof(msg->options) - 4);
+	memset((char *)p, 0, sizeof(msg->options) - 4);
 	*p++ = dhcpMessageType;		/* DHCP message type */
 	*p++ = 1;
 	*p++ = (u_char)flag;
@@ -840,7 +840,7 @@ mkDhcpDeclineMsg(int flag, u_long serverInaddr, u_long ciaddr,
 		strncpy(p, Hostname, len);
 		p += len;
 	}
-	bcopy(ClientId, p, ClientId[1]+2); /* client identifier */
+	memmove(p, ClientId, ClientId[1]+2); /* client identifier */
 	p += ClientId[1] + 2;
 	*p = endOption;				/* end */
 }
@@ -850,7 +850,7 @@ sendDhcpDecline(int flag, u_long serverInaddr, u_long ciaddr)
 {
 	struct sockaddr_in	 addr;
 
-	bzero((char *)&addr, sizeof(addr));
+	memset((char *)&addr, 0, sizeof(addr));
 	addr.sin_family 	 = AF_INET;
 	addr.sin_port		 = htons(DHCP_SERVER_PORT);
 	switch ( flag ) {

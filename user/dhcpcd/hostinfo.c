@@ -57,7 +57,7 @@ setupOptInfo(u_char *dest[], const u_char *src[])
 				free(dest[i]);
 			}
 			dest[i] = smalloc(*src[i]+1);
-			bcopy(src[i], dest[i], *src[i]+1);
+			memmove(dest[i], src[i], *src[i]+1);
 		}
 	}
 }

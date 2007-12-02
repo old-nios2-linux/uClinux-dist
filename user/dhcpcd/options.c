@@ -114,7 +114,7 @@ getOptions(u_char *optp[], dhcpMessage *msg)
 	end = msg-> options + sizeof(msg->options);	/* last element + 1 */
 
 	i = 0;
-	bzero((u_char *)optp, sizeof(msg->options) * sizeof(u_char *));
+	memset((u_char *)optp, 0, sizeof(msg->options) * sizeof(u_char *));
 	while ( p < end ) {
 		if ( *p == endOption ) { /* end */
 			return;
@@ -159,7 +159,7 @@ parseDhcpMsg(u_char *optp[], dhcpMessage *msg)
 	if ( memcmp(msg->chaddr, DhcpMsgSend.chaddr, DhcpMsgSend.hlen) ) {
 		return 0;				/* NG */
 	}
-	bzero((char *)opt, sizeof(opt));
+	memset((char *)opt, 0, sizeof(opt));
 	getOptions(p, msg);			/* get pointers to each option */
 	for (; *p != NULL; ++p ) {
 		switch ( **p ) {
@@ -221,7 +221,7 @@ parseDhcpMsg(u_char *optp[], dhcpMessage *msg)
 			break;
 		}
 	}
-	bcopy(opt, optp, sizeof(opt));
+	memmove(optp, opt, sizeof(opt));
 
 	/* check option field
 	 */

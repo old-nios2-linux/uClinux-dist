@@ -119,7 +119,7 @@ int set_address(char* ifname, unsigned long ip, unsigned long netmask, int skfd)
 	strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
         addr = (struct sockaddr_in *) &ifr.ifr_addr;
-        bzero(addr, sizeof(struct sockaddr_in));
+        memset(addr, 0, sizeof(struct sockaddr_in));
         addr->sin_family = AF_INET;
         addr->sin_addr.s_addr = ip;
         if ((result=ioctl(skfd, SIOCSIFADDR, &ifr))==-1)
@@ -129,7 +129,7 @@ int set_address(char* ifname, unsigned long ip, unsigned long netmask, int skfd)
         }
 	
 	addr = (struct sockaddr_in *) & ifr.ifr_broadaddr;
-	bzero(addr, sizeof(struct sockaddr_in));
+	memset(addr, 0, sizeof(struct sockaddr_in));
 	addr->sin_family = AF_INET;
 	addr->sin_addr.s_addr = ip & netmask | ~netmask;
         if ( ioctl(skfd, SIOCSIFBRDADDR, &ifr) == -1)
@@ -139,7 +139,7 @@ int set_address(char* ifname, unsigned long ip, unsigned long netmask, int skfd)
 	}
 
 	addr = (struct sockaddr_in *) &ifr.ifr_netmask;
-	bzero(addr, sizeof(struct sockaddr_in));
+	memset(addr, 0, sizeof(struct sockaddr_in));
 	addr->sin_family = AF_INET;
 	addr->sin_addr.s_addr = netmask;
 	if ((result=ioctl(skfd, SIOCSIFNETMASK, &ifr))==-1)

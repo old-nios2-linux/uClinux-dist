@@ -174,7 +174,7 @@ char *argv[];
 #endif
 	if(Hostname == NULL) {
 		Hostname = smalloc(32);
-		/*bzero(Hostname,32);*/
+		/*memset(Hostname,0,32);*/
 		gethostname(Hostname, 32);
 	}
 #endif

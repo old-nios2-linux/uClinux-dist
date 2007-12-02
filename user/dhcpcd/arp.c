@@ -53,7 +53,7 @@ arpCheck(u_long inaddr, struct ifinfo *ifbuf, long timeout)
 	/* send arp request
 	 */
 	mkArpMsg(ARPOP_REQUEST, inaddr, NULL, ifbuf->addr, ifbuf->haddr, &arp);
-	bzero(&addr, sizeof(addr));
+	memset(&addr, 0, sizeof(addr));
 	strcpy(addr.sa_data, ifbuf->ifname);
 	if ( sendto(s, &arp, sizeof(arp), 0, &addr, sizeof(addr)) < 0 ) {
 		logSysRet("sendto (arpCheck)");
@@ -102,7 +102,7 @@ sendArpReply(u_char *thaddr, u_long tinaddr, struct ifinfo *ifbuf)
 	/* send arp reply
 	 */
 	mkArpMsg(ARPOP_REPLY, tinaddr, thaddr, ifbuf->addr, ifbuf->haddr, &arp);
-	bzero(&addr, sizeof(addr));
+	memset(&addr, 0, sizeof(addr));
 	strcpy(addr.sa_data, ifbuf->ifname);
 	if ( sendto(s, &arp, sizeof(arp), 0, &addr, sizeof(addr)) < 0 ) {
 		logSysRet("sendto (arpCheck)");
@@ -113,9 +113,9 @@ void
 mkArpMsg(int opcode, u_long tInaddr, u_char *tHaddr,
 		 u_long sInaddr, u_char *sHaddr, struct arpMsg *msg)
 {
-	bzero(msg, sizeof(*msg));
-	bcopy(MAC_BCAST_ADDR, msg->ethhdr.h_dest, 6); /* MAC DA */
-	bcopy(sHaddr, msg->ethhdr.h_source, 6);	/* MAC SA */
+	memset(msg, 0, sizeof(*msg));
+	memmove(msg->ethhdr.h_dest, MAC_BCAST_ADDR, 6); /* MAC DA */
+	memmove(msg->ethhdr.h_source, sHaddr, 6);	/* MAC SA */
 	msg->ethhdr.h_proto = htons(ETH_P_ARP);	/* protocol type (Ethernet) */
 	msg->htype = htons(ARPHRD_ETHER);		/* hardware type */
 	msg->ptype = htons(ETH_P_IP);			/* protocol type (ARP message) */
@@ -123,9 +123,9 @@ mkArpMsg(int opcode, u_long tInaddr, u_char *tHaddr,
 	msg->plen = 4;							/* protocol address length */
 	msg->operation = htons(opcode);			/* ARP op code */
 	*((u_int *)msg->sInaddr) = sInaddr;		/* source IP address */
-	bcopy(sHaddr, msg->sHaddr, 6);			/* source hardware address */
+	memmove(msg->sHaddr, sHaddr, 6);			/* source hardware address */
 	*((u_int *)msg->tInaddr) = tInaddr;		/* target IP address */
 	if ( opcode == ARPOP_REPLY ) {
-		bcopy(tHaddr, msg->tHaddr, 6);		/* target hardware address */
+		memmove(msg->tHaddr, tHaddr, 6);		/* target hardware address */
 	}
 }

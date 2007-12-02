@@ -56,7 +56,7 @@ int llip_sendGratuitousArps(char* device_name, u_long address, unsigned char *so
 
 	/* send two arps two seconds apart */
 	llip_mkArpMsg(ARPOP_REPLY, 0xffffffffU, MAC_BCAST_ADDR, address, (u_char*) source_hw_addr, &arp);
-	bzero(&addr, sizeof(addr));
+	memset(&addr, 0, sizeof(addr));
 	strncpy(addr.sa_data, device_name, sizeof(addr.sa_data));
 
 	for(i=0; i<GRATUITOUS_ARPS; i++)
@@ -100,7 +100,7 @@ int llip_arpCheck(char* device_name, u_long test_addr, unsigned char *source_hw_
 
 	/* send arp probe */
 	llip_mkArpMsg(ARPOP_REQUEST, test_addr, MAC_BCAST_ADDR, 0 /* source=0.0.0.0 */, (u_char *) source_hw_addr, &arp);
-	bzero(&addr, sizeof(addr));
+	memset(&addr, 0, sizeof(addr));
 	strncpy(addr.sa_data, device_name, sizeof(addr.sa_data));
 
 	if ( sendto(s, &arp, sizeof(arp), 0, &addr, sizeof(addr)) < 0 ) {
@@ -155,9 +155,9 @@ int llip_arpCheck(char* device_name, u_long test_addr, unsigned char *source_hw_
 
 void llip_mkArpMsg(int opcode, u_long tInaddr, u_char *tHaddr,
 		 u_long sInaddr, u_char *sHaddr, struct arpMsg *msg) {
-	bzero(msg, sizeof(*msg));
-	bcopy(tHaddr, msg->ethhdr.h_dest, 6); /* MAC DA */
-	bcopy(sHaddr, msg->ethhdr.h_source, 6);	/* MAC SA */
+	memset(msg, 0, sizeof(*msg));
+	memmove(msg->ethhdr.h_dest, tHaddr, 6); /* MAC DA */
+	memmove(msg->ethhdr.h_source, sHaddr, msg->ethhdr.h_source, 6);	/* MAC SA */
 	msg->ethhdr.h_proto = htons(ETH_P_ARP);	/* protocol type (Ethernet) */
 	msg->htype = htons(ARPHRD_ETHER);		/* hardware type */
 	msg->ptype = htons(ETH_P_IP);			/* protocol type (ARP message) */
@@ -165,10 +165,10 @@ void llip_mkArpMsg(int opcode, u_long tInaddr, u_char *tHaddr,
 	msg->plen = 4;							/* protocol address length */
 	msg->operation = htons(opcode);			/* ARP op code */
 	*((u_int *)msg->sInaddr) = sInaddr;		/* source IP address */
-	bcopy(sHaddr, msg->sHaddr, 6);			/* source hardware address */
+	memmove(msg->sHaddr, sHaddr, 6);			/* source hardware address */
 	*((u_int *)msg->tInaddr) = tInaddr;		/* target IP address */
 	if ( opcode == ARPOP_REPLY ) {
-		bcopy(tHaddr, msg->tHaddr, 6);		/* target hardware address */
+		memmove(msg->tHaddr, tHaddr, 6);		/* target hardware address */
 	}
 }
 

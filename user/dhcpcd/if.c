@@ -48,7 +48,7 @@ struct ifinfo Ifbuf;
 void
 ifReset(char *ifname)
 {
-	bzero((char *)&Ifbuf, sizeof(Ifbuf));
+	memset((char *)&Ifbuf, 0, sizeof(Ifbuf));
 	strncpy(Ifbuf.ifname, ifname, sizeof(Ifbuf.ifname));
 	Ifbuf.addr	= htonl(0);
 	Ifbuf.mask	= htonl(0);
@@ -78,7 +78,7 @@ ifConfig(struct ifinfo * ifinfo)
 	}
 	/* save hardware address of the interface
 	 */
-	bcopy(ifr.ifr_hwaddr.sa_data, ifinfo->haddr, sizeof(ifinfo->haddr));
+	memmove(ifinfo->haddr, ifr.ifr_hwaddr.sa_data, sizeof(ifinfo->haddr));
 
 	/* configure interface
 	 */
@@ -102,7 +102,7 @@ ifConfig(struct ifinfo * ifinfo)
 	}
 	/* set route to the interface
 	 */
-	bzero((char *)&rtent, sizeof(rtent));
+	memset((char *)&rtent, 0, sizeof(rtent));
 
 	p = (struct sockaddr_in *)&rtent.rt_dst;
 	p->sin_family		= AF_INET;
@@ -251,7 +251,7 @@ getIfInfo(struct ifinfo * ifinfo)
 	}
 	/* save hardware address of the interface
 	 */
-	bcopy(ifr.ifr_hwaddr.sa_data, ifinfo->haddr, sizeof(ifinfo->haddr));
+	memmove(ifinfo->haddr, ifr.ifr_hwaddr.sa_data, sizeof(ifinfo->haddr));
 
 	/* configure interface
 	 */
@@ -286,7 +286,7 @@ setDefRoute(const char *routers, struct ifinfo *ifinfo)
 	if ( (s = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
 		logSysExit("socket (setDefRoute)");
 	}
-	bzero((char *)&rtent, sizeof(rtent));
+	memset((char *)&rtent, 0, sizeof(rtent));
 	p = (struct sockaddr_in *)&rtent.rt_dst;
 	p->sin_family		= AF_INET;
 	p->sin_addr.s_addr	= 0;	/* dest. net address (default route) */

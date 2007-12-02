@@ -39,7 +39,7 @@
 void
 setSockAddrIn(u_short port, u_long inaddr, struct sockaddr_in *saddr)
 {
-	bzero((char *)saddr, sizeof(*saddr));
+	memset((char *)saddr, 0, sizeof(*saddr));
 	saddr->sin_family		= AF_INET;
 	saddr->sin_addr.s_addr	= inaddr;
 	saddr->sin_port			= port;
@@ -120,8 +120,8 @@ rcvAndCheckDhcpMsg(int s, dhcpMessage *msg, u_long waitMsgType,
 	struct timeval tm;
 	int len;
 
-	bzero((char *)msg, sizeof(*msg));
-	bzero((char *)&addr, sizeof(addr));
+	memset((char *)msg, 0, sizeof(*msg));
+	memset((char *)&addr, 0, sizeof(addr));
 	tm.tv_sec = 0;
 	time(&prevTime); 
 	while ( timeout > 0 ) {
