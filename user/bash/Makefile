@@ -107,7 +107,7 @@ LOCAL_LIBS =
 LIBS = $(BUILTINS_LIB) $(LIBRARIES) $(LDLIBS)
 LDFLAGS +=  -L./lib/termcap $(STATIC_LD) $(LOCAL_LDFLAGS) $(PROFILE_FLAGS) $(CFLAGS)
 STATIC_LD = 
-LOCAL_LDFLAGS = -rdynamic
+LOCAL_LDFLAGS =
 
 SYSTEM_FLAGS = -DPROGRAM='"$(Program)"' -DCONF_HOSTTYPE='"$(Machine)"' -DCONF_OSTYPE='"$(OS)"' -DCONF_MACHTYPE='"$(MACHTYPE)"' -DCONF_VENDOR='"$(VENDOR)"'
 
@@ -437,7 +437,7 @@ $(Program):  .build $(OBJECTS) $(BUILTINS_DEP) $(LIBDEP)
 	$(RM) $@
 	$(PURIFY) $(CC) $(BUILTINS_LDFLAGS) $(LIBRARY_LDFLAGS) $(LDFLAGS) -o $(Program) $(OBJECTS) $(LIBS)
 	ls -l $(Program)
-	$(CROSS)size $(Program)
+	-$(CROSS)size $(Program)
 
 .build:	$(SOURCES) config.h Makefile version.h
 	@echo

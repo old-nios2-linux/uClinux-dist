@@ -335,7 +335,7 @@
 
 /* #undef ULIMIT_MAXFDS */
 
-#define CAN_REDEFINE_GETENV 1
+#undef CAN_REDEFINE_GETENV
 
 
 /* Characteristics of properties exported by the kernel. */
@@ -379,13 +379,13 @@
 /* Presence of system and C library functions. */
 
 /* Define if you have the bcopy function.  */
-#define HAVE_BCOPY 1
+/* #undef HAVE_BCOPY */
 
 /* Define if you have the bindtextdomain function.  */
 /* #undef HAVE_BINDTEXTDOMAIN */
 
 /* Define if you have the bzero function.  */
-#define HAVE_BZERO 1
+/* #undef HAVE_BZERO */
 
 /* Define if you have the confstr function.  */
 #define HAVE_CONFSTR 1
