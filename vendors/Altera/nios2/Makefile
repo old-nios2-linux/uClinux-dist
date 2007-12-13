@@ -4,7 +4,8 @@
 
 KERNELZ  = $(IMAGEDIR)/zImage
 
-ROMFS_DIRS = bin dev etc etc/config etc/default etc/dhcpc home home/ftp home/httpd home/httpd/cgi-bin lib mnt proc usr var sys tmp
+ROMFS_DIRS = bin sbin dev etc home lib mnt proc usr var sys tmp \
+	etc/config etc/default etc/dhcpc home/ftp home/httpd home/httpd/cgi-bin usr/bin usr/sbin
 
 all:
 	dirs=$(DIRS) ; \
