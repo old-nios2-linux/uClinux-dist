@@ -1,5 +1,5 @@
 name:nios2
-expedite:sp,fp,pc
+expedite:sp,fp,ea
 32:zero
 32:at
 32:r2
@@ -32,16 +32,9 @@ expedite:sp,fp,pc
 32:ea
 32:ba
 32:ra
-32:pc
 32:status
 32:estatus
 32:bstatus
 32:ienable
 32:ipending
 32:cpuid
-32:ctl6
-32:ctl7
-32:pteaddr
-32:tlbacc
-32:tlbmisc
-

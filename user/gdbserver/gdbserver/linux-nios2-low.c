@@ -9,22 +9,18 @@
 
 #include <asm/ptrace.h>
 
-/* FIXME: Definitions in gdb/nios2-tdep.c and asm/ptrace.h does not quite agree... */
 static int nios2_regmap[] =
 {
-  PTR_R0  * 4, PTR_R1  * 4, PTR_R2  * 4, PTR_R3  * 4,
+           -1, PTR_R1  * 4, PTR_R2  * 4, PTR_R3  * 4,
   PTR_R4  * 4, PTR_R5  * 4, PTR_R6  * 4, PTR_R7  * 4,
   PTR_R8  * 4, PTR_R9  * 4, PTR_R10 * 4, PTR_R11 * 4,
   PTR_R12 * 4, PTR_R13 * 4, PTR_R14 * 4, PTR_R15 * 4,
-
   PTR_R16 * 4, PTR_R17 * 4, PTR_R18 * 4, PTR_R19 * 4,
   PTR_R20 * 4, PTR_R21 * 4, PTR_R22 * 4, PTR_R23 * 4,
-  PTR_R24 * 4, PTR_R25 * 4,
-
-  PTR_GP  * 4, PTR_SP  * 4, PTR_FP  * 4, PTR_EA  * 4,
-  PTR_BA  * 4, PTR_RA  * 4,
-  (PTR_RA + 1) * 4, (PTR_RA + 2) * 4, (PTR_RA + 3) * 4,
-  (PTR_RA + 4) * 4, (PTR_RA + 5) * 4, (PTR_RA + 6) * 4
+           -1,          -1, PTR_GP  * 4, PTR_SP  * 4,
+           -1,          -1,          -1, PTR_RA  * 4,
+           -1, PTR_ESTATUS*4,        -1,          -1,
+           -1,          -1
 };
 
 #define nios2_num_regs (sizeof(nios2_regmap) / sizeof(nios2_regmap[0]))
@@ -45,7 +41,7 @@ static CORE_ADDR
 nios2_get_pc ()
 {
   unsigned long pc;
-  collect_register_by_name ("pc", &pc);
+  collect_register_by_name ("ea", &pc);
   return pc;
 }
 
@@ -53,10 +49,10 @@ static void
 nios2_set_pc (CORE_ADDR pc)
 {
   unsigned long newpc = pc;
-  supply_register_by_name ("pc", &newpc);
+  supply_register_by_name ("ea", &newpc);
 }
 
-static const unsigned long nios2_breakpoint = 0x003da03a;
+static const unsigned long nios2_breakpoint = 0x003b687a;	/* Trap instr. w/imm=0x01 */
 #define nios2_breakpoint_len 4
 
 static int
