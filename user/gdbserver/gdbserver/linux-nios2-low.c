@@ -18,7 +18,7 @@ static int nios2_regmap[] =
   PTR_R16 * 4, PTR_R17 * 4, PTR_R18 * 4, PTR_R19 * 4,
   PTR_R20 * 4, PTR_R21 * 4, PTR_R22 * 4, PTR_R23 * 4,
            -1,          -1, PTR_GP  * 4, PTR_SP  * 4,
-           -1,          -1,          -1, PTR_RA  * 4,
+           -1, PTR_EA  * 4,          -1, PTR_RA  * 4,
            -1, PTR_ESTATUS*4,        -1,          -1,
            -1,          -1
 };
