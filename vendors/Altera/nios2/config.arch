@@ -21,6 +21,7 @@ MACHINE       = nios2
 ARCH          = nios2
 CROSS_COMPILE = nios2-linux-uclibc-
 CROSS         = $(CROSS_COMPILE)
+CONFIGURE_HOST = nios2-linux-uclibc
 
 CONFIG_UCLINUX=y
 
