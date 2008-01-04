@@ -577,12 +577,6 @@ dm9000_probe(struct platform_device *pdev)
 	db->mii.mdio_read    = dm9000_phy_read;
 	db->mii.mdio_write   = dm9000_phy_write;
 
-#ifdef CONFIG_EXCALIBUR
-	{
-		extern unsigned char *excalibur_enet_hwaddr;
-		memcpy(ndev->dev_addr, excalibur_enet_hwaddr, 6);
-	}
-#else
 	/* Read SROM content */
 	for (i = 0; i < 64; i++)
 		((u16 *) db->srom)[i] = read_srom_word(db, i);
