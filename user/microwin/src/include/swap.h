@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2001, 2003, 2005 Greg Haerr <greg@censoft.com>
  * Copyright (c) 2003 Jon Foster <jon@jon-foster.co.uk>
  *
  * Byte and word swapping header file for big/little endian mapping
@@ -11,6 +11,9 @@
  *	__CYGWIN__
  *	TRIMEDIA
  */
+
+#ifndef MW_SWAP_H_INCLUDED
+#define MW_SWAP_H_INCLUDED
 
 /* ********************************************************************* */
 /* First, the default (portable) implementation.                         */
@@ -46,10 +49,19 @@
 /* Now, some platform-specific optimized macros.                         */
 /* ********************************************************************* */
 
+#if ARCH_LINUX_POWERPPC
+# if !MW_CPU_BIG_ENDIAN
+#  error POWERPC works in BIG ENDIAN only !!!
+# endif
+
 /* ********************************************************************* */
 /* Linux                                                                 */
+/*                                                                       */
+/* for both linux and __ECOS is checked, because when compiling for the  */
+/* synthetic target of eCos, both linux and __ECOS are defined           */
+/* but we want to end up in the __ECOS branch and not in the linux branch */
 /* ********************************************************************* */
-#ifdef linux
+#elif defined(linux) && !defined(__ECOS)
 
 # include <endian.h>
 # if __BYTE_ORDER == __BIG_ENDIAN
@@ -97,18 +109,21 @@
 /* ********************************************************************* */
 #elif __ECOS
 
-# undef wswap
+/* although machine/endian.h might provide optimized versions,           */
+/* endian.h is only available if ecos is configured with networking      */
+/* In order to avoid this dependency of microwindows to networking       */
+/* this header is commented out                                          */
+/*# undef wswap
 # undef dwswap
 # include <machine/endian.h>
 # define wswap(x)	letoh16(x)
-# define dwswap(x)	letoh32(x)
+# define dwswap(x)	letoh32(x)*/
 /* end __ECOS*/
 
 /* ********************************************************************* */
 /* Cygwin (on Win32)                                                     */
 /* ********************************************************************* */
 #elif defined(__CYGWIN__)
-
 /* Cygwin only works on Win32 on x86.  Therefore it is always little-endian */
 # if MW_CPU_BIG_ENDIAN
 #  error MW_CPU_BIG_ENDIAN and your OS disagree about your CPUs byte-order.  Did you accidentally set BIGENDIAN in the config file?
@@ -138,3 +153,7 @@
  */
 # warning You might want to define optimized byte swapping macros for this machine - if not, you can safely ignore this warning.
 #endif
+
+
+#endif /* ndef MW_SWAP_H_INCLUDED */
+

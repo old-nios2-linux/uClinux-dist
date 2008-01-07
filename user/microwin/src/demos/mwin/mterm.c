@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2005 Greg Haerr <greg@censoft.com>
  *
  * Microwindows Terminal Emulator for Linux
  *
@@ -16,6 +16,9 @@
 #include "windows.h"
 #include "wintern.h"		/* for MwRegisterFdInput*/
 #include "wintools.h"		/* Draw3dInset*/
+#if __CYGWIN__
+#include <pty.h>
+#endif
 
 #define COLS		80
 #define ROWS		24
@@ -27,18 +30,25 @@
 /*#define FONTNAME	OEM_FIXED_FONT*/
 #define APPCLASS	"mterm"
 
+#if ELKS
+#define SHELL	"/bin/sash"
+#else
 #if DOS_DJGPP
+#define SHELL	"bash"
 #define killpg		kill
 #define SIGCHLD		17 /* from Linux, not defined in DJGPP */
+#else
+#if __CYGWIN__
+#define SHELL  "/usr/bin/bash"
+#else
+#define SHELL	"/bin/sh"
 #endif
-
-#ifdef __uClinux__
-#define killpg(x,y) kill(-x,y)
+#endif
 #endif
 
 /* forward decls*/
 LRESULT CALLBACK WndProc(HWND hwnd,UINT uMsg,WPARAM wp,LPARAM lp);
-void EmOutChar(HWND hwnd, int ch);
+void EmOutChar(HWND hwnd, unsigned char ch);
 int  CreatePtyShell(void);
 int  ReadPtyShell(int fd, char *buf, int count);
 int  WritePtyShell(int fd, char *buf, int count);
@@ -154,7 +164,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	return 0;
 }
 
-int WINAPI 
+int WINAPI
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
 	int nShowCmd)
 {
@@ -162,7 +172,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
 	extern MWIMAGEHDR image_car8;
 
 	RegisterAppClass();
-	/* MwSetDesktopWallpaper(&image_car8); */
+	MwSetDesktopWallpaper(&image_car8);
 
 	CreateAppWindow();
 
@@ -175,7 +185,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
 }
 
 void
-EmOutChar(HWND hwnd, int ch)
+EmOutChar(HWND hwnd, unsigned char ch)
 {
 	HDC	hdc;
 	RECT	rc;
@@ -236,16 +246,6 @@ EmOutChar(HWND hwnd, int ch)
 	}
 }
 
-#if ELKS
-#define SHELL	"/bin/sash"
-#else
-#if DOS_DJGPP
-#define SHELL	"bash"
-#else
-#define SHELL	"/bin/sh"
-#endif
-#endif
-
 static int pid;
 
 static void
@@ -272,10 +272,46 @@ ptysignaled(int signo)
 int
 CreatePtyShell(void)
 {
+#if __CYGWIN__
+	int	master, slave;
+	char *	argv[2];
+	char	pty_name[32];
+
+	signal(SIGCHLD, ptysignaled);
+	signal(SIGINT, ptysignaled);
+	if ((pid = forkpty(&master, pty_name, NULL, NULL)) == -1) {
+		fprintf(stderr, "No processes\n");
+		return -1;
+	}
+fprintf(stderr, "CYGWIN: Opened pty_name %s\n", pty_name);
+	if (!pid) {
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
+		close(master);
+
+		setsid();
+		grantpt(master);
+		unlockpt(master);
+		if ((slave = open(pty_name, O_RDWR)) < 0) {
+			fprintf(stderr, "Child: Can't open pty %s\n", pty_name);
+			exit(1);
+		}
+		dup2(slave, STDIN_FILENO);
+		dup2(slave, STDOUT_FILENO);
+		dup2(slave, STDERR_FILENO);
+		/*if(!(argv[0] = getenv("SHELL")))*/
+		argv[0] = SHELL;
+		argv[1] = NULL;
+		execv(argv[0], argv);
+		exit(1);
+	}
+	return master;
+#else
 	int	n = 0;
 	int	tfd;
-	char	pty_name[12];
 	char *	argv[2];
+	char	pty_name[32];
 
 again:
 	sprintf(pty_name, "/dev/ptyp%d", n);
@@ -289,10 +325,6 @@ again:
 	}
 	signal(SIGCHLD, ptysignaled);
 	signal(SIGINT, ptysignaled);
-#ifdef __uClinux__
-#undef fork
-#define fork() vfork()
-#endif
 	if ((pid = fork()) == -1) {
 		fprintf(stderr, "No processes\n");
 		return -1;
@@ -319,6 +351,7 @@ again:
 		exit(1);
 	}
 	return tfd;
+#endif
 }
 
 int

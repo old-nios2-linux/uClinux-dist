@@ -956,10 +956,6 @@ extern double rint (double);
 extern float expf (float);	/* N.B.  exp() appears to be broken on ELX! */
 #endif
 
-#ifndef MAXINT
-#define MAXINT (((unsigned)-1)>>1)
-#endif
-
 #define	WORST_SCORE	MAXINT
 
 /* Dynamic programming parameters */

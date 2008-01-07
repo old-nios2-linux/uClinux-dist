@@ -1,7 +1,7 @@
 #ifndef _DEVICE_H
 #define _DEVICE_H
 /*
- * Copyright (c) 1999, 2000, 2001, 2002, 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2005, 2007 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 Koninklijke Philips Electronics
  *
  * Engine-level Screen, Mouse and Keyboard device driver API's and types
@@ -13,30 +13,50 @@
 
 /* Changeable limits and options*/
 #define ALPHABLEND	1			/* =1 to include blending code*/
-#define DYNAMICREGIONS	1			/* =1 to use MWCLIPREGIONS*/
-#define HAVEFLOAT	1			/* =1 incl float, GdArcAngle*/
 #define POLYREGIONS	1			/* =1 includes polygon regions*/
 #define ANIMATEPALETTE	0			/* =1 animated palette test*/
+
+/* the fontmapper is obsolete, according to Greg */
 #define FONTMAPPER	0			/* =1 for Morten's font mapper*/
 #define USE_ALLOCA	1			/* alloca() is available */
 #define FASTJPEG	1			/* =1 for temp quick jpeg 8bpp*/
+#if defined(__rtems__) || defined(__ECOS)
+#define HAVE_MMAP       0
+#else
 #define HAVE_MMAP       1       		/* =1 to use mmap if available*/
+#endif
+#define FFMINAA_HEIGHT	0			/* min height for FT antialias*/
 
+#define TRANSLATE_ESCAPE_SEQUENCES  1		/* =1 to parse fnkeys w/tty driver*/
+
+#ifndef HAVEFLOAT
+#define HAVEFLOAT	1			/* =1 incl float, GdArcAngle*/
+#endif
+
+
+#ifndef DYNAMICREGIONS
+#define DYNAMICREGIONS	1			/* =1 to use MWCLIPREGIONS*/
+#endif
+
+#ifndef MW_FEATURE_IMAGES
 #if !((DOS_DJGPP) || (__PACIFIC__) || (DOS_TURBOC))
 #define MW_FEATURE_IMAGES 1		/* =1 to enable GdLoadImage* / GdDrawImage* */
 #else
 #define MW_FEATURE_IMAGES 0		/* platform doesn't support images*/
 #endif
+#endif
 
+#ifndef MW_FEATURE_TIMERS
 #if UNIX || DOS_DJGPP || HAVE_TIMER_SUPPORT
 #define MW_FEATURE_TIMERS 1		/* =1 to include MWTIMER support */
 #else
 #define MW_FEATURE_TIMERS 0		/* Other platforms do not support timers yet */
 #endif
+#endif
 
 /* determine compiler capability for handling EPRINTF/DPRINTF macros*/
 #ifndef MW_FEATURE_GDERROR
-#if (defined(GCC_VERSION) && (GCC_VERSION >= 2093)) || (defined(__GNUC__) && (__GNUC__ >= 2) && (__GNUC_MINOR__ >= 95))
+#if (defined(GCC_VERSION) && (GCC_VERSION >= 2093)) || (defined(__GNUC__) && (((__GNUC__ >= 2) && (__GNUC_MINOR__ >= 95)) || (__GNUC__ > 2)))
 #define MW_FEATURE_GDERROR	0		/* use fprintf instead of GdError*/
 #else
 #define MW_FEATURE_GDERROR	1		/* use GdError for errors*/
@@ -63,7 +83,7 @@
 #endif /* MW_FEATURE_GDERROR*/
 
 /* Which low-level psd->DrawArea routines to include. */
-#define MW_FEATURE_PSDOP_COPY                   0
+#define MW_FEATURE_PSDOP_COPY                   1
 #define MW_FEATURE_PSDOP_ALPHAMAP               0
 #define MW_FEATURE_PSDOP_ALPHACOL               0
 #define MW_FEATURE_PSDOP_BITMAP_BYTES_LSB_FIRST 0
@@ -101,9 +121,9 @@ typedef struct {
 	int		ascent;		/* ascent (baseline) height*/
 	int		firstchar;	/* first character in bitmap*/
 	int		size;		/* font size in characters*/
-	MWIMAGEBITS *	bits;		/* 16-bit right-padded bitmap data*/
-	unsigned long *offset;		/* 256 offsets into bitmap data*/
-	unsigned char *	width;		/* 256 character widths or 0 if fixed*/
+	const MWIMAGEBITS   *bits;	/* 16-bit right-padded bitmap data*/
+	const unsigned long *offset;	/* offsets into bitmap data*/
+	const unsigned char *width;	/* character widths or 0 if fixed*/
 	int		defaultchar;	/* default char (not glyph index)*/
 	long		bits_size;	/* # words of MWIMAGEBITS bits*/
 } MWCFONT, *PMWCFONT;
@@ -148,7 +168,7 @@ typedef struct {
 
 
 /* This structure is used to pass parameters into the low
- * level device driver functions.
+ * level device driver drawarea function.
  */
 typedef struct {
 	MWCOORD dstx, dsty, dstw, dsth, dst_linelen;
@@ -161,22 +181,22 @@ typedef struct {
 /* Operations for the Blitter/Area functions */
 
 #if MW_FEATURE_PSDOP_COPY
-
 /*
- * FIXME Not Documented - see drivers/fblin16.c
+ * Copy an image to screen.
+ * Params:
+ * dstx, dsty  - Destination for top left of image
+ * dstw, dsth  - Image size
+ * srcx, srcy  - Start co-ordinates in source image
+ * src_linelen - Source image stride, in pixels
+ * pixels      - Image to copy from in hw display format.
+ * misc        - Ignored.
+ * gr_usebg    - Checked for PSD_COPY only.
+ * bg_color    - Background color to ignore if PSDOP_COPYTRANS.
+ * fg_color    - Ignored.
  */
-#define PSDOP_COPY	0
-
-/*
- * FIXME Not Documented - see drivers/fblin16.c
- */
-#define PSDOP_COPYALL	1
-
-/*
- * FIXME Not Documented - see drivers/fblin16.c
- */
-#define PSDOP_COPYTRANS 2
-
+#define PSDOP_COPY	0	/* if gr_usebg COPYALL else COPYTRANS*/
+#define PSDOP_COPYALL	1	/* copy image bits to screen*/
+#define PSDOP_COPYTRANS 2	/* copy non-background bits to screen*/
 #endif /* MW_FEATURE_PSDOP_COPY */
 
 #if MW_FEATURE_PSDOP_ALPHAMAP
@@ -208,8 +228,8 @@ typedef struct {
  * misc        - Alpha map.  Format: ADDR8, entries
  *               are alpha values in range 0-255.
  * fg_color    - The color to draw in, in the display format.
- * gr_usebg    - Ignored.  FIXME If set, should blend to bg_color.
  * bg_color    - Ignored.  FIXME Should be used if gr_usebg is set.
+ * gr_usebg    - Ignored.  FIXME If set, should blend to bg_color.
  * pixels      - Ignored.
  */
 #define PSDOP_ALPHACOL	4
@@ -469,6 +489,11 @@ typedef struct {
 #define RGB2PIXEL332(r,g,b)	\
 	(((r) & 0xe0) | (((g) & 0xe0) >> 3) | (((b) & 0xc0) >> 6))
 
+/* create 8 bit 2/3/3 format pixel from RBG triplet*/
+#define RGB2PIXEL233(r,g,b)	\
+	((((r) & 0xe0) >> 5) | (((g) & 0xe0) >> 2) | (((b) & 0xc0) >> 0))
+
+
 /*
  * Conversion from MWCOLORVAL to MWPIXELVAL
  */
@@ -496,6 +521,10 @@ typedef struct {
 /* In this format, alpha is ignored. */
 #define COLOR2PIXEL332(c)	\
 	(((c) & 0xe0) | (((c) & 0xe000) >> 11) | (((c) & 0xc00000) >> 22))
+
+/* create 8 bit 2/3/3 format pixel from RGB colorval (0x00BBGGRR)*/
+#define COLOR2PIXEL233(c)	\
+        ((((c) & 0xC00000) >> 16) | (((c) & 0x00E000) >> 10) | (((c) & 0xE0) >> 5))
 
 /*
  * Conversion from MWPIXELVAL to red, green or blue components
@@ -526,6 +555,11 @@ typedef struct {
 #define PIXEL332GREEN(pixelval)		(((pixelval) >> 2) & 0x07)
 #define PIXEL332BLUE(pixelval)		((pixelval) & 0x03)
 
+/* return 2/3/3 bit b, g, r component of 8 bit pixelval*/
+#define PIXEL233RED(pixelval)		((pixelval) & 0x07)
+#define PIXEL233GREEN(pixelval)		(((pixelval) >> 3) & 0x07)
+#define PIXEL233BLUE(pixelval)		(((pixelval) >> 6) & 0x03)
+
 /*
  * Conversion from MWPIXELVAL to normal 8-bit red, green or blue components
  */
@@ -554,6 +588,11 @@ typedef struct {
 #define PIXEL332RED8(pixelval)          ( (pixelval)       & 0xe0)
 #define PIXEL332GREEN8(pixelval)        (((pixelval) << 3) & 0xe0)
 #define PIXEL332BLUE8(pixelval)         (((pixelval) << 6) & 0xc0)
+
+/* return 8 bit r, g or b component of 2/3/3 8 bit pixelval*/
+#define PIXEL233RED8(pixelval)          (((pixelval) << 5) & 0xe0)
+#define PIXEL233GREEN8(pixelval)        (((pixelval) << 2) & 0xe0)
+#define PIXEL233BLUE8(pixelval)         ( (pixelval)       & 0xc0)
 
 /*
  * Conversion from MWPIXELVAL to *32-bit* red, green or blue components
@@ -586,6 +625,11 @@ typedef struct {
 #define PIXEL332GREEN32(pixelval)        ((((unsigned long)(pixelval)) << 27) & 0xe0000000UL)
 #define PIXEL332BLUE32(pixelval)         ((((unsigned long)(pixelval)) << 30) & 0xc0000000UL)
 
+/* return 32 bit r, g or b component of 2/3/3 8 bit pixelval*/
+#define PIXEL233RED32(pixelval)          ((((unsigned long)(pixelval)) << 29) & 0xe0000000UL)
+#define PIXEL233GREEN32(pixelval)        ((((unsigned long)(pixelval)) << 26) & 0xe0000000UL)
+#define PIXEL233BLUE32(pixelval)         ((((unsigned long)(pixelval)) << 24) & 0xc0000000UL)
+
 /*
  * Conversion from MWPIXELVAL to MWCOLORVAL
  */
@@ -607,6 +651,10 @@ typedef struct {
 /* create RGB colorval (0xAABBGGRR) from 3/3/2 format pixel*/
 #define PIXEL332TOCOLORVAL(p)	\
 	(0xff000000ul | (((p) & 0xe0u)) | (((p) & 0x1cu) << 11) | (((p) & 0x03ul) << 19) | 0xff000000ul)
+
+/* create RGB colorval (0x00BBGGRR) from 2/3/3 format pixel*/
+#define PIXEL233TOCOLORVAL(p)	\
+	(((p) & 0x07) | (((p) & 0x38) << 5) | (((p) & 0xC0) << 14))
 
 #if MWPIXEL_FORMAT == MWPF_TRUECOLOR8888
 #define RGB2PIXEL(r,g,b)	RGB2PIXEL8888(r,g,b)
@@ -651,6 +699,15 @@ typedef struct {
 #define PIXEL2RED(p)		PIXEL332RED(p)
 #define PIXEL2GREEN(p)		PIXEL332GREEN(p)
 #define PIXEL2BLUE(p)		PIXEL332BLUE(p)
+#endif
+
+#if MWPIXEL_FORMAT == MWPF_TRUECOLOR233
+#define RGB2PIXEL(r,g,b)	RGB2PIXEL233(r,g,b)
+#define COLORVALTOPIXELVAL(c)	COLOR2PIXEL233(c)
+#define PIXELVALTOCOLORVAL(p)	PIXEL233TOCOLORVAL(p)
+#define PIXEL2RED(p)		PIXEL233RED(p)
+#define PIXEL2GREEN(p)		PIXEL233GREEN(p)
+#define PIXEL2BLUE(p)		PIXEL233BLUE(p)
 #endif
 
 #if 0000
@@ -777,13 +834,16 @@ PMWFONT	GdCreateFontFromBuffer(PSD psd, const unsigned char *buffer,
 		unsigned length, const char *format, MWCOORD height);
 PMWFONT	GdDuplicateFont(PSD psd, PMWFONT psrcfont, MWCOORD fontsize);
 
-/* devclip1.c*/
-void 	GdSetClipRects(PSD psd,int count,MWCLIPRECT *table);
+
+/* both devclip1.c and devclip2.c */
 MWBOOL	GdClipPoint(PSD psd,MWCOORD x,MWCOORD y);
 int	GdClipArea(PSD psd,MWCOORD x1, MWCOORD y1, MWCOORD x2, MWCOORD y2);
 extern MWCOORD clipminx, clipminy, clipmaxx, clipmaxy;
 
-/* devclip2.c*/
+/* devclip1.c only*/
+void 	GdSetClipRects(PSD psd,int count,MWCLIPRECT *table);
+
+/* devclip2.c only*/
 void	GdSetClipRegion(PSD psd, MWCLIPREGION *reg);
 
 /* devrgn.c - multi-rectangle region entry points*/
@@ -841,6 +901,11 @@ void 	GdGetModifierInfo(MWKEYMOD *modifiers, MWKEYMOD *curmodifiers);
 int  	GdReadKeyboard(MWKEY *buf, MWKEYMOD *modifiers, MWSCANCODE *scancode);
 extern KBDDEVICE kbddev;
 
+#ifdef MW_FEATURE_TWO_KEYBOARDS
+int  	GdOpenKeyboard2(void);
+extern KBDDEVICE kbddev2;
+#endif
+
 /* devimage.c */
 #if MW_FEATURE_IMAGES
 int	GdLoadImageFromBuffer(PSD psd, void *buffer, int size, int flags);
@@ -855,6 +920,45 @@ void	GdFreeImage(int id);
 MWBOOL	GdGetImageInfo(int id, PMWIMAGEINFO pii);
 void	GdStretchImage(PMWIMAGEHDR src, MWCLIPRECT *srcrect, PMWIMAGEHDR dst,
 		MWCLIPRECT *dstrect);
+void	GdDrawImagePartToFit(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
+		MWCOORD sx, MWCOORD sy, MWCOORD swidth, MWCOORD sheight, int id);
+void	GdComputeImagePitch(int bpp, int width, int *pitch, int *bytesperpixel);
+
+/* Buffered input functions to replace stdio functions*/
+typedef struct {  /* structure for reading images from buffer   */
+	unsigned char *start;	/* The pointer to the beginning of the buffer */
+	unsigned long offset;	/* The current offset within the buffer       */
+	unsigned long size;	/* The total size of the buffer               */
+} buffer_t;
+void	GdImageBufferInit(buffer_t *buffer, void *startdata, int size);
+void	GdImageBufferSeekTo(buffer_t *buffer, unsigned long offset);
+int	GdImageBufferRead(buffer_t *buffer, void *dest, unsigned long size);
+int	GdImageBufferGetChar(buffer_t *buffer);
+char *	GdImageBufferGetString(buffer_t *buffer, char *dest, unsigned int size);
+int	GdImageBufferEOF(buffer_t *buffer);
+
+/* individual decoders*/
+#ifdef HAVE_BMP_SUPPORT
+int	GdDecodeBMP(buffer_t *src, PMWIMAGEHDR pimage);
+#endif
+#ifdef HAVE_JPEG_SUPPORT
+int	GdDecodeJPEG(buffer_t *src, PMWIMAGEHDR pimage, PSD psd, MWBOOL fast_grayscale);
+#endif
+#ifdef HAVE_PNG_SUPPORT
+int	GdDecodePNG(buffer_t *src, PMWIMAGEHDR pimage);
+#endif
+#ifdef HAVE_GIF_SUPPORT
+int	GdDecodeGIF(buffer_t *src, PMWIMAGEHDR pimage);
+#endif
+#ifdef HAVE_PNM_SUPPORT
+int	GdDecodePNM(buffer_t *src, PMWIMAGEHDR pimage);
+#endif
+#ifdef HAVE_XPM_SUPPORT
+int	GdDecodeXPM(buffer_t *src, PMWIMAGEHDR pimage, PSD psd);
+#endif
+#ifdef HAVE_TIFF_SUPPORT
+int	GdDecodeTIFF(char *path, PMWIMAGEHDR pimage);
+#endif
 #endif /* MW_FEATURE_IMAGES */
 
 /* devlist.c*/
@@ -936,7 +1040,7 @@ int	GdErrorNull(const char *format, ...);  /* doesn't print msgs */
 #endif
 
 #if !_MINIX
-#ifndef __rtems__
+#if !defined __rtems__ && !defined __ECOS
 #define HAVESELECT	1	/* has select system call*/
 #endif
 #endif

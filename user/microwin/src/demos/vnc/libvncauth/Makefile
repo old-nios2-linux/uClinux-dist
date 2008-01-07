@@ -3,6 +3,11 @@
 # Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
 ##############################################################################
 
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/../..
+endif
+MW_DIR_RELATIVE := demos/vnc/libvncauth/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ######################## Additional Flags section ############################
@@ -28,15 +33,16 @@ ifeq ($(NANOXDEMO), Y)
 LIBNAME = libvncauth.a
 
 # List of objects to compile
-OBJS =	d3des.o \
-	vncauth.o
-	
+OBJS = \
+	$(MW_DIR_OBJ)/demos/vnc/libvncauth/d3des.o \
+	$(MW_DIR_OBJ)/demos/vnc/libvncauth/vncauth.o
+
 endif
 endif
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 

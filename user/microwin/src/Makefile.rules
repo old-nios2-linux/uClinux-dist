@@ -5,7 +5,7 @@
 #
 # This makefile should be placed at the top of a project hierarchy
 #
-# NOTE: The TOP environment variable should be set to that top directory
+# NOTE: The MW_DIR_SRC environment variable should be set to that top directory
 ##############################################################################
 
 ifeq ($(ARCH), DJGPP)
@@ -16,17 +16,16 @@ endif
 
 # install directories for headers and libraries
 INSTALL_PREFIX  = /usr
-INSTALL_USER    = root
-INSTALL_GROUP   = root
-INSTALL_GROUP_2 = bin
+INSTALL_OWNER1  = -o root -g root
+INSTALL_OWNER2  = -o root -g bin
 HDRINSTALLDIR = $(INSTALL_PREFIX)/include/microwin
 LIBINSTALLDIR = $(INSTALL_PREFIX)/lib
 BININSTALLDIR = $(INSTALL_PREFIX)/bin
 
-INSTALL_DIR   = install -c -m 755 -o $(INSTALL_USER) -g $(INSTALL_GROUP) -d
-INSTALL_HDR   = install -c -m 644 -o $(INSTALL_USER) -g $(INSTALL_GROUP_2)
-INSTALL_LIB   = install -c -m 644 -o $(INSTALL_USER) -g $(INSTALL_GROUP_2)
-INSTALL_BIN   = install -c -m 755 -o $(INSTALL_USER) -g $(INSTALL_GROUP_2)
+INSTALL_DIR   = install -c -m 755 $(INSTALL_OWNER1) -d
+INSTALL_HDR   = install -c -m 644 $(INSTALL_OWNER2)
+INSTALL_LIB   = install -c -m 644 $(INSTALL_OWNER2)
+INSTALL_BIN   = install -c -m 755 $(INSTALL_OWNER2)
 
 ##############################################################################
 # Defines, includes, and core libraries.  Controlled by the config file.
@@ -36,7 +35,7 @@ INSTALL_BIN   = install -c -m 755 -o $(INSTALL_USER) -g $(INSTALL_GROUP_2)
 DEFINES += -DMWPIXEL_FORMAT=$(SCREEN_PIXTYPE)
 
 # Includes
-INCLUDEDIRS += -I. -I$(TOP)/include
+INCLUDEDIRS += -I. -I$(MW_DIR_SRC)/include
 
 # Libraries required for the 'engine' functionality.
 MW_CORE_LIBS :=
@@ -67,6 +66,15 @@ endif
 
 ifeq ($(VGALIB), Y)
 LDFLAGS += -lvga
+endif
+
+ifeq ($(HAVE_VNCSERVER_SUPPORT), Y)
+INCLUDEDIRS += -I$(INCVNC) -I$(INCZ)
+DEFINES += -DHAVE_VNCSERVER=1
+ifeq ($(VNCSERVER_PTHREADED), Y)
+DEFINES += -DVNCSERVER_PTHREADED=1
+LDFLAGS += -lpthread 
+endif
 endif
 
 ifeq ($(ARCH),FREEBSD-X86)
@@ -133,27 +141,6 @@ endif
 LDFLAGS += -lm
 endif
 
-ifeq ($(HAVE_FREETYPE_2_SUPPORT), Y)
-ifeq ($(HAVE_FREETYPE_SUPPORT), Y)
-$(error Having both FreeType 1 and FreeType 2 support is not allowed.)
-endif
-DEFINES += -DHAVE_FREETYPE_2_SUPPORT=1
-DEFINES += -DFREETYPE_FONT_DIR=\"$(FREETYPE_FONT_DIR)\"
-MW_CORE_LIBS += $(LIBFT2LIB)
-# GCC 3.2 complains if system directories (e.g. /usr/include) are
-# specified with "-I".  For most INCxxx, we simply allow the
-# value to be set to empty to mean "no -I required".
-# Since FT2 requires $(INCFT2LIB)/freetype2 to always be
-# specified, we take a slightly different (and less reliable)
-# approach and simply skip the well-known system directories.
-ifneq ($(INCFT2LIB),/usr/include)
-ifneq ($(INCFT2LIB),/usr/local/include)
-INCLUDEDIRS += -I$(INCFT2LIB)
-endif
-endif
-INCLUDEDIRS += -I$(INCFT2LIB)/freetype2
-endif
-
 ifeq ($(HAVE_PCF_SUPPORT), Y)
 DEFINES += -DHAVE_PCF_SUPPORT=1
 DEFINES += -DPCF_FONT_DIR="\"$(PCF_FONT_DIR)"\"
@@ -207,6 +194,45 @@ endif
 
 endif
 
+# NOTE: Don't need FILEIO support for FreeType 2, since it can load
+# from memory buffers.
+
+ifeq ($(HAVE_FREETYPE_2_SUPPORT), Y)
+ifeq ($(HAVE_FREETYPE_SUPPORT), Y)
+$(error Having both FreeType 1 and FreeType 2 support is not allowed.)
+endif
+DEFINES += -DHAVE_FREETYPE_2_SUPPORT=1
+DEFINES += -DFREETYPE_FONT_DIR=\"$(FREETYPE_FONT_DIR)\"
+MW_CORE_LIBS += $(LIBFT2LIB)
+# GCC 3.2 complains if system directories (e.g. /usr/include) are
+# specified with "-I".  For most INCxxx, we simply allow the
+# value to be set to empty to mean "no -I required".
+# Since FT2 requires $(INCFT2LIB)/freetype2 to always be
+# specified, we take a slightly different (and less reliable)
+# approach and simply skip the well-known system directories.
+ifneq ($(INCFT2LIB),/usr/include)
+ifneq ($(INCFT2LIB),/usr/local/include)
+INCLUDEDIRS += -I$(INCFT2LIB)
+endif
+endif
+INCLUDEDIRS += -I$(INCFT2LIB)/freetype2
+endif
+
+ifeq ($(HAVE_FRIBIDI_SUPPORT), Y)
+DEFINES += -DHAVE_FRIBIDI_SUPPORT=1
+ifneq ($(INCFRIBIDI),)
+INCLUDEDIRS += -I$(INCFRIBIDI)
+endif
+ifneq ($(LIBFRIBIDI),)
+MW_CORE_LIBS += $(LIBFRIBIDI)
+else
+LDFLAGS += -lfribidi
+endif
+endif
+ifeq ($(HAVE_SHAPEJOINING_SUPPORT), Y)
+DEFINES += -DHAVE_SHAPEJOINING_SUPPORT=1
+endif
+
 ifeq ($(NOFONTSORCLIPPING), Y)
 DEFINES += -DNOFONTSORCLIPPING=1
 endif
@@ -245,6 +271,10 @@ endif
 ifeq ($(INVERT4BPP), Y)
 DEFINES += -DINVERT4BPP=1
 endif
+
+ifeq ($(INVERT2BPP), Y)
+DEFINES += -DINVERT2BPP=1
+endif
 endif # FRAMEBUFER
 
 ifeq ($(X11), Y)
@@ -270,6 +300,14 @@ endif # !ELKS
 
 ifeq ($(TPHELIO), Y)
 DEFINES += -DTPHELIO=1
+endif
+
+ifeq ($(LIRCMOUSE), Y)
+DEFINES += -DMW_LIRC_MOUSE=1
+endif
+
+ifeq ($(LIRCKBD2), Y)
+DEFINES += -DMW_FEATURE_TWO_KEYBOARDS=1
 endif
 
 # Nano-X specific stuff
@@ -337,16 +375,16 @@ endif
 endif
 
 ifeq ($(DEBUG), Y)
-OPTFLAGS += -ggdb
+OPTFLAGS += -ggdb -O0
 DEFINES += -DDEBUG=1
 else
 #OPTFLAGS += -DNDEBUG
 endif
 
-CFLAGS += $(INCLUDEDIRS)
-HOSTCFLAGS := $(INCLUDEDIRS)
+MAKEDEPCFLAGS :=
+HOSTCFLAGS :=
 CPPFLAGS += $(DEFINES)
-LDFLAGS += -L$(TOP)/lib
+LDFLAGS += -L$(MW_DIR_LIB)
 ifeq ($(ARCH), TRIMEDIA)
 ARFLAGS = r
 else
@@ -366,27 +404,29 @@ LINKER = ld
 
 # Include the rules for arch's
 # if the user has a specific arch local to their home load it
-# ifeq ($(HOME)/microwin/Arch.rules,$(wildcard $(HOME)/microwin/Arch.rules))
-# include $(HOME)/microwin/Arch.rules
-# else
-include $(TOP)/Arch.rules
-# endif
+ifeq ($(HOME)/microwin/Arch.rules,$(wildcard $(HOME)/microwin/Arch.rules))
+include $(HOME)/microwin/Arch.rules
+else
+include $(MW_DIR_SRC)/Arch.rules
+endif
 
 # Tools ...
-ifdef NOT_DEFINED_EVER
 CC = $(TOOLSPREFIX)$(COMPILER)
 CXX = $(TOOLSPREFIX)$(CXX_COMPILER)
 AR = $(TOOLSPREFIX)$(ACHIVER)
 LD = $(TOOLSPREFIX)$(LINKER)
-endif
 NM = $(TOOLSPREFIX)nm
-# STRIP = $(TOOLSPREFIX)strip
+STRIP = $(TOOLSPREFIX)strip
 OBJCOPY = $(TOOLSPREFIX)objcopy
-ifdef NOT_DEFINED_EVER
-RANLIB = $(TOOLSPREFIX)ranlib
-endif
 CP = cp
 MV = mv
+
+# Note: We don't put INCLUDEDIRS in HOSTCFLAGS.
+# When cross-compiling, we want to use the target headers for
+# generating dependencies (MAKEDEPCFLAGS), but the host's default
+# headers for compiling tools (HOSTCFLAGS).
+CFLAGS += $(INCLUDEDIRS)
+MAKEDEPCFLAGS += $(INCLUDEDIRS)
 
 ##############################################################################
 # Libraries.
@@ -396,32 +436,22 @@ MV = mv
 ##############################################################################
 
 MWINLIBS = \
-	$(TOP)/lib/libmwin.a \
-	$(TOP)/lib/libmwinlib.a\
-	$(TOP)/lib/libmwengine.a \
-	$(TOP)/lib/libmwdrivers.a \
-	$(TOP)/lib/libmwfonts.a \
-	$(TOP)/lib/libmwimages.a \
+	$(MW_DIR_LIB)/libmwin.a \
+	$(MW_DIR_LIB)/libmwimages.a \
 	$(MW_CORE_LIBS)
-CCMWINLIBS = -lmwin -lmwinlib -lmwengine -lmwdrivers -lmwfonts -lmwin -lmwimages -lm $(MW_CORE_LIBS)
+CCMWINLIBS = -lmwin -lmwimages -lm $(MW_CORE_LIBS)
 
-ifeq ($(LINK_APP_INTO_SERVER), Y)
-NANOXCLIENTLIBS += \
-	$(TOP)/lib/libnano-X.a \
-	$(TOP)/lib/libmwengine.a \
-	$(TOP)/lib/libmwdrivers.a \
-	$(TOP)/lib/libmwfonts.a \
-	$(MW_CORE_LIBS)
-CCNANOXCLIENTLIBS += -lnano-X -lmwengine -lmwdrivers -lmwfonts $(MW_CORE_LIBS)
-else
-NANOXCLIENTLIBS += $(TOP)/lib/libnano-X.a
+NANOXCLIENTLIBS += $(MW_DIR_LIB)/libnano-X.a
 CCNANOXCLIENTLIBS += -lnano-X
+ifeq ($(LINK_APP_INTO_SERVER), Y)
+NANOXCLIENTLIBS += $(MW_CORE_LIBS)
+CCNANOXCLIENTLIBS += $(MW_CORE_LIBS)
 endif
 
 NANOXSERVERLIBS += \
-	$(TOP)/lib/libmwengine.a \
-	$(TOP)/lib/libmwdrivers.a \
-	$(TOP)/lib/libmwfonts.a \
+	$(MW_DIR_LIB)/libmwengine.a \
+	$(MW_DIR_LIB)/libmwdrivers.a \
+	$(MW_DIR_LIB)/libmwfonts.a \
 	$(MW_CORE_LIBS)
 CCNANOXSERVERLIBS += -lmwengine -lmwdrivers -lmwfonts
 ifeq ($(SHAREDLIBS), Y)
@@ -436,42 +466,6 @@ endif
 ifeq ($(ARCH), DJGPP)
 CCMWINLIBS += -lgrx20
 NANOXCLIENTLIBS += -lgrx20
-endif
-# I think the ARCH is m68knommu. So the "ifeq ($(ARCH), uClinux)"
-# may not work. I do rather check if people are compiling for our board:
-ifeq ($(CONFIG_COBRA5272), y) # Compiling for COBRA5272?
-CCMWINLIBS = $(MWINLIBS) $(MWINLIBS) $(SYS_LIBS)
-CCNANOXLIBS = $(NANOXLIBS) $(SYS_LIBS)
-NANOXSERVERLIBS += $(SYS_LIBS)
-NANOXCLIENTLIBS += $(SYS_LIBS)
-CCNANOXSERVERLIBS += $(NANOXSERVERLIBS) $(SYS_LIBS)
-CCNANOXCLIENTLIBS += $(NANOXCLIENTLIBS) $(SYS_LIBS)
-else # Not compiling for COBRA5272 (same code as before):
-ifeq ($(ARCH), uClinux)
-CCMWINLIBS = $(MWINLIBS) $(MWINLIBS) $(SYS_LIBS)
-CCNANOXLIBS = $(NANOXLIBS) $(SYS_LIBS)
-NANOXSERVERLIBS += $(SYS_LIBS)
-NANOXCLIENTLIBS += $(SYS_LIBS)
-CCNANOXSERVERLIBS += $(NANOXSERVERLIBS) $(SYS_LIBS)
-CCNANOXCLIENTLIBS += $(NANOXCLIENTLIBS) $(SYS_LIBS)
-endif # end for "ifeq ($(ARCH), uClinux)".
-endif # end for "ifeq ($(CONFIG_COBRA5272), y)"
-
-
-ifeq ($(ARCH), CLEOPATRA)
-ifeq ($(CONFIG_M5307), y)
-CLEOLIB = $(ROOTDIR)/vendors/Feith/Cleopatra_src/lib/cleopatra.a
-else
-CLEOLIB = $(ROOTDIR)/vendors/Feith/Cleopatra2_src/lib/cleopatra2.a
-endif
-
-CCMWINLIBS = $(MWINLIBS) $(MWINLIBS) $(SYS_LIBS) $(CLEOLIB)
-CCNANOXLIBS = $(NANOXLIBS) $(SYS_LIBS) $(CLEOLIB)
-NANOXSERVERLIBS += $(SYS_LIBS) $(CLEOLIB)
-NANOXCLIENTLIBS += $(SYS_LIBS) $(CLEOLIB)
-CCNANOXSERVERLIBS += $(NANOXSERVERLIBS) $(SYS_LIBS)
-CCNANOXCLIENTLIBS += $(NANOXCLIENTLIBS) $(SYS_LIBS)
-
 endif
 
 ifeq ($(ARCH), FREEBSD-X86)
@@ -488,33 +482,47 @@ ifeq ($(VERBOSE), N)
 .SILENT:
 endif
 
-.PHONY: default subdirs clean cleandepend cleandepend-notsubdir xconfig makedestdirs
+.PHONY: default subdirs clean cleanapps xconfig makedestdirs
 
 # Add any exportable variable here
-export TOP ARCH CONFIG
+export MW_DIR_SRC MW_DIR_BIN MW_DIR_LIB MW_DIR_OBJ ARCH CONFIG
+
+# Do not use standard rules such as .c.o
+.SUFFIXES:
+
+# Do not delete "intermediate" files, such as the .c
+# files created from bitmaps and fonts.
+.SECONDARY:
 
 #
 # This is the default target
 # It looks for sub-directories with makefiles in it and tries to execute them
 #
 ifeq ($(SHAREDLIBS), Y)
-default: $(TOP)/bin $(TOP)/lib subdirs $(TOP)/lib/$(LIBNAME) $(TOP)/lib/$(LIBNAMESO)
+default: $(MW_DIR_BIN) $(MW_DIR_LIB) subdirs $(MW_DIR_LIB)/$(LIBNAME) $(MW_DIR_LIB)/$(LIBNAMESO)
 else
-default: $(TOP)/bin $(TOP)/lib subdirs $(TOP)/lib/$(LIBNAME)
+default: $(MW_DIR_BIN) $(MW_DIR_LIB) subdirs $(MW_DIR_LIB)/$(LIBNAME)
 endif
 
 # 'dirs' can be pre-specified
 ifeq ($(dirs), )
-dirs =	$(shell for file in `\ls`; \
-	do if [ -d $$file -a $$file != "demos" ]; then \
-	if [ -f $$file/Makefile ]; then echo $$file; fi; fi; done)
+# Look for all subdirectories that contain a Makefile,
+# but ignore the demos/ directory (if present).
+# Save the list of directory names to $(dirs) - this
+# variable is empty if the directories do not exist.
+dirs := $(dir $(wildcard $(MW_DIR_SRC)/$(MW_DIR_RELATIVE)*/Makefile))
+dirs := $(filter-out $(MW_DIR_SRC)/$(MW_DIR_RELATIVE)demos/,$(dirs))
+dirs := $(filter-out $(MW_DIR_SRC)/$(MW_DIR_RELATIVE)ecos/,$(dirs))
+dirs := $(filter-out $(MW_DIR_SRC)/$(MW_DIR_RELATIVE)rtems/,$(dirs))
 endif
 
 # 'demos' can be pre-specified
 ifeq ($(demos), )
-demos =	$(shell for file in `\ls`; \
-	do if [ -d $$file -a $$file = "demos" ]; then \
-	if [ -f $$file/Makefile ]; then echo $$file; fi; fi; done)
+# Look for the subdirectory demos/ that contains a Makefile,
+# if present.
+# Save the directory name to $(demos) - this variable is
+# empty if the directory does not exist.
+demos := $(dir $(wildcard $(MW_DIR_SRC)/$(MW_DIR_RELATIVE)demos/Makefile))
 endif
 
 #
@@ -534,143 +542,208 @@ $(dirs:%=subdir-%): makedestdirs
 
 makedestdirs:
 ifeq ($(ARCH), DJGPP)
-
 	$(shell set CURDIR=$(pwd);)
-
-	$(shell \
-	if [ ! -d $(TOP)/bin ]; \
-	then mkdir $(TOP)/bin; fi;)
-
-	$(shell \
-	if [ ! -d $(TOP)/lib ]; \
-	then mkdir $(TOP)/lib; fi;)
-
+	[ -d $(MW_DIR_BIN) ] || mkdir $(MW_DIR_BIN)
+	[ -d $(MW_DIR_LIB) ] || mkdir $(MW_DIR_LIB)
 endif
 	@#
+
+#
+# This rule creates the directory for the target.
+#
+define MW_RULE_MAKE_TARGET_DIR
+[ -d $(dir $@) ] || mkdir -p $(dir $@)
+endef
 
 #
 # If a library name is specified,
 # a library of that name will be created with objects in that directory
 #
 ifneq ($(LIBNAME),)
-$(TOP)/lib/$(LIBNAME): $(OBJS) $(CXXOBJS)
-	@echo "Creating library $@ ..."
-	$(AR) $(ARFLAGS) $(TOP)/lib/$(LIBNAME) $(OBJS) $(CXXOBJS) $(ASMOBJS)
-	-$(RANLIB) $(TOP)/lib/$(LIBNAME)
+$(MW_DIR_LIB)/$(LIBNAME): $(OBJS) $(CXXOBJS)
+	@echo "Creating library $(patsubst $(MW_DIR_LIB)/%,%,$@) ..."
+	$(AR) $(ARFLAGS) $(MW_DIR_LIB)/$(LIBNAME) $(OBJS) $(CXXOBJS) $(ASMOBJS)
 endif
 
 #
 # If a shared object library name is specified, link this object
 #
 ifeq ($(SHAREDLIBS), Y)
-$(TOP)/lib/$(LIBNAMESO): $(TOP)/lib/$(LIBNAME)
-	@echo "Creating shared library $@ ..."
-	$(LD) -shared -o $@ --whole-archive $^
+$(MW_DIR_LIB)/$(LIBNAMESO): $(MW_DIR_LIB)/$(LIBNAME)
+	@echo "Creating shared library $(patsubst $(MW_DIR_LIB)/%,%,$@) ..."
+	$(CC) -shared -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 endif
 
 #
 # Make sure that bin and lib directories exist
 #
-$(TOP)/bin $(TOP)/lib: 
+$(MW_DIR_BIN) $(MW_DIR_LIB): 
 	@mkdir -p $@
 
 #
-# Dependencies target for C files
+# This rule generates a dependencies *.d file from a C or C++ source file.
+# The .d file is placed in the same directory as the .o file.
 #
-.depend: $(OBJS:.o=.c) $(CXXOBJS:.o=.cc)
-	@echo "Updating dependencies in $(CURDIR) ..."
-	$(SHELL) -ec '$(HOSTCC) -MM $(CPPFLAGS) $(HOSTCFLAGS) $(OBJS:.o=.c) \
-	| sed '\''s/\($*\)\.o[ :]*/\1.o \$@ : $$(TOP)\/config /g'\'' > $@; \
-	[ -s $@ ] || rm -f $@'
+# The sed script replaces the short .o filename produced by gcc with the
+# full filename used by make.  This is only necessary if make is using
+# a filename including a directory part, since some [all?] versions of
+# gcc will remove the directory.  However, it does not hurt to always
+# use the sed script.
+#
+# Note that on error, this rule removes the (incomplete) .d file, and
+# also removes the .o file so that the rule will be run again next
+# time the user runs make.
+#
+define MW_RULE_DEPEND_C
+	$(HOSTCC) -MM $(MAKEDEPCFLAGS) $(DEFINES) $< \
+		| sed 's/.*\.o[ :]*/$(subst /,\/,$@) : /g' \
+		> $(basename $@).d \
+		|| (rm $@ $(basename $@).d ; exit 1)
+endef
 
 #
 # Compilation target for C files
 #
-%.o:%.c
-	@echo "Compiling $< ..."
+$(MW_DIR_OBJ)/%.o: $(MW_DIR_SRC)/%.c $(CONFIG)
+	@echo "Compiling $(patsubst $(MW_DIR_SRC)/%,%,$<) ..."
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@$(MW_RULE_MAKE_TARGET_DIR)
+endif
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) -o $@ $<
+	$(MW_RULE_DEPEND_C)
 
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+#
+# Compilation target for generated C files
+# (e.g. C files generated from bitmaps, fonts, etc)
+#
+$(MW_DIR_OBJ)/%.o: $(MW_DIR_OBJ)/%.c $(CONFIG)
+	@echo "Compiling $(patsubst $(MW_DIR_OBJ)/%,%,$<) ..."
+	@$(MW_RULE_MAKE_TARGET_DIR)
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) -o $@ $<
+	$(MW_RULE_DEPEND_C)
+endif
 
 #
 # Compilation target for C++ files
 #
-%.o:%.cc
-	@echo "C++ compiling $< ..."
+$(MW_DIR_OBJ)/%.o: $(MW_DIR_SRC)/%.cc $(CONFIG)
+	@echo "Compiling $(patsubst $(MW_DIR_SRC)/%,%,$<) ..."
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@$(MW_RULE_MAKE_TARGET_DIR)
+endif
 	$(CXX) -c $(CFLAGS) $(CXXFLAGS) -o $@ $<
+	$(MW_RULE_DEPEND_C)
+
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+#
+# Compilation target for generated C++ files
+#
+$(MW_DIR_OBJ)/%.o: $(MW_DIR_OBJ)/%.cc $(CONFIG)
+	@echo "Compiling $(patsubst $(MW_DIR_OBJ)/%,%,$<) ..."
+	@$(MW_RULE_MAKE_TARGET_DIR)
+	$(CXX) -c $(CFLAGS) $(CXXFLAGS) -o $@ $<
+	$(MW_RULE_DEPEND_C)
+endif
 
 #
 # Compilation target for bmp file conversion
 #
-%.c:%.bmp $(TOP)/bin/convbmp
-	echo "Generating $@ from bitmap file ..."
-	$(TOP)/bin/convbmp -o $@ $<
+$(MW_DIR_OBJ)/%.c: $(MW_DIR_SRC)/%.bmp $(MW_DIR_BIN)/convbmp
+	echo "Converting $(patsubst $(MW_DIR_SRC)/%,%,$<) ..."
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@$(MW_RULE_MAKE_TARGET_DIR)
+endif
+	$(MW_DIR_BIN)/convbmp -o $@ $<
 
 #
 # Compilation target for tool that does bmp file conversion
 #
-$(TOP)/bin/convbmp: $(TOP)/mwin/bmp/convbmp.c
-	echo "Building $@ tool ..."
+$(MW_DIR_BIN)/convbmp: $(MW_DIR_SRC)/mwin/bmp/convbmp.c
+	echo "Building $(patsubst $(MW_DIR_BIN)/%,%,$@) tool ..."
 	$(HOSTCC) $(HOSTCFLAGS) $< -o $@
 
 #
 # Compilation target for bdf font file conversion
 #
-%.c:%.bdf $(TOP)/bin/convbdf
-	echo "Generating $@ from font file ..."
-	$(TOP)/bin/convbdf -c -o $@ $<
+$(MW_DIR_OBJ)/%.c: $(MW_DIR_SRC)/%.bdf $(MW_DIR_BIN)/convbdf
+	echo "Converting $(patsubst $(MW_DIR_SRC)/%,%,$<) ..."
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@$(MW_RULE_MAKE_TARGET_DIR)
+endif
+	$(MW_DIR_BIN)/convbdf -c -o $@ $<
 
 #
 # Compilation target for tool that does bdf font file conversion
 #
-$(TOP)/bin/convbdf: $(TOP)/fonts/convbdf.c
-	echo "Building $@ tool ..."
+$(MW_DIR_BIN)/convbdf: $(MW_DIR_SRC)/fonts/convbdf.c
+	echo "Building $(patsubst $(MW_DIR_BIN)/%,%,$@) tool ..."
 	$(HOSTCC) $(HOSTCFLAGS) $< -o $@
 
 xconfig:
 	./xconfigure
 
 # don't clean lib dir
-cleanapps: cleandepend-notsubdir
-	@echo "Cleaning directory       $(CURDIR) ..."
-	$(RM) core *~ *.bak *.o TAGS
-	$(RM) bin/*
+cleanapps:
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@echo "Cleaning $(MW_DIR_RELATIVE) ..."
+	$(RM) -rf $(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)
+#	$(RM) -rf $(MW_DIR_BIN)/
+#	mkdir $(MW_DIR_BIN)
+endif
+	@echo "Cleaning directory $(MW_DIR_RELATIVE) ..."
+	$(RM) \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)core \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*~ \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.bak \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.o \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.d \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)TAGS \
+		$(MW_DIR_BIN)/*
 	$(foreach dir, $(dirs), $(MAKE) -C $(dir) cleanapps;)
 	$(foreach dir, $(demos), $(MAKE) -C $(dir) cleanapps;)
 
-clean: cleandepend-notsubdir
-	@echo "Cleaning directory       $(CURDIR) ..."
-	$(RM) core *~ *.bak *.o TAGS
-	$(RM) $(TOP)/lib/*.a $(TOP)/lib/*.so
-	$(shell cd $(TOP)/bin && \
-		for file in `\ls`; do if [ ! -d $$file ]; \
-		then $(RM) $$file; fi; done; cd $(TOP))
+clean:
+ifneq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	@echo "Cleaning $(MW_DIR_RELATIVE) ..."
+	$(RM) -rf $(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)
+#	$(RM) -rf $(MW_DIR_BIN)/ $(MW_DIR_LIB)/
+#	mkdir $(MW_DIR_BIN)
+#	mkdir $(MW_DIR_LIB)
+endif
+	@echo "Cleaning directory $(MW_DIR_RELATIVE) ..."
+	$(RM) \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)core \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*~ \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.bak \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.o \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.d \
+		$(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)TAGS \
+		$(MW_DIR_LIB)/*.a \
+		$(MW_DIR_LIB)/*.so
+	for file in $(wildcard $(MW_DIR_BIN)/*); do \
+		if [ ! -d $$file ]; then \
+			$(RM) $$file; \
+		fi; \
+	done
 	$(foreach dir, $(dirs), $(MAKE) -C $(dir) clean;)
 	$(foreach dir, $(demos), $(MAKE) -C $(dir) clean;)
-
-
-cleandepend-notsubdir:
-	@echo "Cleaning dependencies in $(CURDIR) ..."
-	$(RM) .depend
-
-cleandepend: cleandepend-notsubdir
-	$(foreach dir, $(dirs), $(MAKE) -C $(dir) cleandepend;)	
-	$(foreach dir, $(demos), $(MAKE) -C $(dir) cleandepend;)	
 
 install: default
 	$(INSTALL_DIR) $(HDRINSTALLDIR)
 	echo "Copying hdrs to $(HDRINSTALLDIR)"
-	$(INSTALL_HDR) include/*.h $(HDRINSTALLDIR)
+	$(INSTALL_HDR) $(MW_DIR_SRC)/include/*.h $(HDRINSTALLDIR)
 	echo "Copying libs to $(LIBINSTALLDIR)"
 	$(INSTALL_DIR) $(LIBINSTALLDIR)
-	$(INSTALL_LIB) lib/*.a $(LIBINSTALLDIR)
+	$(INSTALL_LIB) $(MW_DIR_LIB)/*.a $(LIBINSTALLDIR)
 ifeq ($(SHAREDLIBS), Y)
-	$(INSTALL_LIB) lib/*.so $(LIBINSTALLDIR)
+	$(INSTALL_LIB) $(MW_DIR_LIB)/*.so $(LIBINSTALLDIR)
 endif
 ifeq ($(NANOX), Y)
 ifeq ($(LINK_APP_INTO_SERVER), N)
 	echo "Copying binaries to $(BININSTALLDIR)"
 	$(INSTALL_DIR) $(BININSTALLDIR)
-	$(INSTALL_BIN) bin/nano-X $(BININSTALLDIR)
+	$(INSTALL_BIN) $(MW_DIR_BIN)/nano-X $(BININSTALLDIR)
 else
 	rm -f $(BININSTALLDIR)/nano-X
 endif
@@ -694,8 +767,8 @@ ifneq ($(MAKECMDGOALS), clean)
 ifneq ($(MAKECMDGOALS), cleandepend)
 ifneq ($(MAKECMDGOALS), realclean)
 ifneq ($(MAKECMDGOALS), xconfig)
-ifneq ($(OBJS),)
--include .depend
+ifneq ($(wildcard $(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.d),)
+-include $(wildcard $(MW_DIR_OBJ)/$(MW_DIR_RELATIVE)*.d)
 endif
 endif
 endif

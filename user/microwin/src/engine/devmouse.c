@@ -3,8 +3,6 @@
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (C) 1999 Bradley D. LaRonde (brad@ltc.com)
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Device-independent top level mouse and cursor routines
  *
@@ -605,7 +603,7 @@ filter_relrotate(int state, int *xpos, int *ypos, int x, int y)
 		break;
 
 	case MWPORTRAIT_DOWN:
-		*xpos += x;
+		*xpos -= x;
 		*ypos -= y;
 		break;
 

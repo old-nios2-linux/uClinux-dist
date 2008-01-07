@@ -1,5 +1,5 @@
-The Microwindows Project
-Copyright (c) 1999-2003 Greg Haerr <greg@censoft.com>
+The Nano-X Window System
+Copyright (c) 1999-2005 Greg Haerr <greg@censoft.com>
 
 CREDITS
 Thanks to everyone who has contributed to this project.
@@ -8,7 +8,7 @@ If I've missed you, please remind me or submit something!
 
 Contributors
 Engine				Greg Haerr, David Bell, Morten Rolland, Alex Holden
-Win32 api			Greg Haerr
+Win32 api			Greg Haerr, Gabriele Brugnoni
 Nano-X api			David Bell, Alan Cox, Alex Holden, Greg Haerr
 Nano-X window manager		Alex Holden, Greg Haerr
 Nano-X popup keyboard		Vladimir Cotfas, Jay Carlson, Greg Haerr
@@ -31,8 +31,10 @@ DJGPP/GRX port			Victor Rogachev
 C++ objects framework		Chris Johns
 Arc clipping routines		Eero Tamminen
 Mozilla kbd,rops,font enum	Matthew Wlazlo
+eCos port improvements          Alexander Neundorf
 
 Contact Info
+Gabriele Brugnoni	<gabrielebrugnoni@dveprojects.com>
 Jay Carlson		<nop@nop.com>
 Vladimir Cotfas		<vladimircotfas@vtech.ca>
 Alan Cox		<alan@lxorguk.ukuu.org.uk>
@@ -53,3 +55,4 @@ Morten Rolland		<mortenro@screenmedia.no>
 Rosimildo daSilva	<rosimildo@xoommail.com>
 Eero Tamminen		<oak@welho.com>
 Matthew Wlazlo		<mattw@igelaus.com.au>
+Alexander Neundorf	<neundorf@kde.org>

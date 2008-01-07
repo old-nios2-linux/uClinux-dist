@@ -6,9 +6,6 @@
  * Copyright (c) 2000 Vidar Hokstad
  * Copyright (c) 2000 Morten Rolland <mortenro@screenmedia.no>
  *
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
- *
  * Client routines to do graphics with windows and graphics contexts.
  *
  * Rewritten heavily for speed by Greg Haerr
@@ -29,6 +26,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+#include <assert.h>
 #if HAVE_SHAREDMEM_SUPPORT
 #include <sys/types.h>
 #include <sys/ipc.h>
@@ -96,7 +94,7 @@ static fd_set regfdset;
 /**
  * Human-readable error strings.
  */
-char *nxErrorStrings[] = {
+const char *nxErrorStrings[] = {
 	GR_ERROR_STRINGS
 };
 
@@ -2994,18 +2992,36 @@ GrBitmap(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 	GR_SIZE height, GR_BITMAP *imagebits)
 {
 	nxBitmapReq *req;
-	long 	     bitmapsize;
+	GR_SIZE	chunk_y    = height;
+	long	bitmapsize = (long)GR_BITMAP_SIZE(width, height) * sizeof(GR_BITMAP);
 
-	bitmapsize = (long)GR_BITMAP_SIZE(width, height) * sizeof(GR_BITMAP);
+	if (bitmapsize > MAXREQUESTSZ) {
+		chunk_y = (GR_SIZE)(((long)height * MAXREQUESTSZ) / bitmapsize);
+		/* needs to be one line less than max */
+		if (chunk_y)
+			chunk_y--;
+		bitmapsize = (long)GR_BITMAP_SIZE(width, chunk_y) * sizeof(GR_BITMAP);
+		}
+
 	LOCK(&nxGlobalLock);
-	req = AllocReqExtra(Bitmap, bitmapsize);
-	req->drawid = id;
-	req->gcid = gc;
-	req->x = x;
-	req->y = y;
-	req->width = width;
-	req->height = height;
-	memcpy(GetReqData(req), imagebits, bitmapsize);
+	/* Break request into MAXREQUESTSZ size packets */
+	while(height > 0) {
+		if(chunk_y > height) {
+			chunk_y = height;
+			bitmapsize = (long)GR_BITMAP_SIZE(width, chunk_y) * sizeof(GR_BITMAP);
+		}
+		req = AllocReqExtra(Bitmap, bitmapsize);
+		req->drawid = id;
+		req->gcid = gc;
+		req->x = x;
+		req->y = y;
+		req->width = width;
+		req->height = chunk_y;
+		memcpy(GetReqData(req), imagebits, bitmapsize);
+		imagebits += bitmapsize / sizeof(GR_BITMAP);
+		y += chunk_y;
+		height -= chunk_y;
+	}
 	UNLOCK(&nxGlobalLock);
 }
 
@@ -3026,33 +3042,52 @@ void
 GrDrawImageBits(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	GR_IMAGE_HDR *pimage)
 {
-	nxDrawImageBitsReq	*req;
-	int			imagesize;
-	int			palsize;
-	char			*addr;
+	nxDrawImageBitsReq    *req;
+	int		      imagesize, blocksize;
+	int		      palsize, rest, step;
+	char                  *addr;
+	char		      *bits;
 
 	imagesize = pimage->pitch * pimage->height;
 	palsize = pimage->palsize * sizeof(MWPALENTRY);
-	LOCK(&nxGlobalLock);
-	req = AllocReqExtra(DrawImageBits, imagesize + palsize);
-	req->drawid = id;
-	req->gcid = gc;
-	req->x = x;
-	req->y = y;
-	/* fill MWIMAGEHDR items passed externally*/
-	req->width = pimage->width;
-	req->height = pimage->height;
-	req->planes = pimage->planes;
-	req->bpp = pimage->bpp;
-	req->pitch = pimage->pitch;
-	req->bytesperpixel = pimage->bytesperpixel;
-	req->compression = pimage->compression;
-	req->palsize = pimage->palsize;
-	req->transcolor = pimage->transcolor;
-	addr = GetReqData(req);
-	memcpy(addr, pimage->imagebits, imagesize);
-	memcpy(addr+imagesize, pimage->palette, palsize);
-	UNLOCK(&nxGlobalLock);
+	bits = pimage->imagebits;
+	rest = pimage->height;
+
+	/* so many lines can be transfered in one step */
+	step = (MAXREQUESTSZ - palsize -
+		sizeof(nxDrawImageBitsReq)) / pimage->pitch;
+	assert(step > 0);
+
+	while (rest > 0) {
+		if (rest < step)
+		    step = rest;
+		blocksize = pimage->pitch * step;
+
+		LOCK(&nxGlobalLock);
+		req = AllocReqExtra(DrawImageBits, blocksize + palsize);
+		req->drawid = id;
+		req->gcid = gc;
+		req->x = x;
+		req->y = y;
+		/* fill MWIMAGEHDR items passed externally*/
+		req->width = pimage->width;
+		req->height = step;
+		req->planes = pimage->planes;
+		req->bpp = pimage->bpp;
+		req->pitch = pimage->pitch;
+		req->bytesperpixel = pimage->bytesperpixel;
+		req->compression = pimage->compression;
+		req->palsize = pimage->palsize;
+		req->transcolor = pimage->transcolor;
+		addr = GetReqData(req);
+		memcpy(addr, bits, blocksize);
+		memcpy(addr+imagesize, pimage->palette, palsize);
+		UNLOCK(&nxGlobalLock);
+
+		y += step;
+		rest -= step;
+		bits += blocksize;
+	}
 }
 
 #if MW_FEATURE_IMAGES && defined(HAVE_FILEIO)
@@ -3168,6 +3203,50 @@ GrDrawImageToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
 	req->imageid = imageid;
 	UNLOCK(&nxGlobalLock);
 }
+
+/**
+ * Draws specified part of the image from the specified image buffer at the specified position
+ * on the specified drawable using the specified graphics context. The
+ * width and height values specify the size of the image to draw- if the
+ * actual image is a different size, it will be scaled to fit.
+ *
+ * @param id  the ID of the drawable to draw the image onto
+ * @param gc  the ID of the graphics context to use when drawing the image
+ * @param x  the X coordinate to draw the image at relative to the drawable
+ * @param y  the Y coordinate to draw the image at relative to the drawable
+ * @param width  the maximum image width
+ * @param height  the maximum image height
+ * @param sx  the X coordinate at the source pixmap to draw from
+ * @param sy  the Y coordinate at the source pixmap to draw from
+ * @param swidth  the maximum source image width
+ * @param sheight  the maximum source image height
+ * @param imageid  the ID of the image buffer containing the image to display
+ *
+ * @ingroup nanox_image
+ */ 
+void
+GrDrawImagePartToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD dx, GR_COORD dy,
+	GR_SIZE dwidth, GR_SIZE dheight, GR_COORD sx, GR_COORD sy,
+	GR_SIZE swidth, GR_SIZE sheight, GR_IMAGE_ID imageid)
+{
+	nxDrawImagePartToFitReq *req;
+	LOCK(&nxGlobalLock);
+	req = AllocReq(DrawImagePartToFit);
+	req->drawid = id;
+	req->gcid = gc;
+	req->dx = dx;
+	req->dy = dy;
+	req->dwidth = dwidth;
+	req->dheight = dheight;
+	req->sx = sx;
+	req->sy = sy;
+	req->swidth = swidth;
+	req->sheight = sheight;
+	req->imageid = imageid;
+	UNLOCK(&nxGlobalLock);
+
+}
+
 #endif /* MW_FEATURE_IMAGES */
 
 #if MW_FEATURE_IMAGES
@@ -3369,6 +3448,8 @@ GrDrawImageFromBuffer(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
+ * MWPF_TRUECOLOR233	unsigned char
+ * MWPF_HWPIXELVAL	one of the above values (run-time dependent)
  */
 /**
  * Draws the specified pixel array of the specified size and format onto the
@@ -3395,9 +3476,24 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 	long       size;
 	long       chunk_y;
 	int        pixsize;
+	int	   type;
+	static int hwpixtype = 0;
+
+	/* find pixel type for hw format pixel if required*/
+	if (pixtype == MWPF_HWPIXELVAL) {
+		/* kluge handle getting hw pixel size once*/
+		if (hwpixtype == 0) {
+			GR_SCREEN_INFO si;
+
+			GrGetScreenInfo(&si);
+			hwpixtype = si.pixtype;
+		}
+		type = hwpixtype;
+	} else
+		type = pixtype;
 
 	/* Calculate size of packed pixels*/
-	switch(pixtype) {
+	switch(type) {
 	case MWPF_RGB:
 		pixsize = sizeof(MWCOLORVAL);
 		break;
@@ -3405,6 +3501,7 @@ GrArea(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y, GR_SIZE width,
 		pixsize = sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
+	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		pixsize = sizeof(unsigned char);
 		break;

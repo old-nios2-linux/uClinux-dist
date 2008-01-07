@@ -3,11 +3,11 @@
 # Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
 ##############################################################################
 
-ifndef TOP
-TOP = ../..
-CONFIG = $(TOP)/config
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/../..
 endif
-
+MW_DIR_RELATIVE := demos/nxkbd/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ######################## Additional Flags section ############################
@@ -26,37 +26,53 @@ LDFLAGS +=
 
 ############################# targets section ################################
 
+ifeq ($(NANOX), Y)
+ifeq ($(NANOXDEMO), Y)
+
 # If you want to create a library with the objects files, define the name here
 LIBNAME =
 
 # List of objects to compile
-OBJS = nxkbd.o srvconn.o keynorm.o keyctrl.o keyshft.o keynum.o
+OBJS := \
+	$(MW_DIR_OBJ)/demos/nxkbd/nxkbd.o \
+	$(MW_DIR_OBJ)/demos/nxkbd/srvconn.o \
+	$(MW_DIR_OBJ)/demos/nxkbd/keynorm.o \
+	$(MW_DIR_OBJ)/demos/nxkbd/keyctrl.o \
+	$(MW_DIR_OBJ)/demos/nxkbd/keyshft.o \
+	$(MW_DIR_OBJ)/demos/nxkbd/keynum.o
 
 ifeq ($(ARCH), ECOS)
-TARGET = $(TOP)/bin/nxkbd.o
+TARGET = $(MW_DIR_BIN)/nxkbd.o
 else
-TARGET = $(TOP)/bin/nxkbd
+TARGET = $(MW_DIR_BIN)/nxkbd
 endif
 
 all: default $(TARGET)
 
+endif
+endif
+
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 
 ifeq ($(SHAREDLIBS), Y)
-$(TOP)/bin/nxkbd: $(OBJS) $(NANOXCLIENTLIBS) $(TOP)/config
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CCNANOXCLIENTLIBS) $(LDLIBS)
+$(MW_DIR_BIN)/nxkbd: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CCNANOXCLIENTLIBS)
 else
 ifeq ($(ARCH), ECOS)
-$(TOP)/bin/nxkbd.o: $(OBJS) $(TOP)/config
+$(MW_DIR_BIN)/nxkbd.o: $(OBJS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -Wl,-r -Wl,--defsym -Wl,nxkbd_main=main -o XX.o
-	$(NM) XX.o | grep -v _main | grep ' T' | awk -f $(TOP)/ecos/retain.awk | xargs $(OBJCOPY) XX.o $@
+	$(NM) XX.o | grep -v _main | grep ' T' | awk -f $(MW_DIR_SRC)/ecos/retain.awk | xargs $(OBJCOPY) XX.o $@
 	rm -f XX.o
 else
-$(TOP)/bin/nxkbd: $(OBJS) $(NANOXCLIENTLIBS) $(TOP)/config
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS) $(LDLIBS)
+$(MW_DIR_BIN)/nxkbd: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS)
 endif
 endif
+

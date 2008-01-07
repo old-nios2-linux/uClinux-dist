@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 1999, 2000, Wei Yongming.
- * Portions Copyright (c) 2000 Greg Haerr <greg@censoft.com>
+ * Portions Copyright (c) 2000, 2005 Greg Haerr <greg@censoft.com>
  *
  * Static control for Microwindows win32 api.
  */
@@ -40,36 +40,48 @@
 **  WEI Yongming    2000/02/24  Tsinghua    Add MPL License         Finished
 **  Kevin Tseng     2000/06/26  gv          port to microwin        ported
 **  Greg Haerr      2000/07/05  Utah        bug fixes               Finished
+** Gabriele Brugnoni 2003/08/30 Italy      WM_SETFONT implementation Finished
+** Gabriele Brugnoni 2003/09/10 Italy      Style SS_BITMAP loads bmp from resources.
+** Gabriele Brugnoni 2003/09/10 Italy      Static text now support '\n' and word wrap
+** Gabriele Brugnoni 2003/09/10 Italy      Implemented WM_CTLCOLORSTATIC
+** Gabriele Brugnoni 2004/12/27 Italy      Implemented UTF8 and internationalizations.
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define MWINCLUDECOLORS
-#include "windows.h"	/* windef.h, winuser.h */
+#include "windows.h"		/* windef.h, winuser.h */
+#include "wintern.h"
 #include "wintools.h"
-#include "device.h" 	/* GdGetTextSize */
+#include "device.h"		/* GdGetTextSize */
+#include "intl.h"
 
 /* jmt: should be SYSTEM_FIXED_FONT because of minigui's GetSysCharXXX() */
-#define FONT_NAME	SYSTEM_FIXED_FONT	/* was DEFAULT_GUI_FONT*/
+#define FONT_NAME	SYSTEM_FIXED_FONT	/* was DEFAULT_GUI_FONT */
 
 static LRESULT CALLBACK
-StaticControlProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+StaticControlProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-int WINAPI MwRegisterStaticControl(HINSTANCE hInstance)
+#define GET_WND_FONT(hWnd)	((HFONT)GetWindowLong(hWnd, 0))
+#define SET_WND_FONT(hWnd, fnt)	SetWindowLong(hWnd, 0, (LPARAM)fnt)
+
+int WINAPI
+MwRegisterStaticControl(HINSTANCE hInstance)
 {
-	WNDCLASS	wc;
+	WNDCLASS wc;
 
-	wc.style	= CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | CS_GLOBALCLASS;
-	wc.lpfnWndProc	= (WNDPROC)StaticControlProc;
-	wc.cbClsExtra	= 0;
-	wc.cbWndExtra	= 0;
-	wc.hInstance	= hInstance;
-	wc.hIcon	= NULL;
-	wc.hCursor	= 0; /*LoadCursor(NULL, IDC_ARROW);*/
-	wc.hbrBackground= GetStockObject(WHITE_BRUSH);
-	wc.lpszMenuName	= NULL;
-	wc.lpszClassName= "STATIC";
+	wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | CS_GLOBALCLASS;
+	wc.lpfnWndProc = (WNDPROC) StaticControlProc;
+	wc.cbClsExtra = 0;
+	wc.cbWndExtra = 4;	// allow space for storing font information
+	wc.hInstance = hInstance;
+	wc.hIcon = NULL;
+	wc.hCursor = 0;		/*LoadCursor(NULL, IDC_ARROW); */
+	/* FIXME: should be NULL_BRUSH, but does not works with current mw ver. */
+	wc.hbrBackground = GetStockObject(WHITE_BRUSH);
+	wc.lpszMenuName = NULL;
+	wc.lpszClassName = "STATIC";
 
 	return RegisterClass(&wc);
 }
@@ -78,292 +90,412 @@ int WINAPI MwRegisterStaticControl(HINSTANCE hInstance)
 #define RECTW(rc) (rc.right-rc.left)
 #define RECTH(rc) (rc.bottom-rc.top)
 
-static DWORD GetWindowStyle (HWND hwnd)
+static DWORD
+GetWindowStyle(HWND hwnd)
 {
 	return hwnd->style;
 }
 
-static COLORREF GetWindowBkColor (HWND hwnd)
+static COLORREF
+GetWindowBkColor(HWND hwnd)
 {
 	MWBRUSHOBJ *hbr;
-	hbr=(MWBRUSHOBJ *)hwnd->pClass->hbrBackground;
+	hbr = (MWBRUSHOBJ *) hwnd->pClass->hbrBackground;
 	return hbr->color;
 }
 
-static char *GetWindowCaption (HWND hwnd)
+static char *
+GetWindowCaption(HWND hwnd)
 {
 	return hwnd->szTitle;
 }
 
-static void SetWindowCaption (HWND hwnd,char *caption)
+
+static int
+GetSysCharHeight(HWND hwnd)
 {
-	if (strlen(caption)<=63)	/* mw: szTitle[64] */
-		strcpy(hwnd->szTitle,caption);
-	else
-	{
-		strncpy(hwnd->szTitle,caption,63);
-		hwnd->szTitle[63]='\0';
-	}
-}
+	HDC hdc;
+	int xw, xh, xb;
 
-static int GetSysCharHeight (HWND hwnd) 
-{
-	HDC 		hdc;
-    	int xw, xh, xb;
+	hdc = GetDC(hwnd);
 
-    	hdc = GetDC(hwnd);
+	SelectObject(hdc, GET_WND_FONT(hwnd));
 
-	SelectObject(hdc, GetStockObject(FONT_NAME));
-
-#if MWCLIENT	/* nanox client */
-    	GrGetGCTextSize(hdc->gc, "X", 1, MWTF_ASCII, &xw, &xh, &xb);
+#if MWCLIENT			/* nanox client */
+	GrGetGCTextSize(hdc->gc, "X", 1, MWTF_ASCII, &xw, &xh, &xb);
 #else
-    	GdGetTextSize(hdc->font->pfont,"X",1, &xw,&xh,&xb,MWTF_ASCII);
+	GdGetTextSize(hdc->font->pfont, "X", 1, &xw, &xh, &xb, MWTF_ASCII);
 #endif
-    	ReleaseDC(hwnd,hdc);
+	ReleaseDC(hwnd, hdc);
 
 	return xh;
 }
 
-static int GetSysCharWidth (HWND hwnd) 
+static int
+GetSysCharWidth(HWND hwnd)
 {
-	HDC 		hdc;
-    	int xw, xh, xb;
+	HDC hdc;
+	int xw, xh, xb;
 
-    	hdc = GetDC(hwnd);
+	hdc = GetDC(hwnd);
 
-	SelectObject(hdc, GetStockObject(FONT_NAME));
+	SelectObject(hdc, GET_WND_FONT(hwnd));
 
-#if MWCLIENT	/* nanox client */
-    	GrGetGCTextSize(hdc->gc, "X", 1, MWTF_ASCII, &xw, &xh, &xb);
+#if MWCLIENT			/* nanox client */
+	GrGetGCTextSize(hdc->gc, "X", 1, MWTF_ASCII, &xw, &xh, &xb);
 #else
-    	GdGetTextSize(hdc->font->pfont,"X",1, &xw,&xh,&xb,MWTF_ASCII);
+	GdGetTextSize(hdc->font->pfont, "X", 1, &xw, &xh, &xb, MWTF_ASCII);
 #endif
-    	ReleaseDC(hwnd,hdc);
+	ReleaseDC(hwnd, hdc);
 
 	return xw;
 }
 #endif
 
-static LRESULT CALLBACK
-StaticControlProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+static void
+ssDrawStaticLabel(HWND hwnd, HDC hdc, LPRECT pRcClient)
 {
-    RECT        rcClient;
-    HDC         hdc;
-    char*       spCaption;
-    HWND    	pCtrl;
-    UINT        uFormat;
-    DWORD       dwStyle;
-    
-    pCtrl = hwnd;                        
-    switch (message) {
-        case WM_CREATE:
-            return 0;
-            
-        case WM_DESTROY: 
-            break;
+	LPTSTR spCaption;
+	UINT uFormat;
+	RECT rc;
+	int y, maxy;
+	SIZE sz;
+	DWORD dwStyle = hwnd->style;
+	unsigned long attrib = 0;
 
-        case STM_GETIMAGE:
-            return (int)(pCtrl->userdata); 
-        
-        case STM_SETIMAGE:
-        {
-            int pOldValue;
-            
-            pOldValue  = (int)(pCtrl->userdata);
-            pCtrl->userdata = (DWORD)wParam;
-            InvalidateRect (hwnd, NULL, FALSE);
-            return pOldValue;
-        }
-           
-        case WM_GETDLGCODE:
-            return DLGC_STATIC;
+	rc = *pRcClient;
+	maxy = rc.bottom - rc.top;
+	y = rc.top;
+
+	uFormat = DT_TOP;
+	if ((dwStyle & SS_TYPEMASK) == SS_LEFT)
+		uFormat |= DT_LEFT | DT_WORDBREAK;
+	else if ((dwStyle & SS_TYPEMASK) == SS_CENTER)
+		uFormat |= DT_CENTER | DT_WORDBREAK;
+	else if ((dwStyle & SS_TYPEMASK) == SS_RIGHT)
+		uFormat |= DT_RIGHT | DT_WORDBREAK;
+	else if ((dwStyle & SS_TYPEMASK) == SS_LEFTNOWORDWRAP)
+		uFormat |= DT_LEFT | DT_SINGLELINE | DT_EXPANDTABS;
 
 
-        case WM_PAINT:
-	{
-	    PAINTSTRUCT ps;
-	    RECT rc;
-	    HBRUSH hbr;
+	spCaption = GetWindowCaption(hwnd);
+	if (dwStyle & SS_NOPREFIX)
+		uFormat |= DT_NOPREFIX;
 
-            hdc = BeginPaint (hwnd,&ps);
+	if (spCaption) {
+		RECT rcUline;
+		BOOL bUline = FALSE;
+		LPTSTR caption;
+		int ln = strlen(spCaption);
 
-            GetClientRect (hwnd, &rcClient);
+		//  Duplicate text. If coding is UTF-8, generati it by checking shape/joining
+		if (mwTextCoding == MWTF_UTF8)
+			caption = doCharShape_UTF8(spCaption, ln, &ln, &attrib);
+		else
+			caption = strdup(spCaption);
 
-	    FastFillRect(hdc, &rcClient, GetSysColor(COLOR_BTNFACE));
+		if (caption == NULL)
+			return;
 
-            dwStyle = GetWindowStyle (hwnd);
+		spCaption = caption;
+		SelectObject(hdc, GET_WND_FONT(hwnd));
 
-            switch (dwStyle & SS_TYPEMASK)
-            {
-                case SS_GRAYRECT:
-#if 0
-                    SetBrushColor (hdc, LTGRAY);
-                    FillBox(hdc, 0, 0, RECTW(rcClient), RECTH(rcClient));
-#else
-		    rc.left=0; rc.top=0; rc.bottom=RECTH(rcClient); rc.right=RECTW(rcClient);
-		    FillRect(hdc,&rc,GetStockObject(LTGRAY_BRUSH));
-#endif
-                break;
-                
-                case SS_GRAYFRAME:
-#if 0
-                    Draw3DDownFrame (hdc, 
-                            0, 0, rcClient.right, rcClient.bottom, 
-                            DKGRAY);
-#else
-		    Draw3dInset(hdc, 0, 0,
-			rcClient.right, rcClient.bottom);
-#endif
-                break;
-                
-                case SS_BITMAP:
-#if 0	/* jmt: fix: no FillBoxWithBitmap() */
-                    FillBoxWithBitmap(hdc, 0, 0, 0, 0,
-                        (PBITMAP)(pCtrl->userdata));
-#endif
-                break;
-                
-                case SS_ICON:
-#if 0	/* jmt: fix: no DrawIcon */
-                    hIcon = (HICON)(pCtrl->userdata);
-                    DrawIcon (hdc, 0, 0, 0, 0, hIcon);
-#endif
-                break;
-      
-                case SS_SIMPLE:
-#if 0
-                    SetBrushColor (hdc, GetWindowBkColor (hwnd));
-                    FillBox (hdc, 0, 0, rcClient.right, rcClient.bottom);
-#else
-		    hbr=CreateSolidBrush(GetWindowBkColor(hwnd));
-		    rc.left=0; rc.top=0; rc.bottom=rcClient.bottom; rc.right=rcClient.right;
-		    FillRect(hdc,&rc,hbr);
-		    DeleteObject(hbr);
-#endif        
-                    if (dwStyle & WS_DISABLED)
-                        SetTextColor (hdc, DKGRAY);
-                    else
-                        SetTextColor (hdc, BLACK);
-		    SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
-                    spCaption = GetWindowCaption (hwnd);
-                    if (spCaption)
-		    {
-	    		SelectObject(hdc, GetStockObject(FONT_NAME));
-                        TextOut (hdc, 0, 0, spCaption, -1); 
-		    }
-                break; 
+		while (ln > 0) {
+			int n;
+			for (n = 0; n < ln; n += MW_CHRNBYTE(spCaption[n]))
+				if (spCaption[n] == '\n')
+					break;
 
-                case SS_LEFT:
-                case SS_CENTER:
-                case SS_RIGHT:
-                case SS_LEFTNOWORDWRAP:
-                    uFormat = DT_TOP;
-                    if ( (dwStyle & SS_TYPEMASK) == SS_LEFT)
-                        uFormat |= DT_LEFT | DT_WORDBREAK;
-                    else if ( (dwStyle & SS_TYPEMASK) == SS_CENTER)
-                        uFormat |= DT_CENTER | DT_WORDBREAK;
-                    else if ( (dwStyle & SS_TYPEMASK) == SS_RIGHT)
-                        uFormat |= DT_RIGHT | DT_WORDBREAK;
-                    else if ( (dwStyle & SS_TYPEMASK) == SS_LEFTNOWORDWRAP)
-                        uFormat |= DT_LEFT | DT_SINGLELINE | DT_EXPANDTABS;
-                    
-                    if (dwStyle & WS_DISABLED)
-                        SetTextColor (hdc, DKGRAY);
-                    else
-                        SetTextColor (hdc, BLACK);
+			attrib &= ~TEXTIP_RTOL;	// resets RTOL text prop
 
-#if 0
-                    SetBkColor (hdc, GetWindowBkColor (hwnd));
-#endif
-		    SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
-                    spCaption = GetWindowCaption (hwnd);
-                    if (dwStyle & SS_NOPREFIX)
-                        uFormat |= DT_NOPREFIX;
-                        
-                    if (spCaption)
-		    {
-	    		SelectObject(hdc, GetStockObject(FONT_NAME));
-                        DrawText (hdc, spCaption, -1, &rcClient, uFormat);
-		    }
-                break;
+			GetTextExtentPoint(hdc, spCaption, n, &sz);
+			while (sz.cx > (rc.right - rc.left)) {
+				while ((n > 0) && (spCaption[n] == ' '
+					   || spCaption[n] == '\t'))
+					n--;
+				while ((n > 0) && !(spCaption[n] == ' '
+					    || spCaption[n] == '\t'))
+					n--;
+				if (n <= 0)
+					break;
+				GetTextExtentPoint(hdc, spCaption, n, &sz);
+			}
 
-                case SS_GROUPBOX:
-#if 0
-                    Draw3DBorder (hdc,  rcClient.left, 
-			    rcClient.top + (GetSysCharHeight(hwnd) >> 1),
-			    rcClient.right, rcClient.bottom);
-#else
-		    Draw3dInset(hdc, rcClient.left, 
-			rcClient.top+(GetSysCharHeight(hwnd) >> 1),
-			rcClient.right-rcClient.left,
-			rcClient.bottom-rcClient.top);
-#endif                    
-                    if (dwStyle & WS_DISABLED)
-                        SetTextColor (hdc, DKGRAY);
-                    else
-                        SetTextColor (hdc, BLACK);
+			if (!bUline)
+				bUline = MwCheckUnderlineChar(hdc, spCaption, &n, &rcUline);
 
-#if 0
-                    SetBkColor(hdc, GetWindowBkColor (GetParent (hwnd)));
-#endif
-		    SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
-                    spCaption = GetWindowCaption (hwnd);
-                    if (spCaption)
-		    {
-	    		SelectObject(hdc, GetStockObject(FONT_NAME));
-                        TextOut (hdc, GetSysCharWidth (hwnd), 2, spCaption, -1);
-		    }
-                break;
-            }
-	    EndPaint (hwnd, &ps);
+			rc.top = y;
+			rc.bottom = y + sz.cy;
+			if (bUline && rcUline.left >= 0)
+				OffsetRect(&rcUline, rc.left, rc.top);
+
+			//  If the UTF8 text has non-ascii characters, check also bidi
+			if (attrib & TEXTIP_EXTENDED) {
+				DWORD vuFormat = uFormat;
+				LPSTR virtCaption =
+					doCharBidi_UTF8(spCaption, n, NULL, NULL, &attrib);
+				if (virtCaption) {
+					if ((attrib & TEXTIP_RTOL)) {
+						if ((vuFormat & (DT_LEFT | DT_CENTER | DT_RIGHT)) == DT_LEFT)
+							vuFormat = (vuFormat &
+								 ~(DT_LEFT | DT_CENTER | DT_RIGHT))
+								| DT_RIGHT;
+					}
+					DrawTextA(hdc, virtCaption, n, &rc, vuFormat);
+					free(virtCaption);
+				}
+			} else
+				DrawTextA(hdc, spCaption, n, &rc, uFormat);
+
+			if (bUline && rcUline.left >= 0) {
+				SelectObject(hdc, GetStockObject(BLACK_PEN));
+				MoveToEx(hdc, rcUline.left, rcUline.bottom,
+					 NULL);
+				LineTo(hdc, rcUline.right, rcUline.bottom);
+				rcUline.left = -1;
+			}
+
+			y += sz.cy;
+			if (y > maxy)
+				break;
+			spCaption += n + 1;
+			ln -= n + 1;
+		}
+		free(caption);
 	}
-            break;
+}
 
-#if 0	/* jmt: SS_NOTIFY isn't standard in win32 */
-        case WM_LBUTTONDBLCLK:
-            if (GetWindowStyle (hwnd) & SS_NOTIFY)
-                SendMessage (GetParent(hwnd), WM_COMMAND, 
-                    (WPARAM)MAKELONG(pCtrl->id, STN_DBLCLK),
-                    (LPARAM)hwnd);   
-            break;
+/*
+ *  Show DIB for SS_BITMAP style...
+ */
+static void
+ssShowBitmap(HWND hwnd, HDC hdc)
+{
+	PMWIMAGEHDR himg;
+	LPCTSTR resName = hwnd->szTitle;
+
+	if (resName[0] == '\xff')
+		resName = MAKEINTRESOURCE((UCHAR) resName[1]);
+	himg = resLoadBitmap(hwnd->hInstance, resName);
+	if (himg != NULL) {
+		DrawDIB(hdc, 0, 0, himg);
+		resFreeBitmap(himg);
+	}
+}
+
+static LRESULT CALLBACK
+StaticControlProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	RECT rcClient;
+	HDC hdc;
+	char *spCaption;
+	HWND pCtrl;
+	DWORD dwStyle;
+
+	pCtrl = hwnd;
+	switch (message) {
+	case WM_CREATE:
+		SET_WND_FONT(hwnd, GET_WND_FONT(hwnd));
+		return 0;
+
+	case WM_DESTROY:
+		break;
+
+	case STM_GETIMAGE:
+		return (int) (pCtrl->userdata);
+
+	case STM_SETIMAGE:
+		{
+			int pOldValue;
+
+			pOldValue = (int) (pCtrl->userdata);
+			pCtrl->userdata = (DWORD) wParam;
+			InvalidateRect(hwnd, NULL, FALSE);
+			return pOldValue;
+		}
+
+	case WM_GETDLGCODE:
+		return DLGC_STATIC;
+
+	case WM_ERASEBKGND:
+		{
+			HBRUSH hbr;
+			dwStyle = GetWindowStyle(hwnd);
+			hbr = (HBRUSH)SendMessage(GetParent(hwnd), WM_CTLCOLORSTATIC,
+					  wParam, (LPARAM) hwnd);
+			if (hbr == NULL)
+				return DefWindowProc(hwnd, message, wParam, lParam);
+			GetClientRect(hwnd, &rcClient);
+			FillRect((HDC) wParam, &rcClient, hbr);
+			return 1;
+		}
+
+	case WM_PAINT:
+		{
+			PAINTSTRUCT ps;
+			RECT rc;
+			HBRUSH hbr;
+
+			hdc = BeginPaint(hwnd, &ps);
+			/* Color, pen and brush are now choosed by defwindowproc, or by user. */
+			hbr = (HBRUSH)SendMessage(GetParent(hwnd), WM_CTLCOLORSTATIC,
+					  (WPARAM) hdc, (LPARAM) hwnd);
+			if (hbr == NULL)
+				hbr = (HBRUSH)GetStockObject(NULL_BRUSH);
+
+			SelectObject(hdc, hbr);
+
+			GetClientRect(hwnd, &rcClient);
+			dwStyle = GetWindowStyle(hwnd);
+
+			switch (dwStyle & SS_ETCTYPEMAKS) {
+			case SS_GRAYRECT:
+			case SS_BLACKRECT:
+			case SS_WHITERECT:
+				FillRect(hdc, &rcClient, hbr);
+				break;
+
+			case SS_GRAYFRAME:
+			case SS_BLACKFRAME:
+			case SS_WHITEFRAME:
+				Rectangle(hdc, rcClient.left, rcClient.top,
+					  rcClient.right, rcClient.bottom);
+				break;
+
+			case SS_BITMAP:
+				ssShowBitmap(hwnd, hdc);
+#if 0				/* jmt: fix: no FillBoxWithBitmap() */
+				FillBoxWithBitmap(hdc, 0, 0, 0, 0, (PBITMAP) (pCtrl->userdata));
 #endif
-        case WM_LBUTTONDOWN:
-            break;
+				break;
 
-        case WM_NCLBUTTONDBLCLK:
-            break;
+			case SS_ICON:
+#if 0				/* jmt: fix: no DrawIcon */
+				hIcon = (HICON) (pCtrl->userdata);
+				DrawIcon(hdc, 0, 0, 0, 0, hIcon);
+#endif
+				FillRect(hdc, &rcClient, hbr);
+				break;
 
-        case WM_NCLBUTTONDOWN:
-            break;
+			case SS_SIMPLE:
+#if 0
+				SetBrushColor(hdc, GetWindowBkColor(hwnd));
+				FillBox(hdc, 0, 0, rcClient.right,
+					rcClient.bottom);
+#else
+				rc.left = 0;
+				rc.top = 0;
+				rc.bottom = rcClient.bottom;
+				rc.right = rcClient.right;
+				FillRect(hdc, &rc, hbr);
+#endif
+				spCaption = GetWindowCaption(hwnd);
+				if (spCaption)
+					TextOut(hdc, 0, 0, spCaption, -1);
+				break;
+
+			case SS_LEFT:
+			case SS_CENTER:
+			case SS_RIGHT:
+			case SS_LEFTNOWORDWRAP:
+				rc = rcClient;
+				if (dwStyle & SS_SUNKEN)
+					rc.left += 1, rc.top += 1, rc.bottom -= 1, rc.right -= 1;
+				if (dwStyle & WS_BORDER)
+					rc.left += 1, rc.top += 1, rc.bottom -= 1, rc.right -= 1;
+				FillRect(hdc, &rc, hbr);
+				ssDrawStaticLabel(hwnd, hdc, &rc);
+				break;
+
+			case SS_ETCHEDFRAME:
+				Draw3dBox(hdc, rcClient.left, rcClient.top,
+					  rcClient.right - rcClient.left,
+					  rcClient.bottom - rcClient.top,
+					  GetSysColor(COLOR_BTNSHADOW),
+					  GetSysColor(COLOR_BTNHIGHLIGHT));
+				Draw3dBox(hdc, rcClient.left + 1, rcClient.top + 1,
+					  rcClient.right - rcClient.left - 2,
+					  rcClient.bottom - rcClient.top - 2,
+					  GetSysColor(COLOR_BTNHIGHLIGHT),
+					  GetSysColor(COLOR_BTNSHADOW));
+				break;
+
+			case SS_GROUPBOX:
+#if 0
+				Draw3DBorder(hdc, rcClient.left, rcClient.top +
+					     (GetSysCharHeight(hwnd) >> 1),
+					     rcClient.right, rcClient.bottom);
+#else
+				Draw3dInset(hdc, rcClient.left, rcClient.top +
+					    (GetSysCharHeight(hwnd) >> 1),
+					    rcClient.right - rcClient.left,
+					    rcClient.bottom - rcClient.top);
+#endif
+
+				spCaption = GetWindowCaption(hwnd);
+				if (spCaption)
+					TextOut(hdc, GetSysCharWidth(hwnd), 2, spCaption, -1);
+				break;
+			}
+
+			if (dwStyle & SS_SUNKEN)
+				Draw3dBox(hdc, rcClient.left, rcClient.top,
+					  rcClient.right - rcClient.left,
+					  rcClient.bottom - rcClient.top,
+					  GetSysColor(COLOR_BTNSHADOW),
+					  GetSysColor(COLOR_BTNHIGHLIGHT));
+
+			EndPaint(hwnd, &ps);
+		}
+		break;
+
+#if 0				/* jmt: SS_NOTIFY isn't standard in win32 */
+	case WM_LBUTTONDBLCLK:
+		if (GetWindowStyle(hwnd) & SS_NOTIFY)
+			SendMessage(GetParent(hwnd), WM_COMMAND,
+				    (WPARAM) MAKELONG(pCtrl->id, STN_DBLCLK), (LPARAM) hwnd);
+		break;
+#endif
+	case WM_LBUTTONDOWN:
+		break;
+
+	case WM_NCLBUTTONDBLCLK:
+		break;
+
+	case WM_NCLBUTTONDOWN:
+		break;
 
 	case WM_NCHITTEST:
-            dwStyle = GetWindowStyle (hwnd);
-            if ((dwStyle & SS_TYPEMASK) == SS_GROUPBOX)
-                return HTTRANSPARENT;
+		dwStyle = GetWindowStyle(hwnd);
+		if ((dwStyle & SS_ETCTYPEMAKS) == SS_GROUPBOX)
+			return HTTRANSPARENT;
 
-#if 0	/* jmt: SS_NOTIFY isn't standard in win32 */
-            if (GetWindowStyle (hwnd) & SS_NOTIFY)
-                return HTCLIENT;
-            else
+#if 0				/* jmt: SS_NOTIFY isn't standard in win32 */
+		if (GetWindowStyle(hwnd) & SS_NOTIFY)
+			return HTCLIENT;
+		else
 #endif
-                return HTNOWHERE;
-        break;
+			return HTNOWHERE;
+		break;
 
 
-#if 0	/* jmt: fix: no WM_GETFONT/WM_SETFONT */
-        case WM_GETFONT:
-            break;
-        case WM_SETFONT:
-            break;
-#endif
-        case WM_SETTEXT:
-            SetWindowCaption (hwnd, (char*)lParam);
-            InvalidateRect (hwnd, NULL, TRUE);
-            break;
-            
-        default:
-    		return DefWindowProc (hwnd, message, wParam, lParam);
-    }
-    return 0;
+	case WM_SETTEXT:
+		DefWindowProc(hwnd, message, wParam, lParam);
+		InvalidateRect(hwnd, NULL, TRUE);
+		break;
+
+
+	case WM_SETFONT:
+		SET_WND_FONT(hwnd, (HFONT) wParam);
+		if (LOWORD(lParam) != 0)
+			InvalidateRect(hwnd, NULL, TRUE);
+		break;
+
+	case WM_GETFONT:
+		return (LRESULT)GET_WND_FONT(hwnd);
+
+	default:
+		return DefWindowProc(hwnd, message, wParam, lParam);
+	}
+	return 0;
 }

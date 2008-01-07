@@ -4,6 +4,11 @@
 # Modified for TuxChess, 2002, Steven J. Merrifield
 ##############################################################################
 
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/../..
+endif
+MW_DIR_RELATIVE := demos/tuxchess/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ######################## Additional Flags section ############################
@@ -22,34 +27,44 @@ LDFLAGS +=
 
 ############################# targets section ################################
 
-ifeq ($(NANOWM), Y)
+ifeq ($(NANOX), Y)
+ifeq ($(NANOXDEMO), Y)
 ifneq ($(ARCH), LINUX-TCC)
 
 # If you want to create a library with the objects files, define the name here
 LIBNAME =
 
 # List of objects to compile
-OBJS = main.o board.o data.o eval.o search.o images.o
+OBJS := \
+	$(MW_DIR_OBJ)/demos/tuxchess/main.o \
+	$(MW_DIR_OBJ)/demos/tuxchess/board.o \
+	$(MW_DIR_OBJ)/demos/tuxchess/data.o \
+	$(MW_DIR_OBJ)/demos/tuxchess/eval.o \
+	$(MW_DIR_OBJ)/demos/tuxchess/search.o \
+	$(MW_DIR_OBJ)/demos/tuxchess/images.o
 
 # Requires: MW_FEATURE_IMAGES, HAVE_FILEIO
-TARGET = $(TOP)/bin/tuxchess
+TARGET = $(MW_DIR_BIN)/tuxchess
 
 all: default $(TARGET)
 
 endif
 endif
+endif
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 
 ifeq ($(SHAREDLIBS), Y)
-$(TOP)/bin/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(TOP)/config
+$(MW_DIR_BIN)/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CCNANOXCLIENTLIBS)
 else
-$(TOP)/bin/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(TOP)/config
+$(MW_DIR_BIN)/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS)
 endif
 

@@ -1,6 +1,6 @@
 /* 
  * Loadable FNT font engine for Microwindows
- * Copyright (c) 2003 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2003, 2005 Greg Haerr <greg@censoft.com>
  *
  * Load a .fnt (Microwindows native) binary font, store in incore format.
  */
@@ -41,7 +41,7 @@
 /* The user hase the option including ZLIB and being able to    */
 /* directly read compressed .fnt files, or to omit it and save  */
 /* space.  The following defines make life much easier          */
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 #include <zlib.h>
 #define FILEP gzFile
 #define FOPEN(path, mode)           gzopen(path, mode)
@@ -124,11 +124,11 @@ fnt_unloadfont(PMWFONT font)
 
 	if (pfc) {
 		if (pfc->width)
-			free(pf->cfont->width);
+			free((char *)pf->cfont->width);
 		if (pfc->offset)
-			free(pf->cfont->offset);
+			free((char *)pf->cfont->offset);
 		if (pfc->bits)
-			free(pf->cfont->bits);
+			free((char *)pf->cfont->bits);
 		if (pfc->name)
 			free(pf->cfont->name);
 
@@ -141,7 +141,7 @@ fnt_unloadfont(PMWFONT font)
 static int
 READBYTE(FILEP fp, unsigned char *cp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[1];
 
 	if (FREAD(fp, buf, 1) != 1)
@@ -160,7 +160,7 @@ READBYTE(FILEP fp, unsigned char *cp)
 static int
 READSHORT(FILEP fp, unsigned short *sp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[2];
 
 	if (FREAD(fp, buf, 2) != 2)
@@ -183,7 +183,7 @@ READSHORT(FILEP fp, unsigned short *sp)
 static int
 READLONG(FILEP fp, unsigned long *lp)
 {
-#ifdef HAVE_FNTGZ_SUPPORT
+#if HAVE_FNTGZ_SUPPORT
 	unsigned char buf[4];
 
 	if (FREAD(fp, buf, 4) != 4)
@@ -343,15 +343,19 @@ fnt_load_font(const char *path)
 
 	/* variable font data*/
 	for (i=0; i<nbits; ++i)
-		if (!READSHORT(ifp, &pf->bits[i]))
+		if (!READSHORT(ifp, (unsigned short *)&pf->bits[i]))
+			goto errout;
+	/* pad to longword boundary*/
+	if (FSEEK(ifp, 0, SEEK_CUR) & 02)
+		if (!READSHORT(ifp, (unsigned short *)&pf->bits[i]))
 			goto errout;
 	if (noffset)
 		for (i=0; i<pf->size; ++i)
-			if (!READLONG(ifp, &pf->offset[i]))
+			if (!READLONG(ifp, (unsigned long *)&pf->offset[i]))
 				goto errout;
 	if (nwidth)
 		for (i=0; i<pf->size; ++i)
-			if (!READBYTE(ifp, &pf->width[i]))
+			if (!READBYTE(ifp, (unsigned char *)&pf->width[i]))
 				goto errout;
 	
 	FCLOSE(ifp);
@@ -364,11 +368,11 @@ errout:
 	if (pf->name)
 		free(pf->name);
 	if (pf->bits)
-		free(pf->bits);
+		free((char *)pf->bits);
 	if (pf->offset)
-		free(pf->offset);
+		free((char *)pf->offset);
 	if (pf->width)
-		free(pf->width);
+		free((char *)pf->width);
 	free(pf);
 	return NULL;
 }

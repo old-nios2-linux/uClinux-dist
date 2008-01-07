@@ -39,6 +39,7 @@
 ####################################################################
 ARCH                     = LINUX-NATIVE
 BIGENDIAN                = N
+NATIVETOOLSPREFIX        = 
 ARMTOOLSPREFIX           = arm-linux-
 MIPSTOOLSPREFIX          = mipsel-linux-
 POWERPCTOOLSPREFIX       = powerpc-linux-
@@ -141,22 +142,23 @@ LIBJPEG                  = /usr/lib/libjpeg.so
 # PNG support via libpng and libz
 ####################################################################
 HAVE_PNG_SUPPORT         = N
-INCPNG                   = /usr/include
+INCPNG                   = .
 LIBPNG                   = /usr/lib/libpng.a
+INCZ                     = .
 LIBZ                     = /usr/lib/libz.a
 
 ####################################################################
 # TIFF support through libtiff
 ####################################################################
 HAVE_TIFF_SUPPORT        = N
-INCTIFF                  = /usr/include
+INCTIFF                  = .
 LIBTIFF                  = /usr/lib/libtiff.a
 
 ####################################################################
 # native .fnt loadable font support
 ####################################################################
 HAVE_FNT_SUPPORT         = Y
-HAVE_FNTGZ_SUPPORT       = N
+HAVE_FNTGZ_SUPPORT       = Y
 FNT_FONT_DIR             = "fonts/bdf"
 
 ####################################################################
@@ -164,13 +166,13 @@ FNT_FONT_DIR             = "fonts/bdf"
 ####################################################################
 HAVE_T1LIB_SUPPORT       = N
 INCT1LIB                 = /usr/include
-LIBT1LIB                 = /usr/lib/libt1.a
+LIBT1LIB                 = /usr/local/lib/libt1.a
 
 ####################################################################
 # TrueType font support thru FreeType 1.x
 ####################################################################
 HAVE_FREETYPE_SUPPORT    = Y
-INCFTLIB                 = /usr/include
+INCFTLIB                 = /usr/include/freetype1
 LIBFTLIB                 = /usr/lib/libttf.so
 FREETYPE_FONT_DIR        = "fonts/truetype"
 
@@ -222,6 +224,14 @@ HAVE_KSC5601_SUPPORT     = N
 ####################################################################
 HAVE_EUCJP_SUPPORT       = N
 EUCJP_FONT_DIR           = "fonts/japanese"
+
+####################################################################
+# Fribidi and shape/joining support for right to left rendering
+####################################################################
+HAVE_FRIBIDI_SUPPORT     = N
+HAVE_SHAPEJOINING_SUPPORT = N
+INCFRIBIDI               = $(TOP)/../../../include
+LIBFRIBIDI               = $(TOP)/../../../lib/libfribidi.a
 
 ####################################################################
 # Generate screen driver interface only with no fonts or clipping
@@ -325,6 +335,7 @@ MTMOUSE                  = N
 PSIONMOUSE               = N
 YOPYMOUSE                = N
 HARRIERMOUSE             = N
+LIRCMOUSE                = N
 
 # keyboard or null kbd driver
 TTYKBD                   = N
@@ -335,6 +346,19 @@ LIRCKBD                  = N
 NOKBD                    = N
 
 endif
+
+# Secondary keyboard drivers.
+# You may have a normal keyboard driver in addition to these
+# drivers, e.g. for both normal keyboard and IR input.
+LIRCKBD2                 = N
+
+####################################################################
+# VNC server support through libvncserver
+####################################################################
+HAVE_VNCSERVER_SUPPORT   = N
+VNCSERVER_PTHREADED      = N
+LIBVNC                   = /usr/local/lib/libvncserver.a
+INCVNC                   = /usr/local/include
 
 ####################################################################
 # Screen driver specific configuration

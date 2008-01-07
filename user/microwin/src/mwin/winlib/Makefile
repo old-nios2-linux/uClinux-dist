@@ -3,11 +3,11 @@
 # Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
 ##############################################################################
 
-ifndef TOP
-TOP = ../..
-CONFIG = $(TOP)/config
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/../..
 endif
-
+MW_DIR_RELATIVE := mwin/winlib/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ############################# targets section ################################
@@ -19,18 +19,13 @@ LIBNAME = libmwinlib.a
 LIBNAMESO = libmwinlib.so
 
 # List of objects to compile
-OBJS = draw3d.o ptinsid.o insetr.o fastfill.o graph3d.o mwuser.o
-
-ifneq ($(ARCH), ELKS)
-OBJS += button.o edit.o listbox.o progbar.o static.o combobox.o caret.o \
-	scrlbar.o medit.o
-endif
+OBJS := $(MW_DIR_OBJ)/mwin/winlib/obsolete.o
 
 endif
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 

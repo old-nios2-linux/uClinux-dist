@@ -147,7 +147,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
 	RegisterAppClass();
 
 	/* set background wallpaper*/
-	/* MwSetDesktopWallpaper(&image_car8); */
+	MwSetDesktopWallpaper(&image_car8);
 
 	/* must update root window until alpha blend blitting
 	 * uses off screen memory for hidden windows, rather than

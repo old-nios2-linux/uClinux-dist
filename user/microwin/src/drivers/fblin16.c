@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2000, 2001 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2007 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  *
  * 16bpp Linear Video Driver for Microwindows
@@ -40,6 +40,9 @@ linear16_init(PSD psd)
 		psd->size = psd->yres * psd->linelen;
 		/* convert linelen from byte to pixel len for bpp 16, 24, 32*/
 		psd->linelen /= 2;
+#if MW_FEATURE_PSDOP_COPY
+		psd->flags |= PSF_HAVEOP_COPY;
+#endif
 	}
 	return 1;
 }
@@ -49,6 +52,7 @@ static void
 linear16_drawpixel(PSD psd, MWCOORD x, MWCOORD y, MWPIXELVAL c)
 {
 	ADDR16	addr = psd->addr;
+	int linelen = psd->linelen;
 
 	assert (addr != 0);
 	assert (x >= 0 && x < psd->xres);
@@ -57,9 +61,9 @@ linear16_drawpixel(PSD psd, MWCOORD x, MWCOORD y, MWPIXELVAL c)
 
 	DRAWON;
 	if(gr_mode == MWMODE_COPY)
-		addr[x + y * psd->linelen] = c;
+		addr[x + y * linelen] = c;
 	else
-		applyOp(gr_mode, c, &addr[x + y * psd->linelen], ADDR16);
+		applyOp(gr_mode, c, &addr[x + y * linelen], ADDR16);
 	DRAWOFF;
 }
 
@@ -96,10 +100,14 @@ linear16_drawhorzline(PSD psd, MWCOORD x1, MWCOORD x2, MWCOORD y, MWPIXELVAL c)
 		while(x1++ <= x2)
 			*addr++ = c;
 	} else {
+		applyOp2(x2-x1, gr_mode, c, addr, ADDR16);
+
+		/*
 		while (x1++ <= x2) {
 			applyOp(gr_mode, c, addr, ADDR16);
 			++addr;
 		}
+		*/
 	}
 	DRAWOFF;
 }
@@ -126,10 +134,13 @@ linear16_drawvertline(PSD psd, MWCOORD x, MWCOORD y1, MWCOORD y2, MWPIXELVAL c)
 			addr += linelen;
 		}
 	} else {
+		applyOp3(y2-y1, linelen, gr_mode, c, addr, ADDR16);
+		/*
 		while (y1++ <= y2) {
 			applyOp(gr_mode, c, addr, ADDR16);
 			addr += linelen;
 		}
+		*/
 	}
 	DRAWOFF;
 }
@@ -228,11 +239,14 @@ stdblit:
 		}
 	} else {
 		while (--h >= 0) {
+			applyOp4(w, MWROP_TO_MODE(op), src, dst, ADDR16);
+			/*
 			for (i=0; i<w; i++) {
 				applyOp(MWROP_TO_MODE(op), *src, dst, ADDR16);
 				++src;
 				++dst;
 			}
+			*/
 			dst += dlinelen - w;
 			src += slinelen - w;
 		}
@@ -275,7 +289,7 @@ linear16_stretchblit(PSD dstpsd, MWCOORD dstx, MWCOORD dsty, MWCOORD dstw,
 
 	DRAWON;
 	row_pos = 0x10000;
-if (g_row_inc) row_inc = g_row_inc; else
+	if (g_row_inc) row_inc = g_row_inc; else
 	row_inc = (srch << 16) / dsth;
 
 	/* stretch blit using integer ratio between src/dst height/width*/
@@ -292,7 +306,7 @@ if (g_row_inc) row_inc = g_row_inc; else
 
 		/* copy a row of pixels*/
 		col_pos = 0x10000;
-if (g_col_inc) col_inc = g_col_inc; else
+		if (g_col_inc) col_inc = g_col_inc; else
 		col_inc = (srcw << 16) / dstw;
 		for (i=0; i<dstw; ++i) {
 			/* get source x pixel*/
@@ -458,7 +472,8 @@ linear16_stretchblitex(PSD dstpsd,
 		ABS(y_step_fraction) - ABS(src_y_step_normal) * y_denominator;
 	src_y_step_normal *= srcpsd->linelen;
 
-	/* DPRINTF("ov_stretch_image8: X: One step=%d, err-=%d; normal step=%d, err+=%d\n                   Y: One step=%d, err-=%d; normal step=%d, err+=%d\n",
+	/* DPRINTF("ov_stretch_image8: X: One step=%d, err-=%d; normal step=%d, err+=%d\n
+	   Y: One step=%d, err-=%d; normal step=%d, err+=%d\n",
 	   src_x_step_one, x_denominator, src_x_step_normal, x_error_step_normal,
 	   src_y_step_one, y_denominator, src_y_step_normal, y_error_step_normal);
 	 */
@@ -584,9 +599,8 @@ static void init_wordmask_lookup(unsigned short **byte2wordmask)
 		exit(17);
 	for ( t=0; t < 256; t++ ) {
 		maskp = b2wm + 8 * t;
-		x = t;
 		for ( u=1; u < 256; u <<= 1 )
-			if ( x & u )
+			if ( t & u )
 				*maskp++ = 0xffff;
 			else
 				*maskp++ = 0x0000;
@@ -1226,38 +1240,34 @@ linear16_drawarea_alphacol(PSD psd, driver_gc_t * gc)
 static void
 linear16_drawarea_copyall(PSD psd, driver_gc_t * gc)
 {
-	ADDR16 src16, dst;
-	int linesize, x, y;
-	unsigned short pcol;
-
-	linesize = 2 * gc->dstw;
-	src16 = ((ADDR16) gc->pixels) + gc->srcx + gc->src_linelen * gc->srcy;
-	dst = ((ADDR16) psd->addr) + gc->dstx + psd->linelen * gc->dsty;
+	ADDR16	src = ((ADDR16)gc->pixels) + gc->srcx + gc->src_linelen * gc->srcy;
+	ADDR16	dst = ((ADDR16)psd->addr) + gc->dstx + psd->linelen * gc->dsty;
+	int	linesize = 2 * gc->dstw;
+	int	y;
 
 	DRAWON;
 	for (y = 1; y < gc->dsth; y++) {
-		memcpy(dst, src16, linesize);
-		src16 += gc->src_linelen;
+		memcpy(dst, src, linesize);
+		src += gc->src_linelen;
 		dst += psd->linelen;
 	}
-	memcpy(dst, src16, linesize);	/* To be seriously ANSI */
+	memcpy(dst, src, linesize);	/* To be seriously ANSI */
 	DRAWOFF;
 }
 
 static void
 linear16_drawarea_copytrans(PSD psd, driver_gc_t * gc)
 {
-	ADDR16	src16, dst, rsrc, rdst;
-	int linesize, x, y;
+	ADDR16	src = ((ADDR16)gc->pixels) + gc->srcx + gc->src_linelen * gc->srcy;
+	ADDR16	dst = ((ADDR16)psd->addr) + gc->dstx + psd->linelen * gc->dsty;
+	ADDR16	rsrc, rdst;
+	int	x, y;
 	unsigned short pcol;
-
-	src16 = ((ADDR16) gc->pixels) + gc->srcx + gc->src_linelen * gc->srcy;
-	dst = ((ADDR16) psd->addr) + gc->dstx + psd->linelen * gc->dsty;
 
 	DRAWON;
 	for (y = 0; y < gc->dsth; y++) {
 		rdst = dst;
-		rsrc = src16;
+		rsrc = src;
 		for (x = 0; x < gc->dstw; x++) {
 			pcol = *rsrc++;
 			if (pcol == gc->bg_color)
@@ -1266,7 +1276,7 @@ linear16_drawarea_copytrans(PSD psd, driver_gc_t * gc)
 				*rdst++ = pcol;
 		}
 		dst += psd->linelen;
-		src16 += gc->src_linelen;
+		src += gc->src_linelen;
 	}
 	DRAWOFF;
 }
@@ -1287,11 +1297,10 @@ linear16_drawarea(PSD psd, driver_gc_t * gc, int op)
 
 #if MW_FEATURE_PSDOP_COPY
 	case PSDOP_COPY:
-		if (gc->gr_usebg) {
+		if (gc->gr_usebg)
 			linear16_drawarea_copyall(psd, gc);
-		} else {
+		else
 			linear16_drawarea_copytrans(psd, gc);
-		}
 		break;
 
 	case PSDOP_COPYALL:

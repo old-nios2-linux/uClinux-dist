@@ -732,8 +732,6 @@ void init_game(nstate *state)
 		exit(1);
 	}
 
-	state->fontid = GrCreateFont(NULL, 3, NULL);
-
 	state->main_window = GrNewWindow(GR_ROOT_WINDOW_ID, x,
 					MAIN_WINDOW_Y_POSITION,
 					MAIN_WINDOW_WIDTH,
@@ -759,11 +757,9 @@ void init_game(nstate *state)
 	GrSelectEvents(state->score_window, GR_EVENT_MASK_EXPOSURE);
 	GrMapWindow(state->score_window);
 	state->scoregcf = GrNewGC();
-    GrSetGCFont(state->scoregcf, state->fontid);
 	GrSetGCForeground(state->scoregcf, SCORE_WINDOW_FOREGROUND_COLOUR);
 	GrSetGCBackground(state->scoregcf, SCORE_WINDOW_BACKGROUND_COLOUR);
 	state->scoregcb = GrNewGC();
-    GrSetGCFont(state->scoregcb, state->fontid);
 	GrSetGCForeground(state->scoregcb, SCORE_WINDOW_BACKGROUND_COLOUR);
 
 	state->next_shape_window = GrNewWindow(state->main_window,
@@ -789,11 +785,9 @@ void init_game(nstate *state)
 					GR_EVENT_MASK_BUTTON_DOWN);
 	GrMapWindow(state->new_game_button);
 	state->buttongcf = GrNewGC();
-    GrSetGCFont(state->buttongcf, state->fontid);
 	GrSetGCForeground(state->buttongcf, BUTTON_FOREGROUND_COLOUR);
 	GrSetGCBackground(state->buttongcf, BUTTON_BACKGROUND_COLOUR);
 	state->buttongcb = GrNewGC();
-    GrSetGCFont(state->buttongcb, state->fontid);
 	GrSetGCForeground(state->buttongcb, BUTTON_BACKGROUND_COLOUR);
 
 	state->pause_continue_button = GrNewWindow(state->main_window,

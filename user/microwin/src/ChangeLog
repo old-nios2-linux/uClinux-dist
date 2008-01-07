@@ -1,3 +1,201 @@
+6 January 2008 - neuros patches from Vladimir
+	* add generic window message send GrSendMsg, GR_EVENT_MSG, GR_EVENT_MASK_MSG
+	* add alpha channel handling in GdDrawImage, alpha support in PNG loader
+	* fix bug in GdGetNextTimeout
+	* add GrDrawImagePartToFit - draw image from part of source image
+	* add MWMODE_SRCTRANSCOPY support in fblin16, applyOp{3,4} macros for speed
+	* remove #include <asm/page.h> in clientfb.c, PAGE_SIZE now internal
+	* fix GsWpDrawBackgroundPixmap to work with pixmap window backgrounds
+30 November 2007
+	* fix ftell in FNTGZ font subdriver
+	* port AGG AntiGrain Geometry, NXLIB and direct hw fb version
+	* add MWPF_HWPIXELVAL run-time pixel type to allow no-translation GrArea
+	* add back in low level psd->DrawArea for fast GdArea
+	* rewrite GdArcAngle to fix bug w/small angles, no fp required
+	* add font file parameter to fontdemo
+9 September 2007 - greg@censoft.com
+	* fix EPRINTF for gcc 3.x (Petr)
+	* fix ft1 return on zero height/width characters (Alexander)
+	* fix GrNewBitmapFromData pad when byte swapped (Martin)
+	* break GrBitmap requests into MAXREQUESTSZ size packets (Martin)
+	* fixed freetype2 font rotation, baseline, compile w/cache off bugs
+	* added support for freetype2 2.3.5 (forces cache off for now)
+22 June 2006 - greg@censoft.com
+	* added complete rop processing to fblin4.c 4bpp driver
+21 April 2006 - greg@censoft.com
+	* obtained permission to convert stretchblit code from LGPL to MPL
+20 December 2005 - greg@censoft.com
+	* added support for 16bpp 5/5/5 and 5/6/5 images to GdDrawImage (Greg)
+	* added support for 16bpp and 32bpp .bmp files
+10 November 2005 - neundorf@kde.org
+	*src/include/mwtypes.h: include ecosmwconfig.h under eCos
+	*src/drivers/kbd_rtems.c: use kbd.mode for supporting keyrelease events under eCos
+	*src/engine/dev_open.c: disable GdCaptureScreen() under eCos
+	*src/ecos/cdl/: update microwindows.cdl
+	*src/ecos/: add eCos specific files (support for qvfb, mw uid and WinMain)
+
+9 November 2005 - neundorf@kde.org
+	*src/demos/mwin/mdemo.stretch.c, mdemo.c: change #ifndef ELKS to #if !ELKS
+	*src/mwin/winmain.c: enable the RTEMS code for eCos, change MwSelect() to MwSelect(BOOL)
+
+7 November 2005 - neundorf@kde.org
+	* src/include/device.h: guarded some defines, so that they are not redefined
+	  if they are already defined (as it is the case in the eCos port) (Alex)
+
+17 October 2005 - neundorf@kde.org
+	* src/drivers/kbd_rtems.c and mou_rtems.c: fix a null pointer crash in
+	  MWKbd_GetModifierInfo() and prepare both files for usage under eCos (Alex)
+
+7 October 2005 - neundorf@kde.org
+	* src/engine/error.c: use diag_printf() for error reporting under eCos (Alex)
+
+5 October 2005 - neundorf@kde.org
+	* src/include/swap.h: removed dependency to network stack under eCos (Alex)
+	* src/engine/selfont.c: removed wrong and unnecessary select_font() declaration  (Alex)
+	* added support for BGR233, backport from the eCos port (Alex)
+
+23 June 2005 - greg@censoft.com
+	* reduced mem size, const for text section, static for size (David)
+	* cleaned up David Bell's copyright notice with permission
+	* added GrQueueLength, GrGetTypedEvent, GrGetTypedEventPred for
+		LINK_APP_INTO_SERVER case
+	* fixed DT_RIGHT in MwDrawText,
+		invalid hwnd in SendMessage & MWGetTopWindow (Jochen)
+	* added Gabriele's test .rc -> .c conversion tool: contrib/makedlg
+	* added Gabriele's win32 api enhancements test pgm: demos/mwdvetest
+		added accid___.ttf, VAGROLN.TTF test fonts,
+		Bitstream Cyberbit unicode font (13Mb) and
+		other truetype fonts are downloaded automatically on make
+	* reformatted windlg.c,newedit.c,winres.c,winresbmp.c,listbox.c,static.c
+	* added right-to-left rendering w/shape joining (Gabriele)
+		HAVE_FRIBIDI_SUPPORT, HAVE_SHAPEJOINING_SUPPORT config opts
+		MwSetTextCoding sets default text coding for non wide char fns
+	* added --no-whole-archive option to leave .so's dyn-linked (Hinko)
+	* fixed alpha blending demo when nEraseBkGnd zero
+	* added extremely extensive enhancements to win32 API: (Gabriele)
+	- New Dialog features:
+	- Added function EnumFonts
+	- Added function EnumChildWindows
+	- Added function GetClassName
+	- Added function GetNextDlgGroupItem
+	- Added functions CreateDialog, CreateDialogParam, DialogBox, DialogBoxParam
+	- Added functions IsDialogMessage, SendDlgItemMessage
+	- Added functions FindResource, LoadResource, LockResource,
+	  UnlockResource, FreeResource, LoadString
+	  Can read dialog, string and bitmap resources from .res file
+	- Added function resLoadBitmap, that loads a bitmap from resource file in
+	  MWIMAGEHDR format.
+	- Added functions Set/GetDlgItemText, Set/GetDlgItemInt.
+	- Added functions IsDlgButtonChecked, CheckDlgButton. Fixed CheckRadioButton.
+	- Added functions GetDlgBaseUnits, MapDialogRect
+	- Implemented DrawFocusRect fn for controls focus highlight.
+	- Implemented WM_SYSCHAR message
+	- Implemented controls navigation for DIALOGS (arrows and tab).
+	- Implemented controls accelerator character (symbol '&' before character).
+	- New Control features:
+	- Static control: implemented WM_SETFONT message. The SS_BITMAP style shows bmp.
+	  The text for non SS_SIMPLE static control is automatically wrapped as needed.
+	  Implemented the WM_CTLCOLORSTATIC and fixed the SS_xxFRAME and SS_xxRECT styles.
+	- Button control: implemented WM_SETFONT and fixed mouse release outside bug
+	- Listbox: implemented WM_OWNERDRAWFIXED and WM_OWNERDRAWVARIABLE. Implemented
+	  WM_MEASUREITEM. Fixed some paint code. Implemented Horizontal scroll.
+	- Rewrote edit control, newedit.c new features:
+	    - horizontal scroll.
+	    - non-fixed fonts works without caret position problem.
+	    - selection (SHIFT+Arrowkeys or Home/End).
+	    - cut and paste (CTRL+INS, SHIFT+INS, SHIFT+DEL).
+	    - word skip if CTRL pressed when using arrows keys.
+	    - mouse selection and autoscroll.
+	    - mouse dblclick.
+	    - insert and replace mode, with different caret size.
+	    - ES_LOWERCASE/UPPERCASE
+	    TODO: multiline capability.
+	- Other bug fixes:
+	- anti-aliasing min font height now set in device.h using FTMINAA_HEIGHT
+	- global user_builtin_fonts
+	- added font cache for freetype fonts to speed up GetTextMetrics
+	- Caret blinking.
+	- WM_CHAR not sent if the key pressed is a control key (like VK_LEFT ecc.).
+	- WM_KEYDOWN: Bit 24 in lParam indicates that the key is a control key.
+	- Implemented TabbedTextOut and GetTabbedTextExtent.
+	- automatic underlined character using & marker
+	- framebuffers: fblin4rev.c should not reverse the c color pixel when in XOR mode.
+	- Now it's possible to activate any number of timers.
+	- Timers: remove timers associated to wnd when windows are destroyed.
+	- Windows caption is now dynamically allocated. Note that szCaption (member of HWND)
+	  is now a pointer, not an array! Never use sizeof(szCaption)!!!
+	- Window structure has some new items: lpfnWndProc, paintBrush, paintPen, hInstance.
+	- WinMain now has hInstance, szCmdLine
+	- Keep window erasebkgnd count
+	- Only post one kbd message to a window at a time, fixes new window post bugs
+	- Some architectures, like ARM, needs data to be 32bit aligned in GetWindowLong
+	  and SetWindowLong. Fixed it by rd/wr unaligned data as four bytes.
+	  The definition ARCH_NEED_ALIGN32 should be set in Makefile.rules if needed.
+	- The MwSelect function has been changed. An argument is passed to the function to
+	  indicates if the select may suspend or not the process. PeekMessage do not suspend,
+	  GetMessage suspend until a next timeout or user action.
+	- if MW_CALL_IDLE_HANDLER is defined, a function idle_handler is called
+	  (should be implemented in the application code). The idle_handler has
+	  the following prototype:  void WINAPI idle_handler ( void );
+	  This may be used in some embedded application to put CPU in idle state
+	  and save battery.
+	- The GetMessage function, when waiting for a message, call
+	  MwHandleTimers and if requested the idle_handler fn.
+	- In the drivers folder, the file mou_tp.h was missing. (Needed by mou_harrier)
+	* fixed v0.90 white display bug in 24/32bpp images (Greg)
+	* fixed XPM support for large line size (Greg)
+	* added VNC server support, requires libvncserver 0.6 (Giampiero)
+		added HAVE_VNCSERVER_SUPPORT, VNCSERVER_PTHREADED config opts
+		added INCZ zlib include config option
+	* fix mterm on Cygwin (David)
+	* add DT_BOTTOM, DT_VCENTER to DrawText (Simon)
+	* fix bug in MwDestroyWindow causing crashes
+	* add DrawArea function to fblin4 driver for Freetype 2.1.4 (Steven)
+	* add Windows screen/mouse/kbd drivers, support Visual C (Wilson Loi)
+		contrib/visualc contains .dsp files, tested for NONETWORK only
+	* added support for iPod Linux (Bernard)
+		new config options: IPOD_LCD, INVERT2BB, config.ipod
+		new arch: UCLINUX-ARM
+		new screen driver fblin2revipod.c
+		fixed uClinux framebuffer mmap, ttyscan driver
+	* allow large transfers > MAXREQUESTSZ in GrDrawImageBits (Thomas)
+	* fixed positive leftBearing in PCF fonts (Thomas)
+	* fix no mmap under eCos
+	* fix GrSendClientData mem leak
+Version 0.91 - 3 June 2005 (based on 28 Feb 2004 CVS) - greg@censoft.com
+	* added changes for updated port to RTEMS 4.6.0pre5 (Andrey)
+	* split devimage.c into individual decoder image_*.c files (Jonathan)
+	* made changes to compile with uClibc/buildroot v0.9.23
+	* added NATIVETOOLSPREFIX to allow multiply hosted local compilers
+	* fix TIF image decoder (added alpha channel bit)
+	* allow freetype 2 support from mem buffers w/o file i/o (Jonathan)
+	* fixed convbmp.c for bigendian systems (Jonathan)
+	* added hardcoded fnkey support to non-scancode tty driver (Jonathan)
+	* fixed various Makefiles for proper NANOWM, NANOX, NANOXDEMO builds
+	* added quick clean mechanism when obj/ dir specified seperately
+	* changed default object directory to obj/ next to bin/ and lib/
+	* reduced libraries required for nano-X and win32 api links (Jonathan)
+		nano-X requires only -lnano-X regardless of LINK_APP_INTO_SERVER
+		win32 requires only -lmwin; obsolete mwinlib, mwengine,
+			mwdrivers, mwfonts for now, CHANGE MAKEFILES!
+	* revised Makefile system, Path.rules allows mult arch makes (Jonathan)
+		also allows bin, lib and obj directories to be separate:
+		e.g. "make MW_DIR_BIN=... MW_DIR_LIB=... MW_DIR_OBJ=...
+			CONFIG=..."
+	* changed default freetype 1 include dir to /usr/include/freetype1
+	* changed default vncviewer password to "password"
+	* added check for "Exif" header in jpeg files for digital cam pics
+	* fixed nested comments in mou_ser.c
+	* fixed EUCJP output with MGL fonts for values > 256
+	* patched nterm.c to work with uClinux (Mark)
+	* fixed 32 bpp alpha framebuffer driver sign extension bug (Jonathan)
+	* added IR trackpoint mouse support (LIRCMOUSE=Y) (Jonathan)
+	* added two keyboard support w/lirc driver (LIRCKBD2=Y) (Jonathan)
+	* fixed GdArcAngle problem with small angles becoming whole circle
+	* fixed portrait-down mirror display problem (Matthias), also mouse
+	* fixed .pcf file short offset problem with large fonts
+	* fixed .pcf file incorrect width mapping bug w/certain fonts
+	* fixed .fnt file font loader bug with certain fonts
 Version 0.90 - 30 May 2003 - greg@censoft.com
 	* remove scancode hack in ttyscan.c (loses mozilla X compatibility)
 	* protect 0 width/height bitmaps in GdBitmap, drawbitmap (PCF fonts)

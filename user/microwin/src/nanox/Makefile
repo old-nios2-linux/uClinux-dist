@@ -4,11 +4,11 @@
 # Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
 ##############################################################################
 
-ifndef TOP
-TOP = ..
-CONFIG = $(TOP)/config
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/..
 endif
-
+MW_DIR_RELATIVE := nanox/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ############################# targets section ################################
@@ -19,61 +19,81 @@ ifeq ($(NANOX), Y)
 LIBNAME = libnano-X.a
 LIBNAMESO = libnano-X.so
 
-LDLIBS += -lm
+# Get list of core files (engine, fonts and drivers).
+MW_CORE_OBJS :=
+include $(MW_DIR_SRC)/engine/Objects.rules
+include $(MW_DIR_SRC)/fonts/Objects.rules
+include $(MW_DIR_SRC)/drivers/Objects.rules
 
 # Nano-X server files
-NANOXFILES = srvmain.o srvfunc.o srvutil.o srvevent.o srvclip.o
+NANOXFILES := \
+	$(MW_CORE_OBJS) \
+	$(MW_DIR_OBJ)/nanox/srvmain.o \
+	$(MW_DIR_OBJ)/nanox/srvfunc.o \
+	$(MW_DIR_OBJ)/nanox/srvutil.o \
+	$(MW_DIR_OBJ)/nanox/srvevent.o \
+	$(MW_DIR_OBJ)/nanox/srvclip.o
 
 # Nano-X client files
-OBJS = nxdraw.o nxutil.o nxtransform.o
+OBJS := \
+	$(MW_DIR_OBJ)/nanox/nxdraw.o \
+	$(MW_DIR_OBJ)/nanox/nxutil.o \
+	$(MW_DIR_OBJ)/nanox/nxtransform.o
 
 ifeq ($(LINK_APP_INTO_SERVER), Y)
 OBJS += $(NANOXFILES)
 else
 
 # Nano-X server files (network only)
-NANOXFILES += srvnet.o
+NANOXFILES += $(MW_DIR_OBJ)/nanox/srvnet.o
 
 # Nano-X client files (network only)
-OBJS += client.o nxproto.o error.o
+OBJS += \
+	$(MW_DIR_OBJ)/nanox/client.o \
+	$(MW_DIR_OBJ)/nanox/nxproto.o \
+	$(MW_DIR_OBJ)/nanox/error.o
 ifeq ($(FRAMEBUFFER), Y)
-OBJS += clientfb.o
+OBJS += $(MW_DIR_OBJ)/nanox/clientfb.o
 else
 ifeq ($(X11), Y)
-OBJS += clientfb.o
+OBJS += $(MW_DIR_OBJ)/nanox/clientfb.o
 endif
 endif
 
 ifeq ($(ARCH), ECOS) 
-TARGET = $(TOP)/bin/nano-X.o
+TARGET = $(MW_DIR_BIN)/nano-X.o
 else
-TARGET = $(TOP)/bin/nano-X
+TARGET = $(MW_DIR_BIN)/nano-X
 endif
 all: default $(TARGET)
 endif
+
+ifeq ($(HAVE_VNCSERVER_SUPPORT), Y)
+NANOXSERVERLIBS += $(LIBVNC) $(LIBJPEG) $(LIBZ)
+endif 
 
 endif
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 
 # Server binary ...
 ifeq ($(SHAREDLIBS), Y)
-$(TOP)/bin/nano-X: $(NANOXFILES) $(NANOXSERVERLIBS) $(TOP)/config
-	@echo "Linking $@ ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(NANOXFILES) $(CCNANOXSERVERLIBS) $(LDLIBS)
+$(MW_DIR_BIN)/nano-X: $(NANOXFILES) $(NANOXSERVERLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(NANOXFILES) $(CCNANOXSERVERLIBS)
 else
-$(TOP)/bin/nano-X.o: $(OBJS) $(NANOXFILES) $(NANOXSERVERLIBS) $(TOP)/config
-	@echo "Linking $@ ..."
+$(MW_DIR_BIN)/nano-X.o: $(OBJS) $(NANOXFILES) $(NANOXSERVERLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
 #	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(NANOXFILES) $(NANOXSERVERLIBS) -Wl,-r -Wl,--retain-symbols-file -Wl,nanox.syms -Wl,--defsym -Wl,nanox_main=main -o XX.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(NANOXFILES) $(NANOXSERVERLIBS) -Wl,-r -Wl,--defsym -Wl,nanox_main=main -o XX.o
-	$(NM) XX.o | grep -v _main | grep -v Gr | grep -v nx | grep ' T' | awk -f $(TOP)/ecos/retain.awk | xargs $(OBJCOPY) XX.o $@
+	$(NM) XX.o | grep -v _main | grep -v Gr | grep -v nx | grep ' T' | awk -f $(MW_DIR_SRC)/ecos/retain.awk | xargs $(OBJCOPY) XX.o $@
 #	rm -f XX.o
 
-$(TOP)/bin/nano-X: $(NANOXFILES) $(NANOXSERVERLIBS) $(TOP)/config
-	@echo "Linking $@ ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(NANOXFILES) $(NANOXSERVERLIBS) $(LDLIBS)
+$(MW_DIR_BIN)/nano-X: $(NANOXFILES) $(NANOXSERVERLIBS) $(CONFIG)
+	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(NANOXFILES) $(NANOXSERVERLIBS)
 endif

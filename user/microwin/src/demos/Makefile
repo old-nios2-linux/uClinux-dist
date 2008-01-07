@@ -3,11 +3,11 @@
 # Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
 ##############################################################################
 
-ifndef TOP
-TOP = ..
-CONFIG = $(TOP)/config
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)/..
 endif
-
+MW_DIR_RELATIVE := demos/
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ######################## Additional Flags section ############################
@@ -35,10 +35,13 @@ OBJS =
 #ifeq ($(ARCH), ECOS)
 #dirs = nanowm nanox nxkbd nxscribble
 #endif
+ifeq ($(ARCH), UCLINUX-ARM)
+dirs = nxkbd
+endif
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################
 

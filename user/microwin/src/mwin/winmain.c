@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2000 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2004, 2005 Greg Haerr <greg@censoft.com>
  *
  * Main module of Microwindows
  */
@@ -27,8 +27,17 @@
 #include <linuxmt/time.h>
 #endif
 
+#if RTEMS || __ECOS
+#include <rtems/mw_uid.h>
+#endif
+
+#if __ECOS
+#include <cyg/kernel/kapi.h>
+#endif
+
 #include "windows.h"
 #include "wintern.h"
+#include "winres.h"
 #include "device.h"
 
 /*
@@ -49,8 +58,14 @@ int		mouse_fd;		/* the mouse file descriptor */
 int		escape_quits = 1;	/* terminate when pressing ESC */
 
 int
-main(int ac,char **av)
+#if __ECOS
+invoke_WinMain(int ac,char **av)
+#else
+   main(int ac,char **av)
+#endif
 {
+    HINSTANCE hInstance;
+
 	/* call user hook routine before anything*/
 	if(MwUserInit(ac, av) < 0)
 		exit(1);
@@ -58,9 +73,16 @@ main(int ac,char **av)
 	if(MwOpen() < 0)
 		exit(1);
 
-	/* call windows main program entry point*/
-	WinMain(NULL, NULL, NULL, SW_SHOW);
+	if( (hInstance=mwCreateInstance(ac, av)) == NULL )
+	    exit(1);
+		
+	rootwp->hInstance = hInstance;
 
+	/* call windows main program entry point*/
+	WinMain ( hInstance, NULL, 
+		  (LPSTR)((PMWAPPINSTANCE)hInstance)->szCmdLine, SW_SHOW );
+
+	mwFreeInstance ( hInstance );
 	MwClose();
 	return 0;
 }
@@ -224,10 +246,9 @@ MwUnregisterFdExcept(HWND hwnd, int fd)
 
 #endif /* UNIX | DOS_DJGPP*/
 
-
-#if MSDOS | _MINIX | CLEOPATRA
+#if MSDOS | _MINIX
 void
-MwSelect(void)
+MwSelect(BOOL mayWait)
 {
 	/* If mouse data present, service it*/
 	if(mousedev.Poll())
@@ -243,13 +264,13 @@ MwSelect(void)
 }
 #endif
 
-#if UNIX && defined(HAVESELECT) && !CLEOPATRA
+#if UNIX && defined(HAVESELECT)
 #if ANIMATEPALETTE
 static int fade = 0;
 #endif
 
 void
-MwSelect(void)
+MwSelect(BOOL mayWait)
 {
 	fd_set	rfds;
 	fd_set	wfds;
@@ -258,7 +279,8 @@ MwSelect(void)
 	int 	e;
 	int	setsize = 0;
 	UINT	timeout;
-	struct timeval to;
+	struct timeval to, *pto;
+	BOOL    maybeInfinite = TRUE;
 
 	/* perform pre-select duties, if any*/
 	if(scrdev.PreSelect)
@@ -268,7 +290,7 @@ MwSelect(void)
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
 	FD_ZERO(&efds);
-
+  
 	if(mouse_fd >= 0) {
 		FD_SET(mouse_fd, &rfds);
 		if(mouse_fd > setsize)
@@ -297,25 +319,37 @@ MwSelect(void)
 	 * so poll quickly to allow other windows to repaint while
 	 * checking for more event input.
 	 */
-	if(dragwp)
-		timeout = to.tv_sec = to.tv_usec = 0L;
-	else {
+	timeout = to.tv_sec = to.tv_usec = 0L;
+	pto = &to;
+	if( !dragwp && mayWait ) {
 		timeout = MwGetNextTimeoutValue();	/* returns ms*/
+		if( (int)timeout == -1 ) // this means that no timers exists
+			timeout = 0;
+		else
+			maybeInfinite = FALSE;
 #if ANIMATEPALETTE
 		if(fade < 100)
 			timeout = 40;
 #endif
-if (!timeout) timeout = 10;	/* temp kluge required for mdemo to run ok*/
+//if (!timeout) timeout = 10;	/* temp kluge required for mdemo to run ok*/
 #if MW_FEATURE_TIMERS
-		GdGetNextTimeout(&to, timeout);
+		if( !GdGetNextTimeout(&to, timeout) ) {
+			to.tv_sec = timeout / 1000;
+			to.tv_usec = (timeout % 1000) * 1000;
+		} else
+			maybeInfinite = FALSE;
 #else /* if ! MW_FEATURE_TIMERS */
 		to.tv_sec = timeout / 1000;
 		to.tv_usec = (timeout % 1000) * 1000;
 #endif /* ! MW_FEATURE_TIMERS */
+		/*  If no timers are scheduled 
+		    so the select function will wait forever...  */
+		if( maybeInfinite && (to.tv_sec == 0) && (to.tv_usec == 0) )
+			pto = NULL;
 	}
-
+		
 	/* Wait for some input on any of the fds in the set or a timeout: */
-	if((e = select(setsize, &rfds, &wfds, &efds, &to)) > 0) {
+	if((e = select(setsize, &rfds, &wfds, &efds, pto)) > 0) {
 		
 		/* If data is present on the mouse fd, service it: */
 		if(mouse_fd >= 0 && FD_ISSET(mouse_fd, &rfds))
@@ -324,8 +358,10 @@ if (!timeout) timeout = 10;	/* temp kluge required for mdemo to run ok*/
 
 		/* If data is present on the keyboard fd, service it: */
 		if(keyb_fd >= 0 && FD_ISSET(keyb_fd, &rfds))
+			MwCheckKeyboardEvent();
+/*	GB: Only one key at a time is posted to focused window...
 			while(MwCheckKeyboardEvent())
-				continue;
+				continue;	*/
 
 		/* If registered descriptor, handle it */
 		fd = userregfd_head;
@@ -354,9 +390,71 @@ if (!timeout) timeout = 10;	/* temp kluge required for mdemo to run ok*/
 		MwHandleTimers();
 	} else
 		if(errno != EINTR)
-			EPRINTF("Select() call in main failed\n");
+			EPRINTF("Select() call in main failed. Errno=%d\n", errno);
 }
 #endif
+
+#if RTEMS || __ECOS
+extern MWBOOL MwCheckMouseEvent();
+extern MWBOOL MwCheckKeyboardEvent();
+extern struct MW_UID_MESSAGE m_kbd;
+extern struct MW_UID_MESSAGE m_mou;
+extern HWND  dragwp;     /* window user is dragging*/
+
+void MwSelect (BOOL mayWait)
+{
+        struct MW_UID_MESSAGE m;
+	int rc;
+	unsigned int timeout = 0;
+
+	/* perform pre-select duties, if any*/
+	if (scrdev.PreSelect)
+		scrdev.PreSelect (&scrdev);
+
+	/* Set up the timeout for the main select().
+	 * If the mouse is captured we're probably moving a window,
+	 * so poll quickly to allow other windows to repaint while
+	 * checking for more event input.
+	 */
+	if (!dragwp) {
+	        timeout = MwGetNextTimeoutValue ();     /* returns ms*/
+		        if (timeout < 10)
+		                timeout = 10;       /* 10ms required for vt fb switch*/
+	}										
+	/* let's make sure that the type is invalid */
+	m.type = MV_UID_INVALID;
+	
+	/* wait up to 100 milisecons for events */
+	rc = uid_read_message (&m, timeout);
+
+	/* return if timed-out or something went wrong */
+	if (rc < 0) {
+	        if ( errno != ETIMEDOUT )
+		        EPRINTF (" rc= %d, errno=%d\n", rc, errno);
+		else {
+			MwHandleTimers ();
+		}
+		return;
+	}
+
+	/* let's pass the event up to microwindows */
+	switch (m.type) {
+	case MV_UID_REL_POS:	/* Mouse or Touch Screen event */
+	case MV_UID_ABS_POS:
+	        m_mou = m;
+		while (MwCheckMouseEvent ()) continue;
+		break;
+	case MV_UID_KBD:	/* KBD event */
+	        m_kbd = m;
+		MwCheckKeyboardEvent();
+		break;
+        case MV_UID_TIMER:	/* Microwindows does nothing with these.. */
+	case MV_UID_INVALID:
+	default:
+	        break;
+	}
+}
+#endif /* RTEMS */
 
 #if VTSWITCH
 static void
@@ -408,11 +506,14 @@ MwInitialize(void)
   	}
 	userregfd_head = -1;
 #endif
+
+#ifndef __ECOS
 	/* catch terminate signal to restore tty state*/
 	signal(SIGTERM, (void *)MwTerminate);
+#endif	
 
 	startTicks = GetTickCount();
-
+	
 	if ((keyb_fd = GdOpenKeyboard()) == -1) {
 		EPRINTF("Cannot initialise keyboard\n");
 		return -1;
@@ -471,6 +572,13 @@ MwInitialize(void)
 	wp->cursor = NULL;
 	wp->unmapcount = 0;
 	wp->id = 0;
+	wp->szTitle = (LPTSTR) malloc ( 64 );
+	wp->lpfnWndProc = wc.lpfnWndProc;
+	wp->hInstance = NULL;
+	wp->nEraseBkGnd = 1;
+	wp->paintBrush = NULL;
+	wp->paintPen = NULL;
+
 	strcpy(wp->szTitle, "Microwindows");
 	wp->gotPaintMsg = PAINT_PAINTED;
 #if UPDATEREGIONS
@@ -542,6 +650,10 @@ GetTickCount(VOID)
 	
 	return (DWORD)times(&t) * 16;
 #else
+#if __ECOS
+  /* CYGNUM_HAL_RTC_NUMERATOR/CYGNUM_HAL_RTC_DENOMINATOR gives the length of one tick in nanoseconds */
+   return (cyg_current_time()*(CYGNUM_HAL_RTC_NUMERATOR/CYGNUM_HAL_RTC_DENOMINATOR))/(1000*1000);
+#else
 #if UNIX
 	struct timeval t;
 
@@ -549,6 +661,7 @@ GetTickCount(VOID)
 	return ((t.tv_sec * 1000) + (t.tv_usec / 25000) * 25) - startTicks;
 #else
 	return 0L;
+#endif
 #endif
 #endif
 #endif

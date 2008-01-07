@@ -1,15 +1,30 @@
-XPM transparent color uses alpha channel
-add alpha channel into GdDrawImage handling
+fix left/right portrait w/freetype
+add drawarea_copy* functions from fblin16 to fblin24/fblin32 driver
+combine GdArea, GdBlit, GdAreaInternal for speed; build conversion library
+	for when fast driver blit can't be used.  Pass usebg, alpha blend
+	etc directly to low level driver, don't use gr_xxx globals
+	GrArea needs to allow src offsets
+	GrReadArea needs to allow hw pixel format return
+old GdArc doesn't draw 2nd point on circle, see grdemo.sh/arcdemo
+replace old GdArc routine w/new version based on GdArcAngle
+ft2: no underline
+ft2: must use forced slow rotation code when cache off
+ft2.3: must force cache off after v2.1.3 as no 'font' member in FTC_ImageTypeReq struct
+change freetype2_create etc back to freetype_create
+mwdvetest demo segfaults when dialog moved or credits closed
+remove 2nd thislen parm in GrSendClientData
+italic wrap bug - lubI24.bdf 'r', 'M'
 fix fast gray palette handling for jpegs
 check incorrect jpeg decode when !FASTJPEG
-where is MWIMAGE_ALPHA_CHANNEL used?
+add alpha channel into GdDrawImage software handling
+no decoder uses MWIMAGE_ALPHA_CHANNEL...
+	use alpha channel with TIFF decoder?
+add 32bpp BMP support?
 remove GR_GRAB_EXCLUSIVE_MOUSE?, check HOTKEY event
 fixup GsDeliverRawMouseEvent, remove internal button handling
 fonts/*/Makefile removed: *.o created with config.dbcs
 MWCOORD_MAX possibly incorrect, int vs uint16 for MWCOORD in nxproto.h
 	check LARGE_COORDINATES in devrgn2.c
-use alpha channel with TIFF decode?
-add 32bpp BMP support?
 remove psd from GdDuplicateFont, GdCreateFontFromBuffer?
 fix kluge rotate filters
 nanocal doesn't work on fb
@@ -58,8 +73,6 @@ add speed demo
 add UPDATE_TEMPMAP?
 check unrealize/realize ok in move, resize, reborder routines
 test fontmapping?
-
-remove right-left quick exit
 
 cache nanowm title draw font creation
 

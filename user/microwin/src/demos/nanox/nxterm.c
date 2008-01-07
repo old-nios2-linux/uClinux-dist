@@ -1122,10 +1122,6 @@ again:
 	}
 	signal(SIGCHLD, sigchild);
 	signal(SIGINT, sigchild);
-#ifdef __uClinux__
-#undef fork
-#define fork() vfork()
-#endif
 	if ((pid = fork()) == -1) {
 		fprintf(stderr, "No processes\n");
 		return -1;

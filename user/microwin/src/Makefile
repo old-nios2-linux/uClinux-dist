@@ -1,18 +1,13 @@
 ##############################################################################
-# Microwindows template Makefile
+# Microwindows top-level Makefile
 # Copyright (c) 2000 Martin Jolicoeur, Greg Haerr
 ##############################################################################
 
-TOP = $(shell pwd)
-
-# See if the user has a local config file. If so use that else
-# use the one provided in the distribution.
-#ifeq ($(HOME)/microwin/config,$(wildcard $(HOME)/microwin/config))
-#CONFIG = $(HOME)/microwin/config
-#else
-CONFIG = $(TOP)/config
-#endif
-
+ifndef MW_DIR_SRC
+MW_DIR_SRC := $(CURDIR)
+endif
+MW_DIR_RELATIVE :=
+include $(MW_DIR_SRC)/Path.rules
 include $(CONFIG)
 
 ############################# targets section ################################
@@ -25,17 +20,36 @@ LIBNAMESO =
 OBJS =	
 
 # demos should be built after the libs !
-dirs = drivers mwin engine fonts nanox
+dirs := \
+	$(MW_DIR_SRC)/drivers \
+	$(MW_DIR_SRC)/engine \
+	$(MW_DIR_SRC)/fonts
 
-all: default
-	-$(MAKE) -C demos
-ifeq ($(ARCH), ECOS)
-	$(MAKE) -C ecos
+ifeq ($(MICROWIN), Y)
+dirs += $(MW_DIR_SRC)/mwin
 endif
 
+ifeq ($(NANOX), Y)
+dirs += $(MW_DIR_SRC)/nanox
+endif
+
+all: default
+ifeq ($(ARCH), RTEMS)
+	$(MAKE) -C $(MW_DIR_SRC)/rtems
+else
+	-$(MAKE) -C $(MW_DIR_SRC)/demos
+endif
+ifeq ($(ARCH), ECOS)
+	$(MAKE) -C $(MW_DIR_SRC)/ecos
+endif
+
+.PHONY: realclean
+
 realclean: clean
-	$(MAKE) -C fonts realclean
-	$(MAKE) -C mwin/bmp realclean
+ifeq ($(MW_DIR_OBJ),$(MW_DIR_SRC))
+	$(MAKE) -C $(MW_DIR_SRC)/fonts realclean
+	$(MAKE) -C $(MW_DIR_SRC)/mwin/bmp realclean
+endif
 
 #
 # Documentation targets:
@@ -72,6 +86,6 @@ doc-clean:
 
 ######################### Makefile.rules section #############################
 
-include $(TOP)/Makefile.rules
+include $(MW_DIR_SRC)/Makefile.rules
 
 ######################## Tools targets section ###############################

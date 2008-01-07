@@ -4,8 +4,6 @@
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 2000 Alex Holden <alex@linuxhacker.org>
  * Copyright (c) 1991 David I. Bell
- * Permission is granted to use, distribute, or modify this source,
- * provided that this copyright notice remains intact.
  *
  * Nano-X public definition header file:  user applications should
  * include only this header file.
@@ -713,7 +711,7 @@ typedef void (*GR_FNCALLBACKEVENT)(GR_EVENT *);
         "Bad fill mode gc: %d\n",       \
 	"Bad region id: %d\n",
         
-extern char *nxErrorStrings[];
+extern const char *nxErrorStrings[];
 
 /* Public graphics routines. */
 void		GrFlush(void);
@@ -864,6 +862,9 @@ GR_IMAGE_ID	GrLoadImageFromBuffer(void *buffer, int size, int flags);
 void		GrDrawImageToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x,
 			GR_COORD y, GR_SIZE width, GR_SIZE height,
 			GR_IMAGE_ID imageid);
+void		GrDrawImagePartToFit(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD dx, GR_COORD dy,
+			GR_SIZE dwidth, GR_SIZE dheight, GR_COORD sx, GR_COORD sy,
+			GR_SIZE swidth, GR_SIZE sheight, GR_IMAGE_ID imageid);
 void		GrFreeImage(GR_IMAGE_ID id);
 void		GrGetImageInfo(GR_IMAGE_ID id, GR_IMAGE_INFO *iip);
 void		GrText(GR_DRAW_ID id, GR_GC_ID gc, GR_COORD x, GR_COORD y,
