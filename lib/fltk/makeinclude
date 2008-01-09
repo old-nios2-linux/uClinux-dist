@@ -77,8 +77,8 @@ LOCALIMAGES	=  images/libjpeg images/zlib images/libpng
 ZLIBINC		= ../zlib
 
 # libraries to link with:
-LDLIBS =  -O2 -g  -DEMBED -Wl,-d -Wl,-elf2flt -lnx11 -lpthread -lm -lsupc++
-GLDLIBS =  -O2 -g  -DEMBED -Wl,-d -Wl,-elf2flt -lnx11 -lpthread -lm -lsupc++
+LDLIBS =  -g -Wl,-d -Wl,-elf2flt -lnx11 -lnano-X -lpthread -lm -lsupc++
+GLDLIBS =  -g -Wl,-d -Wl,-elf2flt -lnx11 -lnano-X -lpthread -lm -lsupc++
 LINKFLTK = -L../lib -L$(ROOTDIR)/lib -lfltk2
 LINKFLTKGL = -L../lib -L$(ROOTDIR)/lib -lfltk2
 LINKFLTKFORMS = -L../lib -L$(ROOTDIR)/lib -lfltk2_forms -lfltk2

@@ -226,6 +226,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/STLport/lib/*.so \
 	$(ROOTDIR)/prop/librep/librep.a \
 	$(ROOTDIR)/lib/nxlib/libnx11.a \
+	$(ROOTDIR)/user/microwin/src/lib/*.a \
 	$(ROOTDIR)/lib/fltk/lib/*.a
 
 ##############################################################################

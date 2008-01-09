@@ -87,7 +87,7 @@
 /* Do we have the X double-buffer extension header file
    <X11/extensions/Xdbe.h>? Turning this on will make the list_visuals
    program produce info about it. (ignored if !USE_X11) */
-#define HAVE_XDBE 1
+#define HAVE_XDBE 0
 
 /* Actually try to use the double-buffer extension to make
    double-buffered windows? If this is false then Pixmaps will
@@ -113,7 +113,7 @@
    display area is one monitor, unless it is very wide, in which
    case FLTK will guess that it is two monitors next to each other.
    (ignored if !USE_X11) */
-#define USE_XINERAMA 0
+#define USE_XINERAMA		0
 
 /* Use the Windows NT5.0/Win98 multi-monitor calls? If ths is false it
    will guess 1 or 2 monitors, similar to the X version.

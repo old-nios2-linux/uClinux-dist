@@ -28,6 +28,7 @@
 
 #define DEBUG_SELECTIONS 0
 #define DEBUG_TABLET 0
+#define USE_TABLET 0  // not supported in nxlib
 
 #include <config.h>
 #include <fltk/x.h>
@@ -912,6 +913,7 @@ bool fltk::warp_mouse(int x, int y) {
   return true; // always works
 }
 
+#if USE_TABLET
 ////////////////////////////////////////////////////////////////
 // Tablet initialisation and event handling
 const int n_stylus_device = 2;
@@ -1008,6 +1010,7 @@ bool fltk::enable_tablet_events() {
   XFreeDeviceList(list);
   return ret;
 }
+#endif // USE_TABLET
 
 #undef FLTK_T_MAX
 
@@ -1902,6 +1905,7 @@ bool fltk::handle()
 
   }
 
+#if USE_TABLET
   // handle stylus events
   if (   xevent.type == stylus_motion_event
       || xevent.type == stylus_proximity_in_event
@@ -1940,6 +1944,7 @@ bool fltk::handle()
     return true;
     // should we send some kind of PEN_DOWN/ERASER_DOWN events?
   }
+#endif
  unknown_device:
 
   return handle(event, window);
