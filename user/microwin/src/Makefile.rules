@@ -411,13 +411,18 @@ include $(MW_DIR_SRC)/Arch.rules
 endif
 
 # Tools ...
+ifdef NOT_DEFINED_EVER
 CC = $(TOOLSPREFIX)$(COMPILER)
 CXX = $(TOOLSPREFIX)$(CXX_COMPILER)
 AR = $(TOOLSPREFIX)$(ACHIVER)
 LD = $(TOOLSPREFIX)$(LINKER)
+endif
 NM = $(TOOLSPREFIX)nm
-STRIP = $(TOOLSPREFIX)strip
+# STRIP = $(TOOLSPREFIX)strip
 OBJCOPY = $(TOOLSPREFIX)objcopy
+ifdef NOT_DEFINED_EVER
+RANLIB = $(TOOLSPREFIX)ranlib
+endif
 CP = cp
 MV = mv
 
