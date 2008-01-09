@@ -346,6 +346,13 @@ config LIB_LIBOPENH323
 	  Only enable this if you want to force the library to be built.  The
 	  Config will make sure this library is built if it is needed.
 
+config LIB_NXLIB
+	bool 'Build nxlib'
+	help
+	  Nano-X / Xlib Compatibility Library.
+	  Allows X11 binaries to run unmodified using the Microwindows Nano-X
+	  server.
+
 comment "Library Configuration"
 
 config LIB_UC_LIBC_TIMEZONE

@@ -8,7 +8,7 @@
 #
 
 # set to Microwindows and X11 include and lib directories
-MWIN=/home/greg/net/microwin/src
+MWIN=$(ROOTDIR)/user/microwin/src
 X11=/usr/X11R6
 
 MWIN_INCLUDE=$(MWIN)/include
@@ -26,20 +26,20 @@ X11_RGBTXT=/usr/lib/X11/rgb.txt
 BIGENDIAN=N
 
 # set to Y to make shared X11 libs
-SHAREDLIB=Y
+SHAREDLIB=N
 LIBNAME = X11
 xSOLIBREV = 6.1
 SOLIBREV = 6.2
 
 # set to Y to include (unmodifed X11) Xrm routines
-INCLUDE_XRM=Y
+INCLUDE_XRM=N
 
 # shared library dependencies and shared library install dir
 SOEXTRALIBS = -L$(MWIN_LIB) -lnano-X
 INSTALL_DIR = $(X11_LIB)
 
 # compiler flags
-CC = gcc
+#CC = gcc
 LN = ln -s
 MV = mv
 RM = rm -f
@@ -94,7 +94,7 @@ all: $(LIBS)
 
 # static nx11 library
 libnx11.a: keysymstr.h $(OBJS)
-	ar r libnx11.a $(OBJS)
+	$(AR) r libnx11.a $(OBJS)
 
 # shared X11 library
 lib$(LIBNAME).so.$(SOLIBREV): $(OBJS)
@@ -116,6 +116,8 @@ install: $(LIBS)
 	$(MV) lib$(LIBNAME).so.$(SOLIBREV) $(INSTALL_DIR)
 ##	$(MV) libnx11.a $(INSTALL_DIR)
 
+romfs:
+
 clean: cleanlibs
 	$(RM) *.o *~
 
@@ -133,7 +135,7 @@ keysymstr.h:
 	perl ./keymap.pl $(X11_INCLUDE)/X11 > ./keysymstr.h
 
 tt: tt.o $(LIBS)
-	cc -o tt tt.c -L. -lnx11 $(SOEXTRALIBS)
+	$(CC) -o tt tt.c -L. -lnx11 $(SOEXTRALIBS)
 
 .SUFFIXES:
 .SUFFIXES: .c .o
