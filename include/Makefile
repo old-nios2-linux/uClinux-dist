@@ -73,7 +73,8 @@ LINKHDRS = \
 	$(ROOTDIR)/prop/librep/librep.h,. \
 	$(ROOTDIR)/prop/librep/librep_c++compatibility.h,. \
 	$(ROOTDIR)/prop/librep/librep_vector.h,. \
-	$(ROOTDIR)/prop/librep/query.h,.
+	$(ROOTDIR)/prop/librep/query.h,. \
+	$(ROOTDIR)/lib/X11/include/*,X11 \
 
 #
 # Both freeswan and openswan can provide des and crypto headers

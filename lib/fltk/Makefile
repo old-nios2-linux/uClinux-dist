@@ -25,7 +25,7 @@
 
 include makeinclude
 
-DIRS = src $(LOCALIMAGES) images OpenGL fluid glut test
+DIRS = src $(LOCALIMAGES) images OpenGL # fluid glut test
 
 all: makeinclude
 	for dir in $(DIRS); do\
@@ -38,6 +38,8 @@ install: makeinclude
 		echo "=== installing $$dir ===";\
 		(cd $$dir; $(MAKE) $(MFLAGS) DESTDIR=$(DESTDIR) install) || exit $$?;\
 	done
+
+romfs:
 
 uninstall: makeinclude
 	for dir in $(DIRS) documentation; do\
@@ -78,7 +80,8 @@ makeinclude: configure configh.in makeinclude.in fltk/string.h.in
 		./config.status --recheck; \
 		./config.status; \
 	else \
-		./configure; \
+		./configure \
+		--host=$(CONFIGURE_HOST) ; \
 	fi
 
 configure: configure.in
