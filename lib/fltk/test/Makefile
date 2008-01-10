@@ -191,7 +191,7 @@ all:	$(TARGETS)
 
 clean:
 	$(RM) *.bck
-	$(RM) *.o
+	$(RM) *.o *.gdb *.elf
 	$(RM) core*
 	$(RM) $(TARGETS)
 

@@ -348,6 +348,7 @@ config LIB_LIBOPENH323
 
 config LIB_NXLIB
 	bool 'Build nxlib'
+	select USER_MICROWIN_NANOX
 	help
 	  Nano-X / Xlib Compatibility Library.
 	  Allows X11 binaries to run unmodified using the Microwindows Nano-X

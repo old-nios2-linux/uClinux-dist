@@ -146,6 +146,7 @@ dir_$(CONFIG_USER_FNORD_HTTPD)              += fnord
 dir_$(CONFIG_USER_FLASHW_FLASHW)            += flashw
 dir_$(CONFIG_USER_FLATFSD_FLATFSD)          += flatfsd
 dir_$(CONFIG_USER_FLTHDR_FLTHDR)            += flthdr
+dir_$(CONFIG_LIB_FLTK)			    += fltk
 dir_$(CONFIG_USER_FREESWAN)                 += freeswan
 dir_$(CONFIG_USER_FROB_LED_FROB_LED)        += frob-led
 dir_$(CONFIG_USER_FROX_FROX)                += frox
@@ -436,6 +437,7 @@ all: config
 .PHONY: $(sort $(dir_y) $(dir_p))
 snort: mysql
 asterisk-addons: mysql asterisk
+fltk: microwin
 
 $(sort $(dir_y) $(dir_p)):  config
 	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -j1 -C $@ ) || exit $$?

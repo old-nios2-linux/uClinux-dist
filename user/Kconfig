@@ -3896,6 +3896,7 @@ menu "MicroWindows"
 
 config USER_MICROWIN
 	bool "MicroWindows"
+	select LIB_ZLIB
 
 comment "Compiling Options"
 
@@ -4003,10 +4004,12 @@ config USER_MICROWIN_HAVE_XPM_SUPPORT
 config USER_MICROWIN_HAVE_JPEG_SUPPORT
 	bool "Have JPEG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBJPEG
 
 config USER_MICROWIN_HAVE_PNG_SUPPORT
 	bool "Have PNG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBPNG
 
 config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 	bool "Have T1LIB Support"

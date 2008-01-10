@@ -25,7 +25,7 @@
 
 include makeinclude
 
-DIRS = src $(LOCALIMAGES) images OpenGL test # fluid glut test
+DIRS = src $(LOCALIMAGES) images OpenGL # fluid glut test
 
 all: makeinclude
 	for dir in $(DIRS); do\
@@ -55,7 +55,7 @@ depend: makeinclude
 
 clean:
 	$(RM) core
-	$(RM) core.* *.o
+	$(RM) core.* *.o *.gdb *.elf *.elf2flt
 	for dir in $(DIRS); do\
 		echo "=== cleaning $$dir ===";\
 		(cd $$dir; $(MAKE) $(MFLAGS) clean) || break;\
