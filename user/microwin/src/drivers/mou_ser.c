@@ -13,7 +13,7 @@
  *
  * Environment Var	Default		Allowed
  * MOUSE_TYPE		pc		ms, pc, logi, ps2
- * MOUSE_PORT		/dev/ttyS1	any serial port or /dev/psaux
+ * MOUSE_PORT		/dev/ttyS1	any serial port or /dev/input/mice (old /dev/psaux)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,13 +45,18 @@
 #define	MOUSE_PORT	"/dev/ttys0"
 #else
 /* default mouse tty port: /dev/psaux or /dev/ttyS1 */
-#define MOUSE_PORT	"/dev/mouse"
+#define MOUSE_PORT	"/dev/input/mice"	/* input subsystem */
+/*#define MOUSE_PORT	"/dev/mouse"*/
 /*#define MOUSE_PORT	"/dev/psaux"*/
 /*#define MOUSE_PORT	"/dev/ttyS1"*/
 #endif
 /* default mouse type: ms, pc, logi, or ps2 */
+#ifdef CONFIG_COBRA5272
+#define	MOUSE_TYPE	"ms"
+#else /* not for COBRA5272: */
 #define MOUSE_TYPE	"ps2"
 /*#define MOUSE_TYPE	"pc"*/
+#endif /* end #ifdef CONFIG_COBRA5272 */
 #endif
 
 #define MAX_BYTES	128		/* number of bytes for buffer */
