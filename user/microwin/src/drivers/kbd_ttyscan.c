@@ -19,7 +19,7 @@
 #include "fb.h"
 
 #ifndef __uClinux__
-#define KEYBOARD	"/dev/tty"	/* console kbd to open*/
+#define KEYBOARD	"/dev/tty1"	/* console kbd to open*/
 #else
 #define KEYBOARD	"/dev/console"
 #endif
