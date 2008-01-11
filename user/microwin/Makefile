@@ -1,9 +1,13 @@
 
 BINDIR=src/bin
 
-all clean:
+all:
 	[ -d src/lib ] || mkdir src/lib
 	[ -d src/bin ] || mkdir src/bin
+	$(MAKE) -C src TOOLSPREFIX=$(CROSS_COMPILE) $@ || exit 1
+	$(MAKE) -C $(ROOTDIR)/lib make_links
+
+clean:
 	$(MAKE) -C src TOOLSPREFIX=$(CROSS_COMPILE) $@ || exit 1
 
 romfs:

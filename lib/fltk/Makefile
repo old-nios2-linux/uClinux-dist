@@ -81,14 +81,14 @@ distclean: clean
 		$(RM) test/`basename $file .fl`.h; \
 	done
 
-makeinclude: configure configh.in makeinclude.in fltk/string.h.in
-	if test -f config.status; then \
-		./config.status --recheck; \
-		./config.status; \
-	else \
-		./configure \
-		--host=$(CONFIGURE_HOST) ; \
-	fi
+#makeinclude: configure configh.in makeinclude.in fltk/string.h.in
+#	if test -f config.status; then \
+#		./config.status --recheck; \
+#		./config.status; \
+#	else \
+#		./configure \
+#		--host=$(CONFIGURE_HOST) ; \
+#	fi
 
 configure: configure.in
 	autoconf

@@ -29,7 +29,7 @@ include makeinclude
 
 DIRS	=	$(IMAGEDIRS) src # fluid test documentation
 
-all: makeinclude fltk-config
+all: makeinclude # fltk-config
 	for dir in $(DIRS); do\
 		echo "=== making $$dir ===";\
 		(cd $$dir; $(MAKE) $(MFLAGS)) || exit 1;\
@@ -109,16 +109,16 @@ fltk-config: configure configh.in fltk-config.in
 	touch config.h
 	chmod +x fltk-config
 
-makeinclude: configure configh.in makeinclude.in
-	if test -f config.status; then \
-		./config.status --recheck; \
-		./config.status; \
-	else \
-		./configure \
-		--host=$(CONFIGURE_HOST) ; \
-	fi
-	touch config.h
-	chmod +x fltk-config
+#makeinclude: configure configh.in makeinclude.in
+#	if test -f config.status; then \
+#		./config.status --recheck; \
+#		./config.status; \
+#	else \
+#		./configure \
+#		--host=$(CONFIGURE_HOST) ; \
+#	fi
+#	touch config.h
+#	chmod +x fltk-config
 
 configure: configure.in
 	autoconf

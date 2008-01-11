@@ -1,7 +1,7 @@
 all:
-	make -C $(ROOTDIR)/lib/fltk demo
+	$(MAKE) -C $(ROOTDIR)/lib/fltk demo
 
 romfs:
 
 clean:
-	make -C $(ROOTDIR)/lib/fltk/test clean
+	$(MAKE) -C $(ROOTDIR)/lib/fltk/test clean
