@@ -53,5 +53,5 @@ $(MW_DIR_BIN)/nxroach: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
 else
 $(MW_DIR_BIN)/nxroach: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
 	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS) -lm
 endif
