@@ -972,8 +972,8 @@ int main(int argc, char **argv)
 	bitmap1bg[4] = MASK(_,_,X,X,X,_,_);
 	bitmap1bg[5] = MASK(_,_,X,X,X,_,_);
 	bitmap1bg[6] = MASK(_,X,X,X,X,X,_);
-    GrSetCursor(w1, 7, 7, 3, 3, GREEN, BLACK, bitmap1fg, bitmap1bg);
-    GrSetGCForeground(gc1, GREEN);
+    GrSetCursor(w1, 7, 7, 3, 3, WHITE, BLACK, bitmap1fg, bitmap1bg);
+    GrSetGCForeground(gc1, WHITE);
     GrSetGCBackground(gc1, BLACK);
     GrGetWindowInfo(w1,&wi);
     GrGetGCInfo(gc1,&gi);
@@ -1105,14 +1105,14 @@ void sigchild(int signo)
 
 int term_init(void)
 {
-	int tfd;
+	int tfdMaster,tfdSlave;
 	int n = 0;
 	pid_t pid;
 	char pty_name[12];
 
 again:
 	sprintf(pty_name, "/dev/ptyp%d", n);
-	if ((tfd = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
+	if ((tfdMaster = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
 		if ((errno == EBUSY || errno == EIO) && n < 10) {
 			n++;
 			goto again;
@@ -1133,22 +1133,22 @@ again:
 	if (!pid) {
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
-		close(tfd);
+		close(tfdMaster);
 		
 		setsid();
 		pty_name[5] = 't';
-		if ((tfd = open(pty_name, O_RDWR)) < 0) {
+		if ((tfdSlave = open(pty_name, O_RDWR)) < 0) {
 			fprintf(stderr, "Child: Can't open pty %s\n", pty_name);
 			exit(1);
 		}
 		close(STDERR_FILENO);
-		dup2(tfd, STDIN_FILENO);
-		dup2(tfd, STDOUT_FILENO);
-		dup2(tfd, STDERR_FILENO);
+		dup2(tfdSlave, STDIN_FILENO);
+		dup2(tfdSlave, STDOUT_FILENO);
+		dup2(tfdSlave, STDERR_FILENO);
 		execv(nargv[0], nargv);
 		exit(1);
 	}
-	return tfd;
+	return tfdMaster;
 }
 
 #if 0
