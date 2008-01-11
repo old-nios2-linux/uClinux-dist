@@ -53,7 +53,7 @@
 # CONFIG_LIB_PWLIB is not set
 # CONFIG_LIB_LIBOPENH323 is not set
 # CONFIG_LIB_NXLIB is not set
-# CONFIG_LIB_FLTK is not set
+# CONFIG_LIB_FLTK2 is not set
 
 #
 # Library Configuration
