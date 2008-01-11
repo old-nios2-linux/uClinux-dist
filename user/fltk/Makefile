@@ -1,5 +1,5 @@
 all:
-	make -C $(ROOTDIR)/lib/fltk test
+	make -C $(ROOTDIR)/lib/fltk demo
 
 romfs:
 

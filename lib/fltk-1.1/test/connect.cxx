@@ -50,6 +50,10 @@ void sigchld(int) {
 
 void cb(Fl_Widget *o, void *) {
   if (((Fl_Toggle_Button*)o)->value()) {
+#ifdef __uClinux__
+#undef fork
+#define fork() vfork()
+#endif
     if (running) return;
     running = fork();
     if (!running) execl("/usr/sbin/pppd","pppd","-detach",0);

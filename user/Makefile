@@ -146,7 +146,8 @@ dir_$(CONFIG_USER_FNORD_HTTPD)              += fnord
 dir_$(CONFIG_USER_FLASHW_FLASHW)            += flashw
 dir_$(CONFIG_USER_FLATFSD_FLATFSD)          += flatfsd
 dir_$(CONFIG_USER_FLTHDR_FLTHDR)            += flthdr
-dir_$(CONFIG_LIB_FLTK2)			    += fltk
+dir_$(CONFIG_LIB_FLTK2_TEST)		    += fltk
+dir_$(CONFIG_LIB_FLTK_TEST)		    += fltk-1.1
 dir_$(CONFIG_USER_FREESWAN)                 += freeswan
 dir_$(CONFIG_USER_FROB_LED_FROB_LED)        += frob-led
 dir_$(CONFIG_USER_FROX_FROX)                += frox
@@ -438,6 +439,7 @@ all: config
 snort: mysql
 asterisk-addons: mysql asterisk
 fltk: microwin
+fltk-1.1: microwin
 
 $(sort $(dir_y) $(dir_p)):  config
 	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -j1 -C $@ ) || exit $$?

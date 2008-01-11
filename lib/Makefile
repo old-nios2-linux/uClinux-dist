@@ -76,6 +76,7 @@ dir_3_$(CONFIG_LIB_BFD)          += bfd
 dir_3_$(CONFIG_LIB_POPT)         += popt
 dir_3_$(CONFIG_LIB_NXLIB)        += nxlib
 dir_4_$(CONFIG_LIB_FLTK2)	 += fltk
+dir_4_$(CONFIG_LIB_FLTK)	 += fltk-1.1
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
@@ -227,7 +228,8 @@ LINKLIBS=\
 	$(ROOTDIR)/prop/librep/librep.a \
 	$(ROOTDIR)/lib/nxlib/libnx11.a \
 	$(ROOTDIR)/user/microwin/src/lib/*.a \
-	$(ROOTDIR)/lib/fltk/lib/*.a
+	$(ROOTDIR)/lib/fltk/lib/*.a \
+	$(ROOTDIR)/lib/fltk-1.1/lib/*.a
 
 ##############################################################################
 

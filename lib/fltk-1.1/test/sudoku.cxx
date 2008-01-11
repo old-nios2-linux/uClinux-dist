@@ -448,6 +448,11 @@ void SudokuSound::play(char note) {
   }
 #  endif // HAVE_ALSA_ASOUNDLIB_H
 
+#ifdef __uClinux__
+  // doesn't support XGetKeyboardControl with nxlib
+  XBell(fl_display, 100);
+  XFlush(fl_display);
+#else
   // Just use standard X11 stuff...
   XKeyboardState	state;
   XKeyboardControl	control;
@@ -474,6 +479,7 @@ void SudokuSound::play(char note) {
   XChangeKeyboardControl(fl_display,
                          KBBellPercent | KBBellPitch | KBBellDuration,
 			 &control);
+#endif // __uClinux__
 #endif // __APPLE__
 }
 

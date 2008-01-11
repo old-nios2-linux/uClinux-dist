@@ -27,10 +27,16 @@
 
 include makeinclude
 
-DIRS	=	$(IMAGEDIRS) src fluid test documentation
+DIRS	=	$(IMAGEDIRS) src # fluid test documentation
 
 all: makeinclude fltk-config
 	for dir in $(DIRS); do\
+		echo "=== making $$dir ===";\
+		(cd $$dir; $(MAKE) $(MFLAGS)) || exit 1;\
+	done
+
+demo:
+	for dir in fluid test; do\
 		echo "=== making $$dir ===";\
 		(cd $$dir; $(MAKE) $(MFLAGS)) || exit 1;\
 	done
@@ -48,6 +54,8 @@ install-desktop: makeinclude
 	cd documentation; $(MAKE) $(MFLAGS) $(INSTALL_DESKTOP)
 	cd fluid; $(MAKE) $(MFLAGS) $(INSTALL_DESKTOP)
 	cd test; $(MAKE) $(MFLAGS) $(INSTALL_DESKTOP)
+
+romfs:
 
 uninstall: makeinclude
 	$(RM) $(DESTDIR)$(bindir)/fltk-config
@@ -68,7 +76,7 @@ depend: makeinclude
 	done
 
 clean:
-	-$(RM) core *.o
+	-$(RM) core *.o *.gdb *.elf *.elf2flt
 	for dir in $(DIRS); do\
 		echo "=== cleaning $$dir ===";\
 		(cd $$dir; $(MAKE) $(MFLAGS) clean) || exit 1;\
@@ -95,7 +103,8 @@ fltk-config: configure configh.in fltk-config.in
 		./config.status --recheck; \
 		./config.status; \
 	else \
-		./configure; \
+		./configure \
+		--host=$(CONFIGURE_HOST) ; \
 	fi
 	touch config.h
 	chmod +x fltk-config
@@ -105,7 +114,8 @@ makeinclude: configure configh.in makeinclude.in
 		./config.status --recheck; \
 		./config.status; \
 	else \
-		./configure; \
+		./configure \
+		--host=$(CONFIGURE_HOST) ; \
 	fi
 	touch config.h
 	chmod +x fltk-config

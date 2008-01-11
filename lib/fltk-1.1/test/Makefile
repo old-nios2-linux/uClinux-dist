@@ -250,7 +250,7 @@ uninstall-osx:
 # FLUID file rules
 .fl.cxx .fl.h:	../fluid/fluid$(EXEEXT)
 	echo Generating $@ and header from $<...
-	../fluid/fluid$(EXEEXT) -c $<
+	fluid -c $<
 
 # All demos depend on the FLTK library...
 $(ALL): ../lib/$(LIBNAME)

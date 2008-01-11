@@ -35,7 +35,7 @@ include ../makeinclude
 #
 
 .fl.cxx .fl.h:
-	../fluid/fluid2$(EXEEXT) -c $<
+	fluid2 -c $<
 
 
 #

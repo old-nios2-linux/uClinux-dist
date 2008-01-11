@@ -33,6 +33,12 @@ all: makeinclude
 		(cd $$dir; $(MAKE) $(MFLAGS)) || exit $$?;\
 	done
 
+demo:
+	for dir in fluid test; do\
+		echo "=== making $$dir ===";\
+		(cd $$dir; $(MAKE) $(MFLAGS)) || exit $$?;\
+	done
+
 install: makeinclude
 	for dir in $(DIRS) documentation; do\
 		echo "=== installing $$dir ===";\
