@@ -54,7 +54,7 @@ OBJECTS = $(CPPFILES:.cxx=.o) $(CFILES:.c=.o)
 # Make everything...
 #
 
-all:		$(LIBTARGET) $(DSOTARGET) $(DEMOS)
+all:		$(LIBTARGET) $(DSOTARGET) # $(DEMOS)
 
 static:		../lib/$(LIBNAME)
 
