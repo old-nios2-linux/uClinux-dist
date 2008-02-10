@@ -1,6 +1,6 @@
 \input texinfo @c -*-texinfo-*-
 
-@c $Header: /cvs/sw/new-wave/user/e2fsprogs/lib/et/com_err.texinfo,v 1.1.1.2 2006/09/06 01:35:43 steveb Exp $
+@c $Header: /cvs/sw/new-wave/user/e2fsprogs/lib/et/com_err.texinfo,v 1.1.1.2 2006-09-06 01:35:43 steveb Exp $
 @c $Source: /cvs/sw/new-wave/user/e2fsprogs/lib/et/com_err.texinfo,v $
 @c $Locker:  $
 

@@ -30,6 +30,7 @@ LINKHDRS = \
 	$(ROOTDIR)/lib/libbzip2/bzlib.h,. \
 	$(ROOTDIR)/prop/libsnapgear/include/*.h,. \
 	$(ROOTDIR)/prop/libsnapgear++/include/*,. \
+	$(ROOTDIR)/prop/acld/sg_acld.h,. \
 	$(ROOTDIR)/lib/libcrypt_old/*.h,. \
 	$(ROOTDIR)/lib/libldap/include/*,. \
 	$(ROOTDIR)/lib/libldap/builddir/include/*,. \

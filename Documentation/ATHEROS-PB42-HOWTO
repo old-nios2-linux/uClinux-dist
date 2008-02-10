@@ -38,7 +38,7 @@ Atheros PB42
 
    That is it!  The final make step will run through and compile the Linux
    kernel, uClibc library and a sample application set. It will also package
-   the result into two files ready to load onto the PB42 board, mvlinux
+   the result into two files ready to load onto the PB42 board, vmlinux
    and ramdisk.gz.
 
    The currently only support kernel is 2.6.x and only library is uClibc.
@@ -57,9 +57,9 @@ Atheros PB42
 
    To load and run Linux with RedBoot issue the following commands:
 
-        load -r -v -b 0x80060000 vmlinux
-        #load -r -v -b 0x00800000 ramdisk.gz
-        go 0x01600000
+        load -r -b 0x80800000 ramdisk.gz
+        load -b 0x80060000 vmlinux
+	exec -c "console=ttyS0,115200 rd_start=0x80800000 rd_size=4M root=/dev/ram0"
 
    You should see the Linux boot banner, and then be presented with a
    bash shell prompt. A reasonable utility set is in place, mostly using

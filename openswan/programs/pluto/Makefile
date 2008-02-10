@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Makefile,v 1.189.2.5 2006/11/07 15:55:52 paul Exp $
+# RCSID $Id: Makefile,v 1.189.2.9 2007-11-06 18:56:26 paul Exp $
 
 # All of the USE_ and HAVE_ variables are controlled from openswan/Makefile.inc
 
@@ -285,7 +285,7 @@ LIBSPLUTO =$(OBJSGCRYPT) $(LIBDESLITE) $(LIBAES) $(OPENSWANLIB)
 LIBSPLUTO+=$(OPENSSL_LIBS)
 LIBSPLUTO+=$(IPSECPOLICY_LIBS) $(X509_LIBS) $(SMARTCARD_LIBS) 
 LIBSPLUTO+=$(HAVE_THREADS_LIBS) ${XAUTHPAM_LIBS}
-LIBSPLUTO+=${CURL_LIBS} 
+LIBSPLUTO+=${CURL_LIBS}  $(EXTRA_LIBS)
 LIBSPLUTO+=${EXTRA_CRYPTO_LIBS}
 LIBSPLUTO+= -lgmp -lresolv # -lefence
 LIBCRYPT ?= -lcrypt

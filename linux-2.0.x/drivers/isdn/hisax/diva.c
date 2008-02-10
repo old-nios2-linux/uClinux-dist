@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: diva.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -8,7 +8,7 @@
  *
  *
  * $Log: diva.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.11  1998/11/05 21:13:51  keil

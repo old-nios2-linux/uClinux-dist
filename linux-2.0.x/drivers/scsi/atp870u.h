@@ -1,11 +1,11 @@
 #ifndef _ATP870U_H
 
-/* $Id: atp870u.h,v 1.1.1.1 1999/11/22 03:47:29 christ Exp $
+/* $Id: atp870u.h,v 1.1.1.1 1999-11-22 03:47:29 christ Exp $
  *
  * Header file for the ACARD 870U/W driver for Linux
  *
  * $Log: atp870u.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:29  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:29  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.0  1997/05/07  15:09:00  root

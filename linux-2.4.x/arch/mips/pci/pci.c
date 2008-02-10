@@ -16,6 +16,9 @@ void
 pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 			struct resource *res, int resource)
 {
+#ifdef CONFIG_RTL865X
+	printk("%s: has no effect RTL865x.\n",__FUNCTION__);
+#else
 	u32 new, check;
 	int reg;
 
@@ -38,6 +41,7 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 		       "%s/%d (%08x != %08x)\n", dev->slot_name, resource,
 		       new, check);
 	}
+#endif
 }
 
 /*
@@ -57,6 +61,9 @@ void
 pcibios_align_resource(void *data, struct resource *res,
 		       unsigned long size, unsigned long align)
 {
+#ifdef CONFIG_RTL865X
+	printk("%s: has no effect RTL865x.\n",__FUNCTION__);
+#else
 	if (res->flags & IORESOURCE_IO) {
 		unsigned long start = res->start;
 
@@ -65,6 +72,7 @@ pcibios_align_resource(void *data, struct resource *res,
 			res->start = start;
 		}
 	}
+#endif
 }
 
 /*
@@ -75,6 +83,9 @@ unsigned int pcibios_max_latency = 255;
 
 void pcibios_set_master(struct pci_dev *dev)
 {
+#ifdef CONFIG_RTL865X
+	printk("%s: already done when device probed.\n",__FUNCTION__);
+#else
 	u8 lat;
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
 	if (lat < 16)
@@ -85,6 +96,7 @@ void pcibios_set_master(struct pci_dev *dev)
 		return;
 	printk(KERN_DEBUG "PCI: Setting latency timer of device %s to %d\n", dev->slot_name, lat);
 	pci_write_config_byte(dev, PCI_LATENCY_TIMER, lat);
+#endif
 }
 
 char * __devinit pcibios_setup(char *str)
@@ -94,6 +106,9 @@ char * __devinit pcibios_setup(char *str)
 
 static int pcibios_enable_resources(struct pci_dev *dev, int mask)
 {
+#if CONFIG_RTL865X
+	printk("%s: already enabled when device probed.\n",__FUNCTION__);
+#else
 	u16 cmd, old_cmd;
 	int idx;
 	struct resource *r;
@@ -121,6 +136,7 @@ static int pcibios_enable_resources(struct pci_dev *dev, int mask)
 		printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
+#endif
 	return 0;
 }
 

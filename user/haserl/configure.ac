@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([haserl],[0.9.16],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
+AC_INIT([haserl],[0.9.21],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
 AM_INIT_AUTOMAKE([haserl],[$PACKAGE_VERSION])
 
 # Checks for programs.
@@ -11,7 +11,7 @@ AC_PROG_LN_S
 
 # Checks for header files.
 AC_HEADER_STDC
-AM_CONFIG_HEADER(src/config.h)
+AC_CONFIG_HEADERS(src/config.h)
 AC_CHECK_HEADERS([stdlib.h string.h unistd.h signal.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -29,32 +29,106 @@ dnl **************************************************************
 AC_ARG_WITH(lua-headers,
    [  --with-lua-headers=DIR  lua include files location],
    [LUA_HDR_DIR="$withval"]
-   [CPPFLAGS="$CPPFLAGS -I$withval"] 
+   [CFLAGS="$CFLAGS -I$withval"] 
 )
 
 
 dnl Checks for lua
+
+luashell=false
+luacshell=false
+
 AC_ARG_WITH(lua, 
-[  --with-lua[[=DIR]]      use lua in DIR],
+	AC_HELP_STRING([--with-lua[[=DIR]]], [use lua in DIR]),
 [ case "$withval" in
-  no)
-	ac_report_have_lua=disabled
-	AM_CONDITIONAL(MAKELUA,false)
+  no)	ac_report_have_lua=disabled
 	;;	
-  *)
-	AC_SEARCH_LIBS(dlopen, dl)
-	LIBS="-llua -lm $LIBS"   
+  *)	AC_SEARCH_LIBS(dlopen, dl)
+	# ubuntu has lua5.1 rather than just lua
+	if pkg-config --exists lua5.1; then
+		LUALIB=lua5.1
+	else
+		LUALIB=lua
+	fi
+	if test -z "$LUA_HDR_DIR"; then
+		CFLAGS="$CFLAGS `pkg-config $LUALIB --cflags`"
+	fi
+	LIBS="$LIBS -lm"
 	LDFLAGS="$LDFLAGS -Wl,-E -L$withval"
-	CPPFLAGS="$CPPFLAGS -I$withval"
+	AC_DEFINE(USE_LUA, , [Enable Lua])
+
+	AC_CHECK_LIB($LUALIB, luaL_newstate, , [
+        	AC_MSG_ERROR([The Lua runtime library cannot be found!])
+	], $LIBS)
+	luashell=true
+	luacshell=true
 	ac_report_have_lua=enabled
-	AM_CONDITIONAL(MAKELUA, true )
-	AC_DEFINE([USE_LUA], [], [Enable Lua])
 	;;
-  esac ],
- 	[  ac_report_have_lua=disabled
-	AM_CONDITIONAL(MAKELUA,false)
-	]
-)
+  esac ], [
+  	ac_report_have_lua=disabled
+])
+AM_CONDITIONAL(USE_LUA, test x$ac_report_have_lua = xenabled)
+
+# If Lua is enabled, the user can choose between two different shells
+
+# shell: ordinary Haserl code with embedded Lua
+AC_ARG_ENABLE(luashell,
+	AC_HELP_STRING([--enable-luashell], [Includes the standard Lua shell - Haserl with embedded Lua (default is yes if Lua's enabled)]),
+[case "${enableval}" in
+  yes) luashell=true ;;
+  no)  luashell=false ;;
+  *)   AC_MSG_ERROR(bad value ${enableval} for --enable-luashell) ;;
+esac], [])
+AM_CONDITIONAL(INCLUDE_LUASHELL, test x$luashell = xtrue)
+if test x$luashell = xtrue; then
+	AC_DEFINE(INCLUDE_LUASHELL, , [Include ordinary Lua shell])
+fi
+
+# shell: precompiled Haserl code - compiled Lua code
+AC_ARG_ENABLE(luacshell,
+	AC_HELP_STRING([--enable-luacshell], [Includes the compiled Lua shell - precompiled Haserl/Lua (default is yes if Lua's enabled)]),
+[case "${enableval}" in
+  yes) luacshell=true ;;
+  no)  luacshell=false ;;
+  *)   AC_MSG_ERROR(bad value ${enableval} for --enable-luacshell) ;;
+esac], [])
+AM_CONDITIONAL(INCLUDE_LUACSHELL, test x$luacshell = xtrue)
+if test x$luacshell = xtrue; then
+	AC_DEFINE(INCLUDE_LUACSHELL, , [Include shell for precompiled Haserl/Lua])
+fi
+
+if test \(x$luashell = xtrue -o x$luacshell = xtrue\) -a x$ac_report_have_lua = xdisabled; then
+	AC_MSG_ERROR([Lua is not enabled so you cannot build a Lua shell.])
+fi
+
+# the Linux shell is always available
+
+AC_ARG_ENABLE(bashshell,
+	AC_HELP_STRING([--enable-bashshell], [Includes the Bash or another Linux shell (default is yes)]),
+[case "${enableval}" in
+  yes) bashshell=true ;;
+  no)  bashshell=false ;;
+  *)   AC_MSG_ERROR(bad value ${enableval} for --enable-bashshell) ;;
+esac], [bashshell=true])
+AM_CONDITIONAL(INCLUDE_BASHSHELL, test x$bashshell = xtrue)
+if test x$bashshell = xtrue; then
+	AC_DEFINE(INCLUDE_BASHSHELL, , [Include Bash/Linux shell])
+fi
+
+# set additional macros
+
+if test x$luashell = xfalse -a x$bashshell = xfalse; then
+	if test x$luacshell = xtrue; then
+		AC_DEFINE(JUST_LUACSHELL, , [Include just the compiled Lua shell])
+	else
+		AC_MSG_ERROR([All shells disabled.])
+	fi
+fi
+
+if test x$ac_report_have_lua = xenabled -a x$luashell = xfalse -a x$luacshell = xfalse; then
+	AC_MSG_ERROR([Cannot enable Lua if no Lua shell is included.])
+fi
+
 
 # What prefix should we use
 AC_ARG_ENABLE(variable-prefix,
@@ -103,7 +177,7 @@ dnl  report configuration
 AC_MSG_RESULT([
 ** Configuration summary for $PACKAGE $VERSION:
 
-	Buidling haserl with with lua $ac_report_have_lua 
+	Building haserl with with lua $ac_report_have_lua 
 	libs: $LIBS
 ])
 

@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1999-2001 port GmbH, Halle
  *------------------------------------------------------------------
- * $Header: /cvs/sw/new-wave/user/horch/horch.h,v 1.1 2003/07/18 00:11:46 gerg Exp $
+ * $Header: /cvs/sw/new-wave/user/horch/horch.h,v 1.1 2003-07-18 00:11:46 gerg Exp $
  *
  *--------------------------------------------------------------------------
  *
@@ -11,7 +11,7 @@
  * modification history
  * --------------------
  * $Log: horch.h,v $
- * Revision 1.1  2003/07/18 00:11:46  gerg
+ * Revision 1.1  2003-07-18 00:11:46  gerg
  * I followed as much rules as possible (I hope) and generated a patch for the
  * uClinux distribution. It contains an additional driver, the CAN driver, first
  * for an SJA1000 CAN controller:

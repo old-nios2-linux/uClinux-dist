@@ -384,17 +384,19 @@ static int test_config(char *filename)
 		error("%s: login_timeout <= 0 is illegal", filename);
 		return (-1);
 	}
+#if 0
 	if (rc_conf_str("mapfile") == NULL)
 	{
 		error("%s: mapfile not specified", filename);
 		return (-1);
 	}
+
 	if (rc_conf_str("nologin") == NULL)
 	{
 		error("%s: nologin not specified", filename);
 		return (-1);
 	}
-
+#endif
 	return 0;
 }
 

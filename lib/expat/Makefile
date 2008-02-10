@@ -184,6 +184,9 @@ run-xmltest: xmlwf/xmlwf tests/XML-Test-Suite
 	install uninstall
 
 romfs:
+ifndef DISABLE_SHARED_LIBS
 	$(ROMFSINST) libexpat.so /lib/libexpat.so.0.5.0
 	$(ROMFSINST) -s libexpat.so.0.5.0 /lib/libexpat.so.0
 	$(ROMFSINST) -s libexpat.so.0.5.0 /lib/libexpat.so
+endif
+

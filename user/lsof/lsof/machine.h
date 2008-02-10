@@ -31,7 +31,7 @@
 
 
 /*
- * $Id: machine.h,v 1.1 2007/08/02 07:25:00 gerg Exp $
+ * $Id: machine.h,v 1.1 2007-08-02 07:25:00 gerg Exp $
  */
 
 

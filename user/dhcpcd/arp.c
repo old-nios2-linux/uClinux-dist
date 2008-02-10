@@ -1,4 +1,4 @@
-/* $Id: arp.c,v 1.5 2007/06/27 06:10:27 gerg Exp $
+/* $Id: arp.c,v 1.5 2007-06-27 06:10:27 gerg Exp $
  *
  * dhcpcd - DHCP client daemon -
  * Copyright (C) 1996 - 1997 Yoichi Hariguchi <yoichi@fore.com>

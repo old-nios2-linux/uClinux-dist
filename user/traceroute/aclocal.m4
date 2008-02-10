@@ -1,4 +1,4 @@
-dnl @(#) $Header: /cvs/sw/new-wave/user/traceroute/aclocal.m4,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)
+dnl @(#) $Header: /cvs/sw/new-wave/user/traceroute/aclocal.m4,v 1.2 2007-06-26 13:01:51 gerg Exp $ (LBL)
 dnl
 dnl Copyright (c) 1995, 1996, 1997, 1998, 1999
 dnl	The Regents of the University of California.  All rights reserved.

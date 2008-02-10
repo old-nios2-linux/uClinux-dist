@@ -84,7 +84,7 @@ int flat1_checkfs(void)
 	if ((hdr.magic != FLATFS_MAGIC) && (hdr.magic != FLATFS_MAGIC_V2))
 		return ERROR_CODE();
 
-	len = flat_length();
+	len = flat_dev_length();
 
 	/* XXX - mn
 	 * We calculate the checksum wrongly here.
@@ -419,7 +419,7 @@ int flat1_savefs(int dowrite, unsigned *total)
 	 * not just the data we wrote. On MTD devices, this data is 0xFF.
 	 */
 	{
-		int checksum_len = flat_length() - (BUF_SIZE - (sizeof(struct flathdr1) * 2));
+		int checksum_len = flat_dev_length() - (BUF_SIZE - (sizeof(struct flathdr1) * 2));
 
 		flat_sum += 0xFFu * (checksum_len - *total);
 

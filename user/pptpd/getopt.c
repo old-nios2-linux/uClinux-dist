@@ -7,7 +7,7 @@
  *        * <config.h> changed to "config.h"
  *        * #include "our_getopt.h" near #define ELIDE_CODE
  *
- * $Id: getopt.c,v 1.3 2007/07/05 23:33:09 gerg Exp $
+ * $Id: getopt.c,v 1.3 2007-07-05 23:33:09 gerg Exp $
  */
 
 /* Getopt for GNU.

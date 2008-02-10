@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: fsm.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,7 +7,7 @@
  *              Fritz Elfert
  *
  * $Log: fsm.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.4.2.5  1998/11/03 00:06:23  keil

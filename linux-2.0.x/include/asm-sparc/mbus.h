@@ -1,4 +1,4 @@
-/* $Id: mbus.h,v 1.1.1.1 1999/11/22 03:47:01 christ Exp $
+/* $Id: mbus.h,v 1.1.1.1 1999-11-22 03:47:01 christ Exp $
  * mbus.h:  Various defines for MBUS modules.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

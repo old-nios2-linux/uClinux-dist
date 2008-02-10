@@ -1,4 +1,4 @@
-/* $Id: aha1542.c,v 1.1.1.1 1999/11/22 03:47:21 christ Exp $
+/* $Id: aha1542.c,v 1.1.1.1 1999-11-22 03:47:21 christ Exp $
  *  linux/kernel/aha1542.c
  *
  *  Copyright (C) 1992  Tommy Thorn
@@ -53,7 +53,7 @@ struct proc_dir_entry proc_scsi_aha1542 = {
 #define DEB(x)
 #endif
 /*
-static const char RCSid[] = "$Header: /cvs/sw/linux-2.0.x/drivers/scsi/aha1542.c,v 1.1.1.1 1999/11/22 03:47:21 christ Exp $";
+static const char RCSid[] = "$Header: /cvs/sw/linux-2.0.x/drivers/scsi/aha1542.c,v 1.1.1.1 1999-11-22 03:47:21 christ Exp $";
 */
 
 /* The adaptec can be configured for quite a number of addresses, but

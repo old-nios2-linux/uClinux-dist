@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.1.1.1 1999/11/22 03:47:41 christ Exp $
+/* $Id: traps.c,v 1.1.1.1 1999-11-22 03:47:41 christ Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)

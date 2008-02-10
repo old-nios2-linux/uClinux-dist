@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isac.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -9,7 +9,7 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: isac.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.7.2.9  1998/11/03 00:06:41  keil

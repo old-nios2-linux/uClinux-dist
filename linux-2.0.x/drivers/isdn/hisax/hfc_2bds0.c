@@ -1,4 +1,4 @@
-/* $Id: hfc_2bds0.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: hfc_2bds0.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *
  *  specific routines for CCD's HFC 2BDS0
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: hfc_2bds0.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.9  1998/11/03 00:06:24  keil

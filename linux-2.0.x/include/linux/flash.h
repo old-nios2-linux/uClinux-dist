@@ -1,8 +1,8 @@
-/* $Id: flash.h,v 1.2 2000/10/06 08:50:37 davidm Exp $ */
+/* $Id: flash.h,v 1.2 2000-10-06 08:50:37 davidm Exp $ */
 /* Copyright (C) 1999, 2000 Axis Communications AB, Sweden */
 /* 
  * $Log: flash.h,v $
- * Revision 1.2  2000/10/06 08:50:37  davidm
+ * Revision 1.2  2000-10-06 08:50:37  davidm
  *
  * Added latest code/patches from elinux_20000801.tgz for jffs support
  *

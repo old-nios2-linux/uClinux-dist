@@ -3,7 +3,7 @@
 #
 # See @FINALDOCDIR@/policygroups.html for details.
 #
-# $Id: clear.in,v 1.4.30.3 2006/11/21 19:49:51 paul Exp $
+# $Id: clear.in,v 1.4.30.3 2006-11-21 19:49:51 paul Exp $
 #
 #
 #	Michael's idea: Always have ROOT NAMESERVERS in the clear.

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.3 2001/01/11 01:37:05 gerg Exp $
+/* $Id: isdn_net.c,v 1.3 2001-01-11 01:37:05 gerg Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
- * Revision 1.3  2001/01/11 01:37:05  gerg
+ * Revision 1.3  2001-01-11 01:37:05  gerg
  * Updates for cvs.uclinux.org.
  *
  * Revision 1.48.2.28  1998/11/27 15:38:12  paul

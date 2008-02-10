@@ -11,7 +11,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_proc.c,v 1.1 2000/10/06 08:40:31 davidm Exp $
+ * $Id: jffs_proc.c,v 1.1 2000-10-06 08:40:31 davidm Exp $
  *
  */
 

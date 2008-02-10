@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.1.1.1 1999/11/22 03:47:41 christ Exp $
+/* $Id: trampoline.S,v 1.1.1.1 1999-11-22 03:47:41 christ Exp $
  * mp.S:  Multiprocessor low-level routines on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

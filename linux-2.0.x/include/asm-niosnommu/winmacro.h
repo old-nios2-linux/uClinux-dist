@@ -5,7 +5,7 @@
  *    Convert most defines to .macro would not process them. this also allows for
  *    more offset size checking for required PFX instruction.
  *
- * $Id: winmacro.h,v 1.1 2003/02/26 04:13:07 gerg Exp $
+ * $Id: winmacro.h,v 1.1 2003-02-26 04:13:07 gerg Exp $
  * winmacro.h: Window loading-unloading macros.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

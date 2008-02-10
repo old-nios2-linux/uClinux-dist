@@ -3,7 +3,7 @@
  *
  * Header file for the getopt_long deprived.
  *
- * $Id: our_getopt.h,v 1.3 2007/07/05 23:33:09 gerg Exp $
+ * $Id: our_getopt.h,v 1.3 2007-07-05 23:33:09 gerg Exp $
  */
 
 /* Declarations for getopt.

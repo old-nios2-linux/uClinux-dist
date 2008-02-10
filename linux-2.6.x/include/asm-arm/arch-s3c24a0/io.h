@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/io.h
  *
- * $Id: io.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: io.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

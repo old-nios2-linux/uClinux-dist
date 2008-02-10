@@ -1,4 +1,4 @@
-/* $Id: teles3c.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: teles3c.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * teles3c.c     low level stuff for teles 16.3c
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: teles3c.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.3  1998/11/03 00:07:40  keil

@@ -13,7 +13,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: setup.in,v 1.122.6.7 2007/07/10 03:12:57 paul Exp $
+# RCSID $Id: setup.in,v 1.122.6.8 2007-11-07 02:36:05 paul Exp $
 #
 # ipsec         init.d script for starting and stopping
 #               the IPsec security subsystem (KLIPS and Pluto).
@@ -125,6 +125,15 @@ case "$1" in
 		echo "permission denied (must be superuser)" |
 			logger -s -p $IPSECsyslog -t ipsec_setup 2>&1
 		exit 1
+	fi
+	# make sure all directories exist (mostly for openwrt)
+	if [ ! -d /var/run/pluto ]
+	then
+		mkdir -p /var/run/pluto
+	fi
+	if [ ! -d /var/lock/subsys ]
+	then
+		mkdir -p /var/lock/subsys
 	fi
 	tmp=/var/run/pluto/ipsec_setup.st
 	outtmp=/var/run/pluto/ipsec_setup.out

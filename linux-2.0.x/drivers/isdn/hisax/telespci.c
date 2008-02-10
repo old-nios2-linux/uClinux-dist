@@ -1,4 +1,4 @@
-/* $Id: telespci.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: telespci.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
@@ -7,7 +7,7 @@
  *
  *
  * $Log: telespci.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.3  1998/10/16 12:46:09  keil

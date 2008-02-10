@@ -11,7 +11,7 @@
 # This program may be distributed according to the terms of the GNU
 # General Public License, version 2 or (at your option) any later version.
 #
-# $Id: Makefile,v 1.18 2003/09/30 00:24:05 steveb Exp $
+# $Id: Makefile,v 1.18 2003-09-30 00:24:05 steveb Exp $
 #***********************************************************************
 
 # Version is set ONLY IN THE MAKEFILE!  Don't delete this!

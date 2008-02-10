@@ -1,4 +1,4 @@
-/* $Id: isdn_syms.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: isdn_syms.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * Linux ISDN subsystem, exported symbols (linklevel).
  *
@@ -17,7 +17,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_syms.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3  1997/02/16 01:02:47  fritz

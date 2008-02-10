@@ -1,4 +1,4 @@
-/* $Id: nioscs89.h,v 1.1 2003/02/26 04:13:07 gerg Exp $ */
+/* $Id: nioscs89.h,v 1.1 2003-02-26 04:13:07 gerg Exp $ */
 
 #ifndef __NIOS_nioscs89_H__
   #define __NIOS_nioscs89_H__

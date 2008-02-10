@@ -1,4 +1,4 @@
-/* $Id: mic.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: mic.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * mic.c  low level stuff for mic cards
  *
@@ -8,7 +8,7 @@
  *
  *
  * $Log: mic.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.5  1998/04/08 21:58:43  keil

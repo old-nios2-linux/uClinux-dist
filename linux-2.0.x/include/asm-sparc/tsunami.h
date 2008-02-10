@@ -1,4 +1,4 @@
-/* $Id: tsunami.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: tsunami.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * tsunami.h:  Module specific definitions for Tsunami V8 Sparcs
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

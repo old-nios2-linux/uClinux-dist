@@ -1,4 +1,4 @@
-/* $Id: teles0.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: teles0.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *
  * teles0.h   Header for Teles 16.0 8.0 & compatible
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: teles0.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2  1997/01/21 22:26:52  keil

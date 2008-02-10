@@ -18,7 +18,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *  $Id: response.c,v 1.5 2004/08/09 02:04:08 pauli Exp $
+ *  $Id: response.c,v 1.5 2004-08-09 02:04:08 pauli Exp $
  */
 
 /* boa: response.c */

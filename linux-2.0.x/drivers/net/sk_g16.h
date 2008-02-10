@@ -16,7 +16,7 @@
  *                  network device driver which uses this chip 
  *
  * $Log: sk_g16.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:08  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:08  christ
  * Importing new-wave v1.0.4
  *
 -*/

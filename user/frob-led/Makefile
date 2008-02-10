@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.2 2001/09/03 05:44:25 philipc Exp $
+# $Id: Makefile,v 1.2 2001-09-03 05:44:25 philipc Exp $
 
 CFLAGS	+=  -MD
 

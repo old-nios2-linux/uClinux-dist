@@ -659,7 +659,7 @@ EXPORT_SYMBOL_GPL(add_input_randomness);
 
 void add_interrupt_randomness(int irq)
 {
-	if (irq >= NR_IRQS || irq_timer_state[irq] == 0)
+	if (irq >= NR_IRQS || irq_timer_state[irq] == NULL)
 		return;
 
 	DEBUG_ENT("irq event %d\n", irq);
@@ -725,7 +725,7 @@ int random_input_wait(void)
 	count = random_write_wakeup_thresh - input_pool.entropy_count;
 
         /* likely we got woken up due to a signal */
-	if (count < 0) count = random_read_wakeup_thresh; 
+	if (count <= 0) count = random_read_wakeup_thresh; 
 
 	DEBUG_ENT("requesting %d bits from input_wait()er %d<%d\n",
 		  count,
@@ -1559,7 +1559,7 @@ __u32 secure_tcpv6_sequence_number(__be32 *saddr, __be32 *daddr,
 	seq = twothirdsMD4Transform((const __u32 *)daddr, hash) & HASH_MASK;
 	seq += keyptr->count;
 
-	seq += ktime_get_real().tv64;
+	seq += ktime_to_ns(ktime_get_real());
 
 	return seq;
 }
@@ -1621,7 +1621,7 @@ __u32 secure_tcp_sequence_number(__be32 saddr, __be32 daddr,
 	 *	overlaps less than one time per MSL (2 minutes).
 	 *	Choosing a clock of 64 ns period is OK. (period of 274 s)
 	 */
-	seq += ktime_get_real().tv64 >> 6;
+	seq += ktime_to_ns(ktime_get_real()) >> 6;
 #if 0
 	printk("init_seq(%lx, %lx, %d, %d) = %d\n",
 	       saddr, daddr, sport, dport, seq);
@@ -1681,7 +1681,7 @@ u64 secure_dccp_sequence_number(__be32 saddr, __be32 daddr,
 	seq = half_md4_transform(hash, keyptr->secret);
 	seq |= ((u64)keyptr->count) << (32 - HASH_BITS);
 
-	seq += ktime_get_real().tv64;
+	seq += ktime_to_ns(ktime_get_real());
 	seq &= (1ull << 48) - 1;
 #if 0
 	printk("dccp init_seq(%lx, %lx, %d, %d) = %d\n",

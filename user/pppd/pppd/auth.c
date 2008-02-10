@@ -68,7 +68,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: auth.c,v 1.9 2007/06/08 04:02:38 gerg Exp $"
+#define RCSID	"$Id: auth.c,v 1.11 2007-11-28 08:22:39 philipc Exp $"
 
 #include <stdio.h>
 #include <stddef.h>
@@ -237,6 +237,10 @@ bool auth_required = 0;		/* Always require authentication from peer */
 bool allow_any_ip = 0;		/* Allow peer to use any IP address */
 bool explicit_remote = 0;	/* User specified explicit remote name */
 char remote_name[MAXNAMELEN];	/* Peer's name for authentication */
+#if USE_PAM
+bool explicit_pamservice = 0;	/* User specified explicit PAM service */
+char pamservice[MAXNAMELEN];	/* Service for pam_start() */
+#endif
 
 static char *uafname;		/* name of most recent +ua file */
 
@@ -396,6 +400,10 @@ option_t auth_options[] = {
     { "allow-number", o_special, (void *)set_permitted_number,
       "Set telephone number(s) which are allowed to connect",
       OPT_PRIV | OPT_A2LIST },
+
+    { "pamservice", o_string, pamservice,
+      "Set PAM service for authentication", OPT_PRIO | OPT_STATIC,
+      &explicit_pamservice, MAXNAMELEN },
 
     { NULL }
 };
@@ -1557,7 +1565,8 @@ plogin(user, passwd, msg)
 #ifdef USE_PAM
     int pam_error;
 
-    pam_error = pam_start ("ppp", user, &PAM_conversation, &pamh);
+    pam_error = pam_start (explicit_pamservice ? pamservice : "ppp",
+			   user, &PAM_conversation, &pamh);
     if (pam_error != PAM_SUCCESS) {
         *msg = (char *) pam_strerror (pamh, pam_error);
 	reopen_log();
@@ -2564,7 +2573,8 @@ auth_script(script)
     argv[3] = user_name;
     argv[4] = devnam;
     argv[5] = strspeed;
-    argv[6] = NULL;
+    argv[6] = ipparam;
+    argv[7] = NULL;
 
     auth_script_pid = run_program(script, argv, 0, auth_script_done, NULL, 0);
 }

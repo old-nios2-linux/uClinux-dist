@@ -1,12 +1,12 @@
 /*
- * $Id: b1pci.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ * $Id: b1pci.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2.2.2  1998/01/23 16:49:30  calle

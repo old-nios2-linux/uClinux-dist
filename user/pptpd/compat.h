@@ -3,7 +3,7 @@
  *
  * Compatibility functions for different OSes (prototypes)
  *
- * $Id: compat.h,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
+ * $Id: compat.h,v 1.1.1.2 2007-07-05 23:25:55 gerg Exp $
  */
 
 #ifndef _PPTPD_COMPAT_H

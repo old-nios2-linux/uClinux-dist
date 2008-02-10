@@ -1,4 +1,4 @@
-/* $Id: user.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: user.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * asm-sparc/user.h: Core file definitions for the Sparc.
  *
  * Copyright (C) 1995 (davem@caip.rutgers.edu)

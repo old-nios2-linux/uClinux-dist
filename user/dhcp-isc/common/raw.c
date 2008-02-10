@@ -1,4 +1,4 @@
-/* socket.c
+/* raw.c
 
    BSD raw socket interface code... */
 
@@ -16,48 +16,34 @@
    Sigh. */
 
 /*
- * Copyright (c) 1995, 1996, 1997, 1999 The Internet Software Consortium.
- * All rights reserved.
+ * Copyright (c) 2004,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1995-2003 by Internet Software Consortium
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The Internet Software Consortium nor the names
- *    of its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INTERNET SOFTWARE CONSORTIUM AND
- * CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE INTERNET SOFTWARE CONSORTIUM OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *   Internet Systems Consortium, Inc.
+ *   950 Charter Street
+ *   Redwood City, CA 94063
+ *   <info@isc.org>
+ *   http://www.isc.org/
  *
- * This software has been written for the Internet Software Consortium
- * by Ted Lemon <mellon@fugue.com> in cooperation with Vixie
- * Enterprises.  To learn more about the Internet Software Consortium,
- * see ``http://www.vix.com/isc''.  To learn more about Vixie
- * Enterprises, see ``http://www.vix.com''.  */
-
-#ifndef EMBED
-#ifndef lint
-static char copyright[] =
-"$Id: raw.c,v 1.3 2002/02/19 02:03:13 pauli Exp $ Copyright (c) 1995, 1996, 1997, 1999 The Internet Software Consortium.  All rights reserved.\n";
-#endif /* not lint */
-#endif
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``http://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
+ */
 
 #include "dhcpd.h"
 
@@ -81,39 +67,46 @@ void if_register_send (info)
 
 	/* List addresses on which we're listening. */
         if (!quiet_interface_discovery)
-		note ("Sending on   Raw Socket/%s/%s%s%s",
-		      info -> name,
-		      print_hw_addr (info -> hw_address.htype,
-				     info -> hw_address.hlen,
-				     info -> hw_address.haddr),
-		      (info -> shared_network ? "/" : ""),
-		      (info -> shared_network ?
-		       info -> shared_network -> name : ""));
-
+		log_info ("Sending on %s, port %d",
+		      piaddr (info -> address), htons (local_port));
 	if ((sock = socket (AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0)
-		error ("Can't create dhcp socket: %m");
+		log_fatal ("Can't create dhcp socket: %m");
 
 	/* Set the BROADCAST option so that we can broadcast DHCP responses. */
 	flag = 1;
 	if (setsockopt (sock, SOL_SOCKET, SO_BROADCAST,
 			&flag, sizeof flag) < 0)
-		error ("Can't set SO_BROADCAST option on dhcp socket: %m");
+		log_fatal ("Can't set SO_BROADCAST option on dhcp socket: %m");
 
 	/* Set the IP_HDRINCL flag so that we can supply our own IP
 	   headers... */
 	if (setsockopt (sock, IPPROTO_IP, IP_HDRINCL, &flag, sizeof flag) < 0)
-		error ("Can't set IP_HDRINCL flag: %m");
+		log_fatal ("Can't set IP_HDRINCL flag: %m");
 
 	info -> wfdesc = sock;
         if (!quiet_interface_discovery)
-		note ("Sending on   Raw/%s%s%s",
+		log_info ("Sending on   Raw/%s%s%s",
 		      info -> name,
 		      (info -> shared_network ? "/" : ""),
 		      (info -> shared_network ?
 		       info -> shared_network -> name : ""));
 }
 
-ssize_t send_packet (interface, packet, raw, len, from, to, hto)
+void if_deregister_send (info)
+	struct interface_info *info;
+{
+	close (info -> wfdesc);
+	info -> wfdesc = -1;
+
+        if (!quiet_interface_discovery)
+		log_info ("Disabling output on Raw/%s%s%s",
+		      info -> name,
+		      (info -> shared_network ? "/" : ""),
+		      (info -> shared_network ?
+		       info -> shared_network -> name : ""));
+}
+
+size_t send_packet (interface, packet, raw, len, from, to, hto)
 	struct interface_info *interface;
 	struct packet *packet;
 	struct dhcp_packet *raw;
@@ -122,7 +115,7 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 	struct sockaddr_in *to;
 	struct hardware *hto;
 {
-	unsigned char buf [1500];
+	unsigned char buf [256];
 	int bufp = 0;
 	struct iovec iov [2];
 	int result;
@@ -131,37 +124,16 @@ ssize_t send_packet (interface, packet, raw, len, from, to, hto)
 	assemble_udp_ip_header (interface, buf, &bufp, from.s_addr,
 				to -> sin_addr.s_addr, to -> sin_port,
 				(unsigned char *)raw, len);
-	if (len + bufp > sizeof buf) {
-		warn ("send_packet: packet too large (%s)", len + bufp);
-		return;
-	}
-	memcpy (buf + bufp, raw, len);
-	bufp += len;
-	result = sendto (interface -> wfdesc, (char *)buf, bufp, 0,
-			 (struct sockaddr *)to, sizeof *to);
+
+	/* Fire it off */
+	iov [0].iov_base = (char *)buf;
+	iov [0].iov_len = bufp;
+	iov [1].iov_base = (char *)raw;
+	iov [1].iov_len = len;
+
+	result = writev(interface -> wfdesc, iov, 2);
 	if (result < 0)
-		warn ("send_packet_raw: %m");
+		log_error ("send_packet: %m");
 	return result;
 }
-
-int can_unicast_without_arp ()
-{
-	return 1;
-}
-
-int can_receive_unicast_unconfigured (ip)
-	struct interface_info *ip;
-{
-	return 1;
-}
-
-void maybe_setup_fallback ()
-{
-}
-
-void if_reinitialize_send (info)
-	struct interface_info *info;
-{
-}
-
-#endif /* USE_RAW_SEND */
+#endif /* USE_SOCKET_SEND */

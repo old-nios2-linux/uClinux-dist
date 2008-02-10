@@ -36,6 +36,7 @@ int watchdog_main(int argc, char **argv)
 	unsigned opts;
 	unsigned timer_duration = 30; /* Userspace timer duration, in seconds */
 	char *t_arg;
+	int fd;
 
 	opts = getopt32(argc, argv, "Ft:", &t_arg);
 
@@ -52,6 +53,12 @@ int watchdog_main(int argc, char **argv)
 #else
 	xdaemon(0, 1);
 #endif
+
+	fd = open("/proc/self/oom_adj", O_WRONLY);
+	if (fd > 0) {
+		write(fd, "-17", 3);
+		close(fd);
+	}
 
 	signal(SIGHUP, watchdog_shutdown);
 	signal(SIGINT, watchdog_shutdown);

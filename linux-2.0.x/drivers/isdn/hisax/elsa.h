@@ -1,4 +1,4 @@
-/* $Id: elsa.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: elsa.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  *
  * elsa.h   Header for Elsa ISDN cards
  *
@@ -8,7 +8,7 @@
  *
  *
  * $Log: elsa.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.6  1997/03/23 21:45:48  keil

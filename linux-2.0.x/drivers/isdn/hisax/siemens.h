@@ -1,4 +1,4 @@
-/* $Id: siemens.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: siemens.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *
  * siemens.h   ISAC and HSCX spezific Macros
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: siemens.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.4  1997/01/21 22:24:33  keil

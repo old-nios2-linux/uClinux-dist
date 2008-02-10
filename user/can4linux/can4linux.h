@@ -7,7 +7,7 @@
  *
  * Copyright (c) 2001 port GmbH Halle/Saale
  *------------------------------------------------------------------
- * $Header: /cvs/sw/new-wave/user/can4linux/can4linux.h,v 1.2 2006/06/13 05:58:13 gerg Exp $
+ * $Header: /cvs/sw/new-wave/user/can4linux/can4linux.h,v 1.2 2006-06-13 05:58:13 gerg Exp $
  *
  *--------------------------------------------------------------------------
  *
@@ -15,7 +15,7 @@
  * modification history
  * --------------------
  * $Log: can4linux.h,v $
- * Revision 1.2  2006/06/13 05:58:13  gerg
+ * Revision 1.2  2006-06-13 05:58:13  gerg
  * #10381
  *
  * CAN tools update (to help support the M5329).
@@ -44,7 +44,7 @@
 * \file can.h
 * \author Heinz-Jürgen Oertel, port GmbH
 * $Revision: 1.2 $
-* $Date: 2006/06/13 05:58:13 $
+* $Date: 2006-06-13 05:58:13 $
 *
 * can4linux interface definitions
 *

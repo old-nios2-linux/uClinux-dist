@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/s3c24a0-key.h
  *
- * $Id: s3c24a0-key.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: s3c24a0-key.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive

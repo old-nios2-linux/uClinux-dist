@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.1.1.1 1999/11/22 03:47:18 christ Exp $
+/* $Id: isdn_common.h,v 1.1.1.1 1999-11-22 03:47:18 christ Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:18  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:18  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.6.2.3  1998/11/05 22:11:50  fritz

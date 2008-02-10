@@ -32,7 +32,7 @@ static int __init fast_timer_setup(void)
 	*IXP4XX_OSST = IXP4XX_OSST_TIMER_2_PEND;
 
 	/* Connect the interrupt handler and enable the interrupt */
-	if (request_irq(IRQ_IXP4XX_TIMER2, fast_timer_interrupt, SA_INTERRUPT,
+	if (request_irq(IRQ_IXP4XX_TIMER2, fast_timer_interrupt, IRQF_DISABLED,
 			"fast timer", NULL))
 		return -EBUSY;
 

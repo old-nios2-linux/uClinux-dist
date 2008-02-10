@@ -474,7 +474,7 @@ static int __init jtaguart_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO "Serial: JTAG UART driver $Revision: 1.3 $\n");
+	printk(KERN_INFO "Serial: JTAG UART driver $Revision: 1.5 $\n");
 
 	ret = uart_register_driver(&juart_reg);
 	if (ret == 0) {

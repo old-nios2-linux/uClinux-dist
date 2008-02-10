@@ -3,7 +3,7 @@
  *
  * Dummy autoconf results for uClinux target.
  *
- * $Id: config.embed.h,v 1.8 2007/07/05 23:33:09 gerg Exp $
+ * $Id: config.embed.h,v 1.8 2007-07-05 23:33:09 gerg Exp $
  */
 
 #define STDC_HEADERS 1

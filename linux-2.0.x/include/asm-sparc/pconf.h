@@ -1,4 +1,4 @@
-/* $Id: pconf.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: pconf.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * pconf.h: pathconf() and fpathconf() defines for SunOS
  *          system call compatibility.
  *

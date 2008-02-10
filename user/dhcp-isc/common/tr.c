@@ -1,6 +1,29 @@
+/* tr.c
+
+   token ring interface support
+   Contributed in May of 1999 by Andrew Chittenden */
+
 /*
- * packet_tr.c - token ring interface code, contributed in May of 1999
- * by Andrew Chittenden
+ * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1996-2003 by Internet Software Consortium
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ *   Internet Systems Consortium, Inc.
+ *   950 Charter Street
+ *   Redwood City, CA 94063
+ *   <info@isc.org>
+ *   http://www.isc.org/
  */
 
 #include "dhcpd.h"
@@ -31,9 +54,9 @@ struct routing_entry {
         struct routing_entry *next;
         unsigned char addr[TR_ALEN];
         unsigned char iface[5];
-        __u16 rcf;                      /* route control field */
-        __u16 rseg[8];                  /* routing registers */
-        unsigned long access_time;      /* time we last used this entry */
+        u_int16_t rcf;			/* route control field */
+        u_int16_t rseg[8];		/* routing registers */
+        unsigned long access_time;	/* time we last used this entry */
 };
 
 static struct routing_entry *routing_info = NULL;
@@ -44,7 +67,7 @@ static struct timeval routing_timer;
 void assemble_tr_header (interface, buf, bufix, to)
 	struct interface_info *interface;
 	unsigned char *buf;
-	int *bufix;
+	unsigned *bufix;
 	struct hardware *to;
 {
         struct trh_hdr *trh;
@@ -54,14 +77,14 @@ void assemble_tr_header (interface, buf, bufix, to)
 
         /* set up the token header */
         trh = (struct trh_hdr *) &buf[*bufix];
-        if (interface -> hw_address.hlen == sizeof (trh->saddr))
-                memcpy (trh->saddr, interface -> hw_address.haddr,
+        if (interface -> hw_address.hlen - 1 == sizeof (trh->saddr))
+                memcpy (trh->saddr, &interface -> hw_address.hbuf [1],
                                     sizeof (trh->saddr));
         else
                 memset (trh->saddr, 0x00, sizeof (trh->saddr));
 
-        if (to && to -> hlen == 6) /* XXX */
-                memcpy (trh->daddr, to -> haddr, sizeof trh->daddr);
+        if (to && to -> hlen == 7) /* XXX */
+                memcpy (trh->daddr, &to -> hbuf [1], sizeof trh->daddr);
         else
                 memset (trh->daddr, 0xff, sizeof (trh->daddr));
 
@@ -97,7 +120,7 @@ static unsigned char tr_broadcast[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 ssize_t decode_tr_header (interface, buf, bufix, from)
         struct interface_info *interface;
         unsigned char *buf;
-        int bufix;
+        unsigned bufix;
         struct hardware *from;
 {
         struct trh_hdr *trh = (struct trh_hdr *) buf + bufix;
@@ -143,14 +166,14 @@ ssize_t decode_tr_header (interface, buf, bufix, from)
          * filter code in bpf.c */
         llc = (struct trllc *)(buf + bufix + hdr_len);
         ip = (struct ip *) (llc + 1);
-        udp = (struct udphdr *) ((unsigned char*) ip + ip->ip_hl * 4);
+        udp = (struct udphdr *) ((unsigned char*) ip + IP_HL (ip));
 
         /* make sure it is a snap encoded, IP, UDP, unfragmented packet sent
          * to our port */
         if (llc->dsap != EXTENDED_SAP
                         || ntohs(llc->ethertype) != ETHERTYPE_IP
                         || ip->ip_p != IPPROTO_UDP
-                        || (ip->ip_off & IP_OFFMASK) != 0
+                        || (ntohs (ip->ip_off) & IP_OFFMASK) != 0
                         || udp->uh_dport != local_port)
                 return -1;
 
@@ -189,7 +212,7 @@ static int insert_source_routing (trh, interface)
 		if (rover != NULL) {
                         /* success: route that frame */
                         if ((rover->rcf & TR_RCF_LEN_MASK) >> 8) {
-                                __u16 rcf = rover->rcf;
+                                u_int16_t rcf = rover->rcf;
 				memcpy(trh->rseg,rover->rseg,sizeof(trh->rseg));
 				rcf ^= TR_RCF_DIR_BIT;	
 				rcf &= ~TR_RCF_BROADCAST_MASK;
@@ -226,7 +249,7 @@ static void save_source_routing(trh, interface)
         struct routing_entry *rover;
         struct timeval now;
         unsigned char saddr[TR_ALEN];
-        __u16 rcf = 0;
+        u_int16_t rcf = 0;
 
         gettimeofday(&now, NULL);
 
@@ -241,8 +264,8 @@ static void save_source_routing(trh, interface)
 
         /* found an entry so update it with fresh information */
         if (rover != NULL) {
-                if ((trh->saddr[0] & TR_RII)
-		    && (((ntohs(trh->rcf) & TR_RCF_LEN_MASK) >> 8) > 2)) {
+                if ((trh->saddr[0] & TR_RII) &&
+		    ((ntohs(trh->rcf) & TR_RCF_LEN_MASK) >> 8) > 2) {
                         rcf = ntohs(trh->rcf);
                         rcf &= ~TR_RCF_BROADCAST_MASK;
                         memcpy(rover->rseg, trh->rseg, sizeof(rover->rseg));
@@ -253,7 +276,7 @@ static void save_source_routing(trh, interface)
         }
 
         /* no entry found, so create one */
-        rover = malloc(sizeof(struct routing_entry));
+        rover = dmalloc (sizeof (struct routing_entry), MDL);
         if (rover == NULL) {
                 fprintf(stderr,
 			"%s: unable to save source routing information\n",
@@ -294,7 +317,7 @@ static void expire_routes()
         while((rover = *prover) != NULL) {
                 if ((now.tv_sec - rover->access_time) > routing_timeout) {
                         *prover = rover->next;
-                        free(rover);
+                        dfree (rover, MDL);
                 } else
                         prover = &rover->next;
         }

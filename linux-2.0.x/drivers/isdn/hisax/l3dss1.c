@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: l3dss1.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,7 +13,7 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.16.2.8  1998/11/03 00:07:14  keil

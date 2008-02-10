@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: netjet.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -8,7 +8,7 @@
  *
  *
  * $Log: netjet.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.10  1998/11/03 00:07:24  keil

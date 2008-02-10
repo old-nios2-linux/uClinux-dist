@@ -1,5 +1,3 @@
-$Id: README,v 1.8 2005/11/02 20:34:19 nangel Exp $
-
 haserl (Html And Shell Embedded Runtime Language) is a cgi 
 program that runs interpreted scripts.   It combines three 
 elements into a single CGI interpreter:
@@ -9,7 +7,7 @@ pairs into the environment for the CGI script to use. It is similar
 to uncgi (http://www.midwinter.com/~koreth/uncgi.html) in this respect
 
 2. It prints the contents of the script as html, and conditionally
-interpets text within <? ... ?> as shell script.  In this case haserl 
+interpets text within <% ... %> as shell script.  In this case haserl 
 scripts are like a poor-man's version of PHP (http://www.php.net)
 
 3. It is very small, and so can be used in embedded environments

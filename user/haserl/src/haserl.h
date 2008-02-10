@@ -8,6 +8,7 @@ typedef struct
   unsigned long uploadkb;       /* how big an upload do we allow (0 for none) */
   char *shell;                  /* The shell we use                                     */
   char *uploaddir;              /* where we upload to                                   */
+  char *uploadhandler;		/* a handler for uploads				*/
   char *var_prefix;		/* what name we give to FORM variables			*/
   char *nul_prefix;		/* what name we give to environment variables		*/
   token_t *uploadlist;		/* a linked list of pathspecs				*/
@@ -32,7 +33,7 @@ void haserlflags(list_t *env);
 int ReadCGIQueryString(list_t *env);
 int ReadCGIPOSTValues(list_t *env);
 int LineToStr(char *string, size_t max);
-int ReadMimeEncodedInput(list_t *env, char *qs);
+int ReadMimeEncodedInput(list_t *env);
 void PrintParseError(char *error, int linenum);
 int parseCommandLine(int argc, char *argv[]);
 int BecomeUser(uid_t uid, gid_t gid);
@@ -41,15 +42,12 @@ void unlink_uploadlist (void);
 int main(int argc, char *argv[]);
 
 
-#ifndef SHELL_DECL
-# define SHELL_DECL extern
-#endif
-SHELL_DECL void (*shell_exec)(buffer_t *buf, char *str);
-SHELL_DECL void (*shell_echo)(buffer_t *buf, char *str, size_t len);
-SHELL_DECL void (*shell_eval)(buffer_t *buf, char *str, size_t len);
-SHELL_DECL void (*shell_setup)( char *, list_t *);
-SHELL_DECL void (*shell_doscript)( buffer_t *, char *);
-SHELL_DECL void (*shell_destroy) (void);
+extern void (*shell_exec)(buffer_t *buf, char *str);
+extern void (*shell_echo)(buffer_t *buf, char *str, size_t len);
+extern void (*shell_eval)(buffer_t *buf, char *str, size_t len);
+extern void (*shell_setup)( char *, list_t *);
+extern void (*shell_doscript)( buffer_t *, char *);
+extern void (*shell_destroy) (void);
 
 #endif /* !_HASERL_H */
 

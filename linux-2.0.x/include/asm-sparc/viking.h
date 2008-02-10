@@ -1,4 +1,4 @@
-/* $Id: viking.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: viking.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * viking.h:  Defines specific to the GNU/Viking MBUS module.
  *            This is SRMMU stuff.
  *

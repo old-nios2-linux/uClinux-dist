@@ -74,7 +74,7 @@
  *
  */
 
-#define RCSID	"$Id: chap_ms.c,v 1.4 2007/06/08 04:02:38 gerg Exp $"
+#define RCSID	"$Id: chap_ms.c,v 1.4 2007-06-08 04:02:38 gerg Exp $"
 
 #ifdef CHAPMS
 

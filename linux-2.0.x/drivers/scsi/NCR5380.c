@@ -31,7 +31,7 @@
 
 /*
  * $Log: NCR5380.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:22  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:22  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.7  1996/3/2	Ray Van Tassle (rayvt@comm.mot.com)

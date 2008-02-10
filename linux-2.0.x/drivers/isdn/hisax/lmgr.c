@@ -1,4 +1,4 @@
-/* $Id: lmgr.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: lmgr.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *
@@ -6,7 +6,7 @@
  *  Layermanagement module
  *
  * $Log: lmgr.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.5  1998/11/03 00:07:21  keil

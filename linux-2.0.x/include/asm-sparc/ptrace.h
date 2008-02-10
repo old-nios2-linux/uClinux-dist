@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $ */
+/* $Id: ptrace.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 

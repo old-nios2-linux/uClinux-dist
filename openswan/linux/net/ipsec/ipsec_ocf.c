@@ -330,6 +330,7 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 		if (!crda->crd_alg) {
 			KLIPS_PRINT(debug_rcv, "klips_debug:ipsec_ocf_rcv: "
 					"bad auth alg 0x%x\n", ipsp->ips_authalg);
+			crypto_freereq(crp);
 			return IPSEC_RCV_BADPROTO;
 		}
 
@@ -363,11 +364,29 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 			crda->crd_skip     =
 				((unsigned char *) irs->protostuff.espstuff.espp) -
 							irs->skb->data;
-			/* clear the authenticator to be sure */
-			/* FIXME: don't do this as some drivers actually check this data */
-			/* need to work out a cleaner way to ensure we do not see */
-			/* the old value from the packet later */
-			//memset(irs->authenticator, 0, 12);
+			/*
+			 * It would be nice to clear the authenticator here
+			 * to be sure we do not see it again later when checking.
+			 * We cannot.  Some HW actually expects to check the in-data
+			 * hash and and flag an error if it is incorrect.
+			 *
+			 * What we do to allow this is to pass in the current in-data
+			 * value.  Your OCF driver must ensure that it fails a request
+			 * for hash+decrypt with an invalid hash value, or returns the
+			 * computed in-data hash as requested.
+			 *
+			 * If your driver does not check the in-data hash but just
+			 * computes it value,  you must ensure that it does not return
+			 * the original in-data hash by accident.  It must invalidate the
+			 * in-data hash itself to force an auth check error.
+			 *
+			 * All existing drivers that do not care about the current
+			 * in-data hash do this by clearing the in-data hash before
+			 * processing, either directly or via their implementation.
+			 */
+#if 0
+			memset(irs->authenticator, 0, 12);
+#endif
 		}
 	}
 
@@ -376,6 +395,7 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 		if (!crde->crd_alg) {
 			KLIPS_PRINT(debug_rcv, "klips_debug:ipsec_ocf_rcv: "
 					"bad enc alg 0x%x\n", ipsp->ips_encalg);
+			crypto_freereq(crp);
 			return IPSEC_RCV_BADPROTO;
 		}
 
@@ -402,8 +422,10 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 	crp->crp_callback = ipsec_ocf_rcv_cb;
 	crp->crp_sid = ipsp->ocf_cryptoid;
 	crp->crp_opaque = (caddr_t) irs;
-	if (crypto_dispatch(crp))
+	if (crypto_dispatch(crp)){
+		crypto_freereq(crp);
 		return IPSEC_RCV_REALLYBAD;
+	}
 	return(IPSEC_RCV_PENDING);
 }
 
@@ -506,6 +528,7 @@ ipsec_ocf_xmit(struct ipsec_xmit_state *ixs)
 		if (!crda->crd_alg) {
 			KLIPS_PRINT(debug_tunnel&DB_TN_XMIT, "klips_debug:ipsec_ocf_xmit: "
 					"bad auth alg 0x%x\n", ipsp->ips_authalg);
+			crypto_freereq(crp);
 			return IPSEC_RCV_BADPROTO;
 		}
 		if (!crde) { /* assume AH processing */
@@ -539,6 +562,7 @@ ipsec_ocf_xmit(struct ipsec_xmit_state *ixs)
 		if (!crde->crd_alg) {
 			KLIPS_PRINT(debug_tunnel&DB_TN_XMIT, "klips_debug:ipsec_ocf_xmit: "
 					"bad enc alg 0x%x\n", ipsp->ips_encalg);
+			crypto_freereq(crp);
 			return IPSEC_RCV_BADPROTO;
 		}
 		crde->crd_flags  = CRD_F_ENCRYPT;
@@ -563,8 +587,10 @@ ipsec_ocf_xmit(struct ipsec_xmit_state *ixs)
 	crp->crp_callback = ipsec_ocf_xmit_cb;
 	crp->crp_sid = ipsp->ocf_cryptoid;
 	crp->crp_opaque = (caddr_t) ixs;
-	if (crypto_dispatch(crp))
+	if (crypto_dispatch(crp)){
+		crypto_freereq(crp);
 		return IPSEC_XMIT_ERRMEMALLOC;
+	}
 	return(IPSEC_XMIT_PENDING);
 }
 

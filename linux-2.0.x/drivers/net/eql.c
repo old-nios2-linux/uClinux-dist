@@ -17,7 +17,7 @@
  */
 
 static const char *version = 
-	"Equalizer1996: $Revision: 1.2 $ $Date: 2001/10/02 07:15:46 $ Simon Janes (simon@ncm.com)\n";
+	"Equalizer1996: $Revision: 1.2 $ $Date: 2001-10-02 07:15:46 $ Simon Janes (simon@ncm.com)\n";
 
 /*
  * Sources:
@@ -31,7 +31,7 @@ static const char *version =
 
 /*
  * $Log: eql.c,v $
- * Revision 1.2  2001/10/02 07:15:46  gerg
+ * Revision 1.2  2001-10-02 07:15:46  gerg
  * Merge of linux-2.0.39 sources. Not a lot of serious changes.
  * A few networking updates (security patches, etc) make it worthwhile.
  * Initial testing looks good, but we need to keep an eye out

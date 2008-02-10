@@ -70,7 +70,7 @@ unsigned int numstamp;
 
 /*****************************************************************************/
 
-int flatz_read_init(void)
+static int flatz_read_init(void)
 {
 	int res;
 	if (!flatzfs.read_initialised) {
@@ -282,7 +282,7 @@ int flat3_checkfs(void)
  * Read header at specific offset. If it is in someway invalid then return
  * an empty (zeroed out) header structure.
  */
-int flat3_gethdroffset(off_t off, struct flathdr3 *hp)
+static int flat3_gethdroffset(off_t off, struct flathdr3 *hp)
 {
 	memset(hp, 0, sizeof(*hp));
         if (flat_seek(off, SEEK_SET) != off)
@@ -307,7 +307,7 @@ unsigned int flat3_gethdr(void)
 	unsigned int psize;
 	int rc;
 
-	psize = flat_dev_length() / 2;
+	psize = flat_part_length();
 	rc = flat3_gethdroffset(0, &hdr);
 	if ((rc < 0) || (hdr.magic != FLATFS_MAGIC_V3)) {
 		rc = flat3_gethdroffset(psize, &hdr);
@@ -569,20 +569,19 @@ static inline int newest_header(struct flathdr3 *hdr1, struct flathdr3 *hdr0)
 
 int flat3_restorefs(int version, int dowrite)
 {
-	struct flathdr3 hdr[2];
+	struct flathdr3 hdr[FLAT_NUM_PARTITIONS];
 	unsigned int off, psize;
 	int part, nrparts, rc;
 
 	part = 0;
-	psize = flat_dev_length() / 2;
 
 	/* Figure out how many partitions we can have */
-	nrparts = 2;
+	nrparts = FLAT_NUM_PARTITIONS;
 	psize = flat_dev_length();
 	if ((psize / flat_dev_erase_length()) <= 1)
 		nrparts = 1;
 	else
-		psize /= 2;
+		psize = flat_part_length();
 
 	/* Get base header, and see how many partitions we have */
 	rc = flat3_gethdroffset(0, &hdr[0]);
@@ -605,31 +604,24 @@ int flat3_restorefs(int version, int dowrite)
 			numvalid = part;
 			numstamp = hdr[part].tstamp;
 			if (dowrite) {
-#ifdef LOGGING
-				char ecmd[64];
-				sprintf(ecmd, "/bin/logd read-partition %d, tstamp=%d",
+				logd("read-partition", "%d, tstamp=%d",
 					part, hdr[part].tstamp);
-				system(ecmd);
-#endif
 				syslog(LOG_INFO, "restore fs- from partition "
 					"%d, tstamp=%d", part, numstamp);
 			}
 			return rc;
 		}
 
-#ifdef LOGGING
 		/*
 		 * I am adding a logd message so we catch this in the flash
 		 * log. It would not normally happen, so if it does we should
 		 * know about it.
 		 */
-		if (dowrite) {
-			char ecmd[64];
-			sprintf(ecmd, "/bin/logd message restore partition "
-				"%d failed, tstamp=%d", part, hdr[part].tstamp);
-			system(ecmd);
-		}
-#endif
+		if (dowrite)
+			logd("message",
+				"restore partition %d failed, tstamp=%d",
+				part, hdr[part].tstamp);
+
 		/* Falling through to other partition */
 		part = (part) ? 0 : 1;
 	}
@@ -643,12 +635,8 @@ dobase:
 	numvalid = part;
 	numstamp = hdr[part].tstamp;
 	if (dowrite) {
-#ifdef LOGGING
-		char ecmd[64];
-		sprintf(ecmd, "/bin/logd read-partition %d, tstamp=%d",
+		logd("read-partition", "%d, tstamp=%d",
 			part, hdr[part].tstamp);
-		system(ecmd);
-#endif
 		syslog(LOG_INFO, "restore fs+ from partition %d, tstamp=%d",
 			part, numstamp);
 	}
@@ -758,7 +746,7 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
  * Returns 0 if OK, or < 0 if error.
  */
 
-int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned *total)
+static int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned *total)
 {
 	struct flathdr3 hdr;
 	struct flatent ent;
@@ -865,9 +853,9 @@ int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned
  * to determine the oldest image and replace it.
  */
 
-int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
+static int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
 {
-	struct flathdr3 hdr[2];
+	struct flathdr3 hdr[FLAT_NUM_PARTITIONS];
 	unsigned int off, size, psize;
 	int nrparts, part, rc, rewrite = 0;
 
@@ -876,14 +864,14 @@ int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
 	numstamp = 0;
 
 	/* Figure out how many partitions we can have */
-	nrparts = 2;
+	nrparts = FLAT_NUM_PARTITIONS;
 	size = psize = flat_dev_length();
 	if ((size / flat_dev_erase_length()) <= 1)
 		nrparts = 1;
 
 	/* Figure out which partition to use */
 	if (nrparts > 1) {
-		psize = size / 2;
+		psize = flat_part_length();
 		flat3_gethdroffset(0, &hdr[0]);
 		flat3_gethdroffset(psize, &hdr[1]);
 
@@ -902,12 +890,8 @@ int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
 
 	off = (part) ? psize : 0;
 	if (dowrite) {
-#ifdef LOGGING
-		char ecmd[64];
-		sprintf(ecmd, "/bin/logd write-partition %d, tstamp=%d",
+		logd("write-partition", "%d, tstamp=%d",
 			part, next_tstamp(numstamp));
-		system(ecmd);
-#endif
 		syslog(LOG_INFO, "saving fs to partition %d, tstamp=%d\n",
 			part, next_tstamp(numstamp));
 	}
@@ -918,12 +902,7 @@ int _flat3_savefs(int dowrite, unsigned int *total, int rewriting)
 
 	/* Write the configuration to the other parititon if tstamp wrapped */
 	if (dowrite && rewrite && (rc = flat3_restorefsoffset(off, 0)) >= 0) {
-#ifdef LOGGING
-		char ecmd[64];
-		sprintf(ecmd, "/bin/logd message rewriting fs for "
-			      "backwards compatibility");
-		system(ecmd);
-#endif
+		logd("message", "rewriting fs for backwards compatibility");
 		syslog(LOG_INFO, "rewriting fs for backwards compatibility\n");
 		rc = _flat3_savefs(dowrite, total, 1);
 	}

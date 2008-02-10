@@ -104,10 +104,7 @@ BOOLEAN ks8695_ChipInit(PADAPTER_STRUCT Adapter, BOOLEAN bResetPhy)
 	}
 
 	/* copy the MAC address out of Station registers */
-	macSetStationAddress(Adapter, DI.stMacStation);
-	if (netdev->addr_len < MAC_ADDRESS_LEN)
-		netdev->addr_len = MAC_ADDRESS_LEN;
-	memcpy(netdev->dev_addr, DI.stMacStation, netdev->addr_len);
+	macSetStationAddress(Adapter, netdev->dev_addr);
 	memcpy(DI.stMacCurrent, netdev->dev_addr, netdev->addr_len);
 
 #ifdef	DEBUG_THIS

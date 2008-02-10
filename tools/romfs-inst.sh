@@ -16,7 +16,9 @@ cat << !EOF >&2
 $0: [options] [src] dst
     -v          : output actions performed.
     -e env-var  : only take action if env-var is set to "y".
+    -E env-var  : only take action if env-var is not set to "y".
     -o option   : only take action if option is set to "y".
+    -O option   : only take action if option is not set to "y".
     -p perms    : chmod style permissions for dst.
     -d          : make dst directory if it doesn't exist
     -S          : don't strip after installing
@@ -24,6 +26,7 @@ $0: [options] [src] dst
     -A pattern  : only append text if pattern doesn't exist in file
     -l link     : dst is a hard link to 'link'.
     -s sym-link : dst is a sym-link to 'sym-link'.
+    -M          : install kernel module into dst subdir of module dir
 
     if "src" is not provided,  basename is run on dst to determine the
     source in the current directory.
@@ -73,7 +76,7 @@ file_copy()
 			setperm ${ROMFSDIR}${dst}
 		)
 	else
-		if [ -d ${dst} ]; then
+		if [ -d ${ROMFSDIR}${dst} ]; then
 			dstfile=${ROMFSDIR}${dst}/`basename ${src}`
 		else
 			dstfile=${ROMFSDIR}${dst}
@@ -151,6 +154,7 @@ fi
 
 v=1
 option=y
+noption=
 pattern=
 perm=
 func=file_copy
@@ -158,15 +162,19 @@ mdir=
 src=
 dst=
 strip=1
+kernmod=
 
-while getopts 'dSve:o:A:p:a:l:s:' opt "$@"
+while getopts 'dSMve:E:o:O:A:p:a:l:s:' opt "$@"
 do
 	case "$opt" in
 	v) v="1";                           ;;
 	d) mdir="1";                        ;;
 	S) strip=;							;;
+	M) kernmod="1";                     ;;
 	o) option="$OPTARG";                ;;
+	O) noption="$OPTARG";               ;;
 	e) eval option=\"\$$OPTARG\";       ;;
+	E) eval noption=\"\$$OPTARG\";      ;;
 	p) perm="$OPTARG";                  ;;
 	a) src="$OPTARG"; func=file_append; ;;
 	A) pattern="$OPTARG";               ;;
@@ -180,6 +188,18 @@ do
 #
 	case "$option" in
 	*[mMyY]*) # this gives OR effect, ie., nYn
+		;;
+	*)
+		[ "$v" ] && echo "Condition not satisfied."
+		exit 0
+		;;
+	esac
+
+#
+#	process negative options here to get an ANDing effect
+#
+	case "${noption:-n}" in
+	*[nN]*) # this gives OR effect, ie., yNy
 		;;
 	*)
 		[ "$v" ] && echo "Condition not satisfied."
@@ -211,6 +231,14 @@ case $# in
 	usage
 	;;
 esac
+
+if [ -n "$kernmod" ]; then
+	strip=
+	kerndir=${ROOTDIR}/${LINUXDIR}
+	# could prob take from UTS headers as well ...
+	kernver=$(cat ${kerndir}/include/config/kernel.release)
+	dst="/lib/modules/${kernver}/${dst}"
+fi
 
 if [ "$mdir" -a ! -d "`dirname ${ROMFSDIR}${dst}`/." ]
 then

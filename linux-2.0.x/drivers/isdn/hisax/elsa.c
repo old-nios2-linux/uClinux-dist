@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: elsa.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -15,7 +15,7 @@
  *
  *
  * $Log: elsa.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.14.2.16  1998/11/05 21:13:55  keil

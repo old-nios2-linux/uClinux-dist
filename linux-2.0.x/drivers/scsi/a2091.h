@@ -1,6 +1,6 @@
 #ifndef A2091_H
 
-/* $Id: a2091.h,v 1.1.1.1 1999/11/22 03:47:27 christ Exp $
+/* $Id: a2091.h,v 1.1.1.1 1999-11-22 03:47:27 christ Exp $
  *
  * Header file for the Commodore A2091 Zorro II SCSI controller for Linux
  *

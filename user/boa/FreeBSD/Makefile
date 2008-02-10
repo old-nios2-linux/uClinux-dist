@@ -3,7 +3,7 @@
 # Date created:         Sun Dec 20  23:24:00 CDT 1998
 # Whom:                 Martin Hinner <martin@tdp.cz>
 #
-# $Id: Makefile,v 1.1.1.1 1999/11/22 03:47:52 christ Exp $
+# $Id: Makefile,v 1.1.1.1 1999-11-22 03:47:52 christ Exp $
 #
 
 DISTNAME=       boa-0.93.15f

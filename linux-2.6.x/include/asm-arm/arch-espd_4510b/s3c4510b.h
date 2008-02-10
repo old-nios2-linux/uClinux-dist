@@ -25,7 +25,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
  * MA 02111-1307 USA
  *
- * MODULE:        $Id: s3c4510b.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * MODULE:        $Id: s3c4510b.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  * Description:   Samsung S3C4510B register layout
  * Runtime Env:   ARM7TDMI
  * Change History:

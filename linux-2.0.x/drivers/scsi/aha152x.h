@@ -2,7 +2,7 @@
 #define _AHA152X_H
 
 /*
- * $Id: aha152x.h,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $
+ * $Id: aha152x.h,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $
  */
 
 #if defined(__KERNEL__)

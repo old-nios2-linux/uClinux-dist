@@ -109,7 +109,11 @@ echo $$gcc_abi $$gcc_opt$$gcc_cpu $$gcc_isa $$gas_abi $$gas_opt$$gas_cpu $$gas_i
 # CPU-dependent compiler/assembler options for optimization.
 #
 ifdef CONFIG_CPU_R3000
+ifdef CONFIG_RTL865X
+GCCFLAGS	+= -march=4180
+else
 GCCFLAGS	+= $(call set_gccflags,r3000,mips1,r3000,mips1,mips1)
+endif
 endif
 ifdef CONFIG_CPU_TX39XX
 GCCFLAGS	+= $(call set_gccflags,r3900,mips1,r3000,mips1,mips1)

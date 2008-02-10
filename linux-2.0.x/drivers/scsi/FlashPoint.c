@@ -163,7 +163,7 @@
  *
  *   Description:  Common shared global defines.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -402,7 +402,7 @@ extern void     OS_OutPortLong(unsigned long ioport, unsigned long val);
  *   Description:  Common shared SCCB Interface defines and SCCB 
  *						 Manager specifics defines.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -720,7 +720,7 @@ typedef struct _SCCB {
  *   Description: This module contains SCCB/UCB Manager implementation
  *                specific stuff.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -877,7 +877,7 @@ typedef struct _SCCB {
  *
  *   Description:  Definitions for Target related structures
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -1076,7 +1076,7 @@ typedef struct SCCBscam_info {
  *
  *   Description:  Register definitions for HARPOON ASIC.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -1208,7 +1208,7 @@ typedef struct SCCBscam_info {
  *
  *   Description:  Definitions for EEPROM related structures
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -1293,7 +1293,7 @@ typedef struct SCCBscam_info {
  *
  *   Description:  Register definitions for HARPOON ASIC.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -2326,7 +2326,7 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data);
 extern unsigned int SccbGlobalFlags;
 
 
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -2340,7 +2340,7 @@ extern unsigned int SccbGlobalFlags;
  *   Description:  Functions relating to handling of the SCCB interface
  *                 between the device driver and the HARPOON.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -5352,7 +5352,7 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data)
 }
 
 #endif
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -5366,7 +5366,7 @@ void Debug_Load(UCHAR p_card, UCHAR p_bug_data)
  *   Description:  Functions relating to handling of the SCCB interface 
  *                 between the device driver and the HARPOON.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -5424,7 +5424,7 @@ UCHAR    debug_int[MAX_CARDS][debug_size] = { 0 };
 UCHAR    debug_index[MAX_CARDS] = { 0 };
 UCHAR    reserved_1[3] = { 0 };
 #endif
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -5439,7 +5439,7 @@ UCHAR    reserved_1[3] = { 0 };
  *                 selection/reselection, sync negotiation, message-in
  *                 decoding.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -7518,7 +7518,7 @@ void sinits(PSCCB p_sccb, UCHAR p_card)
 }
 
 
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -7533,7 +7533,7 @@ void sinits(PSCCB p_sccb, UCHAR p_card)
  *                 the target asserts request (and the automation is not
  *                 enabled to handle the situation).
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -8267,7 +8267,7 @@ void phaseBusFree(ULONG port, UCHAR p_card)
 
 
 
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -8281,7 +8281,7 @@ void phaseBusFree(ULONG port, UCHAR p_card)
  *   Description:  Functions relating to programming the automation of
  *                 the HARPOON.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -8659,7 +8659,7 @@ void autoCmdCmplt(ULONG p_port, UCHAR p_card)
 
    queueCmdComplete(&BL_Card[p_card], currSCCB, p_card);
 }
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -8672,7 +8672,7 @@ void autoCmdCmplt(ULONG p_port, UCHAR p_card)
  *
  *   Description:  Functions to start, stop, and abort BusMaster operations.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -9351,7 +9351,7 @@ void hostDataXferRestart(PSCCB currSCCB)
       currSCCB->Sccb_XferCnt = currSCCB->DataLength - currSCCB->Sccb_ATC;
       }
 }
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -9366,7 +9366,7 @@ void hostDataXferRestart(PSCCB currSCCB)
  *                 and the determination of the SCSI IDs to be assigned
  *                 to all perspective SCSI targets.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -10581,7 +10581,7 @@ void scsavdi(UCHAR p_card, ULONG p_port)
    utilEEWrite(p_port, sum_data, EEPROM_CHECK_SUM/2);
    utilEEWriteOnOff(p_port,0);   /* Turn off write access */
 }
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -10595,7 +10595,7 @@ void scsavdi(UCHAR p_card, ULONG p_port)
  *   Description:  Diagnostic funtions for testing the integrity of
  *                 the HARPOON.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *
@@ -11026,7 +11026,7 @@ void DiagEEPROM(ULONG p_port)
 
 }
 
-#ident "$Id: FlashPoint.c,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $"
+#ident "$Id: FlashPoint.c,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $"
 /*----------------------------------------------------------------------
  *
  *
@@ -11040,7 +11040,7 @@ void DiagEEPROM(ULONG p_port)
  *   Description:  Utility functions relating to queueing and EEPROM
  *                 manipulation and any other garbage functions.
  *
- *   $Date: 1999/11/22 03:47:28 $
+ *   $Date: 1999-11-22 03:47:28 $
  *
  *   $Revision: 1.1.1.1 $
  *

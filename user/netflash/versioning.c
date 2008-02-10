@@ -37,7 +37,7 @@
 #include <config/autoconf.h>
 #endif
 #include <ctype.h>
-#include "netflash.h"
+#include "fileblock.h"
 #include "versioning.h"
 
 #define MAX_VENDOR_SIZE			256
@@ -67,9 +67,9 @@ static char new_image_version[MAX_VERSION_SIZE+1];
 
 
 /****************************************************************************/
-static char *get_string(struct fileblock_t **block, char *cp, char *str, int len);
+static char *get_string(struct fileblock **block, char *cp, char *str, int len);
 static int check_version_info(char *version, char *new_version);
-static char *decrement_blk(char *cp, struct fileblock_t **block);
+static char *decrement_blk(char *cp, struct fileblock **block);
 static int get_version_bits(char *version, char *ver_long, char *letter,
 		int *num, char *lang);
 static int minor_to_int(char letter, int num);
@@ -131,8 +131,8 @@ static int check_match(const char *name, const char *namelist)
  */
 int check_vendor(void)
 {
-	struct fileblock_t *currBlock;
-	int versionInfo;
+	struct fileblock *currBlock;
+	int versionInfo, tot;
 	char *cp;
 	char imageVendorName[MAX_VENDOR_SIZE];
 	char imageProductName[MAX_PRODUCT_SIZE];
@@ -143,8 +143,12 @@ int check_vendor(void)
 	 */
 	if (fileblocks == NULL)
 		return 5;
-	for (currBlock = fileblocks; currBlock->next; currBlock = currBlock->next);
-	cp = currBlock->data + currBlock->length - 1;
+	for (tot = 0, currBlock = fileblocks; currBlock->next; currBlock = currBlock->next) {
+		if ((tot + currBlock->length) >= file_length)
+			break;
+		tot += currBlock->length;
+	}
+	cp = currBlock->data + (file_length - tot) - 1;
 
 	/*
 	 * Now try to get the vendor/product/version strings, from the end
@@ -212,7 +216,7 @@ int check_vendor(void)
  * NULL - we couldn't find the string.
  * anything else - a pointer to the char before the NULL terminator.
  */
-char *get_string(struct fileblock_t **block, char *cp, char *str, int len)
+char *get_string(struct fileblock **block, char *cp, char *str, int len)
 {
 	int i, j;
 	char c;
@@ -313,9 +317,9 @@ int check_version_info(char *version, char *new_version)
  * Decrement the pointer and block number appropriately.
  * we return NULL when asked to decrement before the beginning.
  */
-char *decrement_blk(char *cp, struct fileblock_t **block)
+char *decrement_blk(char *cp, struct fileblock **block)
 {
-	struct fileblock_t *p;
+	struct fileblock *p;
 	if(cp==NULL || (*block)==NULL)
 		return NULL;
 
@@ -338,7 +342,7 @@ char *decrement_blk(char *cp, struct fileblock_t **block)
  * This is not currently used.
  */
 #if 0
-char *increment_blk(char *cp, struct fileblock_t **block)
+char *increment_blk(char *cp, struct fileblock **block)
 {
 	if(cp == NULL || (*block) == NULL){
 		return NULL;
@@ -476,7 +480,7 @@ int minor_to_int(char letter, int num)
 /****************************************************************************/
 
 #ifdef VERSIONTEST
-struct fileblock_t *fileblocks = NULL;
+struct fileblock *fileblocks = NULL;
 
 void remove_data(int length)
 {

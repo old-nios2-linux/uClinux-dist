@@ -2,7 +2,7 @@ alert tcp $TELNET_SERVERS 23 -> $EXTERNAL_NET any (msg:"INFO TELNET login incorr
 alert tcp $TELNET_SERVERS 23 -> $EXTERNAL_NET any (msg:"INFO TELNET access"; flow:from_server,established; content:"|FF FD|"; rawbytes; content:"|FF FD|"; distance:0; rawbytes; content:"|FF FD|"; distance:0; rawbytes; reference:arachnids,08; reference:cve,1999-0619; reference:nessus,10280; classtype:not-suspicious; sid:716; rev:13;)
 # (C) Copyright 2001-2004, Martin Roesch, Brian Caswell, et al.
 #    All rights reserved.
-# $Id: info.rules,v 1.1 2006/06/06 03:45:11 pauli Exp $
+# $Id: info.rules,v 1.1 2006-06-06 03:45:11 pauli Exp $
 #-----------
 # INFO RULES
 #-----------

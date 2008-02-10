@@ -1,4 +1,4 @@
-/* $Id: l3_1tr6.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: l3_1tr6.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  *  German 1TR6 D-channel protocol
  *
@@ -10,7 +10,7 @@
  *
  *
  * $Log: l3_1tr6.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.11.2.6  1998/11/03 00:07:10  keil

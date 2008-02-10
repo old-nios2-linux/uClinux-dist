@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.h,v 1.2 2000/10/06 08:39:31 davidm Exp $
+ * $Id: jffs_fm.h,v 1.2 2000-10-06 08:39:31 davidm Exp $
  *
  */
 

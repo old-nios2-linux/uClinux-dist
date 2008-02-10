@@ -109,6 +109,9 @@ image.arm.zimage:
 image.i386.zimage:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/i386/boot/bzImage $(ZIMAGE)
 
+image.mips.vmlinux:
+	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(VMLINUX)
+
 # Create a 16MB file for testing
 image.16mb:
 	dd if=/dev/zero of=$(ROMFSDIR)/16MB bs=1000000 count=16
@@ -231,6 +234,9 @@ romfs.ixp425-microcode:
 romfs.ixp425-boot:
 	-$(ROMFSINST) -d $(ROOTDIR)/boot/ixp425/bios.bin /boot/biosplus.bin
 	-$(ROMFSINST) -d $(ROOTDIR)/boot/ixp425/boot.bin /boot/bootplus.bin
+
+romfs.boot:
+	-$(ROMFSINST) -d $(ROOTDIR)/boot/boot.bin /boot/boot.bin
 
 romfs.version:
 	echo "$(VERSIONSTR) -- " $(BUILD_START_STRING) > $(ROMFSDIR)/etc/version

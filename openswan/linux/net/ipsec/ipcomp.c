@@ -14,7 +14,7 @@
  * for more details.
  */
 
-char ipcomp_c_version[] = "RCSID $Id: ipcomp.c,v 1.41.2.5 2006/10/06 21:39:26 paul Exp $";
+char ipcomp_c_version[] = "RCSID $Id: ipcomp.c,v 1.41.2.8 2007-10-30 21:33:40 paul Exp $";
 
 /* SSS */
 
@@ -99,7 +99,7 @@ safe_skb_put(struct sk_buff *skb, int extend)
                 ptr = skb_put(skb, extend);
         } else {
                 // shrink the size of the packet
-                ptr = skb->tail;
+                ptr = skb_tail_pointer(skb);
                 skb_trim (skb, skb->len + extend);
         }
 
@@ -604,8 +604,8 @@ struct sk_buff *skb_copy_ipcomp(struct sk_buff *skb, int data_growth, int gfp_ma
 #endif /* NET_21 */
         if (!iph) return NULL;
         iphlen = iph->ihl << 2;
-	
-        n=alloc_skb(skb->end - skb->head + data_growth, gfp_mask);
+
+        n=alloc_skb(skb_end_pointer(skb) - skb->head + data_growth, gfp_mask);
         if(n==NULL)
                 return NULL;
 	

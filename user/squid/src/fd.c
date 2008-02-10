@@ -87,8 +87,10 @@ fd_close(int fd)
     F->flags.open = 0;
     fdUpdateBiggest(fd, 0);
     Number_FD--;
+#ifndef HAVE_POLL
     commUpdateReadBits(fd, NULL);
     commUpdateWriteBits(fd, NULL);
+#endif
     memset(F, '\0', sizeof(fde));
     F->timeout = 0;
 }

@@ -15,7 +15,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Makefile.fs2_4,v 1.9.2.1 2006/10/19 04:57:08 paul Exp $
+# RCSID $Id: Makefile.fs2_4,v 1.9.2.1 2006-10-19 04:57:08 paul Exp $
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -252,7 +252,7 @@ tar:
 
 #
 # $Log: Makefile.fs2_4,v $
-# Revision 1.9.2.1  2006/10/19 04:57:08  paul
+# Revision 1.9.2.1  2006-10-19 04:57:08  paul
 # X.509 setup options added to man page.
 #
 # Revision 1.9  2005/05/20 16:47:26  mcr

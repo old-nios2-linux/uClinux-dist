@@ -1,9 +1,9 @@
-/* $Id: hisax.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: hisax.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.13.2.19  1998/11/05 21:11:17  keil

@@ -4,7 +4,7 @@
  *  DESCR: High-level system call path.
  */
 
-#ident "$Id: syscall.c,v 1.1 1999/12/03 06:02:34 gerg Exp $"
+#ident "$Id: syscall.c,v 1.1 1999-12-03 06:02:34 gerg Exp $"
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/sem.h>

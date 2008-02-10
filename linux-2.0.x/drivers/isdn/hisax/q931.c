@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: q931.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * q931.c       code to decode ITU Q.931 call control messages
  *
@@ -14,7 +14,7 @@
  *
  *
  * $Log: q931.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.5.2.3  1998/11/03 00:07:28  keil

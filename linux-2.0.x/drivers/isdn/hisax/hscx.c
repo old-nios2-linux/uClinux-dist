@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: hscx.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * hscx.c   HSCX specific routines
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: hscx.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3.2.11  1998/11/05 21:14:01  keil

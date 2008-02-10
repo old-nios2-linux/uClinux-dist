@@ -31,7 +31,7 @@ static const char rcsid[] _U_ =
 #include "config.h"
 #endif
 
-#if !defined(EMBED) || defined(CONFIG_USER_PPTPD_PPTPD) || defined(CONFIG_USER_PPTP_CLIENT_PPTP)
+#if !defined(EMBED) || defined(CONFIG_USER_PPTPD_PPTPD) || defined(CONFIG_USER_PPTP_CLIENT_PPTP) || defined(CONFIG_USER_PPTP_PPTP)
 
 #include <tcpdump-stdinc.h>
 

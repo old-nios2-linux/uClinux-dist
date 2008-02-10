@@ -13,8 +13,8 @@
 #include <linux/param.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <asm/machdep.h>
-#include <asm/io.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
 #include <asm/mcfuart.h>
@@ -119,19 +119,6 @@ void mcf_settimericr(int timer, int level)
 		icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
 		*icrp = (0x8 | level) << ((4 - timer) * 4);
 	}
-}
-
-/***************************************************************************/
-
-int mcf_timerirqpending(int timer)
-{
-	volatile unsigned long *icrp;
-
-	if ((timer >= 1 ) && (timer <= 4)) {
-		icrp = (volatile unsigned long *) (MCF_MBAR + MCFSIM_ICR1);
-		return (*icrp & (0x8 << ((4 - timer) * 4)));
-	}
-	return 0;
 }
 
 /***************************************************************************/

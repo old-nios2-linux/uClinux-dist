@@ -42,7 +42,7 @@
 
 #ifdef IPX_CHANGE
 
-#define RCSID	"$Id: ipxcp.c,v 1.2 2007/06/08 04:02:38 gerg Exp $"
+#define RCSID	"$Id: ipxcp.c,v 1.2 2007-06-08 04:02:38 gerg Exp $"
 
 /*
  * TODO:

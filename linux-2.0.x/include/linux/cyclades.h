@@ -1,4 +1,4 @@
-/* $Revision: 1.2 $$Date: 2001/10/02 07:15:48 $
+/* $Revision: 1.2 $$Date: 2001-10-02 07:15:48 $
  * linux/include/linux/cyclades.h
  *
  * This file is maintained by Ivan Passos <ivan@cyclades.com>, 
@@ -7,7 +7,7 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
- *Revision 1.2  2001/10/02 07:15:48  gerg
+ *Revision 1.2  2001-10-02 07:15:48  gerg
  *Merge of linux-2.0.39 sources. Not a lot of serious changes.
  *A few networking updates (security patches, etc) make it worthwhile.
  *Initial testing looks good, but we need to keep an eye out

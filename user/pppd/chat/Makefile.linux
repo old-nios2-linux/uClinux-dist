@@ -1,4 +1,4 @@
-#	$Id: Makefile.linux,v 1.6 2007/10/31 03:38:05 davidm Exp $
+#	$Id: Makefile.linux,v 1.6 2007-10-31 03:38:05 davidm Exp $
 
 DESTDIR = $(INSTROOT)@DESTDIR@
 BINDIR = $(DESTDIR)/sbin

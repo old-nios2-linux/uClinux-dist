@@ -3,9 +3,14 @@
 #include <string.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <config/autoconf.h>
+
+#ifdef CONFIG_USER_SETKEY_SETKEY
+#include <key/key.h>
+#endif
 
 static int	crypto_keylen = 0;
-static char	*crypto_key;
+static char	*crypto_key = NULL;
 
 static void usage(int rc) {
 	printf("usage: oggenc -c key files...\n");
@@ -82,6 +87,22 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 	}
+
+#ifdef CONFIG_USER_SETKEY_SETKEY
+	/* If we've got the crypto key driver installed and the user hasn't
+	 * specified a crypto key already, we load it from the driver.
+	 */
+	if (crypto_key == NULL) {
+		static unsigned char key[128];
+		int i;
+
+		if ((i = getdriverkey(key, sizeof(key))) > 0) {
+			crypto_key = key;
+			crypto_keylen = i;
+		}
+	}
+#endif
+
 	if (crypto_keylen == 0)
 		usage(1);
 	if (optind >= argc)

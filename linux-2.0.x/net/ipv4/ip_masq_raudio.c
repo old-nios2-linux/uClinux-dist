@@ -2,7 +2,7 @@
  *		IP_MASQ_RAUDIO  - Real Audio masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_raudio.c,v 1.1.1.1 1999/11/22 03:47:06 christ Exp $
+ * Version:	@(#)$Id: ip_masq_raudio.c,v 1.1.1.1 1999-11-22 03:47:06 christ Exp $
  *
  * Author:	Nigel Metheringham
  *		[strongly based on ftp module by Juan Jose Ciarlante & Wouter Gadeyne]

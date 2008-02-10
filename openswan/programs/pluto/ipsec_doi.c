@@ -17,7 +17,7 @@
  * Daniel Djamaludin <ddjamaludin@cyberguard.com>
  * Copyright (C) 2004-2005 Intel Corporation.  All Rights Reserved.
  *
- * RCSID $Id: ipsec_doi.c,v 1.304.2.16 2007/01/22 21:05:12 paul Exp $
+ * RCSID $Id: ipsec_doi.c,v 1.304.2.17 2007-09-05 19:46:15 paul Exp $
  */
 
 #include <stdio.h>

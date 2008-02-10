@@ -1164,7 +1164,7 @@ static int compatible_revision(const char *name, u_int8_t revision, int opt)
 	max_rev = getsockopt(sockfd, IPPROTO_IP, opt, &rev, &s);
 	if (max_rev < 0) {
 		/* Definitely don't support this? */
-		if (errno == EPROTONOSUPPORT) {
+		if ((errno == EPROTONOSUPPORT) || (errno == ENOENT)) {
 			close(sockfd);
 			return 0;
 		} else if (errno == ENOPROTOOPT) {

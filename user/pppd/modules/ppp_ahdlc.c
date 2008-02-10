@@ -56,7 +56,7 @@
  * OBLIGATION TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS,
  * OR MODIFICATIONS.
  *
- * $Id: ppp_ahdlc.c,v 1.2 2007/06/08 04:02:37 gerg Exp $
+ * $Id: ppp_ahdlc.c,v 1.2 2007-06-08 04:02:37 gerg Exp $
  */
 
 /*

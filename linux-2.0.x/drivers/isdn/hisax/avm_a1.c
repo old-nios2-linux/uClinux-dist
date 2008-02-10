@@ -1,4 +1,4 @@
-/* $Id: avm_a1.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: avm_a1.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * avm_a1.c     low level stuff for AVM A1 (Fritz) isdn cards
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: avm_a1.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.6.2.12  1998/11/03 00:05:44  keil

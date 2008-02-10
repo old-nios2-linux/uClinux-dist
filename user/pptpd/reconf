@@ -3,7 +3,7 @@
 # Reconfigure for a release, by updating the Makefile dependencies and
 # running the autotools.
 #
-# $Id: reconf,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
+# $Id: reconf,v 1.1.1.2 2007-07-05 23:25:55 gerg Exp $
 
 # make the existing config.h disappear temporarily
 if test -f config.h

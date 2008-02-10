@@ -9,7 +9,10 @@
 #define FLATFS_DEV_H
 /****************************************************************************/
 
+#define FLAT_NUM_PARTITIONS 2
+
 int flat_dev_open(const char *flatfs, const char *mode);
+size_t flat_part_length(void);
 int flat_dev_length(void);
 int flat_dev_erase_length(void);
 int flat_dev_erase(off_t offset, size_t len);

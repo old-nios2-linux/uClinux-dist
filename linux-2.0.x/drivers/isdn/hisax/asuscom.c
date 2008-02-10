@@ -1,4 +1,4 @@
-/* $Id: asuscom.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: asuscom.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
@@ -8,7 +8,7 @@
  *
  *
  * $Log: asuscom.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.4  1998/11/03 00:05:42  keil

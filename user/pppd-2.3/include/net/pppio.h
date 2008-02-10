@@ -24,7 +24,7 @@
  * OBLIGATION TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS,
  * OR MODIFICATIONS.
  *
- * $Id: pppio.h,v 1.1.1.1 1999/11/22 03:47:53 christ Exp $
+ * $Id: pppio.h,v 1.1.1.1 1999-11-22 03:47:53 christ Exp $
  */
 
 #define _PPPIO(n)	(('p' << 8) + (n))

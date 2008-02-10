@@ -7,7 +7,7 @@
 #ifndef MON960_H
 #define MON960_H
 
-#ident "$Id: mon960.h,v 1.1 1999/12/03 06:02:35 gerg Exp $"
+#ident "$Id: mon960.h,v 1.1 1999-12-03 06:02:35 gerg Exp $"
 
 unsigned long mon_entry(void);
 unsigned long get_prcbptr(void);

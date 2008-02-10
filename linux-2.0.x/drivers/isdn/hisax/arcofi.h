@@ -1,4 +1,4 @@
-/* $Id: arcofi.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: arcofi.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * arcofi.h   Ansteuerung ARCOFI 2165
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: arcofi.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.3  1998/05/27 18:04:50  keil

@@ -2,7 +2,7 @@
  * Copyright c                Realtek Semiconductor Corporation, 2003
  * All rights reserved.                                                    
  * 
- * $Header: /cvs/sw/linux-2.4.x/include/asm-mips/rtl865x/re865x.h,v 1.1 2007/08/29 05:29:48 gerg Exp $
+ * $Header: /cvs/sw/linux-2.4.x/include/asm-mips/rtl865x/re865x.h,v 1.1 2007-08-29 05:29:48 gerg Exp $
  *
  * $Author: gerg $
  *
@@ -11,7 +11,7 @@
  *   re865x.h  -- ioctl symbol definitions
  *
  * $Log: re865x.h,v $
- * Revision 1.1  2007/08/29 05:29:48  gerg
+ * Revision 1.1  2007-08-29 05:29:48  gerg
  * #12420
  *
  * Rudimentary RealTek/865X support. Imported from the Realtek SDK.

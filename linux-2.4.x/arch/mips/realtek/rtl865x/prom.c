@@ -45,6 +45,9 @@ void __init prom_init(int argc, char **argv, unsigned long magic, int *prom_vec)
 	strcpy(arcs_cmdline, "root=/dev/mtdblock4");
 #endif
 #endif
+#ifdef CONFIG_CMDLINE_BOOL
+	strcpy(arcs_cmdline, CONFIG_CMDLINE);
+#endif
 	mips_machgroup = MACH_GROUP_PHILIPS;
 	mips_machtype = MACH_PHILIPS_NINO;
 

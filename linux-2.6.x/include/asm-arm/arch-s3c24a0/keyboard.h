@@ -1,7 +1,7 @@
 /*
  * keyboard.h
  *
- * $Id: keyboard.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: keyboard.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  */
 

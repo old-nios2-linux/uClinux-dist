@@ -13,7 +13,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Config.in.os2_4,v 1.1.2.1 2006/10/11 18:14:33 paul Exp $
+# RCSID $Id: Config.in.os2_4,v 1.1.2.1 2006-10-11 18:14:33 paul Exp $
 
 comment 'IPsec options (Openswan)'
 
@@ -50,7 +50,7 @@ bool '   IPsec Debugging Option' CONFIG_KLIPS_DEBUG
 #
 #
 # $Log: Config.in.os2_4,v $
-# Revision 1.1.2.1  2006/10/11 18:14:33  paul
+# Revision 1.1.2.1  2006-10-11 18:14:33  paul
 # Add JuanJo Ciarlante's ESP_NULL patches for KLIPS, but leave it disabled
 # per default.
 #

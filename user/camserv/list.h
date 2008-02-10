@@ -13,7 +13,7 @@
  * The copyright extends to translations of this work into other languages,
  * including machine languages. 
  *
- * $Id: list.h,v 1.1 2005/01/07 01:32:37 damion Exp $
+ * $Id: list.h,v 1.1 2005-01-07 01:32:37 damion Exp $
  * $Name:  $
  */
 

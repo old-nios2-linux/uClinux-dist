@@ -1,7 +1,7 @@
 /*
  *	i82596 ethernet controller bits and structures (little endian)
  *
- *	$Id: dgrs_i82596.h,v 1.1.1.1 1999/11/22 03:47:11 christ Exp $
+ *	$Id: dgrs_i82596.h,v 1.1.1.1 1999-11-22 03:47:11 christ Exp $
  */
 
 /************************************************************************/

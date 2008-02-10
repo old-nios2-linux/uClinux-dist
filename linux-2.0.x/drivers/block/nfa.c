@@ -1,4 +1,4 @@
-/*  $Id: nfa.c,v 1.2 2001/05/30 05:24:54 gerg Exp $
+/*  $Id: nfa.c,v 1.2 2001-05-30 05:24:54 gerg Exp $
  *
  *  Copyright (C) 2000 Jeffrey L. Smith (flexiblepenguin@hotmail.com)
  *

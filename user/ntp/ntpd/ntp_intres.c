@@ -15,6 +15,11 @@
  * might go about autoconfiguring an NTP distribution network.
  *
  */
+ /*
+ * For special situations define the FORCE_DNSRETRY Macro
+ * to force retries even if it fails the lookup.
+ * Use with extreme caution since it will then retry forever.
+ */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -30,7 +35,6 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <netdb.h>
 #include <signal.h>
 
 /**/
@@ -40,6 +44,9 @@
 #ifdef HAVE_SYS_PARAM_H
 # include <sys/param.h>		/* MAXHOSTNAMELEN (often) */
 #endif
+
+#include <isc/net.h>
+#include <isc/result.h>
 
 #define	STREQ(a, b)	(*(a) == *(b) && strcmp((a), (b)) == 0)
 
@@ -168,6 +175,21 @@ struct ntp_res_c_pkt {		/* Control packet: */
 };
 
 
+static void	resolver_exit P((int));
+
+/*
+ * Call here instead of just exiting
+ */
+
+static void resolver_exit (int code)
+{
+#ifdef SYS_WINNT
+	ExitThread (code);	/* Just to kill the thread not the process */
+#else
+	exit (code);		/* fill the forked process */
+#endif
+}
+
 /*
  * ntp_res_recv: Process an answer from the resolver
  */
@@ -211,7 +233,7 @@ ntp_intres(void)
 		if (!authistrusted(req_keyid)) {
 			msyslog(LOG_ERR, "invalid request keyid %08x",
 			    req_keyid );
-			exit(1);
+			resolver_exit(1);
 		}
 	}
 
@@ -223,12 +245,14 @@ ntp_intres(void)
 	if ((in = fopen(req_file, "r")) == NULL) {
 		msyslog(LOG_ERR, "can't open configuration file %s: %m",
 			req_file);
-		exit(1);
+		resolver_exit(1);
 	}
 	readconf(in, req_file);
 	(void) fclose(in);
 
+#ifdef DEBUG
 	if (!debug )
+#endif
 		(void) unlink(req_file);
 
 	/*
@@ -242,11 +266,7 @@ ntp_intres(void)
 	 */
 	doconfigure(1);
 	if (confentries == NULL) {
-#if defined SYS_WINNT
-		ExitThread(0);	/* Don't want to kill whole NT process */
-#else
-		exit(0);	/* done that quick */
-#endif
+		resolver_exit(0);
 	}
 	
 	/*
@@ -262,7 +282,7 @@ ntp_intres(void)
 
 	for (;;) {
 		if (confentries == NULL)
-		    exit(0);
+		    resolver_exit(0);
 
 		checkparent();
 
@@ -284,7 +304,7 @@ ntp_intres(void)
 				msyslog(LOG_INFO, "config_timer: 0->%d", config_timer);
 #endif
 			doconfigure(0);
-			continue;
+			continue; 
 		}
 #ifndef SYS_WINNT
 		/*
@@ -345,7 +365,7 @@ checkparent(void)
 	 */
 	if (getppid() == 1) {
 		msyslog(LOG_INFO, "parent died before we finished, exiting");
-		exit(0);
+		resolver_exit(0);
 	}
 #endif /* SYS_WINNT && SYS_VXWORKS*/
 }
@@ -412,7 +432,9 @@ addentry(
 	ce = (struct conf_entry *)emalloc(sizeof(struct conf_entry));
 	ce->ce_name = cp;
 	ce->ce_peeraddr = 0;
+#ifdef ISC_PLATFORM_HAVEIPV6
 	ce->ce_peeraddr6 = in6addr_any;
+#endif
 	ANYSOCK(&ce->peer_store);
 	ce->ce_hmode = (u_char)mode;
 	ce->ce_version = (u_char)version;
@@ -451,17 +473,18 @@ findhostaddr(
 	)
 {
 	struct addrinfo *addr;
+	struct addrinfo hints;
 	int error;
 
 	checkparent();		/* make sure our guy is still running */
 
-	if (entry->ce_name != NULL && SOCKNUL(&entry->peer_store)) {
+	if (entry->ce_name != NULL && !SOCKNUL(&entry->peer_store)) {
 		/* HMS: Squawk? */
 		msyslog(LOG_ERR, "findhostaddr: both ce_name and ce_peeraddr are defined...");
 		return 1;
 	}
 
-        if (entry->ce_name == NULL && !SOCKNUL(&entry->peer_store)) {
+        if (entry->ce_name == NULL && SOCKNUL(&entry->peer_store)) {
 		msyslog(LOG_ERR, "findhostaddr: both ce_name and ce_peeraddr are undefined!");
 		return 0;
 	}
@@ -472,7 +495,16 @@ findhostaddr(
 			msyslog(LOG_INFO, "findhostaddr: Resolving <%s>",
 				entry->ce_name);
 #endif /* DEBUG */
-		error = getaddrinfo(entry->ce_name, NULL, NULL, &addr);
+
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_UNSPEC;
+		/*
+		 * If the IPv6 stack is not available look only for IPv4 addresses
+		 */
+		if (isc_net_probeipv6() != ISC_R_SUCCESS)
+			hints.ai_family = AF_INET;
+
+		error = getaddrinfo(entry->ce_name, NULL, &hints, &addr);
 		if (error == 0) {
 			entry->peer_store = *((struct sockaddr_storage*)(addr->ai_addr));
 			if (entry->peer_store.ss_family == AF_INET) {
@@ -484,6 +516,10 @@ findhostaddr(
 				    GET_INADDR6(entry->peer_store);
 				entry->ce_config.v6_flag = 1;
 			}
+		}
+		else if (error == EAI_NONAME)
+		{
+			msyslog(LOG_ERR, "host name not found: %s", entry->ce_name);
 		}
 	} else {
 #ifdef DEBUG
@@ -497,15 +533,37 @@ findhostaddr(
 				   (char *)&entry->ce_name, MAXHOSTNAMELEN,
 				   NULL, 0, 0);
 	}
+#ifdef DEBUG
+	if (debug > 2)
+		printf("intres: got error status of: %d\n", error);
+#endif
 
+	/*
+	 * If the resolver failed, see if the failure is
+	 * temporary. If so, return success.
+	 */
 	if (error != 0) {
-		/*
-		 * If the resolver is in use, see if the failure is
-		 * temporary.  If so, return success.
-		 */
-		if (h_errno == TRY_AGAIN)
-		    return (1);
-		return (0);
+		switch (error)
+		{
+		case EAI_AGAIN:
+			return (1);
+		case EAI_NONAME:
+#ifndef FORCE_DNSRETRY
+			return (0);
+#else
+			return (1);
+#endif
+#if defined(EAI_NODATA) && (EAI_NODATA != EAI_NONAME)
+		case EAI_NODATA:
+#endif
+		case EAI_FAIL:
+#ifdef EAI_SYSTEM
+		case EAI_SYSTEM:
+			return (1);
+#endif
+		default:
+			return (0);
+		}
 	}
 
 	if (entry->ce_name) {
@@ -532,22 +590,28 @@ openntp(void)
 {
 	struct addrinfo hints;
 	struct addrinfo *addrResult;
+	const char *localhost = "127.0.0.1";	/* Use IPv6 loopback */
 
-	if (sockfd >= 0)
+	if (sockfd != INVALID_SOCKET)
 	    return;
 
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
+
+	/*
+	 * For now only bother with IPv4
+	 */
+	hints.ai_family = AF_INET;
+
 	hints.ai_socktype = SOCK_DGRAM;
-	if (getaddrinfo(NULL, "ntp", &hints, &addrResult)!=0) {
+	if (getaddrinfo(localhost, "ntp", &hints, &addrResult)!=0) {
 		msyslog(LOG_ERR, "getaddrinfo failed: %m");
-		exit(1);
+		resolver_exit(1);
 	}
 	sockfd = socket(addrResult->ai_family, addrResult->ai_socktype, 0);
 
 	if (sockfd == -1) {
 		msyslog(LOG_ERR, "socket() failed: %m");
-		exit(1);
+		resolver_exit(1);
 	}
 
 	/*
@@ -557,13 +621,13 @@ openntp(void)
 #if defined(O_NONBLOCK)
 	if (fcntl(sockfd, F_SETFL, O_NONBLOCK) == -1) {
 		msyslog(LOG_ERR, "fcntl(O_NONBLOCK) failed: %m");
-		exit(1);
+		resolver_exit(1);
 	}
 #else
 #if defined(FNDELAY)
 	if (fcntl(sockfd, F_SETFL, FNDELAY) == -1) {
 		msyslog(LOG_ERR, "fcntl(FNDELAY) failed: %m");
-		exit(1);
+		resolver_exit(1);
 	}
 #else
 # include "Bletch: NEED NON BLOCKING IO"
@@ -574,13 +638,13 @@ openntp(void)
 		int on = 1;
 		if (ioctlsocket(sockfd,FIONBIO,(u_long *) &on) == SOCKET_ERROR) {
 			msyslog(LOG_ERR, "ioctlsocket(FIONBIO) fails: %m");
-			exit(1); /* Windows NT - set socket in non-blocking mode */
+			resolver_exit(1); /* Windows NT - set socket in non-blocking mode */
 		}
 	}
 #endif /* SYS_WINNT */
 	if (connect(sockfd, addrResult->ai_addr, addrResult->ai_addrlen) == -1) {
 		msyslog(LOG_ERR, "openntp: connect() failed: %m");
-		exit(1);
+		resolver_exit(1);
 	}
 	freeaddrinfo(addrResult);
 }
@@ -608,7 +672,7 @@ request(
 
 	checkparent();		/* make sure our guy is still running */
 
-	if (sockfd < 0)
+	if (sockfd == INVALID_SOCKET)
 	    openntp();
 	
 #ifdef SYS_WINNT
@@ -644,7 +708,7 @@ request(
 	/* Make sure mbz_itemsize <= sizeof reqpkt.data */
 	if (sizeof(struct conf_peer) > sizeof (reqpkt.data)) {
 		msyslog(LOG_ERR, "Bletch: conf_peer is too big for reqpkt.data!");
-		exit(1);
+		resolver_exit(1);
 	}
 	memmove(reqpkt.data, (char *)conf, sizeof(struct conf_peer));
 	reqpkt.keyid = htonl(req_keyid);
@@ -679,7 +743,7 @@ request(
 	overlap.Offset = overlap.OffsetHigh = (DWORD)0;
 	overlap.hEvent = hReadWriteEvent;
 	ret = WriteFile((HANDLE)sockfd, (char *)&reqpkt, REQ_LEN_NOMAC + n,
-			(LPDWORD)&NumberOfBytesWritten, (LPOVERLAPPED)&overlap);
+			NULL, (LPOVERLAPPED)&overlap);
 	if ((ret == FALSE) && (GetLastError() != ERROR_IO_PENDING)) {
 		msyslog(LOG_ERR, "send to NTP server failed: %m");
 		return 0;
@@ -688,6 +752,11 @@ request(
 	if ((dwWait == WAIT_FAILED) || (dwWait == WAIT_TIMEOUT)) {
 		if (dwWait == WAIT_FAILED)
 		    msyslog(LOG_ERR, "WaitForSingleObject failed: %m");
+		return 0;
+	}
+	if (!GetOverlappedResult((HANDLE)sockfd, (LPOVERLAPPED)&overlap,
+				(LPDWORD)&NumberOfBytesWritten, FALSE)) {
+		msyslog(LOG_ERR, "GetOverlappedResult for WriteFile fails: %m");
 		return 0;
 	}
 #endif /* SYS_WINNT */
@@ -719,8 +788,10 @@ request(
 		}
 		else if (n == 0)
 		{
+#ifdef DEBUG
 			if (debug)
 			    msyslog(LOG_INFO, "select() returned 0.");
+#endif
 			return 0;
 		}
 
@@ -735,7 +806,7 @@ request(
 		}
 #else /* Overlapped I/O used on non-blocking sockets on Windows NT */
 		ret = ReadFile((HANDLE)sockfd, (char *)&reqpkt, (DWORD)REQ_LEN_MAC,
-			       (LPDWORD)&NumberOfBytesRead, (LPOVERLAPPED)&overlap);
+			       NULL, (LPOVERLAPPED)&overlap);
 		if ((ret == FALSE) && (GetLastError() != ERROR_IO_PENDING)) {
 			msyslog(LOG_ERR, "ReadFile() fails: %m");
 			return 0;
@@ -743,10 +814,15 @@ request(
 		dwWait = WaitForSingleObject(hReadWriteEvent, (DWORD) TIMEOUT_SEC * 1000);
 		if ((dwWait == WAIT_FAILED) || (dwWait == WAIT_TIMEOUT)) {
 			if (dwWait == WAIT_FAILED) {
-				msyslog(LOG_ERR, "WaitForSingleObject fails: %m");
+				msyslog(LOG_ERR, "WaitForSingleObject for ReadFile fails: %m");
 				return 0;
 			}
 			continue;
+		}
+		if (!GetOverlappedResult((HANDLE)sockfd, (LPOVERLAPPED)&overlap,
+					(LPDWORD)&NumberOfBytesRead, FALSE)) {
+			msyslog(LOG_ERR, "GetOverlappedResult fails: %m");
+			return 0;
 		}
 		n = NumberOfBytesRead;
 #endif /* SYS_WINNT */
@@ -942,7 +1018,7 @@ readconf(
 				msyslog(LOG_ERR,
 					"tokenizing error in file `%s', quitting",
 					name);
-				exit(1);
+				resolver_exit(1);
 			}
 		}
 
@@ -951,7 +1027,7 @@ readconf(
 				msyslog(LOG_ERR,
 					"format error for integer token `%s', file `%s', quitting",
 					token[i], name);
-				exit(1);
+				resolver_exit(1);
 			}
 		}
 
@@ -960,35 +1036,35 @@ readconf(
 		    intval[TOK_HMODE] != MODE_BROADCAST) {
 			msyslog(LOG_ERR, "invalid mode (%ld) in file %s",
 				intval[TOK_HMODE], name);
-			exit(1);
+			resolver_exit(1);
 		}
 
 		if (intval[TOK_VERSION] > NTP_VERSION ||
 		    intval[TOK_VERSION] < NTP_OLDVERSION) {
 			msyslog(LOG_ERR, "invalid version (%ld) in file %s",
 				intval[TOK_VERSION], name);
-			exit(1);
+			resolver_exit(1);
 		}
 		if (intval[TOK_MINPOLL] < NTP_MINPOLL ||
 		    intval[TOK_MINPOLL] > NTP_MAXPOLL) {
 			msyslog(LOG_ERR, "invalid MINPOLL value (%ld) in file %s",
 				intval[TOK_MINPOLL], name);
-			exit(1);
+			resolver_exit(1);
 		}
 
 		if (intval[TOK_MAXPOLL] < NTP_MINPOLL ||
 		    intval[TOK_MAXPOLL] > NTP_MAXPOLL) {
 			msyslog(LOG_ERR, "invalid MAXPOLL value (%ld) in file %s",
 				intval[TOK_MAXPOLL], name);
-			exit(1);
+			resolver_exit(1);
 		}
 
 		if ((intval[TOK_FLAGS] & ~(FLAG_AUTHENABLE | FLAG_PREFER |
-		    FLAG_NOSELECT | FLAG_BURST | FLAG_IBURST | FLAG_SKEY))
+		    FLAG_NOSELECT | FLAG_BURST | FLAG_IBURST | FLAG_SKEY | FLAG_DYNAMIC))
 		    != 0) {
 			msyslog(LOG_ERR, "invalid flags (%ld) in file %s",
 				intval[TOK_FLAGS], name);
-			exit(1);
+			resolver_exit(1);
 		}
 
 		flags = 0;
@@ -1004,6 +1080,8 @@ readconf(
 		    flags |= CONF_FLAG_IBURST;
 		if (intval[TOK_FLAGS] & FLAG_SKEY)
 		    flags |= CONF_FLAG_SKEY;
+		if (intval[TOK_FLAGS] & FLAG_DYNAMIC)
+		    flags |= CONF_FLAG_DYNAMIC;
 
 		/*
 		 * This is as good as we can check it.  Add it in.
@@ -1035,7 +1113,7 @@ doconfigure(
 			    "doconfigure: <%s> has peeraddr %s",
 			    ce->ce_name, stoa(&ce->peer_store));
 #endif
-		if (dores && !SOCKNUL(&(ce->peer_store))) {
+		if (dores && SOCKNUL(&(ce->peer_store))) {
 			if (!findhostaddr(ce)) {
 				msyslog(LOG_ERR,
 					"couldn't resolve `%s', giving up on it",

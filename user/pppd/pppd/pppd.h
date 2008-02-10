@@ -39,7 +39,7 @@
  * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: pppd.h,v 1.16 2007/06/08 04:02:38 gerg Exp $
+ * $Id: pppd.h,v 1.17 2007-11-23 06:12:46 asallawa Exp $
  */
 
 /*
@@ -297,6 +297,8 @@ extern char	our_name[MAXNAMELEN];/* Our name for authentication purposes */
 extern char	remote_name[MAXNAMELEN]; /* Peer's name for authentication */
 extern bool	explicit_remote;/* remote_name specified with remotename opt */
 extern bool	demand;		/* Do dial-on-demand */
+extern char	*ip_up;		/* user defined ip-up script */
+extern char	*ip_down;	/* user defined ip-down script */
 extern char	*ipparam;	/* Extra parameter for ip up/down scripts */
 extern bool	cryptpap;	/* Others' PAP passwords are encrypted */
 extern int	idle_time_limit;/* Shut down link if idle for this long */
@@ -318,6 +320,10 @@ extern char	*bundle_name;	/* bundle name for multilink */
 extern bool	dump_options;	/* print out option values */
 extern bool	dryrun;		/* check everything, print options, exit */
 extern int	child_wait;	/* # seconds to wait for children at end */
+
+extern u_int32_t	metric;	/* the metric to set the host route to */
+extern u_int32_t	drmetric;	/* the default route metric to set */
+extern char	pid_file[MAXNAMELEN];	/* name of our pid file */
 
 #ifdef MAXOCTETS
 extern unsigned int maxoctets;	     /* Maximum octetes per session (in bytes) */
@@ -642,10 +648,11 @@ int  sif6addr __P((int, eui64_t, eui64_t));
 int  cif6addr __P((int, eui64_t, eui64_t));
 				/* Remove an IPv6 address from i/f */
 #endif
-int  sifdefaultroute __P((int, u_int32_t, u_int32_t));
+int  sifdefaultroute __P((int, u_int32_t, u_int32_t, u_int32_t));
 				/* Create default route through i/f */
 int  cifdefaultroute __P((int, u_int32_t, u_int32_t));
 				/* Delete default route through i/f */
+int  rtmetricfixup __P((int, u_int32_t, u_int32_t));
 int  sifproxyarp __P((int, u_int32_t));
 				/* Add proxy ARP entry for peer */
 int  cifproxyarp __P((int, u_int32_t));

@@ -1,4 +1,4 @@
-/* $Id: a.out.h,v 1.1 2003/02/26 04:13:06 gerg Exp $ */
+/* $Id: a.out.h,v 1.1 2003-02-26 04:13:06 gerg Exp $ */
 #ifndef __SPARC_A_OUT_H__
 #define __SPARC_A_OUT_H__
 

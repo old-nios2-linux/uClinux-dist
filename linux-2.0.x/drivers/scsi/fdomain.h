@@ -4,7 +4,7 @@
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.h,v 1.1.1.1 1999/11/22 03:47:23 christ Exp $
+ * $Id: fdomain.h,v 1.1.1.1 1999-11-22 03:47:23 christ Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the

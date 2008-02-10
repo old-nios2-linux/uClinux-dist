@@ -1,6 +1,6 @@
 /* --------------------------------------------------------------------------
  * lua language specific functions
- * Copyright (c) 2003-2006   Nathan Angelacos (nangel@users.sourceforge.net)
+ * Copyright (c) 2003-2007   Nathan Angelacos (nangel@users.sourceforge.net)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2,
@@ -33,170 +33,123 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
 #include "common.h"
 #include "h_error.h"
 #include "h_lua.h"
 #include "h_script.h"
 #include "haserl.h"
 
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-
-lua_State *lua_vm = NULL;
-extern char *haserl_lualib;
+extern lua_State *lua_vm;
 
 /* attempts to open a file, tokenize and then process it as a haserl script */
-static int h_lua_loadfile(lua_State * L)
+int
+h_lua_loadfile (lua_State * L)
 {
-    script_t *scriptchain;
-    token_t *tokenchain;
-    buffer_t script_text;
-    int status;
+  script_t *scriptchain;
+  token_t *tokenchain;
+  buffer_t script_text;
+  int status;
 
-    /* get the filename */
-    const char *filename = luaL_checkstring(L, 1);
-    
+  /* get the filename */
+  const char *filename = luaL_checkstring (L, 1);
 
-    scriptchain = load_script((char *) filename, NULL);
-    tokenchain = build_token_list(scriptchain, NULL);
-    preprocess_token_list(tokenchain);
-    process_token_list(&script_text, tokenchain);
-    free_token_list(tokenchain);
-    free_script_list(scriptchain);
 
-    /* script_text has the include file */
-    status = luaL_loadbuffer(L, (char *) script_text.data, 
-	script_text.ptr - script_text.data, filename);
-    buffer_destroy(&script_text);
-    if (status) {
-	lua_error (L);
-	}
-    return (1); /* we return one value, the buffer, as a function */
-}
+  scriptchain = load_script ((char *) filename, NULL);
+  tokenchain = build_token_list (scriptchain, NULL);
+  preprocess_token_list (tokenchain);
+  process_token_list (&script_text, tokenchain);
+  free_token_list (tokenchain);
+  free_script_list (scriptchain);
 
-void lua_putenv(char *str)
-{
-    char *value;
-    value = index(str, '=');
-    if (value) {
-	*value = (char) NULL;
-	value++;
-    } else {
-	value = str + strlen(str);
+  /* script_text has the include file */
+  status = luaL_loadbuffer (L, (char *) script_text.data,
+			    script_text.ptr - script_text.data, filename);
+  buffer_destroy (&script_text);
+  if (status)
+    {
+      lua_error (L);
     }
-
-
-    lua_getglobal(lua_vm, "haserl");
-    lua_pushstring(lua_vm, "myputenv");
-    lua_gettable(lua_vm, -2);
-    lua_pushstring(lua_vm, str);
-    lua_pushstring(lua_vm, value);
-    lua_call(lua_vm, 2, 0);
-    return;
+  return (1);			/* we return one value, the buffer, as a function */
 }
 
-void lua_destroy(void)
+void
+lua_exec (buffer_t * buf, char *str)
 {
-    /* close the lua instance */
-    lua_close(lua_vm);
+  buffer_add (buf, str, strlen (str));
 }
 
-
-void lua_exec(buffer_t * buf, char *str)
+void
+lua_doscript (buffer_t * script, char *name)
 {
-    buffer_add(buf, str, strlen(str));
-}
+  int status;
+  /* force the string to be null terminated */
 
-void lua_doscript(buffer_t * script, char *name)
-{
-    int status;
-    /* force the string to be null terminated */
+  buffer_add (script, "\0", 1);
 
-    buffer_add(script, "\0", 1);
+  status = luaL_loadbuffer (lua_vm, (char *) script->data,
+			    strlen ((char *) script->data), name) ||
+    lua_pcall (lua_vm, 0, LUA_MULTRET, 0);
 
-    status = luaL_loadbuffer ( lua_vm, (char *) script->data,
-	strlen((char *)script->data), name) ||
-    		 lua_pcall ( lua_vm, 0, LUA_MULTRET, 0);
-
-    if (status && !lua_isnil(lua_vm, -1)) {
-	const char *msg = lua_tostring(lua_vm, -1);
-	if (msg == NULL)
-	    msg = "(error object is not a string)";
-	die_with_message(NULL, NULL, msg);
+  if (status && !lua_isnil (lua_vm, -1))
+    {
+      const char *msg = lua_tostring (lua_vm, -1);
+      if (msg == NULL)
+	msg = "(error object is not a string)";
+      die_with_message (NULL, NULL, msg);
     }
 }
 
 
 /* Run the echo command in a subshell */
-void lua_echo(buffer_t * buf, char *str, size_t len)
+void
+lua_echo (buffer_t * buf, char *str, size_t len)
 {
-    static char echo_start[] = " io.write ";
-    char  quote[200] = "]=]";  /* 197 nested comments is a problem */
-    
-    if (len == 0)
-	return;
+  static char echo_start[] = " io.write ";
+  char quote[200] = "]=]";	/* 197 nested comments is a problem */
 
-    /* figure out if the string uses ]] ]=] ]==] etc in it */ 
-    while (( strstr (str, quote)) && (strlen(quote) < 198)) {
-    	memmove (quote + strlen(quote) - 1, quote + strlen(quote) - 2, 3);
-    }
-    
-    /* As of 5.1, nested comments are depreciated... sigh */
-    quote[0] = '[';
-    quote[strlen(quote)-1] = quote[0];
-    while (( strstr (str, quote)) && (strlen(quote) < 198)) {
-    	memmove (quote + strlen(quote) - 1, quote + strlen(quote) - 2, 3);
+  if (len == 0)
+    return;
+
+  /* figure out if the string uses ]] ]=] ]==] etc in it */
+  while ((strstr (str, quote)) && (strlen (quote) < 198))
+    {
+      memmove (quote + strlen (quote) - 1, quote + strlen (quote) - 2, 3);
     }
 
-    buffer_add (buf, echo_start, strlen(echo_start));
-    buffer_add (buf, quote, strlen(quote));
-    buffer_add(buf, str, len);
-    quote[0] = ']';
-    quote[strlen(quote)-1] = quote[0];
-    buffer_add (buf, quote, strlen(quote));
-    buffer_add (buf, "\n", 1);
-	
+  /* As of 5.1, nested comments are depreciated... sigh */
+  quote[0] = '[';
+  quote[strlen (quote) - 1] = quote[0];
+  while ((strstr (str, quote)) && (strlen (quote) < 198))
+    {
+      memmove (quote + strlen (quote) - 1, quote + strlen (quote) - 2, 3);
+    }
+
+  buffer_add (buf, echo_start, strlen (echo_start));
+  buffer_add (buf, quote, strlen (quote));
+  buffer_add (buf, str, len);
+  quote[0] = ']';
+  quote[strlen (quote) - 1] = quote[0];
+  buffer_add (buf, quote, strlen (quote));
+  buffer_add (buf, "\n", 1);
+
 }
 
 
 /* do an evaluation */
-void lua_eval(buffer_t * buf, char *str, size_t len)
+void
+lua_eval (buffer_t * buf, char *str, size_t len)
 {
-    static char start[] = " io.write(tostring(";
-    static char end[] = "))\n";
-    if (len == 0)
-	return;
+  static char start[] = " io.write(tostring(";
+  static char end[] = "))\n";
+  if (len == 0)
+    return;
 
-    buffer_add(buf, start, strlen(start));
-    buffer_add(buf, str, len);
-    buffer_add(buf, end, strlen(end));
+  buffer_add (buf, start, strlen (start));
+  buffer_add (buf, str, len);
+  buffer_add (buf, end, strlen (end));
 }
 
-
-void lua_setup(char *shell, list_t * env)
-{
-    /*  create a lua instance */
-    lua_vm = luaL_newstate();
-    luaL_openlibs(lua_vm);
-
-    /* and load our haserl library */
-    if (luaL_dostring(lua_vm, haserl_lualib)) {
-	die_with_message(NULL, NULL,
-			 "Error passing the lua library to the lua vm");
-    }
-
-    /* and put the vars in the vm */
-    while (env) {
-	lua_putenv(env->buf);
-	env = env->next;
-    }
-
-
-    /* register our open function in the haserl table */
-    lua_getglobal(lua_vm, "haserl");
-    lua_pushstring(lua_vm, "loadfile");
-    lua_pushcfunction(lua_vm, h_lua_loadfile);
-    lua_settable(lua_vm, -3);
-
-}

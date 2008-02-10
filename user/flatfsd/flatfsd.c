@@ -22,9 +22,12 @@
 #include <string.h>
 #include <syslog.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/un.h>
+#include <sys/wait.h>
 
 #include <linux/autoconf.h>
 #include <config/autoconf.h>
@@ -41,7 +44,7 @@
  * By default create version 3 flat fs files (compressed/duplicated).
  * Allow it to be overriden on the command line with args though.
  */
-int fsver = 3;
+static int fsver = 3;
 
 /*****************************************************************************/
 
@@ -52,15 +55,16 @@ int fsver = 3;
 
 /*****************************************************************************/
 
-/*
- * Globals for file and byte count.
- * This is a kind of ugly way to do it, but we are using LCP
- * (Least Change Principle)
- */
-int numfiles;
-int numbytes;
-int numdropped;
-int numversion;
+#define ACTION_NONE 0
+#define ACTION_EXIT    (1<<1)
+#define ACTION_READ    (1<<2)
+#define ACTION_WRITE   (1<<3)
+#define ACTION_RESET   (1<<4)
+#define ACTION_REBOOT  (1<<5)
+#define ACTION_HALT    (1<<6)
+#define ACTION_BUTTON  (1<<7)
+
+static int action = 0;
 
 /*****************************************************************************/
 
@@ -68,8 +72,6 @@ int numversion;
  * The code to do Reset/Erase button menus.
  */
 static int current_cmd = 0;
-static void no_action(void) { }
-static void reset_config_fs(void);
 
 #define MAX_LED_PATTERN 4
 #define	ACTION_TIMEOUT 5		/* timeout before action in seconds */
@@ -79,15 +81,15 @@ static void reset_config_fs(void);
 #endif
 
 static struct {
-	void		(*action)(void);
+	unsigned int	action;
 	unsigned long	led;
 	unsigned long	timeout;
 } cmd_list[] = {
-	{ no_action, 0, 0 },
-	{ no_action, 0, 2 },
-	{ reset_config_fs, LEDMAN_RESET, 0 },
-	{ NULL,	0, 0 }
+	{ ACTION_NONE, 0, 0 },
+	{ ACTION_NONE, 0, 2 },
+	{ ACTION_RESET, LEDMAN_RESET, 0 },
 };
+#define cmd_num (sizeof(cmd_list)/sizeof(cmd_list[0]))
 
 /*****************************************************************************/
 
@@ -95,24 +97,10 @@ static int recv_hup = 0;	/* SIGHUP = reboot device */
 static int recv_usr1 = 0;	/* SIGUSR1 = write config to flash */
 static int recv_usr2 = 0;	/* SIGUSR2 = erase flash and reboot */
 static int recv_pwr = 0;	/* SIGPWR = halt device */
+static int recv_chld = 0;	/* SIGPWR = halt device */
 static int exit_flatfsd = 0;  /* SIGINT, SIGTERM, SIGQUIT */
 static int nowrite = 0;
 static char *configdir = DSTDIR;
-
-static void block_sig(int blp)
-{
-	sigset_t sigs;
-
-	sigemptyset(&sigs);
-	sigaddset(&sigs, SIGUSR1);
-	sigaddset(&sigs, SIGUSR2);
-	sigaddset(&sigs, SIGHUP);
-	sigaddset(&sigs, SIGTERM);
-	sigaddset(&sigs, SIGINT);
-	sigaddset(&sigs, SIGQUIT);
-	sigaddset(&sigs, SIGPWR);
-	sigprocmask(blp?SIG_BLOCK:SIG_UNBLOCK, &sigs, NULL);
-}
 
 static void sigusr1(int signr)
 {
@@ -134,9 +122,121 @@ static void sigpwr(int signr)
 	recv_pwr = 1;
 }
 
+static void sigchld(int signr)
+{
+	recv_chld = 1;
+}
+
 static void sigexit(int signr)
 {
 	exit_flatfsd = 1;
+}
+
+/*****************************************************************************/
+
+#define PATH_FLATFSD_SOCKET "/var/tmp/flatfsd.cmd"
+
+static int createsocket(void)
+{
+	struct sockaddr_un addr;
+	int sockfd;
+
+	sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (sockfd < 0) {
+		syslog(LOG_ERR, "Failed to open socket: %m");
+		exit(1);
+	}
+
+	if (fcntl(sockfd, F_SETFD, FD_CLOEXEC) < 0)
+		syslog(LOG_ERR, "Failed to set socket FD_CLOEXEC: %m");
+
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, PATH_FLATFSD_SOCKET);
+	unlink(addr.sun_path);
+	if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		syslog(LOG_ERR, "Failed to bind socket: %m");
+		exit(1);
+	}
+
+	return sockfd;
+}
+
+static void readsocket(int sockfd)
+{
+	struct sockaddr_un addr;
+	socklen_t addrlen = sizeof(addr);
+	char buf[128];
+	int len;
+
+	len = recvfrom(sockfd, buf, sizeof(buf) - 1, 0,
+			(struct sockaddr *)&addr, &addrlen);
+	if (len < 0) {
+		syslog(LOG_ERR, "Failed to recv from socket: %m");
+		return;
+	}
+	if (len == 0 || len >= sizeof(buf)) {
+		syslog(LOG_ERR, "Failed to recv from socket, bad length %d",
+				len);
+		return;
+	}
+
+	buf[len] = 0;
+	if (strcmp(buf, "exit") == 0) {
+		action |= ACTION_EXIT;
+	}
+	else if (strcmp(buf, "write") == 0) {
+		action |= ACTION_WRITE;
+	}
+	else if (strcmp(buf, "reset") == 0) {
+		action |= ACTION_RESET;
+	}
+	else if (strcmp(buf, "reboot") == 0) {
+		action |= ACTION_REBOOT;
+	}
+	else if (strcmp(buf, "halt") == 0) {
+		action |= ACTION_HALT;
+	}
+	else {
+		syslog(LOG_ERR, "Unknown command: %s", buf);
+	}
+}
+
+static int writesocket(const char *cmd)
+{
+	struct sockaddr_un addr;
+	int sockfd;
+	int len;
+
+	sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (sockfd < 0) {
+		syslog(LOG_ERR, "Failed to open socket: %m");
+		exit(1);
+	}
+
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, PATH_FLATFSD_SOCKET);
+	len = strlen(cmd);
+	if (sendto(sockfd, cmd, len, 0,
+			(struct sockaddr *)&addr, sizeof(addr)) != len) {
+		close(sockfd);
+		syslog(LOG_ERR, "Failed to write socket: %m");
+		exit(1);
+	}
+
+	close(sockfd);
+	return 0;
+}
+
+/*****************************************************************************/
+
+static void check_config(void)
+{
+#ifdef USING_FLASH_FILESYSTEM
+	exit(0);
+#else
+	execlp("flatfs", "flatfs", "-c", NULL);
+	exit(1);
+#endif
 }
 
 /*****************************************************************************/
@@ -145,27 +245,108 @@ static void sigexit(int signr)
  * Save the filesystem to flash in flat format for retrieval later.
  */
 
-static void save_config_to_flash(void)
+static pid_t save_config_to_flash(void)
 {
-	if (!nowrite) {
-#if !defined(USING_FLASH_FILESYSTEM)
-		int	rc;
-#endif
-		block_sig(1);
+#ifdef USING_FLASH_FILESYSTEM
+	return 0;
+#else
+	struct stat st_buf;
+	char fsveropt[64];
+	pid_t pid;
 
-#ifdef LOGGING
-		system("/bin/logd writeconfig");
-#endif
-#if !defined(USING_FLASH_FILESYSTEM)
-		if ((rc = flat_savefs(fsver, configdir)) < 0)
-			syslog(LOG_ERR, "Failed to write flatfs (%d): %m", rc);
-#endif
-#ifdef LOGGING
-		system("/bin/logd write-done");
-		system("flatfsd -c");
-#endif
-		block_sig(0);
+	if (nowrite)
+		return 0;
+
+	if (stat(IGNORE_FLASH_WRITE_FILE, &st_buf) >= 0) {
+		syslog(LOG_INFO, "Not writing to flash because %s exists",
+			IGNORE_FLASH_WRITE_FILE);
+		return 0;
 	}
+
+	snprintf(fsveropt, sizeof(fsveropt), "-%d", fsver);
+	pid = vfork();
+	if (pid == 0) {
+		execlp("flatfs", "flatfs", "-s",
+				fsveropt, "-d", configdir, NULL);
+		_exit(1);
+	}
+	return pid;
+#endif
+}
+
+/*****************************************************************************/
+
+/*
+ * Read the filesystem from flash in flat format
+ */
+
+static int read_config_from_flash(void)
+{
+#ifdef USING_FLASH_FILESYSTEM
+	return 0;
+#else
+	char cmd[64];
+	int rc;
+
+	snprintf(cmd, sizeof(cmd), "flatfs -r -d %s", configdir);
+	rc = system(cmd);
+	if (rc < 0)
+		return rc;
+	else if (WIFEXITED(rc))
+		return WEXITSTATUS(rc);
+	else
+		return -1;
+#endif
+}
+
+/*****************************************************************************/
+
+static void maybewait(pid_t pid)
+{
+	int status;
+
+	if (pid > 0)
+		while (waitpid(pid, &status, 0) == -1 && errno == EINTR);
+}
+
+/*****************************************************************************/
+
+/*
+ * Initialise the filesystem, either from default (clobbercfg = 1)
+ * or from flash.
+ */
+
+static void init_config_fs(int clobbercfg)
+{
+	int rc = 0;
+
+	/* Read and validate the config */
+	if (clobbercfg) {
+		logd("newflatfs", "clobbered");
+	} else if (read_config_from_flash() != 0) {
+		/* flatfs has already logged the error */
+	} else if ((rc = flat_filecount(configdir)) <= 0) {
+		logd("newflatfs", "filecount=%d", rc);
+	} else if (flat_needinit()) {
+		logd("newflatfs", "needinit");
+	} else {
+		return;
+	}
+
+	/* Invalid config so reinitialise it */
+#ifdef CONFIG_USER_FLATFSD_EXTERNAL_INIT
+	syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), requesting new one...", rc);
+	flat_requestinit();
+#else
+	syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), creating new one...", rc);
+	flat_clean();
+	if ((rc = flat_new(DEFAULTDIR)) < 0) {
+		syslog(LOG_ERR, "Failed to create new flatfs, err=%d errno=%d",
+			rc, errno);
+		exit(1);
+	}
+	maybewait(save_config_to_flash());
+#endif
 }
 
 /*****************************************************************************/
@@ -174,16 +355,12 @@ static void save_config_to_flash(void)
  * Default the config filesystem.
  */
 
-static void reset_config_fs(void)
+static pid_t reset_config_fs(void)
 {
 	int rc;
 
-	block_sig(1);
-
 	printf("Resetting configuration\n");
-#ifdef LOGGING
-	system("/bin/logd resetconfig");
-#endif
+	logd("resetconfig", NULL);
 
 	/*
 	 * Don't actually clean out the filesystem.
@@ -193,15 +370,13 @@ static void reset_config_fs(void)
 		syslog(LOG_ERR, "Failed to prepare flatfs for reset (%d): %m", rc);
 		exit(1);
 	}
-	save_config_to_flash();
 
-	reboot_now();
-	block_sig(0);
+	return save_config_to_flash();
 }
 
 /*****************************************************************************/
 
-int creatpidfile(void)
+static int creatpidfile(void)
 {
 	FILE	*f;
 	pid_t	pid;
@@ -217,25 +392,6 @@ int creatpidfile(void)
 	return 0;
 }
 
-int readpidfile(void)
-{
-	FILE	*f;
-	pid_t	pid;
-	char	*pidfile = "/var/run/flatfsd.pid";
-	int	nread;
-
-	pid = getpid();
-	if ((f = fopen(pidfile, "r")) == NULL) {
-		syslog(LOG_ERR, "Failed to open %s: %m", pidfile);
-		return -1;
-	}
-	nread = fscanf(f, "%d\n", &pid);
-	fclose(f);
-	if (nread)
-		return pid;
-	return -1;
-}
-
 /*****************************************************************************/
 
 /*
@@ -243,7 +399,7 @@ int readpidfile(void)
  * interrupt from the reset switch it will send us a SIGUSR2.
  */
 
-int register_resetpid(void)
+static int register_resetpid(void)
 {
 #if defined(CONFIG_LEDMAN) && defined(LEDMAN_CMD_SIGNAL)
 	int	fd;
@@ -289,13 +445,10 @@ static void led_pause(void)
 		CHECK_FOR_SIG(250000);
 	}
 
-	block_sig(1);
 #if defined(CONFIG_LEDMAN) && defined(LEDMAN_CMD_SIGNAL)
 	ledman_cmd(LEDMAN_CMD_ON | LEDMAN_CMD_ALTBIT, LEDMAN_ALL); /* all leds on */
 #endif
-	(*cmd_list[current_cmd].action)();
-	block_sig(0);
-
+	action |= cmd_list[current_cmd].action;
 	current_cmd = 0;
 
 #if defined(CONFIG_LEDMAN) && defined(LEDMAN_CMD_SIGNAL)
@@ -307,7 +460,7 @@ skip_out:
 
 /*****************************************************************************/
 
-void usage(int rc)
+static void usage(int rc)
 {
 	printf("usage: flatfsd [-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn123]\n"
 		"\t-b safely reboot the system\n"
@@ -339,117 +492,48 @@ static void version(void)
 
 static int saveconfig(void)
 {
-	/* Query PID file, and send USR1 to the running daemon */
-	int pid = readpidfile();
-	if(strcmp(configdir, DSTDIR) == 0 && pid > 0 && kill(pid, SIGUSR1) == 0)
+	if (writesocket("write") == 0)
 		printf("Saving configuration\n");
-	else {
-		struct stat st_buf;
-		/* No daemon running or we are saving the config from an alternate
-		 * location, so save the config ourselves */
-		if (stat(IGNORE_FLASH_WRITE_FILE, &st_buf) < 0) {
-			save_config_to_flash();
-		} else {
-			syslog(LOG_INFO, "Not writing to flash because %s exists",
-				IGNORE_FLASH_WRITE_FILE);
-		}
-	}
+	else
+		maybewait(save_config_to_flash());
 	return 0;
 }
 
-/*****************************************************************************/
-
 static int reboot_system(void)
 {
-	/* Query PID file, and send USR1 to the running daemon */
-	int pid = readpidfile();
-	if (pid > 0) {
+	if (writesocket("reboot") == 0) {
 		printf("Rebooting system\n");
-		kill(pid, SIGHUP);
+		return 0;
 	} else {
 		reboot_now();
 		/*notreached*/
 		return 1;
 	}
-	return 0;
 }
 
 static int halt_system(void)
 {
-	/* Query PID file, and send USR1 to the running daemon */
-	int pid = readpidfile();
-	if (pid > 0) {
+	if (writesocket("halt") == 0) {
 		printf("Halting system\n");
-		kill(pid, SIGPWR);
+		return 0;
 	} else {
 		halt_now();
 		/*notreached*/
 		return 1;
 	}
-	return 0;
 }
-
-/*****************************************************************************/
-
-/*
- * Remote reset of config.
- *
- * We cannot use the button signals to do this as we need to send two and
- * they may be locked during a save (resulting on only one signal).
- * So we do the clean ourselves, which is safe, then send a save followed by
- * reboot signal to flatfsd, of which none will be lost.
- */
 
 static int reset_config(void)
 {
-	/* Query PID file, and send USR1 to the running daemon */
-	int rc, pid = readpidfile();
-	if (pid > 0) {
+	if (writesocket("reset") == 0) {
 		printf("Reset config\n");
-#ifdef LOGGING
-		system("/bin/logd resetconfig");
-#endif
-		/*
-		 * Don't actually clean out the filesystem.
-		 * That will be done when we reboot.
-		 */
-		if ((rc = flat_requestinit()) < 0) {
-			syslog(LOG_ERR, "Failed to prepare flatfs for reset (%d): %m", rc);
-			exit(1);
-		}
-		kill(pid, SIGUSR1);
-		sleep(1);
-		kill(pid, SIGHUP);
+		return 0;
 	} else {
-		reset_config_fs();
+		maybewait(reset_config_fs());
+		reboot_now();
+		/*notreached*/
+		return 1;
 	}
-	return 0;
-}
-
-/*****************************************************************************/
-
-static void log_caller(char *prefix)
-{
-#ifdef LOGGING
-	char	procname[64];
-	char	cmd[64];
-	pid_t	pp = getppid();
-	FILE	*fp;
-
-	procname[0] = '\0';
-
-	snprintf(cmd, sizeof(cmd), "/proc/%d/cmdline", pp);
-	if ((fp = fopen(cmd, "r"))) {
-		fgets(procname, sizeof(procname), fp);
-		fclose(fp);
-	}
-
-	if (procname[0] == '\0')
-		strcpy(procname, "???");
-
-	snprintf(cmd, sizeof(cmd), "%s %d: %s", prefix, (int) pp, procname);
-	system(cmd);
-#endif
 }
 
 /*****************************************************************************/
@@ -457,45 +541,20 @@ static void log_caller(char *prefix)
 int main(int argc, char *argv[])
 {
 	struct sigaction act;
-	int rc, rc1, rc2, readonly, clobbercfg, action = 0;
+	struct timeval timeout;
+	fd_set fds;
+	pid_t pid;
+	int sockfd;
+	int rc;
+	int fd;
 
-	clobbercfg = readonly = 0;
+	openlog("flatfsd", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
-	openlog("flatfsd", LOG_PERROR, LOG_DAEMON);
-
+	action = 0;
 	while ((rc = getopt(argc, argv, "vcd:nribwH123hs?")) != EOF) {
 		switch (rc) {
-		case 'w':
-			clobbercfg++;
-			readonly++;
-			break;
-
-		case 'r':
-			readonly++;
-			break;
 		case 'n':
 			nowrite = 1;
-			break;
-		case 'c':
-#if !defined(USING_FLASH_FILESYSTEM)
-			rc = flat_check();
-			if (rc < 0) {
-#ifdef LOGGING
-				char ecmd[64];
-				sprintf(ecmd, "/bin/logd chksum-bad %d", -rc);
-				system(ecmd);
-#endif
-				printf("Flash filesystem is invalid %d - check syslog\n", rc);
-			} else {
-				printf("Flash filesystem is valid\n");
-#ifdef LOGGING
-				system("/bin/logd chksum-good");
-#endif
-			}
-			exit(rc);
-#else
-			exit(0);
-#endif
 			break;
 		case 'd':
 			configdir = optarg;
@@ -509,6 +568,9 @@ int main(int argc, char *argv[])
 			version();
 			exit(0);
 			break;
+		case 'w':
+		case 'r':
+		case 'c':
 		case 's':
 		case 'b':
 		case 'H':
@@ -535,68 +597,42 @@ int main(int argc, char *argv[])
 	}
 
 	switch (action) {
+		case 'w':
+			init_config_fs(1);
+			exit(0);
+			break;
+		case 'r':
+			init_config_fs(0);
+			exit(0);
+			break;
+		case 'c':
+			check_config();
+			break;
 		case 's':
-			log_caller("/bin/logd flatfsd-s");
+			log_caller("flatfsd-s");
 			exit(saveconfig());
 			break;
 		case 'b':
-			log_caller("/bin/logd flatfsd-b");
+			log_caller("flatfsd-b");
 			exit(reboot_system());
 			break;
 		case 'H':
-			log_caller("/bin/logd flatfsd-h");
+			log_caller("flatfsd-h");
 			exit(halt_system());
 			break;
 		case 'i':
-			log_caller("/bin/logd flatfsd-i");
+			log_caller("flatfsd-i");
 			exit(reset_config());
 			break;
-	}	
-
-	if (readonly) {
-		rc1 = rc2 = 0;
-
-		if (clobbercfg ||
-#if !defined(USING_FLASH_FILESYSTEM)
-			((rc = flat_restorefs(configdir)) < 0) ||
-#endif
-			(rc1 = flat_filecount(configdir)) <= 0 ||
-			(rc2 = flat_needinit())
-		) {
-#ifdef LOGGING
-			char ecmd[64];
-
-			/* log the reason we have for killing the flatfs */
-			if (clobbercfg)
-				sprintf(ecmd, "/bin/logd newflatfs clobbered");
-			else if (rc < 0)
-				sprintf(ecmd, "/bin/logd newflatfs recreate=%d", rc);
-			else if (rc1 <= 0)
-				sprintf(ecmd, "/bin/logd newflatfs filecount=%d", rc1);
-			else if (rc2)
-				sprintf(ecmd, "/bin/logd newflatfs needinit");
-			else
-				sprintf(ecmd, "/bin/logd newflatfs unknown");
-
-			system(ecmd);
-#endif
-#ifdef CONFIG_USER_FLATFSD_EXTERNAL_INIT
-			syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), requesting new one...", rc);
-			flat_requestinit();
-#else
-			syslog(LOG_ERR, "Nonexistent or bad flatfs (%d), creating new one...", rc);
-			flat_clean();
-			if ((rc = flat_new(DEFAULTDIR)) < 0) {
-				syslog(LOG_ERR, "Failed to create new flatfs, err=%d errno=%d",
-					rc, errno);
-				exit(1);
-			}
-			save_config_to_flash();
-#endif
-		}
-		exit(0);
 	}
 
+	fd = open("/proc/self/oom_adj", O_WRONLY);
+	if (fd > 0) {
+		write(fd, "-17", 3);
+		close(fd);
+	}
+
+	sockfd = createsocket();
 	creatpidfile();
 
 	memset(&act, 0, sizeof(act));
@@ -619,6 +655,11 @@ int main(int argc, char *argv[])
 	act.sa_flags = SA_RESTART;
 	sigaction(SIGPWR, &act, NULL);
 
+	memset(&act, 0, sizeof(act));
+	act.sa_handler = sigchld;
+	act.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+	sigaction(SIGCHLD, &act, NULL);
+
 	/* Make sure we don't suddenly exit while we are writing */
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigexit;
@@ -632,59 +673,110 @@ int main(int argc, char *argv[])
 	/*
 	 * Spin forever, waiting for a signal to write...
 	 */
+	action = 0;
+	pid = 0;
 	for (;;) {
+		FD_ZERO(&fds);
+		FD_SET(sockfd, &fds);
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+
+		if (recv_chld) {
+			int status;
+
+			recv_chld = 0;
+			if (pid > 0 && waitpid(pid, &status, WNOHANG) > 0)
+				pid = 0;
+		}
+
+		/* Convert signals into actions.
+		 * Action modifications are not atomic, so not done in
+		 * signal handlers to avoid races. */
 		if (recv_usr1) {
-			struct stat st_buf;
 			recv_usr1 = 0;
-			/* Don't write out config if temp file  exists. */
-			if (stat(IGNORE_FLASH_WRITE_FILE, &st_buf) == 0) {
-				syslog(LOG_INFO, "Not writing to flash "
-					"because %s exists",
-					IGNORE_FLASH_WRITE_FILE);
-				continue;
-			}
-			save_config_to_flash();
-			continue;
+			action |= ACTION_WRITE;
 		}
 
 		if (recv_hup) {
+			recv_hup = 0;
+			action |= ACTION_REBOOT;
+		}
+
+		if (recv_pwr) {
+			recv_pwr = 0;
+			action |= ACTION_HALT;
+		}
+
+		if (recv_usr2) {
+			recv_usr2 = 0;
+			action |= ACTION_BUTTON;
+		}
+
+		if (exit_flatfsd) {
+			exit_flatfsd = 0;
+			action |= ACTION_EXIT;
+		}
+
+		if (pid > 0 || !action) {
+			/* timeout mitigates race with signals */
+			if (select(sockfd+1, &fds, NULL, NULL, &timeout) < 0) {
+				if (errno != EINTR)
+					syslog(LOG_ERR, "Select failed: %m");
+			} else if (FD_ISSET(sockfd, &fds)) {
+				readsocket(sockfd);
+			}
+		}
+
+		if (pid > 0)
+			continue;
+
+		if (action & ACTION_WRITE) {
+			action &= ~ACTION_WRITE;
+			pid = save_config_to_flash();
+			continue;
+		}
+
+		if (action & ACTION_RESET) {
+			action &= ~ACTION_RESET;
+			action |= ACTION_REBOOT;
+			pid = reset_config_fs();
+			continue;
+		}
+
+		if (action & ACTION_REBOOT) {
 			/*
 			 * Make sure we do the check above first so that we
 			 * commit to flash before rebooting.
 			 */
-			recv_hup = 0;
+			action &= ~ACTION_REBOOT;
 			reboot_now();
 			/*notreached*/
 			exit(1);
 		}
 
-		if (recv_pwr) {
+		if (action & ACTION_HALT) {
 			/*
 			 * Ditto for halt
 			 */
-			recv_pwr = 0;
+			action &= ~ACTION_HALT;
 			halt_now();
 			/*notreached*/
 			exit(1);
 		}
 
-		if (recv_usr2) {
-#ifdef LOGGING
-			system("/bin/logd button");
-#endif
-			recv_usr2 = 0;
+		if (action & ACTION_BUTTON) {
+			logd("button", NULL);
+			action &= ~ACTION_BUTTON;
 			current_cmd++;
-			if (cmd_list[current_cmd].action == NULL) /* wrap */
+			if (current_cmd >= cmd_num) /* wrap */
 				current_cmd = 0;
 		}
 
-		if (exit_flatfsd)
+		if (action & ACTION_EXIT)
 			break;
 
 		if (current_cmd)
 			led_pause();
-		else if (!recv_hup && !recv_usr1 && !recv_usr2 && !recv_pwr)
-			pause();
 	}
 
 	return 0;

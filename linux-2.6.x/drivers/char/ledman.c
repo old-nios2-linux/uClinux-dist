@@ -1221,7 +1221,7 @@ static void ledman_initarch(void)
 	ledman_ledp = (volatile unsigned long *) (mmcrp + 0xc30);
 
 	/* Setup extern "factory default" switch on IRQ12 */
-	if (request_irq(12, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	if (request_irq(12, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ12 for ERASE witch\n");
 	else
 		printk("LED: registered ERASE switch on IRQ12\n");
@@ -1681,7 +1681,7 @@ static void ledman_initarch(void)
 	/* Configure GPIO9 as interrupt input (ERASE switch) */
 	gpio_line_config(9, (IXP4XX_GPIO_IN | IXP4XX_GPIO_FALLING_EDGE));
 
-	if (request_irq(26, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	if (request_irq(26, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ26 for ERASE witch\n");
 	else
 		printk("LED: registered ERASE switch on IRQ26\n");
@@ -1961,7 +1961,7 @@ static void ledman_initarch(void)
 	gpio_line_set(13, 1);
 #endif
 
-	if (request_irq(ERASEIRQ, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	if (request_irq(ERASEIRQ, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ%d for ERASE witch\n", ERASEIRQ);
 	else
 		printk("LED: registered ERASE switch on IRQ%d\n", ERASEIRQ);
@@ -2083,7 +2083,7 @@ static void ledman_initarch(void)
 	/* Configure GPIO9 as interrupt input (ERASE switch) */
 	gpio_line_config(9, (IXP4XX_GPIO_IN | IXP4XX_GPIO_FALLING_EDGE));
 
-	if (request_irq(26, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	if (request_irq(26, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ26 for ERASE witch\n");
 	else
 		printk("LED: registered ERASE switch on IRQ26\n");
@@ -2099,7 +2099,65 @@ static void ledman_initarch(void)
 #include <linux/interrupt.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
+#include <asm/arch/gpio.h>
+#include <asm/arch/regs-gpio.h>
 
+#ifdef CONFIG_MACH_SG310
+/*
+ *	LED definitions for the SG310 platform. It has quite a few more LEDs
+ *	than the SG300/LITE3. Setup is supposed to be the same as the SG560.
+ */
+#define LED_D2  0x0002
+#define LED_D3  0x0004
+#define LED_D4  0x0008
+#define LED_D5  0x0010
+#define LED_D6  0x0020
+#define LED_D7  0x0040
+#define LEDMASK 0x007e
+
+static ledmap_t	lite3_std = {
+	[LEDMAN_ALL]       = LEDMASK,
+	[LEDMAN_HEARTBEAT] = LED_D2,
+	[LEDMAN_LAN1_RX]   = LED_D3,
+	[LEDMAN_LAN1_TX]   = LED_D3,
+	[LEDMAN_LAN2_RX]   = LED_D4,
+	[LEDMAN_LAN2_TX]   = LED_D4,
+	[LEDMAN_COM1_RX]   = LED_D5,
+	[LEDMAN_COM1_TX]   = LED_D5,
+	[LEDMAN_COM2_RX]   = LED_D5,
+	[LEDMAN_COM2_TX]   = LED_D5,
+	[LEDMAN_ONLINE]    = LED_D6,
+	[LEDMAN_VPN]       = LED_D7,
+	[LEDMAN_NVRAM_1]   = LED_D2 | LED_D3 | LED_D6 | LED_D7,
+	[LEDMAN_NVRAM_2]   = LED_D4 | LED_D5,
+	[LEDMAN_LAN1_DHCP] = LEDMASK,
+};
+
+static leddef_t	lite3_def = {
+	[LEDS_FLASH] = LED_D2,
+};
+
+#elif defined(CONFIG_MACH_PFW)
+/*
+ *	LED definitions for the PFW platform. Pretty simple, just 2 LEDs.
+ */
+#define LED_D1  0x0008
+#define LED_D2  0x0004
+#define LEDMASK 0x000c
+
+static ledmap_t	lite3_std = {
+	[LEDMAN_ALL]       = LEDMASK,
+	[LEDMAN_POWER]     = LED_D2,
+	[LEDMAN_HEARTBEAT] = LED_D1,
+	[LEDMAN_NVRAM_1]   = LED_D1,
+};
+
+static leddef_t	lite3_def = {
+	[LEDS_ON] = LED_D2,
+	[LEDS_FLASH] = LED_D1,
+};
+
+#else
 /*
  *	Here is the definition of the LED's on the SnapGear/LITE3 circuit board,
  *	as per the labels next to them. There is only 2 software programmable
@@ -2108,55 +2166,49 @@ static void ledman_initarch(void)
  *	LED - D1   D2
  *	HEX - 002  004
  */
+#define LED_D1  0x0002
+#define LED_D2  0x0004
+#define LEDMASK 0x0006
+
 static ledmap_t	lite3_std = {
-	0x006, 0x004, 0x002, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
-	0x000, 0x000, 0x000, 0x000, 0x000, 0x002, 0x000, 0x000, 0x000, 0x000,
-	0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
-	0x000, 0x000, 0x000, 0x000
+	[LEDMAN_ALL]       = LEDMASK,
+	[LEDMAN_POWER]     = LED_D2,
+	[LEDMAN_HEARTBEAT] = LED_D1,
+	[LEDMAN_NVRAM_1]   = LED_D1,
 };
 
 static leddef_t	lite3_def = {
-	0x0000, 0x0004, 0x0000, 0x0002,
+	[LEDS_ON] = LED_D2,
+	[LEDS_FLASH] = LED_D1,
 };
-
-static volatile unsigned int *ledman_gpio;
+#endif
 
 static irqreturn_t ledman_interrupt(int irq, void *dev_id)
 {
-	volatile unsigned int *intstatp;
-
-	intstatp = (volatile unsigned int __force *) (KS8695_REG(KS8695_INT_STATUS));
-	*intstatp |= 0x4;
-
 	ledman_signalreset();
 	return IRQ_HANDLED;
 }
 
 static void lite3_set(unsigned long bits)
 {
-	*ledman_gpio = (*ledman_gpio & ~0x6) | (~bits & 0x6);
+	__raw_writel(
+		(__raw_readl(KS8695_GPIO_VA + KS8695_IOPD) & ~LEDMASK) | (~bits & LEDMASK),
+		KS8695_GPIO_VA + KS8695_IOPD);
 }
 
 static void ledman_initarch(void)
 {
-	volatile unsigned int *gpiop, *intenp;
+	unsigned int m, i;
 
-	/* Enable LED lines as outputs */
-	gpiop = (volatile unsigned int __force *) (KS8695_REG(KS8695_GPIO_MODE));
-	*gpiop = (*gpiop | 0x6) & ~0x1;
-
-	/* Turn LEDs off */
-	ledman_gpio = (volatile unsigned int __force *) (KS8695_REG(KS8695_GPIO_DATA));
-	*ledman_gpio = (*ledman_gpio & ~0x6);
+	/* Enable LED lines as outputs and turn them off */
+	for (i = 0, m = 0x1; (i < 32); i++, m <<= 1) {
+		if (LEDMASK & m)
+			gpio_direction_output(i, 1);
+	}
 
 	/* Configure GPIO0 as interrupt input (ERASE switch) */
-	gpiop = (volatile unsigned int __force *) (KS8695_REG(KS8695_GPIO_CTRL));
-	*gpiop = (*gpiop & ~0x7) | 0xc;
-
-	intenp = (volatile unsigned int __force *) (KS8695_REG(KS8695_INT_ENABLE));
-	*intenp |= 0x4;
-
-	if (request_irq(2, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	ks8695_gpio_interrupt(KS8695_GPIO_0, IRQ_TYPE_EDGE_FALLING);
+	if (request_irq(2, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ2 for ERASE witch\n");
 	else
 		printk("LED: registered ERASE switch on IRQ2\n");
@@ -2196,7 +2248,7 @@ static irqreturn_r ledman_interrupt(int irq, void *dev_id)
 
 static void ledman_initarch(void)
 {
-	if (request_irq(32, ledman_interrupt, SA_INTERRUPT, "Erase", NULL))
+	if (request_irq(32, ledman_interrupt, IRQF_DISABLED, "Erase", NULL))
 		printk("LED: failed to register IRQ32 for ERASE witch\n");
 	else
 		printk("LED: registered ERASE switch on IRQ32\n");

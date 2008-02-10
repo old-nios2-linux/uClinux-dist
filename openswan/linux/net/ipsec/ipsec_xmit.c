@@ -19,7 +19,7 @@
  * for more details.
  */
 
-char ipsec_xmit_c_version[] = "RCSID $Id: ipsec_xmit.c,v 1.20.2.9 2007/07/06 17:18:43 paul Exp $";
+char ipsec_xmit_c_version[] = "RCSID $Id: ipsec_xmit.c,v 1.20.2.13 2007-10-30 21:38:56 paul Exp $";
 
 #define __NO_VERSION__
 #include <linux/module.h>
@@ -1438,7 +1438,7 @@ ipsec_xmit_init(struct ipsec_xmit_state *ixs)
 	ixs->ipsq = ixs->ipsp;	/* save the head of the ipsec_sa chain */
 	while (ixs->ipsp) {
 		if (debug_tunnel & DB_TN_XMIT) {
-		ixs->sa_len = satot(&ixs->ipsp->ips_said, 0, ixs->sa_txt, sizeof(ixs->sa_txt));
+		ixs->sa_len = KLIPS_SATOT(debug_tunnel, &ixs->ipsp->ips_said, 0, ixs->sa_txt, sizeof(ixs->sa_txt));
 		if(ixs->sa_len == 0) {
 			strcpy(ixs->sa_txt, "(error)");
 		}
@@ -1785,7 +1785,7 @@ ipsec_xmit_init(struct ipsec_xmit_state *ixs)
 	       */
 	      __u32 natt_oa = ixs->ipsp->ips_natt_oa ?
 		      ((struct sockaddr_in*)(ixs->ipsp->ips_natt_oa))->sin_addr.s_addr : 0;
-	      __u16 pkt_len = ixs->skb->tail - (unsigned char *)ixs->iph;
+	      unsigned int pkt_len = skb_tail_pointer(ixs->skb) - (unsigned char *)ixs->iph;
 	      __u16 data_len = pkt_len - (ixs->iph->ihl << 2);
 	      switch (ixs->iph->protocol) {
 		      case IPPROTO_TCP:
@@ -2078,6 +2078,19 @@ ipsec_xsm(struct ipsec_xmit_state *ixs)
 
 /*
  * $Log: ipsec_xmit.c,v $
+ * Revision 1.20.2.13  2007-10-30 21:38:56  paul
+ * Use skb_tail_pointer [dhr]
+ *
+ * Revision 1.20.2.12  2007-10-28 00:26:03  paul
+ * Start of fix for 2.6.22+ kernels and skb_tail_pointer()
+ *
+ * Revision 1.20.2.11  2007/10/22 15:40:45  paul
+ * Missing #ifdef CONFIG_KLIPS_ALG [davidm]
+ *
+ * Revision 1.20.2.10  2007/09/05 02:56:10  paul
+ * Use the new ipsec_kversion macros by David to deal with 2.6.22 kernels.
+ * Fixes based on David McCullough patch.
+ *
  * Revision 1.20.2.9  2007/07/06 17:18:43  paul
  * Fix for authentication field on sent packets has size equals to zero when
  * using custom auth algorithms. This is bug #811. Patch by "iamscared".

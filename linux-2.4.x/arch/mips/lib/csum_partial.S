@@ -53,7 +53,25 @@ small_csumcpy:
 	 andi	t0, a1, 2
 
 	/* Still a full word to go  */
+#ifndef CONFIG_RTL865X
 	ulw	t1, (src)
+#else
+#ifdef __MIPSEB__
+	lbu	t5, 0(src)
+	lbu	t6, 1(src)
+	sll t5, 24
+	sll	t6, 16
+	or	t5, t6
+	move	t1, t5
+	lbu  t5, 2(src)
+    lbu  t6, 3(src)
+	sll t5, 8
+	or  t5, t6
+	or	t1, t5
+#else
+#error "Modeif csum_partial.S
+#endif	
+#endif	
 	addiu	src, 4
 	ADDC(sum, t1)
 

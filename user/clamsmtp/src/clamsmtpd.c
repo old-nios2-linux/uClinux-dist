@@ -62,6 +62,12 @@
 #define SP_LEGACY_OPTIONS
 #include "smtppass.h"
 
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+#include "libconfig.h"
+#include "sg_ipset.h"
+#include "sg_ipr.h"
+#endif
+
 #ifdef CONFIG_USER_TRUSTEDSOURCE_V2
 #include "librep.h"
 #include "query.h"
@@ -148,6 +154,7 @@ clctx_t;
 #define CFG_TRUSTEDSOURCEV2_ENABLED "TrustedSourcev2Enabled"
 #define CFG_TRUSTEDSOURCEV2_SERVER "TrustedSourcev2Server"
 #define CFG_TRUSTEDSOURCEV2_THRESHOLD "TrustedSourcev2Threshold"
+#define CFG_TRUSTEDSOURCE_BLACKLIST "TrustedSourceBlacklist"
 #define CFG_PASSTHROUGH  "Passthrough"
 
 
@@ -166,6 +173,17 @@ char *g_vendor = NULL;                      /* vendor string */
 int g_threshold = 0;                        /* reject threshold */
 int g_trustedsource_enabled = 0;            /* lookups enabled or disabled */
 int g_trustedsourcev2_enabled = 0;          /* ver 2 lookups enabled or disabled */
+int g_trustedsource_bwlist = 0;		    /* trustedsource blacklisting */ 
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+#ifdef CONFIG_USER_TRUSTEDSOURCE
+ipset white_list; 	    /* trustedsource whitelist */
+ipset black_list; 	    /* trustedsource blacklist */
+#endif
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+ipset white_listv2; 	    /* trustedsourcev2 whitelist */
+ipset black_listv2; 	    /* trustedsourcev2 blacklist */
+#endif
+#endif
 
 extern int h_errno;
 
@@ -190,6 +208,66 @@ static int clam_scan_file(clctx_t* ctx, const char** virus);
 #ifndef HAVE___ARGV
 char** __argv;
 #endif
+
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+/* -------------------------------------------
+ * Snapgear - specific config parsing routines 
+ */
+
+/* Resolve and add the given hostname to the passed IP address set.
+ */
+static void add_hostname_to_set(const char *hostname, ipset addrs) {
+        int               j;
+        struct hostent   *h = gethostbyname(hostname);
+        if (h == NULL)
+                return;
+        struct in_addr  **al = (struct in_addr **)h->h_addr_list;
+
+        for (j=0; al[j] != NULL; j++)
+                ipset_add_address(addrs, ntohl(al[j]->s_addr));
+}
+
+
+/* Routine for decoding a firewall address group into its raw IP addresses.
+ *
+ * The second two arguments are IP address sets.  The first is used for adding
+ * ranges to and the second is for adding singleton addresses to.  Neither can
+ * be NULL but they can be the same list.
+ */
+static void add_all_fwaddress(config_handle cfg, config_ref r, ipset addrs) {
+        if (config_ref_null(r))
+                return;
+
+        /* Decode the address record */
+        if (config_provides(r, "firewall.fwaddress")) {
+                s_iprange       ipr;
+                struct in_addr  ip;
+
+                inet_aton(config_get(cfg, r, "lower"), &ip);
+                ipr.lower = ntohl(ip.s_addr);
+                inet_aton(config_get(cfg, r, "upper"), &ip);
+                ipr.upper = ntohl(ip.s_addr);
+                ipset_add_range(addrs, ipr);
+        } else if (config_provides(r, "firewall.fwhostname")) {
+                add_hostname_to_set(config_get(cfg, r, "hostname"), addrs);
+        } else if (config_provides(r, "firewall.fwaddress_group")) {
+                size_t           count;
+                int              i;
+                config_ref      *refs = config_find_all(cfg,
+                                        config_subtype(cfg, r, "address"),
+                                        &count, CONFIG_FIND_NORMAL);
+                for (i=0; i<count; i++)
+                        add_all_fwaddress(cfg, config_parseref(config_get(cfg, refs[i], "address")), addrs);
+                free(refs);
+        }
+}
+/* 
+ * -------------------------------------------
+ */
+
+#endif
+
 
 int main(int argc, char* argv[])
 {
@@ -531,6 +609,7 @@ int cb_parse_option(const char* name, const char* value)
         return 1;
     }
 
+
 #endif
 #ifdef CONFIG_USER_TRUSTEDSOURCE_V2
     else if(strcasecmp(CFG_TRUSTEDSOURCEV2_ENABLED, name) == 0)
@@ -555,6 +634,39 @@ int cb_parse_option(const char* name, const char* value)
     }
 
 #endif
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+    else if(strcasecmp(CFG_TRUSTEDSOURCE_BLACKLIST, name) == 0)
+    {
+	if((g_trustedsource_bwlist = strtob(value)) == -1) {
+		errx(2, "invalid value for " CFG_TRUSTEDSOURCE_BLACKLIST);
+	}
+
+	if(g_trustedsource_bwlist) {
+		/* load the black and white lists from the SG metaconfig */
+		config_handle cfg = config_open();
+		config_ref cref;
+#ifdef CONFIG_USER_TRUSTEDSOURCE
+		white_list = ipset_new(20);
+		black_list = ipset_new(20);
+		cref = config_parseref("trustedsource");
+		add_all_fwaddress(cfg, config_parseref(config_get(cfg, cref, "white_list")), white_list);
+		add_all_fwaddress(cfg, config_parseref(config_get(cfg, cref, "black_list")), black_list);
+#endif
+#ifdef CONFIG_USER_TRUSTEDSOURCE_V2
+		white_listv2 = ipset_new(20);
+		black_listv2 = ipset_new(20);
+		cref = config_parseref("trustedsourcev2");
+		add_all_fwaddress(cfg, config_parseref(config_get(cfg, cref, "white_list")), white_listv2);
+		add_all_fwaddress(cfg, config_parseref(config_get(cfg, cref, "black_list")), black_listv2);
+#endif
+		/* ... and we have our lists, time to close the config */
+		config_abort(cfg); 
+	}
+        return 1;
+    }
+#endif
+
    else if(strcasecmp(CFG_PASSTHROUGH, name) == 0)
     {
         if((g_clstate.passthrough = strtob(value)) == -1)
@@ -596,6 +708,28 @@ void cb_del_context(spctx_t* sp)
     }
 }
 
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+/* returns 1 if the address is whitelisted
+ * returns -1 if the address is blacklisted
+ * returns 0 if the address isn't in either list
+ * This is so that it lines up with what is expected from cb_check_client()
+ */
+int check_bwlist_access(ipset white, ipset black, const unsigned long srcip) {
+	struct in_addr addr;
+	addr.s_addr = htonl(srcip);
+
+        if (ipset_contains_address(white, srcip)) {
+		sp_messagex(NULL, LOG_ALERT, "client connection from %s is whitelisted", inet_ntoa(addr));
+                return 1;
+	} else if (ipset_contains_address(black, srcip)) {
+		sp_messagex(NULL, LOG_ALERT, "client connection from %s is blacklisted", inet_ntoa(addr));
+		return -1;
+        } else {
+                return 0;
+	}
+}
+#endif
+
 int cb_check_client(spctx_t* sp, struct sockaddr_any* peeraddr)
 {
 #ifdef CONFIG_USER_TRUSTEDSOURCE_V2
@@ -609,10 +743,20 @@ int cb_check_client(spctx_t* sp, struct sockaddr_any* peeraddr)
     int x = 0, z = 0; 
     int score = 0;
     unsigned long my_ip;
+    int bwlist;
+
+    my_ip = ntohl(peeraddr->s.in.sin_addr.s_addr);
 
     if (!g_trustedsource_enabled) goto trustedsourcev2;
 
     sp_messagex(sp, LOG_DEBUG, "checking client");
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+    if (g_trustedsource_bwlist && (bwlist = check_bwlist_access(white_list, black_list, my_ip))) {
+	/* I decided that TSv1 takes priority over TSv2 static listing. */
+	return bwlist;
+    } /* else: do the ts v1 or 2 lookup as normal */
+#endif
 
     /* piece together the 'domain name' to lookup */
     namebuf = malloc(sizeof(char) * 256);
@@ -620,8 +764,6 @@ int cb_check_client(spctx_t* sp, struct sockaddr_any* peeraddr)
         sp_message(sp, LOG_ERR, "error creating anti-spam lookup");
         return 1; 
     }
-
-    my_ip = ntohl(peeraddr->s.in.sin_addr.s_addr);
 
     /* b.<SERIAL>-<VENDOR>.d.c.b.a.ts-api.ciphertrust.net */
     sprintf(namebuf, "b.%s-%s.%d.%d.%d.%d.%s",
@@ -701,6 +843,12 @@ trustedsourcev2:
     {
         return 1;
     }
+
+#ifdef CONFIG_USER_TRUSTEDSOURCE_BLACKLIST
+    if (g_trustedsource_bwlist && (bwlist = check_bwlist_access(white_listv2, black_listv2, my_ip))) {
+	return bwlist;
+    } /* else: do the ts v1 or 2 lookup as normal */
+#endif
 
     repqu = RepQuery_New();
     if (repqu == NULL)

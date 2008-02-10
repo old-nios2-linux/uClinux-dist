@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "reboot.h"
 #include <config/autoconf.h>
 #include <linux/version.h>
 #include <linux/autoconf.h>

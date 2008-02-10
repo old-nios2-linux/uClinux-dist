@@ -1,6 +1,6 @@
 
 #
-# RCSID $Id: defconfig,v 1.28.2.1 2006/10/11 18:14:33 paul Exp $
+# RCSID $Id: defconfig,v 1.28.2.1 2006-10-11 18:14:33 paul Exp $
 #
 
 #
@@ -65,7 +65,7 @@ CONFIG_IPSEC_NAT_TRAVERSAL=y
 #
 #
 # $Log: defconfig,v $
-# Revision 1.28.2.1  2006/10/11 18:14:33  paul
+# Revision 1.28.2.1  2006-10-11 18:14:33  paul
 # Add JuanJo Ciarlante's ESP_NULL patches for KLIPS, but leave it disabled
 # per default.
 #

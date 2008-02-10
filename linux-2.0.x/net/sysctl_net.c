@@ -5,7 +5,7 @@
  * Added /proc/sys/net directories for each protocol family. [MS]
  *
  * $Log: sysctl_net.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:04  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:04  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2  1996/05/08  20:24:40  shaver

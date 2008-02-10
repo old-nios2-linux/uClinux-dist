@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: pfkey_v2.c,v 1.97.2.12 2006/11/24 05:43:29 paul Exp $
+ * RCSID $Id: pfkey_v2.c,v 1.97.2.16 2007-10-31 19:57:41 paul Exp $
  */
 
 /*
@@ -538,12 +538,12 @@ pfkey_destroy_socket(struct sock *sk)
 			printk(" truesize:%d", skb->truesize);
 			printk(" head:0p%p", skb->head);
 			printk(" data:0p%p", skb->data);
-			printk(" tail:0p%p", skb->tail);
-			printk(" end:0p%p", skb->end);
+			printk(" tail:0p%p", skb_tail_pointer(skb));
+			printk(" end:0p%p", skb_end_pointer(skb));
 			if(sysctl_ipsec_debug_verbose) {
 				unsigned char* i;
 				printk(" data");
-				for(i = skb->head; i < skb->end; i++) {
+				for(i = skb->head; i < skb_end_pointer(skb); i++) {
 					printk(":%2x", (unsigned char)(*(i)));
 				}
 			}
@@ -1110,7 +1110,7 @@ pfkey_recvmsg(struct socket *sock
 
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size);
 #ifdef HAVE_KERNEL_TSTAMP
-        sk->sk_stamp = skb->tstamp;
+	sk->sk_stamp = skb->tstamp;
 #elif defined(HAVE_TSTAMP)
 	sk->sk_stamp.tv_sec  = skb->tstamp.off_sec;
 	sk->sk_stamp.tv_usec = skb->tstamp.off_usec;
@@ -1172,7 +1172,7 @@ pfkey_get_info(char *buffer, char **start, off_t offset, int length
 #ifdef CONFIG_KLIPS_DEBUG
 		} else {
 		  struct timeval t;
-		  t = ktime_to_timeval(sk->sk_stamp);
+		  grab_socket_timeval(t, *sk);
 		  len += ipsec_snprintf(buffer+len, length-len,
 					"%8p %5d %d %8p %8p %d %d %d %d %5d %d.%06d %08lX %8X %2X\n",
 					sk,
@@ -1495,9 +1495,15 @@ pfkey_init(void)
 	error |= proc_register_dynamic(&proc_net, &proc_net_pfkey_registered);
 #    endif /* PROC_FS_21 */
 #  else /* !PROC_FS_2325 */
+#    if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	proc_net_create ("pf_key", 0, pfkey_get_info);
 	proc_net_create ("pf_key_supported", 0, pfkey_supported_get_info);
 	proc_net_create ("pf_key_registered", 0, pfkey_registered_get_info);
+#    else
+	create_proc_entry ("pf_key", 0, init_net.proc_net);
+	create_proc_entry ("pf_key_supported", 0, init_net.proc_net);
+	create_proc_entry ("pf_key_registered", 0, init_net.proc_net);
+#    endif
 #  endif /* !PROC_FS_2325 */
 #endif /* CONFIG_PROC_FS */
 
@@ -1511,7 +1517,11 @@ pfkey_cleanup(void)
 	
         printk(KERN_INFO "klips_info:pfkey_cleanup: "
 	       "shutting down PF_KEY domain sockets.\n");
-        sock_unregister(PF_KEY);
+#ifdef VOID_SOCK_UNREGISTER
+	sock_unregister(PF_KEY);
+#else
+	(void)sock_unregister(PF_KEY);
+#endif
 
 	error |= supported_remove_all(SADB_SATYPE_AH);
 	error |= supported_remove_all(SADB_SATYPE_ESP);
@@ -1532,9 +1542,15 @@ pfkey_cleanup(void)
 		printk("klips_debug:pfkey_cleanup: "
 		       "cannot unregister /proc/net/pf_key_registered\n");
 #  else /* !PROC_FS_2325 */
+#  if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	proc_net_remove ("pf_key");
 	proc_net_remove ("pf_key_supported");
 	proc_net_remove ("pf_key_registered");
+#     else
+	proc_net_remove (&init_net, "pf_key");
+	proc_net_remove (&init_net, "pf_key_supported");
+	proc_net_remove (&init_net, "pf_key_registered");
+#    endif
 #  endif /* !PROC_FS_2325 */
 #endif /* CONFIG_PROC_FS */
 
@@ -1567,6 +1583,19 @@ void pfkey_proto_init(struct net_protocol *pro)
 
 /*
  * $Log: pfkey_v2.c,v $
+ * Revision 1.97.2.16  2007-10-31 19:57:41  paul
+ * type of sock.sk_stamp changed from timeval to ktime [dhr]
+ *
+ * Revision 1.97.2.15  2007-10-30 21:39:30  paul
+ * Use skb_tail_pointer/skb_end_pointer [dhr]
+ *
+ * Revision 1.97.2.14  2007/09/05 02:56:10  paul
+ * Use the new ipsec_kversion macros by David to deal with 2.6.22 kernels.
+ * Fixes based on David McCullough patch.
+ *
+ * Revision 1.97.2.13  2007/08/10 01:40:49  paul
+ * Fix for sock_unregister for 2.6.19 by Sergeil
+ *
  * Revision 1.97.2.12  2006/11/24 05:43:29  paul
  * kernels after 2.6.18 do not return a code from unregister_socket()
  * backport from git 41e54a2684dc809d7952e816860ea646a3194a72

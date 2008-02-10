@@ -2,7 +2,7 @@
 **
 *A  unzoo.c                     Tools                        Martin Schoenert
 **
-*H  @(#)$Id: unzoo.c,v 1.1 2005/06/15 01:32:00 pauli Exp $
+*H  @(#)$Id: unzoo.c,v 1.1 2005-06-15 01:32:00 pauli Exp $
 **
 *Y  This file is in the Public Domain.
 **
@@ -218,7 +218,7 @@
 **
 **  HISTORY
 *H  $Log: unzoo.c,v $
-*H  Revision 1.1  2005/06/15 01:32:00  pauli
+*H  Revision 1.1  2005-06-15 01:32:00  pauli
 *H
 *H  #10224 Bring in the unzoo command line utility.
 *H
@@ -2730,7 +2730,7 @@ int             ExtrArch ( bim, out, ovr, pre, arc, filec, files )
 int             HelpArch ()
 {
     printf("unzoo -- a zoo archive extractor by Martin Schoenert\n");
-    printf("  ($Id: unzoo.c,v 1.1 2005/06/15 01:32:00 pauli Exp $)\n");
+    printf("  ($Id: unzoo.c,v 1.1 2005-06-15 01:32:00 pauli Exp $)\n");
     printf("  based on 'booz' version 2.0 by Rahul Dhesi\n");
     printf("\n");
     printf("unzoo [-l] [-v] <archive>[.zoo] [<file>..]\n");

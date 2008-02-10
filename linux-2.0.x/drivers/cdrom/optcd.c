@@ -1,5 +1,5 @@
 /*	linux/drivers/cdrom/optcd.c - Optics Storage 8000 AT CDROM driver
-	$Id: optcd.c,v 1.1.1.1 1999/11/22 03:47:21 christ Exp $
+	$Id: optcd.c,v 1.1.1.1 1999-11-22 03:47:21 christ Exp $
 
 	Copyright (C) 1995 Leo Spiekman (spiekman@dutette.et.tudelft.nl)
 

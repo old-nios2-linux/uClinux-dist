@@ -6,7 +6,7 @@
  * NOTE: Changed to make dependencies work better:
  *        * <config.h> changed to "config.h"
  *
- * $Id: getopt1.c,v 1.3 2007/07/05 23:33:09 gerg Exp $
+ * $Id: getopt1.c,v 1.3 2007-07-05 23:33:09 gerg Exp $
  */
 
 /* getopt_long and getopt_long_only entry points for GNU getopt.

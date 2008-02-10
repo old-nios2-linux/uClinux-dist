@@ -14,7 +14,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
  * License for more details.
  *
- * RCSID $Id: ipsec_kversion.h,v 1.15.2.11 2007/02/20 03:53:16 paul Exp $
+ * RCSID $Id: ipsec_kversion.h,v 1.15.2.20 2007-11-16 06:16:10 paul Exp $
  */
 #define	_OPENSWAN_KVERSIONS_H	/* seen it, no need to see it again */
 
@@ -80,8 +80,14 @@
 #define IP_SELECT_IDENT
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,50)) && defined(CONFIG_NETFILTER)
-#define SKB_RESET_NFCT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,50)
+# if(LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23) && defined(CONFIG_NETFILTER))
+#  define SKB_RESET_NFCT
+# elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
+#  if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+#   define SKB_RESET_NFCT
+#  endif
+# endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,2)
@@ -142,6 +148,17 @@
 #define HAVE_NEW_SKB_LINEARIZE
 #endif
 
+/* this is the best we can do to detect XEN, which makes
+ *  * patches to linux/skbuff.h, making it look like 2.6.18 version 
+ *   */
+#ifdef CONFIG_XEN
+#define HAVE_NEW_SKB_LINEARIZE
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,19)
+#define VOID_SOCK_UNREGISTER
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 /* skb->nfmark changed to skb->mark in 2.6.20 */
 #define nfmark mark
@@ -150,20 +167,24 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22)
 /* need to include ip.h early, no longer pick it up in skbuff.h */
 #include <linux/ip.h>
-#define HAVE_KERNEL_TSTAMP
+#  define HAVE_KERNEL_TSTAMP
+/* type of sock.sk_stamp changed from timeval to ktime  */
+#  define grab_socket_timeval(tv, sock)  { (tv) = ktime_to_timeval((sock).sk_stamp); }
 #else
+#  define grab_socket_timeval(tv, sock)  { (tv) = (sock).sk_stamp; }
 /* internals of struct skbuff changed */
-#define	HAVE_DEV_NEXT
-#define ip_hdr(skb) (skb)->nh.iph
-#define skb_network_header(skb) (skb)->nh.raw
-#define skb_set_network_header(skb,off) ((skb)->nh.raw = (skb)->data + (off))
-#define tcp_hdr(skb) (skb)->h.th
-#define udp_hdr(skb) (skb)->h.uh
-#define skb_transport_header(skb) (skb)->h.raw
-#define skb_set_transport_header(skb,off) ((skb)->h.raw = (skb)->data + (off))
-#define skb_mac_header(skb) (skb)->mac.raw
-#define skb_set_mac_header(skb,off) ((skb)->mac.raw = (skb)->data + (off))
-#define ktime_to_timeval(ts) (ts)
+#  define        HAVE_DEV_NEXT
+#  define ip_hdr(skb)  ((skb)->nh.iph)
+#  define skb_tail_pointer(skb)  ((skb)->tail)
+#  define skb_end_pointer(skb)  ((skb)->end)
+#  define skb_network_header(skb)  ((skb)->nh.raw)
+#  define skb_set_network_header(skb,off)  ((skb)->nh.raw = (skb)->data + (off))
+#  define tcp_hdr(skb)  ((skb)->h.th)
+#  define udp_hdr(skb)  ((skb)->h.uh)
+#  define skb_transport_header(skb)  ((skb)->h.raw)
+#  define skb_set_transport_header(skb,off)  ((skb)->h.raw = (skb)->data + (off))
+#  define skb_mac_header(skb)  ((skb)->mac.raw)
+#  define skb_set_mac_header(skb,off)  ((skb)->mac.raw = (skb)->data + (off))
 #endif
 /* turn a pointer into an offset for above macros */
 #define ipsec_skb_offset(skb, ptr) (((unsigned char *)(ptr)) - (skb)->data)
@@ -192,8 +213,13 @@
 #define device net_device
 #endif
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
+# define ipsec_dev_get(n) dev_get_by_name(&init_net, (n))
+# define __ipsec_dev_get(n) __dev_get_by_name(&init_net, (n))
+#else
 # define ipsec_dev_get dev_get_by_name
 # define __ipsec_dev_get __dev_get_by_name
+#endif
 # define ipsec_dev_put(x) dev_put(x)
 # define __ipsec_dev_put(x) __dev_put(x)
 # define ipsec_dev_hold(x) dev_hold(x)
@@ -259,6 +285,12 @@
 	printk(sevlevel "%s: " format , netdev->name , ## arg)
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
+#define	PROC_NET	init_net.proc_net
+#else
+#define	PROC_NET	proc_net
+#endif
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,0) 
 #include "openswan/ipsec_kern24.h"
@@ -272,6 +304,38 @@
 
 /*
  * $Log: ipsec_kversion.h,v $
+ * Revision 1.15.2.20  2007-11-16 06:16:10  paul
+ * Fix brackets on SKB_RESET_NFCT case
+ *
+ * Revision 1.15.2.19  2007-11-16 06:01:27  paul
+ * On 2.6.23+, sk->nfct is part of skbut only when CONFIG_NF_CONNTRACK or
+ * CONFIG_NF_CONNTRACK_MODUE is set, where previously this was handled with
+ * CONFIG_NETFILTER.
+ *
+ * Revision 1.15.2.18  2007-11-07 14:17:56  paul
+ * Xen modifies skb structures, so xen kernels < 2.6.18 need to have
+ * HAVE_NEW_SKB_LINEARIZE defined.
+ *
+ * Revision 1.15.2.17  2007-10-31 19:57:40  paul
+ * type of sock.sk_stamp changed from timeval to ktime [dhr]
+ *
+ * Revision 1.15.2.16  2007-10-30 22:17:02  paul
+ * Move the define for ktime_to_timeval() from "not 2.6.22" to "< 2.6.16",
+ * where it belongs.
+ *
+ * Revision 1.15.2.15  2007-10-30 21:44:00  paul
+ * added a backport definition for define skb_end_pointer [dhr]
+ *
+ * Revision 1.15.2.14  2007-10-28 00:26:03  paul
+ * Start of fix for 2.6.22+ kernels and skb_tail_pointer()
+ *
+ * Revision 1.15.2.13  2007/09/05 02:28:27  paul
+ * Patch by David McCullough for 2.6.22 compatibility (HAVE_KERNEL_TSTAMP,
+ * HAVE_DEV_NEXT and other header surgery)
+ *
+ * Revision 1.15.2.12  2007/08/10 01:40:49  paul
+ * Fix for sock_unregister for 2.6.19 by Sergeil
+ *
  * Revision 1.15.2.11  2007/02/20 03:53:16  paul
  * Added comment, made layout consistent with other checks.
  *

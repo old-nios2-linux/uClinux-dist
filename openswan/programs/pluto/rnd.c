@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: rnd.c,v 1.22.8.2 2006/10/11 16:24:52 paul Exp $
+ * RCSID $Id: rnd.c,v 1.22.8.2 2006-10-11 16:24:52 paul Exp $
  */
 
 /* A true random number generator (we hope)

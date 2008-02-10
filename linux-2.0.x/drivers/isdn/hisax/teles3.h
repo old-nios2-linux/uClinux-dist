@@ -1,4 +1,4 @@
-/* $Id: teles3.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: teles3.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *
  * teles3.h   Header for Teles 16.3 PNP & compatible
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: teles3.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2  1997/01/21 22:27:14  keil

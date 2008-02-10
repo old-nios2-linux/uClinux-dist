@@ -1435,12 +1435,12 @@ struct tcb *tcp;
 		if (umove(tcp, sp, &sc) < 0)
 		  	return 0;
 		tcp->u_arg[0] = 1;
-		tcp->u_arg[1] = sc.sc_sigset;
+		tcp->u_arg[1] = sc.sc_hi2;
 	} else {
 	  	tcp->u_rval = tcp->u_error = 0;
 		if(tcp->u_arg[0] == 0)
 		  	return 0;
-		tcp->auxstr = sprintsigmask("mask now ", tcp->u_arg[1]);
+		tcp->auxstr = sprintsigmask("mask now ", tcp->u_arg[1], 0);
 		return RVAL_NONE | RVAL_STR;
 	}
 	return 0;

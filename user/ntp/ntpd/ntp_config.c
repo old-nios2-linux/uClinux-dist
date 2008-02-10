@@ -15,8 +15,9 @@
 #include "ntp_refclock.h"
 #include "ntp_filegen.h"
 #include "ntp_stdlib.h"
-#include "ntp_config.h"
-#include "ntp_cmdargs.h"
+#include <ntp_random.h>
+#include <isc/net.h>
+#include <isc/result.h>
 
 #include <stdio.h>
 #include <ctype.h>
@@ -35,10 +36,16 @@
 
 #ifdef SYS_WINNT
 # include <io.h>
-extern HANDLE ResolverThreadHandle;
+HANDLE ResolverThreadHandle = NULL;
 #endif /* SYS_WINNT */
 
-#include <netdb.h>
+/*
+ * [Bug 467]: Some linux headers collide with CONFIG_PHONE and CONFIG_KEYS
+ * so #include these later.
+ */
+
+#include "ntp_config.h"
+#include "ntp_cmdargs.h"
 
 extern int priority_done;
 
@@ -73,6 +80,7 @@ static	struct keyword keywords[] = {
 	{ "disable",		CONFIG_DISABLE },
 	{ "driftfile",		CONFIG_DRIFTFILE },
 	{ "enable",		CONFIG_ENABLE },
+	{ "end",		CONFIG_END },
 	{ "filegen",		CONFIG_FILEGEN },
 	{ "fudge",		CONFIG_FUDGE },
 	{ "includefile",	CONFIG_INCLUDEFILE },
@@ -115,9 +123,12 @@ static	struct keyword mod_keywords[] = {
 	{ "minpoll",		CONF_MOD_MINPOLL },
 	{ "mode",		CONF_MOD_MODE },    /* refclocks */
 	{ "noselect",		CONF_MOD_NOSELECT },
+	{ "preempt",		CONF_MOD_PREEMPT },
+	{ "true",		CONF_MOD_TRUE },
 	{ "prefer",		CONF_MOD_PREFER },
 	{ "ttl",		CONF_MOD_TTL },     /* NTP peers */
 	{ "version",		CONF_MOD_VERSION },
+	{ "dynamic",		CONF_MOD_DYNAMIC },
 	{ "",			CONFIG_UNKNOWN }
 };
 
@@ -158,7 +169,7 @@ static	struct keyword fudge_keywords[] = {
 	{ "flag2",		CONF_FDG_FLAG2 },
 	{ "flag3",		CONF_FDG_FLAG3 },
 	{ "flag4",		CONF_FDG_FLAG4 },
-	{ "refid",		CONF_FDG_REFID },
+	{ "refid",		CONF_FDG_REFID }, /* this mapping should be cleaned up (endianness, \0) - kd 20041031 */
 	{ "stratum",		CONF_FDG_STRATUM },
 	{ "time1",		CONF_FDG_TIME1 },
 	{ "time2",		CONF_FDG_TIME2 },
@@ -202,7 +213,6 @@ static struct keyword flags_keywords[] = {
 	{ "kernel",		PROTO_KERNEL },
 	{ "monitor",		PROTO_MONITOR },
 	{ "ntp",		PROTO_NTP },
-	{ "pps",		PROTO_PPS },
 	{ "stats",		PROTO_FILEGEN },
 	{ "",			CONFIG_UNKNOWN }
 };
@@ -236,10 +246,16 @@ static struct keyword tinker_keywords[] = {
  */
 static struct keyword tos_keywords[] = {
 	{ "minclock",		CONF_TOS_MINCLOCK },
+	{ "maxclock",		CONF_TOS_MAXCLOCK },
 	{ "minsane",		CONF_TOS_MINSANE },
 	{ "floor",		CONF_TOS_FLOOR },
 	{ "ceiling",		CONF_TOS_CEILING },
 	{ "cohort",		CONF_TOS_COHORT },
+	{ "mindist",		CONF_TOS_MINDISP },
+	{ "maxdist",		CONF_TOS_MAXDIST },
+	{ "maxhop",		CONF_TOS_MAXHOP },
+	{ "beacon",		CONF_TOS_BEACON },
+	{ "orphan",		CONF_TOS_ORPHAN },
 	{ "",			CONFIG_UNKNOWN }
 };
 
@@ -251,6 +267,7 @@ static struct keyword crypto_keywords[] = {
 	{ "cert",		CONF_CRYPTO_CERT },
 	{ "gqpar",		CONF_CRYPTO_GQPAR },
 	{ "host",		CONF_CRYPTO_RSA },
+	{ "ident",		CONF_CRYPTO_IDENT },
 	{ "iffpar",		CONF_CRYPTO_IFFPAR },
 	{ "leap",		CONF_CRYPTO_LEAP },
 	{ "mvpar",		CONF_CRYPTO_MVPAR },
@@ -309,7 +326,7 @@ static struct masks logcfg_item[] = {
  */
 #define MAXTOKENS	20	/* 20 tokens on line */
 #define MAXLINE		1024	/* maximum length of line */
-#define MAXPHONE	5	/* maximum number of phone strings */
+#define MAXPHONE	10	/* maximum number of phone strings */
 #define MAXPPS		20	/* maximum length of PPS device string */
 #define MAXINCLUDELEVEL	5	/* maximum include file levels */
 
@@ -339,10 +356,10 @@ static char res_file[MAX_PATH];
 /*
  * Definitions of things either imported from or exported to outside
  */
-char const *progname;
-char	sys_phone[MAXPHONE][MAXDIAL]; /* ACTS phone numbers */
+
+short default_ai_family = AF_UNSPEC;	/* Default either IPv4 or IPv6 */
+char	*sys_phone[MAXPHONE] = {NULL}; /* ACTS phone numbers */
 char	*keysdir = NTP_KEYSDIR;	/* crypto keys directory */
-char	pps_device[MAXPPS + 1]; /* PPS device name */
 #if defined(HAVE_SCHED_SETSCHEDULER)
 int	config_priority_override = 0;
 int	config_priority;
@@ -386,7 +403,13 @@ static	int gettokens_netinfo P((struct netinfo_config_state *, char **, int *));
 #endif
 static	int gettokens P((FILE *, char *, char **, int *));
 static	int matchkey P((char *, struct keyword *, int));
-static	int getnetnum P((const char *, struct sockaddr_storage *, int));
+enum gnn_type {
+	t_UNK,		/* Unknown */
+	t_REF,		/* Refclock */
+	t_MSK		/* Network Mask */
+	};
+static	int getnetnum P((const char *, struct sockaddr_storage *, int,
+			 enum gnn_type));
 static	void save_resolve P((char *, int, int, int, int, u_int, int,
     keyid_t, u_char *));
 static	void do_resolve_internal P((void));
@@ -472,6 +495,7 @@ getconfig(
 	register int i;
 	int c;
 	int errflg;
+	int status;
 	int istart;
 	int peerversion;
 	int minpoll;
@@ -501,7 +525,7 @@ getconfig(
 	 * Initialize, initialize
 	 */
 	errflg = 0;
-	/* HMS: don't initialize debug to 0 here! */
+	
 #ifndef SYS_WINNT
 	config_file = CONFIG_FILE;
 #else
@@ -520,9 +544,7 @@ getconfig(
 	alt_config_file = alt_config_file_storage;
 
 #endif /* SYS_WINNT */
-	progname = argv[0];
 	res_fp = NULL;
-	memset((char *)sys_phone, 0, sizeof(sys_phone));
 	ntp_syslogmask = NLOG_SYNCMASK; /* set more via logconfig */
 
 	/*
@@ -573,6 +595,8 @@ getconfig(
 	}
 
 	for (;;) {
+		if (tok == CONFIG_END) 
+			break;
 		if (fp[includelevel])
 			tok = gettokens(fp[includelevel], line, tokens, &ntokens);
 #ifdef HAVE_NETINFO
@@ -612,6 +636,7 @@ getconfig(
 
 			istart = 1;
 			memset((char *)&peeraddr, 0, sizeof(peeraddr));
+			peeraddr.ss_family = default_ai_family;
 			switch (matchkey(tokens[istart], addr_type, 0)) {
 			case CONF_ADDR_IPV4:
 				peeraddr.ss_family = AF_INET;
@@ -623,7 +648,10 @@ getconfig(
 				break;
 			}
 
-			if (!getnetnum(tokens[istart], &peeraddr, 0)) {
+			status = getnetnum(tokens[istart], &peeraddr, 0, t_UNK);
+			if (status == -1)
+				break;		/* Found IPv6 address */
+			if(status != 1) {
 				errflg = -1;
 			} else {
 				errflg = 0;
@@ -684,7 +712,10 @@ getconfig(
 					}
 				}
 			}
-			
+			if (peeraddr.ss_family == AF_INET6 &&
+			    isc_net_probeipv6() != ISC_R_SUCCESS)
+				break;
+
 			peerversion = NTP_VERSION;
 			minpoll = NTP_MINDPOLL;
 			maxpoll = NTP_MAXDPOLL;
@@ -760,9 +791,16 @@ getconfig(
 				    peerflags |= FLAG_PREFER;
 				    break;
 
+				case CONF_MOD_PREEMPT:
+				    peerflags |= FLAG_PREEMPT;
+				    break;
+
 				case CONF_MOD_NOSELECT:
 				    peerflags |= FLAG_NOSELECT;
 				    break;
+
+				case CONF_MOD_TRUE:
+				    peerflags |= FLAG_TRUE;
 
 				case CONF_MOD_BURST:
 				    peerflags |= FLAG_BURST;
@@ -771,6 +809,11 @@ getconfig(
 				case CONF_MOD_IBURST:
 				    peerflags |= FLAG_IBURST;
 				    break;
+
+			        case CONF_MOD_DYNAMIC:
+				    peerflags |= FLAG_DYNAMIC;
+				    break;
+
 #ifdef OPENSSL
 				case CONF_MOD_SKEY:
 				    peerflags |= FLAG_SKEY |
@@ -821,10 +864,6 @@ getconfig(
 						"configuration of %s failed",
 						stoa(&peeraddr));
 			    }
-			    if (tok == CONFIG_MANYCASTCLIENT)
-				proto_config(PROTO_MULTICAST_ADD,
-				    0, 0., &peeraddr);
-	
 			} else if (errflg == -1) {
 				save_resolve(tokens[1], hmode, peerversion,
 				    minpoll, maxpoll, peerflags, ttl,
@@ -837,6 +876,16 @@ getconfig(
 			    stats_config(STATS_FREQ_FILE, tokens[1]);
 			else
 			    stats_config(STATS_FREQ_FILE, (char *)0);
+			stats_write_period = stats_write_tolerance = 0;
+			if (ntokens >= 3)
+			     stats_write_period = 60 * atol(tokens[2]);
+			if (stats_write_period <= 0)
+			     stats_write_period = 3600;
+			if (ntokens >= 4) {
+			     double ftemp;
+			     sscanf(tokens[3], "%lf", &ftemp);
+			     stats_write_tolerance = ftemp / 100;
+			}
 			break;
 	
 		    case CONFIG_PIDFILE:
@@ -846,6 +895,12 @@ getconfig(
 			    stats_config(STATS_PID_FILE, (char *)0);
 			break;
 
+		    case CONFIG_END:
+			for ( i = 0; i <= includelevel; i++ ) {
+				fclose(fp[i]);
+			}
+			break;
+			
 		    case CONFIG_INCLUDEFILE:
 			if (ntokens < 2) {
 			    msyslog(LOG_ERR, "includefile needs one argument");
@@ -925,7 +980,11 @@ getconfig(
 			break;
 
 		    case CONFIG_BROADCASTCLIENT:
-			proto_config(PROTO_BROADCLIENT, 1, 0., NULL);
+			if (ntokens == 1) {
+				proto_config(PROTO_BROADCLIENT, 1, 0., NULL);
+			} else {
+				proto_config(PROTO_BROADCLIENT, 2, 0., NULL);
+			}
 			break;
 
 		    case CONFIG_MULTICASTCLIENT:
@@ -933,6 +992,7 @@ getconfig(
 			if (ntokens > 1) {
 				istart = 1;
 				memset((char *)&peeraddr, 0, sizeof(peeraddr));
+				peeraddr.ss_family = default_ai_family;
 				switch (matchkey(tokens[istart],
 				    addr_type, 0)) {
 				case CONF_ADDR_IPV4:
@@ -955,7 +1015,8 @@ getconfig(
 					memset((char *)&peeraddr, 0,
 					    sizeof(peeraddr));
 					peeraddr.ss_family = maskaddr.ss_family;
-					if (getnetnum(tokens[i], &peeraddr, 1))
+					if (getnetnum(tokens[i], &peeraddr, 1,
+						      t_UNK)  == 1)
 					    proto_config(PROTO_MULTICAST_ADD,
 							 0, 0., &peeraddr);
 				}
@@ -963,7 +1024,7 @@ getconfig(
 			    proto_config(PROTO_MULTICAST_ADD,
 					 0, 0., NULL);
 			if (tok == CONFIG_MULTICASTCLIENT)
-				sys_bclient = 1;
+				proto_config(PROTO_MULTICAST_ADD, 1, 0., NULL);
 			else if (tok == CONFIG_MANYCASTSERVER)
 				sys_manycastserver = 1;
 			break;
@@ -980,7 +1041,7 @@ getconfig(
 				"Keys directory name required");
 			    break;
 			}
-			keysdir = emalloc(strlen(tokens[1]) + 1);
+			keysdir = (char *)emalloc(strlen(tokens[1]) + 1);
 			strcpy(keysdir, tokens[1]);
 			break;
 
@@ -1038,7 +1099,7 @@ getconfig(
 			    temp = matchkey(tokens[i++], tos_keywords, 1);
 			    if (i > ntokens - 1) {
 				msyslog(LOG_ERR,
-				    "tinker: missing argument");
+				    "tos: missing argument");
 				errflg++;
 				break;
 			    }
@@ -1047,6 +1108,10 @@ getconfig(
 
 			    case CONF_TOS_MINCLOCK:
 				proto_config(PROTO_MINCLOCK, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_MAXCLOCK:
+				proto_config(PROTO_MAXCLOCK, 0, ftemp, NULL);
 				break;
 
 			    case CONF_TOS_MINSANE:
@@ -1063,6 +1128,26 @@ getconfig(
 
 			    case CONF_TOS_COHORT:
 				proto_config(PROTO_COHORT, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_MINDISP:
+				proto_config(PROTO_MINDISP, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_MAXDIST:
+				proto_config(PROTO_MAXDIST, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_MAXHOP:
+				proto_config(PROTO_MAXHOP, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_ORPHAN:
+				proto_config(PROTO_ORPHAN, 0, ftemp, NULL);
+				break;
+
+			    case CONF_TOS_BEACON:
+				proto_config(PROTO_BEACON, 0, ftemp, NULL);
 				break;
 			    }
 			}
@@ -1089,15 +1174,15 @@ getconfig(
 			    }
 			    switch(temp) {
 			    case CONF_DISCARD_AVERAGE:
-				res_avg_interval = atoi(tokens[i++]);
+				res_avg_interval = atoi(tokens[i]);
 				break;
 
 			    case CONF_DISCARD_MINIMUM:
-				res_min_interval = atoi(tokens[i++]);
+				res_min_interval = atoi(tokens[i]);
 				break;
 
 			    case CONF_DISCARD_MONITOR:
-				mon_age = atoi(tokens[i++]);
+				mon_age = atoi(tokens[i]);
 				break;
 
 			    default:
@@ -1144,6 +1229,11 @@ getconfig(
 
 			    case CONF_CRYPTO_RSA:
 				crypto_config(CRYPTO_CONF_PRIV,
+				    tokens[i]);
+				break;
+
+			    case CONF_CRYPTO_IDENT:
+				crypto_config(CRYPTO_CONF_IDENT,
 				    tokens[i]);
 				break;
 
@@ -1198,6 +1288,7 @@ getconfig(
 			}
 			istart = 1;
 			memset((char *)&peeraddr, 0, sizeof(peeraddr));
+			peeraddr.ss_family = default_ai_family;
 			switch (matchkey(tokens[istart], addr_type, 0)) {
 			case CONF_ADDR_IPV4:
 				peeraddr.ss_family = AF_INET;
@@ -1216,7 +1307,8 @@ getconfig(
 			if (STREQ(tokens[istart], "default")) {
 				if (peeraddr.ss_family == 0)
 					peeraddr.ss_family = AF_INET;
-			} else if (!getnetnum(tokens[istart], &peeraddr, 1))
+			} else if (getnetnum(tokens[istart], &peeraddr, 1,
+					      t_UNK) != 1)
 				break;
 
 			/*
@@ -1237,7 +1329,8 @@ getconfig(
 						break;
 					}
 					i++;
-					if (!getnetnum(tokens[i], &maskaddr, 1))
+					if (getnetnum(tokens[i], &maskaddr, 1,
+						       t_MSK) != 1)
 					    errflg++;
 					break;
 
@@ -1386,6 +1479,7 @@ getconfig(
 			}
 			istart = 1;
 			memset((char *)&peeraddr, 0, sizeof(peeraddr));
+			peeraddr.ss_family = default_ai_family;
 			switch (matchkey(tokens[istart], addr_type, 0)) {
 			case CONF_ADDR_IPV4:
 				peeraddr.ss_family = AF_INET;
@@ -1397,7 +1491,7 @@ getconfig(
 				break;
 			}
 
-			if (!getnetnum(tokens[istart], &peeraddr, 1))
+			if (getnetnum(tokens[istart], &peeraddr, 1, t_UNK) != 1)
 			    break;
 
 			/*
@@ -1437,8 +1531,8 @@ getconfig(
 				    memset((char *)&maskaddr, 0,
 					sizeof(maskaddr));
 				    maskaddr.ss_family = peeraddr.ss_family;
-				    if (!getnetnum(tokens[++i],
-						   &maskaddr, 1)) {
+				    if (getnetnum(tokens[++i],
+						   &maskaddr, 1, t_UNK) != 1) {
 					    errflg = 1;
 					    break;
 				    }
@@ -1479,7 +1573,7 @@ getconfig(
 				break;
 			}
 			memset((char *)&peeraddr, 0, sizeof(peeraddr));
-			if (!getnetnum(tokens[1], &peeraddr, 1))
+			if (getnetnum(tokens[1], &peeraddr, 1, t_REF) != 1)
 			    break;
 
 			if (!ISREFCLOCKADR(&peeraddr)) {
@@ -1534,10 +1628,10 @@ getconfig(
 					break;
 
 				    case CONF_FDG_REFID:
-					/* HMS: Endianness and 0 bytes? */
-					/* XXX */
-					strncpy((char *)&clock_stat.fudgeval2,
-						tokens[++i], 4);
+					i++;
+					memcpy(&clock_stat.fudgeval2,
+					    tokens[i], min(strlen(tokens[i]),
+					    4));
 					clock_stat.haveflags |= CLK_HAVEVAL2;
 					break;
 
@@ -1746,11 +1840,12 @@ getconfig(
 			break;
 
 		    case CONFIG_PHONE:
-			for (i = 1; i < ntokens && i < MAXPHONE; i++) {
-				(void)strncpy(sys_phone[i - 1],
-					      tokens[i], MAXDIAL);
+			for (i = 1; i < ntokens && i < MAXPHONE - 1; i++) {
+				sys_phone[i - 1] =
+				    emalloc(strlen(tokens[i]) + 1);
+				strcpy(sys_phone[i - 1], tokens[i]);
 			}
-			sys_phone[i - 1][0] = '\0';
+			sys_phone[i] = NULL;
 			break;
 
 		    case CONFIG_ADJ: {
@@ -1785,7 +1880,7 @@ getconfig(
 
 		for (i = 0; i < 8; i++)
 			for (j = 1; j < 100; ++j) {
-				rankey[i] = (char) (RANDOM & 0xff);
+				rankey[i] = (char) (ntp_random() & 0xff);
 				if (rankey[i] != 0) break;
 			}
 		rankey[8] = 0;
@@ -1952,9 +2047,17 @@ gettokens_netinfo (
 				if (ISEOL(*tokens)) break;
 			}
 		}
-		*ntokens = ntok + 1;
-		
-		config->val_index++;
+
+		if (ntok == MAXTOKENS) {
+			/* HMS: chomp it to lose the EOL? */
+			msyslog(LOG_ERR,
+			    "gettokens_netinfo: too many tokens.  Ignoring: %s",
+			    tokens);
+		} else {
+			*ntokens = ntok + 1;
+		}
+
+		config->val_index++;	/* HMS: Should this be in the 'else'? */
 
 		return keywords[prop_index].keytype;
 	}
@@ -2024,13 +2127,40 @@ gettokens (
 		}
 	}
 
-	/*
-	 * Return the match
-	 */
-	*ntokens = ntok + 1;
-	ntok = matchkey(tokenlist[0], keywords, 1);
-	if (ntok == CONFIG_UNKNOWN)
-		goto again;
+     /* Heiko: Remove leading and trailing quotes around tokens */
+     {
+            int i,j = 0;
+	    
+		
+			for (i = 0; i < ntok; i++) {	    
+					/* Now check if the first char is a quote and remove that */
+					if ( tokenlist[ntok][0] == '"' )
+							tokenlist[ntok]++;
+
+					/* Now check the last char ... */
+					j = strlen(tokenlist[ntok])-1;
+					if ( tokenlist[ntok][j] == '"' )
+							tokenlist[ntok][j] = '\0';
+			}
+							
+    }
+
+	if (ntok == MAXTOKENS) {
+		--ntok;
+		/* HMS: chomp it to lose the EOL? */
+		msyslog(LOG_ERR,
+		    "gettokens: too many tokens on the line. Ignoring %s",
+		    cp);
+	} else {
+		/*
+		 * Return the match
+		 */
+		*ntokens = ntok + 1;
+		ntok = matchkey(tokenlist[0], keywords, 1);
+		if (ntok == CONFIG_UNKNOWN)
+			goto again;
+	}
+
 	return ntok;
 }
 
@@ -2068,11 +2198,26 @@ static int
 getnetnum(
 	const char *num,
 	struct sockaddr_storage *addr,
-	int complain
+	int complain,
+	enum gnn_type a_type
 	)
 {
 	struct addrinfo hints;
 	struct addrinfo *ptr;
+	int retval;
+
+#if 0
+	printf("getnetnum: <%s> is a %s (%d)\n",
+		num,
+		(a_type == t_UNK)
+		? "t_UNK"
+		: (a_type == t_REF)
+		  ? "t_REF"
+		  : (a_type == t_MSK)
+		    ? "t_MSK"
+		    : "???",
+		a_type);
+#endif
 
 	/* Get host address. Looking for UDP datagram connection */
  	memset(&hints, 0, sizeof (hints));
@@ -2080,33 +2225,61 @@ getnetnum(
 	    hints.ai_family = addr->ss_family;
 	else
 	    hints.ai_family = AF_UNSPEC;
+	/*
+	 * If we don't have an IPv6 stack, just look up IPv4 addresses
+	 */
+	if (isc_net_probeipv6() != ISC_R_SUCCESS)
+		hints.ai_family = AF_INET;
 
 	hints.ai_socktype = SOCK_DGRAM;
+
+	if (a_type != t_UNK) {
+		hints.ai_flags = AI_NUMERICHOST;
+	}
+
 #ifdef DEBUG
-		if (debug > 3)
-			printf("getaddrinfo %s\n", num);
+	if (debug > 3)
+		printf("getnetnum: calling getaddrinfo(%s,...)\n", num);
 #endif
-	if (getaddrinfo(num, "ntp", &hints, &ptr)!=0) {
+	retval = getaddrinfo(num, "ntp", &hints, &ptr);
+	if (retval != 0 ||
+	   (ptr->ai_family == AF_INET6 && isc_net_probeipv6() != ISC_R_SUCCESS)) {
 		if (complain)
 			msyslog(LOG_ERR,
-				"getaddrinfo: \"%s\" invalid host address, line ignored",
+				"getaddrinfo: \"%s\" invalid host address, ignored",
 				num);
 #ifdef DEBUG
-		if (debug > 3)
+		if (debug > 0)
 			printf(
 				"getaddrinfo: \"%s\" invalid host address%s.\n",
 				num, (complain)
-				? ", line ignored"
+				? ", ignored"
 				: "");
 #endif
-		return 0;
+		if (retval == 0 && 
+		    ptr->ai_family == AF_INET6 && 
+		    isc_net_probeipv6() != ISC_R_SUCCESS) 
+		{
+			return -1;
+		}
+		else {
+			return 0;
+		}
 	}
 
 	memcpy(addr, ptr->ai_addr, ptr->ai_addrlen);
 #ifdef DEBUG
 	if (debug > 1)
-		printf("getnetnum given %s, got %s \n",
-		   num, stoa(addr));
+		printf("getnetnum given %s, got %s (%s/%d)\n",
+		   num, stoa(addr),
+			(a_type == t_UNK)
+			? "t_UNK"
+			: (a_type == t_REF)
+			  ? "t_REF"
+			  : (a_type == t_MSK)
+			    ? "t_MSK"
+			    : "???",
+			a_type);
 #endif
         freeaddrinfo(ptr);
 	return 1;

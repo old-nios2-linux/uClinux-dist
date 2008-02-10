@@ -1,11 +1,11 @@
-/* $Id: config.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: config.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.15.2.24  1998/11/11 13:37:53  keil

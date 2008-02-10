@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+# $Id: Makefile,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,7 +11,7 @@
 # parent makes..
 #
 # $Log: Makefile,v $
-# Revision 1.1.1.1  1999/11/22 03:47:19  christ
+# Revision 1.1.1.1  1999-11-22 03:47:19  christ
 # Importing new-wave v1.0.4
 #
 # Revision 1.4  1997/03/30 17:10:40  calle

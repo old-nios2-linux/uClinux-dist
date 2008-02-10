@@ -19,6 +19,8 @@
 # back to root.
 #
 
+SUDO ?= sudo -p "Enter root password for building dev nodes : "
+
 # Some shorthand device permission setups
 DEVICE_PUBLIC=		-group=root	-mode=0666
 DEVICE_PRIVATE=		-group=root	-mode=0600
@@ -45,7 +47,6 @@ DEVICE_READABLE=	-group=root	-mode=0444
 DEVICE_CRYPTO=		-group=crypto	-mode=0666
 DEVICE_PTY=		-group=tty	-mode=0620
 DEVICE_TUN=		-group=root	-mode=0700
-
 
 ifdef CONFIG_DEFAULTS_KERNEL_2_0
 	DEVICES += $(DEVICE_CONS) console,c,4,0
@@ -344,7 +345,8 @@ DEVICES += -reset
 # Creating devices.
 # If you can chgrp properly add "chgrp $$group $$node;" below the touch command
 
-romfs_dev:
+.PHONY: romfs_dirs
+romfs_dirs:
 	[ -d $(ROMFSDIR)/dev ] || mkdir -p $(ROMFSDIR)/dev
 ifdef CONFIG_USER_UDEV
 	[ -d $(ROMFSDIR)/lib/udev/devices ] || mkdir -p $(ROMFSDIR)/lib/udev/devices
@@ -352,6 +354,9 @@ endif
 ifdef CONFIG_OPROFILE
 	[ -d $(ROMFSDIR)/dev/oprofile ] || mkdir -p $(ROMFSDIR)/dev/oprofile
 endif
+
+.PHONY: romfs_dev
+romfs_dev: romfs_dirs
 	for i in -reset $(DEVICES) $(DEVICE_SYSTEM) $(patsubst %,flash/%,$(FLASH_DEVICES));	\
 	do									\
 		case "$$i" in							\
@@ -364,7 +369,7 @@ endif
 					mkdir $(ROMFSDIR)/dev/$$d;		\
 				fi;						\
 				node=$(ROMFSDIR)/dev/$$d/@`basename $$i` ;	\
-				rm -f $$node;					\
+				rm -f `echo $$node | sed 's/,.*//g'`* ; \
 				echo touching $$node; \
 				touch $$node;					\
 				chmod $$mode $$node;				\
@@ -373,7 +378,7 @@ endif
 						mkdir $(ROMFSDIR)/lib/udev/devices/$$d;		\
 					fi;						\
 					node=$(ROMFSDIR)/lib/udev/devices/$$d/@`basename $$i` ;	\
-					rm -f $$node;					\
+					rm -f `echo $$node | sed 's/,.*//g'`* ; \
 					echo touching $$node; \
 					touch $$node;					\
 					chmod $$mode $$node;				\
@@ -381,3 +386,36 @@ endif
 				;;						\
 		esac ;								\
 	done
+
+.PHONY: romfs_dev_sudo
+romfs_dev_sudo: romfs_dirs
+	for i in -reset $(DEVICES) $(DEVICE_SYSTEM) $(patsubst %,flash/%,$(FLASH_DEVICES));	\
+	do									\
+		case "$$i" in							\
+			-mode=*)	mode="`echo $$i | cut -f2 -d=`"  ;;	\
+			-group=*)	group="`echo $$i | cut -f2 -d=`" ;;	\
+			-reset) 	mode=644;	group=root	 ;;	\
+			*)							\
+				d=`dirname $$i` ;				\
+				if [ ! -d $(ROMFSDIR)/dev/$$d ]; then		\
+					mkdir $(ROMFSDIR)/dev/$$d;		\
+				fi;						\
+				node=$(ROMFSDIR)/dev/$$d/`basename $$i` ;	\
+				$(SUDO) rm -f `echo $$node | sed 's/,.*//g'`; \
+				echo mknoding $$node; \
+				$(SUDO) mknod `echo $$node | sed 's/,/ /g'`; \
+				$(SUDO) chmod $$mode `echo $$node | sed 's/,.*$$//g'`; \
+				if [ -d $(ROMFSDIR)/lib/udev ]; then \
+					if [ ! -d $(ROMFSDIR)/lib/udev/devices/$$d ]; then		\
+						mkdir $(ROMFSDIR)/lib/udev/devices/$$d;		\
+					fi;						\
+					node=$(ROMFSDIR)/lib/udev/devices/$$d/`basename $$i` ;	\
+					$(SUDO) rm -f `echo $$node | sed 's/,.*//g'`; \
+					echo mknoding $$node; \
+					$(SUDO) mknod `echo $$node | sed -e 's/,/ /g'`; \
+					$(SUDO)  chmod $$mode `echo $$node | sed 's/,/ /g'`; \
+				fi;						\
+				;;						\
+		esac ;								\
+	done
+

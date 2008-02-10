@@ -4,7 +4,7 @@
  *  DESCR: system calls to mon960
  */
 
-#ident "$Id: mon960_calls.c,v 1.1 1999/12/03 06:02:33 gerg Exp $"
+#ident "$Id: mon960_calls.c,v 1.1 1999-12-03 06:02:33 gerg Exp $"
 
 #include <linux/config.h>
 #include <asm/mon960.h>

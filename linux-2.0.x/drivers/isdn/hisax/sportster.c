@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: sportster.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -7,7 +7,7 @@
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.4  1998/04/08 21:58:46  keil

@@ -13,7 +13,7 @@
  * for more details.
  */
 
-char lookup_c_version[] = "@(#) RCSID $Id: lookup.c,v 1.8.8.1 2006/08/16 17:29:11 mcr Exp $";
+char lookup_c_version[] = "@(#) RCSID $Id: lookup.c,v 1.8.8.1 2006-08-16 17:29:11 mcr Exp $";
 
 
 #include <stdio.h>
@@ -645,7 +645,7 @@ void process_dns_reply(dnskey_glob *gs)
 	
 /*
  * $Log: lookup.c,v $
- * Revision 1.8.8.1  2006/08/16 17:29:11  mcr
+ * Revision 1.8.8.1  2006-08-16 17:29:11  mcr
  * back ported #public to 2.4 branch for luck in tracking down loop in
  * lwdnsq. Added some loop checking code as well.
  *

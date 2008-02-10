@@ -3,7 +3,7 @@
 /*
  *	oggplay.c -- Play OGG VORBIS data files
  *
- *	(C) Copyright 2007, Paul Dale (gerg@snapgear.com)
+ *	(C) Copyright 2007-2008, Paul Dale (Paul_Dale@au.securecomputing.com)
  *	(C) Copyright 1999-2002, Greg Ungerer (gerg@snapgear.com)
  *      (C) Copyright 1997-1997, Stéphane TAVENARD
  *          All Rights Reserved
@@ -50,6 +50,10 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 
+#ifdef CONFIG_USER_SETKEY_SETKEY
+#include <key/key.h>
+#endif
+
 /****************************************************************************/
 
 static int	verbose;
@@ -60,7 +64,7 @@ static int	gotsigusr1;
 static int	printtime;
 static int	onlytags;
 static int	crypto_keylen = 0;
-static char	*crypto_key;
+static char	*crypto_key = NULL;
 
 
 /****************************************************************************/
@@ -434,6 +438,20 @@ int main(int argc, char *argv[])
 	if (argnr >= argc)
 		usage(1);
 	startargnr = argnr;
+
+#ifdef CONFIG_USER_SETKEY_SETKEY
+	/* If we've got the crypto key driver installed and the user hasn't
+	 * specified a crypto key already, we load it from the driver.
+	 */
+	if (crypto_key == NULL) {
+		static unsigned char key[128];
+
+		if ((i = getdriverkey(key, sizeof(key))) > 0) {
+			crypto_key = key;
+			crypto_keylen = i;
+		}
+	}
+#endif
 
 	/* Make ourselves the top priority process! */
 	setpriority(PRIO_PROCESS, 0, -20);

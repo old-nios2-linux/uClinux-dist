@@ -23,7 +23,7 @@
  * Tested with Linux 1.2.13, ..., 2.1.103                               *
  *                                                                      *
  * $Log: gdth.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:27  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:27  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.16  1998/09/28 16:08:46  achim
@@ -91,7 +91,7 @@
  * Initial revision
  *
  *
- * $Id: gdth.c,v 1.1.1.1 1999/11/22 03:47:27 christ Exp $ 
+ * $Id: gdth.c,v 1.1.1.1 1999-11-22 03:47:27 christ Exp $ 
  ************************************************************************/
 
 #ifdef MODULE

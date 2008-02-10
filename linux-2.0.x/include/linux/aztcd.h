@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 1.1.1.1 1999/11/22 03:47:00 christ Exp $
+/* $Id: aztcd.h,v 1.1.1.1 1999-11-22 03:47:00 christ Exp $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann

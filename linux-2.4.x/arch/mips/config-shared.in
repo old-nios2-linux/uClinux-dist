@@ -828,10 +828,10 @@ fi
        8306SDM CONFIG_RTL8306SDM" 8306SDM
 	fi
 
-  if ["$CONFIG_RTL8305SB" = "y"]; then
+  if [ "$CONFIG_RTL8305SB" = "y" ]; then
     define_bool CONFIG_RTL8305S y     
   fi               
-  if ["$CONFIG_RTL8305SC" = "y"]; then
+  if [ "$CONFIG_RTL8305SC" = "y" ]; then
     define_bool CONFIG_RTL8305S y
   fi               
                         	

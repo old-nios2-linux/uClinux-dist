@@ -51,6 +51,18 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
+/* Include Bash/Linux shell */
+#undef INCLUDE_BASHSHELL
+
+/* Include shell for precompiled Haserl/Lua */
+#undef INCLUDE_LUACSHELL
+
+/* Include ordinary Lua shell */
+#undef INCLUDE_LUASHELL
+
+/* Include just the compiled Lua shell */
+#undef JUST_LUACSHELL
+
 /* Name of package */
 #undef PACKAGE
 

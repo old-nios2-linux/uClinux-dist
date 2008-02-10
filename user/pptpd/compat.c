@@ -3,7 +3,7 @@
  *
  * Compatibility functions for different OSes
  *
- * $Id: compat.c,v 1.3 2007/07/05 23:33:09 gerg Exp $
+ * $Id: compat.c,v 1.4 2007-12-12 04:42:42 asallawa Exp $
  */
 
 #if HAVE_CONFIG_H
@@ -11,9 +11,9 @@
 #endif
 
 #include "compat.h"
+#include <string.h>
 
 #ifndef HAVE_STRLCPY
-#include <string.h>
 #include <stdio.h>
 
 void strlcpy(char *dst, const char *src, size_t size)

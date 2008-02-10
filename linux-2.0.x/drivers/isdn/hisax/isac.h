@@ -1,4 +1,4 @@
-/* $Id: isac.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isac.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * isac.h   ISAC specific defines
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: isac.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3.2.3  1998/05/27 18:05:41  keil

@@ -1,4 +1,4 @@
-/* $Id: ipac.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: ipac.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * ipac.h   IPAC specific defines
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: ipac.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.2  1998/04/11 18:49:48  keil

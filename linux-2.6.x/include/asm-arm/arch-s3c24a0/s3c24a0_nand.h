@@ -3,7 +3,7 @@
  *
  * s3c24a0 NAND specific definiton
  *
- * $Id: s3c24a0_nand.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: s3c24a0_nand.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  * Copyright (C) SAMSUNG MOBILE
  */

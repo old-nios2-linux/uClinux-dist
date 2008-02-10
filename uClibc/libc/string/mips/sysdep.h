@@ -26,10 +26,10 @@
 #include <sys/regdef.h>
 
 #define ENTRY(name) \
-  .globl name;                                                                \
-  .align 2;                                                                   \
-  .ent name,0;                                                                \
-  name##:
+  .globl name;      \
+  .align 2;         \
+  .ent name,0;      \
+  name :
 
 #undef END
 #define END(function)                                   \

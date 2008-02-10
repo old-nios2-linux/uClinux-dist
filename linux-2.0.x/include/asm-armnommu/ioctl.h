@@ -1,4 +1,4 @@
-/* $Id: ioctl.h,v 1.2 2001/01/09 00:57:38 gerg Exp $
+/* $Id: ioctl.h,v 1.2 2001-01-09 00:57:38 gerg Exp $
  *
  * linux/ioctl.h for Linux by H.H. Bergman.
  */

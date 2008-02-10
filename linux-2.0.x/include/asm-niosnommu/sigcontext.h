@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.1 2003/02/26 04:13:07 gerg Exp $ */
+/* $Id: sigcontext.h,v 1.1 2003-02-26 04:13:07 gerg Exp $ */
 #ifndef _ASMnios_SIGCONTEXT_H
 #define _ASMnios_SIGCONTEXT_H
 

@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-s3c24a0/S3C24A0.h
  *
- * $Id: S3C24A0.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: S3C24A0.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  */
 

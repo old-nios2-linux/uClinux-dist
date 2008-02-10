@@ -1,5 +1,5 @@
 /*
- * $Id: mtd-user.h,v 1.2 2005/01/12 06:12:58 gerg Exp $
+ * $Id: mtd-user.h,v 1.2 2005-01-12 06:12:58 gerg Exp $
  *
  * MTD ABI header for use by user space only.
  */

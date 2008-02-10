@@ -27,7 +27,7 @@
 
 /*
  * $Log: g_NCR5380.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:23  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:23  christ
  * Importing new-wave v1.0.4
  *
  */

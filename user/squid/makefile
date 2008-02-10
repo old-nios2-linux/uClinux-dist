@@ -19,7 +19,8 @@ CONFOPTS=--prefix= \
 		--enable-default-err-language=English			\
 		--enable-linux-netfilter --disable-ident-lookups	\
 		--enable-icap-support \
-		--enable-dependency-tracking
+		--enable-dependency-tracking \
+		--with-maxfd=8192
 
 all: build/build
 	$(MAKE) -C build

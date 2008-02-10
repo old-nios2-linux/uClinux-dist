@@ -25,6 +25,8 @@ CONFIGURE_HOST = nios2-linux-uclibc
 
 CONFIG_UCLINUX=y
 
+CONFIG_UCLINUX=y
+
 CC        = $(CROSS_COMPILE)gcc
 AS        = $(CROSS_COMPILE)as
 CXX       = $(CROSS_COMPILE)g++

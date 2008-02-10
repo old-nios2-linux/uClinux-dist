@@ -4,7 +4,7 @@
  * This file contains some tuneable parameters, most of which can be overriden
  * at run-time.
  *
- * $Id: defaults.h,v 1.4 2007/07/05 23:33:09 gerg Exp $
+ * $Id: defaults.h,v 1.4 2007-07-05 23:33:09 gerg Exp $
  */
 
 #ifndef _PPTPD_DEFAULTS_H

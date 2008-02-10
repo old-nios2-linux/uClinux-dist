@@ -310,7 +310,7 @@ void lookup_aaaa(dnskey_glob *gs,
 	
 /*
  * $Log: cmds.c,v $
- * Revision 1.13.22.1  2006/08/16 17:29:11  mcr
+ * Revision 1.13.22.1  2006-08-16 17:29:11  mcr
  * back ported #public to 2.4 branch for luck in tracking down loop in
  * lwdnsq. Added some loop checking code as well.
  *

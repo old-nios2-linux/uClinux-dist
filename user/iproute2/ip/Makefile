@@ -1,7 +1,8 @@
 IPOBJ=ip.o ipaddress.o iproute.o iprule.o \
     rtm_map.o iptunnel.o tunnel.o ipneigh.o ipntable.o iplink.o \
     ipmaddr.o ipmonitor.o ipmroute.o ipprefix.o \
-    ipxfrm.o xfrm_state.o xfrm_policy.o xfrm_monitor.o
+    ipxfrm.o xfrm_state.o xfrm_policy.o xfrm_monitor.o \
+    iplink_vlan.o link_veth.o
 ifdef CONFIG_IPV6
 IPOBJ+=ip6tunnel.o
 endif
@@ -12,7 +13,7 @@ ALLOBJ=$(IPOBJ) $(RTMONOBJ)
 SCRIPTS=ifcfg rtpr routel routef
 TARGETS=ip rtmon
 
-all: $(TARGETS) $(SCRIPTS)
+all: $(TARGETS) $(SCRIPTS) $(LIBS)
 
 ip: $(IPOBJ) $(LIBNETLINK)
 	$(CC) $(LDFLAGS) -o $@ $(IPOBJ) $(LIBNETLINK) $(LDLIBS$(LDLIBS_$@))
@@ -36,3 +37,4 @@ clean:
 	rm -f *.gdb
 	rm -f $(ALLOBJ) $(TARGETS)
 
+LDLIBS += -ldl

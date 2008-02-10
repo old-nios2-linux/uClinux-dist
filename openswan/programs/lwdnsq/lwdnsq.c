@@ -13,7 +13,7 @@
  * for more details.
  */
 
-char tncfg_c_version[] = "RCSID $Id: lwdnsq.c,v 1.19.8.2 2006/08/16 21:24:13 mcr Exp $";
+char tncfg_c_version[] = "RCSID $Id: lwdnsq.c,v 1.19.8.2 2006-08-16 21:24:13 mcr Exp $";
 
 
 #include <stdio.h>
@@ -551,7 +551,7 @@ main(int argc, char *argv[])
 	
 /*
  * $Log: lwdnsq.c,v $
- * Revision 1.19.8.2  2006/08/16 21:24:13  mcr
+ * Revision 1.19.8.2  2006-08-16 21:24:13  mcr
  * fix signed/unsigned char problem.
  *
  * Revision 1.19.8.1  2006/08/16 17:29:11  mcr

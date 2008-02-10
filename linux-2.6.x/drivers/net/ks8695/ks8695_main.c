@@ -34,7 +34,8 @@
 
 /* define which external ports do what... */
 #if defined(CONFIG_MACH_CM4008) || defined(CONFIG_MACH_CM41xx) || \
-    defined(CONFIG_MACH_LITE300) || defined(CONFIG_MACH_SE4200)
+    defined(CONFIG_MACH_LITE300) || defined(CONFIG_MACH_SE4200) || \
+    defined(CONFIG_MACH_SG310) || defined(CONFIG_MACH_PFW)
 #define	LANPORT		0
 #define	WANPORT		1
 #define	HPNAPORT	2
@@ -121,13 +122,33 @@ static int RoundRobin = 1;		/* default Icache is roundrobin */
 
 /* For mii-tool support */
 static struct mii_regs mii_regs_lan[] = { 
-	{ {KS8695_SWITCH_PORT1, }, {KS8695_SWITCH_AUTO0, 16}, {KS8695_LAN12_POWERMAGR, 16} },
-	{ {KS8695_SWITCH_PORT2, }, {KS8695_SWITCH_AUTO0,  0}, {KS8695_LAN12_POWERMAGR,  0} },
-	{ {KS8695_SWITCH_PORT3, }, {KS8695_SWITCH_AUTO1, 16}, {KS8695_LAN34_POWERMAGR, 16} },
-	{ {KS8695_SWITCH_PORT4, }, {KS8695_SWITCH_AUTO1,  0}, {KS8695_LAN34_POWERMAGR,  0} }
+	{
+		{KS8695_SWITCH_PORT1, },
+		{KS8695_SWITCH_AUTO0, 16},
+		{KS8695_LAN12_POWERMAGR, 16}
+	 },
+	{
+		{KS8695_SWITCH_PORT2, },
+		{KS8695_SWITCH_AUTO0,  0},
+		{KS8695_LAN12_POWERMAGR,  0}
+	},
+	{
+		{KS8695_SWITCH_PORT3, },
+		{KS8695_SWITCH_AUTO1, 16},
+		{KS8695_LAN34_POWERMAGR, 16}
+	},
+	{
+		{KS8695_SWITCH_PORT4, },
+		{KS8695_SWITCH_AUTO1,  0},
+		{KS8695_LAN34_POWERMAGR,  0}
+	}
 };
 static struct mii_regs mii_regs_wan[] = {
-	{ {KS8695_WAN_CONTROL, }, {KS8695_WAN_CONTROL, 16}, {KS8695_WAN_CONTROL, 16} }
+	{
+		{KS8695_WAN_CONTROL, },
+		{KS8695_WAN_CONTROL, 16},
+		{KS8695_WAN_CONTROL, 16}
+	}
 };
 static int skipcmd = 0;
 static uint16_t ctype = SW_PHY_DEFAULT;
@@ -592,7 +613,7 @@ static int hook_irqs(struct net_device *netdev, int req)
 #ifndef	USE_FIQ
 				if (request_irq(31, ks8695_isr_link, SA_SHIRQ, "WAN eth", netdev)) {
 #else
-				if (request_irq(31, ks8695_isr_link, SA_SHIRQ | SA_INTERRUPT, "WAN eth", netdev)) {
+				if (request_irq(31, ks8695_isr_link, IRQF_SHARED | IRQF_DISABLED, "WAN eth", netdev)) {
 #endif
 					return -EBUSY;
 				}
@@ -642,6 +663,10 @@ static int hook_irqs(struct net_device *netdev, int req)
 #elif defined(CONFIG_MACH_LITE300) || defined(CONFIG_MACH_SE4200)
 #define	MAC_OFFSET	0x0c000
 #define	MAC_DEFAULT	0x00, 0xd0, 0xcf, 0x00, 0x00, 0x00
+#elif defined(CONFIG_MACH_SG310) || defined(CONFIG_MACH_PFW)
+#define	MAC_DEFAULT	0x00, 0xd0, 0xcf, 0x00, 0x00, 0x00
+#else
+#define	MAC_DEFAULT	0x00, 0x10, 0xa1, 0x00, 0x10, 0x01
 #endif
 
 #ifdef MAC_OFFSET
@@ -681,7 +706,7 @@ void ks8695_getmac(unsigned char *dst, int index)
 void ks8695_getmac(unsigned char *dst, int index)
 {
 	static char macs[] = {
-		0x00, 0x10, 0xa1, 0x00, 0x10, 0x01,
+		MAC_DEFAULT
 	};
 	memcpy(dst, macs, ETH_LENGTH_OF_ADDRESS);
 	macs[ETH_LENGTH_OF_ADDRESS-1]++;
@@ -795,12 +820,12 @@ int ks8695_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	   use more for each DMA, look for /proc/interrupts for details */
 	netdev->irq = pdev->irq;
 
-	Adapter->stDMAInfo.nBaseAddr = KS8695_IO_VIRT;
-	netdev->mem_start = KS8695_IO_VIRT;
+	Adapter->stDMAInfo.nBaseAddr = KS8695_SYS_VA;
+	netdev->mem_start = KS8695_SYS_VA;
 	netdev->mem_end = netdev->mem_start + 0xffff;
 
 /* #ifdef	DEBUG_THIS */
-	DRV_INFO("VA = 0x%08x, PA=0x%08x", Adapter->stDMAInfo.nBaseAddr, KS8695_IO_BASE);
+	DRV_INFO("VA = 0x%08x, PA=0x%08x", Adapter->stDMAInfo.nBaseAddr, KS8695_SYS_PA);
 /* #endif */
 
 	/* set up function pointers to driver entry points */
@@ -904,6 +929,10 @@ int ks8695_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -ENODEV;
 	}
 
+	netdev->addr_len = MAC_ADDRESS_LEN;
+	memcpy(netdev->dev_addr, DI.stMacStation, MAC_ADDRESS_LEN);
+	memcpy(DI.stMacCurrent, DI.stMacStation, MAC_ADDRESS_LEN);
+
 	nRet = SoftwareInit(Adapter);
 	if (nRet) {
 		DRV_ERR("%s: SoftwareInit failed", __FUNCTION__);
@@ -924,7 +953,8 @@ int ks8695_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	cards_found++;
 
-#if defined(CONFIG_MACH_LITE300)
+#if defined(CONFIG_MACH_LITE300) || defined(CONFIG_MACH_SG310) || \
+    defined(CONFIG_MACH_PFW)
 	/* set LED 0 for link/activities */
 	swSetLED(Adapter, FALSE, LED_LINK_ACTIVITY);
 #else
@@ -1448,7 +1478,7 @@ static void *consistent_alloc_ex(int gfp, size_t size, dma_addr_t *dma_handle)
 	 */
 	virt = page_address(page);
 	*dma_handle = virt_to_phys(virt);
-	ret = __ioremap(virt_to_phys(virt), size, 0);
+	ret = __arm_ioremap(virt_to_phys(virt), size, 0);
 	if (!ret)
 		goto no_remap;
 
@@ -1971,14 +2001,13 @@ int ks8695_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 	DRV_INFO("%s> len=%d", __FUNCTION__, len); 
 #endif
 
-
 	i = DI.nTxDescNextAvail;
 	pTxDesc = &DI.pTxDescriptors[i];
 
 	DI.pTxSkb[i].skb = skb;
 	DI.pTxSkb[i].length = len;
 	DI.pTxSkb[i].direction = PCI_DMA_TODEVICE;
-	consistent_sync(data, DI.uRxBufferLen, PCI_DMA_TODEVICE);
+	dma_cache_maint(data, DI.uRxBufferLen, PCI_DMA_TODEVICE);
 	DI.pTxSkb[i].dma = virt_to_phys(data);
 
 	/* set DMA buffer address */
@@ -2395,10 +2424,6 @@ static int __inline ProcessRxInterrupts(PADAPTER_STRUCT Adapter)
 	DRV_INFO("%s> )", __FUNCTION__); 
 #endif
 
-#ifdef CONFIG_LEDMAN
-	ledman_cmd(LEDMAN_CMD_SET, LEDMAN_LAN1_RX);
-		/*(dev->name[3] == '0') ? LEDMAN_LAN1_RX : LEDMAN_LAN2_RX);*/
-#endif
 	i = DI.nRxDescNextAvail;
 	pBegin = CurrentDescriptor = &DI.pRxDescriptors[i];
 
@@ -2519,7 +2544,7 @@ static int __inline ProcessRxInterrupts(PADAPTER_STRUCT Adapter)
 		Length -= ETH_CRC_LENGTH;
 
 		/* to do something ? */
-		consistent_sync(skb->data, DI.uRxBufferLen, PCI_DMA_FROMDEVICE);
+		dma_cache_maint(skb->data, DI.uRxBufferLen, PCI_DMA_FROMDEVICE);
 
 #ifdef	PACKET_DUMP
 		/* build in debug mechanism */
@@ -2552,6 +2577,10 @@ static int __inline ProcessRxInterrupts(PADAPTER_STRUCT Adapter)
 		else 
 		    skb->ip_summed = CHECKSUM_NONE;
 
+#ifdef CONFIG_LEDMAN
+		ledman_cmd(LEDMAN_CMD_SET, (Adapter->netdev->name[3] == '0') ?
+			 LEDMAN_LAN1_RX : LEDMAN_LAN2_RX);
+#endif
 		skb->protocol = eth_type_trans(skb, Adapter->netdev);
 		cng_level = netif_rx(skb);
 		nProcessed++;
@@ -2838,7 +2867,7 @@ static void ReceiveBufferFill(uintptr_t data)
 		DI.pRxSkb[i].length = DI.uRxBufferLen;
 		DI.pRxSkb[i].direction = PCI_DMA_FROMDEVICE;
 #ifndef	RX_TASK
-		consistent_sync(skb->data, DI.uRxBufferLen, PCI_DMA_FROMDEVICE);
+		dma_cache_maint(skb->data, DI.uRxBufferLen, PCI_DMA_FROMDEVICE);
 #endif
 		DI.pRxSkb[i].dma = virt_to_phys(skb->data);
 

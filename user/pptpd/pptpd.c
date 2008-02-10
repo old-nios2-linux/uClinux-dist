@@ -4,7 +4,7 @@
  * Grabs any command line argument and processes any further options in
  * the pptpd config file, before throwing over to pptpmanager.c.
  *
- * $Id: pptpd.c,v 1.15 2007/07/05 23:33:09 gerg Exp $
+ * $Id: pptpd.c,v 1.15 2007-07-05 23:33:09 gerg Exp $
  */
 
 #ifdef HAVE_CONFIG_H

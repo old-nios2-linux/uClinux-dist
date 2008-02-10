@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: barf.in,v 1.107.2.7 2006/11/07 03:49:18 paul Exp $
+# RCSID $Id: barf.in,v 1.107.2.7 2006-11-07 03:49:18 paul Exp $
 
 LOGS=${LOGS-/var/log}
 CONFS=${IPSEC_CONFS-/etc}

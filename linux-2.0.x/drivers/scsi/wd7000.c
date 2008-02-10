@@ -1,4 +1,4 @@
-/* $Id: wd7000.c,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $
+/* $Id: wd7000.c,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $
  *  linux/drivers/scsi/wd7000.c
  *
  *  Copyright (C) 1992  Thomas Wuensche

@@ -36,7 +36,7 @@
  * From: @(#)termstat.c	5.10 (Berkeley) 3/22/91
  */
 char termstat_rcsid[] = 
-  "$Id: termstat.c,v 1.2 2003/07/21 03:11:25 davidm Exp $";
+  "$Id: termstat.c,v 1.2 2003-07-21 03:11:25 davidm Exp $";
 #endif
 
 #include <string.h>

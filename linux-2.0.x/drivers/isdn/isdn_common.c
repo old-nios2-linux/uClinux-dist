@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.1.1.1 1999/11/22 03:47:18 christ Exp $
+/* $Id: isdn_common.c,v 1.1.1.1 1999-11-22 03:47:18 christ Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:18  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:18  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.44.2.9  1998/11/06 00:07:25  fritz

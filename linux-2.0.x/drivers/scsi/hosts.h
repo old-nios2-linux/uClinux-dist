@@ -20,7 +20,7 @@
 #define _HOSTS_H
 
 /*
-    $Header: /cvs/sw/linux-2.0.x/drivers/scsi/hosts.h,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $
+    $Header: /cvs/sw/linux-2.0.x/drivers/scsi/hosts.h,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $
 */
 
 #include <linux/proc_fs.h>

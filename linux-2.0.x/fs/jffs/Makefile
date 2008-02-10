@@ -9,7 +9,7 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 #
-# $Id: Makefile,v 1.2 2000/10/06 08:39:31 davidm Exp $
+# $Id: Makefile,v 1.2 2000-10-06 08:39:31 davidm Exp $
 #
 
 O_TARGET := jffs.o

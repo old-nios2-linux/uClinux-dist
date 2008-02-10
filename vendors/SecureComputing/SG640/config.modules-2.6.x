@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Wed Nov  7 01:50:01 2007
+# Thu Jan 31 01:35:59 2008
 #
 CONFIG_MODULES=y
 
@@ -74,7 +74,7 @@ CONFIG_IXP400_COMPONENTS=y
 # CONFIG_IXP425_ATM is not set
 CONFIG_IXP400_ETH=y
 CONFIG_IXP425_IXP_AS_ETH=y
-# CONFIG_IXP400_NAPI is not set
+CONFIG_IXP400_NAPI=y
 CONFIG_IXP400_ETH_ALL=y
 # CONFIG_IXP400_ETH_NPEB_ONLY is not set
 # CONFIG_IXP400_ETH_NPEC_ONLY is not set

@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/clocks.h
  *
- * $Id: clocks.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: clocks.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or

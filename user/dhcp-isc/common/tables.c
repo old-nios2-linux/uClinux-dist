@@ -3,58 +3,55 @@
    Tables of information... */
 
 /*
- * Copyright (c) 1995, 1996 The Internet Software Consortium.
- * All rights reserved.
+ * Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1995-2003 by Internet Software Consortium
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The Internet Software Consortium nor the names
- *    of its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INTERNET SOFTWARE CONSORTIUM AND
- * CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE INTERNET SOFTWARE CONSORTIUM OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *   Internet Systems Consortium, Inc.
+ *   950 Charter Street
+ *   Redwood City, CA 94063
+ *   <info@isc.org>
+ *   http://www.isc.org/
  *
- * This software has been written for the Internet Software Consortium
- * by Ted Lemon <mellon@fugue.com> in cooperation with Vixie
- * Enterprises.  To learn more about the Internet Software Consortium,
- * see ``http://www.vix.com/isc''.  To learn more about Vixie
- * Enterprises, see ``http://www.vix.com''.
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``http://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
-#ifndef EMBED
-#ifndef lint
-static char copyright[] =
-"$Id: tables.c,v 1.4 2004/12/14 04:47:52 robertw Exp $ Copyright (c) 1995, 1996 The Internet Software Consortium.  All rights reserved.\n";
-#endif /* not lint */
-#endif
-
 #include "dhcpd.h"
+
+/* XXXDPN: Moved here from hash.c, when it moved to libomapi.  Not sure
+   where these really belong. */
+HASH_FUNCTIONS (group, const char *, struct group_object, group_hash_t,
+		group_reference, group_dereference, do_string_hash)
+HASH_FUNCTIONS (universe, const char *, struct universe, universe_hash_t, 0, 0,
+		do_case_hash)
+HASH_FUNCTIONS (option_name, const char *, struct option, option_name_hash_t,
+		option_reference, option_dereference, do_case_hash)
+HASH_FUNCTIONS (option_code, const unsigned *, struct option,
+		option_code_hash_t, option_reference, option_dereference,
+		do_number_hash)
 
 /* DHCP Option names, formats and codes, from RFC1533.
 
    Format codes:
 
-   e - end of data
-   I - IP address
+   I - IPv4 address
+   6 - IPv6 address
    l - 32-bit signed integer
    L - 32-bit unsigned integer
    s - 16-bit signed integer
@@ -62,356 +59,460 @@ static char copyright[] =
    b - 8-bit signed integer
    B - 8-bit unsigned integer
    t - ASCII text
+   T - Lease Time, 32-bit unsigned integer implying a number of seconds from
+       some event.  The special all-ones value means 'infinite'.  May either
+       be printed as a decimal, eg, "3600", or as this name, eg, "infinite".
    f - flag (true or false)
    A - array of whatever precedes (e.g., IA means array of IP addresses)
+   a - array of the preceding character (e.g., IIa means two or more IP
+       addresses)
+   U - name of an option space (universe)
+   F - implicit flag - the presence of the option indicates that the
+       flag is true.
+   o - the preceding value is optional.
+   E - encapsulation, string or colon-separated hex list (the latter
+       two for parsing).   E is followed by a text string containing
+       the name of the option space to encapsulate, followed by a '.'.
+       If the E is immediately followed by '.', the applicable vendor
+       option space is used if one is defined.
+   e - If an encapsulation directive is not the first thing in the string,
+       the option scanner requires an efficient way to find the encapsulation.
+       This is done by placing a 'e' at the beginning of the option.   The
+       'e' has no other purpose, and is not required if 'E' is the first
+       thing in the option.
+   X - either an ASCII string or binary data.   On output, the string is
+       scanned to see if it's printable ASCII and, if so, output as a
+       quoted string.   If not, it's output as colon-separated hex.   On
+       input, the option can be specified either as a quoted string or as
+       a colon-separated hex list.
+   N - enumeration.   N is followed by a text string containing
+       the name of the set of enumeration values to parse or emit,
+       followed by a '.'.   The width of the data is specified in the
+       named enumeration.   Named enumerations are tracked in parse.c.
+   d - Domain name (i.e., FOO or FOO.BAR).
+   D - Domain list (i.e., example.com eng.example.com)
+   c - When following a 'D' atom, enables compression pointers.
 */
 
 struct universe dhcp_universe;
-struct option dhcp_options [256] = {
-	{ "pad", "",					&dhcp_universe, 0 },
-	{ "subnet-mask", "I",				&dhcp_universe, 1 },
-	{ "time-offset", "l",				&dhcp_universe, 2 },
-	{ "routers", "IA",				&dhcp_universe, 3 },
-	{ "time-servers", "IA",				&dhcp_universe, 4 },
-	{ "ien116-name-servers", "IA",			&dhcp_universe, 5 },
-	{ "domain-name-servers", "IA",			&dhcp_universe, 6 },
-	{ "log-servers", "IA",				&dhcp_universe, 7 },
-	{ "cookie-servers", "IA",			&dhcp_universe, 8 },
-	{ "lpr-servers", "IA",				&dhcp_universe, 9 },
-	{ "impress-servers", "IA",			&dhcp_universe, 10 },
-	{ "resource-location-servers", "IA",		&dhcp_universe, 11 },
-	{ "host-name", "X",				&dhcp_universe, 12 },
-	{ "boot-size", "S",				&dhcp_universe, 13 },
-	{ "merit-dump", "t",				&dhcp_universe, 14 },
-	{ "domain-name", "t",				&dhcp_universe, 15 },
-	{ "swap-server", "I",				&dhcp_universe, 16 },
-	{ "root-path", "t",				&dhcp_universe, 17 },
-	{ "extensions-path", "t",			&dhcp_universe, 18 },
-	{ "ip-forwarding", "f",				&dhcp_universe, 19 },
-	{ "non-local-source-routing", "f",		&dhcp_universe, 20 },
-	{ "policy-filter", "IIA",			&dhcp_universe, 21 },
-	{ "max-dgram-reassembly", "S",			&dhcp_universe, 22 },
-	{ "default-ip-ttl", "B",			&dhcp_universe, 23 },
-	{ "path-mtu-aging-timeout", "L",		&dhcp_universe, 24 },
-	{ "path-mtu-plateau-table", "SA",		&dhcp_universe, 25 },
-	{ "interface-mtu", "S",				&dhcp_universe, 26 },
-	{ "all-subnets-local", "f",			&dhcp_universe, 27 },
-	{ "broadcast-address", "I",			&dhcp_universe, 28 },
-	{ "perform-mask-discovery", "f",		&dhcp_universe, 29 },
-	{ "mask-supplier", "f",				&dhcp_universe, 30 },
-	{ "router-discovery", "f",			&dhcp_universe, 31 },
-	{ "router-solicitation-address", "I",		&dhcp_universe, 32 },
-	{ "static-routes", "IIA",			&dhcp_universe, 33 },
-	{ "trailer-encapsulation", "f",			&dhcp_universe, 34 },
-	{ "arp-cache-timeout", "L",			&dhcp_universe, 35 },
-	{ "ieee802-3-encapsulation", "f",		&dhcp_universe, 36 },
-	{ "default-tcp-ttl", "B",			&dhcp_universe, 37 },
-	{ "tcp-keepalive-interval", "L",		&dhcp_universe, 38 },
-	{ "tcp-keepalive-garbage", "f",			&dhcp_universe, 39 },
-	{ "nis-domain", "t",				&dhcp_universe, 40 },
-	{ "nis-servers", "IA",				&dhcp_universe, 41 },
-	{ "ntp-servers", "IA",				&dhcp_universe, 42 },
-	{ "vendor-encapsulated-options", "X",		&dhcp_universe, 43 },
-	{ "netbios-name-servers", "IA",			&dhcp_universe, 44 },
-	{ "netbios-dd-server", "IA",			&dhcp_universe, 45 },
-	{ "netbios-node-type", "B",			&dhcp_universe, 46 },
-	{ "netbios-scope", "t",				&dhcp_universe, 47 },
-	{ "font-servers", "IA",				&dhcp_universe, 48 },
-	{ "x-display-manager", "IA",			&dhcp_universe, 49 },
-	{ "dhcp-requested-address", "I",		&dhcp_universe, 50 },
-	{ "dhcp-lease-time", "L",			&dhcp_universe, 51 },
-	{ "dhcp-option-overload", "B",			&dhcp_universe, 52 },
-	{ "dhcp-message-type", "B",			&dhcp_universe, 53 },
-	{ "dhcp-server-identifier", "I",		&dhcp_universe, 54 },
-	{ "dhcp-parameter-request-list", "BA",		&dhcp_universe, 55 },
-	{ "dhcp-message", "t",				&dhcp_universe, 56 },
-	{ "dhcp-max-message-size", "S",			&dhcp_universe, 57 },
-	{ "dhcp-renewal-time", "L",			&dhcp_universe, 58 },
-	{ "dhcp-rebinding-time", "L",			&dhcp_universe, 59 },
-	{ "dhcp-class-identifier", "t",			&dhcp_universe, 60 },
-	{ "dhcp-client-identifier", "X",		&dhcp_universe, 61 },
-	{ "option-62", "X",				&dhcp_universe, 62 },
-	{ "option-63", "X",				&dhcp_universe, 63 },
-	{ "nisplus-domain", "t",			&dhcp_universe, 64 },
-	{ "nisplus-servers", "IA",			&dhcp_universe, 65 },
-	{ "tftp-server-name", "t",			&dhcp_universe, 66 },
-	{ "bootfile-name", "t",				&dhcp_universe, 67 },
-	{ "mobile-ip-home-agent", "IA",			&dhcp_universe, 68 },
-	{ "smtp-server", "IA",				&dhcp_universe, 69 },
-	{ "pop-server", "IA",				&dhcp_universe, 70 },
-	{ "nntp-server", "IA",				&dhcp_universe, 71 },
-	{ "www-server", "IA",				&dhcp_universe, 72 },
-	{ "finger-server", "IA",			&dhcp_universe, 73 },
-	{ "irc-server", "IA",				&dhcp_universe, 74 },
-	{ "streettalk-server", "IA",			&dhcp_universe, 75 },
-	{ "streettalk-directory-assistance-server", "IA", &dhcp_universe, 76 },
-	{ "user-class", "t",				&dhcp_universe, 77 },
-	{ "option-78", "X",				&dhcp_universe, 78 },
-	{ "option-79", "X",				&dhcp_universe, 79 },
-	{ "option-80", "X",				&dhcp_universe, 80 },
-	{ "option-81", "X",				&dhcp_universe, 81 },
-	{ "option-82", "X",				&dhcp_universe, 82 },
-	{ "option-83", "X",				&dhcp_universe, 83 },
-	{ "option-84", "X",				&dhcp_universe, 84 },
-	{ "nds-servers", "IA",				&dhcp_universe, 85 },
-	{ "nds-tree-name", "X",				&dhcp_universe, 86 },
-	{ "nds-context", "X",				&dhcp_universe, 87 },
-	{ "option-88", "X",				&dhcp_universe, 88 },
-	{ "option-89", "X",				&dhcp_universe, 89 },
-	{ "option-90", "X",				&dhcp_universe, 90 },
-	{ "option-91", "X",				&dhcp_universe, 91 },
-	{ "option-92", "X",				&dhcp_universe, 92 },
-	{ "option-93", "X",				&dhcp_universe, 93 },
-	{ "option-94", "X",				&dhcp_universe, 94 },
-	{ "option-95", "X",				&dhcp_universe, 95 },
-	{ "option-96", "X",				&dhcp_universe, 96 },
-	{ "option-97", "X",				&dhcp_universe, 97 },
-	{ "option-98", "X",				&dhcp_universe, 98 },
-	{ "option-99", "X",				&dhcp_universe, 99 },
-	{ "option-100", "X",				&dhcp_universe, 100 },
-	{ "option-101", "X",				&dhcp_universe, 101 },
-	{ "option-102", "X",				&dhcp_universe, 102 },
-	{ "option-103", "X",				&dhcp_universe, 103 },
-	{ "option-104", "X",				&dhcp_universe, 104 },
-	{ "option-105", "X",				&dhcp_universe, 105 },
-	{ "option-106", "X",				&dhcp_universe, 106 },
-	{ "option-107", "X",				&dhcp_universe, 107 },
-	{ "option-108", "X",				&dhcp_universe, 108 },
-	{ "option-109", "X",				&dhcp_universe, 109 },
-	{ "option-110", "X",				&dhcp_universe, 110 },
-	{ "option-111", "X",				&dhcp_universe, 111 },
-	{ "option-112", "X",				&dhcp_universe, 112 },
-	{ "option-113", "X",				&dhcp_universe, 113 },
-	{ "option-114", "X",				&dhcp_universe, 114 },
-	{ "option-115", "X",				&dhcp_universe, 115 },
-	{ "option-116", "X",				&dhcp_universe, 116 },
-	{ "option-117", "X",				&dhcp_universe, 117 },
-	{ "option-118", "X",				&dhcp_universe, 118 },
-	{ "option-119", "X",				&dhcp_universe, 119 },
-	{ "option-120", "X",				&dhcp_universe, 120 },
-	{ "option-121", "X",				&dhcp_universe, 121 },
-	{ "option-122", "X",				&dhcp_universe, 122 },
-	{ "option-123", "X",				&dhcp_universe, 123 },
-	{ "option-124", "X",				&dhcp_universe, 124 },
-	{ "option-125", "X",				&dhcp_universe, 125 },
-	{ "option-126", "X",				&dhcp_universe, 126 },
-	{ "option-127", "X",				&dhcp_universe, 127 },
-	{ "option-128", "X",				&dhcp_universe, 128 },
-	{ "option-129", "X",				&dhcp_universe, 129 },
-	{ "option-130", "X",				&dhcp_universe, 130 },
-	{ "option-131", "X",				&dhcp_universe, 131 },
-	{ "option-132", "X",				&dhcp_universe, 132 },
-	{ "option-133", "X",				&dhcp_universe, 133 },
-	{ "option-134", "X",				&dhcp_universe, 134 },
-	{ "option-135", "X",				&dhcp_universe, 135 },
-	{ "option-136", "X",				&dhcp_universe, 136 },
-	{ "option-137", "X",				&dhcp_universe, 137 },
-	{ "option-138", "X",				&dhcp_universe, 138 },
-	{ "option-139", "X",				&dhcp_universe, 139 },
-	{ "option-140", "X",				&dhcp_universe, 140 },
-	{ "option-141", "X",				&dhcp_universe, 141 },
-	{ "option-142", "X",				&dhcp_universe, 142 },
-	{ "option-143", "X",				&dhcp_universe, 143 },
-	{ "option-144", "X",				&dhcp_universe, 144 },
-	{ "option-145", "X",				&dhcp_universe, 145 },
-	{ "option-146", "X",				&dhcp_universe, 146 },
-	{ "option-147", "X",				&dhcp_universe, 147 },
-	{ "option-148", "X",				&dhcp_universe, 148 },
-	{ "option-149", "X",				&dhcp_universe, 149 },
-	{ "option-150", "X",				&dhcp_universe, 150 },
-	{ "option-151", "X",				&dhcp_universe, 151 },
-	{ "option-152", "X",				&dhcp_universe, 152 },
-	{ "option-153", "X",				&dhcp_universe, 153 },
-	{ "option-154", "X",				&dhcp_universe, 154 },
-	{ "option-155", "X",				&dhcp_universe, 155 },
-	{ "option-156", "X",				&dhcp_universe, 156 },
-	{ "option-157", "X",				&dhcp_universe, 157 },
-	{ "option-158", "X",				&dhcp_universe, 158 },
-	{ "option-159", "X",				&dhcp_universe, 159 },
-	{ "option-160", "X",				&dhcp_universe, 160 },
-	{ "option-161", "X",				&dhcp_universe, 161 },
-	{ "option-162", "X",				&dhcp_universe, 162 },
-	{ "option-163", "X",				&dhcp_universe, 163 },
-	{ "option-164", "X",				&dhcp_universe, 164 },
-	{ "option-165", "X",				&dhcp_universe, 165 },
-	{ "option-166", "X",				&dhcp_universe, 166 },
-	{ "option-167", "X",				&dhcp_universe, 167 },
-	{ "option-168", "X",				&dhcp_universe, 168 },
-	{ "option-169", "X",				&dhcp_universe, 169 },
-	{ "option-170", "X",				&dhcp_universe, 170 },
-	{ "option-171", "X",				&dhcp_universe, 171 },
-	{ "option-172", "X",				&dhcp_universe, 172 },
-	{ "option-173", "X",				&dhcp_universe, 173 },
-	{ "option-174", "X",				&dhcp_universe, 174 },
-	{ "option-175", "X",				&dhcp_universe, 175 },
-	{ "option-176", "X",				&dhcp_universe, 176 },
-	{ "option-177", "X",				&dhcp_universe, 177 },
-	{ "option-178", "X",				&dhcp_universe, 178 },
-	{ "option-179", "X",				&dhcp_universe, 179 },
-	{ "option-180", "X",				&dhcp_universe, 180 },
-	{ "option-181", "X",				&dhcp_universe, 181 },
-	{ "option-182", "X",				&dhcp_universe, 182 },
-	{ "option-183", "X",				&dhcp_universe, 183 },
-	{ "option-184", "X",				&dhcp_universe, 184 },
-	{ "option-185", "X",				&dhcp_universe, 185 },
-	{ "option-186", "X",				&dhcp_universe, 186 },
-	{ "option-187", "X",				&dhcp_universe, 187 },
-	{ "option-188", "X",				&dhcp_universe, 188 },
-	{ "option-189", "X",				&dhcp_universe, 189 },
-	{ "option-190", "X",				&dhcp_universe, 190 },
-	{ "option-191", "X",				&dhcp_universe, 191 },
-	{ "option-192", "X",				&dhcp_universe, 192 },
-	{ "option-193", "X",				&dhcp_universe, 193 },
-	{ "option-194", "X",				&dhcp_universe, 194 },
-	{ "option-195", "X",				&dhcp_universe, 195 },
-	{ "option-196", "X",				&dhcp_universe, 196 },
-	{ "option-197", "X",				&dhcp_universe, 197 },
-	{ "option-198", "X",				&dhcp_universe, 198 },
-	{ "option-199", "X",				&dhcp_universe, 199 },
-	{ "option-200", "X",				&dhcp_universe, 200 },
-	{ "option-201", "X",				&dhcp_universe, 201 },
-	{ "option-202", "X",				&dhcp_universe, 202 },
-	{ "option-203", "X",				&dhcp_universe, 203 },
-	{ "option-204", "X",				&dhcp_universe, 204 },
-	{ "option-205", "X",				&dhcp_universe, 205 },
-	{ "option-206", "X",				&dhcp_universe, 206 },
-	{ "option-207", "X",				&dhcp_universe, 207 },
-	{ "option-208", "X",				&dhcp_universe, 208 },
-	{ "option-209", "X",				&dhcp_universe, 209 },
-	{ "option-210", "X",				&dhcp_universe, 210 },
-	{ "option-211", "X",				&dhcp_universe, 211 },
-	{ "option-212", "X",				&dhcp_universe, 212 },
-	{ "option-213", "X",				&dhcp_universe, 213 },
-	{ "option-214", "X",				&dhcp_universe, 214 },
-	{ "option-215", "X",				&dhcp_universe, 215 },
-	{ "option-216", "X",				&dhcp_universe, 216 },
-	{ "option-217", "X",				&dhcp_universe, 217 },
-	{ "option-218", "X",				&dhcp_universe, 218 },
-	{ "option-219", "X",				&dhcp_universe, 219 },
-	{ "option-220", "X",				&dhcp_universe, 220 },
-	{ "option-221", "X",				&dhcp_universe, 221 },
-	{ "option-222", "X",				&dhcp_universe, 222 },
-	{ "option-223", "X",				&dhcp_universe, 223 },
-	{ "option-224", "X",				&dhcp_universe, 224 },
-	{ "option-225", "X",				&dhcp_universe, 225 },
-	{ "option-226", "X",				&dhcp_universe, 226 },
-	{ "option-227", "X",				&dhcp_universe, 227 },
-	{ "option-228", "X",				&dhcp_universe, 228 },
-	{ "option-229", "X",				&dhcp_universe, 229 },
-	{ "option-230", "X",				&dhcp_universe, 230 },
-	{ "option-231", "X",				&dhcp_universe, 231 },
-	{ "option-232", "X",				&dhcp_universe, 232 },
-	{ "option-233", "X",				&dhcp_universe, 233 },
-	{ "option-234", "X",				&dhcp_universe, 234 },
-	{ "option-235", "X",				&dhcp_universe, 235 },
-	{ "option-236", "X",				&dhcp_universe, 236 },
-	{ "option-237", "X",				&dhcp_universe, 237 },
-	{ "option-238", "X",				&dhcp_universe, 238 },
-	{ "option-239", "X",				&dhcp_universe, 239 },
-	{ "option-240", "X",				&dhcp_universe, 240 },
-	{ "option-241", "X",				&dhcp_universe, 241 },
-	{ "option-242", "X",				&dhcp_universe, 242 },
-	{ "option-243", "X",				&dhcp_universe, 243 },
-	{ "option-244", "X",				&dhcp_universe, 244 },
-	{ "option-245", "X",				&dhcp_universe, 245 },
-	{ "option-246", "X",				&dhcp_universe, 246 },
-	{ "option-247", "X",				&dhcp_universe, 247 },
-	{ "option-248", "X",				&dhcp_universe, 248 },
-	{ "option-249", "X",				&dhcp_universe, 249 },
-	{ "option-250", "X",				&dhcp_universe, 250 },
-	{ "option-251", "X",				&dhcp_universe, 251 },
-	{ "option-252", "X",				&dhcp_universe, 252 },
-	{ "option-253", "X",				&dhcp_universe, 253 },
-	{ "option-254", "X",				&dhcp_universe, 254 },
-	{ "option-end", "e",				&dhcp_universe, 255 },
+static struct option dhcp_options[] = {
+	{ "subnet-mask", "I",			&dhcp_universe,   1, 1 },
+	{ "time-offset", "l",			&dhcp_universe,   2, 1 },
+	{ "routers", "IA",			&dhcp_universe,   3, 1 },
+	{ "time-servers", "IA",			&dhcp_universe,   4, 1 },
+	{ "ien116-name-servers", "IA",		&dhcp_universe,   5, 1 },
+	{ "domain-name-servers", "IA",		&dhcp_universe,   6, 1 },
+	{ "log-servers", "IA",			&dhcp_universe,   7, 1 },
+	{ "cookie-servers", "IA",		&dhcp_universe,   8, 1 },
+	{ "lpr-servers", "IA",			&dhcp_universe,   9, 1 },
+	{ "impress-servers", "IA",		&dhcp_universe,  10, 1 },
+	{ "resource-location-servers", "IA",	&dhcp_universe,  11, 1 },
+	{ "host-name", "t",			&dhcp_universe,  12, 1 },
+	{ "boot-size", "S",			&dhcp_universe,  13, 1 },
+	{ "merit-dump", "t",			&dhcp_universe,  14, 1 },
+	{ "domain-name", "t",			&dhcp_universe,  15, 1 },
+	{ "swap-server", "I",			&dhcp_universe,  16, 1 },
+	{ "root-path", "t",			&dhcp_universe,  17, 1 },
+	{ "extensions-path", "t",		&dhcp_universe,  18, 1 },
+	{ "ip-forwarding", "f",			&dhcp_universe,  19, 1 },
+	{ "non-local-source-routing", "f",	&dhcp_universe,  20, 1 },
+	{ "policy-filter", "IIA",		&dhcp_universe,  21, 1 },
+	{ "max-dgram-reassembly", "S",		&dhcp_universe,  22, 1 },
+	{ "default-ip-ttl", "B",		&dhcp_universe,  23, 1 },
+	{ "path-mtu-aging-timeout", "L",	&dhcp_universe,  24, 1 },
+	{ "path-mtu-plateau-table", "SA",	&dhcp_universe,  25, 1 },
+	{ "interface-mtu", "S",			&dhcp_universe,  26, 1 },
+	{ "all-subnets-local", "f",		&dhcp_universe,  27, 1 },
+	{ "broadcast-address", "I",		&dhcp_universe,  28, 1 },
+	{ "perform-mask-discovery", "f",	&dhcp_universe,  29, 1 },
+	{ "mask-supplier", "f",			&dhcp_universe,  30, 1 },
+	{ "router-discovery", "f",		&dhcp_universe,  31, 1 },
+	{ "router-solicitation-address", "I",	&dhcp_universe,  32, 1 },
+	{ "static-routes", "IIA",		&dhcp_universe,  33, 1 },
+	{ "trailer-encapsulation", "f",		&dhcp_universe,  34, 1 },
+	{ "arp-cache-timeout", "L",		&dhcp_universe,  35, 1 },
+	{ "ieee802-3-encapsulation", "f",	&dhcp_universe,  36, 1 },
+	{ "default-tcp-ttl", "B",		&dhcp_universe,  37, 1 },
+	{ "tcp-keepalive-interval", "L",	&dhcp_universe,  38, 1 },
+	{ "tcp-keepalive-garbage", "f",		&dhcp_universe,  39, 1 },
+	{ "nis-domain", "t",			&dhcp_universe,  40, 1 },
+	{ "nis-servers", "IA",			&dhcp_universe,  41, 1 },
+	{ "ntp-servers", "IA",			&dhcp_universe,  42, 1 },
+	{ "vendor-encapsulated-options", "E.",	&dhcp_universe,  43, 1 },
+	{ "netbios-name-servers", "IA",		&dhcp_universe,  44, 1 },
+	{ "netbios-dd-server", "IA",		&dhcp_universe,  45, 1 },
+	{ "netbios-node-type", "B",		&dhcp_universe,  46, 1 },
+	{ "netbios-scope", "t",			&dhcp_universe,  47, 1 },
+	{ "font-servers", "IA",			&dhcp_universe,  48, 1 },
+	{ "x-display-manager", "IA",		&dhcp_universe,  49, 1 },
+	{ "dhcp-requested-address", "I",	&dhcp_universe,  50, 1 },
+	{ "dhcp-lease-time", "L",		&dhcp_universe,  51, 1 },
+	{ "dhcp-option-overload", "B",		&dhcp_universe,  52, 1 },
+	{ "dhcp-message-type", "B",		&dhcp_universe,  53, 1 },
+	{ "dhcp-server-identifier", "I",	&dhcp_universe,  54, 1 },
+	{ "dhcp-parameter-request-list", "BA",	&dhcp_universe,  55, 1 },
+	{ "dhcp-message", "t",			&dhcp_universe,  56, 1 },
+	{ "dhcp-max-message-size", "S",		&dhcp_universe,  57, 1 },
+	{ "dhcp-renewal-time", "L",		&dhcp_universe,  58, 1 },
+	{ "dhcp-rebinding-time", "L",		&dhcp_universe,  59, 1 },
+	{ "vendor-class-identifier", "X",	&dhcp_universe,  60, 1 },
+	{ "dhcp-client-identifier", "X",	&dhcp_universe,  61, 1 },
+	{ "nwip-domain", "t",			&dhcp_universe,  62, 1 },
+	{ "nwip-suboptions", "Enwip.",		&dhcp_universe,  63, 1 },
+	{ "nisplus-domain", "t",		&dhcp_universe,  64, 1 },
+	{ "nisplus-servers", "IA",		&dhcp_universe,  65, 1 },
+	{ "tftp-server-name", "t",		&dhcp_universe,  66, 1 },
+	{ "bootfile-name", "t",			&dhcp_universe,  67, 1 },
+	{ "mobile-ip-home-agent", "IA",		&dhcp_universe,  68, 1 },
+	{ "smtp-server", "IA",			&dhcp_universe,  69, 1 },
+	{ "pop-server", "IA",			&dhcp_universe,  70, 1 },
+	{ "nntp-server", "IA",			&dhcp_universe,  71, 1 },
+	{ "www-server", "IA",			&dhcp_universe,  72, 1 },
+	{ "finger-server", "IA",		&dhcp_universe,  73, 1 },
+	{ "irc-server", "IA",			&dhcp_universe,  74, 1 },
+	{ "streettalk-server", "IA",		&dhcp_universe,  75, 1 },
+	{ "streettalk-directory-assistance-server", "IA",
+						&dhcp_universe,  76, 1 },
+	{ "user-class", "t",			&dhcp_universe,  77, 1 },
+	{ "slp-directory-agent", "fIa",		&dhcp_universe,  78, 1 },
+	{ "slp-service-scope", "fto",		&dhcp_universe,  79, 1 },
+	{ "fqdn", "Efqdn.",			&dhcp_universe,  81, 1 },
+	{ "relay-agent-information", "Eagent.",	&dhcp_universe,  82, 1 },
+	{ "nds-servers", "IA",			&dhcp_universe,  85, 1 },
+	{ "nds-tree-name", "t",			&dhcp_universe,  86, 1 },
+	{ "nds-context", "t",			&dhcp_universe,  87, 1 },
+
+	/* Note: RFC4280 fails to identify if the DHCPv4 option is to use
+	 * compression pointers or not.  Assume not.
+	 */
+	{ "bcms-controller-names", "D",		&dhcp_universe,  88, 1 },
+	{ "bcms-controller-address", "Ia",	&dhcp_universe,  89, 1 },
+
+	{ "client-last-transaction-time", "L",  &dhcp_universe,  91, 1 },
+	{ "associated-ip", "Ia",                &dhcp_universe,  92, 1 },
+#if 0
+	/* Not defined by RFC yet */
+	{ "pxe-system-type", "S",		&dhcp_universe,  93, 1 },
+	{ "pxe-interface-id", "BBB",		&dhcp_universe,  94, 1 },
+	{ "pxe-client-id", "BX",		&dhcp_universe,  97, 1 },
+#endif
+	{ "uap-servers", "t",			&dhcp_universe,  98, 1 },
+	{ "netinfo-server-address", "Ia",	&dhcp_universe, 112, 1 },
+	{ "netinfo-server-tag", "t",		&dhcp_universe, 113, 1 },
+	{ "default-url", "t",			&dhcp_universe, 114, 1 },
+	{ "subnet-selection", "I",		&dhcp_universe, 118, 1 },
+	{ "domain-search", "Dc",		&dhcp_universe, 119, 1 },
+	{ "vivco", "Evendor-class.",		&dhcp_universe, 124, 1 },
+	{ "vivso", "Evendor.",			&dhcp_universe, 125, 1 },
+#if 0
+	/* Not defined by RFC yet.
+	 * DO NOT UNCOMMENT THESE DEFINITIONS: these names are placeholders
+	 * and will not be used in future versions of the software.
+	 */
+	{ "pxe-undefined-1", "X",		&dhcp_universe, 128, 1 },
+	{ "pxe-undefined-2", "X",		&dhcp_universe, 129, 1 },
+	{ "pxe-undefined-3", "X",		&dhcp_universe, 130, 1 },
+	{ "pxe-undefined-4", "X",		&dhcp_universe, 131, 1 },
+	{ "pxe-undefined-5", "X",		&dhcp_universe, 132, 1 },
+	{ "pxe-undefined-6", "X",		&dhcp_universe, 133, 1 },
+	{ "pxe-undefined-7", "X",		&dhcp_universe, 134, 1 },
+	{ "pxe-undefined-8", "X",		&dhcp_universe, 135, 1 },
+#endif
+#if 0
+	/* Not defined by RFC yet */
+	{ "tftp-server-address", "Ia",		&dhcp_universe, 150, 1 },
+#endif
+#if 0
+	/* PXELINUX options: not defined by RFC yet */
+	{ "pxelinux-magic", "BBBB",		&dhcp_universe, 208, 1 },
+	{ "loader-configfile", "t",		&dhcp_universe, 209, 1 },
+	{ "loader-pathprefix", "t",		&dhcp_universe, 210, 1 },
+	{ "loader-reboottime", "L",		&dhcp_universe, 211, 1 },
+#endif
+#if 0
+	/* Not defined by RFC yet */
+	{ "vss-info", "BX",			&dhcp_universe, 221, 1 },
+#endif
+	{ NULL, NULL, NULL, 0, 0 }
 };
 
-/* Default dhcp option priority list (this is ad hoc and should not be
-   mistaken for a carefully crafted and optimized list). */
-unsigned char dhcp_option_default_priority_list [] = {
-	DHO_DHCP_REQUESTED_ADDRESS,
-	DHO_DHCP_OPTION_OVERLOAD,
-	DHO_DHCP_MAX_MESSAGE_SIZE,
-	DHO_DHCP_RENEWAL_TIME,
-	DHO_DHCP_REBINDING_TIME,
-	DHO_DHCP_CLASS_IDENTIFIER,
-	DHO_DHCP_CLIENT_IDENTIFIER,
-	DHO_SUBNET_MASK,
-	DHO_TIME_OFFSET,
-	DHO_ROUTERS,
-	DHO_TIME_SERVERS,
-	DHO_NAME_SERVERS,
-	DHO_DOMAIN_NAME_SERVERS,
-	DHO_HOST_NAME,
-	DHO_LOG_SERVERS,
-	DHO_COOKIE_SERVERS,
-	DHO_LPR_SERVERS,
-	DHO_IMPRESS_SERVERS,
-	DHO_RESOURCE_LOCATION_SERVERS,
-	DHO_HOST_NAME,
-	DHO_BOOT_SIZE,
-	DHO_MERIT_DUMP,
-	DHO_DOMAIN_NAME,
-	DHO_SWAP_SERVER,
-	DHO_ROOT_PATH,
-	DHO_EXTENSIONS_PATH,
-	DHO_IP_FORWARDING,
-	DHO_NON_LOCAL_SOURCE_ROUTING,
-	DHO_POLICY_FILTER,
-	DHO_MAX_DGRAM_REASSEMBLY,
-	DHO_DEFAULT_IP_TTL,
-	DHO_PATH_MTU_AGING_TIMEOUT,
-	DHO_PATH_MTU_PLATEAU_TABLE,
-	DHO_INTERFACE_MTU,
-	DHO_ALL_SUBNETS_LOCAL,
-	DHO_BROADCAST_ADDRESS,
-	DHO_PERFORM_MASK_DISCOVERY,
-	DHO_MASK_SUPPLIER,
-	DHO_ROUTER_DISCOVERY,
-	DHO_ROUTER_SOLICITATION_ADDRESS,
-	DHO_STATIC_ROUTES,
-	DHO_TRAILER_ENCAPSULATION,
-	DHO_ARP_CACHE_TIMEOUT,
-	DHO_IEEE802_3_ENCAPSULATION,
-	DHO_DEFAULT_TCP_TTL,
-	DHO_TCP_KEEPALIVE_INTERVAL,
-	DHO_TCP_KEEPALIVE_GARBAGE,
-	DHO_NIS_DOMAIN,
-	DHO_NIS_SERVERS,
-	DHO_NTP_SERVERS,
-	DHO_VENDOR_ENCAPSULATED_OPTIONS,
-	DHO_NETBIOS_NAME_SERVERS,
-	DHO_NETBIOS_DD_SERVER,
-	DHO_NETBIOS_NODE_TYPE,
-	DHO_NETBIOS_SCOPE,
-	DHO_FONT_SERVERS,
-	DHO_X_DISPLAY_MANAGER,
-	DHO_DHCP_PARAMETER_REQUEST_LIST,
-
-	/* Presently-undefined options... */
-	62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
-	78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92,
-	93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106,
-	107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118,
-	119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
-	131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142,
-	143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154,
-	155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166,
-	167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178,
-	179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190,
-	191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202,
-	203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214,
-	215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226,
-	227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238,
-	239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250,
-	251, 252, 253, 254,
+struct universe nwip_universe;
+static struct option nwip_options[] = {
+	{ "illegal-1", "",			&nwip_universe,   1, 1 },
+	{ "illegal-2", "",			&nwip_universe,   2, 1 },
+	{ "illegal-3", "",			&nwip_universe,   3, 1 },
+	{ "illegal-4", "",			&nwip_universe,   4, 1 },
+	{ "nsq-broadcast", "f",			&nwip_universe,   5, 1 },
+	{ "preferred-dss", "IA",		&nwip_universe,   6, 1 },
+	{ "nearest-nwip-server", "IA",		&nwip_universe,   7, 1 },
+	{ "autoretries", "B",			&nwip_universe,   8, 1 },
+	{ "autoretry-secs", "B",		&nwip_universe,   9, 1 },
+	{ "nwip-1-1", "f",			&nwip_universe,  10, 1 },
+	{ "primary-dss", "I",			&nwip_universe,  11, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
 };
 
-int sizeof_dhcp_option_default_priority_list =
-	sizeof dhcp_option_default_priority_list;
+/* Note that the "FQDN suboption space" does not reflect the FQDN option
+ * format - rather, this is a handy "virtualization" of a flat option
+ * which makes manual configuration and presentation of some of its
+ * contents easier (each of these suboptions is a fixed-space field within
+ * the fqdn contents - domain and host names are derived from a common field,
+ * and differ in the left and right hand side of the leftmost dot, fqdn is
+ * the combination of the two).
+ *
+ * Note further that the DHCPv6 and DHCPv4 'fqdn' options use the same
+ * virtualized option space to store their work.
+ */
 
+struct universe fqdn_universe;
+struct universe fqdn6_universe;
+static struct option fqdn_options[] = {
+	{ "no-client-update", "f",		&fqdn_universe,   1, 1 },
+	{ "server-update", "f",			&fqdn_universe,   2, 1 },
+	{ "encoded", "f",			&fqdn_universe,   3, 1 },
+	{ "rcode1", "B",			&fqdn_universe,   4, 1 },
+	{ "rcode2", "B",			&fqdn_universe,   5, 1 },
+	{ "hostname", "t",			&fqdn_universe,   6, 1 },
+	{ "domainname", "t",			&fqdn_universe,   7, 1 },
+	{ "fqdn", "t",				&fqdn_universe,   8, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
 
-char *hardware_types [] = {
+struct universe vendor_class_universe;
+static struct option vendor_class_options[] =  {
+	{ "isc", "X",			&vendor_class_universe,      2495, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
+
+struct universe vendor_universe;
+static struct option vendor_options[] = {
+	{ "isc", "Eisc.",		&vendor_universe,            2495, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
+
+struct universe isc_universe;
+static struct option isc_options [] = {
+	{ "media", "t",				&isc_universe,   1, 1 },
+	{ "update-assist", "X",			&isc_universe,   2, 1 },
+	{ NULL,	NULL, NULL, 0, 0 }
+};
+
+struct universe dhcpv6_universe;
+static struct option dhcpv6_options[] = {
+
+				/* RFC3315 OPTIONS */
+
+	/* Client and server DUIDs are opaque fields, but marking them
+	 * up somewhat makes configuration easier.
+	 */
+	{ "client-id", "X",			&dhcpv6_universe,  1, 1 },
+	{ "server-id", "X",			&dhcpv6_universe,  2, 1 },
+
+	/* ia-* options actually have at their ends a space for options
+	 * that are specific to this instance of the option.  We can not
+	 * handle this yet at this stage of development, so the encoding
+	 * of these options is unspecified ("X").
+	 */
+	{ "ia-na", "X",				&dhcpv6_universe,  3, 1 },
+	{ "ia-ta", "X",				&dhcpv6_universe,  4, 1 },
+	{ "ia-addr", "X",			&dhcpv6_universe,  5, 1 },
+
+	/* "oro" is DHCPv6 speak for "parameter-request-list" */
+	{ "oro", "SA",				&dhcpv6_universe,  6, 1 },
+
+	{ "preference", "B",			&dhcpv6_universe,  7, 1 },
+	{ "elapsed-time", "S",			&dhcpv6_universe,  8, 1 },
+	{ "relay-msg", "X",			&dhcpv6_universe,  9, 1 },
+
+	/* Option code 10 is curiously unassigned. */
+#if 0
+	/* XXX: missing suitable atoms for the auth option.  We may want
+	 * to 'virtually encapsulate' this option a la the fqdn option
+	 * seeing as it is processed explicitly by the server and unlikely
+	 * to be configured by hand by users as such.
+	 */
+	{ "auth", "Nauth-protocol.Nauth-algorithm.Nrdm-type.LLX",
+						&dhcpv6_universe, 11, 1 },
+#endif
+	{ "unicast", "6",			&dhcpv6_universe, 12, 1 },
+	{ "status-code", "Nstatus-codes.to",	&dhcpv6_universe, 13, 1 },
+	{ "rapid-commit", "",			&dhcpv6_universe, 14, 1 },
+#if 0
+	/* XXX: user-class contents are of the form "StA" where the
+	 * integer describes the length of the text field.  We don't have
+	 * an atom for pre-determined-length octet strings yet, so we
+	 * can't quite do these two.
+	 */
+	{ "user-class", "X",			&dhcpv6_universe, 15, 1 },
+	{ "vendor-class", "X",			&dhcpv6_universe, 16, 1 },
+#endif
+	{ "vendor-opts", "Evsio.",		&dhcpv6_universe, 17, 1 },
+	{ "interface-id", "X",			&dhcpv6_universe, 18, 1 },
+	{ "reconf-msg", "Ndhcpv6-messages.",	&dhcpv6_universe, 19, 1 },
+	{ "reconf-accept", "",			&dhcpv6_universe, 20, 1 },
+
+				/* RFC3319 OPTIONS */
+
+	/* Of course: we would HAVE to have a different atom for
+	 * domain names without compression.  Typical.
+	 */
+	{ "sip-servers-names", "D",		&dhcpv6_universe, 21, 1 },
+	{ "sip-servers-addresses", "6A",	&dhcpv6_universe, 22, 1 },
+
+				/* RFC3646 OPTIONS */
+
+	{ "name-servers", "6A",			&dhcpv6_universe, 23, 1 },
+	{ "domain-search", "D",			&dhcpv6_universe, 24, 1 },
+
+				/* RFC3633 OPTIONS */
+
+	{ "ia-pd", "X",				&dhcpv6_universe, 25, 1 },
+	{ "ia-prefix", "X",			&dhcpv6_universe, 26, 1 },
+
+				/* RFC3898 OPTIONS */
+
+	{ "nis-servers", "6A", 			&dhcpv6_universe, 27, 1 },
+	{ "nisp-servers", "6A",			&dhcpv6_universe, 28, 1 },
+	{ "nis-domain-name", "D",		&dhcpv6_universe, 29, 1 },
+	{ "nisp-domain-name", "D",		&dhcpv6_universe, 30, 1 },
+
+				/* RFC4075 OPTIONS */
+	{ "sntp-servers", "6A",			&dhcpv6_universe, 31, 1 },
+
+				/* RFC4242 OPTIONS */
+
+	{ "info-refresh-time", "T",		&dhcpv6_universe, 32, 1 },
+
+				/* RFC4280 OPTIONS */
+
+	{ "bcms-server-d", "D",			&dhcpv6_universe, 33, 1 },
+	{ "bcms-server-a", "6A",		&dhcpv6_universe, 34, 1 },
+
+	/* Note that 35 is not assigned. */
+
+	/* Not yet considering for inclusion. */
+#if 0
+			/* RFC-ietf-geopriv-dhcp-civil-09.txt */
+
+	{ "geoconf-civic", "X",			&dhcpv6_universe, 36, 1 },
+#endif
+
+				/* RFC4649 OPTIONS */
+
+	/* The remote-id option looks like the VSIO option, but for all
+	 * intents and purposes we only need to treat the entire field
+	 * like a globally unique identifier (and if we create such an
+	 * option, ensure the first 4 bytes are our enterprise-id followed
+	 * by a globally unique ID so long as you're within that enterprise
+	 * id).  So we'll use "X" for now unless someone grumbles.
+	 */
+	{ "remote-id", "X",			&dhcpv6_universe, 37, 1 },
+
+				/* RFC4580 OPTIONS */
+
+	{ "subscriber-id", "X",			&dhcpv6_universe, 38, 1 },
+
+				/* RFC4704 OPTIONS */
+
+	/* The DHCPv6 FQDN option is...weird.
+	 *
+	 * We use the same "virtual" encapsulated space as DHCPv4's FQDN
+	 * option, so it can all be configured in one place.  Since the
+	 * options system does not support multiple inheritance, we use
+	 * a 'shill' layer to perform the different protocol conversions,
+	 * and to redirect any queries in the DHCPv4 FQDN's space.
+	 */
+	{ "fqdn", "Efqdn6-if-you-see-me-its-a-bug-bug-bug.",
+						&dhcpv6_universe, 39, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
+
+struct enumeration_value dhcpv6_duid_type_values[] = {
+	{ "duid-llt",	DUID_LLT }, /* Link-Local Plus Time */
+	{ "duid-en",	DUID_EN },  /* DUID based upon enterprise-ID. */
+	{ "duid-ll",	DUID_LL },  /* DUID from Link Local address only. */
+	{ NULL, 0 }
+};
+
+struct enumeration dhcpv6_duid_types = {
+	NULL,
+	"duid-types", 2,
+	dhcpv6_duid_type_values
+};
+
+struct enumeration_value dhcpv6_status_code_values[] = {
+	{ "success",	  0 }, /* Success				*/
+	{ "UnspecFail",	  1 }, /* Failure, for unspecified reasons.	*/
+	{ "NoAddrsAvail", 2 }, /* Server has no addresses to assign.	*/
+	{ "NoBinding",	  3 }, /* Client record (binding) unavailable.	*/
+	{ "NotOnLink",	  4 }, /* Bad prefix for the link.		*/
+	{ "UseMulticast", 5 }, /* Not just good advice.  It's the law.	*/
+	{ NULL, 0 }
+};
+
+struct enumeration dhcpv6_status_codes = {
+	NULL,
+	"status-codes", 2,
+	dhcpv6_status_code_values
+};
+
+struct enumeration_value dhcpv6_message_values[] = {
+	{ "SOLICIT", 1 },
+	{ "ADVERTISE", 2 },
+	{ "REQUEST", 3 },
+	{ "CONFIRM", 4 },
+	{ "RENEW", 5 },
+	{ "REBIND", 6 },
+	{ "REPLY", 7 },
+	{ "RELEASE", 8 },
+	{ "DECLINE", 9 },
+	{ "RECONFIGURE", 10 },
+	{ "INFORMATION-REQUEST", 11 },
+	{ "RELAY-FORW", 12 },
+	{ "RELAY-REPL", 13 },
+	{ NULL, 0 }
+};
+
+/* Some code refers to a different table. */
+const char *dhcpv6_type_names[] = {
+	NULL,
+	"Solicit",
+	"Advertise",
+	"Request",
+	"Confirm",
+	"Renew",
+	"Rebind",
+	"Reply",
+	"Release",
+	"Decline",
+	"Reconfigure",
+	"Information-request",
+	"Relay-forward",
+	"Relay-reply"
+};
+const int dhcpv6_type_name_max =
+	(sizeof(dhcpv6_type_names) / sizeof(dhcpv6_type_names[0]));
+
+struct enumeration dhcpv6_messages = {
+	NULL,
+	"dhcpv6-messages", 1,
+	dhcpv6_message_values
+};
+
+struct universe vsio_universe;
+static struct option vsio_options[] = {
+	{ "isc", "Eisc6.",		&vsio_universe,		     2495, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
+
+struct universe isc6_universe;
+static struct option isc6_options[] = {
+	{ "media", "t",				&isc6_universe,     1, 1 },
+	{ "update-assist", "X",			&isc6_universe,	    2, 1 },
+	{ NULL, NULL, NULL, 0, 0 }
+};
+
+const char *hardware_types [] = {
 	"unknown-0",
 	"ethernet",
 	"unknown-2",
@@ -420,7 +521,7 @@ char *hardware_types [] = {
 	"unknown-5",
 	"token-ring",
 	"unknown-7",
-	"fddi"};/*
+	"fddi",
 	"unknown-9",
 	"unknown-10",
 	"unknown-11",
@@ -668,27 +769,580 @@ char *hardware_types [] = {
 	"unknown-253",
 	"unknown-254",
 	"unknown-255" };
-*/
 
+universe_hash_t *universe_hash;
+struct universe **universes;
+int universe_count, universe_max;
 
-struct hash_table universe_hash;
+/* Universe containing names of configuration options, which, rather than
+   writing "option universe-name.option-name ...;", can be set by writing
+   "option-name ...;". */
 
-void initialize_universes()
+struct universe *config_universe;
+
+/* XXX: omapi must die...all the below keeps us from having to make the
+ * option structures omapi typed objects, which is a bigger headache.
+ */
+
+char *default_option_format = (char *) "X";
+
+/* Must match hash_reference/dereference types in omapip/hash.h. */
+int
+option_reference(struct option **dest, struct option *src,
+	         const char * file, int line)
 {
+	if (!dest || !src)
+	        return ISC_R_INVALIDARG;
+
+	if (*dest) {
+#if defined(POINTER_DEBUG)
+	        log_fatal("%s(%d): reference store into non-null pointer!",
+	                  file, line);
+#else
+	        return ISC_R_INVALIDARG;
+#endif
+	}
+
+	*dest = src;
+	src->refcnt++;
+	rc_register(file, line, dest, src, src->refcnt, 0, RC_MISC);
+	return(ISC_R_SUCCESS);
+}
+
+int
+option_dereference(struct option **dest, const char *file, int line)
+{
+	if (!dest)
+	        return ISC_R_INVALIDARG;
+
+	if (!*dest) {
+#if defined (POINTER_DEBUG)
+	        log_fatal("%s(%d): dereference of null pointer!", file, line);
+#else
+	        return ISC_R_INVALIDARG;
+#endif
+	}
+
+	if ((*dest)->refcnt <= 0) {
+#if defined (POINTER_DEBUG)
+	        log_fatal("%s(%d): dereference of <= 0 refcnt!", file, line);
+#else
+	        return ISC_R_INVALIDARG;
+#endif
+	}
+
+	(*dest)->refcnt--;
+
+	rc_register(file, line, dest, (*dest), (*dest)->refcnt, 1, RC_MISC);
+
+	if ((*dest)->refcnt == 0) {
+		/* The option name may be packed in the same alloc as the
+		 * option structure.
+		 */
+	        if ((char *) (*dest)->name != (char *) ((*dest) + 1))
+	                dfree((char *) (*dest)->name, file, line);
+
+		/* It's either a user-configured format (allocated), or the
+		 * default static format.
+		 */
+		if (((*dest)->format != NULL) &&
+		    ((*dest)->format != default_option_format)) {
+			dfree((char *) (*dest)->format, file, line);
+		}
+
+	        dfree(*dest, file, line);
+	}
+
+	*dest = NULL;
+	return ISC_R_SUCCESS;
+}
+
+void initialize_common_option_spaces()
+{
+	unsigned code;
 	int i;
 
+	/* The 'universes' table is dynamically grown to contain
+	 * universe as they're configured - except during startup.
+	 * Since we know how many we put down in .c files, we can
+	 * allocate a more-than-right-sized buffer now, leaving some
+	 * space for user-configured option spaces.
+	 *
+	 * 1: dhcp_universe (dhcpv4 options)
+	 * 2: nwip_universe (dhcpv4 NWIP option)
+	 * 3: fqdn_universe (dhcpv4 fqdn option - reusable for v6)
+	 * 4: vendor_class_universe (VIVCO)
+	 * 5: vendor_universe (VIVSO)
+	 * 6: isc_universe (dhcpv4 isc config space)
+	 * 7: dhcpv6_universe (dhcpv6 options)
+	 * 8: vsio_universe (DHCPv6 Vendor-Identified space)
+	 * 9: isc6_universe (ISC's Vendor universe in DHCPv6 VSIO)
+	 * 10: fqdn6_universe (dhcpv6 fqdn option shill to v4)
+	 * 11: agent_universe (dhcpv4 relay agent - see server/stables.c)
+	 * 12: server_universe (server's config, see server/stables.c)
+	 * 13: user-config
+	 * 14: more user-config
+	 * 15: more user-config
+	 * 16: more user-config
+	 */
+	universe_max = 16;
+	i = universe_max * sizeof(struct universe *);
+	if (i <= 0)
+		log_fatal("Ludicrous initial size option space table.");
+	universes = dmalloc(i, MDL);
+	if (universes == NULL)
+		log_fatal("Can't allocate option space table.");
+	memset(universes, 0, i);
+
+	/* Set up the DHCP option universe... */
 	dhcp_universe.name = "dhcp";
-	dhcp_universe.hash = new_hash ();
-	if (!dhcp_universe.hash)
-		error ("Can't allocate dhcp option hash table.");
-	for (i = 0; i < 256; i++) {
-		dhcp_universe.options [i] = &dhcp_options [i];
-		add_hash (dhcp_universe.hash,
-			  (unsigned char *)dhcp_options [i].name, 0,
-			  (unsigned char *)&dhcp_options [i]);
+	dhcp_universe.concat_duplicates = 1;
+	dhcp_universe.lookup_func = lookup_hashed_option;
+	dhcp_universe.option_state_dereference =
+		hashed_option_state_dereference;
+	dhcp_universe.save_func = save_hashed_option;
+	dhcp_universe.delete_func = delete_hashed_option;
+	dhcp_universe.encapsulate = hashed_option_space_encapsulate;
+	dhcp_universe.foreach = hashed_option_space_foreach;
+	dhcp_universe.decode = parse_option_buffer;
+	dhcp_universe.length_size = 1;
+	dhcp_universe.tag_size = 1;
+	dhcp_universe.get_tag = getUChar;
+	dhcp_universe.store_tag = putUChar;
+	dhcp_universe.get_length = getUChar;
+	dhcp_universe.store_length = putUChar;
+	dhcp_universe.end = DHO_END;
+	dhcp_universe.index = universe_count++;
+	universes [dhcp_universe.index] = &dhcp_universe;
+	if (!option_name_new_hash(&dhcp_universe.name_hash,
+				  BYTE_NAME_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&dhcp_universe.code_hash,
+				  BYTE_CODE_HASH_SIZE, MDL))
+		log_fatal ("Can't allocate dhcp option hash table.");
+	for (i = 0 ; dhcp_options[i].name ; i++) {
+		option_code_hash_add(dhcp_universe.code_hash,
+				     &dhcp_options[i].code, 0,
+				     &dhcp_options[i], MDL);
+		option_name_hash_add(dhcp_universe.name_hash,
+				     dhcp_options [i].name, 0,
+				     &dhcp_options [i], MDL);
 	}
-	universe_hash.hash_count = DEFAULT_HASH_SIZE;
-	add_hash (&universe_hash,
-		  (unsigned char *)dhcp_universe.name, 0,
-		  (unsigned char *)&dhcp_universe);
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("DHCP name hash: %s",
+		 option_name_hash_report(dhcp_universe.name_hash));
+	log_info("DHCP code hash: %s",
+		 option_code_hash_report(dhcp_universe.code_hash));
+#endif
+
+	/* Set up the Novell option universe (for option 63)... */
+	nwip_universe.name = "nwip";
+	nwip_universe.concat_duplicates = 0; /* XXX: reference? */
+	nwip_universe.lookup_func = lookup_linked_option;
+	nwip_universe.option_state_dereference =
+		linked_option_state_dereference;
+	nwip_universe.save_func = save_linked_option;
+	nwip_universe.delete_func = delete_linked_option;
+	nwip_universe.encapsulate = nwip_option_space_encapsulate;
+	nwip_universe.foreach = linked_option_space_foreach;
+	nwip_universe.decode = parse_option_buffer;
+	nwip_universe.length_size = 1;
+	nwip_universe.tag_size = 1;
+	nwip_universe.get_tag = getUChar;
+	nwip_universe.store_tag = putUChar;
+	nwip_universe.get_length = getUChar;
+	nwip_universe.store_length = putUChar;
+	nwip_universe.end = 0;
+	code = DHO_NWIP_SUBOPTIONS;
+	nwip_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&nwip_universe.enc_opt,
+				     dhcp_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find NWIP parent option (%s:%d).", MDL);
+	nwip_universe.index = universe_count++;
+	universes [nwip_universe.index] = &nwip_universe;
+	if (!option_name_new_hash(&nwip_universe.name_hash,
+				  NWIP_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&nwip_universe.code_hash,
+				  NWIP_HASH_SIZE, MDL))
+		log_fatal ("Can't allocate nwip option hash table.");
+	for (i = 0 ; nwip_options[i].name ; i++) {
+		option_code_hash_add(nwip_universe.code_hash,
+				     &nwip_options[i].code, 0,
+				     &nwip_options[i], MDL);
+		option_name_hash_add(nwip_universe.name_hash,
+				     nwip_options[i].name, 0,
+				     &nwip_options[i], MDL);
+	}
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("NWIP name hash: %s",
+		 option_name_hash_report(nwip_universe.name_hash));
+	log_info("NWIP code hash: %s",
+		 option_code_hash_report(nwip_universe.code_hash));
+#endif
+
+	/* Set up the FQDN option universe... */
+	fqdn_universe.name = "fqdn";
+	fqdn_universe.concat_duplicates = 0;
+	fqdn_universe.lookup_func = lookup_linked_option;
+	fqdn_universe.option_state_dereference =
+		linked_option_state_dereference;
+	fqdn_universe.save_func = save_linked_option;
+	fqdn_universe.delete_func = delete_linked_option;
+	fqdn_universe.encapsulate = fqdn_option_space_encapsulate;
+	fqdn_universe.foreach = linked_option_space_foreach;
+	fqdn_universe.decode = fqdn_universe_decode;
+	fqdn_universe.length_size = 1;
+	fqdn_universe.tag_size = 1;
+	fqdn_universe.get_tag = getUChar;
+	fqdn_universe.store_tag = putUChar;
+	fqdn_universe.get_length = getUChar;
+	fqdn_universe.store_length = putUChar;
+	fqdn_universe.end = 0;
+	fqdn_universe.index = universe_count++;
+	code = DHO_FQDN;
+	fqdn_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&fqdn_universe.enc_opt,
+				     dhcp_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find FQDN parent option (%s:%d).", MDL);
+	universes [fqdn_universe.index] = &fqdn_universe;
+	if (!option_name_new_hash(&fqdn_universe.name_hash,
+				  FQDN_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&fqdn_universe.code_hash,
+				  FQDN_HASH_SIZE, MDL))
+		log_fatal ("Can't allocate fqdn option hash table.");
+	for (i = 0 ; fqdn_options[i].name ; i++) {
+		option_code_hash_add(fqdn_universe.code_hash,
+				     &fqdn_options[i].code, 0,
+				     &fqdn_options[i], MDL);
+		option_name_hash_add(fqdn_universe.name_hash,
+				     fqdn_options[i].name, 0,
+				     &fqdn_options[i], MDL);
+	}
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("FQDN name hash: %s",
+		 option_name_hash_report(fqdn_universe.name_hash));
+	log_info("FQDN code hash: %s",
+		 option_code_hash_report(fqdn_universe.code_hash));
+#endif
+
+        /* Set up the Vendor Identified Vendor Class options (for option
+	 * 125)...
+	 */
+        vendor_class_universe.name = "vendor-class";
+	vendor_class_universe.concat_duplicates = 0; /* XXX: reference? */
+        vendor_class_universe.lookup_func = lookup_hashed_option;
+        vendor_class_universe.option_state_dereference =
+                hashed_option_state_dereference;
+        vendor_class_universe.save_func = save_hashed_option;
+        vendor_class_universe.delete_func = delete_hashed_option;
+        vendor_class_universe.encapsulate = hashed_option_space_encapsulate;
+        vendor_class_universe.foreach = hashed_option_space_foreach;
+        vendor_class_universe.decode = parse_option_buffer;
+        vendor_class_universe.length_size = 1;
+        vendor_class_universe.tag_size = 4;
+	vendor_class_universe.get_tag = getULong;
+        vendor_class_universe.store_tag = putULong;
+	vendor_class_universe.get_length = getUChar;
+        vendor_class_universe.store_length = putUChar;
+	vendor_class_universe.end = 0;
+	code = DHO_VIVCO_SUBOPTIONS;
+	vendor_class_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&vendor_class_universe.enc_opt,
+				     dhcp_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find VIVCO parent option (%s:%d).", MDL);
+        vendor_class_universe.index = universe_count++;
+        universes[vendor_class_universe.index] = &vendor_class_universe;
+        if (!option_name_new_hash(&vendor_class_universe.name_hash,
+				  VIVCO_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&vendor_class_universe.code_hash,
+				  VIVCO_HASH_SIZE, MDL))
+                log_fatal("Can't allocate Vendor Identified Vendor Class "
+			  "option hash table.");
+        for (i = 0 ; vendor_class_options[i].name ; i++) {
+		option_code_hash_add(vendor_class_universe.code_hash,
+				     &vendor_class_options[i].code, 0,
+				     &vendor_class_options[i], MDL);
+                option_name_hash_add(vendor_class_universe.name_hash,
+                                     vendor_class_options[i].name, 0,
+                                     &vendor_class_options[i], MDL);
+        }
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("VIVCO name hash: %s",
+		 option_name_hash_report(vendor_class_universe.name_hash));
+	log_info("VIVCO code hash: %s",
+		 option_code_hash_report(vendor_class_universe.code_hash));
+#endif
+
+        /* Set up the Vendor Identified Vendor Sub-options (option 126)... */
+        vendor_universe.name = "vendor";
+	vendor_universe.concat_duplicates = 0; /* XXX: reference? */
+        vendor_universe.lookup_func = lookup_hashed_option;
+        vendor_universe.option_state_dereference =
+                hashed_option_state_dereference;
+        vendor_universe.save_func = save_hashed_option;
+        vendor_universe.delete_func = delete_hashed_option;
+        vendor_universe.encapsulate = hashed_option_space_encapsulate;
+        vendor_universe.foreach = hashed_option_space_foreach;
+        vendor_universe.decode = parse_option_buffer;
+        vendor_universe.length_size = 1;
+        vendor_universe.tag_size = 4;
+	vendor_universe.get_tag = getULong;
+        vendor_universe.store_tag = putULong;
+	vendor_universe.get_length = getUChar;
+        vendor_universe.store_length = putUChar;
+	vendor_universe.end = 0;
+	code = DHO_VIVSO_SUBOPTIONS;
+	vendor_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&vendor_universe.enc_opt,
+				     dhcp_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find VIVSO parent option (%s:%d).", MDL);
+        vendor_universe.index = universe_count++;
+        universes[vendor_universe.index] = &vendor_universe;
+        if (!option_name_new_hash(&vendor_universe.name_hash,
+				  VIVSO_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&vendor_universe.code_hash,
+				  VIVSO_HASH_SIZE, MDL))
+                log_fatal("Can't allocate Vendor Identified Vendor Sub-"
+			  "options hash table.");
+        for (i = 0 ; vendor_options[i].name ; i++) {
+                option_code_hash_add(vendor_universe.code_hash,
+				     &vendor_options[i].code, 0,
+				     &vendor_options[i], MDL);
+                option_name_hash_add(vendor_universe.name_hash,
+				     vendor_options[i].name, 0,
+				     &vendor_options[i], MDL);
+        }
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("VIVSO name hash: %s",
+		 option_name_hash_report(vendor_universe.name_hash));
+	log_info("VIVSO code hash: %s",
+		 option_code_hash_report(vendor_universe.code_hash));
+#endif
+
+        /* Set up the ISC Vendor-option universe (for option 125.2495)... */
+        isc_universe.name = "isc";
+	isc_universe.concat_duplicates = 0; /* XXX: check VIVSO ref */
+        isc_universe.lookup_func = lookup_linked_option;
+        isc_universe.option_state_dereference =
+                linked_option_state_dereference;
+        isc_universe.save_func = save_linked_option;
+        isc_universe.delete_func = delete_linked_option;
+        isc_universe.encapsulate = linked_option_space_encapsulate;
+        isc_universe.foreach = linked_option_space_foreach;
+        isc_universe.decode = parse_option_buffer;
+        isc_universe.length_size = 2;
+        isc_universe.tag_size = 2;
+	isc_universe.get_tag = getUShort;
+        isc_universe.store_tag = putUShort;
+	isc_universe.get_length = getUShort;
+        isc_universe.store_length = putUShort;
+	isc_universe.end = 0;
+	code = VENDOR_ISC_SUBOPTIONS;
+	isc_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&isc_universe.enc_opt,
+				     vendor_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find ISC parent option (%s:%d).", MDL);
+        isc_universe.index = universe_count++;
+        universes[isc_universe.index] = &isc_universe;
+        if (!option_name_new_hash(&isc_universe.name_hash,
+				  VIV_ISC_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&isc_universe.code_hash,
+				  VIV_ISC_HASH_SIZE, MDL))
+                log_fatal("Can't allocate ISC Vendor options hash table.");
+        for (i = 0 ; isc_options[i].name ; i++) {
+		option_code_hash_add(isc_universe.code_hash,
+				     &isc_options[i].code, 0,
+				     &isc_options[i], MDL);
+                option_name_hash_add(isc_universe.name_hash,
+                                     isc_options[i].name, 0,
+                                     &isc_options[i], MDL);
+        }
+#if defined(REPORT_HASH_PERFORMANCE)
+	log_info("ISC name hash: %s",
+		 option_name_hash_report(isc_universe.name_hash));
+	log_info("ISC code hash: %s",
+		 option_code_hash_report(isc_universe.code_hash));
+#endif
+
+	/* Set up the DHCPv6 root universe. */
+	dhcpv6_universe.name = "dhcp6";
+	dhcpv6_universe.concat_duplicates = 0;
+	dhcpv6_universe.lookup_func = lookup_hashed_option;
+	dhcpv6_universe.option_state_dereference =
+		hashed_option_state_dereference;
+	dhcpv6_universe.save_func = save_hashed_option;
+	dhcpv6_universe.delete_func = delete_hashed_option;
+	dhcpv6_universe.encapsulate = hashed_option_space_encapsulate;
+	dhcpv6_universe.foreach = hashed_option_space_foreach;
+	dhcpv6_universe.decode = parse_option_buffer;
+	dhcpv6_universe.length_size = 2;
+	dhcpv6_universe.tag_size = 2;
+	dhcpv6_universe.get_tag = getUShort;
+	dhcpv6_universe.store_tag = putUShort;
+	dhcpv6_universe.get_length = getUShort;
+	dhcpv6_universe.store_length = putUShort;
+	/* DHCPv6 has no END option. */
+	dhcpv6_universe.end = 0x00;
+	dhcpv6_universe.index = universe_count++;
+	universes[dhcpv6_universe.index] = &dhcpv6_universe;
+	if (!option_name_new_hash(&dhcpv6_universe.name_hash,
+				  WORD_NAME_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&dhcpv6_universe.code_hash,
+				  WORD_CODE_HASH_SIZE, MDL))
+		log_fatal("Can't allocate dhcpv6 option hash tables.");
+	for (i = 0 ; dhcpv6_options[i].name ; i++) {
+		option_code_hash_add(dhcpv6_universe.code_hash,
+				     &dhcpv6_options[i].code, 0,
+				     &dhcpv6_options[i], MDL);
+		option_name_hash_add(dhcpv6_universe.name_hash,
+				     dhcpv6_options[i].name, 0,
+				     &dhcpv6_options[i], MDL);
+	}
+
+	/* Add DHCPv6 protocol enumeration sets. */
+	add_enumeration(&dhcpv6_duid_types);
+	add_enumeration(&dhcpv6_status_codes);
+	add_enumeration(&dhcpv6_messages);
+
+	/* Set up DHCPv6 VSIO universe. */
+	vsio_universe.name = "vsio";
+	vsio_universe.concat_duplicates = 0;
+	vsio_universe.lookup_func = lookup_hashed_option;
+	vsio_universe.option_state_dereference =
+		hashed_option_state_dereference;
+	vsio_universe.save_func = save_hashed_option;
+	vsio_universe.delete_func = delete_hashed_option;
+	vsio_universe.encapsulate = hashed_option_space_encapsulate;
+	vsio_universe.foreach = hashed_option_space_foreach;
+	vsio_universe.decode = parse_option_buffer;
+	vsio_universe.length_size = 0;
+	vsio_universe.tag_size = 4;
+	vsio_universe.get_tag = getULong;
+	vsio_universe.store_tag = putULong;
+	vsio_universe.get_length = NULL;
+	vsio_universe.store_length = NULL;
+	/* No END option. */
+	vsio_universe.end = 0x00;
+	code = D6O_VENDOR_OPTS;
+	if (!option_code_hash_lookup(&vsio_universe.enc_opt,
+				     dhcpv6_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find VSIO parent option (%s:%d).", MDL);
+	vsio_universe.index = universe_count++;
+	universes[vsio_universe.index] = &vsio_universe;
+	if (!option_name_new_hash(&vsio_universe.name_hash,
+				  VSIO_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&vsio_universe.code_hash,
+				  VSIO_HASH_SIZE, MDL))
+		log_fatal("Can't allocate Vendor Specific Information "
+			  "Options space.");
+	for (i = 0 ; vsio_options[i].name != NULL ; i++) {
+		option_code_hash_add(vsio_universe.code_hash,
+				     &vsio_options[i].code, 0,
+				     &vsio_options[i], MDL);
+		option_name_hash_add(vsio_universe.name_hash,
+				     vsio_options[i].name, 0,
+				     &vsio_options[i], MDL);
+	}
+
+	/* Add ISC VSIO sub-sub-option space. */
+	isc6_universe.name = "isc6";
+	isc6_universe.concat_duplicates = 0;
+	isc6_universe.lookup_func = lookup_hashed_option;
+	isc6_universe.option_state_dereference =
+		hashed_option_state_dereference;
+	isc6_universe.save_func = save_hashed_option;
+	isc6_universe.delete_func = delete_hashed_option;
+	isc6_universe.encapsulate = hashed_option_space_encapsulate;
+	isc6_universe.foreach = hashed_option_space_foreach;
+	isc6_universe.decode = parse_option_buffer;
+	isc6_universe.length_size = 0;
+	isc6_universe.tag_size = 4;
+	isc6_universe.get_tag = getULong;
+	isc6_universe.store_tag = putULong;
+	isc6_universe.get_length = NULL;
+	isc6_universe.store_length = NULL;
+	/* No END option. */
+	isc6_universe.end = 0x00;
+	code = 2495;
+	if (!option_code_hash_lookup(&isc6_universe.enc_opt,
+				     vsio_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find ISC parent option (%s:%d).", MDL);
+	isc6_universe.index = universe_count++;
+	universes[isc6_universe.index] = &isc6_universe;
+	if (!option_name_new_hash(&isc6_universe.name_hash,
+				  VIV_ISC_HASH_SIZE, MDL) ||
+	    !option_code_new_hash(&isc6_universe.code_hash,
+				  VIV_ISC_HASH_SIZE, MDL))
+		log_fatal("Can't allocate Vendor Specific Information "
+			  "Options space.");
+	for (i = 0 ; isc6_options[i].name != NULL ; i++) {
+		option_code_hash_add(isc6_universe.code_hash,
+				     &isc6_options[i].code, 0,
+				     &isc6_options[i], MDL);
+		option_name_hash_add(isc6_universe.name_hash,
+				     isc6_options[i].name, 0,
+				     &isc6_options[i], MDL);
+	}
+
+	/* The fqdn6 option space is a protocol-wrapper shill for the
+	 * old DHCPv4 space.
+	 */
+	fqdn6_universe.name = "fqdn6-if-you-see-me-its-a-bug-bug-bug";
+	fqdn6_universe.lookup_func = lookup_fqdn6_option;
+	fqdn6_universe.option_state_dereference = NULL; /* Covered by v4. */
+	fqdn6_universe.save_func = save_fqdn6_option;
+	fqdn6_universe.delete_func = delete_fqdn6_option;
+	fqdn6_universe.encapsulate = fqdn6_option_space_encapsulate;
+	fqdn6_universe.foreach = fqdn6_option_space_foreach;
+	fqdn6_universe.decode = fqdn6_universe_decode;
+	/* This is not a 'normal' encapsulated space, so these values are
+	 * meaningless.
+	 */
+	fqdn6_universe.length_size = 0;
+	fqdn6_universe.tag_size = 0;
+	fqdn6_universe.get_tag = NULL;
+	fqdn6_universe.store_tag = NULL;
+	fqdn6_universe.get_length = NULL;
+	fqdn6_universe.store_length = NULL;
+	fqdn6_universe.end = 0;
+	fqdn6_universe.index = universe_count++;
+	code = D6O_CLIENT_FQDN;
+	fqdn6_universe.enc_opt = NULL;
+	if (!option_code_hash_lookup(&fqdn6_universe.enc_opt,
+				     dhcpv6_universe.code_hash, &code, 0, MDL))
+		log_fatal("Unable to find FQDN v6 parent option. (%s:%d).",
+			  MDL);
+	universes[fqdn6_universe.index] = &fqdn6_universe;
+	/* The fqdn6 space shares the same option space as the v4 space.
+	 * So there are no name or code hashes on the v6 side.
+	 */
+	fqdn6_universe.name_hash = NULL;
+	fqdn6_universe.code_hash = NULL;
+
+
+	/* Set up the hash of DHCPv4 universes. */
+	universe_new_hash(&universe_hash, UNIVERSE_HASH_SIZE, MDL);
+	universe_hash_add(universe_hash, dhcp_universe.name, 0,
+			  &dhcp_universe, MDL);
+	universe_hash_add(universe_hash, nwip_universe.name, 0,
+			  &nwip_universe, MDL);
+	universe_hash_add(universe_hash, fqdn_universe.name, 0,
+			  &fqdn_universe, MDL);
+	universe_hash_add(universe_hash, vendor_class_universe.name, 0,
+			  &vendor_class_universe, MDL);
+	universe_hash_add(universe_hash, vendor_universe.name, 0,
+			  &vendor_universe, MDL);
+	universe_hash_add(universe_hash, isc_universe.name, 0,
+			  &isc_universe, MDL);
+
+	/* Set up hashes for DHCPv6 universes. */
+	universe_hash_add(universe_hash, dhcpv6_universe.name, 0,
+			  &dhcpv6_universe, MDL);
+	universe_hash_add(universe_hash, vsio_universe.name, 0,
+			  &vsio_universe, MDL);
+	universe_hash_add(universe_hash, isc6_universe.name, 0,
+			  &isc6_universe, MDL);
+/* This should not be necessary.  Listing here just for consistency.
+ *	universe_hash_add(universe_hash, fqdn6_universe.name, 0,
+ *			  &fqdn6_universe, MDL);
+ */
 }

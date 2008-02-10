@@ -1,8 +1,6 @@
+if ARCH_KS8695
 
-menu "Kendin-Micrel KS8695 Implementation Options"
-	depends on ARCH_KS8695
-
-comment "KS8695 Platforms"
+menu "Kendin/Micrel KS8695 Implementations"
 
 config MACH_KS8695
 	bool "KS8695 development board"
@@ -10,11 +8,34 @@ config MACH_KS8695
 	  Say 'Y' here if you want your kernel to run on the original
 	  Kendin-Micrel KS8695 development board.
 
-config MACH_DSM320
-	bool "DLink DSM320 Media Player"
+config MACH_LITE300
+	bool "SecureComputing SG300"
 	help
-	  Say 'Y' here if you want your kernel to run on the DLink DSM320
-	  Media Player.
+	  Say 'Y' here if you want your kernel to support the
+	  SecureComputing / SnapGear SG300 VPN Internet Router.
+	  See http://www.securecomputing.com for more details.
+
+config MACH_SG310
+	bool "SecureComputing SG310"
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  SecureComputing / SnapGear SG310 VPN Internet Router.
+	  See http://www.securecomputing.com for more details.
+
+config MACH_PFW
+	bool "SecureComputing PFW"
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  SecureComputing / Personal FireWall device.
+	  See http://www.securecomputing.com for more details.
+
+config MACH_SE4200
+	bool "SecureComputing SE4200"
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  SecureComputing / SnapGear SE4200 Secure Wireless VPN
+	  Internet Router.
+	  See http://www.securecomputing.com for more details.
 
 config MACH_CM4002
 	bool "OpenGear CM4002"
@@ -37,19 +58,6 @@ config MACH_CM40xx
 	  CM4016 or CM4048 Console Servers. See http://www.opengear.com for
 	  more details.
 
-config MACH_LITE300
-	bool "Secure Computing / CyberGuard SG300"
-	help
-	  Say 'Y' here if you want your kernel to support the Secure
-	  Computing / CyberGuard / SnapGear SG300 VPN Internet Router.
-	  See http://www.securecomputing.com for more details.
-
-config MACH_SE4200
-	bool "Secure Computing / CyberGuard SE4200"
-	help
-	  Say 'Y' here if you want your kernel to support the Secure
-	  Computing / CyberGuard / SnapGear SE4200 Secure Wireless VPN
-	  Internet Router. See http://www.securecomputing.com for more
-	  details.
-
 endmenu
+
+endif

@@ -1,4 +1,4 @@
-/* $Id: hscx.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: hscx.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * hscx.h   HSCX specific defines
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: hscx.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3.2.2  1998/04/08 21:57:30  keil

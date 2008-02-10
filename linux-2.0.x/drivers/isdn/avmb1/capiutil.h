@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ * $Id: capiutil.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  * 
  * CAPI 2.0 defines & types
  * 
@@ -7,7 +7,7 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: capiutil.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2  1997/05/18 09:24:19  calle

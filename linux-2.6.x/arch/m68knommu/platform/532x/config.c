@@ -21,8 +21,8 @@
 #include <linux/param.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <asm/machdep.h>
-#include <asm/io.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
 #include <asm/mcfuart.h>
@@ -131,20 +131,6 @@ void mcf_settimericr(unsigned int timer, unsigned int level)
 
 /***************************************************************************/
 
-int mcf_timerirqpending(int timer)
-{
-	unsigned int imr = 0;
-
-	switch (timer) {
-	case 1:  imr = 0x1; break;
-	case 2:  imr = 0x2; break;
-	default: break;
-	}
-	return (mcf_getiprh() & imr);
-}
-
-/***************************************************************************/
-
 void __init config_BSP(char *commandp, int size)
 {
 	sys_clk_khz = get_sys_clock();
@@ -167,7 +153,7 @@ void __init config_BSP(char *commandp, int size)
 	mcf_profilevector = 64+33;
 	mach_reset = coldfire_reset;
 
-#ifdef MCF_BDM_DISABLE
+#ifdef CONFIG_BDM_DISABLE
 	/*
 	 * Disable the BDM clocking.  This also turns off most of the rest of
 	 * the BDM device.  This is good for EMC reasons. This option is not

@@ -291,7 +291,7 @@ start.  It would be better to display them in seconds before now for
 human readability.</para>
 
 <!--  $Log: spi.5.xml,v $
-<!--  Revision 1.1.16.1  2006/10/26 20:53:59  paul
+<!--  Revision 1.1.16.1  2006-10-26 20:53:59  paul
 <!--  fixed and regenerated spi man page. added note it will be obsolete.
 <!-- -->
 <!--  Revision 1.1  2004/05/26 17:50:59  ken -->

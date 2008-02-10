@@ -33,7 +33,7 @@
 
 #ifndef lint
 static const char rcsid[] =
-    "@(#) $Id: ifaddrlist.c,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)";
+    "@(#) $Id: ifaddrlist.c,v 1.2 2007-06-26 13:01:51 gerg Exp $ (LBL)";
 #endif
 
 #include <sys/param.h>

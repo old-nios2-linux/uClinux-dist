@@ -1,6 +1,6 @@
 #
 # pppd makefile for Linux
-# $Id: Makefile.linux,v 1.9 2007/10/03 08:22:36 philipc Exp $
+# $Id: Makefile.linux,v 1.9 2007-10-03 08:22:36 philipc Exp $
 #
 
 # Default installation locations

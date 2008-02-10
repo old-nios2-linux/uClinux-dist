@@ -4,7 +4,7 @@
  * originally by C. S. Ananian
  * Modified for PoPToP
  *
- * $Id: pptpgre.c,v 1.11 2007/07/05 23:33:09 gerg Exp $
+ * $Id: pptpgre.c,v 1.12 2007-12-12 04:42:42 asallawa Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -340,7 +340,7 @@ static int dequeue_gre (callback_t callback, int cl)
 
 int decaps_gre(int fd, int (*cb) (int cl, void *pack, unsigned len), int cl)
 {
-	static unsigned char buffer[PACKET_MAX + 64 /*ip header */ ];
+	static unsigned char buffer[PACKET_MAX + 64 /*ip header */ ] __attribute__ ((aligned));;
 	struct pptp_gre_header *header;
 	int status, ip_len = 0;
 
@@ -402,6 +402,8 @@ int decaps_gre(int fd, int (*cb) (int cl, void *pack, unsigned len), int cl)
 			headersize -= sizeof(header->ack);
 		/* check for incomplete packet (length smaller than expected) */
 		if (status - headersize < payload_len) {
+			syslog(LOG_ERR, "GRE: discarding incomplete packet %d < %d",
+				status - headersize, payload_len);
 			stats.rx_truncated++;
 			return 0;
 		}

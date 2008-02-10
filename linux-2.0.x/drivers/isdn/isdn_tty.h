@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: isdn_tty.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,7 +20,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.10.2.2  1998/11/05 22:12:25  fritz

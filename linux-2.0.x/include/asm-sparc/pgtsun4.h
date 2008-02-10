@@ -1,4 +1,4 @@
-/* $Id: pgtsun4.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: pgtsun4.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * pgtsun4.c:  Regular Sun4 MMU support goes in here.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

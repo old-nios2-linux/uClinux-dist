@@ -1,4 +1,4 @@
-/* $Id: teles0.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: teles0.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -10,7 +10,7 @@
  *              Beat Doebeli
  *
  * $Log: teles0.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.8.2.9  1998/04/08 21:58:49  keil

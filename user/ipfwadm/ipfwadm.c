@@ -1,5 +1,5 @@
 /*
- *	$Id: ipfwadm.c,v 1.6 2002/03/06 01:51:11 gerg Exp $
+ *	$Id: ipfwadm.c,v 1.6 2002-03-06 01:51:11 gerg Exp $
  *
  *
  *	ipfwadm -- IP firewall and accounting administration
@@ -200,7 +200,7 @@ struct masq_timeout {
 	int	udp_timeout;
 } timeouts;
 
-char ipfwadm_version[] = "$Id: ipfwadm.c,v 1.6 2002/03/06 01:51:11 gerg Exp $";
+char ipfwadm_version[] = "$Id: ipfwadm.c,v 1.6 2002-03-06 01:51:11 gerg Exp $";
 char package_version[] = "ipfwadm 2.3.0, 1996/07/30";
 
 int ssocmd_insert[4] =

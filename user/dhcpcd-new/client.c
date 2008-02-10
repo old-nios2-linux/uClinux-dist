@@ -79,6 +79,7 @@ extern	int		FiniteLeaseOnly;
 #ifdef CONFIG_LEDMAN
 extern	int		ledman_led;
 #endif
+extern	int		RenewTimeout;
 
 
 #ifdef ARPCHECK
@@ -326,6 +327,24 @@ UdpIpMsgRecv.ethhdr.ether_shost[5]);
       memcpy(DhcpOptions.val[dhcpT2value],&t2,4);
       DhcpOptions.len[dhcpT2value] = 4;
       DhcpOptions.num++;
+    }
+  if ( RenewTimeout > 0 )
+    {
+      /* Set new T2 to the specified renew time plus two minutes (just an arbitary time) to give
+         the client a decent window to renew its lease. RFC states that T2 MUST be larger than 
+         T1/renew time, but less than the lease time */
+      int leasetime = htonl((unsigned )(ntohl(*(unsigned int *)DhcpOptions.val[dhcpIPaddrLeaseTime])));
+      int t2 = RenewTimeout + 120;
+      if ( t2 > leasetime )
+        {
+          DebugSyslog(LOG_DEBUG, "Renew timeout specified is too long compared to lease time (%d vs %d). Ignoring renew timeout.\n", 
+                        RenewTimeout, leasetime);
+        }
+        else
+        {
+          memcpy(DhcpOptions.val[dhcpT1value],&RenewTimeout,4);
+          memcpy(DhcpOptions.val[dhcpT2value],&t2,4);
+        }
     }
   if ( DhcpOptions.val[dhcpMessageType] )
     return *(unsigned char *)DhcpOptions.val[dhcpMessageType];
@@ -1444,6 +1463,12 @@ void *dhcpRebind()
 {
   int i;
   if ( sigsetjmp(env,0xffff) ) return &dhcpStop;
+
+  /* If a renew timeout has been specified, don't wait till the end of 
+     the lease to move back to the INIT state, just do it immediately. */
+  if ( RenewTimeout > 0 )
+    return &dhcpStop;
+
   i = ReqSentTime+ntohl(*(unsigned int *)DhcpOptions.val[dhcpIPaddrLeaseTime])-time(NULL);
   if ( i > 0 )
     alarm(i);

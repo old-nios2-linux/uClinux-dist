@@ -1353,7 +1353,8 @@ mmc_spi_detect_irq(int irq, void *mmc)
 	return IRQ_HANDLED;
 }
 
-static int __devinit mmc_spi_probe(struct spi_device *spi)
+/* do not use __devinit  mmc_spi_probe also invoked by insmod of spi driver */ 
+static int mmc_spi_probe(struct spi_device *spi)
 {
 	struct mmc_host		*mmc;
 	struct mmc_spi_host	*host;
@@ -1470,7 +1471,8 @@ static int __devinit mmc_spi_probe(struct spi_device *spi)
 }
 
 
-static int __devexit mmc_spi_remove(struct spi_device *spi)
+/* do not use __devexit  mmc_spi_probe also invoked by rmmod  of spi driver */ 
+static int mmc_spi_remove(struct spi_device *spi)
 {
 	struct mmc_host		*mmc = dev_get_drvdata(&spi->dev);
 	struct mmc_spi_host	*host;

@@ -15,9 +15,6 @@ CPUFLAGS      = -m68000
 # LOPT := -Os
 # UOPT := -Os
 
-LINUXTARGET = linux.bin
-
-
 ############################################################################
 
 include $(ROOTDIR)/vendors/config/m68knommu/config.arch

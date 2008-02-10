@@ -1,53 +1,42 @@
 /*
- *  linux/include/asm-arm/arch-ks8695/uncompress.h
+ * include/asm-arm/arch-ks8695/uncompress.h
  *
- *  Copyright (C) 1999 ARM Limited
+ * Copyright (C) 2006 Ben Dooks <ben@simtec.co.uk>
+ * Copyright (C) 2006 Simtec Electronics
+ *
+ * KS8695 - Kernel uncompressor
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
-#include <asm/arch/ks8695-regs.h>
+#ifndef __ASM_ARCH_UNCOMPRESS_H
+#define __ASM_ARCH_UNCOMPRESS_H
 
-/*
- * These access routines operate on the physical address space.
- */
-static inline unsigned int ks8695_getreg(unsigned int r)
-{
-	return *((unsigned int *) (KS8695_IO_BASE + r));
-}
-
-static inline void ks8695_setreg(unsigned int r, unsigned int v)
-{
-	*((unsigned int *) (KS8695_IO_BASE + r)) = v;
-}
+#include <asm/mach-types.h>
+#include <asm/io.h>
+#include <asm/arch/regs-uart.h>
 
 static void putc(char c)
 {
-	while ((ks8695_getreg(KS8695_UART_LINE_STATUS) & KS8695_UART_LINES_TXFE) == 0)
-		;
+	if (!machine_is_lite300() && !machine_is_sg310()) {
+		while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTHRE))
+			barrier();
 
-	ks8695_setreg(KS8695_UART_TX_HOLDING, c);
+		__raw_writel(c, KS8695_UART_PA + KS8695_URTH);
+	}
 }
 
-static void flush(void)
+static inline void flush(void)
 {
+	if (!machine_is_lite300() && !machine_is_sg310()) {
+		while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTE))
+			barrier();
+	}
 }
 
-/*
- * nothing to do
- */
 #define arch_decomp_setup()
-
 #define arch_decomp_wdog()
+
+#endif

@@ -1,4 +1,4 @@
-/* $Id: s0box.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: s0box.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * s0box.c      low level stuff for Creatix S0BOX
  *

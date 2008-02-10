@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
  * License for more details.
  *
- * RCSID $Id: anyaddr.c,v 1.10.10.1 2006/11/24 05:55:46 paul Exp $
+ * RCSID $Id: anyaddr.c,v 1.10.10.1 2006-11-24 05:55:46 paul Exp $
  */
 #include "openswan.h"
 

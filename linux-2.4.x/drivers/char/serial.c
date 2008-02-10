@@ -656,9 +656,10 @@ static inline unsigned calc_divisor(unsigned baud_base, unsigned baud)
 	 * This is a bogus, it assumes only the internal serial ports
 	 * present. Too bad if you have extra 16550 based hardware attached.
 	 */
-        baud_base = GetSysClockRate(); /* yjlou: Divisor Latch is considered by SysClkRate. */
+	/* yjlou: Divisor Latch is considered by SysClkRate. */
+	baud_base = GetSysClockRate() / 16;
 #elif CONFIG_RTL8186
-       baud_base = 153600000;
+	baud_base = 153600000 / 16;
 #endif
 
 	/* work out the divisor to give us the nearest higher baud rate */

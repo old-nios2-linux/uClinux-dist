@@ -336,7 +336,9 @@ static void find_lib_env(void)
 	char *config_libcdir = getenv("CONFIG_LIBCDIR");
 	char *config_linuxdir = getenv("CONFIG_LINUXDIR");
 
-	rootdir = getenv("ROOTDIR");
+	rootdir = getenv("FAKE_ROOTDIR");
+	if (!rootdir)
+		rootdir = getenv("ROOTDIR");
 
 	if (!rootdir) {
 		char *pt;
@@ -652,23 +654,23 @@ static void process_args(int argc, char **argv)
 		}
 
 		if (libtype != LIBTYPE_NONE && !nodefaultlibs) {
-			x_asprintf(&rpath, "-Wl,-rpath-link,%s", libc_libdir);
-			args_add_prefix(stripped_args, rpath);
+			args_add(stripped_args, "-L");
+			args_add(stripped_args, libc_libdir);
 
-			args_add_prefix(stripped_args, libc_libdir);
-			args_add_prefix(stripped_args, "-L");
+			x_asprintf(&rpath, "-Wl,-rpath-link,%s", libc_libdir);
+			args_add(stripped_args, rpath);
+
 			libpaths[num_lib_paths++] = libc_libdir;
 		}
 
-
 		/* Need to be able to find all the libs */
 		x_asprintf(&e, "%s/lib", rootdir);
+		args_add(stripped_args, "-L");
+		args_add(stripped_args, e);
 
 		x_asprintf(&rpath, "-Wl,-rpath-link,%s", e);
-		args_add_prefix(stripped_args, rpath);
+		args_add(stripped_args, rpath);
 
-		args_add_prefix(stripped_args, e);
-		args_add_prefix(stripped_args, "-L");
 		libpaths[num_lib_paths++] = e;
 
 		if (!nodefaultlibs) {

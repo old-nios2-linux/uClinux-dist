@@ -1,4 +1,4 @@
-/* $Id: isdn_cards.c,v 1.1.1.1 1999/11/22 03:47:18 christ Exp $
+/* $Id: isdn_cards.c,v 1.1.1.1 1999-11-22 03:47:18 christ Exp $
 
  * Linux ISDN subsystem, initialization for non-modularized drivers.
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_cards.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:18  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:18  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.6.2.1  1998/11/05 22:11:40  fritz

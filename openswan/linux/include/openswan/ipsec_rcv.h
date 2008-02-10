@@ -13,7 +13,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: ipsec_rcv.h,v 1.28.2.2 2006/10/06 21:39:26 paul Exp $
+ * RCSID $Id: ipsec_rcv.h,v 1.28.2.2 2006-10-06 21:39:26 paul Exp $
  */
 
 #ifndef IPSEC_RCV_H
@@ -146,6 +146,7 @@ struct ipsec_rcv_state {
 	 */
 	int		state;
 	int		next_state;
+	int		auth_checked;
 
 #ifdef CONFIG_KLIPS_OCF
 	struct work_struct	workq;
@@ -199,7 +200,7 @@ extern int klips26_rcv_encap(struct sk_buff *skb, __u16 encap_type);
 
 /*
  * $Log: ipsec_rcv.h,v $
- * Revision 1.28.2.2  2006/10/06 21:39:26  paul
+ * Revision 1.28.2.2  2006-10-06 21:39:26  paul
  * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
  * set. This is defined through autoconf.h which is included through the
  * linux kernel build macros.

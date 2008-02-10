@@ -26,7 +26,7 @@
  *
  *  Dean W. Gehnert, deang@teleport.com, 05/01/96
  *
- *  $Id: aic7xxx_proc.c,v 1.1.1.1 1999/11/22 03:47:25 christ Exp $
+ *  $Id: aic7xxx_proc.c,v 1.1.1.1 1999-11-22 03:47:25 christ Exp $
  *-M*************************************************************************/
 
 #define	BLS	(&aic7xxx_buffer[size])

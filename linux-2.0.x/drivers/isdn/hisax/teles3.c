@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: teles3.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -11,7 +11,7 @@
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.11.2.9  1998/04/08 21:58:52  keil

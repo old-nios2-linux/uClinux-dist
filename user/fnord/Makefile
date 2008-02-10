@@ -59,8 +59,8 @@ clean:
 	rm -f *.[oa] httpd fnord fnord-cgi fnord-idx
 	rm -f *.gdb *.elf
 
-install:
-	test -d /command || mkdir /command
+#install:
+	#test -d /command || mkdir /command
 
 CURNAME=$(notdir $(shell pwd))
 VERSION=fnord-$(shell head -n 1 CHANGES|sed 's/://')

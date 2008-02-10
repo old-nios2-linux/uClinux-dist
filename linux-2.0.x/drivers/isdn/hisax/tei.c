@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: tei.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,7 +11,7 @@
  *              Fritz Elfert
  *
  * $Log: tei.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.8.2.7  1998/11/03 00:07:35  keil

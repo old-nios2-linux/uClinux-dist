@@ -22,7 +22,7 @@ static int std_rcv_pado(struct session* ses,
 	return -1;
     
     if(ses->state != PADO_CODE ){
-	poe_error(ses,"Unexpected packet: %P",p_in);
+	poe_dbglog(ses,"Unexpected packet: %P",p_in);
 	return 0;
     }
     

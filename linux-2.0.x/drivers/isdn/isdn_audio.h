@@ -1,4 +1,4 @@
-/* $Id: isdn_audio.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: isdn_audio.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_audio.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.5.2.2  1998/11/05 22:11:39  fritz

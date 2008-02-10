@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isar.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: isar.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.4  1998/11/03 00:06:44  keil

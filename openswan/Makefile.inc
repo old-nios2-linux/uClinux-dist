@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Makefile.inc,v 1.116.2.13 2007/06/19 14:49:19 paul Exp $
+# RCSID $Id: Makefile.inc,v 1.116.2.16 2007-11-02 03:07:27 paul Exp $
 
 
 # snapgear specific defaults from build env.
@@ -193,7 +193,7 @@ INSTCONFFLAGS=
 # CC variable
 # (caution, this stuff is still being sorted out, will change in future)
 USERCOMPILE?=-g -O3 -DDISABLE_UDP_CHECKSUM
-KLIPSCOMPILE=-O3
+KLIPSCOMPILE=-O3 -DCONFIG_KLIPS_ALG
 # for AMD64 use 
 #USERCOMPILE?=-g -O3 -m64
 #KLIPSCOMPILE=-O3 -m64 -mno-red-zone
@@ -345,7 +345,7 @@ USE_SMARTCARD?=false
 
 # should opportunistic encryption be turned on by default?
 # Enabled during testing, but probably turned off in shipping versions.
-USE_OE?=false
+USE_OE?=true
 ifeq ($(USE_OE),false)
 # warning: examples subdirectory is statically defined here
 OE_FLAG=\#Disable Opportunistic Encryption\\ninclude ${FINALCONFDDIR}/examples/no_oe.conf

@@ -1,6 +1,6 @@
 #
 # Makefile for pppd under Solaris 2.
-# $Id: Makefile.sol2,v 1.2 2007/06/08 04:02:38 gerg Exp $
+# $Id: Makefile.sol2,v 1.2 2007-06-08 04:02:38 gerg Exp $
 #
 
 include ../Makedefs.com

@@ -20,10 +20,10 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.1.1.1 1999/11/22 03:47:23 christ Exp $
+ * $Id: aha152x.c,v 1.1.1.1 1999-11-22 03:47:23 christ Exp $
  *
  * $Log: aha152x.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:23  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:23  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.18  1996/09/07 20:10:40  fischer

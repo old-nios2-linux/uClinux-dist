@@ -610,8 +610,10 @@ main(int argc, char **argv)
 #endif
 
     debug_log = stderr;
+#ifndef HAVE_POLL
     if (FD_SETSIZE < Squid_MaxFD)
 	Squid_MaxFD = FD_SETSIZE;
+#endif
 
 #if defined(_SQUID_MSWIN_) || defined(_SQUID_CYGWIN_)
     if ((WIN32_init_err = WIN32_Subsystem_Init()))
@@ -1023,6 +1025,7 @@ SquidShutdown(void *unused)
 	fd_close(2);
     }
 #endif
+    comm_select_shutdown();
     fdDumpOpen();
     fdFreeMemory();
     memClean();

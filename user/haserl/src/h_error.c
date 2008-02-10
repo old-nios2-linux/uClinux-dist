@@ -36,14 +36,14 @@
 #include "h_error.h"
 
 char *g_err_msg[] = {
-    "",
-    "Memory Allocation Failure",
-    "Unable to open file %s",
-    "?&gt; before &lt;?",
-    "Missing ?&gt;",
-    "Unknown operation",
-    "Unable to start subshell",
-    "Unspecified Error",
+  "",
+  "Memory Allocation Failure",
+  "Unable to open file %s",
+  "%c&gt; before &lt;%c",
+  "Missing %c&gt;",
+  "Unknown operation",
+  "Unable to start subshell",
+  "Unspecified Error",
 };
 
 
@@ -51,10 +51,11 @@ char *g_err_msg[] = {
 /*
  * abort the program
  */
-void die_with_error(char *msg)
+void
+die_with_error (char *msg)
 {
-    fprintf(stderr, "Error: %s\n", msg);
-    exit(-1);
+  fprintf (stderr, "Error: %s\n", msg);
+  exit (-1);
 }
 
 
@@ -62,33 +63,41 @@ void die_with_error(char *msg)
    a line is added saying where in the script buffer the error occured.  If
    there's a request method, then http headers are added.
  */
-void die_with_message(void *sp, char *where, const char *s, ...)
+void
+die_with_message (void *sp, char *where, const char *s, ...)
 {
-    script_t *script = sp;
-    va_list p;
-    FILE *fo = stderr;
+  #ifndef JUST_LUACSHELL
+  script_t *script = sp;
+  #endif
+  va_list p;
+  FILE *fo = stderr;
 
-    if (global.silent == FALSE) {
-       if (getenv("REQUEST_METHOD")) {
-            fo = stdout;
-           fprintf(fo, "HTTP/1.0 500 Server Error\n" 
-			"Content-Type: text/html\n\n" 
-			"<html><body><b><font color=#CC0000>" PACKAGE_NAME
-		    	" CGI Error</font></b><br><pre>\n");
+  if (global.silent == FALSE)
+    {
+      if (getenv ("REQUEST_METHOD"))
+	{
+	  fo = stdout;
+	  fprintf (fo, "HTTP/1.0 500 Server Error\n"
+		   "Content-Type: text/html\n\n"
+		   "<html><body><b><font color=#CC0000>" PACKAGE_NAME
+		   " CGI Error</font></b><br><pre>\n");
 	}
-	va_start(p, s);
-	vfprintf(fo, s, p);
-	va_end(p);
-	if (where && sp) {
-	    fprintf(fo, " near line %d of %s\n",
-		    count_lines(script->buf, script->size, where),
-		    script->name);
+      va_start (p, s);
+      vfprintf (fo, s, p);
+      va_end (p);
+      #ifndef JUST_LUACSHELL
+      if (where && sp)
+        {
+	  fprintf (fo, " near line %d of %s\n",
+		   count_lines (script->buf, script->size, where),
+		   script->name);
 	}
-	printf("\n");
+      #endif
+      printf ("\n");
 
-	if (getenv("REQUEST_METHOD"))
-	    fprintf(fo, "</pre></body></html>\n");
+      if (getenv ("REQUEST_METHOD"))
+	fprintf (fo, "</pre></body></html>\n");
     }
-    exit(-1);
+  exit (-1);
 
 }

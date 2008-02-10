@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.1.1.1 1999/11/22 03:47:01 christ Exp $
+/* $Id: dma.h,v 1.1.1.1 1999-11-22 03:47:01 christ Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)

@@ -29,6 +29,7 @@ struct isc_lease {
 static struct isc_lease *leases = NULL;
 static off_t lease_file_size = (off_t)0;
 static ino_t lease_file_inode = (ino_t)0;
+static time_t lease_file_mtime = (time_t)0;
 static int logged_lease = 0;
 
 static int next_token (char *token, int buffsize, FILE * fp)
@@ -78,11 +79,13 @@ void load_dhcp(struct daemon *daemon, time_t now)
   logged_lease = 0;
   
   if ((statbuf.st_size <= lease_file_size) &&
-      (statbuf.st_ino == lease_file_inode))
+      (statbuf.st_ino == lease_file_inode) &&
+      (statbuf.st_mtime == lease_file_mtime))
     return;
   
   lease_file_size = statbuf.st_size;
   lease_file_inode = statbuf.st_ino;
+  lease_file_mtime = statbuf.st_mtime;
   
   if (!(fp = fopen (daemon->lease_file, "r")))
     {

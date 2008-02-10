@@ -1,7 +1,7 @@
 /*
  *  /arch/arm/mach-s3c24a0/generic.h
  *
- * 	$Id: generic.h,v 1.2 2005/11/28 03:55:09 gerg Exp $
+ * 	$Id: generic.h,v 1.2 2005-11-28 03:55:09 gerg Exp $
  * 	
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as

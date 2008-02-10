@@ -1,4 +1,4 @@
-/* $Id: ix1_micro.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: ix1_micro.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * ix1_micro.c  low level stuff for ITK ix1-micro Rev.2 isdn cards
  *              derived from the original file teles3.c from Karsten Keil
@@ -11,7 +11,7 @@
  *              Beat Doebeli
  *
  * $Log: ix1_micro.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3.2.8  1998/04/08 21:58:41  keil

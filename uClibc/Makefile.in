@@ -39,6 +39,7 @@ include $(top_srcdir)libc/Makefile.in
 include/bits/uClibc_config.h: extra/config/conf .config
 	$(Q)$(INSTALL) -d $(dir $@)
 	$(Q)@$< -o $(top_srcdir)extra/Configs/Config.in
+	chmod +x $(top_srcdir)extra/scripts/conf-header.sh
 	$(top_srcdir)extra/scripts/conf-header.sh .config > include/bits/uClibc_config.h
 
 
@@ -370,6 +371,9 @@ ifeq ($(strip $(HAVE_SHARED)),y)
 		$(ROMFSINST) -s \
 			/lib/ld-uClibc-$(UCLIBC_VERSION).so \
 			/lib/ld-linux.so.2; \
+		$(ROMFSINST) -s \
+			/lib/ld-uClibc-$(UCLIBC_VERSION).so \
+			/lib/ld.so.1; \
 	fi
 endif
 

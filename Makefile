@@ -231,6 +231,9 @@ romfs.subdirs:
 romfs.post:
 	$(MAKEARCH) -C vendors romfs.post
 	-find $(ROMFSDIR)/. -name CVS | xargs -r rm -rf
+	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
+		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1; \
+	fi
 
 .PHONY: image
 image:
@@ -239,7 +242,7 @@ image:
 
 .PHONY: release
 release:
-	make -C release release
+	$(MAKE) -C release release
 
 .PHONY: single
 single single%:
@@ -260,6 +263,10 @@ vendor_%:
 
 .PHONY: linux
 linux linux%_only:
+	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
+		mkdir -p `dirname $$CONFIG_INITRAMFS_SOURCE`; \
+		touch $$CONFIG_INITRAMFS_SOURCE || exit 1; \
+	fi
 	@if expr "$(LINUXDIR)" : 'linux-2\.[0-4].*' > /dev/null && \
 			 [ ! -f $(LINUXDIR)/.depend ] ; then \
 		echo "ERROR: you need to do a 'make dep' first" ; \
@@ -349,13 +356,13 @@ distclean: mrproper
 		echo "vendors/$(@:_default=)/config.device must exist first"; \
 		exit 1; \
 	 fi
-	-make clean > /dev/null 2>&1
+	-$(MAKE) clean > /dev/null 2>&1
 	cp vendors/$(@:_default=)/config.device .config
 	chmod u+x config/setconfig
 	yes "" | config/setconfig defaults
 	config/setconfig final
-	make dep
-	make
+	$(MAKE) dep
+	$(MAKE)
 
 config_error:
 	@echo "*************************************************"

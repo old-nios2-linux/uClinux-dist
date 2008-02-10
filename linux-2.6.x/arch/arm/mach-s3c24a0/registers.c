@@ -3,7 +3,7 @@
  *
  * S3C24A0 register monitor & controller
  *
- * $Id: registers.c,v 1.3 2006/12/12 13:38:48 gerg Exp $
+ * $Id: registers.c,v 1.3 2006-12-12 13:38:48 gerg Exp $
  * 
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive

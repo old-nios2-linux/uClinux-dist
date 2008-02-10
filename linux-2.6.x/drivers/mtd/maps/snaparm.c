@@ -67,6 +67,12 @@ extern unsigned long phys_initrd_start;
 #define FLASH_SIZE 0x01000000
 #define FLASH_WIDTH 2
 
+#elif defined(CONFIG_MACH_SG720)
+
+#define FLASH_ADDR 0x50000000
+#define FLASH_SIZE 0x01000000
+#define FLASH_WIDTH 1
+
 #elif defined(CONFIG_MACH_CM4008)
 
 #define FLASH_ADDR 0x02000000
@@ -88,49 +94,51 @@ typedef struct {
 	unsigned long type;			/* machine_arch_type */
 	unsigned long addr;			/* Physical flash address */
 	unsigned long size;			/* Maximum flash size */
-	unsigned long configsize;	/* Size of the config partition */
-	unsigned width;				/* Flash bus width */
+	unsigned long bootsize;			/* Size of boot loader */
+	unsigned long tagsize;			/* Size of boot tags */
+	unsigned long configsize;		/* Size of config partition */
+	unsigned int width;			/* Flash bus width */
 } flash_layout_t;
 
 static const flash_layout_t flash_layout[] = {
 #if defined(CONFIG_MACH_SE4000)
-	{ .type = MACH_TYPE_SE4000, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_SE4000, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_IVPN)
-	{ .type = MACH_TYPE_IVPN, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_IVPN, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SG560) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG560, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x80000 },
+	{ .type = MACH_TYPE_SG560, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x80000 },
 #endif
 #if defined(CONFIG_MACH_SG580) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG580, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG580, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
 #endif
 #if defined(CONFIG_MACH_SG590) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG590, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG590, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
 #endif
 #if defined(CONFIG_MACH_SG640) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG640, .addr = 0x50000000, .size = 0x01000000, .width = 2, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG640, .addr = 0x50000000, .size = 0x01000000, .width = 2, .bootsize = 0x20000, .configsize = 0x100000 },
 #endif
 #if defined(CONFIG_MACH_SG565) || defined (CONFIG_MACH_SGARMAUTO)
-	{ .type = MACH_TYPE_SG565, .addr = 0x50000000, .size = 0x01000000, .width = 1, .configsize = 0x100000 },
-#endif
-#if defined(CONFIG_MACH_SG720)
-	{ .type = MACH_TYPE_SG720, .addr = 0x50000000, .size = 0x01000000, .width = 1, .configsize = 0 },
-#endif
-#if defined(CONFIG_MACH_SG8100)
-	{ .type = MACH_TYPE_SG8100, .addr = 0x50000000, .size = 0x02000000, .width = 2, .configsize = 0x100000 },
+	{ .type = MACH_TYPE_SG565, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .configsize = 0x100000 },
 #endif
 #if defined(CONFIG_MACH_SHIVA1100)
-	{ .type = MACH_TYPE_SHIVA1100, .addr = 0x50000000, .size = 0x01000000, .width = 1, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_SHIVA1100, .addr = 0x50000000, .size = 0x01000000, .width = 1, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_LITE300)
-	{ .type = MACH_TYPE_LITE300, .addr = 0x02000000, .size = 0x00800000, .width = 1, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_LITE300, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .configsize = 0x20000 },
+#endif
+#if defined(CONFIG_MACH_SG310)
+	{ .type = MACH_TYPE_SG310, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x80000 },
+#endif
+#if defined(CONFIG_MACH_PFW)
+	{ .type = MACH_TYPE_PFW, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .tagsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_SE4200)
-	{ .type = MACH_TYPE_SE4200, .addr = 0x02000000, .size = 0x00800000, .width = 1, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_SE4200, .addr = 0x02000000, .size = 0x00800000, .width = 1, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 #if defined(CONFIG_MACH_EP9312)
-	{ .type = MACH_TYPE_EP9312, .addr = 0x60000000, .size = 0x00800000, .width = 2, .configsize = 0x20000 },
+	{ .type = MACH_TYPE_EP9312, .addr = 0x60000000, .size = 0x00800000, .width = 2, .bootsize = 0x20000, .configsize = 0x20000 },
 #endif
 };
 
@@ -537,21 +545,18 @@ static struct mtd_partition sg_partitions[] = {
 static struct mtd_partition sg_partitions[] = {
 	{
 		name: "SnapGear Boot Loader",
-		offset: 0,
-		size: 0x00020000
 	},
 	{
 		name: "SnapGear non-volatile configuration",
-		offset: 0x00020000,
-		/*size: CONFIG_SIZE -- filled in when we know the config size */
 	},
 	{
 		name: "SnapGear image",
-		offset: 0x00020000, /* +CONFIG_SIZE, -- filled in when we know the config size */
 	},
 	{
 		name: "SnapGear Intel/StrataFlash",
-		offset: 0
+	},
+	{
+		name: "SnapGear Boot Tags",
 	},
 };
 #endif
@@ -616,21 +621,24 @@ static int sg_getmtdindex(char *name)
 int __init sg_init(void)
 {
 	int index, rc;
+	int numpartitions;
 
 	printk(VENDOR ": MTD flash setup\n");
 
+	numpartitions = NUM_PARTITIONS;
 
 #ifdef DYNAMIC_SGARM_CONFIG
-	/* Find the matching entry in the flash_layout table.
+	/*
+	 * Find the matching entry in the flash_layout table.
 	 * Note that for almost *all* devices, there will be only 1
 	 */
-	for (index = 0; index < sizeof(flash_layout) / sizeof(*flash_layout); index++) {
-		if (flash_layout[index].type == machine_arch_type) {
+	for (index = 0; index < ARRAY_SIZE(flash_layout); index++) {
+		if (flash_layout[index].type == machine_arch_type)
 			break;
-		}
 	}
-	if (index == sizeof(flash_layout) / sizeof(*flash_layout)) {
-		printk(KERN_WARNING VENDOR ": No matching flash layout for mach type %d, using mach type %lu\n",
+	if (index == ARRAY_SIZE(flash_layout)) {
+		printk(KERN_WARNING VENDOR ": No matching flash layout "
+			"for mach type %d, using mach type %lu\n",
 			machine_arch_type, flash_layout[0].type);
 		index = 0;
 	}
@@ -640,6 +648,21 @@ int __init sg_init(void)
 	sg_map.bankwidth = flash_layout[index].width;
 	flash_addr = flash_layout[index].addr;
 
+	/* If boot loader has specified size, then set accordingly */
+	if (flash_layout[index].bootsize) {
+		sg_partitions[0].size = flash_layout[index].bootsize;
+		sg_partitions[1].offset += flash_layout[index].bootsize;
+		sg_partitions[2].offset += flash_layout[index].bootsize;
+		sg_partitions[4].offset += flash_layout[index].bootsize;
+	}
+	/* If we have a separate tags segment, then set accordingly */
+	if (flash_layout[index].tagsize) {
+		sg_partitions[4].size = flash_layout[index].tagsize;
+		sg_partitions[1].offset += flash_layout[index].tagsize;
+		sg_partitions[2].offset += flash_layout[index].tagsize;
+	} else {
+		numpartitions--;
+	}
 	/* And also fix up the partition table if we have a config partition */
 	if (flash_layout[index].configsize) {
 		sg_partitions[1].size += flash_layout[index].configsize;
@@ -701,7 +724,7 @@ int __init sg_init(void)
 	sg_mtd->owner = THIS_MODULE;
 	sg_mtd->priv = &sg_map;
 	register_reboot_notifier(&sg_notifier_block);
-	rc = add_mtd_partitions(sg_mtd, sg_partitions, NUM_PARTITIONS);
+	rc = add_mtd_partitions(sg_mtd, sg_partitions, numpartitions);
 	if (rc < 0)
 		printk(KERN_NOTICE VENDOR ": add_mtd_partitions() failed?\n");
 

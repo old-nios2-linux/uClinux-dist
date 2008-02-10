@@ -18,7 +18,7 @@
  * Split out from ipsec_init.c version 1.70.
  */
 
-char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.4 2006/11/15 22:21:39 paul Exp $";
+char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.7 2007-11-06 18:24:44 paul Exp $";
 
 
 #ifndef AUTOCONF_INCLUDED
@@ -26,6 +26,9 @@ char ipsec_proc_c_version[] = "RCSID $Id: ipsec_proc.c,v 1.39.2.4 2006/11/15 22:
 #endif
 #include <linux/version.h>
 #define __NO_VERSION__
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
+#include <linux/moduleparam.h>
+#endif
 #include <linux/module.h>
 #include <linux/kernel.h> /* printk() */
 #include <linux/ip.h>          /* struct iphdr */
@@ -628,7 +631,11 @@ unsigned int natt_available = 1;
 #else
 unsigned int natt_available = 0;
 #endif
+#ifdef module_param
 module_param(natt_available, int, 0444);
+#else
+MODULE_PARM("natt_available","i");
+#endif
 
 IPSEC_PROCFS_DEBUG_NO_STATIC
 int
@@ -891,25 +898,25 @@ ipsec_proc_init()
 
         /* for 2.0 kernels */
 #if !defined(PROC_FS_2325) && !defined(PROC_FS_21)
-	error |= proc_register_dynamic(&proc_net, &ipsec_eroute);
-	error |= proc_register_dynamic(&proc_net, &ipsec_spi);
-	error |= proc_register_dynamic(&proc_net, &ipsec_spigrp);
-	error |= proc_register_dynamic(&proc_net, &ipsec_tncfg);
-	error |= proc_register_dynamic(&proc_net, &ipsec_version);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_eroute);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_spi);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_spigrp);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_tncfg);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_version);
 #ifdef CONFIG_KLIPS_DEBUG
-	error |= proc_register_dynamic(&proc_net, &ipsec_klipsdebug);
+	error |= proc_register_dynamic(&PROC_NET, &ipsec_klipsdebug);
 #endif /* CONFIG_KLIPS_DEBUG */
 #endif
 
 	/* for 2.2 kernels */
 #if !defined(PROC_FS_2325) && defined(PROC_FS_21)
-	error |= proc_register(proc_net, &ipsec_eroute);
-	error |= proc_register(proc_net, &ipsec_spi);
-	error |= proc_register(proc_net, &ipsec_spigrp);
-	error |= proc_register(proc_net, &ipsec_tncfg);
-	error |= proc_register(proc_net, &ipsec_version);
+	error |= proc_register(PROC_NET, &ipsec_eroute);
+	error |= proc_register(PROC_NET, &ipsec_spi);
+	error |= proc_register(PROC_NET, &ipsec_spigrp);
+	error |= proc_register(PROC_NET, &ipsec_tncfg);
+	error |= proc_register(PROC_NET, &ipsec_version);
 #ifdef CONFIG_KLIPS_DEBUG
-	error |= proc_register(proc_net, &ipsec_klipsdebug);
+	error |= proc_register(PROC_NET, &ipsec_klipsdebug);
 #endif /* CONFIG_KLIPS_DEBUG */
 #endif
 
@@ -921,7 +928,7 @@ ipsec_proc_init()
 	memset(&ipsec_ipv4_birth_packet, 0, sizeof(struct ipsec_birth_reply));
 	memset(&ipsec_ipv6_birth_packet, 0, sizeof(struct ipsec_birth_reply));
 
-	proc_net_ipsec_dir = proc_mkdir("ipsec", proc_net);
+	proc_net_ipsec_dir = proc_mkdir("ipsec", PROC_NET);
 	if(proc_net_ipsec_dir == NULL) {
 		/* no point in continuing */
 		return 1;
@@ -954,12 +961,12 @@ ipsec_proc_init()
 	}
 	
 	/* now create some symlinks to provide compatibility */
-	proc_symlink("ipsec_eroute", proc_net, "ipsec/eroute/all");
-	proc_symlink("ipsec_spi",    proc_net, "ipsec/spi/all");
-	proc_symlink("ipsec_spigrp", proc_net, "ipsec/spigrp/all");
-	proc_symlink("ipsec_tncfg",  proc_net, "ipsec/tncfg");
-	proc_symlink("ipsec_version",proc_net, "ipsec/version");
-	proc_symlink("ipsec_klipsdebug",proc_net,"ipsec/klipsdebug");
+	proc_symlink("ipsec_eroute", PROC_NET, "ipsec/eroute/all");
+	proc_symlink("ipsec_spi",    PROC_NET, "ipsec/spi/all");
+	proc_symlink("ipsec_spigrp", PROC_NET, "ipsec/spigrp/all");
+	proc_symlink("ipsec_tncfg",  PROC_NET, "ipsec/tncfg");
+	proc_symlink("ipsec_version",PROC_NET, "ipsec/version");
+	proc_symlink("ipsec_klipsdebug",PROC_NET,"ipsec/klipsdebug");
 
 #endif /* !PROC_FS_2325 */
 
@@ -1016,19 +1023,28 @@ ipsec_proc_cleanup()
 
 
 #ifdef CONFIG_KLIPS_DEBUG
-	remove_proc_entry("ipsec_klipsdebug", proc_net);
+	remove_proc_entry("ipsec_klipsdebug", PROC_NET);
 #endif /* CONFIG_KLIPS_DEBUG */
-	remove_proc_entry("ipsec_eroute",     proc_net);
-	remove_proc_entry("ipsec_spi",        proc_net);
-	remove_proc_entry("ipsec_spigrp",     proc_net);
-	remove_proc_entry("ipsec_tncfg",      proc_net);
-	remove_proc_entry("ipsec_version",    proc_net);
-	remove_proc_entry("ipsec",            proc_net);
+	remove_proc_entry("ipsec_eroute",     PROC_NET);
+	remove_proc_entry("ipsec_spi",        PROC_NET);
+	remove_proc_entry("ipsec_spigrp",     PROC_NET);
+	remove_proc_entry("ipsec_tncfg",      PROC_NET);
+	remove_proc_entry("ipsec_version",    PROC_NET);
+	remove_proc_entry("ipsec",            PROC_NET);
 #endif /* 2.4 kernel */
 }
 
 /*
  * $Log: ipsec_proc.c,v $
+ * Revision 1.39.2.7  2007-11-06 18:24:44  paul
+ * include linux/moduleparam.h on linux 2.4.x kernels.
+ *
+ * Revision 1.39.2.6  2007/09/05 02:41:20  paul
+ * Added xforms info to /proc file. Patch by David McCullough
+ *
+ * Revision 1.39.2.5  2007/08/09 14:37:45  paul
+ * Patch by sergeil to compile on 2.4.35.
+ *
  * Revision 1.39.2.4  2006/11/15 22:21:39  paul
  * backport of creating a /sys/ file to test for nat-t capability in kernel.
  *

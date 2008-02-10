@@ -1,4 +1,4 @@
-/* $Id: teleint.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: teleint.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * teleint.c     low level stuff for TeleInt isdn cards
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: teleint.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.7  1998/11/03 00:07:39  keil

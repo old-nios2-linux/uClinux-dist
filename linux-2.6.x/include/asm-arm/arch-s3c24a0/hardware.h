@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/hardware.h
  *
- * $Id: hardware.h,v 1.3 2006/12/12 13:13:07 gerg Exp $
+ * $Id: hardware.h,v 1.3 2006-12-12 13:13:07 gerg Exp $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

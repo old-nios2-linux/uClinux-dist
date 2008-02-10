@@ -1,6 +1,6 @@
 #
 # pppstats makefile
-# $Id: Makefile.linux,v 1.4 2007/06/20 06:11:29 gerg Exp $
+# $Id: Makefile.linux,v 1.4 2007-06-20 06:11:29 gerg Exp $
 #
 DESTDIR = $(INSTROOT)@DESTDIR@
 BINDIR = $(DESTDIR)/sbin

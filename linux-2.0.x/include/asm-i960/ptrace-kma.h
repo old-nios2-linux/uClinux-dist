@@ -7,7 +7,7 @@
 #ifndef PTRACE_H
 #define PTRACE_H
 
-#ident "$Id: ptrace-kma.h,v 1.1 1999/12/03 06:02:35 gerg Exp $"
+#ident "$Id: ptrace-kma.h,v 1.1 1999-12-03 06:02:35 gerg Exp $"
 
 /*
  * Always get the AC, PC

@@ -13,8 +13,8 @@
 #include <linux/param.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <asm/machdep.h>
-#include <asm/io.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
 #include <asm/mcfuart.h>
@@ -106,20 +106,6 @@ void mcf_settimericr(unsigned int timer, unsigned int level)
 		*icrp = MCFSIM_ICR_AUTOVEC | (level << 2) | MCFSIM_ICR_PRI3;
 		mcf_setimr(mcf_getimr() & ~imr);
 	}
-}
-
-/***************************************************************************/
-
-int mcf_timerirqpending(int timer)
-{
-	unsigned int imr = 0;
-
-	switch (timer) {
-	case 1:  imr = MCFSIM_IMR_TIMER1; break;
-	case 2:  imr = MCFSIM_IMR_TIMER2; break;
-	default: break;
-	}
-	return (mcf_getipr() & imr);
 }
 
 /***************************************************************************/

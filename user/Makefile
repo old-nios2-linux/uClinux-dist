@@ -219,6 +219,7 @@ dir_$(CONFIG_USER_MGETTY_MGETTY)            += mgetty
 dir_$(CONFIG_USER_MTDUTILS)                 += mtd-utils
 dir_$(CONFIG_USER_MICROWIN)                 += microwin
 dir_$(CONFIG_USER_MINI_HTTPD_MINI_HTTPD)    += mini_httpd
+dir_$(CONFIG_USER_MINIUPNPD)                += miniupnpd
 dir_$(CONFIG_USER_MOUNT_MOUNT)              += mount
 dir_$(CONFIG_USER_MOUNT_UMOUNT)             += mount
 dir_$(CONFIG_USER_MP3PLAY_MP3PLAY)          += mp3play
@@ -285,8 +286,8 @@ dir_$(CONFIG_USER_POP3PROXY_POP3PROXY)      += pop3proxy
 dir_$(CONFIG_USER_PORTMAP_PORTMAP)          += portmap
 dir_$(CONFIG_USER_POTRACE_POTRACE)          += potrace
 dir_$(CONFIG_USER_PPPD_PPPD_PPPD)           += pppd
+dir_$(CONFIG_USER_PPTP_PPTP)                += pptp
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP)         += pptp-client
-dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
 dir_$(CONFIG_USER_PPTPD_PPTPCTRL)           += pptpd
 dir_$(CONFIG_USER_PPTPD_PPTPD)              += pptpd
@@ -441,6 +442,7 @@ snort: mysql
 asterisk-addons: mysql asterisk
 fltk: microwin
 fltk-1.1: microwin
+miniupnpd : iptables
 
 $(sort $(dir_y) $(dir_p)):  config
 	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -j1 -C $@ ) || exit $$?

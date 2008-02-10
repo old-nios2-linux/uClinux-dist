@@ -1,4 +1,4 @@
-/* $Id: cert.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: cert.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,7 +7,7 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: cert.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2.2.1  1998/11/03 21:46:37  keil

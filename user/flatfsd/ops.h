@@ -28,9 +28,14 @@ int flat_read(void *buf, size_t len);
 int flat_write(off_t offset, const void *buf, size_t len);
 
 /*
+ * Returns the total length of a flat device partition.
+ */
+size_t flat_part_length(void);
+
+/*
  * Returns the total length of the flat device.
  */
-size_t flat_length(void);
+int flat_dev_length(void);
 
 /*
  * Performs an lseek() on the flat device.

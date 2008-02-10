@@ -67,9 +67,7 @@ int flat_filecount(char *configdir)
 	DIR *dirp;
 	struct dirent *dp;
 	struct stat sb;
-
-	numfiles = 0;
-	numbytes = 0;
+	int numfiles = 0, numbytes = 0;
 
 	if (chdir(configdir) < 0)
 		return ERROR_CODE();
@@ -140,6 +138,7 @@ int flat_new(const char *dir)
 	int fddefault, fdconfig;
 	char filename[512];
 	unsigned char buf[1024];
+	int numfiles = 0, numbytes = 0, numdropped = 0;
 
 	if (chdir(dir) < 0)
 		return ERROR_CODE();
@@ -147,10 +146,6 @@ int flat_new(const char *dir)
 	/* Scan directory */
 	if ((dirp = opendir(".")) == NULL)
 		return ERROR_CODE();
-
-	numfiles = 0;
-	numbytes = 0;
-	numdropped = 0;
 
 	while ((dp = readdir(dirp)) != NULL) {
 

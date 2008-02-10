@@ -3,7 +3,7 @@
  *
  * PPTP control connection between PAC-PNS pair
  *
- * $Id: pptpctrl.c,v 1.8 2007/07/05 23:33:09 gerg Exp $
+ * $Id: pptpctrl.c,v 1.9 2007-12-12 04:42:42 asallawa Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -39,10 +39,6 @@
 #ifdef HAVE_LIBUTIL_H
 #include <libutil.h>
 #endif
-#endif
-
-#ifdef __UCLIBC__
-#define socklen_t int
 #endif
 
 #include "compat.h"

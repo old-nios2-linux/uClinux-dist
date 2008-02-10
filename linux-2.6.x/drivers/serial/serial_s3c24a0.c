@@ -3,7 +3,7 @@
  *
  * device for S3C24A0
  *
- * $Id: serial_s3c24a0.c,v 1.3 2006/12/12 13:38:51 gerg Exp $
+ * $Id: serial_s3c24a0.c,v 1.3 2006-12-12 13:38:51 gerg Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive

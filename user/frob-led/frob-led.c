@@ -1,4 +1,4 @@
-/* $Id: frob-led.c,v 1.4 2004/08/18 06:01:20 philipc Exp $ */
+/* $Id: frob-led.c,v 1.4 2004-08-18 06:01:20 philipc Exp $ */
 
 /*
  * Trivial utility to allow frobbing of NETtel LEDs from scripts.

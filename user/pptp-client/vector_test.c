@@ -1,7 +1,7 @@
 /* vector_test.c .... Test the vector package.
  *                    C. Scott Ananian <cananian@alumni.princeton.edu>
  *
- * $Id: vector_test.c,v 1.2 2000/07/24 23:18:27 matthewn Exp $
+ * $Id: vector_test.c,v 1.2 2000-07-24 23:18:27 matthewn Exp $
  */
 
 #include <stdlib.h>

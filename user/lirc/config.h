@@ -1,5 +1,5 @@
 /* config.h.in.  Generated automatically from configure.in by autoheader.  */
-/*      $Id: config.h,v 1.2 2002/02/07 00:43:01 pdh Exp $      */
+/*      $Id: config.h,v 1.2 2002-02-07 00:43:01 pdh Exp $      */
 
 /*
  *  are you editing the correct file?

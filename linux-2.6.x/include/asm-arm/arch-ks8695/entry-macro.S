@@ -1,33 +1,53 @@
 /*
  * include/asm-arm/arch-ks8695/entry-macro.S
  *
- * Low-level IRQ helper macros for KS8695 based platforms
+ * Copyright (C) 2006 Ben Dooks <ben@simtec.co.uk>
+ * Copyright (C) 2006 Simtec Electronics
+ *
+ * Low-level IRQ helper macros for KS8695
  *
  * This file is licensed under  the terms of the GNU General Public
  * License version 2. This program is licensed "as is" without any
  * warranty of any kind, whether express or implied.
- */
+*/
 
-		.macro	disable_fiq
-		.endm
+#include <asm/hardware.h>
+#include <asm/arch/regs-irq.h>
 
-		.macro  get_irqnr_preamble, base, tmp
-		.endm
+	.macro	disable_fiq
+	.endm
 
-		.macro  arch_ret_to_user, tmp1, tmp2
-		.endm
+	.macro  get_irqnr_preamble, base, tmp
+		ldr	\base, =KS8695_IRQ_VA			@ Base address of interrupt controller
+	.endm
 
-		.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
-		ldr	\irqnr, =KS8695_IO_VIRT+KS8695_INT_MASK_STATUS
-		ldr	\irqstat, [\irqnr]		@ get masked status
-	
+	.macro  arch_ret_to_user, tmp1, tmp2
+	.endm
+
+	.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
+		ldr	\irqstat, [\base, #KS8695_INTMS]	@ Mask Status register
+
+		teq	\irqstat, #0
+		beq	1001f
+
 		mov	\irqnr, #0
-1001:		tst	\irqstat, #1
-		bne	1002f
-		add	\irqnr, \irqnr, #1
-		mov	\irqstat, \irqstat, lsr #1
-		cmp	\irqnr, #32
-		bcc	1001b
-1002:		@ EQ will be set if we reach
-		.endm
 
+		tst	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tsteq	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tsteq	\irqstat, #0xff
+		moveq	\irqstat, \irqstat, lsr #8
+		addeq	\irqnr, \irqnr, #8
+		tst	\irqstat, #0x0f
+		moveq	\irqstat, \irqstat, lsr #4
+		addeq	\irqnr, \irqnr, #4
+		tst	\irqstat, #0x03
+		moveq	\irqstat, \irqstat, lsr #2
+		addeq	\irqnr, \irqnr, #2
+		tst	\irqstat, #0x01
+		addeqs	\irqnr, \irqnr, #1
+1001:
+	.endm

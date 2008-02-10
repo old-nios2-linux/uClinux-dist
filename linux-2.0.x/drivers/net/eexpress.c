@@ -1,4 +1,4 @@
-/* $Id: eexpress.c,v 1.1.1.1 1999/11/22 03:47:08 christ Exp $
+/* $Id: eexpress.c,v 1.1.1.1 1999-11-22 03:47:08 christ Exp $
  *
  * Intel EtherExpress device driver for Linux
  *

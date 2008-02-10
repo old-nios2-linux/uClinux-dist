@@ -1,4 +1,4 @@
-/* $Id: ross.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $
+/* $Id: ross.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $
  * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

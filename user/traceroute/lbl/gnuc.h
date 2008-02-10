@@ -1,4 +1,4 @@
-/* @(#) $Header: /cvs/sw/new-wave/user/traceroute/lbl/gnuc.h,v 1.2 2007/06/26 13:01:52 gerg Exp $ (LBL) */
+/* @(#) $Header: /cvs/sw/new-wave/user/traceroute/lbl/gnuc.h,v 1.2 2007-06-26 13:01:52 gerg Exp $ (LBL) */
 
 /* Define __P() macro, if necessary */
 #ifndef __P

@@ -1,7 +1,5 @@
 /*
- *  linux/include/asm-arm/arch-ks8695/dma.h
- *
- *  Copyright (C) 1997,1998 Russell King
+ * include/asm-arm/arch-ks8695/dma.h
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,10 +15,3 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#ifndef __ASM_ARCH_DMA_H
-#define __ASM_ARCH_DMA_H
-
-#define MAX_DMA_CHANNELS	0
-#define MAX_DMA_ADDRESS		0xffffffff
-
-#endif /* __ASM_ARCH_DMA_H */

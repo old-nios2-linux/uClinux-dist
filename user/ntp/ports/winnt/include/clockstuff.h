@@ -14,6 +14,7 @@
  */
 
 void init_winnt_time(void);
+void shutdown_winnt_time(void);
 void reset_winnt_time(void);
 
 /* 100ns intervals between 1/1/1601 and 1/1/1970 as reported by
@@ -22,4 +23,15 @@ void reset_winnt_time(void);
 
 #define FILETIME_1970     0x019db1ded53e8000
 #define HECTONANOSECONDS  10000000ui64
+
+/*
+ * Multimedia Timer
+ */
+
+void set_mm_timer(int);
+
+enum {
+	MM_TIMER_LORES,
+	MM_TIMER_HIRES
+};
 #endif

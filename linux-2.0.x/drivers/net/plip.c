@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.2 2001/10/02 07:15:46 gerg Exp $ */
+/* $Id: plip.c,v 1.2 2001-10-02 07:15:46 gerg Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*

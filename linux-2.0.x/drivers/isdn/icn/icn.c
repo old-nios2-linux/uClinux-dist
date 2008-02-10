@@ -1,4 +1,4 @@
- /* $Id: icn.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ /* $Id: icn.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.45.2.4  1998/11/05 22:13:02  fritz

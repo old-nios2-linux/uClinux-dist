@@ -4,7 +4,7 @@
  *  DESCR: interrupt-safe i960 semaphore implementation; isn't ready for SMP
  */
 
-#ident "$Id: semaphore.c,v 1.1 1999/12/03 06:02:34 gerg Exp $"
+#ident "$Id: semaphore.c,v 1.1 1999-12-03 06:02:34 gerg Exp $"
 #include <asm/semaphore.h>
 #include <linux/sched.h>
 

@@ -7,7 +7,7 @@
 #ifndef I960_H
 #define I960_H
 
-#ident "$Id: i960.h,v 1.1 1999/12/03 06:02:34 gerg Exp $"
+#ident "$Id: i960.h,v 1.1 1999-12-03 06:02:34 gerg Exp $"
 
 #ifdef __ASSEMBLY__
 /*

@@ -40,7 +40,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: options.c,v 1.20 2007/06/14 03:58:15 gerg Exp $"
+#define RCSID	"$Id: options.c,v 1.21 2007-11-23 06:12:46 asallawa Exp $"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -102,6 +102,8 @@ char	passwd[MAXSECRETLEN];	/* Password for PAP */
 bool	persist = 0;		/* Reopen link after it goes down */
 char	our_name[MAXNAMELEN];	/* Our name for authentication purposes */
 bool	demand = 0;		/* do dial-on-demand */
+char	*ip_up = NULL;		/* user defined ip-up script */
+char	*ip_down = NULL;	/* user defined ip-down script */
 char	*ipparam = NULL;	/* Extra parameter for ip up/down scripts */
 int	idle_time_limit = 0;	/* Disconnect if idle for this many seconds */
 int	holdoff = 30;		/* # seconds to pause before reconnecting */
@@ -119,6 +121,10 @@ bool	dump_options;		/* print out option values */
 bool	dryrun;			/* print out option values and exit */
 char	*domain;		/* domain name set by domain option */
 int	child_wait = 5;		/* # seconds to wait for children at exit */
+
+u_int32_t	metric = 0;	/* the metric to set the host route to */
+u_int32_t	drmetric = 0;	/* the default route metric to set */
+char	pid_file[MAXNAMELEN];	/* name of our pid file */
 
 #ifdef MAXOCTETS
 unsigned int  maxoctets = 0;    /* default - no limit */
@@ -186,6 +192,14 @@ static struct option_list *extra_options = NULL;
  * Valid arguments.
  */
 option_t general_options[] = {
+    { "metric", o_uint32, &metric,
+      "Set host route metric.", 1 },
+    { "drmetric", o_uint32, &drmetric,
+      "Set default route metric.", 1 },
+    { "pidfile", o_string, pid_file,
+      "File to write PPPD pid into.",
+      OPT_PRIV | OPT_STATIC, NULL, MAXNAMELEN },
+
     { "debug", o_int, &debug,
       "Increase debugging level", OPT_INC | OPT_NOARG | 1 },
     { "-d", o_int, &debug,

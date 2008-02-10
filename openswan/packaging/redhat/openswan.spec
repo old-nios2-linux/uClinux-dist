@@ -1,6 +1,6 @@
 Summary: Openswan IPSEC implementation
 Name: openswan
-Version: 2.4.9
+Version: 2.4.11
 # Build KLIPS kernel module?
 %{!?buildklips: %{expand: %%define buildklips 0}}
 %{!?buildxen: %{expand: %%define buildxen 0}}
@@ -31,7 +31,7 @@ Group: System Environment/Daemons
 Provides: ipsec-userland
 Obsoletes: freeswan superfreeswan super-freeswan
 Requires: ipsec-kernel, iproute >= 2.6.8, gmp
-BuildRequires: gmp-devel bison flex bind-devel
+BuildRequires: gmp-devel bison flex bind-devel redhat-rpm-config
 Release: %{ourrelease}
 
 %package doc

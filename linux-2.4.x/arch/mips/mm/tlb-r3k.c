@@ -53,6 +53,9 @@ void local_flush_tlb_all(void)
 	local_irq_save(flags);
 	old_ctx = read_c0_entryhi() & ASID_MASK;
 	write_c0_entrylo0(0);
+#if defined(CONFIG_RTL865X)
+	r3k_have_wired_reg=1;
+#endif
 	entry = r3k_have_wired_reg ? read_c0_wired() : 8;
 	for (; entry < current_cpu_data.tlbsize; entry++) {
 		write_c0_index(entry << 8);

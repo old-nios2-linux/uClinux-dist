@@ -23,23 +23,32 @@
 
 #define FLATFSD_CONFIG	".flatfsd"
 
-
 /*
  * Globals for file and byte count.
  */
 extern int numfiles;
 extern int numbytes;
 extern int numdropped;
-extern int numversion;
 
-extern int flat_restorefs(char *configdir);
-extern int flat_savefs(int version, char *configdir);
 extern int flat_new(const char *dir);
 extern int flat_clean(void);
 extern int flat_filecount(char *configdir);
 extern int flat_needinit(void);
 extern int flat_requestinit(void);
-extern int flat_check(void);
+
+#ifdef LOGGING
+extern void logd(const char *cmd, const char *format, ...) __attribute__ ((format(printf, 2, 3)));
+extern void log_caller(const char *cmd);
+#else
+static void logd(const char *cmd, const char *format, ...) __attribute__ ((format(printf, 2, 3)));
+static inline void logd(const char *cmd, const char *format, ...)
+{
+}
+
+static inline void log_caller(const char *cmd)
+{
+}
+#endif
 
 #define ERROR_CODE()	(-(__LINE__)) /* unique failure codes :-) */
 

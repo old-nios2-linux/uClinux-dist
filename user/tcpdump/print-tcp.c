@@ -668,7 +668,7 @@ tcp_print(register const u_char *bp, register u_int length,
 		else if (sport == BGP_PORT || dport == BGP_PORT)
 			bgp_print(bp, length);
 #endif
-#if !defined(EMBED) || defined(CONFIG_USER_PPTPD_PPTPD) || defined(CONFIG_USER_PPTP_CLIENT_PPTP)
+#if !defined(EMBED) || defined(CONFIG_USER_PPTPD_PPTPD) || defined(CONFIG_USER_PPTP_CLIENT_PPTP) || defined(CONFIG_USER_PPTP_PPTP)
 		else if (sport == PPTP_PORT || dport == PPTP_PORT)
 			pptp_print(bp);
 #endif

@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/serial.h>
 #include <asm/paccess.h>
 #include <asm/pci_channel.h>
 #include <asm-mips/rtl865x/interrupt.h>
@@ -1669,7 +1670,7 @@ int rtl_pci_assign_resource(void)
 #endif
 u8 rtl865x_pci_ioread8(u32 addr){ 	
  	//For legacy 8650's linux incompliant PCI access endian mode 	
-	if(rtl_pci_big_endian){
+	if(rtl_pci_big_endian && (addr&0xfffff000)!=(UART_REGS_BASE&0xfffff000)){
 		u8 tmp;
 		u8 swap[4]={3,2,1,0};
 		int diff = swap[addr&0x3];

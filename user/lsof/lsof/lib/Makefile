@@ -10,7 +10,7 @@ CFLAGS+= ${CDEFS} ${INCL} ${DEBUG}
 #
 # This skeleton is added to definitions established by Configure.
 #
-# $Id: Makefile,v 1.1 2007/08/02 07:25:00 gerg Exp $
+# $Id: Makefile,v 1.1 2007-08-02 07:25:00 gerg Exp $
 
 LIB=	liblsof.a
 

@@ -886,7 +886,7 @@ int random_input_wait(void)
 	count = random_write_wakeup_thresh - random_state->entropy_count;
 
 	/* likely we got woken up due to a signal */
-	if (count < 0) count = random_read_wakeup_thresh; 
+	if (count <= 0) count = random_read_wakeup_thresh; 
 
 	DEBUG_ENT("requesting %d bits from input_wait()er %d<%d\n",
 		  count,

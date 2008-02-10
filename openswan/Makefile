@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Makefile,v 1.273.2.7 2006/11/17 15:35:51 paul Exp $
+# RCSID $Id: Makefile,v 1.273.2.7 2006-11-17 15:35:51 paul Exp $
 
 
 OPENSWANSRCDIR?=$(shell pwd)

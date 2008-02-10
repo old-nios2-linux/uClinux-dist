@@ -1,4 +1,4 @@
-/* $Id: bare.S,v 1.1.1.1 1999/11/22 03:47:41 christ Exp $
+/* $Id: bare.S,v 1.1.1.1 1999-11-22 03:47:41 christ Exp $
  * base.S:      Ugly low-level boot program entry code.  The job of this
  *              module is to parse the boot flags, try to mount the remote
  *              root filesystem and load the kernel into virtual memory.

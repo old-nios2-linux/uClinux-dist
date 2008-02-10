@@ -1,12 +1,12 @@
 /*
- * $Id: kernelcapi.h,v 1.1.1.1 1999/11/22 03:47:00 christ Exp $
+ * $Id: kernelcapi.h,v 1.1.1.1 1999-11-22 03:47:00 christ Exp $
  * 
  * Kernel CAPI 2.0 Interface for Linux
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kernelcapi.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:00  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:00  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1  1997/03/04 21:27:33  calle

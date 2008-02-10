@@ -70,6 +70,7 @@ int		FiniteLeaseOnly	=	0;
 #ifdef CONFIG_LEDMAN
 int		ledman_led	=	-1;
 #endif
+int		RenewTimeout	=	0;
 /*****************************************************************************/
 void print_version()
 {
@@ -274,6 +275,12 @@ prgs: switch ( argc[i][s] )
 	    s++;
 	    FiniteLeaseOnly=1;
 	    goto prgs;
+	  case 'b':
+	    i++;
+	    RenewTimeout = strtol(argc[i++], (char **)NULL, 10);
+	    if ( RenewTimeout <= 0 ) goto usage;
+	    s=1;
+	    break;
 	  case 'l':
 	    i++;
 	    if ( argc[i] )

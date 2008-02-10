@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: sedlbauer.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,7 +17,7 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.16  1998/11/08 13:01:01  niemann

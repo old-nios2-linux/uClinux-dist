@@ -25,7 +25,7 @@
  * $Author: christ $
  *
  * $Revision: 1.1.1.1 $
- * $Date: 1999/11/22 03:47:16 $
+ * $Date: 1999-11-22 03:47:16 $
  * $State: Exp $
  *
  *      This file contains the Reed-Solomon error correction code 

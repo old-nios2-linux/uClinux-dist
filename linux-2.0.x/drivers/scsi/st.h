@@ -2,7 +2,7 @@
 #ifndef _ST_H
 	#define _ST_H
 /*
-	$Header: /cvs/sw/linux-2.0.x/drivers/scsi/st.h,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $
+	$Header: /cvs/sw/linux-2.0.x/drivers/scsi/st.h,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $
 */
 
 #ifndef _SCSI_H

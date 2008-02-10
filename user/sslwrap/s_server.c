@@ -263,6 +263,9 @@ static void sv_usage()
 	BIO_printf(bio_err," -no_tmp_rsa   - Do not generate a tmp RSA key\n");
 	BIO_printf(bio_err," -ssl2         - Just talk SSLv2\n");
 	BIO_printf(bio_err," -ssl3         - Just talk SSLv3\n");
+	BIO_printf(bio_err," -no_ssl2      - Do not talk SSLv2\n");
+	BIO_printf(bio_err," -no_ssl3      - Do not talk SSLv3\n");
+	BIO_printf(bio_err," -no_tls1_0    - Do not talk TLSv1.0\n");
 	BIO_printf(bio_err," -bugs         - Turn on SSL bug compatability\n");
 	}
 
@@ -280,6 +283,8 @@ char *argv[];
 	int ret=1;
 	int no_tmp_rsa=0,nocert=0;
 	int state=0;
+	int ssl2 = 0, ssl3 = 0;
+	int no_ssl2 = 0, no_ssl3 = 0, no_tls1_0 = 0;
 	SSL_METHOD *meth=NULL;
 	DH *dh=NULL;
 
@@ -429,12 +434,24 @@ char *argv[];
 			{ no_tmp_rsa=1; }
 #ifndef NO_SSL2
 		else if	(strcmp(*argv,"-ssl2") == 0)
-			{ meth=SSLv2_server_method(); }
+			{
+				ssl2 = 1;
+				meth=SSLv2_server_method();
+			}
 #endif
 #ifndef NO_SSL3
 		else if	(strcmp(*argv,"-ssl3") == 0)
-			{ meth=SSLv3_server_method(); }
+			{
+				ssl3 = 1;
+				meth=SSLv3_server_method();
+			}
 #endif
+		else if	(strcmp(*argv,"-no_ssl2") == 0)
+			{ no_ssl2 = 1; }
+		else if	(strcmp(*argv,"-no_ssl3") == 0)
+			{ no_ssl3 = 1; }
+		else if	(strcmp(*argv,"-no_tls1_0") == 0)
+			{ no_tls1_0 = 1; }
 		else
 			{
 			errprint("unknown option %s",*argv);
@@ -459,6 +476,20 @@ char *argv[];
 	    badop=1;
 	}
 #endif /*NO_EXEC*/
+
+	if (ssl2 && no_ssl2) {
+	    errprint("options -ssl2 and -no_ssl2 are incompatible");
+	    badop=1;
+	}
+	if (ssl3 && no_ssl3) {
+	    errprint("options -ssl3 and -no_ssl3 are incompatible");
+	    badop=1;
+	}
+	if (no_ssl2 && no_ssl3 && no_tls1_0) {
+	    errprint("Cannot specify -no_ssl2, -no_ssl3 and -no_tls1_0. Must allow at least one (1) protocol");
+	    badop=1;
+	}
+
 	if (badop)
 		{
 bad:
@@ -502,6 +533,10 @@ bad:
 #ifdef SSL_OP_NON_EXPORT_FIRST
 	if (hack) SSL_CTX_set_options(ctx,SSL_OP_NON_EXPORT_FIRST);
 #endif
+
+	if (no_ssl2) SSL_CTX_set_options(ctx,SSL_OP_NO_SSLv2);
+	if (no_ssl3) SSL_CTX_set_options(ctx,SSL_OP_NO_SSLv3);
+	if (no_tls1_0) SSL_CTX_set_options(ctx,SSL_OP_NO_TLSv1);
 
 	if (state) SSL_CTX_set_info_callback(ctx,apps_ssl_info_callback);
 

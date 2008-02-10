@@ -38,7 +38,7 @@
  */
 
 /*
- * $Id: bsd-comp.c,v 1.2 2007/06/08 04:02:39 gerg Exp $
+ * $Id: bsd-comp.c,v 1.2 2007-06-08 04:02:39 gerg Exp $
  */
 
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.1.1.1 1999/11/22 03:47:00 christ Exp $
+/* $Id: isdnif.h,v 1.1.1.1 1999-11-22 03:47:00 christ Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,7 +22,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:00  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:00  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.20.2.2  1998/11/05 22:13:33  fritz

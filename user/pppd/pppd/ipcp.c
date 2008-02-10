@@ -40,7 +40,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: ipcp.c,v 1.18 2007/06/08 04:02:38 gerg Exp $"
+#define RCSID	"$Id: ipcp.c,v 1.19 2007-11-23 06:12:46 asallawa Exp $"
 
 /*
  * TODO:
@@ -55,6 +55,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 
 #include "pppd.h"
 #include "fsm.h"
@@ -168,6 +169,11 @@ static option_t ipcp_option_list[] = {
     { "ipcp-accept-remote", o_bool, &ipcp_wantoptions[0].accept_remote,
       "Accept peer's address for it", 1 },
 
+    { "ip-up", o_string, &ip_up,
+      "Set ip-up script name", OPT_PRIV },
+    { "ip-down", o_string, &ip_down,
+      "Set ip-down script name", OPT_PRIV },
+
     { "ipparam", o_string, &ipparam,
       "Set ip script parameter", OPT_PRIO },
 
@@ -264,6 +270,8 @@ struct protent ipcp_protent = {
 };
 
 static void ipcp_clear_addrs __P((int, u_int32_t, u_int32_t));
+static void ipcp_script_up __P((void));
+static void ipcp_script_down __P((void));
 static void ipcp_script __P((char *, int));	/* Run an up/down script */
 static void ipcp_script_done __P((void *));
 
@@ -1657,10 +1665,13 @@ ip_demand_conf(u)
     ipcp_script(_PATH_IPPREUP, 1);
     if (!sifup(u))
 	return 0;
+
+    rtmetricfixup(u, wo->hisaddr, metric);
+
     if (!sifnpmode(u, PPP_IP, NPMODE_QUEUE))
 	return 0;
     if (wo->default_route)
-	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr))
+	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr, drmetric))
 	    default_route_set[u] = 1;
     if (wo->proxy_arp)
 	if (sifproxyarp(u, wo->hisaddr))
@@ -1765,9 +1776,11 @@ ipcp_up(f)
 		return;
 	    }
 
+	    rtmetricfixup(f->unit, ho->hisaddr, metric);
+
 	    /* assign a default route through the interface if required */
 	    if (ipcp_wantoptions[f->unit].default_route) 
-		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr))
+		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric))
 		    default_route_set[f->unit] = 1;
 
 	    /* Make a proxy ARP entry if requested. */
@@ -1813,11 +1826,12 @@ ipcp_up(f)
 	    return;
 	}
 #endif
+	rtmetricfixup(f->unit, ho->hisaddr, metric);
 	sifnpmode(f->unit, PPP_IP, NPMODE_PASS);
 
 	/* assign a default route through the interface if required */
 	if (ipcp_wantoptions[f->unit].default_route) 
-	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr))
+	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric))
 		default_route_set[f->unit] = 1;
 
 	/* Make a proxy ARP entry if requested. */
@@ -1850,7 +1864,7 @@ ipcp_up(f)
      */
     if (ipcp_script_state == s_down && ipcp_script_pid == 0) {
 	ipcp_script_state = s_up;
-	ipcp_script(_PATH_IPUP, 0);
+	ipcp_script_up();
     }
 }
 
@@ -1900,7 +1914,7 @@ ipcp_down(f)
     /* Execute the ip-down script */
     if (ipcp_script_state == s_up && ipcp_script_pid == 0) {
 	ipcp_script_state = s_down;
-	ipcp_script(_PATH_IPDOWN, 0);
+	ipcp_script_down();
     }
 }
 
@@ -1938,6 +1952,44 @@ ipcp_finished(f)
 		ipcp_is_open = 0;
 		np_finished(f->unit, PPP_IP);
 	}
+}
+
+
+static void
+ipcp_script_up()
+{
+#ifdef PATH_ETC_CONFIG
+    if (ip_up)
+	ipcp_script(ip_up, 0);
+    else {
+	struct stat st;
+	if (stat(_PATH_IPUP, &st) == 0 && (st.st_mode & S_IXUSR))
+	    ipcp_script(_PATH_IPUP, 0);
+	else
+	    ipcp_script(_PATH_DEFAULT_IPUP, 0);
+    }       
+#else
+    ipcp_script(ip_up ? ip_up : _PATH_IPUP, 0);
+#endif
+}
+
+
+static void
+ipcp_script_down()
+{
+#ifdef PATH_ETC_CONFIG
+    if (ip_down)
+	ipcp_script(ip_down, 0);
+    else {
+	struct stat st;
+	if (stat(_PATH_IPDOWN, &st) == 0 && (st.st_mode & S_IXUSR))
+	    ipcp_script(_PATH_IPDOWN, 0);
+	else
+	    ipcp_script(_PATH_DEFAULT_IPDOWN, 0);
+    }       
+#else
+    ipcp_script(ip_down ? ip_down : _PATH_IPDOWN, 0);
+#endif
 }
 
 

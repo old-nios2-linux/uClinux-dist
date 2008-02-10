@@ -1,4 +1,4 @@
-/* $Id: param.h,v 1.1.1.1 1999/11/22 03:47:02 christ Exp $ */
+/* $Id: param.h,v 1.1.1.1 1999-11-22 03:47:02 christ Exp $ */
 #ifndef _ASMSPARC_PARAM_H
 #define _ASMSPARC_PARAM_H
 

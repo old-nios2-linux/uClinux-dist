@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/s3c24a0-machine.h
  *
- * $Id: s3c24a0-machine.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: s3c24a0-machine.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  * vendor/machine specifice ioctl function
  *

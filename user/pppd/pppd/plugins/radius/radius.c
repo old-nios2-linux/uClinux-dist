@@ -1230,12 +1230,13 @@ radius_init(char *msg)
 		 rc_conf_str("dictionary"));
 	return -1;
     }
-
+#if 0
     if (rc_read_mapfile(rc_conf_str("mapfile")) != 0)	{
 	slprintf(msg, BUF_LEN, "RADIUS: Can't read map file %s",
 		 rc_conf_str("mapfile"));
 	return -1;
     }
+#endif 
 
     /* Add av pairs saved during option parsing */
     while (avpopt) {

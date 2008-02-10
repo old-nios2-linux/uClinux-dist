@@ -13,7 +13,7 @@
  * for more details.
  */
 
-char ipsec_ah_c_version[] = "RCSID $Id: ipsec_ah.c,v 1.12.2.2 2006/10/06 21:39:26 paul Exp $";
+char ipsec_ah_c_version[] = "RCSID $Id: ipsec_ah.c,v 1.12.2.3 2007-09-05 02:56:09 paul Exp $";
 #ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
 #endif
@@ -358,6 +358,10 @@ struct inet_protocol ah_protocol =
 
 /*
  * $Log: ipsec_ah.c,v $
+ * Revision 1.12.2.3  2007-09-05 02:56:09  paul
+ * Use the new ipsec_kversion macros by David to deal with 2.6.22 kernels.
+ * Fixes based on David McCullough patch.
+ *
  * Revision 1.12.2.2  2006/10/06 21:39:26  paul
  * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
  * set. This is defined through autoconf.h which is included through the

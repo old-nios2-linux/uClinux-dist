@@ -17,28 +17,6 @@
 
 int NT_set_process_priority(void)
 {
-	DWORD  SingleCPUMask = 0;
-	DWORD ProcessAffinityMask, SystemAffinityMask;
-	if (!GetProcessAffinityMask(GetCurrentProcess(), &ProcessAffinityMask, &
-		 SystemAffinityMask))
-		msyslog(LOG_ERR, "GetProcessAffinityMask: %m");
-	else {
-		SingleCPUMask = 1; 
-# ifdef DEBUG 
-	msyslog(LOG_INFO, "System AffinityMask = %x", SystemAffinityMask); 
-# endif 
-		}
-
-	while (SingleCPUMask && !(SingleCPUMask & SystemAffinityMask)) 
-		SingleCPUMask = SingleCPUMask << 1; 
-		
-	if (!SingleCPUMask) 
-		msyslog(LOG_ERR, "Can't set Processor Affinity Mask"); 
-	else if (!SetProcessAffinityMask(GetCurrentProcess(), SingleCPUMask)) 
-		msyslog(LOG_ERR, "SetProcessAffinityMask: %m"); 
-# ifdef DEBUG 
-	else msyslog(LOG_INFO,"ProcessorAffinity Mask: %x", SingleCPUMask ); 
-# endif 
 	if (!SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS)) 
 		{
 		msyslog(LOG_ERR, "SetPriorityClass: %m"); 
@@ -57,8 +35,8 @@ int NT_set_process_priority(void)
 int
 refclock_open(
 	char *dev,		/* device name pointer */
-	int speed,		/* serial port speed (code) */
-	int flags		/* line discipline flags */
+	u_int speed,		/* serial port speed (code) */
+	u_int flags		/* line discipline flags */
 	)
 {
 	HANDLE Handle = INVALID_HANDLE_VALUE;
@@ -77,21 +55,21 @@ refclock_open(
 		NULL); // not template
 	if (Handle == INVALID_HANDLE_VALUE) {  
 		 
-		msyslog(LOG_ERR, "NT_COM: Device %s: CreateFile ", dev);
+		msyslog(LOG_ERR, "NT_COM: Device %s: CreateFile error: %m", dev);
 		return -1;
 	}
 
 	/*  Change the input/output buffers to be large.
 	*/
 	if (!SetupComm( Handle, 1024, 1024)) {
-		msyslog(LOG_ERR, "NT_COM: Device %s: SetupComm ", dev);
+		msyslog(LOG_ERR, "NT_COM: Device %s: SetupComm error: %m", dev);
 		return -1;
 	}
 
 	dcb.DCBlength = sizeof(dcb);
 	if (!GetCommState(Handle, &dcb)) {
 		// Error getting current DCB settings
-		msyslog(LOG_ERR, "NT_COM: Device %s: GetCommState ", dev);
+		msyslog(LOG_ERR, "NT_COM: Device %s: GetCommState error: %m", dev);
 		return -1;
 	}
 
@@ -131,7 +109,7 @@ refclock_open(
 	dcb.EofChar = 0;
 
 	if (!SetCommState(Handle, &dcb)) {
-		msyslog(LOG_ERR, "NT_COM: Device %s: SetCommState ", dev);
+		msyslog(LOG_ERR, "NT_COM: Device %s: SetCommState error: %m", dev);
 		return -1;
 	}
 
@@ -143,7 +121,7 @@ refclock_open(
 
 	   // Error setting time-outs.
 	if (!SetCommTimeouts(Handle, &timeouts)) {
-		msyslog(LOG_ERR, "NT_COM: Device %s: SetCommTimeouts ", dev);
+		msyslog(LOG_ERR, "NT_COM: Device %s: SetCommTimeouts error: %m", dev);
 		return -1;
 	}
 
@@ -180,7 +158,7 @@ tcsetattr(
 	dcb.DCBlength = sizeof(dcb);
 	if (!GetCommState(Handle, &dcb)) {
 		// Error getting current DCB settings
-		msyslog(LOG_ERR, "NT_COM: GetCommState ");
+		msyslog(LOG_ERR, "NT_COM: GetCommState error: %m");
 		return FALSE;
 	}
 
@@ -237,7 +215,7 @@ tcsetattr(
 	dcb.EofChar = 0;
 
 	if (!SetCommState(Handle, &dcb)) {
-		msyslog(LOG_ERR, "NT_COM: SetCommState ");
+		msyslog(LOG_ERR, "NT_COM: SetCommState error: %m");
 		return FALSE;
 	}
 	return TRUE;
@@ -252,7 +230,7 @@ tcgetattr(
 	dcb.DCBlength = sizeof(dcb);
 	if (!GetCommState(Handle, &dcb)) {
 		// Error getting current DCB settings
-		msyslog(LOG_ERR, "NT_COM: GetCommState ");
+		msyslog(LOG_ERR, "NT_COM: GetCommState error: %m");
 		return FALSE;
 	}
 

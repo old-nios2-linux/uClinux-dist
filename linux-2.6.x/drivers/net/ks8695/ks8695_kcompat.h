@@ -47,10 +47,6 @@
 
 #include <linux/version.h>
 
-/* a good type to have */
-/* in Linux a long is always the same length as a pointer */
-typedef unsigned long int uintptr_t;
-
 /*****************************************************************************
  **
  **  PCI Bus Changes

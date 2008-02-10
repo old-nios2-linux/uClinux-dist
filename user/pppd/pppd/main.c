@@ -66,7 +66,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: main.c,v 1.24 2007/06/20 06:09:14 gerg Exp $"
+#define RCSID	"$Id: main.c,v 1.25 2007-11-23 06:12:46 asallawa Exp $"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -811,10 +811,18 @@ create_pidfile(pid)
 {
     FILE *pidfile;
 
-    slprintf(pidfilename, sizeof(pidfilename), "%s%s.pid",
-	     _PATH_VARRUN, ifname);
+    if (pid_file[0])
+	slprintf(pidfilename, sizeof(pidfilename), "%s%s",
+			pid_file[0] == '/' ? "" : _PATH_VARRUN,
+			pid_file);
+    else
+	slprintf(pidfilename, sizeof(pidfilename), "%s%s.pid",
+			_PATH_VARRUN, ifname);
+
     if ((pidfile = fopen(pidfilename, "w")) != NULL) {
 	fprintf(pidfile, "%d\n", pid);
+	if (ipparam)
+	    fprintf(pidfile, "%s\n", ipparam);
 	(void) fclose(pidfile);
     } else {
 	error("Failed to create pid file %s: %m", pidfilename);

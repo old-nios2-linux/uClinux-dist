@@ -1,4 +1,4 @@
-/* $Id: avm_a1.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: avm_a1.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  *
  * avm_a1.h   Header for AVM A1 (Fritz) ISDN card
  *
@@ -6,7 +6,7 @@
  *
  *
  * $Log: avm_a1.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.2  1997/01/21 22:14:36  keil

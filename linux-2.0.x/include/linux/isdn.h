@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.1.1.1 1999/11/22 03:47:00 christ Exp $
+/* $Id: isdn.h,v 1.1.1.1 1999-11-22 03:47:00 christ Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,7 +21,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:00  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:00  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.31.2.17  1998/11/05 22:13:28  fritz

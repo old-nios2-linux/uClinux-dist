@@ -1,5 +1,5 @@
 /*
- *  $Id: message.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+ *  $Id: message.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  message.c - functions for sending and receiving control messages

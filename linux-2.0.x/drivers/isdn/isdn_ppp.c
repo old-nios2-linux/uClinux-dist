@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.1.1.1 1999/11/22 03:47:18 christ Exp $
+/* $Id: isdn_ppp.c,v 1.1.1.1 1999-11-22 03:47:18 christ Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:18  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:18  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.28.2.3  1998/12/30 17:49:00  paul

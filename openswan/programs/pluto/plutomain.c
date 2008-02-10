@@ -17,7 +17,7 @@
  * Daniel Djamaludin <ddjamaludin@cyberguard.com>
  * Copyright (C) 2004-2005 Intel Corporation.  All Rights Reserved.
  *
- * RCSID $Id: plutomain.c,v 1.102.2.7 2007/04/06 17:10:37 paul Exp $
+ * RCSID $Id: plutomain.c,v 1.102.2.7 2007-04-06 17:10:37 paul Exp $
  */
 
 #include <stdio.h>

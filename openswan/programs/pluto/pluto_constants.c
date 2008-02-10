@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: pluto_constants.c,v 1.15.2.4 2006/11/07 15:55:52 paul Exp $
+ * RCSID $Id: pluto_constants.c,v 1.15.2.4 2006-11-07 15:55:52 paul Exp $
  */
 
 /*

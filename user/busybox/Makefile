@@ -819,6 +819,8 @@ quiet_cmd_split_autoconf   = SPLIT   include/autoconf.h -> include/config/*
       cmd_split_autoconf   = scripts/basic/split-include include/autoconf.h include/config
 #bbox# piggybacked generation of few .h files
 include/config/MARKER: scripts/basic/split-include include/autoconf.h
+	chmod +x $(srctree)/scripts/mkconfigs
+	chmod +x $(srctree)/applets/usage_compressed
 	$(call cmd,split_autoconf)
 	$(call cmd,gen_bbconfigopts)
 	@touch $@

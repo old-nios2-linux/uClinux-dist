@@ -3,7 +3,7 @@
  *
  * PPTP Control Message packet reading, formatting and writing.
  *
- * $Id: ctrlpacket.c,v 1.8 2007/07/05 23:33:09 gerg Exp $
+ * $Id: ctrlpacket.c,v 1.9 2007-12-12 04:42:42 asallawa Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -424,7 +424,7 @@ void deal_out_call(unsigned char *packet, unsigned char *rply_packet, ssize_t * 
 
 	out_call_rqst = (struct pptp_out_call_rqst *) packet;
 
-	if ((pac_call_id = getcall()) == htons(-1)) {
+	if ((pac_call_id = getcall()) == (u_int16_t)htons(-1)) {
 		/* XXX should reject call */
 		syslog(LOG_ERR, "CTRL: No free Call IDs!");
 		pac_call_id = 0;
@@ -506,7 +506,7 @@ void deal_call_clr(unsigned char *packet, unsigned char *rply_packet, ssize_t *r
 	 * The reply packet is a CALL-DISCONECT-NOTIFY
 	 * In single call mode we don't care what peer's call ID is, so don't even bother looking
 	 */
-	if ((pac_call_id = freecall()) == htons(-1)) {
+	if ((pac_call_id = freecall()) == (u_int16_t)htons(-1)) {
 		/* XXX should return an error */
 		syslog(LOG_ERR, "CTRL: Could not free Call ID [call clear]!");
 	}
@@ -578,7 +578,7 @@ void make_call_admin_shutdown(unsigned char *rply_packet, ssize_t * rply_size)
 	 * The reply packet is a CALL-DISCONECT-NOTIFY
 	 * In single call mode we don't care what peer's call ID is, so don't even bother looking
 	 */
-	if ((pac_call_id = freecall()) == htons(-1)) {
+	if ((pac_call_id = freecall()) == (u_int16_t)htons(-1)) {
 		/* XXX should return an error */
 		syslog(LOG_ERR, "CTRL: Could not free Call ID [admin shutdown]!");
 	}

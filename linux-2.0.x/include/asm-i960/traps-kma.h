@@ -7,7 +7,7 @@
 #ifndef TRAPS_H
 #define TRAPS_H
 
-#ident "$Id: traps-kma.h,v 1.1 1999/12/03 06:02:35 gerg Exp $"
+#ident "$Id: traps-kma.h,v 1.1 1999-12-03 06:02:35 gerg Exp $"
 
 #include <asm/ptrace.h>
 #include <asm/i960.h>

@@ -1,4 +1,4 @@
-/* $Id: isdnloop.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isdnloop.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * ISDN low-level module implementing a dummy loop driver.
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdnloop.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.1  1998/11/05 22:13:15  fritz

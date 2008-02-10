@@ -1,4 +1,4 @@
-@(#) $Id: INSTALL,v 1.2 2007/06/26 13:01:51 gerg Exp $ (LBL)
+@(#) $Id: INSTALL,v 1.2 2007-06-26 13:01:51 gerg Exp $ (LBL)
 
 Traceroute is known to build and run under SunOS 4.1.4 and Solaris 5.4.
 If you are running a really old kernel, see the instructions under the

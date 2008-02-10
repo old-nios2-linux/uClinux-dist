@@ -17,9 +17,8 @@ typedef struct {
 	} script_t;
 
 /* tag types */
-enum tag_t { HTML, RUN, INCLUDE, EVAL, NOOP };
+enum tag_t { HTML, RUN, INCLUDE, EVAL, COMMENT, NOOP };
 
-extern const char *g_tag[];
 
 /* token structure */
 typedef struct {
@@ -34,11 +33,16 @@ typedef struct {
 
 /* h_script.c */
 script_t *load_script(char *filename, script_t *scriptlist);
-token_t *build_token_list(script_t *scriptbuf, token_t *tokenlist);
+void free_script_list(script_t *script);
 token_t *push_token_on_list(token_t *tokenlist, script_t *scriptbuf, char *start, size_t len);
 void free_token_list(token_t *tokenlist);
+
+#ifndef JUST_LUACSHELL
+
+token_t *build_token_list(script_t *scriptbuf, token_t *tokenlist);
 void preprocess_token_list(token_t *tokenlist);
 token_t *process_token_list(buffer_t *buf, token_t *tokenlist);
-void free_script_list(script_t *script);
+
+#endif
 
 #endif /* !H_SCRIPT_H */

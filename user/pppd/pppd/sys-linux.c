@@ -1584,7 +1584,7 @@ int have_route_to(u_int32_t addr)
  * sifdefaultroute - assign a default route through the address given.
  */
 
-int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
+int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, u_int32_t metric)
 {
     struct rtentry rt;
 
@@ -1602,6 +1602,7 @@ int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
     SET_SA_FAMILY (rt.rt_dst, AF_INET);
 
     rt.rt_dev = ifname;
+    rt.rt_metric = metric + 1;
 
     if (kernel_version > KVERSION(2,1,0)) {
 	SET_SA_FAMILY (rt.rt_genmask, AF_INET);
@@ -1648,6 +1649,31 @@ int cifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
 	}
     }
 
+    return 1;
+}
+
+int rtmetricfixup(int unit, u_int32_t hisaddr, u_int32_t metric)
+{
+    struct rtentry rt;
+
+    memset(&rt, '\0', sizeof(rt));
+    SET_SA_FAMILY (rt.rt_dst,     AF_INET);
+    SET_SA_FAMILY (rt.rt_gateway, AF_INET);
+    if (kernel_version > KVERSION(2,1,0)) {
+	SET_SA_FAMILY (rt.rt_genmask, AF_INET);
+	((struct sockaddr_in *) &rt.rt_genmask)->sin_addr.s_addr = ~0L;
+    }
+    rt.rt_dev = ifname;
+    ((struct sockaddr_in *) &rt.rt_gateway)->sin_addr.s_addr = 0L;
+    ((struct sockaddr_in *) &rt.rt_dst)->sin_addr.s_addr     = hisaddr;
+    rt.rt_flags = RTF_UP | RTF_HOST;
+    if (ioctl(sock_fd, SIOCDELRT, &rt) < 0) {
+	error("ioctl(SIOCDELRT): %m(%d)", errno);
+    }
+    rt.rt_metric = metric + 1;
+    if (ioctl(sock_fd, SIOCADDRT, &rt) < 0) {
+	warn("ioctl(SIOCADDRT): %m(%d)", errno);
+    }
     return 1;
 }
 

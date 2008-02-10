@@ -23,7 +23,7 @@
  $Author: christ $
  *
  $Revision: 1.1.1.1 $
- $Date: 1999/11/22 03:47:17 $
+ $Date: 1999-11-22 03:47:17 $
  $State: Exp $
  *
  *      This file contains definitions for the FC-10 code

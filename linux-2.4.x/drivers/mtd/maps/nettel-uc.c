@@ -88,8 +88,14 @@ extern char _edata;
 #endif
 
 #ifdef CONFIG_MIPS32
+#ifdef CONFIG_RTL865X
+#define FLASH_BASE	0xbe000000
+#define	BUS_WIDTH	2
+#define	FORCE_RAM_MAPPING 1
+#else
 #define FLASH_BASE	0x1f000000
 #define	BUS_WIDTH	4
+#endif
 #endif
 
 #ifdef CONFIG_ARCH_IXP425
@@ -235,7 +241,7 @@ static struct mtd_partition nettel_2mb[] = {
 	{ name: "Flash",      offset: 0 }
 };
 
-#ifdef CONFIG_SH_SECUREEDGE5410
+#if defined(CONFIG_SH_SECUREEDGE5410) || defined(CONFIG_SG310)
 
 static struct mtd_partition nettel_4mb[] = {
 	{ name: "Boot data",  offset: 0x00000000, size:   0x00020000 },
@@ -459,10 +465,14 @@ nettel_probe(int ram, unsigned long addr, int size, int buswidth)
 			ram ? "ram" : "flash",
 			addr, size, buswidth, map_ptr->size, map_ptr->map_priv_2);
 
+#ifdef FORCE_RAM_MAPPING
+	map_ptr->map_priv_1 = addr;
+#else
 	if (ram)
 		map_ptr->map_priv_1 = addr;
 	else
 		map_ptr->map_priv_1 = (unsigned long) ioremap_nocache(map_ptr->map_priv_2, map_ptr->size);
+#endif
 
 	if (!map_ptr->map_priv_1) {
 		printk("Failed to ioremap_nocache\n");
@@ -681,7 +691,7 @@ int __init nettel_mtd_init(void)
 		printk("no unlock routine\n");
 #endif
 
-#if defined(CONFIG_SH_SECUREEDGE5410) || defined(CONFIG_MIPS_VEGAS) || defined(CONFIG_MACH_ESS710)
+#if defined(CONFIG_SH_SECUREEDGE5410) || defined(CONFIG_MIPS_VEGAS) || defined(CONFIG_MACH_ESS710) || defined(CONFIG_RTL865X)
 {
 	extern int _end;
 	unsigned long magic;
@@ -701,11 +711,11 @@ int __init nettel_mtd_init(void)
 			printk("%s: Failed to find & make romfs root filesystem\n",
 					__FUNCTION__);
 #endif
-	} else if (magic == 0x28cd3d45) {
+	} else if (le32_to_cpu(magic) == 0x28cd3d45) {
 #ifndef CONFIG_BLK_DEV_INITRD
 		/* cramfs */ ;
 		nettel_probe(1, (unsigned long) cp,
-				PAGE_ALIGN(* (unsigned long *)(cp + 4)), 4);
+				PAGE_ALIGN(le32_to_cpu(* (unsigned long *)(cp + 4))), 4);
 		mtd = get_mtd_named("Romfs");
 		if (mtd) {
 			ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);

@@ -1,5 +1,5 @@
 /*
- * $Id: nftl-user.h,v 1.1 2004/11/09 01:21:10 gerg Exp $
+ * $Id: nftl-user.h,v 1.1 2004-11-09 01:21:10 gerg Exp $
  *
  * Parts of NFTL headers shared with userspace 
  *

@@ -4,7 +4,7 @@
  *  DESCR: Initialization code for the i960.
  */
 
-#ident "$Id: head.c,v 1.2 2002/06/18 00:31:50 gerg Exp $"
+#ident "$Id: head.c,v 1.2 2002-06-18 00:31:50 gerg Exp $"
 
 #include <linux/autoconf.h>
 #include <linux/kernel.h>

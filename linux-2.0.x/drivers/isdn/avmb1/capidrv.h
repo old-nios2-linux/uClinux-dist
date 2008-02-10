@@ -1,12 +1,12 @@
 /*
- * $Id: capidrv.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ * $Id: capidrv.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.1  1998/03/20 14:38:28  calle

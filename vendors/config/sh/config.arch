@@ -71,10 +71,17 @@ CROSS_COMPILE = sh-linux-20070413-
 else
 CROSS_COMPILE = sh-linux-
 endif
+
+ifdef CONFIG_DEFAULTS_KERNEL_2_4
+ifneq ($(shell which sh-linux-20021008-gcc),)
+KERNEL_CROSS_COMPILE = sh-linux-20021008-
+else
+KERNEL_CROSS_COMPILE = sh-linux-
+endif
+endif
+
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = sh-linux
-
-KERNEL_CROSS_COMPILE = $(CROSS_COMPILE)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)

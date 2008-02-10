@@ -3,40 +3,63 @@
    Operating system dependencies... */
 
 /*
- * Copyright (c) 1996, 1997, 1998, 1999 The Internet Software Consortium.
- * All rights reserved.
+ * Copyright (c) 2004,2005,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1996-2003 by Internet Software Consortium
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The Internet Software Consortium nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INTERNET SOFTWARE CONSORTIUM AND
- * CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
- * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
- * THE INTERNET SOFTWARE CONSORTIUM OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
- * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
+ *   Internet Systems Consortium, Inc.
+ *   950 Charter Street
+ *   Redwood City, CA 94063
+ *   <info@isc.org>
+ *   http://www.isc.org/
  *
- * This software was written for the Internet Software Consortium by Ted Lemon
- * under a contract with Vixie Laboratories.
+ * This software has been written for Internet Systems Consortium
+ * by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+ * To learn more about Internet Systems Consortium, see
+ * ``http://www.isc.org/''.  To learn more about Vixie Enterprises,
+ * see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+ * ``http://www.nominum.com''.
  */
 
+#if !defined (__ISC_DHCP_OSDEP_H__)
+#define __ISC_DHCP_OSDEP_H__
+
 #include "site.h"
+
+#include "config.h"
+
+#include <inttypes.h>
+/* XXX: now that we have a nice autoconf, we should sense this in
+ * ./configure.
+ */
+#if defined(__sun__) || defined(__hpux__)
+typedef uint8_t u_int8_t;
+typedef uint16_t u_int16_t;
+typedef uint32_t u_int32_t;
+#endif
+
+#ifndef LITTLE_ENDIAN
+#define LITTLE_ENDIAN 1234
+#endif /* LITTLE_ENDIAN */
+
+#ifndef BIG_ENDIAN
+#define BIG_ENDIAN 4321
+#endif /* BIG_ENDIAN */
+
+#ifndef BYTE_ORDER
+#define BYTE_ORDER DHCP_BYTE_ORDER
+#endif /* BYTE_ORDER */
 
 /* Porting::
 
@@ -57,82 +80,21 @@
     !defined (USE_NIT) && \
     !defined (USE_NIT_SEND) && \
     !defined (USE_NIT_RECEIVE) && \
-    !defined (USR_DLPI_SEND) && \
+    !defined (USE_DLPI_SEND) && \
     !defined (USE_DLPI_RECEIVE)
 #  define USE_DEFAULT_NETWORK
 #endif
 
-
-/* Porting::
-
-   If you add a new system configuration file, include it here: */
-
-#if defined (sun)
-# if defined (__svr4__) || defined (__SVR4)
-#  include "cf/sunos5-5.h"
-# else
-#  include "cf/sunos4.h"
-# endif
-#endif
-
-#ifdef aix
-#  include "cf/aix.h"
-#endif
-
-#ifdef bsdi
-#  include "cf/bsdos.h"
-#endif
-
-#ifdef __NetBSD__
-#  include "cf/netbsd.h"
-#endif
-
-#ifdef __FreeBSD__
-#  include "cf/freebsd.h"
-#endif
-
-#if defined (__osf__) && defined (__alpha)
-#  include "cf/alphaosf.h"
-#endif
-
-#ifdef ultrix
-#  include "cf/ultrix.h"
-#endif
-
-#ifdef linux
-#  include "cf/linux.h"
-#endif
-
-#ifdef SCO
-#  include "cf/sco.h"
-#endif
-
-#if defined (hpux) || defined (__hpux)
-#  include "cf/hpux.h"
-#endif
-
-#ifdef __QNX__
-#  include "cf/qnx.h"
-#endif
-
-#ifdef __CYGWIN32__
-#  include "cf/cygwin32.h"
-#endif
-
-#ifdef __APPLE__
-# include "cf/rhapsody.h"
-#else
-# if defined (NeXT)
-#  include "cf/nextstep.h"
-# endif
-#endif
-
-#if defined(IRIX) || defined(__sgi)
-# include "cf/irix.h"
-#endif
-
 #if !defined (TIME_MAX)
 # define TIME_MAX 2147483647
+#endif
+
+/* snprintf/vsnprintf hacks.  for systems with no libc versions only. */
+#ifdef NO_SNPRINTF
+  extern int isc_print_snprintf(char *, size_t, const char *, ...);
+  extern int isc_print_vsnprintf(char *, size_t, const char *, va_list ap);
+# define snprintf  isc_print_snprintf
+# define vsnprintf isc_print_vsnprintf
 #endif
 
 /* Porting::
@@ -185,7 +147,9 @@
    fallback. */
 
 #if defined (USE_BPF_SEND) || defined (USE_NIT_SEND) || \
-    defined (USE_DLPI_SEND) || defined (USE_UPF_SEND) || defined (USE_LPF_SEND)
+    defined (USE_DLPI_SEND) || defined (USE_UPF_SEND) || \
+    defined (USE_LPF_SEND) || \
+    (defined (USE_SOCKET_SEND) && defined (HAVE_SO_BINDTODEVICE))
 #  define USE_SOCKET_FALLBACK
 #  define USE_FALLBACK
 #endif
@@ -210,9 +174,7 @@
 
 #if defined (USE_RAW_RECEIVE) || defined (USE_BPF_SEND) || \
 		defined (USE_NIT_RECEIVE) || defined (USE_UPF_RECEIVE) || \
-		defined (USE_DLPI_RECEIVE) || \
-    defined (USE_LPF_SEND) || \
-    (defined (USE_SOCKET_SEND) && defined (SO_BINDTODEVICE))
+		defined (USE_DLPI_RECEIVE) || defined (USE_LPF_RECEIVE)
 #  define PACKET_DECODING
 #endif
 
@@ -241,6 +203,10 @@
 # define BPF_FORMAT "/dev/bpf%d"
 #endif
 
+#if defined (F_SETFD) && !defined (HAVE_SETFD)
+# define HAVE_SETFD
+#endif
+
 #if defined (IFF_POINTOPOINT) && !defined (HAVE_IFF_POINTOPOINT)
 # define HAVE_IFF_POINTOPOINT
 #endif
@@ -261,8 +227,24 @@
 # define HAVE_ARPHRD_ROSE
 #endif
 
+#if defined (ARPHRD_IRDA) && !defined (HAVE_ARPHRD_IRDA)
+# define HAVE_ARPHRD_IRDA
+#endif
+
+#if defined (ARPHRD_SIT) && !defined (HAVE_ARPHRD_SIT)
+# define HAVE_ARPHRD_SIT
+#endif
+
+#if defined (ARPHRD_IEEE1394) & !defined (HAVE_ARPHRD_IEEE1394)
+# define HAVE_ARPHRD_IEEE1394
+#endif
+
 #if defined (ARPHRD_IEEE802) && !defined (HAVE_ARPHRD_IEEE802)
 # define HAVE_ARPHRD_IEEE802
+#endif
+
+#if defined (ARPHRD_IEEE802_TR) && !defined (HAVE_ARPHRD_IEEE802_TR)
+# define HAVE_ARPHRD_IEEE802_TR
 #endif
 
 #if defined (ARPHRD_FDDI) && !defined (HAVE_ARPHRD_FDDI)
@@ -285,10 +267,21 @@
 # define HAVE_SO_BINDTODEVICE
 #endif
 
-#if defined (SIOCGIFHWADDR) && !defined (HAVE_SIOCGIFHWADDR)
-# define HAVE_SIOCGIFHWADDR
-#endif
-
 #if defined (AF_LINK) && !defined (HAVE_AF_LINK)
 # define HAVE_AF_LINK
 #endif
+
+/* Linux needs to define SHUT_* in /usr/include/sys/socket.h someday... */
+#if !defined (SHUT_RD)
+# define SHUT_RD 0
+#endif
+
+#if !defined (SOCKLEN_T)
+# define SOCKLEN_T socklen_t
+#endif
+
+#if !defined (STDERR_FILENO)
+# define STDERR_FILENO 2
+#endif
+
+#endif /* __ISC_DHCP_OSDEP_H__ */

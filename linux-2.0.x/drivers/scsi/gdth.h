@@ -10,7 +10,7 @@
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.1.1.1 1999/11/22 03:47:28 christ Exp $
+ * $Id: gdth.h,v 1.1.1.1 1999-11-22 03:47:28 christ Exp $
  */
 
 #include <linux/version.h>

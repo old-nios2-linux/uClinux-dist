@@ -1,4 +1,4 @@
-/* $Id: tpqic02.c,v 1.1.1.1 1999/11/22 03:47:15 christ Exp $
+/* $Id: tpqic02.c,v 1.1.1.1 1999-11-22 03:47:15 christ Exp $
  *
  * Driver for tape drive support for Linux-i386 1.1.58
  *
@@ -34,7 +34,7 @@
  * You are not allowed to change this line nor the text above.
  *
  * $Log: tpqic02.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:15  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:15  christ
  * Importing new-wave v1.0.4
  *
  * Revision 0.4.1.5  1994/10/29  02:46:13  root
@@ -263,7 +263,7 @@ static volatile struct mtget ioctl_status;	/* current generic status */
 static volatile struct tpstatus tperror;	/* last drive status */
 
 static char rcs_revision[] = "$Revision: 1.1.1.1 $";
-static char rcs_date[] = "$Date: 1999/11/22 03:47:15 $";
+static char rcs_date[] = "$Date: 1999-11-22 03:47:15 $";
 
 /* Flag bits for status and outstanding requests.
  * (Could all be put in one bit-field-struct.)

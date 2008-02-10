@@ -17,6 +17,7 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/etherdevice.h>
 #include <linux/llc.h>
+#include <net/net_namespace.h>
 #include <net/llc.h>
 #include <net/llc_pdu.h>
 #include <asm/unaligned.h>
@@ -64,7 +65,7 @@ static inline int br_get_ticks(const unsigned char *src)
 {
 	unsigned long ticks = ntohs(get_unaligned((__be16 *)src));
 
-	return (ticks * HZ + STP_HZ - 1) / STP_HZ;
+	return DIV_ROUND_UP(ticks * HZ, STP_HZ);
 }
 
 /* called under bridge lock */
@@ -133,6 +134,9 @@ static void __br_stp_rcv(struct sk_buff *skb, struct net_device *dev,
 	struct net_bridge_port *p = rcu_dereference(dev->br_port);
 	struct net_bridge *br;
 	const unsigned char *buf;
+
+	if (dev->nd_net != &init_net)
+		return;
 
 	if (!p)
 		return;

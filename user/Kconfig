@@ -317,6 +317,13 @@ config USER_NETFLASH_HMACMD5_KEY
 	depends on USER_NETFLASH_HMACMD5
 	default "HMAC-MD5 key"
 
+config USER_NETFLASH_SHA256
+	bool "netflash uses SHA256 as checksum"
+	depends on USER_NETFLASH_NETFLASH
+	help
+	  Instead of expecting the simple old checksum on flash images
+	  default to using a SHA256 hash.
+
 config USER_RECOVER_BIOS
 	bool "recover bios only"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
@@ -822,6 +829,10 @@ config USER_ASTERISK_MYSQL
 config USER_TRUSTEDSOURCE
 	bool "antispam - trusted source"
 	select USER_CLAMAV_CLAMSMTP
+
+config USER_TRUSTEDSOURCE_BLACKLIST
+	bool "antispam - trusted source black and white listing"
+	depends on USER_TRUSTEDSOURCE
 
 config USER_TRUSTEDSOURCE_V2
 	bool "antispam - trusted source v2"
@@ -1593,6 +1604,12 @@ config USER_LINUXIGD_DEFAULT
 	  Use the unmodified default configuration files for the 
 	  linux-igd daemon and not the snapgear customised files.
 
+config USER_MINIUPNPD
+	bool "miniupnpd"
+	help
+	  Alternate upnpd with less overhead
+	  Approx binary size 60K
+
 config USER_LOATTACH_LOATTACH
 	bool "loattach"
 	select LIB_LIBNETOLD
@@ -2141,8 +2158,13 @@ config USER_PPTPD_PPTPD
 	  PPTP VPN daemon.
 	  Approx. binary size: 31k
 
-config USER_PPTP_CLIENT_PPTP
+config USER_PPTP_PPTP
 	bool "pptp"
+	help
+	  PPTP Client for establishing VPN's.
+
+config USER_PPTP_CLIENT_PPTP
+	bool "pptp client (ok for !MMU)"
 	help
 	  PPTP Client for establishing VPN's.
 	  Approx. binary size: 34k

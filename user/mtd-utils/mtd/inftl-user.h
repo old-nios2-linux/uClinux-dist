@@ -1,5 +1,5 @@
 /*
- * $Id: inftl-user.h,v 1.1 2004/11/09 01:21:10 gerg Exp $
+ * $Id: inftl-user.h,v 1.1 2004-11-09 01:21:10 gerg Exp $
  *
  * Parts of INFTL headers shared with userspace 
  *

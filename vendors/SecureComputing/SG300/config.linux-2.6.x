@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.23-uc0
+# Linux kernel version: 2.6.24-uc0
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -38,9 +38,14 @@ CONFIG_LOCALVERSION_AUTO=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 # CONFIG_TASKSTATS is not set
 # CONFIG_USER_NS is not set
+# CONFIG_PID_NS is not set
 # CONFIG_AUDIT is not set
 # CONFIG_IKCONFIG is not set
 CONFIG_LOG_BUF_SHIFT=14
+# CONFIG_CGROUPS is not set
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_FAIR_USER_SCHED=y
+# CONFIG_FAIR_CGROUP_SCHED is not set
 # CONFIG_SYSFS_DEPRECATED is not set
 # CONFIG_RELAY is not set
 # CONFIG_BLK_DEV_INITRD is not set
@@ -56,15 +61,15 @@ CONFIG_BUG=y
 # CONFIG_ELF_CORE is not set
 CONFIG_BASE_FULL=y
 # CONFIG_FUTEX is not set
-CONFIG_ANON_INODES=y
-CONFIG_EPOLL=y
-CONFIG_SIGNALFD=y
-CONFIG_EVENTFD=y
+# CONFIG_EPOLL is not set
+# CONFIG_SIGNALFD is not set
+# CONFIG_EVENTFD is not set
 CONFIG_SHMEM=y
 # CONFIG_VM_EVENT_COUNTERS is not set
 CONFIG_SLAB=y
 # CONFIG_SLUB is not set
 # CONFIG_SLOB is not set
+CONFIG_SLABINFO=y
 # CONFIG_TINY_SHMEM is not set
 CONFIG_BASE_SMALL=0
 CONFIG_MODULES=y
@@ -146,19 +151,16 @@ CONFIG_ARCH_KS8695=y
 #
 
 #
-# Kendin-Micrel KS8695 Implementation Options
-#
-
-#
-# KS8695 Platforms
+# Kendin/Micrel KS8695 Implementations
 #
 # CONFIG_MACH_KS8695 is not set
-# CONFIG_MACH_DSM320 is not set
+CONFIG_MACH_LITE300=y
+# CONFIG_MACH_SG310 is not set
+# CONFIG_MACH_PFW is not set
+# CONFIG_MACH_SE4200 is not set
 # CONFIG_MACH_CM4002 is not set
 # CONFIG_MACH_CM4008 is not set
 # CONFIG_MACH_CM40xx is not set
-CONFIG_MACH_LITE300=y
-# CONFIG_MACH_SE4200 is not set
 
 #
 # Processor Type
@@ -182,6 +184,7 @@ CONFIG_ARM_THUMB=y
 # CONFIG_CPU_DCACHE_DISABLE is not set
 # CONFIG_CPU_DCACHE_WRITETHROUGH is not set
 # CONFIG_OUTER_CACHE is not set
+# CONFIG_ARM_PLT_MODULE_LOAD is not set
 
 #
 # Bus support
@@ -189,10 +192,6 @@ CONFIG_ARM_THUMB=y
 # CONFIG_PCI is not set
 # CONFIG_PCI_SYSCALL is not set
 # CONFIG_ARCH_SUPPORTS_MSI is not set
-
-#
-# PCCARD (PCMCIA/CardBus) support
-#
 
 #
 # Kernel Features
@@ -210,6 +209,7 @@ CONFIG_FLATMEM_MANUAL=y
 CONFIG_FLATMEM=y
 CONFIG_FLAT_NODE_MEM_MAP=y
 # CONFIG_SPARSEMEM_STATIC is not set
+# CONFIG_SPARSEMEM_VMEMMAP_ENABLE is not set
 CONFIG_SPLIT_PTLOCK_CPUS=4096
 # CONFIG_RESOURCES_64BIT is not set
 CONFIG_ZONE_DMA_FLAG=1
@@ -288,6 +288,7 @@ CONFIG_IPSEC_NAT_TRAVERSAL=y
 # CONFIG_INET_XFRM_MODE_TRANSPORT is not set
 # CONFIG_INET_XFRM_MODE_TUNNEL is not set
 # CONFIG_INET_XFRM_MODE_BEET is not set
+# CONFIG_INET_LRO is not set
 # CONFIG_INET_DIAG is not set
 # CONFIG_TCP_CONG_ADVANCED is not set
 CONFIG_TCP_CONG_CUBIC=y
@@ -361,6 +362,7 @@ CONFIG_NETFILTER_XT_MATCH_LAYER7=m
 # CONFIG_NETFILTER_XT_MATCH_STATISTIC is not set
 CONFIG_NETFILTER_XT_MATCH_STRING=m
 CONFIG_NETFILTER_XT_MATCH_TCPMSS=m
+# CONFIG_NETFILTER_XT_MATCH_TIME is not set
 # CONFIG_NETFILTER_XT_MATCH_U32 is not set
 # CONFIG_NETFILTER_XT_MATCH_HASHLIMIT is not set
 
@@ -439,12 +441,7 @@ CONFIG_LLC=y
 # CONFIG_LAPB is not set
 # CONFIG_ECONET is not set
 # CONFIG_WAN_ROUTER is not set
-
-#
-# QoS and/or fair queueing
-#
 CONFIG_NET_SCHED=y
-CONFIG_NET_SCH_FIFO=y
 
 #
 # Queueing/Scheduling
@@ -480,6 +477,7 @@ CONFIG_NET_CLS_U32=y
 # CONFIG_NET_CLS_ACT is not set
 # CONFIG_NET_CLS_POLICE is not set
 # CONFIG_NET_CLS_IND is not set
+CONFIG_NET_SCH_FIFO=y
 
 #
 # Network testing
@@ -548,6 +546,7 @@ CONFIG_MTD_BLOCK_RO=y
 # CONFIG_INFTL is not set
 # CONFIG_RFD_FTL is not set
 # CONFIG_SSFDC is not set
+# CONFIG_MTD_OOPS is not set
 
 #
 # RAM/ROM/Flash chip drivers
@@ -620,6 +619,7 @@ CONFIG_BLK_DEV=y
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_CDROM_PKTCDVD is not set
 # CONFIG_ATA_OVER_ETH is not set
+# CONFIG_MISC_DEVICES is not set
 
 #
 # SCSI device support
@@ -637,6 +637,7 @@ CONFIG_NETDEVICES=y
 # CONFIG_MACVLAN is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_TUN is not set
+# CONFIG_VETH is not set
 # CONFIG_PHYLIB is not set
 CONFIG_NET_ETHERNET=y
 # CONFIG_MII is not set
@@ -648,7 +649,12 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_DM9000 is not set
 # CONFIG_DM9KS is not set
 CONFIG_ETH_KS8695=m
+# CONFIG_IBM_NEW_EMAC_ZMII is not set
+# CONFIG_IBM_NEW_EMAC_RGMII is not set
+# CONFIG_IBM_NEW_EMAC_TAH is not set
+# CONFIG_IBM_NEW_EMAC_EMAC4 is not set
 # CONFIG_NET_PCI is not set
+# CONFIG_B44 is not set
 # CONFIG_NETDEV_1000 is not set
 # CONFIG_NETDEV_10000 is not set
 
@@ -717,7 +723,7 @@ CONFIG_SERIAL_CORE_CONSOLE=y
 CONFIG_UNIX98_PTYS=y
 # CONFIG_LEGACY_PTYS is not set
 # CONFIG_IPMI_HANDLER is not set
-# CONFIG_WATCHDOG is not set
+CONFIG_FIPS_RNG=y
 # CONFIG_HW_RANDOM is not set
 # CONFIG_NVRAM is not set
 # CONFIG_R3964 is not set
@@ -732,15 +738,20 @@ CONFIG_UNIX98_PTYS=y
 # CONFIG_SPI is not set
 # CONFIG_SPI_MASTER is not set
 # CONFIG_W1 is not set
+# CONFIG_POWER_SUPPLY is not set
 # CONFIG_HWMON is not set
-CONFIG_MISC_DEVICES=y
-# CONFIG_EEPROM_93CX6 is not set
+# CONFIG_WATCHDOG is not set
+
+#
+# Sonics Silicon Backplane
+#
+CONFIG_SSB_POSSIBLE=y
+# CONFIG_SSB is not set
 
 #
 # Multifunction device drivers
 #
 # CONFIG_MFD_SM501 is not set
-# CONFIG_NEW_LEDS is not set
 
 #
 # Multimedia devices
@@ -752,50 +763,25 @@ CONFIG_MISC_DEVICES=y
 #
 # Graphics support
 #
+# CONFIG_VGASTATE is not set
+# CONFIG_VIDEO_OUTPUT_CONTROL is not set
+# CONFIG_FB is not set
 # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
 
 #
 # Display device support
 #
 # CONFIG_DISPLAY_SUPPORT is not set
-# CONFIG_VGASTATE is not set
-CONFIG_VIDEO_OUTPUT_CONTROL=m
-# CONFIG_FB is not set
 
 #
 # Sound
 #
 # CONFIG_SOUND is not set
-CONFIG_USB_SUPPORT=y
-CONFIG_USB_ARCH_HAS_HCD=y
-# CONFIG_USB_ARCH_HAS_OHCI is not set
-# CONFIG_USB_ARCH_HAS_EHCI is not set
-# CONFIG_USB is not set
-
-#
-# NOTE: USB_STORAGE enables SCSI, and 'SCSI disk support'
-#
-
-#
-# USB Gadget Support
-#
-# CONFIG_USB_GADGET is not set
+# CONFIG_USB_SUPPORT is not set
 # CONFIG_MMC is not set
+# CONFIG_NEW_LEDS is not set
 CONFIG_RTC_LIB=y
 # CONFIG_RTC_CLASS is not set
-
-#
-# DMA Engine support
-#
-# CONFIG_DMA_ENGINE is not set
-
-#
-# DMA Clients
-#
-
-#
-# DMA Devices
-#
 
 #
 # File systems
@@ -841,7 +827,6 @@ CONFIG_SYSFS=y
 CONFIG_TMPFS=y
 # CONFIG_TMPFS_POSIX_ACL is not set
 # CONFIG_HUGETLB_PAGE is not set
-CONFIG_RAMFS=y
 # CONFIG_CONFIGFS_FS is not set
 
 #
@@ -867,10 +852,7 @@ CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE=3
 # CONFIG_QNX4FS_FS is not set
 # CONFIG_SYSV_FS is not set
 # CONFIG_UFS_FS is not set
-
-#
-# Network File Systems
-#
+CONFIG_NETWORK_FILESYSTEMS=y
 # CONFIG_NFS_FS is not set
 # CONFIG_NFSD is not set
 # CONFIG_SMB_FS is not set
@@ -896,31 +878,22 @@ CONFIG_PARTITION_ADVANCED=y
 # CONFIG_KARMA_PARTITION is not set
 # CONFIG_EFI_PARTITION is not set
 # CONFIG_SYSV68_PARTITION is not set
-
-#
-# Native Language Support
-#
 # CONFIG_NLS is not set
-
-#
-# Distributed Lock Manager
-#
 # CONFIG_DLM is not set
 
 #
 # Debug
 #
 CONFIG_COREDUMP_PRINTK=y
-
-#
-# Profiling support
-#
+CONFIG_INSTRUMENTATION=y
 # CONFIG_PROFILING is not set
+# CONFIG_MARKERS is not set
 
 #
 # Kernel hacking
 #
 # CONFIG_PRINTK_TIME is not set
+CONFIG_ENABLE_WARN_DEPRECATED=y
 # CONFIG_ENABLE_MUST_CHECK is not set
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_UNUSED_SYMBOLS is not set
@@ -929,6 +902,7 @@ CONFIG_COREDUMP_PRINTK=y
 # CONFIG_DEBUG_KERNEL is not set
 # CONFIG_DEBUG_BUGVERBOSE is not set
 # CONFIG_FRAME_POINTER is not set
+# CONFIG_SAMPLES is not set
 # CONFIG_DEBUG_USER is not set
 
 #
@@ -936,6 +910,7 @@ CONFIG_COREDUMP_PRINTK=y
 #
 # CONFIG_KEYS is not set
 # CONFIG_SECURITY is not set
+# CONFIG_SECURITY_FILE_CAPABILITIES is not set
 CONFIG_CRYPTO=y
 CONFIG_CRYPTO_ALGAPI=y
 CONFIG_CRYPTO_BLKCIPHER=y
@@ -956,6 +931,7 @@ CONFIG_CRYPTO_ECB=y
 CONFIG_CRYPTO_CBC=y
 # CONFIG_CRYPTO_PCBC is not set
 # CONFIG_CRYPTO_LRW is not set
+# CONFIG_CRYPTO_XTS is not set
 # CONFIG_CRYPTO_CRYPTD is not set
 CONFIG_CRYPTO_DES=y
 # CONFIG_CRYPTO_FCRYPT is not set
@@ -969,12 +945,14 @@ CONFIG_CRYPTO_AES=y
 CONFIG_CRYPTO_ARC4=y
 # CONFIG_CRYPTO_KHAZAD is not set
 # CONFIG_CRYPTO_ANUBIS is not set
+# CONFIG_CRYPTO_SEED is not set
 # CONFIG_CRYPTO_DEFLATE is not set
 # CONFIG_CRYPTO_MICHAEL_MIC is not set
 # CONFIG_CRYPTO_CRC32C is not set
 # CONFIG_CRYPTO_CAMELLIA is not set
 # CONFIG_CRYPTO_TEST is not set
-CONFIG_CRYPTO_HW=y
+# CONFIG_CRYPTO_AUTHENC is not set
+# CONFIG_CRYPTO_HW is not set
 
 #
 # Library routines

@@ -28,10 +28,11 @@ struct _ADAPTER_STRUCT;
 typedef struct _ADAPTER_STRUCT ADAPTER_STRUCT, *PADAPTER_STRUCT;
 
 #include "ks8695_kcompat.h"
-//#include <linux/module.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
+#include <asm/arch/regs-sys.h>
 #include "ks8695_chipdef.h"
+#include "ks8695_regs.h"
 
 #include "ks8695_fxhw.h"
 
@@ -76,15 +77,9 @@ typedef struct _ADAPTER_STRUCT ADAPTER_STRUCT, *PADAPTER_STRUCT;
 #define OPTION_DISABLED 	0
 #define OPTION_ENABLED  	1
 
-#if defined(CONFIG_MACH_LITE300) || defined(CONFIG_MACH_CM4002) || \
-    defined(CONFIG_MACH_CM4008) || defined(CONFIG_MACH_CM41xx) || \
-    defined(CONFIG_MACH_SE4200)
+/* UDP checksumming does not work for IP fragments. */
 #define RXCHECKSUM_DEFAULT	OPTION_DISABLED
 #define TXCHECKSUM_DEFAULT	OPTION_DISABLED
-#else
-#define RXCHECKSUM_DEFAULT	OPTION_ENABLED
-#define TXCHECKSUM_DEFAULT	OPTION_ENABLED
-#endif
 #define FLOWCONTROL_DEFAULT	OPTION_ENABLED
 
 #define PBL_DEFAULT		8	     /* 0 for unlimited, other value for (4 * x), our VxWorks shows that 8 is optimized */	

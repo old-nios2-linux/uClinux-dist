@@ -18,7 +18,7 @@
  *
  */
 
-char ipsec_init_c_version[] = "RCSID $Id: ipsec_init.c,v 1.104.2.4 2006/10/06 21:39:26 paul Exp $";
+char ipsec_init_c_version[] = "RCSID $Id: ipsec_init.c,v 1.104.2.6 2007-11-16 03:31:52 paul Exp $";
 
 #ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
@@ -175,11 +175,19 @@ extern int ipsec_sysctl_register(void);
 extern void ipsec_sysctl_unregister(void);
 #endif
 
+/*
+ * inet_*_protocol returns void on 2.4.x, int on 2.6.x
+ * So we need our own wrapper
+ */
 #if defined(NET_26) || defined(IPSKB_XFRM_TUNNEL_SIZE)
 static inline int
-openswan_inet_add_protocol(struct inet_protocol *prot, unsigned protocol)
+openswan_inet_add_protocol(struct inet_protocol *prot, unsigned protocol,char *protstr)
 {
-	return inet_add_protocol(prot, protocol);
+	int err = inet_add_protocol(prot, protocol);
+	if (err)
+		printk(KERN_ERR "KLIPS: can not register %s protocol - recompile with CONFIG_INET_%s disabled or as module\n", protstr,protstr);
+	return err;
+
 }
 
 static inline int
@@ -190,7 +198,7 @@ openswan_inet_del_protocol(struct inet_protocol *prot, unsigned protocol)
 
 #else
 static inline int
-openswan_inet_add_protocol(struct inet_protocol *prot, unsigned protocol)
+openswan_inet_add_protocol(struct inet_protocol *prot, unsigned protocol, char *protstr)
 {
 	inet_add_protocol(prot);
 	return 0;
@@ -243,17 +251,17 @@ ipsec_klips_init(void)
 	error |= register_netdevice_notifier(&ipsec_dev_notifier);
 
 #ifdef CONFIG_KLIPS_ESP
-	openswan_inet_add_protocol(&esp_protocol, IPPROTO_ESP);
+	error |= openswan_inet_add_protocol(&esp_protocol, IPPROTO_ESP,"ESP");
 #endif /* CONFIG_KLIPS_ESP */
 
 #ifdef CONFIG_KLIPS_AH
-	openswan_inet_add_protocol(&ah_protocol, IPPROTO_AH);
+	error |= openswan_inet_add_protocol(&ah_protocol, IPPROTO_AH,"AH");
 #endif /* CONFIG_KLIPS_AH */
 
 /* we never actually link IPCOMP to the stack */
 #ifdef IPCOMP_USED_ALONE
 #ifdef CONFIG_KLIPS_IPCOMP
- 	openswan_inet_add_protocol(&comp_protocol, IPPROTO_COMP);
+ 	error |= openswan_inet_add_protocol(&comp_protocol, IPPROTO_COMP,"IPCOMP");
 #endif /* CONFIG_KLIPS_IPCOMP */
 #endif
 
@@ -392,7 +400,9 @@ init_module(void)
 	int error = 0;
 
 	error |= ipsec_klips_init();
-
+	/*if (error)
+		ipsec_cleanup();
+	*/
 	return error;
 }
 
@@ -412,6 +422,20 @@ cleanup_module(void)
 
 /*
  * $Log: ipsec_init.c,v $
+ * Revision 1.104.2.6  2007-11-16 03:31:52  paul
+ * Added log message to openswan_inet_add_protocol() if we fail to register
+ * our protocol with KLIPS (eg ESP because esp4 module is already loaded).
+ * We didnt notice this failure before. We now return a proper error, but
+ *
+ * TODO:
+ *
+ * we still need to do a beter cleanup, as we're leaving files in /proc.
+ * (calling cleanup_module() from init_module() if we see an error caused
+ *  its own kernel oopses).
+ *
+ * Revision 1.104.2.5  2007/09/05 02:36:57  paul
+ * include ipsec_init.h. Added an ifdef. Patch by David McCullough
+ *
  * Revision 1.104.2.4  2006/10/06 21:39:26  paul
  * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
  * set. This is defined through autoconf.h which is included through the

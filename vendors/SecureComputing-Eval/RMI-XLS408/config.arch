@@ -1,0 +1,22 @@
+.EXPORT_ALL_VARIABLES:
+############################################################################
+
+BUILD_NETtel = 1
+LINUXTARGET = vmlinux
+
+VERSIONPKG  := 4.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+VENDORHTTPD  ?= $(ROOTDIR)/vendors/SecureComputing/httpd
+VENDORICON   ?= $(ROOTDIR)/vendors/SecureComputing/icons
+
+# uncomment to use RMI's toolchain
+#CROSS_COMPILE := mips-linux-
+#PATH := $(PATH):/usr/mips/bin
+#export PATH
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+############################################################################

@@ -1,12 +1,12 @@
 /*
- * $Id: capidev.h,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ * $Id: capidev.h,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * (c) Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidev.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1  1997/03/04 21:50:30  calle

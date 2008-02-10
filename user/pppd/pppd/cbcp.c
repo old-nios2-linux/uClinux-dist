@@ -33,7 +33,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: cbcp.c,v 1.2 2007/06/08 04:02:38 gerg Exp $"
+#define RCSID	"$Id: cbcp.c,v 1.2 2007-06-08 04:02:38 gerg Exp $"
 
 #include <stdio.h>
 #include <string.h>

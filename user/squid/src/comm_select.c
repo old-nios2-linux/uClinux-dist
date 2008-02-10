@@ -65,11 +65,11 @@ static void comm_select_dns_incoming(void);
 
 #if !HAVE_POLL
 static struct timeval zero_tv;
-#endif
 static fd_set global_readfds;
 static fd_set global_writefds;
 static int nreadfds;
 static int nwritefds;
+#endif
 
 /*
  * Automatic tuning for incoming requests:
@@ -172,12 +172,12 @@ fdIsHttp(int fd)
 
 #if DELAY_POOLS
 static int slowfdcnt = 0;
-static int slowfdarr[SQUID_MAXFD];
+static int *slowfdarr = NULL;
 
 static void
 commAddSlowFd(int fd)
 {
-    assert(slowfdcnt < SQUID_MAXFD);
+    assert(slowfdcnt < Squid_MaxFD);
     slowfdarr[slowfdcnt++] = fd;
 }
 
@@ -308,9 +308,9 @@ comm_poll_http_incoming(void)
 int
 comm_poll(int msec)
 {
-    struct pollfd pfds[SQUID_MAXFD];
+    struct pollfd pfds[Squid_MaxFD];
 #if DELAY_POOLS
-    fd_set slowfds;
+    char slowfds[Squid_MaxFD];
 #endif
     PF *hdl = NULL;
     int fd;
@@ -332,7 +332,7 @@ comm_poll(int msec)
 	/* Handle any fs callbacks that need doing */
 	storeDirCallback();
 #if DELAY_POOLS
-	FD_ZERO(&slowfds);
+	memset(slowfds, 0, sizeof(slowfds));
 #endif
 	if (commCheckICPIncoming)
 	    comm_poll_icp_incoming();
@@ -358,7 +358,7 @@ comm_poll(int msec)
 #if DELAY_POOLS
 		case -1:
 		    events |= POLLRDNORM;
-		    FD_SET(i, &slowfds);
+		    slowfds[i] = 1;
 		    break;
 #endif
 		default:
@@ -437,7 +437,7 @@ comm_poll(int msec)
 		if (NULL == (hdl = F->read_handler))
 		    (void) 0;
 #if DELAY_POOLS
-		else if (FD_ISSET(fd, &slowfds))
+		else if (slowfds[i])
 		    commAddSlowFd(fd);
 #endif
 		else {
@@ -950,9 +950,22 @@ comm_select_init(void)
     cachemgrRegister("comm_incoming",
 	"comm_incoming() stats",
 	commIncomingStats, 0, 1);
+#if !HAVE_POLL
     FD_ZERO(&global_readfds);
     FD_ZERO(&global_writefds);
     nreadfds = nwritefds = 0;
+#endif
+#if DELAY_POOLS
+    slowfdarr = xmalloc(sizeof(int) * Squid_MaxFD);
+#endif
+}
+
+void
+comm_select_shutdown(void)
+{
+#if DELAY_POOLS
+    safe_free(slowfdarr);
+#endif
 }
 
 #if !HAVE_POLL
@@ -1085,6 +1098,7 @@ commIncomingStats(StoreEntry * sentry)
 void
 commUpdateReadBits(int fd, PF * handler)
 {
+#if !HAVE_POLL
     if (handler && !FD_ISSET(fd, &global_readfds)) {
 	FD_SET(fd, &global_readfds);
 	nreadfds++;
@@ -1092,11 +1106,13 @@ commUpdateReadBits(int fd, PF * handler)
 	FD_CLR(fd, &global_readfds);
 	nreadfds--;
     }
+#endif
 }
 
 void
 commUpdateWriteBits(int fd, PF * handler)
 {
+#if !HAVE_POLL
     if (handler && !FD_ISSET(fd, &global_writefds)) {
 	FD_SET(fd, &global_writefds);
 	nwritefds++;
@@ -1104,6 +1120,7 @@ commUpdateWriteBits(int fd, PF * handler)
 	FD_CLR(fd, &global_writefds);
 	nwritefds--;
     }
+#endif
 }
 
 /* Called by async-io or diskd to speed up the polling */

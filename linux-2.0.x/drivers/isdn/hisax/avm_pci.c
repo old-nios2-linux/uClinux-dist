@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: avm_pci.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,7 +7,7 @@
  *
  *
  * $Log: avm_pci.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.8  1998/11/05 21:11:12  keil

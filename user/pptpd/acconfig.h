@@ -3,7 +3,7 @@
  *
  * Additional autoconf defines for this program.
  *
- * $Id: acconfig.h,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
+ * $Id: acconfig.h,v 1.1.1.2 2007-07-05 23:25:55 gerg Exp $
  */
 
 /* Use BSD User land PPP? */

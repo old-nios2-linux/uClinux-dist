@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+/* $Id: callc.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,7 +11,7 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.30.2.13  1998/11/05 21:13:32  keil

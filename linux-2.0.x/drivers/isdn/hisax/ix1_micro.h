@@ -1,4 +1,4 @@
-/* $Id: ix1_micro.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: ix1_micro.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * ix1_micro.h  low level stuff for ITK ix1-micro Rev.2 isdn cards
  *
@@ -8,7 +8,7 @@
  to the original file teles.c)
  *
  * $Log: ix1_micro.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1  1997/01/27 15:42:48  keil

@@ -1,40 +1,35 @@
 .\"	dhcpd.8
 .\"
-.\" Copyright (c) 1995, 1996 The Internet Software Consortium.
-.\" All rights reserved.
+.\" Copyright (c) 2004-2007 by Internet Systems Consortium, Inc. ("ISC")
+.\" Copyright (c) 1996-2003 by Internet Software Consortium
 .\"
-.\" Redistribution and use in source and binary forms, with or without
-.\" modification, are permitted provided that the following conditions
-.\" are met:
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
 .\"
-.\" 1. Redistributions of source code must retain the above copyright
-.\"    notice, this list of conditions and the following disclaimer.
-.\" 2. Redistributions in binary form must reproduce the above copyright
-.\"    notice, this list of conditions and the following disclaimer in the
-.\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The Internet Software Consortium nor the names
-.\"    of its contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+.\" OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.\" THIS SOFTWARE IS PROVIDED BY THE INTERNET SOFTWARE CONSORTIUM AND
-.\" CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
-.\" INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-.\" MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-.\" DISCLAIMED.  IN NO EVENT SHALL THE INTERNET SOFTWARE CONSORTIUM OR
-.\" CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-.\" SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-.\" LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-.\" USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-.\" ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-.\" OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
-.\" OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-.\" SUCH DAMAGE.
+.\"   Internet Systems Consortium, Inc.
+.\"   950 Charter Street
+.\"   Redwood City, CA 94063
+.\"   <info@isc.org>
+.\"   http://www.isc.org/
 .\"
-.\" This software has been written for the Internet Software Consortium
-.\" by Ted Lemon <mellon@fugue.com> in cooperation with Vixie
-.\" Enterprises.  To learn more about the Internet Software Consortium,
-.\" see ``http://www.isc.org/isc''.  To learn more about Vixie
-.\" Enterprises, see ``http://www.vix.com''.
+.\" This software has been written for Internet Systems Consortium
+.\" by Ted Lemon in cooperation with Vixie Enterprises and Nominum, Inc.
+.\" To learn more about Internet Systems Consortium, see
+.\" ``http://www.isc.org/''.  To learn more about Vixie Enterprises,
+.\" see ``http://www.vix.com''.   To learn more about Nominum, Inc., see
+.\" ``http://www.nominum.com''.
+.\"
+.\" $Id: dhcpd.8,v 1.1.1.4 2007-12-18 02:59:45 asallawa Exp $
+.\"
 .TH dhcpd 8
 .SH NAME
 dhcpd - Dynamic Host Configuration Protocol Server
@@ -54,6 +49,20 @@ dhcpd - Dynamic Host Configuration Protocol Server
 .B -q
 ]
 [
+.B -t
+|
+.B -T
+]
+[
+.B -4
+| 
+.B -6
+]
+[
+.B -s
+.I server
+]
+[
 .B -cf
 .I config-file
 ]
@@ -62,18 +71,43 @@ dhcpd - Dynamic Host Configuration Protocol Server
 .I lease-file
 ]
 [
+.B -pf
+.I pid-file
+]
+[
+.B -tf
+.I trace-output-file
+]
+[
+.B -play
+.I trace-playback-file
+]
+[
 .I if0
 [
 .I ...ifN
 ]
 ]
+
+.B dhcpd
+--version
 .SH DESCRIPTION
-The Internet Software Consortium DHCP Server, dhcpd, implements the
+The Internet Systems Consortium DHCP Server, dhcpd, implements the
 Dynamic Host Configuration Protocol (DHCP) and the Internet Bootstrap
 Protocol (BOOTP).  DHCP allows hosts on a TCP/IP network to request
 and be assigned IP addresses, and also to discover information about
 the network to which they are attached.  BOOTP provides similar
 functionality, with certain restrictions.
+.SH CONTRIBUTIONS
+.PP
+This software is free software.  At various times its development has
+been underwritten by various organizations, including the ISC and
+Vixie Enterprises.  The development of 3.0 has been funded almost
+entirely by Nominum, Inc.
+.PP
+At this point development is being shepherded by Ted Lemon, and hosted
+by the ISC, but the future of this project depends on you.  If you
+have features you want, please consider implementing them.
 .SH OPERATION
 .PP
 The DHCP protocol allows a host which is unknown to the network
@@ -150,26 +184,27 @@ broadcasts may be specified on the command line.  This should be done
 on systems where dhcpd is unable to identify non-broadcast interfaces,
 but should not be required on other systems.  If no interface names
 are specified on the command line dhcpd will identify all network
-interfaces which are up, elimininating non-broadcast interfaces if
+interfaces which are up, eliminating non-broadcast interfaces if
 possible, and listen for DHCP broadcasts on each interface.
+.PP
+The server either operates as a DHCPv6 server or a DHCP server, but
+not both at the same time. To run as a DHCPv6 server, use the
+.B -6
+flag. To run as a DHCP server, use the
+.B -4
+flag. If neither is used, the default is to run as a DHCPv6 server.
 .PP
 If dhcpd should listen on a port other than the standard (port 67),
 the
 .B -p
 flag may used.  It should be followed by the udp port number on which
 dhcpd should listen.  This is mostly useful for debugging purposes.
-If the
-.B -p
-flag is specified, the server will transmit responses to clients at a
-port number that is one greater than the one specified - i.e., if you
-specify
-.B -p
-67, then the server will listen on port 67 and transmit to port 68.
-Datagrams that must go through relay agents are sent to the port
-number specified with the
-.B -p
-flag - if you wish to use alternate port numbers, you must configure
-any relay agents you are using to use the same alternate port numbers.
+.PP
+If dhcpd should send replies to an address other than the broadcast
+address (255.255.255.255), the 
+.B -s
+flag may be used. It is followed by either the IP address or the host 
+name to send replies to. This option is only supported in IPv4.
 .PP
 To run dhcpd as a foreground process, rather than allowing it to run
 as a daemon in the background, the
@@ -183,12 +218,15 @@ flag.  This can be useful for debugging, and also at sites where a
 complete log of all dhcp activity must be kept but syslogd is not
 reliable or otherwise cannot be used.   Normally, dhcpd will log all
 output using the syslog(3) function with the log facility set to
-LOG_DAEMON.
+LOG_DAEMON.  Note that -d implies -f (the daemon will not fork
+itself into the background).
 .PP
 Dhcpd can be made to use an alternate configuration file with the
 .B -cf
-flag, or an alternate lease file with the
+flag, an alternate lease file with the
 .B -lf
+flag, or an alternate pid file with the
+.B -pf
 flag.   Because of the importance of using the same lease database at
 all times when running dhcpd in production, these options should be
 used \fBonly\fR for testing lease files or database files in a
@@ -199,8 +237,39 @@ it may not be desirable to print out the entire copyright message on
 startup.   To avoid printing this message, the
 .B -q
 flag may be specified.
+.PP
+The DHCP server reads two files on startup: a configuration file, and
+a lease database.   If the
+.B -t
+flag is specified, the server will simply test the configuration file
+for correct syntax, but will not attempt to perform any network
+operations.   This can be used to test the a new configuration file
+automatically before installing it.
+.PP
+The
+.B -T
+flag can be used to test the lease database file in a similar way.
+.PP
+The \fB-tf\fR and \fB-play\fR options allow you to specify a file into
+which the entire startup state of the server and all the transactions
+it processes are either logged or played back from.  This can be
+useful in submitting bug reports - if you are getting a core dump
+every so often, you can start the server with the \fB-tf\fR option and
+then, when the server dumps core, the trace file will contain all the
+transactions that led up to it dumping core, so that the problem can
+be easily debugged with \fB-play\fR.
+.PP
+The \fB-play\fR option must be specified with an alternate lease file,
+using the \fB-lf\fR switch, so that the DHCP server doesn't wipe out
+your existing lease file with its test data.  The DHCP server will
+refuse to operate in playback mode unless you specify an alternate
+lease file.
+.PP
+To find the version of dhcpd that will run, use the
+.B --version
+argument. Instead of running, the version will be printed.
 .SH CONFIGURATION
-The syntax of the dhcpd.conf(5) file is discussed seperately.   This
+The syntax of the dhcpd.conf(5) file is discussed separately.   This
 section should be used as an overview of the configuration process,
 and the dhcpd.conf(5) documentation should be consulted for detailed
 reference information.
@@ -216,7 +285,7 @@ support might look like this:
 .sp 1
 	subnet 239.252.197.0 netmask 255.255.255.0 {
 	  range 239.252.197.10 239.252.197.250;
-        }
+	}
 .fi
 .PP
 Multiple address ranges may be specified like this:
@@ -256,7 +325,7 @@ to the subnet command:
 	  range 239.252.197.10 239.252.197.107;
 	  default-lease-time 600;
 	  max-lease-time 7200;
-	|
+	}
 .fi
 .PP
 This particular subnet declaration specifies a default lease time of
@@ -284,7 +353,7 @@ client declaration might look like this:
 	}
 .fi
 .SH Options
-DHCP (and also BOOTP with Vendor Extensions) provides a mechanism
+DHCP (and also BOOTP with Vendor Extensions) provide a mechanism
 whereby the server can provide the client with information about how
 to configure its network interface (e.g., subnet mask), and also how
 the client can access various network services (e.g., DNS, IP routers,
@@ -294,7 +363,7 @@ These options can be specified on a per-subnet basis, and, for BOOTP
 clients, also on a per-client basis.   In the event that a BOOTP
 client declaration specifies options that are also specified in its
 subnet declaration, the options specified in the client declaration
-take precedence.   An reasonably complete DHCP configuration might
+take precedence.   A reasonably complete DHCP configuration might
 look something like this:
 .nf
 .sp 1
@@ -324,6 +393,375 @@ use a different name server might be declared as follows:
 .PP
 A more complete description of the dhcpd.conf file syntax is provided
 in dhcpd.conf(5).
+.SH OMAPI
+The DHCP server provides the capability to modify some of its
+configuration while it is running, without stopping it, modifying its
+database files, and restarting it.  This capability is currently
+provided using OMAPI - an API for manipulating remote objects.  OMAPI
+clients connect to the server using TCP/IP, authenticate, and can then
+examine the server's current status and make changes to it.
+.PP
+Rather than implementing the underlying OMAPI protocol directly, user
+programs should use the dhcpctl API or OMAPI itself.   Dhcpctl is a
+wrapper that handles some of the housekeeping chores that OMAPI does
+not do automatically.   Dhcpctl and OMAPI are documented in \fBdhcpctl(3)\fR
+and \fBomapi(3)\fR.
+.PP
+OMAPI exports objects, which can then be examined and modified.   The
+DHCP server exports the following objects: lease, host,
+failover-state and group.   Each object has a number of methods that
+are provided: lookup, create, and destroy.   In addition, it is
+possible to look at attributes that are stored on objects, and in some
+cases to modify those attributes.
+.SH THE LEASE OBJECT
+Leases can't currently be created or destroyed, but they can be looked
+up to examine and modify their state.
+.PP
+Leases have the following attributes:
+.PP
+.B state \fIinteger\fR lookup, examine
+.RS 0.5i
+.nf
+1 = free
+2 = active
+3 = expired
+4 = released
+5 = abandoned
+6 = reset
+7 = backup
+8 = reserved
+9 = bootp
+.fi
+.RE
+.PP
+.B ip-address \fIdata\fR lookup, examine
+.RS 0.5i
+The IP address of the lease.
+.RE
+.PP
+.B dhcp-client-identifier \fIdata\fR lookup, examine, update
+.RS 0.5i
+The
+client identifier that the client used when it acquired the lease.
+Not all clients send client identifiers, so this may be empty.
+.RE
+.PP
+.B client-hostname \fIdata\fR examine, update
+.RS 0.5i
+The value the client sent in the host-name option.
+.RE
+.PP
+.B host \fIhandle\fR examine
+.RS 0.5i
+the host declaration associated with this lease, if any.
+.RE
+.PP
+.B subnet \fIhandle\fR examine
+.RS 0.5i
+the subnet object associated with this lease (the subnet object is not
+currently supported).
+.RE
+.PP
+.B pool \fIhandle\fR examine
+.RS 0.5i
+the pool object associated with this lease (the pool object is not
+currently supported).
+.RE
+.PP
+.B billing-class \fIhandle\fR examine
+.RS 0.5i
+the handle to the class to which this lease is currently billed, if
+any (the class object is not currently supported).
+.RE
+.PP
+.B hardware-address \fIdata\fR examine, update
+.RS 0.5i
+the hardware address (chaddr) field sent by the client when it
+acquired its lease.
+.RE
+.PP
+.B hardware-type \fIinteger\fR examine, update
+.RS 0.5i
+the type of the network interface that the client reported when it
+acquired its lease.
+.RE
+.PP
+.B ends \fItime\fR examine
+.RS 0.5i
+the time when the lease's current state ends, as understood by the
+client.
+.RE
+.PP
+.B tstp \fItime\fR examine
+.RS 0.5i
+the time when the lease's current state ends, as understood by the
+server.
+.RE
+.B tsfp \fItime\fR examine
+.RS 0.5i
+the adjusted time when the lease's current state ends, as understood by
+the failover peer (if there is no failover peer, this value is
+undefined).  Generally this value is only adjusted for expired, released,
+or reset leases while the server is operating in partner-down state, and
+otherwise is simply the value supplied by the peer.
+.RE
+.B atsfp \fItime\fR examine
+.RS 0.5i
+the actual tsfp value sent from the peer.  This value is forgotten when a
+lease binding state change is made, to facilitate retransmission logic.
+.RE
+.PP
+.B cltt \fItime\fR examine
+.RS 0.5i
+The time of the last transaction with the client on this lease.
+.RE
+.SH THE HOST OBJECT
+Hosts can be created, destroyed, looked up, examined and modified.
+If a host declaration is created or deleted using OMAPI, that
+information will be recorded in the dhcpd.leases file.   It is
+permissible to delete host declarations that are declared in the
+dhcpd.conf file.
+.PP
+Hosts have the following attributes:
+.PP
+.B name \fIdata\fR lookup, examine, modify
+.RS 0.5i
+the name of the host declaration.   This name must be unique among all
+host declarations.
+.RE
+.PP
+.B group \fIhandle\fR examine, modify
+.RS 0.5i
+the named group associated with the host declaration, if there is one.
+.RE
+.PP
+.B hardware-address \fIdata\fR lookup, examine, modify
+.RS 0.5i
+the link-layer address that will be used to match the client, if any.
+Only valid if hardware-type is also present.
+.RE
+.PP
+.B hardware-type \fIinteger\fR lookup, examine, modify
+.RS 0.5i
+the type of the network interface that will be used to match the
+client, if any.   Only valid if hardware-address is also present.
+.RE
+.PP
+.B dhcp-client-identifier \fIdata\fR lookup, examine, modify
+.RS 0.5i
+the dhcp-client-identifier option that will be used to match the
+client, if any.
+.RE
+.PP
+.B ip-address \fIdata\fR examine, modify
+.RS 0.5i
+a fixed IP address which is reserved for a DHCP client that matches
+this host declaration.   The IP address will only be assigned to the
+client if it is valid for the network segment to which the client is
+connected.
+.RE
+.PP
+.B statements \fIdata\fR modify
+.RS 0.5i
+a list of statements in the format of the dhcpd.conf file that will be
+executed whenever a message from the client is being processed.
+.RE
+.PP
+.B known \fIinteger\fR examine, modify
+.RS 0.5i
+if nonzero, indicates that a client matching this host declaration
+will be treated as \fIknown\fR in pool permit lists.   If zero, the
+client will not be treated as known.
+.RE
+.SH THE GROUP OBJECT
+Named groups can be created, destroyed, looked up, examined and
+modified.  If a group declaration is created or deleted using OMAPI,
+that information will be recorded in the dhcpd.leases file.  It is
+permissible to delete group declarations that are declared in the
+dhcpd.conf file.
+.PP
+Named groups currently can only be associated with
+hosts - this allows one set of statements to be efficiently attached
+to more than one host declaration.   
+.PP
+Groups have the following attributes:
+.PP
+.B name \fIdata\fR
+.RS 0.5i
+the name of the group.  All groups that are created using OMAPI must
+have names, and the names must be unique among all groups.
+.RE
+.PP
+.B statements \fIdata\fR
+.RS 0.5i
+a list of statements in the format of the dhcpd.conf file that will be
+executed whenever a message from a client whose host declaration
+references this group is processed.
+.RE
+.SH THE CONTROL OBJECT
+The control object allows you to shut the server down.   If the server
+is doing failover with another peer, it will make a clean transition
+into the shutdown state and notify its peer, so that the peer can go
+into partner down, and then record the "recover" state in the lease
+file so that when the server is restarted, it will automatically
+resynchronize with its peer.
+.PP
+On shutdown the server will also attempt to cleanly shut down all
+OMAPI connections.  If these connections do not go down cleanly after
+five seconds, they are shut down preemptively.  It can take as much
+as 25 seconds from the beginning of the shutdown process to the time
+that the server actually exits.
+.PP
+To shut the server down, open its control object and set the state
+attribute to 2.
+.SH THE FAILOVER-STATE OBJECT
+The failover-state object is the object that tracks the state of the
+failover protocol as it is being managed for a given failover peer.
+The failover object has the following attributes (please see
+.B dhcpd.conf (5)
+for explanations about what these attributes mean):
+.PP
+.B name \fIdata\fR examine
+.RS 0.5i
+Indicates the name of the failover peer relationship, as described in
+the server's \fBdhcpd.conf\fR file.
+.RE
+.PP
+.B partner-address \fIdata\fR examine
+.RS 0.5i
+Indicates the failover partner's IP address.
+.RE
+.PP
+.B local-address \fIdata\fR examine
+.RS 0.5i
+Indicates the IP address that is being used by the DHCP server for
+this failover pair.
+.RE
+.PP
+.B partner-port \fIdata\fR examine
+.RS 0.5i
+Indicates the TCP port on which the failover partner is listening for
+failover protocol connections.
+.RE
+.PP
+.B local-port \fIdata\fR examine
+.RS 0.5i
+Indicates the TCP port on which the DHCP server is listening for
+failover protocol connections for this failover pair.
+.RE
+.PP
+.B max-outstanding-updates \fIinteger\fR examine
+.RS 0.5i
+Indicates the number of updates that can be outstanding and
+unacknowledged at any given time, in this failover relationship.
+.RE
+.PP
+.B mclt \fIinteger\fR examine
+.RS 0.5i
+Indicates the maximum client lead time in this failover relationship.
+.RE
+.PP
+.B load-balance-max-secs \fIinteger\fR examine
+.RS 0.5i
+Indicates the maximum value for the secs field in a client request
+before load balancing is bypassed.
+.RE
+.PP
+.B load-balance-hba \fIdata\fR examine
+.RS 0.5i
+Indicates the load balancing hash bucket array for this failover
+relationship.
+.RE
+.PP
+.B local-state \fIinteger\fR examine, modify
+.RS 0.5i
+Indicates the present state of the DHCP server in this failover
+relationship.   Possible values for state are:
+.RE
+.RS 1i
+.PP
+.nf
+1  - partner down
+2  - normal
+3  - communications interrupted
+4  - resolution interrupted
+5  - potential conflict
+6  - recover
+7  - recover done
+8  - shutdown
+9  - paused
+10 - startup
+11 - recover wait
+.fi
+.RE
+.PP
+.RS 0.5i
+In general it is not a good idea to make changes to this state.
+However, in the case that the failover partner is known to be down, it
+can be useful to set the DHCP server's failover state to partner
+down.   At this point the DHCP server will take over service of the
+failover partner's leases as soon as possible, and will give out
+normal leases, not leases that are restricted by MCLT.   If you do put
+the DHCP server into the partner-down when the other DHCP server is
+not in the partner-down state, but is not reachable, IP address
+assignment conflicts are possible, even likely.   Once a server has
+been put into partner-down mode, its failover partner must not be
+brought back online until communication is possible between the two
+servers.
+.RE
+.PP
+.B partner-state \fIinteger\fR examine
+.RS 0.5i
+Indicates the present state of the failover partner.
+.RE
+.PP
+.B local-stos \fIinteger\fR examine
+.RS 0.5i
+Indicates the time at which the DHCP server entered its present state
+in this failover relationship.
+.RE
+.PP
+.B partner-stos \fIinteger\fR examine
+.RS 0.5i
+Indicates the time at which the failover partner entered its present state.
+.RE
+.PP
+.B hierarchy \fIinteger\fR examine
+.RS 0.5i
+Indicates whether the DHCP server is primary (0) or secondary (1) in
+this failover relationship.
+.RE
+.PP
+.B last-packet-sent \fIinteger\fR examine
+.RS 0.5i
+Indicates the time at which the most recent failover packet was sent
+by this DHCP server to its failover partner.
+.RE
+.PP
+.B last-timestamp-received \fIinteger\fR examine
+.RS 0.5i
+Indicates the timestamp that was on the failover message most recently
+received from the failover partner.
+.RE
+.PP
+.B skew \fIinteger\fR examine
+.RS 0.5i
+Indicates the skew between the failover partner's clock and this DHCP
+server's clock
+.RE
+.PP
+.B max-response-delay \fIinteger\fR examine
+.RS 0.5i
+Indicates the time in seconds after which, if no message is received
+from the failover partner, the partner is assumed to be out of
+communication.
+.RE
+.PP
+.B cur-unacked-updates \fIinteger\fR examine
+.RS 0.5i
+Indicates the number of update messages that have been received from
+the failover partner but not yet processed.
+.RE
 .SH FILES
 .B ETCDIR/dhcpd.conf, DBDIR/dhcpd.leases, RUNDIR/dhcpd.pid,
 .B DBDIR/dhcpd.leases~.
@@ -331,8 +769,9 @@ in dhcpd.conf(5).
 dhclient(8), dhcrelay(8), dhcpd.conf(5), dhcpd.leases(5)
 .SH AUTHOR
 .B dhcpd(8)
-was written by Ted Lemon <mellon@vix.com>
-under a contract with Vixie Labs.   Funding
-for this project was provided by the Internet Software Corporation.
-Information about the Internet Software Consortium can be found at
-.B http://www.isc.org/isc.
+was originally written by Ted Lemon under a contract with Vixie Labs.
+Funding for this project was provided by Internet Systems
+Consortium.   Version 3 of the DHCP server was funded by Nominum, Inc.
+Information about Internet Systems Consortium is available at
+.B http://www.isc.org/\fR.
+Information about Nominum can be found at \fBhttp://www.nominum.com/\fR.

@@ -31,6 +31,6 @@ make generic | make posix | make linux | ...
 mkdir /tmp/lua
 cp src/* /tmp/lua
 cd <haserl path>
-./configure --with-lua=/tmp/lua
+./configure --with-lua=/tmp/lua --with-lua-headers=/tmp/lua
 make
 

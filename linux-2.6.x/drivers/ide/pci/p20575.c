@@ -57,6 +57,7 @@ static u16 p20575_inw(unsigned long port)
 	return v;
 }
 
+#if 0
 static u32 p20575_inl(unsigned long port)
 {
 	u32 v;
@@ -65,6 +66,7 @@ static u32 p20575_inl(unsigned long port)
 	PRINTK("=%x\n", (int)v);
 	return v;
 }
+#endif
 
 static void p20575_outb(u8 val, unsigned long port)
 {
@@ -84,11 +86,13 @@ static void p20575_outw(u16 val, unsigned long port)
 	writel(val, p20575_iomap+port);
 }
 
+#if 0
 static void p20575_outl(u32 val, unsigned long port)
 {
 	PRINTK("p20575_outl(val=%x,port=%x)\n", (int)val, (int)port);
 	writel(val, p20575_iomap+port);
 }
+#endif
 
 static void p20575_outsw(unsigned long port, void *buf, u32 len)
 {
@@ -137,8 +141,6 @@ static void __devinit p20575_init_iops(ide_hwif_t *hwif)
 	hw.io_ports[IDE_SELECT_OFFSET] = 0x318;
 	hw.io_ports[IDE_STATUS_OFFSET] = 0x31C;
 	hw.io_ports[IDE_CONTROL_OFFSET] = 0x338;
-	hw.irq = hwif->pci_dev->irq;
-	hw.ack_intr = p20575_ack_intr;
 
 	hwif->INB = p20575_inb;
 	hwif->INW = p20575_inw;
@@ -149,11 +151,12 @@ static void __devinit p20575_init_iops(ide_hwif_t *hwif)
 	/*hwif->OUTL = p20575_outl;*/
 	hwif->OUTSW = p20575_outsw;
 	hwif->INSW = p20575_insw;
+	/*hwif->irq = hwif->pci_dev->irq;*/
+	hwif->ack_intr = p20575_ack_intr;
 
 	hwif->mmio = 1;
 
-	memcpy(&hwif->hw, &hw, sizeof(hw));
-	memcpy(hwif->io_ports, hwif->hw.io_ports, sizeof(hwif->hw.io_ports));
+	memcpy(hwif->io_ports, hw.io_ports, sizeof(hw.io_ports));
 }
 
 static unsigned int __devinit p20575_init_chipset(struct pci_dev *dev, const char *name)
@@ -172,31 +175,19 @@ static unsigned int __devinit p20575_init_chipset(struct pci_dev *dev, const cha
 static void __devinit p20575_init_hwif(ide_hwif_t *hwif)
 {
 	PRINTK("%s(%d): p20575_init_hwif()\n", __FILE__, __LINE__);
-
-	hwif->autodma = 0;
-	hwif->drives[0].autodma = hwif->drives[1].autodma = hwif->autodma;
 }
 
-static int __devinit p20575_init_setup(struct pci_dev *dev, ide_pci_device_t *d)
-{
-	PRINTK("%s(%d): p20575_init_setup()\n", __FILE__, __LINE__);
-	return ide_setup_pci_device(dev, d);
-}
-
-static ide_pci_device_t p20575_chipset __devinitdata = {
+static const struct ide_port_info p20575_chipset __devinitdata = {
 	.name		= "P20575",
-	.init_setup	= p20575_init_setup,
 	.init_chipset	= p20575_init_chipset,
 	.init_iops	= p20575_init_iops,
 	.init_hwif	= p20575_init_hwif,
-	.autodma	= AUTODMA,
-	.bootable	= ON_BOARD,
 };
 
 static int __devinit p20575_init_one(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	PRINTK("%s(%d): p20575_init_one()\n", __FILE__, __LINE__);
-	return p20575_chipset.init_setup(dev, &p20575_chipset);
+	return ide_setup_pci_device(dev, &p20575_chipset);
 }
 
 static struct pci_device_id p20575_pci_tbl[] = {

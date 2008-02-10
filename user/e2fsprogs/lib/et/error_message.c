@@ -1,5 +1,5 @@
 /*
- * $Header: /cvs/sw/new-wave/user/e2fsprogs/lib/et/error_message.c,v 1.1.1.2 2006/09/06 01:35:43 steveb Exp $
+ * $Header: /cvs/sw/new-wave/user/e2fsprogs/lib/et/error_message.c,v 1.1.1.2 2006-09-06 01:35:43 steveb Exp $
  * $Source: /cvs/sw/new-wave/user/e2fsprogs/lib/et/error_message.c,v $
  * $Locker:  $
  *

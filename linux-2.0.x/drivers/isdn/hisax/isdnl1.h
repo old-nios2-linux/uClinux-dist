@@ -1,7 +1,7 @@
-/* $Id: isdnl1.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isdnl1.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * $Log: isdnl1.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.4.2.7  1998/11/03 00:06:55  keil

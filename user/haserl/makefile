@@ -1,16 +1,17 @@
-# This makefile, like a few others in the uClinux distribution, relies on the
-# fact that GNU make's search order is "makefile" before "Makefile."
 
-all: Makefile
-	$(MAKE) -f Makefile
+CONF_OPTS = --prefix=
 
-Makefile:
-	./configure $(CONFIGURE_OPTS) --prefix=
+all: build
+	$(MAKE) -C build
+
+build: makefile
+	rm -rf build
+	mkdir build
+	(cd build; CC="$(CC) $(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LDLIBS)" ../configure $(CONFIGURE_OPTS) $(CONF_OPTS))
 
 romfs:
-	$(ROMFSINST) src/haserl /bin
+	$(ROMFSINST) build/src/haserl /bin
 
-# Default rule retries target in 'Makefile'
-%:
-	$(MAKE) -f Makefile $@
+clean:
+	rm -rf build
 

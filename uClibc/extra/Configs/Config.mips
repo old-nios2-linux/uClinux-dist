@@ -13,7 +13,7 @@ config FORCE_OPTIONS_FOR_ARCH
 	select ARCH_ANY_ENDIAN
 
 config ARCH_CFLAGS
-	string
+	string "Specifically needed CFLAGS for compilation"
 	default "-mno-split-addresses"
 
 choice

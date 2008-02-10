@@ -1,5 +1,5 @@
 /*
- *  $Id: card.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+ *  $Id: card.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  card.h - Driver parameters for SpellCaster ISA ISDN adapters

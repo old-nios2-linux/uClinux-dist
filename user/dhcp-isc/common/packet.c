@@ -3,74 +3,59 @@
    Packet assembly code, originally contributed by Archie Cobbs. */
 
 /*
- * Copyright (c) 1995, 1996, 1999 The Internet Software Consortium.
- * All rights reserved.
+ * Copyright (c) 2004,2005,2007 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 1996-2003 by Internet Software Consortium
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The Internet Software Consortium nor the names
- *    of its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * THIS SOFTWARE IS PROVIDED BY THE INTERNET SOFTWARE CONSORTIUM AND
- * CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE INTERNET SOFTWARE CONSORTIUM OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *   Internet Systems Consortium, Inc.
+ *   950 Charter Street
+ *   Redwood City, CA 94063
+ *   <info@isc.org>
+ *   http://www.isc.org/
  *
- * This software has been written for the Internet Software Consortium
- * by Ted Lemon <mellon@fugue.com> in cooperation with Vixie
- * Enterprises.  To learn more about the Internet Software Consortium,
- * see ``http://www.vix.com/isc''.  To learn more about Vixie
- * Enterprises, see ``http://www.vix.com''.
+ * This code was originally contributed by Archie Cobbs, and is still
+ * very similar to that contribution, although the packet checksum code
+ * has been hacked significantly with the help of quite a few ISC DHCP
+ * users, without whose gracious and thorough help the checksum code would
+ * still be disabled.
  */
-
-#ifndef lint
-#ifndef EMBED
-static char copyright[] =
-"$Id: packet.c,v 1.3 2002/02/19 02:03:13 pauli Exp $ Copyright (c) 1996 The Internet Software Consortium.  All rights reserved.\n";
-#endif /*!EMBED*/
-#endif /* not lint */
 
 #include "dhcpd.h"
 
 #if defined (PACKET_ASSEMBLY) || defined (PACKET_DECODING)
 #include "includes/netinet/ip.h"
 #include "includes/netinet/udp.h"
+#include "includes/netinet/if_ether.h"
 #endif /* PACKET_ASSEMBLY || PACKET_DECODING */
 
 /* Compute the easy part of the checksum on a range of bytes. */
 
 u_int32_t checksum (buf, nbytes, sum)
 	unsigned char *buf;
-	int nbytes;
+	unsigned nbytes;
 	u_int32_t sum;
 {
-	int i;
+	unsigned i;
 
 #ifdef DEBUG_CHECKSUM
-	debug ("checksum (%x %d %x)", buf, nbytes, sum);
+	log_debug ("checksum (%x %d %x)", buf, nbytes, sum);
 #endif
 
 	/* Checksum all the pairs of bytes first... */
-	for (i = 0; i < (nbytes & ~1); i += 2) {
+	for (i = 0; i < (nbytes & ~1U); i += 2) {
 #ifdef DEBUG_CHECKSUM_VERBOSE
-		debug ("sum = %x", sum);
+		log_debug ("sum = %x", sum);
 #endif
 		sum += (u_int16_t) ntohs(*((u_int16_t *)(buf + i)));
 		/* Add carry. */
@@ -82,7 +67,7 @@ u_int32_t checksum (buf, nbytes, sum)
 	   byte order is big-endian, so the remaining byte is the high byte. */
 	if (i < nbytes) {
 #ifdef DEBUG_CHECKSUM_VERBOSE
-		debug ("sum = %x", sum);
+		log_debug ("sum = %x", sum);
 #endif
 		sum += buf [i] << 8;
 		/* Add carry. */
@@ -93,39 +78,41 @@ u_int32_t checksum (buf, nbytes, sum)
 	return sum;
 }
 
-/* Finish computing the sum, and then put it into network byte order. */
+/* Finish computing the checksum, and then put it into network byte order. */
 
 u_int32_t wrapsum (sum)
 	u_int32_t sum;
 {
 #ifdef DEBUG_CHECKSUM
-	debug ("wrapsum (%x)", sum);
+	log_debug ("wrapsum (%x)", sum);
 #endif
 
 	sum = ~sum & 0xFFFF;
 #ifdef DEBUG_CHECKSUM_VERBOSE
-	debug ("sum = %x", sum);
+	log_debug ("sum = %x", sum);
 #endif
 	
 #ifdef DEBUG_CHECKSUM
-	debug ("wrapsum returns %x", htons (sum));
+	log_debug ("wrapsum returns %x", htons (sum));
 #endif
 	return htons(sum);
 }
 
 #ifdef PACKET_ASSEMBLY
-/* Assemble an hardware header... */
-/* XXX currently only supports ethernet; doesn't check for other types. */
-
 void assemble_hw_header (interface, buf, bufix, to)
 	struct interface_info *interface;
 	unsigned char *buf;
-	int *bufix;
+	unsigned *bufix;
 	struct hardware *to;
 {
 #if defined (HAVE_TR_SUPPORT)
-	if (interface -> hw_address.htype == HTYPE_IEEE802)
+	if (interface -> hw_address.hbuf [0] == HTYPE_IEEE802)
 		assemble_tr_header (interface, buf, bufix, to);
+	else
+#endif
+#if defined (DEC_FDDI)
+	     if (interface -> hw_address.hbuf [0] == HTYPE_FDDI)
+		     assemble_fddi_header (interface, buf, bufix, to);
 	else
 #endif
 		assemble_ethernet_header (interface, buf, bufix, to);
@@ -138,24 +125,24 @@ void assemble_udp_ip_header (interface, buf, bufix,
 			     from, to, port, data, len)
 	struct interface_info *interface;
 	unsigned char *buf;
-	int *bufix;
+	unsigned *bufix;
 	u_int32_t from;
 	u_int32_t to;
-	unsigned int port;
+	u_int32_t port;
 	unsigned char *data;
-	int len;
+	unsigned len;
 {
 	struct ip ip;
 	struct udphdr udp;
 
 	/* Fill out the IP header */
-	ip.ip_v = 4;
-	ip.ip_hl = 5;
+	IP_V_SET (&ip, 4);
+	IP_HL_SET (&ip, 20);
 	ip.ip_tos = IPTOS_LOWDELAY;
 	ip.ip_len = htons(sizeof(ip) + sizeof(udp) + len);
 	ip.ip_id = 0;
 	ip.ip_off = 0;
-	ip.ip_ttl = 16;
+	ip.ip_ttl = 128;
 	ip.ip_p = IPPROTO_UDP;
 	ip.ip_sum = 0;
 	ip.ip_src.s_addr = from;
@@ -195,16 +182,22 @@ void assemble_udp_ip_header (interface, buf, bufix,
 
 #ifdef PACKET_DECODING
 /* Decode a hardware header... */
+/* XXX currently only supports ethernet; doesn't check for other types. */
 
 ssize_t decode_hw_header (interface, buf, bufix, from)
      struct interface_info *interface;
      unsigned char *buf;
-     int bufix;
+     unsigned bufix;
      struct hardware *from;
 {
 #if defined (HAVE_TR_SUPPORT)
-	if (interface -> hw_address.htype == HTYPE_IEEE802)
+	if (interface -> hw_address.hbuf [0] == HTYPE_IEEE802)
 		return decode_tr_header (interface, buf, bufix, from);
+	else
+#endif
+#if defined (DEC_FDDI)
+	     if (interface -> hw_address.hbuf [0] == HTYPE_FDDI)
+		     return decode_fddi_header (interface, buf, bufix, from);
 	else
 #endif
 		return decode_ethernet_header (interface, buf, bufix, from);
@@ -212,17 +205,17 @@ ssize_t decode_hw_header (interface, buf, bufix, from)
 
 /* UDP header and IP header decoded together for convenience. */
 
-ssize_t decode_udp_ip_header (interface, buf, bufix, from, data, buflen)
-	struct interface_info *interface;
-	unsigned char *buf;
-	int bufix;
-	struct sockaddr_in *from;
-	unsigned char *data;
-	int buflen;
+ssize_t
+decode_udp_ip_header(struct interface_info *interface,
+		     unsigned char *buf, unsigned bufix,
+		     struct sockaddr_in *from, unsigned buflen,
+		     unsigned *rbuflen)
 {
-  struct ip *ip;
-  struct udphdr *udp;
-  u_int32_t ip_len = (buf [bufix] & 0xf) << 2;
+  unsigned char *data;
+  struct ip ip;
+  struct udphdr udp;
+  unsigned char *upp, *endbuf;
+  u_int32_t ip_len, ulen, pkt_len;
   u_int32_t sum, usum;
   static int ip_packets_seen;
   static int ip_packets_bad_checksum;
@@ -230,20 +223,67 @@ ssize_t decode_udp_ip_header (interface, buf, bufix, from, data, buflen)
   static int udp_packets_bad_checksum;
   static int udp_packets_length_checked;
   static int udp_packets_length_overflow;
-  int len;
+  unsigned len;
 
-  ip = (struct ip *)(buf + bufix);
-  udp = (struct udphdr *)(buf + bufix + ip_len);
+  /* Designate the end of the input buffer for bounds checks. */
+  endbuf = buf + bufix + buflen;
+
+  /* Assure there is at least an IP header there. */
+  if ((buf + bufix + sizeof(ip)) > endbuf)
+	  return -1;
+
+  /* Copy the IP header into a stack aligned structure for inspection.
+   * There may be bits in the IP header that we're not decoding, so we
+   * copy out the bits we grok and skip ahead by ip.ip_hl * 4.
+   */
+  upp = buf + bufix;
+  memcpy(&ip, upp, sizeof(ip));
+  ip_len = (*upp & 0x0f) << 2;
+  upp += ip_len;
+
+  /* Check the IP packet length. */
+  pkt_len = ntohs(ip.ip_len);
+  if (pkt_len > buflen)
+	return -1;
+
+  /* Assure after ip_len bytes that there is enough room for a UDP header. */
+  if ((upp + sizeof(udp)) > endbuf)
+	  return -1;
+
+  /* Copy the UDP header into a stack aligned structure for inspection. */
+  memcpy(&udp, upp, sizeof(udp));
 
 #ifdef USERLAND_FILTER
   /* Is it a UDP packet? */
-  if (ip -> ip_p != IPPROTO_UDP)
+  if (ip.ip_p != IPPROTO_UDP)
 	  return -1;
 
   /* Is it to the port we're serving? */
-  if (udp -> uh_dport != local_port)
+  if (udp.uh_dport != local_port)
 	  return -1;
 #endif /* USERLAND_FILTER */
+
+  ulen = ntohs(udp.uh_ulen);
+  if (ulen < sizeof(udp))
+	return -1;
+
+  udp_packets_length_checked++;
+  if ((upp + ulen) > endbuf) {
+	udp_packets_length_overflow++;
+	if ((udp_packets_length_checked > 4) &&
+	    ((udp_packets_length_checked /
+	      udp_packets_length_overflow) < 2)) {
+		log_info("%d udp packets in %d too long - dropped",
+			 udp_packets_length_overflow,
+			 udp_packets_length_checked);
+		udp_packets_length_overflow = 0;
+		udp_packets_length_checked = 0;
+	}
+	return -1;
+  }
+
+  if ((ulen < sizeof(udp)) || ((upp + ulen) > endbuf))
+	return -1;
 
   /* Check the IP header checksum - it should be zero. */
   ++ip_packets_seen;
@@ -251,73 +291,54 @@ ssize_t decode_udp_ip_header (interface, buf, bufix, from, data, buflen)
 	  ++ip_packets_bad_checksum;
 	  if (ip_packets_seen > 4 &&
 	      (ip_packets_seen / ip_packets_bad_checksum) < 2) {
-		  note ("%d bad IP checksums seen in %d packets",
-			ip_packets_bad_checksum, ip_packets_seen);
+		  log_info ("%d bad IP checksums seen in %d packets",
+			    ip_packets_bad_checksum, ip_packets_seen);
 		  ip_packets_seen = ip_packets_bad_checksum = 0;
 	  }
 	  return -1;
   }
 
-  /* Check the IP packet length. */
-  if (ntohs (ip -> ip_len) != buflen)
-	  debug ("ip length %d disagrees with bytes received %d.",
-		 ntohs (ip -> ip_len), buflen);
-
   /* Copy out the IP source address... */
-  memcpy (&from -> sin_addr, &ip -> ip_src, 4);
+  memcpy(&from->sin_addr, &ip.ip_src, 4);
 
   /* Compute UDP checksums, including the ``pseudo-header'', the UDP
      header and the data.   If the UDP checksum field is zero, we're
      not supposed to do a checksum. */
 
-  if (!data) {
-	  data = buf + bufix + ip_len + sizeof *udp;
-	  len = ntohs (udp -> uh_ulen) - sizeof *udp;
-	  ++udp_packets_length_checked;
-	  if (len + data > buf + bufix + buflen) {
-		  ++udp_packets_length_overflow;
-		  if (udp_packets_length_checked > 4 &&
-		      (udp_packets_length_checked /
-		       udp_packets_length_overflow) < 2) {
-			  note ("%d udp packets in %d too long - dropped",
-				udp_packets_length_overflow,
-				udp_packets_length_checked);
-			  udp_packets_length_overflow =
-				  udp_packets_length_checked = 0;
-		  }
-		  return -1;
-	  }
-	  if (len + data != buf + bufix + buflen)
-		  debug ("accepting packet with data after udp payload.");
-  }
+  data = upp + sizeof(udp);
+  len = ulen - sizeof(udp);
 
-  usum = udp -> uh_sum;
-  udp -> uh_sum = 0;
+  usum = udp.uh_sum;
+  udp.uh_sum = 0;
 
-  sum = wrapsum (checksum ((unsigned char *)udp, sizeof *udp,
-			   checksum (data, len,
-				     checksum ((unsigned char *)
-					       &ip -> ip_src,
-					       2 * sizeof ip -> ip_src,
-					       IPPROTO_UDP +
-					       (u_int32_t)
-					       ntohs (udp -> uh_ulen)))));
+  /* XXX: We have to pass &udp, because we have to zero the checksum
+   * field before calculating the sum...'upp' isn't zeroed.
+   */
+  sum = wrapsum(checksum((unsigned char *)&udp, sizeof(udp),
+			 checksum(data, len,
+				  checksum((unsigned char *)&ip.ip_src,
+					   8, IPPROTO_UDP + ulen))));
 
   udp_packets_seen++;
   if (usum && usum != sum) {
 	  udp_packets_bad_checksum++;
 	  if (udp_packets_seen > 4 &&
 	      (udp_packets_seen / udp_packets_bad_checksum) < 2) {
-		  note ("%d bad udp checksums in %d packets",
-			udp_packets_bad_checksum, udp_packets_seen);
+		  log_info ("%d bad udp checksums in %d packets",
+			    udp_packets_bad_checksum, udp_packets_seen);
 		  udp_packets_seen = udp_packets_bad_checksum = 0;
 	  }
 	  return -1;
   }
 
   /* Copy out the port... */
-  memcpy (&from -> sin_port, &udp -> uh_sport, sizeof udp -> uh_sport);
+  memcpy (&from -> sin_port, &udp.uh_sport, sizeof udp.uh_sport);
 
-  return ip_len + sizeof *udp;
+  /* Save the length of the UDP payload. */
+  if (rbuflen != NULL)
+	*rbuflen = len;
+
+  /* Return the index to the UDP payload. */
+  return ip_len + sizeof udp;
 }
 #endif /* PACKET_DECODING */

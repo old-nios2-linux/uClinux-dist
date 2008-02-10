@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.c,v 1.1.1.1 1999/11/22 03:47:19 christ Exp $
+ * $Id: capiutil.c,v 1.1.1.1 1999-11-22 03:47:19 christ Exp $
  *
  * CAPI 2.0 convert capi message to capi message struct
  *
@@ -7,7 +7,7 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capiutil.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:19  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:19  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.3.2.1  1998/08/03 15:52:21  paul

@@ -18,7 +18,7 @@
  * Daniel Djamaludin <ddjamaludin@cyberguard.com>
  * Copyright (C) 2004-2005 Intel Corporation.  All Rights Reserved.
  *
- * RCSID $Id: pluto_crypt.c,v 1.19.2.2 2007/04/06 17:03:36 paul Exp $
+ * RCSID $Id: pluto_crypt.c,v 1.19.2.2 2007-04-06 17:03:36 paul Exp $
  */
 
 #include <stdlib.h>

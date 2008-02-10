@@ -1,4 +1,4 @@
-/* $Id: hscx_irq.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: hscx_irq.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *
@@ -7,7 +7,7 @@
  * This is an include file for fast inline IRQ stuff
  *
  * $Log: hscx_irq.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.5.2.5  1998/11/03 00:06:39  keil

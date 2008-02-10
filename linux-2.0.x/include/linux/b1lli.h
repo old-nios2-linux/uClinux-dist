@@ -1,12 +1,12 @@
 /*
- * $Id: b1lli.h,v 1.1.1.1 1999/11/22 03:47:00 christ Exp $
+ * $Id: b1lli.h,v 1.1.1.1 1999-11-22 03:47:00 christ Exp $
  *
  * ISDN lowlevel-module for AVM B1-card.
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: b1lli.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:00  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:00  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.10  1998/10/25 14:37:35  fritz

@@ -1,4 +1,4 @@
-/* $Id: eeprom.h,v 1.1.1.1 1999/11/22 03:47:01 christ Exp $
+/* $Id: eeprom.h,v 1.1.1.1 1999-11-22 03:47:01 christ Exp $
  * eeprom.h:  Definitions for the Sun eeprom.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

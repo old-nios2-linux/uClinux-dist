@@ -475,6 +475,7 @@ int session_connect(struct session *ses)
     int ret;
     int bad_sid = -1;
     int bad_cnt = 0;
+    time_t send_time;
 
     if(ses->init_disc){
 	ret = (*ses->init_disc)(ses, NULL, &p_out);
@@ -484,6 +485,7 @@ int session_connect(struct session *ses)
     /* main discovery loop */
 
 
+    send_time = time(NULL);
     while(ses->retransmits <= ses->retries || ses->retries==-1 ){
 
 		fd_set in;
@@ -496,13 +498,12 @@ int session_connect(struct session *ses)
 		}
 
 		if(ses->retransmits>=0){
-			tv.tv_sec = 1 << ses->retransmits;
+			tv.tv_sec = send_time + (1 << ses->retransmits) - time(NULL);
 			tv.tv_usec = 0;
 
-			tv.tv_sec = tv.tv_sec <= MAX_WAIT_SECONDS ? tv.tv_sec : MAX_WAIT_SECONDS;
+			tv.tv_sec = tv.tv_sec < 0 ? 0 : tv.tv_sec <= MAX_WAIT_SECONDS ? tv.tv_sec : MAX_WAIT_SECONDS;
 
 			ret = select(MAX(disc_sock, ses_sock) + 1, &in, NULL, NULL, &tv);
-			++ses->retransmits;
 		}else{
 			ret = select(MAX(disc_sock, ses_sock) + 1, &in, NULL, NULL, NULL);
 		}
@@ -522,6 +523,10 @@ int session_connect(struct session *ses)
 			} else if (p_out) {
 				poe_dbglog(ses, "Sending discovery %P", p_out);
 				send_disc(ses,p_out);
+			}
+			if(ses->retransmits>=0){
+				send_time = time(NULL);
+				++ses->retransmits;
 			}
 			continue;
 		}

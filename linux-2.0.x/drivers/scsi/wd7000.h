@@ -1,4 +1,4 @@
-/* $Id: wd7000.h,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $
+/* $Id: wd7000.h,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $
  *
  * Header file for the WD-7000 driver for Linux
  *

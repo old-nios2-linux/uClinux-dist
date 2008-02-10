@@ -16,10 +16,8 @@ Erich Titl helped with some of the configure automake checks.
 
 Vladislav Moskovets suggested the include directive.
 
-Andreas Brodmann provided the incentive to do haserll (lua)
+Andreas Brodmann provided the incentive to add lua support.
 
-The haserldb sha256 functions are GPL'ed code from Christophe Devine
-See  http://www.cr0.net:8040/code/crypto/sha256/ for the original source.
-
-
+Robin Haberkorn supplied the luac (precompiled lua) support, and then
+did so a second time after the entire source tree was reformatted. 
 

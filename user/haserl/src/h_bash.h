@@ -6,11 +6,9 @@
 
 
 /* the "names" for the pipes to the subshell */
-enum pipe_t { PARENT_IN, PARENT_OUT, PARENT_CTRLIN, CHILD_CTRLOUT };
+enum pipe_t { PARENT_IN, PARENT_OUT };
 
 /* h_bash.c */
-void bash_sig_handler(int signo);
-void bash_open(char *shell);
 void bash_destroy(void);
 void bash_exec(buffer_t *buf, char *str);
 void bash_wait(buffer_t *buf, char *str);

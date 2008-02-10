@@ -4,7 +4,7 @@
  *  DESCR: serial console for TI's 16552 serial controller
  */
 
-#ident "$Id: mon960_console.c,v 1.2 2002/06/18 00:31:50 gerg Exp $"
+#ident "$Id: mon960_console.c,v 1.2 2002-06-18 00:31:50 gerg Exp $"
 
 #include <linux/tty.h>
 #include <linux/tty_driver.h>

@@ -18,7 +18,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: cgi_header.c,v 1.7 2004/08/09 02:04:08 pauli Exp $
+ * $Id: cgi_header.c,v 1.7 2004-08-09 02:04:08 pauli Exp $
  */
 
 #include "boa.h"

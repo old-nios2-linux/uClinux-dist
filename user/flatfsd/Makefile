@@ -6,11 +6,12 @@ VERSION = 3.0.1
 
 ######################################################
 
-EXEC = flatfsd
-OBJS = flatfsd.o newfs.o reboot.o
+TARGETS = flatfsd
+FLATFSD_OBJS = flatfsd.o newfs.o reboot.o
+FLATFS_OBJS = flatfs.o flatfs1.o ops.o
 
 # force error checking on compile
-CFLAGS += -Wall -Werror
+CFLAGS += -Wall -Werror -Wmissing-prototypes
 
 # CFLAGS += -DDEBUG
 
@@ -34,7 +35,7 @@ ifdef CONFIG_USER_FLATFSD_AUTO
 endif
 
 ifdef CONFIG_USER_FLATFSD_COMPRESSED
-	OBJS += flatfs3.o
+	FLATFS_OBJS += flatfs3.o
 	EXTRA_LIBS = -lz
 endif
 
@@ -42,17 +43,20 @@ endif
 
 ifdef USING_DISKLIKE_DEVICE_y
 CFLAGS += -DUSING_DISKLIKE_DEVICE=1
-OBJS += flatfs.o flatfs1.o disk.o ops.o
+FLATFS_OBJS += disk.o
+TARGETS += flatfs
 SUBSYS = disk
 else
 ifdef USING_MTD_DEVICE_y
 CFLAGS += -DUSING_MTD_DEVICE=1
-OBJS += flatfs.o flatfs1.o mtd.o ops.o
+FLATFS_OBJS += mtd.o
+TARGETS += flatfs
 SUBSYS = mtd
 else
 ifdef USING_BLKMEM_DEVICE_y
 CFLAGS += -DUSING_BLKMEM_DEVICE=1
-OBJS += flatfs.o flatfs1.o blkmem.o ops.o
+FLATFS_OBJS += blkmem.o
+TARGETS += flatfs
 SUBSYS = blkmem
 else
 ifdef USING_FLASH_FILESYSTEM_y
@@ -67,6 +71,8 @@ endif
 
 ifdef CONFIG_PROP_LOGD_LOGD
 CFLAGS += -DLOGGING
+FLATFSD_OBJS += log.o
+FLATFS_OBJS += log.o
 endif
 ifdef CONFIG_USER_FLATFSD_HAS_RTC
 CFLAGS += -DHAS_RTC
@@ -76,19 +82,25 @@ CFLAGS += -DFLATFSD_VERSION='"$(VERSION)$(SUBSYS)"'
 
 ######################################################
 
-all:: $(EXEC)
+all:: $(TARGETS)
 
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(EXTRA_LIBS) $(LDLIBS)
+flatfsd: $(FLATFSD_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(FLATFSD_OBJS) $(EXTRA_LIBS) $(LDLIBS)
+
+flatfs: $(FLATFS_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(FLATFS_OBJS) $(EXTRA_LIBS) $(LDLIBS)
 
 romfs:
-	$(ROMFSINST) /bin/$(EXEC)
+	for target in $(TARGETS) ; do \
+		$(ROMFSINST) /bin/$$target; \
+	done
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o
+	-rm -f flatfsd flatfs *.elf *.gdb *.o
 
 ######################################################
 
-$(OBJS): Makefile flatfs.h
+$(FLATFSD_OBJS) $(FLATFS_OBJS): Makefile flatfs.h
+reboot.o flatfsd.o: reboot.h
 
 ######################################################

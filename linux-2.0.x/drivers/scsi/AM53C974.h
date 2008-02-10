@@ -22,7 +22,7 @@
 
 /*
  * $Log: AM53C974.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:26  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:26  christ
  * Importing new-wave v1.0.4
  *
  */

@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: niccy.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
 
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -8,7 +8,7 @@
  * Thanks to Dr. Neuhaus and SAGEM for informations
  *
  * $Log: niccy.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.4  1998/04/16 19:18:19  keil

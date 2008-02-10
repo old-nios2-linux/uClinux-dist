@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: spdb_struct.c,v 1.13.2.15 2007/05/13 21:56:48 paul Exp $
+ * RCSID $Id: spdb_struct.c,v 1.13.2.15 2007-05-13 21:56:48 paul Exp $
  */
 
 #include <stdio.h>

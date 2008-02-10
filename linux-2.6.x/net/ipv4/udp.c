@@ -98,6 +98,7 @@
 #include <linux/skbuff.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <net/net_namespace.h>
 #include <net/icmp.h>
 #include <net/route.h>
 #include <net/checksum.h>
@@ -109,16 +110,13 @@
  *	Snmp MIB for the UDP layer
  */
 
-static xfrm4_rcv_encap_t xfrm4_rcv_encap_func;
-
 DEFINE_SNMP_STAT(struct udp_mib, udp_statistics) __read_mostly;
 
 struct hlist_head udp_hash[UDP_HTABLE_SIZE];
 DEFINE_RWLOCK(udp_hash_lock);
 
-static int udp_port_rover;
-
-static inline int __udp_lib_lport_inuse(__u16 num, struct hlist_head udptable[])
+static inline int __udp_lib_lport_inuse(__u16 num,
+					const struct hlist_head udptable[])
 {
 	struct sock *sk;
 	struct hlist_node *node;
@@ -135,11 +133,10 @@ static inline int __udp_lib_lport_inuse(__u16 num, struct hlist_head udptable[])
  *  @sk:          socket struct in question
  *  @snum:        port number to look up
  *  @udptable:    hash list table, must be of UDP_HTABLE_SIZE
- *  @port_rover:  pointer to record of last unallocated port
  *  @saddr_comp:  AF-dependent comparison of bound local IP addresses
  */
 int __udp_lib_get_port(struct sock *sk, unsigned short snum,
-		       struct hlist_head udptable[], int *port_rover,
+		       struct hlist_head udptable[],
 		       int (*saddr_comp)(const struct sock *sk1,
 					 const struct sock *sk2 )    )
 {
@@ -149,49 +146,57 @@ int __udp_lib_get_port(struct sock *sk, unsigned short snum,
 	int    error = 1;
 
 	write_lock_bh(&udp_hash_lock);
-	if (snum == 0) {
-		int best_size_so_far, best, result, i;
 
-		if (*port_rover > sysctl_local_port_range[1] ||
-		    *port_rover < sysctl_local_port_range[0])
-			*port_rover = sysctl_local_port_range[0];
-		best_size_so_far = 32767;
-		best = result = *port_rover;
-		for (i = 0; i < UDP_HTABLE_SIZE; i++, result++) {
-			int size;
+	if (!snum) {
+		int i, low, high, remaining;
+		unsigned rover, best, best_size_so_far;
 
-			head = &udptable[result & (UDP_HTABLE_SIZE - 1)];
-			if (hlist_empty(head)) {
-				if (result > sysctl_local_port_range[1])
-					result = sysctl_local_port_range[0] +
-						((result - sysctl_local_port_range[0]) &
-						 (UDP_HTABLE_SIZE - 1));
+		inet_get_local_port_range(&low, &high);
+		remaining = (high - low) + 1;
+
+		best_size_so_far = UINT_MAX;
+		best = rover = net_random() % remaining + low;
+
+		/* 1st pass: look for empty (or shortest) hash chain */
+		for (i = 0; i < UDP_HTABLE_SIZE; i++) {
+			int size = 0;
+
+			head = &udptable[rover & (UDP_HTABLE_SIZE - 1)];
+			if (hlist_empty(head))
 				goto gotit;
-			}
-			size = 0;
+
 			sk_for_each(sk2, node, head) {
 				if (++size >= best_size_so_far)
 					goto next;
 			}
 			best_size_so_far = size;
-			best = result;
+			best = rover;
 		next:
-			;
+			/* fold back if end of range */
+			if (++rover > high)
+				rover = low + ((rover - low)
+					       & (UDP_HTABLE_SIZE - 1));
+
+
 		}
-		result = best;
-		for (i = 0; i < (1 << 16) / UDP_HTABLE_SIZE;
-		     i++, result += UDP_HTABLE_SIZE) {
-			if (result > sysctl_local_port_range[1])
-				result = sysctl_local_port_range[0]
-					+ ((result - sysctl_local_port_range[0]) &
-					   (UDP_HTABLE_SIZE - 1));
-			if (! __udp_lib_lport_inuse(result, udptable))
-				break;
+
+		/* 2nd pass: find hole in shortest hash chain */
+		rover = best;
+		for (i = 0; i < (1 << 16) / UDP_HTABLE_SIZE; i++) {
+			if (! __udp_lib_lport_inuse(rover, udptable))
+				goto gotit;
+			rover += UDP_HTABLE_SIZE;
+			if (rover > high)
+				rover = low + ((rover - low)
+					       & (UDP_HTABLE_SIZE - 1));
 		}
-		if (i >= (1 << 16) / UDP_HTABLE_SIZE)
-			goto fail;
+
+
+		/* All ports in use! */
+		goto fail;
+
 gotit:
-		*port_rover = snum = result;
+		snum = rover;
 	} else {
 		head = &udptable[snum & (UDP_HTABLE_SIZE - 1)];
 
@@ -204,6 +209,7 @@ gotit:
 			    (*saddr_comp)(sk, sk2)                             )
 				goto fail;
 	}
+
 	inet_sk(sk)->num = snum;
 	sk->sk_hash = snum;
 	if (sk_unhashed(sk)) {
@@ -220,7 +226,7 @@ fail:
 int udp_get_port(struct sock *sk, unsigned short snum,
 			int (*scmp)(const struct sock *, const struct sock *))
 {
-	return  __udp_lib_get_port(sk, snum, udp_hash, &udp_port_rover, scmp);
+	return  __udp_lib_get_port(sk, snum, udp_hash, scmp);
 }
 
 int ipv4_rcv_saddr_equal(const struct sock *sk1, const struct sock *sk2)
@@ -925,37 +931,124 @@ int udp_disconnect(struct sock *sk, int flags)
 
 #if defined(CONFIG_XFRM) || defined(CONFIG_IPSEC_NAT_TRAVERSAL)
 
-/* if XFRM isn't a module, then register it directly. */
-#if 0 && !defined(CONFIG_XFRM_MODULE) && !defined(CONFIG_IPSEC_NAT_TRAVERSAL)
-static xfrm4_rcv_encap_t xfrm4_rcv_encap_func = xfrm4_rcv_encap;
-#else
 static xfrm4_rcv_encap_t xfrm4_rcv_encap_func = NULL;
-#endif
 
-int udp4_register_esp_rcvencap(xfrm4_rcv_encap_t func
-			       , xfrm4_rcv_encap_t *oldfunc)
+/*
+ * de-encapsulate and pass to the registered xfrm4_rcv_encap_func function.
+ * Most of this code stolen from net/ipv4/xfrm4_input.c
+ * which is attributed to YOSHIFUJI Hideaki @USAGI, and
+ * Derek Atkins <derek@ihtfp.com>
+ */
+
+static int xfrm4_udp_encap_rcv_wrapper(struct sock *sk, struct sk_buff *skb)
 {
-  if(oldfunc != NULL) {
-    *oldfunc = xfrm4_rcv_encap_func;
-  }
+	struct udp_sock *up = udp_sk(sk);
+	struct udphdr *uh;
+	struct iphdr *iph;
+	int iphlen, len;
+	int ret;
 
-#if 0
-  if(xfrm4_rcv_encap_func != NULL)
-    return -1;
-#endif
+	__u8 *udpdata;
+	__be32 *udpdata32;
+	__u16 encap_type = up->encap_type;
 
-  xfrm4_rcv_encap_func = func;
-  return 0;
+	/* if this is not encapsulated socket, then just return now */
+	if (!encap_type && !xfrm4_rcv_encap_func)
+		return 1;
+
+	/* If this is a paged skb, make sure we pull up
+	 * whatever data we need to look at. */
+	len = skb->len - sizeof(struct udphdr);
+	if (!pskb_may_pull(skb, sizeof(struct udphdr) + min(len, 8)))
+		return 1;
+
+	/* Now we can get the pointers */
+	uh = udp_hdr(skb);
+	udpdata = (__u8 *)uh + sizeof(struct udphdr);
+	udpdata32 = (__be32 *)udpdata;
+
+	switch (encap_type) {
+	default:
+	case UDP_ENCAP_ESPINUDP:
+		/* Check if this is a keepalive packet.  If so, eat it. */
+		if (len == 1 && udpdata[0] == 0xff) {
+			goto drop;
+		} else if (len > sizeof(struct ip_esp_hdr) && udpdata32[0] != 0) {
+			/* ESP Packet without Non-ESP header */
+			len = sizeof(struct udphdr);
+		} else
+			/* Must be an IKE packet.. pass it through */
+			return 1;
+		break;
+	case UDP_ENCAP_ESPINUDP_NON_IKE:
+		/* Check if this is a keepalive packet.  If so, eat it. */
+		if (len == 1 && udpdata[0] == 0xff) {
+			goto drop;
+		} else if (len > 2 * sizeof(u32) + sizeof(struct ip_esp_hdr) &&
+			   udpdata32[0] == 0 && udpdata32[1] == 0) {
+
+			/* ESP Packet with Non-IKE marker */
+			len = sizeof(struct udphdr) + 2 * sizeof(u32);
+		} else
+			/* Must be an IKE packet.. pass it through */
+			return 1;
+		break;
+	}
+
+	/* At this point we are sure that this is an ESPinUDP packet,
+	 * so we need to remove 'len' bytes from the packet (the UDP
+	 * header and optional ESP marker bytes) and then modify the
+	 * protocol to ESP, and then call into the transform receiver.
+	 */
+	if (skb_cloned(skb) && pskb_expand_head(skb, 0, 0, GFP_ATOMIC))
+		goto drop;
+
+	/* Now we can update and verify the packet length... */
+	iph = ip_hdr(skb);
+	iphlen = iph->ihl << 2;
+	iph->tot_len = htons(ntohs(iph->tot_len) - len);
+	if (skb->len < iphlen + len) {
+		/* packet is too small!?! */
+		goto drop;
+	}
+
+	/* pull the data buffer up to the ESP header and set the
+	 * transport header to point to ESP.  Keep UDP on the stack
+	 * for later.
+	 */
+	__skb_pull(skb, len);
+	skb_reset_transport_header(skb);
+
+	/* modify the protocol (it's ESP!) */
+	iph->protocol = IPPROTO_ESP;
+
+	/* process ESP */
+	ret = (*xfrm4_rcv_encap_func)(skb, encap_type);
+	return ret;
+
+drop:
+	kfree_skb(skb);
+	return 0;
+}
+
+int udp4_register_esp_rcvencap(xfrm4_rcv_encap_t func,
+		xfrm4_rcv_encap_t *oldfunc)
+{
+	if (oldfunc != NULL)
+		*oldfunc = xfrm4_rcv_encap_func;
+	xfrm4_rcv_encap_func = func;
+	return 0;
 }
 
 int udp4_unregister_esp_rcvencap(xfrm4_rcv_encap_t func)
 {
-  if(xfrm4_rcv_encap_func != func)
-    return -1;
+	if (xfrm4_rcv_encap_func != func)
+		return -1;
 
-  xfrm4_rcv_encap_func = NULL;
-  return 0;
+	xfrm4_rcv_encap_func = NULL;
+	return 0;
 }
+
 #endif /* CONFIG_XFRM_MODULE || CONFIG_IPSEC_NAT_TRAVERSAL */
 
 /* returns:
@@ -1182,7 +1275,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct hlist_head udptable[],
 		return __udp4_lib_mcast_deliver(skb, uh, saddr, daddr, udptable);
 
 	sk = __udp4_lib_lookup(saddr, uh->source, daddr, uh->dest,
-			       skb->dev->ifindex, udptable        );
+			       inet_iif(skb), udptable);
 
 	if (sk != NULL) {
 		int ret = udp_queue_rcv_skb(sk, skb);
@@ -1290,6 +1383,11 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 		case 0:
 		case UDP_ENCAP_ESPINUDP:
 		case UDP_ENCAP_ESPINUDP_NON_IKE:
+#if defined(CONFIG_XFRM) || defined(CONFIG_IPSEC_NAT_TRAVERSAL)
+			if (xfrm4_rcv_encap_func)
+				up->encap_rcv = xfrm4_udp_encap_rcv_wrapper;
+			else
+#endif
 			up->encap_rcv = xfrm4_udp_encap_rcv;
 			/* FALLTHROUGH */
 		case UDP_ENCAP_L2TPINUDP:
@@ -1460,6 +1558,8 @@ unsigned int udp_poll(struct file *file, struct socket *sock, poll_table *wait)
 
 }
 
+DEFINE_PROTO_INUSE(udp)
+
 struct proto udp_prot = {
 	.name		   = "UDP",
 	.owner		   = THIS_MODULE,
@@ -1482,6 +1582,7 @@ struct proto udp_prot = {
 	.compat_setsockopt = compat_udp_setsockopt,
 	.compat_getsockopt = compat_udp_getsockopt,
 #endif
+	REF_PROTO_INUSE(udp)
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1598,7 +1699,7 @@ int udp_proc_register(struct udp_seq_afinfo *afinfo)
 	afinfo->seq_fops->llseek	= seq_lseek;
 	afinfo->seq_fops->release	= seq_release_private;
 
-	p = proc_net_fops_create(afinfo->name, S_IRUGO, afinfo->seq_fops);
+	p = proc_net_fops_create(&init_net, afinfo->name, S_IRUGO, afinfo->seq_fops);
 	if (p)
 		p->data = afinfo;
 	else
@@ -1610,7 +1711,7 @@ void udp_proc_unregister(struct udp_seq_afinfo *afinfo)
 {
 	if (!afinfo)
 		return;
-	proc_net_remove(afinfo->name);
+	proc_net_remove(&init_net, afinfo->name);
 	memset(afinfo->seq_fops, 0, sizeof(*afinfo->seq_fops));
 }
 

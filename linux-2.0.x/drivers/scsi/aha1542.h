@@ -1,11 +1,11 @@
 #ifndef _AHA1542_H
 
-/* $Id: aha1542.h,v 1.1.1.1 1999/11/22 03:47:21 christ Exp $
+/* $Id: aha1542.h,v 1.1.1.1 1999-11-22 03:47:21 christ Exp $
  *
  * Header file for the adaptec 1542 driver for Linux
  *
  * $Log: aha1542.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:21  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:21  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1  1992/07/24  06:27:38  root

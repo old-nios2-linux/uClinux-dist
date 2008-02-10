@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: avm_a1p.c,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -8,7 +8,7 @@
  * Author       Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avm_a1p.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.3  1998/11/03 00:05:47  keil

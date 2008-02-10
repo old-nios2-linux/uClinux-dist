@@ -1,6 +1,6 @@
 # (C) Copyright 2001-2004, Martin Roesch, Brian Caswell, et al.
 #    All rights reserved.
-# $Id: shellcode.rules,v 1.1 2006/06/06 03:45:11 pauli Exp $
+# $Id: shellcode.rules,v 1.1 2006-06-06 03:45:11 pauli Exp $
 # ---------------
 # SHELLCODE RULES
 # ---------------

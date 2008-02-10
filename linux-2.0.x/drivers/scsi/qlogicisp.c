@@ -17,11 +17,11 @@
 /* Renamed and updated to 1.3.x by Michael Griffith <grif@cs.ucr.edu> */
 
 /*
- * $Date: 1999/11/22 03:47:27 $
+ * $Date: 1999-11-22 03:47:27 $
  * $Revision: 1.1.1.1 $
  *
  * $Log: qlogicisp.c,v $
- * Revision 1.1.1.1  1999/11/22 03:47:27  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:27  christ
  * Importing new-wave v1.0.4
  *
  * Revision 0.5  1995/09/22  02:23:15  root

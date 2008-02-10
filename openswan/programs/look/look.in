@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: look.in,v 1.33.2.2 2007/06/19 14:34:28 paul Exp $
+# RCSID $Id: look.in,v 1.33.2.2 2007-06-19 14:34:28 paul Exp $
 
 info=/var/run/pluto/ipsec.info
 me="ipsec look"

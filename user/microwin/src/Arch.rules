@@ -220,7 +220,7 @@ DEFINES += -DUNIX=1 -DLINUX=1
 FLTFLAGS += -s 64000
 SYS_LIBS = -lm
 # LDLIBS += -lgcc -lc -lgcc
-endif # end for "ifdef CONFIG_UCLINUX".
+endif # end for "ifdef CONFIG_UCLINUX"
 endif # end for "ifeq ($(CONFIG_COBRA5329), y)"
 endif # end for "ifeq ($(CONFIG_COBRA5272), y)"
 

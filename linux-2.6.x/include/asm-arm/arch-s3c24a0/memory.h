@@ -1,7 +1,7 @@
 /*
  * include/asm-arm/arch-s3c24a0/memory.h
  *
- * $Id: memory.h,v 1.2 2005/11/28 03:55:11 gerg Exp $
+ * $Id: memory.h,v 1.2 2005-11-28 03:55:11 gerg Exp $
  *
  * Copyright (C) Heechul Yun <heechul.yun@samsung.com>
  * Copyright (C) Hyok S. Choi <hyok.choi@samsung.com>

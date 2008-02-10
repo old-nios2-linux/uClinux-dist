@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include "dev.h"
+#include "ops.h"
 
 /*****************************************************************************/
 
@@ -66,11 +67,11 @@ int flat_write(off_t offset, const void *buf, size_t len)
 /*****************************************************************************/
 
 /*
- * Returns the total length of the flat device.
+ * Returns the total length of the flat device partition.
  */
-size_t flat_length(void)
+size_t flat_part_length(void)
 {
-	return flat_dev_length();
+	return flat_dev_length()/FLAT_NUM_PARTITIONS;
 }
 
 /*****************************************************************************/
@@ -119,7 +120,7 @@ int flat_open(const char *flatfs, const char *mode)
 int flat_erase(void)
 {
 	int rc;
-	rc = flat_dev_erase(0, flat_length());
+	rc = flat_dev_erase(0, flat_dev_length());
 	if (rc == 0)
 		flat_sum = 0;
 	return rc;

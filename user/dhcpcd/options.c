@@ -1,4 +1,4 @@
-/* $Id: options.c,v 1.3 2007/06/27 06:10:27 gerg Exp $
+/* $Id: options.c,v 1.3 2007-06-27 06:10:27 gerg Exp $
  *
  * dhcpcd - DHCP client daemon -
  * Copyright (C) 1996 - 1997 Yoichi Hariguchi <yoichi@fore.com>

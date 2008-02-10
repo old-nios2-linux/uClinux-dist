@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.1 2003/02/26 04:13:07 gerg Exp $ */
+/* $Id: ptrace.h,v 1.1 2003-02-26 04:13:07 gerg Exp $ */
 #ifndef _NIOS_PTRACE_H
 #define _NIOS_PTRACE_H
 

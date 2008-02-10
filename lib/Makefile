@@ -83,10 +83,15 @@ dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 
-# And build libraries in the prop directory last
-dir_6_y = $(ROOTDIR)/prop
+#
+# dir 6, 7 and 8 reserved for Makefile.local
+#
+-include Makefile.local
 
-DIRS_NUM = 1 2 3 4 5 6
+# And build libraries in the prop directory last
+dir_9_y += $(ROOTDIR)/prop
+
+DIRS_NUM = 1 2 3 4 5 6 7 8 9
 DIRS_y   = $(foreach n,$(DIRS_NUM),$(sort $(dir_$(n)_y)))
 DIRS_all = $(foreach n,$(DIRS_NUM),$(sort $(dir_$(n)_y) $(dir_$(n)_n) $(dir_$(n)_)))
 
@@ -116,6 +121,18 @@ all:
 	$(MAKE) make_links                        || exit $$?
 	[ -z "$(dir_6_y)" ] ||\
 		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_6_y)) || exit $$?
+	$(MAKE) -j1 -C ../include
+	$(MAKE) make_links                        || exit $$?
+	[ -z "$(dir_7_y)" ] ||\
+		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_7_y)) || exit $$?
+	$(MAKE) -j1 -C ../include
+	$(MAKE) make_links                        || exit $$?
+	[ -z "$(dir_8_y)" ] ||\
+		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_8_y)) || exit $$?
+	$(MAKE) -j1 -C ../include
+	$(MAKE) make_links                        || exit $$?
+	[ -z "$(dir_9_y)" ] ||\
+		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_9_y)) || exit $$?
 	$(MAKE) -j1 -C ../include
 	$(MAKE) make_links                        || exit $$?
 
@@ -189,6 +206,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libldap/builddir/libraries/libldap/.libs/*.a \
 	$(ROOTDIR)/lib/libldap/builddir/libraries/liblber/.libs/*.a \
 	$(ROOTDIR)/lib/pcre/builddir/.libs/*.a \
+	$(ROOTDIR)/prop/acld/libacld.a \
 	$(ROOTDIR)/prop/libsnapgear++/*.a $(ROOTDIR)/prop/libsnapgear++/*.so* \
 	$(ROOTDIR)/prop/libsnapgear/*.a $(ROOTDIR)/prop/libsnapgear/*.so* \
 	$(ROOTDIR)/user/tinytcl/*.a $(ROOTDIR)/user/tinytcl/*.a* \

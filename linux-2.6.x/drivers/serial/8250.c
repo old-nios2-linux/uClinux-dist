@@ -1586,7 +1586,7 @@ static int serial_link_irq_chain(struct uart_8250_port *up)
 		ret = request_irq(up->port.irq, serial8250_interrupt,
 				  irq_flags, "serial", i);
 #ifdef CONFIG_IXP4XX_DCD0
-		request_irq(7, serial8250_interrupt_dcd, SA_SHIRQ, "serial(DCD)", up);
+		request_irq(7, serial8250_interrupt_dcd, IRQF_DISABLED | IRQF_SHARED, "serial(DCD)", up);
 #endif
 		if (ret < 0)
 			serial_do_unlink(i, up);

@@ -3,7 +3,7 @@
  *
  * Manages the PoPToP sessions.
  *
- * $Id: pptpmanager.c,v 1.12 2007/07/05 23:33:09 gerg Exp $
+ * $Id: pptpmanager.c,v 1.14 2007-12-12 04:42:42 asallawa Exp $
  */
 
 #ifdef HAVE_CONFIG_H
@@ -40,10 +40,6 @@
 
 int allow_severity = LOG_WARNING;
 int deny_severity = LOG_WARNING;
-#endif
-
-#ifdef __UCLIBC__
-#define socklen_t int
 #endif
 
 #include "configfile.h"
@@ -110,6 +106,7 @@ void slot_init(int count)
 
 static void slot_slot_free(struct slot *slot)
 {
+  if (slot->pid > 0) kill(slot->pid, SIGHUP);
   slot->pid = 0;
   if (slot->local) free(slot->local);
   slot->local = NULL;

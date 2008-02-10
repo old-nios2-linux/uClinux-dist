@@ -1,4 +1,4 @@
-char radij_c_version[] = "RCSID $Id: radij.c,v 1.48.2.1 2006/10/06 21:39:27 paul Exp $";
+char radij_c_version[] = "RCSID $Id: radij.c,v 1.48.2.1 2006-10-06 21:39:27 paul Exp $";
 
 /*
  * This file is defived from ${SRC}/sys/net/radix.c of BSD 4.4lite
@@ -1006,7 +1006,7 @@ radijcleanup(void)
 
 /*
  * $Log: radij.c,v $
- * Revision 1.48.2.1  2006/10/06 21:39:27  paul
+ * Revision 1.48.2.1  2006-10-06 21:39:27  paul
  * Fix for 2.6.18+ only include linux/config.h if AUTOCONF_INCLUDED is not
  * set. This is defined through autoconf.h which is included through the
  * linux kernel build macros.

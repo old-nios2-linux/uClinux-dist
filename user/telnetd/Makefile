@@ -23,8 +23,13 @@ $(EXEC): $(OBJS)
 
 romfs:
 	$(ROMFSINST) /bin/$(EXEC)
+ifdef CONFIG_PROP_CONFIG_LIBCONFIG
+	$(ROMFSINST) -e CONFIG_USER_TELNETD_TELNETD \
+		-a "#telnet details are now in /etc/config/inetd.conf" /etc/inetd.conf
+else
 	$(ROMFSINST) -e CONFIG_USER_TELNETD_TELNETD \
 		-a "telnet  stream tcp nowait root /bin/telnetd" /etc/inetd.conf
+endif
 
 clean:
 	-rm -f $(EXEC) *.elf *.gdb *.o

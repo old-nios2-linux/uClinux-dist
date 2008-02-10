@@ -1,11 +1,11 @@
-/* $Id: isar.h,v 1.1.1.1 1999/11/22 03:47:20 christ Exp $
+/* $Id: isar.h,v 1.1.1.1 1999-11-22 03:47:20 christ Exp $
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
  * Author Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: isar.h,v $
- * Revision 1.1.1.1  1999/11/22 03:47:20  christ
+ * Revision 1.1.1.1  1999-11-22 03:47:20  christ
  * Importing new-wave v1.0.4
  *
  * Revision 1.1.2.3  1998/10/04 23:05:01  keil

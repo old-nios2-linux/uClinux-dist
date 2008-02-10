@@ -5,7 +5,7 @@
  *
  *  Swap reorganised 29.12.95, Stephen Tweedie.
  *  kswapd added: 7.1.96  sct
- *  Version: $Id: vmscan.c,v 1.3 2000/08/04 05:45:09 gerg Exp $
+ *  Version: $Id: vmscan.c,v 1.3 2000-08-04 05:45:09 gerg Exp $
  */
 
 /*

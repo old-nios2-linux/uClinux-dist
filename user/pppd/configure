@@ -1,5 +1,5 @@
 #!/bin/sh
-# $Id: configure,v 1.2 2007/06/08 04:02:36 gerg Exp $
+# $Id: configure,v 1.2 2007-06-08 04:02:36 gerg Exp $
 
 # Where to install stuff by default
 DESTDIR=/usr/local

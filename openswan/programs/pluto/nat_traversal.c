@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: nat_traversal.c,v 1.26.2.10 2007/07/09 23:08:47 paul Exp $
+ * RCSID $Id: nat_traversal.c,v 1.26.2.12 2007-11-07 02:38:21 paul Exp $
  */
 
 #ifdef NAT_TRAVERSAL
@@ -199,6 +199,7 @@ bool nat_traversal_add_vid(u_int8_t np, pb_stream *outs)
 		      
 	if (nat_traversal_support_port_floating) {
 		if (r) r = out_vendorid(np, outs, VID_NATT_RFC);
+		if (r) r = out_vendorid(np, outs, VID_NATT_IETF_05);
 		if (r) r = out_vendorid(np, outs, VID_NATT_IETF_03);
 		if (r) r = out_vendorid(np, outs, VID_NATT_IETF_02);
 		if (r) r = out_vendorid(np, outs, VID_NATT_IETF_02_N);
@@ -214,18 +215,16 @@ u_int32_t nat_traversal_vid_to_method(unsigned short nat_t_vid)
 	switch (nat_t_vid) {
 		case VID_NATT_IETF_00:
 			return LELEM(NAT_TRAVERSAL_IETF_00_01);
-			break;
 		case VID_NATT_IETF_02:
 		case VID_NATT_IETF_02_N:
 		case VID_NATT_IETF_03:
 			return LELEM(NAT_TRAVERSAL_IETF_02_03);
-			break;
+		case VID_NATT_IETF_05:
+			return LELEM(NAT_TRAVERSAL_IETF_05);
 		case VID_NATT_DRAFT_IETF_IPSEC_NAT_T_IKE:
 			return LELEM(NAT_TRAVERSAL_OSX);
-			break;
 		case VID_NATT_RFC:
 			return LELEM(NAT_TRAVERSAL_RFC);
-			break;
 	}
 	return 0;
 }
@@ -566,11 +565,14 @@ void nat_traversal_show_result (u_int32_t nt, u_int16_t sport)
 	case LELEM(NAT_TRAVERSAL_IETF_02_03):
 	    mth = natt_type_bitnames[1];
 	    break;
-	case LELEM(NAT_TRAVERSAL_OSX):
+	case LELEM(NAT_TRAVERSAL_IETF_05):
 	    mth = natt_type_bitnames[2];
 	    break;
-	case LELEM(NAT_TRAVERSAL_RFC):
+	case LELEM(NAT_TRAVERSAL_OSX):
 	    mth = natt_type_bitnames[3];
+	    break;
+	case LELEM(NAT_TRAVERSAL_RFC):
+	    mth = natt_type_bitnames[4];
 	    break;
 	}
 	switch (nt & NAT_T_DETECTED) {
@@ -976,6 +978,14 @@ void process_pfkey_nat_t_new_mapping(
 
 /*
  * $Log: nat_traversal.c,v $
+ * Revision 1.26.2.12  2007-11-07 02:38:21  paul
+ * backport of f3a4c57e3cca974d2bb776d1a063cfff3178bab7.
+ * Changes to NAT-T vendor ID, fixed to make test case pass.
+ *
+ * Revision 1.26.2.11  2007-10-28 07:00:22  paul
+ * Added draft-ietf-ipsec-nat-t-ike-05 (80d0bb3def54565ee84645d4c85ce3ee)
+ * used in OSX.
+ *
  * Revision 1.26.2.10  2007/07/09 23:08:47  paul
  * Ensured two debug lines only appear when plutodebug=control is specified.
  *
@@ -1068,6 +1078,6 @@ void process_pfkey_nat_t_new_mapping(
  * 	added log info.
  *
  *
- * $Id: nat_traversal.c,v 1.26.2.10 2007/07/09 23:08:47 paul Exp $
+ * $Id: nat_traversal.c,v 1.26.2.12 2007-11-07 02:38:21 paul Exp $
  *
  */

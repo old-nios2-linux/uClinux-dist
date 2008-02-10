@@ -3,13 +3,13 @@
  *
  * $Source: /cvs/sw/new-wave/user/e2fsprogs/lib/ss/test_ss.c,v $
  * $Revision: 1.1.1.2 $
- * $Date: 2006/09/06 01:35:43 $
+ * $Date: 2006-09-06 01:35:43 $
  * $State: Exp $
  * $Author: steveb $
  * $Locker:  $
  *
  * $Log: test_ss.c,v $
- * Revision 1.1.1.2  2006/09/06 01:35:43  steveb
+ * Revision 1.1.1.2  2006-09-06 01:35:43  steveb
  * #11827 Import of e2fsprogs version 1.39
  *
  * Revision 1.13  1997/04/29 21:26:37  tytso
@@ -36,7 +36,7 @@
 
 #ifndef lint
 static char const rcsid_test_c[] =
-    "$Header: /cvs/sw/new-wave/user/e2fsprogs/lib/ss/test_ss.c,v 1.1.1.2 2006/09/06 01:35:43 steveb Exp $";
+    "$Header: /cvs/sw/new-wave/user/e2fsprogs/lib/ss/test_ss.c,v 1.1.1.2 2006-09-06 01:35:43 steveb Exp $";
 #endif /* lint */
 
 #include <stdio.h>

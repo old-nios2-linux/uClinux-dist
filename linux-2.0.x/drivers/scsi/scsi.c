@@ -64,7 +64,7 @@
 #undef USE_STATIC_SCSI_MEMORY
 
 /*
-static const char RCSid[] = "$Header: /cvs/sw/linux-2.0.x/drivers/scsi/scsi.c,v 1.1.1.1 1999/11/22 03:47:22 christ Exp $";
+static const char RCSid[] = "$Header: /cvs/sw/linux-2.0.x/drivers/scsi/scsi.c,v 1.1.1.1 1999-11-22 03:47:22 christ Exp $";
 */
 
 

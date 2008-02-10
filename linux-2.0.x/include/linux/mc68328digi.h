@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------*/
-/* $Id: mc68328digi.h,v 1.1 2001/11/21 14:54:30 gerg Exp $
+/* $Id: mc68328digi.h,v 1.1 2001-11-21 14:54:30 gerg Exp $
  *
  * linux/drivers/char/mc68328digi.h - Touch screen driver.
  *                                    Header file.

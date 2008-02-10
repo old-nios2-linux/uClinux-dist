@@ -19,7 +19,7 @@
  * for more details.
  */
 
-char ipsec_rcv_c_version[] = "RCSID $Id: ipsec_rcv.c,v 1.171.2.11 2007/04/28 20:46:40 paul Exp $";
+char ipsec_rcv_c_version[] = "RCSID $Id: ipsec_rcv.c,v 1.171.2.15 2007-10-30 21:37:45 paul Exp $";
 
 #ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
@@ -275,7 +275,7 @@ struct {
 	[IPSEC_RSM_DECAP_CHK]  = {ipsec_rcv_decap_chk,  IPSEC_RSM_AUTH_INIT },
 	[IPSEC_RSM_AUTH_INIT]  = {ipsec_rcv_auth_init,  IPSEC_RSM_AUTH_CALC },
 	[IPSEC_RSM_AUTH_CALC]  = {ipsec_rcv_auth_calc,  IPSEC_RSM_AUTH_CHK },
-	[IPSEC_RSM_AUTH_CHK]   = {ipsec_rcv_auth_chk,  IPSEC_RSM_DECRYPT },
+	[IPSEC_RSM_AUTH_CHK]   = {ipsec_rcv_auth_chk,   IPSEC_RSM_DECRYPT },
 	[IPSEC_RSM_DECRYPT]    = {ipsec_rcv_decrypt,    IPSEC_RSM_DECAP_CONT },
 	[IPSEC_RSM_DECAP_CONT] = {ipsec_rcv_decap_cont, IPSEC_RSM_CLEANUP },
 	[IPSEC_RSM_CLEANUP]    = {ipsec_rcv_cleanup,    IPSEC_RSM_IPCOMP },
@@ -1133,8 +1133,12 @@ ipsec_rcv_auth_calc(struct ipsec_rcv_state *irs)
 static enum ipsec_rcv_value
 ipsec_rcv_auth_chk(struct ipsec_rcv_state *irs)
 {
-	KLIPS_PRINT(debug_rcv, "klips_debug: %s(st=%d,nxt=%d)\n", __FUNCTION__,
-			irs->state, irs->next_state);
+	KLIPS_PRINT(debug_rcv, "klips_debug: %s(st=%d,nxt=%d) - %s\n", __FUNCTION__,
+			irs->state, irs->next_state,
+			irs->auth_checked ? "already checked" : "will check");
+
+	if (irs->auth_checked)
+		return IPSEC_RCV_OK;
 
 	if(irs->authfuncs ||
 #ifdef CONFIG_KLIPS_OCF
@@ -1195,6 +1199,7 @@ ipsec_rcv_auth_chk(struct ipsec_rcv_state *irs)
 			}
 			return IPSEC_RCV_REPLAYROLLED;
 		}
+		irs->auth_checked = 1;
 	}
 	return IPSEC_RCV_OK;
 }
@@ -1223,9 +1228,19 @@ ipsec_rcv_decap_cont(struct ipsec_rcv_state *irs)
 	struct in_addr ipsaddr;
 	struct in_addr ipdaddr;
 	struct ipsec_sa *ipsnext = NULL; /* next SA towards inside of packet */
+	enum ipsec_rcv_value rv;
 
 	KLIPS_PRINT(debug_rcv, "klips_debug: %s(st=%d,nxt=%d)\n", __FUNCTION__,
 			irs->state, irs->next_state);
+
+	/*
+	 * if we haven't checked the auth values yet, do it now.
+	 * This is needed for the case where drivers do crypt+hash
+	 * in one operation.
+	 */
+	rv = ipsec_rcv_auth_chk(irs);
+	if (rv != IPSEC_RCV_OK)
+		return rv;
 
 	/*
 	 *	Adjust pointers after decrypt
@@ -1386,7 +1401,7 @@ ipsec_rcv_cleanup(struct ipsec_rcv_state *irs)
 	   */
 	  __u32 natt_oa = ipsp->ips_natt_oa ?
 	    ((struct sockaddr_in*)(ipsp->ips_natt_oa))->sin_addr.s_addr : 0;
-	  __u16 pkt_len = skb->tail - (unsigned char *)ipp;
+	  __u16 pkt_len = skb_tail_pointer(skb) - (unsigned char *)ipp;
 	  __u16 data_len = pkt_len - (ipp->ihl << 2);
   	  
 	  switch (ipp->protocol) {
@@ -1430,21 +1445,24 @@ ipsec_rcv_cleanup(struct ipsec_rcv_state *irs)
 			    "NAT-T & TRANSPORT: UDP checksum already 0\n");
 	      }
 	      else if (natt_oa) {
-		__u32 buff[2] = { ~natt_oa, ipp->saddr };
 		KLIPS_PRINT(debug_rcv,
 			    "klips_debug:ipsec_rcv: "
 			    "NAT-T & TRANSPORT: "
 			    "fix UDP checksum using NAT-OA\n");
 #ifdef DISABLE_UDP_CHECKSUM
-		udp->check=0
+		udp->check=0;
 		KLIPS_PRINT(debug_rcv,
 			    "klips_debug:ipsec_rcv: "
 			    "NAT-T & TRANSPORT: "
 			    "UDP checksum using NAT-OA disabled at compile time\n");
 #else
-		udp->check = csum_fold(
-				       csum_partial((unsigned char *)buff, sizeof(buff),
-						    udp->check^0xffff));
+		{
+		    __u32 buff[2] = { ~natt_oa, ipp->saddr };
+
+		    udp->check = csum_fold(
+					   csum_partial((unsigned char *)buff, sizeof(buff),
+							udp->check^0xffff));
+		}
 #endif
 	      }
 	      else {
@@ -1570,10 +1588,10 @@ ipsec_rcv_cleanup(struct ipsec_rcv_state *irs)
 		/* re-do any strings for debugging */
 		ipsaddr.s_addr = ipp->saddr;
 		if (debug_rcv)
-		addrtoa(ipsaddr, 0, irs->ipsaddr_txt, sizeof(irs->ipsaddr_txt));
+			addrtoa(ipsaddr, 0, irs->ipsaddr_txt, sizeof(irs->ipsaddr_txt));
 		ipdaddr.s_addr = ipp->daddr;
 		if (debug_rcv)
-		addrtoa(ipdaddr, 0, irs->ipdaddr_txt, sizeof(irs->ipdaddr_txt));
+			addrtoa(ipdaddr, 0, irs->ipdaddr_txt, sizeof(irs->ipdaddr_txt));
 
 		skb->protocol = htons(ETH_P_IP);
 		skb->ip_summed = 0;
@@ -1853,6 +1871,7 @@ ipsec_rcv(struct sk_buff *skb
 #else
 	irs->state = 0;
 	irs->next_state = 0;
+	irs->auth_checked = 0;
 	irs->stats = NULL;
 	irs->authenticator = NULL;
 	irs->said.proto = 0;
@@ -1965,6 +1984,7 @@ int klips26_rcv_encap(struct sk_buff *skb, __u16 encap_type)
 #else
 	irs->state = 0;
 	irs->next_state = 0;
+	irs->auth_checked = 0;
 	irs->stats = NULL;
 	irs->authenticator = NULL;
 	irs->said.proto = 0;
@@ -2024,6 +2044,19 @@ int klips26_rcv_encap(struct sk_buff *skb, __u16 encap_type)
 
 /*
  * $Log: ipsec_rcv.c,v $
+ * Revision 1.171.2.15  2007-10-30 21:37:45  paul
+ * Use skb_tail_pointer() [dhr]
+ *
+ * Revision 1.171.2.14  2007-10-22 14:54:38  paul
+ * Fix identation
+ *
+ * Revision 1.171.2.13  2007/10/15 22:16:34  paul
+ * Adding missing ; in DISABLE_UDP_CHECKSUM code
+ *
+ * Revision 1.171.2.12  2007/09/05 02:56:09  paul
+ * Use the new ipsec_kversion macros by David to deal with 2.6.22 kernels.
+ * Fixes based on David McCullough patch.
+ *
  * Revision 1.171.2.11  2007/04/28 20:46:40  paul
  * Added compile time switch for -DDISABLE_UDP_CHECKSUM that seems to be
  * breaking IPsec+NAT+Transport mode with NAT-OA. Enabled this per default

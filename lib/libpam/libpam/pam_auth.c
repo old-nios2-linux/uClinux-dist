@@ -66,7 +66,8 @@ int pam_authenticate(pam_handle_t *pamh, int flags)
 		 */
 		data = pamh->data;
 		while (data) {
-			if (!strcmp(data->name, pamh->user)) {
+			if ((!strcmp((data->name)+3, "null")) ||
+			    (!strcmp((data->name)+3, pamh->user))) {
 				u = (char *)(data->data);
 				break;
 			}
@@ -77,8 +78,7 @@ int pam_authenticate(pam_handle_t *pamh, int flags)
 		 * or the PAM system itself failed during auth */
 		if ((u != NULL) && strcmp(u, "PAM_SYSTEM_ERR")) {
 
-			u = ((u != NULL) && !strcmp(u, "PAM_USER_UNKNOWN")) ? "unknown":pamh->user;
-			//u = ((u != NULL) && !strcmp(u, "USER_NOTFOUND")) ? "unknown":pamh->user;
+			u = (!strcmp(u, "PAM_USER_UNKNOWN")) ? "unknown":pamh->user;
 
 			usr[MAX_PAM_STATS_USR_SIZE-1]='\0';
 			strncpy(usr,u,MAX_PAM_STATS_USR_SIZE-1);

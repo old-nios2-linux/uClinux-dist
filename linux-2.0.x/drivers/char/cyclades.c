@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 1.2 $$Date: 2001/10/02 07:15:45 $";
+"$Revision: 1.2 $$Date: 2001-10-02 07:15:45 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,7 +31,7 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
- * Revision 1.2  2001/10/02 07:15:45  gerg
+ * Revision 1.2  2001-10-02 07:15:45  gerg
  * Merge of linux-2.0.39 sources. Not a lot of serious changes.
  * A few networking updates (security patches, etc) make it worthwhile.
  * Initial testing looks good, but we need to keep an eye out

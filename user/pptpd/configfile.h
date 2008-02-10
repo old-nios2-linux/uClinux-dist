@@ -3,7 +3,7 @@
  *
  * Function to read pptpd config file.
  *
- * $Id: configfile.h,v 1.1.1.2 2007/07/05 23:25:55 gerg Exp $
+ * $Id: configfile.h,v 1.1.1.2 2007-07-05 23:25:55 gerg Exp $
  */
 
 #ifndef _PPTPD_CONFIGFILE_H
