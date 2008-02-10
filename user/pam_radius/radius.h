@@ -177,6 +177,15 @@ typedef struct pw_auth_hdr {
 #define PW_STATUS_STOP			2
 #define PW_STATUS_ALIVE			3
 
+
+#if 1 
+/*	Vendor Specific Attribute stuff */
+#define SG_VENDOR_TAG 			1500 /* Pick something arbitrary until we actually go 
+						and do this properly */
+#define SG_GROUP_ATTR			1
+
+#define SG_PAM_DATA_HANDLE		"SG-GROUP"
+#endif /* 0 */
 /* Default Database File Names */
 
 #define RADIUS_DIR		"/etc/raddb"

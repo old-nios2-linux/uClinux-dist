@@ -57,9 +57,8 @@ static void copy_cacheinfo_into_route(struct rta_cacheinfo *ci,
 }
 
 static int route_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
-			    struct nlmsghdr *nlh, void *arg)
+			    struct nlmsghdr *nlh, struct nl_parser_param *pp)
 {
-	struct nl_parser_param *pp = arg;
 	struct rtmsg *rtm;
 	struct rtnl_route *route;
 	struct nlattr *tb[RTA_MAX + 1];
@@ -92,14 +91,17 @@ static int route_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
 		dst = nla_get_addr(tb[RTA_DST], rtm->rtm_family);
 		if (dst == NULL)
 			goto errout_errno;
-	} else if (rtm->rtm_dst_len)
+	} else {
 		dst = nl_addr_alloc(0);
-
-	if (dst) {
-		nl_addr_set_prefixlen(dst, rtm->rtm_dst_len);
-		rtnl_route_set_dst(route, dst);
-		nl_addr_put(dst);
+		nl_addr_set_family(dst, rtm->rtm_family);
 	}
+
+	nl_addr_set_prefixlen(dst, rtm->rtm_dst_len);
+	err = rtnl_route_set_dst(route, dst);
+	if (err < 0)
+		goto errout;
+
+	nl_addr_put(dst);
 
 	if (tb[RTA_SRC]) {
 		src = nla_get_addr(tb[RTA_SRC], rtm->rtm_family);
@@ -204,14 +206,15 @@ static int route_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
 	if (err < 0)
 		goto errout;
 
-	return P_ACCEPT;
+	err = P_ACCEPT;
 
-errout_errno:
-	err = nl_get_errno();
 errout:
 	rtnl_route_put(route);
 	return err;
 
+errout_errno:
+	err = nl_get_errno();
+	goto errout;
 }
 
 static int route_request_update(struct nl_cache *c, struct nl_handle *h)

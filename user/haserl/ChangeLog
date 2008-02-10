@@ -1,3 +1,15 @@
+2008-01-28
+	0.9.22
+	*	h_bash.c - close the input side of the pipe, so that if the
+		child dies early the parent doesn't deadlock (patch by Diego
+		Santa Cruz)
+	*	rfc2388.c, sliding_buffer.c, haserl.c - read CONTENT_LENGTH,
+		and stop reading input when CONTENT_LENGTH reached (fixes odd
+		problems where the client may not close the connection
+		properly at the end of a request [guess which clients are
+		MiStaken?])  (patch by Diego Santa Cruz)
+	*	Allow "-" to be used in a field identifier (e.g. FORM["-foo"])
+
 2007-11-22
 	0.9.21
 	*	haserl.c - fixed a stupid test for strlen that caused CGI post

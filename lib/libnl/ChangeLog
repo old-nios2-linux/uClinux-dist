@@ -1,4 +1,7 @@
-Summary of Changes from 1.0-pre6 to HEAD
+ChangeLog discontinued, git history can be found here:
+http://git.kernel.org/?p=libs/netlink/libnl.git
+
+Summary of Changes from 1.0-pre6 to 1.0-pre7
 ================================================
 	Thomas Graf <tgraf@suug.ch>
 	  o Generic netlink support
@@ -33,6 +36,15 @@ Summary of Changes from 1.0-pre6 to HEAD
 	  o Cache updates based on event notifications, code based on
 	    Patrick McHardy's patches
 	  o Cache Manager
+	  o Added NL_AUTO_PID, NL_AUTO_SEQ for convenience
+	  o Disable MSG_PEEK by default and provide nl_socket_enable_msg_peek()
+	  o Fixed nl_recvmsgs() to return 0 when interrupted via NL_STOP or
+	    NL_SKIP
+	  o Fixed nl_recvmsgs() to stop reading after parsing if not in the
+	    middle of a multipart message.
+	  o Fixed nl_recvmsgs() to not stop after receving an ACK
+	  o Fixed nl_recvmsgs() to not blindly discard remaining messages
+	    if a NLMSG_DONE message is received.
 	
 	Petr Gotthard <petr.gotthard@siemens.com>
 	Siemens AG Oesterreich
@@ -53,6 +65,14 @@ Summary of Changes from 1.0-pre6 to HEAD
 	
 	James Oakley <jfunk@funktronics.ca>
 	  o Fix rtnl_link_set_arptype() typo
+
+	Philip Craig <philipc@snapgear.com>
+	  o Change address family type from char to int
+	  o Fix the error handling when the build fails.
+	  o add nl_cache_mngr_get_fd()
+	  o add netfilter support
+	  o add netfilter conntrack support
+	  o add netfilter log support
 
 Summary of Changes from 1.0-pre5 to 1.0-pre6
 ================================================

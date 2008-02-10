@@ -1,8 +1,9 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Jan 31 02:05:11 2008
+# Thu Apr 10 01:51:07 2008
 #
+CONFIG_DISTVERSION="4.0"
 
 #
 # Library Configuration
@@ -189,6 +190,7 @@ CONFIG_USER_NETFLASH_DECOMPRESS=y
 # CONFIG_USER_NETFLASH_SHA256 is not set
 # CONFIG_USER_RECOVER_BIOS is not set
 # CONFIG_USER_NETFLASH_CRYPTO is not set
+# CONFIG_USER_NETFLASH_CRYPTO_V2 is not set
 # CONFIG_USER_RECOVER_STATIC_TFTP is not set
 # CONFIG_USER_RECOVER_RECOVER is not set
 # CONFIG_USER_RECOVER_USE_STATIC_SERVER is not set
@@ -1112,6 +1114,7 @@ CONFIG_USER_BUSYBOX_KLOGD=y
 # CONFIG_USER_GAMES_ADVENT4 is not set
 # CONFIG_USER_GAMES_DUNGEON is not set
 # CONFIG_USER_GAMES_RUBIK is not set
+# CONFIG_USER_GAMES_TAMA is not set
 
 #
 # Miscellaneous Configuration

@@ -30,6 +30,8 @@
 #include "byte.h"
 #include "scan.h"
 
+#include <config/autoconf.h>
+
 #ifdef USE_AUTH
 #include "auth.h"
 #endif
@@ -1255,12 +1257,11 @@ static void handledirlist(const char*origurl) {
 
 #ifdef INDEX_CGI
 static int handleindexcgi(const char *testurl,const char* origurl,char* space) {
-  unsigned int ul,ol=str_len(origurl);
-  while (testurl[0]=='/') ++testurl,--ol;
+  unsigned int ul;
 
   /*syslog(LOG_INFO, "handleindexcgi(origurl=%s), testurl=%s, testurl+ol=%s", origurl, testurl, testurl + ol);*/
 
-  if (str_diff(testurl+ol,"index.html")) return 0; /* no request for index.html */
+  if (str_diff(testurl,"/index.html")) return 0; /* not a request for /index.html */
   /*syslog(LOG_INFO, "origurl=%s, testurl=%s, testurl+ol=%s", origurl, testurl, testurl+ol);*/
   if (stat(INDEX_CGI + 1,&st)) return 0; /* no index.cgi present */
   ul=1;
@@ -1270,6 +1271,23 @@ static int handleindexcgi(const char *testurl,const char* origurl,char* space) {
   url = INDEX_CGI;
   /*syslog(LOG_INFO, "handleindexcgi OK, url=%s", url);*/
   return 1; /* Wow... now start "index.cgi" */
+}
+#endif
+
+#ifdef CONFIG_USER_FNORD_404_REDIR
+/* Redirect any invalid URL to the main start page on the IP address that the user came in on */
+static void handle404redirect(void)
+{
+  char buf[128];
+
+  /*syslog(LOG_INFO, " 404 redirected to http://%s/", local_ip);*/
+  redirectboilerplate();
+  snprintf(buf, sizeof(buf), "http://%s/\r\n\r\n", local_ip);
+  buffer_put(buffer_1, buf, strlen(buf));
+  retcode = 301;
+  dolog(0);
+  buffer_flush(buffer_1);
+  exit(0);
 }
 #endif
 
@@ -1893,6 +1911,14 @@ hostb0rken:
     dolog(0);
     buffer_puts(buffer_1,"HTTP/1.0 401 Authorization Required\r\n"
       "WWW-Authenticate: Basic realm=\"");
+#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
+    /* 
+     * The hostname might not match our IP or name, so set the host to the 
+     * IP address of the server. Don't use the hostname because this gives
+     * away information that might compromise security.
+     */
+    host = local_ip;
+#endif
     buffer_puts(buffer_1, host);
     buffer_puts(buffer_1,"\"\r\nConnection: close\r\n\r\n"
       "Access to this site is restricted.\r\n"
@@ -2099,7 +2125,12 @@ tuttikaputti:
 #ifdef DIR_LIST
       handledirlist(origurl);
 #endif
+
+#ifdef CONFIG_USER_FNORD_404_REDIR
+      handle404redirect();
+#else
       badrequest(404,"Not Found","<title>Not Found</title>No such file or directory.");
+#endif
     }
   case 406: badrequest(406,"Not Acceptable","<title>Not Acceptable</title>Nothing acceptable found.");
   case 416: badrequest(416,"Requested Range Not Satisfiable","");

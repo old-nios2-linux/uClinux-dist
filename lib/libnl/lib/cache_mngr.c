@@ -89,18 +89,13 @@
 static int include_cb(struct nl_object *obj, struct nl_parser_param *p)
 {
 	struct nl_cache_assoc *ca = p->pp_arg;
-	int err;
 
 	NL_DBG(2, "Including object %p into cache %p\n", obj, ca->ca_cache);
 #ifdef NL_DEBUG
 	if (nl_debug >= 4)
 		nl_object_dump(obj, &nl_debug_dp);
 #endif
-	err = nl_cache_include(ca->ca_cache, obj, ca->ca_change);
-
-	nl_object_put(obj);
-
-	return err;
+	return nl_cache_include(ca->ca_cache, obj, ca->ca_change);
 }
 
 static int event_input(struct nl_msg *msg, void *arg)
@@ -145,19 +140,25 @@ found:
 
 /**
  * Allocate new cache manager
+ * @arg handle		Netlink socket/handle to be used
  * @arg protocol	Netlink Protocol this manager is used for
  * @arg flags		Flags
  *
  * @return Newly allocated cache manager or NULL on failure.
  */
-struct nl_cache_mngr *nl_cache_mngr_alloc(int protocol, int flags)
+struct nl_cache_mngr *nl_cache_mngr_alloc(struct nl_handle *handle,
+					  int protocol, int flags)
 {
 	struct nl_cache_mngr *mngr;
+
+	if (handle == NULL)
+		BUG();
 
 	mngr = calloc(1, sizeof(*mngr));
 	if (!mngr)
 		goto enomem;
 
+	mngr->cm_handle = handle;
 	mngr->cm_nassocs = 32;
 	mngr->cm_protocol = protocol;
 	mngr->cm_flags = flags;
@@ -166,9 +167,6 @@ struct nl_cache_mngr *nl_cache_mngr_alloc(int protocol, int flags)
 	if (!mngr->cm_assocs)
 		goto enomem;
 
-	mngr->cm_handle = nl_handle_alloc();
-	if (!mngr->cm_handle)
-		goto enomem;
 
 	nl_socket_modify_cb(mngr->cm_handle, NL_CB_VALID, NL_CB_CUSTOM,
 			    event_input, mngr);
@@ -198,6 +196,7 @@ errout:
  * Add cache responsibility to cache manager
  * @arg mngr		Cache manager.
  * @arg name		Name of cache to keep track of
+ * @arg cb		Function to be called upon changes.
  *
  * Allocates a new cache of the specified type and adds it to the manager.
  * The operation will trigger a full dump request from the kernel to
@@ -358,7 +357,7 @@ int nl_cache_mngr_data_ready(struct nl_cache_mngr *mngr)
 {
 	int err;
 
-	err = nl_recvmsgs_def(mngr->cm_handle);
+	err = nl_recvmsgs_default(mngr->cm_handle);
 	if (err < 0)
 		return err;
 

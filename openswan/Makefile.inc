@@ -17,6 +17,8 @@
 
 # snapgear specific defaults from build env.
 -include $(ROOTDIR)/modules/.config
+
+ifeq ($(HOSTBUILD),)
 ifneq ($(CONFIG_OCF_CRYPTODEV),)
 HAVE_OCF := true
 endif
@@ -32,6 +34,7 @@ HAVE_THREADS := true # the comments below about XAUTH say we need threads
 endif
 ifdef CONFIG_PROP_STATSD_STATSD
 EXTRA_DEFINES += -DEXTERNAL_STATE_LOGGING=1
+endif
 endif
 
 

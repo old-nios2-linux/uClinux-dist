@@ -1852,6 +1852,12 @@ ipsec_tunnel_probe(struct net_device *dev)
 	return 0;
 }
 
+#ifdef alloc_netdev
+static void ipsec_tunnel_netdev_setup(struct net_device *dev)
+{
+}
+#endif
+
 struct net_device *ipsecdevices[IPSEC_NUM_IF];
 
 int 
@@ -1870,7 +1876,11 @@ ipsec_tunnel_init_devices(void)
 
 	for(i = 0; i < IPSEC_NUM_IF; i++) {
 		sprintf(name, IPSEC_DEV_FORMAT, i);
+#ifdef alloc_netdev
+		dev_ipsec = alloc_netdev(0, name, ipsec_tunnel_netdev_setup);
+#else
 		dev_ipsec = (struct net_device*)kmalloc(sizeof(struct net_device), GFP_KERNEL);
+#endif
 		if (dev_ipsec == NULL) {
 			KLIPS_PRINT(debug_tunnel & DB_TN_INIT,
 				    "klips_debug:ipsec_tunnel_init_devices: "
@@ -1878,6 +1888,7 @@ ipsec_tunnel_init_devices(void)
 				    name);
 			return -ENOMEM;
 		}
+#ifndef alloc_netdev
 		memset((caddr_t)dev_ipsec, 0, sizeof(struct net_device));
 #ifdef NETDEV_23
 		strncpy(dev_ipsec->name, name, sizeof(dev_ipsec->name));
@@ -1896,6 +1907,7 @@ ipsec_tunnel_init_devices(void)
 #ifdef HAVE_DEV_NEXT
 		dev_ipsec->next = NULL;
 #endif
+#endif /* alloc_netdev */
 		dev_ipsec->init = &ipsec_tunnel_probe;
 		KLIPS_PRINT(debug_tunnel & DB_TN_INIT,
 			    "klips_debug:ipsec_tunnel_init_devices: "
@@ -1945,11 +1957,15 @@ ipsec_tunnel_cleanup_devices(void)
 			    atomic_read(&dev_ipsec->refcnt));
 		unregister_netdev(dev_ipsec);
 		KLIPS_PRINT(debug_tunnel, "Unregisted %s\n", dev_ipsec->name);
+#ifdef alloc_netdev
+		free_netdev(dev_ipsec);
+#else
 #ifndef NETDEV_23
 		kfree(dev_ipsec->name);
 		dev_ipsec->name=NULL;
 #endif /* !NETDEV_23 */
 		kfree(dev_ipsec->priv);
+#endif /* alloc_netdev */
 		dev_ipsec->priv=NULL;
 	}
 	return error;

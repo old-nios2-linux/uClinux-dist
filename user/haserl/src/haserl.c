@@ -432,6 +432,10 @@ ReadCGIPOSTValues (list_t * env)
 
   s_buffer_init (&sbuf, 32768);
   sbuf.fh = STDIN;
+  if ( getenv( "CONTENT_LENGTH" ) )
+    {
+      sbuf.maxread = strtoul(getenv("CONTENT_LENGTH"), NULL, 10);
+    }
   buffer_init (&token);
 
 

@@ -124,7 +124,11 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 #define HAVE_SOCK_ZAPPED
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,24)
+#define NET_26_24_SKALLOC
+#else
 #define NET_26_12_SKALLOC
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
@@ -162,6 +166,8 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,20)
 /* skb->nfmark changed to skb->mark in 2.6.20 */
 #define nfmark mark
+#else
+#define HAVE_KMEM_CACHE_T
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22)

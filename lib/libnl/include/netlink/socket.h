@@ -56,6 +56,8 @@ extern unsigned int		nl_socket_use_seq(struct nl_handle *);
 
 extern int			nl_socket_get_fd(struct nl_handle *);
 extern int			nl_socket_set_nonblocking(struct nl_handle *);
+extern void			nl_socket_enable_msg_peek(struct nl_handle *);
+extern void			nl_socket_disable_msg_peek(struct nl_handle *);
 
 #ifdef __cplusplus
 }

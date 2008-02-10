@@ -56,7 +56,6 @@
 
 void move_infected(const char *filename, const struct optstruct *opt);
 int notremoved = 0, notmoved = 0;
-static int ncore = 0;
 
 static int dsresult(int sockd, const struct optstruct *opt)
 {
@@ -93,12 +92,12 @@ static int dsresult(int sockd, const struct optstruct *opt)
 		} else {
 		    *pt = 0;
 		    if(unlink(buff)) {
-			mprintf("%s: Can't remove.\n", buff);
-			logg("%s: Can't remove.\n", buff);
+			mprintf("~%s: Can't remove.\n", buff);
+			logg("~%s: Can't remove.\n", buff);
 			notremoved++;
 		    } else {
-			mprintf("%s: Removed.\n", buff);
-			logg("%s: Removed.\n", buff);
+			mprintf("~%s: Removed.\n", buff);
+			logg("~%s: Removed.\n", buff);
 		    }
 		}
 	    }
@@ -137,7 +136,7 @@ static int dsfile(int sockd, const char *scantype, const char *filename, const s
     ret = dsresult(sockd, opt);
 
     if(!ret)
-	logg("%s: OK\n", filename);
+	logg("~%s: OK\n", filename);
 
     return ret;
 }
@@ -184,11 +183,6 @@ static int dsfd(int sockfd, int fd, const struct optstruct *opt)
     }
     return dsresult(sockfd, opt);
 }
-#else
-static int dsfd(int sockfd, int fd, const struct optstruct *opt)
-{
-    return -1;
-}
 #endif
 
 static int dsstream(int sockd, const struct optstruct *opt)
@@ -196,7 +190,7 @@ static int dsstream(int sockd, const struct optstruct *opt)
 	int wsockd, loopw = 60, bread, port, infected = 0;
 	struct sockaddr_in server;
 	struct sockaddr_in peer;
-	int peer_size;
+	socklen_t peer_size;
 	char buff[4096], *pt;
 
 
@@ -205,13 +199,14 @@ static int dsstream(int sockd, const struct optstruct *opt)
 	return 2;
     }
 
-    memset(buff, 0, sizeof(buff));
     while(loopw) {
-	read(sockd, buff, sizeof(buff));
-	if((pt = strstr(buff, "PORT"))) {
-	    pt += 5;
-	    sscanf(pt, "%d", &port);
-	    break;
+	memset(buff, 0, sizeof(buff));
+	if(read(sockd, buff, sizeof(buff)) > 0) {
+	    if((pt = strstr(buff, "PORT"))) {
+		pt += 5;
+		sscanf(pt, "%d", &port);
+		break;
+	    }
 	}
 	loopw--;
     }
@@ -313,7 +308,8 @@ static int dconnect(const struct optstruct *opt)
 	struct sockaddr_un server;
 	struct sockaddr_in server2;
 	struct hostent *he;
-	struct cfgstruct *copt, *cpt;
+	struct cfgstruct *copt;
+	const struct cfgstruct *cpt;
 	const char *clamav_conf = opt_arg(opt, "config-file");
 	int sockd;
 
@@ -389,11 +385,6 @@ static int dconnect(const struct optstruct *opt)
 	return -1;
     }
 
-#ifdef HAVE_NCORE
-    if(cfgopt(copt, "NodalCoreAcceleration")->enabled)
-	ncore = 1;
-#endif
-
     freecfg(copt);
 
     return sockd;
@@ -409,7 +400,7 @@ int client(const struct optstruct *opt, int *infected)
 
     *infected = 0;
 
-    if(ncore || opt_check(opt, "multiscan"))
+    if(opt_check(opt, "multiscan"))
 	scantype = "MULTISCAN";
 
     /* parse argument list */
@@ -504,8 +495,9 @@ int client(const struct optstruct *opt, int *infected)
 
 void move_infected(const char *filename, const struct optstruct *opt)
 {
-	char *movedir, *movefilename, *tmp, numext[4 + 1];
-	struct stat fstat, mfstat;
+	char *movedir, *movefilename, numext[4 + 1];
+	const char *tmp;
+	struct stat ofstat, mfstat;
 	int n, len, movefilename_size;
 	int moveflag = opt_check(opt, "move");
 	struct utimbuf ubuf;
@@ -525,7 +517,7 @@ void move_infected(const char *filename, const struct optstruct *opt)
         return;
     }
 
-    if(stat(filename, &fstat) == -1) {
+    if(stat(filename, &ofstat) == -1) {
         logg("^Can't stat file %s\n", filename);
 	logg("Try to run clamdscan with clamd privileges\n");
         notmoved++;
@@ -533,7 +525,7 @@ void move_infected(const char *filename, const struct optstruct *opt)
     }
 
     if(!(tmp = strrchr(filename, '/')))
-	tmp = (char *) filename;
+	tmp = filename;
 
     movefilename_size = sizeof(char) * (strlen(movedir) + strlen(tmp) + sizeof(numext) + 2);
 
@@ -559,7 +551,7 @@ void move_infected(const char *filename, const struct optstruct *opt)
     }
 
     if(!stat(movefilename, &mfstat)) {
-        if(fstat.st_ino == mfstat.st_ino) { /* It's the same file*/
+        if((ofstat.st_dev == mfstat.st_dev) && (ofstat.st_ino == mfstat.st_ino)) { /* It's the same file*/
             logg("File excluded '%s'\n", filename);
             notmoved++;
             free(movefilename);
@@ -591,11 +583,12 @@ void move_infected(const char *filename, const struct optstruct *opt)
 	    return;
 	}
 
-	chmod(movefilename, fstat.st_mode);
-	chown(movefilename, fstat.st_uid, fstat.st_gid);
+	chmod(movefilename, ofstat.st_mode);
+	if(chown(movefilename, ofstat.st_uid, ofstat.st_gid) == -1)
+	    logg("^chown() failed for %s: %s\n", movefilename, strerror(errno));
 
-	ubuf.actime = fstat.st_atime;
-	ubuf.modtime = fstat.st_mtime;
+	ubuf.actime = ofstat.st_atime;
+	ubuf.modtime = ofstat.st_mtime;
 	utime(movefilename, &ubuf);
 
 	if(moveflag && unlink(filename)) {

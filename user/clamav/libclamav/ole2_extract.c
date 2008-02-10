@@ -52,8 +52,8 @@
 #include "mbox.h"
 #include "blob.h" /* sanitiseName() */
 
-#define ole2_endian_convert_16(v) le16_to_host(v)
-#define ole2_endian_convert_32(v) le32_to_host(v)
+#define ole2_endian_convert_16(v) le16_to_host((uint16_t)(v))
+#define ole2_endian_convert_32(v) le32_to_host((uint32_t)(v))
 
 #ifndef HAVE_ATTRIB_PACKED
 #define __attribute__(x)
@@ -610,7 +610,7 @@ static int handler_writefile(int fd, ole2_header_t *hdr, property_t *prop, const
 		if (!name) {
 			return FALSE;
 		}
-		snprintf(name, 11, "%.10ld", i + (long int) prop);
+		snprintf(name, 11, "%.10ld", (long int) (i + (long int) prop));
 	} else {
 		/* Sanitize the file name */
 		sanitiseName(name);
@@ -854,15 +854,15 @@ int cli_ole2_extract(int fd, const char *dirname, const struct cl_limits *limits
 	}
 
 	if (hdr.log2_big_block_size != 9) {
-		cli_errmsg("WARNING: not scanned; untested big block size - please report\n");
+		cli_dbgmsg("WARNING: not scanned; untested big block size - please report\n");
 		goto abort;
 	}
 	if (hdr.log2_small_block_size != 6) {
-		cli_errmsg("WARNING: not scanned; untested small block size - please report\n");
+		cli_dbgmsg("WARNING: not scanned; untested small block size - please report\n");
 		goto abort;
 	}
 	if (hdr.sbat_cutoff != 4096) {
-		cli_errmsg("WARNING: not scanned; untested sbat cutoff - please report\n");
+		cli_dbgmsg("WARNING: not scanned; untested sbat cutoff - please report\n");
 		goto abort;
 	}
 

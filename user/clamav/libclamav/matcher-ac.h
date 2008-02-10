@@ -27,10 +27,18 @@
 #define AC_DEFAULT_MIN_DEPTH 2
 #define AC_DEFAULT_MAX_DEPTH 3
 #define AC_DEFAULT_TRACKLEN 8
+extern uint8_t cli_ac_mindepth, cli_ac_maxdepth;
 
 struct cli_ac_data {
     uint32_t partsigs;
     int32_t ***offmatrix;
+};
+
+struct cli_ac_alt {
+    uint8_t chmode;
+    unsigned char *str;
+    uint16_t len, num;
+    struct cli_ac_alt *next;
 };
 
 struct cli_ac_patt {
@@ -39,11 +47,11 @@ struct cli_ac_patt {
     uint32_t mindist, maxdist;
     char *virname, *offset;
     uint32_t sigid;
-    uint16_t parts, partno, alt, *altn, alt_pattern;
+    uint16_t parts, partno, alt, alt_pattern;
+    struct cli_ac_alt **alttable;
     uint8_t target;
     uint16_t type;
-    unsigned char **altc;
-    struct cli_ac_patt *next;
+    struct cli_ac_patt *next, *next_same;
 };
 
 struct cli_ac_node {
@@ -62,6 +70,6 @@ int cli_ac_buildtrie(struct cli_matcher *root);
 int cli_ac_init(struct cli_matcher *root, uint8_t mindepth, uint8_t maxdepth);
 void cli_ac_free(struct cli_matcher *root);
 int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, uint8_t target);
-
+void cli_ac_setdepth(uint8_t mindepth, uint8_t maxdepth);
 
 #endif

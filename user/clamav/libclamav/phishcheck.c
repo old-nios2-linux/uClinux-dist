@@ -117,8 +117,6 @@ Checks if realLink is http, but displayedLink is https or viceversa.
 
 10. Hostname of real URL is extracted.
 
-11. Skip cid: displayedLink urls (images embedded in mails).
-
 12. Numeric IP detection.
 If url is a numeric IP, then -> phish.
 Maybe we should do DNS lookup?
@@ -151,9 +149,9 @@ static const char cctld_regex[] = "^"iana_cctld"$";
 static const char dotnet[] = ".net";
 static const char adonet[] = "ado.net";
 static const char aspnet[] = "asp.net";
-static const char lt[]="&lt;";
-static const char gt[]="&gt;";
-static const char cid[] = "cid:";
+/* ; is replaced by ' ' so omit it here*/
+static const char lt[]="&lt";
+static const char gt[]="&gt";
 static const char src_text[] = "src";
 static const char href_text[] = "href";
 static const char mailto[] = "mailto:";
@@ -161,7 +159,6 @@ static const char https[]="https://";
 
 static const size_t href_text_len = sizeof(href_text);
 static const size_t src_text_len = sizeof(src_text);
-static const size_t cid_len = sizeof(cid)-1;
 static const size_t dotnet_len = sizeof(dotnet)-1;
 static const size_t adonet_len = sizeof(adonet)-1;
 static const size_t aspnet_len = sizeof(aspnet)-1;
@@ -222,7 +219,7 @@ static const size_t https_len  = sizeof(https)-1;
 #define URI_fragmentaddress2 URI_URI2
 #define URI_fragmentaddress3 URI_URI3"(#"URI_fragmentid")?"
 
-#define URI_CHECK_PROTOCOLS "(http|https|ftp)://.+"
+#define URI_CHECK_PROTOCOLS "(http|https|ftp|mailto)://.+"
 
 /*Warning: take care when modifying this regex, it has been tweaked, and tuned, just don't break it please.
  * there is fragmentaddress1, and 2  to work around the ISO limitation of 509 bytes max length for string constants*/
@@ -259,12 +256,9 @@ static const char* phishing_ret_toString(enum phish_status rc);
 
 static void url_check_init(struct url_check* urls)
 {
-	urls->realLink.refcount=0;
-	urls->realLink.data=empty_string;
-	urls->realLink.ref=NULL;
-	urls->displayLink.refcount=0;
-	urls->displayLink.data=empty_string;
-	urls->displayLink.ref=NULL;
+	string_init_c(&urls->realLink, NULL);
+	string_init_c(&urls->displayLink, NULL);
+	string_init_c(&urls->pre_fixup.pre_displayLink, NULL);
 }
 
 /* string reference counting implementation,
@@ -304,7 +298,7 @@ static void string_assign(struct string* dest,struct string* src)
  * */
 static void string_init_c(struct string* dest,char* data)
 {
-	dest->refcount = 1;
+	dest->refcount = data ? 1 : 0;
 	dest->data = data ? data : empty_string;
 	dest->ref = NULL;
 }
@@ -327,10 +321,12 @@ static int string_assign_dup(struct string* dest,const char* start,const char* e
 
 static void string_assign_null(struct string* dest)
 {
-	string_free(dest);
-	dest->data=empty_string;
-	dest->refcount=-1;/* don't free it! */
-	dest->ref=NULL;
+	if(dest) {
+		string_free(dest);
+		dest->data=empty_string;
+		dest->refcount=-1;/* don't free it! */
+		dest->ref=NULL;
+	}
 }
 
 /* this string uses portion of another string*/
@@ -347,23 +343,24 @@ static void free_if_needed(struct url_check* url)
 {
 	string_free(&url->realLink);
 	string_free(&url->displayLink);
+	string_free(&url->pre_fixup.pre_displayLink);
 }
 
 static int build_regex(regex_t* preg,const char* regex,int nosub)
 {
 	int rc;
 	cli_dbgmsg("Phishcheck: Compiling regex: %s\n",regex);
-	rc = regcomp(preg,regex,REG_EXTENDED|REG_ICASE|(nosub ? REG_NOSUB :0));
+	rc = cli_regcomp(preg,regex,REG_EXTENDED|REG_ICASE|(nosub ? REG_NOSUB :0));
 	if(rc) {
 	
 #ifdef	C_WINDOWS
 		cli_errmsg("Phishcheck: Error in compiling regex, disabling phishing checks\n");
 #else
-		size_t buflen =	regerror(rc,preg,NULL,0);
+		size_t buflen =	cli_regerror(rc,preg,NULL,0);
 		char *errbuf = cli_malloc(buflen);
 		
 		if(errbuf) {
-			regerror(rc,preg,errbuf,buflen);
+			cli_regerror(rc,preg,errbuf,buflen);
 			cli_errmsg("Phishcheck: Error in compiling regex:%s\nDisabling phishing checks\n",errbuf);
 			free(errbuf);
 		} else
@@ -375,13 +372,13 @@ static int build_regex(regex_t* preg,const char* regex,int nosub)
 }
 
 /* allocates memory */
-static int get_host(const struct phishcheck* s,struct string* dest,const char* URL,int isReal,int* phishy)
+static int get_host(const struct phishcheck* s,const char* URL,int isReal,int* phishy,const char **hstart, const char **hend)
 {
 	int rc,ismailto = 0;
 	const char* start;
 	const char* end=NULL;
 	if(!URL) {
-		string_assign_null(dest);
+		*hstart=*hend=NULL;
 		return 0;
 	}
 	start = strstr(URL,"://");
@@ -438,15 +435,14 @@ static int get_host(const struct phishcheck* s,struct string* dest,const char* U
 		if(!end)
 			end  = start + strlen(start);
 	}
-
-	if(( rc = string_assign_dup(dest,start,end) ))
-		return rc;
+	*hstart = start;
+	*hend = end;
 	return 0;
 }
 
 static int isCountryCode(const struct phishcheck* s,const char* str)
 {
-	return str ? !regexec(&s->preg_cctld,str,0,NULL,0) : 0;
+	return str ? !cli_regexec(&s->preg_cctld,str,0,NULL,0) : 0;
 }
 
 static int isTLD(const struct phishcheck* pchk,const char* str,int len)
@@ -461,7 +457,7 @@ static int isTLD(const struct phishcheck* pchk,const char* str,int len)
 			return CL_EMEM;
 		strncpy(s,str,len);
 		s[len]='\0';
-		rc = !regexec(&pchk->preg_tld,s,0,NULL,0);
+		rc = !cli_regexec(&pchk->preg_tld,s,0,NULL,0);
 		free(s);
 		return rc ? 1 : 0;
 	}
@@ -657,40 +653,36 @@ static void clear_msb(char* begin)
  * <a href="www.yahoo.com">Check out yahoo.com</a>
  * Here we add a ., so we get: check.out.yahoo.com (it won't trigger)
  *
- * Rule for adding .: if substring from right contains dot, then add dot,
+ * Old Rule for adding .: if substring from right contains dot, then add dot,
  *	otherwise strip space
+ * New Rule: strip all spaces
+ *  strip leading and trailing garbage
  *
  */
 static void
 str_fixup_spaces(char **begin, const char **end)
 {
-	char *space = strchr(*begin, ' ');
-
-	if(space == NULL)
+	char* sbegin = *begin;
+	const char* send = *end;
+	if(!sbegin || !send || send < sbegin)
 		return;
-
-	/* strip any number of spaces after / */
-	while((space > *begin) && (space[-1] == '/') && (space[0] == ' ') && (space < *end)) {
-		memmove(space, space+1, *end-space+1);
-		(*end)--;
-	}
-
-	for(space = rfind(*begin,' ',*end-*begin);space && space[0]!='.' && space<*end;space++)
-		;
-	if(space && space[0]=='.')
-		str_replace(*begin,*end,' ','.');
-	else
-		str_strip(begin,end," ",1);
+	/* strip spaces */
+	str_strip(&sbegin, &send, " ",1);
+	/* strip leading/trailing garbage */
+	while(!isalnum(sbegin[0]) && sbegin <= send) sbegin++;
+	while(!isalnum(send[0]) && send >= sbegin) send--;
+	*begin = sbegin;
+	*end = send;
 }
 
 /* allocates memory */
 static int
-cleanupURL(struct string *URL, int isReal)
+cleanupURL(struct string *URL,struct string *pre_URL, int isReal)
 {
 	char *begin = URL->data;
 	const char *end;
 	size_t len;
-
+	
 	clear_msb(begin);
 	/*if(begin == NULL)
 		return;*/
@@ -701,6 +693,7 @@ cleanupURL(struct string *URL, int isReal)
 	len = strlen(begin);
 	if(len == 0) {
 		string_assign_null(URL);
+		string_assign_null(pre_URL);
 		return 0;
 	}
 
@@ -708,14 +701,17 @@ cleanupURL(struct string *URL, int isReal)
 	/*cli_dbgmsg("%d %d\n", end-begin, len);*/
 	if(begin >= end) {
 		string_assign_null(URL);
+		string_assign_null(pre_URL);
 		return 0;
 	}
 	while(isspace(*end))
 		end--;
 	/*TODO: convert \ to /, and stuff like that*/
 	/* From mailscanner, my comments enclosed in {} */
-	if(!strncmp(begin,dotnet,dotnet_len) || !strncmp(begin,adonet,adonet_len) || !strncmp(begin,aspnet,aspnet_len))
+	if(!strncmp(begin,dotnet,dotnet_len) || !strncmp(begin,adonet,adonet_len) || !strncmp(begin,aspnet,aspnet_len)) {
 		string_assign_null(URL);
+		string_assign_null(pre_URL);
+	}
 	else {
 		size_t host_len;
 		char* host_begin;
@@ -724,9 +720,10 @@ cleanupURL(struct string *URL, int isReal)
 		str_replace(begin,end,'\\','/');
 		/* some broken MUAs put > in the href, and then
 		 * we get a false positive, so remove them */
-		str_replace(begin,end,'<','/');
-		str_replace(begin,end,'>','/');
-		str_strip(&begin,&end,"\"",1);
+		str_replace(begin,end,'<',' ');
+		str_replace(begin,end,'>',' ');
+		str_replace(begin,end,'\"',' ');
+		str_replace(begin,end,';',' ');
 		str_strip(&begin,&end,lt,lt_len);
 		str_strip(&begin,&end,gt,gt_len);
 		/* convert hostname to lowercase, but only hostname! */
@@ -738,9 +735,25 @@ cleanupURL(struct string *URL, int isReal)
 		str_make_lowercase(host_begin,host_len);
 		/* convert %xx to real value */
 		str_hex_to_char(&begin,&end);
-		str_fixup_spaces(&begin,&end);
-		if (( rc = string_assign_dup(URL,begin,end+1) ))
+		if(isReal) {
+			/* htmlnorm converts \n to space, so we have to strip spaces */
+			str_strip(&begin, &end, " ", 1);
+		}
+		else {
+			/* trim space */
+			while((begin <= end) && (begin[0]==' '))  begin++;
+			while((begin <= end) && (end[0]==' ')) end--;
+		}
+		if (( rc = string_assign_dup(isReal ? URL : pre_URL,begin,end+1) )) {
+			string_assign_null(URL);
 			return rc;
+		}
+		if(!isReal) {
+			str_fixup_spaces(&begin,&end);
+			if (( rc = string_assign_dup(URL,begin,end+1) )) {
+				return rc;
+			}
+		}
 		/*cli_dbgmsg("%p::%s\n",URL->data,URL->data);*/
 	}
 	return 0;
@@ -787,11 +800,12 @@ int phishingScan(message* m,const char* dir,cli_ctx* ctx,tag_arguments_t* hrefs)
 			}
 			string_init_c(&urls.realLink,(char*)hrefs->value[i]);
 			string_init_c(&urls.displayLink,(char*)blobGetData(hrefs->contents[i]));
-
+			string_init_c(&urls.pre_fixup.pre_displayLink, NULL);
 			if (urls.displayLink.data[blobGetDataSize(hrefs->contents[i])-1]) {
 				cli_warnmsg("urls.displayLink.data[...]");
 				return CL_CLEAN;
 			}
+
 			urls.realLink.refcount=-1;
 			urls.displayLink.refcount=-1;/*don't free these, caller will free*/
 			if(strcmp((char*)hrefs->tag[i],"href")) {
@@ -880,12 +894,13 @@ static char hex2int(const unsigned char* src)
 static void free_regex(regex_t* p)
 {
 	if(p) {
-		regfree(p);
+		cli_regfree(p);
 	}
 }
 
 int phishing_init(struct cl_engine* engine)
 {
+	char *url_regex, *realurl_regex;
 	struct phishcheck* pchk;
 	if(!engine->phishcheck) {
 		pchk = engine->phishcheck = cli_malloc(sizeof(struct phishcheck));
@@ -922,20 +937,33 @@ int phishing_init(struct cl_engine* engine)
 		engine->phishcheck = NULL;
 		return CL_EFORMAT;	
 	}
-	pchk->url_regex = str_compose("^ *("URI_fragmentaddress1,URI_fragmentaddress2,URI_fragmentaddress3"|"URI_CHECK_PROTOCOLS") *$");
-	if(build_regex(&pchk->preg,pchk->url_regex,1)) {
+	url_regex = str_compose("^ *(("URI_CHECK_PROTOCOLS")|("URI_fragmentaddress1,URI_fragmentaddress2,URI_fragmentaddress3")) *$");
+	if(build_regex(&pchk->preg,url_regex,1)) {
 		free_regex(&pchk->preg_cctld);
 		free_regex(&pchk->preg_tld);
-		free(pchk->url_regex);
+		free(url_regex);
 		free(pchk);
 		engine->phishcheck = NULL;
 		return CL_EFORMAT;
 	}
+	free(url_regex);
+	realurl_regex = str_compose("^ *(("URI_CHECK_PROTOCOLS")|("URI_path1,URI_fragmentaddress2,URI_fragmentaddress3")) *$");
+	if(build_regex(&pchk->preg_realurl, realurl_regex,1)) {
+		free_regex(&pchk->preg_cctld);
+		free_regex(&pchk->preg_tld);
+		free_regex(&pchk->preg);
+		free(url_regex);
+		free(realurl_regex);
+		free(pchk);
+		engine->phishcheck = NULL;
+		return CL_EFORMAT;
+	}
+	free(realurl_regex);
 	if(build_regex(&pchk->preg_numeric,numeric_url_regex,1)) {
 		free_regex(&pchk->preg_cctld);
 		free_regex(&pchk->preg_tld);
 		free_regex(&pchk->preg);
-		free(pchk->url_regex);
+		free_regex(&pchk->preg_realurl);
 		free(pchk);
 		engine->phishcheck = NULL;
 		return CL_EFORMAT;
@@ -955,10 +983,7 @@ void phishing_done(struct cl_engine* engine)
 		free_regex(&pchk->preg_cctld);
 		free_regex(&pchk->preg_tld);
 		free_regex(&pchk->preg_numeric);
-		if(pchk->url_regex) {
-			free(pchk->url_regex);
-			pchk->url_regex = NULL;
-		}
+		free_regex(&pchk->preg_realurl);
 		pchk->is_disabled = 1;
 	}
 	whitelist_done(engine);
@@ -973,16 +998,24 @@ void phishing_done(struct cl_engine* engine)
 
 /*
  * Only those URLs are identified as URLs for which phishing detection can be performed.
- * This means that no attempt is made to properly recognize 'cid:' URLs
  */
 static int isURL(const struct phishcheck* pchk,const char* URL)
 {
-	return URL ? !regexec(&pchk->preg,URL,0,NULL,0) : 0;
+	return URL ? !cli_regexec(&pchk->preg,URL,0,NULL,0) : 0;
+}
+
+/*
+ * Check if this is a real URL, which basically means to check if it has a known URL scheme (http,https,ftp).
+ * This prevents false positives with outbind:// and blocked:: links.
+ */
+static int isRealURL(const struct phishcheck* pchk,const char* URL)
+{
+	return URL ? !cli_regexec(&pchk->preg_realurl,URL,0,NULL,0) : 0;
 }
 
 static int isNumericURL(const struct phishcheck* pchk,const char* URL)
 {
-	return URL ? !regexec(&pchk->preg_numeric,URL,0,NULL,0) : 0;
+	return URL ? !cli_regexec(&pchk->preg_numeric,URL,0,NULL,0) : 0;
 }
 
 /* Cleans up @urls
@@ -991,8 +1024,8 @@ static int isNumericURL(const struct phishcheck* pchk,const char* URL)
 static enum phish_status cleanupURLs(struct url_check* urls)
 {
 	if(urls->flags&CLEANUP_URL) {
-		cleanupURL(&urls->realLink,1);
-		cleanupURL(&urls->displayLink,0);
+		cleanupURL(&urls->realLink,NULL,1);
+		cleanupURL(&urls->displayLink,&urls->pre_fixup.pre_displayLink,0);
 		if(!urls->displayLink.data || !urls->realLink.data)
 			return CL_PHISH_NODECISION;
 		if(!strcmp(urls->realLink.data,urls->displayLink.data))
@@ -1003,8 +1036,25 @@ static enum phish_status cleanupURLs(struct url_check* urls)
 
 static int url_get_host(const struct phishcheck* pchk, struct url_check* url,struct url_check* host_url,int isReal,int* phishy)
 {
+	const char *start, *end;
 	struct string* host = isReal ? &host_url->realLink : &host_url->displayLink;
-	get_host(pchk, host, isReal ? url->realLink.data : url->displayLink.data, isReal, phishy);
+	const char* URL = isReal ? url->realLink.data : url->displayLink.data;
+	int rc;
+	if ((rc = get_host(pchk, URL, isReal, phishy, &start, &end))) {
+		return rc;
+	}
+	if(!start || !end) {
+		string_assign_null(host);
+	}
+	else {
+		if(( rc = string_assign_dup(host,start,end) ))
+			return rc;
+	}
+	cli_dbgmsg("Phishcheck:host:%s\n", host->data);
+	if(!isReal) {
+		url->pre_fixup.host_start = start - URL;
+		url->pre_fixup.host_end = end - URL;
+	}
 	if(!host->data)
 		return CL_PHISH_CLEANUP_OK;
 	if(*phishy&REAL_IS_MAILTO)
@@ -1013,7 +1063,7 @@ static int url_get_host(const struct phishcheck* pchk, struct url_check* url,str
 		string_free(host);
 		return CL_PHISH_TEXTURL;
 	}
-	if(url->flags&CHECK_CLOAKING && !regexec(&pchk->preg_hexurl,host->data,0,NULL,0)) {
+	if(url->flags&CHECK_CLOAKING && !cli_regexec(&pchk->preg_hexurl,host->data,0,NULL,0)) {
 		/* uses a regex here, so that we don't accidentally block 0xacab.net style hosts */
 		string_free(host);
 		return CL_PHISH_HEX_URL;
@@ -1117,7 +1167,14 @@ static enum phish_status phishingCheck(const struct cl_engine* engine,struct url
 	if(whitelist_check(engine,urls,0))
 		return CL_PHISH_WHITELISTED;/* if url is whitelist don't perform further checks */
 
-	if(urls->flags&DOMAINLIST_REQUIRED && domainlist_match(engine,urls->realLink.data,urls->displayLink.data,0,&urls->flags))
+	if((!isURL(pchk, urls->displayLink.data) || !isRealURL(pchk, urls->realLink.data) )&&
+			( (phishy&PHISHY_NUMERIC_IP && !isNumericURL(pchk, urls->displayLink.data)) ||
+			  !(phishy&PHISHY_NUMERIC_IP))) {
+		cli_dbgmsg("Displayed 'url' is not url:%s\n",urls->displayLink.data);
+		return CL_PHISH_TEXTURL;
+	}
+
+	if(urls->flags&DOMAINLIST_REQUIRED && domainlist_match(engine,urls->realLink.data,urls->displayLink.data,NULL,0,&urls->flags))
 		phishy |= DOMAIN_LISTED;
 	else {
 		/* although entire url is not listed, the host might be,
@@ -1137,7 +1194,7 @@ static enum phish_status phishingCheck(const struct cl_engine* engine,struct url
 
 	if(urls->flags&DOMAINLIST_REQUIRED) {
 		if(!(phishy&DOMAIN_LISTED)) {
-			if(domainlist_match(engine,host_url.displayLink.data,host_url.realLink.data,1,&urls->flags))
+			if(domainlist_match(engine,host_url.displayLink.data,host_url.realLink.data,&urls->pre_fixup,1,&urls->flags))
 				phishy |= DOMAIN_LISTED;
 			else {
 			}
@@ -1197,22 +1254,11 @@ static enum phish_status phishingCheck(const struct cl_engine* engine,struct url
 		return CL_PHISH_HOST_NOT_LISTED;
 	}
 
-	if(!strncmp(urls->displayLink.data,cid,cid_len))/* cid: image */{
-		free_if_needed(&host_url);
-		return CL_PHISH_CLEAN_CID;
-	}
-
 	if(whitelist_check(engine,&host_url,1)) {
 		free_if_needed(&host_url);
 		return CL_PHISH_HOST_WHITELISTED;
 	}
 
-	if((!isURL(pchk, urls->displayLink.data) || !isURL(pchk, urls->realLink.data) )&&
-			( (phishy&PHISHY_NUMERIC_IP && !isNumericURL(pchk, urls->displayLink.data)) ||
-			  !(phishy&PHISHY_NUMERIC_IP))) {
-		free_if_needed(&host_url);
-		return CL_PHISH_TEXTURL;
-	}
 
 	if(urls->flags&HOST_SUFFICIENT) {
 		if(!strcmp(urls->realLink.data,urls->displayLink.data)) {

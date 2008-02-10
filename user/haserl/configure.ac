@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([haserl],[0.9.21],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
+AC_INIT([haserl],[0.9.22],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
 AM_INIT_AUTOMAKE([haserl],[$PACKAGE_VERSION])
 
 # Checks for programs.

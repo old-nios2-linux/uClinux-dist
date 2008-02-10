@@ -42,7 +42,7 @@ struct cli_dconf {
 #define PE_CONF_MD5SECT	    0x10
 #define PE_CONF_UPX	    0x20
 #define PE_CONF_FSG	    0x40
-#define PE_CONF_SUE	    0x80
+/*#define PE_CONF_REUSEME	    0x80 */
 #define PE_CONF_PETITE	    0x100
 #define PE_CONF_PESPIN	    0x200
 #define PE_CONF_YC	    0x400
@@ -65,6 +65,8 @@ struct cli_dconf {
 #define ARCH_CONF_BINHEX    0x200
 #define ARCH_CONF_SIS	    0x400
 #define ARCH_CONF_NSIS	    0x800
+#define ARCH_CONF_ARJ       0x1000
+#define ARCH_CONF_AUTOIT    0x2000
 
 /* Document flags */
 #define DOC_CONF_HTML	    0x1
@@ -74,7 +76,6 @@ struct cli_dconf {
 /* Mail flags */
 #define MAIL_CONF_MBOX	    0x1
 #define MAIL_CONF_TNEF	    0x2
-#define MAIL_CONF_PST	    0x4
 
 /* Other flags */
 #define OTHER_CONF_UUENC    0x1

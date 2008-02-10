@@ -320,9 +320,12 @@ config USER_NETFLASH_HMACMD5_KEY
 config USER_NETFLASH_SHA256
 	bool "netflash uses SHA256 as checksum"
 	depends on USER_NETFLASH_NETFLASH
+	depends on !USER_NETFLASH_CRYPTO_V2
 	help
-	  Instead of expecting the simple old checksum on flash images
-	  default to using a SHA256 hash.
+	  Image files must also contain a SHA256 hash of the image contents.
+	  By default this is in addition to the old style 32bit checksum (for
+	  backword compatabilty). The check of this hash can be disabled
+	  using the netflash "-i" option.
 
 config USER_RECOVER_BIOS
 	bool "recover bios only"
@@ -337,6 +340,18 @@ config USER_NETFLASH_CRYPTO
 	  Netflash requires a public key authentication to be attached to an
 	  image and won't commit an image without this or with an invalid
 	  authentication.
+
+config USER_NETFLASH_CRYPTO_V2
+	bool "netflash supports public key encryption using SHA256 checksum"
+	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
+	select LIB_LIBAES
+	select LIB_LIBSSL
+	select USER_NETFLASH_CRYPTO
+	help
+	  Netflash requires a public key authentication to be attached to an
+	  image and won't commit an image without this or with an invalid
+	  authentication. A SHA256 hash of the firmware image is used as
+	  the signed block data.
 
 config USER_NETFLASH_CRYPTO_OPTIONAL
 	bool "netflash optional public key encryption"
@@ -864,6 +879,13 @@ config USER_FNORD_PAM
 	help
 	  Uses PAM to authenticate users in fnord.
 
+config USER_FNORD_404_REDIR
+	bool "fnord 404 redirect"
+	depends on USER_FNORD_HTTPD
+	help
+	  Automatically redirects all invalid URL requests to the main 
+	  cgi-bin/ webpage.
+
 config USER_BOA_SRC_BOA
 	bool "boa"
 	help
@@ -1073,6 +1095,14 @@ config USER_DNSMASQ2_DNSMASQ2
 	help
 	  DNS masquerading (v2)
 
+config USER_DNSMASQ2_RESOLVE_AS_SERVER
+	bool "Add 'resolve as server IP' feature"
+	depends on USER_DNSMASQ2_DNSMASQ2
+	help
+	  Adds feature where dnsmasq2 will resolve all DNS requests to the 
+	  IP address that they came in on. For use when network isn't setup 
+	  yet and all data should be redirected to the DNS server.
+
 config USER_DROPBEAR_DROPBEAR
 	bool "dropbear"
 	depends on USER_INETD_INETD
@@ -1264,6 +1294,18 @@ config USER_OPENSWAN_KLIPS_SPIGRP
 config USER_OPENSWAN_KLIPS_TNCFG
 	bool "tncfg"
 	depends on USER_OPENSWAN
+
+config IPSEC_CONNECTION_LIMIT_BOOL
+	bool "Enable IPSec tunnel limit"
+	depends on USER_FREESWAN || USER_OPENSWAN
+	help
+	  Enable the limit checking for the maximum tunnels supported by IPSec.
+
+config IPSEC_CONNECTION_LIMIT
+	int "IPSec tunnel limit"
+	depends on IPSEC_CONNECTION_LIMIT_BOOL
+	help
+	  The absolute maximum number of tunnels allowed to be supported by IPSec.
 
 config USER_GNUGK_GNUGK
 	bool "gnugk"
@@ -2054,6 +2096,17 @@ config USER_PORTMAP_PORTMAP
 	  The portmapper service, needed for NFS under 2.4.
 	  Approx. binary size: 49k
 
+config USER_PORTMAP_PMAP_SET
+	bool "pmap_set"
+	depends on USER_PORTMAP_PORTMAP
+	help
+	  Set the list of portmap registered programs.
+
+config USER_PORTMAP_PMAP_DUMP
+	bool "pmap_dump"
+	depends on USER_PORTMAP_PORTMAP
+	help
+	  Print the list of portmap registered programs.
 
 config USER_PPPD_PPPD_PPPD
 	bool "pppd"
@@ -3918,7 +3971,6 @@ menu "MicroWindows"
 
 config USER_MICROWIN
 	bool "MicroWindows"
-	select LIB_ZLIB
 
 comment "Compiling Options"
 
@@ -4026,12 +4078,10 @@ config USER_MICROWIN_HAVE_XPM_SUPPORT
 config USER_MICROWIN_HAVE_JPEG_SUPPORT
 	bool "Have JPEG Support"
 	depends on USER_MICROWIN
-	select LIB_LIBJPEG
 
 config USER_MICROWIN_HAVE_PNG_SUPPORT
 	bool "Have PNG Support"
 	depends on USER_MICROWIN
-	select LIB_LIBPNG
 
 config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 	bool "Have T1LIB Support"
@@ -4299,6 +4349,12 @@ config USER_GAMES_RUBIK
 	bool "rubik"
 	help
 	  Non-optimal rubik's cube solver.
+
+config USER_GAMES_TAMA
+	bool "Tamagotchi daemon"
+	help
+	  The Net Tamagotchi server - maintains multiple virtual pets.
+	  To be accessed via telnet.  Default port is 9111.
 
 endmenu
 

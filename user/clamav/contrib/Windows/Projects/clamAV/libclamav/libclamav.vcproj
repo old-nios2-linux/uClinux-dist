@@ -41,7 +41,7 @@
 				Name="VCCLCompilerTool"
 				UseUnicodeResponseFiles="false"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;$(ProjectDir)mspack&quot;;&quot;$(ProjectDir)&quot;;&quot;$(ProjectDir)\unrar&quot;;&quot;$(ProjectDir)nsis&quot;;&quot;$(ProjectDir)js&quot;;&quot;$(ProjectDir)pthread&quot;"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)libclamunrar&quot;;&quot;$(ProjectDir)nsis&quot;;&quot;$(ProjectDir)regex&quot;;&quot;$(ProjectDir)zlib&quot;;&quot;$(ProjectDir)pthread&quot;"
 				PreprocessorDefinitions="_USE_32BIT_TIME_T;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;PTW32_STATIC_LIB;_DEBUG"
 				StringPooling="true"
 				MinimalRebuild="true"
@@ -68,8 +68,9 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="ws2_32.lib"
+				AdditionalDependencies="ws2_32.lib &quot;$(ProjectDir)pthread\pthreadVC2.lib&quot; &quot;$(TargetDir)\libclamunrar.lib&quot;"
 				ModuleDefinitionFile="$(InputDir)/libclamav.def"
+				GenerateDebugInformation="true"
 				SubSystem="2"
 			/>
 			<Tool
@@ -123,7 +124,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				UseUnicodeResponseFiles="false"
-				AdditionalIncludeDirectories="&quot;$(ProjectDir)mspack&quot;;&quot;$(ProjectDir)&quot;;&quot;$(ProjectDir)\unrar&quot;;&quot;$(ProjectDir)nsis&quot;;&quot;$(ProjectDir)js&quot;;&quot;$(ProjectDir)pthread&quot;"
+				AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;$(SolutionDir)libclamunrar&quot;;&quot;$(ProjectDir)nsis&quot;;&quot;$(ProjectDir)regex&quot;;&quot;$(ProjectDir)zlib&quot;;&quot;$(ProjectDir)pthread&quot;"
 				PreprocessorDefinitions="_USE_32BIT_TIME_T;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;PTW32_STATIC_LIB"
 				StringPooling="true"
 				ExceptionHandling="0"
@@ -149,89 +150,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="ws2_32.lib"
-				ModuleDefinitionFile="$(InputDir)/libclamav.def"
-				SubSystem="2"
-			/>
-			<Tool
-				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
-			/>
-			<Tool
-				Name="VCXDCMakeTool"
-			/>
-			<Tool
-				Name="VCBscMakeTool"
-			/>
-			<Tool
-				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
-				Name="VCPostBuildEventTool"
-			/>
-		</Configuration>
-		<Configuration
-			Name="Release no .net|Win32"
-			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="2"
-			CharacterSet="0"
-			WholeProgramOptimization="1"
-			>
-			<Tool
-				Name="VCPreBuildEventTool"
-			/>
-			<Tool
-				Name="VCCustomBuildTool"
-			/>
-			<Tool
-				Name="VCXMLDataGeneratorTool"
-			/>
-			<Tool
-				Name="VCWebServiceProxyGeneratorTool"
-			/>
-			<Tool
-				Name="VCMIDLTool"
-			/>
-			<Tool
-				Name="VCCLCompilerTool"
-				UseUnicodeResponseFiles="false"
-				AdditionalIncludeDirectories="&quot;$(ProjectDir)mspack&quot;;&quot;$(ProjectDir)&quot;;&quot;$(ProjectDir)\unrar&quot;;&quot;$(ProjectDir)nsis&quot;;&quot;$(ProjectDir)js&quot;;&quot;$(ProjectDir)pthread&quot;"
-				PreprocessorDefinitions="_USE_32BIT_TIME_T;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;PTW32_STATIC_LIB"
-				StringPooling="true"
-				ExceptionHandling="0"
-				RuntimeLibrary="0"
-				StructMemberAlignment="0"
-				DefaultCharIsUnsigned="false"
-				TreatWChar_tAsBuiltInType="false"
-				UsePrecompiledHeader="0"
-				WarningLevel="4"
-				Detect64BitPortabilityProblems="true"
-				DebugInformationFormat="0"
-				CallingConvention="0"
-				CompileAs="1"
-			/>
-			<Tool
-				Name="VCManagedResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCResourceCompilerTool"
-			/>
-			<Tool
-				Name="VCPreLinkEventTool"
-			/>
-			<Tool
-				Name="VCLinkerTool"
-				AdditionalDependencies="ws2_32.lib"
-				GenerateManifest="false"
+				AdditionalDependencies="ws2_32.lib &quot;$(ProjectDir)pthread\pthreadVC2.lib&quot; &quot;$(TargetDir)\libclamunrar.lib&quot;"
 				ModuleDefinitionFile="$(InputDir)/libclamav.def"
 				SubSystem="2"
 			/>
@@ -271,6 +190,10 @@
 			>
 			<File
 				RelativePath=".\aspack.c"
+				>
+			</File>
+			<File
+				RelativePath=".\autoit.c"
 				>
 			</File>
 			<File
@@ -314,14 +237,6 @@
 				</FileConfiguration>
 				<FileConfiguration
 					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						WarningLevel="4"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release no .net|Win32"
 					>
 					<Tool
 						Name="VCCLCompilerTool"
@@ -466,10 +381,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\regex.c"
-				>
-			</File>
-			<File
 				RelativePath=".\regex_list.c"
 				>
 			</File>
@@ -479,10 +390,6 @@
 			</File>
 			<File
 				RelativePath=".\scanners.c"
-				>
-			</File>
-			<File
-				RelativePath=".\sha256.c"
 				>
 			</File>
 			<File
@@ -510,10 +417,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\mspack\system.c"
-				>
-			</File>
-			<File
 				RelativePath=".\table.c"
 				>
 			</File>
@@ -523,6 +426,10 @@
 			</File>
 			<File
 				RelativePath=".\tnef.c"
+				>
+			</File>
+			<File
+				RelativePath=".\unarj.c"
 				>
 			</File>
 			<File
@@ -562,34 +469,46 @@
 				>
 			</File>
 			<Filter
-				Name="unrar"
+				Name="nsis"
 				>
 				<File
-					RelativePath=".\unrar\unrar.c"
+					RelativePath=".\nsis\bzlib.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrar15.c"
+					RelativePath=".\nsis\infblock.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrar20.c"
+					RelativePath=".\nsis\LZMADecode.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarcmd.c"
+					RelativePath=".\nsis\nulsft.c"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="regex"
+				>
+				<File
+					RelativePath=".\regex\regcomp.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarfilter.c"
+					RelativePath=".\regex\regerror.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarppm.c"
+					RelativePath=".\regex\regexec.c"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarvm.c"
+					RelativePath=".\regex\regfree.c"
+					>
+				</File>
+				<File
+					RelativePath=".\regex\strlcpy.c"
 					>
 				</File>
 			</Filter>
@@ -649,34 +568,6 @@
 					>
 				</File>
 			</Filter>
-			<Filter
-				Name="pthread"
-				>
-				<File
-					RelativePath=".\pthread\pthread.c"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="nsis"
-				>
-				<File
-					RelativePath=".\nsis\bzlib.c"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\infblock.c"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\LZMADecode.c"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nulsft.c"
-					>
-				</File>
-			</Filter>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -685,6 +576,10 @@
 			>
 			<File
 				RelativePath=".\aspack.h"
+				>
+			</File>
+			<File
+				RelativePath=".\autoit.h"
 				>
 			</File>
 			<File
@@ -868,10 +763,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\regex.h"
-				>
-			</File>
-			<File
 				RelativePath=".\regex_list.h"
 				>
 			</File>
@@ -885,10 +776,6 @@
 			</File>
 			<File
 				RelativePath=".\scanners.h"
-				>
-			</File>
-			<File
-				RelativePath=".\sha256.h"
 				>
 			</File>
 			<File
@@ -920,6 +807,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\syslog.h"
+				>
+			</File>
+			<File
 				RelativePath=".\table.h"
 				>
 			</File>
@@ -933,6 +824,10 @@
 			</File>
 			<File
 				RelativePath=".\tnef.h"
+				>
+			</File>
+			<File
+				RelativePath=".\unarj.h"
 				>
 			</File>
 			<File
@@ -980,34 +875,58 @@
 				>
 			</File>
 			<Filter
-				Name="unrar"
+				Name="nsis"
 				>
 				<File
-					RelativePath=".\unrar\unrar.h"
+					RelativePath=".\nsis\bzlib_private.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrar15.h"
+					RelativePath=".\nsis\LZMADecode.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrar20.h"
+					RelativePath=".\nsis\nsis_bzlib.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarcmd.h"
+					RelativePath=".\nsis\nsis_zconf.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarfilter.h"
+					RelativePath=".\nsis\nsis_zlib.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarppm.h"
+					RelativePath=".\nsis\nsis_zutil.h"
 					>
 				</File>
 				<File
-					RelativePath=".\unrar\unrarvm.h"
+					RelativePath=".\nsis\nulsft.h"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="regex"
+				>
+				<File
+					RelativePath=".\regex\cclass.h"
+					>
+				</File>
+				<File
+					RelativePath=".\regex\cname.h"
+					>
+				</File>
+				<File
+					RelativePath=".\regex\regex.h"
+					>
+				</File>
+				<File
+					RelativePath=".\regex\regex2.h"
+					>
+				</File>
+				<File
+					RelativePath=".\regex\utils.h"
 					>
 				</File>
 			</Filter>
@@ -1056,66 +975,6 @@
 				</File>
 				<File
 					RelativePath=".\zlib\zutil.h"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="pthread"
-				>
-				<File
-					RelativePath=".\pthread\config.h"
-					>
-				</File>
-				<File
-					RelativePath=".\pthread\implement.h"
-					>
-				</File>
-				<File
-					RelativePath=".\pthread\need_errno.h"
-					>
-				</File>
-				<File
-					RelativePath=".\pthread\pthread.h"
-					>
-				</File>
-				<File
-					RelativePath=".\pthread\sched.h"
-					>
-				</File>
-				<File
-					RelativePath=".\pthread\semaphore.h"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="nsis"
-				>
-				<File
-					RelativePath=".\nsis\bzlib_private.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\LZMADecode.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nsis_bzlib.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nsis_zconf.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nsis_zlib.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nsis_zutil.h"
-					>
-				</File>
-				<File
-					RelativePath=".\nsis\nulsft.h"
 					>
 				</File>
 			</Filter>

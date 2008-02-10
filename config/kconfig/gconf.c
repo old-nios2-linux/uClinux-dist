@@ -271,8 +271,8 @@ void init_main_window(const gchar * glade_file)
 					  /*"style", PANGO_STYLE_OBLIQUE, */
 					  NULL);
 
-	sprintf(title, _("Linux Kernel v%s Configuration"),
-		getenv("KERNELVERSION"));
+	sprintf(title, _("uClinux Distribution v%s Configuration"),
+		getenv("DISTVERSION"));
 	gtk_window_set_title(GTK_WINDOW(main_wnd), title);
 
 	gtk_widget_show(main_wnd);

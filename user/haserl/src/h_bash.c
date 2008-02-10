@@ -74,6 +74,7 @@ bash_setup (char *shell, list_t * env)
 	  /* I'm the child, connect stdin to the parent */
 	  dup2 (subshell_pipe[PARENT_IN], STDIN_FILENO);
 	  close (subshell_pipe[PARENT_IN]);
+	  close (subshell_pipe[PARENT_OUT]);
 	  count = argc_argv (shell, &argv, "");
 	  if (count > 19)
 	    {
@@ -105,6 +106,7 @@ bash_setup (char *shell, list_t * env)
       else
 	{
 	  /* I'm parent, move along please */
+	  close (subshell_pipe[PARENT_IN]);
 	}
     }
 

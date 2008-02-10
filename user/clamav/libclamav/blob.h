@@ -46,11 +46,15 @@ int	blobcmp(const blob *b1, const blob *b2);
 int	blobGrow(blob *b, size_t len);
 
 /*
- * Like a blob, but associated with a file
+ * Like a blob, but associated with a file stored in the temporary directory
  */
 typedef	struct fileblob {
 	FILE	*fp;
-	blob	b;
+	blob	b;	/*
+			 * b.name is the name of the attachment as stored in the
+			 * email, not the full path name of the temporary file
+			 */
+	char	*fullname;	/* full pathname of the file */
 	unsigned	int	isNotEmpty : 1;
 	unsigned	int	isInfected : 1;
 	unsigned	long	bytes_scanned;
@@ -58,12 +62,15 @@ typedef	struct fileblob {
 } fileblob;
 
 fileblob	*fileblobCreate(void);
+int	fileblobScanAndDestroy(fileblob *fb);
+void	fileblobDestructiveDestroy(fileblob *fb);
 void	fileblobDestroy(fileblob *fb);
 void	fileblobSetFilename(fileblob *fb, const char *dir, const char *filename);
 const	char	*fileblobGetFilename(const fileblob *fb);
 void	fileblobSetCTX(fileblob *fb, cli_ctx *ctx);
 int	fileblobAddData(fileblob *fb, const unsigned char *data, size_t len);
-int	fileblobContainsVirus(const fileblob *fb);
+int	fileblobScan(const fileblob *fb);
+int	fileblobInfected(const fileblob *fb);
 void	sanitiseName(char *name);
 
 #endif /*_BLOB_H*/

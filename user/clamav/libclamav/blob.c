@@ -48,6 +48,7 @@ static	char	const	rcsid[] = "$Id: blob.c,v 1.64 2007/02/12 22:25:14 njh Exp $";
 #include "others.h"
 #include "mbox.h"
 #include "matcher.h"
+#include "scanners.h"
 
 #ifndef	CL_DEBUG
 #define	NDEBUG	/* map CLAMAV debug onto standard */
@@ -149,6 +150,9 @@ blobGetFilename(const blob *b)
 	return b->name;
 }
 
+/*
+ * Returns <0 for failure
+ */
 int
 blobAddData(blob *b, const unsigned char *data, size_t len)
 {
@@ -214,22 +218,22 @@ blobAddData(blob *b, const unsigned char *data, size_t len)
 		assert(b->len == 0);
 		assert(b->size == 0);
 
-		b->size = len * 4;
+		b->size = (off_t)len * 4;
 		b->data = cli_malloc(b->size);
-	} else if(b->size < b->len + len) {
+	} else if(b->size < b->len + (off_t)len) {
 		unsigned char *p = cli_realloc(b->data, b->size + (len * 4));
 
 		if(p == NULL)
 			return -1;
 
-		b->size += len * 4;
+		b->size += (off_t)len * 4;
 		b->data = p;
 	}
 #endif
 
 	if(b->data) {
 		memcpy(&b->data[b->len], data, len);
-		b->len += len;
+		b->len += (off_t)len;
 	}
 	return 0;
 }
@@ -344,12 +348,12 @@ blobGrow(blob *b, size_t len)
 
 		b->data = cli_malloc(len);
 		if(b->data)
-			b->size = len;
+			b->size = (off_t)len;
 	} else {
 		unsigned char *ptr = cli_realloc(b->data, b->size + len);
 
 		if(ptr) {
-			b->size += len;
+			b->size += (off_t)len;
 			b->data = ptr;
 		}
 	}
@@ -371,6 +375,58 @@ fileblobCreate(void)
 #endif
 }
 
+/*
+ * Returns CL_CLEAN or CL_VIRUS. Destroys the fileblob and removes the file
+ * if possible
+ */
+int
+fileblobScanAndDestroy(fileblob *fb)
+{
+	if(cli_leavetemps_flag) {
+		/* Can't remove the file, the caller must scan */
+		fileblobDestroy(fb);
+		return CL_CLEAN;
+	}
+		
+	switch(fileblobScan(fb)) {
+		case CL_VIRUS:
+			fileblobDestructiveDestroy(fb);
+			return CL_VIRUS;
+		case CL_BREAK:
+			fileblobDestructiveDestroy(fb);
+			return CL_CLEAN;
+		default:
+			fileblobDestroy(fb);
+			return CL_CLEAN;
+	}
+}
+
+/*
+ * Destroy the fileblob, and remove the file associated with it
+ */
+void
+fileblobDestructiveDestroy(fileblob *fb)
+{
+	if(fb->fp && fb->fullname) {
+		fclose(fb->fp);
+		cli_dbgmsg("fileblobDestructiveDestroy: %s\n", fb->fullname);
+		if(unlink(fb->fullname) < 0)
+			cli_warnmsg("fileblobDestructiveDestroy: Can't delete file %s\n", fb->fullname);
+		free(fb->fullname);
+		fb->fp = NULL;
+		fb->fullname = NULL;
+	}
+	if(fb->b.name) {
+		free(fb->b.name);
+		fb->b.name = NULL;
+	}
+	fileblobDestroy(fb);
+}
+
+/*
+ * Destroy the fileblob, and remove the file associated with it if that file is
+ * empty
+ */
 void
 fileblobDestroy(fileblob *fb)
 {
@@ -379,10 +435,13 @@ fileblobDestroy(fileblob *fb)
 
 	if(fb->b.name && fb->fp) {
 		fclose(fb->fp);
-		cli_dbgmsg("fileblobDestroy: %s\n", fb->b.name);
-		if(!fb->isNotEmpty) {
-			cli_dbgmsg("fileblobDestroy: not saving empty file\n");
-			unlink(fb->b.name);
+		if(fb->fullname) {
+			cli_dbgmsg("fileblobDestroy: %s\n", fb->fullname);
+			if(!fb->isNotEmpty) {
+				cli_dbgmsg("fileblobDestroy: not saving empty file\n");
+				if(unlink(fb->fullname) < 0)
+					cli_warnmsg("fileblobDestroy: Can't delete empty file %s\n", fb->fullname);
+			}
 		}
 		free(fb->b.name);
 
@@ -390,12 +449,15 @@ fileblobDestroy(fileblob *fb)
 	} else if(fb->b.data) {
 		free(fb->b.data);
 		if(fb->b.name) {
-			cli_errmsg("fileblobDestroy: %s not saved: report to http://bugs.clamav.net\n", fb->b.name);
+			cli_errmsg("fileblobDestroy: %s not saved: report to http://bugs.clamav.net\n",
+				(fb->fullname) ? fb->fullname : fb->b.name);
 			free(fb->b.name);
 		} else
 			cli_errmsg("fileblobDestroy: file not saved (%lu bytes): report to http://bugs.clamav.net\n",
 				(unsigned long)fb->b.len);
 	}
+	if(fb->fullname)
+		free(fb->fullname);
 #ifdef	CL_DEBUG
 	fb->b.magic = INVALIDCLASS;
 #endif
@@ -461,6 +523,8 @@ fileblobSetFilename(fileblob *fb, const char *dir, const char *filename)
 		if(name == NULL)
 			return;
 		fd = open(name, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
+		if(fd >= 0)
+			strncpy(fullname, name, sizeof(fullname) - 1);
 		free(name);
 	} else
 		fd = open(fullname, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
@@ -494,7 +558,15 @@ fileblobSetFilename(fileblob *fb, const char *dir, const char *filename)
 			free(fb->b.data);
 			fb->b.data = NULL;
 			fb->b.len = fb->b.size = 0;
+			fb->isNotEmpty = 1;
 		}
+
+	/*
+	 * If this strdup fails, then if the file is empty it won't be removed
+	 * until later. Since this is only a trivial issue, there is no need
+	 * to error if it fails to allocate
+	 */
+	fb->fullname = cli_strdup(fullname);
 }
 
 int
@@ -556,10 +628,74 @@ fileblobSetCTX(fileblob *fb, cli_ctx *ctx)
 	fb->ctx = ctx;
 }
 
+/*
+ * Performs a full scan on the fileblob, returning ClamAV status:
+ *	CL_BREAK means clean
+ *	CL_CLEAN means unknown
+ *	CL_VIRUS means infected
+ */
 int
-fileblobContainsVirus(const fileblob *fb)
+fileblobScan(const fileblob *fb)
 {
-	return fb->isInfected ? TRUE : FALSE;
+#ifndef	C_WINDOWS
+	int rc, fd;
+#endif
+
+	if(fb->isInfected)
+		return CL_VIRUS;
+	if(fb->fullname == NULL) {
+		/* shouldn't happen, scan called before fileblobSetFilename */
+		cli_warnmsg("fileblobScan, fullname == NULL\n");
+		return CL_ENULLARG;	/* there is no CL_UNKNOWN */
+	}
+	if(fb->ctx == NULL) {
+		/* fileblobSetCTX hasn't been called */
+		cli_dbgmsg("fileblobScan, ctx == NULL\n");
+		return CL_CLEAN;	/* there is no CL_UNKNOWN */
+	}
+#ifndef	C_WINDOWS
+	/*
+	 * FIXME: On Windows, cli_readn gives "bad file descriptor" when called
+	 * by cli_check_mydoom_log from the call to cli_magic_scandesc here
+	 * which implies that the file descriptor is getting closed somewhere,
+	 * but I can't see where.
+	 * One possible fix would be to duplicate cli_scanfile here.
+	 */
+	fflush(fb->fp);
+	fd = dup(fileno(fb->fp));
+	if(fd == -1) {
+		cli_warnmsg("%s: dup failed\n", fb->fullname);
+		return CL_CLEAN;
+	}
+	/* cli_scanfile is static :-( */
+	/*if(cli_scanfile(fb->fullname, fb->ctx) == CL_VIRUS) {
+		cli_dbgmsg("%s is infected\n", fb->fullname);
+		return CL_VIRUS;
+	}*/
+
+	rc = cli_magic_scandesc(fd, fb->ctx);
+	close(fd);
+
+	if(rc == CL_VIRUS) {
+		cli_dbgmsg("%s is infected\n", fb->fullname);
+		return CL_VIRUS;
+	}
+	cli_dbgmsg("%s is clean\n", fb->fullname);
+	return CL_BREAK;
+#else	/*C_WINDOWS*/
+	/* Ensure that the file is saved and scanned */
+	return CL_CLEAN;	/* there is no CL_UNKNOWN :-( */
+#endif	/*C_WINDOWS*/
+}
+
+/*
+ * Doesn't perform a full scan just lets the caller know if something suspicious has
+ * been seen yet
+ */
+int
+fileblobInfected(const fileblob *fb)
+{
+	return fb->isInfected;
 }
 
 /*

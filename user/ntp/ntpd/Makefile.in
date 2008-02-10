@@ -1009,6 +1009,7 @@ uninstall-man: uninstall-man1
 check-local: @MAKE_CHECK_Y2K@
 	test -z "@MAKE_CHECK_Y2K@" || ./@MAKE_CHECK_Y2K@
 
+ifeq (0,1)
 $(srcdir)/ntpd-opts.h: $(srcdir)/ntpd-opts.c
 $(srcdir)/ntpd-opts.c: $(srcdir)/ntpd-opts.def $(srcdir)/ntpdbase-opts.def $(std_def_list)
 	$(run_ag) ntpd-opts.def
@@ -1028,6 +1029,7 @@ $(srcdir)/ntpdsim.1: $(srcdir)/ntpdsim-opts.def $(srcdir)/ntpdbase-opts.def $(st
 
 $(srcdir)/ntpdsim-opts.texi $(srcdir)/ntpdsim-opts.menu: $(srcdir)/ntpdsim-opts.def $(srcdir)/ntpdbase-opts.def $(std_def_list) $(top_srcdir)/include/homerc.def
 	$(run_ag) -Taginfo.tpl -DLEVEL=section ntpdsim-opts.def
+endif
 
 $(PROGRAMS): $(LDADD)
 

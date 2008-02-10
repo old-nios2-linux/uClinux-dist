@@ -919,13 +919,13 @@ static void ep93xx_init_mixer(void)
 	poke( AC97_04_HEADPHONE_VOL, 0xa020 );
 	if( peek( AC97_04_HEADPHONE_VOL) != 0xa020 )
 	{
-		ac97_hw[AC97_04_HEADPHONE_VOL].scale = 32;
+		ac97_hw[SOUND_MIXER_ALTPCM].scale = 32;
 	}
 
 	poke( AC97_06_MONO_VOL, 0x8020 );
 	if( peek( AC97_06_MONO_VOL) != 0x8020 )
 	{
-		ac97_hw[AC97_06_MONO_VOL].scale = 32;
+		ac97_hw[SOUND_MIXER_PHONEOUT].scale = 32;
 	}
 
 	/* initialize mixer channel volumes */

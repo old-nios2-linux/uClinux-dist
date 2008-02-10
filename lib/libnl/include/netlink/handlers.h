@@ -57,12 +57,16 @@ typedef int (*nl_recvmsg_err_cb_t)(struct sockaddr_nl *nla,
  */
 enum nl_cb_action {
 	/** Proceed with wathever would come next */
-	NL_PROCEED,
+	NL_OK,
 	/** Skip this message */
 	NL_SKIP,
 	/** Stop parsing altogether and discard remaining messages */
-	NL_EXIT,
+	NL_STOP,
 };
+
+/* backwards compatibility */
+#define NL_PROCEED NL_OK
+#define NL_EXIT NL_STOP
 
 /**
  * Callback kinds

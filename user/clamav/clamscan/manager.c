@@ -107,11 +107,16 @@ static int scanstdin(const struct cl_engine *engine, const struct cl_limits *lim
 
     if(!(fs = fopen(file, "wb"))) {
 	logg("!Can't open %s for writing\n", file);
+	free(file);
 	return 63;
     }
 
     while((ret = fread(buff, 1, FILEBUFF, stdin)))
-	fwrite(buff, 1, ret, fs);
+	if(fwrite(buff, 1, ret, fs) < ret) {
+	    logg("!Can't write to %s\n", file);
+	    free(file);
+	    return 58;
+	}
 
     fclose(fs);
 
@@ -164,9 +169,6 @@ int scanmanager(const struct optstruct *opt)
     }
 #endif
 
-    if(opt_check(opt, "ncore"))
-	dboptions |= CL_DB_NCORE;
-
     if(!opt_check(opt, "no-phishing-sigs"))
 	dboptions |= CL_DB_PHISHING;
 
@@ -185,6 +187,9 @@ int scanmanager(const struct optstruct *opt)
 
     if(opt_check(opt, "dev-ac-only"))
 	dboptions |= CL_DB_ACONLY;
+
+    if(opt_check(opt, "dev-ac-depth"))
+	cli_ac_setdepth(AC_DEFAULT_MIN_DEPTH, atoi(opt_arg(opt, "dev-ac-depth")));
 
     if(opt_check(opt, "detect-pua"))
 	dboptions |= CL_DB_PUA;
@@ -463,7 +468,10 @@ static int clamav_unpack(const char *prog, const char **args, const char *tmpdir
 		}
 	    }
 #endif
-	    chdir(tmpdir);
+	    if(chdir(tmpdir) == -1) {
+		fprintf(stderr, "ERROR: chdir(%s) failed\n", tmpdir);
+		exit(1);
+	    }
 
 	    if(printinfected) {
   	        fdevnull = open("/dev/null", O_WRONLY);
@@ -573,7 +581,7 @@ static void move_infected(const char *filename, const struct optstruct *opt)
     stat(filename, &ofstat);
 
     if(!stat(movefilename, &mfstat)) {
-        if(ofstat.st_ino == mfstat.st_ino) { /* It's the same file*/
+        if((ofstat.st_dev == mfstat.st_dev) && (ofstat.st_ino == mfstat.st_ino)) { /* It's the same file*/
             logg("File excluded '%s'\n", filename);
             info.notmoved++;
             free(movefilename);
@@ -622,7 +630,7 @@ static void move_infected(const char *filename, const struct optstruct *opt)
 	}
     }
 
-    logg("%s: %s to '%s'\n", filename, (moveflag) ? "moved" : "copied", movefilename);
+    logg("~%s: %s to '%s'\n", filename, (moveflag) ? "moved" : "copied", movefilename);
 
     free(movefilename);
 }
@@ -641,7 +649,7 @@ static int checkfile(const char *filename, const struct cl_engine *engine, const
     }
 
     if((ret = cl_scandesc(fd, &virname, &info.blocks, engine, limits, options)) == CL_VIRUS) {
-	logg("%s: %s FOUND\n", filename, virname);
+	logg("~%s: %s FOUND\n", filename, virname);
 	info.ifiles++;
 
 	if(bell)
@@ -649,10 +657,10 @@ static int checkfile(const char *filename, const struct cl_engine *engine, const
 
     } else if(ret == CL_CLEAN) {
 	if(!printinfected && printclean)
-	    mprintf("%s: OK\n", filename);
+	    mprintf("~%s: OK\n", filename);
     } else
 	if(!printinfected)
-	    logg("%s: %s\n", filename, cl_strerror(ret));
+	    logg("~%s: %s\n", filename, cl_strerror(ret));
 
     close(fd);
     return ret;
@@ -814,7 +822,7 @@ static int scancompressed(const char *filename, struct cl_engine *engine, const 
 			logg("^%s: Can't remove\n", filename);
 			info.notremoved++;
 		    } else {
-			logg("%s: Removed\n", filename);
+			logg("~%s: Removed\n", filename);
 		    }
 		} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
 		    move_infected(filename, opt);
@@ -831,14 +839,14 @@ static int scancompressed(const char *filename, struct cl_engine *engine, const 
 			logg("^%s: Can't remove\n", filename);
 			info.notremoved++;
 		    } else {
-			logg("%s: Removed\n", filename);
+			logg("~%s: Removed\n", filename);
 		    }
 		} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
 		    move_infected(filename, opt);
 	    }
 	    return ret;
 	case 1:
-	    logg("%s: Infected.Archive FOUND\n", filename);
+	    logg("~%s: Infected.Archive FOUND\n", filename);
 
 	    if(bell)
 		fprintf(stderr, "\007");
@@ -848,7 +856,7 @@ static int scancompressed(const char *filename, struct cl_engine *engine, const 
 		    logg("^%s: Can't remove\n", filename);
 		    info.notremoved++;
 		} else {
-		    logg("%s: Removed\n", filename);
+		    logg("~%s: Removed\n", filename);
 		}
 	    } else if (opt_check(opt, "move") || opt_check(opt, "copy"))
 		move_infected(filename, opt);
@@ -929,7 +937,7 @@ static int scandenied(const char *filename, struct cl_engine *engine, const stru
 		logg("^%s: Can't remove\n", filename);
 		info.notremoved++;
 	    } else {
-	        logg("%s: Removed\n", filename);
+	        logg("~%s: Removed\n", filename);
 	    }
 	} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
 	    move_infected(filename, opt);
@@ -957,7 +965,7 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
 	if(stat(filename, &sb) != -1)
 	    if(sb.st_dev == procdev) {
 		if(!printinfected)
-		    logg("%s: Excluded (/proc)\n", filename);
+		    logg("~%s: Excluded (/proc)\n", filename);
 		return 0;
 	    }
 #endif    
@@ -967,7 +975,7 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
 	while(argument) {
 	    if(match_regex(filename, argument) == 1) {
 		if(!printinfected)
-		    logg("%s: Excluded\n", filename);
+		    logg("~%s: Excluded\n", filename);
 		return 0;
 	    }
 	    argument = opt_nextarg(&optnode, "exclude");
@@ -987,14 +995,14 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
 
 	if(!included) {
 	    if(!printinfected)
-		logg("%s: Excluded\n", filename);
+		logg("~%s: Excluded\n", filename);
 	    return 0;
 	}
     }
 
     if(fileinfo(filename, 1) == 0) {
 	if(!printinfected)
-	    logg("%s: Empty file\n", filename);
+	    logg("~%s: Empty file\n", filename);
 	return 0;
     }
 
@@ -1002,7 +1010,7 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
     if(geteuid())
 	if(checkaccess(filename, NULL, R_OK) != 1) {
 	    if(!printinfected)
-		logg("%s: Access denied\n", filename);
+		logg("~%s: Access denied\n", filename);
 	    return 0;
 	}
 #endif
@@ -1024,7 +1032,7 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
 		    logg("^%s: Can't remove\n", filename);
 		    info.notremoved++;
 		} else {
-		    logg("%s: Removed\n", filename);
+		    logg("~%s: Removed\n", filename);
 		}
 	    } else if (opt_check(opt, "move") || opt_check(opt, "copy"))
 		move_infected(filename, opt);
@@ -1088,7 +1096,7 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
 		logg("^%s: Can't remove\n", filename);
 		info.notremoved++;
 	    } else {
-		logg("%s: Removed\n", filename);
+		logg("~%s: Removed\n", filename);
 	    }
 	} else if (opt_check(opt, "move") || opt_check(opt, "copy"))
             move_infected(filename, opt);

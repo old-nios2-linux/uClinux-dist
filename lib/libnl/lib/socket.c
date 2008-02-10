@@ -96,6 +96,26 @@
 #include <netlink/msg.h>
 #include <netlink/attr.h>
 
+static int default_cb = NL_CB_DEFAULT;
+
+static void __init init_default_cb(void)
+{
+	char *nlcb;
+
+	if ((nlcb = getenv("NLCB"))) {
+		if (!strcasecmp(nlcb, "default"))
+			default_cb = NL_CB_DEFAULT;
+		else if (!strcasecmp(nlcb, "verbose"))
+			default_cb = NL_CB_VERBOSE;
+		else if (!strcasecmp(nlcb, "debug"))
+			default_cb = NL_CB_DEBUG;
+		else {
+			fprintf(stderr, "Unknown value for NLCB, valid values: "
+				"{default | verbose | debug}\n");
+		}
+	}
+}
+
 static uint32_t used_ports_map[32];
 
 static uint32_t generate_local_port(void)
@@ -127,9 +147,13 @@ static uint32_t generate_local_port(void)
 
 static void release_local_port(uint32_t port)
 {
-	int nr = port >> 22;
+	int nr;
 
-	used_ports_map[nr / 32] &= ~(nr % 32);
+	if (port == UINT_MAX)
+		return;
+	
+	nr = port >> 22;
+	used_ports_map[nr / 32] &= ~((nr % 32) + 1);
 }
 
 /**
@@ -147,11 +171,17 @@ static struct nl_handle *__alloc_handle(struct nl_cb *cb)
 		return NULL;
 	}
 
+	handle->h_fd = -1;
 	handle->h_cb = cb;
 	handle->h_local.nl_family = AF_NETLINK;
-	handle->h_local.nl_pid = generate_local_port();
 	handle->h_peer.nl_family = AF_NETLINK;
 	handle->h_seq_expect = handle->h_seq_next = time(0);
+	handle->h_local.nl_pid = generate_local_port();
+	if (handle->h_local.nl_pid == UINT_MAX) {
+		nl_handle_destroy(handle);
+		nl_error(ENOBUFS, "Out of local ports");
+		return NULL;
+	}
 
 	return handle;
 }
@@ -165,7 +195,7 @@ struct nl_handle *nl_handle_alloc(void)
 {
 	struct nl_cb *cb;
 	
-	cb = nl_cb_alloc(NL_CB_DEFAULT);
+	cb = nl_cb_alloc(default_cb);
 	if (!cb) {
 		nl_errno(ENOMEM);
 		return NULL;
@@ -200,6 +230,9 @@ void nl_handle_destroy(struct nl_handle *handle)
 	if (!handle)
 		return;
 
+	if (handle->h_fd >= 0)
+		close(handle->h_fd);
+
 	if (!(handle->h_flags & NL_OWN_PORT))
 		release_local_port(handle->h_local.nl_pid);
 
@@ -216,7 +249,7 @@ void nl_handle_destroy(struct nl_handle *handle)
 
 static int noop_seq_check(struct nl_msg *msg, void *arg)
 {
-	return NL_PROCEED;
+	return NL_OK;
 }
 
 
@@ -311,6 +344,9 @@ int nl_socket_add_membership(struct nl_handle *handle, int group)
 {
 	int err;
 
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
+
 	err = setsockopt(handle->h_fd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP,
 			 &group, sizeof(group));
 	if (err < 0)
@@ -334,6 +370,9 @@ int nl_socket_add_membership(struct nl_handle *handle, int group)
 int nl_socket_drop_membership(struct nl_handle *handle, int group)
 {
 	int err;
+
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
 
 	err = setsockopt(handle->h_fd, SOL_NETLINK, NETLINK_DROP_MEMBERSHIP,
 			 &group, sizeof(group));
@@ -396,10 +435,31 @@ int nl_socket_get_fd(struct nl_handle *handle)
  */
 int nl_socket_set_nonblocking(struct nl_handle *handle)
 {
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
+
 	if (fcntl(handle->h_fd, F_SETFL, O_NONBLOCK) < 0)
 		return nl_error(errno, "fcntl(F_SETFL, O_NONBLOCK) failed");
 
 	return 0;
+}
+
+/**
+ * Enable use of MSG_PEEK when reading from socket
+ * @arg handle		Netlink socket
+ */
+void nl_socket_enable_msg_peek(struct nl_handle *handle)
+{
+	handle->h_flags |= NL_MSG_PEEK;
+}
+
+/**
+ * Disable use of MSG_PEEK when reading from socket
+ * @arg handle		Netlink socket
+ */
+void nl_socket_disable_msg_peek(struct nl_handle *handle)
+{
+	handle->h_flags &= ~NL_MSG_PEEK;
 }
 
 /** @} */
@@ -466,6 +526,9 @@ int nl_set_buffer_size(struct nl_handle *handle, int rxbuf, int txbuf)
 
 	if (txbuf <= 0)
 		txbuf = 32768;
+
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
 	
 	err = setsockopt(handle->h_fd, SOL_SOCKET, SO_SNDBUF,
 			 &txbuf, sizeof(txbuf));
@@ -493,6 +556,9 @@ int nl_set_passcred(struct nl_handle *handle, int state)
 {
 	int err;
 
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
+
 	err = setsockopt(handle->h_fd, SOL_SOCKET, SO_PASSCRED,
 			 &state, sizeof(state));
 	if (err < 0)
@@ -516,6 +582,9 @@ int nl_set_passcred(struct nl_handle *handle, int state)
 int nl_socket_recv_pktinfo(struct nl_handle *handle, int state)
 {
 	int err;
+
+	if (handle->h_fd == -1)
+		return nl_error(EBADFD, "Socket not connected");
 
 	err = setsockopt(handle->h_fd, SOL_NETLINK, NETLINK_PKTINFO,
 			 &state, sizeof(state));

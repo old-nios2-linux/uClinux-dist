@@ -1,8 +1,9 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Jan 31 01:14:45 2008
+# Thu Apr 10 01:00:40 2008
 #
+CONFIG_DISTVERSION="4.0"
 
 #
 # Library Configuration
@@ -1081,6 +1082,7 @@ CONFIG_USER_BUSYBOX_FEATURE_SH_IS_NONE=y
 # CONFIG_USER_GAMES_ADVENT4 is not set
 # CONFIG_USER_GAMES_DUNGEON is not set
 # CONFIG_USER_GAMES_RUBIK is not set
+# CONFIG_USER_GAMES_TAMA is not set
 
 #
 # Miscellaneous Configuration

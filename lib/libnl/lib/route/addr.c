@@ -184,10 +184,9 @@ static struct nla_policy addr_policy[IFA_MAX+1] = {
 };
 
 static int addr_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
-			   struct nlmsghdr *nlh, void *arg)
+			   struct nlmsghdr *nlh, struct nl_parser_param *pp)
 {
 	struct rtnl_addr *addr;
-	struct nl_parser_param *pp = arg;
 	struct ifaddrmsg *ifa;
 	struct nlattr *tb[IFA_MAX+1];
 	int err = -ENOMEM, peer_prefix = 0;
@@ -289,7 +288,7 @@ static int addr_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
 	if (err < 0)
 		goto errout_free;
 
-	return P_ACCEPT;
+	err = P_ACCEPT;
 
 errout_free:
 	rtnl_addr_put(addr);

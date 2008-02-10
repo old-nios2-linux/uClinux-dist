@@ -333,6 +333,7 @@ extern int	ext_enable;		/* external clock enabled */
 extern int	cal_enable;		/* refclock calibrate enable */
 extern int	allow_panic;		/* allow panic correction */
 extern int	mode_ntpdate;		/* exit on first clock set */
+extern int	mode_immediateset;	/* set the clock ASAP with anything available */
 extern int	peer_ntpdate;		/* count of ntpdate peers */
 
 /*

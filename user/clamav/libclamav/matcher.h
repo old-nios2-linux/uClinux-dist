@@ -32,6 +32,7 @@
 #include "matcher-bm.h"
 
 #define CLI_MATCH_WILDCARD	0xff00
+#define CLI_MATCH_CHAR		0x0000
 #define CLI_MATCH_IGNORE	0x0100
 #define CLI_MATCH_ALTERNATIVE	0x0200
 #define CLI_MATCH_NIBBLE_HIGH	0x0300
@@ -42,7 +43,7 @@ struct cli_matcher {
     uint8_t ac_only;
 
     /* Extended Boyer-Moore */
-    int32_t *bm_shift;
+    uint8_t *bm_shift;
     struct cli_bm_patt **bm_suffix;
     uint32_t *soff, soff_len; /* for PE section sigs */
 
@@ -51,6 +52,21 @@ struct cli_matcher {
     struct cli_ac_node *ac_root, **ac_nodetable;
     struct cli_ac_patt **ac_pattable;
     uint32_t ac_partsigs, ac_nodes, ac_patterns;
+};
+
+struct cli_md5_node {
+    char *virname;
+    unsigned char *md5;
+    unsigned int size;
+    unsigned short fp;
+    struct cli_md5_node *next;
+};
+
+struct cli_meta_node {
+    int csize, size, method;
+    unsigned int crc32, fileno, encrypted, maxdepth;
+    char *filename, *virname;
+    struct cli_meta_node *next;
 };
 
 #define CL_TARGET_TABLE_SIZE 7

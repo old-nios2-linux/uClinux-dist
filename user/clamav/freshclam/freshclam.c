@@ -247,12 +247,6 @@ int main(int argc, char **argv)
 	return 0;
     }
 
-    if(opt_check(opt, "version")) {
-	print_version();
-	opt_free(opt);
-	return 0;
-    }
-
     /* parse the config file */
     if((cfgfile = opt_arg(opt, "config-file"))) {
 	copt = getcfg(cfgfile, 1);
@@ -266,6 +260,18 @@ int main(int argc, char **argv)
 	logg("!Can't parse the config file %s\n", cfgfile);
 	opt_free(opt);
 	return 56;
+    }
+
+    if(opt_check(opt, "datadir"))
+	newdir = opt_arg(opt, "datadir");
+    else
+	newdir = cfgopt(copt, "DatabaseDirectory")->strarg;
+
+    if(opt_check(opt, "version")) {
+	print_version(newdir);
+	opt_free(opt);
+	freecfg(copt);
+	return 0;
     }
 
 #ifdef C_WINDOWS
@@ -364,9 +370,9 @@ int main(int argc, char **argv)
 	mprintf_stdout = 1;
 
     /* initialize logger */
-
-    if(cfgopt(copt, "LogVerbose")->enabled)
-	logg_verbose = 1;
+    logg_verbose = cfgopt(copt, "LogVerbose")->enabled;
+    logg_time = cfgopt(copt, "LogTime")->enabled;
+    logg_size = cfgopt(copt, "LogFileMaxSize")->numarg;
 
     if(opt_check(opt, "log")) {
 	logg_file = opt_arg(opt, "log");
@@ -406,11 +412,6 @@ int main(int argc, char **argv)
 #endif
 
     /* change the current working directory */
-    if(opt_check(opt, "datadir"))
-	newdir = opt_arg(opt, "datadir");
-    else
-	newdir = cfgopt(copt, "DatabaseDirectory")->strarg;
-
     if(chdir(newdir)) {
 	logg("Can't change dir to %s\n", newdir);
 	opt_free(opt);
@@ -480,8 +481,13 @@ int main(int argc, char **argv)
 	bigsleep = 24 * 3600 / checks;
 
 	if(!cfgopt(copt, "Foreground")->enabled) {
+	    if(daemonize() == -1) {
+		logg("!daemonize() failed\n");
+		opt_free(opt);
+		freecfg(copt);
+		return 70; /* FIXME */
+	    }
             foreground = 0;
-	    daemonize();
 	    mprintf_disabled = 1;
         }
 
@@ -565,11 +571,14 @@ int main(int argc, char **argv)
 
     if(opt_check(opt, "on-error-execute")) {
 	if(ret > 1)
-	    system(opt_arg(opt, "on-error-execute"));
+	    if(system(opt_arg(opt, "on-error-execute")) == -1)
+		logg("!system(%s) failed\n", opt_arg(opt, "on-error-execute"));
 
     } else if((cpt = cfgopt(copt, "OnErrorExecute"))->enabled) {
 	if(ret > 1)
-	    system(cpt->strarg);
+	    if(system(cpt->strarg) == -1)
+		logg("!system(%s) failed\n", cpt->strarg);
+
     }
     if (pidfile) {
         unlink(pidfile);

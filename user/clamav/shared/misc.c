@@ -104,26 +104,37 @@ char *freshdbdir(void)
     return retdir;
 }
 
-void print_version(void)
+void print_version(const char *dbdir)
 {
-	char *dbdir;
-	char *path;
+	char *fdbdir, *path;
+	const char *pt;
 	struct cl_cvd *daily;
-	struct stat foo;
 
 
-    dbdir = freshdbdir();
-    if(!(path = malloc(strlen(dbdir) + 30))) {
-	free(dbdir);
+    if(dbdir)
+	pt = dbdir;
+    else
+	pt = fdbdir = freshdbdir();
+
+    if(!pt) {
+	printf("ClamAV "VERSION_EXP"\n");
 	return;
     }
 
-    sprintf(path, "%s/daily.cvd", dbdir);
-    if(stat(path, &foo) == -1)
-	sprintf(path, "%s/daily.inc/daily.info", dbdir);
-    free(dbdir);
+    if(!(path = malloc(strlen(pt) + 30))) {
+	if(!dbdir)
+	    free(fdbdir);
+	return;
+    }
 
-    if((daily = cl_cvdhead(path))) {
+    sprintf(path, "%s/daily.cvd", pt);
+    if(access(path, R_OK))
+	sprintf(path, "%s/daily.inc/daily.info", dbdir);
+
+    if(!dbdir)
+	free(fdbdir);
+
+    if(!access(path, R_OK) && (daily = cl_cvdhead(path))) {
 	    time_t t = (time_t) daily->stime;
 
 	printf("ClamAV "VERSION_EXP"/%d/%s", daily->version, ctime(&t));
@@ -146,7 +157,7 @@ int filecopy(const char *src, const char *dest)
 	case -1:
 	    return -1;
 	case 0:
-	    execl("/usr/bin/ditto", "ditto", "--rsrc", src, dest, NULL);
+	    execl("/usr/bin/ditto", "ditto", src, dest, NULL);
 	    perror("execl(ditto)");
 	    break;
 	default:
@@ -165,13 +176,17 @@ int filecopy(const char *src, const char *dest)
     if((s = open(src, O_RDONLY|O_BINARY)) == -1)
 	return -1;
 
-    if((d = open(dest, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY)) == -1) {
+    if((d = open(dest, O_CREAT|O_WRONLY|O_TRUNC|O_BINARY, 0644)) == -1) {
 	close(s);
 	return -1;
     }
 
     while((bytes = read(s, buffer, FILEBUFF)) > 0)
-	write(d, buffer, bytes);
+	if(write(d, buffer, bytes) < bytes) {
+	    close(s);
+	    close(d);
+	    return -1;
+	}
 
     close(s);
     /* njh@bandsman.co.uk: check result of close for NFS file */
@@ -254,36 +269,59 @@ int cvd_unpack(const char *cvd, const char *destdir)
 	return -1;
     }
 
-    if(cli_untgz(fd, destdir) == -1) /* cli_untgz() will close fd */
+    if(cli_untgz(fd, destdir) == -1) {
+	close(fd);
 	return -1;
+    }
+    close(fd);
 
     return 0;
 }
 
-void daemonize(void)
+int daemonize(void)
 {
-#if	defined(C_OS2) || defined(C_WINDOWS)
-	fputs("Background mode is not supported on your operating system\n", stderr);
+#if defined(C_OS2) || defined(C_WINDOWS)
+    fputs("Background mode is not supported on your operating system\n", stderr);
     return;
 #else
-	int i;
+	int fds[3], i;
+	pid_t pid;
 
 
-    if((i = open("/dev/null", O_RDWR)) == -1) {
+    fds[0] = open("/dev/null", O_RDONLY);
+    fds[1] = open("/dev/null", O_WRONLY);
+    fds[2] = open("/dev/null", O_WRONLY);
+    if(fds[0] == -1 || fds[1] == -1 || fds[2] == -1) {
+	fputs("Can't open /dev/null\n", stderr);
 	for(i = 0; i <= 2; i++)
-	    close(i);
-
-    } else {
-	dup2(i, 0);
-	dup2(i, 1);
-	dup2(i, 2);
-	if(i > 2)
-	    close(i);
+	    if(fds[i] != -1)
+		close(fds[i]);
+	return -1;
     }
 
-    if(fork())
+    for(i = 0; i <= 2; i++) {
+	if(dup2(fds[i], i) == -1) {
+	    fprintf(stderr, "dup2(%d, %d) failed\n", fds[i], i); /* may not be printed */
+	    for(i = 0; i <= 2; i++)
+		if(fds[i] != -1)
+		    close(fds[i]);
+	    return -1;
+	}
+    }
+
+    for(i = 0; i <= 2; i++)
+	if(fds[i] > 2)
+	    close(fds[i]);
+
+    pid = fork();
+
+    if(pid == -1)
+	return -1;
+
+    if(pid)
 	exit(0);
 
     setsid();
+    return 0;
 #endif
 }

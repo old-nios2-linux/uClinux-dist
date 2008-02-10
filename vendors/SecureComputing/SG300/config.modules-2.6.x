@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Jan 31 01:30:33 2008
+# Thu Apr 10 01:16:44 2008
 #
 CONFIG_MODULES=y
 
@@ -101,6 +101,15 @@ CONFIG_OCF_CRYPTOSOFT=m
 #
 # CONFIG_MODULES_SAT_PENTANET is not set
 # CONFIG_MODULES_SAT_PENTAVAL is not set
+
+#
+# VMWare Modules
+#
+# CONFIG_MODULES_VMWARE_VMXNET is not set
+# CONFIG_MODULES_VMWARE_VMSYNC is not set
+# CONFIG_MODULES_VMWARE_VMMEMCTL is not set
+# CONFIG_MODULES_VMWARE_VMHGFS is not set
+# CONFIG_MODULES_VMWARE_VMBLOCK is not set
 
 #
 # USB Modules

@@ -24,7 +24,6 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/genetlink.h>
-//#include <linux/ip_mp_alg.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <netlink/types.h>
 #include <netlink/handlers.h>
@@ -57,7 +56,9 @@ extern int			nl_recv(struct nl_handle *,
 					struct ucred **);
 
 extern int			nl_recvmsgs(struct nl_handle *, struct nl_cb *);
-extern int			nl_recvmsgs_def(struct nl_handle *);
+
+#define nl_recvmsgs_def(handle) nl_recvmsgs_default(handle)
+extern int			nl_recvmsgs_default(struct nl_handle *);
 
 extern int			nl_wait_for_ack(struct nl_handle *);
 

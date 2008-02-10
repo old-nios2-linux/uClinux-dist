@@ -69,11 +69,10 @@ static int result_clone(struct nl_object *_dst, struct nl_object *_src)
 }
 
 static int result_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
-			     struct nlmsghdr *n, void *arg)
+			     struct nlmsghdr *n, struct nl_parser_param *pp)
 {
 	struct flnl_result *res;
 	struct fib_result_nl *fr;
-	struct nl_parser_param *pp = arg;
 	struct nl_addr *addr;
 	int err = -EINVAL;
 
@@ -115,7 +114,7 @@ static int result_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
 	/* REAL HACK, fib_lookup doesn't support ACK nor does it
 	 * send a DONE message, enforce end of message stream
 	 * after just the first message */
-	return NL_EXIT;
+	err = NL_STOP;
 
 errout:
 	flnl_result_put(res);

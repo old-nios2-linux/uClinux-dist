@@ -568,7 +568,7 @@ int rtnl_netem_set_delay_correlation(struct rtnl_qdisc *qdisc, int prob)
  * @arg qdisc		Netem qdisc.
  * @return Packet delay correlation probability or a negative error code.
  */
-int rtnl_netem_get_delay_corellation(struct rtnl_qdisc *qdisc)
+int rtnl_netem_get_delay_correlation(struct rtnl_qdisc *qdisc)
 {
 	struct rtnl_netem *netem;
 

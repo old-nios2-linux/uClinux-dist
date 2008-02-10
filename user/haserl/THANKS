@@ -21,3 +21,6 @@ Andreas Brodmann provided the incentive to add lua support.
 Robin Haberkorn supplied the luac (precompiled lua) support, and then
 did so a second time after the entire source tree was reformatted. 
 
+Diego Santa Cruz from spinetix.com provided fixes to some really
+annoying (and sporadic) deadlocks with IE, thttpd, POST requests.  
+

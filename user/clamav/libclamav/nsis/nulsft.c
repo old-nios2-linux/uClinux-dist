@@ -29,7 +29,6 @@
 #include <unistd.h>
 #endif
 
-#include "nulsft.h"
 #include "others.h"
 #include "cltypes.h"
 #include "nsis_bzlib.h"
@@ -37,8 +36,12 @@
 #include "nsis_zlib.h"
 #include "matcher.h"
 #include "scanners.h"
+#include "nulsft.h" /* SHUT UP GCC -Wextra */
 
-extern short cli_leavetemps_flag;
+#ifdef CL_THREAD_SAFE
+#  include <pthread.h>
+static pthread_mutex_t nsis_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -53,6 +56,32 @@ enum {
   COMP_ZLIB,
   COMP_NOCOMP
 };
+
+struct nsis_st {
+  int ifd;
+  int ofd;
+  off_t off;
+  char *dir;
+  uint32_t asz;
+  uint32_t hsz;
+  uint32_t fno;
+  struct {
+    uint32_t avail_in;
+    unsigned char *next_in;
+    uint32_t avail_out;
+    unsigned char *next_out;
+  } nsis;
+  nsis_bzstream bz;
+  lzma_stream lz;
+  nsis_z_stream z;
+  unsigned char *freeme;
+  uint8_t comp;
+  uint8_t solid;
+  uint8_t freecomp;
+  uint8_t eof;
+  char ofn[1024];
+};
+
 
 #define LINESTR(x) #x
 #define LINESTR2(x) LINESTR(x)
@@ -374,7 +403,7 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
 
 }
 
-static uint8_t detcomp(const char *b) {
+static uint8_t nsis_detcomp(const char *b) {
   if (*b=='1') return COMP_BZIP2;
   if ((cli_readint32(b)&~0x80000000)==0x5d) return COMP_LZMA;
   return COMP_ZLIB;
@@ -412,11 +441,11 @@ static int nsis_headers(struct nsis_st *n, cli_ctx *ctx) {
     int32_t nextsz;
     if (cli_readn(n->ifd, buf+4, 4)!=4) return CL_EIO;
     nextsz=cli_readint32(buf+4);
-    if (!i) n->comp = detcomp(buf+4);
+    if (!i) n->comp = nsis_detcomp(buf+4);
     if (nextsz&0x80000000) {
       nextsz&=~0x80000000;
       if (cli_readn(n->ifd, buf+4, 4)!=4) return CL_EIO;
-      comps[detcomp(buf+4)]++;
+      comps[nsis_detcomp(buf+4)]++;
       nextsz-=4;
       pos+=4;
     }
@@ -445,11 +474,11 @@ static int nsis_headers(struct nsis_st *n, cli_ctx *ctx) {
 
 
 
-int cli_nsis_unpack(struct nsis_st *n, cli_ctx *ctx) {
+static int cli_nsis_unpack(struct nsis_st *n, cli_ctx *ctx) {
   return (n->fno) ? nsis_unpack_next(n, ctx) : nsis_headers(n, ctx);
 }
 
-void cli_nsis_free(struct nsis_st *n) {
+static void cli_nsis_free(struct nsis_st *n) {
   nsis_shutdown(n);
   if (n->solid && n->freeme) free(n->freeme);
 }
@@ -468,17 +497,26 @@ int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
 
     nsist.ifd = desc;
     nsist.off = offset;
-    nsist.dir = cli_gentemp(NULL);
+    if (!(nsist.dir = cli_gentemp(NULL)))
+        return CL_ETMPDIR;
     if(mkdir(nsist.dir, 0700)) {
 	cli_dbgmsg("NSIS: Can't create temporary directory %s\n", nsist.dir);
 	free(nsist.dir);
 	return CL_ETMPDIR;
     }
 
+    if(cli_leavetemps_flag) cli_dbgmsg("NSIS: Extracting files to %s\n", nsist.dir);
+
     ctx->arec++;
 
     do {
+#ifdef CL_THREAD_SAFE
+        pthread_mutex_lock(&nsis_mutex);
+#endif
         ret = cli_nsis_unpack(&nsist, ctx);
+#ifdef CL_THREAD_SAFE
+	pthread_mutex_unlock(&nsis_mutex);
+#endif
 	if(ret != CL_SUCCESS) {
 	    if(ret == CL_EMAXSIZE) {
 	        if(BLOCKMAX) {

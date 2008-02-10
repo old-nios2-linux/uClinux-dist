@@ -11,6 +11,8 @@ typedef struct {
 	size_t		len;			/* length of this segment */
 	size_t		maxsize;		/* max size of buffer */
 	size_t		bufsize;		/* current size of buffer */
+	size_t		maxread;		/* maximum number of bytes to read from fh, ignored if 0 */
+	size_t		nrread;			/* number of bytes read from fh */
 	int		eof; 			/* true if there is no more to read */
 	} sliding_buffer_t;
 

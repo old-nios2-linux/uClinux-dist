@@ -9,6 +9,7 @@
  * Copyright (c) 2003-2006 Thomas Graf <tgraf@suug.ch>
  * Copyright (c) 2007 Philip Craig <philipc@snapgear.com>
  * Copyright (c) 2007 Secure Computing Corporation
+ * Copyright (c= 2008 Patrick McHardy <kaber@trash.net>
  */
 
 /**
@@ -107,7 +108,9 @@ static int ct_parse_ip(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 	struct nl_addr *addr;
 	int err;
 
-        nla_parse_nested(tb, CTA_IP_MAX, attr, ct_ip_policy);
+        err = nla_parse_nested(tb, CTA_IP_MAX, attr, ct_ip_policy);
+	if (err < 0)
+		goto errout;
 
 	if (tb[CTA_IP_V4_SRC]) {
 		addr = nla_get_addr(tb[CTA_IP_V4_SRC], AF_INET);
@@ -154,11 +157,14 @@ errout:
 	return err;
 }
 
-static void ct_parse_proto(struct nfnl_ct *ct, int repl, struct nlattr *attr)
+static int ct_parse_proto(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 {
 	struct nlattr *tb[CTA_PROTO_MAX+1];
+	int err;
 
-	nla_parse_nested(tb, CTA_PROTO_MAX, attr, ct_proto_policy);
+	err = nla_parse_nested(tb, CTA_PROTO_MAX, attr, ct_proto_policy);
+	if (err < 0)
+		return err;
 
 	if (!repl && tb[CTA_PROTO_NUM])
 		nfnl_ct_set_proto(ct, nla_get_u8(tb[CTA_PROTO_NUM]));
@@ -177,6 +183,8 @@ static void ct_parse_proto(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 	if (tb[CTA_PROTO_ICMP_CODE])
 		nfnl_ct_set_icmp_code(ct, repl,
 				nla_get_u8(tb[CTA_PROTO_ICMP_CODE]));
+
+	return 0;
 }
 
 static int ct_parse_tuple(struct nfnl_ct *ct, int repl, struct nlattr *attr)
@@ -184,45 +192,69 @@ static int ct_parse_tuple(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 	struct nlattr *tb[CTA_TUPLE_MAX+1];
 	int err;
 
-	nla_parse_nested(tb, CTA_TUPLE_MAX, attr, ct_tuple_policy);
+	err = nla_parse_nested(tb, CTA_TUPLE_MAX, attr, ct_tuple_policy);
+	if (err < 0)
+		return err;
 
 	if (tb[CTA_TUPLE_IP]) {
 		err = ct_parse_ip(ct, repl, tb[CTA_TUPLE_IP]);
 		if (err < 0)
 			return err;
 	}
-	if (tb[CTA_TUPLE_PROTO])
-		ct_parse_proto(ct, repl, tb[CTA_TUPLE_PROTO]);
+
+	if (tb[CTA_TUPLE_PROTO]) {
+		err = ct_parse_proto(ct, repl, tb[CTA_TUPLE_PROTO]);
+		if (err < 0)
+			return err;
+	}
+
 	return 0;
 }
 
-static void ct_parse_protoinfo_tcp(struct nfnl_ct *ct, struct nlattr *attr)
+static int ct_parse_protoinfo_tcp(struct nfnl_ct *ct, struct nlattr *attr)
 {
 	struct nlattr *tb[CTA_PROTOINFO_TCP_MAX+1];
+	int err;
 
-	nla_parse_nested(tb, CTA_PROTOINFO_TCP_MAX, attr,
-			 ct_protoinfo_tcp_policy);
+	err = nla_parse_nested(tb, CTA_PROTOINFO_TCP_MAX, attr,
+			       ct_protoinfo_tcp_policy);
+	if (err < 0)
+		return err;
 
 	if (tb[CTA_PROTOINFO_TCP_STATE])
 		nfnl_ct_set_tcp_state(ct,
 				nla_get_u8(tb[CTA_PROTOINFO_TCP_STATE]));
+
+	return 0;
 }
 
-static void ct_parse_protoinfo(struct nfnl_ct *ct, struct nlattr *attr)
+static int ct_parse_protoinfo(struct nfnl_ct *ct, struct nlattr *attr)
 {
 	struct nlattr *tb[CTA_PROTOINFO_MAX+1];
+	int err;
 
-	nla_parse_nested(tb, CTA_PROTOINFO_MAX, attr, ct_protoinfo_policy);
+	err = nla_parse_nested(tb, CTA_PROTOINFO_MAX, attr,
+			       ct_protoinfo_policy);
+	if (err < 0)
+		return err;
 
-	if (tb[CTA_PROTOINFO_TCP])
-		ct_parse_protoinfo_tcp(ct, tb[CTA_PROTOINFO_TCP]);
+	if (tb[CTA_PROTOINFO_TCP]) {
+		err = ct_parse_protoinfo_tcp(ct, tb[CTA_PROTOINFO_TCP]);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
 }
 
-static void ct_parse_counters(struct nfnl_ct *ct, int repl, struct nlattr *attr)
+static int ct_parse_counters(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 {
 	struct nlattr *tb[CTA_COUNTERS_MAX+1];
+	int err;
 
-	nla_parse_nested(tb, CTA_COUNTERS_MAX, attr, ct_counters_policy);
+	err = nla_parse_nested(tb, CTA_COUNTERS_MAX, attr, ct_counters_policy);
+	if (err < 0)
+		return err;
 
 	if (tb[CTA_COUNTERS_PACKETS])
 		nfnl_ct_set_packets(ct, repl,
@@ -236,6 +268,8 @@ static void ct_parse_counters(struct nfnl_ct *ct, int repl, struct nlattr *attr)
 	if (tb[CTA_COUNTERS32_BYTES])
 		nfnl_ct_set_bytes(ct, repl,
 			ntohl(nla_get_u32(tb[CTA_COUNTERS32_BYTES])));
+
+	return 0;
 }
 
 int nfnlmsg_ct_group(struct nlmsghdr *nlh)
@@ -283,8 +317,11 @@ struct nfnl_ct *nfnlmsg_ct_parse(struct nlmsghdr *nlh)
 			goto errout;
 	}
 
-	if (tb[CTA_PROTOINFO])
-		ct_parse_protoinfo(ct, tb[CTA_PROTOINFO]);
+	if (tb[CTA_PROTOINFO]) {
+		err = ct_parse_protoinfo(ct, tb[CTA_PROTOINFO]);
+		if (err < 0)
+			goto errout;
+	}
 
 	if (tb[CTA_STATUS])
 		nfnl_ct_set_status(ct, ntohl(nla_get_u32(tb[CTA_STATUS])));
@@ -297,10 +334,17 @@ struct nfnl_ct *nfnlmsg_ct_parse(struct nlmsghdr *nlh)
 	if (tb[CTA_ID])
 		nfnl_ct_set_id(ct, ntohl(nla_get_u32(tb[CTA_ID])));
 
-	if (tb[CTA_COUNTERS_ORIG])
-		ct_parse_counters(ct, 0, tb[CTA_COUNTERS_ORIG]);
-	if (tb[CTA_COUNTERS_REPLY])
-		ct_parse_counters(ct, 1, tb[CTA_COUNTERS_REPLY]);
+	if (tb[CTA_COUNTERS_ORIG]) {
+		err = ct_parse_counters(ct, 0, tb[CTA_COUNTERS_ORIG]);
+		if (err < 0)
+			goto errout;
+	}
+
+	if (tb[CTA_COUNTERS_REPLY]) {
+		err = ct_parse_counters(ct, 1, tb[CTA_COUNTERS_REPLY]);
+		if (err < 0)
+			goto errout;
+	}
 
 	return ct;
 
@@ -310,9 +354,8 @@ errout:
 }
 
 static int ct_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
-			 struct nlmsghdr *nlh, void *arg)
+			 struct nlmsghdr *nlh, struct nl_parser_param *pp)
 {
-	struct nl_parser_param *pp = arg;
 	struct nfnl_ct *ct;
 	int err;
 
@@ -324,13 +367,15 @@ static int ct_msg_parser(struct nl_cache_ops *ops, struct sockaddr_nl *who,
 	if (err < 0)
 		goto errout;
 
-	return P_ACCEPT;
+	err = P_ACCEPT;
 
-errout_errno:
-	err = nl_get_errno();
 errout:
 	nfnl_ct_put(ct);
 	return err;
+
+errout_errno:
+	err = nl_get_errno();
+	goto errout;
 }
 
 int nfnl_ct_dump_request(struct nl_handle *h)
@@ -342,6 +387,158 @@ int nfnl_ct_dump_request(struct nl_handle *h)
 static int ct_request_update(struct nl_cache *c, struct nl_handle *h)
 {
 	return nfnl_ct_dump_request(h);
+}
+
+static int nfnl_ct_build_tuple(struct nl_msg *msg, const struct nfnl_ct *ct,
+			       int repl)
+{
+	struct nlattr *tuple, *ip, *proto;
+	struct nl_addr *addr;
+	int family;
+
+	family = nfnl_ct_get_family(ct);
+
+	tuple = nla_nest_start(msg, repl ? CTA_TUPLE_REPLY : CTA_TUPLE_ORIG);
+	if (!tuple)
+		goto nla_put_failure;
+
+	ip = nla_nest_start(msg, CTA_TUPLE_IP);
+	if (!ip)
+		goto nla_put_failure;
+
+	addr = nfnl_ct_get_src(ct, repl);
+	if (addr)
+		NLA_PUT_ADDR(msg,
+			     family == AF_INET ? CTA_IP_V4_SRC : CTA_IP_V6_SRC,
+			     addr);
+
+	addr = nfnl_ct_get_dst(ct, repl);
+	if (addr)
+		NLA_PUT_ADDR(msg,
+			     family == AF_INET ? CTA_IP_V4_DST : CTA_IP_V6_DST,
+			     addr);
+
+	nla_nest_end(msg, ip);
+
+	proto = nla_nest_start(msg, CTA_TUPLE_PROTO);
+	if (!proto)
+		goto nla_put_failure;
+
+	if (nfnl_ct_test_proto(ct))
+		NLA_PUT_U8(msg, CTA_PROTO_NUM, nfnl_ct_get_proto(ct));
+
+	if (nfnl_ct_test_src_port(ct, repl))
+		NLA_PUT_U16(msg, CTA_PROTO_SRC_PORT,
+			    nfnl_ct_get_src_port(ct, repl));
+
+	if (nfnl_ct_test_dst_port(ct, repl))
+		NLA_PUT_U16(msg, CTA_PROTO_DST_PORT,
+			    nfnl_ct_get_dst_port(ct, repl));
+
+	if (nfnl_ct_test_icmp_id(ct, repl))
+		NLA_PUT_U16(msg, CTA_PROTO_ICMP_ID,
+			    nfnl_ct_get_icmp_id(ct, repl));
+
+	if (nfnl_ct_test_icmp_type(ct, repl))
+		NLA_PUT_U8(msg, CTA_PROTO_ICMP_TYPE,
+			    nfnl_ct_get_icmp_type(ct, repl));
+
+	if (nfnl_ct_test_icmp_code(ct, repl))
+		NLA_PUT_U8(msg, CTA_PROTO_ICMP_CODE,
+			    nfnl_ct_get_icmp_code(ct, repl));
+
+	nla_nest_end(msg, proto);
+
+	nla_nest_end(msg, tuple);
+	return 0;
+
+nla_put_failure:
+	return -1;
+}
+
+static struct nl_msg *nfnl_ct_build_message(const struct nfnl_ct *ct, int cmd, int flags)
+{
+	struct nl_msg *msg;
+
+	msg = nfnlmsg_alloc_simple(NFNL_SUBSYS_CTNETLINK, cmd, flags,
+				   nfnl_ct_get_family(ct), 0);
+	if (msg == NULL)
+		return NULL;
+
+	if (nfnl_ct_build_tuple(msg, ct, 0) < 0)
+		goto err_out;
+
+	return msg;
+
+err_out:
+	nlmsg_free(msg);
+	return NULL;
+}
+
+struct nl_msg *nfnl_ct_build_add_request(const struct nfnl_ct *ct, int flags)
+{
+	return nfnl_ct_build_message(ct, IPCTNL_MSG_CT_NEW, flags);
+}
+
+int nfnl_ct_add(struct nl_handle *h, const struct nfnl_ct *ct, int flags)
+{
+	struct nl_msg *msg;
+	int err;
+
+	msg = nfnl_ct_build_add_request(ct, flags);
+	if (msg == NULL)
+		return nl_errno(ENOMEM);
+
+	err = nl_send_auto_complete(h, msg);
+	nlmsg_free(msg);
+	if (err < 0)
+		return err;
+
+	return nl_wait_for_ack(h);
+}
+
+struct nl_msg *nfnl_ct_build_delete_request(const struct nfnl_ct *ct, int flags)
+{
+	return nfnl_ct_build_message(ct, IPCTNL_MSG_CT_DELETE, flags);
+}
+
+int nfnl_ct_del(struct nl_handle *h, const struct nfnl_ct *ct, int flags)
+{
+	struct nl_msg *msg;
+	int err;
+
+	msg = nfnl_ct_build_delete_request(ct, flags);
+	if (msg == NULL)
+		return nl_errno(ENOMEM);
+
+	err = nl_send_auto_complete(h, msg);
+	nlmsg_free(msg);
+	if (err < 0)
+		return err;
+
+	return nl_wait_for_ack(h);
+}
+
+struct nl_msg *nfnl_ct_build_query_request(const struct nfnl_ct *ct, int flags)
+{
+	return nfnl_ct_build_message(ct, IPCTNL_MSG_CT_GET, flags);
+}
+
+int nfnl_ct_query(struct nl_handle *h, const struct nfnl_ct *ct, int flags)
+{
+	struct nl_msg *msg;
+	int err;
+
+	msg = nfnl_ct_build_query_request(ct, flags);
+	if (msg == NULL)
+		return nl_errno(ENOMEM);
+
+	err = nl_send_auto_complete(h, msg);
+	nlmsg_free(msg);
+	if (err < 0)
+		return err;
+
+	return nl_wait_for_ack(h);
 }
 
 /**
@@ -386,9 +583,9 @@ struct nl_cache *nfnl_ct_alloc_cache(struct nl_handle *handle)
 /** @} */
 
 static struct nl_af_group ct_groups[] = {
-	{ 0, NFNLGRP_CONNTRACK_NEW },
-	{ 0, NFNLGRP_CONNTRACK_UPDATE },
-	{ 0, NFNLGRP_CONNTRACK_DESTROY },
+	{ AF_UNSPEC, NFNLGRP_CONNTRACK_NEW },
+	{ AF_UNSPEC, NFNLGRP_CONNTRACK_UPDATE },
+	{ AF_UNSPEC, NFNLGRP_CONNTRACK_DESTROY },
 	{ END_OF_GROUP_LIST },
 };
 

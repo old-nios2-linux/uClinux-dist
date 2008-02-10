@@ -77,6 +77,45 @@ static char conf_file[BUFFER_SIZE]; /* configuration file */
 static radius_server_t *live_server = NULL;
 static time_t session_time;
 
+#if 1
+/* Cleanup function for SG group data */
+static void sg_group_pam_cleanup(pam_handle_t *pamh, void *data, int err) {
+  free(data);
+  err = PAM_SUCCESS;
+}
+
+/* Parse a VSA to see if its the SG group VSA */
+static char *parse_vsa(attribute_t *attr) {
+  long vendor_id = htonl(SG_VENDOR_TAG);
+  unsigned char vendor_attr_len = 0;
+  char *group_str;
+  /* Check that there is enough length to store the type, length, vendor ID
+   * vendor type, and vendor length */
+  if (attr->length < 8)
+    return NULL;
+  
+  /* Check the vendor ID */
+  if (memcmp(&vendor_id, &attr->data[0], sizeof(long)) == 0) {
+    /* Check the vendor type and if its what we're expecting, get the 
+     * attribute length, and then the group string */
+    if (attr->data[4] == SG_GROUP_ATTR) {
+       vendor_attr_len = ntohs(attr->data[5]);
+       if (vendor_attr_len >= 3) {
+         
+         group_str = malloc(vendor_attr_len - 1);
+         if (group_str == NULL)
+           return NULL;
+        
+         strncpy(group_str, &attr->data[6], vendor_attr_len - 1);
+         group_str[vendor_attr_len - 2] = '\0';
+         return group_str;
+      }
+    }
+  }
+  return NULL;
+}
+
+#endif 
 /* logging */
 static void _pam_log(int err, CONST char *format, ...)
 {
@@ -1232,6 +1271,24 @@ pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
   /* Whew! Done the pasword checks, look for an authentication acknowledge */
   if (response->code == PW_AUTHENTICATION_ACK) {
     retval = PAM_SUCCESS;
+    
+#if 1
+    /* Look for a group data in this packet */
+    {
+      attribute_t *vendor_attr;
+      char	  *group_name;
+      char         env_buf[80];
+      if ((vendor_attr = find_attribute(response, PW_VENDOR_SPECIFIC)) != NULL) {
+        DPRINT(LOG_DEBUG, "Parsing VSA...");
+        if ((group_name = parse_vsa(vendor_attr)) != NULL) {
+          snprintf(&env_buf, 80, "%s=%s", SG_PAM_DATA_HANDLE, group_name); 
+          pam_putenv(pamh, &env_buf);
+          DPRINT(LOG_DEBUG, "VSA Parsed. env variable = %s", env_buf);
+          free(group_name);
+        }           
+      }
+    }
+#endif
   } else {
     retval = PAM_AUTH_ERR;	/* authentication failure */
 
@@ -1241,7 +1298,7 @@ error:
       pam_set_item(pamh, PAM_AUTHTOK, password);
     }
   }
-
+  
   if (ctrl & PAM_DEBUG_ARG) {
     _pam_log(LOG_DEBUG, "authentication %s"
 	     , retval==PAM_SUCCESS ? "succeeded":"failed" );

@@ -41,6 +41,7 @@
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <netlink/genl/mngt.h>
+#include <netlink/netfilter/ct.h>
 
 extern int nltool_init(int argc, char *argv[]);
 extern int nltool_connect(struct nl_handle *nlh, int protocol);

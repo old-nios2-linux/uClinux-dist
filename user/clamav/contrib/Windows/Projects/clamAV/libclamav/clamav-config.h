@@ -89,6 +89,9 @@
 /* "default FD_SETSIZE value" */
 #define DEFAULT_FD_SETSIZE 64
 
+/* link with libclamunrar (non-GPL, see COPYING.unrar) */
+#define ENABLE_UNRAR 1
+
 /* file i/o buffer size */
 #define FILEBUFF 8192
 
@@ -207,6 +210,9 @@
 
 /* have resolv.h */
 /* #undef HAVE_RESOLV_H */
+
+/* Define signed right shift implementation */
+#define HAVE_SAR 1
 
 /* Define to 1 if you have the `sendmsg' function. */
 /* #undef HAVE_SENDMSG */
@@ -344,10 +350,11 @@
 #define STDC_HEADERS 1
 
 /* use syslog */
-/* #define USE_SYSLOG 1 */
+#define USE_SYSLOG 1
 
 /* Version number of package */
-#define VERSION "devel-20070527"
+#define VERSION "devel-20071024"
+/*#define	VERSION	"0.92RC2"*/
 
 /* tcpwrappers support */
 /* #undef WITH_TCPWRAP */
@@ -357,6 +364,9 @@
 
 /* Define to 1 to make fseeko visible on some hosts (e.g. glibc 2.2). */
 /* #undef _LARGEFILE_SOURCE */
+
+/* POSIX compatibility */
+/* #undef _POSIX_PII_SOCKET */
 
 /* thread safe */
 #define _REENTRANT 1
@@ -370,7 +380,7 @@
 /* #undef inline */
 #endif
 
-/* Define to `long int' if <sys/types.h> does not define. */
+/* Define to `long' if <sys/types.h> does not define. */
 /* #undef off_t */
 
 /* Define to "int" if <sys/socket.h> does not define. */

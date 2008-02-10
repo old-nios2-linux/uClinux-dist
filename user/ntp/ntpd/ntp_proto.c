@@ -1248,6 +1248,25 @@ process_packet(
 	clock_filter(peer, p_offset, p_del, p_disp);
 	record_peer_stats(&peer->srcadr, ctlpeerstatus(peer),
 	    peer->offset, peer->delay, peer->disp, peer->jitter);
+
+	/*
+	 * If we want to immediately set the time ASAP, to the first "real"
+	 * time that floats past, grab this peer and try to set the time with
+	 * it. If it's come this far, it should have some semi-reasonable data.
+	 *
+	 * This is used as a once-off to set the time on machines that don't have
+	 * a real time clock, as it's imperative that we get them to something a
+	 * bit closer than the epoch straight away. After that we can take as much
+	 * time as we want to get the clock precise.
+	 */
+	if (mode_immediateset) {
+		sys_peer = peer;
+		sys_offset = peer->offset;
+		msyslog(LOG_INFO, "immediately setting time to first available offset: %.6f s", sys_offset);
+		clock_update();
+		mode_immediateset = FALSE;
+		clear_all();
+	}
 }
 
 

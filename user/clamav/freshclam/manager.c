@@ -386,7 +386,7 @@ static struct cl_cvd *remote_cvdhead(const char *file, const char *hostname, cha
 #endif
 
     snprintf(cmd, sizeof(cmd),
-	"GET %s/%s HTTP/1.1\r\n"
+	"GET %s/%s HTTP/1.0\r\n"
 	"Host: %s\r\n%s"
 	"User-Agent: %s\r\n"
 	"Connection: close\r\n"
@@ -541,7 +541,7 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 #endif
 
     snprintf(cmd, sizeof(cmd),
-	"GET %s/%s HTTP/1.1\r\n"
+	"GET %s/%s HTTP/1.0\r\n"
 	"Host: %s\r\n%s"
 	"User-Agent: %s\r\n"
 #ifdef FRESHCLAM_NO_CACHE
@@ -604,7 +604,7 @@ static int getfile(const char *srcfile, const char *destfile, const char *hostna
 
     /* check whether the resource actually existed or not */
     if((strstr(buffer, "HTTP/1.1 404")) != NULL || (strstr(buffer, "HTTP/1.0 404")) != NULL) { 
-	logg("!getfile: %s not found on remote server (IP: %s)\n", srcfile, ipaddr);
+	logg("^getfile: %s not found on remote server (IP: %s)\n", srcfile, ipaddr);
 	/* mirman_update(mdat->currip, mdat, 1); */
 	closesocket(sd);
 	return 58;
@@ -873,7 +873,7 @@ static struct cl_cvd *currentdb(const char *dbname, unsigned int *inc)
 {
 	struct stat sb;
 	char path[512];
-	struct cl_cvd *cvd;
+	struct cl_cvd *cvd = NULL;
 
 
     snprintf(path, sizeof(path), "%s.inc", dbname);
@@ -887,7 +887,8 @@ static struct cl_cvd *currentdb(const char *dbname, unsigned int *inc)
 	    *inc = 0;
     }
 
-    cvd = cl_cvdhead(path);
+    if(!access(path, R_OK))
+	cvd = cl_cvdhead(path);
 
     return cvd;
 }
@@ -1307,8 +1308,8 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 	if(arg) {
 	    if(opt_check(opt, "daemon"))
 		execute("OnUpdateExecute", arg);
-            else
-		system(arg);
+            else if(system(arg) == -1)
+		logg("!system(%s) failed\n", arg);
 	}
     }
 
@@ -1356,8 +1357,8 @@ int downloadmanager(const struct cfgstruct *copt, const struct optstruct *opt, c
 	    if(newver) {
 		if(opt_check(opt, "daemon"))
 		    execute("OnOutdatedExecute", cmd);
-		else
-		    system(cmd);
+		else if(system(cmd) == -1)
+		logg("!system(%s) failed\n", cmd);
 	    }
 	    free(cmd);
 	}

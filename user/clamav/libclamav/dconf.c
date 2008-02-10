@@ -55,8 +55,6 @@ static struct dconf_module modules[] = {
     { "PE",	    "UPX",	    PE_CONF_UPX,	    1 },
     { "PE",	    "FSG",	    PE_CONF_FSG,	    1 },
 
-    { "PE",	    "SUE",	    PE_CONF_SUE,	    1 },
-
     { "PE",	    "PETITE",	    PE_CONF_PETITE,	    1 },
     { "PE",	    "PESPIN",	    PE_CONF_PESPIN,	    1 },
     { "PE",	    "YC",	    PE_CONF_YC,		    1 },
@@ -73,6 +71,7 @@ static struct dconf_module modules[] = {
     { "ARCHIVE",    "ZIP",	    ARCH_CONF_ZIP,	    1 },
     { "ARCHIVE",    "GZIP",	    ARCH_CONF_GZ,	    1 },
     { "ARCHIVE",    "BZIP",	    ARCH_CONF_BZ,	    1 },
+    { "ARCHIVE",    "ARJ",          ARCH_CONF_ARJ,	    1 },
     { "ARCHIVE",    "SZDD",	    ARCH_CONF_SZDD,	    1 },
     { "ARCHIVE",    "CAB",	    ARCH_CONF_CAB,	    1 },
     { "ARCHIVE",    "CHM",	    ARCH_CONF_CHM,	    1 },
@@ -81,6 +80,7 @@ static struct dconf_module modules[] = {
     { "ARCHIVE",    "BINHEX",	    ARCH_CONF_BINHEX,	    1 },
     { "ARCHIVE",    "SIS",	    ARCH_CONF_SIS,	    1 },
     { "ARCHIVE",    "NSIS",	    ARCH_CONF_NSIS,	    1 },
+    { "ARCHIVE",    "AUTOIT",	    ARCH_CONF_AUTOIT,	    1 },
 
     { "DOCUMENT",   "HTML",	    DOC_CONF_HTML,	    1 },
     { "DOCUMENT",   "RTF",	    DOC_CONF_RTF,	    1 },
@@ -88,7 +88,6 @@ static struct dconf_module modules[] = {
 
     { "MAIL",	    "MBOX",	    MAIL_CONF_MBOX,	    1 },
     { "MAIL",	    "TNEF",	    MAIL_CONF_TNEF,	    1 },
-    { "MAIL",	    "PST",	    MAIL_CONF_PST,	    1 },
 
     { "OTHER",	    "UUENCODED",    OTHER_CONF_UUENC,	    1 },
     { "OTHER",	    "SCRENC",	    OTHER_CONF_SCRENC,	    1 },

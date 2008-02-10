@@ -1232,11 +1232,13 @@ _rrd_update(char *filename, char *template, int argc, char **argv,
 			  /* wrap */
 			  rrd.rra_ptr[i].cur_row = 0;
 			  /* seek back to beginning of current rra */
+#ifndef HAVE_MMAP
 		      if (fseek(rrd_file, rra_start, SEEK_SET) != 0)
 			  {
 		         rrd_set_error("seek error in rrd");
 		         break;
 			  }
+#endif
 #ifdef DEBUG
 	          fprintf(stderr,"  -- Wraparound Postseek %ld\n",ftell(rrd_file));
 #endif

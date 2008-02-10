@@ -1945,6 +1945,7 @@ static void mii_relink(struct net_device *dev)
 	fep->old_link = fep->link;
 
 	if (fep->link) {
+		netif_carrier_on(dev);
 		duplex = 0;
 		if (fep->phy_status & (PHY_STAT_100FDX | PHY_STAT_10FDX))
 			duplex = 1;
@@ -1953,6 +1954,7 @@ static void mii_relink(struct net_device *dev)
 		    netif_wake_queue(dev);
 
 	} else {
+		netif_carrier_off(dev);
 		fec_stop(dev);
 	}
 }
@@ -2275,13 +2277,13 @@ static void set_multicast_list(struct net_device *dev)
 			/* Catch all multicast addresses, so set the
 			 * filter to all 1's.
 			 */
-			ep->fec_hash_table_high = 0xffffffff;
-			ep->fec_hash_table_low = 0xffffffff;
+			ep->fec_grp_hash_table_high = 0xffffffff;
+			ep->fec_grp_hash_table_low = 0xffffffff;
 		} else {
 			/* Clear filter and add the addresses in hash register.
 			*/
-			ep->fec_hash_table_high = 0;
-			ep->fec_hash_table_low = 0;
+			ep->fec_grp_hash_table_high = 0;
+			ep->fec_grp_hash_table_low = 0;
             
 			dmi = dev->mc_list;
 
@@ -2310,9 +2312,9 @@ static void set_multicast_list(struct net_device *dev)
 				hash = (crc >> (32 - HASH_BITS)) & 0x3f;
 			
 				if (hash > 31)
-					ep->fec_hash_table_high |= 1 << (hash - 32);
+					ep->fec_grp_hash_table_high |= 1 << (hash - 32);
 				else
-					ep->fec_hash_table_low |= 1 << hash;
+					ep->fec_grp_hash_table_low |= 1 << hash;
 			}
 		}
 	}
@@ -2404,11 +2406,18 @@ int __init fec_enet_init(struct net_device *dev)
 	fecp->fec_ievent = 0xffc0;
 	fecp->fec_imask = (FEC_ENET_TXF | FEC_ENET_TXB |
 		FEC_ENET_RXF | FEC_ENET_RXB | FEC_ENET_MII);
-	fecp->fec_hash_table_high = 0;
-	fecp->fec_hash_table_low = 0;
+	fecp->fec_grp_hash_table_high = 0;
+	fecp->fec_grp_hash_table_low = 0;
 	fecp->fec_r_buff_size = PKT_MAXBLR_SIZE;
         //fecp->fec_ecntrl = 2; // this is too early PSW
         fecp->fec_r_des_active = 0x01000000;
+
+#if defined(CONFIG_M5235) || defined(CONFIG_M527x) || \
+    defined(CONFIG_M5282) || defined(CONFIG_M5280) || \
+    defined(CONFIG_M5208
+	fecp->fec_hash_table_high = 0;
+	fecp->fec_hash_table_low = 0;
+#endif
 
 	/*
 	 * Set the Ethernet address. If using multiple Enets on the 8xx,
@@ -2929,8 +2938,8 @@ static void fec_enet_setup_hw_p1( struct net_device *dev )
 
 	/* Reset all multicast.
 	*/
-	fecp->fec_hash_table_high = 0;
-	fecp->fec_hash_table_low = 0;
+	fecp->fec_grp_hash_table_high = 0;
+	fecp->fec_grp_hash_table_low = 0;
 
 	/* Set maximum receive buffer size.
 	*/

@@ -1542,9 +1542,9 @@ quiet_cmd_rmfiles = $(if $(wildcard $(rm-files)),CLEAN   $(wildcard $(rm-files))
 # and we build for the host arch
 quiet_cmd_depmod = DEPMOD  $(KERNELRELEASE)
       cmd_depmod = \
-	if [ -r System.map -a -x $(DEPMOD) ]; then                              \
+	if [ -r System.map -a -x $(word 1, $(DEPMOD)) ]; then                              \
 		$(DEPMOD) -ae -F System.map                                     \
-		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH) -r)   \
+		$(if $(strip $(INSTALL_MOD_PATH)), -b $(INSTALL_MOD_PATH)/lib/modules -r)   \
 		$(KERNELRELEASE);                                               \
 	fi
 

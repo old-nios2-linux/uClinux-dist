@@ -1531,6 +1531,7 @@ reply_process_ia(struct reply_state *reply, struct option_cache *ia) {
 
 			schedule_lease_timeout(tmp->ipv6_pool);
 
+#if defined (NSUPDATE)
 			/*
 			 * If this constitutes a 'hard' binding, perform ddns
 			 * updates.
@@ -1547,6 +1548,7 @@ reply_process_ia(struct reply_state *reply, struct option_cache *ia) {
 				ddns_updates(reply->packet, NULL, NULL,
 					     tmp, NULL, reply->opt_state);
 			}
+#endif
 		}
 
 		/* Remove any old ia_na from the hash. */

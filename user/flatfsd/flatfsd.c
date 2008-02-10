@@ -12,6 +12,7 @@
 
 /*****************************************************************************/
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -63,8 +64,11 @@ static int fsver = 3;
 #define ACTION_REBOOT  (1<<5)
 #define ACTION_HALT    (1<<6)
 #define ACTION_BUTTON  (1<<7)
+#define ACTION_DIRTY   (1<<8)
+#define ACTION_REBOOT_NOW  (1<<9)
 
 static int action = 0;
+static time_t dirty;
 
 /*****************************************************************************/
 
@@ -97,7 +101,8 @@ static int recv_hup = 0;	/* SIGHUP = reboot device */
 static int recv_usr1 = 0;	/* SIGUSR1 = write config to flash */
 static int recv_usr2 = 0;	/* SIGUSR2 = erase flash and reboot */
 static int recv_pwr = 0;	/* SIGPWR = halt device */
-static int recv_chld = 0;	/* SIGPWR = halt device */
+static int recv_chld = 0;	/* SIGCHLD */
+static int stopped = 0;
 static int exit_flatfsd = 0;  /* SIGINT, SIGTERM, SIGQUIT */
 static int nowrite = 0;
 static char *configdir = DSTDIR;
@@ -127,9 +132,50 @@ static void sigchld(int signr)
 	recv_chld = 1;
 }
 
+static void sigcont(int signr)
+{
+	stopped = 0;
+}
+
 static void sigexit(int signr)
 {
 	exit_flatfsd = 1;
+}
+
+/*****************************************************************************/
+
+static char *get_caller(void)
+{
+	char	procname[64];
+	char	cmdline[64];
+	pid_t	pp;
+	FILE	*fp;
+	char	*arg;
+
+	procname[0] = '\0';
+
+	pp = getppid();
+	snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", pp);
+	fp = fopen(cmdline, "r");
+	if (fp) {
+		fgets(procname, sizeof(procname), fp);
+		fclose(fp);
+	}
+
+	if (procname[0] == '\0')
+		strcpy(procname, "???");
+
+	asprintf(&arg, "%d: %s", (int)pp, procname);
+	return arg;
+}
+
+static void log_caller(const char *cmd)
+{
+	char *arg;
+
+	arg = get_caller();
+	vlogd(1, cmd, arg);
+	free(arg);
 }
 
 /*****************************************************************************/
@@ -167,6 +213,7 @@ static void readsocket(int sockfd)
 	socklen_t addrlen = sizeof(addr);
 	char buf[128];
 	int len;
+	char *caller;
 
 	len = recvfrom(sockfd, buf, sizeof(buf) - 1, 0,
 			(struct sockaddr *)&addr, &addrlen);
@@ -180,20 +227,43 @@ static void readsocket(int sockfd)
 		return;
 	}
 
+	caller = strchr(buf, '\t');
+	if (caller)
+		*(caller++) = '\0';
+
 	buf[len] = 0;
 	if (strcmp(buf, "exit") == 0) {
 		action |= ACTION_EXIT;
 	}
+	else if (strcmp(buf, "stop") == 0) {
+		stopped = 1;
+	}
+	else if (strcmp(buf, "cont") == 0) {
+		stopped = 0;
+	}
+	else if (stopped) {
+		/* Ignore any other commands while stopped */
+	}
 	else if (strcmp(buf, "write") == 0) {
+		vlogd(1, "flatfsd-s", caller);
 		action |= ACTION_WRITE;
 	}
+	else if (strcmp(buf, "dirty") == 0) {
+		if (!dirty) {
+			vlogd(1, "flatfsd-dirty", caller);
+			action |= ACTION_DIRTY;
+		}
+	}
 	else if (strcmp(buf, "reset") == 0) {
+		vlogd(1, "flatfsd-i", caller);
 		action |= ACTION_RESET;
 	}
 	else if (strcmp(buf, "reboot") == 0) {
+		vlogd(1, "flatfsd-b", caller);
 		action |= ACTION_REBOOT;
 	}
 	else if (strcmp(buf, "halt") == 0) {
+		vlogd(1, "flatfsd-h", caller);
 		action |= ACTION_HALT;
 	}
 	else {
@@ -206,23 +276,36 @@ static int writesocket(const char *cmd)
 	struct sockaddr_un addr;
 	int sockfd;
 	int len;
+	char *caller;
+	char *buf;
 
 	sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if (sockfd < 0) {
 		syslog(LOG_ERR, "Failed to open socket: %m");
-		exit(1);
+		return 1;
 	}
+
+	caller = get_caller();
+	len = asprintf(&buf, "%s\t%s", cmd, caller);
+	free(caller);
+	if (len < 0) {
+		len = strlen(cmd);
+		buf = NULL;
+	}
+
+	if (len > 100)
+		len = 100;
 
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, PATH_FLATFSD_SOCKET);
-	len = strlen(cmd);
-	if (sendto(sockfd, cmd, len, 0,
+	if (sendto(sockfd, buf ?: cmd, len, 0,
 			(struct sockaddr *)&addr, sizeof(addr)) != len) {
 		close(sockfd);
 		syslog(LOG_ERR, "Failed to write socket: %m");
-		exit(1);
+		return 1;
 	}
 
+	free(buf);
 	close(sockfd);
 	return 0;
 }
@@ -462,7 +545,8 @@ skip_out:
 
 static void usage(int rc)
 {
-	printf("usage: flatfsd [-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn123]\n"
+	printf("usage: flatfsd [-a|-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn123]\n"
+		"\t-a <action> send a command to the running flatfsd\n"
 		"\t-b safely reboot the system\n"
 		"\t-H safely halt the system\n"
 		"\t-c check that the saved flatfs is valid\n"
@@ -473,6 +557,7 @@ static void usage(int rc)
 		"\t-n with -r or -w, do not write to flash\n"
 		"\t-i initialise from default, reboot\n"
 		"\t-s save config filesystem to flash\n"
+		"\t-S save config filesystem to flash (rate limited)\n"
 		"\t-1 force use of version 1 flash layout\n"
 		"\t-2 force use of version 2 flash layout\n"
 		"\t-3 force use of version 3 flash layout (default)\n"
@@ -494,8 +579,21 @@ static int saveconfig(void)
 {
 	if (writesocket("write") == 0)
 		printf("Saving configuration\n");
-	else
+	else {
+		log_caller("flatfsd-s");
 		maybewait(save_config_to_flash());
+	}
+	return 0;
+}
+
+static int dirtyconfig(void)
+{
+	if (writesocket("dirty") == 0)
+		printf("Marking configuration dirty\n");
+	else {
+		log_caller("flatfsd-dirty");
+		maybewait(save_config_to_flash());
+	}
 	return 0;
 }
 
@@ -505,6 +603,7 @@ static int reboot_system(void)
 		printf("Rebooting system\n");
 		return 0;
 	} else {
+		log_caller("flatfsd-b");
 		reboot_now();
 		/*notreached*/
 		return 1;
@@ -517,6 +616,7 @@ static int halt_system(void)
 		printf("Halting system\n");
 		return 0;
 	} else {
+		log_caller("flatfsd-h");
 		halt_now();
 		/*notreached*/
 		return 1;
@@ -529,6 +629,7 @@ static int reset_config(void)
 		printf("Reset config\n");
 		return 0;
 	} else {
+		log_caller("flatfsd-i");
 		maybewait(reset_config_fs());
 		reboot_now();
 		/*notreached*/
@@ -540,9 +641,12 @@ static int reset_config(void)
 
 int main(int argc, char *argv[])
 {
+	const char *actionval = NULL;
 	struct sigaction act;
 	struct timeval timeout;
 	fd_set fds;
+	time_t dirtyprev, now;
+	int dirtydelay;
 	pid_t pid;
 	int sockfd;
 	int rc;
@@ -551,8 +655,12 @@ int main(int argc, char *argv[])
 	openlog("flatfsd", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
 	action = 0;
-	while ((rc = getopt(argc, argv, "vcd:nribwH123hs?")) != EOF) {
+	while ((rc = getopt(argc, argv, "a:vcd:nribwH123hsS?")) != EOF) {
 		switch (rc) {
+		case 'a':
+			action = rc;
+			actionval = optarg;
+			break;
 		case 'n':
 			nowrite = 1;
 			break;
@@ -572,6 +680,7 @@ int main(int argc, char *argv[])
 		case 'r':
 		case 'c':
 		case 's':
+		case 'S':
 		case 'b':
 		case 'H':
 		case 'i':
@@ -597,6 +706,9 @@ int main(int argc, char *argv[])
 	}
 
 	switch (action) {
+		case 'a':
+			exit(writesocket(actionval));
+			break;
 		case 'w':
 			init_config_fs(1);
 			exit(0);
@@ -609,19 +721,18 @@ int main(int argc, char *argv[])
 			check_config();
 			break;
 		case 's':
-			log_caller("flatfsd-s");
 			exit(saveconfig());
 			break;
+		case 'S':
+			exit(dirtyconfig());
+			break;
 		case 'b':
-			log_caller("flatfsd-b");
 			exit(reboot_system());
 			break;
 		case 'H':
-			log_caller("flatfsd-h");
 			exit(halt_system());
 			break;
 		case 'i':
-			log_caller("flatfsd-i");
 			exit(reset_config());
 			break;
 	}
@@ -639,6 +750,11 @@ int main(int argc, char *argv[])
 	act.sa_handler = sighup;
 	act.sa_flags = SA_RESTART;
 	sigaction(SIGHUP, &act, NULL);
+
+	memset(&act, 0, sizeof(act));
+	act.sa_handler = sigcont;
+	act.sa_flags = SA_RESTART;
+	sigaction(SIGCONT, &act, NULL);
 
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = sigusr1;
@@ -674,6 +790,9 @@ int main(int argc, char *argv[])
 	 * Spin forever, waiting for a signal to write...
 	 */
 	action = 0;
+	dirty = 0;
+	dirtyprev = time(NULL);
+	dirtydelay = 2 * 60;
 	pid = 0;
 	for (;;) {
 		FD_ZERO(&fds);
@@ -683,10 +802,13 @@ int main(int argc, char *argv[])
 
 		if (recv_chld) {
 			int status;
+			pid_t pidexit;
 
 			recv_chld = 0;
-			if (pid > 0 && waitpid(pid, &status, WNOHANG) > 0)
-				pid = 0;
+			while ((pidexit = waitpid(-1, &status, WNOHANG)) > 0) {
+				if (pidexit == pid)
+					pid = 0;
+			}
 		}
 
 		/* Convert signals into actions.
@@ -694,22 +816,26 @@ int main(int argc, char *argv[])
 		 * signal handlers to avoid races. */
 		if (recv_usr1) {
 			recv_usr1 = 0;
-			action |= ACTION_WRITE;
+			if (!stopped)
+				action |= ACTION_WRITE;
 		}
 
 		if (recv_hup) {
 			recv_hup = 0;
-			action |= ACTION_REBOOT;
+			if (!stopped)
+				action |= ACTION_REBOOT;
 		}
 
 		if (recv_pwr) {
 			recv_pwr = 0;
-			action |= ACTION_HALT;
+			if (!stopped)
+				action |= ACTION_HALT;
 		}
 
 		if (recv_usr2) {
 			recv_usr2 = 0;
-			action |= ACTION_BUTTON;
+			if (!stopped)
+				action |= ACTION_BUTTON;
 		}
 
 		if (exit_flatfsd) {
@@ -717,7 +843,33 @@ int main(int argc, char *argv[])
 			action |= ACTION_EXIT;
 		}
 
-		if (pid > 0 || !action) {
+		if (action & ACTION_DIRTY) {
+			action &= ~ACTION_DIRTY;
+			if (!dirty) {
+				now = time(NULL);
+				dirty = dirtyprev + dirtydelay;
+				if (dirty < now) {
+					dirty = now;
+					dirtydelay = dirty - dirtyprev;
+				}
+				dirtyprev = dirty;
+
+				/* Takes about an hour to get to the max
+				 * delay of one hour.
+				 */
+				dirtydelay *= 2;
+				if (dirtydelay > 60 * 60)
+					dirtydelay = 60 * 60;
+			}
+		}
+
+		if (dirty) {
+			if ((action & (ACTION_REBOOT|ACTION_HALT))
+					|| dirty < time(NULL))
+				action |= ACTION_WRITE;
+		}
+
+		if (stopped || pid > 0 || !action) {
 			/* timeout mitigates race with signals */
 			if (select(sockfd+1, &fds, NULL, NULL, &timeout) < 0) {
 				if (errno != EINTR)
@@ -725,21 +877,34 @@ int main(int argc, char *argv[])
 			} else if (FD_ISSET(sockfd, &fds)) {
 				readsocket(sockfd);
 			}
+			continue;
 		}
 
 		if (pid > 0)
 			continue;
 
-		if (action & ACTION_WRITE) {
-			action &= ~ACTION_WRITE;
-			pid = save_config_to_flash();
-			continue;
+		if (action & ACTION_REBOOT_NOW) {
+			/*
+			 * High priority reboot after resetting config.
+			 */
+			action &= ~ACTION_REBOOT_NOW;
+			reboot_now();
+			/*notreached*/
+			exit(1);
 		}
 
 		if (action & ACTION_RESET) {
-			action &= ~ACTION_RESET;
-			action |= ACTION_REBOOT;
+			action &= ~(ACTION_RESET|ACTION_WRITE);
+			action |= ACTION_REBOOT_NOW;
+			dirty = 0;
 			pid = reset_config_fs();
+			continue;
+		}
+
+		if (action & ACTION_WRITE) {
+			action &= ~ACTION_WRITE;
+			dirty = 0;
+			pid = save_config_to_flash();
 			continue;
 		}
 

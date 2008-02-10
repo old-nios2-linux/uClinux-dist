@@ -6,6 +6,7 @@ CONFOPTS :=	--enable-dependency-tracking		\
 		--disable-milter			\
 		--disable-clamav			\
 		--disable-dsig				\
+		--disable-unrar				\
 		--with-dbdir=/var/clamav		\
 		--enable-dns				\
 		--without-libcurl	 		\

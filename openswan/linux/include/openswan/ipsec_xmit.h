@@ -169,7 +169,11 @@ enum ipsec_xmit_value
 ipsec_xmit_encap_bundle(struct ipsec_xmit_state *ixs);
 
 extern void ipsec_xsm(struct ipsec_xmit_state *ixs);
+#ifdef HAVE_KMEM_CACHE_T
+extern kmem_cache_t *ipsec_ixs_cache;
+#else
 extern struct kmem_cache *ipsec_ixs_cache;
+#endif
 extern int ipsec_ixs_max;
 extern atomic_t ipsec_ixs_cnt;
 

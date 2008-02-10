@@ -86,12 +86,22 @@ static struct conf_entry *confentries = NULL;
  *
  * We sleep SLEEPTIME seconds before doing anything, to give the server
  * time to arrange itself.
+ *
+ * (decreased MAXRESOLVE to 8, to get devices to keep retrying failed
+ * DNS lookups more often)
  */
 #define	MINRESOLVE	2
-#define	MAXRESOLVE	32
+#define	MAXRESOLVE	8
 #define	CONFIG_TIME	2
 #define	ALARM_TIME	30
 #define	SLEEPTIME	2
+
+/*
+ * Define the FORCE_DNSRETRY macro, so name lookups are retried. In some
+ * situations, devices won't be able to resolve the name properly at startup,
+ * so need some time to bring interfaces up, etc.
+ */
+#define FORCE_DNSRETRY
 
 static	volatile int config_timer = 0;
 static	volatile int resolve_timer = 0;

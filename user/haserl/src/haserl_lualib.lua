@@ -23,7 +23,7 @@ haserl, FORM, ENV = {}, {}, {}
 function haserl.setfield (f, v)
 						-- From programming in Lua 1st Ed.
 	local t = _G    			-- start with the table of globals
-	for w, d in string.gfind(f, '([%w_]+)(.?)') do
+	for w, d in string.gfind(f, '([%w_%-]+)(.?)') do
 		if (tonumber(w)) then
 			w = tonumber(w)
 		end

@@ -67,6 +67,7 @@ libntpd_a_SOURCES = jupiter.h ntp_control.c \
 	refclock_ulink.c refclock_wwv.c refclock_wwvb.c \
 	refclock_zyfer.c
 
+ifeq (0,1)
 $(srcdir)/ntpd-opts.h: $(srcdir)/ntpd-opts.c
 $(srcdir)/ntpd-opts.c: $(srcdir)/ntpd-opts.def $(srcdir)/ntpdbase-opts.def $(std_def_list)
 	$(run_ag) ntpd-opts.def
@@ -86,6 +87,7 @@ $(srcdir)/ntpdsim.1: $(srcdir)/ntpdsim-opts.def $(srcdir)/ntpdbase-opts.def $(st
 
 $(srcdir)/ntpdsim-opts.texi $(srcdir)/ntpdsim-opts.menu: $(srcdir)/ntpdsim-opts.def $(srcdir)/ntpdbase-opts.def $(std_def_list) $(top_srcdir)/include/homerc.def
 	$(run_ag) -Taginfo.tpl -DLEVEL=section ntpdsim-opts.def
+endif
 
 $(PROGRAMS): $(LDADD)
 

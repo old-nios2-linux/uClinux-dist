@@ -147,6 +147,26 @@ ifdef CONFIG_TUN
 	DEVICES += $(DEVICE_TUN) net/tun,c,10,200
 endif
 
+ifdef CONFIG_SOUND_OSS
+	DEVICES += $(DEVICE_AUDIO) \
+		mixer,c,14,0 \
+		mixer1,c,14,16 \
+		sequencer,c,14,1 \
+		sequencer2,c,14,8 \
+		music,c,14,8 \
+		midi00,c,14,2 \
+		midi01,c,14,18 \
+		midi02,c,14,34 \
+		midi03,c,14,50 \
+		dsp,c,14,3 \
+		dsp1,c,14,19 \
+		dspleft,p,0,0 \
+		dspright,p,0,0 \
+		audio,c,14,4 \
+		audio1,c,14,20 \
+		sndstat,c,14,6
+endif
+
 ifneq ($(CONFIG_MODULES_CRYPTO_HIFN7901)$(CONFIG_MODULES_CRYPTO_HIFN7951)$(CONFIG_MODULES_CRYPTO_SAFENET),)
 	DEVICES += $(DEVICE_CRYPTO) hifn0,c,28,0
 endif
@@ -219,6 +239,16 @@ ifneq ($(CONFIG_PCMCIA_IVPN)$(CONFIG_PCMCIA_KS),)
 		attr8,c,120,4	attr16,c,120,5
 endif
 
+ifdef CONFIG_MODULES_LCD_LCDTXT
+	DEVICES += $(DEVICE_SYSTEM) \
+		lcdtxt,c,120,0
+endif
+
+ifdef CONFIG_MODULES_KEYPAD_KEYPAD
+	DEVICES += $(DEVICE_SYSTEM) \
+		keypad,c,121,0
+endif
+
 ifdef CONFIG_MODULES_QTAB_SMARTREADER
 	DEVICES += $(DEVICE_SYSTEM) \
 		cardpro0,c,125,0	cardpro1,c,125,1
@@ -274,6 +304,13 @@ else
 		cua0,c,204,8	cua1,c,204,9 \
 		ttySC0,c,204,8	ttySC1,c,204,9	ttySC2,c,204,10
 endif
+endif
+
+ifdef CONFIG_SERIAL_EP93XX
+	DEVICES += $(DEVICE_TTY) \
+		ttyS0,c,204,17	ttyS1,c,204,16 \
+		cua0,c,204,17	cua1,c,204,16 \
+		ttyAM0,c,204,16	ttyAM1,c,204,17
 endif
 
 ifdef CONFIG_I2C_CHARDEV

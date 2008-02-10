@@ -1,8 +1,9 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Tue Jan 29 16:50:49 2008
+# Thu Apr  3 11:04:29 2008
 #
+CONFIG_DISTVERSION="4.0"
 
 #
 # Vendor/Product Selection

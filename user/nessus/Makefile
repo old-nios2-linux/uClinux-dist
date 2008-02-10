@@ -119,6 +119,7 @@ nessus-libraries/config.status: Makefile
 			--sharedstatedir=/var						\
 			--localstatedir=/var						\
 			--datadir=/var								\
+			--without-x                                 \
 			--prefix=
 
 nessus-libraries: build nessus-libraries/config.status
@@ -136,6 +137,7 @@ libnasl/config.status: Makefile
 			--sharedstatedir=/var						\
 			--localstatedir=/var						\
 			--datadir=/var								\
+			--without-x                                 \
 			--prefix=
 
 libnasl: nessus-libraries libnasl/config.status
@@ -153,6 +155,7 @@ nessus-core/config.status: Makefile
 			--sharedstatedir=/var						\
 			--localstatedir=/var						\
 			--datadir=/var								\
+			--without-x                                 \
 			--prefix=
 
 nessus-core: libnasl nessus-core/config.status
@@ -171,6 +174,7 @@ nessus-plugins/config.status: Makefile
 			--sharedstatedir=/var						\
 			--localstatedir=/var						\
 			--datadir=/var								\
+			--without-x                                 \
 			--prefix=
 
 nessus-plugins: nessus-core nessus-plugins/config.status

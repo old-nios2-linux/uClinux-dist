@@ -55,7 +55,7 @@ static void print(struct nl_cache_ops *ops, void *arg)
 
 		printf("    cacheable object:\n" \
 		       "        name: %s:\n" \
-		       "        size: %d bytes\n" \
+		       "        size: %zu bytes\n" \
 		       "        constructor: %s\n" \
 		       "        free-data: %s\n" \
 		       "        clone: %s\n" \
@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 	if (argc > 1 && !strcasecmp(argv[1], "-h"))
 		print_usage();
 
-	nl_cache_mngt_foreach(print, NULL);
+	nl_cache_ops_foreach(print, NULL);
 
 	return 0;
 }

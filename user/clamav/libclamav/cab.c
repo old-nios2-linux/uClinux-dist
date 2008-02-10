@@ -1,4 +1,7 @@
 /*
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *  Author: Tomasz Kojm <tkojm@clamav.net>
+ *
  *  Copyright (C) 2006 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This code is based on the work of Stuart Caie and the official
@@ -157,6 +160,22 @@ void cab_free(struct cab_archive *cab)
 	struct cab_file *file;
 
 
+    if(cab->state) {
+	if(cab->state->stream) {
+	    switch(cab->state->cmethod & 0x000f) {
+		case 0x0001:
+		    mszip_free(cab->state->stream);
+		    break;
+		case 0x0002:
+		    qtm_free(cab->state->stream);
+		    break;
+		case 0x0003:
+		    lzx_free(cab->state->stream);
+	    }
+	}
+	free(cab->state);
+    }
+
     while(cab->folders) {
 	folder = cab->folders;
 	cab->folders = cab->folders->next;
@@ -214,8 +233,10 @@ int cab_open(int fd, off_t offset, struct cab_archive *cab)
 
     cab->length = EC32(hdr.cbCabinet);
     cli_dbgmsg("CAB: Cabinet length: %u\n", cab->length);
-    if((off_t) cab->length > rsize)
+    if((off_t) cab->length > rsize) {
+	cab->length = (uint32_t) rsize;
 	bscore++;
+    }
 
     cab->nfolders = EC16(hdr.cFolders);
     if(!cab->nfolders) {
@@ -421,7 +442,7 @@ int cab_open(int fd, off_t offset, struct cab_archive *cab)
 	if(fidx < 0xfffd) {
 	    if(fidx > cab->nfolders) {
 		if(bscore < 3)
-		    cli_warnmsg("cab_open: File %s is not associated with any folder\n", file->name);
+		    cli_dbgmsg("cab_open: File %s is not associated with any folder\n", file->name);
 		bscore++;
 		free(file->name);
 		free(file);
@@ -465,7 +486,7 @@ static int cab_read_block(int fd, struct cab_state *state, uint16_t resdata)
 
 
     if(cli_readn(fd, &block_hdr, sizeof(block_hdr)) != sizeof(block_hdr)) {
-	cli_errmsg("cab_read_block: Can't read block header\n");
+	cli_dbgmsg("cab_read_block: Can't read block header\n");
 	return CL_EIO;
     }
 
@@ -505,36 +526,36 @@ static int cab_read(struct cab_file *file, unsigned char *buffer, int bytes)
 
     todo = bytes;
     while(todo > 0) {
-	left = file->state->end - file->state->pt;
+	left = file->cab->state->end - file->cab->state->pt;
 
 	if(left) {
 	    if(left > todo)
 		left = todo;
 
-	    memcpy(buffer, file->state->pt, left);
-	    file->state->pt += left;
+	    memcpy(buffer, file->cab->state->pt, left);
+	    file->cab->state->pt += left;
 	    buffer += left;
 	    todo -= left;
 
 	} else {
-	    if(file->state->blknum++ >= file->folder->nblocks) {
+	    if(file->cab->state->blknum++ >= file->folder->nblocks) {
 		file->error = CL_EFORMAT;
 		break;
 	    }
 
-	    file->error = cab_read_block(file->fd, file->state, file->cab->resdata);
+	    file->error = cab_read_block(file->fd, file->cab->state, file->cab->resdata);
 	    if(file->error)
 		return -1;
 
 	    if((file->folder->cmethod & 0x000f) == 0x0002) /* Quantum hack */
-		*file->state->end++ = 0xff;
+		*file->cab->state->end++ = 0xff;
 
-	    if(file->state->blknum >= file->folder->nblocks) {
+	    if(file->cab->state->blknum >= file->folder->nblocks) {
 		if((file->folder->cmethod & 0x000f) == 0x0003) { /* LZX hack */
-		    lzx_set_output_length(file->state->stream, (off_t) ((file->state->blknum - 1) * CAB_BLOCKMAX + file->state->outlen));
+		    lzx_set_output_length(file->cab->state->stream, (off_t) ((file->cab->state->blknum - 1) * CAB_BLOCKMAX + file->cab->state->outlen));
 		}
 	    } else {
-		if(file->state->outlen != CAB_BLOCKMAX) {
+		if(file->cab->state->outlen != CAB_BLOCKMAX) {
 		    cli_dbgmsg("cab_read: WARNING: partial data block\n");
 		}
 	    }
@@ -544,7 +565,7 @@ static int cab_read(struct cab_file *file, unsigned char *buffer, int bytes)
     return bytes - todo;
 }
 
-static int cab_unstore(struct cab_file *file, int bytes, uint8_t wflag)
+static int cab_unstore(struct cab_file *file, int bytes)
 {
 	int todo;
 	unsigned char buff[4096];
@@ -563,7 +584,7 @@ static int cab_unstore(struct cab_file *file, int bytes, uint8_t wflag)
 	    if(cab_read(file, buff, todo) == -1) {
 		cli_dbgmsg("cab_unstore: cab_read failed for descriptor %d\n", file->fd);
 		return CL_EIO;
-	    } else if(wflag && cli_writen(file->ofd, buff, todo) == -1) {
+	    } else if(cli_writen(file->ofd, buff, todo) == -1) {
 		cli_dbgmsg("cab_unstore: Can't write to descriptor %d\n", file->ofd);
 		return CL_EIO;
 	    }
@@ -573,7 +594,7 @@ static int cab_unstore(struct cab_file *file, int bytes, uint8_t wflag)
 	    if(cab_read(file, buff, sizeof(buff)) == -1) {
 		cli_dbgmsg("cab_unstore: cab_read failed for descriptor %d\n", file->fd);
 		return CL_EIO;
-	    } else if(wflag && cli_writen(file->ofd, buff, sizeof(buff)) == -1) {
+	    } else if(cli_writen(file->ofd, buff, sizeof(buff)) == -1) {
 		cli_dbgmsg("cab_unstore: Can't write to descriptor %d\n", file->ofd);
 		return CL_EIO;
 	    }
@@ -584,9 +605,70 @@ static int cab_unstore(struct cab_file *file, int bytes, uint8_t wflag)
     return CL_SUCCESS;
 }
 
+#define CAB_CHGFOLDER							\
+    if(!file->cab->actfol || (file->folder != file->cab->actfol)) {	\
+	if(file->cab->state) {						\
+	    if(file->cab->state->stream) {				\
+		switch(file->cab->state->cmethod & 0x000f) {		\
+		    case 0x0001:					\
+			mszip_free(file->cab->state->stream);		\
+			break;						\
+		    case 0x0002:					\
+			qtm_free(file->cab->state->stream);		\
+			break;						\
+		    case 0x0003:					\
+			lzx_free(file->cab->state->stream);		\
+		}							\
+	    }								\
+	    free(file->cab->state);					\
+	    file->cab->state = NULL;					\
+	}								\
+	if(lseek(file->fd, file->folder->offset, SEEK_SET) == -1) {	\
+	    cli_dbgmsg("cab_extract: Can't lseek to %u\n", (unsigned int) file->folder->offset);							\
+	    close(file->ofd);						\
+	    return CL_EFORMAT; /* truncated file? */			\
+	}								\
+	file->cab->state = (struct cab_state *) cli_calloc(1, sizeof(struct cab_state));								\
+	if(!file->cab->state) {						\
+	    cli_errmsg("cab_extract: Can't allocate memory for internal state\n");									\
+	    close(file->ofd);						\
+	    return CL_EMEM;						\
+	}								\
+	file->cab->state->cmethod = file->folder->cmethod;		\
+	switch(file->folder->cmethod & 0x000f) {			\
+	    case 0x0001:						\
+		file->cab->state->stream = (struct mszip_stream *) mszip_init(file->fd, file->ofd, 4096, 1, file, &cab_read);				\
+		break;							\
+	    case 0x0002:						\
+		file->cab->state->stream = (struct qtm_stream *) qtm_init(file->fd, file->ofd, (int) (file->folder->cmethod >> 8) & 0x1f, 4096, file, &cab_read);									\
+		break;							\
+	    case 0x0003:						\
+		file->cab->state->stream = (struct lzx_stream *) lzx_init(file->fd, file->ofd, (int) (file->folder->cmethod >> 8) & 0x1f, 0, 4096, 0, file, &cab_read);									\
+	}								\
+	if((file->folder->cmethod & 0x000f) && !file->cab->state->stream) { \
+	    close(file->ofd);						\
+	    return CL_EMSCAB;						\
+	}								\
+	file->cab->actfol = file->folder;				\
+    } else {								\
+    	if(file->cab->state && file->cab->state->stream) {		\
+	    switch(file->cab->state->cmethod & 0x000f) {		\
+		case 0x0001:						\
+		    ((struct mszip_stream *) file->cab->state->stream)->ofd = file->ofd;									\
+		    break;						\
+		case 0x0002:						\
+		    ((struct qtm_stream *) file->cab->state->stream)->ofd = file->ofd;									\
+		    break;						\
+		case 0x0003:						\
+		    ((struct lzx_stream *) file->cab->state->stream)->ofd = file->ofd;									\
+		    break;						\
+	    }								\
+	}								\
+    }
+
+
 int cab_extract(struct cab_file *file, const char *name)
 {
-	struct cab_folder *folder;
 	int ret;
 
 
@@ -595,108 +677,44 @@ int cab_extract(struct cab_file *file, const char *name)
 	return CL_ENULLARG;
     }
 
-    if(!(folder = file->folder)) {
+    if(!file->folder) {
 	cli_errmsg("cab_extract: file->folder == NULL\n");
 	return CL_ENULLARG;
-    }
-
-    if(lseek(file->fd, file->folder->offset, SEEK_SET) == -1) {
-	cli_errmsg("cab_extract: Can't lseek to %u\n", (unsigned int) file->folder->offset);
-	return CL_EIO;
-    }
-
-    file->state = (struct cab_state *) cli_calloc(1, sizeof(struct cab_state));
-    if(!file->state) {
-	cli_errmsg("cab_extract: Can't allocate memory for internal state\n");
-	return CL_EIO;
     }
 
     file->ofd = open(name, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU);
     if(file->ofd == -1) {
 	cli_errmsg("cab_extract: Can't open file %s in write mode\n", name);
-	free(file->state);
 	return CL_EIO;
     }
 
     switch(file->folder->cmethod & 0x000f) {
 	case 0x0000: /* STORE */
-	    if(file->offset > 0)
-		cab_unstore(file, file->offset, 0);
-
-	    ret = cab_unstore(file, file->length, 1);
+	    cli_dbgmsg("CAB: Compression method: STORED\n");
+	    CAB_CHGFOLDER;
+	    if(file->length > file->cab->length) {
+		cli_dbgmsg("cab_extract: Stored file larger than archive itself, trimming down\n");
+		file->length = file->cab->length;
+	    }
+	    ret = cab_unstore(file, file->length);
 	    break;
 
 	case 0x0001: /* MSZIP */
 	    cli_dbgmsg("CAB: Compression method: MSZIP\n");
-	    file->state->stream = (struct mszip_stream *) mszip_init(file->fd, file->ofd, 4096, 1, file, &cab_read);
-	    if(!file->state->stream) {
-		free(file->state);
-		close(file->ofd);
-		return CL_EMSCAB;
-	    }
-	    if(file->offset > 0) {
-		((struct mszip_stream *) file->state->stream)->wflag = 0;
-		ret = mszip_decompress(file->state->stream, file->offset);
-		((struct mszip_stream *) file->state->stream)->wflag = 1;
-		if(ret < 0) {
-		    mszip_free(file->state->stream);
-		    memset(file->state, 0, sizeof(struct cab_state));
-		    file->state->stream = (struct mszip_stream *) mszip_init(file->fd, file->ofd, 4096, 1, file, &cab_read);
-		    if(!file->state->stream) {
-			free(file->state);
-			close(file->ofd);
-			return CL_EMSCAB;
-		    }
-                    lseek(file->fd, file->folder->offset, SEEK_SET);
-		}
-	    }
-	    ret = mszip_decompress(file->state->stream, file->length);
-	    mszip_free(file->state->stream);
+	    CAB_CHGFOLDER;
+	    ret = mszip_decompress(file->cab->state->stream, file->length);
 	    break;
 
 	case 0x0002: /* QUANTUM */
 	    cli_dbgmsg("CAB: Compression method: QUANTUM\n");
-	    file->state->stream = (struct qtm_stream *) qtm_init(file->fd, file->ofd, (int) (file->folder->cmethod >> 8) & 0x1f, 4096, file, &cab_read);
-	    if(!file->state->stream) {
-		free(file->state);
-		close(file->ofd);
-		return CL_EMSCAB;
-	    }
-	    if(file->offset > 0) {
-		((struct qtm_stream *) file->state->stream)->wflag = 0;
-		qtm_decompress(file->state->stream, file->offset);
-		((struct qtm_stream *) file->state->stream)->wflag = 1;
-	    }
-	    ret = qtm_decompress(file->state->stream, file->length);
-	    qtm_free(file->state->stream);
+	    CAB_CHGFOLDER;
+	    ret = qtm_decompress(file->cab->state->stream, file->length);
 	    break;
 
 	case 0x0003: /* LZX */
 	    cli_dbgmsg("CAB: Compression method: LZX\n");
-	    file->state->stream = (struct lzx_stream *) lzx_init(file->fd, file->ofd, (int) (file->folder->cmethod >> 8) & 0x1f, 0, 4096, 0, file, &cab_read);
-	    if(!file->state->stream) {
-		free(file->state);
-		close(file->ofd);
-		return CL_EMSCAB;
-	    }
-	    if(file->offset > 0) {
-		((struct lzx_stream *) file->state->stream)->wflag = 0;
-		ret = lzx_decompress(file->state->stream, file->offset);
-		((struct lzx_stream *) file->state->stream)->wflag = 1;
-		if(ret < 0) {
-		    lzx_free(file->state->stream);
-		    memset(file->state, 0, sizeof(struct cab_state));
-		    file->state->stream = (struct lzx_stream *) lzx_init(file->fd, file->ofd, (int) (file->folder->cmethod >> 8) & 0x1f, 0, 4096, 0, file, &cab_read);
-		    if(!file->state->stream) {
-			free(file->state);
-			close(file->ofd);
-			return CL_EMSCAB;
-		    }
-                    lseek(file->fd, file->folder->offset, SEEK_SET);
-		}
-	    }
-	    ret = lzx_decompress(file->state->stream, file->length);
-	    lzx_free(file->state->stream);
+	    CAB_CHGFOLDER;
+	    ret = lzx_decompress(file->cab->state->stream, file->length);
 	    break;
 
 	default:
@@ -704,7 +722,6 @@ int cab_extract(struct cab_file *file, const char *name)
 	    ret = CL_EFORMAT;
     }
 
-    free(file->state);
     close(file->ofd);
 
     return ret;

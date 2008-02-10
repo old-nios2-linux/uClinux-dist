@@ -6,7 +6,8 @@ watchdog /dev/watchdog
 hostname SG8100
 echo "Mounting Filesystems ..."
 mount -t sysfs none /sys
-mount -t tmpfs -o size=131072k tmpfs /var
+mount -t tmpfs -o size=33792k tmpfs /var
+mount -t tmpfs -o size=2048k tmpfs /etc/config
 mkdir -m 1777 /var/tmp
 mkdir -m 755 /var/log
 mkdir -m 755 /var/run
@@ -14,25 +15,6 @@ mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
 mount -t devpts devpts /dev/pts
-if [ -L /dev/flash/config ]; then
-	if [ -f /proc/bus/usb/devices ]; then
-		sleep 2
-		grep usb-storage /proc/bus/usb/devices>/dev/null 2>&1 && sleep 5
-	fi
-	DEV=`sfdisk -l 2>/dev/null | grep -i SpeedStor | tail -1 | awk '{ print $1 }'`
-	if [ "$DEV" ]; then
-		ln -s $DEV /var/config
-	fi
-fi
-if ! mount -t ext3 /dev/flash/config /etc/config
-then
-	mke2fs -j /dev/flash/config
-	if ! mount -t ext3 /dev/flash/config /etc/config
-	then
-		mount -t tmpfs -o size=4096k tmpfs /etc/config
-	fi
-fi
-[ -d /etc/config/persistent ] || mkdir /etc/config/persistent
 echo "Processing Config Filesystem ..."
 flatfsd -r 
 echo "Loading network drivers."
@@ -40,7 +22,11 @@ modprobe ixp400
 cat /etc/IxNpeMicrocode.dat >/dev/ixNpe
 modprobe ixp400_eth
 setmac -p
+modprobe rt2500ap
+modprobe rt61ap
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+echo "Loading USB drivers."
+mount -t usbfs none /proc/bus/usb
 echo "Loading crypto drivers."
 modprobe ocf
 modprobe ixp4xx

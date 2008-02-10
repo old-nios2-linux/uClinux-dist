@@ -49,7 +49,6 @@
 #define	O_BINARY	0
 #endif
 
-extern short cli_leavetemps_flag;
 
 #define DCONF_ARCH  ctx->dconf->archive
 #define DCONF_DOC   ctx->dconf->doc
@@ -63,7 +62,6 @@ extern short cli_leavetemps_flag;
 #include "matcher-ac.h"
 #include "matcher-bm.h"
 #include "matcher.h"
-#include "unrar.h"
 #include "ole2_extract.h"
 #include "vba_extract.h"
 #include "msexpand.h"
@@ -84,6 +82,9 @@ extern short cli_leavetemps_flag;
 #include "mspack.h"
 #include "cab.h"
 #include "rtf.h"
+#include "unarj.h"
+#include "nulsft.h"
+#include "autoit.h"
 
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
@@ -94,6 +95,10 @@ extern short cli_leavetemps_flag;
 #include <bzlib.h>
 #endif
 
+#ifdef ENABLE_UNRAR
+#include "libclamunrar_iface/unrar_iface.h"
+#endif
+
 #if defined(HAVE_READDIR_R_3) || defined(HAVE_READDIR_R_2)
 #include <limits.h>
 #include <stddef.h>
@@ -101,10 +106,11 @@ extern short cli_leavetemps_flag;
 
 #define MAX_MAIL_RECURSION  15
 
-int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset); /* FIXME */
+
 static int cli_scanfile(const char *filename, cli_ctx *ctx);
 
-static int cli_unrar_scanmetadata(int desc, rar_metadata_t *metadata, cli_ctx *ctx, unsigned int files, uint32_t* sfx_check)
+#ifdef ENABLE_UNRAR
+static int cli_unrar_scanmetadata(int desc, unrar_metadata_t *metadata, cli_ctx *ctx, unsigned int files, uint32_t* sfx_check)
 {
 	int ret = CL_SUCCESS;
 	struct cli_meta_node* mdata;
@@ -181,7 +187,7 @@ static int cli_unrar_scanmetadata(int desc, rar_metadata_t *metadata, cli_ctx *c
     return ret;
 }
 
-static int cli_unrar_checklimits(const cli_ctx *ctx, const rar_metadata_t *metadata, unsigned int files)
+static int cli_unrar_checklimits(const cli_ctx *ctx, const unrar_metadata_t *metadata, unsigned int files)
 {
     if(ctx->limits) {
 	if(ctx->limits->maxratio && metadata->unpack_size && metadata->pack_size) {
@@ -220,9 +226,9 @@ static int cli_unrar_checklimits(const cli_ctx *ctx, const rar_metadata_t *metad
 static int cli_scanrar(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_check)
 {
 	int ret = CL_CLEAN;
-	rar_metadata_t *metadata, *metadata_tmp;
+	unrar_metadata_t *metadata, *metadata_tmp;
 	char *dir;
-	rar_state_t rar_state;
+	unrar_state_t rar_state;
 
 
     cli_dbgmsg("in scanrar()\n");
@@ -238,20 +244,29 @@ static int cli_scanrar(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
     if(sfx_offset)
 	lseek(desc, sfx_offset, SEEK_SET);
 
-    if((ret = cli_unrar_open(desc, dir, &rar_state)) != CL_SUCCESS) {
+    if((ret = unrar_open(desc, dir, &rar_state)) != UNRAR_OK) {
 	if(!cli_leavetemps_flag)
 	    cli_rmdirs(dir);
 	free(dir);
-	cli_dbgmsg("RAR: Error: %s\n", cl_strerror(ret));
-	return ret;
+	if(ret == UNRAR_EMEM)
+	    return CL_EMEM;
+	else
+	    return CL_ERAR;
     }
 
     do {
 	int rc;
-	rar_state.unpack_data->ofd = -1;
-	ret = cli_unrar_extract_next_prepare(&rar_state,dir);
-	if(ret != CL_SUCCESS) 
+	rar_state.ofd = -1;
+	ret = unrar_extract_next_prepare(&rar_state,dir);
+	if(ret != UNRAR_OK) {
+	    if(ret == UNRAR_BREAK)
+		ret = CL_BREAK;
+	    else if(ret == UNRAR_EMEM)
+		ret = CL_EMEM;
+	    else
+		ret = CL_ERAR;
 	    break;
+	}
 	ret = cli_unrar_checklimits(ctx, rar_state.metadata_tail, rar_state.file_count);
 	if(ret && ret != CL_VIRUS) {
 	    free(rar_state.file_header->filename);
@@ -264,11 +279,18 @@ static int cli_scanrar(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
 	    free(rar_state.file_header);	   
 	    break;
 	}
-	ret = cli_unrar_extract_next(&rar_state,dir);
-	if(rar_state.unpack_data->ofd > 0) {
-	    lseek(rar_state.unpack_data->ofd,0,SEEK_SET);
-	    rc = cli_magic_scandesc(rar_state.unpack_data->ofd,ctx);
-	    close(rar_state.unpack_data->ofd);
+	ret = unrar_extract_next(&rar_state,dir);
+	if(ret == UNRAR_OK)
+	    ret = CL_SUCCESS;
+	else if(ret == UNRAR_EMEM)
+	    ret = CL_EMEM;
+	else
+	    ret = CL_ERAR;
+
+	if(rar_state.ofd > 0) {
+	    lseek(rar_state.ofd,0,SEEK_SET);
+	    rc = cli_magic_scandesc(rar_state.ofd,ctx);
+	    close(rar_state.ofd);
 	    if(!cli_leavetemps_flag) 
 		unlink(rar_state.filename);
 	    if(rc == CL_VIRUS ) {
@@ -291,7 +313,7 @@ static int cli_scanrar(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
     if(cli_scandir(rar_state.comment_dir, ctx) == CL_VIRUS)
 	ret = CL_VIRUS;
 
-    cli_unrar_close(&rar_state);
+    unrar_close(&rar_state);
 
     if(!cli_leavetemps_flag)
         cli_rmdirs(dir);
@@ -309,16 +331,128 @@ static int cli_scanrar(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
 
     return ret;
 }
+#endif /* ENABLE_UNRAR */
 
+static int cli_unarj_checklimits(const cli_ctx *ctx, const arj_metadata_t *metadata, unsigned int files)
+{
+    if (ctx->limits) {
+	if (ctx->limits->maxfilesize && (metadata->orig_size > ctx->limits->maxfilesize)) {
+	    cli_dbgmsg("ARJ: %s: Size exceeded (%lu, max: %lu)\n", metadata->filename ? metadata->filename : "(none)",
+	    		(unsigned long int) metadata->orig_size, ctx->limits->maxfilesize);
+	    if (BLOCKMAX) {
+		*ctx->virname = "ARJ.ExceededFileSize";
+		return CL_VIRUS;
+	    }
+	    return CL_EMAXSIZE;
+	}
+	
+	if (ctx->limits->maxratio && metadata->orig_size && metadata->comp_size) {
+	    if (metadata->orig_size / metadata->comp_size >= ctx->limits->maxratio) {
+		cli_dbgmsg("ARJ: Max ratio reached (%u, max: %u)\n", (unsigned int) (metadata->orig_size / metadata->comp_size), ctx->limits->maxratio);
+		if (ctx->limits->maxfilesize && (metadata->orig_size <= ctx->limits->maxfilesize)) {
+		    cli_dbgmsg("ARJ: Ignoring ratio limit (file size doesn't hit limits)\n");
+		} else {
+		    if(BLOCKMAX) {
+		    	*ctx->virname = "Oversized.ARJ";
+			return CL_VIRUS;
+		    }
+		}
+	    }
+	}
+	
+	if(ctx->limits->maxfiles && (files > ctx->limits->maxfiles)) {
+	    cli_dbgmsg("ARJ: Files limit reached (max: %u)\n", ctx->limits->maxfiles);
+	    if (BLOCKMAX) {
+	    	*ctx->virname = "ARJ.ExceededFilesLimit";
+		return CL_VIRUS;
+	    }
+	    return CL_EMAXFILES;
+	}
+    }
+    
+    return CL_SUCCESS;
+}
+
+static int cli_scanarj(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_check)
+{
+	int ret = CL_CLEAN, rc;
+	arj_metadata_t metadata;
+	char *dir;
+	unsigned int file_count = 1;
+
+    cli_dbgmsg("in cli_scanarj()\n");
+
+     /* generate the temporary directory */
+    dir = cli_gentemp(NULL);
+    if(mkdir(dir, 0700)) {
+	cli_dbgmsg("RAR: Can't create temporary directory %s\n", dir);
+	free(dir);
+	return CL_ETMPDIR;
+    }
+
+    if(sfx_offset)
+	lseek(desc, sfx_offset, SEEK_SET);
+
+    ret = cli_unarj_open(desc, dir);
+    if (ret != CL_SUCCESS) {
+	if(!cli_leavetemps_flag)
+	    cli_rmdirs(dir);
+	free(dir);
+	cli_dbgmsg("ARJ: Error: %s\n", cl_strerror(ret));
+	return ret;
+    }
+    
+   metadata.filename = NULL;
+
+   do {
+	ret = cli_unarj_prepare_file(desc, dir, &metadata);
+	if (ret != CL_SUCCESS) {
+	   break;
+	}
+	ret = cli_unarj_checklimits(ctx, &metadata, file_count);
+	if (ret == CL_VIRUS) {
+		break;
+	}
+	ret = cli_unarj_extract_file(desc, dir, &metadata);
+	if (metadata.ofd >= 0) {
+	    lseek(metadata.ofd, 0, SEEK_SET);
+	    rc = cli_magic_scandesc(metadata.ofd, ctx);
+	    close(metadata.ofd);
+	    if (rc == CL_VIRUS) {
+		cli_dbgmsg("ARJ: infected with %s\n",*ctx->virname);
+		ret = CL_VIRUS;
+		break;
+	    }
+	}
+	if (metadata.filename) {
+		free(metadata.filename);
+		metadata.filename = NULL;
+	}
+
+    } while(ret == CL_SUCCESS);
+    
+    if(!cli_leavetemps_flag)
+	cli_rmdirs(dir);
+
+    free(dir);
+    if (metadata.filename) {
+	free(metadata.filename);
+    }
+
+    cli_dbgmsg("ARJ: Exit code: %d\n", ret);
+    if (ret == CL_BREAK)
+	ret = CL_CLEAN;
+
+    return ret;
+}
 #ifdef HAVE_ZLIB_H
 static int cli_scanzip(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_check)
 {
 	zip_dir *zdir;
 	zip_dirent zdirent;
 	zip_file *zfp;
-	FILE *tmp = NULL;
 	char *tmpname = NULL, *buff;
-	int fd, bytes, ret = CL_CLEAN;
+	int fd = -1, bytes, ret = CL_CLEAN;
 	unsigned long int size = 0;
 	unsigned int files = 0, encrypted, bfcnt;
 	struct stat source;
@@ -498,17 +632,13 @@ static int cli_scanzip(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
 	while(1) {
 	    fail = 0;
 
-	    /* generate temporary file and get its descriptor */
-	    if((tmpname = cli_gentempstream(NULL, &tmp)) == NULL) {
-		cli_dbgmsg("Zip: Can't generate tmpfile().\n");
-		ret = CL_ETMPFILE;
+	    if((ret = cli_gentempfd(NULL, &tmpname, &fd)))
 		break;
-	    }
 
 	    size = 0;
 	    while((bytes = zip_file_read(zfp, buff, FILEBUFF)) > 0) {
 		size += bytes;
-		if(fwrite(buff, 1, bytes, tmp) != (size_t) bytes) {
+		if(cli_writen(fd, buff, bytes) != bytes) {
 		    cli_dbgmsg("Zip: Can't write to file.\n");
 		    ret = CL_EIO;
 		    break;
@@ -531,14 +661,11 @@ static int cli_scanzip(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
 	    }
 
 	    if(!fail) {
-		if(fflush(tmp) != 0) {
-		    cli_dbgmsg("Zip: fflush() failed\n");
+		if(fsync(fd) == -1) {
+		    cli_dbgmsg("Zip: fsync() failed\n");
 		    ret = CL_EFSYNC;
 		    break;
 		}
-
-		fd = fileno(tmp);
-
 		lseek(fd, 0, SEEK_SET);
 
 		if((ret = cli_magic_scandesc(fd, ctx)) == CL_VIRUS ) {
@@ -546,16 +673,13 @@ static int cli_scanzip(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
 		    ret = CL_VIRUS;
 		    break;
 		}
-
 	    }
 
-	    if(tmp) {
-		fclose(tmp);
-		if(!cli_leavetemps_flag)
-		    unlink(tmpname);
-		free(tmpname);
-		tmp = NULL;
-	    }
+	    close(fd);
+	    if(!cli_leavetemps_flag)
+		unlink(tmpname);
+	    free(tmpname);
+	    fd = -1;
 
 	    if(zfp->bf[bfcnt] == -1)
 		break;
@@ -577,12 +701,11 @@ static int cli_scanzip(int desc, cli_ctx *ctx, off_t sfx_offset, uint32_t *sfx_c
     }
 
     zip_dir_close(zdir);
-    if(tmp) {
-	fclose(tmp);
+    if(fd != -1) {
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);
-	tmp = NULL;
     }
 
     free(buff);
@@ -594,7 +717,6 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
 	int fd, bytes, ret = CL_CLEAN;
 	unsigned long int size = 0;
 	char *buff;
-	FILE *tmp = NULL;
 	char *tmpname;
 	gzFile gd;
 
@@ -606,17 +728,16 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
 	return CL_EGZIP;
     }
 
-    if((tmpname = cli_gentempstream(NULL, &tmp)) == NULL) {
+    if((ret = cli_gentempfd(NULL, &tmpname, &fd))) {
 	cli_dbgmsg("GZip: Can't generate temporary file.\n");
 	gzclose(gd);
-	return CL_ETMPFILE;
+	return ret;
     }
-    fd = fileno(tmp);
 
     if(!(buff = (char *) cli_malloc(FILEBUFF))) {
 	cli_dbgmsg("GZip: Unable to malloc %u bytes.\n", FILEBUFF);
 	gzclose(gd);
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -638,7 +759,7 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
 
 	if(cli_writen(fd, buff, bytes) != bytes) {
 	    cli_dbgmsg("GZip: Can't write to file.\n");
-	    fclose(tmp);
+	    close(fd);
 	    if(!cli_leavetemps_flag)
 		unlink(tmpname);
 	    free(tmpname);	
@@ -652,7 +773,7 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
     gzclose(gd);
 
     if(ret == CL_VIRUS) {
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -661,7 +782,7 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
 
     if(fsync(fd) == -1) {
 	cli_dbgmsg("GZip: Can't synchronise descriptor %d\n", fd);
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -671,13 +792,13 @@ static int cli_scangzip(int desc, cli_ctx *ctx)
     lseek(fd, 0, SEEK_SET);
     if((ret = cli_magic_scandesc(fd, ctx)) == CL_VIRUS ) {
 	cli_dbgmsg("GZip: Infected with %s\n", *ctx->virname);
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
 	return CL_VIRUS;
     }
-    fclose(tmp);
+    close(fd);
     if(!cli_leavetemps_flag)
 	unlink(tmpname);
     free(tmpname);	
@@ -700,7 +821,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
 	short memlim = 0;
 	unsigned long int size = 0;
 	char *buff;
-	FILE *fs, *tmp = NULL;
+	FILE *fs;
 	char *tmpname;
 	BZFILE *bfd;
 
@@ -720,17 +841,16 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
 	return CL_EBZIP;
     }
 
-    if((tmpname = cli_gentempstream(NULL, &tmp)) == NULL) {
+    if((ret = cli_gentempfd(NULL, &tmpname, &fd))) {
 	cli_dbgmsg("Bzip: Can't generate temporary file.\n");
 	BZ2_bzReadClose(&bzerror, bfd);
 	fclose(fs);
-	return CL_ETMPFILE;
+	return ret;
     }
-    fd = fileno(tmp);
 
     if(!(buff = (char *) cli_malloc(FILEBUFF))) {
 	cli_dbgmsg("Bzip: Unable to malloc %u bytes.\n", FILEBUFF);
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -755,7 +875,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
 	if(cli_writen(fd, buff, bytes) != bytes) {
 	    cli_dbgmsg("Bzip: Can't write to file.\n");
 	    BZ2_bzReadClose(&bzerror, bfd);
-	    fclose(tmp);
+	    close(fd);
 	    if(!cli_leavetemps_flag)
 		unlink(tmpname);
 	    free(tmpname);	
@@ -769,7 +889,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
     BZ2_bzReadClose(&bzerror, bfd);
 
     if(ret == CL_VIRUS) {
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -779,7 +899,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
 
     if(fsync(fd) == -1) {
 	cli_dbgmsg("Bzip: Synchronisation failed for descriptor %d\n", fd);
-	fclose(tmp);
+	close(fd);
 	if(!cli_leavetemps_flag)
 	    unlink(tmpname);
 	free(tmpname);	
@@ -791,7 +911,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
     if((ret = cli_magic_scandesc(fd, ctx)) == CL_VIRUS ) {
 	cli_dbgmsg("Bzip: Infected with %s\n", *ctx->virname);
     }
-    fclose(tmp);
+    close(fd);
     if(!cli_leavetemps_flag)
 	unlink(tmpname);
     free(tmpname);	
@@ -801,6 +921,7 @@ static int cli_scanbzip(int desc, cli_ctx *ctx)
 }
 #endif
 
+/*
 static int cli_scanszdd(int desc, cli_ctx *ctx)
 {
 	int fd, ret = CL_CLEAN, dcpy;
@@ -864,6 +985,7 @@ static int cli_scanszdd(int desc, cli_ctx *ctx)
     free(tmpname);	
     return ret;
 }
+*/
 
 static int cli_scanmscab(int desc, cli_ctx *ctx, off_t sfx_offset)
 {
@@ -1703,6 +1825,7 @@ static int cli_scanembpe(int desc, cli_ctx *ctx)
 	return CL_EFSYNC;
     }
 
+    ctx->arec++;
     lseek(fd, 0, SEEK_SET);
     if((ret = cli_magic_scandesc(fd, ctx)) == CL_VIRUS) {
 	cli_dbgmsg("cli_scanembpe: Infected with %s\n", *ctx->virname);
@@ -1712,6 +1835,7 @@ static int cli_scanembpe(int desc, cli_ctx *ctx)
 	free(tmpname);	
 	return CL_VIRUS;
     }
+    ctx->arec--;
 
     close(fd);
     if(!cli_leavetemps_flag)
@@ -1764,10 +1888,12 @@ static int cli_scanraw(int desc, cli_ctx *ctx, cli_file_t type, uint8_t typercg)
 	    while(fpt) {
 		switch(fpt->type) {
 		    case CL_TYPE_RARSFX:
+#ifdef ENABLE_UNRAR
 			if(SCAN_ARCHIVE && type == CL_TYPE_MSEXE && (DCONF_ARCH & ARCH_CONF_RAR)) {
 			    cli_dbgmsg("RAR-SFX signature found at %u\n", (unsigned int) fpt->offset);
 			    nret = cli_scanrar(desc, ctx, fpt->offset, &lastrar);
 			}
+#endif
 			break;
 
 		    case CL_TYPE_ZIPSFX:
@@ -1783,11 +1909,24 @@ static int cli_scanraw(int desc, cli_ctx *ctx, cli_file_t type, uint8_t typercg)
 			    nret = cli_scanmscab(desc, ctx, fpt->offset);
 			}
 			break;
+		    case CL_TYPE_ARJSFX:
+			if(SCAN_ARCHIVE && type == CL_TYPE_MSEXE && (DCONF_ARCH & ARCH_CONF_ARJ)) {
+			    cli_dbgmsg("ARJ-SFX signature found at %u\n", (unsigned int) fpt->offset);
+			    nret = cli_scanarj(desc, ctx, fpt->offset, &lastrar);
+			}
+			break;
 
 		    case CL_TYPE_NULSFT:
 		        if(SCAN_ARCHIVE && type == CL_TYPE_MSEXE && (DCONF_ARCH & ARCH_CONF_NSIS) && fpt->offset > 4) {
 			    cli_dbgmsg("NSIS signature found at %u\n", (unsigned int) fpt->offset-4);
 			    nret = cli_scannulsft(desc, ctx, fpt->offset - 4);
+			}
+			break;
+
+		    case CL_TYPE_AUTOIT:
+		        if(SCAN_ARCHIVE && type == CL_TYPE_MSEXE && (DCONF_ARCH & ARCH_CONF_AUTOIT)) {
+			    cli_dbgmsg("AUTOIT signature found at %u\n", (unsigned int) fpt->offset);
+			    nret = cli_scanautoit(desc, ctx, fpt->offset + 23);
 			}
 			break;
 
@@ -1917,8 +2056,12 @@ int cli_magic_scandesc(int desc, cli_ctx *ctx)
 
     switch(type) {
 	case CL_TYPE_RAR:
+#ifdef ENABLE_UNRAR
 	    if(SCAN_ARCHIVE && (DCONF_ARCH & ARCH_CONF_RAR))
 		ret = cli_scanrar(desc, ctx, 0, NULL);
+#else
+	    cli_warnmsg("RAR code not compiled-in\n");
+#endif
 	    break;
 
 	case CL_TYPE_ZIP:
@@ -1937,17 +2080,26 @@ int cli_magic_scandesc(int desc, cli_ctx *ctx)
 		ret = cli_scanbzip(desc, ctx);
 #endif
 	    break;
+	case CL_TYPE_ARJ:
+	    if(SCAN_ARCHIVE && (DCONF_ARCH & ARCH_CONF_ARJ))
+		ret = cli_scanarj(desc, ctx, 0, NULL);
+	    break;
 
         case CL_TYPE_NULSFT:
 	    if(SCAN_ARCHIVE)
 		ret = cli_scannulsft(desc, ctx, 0);
 	    break;
 
+        case CL_TYPE_AUTOIT:
+	    if(SCAN_ARCHIVE && (DCONF_ARCH & ARCH_CONF_AUTOIT))
+		ret = cli_scanautoit(desc, ctx, 23);
+	    break;
+/*
 	case CL_TYPE_MSSZDD:
 	    if(SCAN_ARCHIVE && (DCONF_ARCH & ARCH_CONF_SZDD))
 		ret = cli_scanszdd(desc, ctx);
 	    break;
-
+*/
 	case CL_TYPE_MSCAB:
 	    if(SCAN_ARCHIVE && (DCONF_ARCH & ARCH_CONF_CAB))
 		ret = cli_scanmscab(desc, ctx, 0);

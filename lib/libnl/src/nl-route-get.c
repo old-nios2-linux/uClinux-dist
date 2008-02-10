@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 		nl_socket_modify_cb(nlh, NL_CB_VALID, NL_CB_CUSTOM, cb,
 				 route_cache);
 
-		if (nl_recvmsgs_def(nlh) < 0) {
+		if (nl_recvmsgs_default(nlh) < 0) {
 			fprintf(stderr, "%s\n", nl_geterror());
 			goto errout_route_cache;
 		}

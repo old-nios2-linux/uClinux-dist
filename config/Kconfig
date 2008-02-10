@@ -8,6 +8,10 @@
 
 mainmenu "Linux Application Configuration"
 
+config DISTVERSION
+	string
+	default "4.0"
+
 source ../lib/Kconfig
 
 source ../user/Kconfig

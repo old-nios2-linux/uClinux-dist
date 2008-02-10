@@ -32,41 +32,60 @@
  * genlmsg_attrdata(ghdr, hdrlen)-------------------------
  * @endcode
  *
- * @par 1) Creating a new generic netlink message
+ * @par Example
  * @code
+ * #include <netlink/netlink.h>
+ * #include <netlink/genl/genl.h>
+ * #include <netlink/genl/ctrl.h>
+ *
+ * struct nl_handle *sock;
  * struct nl_msg *msg;
- * struct myhdr {
- *         int a;
- *         int b;
- * } hdr;
+ * int family;
  *
- * // Create a new empty netlink message
+ * // Allocate a new netlink socket
+ * sock = nl_handle_alloc();
+ *
+ * // Connect to generic netlink socket on kernel side
+ * genl_connect(sock);
+ *
+ * // Ask kernel to resolve family name to family id
+ * family = genl_ctrl_resolve(sock, "generic_netlink_family_name");
+ *
+ * // Construct a generic netlink by allocating a new message, fill in
+ * // the header and append a simple integer attribute.
  * msg = nlmsg_alloc();
+ * genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, family, 0, NLM_F_ECHO,
+ *             CMD_FOO_GET, FOO_VERSION);
+ * nla_put_u32(msg, ATTR_FOO, 123);
  *
- * // Append the netlink and generic netlink message header, this
- * // operation also reserves room for the family specific header.
- * hdr = genlmsg_put(msg, PID, SEQ, family, sizeof(hdr), NLM_F_ECHO,
- *                   MYOP, VERSION);
+ * // Send message over netlink socket
+ * nl_send_auto_complete(sock, msg);
  *
- * // Fill out your own family specific header.
- * hdr->a = 1;
- * hdr->b = 2;
- *
- * // Append the optional attributes.
- * nla_put_u32(msg, 1, 0x10);
- *
- * // Message is ready to be sent.
- * nl_send_auto_complete(nl_handle, msg);
- *
- * // All done? Free the message.
+ * // Free message
  * nlmsg_free(msg);
- * @endcode
  *
- * @par 2) Sending of trivial messages
- * @code
- * // For trivial messages not requiring any family specific header or
- * // attributes, genl_send_simple() may be used to send messages directly.
- * genl_send_simple(nl_handle, family, MY_SIMPLE_CMD, VERSION, 0);
+ * // Prepare socket to receive the answer by specifying the callback
+ * // function to be called for valid messages.
+ * nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, parse_cb, NULL);
+ *
+ * // Wait for the answer and receive it
+ * nl_recvmsgs_default(sock);
+ *
+ * static int parse_cb(struct nl_msg *msg, void *arg)
+ * {
+ *     struct nlmsghdr *nlh = nlmsg_hdr(msg);
+ *     struct nlattr *attrs[ATTR_MAX+1];
+ *
+ *     // Validate message and parse attributes
+ *     genlmsg_parse(nlh, 0, attrs, ATTR_MAX, policy);
+ *
+ *     if (attrs[ATTR_FOO]) {
+ *         uint32_t value = nla_get_u32(attrs[ATTR_FOO]);
+ *         ...
+ *     }
+ *
+ *     return 0;
+ * }
  * @endcode
  * @{
  */
@@ -81,17 +100,6 @@
  * @{
  */
 
-/**
- * Create and connect generic netlink socket.
- * @arg handle		Netlink handle.
- *
- * Creates a NETLINK_GENERIC netlink socket, binds the socket and
- * issues a connection attempt.
- *
- * @see nl_connect()
- *
- * @return 0 on success or a negative error code.
- */
 int genl_connect(struct nl_handle *handle)
 {
 	return nl_connect(handle, NETLINK_GENERIC);
@@ -135,6 +143,46 @@ int genl_send_simple(struct nl_handle *handle, int family, int cmd,
  * @name Message Parsing
  * @{
  */
+
+int genlmsg_valid_hdr(struct nlmsghdr *nlh, int hdrlen)
+{
+	struct genlmsghdr *ghdr;
+
+	if (!nlmsg_valid_hdr(nlh, GENL_HDRLEN))
+		return 0;
+
+	ghdr = nlmsg_data(nlh);
+	if (genlmsg_len(ghdr) < NLMSG_ALIGN(hdrlen))
+		return 0;
+
+	return 1;
+}
+
+int genlmsg_validate(struct nlmsghdr *nlh, int hdrlen, int maxtype,
+		   struct nla_policy *policy)
+{
+	struct genlmsghdr *ghdr;
+
+	if (!genlmsg_valid_hdr(nlh, hdrlen))
+		return nl_errno(EINVAL);
+
+	ghdr = nlmsg_data(nlh);
+	return nla_validate(genlmsg_attrdata(ghdr, hdrlen),
+			    genlmsg_attrlen(ghdr, hdrlen), maxtype, policy);
+}
+
+int genlmsg_parse(struct nlmsghdr *nlh, int hdrlen, struct nlattr *tb[],
+		  int maxtype, struct nla_policy *policy)
+{
+	struct genlmsghdr *ghdr;
+
+	if (!genlmsg_valid_hdr(nlh, hdrlen))
+		return nl_errno(EINVAL);
+
+	ghdr = nlmsg_data(nlh);
+	return nla_parse(tb, maxtype, genlmsg_attrdata(ghdr, hdrlen),
+			 genlmsg_attrlen(ghdr, hdrlen), policy);
+}
 
 /**
  * Get head of message payload
@@ -186,8 +234,8 @@ int genlmsg_attrlen(const struct genlmsghdr *gnlh, int hdrlen)
 /**
  * Add generic netlink header to netlink message
  * @arg msg		netlink message
- * @arg pid		netlink process id
- * @arg seq		sequence number of message
+ * @arg pid		netlink process id or NL_AUTO_PID
+ * @arg seq		sequence number of message or NL_AUTO_SEQ
  * @arg family		generic netlink family
  * @arg hdrlen		length of user specific header
  * @arg flags		message flags

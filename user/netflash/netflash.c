@@ -50,6 +50,9 @@
 #include <openssl/bio.h>
 #include "crypto.h"
 #endif
+#if defined(CONFIG_USER_NETFLASH_SHA256) || defined(CONFIG_USER_NETFLASH_CRYPTO_V2)
+#include <openssl/sha.h>
+#endif
 #if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
 #include <mtd/mtd-user.h>
@@ -81,6 +84,7 @@
 #include "fileblock.h"
 #include "exit_codes.h"
 #include "versioning.h"
+#include "netflash.h"
 
 /****************************************************************************/
 
@@ -104,7 +108,7 @@
 #endif
 
 #ifdef CONFIG_USER_NETFLASH_SHA256
-#define	SHA256_OPTIONS "B"
+#define	SHA256_OPTIONS "N"
 #else
 #define	SHA256_OPTIONS
 #endif
@@ -283,7 +287,7 @@ void add_data(unsigned long address, unsigned char * data, unsigned long len)
 		 * fbprev = block preceding the range, or NULL if at start
 		 */
 #ifdef CONFIG_USER_NETFLASH_VERSION
-#ifndef CONFIG_USER_NETFLASH_CRYPTO
+#if !defined(CONFIG_USER_NETFLASH_CRYPTO) && !defined(CONFIG_USER_NETFLASH_SHA256)
 		if (dothrow && fileblocks_num > 2) {
 			/* Steal the first block from the list. */
 			fbnew = fileblocks;
@@ -296,10 +300,10 @@ void add_data(unsigned long address, unsigned char * data, unsigned long len)
 			if (fb && ((fb->pos - address) < fbnew->maxlength))
 				fbnew->maxlength = fb->pos - address;
 
-		} else {
+		} else
 #endif
 #endif /*CONFIG_USER_NETFLASH_VERSION*/
-
+		{
 			fbnew = malloc(sizeof(*fbnew));
 			if (!fbnew) {
 				error("Insufficient memory for image!");
@@ -327,12 +331,7 @@ void add_data(unsigned long address, unsigned char * data, unsigned long len)
 			}
 
 			fileblocks_num++;
-
-#ifdef CONFIG_USER_NETFLASH_VERSION
-#ifndef CONFIG_USER_NETFLASH_CRYPTO
 		}
-#endif
-#endif
 
 		l = fbnew->maxlength;
 		if (l > len)
@@ -489,13 +488,11 @@ int check_hmac_md5(char *key)
 
 #ifdef CONFIG_USER_NETFLASH_SHA256
 
-#include "sha256.h"
-
 int dosha256sum = 1;
 
 int check_sha256_sum(void)
 {
-	struct sha256_ctx ctx;
+	SHA256_CTX ctx;
 	struct fileblock *fb;
 	unsigned char hash[32];
 	int length, total;
@@ -505,17 +502,17 @@ int check_sha256_sum(void)
 		total = 0;
 		length = 0;
 
-		sha256_init_ctx(&ctx);
+		SHA256_Init(&ctx);
 		for (fb = fileblocks; (fb != NULL); fb = fb->next) {
 			length = fb->length;
 			if (length > (file_length - total - 32))
 				length = file_length - total - 32;
-			sha256_process_bytes(fb->data, length, &ctx);
+			SHA256_Update(&ctx, fb->data, length);
 			total += length;
 			if (length != fb->length)
 				break;
 		}
-		sha256_finish_ctx(&ctx, hash);
+		SHA256_Final(hash, &ctx);
 
 		/* Check if calculated hash equals sent hash */
 		for (i = 0; (i < 32); i++, length++) {
@@ -530,7 +527,6 @@ int check_sha256_sum(void)
 		}
 
 		notice("SHA256 digest ok");
-		remove_data(32);
 	}
 
 	return 0;
@@ -539,29 +535,28 @@ int check_sha256_sum(void)
 
 #ifdef CONFIG_USER_NETFLASH_CRYPTO
 
-/* Extract bytes from end of the data.
- * These bytes are removed from the data.
+/*
+ *	Extract bytes from end of the data.
+ *	These bytes are removed from the data.
  */
-static inline void extract_data(int length, char buf[]) {
+static void extract_data(char buf[], int start, int length)
+{
 	unsigned long i, tpos;
 	struct fileblock *fb;
-	unsigned long target_length;
 
-	if (fileblocks != NULL && file_length >= length) {
-		target_length = file_length - length;
+	if (fileblocks != NULL && file_length >= (start + length)) {
 		for (fb = fileblocks; fb != NULL; fb = fb->next) {
-			if ((fb->pos + fb->length) >= target_length)
+			if ((fb->pos + fb->length) >= start)
 				break;
 		}
-		tpos = target_length - fb->pos;
-		for (i=0; i<length;) {
+		tpos = start - fb->pos;
+		for (i = 0; i < length; ) {
 			if (tpos >= fb->length) {
 				fb = fb->next;
 				tpos = 0;
 			}
 			buf[i++] = fb->data[tpos++];
 		}
-		remove_data(length);
 	} else {
 		error("insufficent data at end of image need %d only have %d",
 				length, (int)file_length);
@@ -569,27 +564,32 @@ static inline void extract_data(int length, char buf[]) {
 	}
 }
 
-/* Grab a block at the specified position.  This could span fileblock boundaries etc so
- * we pull it out piecemeal.  This could be written significantly more efficiently
- * I expect.
+/*
+ *	Grab a block at the specified position. This could span fileblock
+ *	boundaries etc so we pull it out piecemeal. This could be written
+ *	significantly more efficiently I expect.
  */
-static inline void get_block(struct fileblock *fb,
-		unsigned long posn, char buf[], int sz) {
-	int i = 0;
+static void get_block(struct fileblock *fb, unsigned long posn, char buf[], int sz)
+{
 	unsigned long offset = posn - fb->pos;
+	int i = 0;
 
-	while (i<sz) {
-		while (offset >= fb->length)
-			offset = 0, fb = fb->next;
+	while (i < sz) {
+		while (offset >= fb->length) {
+			offset = 0;
+			fb = fb->next;
+		}
 		buf[i++] = fb->data[offset++];
 	}
 }
 
-/* Write a block of information back into the file at the specified
- * position.  Again this isn't written overly efficiently.
+/*
+ *	Write a block of information back into the file at the specified
+ *	position. Again this isn't written overly efficiently.
  */
-static inline struct fileblock *put_block(struct fileblock *fb,
-		unsigned long posn, const char buf[], int sz) {
+static struct fileblock *put_block(struct fileblock *fb,
+		unsigned long posn, const char buf[], int sz)
+{
 	int i = 0;
 	unsigned long offset = posn - fb->pos;
 
@@ -601,17 +601,33 @@ static inline struct fileblock *put_block(struct fileblock *fb,
 	return fb;
 }
 
+#if 1
+void hexdump(unsigned char *p, unsigned int len)
+{
+	unsigned int i;
+	for (i = 0; (i < len); i++) {
+		if ((i % 16) == 0) printf("%08x:  ", p+i);
+		printf("%02x ", p[i]);
+		if (((i+1) % 16) == 0) printf("\n");
+	}
+	if ((i % 16) != 0) printf("\n");
+}
+#endif
 
-/* Check the crypto signature on the image...
- * This always includes a public key encrypted header and an MD5
- * checksum.  It optionally includes AES encryption of the image.
+/*
+ *	Check the crypto signature on the image...
+ *	This always includes a public key encrypted header and an MD5
+ *	(or SHA256) checksum. It optionally includes AES encryption of
+ *	the image.
  */
-void check_crypto_signature(void) {
+void check_crypto_signature(void)
+{
 	struct fileblock *fb;
-  	RSA *pkey;
-	struct header hdr;
 	struct little_header lhdr;
-	
+	struct header hdr;
+	int image_length;
+  	RSA *pkey;
+
 	/* Load public key */
 	{
 		BIO *in;
@@ -637,13 +653,11 @@ void check_crypto_signature(void) {
 			exit_failed(BAD_PUB_KEY);
 		}
 	}
+
 	/* Decode header information */
-	extract_data(sizeof(struct little_header), (char *)&lhdr);
+	extract_data((char *) &lhdr, file_length - sizeof(lhdr), sizeof(lhdr));
 	if (lhdr.magic != htons(LITTLE_CRYPTO_MAGIC)) {
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_OPTIONAL
-		add_data(file_length, (char *)&lhdr,
-				sizeof(struct little_header));
-		file_length += sizeof(struct little_header);
 		return;
 #else
 		error("size magic incorrect");
@@ -656,7 +670,13 @@ void check_crypto_signature(void) {
 		char t2[hlen];
 		int len;
 
-		extract_data(hlen, tmp);
+		extract_data(tmp, file_length - sizeof(lhdr) - hlen, hlen);
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+		image_length = file_length - sizeof(lhdr) - hlen;
+#else
+		remove_data(sizeof(lhdr) + hlen);
+		image_length = file_length;
+#endif
 		len = RSA_public_decrypt(hlen, tmp, t2,
 				pkey, RSA_PKCS1_PADDING);
 		if (len == -1) {
@@ -680,18 +700,44 @@ void check_crypto_signature(void) {
 		char cout[AES_BLOCK_SIZE];
 		unsigned long s;
 
-		if ((file_length % AES_BLOCK_SIZE) != 0) {
+		if ((image_length % AES_BLOCK_SIZE) != 0) {
 			error("image size not miscable with cryptography");
 			exit_failed(BAD_CRYPT);
 		}
 		aes_set_key(&ac, hdr.aeskey, AESKEYSIZE, 0);
 		/* Convert the body of the file */
-		for (fb = fileblocks, s = 0; s < file_length; s += AES_BLOCK_SIZE) {
+		for (fb = fileblocks, s = 0; s < image_length; s += AES_BLOCK_SIZE) {
 			get_block(fb, s, cin, AES_BLOCK_SIZE);
 			aes_decrypt(&ac, cin, cout);
 			fb = put_block(fb, s, cout, AES_BLOCK_SIZE);
 		}
 	}
+
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+	/* Check SHA256 sum */
+	{
+		SHA256_CTX ctx;
+		unsigned char hash[32];
+		int length = 0, total = 0;
+
+		SHA256_Init(&ctx);
+		for (fb = fileblocks; (fb != NULL); fb = fb->next) {
+			length = fb->length;
+			if (length > (image_length - total))
+				length = image_length - total;
+			SHA256_Update(&ctx, fb->data, length);
+			total += length;
+			if (length != fb->length)
+				break;
+		}
+		SHA256_Final(hash, &ctx);
+
+		if (memcmp(hdr.hash, hash, SHA256_DIGEST_LENGTH) != 0) {
+			error("bad SHA256 signature");
+			exit_failed(BAD_MD5_SIG);
+		}
+	}
+#else
 	/* Remove padding */
 	if (hdr.padsize) remove_data(hdr.padsize);
 	/* Check MD5 sum if required */
@@ -710,6 +756,7 @@ void check_crypto_signature(void) {
 			}
 		}
 	}
+#endif
 
 	printf("netflash: signed image approved\n");
 }
@@ -717,12 +764,14 @@ void check_crypto_signature(void) {
 
 
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
-/* Read the decompressed size from the gzip format */
-int decompress_size()
+/*
+ *	Read the decompressed size from the gzip format.
+ */
+int decompress_size(void)
 {
     unsigned char *sp = 0, *ep;
-    int	i, total, size;
     struct fileblock *fb;
+    int	i, total, size;
 
     /* Get a pointer to the start of the inflated size */
     total = 0;
@@ -773,7 +822,7 @@ int decompress_skip_bytes(int pos, int num)
 }
 
 
-int decompress_init()
+int decompress_init(void)
 {
     int pos, flg, xlen, size;
 
@@ -970,9 +1019,7 @@ int local_write(int fd, char *buf, int count)
 
 /****************************************************************************/
  
-extern int tftpmain(int argc, char *argv[]);
-extern int tftpsetbinary(int argc, char *argv[]);
-extern int tftpget(int argc, char *argv[]);
+#include "tftp.h"
 
 /*
  * Call to tftp. This will initialize tftp and do a get operation.
@@ -1790,9 +1837,6 @@ int usage(int rc)
 	"[-o offset] [-r flash-device] "
 	"[net-server] file-name\n\n"
 	"\t-b\tdon't reboot hardware when done\n"
-#if CONFIG_USER_NETFLASH_SHA256
-  	"\t-B\tuse old checksum (not SHA256 digest)\n"
-#endif
 	"\t-C\tcheck that image was written correctly\n"
 	"\t-f\tuse FTP as load protocol\n"
 	"\t-e\tdo not erase flash segments if they are already blank\n"
@@ -1809,6 +1853,9 @@ int usage(int rc)
 	"\t-K\tonly kill unnecessary processes (or delays kill until\n"
 	"\t\tafter downloading when root filesystem is inside flash)\n"
 	"\t-l\tlock flash segments when done\n"
+#if CONFIG_USER_NETFLASH_SHA256
+  	"\t-N\tfile with no SHA256 checksum\n"
+#endif
   	"\t-n\tfile with no checksum at end (implies no version information)\n"
 	"\t-p\tpreserve portions of flash segments not actually written.\n"
   	"\t-s\tstop erasing/programming at end of input data\n"
@@ -2022,7 +2069,7 @@ int netflashmain(int argc, char *argv[])
 			break;
 #endif
 #ifdef CONFIG_USER_NETFLASH_SHA256
-		case 'B':
+		case 'N':
 			dosha256sum = 0;
 			break;
 #endif
@@ -2300,7 +2347,7 @@ int netflashmain(int argc, char *argv[])
 		notice("got \"%s\", length=%ld", filename, file_length);
 	}
 
-#ifdef CONFIG_USER_NETFLASH_CRYPTO
+#if defined(CONFIG_USER_NETFLASH_CRYPTO) && !defined(CONFIG_USER_NETFLASH_CRYPTO_V2)
 	check_crypto_signature();
 #endif
 
@@ -2309,14 +2356,8 @@ int netflashmain(int argc, char *argv[])
 		check_hmac_md5(hmacmd5key);
 	else
 #endif
-	if (dochecksum) {
-#ifdef CONFIG_USER_NETFLASH_SHA256
-		if (dosha256sum)
-			check_sha256_sum();
-		else
-#endif
-			chksum();
-	}
+	if (dochecksum)
+		chksum();
 
 	/*
 	 * Check the version information.
@@ -2379,6 +2420,29 @@ int netflashmain(int argc, char *argv[])
 		}
 	}
 #endif /*CONFIG_USER_NETFLASH_VERSION*/
+
+#ifdef CONFIG_USER_NETFLASH_SHA256
+	/*
+	 * To be backword compatible with our images we leave the trailing
+	 * old style checksum and product ID "as is". They are stripped of
+	 * in the above code. Leaving now the SHA256 checksum. We want to
+	 * leave this in place, and have it written to the flash with the
+	 * actual image.
+	 */
+	if (dochecksum && dosha256sum)
+		check_sha256_sum();
+#endif
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+	/*
+	 * Modern signed image support is backward compatible, so we don't
+	 * do the crypto check until this point. (That is we have stripped
+	 * of old style 16bit checksum and the product/version information).
+	 * We also leave the sign structures on the image data, so they get
+	 * written to flash as well.
+	 */
+	if (doversion)
+		check_crypto_signature();
+#endif
 
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
 	doinflate = check_decompression(doinflate);

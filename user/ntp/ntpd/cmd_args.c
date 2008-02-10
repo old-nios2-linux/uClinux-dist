@@ -100,6 +100,9 @@ getCmdOpts(
 	if (HAVE_OPT( QUIT ))
 		mode_ntpdate = TRUE;
 
+	if (HAVE_OPT( IMMEDIATESET ))
+		mode_immediateset = TRUE;
+
 	if (HAVE_OPT( PROPAGATIONDELAY ))
 		do {
 			double tmp;

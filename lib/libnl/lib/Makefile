@@ -21,6 +21,8 @@ CIN      += $(wildcard route/*.c)
 CIN      += $(wildcard route/sch/*.c)
 # Classifiers
 CIN      += $(wildcard route/cls/*.c)
+# Link Info Modules
+CIN      += $(wildcard route/link/*.c)
 # NETLINK_GENERIC
 CIN      += $(wildcard genl/*.c)
 # fib lookup
@@ -41,6 +43,8 @@ CIN      += $(wildcard route/addr.c)
 endif
 ifdef CONFIG_LIB_LIBNL_ROUTE_LINK
 CIN      += $(wildcard route/link.c)
+# Link Info Modules
+CIN      += $(wildcard route/link/*.c)
 endif
 ifdef CONFIG_LIB_LIBNL_ROUTE_NEIGH
 CIN      += $(wildcard route/neigh*.c)
@@ -72,6 +76,7 @@ CIN      += $(wildcard fib_lookup/*.c)
 endif
 # Netfilter
 ifdef CONFIG_LIB_LIBNL_NETFILTER
+CIN      += $(wildcard netfilter/netfilter.c)
 CIN      += $(wildcard netfilter/nfnl.c)
 endif
 ifdef CONFIG_LIB_LIBNL_NETFILTER_CT
@@ -79,6 +84,9 @@ CIN      += $(wildcard netfilter/ct*.c)
 endif
 ifdef CONFIG_LIB_LIBNL_NETFILTER_LOG
 CIN      += $(wildcard netfilter/log*.c)
+endif
+ifdef CONFIG_LIB_LIBNL_NETFILTER_QUEUE
+CIN      += $(wildcard netfilter/queue*.c)
 endif
 endif
 

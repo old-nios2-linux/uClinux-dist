@@ -37,6 +37,11 @@
 /*****************************************************************************/
 
 /*
+ * Maximum path name size that we will support. This is completely arbitary.
+ */
+#define	MAXNAME	128
+
+/*
  * General work buffer size (these are often allocated on the stack).
  */
 #define BUF_SIZE 1024
@@ -345,6 +350,31 @@ static void parseconfig(char *buf)
 /*****************************************************************************/
 
 /*
+ * The stored filename may have directory path components. Scan the filename
+ * and build the directories as required.
+ */
+
+static int makefilepath(char *filename)
+{
+	char *s;
+
+	for (s = filename; (*s != '\0'); s++) {
+		if (*s == '/') {
+			*s = '\0';
+			if (mkdir(filename, 0777) < 0) {
+				if (errno != EEXIST)
+					return ERROR_CODE();
+			}
+			*s = '/';
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+
+/*
  * Read the contents of a flat file-system and dump them out as regular files.
  * Takes the offset of the filesystem into the flash address space (this
  * is to allow support multiple filesystems in a single flash partition).
@@ -355,7 +385,7 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 	struct flathdr3 hdr;
 	struct flatent ent;
 	unsigned int size, n = 0;
-	char filename[128], *confbuf;
+	char filename[MAXNAME], *confbuf;
 	unsigned char buf[BUF_SIZE];
 	mode_t mode;
 	int fdfile, rc;
@@ -386,6 +416,11 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 		}
 
 		if (flatz_read((void *) &filename[0], n) != n) {
+			flatz_close();
+			return ERROR_CODE();
+		}
+
+		if (makefilepath(filename)) {
 			flatz_close();
 			return ERROR_CODE();
 		}
@@ -656,15 +691,15 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 	int n, written;
 
 	/*
-	 * Write file entry into flat fs. Names and file
-	 * contents are aligned on long word boundaries.
-	 * They are padded to that length with zeros.
+	 * Write file entry into flat fs. Names and file contents are
+	 * aligned on long word boundaries. They are padded to that length
+	 * with zeros.
 	 */
 	if (stat(name, &st) < 0)
 		return ERROR_CODE();
 
 	size = strlen(name) + 1;
-	if (size > 128) {
+	if (size > MAXNAME) {
 		numdropped++;
 		return ERROR_CODE();
 	}
@@ -695,9 +730,9 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 	if (size > 0) {
 		if ((fdfile = open(name, O_RDONLY)) < 0)
 			return ERROR_CODE();
-		while (size>written) {
+		while (size > written) {
 			int bytes_read;
-			n = ((size-written) > sizeof(buf))?sizeof(buf):(size-written);
+			n = ((size - written) > sizeof(buf)) ? sizeof(buf) : (size - written);
 			if ((bytes_read = read(fdfile, buf, n)) != n) {
 				/* Somebody must have trunced the file. */
 				syslog(LOG_WARNING, "File %s was shorter than "
@@ -734,6 +769,60 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 
 /*****************************************************************************/
 
+static int writedirectory(char *path, DIR *dirp, unsigned int *ptotal, int dowrite)
+{
+	char filename[MAXNAME];
+	struct stat st;
+	struct dirent *dp;
+	DIR *subdirp;
+	int pathlen, rc;
+
+	pathlen = strlen(path);
+
+	while ((dp = readdir(dirp)) != NULL) {
+
+		if ((strcmp(dp->d_name, ".") == 0) ||
+		    (strcmp(dp->d_name, "..") == 0) ||
+		    (strcmp(dp->d_name, FLATFSD_CONFIG) == 0))
+			continue;
+
+		if ((pathlen + strlen(dp->d_name) + 2) > MAXNAME) {
+			syslog(LOG_ERR, "dropping long name (max %d) %s/%s",
+				MAXNAME, path, dp->d_name);
+			continue;
+		}
+
+		sprintf(filename, "%s%s%s", path,
+			(path[0] == '\0') ? "" : "/", dp->d_name);
+
+		if (stat(filename, &st) < 0)
+			return ERROR_CODE();
+
+		if (S_ISDIR(st.st_mode)) {
+			if ((subdirp = opendir(filename)) == NULL)
+				return ERROR_CODE();
+			rc = writedirectory(filename, subdirp, ptotal, dowrite);
+			closedir(subdirp);
+			if (rc)
+				return rc;
+			continue;
+		}
+
+		if (! S_ISREG(st.st_mode))
+			continue;
+
+		rc = writefile(filename, ptotal, dowrite);
+		if (rc < 0) {
+			syslog(LOG_ERR, "Failed to write write file %s "
+				"(%d): %m %d", filename, rc, errno);
+		}
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+
 /*
  * Writes out the contents of all files. Does not actually do the write
  * if 'dowrite' is not set. In this case, it just checks to see that the
@@ -746,11 +835,10 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
  * Returns 0 if OK, or < 0 if error.
  */
 
-static int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned *total)
+static int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, unsigned int *total)
 {
 	struct flathdr3 hdr;
 	struct flatent ent;
-	struct dirent *dp;
 	DIR *dirp;
 	int rc, ret = 0;
 
@@ -793,21 +881,7 @@ static int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, u
 		return ret;
 	}
 
-	while ((dp = readdir(dirp)) != NULL) {
-
-		if ((strcmp(dp->d_name, ".") == 0) ||
-		    (strcmp(dp->d_name, "..") == 0) ||
-		    (strcmp(dp->d_name, FLATFSD_CONFIG) == 0))
-			continue;
-
-		rc = writefile(dp->d_name, total, dowrite);
-		if (rc < 0) {
-			syslog(LOG_ERR, "Failed to write write file %s "
-				"(%d): %m %d", dp->d_name, rc, errno);
-			if (!ret)
-				ret = rc;
-		}
-	}
+	writedirectory("", dirp, total, dowrite);
 	closedir(dirp);
 
 	/* Write the terminating entry */

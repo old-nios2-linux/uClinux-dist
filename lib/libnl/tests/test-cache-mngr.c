@@ -22,10 +22,13 @@ int main(int argc, char *argv[])
 {
 	struct nl_cache_mngr *mngr;
 	struct nl_cache *lc, *nc, *ac, *rc;
+	struct nl_handle *handle;
 
 	nltool_init(argc, argv);
 
-	mngr = nl_cache_mngr_alloc(NETLINK_ROUTE, NL_AUTO_PROVIDE);
+	handle = nltool_alloc_handle();
+
+	mngr = nl_cache_mngr_alloc(handle, NETLINK_ROUTE, NL_AUTO_PROVIDE);
 	if (!mngr) {
 		nl_perror("nl_cache_mngr_alloc");
 		return -1;

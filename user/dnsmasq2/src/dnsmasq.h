@@ -118,6 +118,7 @@ extern int capset(cap_user_header_t header, cap_user_data_t data);
 #define OPT_LEASE_RO       4194304
 #endif
 #define OPT_RELOAD         8388608
+#define OPT_REPLY_DST      67108864
 
 struct all_addr {
   union {

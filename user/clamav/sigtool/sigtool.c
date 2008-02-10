@@ -51,6 +51,7 @@
 #include "shared/cfgparser.h"
 #include "shared/misc.h"
 #include "shared/cdiff.h"
+#include "shared/sha256.h"
 
 #include "libclamav/clamav.h"
 #include "libclamav/cvd.h"
@@ -58,7 +59,6 @@
 #include "libclamav/str.h"
 #include "libclamav/ole2_extract.h"
 #include "libclamav/htmlnorm.h"
-#include "libclamav/sha256.h"
 
 #define MAX_DEL_LOOKAHEAD   200
 
@@ -997,6 +997,7 @@ static int cvdinfo(struct optstruct *opt)
 	mprintf("!cvdinfo: Can't read/parse CVD header of %s\n", pt);
 	return -1;
     }
+    mprintf("File: %s\n", pt);
 
     pt = strchr(cvd->time, '-');
     *pt = ':';
@@ -1786,7 +1787,7 @@ int main(int argc, char **argv)
 	cl_debug();
 
     if(opt_check(opt, "version")) {
-	print_version();
+	print_version(NULL);
 	opt_free(opt);
 	return 0;
     }

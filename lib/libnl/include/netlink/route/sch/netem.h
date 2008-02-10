@@ -42,7 +42,7 @@ extern int rtnl_netem_get_loss_correlation(struct rtnl_qdisc *);
 extern int rtnl_netem_set_duplicate(struct rtnl_qdisc *, int);
 extern int rtnl_netem_get_duplicate(struct rtnl_qdisc *);
 
-extern int rtnl_netem_set_duplicate_correction(struct rtnl_qdisc *, int);
+extern int rtnl_netem_set_duplicate_correlation(struct rtnl_qdisc *, int);
 extern int rtnl_netem_get_duplicate_correlation(struct rtnl_qdisc *);
 
 /* Packet Delay */

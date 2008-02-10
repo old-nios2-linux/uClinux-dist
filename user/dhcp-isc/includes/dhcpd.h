@@ -90,6 +90,9 @@ typedef time_t TIME;
 #define EOL '\n'
 #endif
 
+#include <isc-dhcp/boolean.h>
+#include <isc-dhcp/result.h>
+
 #include "dhcp.h"
 #include "dhcp6.h"
 #include "statement.h"
@@ -98,7 +101,6 @@ typedef time_t TIME;
 #include "dhctoken.h"
 #include "heap.h"
 
-#include <isc-dhcp/result.h>
 #include <omapip/omapip_p.h>
 
 #if !defined (BYTE_NAME_HASH_SIZE)
@@ -235,11 +237,13 @@ enum dhcp_shutdown_state {
 };
 
 /* Client FQDN option, failover FQDN option, etc. */
+#if defined (NSUPDATE)
 typedef struct {
 	u_int8_t codes [2];
 	unsigned length;
 	u_int8_t *data;
 } ddns_fqdn_t;
+#endif
 
 #include "failover.h"
 
@@ -558,10 +562,12 @@ struct lease_state {
 #define DISCOVER_RELAY		3
 #define DISCOVER_REQUESTED	4
 
+#if defined (NSUPDATE)
 /* DDNS_UPDATE_STYLE enumerations. */
 #define DDNS_UPDATE_STYLE_NONE		0
 #define DDNS_UPDATE_STYLE_AD_HOC	1
 #define DDNS_UPDATE_STYLE_INTERIM	2
+#endif
 
 /* Server option names. */
 
@@ -996,9 +1002,11 @@ struct client_config {
 	int omapi_port;			/* port on which to accept OMAPI
 					   connections, or -1 for no
 					   listener. */
+#if defined (NSUPDATE)
 	int do_forward_update;		/* If nonzero, and if we have the
 					   information we need, update the
 					   A record for the address we get. */
+#endif
 };
 
 /* Per-interface state used in the dhcp client... */
@@ -1596,7 +1604,9 @@ int add_option(struct option_state *options,
 /* dhcpd.c */
 extern TIME cur_time;
 
+#if defined (NSUPDATE)
 extern int ddns_update_style;
+#endif
 
 extern const char *path_dhcpd_conf;
 extern const char *path_dhcpd_db;
@@ -1674,9 +1684,11 @@ void parse_server_duid(struct parse *cfile);
 void parse_server_duid_conf(struct parse *cfile);
 
 /* ddns.c */
+#if defined (NSUPDATE)
 int ddns_updates(struct packet *, struct lease *, struct lease *,
 		 struct iaaddr *, struct iaaddr *, struct option_state *);
 int ddns_removals(struct lease *, struct iaaddr *);
+#endif
 
 /* parse.c */
 void add_enumeration (struct enumeration *);
@@ -2359,7 +2371,9 @@ extern const char *binding_state_names [];
 extern struct universe agent_universe;
 extern struct universe server_universe;
 
+#if defined (NSUPDATE)
 extern struct enumeration ddns_styles;
+#endif
 extern struct enumeration syslog_enum;
 void initialize_server_option_spaces PROTO ((void));
 
@@ -2457,11 +2471,13 @@ void do_release PROTO ((struct client_state *));
 int dhclient_interface_shutdown_hook (struct interface_info *);
 int dhclient_interface_discovery_hook (struct interface_info *);
 isc_result_t dhclient_interface_startup_hook (struct interface_info *);
+#if defined (NSUPDATE)
 void dhclient_schedule_updates(struct client_state *client,
 			       struct iaddr *addr, int offset);
 void client_dns_update_timeout (void *cp);
 isc_result_t client_dns_update(struct client_state *client, int, int,
 			       struct iaddr *);
+#endif
 
 void dhcpv4_client_assignments(void);
 void dhcpv6_client_assignments(void);
@@ -2990,6 +3006,7 @@ void free_everything (void);
 #endif
 
 /* nsupdate.c */
+#if defined (NSUPDATE)
 char *ddns_rev_name (struct lease *, struct lease_state *, struct packet *);
 char *ddns_fwd_name (struct lease *, struct lease_state *, struct packet *);
 int nsupdateA (const char *, const unsigned char *, u_int32_t, int);
@@ -3003,6 +3020,7 @@ int deleteA (const struct data_string *, const struct data_string *,
 	     struct lease *);
 int deletePTR (const struct data_string *, const struct data_string *,
 	       struct lease *);
+#endif
 
 /* failover.c */
 #if defined (FAILOVER_PROTOCOL)

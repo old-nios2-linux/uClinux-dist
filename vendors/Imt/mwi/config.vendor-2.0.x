@@ -1,8 +1,9 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Jan 31 01:16:44 2008
+# Thu Apr 10 01:02:35 2008
 #
+CONFIG_DISTVERSION="4.0"
 
 #
 # Library Configuration
@@ -684,6 +685,7 @@ CONFIG_USER_OTHER_SH=y
 # CONFIG_USER_GAMES_ADVENT4 is not set
 # CONFIG_USER_GAMES_DUNGEON is not set
 # CONFIG_USER_GAMES_RUBIK is not set
+# CONFIG_USER_GAMES_TAMA is not set
 
 #
 # Miscellaneous Configuration

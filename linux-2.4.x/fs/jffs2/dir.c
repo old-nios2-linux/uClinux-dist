@@ -972,11 +972,6 @@ static int jffs2_rename (struct inode *old_dir_i, struct dentry *old_dentry,
 	   then getting -ENOSPC, is quite bad :)
 	*/
 
-    if ( new_dentry->d_inode )
-    {
-	  jffs2_unlink(new_dir_i, new_dentry);
-    }
-
 	/* Make a hard link */
 	ret = jffs2_do_link(old_dentry, new_dir_i, new_dentry, 1);
 	if (ret)

@@ -516,8 +516,10 @@ main(int argc, char **argv) {
 	initialize_common_option_spaces ();
 	initialize_server_option_spaces ();
 
+#if defined (NSUPDATE)
 	/* Add the ddns update style enumeration prior to parsing. */
 	add_enumeration (&ddns_styles);
+#endif
 	add_enumeration (&syslog_enum);
 
 	if (!group_allocate (&root_group, MDL))
@@ -922,6 +924,7 @@ void postconf_initialization (int quiet)
 		data_string_forget (&db, MDL);
 	}
 
+#if defined (NSUPDATE)
 	oc = lookup_option (&server_universe, options, SV_DDNS_UPDATE_STYLE);
 	if (oc) {
 		if (evaluate_option_cache (&db, (struct packet *)0,
@@ -939,6 +942,7 @@ void postconf_initialization (int quiet)
 	} else {
 		ddns_update_style = DDNS_UPDATE_STYLE_NONE;
 	}
+#endif
 
 	oc = lookup_option (&server_universe, options, SV_LOG_FACILITY);
 	if (oc) {
@@ -1222,8 +1226,8 @@ isc_result_t dhcp_io_shutdown (omapi_object_t *obj, void *foo)
 
 static isc_result_t dhcp_io_shutdown_countdown (void *vlp)
 {
-	dhcp_failover_state_t *state;
 #if defined (FAILOVER_PROTOCOL)
+	dhcp_failover_state_t *state;
 	int failover_connection_count = 0;
 #endif
 

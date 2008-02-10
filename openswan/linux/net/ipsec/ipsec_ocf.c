@@ -49,6 +49,17 @@
 extern int debug_pfkey;
 extern int debug_rcv;
 
+int ipsec_ocf_crid = (CRYPTOCAP_F_HARDWARE|CRYPTOCAP_F_SOFTWARE);
+#if 0 /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0) */
+/*
+ * allow users to force us to a particular OCF driver
+ */
+char *ipsec_ocf_driver = NULL;
+module_parm(ipsec_ocf_driver, charp, 0644);
+MODULE_PARM_DESC(ipsec_ocf_driver,
+	"Driver name (ie., cryptosoft), hw, sw, both (default both)");
+#endif
+
 /*
  * Tuning parameters,  the settings below appear best for
  * the IXP
@@ -191,11 +202,11 @@ ipsec_ocf_sa_init(struct ipsec_sa *ipsp, int authalg, int encalg)
 
 	if (authalg && encalg) {
 		crie.cri_next = &cria;
-		error = crypto_newsession(&ipsp->ocf_cryptoid, &crie, 0);
+		error = crypto_newsession(&ipsp->ocf_cryptoid, &crie, ipsec_ocf_crid);
 	} else if (encalg) {
-		error = crypto_newsession(&ipsp->ocf_cryptoid, &crie, 0);
+		error = crypto_newsession(&ipsp->ocf_cryptoid, &crie, ipsec_ocf_crid);
 	} else if (authalg) {
-		error = crypto_newsession(&ipsp->ocf_cryptoid, &cria, 0);
+		error = crypto_newsession(&ipsp->ocf_cryptoid, &cria, ipsec_ocf_crid);
 	} else {
 		KLIPS_PRINT(debug_pfkey, "klips_debug:ipsec_ocf_sa_init: "
 				"no authalg or encalg\n");
@@ -691,7 +702,7 @@ ipsec_ocf_check_alg(struct ipsec_alg_supported *s)
 	cri.cri_klen     = s->ias_keyminbits;
 	cri.cri_key      = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-	if (crypto_newsession(&cryptoid, &cri, 0)) {
+	if (crypto_newsession(&cryptoid, &cri, ipsec_ocf_crid)) {
 		KLIPS_PRINT(debug_pfkey, "klips_debug:ipsec_ocf:%s not supported\n",
 				s->ias_name);
 		return 0;

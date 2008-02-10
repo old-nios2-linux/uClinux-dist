@@ -34,12 +34,7 @@
 #define SOL_NETLINK 270
 #endif
 
-typedef uint8_t		__u8;
-typedef uint16_t	__u16;
-typedef int16_t		__s16;
-typedef uint32_t	__u32;
-typedef int32_t		__s32;
-typedef uint64_t	__u64;
+#include <linux/types.h>
 
 /* local header copies */
 #include <linux/if.h>
@@ -48,11 +43,14 @@ typedef uint64_t	__u64;
 #include <linux/pkt_sched.h>
 #include <linux/pkt_cls.h>
 #include <linux/gen_stats.h>
+#include <linux/ip_mp_alg.h>
 
 #include <netlink/netlink.h>
 #include <netlink/handlers.h>
 #include <netlink/cache.h>
 #include <netlink/route/tc.h>
+#include <netlink/object-api.h>
+#include <netlink/cache-api.h>
 #include <netlink-types.h>
 
 struct trans_tbl {
@@ -125,6 +123,10 @@ static inline int __assert_error(const char *file, int line, char *func,
 #endif
 
 #define nl_errno(E)	nl_error(E, NULL)
+
+/* backwards compat */
+#define dp_new_line(params, line)	nl_new_line(params, line)
+#define dp_dump(params, fmt, arg...)	nl_dump(params, fmt, ##arg)
 
 static inline int __trans_list_add(int i, const char *a,
 				   struct nl_list_head *head)
@@ -271,26 +273,6 @@ static inline int __str2flags(const char *buf, struct trans_tbl *tbl,
 	return 0;
 }
 
-
-static inline void dp_new_line(struct nl_dump_params *params,
-			       int line_nr)
-{
-	if (params->dp_prefix) {
-		int i;
-		for (i = 0; i < params->dp_prefix; i++) {
-			if (params->dp_fd)
-				fprintf(params->dp_fd, " ");
-			else if (params->dp_buf)
-				strncat(params->dp_buf, " ",
-					params->dp_buflen -
-					sizeof(params->dp_buf) - 1);
-		}
-	}
-
-	if (params->dp_nl_cb)
-		params->dp_nl_cb(params, line_nr);
-}
-
 static inline void __dp_dump(struct nl_dump_params *parms, const char *fmt,
 			     va_list args)
 {
@@ -308,21 +290,12 @@ static inline void __dp_dump(struct nl_dump_params *parms, const char *fmt,
 	}
 }
 
-static inline void dp_dump(struct nl_dump_params *parms, const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	__dp_dump(parms, fmt, args);
-	va_end(args);
-}
-
 static inline void dp_dump_line(struct nl_dump_params *parms, int line,
 				const char *fmt, ...)
 {
 	va_list args;
 
-	dp_new_line(parms, line);
+	nl_new_line(parms, line);
 
 	va_start(args, fmt);
 	__dp_dump(parms, fmt, args);
@@ -429,14 +402,5 @@ static inline char *nl_cache_name(struct nl_cache *cache)
 		{ id, NL_ACT_UNSPEC, name }, \
 		END_OF_MSGTYPES_LIST, \
 	}
-
-#define REQUESTED(LIST, ATTR)	((LIST) & (ATTR))
-#define AVAILABLE(A, B, ATTR)	(((A)->ce_mask & (B)->ce_mask) & (ATTR))
-#define ATTR_MATCH(A, B, ATTR, EXPR)	(!AVAILABLE(A, B, ATTR) || (EXPR))
-#define ATTR_DIFF(LIST, ATTR, A, B, EXPR) \
-({	int diff = 0; \
-	if (REQUESTED(LIST, ATTR) && ATTR_MATCH(A, B, ATTR, EXPR)) \
-		diff = ATTR; \
-	diff; })
 
 #endif

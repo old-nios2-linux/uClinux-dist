@@ -75,15 +75,15 @@ int
 cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 {
 	off_t size;	/* total number of bytes in the file */
-	long bytesleft, trailerlength;
+	off_t bytesleft, trailerlength;
 	char *buf, *alloced;	/* start of memory mapped area */
 	const char *p, *q, *trailerstart;
 	const char *xrefstart;	/* cross reference table */
+	const struct cl_limits *limits;
 	/*size_t xreflength;*/
-	int rc = CL_CLEAN;
 	table_t *md5table;
-	int printed_predictor_message;
-	int printed_embedded_font_message;
+	int printed_predictor_message, printed_embedded_font_message, rc;
+	unsigned int files;
 	struct stat statb;
 
 	cli_dbgmsg("in cli_pdf(%s)\n", dir);
@@ -209,7 +209,10 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 	xreflength = (size_t)(trailerstart - xrefstart);
 	bytesleft -= xreflength;
 	 */
-	*ctx->virname = NULL;
+
+	rc = CL_CLEAN;
+	files = 0;
+	limits = ctx->limits;
 
 	/*
 	 * The body section consists of a sequence of indirect objects
@@ -230,7 +233,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			break;
 
 		/*object_number = atoi(q);*/
-		bytesleft -= (q - p);
+		bytesleft -= (off_t)(q - p);
 		p = q;
 
 		if(memcmp(q, "endobj", 6) == 0)
@@ -247,7 +250,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			break;
 		}
 		/*generation_number = atoi(q);*/
-		bytesleft -= (q - p);
+		bytesleft -= (off_t)(q - p);
 		p = q;
 
 		q = pdf_nextobject(p, bytesleft);
@@ -257,14 +260,14 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			break;
 		}
 
-		bytesleft -= (q - p) + 3;
+		bytesleft -= (off_t)((q - p) + 3);
 		objstart = p = &q[3];
 		objend = cli_pmemstr(p, bytesleft, "endobj", 6);
 		if(objend == NULL) {
 			cli_dbgmsg("No matching endobj\n");
 			break;
 		}
-		bytesleft -= (objend - p) + 6;
+		bytesleft -= (off_t)((objend - p) + 6);
 		p = &objend[6];
 		objlen = (unsigned long)(objend - objstart);
 
@@ -430,6 +433,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		if(streamend <= streamstart) {
 			close(fout);
 			cli_dbgmsg("Empty stream\n");
+			unlink(fullname);
 			continue;
 		}
 		calculated_streamlen = (int)(streamend - streamstart);
@@ -488,35 +492,16 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 				 * Note that it will probably be both
 				 * ascii85encoded and flateencoded
 				 */
-				if(is_flatedecode) {
-					const int zstat = try_flatedecode((unsigned char *)tmpbuf, real_streamlen, real_streamlen, fout, ctx);
-
-					switch(zstat) {
-						case Z_DATA_ERROR:
-							rc = *ctx->virname ? CL_VIRUS : CL_EZIP;
-							break;
-						case Z_OK:
-							break;
-						default:
-							rc = CL_EZIP;
-					}
-				} else
+				if(is_flatedecode)
+					rc = try_flatedecode((unsigned char *)tmpbuf, real_streamlen, real_streamlen, fout, ctx);
+				else
 					cli_writen(fout, (const char *)streamstart, real_streamlen);
 			}
 			free(tmpbuf);
-		} else if(is_flatedecode) {
-			const int zstat = try_flatedecode((unsigned char *)streamstart, real_streamlen, calculated_streamlen, fout, ctx);
+		} else if(is_flatedecode)
+			rc = try_flatedecode((unsigned char *)streamstart, real_streamlen, calculated_streamlen, fout, ctx);
 
-			switch(zstat) {
-				case Z_DATA_ERROR:
-					rc = *ctx->virname ? CL_VIRUS : CL_EZIP;
-					break;
-				case Z_OK:
-					break;
-				default:
-					rc = CL_EZIP;
-			}
-		} else {
+		else {
 			cli_dbgmsg("cli_pdf: writing %lu bytes from the stream\n",
 				(unsigned long)real_streamlen);
 			cli_writen(fout, (const char *)streamstart, real_streamlen);
@@ -530,7 +515,13 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		} else
 			tableInsert(md5table, md5digest, 1);
 		free(md5digest);
-		cli_dbgmsg("cli_pdf: extracted to %s\n", fullname);
+		cli_dbgmsg("cli_pdf: extracted file %d to %s\n", ++files,
+			fullname);
+		if(limits && limits->maxfiles && (files >= limits->maxfiles)) {
+			/* Bug 698 */
+			cli_dbgmsg("cli_pdf: number of files exceeded %u\n", limits->maxfiles);
+			rc = CL_EMAXFILES;
+		}
 	}
 
 	if(alloced)
@@ -544,26 +535,28 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 	return rc;
 }
 
-/* flate inflation - returns zlib status, e.g. Z_OK */
+/*
+ * flate inflation - returns clamAV status, e.g CL_SUCCESS, CL_EZIP
+ */
 static int
 try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, const cli_ctx *ctx)
 {
 	int ret = flatedecode(buf, real_len, fout, ctx);
 
-	if(ret == Z_OK)
-		return Z_OK;
+	if(ret == CL_SUCCESS)
+		return CL_SUCCESS;
 
 	if(real_len == calculated_len) {
 		/*
 		 * Nothing more we can do to inflate
 		 */
 		cli_warnmsg("Bad compression in flate stream\n");
-		return ret;
+		return (ret == CL_SUCCESS) ? CL_EFORMAT : ret;
 	}
 
 	ret = flatedecode(buf, calculated_len, fout, ctx);
-	if(ret == Z_OK)
-		return Z_OK;
+	if(ret == CL_SUCCESS)
+		return CL_SUCCESS;
 
 	/* i.e. the PDF file is broken :-( */
 	cli_warnmsg("cli_pdf: Bad compressed block length in flate stream\n");
@@ -587,7 +580,7 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 
 	if(len == 0) {
 		cli_warnmsg("cli_pdf: flatedecode len == 0\n");
-		return Z_OK;
+		return CL_CLEAN;
 	}
 
 #ifdef	SAVE_TMP
@@ -626,7 +619,7 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 	zstat = inflateInit(&stream);
 	if(zstat != Z_OK) {
 		cli_warnmsg("cli_pdf: inflateInit failed");
-		return zstat;
+		return CL_EZIP;
 	}
 
 	nbytes = 0;
@@ -645,9 +638,11 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 						cli_dbgmsg("cli_pdf: flatedecode size exceeded (%lu)\n",
 							(unsigned long)nbytes);
 						inflateEnd(&stream);
-						if(BLOCKMAX)
+						if(BLOCKMAX) {
 							*ctx->virname = "PDF.ExceededFileSize";
-						return Z_DATA_ERROR;
+							return CL_VIRUS;
+						}
+						return CL_EZIP;
 					}
 					stream.next_out = output;
 					stream.avail_out = sizeof(output);
@@ -664,18 +659,22 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 					cli_dbgmsg("pdf: after writing %lu bytes, got error %d inflating PDF attachment\n",
 						(unsigned long)nbytes, zstat);
 				inflateEnd(&stream);
-				return zstat;
+				return (zstat == Z_OK) ? CL_SUCCESS : CL_EZIP;
 		}
 		break;
 	}
 
 	if(stream.avail_out != sizeof(output))
 		if(cli_writen(fout, output, sizeof(output) - stream.avail_out) < 0)
-			return Z_STREAM_ERROR;
+			return CL_EIO;
 
-	cli_dbgmsg("cli_pdf: flatedecode in=%lu out=%lu ratio %ld (max %d)\n",
-		stream.total_in, stream.total_out,
-		stream.total_out / stream.total_in,
+	/*
+	 * On BSD systems total_in and total_out are "long long", so these
+	 * numbers could (in theory) get truncated in the debug statement
+	 */
+	cli_dbgmsg("cli_pdf: flatedecode in=%lu out=%lu ratio %lu (max %u)\n",
+		(unsigned long)stream.total_in, (unsigned long)stream.total_out,
+		(unsigned long)(stream.total_out / stream.total_in),
 		ctx->limits ? ctx->limits->maxratio : 0);
 
 	if(ctx->limits &&
@@ -683,15 +682,17 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 	   ((stream.total_out / stream.total_in) > ctx->limits->maxratio)) {
 		cli_dbgmsg("cli_pdf: flatedecode Max ratio reached\n");
 		inflateEnd(&stream);
-		if(BLOCKMAX)
+		if(BLOCKMAX) {
 			*ctx->virname = "Oversized.PDF";
-		return Z_DATA_ERROR;
+			return CL_VIRUS;
+		}
+		return CL_EZIP;
 	}
 
 #ifdef	SAVE_TMP
 	unlink(tmpfilename);
 #endif
-	return inflateEnd(&stream);
+	return inflateEnd(&stream) == Z_OK ? CL_SUCCESS : CL_EZIP;
 }
 
 /*

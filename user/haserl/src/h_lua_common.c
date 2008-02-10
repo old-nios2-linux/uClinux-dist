@@ -51,7 +51,7 @@ lua_common_putenv (char *str)
   value = index (str, '=');
   if (value)
     {
-      *value = (char) NULL;
+      *value = (char) '\0';
       value++;
     }
   else

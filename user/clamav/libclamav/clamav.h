@@ -62,14 +62,9 @@ extern "C"
 #define CL_EFORMAT	-124 /* bad format or broken file */
 #define CL_ESUPPORT	-125 /* not supported data format */
 #define CL_ELOCKDB	-126 /* can't lock DB directory */
-
-/* NodalCore */
-#define CL_ENCINIT	-200 /* NodalCore initialization failed */
-#define	CL_ENCLOAD	-201 /* error loading NodalCore database */
-#define CL_ENCIO	-202 /* general NodalCore I/O error */
+#define CL_EARJ         -127 /* ARJ handler error */
 
 /* db options */
-#define CL_DB_NCORE	    0x1
 #define CL_DB_PHISHING	    0x2
 #define CL_DB_ACONLY	    0x4 /* WARNING: only for developers */
 #define CL_DB_PHISHING_URLS 0x8
@@ -101,7 +96,7 @@ extern "C"
 #define CL_SCAN_PDF		    0x4000
 
 /* recommended scan settings */
-#define CL_SCAN_STDOPT		(CL_SCAN_ARCHIVE | CL_SCAN_MAIL | CL_SCAN_OLE2 | CL_SCAN_HTML | CL_SCAN_PE | CL_SCAN_ALGORITHMIC | CL_SCAN_ELF) 
+#define CL_SCAN_STDOPT		(CL_SCAN_ARCHIVE | CL_SCAN_MAIL | CL_SCAN_OLE2 | CL_SCAN_HTML | CL_SCAN_PE | CL_SCAN_ALGORITHMIC | CL_SCAN_ELF | CL_SCAN_PHISHING_DOMAINLIST) 
 
 /* aliases for backward compatibility */
 #define CL_RAW		CL_SCAN_RAW
@@ -112,25 +107,8 @@ extern "C"
 #define cl_node		cl_engine
 #define cl_perror	cl_strerror
 
-/* internal structures */
-struct cli_md5_node {
-    char *virname;
-    unsigned char *md5;
-    unsigned int size;
-    unsigned short fp;
-    struct cli_md5_node *next;
-};
-
-struct cli_meta_node {
-    int csize, size, method;
-    unsigned int crc32, fileno, encrypted, maxdepth;
-    char *filename, *virname;
-    struct cli_meta_node *next;
-};
-
 struct cl_engine {
     unsigned int refcount; /* reference counter */
-    unsigned short ncore;
     unsigned short sdb;
     unsigned int dboptions;
 
@@ -138,19 +116,16 @@ struct cl_engine {
     void **root;
 
     /* MD5 */
-    struct cli_md5_node **md5_hlist;
+    void **md5_hlist;
 
     /* B-M matcher for MD5 sigs for PE sections */
     void *md5_sect;
 
     /* Zip metadata */
-    struct cli_meta_node *zip_mlist;
+    void *zip_mlist;
 
     /* RAR metadata */
-    struct cli_meta_node *rar_mlist;
-
-    /* NodalCore database handle */
-    void *ncdb;
+    void *rar_mlist;
 
     /* Phishing .pdb and .wdb databases*/
     void *whitelist_matcher;

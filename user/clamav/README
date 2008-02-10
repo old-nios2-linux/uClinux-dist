@@ -2,6 +2,29 @@ Note: This README/NEWS file refers to the source tarball. Some things described
 here may not be available in binary packages.
 --
 
+0.92.1
+------
+
+This is a bugfix release, please refer to the ChangeLog for a complete
+list of changes.
+
+--
+The ClamAV team (http://www.clamav.net/team)
+
+0.92
+----
+
+This release provides various bugfixes, optimisations and improvements
+to the scanning engine. The new features include support for ARJ and
+SFX-ARJ archives, AutoIt, basic SPF parser in clamav-milter (to reduce
+phishing false-positives), faster scanning and others (see ChangeLog).
+To get a consistent behaviour of the anti-phishing module on all platforms,
+libclamav now includes the regex library from OpenBSD.
+
+--
+The ClamAV team (http://www.clamav.net/team)
+
+
 0.91.2
 -------
 
@@ -45,6 +68,7 @@ http://www.clamav.net/support/sf-faq
 --
 The ClamAV team (http://www.clamav.net/team)
 
+
 0.91.1
 ------
 
@@ -52,6 +76,7 @@ This release fixes stability and other issues of 0.91.
 
 --
 The ClamAV team (http://www.clamav.net/team)
+
 
 0.91
 ----

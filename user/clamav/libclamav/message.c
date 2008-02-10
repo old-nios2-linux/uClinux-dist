@@ -15,6 +15,8 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
+ *
+ * TODO: Optimise messageExport, decodeLine, messageIsEncoding
  */
 static	char	const	rcsid[] = "$Id: message.c,v 1.195 2007/02/12 20:46:09 njh Exp $";
 
@@ -70,6 +72,7 @@ typedef enum	{ FALSE = 0, TRUE = 1 } bool;
 #endif
 #endif
 
+static	int	messageHasArgument(const message *m, const char *variable);
 static	void	messageIsEncoding(message *m);
 static unsigned char *decode(message *m, const char *in, unsigned char *out, unsigned char (*decoder)(char), bool isFast);
 static	void	sanitiseBase64(char *s);
@@ -297,7 +300,8 @@ messageSetMimeType(message *mess, const char *type)
 				}
 				if(highestSimil >= 50) {
 					cli_dbgmsg("Unknown MIME type \"%s\" - guessing as %s (%u%% certainty)\n",
-						type, closest, highestSimil);
+						type, closest,
+						(int)highestSimil);
 					mess->mimeType = (mime_type)t;
 				} else {
 					cli_dbgmsg("Unknown MIME type: `%s', set to Application - if you believe this file contains a virus, submit it to www.clamav.net\n", type);
@@ -433,7 +437,7 @@ messageAddArgument(message *m, const char *arg)
 	 * mime. By pretending defaulting to an application rather than
 	 * to nomime we can ensure they're saved and scanned
 	 */
-	if((strncasecmp(arg, "filename=", 9) == 0) || (strncasecmp(arg, "name=", 5) == 0))
+	if(arg && ((strncasecmp(arg, "filename=", 9) == 0) || (strncasecmp(arg, "name=", 5) == 0)))
 		if(messageGetMimeType(m) == NOMIME) {
 			cli_dbgmsg("Force mime encoding to application\n");
 			messageSetMimeType(m, "application");
@@ -671,6 +675,59 @@ messageFindArgument(const message *m, const char *variable)
 		}
 	}
 	return NULL;
+}
+
+char *
+messageGetFilename(const message *m)
+{
+	char *filename = (char *)messageFindArgument(m, "filename");
+
+	if(filename)
+		return filename;
+
+	return (char *)messageFindArgument(m, "name");
+}
+
+/* Returns true or false */
+static int
+messageHasArgument(const message *m, const char *variable)
+{
+	int i;
+	size_t len;
+
+	assert(m != NULL);
+	assert(variable != NULL);
+
+	len = strlen(variable);
+
+	for(i = 0; i < m->numberOfArguments; i++) {
+		const char *ptr;
+
+		ptr = messageGetArgument(m, i);
+		if((ptr == NULL) || (*ptr == '\0'))
+			continue;
+#ifdef	CL_DEBUG
+		cli_dbgmsg("messageArgumentExists: compare %lu bytes of %s with %s\n",
+			(unsigned long)len, variable, ptr);
+#endif
+		if(strncasecmp(ptr, variable, len) == 0) {
+			ptr = &ptr[len];
+			while(isspace(*ptr))
+				ptr++;
+			if(*ptr != '=') {
+				cli_warnmsg("messageArgumentExists: no '=' sign found in MIME header '%s' (%s)\n", variable, messageGetArgument(m, i));
+				return 0;
+			}
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int
+messageHasFilename(const message *m)
+{
+	return messageHasArgument(m, "filename") || messageHasArgument(m, "file");
 }
 
 void
@@ -952,6 +1009,83 @@ messageAddStrAtTop(message *m, const char *data)
 }
 
 /*
+ * Put the contents of the given text at the end of the current object.
+ * Can be used either to move a text object into a message, or to move a
+ * message's text into another message only moving from a given offset.
+ * The given text emptied; it can be used again if needed, though be warned that
+ * it will have an empty line at the start.
+ * Returns 0 for failure, 1 for success
+ */
+int
+messageMoveText(message *m, text *t, message *old_message)
+{
+	int rc;
+
+	if(m->body_first == NULL) {
+		if(old_message) {
+			text *u;
+			/*
+			 * t is within old_message which is about to be
+			 * destroyed
+			 */
+			assert(old_message->body_first != NULL);
+
+			m->body_first = t;
+			for(u = old_message->body_first; u != t;) {
+				text *next;
+
+				if(u->t_line)
+					lineUnlink(u->t_line);
+				next = u->t_next;
+
+				free(u);
+				u = next;
+
+				if(u == NULL) {
+					cli_errmsg("messageMoveText sanity check: t not within old_message\n");
+					return -1;
+				}
+			}
+			assert(old_message->body_last->t_next == NULL);
+
+			m->body_last = old_message->body_last;
+			old_message->body_first = old_message->body_last = NULL;
+
+			/* Do any pointers need to be reset? */
+			if((old_message->bounce == NULL) &&
+			   (old_message->encoding == NULL) &&
+			   (old_message->binhex == NULL) &&
+			   (old_message->yenc == NULL))
+				return 0;
+
+			m->body_last = m->body_first;
+			rc = 0;
+		} else {
+			m->body_last = m->body_first = textMove(NULL, t);
+			if(m->body_first == NULL)
+				rc = -1;
+			else
+				rc = 0;
+		}
+	} else {
+		m->body_last = textMove(m->body_last, t);
+		if(m->body_last == NULL) {
+			rc = -1;
+			m->body_last = m->body_first;
+		} else
+			rc = 0;
+	}
+
+	while(m->body_last->t_next) {
+		m->body_last = m->body_last->t_next;
+		if(m->body_last->t_line)
+			messageIsEncoding(m);
+	}
+
+	return rc;
+}
+
+/*
  * See if the last line marks the start of a non MIME inclusion that
  * will need to be scanned
  */
@@ -961,11 +1095,6 @@ messageIsEncoding(message *m)
 	static const char encoding[] = "Content-Transfer-Encoding";
 	static const char binhex[] = "(This file must be converted with BinHex 4.0)";
 	const char *line = lineGetData(m->body_last->t_line);
-
-	/* not enough matches to warrant this test */
-	/*if(lineGetRefCount(m->body_last->t_line) > 1) {
-		return;
-	}*/
 
 	if((m->encoding == NULL) &&
 	   (strncasecmp(line, encoding, sizeof(encoding) - 1) == 0) &&
@@ -1000,18 +1129,6 @@ messageGetBody(message *m)
 {
 	assert(m != NULL);
 	return m->body_first;
-}
-
-/*
- * Clean up the message by removing trailing spaces and blank lines
- */
-void
-messageClean(message *m)
-{
-	text *newEnd = textClean(m->body_first);
-
-	if(newEnd)
-		m->body_last = newEnd;
 }
 
 /*
@@ -1088,8 +1205,6 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 			/*
 			 * FIXME: We've probably run out of memory during the
 			 * text to blob.
-			 * TODO: if m->numberOfEncTypes == 1 we could delete
-			 * the text object as we decode it
 			 */
 			cli_warnmsg("Couldn't start binhex parser\n");
 			(*destroy)(ret);
@@ -1338,6 +1453,19 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		 */
 		cli_dbgmsg("messageExport: Entering fast copy mode\n");
 
+#if	0
+		filename = messageGetFilename(m);
+
+		if(filename == NULL) {
+			cli_dbgmsg("Unencoded attachment sent with no filename\n");
+			messageAddArgument(m, "name=attachment");
+		} else if((strcmp(filename, "textportion") != 0) && (strcmp(filename, "mixedtextportion") != 0))
+			/*
+			 * Some virus attachments don't say how they've
+			 * been encoded. We assume base64
+			 */
+			messageSetEncoding(m, "base64");
+#else
 		filename = (char *)messageFindArgument(m, "filename");
 		if(filename == NULL) {
 			filename = (char *)messageFindArgument(m, "name");
@@ -1352,6 +1480,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 				 */
 				messageSetEncoding(m, "base64");
 		}
+#endif
 
 		(*setFilename)(ret, dir, (filename && *filename) ? filename : "attachment");
 
@@ -1380,11 +1509,11 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 			(*destroy)(ret);
 			ret = newret;
 		}
-		cli_dbgmsg("messageExport: enctype %d is %d\n", i, enctype);
+		cli_dbgmsg("messageExport: enctype %d is %d\n", i, (int)enctype);
 		/*
 		 * Find the filename to decode
 		 */
-		if(((enctype == YENCODE) && yEncBegin(m)) || ((i == 0) && yEncBegin(m))) {
+		if(((enctype == YENCODE) || (i == 0)) && yEncBegin(m)) {
 			const char *f;
 
 			/*
@@ -1413,31 +1542,29 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		} else {
 			if(enctype == UUENCODE) {
 				/*
-				 * The body will have been stripped out by the fast track visa
-				 * system. Treat as plain/text, which means we'll still scan
-				 * for funnies outside of the uuencoded portion.
+				 * The body will have been stripped out by the
+				 * fast track visa system. Treat as plain/text,
+				 * which means we'll still scan for funnies
+				 * outside of the uuencoded portion.
 				 */
 				cli_dbgmsg("messageExport: treat uuencode as text/plain\n");
 				enctype = m->encodingTypes[i] = NOENCODING;
 			}
-			filename = (char *)messageFindArgument(m, "filename");
-			if(filename == NULL) {
-				filename = (char *)messageFindArgument(m, "name");
+			filename = messageGetFilename(m);
 
-				if(filename == NULL) {
-					cli_dbgmsg("Attachment sent with no filename\n");
-					messageAddArgument(m, "name=attachment");
-				} else if(enctype == NOENCODING)
-					/*
-					 * Some virus attachments don't say how
-					 * they've been encoded. We assume
-					 * base64.
-					 *
-					 * FIXME: don't do this if it's a fall
-					 * through from uuencode
-					 */
-					messageSetEncoding(m, "base64");
-			}
+			if(filename == NULL) {
+				cli_dbgmsg("Attachment sent with no filename\n");
+				messageAddArgument(m, "name=attachment");
+			} else if(enctype == NOENCODING)
+				/*
+				 * Some virus attachments don't say how
+				 * they've been encoded. We assume
+				 * base64.
+				 *
+				 * FIXME: don't do this if it's a fall
+				 * through from uuencode
+				 */
+				messageSetEncoding(m, "base64");
 
 			(*setFilename)(ret, dir, (filename && *filename) ? filename : "attachment");
 
@@ -1531,7 +1658,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		} while((t_line = t_line->t_next) != NULL);
 
 		cli_dbgmsg("Exported %lu bytes using enctype %d\n",
-			(unsigned long)size, enctype);
+			(unsigned long)size, (int)enctype);
 
 		/* Verify we have nothing left to flush out */
 		if(m->base64chars) {
@@ -1550,7 +1677,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 unsigned char *
 base64Flush(message *m, unsigned char *buf)
 {
-	cli_dbgmsg("%u trailing bytes to export\n", m->base64chars);
+	cli_dbgmsg("%d trailing bytes to export\n", m->base64chars);
 
 	if(m->base64chars) {
 		unsigned char *ret = decode(m, NULL, buf, base64, FALSE);
@@ -1662,7 +1789,7 @@ messageToText(message *m)
 		const encoding_type enctype = m->encodingTypes[i];
 
 		cli_dbgmsg("messageToText: export transfer method %d = %d\n",
-			i, enctype);
+			i, (int)enctype);
 
 		switch(enctype) {
 			case NOENCODING:
@@ -2223,25 +2350,23 @@ decode(message *m, const char *in, unsigned char *out, unsigned char (*decoder)(
 		}
 
 		switch(nbytes) {
+			case 4:
+				*out++ = (b1 << 2) | ((b2 >> 4) & 0x3);
+				*out++ = (b2 << 4) | ((b3 >> 2) & 0xF);
+				*out++ = (b3 << 6) | (b4 & 0x3F);
+				continue;
 			case 3:
 				m->base64_3 = b3;
 			case 2:
 				m->base64_2 = b2;
 			case 1:
 				m->base64_1 = b1;
-				break;
-			case 4:
-				*out++ = (b1 << 2) | ((b2 >> 4) & 0x3);
-				*out++ = (b2 << 4) | ((b3 >> 2) & 0xF);
-				*out++ = (b3 << 6) | (b4 & 0x3F);
+				m->base64chars = nbytes;
 				break;
 			default:
 				assert(0);
 		}
-		if(nbytes != 4) {
-			m->base64chars = nbytes;
-			break;
-		}
+		break;	/* nbytes != 4 => EOL */
 	}
 	return out;
 }

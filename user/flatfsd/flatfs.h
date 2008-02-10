@@ -37,15 +37,15 @@ extern int flat_needinit(void);
 extern int flat_requestinit(void);
 
 #ifdef LOGGING
+extern void vlogd(int bg, const char *cmd, const char *arg);
 extern void logd(const char *cmd, const char *format, ...) __attribute__ ((format(printf, 2, 3)));
-extern void log_caller(const char *cmd);
 #else
-static void logd(const char *cmd, const char *format, ...) __attribute__ ((format(printf, 2, 3)));
-static inline void logd(const char *cmd, const char *format, ...)
+static inline void vlogd(int bg, const char *cmd, const char *arg)
 {
 }
 
-static inline void log_caller(const char *cmd)
+static void logd(const char *cmd, const char *format, ...) __attribute__ ((format(printf, 2, 3)));
+static inline void logd(const char *cmd, const char *format, ...)
 {
 }
 #endif

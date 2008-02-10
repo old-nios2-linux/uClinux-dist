@@ -26,7 +26,8 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	hdr = genlmsg_put(msg, 0, 1, GENL_ID_CTRL, 0, 0, CTRL_CMD_GETFAMILY, 1);
+	hdr = genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, GENL_ID_CTRL,
+			  0, 0, CTRL_CMD_GETFAMILY, 1);
 	if (hdr == NULL) {
 		nl_perror("genlmsg_put");
 		return -1;
@@ -42,7 +43,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (nl_recvmsgs_def(h) < 0) {
+	if (nl_recvmsgs_default(h) < 0) {
 		nl_perror("nl_recvmsgs_def");
 		return -1;
 	}

@@ -45,6 +45,8 @@
 #include "version.h"
 #if defined(__linux__)
 #include <linux/prctl.h>
+#include <termios.h>
+#include <unistd.h>
 #else
 #include "inststr.h"
 #endif
@@ -160,7 +162,7 @@ int main(int argc, char **argv, char **envp)
     char phonenrbuf[65]; /* maximum length of field plus one for the trailing
                           * '\0' */
     char * volatile phonenr = NULL;
-    volatile int launchpppd = 1, debug = 0;
+    volatile int launchpppd = 1, debug = 0, nodaemon = 0;
 
     while(1){ 
         /* structure with all recognised options for pptp */
@@ -178,6 +180,7 @@ int main(int argc, char **argv, char **envp)
 	    {"idle-wait", 1, 0, 0},
 	    {"max-echo-wait", 1, 0, 0},
 	    {"version", 0, 0, 0},
+            {"nodaemon", 0, 0, 0},
             {0, 0, 0, 0}
         };
         int option_index = 0;
@@ -252,6 +255,8 @@ int main(int argc, char **argv, char **envp)
                 } else if (option_index == 12) { /* --version */
 		    fprintf(stdout, "%s\n", version);
 		    exit(0);
+                } else if (option_index == 13) {/* --nodaemon */
+                    nodaemon = 1;
                 }
                 break;
             case '?': /* unrecognised option */
@@ -292,6 +297,21 @@ int main(int argc, char **argv, char **envp)
             fatal("Could not find free pty.");
         }
 
+#if defined(__linux__)
+		/*
+		 * if we do not turn off echo now,  then if pppd sleeps for any
+		 * length of time (DNS timeouts or whatever) the other end of the
+		 * connect may detect the link as looped.  Other OSen may want this
+		 * as well,  but for now linux gets it.
+		 */
+		{
+			struct termios tios;
+			tcgetattr(tty_fd, &tios);
+			cfmakeraw(&tios);
+			tcsetattr(tty_fd, TCSAFLUSH, &tios);
+		}
+#endif
+
         /* fork and wait. */
         signal(SIGUSR1, do_nothing); /* don't die */
         signal(SIGCHLD, do_nothing); /* don't ignore SIGCHLD */
@@ -306,6 +326,7 @@ int main(int argc, char **argv, char **envp)
                 break;
             default: /* parent */
                 close (pty_fd);
+                close (gre_fd);
                 /*
                  * There is still a very small race condition here.  If a signal
                  * occurs after signaled is checked but before pause is called,
@@ -345,7 +366,7 @@ int main(int argc, char **argv, char **envp)
         kill(parent_pid, SIGUSR1);
         sleep(2);
         /* become a daemon */
-        if (!debug && daemon(0, 0) != 0) {
+        if (!(debug || nodaemon) && daemon(0, 0) != 0) {
             perror("daemon");
         }
     } else {

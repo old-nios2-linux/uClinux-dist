@@ -13,6 +13,6 @@ clean:
 	rm -rf build
 
 romfs:
-	$(ROMFSINST) build/client/dhclient /bin/dhclient
-	$(ROMFSINST) build/relay/dhcrelay  /bin/dhcrelay
-	$(ROMFSINST) build/server/dhcpd    /bin/dhcpd
+	$(ROMFSINST) -e CONFIG_USER_DHCP_ISC_CLIENT_DHCLIENT  build/client/dhclient /bin/dhclient
+	$(ROMFSINST) -e CONFIG_USER_DHCP_ISC_RELAY_DHCRELAY   build/relay/dhcrelay  /bin/dhcrelay
+	$(ROMFSINST) -e CONFIG_USER_DHCP_ISC_SERVER_DHCPD     build/server/dhcpd    /bin/dhcpd

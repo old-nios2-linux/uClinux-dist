@@ -34,8 +34,8 @@
 struct cfgoption cfg_options[] = {
     {"LogFile",	OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
     {"LogFileUnlock", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
-    {"LogFileMaxSize", OPT_COMPSIZE, 1048576, NULL, 0, OPT_CLAMD},
-    {"LogTime", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"LogFileMaxSize", OPT_COMPSIZE, 1048576, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
+    {"LogTime", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
     {"LogClean", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"LogVerbose", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
     {"LogSyslog", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
@@ -87,12 +87,11 @@ struct cfgoption cfg_options[] = {
     {"Foreground", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
     {"Debug", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
     {"LeaveTemporaryFiles", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
-    {"FixStaleSocket", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
+    {"FixStaleSocket", OPT_BOOL, 1, NULL, 0, OPT_CLAMD},
     {"User", OPT_QUOTESTR, -1, NULL, 0, OPT_CLAMD},
     {"AllowSupplementaryGroups", OPT_BOOL, 0, NULL, 0, OPT_CLAMD | OPT_FRESHCLAM},
     {"SelfCheck", OPT_NUM, 1800, NULL, 0, OPT_CLAMD},
     {"VirusEvent", OPT_FULLSTR, -1, NULL, 0, OPT_CLAMD},
-    {"NodalCoreAcceleration", OPT_BOOL, 0, NULL, 0, OPT_CLAMD},
     {"ClamukoScanOnAccess", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
     {"ClamukoScanOnOpen", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
     {"ClamukoScanOnClose", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
@@ -119,6 +118,10 @@ struct cfgoption cfg_options[] = {
     {"LocalIPAddress", OPT_QUOTESTR, -1, NULL, 0, OPT_FRESHCLAM},
     {"ConnectTimeout", OPT_NUM, 30, NULL, 0, OPT_FRESHCLAM},
     {"ReceiveTimeout", OPT_NUM, 30, NULL, 0, OPT_FRESHCLAM},
+
+    {"DevACOnly", OPT_BOOL, -1, NULL, 0, OPT_CLAMD},
+    {"DevACDepth", OPT_NUM, -1, NULL, 0, OPT_CLAMD},
+
     {NULL, 0, 0, NULL, 0, 0}
 };
 

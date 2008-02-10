@@ -1,4 +1,7 @@
 /*
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *  Author: Tomasz Kojm <tkojm@clamav.net>
+ *
  *  Copyright (C) 2006 Tomasz Kojm <tkojm@clamav.net>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -26,45 +29,46 @@
 #define CAB_INPUTMAX (CAB_BLOCKMAX + 6144)
 
 struct cab_archive {
+    struct cab_folder *folders, *actfol;
+    struct cab_file *files;
+    struct cab_state *state;
     uint32_t length;
     uint16_t nfolders;
     uint16_t nfiles;
     uint16_t flags;
     uint16_t reshdr;
     uint8_t resdata;
-    struct cab_folder *folders;
-    struct cab_file *files;
 };
 
 struct cab_state {
     unsigned char *pt, *end;
+    void *stream;
     unsigned char block[CAB_INPUTMAX];
     uint16_t blklen;
     uint16_t outlen;
-    void *stream;
     uint16_t blknum;
+    uint16_t cmethod;
 };
 
 struct cab_file {
-    uint32_t length;
-    uint16_t attribs;
     off_t offset;
     char *name;
+    uint32_t length;
     int error;
     int fd;
     int ofd;
     struct cab_folder *folder;
     struct cab_file *next;
     struct cab_archive *cab;
-    struct cab_state *state;
+    uint16_t attribs;
 };
 
 struct cab_folder {
-    uint16_t cmethod;
-    uint16_t nblocks;
     struct cab_archive *cab;
     off_t offset;
     struct cab_folder *next;
+    uint16_t cmethod;
+    uint16_t nblocks;
 };
 
 int cab_open(int fd, off_t offset, struct cab_archive *cab);

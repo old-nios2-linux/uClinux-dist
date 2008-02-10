@@ -52,6 +52,7 @@
 
 #include "libclamav/clamav.h"
 #include "libclamav/others.h"
+#include "libclamav/matcher-ac.h"
 
 #include "shared/output.h"
 #include "shared/options.h"
@@ -120,12 +121,6 @@ int main(int argc, char **argv)
 	return 1;
     }
 
-    if(opt_check(opt, "version")) {
-	print_version();
-	opt_free(opt);
-	return 0;
-    }
-
     if(opt_check(opt, "help")) {
     	help();
 	opt_free(opt);
@@ -155,6 +150,14 @@ int main(int argc, char **argv)
 	opt_free(opt);
 	return 1;
     }
+
+    if(opt_check(opt, "version")) {
+	print_version(cfgopt(copt, "DatabaseDirectory")->strarg);
+	opt_free(opt);
+	freecfg(copt);
+	return 0;
+    }
+
     opt_free(opt);
 
     umask(0);
@@ -213,6 +216,7 @@ int main(int argc, char **argv)
 	cl_debug();
 
     if((cpt = cfgopt(copt, "LogFile"))->enabled) {
+	char timestr[32];
 	logg_file = cpt->strarg;
 	if(strlen(logg_file) < 2 || (logg_file[0] != '/' && logg_file[0] != '\\' && logg_file[1] != ':')) {
 	    fprintf(stderr, "ERROR: LogFile requires full path.\n");
@@ -221,7 +225,7 @@ int main(int argc, char **argv)
 	    return 1;
 	}
 	time(&currtime);
-	if(logg("#+++ Started at %s", ctime(&currtime))) {
+	if(logg("#+++ Started at %s", cli_ctime(&currtime, timestr, sizeof(timestr)))) {
 	    fprintf(stderr, "ERROR: Problem with internal logger. Please check the permissions on the %s file.\n", logg_file);
 	    logg_close();
 	    freecfg(copt);
@@ -277,9 +281,16 @@ int main(int argc, char **argv)
 
     /* fork into background */
     if(!cfgopt(copt, "Foreground")->enabled) {
-	daemonize();
+	if(daemonize() == -1) {
+	    logg("!daemonize() failed\n");
+	    logg_close();
+	    freecfg(copt);
+	    return 1;
+	}
 	if(!debug_mode)
-	    chdir("/");
+	    if(chdir("/") == -1)
+		logg("^Can't change current working directory to root\n");
+
     } else
         foreground = 1;
 
@@ -312,13 +323,14 @@ int main(int argc, char **argv)
     else
 	logg("Disabling URL based phishing detection.\n");
 
-    if(cfgopt(copt, "NodalCoreAcceleration")->enabled) {
-#ifdef HAVE_NCORE
-	dboptions |= CL_DB_NCORE;
-	logg("Enabling support for hardware acceleration.\n");
-#else
-	logg("^Support for hardware acceleration not compiled in.\n");
-#endif
+    if(cfgopt(copt,"DevACOnly")->enabled) {
+	logg("Only using the A-C matcher.\n");
+	dboptions |= CL_DB_ACONLY;
+    }
+
+    if((cpt = cfgopt(copt, "DevACDepth"))->enabled) {
+	cli_ac_setdepth(AC_DEFAULT_MIN_DEPTH, cpt->numarg);
+	logg("Max A-C depth set to %u\n", cpt->numarg);
     }
 
     if((ret = cl_load(dbdir, &engine, &sigs, dboptions))) {

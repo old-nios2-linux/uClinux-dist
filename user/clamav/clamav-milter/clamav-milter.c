@@ -33,7 +33,7 @@
  */
 static	char	const	rcsid[] = "$Id: clamav-milter.c,v 1.312 2007/02/12 22:24:21 njh Exp $";
 
-#define	CM_VERSION	"0.91.2"
+#define	CM_VERSION	"0.92.1"
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -81,9 +81,6 @@ static	char	const	rcsid[] = "$Id: clamav-milter.c,v 1.312 2007/02/12 22:24:21 nj
 #include <pthread.h>
 #include <sys/time.h>
 #include <signal.h>
-#if	HAVE_REGEX_H
-#include <regex.h>
-#endif
 #include <fcntl.h>
 #include <pwd.h>
 #include <grp.h>
@@ -173,7 +170,7 @@ typedef	unsigned int	in_addr_t;
 
 #define	VERSION_LENGTH	128
 #define	DEFAULT_TIMEOUT	120
-#define	NTRIES	30	/* How long to wait for the local clamd to start */
+#define	NTRIES	5	/* How many times we try to connect to a clamd */
 
 /*#define	SESSION*/
 		/* Keep one command connexion open to clamd, otherwise a new
@@ -203,6 +200,7 @@ typedef	unsigned int	in_addr_t;
  *	address
  * TODO: optionally use zlib to compress data sent to remote hosts
  * TODO: Finish IPv6 support (serverIPs array and SPF are IPv4 only)
+ * TODO: Check domainkeys as well as SPF for phish false positives
  */
 
 struct header_node_t {
@@ -248,12 +246,14 @@ static struct cidr_net {	/* don't make this const because of -I flag */
 };
 #define IFLAG_MAX 8
 
+#ifdef	AF_INET6
 typedef struct cidr_net6 {
 	struct in6_addr	base;
 	int preflen;
 } cidr_net6;
 static	cidr_net6	localNets6[IFLAG_MAX];
 static	int	localNets6_cnt;
+#endif
 
 /*
  * Each libmilter thread has one of these
@@ -516,7 +516,9 @@ static	pthread_cond_t	watchdog_cond = PTHREAD_COND_INITIALIZER;
 static	const	char	*postmaster = "postmaster";
 static	const	char	*from = "MAILER-DAEMON";
 static	int	quitting;
+static	int	reload;	/* reload database when SIGUSR2 is received */
 static	const	char	*report;	/* Report Phishing to this address */
+static	const	char	*report_fps;	/* Report Phish FPs to this address */
 
 static	const	char	*whitelistFile;	/*
 					 * file containing destination email
@@ -551,6 +553,8 @@ static	pthread_mutex_t	blacklist_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 static	void	sigsegv(int sig);
+static	void	sighup(int sig);
+static	void	sigusr2(int sig);
 
 #ifdef HAVE_BACKTRACE
 #include <execinfo.h>
@@ -573,8 +577,7 @@ static	void	spf_ip(char *ip, int zero, void *v);
 static	sfsistat	black_hole(const struct privdata *privdata);
 static	int	useful_header(const char *cmd);
 
-extern	short	logg_time, logg_lock, logg_verbose, logg_foreground;
-extern	int	logg_size;
+extern	short	logg_foreground;
 
 static void
 help(void)
@@ -614,6 +617,7 @@ help(void)
 	puts(_("\t--quiet\t\t\t-q\tDon't send e-mail notifications of interceptions."));
 	puts(_("\t--quarantine=USER\t-Q EMAIL\tQuarantine e-mail account."));
 	puts(_("\t--report-phish=EMAIL\t-r EMAIL\tReport phish to this email address."));
+	puts(_("\t--report-phish-false-positives=EMAIL\t-R EMAIL\tReport phish false positves to this email address."));
 	puts(_("\t--quarantine-dir=DIR\t-U DIR\tDirectory to store infected emails."));
 	puts(_("\t--server=SERVER\t\t-s SERVER\tHostname/IP address of server(s) running clamd (when using TCPsocket)."));
 	puts(_("\t--sendmail-cf=FILE\t\tLocation of the sendmail.cf file to verify"));
@@ -711,15 +715,15 @@ main(int argc, char **argv)
 		int opt_index = 0;
 #ifdef	BOUNCE
 #ifdef	CL_DEBUG
-		const char *args = "a:AbB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:hHs:St:T:U:VwW:x:0:1:2";
+		const char *args = "a:AbB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:R:hHs:St:T:U:VwW:x:0:1:2";
 #else
-		const char *args = "a:AbB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:hHs:St:T:U:VwW:0:1:2";
+		const char *args = "a:AbB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:R:hHs:St:T:U:VwW:0:1:2";
 #endif
 #else	/*!BOUNCE*/
 #ifdef	CL_DEBUG
-		const char *args = "a:AB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:hHs:St:T:U:VwW:x:0:1:2";
+		const char *args = "a:AB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:R:hHs:St:T:U:VwW:x:0:1:2";
 #else
-		const char *args = "a:AB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:hHs:St:T:U:VwW:0:1:2";
+		const char *args = "a:AB:c:C:dDefF:I:k:K:lLm:M:nNop:PqQ:r:R:hHs:St:T:U:VwW:0:1:2";
 #endif
 #endif	/*BOUNCE*/
 
@@ -805,7 +809,10 @@ main(int argc, char **argv)
 				"quarantine", 1, NULL, 'Q',
 			},
 			{
-				"report-phishing", 1, NULL, 'r'
+				"report-phish", 1, NULL, 'r'
+			},
+			{
+				"report-phish-false-positives", 1, NULL, 'R'
 			},
 			{
 				"quarantine-dir", 1, NULL, 'U',
@@ -975,6 +982,9 @@ main(int argc, char **argv)
 				/* e.g. reportphishing@antiphishing.org */
 				report = optarg;
 				break;
+			case 'R':	/* report phishing false positives here */
+				report_fps = optarg;
+				break;
 			case 's':	/* server running clamd */
 				server++;
 				serverHostNames = optarg;
@@ -1041,7 +1051,7 @@ main(int argc, char **argv)
 #ifdef	SESSION
 	if(!external) {
 		fprintf(stderr,
-			_("%s: SESSIONS mode requires --external\n"));
+			_("%s: SESSIONS mode requires --external\n"), argv[0]);
 		return EX_USAGE;
 	}
 #endif
@@ -1323,11 +1333,10 @@ main(int argc, char **argv)
 	}
 
 	/*
-	 * patch from "Richard G. Roberto" <rgr@dedlegend.com>
 	 * If the --max-children flag isn't set, see if MaxThreads
-	 * is set in the config file
+	 * is set in the config file. Based on an idea by "Richard G. Roberto"
+	 * <rgr@dedlegend.com>
 	 */
-	if(max_children == 0)
 	if((max_children == 0) && ((cpt = cfgopt(copt, "MaxThreads")) != NULL))
 		max_children = cfgopt(copt, "MaxThreads")->numarg;
 
@@ -1733,7 +1742,7 @@ main(int argc, char **argv)
 
 	if(report) {
 		if(!cfgopt(copt, "PhishingSignatures")->enabled) {
-			fprintf(stderr, "%s: You have chosen --report, but PhishingSignatures is off in %s\n",
+			fprintf(stderr, "%s: You have chosen --report-phish, but PhishingSignatures is off in %s\n",
 				argv[0], cfgfile);
 			return EX_USAGE;
 		}
@@ -1756,6 +1765,12 @@ main(int argc, char **argv)
 			return EX_USAGE;
 		}
 	}
+	if(report_fps)
+		if(!cfgopt(copt, "PhishingSignatures")->enabled) {
+			fprintf(stderr, "%s: You have chosen --report-phish-false-positives, but PhishingSignatures is off in %s\n",
+				argv[0], cfgfile);
+			return EX_USAGE;
+		}
 
 	if(cfgopt(copt, "Foreground")->enabled)
 		logg_foreground = 1;
@@ -1778,8 +1793,6 @@ main(int argc, char **argv)
 		close(0);
 		open("/dev/null", O_RDONLY);
 
-		close(1);
-
 		/* initialize logger */
 		logg_lock = cfgopt(copt, "LogFileUnlock")->enabled;
 		logg_time = cfgopt(copt, "LogTime")->enabled;
@@ -1788,7 +1801,7 @@ main(int argc, char **argv)
 		logg_verbose = mprintf_verbose = cfgopt(copt, "LogVerbose")->enabled;
 
 		if(cfgopt(copt, "Debug")->enabled) /* enable debug messages in libclamav */
-		cl_debug();
+			cl_debug();
 
 		if((cpt = cfgopt(copt, "LogFile"))->enabled) {
 			time_t currtime;
@@ -1802,6 +1815,7 @@ main(int argc, char **argv)
 				return 1;
 			}
 			time(&currtime);
+			close(1);
 			if(logg("#ClamAV-milter started at %s", ctime(&currtime))) {
 				fprintf(stderr, "ERROR: Problem with internal logger. Please check the permissions on the %s file.\n", logg_file);
 				logg_close();
@@ -1810,6 +1824,7 @@ main(int argc, char **argv)
 			}
 		} else {
 #ifdef	CL_DEBUG
+			close(1);
 			logg_file = console;
 			if(consolefd < 0) {
 				perror(console);
@@ -1937,10 +1952,12 @@ main(int argc, char **argv)
 		if(getuid() == 0) {
 			if(chdir(rootdir) < 0) {
 				perror(rootdir);
+				logg("!chdir %s failed\n", rootdir);
 				return EX_CONFIG;
 			}
 			if(chroot(rootdir) < 0) {
 				perror(rootdir);
+				logg("!chroot %s failed\n", rootdir);
 				return EX_CONFIG;
 			}
 			logg("Chrooted to %s\n", rootdir);
@@ -2082,6 +2099,9 @@ main(int argc, char **argv)
 #endif
 
 	(void)signal(SIGSEGV, sigsegv);
+	(void)signal(SIGHUP, sighup);
+	if(!external)
+		(void)signal(SIGUSR2, sigusr2);
 
 	return smfi_main();
 }
@@ -2207,6 +2227,9 @@ pingServer(int serverNumber)
 			perror("socket");
 			return 0;
 		}
+		/*
+		 * FIXME: use non-blocking connect
+		 */
 		if(connect(sock, (struct sockaddr *)&server, sizeof(struct sockaddr_in)) < 0) {
 			int is_connected = 0;
 
@@ -2255,13 +2278,12 @@ pingServer(int serverNumber)
 	cli_dbgmsg("pingServer%d: sending VERSION\n", serverNumber);
 	if(send(sock, "VERSION\n", 8, 0) < 8) {
 		perror("send");
-		close(sock);
-		return 0;
+		return close(sock);
 	}
 
 	shutdown(sock, SHUT_WR);
 
-	nbytes = clamd_recv(sock, buf, sizeof(buf));
+	nbytes = clamd_recv(sock, buf, sizeof(buf) - 1);
 
 	close(sock);
 
@@ -2400,11 +2422,9 @@ findServer(void)
 			j = 0;
 	} else
 		/*
-		 * cli_rndnum returns 0..(max-1) - the max argument is not
-		 * the maximum number you want it to return, it is in fact
-		 * one *more* than the maximum number you want it to return
+		 * cli_rndnum returns 0..max
 		 */
-		j = cli_rndnum(numServers);
+		j = cli_rndnum(numServers - 1);
 
 	for(i = 0; i < numServers; i++)
 		socks[i].sock = -1;
@@ -2976,8 +2996,16 @@ clamfi_envrcpt(SMFICTX *ctx, char **argv)
 	for(ptr = to; *ptr; ptr++)
 		if(strchr("|;", *ptr) != NULL) {
 			smfi_setreply(ctx, "554", "5.7.1", _("Suspicious recipient address blocked"));
-			logg("^Suspicious recipient address blocked: '%s'", to);
+			logg("^Suspicious recipient address blocked: '%s'\n", to);
 			privdata->to[privdata->numTo] = NULL;
+			if(blacklist_time && privdata->ip[0]) {
+				logg(_("Will blacklist %s for %d seconds because of cracking attempt\n"),
+					privdata->ip, blacklist_time);
+				pthread_mutex_lock(&blacklist_mutex);
+				(void)tableUpdate(blacklist, privdata->ip,
+					(int)time((time_t *)0));
+				pthread_mutex_unlock(&blacklist_mutex);
+			}
 			/*
 			 * REJECT rejects this recipient, not the entire email
 			 */
@@ -3022,19 +3050,32 @@ clamfi_header(SMFICTX *ctx, char *headerf, char *headerv)
 	if((strcasecmp(headerf, "Message-ID") == 0) &&
 	   (strncasecmp(headerv, "<MDAEMON", 8) == 0))
 		privdata->discard = 1;
-	else if(strcasecmp(headerf, "Subject") == 0) {
+	else if((strcasecmp(headerf, "Subject") == 0) && headerv) {
 		if(privdata->subject)
 			free(privdata->subject);
 		if(headerv)
 			privdata->subject = cli_strdup(headerv);
 	} else if(strcasecmp(headerf, "X-Virus-Status") == 0)
 		privdata->statusCount++;
-	else if(strcasecmp(headerf, "Sender") == 0) {
+	else if((strcasecmp(headerf, "Sender") == 0) && headerv) {
 		if(privdata->sender)
 			free(privdata->sender);
-		if(headerv)
-			privdata->sender = cli_strdup(headerv);
+		privdata->sender = cli_strdup(headerv);
 	}
+#ifdef	HAVE_RESOLV_H
+	else if((strcasecmp(headerf, "From") == 0) && headerv) {
+		/*
+		 * SPF check against the from header, since the SMTP header
+		 * may be valid. This is not what the SPF spec says, but I
+		 * have seen SPF matches on what are clearly phishes, so by
+		 * checking against the from: header we're less likely to
+		 * FP a real phish
+		 */
+		if(privdata->from)
+			free(privdata->from);
+		privdata->from = cli_strdup(headerv);
+	}
+#endif
 
 	if(!useful_header(headerf)) {
 		logg("*Discarded the header\n");
@@ -3282,7 +3323,7 @@ clamfi_eom(SMFICTX *ctx)
 
 		for(i = privdata->statusCount; i > 0; --i)
 			if(smfi_chgheader(ctx, "X-Virus-Status", i, NULL) == MI_FAILURE)
-				logg(_("^Failed to delete X-Virus-Status header %d"), i);
+				logg(_("^Failed to delete X-Virus-Status header %d\n"), i);
 	}
 
 	if(!external) {
@@ -3337,7 +3378,7 @@ clamfi_eom(SMFICTX *ctx)
 		if(send(session->sock, cmdbuf, nbytes, 0) < nbytes) {
 			perror("send");
 			clamfi_cleanup(ctx);
-			logg(_("failed to send SCAN %s command to clamd"), privdata->filename);
+			logg(_("failed to send SCAN %s command to clamd\n"), privdata->filename);
 			return cl_error;
 		}
 #else
@@ -3358,7 +3399,7 @@ clamfi_eom(SMFICTX *ctx)
 		if(send(privdata->cmdSocket, cmdbuf, nbytes, 0) < nbytes) {
 			perror("send");
 			clamfi_cleanup(ctx);
-			logg(_("failed to send SCAN command to clamd"));
+			logg(_("failed to send SCAN command to clamd\n"));
 			return cl_error;
 		}
 
@@ -3398,14 +3439,22 @@ clamfi_eom(SMFICTX *ctx)
 #else
 			char *hostname = cli_strtok(serverHostNames, privdata->serverNumber, ":");
 #endif
+			if(privdata->subject)
+				logg(_("clamfi_eom: read nothing from clamd on %s, from %s (%s)"),
+					hostname, privdata->from, privdata->subject);
+			else
+				logg(_("clamfi_eom: read nothing from clamd on %s, from %s"),
+					hostname, privdata->from);
+
+#ifndef	MAXHOSTNAMELEN
+			free(hostname);
+#endif
 			/*
 			 * TODO: if more than one host has been specified, try
 			 * another one - setting cl_error to SMFIS_TEMPFAIL
 			 * helps by forcing a retry
 			 */
 			clamfi_cleanup(ctx);
-
-			logg(_("clamfi_eom: read nothing from clamd on %s"), hostname);
 
 #ifdef	SESSION
 			pthread_mutex_lock(&sstatus_mutex);
@@ -3511,9 +3560,35 @@ clamfi_eom(SMFICTX *ctx)
 		table_t *prevhosts = tableCreate();
 
 		if(spf(privdata, prevhosts)) {
-			logg(_("%s: ignoring phish false positive from %s received from %s\n"),
-				sendmailId, privdata->from, privdata->ip);
+			logg(_("%s: Ignoring %s false positive from %s received from %s\n"),
+				sendmailId, mess, privdata->from, privdata->ip);
 			strcpy(mess, "OK");
+			/*
+			 * Report false positive to ClamAV, works best when
+			 * clamav-milter has had to create a local copy of
+			 * the email, e.g. when --quarantine-dir is on
+			 */
+			if(report_fps &&
+			   (smfi_addrcpt(ctx, report_fps) == MI_FAILURE)) {
+				if(privdata->filename) {
+					char cmd[1024];
+
+					snprintf(cmd, sizeof(cmd) - 1,
+						"mail -s \"False Positive: %s\" %s < %s",
+						mess, report_fps,
+						privdata->filename);
+					if(system(cmd) == 0)
+						logg(_("#Reported phishing false positive to %s"), report_fps);
+					else
+						logg(_("^Couldn't report false positive to %s\n"), report_fps);
+				} else
+					/*
+					 * Most likely this is because we're
+					 * attempting to add a recipient on
+					 * another host
+					 */
+					logg(_("^Can't set phish FP header\n"));
+			}
 		}
 		tableDestroy(prevhosts);
 	}
@@ -4558,8 +4633,7 @@ connect2clamd(struct privdata *privdata)
 
 			pthread_mutex_lock(&sstatus_mutex);
 			session->status = CMDSOCKET_DOWN;
-			pthread_mutex_unlock(&sstatus_mutex);
-			return 0;
+			return pthread_mutex_unlock(&sstatus_mutex);
 		}
 #else
 		nbytes = clamd_recv(privdata->cmdSocket, buf, sizeof(buf));
@@ -5113,7 +5187,9 @@ add_local_ip(char *address)
 	int preflen;
 	int retval;
 	struct in_addr ignoreIP;
+#ifdef	AF_INET6
 	struct in6_addr ignoreIP6;
+#endif
 
 	opt = cli_strdup(address);
 	if(opt == NULL)
@@ -5176,7 +5252,9 @@ static int
 isLocal(const char *addr)
 {
 	struct in_addr ip;
+#ifdef	AF_INET6
 	struct in6_addr ip6;
+#endif
 
 #ifdef HAVE_INET_NTOP
 	if(inet_pton(AF_INET, addr, &ip) > 0)
@@ -5327,6 +5405,7 @@ watchdog(void *a)
 				perror("pthread_cond_timedwait");
 		}
 		pthread_mutex_unlock(&watchdog_mutex);
+
 		cli_dbgmsg("watchdog wakes\n");
 
 		if(check_and_reload_database() != 0) {
@@ -5453,6 +5532,7 @@ watchdog(void *a)
 		ts.tv_sec = tp.tv_sec + freshclam_monitor;
 		ts.tv_nsec = tp.tv_usec * 1000;
 		cli_dbgmsg("watchdog sleeps\n");
+
 		pthread_mutex_lock(&watchdog_mutex);
 		/*
 		 * Sometimes this returns EPIPE which isn't listed as a
@@ -5506,7 +5586,13 @@ check_and_reload_database(void)
 	if(external)
 		return 0;
 
-	switch(rc = cl_statchkdir(&dbstat)) {
+	if(reload) {
+		rc = 1;
+		reload = 0;
+	} else
+		rc = cl_statchkdir(&dbstat);
+
+	switch(rc) {
 		case 1:
 			logg("^Database has changed, loading updated database\n");
 			cl_statfree(&dbstat);
@@ -5539,8 +5625,6 @@ timeoutBlacklist(char *ip_address, int time_of_blacklist, void *v)
 static void
 quit(void)
 {
-	extern short cli_leavetemps_flag;
-
 	quitting++;
 
 #ifdef	SESSION
@@ -5661,22 +5745,11 @@ loadDatabase(void)
 	if(d) {
 		char *ptr;
 		time_t t = d->stime;
-#ifdef	HAVE_CTIME_R
 		char buf[26];
 
-#ifdef	HAVE_CTIME_R_2
 		snprintf(clamav_version, VERSION_LENGTH,
 			"ClamAV %s/%u/%s", VERSION, d->version,
-			ctime_r(&t, buf));
-#else
-		snprintf(clamav_version, VERSION_LENGTH,
-			"ClamAV %s/%d/%s", VERSION, d->version,
-			ctime_r(&t, buf, sizeof(buf)));
-#endif
-#else
-		snprintf(clamav_version, VERSION_LENGTH,
-			"ClamAV %s/%d/%s", VERSION, d->version, ctime(&t));
-#endif
+			cli_ctime(&t, buf, sizeof(buf)));
 
 		/* Remove ctime's trailing \n */
 		if((ptr = strchr(clamav_version, '\n')) != NULL)
@@ -5767,7 +5840,30 @@ sigsegv(int sig)
 
 	logg("!Segmentation fault :-( Bye..\n");
 
+	quitting++;
 	smfi_stop();
+}
+
+static void
+sighup(int sig)
+{
+	const struct cfgstruct *cpt;
+
+	signal(SIGHUP, sighup);
+
+	logg("SIGHUP caught: re-opening log file\n");
+	logg_close();
+	if(!logg_file && (cpt = cfgopt(copt, "LogFile"))->enabled)
+		logg_file = cpt->strarg;
+}
+
+static void
+sigusr2(int sig)
+{
+	signal(SIGUSR2, sighup);
+
+	logg("^SIGUSR2 caught: scheduling database reload\n");
+	reload++;
 }
 
 #ifdef HAVE_BACKTRACE
@@ -6167,17 +6263,15 @@ resolve(const char *host, table_t *t)
  * Currently only handles ip4, a and mx fields in the DNS record
  * Having said that, this is NOT a replacement for spf-milter, it is NOT
  *	an SPF system, we ONLY use SPF records to reduce phish false positives
- * TODO: ptr
  * TODO: IPv6?
  * TODO: cache queries?
+ * TODO: check res_query is thread safe
  *
  * INPUT: prevhosts, a list of hosts already searched: stops include loops
  *	e.g. mercado.com includes medrcadosw.com which includes mercado.com,
  *	causing a loop
  * Return 1 if SPF says this email is from a legitimate source
  *	0 for fail or unknown
- *
- * TODO: check res_query is thread safe
  */
 static int
 spf(struct privdata *privdata, table_t *prevhosts)
@@ -6209,7 +6303,7 @@ spf(struct privdata *privdata, table_t *prevhosts)
 
 	if(privdata->from == NULL)
 		return 0;
-	if((host = strchr(privdata->from, '@')) == NULL)
+	if((host = strrchr(privdata->from, '@')) == NULL)
 		return 0;
 
 	host = cli_strdup(++host);
@@ -6222,6 +6316,7 @@ spf(struct privdata *privdata, table_t *prevhosts)
 	if(ptr)
 		*ptr = '\0';
 
+	logg("*SPF query '%s'\n", host);
 	len = res_query(host, C_IN, T_TXT, (u_char *)&q, sizeof(q));
 	if(len < 0) {
 		free(host);
@@ -6270,7 +6365,7 @@ spf(struct privdata *privdata, table_t *prevhosts)
 			char *record;
 			struct in_addr remote_ip;	/* IP connecting to us */
 
-			logg("#%s(%s): SPF record %s\n",
+			logg("*%s(%s): SPF record %s\n",
 				host, privdata->ip, txt);
 #ifdef HAVE_INET_NTOP
 			/* IPv4 address ? */
@@ -6305,15 +6400,23 @@ spf(struct privdata *privdata, table_t *prevhosts)
 
 #ifdef HAVE_INET_NTOP
 					/* IPv4 address ? */
-					if(inet_pton(AF_INET, ip, &spf_range) <= 0)
+					if(inet_pton(AF_INET, ip, &spf_range) <= 0) {
+						free(record);
 						continue;
+					}
 #else
-					if(inet_aton(ip, &spf_range) == 0)
+					if(inet_aton(ip, &spf_range) == 0) {
+						free(record);
 						continue;
+					}
 #endif
 					mask = MAKEMASK(preflen);
 					if((ntohl(remote_ip.s_addr) & mask) == (ntohl(spf_range.s_addr) & mask)) {
-						logg("#SPF ip4 pass\n");
+						if(privdata->subject)
+							logg("#SPF ip4 pass (%s) %s is valid for %s\n",
+								privdata->subject, ip, host);
+						else
+							logg("#SPF ip4 pass %s is valid for %s\n", ip, host);
 						privdata->spf_ok = 1;
 					}
 				} else if(strcmp(record, "mx") == 0) {
@@ -6393,7 +6496,10 @@ spf_ip(char *ip, int zero, void *v)
 	struct privdata *privdata = (struct privdata *)v;
 
 	if(strcmp(ip, privdata->ip) == 0) {
-		logg("#SPF mx/a pass %s\n", ip);
+		if(privdata->subject)
+			logg("#SPF mx/a pass (%s) %s\n", privdata->subject, ip);
+		else
+			logg("#SPF mx/a pass %s\n", ip);
 		privdata->spf_ok = 1;
 	}
 }
@@ -6635,4 +6741,3 @@ dump_blacklist(char *key, int value, void *v)
 {
 	logg(_("Won't blacklist %s\n"), key);
 }
-

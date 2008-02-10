@@ -87,11 +87,13 @@ isc_result_t new_parse (cfile, file, inbuf, buflen, name, eolp)
 			return ISC_R_IOERROR;
 
 		tmp->bufsiz = tmp->buflen = (size_t)sb.st_size;
-		tmp->inbuf = mmap(NULL, tmp->bufsiz, PROT_READ, MAP_SHARED,
-				  file, 0);
+		if (tmp->buflen != 0) {
+			tmp->inbuf = mmap(NULL, tmp->bufsiz, PROT_READ, MAP_SHARED,
+					  file, 0);
 
-		if (tmp->inbuf == MAP_FAILED) {
-			return ISC_R_IOERROR;
+			if (tmp->inbuf == MAP_FAILED) {
+				return ISC_R_IOERROR;
+			}
 		}
 	}
 
@@ -104,7 +106,8 @@ isc_result_t end_parse (cfile)
 {
 	/* "Memory" config files have no file. */
 	if ((*cfile)->file != -1) {
-		munmap((*cfile)->inbuf, (*cfile)->bufsiz);
+		if ((*cfile)->buflen)
+			munmap((*cfile)->inbuf, (*cfile)->bufsiz);
 		close((*cfile)->file);
 	}
 

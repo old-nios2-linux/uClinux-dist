@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 	mprintf_stdout = 1;
 
     if(opt_check(opt, "version")) {
-	print_version();
+	print_version(NULL);
 	opt_free(opt);
 	exit(0);
     }

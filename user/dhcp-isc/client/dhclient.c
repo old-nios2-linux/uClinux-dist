@@ -975,9 +975,11 @@ void bind_lease (client)
 	client -> state = S_BOUND;
 	reinitialize_interfaces ();
 	go_daemon ();
+#if defined (NSUPDATE)
 	if (client->config->do_forward_update)
 		dhclient_schedule_updates(client, &client->active->address,
 					  1);
+#endif
 }  
 
 /* state_bound is called when we've successfully bound to a particular
@@ -3331,9 +3333,11 @@ isc_result_t dhcp_set_control_state (control_object_state_t oldstate,
 		  case server_shutdown:
 		    if (client -> active &&
 			client -> active -> expiry > cur_time) {
+#if defined (NSUPDATE)
 			    if (client -> config -> do_forward_update)
 				    client_dns_update(client, 0, 0,
 						    &client->active->address);
+#endif
 			    do_release (client);
 		    }
 		    break;
@@ -3354,6 +3358,7 @@ isc_result_t dhcp_set_control_state (control_object_state_t oldstate,
 	return ISC_R_SUCCESS;
 }
 
+#if defined (NSUPDATE)
 /* Schedule updates to retry occasionally until it no longer times out.
  */
 void
@@ -3532,6 +3537,7 @@ isc_result_t client_dns_update (struct client_state *client, int addp,
 	data_string_forget (&ddns_dhcid, MDL);
 	return rcode;
 }
+#endif
 
 void
 dhcpv4_client_assignments(void)

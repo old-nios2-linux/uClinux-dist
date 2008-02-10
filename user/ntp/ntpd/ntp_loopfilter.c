@@ -150,6 +150,7 @@ int	ext_enable;		/* external clock enabled */
 int	pps_stratum;		/* pps stratum */
 int	allow_panic = FALSE;	/* allow panic correction */
 int	mode_ntpdate = FALSE;	/* exit on first clock set */
+int	mode_immediateset = FALSE; /* set the clock ASAP with anything available */
 
 /*
  * Clock state machine variables

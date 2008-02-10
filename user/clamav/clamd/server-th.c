@@ -50,6 +50,7 @@
 #include "clamuko.h"
 #include "others.h"
 #include "shared.h"
+#include "libclamav/others.h"
 
 #ifndef	C_WINDOWS
 #define	closesocket(s)	close(s)
@@ -146,6 +147,7 @@ static void scanner_thread(void *arg)
 	}
     } while (session);
 
+    shutdown(conn->sd, 2);
     closesocket(conn->sd);
     cl_free(conn->engine);
     free(conn);
@@ -259,6 +261,7 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	int max_threads, i, ret = 0;
 	unsigned int options = 0;
 	threadpool_t *thr_pool;
+	char timestr[32];
 #ifndef	C_WINDOWS
 	struct sigaction sigact;
 #endif
@@ -537,7 +540,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     	}
 #if !defined(C_WINDOWS) && !defined(C_BEOS)
 	if(new_sd != -1 && fstat(socketd, &st_buf) == -1) {
-	    logg("!fstat(): socket descriptor gone\n");
 	    memmove(socketds, socketds + 1, sizeof(socketds[0]) * nsockets);
 	    nsockets--;
 	    if(!nsockets) {
@@ -610,11 +612,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	}
 
 	pthread_mutex_lock(&reload_mutex);
-	if(reload && cfgopt(copt, "NodalCoreAcceleration")->enabled) {
-	    logg("^RELOAD is not available in hardware accelerated mode (yet).\n");
-	    logg("^Please restart the daemon manually.\n");
-	    reload = 0;
-	}
 	if(reload) {
 	    pthread_mutex_unlock(&reload_mutex);
 	    engine = reload_db(engine, dboptions, copt, FALSE, &ret);
@@ -681,7 +678,7 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     }
 
     time(&current_time);
-    logg("--- Stopped at %s", ctime(&current_time));
+    logg("--- Stopped at %s", cli_ctime(&current_time, timestr, sizeof(timestr)));
 
     return ret;
 }

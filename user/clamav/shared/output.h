@@ -29,10 +29,9 @@
 int mdprintf(int desc, const char *str, ...);
 
 int logg(const char *str, ...);
-
 void logg_close(void);
 extern short int logg_verbose, logg_lock, logg_time;
-extern int logg_size;
+extern unsigned int logg_size;
 extern const char *logg_file;
 
 #if defined(USE_SYSLOG) && !defined(C_AIX)
@@ -41,7 +40,6 @@ int logg_facility(const char *name);
 #endif
 
 void mprintf(const char *str, ...);
-
 extern short int mprintf_disabled, mprintf_verbose, mprintf_quiet, mprintf_stdout;
 
 #endif

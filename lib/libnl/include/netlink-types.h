@@ -18,9 +18,10 @@
 #include <netlink/route/rtnl.h>
 #include <netlink/route/route.h>
 
-#define NL_SOCK_BUFSIZE_SET	1
-#define NL_SOCK_PASSCRED	2
-#define NL_OWN_PORT		4
+#define NL_SOCK_BUFSIZE_SET	(1<<0)
+#define NL_SOCK_PASSCRED	(1<<1)
+#define NL_OWN_PORT		(1<<2)
+#define NL_MSG_PEEK		(1<<3)
 
 #define NL_MSG_CRED_PRESENT 1
 
@@ -94,27 +95,6 @@ struct nl_cache_mngr
 
 struct nl_parser_param;
 
-enum {
-	NL_ACT_UNSPEC,
-	NL_ACT_NEW,
-	NL_ACT_DEL,
-	NL_ACT_GET,
-	NL_ACT_SET,
-	NL_ACT_CHANGE,
-	__NL_ACT_MAX,
-};
-
-#define NL_ACT_MAX (__NL_ACT_MAX - 1)
-
-#define END_OF_MSGTYPES_LIST	{ -1, -1, NULL }
-
-struct nl_msgtype
-{
-	int			mt_id;
-	int			mt_act;
-	char *			mt_name;
-};
-
 struct genl_info
 {
 	struct sockaddr_nl *	who;
@@ -126,104 +106,11 @@ struct genl_info
 
 #define LOOSE_FLAG_COMPARISON	1
 
-struct nl_object_ops
-{
-	/* Name of object */
-	char *		oo_name;
-
-	/* Size of object structure */
-	size_t		oo_size;
-
-	/* List of attributes needed to uniquely identify the object */
-	uint32_t	oo_id_attrs;
-
-	/**
-	 * Called whenever a new object was allocated
-	 */
-	void  (*oo_constructor)(struct nl_object *);
-
-	/**
-	 * Called whenever a object in the cache gets destroyed, must
-	 * free the type specific memory allocations
-	 */
-	void  (*oo_free_data)(struct nl_object *);
-
-	/**
-	 * Callened whenever an object needs to be cloned
-	 */
-	int  (*oo_clone)(struct nl_object *, struct nl_object *);
-
-	/**
-	 * Called whenever a dump of a cache object is requested. Must
-	 * dump the specified object to the specified file descriptor
-	 */
-	int   (*oo_dump[NL_DUMP_MAX+1])(struct nl_object *,
-					struct nl_dump_params *);
-
-	int   (*oo_compare)(struct nl_object *, struct nl_object *,
-			    uint32_t, int);
-
-
-	char *(*oo_attrs2str)(int, char *, size_t);
-};
-
-struct nl_af_group
-{
-	int			ag_family;
-	int			ag_group;
-};
-
-#define END_OF_GROUP_LIST AF_UNSPEC, 0
-
-struct nl_cache_ops
-{
-	char  *			co_name;
-	int			co_hdrsize;
-	int			co_protocol;
-	struct nl_af_group *	co_groups;
-	
-	/**
-	 * Called whenever an update of the cache is required. Must send
-	 * a request message to the kernel requesting a complete dump.
-	 */
-	int   (*co_request_update)(struct nl_cache *, struct nl_handle *);
-
-	/**
-	 * Called whenever a message was received that needs to be parsed.
-	 * Must parse the message and call the paser callback function
-	 * (nl_parser_param) provided via the argument.
-	 */
-	int   (*co_msg_parser)(struct nl_cache_ops *, struct sockaddr_nl *,
-			       struct nlmsghdr *, void *);
-
-	struct nl_object_ops *	co_obj_ops;
-
-	struct nl_cache_ops *co_next;
-	struct nl_cache *co_major_cache;
-	struct genl_ops *	co_genl;
-	struct nl_msgtype	co_msgtypes[];
-};
-
 #define NL_OBJ_MARK		1
-
-#define NLHDR_COMMON				\
-	int			ce_refcnt;	\
-	struct nl_object_ops *	ce_ops;		\
-	struct nl_cache *	ce_cache;	\
-	struct nl_list_head	ce_list;	\
-	int			ce_msgtype;	\
-	int			ce_flags;	\
-	uint32_t		ce_mask;
 
 struct nl_object
 {
 	NLHDR_COMMON
-};
-
-struct nl_parser_param
-{
-	int             (*pp_cb)(struct nl_object *, struct nl_parser_param *);
-	void *            pp_arg;
 };
 
 struct nl_data
@@ -250,6 +137,7 @@ struct nl_msg
 	struct sockaddr_nl	nm_dst;
 	struct ucred		nm_creds;
 	struct nlmsghdr *	nm_nlh;
+	size_t			nm_size;
 };
 
 struct rtnl_link_map
@@ -286,6 +174,11 @@ struct rtnl_link
 	struct rtnl_link_map l_map;
 	uint64_t	l_stats[RTNL_LINK_STATS_MAX+1];
 	uint32_t	l_flag_mask;
+	uint8_t		l_operstate;
+	uint8_t		l_linkmode;
+	/* 2 byte hole */
+	struct rtnl_link_info_ops *l_info_ops;
+	void *		l_info;
 };
 
 struct rtnl_ncacheinfo
@@ -843,23 +736,67 @@ struct nfnl_ct {
 struct nfnl_log {
 	NLHDR_COMMON
 
-	uint8_t			log_family;
-	uint8_t			log_hook;
-	uint16_t		log_hwproto;
-	uint32_t		log_mark;
-	struct timeval		log_timestamp;
-	uint32_t		log_indev;
-	uint32_t		log_outdev;
-	uint32_t		log_physindev;
-	uint32_t		log_physoutdev;
-	uint8_t			log_hwaddr[8];
-	int			log_hwaddr_len;
-	void *			log_payload;
-	int			log_payload_len;
-	char *			log_prefix;
-	uint32_t		log_uid;
-	uint32_t		log_seq;
-	uint32_t		log_seq_global;
+	uint16_t		log_group;
+	uint8_t			log_copy_mode;
+	uint32_t		log_copy_range;
+	uint32_t		log_flush_timeout;
+	uint32_t		log_alloc_size;
+	uint32_t		log_queue_threshold;
+	uint32_t		log_flags;
+	uint32_t		log_flag_mask;
+};
+
+struct nfnl_log_msg {
+	NLHDR_COMMON
+
+	uint8_t			log_msg_family;
+	uint8_t			log_msg_hook;
+	uint16_t		log_msg_hwproto;
+	uint32_t		log_msg_mark;
+	struct timeval		log_msg_timestamp;
+	uint32_t		log_msg_indev;
+	uint32_t		log_msg_outdev;
+	uint32_t		log_msg_physindev;
+	uint32_t		log_msg_physoutdev;
+	uint8_t			log_msg_hwaddr[8];
+	int			log_msg_hwaddr_len;
+	void *			log_msg_payload;
+	int			log_msg_payload_len;
+	char *			log_msg_prefix;
+	uint32_t		log_msg_uid;
+	uint32_t		log_msg_gid;
+	uint32_t		log_msg_seq;
+	uint32_t		log_msg_seq_global;
+};
+
+struct nfnl_queue {
+	NLHDR_COMMON
+
+	uint16_t		queue_group;
+	uint32_t		queue_maxlen;
+	uint32_t		queue_copy_range;
+	uint8_t			queue_copy_mode;
+};
+
+struct nfnl_queue_msg {
+	NLHDR_COMMON
+
+	uint16_t		queue_msg_group;
+	uint8_t			queue_msg_family;
+	uint8_t			queue_msg_hook;
+	uint16_t		queue_msg_hwproto;
+	uint32_t		queue_msg_packetid;
+	uint32_t		queue_msg_mark;
+	struct timeval		queue_msg_timestamp;
+	uint32_t		queue_msg_indev;
+	uint32_t		queue_msg_outdev;
+	uint32_t		queue_msg_physindev;
+	uint32_t		queue_msg_physoutdev;
+	uint8_t			queue_msg_hwaddr[8];
+	int			queue_msg_hwaddr_len;
+	void *			queue_msg_payload;
+	int			queue_msg_payload_len;
+	uint32_t		queue_msg_verdict;
 };
 
 #endif

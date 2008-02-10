@@ -1,54 +1,787 @@
-Tue Aug 21 00:57:03 CEST 2007
------------------------------
-  V 0.91.2
-  * Bugfixes and changes since 0.91.1:
-    - libclamav/rtf.c: fix possible NULL dereference (bb#611)
-    - libclamav/ole2_extract.c: properly initialise hdr.max_block_no (bb#603)
-    - libclamav/htmlnorm.c: fix possible NULL dereference (bb#582),
-      thanks to Stefanos Stamatis
-    - libclamav/htmlnorm.c: fix call to tolower() (bb#580)
-    - libclamav/filetypes.c: some embedded PEs were not being detected
-    - clamav-milter: Fix compilation error on NetBSD2.0
-    - clamav-milter: Black-hole-mode no longer needs to be run as root
-    - libclamav/pdf.c: Bug 618, --block-max not always honoured
-    - libclamav/phishcheck.c, regex_list.c, phish_whitelist.c: make debug
-      output look better (patch from Sven)
-    - libclamav/phishcheck.c: Don't report phishing on broken urls containing
-      '>' in the hostname. (bb #619)
-    - libclamav, sigtool: add support for PUA databases (.hdu, .mdu, .ndu),
-      requested by Christoph
-    - clamscan: add --detect-pua
-    - clamd, clamd.conf: add DetectPUA
-    - freshclam/mirman.c: properly handle mirror access times (bb#606, only
-      outdated installations - three versions behind the latest one were
-      affected by this problem),
-      Reported by David F. Skoll <dfs*roaringpenguin.com>
-    - clamav-milter:      Bug 614
-    - libclamav/pdf.c:    Bug 608
-    - clamav-milter:      SPF checking no longer experimental
-    - libclamav/phishcheck.c: workaround Solaris problem with regexec() [bb #598]
-    - libclamav/matcher-ac.c: fix matching of patterns with prefixes and some
-      other issues spotted by Glen <daineng*gmail.com>
-    - clamav-milter/clamav-milter.c: Better use of res_init()
-    - clamav-milter/clamav-milter.c: HP-UX doesn't have EX_CONFIG, reported
-      by clam * ministry.se
+Mon Feb 11 19:32:02 CET 2008
+----------------------------
+  * libclamav/mew.c: fix possible heap corruption (bb#806)
+    Found by Elliot, broken module disabled via daily.cvd published on Feb 2
+  * libclamav/pe.c: fix possible integer overflow (CVE-2008-0318)
+    Found by Silvio Cesare working with the VeriSign iDefense VCP;
+    broken module disabled via daily.cvd published on Jan 11, 2008
+  * libclamav/cab.c: improve handling of stored files (bb#771)
+  * libclamav/unarj.c: improve bounds checking (bb#811)
+  * libclamav/scanners.c: respect recursion limits in cli_scanembpe() (bb#771)
+  * libclamav/vba_extract.c: fix extraction of embedded files (bb#760)
+  * libclamav/others.[ch]: add cli_ctime() (uses ctime_r() if available or
+    falls back to mutex protected ctime())
+  * clamd, clamav-milter, shared: use cli_ctime() instead of the
+    thread-unsafe ctime()
+  * libclamav/nsis/nulsft.c: use mutex for cli_nsis_unpack() (bb#812)
+  * libclamunrar: Use static CRC table - bb#64
+  * libclamav/matcher-bm.c: on Solaris/Intel bm_shift could be improperly
+    allocated (bb#773)
+  * freshclam/manager.c: advertise itself as HTTP/1.0 client
+  * libclamav/cab.[ch]: rewrite file/folder handling code (bb#730)
+  * shared/output.c: fix handling of special characters in mprintf/logg (bb#360)
+  * shared/misc.c: add error reporting to daemonize() (bb#729)
+  * configure: if available use dscl on Mac OS X (bb#753)
+  * libclamunrar/unrar.c: disable 'Unknown RAR pack method' error message due
+    to false alerts with some SFX archives (bb#399)
+  * configure: don't link with nsl if not needed (bb#754)
+  * shared/misc.c, clamd, clamscan, freshclam: respect custom dbdir settings
+    in print_version() (bb#699)
+  * libclamunrar_iface/unrar_iface.h: add missing #pragma pack direct.  (bb#769)
+  * libclamav/entconv.c: don't make tmp_move negative (exper. code, bb #772).
+  * shared/misc.c: don't pass --rsrc flag to ditto (bb#380)
+  * libclamav: fix printing of size_t and off_t vars (bb#444)
+  * clamav-milter: Use new cli_rndnum API
+  * libclamav/others.c: improve cli_rndnum() and cli_gentempfd()
+  * libclamav/cvd.c: fix error path descriptor leak; gzdopen() may not close fd
+  * shared/misc.c: cvd_unpack: cli_untgz() no longer closes fd
+  * clamav-milter: Fix error handling in Session Mode
+  * clamav-milter: Correct nul termination in ping response from clamd
+  * libclamunrar_iface/unrar_iface.[ch]: minor cleanups
 
-Mon Jul 16 21:52:08 CEST 2007
------------------------------
-  V 0.91.1
-  * Bugfixes:
-    - libclamav/others.c: bump f-level
-    - libclamav/unrar/unrarvm.c: fix another occurrence of bb#555, thanks to
-      Ludwig Nussel <ludwig.nussel*suse.de>
-    - sigtool/sigtool.c: increase MAX_DEL_LOOKAHEAD, requested by Sven
-    - libclamav/scanner.c: don't search for embedded PEs in zip files larger
-      than 1 MB (bb#573)
-    - clamav-milter: Fix memory leak when load balancing
-    - clamav-milter: Chroot handling no longer marked as experimental
-    - libclamav/nsis: fix macro collision on AIX - bb#570
-    - libclamav/phishcheck.c: fix (null) FOUND
-    - libclamav: rename x86 macroes due to collisions on HPUX
-    - libclamav: Fix warnings on HP-UX
+Thu Dec 13 00:26:58 CET 2007 (tk)
+---------------------------------
+  * 0.92 (released with JS and PST code removed)
+
+Wed Dec 12 23:45:21 CET 2007 (tk)
+---------------------------------
+  * libclamav/vba_extract.c: fix compilation error with --enable-debug (NJH)
+
+Wed Dec 12 23:37:18 CET 2007 (tk)
+---------------------------------
+  * libclamav/others.c,configure.in: bump f-level and revision
+
+Wed Dec 12 23:34:36 CET 2007 (tk)
+---------------------------------
+  * docs: update
+
+Wed Dec 12 23:17:02 CET 2007 (tk)
+---------------------------------
+  * libclamav/matcher-ac.h: add missing prototype for cli_ac_setdepth() (bb#711)
+
+Wed Dec 12 21:59:00 CET 2007 (tk)
+---------------------------------
+  * libclamunrar, libclamunrar_iface: re-include RAR code
+
+Tue Dec 11 20:20:36 CET 2007 (tk)
+---------------------------------
+  * freshclam/manager.c: eliminate misleading error message when downloading
+			 to empty directory
+
+Mon Dec 10 15:54:20 CET 2007 (tk)
+---------------------------------
+  * libclamav/nsis/bzlib_private.h: fix bzlib bug (aCaB)
+
+Mon Dec 10 15:50:22 CET 2007 (tk)
+---------------------------------
+  * libclamav: eliminate some warning msgs
+
+Sun Dec  9 11:43:03 EET 2007 (edwin)
+------------------------------------
+  * shared/misc.c: pass mode to open with O_CREAT. 
+  Avoids build failure with -D_FORTIFY_SOURCE=2 on gcc4.3 with glibc 2.7.
+
+Fri Dec  7 08:56:02 GMT 2007 (trog)
+-----------------------------------
+  * libclamav/scanners.c: fixup return value.
+
+Thu Dec  6 15:44:01 CET 2007 (edwin)
+------------------------------------
+  * libclamav/regex_list.c: avoid circular list construction, when different
+			    versions of same .wdb is loaded twice. (BB #718)
+
+Thu Dec  6 15:41:04 CET 2007 (trog)
+-----------------------------------
+  * libclamav/unarj.c: minor code cleanup
+
+Thu Dec  6 15:39:11 CET 2007 (tk)
+---------------------------------
+  * libclamav/matcher-ac.c: fix handling of bfs_last (bb#713)
+
+Thu Dec  6 15:29:00 CET 2007 (tk)
+---------------------------------
+  * libclamav/others.c: bump f-level
+
+Thu Dec  6 15:22:27 CET 2007 (tk)
+---------------------------------
+  * libclamav/pe.c: fix possible integer overflow in MEW related code
+		    Reported by iDefense [IDEF2842]
+
+Thu Dec  6 15:19:53 CET 2007 (tk)
+---------------------------------
+  * libclamav/sis.c: fix error path descriptor leak (bb#704)
+
+Thu Dec  6 15:15:45 CET 2007 (tk)
+---------------------------------
+  * libclamav/mspack.c: fix off-by-one error in LZX_READ_HUFFSYM() (bb#663)
+
+Thu Dec  6 15:11:25 CET 2007 (tk)
+---------------------------------
+  * libclamav/mbox.c: some attachments were not being scanned (NJH, bb#660)
+
+Thu Dec  6 15:08:01 CET 2007 (tk)
+---------------------------------
+  * libclamav/htmlnorm.c: properly truncate long URLs (Edwin, bb#645)
+
+Thu Dec  6 15:03:16 CET 2007 (tk)
+---------------------------------
+  * libclamunrar: temporarily remove the RAR code
+
+Mon Nov 12 17:47:21 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Removed more unused code
+
+Mon Nov 12 01:09:13 CET 2007 (acab)
+-----------------------------------
+  * libclamav/spin.c: Minor improvements
+
+Thu Nov  8 14:29:00 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Removed more unused code
+
+Thu Nov  8 15:18:39 CET 2007 (tk)
+---------------------------------
+  * libclamav: add cli_ac_setdepth()
+  * clamscan: --dev-ac-depth
+  * clamd: DevACOnly, DevACDepth
+
+Wed Nov  7 20:37:27 GMT 2007 (njh)
+----------------------------------
+  * clamav-milter:	Added signal handling: SIGUSR2 to reload database
+				(when not external mode); SIGHUP to reopen
+				the logfile (to aid logrotate)
+
+Wed Nov  7 13:06:54 GMT 2007 (njh)
+----------------------------------
+  * libclamav/blob.c:	VBS.Redlof-A was not being detected under Windows
+
+Tue Nov  6 17:49:03 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Added sanity check to get_unicode_name(),
+					needed for W97M.Advice
+
+Tue Nov  6 17:17:56 CET 2007 (tk)
+---------------------------------
+  * libclamav/matcher-bm.c: minor code cleanup; load balance bm_suffix
+
+Tue Nov  6 16:13:08 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Removed more unused code
+
+Mon Nov  5 17:16:18 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	More tidy up
+
+Sat Nov  3 14:28:17 CET 2007 (edwin)
+  * libclamav/autoit.c: fix endianess checks for arm - thanks edwin
+
+Sat Nov  3 00:25:52 EET 2007 (edwin)
+------------------------------------
+  * libclamav/ole2_extract.c: make endian conversion macros work when operand
+  is negative number.
+
+Fri Nov  2 00:16:27 CET 2007 (acab)
+  * libclamav/autoit: final
+
+Thu Nov  1 17:42:12 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	More tidy ups. Fixed memory leak on error
+			return
+
+Thu Nov  1 16:14:50 CET 2007 (acab)
+  * libclamav/autoit: add support for type10(int64) and some misc fixes
+
+Wed Oct 31 17:45:45 GMT 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Tidy up and removed some unused code
+
+Wed Oct 31 16:08:39 CET 2007 (acab)
+-----------------------------------
+  * libclamav/autoit: misc fixes
+
+Tue Oct 30 22:35:47 CET 2007 (acab)
+-----------------------------------
+  * libclamav/autoit: misc fixes - big thanks to Edwin
+
+Tue Oct 30 19:30:54 CET 2007 (tk)
+---------------------------------
+  * libclamav: add dconf support for autoit
+
+Tue Oct 30 19:01:41 CET 2007 (acab)
+-----------------------------------
+  * libclamav: Add preliminary autoit unpacking support
+
+Tue Oct 30 16:35:41 GMT 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Now honours --max-files
+
+Tue Oct 30 15:40:49 GMT 2007 (njh)
+----------------------------------
+  * libclamav/pdf.c:	Bug 698
+
+Mon Oct 29 20:27:36 EET 2007 (edwin)
+------------------------------------
+  * libclamav/phishcheck.c: better handling for \n
+
+Fri Oct 26 19:58:02 CEST 2007 (tk)
+----------------------------------
+  * add COPYING.unrar; TODO: add GPL exception for libclamunrar
+
+Fri Oct 26 19:51:52 CEST 2007 (tk)
+----------------------------------
+  * libclamav, configure: by default don't build and link with libclamunrar;
+			  use --enable-unrar to build with RAR support
+
+Fri Oct 26 17:47:22 CEST 2007 (tk)
+----------------------------------
+  * libclamunrar/Makefile: remove
+
+Fri Oct 26 16:36:12 BST 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Further cleanups
+
+Wed Oct 24 09:08:12 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Improved SPF checking for phish false positives
+			Improved chroot failure diagnostics
+			Added option to report phish false positives
+
+Tue Oct 23 12:05:05 BST 2007 (trog)
+-----------------------------------
+  * libclamunrar: move unrar to a separate library, under an unrar license.
+
+  * libclamav/unarj: further bounds checking
+
+Mon Oct 22 20:39:10 BST 2007 (njh)
+----------------------------------
+  * libclamav/vba_extract.c:	Fixed warnings, removed double close() and
+			some code tidies
+
+Thu Oct 18 20:42:11 EDT 2007 (tk)
+---------------------------------
+  * libclamav/dsig.c: fix integer wrap introduced in r3305 (bb#688)
+
+Thu Oct 18 14:54:20 EDT 2007 (tk)
+---------------------------------
+  * libclamav: move RSASSA-PSS code to shared/cdiff.c
+
+Wed Oct 17 11:40:05 BST 2007 (trog)
+-----------------------------------
+  * libclamav/unrar: remove RARv3 support.
+
+Tue Oct  9 16:53:48 CEST 2007 (tk)
+----------------------------------
+  * 0.92rc2 (released with JS and PST code removed)
+
+Tue Oct  9 16:28:56 CEST 2007 (tk)
+----------------------------------
+  * libclamav/dconf.c: re-enable ARJ in standard builds
+  * libclamav/others.c: bump f-level
+
+Tue Oct  9 11:36:44 BST 2007 (trog)
+-----------------------------------
+  * libclamav/unarj.c: Improve bounds checking.
+
+Tue Oct  9 08:47:44 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Fix bug introducted in revision 3277.
+
+Mon Oct  8 23:20:23 CEST 2007 (tk)
+----------------------------------
+  * 0.92rc1 (released with JS and PST code removed)
+
+Mon Oct  8 22:32:33 CEST 2007 (tk)
+----------------------------------
+  * libclamav/dconf.c: make ARJ experimental
+
+Mon Oct  8 20:36:58 CEST 2007 (tk)
+----------------------------------
+  * libclamav/others.c: bump f-level
+
+Mon Oct  8 17:12:52 CEST 2007 (tk)
+----------------------------------
+  * clamscan, clamdscan: check both st_dev and st_ino in move_infected()
+
+Mon Oct  8 17:02:30 CEST 2007 (tk)
+----------------------------------
+  * clamconf: print version details for engine and databases
+
+Mon Oct  8 15:44:59 CEST 2007 (tk)
+----------------------------------
+  * clamdscan, freshclam: fix some warnings
+
+Mon Oct  8 14:09:05 CEST 2007 (tk)
+----------------------------------
+  * freshclam/freshclam.c: add support for LogFileMaxSize and LogTime
+
+Sat Oct  6 12:36:13 CEST 2007 (acab)
+------------------------------------
+  * libclamav/nsis/nulsft.c: check return value of gentemp()
+
+Sat Oct  6 10:47:26 EEST 2007 (edwin)
+------------------------------------
+  * libclamav/phish*.[ch], regex_list.c, rtf.c: fix some warnings
+
+Sat Oct  6 01:10:40 CEST 2007 (tk)
+----------------------------------
+  * clamd/server-th.c: shutdown conn->sd when exiting scanner_thread() (bb#674)
+
+Sat Oct  6 00:50:05 CEST 2007 (tk)
+----------------------------------
+  * clamscan, clamd: better error checking/reporting (bb#657)
+
+Sat Oct  6 00:25:17 CEST 2007 (tk)
+----------------------------------
+  * clamd: enable FixStaleSocket by default
+
+Fri Oct  5 22:56:13 CEST 2007 (tk)
+----------------------------------
+  * sigtool/sigtool.c: print filename when using --info (bb#513)
+
+Fri Oct  5 22:50:37 CEST 2007 (tk)
+----------------------------------
+  * libclamav/pe.c: fix bb#495
+
+Fri Oct  5 14:30:38 CEST 2007 (tk)
+----------------------------------
+  * libclamav/readdb.c: code cleanup
+
+Fri Oct  5 11:02:07 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Corrected comment on the meaning of NTRIES
+
+Thu Oct  4 15:16:45 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: fix range calculation for multipart sigs with string
+			    alternatives
+
+Thu Oct  4 13:29:02 CEST 2007 (tk)
+----------------------------------
+  * freshclam/manager.c: downgrade "file not found on remote server" to warning
+
+Wed Oct  3 18:26:12 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/clamav.h: make CL_SCAN_STDOPT consistent with clamscan/clamd's
+  defaults.
+
+Wed Oct  3 15:10:28 EEST 2007 (edwin)
+------------------------------------
+  * libclamav/regex_list.[ch]: avoid some false positives when there are
+  spaces in URL.
+
+Wed Oct  3 01:48:26 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.[ch]: - add basic support for string alternatives
+			       - optimise bfs_enqueue/dequeue
+
+Tue Oct  2 22:53:15 EEST 2007 (edwin)
+------------------------------------
+  * libclamav/phishcheck.c: remove incorrect free_if_needed call
+
+Tue Oct  2 21:29:03 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/phishcheck.[ch]: avoid false positives with outbind:// URLs
+
+Mon Oct  1 14:05:35 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	More informative message when SPF record is passed
+
+Mon Oct  1 10:52:13 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Increase the chance of a stack trace being printed in
+				the event of trouble.
+			Various compiler warnings removed.
+
+Sun Sep 30 23:18:11 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/phishcheck.c, regex_list.c: more improvements to the algorithm.
+
+Fri Sep 28 21:02:43 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/regex_list.c: fix off by one substring logic.
+
+Fri Sep 28 20:17:41 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/phishcheck.c: fix NULL deref. bug, use of uninitialized
+  variable, and memory leak from yesterday's commit. (r3255)
+  * Changelog: add log message for r3254 from svn log, forgot to update
+  Changelog yesterday (oops)
+  * libclamav/phish*.[ch], regex_list.[ch]: more improvements to the url extraction algorithm (more to come later).
+					    Reduces false negatives. False
+					    positives ratio should be same.
+					    (r3254)
+
+Wed Sep 26 23:36:06 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: minor optimisation
+
+Tue Sep 25 10:43:35 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Only use strcasestr on Linux (for now, until it
+				can be built into configure)
+
+Sun Sep 23 13:49:12 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	MailFollowURLS: Prefer .exes for download, catches
+				Trojan.IRC-Script-33
+
+Sat Sep 22 18:14:49 EEST 2007 (edwin)
+-------------------------------------
+  * libclamav/cvd.c: seek on the underlying file descriptor and not FILE*.
+       Avoids problems on OpenBSD with cvd unpacking.
+
+Fri Sep 21 18:40:56 EEST 2007 (edwin)
+-------------------------------------
+  * configure, configure.in: add comment on origin of testcases.
+
+Fri Sep 21 00:33:37 CEST 2007 (acab)
+------------------------------------
+  * libclamav/pe.c: Avoid variadic macroes make vc6 happy. Big thx to
+			Gianluigi Tiesi for reporting and testing.
+
+Fri Sep 21 00:18:08 EEST 2007(edwin)
+------------------------------------
+ * clamscan/others.c: use cli_regcomp(), instead of regcomp().
+
+Fri Sep 21 00:13:32 EEST 2007(edwin)
+------------------------------------
+  * configure, configure.in: add check to detect certain compiler bugs that
+  cause incorrect code generation for CLI_ISCONTAINED.
+
+Thu Sep 20 23:19:20 EEST 2007(edwin)
+------------------------------------
+  * libclamav/phishcheck.c: improve url extraction algorithm.
+
+Thu Sep 20 11:21:14 BST 2007 (njh)
+----------------------------------
+  * clamav-milter/clamav-milter.c:	Plug leak on SPF error handling
+
+Tue Sep 18 19:50:33 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: properly handle alternatives in the new approach
+
+Tue Sep 18 13:45:34 BST 2007 (njh)
+----------------------------------
+ * libclamav/regex/regcomp.c:	Fix compilation error on systems without
+		_POSIX2_RE_DUP_MAX (under advice from Edwin)
+
+Mon Sep 17 21:06:59 EEST 2007(edwin)
+------------------------------------
+ * libclamav/regex/: add regcomp(), regexec() impl. from OpenBSD's libc.
+	This code is licensed under the 3-clause BSD.
+	This will be used instead of system provided regexec()/regcomp() to
+	have consistent behaviour across platforms.
+
+Mon Sep 17 17:12:27 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Bugs 665/667
+
+Mon Sep 17 14:36:27 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Bug 664
+
+Sat Sep 15 17:39:06 CEST 2007 (acab)
+------------------------------------
+  * libclamav/pe.c: fix nasty typo - thanks edwin!
+
+Sat Sep 15 09:13:14 BST 2007 (njh)
+----------------------------------
+  * libclamav:			More cleanups
+
+Fri Sep 14 20:16:20 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: minor optimisation
+
+Fri Sep 14 10:03:22 BST 2007 (njh)
+----------------------------------
+  * libclamav/message.c:	--enable-debug: fix assertion (thanks to Edvin)
+
+Thu Sep 13 19:23:31 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.[ch]: various speed optimisations:
+				- optimise node usage
+				- try hard to not overload node 0x00.0x00[0x00]
+				- optimise memory usage
+
+Thu Sep 13 17:37:31 BST 2007 (njh)
+----------------------------------
+  * libclamav:	More optimisations
+
+Thu Sep 13 14:01:08 CEST 2007 (acab)
+  * libclamav/pe.c: One more typo fixed
+
+Thu Sep 13 12:37:26 CEST 2007 (acab)
+------------------------------------
+  * libclamav: Shut up a few warnings and fix some typoes
+
+Wed Sep 12 13:36:37 BST 2007 (njh)
+----------------------------------
+  * libclamav:	More optimisations
+
+Tue Sep 11 10:33:21 BST 2007 (njh)
+----------------------------------
+  * libclamav:	Various code clean ups and optimisations
+
+Sun Sep  9 13:42:26 CEST 2007 (acab)
+  * libclamav/nsis: tidy
+
+Sat Sep  8 14:08:54 CEST 2007 (acab)
+------------------------------------
+  * libclamav/pe.c: wrap in paretheses - bb#656, part 1/2
+
+Fri Sep  7 15:28:54 CEST 2007 (tk)
+----------------------------------
+  * libclamav, clamd, clamscan: move hardware acceleration code to
+				contrib/hwaccel/hwaccel.patch
+
+Thu Sep  6 17:18:01 BST 2007 (njh)
+----------------------------------
+  * libclamav/pdf.c:	Ensure consistency with other archivers when attempted
+				DoS attacks are caught
+
+Thu Sep  6 12:30:10 BST 2007 (njh)
+----------------------------------
+  * libclamav, clamav-milter:	Various cleanups
+  * libclamav/blob.c:	Handle cli_readn() difficulties when called by
+				cli_check_mydoom_log()
+
+Tue Sep  4 16:38:18 BST 2007 (njh)
+----------------------------------
+  * libclamav/pdf.c:	Don't clear any stored virus name
+  * libclamav/[mbox|message.c]:	Code clean up
+  * clamav-milter/clamav-milter.c:	Blacklist crackers
+
+Tue Sep  4 11:48:08 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Catch phishes with NULL names
+
+Tue Sep  4 09:52:10 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	Partial dir: plug leak on error and code tidy
+
+Tue Sep  4 01:31:23 CEST 2007 (acab)
+------------------------------------
+  * libclamav:pe.c  General "tidy" and some algo hacks. Old and inefficient
+			sue cryptor replaced with a signature.
+
+Sun Sep  2 12:41:46 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Fix compilation error from fix to bug 577
+
+Sun Sep  2 13:28:01 CEST 2007 (tk)
+----------------------------------
+  * clamd: fix compilation error
+
+Fri Aug 31 21:08:22 CEST 2007 (tk)
+----------------------------------
+  * contrib: fix bb#644 (Contrib files have wrong shebang line)
+	     Thanks to Steve Gran <steve*lobefin.net>
+
+Fri Aug 31 21:02:46 CEST 2007 (tk)
+----------------------------------
+  * libclamav: various cleanups; fix bb#577 (move cli_* out of clamav.h)
+
+Fri Aug 31 09:02:23 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Bug 642
+
+Thu Aug 30 09:05:45 BST 2007 (njh)
+----------------------------------
+  * libclamav/blob.c:	Yesterday's new code broke --leave-temps
+
+Wed Aug 29 18:27:55 BST 2007 (njh)
+----------------------------------
+  * libclamav:	mbox optimisation to reduce the lifetime of temporary files
+
+Tue Aug 28 16:08:13 BST 2007 (njh)
+----------------------------------
+  * libclamav/mbox.c:	MailFollowURLS: improved debugging
+
+Mon Aug 27 23:10:26 BST 2007 (njh)
+----------------------------------
+  * libclamav/blob.[ch]:	Bug 637
+  * libclamav/mbox.c:		Minor code tidy
+
+Tue Aug 21 21:43:56 CEST 2007 (tk)
+----------------------------------
+  * libclamav/others.c: bump f-level
+
+Tue Aug 21 21:42:14 CEST 2007 (tk)
+----------------------------------
+  * libclamav/rtf.c: fix possible NULL dereference (bb#611)
+
+Tue Aug 21 21:39:06 CEST 2007 (tk)
+----------------------------------
+  * libclamav/ole2_extract.c: properly initialise hdr.max_block_no (bb#603)
+
+Tue Aug 21 21:35:10 CEST 2007 (tk)
+----------------------------------
+  * libclamav/htmlnorm.c: fix possible NULL dereference (bb#582),
+			  thanks to Stefanos Stamatis
+
+Tue Aug 21 21:32:30 CEST 2007 (tk)
+----------------------------------
+  * libclamav/htmlnorm.c: fix possible NULL dereference (bb#582)
+
+Tue Aug 21 13:22:11 BST 2007 (njh)
+----------------------------------
+  * Further tidy of bugs 614 and 618
+
+Mon Aug 20 23:31:16 CEST 2007 (tk)
+----------------------------------
+  * libclamav/filetypes.c: some embedded PEs were not being detected
+
+Sun Aug 19 10:35:38 BST 2007 (njh)
+----------------------------------
+ * clamav-milter:	Fix compilation error on NetBSD2.0
+
+Sat Aug 18 16:12:51 BST 2007 (njh)
+----------------------------------
+ * clamav-milter:	Black-hole-mode no longer needs to be run as root
+
+Sat Aug 18 13:25:52 BST 2007 (njh)
+----------------------------------
+  * libclamav/pdf.c:	Bug 618, --block-max not always honoured
+
+Tue Aug 14 23:23:00 EEST 2007 (edwin)
+----------------------------------
+  * libclamav/phishcheck.c, regex_list.c, phish_whitelist.c: make debug output
+  look better (patch from Sven)
+
+Tue Aug 14 23:11:00 EEST 2007 (edwin)
+----------------------------------
+  * libclamav/phishcheck.c: Don't report phishing on broken urls containing >
+  in the hostname. (bb #619)
+
+Mon Aug 13 22:27:13 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Tidy up bug fix 614
+
+Mon Aug 13 19:09:43 CEST 2007 (tk)
+----------------------------------
+  * libclamav, sigtool: add support for PUA databases (.hdu, .mdu, .ndu),
+			requested by Christoph
+  * clamscan: add --detect-pua
+  * clamd, clamd.conf: add DetectPUA
+
+Sat Aug 11 15:15:55 CEST 2007 (tk)
+----------------------------------
+  * freshclam/mirman.c: properly handle mirror access times (bb#606, only
+			outdated installations - three versions behind the
+			latest one were affected by this problem)
+			Reported by David F. Skoll <dfs*roaringpenguin.com>
+
+Fri Aug 10 11:15:25 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Bug 614
+
+Thu Aug  9 11:26:02 BST 2007 (njh)
+----------------------------------
+  * libclamav/pdf.c:	Bug 608
+  * clamav-milter:	SPF checking no longer experimental
+
+Wed Aug  8 19:26:30 CEST 2007 (edwin)
+----------------------------------
+  * libclamav/phishcheck.c: workaround Solaris problem with regexec() [bb
+  #598]
+
+Mon Aug  6 13:16:39 CEST 2007 (tk)
+----------------------------------
+  * libclamav/matcher-ac.c: fix matching of patterns with prefixes and some
+			    other issues spotted by Glen <daineng*gmail.com>
+
+Fri Aug  3 09:21:12 BST 2007 (njh)
+----------------------------------
+  * clamav-milter/clamav-milter.c:	Better use of res_init()
+
+Thu Jul 19 12:13:33 BST 2007 (njh)
+----------------------------------
+  * clamav-milter/clamav-milter.c:	HP-UX doesn't have EX_CONFIG, reported
+				by clam * ministry.se
+
+Tue Jul 17 11:41:31 BST 2007 (trog)
+-----------------------------------
+  * libclamav/unarj.c: fix include
+
+Tue Jul 17 11:09:50 CEST 2007 (tk)
+----------------------------------
+  * libclamav/others.c: bump f-level
+
+Tue Jul 17 11:08:37 CEST 2007 (tk)
+----------------------------------
+  * libclamav/unrar/unrarvm.c: fix another occurrence of bb#555, thanks to
+			       Ludwig Nussel <ludwig.nussel*suse.de>
+
+Mon Jul 16 21:33:48 CEST 2007 (tk)
+----------------------------------
+  * sigtool/sigtool.c: increase MAX_DEL_LOOKAHEAD, requested by Sven
+
+Mon Jul 16 17:04:50 CEST 2007 (tk)
+----------------------------------
+  * libclamav/scanner.c: don't search for embedded PEs in zip files larger
+			 than 1 MB (bb#573)
+
+Mon Jul 16 10:08:26 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Fix memory leak when load balancing
+
+Mon Jul 16 07:43:19 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: Fix INCLUDE loop handling bug
+
+Sun Jul 15 22:12:45 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Chroot handling no longer marked as experimental
+			Experimental mode: handle loops in INCLUDE: SPF
+				statements
+
+Sun Jul 15 13:27:46 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: Reduce the number of SPF DNS queries
+
+Sun Jul 15 10:26:49 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: Handle A: MX: INCLUDE: in SPF
+
+Sun Jul 15 09:25:07 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: Remove simple string search in SPF
+
+Sat Jul 14 23:50:56 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: Handle A and MX in SPF records
+
+Sat Jul 14 22:07:16 BST 2007 (njh)
+----------------------------------
+  * clamav-milter:	Experimental mode: basic SPF parser to reduce
+				phish false-positives
+			Possible fix for 487
+			Some small tidies
+
+Sat Jul 14 14:17:01 CEST 2007 (acab)
+------------------------------------
+  * libclamav/nsis: fix macro collision on AIX - bb#570
+
+Thu Jul 12 23:17:00 CEST 2007 (edwin)
+-----------------------------------
+  * libclamav/phishcheck.c: fix (null) FOUND
+
+Thu Jul 12 11:41:15 BST 2007 (trog)
+-----------------------------------
+  * libclamav/unarj.c: fix include
+
+Thu Jul 12 01:41:56 CEST 2007 (acab)
+------------------------------------
+  * libclamav: rename x86 macroes due to collisions on HPUX
+		reported by njh
+
+Wed Jul 11 10:20:53 BST 2007 (njh)
+----------------------------------
+  * libclamav:	Fix warnings on HP-UX
+
+Wed Jul 11 10:12:36 BST 2007 (trog)
+-----------------------------------
+  * libclamav: add ARJ and SFX-ARJ support
 
 Wed Jul 11 00:56:02 CEST 2007 (tk)
 ----------------------------------
@@ -89,7 +822,7 @@ Tue Jul 10 22:02:15 CEST 2007 (tk)
 Sun Jul  8 17:25:04 CEST 2007 (acab)
 ------------------------------------
   * misc: Implement compiler indepenedent sign-extended signed right shift
-  	  when needed - reported by Michal Spadlinski <gim913 * gmail.com>
+	  when needed - reported by Michal Spadlinski <gim913 * gmail.com>
 
 Sat Jul 07 10:52:00 CEST 2007 (edwin)
 ----------------------------------

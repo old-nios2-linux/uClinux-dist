@@ -935,7 +935,8 @@ static int chm_decompress_stream(int fd, const char *dirname, itsf_header_t *its
 			continue;
 		}
 		if (chm_copy_file_data(tmpfd, ofd, entry->length) != entry->length) {
-			cli_dbgmsg("failed to copy %lu bytes\n", entry->length);
+			cli_dbgmsg("failed to copy %lu bytes\n", (unsigned long int) entry->length);
+
 		}
 		
 		close(ofd);		

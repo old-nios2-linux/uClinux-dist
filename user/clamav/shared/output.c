@@ -50,6 +50,7 @@
 #endif
 
 #include "output.h"
+#include "libclamav/others.h"
 
 #ifdef CL_NOTHREADS
 #undef CL_THREAD_SAFE
@@ -79,7 +80,7 @@ pthread_mutex_t logg_mutex = PTHREAD_MUTEX_INITIALIZER;
 FILE *logg_fd = NULL;
 
 short int logg_verbose = 0, logg_lock = 1, logg_time = 0, logg_foreground = 1;
-int logg_size = 0;
+unsigned int logg_size = 0;
 const char *logg_file = NULL;
 #if defined(USE_SYSLOG) && !defined(C_AIX)
 short logg_syslog;
@@ -129,20 +130,20 @@ void logg_close(void) {
 
 int logg(const char *str, ...)
 {
-	va_list args, argscpy, argsout;
+	va_list args;
 #ifdef F_WRLCK
 	struct flock fl;
 #endif
-	char *pt, *timestr, vbuff[1025];
+	char vbuff[1025];
 	time_t currtime;
 	struct stat sb;
 	mode_t old_umask;
 
 
     va_start(args, str);
-    /* va_copy is less portable so we just use va_start once more */
-    va_start(argscpy, str);
-    va_start(argsout, str);
+    vsnprintf(vbuff, sizeof(vbuff), str, args);
+    va_end(args);
+    vbuff[1024] = 0;
 
 #ifdef CL_THREAD_SAFE
     pthread_mutex_lock(&logg_mutex);
@@ -175,9 +176,9 @@ int logg(const char *str, ...)
 
 	if(logg_size) {
 	    if(stat(logg_file, &sb) != -1) {
-		if(sb.st_size > logg_size) {
+		if((unsigned int) sb.st_size > logg_size) {
 		    logg_file = NULL;
-		    fprintf(logg_fd, "Log size = %d, maximal = %d\n", (int) sb.st_size, logg_size);
+		    fprintf(logg_fd, "Log size = %u, max = %u\n", (unsigned int) sb.st_size, logg_size);
 		    fprintf(logg_fd, "LOGGING DISABLED (Maximal log file size exceeded).\n");
 		    fclose(logg_fd);
 		    logg_fd = NULL;
@@ -189,29 +190,26 @@ int logg(const char *str, ...)
             /* Need to avoid logging time for verbose messages when logverbose
                is not set or we get a bunch of timestamps in the log without
                newlines... */
-	    if(logg_time && ((*str != '*') || logg_verbose)) {
+	    if(logg_time && ((*vbuff != '*') || logg_verbose)) {
+	        char timestr[32];
 		time(&currtime);
-		pt = ctime(&currtime);
-		timestr = calloc(strlen(pt), 1);
-		strncpy(timestr, pt, strlen(pt) - 1);
+		cli_ctime(&currtime, timestr, sizeof(timestr));
+		/* cut trailing \n */
+		timestr[strlen(timestr)-1] = '\0';
 		fprintf(logg_fd, "%s -> ", timestr);
-		free(timestr);
 	    }
 
-	    _(str);
-	    if(*str == '!') {
-		fprintf(logg_fd, "ERROR: ");
-		vfprintf(logg_fd, str + 1, args);
-	    } else if(*str == '^') {
-		fprintf(logg_fd, "WARNING: ");
-		vfprintf(logg_fd, str + 1, args);
-	    } else if(*str == '*') {
+	    if(*vbuff == '!') {
+		fprintf(logg_fd, "ERROR: %s", vbuff + 1);
+	    } else if(*vbuff == '^') {
+		fprintf(logg_fd, "WARNING: %s", vbuff + 1);
+	    } else if(*vbuff == '*') {
 		if(logg_verbose)
-		    vfprintf(logg_fd, str + 1, args);
-	    } else if(*str == '#') {
-		vfprintf(logg_fd, str + 1, args);
-	    } else vfprintf(logg_fd, str, args);
-
+		    fprintf(logg_fd, "%s", vbuff + 1);
+	    } else if(*vbuff == '#' || *vbuff == '~') {
+		fprintf(logg_fd, "%s", vbuff + 1);
+	    } else
+		fprintf(logg_fd, "%s", vbuff);
 
 	    fflush(logg_fd);
 	}
@@ -219,10 +217,6 @@ int logg(const char *str, ...)
 
 #if defined(USE_SYSLOG) && !defined(C_AIX)
     if(logg_syslog) {
-        _(str);
-	vsnprintf(vbuff, 1024, str, argscpy);
-	vbuff[1024] = 0;
-
 	if(vbuff[0] == '!') {
 	    syslog(LOG_ERR, "%s", vbuff + 1);
 	} else if(vbuff[0] == '^') {
@@ -231,7 +225,7 @@ int logg(const char *str, ...)
 	    if(logg_verbose) {
 		syslog(LOG_DEBUG, "%s", vbuff + 1);
 	    }
-	} else if(vbuff[0] == '#') {
+	} else if(vbuff[0] == '#' || vbuff[0] == '~') {
 	    syslog(LOG_INFO, "%s", vbuff + 1);
 	} else syslog(LOG_INFO, "%s", vbuff);
 
@@ -239,9 +233,6 @@ int logg(const char *str, ...)
 #endif
 
     if(logg_foreground) {
-	_(str);
-        vsnprintf(vbuff, 1024, str, argsout);
-	vbuff[1024] = 0;
 	if(vbuff[0] != '#')
 	    mprintf("%s", vbuff);
     }
@@ -250,9 +241,6 @@ int logg(const char *str, ...)
     pthread_mutex_unlock(&logg_mutex);
 #endif
 
-    va_end(args);
-    va_end(argscpy);
-    va_end(argsout);
     return 0;
 }
 
@@ -297,12 +285,14 @@ void mprintf(const char *str, ...)
 	fprintf(fd, "ERROR: %s", &buff[1]);
     } else if(!mprintf_quiet) {
 	if(buff[0] == '^') {
-           if(!mprintf_stdout)
-               fd = stderr;
+	    if(!mprintf_stdout)
+		fd = stderr;
 	    fprintf(fd, "WARNING: %s", &buff[1]);
 	} else if(buff[0] == '*') {
 	    if(mprintf_verbose)
 		fprintf(fd, "%s", &buff[1]);
+	} else if(buff[0] == '~') {
+	    fprintf(fd, "%s", &buff[1]);
 	} else fprintf(fd, "%s", buff);
     }
 

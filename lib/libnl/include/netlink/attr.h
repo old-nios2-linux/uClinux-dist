@@ -87,6 +87,7 @@ extern int		nla_total_size(int payload);
 extern int		nla_padlen(int payload);
 
 /* payload access */
+extern int		nla_type(const struct nlattr *);
 extern void *		nla_data(const struct nlattr *);
 extern int		nla_len(const struct nlattr *);
 

@@ -1,8 +1,9 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Jan 31 02:09:44 2008
+# Thu Apr 10 01:55:32 2008
 #
+CONFIG_DISTVERSION="4.0"
 
 #
 # Library Configuration
@@ -354,6 +355,8 @@ CONFIG_USER_INETD_INETD=y
 # CONFIG_USER_PLUG_PLUG is not set
 # CONFIG_USER_POP3PROXY_POP3PROXY is not set
 CONFIG_USER_PORTMAP_PORTMAP=y
+# CONFIG_USER_PORTMAP_PMAP_SET is not set
+# CONFIG_USER_PORTMAP_PMAP_DUMP is not set
 # CONFIG_USER_PPPD_PPPD_PPPD is not set
 # CONFIG_USER_PPTPD_PPTPCTRL is not set
 # CONFIG_USER_PPTPD_PPTPD is not set
@@ -1196,6 +1199,7 @@ CONFIG_USER_TINYLOGIN_GETTY=y
 # CONFIG_USER_GAMES_ADVENT4 is not set
 # CONFIG_USER_GAMES_DUNGEON is not set
 # CONFIG_USER_GAMES_RUBIK is not set
+# CONFIG_USER_GAMES_TAMA is not set
 
 #
 # Miscellaneous Configuration

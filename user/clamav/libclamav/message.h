@@ -20,6 +20,7 @@
 #ifndef	_MESSAGE_H
 #define	_MESSAGE_H
 
+/* The contents could change, ONLY access in message.c */
 typedef struct message {
 	mime_type	mimeType;
 	encoding_type	*encodingTypes;
@@ -58,13 +59,15 @@ const	char	*messageGetDispositionType(const message *m);
 void	messageAddArgument(message *m, const char *arg);
 void	messageAddArguments(message *m, const char *arg);
 char	*messageFindArgument(const message *m, const char *variable);
+char	*messageGetFilename(const message *m);
+int	messageHasFilename(const message *m);
 void	messageSetEncoding(message *m, const char *enctype);
 encoding_type	messageGetEncoding(const message *m);
 int	messageAddLine(message *m, line_t *line);
 int	messageAddStr(message *m, const char *data);
 int	messageAddStrAtTop(message *m, const char *data);
+int	messageMoveText(message *m, text *t, message *old_message);
 text	*messageGetBody(message *m);
-void	messageClean(message *m);
 unsigned	char	*base64Flush(message *m, unsigned char *buf);
 fileblob	*messageToFileblob(message *m, const char *dir, int destroy);
 blob	*messageToBlob(message *m, int destroy);

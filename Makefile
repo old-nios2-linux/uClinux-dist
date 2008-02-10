@@ -18,7 +18,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 ifeq (.config,$(wildcard .config))
 include .config
 
-all: ucfront cksum subdirs romfs image
+all: tools subdirs romfs image
 else
 all: config_error
 endif
@@ -82,6 +82,10 @@ export VERSIONPKG VERSIONSTR ROMFSINST PATH IMAGEDIR RELDIR RELFILES TFTPDIR
 export BUILD_START_STRING
 export HOST_NCPU
 
+.PHONY: tools
+tools: ucfront cksum
+	chmod +x tools/romfs-inst.sh tools/modules-alias.sh
+
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
 	$(MAKE) -C tools/ucfront
@@ -109,41 +113,34 @@ Kconfig:
 
 include config/Makefile.conf
 
-.PHONY: config
-config: Kconfig conf
-	$(SCRIPTSDIR)/conf Kconfig
-	@chmod u+x config/setconfig
-	@config/setconfig defaults
-	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
-		$(MAKE) linux_config; \
-	 fi
-	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
-		$(MAKE) modules_config; \
-	 fi
-	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
-		$(MAKE) config_config; \
-	 fi
-	@config/setconfig final
-
-.PHONY: menuconfig
-menuconfig: Kconfig conf mconf
-	$(SCRIPTSDIR)/mconf Kconfig
+SCRIPTS_BINARY_config     = conf
+SCRIPTS_BINARY_menuconfig = mconf
+SCRIPTS_BINARY_qconfig    = qconf
+SCRIPTS_BINARY_gconfig    = gconf
+SCRIPTS_BINARY_xconfig    = gconf
+.PHONY: config menuconfig qconfig gconfig xconfig
+menuconfig: mconf
+qconfig: qconf
+gconfig: gconf
+xconfig: $(SCRIPTS_BINARY_xconfig)
+config menuconfig qconfig gconfig xconfig: Kconfig conf
+	$(SCRIPTSDIR)/$(SCRIPTS_BINARY_$@) Kconfig
 	@if [ ! -f .config ]; then \
 		echo; \
-		echo "You have not saved your config, please re-run make config"; \
+		echo "You have not saved your config, please re-run 'make $@'"; \
 		echo; \
 		exit 1; \
 	 fi
 	@chmod u+x config/setconfig
 	@config/setconfig defaults
 	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
-		$(MAKE) linux_menuconfig; \
+		$(MAKE) linux_$@; \
 	 fi
 	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
-		$(MAKE) modules_menuconfig; \
+		$(MAKE) modules_$@; \
 	 fi
 	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
-		$(MAKE) config_menuconfig; \
+		$(MAKE) config_$@; \
 	 fi
 	@config/setconfig final
 
@@ -231,6 +228,9 @@ romfs.subdirs:
 romfs.post:
 	$(MAKEARCH) -C vendors romfs.post
 	-find $(ROMFSDIR)/. -name CVS | xargs -r rm -rf
+	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
+		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1; \
+	fi
 
 .PHONY: image
 image:

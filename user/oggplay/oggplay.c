@@ -27,7 +27,7 @@
  */
 
 /****************************************************************************/
-
+#define _BSD_SOURCE
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -65,6 +65,7 @@ static int	printtime;
 static int	onlytags;
 static int	crypto_keylen = 0;
 static char	*crypto_key = NULL;
+static int	buffer_size = 8192;
 
 
 /****************************************************************************/
@@ -112,6 +113,8 @@ static void lcdtitle(char **user_comments)
 	 */
 	if (user_comments != NULL && *user_comments != NULL) {
 		name = *user_comments;
+		if (strncasecmp(name, "title=", sizeof("title=")-1) == 0)
+			name += sizeof("title=")-1;
 		namelen = strlen(name);
 	} else {
 		name = strrchr(trk_filename, '/');
@@ -230,9 +233,10 @@ static void usage(int rc)
 {
 	printf("usage: oggplay [-hviqzRPZ] [-s <time>] "
 		"[-d <device>] [-w <filename>] [-c <key>]"
-		"[-l <line> [-t]] ogg-files...\n\n"
+		"[-l <line> [-t]] [-p <pause>]ogg-files...\n\n"
 		"\t\t-h            this help\n"
 		"\t\t-v            verbose stdout output\n"
+		"\t\t-b <size>     set the input file buffer size\n"
 		"\t\t-i            display file tags and exit\n"
 		"\t\t-q            quiet (don't print title)\n"
 		"\t\t-R            repeat tracks forever\n"
@@ -245,6 +249,7 @@ static void usage(int rc)
 		"\t\t-l <line>     display title on LCD line (0,1,2) (0 = no title)\n"
 		"\t\t-t <line>     display time on LCD line (1,2)\n"
 		"\t\t-c <key>      decrypt using key\n"
+		"\t\t-0 <bytes>    emit <bytes> zero bytes after playing a track\n"
 		);
 	exit(rc);
 }
@@ -302,7 +307,13 @@ static int play_one(const char *file) {
 			trk_filename, errno);
 		return 1;
 	}
-	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
+	setvbuf(trk_fd, NULL, _IOFBF, buffer_size);
+retry:	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
+		if (crypto_keylen > 0) {
+			crypto_keylen = 0;
+			rewind(trk_fd);
+			goto retry;
+		}
 		fclose(trk_fd);
 		fprintf(stderr, "ERROR: Unable to ov_open '%s', errno=%d\n",
 			trk_filename, errno);
@@ -357,6 +368,27 @@ static int play_one(const char *file) {
 	return 0;
 }
 
+static void paddy(int fd, int len) {
+	char buf[2000];
+	int n;
+
+	bzero(buf, sizeof(buf));
+
+	while (len > 0) {
+		n = sizeof(buf);
+		if (len < n)
+			n = len;
+		n = write(fd, buf, n);
+		if (n == 0)
+			break;
+		if (n == -1) {
+			if (errno != EINTR)
+				break;
+		} else
+			len -= n;
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	int		c, i, j, slptime;
@@ -364,6 +396,9 @@ int main(int argc, char *argv[])
  	int		argnr, startargnr, rand, shuffle;
 	char		*device, *argvtmp;
 	pid_t		pid;
+	int		zerobytes;
+
+	signal(SIGUSR1, SIG_IGN);
 
 	verbose = 0;
 	quiet = 0;
@@ -375,9 +410,15 @@ int main(int argc, char *argv[])
 	device = "/dev/dsp";
 	dsphw = 0;
 	onlytags = 0;
+	zerobytes = 0;
 
-	while ((c = getopt(argc, argv, "?himvqzt:RZPs:d:Dl:Vc:")) >= 0) {
+	while ((c = getopt(argc, argv, "?himvqzt:RZPs:d:Dl:Vc:b:0:")) >= 0) {
 		switch (c) {
+		case 'b':
+			buffer_size = atoi(optarg);
+			if (buffer_size < 1)
+				buffer_size = 1;
+			break;
 		case 'V':
 			printf("%s version 1.0\n", argv[0]);
 			return 0;
@@ -426,6 +467,11 @@ int main(int argc, char *argv[])
 				while (*p != '\0')
 					*p++ = '\0';
 			}
+			break;
+		case '0':
+			zerobytes = (atoi(optarg) + 1) & ~1;
+			if (zerobytes < 0)
+				zerobytes = 0;
 			break;
 		case 'h':
 		case '?':
@@ -517,10 +563,11 @@ nextfile:
 		goto nextall;
 	}
 
+	paddy(dspfd, zerobytes);
 	close(dspfd);
 	if (lcdfd >= 0)
 		close(lcdfd);
-	exit(0);
+	return 0;
 }
 
 /****************************************************************************/

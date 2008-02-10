@@ -216,7 +216,7 @@ static int dirscan(const char *dirname, const char **virname, unsigned long int 
 					if(scanret == CL_VIRUS) {
 
 					    mdprintf(odesc, "%s: %s FOUND\n", fname, *virname);
-					    logg("%s: %s FOUND\n", fname, *virname);
+					    logg("~%s: %s FOUND\n", fname, *virname);
 					    virusaction(fname, *virname, copt);
 					    if(type == TYPE_SCAN) {
 						closedir(dd);
@@ -227,7 +227,7 @@ static int dirscan(const char *dirname, const char **virname, unsigned long int 
 
 					} else if(scanret != CL_CLEAN) {
 					    mdprintf(odesc, "%s: %s ERROR\n", fname, cl_strerror(scanret));
-					    logg("%s: %s ERROR\n", fname, cl_strerror(scanret));
+					    logg("~%s: %s ERROR\n", fname, cl_strerror(scanret));
 					    if(scanret == CL_EMEM) {
 						closedir(dd);
 						free(fname);
@@ -235,7 +235,7 @@ static int dirscan(const char *dirname, const char **virname, unsigned long int 
 					    }
 
 					} else if(logok) {
-					    logg("%s: OK\n", fname);
+					    logg("~%s: OK\n", fname);
 					}
 					free(fname);
 				    }
@@ -277,13 +277,13 @@ static void multiscanfile(void *arg)
 
     if(ret == CL_VIRUS) {
 	mdprintf(tag->sd, "%s: %s FOUND\n", tag->fname, virname);
-	logg("%s: %s FOUND\n", tag->fname, virname);
+	logg("~%s: %s FOUND\n", tag->fname, virname);
 	virusaction(tag->fname, virname, tag->copt);
     } else if(ret != CL_CLEAN) {
 	mdprintf(tag->sd, "%s: %s ERROR\n", tag->fname, cl_strerror(ret));
-	logg("%s: %s ERROR\n", tag->fname, cl_strerror(ret));
+	logg("~%s: %s ERROR\n", tag->fname, cl_strerror(ret));
     } else if(logok) {
-	logg("%s: OK\n", tag->fname);
+	logg("~%s: OK\n", tag->fname);
     }
 
     free(tag->fname);
@@ -333,15 +333,15 @@ int scan(const char *filename, unsigned long int *scanned, const struct cl_engin
 
 	    if(ret == CL_VIRUS) {
 		mdprintf(odesc, "%s: %s FOUND\n", filename, virname);
-		logg("%s: %s FOUND\n", filename, virname);
+		logg("~%s: %s FOUND\n", filename, virname);
 		virusaction(filename, virname, copt);
 	    } else if(ret != CL_CLEAN) {
 		mdprintf(odesc, "%s: %s ERROR\n", filename, cl_strerror(ret));
-		logg("%s: %s ERROR\n", filename, cl_strerror(ret));
+		logg("~%s: %s ERROR\n", filename, cl_strerror(ret));
 		if(ret == CL_EMEM)
 		    return -2;
 	    } else if (logok) {
-		logg("%s: OK\n", filename);
+		logg("~%s: OK\n", filename);
 	    }
 	    break;
 	case S_IFDIR:
@@ -437,7 +437,7 @@ int scanstream(int odesc, unsigned long int *scanned, const struct cl_engine *en
     while(!bound && --portscan) {
 	if(rnd_port_first) {
 	    /* try a random port first */
-	    port = min_port + cli_rndnum(max_port - min_port + 1);
+	    port = min_port + cli_rndnum(max_port - min_port);
 	    rnd_port_first = 0;
 	} else {
 	    /* try the neighbor ports */
@@ -508,11 +508,11 @@ int scanstream(int odesc, unsigned long int *scanned, const struct cl_engine *en
 
     logg("*Accepted connection on port %u, fd %d\n", port, acceptd);
 
-    if ((tmpname = cli_gentempdesc(NULL, &tmpd)) == NULL) {
+    if(cli_gentempfd(NULL, &tmpname, &tmpd)) {
 	shutdown(sockfd, 2);
 	close(sockfd);
 	close(acceptd);
-	mdprintf(odesc, "tempfile() failed. ERROR\n");
+	mdprintf(odesc, "cli_gentempfd() failed. ERROR\n");
 	logg("!ScanStream %u: Can't create temporary file.\n", port);
 	return -1;
     }

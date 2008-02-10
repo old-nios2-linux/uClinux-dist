@@ -24,7 +24,9 @@ CFLAGS += -I. -I../.. -I../../../include -DRC_LOG_FACILITY=LOG_DAEMON
 # MS-CHAP authentication protocol.
 CHAPMS=y
 # Uncomment the next line to include support for MPPE.
-MPPE=y
+ifeq ($(CONFIG_USER_PPPD_WITH_MPPE),y)                                                                                  
+MPPE=y                                                                                                                  
+endif                                                                                                                   
 # Uncomment the next lint to include support for traffic limiting
 MAXOCTETS=y
 

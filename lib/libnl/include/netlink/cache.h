@@ -16,13 +16,13 @@
 #include <netlink/msg.h>
 #include <netlink/utils.h>
 #include <netlink/object.h>
+#include <netlink/cache-api.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct nl_cache;
-struct nl_cache_ops;
 
 typedef void (*change_func_t)(struct nl_cache *, struct nl_object *, int);
 
@@ -89,18 +89,11 @@ extern void			nl_cache_foreach_filter(struct nl_cache *,
 
 /* --- cache management --- */
 
-/* Message type association */
-extern struct nl_cache_ops *	nl_cache_mngt_associate(int, int);
-extern char *			nl_cache_mngt_type2name(struct nl_cache_ops *,
-							int protocol,
-							int msgtype,
-							char *buf,
-							size_t len);
-
 /* Cache type management */
 extern struct nl_cache_ops *	nl_cache_ops_lookup(const char *);
-extern struct nl_cache_ops *	nl_cache_ops_lookup_for_obj(struct nl_object_ops *);
-extern void			nl_cache_mngt_foreach(void (*cb)(struct nl_cache_ops *, void *), void *);
+extern struct nl_cache_ops *	nl_cache_ops_associate(int, int);
+extern struct nl_msgtype *	nl_msgtype_lookup(struct nl_cache_ops *, int);
+extern void			nl_cache_ops_foreach(void (*cb)(struct nl_cache_ops *, void *), void *);
 extern int			nl_cache_mngt_register(struct nl_cache_ops *);
 extern int			nl_cache_mngt_unregister(struct nl_cache_ops *);
 
@@ -113,7 +106,8 @@ struct nl_cache_mngr;
 
 #define NL_AUTO_PROVIDE		1
 
-extern struct nl_cache_mngr *	nl_cache_mngr_alloc(int, int);
+extern struct nl_cache_mngr *	nl_cache_mngr_alloc(struct nl_handle *,
+						    int, int);
 extern struct nl_cache *	nl_cache_mngr_add(struct nl_cache_mngr *,
 						  const char *,
 						  change_func_t);

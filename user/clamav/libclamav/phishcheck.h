@@ -20,9 +20,7 @@
 #ifndef _PHISH_CHECK_H
 #define _PHISH_CHECK_H
 
-#ifdef	HAVE_REGEX_H
-#include <regex.h>
-#endif
+#include "regex/regex.h"
 
 #define CL_PHISH_BASE 100
 enum phish_status {CL_PHISH_NODECISION=0,CL_PHISH_CLEAN=CL_PHISH_BASE, CL_PHISH_CLEANUP_OK,CL_PHISH_HOST_OK, CL_PHISH_DOMAIN_OK,
@@ -58,17 +56,25 @@ struct string {
 
 struct phishcheck {
 	regex_t preg;
+	regex_t preg_realurl;
 	regex_t preg_tld;
 	regex_t preg_cctld;
 	regex_t preg_numeric;
 	regex_t preg_hexurl;
-	char*    url_regex;
 	int      is_disabled;
+};
+
+struct pre_fixup_info {
+	/* pre_* url before fixup_spaces */
+	struct string pre_displayLink;
+	size_t host_start;
+	size_t host_end;
 };
 
 struct url_check {
 	struct string realLink;
 	struct string displayLink;
+	struct pre_fixup_info pre_fixup;
 	unsigned short       flags;
 	unsigned short always_check_flags;
 	unsigned short       link_type;

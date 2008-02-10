@@ -124,8 +124,6 @@ static const short int hextable[256] = {
        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
 };
 
-extern int short cli_leavetemps_flag;
-
 static void init_rtf_state(struct rtf_state* state)
 {
 	*state = base_state;
@@ -267,6 +265,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 	const unsigned char* out_data;
 	size_t out_cnt = 0;
 	size_t i;
+	int ret;
 
 	if(!data || !len)
 		return 0;
@@ -305,7 +304,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 						 cli_dbgmsg("RTF: waiting for magic\n");
 						 for(i=0; i<out_cnt && data->bread < rtf_data_magic_len; i++, data->bread++)
 							 if(rtf_data_magic[data->bread] != out_data[i]) {
-								 cli_dbgmsg("Warning: rtf objdata magic number not matched, expected:%d, got: %d, at pos:%lu\n",rtf_data_magic[i],out_data[i],data->bread);
+								cli_dbgmsg("Warning: rtf objdata magic number not matched, expected:%d, got: %d, at pos:%lu\n",rtf_data_magic[i],out_data[i], (unsigned long int) data->bread);
 							 }
 						 out_cnt  -= i;
 						 if(data->bread == rtf_data_magic_len) {
@@ -325,7 +324,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 							    out_data += i;
 							    data->bread=0;
 							    if(data->desc_len > 64) {
-								    cli_dbgmsg("Description length too big (%lu), showing only 64 bytes of it\n",data->desc_len);
+							    cli_dbgmsg("Description length too big (%lu), showing only 64 bytes of it\n", (unsigned long int) data->desc_len);
 								    data->desc_name = cli_malloc(65);
 							    }
 							    else
@@ -334,7 +333,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 								    return CL_EMEM;
 							    }
 							    data->internal_state = WAIT_DESC;
-							    cli_dbgmsg("RTF: description length:%lu\n",data->desc_len);
+							    cli_dbgmsg("RTF: description length:%lu\n", (unsigned long int) data->desc_len);
 						    }
 						    break;
 					    }
@@ -393,10 +392,9 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 						    if(data->bread == 4) {
 							    out_data += i;
 							    data->bread=0;
-							    cli_dbgmsg("Dumping rtf embedded object of size:%ld\n",data->desc_len);
-					    		    data->name = cli_gentempdesc(data->tmpdir, &data->fd);
-							    if(!data->name || data->fd < 0)
-								    return CL_ETMPFILE;
+							    cli_dbgmsg("Dumping rtf embedded object of size:%lu\n", (unsigned long int) data->desc_len);
+							    if((ret = cli_gentempfd(data->tmpdir, &data->name, &data->fd)))
+								    return ret;
 							    data->internal_state = DUMP_DATA;
 	    						    cli_dbgmsg("RTF: next state: DUMP_DATA\n");
 						    }

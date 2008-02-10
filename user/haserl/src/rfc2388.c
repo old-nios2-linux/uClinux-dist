@@ -392,6 +392,10 @@ rfc2388_handler (list_t * env)
   /* initialize a 128K sliding buffer */
   s_buffer_init (&sbuf, 1024 * 128);
   sbuf.fh = STDIN;
+  if (getenv("CONTENT_LENGTH"))
+    {
+      sbuf.maxread = strtoul(getenv("CONTENT_LENGTH"), NULL, 10);
+    }
 
   /* initialize the buffer, and make sure it doesn't point to null */
   buffer_init (&buf);

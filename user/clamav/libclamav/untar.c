@@ -126,7 +126,7 @@ cli_untar(const char *dir, int desc, unsigned int posix, const struct cl_limits 
 			 */
 			switch(type) {
 				default:
-					cli_warnmsg("cli_untar: unknown type flag %c\n", type);
+					cli_dbgmsg("cli_untar: unknown type flag %c\n", type);
 				case '0':	/* plain file */
 				case '\0':	/* plain file */
 				case '7':	/* contiguous file */
@@ -170,7 +170,7 @@ cli_untar(const char *dir, int desc, unsigned int posix, const struct cl_limits 
 			osize[12] = '\0';
 			size = octal(osize);
 			if(size < 0) {
-				cli_errmsg("Invalid size in tar header\n");
+				cli_dbgmsg("Invalid size in tar header\n");
 				if(outfile)
 					fclose(outfile);
 				return CL_EFORMAT;

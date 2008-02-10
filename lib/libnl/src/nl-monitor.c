@@ -30,7 +30,7 @@ static int event_input(struct nl_msg *msg, void *arg)
 		fprintf(stderr, "<<EVENT>> Unknown message type\n");
 
 	/* Exit nl_recvmsgs_def() and return to the main select() */
-	return NL_EXIT;
+	return NL_STOP;
 }
 
 int main(int argc, char *argv[])
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
 
 		if (retval) {
 			/* FD_ISSET(fd, &rfds) will be true */
-			nl_recvmsgs_def(nlh);
+			nl_recvmsgs_default(nlh);
 		}
 	}
 

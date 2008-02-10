@@ -64,15 +64,13 @@
  * @code
  * int param1 = 10;
  * char *param2 = "parameter text";
- * struct nlmsghdr hdr = {
- * 	.nlmsg_type = MY_ACTION,
- * };
- * struct nl_msg *m = nlmsg_build(&hdr);
- * nla_put_u32(m, 1, param1);
- * nla_put_string(m, 2, param2);
+ *
+ * struct nl_msg *msg = nlmsg_alloc();
+ * nla_put_u32(msg, 1, param1);
+ * nla_put_string(msg, 2, param2);
  * 
- * nl_send_auto_complete(handle, nl_msg_get(m));
- * nlmsg_free(m);
+ * nl_send_auto_complete(handle, nl_msg_get(msg));
+ * nlmsg_free(msg);
  * @endcode
  *
  * @par 2) Constructing nested attributes
@@ -80,14 +78,14 @@
  * struct nl_msg * nested_config(void)
  * {
  * 	int a = 5, int b = 10;
- * 	struct nl_msg *n = nlmsg_build(NULL);
+ * 	struct nl_msg *n = nlmsg_alloc();
  * 	nla_put_u32(n, 10, a);
  * 	nla_put_u32(n, 20, b);
  * 	return n;
  * }
  *
  * ...
- * struct nl_msg *m = nlmsg_build(&hdr);
+ * struct nl_msg *m = nlmsg_alloc();
  * struct nl_msg *nest = nested_config();
  * nla_put_nested(m, 1, nest);
  *
@@ -136,6 +134,15 @@ int nla_padlen(int payload)
  * @name Payload Access
  * @{
  */
+
+/**
+ * attribute type
+ * @arg nla		netlink attribute
+ */
+int nla_type(const struct nlattr *nla)
+{
+	return nla->nla_type & NLA_TYPE_MASK;
+}
 
 /**
  * head of payload
@@ -203,12 +210,12 @@ static int validate_nla(struct nlattr *nla, int maxtype,
 			struct nla_policy *policy)
 {
 	struct nla_policy *pt;
-	int minlen = 0;
+	int minlen = 0, type = nla_type(nla);
 
-	if (nla->nla_type <= 0 || nla->nla_type > maxtype)
+	if (type <= 0 || type > maxtype)
 		return 0;
 
-	pt = &policy[nla->nla_type];
+	pt = &policy[type];
 
 	if (pt->type > NLA_TYPE_MAX)
 		BUG();
@@ -261,8 +268,7 @@ int nla_parse(struct nlattr *tb[], int maxtype, struct nlattr *head, int len,
 	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
 
 	nla_for_each_attr(nla, head, len, rem) {
-		/* Ignore NFNL_NFA_NEST bit, hope nothing else uses it */
-		uint16_t type = nla->nla_type & 0x7fff;
+		int type = nla_type(nla);
 
 		if (type == 0) {
 			fprintf(stderr, "Illegal nla->nla_type == 0\n");
@@ -350,7 +356,7 @@ struct nlattr *nla_find(struct nlattr *head, int len, int attrtype)
 	int rem;
 
 	nla_for_each_attr(nla, head, len, rem)
-		if (nla->nla_type == attrtype)
+		if (nla_type(nla) == attrtype)
 			return nla;
 
 	return NULL;
@@ -473,9 +479,8 @@ struct nlattr *nla_reserve(struct nl_msg *n, int attrtype, int attrlen)
 	
 	tlen = NLMSG_ALIGN(n->nm_nlh->nlmsg_len) + nla_total_size(attrlen);
 
-	n->nm_nlh = realloc(n->nm_nlh, tlen);
-	if (!n->nm_nlh) {
-		nl_errno(ENOMEM);
+	if ((tlen + n->nm_nlh->nlmsg_len) > n->nm_size) {
+		nl_errno(ENOBUFS);
 		return NULL;
 	}
 
@@ -486,7 +491,7 @@ struct nlattr *nla_reserve(struct nl_msg *n, int attrtype, int attrlen)
 	memset((unsigned char *) nla + nla->nla_len, 0, nla_padlen(attrlen));
 	n->nm_nlh->nlmsg_len = tlen;
 
-	NL_DBG(2, "msg %p: Reserved %d bytes at offset +%d for attr %d "
+	NL_DBG(2, "msg %p: Reserved %d bytes at offset +%td for attr %d "
 		  "nlmsg_len=%d\n", n, attrlen,
 		  (void *) nla - nlmsg_data(n->nm_nlh),
 		  attrtype, n->nm_nlh->nlmsg_len);
@@ -513,7 +518,7 @@ int nla_put(struct nl_msg *n, int attrtype, int attrlen, const void *data)
 		return nl_errno(ENOMEM);
 
 	memcpy(nla_data(nla), data, attrlen);
-	NL_DBG(2, "msg %p: Wrote %d bytes at offset +%d for attr %d\n",
+	NL_DBG(2, "msg %p: Wrote %d bytes at offset +%td for attr %d\n",
 	       n, attrlen, (void *) nla - nlmsg_data(n->nm_nlh), attrtype);
 
 	return 0;

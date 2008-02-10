@@ -128,7 +128,9 @@ isc_result_t read_client_conf ()
 	top_level_config.script_name = path_dhclient_script;
 	top_level_config.requested_options = default_requested_options;
 	top_level_config.omapi_port = -1;
+#if defined (NSUPDATE)
 	top_level_config.do_forward_update = 1;
+#endif
 	/* Requested lease time, used by DHCPv6 (DHCPv4 uses the option cache)
 	 */
 	top_level_config.requested_lease = 7200;
@@ -581,6 +583,7 @@ void parse_client_statement (cfile, ip, config)
 		parse_semi (cfile);
 		return;
 		
+#if defined (NSUPDATE)
 	      case DO_FORWARD_UPDATE:
 		token = next_token (&val, (unsigned *)0, cfile);
 		token = next_token (&val, (unsigned *)0, cfile);
@@ -597,6 +600,7 @@ void parse_client_statement (cfile, ip, config)
 		}
 		parse_semi (cfile);
 		return;
+#endif
 
 	      case REBOOT:
 		token = next_token (&val, (unsigned *)0, cfile);

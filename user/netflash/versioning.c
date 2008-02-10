@@ -132,7 +132,7 @@ static int check_match(const char *name, const char *namelist)
 int check_vendor(void)
 {
 	struct fileblock *currBlock;
-	int versionInfo, tot;
+	int versionInfo;
 	char *cp;
 	char imageVendorName[MAX_VENDOR_SIZE];
 	char imageProductName[MAX_PRODUCT_SIZE];
@@ -143,12 +143,8 @@ int check_vendor(void)
 	 */
 	if (fileblocks == NULL)
 		return 5;
-	for (tot = 0, currBlock = fileblocks; currBlock->next; currBlock = currBlock->next) {
-		if ((tot + currBlock->length) >= file_length)
-			break;
-		tot += currBlock->length;
-	}
-	cp = currBlock->data + (file_length - tot) - 1;
+	for (currBlock = fileblocks; currBlock->next; currBlock = currBlock->next);
+	cp = currBlock->data + currBlock->length - 1;
 
 	/*
 	 * Now try to get the vendor/product/version strings, from the end

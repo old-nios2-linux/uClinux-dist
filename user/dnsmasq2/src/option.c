@@ -13,6 +13,7 @@
 /* define this to get facilitynames */
 #define SYSLOG_NAMES
 
+#include <config/autoconf.h>
 #include "dnsmasq.h"
 
 #ifndef HAVE_GETOPT_LONG
@@ -24,7 +25,7 @@ struct myoption {
 };
 #endif
 
-#define OPTSTRING "9531yZDNLERKzowefnbvhdkqr:m:p:c:l:s:i:t:u:g:a:x:S:C:A:T:H:Q:I:B:F:G:O:M:X:V:U:j:P:J:W:Y:2:4:6:7:8:0:_:"
+#define OPTSTRING "9531yZDNLERKzowefnbvhdkqr:m:p:c:l:s:i:t:u:g:a:x:S:C:A:T:H:Q:I:B:F:G:O:M:X:V:U:j:P:J:W:Y:2:4:6:7:8:0:_:%"
 
 /* options which don't have a one-char version */
 #define LOPT_RELOAD 256
@@ -129,6 +130,9 @@ static const struct myoption opts[] =
 #ifdef DO_PRELOAD
     {"preload-file", 1, 0, '_'},
 #endif
+#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
+    {"reply-with-dest", 1, 0, '%'},
+#endif
     { NULL, 0, 0, 0 }
   };
 
@@ -171,6 +175,9 @@ static const struct optflags optmap[] = {
   { LOPT_RELOAD,    OPT_RELOAD },
   { 'v',            0},
   { 'w',            0},
+#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
+  { '%',            OPT_REPLY_DST },
+#endif
   { 0, 0 }
 };
 

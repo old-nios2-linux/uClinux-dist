@@ -43,6 +43,8 @@ s_buffer_init (sliding_buffer_t * sbuf, int size)
   sbuf->len = 0;
   sbuf->ptr = sbuf->buf;
   sbuf->bufsize = 0;
+  sbuf->maxread = 0;
+  sbuf->nrread = 0;
   return (sbuf->buf != NULL);	/* return true if the alloc succeeded */
 }
 
@@ -98,7 +100,10 @@ s_buffer_read (sliding_buffer_t * sbuf, char *matchstr)
 	}
       else
 	{
-	  r = read (sbuf->fh, sbuf->buf + len, sbuf->maxsize - len);
+	  size_t n = sbuf->maxsize - len;
+	  if ( sbuf->maxread && sbuf->maxread < sbuf->nrread + n)
+	    n = sbuf->maxread - sbuf->nrread;
+	  r = read (sbuf->fh, sbuf->buf + len, n);
 	}
       /*
        * only report eof when we've done a read of 0.
@@ -110,6 +115,7 @@ s_buffer_read (sliding_buffer_t * sbuf, char *matchstr)
       else
 	{
 	  sbuf->bufsize += (r > 0) ? r : 0;
+	  sbuf->nrread += (r > 0) ? r : 0;
 	}
     }
 

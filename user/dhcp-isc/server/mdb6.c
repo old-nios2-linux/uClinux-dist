@@ -890,8 +890,10 @@ move_lease_to_inactive(struct ipv6_pool *pool, struct iaaddr *addr,
 	old_heap_index = addr->heap_index;
 	insert_result = isc_heap_insert(pool->inactive_timeouts, addr);
 	if (insert_result == ISC_R_SUCCESS) {
+#if defined (NSUPDATE)
 		/* Process events upon expiration. */
 		ddns_removals(NULL, addr);
+#endif
 
 		/* Binding scopes are no longer valid after expiry or
 		 * release.
@@ -1092,6 +1094,7 @@ lease_timeout_support(void *vpool) {
 			break;
 		}
 
+#if defined (NSUPDATE)
 		/* Look to see if there were ddns updates, and if
 		 * so, drop them.
 		 *
@@ -1099,6 +1102,7 @@ lease_timeout_support(void *vpool) {
 		 * timer rather than expiration timer?
 		 */
 		ddns_removals(NULL, addr);
+#endif
 
 		write_ia_na(addr->ia_na);
 

@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include "flatfs.h"
 
-static void vlogd(int bg, const char *cmd, const char *arg)
+void vlogd(int bg, const char *cmd, const char *arg)
 {
 	pid_t pid;
 
@@ -41,28 +41,4 @@ void logd(const char *cmd, const char *format, ...)
 		free(arg);
 	} else
 		vlogd(0, cmd, NULL);
-}
-
-void log_caller(const char *cmd)
-{
-	char	procname[64];
-	char	cndline[64];
-	pid_t	pp = getppid();
-	FILE	*fp;
-	char	*arg;
-
-	procname[0] = '\0';
-
-	snprintf(cndline, sizeof(cndline), "/proc/%d/cmdline", pp);
-	if ((fp = fopen(cndline, "r"))) {
-		fgets(procname, sizeof(procname), fp);
-		fclose(fp);
-	}
-
-	if (procname[0] == '\0')
-		strcpy(procname, "???");
-
-	asprintf(&arg, "%d: %s", (int)pp, procname);
-	vlogd(1, cmd, arg);
-	free(arg);
 }

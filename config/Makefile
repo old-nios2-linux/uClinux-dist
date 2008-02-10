@@ -12,6 +12,15 @@ config: conf
 menuconfig: mconf
 	$(SCRIPTSDIR)/mconf Kconfig
 
+gconfig: gconf
+	$(SCRIPTSDIR)/gconf Kconfig
+
+qconfig: qconf
+	$(SCRIPTSDIR)/qconf Kconfig
+
+xconfig: gconfig
+
 clean: confclean
 	rm -f autoconf.h auto.conf .config .config.old
 
+.PHONY: all oldconfig config menuconfig gconfig qconfig xconfig clean

@@ -24,6 +24,8 @@ FLASH_DEVICES ?= \
 	image,c,90,4 \
 	all,c,90,6
 
+SGKEY ?= $(HOME)/keys/sgkey.pem
+
 COMMON_ROMFS_DIRS =
 ifdef CONFIG_SYSFS
 COMMON_ROMFS_DIRS += sys
@@ -65,6 +67,17 @@ mksquashfs7z:
 # Tags an image with vendor,product,version and adds the checksum
 image.tag:
 	printf '\0%s\0%s\0%s' $(VERSIONPKG) $(HW_VENDOR) $(HW_PRODUCT) >>$(IMAGE)
+ifdef CONFIG_USER_NETFLASH_CRYPTO
+	if [ -f $(SGKEY) ] ; then \
+		openssl rsa -in $(SGKEY) -pubout > $(ROMFSDIR)/etc/publickey.pem ; \
+		$(ROOTDIR)/prop/cryptimage/cryptimage -k $(SGKEY) -f $(IMAGE) ; \
+		printf '\0%s\0%s\0%s' $(VERSIONPKG) $(HW_VENDOR) $(HW_PRODUCT) >>$(IMAGE) ; \
+	fi
+endif
+ifdef CONFIG_USER_NETFLASH_SHA256
+	cat $(IMAGE) | $(ROOTDIR)/user/netflash/sha256sum -b >> $(IMAGE)
+	printf '\0%s\0%s\0%s' $(VERSIONPKG) $(HW_VENDOR) $(HW_PRODUCT) >>$(IMAGE)
+endif
 	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 
 image.size.zimage:

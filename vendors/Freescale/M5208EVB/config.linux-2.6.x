@@ -596,9 +596,7 @@ CONFIG_MSDOS_PARTITION=y
 # Debug
 #
 # CONFIG_COREDUMP_PRINTK is not set
-CONFIG_INSTRUMENTATION=y
-# CONFIG_PROFILING is not set
-# CONFIG_MARKERS is not set
+# CONFIG_INSTRUMENTATION is not set
 
 #
 # Kernel hacking

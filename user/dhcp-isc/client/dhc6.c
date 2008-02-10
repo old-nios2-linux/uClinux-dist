@@ -2733,7 +2733,9 @@ start_bound(struct client_state *client)
 	struct dhc6_addr *addr, *oldaddr;
 	struct dhc6_lease *lease, *old;
 	const char *reason;
+#if defined (NSUPDATE)
 	TIME dns_update_offset = 1;
+#endif
 
 	lease = client->active_lease;
 	if (lease == NULL) {
@@ -2786,10 +2788,12 @@ start_bound(struct client_state *client)
 			else
 				oldaddr = NULL;
 
+#if defined (NSUPDATE)
 			if (oldaddr == NULL)
 				dhclient_schedule_updates(client,
 							  &addr->address,
 							  dns_update_offset++);
+#endif
 
 			/* Shell out to setup the new binding. */
 			script_init(client, reason, NULL);
@@ -3078,10 +3082,12 @@ do_depref(void *input)
 
 				addr->flags |= DHC6_ADDR_DEPREFFED;
 
+#if defined (NSUPDATE)
 				/* Remove DDNS bindings at depref time. */
 				if (client->config->do_forward_update)
 					client_dns_update(client, 0, 0,
 							  &addr->address);
+#endif
 			}
 		}
 	}
@@ -3125,6 +3131,7 @@ do_expire(void *input)
 						     addr->address.iabuf,
 						     50));
 
+#if defined (NSUPDATE)
 				/* We remove DNS records at depref time, but
 				 * it is possible that we might get here
 				 * without depreffing.
@@ -3133,6 +3140,7 @@ do_expire(void *input)
 				    !(addr->flags & DHC6_ADDR_DEPREFFED))
 					client_dns_update(client, 0, 0,
 							  &addr->address);
+#endif
 
 				continue;
 			}
@@ -3178,8 +3186,10 @@ unconfigure6(struct client_state *client, const char *reason)
 					     client->active_lease, ia, addr);
 			script_go(client);
 		 
+#if defined (NSUPDATE)
 			if (client->config->do_forward_update)
 				client_dns_update(client, 0, 0, &addr->address);
+#endif
 		}
 	}
 }

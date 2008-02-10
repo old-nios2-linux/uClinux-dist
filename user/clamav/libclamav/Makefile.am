@@ -17,9 +17,13 @@
 #  MA 02110-1301, USA.
 
 
-INCLUDES = -I$(top_srcdir) -I@srcdir@/unrar -I@srcdir@/nsis
+INCLUDES = -I$(top_srcdir) -I@srcdir@/nsis
 
+if ENABLE_UNRAR
+libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
+else
 libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@
+endif
 
 libclamav_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ -no-undefined
 
@@ -31,8 +35,6 @@ libclamav_la_SOURCES = \
         matcher-ac.h \
         matcher-bm.c \
         matcher-bm.h \
-	matcher-ncore.c \
-	matcher-ncore.h \
         matcher.c \
         matcher.h \
         md5.c \
@@ -86,8 +88,6 @@ libclamav_la_SOURCES = \
 	petite.h \
 	wwunpack.c \
 	wwunpack.h \
-	suecrypt.c \
-	suecrypt.h \
 	unsp.c \
 	unsp.h \
 	aspack.c \
@@ -114,20 +114,20 @@ libclamav_la_SOURCES = \
 	is_tar.h \
 	tnef.c \
 	tnef.h \
-	unrar/unrar15.c \
-	unrar/unrar20.h \
-	unrar/unrarcmd.h \
-	unrar/unrar.h \
-	unrar/unrarvm.c \
-	unrar/unrar15.h \
-	unrar/unrar.c \
-	unrar/unrarfilter.c \
-	unrar/unrarppm.c \
-	unrar/unrarvm.h \
-	unrar/unrar20.c \
-	unrar/unrarcmd.c \
-	unrar/unrarfilter.h \
-	unrar/unrarppm.h \
+	autoit.c \
+	autoit.h \
+	regex/strlcpy.c \
+	regex/regcomp.c \
+	regex/regerror.c \
+	regex/regexec.c \
+	regex/regfree.c \
+	regex/cclass.h \
+	regex/cname.h \
+	regex/regex.h \
+	regex/regex2.h \
+	regex/utils.h \
+	unarj.c \
+	unarj.h \
 	nsis/LZMADecode.c \
 	nsis/LZMADecode.h \
 	nsis/bzlib.c \
@@ -161,8 +161,6 @@ libclamav_la_SOURCES = \
 	iana_tld.h \
 	regex_list.c \
 	regex_list.h \
-	sha256.c \
-	sha256.h \
 	mspack.c \
 	mspack.h \
 	cab.c \
@@ -179,3 +177,4 @@ libclamav_la_SOURCES = \
 	lockdb.h
 
 lib_LTLIBRARIES = libclamav.la
+EXTRA_DIST = regex/engine.c

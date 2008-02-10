@@ -36,7 +36,7 @@
 
 /* TODO: when implementation of new version is complete, enable it in CL_EXPERIMENTAL */
 #ifdef CL_EXPERIMENTAL
-//#define USE_NEW_VERSION
+/*#define USE_NEW_VERSION*/
 #endif
 
 #ifndef USE_NEW_VERSION
@@ -52,9 +52,7 @@
 #include <limits.h>
 #include <sys/types.h>
 
-#ifdef	HAVE_REGEX_H
-#include <regex.h>
-#endif
+#include "regex/regex.h"
 
 
 #include "clamav.h"
@@ -62,7 +60,6 @@
 #include "regex_list.h"
 #include "matcher-ac.h"
 #include "str.h"
-
 
 /*Tree*/
 enum token_op_t {OP_CHAR,OP_STDCLASS,OP_CUSTOMCLASS,OP_DOT,OP_LEAF,OP_ROOT,OP_PARCLOSE};
@@ -223,6 +220,26 @@ static void fatal_error(struct regex_matcher* matcher)
 }
 
 
+static inline size_t get_char_at_pos_with_skip(const struct pre_fixup_info* info, const char* buffer, size_t pos)
+{
+	const char* str;
+	size_t realpos = 0;
+	if(!info) {
+		return (pos <= strlen(buffer)) ? buffer[pos>0 ? pos-1:0] : '\0';
+	}
+	str = info->pre_displayLink.data;
+	cli_dbgmsg("calc_pos_with_skip: skip:%lu, %lu - %lu \"%s\",\"%s\"\n", pos, info->host_start, info->host_end, str, buffer);
+	pos += info->host_start;
+	while(str[realpos] && !isalnum(str[realpos])) realpos++;
+	for(; str[realpos] && (pos>0); pos--) {
+		while(str[realpos]==' ') realpos++;
+		realpos++;
+	}
+	while(str[realpos]==' ') realpos++;
+	cli_dbgmsg("calc_pos_with_skip:%s\n",str+realpos);	
+	return (pos>0 && !str[realpos]) ? '\0' : str[realpos>0?realpos-1:0];
+}
+
 /*
  * @matcher - matcher structure to use
  * @real_url - href target
@@ -236,7 +253,7 @@ static void fatal_error(struct regex_matcher* matcher)
  * Do not send NULL pointers to this function!!
  *
  */
-int regex_list_match(struct regex_matcher* matcher,const char* real_url,const char* display_url,int hostOnly,const char** info,int is_whitelist)
+int regex_list_match(struct regex_matcher* matcher,char* real_url,const char* display_url,const struct pre_fixup_info* pre_fixup,int hostOnly,const char** info,int is_whitelist)
 {
 	massert(matcher);
 	massert(real_url);
@@ -273,21 +290,28 @@ int regex_list_match(struct regex_matcher* matcher,const char* real_url,const ch
 			rc = 0;
 
 			for(i = 0; i < matcher->root_hosts_cnt; i++) {
-				/* needs to match terminating \0 too */
-				rc = cli_ac_scanbuff((unsigned char*)buffer,buffer_len+1,info, &matcher->root_hosts[i] ,&mdata,0,0,0,-1,NULL);
+				/* doesn't need to match terminating \0*/
+				rc = cli_ac_scanbuff((unsigned char*)buffer,buffer_len,info, &matcher->root_hosts[i] ,&mdata,0,0,0,-1,NULL);
 				cli_ac_freedata(&mdata);
 				if(rc) {
+					char c;
 					const char* matched = strchr(*info,':');	
 					const size_t match_len = matched ? strlen(matched+1) : 0;
-					if(match_len == buffer_len || /* full match */
+					if(((c=get_char_at_pos_with_skip(pre_fixup,buffer,buffer_len+1))==' ' || c=='\0' || c=='/' || c=='?') &&
+						(match_len == buffer_len || /* full match */
 					        (match_len < buffer_len &&
-						buffer[buffer_len-match_len-1]=='.') 
-						/* subdomain matched*/) {
+						((c=get_char_at_pos_with_skip(pre_fixup,buffer,buffer_len-match_len))=='.' || (c==' ')) ) 
+						/* subdomain matched*/)) {
 
 						cli_dbgmsg("Got a match: %s with %s\n",buffer,*info);
+						cli_dbgmsg("Before inserting .: %s\n",real_url);
+						if(real_len >= match_len + 1) {
+							real_url[real_len-match_len-1]='.';
+							cli_dbgmsg("After inserting .: %s\n",real_url);
+						}
 						break;
 					}
-					cli_dbgmsg("Ignoring false match: %s with %s\n",buffer,*info);
+					cli_dbgmsg("Ignoring false match: %s with %s,%c\n",buffer,*info,c);
 					rc=0;
 				}
 			}
@@ -357,7 +381,6 @@ static struct tree_node* stack_pop(struct node_stack* stack)
 }
 
 /* Initialization & loading */
-
 /* Initializes @matcher, allocating necesarry substructures */
 int init_regex_list(struct regex_matcher* matcher)
 {
@@ -412,9 +435,8 @@ static int add_regex_list_element(struct cli_matcher* root,const char* pattern,c
        massert(root);
        massert(pattern);
 
-       len = strlen(pattern)+1;
-       /* need to match \0 too, so we are sure
-	* matches only happen at end of string */
+       len = strlen(pattern);
+       /* need not to match \0 too */
        new->type = 0;
        new->sigid = 0;
        new->parts = 0;
@@ -594,7 +616,7 @@ int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int optio
  				memset(root, 0, sizeof(struct cli_matcher));
 
 				cli_dbgmsg("regex_list: Initialising AC pattern matcher\n");
-				if((rc = cli_ac_init(root, AC_DEFAULT_MIN_DEPTH, AC_DEFAULT_MAX_DEPTH))) {
+				if((rc = cli_ac_init(root, cli_ac_mindepth, cli_ac_maxdepth))) {
 					/* no need to free previously allocated memory here */
 					cli_errmsg("regex_list: Can't initialise AC pattern matcher\n");
 					return rc;
@@ -1031,9 +1053,7 @@ static void tree_node_insert_nonbin(struct tree_node* node, struct tree_node* ne
 				while(node->next && !node->listend)
 					node = node->next;
 				node->listend = 0;
-				if(new->next == node) {
-					new->next = node->next;
-				}
+				new->next = node->next;
 				node->next = new;
 				new->listend=1;
 				return;
@@ -1194,7 +1214,7 @@ static int add_pattern(struct regex_matcher* matcher,const unsigned char* pat,co
 							 preg=cli_malloc(sizeof(*preg));
 							 if(!preg)
 								 return CL_EMEM;
-							 rc = regcomp(preg,(const char*)token.u.start,REG_EXTENDED|(bol?0:REG_NOTBOL));
+							 rc = cli_regcomp(preg,(const char*)token.u.start,REG_EXTENDED|(bol?0:REG_NOTBOL));
 							 leaf->preg=preg;
 							 if(rc)
 								 return rc;
@@ -1275,7 +1295,7 @@ static int match_node(struct tree_node* node,const unsigned char* c,size_t len,c
 				const struct leaf_info* leaf = node->u.leaf;
 				/*isleaf = 1;*/
 				if(leaf->preg) {
-					rc = !regexec(leaf->preg,(const char*)c,0,NULL,0);
+					rc = !cli_regexec(leaf->preg,(const char*)c,0,NULL,0);
 				}
 				else  {
 					massert(*c==node->c && "We know this has to match[2]");
@@ -1394,7 +1414,7 @@ static void destroy_tree_internal(struct regex_matcher* matcher,struct tree_node
 		stack_push_once(&matcher->node_stack,(struct tree_node*)node->u.leaf);/* cast to make compiler happy, and to not make another stack implementation for storing void* */
 		stack_push_once(&matcher->node_stack,node);
 		if(leaf->preg) {
-			regfree(leaf->preg);
+			cli_regfree(leaf->preg);
 			free(leaf->preg);
 			leaf->preg=NULL;
 		}

@@ -12,8 +12,71 @@
 /**
  * @ingroup nl
  * @defgroup cb Callbacks/Customization
- * 
- * Customization via callbacks.
+ * @brief
+ *
+ * Callbacks and overwriting capabilities are provided to take influence
+ * in various control flows inside the library. All callbacks are packed
+ * together in struct nl_cb which is then attached to a netlink socket or
+ * passed on to the respective functions directly.
+ *
+ * Callbacks can control the flow of the underlying layer by returning
+ * the appropriate error codes:
+ * @code
+ * Action ID        | Description
+ * -----------------+-------------------------------------------------------
+ * NL_OK       | Proceed with whatever comes next.
+ * NL_SKIP          | Skip message currently being processed and continue
+ *                  | with next message.
+ * NL_STOP          | Stop parsing and discard all remaining messages in
+ *                  | this set of messages.
+ * @endcode
+ *
+ * All callbacks are optional and a default action is performed if no 
+ * application specific implementation is provided:
+ *
+ * @code
+ * Callback ID       | Default Return Value
+ * ------------------+----------------------
+ * NL_CB_VALID       | NL_OK
+ * NL_CB_FINISH      | NL_STOP
+ * NL_CB_OVERRUN     | NL_STOP
+ * NL_CB_SKIPPED     | NL_SKIP
+ * NL_CB_ACK         | NL_STOP
+ * NL_CB_MSG_IN      | NL_OK
+ * NL_CB_MSG_OUT     | NL_OK
+ * NL_CB_INVALID     | NL_STOP
+ * NL_CB_SEQ_CHECK   | NL_OK
+ * NL_CB_SEND_ACK    | NL_OK
+ *                   |
+ * Error Callback    | NL_STOP
+ * @endcode
+ *
+ * In order to simplify typical usages of the library, different sets of
+ * default callback implementations exist:
+ * @code
+ * NL_CB_DEFAULT: No additional actions
+ * NL_CB_VERBOSE: Automatically print warning and error messages to a file
+ *                descriptor as appropriate. This is useful for CLI based
+ *                applications.
+ * NL_CB_DEBUG:   Print informal debugging information for each message
+ *                received. This will result in every message beint sent or
+ *                received to be printed to the screen in a decoded,
+ *                human-readable format.
+ * @endcode
+ *
+ * @par 1) Setting up a callback set
+ * @code
+ * // Allocate a callback set and initialize it to the verbose default set
+ * struct nl_cb *cb = nl_cb_alloc(NL_CB_VERBOSE);
+ *
+ * // Modify the set to call my_func() for all valid messages
+ * nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, my_func, NULL);
+ *
+ * // Set the error message handler to the verbose default implementation
+ * // and direct it to print all errors to the given file descriptor.
+ * FILE *file = fopen(...);
+ * nl_cb_err(cb, NL_CB_VERBOSE, NULL, file);
+ * @endcode
  * @{
  */
 
@@ -34,52 +97,6 @@ static void print_header_content(FILE *ofd, struct nlmsghdr *n)
 		sizeof(flags)), n->nlmsg_seq, n->nlmsg_pid);
 }
 
-static int nl_valid_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_PROCEED;
-}
-
-static int nl_finish_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_invalid_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_msg_in_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_PROCEED;
-}
-
-static int nl_msg_out_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_PROCEED;
-}
-
-static int nl_overrun_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_skipped_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_SKIP;
-}
-
-static int nl_ack_handler_default(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_error_handler_default(struct sockaddr_nl *who,
-				    struct nlmsgerr *e, void *arg)
-{
-	return NL_EXIT;
-}
-
 static int nl_valid_handler_verbose(struct nl_msg *msg, void *arg)
 {
 	FILE *ofd = arg ? arg : stdout;
@@ -88,17 +105,7 @@ static int nl_valid_handler_verbose(struct nl_msg *msg, void *arg)
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 
-	return NL_PROCEED;
-}
-
-static int nl_finish_handler_verbose(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_msg_in_handler_verbose(struct nl_msg *msg, void *arg)
-{
-	return NL_PROCEED;
+	return NL_OK;
 }
 
 static int nl_invalid_handler_verbose(struct nl_msg *msg, void *arg)
@@ -109,12 +116,7 @@ static int nl_invalid_handler_verbose(struct nl_msg *msg, void *arg)
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 
-	return NL_EXIT;
-}
-
-static int nl_msg_out_handler_verbose(struct nl_msg *msg, void *arg)
-{
-	return NL_PROCEED;
+	return NL_STOP;
 }
 
 static int nl_overrun_handler_verbose(struct nl_msg *msg, void *arg)
@@ -125,17 +127,7 @@ static int nl_overrun_handler_verbose(struct nl_msg *msg, void *arg)
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 	
-	return NL_EXIT;
-}
-
-static int nl_ack_handler_verbose(struct nl_msg *msg, void *arg)
-{
-	return NL_EXIT;
-}
-
-static int nl_skipped_handler_verbose(struct nl_msg *msg, void *arg)
-{
-	return NL_SKIP;
+	return NL_STOP;
 }
 
 static int nl_error_handler_verbose(struct sockaddr_nl *who,
@@ -148,18 +140,18 @@ static int nl_error_handler_verbose(struct sockaddr_nl *who,
 	print_header_content(ofd, &e->msg);
 	fprintf(ofd, "\n");
 
-	return NL_EXIT;
+	return e->error;
 }
 
 static int nl_valid_handler_debug(struct nl_msg *msg, void *arg)
 {
 	FILE *ofd = arg ? arg : stderr;
 
-	fprintf(ofd, "-- Debug: Valid message: ");
+	fprintf(ofd, "-- Debug: Unhandled Valid message: ");
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 
-	return NL_PROCEED;
+	return NL_OK;
 }
 
 static int nl_finish_handler_debug(struct nl_msg *msg, void *arg)
@@ -170,12 +162,7 @@ static int nl_finish_handler_debug(struct nl_msg *msg, void *arg)
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 	
-	return NL_EXIT;
-}
-
-static int nl_invalid_handler_debug(struct nl_msg *msg, void *arg)
-{
-	return nl_invalid_handler_verbose(msg, arg);
+	return NL_STOP;
 }
 
 static int nl_msg_in_handler_debug(struct nl_msg *msg, void *arg)
@@ -185,7 +172,7 @@ static int nl_msg_in_handler_debug(struct nl_msg *msg, void *arg)
 	fprintf(ofd, "-- Debug: Received Message:\n");
 	nl_msg_dump(msg, ofd);
 	
-	return NL_PROCEED;
+	return NL_OK;
 }
 
 static int nl_msg_out_handler_debug(struct nl_msg *msg, void *arg)
@@ -195,12 +182,7 @@ static int nl_msg_out_handler_debug(struct nl_msg *msg, void *arg)
 	fprintf(ofd, "-- Debug: Sent Message:\n");
 	nl_msg_dump(msg, ofd);
 
-	return NL_PROCEED;
-}
-
-static int nl_overrun_handler_debug(struct nl_msg *msg, void *arg)
-{
-	return nl_overrun_handler_verbose(msg, arg);
+	return NL_OK;
 }
 
 static int nl_skipped_handler_debug(struct nl_msg *msg, void *arg)
@@ -222,62 +204,42 @@ static int nl_ack_handler_debug(struct nl_msg *msg, void *arg)
 	print_header_content(ofd, nlmsg_hdr(msg));
 	fprintf(ofd, "\n");
 
-	return NL_EXIT;
-}
-
-static int nl_error_handler_debug(struct sockaddr_nl *who,
-				  struct nlmsgerr *e, void *arg)
-{
-	return nl_error_handler_verbose(who, e, arg);
+	return NL_STOP;
 }
 
 static nl_recvmsg_msg_cb_t cb_def[NL_CB_TYPE_MAX+1][NL_CB_KIND_MAX+1] = {
 	[NL_CB_VALID] = {
-		[NL_CB_DEFAULT]	= nl_valid_handler_default,
 		[NL_CB_VERBOSE]	= nl_valid_handler_verbose,
 		[NL_CB_DEBUG]	= nl_valid_handler_debug,
 	},
 	[NL_CB_FINISH] = {
-		[NL_CB_DEFAULT]	= nl_finish_handler_default,
-		[NL_CB_VERBOSE]	= nl_finish_handler_verbose,
 		[NL_CB_DEBUG]	= nl_finish_handler_debug,
 	},
 	[NL_CB_INVALID] = {
-		[NL_CB_DEFAULT]	= nl_invalid_handler_default,
 		[NL_CB_VERBOSE]	= nl_invalid_handler_verbose,
-		[NL_CB_DEBUG]	= nl_invalid_handler_debug,
+		[NL_CB_DEBUG]	= nl_invalid_handler_verbose,
 	},
 	[NL_CB_MSG_IN] = {
-		[NL_CB_DEFAULT]	= nl_msg_in_handler_default,
-		[NL_CB_VERBOSE]	= nl_msg_in_handler_verbose,
 		[NL_CB_DEBUG]	= nl_msg_in_handler_debug,
 	},
 	[NL_CB_MSG_OUT] = {
-		[NL_CB_DEFAULT]	= nl_msg_out_handler_default,
-		[NL_CB_VERBOSE]	= nl_msg_out_handler_verbose,
 		[NL_CB_DEBUG]	= nl_msg_out_handler_debug,
 	},
 	[NL_CB_OVERRUN] = {
-		[NL_CB_DEFAULT]	= nl_overrun_handler_default,
 		[NL_CB_VERBOSE]	= nl_overrun_handler_verbose,
-		[NL_CB_DEBUG]	= nl_overrun_handler_debug,
+		[NL_CB_DEBUG]	= nl_overrun_handler_verbose,
 	},
 	[NL_CB_SKIPPED] = {
-		[NL_CB_DEFAULT]	= nl_skipped_handler_default,
-		[NL_CB_VERBOSE]	= nl_skipped_handler_verbose,
 		[NL_CB_DEBUG]	= nl_skipped_handler_debug,
 	},
 	[NL_CB_ACK] = {
-		[NL_CB_DEFAULT]	= nl_ack_handler_default,
-		[NL_CB_VERBOSE]	= nl_ack_handler_verbose,
 		[NL_CB_DEBUG]	= nl_ack_handler_debug,
 	},
 };
 
 static nl_recvmsg_err_cb_t cb_err_def[NL_CB_KIND_MAX+1] = {
-	[NL_CB_DEFAULT]	= nl_error_handler_default,
 	[NL_CB_VERBOSE]	= nl_error_handler_verbose,
-	[NL_CB_DEBUG]	= nl_error_handler_debug,
+	[NL_CB_DEBUG]	= nl_error_handler_verbose,
 };
 
 /**
@@ -364,11 +326,11 @@ void nl_cb_put(struct nl_cb *cb)
 
 /**
  * Set up a callback 
- * @arg cb		callback configuration
- * @arg type		which type callback to set
- * @arg kind		kind of callback
- * @arg func		callback function
- * @arg arg		argument to be passwd to callback function
+ * @arg cb		callback set
+ * @arg type		callback to modify
+ * @arg kind		kind of implementation
+ * @arg func		callback function (NL_CB_CUSTOM)
+ * @arg arg		argument passed to callback
  *
  * @return 0 on success or a negative error code
  */
@@ -394,7 +356,7 @@ int nl_cb_set(struct nl_cb *cb, enum nl_cb_type type, enum nl_cb_kind kind,
 
 /**
  * Set up a all callbacks
- * @arg cb		callback configuration
+ * @arg cb		callback set
  * @arg kind		kind of callback
  * @arg func		callback function
  * @arg arg		argument to be passwd to callback function
@@ -417,7 +379,7 @@ int nl_cb_set_all(struct nl_cb *cb, enum nl_cb_kind kind,
 
 /**
  * Set up an error callback
- * @arg cb		callback configuration
+ * @arg cb		callback set
  * @arg kind		kind of callback
  * @arg func		callback function
  * @arg arg		argument to be passed to callback function
@@ -439,9 +401,16 @@ int nl_cb_err(struct nl_cb *cb, enum nl_cb_kind kind,
 	return 0;
 }
 
+/** @} */
+
+/**
+ * @name Overwriting
+ * @{
+ */
+
 /**
  * Overwrite internal calls to nl_recvmsgs()
- * @arg cb		callback configuration
+ * @arg cb		callback set
  * @arg func		replacement callback for nl_recvmsgs()
  */
 void nl_cb_overwrite_recvmsgs(struct nl_cb *cb,
@@ -452,7 +421,7 @@ void nl_cb_overwrite_recvmsgs(struct nl_cb *cb,
 
 /**
  * Overwrite internal calls to nl_recv()
- * @arg cb		callback configuration
+ * @arg cb		callback set
  * @arg func		replacement callback for nl_recv()
  */
 void nl_cb_overwrite_recv(struct nl_cb *cb,
@@ -464,7 +433,7 @@ void nl_cb_overwrite_recv(struct nl_cb *cb,
 
 /**
  * Overwrite internal calls to nl_send()
- * @arg cb		callback configuration
+ * @arg cb		callback set
  * @arg func		replacement callback for nl_send()
  */
 void nl_cb_overwrite_send(struct nl_cb *cb,

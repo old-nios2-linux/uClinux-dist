@@ -131,8 +131,13 @@ int debug_netlink = 0;
  * these as fast as the come in,  crypto is usually much slower
  * than your network interface
  */
+#ifdef HAVE_KMEM_CACHE_T
+kmem_cache_t *ipsec_irs_cache;
+kmem_cache_t *ipsec_ixs_cache;
+#else
 struct kmem_cache *ipsec_irs_cache;
 struct kmem_cache *ipsec_ixs_cache;
+#endif
 
 #if !defined(MODULE_PARM) && defined(module_param)
 /*

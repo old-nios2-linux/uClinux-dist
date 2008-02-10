@@ -68,7 +68,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: auth.c,v 1.11 2007-11-28 08:22:39 philipc Exp $"
+#define RCSID	"$Id: auth.c,v 1.10 2007/11/23 06:12:46 asallawa Exp $"
 
 #include <stdio.h>
 #include <stddef.h>
@@ -401,10 +401,11 @@ option_t auth_options[] = {
       "Set telephone number(s) which are allowed to connect",
       OPT_PRIV | OPT_A2LIST },
 
+#ifdef USE_PAM
     { "pamservice", o_string, pamservice,
       "Set PAM service for authentication", OPT_PRIO | OPT_STATIC,
       &explicit_pamservice, MAXNAMELEN },
-
+#endif
     { NULL }
 };
 

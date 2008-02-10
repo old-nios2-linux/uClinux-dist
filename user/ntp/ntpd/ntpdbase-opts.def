@@ -294,6 +294,17 @@ flag = {
 };
 
 flag = {
+    name      = immediateset;
+    value     = Q;
+    descrip   = "Set the time as quickly as possible";
+    doc = <<-  _EndOfDoc_
+	ntpd
+	will try to set the time as quickly as possible, using the first available offset
+	value from any server.
+	_EndOfDoc_;
+};
+
+flag = {
     name      = propagationdelay;
     value     = r;
     arg-type  = string;

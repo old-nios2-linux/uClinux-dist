@@ -92,11 +92,11 @@
  */
 #ifdef CONFIG_SOUND_EP93XX_AC97
 #ifdef CONFIG_MACH_IPD
-#define AUDIO_NBFRAGS_DEFAULT	64		/* we don't that much memory */
+#define AUDIO_NBFRAGS_DEFAULT	32		/* we don't that much memory */
 #else
 #define AUDIO_NBFRAGS_DEFAULT	128
 #endif
-#define AUDIO_FRAGSIZE_DEFAULT	16384	/* max is 65536 */
+#define AUDIO_FRAGSIZE_DEFAULT	4096	/* max is 65536 */
 #define AUDIO_NBFRAGS_MAX		128	
 #else
 #define AUDIO_NBFRAGS_DEFAULT	32

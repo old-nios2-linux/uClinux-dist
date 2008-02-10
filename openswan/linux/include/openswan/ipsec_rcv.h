@@ -171,7 +171,11 @@ struct ipsec_rcv_state {
 };
 
 extern void ipsec_rsm(struct ipsec_rcv_state *irs);
+#ifdef HAVE_KMEM_CACHE_T
+extern kmem_cache_t *ipsec_irs_cache;
+#else
 extern struct kmem_cache *ipsec_irs_cache;
+#endif
 extern int ipsec_irs_max;
 extern atomic_t ipsec_irs_cnt;
 

@@ -786,7 +786,9 @@ void dhcprelease (packet, ms_nulltp)
 		release_lease (lease, packet);
 	} 
 	log_info ("%s", msgbuf);
+#if defined (FAILOVER_PROTOCOL)
       out:
+#endif
 	if (lease)
 		lease_dereference (&lease, MDL);
 }
@@ -909,7 +911,9 @@ void dhcpdecline (packet, ms_nulltp)
 	if (!ignorep)
 		log_info ("%s: %s", msgbuf, status);
 		
+#if defined (FAILOVER_PROTOCOL)
       out:
+#endif
 	if (options)
 		option_state_dereference (&options, MDL);
 	if (lease)
@@ -3035,6 +3039,7 @@ int find_lease (struct lease **lp,
 	struct data_string client_identifier;
 	struct hardware h;
 
+#if defined (FAILOVER_PROTOCOL)
 	/* Quick check to see if the peer has leases. */
 	if (peer_has_leases) {
 		struct pool *pool;
@@ -3050,6 +3055,7 @@ int find_lease (struct lease **lp,
 			}
 		}
 	}
+#endif
 
 	if (packet -> raw -> ciaddr.s_addr) {
 		cip.len = 4;
@@ -3365,6 +3371,7 @@ int find_lease (struct lease **lp,
 		}
 	}
 
+#if defined (FAILOVER_PROTOCOL)
 	/* If we got an ip_lease and a uid_lease or hw_lease, and ip_lease
 	   is not active, and is not ours to reallocate, forget about it. */
 	if (ip_lease && (uid_lease || hw_lease) &&
@@ -3376,6 +3383,7 @@ int find_lease (struct lease **lp,
 #endif
 		lease_dereference (&ip_lease, MDL);
 	}
+#endif
 
 	/* If for some reason the client has more than one lease
 	   on the subnet that matches its uid, pick the one that
