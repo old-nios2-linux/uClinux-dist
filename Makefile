@@ -231,9 +231,6 @@ romfs.subdirs:
 romfs.post:
 	$(MAKEARCH) -C vendors romfs.post
 	-find $(ROMFSDIR)/. -name CVS | xargs -r rm -rf
-	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
-		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1; \
-	fi
 
 .PHONY: image
 image:
@@ -263,10 +260,6 @@ vendor_%:
 
 .PHONY: linux
 linux linux%_only:
-	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
-		mkdir -p `dirname $$CONFIG_INITRAMFS_SOURCE`; \
-		touch $$CONFIG_INITRAMFS_SOURCE || exit 1; \
-	fi
 	@if expr "$(LINUXDIR)" : 'linux-2\.[0-4].*' > /dev/null && \
 			 [ ! -f $(LINUXDIR)/.depend ] ; then \
 		echo "ERROR: you need to do a 'make dep' first" ; \
