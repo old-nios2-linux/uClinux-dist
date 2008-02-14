@@ -488,6 +488,14 @@ config USER_BUSYBOX_RMDIR
 	help
 	  rmdir is used to remove empty directories.
 
+config USER_BUSYBOX_FEATURE_RMDIR_LONG_OPTIONS
+	bool "Enable long options"
+	default n
+	depends on USER_BUSYBOX_RMDIR && USER_BUSYBOX_GETOPT_LONG
+	help
+	  Support long options for the rmdir applet, including
+	  --ignore-fail-on-non-empty for compatibility with GNU rmdir.
+
 config USER_BUSYBOX_SEQ
 	bool "seq"
 	default n
@@ -520,7 +528,7 @@ config USER_BUSYBOX_SORT
 	  sort is used to sort lines of text in specified files.
 
 config USER_BUSYBOX_FEATURE_SORT_BIG
-	bool "full SuSv3 compliant sort (Support -ktcsbdfiozgM)"
+	bool "Full SuSv3 compliant sort (support -ktcsbdfiozgM)"
 	default y
 	depends on USER_BUSYBOX_SORT
 	help
@@ -538,7 +546,7 @@ config USER_BUSYBOX_SPLIT
 	  split a file into pieces.
 
 config USER_BUSYBOX_FEATURE_SPLIT_FANCY
-	bool "fancy extensions"
+	bool "Fancy extensions"
 	default n
 	depends on USER_BUSYBOX_SPLIT
 	help
@@ -579,6 +587,12 @@ config USER_BUSYBOX_SYNC
 	help
 	  sync is used to flush filesystem buffers.
 
+config USER_BUSYBOX_TAC
+	bool "tac"
+	default n
+	help
+	  tac is used to concatenate and print files in reverse.
+
 config USER_BUSYBOX_TAIL
 	bool "tail"
 	default n
@@ -602,7 +616,7 @@ config USER_BUSYBOX_TEE
 	  to standard output and files.
 
 config USER_BUSYBOX_FEATURE_TEE_USE_BLOCK_IO
-	bool "Enable block i/o (larger/faster) instead of byte i/o."
+	bool "Enable block I/O (larger/faster) instead of byte I/O"
 	default n
 	depends on USER_BUSYBOX_TEE
 	help

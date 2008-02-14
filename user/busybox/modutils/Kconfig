@@ -73,7 +73,7 @@ config USER_BUSYBOX_LSMOD
 	  lsmod is used to display a list of loaded modules.
 
 config USER_BUSYBOX_FEATURE_LSMOD_PRETTY_2_6_OUTPUT
-	bool "lsmod pretty output for 2.6.x Linux kernels "
+	bool "Pretty output for 2.6.x Linux kernels"
 	default n
 	depends on USER_BUSYBOX_LSMOD
 	help

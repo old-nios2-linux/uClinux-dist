@@ -72,7 +72,7 @@ config USER_BUSYBOX_RESIZE
 	  terminal.
 
 config USER_BUSYBOX_FEATURE_RESIZE_PRINT
-	bool "print environment variables"
+	bool "Print environment variables"
 	default n
 	depends on USER_BUSYBOX_RESIZE
 	help
