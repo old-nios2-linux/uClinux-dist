@@ -10,12 +10,9 @@
 
 /* no options, no getopt */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
 
-
-int clear_main(int argc, char **argv);
+int clear_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int clear_main(int argc, char **argv)
 {
 	return printf("\033[H\033[J") != 6;

@@ -7,10 +7,10 @@
  * known bugs: can't deal with alpha ranges
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
-#ifdef CONFIG_FEATURE_MAKEDEVS_LEAF
-int makedevs_main(int argc, char **argv);
+#if ENABLE_FEATURE_MAKEDEVS_LEAF
+int makedevs_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int makedevs_main(int argc, char **argv)
 {
 	mode_t mode;
@@ -48,7 +48,7 @@ int makedevs_main(int argc, char **argv)
 		int sz;
 
 		sz = snprintf(buf, sizeof(buf), "%s%d", basedev, S);
-		if(sz<0 || sz>=sizeof(buf))  /* libc different */
+		if (sz < 0 || sz >= sizeof(buf))  /* libc different */
 			bb_error_msg_and_die("%s too large", basedev);
 
 	/* if mode != S_IFCHR and != S_IFBLK third param in mknod() ignored */
@@ -65,11 +65,11 @@ int makedevs_main(int argc, char **argv)
 	return 0;
 }
 
-#elif defined CONFIG_FEATURE_MAKEDEVS_TABLE
+#elif ENABLE_FEATURE_MAKEDEVS_TABLE
 
 /* Licensed under the GPL v2 or later, see the file LICENSE in this tarball. */
 
-int makedevs_main(int argc, char **argv);
+int makedevs_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int makedevs_main(int argc, char **argv)
 {
 	FILE *table = stdin;
@@ -78,7 +78,7 @@ int makedevs_main(int argc, char **argv)
 	int linenum = 0;
 	int ret = EXIT_SUCCESS;
 
-	getopt32(argc, argv, "d:", &line);
+	getopt32(argv, "d:", &line);
 	if (line)
 		table = xfopen(line, "r");
 
@@ -162,8 +162,7 @@ int makedevs_main(int argc, char **argv)
 				ret = EXIT_FAILURE;
 				goto loop;
 			}
-		} else
-		{
+		} else {
 			dev_t rdev;
 
 			if (type == 'p') {

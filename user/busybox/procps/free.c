@@ -9,25 +9,25 @@
 
 /* getopt not needed */
 
-#include "busybox.h"
+#include "libbb.h"
 
-int free_main(int argc, char **argv);
+int free_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int free_main(int argc, char **argv)
 {
 	struct sysinfo info;
 	sysinfo(&info);
 
 	/* Kernels prior to 2.4.x will return info.mem_unit==0, so cope... */
-	if (info.mem_unit==0) {
+	if (info.mem_unit == 0) {
 		info.mem_unit=1;
 	}
-	if ( info.mem_unit == 1 ) {
+	if (info.mem_unit == 1) {
 		info.mem_unit=1024;
 
 		/* TODO:  Make all this stuff not overflow when mem >= 4 Gib */
 		info.totalram/=info.mem_unit;
 		info.freeram/=info.mem_unit;
-#ifndef BB_NOMMU
+#ifndef __uClinux__
 		info.totalswap/=info.mem_unit;
 		info.freeswap/=info.mem_unit;
 #endif
@@ -38,7 +38,7 @@ int free_main(int argc, char **argv)
 		/* TODO:  Make all this stuff not overflow when mem >= 4 Gib */
 		info.totalram*=info.mem_unit;
 		info.freeram*=info.mem_unit;
-#ifndef BB_NOMMU
+#ifndef __uClinux__
 		info.totalswap*=info.mem_unit;
 		info.freeswap*=info.mem_unit;
 #endif
@@ -46,7 +46,7 @@ int free_main(int argc, char **argv)
 		info.bufferram*=info.mem_unit;
 	}
 
-	if (argc > 1 && **(argv + 1) == '-')
+	if (argc > 1 && *argv[1] == '-')
 		bb_show_usage();
 
 	printf("%6s%13s%13s%13s%13s%13s\n", "", "total", "used", "free",
@@ -56,7 +56,7 @@ int free_main(int argc, char **argv)
 			info.totalram-info.freeram, info.freeram,
 			info.sharedram, info.bufferram);
 
-#ifndef BB_NOMMU
+#ifndef __uClinux__
 	printf("%6s%13ld%13ld%13ld\n", "Swap:", info.totalswap,
 			info.totalswap-info.freeswap, info.freeswap);
 
@@ -66,4 +66,3 @@ int free_main(int argc, char **argv)
 #endif
 	return EXIT_SUCCESS;
 }
-

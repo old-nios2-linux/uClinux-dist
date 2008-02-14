@@ -1,7 +1,7 @@
 /* vi: set sw=4 ts=4: */
 /*
  *  busybox patch applet to handle the unified diff format.
- *  Copyright (C) 2003 Glenn McGrath <bug1@iinet.net.au>
+ *  Copyright (C) 2003 Glenn McGrath
  *
  *  Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  *
@@ -20,10 +20,8 @@
  */
 
 #include <getopt.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "busybox.h"
+
+#include "libbb.h"
 
 static unsigned int copy_lines(FILE *src_stream, FILE *dest_stream, const unsigned int lines_count)
 {
@@ -57,12 +55,16 @@ static char *extract_filename(char *line, int patch_level)
 	int i;
 
 	/* Terminate string at end of source filename */
-	temp = strchr(filename_start_ptr, '\t');
-	if (temp) *temp = 0;
+	temp = strchrnul(filename_start_ptr, '\t');
+	*temp = '\0';
 
-	/* skip over (patch_level) number of leading directories */
+	/* Skip over (patch_level) number of leading directories */
+	if (patch_level == -1)
+		patch_level = INT_MAX;
 	for (i = 0; i < patch_level; i++) {
-		if(!(temp = strchr(filename_start_ptr, '/'))) break;
+		temp = strchr(filename_start_ptr, '/');
+		if (!temp)
+			break;
 		filename_start_ptr = temp + 1;
 	}
 
@@ -75,7 +77,7 @@ static int file_doesnt_exist(const char *filename)
 	return stat(filename, &statbuf);
 }
 
-int patch_main(int argc, char **argv);
+int patch_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int patch_main(int argc, char **argv)
 {
 	int patch_level = -1;
@@ -85,7 +87,7 @@ int patch_main(int argc, char **argv)
 
 	{
 		char *p, *i;
-		ret = getopt32(argc, argv, "p:i:", &p, &i);
+		ret = getopt32(argv, "p:i:", &p, &i);
 		if (ret & 1)
 			patch_level = xatol_range(p, -1, USHRT_MAX);
 		if (ret & 2) {
@@ -96,7 +98,7 @@ int patch_main(int argc, char **argv)
 		ret = 0;
 	}
 
-	patch_line = xmalloc_fgets(patch_file);
+	patch_line = xmalloc_getline(patch_file);
 	while (patch_line) {
 		FILE *src_stream;
 		FILE *dst_stream;
@@ -115,7 +117,7 @@ int patch_main(int argc, char **argv)
 		 */
 		while (patch_line && strncmp(patch_line, "--- ", 4) != 0) {
 			free(patch_line);
-			patch_line = xmalloc_fgets(patch_file);
+			patch_line = xmalloc_getline(patch_file);
 		}
 		/* FIXME: patch_line NULL check?? */
 
@@ -123,7 +125,7 @@ int patch_main(int argc, char **argv)
 		original_filename = extract_filename(patch_line, patch_level);
 		free(patch_line);
 
-		patch_line = xmalloc_fgets(patch_file);
+		patch_line = xmalloc_getline(patch_file);
 		/* FIXME: NULL check?? */
 		if (strncmp(patch_line, "+++ ", 4) != 0) {
 			ret = 2;
@@ -260,12 +262,9 @@ int patch_main(int argc, char **argv)
 			}
 			if ((dest_cur_line == 0) || (dest_beg_line == 0)) {
 				/* The new patched file is empty, remove it */
-				if (unlink(new_filename) == -1) {
-					bb_perror_msg_and_die("cannot remove file %s", new_filename);
-				}
-				if (unlink(original_filename) == -1) {
-					bb_perror_msg_and_die("cannot remove original file %s", new_filename);
-				}
+				xunlink(new_filename);
+				if (strcmp(new_filename, original_filename) != 0)
+					xunlink(original_filename);
 			}
 		}
 	}

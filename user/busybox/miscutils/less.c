@@ -23,7 +23,7 @@
 
 #include <sched.h>	/* sched_yield() */
 
-#include "busybox.h"
+#include "libbb.h"
 #if ENABLE_FEATURE_LESS_REGEXP
 #include "xregex.h"
 #endif
@@ -72,27 +72,6 @@ enum {
 	TILDES = 1,
 };
 
-static unsigned max_displayed_line;
-static unsigned width;
-static const char *empty_line_marker = "~";
-
-static char *filename;
-static char **files;
-static unsigned num_files = 1;
-static unsigned current_file = 1;
-static const char **buffer;
-static const char **flines;
-static int cur_fline; /* signed */
-static unsigned max_fline;
-static unsigned max_lineno; /* this one tracks linewrap */
-
-static ssize_t eof_error = 1; /* eof if 0, error if < 0 */
-static char terminated = 1;
-static size_t readpos;
-static size_t readeof;
-/* last position in last line, taking into account tabs */
-static size_t linepos;
-
 /* Command line options */
 enum {
 	FLAG_E = 1,
@@ -104,25 +83,81 @@ enum {
 	LESS_STATE_MATCH_BACKWARDS = 1 << 15,
 };
 
-#if ENABLE_FEATURE_LESS_MARKS
-static unsigned mark_lines[15][2];
-static unsigned num_marks;
-#endif
-
-#if ENABLE_FEATURE_LESS_REGEXP
-static unsigned *match_lines;
-static int match_pos; /* signed! */
-static unsigned num_matches;
-static regex_t pattern;
-static unsigned pattern_valid;
-#else
+#if !ENABLE_FEATURE_LESS_REGEXP
 enum { pattern_valid = 0 };
 #endif
 
-static struct termios term_orig, term_vi;
-
-/* File pointer to get input from */
-static int kbd_fd;
+struct globals {
+	int cur_fline; /* signed */
+	int kbd_fd;  /* fd to get input from */
+/* last position in last line, taking into account tabs */
+	size_t linepos;
+	unsigned max_displayed_line;
+	unsigned max_fline;
+	unsigned max_lineno; /* this one tracks linewrap */
+	unsigned width;
+	ssize_t eof_error; /* eof if 0, error if < 0 */
+	size_t readpos;
+	size_t readeof;
+	const char **buffer;
+	const char **flines;
+	const char *empty_line_marker;
+	unsigned num_files;
+	unsigned current_file;
+	char *filename;
+	char **files;
+#if ENABLE_FEATURE_LESS_MARKS
+	unsigned num_marks;
+	unsigned mark_lines[15][2];
+#endif
+#if ENABLE_FEATURE_LESS_REGEXP
+	unsigned *match_lines;
+	int match_pos; /* signed! */
+	unsigned num_matches;
+	regex_t pattern;
+	smallint pattern_valid;
+#endif
+	smallint terminated;
+	struct termios term_orig, term_less;
+};
+#define G (*ptr_to_globals)
+#define cur_fline           (G.cur_fline         )
+#define kbd_fd              (G.kbd_fd            )
+#define linepos             (G.linepos           )
+#define max_displayed_line  (G.max_displayed_line)
+#define max_fline           (G.max_fline         )
+#define max_lineno          (G.max_lineno        )
+#define width               (G.width             )
+#define eof_error           (G.eof_error         )
+#define readpos             (G.readpos           )
+#define readeof             (G.readeof           )
+#define buffer              (G.buffer            )
+#define flines              (G.flines            )
+#define empty_line_marker   (G.empty_line_marker )
+#define num_files           (G.num_files         )
+#define current_file        (G.current_file      )
+#define filename            (G.filename          )
+#define files               (G.files             )
+#define num_marks           (G.num_marks         )
+#define mark_lines          (G.mark_lines        )
+#if ENABLE_FEATURE_LESS_REGEXP
+#define match_lines         (G.match_lines       )
+#define match_pos           (G.match_pos         )
+#define num_matches         (G.num_matches       )
+#define pattern             (G.pattern           )
+#define pattern_valid       (G.pattern_valid     )
+#endif
+#define terminated          (G.terminated        )
+#define term_orig           (G.term_orig         )
+#define term_less           (G.term_less         )
+#define INIT_G() do { \
+		PTR_TO_GLOBALS = xzalloc(sizeof(G)); \
+		empty_line_marker = "~"; \
+		num_files = 1; \
+		current_file = 1; \
+		eof_error = 1; \
+		terminated = 1; \
+	} while (0)
 
 /* Reset terminal input to normal */
 static void set_tty_cooked(void)
@@ -138,7 +173,7 @@ static void less_exit(int code)
 	 * and restore it when we exit. Less does this with the
 	 * "ti" and "te" termcap commands; can this be done with
 	 * only termios.h? */
-	putchar('\n');
+	bb_putchar('\n');
 	fflush_stdout_and_exit(code);
 }
 
@@ -171,7 +206,29 @@ static void fill_match_lines(unsigned pos);
 #define fill_match_lines(pos) ((void)0)
 #endif
 
-
+/* Devilishly complex routine.
+ *
+ * Has to deal with EOF and EPIPE on input,
+ * with line wrapping, with last line not ending in '\n'
+ * (possibly not ending YET!), with backspace and tabs.
+ * It reads input again if last time we got an EOF (thus supporting
+ * growing files) or EPIPE (watching output of slow process like make).
+ *
+ * Variables used:
+ * flines[] - array of lines already read. Linewrap may cause
+ *      one source file line to occupy several flines[n].
+ * flines[max_fline] - last line, possibly incomplete.
+ * terminated - 1 if flines[max_fline] is 'terminated'
+ *      (if there was '\n' [which isn't stored itself, we just remember
+ *      that it was seen])
+ * max_lineno - last line's number, this one doesn't increment
+ *      on line wrap, only on "real" new lines.
+ * readbuf[0..readeof-1] - small preliminary buffer.
+ * readbuf[readpos] - next character to add to current line.
+ * linepos - screen line position of next char to be read
+ *      (takes into account tabs and backspaces)
+ * eof_error - < 0 error, == 0 EOF, > 0 not EOF/error
+ */
 static void read_lines(void)
 {
 #define readbuf bb_common_bufsiz1
@@ -192,6 +249,7 @@ static void read_lines(void)
 			cp += 8;
 		strcpy(current_line, cp);
 		p += strlen(current_line);
+		/* linepos is still valid from previous read_lines() */
 	} else {
 		linepos = 0;
 	}
@@ -242,17 +300,27 @@ static void read_lines(void)
 			if (c == '\x8' && linepos && p[-1] != '\t') {
 				readpos++; /* eat it */
 				linepos--;
+			/* was buggy (p could end up <= current_line)... */
 				*--p = '\0';
 				continue;
 			}
-			if (c == '\t')
-				linepos += (linepos^7) & 7;
-			linepos++;
-			if (linepos >= w)
-				break;
+			{
+				size_t new_linepos = linepos + 1;
+				if (c == '\t') {
+					new_linepos += 7;
+					new_linepos &= (~7);
+				}
+				if (new_linepos >= w)
+					break;
+				linepos = new_linepos;
+			}
 			/* ok, we will eat this char */
 			readpos++;
-			if (c == '\n') { terminated = 1; break; }
+			if (c == '\n') {
+				terminated = 1;
+				linepos = 0;
+				break;
+			}
 			/* NUL is substituted by '\n'! */
 			if (c == '\0') c = '\n';
 			*p++ = c;
@@ -279,8 +347,10 @@ static void read_lines(void)
 		} else {
 			flines[max_fline] = xrealloc(current_line, strlen(current_line)+1);
 		}
-		if (max_fline >= MAXLINES)
+		if (max_fline >= MAXLINES) {
+			eof_error = 0; /* Pretend we saw EOF */
 			break;
+		}
 		if (max_fline > cur_fline + max_displayed_line)
 			break;
 		if (eof_error <= 0) {
@@ -349,7 +419,7 @@ static void status_print(void)
 
 	clear_line();
 	if (cur_fline && cur_fline < max_fline - max_displayed_line) {
-		putchar(':');
+		bb_putchar(':');
 		return;
 	}
 	p = "(END)";
@@ -380,12 +450,12 @@ static void cap_cur_fline(int nlines)
 	}
 }
 
-static char controls[] =
+static const char controls[] ALIGN1 =
 	/* NUL: never encountered; TAB: not converted */
 	/**/"\x01\x02\x03\x04\x05\x06\x07\x08"  "\x0a\x0b\x0c\x0d\x0e\x0f"
 	"\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f"
 	"\x7f\x9b"; /* DEL and infamous Meta-ESC :( */
-static char ctrlconv[] =
+static const char ctrlconv[] ALIGN1 =
 	/* '\n': it's a former NUL - subst with '@', not 'J' */
 	"\x40\x41\x42\x43\x44\x45\x46\x47\x48\x49\x40\x4b\x4c\x4d\x4e\x4f"
 	"\x50\x51\x52\x53\x54\x55\x56\x57\x58\x59\x5a\x5b\x5c\x5d\x5e\x5f";
@@ -604,7 +674,7 @@ static void getch_nowait(char* input, int sz)
 		FD_SET(0, &readfds);
 	}
 	FD_SET(kbd_fd, &readfds);
-	tcsetattr(kbd_fd, TCSANOW, &term_vi);
+	tcsetattr(kbd_fd, TCSANOW, &term_less);
 	select(kbd_fd + 1, &readfds, NULL, NULL, NULL);
 
 	input[0] = '\0';
@@ -629,10 +699,11 @@ static int less_getch(void)
 	char input[16];
 	unsigned i;
  again:
+	memset(input, 0, sizeof(input));
 	getch_nowait(input, sizeof(input));
+
 	/* Detect escape sequences (i.e. arrow keys) and handle
 	 * them accordingly */
-
 	if (input[0] == '\033' && input[1] == '[') {
 		set_tty_cooked();
 		i = input[2] - REAL_KEY_UP;
@@ -668,8 +739,9 @@ static char* less_gets(int sz)
 
 		/* I be damned if I know why is it needed *repeatedly*,
 		 * but it is needed. Is it because of stdio? */
-		tcsetattr(kbd_fd, TCSANOW, &term_vi);
+		tcsetattr(kbd_fd, TCSANOW, &term_less);
 
+		c = '\0';
 		read(kbd_fd, &c, 1);
 		if (c == 0x0d)
 			return result;
@@ -683,7 +755,7 @@ static char* less_gets(int sz)
 			continue;
 		if (i >= width - sz - 1)
 			continue; /* len limit */
-		putchar(c);
+		bb_putchar(c);
 		result[i++] = c;
 		result = xrealloc(result, i+1);
 		result[i] = '\0';
@@ -788,19 +860,25 @@ static void normalize_match_pos(int match)
 
 static void goto_match(int match)
 {
+	int sv;
+
 	if (!pattern_valid)
 		return;
 	if (match < 0)
 		match = 0;
+	sv = cur_fline;
 	/* Try to find next match if eof isn't reached yet */
 	if (match >= num_matches && eof_error > 0) {
 		cur_fline = MAXLINES; /* look as far as needed */
 		read_lines();
-		cap_cur_fline(cur_fline);
 	}
 	if (num_matches) {
+		cap_cur_fline(cur_fline);
 		normalize_match_pos(match);
 		buffer_line(match_lines[match_pos]);
+	} else {
+		cur_fline = sv;
+		print_statusline("No matches found");
 	}
 }
 
@@ -838,7 +916,7 @@ static void regex_process(void)
 
 	/* Get the uncompiled regular expression from the user */
 	clear_line();
-	putchar((option_mask32 & LESS_STATE_MATCH_BACKWARDS) ? '?' : '/');
+	bb_putchar((option_mask32 & LESS_STATE_MATCH_BACKWARDS) ? '?' : '/');
 	uncomp_regex = less_gets(1);
 	if (!uncomp_regex[0]) {
 		free(uncomp_regex);
@@ -891,7 +969,7 @@ static void number_process(int first_digit)
 		num_input[i] = less_getch();
 		if (!num_input[i] || !isdigit(num_input[i]))
 			break;
-		putchar(num_input[i]);
+		bb_putchar(num_input[i]);
 		i++;
 	}
 
@@ -946,7 +1024,7 @@ static void flag_change(void)
 	int keypress;
 
 	clear_line();
-	putchar('-');
+	bb_putchar('-');
 	keypress = less_getch();
 
 	switch (keypress) {
@@ -971,7 +1049,7 @@ static void show_flag_status(void)
 	int flag_val;
 
 	clear_line();
-	putchar('_');
+	bb_putchar('_');
 	keypress = less_getch();
 
 	switch (keypress) {
@@ -1135,7 +1213,7 @@ static void keypress_process(int keypress)
 	case KEY_UP: case 'y': case 'k':
 		buffer_up(1);
 		break;
-	case PAGE_DOWN: case ' ': case 'z':
+	case PAGE_DOWN: case ' ': case 'z': case 'f':
 		buffer_down(max_displayed_line + 1);
 		break;
 	case PAGE_UP: case 'w': case 'b':
@@ -1233,15 +1311,17 @@ static void sig_catcher(int sig ATTRIBUTE_UNUSED)
 	exit(1);
 }
 
-int less_main(int argc, char **argv);
+int less_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int less_main(int argc, char **argv)
 {
 	int keypress;
 
+	INIT_G();
+
 	/* TODO: -x: do not interpret backspace, -xx: tab also */
 	/* -xxx: newline also */
 	/* -w N: assume width N (-xxx -w 32: hex viewer of sorts) */
-	getopt32(argc, argv, "EMmN~");
+	getopt32(argv, "EMmN~");
 	argc -= optind;
 	argv += optind;
 	num_files = argc;
@@ -1277,16 +1357,16 @@ int less_main(int argc, char **argv)
 	tcgetattr(kbd_fd, &term_orig);
 	signal(SIGTERM, sig_catcher);
 	signal(SIGINT, sig_catcher);
-	term_vi = term_orig;
-	term_vi.c_lflag &= ~(ICANON | ECHO);
-	term_vi.c_iflag &= ~(IXON | ICRNL);
-	/*term_vi.c_oflag &= ~ONLCR;*/
-	term_vi.c_cc[VMIN] = 1;
-	term_vi.c_cc[VTIME] = 0;
+	term_less = term_orig;
+	term_less.c_lflag &= ~(ICANON | ECHO);
+	term_less.c_iflag &= ~(IXON | ICRNL);
+	/*term_less.c_oflag &= ~ONLCR;*/
+	term_less.c_cc[VMIN] = 1;
+	term_less.c_cc[VTIME] = 0;
 
 	/* Want to do it just once, but it doesn't work, */
 	/* so we are redoing it (see code above). Mystery... */
-	/*tcsetattr(kbd_fd, TCSANOW, &term_vi);*/
+	/*tcsetattr(kbd_fd, TCSANOW, &term_less);*/
 
 	reinitialize();
 	while (1) {

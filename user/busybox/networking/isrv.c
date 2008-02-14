@@ -8,7 +8,7 @@
  * Licensed under GPL version 2, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include "isrv.h"
 
 #define DEBUG 0
@@ -20,20 +20,6 @@
 #endif
 
 /* Helpers */
-
-/* Even if _POSIX_MONOTONIC_CLOCK is defined, this
- * may require librt */
-#if 0 /*def _POSIX_MONOTONIC_CLOCK*/
-static time_t monotonic_time(void)
-{
-	struct timespec ts;
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-		time(&ts.tv_sec);
-	return ts.tv_sec;
-}
-#else
-#define monotonic_time() (time(NULL))
-#endif
 
 /* Opaque structure */
 
@@ -258,7 +244,7 @@ static void handle_fd_set(isrv_state_t *state, fd_set *fds, int (*h)(int, void *
 			/* this peer is gone */
 			remove_peer(state, peer);
 		} else if (TIMEOUT) {
-			TIMEO_TBL[peer] = monotonic_time();
+			TIMEO_TBL[peer] = monotonic_sec();
 		}
 	}
 }
@@ -301,7 +287,7 @@ void isrv_run(
 	isrv_want_rd(state, listen_fd);
 	/* remember flags to make blocking<->nonblocking switch faster */
 	/* (suppress gcc warning "cast from ptr to int of different size") */
-	PARAM_TBL[0] = (void*)(ptrdiff_t)(fcntl(listen_fd, F_GETFL, 0));
+	PARAM_TBL[0] = (void*)(ptrdiff_t)(fcntl(listen_fd, F_GETFL));
 
 	while (1) {
 		struct timeval tv;
@@ -335,7 +321,7 @@ void isrv_run(
 			break;
 
 		if (timeout) {
-			time_t t = monotonic_time();
+			time_t t = monotonic_sec();
 			if (t != CURTIME) {
 				CURTIME = t;
 				handle_timeout(state, do_timeout);

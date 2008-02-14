@@ -22,10 +22,9 @@
  * val.  Otherwise, pass -1 to get default permissions.
  */
 
-#include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include "libbb.h"
+
+/* This function is used from NOFORK applets. It must not allocate anything */
 
 int bb_make_directory (char *path, long mode, int flags)
 {
@@ -99,6 +98,6 @@ int bb_make_directory (char *path, long mode, int flags)
 
 	} while (1);
 
-	bb_perror_msg ("cannot %s directory '%s'", fail_msg, path);
+	bb_perror_msg("cannot %s directory '%s'", fail_msg, path);
 	return -1;
 }

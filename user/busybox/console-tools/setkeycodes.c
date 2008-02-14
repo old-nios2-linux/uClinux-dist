@@ -9,9 +9,8 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <sys/ioctl.h>
-#include "busybox.h"
-
+//#include <sys/ioctl.h>
+#include "libbb.h"
 
 /* From <linux/kd.h> */
 struct kbkeycode {
@@ -21,8 +20,8 @@ enum {
 	KDSETKEYCODE = 0x4B4D  /* write kernel keycode table entry */
 };
 
-int setkeycodes_main(int argc, char** argv);
-int setkeycodes_main(int argc, char** argv)
+int setkeycodes_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int setkeycodes_main(int argc, char **argv)
 {
 	int fd, sc;
 	struct kbkeycode a;
@@ -40,9 +39,9 @@ int setkeycodes_main(int argc, char** argv)
 			a.scancode -= 0xe000;
 			a.scancode += 128;
 		}
-		if (ioctl(fd, KDSETKEYCODE, &a)) {
-			bb_perror_msg_and_die("failed to set SCANCODE %x to KEYCODE %d", sc, a.keycode);
-		}
+		ioctl_or_perror_and_die(fd, KDSETKEYCODE, &a,
+			"failed to set SCANCODE %x to KEYCODE %d",
+			sc, a.keycode);
 		argc -= 2;
 		argv += 2;
 	}

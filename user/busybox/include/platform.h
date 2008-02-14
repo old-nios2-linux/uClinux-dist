@@ -53,17 +53,30 @@
 # define ATTRIBUTE_PACKED __attribute__ ((__packed__))
 # define ATTRIBUTE_ALIGNED(m) __attribute__ ((__aligned__(m)))
 # if __GNUC_PREREQ (3,0)
-#  define ATTRIBUTE_ALWAYS_INLINE __attribute__ ((always_inline)) inline
+#  define ALWAYS_INLINE __attribute__ ((always_inline)) inline
+/* I've seen a toolchain where I needed __noinline__ instead of noinline */
+#  define NOINLINE      __attribute__((__noinline__))
+#  if !ENABLE_WERROR
+#   define ATTRIBUTE_DEPRECATED __attribute__ ((__deprecated__))
+#   define ATTRIBUTE_UNUSED_RESULT __attribute__ ((warn_unused_result))
+#  else
+#   define ATTRIBUTE_DEPRECATED /* n/a */
+#   define ATTRIBUTE_UNUSED_RESULT /* n/a */
+#  endif
 # else
-#  define ATTRIBUTE_ALWAYS_INLINE inline
+#  define ALWAYS_INLINE inline /* n/a */
+#  define NOINLINE /* n/a */
+#  define ATTRIBUTE_DEPRECATED /* n/a */
+#  define ATTRIBUTE_UNUSED_RESULT /* n/a */
 # endif
 
 /* -fwhole-program makes all symbols local. The attribute externally_visible
    forces a symbol global.  */
 # if __GNUC_PREREQ (4,1)
-#  define ATTRIBUTE_EXTERNALLY_VISIBLE __attribute__ ((__externally_visible__))
+#  define EXTERNALLY_VISIBLE __attribute__(( visibility("default") ));
+//__attribute__ ((__externally_visible__))
 # else
-#  define ATTRIBUTE_EXTERNALLY_VISIBLE
+#  define EXTERNALLY_VISIBLE
 # endif /* GNUC >= 4.1 */
 
 /* We use __extension__ in some places to suppress -pedantic warnings
@@ -160,7 +173,7 @@ __extension__ typedef unsigned long long __u64;
 # error "Sorry, this libc version is not supported :("
 #endif
 
-// Don't perpetuate e2fsck crap into the headers.  Clean up e2fsck instead.
+/* Don't perpetuate e2fsck crap into the headers.  Clean up e2fsck instead. */
 
 #if defined __GLIBC__ || defined __UCLIBC__ \
 	|| defined __dietlibc__ || defined _NEWLIB_VERSION
@@ -171,13 +184,13 @@ __extension__ typedef unsigned long long __u64;
 #else
 /* Largest integral types.  */
 #if __BIG_ENDIAN__
-typedef long int                intmax_t;
-typedef unsigned long int       uintmax_t;
+typedef long                intmax_t;
+typedef unsigned long       uintmax_t;
 #else
 __extension__
-typedef long long int           intmax_t;
+typedef long long           intmax_t;
 __extension__
-typedef unsigned long long int  uintmax_t;
+typedef unsigned long long  uintmax_t;
 #endif
 #endif
 
@@ -201,6 +214,16 @@ typedef unsigned smalluint;
 #include <stdbool.h>
 #endif
 
+/* Try to defeat gcc's alignment of "char message[]"-like data */
+#if 1 /* if needed: !defined(arch1) && !defined(arch2) */
+#define ALIGN1 __attribute__((aligned(1)))
+#define ALIGN2 __attribute__((aligned(2)))
+#else
+/* Arches which MUST have 2 or 4 byte alignment for everything are here */
+#define ALIGN1
+#define ALIGN2
+#endif
+
 
 /* uclibc does not implement daemon() for no-mmu systems.
  * For 0.9.29 and svn, __ARCH_USE_MMU__ indicates no-mmu reliably.
@@ -210,7 +233,15 @@ typedef unsigned smalluint;
  */
 #if defined __UCLIBC__ && __UCLIBC_MAJOR__ >= 0 && __UCLIBC_MINOR__ >= 9 && \
     __UCLIBC_SUBLEVEL__ > 28 && !defined __ARCH_USE_MMU__
-#define BB_NOMMU
+#define BB_MMU 0
+#define BB_NOMMU 1
+#define USE_FOR_NOMMU(...) __VA_ARGS__
+#define USE_FOR_MMU(...)
+#else
+#define BB_MMU 1
+/* BB_NOMMU is not defined in this case! */
+#define USE_FOR_NOMMU(...)
+#define USE_FOR_MMU(...) __VA_ARGS__
 #endif
 
 /* Platforms that haven't got dprintf need to implement fdprintf() in
@@ -224,13 +255,14 @@ typedef unsigned smalluint;
 #endif
 
 #if defined(__dietlibc__)
-static ATTRIBUTE_ALWAYS_INLINE char* strchrnul(const char *s, char c) {
+static ALWAYS_INLINE char* strchrnul(const char *s, char c)
+{
 	while (*s && *s != c) ++s;
 	return (char*)s;
 }
 #endif
 
-/* Don't use lchown with glibc older than 2.1.x ... uC-libc lacks it */
+/* Don't use lchown with glibc older than 2.1.x ... uClibc lacks it */
 #if (defined __GLIBC__ && __GLIBC__ <= 2 && __GLIBC_MINOR__ < 1) || \
     defined __UC_LIBC__
 # define lchown chown
@@ -249,8 +281,8 @@ static ATTRIBUTE_ALWAYS_INLINE char* strchrnul(const char *s, char c) {
 #define HAVE_INTTYPES_H
 #define PRIu32 "u"
 
-/* use legacy setpgrp(pidt_,pid_t) for now.  move to platform.c */
-#define bb_setpgrp do { pid_t __me = getpid(); setpgrp(__me,__me); } while (0)
+/* use legacy setpgrp(pid_t,pid_t) for now.  move to platform.c */
+#define bb_setpgrp() do { pid_t __me = getpid(); setpgrp(__me,__me); } while (0)
 
 #if !defined ADJ_OFFSET_SINGLESHOT && defined MOD_CLKA && defined MOD_OFFSET
 #define ADJ_OFFSET_SINGLESHOT (MOD_CLKA | MOD_OFFSET)
@@ -266,12 +298,12 @@ static ATTRIBUTE_ALWAYS_INLINE char* strchrnul(const char *s, char c) {
 #endif
 
 #else
-#define bb_setpgrp setpgrp()
+#define bb_setpgrp() setpgrp()
 #endif
 
 #if defined(__linux__)
 #include <sys/mount.h>
-// Make sure we have all the new mount flags we actually try to use.
+/* Make sure we have all the new mount flags we actually try to use. */
 #ifndef MS_BIND
 #define MS_BIND        (1<<12)
 #endif
@@ -285,7 +317,7 @@ static ATTRIBUTE_ALWAYS_INLINE char* strchrnul(const char *s, char c) {
 #define MS_SILENT      (1<<15)
 #endif
 
-// The shared subtree stuff, which went in around 2.6.15
+/* The shared subtree stuff, which went in around 2.6.15. */
 #ifndef MS_UNBINDABLE
 #define MS_UNBINDABLE  (1<<17)
 #endif

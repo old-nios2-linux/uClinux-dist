@@ -11,22 +11,18 @@
  *		Only supports new ASCII and CRC formats
  *
  */
-#include <fcntl.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include "libbb.h"
 #include "unarchive.h"
-#include "busybox.h"
 
-#define CPIO_OPT_EXTRACT			0x01
-#define CPIO_OPT_TEST				0x02
-#define CPIO_OPT_UNCONDITIONAL		0x04
-#define CPIO_OPT_VERBOSE			0x08
-#define CPIO_OPT_FILE				0x10
-#define CPIO_OPT_CREATE_LEADING_DIR	0x20
-#define CPIO_OPT_PRESERVE_MTIME		0x40
+#define CPIO_OPT_EXTRACT                0x01
+#define CPIO_OPT_TEST                   0x02
+#define CPIO_OPT_UNCONDITIONAL          0x04
+#define CPIO_OPT_VERBOSE                0x08
+#define CPIO_OPT_FILE                   0x10
+#define CPIO_OPT_CREATE_LEADING_DIR     0x20
+#define CPIO_OPT_PRESERVE_MTIME         0x40
 
-int cpio_main(int argc, char **argv);
+int cpio_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int cpio_main(int argc, char **argv)
 {
 	archive_handle_t *archive_handle;
@@ -39,7 +35,7 @@ int cpio_main(int argc, char **argv)
 	archive_handle->seek = seek_by_read;
 	archive_handle->flags = ARCHIVE_EXTRACT_NEWER | ARCHIVE_PRESERVE_DATE;
 
-	opt = getopt32(argc, argv, "ituvF:dm", &cpio_filename);
+	opt = getopt32(argv, "ituvF:dm", &cpio_filename);
 
 	/* One of either extract or test options must be given */
 	if ((opt & (CPIO_OPT_TEST | CPIO_OPT_EXTRACT)) == 0) {

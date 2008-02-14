@@ -9,17 +9,12 @@
  * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#include "busybox.h"
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
+#include "libbb.h"
 
-int mktemp_main(int argc, char **argv);
+int mktemp_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int mktemp_main(int argc, char **argv)
 {
-	unsigned long flags = getopt32(argc, argv, "dqt");
+	unsigned long flags = getopt32(argv, "dqt");
 	char *chp;
 
 	if (optind + 1 != argc)

@@ -7,7 +7,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* From <linux/vt.h> */
 enum {
@@ -15,7 +15,7 @@ enum {
 	VT_WAITACTIVE = 0x5607  /* wait for vt active */
 };
 
-int chvt_main(int argc, char **argv);
+int chvt_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int chvt_main(int argc, char **argv)
 {
 	int fd, num;
@@ -25,10 +25,9 @@ int chvt_main(int argc, char **argv)
 	}
 
 	fd = get_console_fd();
-	num = xatoul_range(argv[1], 1, 63);
-	if ((-1 == ioctl(fd, VT_ACTIVATE, num))
-	|| (-1 == ioctl(fd, VT_WAITACTIVE, num))) {
-		bb_perror_msg_and_die("ioctl");
-	}
+	num = xatou_range(argv[1], 1, 63);
+	/* double cast suppresses "cast to ptr from int of different size" */
+	xioctl(fd, VT_ACTIVATE, (void *)(ptrdiff_t)num);
+	xioctl(fd, VT_WAITACTIVE, (void *)(ptrdiff_t)num);
 	return EXIT_SUCCESS;
 }

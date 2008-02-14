@@ -25,11 +25,12 @@
  * remove ridiculous amounts of bloat.
  */
 
-#include "busybox.h"
-#include "inet_common.h"
 #include <getopt.h>
 #include <net/route.h>
 #include <net/if.h>
+
+#include "libbb.h"
+#include "inet_common.h"
 
 
 #ifndef RTF_UP
@@ -49,7 +50,7 @@
 #define RTF_REJECT      0x0200	/* Reject route                 */
 #endif
 
-#if defined (SIOCADDRTOLD) || defined (RTF_IRTT)	/* route */
+#if defined(SIOCADDRTOLD) || defined(RTF_IRTT)	/* route */
 #define HAVE_NEW_ADDRT 1
 #endif
 
@@ -72,7 +73,7 @@
 #define HOST_FLAG 2
 
 /* We remap '-' to '#' to avoid problems with getopt. */
-static const char tbl_hash_net_host[] =
+static const char tbl_hash_net_host[] ALIGN1 =
 	"\007\001#net\0"
 /*	"\010\002#host\0" */
 	"\007\002#host"				/* Since last, we can save a byte. */
@@ -95,7 +96,7 @@ static const char tbl_hash_net_host[] =
 #define KW_IPVx_DYN             042
 #define KW_IPVx_REINSTATE       043
 
-static const char tbl_ipvx[] =
+static const char tbl_ipvx[] ALIGN1 =
 	/* 020 is the "takes an arg" bit */
 #if HAVE_NEW_ADDRT
 	"\011\020metric\0"
@@ -174,7 +175,7 @@ static void INET_setroute(int action, char **args)
 
 		/* recognize x.x.x.x/mask format. */
 		prefix = strchr(target, '/');
-		if(prefix) {
+		if (prefix) {
 			int prefix_len;
 
 			prefix_len = xatoul_range(prefix+1, 0, 32);
@@ -193,7 +194,7 @@ static void INET_setroute(int action, char **args)
 		if (isnet < 0) {
 			bb_error_msg_and_die("resolving %s", target);
 		}
-		if(prefix) {
+		if (prefix) {
 			/* do not destroy prefix for process args */
 			*prefix = '/';
 		}
@@ -326,9 +327,10 @@ static void INET_setroute(int action, char **args)
 	/* Create a socket to the INET kernel. */
 	skfd = xsocket(AF_INET, SOCK_DGRAM, 0);
 
-	if (ioctl(skfd, ((action==RTACTION_ADD) ? SIOCADDRT : SIOCDELRT), &rt)<0) {
-		bb_perror_msg_and_die("SIOC[ADD|DEL]RT");
-	}
+	if (action == RTACTION_ADD)
+		xioctl(skfd, SIOCADDRT, &rt);
+	else
+		xioctl(skfd, SIOCDELRT, &rt);
 
 	if (ENABLE_FEATURE_CLEAN_UP) close(skfd);
 }
@@ -350,9 +352,10 @@ static void INET6_setroute(int action, char **args)
 			memset(&sa6, 0, sizeof(sa6));
 		} else {
 			char *cp;
-			if ((cp = strchr(target, '/'))) { /* Yes... const to non is ok. */
-				*cp = 0;
-				prefix_len = xatoul_range(cp+1, 0, 128);
+			cp = strchr(target, '/'); /* Yes... const to non is ok. */
+			if (cp) {
+				*cp = '\0';
+				prefix_len = xatoul_range(cp + 1, 0, 128);
 			} else {
 				prefix_len = 128;
 			}
@@ -422,23 +425,21 @@ static void INET6_setroute(int action, char **args)
 		struct ifreq ifr;
 		memset(&ifr, 0, sizeof(ifr));
 		strncpy(ifr.ifr_name, devname, sizeof(ifr.ifr_name));
-
-		if (ioctl(skfd, SIOGIFINDEX, &ifr) < 0) {
-			bb_perror_msg_and_die("SIOGIFINDEX");
-		}
+		xioctl(skfd, SIOGIFINDEX, &ifr);
 		rt.rtmsg_ifindex = ifr.ifr_ifindex;
 	}
 
 	/* Tell the kernel to accept this route. */
-	if (ioctl(skfd, ((action==RTACTION_ADD) ? SIOCADDRT : SIOCDELRT), &rt)<0) {
-		bb_perror_msg_and_die("SIOC[ADD|DEL]RT");
-	}
+	if (action == RTACTION_ADD)
+		xioctl(skfd, SIOCADDRT, &rt);
+	else
+		xioctl(skfd, SIOCDELRT, &rt);
 
 	if (ENABLE_FEATURE_CLEAN_UP) close(skfd);
 }
 #endif
 
-static const unsigned int flagvals[] = { /* Must agree with flagchars[]. */
+static const unsigned flagvals[] = { /* Must agree with flagchars[]. */
 	RTF_GATEWAY,
 	RTF_HOST,
 	RTF_REINSTATE,
@@ -454,7 +455,8 @@ static const unsigned int flagvals[] = { /* Must agree with flagchars[]. */
 #define IPV4_MASK (RTF_GATEWAY|RTF_HOST|RTF_REINSTATE|RTF_DYNAMIC|RTF_MODIFIED)
 #define IPV6_MASK (RTF_GATEWAY|RTF_HOST|RTF_DEFAULT|RTF_ADDRCONF|RTF_CACHE)
 
-static const char flagchars[] =		/* Must agree with flagvals[]. */
+/* Must agree with flagvals[]. */
+static const char flagchars[] ALIGN1 =
 	"GHRDM"
 #if ENABLE_FEATURE_IPV6
 	"DAC"
@@ -477,8 +479,8 @@ static void set_flags(char *flagstr, int flags)
 /* also used in netstat */
 void bb_displayroutes(int noresolve, int netstatfmt)
 {
-	char devname[64], flags[16], sdest[16], sgw[16];
-	unsigned long int d, g, m;
+	char devname[64], flags[16], *sdest, *sgw;
+	unsigned long d, g, m;
 	int flgs, ref, use, metric, mtu, win, ir;
 	struct sockaddr_in s_addr;
 	struct in_addr mask;
@@ -519,15 +521,14 @@ void bb_displayroutes(int noresolve, int netstatfmt)
 		memset(&s_addr, 0, sizeof(struct sockaddr_in));
 		s_addr.sin_family = AF_INET;
 		s_addr.sin_addr.s_addr = d;
-		INET_rresolve(sdest, sizeof(sdest), &s_addr,
-					  (noresolve | 0x8000), m);	/* Default instead of *. */
-
+		sdest = INET_rresolve(&s_addr, (noresolve | 0x8000), m); /* 'default' instead of '*' */
 		s_addr.sin_addr.s_addr = g;
-		INET_rresolve(sgw, sizeof(sgw), &s_addr,
-					  (noresolve | 0x4000), m);	/* Host instead of net. */
-
+		sgw = INET_rresolve(&s_addr, (noresolve | 0x4000), m); /* Host instead of net */
 		mask.s_addr = m;
-		printf("%-16s%-16s%-16s%-6s", sdest, sgw, inet_ntoa(mask), flags);
+		/* "%15.15s" truncates hostnames, do we really want that? */
+		printf("%-15.15s %-15.15s %-16s%-6s", sdest, sgw, inet_ntoa(mask), flags);
+		free(sdest);
+		free(sgw);
 		if (netstatfmt) {
 			printf("%5d %-5d %6d %s\n", mtu, win, ir, devname);
 		} else {
@@ -540,7 +541,7 @@ void bb_displayroutes(int noresolve, int netstatfmt)
 
 static void INET6_displayroutes(int noresolve)
 {
-	char addr6[128], naddr6[128];
+	char addr6[128], *naddr6;
 	/* In addr6x, we store both 40-byte ':'-delimited ipv6 addresses.
 	 * We read the non-delimited strings into the tail of the buffer
 	 * using fscanf and then modify the buffer by shifting forward
@@ -580,7 +581,7 @@ static void INET6_displayroutes(int noresolve)
 
 			do {
 				if (!*p) {
-					if (i==40) { /* nul terminator for 1st address? */
+					if (i == 40) { /* nul terminator for 1st address? */
 						addr6x[39] = 0;	/* Fixup... need 0 instead of ':'. */
 						++p;	/* Skip and continue. */
 						continue;
@@ -605,18 +606,19 @@ static void INET6_displayroutes(int noresolve)
 			inet_pton(AF_INET6, addr6x + r,
 					  (struct sockaddr *) &snaddr6.sin6_addr);
 			snaddr6.sin6_family = AF_INET6;
-			INET6_rresolve(naddr6, sizeof(naddr6),
-						   (struct sockaddr_in6 *) &snaddr6,
+			naddr6 = INET6_rresolve((struct sockaddr_in6 *) &snaddr6,
 						   0x0fff /* Apparently, upstream never resolves. */
 						   );
 
 			if (!r) {			/* 1st pass */
 				snprintf(addr6, sizeof(addr6), "%s/%d", naddr6, prefix_len);
 				r += 40;
+				free(naddr6);
 			} else {			/* 2nd pass */
 				/* Print the info. */
 				printf("%-43s %-39s %-5s %-6d %-2d %7d %-8s\n",
-						  addr6, naddr6, flags, metric, refcnt, use, iface);
+						addr6, naddr6, flags, metric, refcnt, use, iface);
+				free(naddr6);
 				break;
 			}
 		} while (1);
@@ -631,14 +633,15 @@ static void INET6_displayroutes(int noresolve)
 #define ROUTE_OPT_INET6 0x08 /* Not an actual option. See below. */
 
 /* 1st byte is offset to next entry offset.  2nd byte is return value. */
-static const char tbl_verb[] =	/* 2nd byte matches RTACTION_* code */
+/* 2nd byte matches RTACTION_* code */
+static const char tbl_verb[] ALIGN1 =
 	"\006\001add\0"
 	"\006\002del\0"
 /*	"\011\002delete\0" */
-	"\010\002delete"			/* Since last, we can save a byte. */
+	"\010\002delete"  /* Since it's last, we can save a byte. */
 ;
 
-int route_main(int argc, char **argv);
+int route_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int route_main(int argc, char **argv)
 {
 	unsigned opt;
@@ -654,7 +657,7 @@ int route_main(int argc, char **argv)
 		}
 	}
 
-	opt = getopt32(argc, argv, "A:ne", &family);
+	opt = getopt32(argv, "A:ne", &family);
 
 	if ((opt & ROUTE_OPT_A) && strcmp(family, "inet") != 0) {
 #if ENABLE_FEATURE_IPV6

@@ -44,7 +44,7 @@
 #include "util.h"
 #include "blkid/blkid.h"
 
-#include "busybox.h"
+#include "libbb.h"
 
 static char * device_name = NULL;
 static char * new_label, *new_last_mounted, *new_UUID;
@@ -577,7 +577,7 @@ static void tune2fs_clean_up(void)
 	if (ENABLE_FEATURE_CLEAN_UP && journal_device) free(journal_device);
 }
 
-int tune2fs_main(int argc, char **argv);
+int tune2fs_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int tune2fs_main(int argc, char **argv)
 {
 	errcode_t retval;

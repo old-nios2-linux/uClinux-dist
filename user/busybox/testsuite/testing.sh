@@ -51,14 +51,14 @@ optional()
 
 # The testing function
 
-testing ()
+testing()
 {
   NAME="$1"
   [ -z "$1" ] && NAME=$2
 
   if [ $# -ne 5 ]
   then
-    echo "Test $NAME has the wrong number of arguments ($# $*)" >&2
+    echo "Test $NAME has wrong number of arguments (must be 5) ($# $*)" >&2
     exit
   fi
 
@@ -76,7 +76,7 @@ testing ()
   echo -ne "$5" | eval "$2" > actual
   RETVAL=$?
 
-  cmp expected actual > /dev/null
+  cmp expected actual >/dev/null 2>/dev/null
   if [ $? -ne 0 ]
   then
     FAILCOUNT=$[$FAILCOUNT+1]
@@ -97,7 +97,7 @@ testing ()
 # the file is assumed to already be there and only its library dependencies
 # are copied.
 
-function mkchroot
+mkchroot()
 {
   [ $# -lt 2 ] && return
 
@@ -126,7 +126,7 @@ function mkchroot
 # Needed commands listed on command line
 # Script fed to stdin.
 
-function dochroot
+dochroot()
 {
   mkdir tmpdir4chroot
   mount -t ramfs tmpdir4chroot tmpdir4chroot

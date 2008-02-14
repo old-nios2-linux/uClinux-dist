@@ -37,7 +37,7 @@
  * It doesn't guess filesystem types from on-disk format.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #define EXIT_OK          0
 #define EXIT_NONDESTRUCT 1
@@ -79,29 +79,25 @@ struct fsck_instance {
 	char	*base_device; /* /dev/hda for /dev/hdaN etc */
 };
 
-static const char *const ignored_types[] = {
-	"ignore",
-	"iso9660",
-	"nfs",
-	"proc",
-	"sw",
-	"swap",
-	"tmpfs",
-	"devpts",
-	NULL
-};
+static const char ignored_types[] ALIGN1 =
+	"ignore\0"
+	"iso9660\0"
+	"nfs\0"
+	"proc\0"
+	"sw\0"
+	"swap\0"
+	"tmpfs\0"
+	"devpts\0";
 
 #if 0
-static const char *const really_wanted[] = {
-	"minix",
-	"ext2",
-	"ext3",
-	"jfs",
-	"reiserfs",
-	"xiafs",
-	"xfs",
-	NULL
-};
+static const char really_wanted[] ALIGN1 =
+	"minix\0"
+	"ext2\0"
+	"ext3\0"
+	"jfs\0"
+	"reiserfs\0"
+	"xiafs\0"
+	"xfs\0";
 #endif
 
 #define BASE_MD "/dev/md"
@@ -396,7 +392,6 @@ static void load_fs_info(const char *filename)
 
 	f = fopen_or_warn(filename, "r");
 	if (f == NULL) {
-		/*bb_perror_msg("WARNING: cannot open %s", filename);*/
 		return;
 	}
 	while (1) {
@@ -509,12 +504,7 @@ static struct fsck_instance *wait_one(int flags)
 		goto ret_inst;
 	}
 
-	/*
-	 * gcc -Wall fails saving throw against stupidity
-	 * (inst and prev are thought to be uninitialized variables)
-	 */
-	inst = prev = NULL;
-
+	inst = prev = NULL; /* for gcc */
 	do {
 		pid = waitpid(-1, &status, flags);
 		kill_all_if_cancel_requested();
@@ -661,29 +651,25 @@ static void execute(const char *type, const char *device, const char *mntpt,
 					mntpt ? mntpt : device);
 		for (i = 0; i < argc; i++)
 			printf(" %s", argv[i]);
-		puts("");
+		bb_putchar('\n');
 	}
 
 	/* Fork and execute the correct program. */
 	pid = -1;
 	if (!noexecute) {
-		pid = fork(); /* TODO: NOMMU friendly way (vfork)? */
+		pid = spawn(argv);
 		if (pid < 0)
-			bb_perror_msg_and_die("fork");
-		if (pid == 0) {
-			/* Child */
-			if (!interactive) {
-				/* NB: e2fsck will complain because of this!
-				 * Use "fsck -s" to avoid... */
-				close(0);
-			}
-			BB_EXECVP(argv[0], argv);
-			bb_perror_msg_and_die("%s", argv[0]);
-		}
+			bb_simple_perror_msg(argv[0]);
 	}
 
 	for (i = num_args+1; i < argc; i++)
 		free(argv[i]);
+
+	/* No pid, so don't record an instance */
+	if (pid < 0) {
+		free(inst);
+		return;
+	}
 
 	inst->pid = pid;
 	inst->prog = argv[0];
@@ -863,7 +849,7 @@ static int ignore(struct fs_info *fs)
 		return 1;
 
 	/* Are we ignoring this type? */
-	if (index_in_str_array(ignored_types, fs->type) >= 0)
+	if (index_in_strings(ignored_types, fs->type) >= 0)
 		return 1;
 
 	/* We can and want to check this file system type. */
@@ -1047,7 +1033,7 @@ static void compile_fs_type(char *fs_type)
 	}
 }
 
-static void parse_args(int argc, char *argv[])
+static void parse_args(int argc, char **argv)
 {
 	int i, j;
 	char *arg, *tmp;
@@ -1173,8 +1159,8 @@ static void signal_cancel(int sig ATTRIBUTE_UNUSED)
 	cancel_requested = 1;
 }
 
-int fsck_main(int argc, char *argv[]);
-int fsck_main(int argc, char *argv[])
+int fsck_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int fsck_main(int argc, char **argv)
 {
 	int i, status = 0;
 	int interactive;

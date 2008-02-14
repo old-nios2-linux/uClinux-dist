@@ -18,64 +18,59 @@
  * the command line.  Properly round *-blocks, Used, and Available quantities.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <mntent.h>
 #include <sys/vfs.h>
-#include "busybox.h"
+#include "libbb.h"
 
-#ifndef CONFIG_FEATURE_HUMAN_READABLE
-static long kscale(long b, long bs)
+#if !ENABLE_FEATURE_HUMAN_READABLE
+static unsigned long kscale(unsigned long b, unsigned long bs)
 {
-	return ( b * (long long) bs + 1024/2 ) / 1024;
+	return (b * (unsigned long long) bs + 1024/2) / 1024;
 }
 #endif
 
-int df_main(int argc, char **argv);
+int df_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int df_main(int argc, char **argv)
 {
-	long blocks_used;
-	long blocks_percent_used;
-#ifdef CONFIG_FEATURE_HUMAN_READABLE
-	unsigned long df_disp_hr = 1024;
+	unsigned long blocks_used;
+	unsigned blocks_percent_used;
+#if ENABLE_FEATURE_HUMAN_READABLE
+	unsigned df_disp_hr = 1024;
 #endif
-	int do_inodes = 0;
 	int status = EXIT_SUCCESS;
 	unsigned opt;
 	FILE *mount_table;
 	struct mntent *mount_entry;
 	struct statfs s;
-	static const char hdr_1k[] = "1k-blocks"; /* default display is kilobytes */
-	const char *disp_units_hdr = hdr_1k;
+	/* default display is kilobytes */
+	const char *disp_units_hdr = "1k-blocks";
 
-#ifdef CONFIG_FEATURE_HUMAN_READABLE
+	enum {
+		OPT_ALL = (1 << 0),
+		OPT_INODE = (ENABLE_FEATURE_HUMAN_READABLE ? (1 << 4) : (1 << 2))
+		            * ENABLE_FEATURE_DF_INODE
+	};
+
+#if ENABLE_FEATURE_HUMAN_READABLE
 	opt_complementary = "h-km:k-hm:m-hk";
-	opt = getopt32(argc, argv, "hmki");
-	if (opt & 1) {
+	opt = getopt32(argv, "ahmk" USE_FEATURE_DF_INODE("i"));
+	if (opt & (1 << 1)) { // -h
 		df_disp_hr = 0;
 		disp_units_hdr = "     Size";
 	}
-	if (opt & 2) {
+	if (opt & (1 << 2)) { // -m
 		df_disp_hr = 1024*1024;
 		disp_units_hdr = "1M-blocks";
 	}
-	if (opt & 8)
-		do_inodes = 1;
+	if (opt & OPT_INODE) {
+		disp_units_hdr = "   Inodes";
+	}
 #else
-	opt = getopt32(argc, argv, "ki");
-	if (opt & 2)
-		do_inodes = 1;
+	opt = getopt32(argv, "ak" USE_FEATURE_DF_INODE("i"));
 #endif
 
-	printf("Filesystem%11s", "");
-	if(do_inodes) {
-		printf("%-14sIUsed     IFree IUse ", "   Inodes");
-	} else {
-		printf("%-15sUsed Available Use%% ", disp_units_hdr);
-	}
-	printf("Mounted on\n");
+	printf("Filesystem           %-15sUsed Available Use%% Mounted on\n",
+			disp_units_hdr);
 
 	mount_table = NULL;
 	argv += optind;
@@ -86,7 +81,7 @@ int df_main(int argc, char **argv)
 		}
 	}
 
-	do {
+	while (1) {
 		const char *device;
 		const char *mount_point;
 
@@ -111,73 +106,70 @@ int df_main(int argc, char **argv)
 		}
 
 		device = mount_entry->mnt_fsname;
-
-		if (strcmp(device, "rootfs") == 0)
-			continue;
-
-		if (strcmp(device, "/dev/root") == 0) {
-			/* Adjusts device to be the real root device,
-			* or leaves device alone if it can't find it */
-			device = find_block_device("/");
-			if (!device) {
-				goto SET_ERROR;
-			}
-		}
-
 		mount_point = mount_entry->mnt_dir;
 
 		if (statfs(mount_point, &s) != 0) {
-			bb_perror_msg("%s", mount_point);
+			bb_simple_perror_msg(mount_point);
 			goto SET_ERROR;
 		}
 
-		if (do_inodes) {
-			if (s.f_files || !mount_table) {
-				blocks_percent_used = 0;
-				if (s.f_files) {
-					blocks_percent_used =
-						(((long long)(s.f_files-s.f_ffree)) * 100 + (s.f_files / 2))
-							/ s.f_files;
-				}
-				printf("%-21s%9ld %9ld %9ld %3ld%% %s\n",
-						  device,
-						  s.f_files, s.f_files - s.f_ffree, s.f_ffree,
-						  blocks_percent_used, mount_point);
+		if ((s.f_blocks > 0) || !mount_table || (opt & OPT_ALL)) {
+			if (opt & OPT_INODE) {
+				s.f_blocks = s.f_files;
+				s.f_bavail = s.f_bfree = s.f_ffree;
+				s.f_bsize = 1;
+#if ENABLE_FEATURE_HUMAN_READABLE
+				if (df_disp_hr)
+					df_disp_hr = 1;
+#endif
 			}
-			continue;
-		}
-
-		if ((s.f_blocks > 0) || !mount_table){
 			blocks_used = s.f_blocks - s.f_bfree;
 			blocks_percent_used = 0;
 			if (blocks_used + s.f_bavail) {
-				blocks_percent_used = (((long long) blocks_used) * 100
+				blocks_percent_used = (blocks_used * 100ULL
 						+ (blocks_used + s.f_bavail)/2
 						) / (blocks_used + s.f_bavail);
 			}
 
-#ifdef CONFIG_FEATURE_HUMAN_READABLE
-			printf("%-20s %9s ", device,
+#ifdef WHY_IT_SHOULD_BE_HIDDEN
+			if (strcmp(device, "rootfs") == 0) {
+				continue;
+			}
+#endif
+#ifdef WHY_WE_DO_IT_FOR_DEV_ROOT_ONLY
+/* ... and also this is the only user of find_block_device */
+			if (strcmp(device, "/dev/root") == 0) {
+				/* Adjusts device to be the real root device,
+				* or leaves device alone if it can't find it */
+				device = find_block_device("/");
+				if (!device) {
+					goto SET_ERROR;
+				}
+			}
+#endif
+
+			if (printf("\n%-20s" + 1, device) > 20)
+				    printf("\n%-20s", "");
+#if ENABLE_FEATURE_HUMAN_READABLE
+			printf(" %9s ",
 				make_human_readable_str(s.f_blocks, s.f_bsize, df_disp_hr));
 
-			printf("%9s ",
-				make_human_readable_str( (s.f_blocks - s.f_bfree),
+			printf(" %9s " + 1,
+				make_human_readable_str((s.f_blocks - s.f_bfree),
 						s.f_bsize, df_disp_hr));
 
-			printf("%9s %3ld%% %s\n",
-					  make_human_readable_str(s.f_bavail, s.f_bsize, df_disp_hr),
-					  blocks_percent_used, mount_point);
+			printf("%9s %3u%% %s\n",
+					make_human_readable_str(s.f_bavail, s.f_bsize, df_disp_hr),
+					blocks_percent_used, mount_point);
 #else
-			printf("%-20s %9ld %9ld %9ld %3ld%% %s\n",
-					  device,
-					  kscale(s.f_blocks, s.f_bsize),
-					  kscale(s.f_blocks-s.f_bfree, s.f_bsize),
-					  kscale(s.f_bavail, s.f_bsize),
-					  blocks_percent_used, mount_point);
+			printf(" %9lu %9lu %9lu %3u%% %s\n",
+					kscale(s.f_blocks, s.f_bsize),
+					kscale(s.f_blocks-s.f_bfree, s.f_bsize),
+					kscale(s.f_bavail, s.f_bsize),
+					blocks_percent_used, mount_point);
 #endif
 		}
-
-	} while (1);
+	}
 
 	fflush_stdout_and_exit(status);
 }

@@ -9,9 +9,12 @@
  * Licensed under GPLv2 or later, see file License in this tarball for details.
  */
 
-#include "busybox.h"
 #include <getopt.h>
+#include "libbb.h"
 #include "dump.h"
+
+/* This is a NOEXEC applet. Be very careful! */
+
 
 static void bb_dump_addfile(char *name)
 {
@@ -32,7 +35,7 @@ static void bb_dump_addfile(char *name)
 	fclose(fp);
 }
 
-static const char * const add_strings[] = {
+static const char *const add_strings[] = {
 	"\"%07.7_ax \" 16/1 \"%03o \" \"\\n\"",		/* b */
 	"\"%07.7_ax \" 16/1 \"%3_c \" \"\\n\"",		/* c */
 	"\"%07.7_ax \" 8/2 \"  %05u \" \"\\n\"",	/* d */
@@ -40,26 +43,37 @@ static const char * const add_strings[] = {
 	"\"%07.7_ax \" 8/2 \"   %04x \" \"\\n\"",	/* x */
 };
 
-static const char add_first[] = "\"%07.7_Ax\n\"";
+static const char add_first[] ALIGN1 = "\"%07.7_Ax\n\"";
 
-static const char hexdump_opts[] = "bcdoxCe:f:n:s:v";
+static const char hexdump_opts[] ALIGN1 = "bcdoxCe:f:n:s:v" USE_FEATURE_HEXDUMP_REVERSE("R");
 
 static const struct suffix_mult suffixes[] = {
-	{"b",  512 },
-	{"k",  1024 },
-	{"m",  1024*1024 },
-	{NULL, 0 }
+	{ "b", 512 },
+	{ "k", 1024 },
+	{ "m", 1024*1024 },
+	{ }
 };
 
-int hexdump_main(int argc, char **argv);
+int hexdump_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int hexdump_main(int argc, char **argv)
 {
 	const char *p;
 	int ch;
+#if ENABLE_FEATURE_HEXDUMP_REVERSE
+	FILE *fp;
+	smallint rdump = 0;
+#endif
 
 	bb_dump_vflag = FIRST;
 	bb_dump_length = -1;
 
+	if (ENABLE_HD && !applet_name[2]) { /* we are "hd" */
+		ch = 'C';
+		goto hd_applet;
+	}
+
+	/* We cannot use getopt32: in hexdump options are cumulative.
+	 * E.g. hexdump -C -C file should dump each line twice */
 	while ((ch = getopt(argc, argv, hexdump_opts)) > 0) {
 		p = strchr(hexdump_opts, ch);
 		if (!p)
@@ -67,28 +81,34 @@ int hexdump_main(int argc, char **argv)
 		if ((p - hexdump_opts) < 5) {
 			bb_dump_add(add_first);
 			bb_dump_add(add_strings[(int)(p - hexdump_opts)]);
-		} else if (ch == 'C') {
+		}
+		/* Save a little bit of space below by omitting the 'else's. */
+		if (ch == 'C') {
+ hd_applet:
 			bb_dump_add("\"%08.8_Ax\n\"");
 			bb_dump_add("\"%08.8_ax  \" 8/1 \"%02x \" \"  \" 8/1 \"%02x \" ");
 			bb_dump_add("\"  |\" 16/1 \"%_p\" \"|\\n\"");
-		} else {
-			/* Save a little bit of space below by omitting the 'else's. */
-			if (ch == 'e') {
-				bb_dump_add(optarg);
-			} /* else */
-			if (ch == 'f') {
-				bb_dump_addfile(optarg);
-			} /* else */
-			if (ch == 'n') {
-				bb_dump_length = xatoi_u(optarg);
-			} /* else */
-			if (ch == 's') {
-				bb_dump_skip = xatoul_range_sfx(optarg, 0, LONG_MAX, suffixes);
-			} /* else */
-			if (ch == 'v') {
-				bb_dump_vflag = ALL;
-			}
 		}
+		if (ch == 'e') {
+			bb_dump_add(optarg);
+		} /* else */
+		if (ch == 'f') {
+			bb_dump_addfile(optarg);
+		} /* else */
+		if (ch == 'n') {
+			bb_dump_length = xatoi_u(optarg);
+		} /* else */
+		if (ch == 's') {
+			bb_dump_skip = xatoul_range_sfx(optarg, 0, LONG_MAX, suffixes);
+		} /* else */
+		if (ch == 'v') {
+			bb_dump_vflag = ALL;
+		}
+#if ENABLE_FEATURE_HEXDUMP_REVERSE
+		if (ch == 'R') {
+			rdump = 1;
+		}
+#endif
 	}
 
 	if (!bb_dump_fshead) {
@@ -98,5 +118,40 @@ int hexdump_main(int argc, char **argv)
 
 	argv += optind;
 
+#if !ENABLE_FEATURE_HEXDUMP_REVERSE
 	return bb_dump_dump(argv);
+#else
+	if (!rdump) {
+		return bb_dump_dump(argv);
+	}
+
+	/* -R: reverse of 'hexdump -Cv' */
+	fp = stdin;
+	if (!*argv) {
+		argv--;
+		goto jump_in;
+	}
+
+	do {
+		char *buf;
+		fp = xfopen(*argv, "r");
+ jump_in:
+		while ((buf = xmalloc_getline(fp)) != NULL) {
+			p = buf;
+			while (1) {
+				/* skip address or previous byte */
+				while (isxdigit(*p)) p++;
+				while (*p == ' ') p++;
+				/* '|' char will break the line */
+				if (!isxdigit(*p) || sscanf(p, "%x ", &ch) != 1)
+					break;
+				putchar(ch);
+			}
+			free(buf);
+		}
+		fclose(fp);
+	} while (*++argv);
+
+	fflush_stdout_and_exit(EXIT_SUCCESS);
+#endif
 }

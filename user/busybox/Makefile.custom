@@ -2,9 +2,6 @@
 # Build system
 # ==========================================================================
 
-%.bflt: %_unstripped
-	$(CROSS_COMPILE)elf2flt $(ELF2FLTFLAGS) $< -o $@
-
 busybox.links: $(srctree)/applets/busybox.mkll $(objtree)/include/autoconf.h $(srctree)/include/applets.h
 	$(Q)-$(SHELL) $^ >$@
 
@@ -14,6 +11,17 @@ INSTALL_OPTS:= --symlinks
 endif
 ifeq ($(CONFIG_INSTALL_APPLET_HARDLINKS),y)
 INSTALL_OPTS:= --hardlinks
+endif
+ifeq ($(CONFIG_INSTALL_APPLET_SCRIPT_WRAPPERS),y)
+ifeq ($(CONFIG_INSTALL_SH_APPLET_SYMLINK),y)
+INSTALL_OPTS:= --sw-sh-sym
+endif
+ifeq ($(CONFIG_INSTALL_SH_APPLET_HARDLINK),y)
+INSTALL_OPTS:= --sw-sh-hard
+endif
+ifeq ($(CONFIG_INSTALL_SH_APPLET_SCRIPT_WRAPPER),y)
+INSTALL_OPTS:= --scriptwrapper
+endif
 endif
 install: $(srctree)/applets/install.sh busybox busybox.links
 	$(Q)DO_INSTALL_LIBS="$(strip $(LIBBUSYBOX_SONAME) $(DO_INSTALL_LIBS))" \
@@ -37,23 +45,6 @@ ifneq ($(strip $(DO_INSTALL_LIBS)),n)
 		rm -f $(CONFIG_PREFIX)$$i; \
 	done
 endif
-
-INSTALLER=install-romfs.sh
-ifdef CONFIG_UCLINUX
-TARGETDIR=$(ROMFSDIR)/bin/ --nosubdir
-else
-TARGETDIR=$(ROMFSDIR)/
-endif
-
-# Before copying, remove all existing busybox links
-romfs: $(INSTALLER) busybox.links
-	if [ -f "$$ROMFSDIR/bin/busybox" ]; then \
-		inode=`ls -i $$ROMFSDIR/bin/busybox | awk '{print $$1}'`; \
-		ls -iL "$$ROMFSDIR/bin" | grep "^ *$$inode" | awk '{print $$2}' | \
-		sed "s:^:$$ROMFSDIR/bin/:" | env -i xargs rm -f; \
-	fi
-	$(ROMFSINST) /bin/busybox
-	$(SHELL) $< $(TARGETDIR)
 
 check test: busybox busybox.links
 	bindir=$(objtree) srcdir=$(srctree)/testsuite SED="$(SED)" \
@@ -87,6 +78,7 @@ sizes: busybox_unstripped
 .PHONY: bloatcheck
 bloatcheck: busybox_old busybox_unstripped
 	@$(srctree)/scripts/bloat-o-meter busybox_old busybox_unstripped
+	@$(CROSS_COMPILE)size busybox_old busybox_unstripped
 
 .PHONY: baseline
 baseline: busybox_unstripped
@@ -96,9 +88,13 @@ baseline: busybox_unstripped
 objsizes: busybox_unstripped
 	$(srctree)/scripts/objsizes
 
+.PHONY: stksizes
+stksizes: busybox_unstripped
+	$(CROSS_COMPILE)objdump -d busybox_unstripped | $(srctree)/scripts/checkstack.pl $(ARCH) | uniq
+
 .PHONY: bigdata
 bigdata: busybox_unstripped
-	nm --size-sort busybox_unstripped | grep -vi ' [tr] ' | tail -20
+	$(CROSS_COMPILE)nm --size-sort busybox_unstripped | grep -vi ' [tr] '
 
 # Documentation Targets
 .PHONY: doc
@@ -160,3 +156,5 @@ SYN_CPPFLAGS := $(subst $(brace_close),\$(brace_close),$(SYN_CPPFLAGS))
 .PHONY: html
 html: $(syn)
 	synopsis -f HTML -Wf,title="'BusyBox Documentation'" -o $@ $^
+
+-include $(srctree)/Makefile.local

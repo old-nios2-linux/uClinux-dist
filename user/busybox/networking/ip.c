@@ -10,41 +10,114 @@
  * Changes:
  *
  * Rani Assaf <rani@magic.metawire.com> 980929:	resolve addresses
+ * Bernhard Fischer rewrote to use index_in_substr_array
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #include "libiproute/utils.h"
 #include "libiproute/ip_common.h"
 
-int ip_main(int argc, char **argv);
+#if ENABLE_FEATURE_IP_ADDRESS \
+ || ENABLE_FEATURE_IP_ROUTE \
+ || ENABLE_FEATURE_IP_LINK \
+ || ENABLE_FEATURE_IP_TUNNEL \
+ || ENABLE_FEATURE_IP_RULE
+
+static int ATTRIBUTE_NORETURN ip_print_help(char ATTRIBUTE_UNUSED **argv)
+{
+	bb_show_usage();
+}
+
+static int ip_do(int (*ip_func)(char **argv), char **argv)
+{
+	argv = ip_parse_common_args(argv);
+	return ip_func(argv);
+}
+
+#if ENABLE_FEATURE_IP_ADDRESS
+int ipaddr_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int ipaddr_main(int argc, char **argv)
+{
+    return ip_do(do_ipaddr, argv);
+}
+#endif
+#if ENABLE_FEATURE_IP_LINK
+int iplink_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int iplink_main(int argc, char **argv)
+{
+    return ip_do(do_iplink, argv);
+}
+#endif
+#if ENABLE_FEATURE_IP_ROUTE
+int iproute_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int iproute_main(int argc, char **argv)
+{
+    return ip_do(do_iproute, argv);
+}
+#endif
+#if ENABLE_FEATURE_IP_RULE
+int iprule_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int iprule_main(int argc, char **argv)
+{
+    return ip_do(do_iprule, argv);
+}
+#endif
+#if ENABLE_FEATURE_IP_TUNNEL
+int iptunnel_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int iptunnel_main(int argc, char **argv)
+{
+    return ip_do(do_iptunnel, argv);
+}
+#endif
+
+
+int ip_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ip_main(int argc, char **argv)
 {
-	int ret = EXIT_FAILURE;
+	static const char keywords[] ALIGN1 =
+		USE_FEATURE_IP_ADDRESS("address\0")
+		USE_FEATURE_IP_ROUTE("route\0")
+		USE_FEATURE_IP_LINK("link\0")
+		USE_FEATURE_IP_TUNNEL("tunnel\0" "tunl\0")
+		USE_FEATURE_IP_RULE("rule\0")
+		;
+	enum {
+		USE_FEATURE_IP_ADDRESS(IP_addr,)
+		USE_FEATURE_IP_ROUTE(IP_route,)
+		USE_FEATURE_IP_LINK(IP_link,)
+		USE_FEATURE_IP_TUNNEL(IP_tunnel, IP_tunl,)
+		USE_FEATURE_IP_RULE(IP_rule,)
+		IP_none
+	};
+	int (*ip_func)(char**) = ip_print_help;
 
-	ip_parse_common_args(&argc, &argv);
-
-	if (argc > 1) {
-		if (ENABLE_FEATURE_IP_ADDRESS && matches(argv[1], "address") == 0) {
-			ret = do_ipaddr(argc-2, argv+2);
-		}
-		if (ENABLE_FEATURE_IP_ROUTE && matches(argv[1], "route") == 0) {
-			ret = do_iproute(argc-2, argv+2);
-		}
-		if (ENABLE_FEATURE_IP_LINK && matches(argv[1], "link") == 0) {
-			ret = do_iplink(argc-2, argv+2);
-		}
-		if (ENABLE_FEATURE_IP_TUNNEL
-		 && (matches(argv[1], "tunnel") == 0 || strcmp(argv[1], "tunl") == 0)
-		) {
-			ret = do_iptunnel(argc-2, argv+2);
-		}
-		if (ENABLE_FEATURE_IP_RULE && matches(argv[1], "rule") == 0) {
-			ret = do_iprule(argc-2, argv+2);
-		}
+	argv = ip_parse_common_args(argv + 1);
+	if (*argv) {
+		int key = index_in_substrings(keywords, *argv);
+		argv++;
+#if ENABLE_FEATURE_IP_ADDRESS
+		if (key == IP_addr)
+			ip_func = do_ipaddr;
+#endif
+#if ENABLE_FEATURE_IP_ROUTE
+		if (key == IP_route)
+			ip_func = do_iproute;
+#endif
+#if ENABLE_FEATURE_IP_LINK
+		if (key == IP_link)
+			ip_func = do_iplink;
+#endif
+#if ENABLE_FEATURE_IP_TUNNEL
+		if (key == IP_tunnel || key == IP_tunl)
+			ip_func = do_iptunnel;
+#endif
+#if ENABLE_FEATURE_IP_RULE
+		if (key == IP_rule)
+			ip_func = do_iprule;
+#endif
 	}
-	if (ret) {
-		bb_show_usage();
-	}
-	return EXIT_SUCCESS;
+	return ip_func(argv);
 }
+
+#endif /* any of ENABLE_FEATURE_IP_xxx is 1 */

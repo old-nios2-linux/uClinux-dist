@@ -12,8 +12,7 @@
  */
 
 #include <resolv.h>
-#include "busybox.h"
-
+#include "libbb.h"
 
 /*
  *  I'm only implementing non-interactive mode;
@@ -70,11 +69,11 @@ static int print_host(const char *hostname, const char *header)
 		unsigned cnt = 0;
 
 		printf("%-10s %s\n", header, hostname);
-		// printf("%s\n", cur->ai_canonname); ?
+		// puts(cur->ai_canonname); ?
 		while (cur) {
 			char *dotted, *revhost;
-			dotted = xmalloc_sockaddr2dotted_noport(cur->ai_addr, cur->ai_addrlen);
-			revhost = xmalloc_sockaddr2hostonly_noport(cur->ai_addr, cur->ai_addrlen);
+			dotted = xmalloc_sockaddr2dotted_noport(cur->ai_addr);
+			revhost = xmalloc_sockaddr2hostonly_noport(cur->ai_addr);
 
 			printf("Address %u: %s%c", ++cnt, dotted, revhost ? ' ' : '\n');
 			if (revhost) {
@@ -101,11 +100,9 @@ static int print_host(const char *hostname, const char *header)
 /* lookup the default nameserver and display it */
 static void server_print(void)
 {
-#ifndef __UC_LIBC__
 	char *server;
 
-	server = xmalloc_sockaddr2dotted_noport((struct sockaddr*)&_res.nsaddr_list[0],
-			sizeof(struct sockaddr_in));
+	server = xmalloc_sockaddr2dotted_noport((struct sockaddr*)&_res.nsaddr_list[0]);
 	/* I honestly don't know what to do if DNS server has _IPv6 address_.
 	 * Probably it is listed in
 	 * _res._u._ext_.nsaddrs[MAXNS] (of type "struct sockaddr_in6*" each)
@@ -115,25 +112,22 @@ static void server_print(void)
 	print_host(server, "Server:");
 	if (ENABLE_FEATURE_CLEAN_UP)
 		free(server);
-	puts("");
-#endif
+	bb_putchar('\n');
 }
 
 /* alter the global _res nameserver structure to use
    an explicit dns server instead of what is in /etc/resolv.h */
 static void set_default_dns(char *server)
 {
-#ifndef __UC_LIBC__
 	struct in_addr server_in_addr;
 
 	if (inet_pton(AF_INET, server, &server_in_addr) > 0) {
 		_res.nscount = 1;
 		_res.nsaddr_list[0].sin_addr = server_in_addr;
 	}
-#endif
 }
 
-int nslookup_main(int argc, char **argv);
+int nslookup_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int nslookup_main(int argc, char **argv)
 {
 	/* We allow 1 or 2 arguments.
@@ -145,17 +139,14 @@ int nslookup_main(int argc, char **argv)
 	if (argc < 2 || *argv[1] == '-' || argc > 3)
 		bb_show_usage();
 
-#ifndef __UC_LIBC__
 	/* initialize DNS structure _res used in printing the default
 	 * name server and in the explicit name server option feature. */
 	res_init();
-#endif
-
 	/* rfc2133 says this enables IPv6 lookups */
 	/* (but it also says "may be enabled in /etc/resolv.conf|) */
 	/*_res.options |= RES_USE_INET6;*/
 
-	if(argc == 3)
+	if (argc == 3)
 		set_default_dns(argv[2]);
 
 	server_print();

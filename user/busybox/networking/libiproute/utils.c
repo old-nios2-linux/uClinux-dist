@@ -12,10 +12,6 @@
  */
 
 #include "libbb.h"
-
-#include <string.h>
-#include <unistd.h>
-
 #include "utils.h"
 #include "inet_common.h"
 
@@ -32,7 +28,7 @@ int get_integer(int *val, char *arg, int base)
 	*val = res;
 	return 0;
 }
-
+//XXX: FIXME: use some libbb function instead
 int get_unsigned(unsigned *val, char *arg, int base)
 {
 	unsigned long res;
@@ -197,7 +193,7 @@ int get_prefix_1(inet_prefix * dst, char *arg, int family)
 			dst->bitlen = plen;
 		}
 	}
-  done:
+ done:
 	if (slash)
 		*slash = '/';
 	return err;
@@ -253,13 +249,6 @@ void duparg(const char *key, const char *arg)
 void duparg2(const char *key, const char *arg)
 {
 	bb_error_msg_and_die("either \"%s\" is duplicate, or \"%s\" is garbage", key, arg);
-}
-
-int matches(const char *cmd, const char *pattern)
-{
-	int len = strlen(cmd);
-
-	return strncmp(pattern, cmd, len);
 }
 
 int inet_addr_match(inet_prefix * a, inet_prefix * b, int bits)
@@ -320,9 +309,12 @@ const char *format_host(int af, int len, void *addr, char *buf, int buflen)
 			default:;
 			}
 		}
-		if (len > 0 && (h_ent = gethostbyaddr(addr, len, af)) != NULL) {
-			snprintf(buf, buflen - 1, "%s", h_ent->h_name);
-			return buf;
+		if (len > 0) {
+			h_ent = gethostbyaddr(addr, len, af);
+			if (h_ent != NULL) {
+				safe_strncpy(buf, h_ent->h_name, buflen);
+				return buf;
+			}
 		}
 	}
 #endif

@@ -101,7 +101,7 @@ static int decode_arg(char *arg)
 	} else
 		return EOF;
 
-	for (; *arg ; ++arg)
+	for (; *arg; ++arg)
 		(*fl) |= get_flag(*arg);
 
 	return 1;
@@ -170,7 +170,7 @@ static int chattr_dir_proc(const char *dir_name, struct dirent *de,
 	return 0;
 }
 
-int chattr_main(int argc, char **argv);
+int chattr_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int chattr_main(int argc, char **argv)
 {
 	int i;

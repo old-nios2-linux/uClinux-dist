@@ -6,181 +6,180 @@
  *
  * Maintainer: Gennady Feldman <gfeldman@gena01.com> as of Mar 12, 2001
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- * 02111-1307 USA
- *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "libbb.h"
 #include <sys/ipc.h>
-#include <sys/types.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
-#include <signal.h>
-#include <setjmp.h>
-#include <unistd.h>
-#include "busybox.h"
 
-static const long KEY_ID = 0x414e4547; /*"GENA"*/
+#define DEBUG 0
 
-static struct shbuf_ds {
-	int size;		// size of data written
-	int head;		// start of message list
-	int tail;		// end of message list
-	char data[1];		// data/messages
-} *buf = NULL;			// shared memory pointer
+enum { KEY_ID = 0x414e4547 }; /* "GENA" */
 
+struct shbuf_ds {
+	int32_t size;           // size of data - 1
+	int32_t tail;           // end of message list
+	char data[1];           // messages
+};
 
-// Semaphore operation structures
-static struct sembuf SMrup[1] = {{0, -1, IPC_NOWAIT | SEM_UNDO}}; // set SMrup
-static struct sembuf SMrdn[2] = {{1, 0}, {0, +1, SEM_UNDO}}; // set SMrdn
+static const struct sembuf init_sem[3] = {
+	{0, -1, IPC_NOWAIT | SEM_UNDO},
+	{1, 0}, {0, +1, SEM_UNDO}
+};
 
-static int	log_shmid = -1;	// ipc shared memory id
-static int	log_semid = -1;	// ipc semaphore id
-static jmp_buf	jmp_env;
+struct globals {
+	struct sembuf SMrup[1]; // {0, -1, IPC_NOWAIT | SEM_UNDO},
+	struct sembuf SMrdn[2]; // {1, 0}, {0, +1, SEM_UNDO}
+	struct shbuf_ds *shbuf;
+};
+#define G (*(struct globals*)&bb_common_bufsiz1)
+#define SMrup (G.SMrup)
+#define SMrdn (G.SMrdn)
+#define shbuf (G.shbuf)
+#define INIT_G() \
+	do { \
+		memcpy(SMrup, init_sem, sizeof(init_sem)); \
+	} while (0)
 
-static void error_exit(const char *str);
-static void interrupted(int sig);
+static void error_exit(const char *str) ATTRIBUTE_NORETURN;
+static void error_exit(const char *str)
+{
+	//release all acquired resources
+	shmdt(shbuf);
+	bb_perror_msg_and_die(str);
+}
 
 /*
  * sem_up - up()'s a semaphore.
  */
-static inline void sem_up(int semid)
+static void sem_up(int semid)
 {
-	if ( semop(semid, SMrup, 1) == -1 ) 
+	if (semop(semid, SMrup, 1) == -1)
 		error_exit("semop[SMrup]");
 }
 
-/*
- * sem_down - down()'s a semaphore
- */				
-static inline void sem_down(int semid)
+static void interrupted(int sig ATTRIBUTE_UNUSED)
 {
-	if ( semop(semid, SMrdn, 2) == -1 )
-		error_exit("semop[SMrdn]");
+	signal(SIGINT, SIG_IGN);
+	shmdt(shbuf);
+	exit(0);
 }
 
-extern int logread_main(int argc, char **argv)
+int logread_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int logread_main(int argc, char **argv)
 {
-	int i;
-	int follow=0;
-	
-	if (argc == 2 && strcmp(argv[1],"-f")==0) {
-		follow = 1;
-	} else {
-		/* no options, no getopt */
-		if (argc > 1)
-			bb_show_usage();
-	}
-	
-	// handle intrrupt signal
-	if (setjmp(jmp_env)) goto output_end;
-	
-	// attempt to redefine ^C signal
+	int cur;
+	int log_semid; /* ipc semaphore id */
+	int log_shmid; /* ipc shared memory id */
+	smallint follow = getopt32(argv, "f");
+
+	INIT_G();
+
+	log_shmid = shmget(KEY_ID, 0, 0);
+	if (log_shmid == -1)
+		bb_perror_msg_and_die("can't find syslogd buffer");
+
+	/* Attach shared memory to our char* */
+	shbuf = shmat(log_shmid, NULL, SHM_RDONLY);
+	if (shbuf == NULL)
+		bb_perror_msg_and_die("can't access syslogd buffer");
+
+	log_semid = semget(KEY_ID, 0, 0);
+	if (log_semid == -1)
+		error_exit("can't get access to semaphores for syslogd buffer");
+
 	signal(SIGINT, interrupted);
-	
-	if ( (log_shmid = shmget(KEY_ID, 0, 0)) == -1)
-		error_exit("Can't find circular buffer");
-	
-	// Attach shared memory to our char*
-	if ( (buf = shmat(log_shmid, NULL, SHM_RDONLY)) == NULL)
-		error_exit("Can't get access to circular buffer from syslogd");
 
-	if ( (log_semid = semget(KEY_ID, 0, 0)) == -1)
-	    	error_exit("Can't get access to semaphone(s) for circular buffer from syslogd");
+	/* Suppose atomic memory read */
+	/* Max possible value for tail is shbuf->size - 1 */
+	cur = shbuf->tail;
 
-	// Suppose atomic memory move
-	i = follow ? buf->tail : buf->head;
-
+	/* Loop for logread -f, one pass if there was no -f */
 	do {
-#ifdef CONFIG_FEATURE_LOGREAD_REDUCED_LOCKING
-		char *buf_data;
-		int log_len,j;
+		unsigned shbuf_size;
+		unsigned shbuf_tail;
+		const char *shbuf_data;
+#if ENABLE_FEATURE_LOGREAD_REDUCED_LOCKING
+		int i;
+		int len_first_part;
+		int len_total = len_total; /* for gcc */
+		char *copy = copy; /* for gcc */
 #endif
+		if (semop(log_semid, SMrdn, 2) == -1)
+			error_exit("semop[SMrdn]");
 
-		sem_down(log_semid);	
+		/* Copy the info, helps gcc to realize that it doesn't change */
+		shbuf_size = shbuf->size;
+		shbuf_tail = shbuf->tail;
+		shbuf_data = shbuf->data; /* pointer! */
 
-		//printf("head: %i tail: %i size: %i\n",buf->head,buf->tail,buf->size);
-		if (buf->head == buf->tail || i==buf->tail) {
-			if (follow) {
+		if (DEBUG)
+			printf("cur:%d tail:%i size:%i\n",
+					cur, shbuf_tail, shbuf_size);
+
+		if (!follow) {
+			/* advance to oldest complete message */
+			/* find NUL */
+			cur += strlen(shbuf_data + cur);
+			if (cur >= shbuf_size) { /* last byte in buffer? */
+				cur = strnlen(shbuf_data, shbuf_tail);
+				if (cur == shbuf_tail)
+					goto unlock; /* no complete messages */
+			}
+			/* advance to first byte of the message */
+			cur++;
+			if (cur >= shbuf_size) /* last byte in buffer? */
+				cur = 0;
+		} else { /* logread -f */
+			if (cur == shbuf_tail) {
 				sem_up(log_semid);
-				sleep(1);	/* TODO: replace me with a sleep_on */
+				fflush(stdout);
+				sleep(1); /* TODO: replace me with a sleep_on */
 				continue;
-			} else {
-				printf("<empty syslog>\n");
 			}
 		}
-	
-		// Read Memory 
-#ifdef CONFIG_FEATURE_LOGREAD_REDUCED_LOCKING
-		log_len = buf->tail - i;
-		if (log_len < 0)
-			log_len += buf->size;
-		buf_data = (char *)malloc(log_len);
-		if (!buf_data)
-			error_exit("malloc failed");
 
-		if (buf->tail < i) {
-			memcpy(buf_data, buf->data+i, buf->size-i);
-			memcpy(buf_data+buf->size-i, buf->data, buf->tail);
-		} else {
-			memcpy(buf_data, buf->data+i, buf->tail-i);
+		/* Read from cur to tail */
+#if ENABLE_FEATURE_LOGREAD_REDUCED_LOCKING
+		len_first_part = len_total = shbuf_tail - cur;
+		if (len_total < 0) {
+			/* message wraps: */
+			/* [SECOND PART.........FIRST PART] */
+			/*  ^data      ^tail    ^cur      ^size */
+			len_total += shbuf_size;
 		}
-		i = buf->tail;
-
+		copy = xmalloc(len_total + 1);
+		if (len_first_part < 0) {
+			/* message wraps (see above) */
+			len_first_part = shbuf_size - cur;
+			memcpy(copy + len_first_part, shbuf_data, shbuf_tail);
+		}
+		memcpy(copy, shbuf_data + cur, len_first_part);
+		copy[len_total] = '\0';
+		cur = shbuf_tail;
 #else
-		while ( i != buf->tail) {
-			printf("%s", buf->data+i);
-			i+= strlen(buf->data+i) + 1;
-			if (i >= buf->size )
-				i=0;
+		while (cur != shbuf_tail) {
+			fputs(shbuf_data + cur, stdout);
+			cur += strlen(shbuf_data + cur) + 1;
+			if (cur >= shbuf_size)
+				cur = 0;
 		}
 #endif
-		// release the lock on the log chain
+ unlock:
+		/* release the lock on the log chain */
 		sem_up(log_semid);
 
-#ifdef CONFIG_FEATURE_LOGREAD_REDUCED_LOCKING
-		for (j=0; j < log_len; j+=strlen(buf_data+j)+1) {
-			printf("%s", buf_data+j);
-			if (follow)
-				fflush(stdout);
+#if ENABLE_FEATURE_LOGREAD_REDUCED_LOCKING
+		for (i = 0; i < len_total; i += strlen(copy + i) + 1) {
+			fputs(copy + i, stdout);
 		}
-		free(buf_data);
+		free(copy);
 #endif
 	} while (follow);
 
-output_end:
-	if (log_shmid != -1) 
-		shmdt(buf);
-		
-	return EXIT_SUCCESS;		
-}
+	shmdt(shbuf);
 
-static void interrupted(int sig){
-	signal(SIGINT, SIG_IGN);
-	longjmp(jmp_env, 1);
-}
-
-static void error_exit(const char *str){
-	perror(str);
-	//release all acquired resources
-	if (log_shmid != -1) 
-		shmdt(buf);
-
-	exit(1);
+	fflush_stdout_and_exit(EXIT_SUCCESS);
 }

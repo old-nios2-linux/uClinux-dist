@@ -10,7 +10,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
 */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* This 'date' command supports only 2 time setting formats,
    all the GNU strftime stuff (its in libc, lets use it),
@@ -32,19 +32,13 @@
 #define DATE_OPT_TIMESPEC	0x20
 #define DATE_OPT_HINT		0x40
 
-static void xputenv(char *s)
-{
-	if (putenv(s) != 0)
-		bb_error_msg_and_die(bb_msg_memory_exhausted);
-}
-
 static void maybe_set_utc(int opt)
 {
 	if (opt & DATE_OPT_UTC)
-		xputenv((char*)"TZ=UTC0");
+		putenv((char*)"TZ=UTC0");
 }
 
-int date_main(int argc, char **argv);
+int date_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int date_main(int argc, char **argv)
 {
 	time_t tm;
@@ -57,9 +51,9 @@ int date_main(int argc, char **argv)
 	char *isofmt_arg;
 	char *hintfmt_arg;
 
-	opt_complementary = "?:d--s:s--d"
+	opt_complementary = "d--s:s--d"
 		USE_FEATURE_DATE_ISOFMT(":R--I:I--R");
-	opt = getopt32(argc, argv, "Rs:ud:r:"
+	opt = getopt32(argv, "Rs:ud:r:"
 			USE_FEATURE_DATE_ISOFMT("I::D:"),
 			&date_str, &date_str, &filename
 			USE_FEATURE_DATE_ISOFMT(, &isofmt_arg, &hintfmt_arg));
@@ -69,15 +63,16 @@ int date_main(int argc, char **argv)
 		if (!isofmt_arg) {
 			ifmt = 0; /* default is date */
 		} else {
-			const char * const isoformats[] =
-				{"date", "hours", "minutes", "seconds"};
+			static const char *const isoformats[] = {
+				"date", "hours", "minutes", "seconds"
+			};
 
 			for (ifmt = 0; ifmt < 4; ifmt++)
-				if (!strcmp(isofmt_arg, isoformats[ifmt])) {
-					break;
-				}
-			if (ifmt == 4) /* parse error */
-				bb_show_usage();
+				if (!strcmp(isofmt_arg, isoformats[ifmt]))
+					goto found;
+			/* parse error */
+			bb_show_usage();
+ found: ;
 		}
 	}
 
@@ -207,7 +202,7 @@ int date_main(int argc, char **argv)
 					date_fmt[i++] = '%';
 					date_fmt[i++] = 'S';
 				}
-format_utc:
+ format_utc:
 				date_fmt[i++] = '%';
 				date_fmt[i] = (opt & DATE_OPT_UTC) ? 'Z' : 'z';
 			}
@@ -222,9 +217,10 @@ format_utc:
 			date_fmt = (char*)"%a %b %e %H:%M:%S %Z %Y";
 	}
 
+#define date_buf bb_common_bufsiz1
 	if (*date_fmt == '\0') {
 		/* With no format string, just print a blank line */
-		*bb_common_bufsiz1 = 0;
+		date_buf[0] = '\0';
 	} else {
 		/* Handle special conversions */
 
@@ -233,9 +229,9 @@ format_utc:
 		}
 
 		/* Generate output string */
-		strftime(bb_common_bufsiz1, 200, date_fmt, &tm_time);
+		strftime(date_buf, sizeof(date_buf), date_fmt, &tm_time);
 	}
-	puts(bb_common_bufsiz1);
+	puts(date_buf);
 
 	return EXIT_SUCCESS;
 }

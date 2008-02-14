@@ -11,11 +11,11 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 
-#ifndef CONFIG_FEATURE_CHECK_TAINTED_MODULE
-static void check_tainted(void) { puts(""); }
+#if !ENABLE_FEATURE_CHECK_TAINTED_MODULE
+static void check_tainted(void) { bb_putchar('\n'); }
 #else
 #define TAINT_FILENAME                  "/proc/sys/kernel/tainted"
 #define TAINT_PROPRIETORY_MODULE        (1<<0)
@@ -28,23 +28,23 @@ static void check_tainted(void)
 	FILE *f;
 
 	tainted = 0;
-	if ((f = fopen(TAINT_FILENAME, "r"))) {
+	f = fopen(TAINT_FILENAME, "r");
+	if (f) {
 		fscanf(f, "%d", &tainted);
 		fclose(f);
 	}
-	if (f && tainted) {
+	if (tainted) {
 		printf("    Tainted: %c%c%c\n",
 				tainted & TAINT_PROPRIETORY_MODULE      ? 'P' : 'G',
 				tainted & TAINT_FORCED_MODULE           ? 'F' : ' ',
 				tainted & TAINT_UNSAFE_SMP              ? 'S' : ' ');
-	}
-	else {
+	} else {
 		printf("    Not tainted\n");
 	}
 }
 #endif
 
-#ifdef CONFIG_FEATURE_QUERY_MODULE_INTERFACE
+#if ENABLE_FEATURE_QUERY_MODULE_INTERFACE
 
 struct module_info
 {
@@ -74,7 +74,7 @@ enum {
 	NEW_MOD_INITIALIZING = 64
 };
 
-int lsmod_main(int argc, char **argv);
+int lsmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int lsmod_main(int argc, char **argv)
 {
 	struct module_info info;
@@ -128,10 +128,10 @@ int lsmod_main(int argc, char **argv)
 		}
 		if (count) printf("]");
 
-		puts("");
+		bb_putchar('\n');
 	}
 
-#ifdef CONFIG_FEATURE_CLEAN_UP
+#if ENABLE_FEATURE_CLEAN_UP
 	free(module_names);
 #endif
 
@@ -140,15 +140,14 @@ int lsmod_main(int argc, char **argv)
 
 #else /* CONFIG_FEATURE_QUERY_MODULE_INTERFACE */
 
-int lsmod_main(int argc, char **argv);
+int lsmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int lsmod_main(int argc, char **argv)
 {
 	FILE *file = xfopen("/proc/modules", "r");
 
 	printf("Module                  Size  Used by");
 	check_tainted();
-
-#if defined(CONFIG_FEATURE_LSMOD_PRETTY_2_6_OUTPUT)
+#if ENABLE_FEATURE_LSMOD_PRETTY_2_6_OUTPUT
 	{
 		char *line;
 		while ((line = xmalloc_fgets(file)) != NULL) {
@@ -179,7 +178,7 @@ int lsmod_main(int argc, char **argv)
 				}
 				printf(" %s", tok);
 			}
-			puts("");
+			bb_putchar('\n');
 			free(line);
 		}
 		fclose(file);

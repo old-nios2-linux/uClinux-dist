@@ -32,16 +32,16 @@
  * Paul Mundt <lethal@linux-sh.org>.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <sys/utsname.h>
 
 #define S_LEN 128
 
 /* These are the defaults */
-static const char defaultmap[] = "/boot/System.map";
-static const char defaultpro[] = "/proc/profile";
+static const char defaultmap[] ALIGN1 = "/boot/System.map";
+static const char defaultpro[] ALIGN1 = "/proc/profile";
 
-int readprofile_main(int argc, char **argv);
+int readprofile_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int readprofile_main(int argc, char **argv)
 {
 	FILE *map;
@@ -67,7 +67,7 @@ int readprofile_main(int argc, char **argv)
 	mapFile = defaultmap;
 
 	opt_complementary = "nn:aa:bb:ss:ii:rr:vv";
-	getopt32(argc, argv, "M:m:p:nabsirv",
+	getopt32(argv, "M:m:p:nabsirv",
 			&mult, &mapFile, &proFile,
 			&optNative, &optAll, &optBins, &optSub,
 			&optInfo, &optReset, &optVerbose);
@@ -88,10 +88,7 @@ int readprofile_main(int argc, char **argv)
 		}
 
 		fd = xopen(defaultpro, O_WRONLY);
-
-		if (full_write(fd, &multiplier, to_write) != to_write)
-			bb_perror_msg_and_die("error writing %s", defaultpro);
-
+		xwrite(fd, &multiplier, to_write);
 		close(fd);
 		return EXIT_SUCCESS;
 	}
@@ -99,7 +96,7 @@ int readprofile_main(int argc, char **argv)
 	/*
 	 * Use an fd for the profiling buffer, to skip stdio overhead
 	 */
-	len = INT_MAX;
+	len = MAXINT(ssize_t);
 	buf = xmalloc_open_read_close(proFile, &len);
 	if (!optNative) {
 		int entries = len/sizeof(*buf);

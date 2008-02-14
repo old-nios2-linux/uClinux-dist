@@ -19,7 +19,7 @@
  *
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #define SOH 0x01
 #define STX 0x02
@@ -43,7 +43,8 @@ Cf:
 #define TIMEOUT_LONG 10
 #define MAXERRORS 10
 
-static int read_byte(int fd, unsigned int timeout) {
+static int read_byte(int fd, unsigned int timeout)
+{
 	char buf[1];
 	int n;
 
@@ -248,7 +249,7 @@ static void sigalrm_handler(int ATTRIBUTE_UNUSED signum)
 {
 }
 
-int rx_main(int argc, char **argv);
+int rx_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int rx_main(int argc, char **argv)
 {
 	char *fn;

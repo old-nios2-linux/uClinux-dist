@@ -8,7 +8,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* X/OPEN tells us to use <sys/{types,ipc,sem}.h> for semctl() */
 /* X/OPEN tells us to use <sys/{types,ipc,msg}.h> for msgctl() */
@@ -17,7 +17,7 @@
 #include <sys/msg.h>
 #include <sys/sem.h>
 
-#if defined (__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)
+#if defined(__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)
 /* union semun is defined by including <sys/sem.h> */
 #else
 /* according to X/OPEN we have to define it ourselves */
@@ -29,7 +29,10 @@ union semun {
 };
 #endif
 
-#ifndef CONFIG_IPCRM_DROP_LEGACY
+#define IPCRM_LEGACY 1
+
+
+#if IPCRM_LEGACY
 
 typedef enum type_id {
 	SHM,
@@ -70,10 +73,10 @@ static int remove_ids(type_id type, int argc, char **argv)
 
 	return nb_errors;
 }
-#endif /* #ifndef CONFIG_IPCRM_DROP_LEGACY */
+#endif /* IPCRM_LEGACY */
 
 
-int ipcrm_main(int argc, char **argv);
+int ipcrm_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ipcrm_main(int argc, char **argv)
 {
 	int c;
@@ -82,7 +85,7 @@ int ipcrm_main(int argc, char **argv)
 	/* if the command is executed without parameters, do nothing */
 	if (argc == 1)
 		return 0;
-#ifndef CONFIG_IPCRM_DROP_LEGACY
+#if IPCRM_LEGACY
 	/* check to see if the command is being invoked in the old way if so
 	   then run the old code. Valid commands are msg, shm, sem. */
 	{
@@ -113,7 +116,7 @@ int ipcrm_main(int argc, char **argv)
 			return 0;
 		}
 	}
-#endif /* #ifndef CONFIG_IPCRM_DROP_LEGACY */
+#endif /* IPCRM_LEGACY */
 
 	/* process new syntax to conform with SYSV ipcrm */
 	while ((c = getopt(argc, argv, "q:m:s:Q:M:S:h?")) != -1) {
@@ -154,7 +157,6 @@ int ipcrm_main(int argc, char **argv)
 
 			if (id < 0) {
 				const char *errmsg;
-				const char *const what = "key";
 
 				error++;
 				switch (errno) {
@@ -171,7 +173,7 @@ int ipcrm_main(int argc, char **argv)
 					errmsg = "unknown error in";
 					break;
 				}
-				bb_error_msg("%s %s (%s)",  errmsg, what, optarg);
+				bb_error_msg("%s %s (%s)", errmsg, "key", optarg);
 				continue;
 			}
 		} else {

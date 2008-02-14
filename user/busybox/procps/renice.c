@@ -19,17 +19,17 @@
  *   following IDs (if any).  Multiple switches are allowed.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <sys/resource.h>
 
 void BUG_bad_PRIO_PROCESS(void);
 void BUG_bad_PRIO_PGRP(void);
 void BUG_bad_PRIO_USER(void);
 
-int renice_main(int argc, char **argv);
+int renice_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int renice_main(int argc, char **argv)
 {
-	static const char Xetpriority_msg[] = "%cetpriority";
+	static const char Xetpriority_msg[] ALIGN1 = "%cetpriority";
 
 	int retval = EXIT_SUCCESS;
 	int which = PRIO_PROCESS;	/* Default 'which' value. */
@@ -67,8 +67,9 @@ int renice_main(int argc, char **argv)
 	while ((arg = *++argv) != NULL) {
 		/* Check for a mode switch. */
 		if (arg[0] == '-' && arg[1]) {
-			static const char opts[]
-				= { 'p', 'g', 'u', 0, PRIO_PROCESS, PRIO_PGRP, PRIO_USER };
+			static const char opts[] ALIGN1 = {
+				'p', 'g', 'u', 0, PRIO_PROCESS, PRIO_PGRP, PRIO_USER
+			};
 			const char *p = strchr(opts, arg[1]);
 			if (p) {
 				which = p[4];

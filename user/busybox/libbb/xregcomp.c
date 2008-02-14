@@ -9,28 +9,6 @@
  */
 
 #include "libbb.h"
-
-#if defined(__UC_LIBC__USE_REGEXP_H__)
-
-#include <regexp.h>
-
-void xregcomp(regex_t *preg, const char *reg, int cflags)
-{
-	regexp *ret;
-	const char *r;
-	r = reg;
-	if (cflags)
-		bb_error_msg_and_die("xregcomp: no support for -i");
-	ret = regcomp(r);
-	if (ret == NULL) {
-		regerror("cannot compile expression");
-		exit(1);
-	}
-	*preg = ret;
-}
-
-#else
-
 #include "xregex.h"
 
 char* regcomp_or_errmsg(regex_t *preg, const char *regex, int cflags)
@@ -52,13 +30,3 @@ void xregcomp(regex_t *preg, const char *regex, int cflags)
 		bb_error_msg_and_die("xregcomp: %s", errmsg);
 	}
 }
-#endif
-
-/* END CODE */
-/*
-Local Variables:
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

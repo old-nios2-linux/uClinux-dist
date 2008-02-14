@@ -7,11 +7,11 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int pwd_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int pwd_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int pwd_main(int argc, char **argv)
 {
 	char *buf;
@@ -19,7 +19,8 @@ int pwd_main(int argc, char **argv)
 	buf = xrealloc_getcwd_or_warn(NULL);
 	if (buf != NULL) {
 		puts(buf);
-		fflush_stdout_and_exit(EXIT_SUCCESS);
+		free(buf);
+		return fflush(stdout);
 	}
 
 	return EXIT_FAILURE;

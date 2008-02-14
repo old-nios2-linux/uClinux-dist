@@ -13,7 +13,7 @@
  * Most of the dirty work blatantly ripped off from cat.c =)
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* various defines swiped from linux/cdrom.h */
 #define CDROMCLOSETRAY            0x5319  /* pendant of CDROMEJECT  */
@@ -25,15 +25,15 @@
 #define FLAG_CLOSE  1
 #define FLAG_SMART  2
 
-int eject_main(int argc, char **argv);
+int eject_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int eject_main(int argc, char **argv)
 {
 	unsigned long flags;
 	const char *device;
 	int dev, cmd;
 
-	opt_complementary = "?:?1:t--T:T--t";
-	flags = getopt32(argc, argv, "tT");
+	opt_complementary = "?1:t--T:T--t";
+	flags = getopt32(argv, "tT");
 	device = argv[optind] ? : "/dev/cdrom";
 
 	// We used to do "umount <device>" here, but it was buggy
@@ -50,9 +50,8 @@ int eject_main(int argc, char **argv)
 	if (flags & FLAG_CLOSE
 	 || (flags & FLAG_SMART && ioctl(dev, CDROM_DRIVE_STATUS) == CDS_TRAY_OPEN))
 		cmd = CDROMCLOSETRAY;
-	if (ioctl(dev, cmd)) {
-		bb_perror_msg_and_die("%s", device);
-	}
+
+	ioctl_or_perror_and_die(dev, cmd, NULL, "%s", device);
 
 	if (ENABLE_FEATURE_CLEAN_UP)
 		close(dev);

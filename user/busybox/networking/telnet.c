@@ -24,7 +24,7 @@
 #include <termios.h>
 #include <arpa/telnet.h>
 #include <netinet/in.h>
-#include "busybox.h"
+#include "libbb.h"
 
 #ifdef DOTRACE
 #define TRACE(x, y) do { if (x) printf y; } while (0)
@@ -52,7 +52,6 @@ enum {
 
 typedef unsigned char byte;
 
-
 struct globals {
 	int	netfd; /* console fd:s are 0 and 1 (and 2) */
 	short	iaclen; /* could even use byte */
@@ -78,9 +77,13 @@ struct globals {
 	struct termios termios_def;
 	struct termios termios_raw;
 };
-
-#define G (*(struct globals*)bb_common_bufsiz1)
-
+#define G (*(struct globals*)&bb_common_bufsiz1)
+void BUG_telnet_globals_too_big(void);
+#define INIT_G() do { \
+	if (sizeof(G) > COMMON_BUFSIZE) \
+		BUG_telnet_globals_too_big(); \
+	/* memset(&G, 0, sizeof G); - already is */ \
+} while (0)
 
 /* Function prototypes */
 static void rawmode(void);
@@ -98,6 +101,7 @@ static void iacflush(void)
 
 #define write_str(fd, str) write(fd, str, sizeof(str) - 1)
 
+static void doexit(int ev) ATTRIBUTE_NORETURN;
 static void doexit(int ev)
 {
 	cookmode();
@@ -154,31 +158,29 @@ static void conescape(void)
 
 static void handlenetoutput(int len)
 {
-	/*	here we could do smart tricks how to handle 0xFF:s in output
-	 *	stream  like writing twice every sequence of FF:s (thus doing
-	 *	many write()s. But I think interactive telnet application does
-	 *	not need to be 100% 8-bit clean, so changing every 0xff:s to
-	 *	0x7f:s
+	/* here we could do smart tricks how to handle 0xFF:s in output
+	 * stream like writing twice every sequence of FF:s (thus doing
+	 * many write()s. But I think interactive telnet application does
+	 * not need to be 100% 8-bit clean, so changing every 0xff:s to
+	 * 0x7f:s
 	 *
-	 *	2002-mar-21, Przemyslaw Czerpak (druzus@polbox.com)
-	 *	I don't agree.
-	 *	first - I cannot use programs like sz/rz
-	 *	second - the 0x0D is sent as one character and if the next
-	 *		 char is 0x0A then it's eaten by a server side.
-	 *	third - whay doy you have to make 'many write()s'?
-	 *		I don't understand.
-	 *	So I implemented it. It's realy useful for me. I hope that
-	 *	others people will find it interesting to.
+	 * 2002-mar-21, Przemyslaw Czerpak (druzus@polbox.com)
+	 * I don't agree.
+	 * first - I cannot use programs like sz/rz
+	 * second - the 0x0D is sent as one character and if the next
+	 *	char is 0x0A then it's eaten by a server side.
+	 * third - whay doy you have to make 'many write()s'?
+	 *	I don't understand.
+	 * So I implemented it. It's realy useful for me. I hope that
+	 * others people will find it interesting too.
 	 */
 
 	int i, j;
 	byte * p = (byte*)G.buf;
 	byte outbuf[4*DATABUFSIZE];
 
-	for (i = len, j = 0; i > 0; i--, p++)
-	{
-		if (*p == 0x1d)
-		{
+	for (i = len, j = 0; i > 0; i--, p++) {
+		if (*p == 0x1d) {
 			conescape();
 			return;
 		}
@@ -188,7 +190,7 @@ static void handlenetoutput(int len)
 		else if (*p == 0x0d)
 			outbuf[j++] = 0x00;
 	}
-	if (j > 0 )
+	if (j > 0)
 		write(G.netfd, outbuf, j);
 }
 
@@ -197,68 +199,59 @@ static void handlenetinput(int len)
 	int i;
 	int cstart = 0;
 
-	for (i = 0; i < len; i++)
-	{
+	for (i = 0; i < len; i++) {
 		byte c = G.buf[i];
 
-		if (G.telstate == 0) /* most of the time state == 0 */
-		{
-			if (c == IAC)
-			{
+		if (G.telstate == 0) { /* most of the time state == 0 */
+			if (c == IAC) {
 				cstart = i;
 				G.telstate = TS_IAC;
 			}
-		}
-		else
-			switch (G.telstate)
-			 {
-			 case TS_0:
-				 if (c == IAC)
-					 G.telstate = TS_IAC;
-				 else
-					 G.buf[cstart++] = c;
-				 break;
+		} else
+			switch (G.telstate) {
+			case TS_0:
+				if (c == IAC)
+					G.telstate = TS_IAC;
+				else
+					G.buf[cstart++] = c;
+				break;
 
-			 case TS_IAC:
-				 if (c == IAC) /* IAC IAC -> 0xFF */
-				 {
-					 G.buf[cstart++] = c;
-					 G.telstate = TS_0;
-					 break;
-				 }
-				 /* else */
-				 switch (c)
-				 {
-				 case SB:
-					 G.telstate = TS_SUB1;
-					 break;
-				 case DO:
-				 case DONT:
-				 case WILL:
-				 case WONT:
-					 G.telwish =  c;
-					 G.telstate = TS_OPT;
-					 break;
-				 default:
-					 G.telstate = TS_0;	/* DATA MARK must be added later */
-				 }
-				 break;
-			 case TS_OPT: /* WILL, WONT, DO, DONT */
-				 telopt(c);
-				 G.telstate = TS_0;
-				 break;
-			 case TS_SUB1: /* Subnegotiation */
-			 case TS_SUB2: /* Subnegotiation */
-				 if (subneg(c))
-					 G.telstate = TS_0;
-				 break;
-			 }
+			case TS_IAC:
+				if (c == IAC) { /* IAC IAC -> 0xFF */
+					G.buf[cstart++] = c;
+					G.telstate = TS_0;
+					break;
+				}
+				/* else */
+				switch (c) {
+				case SB:
+					G.telstate = TS_SUB1;
+					break;
+				case DO:
+				case DONT:
+				case WILL:
+				case WONT:
+					G.telwish =  c;
+					G.telstate = TS_OPT;
+					break;
+				default:
+					G.telstate = TS_0;	/* DATA MARK must be added later */
+				}
+				break;
+			case TS_OPT: /* WILL, WONT, DO, DONT */
+				telopt(c);
+				G.telstate = TS_0;
+				break;
+			case TS_SUB1: /* Subnegotiation */
+			case TS_SUB2: /* Subnegotiation */
+				if (subneg(c))
+					G.telstate = TS_0;
+				break;
+			}
 	}
-	if (G.telstate)
-	{
-		if (G.iaclen)			iacflush();
+	if (G.telstate) {
+		if (G.iaclen) iacflush();
 		if (G.telstate == TS_0)	G.telstate = 0;
-
 		len = cstart;
 	}
 
@@ -350,7 +343,7 @@ static void putiac_naws(byte c, int x, int y)
 }
 #endif
 
-static char const escapecharis[] = "\r\nEscape character is ";
+static char const escapecharis[] ALIGN1 = "\r\nEscape character is ";
 
 static void setConMode(void)
 {
@@ -437,7 +430,8 @@ static void to_sga(void)
 	} else if (G.telwish == WONT)
 		return;
 
-	if ((G.telflags ^= UF_SGA) & UF_SGA) /* toggle */
+	G.telflags ^= UF_SGA; /* toggle */
+	if (G.telflags & UF_SGA)
 		putiac2(DO, TELOPT_SGA);
 	else
 		putiac2(DONT, TELOPT_SGA);
@@ -547,10 +541,11 @@ static void cookmode(void)
 		tcsetattr(0, TCSADRAIN, &G.termios_def);
 }
 
-void BUG_telnet_globals_too_big(void);
+/* poll gives smaller (-70 bytes) code */
+#define USE_POLL 1
 
-int telnet_main(int argc, char** argv);
-int telnet_main(int argc, char** argv)
+int telnet_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int telnet_main(int argc, char **argv)
 {
 	char *host;
 	int port;
@@ -562,9 +557,7 @@ int telnet_main(int argc, char** argv)
 	int maxfd;
 #endif
 
-	if (sizeof(G) > sizeof(bb_common_bufsiz1))
-		BUG_telnet_globals_too_big();
-	/* memset(&G, 0, sizeof G); - already is */
+	INIT_G();
 
 #if ENABLE_FEATURE_AUTOWIDTH
 	get_terminal_width_height(0, &G.win_width, &G.win_height);
@@ -584,7 +577,7 @@ int telnet_main(int argc, char** argv)
 		bb_show_usage();
 
 #if ENABLE_FEATURE_TELNET_AUTOLOGIN
-	if (1 & getopt32(argc, argv, "al:", &G.autologin))
+	if (1 & getopt32(argv, "al:", &G.autologin))
 		G.autologin = getenv("USER");
 	argv += optind;
 #else

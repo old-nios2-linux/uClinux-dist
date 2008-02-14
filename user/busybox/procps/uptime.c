@@ -15,7 +15,7 @@
 
 /* getopt not needed */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #ifndef FSHIFT
 # define FSHIFT 16              /* nr of bits of precision */
@@ -25,7 +25,7 @@
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 
 
-int uptime_main(int argc, char **argv);
+int uptime_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int uptime_main(int argc, char **argv)
 {
 	int updays, uphours, upminutes;
@@ -46,7 +46,7 @@ int uptime_main(int argc, char **argv)
 	upminutes = (int) info.uptime / 60;
 	uphours = (upminutes / 60) % 24;
 	upminutes %= 60;
-	if(uphours)
+	if (uphours)
 		printf("%2d:%02d, ", uphours, upminutes);
 	else
 		printf("%d min, ", upminutes);

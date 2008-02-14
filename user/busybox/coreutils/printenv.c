@@ -8,34 +8,26 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
+extern char **environ;
 
-int printenv_main(int argc, char **argv);
+int printenv_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int printenv_main(int argc, char **argv)
 {
-	extern char **environ;
-	int e = 0;
-
 	/* no variables specified, show whole env */
-	if (argc == 1)
+	if (argc == 1) {
+		int e = 0;
 		while (environ[e])
 			puts(environ[e++]);
-
-	/* search for specified variables and print them out if found */
-	else {
-		int i;
-		size_t l;
+	} else {
+		/* search for specified variables and print them out if found */
 		char *arg, *env;
 
-		for (i=1; (arg = argv[i]); ++i)
-			for (; (env = environ[e]); ++e) {
-				l = strlen(arg);
-				if (!strncmp(env, arg, l) && env[l] == '=')
-					puts(env + l + 1);
-			}
+		while ((arg = *++argv) != NULL) {
+			env = getenv(arg);
+			if (env)
+				puts(env);
+		}
 	}
 
 	fflush_stdout_and_exit(0);

@@ -7,10 +7,10 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <sys/syscall.h>
 
-#ifdef CONFIG_FEATURE_2_6_MODULES
+#if ENABLE_FEATURE_2_6_MODULES
 static inline void filename2modname(char *modname, const char *afterslash)
 {
 	unsigned int i;
@@ -38,19 +38,21 @@ void filename2modname(char *modname, const char *afterslash);
 int query_module(const char *name, int which, void *buf,
 			size_t bufsize, size_t *ret);
 
-int rmmod_main(int argc, char **argv);
+int rmmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int rmmod_main(int argc, char **argv)
 {
 	int n, ret = EXIT_SUCCESS;
 	unsigned int flags = O_NONBLOCK|O_EXCL;
 
+#define misc_buf bb_common_bufsiz1
+
 	/* Parse command line. */
-	n = getopt32(argc, argv, "wfa");
-	if((n & 1))	// --wait
+	n = getopt32(argv, "wfa");
+	if (n & 1)	// --wait
 		flags &= ~O_NONBLOCK;
-	if((n & 2))	// --force
+	if (n & 2)	// --force
 		flags |= O_TRUNC;
-	if((n & 4)) {
+	if (n & 4) {
 		/* Unload _all_ unused modules via NULL delete_module() call */
 		/* until the number of modules does not change */
 		size_t nmod = 0; /* number of modules */
@@ -65,7 +67,7 @@ int rmmod_main(int argc, char **argv)
 			pnmod = nmod;
 			// the 1 here is QM_MODULES.
 			if (ENABLE_FEATURE_QUERY_MODULE_INTERFACE && query_module(NULL,
-					1, bb_common_bufsiz1, sizeof(bb_common_bufsiz1),
+					1, misc_buf, sizeof(misc_buf),
 					&nmod))
 			{
 				bb_perror_msg_and_die("QM_MODULES");
@@ -79,16 +81,11 @@ int rmmod_main(int argc, char **argv)
 
 	for (n = optind; n < argc; n++) {
 		if (ENABLE_FEATURE_2_6_MODULES) {
-			const char *afterslash;
-
-			afterslash = strrchr(argv[n], '/');
-			if (!afterslash) afterslash = argv[n];
-			else afterslash++;
-			filename2modname(bb_common_bufsiz1, afterslash);
+			filename2modname(misc_buf, bb_basename(argv[n]));
 		}
 
-		if (syscall(__NR_delete_module, ENABLE_FEATURE_2_6_MODULES ? bb_common_bufsiz1 : argv[n], flags)) {
-			bb_perror_msg("%s", argv[n]);
+		if (syscall(__NR_delete_module, ENABLE_FEATURE_2_6_MODULES ? misc_buf : argv[n], flags)) {
+			bb_simple_perror_msg(argv[n]);
 			ret = EXIT_FAILURE;
 		}
 	}

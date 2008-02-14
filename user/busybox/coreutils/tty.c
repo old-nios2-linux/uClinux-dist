@@ -10,12 +10,9 @@
 /* BB_AUDIT SUSv3 compliant */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/tty.html */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int tty_main(int argc, char **argv);
+int tty_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int tty_main(int argc, char **argv)
 {
 	const char *s;
@@ -24,14 +21,15 @@ int tty_main(int argc, char **argv)
 
 	xfunc_error_retval = 2;	/* SUSv3 requires > 1 for error. */
 
-	USE_INCLUDE_SUSv2(silent = getopt32(argc, argv, "s");)
+	USE_INCLUDE_SUSv2(silent = getopt32(argv, "s");)
 
 	/* gnu tty outputs a warning that it is ignoring all args. */
 	bb_warn_ignoring_args(argc - optind);
 
 	retval = 0;
 
-	if ((s = ttyname(0)) == NULL) {
+	s = ttyname(0);
+	if (s == NULL) {
 	/* According to SUSv3, ttyname can on fail with EBADF or ENOTTY.
 	 * We know the file descriptor is good, so failure means not a tty. */
 		s = "not a tty";

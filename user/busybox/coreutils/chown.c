@@ -11,12 +11,10 @@
 /* BB_AUDIT GNU defects - unsupported long options. */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/chown.html */
 
-#include "busybox.h"
+#include "libbb.h"
 
-/* Don't use lchown for glibc older then 2.1.x */
-#if ((__GLIBC__ <= 2) && (__GLIBC_MINOR__ < 1)) || defined(__UC_LIBC__)
-#define lchown	chown
-#endif
+/* This is a NOEXEC applet. Be very careful! */
+
 
 #define OPT_STR     ("Rh" USE_DESKTOP("vcfLHP"))
 #define BIT_RECURSE 1
@@ -59,18 +57,19 @@ static int fileAction(const char *fileName, struct stat *statbuf,
 		return TRUE;
 	}
 	if (!OPT_QUIET)
-		bb_perror_msg("%s", fileName);	/* A filename can have % in it... */
+		bb_simple_perror_msg(fileName);	/* A filename can have % in it... */
 	return FALSE;
 }
 
-int chown_main(int argc, char **argv);
+int chown_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int chown_main(int argc, char **argv)
 {
 	int retval = EXIT_SUCCESS;
+	int flags;
 	chown_fptr chown_func;
 
 	opt_complementary = "-2";
-	getopt32(argc, argv, OPT_STR);
+	getopt32(argv, OPT_STR);
 	argv += optind;
 
 	/* This matches coreutils behavior (almost - see below) */
@@ -82,34 +81,28 @@ int chown_main(int argc, char **argv)
 		chown_func = lchown;
 	}
 
+	flags = ACTION_DEPTHFIRST; /* match coreutils order */
+	if (OPT_RECURSE)
+		flags |= ACTION_RECURSE;
+	if (OPT_TRAVERSE_TOP)
+		flags |= ACTION_FOLLOWLINKS_L0; /* -H/-L: follow links on depth 0 */
+	if (OPT_TRAVERSE)
+		flags |= ACTION_FOLLOWLINKS; /* follow links if -L */
+
 	parse_chown_usergroup_or_die(&ugid, argv[0]);
 
 	/* Ok, ready to do the deed now */
 	argv++;
 	do {
-		char *arg = *argv;
-
-		if (OPT_TRAVERSE_TOP) {
-			/* resolves symlink (even recursive) */
-			arg = xmalloc_realpath(arg);
-			if (!arg)
-				continue;
-		}
-
-		if (!recursive_action(arg,
-				OPT_RECURSE,    // recurse
-				OPT_TRAVERSE,   // follow links if -L
-				FALSE,          // depth first
-				fileAction,     // file action
-				fileAction,     // dir action
-				chown_func,     // user data
-				0)              // depth
+		if (!recursive_action(*argv,
+				flags,          /* flags */
+				fileAction,     /* file action */
+				fileAction,     /* dir action */
+				chown_func,     /* user data */
+				0)              /* depth */
 		) {
 			retval = EXIT_FAILURE;
 		}
-
-		if (OPT_TRAVERSE_TOP)
-			free(arg);
 	} while (*++argv);
 
 	return retval;
@@ -140,8 +133,10 @@ create() {
 tst() {
     create test1
     create test2
-    (cd test1; $t1 $1)
-    (cd test2; $t2 $1)
+    echo "[$1]" >>test1.out
+    echo "[$1]" >>test2.out
+    (cd test1; $t1 $1) >>test1.out 2>&1
+    (cd test2; $t2 $1) >>test2.out 2>&1
     (cd test1; ls -lnR) >out1
     (cd test2; ls -lnR) >out2
     echo "chown $1" >out.diff
@@ -155,18 +150,22 @@ tst_for_each() {
     tst "$1 1:1 linkfile"
 }
 echo "If script produced 'out.diff' file, then at least one testcase failed"
+>test1.out
+>test2.out
 # These match coreutils 6.8:
-tst_for_each ""
-tst_for_each "-R"
-tst_for_each "-RP"
-tst_for_each "-RL"
-tst_for_each "-RH"
-tst_for_each "-h"
-tst_for_each "-hR"
-tst_for_each "-hRP"
-# Below: with "chown linkdir" coreutils 6.8 will chown linkdir _target_,
-# we lchown _the link_. I believe we are "more correct".
-#tst_for_each "-hRL"
-#tst_for_each "-hRH"
+tst_for_each "-v"
+tst_for_each "-vR"
+tst_for_each "-vRP"
+tst_for_each "-vRL"
+tst_for_each "-vRH"
+tst_for_each "-vh"
+tst_for_each "-vhR"
+tst_for_each "-vhRP"
+tst_for_each "-vhRL"
+tst_for_each "-vhRH"
+# Fix `name' in coreutils output
+sed 's/`/'"'"'/g' -i test2.out
+# Compare us with coreutils output
+diff -u test1.out test2.out
 
 */

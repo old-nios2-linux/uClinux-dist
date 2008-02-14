@@ -17,22 +17,18 @@
  * Also, exiting on a failure was a bug.  All args should be processed.
  */
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <utime.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int touch_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int touch_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int touch_main(int argc, char **argv)
 {
 	int fd;
 	int status = EXIT_SUCCESS;
-	bool flags = (getopt32(argc, argv, "c") & 1);
+	int flags = getopt32(argv, "cf");
 
+	flags &= 1; /* ignoring -f (BSD compat thingy) */
 	argv += optind;
 
 	if (!*argv) {
@@ -41,7 +37,7 @@ int touch_main(int argc, char **argv)
 
 	do {
 		if (utime(*argv, NULL)) {
-			if (errno == ENOENT) {	/* no such file*/
+			if (errno == ENOENT) {	/* no such file */
 				if (flags) {	/* Creation is disabled, so ignore. */
 					continue;
 				}
@@ -54,7 +50,7 @@ int touch_main(int argc, char **argv)
 				}
 			}
 			status = EXIT_FAILURE;
-			bb_perror_msg("%s", *argv);
+			bb_simple_perror_msg(*argv);
 		}
 	} while (*++argv);
 

@@ -13,7 +13,7 @@
  * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 enum { SUM_BSD, PRINT_NAME, SUM_SYSV };
 
@@ -24,7 +24,7 @@ enum { SUM_BSD, PRINT_NAME, SUM_SYSV };
 static unsigned sum_file(const char *file, const unsigned type)
 {
 #define buf bb_common_bufsiz1
-	uintmax_t total_bytes = 0;
+	unsigned long long total_bytes = 0;
 	int fd = 0, r;
 
 	/* The sum of all the input bytes, modulo (UINT_MAX + 1).  */
@@ -67,20 +67,20 @@ static unsigned sum_file(const char *file, const unsigned type)
 	if (type >= SUM_SYSV) {
 		r = (s & 0xffff) + ((s & 0xffffffff) >> 16);
 		s = (r & 0xffff) + (r >> 16);
-		printf("%d %ju %s\n", s, (total_bytes+511)/512, file);
+		printf("%d %llu %s\n", s, (total_bytes + 511) / 512, file);
 	} else
-		printf("%05d %5ju %s\n", s, (total_bytes+1023)/1024, file);
+		printf("%05d %5llu %s\n", s, (total_bytes + 1023) / 1024, file);
 	return 1;
 #undef buf
 }
 
-int sum_main(int argc, char **argv);
+int sum_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int sum_main(int argc, char **argv)
 {
 	unsigned n;
 	unsigned type = SUM_BSD;
 
-	n = getopt32(argc, argv, "sr");
+	n = getopt32(argv, "sr");
 	if (n & 1) type = SUM_SYSV;
 	/* give the bsd priority over sysv func */
 	if (n & 2) type = SUM_BSD;

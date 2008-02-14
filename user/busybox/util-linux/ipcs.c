@@ -8,12 +8,6 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
-#include <errno.h>
-#include <time.h>
-#include <pwd.h>
-#include <grp.h>
-
 /* X/OPEN tells us to use <sys/{types,ipc,sem}.h> for semctl() */
 /* X/OPEN tells us to use <sys/{types,ipc,msg}.h> for msgctl() */
 /* X/OPEN tells us to use <sys/{types,ipc,shm}.h> for shmctl() */
@@ -23,7 +17,7 @@
 #include <sys/msg.h>
 #include <sys/shm.h>
 
-
+#include "libbb.h"
 
 /*-------------------------------------------------------------------*/
 /* SHM_DEST and SHM_LOCKED are defined in kernel headers,
@@ -67,7 +61,7 @@ struct shm_info {
 /* The last arg of semctl is a union semun, but where is it defined?
    X/OPEN tells us to define it ourselves, but until recently
    Linux include files would also define it. */
-#if defined (__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)
+#if defined(__GNU_LIBRARY__) && !defined(_SEM_SEMUN_UNDEFINED)
 /* union semun is defined by including <sys/sem.h> */
 #else
 /* according to X/OPEN we have to define it ourselves */
@@ -84,7 +78,7 @@ union semun {
    <linux/ipc.h>, which defines a struct ipc_perm with such fields.
    glibc-1.09 has no support for sysv ipc.
    glibc 2 uses __key, __seq */
-#if defined (__GNU_LIBRARY__) && __GNU_LIBRARY__ > 1
+#if defined(__GNU_LIBRARY__) && __GNU_LIBRARY__ > 1
 #define KEY __key
 #else
 #define KEY key
@@ -105,23 +99,19 @@ static void print_perms(int id, struct ipc_perm *ipcp)
 
 	printf("%-10d %-10o", id, ipcp->mode & 0777);
 
-	if ((pw = getpwuid(ipcp->cuid)))
-		printf(" %-10s", pw->pw_name);
-	else
-		printf(" %-10d", ipcp->cuid);
-	if ((gr = getgrgid(ipcp->cgid)))
-		printf(" %-10s", gr->gr_name);
-	else
-		printf(" %-10d", ipcp->cgid);
+	pw = getpwuid(ipcp->cuid);
+	if (pw)	printf(" %-10s", pw->pw_name);
+	else	printf(" %-10d", ipcp->cuid);
+	gr = getgrgid(ipcp->cgid);
+	if (gr)	printf(" %-10s", gr->gr_name);
+	else	printf(" %-10d", ipcp->cgid);
 
-	if ((pw = getpwuid(ipcp->uid)))
-		printf(" %-10s", pw->pw_name);
-	else
-		printf(" %-10d", ipcp->uid);
-	if ((gr = getgrgid(ipcp->gid)))
-		printf(" %-10s\n", gr->gr_name);
-	else
-		printf(" %-10d\n", ipcp->gid);
+	pw = getpwuid(ipcp->uid);
+	if (pw)	printf(" %-10s", pw->pw_name);
+	else	printf(" %-10d", ipcp->uid);
+	gr = getgrgid(ipcp->gid);
+	if (gr)	printf(" %-10s\n", gr->gr_name);
+	else	printf(" %-10d\n", ipcp->gid);
 }
 
 
@@ -565,10 +555,10 @@ static void print_sem(int semid)
 		}
 		printf("%-10d %-10d %-10d %-10d %-10d\n", i, val, ncnt, zcnt, pid);
 	}
-	puts("");
+	bb_putchar('\n');
 }
 
-int ipcs_main(int argc, char **argv);
+int ipcs_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ipcs_main(int argc, char **argv)
 {
 	int id = 0;
@@ -580,7 +570,7 @@ int ipcs_main(int argc, char **argv)
 #define flag_sem	(1<<2)
 #define flag_shm	(1<<3)
 
-	opt = getopt32(argc, argv, "i:aqsmtcplu", &opt_i);
+	opt = getopt32(argv, "i:aqsmtcplu", &opt_i);
 	if (opt & 0x1) { // -i
 		id = xatoi(opt_i);
 		flags |= flag_print;
@@ -613,19 +603,19 @@ int ipcs_main(int argc, char **argv)
 
 	if (!(flags & (flag_shm | flag_msg | flag_sem)))
 		flags |= flag_msg | flag_shm | flag_sem;
-	puts("");
+	bb_putchar('\n');
 
 	if (flags & flag_shm) {
 		do_shm();
-		puts("");
+		bb_putchar('\n');
 	}
 	if (flags & flag_sem) {
 		do_sem();
-		puts("");
+		bb_putchar('\n');
 	}
 	if (flags & flag_msg) {
 		do_msg();
-		puts("");
+		bb_putchar('\n');
 	}
 	fflush_stdout_and_exit(0);
 }

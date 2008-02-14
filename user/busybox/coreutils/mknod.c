@@ -11,13 +11,13 @@
 
 #include <sys/sysmacros.h>  // For makedev
 
-#include "busybox.h"
+#include "libbb.h"
 #include "libcoreutils/coreutils.h"
 
-static const char modes_chars[] = { 'p', 'c', 'u', 'b', 0, 1, 1, 2 };
+static const char modes_chars[] ALIGN1 = { 'p', 'c', 'u', 'b', 0, 1, 1, 2 };
 static const mode_t modes_cubp[] = { S_IFIFO, S_IFCHR, S_IFBLK };
 
-int mknod_main(int argc, char **argv);
+int mknod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int mknod_main(int argc, char **argv)
 {
 	mode_t mode;
@@ -28,23 +28,29 @@ int mknod_main(int argc, char **argv)
 	argv += optind;
 	argc -= optind;
 
-	if ((argc >= 2) && ((name = strchr(modes_chars, argv[1][0])) != NULL)) {
-		mode |= modes_cubp[(int)(name[4])];
+	if (argc >= 2) {
+		name = strchr(modes_chars, argv[1][0]);
+		if (name != NULL) {
+			mode |= modes_cubp[(int)(name[4])];
 
-		dev = 0;
-		if ((*name != 'p') && ((argc -= 2) == 2)) {
-			/* Autodetect what the system supports; these macros should
-			 * optimize out to two constants. */
-			dev = makedev(xatoul_range(argv[2], 0, major(UINT_MAX)),
-			              xatoul_range(argv[3], 0, minor(UINT_MAX)));
-		}
-
-		if (argc == 2) {
-			name = *argv;
-			if (mknod(name, mode, dev) == 0) {
-				return EXIT_SUCCESS;
+			dev = 0;
+			if (*name != 'p') {
+				argc -= 2;
+				if (argc == 2) {
+					/* Autodetect what the system supports; these macros should
+					 * optimize out to two constants. */
+					dev = makedev(xatoul_range(argv[2], 0, major(UINT_MAX)),
+					              xatoul_range(argv[3], 0, minor(UINT_MAX)));
+				}
 			}
-			bb_perror_msg_and_die("%s", name);
+
+			if (argc == 2) {
+				name = *argv;
+				if (mknod(name, mode, dev) == 0) {
+					return EXIT_SUCCESS;
+				}
+				bb_simple_perror_msg_and_die(name);
+			}
 		}
 	}
 	bb_show_usage();

@@ -3,7 +3,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <syslog.h>
 
 
@@ -11,44 +11,6 @@ static void nuke_str(char *str)
 {
 	if (str) memset(str, 0, strlen(str));
 }
-
-
-static int i64c(int i)
-{
-	i &= 0x3f;
-	if (i == 0)
-		return '.';
-	if (i == 1)
-		return '/';
-	if (i < 12)
-		return ('0' - 2 + i);
-	if (i < 38)
-		return ('A' - 12 + i);
-	return ('a' - 38 + i);
-}
-
-
-static void crypt_make_salt(char *p, int cnt)
-{
-	unsigned x = x; /* it's pointless to initialize it anyway :) */
-
-	x += getpid() + time(NULL) + clock();
-	do {
-		/* x = (x*1664525 + 1013904223) % 2^32 generator is lame
-		 * (low-order bit is not "random", etc...),
-		 * but for our purposes it is good enough */
-		x = x*1664525 + 1013904223;
-		/* BTW, Park and Miller's "minimal standard generator" is
-		 * x = x*16807 % ((2^31)-1)
-		 * It has no problem with visibly alternating lowest bit
-		 * but is also weak in cryptographic sense + needs div,
-		 * which needs more code (and slower) on many CPUs */
-		*p++ = i64c(x >> 16);
-		*p++ = i64c(x >> 22);
-	} while (--cnt);
-	*p = '\0';
-}
-
 
 static char* new_password(const struct passwd *pw, uid_t myuid, int algo)
 {
@@ -89,13 +51,13 @@ static char* new_password(const struct passwd *pw, uid_t myuid, int algo)
 		goto err_ret;
 	}
 
-	/*memset(salt, 0, sizeof(salt)); - why?*/
-	crypt_make_salt(salt, 1); /* des */
+	crypt_make_salt(salt, 1, 0); /* des */
 	if (algo) { /* MD5 */
 		strcpy(salt, "$1$");
-		crypt_make_salt(salt + 3, 4);
+		crypt_make_salt(salt + 3, 4, 0);
 	}
-	ret = xstrdup(pw_encrypt(newp, salt)); /* returns ptr to static */
+	/* pw_encrypt returns ptr to static */
+	ret = xstrdup(pw_encrypt(newp, salt));
 	/* whee, success! */
 
  err_ret:
@@ -108,128 +70,7 @@ static char* new_password(const struct passwd *pw, uid_t myuid, int algo)
 	return ret;
 }
 
-
-#if 0
-static int get_algo(char *a)
-{
-	/* standard: MD5 */
-	int x = 1;
-	if (strcasecmp(a, "des") == 0)
-		x = 0;
-	return x;
-}
-#endif
-
-
-static int update_passwd(const char *filename, const char *username,
-			const char *new_pw)
-{
-	struct stat sb;
-	struct flock lock;
-	FILE *old_fp;
-	FILE *new_fp;
-	char *new_name;
-	char *last_char;
-	unsigned user_len;
-	int old_fd;
-	int new_fd;
-	int i;
-	int ret = 1; /* failure */
-
-	logmode = LOGMODE_STDIO;
-	/* New passwd file, "/etc/passwd+" for now */
-	new_name = xasprintf("%s+", filename);
-	last_char = &new_name[strlen(new_name)-1];
-	username = xasprintf("%s:", username);
-	user_len = strlen(username);
-
-	old_fp = fopen(filename, "r+");
-	if (!old_fp)
-		goto free_mem;
-	old_fd = fileno(old_fp);
-
-	/* Try to create "/etc/passwd+". Wait if it exists. */
-	i = 30;
-	do {
-		// FIXME: on last iteration try w/o O_EXCL but with O_TRUNC?
-		new_fd = open(new_name, O_WRONLY|O_CREAT|O_EXCL,0600);
-		if (new_fd >= 0) goto created;
-		if (errno != EEXIST) break;
-		usleep(100000); /* 0.1 sec */
-	} while (--i);
-	bb_perror_msg("cannot create '%s'", new_name);
-	goto close_old_fp;
- created:
-	if (!fstat(old_fd, &sb)) {
-		fchmod(new_fd, sb.st_mode & 0777); /* ignore errors */
-		fchown(new_fd, sb.st_uid, sb.st_gid);
-	}
-	new_fp = fdopen(new_fd, "w");
-	if (!new_fp) {
-		close(new_fd);
-		goto unlink_new;
-	}
-
-	/* Backup file is "/etc/passwd-" */
-	last_char[0] = '-';
-	/* Delete old one, create new as a hardlink to current */
-	i = (unlink(new_name) && errno != ENOENT);
-	if (i || link(filename, new_name))
-		bb_perror_msg("warning: cannot create backup copy '%s'", new_name);
-	last_char[0] = '+';
-
-	/* Lock the password file before updating */
-	lock.l_type = F_WRLCK;
-	lock.l_whence = SEEK_SET;
-	lock.l_start = 0;
-	lock.l_len = 0;
-	if (fcntl(old_fd, F_SETLK, &lock) < 0)
-		bb_perror_msg("warning: cannot lock '%s'", filename);
-	lock.l_type = F_UNLCK;
-
-	/* Read current password file, write updated one */
-	while (1) {
-		char *line = xmalloc_fgets(old_fp);
-		if (!line) break; /* EOF/error */
-		if (strncmp(username, line, user_len) == 0) {
-			/* we have a match with "username:"... */
-			const char *cp = line + user_len;
-			/* now cp -> old passwd, skip it: */
-			cp = strchr(cp, ':');
-			if (!cp) cp = "";
-			/* now cp -> ':' after old passwd or -> "" */
-			fprintf(new_fp, "%s%s%s", username, new_pw, cp);
-			/* Erase password in memory */
-		} else
-			fputs(line, new_fp);
-		free(line);
-	}
-	fcntl(old_fd, F_SETLK, &lock);
-
-	/* We do want all of them to execute, thus | instead of || */
-	if ((ferror(old_fp) | fflush(new_fp) | fsync(new_fd) | fclose(new_fp))
-	 || rename(new_name, filename)
-	) {
-		/* At least one of those failed */
-		goto unlink_new;
-	}
-	ret = 0; /* whee, success! */
-
- unlink_new:
-	if (ret) unlink(new_name);
-
- close_old_fp:
-	fclose(old_fp);
-
- free_mem:
-	if (ENABLE_FEATURE_CLEAN_UP) free(new_name);
-	if (ENABLE_FEATURE_CLEAN_UP) free((char*)username);
-	logmode = LOGMODE_BOTH;
-	return ret;
-}
-
-
-int passwd_main(int argc, char **argv);
+int passwd_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int passwd_main(int argc, char **argv)
 {
 	enum {
@@ -239,9 +80,10 @@ int passwd_main(int argc, char **argv)
 		OPT_delete = 0x8, /* -d - delete password */
 		OPT_lud = 0xe,
 		STATE_ALGO_md5 = 0x10,
-		/*STATE_ALGO_des = 0x20, not needed yet */
+		//STATE_ALGO_des = 0x20, not needed yet
 	};
 	unsigned opt;
+	int rc;
 	const char *opt_a = "";
 	const char *filename;
 	char *myname;
@@ -251,18 +93,16 @@ int passwd_main(int argc, char **argv)
 	uid_t myuid;
 	struct rlimit rlimit_fsize;
 	char c;
-
 #if ENABLE_FEATURE_SHADOWPASSWDS
 	/* Using _r function to avoid pulling in static buffers */
 	struct spwd spw;
-	struct spwd *result;
 	char buffer[256];
 #endif
 
 	logmode = LOGMODE_BOTH;
 	openlog(applet_name, LOG_NOWAIT, LOG_AUTH);
-	opt = getopt32(argc, argv, "a:lud", &opt_a);
-	argc -= optind;
+	opt = getopt32(argv, "a:lud", &opt_a);
+	//argc -= optind;
 	argv += optind;
 
 	if (strcasecmp(opt_a, "des") != 0) /* -a */
@@ -270,11 +110,13 @@ int passwd_main(int argc, char **argv)
 	//else
 	//	opt |= STATE_ALGO_des;
 	myuid = getuid();
-	if ((opt & OPT_lud) && (!argc || myuid))
+	/* -l, -u, -d require root priv and username argument */
+	if ((opt & OPT_lud) && (myuid || !argv[0]))
 		bb_show_usage();
 
-	myname = xstrdup(bb_getpwuid(NULL, myuid, -1));
-	name = argc ? argv[0] : myname;
+	/* Will complain and die if username not found */
+	myname = xstrdup(bb_getpwuid(NULL, -1, myuid));
+	name = argv[0] ? argv[0] : myname;
 
 	pw = getpwnam(name);
 	if (!pw) bb_error_msg_and_die("unknown user %s", name);
@@ -283,16 +125,20 @@ int passwd_main(int argc, char **argv)
 		bb_error_msg_and_die("%s can't change password for %s", myname, name);
 	}
 
-	filename = bb_path_passwd_file;
 #if ENABLE_FEATURE_SHADOWPASSWDS
-	if (getspnam_r(pw->pw_name, &spw, buffer, sizeof(buffer), &result)) {
-		/* LOGMODE_BOTH */
-		bb_error_msg("no record of %s in %s, using %s",
-				name, bb_path_shadow_file,
-				bb_path_passwd_file);
-	} else {
-		filename = bb_path_shadow_file;
-		pw->pw_passwd = spw.sp_pwdp;
+	{
+		/* getspnam_r may return 0 yet set result to NULL.
+		 * At least glibc 2.4 does this. Be extra paranoid here. */
+		struct spwd *result = NULL;
+		if (getspnam_r(pw->pw_name, &spw, buffer, sizeof(buffer), &result)
+		 || !result || strcmp(result->sp_namp, pw->pw_name) != 0) {
+			/* LOGMODE_BOTH */
+			bb_error_msg("no record of %s in %s, using %s",
+					name, bb_path_shadow_file,
+					bb_path_passwd_file);
+		} else {
+			pw->pw_passwd = result->sp_pwdp;
+		}
 	}
 #endif
 
@@ -316,9 +162,12 @@ int passwd_main(int argc, char **argv)
 		newp = xasprintf("!%s", pw->pw_passwd);
 	} else if (opt & OPT_unlock) {
 		if (c) goto skip; /* not '!' */
+		/* pw->pw_passwd points to static storage,
+		 * strdup'ing to avoid nasty surprizes */
 		newp = xstrdup(&pw->pw_passwd[1]);
 	} else if (opt & OPT_delete) {
-		newp = xstrdup("");
+		//newp = xstrdup("");
+		newp = (char*)"";
 	}
 
 	rlimit_fsize.rlim_cur = rlimit_fsize.rlim_max = 512L * 30000;
@@ -328,16 +177,24 @@ int passwd_main(int argc, char **argv)
 	signal(SIGQUIT, SIG_IGN);
 	umask(077);
 	xsetuid(0);
-	if (update_passwd(filename, name, newp) != 0) {
-		/* LOGMODE_BOTH */
-		bb_error_msg_and_die("cannot update password file %s",
-				filename);
+
+#if ENABLE_FEATURE_SHADOWPASSWDS
+	filename = bb_path_shadow_file;
+	rc = update_passwd(bb_path_shadow_file, name, newp);
+	if (rc == 0) /* no lines updated, no errors detected */
+#endif
+	{
+		filename = bb_path_passwd_file;
+		rc = update_passwd(bb_path_passwd_file, name, newp);
 	}
 	/* LOGMODE_BOTH */
+	if (rc < 0)
+		bb_error_msg_and_die("cannot update password file %s",
+				filename);
 	bb_info_msg("Password for %s changed by %s", name, myname);
 
-	if (ENABLE_FEATURE_CLEAN_UP) free(newp);
-skip:
+	//if (ENABLE_FEATURE_CLEAN_UP) free(newp);
+ skip:
 	if (!newp) {
 		bb_error_msg_and_die("password for %s is already %slocked",
 			name, (opt & OPT_unlock) ? "un" : "");

@@ -4,7 +4,7 @@
  *
  * Copyright 2007 KaiGai Kohei <kaigai@kaigai.gr.jp>
  */
-#include "busybox.h"
+#include "libbb.h"
 #include <selinux/context.h>
 
 context_t set_security_context_component(security_context_t cur_context,
@@ -38,3 +38,17 @@ void setfscreatecon_or_die(security_context_t scontext)
 				"file creation context to %s", scontext);
 	}
 }
+
+void selinux_preserve_fcontext(int fdesc)
+{
+	security_context_t context;
+
+	if (fgetfilecon(fdesc, &context) < 0) {
+		if (errno == ENODATA || errno == ENOTSUP)
+			return;
+		bb_perror_msg_and_die("fgetfilecon failed");
+	}
+	setfscreatecon_or_die(context);
+	freecon(context);
+}
+

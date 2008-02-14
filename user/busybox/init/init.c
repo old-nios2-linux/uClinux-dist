@@ -9,11 +9,8 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <paths.h>
-#include <signal.h>
-#include <sys/ioctl.h>
-#include <sys/wait.h>
 #include <sys/reboot.h>
 
 #if ENABLE_FEATURE_INIT_SYSLOG
@@ -23,10 +20,6 @@
 #define INIT_BUFFS_SIZE 256
 #define CONSOLE_NAME_SIZE 32
 #define MAXENV	16		/* Number of env. vars */
-
-#ifndef _PATH_STDPATH
-#define _PATH_STDPATH	"/usr/bin:/bin:/usr/sbin:/sbin"
-#endif
 
 #if ENABLE_FEATURE_INIT_COREDUMPS
 /*
@@ -54,31 +47,22 @@
 #define SHUTDOWN    0x040
 #define RESTART     0x080
 
-/* A mapping between "inittab" action name strings and action type codes. */
-struct init_action_type {
-	const char *name;
-	int action;
-};
-
-static const struct init_action_type actions[] = {
-	{"sysinit", SYSINIT},
-	{"respawn", RESPAWN},
-	{"askfirst", ASKFIRST},
-	{"wait", WAIT},
-	{"once", ONCE},
-	{"ctrlaltdel", CTRLALTDEL},
-	{"shutdown", SHUTDOWN},
-	{"restart", RESTART},
-	{0, 0}
-};
+#define STR_SYSINIT     "\x01"
+#define STR_RESPAWN     "\x02"
+#define STR_ASKFIRST    "\x04"
+#define STR_WAIT        "\x08"
+#define STR_ONCE        "\x10"
+#define STR_CTRLALTDEL  "\x20"
+#define STR_SHUTDOWN    "\x40"
+#define STR_RESTART     "\x80"
 
 /* Set up a linked list of init_actions, to be read from inittab */
 struct init_action {
 	struct init_action *next;
-	int action;
 	pid_t pid;
-	char command[INIT_BUFFS_SIZE];
+	uint8_t action;
 	char terminal[CONSOLE_NAME_SIZE];
+	char command[INIT_BUFFS_SIZE];
 };
 
 /* Static variables */
@@ -110,9 +94,9 @@ enum {
 #endif
 };
 
-static const char * const environment[] = {
+static const char *const environment[] = {
 	"HOME=/",
-	"PATH=" _PATH_STDPATH,
+	bb_PATH_root_path,
 	"SHELL=/bin/sh",
 	"USER=root",
 	NULL
@@ -120,7 +104,7 @@ static const char * const environment[] = {
 
 /* Function prototypes */
 static void delete_init_action(struct init_action *a);
-static int waitfor(const struct init_action *a, pid_t pid);
+static int waitfor(pid_t pid);
 #if !ENABLE_DEBUG_INIT
 static void shutdown_signal(int sig);
 #endif
@@ -183,7 +167,7 @@ static void message(int device, const char *fmt, ...)
 				bb_error_msg("can't log to %s", log_console);
 				device = L_CONSOLE;
 			} else {
-				fcntl(log_fd, F_SETFD, FD_CLOEXEC);
+				close_on_exec_on(log_fd);
 			}
 		}
 	}
@@ -198,43 +182,6 @@ static void message(int device, const char *fmt, ...)
 		/* Send console messages to console so people will see them. */
 		full_write(2, msg, l);
 	}
-}
-
-/* Set terminal settings to reasonable defaults */
-static void set_sane_term(void)
-{
-	struct termios tty;
-
-	tcgetattr(STDIN_FILENO, &tty);
-
-	/* set control chars */
-	tty.c_cc[VINTR] = 3;	/* C-c */
-	tty.c_cc[VQUIT] = 28;	/* C-\ */
-	tty.c_cc[VERASE] = 127;	/* C-? */
-	tty.c_cc[VKILL] = 21;	/* C-u */
-	tty.c_cc[VEOF] = 4;	/* C-d */
-	tty.c_cc[VSTART] = 17;	/* C-q */
-	tty.c_cc[VSTOP] = 19;	/* C-s */
-	tty.c_cc[VSUSP] = 26;	/* C-z */
-
-	/* use line dicipline 0 */
-	tty.c_line = 0;
-
-	/* Make it be sane */
-	tty.c_cflag &= CBAUD | CBAUDEX | CSIZE | CSTOPB | PARENB | PARODD;
-	tty.c_cflag |= CREAD | HUPCL | CLOCAL;
-
-	/* input modes */
-	tty.c_iflag = ICRNL | IXON | IXOFF;
-
-	/* output modes */
-	tty.c_oflag = OPOST | ONLCR;
-
-	/* local modes */
-	tty.c_lflag =
-		ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE | IEXTEN;
-
-	tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 }
 
 /* From <linux/serial.h> */
@@ -277,11 +224,14 @@ static void console_init(void)
 			while (fd > 2) close(fd--);
 		}
 		messageD(L_LOG, "console='%s'", s);
+	} else {
+		/* Make sure fd 0,1,2 are not closed */
+		bb_sanitize_stdio();
 	}
 
 	s = getenv("TERM");
 	if (ioctl(0, TIOCGSERIAL, &sr) == 0) {
-		/* Force the TERM setting to vt102 for serial console --
+		/* Force the TERM setting to vt102 for serial console
 		 * if TERM is set to linux (the default) */
 		if (!s || strcmp(s, "linux") == 0)
 			putenv((char*)"TERM=vt102");
@@ -292,20 +242,41 @@ static void console_init(void)
 		putenv((char*)"TERM=linux");
 }
 
-static void fixup_argv(int argc, char **argv, const char *new_argv0)
+/* Set terminal settings to reasonable defaults */
+static void set_sane_term(void)
 {
-	int len;
+	struct termios tty;
 
-	/* Fix up argv[0] to be certain we claim to be init */
-	len = strlen(argv[0]);
-	strncpy(argv[0], new_argv0, len);
+	tcgetattr(STDIN_FILENO, &tty);
 
-	/* Wipe argv[1]-argv[N] so they don't clutter the ps listing */
-	len = 1;
-	while (argc > len) {
-		memset(argv[len], 0, strlen(argv[len]));
-		len++;
-	}
+	/* set control chars */
+	tty.c_cc[VINTR] = 3;	/* C-c */
+	tty.c_cc[VQUIT] = 28;	/* C-\ */
+	tty.c_cc[VERASE] = 127;	/* C-? */
+	tty.c_cc[VKILL] = 21;	/* C-u */
+	tty.c_cc[VEOF] = 4;	/* C-d */
+	tty.c_cc[VSTART] = 17;	/* C-q */
+	tty.c_cc[VSTOP] = 19;	/* C-s */
+	tty.c_cc[VSUSP] = 26;	/* C-z */
+
+	/* use line dicipline 0 */
+	tty.c_line = 0;
+
+	/* Make it be sane */
+	tty.c_cflag &= CBAUD | CBAUDEX | CSIZE | CSTOPB | PARENB | PARODD;
+	tty.c_cflag |= CREAD | HUPCL | CLOCAL;
+
+	/* input modes */
+	tty.c_iflag = ICRNL | IXON | IXOFF;
+
+	/* output modes */
+	tty.c_oflag = OPOST | ONLCR;
+
+	/* local modes */
+	tty.c_lflag =
+		ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE | IEXTEN;
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 }
 
 /* Open the new terminal device */
@@ -334,6 +305,7 @@ static void open_stdio_to_tty(const char* tty_name, int fail)
 	set_sane_term();
 }
 
+/* Used only by run_actions */
 static pid_t run(const struct init_action *a)
 {
 	int i;
@@ -343,15 +315,19 @@ static pid_t run(const struct init_action *a)
 	char buf[INIT_BUFFS_SIZE + 6];	/* INIT_BUFFS_SIZE+strlen("exec ")+1 */
 	sigset_t nmask, omask;
 
-	/* Block sigchild while forking.  */
+	/* Block sigchild while forking (why?) */
 	sigemptyset(&nmask);
 	sigaddset(&nmask, SIGCHLD);
 	sigprocmask(SIG_BLOCK, &nmask, &omask);
 	pid = fork();
 	sigprocmask(SIG_SETMASK, &omask, NULL);
 
+	if (pid < 0)
+		message(L_LOG | L_CONSOLE, "Can't fork");
 	if (pid)
 		return pid;
+
+	/* Child */
 
 	/* Reset signal handlers that were set by the parent process */
 	signal(SIGUSR1, SIG_DFL);
@@ -369,33 +345,35 @@ static pid_t run(const struct init_action *a)
 	setsid();
 
 	/* Open the new terminal device */
-	open_stdio_to_tty(a->terminal, 1);
+	open_stdio_to_tty(a->terminal, 1 /* - exit if open fails*/);
 
+#ifdef BUT_RUN_ACTIONS_ALREADY_DOES_WAITING
 	/* If the init Action requires us to wait, then force the
 	 * supplied terminal to be the controlling tty. */
 	if (a->action & (SYSINIT | WAIT | CTRLALTDEL | SHUTDOWN | RESTART)) {
 
 		/* Now fork off another process to just hang around */
-		if ((pid = fork()) < 0) {
+		pid = fork();
+		if (pid < 0) {
 			message(L_LOG | L_CONSOLE, "Can't fork");
 			_exit(1);
 		}
 
 		if (pid > 0) {
-
-			/* We are the parent -- wait till the child is done */
+			/* Parent - wait till the child is done */
 			signal(SIGINT, SIG_IGN);
 			signal(SIGTSTP, SIG_IGN);
 			signal(SIGQUIT, SIG_IGN);
 			signal(SIGCHLD, SIG_DFL);
 
-			waitfor(NULL, pid);
+			waitfor(pid);
 			/* See if stealing the controlling tty back is necessary */
 			if (tcgetpgrp(0) != getpid())
 				_exit(0);
 
 			/* Use a temporary process to steal the controlling tty. */
-			if ((pid = fork()) < 0) {
+			pid = fork();
+			if (pid < 0) {
 				message(L_LOG | L_CONSOLE, "Can't fork");
 				_exit(1);
 			}
@@ -404,12 +382,13 @@ static pid_t run(const struct init_action *a)
 				ioctl(0, TIOCSCTTY, 1);
 				_exit(0);
 			}
-			waitfor(NULL, pid);
+			waitfor(pid);
 			_exit(0);
 		}
 
-		/* Now fall though to actually execute things */
+		/* Child - fall though to actually execute things */
 	}
+#endif
 
 	/* See if any special /bin/sh requiring characters are present */
 	if (strpbrk(a->command, "~`!$^&*()=|\\{}[];\"'<>?") != NULL) {
@@ -442,29 +421,30 @@ static pid_t run(const struct init_action *a)
 		/* skip over the dash */
 		++cmdpath;
 
+#ifdef WHY_WE_DO_THIS_SHELL_MUST_HANDLE_THIS_ITSELF
 		/* find the last component in the command pathname */
-		s = bb_get_last_path_component(cmdpath);
-
+		s = bb_get_last_path_component_nostrip(cmdpath);
 		/* make a new argv[0] */
-		if ((cmd[0] = malloc(strlen(s) + 2)) == NULL) {
+		cmd[0] = malloc(strlen(s) + 2);
+		if (cmd[0] == NULL) {
 			message(L_LOG | L_CONSOLE, bb_msg_memory_exhausted);
 			cmd[0] = cmdpath;
 		} else {
 			cmd[0][0] = '-';
 			strcpy(cmd[0] + 1, s);
 		}
+#endif
+
 #if ENABLE_FEATURE_INIT_SCTTY
 		/* Establish this process as session leader and
-		 * (attempt) to make the tty (if any) a controlling tty.
+		 * _attempt_ to make stdin a controlling tty.
 		 */
-		setsid();
-		ioctl(0, TIOCSCTTY, 0 /*don't steal it*/);
+		ioctl(0, TIOCSCTTY, 0 /*only try, don't steal*/);
 #endif
 	}
 
-#if !defined(__UCLIBC__) || defined(__ARCH_HAS_MMU__)
 	if (a->action & ASKFIRST) {
-		static const char press_enter[] =
+		static const char press_enter[] ALIGN1 =
 #ifdef CUSTOMIZED_BANNER
 #include CUSTOMIZED_BANNER
 #endif
@@ -482,10 +462,10 @@ static pid_t run(const struct init_action *a)
 					"(pid %d, tty '%s')\n",
 				  cmdpath, getpid(), a->terminal);
 		full_write(1, press_enter, sizeof(press_enter) - 1);
-		while (read(0, &c, 1) == 1 && c != '\n')
-			;
+		while (safe_read(0, &c, 1) == 1 && c != '\n')
+			continue;
 	}
-#endif
+
 	/* Log the process name and args */
 	message(L_LOG, "starting pid %d, tty '%s': '%s'",
 			  getpid(), a->terminal, cmdpath);
@@ -512,22 +492,15 @@ static pid_t run(const struct init_action *a)
 	_exit(-1);
 }
 
-static int waitfor(const struct init_action *a, pid_t pid)
+static int waitfor(pid_t runpid)
 {
-	int runpid;
 	int status, wpid;
 
-	runpid = (NULL == a)? pid : run(a);
 	while (1) {
 		wpid = waitpid(runpid, &status, 0);
-		if (wpid == runpid)
-			break;
-		if (wpid == -1 && errno == ECHILD) {
-			/* we missed its termination */
-			break;
-		}
-		/* FIXME other errors should maybe trigger an error, but allow
-		 * the program to continue */
+		if (wpid == -1 && errno == EINTR)
+			continue;
+		break;
 	}
 	return wpid;
 }
@@ -540,11 +513,14 @@ static void run_actions(int action)
 	for (a = init_action_list; a; a = tmp) {
 		tmp = a->next;
 		if (a->action == action) {
-			/* a->terminal of "" means "init's console" */
-			if (a->terminal[0] && access(a->terminal, R_OK | W_OK)) {
-				delete_init_action(a);
-			} else if (a->action & (SYSINIT | WAIT | CTRLALTDEL | SHUTDOWN | RESTART)) {
-				waitfor(a, 0);
+			// Pointless: run() will error out if open of device fails.
+			///* a->terminal of "" means "init's console" */
+			//if (a->terminal[0] && access(a->terminal, R_OK | W_OK)) {
+			//	//message(L_LOG | L_CONSOLE, "Device %s cannot be opened in RW mode", a->terminal /*, strerror(errno)*/);
+			//	delete_init_action(a);
+			//} else
+			if (a->action & (SYSINIT | WAIT | CTRLALTDEL | SHUTDOWN | RESTART)) {
+				waitfor(run(a));
 				delete_init_action(a);
 			} else if (a->action & ONCE) {
 				run(a);
@@ -615,6 +591,29 @@ static void shutdown_system(void)
 	sleep(1);
 }
 
+static void shutdown_signal(int sig)
+{
+	const char *m;
+	int rb;
+
+	shutdown_system();
+
+	m = "halt";
+	rb = RB_HALT_SYSTEM;
+	if (sig == SIGTERM) {
+		m = "reboot";
+		rb = RB_AUTOBOOT;
+	} else if (sig == SIGUSR2) {
+		m = "poweroff";
+		rb = RB_POWER_OFF;
+	}
+	message(L_CONSOLE | L_LOG, "Requesting system %s", m);
+	/* allow time for last message to reach serial console */
+	sleep(2);
+	init_reboot(rb);
+	loop_forever();
+}
+
 static void exec_signal(int sig ATTRIBUTE_UNUSED)
 {
 	struct init_action *a, *tmp;
@@ -640,7 +639,7 @@ static void exec_signal(int sig ATTRIBUTE_UNUSED)
 			sigprocmask(SIG_UNBLOCK, &unblock_signals, NULL);
 
 			/* Open the new terminal device */
-			open_stdio_to_tty(a->terminal, 0);
+			open_stdio_to_tty(a->terminal, 0 /* - shutdown_signal(SIGUSR1) [halt] if open fails */);
 
 			messageD(L_CONSOLE | L_LOG, "Trying to re-exec %s", a->command);
 			BB_EXECLP(a->command, a->command, NULL);
@@ -652,29 +651,6 @@ static void exec_signal(int sig ATTRIBUTE_UNUSED)
 			loop_forever();
 		}
 	}
-}
-
-static void shutdown_signal(int sig)
-{
-	const char *m;
-	int rb;
-
-	shutdown_system();
-
-	m = "halt";
-	rb = RB_HALT_SYSTEM;
-	if (sig == SIGTERM) {
-		m = "reboot";
-		rb = RB_AUTOBOOT;
-	} else if (sig == SIGUSR2) {
-		m = "poweroff";
-		rb = RB_POWER_OFF;
-	}
-	message(L_CONSOLE | L_LOG, "Requesting system %s", m);
-	/* allow time for last message to reach serial console */
-	sleep(2);
-	init_reboot(rb);
-	loop_forever();
 }
 
 static void ctrlaltdel_signal(int sig ATTRIBUTE_UNUSED)
@@ -690,7 +666,7 @@ static void stop_handler(int sig ATTRIBUTE_UNUSED)
 	got_cont = 0;
 	while (!got_cont)
 		pause();
-	got_cont = 0;
+
 	errno = saved_errno;
 }
 
@@ -702,7 +678,7 @@ static void cont_handler(int sig ATTRIBUTE_UNUSED)
 
 #endif	/* !ENABLE_DEBUG_INIT */
 
-static void new_init_action(int action, const char *command, const char *cons)
+static void new_init_action(uint8_t action, const char *command, const char *cons)
 {
 	struct init_action *new_action, *a, *last;
 
@@ -762,11 +738,21 @@ static void delete_init_action(struct init_action *action)
 static void parse_inittab(void)
 {
 #if ENABLE_FEATURE_USE_INITTAB
+	static const char actions[] =
+		STR_SYSINIT    "sysinit\0"
+		STR_RESPAWN    "respawn\0"
+		STR_ASKFIRST   "askfirst\0"
+		STR_WAIT       "wait\0"
+		STR_ONCE       "once\0"
+		STR_CTRLALTDEL "ctrlaltdel\0"
+		STR_SHUTDOWN   "shutdown\0"
+		STR_RESTART    "restart\0"
+	;
+
 	FILE *file;
 	char buf[INIT_BUFFS_SIZE], lineAsRead[INIT_BUFFS_SIZE];
 	char tmpConsole[CONSOLE_NAME_SIZE];
 	char *id, *runlev, *action, *command, *eol;
-	const struct init_action_type *a = actions;
 
 	file = fopen(INITTAB, "r");
 	if (file == NULL) {
@@ -777,7 +763,8 @@ static void parse_inittab(void)
 		/* Umount all filesystems on halt/reboot */
 		new_init_action(SHUTDOWN, "umount -a -r", "");
 		/* Swapoff on halt/reboot */
-		if (ENABLE_SWAPONOFF) new_init_action(SHUTDOWN, "swapoff -a", "");
+		if (ENABLE_SWAPONOFF)
+			new_init_action(SHUTDOWN, "swapoff -a", "");
 		/* Prepare to restart init when a HUP is received */
 		new_init_action(RESTART, "init", "");
 		/* Askfirst shell on tty1-4 */
@@ -793,6 +780,8 @@ static void parse_inittab(void)
 	}
 
 	while (fgets(buf, INIT_BUFFS_SIZE, file) != NULL) {
+		const char *a;
+
 		/* Skip leading spaces */
 		for (id = buf; *id == ' ' || *id == '\t'; id++);
 
@@ -840,21 +829,21 @@ static void parse_inittab(void)
 		}
 
 		/* Ok, now process it */
-		for (a = actions; a->name != 0; a++) {
-			if (strcmp(a->name, action) == 0) {
+		for (a = actions; a[0]; a += strlen(a) + 1) {
+			if (strcmp(a + 1, action) == 0) {
 				if (*id != '\0') {
-					if(strncmp(id, "/dev/", 5) == 0)
+					if (strncmp(id, "/dev/", 5) == 0)
 						id += 5;
 					strcpy(tmpConsole, "/dev/");
 					safe_strncpy(tmpConsole + 5, id,
 						sizeof(tmpConsole) - 5);
 					id = tmpConsole;
 				}
-				new_init_action(a->action, command, id);
+				new_init_action((uint8_t)a[0], command, id);
 				break;
 			}
 		}
-		if (a->name == 0) {
+		if (!a[0]) {
 			/* Choke on an unknown action */
 			message(L_LOG | L_CONSOLE, "Bad inittab entry: %s", lineAsRead);
 		}
@@ -880,8 +869,7 @@ static void reload_signal(int sig ATTRIBUTE_UNUSED)
 	/* remove unused entrys */
 	for (a = init_action_list; a; a = tmp) {
 		tmp = a->next;
-		if (a->action & (ONCE | SYSINIT | WAIT ) &&
-				a->pid == 0 ) {
+		if ((a->action & (ONCE | SYSINIT | WAIT)) && a->pid == 0) {
 			delete_init_action(a);
 		}
 	}
@@ -889,7 +877,7 @@ static void reload_signal(int sig ATTRIBUTE_UNUSED)
 }
 #endif  /* FEATURE_USE_INITTAB */
 
-int init_main(int argc, char **argv);
+int init_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int init_main(int argc, char **argv)
 {
 	struct init_action *a;
@@ -924,13 +912,14 @@ int init_main(int argc, char **argv)
 	init_reboot(RB_DISABLE_CAD);
 #endif
 
+
 	/* Figure out where the default console should be */
 	console_init();
 	set_sane_term();
 	chdir("/");
 	setsid();
 	{
-		const char * const *e;
+		const char *const *e;
 		/* Make sure environs is set to something sane */
 		for (e = environment; *e; e++)
 			putenv((char *) *e);
@@ -939,7 +928,7 @@ int init_main(int argc, char **argv)
 	if (argc > 1) setenv("RUNLEVEL", argv[1], 1);
 
 	/* Hello world */
-	message(MAYBE_CONSOLE | L_LOG, "init started: %s", bb_msg_full_version);
+	message(MAYBE_CONSOLE | L_LOG, "init started: %s", bb_banner);
 
 	/* Make sure there is enough memory to do something useful. */
 	if (ENABLE_SWAPONOFF) {
@@ -977,12 +966,11 @@ int init_main(int argc, char **argv)
 	if (getenv("SELINUX_INIT") == NULL) {
 		int enforce = 0;
 
-		putenv("SELINUX_INIT=YES");
+		putenv((char*)"SELINUX_INIT=YES");
 		if (selinux_init_load_policy(&enforce) == 0) {
 			BB_EXECVP(argv[0], argv);
 		} else if (enforce > 0) {
 			/* SELinux in enforcing mode but load_policy failed */
-			/* At this point, we probably can't open /dev/console, so log() won't work */
 			message(L_CONSOLE, "Cannot load SELinux Policy. "
 				"Machine is in enforcing mode. Halting now.");
 			exit(1);
@@ -990,8 +978,11 @@ int init_main(int argc, char **argv)
 	}
 #endif /* CONFIG_SELINUX */
 
-	/* Make the command line just say "init"  -- thats all, nothing else */
-	fixup_argv(argc, argv, "init");
+	/* Make the command line just say "init"  - thats all, nothing else */
+	strncpy(argv[0], "init", strlen(argv[0]));
+	/* Wipe argv[1]-argv[N] so they don't clutter the ps listing */
+	while (*++argv)
+		memset(*argv, 0, strlen(*argv));
 
 	/* Now run everything that needs to be run */
 

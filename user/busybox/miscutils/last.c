@@ -7,7 +7,7 @@
  * Licensed under the GPL version 2, see the file LICENSE in this tarball.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <utmp.h>
 
 #ifndef SHUTDOWN_TIME
@@ -26,7 +26,7 @@
 #error struct utmp member char[] size(s) have changed!
 #endif
 
-int last_main(int argc, char **argv);
+int last_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int last_main(int argc, char **argv)
 {
 	struct utmp ut;

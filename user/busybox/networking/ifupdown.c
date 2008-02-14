@@ -1,7 +1,7 @@
 /* vi: set sw=4 ts=4: */
 /*
  *  ifupdown for busybox
- *  Copyright (c) 2002 Glenn McGrath <bug1@iinet.net.au>
+ *  Copyright (c) 2002 Glenn McGrath
  *  Copyright (c) 2003-2004 Erik Andersen <andersen@codepoet.org>
  *
  *  Based on ifupdown v 0.6.4 by Anthony Towns
@@ -10,15 +10,18 @@
  *  Changes to upstream version
  *  Remove checks for kernel version, assume kernel version 2.2.0 or better.
  *  Lines in the interfaces file cannot wrap.
- *  To adhere to the FHS, the default state file is /var/run/ifstate.
+ *  To adhere to the FHS, the default state file is /var/run/ifstate
+ *  (defined via CONFIG_IFUPDOWN_IFSTATE_PATH) and can be overridden by build
+ *  configuration.
  *
  * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#include "busybox.h"
 #include <sys/utsname.h>
 #include <fnmatch.h>
 #include <getopt.h>
+
+#include "libbb.h"
 
 #define MAX_OPT_DEPTH 10
 #define EUNBALBRACK 10001
@@ -103,31 +106,6 @@ static const char *startup_PATH;
 
 #if ENABLE_FEATURE_IFUPDOWN_IPV4 || ENABLE_FEATURE_IFUPDOWN_IPV6
 
-#if ENABLE_FEATURE_IFUPDOWN_IP
-
-static unsigned count_bits(unsigned a)
-{
-	unsigned result;
-	result = (a & 0x55) + ((a >> 1) & 0x55);
-	result = (result & 0x33) + ((result >> 2) & 0x33);
-	return (result & 0x0F) + ((result >> 4) & 0x0F);
-}
-
-static int count_netmask_bits(char *dotted_quad)
-{
-	unsigned result, a, b, c, d;
-	/* Found a netmask...  Check if it is dotted quad */
-	if (sscanf(dotted_quad, "%u.%u.%u.%u", &a, &b, &c, &d) != 4)
-		return -1;
-	// FIXME: will be confused by e.g. 255.0.255.0
-	result = count_bits(a);
-	result += count_bits(b);
-	result += count_bits(c);
-	result += count_bits(d);
-	return (int)result;
-}
-#endif
-
 static void addstr(char **bufp, const char *str, size_t str_length)
 {
 	/* xasprintf trick will be smaller, but we are often
@@ -156,13 +134,15 @@ static char *get_var(const char *id, size_t idlen, struct interface_defn_t *ifd)
 	int i;
 
 	if (strncmpz(id, "iface", idlen) == 0) {
-		char *result;
-		static char label_buf[20];
-		safe_strncpy(label_buf, ifd->iface, sizeof(label_buf));
-		result = strchr(label_buf, ':');
-		if (result) {
-			*result = '\0';
-		}
+		static char *label_buf;
+		//char *result;
+
+		free(label_buf);
+		label_buf = xstrdup(ifd->iface);
+		// Remove virtual iface suffix - why?
+		// ubuntu's ifup doesn't do this
+		//result = strchrnul(label_buf, ':');
+		//*result = '\0';
 		return label_buf;
 	}
 	if (strncmpz(id, "label", idlen) == 0) {
@@ -175,6 +155,39 @@ static char *get_var(const char *id, size_t idlen, struct interface_defn_t *ifd)
 	}
 	return NULL;
 }
+
+#if ENABLE_FEATURE_IFUPDOWN_IP
+static int count_netmask_bits(const char *dotted_quad)
+{
+//	int result;
+//	unsigned a, b, c, d;
+//	/* Found a netmask...  Check if it is dotted quad */
+//	if (sscanf(dotted_quad, "%u.%u.%u.%u", &a, &b, &c, &d) != 4)
+//		return -1;
+//	if ((a|b|c|d) >> 8)
+//		return -1; /* one of numbers is >= 256 */
+//	d |= (a << 24) | (b << 16) | (c << 8); /* IP */
+//	d = ~d; /* 11110000 -> 00001111 */
+
+	/* Shorter version */
+	int result;
+	struct in_addr ip;
+	unsigned d;
+
+	if (inet_aton(dotted_quad, &ip) == 0)
+		return -1; /* malformed dotted IP */
+	d = ntohl(ip.s_addr); /* IP in host order */
+	d = ~d; /* 11110000 -> 00001111 */
+	if (d & (d+1)) /* check that it is in 00001111 form */
+		return -1; /* no it is not */
+	result = 32;
+	while (d) {
+		d >>= 1;
+		result--;
+	}
+	return result;
+}
+#endif
 
 static char *parse(const char *command, struct interface_defn_t *ifd)
 {
@@ -245,11 +258,14 @@ static char *parse(const char *command, struct interface_defn_t *ifd)
 					if (strncmp(command, "bnmask", 6) == 0) {
 						unsigned res;
 						varvalue = get_var("netmask", 7, ifd);
-						if (varvalue && (res = count_netmask_bits(varvalue)) > 0) {
-							const char *argument = utoa(res);
-							addstr(&result, argument, strlen(argument));
-							command = nextpercent + 1;
-							break;
+						if (varvalue) {
+							res = count_netmask_bits(varvalue);
+							if (res > 0) {
+								const char *argument = utoa(res);
+								addstr(&result, argument, strlen(argument));
+								command = nextpercent + 1;
+								break;
+							}
 						}
 					}
 #endif
@@ -374,7 +390,7 @@ static const struct method_t methods6[] = {
 
 static const struct address_family_t addr_inet6 = {
 	"inet6",
-	sizeof(methods6) / sizeof(struct method_t),
+	ARRAY_SIZE(methods6),
 	methods6
 };
 #endif /* FEATURE_IFUPDOWN_IPV6 */
@@ -439,7 +455,7 @@ static int static_down(struct interface_defn_t *ifd, execfn *exec)
 	return ((result == 2) ? 2 : 0);
 }
 
-#if !ENABLE_APP_UDHCPC
+#if ENABLE_FEATURE_IFUPDOWN_EXTERNAL_DHCP
 struct dhcp_client_t
 {
 	const char *name;
@@ -448,55 +464,69 @@ struct dhcp_client_t
 };
 
 static const struct dhcp_client_t ext_dhcp_clients[] = {
-	{ "udhcpc",
-		"udhcpc -R -n -p /var/run/udhcpc.%iface%.pid -i %iface%[[ -H %hostname%]][[ -c %clientid%]][[ -s %script%]]",
-		"kill -TERM `cat /var/run/udhcpc.%iface%.pid` 2>/dev/null",
-	},
-	{ "pump",
-		"pump -i %iface%[[ -h %hostname%]][[ -l %leasehours%]]",
-		"pump -i %iface% -k",
+	{ "dhcpcd",
+		"dhcpcd[[ -h %hostname%]][[ -i %vendor%]][[ -I %clientid%]][[ -l %leasetime%]] %iface%",
+		"dhcpcd -k %iface%",
 	},
 	{ "dhclient",
 		"dhclient -pf /var/run/dhclient.%iface%.pid %iface%",
 		"kill -9 `cat /var/run/dhclient.%iface%.pid` 2>/dev/null",
 	},
-	{ "dhcpcd",
-		"dhcpcd[[ -h %hostname%]][[ -i %vendor%]][[ -I %clientid%]][[ -l %leasetime%]] %iface%",
-		"dhcpcd -k %iface%",
+	{ "pump",
+		"pump -i %iface%[[ -h %hostname%]][[ -l %leasehours%]]",
+		"pump -i %iface% -k",
+	},
+	{ "udhcpc",
+		"udhcpc -R -n -p /var/run/udhcpc.%iface%.pid -i %iface%[[ -H %hostname%]][[ -c %clientid%]][[ -s %script%]]",
+		"kill `cat /var/run/udhcpc.%iface%.pid` 2>/dev/null",
 	},
 };
-#endif
+#endif /* ENABLE_FEATURE_IFUPDOWN_EXTERNAL_DHCPC */
 
 static int dhcp_up(struct interface_defn_t *ifd, execfn *exec)
 {
-#if ENABLE_APP_UDHCPC
-	return execute("udhcpc -R -n -p /var/run/udhcpc.%iface%.pid "
-			"-i %iface%[[ -H %hostname%]][[ -c %clientid%]][[ -s %script%]]",
-			ifd, exec);
-#else
-	int i, nclients = sizeof(ext_dhcp_clients) / sizeof(ext_dhcp_clients[0]);
-	for (i = 0; i < nclients; i++) {
+#if ENABLE_FEATURE_IFUPDOWN_EXTERNAL_DHCP
+	int i;
+#if ENABLE_FEATURE_IFUPDOWN_IP
+	/* ip doesn't up iface when it configures it (unlike ifconfig) */
+	if (!execute("ip link set %iface% up", ifd, exec))
+		return 0;
+#endif
+	for (i = 0; i < ARRAY_SIZE(ext_dhcp_clients); i++) {
 		if (exists_execable(ext_dhcp_clients[i].name))
 			return execute(ext_dhcp_clients[i].startcmd, ifd, exec);
 	}
 	bb_error_msg("no dhcp clients found");
 	return 0;
+#elif ENABLE_APP_UDHCPC
+#if ENABLE_FEATURE_IFUPDOWN_IP
+	/* ip doesn't up iface when it configures it (unlike ifconfig) */
+	if (!execute("ip link set %iface% up", ifd, exec))
+		return 0;
+#endif
+	return execute("udhcpc -R -n -p /var/run/udhcpc.%iface%.pid "
+			"-i %iface%[[ -H %hostname%]][[ -c %clientid%]][[ -s %script%]]",
+			ifd, exec);
+#else
+	return 0; /* no dhcp support */
 #endif
 }
 
 static int dhcp_down(struct interface_defn_t *ifd, execfn *exec)
 {
-#if ENABLE_APP_UDHCPC
-	return execute("kill -TERM "
-	               "`cat /var/run/udhcpc.%iface%.pid` 2>/dev/null", ifd, exec);
-#else
-	int i, nclients = sizeof(ext_dhcp_clients) / sizeof(ext_dhcp_clients[0]);
-	for (i = 0; i < nclients; i++) {
+#if ENABLE_FEATURE_IFUPDOWN_EXTERNAL_DHCP
+	int i;
+	for (i = 0; i < ARRAY_SIZE(ext_dhcp_clients); i++) {
 		if (exists_execable(ext_dhcp_clients[i].name))
 			return execute(ext_dhcp_clients[i].stopcmd, ifd, exec);
 	}
 	bb_error_msg("no dhcp clients found, using static interface shutdown");
 	return static_down(ifd, exec);
+#elif ENABLE_APP_UDHCPC
+	return execute("kill "
+	               "`cat /var/run/udhcpc.%iface%.pid` 2>/dev/null", ifd, exec);
+#else
+	return 0; /* no dhcp support */
 #endif
 }
 
@@ -508,8 +538,8 @@ static int manual_up_down(struct interface_defn_t *ifd, execfn *exec)
 static int bootp_up(struct interface_defn_t *ifd, execfn *exec)
 {
 	return execute("bootpc[[ --bootfile %bootfile%]] --dev %iface%"
-			"[[ --server %server%]][[ --hwaddr %hwaddr%]] "
-			"--returniffail --serverbcast", ifd, exec);
+			"[[ --server %server%]][[ --hwaddr %hwaddr%]]"
+			" --returniffail --serverbcast", ifd, exec);
 }
 
 static int ppp_up(struct interface_defn_t *ifd, execfn *exec)
@@ -546,7 +576,7 @@ static const struct method_t methods[] = {
 
 static const struct address_family_t addr_inet = {
 	"inet",
-	sizeof(methods) / sizeof(struct method_t),
+	ARRAY_SIZE(methods),
 	methods
 };
 
@@ -605,7 +635,7 @@ static const struct method_t *get_method(const struct address_family_t *af, char
 
 	if (!name)
 		return NULL;
-
+	/* TODO: use index_in_str_array() */
 	for (i = 0; i < af->n_methods; i++) {
 		if (strcmp(af->method[i].name, name) == 0) {
 			return &af->method[i];
@@ -829,7 +859,8 @@ static struct interfaces_file_t *read_interfaces(const char *filename)
 		free(buf);
 	}
 	if (ferror(f) != 0) {
-		bb_perror_msg_and_die("%s", filename);
+		/* ferror does NOT set errno! */
+		bb_error_msg_and_die("%s: I/O error", filename);
 	}
 	fclose(f);
 
@@ -879,9 +910,10 @@ static void set_environ(struct interface_defn_t *iface, const char *mode)
 
 	for (i = 0; i < iface->n_options; i++) {
 		if (strcmp(iface->option[i].name, "up") == 0
-				|| strcmp(iface->option[i].name, "down") == 0
-				|| strcmp(iface->option[i].name, "pre-up") == 0
-				|| strcmp(iface->option[i].name, "post-down") == 0) {
+		 || strcmp(iface->option[i].name, "down") == 0
+		 || strcmp(iface->option[i].name, "pre-up") == 0
+		 || strcmp(iface->option[i].name, "post-down") == 0
+		) {
 			continue;
 		}
 		*(environend++) = setlocalenv("IF_%s=%s", iface->option[i].name, iface->option[i].value);
@@ -1074,8 +1106,8 @@ static llist_t *find_iface_state(llist_t *state_list, const char *iface)
 	llist_t *search = state_list;
 
 	while (search) {
-		if ((strncmp(search->data, iface, iface_len) == 0) &&
-				(search->data[iface_len] == '=')) {
+		if ((strncmp(search->data, iface, iface_len) == 0)
+		 && (search->data[iface_len] == '=')) {
 			return search;
 		}
 		search = search->link;
@@ -1084,10 +1116,11 @@ static llist_t *find_iface_state(llist_t *state_list, const char *iface)
 }
 
 /* read the previous state from the state file */
-static llist_t *read_iface_state(void) {
+static llist_t *read_iface_state(void)
+{
 	llist_t *state_list = NULL;
-	FILE *state_fp;
-	state_fp = fopen("/var/run/ifstate", "r");
+	FILE *state_fp = fopen(CONFIG_IFUPDOWN_IFSTATE_PATH, "r");
+
 	if (state_fp) {
 		char *start, *end_ptr;
 		while ((start = xmalloc_fgets(state_fp)) != NULL) {
@@ -1102,7 +1135,7 @@ static llist_t *read_iface_state(void) {
 }
 
 
-int ifupdown_main(int argc, char **argv);
+int ifupdown_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ifupdown_main(int argc, char **argv)
 {
 	int (*cmds)(struct interface_defn_t *) = NULL;
@@ -1117,7 +1150,7 @@ int ifupdown_main(int argc, char **argv)
 		cmds = iface_up;
 	}
 
-	getopt32(argc, argv, OPTION_STR, &interfaces);
+	getopt32(argv, OPTION_STR, &interfaces);
 	if (argc - optind > 0) {
 		if (DO_ALL) bb_show_usage();
 	} else {
@@ -1228,14 +1261,16 @@ int ifupdown_main(int argc, char **argv)
 			iface_list = iface_list->link;
 		}
 		if (VERBOSE) {
-			puts("");
+			bb_putchar('\n');
 		}
 
 		if (!okay && !FORCE) {
 			bb_error_msg("ignoring unknown interface %s", liface);
 			any_failures = 1;
-		} else {
+		} else if (!NO_ACT) {
 			/* update the state file */
+			FILE *state_fp;
+			llist_t *state;
 			llist_t *state_list = read_iface_state();
 			llist_t *iface_state = find_iface_state(state_list, iface);
 
@@ -1254,17 +1289,15 @@ int ifupdown_main(int argc, char **argv)
 			}
 
 			/* Actually write the new state */
-			if (!NO_ACT) {
-				FILE *state_fp = xfopen("/var/run/ifstate", "w");
-				llist_t *state = state_list;
-				while (state) {
-					if (state->data) {
-						fprintf(state_fp, "%s\n", state->data);
-					}
-					state = state->link;
+			state_fp = xfopen(CONFIG_IFUPDOWN_IFSTATE_PATH, "w");
+			state = state_list;
+			while (state) {
+				if (state->data) {
+					fprintf(state_fp, "%s\n", state->data);
 				}
-				fclose(state_fp);
+				state = state->link;
 			}
+			fclose(state_fp);
 			llist_free(state_list, free);
 		}
 	}

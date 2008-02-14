@@ -23,7 +23,6 @@
 // - avoid silent script failures, especially under load...
 // - link status monitoring (restart on link-up; stop on link-down)
 
-#include "busybox.h"
 #include <syslog.h>
 #include <poll.h>
 #include <sys/wait.h>
@@ -31,13 +30,16 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-
 #include <linux/if_packet.h>
 #include <linux/sockios.h>
 
+#include "libbb.h"
+
+/* We don't need more than 32 bits of the counter */
+#define MONOTONIC_US() ((unsigned)monotonic_us())
 
 struct arp_packet {
-	struct ether_header hdr;
+	struct ether_header eth;
 	struct ether_arp arp;
 } ATTRIBUTE_PACKED;
 
@@ -67,12 +69,21 @@ enum {
 	DEFEND
 };
 
-#define VDBG(fmt,args...) \
-	do { } while (0)
+#define VDBG(...) do { } while (0)
 
-static unsigned opts;
-#define FOREGROUND (opts & 1)
-#define QUIT (opts & 2)
+
+enum {
+	sock_fd = 3
+};
+
+struct globals {
+	char *intf;
+	struct sockaddr saddr;
+};
+#define G (*(struct globals*)&bb_common_bufsiz1)
+#define intf  (G.intf )
+#define saddr (G.saddr)
+
 
 /**
  * Pick a random link local IP address on 169.254/16, except that
@@ -82,29 +93,26 @@ static void pick(struct in_addr *ip)
 {
 	unsigned tmp;
 
-	/* use cheaper math than lrand48() mod N */
 	do {
-		tmp = (lrand48() >> 16) & IN_CLASSB_HOST;
+		tmp = rand() & IN_CLASSB_HOST;
 	} while (tmp > (IN_CLASSB_HOST - 0x0200));
 	ip->s_addr = htonl((LINKLOCAL_ADDR + 0x0100) + tmp);
 }
 
-/* TODO: we need a flag to direct bb_[p]error_msg output to stderr. */
-
 /**
  * Broadcast an ARP packet.
  */
-static void arp(int fd, struct sockaddr *saddr, int op,
-	const struct ether_addr *source_addr, struct in_addr source_ip,
-	const struct ether_addr *target_addr, struct in_addr target_ip)
+static void arp(int op,
+	const struct ether_addr *source_eth, struct in_addr source_ip,
+	const struct ether_addr *target_eth, struct in_addr target_ip)
 {
 	struct arp_packet p;
 	memset(&p, 0, sizeof(p));
 
 	// ether header
-	p.hdr.ether_type = htons(ETHERTYPE_ARP);
-	memcpy(p.hdr.ether_shost, source_addr, ETH_ALEN);
-	memset(p.hdr.ether_dhost, 0xff, ETH_ALEN);
+	p.eth.ether_type = htons(ETHERTYPE_ARP);
+	memcpy(p.eth.ether_shost, source_eth, ETH_ALEN);
+	memset(p.eth.ether_dhost, 0xff, ETH_ALEN);
 
 	// arp request
 	p.arp.arp_hrd = htons(ARPHRD_ETHER);
@@ -112,113 +120,113 @@ static void arp(int fd, struct sockaddr *saddr, int op,
 	p.arp.arp_hln = ETH_ALEN;
 	p.arp.arp_pln = 4;
 	p.arp.arp_op = htons(op);
-	memcpy(&p.arp.arp_sha, source_addr, ETH_ALEN);
+	memcpy(&p.arp.arp_sha, source_eth, ETH_ALEN);
 	memcpy(&p.arp.arp_spa, &source_ip, sizeof(p.arp.arp_spa));
-	memcpy(&p.arp.arp_tha, target_addr, ETH_ALEN);
+	memcpy(&p.arp.arp_tha, target_eth, ETH_ALEN);
 	memcpy(&p.arp.arp_tpa, &target_ip, sizeof(p.arp.arp_tpa));
 
 	// send it
-	if (sendto(fd, &p, sizeof(p), 0, saddr, sizeof(*saddr)) < 0) {
-		bb_perror_msg("sendto");
-		//return -errno;
-	}
+	xsendto(sock_fd, &p, sizeof(p), &saddr, sizeof(saddr));
+
 	// Currently all callers ignore errors, that's why returns are
 	// commented out...
 	//return 0;
 }
 
 /**
- * Run a script.
+ * Run a script. argv[2] is already NULL.
  */
-static int run(const char *script, const char *arg, const char *intf, struct in_addr *ip)
+static int run(char *argv[3], struct in_addr *ip)
 {
-	int pid, status;
-	const char *why;
+	int status;
+	char *addr = addr; /* for gcc */
+	const char *fmt = "%s %s %s" + 3;
 
-	if(1) { //always true: if (script != NULL)
-		VDBG("%s run %s %s\n", intf, script, arg);
-		if (ip != NULL) {
-			char *addr = inet_ntoa(*ip);
-			setenv("ip", addr, 1);
-			bb_info_msg("%s %s %s", arg, intf, addr);
-		}
+	VDBG("%s run %s %s\n", intf, argv[0], argv[1]);
 
-		pid = vfork();
-		if (pid < 0) {			// error
-			why = "vfork";
-			goto bad;
-		} else if (pid == 0) {		// child
-			execl(script, script, arg, NULL);
-			bb_perror_msg("execl");
-			_exit(EXIT_FAILURE);
-		}
-
-		if (waitpid(pid, &status, 0) <= 0) {
-			why = "waitpid";
-			goto bad;
-		}
-		if (WEXITSTATUS(status) != 0) {
-			bb_error_msg("script %s failed, exit=%d",
-				script, WEXITSTATUS(status));
-			return -errno;
-		}
+	if (ip) {
+		addr = inet_ntoa(*ip);
+		setenv("ip", addr, 1);
+		fmt -= 3;
 	}
-	return 0;
-bad:
-	status = -errno;
-	bb_perror_msg("%s %s, %s", arg, intf, why);
+	bb_info_msg(fmt, argv[1], intf, addr);
+
+	status = wait4pid(spawn(argv));
+	if (status < 0) {
+		bb_perror_msg("%s %s %s" + 3, argv[1], intf);
+		return -errno;
+	}
+	if (status != 0)
+		bb_error_msg("script %s %s failed, exitcode=%d", argv[0], argv[1], status);
 	return status;
 }
-
 
 /**
  * Return milliseconds of random delay, up to "secs" seconds.
  */
-static unsigned ATTRIBUTE_ALWAYS_INLINE ms_rdelay(unsigned secs)
+static unsigned ALWAYS_INLINE random_delay_ms(unsigned secs)
 {
-	return lrand48() % (secs * 1000);
+	return rand() % (secs * 1000);
 }
 
 /**
  * main program
  */
-
-/* Used to be auto variables on main() stack, but
- * most of them were zero-inited. Moving them to bss
- * is more space-efficient.
- */
-static	const struct in_addr null_ip; // = { 0 };
-static	const struct ether_addr null_addr; // = { {0, 0, 0, 0, 0, 0} };
-
-static	struct sockaddr saddr; // memset(0);
-static	struct in_addr ip; // = { 0 };
-static	struct ifreq ifr; //memset(0);
-
-static	char *intf; // = NULL;
-static	char *script; // = NULL;
-static	suseconds_t timeout; // = 0;	// milliseconds
-static	unsigned conflicts; // = 0;
-static	unsigned nprobes; // = 0;
-static	unsigned nclaims; // = 0;
-static	int ready; // = 0;
-static	int verbose; // = 0;
-static	int state = PROBE;
-
-int zcip_main(int argc, char *argv[]);
-int zcip_main(int argc, char *argv[])
+int zcip_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int zcip_main(int argc, char **argv)
 {
+	int state = PROBE;
 	struct ether_addr eth_addr;
-	const char *why;
-	int fd;
-
-	// parse commandline: prog [options] ifname script
 	char *r_opt;
-	opt_complementary = "vv:vf"; // -v accumulates and implies -f
-	opts = getopt32(argc, argv, "fqr:v", &r_opt, &verbose);
+	unsigned opts;
+
+	// ugly trick, but I want these zeroed in one go
+	struct {
+		const struct in_addr null_ip;
+		const struct ether_addr null_addr;
+		struct in_addr ip;
+		struct ifreq ifr;
+		char *script_av[3];
+		int timeout_ms; /* must be signed */
+		unsigned conflicts;
+		unsigned nprobes;
+		unsigned nclaims;
+		int ready;
+		int verbose;
+	} L;
+#define null_ip    (L.null_ip   )
+#define null_addr  (L.null_addr )
+#define ip         (L.ip        )
+#define ifr        (L.ifr       )
+#define script_av  (L.script_av )
+#define timeout_ms (L.timeout_ms)
+#define conflicts  (L.conflicts )
+#define nprobes    (L.nprobes   )
+#define nclaims    (L.nclaims   )
+#define ready      (L.ready     )
+#define verbose    (L.verbose   )
+
+	memset(&L, 0, sizeof(L));
+
+#define FOREGROUND (opts & 1)
+#define QUIT       (opts & 2)
+	// parse commandline: prog [options] ifname script
+	// exactly 2 args; -v accumulates and implies -f
+	opt_complementary = "=2:vv:vf";
+	opts = getopt32(argv, "fqr:v", &r_opt, &verbose);
+#if !BB_MMU
+	// on NOMMU reexec early (or else we will rerun things twice)
+	if (!FOREGROUND)
+		bb_daemonize_or_rexec(DAEMON_CHDIR_ROOT, argv);
+#endif
+	// open an ARP socket
+	// (need to do it before openlog to prevent openlog from taking
+	// fd 3 (sock_fd==3))
+	xmove_fd(xsocket(AF_PACKET, SOCK_PACKET, htons(ETH_P_ARP)), sock_fd);
 	if (!FOREGROUND) {
-		/* Do it early, before all bb_xx_msg calls */
-		logmode = LOGMODE_SYSLOG;
+		// do it before all bb_xx_msg calls
 		openlog(applet_name, 0, LOG_DAEMON);
+		logmode |= LOGMODE_SYSLOG;
 	}
 	if (opts & 4) { // -r n.n.n.n
 		if (inet_aton(r_opt, &ip) == 0
@@ -229,39 +237,42 @@ int zcip_main(int argc, char *argv[])
 	}
 	argc -= optind;
 	argv += optind;
-	if (argc != 2)
-		bb_show_usage();
+
 	intf = argv[0];
-	script = argv[1];
+	script_av[0] = argv[1];
 	setenv("interface", intf, 1);
 
 	// initialize the interface (modprobe, ifup, etc)
-	if (run(script, "init", intf, NULL) < 0)
+	script_av[1] = (char*)"init";
+	if (run(script_av, NULL))
 		return EXIT_FAILURE;
 
 	// initialize saddr
+	// saddr is: { u16 sa_family; u8 sa_data[14]; }
 	//memset(&saddr, 0, sizeof(saddr));
+	//TODO: are we leaving sa_family == 0 (AF_UNSPEC)?!
 	safe_strncpy(saddr.sa_data, intf, sizeof(saddr.sa_data));
 
-	// open an ARP socket
-	fd = xsocket(PF_PACKET, SOCK_PACKET, htons(ETH_P_ARP));
 	// bind to the interface's ARP socket
-	xbind(fd, &saddr, sizeof(saddr));
+	xbind(sock_fd, &saddr, sizeof(saddr));
 
 	// get the interface's ethernet address
 	//memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, intf, sizeof(ifr.ifr_name));
-	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
-		bb_perror_msg_and_die("get ethernet address");
-	}
+	xioctl(sock_fd, SIOCGIFHWADDR, &ifr);
 	memcpy(&eth_addr, &ifr.ifr_hwaddr.sa_data, ETH_ALEN);
 
 	// start with some stable ip address, either a function of
 	// the hardware address or else the last address we used.
+	// we are taking low-order four bytes, as top-order ones
+	// aren't random enough.
 	// NOTE: the sequence of addresses we try changes only
 	// depending on when we detect conflicts.
-	// (SVID 3 bogon: who says that "short" is always 16 bits?)
-	seed48( (unsigned short*)&ifr.ifr_hwaddr.sa_data );
+	{
+		uint32_t t;
+		memcpy(&t, (char*)&eth_addr + 2, 4);
+		srand(t);
+	}
 	if (ip.s_addr == 0)
 		pick(&ip);
 
@@ -271,8 +282,9 @@ int zcip_main(int argc, char *argv[])
 
 	// daemonize now; don't delay system startup
 	if (!FOREGROUND) {
-		/* bb_daemonize(); - bad, will close fd! */
-		xdaemon(0, 0);
+#if BB_MMU
+		bb_daemonize(DAEMON_CHDIR_ROOT);
+#endif
 		bb_info_msg("start, interface %s", intf);
 	}
 
@@ -280,41 +292,39 @@ int zcip_main(int argc, char *argv[])
 	// restarting after address conflicts:
 	//  - start with some address we want to try
 	//  - short random delay
-	//  - arp probes to see if another host else uses it
+	//  - arp probes to see if another host uses it
 	//  - arp announcements that we're claiming it
 	//  - use it
 	//  - defend it, within limits
 	while (1) {
 		struct pollfd fds[1];
-		struct timeval tv1;
+		unsigned deadline_us;
 		struct arp_packet p;
+		int source_ip_conflict;
+		int target_ip_conflict;
 
-		int source_ip_conflict = 0;
-		int target_ip_conflict = 0;
-
-		fds[0].fd = fd;
+		fds[0].fd = sock_fd;
 		fds[0].events = POLLIN;
 		fds[0].revents = 0;
 
 		// poll, being ready to adjust current timeout
-		if (!timeout) {
-			timeout = ms_rdelay(PROBE_WAIT);
-			// FIXME setsockopt(fd, SO_ATTACH_FILTER, ...) to
+		if (!timeout_ms) {
+			timeout_ms = random_delay_ms(PROBE_WAIT);
+			// FIXME setsockopt(sock_fd, SO_ATTACH_FILTER, ...) to
 			// make the kernel filter out all packets except
 			// ones we'd care about.
 		}
-		// set tv1 to the point in time when we timeout
-		gettimeofday(&tv1, NULL);
-		tv1.tv_usec += (timeout % 1000) * 1000;
-		while (tv1.tv_usec > 1000000) {
-			tv1.tv_usec -= 1000000;
-			tv1.tv_sec++;
-		}
-		tv1.tv_sec += timeout / 1000;
+		// set deadline_us to the point in time when we timeout
+		deadline_us = MONOTONIC_US() + timeout_ms * 1000;
 
-		VDBG("...wait %ld %s nprobes=%d, nclaims=%d\n",
-				timeout, intf, nprobes, nclaims);
-		switch (poll(fds, 1, timeout)) {
+		VDBG("...wait %d %s nprobes=%u, nclaims=%u\n",
+				timeout_ms, intf, nprobes, nclaims);
+
+		switch (safe_poll(fds, 1, timeout_ms)) {
+
+		default:
+			//bb_perror_msg("poll"); - done in safe_poll
+			return EXIT_FAILURE;
 
 		// timeout
 		case 0:
@@ -325,25 +335,24 @@ int zcip_main(int argc, char *argv[])
 				// have been received, so we can progress through the states
 				if (nprobes < PROBE_NUM) {
 					nprobes++;
-					VDBG("probe/%d %s@%s\n",
+					VDBG("probe/%u %s@%s\n",
 							nprobes, intf, inet_ntoa(ip));
-					arp(fd, &saddr, ARPOP_REQUEST,
+					arp(ARPOP_REQUEST,
 							&eth_addr, null_ip,
 							&null_addr, ip);
-					timeout = PROBE_MIN * 1000;
-					timeout += ms_rdelay(PROBE_MAX
-							- PROBE_MIN);
+					timeout_ms = PROBE_MIN * 1000;
+					timeout_ms += random_delay_ms(PROBE_MAX - PROBE_MIN);
 				}
 				else {
 					// Switch to announce state.
 					state = ANNOUNCE;
 					nclaims = 0;
-					VDBG("announce/%d %s@%s\n",
+					VDBG("announce/%u %s@%s\n",
 							nclaims, intf, inet_ntoa(ip));
-					arp(fd, &saddr, ARPOP_REQUEST,
+					arp(ARPOP_REQUEST,
 							&eth_addr, ip,
 							&eth_addr, ip);
-					timeout = ANNOUNCE_INTERVAL * 1000;
+					timeout_ms = ANNOUNCE_INTERVAL * 1000;
 				}
 				break;
 			case RATE_LIMIT_PROBE:
@@ -351,34 +360,35 @@ int zcip_main(int argc, char *argv[])
 				// have been received, so we can move immediately to the announce state
 				state = ANNOUNCE;
 				nclaims = 0;
-				VDBG("announce/%d %s@%s\n",
+				VDBG("announce/%u %s@%s\n",
 						nclaims, intf, inet_ntoa(ip));
-				arp(fd, &saddr, ARPOP_REQUEST,
+				arp(ARPOP_REQUEST,
 						&eth_addr, ip,
 						&eth_addr, ip);
-				timeout = ANNOUNCE_INTERVAL * 1000;
+				timeout_ms = ANNOUNCE_INTERVAL * 1000;
 				break;
 			case ANNOUNCE:
 				// timeouts in the ANNOUNCE state mean no conflicting ARP packets
 				// have been received, so we can progress through the states
 				if (nclaims < ANNOUNCE_NUM) {
 					nclaims++;
-					VDBG("announce/%d %s@%s\n",
+					VDBG("announce/%u %s@%s\n",
 							nclaims, intf, inet_ntoa(ip));
-					arp(fd, &saddr, ARPOP_REQUEST,
+					arp(ARPOP_REQUEST,
 							&eth_addr, ip,
 							&eth_addr, ip);
-					timeout = ANNOUNCE_INTERVAL * 1000;
+					timeout_ms = ANNOUNCE_INTERVAL * 1000;
 				}
 				else {
 					// Switch to monitor state.
 					state = MONITOR;
 					// link is ok to use earlier
 					// FIXME update filters
-					run(script, "config", intf, &ip);
+					script_av[1] = (char*)"config";
+					run(script_av, &ip);
 					ready = 1;
 					conflicts = 0;
-					timeout = -1; // Never timeout in the monitor state.
+					timeout_ms = -1; // Never timeout in the monitor state.
 
 					// NOTE: all other exit paths
 					// should deconfig ...
@@ -389,37 +399,34 @@ int zcip_main(int argc, char *argv[])
 			case DEFEND:
 				// We won!  No ARP replies, so just go back to monitor.
 				state = MONITOR;
-				timeout = -1;
+				timeout_ms = -1;
 				conflicts = 0;
 				break;
 			default:
 				// Invalid, should never happen.  Restart the whole protocol.
 				state = PROBE;
 				pick(&ip);
-				timeout = 0;
+				timeout_ms = 0;
 				nprobes = 0;
 				nclaims = 0;
 				break;
 			} // switch (state)
 			break; // case 0 (timeout)
-		// packets arriving
+
+		// packets arriving, or link went down
 		case 1:
 			// We need to adjust the timeout in case we didn't receive
 			// a conflicting packet.
-			if (timeout > 0) {
-				struct timeval tv2;
-
-				gettimeofday(&tv2, NULL);
-				if (timercmp(&tv1, &tv2, <)) {
+			if (timeout_ms > 0) {
+				unsigned diff = deadline_us - MONOTONIC_US();
+				if ((int)(diff) < 0) {
 					// Current time is greater than the expected timeout time.
 					// Should never happen.
 					VDBG("missed an expected timeout\n");
-					timeout = 0;
+					timeout_ms = 0;
 				} else {
 					VDBG("adjusting timeout\n");
-					timersub(&tv1, &tv2, &tv1);
-					timeout = 1000 * tv1.tv_sec
-							+ tv1.tv_usec / 1000;
+					timeout_ms = (diff / 1000) | 1; /* never 0 */
 				}
 			}
 
@@ -427,10 +434,10 @@ int zcip_main(int argc, char *argv[])
 				if (fds[0].revents & POLLERR) {
 					// FIXME: links routinely go down;
 					// this shouldn't necessarily exit.
-					bb_error_msg("%s: poll error", intf);
+					bb_error_msg("iface %s is down", intf);
 					if (ready) {
-						run(script, "deconfig",
-								intf, &ip);
+						script_av[1] = (char*)"deconfig";
+						run(script_av, &ip);
 					}
 					return EXIT_FAILURE;
 				}
@@ -438,21 +445,19 @@ int zcip_main(int argc, char *argv[])
 			}
 
 			// read ARP packet
-			if (recv(fd, &p, sizeof(p), 0) < 0) {
-				why = "recv";
-				goto bad;
+			if (safe_read(sock_fd, &p, sizeof(p)) < 0) {
+				bb_perror_msg_and_die(bb_msg_read_error);
 			}
-			if (p.hdr.ether_type != htons(ETHERTYPE_ARP))
+			if (p.eth.ether_type != htons(ETHERTYPE_ARP))
 				continue;
-
 #ifdef DEBUG
 			{
-				struct ether_addr * sha = (struct ether_addr *) p.arp.arp_sha;
-				struct ether_addr * tha = (struct ether_addr *) p.arp.arp_tha;
-				struct in_addr * spa = (struct in_addr *) p.arp.arp_spa;
-				struct in_addr * tpa = (struct in_addr *) p.arp.arp_tpa;
+				struct ether_addr *sha = (struct ether_addr *) p.arp.arp_sha;
+				struct ether_addr *tha = (struct ether_addr *) p.arp.arp_tha;
+				struct in_addr *spa = (struct in_addr *) p.arp.arp_spa;
+				struct in_addr *tpa = (struct in_addr *) p.arp.arp_tpa;
 				VDBG("%s recv arp type=%d, op=%d,\n",
-					intf, ntohs(p.hdr.ether_type),
+					intf, ntohs(p.eth.ether_type),
 					ntohs(p.arp.arp_op));
 				VDBG("\tsource=%s %s\n",
 					ether_ntoa(sha),
@@ -463,16 +468,21 @@ int zcip_main(int argc, char *argv[])
 			}
 #endif
 			if (p.arp.arp_op != htons(ARPOP_REQUEST)
-					&& p.arp.arp_op != htons(ARPOP_REPLY))
+			 && p.arp.arp_op != htons(ARPOP_REPLY))
 				continue;
 
-			if (memcmp(p.arp.arp_spa, &ip.s_addr, sizeof(struct in_addr)) == 0 &&
-				memcmp(&eth_addr, &p.arp.arp_sha, ETH_ALEN) != 0) {
+			source_ip_conflict = 0;
+			target_ip_conflict = 0;
+
+			if (memcmp(p.arp.arp_spa, &ip.s_addr, sizeof(struct in_addr)) == 0
+			 && memcmp(&p.arp.arp_sha, &eth_addr, ETH_ALEN) != 0
+			) {
 				source_ip_conflict = 1;
 			}
-			if (memcmp(p.arp.arp_tpa, &ip.s_addr, sizeof(struct in_addr)) == 0 &&
-				p.arp.arp_op == htons(ARPOP_REQUEST) &&
-				memcmp(&eth_addr, &p.arp.arp_tha, ETH_ALEN) != 0) {
+			if (p.arp.arp_op == htons(ARPOP_REQUEST)
+			 && memcmp(p.arp.arp_tpa, &ip.s_addr, sizeof(struct in_addr)) == 0
+			 && memcmp(&p.arp.arp_tha, &eth_addr, ETH_ALEN) != 0
+			) {
 				target_ip_conflict = 1;
 			}
 
@@ -487,13 +497,13 @@ int zcip_main(int argc, char *argv[])
 					conflicts++;
 					if (conflicts >= MAX_CONFLICTS) {
 						VDBG("%s ratelimit\n", intf);
-						timeout = RATE_LIMIT_INTERVAL * 1000;
+						timeout_ms = RATE_LIMIT_INTERVAL * 1000;
 						state = RATE_LIMIT_PROBE;
 					}
 
 					// restart the whole protocol
 					pick(&ip);
-					timeout = 0;
+					timeout_ms = 0;
 					nprobes = 0;
 					nclaims = 0;
 				}
@@ -503,11 +513,10 @@ int zcip_main(int argc, char *argv[])
 				if (source_ip_conflict) {
 					VDBG("monitor conflict -- defending\n");
 					state = DEFEND;
-					timeout = DEFEND_INTERVAL * 1000;
-					arp(fd, &saddr,
-							ARPOP_REQUEST,
-							&eth_addr, ip,
-							&eth_addr, ip);
+					timeout_ms = DEFEND_INTERVAL * 1000;
+					arp(ARPOP_REQUEST,
+						&eth_addr, ip,
+						&eth_addr, ip);
 				}
 				break;
 			case DEFEND:
@@ -516,11 +525,12 @@ int zcip_main(int argc, char *argv[])
 					state = PROBE;
 					VDBG("defend conflict -- starting over\n");
 					ready = 0;
-					run(script, "deconfig", intf, &ip);
+					script_av[1] = (char*)"deconfig";
+					run(script_av, &ip);
 
 					// restart the whole protocol
 					pick(&ip);
-					timeout = 0;
+					timeout_ms = 0;
 					nprobes = 0;
 					nclaims = 0;
 				}
@@ -530,19 +540,12 @@ int zcip_main(int argc, char *argv[])
 				VDBG("invalid state -- starting over\n");
 				state = PROBE;
 				pick(&ip);
-				timeout = 0;
+				timeout_ms = 0;
 				nprobes = 0;
 				nclaims = 0;
 				break;
 			} // switch state
-
 			break; // case 1 (packets arriving)
-		default:
-			why = "poll";
-			goto bad;
 		} // switch poll
-	}
-bad:
-	bb_perror_msg("%s, %s", intf, why);
-	return EXIT_FAILURE;
+	} // while (1)
 }

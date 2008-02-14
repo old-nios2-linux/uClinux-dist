@@ -29,6 +29,9 @@ CFLAGS += $(call cc-option,-Wundef -Wstrict-prototypes,)
 
 ifeq ($(CONFIG_WERROR),y)
 CFLAGS += $(call cc-option,-Werror,)
+else
+# for development, warn a little bit about unused results..
+CPPFLAGS += -D_FORTIFY_SOURCE=2
 endif
 # gcc 3.x emits bogus "old style proto" warning on find.c:alloc_action()
 CFLAGS += $(call cc-ifversion, -ge, 0400, -Wold-style-definition)
@@ -53,12 +56,35 @@ ifeq ($(CONFIG_DEBUG),y)
 CFLAGS += $(call cc-option,-g)
 endif
 
+ifeq ($(CONFIG_BUILD_LIBBUSYBOX),y)
+# on i386: 14% smaller libbusybox.so
+# (code itself is 9% bigger, we save on relocs/PLT/GOT)
+CFLAGS += -fpic
+# and another 4% reduction of libbusybox.so:
+# (external entry points must be marked EXTERNALLY_VISIBLE)
+CFLAGS += $(call cc-option,-fvisibility=hidden)
+endif
+
 ifeq ($(CONFIG_STATIC),y)
-LDLIBS += -static
+LDFLAGS += -static
+endif
+
+LDLIBS += m crypt
+
+ifeq ($(CONFIG_PAM),y)
+LDLIBS += pam pam_misc
 endif
 
 ifeq ($(CONFIG_SELINUX),y)
-LDLIBS += -lselinux -lsepol
+LDLIBS += selinux sepol
+endif
+
+ifeq ($(CONFIG_EFENCE),y)
+LDLIBS += efence
+endif
+
+ifeq ($(CONFIG_DMALLOC),y)
+LDLIBS += dmalloc
 endif
 
 #LDFLAGS += -nostdlib
@@ -69,4 +95,7 @@ SKIP_STRIP = y
 endif
 
 # Busybox is a stack-fatty so make sure we increase default size
-FLTFLAGS += -s 20000
+# TODO: use "make stksizes" to find & fix big stack users
+# (we stole scripts/checkstack.pl from the kernel... thanks guys!)
+# Reduced from 20k to 16k in 1.9.0.
+FLTFLAGS += -s 16000

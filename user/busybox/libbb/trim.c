@@ -8,11 +8,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
 #include "libbb.h"
-
 
 void trim(char *s)
 {
@@ -20,12 +16,16 @@ void trim(char *s)
 	size_t lws;
 
 	/* trim trailing whitespace */
-	while (len && isspace(s[len-1])) --len;
+	while (len && isspace(s[len-1]))
+		--len;
 
 	/* trim leading whitespace */
-	if(len) {
+	if (len) {
 		lws = strspn(s, " \n\r\t\v");
-		memmove(s, s + lws, len -= lws);
+		if (lws) {
+			len -= lws;
+			memmove(s, s + lws, len);
+		}
 	}
-	s[len] = 0;
+	s[len] = '\0';
 }

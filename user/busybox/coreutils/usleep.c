@@ -9,25 +9,20 @@
 
 /* BB_AUDIT SUSv3 N/A -- Apparently a busybox extension. */
 
-#include <stdlib.h>
-#include <limits.h>
-#include <unistd.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int usleep_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int usleep_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int usleep_main(int argc, char **argv)
 {
 	if (argc != 2) {
 		bb_show_usage();
 	}
 
-#ifdef __UC_LIBC__
-	usleep(bb_xgetularg10_bnd(argv[1], 0, UINT_MAX));
-#else
 	if (usleep(xatou(argv[1]))) {
 		bb_perror_nomsg_and_die();
 	}
-#endif
 
 	return EXIT_SUCCESS;
 }

@@ -9,7 +9,7 @@
 
 /* BB_AUDIT SUSv3 N/A */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <net/if.h>
 
 /* Stuff from linux/if_vlan.h, kernel version 2.4.23 */
@@ -63,7 +63,7 @@ static const char *xfind_str(const char *table, const char *str)
 	return table - 1;
 }
 
-static const char cmds[] = {
+static const char cmds[] ALIGN1 = {
 	4, ADD_VLAN_CMD, 7,
 	'a', 'd', 'd', 0,
 	3, DEL_VLAN_CMD, 7,
@@ -85,7 +85,7 @@ static const char cmds[] = {
 	'm', 'a', 'p', 0,
 };
 
-static const char name_types[] = {
+static const char name_types[] ALIGN1 = {
 	VLAN_NAME_TYPE_PLUS_VID, 16,
 	'V', 'L', 'A', 'N',
 	'_', 'P', 'L', 'U', 'S', '_', 'V', 'I', 'D',
@@ -104,9 +104,9 @@ static const char name_types[] = {
 	'_', 'N', 'O', '_', 'P', 'A', 'D', 0,
 };
 
-static const char conf_file_name[] = "/proc/net/vlan/config";
+static const char conf_file_name[] ALIGN1 = "/proc/net/vlan/config";
 
-int vconfig_main(int argc, char **argv);
+int vconfig_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int vconfig_main(int argc, char **argv)
 {
 	struct vlan_ioctl_args ifr;
@@ -157,9 +157,8 @@ int vconfig_main(int argc, char **argv)
 	}
 
 	fd = xsocket(AF_INET, SOCK_STREAM, 0);
-	if (ioctl(fd, SIOCSIFVLAN, &ifr) < 0) {
-		bb_perror_msg_and_die("ioctl error for %s", *argv);
-	}
+	ioctl_or_perror_and_die(fd, SIOCSIFVLAN, &ifr,
+						"ioctl error for %s", *argv);
 
 	return 0;
 }

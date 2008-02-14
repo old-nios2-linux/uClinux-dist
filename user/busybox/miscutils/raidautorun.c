@@ -8,20 +8,18 @@
  *
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #include <linux/major.h>
 #include <linux/raid/md_u.h>
 
-int raidautorun_main(int argc, char **argv);
+int raidautorun_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int raidautorun_main(int argc, char **argv)
 {
 	if (argc != 2)
 		bb_show_usage();
 
-	if (ioctl(xopen(argv[1], O_RDONLY), RAID_AUTORUN, NULL) != 0) {
-		bb_perror_msg_and_die("ioctl");
-	}
+	xioctl(xopen(argv[1], O_RDONLY), RAID_AUTORUN, NULL);
 
 	return EXIT_SUCCESS;
 }

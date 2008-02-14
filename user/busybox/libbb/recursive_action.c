@@ -22,7 +22,8 @@
  * is so stinking huge.
  */
 
-static int true_action(const char *fileName, struct stat *statbuf, void* userData, int depth)
+static int true_action(const char *fileName, struct stat *statbuf,
+						void* userData, int depth)
 {
 	return TRUE;
 }
@@ -41,11 +42,11 @@ static int true_action(const char *fileName, struct stat *statbuf, void* userDat
  */
 
 int recursive_action(const char *fileName,
-		int recurse, int followLinks, int depthFirst,
+		unsigned flags,
 		int (*fileAction)(const char *fileName, struct stat *statbuf, void* userData, int depth),
 		int (*dirAction)(const char *fileName, struct stat *statbuf, void* userData, int depth),
 		void* userData,
-		int depth)
+		unsigned depth)
 {
 	struct stat statbuf;
 	int status;
@@ -55,21 +56,20 @@ int recursive_action(const char *fileName,
 	if (!fileAction) fileAction = true_action;
 	if (!dirAction) dirAction = true_action;
 
-	status = (followLinks ? stat : lstat)(fileName, &statbuf);
-
+	status = ACTION_FOLLOWLINKS; /* hijack a variable for bitmask... */
+	if (!depth) status = ACTION_FOLLOWLINKS | ACTION_FOLLOWLINKS_L0;
+	status = ((flags & status) ? stat : lstat)(fileName, &statbuf);
 	if (status < 0) {
 #ifdef DEBUG_RECURS_ACTION
-		bb_error_msg("status=%d followLinks=%d TRUE=%d",
-				status, followLinks, TRUE);
+		bb_error_msg("status=%d flags=%x", status, flags);
 #endif
-		bb_perror_msg("%s", fileName);
-		return FALSE;
+		goto done_nak_warn;
 	}
 
 	/* If S_ISLNK(m), then we know that !S_ISDIR(m).
 	 * Then we can skip checking first part: if it is true, then
 	 * (!dir) is also true! */
-	if ( /* (!followLinks && S_ISLNK(statbuf.st_mode)) || */
+	if ( /* (!(flags & ACTION_FOLLOWLINKS) && S_ISLNK(statbuf.st_mode)) || */
 	 !S_ISDIR(statbuf.st_mode)
 	) {
 		return fileAction(fileName, &statbuf, userData, depth);
@@ -77,16 +77,14 @@ int recursive_action(const char *fileName,
 
 	/* It's a directory (or a link to one, and followLinks is set) */
 
-	if (!recurse) {
+	if (!(flags & ACTION_RECURSE)) {
 		return dirAction(fileName, &statbuf, userData, depth);
 	}
 
-	if (!depthFirst) {
+	if (!(flags & ACTION_DEPTHFIRST)) {
 		status = dirAction(fileName, &statbuf, userData, depth);
-		if (!status) {
-			bb_perror_msg("%s", fileName);
-			return FALSE;
-		}
+		if (!status)
+			goto done_nak_warn;
 		if (status == SKIP)
 			return TRUE;
 	}
@@ -96,8 +94,7 @@ int recursive_action(const char *fileName,
 		/* findutils-4.1.20 reports this */
 		/* (i.e. it doesn't silently return with exit code 1) */
 		/* To trigger: "find -exec rm -rf {} \;" */
-		bb_perror_msg("%s", fileName);
-		return FALSE;
+		goto done_nak_warn;
 	}
 	status = TRUE;
 	while ((next = readdir(dir)) != NULL) {
@@ -106,21 +103,23 @@ int recursive_action(const char *fileName,
 		nextFile = concat_subpath_file(fileName, next->d_name);
 		if (nextFile == NULL)
 			continue;
-		if (!recursive_action(nextFile, TRUE, followLinks, depthFirst,
-				fileAction, dirAction, userData, depth+1)) {
+		/* now descend into it (NB: ACTION_RECURSE is set in flags) */
+		if (!recursive_action(nextFile, flags, fileAction, dirAction, userData, depth+1))
 			status = FALSE;
-		}
 		free(nextFile);
 	}
 	closedir(dir);
-	if (depthFirst) {
-		if (!dirAction(fileName, &statbuf, userData, depth)) {
-			bb_perror_msg("%s", fileName);
-			return FALSE;
-		}
+
+	if (flags & ACTION_DEPTHFIRST) {
+		if (!dirAction(fileName, &statbuf, userData, depth))
+			goto done_nak_warn;
 	}
 
 	if (!status)
 		return FALSE;
 	return TRUE;
+
+ done_nak_warn:
+	bb_simple_perror_msg(fileName);
+	return FALSE;
 }

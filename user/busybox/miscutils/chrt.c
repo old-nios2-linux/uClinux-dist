@@ -6,10 +6,9 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
-#include <unistd.h>
 #include <sched.h>
 #include <getopt.h> /* optind */
+#include "libbb.h"
 #ifndef _POSIX_PRIORITY_SCHEDULING
 #warning your system may be foobared
 #endif
@@ -22,7 +21,8 @@ static const struct {
 	{SCHED_RR, "SCHED_RR"}
 };
 
-static void show_min_max(int pol) {
+static void show_min_max(int pol)
+{
 	const char *fmt = "%s min/max priority\t: %d/%d\n\0%s not supported?\n";
 	int max, min;
 	max = sched_get_priority_max(pol);
@@ -41,8 +41,8 @@ static void show_min_max(int pol) {
 #define OPT_f (1<<3)
 #define OPT_o (1<<4)
 
-int chrt_main(int argc, char** argv);
-int chrt_main(int argc, char** argv)
+int chrt_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int chrt_main(int argc, char **argv)
 {
 	pid_t pid = 0;
 	unsigned opt;
@@ -52,7 +52,7 @@ int chrt_main(int argc, char** argv)
 	int prio = 0, policy = SCHED_RR;
 
 	opt_complementary = "r--fo:f--ro:r--fo"; /* only one policy accepted */
-	opt = getopt32(argc, argv, "+mp:rfo", &p_opt);
+	opt = getopt32(argv, "+mp:rfo", &p_opt);
 	if (opt & OPT_r)
 		policy = SCHED_RR;
 	if (opt & OPT_f)
@@ -115,7 +115,7 @@ print_rt_info:
 	}
 	++argv;
 	BB_EXECVP(*argv, argv);
-	bb_perror_msg_and_die("%s", *argv);
+	bb_simple_perror_msg_and_die(*argv);
 }
 #undef OPT_p
 #undef OPT_r

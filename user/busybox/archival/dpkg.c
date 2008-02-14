@@ -24,7 +24,7 @@
  *
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include "unarchive.h"
 
 /* note: if you vary hash_prime sizes be aware,
@@ -53,16 +53,16 @@
  *      and available file */
 #define PACKAGE_HASH_PRIME 10007
 typedef struct edge_s {
-	unsigned operator:3;
+	unsigned operator:4; /* was:3 */
 	unsigned type:4;
-	unsigned name:14;
-	unsigned version:14;
+	unsigned name:16; /* was:14 */
+	unsigned version:16; /* was:14 */
 } edge_t;
 
 typedef struct common_node_s {
-	unsigned name:14;
-	unsigned version:14;
-	unsigned num_of_edges:14;
+	unsigned name:16; /* was:14 */
+	unsigned version:16; /* was:14 */
+	unsigned num_of_edges:16; /* was:14 */
 	edge_t **edge;
 } common_node_t;
 
@@ -71,8 +71,8 @@ typedef struct common_node_s {
  * likely to be installed at any one time, so there is a bit of leeway here */
 #define STATUS_HASH_PRIME 8191
 typedef struct status_node_s {
-	unsigned package:14;	/* has to fit PACKAGE_HASH_PRIME */
-	unsigned status:14;		/* has to fit STATUS_HASH_PRIME */
+	unsigned package:16; /* was:14 */       /* has to fit PACKAGE_HASH_PRIME */
+	unsigned status:16; /* was:14 */        /* has to fit STATUS_HASH_PRIME */
 } status_node_t;
 
 /* Were statically declared here, but such a big bss is nommu-unfriendly */
@@ -107,13 +107,13 @@ enum operator_e {
 typedef struct deb_file_s {
 	char *control_file;
 	char *filename;
-	unsigned package:14;
+	unsigned package:16; /* was:14 */
 } deb_file_t;
 
 
 static void make_hash(const char *key, unsigned *start, unsigned *decrement, const int hash_prime)
 {
-	unsigned long int hash_num = key[0];
+	unsigned long hash_num = key[0];
 	int len = strlen(key);
 	int i;
 
@@ -352,7 +352,8 @@ static int search_package_hashtable(const unsigned name, const unsigned version,
  * FIXME: I don't think this is very efficient, but I thought I'd keep
  * it simple for now until it proves to be a problem.
  */
-static int search_for_provides(int needle, int start_at) {
+static int search_for_provides(int needle, int start_at)
+{
 	int i, j;
 	common_node_t *p;
 	for (i = start_at + 1; i < PACKAGE_HASH_PRIME; i++) {
@@ -412,7 +413,7 @@ static void add_split_dependencies(common_node_t *parent_node, const char *whole
 			or_edge = xmalloc(sizeof(edge_t));
 			or_edge->type = edge_type + 1;
 			or_edge->name = search_name_hashtable(field);
-			or_edge->version = 0; // tracks the number of altenatives
+			or_edge->version = 0; // tracks the number of alternatives
 			add_edge_to_node(parent_node, or_edge);
 		}
 
@@ -431,7 +432,7 @@ static void add_split_dependencies(common_node_t *parent_node, const char *whole
 				edge->version = search_name_hashtable("ANY");
 			} else {
 				/* Skip leading ' ' or '(' */
-				version += strspn(field2, " (");
+				version += strspn(version, " (");
 				/* Calculate length of any operator characters */
 				offset_ch = strspn(version, "<=>");
 				/* Determine operator */
@@ -472,9 +473,13 @@ static void add_split_dependencies(common_node_t *parent_node, const char *whole
 				or_edge->version++;
 
 			add_edge_to_node(parent_node, edge);
-		} while ((field2 = strtok_r(NULL, "|", &line_ptr2)) != NULL);
+			field2 = strtok_r(NULL, "|", &line_ptr2);
+		} while (field2 != NULL);
+
 		free(line2);
-	} while ((field = strtok_r(NULL, ",", &line_ptr1)) != NULL);
+		field = strtok_r(NULL, ",", &line_ptr1);
+	} while (field != NULL);
+
 	free(line);
 }
 
@@ -577,10 +582,10 @@ static int read_package_field(const char *package_buffer, char **field_name, cha
 
 static unsigned fill_package_struct(char *control_buffer)
 {
-	static const char *const field_names[] = { "Package", "Version",
-		"Pre-Depends", "Depends","Replaces", "Provides",
-		"Conflicts", "Suggests", "Recommends", "Enhances", 0
-	};
+	static const char field_names[] ALIGN1 =
+		"Package\0""Version\0"
+		"Pre-Depends\0""Depends\0""Replaces\0""Provides\0"
+		"Conflicts\0""Suggests\0""Recommends\0""Enhances\0";
 
 	common_node_t *new_node = xzalloc(sizeof(common_node_t));
 	char *field_name;
@@ -597,10 +602,10 @@ static unsigned fill_package_struct(char *control_buffer)
 				&field_name, &field_value);
 
 		if (field_name == NULL) {
-			goto fill_package_struct_cleanup; /* Oh no, the dreaded goto statement ! */
+			goto fill_package_struct_cleanup; /* Oh no, the dreaded goto statement! */
 		}
 
-		field_num = index_in_str_array(field_names, field_name);
+		field_num = index_in_strings(field_names, field_name);
 		switch (field_num) {
 		case 0: /* Package */
 			new_node->name = search_name_hashtable(field_value);
@@ -705,10 +710,11 @@ static void set_status(const unsigned status_node_num, const char *new_value, co
 	free(new_status);
 }
 
-static const char *describe_status(int status_num) {
-	int status_want, status_state ;
+static const char *describe_status(int status_num)
+{
+	int status_want, status_state;
 	if (status_hashtable[status_num] == NULL || status_hashtable[status_num]->status == 0)
-		return "is not installed or flagged to be installed\n";
+		return "is not installed or flagged to be installed";
 
 	status_want = get_status(status_num, 1);
 	status_state = get_status(status_num, 3);
@@ -721,7 +727,7 @@ static const char *describe_status(int status_num) {
 		if (status_want == search_name_hashtable("purge"))
 			return "is marked to be purged";
 	}
-	if (status_want ==  search_name_hashtable("unknown"))
+	if (status_want == search_name_hashtable("unknown"))
 		return "is in an indeterminate state";
 	if (status_want == search_name_hashtable("install"))
 		return "is marked to be installed";
@@ -793,7 +799,8 @@ static void write_status_file(deb_file_t **deb_file)
 
 	/* Update previously known packages */
 	while ((control_buffer = xmalloc_fgets_str(old_status_file, "\n\n")) != NULL) {
-		if ((tmp_string = strstr(control_buffer, "Package:")) == NULL) {
+		tmp_string = strstr(control_buffer, "Package:");
+		if (tmp_string == NULL) {
 			continue;
 		}
 
@@ -818,8 +825,9 @@ static void write_status_file(deb_file_t **deb_file)
 			if (strcmp(status_from_file, status_from_hashtable) != 0) {
 				/* New status isnt exactly the same as old status */
 				const int state_status = get_status(status_num, 3);
-				if ((strcmp("installed", name_hashtable[state_status]) == 0) ||
-					(strcmp("unpacked", name_hashtable[state_status]) == 0)) {
+				if ((strcmp("installed", name_hashtable[state_status]) == 0)
+				 || (strcmp("unpacked", name_hashtable[state_status]) == 0)
+				) {
 					/* We need to add the control file from the package */
 					i = 0;
 					while (deb_file[i] != NULL) {
@@ -884,7 +892,7 @@ static void write_status_file(deb_file_t **deb_file)
 			}
 		}
 		/* If the package from the status file wasnt handle above, do it now*/
-		if (! write_flag) {
+		if (!write_flag) {
 			fprintf(new_status_file, "%s\n\n", control_buffer);
 		}
 
@@ -1065,12 +1073,14 @@ static int check_deps(deb_file_t **deb_file, int deb_start, int dep_max_count)
 			const edge_t *package_edge = package_node->edge[j];
 			unsigned package_num;
 
-			if (package_edge->type == EDGE_OR_PRE_DEPENDS ||
-			    package_edge->type == EDGE_OR_DEPENDS) {	/* start an EDGE_OR_ list */
+			if (package_edge->type == EDGE_OR_PRE_DEPENDS
+			 || package_edge->type == EDGE_OR_DEPENDS
+			) {	/* start an EDGE_OR_ list */
 				number_of_alternatives = package_edge->version;
 				root_of_alternatives = package_edge;
 				continue;
-			} else if (number_of_alternatives == 0) {	/* not in the middle of an EDGE_OR_ list */
+			}
+			if (number_of_alternatives == 0) {	/* not in the middle of an EDGE_OR_ list */
 				number_of_alternatives = 1;
 				root_of_alternatives = NULL;
 			}
@@ -1120,14 +1130,14 @@ static int check_deps(deb_file_t **deb_file, int deb_start, int dep_max_count)
 							name_hashtable[package_node->name],
 							package_edge->type == EDGE_PRE_DEPENDS ? "pre-" : "",
 							name_hashtable[root_of_alternatives->name]);
-					else
-						bb_error_msg_and_die(
-							"package %s %sdepends on %s, which %s\n",
-							name_hashtable[package_node->name],
-							package_edge->type == EDGE_PRE_DEPENDS ? "pre-" : "",
-							name_hashtable[package_edge->name],
-							describe_status(status_num));
-				} else if (result == 0 && number_of_alternatives) {
+					bb_error_msg_and_die(
+						"package %s %sdepends on %s, which %s\n",
+						name_hashtable[package_node->name],
+						package_edge->type == EDGE_PRE_DEPENDS ? "pre-" : "",
+						name_hashtable[package_edge->name],
+						describe_status(status_num));
+				}
+				if (result == 0 && number_of_alternatives) {
 					/* we've found a package which
 					 * satisfies the dependency,
 					 * so skip over the rest of
@@ -1165,49 +1175,42 @@ static char **create_list(const char *filename)
 
 	if (count == 0) {
 		return NULL;
-	} else {
-		file_list[count] = NULL;
-		return file_list;
 	}
+	file_list[count] = NULL;
+	return file_list;
 }
 
 /* maybe i should try and hook this into remove_file.c somehow */
 static int remove_file_array(char **remove_names, char **exclude_names)
 {
 	struct stat path_stat;
-	int match_flag;
-	int remove_flag = FALSE;
-	int i,j;
+	int remove_flag = 1; /* not removed anything yet */
+	int i, j;
 
 	if (remove_names == NULL) {
-		return FALSE;
+		return 0;
 	}
 	for (i = 0; remove_names[i] != NULL; i++) {
-		match_flag = FALSE;
 		if (exclude_names != NULL) {
-			for (j = 0; exclude_names[j] != 0; j++) {
+			for (j = 0; exclude_names[j] != NULL; j++) {
 				if (strcmp(remove_names[i], exclude_names[j]) == 0) {
-					match_flag = TRUE;
-					break;
+					goto skip;
 				}
 			}
 		}
-		if (!match_flag) {
-			if (lstat(remove_names[i], &path_stat) < 0) {
-				continue;
-			}
-			if (S_ISDIR(path_stat.st_mode)) {
-				if (rmdir(remove_names[i]) != -1) {
-					remove_flag = TRUE;
-				}
-			} else {
-				if (unlink(remove_names[i]) != -1) {
-					remove_flag = TRUE;
-				}
-			}
+		/* TODO: why we are checking lstat? we can just try rm/rmdir */
+		if (lstat(remove_names[i], &path_stat) < 0) {
+			continue;
 		}
+		if (S_ISDIR(path_stat.st_mode)) {
+			remove_flag &= rmdir(remove_names[i]); /* 0 if no error */
+		} else {
+			remove_flag &= unlink(remove_names[i]); /* 0 if no error */
+		}
+ skip:
+		continue;
 	}
-	return remove_flag;
+	return (remove_flag == 0);
 }
 
 static int run_package_script(const char *package_name, const char *script_type)
@@ -1224,8 +1227,11 @@ static int run_package_script(const char *package_name, const char *script_type)
 	return result;
 }
 
-static const char *all_control_files[] = {"preinst", "postinst", "prerm", "postrm",
-	"list", "md5sums", "shlibs", "conffiles", "config", "templates", NULL };
+static const char *const all_control_files[] = {
+	"preinst", "postinst", "prerm", "postrm",
+	"list", "md5sums", "shlibs", "conffiles",
+	"config", "templates", NULL
+};
 
 static char **all_control_list(const char *package_name)
 {
@@ -1244,7 +1250,6 @@ static char **all_control_list(const char *package_name)
 
 static void free_array(char **array)
 {
-
 	if (array) {
 		unsigned i = 0;
 		while (array[i]) {
@@ -1267,8 +1272,7 @@ static void list_packages(void)
 	puts("+++-==============-==============");
 
 	/* go through status hash, dereference package hash and finally strings */
-	for (i=0; i<STATUS_HASH_PRIME+1; i++) {
-
+	for (i = 0; i < STATUS_HASH_PRIME+1; i++) {
 		if (status_hashtable[i]) {
 			const char *stat_str;  /* status string */
 			const char *name_str;  /* package name */
@@ -1285,7 +1289,7 @@ static void list_packages(void)
 			s1 = stat_str[0] == 'i' ? 'i' : 'r';
 
 			/* get abbreviation for status field 2 */
-			for (j=0, spccnt=0; stat_str[j] && spccnt<2; j++) {
+			for (j = 0, spccnt = 0; stat_str[j] && spccnt < 2; j++) {
 				if (stat_str[j] == ' ') spccnt++;
 			}
 			s2 = stat_str[j];
@@ -1293,7 +1297,7 @@ static void list_packages(void)
 			/* print out the line formatted like Debian dpkg */
 			printf("%c%c  %-14s %s\n", s1, s2, name_str, vers_str);
 		}
-    }
+	}
 }
 
 static void remove_package(const unsigned package_num, int noisy)
@@ -1306,14 +1310,12 @@ static void remove_package(const unsigned package_num, int noisy)
 	char **exclude_files;
 	char list_name[package_name_length + 25];
 	char conffile_name[package_name_length + 30];
-	int return_value;
 
 	if (noisy)
 		printf("Removing %s (%s)...\n", package_name, package_version);
 
 	/* run prerm script */
-	return_value = run_package_script(package_name, "prerm");
-	if (return_value == -1) {
+	if (run_package_script(package_name, "prerm") != 0) {
 		bb_error_msg_and_die("script failed, prerm failure");
 	}
 
@@ -1381,8 +1383,8 @@ static void purge_package(const unsigned package_num)
 	free(exclude_files);
 
 	/* run postrm script */
-	if (run_package_script(package_name, "postrm") == -1) {
-		bb_error_msg_and_die("postrm fialure.. set status to what?");
+	if (run_package_script(package_name, "postrm") != 0) {
+		bb_error_msg_and_die("postrm failure.. set status to what?");
 	}
 
 	/* Change package status */
@@ -1410,10 +1412,10 @@ static void init_archive_deb_control(archive_handle_t *ar_handle)
 	tar_handle->src_fd = ar_handle->src_fd;
 
 	/* We don't care about data.tar.* or debian-binary, just control.tar.* */
-#ifdef CONFIG_FEATURE_DEB_TAR_GZ
+#if ENABLE_FEATURE_DEB_TAR_GZ
 	llist_add_to(&(ar_handle->accept), (char*)"control.tar.gz");
 #endif
-#ifdef CONFIG_FEATURE_DEB_TAR_BZ2
+#if ENABLE_FEATURE_DEB_TAR_BZ2
 	llist_add_to(&(ar_handle->accept), (char*)"control.tar.bz2");
 #endif
 
@@ -1430,10 +1432,10 @@ static void init_archive_deb_data(archive_handle_t *ar_handle)
 	tar_handle->src_fd = ar_handle->src_fd;
 
 	/* We don't care about control.tar.* or debian-binary, just data.tar.* */
-#ifdef CONFIG_FEATURE_DEB_TAR_GZ
+#if ENABLE_FEATURE_DEB_TAR_GZ
 	llist_add_to(&(ar_handle->accept), (char*)"data.tar.gz");
 #endif
-#ifdef CONFIG_FEATURE_DEB_TAR_BZ2
+#if ENABLE_FEATURE_DEB_TAR_BZ2
 	llist_add_to(&(ar_handle->accept), (char*)"data.tar.bz2");
 #endif
 
@@ -1548,14 +1550,14 @@ static void configure_package(deb_file_t *deb_file)
 	/* Run the postinst script */
 	if (run_package_script(package_name, "postinst") != 0) {
 		/* TODO: handle failure gracefully */
-		bb_error_msg_and_die("postrm failure.. set status to what?");
+		bb_error_msg_and_die("postinst failure.. set status to what?");
 	}
 	/* Change status to reflect success */
 	set_status(status_num, "install", 1);
 	set_status(status_num, "installed", 3);
 }
 
-int dpkg_main(int argc, char **argv);
+int dpkg_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int dpkg_main(int argc, char **argv)
 {
 	deb_file_t **deb_file = NULL;
@@ -1577,7 +1579,7 @@ int dpkg_main(int argc, char **argv)
 		OPT_unpack = 0x40,
 	};
 
-	opt = getopt32(argc, argv, "CF:ilPru", &str_f);
+	opt = getopt32(argv, "CF:ilPru", &str_f);
 	//if (opt & OPT_configure) ... // -C
 	if (opt & OPT_force_ignore_depends) { // -F (--force in official dpkg)
 		if (strcmp(str_f, "depends"))

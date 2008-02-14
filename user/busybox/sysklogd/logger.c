@@ -7,11 +7,14 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #if !defined CONFIG_SYSLOGD
 
+/* SYSLOG_NAMES defined to pull prioritynames[] and facilitynames[]
+ * from syslog.h. Grrrr - glibc puts those in _rwdata_! :( */
 #define SYSLOG_NAMES
+#define SYSLOG_NAMES_CONST /* uclibc is saner :) */
 #include <sys/syslog.h>
 
 #else
@@ -36,9 +39,9 @@
  *
  * Original copyright notice is retained at the end of this file.
  */
-static int decode(char *name, CODE * codetab)
+static int decode(char *name, const CODE *codetab)
 {
-	CODE *c;
+	const CODE *c;
 
 	if (isdigit(*name))
 		return atoi(name);
@@ -81,7 +84,7 @@ static int pencode(char *s)
 }
 
 
-int logger_main(int argc, char **argv);
+int logger_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int logger_main(int argc, char **argv)
 {
 	char *str_p, *str_t;
@@ -89,11 +92,11 @@ int logger_main(int argc, char **argv)
 	char name[80];
 
 	/* Fill out the name string early (may be overwritten later) */
-	bb_getpwuid(name, geteuid(), sizeof(name));
+	bb_getpwuid(name, sizeof(name), geteuid());
 	str_t = name;
 
 	/* Parse any options */
-	getopt32(argc, argv, "p:st:", &str_p, &str_t);
+	getopt32(argv, "p:st:", &str_p, &str_t);
 
 	if (option_mask32 & 0x2) /* -s */
 		i |= LOG_PERROR;
@@ -106,21 +109,22 @@ int logger_main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 	if (!argc) {
-		while (fgets(bb_common_bufsiz1, BUFSIZ, stdin)) {
-			if (bb_common_bufsiz1[0]
-			 && NOT_LONE_CHAR(bb_common_bufsiz1, '\n')
+#define strbuf bb_common_bufsiz1
+		while (fgets(strbuf, COMMON_BUFSIZE, stdin)) {
+			if (strbuf[0]
+			 && NOT_LONE_CHAR(strbuf, '\n')
 			) {
 				/* Neither "" nor "\n" */
-				syslog(i, "%s", bb_common_bufsiz1);
+				syslog(i, "%s", strbuf);
 			}
 		}
 	} else {
 		char *message = NULL;
-		int len = 1; /* for NUL */
+		int len = 0;
 		int pos = 0;
 		do {
 			len += strlen(*argv) + 1;
-			message = xrealloc(message, len);
+			message = xrealloc(message, len + 1);
 			sprintf(message + pos, " %s", *argv),
 			pos = len;
 		} while (*++argv);

@@ -1,8 +1,9 @@
 /* vi: set sw=4 ts=4: */
 #include <unistd.h>
 
+/* Just #include "autoconf.h" doesn't work for builds in separate
+ * object directory */
 #include "../include/autoconf.h"
-#include "../include/busybox.h"
 
 static const char usage_messages[] = ""
 #define MAKE_USAGE

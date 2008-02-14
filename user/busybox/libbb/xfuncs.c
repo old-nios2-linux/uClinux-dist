@@ -9,7 +9,7 @@
  * Licensed under GPL version 2, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* All the functions starting with "x" call bb_error_msg_and_die() if they
  * fail, so callers never need to check for errors.  If it returned, it
@@ -20,6 +20,15 @@
  * Since dmalloc's prototypes overwrite the impls here as they are
  * included after these prototypes in libbb.h, all is well.
  */
+// Warn if we can't allocate size bytes of memory.
+void *malloc_or_warn(size_t size)
+{
+	void *ptr = malloc(size);
+	if (ptr == NULL && size != 0)
+		bb_error_msg(bb_msg_memory_exhausted);
+	return ptr;
+}
+
 // Die if we can't allocate size bytes of memory.
 void *xmalloc(size_t size)
 {
@@ -97,40 +106,87 @@ FILE *xfopen(const char *path, const char *mode)
 {
 	FILE *fp = fopen(path, mode);
 	if (fp == NULL)
-		bb_perror_msg_and_die("%s", path);
+		bb_perror_msg_and_die("can't open '%s'", path);
 	return fp;
 }
 
-// Die if we can't open an existing file and return an fd.
-int xopen(const char *pathname, int flags)
-{
-	//if (ENABLE_DEBUG && (flags & O_CREAT))
-	//	bb_error_msg_and_die("xopen() with O_CREAT");
-
-	return xopen3(pathname, flags, 0666);
-}
-
-// Die if we can't open a new file and return an fd.
+// Die if we can't open a file and return a fd.
 int xopen3(const char *pathname, int flags, int mode)
 {
 	int ret;
 
 	ret = open(pathname, flags, mode);
 	if (ret < 0) {
-		bb_perror_msg_and_die("%s", pathname);
+		bb_perror_msg_and_die("can't open '%s'", pathname);
 	}
 	return ret;
+}
+
+// Die if we can't open an existing file and return a fd.
+int xopen(const char *pathname, int flags)
+{
+	return xopen3(pathname, flags, 0666);
+}
+
+// Warn if we can't open a file and return a fd.
+int open3_or_warn(const char *pathname, int flags, int mode)
+{
+	int ret;
+
+	ret = open(pathname, flags, mode);
+	if (ret < 0) {
+		bb_perror_msg("can't open '%s'", pathname);
+	}
+	return ret;
+}
+
+// Warn if we can't open a file and return a fd.
+int open_or_warn(const char *pathname, int flags)
+{
+	return open3_or_warn(pathname, flags, 0666);
+}
+
+void xpipe(int filedes[2])
+{
+	if (pipe(filedes))
+		bb_perror_msg_and_die("can't create pipe");
+}
+
+void xunlink(const char *pathname)
+{
+	if (unlink(pathname))
+		bb_perror_msg_and_die("can't remove file '%s'", pathname);
 }
 
 // Turn on nonblocking I/O on a fd
 int ndelay_on(int fd)
 {
-	return fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0) | O_NONBLOCK);
+	return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);
+}
+
+int close_on_exec_on(int fd)
+{
+        return fcntl(fd, F_SETFD, FD_CLOEXEC);
 }
 
 int ndelay_off(int fd)
 {
-	return fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0) & ~O_NONBLOCK);
+	return fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) & ~O_NONBLOCK);
+}
+
+void xdup2(int from, int to)
+{
+	if (dup2(from, to) != to)
+		bb_perror_msg_and_die("can't duplicate file descriptor");
+}
+
+// "Renumber" opened fd
+void xmove_fd(int from, int to)
+{
+	if (from == to)
+		return;
+	xdup2(from, to);
+	close(from);
 }
 
 // Die with an error message if we can't write the entire buffer.
@@ -159,6 +215,7 @@ off_t xlseek(int fd, off_t offset, int whence)
 void die_if_ferror(FILE *fp, const char *fn)
 {
 	if (ferror(fp)) {
+		/* ferror doesn't set useful errno */
 		bb_error_msg_and_die("%s: I/O error", fn);
 	}
 }
@@ -177,53 +234,47 @@ void xfflush_stdout(void)
 	}
 }
 
-// This does a fork/exec in one call, using vfork().  Return PID of new child,
-// -1 for failure.  Runs argv[0], searching path if that has no / in it.
-pid_t spawn(char **argv)
+void sig_block(int sig)
 {
-	/* Why static? */
-	static int failed;
-	pid_t pid;
-
-	// Be nice to nommu machines.
-	failed = 0;
-	pid = vfork();
-	if (pid < 0) return pid;
-	if (!pid) {
-		BB_EXECVP(argv[0], argv);
-
-		// We're sharing a stack with blocked parent, let parent know we failed
-		// and then exit to unblock parent (but don't run atexit() stuff, which
-		// would screw up parent.)
-
-		failed = errno;
-		_exit(0);
-	}
-	if (failed) {
-		errno = failed;
-		return -1;
-	}
-	return pid;
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigaddset(&ss, sig);
+	sigprocmask(SIG_BLOCK, &ss, NULL);
 }
 
-// Die with an error message if we can't spawn a child process.
-pid_t xspawn(char **argv)
+void sig_unblock(int sig)
 {
-	pid_t pid = spawn(argv);
-	if (pid < 0) bb_perror_msg_and_die("%s", *argv);
-	return pid;
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigaddset(&ss, sig);
+	sigprocmask(SIG_UNBLOCK, &ss, NULL);
 }
 
-// Wait for the specified child PID to exit, returning child's error return.
-int wait4pid(int pid)
+#if 0
+void sig_blocknone(void)
 {
-	int status;
-
-	if (pid == -1 || waitpid(pid, &status, 0) == -1) return -1;
-	if (WIFEXITED(status)) return WEXITSTATUS(status);
-	if (WIFSIGNALED(status)) return WTERMSIG(status);
-	return 0;
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigprocmask(SIG_SETMASK, &ss, NULL);
 }
+#endif
+
+void sig_catch(int sig, void (*f)(int))
+{
+	struct sigaction sa;
+	sa.sa_handler = f;
+	sa.sa_flags = 0;
+	sigemptyset(&sa.sa_mask);
+	sigaction(sig, &sa, NULL);
+}
+
+void sig_pause(void)
+{
+	sigset_t ss;
+	sigemptyset(&ss);
+	sigsuspend(&ss);
+}
+
 
 void xsetenv(const char *key, const char *value)
 {
@@ -238,46 +289,56 @@ void smart_ulltoa5(unsigned long long ul, char buf[5])
 {
 	const char *fmt;
 	char c;
-	unsigned v,idx = 0;
-	ul *= 10;
-	if (ul > 9999*10) { // do not scale if 9999 or less
-		while (ul >= 10000) {
+	unsigned v, u, idx = 0;
+
+	if (ul > 9999) { // do not scale if 9999 or less
+		ul *= 10;
+		do {
 			ul /= 1024;
 			idx++;
-		}
+		} while (ul >= 10000);
 	}
 	v = ul; // ullong divisions are expensive, avoid them
 
 	fmt = " 123456789";
-	if (!idx) {		// 9999 or less: use 1234 format
-		c = buf[0] = " 123456789"[v/10000];
-		if (c!=' ') fmt = "0123456789";
-		c = buf[1] = fmt[v/1000%10];
-		if (c!=' ') fmt = "0123456789";
-		buf[2] = fmt[v/100%10];
-		buf[3] = "0123456789"[v/10%10];
+	u = v / 10;
+	v = v % 10;
+	if (!idx) {
+		// 9999 or less: use "1234" format
+		// u is value/10, v is last digit
+		c = buf[0] = " 123456789"[u/100];
+		if (c != ' ') fmt = "0123456789";
+		c = buf[1] = fmt[u/10%10];
+		if (c != ' ') fmt = "0123456789";
+		buf[2] = fmt[u%10];
+		buf[3] = "0123456789"[v];
 	} else {
-		if (v>=10*10) {	// scaled value is >=10: use 123M format
-			c = buf[0] = " 123456789"[v/1000];
-			if (c!=' ') fmt = "0123456789";
-			buf[1] = fmt[v/100%10];
-			buf[2] = "0123456789"[v/10%10];
-		} else {	// scaled value is <10: use 1.2M format
-			buf[0] = "0123456789"[v/10];
+		// u is value, v is 1/10ths (allows for 9.2M format)
+		if (u >= 10) {
+			// value is >= 10: use "123M', " 12M" formats
+			c = buf[0] = " 123456789"[u/100];
+			if (c != ' ') fmt = "0123456789";
+			v = u % 10;
+			u = u / 10;
+			buf[1] = fmt[u%10];
+		} else {
+			// value is < 10: use "9.2M" format
+			buf[0] = "0123456789"[u];
 			buf[1] = '.';
-			buf[2] = "0123456789"[v%10];
 		}
+		buf[2] = "0123456789"[v];
 		// see http://en.wikipedia.org/wiki/Tera
-		buf[3] = " kMGTPEZY"[idx];
+		// (small letters stand out better versus numbers)
+		buf[3] = " kmgtpezy"[idx];
 	}
 	buf[4] = '\0';
 }
 
-// Convert unsigned integer to ascii, writing into supplied buffer.  A
-// truncated result is always null terminated (unless buflen is 0), and
-// contains the first few digits of the result ala strncpy.
+// Convert unsigned integer to ascii, writing into supplied buffer.
+// A truncated result contains the first few digits of the result ala strncpy.
+// Returns a pointer past last generated digit, does _not_ store NUL.
 void BUG_sizeof_unsigned_not_4(void);
-void utoa_to_buf(unsigned n, char *buf, unsigned buflen)
+char *utoa_to_buf(unsigned n, char *buf, unsigned buflen)
 {
 	unsigned i, out, res;
 	if (sizeof(unsigned) != 4)
@@ -293,19 +354,19 @@ void utoa_to_buf(unsigned n, char *buf, unsigned buflen)
 				*buf++ = '0' + res;
 			}
 		}
-		*buf = '\0';
 	}
+	return buf;
 }
 
 // Convert signed integer to ascii, like utoa_to_buf()
-void itoa_to_buf(int n, char *buf, unsigned buflen)
+char *itoa_to_buf(int n, char *buf, unsigned buflen)
 {
 	if (buflen && n<0) {
 		n = -n;
 		*buf++ = '-';
 		buflen--;
 	}
-	utoa_to_buf((unsigned)n, buf, buflen);
+	return utoa_to_buf((unsigned)n, buf, buflen);
 }
 
 // The following two functions use a static buffer, so calling either one a
@@ -320,7 +381,7 @@ static char local_buf[12];
 // Convert unsigned integer to ascii using a static buffer (returned).
 char *utoa(unsigned n)
 {
-	utoa_to_buf(n, local_buf, sizeof(local_buf));
+	*(utoa_to_buf(n, local_buf, sizeof(local_buf))) = '\0';
 
 	return local_buf;
 }
@@ -328,7 +389,7 @@ char *utoa(unsigned n)
 // Convert signed integer to ascii using a static buffer (returned).
 char *itoa(int n)
 {
-	itoa_to_buf(n, local_buf, sizeof(local_buf));
+	*(itoa_to_buf(n, local_buf, sizeof(local_buf))) = '\0';
 
 	return local_buf;
 }
@@ -351,13 +412,13 @@ char *bin2hex(char *p, const char *cp, int count)
 // setgid() will fail and we'll _still_be_root_, which is bad.)
 void xsetgid(gid_t gid)
 {
-	if (setgid(gid)) bb_error_msg_and_die("setgid");
+	if (setgid(gid)) bb_perror_msg_and_die("setgid");
 }
 
 // Die with an error message if we can't set uid.  (See xsetgid() for why.)
 void xsetuid(uid_t uid)
 {
-	if (setuid(uid)) bb_error_msg_and_die("setuid");
+	if (setuid(uid)) bb_perror_msg_and_die("setuid");
 }
 
 // Return how long the file at fd is, if there's any way to determine it.
@@ -400,6 +461,14 @@ off_t fdlength(int fd)
 	return pos + 1;
 }
 
+int bb_putchar(int ch)
+{
+	/* time.c needs putc(ch, stdout), not putchar(ch).
+	 * it does "stdout = stderr;", but then glibc's putchar()
+	 * doesn't work as expected. bad glibc, bad */
+	return putc(ch, stdout);
+}
+
 // Die with an error message if we can't malloc() enough space and do an
 // sprintf() into that space.
 char *xasprintf(const char *format, ...)
@@ -424,7 +493,8 @@ char *xasprintf(const char *format, ...)
 	va_end(p);
 #endif
 
-	if (r < 0) bb_error_msg_and_die(bb_msg_memory_exhausted);
+	if (r < 0)
+		bb_error_msg_and_die(bb_msg_memory_exhausted);
 	return string_ptr;
 }
 
@@ -443,12 +513,14 @@ int fdprintf(int fd, const char *format, ...)
 #else
 	// Bloat for systems that haven't got the GNU extension.
 	va_start(p, format);
-	r = vsnprintf(NULL, 0, format, p);
+	r = vsnprintf(NULL, 0, format, p) + 1;
 	va_end(p);
-	string_ptr = xmalloc(r+1);
-	va_start(p, format);
-	r = vsnprintf(string_ptr, r+1, format, p);
-	va_end(p);
+	string_ptr = malloc(r);
+	if (string_ptr) {
+		va_start(p, format);
+		r = vsnprintf(string_ptr, r, format, p);
+		va_end(p);
+	}
 #endif
 
 	if (r >= 0) {
@@ -466,7 +538,7 @@ void xprint_and_close_file(FILE *file)
 	fflush(stdout);
 	// copyfd outputs error messages for us.
 	if (bb_copyfd_eof(fileno(file), 1) == -1)
-		exit(xfunc_error_retval);
+		xfunc_die();
 
 	fclose(file);
 }
@@ -483,10 +555,9 @@ DIR *warn_opendir(const char *path)
 {
 	DIR *dp;
 
-	if ((dp = opendir(path)) == NULL) {
-		bb_perror_msg("cannot open '%s'", path);
-		return NULL;
-	}
+	dp = opendir(path);
+	if (!dp)
+		bb_perror_msg("can't open '%s'", path);
 	return dp;
 }
 
@@ -495,54 +566,10 @@ DIR *xopendir(const char *path)
 {
 	DIR *dp;
 
-	if ((dp = opendir(path)) == NULL)
-		bb_perror_msg_and_die("cannot open '%s'", path);
+	dp = opendir(path);
+	if (!dp)
+		bb_perror_msg_and_die("can't open '%s'", path);
 	return dp;
-}
-
-#ifndef BB_NOMMU
-// Die with an error message if we can't daemonize.
-void xdaemon(int nochdir, int noclose)
-{
-	if (daemon(nochdir, noclose))
-		bb_perror_msg_and_die("daemon");
-}
-#endif
-
-void bb_sanitize_stdio_maybe_daemonize(int daemonize)
-{
-	int fd;
-	/* Mega-paranoid */
-	fd = xopen(bb_dev_null, O_RDWR);
-	while ((unsigned)fd < 2)
-		fd = dup(fd); /* have 0,1,2 open at least to /dev/null */
-	if (daemonize) {
-#ifdef BB_NOMMU
-		bb_error_msg_and_die("fork");
-#else
-		pid_t pid = fork();
-		if (pid < 0) /* wtf? */
-			bb_perror_msg_and_die("fork");
-		if (pid) /* parent */
-			exit(0);
-		/* child */
-		/* if daemonizing, make sure we detach from stdio */
-		setsid();
-		dup2(fd, 0);
-		dup2(fd, 1);
-		dup2(fd, 2);
-#endif
-	}
-	while (fd > 2)
-		close(fd--); /* close everything after fd#2 */
-}
-void bb_sanitize_stdio(void)
-{
-	bb_sanitize_stdio_maybe_daemonize(0);
-}
-void bb_daemonize(void)
-{
-	bb_sanitize_stdio_maybe_daemonize(1);
 }
 
 // Die with an error message if we can't open a new socket.
@@ -550,7 +577,18 @@ int xsocket(int domain, int type, int protocol)
 {
 	int r = socket(domain, type, protocol);
 
-	if (r < 0) bb_perror_msg_and_die("socket");
+	if (r < 0) {
+		/* Hijack vaguely related config option */
+#if ENABLE_VERBOSE_RESOLUTION_ERRORS
+		const char *s = "INET";
+		if (domain == AF_PACKET) s = "PACKET";
+		if (domain == AF_NETLINK) s = "NETLINK";
+USE_FEATURE_IPV6(if (domain == AF_INET6) s = "INET6";)
+		bb_perror_msg_and_die("socket(AF_%s)", s);
+#else
+		bb_perror_msg_and_die("socket");
+#endif
+	}
 
 	return r;
 }
@@ -565,6 +603,20 @@ void xbind(int sockfd, struct sockaddr *my_addr, socklen_t addrlen)
 void xlisten(int s, int backlog)
 {
 	if (listen(s, backlog)) bb_perror_msg_and_die("listen");
+}
+
+/* Die with an error message if sendto failed.
+ * Return bytes sent otherwise  */
+ssize_t xsendto(int s, const  void *buf, size_t len, const struct sockaddr *to,
+				socklen_t tolen)
+{
+	ssize_t ret = sendto(s, buf, len, 0, to, tolen);
+	if (ret < 0) {
+		if (ENABLE_FEATURE_CLEAN_UP)
+			close(s);
+		bb_perror_msg_and_die("sendto");
+	}
+	return ret;
 }
 
 // xstat() - a stat() which dies on failure with meaningful error message
@@ -591,7 +643,7 @@ void selinux_or_die(void)
 
 /* It is perfectly ok to pass in a NULL for either width or for
  * height, in which case that value will not be set.  */
-int get_terminal_width_height(const int fd, int *width, int *height)
+int get_terminal_width_height(int fd, int *width, int *height)
 {
 	struct winsize win = { 0, 0, 0, 0 };
 	int ret = ioctl(fd, TIOCGWINSZ, &win);
@@ -618,3 +670,61 @@ int get_terminal_width_height(const int fd, int *width, int *height)
 
 	return ret;
 }
+
+void ioctl_or_perror_and_die(int fd, int request, void *argp, const char *fmt,...)
+{
+	va_list p;
+
+	if (ioctl(fd, request, argp) < 0) {
+		va_start(p, fmt);
+		bb_verror_msg(fmt, p, strerror(errno));
+		/* xfunc_die can actually longjmp, so be nice */
+		va_end(p);
+		xfunc_die();
+	}
+}
+
+int ioctl_or_perror(int fd, int request, void *argp, const char *fmt,...)
+{
+	va_list p;
+	int ret = ioctl(fd, request, argp);
+
+	if (ret < 0) {
+		va_start(p, fmt);
+		bb_verror_msg(fmt, p, strerror(errno));
+		va_end(p);
+	}
+	return ret;
+}
+
+#if ENABLE_IOCTL_HEX2STR_ERROR
+int bb_ioctl_or_warn(int fd, int request, void *argp, const char *ioctl_name)
+{
+	int ret;
+
+	ret = ioctl(fd, request, argp);
+	if (ret < 0)
+		bb_simple_perror_msg(ioctl_name);
+	return ret;
+}
+void bb_xioctl(int fd, int request, void *argp, const char *ioctl_name)
+{
+	if (ioctl(fd, request, argp) < 0)
+		bb_simple_perror_msg_and_die(ioctl_name);
+}
+#else
+int bb_ioctl_or_warn(int fd, int request, void *argp)
+{
+	int ret;
+
+	ret = ioctl(fd, request, argp);
+	if (ret < 0)
+		bb_perror_msg("ioctl %#x failed", request);
+	return ret;
+}
+void bb_xioctl(int fd, int request, void *argp)
+{
+	if (ioctl(fd, request, argp) < 0)
+		bb_perror_msg_and_die("ioctl %#x failed", request);
+}
+#endif

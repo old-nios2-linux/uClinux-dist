@@ -149,7 +149,7 @@ struct xbsd_disklabel {
 #define BSD_DSTYPE_DOSPART(s)   ((s) & 3)       /* dos partition number */
 #define BSD_DSTYPE_GEOMETRY     0x10            /* drive params in label */
 
-static const char * const xbsd_dktypenames[] = {
+static const char *const xbsd_dktypenames[] = {
 	"unknown",
 	"SMD",
 	"MSCP",
@@ -163,7 +163,7 @@ static const char * const xbsd_dktypenames[] = {
 	"floppy",
 	0
 };
-#define BSD_DKMAXTYPES  (sizeof(xbsd_dktypenames) / sizeof(xbsd_dktypenames[0]) - 1)
+
 
 /*
  * Filesystem type and version.
@@ -219,7 +219,6 @@ static const char *const xbsd_fstypes[] = {
 	"\x10" "AdvFS",             /* BSD_FS_ADVFS   */
 	NULL
 };
-#define BSD_FSMAXTYPES (SIZE(xbsd_fstypes)-1)
 
 
 /*
@@ -240,8 +239,6 @@ static const char *const xbsd_fstypes[] = {
    support for OSF/1 disklabels on Alpha.
    Also fixed unaligned accesses in alpha_bootblock_checksum()
 */
-
-static int possibly_osf_label;
 
 #define FREEBSD_PARTITION       0xa5
 #define NETBSD_PARTITION        0xa9
@@ -395,7 +392,7 @@ bsd_select(void)
 #endif
 
 	while (1) {
-		putchar('\n');
+		bb_putchar('\n');
 		switch (tolower(read_nonempty("BSD disklabel command (m for help): "))) {
 		case 'd':
 			xbsd_delete_part();
@@ -509,7 +506,7 @@ xbsd_print_disklabel(int show_all)
 #else
 		printf("# %s:\n", partname(disk_device, xbsd_part_index+1, 0));
 #endif
-		if ((unsigned) lp->d_type < BSD_DKMAXTYPES)
+		if ((unsigned) lp->d_type < ARRAY_SIZE(xbsd_dktypenames)-1)
 			printf("type: %s\n", xbsd_dktypenames[lp->d_type]);
 		else
 			printf("type: %d\n", lp->d_type);
@@ -522,7 +519,7 @@ xbsd_print_disklabel(int show_all)
 			printf(" ecc");
 		if (lp->d_flags & BSD_D_BADSECT)
 			printf(" badsect");
-		puts("");
+		bb_putchar('\n');
 		/* On various machines the fields of *lp are short/int/long */
 		/* In order to avoid problems, we cast them all to long. */
 		printf("bytes/sector: %ld\n", (long) lp->d_secsize);
@@ -571,7 +568,7 @@ xbsd_print_disklabel(int show_all)
 				);
 			}
 
-			if ((unsigned) pp->p_fstype < BSD_FSMAXTYPES)
+			if ((unsigned) pp->p_fstype < ARRAY_SIZE(xbsd_fstypes)-1)
 				printf("%8.8s", xbsd_fstypes[pp->p_fstype]);
 			else
 				printf("%8x", pp->p_fstype);
@@ -589,7 +586,7 @@ xbsd_print_disklabel(int show_all)
 				printf("%22.22s", "");
 				break;
 			}
-			puts("");
+			bb_putchar('\n');
 		}
 	}
 }
@@ -877,10 +874,10 @@ xbsd_initlabel(struct partition *p)
 	d->d_flags = 0;
 #endif
 	d->d_secsize = SECTOR_SIZE;           /* bytes/sector  */
-	d->d_nsectors = sectors;              /* sectors/track */
-	d->d_ntracks = heads;                 /* tracks/cylinder (heads) */
-	d->d_ncylinders = cylinders;
-	d->d_secpercyl  = sectors * heads;    /* sectors/cylinder */
+	d->d_nsectors = g_sectors;            /* sectors/track */
+	d->d_ntracks = g_heads;               /* tracks/cylinder (heads) */
+	d->d_ncylinders = g_cylinders;
+	d->d_secpercyl  = g_sectors * g_heads;/* sectors/cylinder */
 	if (d->d_secpercyl == 0)
 		d->d_secpercyl = 1;           /* avoid segfaults */
 	d->d_secperunit = d->d_secpercyl * d->d_ncylinders;
@@ -1028,7 +1025,7 @@ xbsd_link_part(void)
 	int k, i;
 	struct partition *p;
 
-	k = get_partition(1, partitions);
+	k = get_partition(1, g_partitions);
 
 	if (!xbsd_check_new_partition(&i))
 		return;

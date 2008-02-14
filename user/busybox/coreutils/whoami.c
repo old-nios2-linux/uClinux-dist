@@ -9,18 +9,18 @@
 
 /* BB_AUDIT SUSv3 N/A -- Matches GNU behavior. */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int whoami_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int whoami_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int whoami_main(int argc, char **argv)
 {
 	if (argc > 1)
 		bb_show_usage();
 
-	puts(bb_getpwuid(NULL, geteuid(), -1));
-	/* exits on error */
-	fflush_stdout_and_exit(EXIT_SUCCESS);
+	/* Will complain and die if username not found */
+	puts(bb_getpwuid(NULL, -1, geteuid()));
+
+	return fflush(stdout);
 }

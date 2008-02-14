@@ -20,12 +20,11 @@
  * 3) Save some space by using strcmp().  Calling strncmp() here was silly.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int basename_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int basename_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int basename_main(int argc, char **argv)
 {
 	size_t m, n;
@@ -35,7 +34,8 @@ int basename_main(int argc, char **argv)
 		bb_show_usage();
 	}
 
-	s = bb_get_last_path_component(*++argv);
+	/* It should strip slash: /abc/def/ -> def */
+	s = bb_get_last_path_component_strip(*++argv);
 
 	if (*++argv) {
 		n = strlen(*argv);
@@ -47,5 +47,5 @@ int basename_main(int argc, char **argv)
 
 	puts(s);
 
-	fflush_stdout_and_exit(EXIT_SUCCESS);
+	return fflush(stdout);
 }

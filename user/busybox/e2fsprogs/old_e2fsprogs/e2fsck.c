@@ -2168,7 +2168,7 @@ static int e2fsck_run_ext3_journal(e2fsck_t ctx)
  * This function will move the journal inode from a visible file in
  * the filesystem directory hierarchy to the reserved inode if necessary.
  */
-static const char * const journal_names[] = {
+static const char *const journal_names[] = {
 	".journal", "journal", ".journal.dat", "journal.dat", 0 };
 
 static void e2fsck_move_ext3_journal(e2fsck_t ctx)
@@ -2179,7 +2179,7 @@ static void e2fsck_move_ext3_journal(e2fsck_t ctx)
 	ext2_filsys             fs = ctx->fs;
 	ext2_ino_t              ino;
 	errcode_t               retval;
-	const char * const *    cpp;
+	const char *const *    cpp;
 	int                     group, mount_flags;
 
 	clear_problem_context(&pctx);
@@ -2372,7 +2372,7 @@ err_out:
  * abbreviation of the form '@<i>' is expanded by looking up the index
  * letter <i> in the table below.
  */
-static const char * const abbrevs[] = {
+static const char *const abbrevs[] = {
 	N_("aextended attribute"),
 	N_("Aerror allocating"),
 	N_("bblock"),
@@ -2410,7 +2410,7 @@ static const char * const abbrevs[] = {
  * Give more user friendly names to the "special" inodes.
  */
 #define num_special_inodes      11
-static const char * const special_inode_name[] =
+static const char *const special_inode_name[] =
 {
 	N_("<The NULL inode>"),                 /* 0 */
 	N_("<The bad blocks inode>"),           /* 1 */
@@ -2443,10 +2443,10 @@ static void safe_print(const char *cp, int len)
 			ch -= 128;
 		}
 		if ((ch < 32) || (ch == 0x7f)) {
-			fputc('^', stdout);
+			bb_putchar('^');
 			ch ^= 0x40; /* ^@, ^A, ^B; ^? for DEL */
 		}
-		fputc(ch, stdout);
+		bb_putchar(ch);
 	}
 }
 
@@ -2485,7 +2485,7 @@ static void expand_at_expression(e2fsck_t ctx, char ch,
 					  struct problem_context *pctx,
 					  int *first)
 {
-	const char * const *cpp;
+	const char *const *cpp;
 	const char *str;
 
 	/* Search for the abbreviation */
@@ -2497,7 +2497,7 @@ static void expand_at_expression(e2fsck_t ctx, char ch,
 		str = _(*cpp) + 1;
 		if (*first && islower(*str)) {
 			*first = 0;
-			fputc(toupper(*str++), stdout);
+			bb_putchar(toupper(*str++));
 		}
 		print_e2fsck_message(ctx, str, pctx, *first);
 	} else
@@ -2630,7 +2630,7 @@ static void expand_percent_expression(ext2_filsys fs, char ch,
 
 	switch (ch) {
 	case '%':
-		fputc('%', stdout);
+		bb_putchar('%');
 		break;
 	case 'b':
 		printf("%u", ctx->blk);
@@ -2654,7 +2654,7 @@ static void expand_percent_expression(ext2_filsys fs, char ch,
 		printf("%u", ctx->ino2);
 		break;
 	case 'm':
-		printf("%s", error_message(ctx->errcode));
+		fputs(error_message(ctx->errcode), stdout);
 		break;
 	case 'N':
 		printf("%"PRIi64, ctx->num);
@@ -2676,7 +2676,7 @@ static void expand_percent_expression(ext2_filsys fs, char ch,
 		printf("%d", get_backup_sb(NULL, fs, NULL, NULL));
 		break;
 	case 's':
-		printf("%s", ctx->str ? ctx->str : "NULL");
+		fputs((ctx->str ? ctx->str : "NULL"), stdout);
 		break;
 	case 'X':
 		printf("0x%"PRIi64, ctx->num);
@@ -4701,7 +4701,7 @@ static void add_dupe(e2fsck_t ctx, ext2_ino_t ino, blk_t blk,
 	else {
 		di = (struct dup_inode *) e2fsck_allocate_memory(ctx,
 			 sizeof(struct dup_inode), "duplicate inode header");
-		di->dir = (ino == EXT2_ROOT_INO) ? EXT2_ROOT_INO : 0 ;
+		di->dir = (ino == EXT2_ROOT_INO) ? EXT2_ROOT_INO : 0;
 		di->num_dupblocks = 0;
 		di->block_list = 0;
 		di->inode = *inode;
@@ -8178,7 +8178,7 @@ struct latch_descr {
  * These are the prompts which are used to ask the user if they want
  * to fix a problem.
  */
-static const char * const prompt[] = {
+static const char *const prompt[] = {
 	N_("(no prompt)"),      /* 0 */
 	N_("Fix"),              /* 1 */
 	N_("Clear"),            /* 2 */
@@ -8206,7 +8206,7 @@ static const char * const prompt[] = {
  * These messages are printed when we are preen mode and we will be
  * automatically fixing the problem.
  */
-static const char * const preen_msg[] = {
+static const char *const preen_msg[] = {
 	N_("(NONE)"),           /* 0 */
 	N_("FIXED"),            /* 1 */
 	N_("CLEARED"),          /* 2 */
@@ -12490,7 +12490,7 @@ blk_t get_backup_sb(e2fsck_t ctx, ext2_filsys fs, const char *name,
 	sb = (struct ext2_super_block *) buf;
 
 	for (blocksize = EXT2_MIN_BLOCK_SIZE;
-	     blocksize <= EXT2_MAX_BLOCK_SIZE ; blocksize *= 2) {
+	     blocksize <= EXT2_MAX_BLOCK_SIZE; blocksize *= 2) {
 		superblock = blocksize*8;
 		if (blocksize == 1024)
 			superblock++;
@@ -12660,7 +12660,7 @@ static void check_mount(e2fsck_t ctx)
 	cont = ask_yn(_("Do you really want to continue"), -1);
 	if (!cont) {
 		printf(_("check aborted.\n"));
-		exit (0);
+		exit(0);
 	}
 }
 
@@ -12767,7 +12767,7 @@ static void check_if_skip(e2fsck_t ctx)
 		else
 			printf(_(" (check in %ld mounts)"), next_check);
 	}
-	fputc('\n', stdout);
+	bb_putchar('\n');
 	ext2fs_close(fs);
 	ctx->fs = NULL;
 	e2fsck_free_context(ctx);
@@ -12864,9 +12864,9 @@ int e2fsck_simple_progress(e2fsck_t ctx, const char *label, float percent,
 	       bar + (sizeof(bar) - (i+1)),
 	       spaces + (sizeof(spaces) - (dpywidth - i + 1)));
 	if (fixed_percent == 1000)
-		fputc('|', stdout);
+		bb_putchar('|');
 	else
-		fputc(spinner[ctx->progress_pos & 3], stdout);
+		bb_putchar(spinner[ctx->progress_pos & 3]);
 	printf(" %4.1f%%  ", percent);
 	if (dpynum)
 		printf("%u\r", dpynum);
@@ -13001,7 +13001,7 @@ static void parse_extended_opts(e2fsck_t ctx, const char *opts)
 }
 
 
-static errcode_t PRS(int argc, char *argv[], e2fsck_t *ret_ctx)
+static errcode_t PRS(int argc, char **argv, e2fsck_t *ret_ctx)
 {
 	int             flush = 0;
 	int             c, fd;
@@ -13202,8 +13202,8 @@ static errcode_t PRS(int argc, char *argv[], e2fsck_t *ret_ctx)
 static const char my_ver_string[] = E2FSPROGS_VERSION;
 static const char my_ver_date[] = E2FSPROGS_DATE;
 
-int e2fsck_main (int argc, char *argv[]);
-int e2fsck_main (int argc, char *argv[])
+int e2fsck_main (int argc, char **argv);
+int e2fsck_main (int argc, char **argv)
 {
 	errcode_t       retval;
 	int             exit_value = EXIT_OK;

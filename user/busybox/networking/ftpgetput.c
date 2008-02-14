@@ -5,7 +5,7 @@
  * Mini implementation of FTP to retrieve a remote file.
  *
  * Copyright (C) 2002 Jeff Angielski, The PTR Group <jeff@theptrgroup.com>
- * Copyright (C) 2002 Glenn McGrath <bug1@iinet.net.au>
+ * Copyright (C) 2002 Glenn McGrath
  *
  * Based on wget.c by Chip Rosenthal Covad Communications
  * <chip@laserlink.net>
@@ -13,8 +13,8 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
 #include <getopt.h>
+#include "libbb.h"
 
 typedef struct ftp_host_info_s {
 	const char *user;
@@ -287,17 +287,16 @@ int ftp_send(ftp_host_info_t *server, FILE *control_stream,
 #define FTPGETPUT_OPT_PORT	16
 
 #if ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS
-static const struct option ftpgetput_long_options[] = {
-	{ "continue", 1, NULL, 'c' },
-	{ "verbose", 0, NULL, 'v' },
-	{ "username", 1, NULL, 'u' },
-	{ "password", 1, NULL, 'p' },
-	{ "port", 1, NULL, 'P' },
-	{ 0, 0, 0, 0 }
-};
+static const char ftpgetput_longopts[] ALIGN1 =
+	"continue\0" Required_argument "c"
+	"verbose\0"  No_argument       "v"
+	"username\0" Required_argument "u"
+	"password\0" Required_argument "p"
+	"port\0"     Required_argument "P"
+	;
 #endif
 
-int ftpgetput_main(int argc, char **argv);
+int ftpgetput_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ftpgetput_main(int argc, char **argv)
 {
 	/* content-length of the file */
@@ -329,10 +328,10 @@ int ftpgetput_main(int argc, char **argv)
 	 * Decipher the command line
 	 */
 #if ENABLE_FEATURE_FTPGETPUT_LONG_OPTIONS
-	applet_long_options = ftpgetput_long_options;
+	applet_long_options = ftpgetput_longopts;
 #endif
 	opt_complementary = "=3"; /* must have 3 params */
-	opt = getopt32(argc, argv, "cvu:p:P:", &server->user, &server->password, &port);
+	opt = getopt32(argv, "cvu:p:P:", &server->user, &server->password, &port);
 	argv += optind;
 
 	/* Process the non-option command line arguments */
@@ -349,7 +348,7 @@ int ftpgetput_main(int argc, char **argv)
 	server->lsa = xhost2sockaddr(argv[0], bb_lookup_port(port, "tcp", 21));
 	if (verbose_flag) {
 		printf("Connecting to %s (%s)\n", argv[0],
-			xmalloc_sockaddr2dotted(&server->lsa->sa, server->lsa->len));
+			xmalloc_sockaddr2dotted(&server->lsa->sa));
 	}
 
 	/*  Connect/Setup/Configure the FTP session */

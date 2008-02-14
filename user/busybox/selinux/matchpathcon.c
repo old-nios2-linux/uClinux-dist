@@ -4,7 +4,7 @@
  * Port to busybox: KaiGai Kohei <kaigai@kaigai.gr.jp>
  *
  */
-#include "busybox.h"
+#include "libbb.h"
 
 static int print_matchpathcon(char *path, int noprint)
 {
@@ -17,7 +17,7 @@ static int print_matchpathcon(char *path, int noprint)
 	if (!noprint)
 		printf("%s\t%s\n", path, buf);
 	else
-		printf("%s\n", buf);
+		puts(buf);
 
 	freecon(buf);
 	return 0;
@@ -29,7 +29,7 @@ static int print_matchpathcon(char *path, int noprint)
 #define OPT_PREFIX      (1<<3)  /* -p */
 #define OPT_VERIFY      (1<<4)  /* -V */
 
-int matchpathcon_main(int argc, char **argv);
+int matchpathcon_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int matchpathcon_main(int argc, char **argv)
 {
 	int error = 0;
@@ -38,7 +38,7 @@ int matchpathcon_main(int argc, char **argv)
 
 	opt_complementary = "-1" /* at least one param reqd */
 		":?:f--p:p--f"; /* mutually exclusive */
-	opts = getopt32(argc, argv, "nNf:p:V", &fcontext, &prefix);
+	opts = getopt32(argv, "nNf:p:V", &fcontext, &prefix);
 	argv += optind;
 
 	if (opts & OPT_NOT_TRANS) {
@@ -53,7 +53,7 @@ int matchpathcon_main(int argc, char **argv)
 			bb_perror_msg_and_die("error while processing %s", prefix);
 	}
 
-	while((path = *argv++) != NULL) {
+	while ((path = *argv++) != NULL) {
 		security_context_t con;
 		int rc;
 

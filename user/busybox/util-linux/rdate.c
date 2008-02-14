@@ -8,7 +8,7 @@
  * Licensed under GPL v2 or later, see file License for details.
 */
 
-#include "busybox.h"
+#include "libbb.h"
 
 enum { RFC_868_BIAS = 2208988800UL };
 
@@ -42,14 +42,14 @@ static time_t askremotedate(const char *host)
 	return ntohl(nett) - RFC_868_BIAS;
 }
 
-int rdate_main(int argc, char **argv);
+int rdate_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int rdate_main(int argc, char **argv)
 {
 	time_t remote_time;
 	unsigned long flags;
 
 	opt_complementary = "-1";
-	flags = getopt32(argc, argv, "sp");
+	flags = getopt32(argv, "sp");
 
 	remote_time = askremotedate(argv[optind]);
 

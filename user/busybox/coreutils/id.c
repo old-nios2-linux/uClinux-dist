@@ -13,23 +13,20 @@
  * -Z option support: by Yuichi Nakamura <ynakam@hitachisoft.jp>
  */
 
-#include "busybox.h"
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
+#include "libbb.h"
 
 #define PRINT_REAL        1
 #define NAME_NOT_NUMBER   2
 #define JUST_USER         4
 #define JUST_GROUP        8
 #if ENABLE_SELINUX
-#define JUST_CONTEXT    16
+#define JUST_CONTEXT     16
 #endif
 
-static short printf_full(unsigned int id, const char *arg, const char prefix)
+static int printf_full(unsigned int id, const char *arg, const char prefix)
 {
 	const char *fmt = "%cid=%u";
-	short status = EXIT_FAILURE;
+	int status = EXIT_FAILURE;
 
 	if (arg) {
 		fmt = "%cid=%u(%s)";
@@ -39,7 +36,7 @@ static short printf_full(unsigned int id, const char *arg, const char prefix)
 	return status;
 }
 
-int id_main(int argc, char **argv);
+int id_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int id_main(int argc, char **argv)
 {
 	struct passwd *p;
@@ -52,8 +49,8 @@ int id_main(int argc, char **argv)
 #endif
 	/* Don't allow -n -r -nr -ug -rug -nug -rnug */
 	/* Don't allow more than one username */
-	opt_complementary = "?1:?:u--g:g--u:r?ug:n?ug" USE_SELINUX(":u--Z:Z--u:g--Z:Z--g");
-	flags = getopt32(argc, argv, "rnug" USE_SELINUX("Z"));
+	opt_complementary = "?1:u--g:g--u:r?ug:n?ug" USE_SELINUX(":u--Z:Z--u:g--Z:Z--g");
+	flags = getopt32(argv, "rnug" USE_SELINUX("Z"));
 
 	/* This values could be overwritten later */
 	uid = geteuid();
@@ -74,8 +71,8 @@ int id_main(int argc, char **argv)
 	if (flags & (JUST_GROUP | JUST_USER USE_SELINUX(| JUST_CONTEXT))) {
 		/* JUST_GROUP and JUST_USER are mutually exclusive */
 		if (flags & NAME_NOT_NUMBER) {
-			/* bb_getpwuid and bb_getgrgid exit on failure so puts cannot segfault */
-			puts((flags & JUST_USER) ? bb_getpwuid(NULL, uid, -1 ) : bb_getgrgid(NULL, gid, -1 ));
+			/* bb_getXXXid(-1) exit on failure, puts cannot segfault */
+			puts((flags & JUST_USER) ? bb_getpwuid(NULL, -1, uid) : bb_getgrgid(NULL, -1, gid));
 		} else {
 			if (flags & JUST_USER) {
 				printf("%u\n", uid);
@@ -95,7 +92,7 @@ int id_main(int argc, char **argv)
 			if (getcon(&scontext)) {
 				bb_error_msg_and_die("can't get process context");
 			}
-			printf("%s\n", scontext);
+			puts(scontext);
 		}
 #endif
 		/* exit */
@@ -103,11 +100,10 @@ int id_main(int argc, char **argv)
 	}
 
 	/* Print full info like GNU id */
-	/* bb_getpwuid doesn't exit on failure here */
-	status = printf_full(uid, bb_getpwuid(NULL, uid, 0), 'u');
-	putchar(' ');
-	/* bb_getgrgid doesn't exit on failure here */
-	status |= printf_full(gid, bb_getgrgid(NULL, gid, 0), 'g');
+	/* bb_getpwuid(0) doesn't exit on failure (returns NULL) */
+	status = printf_full(uid, bb_getpwuid(NULL, 0, uid), 'u');
+	bb_putchar(' ');
+	status |= printf_full(gid, bb_getgrgid(NULL, 0, gid), 'g');
 
 #if ENABLE_SELINUX
 	if (is_selinux_enabled()) {
@@ -125,6 +121,6 @@ int id_main(int argc, char **argv)
 	}
 #endif
 
-	putchar('\n');
+	bb_putchar('\n');
 	fflush_stdout_and_exit(status);
 }

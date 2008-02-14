@@ -10,12 +10,13 @@
 /* BB_AUDIT SUSv3 compliant */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/rmdir.html */
 
-#include <stdlib.h>
-#include <unistd.h>
 #include <libgen.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int rmdir_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+
+int rmdir_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int rmdir_main(int argc, char **argv)
 {
 	int status = EXIT_SUCCESS;
@@ -23,8 +24,7 @@ int rmdir_main(int argc, char **argv)
 	int do_dot;
 	char *path;
 
-	flags = getopt32(argc, argv, "p");
-
+	flags = getopt32(argv, "p");
 	argv += optind;
 
 	if (!*argv) {
@@ -37,7 +37,7 @@ int rmdir_main(int argc, char **argv)
 		/* Record if the first char was a '.' so we can use dirname later. */
 		do_dot = (*path == '.');
 
-		do {
+		while (1) {
 			if (rmdir(path) < 0) {
 				bb_perror_msg("'%s'", path);	/* Match gnu rmdir msg. */
 				status = EXIT_FAILURE;
@@ -53,7 +53,7 @@ int rmdir_main(int argc, char **argv)
 				}
 			}
 			break;
-		} while (1);
+		}
 
 	} while (*++argv);
 

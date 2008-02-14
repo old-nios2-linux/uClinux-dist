@@ -1,5 +1,5 @@
 VERSION = 1
-PATCHLEVEL = 5
+PATCHLEVEL = 9
 SUBLEVEL = 1
 EXTRAVERSION =
 NAME = Unnamed
@@ -183,11 +183,6 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-HOSTCC  	= gcc
-HOSTCXX  	= g++
-HOSTCFLAGS	= -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
-HOSTCXXFLAGS	= -O2
-
 # 	Decide whether to build built-in, modular, or both.
 #	Normally, just do built-in.
 
@@ -262,8 +257,15 @@ export quiet Q KBUILD_VERBOSE
 # Look for make include files relative to root of kernel src
 MAKEFLAGS += --include-dir=$(srctree)
 
+HOSTCC  	= gcc
+HOSTCXX  	= g++
+HOSTCFLAGS	:=
+HOSTCXXFLAGS	:=
 # We need some generic definitions
 include $(srctree)/scripts/Kbuild.include
+
+HOSTCFLAGS	+= $(call hostcc-option,-Wall -Wstrict-prototypes -O2 -fomit-frame-pointer,)
+HOSTCXXFLAGS	+= -O2
 
 # For maximum performance (+ possibly random breakage, uncomment
 # the following)
@@ -272,15 +274,15 @@ MAKEFLAGS += -rR
 
 # Make variables (CC, etc...)
 
-#AS		= $(CROSS_COMPILE)as
-#CC		= $(CROSS_COMPILE)gcc
-#LD		= $(CC) -nostdlib
-#CPP		= $(CC) -E
-#AR		= $(CROSS_COMPILE)ar
-#NM		= $(CROSS_COMPILE)nm
-#STRIP		= $(CROSS_COMPILE)strip
-#OBJCOPY		= $(CROSS_COMPILE)objcopy
-#OBJDUMP		= $(CROSS_COMPILE)objdump
+AS		= $(CROSS_COMPILE)as
+CC		= $(CROSS_COMPILE)gcc
+LD		= $(CC) -nostdlib
+CPP		= $(CC) -E
+AR		= $(CROSS_COMPILE)ar
+NM		= $(CROSS_COMPILE)nm
+STRIP		= $(CROSS_COMPILE)strip
+OBJCOPY		= $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CROSS_COMPILE)objdump
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 DEPMOD		= /sbin/depmod
@@ -435,6 +437,7 @@ libs-y		:= \
 		editors/ \
 		findutils/ \
 		init/ \
+		ipsvd/ \
 		libbb/ \
 		libpwdgrp/ \
 		loginutils/ \
@@ -464,23 +467,7 @@ ifeq ($(dot-config),1)
 # If .config needs to be updated, it will be done via the dependency
 # that autoconf has on .config.
 # To avoid any implicit rule to kick in, define an empty command
-.kconfig.d : ;
-
-Config.in: Kconfig
-	sh ./mkConfig.in
-
-.config: $(ROOTDIR)/config/.config Config.in
-	sh ./mkconfig > .config.tmp
-	if cmp -s .config .config.tmp ; \
-	then \
-		echo "CONFIGs the same!" ; \
-		rm -f .config.tmp ; \
-	else \
-		echo "CALLING make clean!" ; \
-		mv -f .config.tmp .config ; \
-		$(MAKE) clean; \
-	fi
-
+.config .kconfig.d: ;
 
 # Now we can define CFLAGS etc according to .config
 include $(srctree)/Makefile.flags
@@ -581,9 +568,13 @@ busybox-all  := $(core-y) $(libs-y)
 # Rule to link busybox - also used during CONFIG_KALLSYMS
 # May be overridden by arch/$(ARCH)/Makefile
 quiet_cmd_busybox__ ?= LINK    $@
-      cmd_busybox__ ?= $(CC) $(LDFLAGS) -o $@ \
-      -Wl,--start-group $(busybox-all) -Wl,--end-group \
-      $(LDLIBS) $(LDLIBS$(LDLIBS_$@))
+      cmd_busybox__ ?= $(srctree)/scripts/trylink \
+      "$@" \
+      "$(CC)" \
+      "$(LDFLAGS) $(EXTRA_LDFLAGS)" \
+      "$(core-y)" \
+      "$(libs-y)" \
+      "$(LDLIBS)"
 
 # Generate System.map
 quiet_cmd_sysmap = SYSMAP
@@ -771,7 +762,7 @@ PHONY += prepare-all
 # 2) Create the include2 directory, used for the second asm symlink
 prepare3: .kernelrelease
 ifneq ($(KBUILD_SRC),)
-	@echo '  Using $(srctree) as source for kernel'
+	@echo '  Using $(srctree) as source for busybox'
 	$(Q)if [ -f $(srctree)/.config ]; then \
 		echo "  $(srctree) is not clean, please run 'make mrproper'";\
 		echo "  in the '$(srctree)' directory.";\
@@ -819,8 +810,6 @@ quiet_cmd_split_autoconf   = SPLIT   include/autoconf.h -> include/config/*
       cmd_split_autoconf   = scripts/basic/split-include include/autoconf.h include/config
 #bbox# piggybacked generation of few .h files
 include/config/MARKER: scripts/basic/split-include include/autoconf.h
-	chmod +x $(srctree)/scripts/mkconfigs
-	chmod +x $(srctree)/applets/usage_compressed
 	$(call cmd,split_autoconf)
 	$(call cmd,gen_bbconfigopts)
 	@touch $@
@@ -853,7 +842,7 @@ depend dep:
 # ---------------------------------------------------------------------------
 # Modules
 
-ifdef _CONFIG_MODULES
+ifdef CONFIG_MODULES
 
 # 	By default, build modules as well
 
@@ -906,7 +895,7 @@ PHONY += _modinst_post
 _modinst_post: _modinst_
 	if [ -r System.map -a -x $(DEPMOD) ]; then $(DEPMOD) -ae -F System.map $(depmod_opts) $(KERNELRELEASE); fi
 
-else # _CONFIG_MODULES
+else # CONFIG_MODULES
 
 # Modules not configured
 # ---------------------------------------------------------------------------
@@ -919,7 +908,7 @@ modules modules_install: FORCE
 	@echo
 	@exit 1
 
-endif # _CONFIG_MODULES
+endif # CONFIG_MODULES
 
 ###
 # Cleaning is done on three levels.
@@ -939,6 +928,8 @@ MRPROPER_FILES += .config .config.old include/asm .version .old_version \
 		  include/autoconf.h \
 		  include/bbconfigopts.h \
 		  include/usage_compressed.h \
+		  include/applet_tables.h \
+		  applets/usage \
 		  .kernelrelease Module.symvers tags TAGS cscope*
 
 # clean - Delete most, but leave enough to build external modules
@@ -970,7 +961,6 @@ $(mrproper-dirs):
 	$(Q)$(MAKE) $(clean)=$(patsubst _mrproper_%,%,$@)
 
 mrproper: clean archmrproper $(mrproper-dirs)
-	@find . -name Config.in | xargs rm -f
 	$(call cmd,rmdirs)
 	$(call cmd,rmfiles)
 
@@ -982,7 +972,7 @@ distclean: mrproper
 	@find $(srctree) $(RCS_FIND_IGNORE) \
 	 	\( -name '*.orig' -o -name '*.rej' -o -name '*~' \
 		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
-	 	-o -name '.*.rej' -o -size 0 \
+	 	-o -name '.*.rej' -o -name '*.tmp' -o -size 0 \
 		-o -name '*%' -o -name '.*.cmd' -o -name 'core' \) \
 		-type f -print | xargs rm -f
 

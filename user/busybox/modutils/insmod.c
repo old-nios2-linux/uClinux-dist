@@ -58,38 +58,29 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <libgen.h>
 #include <sys/utsname.h>
-
-#ifndef FILENAME_MAX
-#include <limits.h>
-#define FILENAME_MAX NAME_MAX
-#endif
 
 #if !ENABLE_FEATURE_2_4_MODULES && !ENABLE_FEATURE_2_6_MODULES
 #undef ENABLE_FEATURE_2_4_MODULES
 #define ENABLE_FEATURE_2_4_MODULES 1
 #endif
 
-#if !ENABLE_FEATURE_2_4_MODULES
-#define insmod_ng_main insmod_main
-#endif
-
-#if ENABLE_FEATURE_2_6_MODULES
-extern int insmod_ng_main( int argc, char **argv);
-#endif
-
-
+/*
+ * Big piece of 2.4-specific code
+ */
 #if ENABLE_FEATURE_2_4_MODULES
 
+#if ENABLE_FEATURE_2_6_MODULES
+static int insmod_ng_main(int argc, char **argv);
+#endif
 
 #if ENABLE_FEATURE_INSMOD_LOADINKMEM
 #define LOADBITS 0
 #else
 #define LOADBITS 1
 #endif
-
 
 /* Alpha */
 #if defined(__alpha__)
@@ -285,7 +276,7 @@ extern int insmod_ng_main( int argc, char **argv);
 #endif
 
 /* v850e */
-#if defined (__v850e__)
+#if defined(__v850e__)
 #define MATCH_MACHINE(x) ((x) == EM_V850 || (x) == EM_CYGNUS_V850)
 #define SHT_RELM	SHT_RELA
 #define Elf32_RelM	Elf32_Rela
@@ -297,15 +288,6 @@ extern int insmod_ng_main( int argc, char **argv);
 #define EM_CYGNUS_V850	0x9080
 #endif
 #define SYMBOL_PREFIX	"_"
-#endif
-
-/* Microblaze */
-#if defined (microblaze) || defined(__microblaze__)
-#define CONFIG_USE_SINGLE
-#define MATCH_MACHINE(x)	((x) == EM_XILINX_MICROBLAZE)
-#define SHT_RELM	SHT_RELA
-#define Elf32_RelM	Elf32_Rela
-#define ELFCLASSM	ELFCLASS32
 #endif
 
 /* X86_64  */
@@ -322,6 +304,7 @@ extern int insmod_ng_main( int argc, char **argv);
 #ifndef SHT_RELM
 #error Sorry, but insmod.c does not yet support this architecture...
 #endif
+
 
 //----------------------------------------------------------------------------
 //--------modutils module.h, lines 45-242
@@ -509,7 +492,6 @@ int delete_module(const char *);
 
 /* The relocatable object is manipulated using elfin types.  */
 
-#include <stdio.h>
 #include <elf.h>
 #include <endian.h>
 
@@ -611,7 +593,7 @@ static unsigned long obj_elf_hash(const char *);
 
 static unsigned long obj_elf_hash_n(const char *, unsigned long len);
 
-static struct obj_symbol *obj_find_symbol (struct obj_file *f,
+static struct obj_symbol *obj_find_symbol(struct obj_file *f,
 					 const char *name);
 
 static ElfW(Addr) obj_symbol_final_value(struct obj_file *f,
@@ -623,57 +605,57 @@ static void obj_set_symbol_compare(struct obj_file *f,
 			    unsigned long (*hash)(const char *));
 #endif
 
-static struct obj_section *obj_find_section (struct obj_file *f,
+static struct obj_section *obj_find_section(struct obj_file *f,
 					   const char *name);
 
-static void obj_insert_section_load_order (struct obj_file *f,
+static void obj_insert_section_load_order(struct obj_file *f,
 				    struct obj_section *sec);
 
-static struct obj_section *obj_create_alloced_section (struct obj_file *f,
+static struct obj_section *obj_create_alloced_section(struct obj_file *f,
 						const char *name,
 						unsigned long align,
 						unsigned long size);
 
-static struct obj_section *obj_create_alloced_section_first (struct obj_file *f,
+static struct obj_section *obj_create_alloced_section_first(struct obj_file *f,
 						      const char *name,
 						      unsigned long align,
 						      unsigned long size);
 
-static void *obj_extend_section (struct obj_section *sec, unsigned long more);
+static void *obj_extend_section(struct obj_section *sec, unsigned long more);
 
-static int obj_string_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
+static void obj_string_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 		     const char *string);
 
-static int obj_symbol_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
+static void obj_symbol_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 		     struct obj_symbol *sym);
 
-static int obj_check_undefineds(struct obj_file *f);
+static void obj_check_undefineds(struct obj_file *f);
 
 static void obj_allocate_commons(struct obj_file *f);
 
-static unsigned long obj_load_size (struct obj_file *f);
+static unsigned long obj_load_size(struct obj_file *f);
 
-static int obj_relocate (struct obj_file *f, ElfW(Addr) base);
+static int obj_relocate(struct obj_file *f, ElfW(Addr) base);
 
 static struct obj_file *obj_load(FILE *f, int loadprogbits);
 
-static int obj_create_image (struct obj_file *f, char *image);
+static int obj_create_image(struct obj_file *f, char *image);
 
 /* Architecture specific manipulation routines.  */
 
-static struct obj_file *arch_new_file (void);
+static struct obj_file *arch_new_file(void);
 
-static struct obj_section *arch_new_section (void);
+static struct obj_section *arch_new_section(void);
 
-static struct obj_symbol *arch_new_symbol (void);
+static struct obj_symbol *arch_new_symbol(void);
 
-static enum obj_reloc arch_apply_relocation (struct obj_file *f,
+static enum obj_reloc arch_apply_relocation(struct obj_file *f,
 				      struct obj_section *targsec,
 				      struct obj_section *symsec,
 				      struct obj_symbol *sym,
 				      ElfW(RelM) *rel, ElfW(Addr) value);
 
-static void arch_create_got (struct obj_file *f);
+static void arch_create_got(struct obj_file *f);
 #if ENABLE_FEATURE_CHECK_TAINTED_MODULE
 static int obj_gpl_license(struct obj_file *f, const char **license);
 #endif /* FEATURE_CHECK_TAINTED_MODULE */
@@ -802,7 +784,6 @@ static size_t nksyms;
 static struct external_module *ext_modules;
 static int n_ext_modules;
 static int n_ext_modules_used;
-extern int delete_module(const char *);
 
 static char *m_filename;
 static char *m_fullName;
@@ -815,19 +796,16 @@ static int check_module_name_match(const char *filename, struct stat *statbuf,
 				void *userdata, int depth)
 {
 	char *fullname = (char *) userdata;
+	char *tmp;
 
 	if (fullname[0] == '\0')
 		return FALSE;
-	else {
-		char *tmp, *tmp1 = xstrdup(filename);
-		tmp = bb_get_last_path_component(tmp1);
-		if (strcmp(tmp, fullname) == 0) {
-			free(tmp1);
-			/* Stop searching if we find a match */
-			m_filename = xstrdup(filename);
-			return FALSE;
-		}
-		free(tmp1);
+
+	tmp = bb_get_last_path_component_nostrip(filename);
+	if (strcmp(tmp, fullname) == 0) {
+		/* Stop searching if we find a match */
+		m_filename = xstrdup(filename);
+		return FALSE;
 	}
 	return TRUE;
 }
@@ -838,25 +816,19 @@ static int check_module_name_match(const char *filename, struct stat *statbuf,
 static struct obj_file *arch_new_file(void)
 {
 	struct arch_file *f;
-	f = xmalloc(sizeof(*f));
-
-	memset(f, 0, sizeof(*f));
-
-	return &f->root;
+	f = xzalloc(sizeof(*f));
+	return &f->root; /* it's a first member */
 }
 
 static struct obj_section *arch_new_section(void)
 {
-	return xmalloc(sizeof(struct obj_section));
+	return xzalloc(sizeof(struct obj_section));
 }
 
 static struct obj_symbol *arch_new_symbol(void)
 {
 	struct arch_symbol *sym;
-	sym = xmalloc(sizeof(*sym));
-
-	memset(sym, 0, sizeof(*sym));
-
+	sym = xzalloc(sizeof(*sym));
 	return &sym->root;
 }
 
@@ -995,7 +967,7 @@ arch_apply_relocation(struct obj_file *f,
 			*loc += v - got;
 			break;
 
-#elif defined (__microblaze__)
+#elif defined(__microblaze__)
 		case R_MICROBLAZE_NONE:
 		case R_MICROBLAZE_64_NONE:
 		case R_MICROBLAZE_32_SYM_OP_SYM:
@@ -1553,7 +1525,7 @@ arch_apply_relocation(struct obj_file *f,
 			}
 # endif /* __SH5__ */
 
-#elif defined (__v850e__)
+#elif defined(__v850e__)
 
 		case R_V850_NONE:
 			break;
@@ -1676,7 +1648,7 @@ bb_use_plt:
 				ip[2] = 0x7d6903a6;			      /* mtctr r11 */
 				ip[3] = 0x4e800420;			      /* bctr */
 #endif
-#if defined (__v850e__)
+#if defined(__v850e__)
 				/* We have to trash a register, so we assume that any control
 				   transfer more than 21-bits away must be a function call
 				   (so we can use a call-clobbered register).  */
@@ -1689,15 +1661,15 @@ bb_use_plt:
 			/* relative distance to target */
 			v -= dot;
 			/* if the target is too far away.... */
-#if defined (__arm__) || defined (__powerpc__)
+#if defined(__arm__) || defined(__powerpc__)
 			if ((int)v < -0x02000000 || (int)v >= 0x02000000)
-#elif defined (__v850e__)
+#elif defined(__v850e__)
 				if ((ElfW(Sword))v > 0x1fffff || (ElfW(Sword))v < (ElfW(Sword))-0x200000)
 #endif
 					/* go via the plt */
 					v = plt + pe->offset - dot;
 
-#if defined (__v850e__)
+#if defined(__v850e__)
 			if (v & 1)
 #else
 				if (v & 3)
@@ -1714,7 +1686,7 @@ bb_use_plt:
 #if defined(__powerpc__)
 			*loc = (*loc & ~0x03fffffc) | (v & 0x03fffffc);
 #endif
-#if defined (__v850e__)
+#if defined(__v850e__)
 			/* We write two shorts instead of a long because even 32-bit insns
 			   only need half-word alignment, but the 32-bit data write needs
 			   to be long-word aligned.  */
@@ -1908,7 +1880,7 @@ static void arch_create_got(struct obj_file *f)
 				got_needed = 1;
 				continue;
 
-#elif defined (__v850e__)
+#elif defined(__v850e__)
 			case R_V850_22_PCREL:
 				plt_needed = 1;
 				break;
@@ -1979,7 +1951,8 @@ static unsigned long obj_elf_hash_n(const char *name, unsigned long n)
 	while (n > 0) {
 		ch = *name++;
 		h = (h << 4) + ch;
-		if ((g = (h & 0xf0000000)) != 0) {
+		g = (h & 0xf0000000);
+		if (g != 0) {
 			h ^= g >> 24;
 			h &= ~g;
 		}
@@ -2224,7 +2197,6 @@ static struct obj_section *obj_create_alloced_section(struct obj_file *f,
 	f->sections = xrealloc(f->sections, (newidx + 1) * sizeof(sec));
 	f->sections[newidx] = sec = arch_new_section();
 
-	memset(sec, 0, sizeof(*sec));
 	sec->header.sh_type = SHT_PROGBITS;
 	sec->header.sh_flags = SHF_WRITE | SHF_ALLOC;
 	sec->header.sh_size = size;
@@ -2250,7 +2222,6 @@ static struct obj_section *obj_create_alloced_section_first(struct obj_file *f,
 	f->sections = xrealloc(f->sections, (newidx + 1) * sizeof(sec));
 	f->sections[newidx] = sec = arch_new_section();
 
-	memset(sec, 0, sizeof(*sec));
 	sec->header.sh_type = SHT_PROGBITS;
 	sec->header.sh_flags = SHF_WRITE | SHF_ALLOC;
 	sec->header.sh_size = size;
@@ -2326,13 +2297,13 @@ add_symbols_from( struct obj_file *f,
 		   kernel exports `C names', but module object files
 		   reference `linker names').  */
 		size_t extra = sizeof SYMBOL_PREFIX;
-		size_t name_size = strlen (name) + extra;
+		size_t name_size = strlen(name) + extra;
 		if (name_size > name_alloced_size) {
 			name_alloced_size = name_size * 2;
-			name_buf = alloca (name_alloced_size);
+			name_buf = alloca(name_alloced_size);
 		}
-		strcpy (name_buf, SYMBOL_PREFIX);
-		strcpy (name_buf + extra - 1, name);
+		strcpy(name_buf, SYMBOL_PREFIX);
+		strcpy(name_buf + extra - 1, name);
 		name = name_buf;
 #endif /* SYMBOL_PREFIX */
 
@@ -2340,8 +2311,8 @@ add_symbols_from( struct obj_file *f,
 		if (sym && !(ELF_ST_BIND(sym->info) == STB_LOCAL)) {
 #ifdef SYMBOL_PREFIX
 			/* Put NAME_BUF into more permanent storage.  */
-			name = xmalloc (name_size);
-			strcpy (name, name_buf);
+			name = xmalloc(name_size);
+			strcpy(name, name_buf);
 #endif
 			sym = obj_add_symbol(f, name, -1,
 					ELF_ST_INFO(STB_GLOBAL,
@@ -2364,10 +2335,14 @@ static void add_kernel_symbols(struct obj_file *f)
 
 	/* Add module symbols first.  */
 
-	for (i = 0, m = ext_modules; i < n_ext_modules; ++i, ++m)
+	for (i = 0, m = ext_modules; i < n_ext_modules; ++i, ++m) {
 		if (m->nsyms
-				&& add_symbols_from(f, SHN_HIRESERVE + 2 + i, m->syms,
-					m->nsyms)) m->used = 1, ++nused;
+		 && add_symbols_from(f, SHN_HIRESERVE + 2 + i, m->syms, m->nsyms)
+		) {
+			m->used = 1;
+			++nused;
+		}
+	}
 
 	n_ext_modules_used = nused;
 
@@ -2408,7 +2383,7 @@ static char *get_modinfo_value(struct obj_file *f, const char *key)
 /*======================================================================*/
 /* Functions relating to module loading after 2.1.18.  */
 
-static int
+static void
 new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 {
 	while (argc > 0) {
@@ -2418,7 +2393,8 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 		int min, max, n;
 
 		p = *argv;
-		if ((q = strchr(p, '=')) == NULL) {
+		q = strchr(p, '=');
+		if (q == NULL) {
 			argc--;
 			continue;
 		}
@@ -2431,14 +2407,13 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 		p = get_modinfo_value(f, key);
 		key += 5;
 		if (p == NULL) {
-			bb_error_msg("invalid parameter %s", key);
-			return 0;
+			bb_error_msg_and_die("invalid parameter %s", key);
 		}
 
 #ifdef SYMBOL_PREFIX
-		sym_name = alloca (strlen (key) + sizeof SYMBOL_PREFIX);
-		strcpy (sym_name, SYMBOL_PREFIX);
-		strcat (sym_name, key);
+		sym_name = alloca(strlen(key) + sizeof SYMBOL_PREFIX);
+		strcpy(sym_name, SYMBOL_PREFIX);
+		strcat(sym_name, key);
 #else
 		sym_name = key;
 #endif
@@ -2446,8 +2421,7 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 
 		/* Also check that the parameter was not resolved from the kernel.  */
 		if (sym == NULL || sym->secidx > SHN_HIRESERVE) {
-			bb_error_msg("symbol for parameter %s not found", key);
-			return 0;
+			bb_error_msg_and_die("symbol for parameter %s not found", key);
 		}
 
 		if (isdigit(*p)) {
@@ -2473,11 +2447,10 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 
 					str = alloca(strlen(q));
 					for (r = str, q++; *q != '"'; ++q, ++r) {
-						if (*q == '\0') {
-							bb_error_msg("improperly terminated string argument for %s",
+						if (*q == '\0')
+							bb_error_msg_and_die("improperly terminated string argument for %s",
 									key);
-							return 0;
-						} else if (*q == '\\')
+						if (*q == '\\')
 							switch (*++q) {
 							case 'a':
 								*r = '\a';
@@ -2523,8 +2496,9 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 							default:
 								*r = *q;
 								break;
-							} else
-								*r = *q;
+							}
+						else
+							*r = *q;
 					}
 					*r = '\0';
 					++q;
@@ -2562,23 +2536,21 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 					obj_string_patch(f, sym->secidx, loc - contents, str);
 					loc += tgt_sizeof_char_p;
 				} else {
-					/* Array of chars (in fact, matrix !) */
+					/* Array of chars (in fact, matrix!) */
 					unsigned long charssize;	/* size of each member */
 
 					/* Get the size of each member */
 					/* Probably we should do that outside the loop ? */
 					if (!isdigit(*(p + 1))) {
-						bb_error_msg("parameter type 'c' for %s must be followed by"
+						bb_error_msg_and_die("parameter type 'c' for %s must be followed by"
 								" the maximum size", key);
-						return 0;
 					}
 					charssize = strtoul(p + 1, (char **) NULL, 10);
 
 					/* Check length */
 					if (strlen(str) >= charssize) {
-						bb_error_msg("string too long for %s (max %ld)", key,
+						bb_error_msg_and_die("string too long for %s (max %ld)", key,
 								charssize - 1);
-						return 0;
 					}
 
 					/* Copy to location */
@@ -2605,12 +2577,10 @@ new_process_module_arguments(struct obj_file *f, int argc, char **argv)
 					break;
 
 				default:
-					bb_error_msg("unknown parameter type '%c' for %s", *p, key);
-					return 0;
+					bb_error_msg_and_die("unknown parameter type '%c' for %s", *p, key);
 				}
 			}
-
-retry_end_of_value:
+ retry_end_of_value:
 			switch (*q) {
 			case '\0':
 				goto end_of_arg;
@@ -2624,28 +2594,23 @@ retry_end_of_value:
 
 			case ',':
 				if (++n > max) {
-					bb_error_msg("too many values for %s (max %d)", key, max);
-					return 0;
+					bb_error_msg_and_die("too many values for %s (max %d)", key, max);
 				}
 				++q;
 				break;
 
 			default:
-				bb_error_msg("invalid argument syntax for %s", key);
-				return 0;
+				bb_error_msg_and_die("invalid argument syntax for %s", key);
 			}
 		}
-
-end_of_arg:
+ end_of_arg:
 		if (n < min) {
-			bb_error_msg("too few values for %s (min %d)", key, min);
-			return 0;
+			bb_error_msg_and_die("too few values for %s (min %d)", key, min);
 		}
 
-		argc--, argv++;
+		argc--;
+		argv++;
 	}
-
-	return 1;
 }
 
 #if ENABLE_FEATURE_INSMOD_VERSION_CHECKING
@@ -2654,8 +2619,7 @@ static int new_is_module_checksummed(struct obj_file *f)
 	const char *p = get_modinfo_value(f, "using_checksums");
 	if (p)
 		return xatoi(p);
-	else
-		return 0;
+	return 0;
 }
 
 /* Get the module's kernel version in the canonical integer form.  */
@@ -2689,7 +2653,7 @@ new_get_module_version(struct obj_file *f, char str[STRVERSIONLEN])
 
 /* Fetch the loaded modules, and all currently exported symbols.  */
 
-static int new_get_kernel_symbols(void)
+static void new_get_kernel_symbols(void)
 {
 	char *module_names, *mn;
 	struct external_module *modules, *m;
@@ -2698,15 +2662,17 @@ static int new_get_kernel_symbols(void)
 
 	/* Collect the loaded modules.  */
 
-	module_names = xmalloc(bufsize = 256);
-retry_modules_load:
+	bufsize = 256;
+	module_names = xmalloc(bufsize);
+
+ retry_modules_load:
 	if (query_module(NULL, QM_MODULES, module_names, bufsize, &ret)) {
 		if (errno == ENOSPC && bufsize < ret) {
-			module_names = xrealloc(module_names, bufsize = ret);
+			bufsize = ret;
+			module_names = xrealloc(module_names, bufsize);
 			goto retry_modules_load;
 		}
-		bb_perror_msg("QM_MODULES");
-		return 0;
+		bb_perror_msg_and_die("QM_MODULES");
 	}
 
 	n_ext_modules = nmod = ret;
@@ -2725,23 +2691,23 @@ retry_modules_load:
 					/* The module was removed out from underneath us.  */
 					continue;
 				}
-				bb_perror_msg("query_module: QM_INFO: %s", mn);
-				return 0;
+				bb_perror_msg_and_die("query_module: QM_INFO: %s", mn);
 			}
 
-			syms = xmalloc(bufsize = 1024);
-retry_mod_sym_load:
+			bufsize = 1024;
+			syms = xmalloc(bufsize);
+ retry_mod_sym_load:
 			if (query_module(mn, QM_SYMBOLS, syms, bufsize, &ret)) {
 				switch (errno) {
 					case ENOSPC:
-						syms = xrealloc(syms, bufsize = ret);
+						bufsize = ret;
+						syms = xrealloc(syms, bufsize);
 						goto retry_mod_sym_load;
 					case ENOENT:
 						/* The module was removed out from underneath us.  */
 						continue;
 					default:
-						bb_perror_msg("query_module: QM_SYMBOLS: %s", mn);
-						return 0;
+						bb_perror_msg_and_die("query_module: QM_SYMBOLS: %s", mn);
 				}
 			}
 			nsyms = ret;
@@ -2760,14 +2726,13 @@ retry_mod_sym_load:
 	/* Collect the kernel's symbols.  */
 
 	syms = xmalloc(bufsize = 16 * 1024);
-retry_kern_sym_load:
+ retry_kern_sym_load:
 	if (query_module(NULL, QM_SYMBOLS, syms, bufsize, &ret)) {
 		if (errno == ENOSPC && bufsize < ret) {
 			syms = xrealloc(syms, bufsize = ret);
 			goto retry_kern_sym_load;
 		}
-		bb_perror_msg("kernel: QM_SYMBOLS");
-		return 0;
+		bb_perror_msg_and_die("kernel: QM_SYMBOLS");
 	}
 	nksyms = nsyms = ret;
 	ksyms = syms;
@@ -2775,7 +2740,6 @@ retry_kern_sym_load:
 	for (j = 0, s = syms; j < nsyms; ++j, ++s) {
 		s->name += (unsigned long) syms;
 	}
-	return 1;
 }
 
 
@@ -2796,7 +2760,7 @@ static int new_is_kernel_checksummed(void)
 }
 
 
-static int new_create_this_module(struct obj_file *f, const char *m_name)
+static void  new_create_this_module(struct obj_file *f, const char *m_name)
 {
 	struct obj_section *sec;
 
@@ -2810,8 +2774,6 @@ static int new_create_this_module(struct obj_file *f, const char *m_name)
 
 	obj_string_patch(f, sec->idx, offsetof(struct new_module, name),
 			m_name);
-
-	return 1;
 }
 
 #if ENABLE_FEATURE_INSMOD_KSYMOOPS_SYMBOLS
@@ -2995,7 +2957,7 @@ new_init_module(const char *m_name, struct obj_file *f, unsigned long m_size)
 
 /*======================================================================*/
 
-static int
+static void
 obj_string_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 				 const char *string)
 {
@@ -3020,11 +2982,9 @@ obj_string_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 		loc = obj_extend_section(strsec, len);
 	}
 	memcpy(loc, string, len);
-
-	return 1;
 }
 
-static int
+static void
 obj_symbol_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 				 struct obj_symbol *sym)
 {
@@ -3036,14 +2996,11 @@ obj_symbol_patch(struct obj_file *f, int secidx, ElfW(Addr) offset,
 	p->reloc_offset = offset;
 	p->sym = sym;
 	f->symbol_patches = p;
-
-	return 1;
 }
 
-static int obj_check_undefineds(struct obj_file *f)
+static void obj_check_undefineds(struct obj_file *f)
 {
-	unsigned long i;
-	int ret = 1;
+	unsigned i;
 
 	for (i = 0; i < HASH_BUCKETS; ++i) {
 		struct obj_symbol *sym;
@@ -3053,15 +3010,11 @@ static int obj_check_undefineds(struct obj_file *f)
 					sym->secidx = SHN_ABS;
 					sym->value = 0;
 				} else {
-					if (!flag_quiet) {
-						bb_error_msg("unresolved symbol %s", sym->name);
-					}
-					ret = 0;
+					if (!flag_quiet)
+						bb_error_msg_and_die("unresolved symbol %s", sym->name);
 				}
 			}
 	}
-
-	return ret;
 }
 
 static void obj_allocate_commons(struct obj_file *f)
@@ -3124,7 +3077,6 @@ static void obj_allocate_commons(struct obj_file *f)
 			f->sections[i] = sec = arch_new_section();
 			f->header.e_shnum = i + 1;
 
-			memset(sec, 0, sizeof(*sec));
 			sec->header.sh_type = SHT_PROGBITS;
 			sec->header.sh_flags = SHF_WRITE | SHF_ALLOC;
 			sec->name = ".bss";
@@ -3357,44 +3309,38 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 	/* Read the file header.  */
 
 	f = arch_new_file();
-	memset(f, 0, sizeof(*f));
 	f->symbol_cmp = strcmp;
 	f->symbol_hash = obj_elf_hash;
 	f->load_order_search_start = &f->load_order;
 
 	fseek(fp, 0, SEEK_SET);
 	if (fread(&f->header, sizeof(f->header), 1, fp) != 1) {
-		bb_perror_msg("error reading ELF header");
-		return NULL;
+		bb_perror_msg_and_die("error reading ELF header");
 	}
 
 	if (f->header.e_ident[EI_MAG0] != ELFMAG0
 			|| f->header.e_ident[EI_MAG1] != ELFMAG1
 			|| f->header.e_ident[EI_MAG2] != ELFMAG2
 			|| f->header.e_ident[EI_MAG3] != ELFMAG3) {
-		bb_error_msg("not an ELF file");
-		return NULL;
+		bb_error_msg_and_die("not an ELF file");
 	}
 	if (f->header.e_ident[EI_CLASS] != ELFCLASSM
 			|| f->header.e_ident[EI_DATA] != (BB_BIG_ENDIAN
 				? ELFDATA2MSB : ELFDATA2LSB)
 			|| f->header.e_ident[EI_VERSION] != EV_CURRENT
 			|| !MATCH_MACHINE(f->header.e_machine)) {
-		bb_error_msg("ELF file not for this architecture");
-		return NULL;
+		bb_error_msg_and_die("ELF file not for this architecture");
 	}
 	if (f->header.e_type != ET_REL) {
-		bb_error_msg("ELF file not a relocatable object");
-		return NULL;
+		bb_error_msg_and_die("ELF file not a relocatable object");
 	}
 
 	/* Read the section headers.  */
 
 	if (f->header.e_shentsize != sizeof(ElfW(Shdr))) {
-		bb_error_msg("section header size mismatch: %lu != %lu",
+		bb_error_msg_and_die("section header size mismatch: %lu != %lu",
 				(unsigned long) f->header.e_shentsize,
 				(unsigned long) sizeof(ElfW(Shdr)));
-		return NULL;
 	}
 
 	shnum = f->header.e_shnum;
@@ -3404,8 +3350,7 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 	section_headers = alloca(sizeof(ElfW(Shdr)) * shnum);
 	fseek(fp, f->header.e_shoff, SEEK_SET);
 	if (fread(section_headers, sizeof(ElfW(Shdr)), shnum, fp) != shnum) {
-		bb_perror_msg("error reading ELF section headers");
-		return NULL;
+		bb_perror_msg_and_die("error reading ELF section headers");
 	}
 
 	/* Read the section data.  */
@@ -3414,12 +3359,11 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 		struct obj_section *sec;
 
 		f->sections[i] = sec = arch_new_section();
-		memset(sec, 0, sizeof(*sec));
 
 		sec->header = section_headers[i];
 		sec->idx = i;
 
-		if(sec->header.sh_size) {
+		if (sec->header.sh_size) {
 			switch (sec->header.sh_type) {
 			case SHT_NULL:
 			case SHT_NOTE:
@@ -3441,8 +3385,7 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 					sec->contents = xmalloc(sec->header.sh_size);
 					fseek(fp, sec->header.sh_offset, SEEK_SET);
 					if (fread(sec->contents, sec->header.sh_size, 1, fp) != 1) {
-						bb_perror_msg("error reading ELF section data");
-						return NULL;
+						bb_perror_msg_and_die("error reading ELF section data");
 					}
 				} else {
 					sec->contents = NULL;
@@ -3451,14 +3394,11 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 
 #if SHT_RELM == SHT_REL
 			case SHT_RELA:
-				bb_error_msg("RELA relocations not supported on this architecture");
-				return NULL;
+				bb_error_msg_and_die("RELA relocations not supported on this architecture");
 #else
 			case SHT_REL:
-				bb_error_msg("REL relocations not supported on this architecture");
-				return NULL;
+				bb_error_msg_and_die("REL relocations not supported on this architecture");
 #endif
-
 			default:
 				if (sec->header.sh_type >= SHT_LOPROC) {
 					/* Assume processor specific section types are debug
@@ -3468,9 +3408,8 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 					break;
 				}
 
-				bb_error_msg("can't handle sections of type %ld",
+				bb_error_msg_and_die("can't handle sections of type %ld",
 						(long) sec->header.sh_type);
-				return NULL;
 			}
 		}
 	}
@@ -3504,10 +3443,9 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 				ElfW(Sym) * sym;
 
 				if (sec->header.sh_entsize != sizeof(ElfW(Sym))) {
-					bb_error_msg("symbol size mismatch: %lu != %lu",
+					bb_error_msg_and_die("symbol size mismatch: %lu != %lu",
 							(unsigned long) sec->header.sh_entsize,
 							(unsigned long) sizeof(ElfW(Sym)));
-					return NULL;
 				}
 
 				nsym = sec->header.sh_size / sizeof(ElfW(Sym));
@@ -3538,7 +3476,6 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 					 */
 					val |= sym->st_other & 4;
 #endif
-
 					obj_add_symbol(f, name, j, sym->st_info, sym->st_shndx,
 							val, sym->st_size);
 				}
@@ -3547,10 +3484,9 @@ static struct obj_file *obj_load(FILE * fp, int loadprogbits)
 
 		case SHT_RELM:
 			if (sec->header.sh_entsize != sizeof(ElfW(RelM))) {
-				bb_error_msg("relocation entry size mismatch: %lu != %lu",
+				bb_error_msg_and_die("relocation entry size mismatch: %lu != %lu",
 						(unsigned long) sec->header.sh_entsize,
 						(unsigned long) sizeof(ElfW(RelM)));
-				return NULL;
 			}
 			break;
 			/* XXX  Relocation code from modutils-2.3.19 is not here.
@@ -3623,12 +3559,12 @@ static int obj_gpl_license(struct obj_file *f, const char **license)
 	 * linux/include/linux/module.h.  Checking for leading "GPL" will not
 	 * work, somebody will use "GPL sucks, this is proprietary".
 	 */
-	static const char * const gpl_licenses[] = {
+	static const char *const gpl_licenses[] = {
 		"GPL",
 		"GPL v2",
 		"GPL and additional rights",
 		"Dual BSD/GPL",
-		"Dual MPL/GPL",
+		"Dual MPL/GPL"
 	};
 
 	sec = obj_find_section(f, ".modinfo");
@@ -3642,14 +3578,15 @@ static int obj_gpl_license(struct obj_file *f, const char **license)
 				int i;
 				if (license)
 					*license = value+1;
-				for (i = 0; i < sizeof(gpl_licenses)/sizeof(gpl_licenses[0]); ++i) {
+				for (i = 0; i < ARRAY_SIZE(gpl_licenses); ++i) {
 					if (strcmp(value+1, gpl_licenses[i]) == 0)
 						return 0;
 				}
 				return 2;
 			}
-			if (strchr(ptr, '\0'))
-				ptr = strchr(ptr, '\0') + 1;
+			ptr = strchr(ptr, '\0');
+			if (ptr)
+				ptr++;
 			else
 				ptr = endptr;
 		}
@@ -3658,24 +3595,26 @@ static int obj_gpl_license(struct obj_file *f, const char **license)
 }
 
 #define TAINT_FILENAME                  "/proc/sys/kernel/tainted"
-#define TAINT_PROPRIETORY_MODULE        (1<<0)
-#define TAINT_FORCED_MODULE             (1<<1)
-#define TAINT_UNSAFE_SMP                (1<<2)
+#define TAINT_PROPRIETORY_MODULE        (1 << 0)
+#define TAINT_FORCED_MODULE             (1 << 1)
+#define TAINT_UNSAFE_SMP                (1 << 2)
 #define TAINT_URL                       "http://www.tux.org/lkml/#export-tainted"
 
-static void set_tainted(struct obj_file *f, int fd, char *m_name,
+static void set_tainted(int fd, char *m_name,
 		int kernel_has_tainted, int taint, const char *text1, const char *text2)
 {
+	static smallint printed_info;
+
 	char buf[80];
 	int oldval;
-	static int first = 1;
+
 	if (fd < 0 && !kernel_has_tainted)
 		return;		/* New modutils on old kernel */
 	printf("Warning: loading %s will taint the kernel: %s%s\n",
 			m_name, text1, text2);
-	if (first) {
+	if (!printed_info) {
 		printf("  See %s for information about tainted modules\n", TAINT_URL);
-		first = 0;
+		printed_info = 1;
 	}
 	if (fd >= 0) {
 		read(fd, buf, sizeof(buf)-1);
@@ -3689,7 +3628,8 @@ static void set_tainted(struct obj_file *f, int fd, char *m_name,
 /* Check if loading this module will taint the kernel. */
 static void check_tainted_module(struct obj_file *f, char *m_name)
 {
-	static const char tainted_file[] = TAINT_FILENAME;
+	static const char tainted_file[] ALIGN1 = TAINT_FILENAME;
+
 	int fd, kernel_has_tainted;
 	const char *ptr;
 
@@ -3710,22 +3650,22 @@ static void check_tainted_module(struct obj_file *f, char *m_name)
 		case 0:
 			break;
 		case 1:
-			set_tainted(f, fd, m_name, kernel_has_tainted, TAINT_PROPRIETORY_MODULE, "no license", "");
+			set_tainted(fd, m_name, kernel_has_tainted, TAINT_PROPRIETORY_MODULE, "no license", "");
 			break;
 		case 2:
 			/* The module has a non-GPL license so we pretend that the
 			 * kernel always has a taint flag to get a warning even on
 			 * kernels without the proc flag.
 			 */
-			set_tainted(f, fd, m_name, 1, TAINT_PROPRIETORY_MODULE, "non-GPL license - ", ptr);
+			set_tainted(fd, m_name, 1, TAINT_PROPRIETORY_MODULE, "non-GPL license - ", ptr);
 			break;
 		default:
-			set_tainted(f, fd, m_name, 1, TAINT_PROPRIETORY_MODULE, "Unexpected return from obj_gpl_license", "");
+			set_tainted(fd, m_name, 1, TAINT_PROPRIETORY_MODULE, "Unexpected return from obj_gpl_license", "");
 			break;
 	}
 
 	if (flag_force_load)
-		set_tainted(f, fd, m_name, 1, TAINT_FORCED_MODULE, "forced load", "");
+		set_tainted(fd, m_name, 1, TAINT_FORCED_MODULE, "forced load", "");
 
 	if (fd >= 0)
 		close(fd);
@@ -3758,15 +3698,8 @@ static void
 add_ksymoops_symbols(struct obj_file *f, const char *filename,
 				 const char *m_name)
 {
-	static const char symprefix[] = "__insmod_";
-	struct obj_section *sec;
-	struct obj_symbol *sym;
-	char *name, *absolute_filename;
-	char str[STRVERSIONLEN], real[PATH_MAX];
-	int i, l, lm_name, lfilename, use_ksymtab, version;
-	struct stat statbuf;
-
-	static const char *section_names[] = {
+	static const char symprefix[] ALIGN1 = "__insmod_";
+	static const char section_names[][8] = {
 		".text",
 		".rodata",
 		".data",
@@ -3774,12 +3707,18 @@ add_ksymoops_symbols(struct obj_file *f, const char *filename,
 		".sbss"
 	};
 
-	if (realpath(filename, real)) {
-		absolute_filename = xstrdup(real);
-	} else {
-		bb_perror_msg("cannot get realpath for %s", filename);
+	struct obj_section *sec;
+	struct obj_symbol *sym;
+	char *name, *absolute_filename;
+	char str[STRVERSIONLEN];
+	int i, l, lm_name, lfilename, use_ksymtab, version;
+	struct stat statbuf;
+
+	/* WARNING: was using realpath, but replaced by readlink to stop using
+	 * lots of stack. But here it seems to be able to cause problems? */
+	absolute_filename = xmalloc_readlink(filename);
+	if (!absolute_filename)
 		absolute_filename = xstrdup(filename);
-	}
 
 	lm_name = strlen(m_name);
 	lfilename = strlen(absolute_filename);
@@ -3797,22 +3736,22 @@ add_ksymoops_symbols(struct obj_file *f, const char *filename,
 		 * is 0xffffff, decimal 16777215.  putting all three fields in
 		 * one symbol is less readable but saves kernel space.
 		 */
-		l = sizeof(symprefix)+			/* "__insmod_" */
-			lm_name+				/* module name */
-			2+					/* "_O" */
-			lfilename+				/* object filename */
-			2+					/* "_M" */
-			2*sizeof(statbuf.st_mtime)+		/* mtime in hex */
-			2+					/* "_V" */
-			8+					/* version in dec */
-			1;					/* nul */
+		l = sizeof(symprefix) +                 /* "__insmod_" */
+			lm_name +                       /* module name */
+			2 +                             /* "_O" */
+			lfilename +                     /* object filename */
+			2 +                             /* "_M" */
+			2 * sizeof(statbuf.st_mtime) +  /* mtime in hex */
+			2 +                             /* "_V" */
+			8 +                             /* version in dec */
+			1;                              /* nul */
 		name = xmalloc(l);
 		if (stat(absolute_filename, &statbuf) != 0)
 			statbuf.st_mtime = 0;
 		version = get_module_version(f, str);	/* -1 if not found */
 		snprintf(name, l, "%s%s_O%s_M%0*lX_V%d",
 				symprefix, m_name, absolute_filename,
-				(int)(2*sizeof(statbuf.st_mtime)), statbuf.st_mtime,
+				(int)(2 * sizeof(statbuf.st_mtime)), statbuf.st_mtime,
 				version);
 		sym = obj_add_symbol(f, name, -1,
 				ELF_ST_INFO(STB_GLOBAL, STT_NOTYPE),
@@ -3825,11 +3764,11 @@ add_ksymoops_symbols(struct obj_file *f, const char *filename,
 	/* record where the persistent data is going, same address as previous symbol */
 
 	if (f->persist) {
-		l = sizeof(symprefix)+		/* "__insmod_" */
-			lm_name+		/* module name */
-			2+			/* "_P" */
-			strlen(f->persist)+	/* data store */
-			1;			/* nul */
+		l = sizeof(symprefix) +         /* "__insmod_" */
+			lm_name +               /* module name */
+			2 +                     /* "_P" */
+			strlen(f->persist) +    /* data store */
+			1;                      /* nul */
 		name = xmalloc(l);
 		snprintf(name, l, "%s%s_P%s",
 				symprefix, m_name, f->persist);
@@ -3841,16 +3780,16 @@ add_ksymoops_symbols(struct obj_file *f, const char *filename,
 #endif /* _NOT_SUPPORTED_ */
 	/* tag the desired sections if size is non-zero */
 
-	for (i = 0; i < sizeof(section_names)/sizeof(section_names[0]); ++i) {
+	for (i = 0; i < ARRAY_SIZE(section_names); ++i) {
 		sec = obj_find_section(f, section_names[i]);
 		if (sec && sec->header.sh_size) {
-			l = sizeof(symprefix)+		/* "__insmod_" */
-				lm_name+		/* module name */
-				2+			/* "_S" */
-				strlen(sec->name)+	/* section name */
-				2+			/* "_L" */
-				8+			/* length in dec */
-				1;			/* nul */
+			l = sizeof(symprefix) +         /* "__insmod_" */
+				lm_name +               /* module name */
+				2 +                     /* "_S" */
+				strlen(sec->name) +     /* section name */
+				2 +                     /* "_L" */
+				8 +                     /* length in dec */
+				1;                      /* nul */
 			name = xmalloc(l);
 			snprintf(name, l, "%s%s_S%s_L%ld",
 					symprefix, m_name, sec->name,
@@ -3897,9 +3836,10 @@ static void print_load_map(struct obj_file *f)
 #if ENABLE_FEATURE_INSMOD_LOAD_MAP_FULL
 	/* Quick reference which section indicies are loaded.  */
 
-	loaded = alloca(sizeof(int) * (i = f->header.e_shnum));
+	i = f->header.e_shnum;
+	loaded = alloca(sizeof(int) * i);
 	while (--i >= 0)
-		loaded[i] = (f->sections[i]->header.sh_flags & SHF_ALLOC) != 0;
+		loaded[i] = ((f->sections[i]->header.sh_flags & SHF_ALLOC) != 0);
 
 	/* Collect the symbols we'll be listing.  */
 
@@ -3958,8 +3898,8 @@ static void print_load_map(struct obj_file *f)
 void print_load_map(struct obj_file *f);
 #endif
 
-int insmod_main( int argc, char **argv);
-int insmod_main( int argc, char **argv)
+int insmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int insmod_main(int argc, char **argv)
 {
 	char *opt_o, *arg1;
 	int len;
@@ -3969,7 +3909,7 @@ int insmod_main( int argc, char **argv)
 	ElfW(Addr) m_addr;
 	struct obj_file *f;
 	struct stat st;
-	char *m_name = 0;
+	char *m_name = NULL;
 	int exit_status = EXIT_FAILURE;
 	int m_has_modinfo;
 #if ENABLE_FEATURE_INSMOD_VERSION_CHECKING
@@ -3978,7 +3918,7 @@ int insmod_main( int argc, char **argv)
 	int m_version, m_crcs;
 #endif
 #if ENABLE_FEATURE_CLEAN_UP
-	FILE *fp = 0;
+	FILE *fp = NULL;
 #else
 	FILE *fp;
 #endif
@@ -3986,7 +3926,7 @@ int insmod_main( int argc, char **argv)
 	struct utsname myuname;
 
 	/* Parse any options */
-	getopt32(argc, argv, OPTION_STR, &opt_o);
+	getopt32(argv, OPTION_STR, &opt_o);
 	arg1 = argv[optind];
 	if (option_mask32 & OPT_o) { // -o /* name the output module */
 		free(m_name);
@@ -4033,10 +3973,10 @@ int insmod_main( int argc, char **argv)
 		m_name = tmp;
 	} else {
 		free(tmp1);
-		tmp1 = 0;       /* flag for free(m_name) before exit() */
+		tmp1 = NULL;       /* flag for free(m_name) before exit() */
 	}
 
-	/* Get a filedesc for the module.  Check we we have a complete path */
+	/* Get a filedesc for the module.  Check that we have a complete path */
 	if (stat(arg1, &st) < 0 || !S_ISREG(st.st_mode)
 	 || (fp = fopen(arg1, "r")) == NULL
 	) {
@@ -4045,7 +3985,6 @@ int insmod_main( int argc, char **argv)
 		if (k_version) {	/* uname succeedd */
 			char *module_dir;
 			char *tmdn;
-			char real_module_dir[FILENAME_MAX];
 
 			tmdn = concat_path_file(_PATH_MODULES, myuname.release);
 			/* Jump through hoops in case /lib/modules/`uname -r`
@@ -4053,36 +3992,37 @@ int insmod_main( int argc, char **argv)
 			 * follow symlinks, but we do want to follow the
 			 * /lib/modules/`uname -r` dir, So resolve it ourselves
 			 * if it is a link... */
-			if (realpath(tmdn, real_module_dir) == NULL)
-				module_dir = tmdn;
-			else
-				module_dir = real_module_dir;
-			recursive_action(module_dir, TRUE, FALSE, FALSE,
-					check_module_name_match, 0, m_fullName, 0);
+			module_dir = xmalloc_readlink(tmdn);
+			if (!module_dir)
+				module_dir = xstrdup(tmdn);
+			recursive_action(module_dir, ACTION_RECURSE,
+					check_module_name_match, NULL, m_fullName, 0);
+			free(module_dir);
 			free(tmdn);
 		}
 
 		/* Check if we have found anything yet */
-		if (m_filename == 0 || ((fp = fopen(m_filename, "r")) == NULL)) {
-			char module_dir[FILENAME_MAX];
+		if (!m_filename || ((fp = fopen(m_filename, "r")) == NULL)) {
+			int r;
+			char *module_dir;
 
 			free(m_filename);
-			m_filename = 0;
-			if (realpath (_PATH_MODULES, module_dir) == NULL)
-				strcpy(module_dir, _PATH_MODULES);
+			m_filename = NULL;
+			module_dir = xmalloc_readlink(_PATH_MODULES);
+			if (!module_dir)
+				module_dir = xstrdup(_PATH_MODULES);
 			/* No module found under /lib/modules/`uname -r`, this
 			 * time cast the net a bit wider.  Search /lib/modules/ */
-			if (!recursive_action(module_dir, TRUE, FALSE, FALSE,
-						    check_module_name_match, 0, m_fullName, 0)
+			r = recursive_action(module_dir, ACTION_RECURSE,
+					check_module_name_match, NULL, m_fullName, 0);
+			if (r)
+				bb_error_msg_and_die("%s: module not found", m_fullName);
+			free(module_dir);
+			if (m_filename == NULL
+			 || ((fp = fopen(m_filename, "r")) == NULL)
 			) {
-				if (m_filename == 0
-				 || ((fp = fopen(m_filename, "r")) == NULL)
-				) {
-					bb_error_msg("%s: no module by that name found", m_fullName);
-					goto out;
-				}
-			} else
-				bb_error_msg_and_die("%s: no module by that name found", m_fullName);
+				bb_error_msg_and_die("%s: module not found", m_fullName);
+			}
 		}
 	} else
 		m_filename = xstrdup(arg1);
@@ -4099,8 +4039,6 @@ int insmod_main( int argc, char **argv)
 #endif
 
 	f = obj_load(fp, LOADBITS);
-	if (f == NULL)
-		bb_perror_msg_and_die("cannot load the module");
 
 	if (get_modinfo_value(f, "kernel_version") == NULL)
 		m_has_modinfo = 0;
@@ -4115,38 +4053,28 @@ int insmod_main( int argc, char **argv)
 		if (m_has_modinfo) {
 			m_version = new_get_module_version(f, m_strversion);
 			if (m_version == -1) {
-				bb_error_msg("cannot find the kernel version the module was "
+				bb_error_msg_and_die("cannot find the kernel version the module was "
 						"compiled for");
-				goto out;
 			}
 		}
 
 		if (strncmp(uts_info.release, m_strversion, STRVERSIONLEN) != 0) {
-			if (flag_force_load) {
-				bb_error_msg("warning: kernel-module version mismatch\n"
-						"\t%s was compiled for kernel version %s\n"
-						"\twhile this kernel is version %s",
-						m_filename, m_strversion, uts_info.release);
-			} else {
-				bb_error_msg("kernel-module version mismatch\n"
-						"\t%s was compiled for kernel version %s\n"
-						"\twhile this kernel is version %s.",
-						m_filename, m_strversion, uts_info.release);
+			bb_error_msg("%skernel-module version mismatch\n"
+				"\t%s was compiled for kernel version %s\n"
+				"\twhile this kernel is version %s",
+				flag_force_load ? "warning: " : "",
+				m_filename, m_strversion, uts_info.release);
+			if (!flag_force_load)
 				goto out;
-			}
 		}
 	}
 	k_crcs = 0;
 #endif /* FEATURE_INSMOD_VERSION_CHECKING */
 
-	if (!query_module(NULL, 0, NULL, 0, NULL)) {
-		if (!new_get_kernel_symbols())
-			goto out;
-		k_crcs = new_is_kernel_checksummed();
-	} else {
-		bb_error_msg("not configured to support old kernels");
-		goto out;
-	}
+	if (query_module(NULL, 0, NULL, 0, NULL))
+		bb_error_msg_and_die("not configured to support old kernels");
+	new_get_kernel_symbols();
+	k_crcs = new_is_kernel_checksummed();
 
 #if ENABLE_FEATURE_INSMOD_VERSION_CHECKING
 	m_crcs = 0;
@@ -4162,22 +4090,15 @@ int insmod_main( int argc, char **argv)
 
 	/* Allocate common symbols, symbol tables, and string tables.  */
 
-	if (!new_create_this_module(f, m_name)) {
-		goto out;
-	}
-
-	if (!obj_check_undefineds(f)) {
-		goto out;
-	}
+	new_create_this_module(f, m_name);
+	obj_check_undefineds(f);
 	obj_allocate_commons(f);
 	check_tainted_module(f, m_name);
 
 	/* done with the module name, on to the optional var=value arguments */
 	++optind;
 	if (optind < argc) {
-		if (!new_process_module_arguments(f, argc - optind, argv + optind)) {
-			goto out;
-		}
+		new_process_module_arguments(f, argc - optind, argv + optind);
 	}
 
 	arch_create_got(f);
@@ -4192,22 +4113,18 @@ int insmod_main( int argc, char **argv)
 	/* Find current size of the module */
 	m_size = obj_load_size(f);
 
-
 	m_addr = create_module(m_name, m_size);
 	if (m_addr == -1) switch (errno) {
 		case EEXIST:
-			bb_error_msg("a module named %s already exists", m_name);
-			goto out;
+			bb_error_msg_and_die("a module named %s already exists", m_name);
 		case ENOMEM:
-			bb_error_msg("can't allocate kernel memory for module; needed %lu bytes",
+			bb_error_msg_and_die("can't allocate kernel memory for module; needed %lu bytes",
 					m_size);
-			goto out;
 		default:
-			bb_perror_msg("create_module: %s", m_name);
-			goto out;
+			bb_perror_msg_and_die("create_module: %s", m_name);
 	}
 
-#if  !LOADBITS
+#if !LOADBITS
 	/*
 	 * the PROGBITS section was not loaded by the obj_load
 	 * now we can load them directly into the kernel memory
@@ -4228,30 +4145,33 @@ int insmod_main( int argc, char **argv)
 		goto out;
 	}
 
-	if(flag_print_load_map)
+	if (flag_print_load_map)
 		print_load_map(f);
 
 	exit_status = EXIT_SUCCESS;
 
-out:
+ out:
 #if ENABLE_FEATURE_CLEAN_UP
-	if(fp)
+	if (fp)
 		fclose(fp);
 	free(tmp1);
-	if(!tmp1)
+	if (!tmp1)
 		free(m_name);
 	free(m_filename);
 #endif
 	return exit_status;
 }
 
-
-#endif
+#endif /* ENABLE_FEATURE_2_4_MODULES */
+/*
+ * End of big piece of 2.4-specific code
+ */
 
 
 #if ENABLE_FEATURE_2_6_MODULES
 
 #include <sys/mman.h>
+#include <asm/unistd.h>
 #include <sys/syscall.h>
 
 /* We use error numbers in a loose translation... */
@@ -4259,23 +4179,28 @@ static const char *moderror(int err)
 {
 	switch (err) {
 	case ENOEXEC:
-		return "Invalid module format";
+		return "invalid module format";
 	case ENOENT:
-		return "Unknown symbol in module";
+		return "unknown symbol in module";
 	case ESRCH:
-		return "Module has wrong symbol version";
+		return "module has wrong symbol version";
 	case EINVAL:
-		return "Invalid parameters";
+		return "invalid parameters";
 	default:
 		return strerror(err);
 	}
 }
 
-int insmod_ng_main(int argc, char **argv);
-int insmod_ng_main(int argc, char **argv)
+#if !ENABLE_FEATURE_2_4_MODULES
+int insmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int insmod_main(int argc, char **argv)
+#else
+static int insmod_ng_main(int argc, char **argv)
+#endif
 {
 	long ret;
 	size_t len;
+	int optlen;
 	void *map;
 	char *filename, *options;
 
@@ -4284,12 +4209,12 @@ int insmod_ng_main(int argc, char **argv)
 		bb_show_usage();
 
 	/* Rest is options */
-	options = xstrdup("");
+	options = xzalloc(1);
+	optlen = 0;
 	while (*++argv) {
-		int optlen = strlen(options);
 		options = xrealloc(options, optlen + 2 + strlen(*argv) + 2);
 		/* Spaces handled by "" pairs, but no way of escaping quotes */
-		sprintf(options + optlen, (strchr(*argv,' ') ? "\"%s\" " : "%s "), *argv);
+		optlen += sprintf(options + optlen, (strchr(*argv,' ') ? "\"%s\" " : "%s "), *argv);
 	}
 
 #if 0
@@ -4317,8 +4242,8 @@ int insmod_ng_main(int argc, char **argv)
 
 	ret = syscall(__NR_init_module, map, len, options);
 	if (ret != 0) {
-		bb_perror_msg_and_die("cannot insert '%s': %s (%li)",
-				filename, moderror(errno), ret);
+		bb_error_msg_and_die("cannot insert '%s': %s",
+				filename, moderror(errno));
 	}
 
 	return 0;

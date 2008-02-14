@@ -14,7 +14,10 @@
 /* BB_AUDIT GNU defects - unsupported long options. */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/chmod.html */
 
-#include "busybox.h"
+#include "libbb.h"
+
+/* This is a NOEXEC applet. Be very careful! */
+
 
 #define OPT_RECURSE (option_mask32 & 1)
 #define OPT_VERBOSE (USE_DESKTOP(option_mask32 & 2) SKIP_DESKTOP(0))
@@ -60,11 +63,11 @@ static int fileAction(const char *fileName, struct stat *statbuf, void* param, i
 	}
  err:
 	if (!OPT_QUIET)
-		bb_perror_msg("%s", fileName);
+		bb_simple_perror_msg(fileName);
 	return FALSE;
 }
 
-int chmod_main(int argc, char **argv);
+int chmod_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int chmod_main(int argc, char **argv)
 {
 	int retval = EXIT_SUCCESS;
@@ -90,7 +93,7 @@ int chmod_main(int argc, char **argv)
 
 	/* Parse options */
 	opt_complementary = "-2";
-	getopt32(argc, argv, ("-"OPT_STR) + 1); /* Reuse string */
+	getopt32(argv, ("-"OPT_STR) + 1); /* Reuse string */
 	argv += optind;
 
 	/* Restore option-like mode if needed */
@@ -101,8 +104,6 @@ int chmod_main(int argc, char **argv)
 	do {
 		if (!recursive_action(*argv,
 			OPT_RECURSE,    // recurse
-			FALSE,          // follow links: coreutils doesn't
-			FALSE,          // depth first
 			fileAction,     // file action
 			fileAction,     // dir action
 			smode,          // user data

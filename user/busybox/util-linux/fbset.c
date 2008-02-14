@@ -12,7 +12,7 @@
  *     Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 #define DEFAULTFBDEV  FB_0
 #define DEFAULTFBMODE "/etc/fb.modes"
@@ -37,7 +37,7 @@ enum {
 	CMD_INFO = 12,
 	CMD_CHANGE = 13,
 
-#ifdef CONFIG_FEATURE_FBSET_FANCY
+#if ENABLE_FEATURE_FBSET_FANCY
 	CMD_XRES = 100,
 	CMD_YRES = 101,
 	CMD_VXRES = 102,
@@ -130,7 +130,7 @@ static const struct cmdoptions_t {
 	{ "-laced", 1, CMD_LACED },
 	{ "-double", 1, CMD_DOUBLE },
 	{ "-n", 0, CMD_CHANGE },
-#ifdef CONFIG_FEATURE_FBSET_FANCY
+#if ENABLE_FEATURE_FBSET_FANCY
 	{ "-all", 0, CMD_ALL },
 	{ "-xres", 1, CMD_XRES },
 	{ "-yres", 1, CMD_YRES },
@@ -158,7 +158,7 @@ static const struct cmdoptions_t {
 	{ "", 0, 0 }
 };
 
-#ifdef CONFIG_FEATURE_FBSET_READMODE
+#if ENABLE_FEATURE_FBSET_READMODE
 /* taken from linux/fb.h */
 enum {
 	FB_VMODE_INTERLACED = 1,	/* interlaced	*/
@@ -173,7 +173,7 @@ enum {
 static int readmode(struct fb_var_screeninfo *base, const char *fn,
 					const char *mode)
 {
-#ifdef CONFIG_FEATURE_FBSET_READMODE
+#if ENABLE_FEATURE_FBSET_READMODE
 	FILE *f;
 	char buf[256];
 	char *p = buf;
@@ -181,10 +181,11 @@ static int readmode(struct fb_var_screeninfo *base, const char *fn,
 	f = xfopen(fn, "r");
 	while (!feof(f)) {
 		fgets(buf, sizeof(buf), f);
-		if (!(p = strstr(buf, "mode ")) && !(p = strstr(buf, "mode\t")))
+		p = strstr(buf, "mode ");
+		if (!p && !(p = strstr(buf, "mode\t")))
 			continue;
-		p += 5;
-		if (!(p = strstr(buf, mode)))
+		p = strstr(p + 5, mode);
+		if (!p)
 			continue;
 		p += strlen(mode);
 		if (!isspace(*p) && (*p != 0) && (*p != '"')
@@ -193,7 +194,8 @@ static int readmode(struct fb_var_screeninfo *base, const char *fn,
 
 		while (!feof(f)) {
 			fgets(buf, sizeof(buf), f);
-			if ((p = strstr(buf, "geometry "))) {
+			p = strstr(buf, "geometry ");
+			if (p) {
 				p += 9;
 				/* FIXME: catastrophic on arches with 64bit ints */
 				sscanf(p, "%d %d %d %d %d",
@@ -286,7 +288,7 @@ static inline void showmode(struct fb_var_screeninfo *v)
 		vrate = hrate / (v->upper_margin + v->yres + v->lower_margin + v->vsync_len);
 	}
 	printf("\nmode \"%ux%u-%u\"\n"
-#ifdef CONFIG_FEATURE_FBSET_FANCY
+#if ENABLE_FEATURE_FBSET_FANCY
 	"\t# D: %.3f MHz, H: %.3f kHz, V: %.3f Hz\n"
 #endif
 	"\tgeometry %u %u %u %u %u\n"
@@ -295,7 +297,7 @@ static inline void showmode(struct fb_var_screeninfo *v)
 	"\trgba %u/%u,%u/%u,%u/%u,%u/%u\n"
 	"endmode\n\n",
 		v->xres, v->yres, (int) (vrate + 0.5),
-#ifdef CONFIG_FEATURE_FBSET_FANCY
+#if ENABLE_FEATURE_FBSET_FANCY
 		drate / 1e6, hrate / 1e3, vrate,
 #endif
 		v->xres, v->yres, v->xres_virtual, v->yres_virtual, v->bits_per_pixel,
@@ -309,7 +311,7 @@ static inline void showmode(struct fb_var_screeninfo *v)
 #ifdef STANDALONE
 int main(int argc, char **argv)
 #else
-int fbset_main(int argc, char **argv);
+int fbset_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int fbset_main(int argc, char **argv)
 #endif
 {
@@ -360,7 +362,7 @@ int fbset_main(int argc, char **argv)
 			case CMD_CHANGE:
 				g_options |= OPT_CHANGE;
 				break;
-#ifdef CONFIG_FEATURE_FBSET_FANCY
+#if ENABLE_FEATURE_FBSET_FANCY
 			case CMD_XRES:
 				varset.xres = xatou32(argv[1]);
 				break;
@@ -385,8 +387,7 @@ int fbset_main(int argc, char **argv)
 	}
 
 	fh = xopen(fbdev, O_RDONLY);
-	if (ioctl(fh, FBIOGET_VSCREENINFO, &var))
-		bb_perror_msg_and_die("ioctl(%sT_VSCREENINFO)", "GE");
+	xioctl(fh, FBIOGET_VSCREENINFO, &var);
 	if (g_options & OPT_READMODE) {
 		if (!readmode(&var, modefile, mode)) {
 			bb_error_msg_and_die("unknown video mode '%s'", mode);
@@ -397,8 +398,7 @@ int fbset_main(int argc, char **argv)
 	if (g_options & OPT_CHANGE) {
 		if (g_options & OPT_ALL)
 			var.activate = FB_ACTIVATE_ALL;
-		if (ioctl(fh, FBIOPUT_VSCREENINFO, &var))
-			bb_perror_msg_and_die("ioctl(%sT_VSCREENINFO)", "PU");
+		xioctl(fh, FBIOPUT_VSCREENINFO, &var);
 	}
 	showmode(&var);
 	/* Don't close the file, as exiting will take care of that */

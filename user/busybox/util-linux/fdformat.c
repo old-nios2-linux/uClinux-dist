@@ -1,15 +1,10 @@
 /* vi: set sw=4 ts=4: */
 /* fdformat.c  -  Low-level formats a floppy disk - Werner Almesberger */
 
-/* 1999-02-22 Arkadiusz Mi¶kiewicz <misiek@pld.ORG.PL>
- * - added Native Language Support
- * 1999-03-20 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
- * - more i18n/nls translatable strings marked
- *
- * 5 July 2003 -- modified for Busybox by Erik Andersen
+/* 5 July 2003 -- modified for Busybox by Erik Andersen
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 
 /* Stuff extracted from linux/fd.h */
@@ -45,15 +40,8 @@ struct format_descr {
 #define FDGETPRM _IOR(2, 0x04, struct floppy_struct)
 #define FD_FILL_BYTE 0xF6 /* format fill byte. */
 
-static void xioctl(int fd, int request, void *argp, const char *string)
-{
-	if (ioctl(fd, request, argp) < 0) {
-		bb_perror_msg_and_die(string);
-	}
-}
-
-int fdformat_main(int argc,char **argv);
-int fdformat_main(int argc,char **argv)
+int fdformat_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int fdformat_main(int argc, char **argv)
 {
 	int fd, n, cyl, read_bytes, verify;
 	unsigned char *data;
@@ -64,7 +52,7 @@ int fdformat_main(int argc,char **argv)
 	if (argc < 2) {
 		bb_show_usage();
 	}
-	verify = !getopt32(argc, argv, "n");
+	verify = !getopt32(argv, "n");
 	argv += optind;
 
 	xstat(*argv, &st);
@@ -77,7 +65,7 @@ int fdformat_main(int argc,char **argv)
 	fd = xopen(*argv, O_RDWR);
 
 	/* original message was: "Could not determine current format type" */
-	xioctl(fd, FDGETPRM, &param, "FDGETPRM");
+	xioctl(fd, FDGETPRM, &param);
 
 	printf("%s-sided, %d tracks, %d sec/track. Total capacity %d kB\n",
 		(param.head == 2) ? "Double" : "Single",
@@ -85,21 +73,21 @@ int fdformat_main(int argc,char **argv)
 
 	/* FORMAT */
 	printf("Formatting... ");
-	xioctl(fd, FDFMTBEG, NULL, "FDFMTBEG");
+	xioctl(fd, FDFMTBEG, NULL);
 
 	/* n == track */
 	for (n = 0; n < param.track; n++) {
 		descr.head = 0;
 		descr.track = n;
-		xioctl(fd, FDFMTTRK, &descr, "FDFMTTRK");
+		xioctl(fd, FDFMTTRK, &descr);
 		printf("%3d\b\b\b", n);
 		if (param.head == 2) {
 			descr.head = 1;
-			xioctl(fd, FDFMTTRK, &descr, "FDFMTTRK");
+			xioctl(fd, FDFMTTRK, &descr);
 		}
 	}
 
-	xioctl(fd, FDFMTEND, NULL, "FDFMTEND");
+	xioctl(fd, FDFMTEND, NULL);
 	printf("done\n");
 
 	/* VERIFY */
@@ -123,7 +111,7 @@ int fdformat_main(int argc,char **argv)
 			/* Check backwards so we don't need a counter */
 			while (--read_bytes >= 0) {
 				if (data[read_bytes] != FD_FILL_BYTE) {
-					 printf("bad data in cyl %d\nContinuing... ",cyl);
+					 printf("bad data in cyl %d\nContinuing... ", cyl);
 				}
 			}
 		}

@@ -10,9 +10,9 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
-int realpath_main(int argc, char **argv);
+int realpath_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int realpath_main(int argc, char **argv)
 {
 	int retval = EXIT_SUCCESS;
@@ -35,7 +35,7 @@ int realpath_main(int argc, char **argv)
 			puts(resolved_path);
 		} else {
 			retval = EXIT_FAILURE;
-			bb_perror_msg("%s", *argv);
+			bb_simple_perror_msg(*argv);
 		}
 	} while (--argc);
 

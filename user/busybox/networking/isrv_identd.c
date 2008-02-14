@@ -8,7 +8,7 @@
  */
 
 #include <syslog.h>
-#include "busybox.h"
+#include "libbb.h"
 #include "isrv.h"
 
 enum { TIMEOUT = 20 };
@@ -19,7 +19,7 @@ typedef struct identd_buf_t {
 	char buf[64 - 2*sizeof(int)];
 } identd_buf_t;
 
-static const char *bogouser = "nobody";
+#define bogouser bb_common_bufsiz1
 
 static int new_peer(isrv_state_t *state, int fd)
 {
@@ -32,7 +32,7 @@ static int new_peer(isrv_state_t *state, int fd)
 	if (isrv_register_fd(state, peer, fd) < 0)
 		return peer; /* failure, unregister peer */
 
-	buf->fd_flag = fcntl(fd, F_GETFL, 0) | O_NONBLOCK;
+	buf->fd_flag = fcntl(fd, F_GETFL) | O_NONBLOCK;
 	isrv_want_rd(state, fd);
 	return 0;
 }
@@ -92,7 +92,7 @@ static void inetd_mode(void)
 	while (do_rd(0, (void*)&buf) == 0);
 }
 
-int fakeidentd_main(int argc, char **argv);
+int fakeidentd_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int fakeidentd_main(int argc, char **argv)
 {
 	enum {
@@ -107,12 +107,15 @@ int fakeidentd_main(int argc, char **argv)
 	unsigned opt;
 	int fd;
 
-	opt = getopt32(argc, argv, "fiwb:", &bind_address);
-	if (optind < argc)
-		bogouser = argv[optind];
+	opt = getopt32(argv, "fiwb:", &bind_address);
+	strcpy(bogouser, "nobody");
+	if (argv[optind])
+		strncpy(bogouser, argv[optind], sizeof(bogouser));
 
 	/* Daemonize if no -f and no -i and no -w */
-	bb_sanitize_stdio_maybe_daemonize(!(opt & OPT_fiw));
+	if (!(opt & OPT_fiw));
+		bb_daemonize_or_rexec(0, argv);
+
 	/* Where to log in inetd modes? "Classic" inetd
 	 * probably has its stderr /dev/null'ed (we need log to syslog?),
 	 * but daemontools-like utilities usually expect that children

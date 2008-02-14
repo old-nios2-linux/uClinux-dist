@@ -10,10 +10,11 @@
 /* BB_AUDIT SUSv3 compliant */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/true.html */
 
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int true_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int true_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int true_main(int argc, char **argv)
 {
 	return EXIT_SUCCESS;

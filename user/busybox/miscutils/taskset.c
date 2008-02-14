@@ -6,9 +6,9 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
 #include <sched.h>
 #include <getopt.h> /* optind */
+#include "libbb.h"
 
 #if ENABLE_FEATURE_TASKSET_FANCY
 #define TASKSET_PRINTF_MASK "%s"
@@ -41,8 +41,8 @@ static char *__from_cpuset(cpu_set_t *mask)
 
 #define OPT_p 1
 
-int taskset_main(int argc, char** argv);
-int taskset_main(int argc, char** argv)
+int taskset_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int taskset_main(int argc, char **argv)
 {
 	cpu_set_t mask, new_mask;
 	pid_t pid = 0;
@@ -50,7 +50,7 @@ int taskset_main(int argc, char** argv)
 	const char *state = "current\0new";
 	char *p_opt = NULL, *aff = NULL;
 
-	opt = getopt32(argc, argv, "+p:", &p_opt);
+	opt = getopt32(argv, "+p:", &p_opt);
 
 	if (opt & OPT_p) {
 		if (argc == optind+1) { /* -p <aff> <pid> */
@@ -92,7 +92,7 @@ int taskset_main(int argc, char** argv)
 	}
 	++argv;
 	BB_EXECVP(*argv, argv);
-	bb_perror_msg_and_die("%s", *argv);
+	bb_simple_perror_msg_and_die(*argv);
 }
 #undef OPT_p
 #undef TASKSET_PRINTF_MASK

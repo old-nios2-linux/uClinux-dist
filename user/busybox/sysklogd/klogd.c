@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2001 by Gennady Feldman <gfeldman@gena01.com>.
  * Changes: Made this a standalone busybox module which uses standalone
- * 					syslog() client interface.
+ *					syslog() client interface.
  *
  * Copyright (C) 1999-2004 by Erik Andersen <andersen@codepoet.org>
  *
@@ -14,50 +14,45 @@
  *
  * Maintainer: Gennady Feldman <gfeldman@gena01.com> as of Mar 12, 2001
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
+ * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>		/* for our signal() handlers */
-#include <string.h>		/* strncpy() */
-#include <errno.h>		/* errno and friends */
-#include <unistd.h>
-#include <ctype.h>
+#include "libbb.h"
 #include <sys/syslog.h>
 #include <sys/klog.h>
 
-#include "busybox.h"
-
-static void klogd_signal(int sig)
+static void klogd_signal(int sig ATTRIBUTE_UNUSED)
 {
 	klogctl(7, NULL, 0);
-	klogctl(0, 0, 0);
-	/* logMessage(0, "Kernel log daemon exiting."); */
-	syslog(LOG_NOTICE, "Kernel log daemon exiting.");
+	klogctl(0, NULL, 0);
+	syslog(LOG_NOTICE, "klogd: exiting");
 	exit(EXIT_SUCCESS);
 }
 
-static void doKlogd(const int console_log_level) __attribute__ ((noreturn));
-static void doKlogd(const int console_log_level)
+#define log_buffer bb_common_bufsiz1
+enum {
+	KLOGD_LOGBUF_SIZE = sizeof(log_buffer),
+	OPT_LEVEL      = (1 << 0),
+	OPT_FOREGROUND = (1 << 1),
+};
+
+int klogd_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int klogd_main(int argc, char **argv)
 {
-	int priority = LOG_INFO;
-	char log_buffer[4096];
-	int i, n, lastc;
+	int i = i; /* silence gcc */
 	char *start;
+
+	/* do normal option parsing */
+	getopt32(argv, "c:n", &start);
+
+	if (option_mask32 & OPT_LEVEL) {
+		/* Valid levels are between 1 and 8 */
+		i = xatoul_range(start, 1, 8);
+	}
+
+	if (!(option_mask32 & OPT_FOREGROUND)) {
+		bb_daemonize_or_rexec(DAEMON_CHDIR_ROOT, argv);
+	}
 
 	openlog("kernel", 0, LOG_KERN);
 
@@ -70,96 +65,56 @@ static void doKlogd(const int console_log_level)
 	/* "Open the log. Currently a NOP." */
 	klogctl(1, NULL, 0);
 
-	/* Set level of kernel console messaging.. */
-	if (console_log_level != -1)
-		klogctl(8, NULL, console_log_level);
+	/* Set level of kernel console messaging. */
+	if (option_mask32 & OPT_LEVEL)
+		klogctl(8, NULL, i);
 
-	syslog(LOG_NOTICE, "klogd started: %s", BB_BANNER);
+	syslog(LOG_NOTICE, "klogd started: %s", bb_banner);
 
+	/* Note: this code does not detect incomplete messages
+	 * (messages not ending with '\n' or just when kernel
+	 * generates too many messages for us to keep up)
+	 * and will split them in two separate lines */
 	while (1) {
-		/* Use kernel syscalls */
-		memset(log_buffer, '\0', sizeof(log_buffer));
-		n = klogctl(2, log_buffer, sizeof(log_buffer));
+		int n;
+		int priority;
+
+		n = klogctl(2, log_buffer, KLOGD_LOGBUF_SIZE - 1);
 		if (n < 0) {
 			if (errno == EINTR)
 				continue;
-			syslog(LOG_ERR, "klogd: Error return from sys_sycall: %d - %m.\n", errno);
-			exit(EXIT_FAILURE);
+			syslog(LOG_ERR, "klogd: error from klogctl(2): %d - %m",
+					errno);
+			break;
 		}
-
-		/* klogctl buffer parsing modelled after code in dmesg.c */
-		start = &log_buffer[0];
-		lastc = '\0';
-		for (i = 0; i < n; i++) {
-			if (lastc == '\0' && log_buffer[i] == '<') {
-				priority = 0;
+		log_buffer[n] = '\n';
+		i = 0;
+		while (i < n) {
+			priority = LOG_INFO;
+			start = &log_buffer[i];
+			if (log_buffer[i] == '<') {
 				i++;
-				while (isdigit(log_buffer[i])) {
-					priority = priority * 10 + (log_buffer[i] - '0');
+				// kernel never ganerates multi-digit prios
+				//priority = 0;
+				//while (log_buffer[i] >= '0' && log_buffer[i] <= '9') {
+				//	priority = priority * 10 + (log_buffer[i] - '0');
+				//	i++;
+				//}
+				if (isdigit(log_buffer[i])) {
+					priority = (log_buffer[i] - '0');
 					i++;
 				}
 				if (log_buffer[i] == '>')
 					i++;
 				start = &log_buffer[i];
 			}
-			if (log_buffer[i] == '\n') {
-				log_buffer[i] = '\0';	/* zero terminate this message */
-				syslog(priority, "%s", start);
-				start = &log_buffer[i + 1];
-				priority = LOG_INFO;
-			}
-			lastc = log_buffer[i];
-		}
-	}
-}
-
-extern int klogd_main(int argc, char **argv)
-{
-	/* no options, no getopt */
-	int opt;
-	int doFork = TRUE;
-	unsigned char console_log_level = -1;
-
-	/* do normal option parsing */
-	while ((opt = getopt(argc, argv, "c:n")) > 0) {
-		switch (opt) {
-		case 'c':
-			if ((optarg == NULL) || (optarg[1] != '\0')) {
-				bb_show_usage();
-			}
-			/* Valid levels are between 1 and 8 */
-			console_log_level = *optarg - '1';
-			if (console_log_level > 7) {
-				bb_show_usage();
-			}
-			console_log_level++;
-
-			break;
-		case 'n':
-			doFork = FALSE;
-			break;
-		default:
-			bb_show_usage();
+			while (log_buffer[i] != '\n')
+				i++;
+			log_buffer[i] = '\0';
+			syslog(priority, "%s", start);
+			i++;
 		}
 	}
 
-	if (doFork) {
-#if defined(__uClinux__)
-		vfork_daemon_rexec(0, 1, argc, argv, "-n");
-#else /* __uClinux__ */
-		if (daemon(0, 1) < 0)
-			bb_perror_msg_and_die("daemon");
-#endif /* __uClinux__ */
-	}
-	doKlogd(console_log_level);
-
-	return EXIT_SUCCESS;
+	return EXIT_FAILURE;
 }
-
-/*
-Local Variables
-c-file-style: "linux"
-c-basic-offset: 4
-tab-width: 4
-End:
-*/

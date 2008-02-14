@@ -7,7 +7,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include "unarchive.h"
 
 #define RPM_HEADER_MAGIC        "\216\255\350"
@@ -80,7 +80,7 @@ static void fileaction_dobackup(char *filename, int fileref);
 static void fileaction_setowngrp(char *filename, int fileref);
 static void loop_through_files(int filetag, void (*fileaction)(char *filename, int fileref));
 
-int rpm_main(int argc, char **argv);
+int rpm_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int rpm_main(int argc, char **argv)
 {
 	int opt = 0, func = 0, rpm_fd, offset;
@@ -185,11 +185,19 @@ int rpm_main(int argc, char **argv)
 	return 0;
 }
 
-static void extract_cpio_gz(int fd) {
+static void extract_cpio_gz(int fd)
+{
 	archive_handle_t *archive_handle;
 	unsigned char magic[2];
+#if BB_MMU
+	USE_DESKTOP(long long) int (*xformer)(int src_fd, int dst_fd);
+	enum { xformer_prog = 0 };
+#else
+	enum { xformer = 0 };
+	const char *xformer_prog;
+#endif
 
-	/* Initialise */
+	/* Initialize */
 	archive_handle = init_handle();
 	archive_handle->seek = seek_by_read;
 	//archive_handle->action_header = header_list;
@@ -200,16 +208,39 @@ static void extract_cpio_gz(int fd) {
 	archive_handle->offset = 0;
 
 	xread(archive_handle->src_fd, &magic, 2);
+#if BB_MMU
+	xformer = unpack_gz_stream;
+#else
+	xformer_prog = "gunzip";
+#endif
 	if ((magic[0] != 0x1f) || (magic[1] != 0x8b)) {
-		bb_error_msg_and_die("invalid gzip magic");
+		if (ENABLE_FEATURE_RPM_BZ2
+		 && (magic[0] == 0x42) && (magic[1] == 0x5a)) {
+#if BB_MMU
+			xformer = unpack_bz2_stream;
+#else
+			xformer_prog = "bunzip2";
+#endif
+	/* We can do better, need modifying unpack_bz2_stream to not require
+	 * first 2 bytes. Not very hard to do... I mean, TODO :) */
+			xlseek(archive_handle->src_fd, -2, SEEK_CUR);
+		} else
+			bb_error_msg_and_die("no gzip"
+				USE_FEATURE_RPM_BZ2("/bzip")
+				" magic");
+	} else {
+#if !BB_MMU
+		/* NOMMU version of open_transformer execs an external unzipper that should
+		 * have the file position at the start of the file */
+		xlseek(archive_handle->src_fd, 0, SEEK_SET);
+#endif
 	}
-	check_header_gzip_or_die(archive_handle->src_fd);
-	xchdir("/"); /* Install RPM's to root */
 
-	archive_handle->src_fd = open_transformer(archive_handle->src_fd, inflate_gunzip);
+	xchdir("/"); /* Install RPM's to root */
+	archive_handle->src_fd = open_transformer(archive_handle->src_fd, xformer, xformer_prog);
 	archive_handle->offset = 0;
 	while (get_header_cpio(archive_handle) == EXIT_SUCCESS)
-		/* loop */;
+		continue;
 }
 
 

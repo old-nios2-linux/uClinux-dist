@@ -8,13 +8,7 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <termios.h>
-#include <sys/ioctl.h>
 
 #include "libbb.h"
 
@@ -23,37 +17,44 @@ static void askpass_timeout(int ATTRIBUTE_UNUSED ignore)
 {
 }
 
-char *bb_askpass(int timeout, const char * prompt)
+char *bb_askpass(int timeout, const char *prompt)
 {
-	static char passwd[64];
+	/* Was static char[BIGNUM] */
+	enum { sizeof_passwd = 128 };
+	static char *passwd;
 
 	char *ret;
 	int i;
-	struct sigaction sa;
-	struct termios old, new;
+	struct sigaction sa, oldsa;
+	struct termios tio, oldtio;
 
-	tcgetattr(STDIN_FILENO, &old);
+	if (!passwd)
+		passwd = xmalloc(sizeof_passwd);
+	memset(passwd, 0, sizeof_passwd);
+
+	tcgetattr(STDIN_FILENO, &oldtio);
 	tcflush(STDIN_FILENO, TCIFLUSH);
+	tio = oldtio;
+	tio.c_iflag &= ~(IUCLC|IXON|IXOFF|IXANY);
+	tio.c_lflag &= ~(ECHO|ECHOE|ECHOK|ECHONL|TOSTOP);
+	tcsetattr(STDIN_FILENO, TCSANOW, &tio);
 
-	memset(passwd, 0, sizeof(passwd));
-
-	fputs(prompt, stdout);
-	fflush(stdout);
-
-	tcgetattr(STDIN_FILENO, &new);
-	new.c_iflag &= ~(IUCLC|IXON|IXOFF|IXANY);
-	new.c_lflag &= ~(ECHO|ECHOE|ECHOK|ECHONL|TOSTOP);
-	tcsetattr(STDIN_FILENO, TCSANOW, &new);
-
+	memset(&sa, 0, sizeof(sa));
+	/* sa.sa_flags = 0; - no SA_RESTART! */
+	/* SIGINT and SIGALRM will interrupt read below */
+	sa.sa_handler = askpass_timeout;
+	sigaction(SIGINT, &sa, &oldsa);
 	if (timeout) {
-		sa.sa_flags = 0;
-		sa.sa_handler = askpass_timeout;
 		sigaction(SIGALRM, &sa, NULL);
 		alarm(timeout);
 	}
 
+	fputs(prompt, stdout);
+	fflush(stdout);
 	ret = NULL;
-	if (read(STDIN_FILENO, passwd, sizeof(passwd)-1) > 0) {
+	/* On timeout or Ctrl-C, read will hopefully be interrupted,
+	 * and we return NULL */
+	if (read(STDIN_FILENO, passwd, sizeof_passwd - 1) > 0) {
 		ret = passwd;
 		i = 0;
 		/* Last byte is guaranteed to be 0
@@ -67,9 +68,10 @@ char *bb_askpass(int timeout, const char * prompt)
 	if (timeout) {
 		alarm(0);
 	}
+	sigaction(SIGINT, &oldsa, NULL);
 
-	tcsetattr(STDIN_FILENO, TCSANOW, &old);
-	puts("");
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldtio);
+	bb_putchar('\n');
 	fflush(stdout);
 	return ret;
 }

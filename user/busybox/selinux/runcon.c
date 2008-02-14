@@ -26,10 +26,11 @@
  * Port to busybox: KaiGai Kohei <kaigai@kaigai.gr.jp>
  *                  - based on coreutils-5.97 (in Fedora Core 6)
  */
-#include "busybox.h"
 #include <getopt.h>
 #include <selinux/context.h>
 #include <selinux/flask.h>
+
+#include "libbb.h"
 
 static context_t runcon_compute_new_context(char *user, char *role, char *type, char *range,
 					    char *command, int compute_trans)
@@ -68,15 +69,14 @@ static context_t runcon_compute_new_context(char *user, char *role, char *type, 
 }
 
 #if ENABLE_FEATURE_RUNCON_LONG_OPTIONS
-static const struct option runcon_options[] = {
-	{ "user",       1, NULL, 'u' },
-	{ "role",       1, NULL, 'r' },
-	{ "type",       1, NULL, 't' },
-	{ "range",      1, NULL, 'l' },
-	{ "compute",    0, NULL, 'c' },
-	{ "help",       0, NULL, 'h' },
-	{ NULL,         0, NULL, 0 },
-};
+static const char runcon_longopts[] ALIGN1 =
+	"user\0"    Required_argument "u"
+	"role\0"    Required_argument "r"
+	"type\0"    Required_argument "t"
+	"range\0"   Required_argument "l"
+	"compute\0" No_argument "c"
+	"help\0"    No_argument "h"
+	;
 #endif
 
 #define OPTS_ROLE	(1<<0)	/* r */
@@ -87,8 +87,8 @@ static const struct option runcon_options[] = {
 #define OPTS_HELP	(1<<5)	/* h */
 #define OPTS_CONTEXT_COMPONENT		(OPTS_ROLE | OPTS_TYPE | OPTS_USER | OPTS_RANGE)
 
-int runcon_main(int argc, char *argv[]);
-int runcon_main(int argc, char *argv[])
+int runcon_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int runcon_main(int argc, char **argv)
 {
 	char *role = NULL;
 	char *range = NULL;
@@ -101,16 +101,16 @@ int runcon_main(int argc, char *argv[])
 	selinux_or_die();
 
 #if ENABLE_FEATURE_RUNCON_LONG_OPTIONS
-	applet_long_options = runcon_options;
+	applet_long_options = runcon_longopts;
 #endif
 	opt_complementary = "-1";
-	opts = getopt32(argc, argv, "r:t:u:l:ch", &role, &type, &user, &range);
+	opts = getopt32(argv, "r:t:u:l:ch", &role, &type, &user, &range);
 	argv += optind;
 
 	if (!(opts & OPTS_CONTEXT_COMPONENT)) {
 		context = *argv++;
 		if (!argv[0])
-			bb_error_msg_and_die("no command found");
+			bb_error_msg_and_die("no command given");
 	}
 
 	if (context) {
@@ -133,5 +133,4 @@ int runcon_main(int argc, char *argv[])
 	execvp(argv[0], argv);
 
 	bb_perror_msg_and_die("cannot execute '%s'", argv[0]);
-	return 1;
 }

@@ -10,11 +10,11 @@
 /* BB_AUDIT SUSv3 compliant */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/dirname.html */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int dirname_main(int argc, char **argv);
+/* This is a NOFORK applet. Be very careful! */
+
+int dirname_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int dirname_main(int argc, char **argv)
 {
 	if (argc != 2) {
@@ -23,5 +23,5 @@ int dirname_main(int argc, char **argv)
 
 	puts(dirname(argv[1]));
 
-	fflush_stdout_and_exit(EXIT_SUCCESS);
+	return fflush(stdout);
 }

@@ -10,22 +10,20 @@
  * Licensed under GPLv2 or later, see file License in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
-int readahead_main(int argc, char **argv);
+int readahead_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int readahead_main(int argc, char **argv)
 {
-	FILE *f;
 	int retval = EXIT_SUCCESS;
 
 	if (argc == 1) bb_show_usage();
 
 	while (*++argv) {
-		if ((f = fopen_or_warn(*argv, "r")) != NULL) {
-			int r, fd=fileno(f);
-
-			r = readahead(fd, 0, fdlength(fd));
-			fclose(f);
+		int fd = open_or_warn(*argv, O_RDONLY);
+		if (fd >= 0) {
+			int r = readahead(fd, 0, fdlength(fd));
+			close(fd);
 			if (r >= 0) continue;
 		}
 		retval = EXIT_FAILURE;

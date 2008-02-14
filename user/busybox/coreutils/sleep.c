@@ -18,27 +18,27 @@
  * time suffixes for seconds, minutes, hours, and days.
  */
 
-#include <stdlib.h>
-#include <limits.h>
-#include <unistd.h>
-#include "busybox.h"
+#include "libbb.h"
 
-#ifdef CONFIG_FEATURE_FANCY_SLEEP
+/* This is a NOFORK applet. Be very careful! */
+
+
+#if ENABLE_FEATURE_FANCY_SLEEP
 static const struct suffix_mult sfx[] = {
 	{ "s", 1 },
 	{ "m", 60 },
 	{ "h", 60*60 },
 	{ "d", 24*60*60 },
-	{ NULL, 0 }
+	{ }
 };
 #endif
 
-int sleep_main(int argc, char **argv);
+int sleep_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int sleep_main(int argc, char **argv)
 {
-	unsigned int duration;
+	unsigned duration;
 
-#ifdef CONFIG_FEATURE_FANCY_SLEEP
+#if ENABLE_FEATURE_FANCY_SLEEP
 
 	if (argc < 2) {
 		bb_show_usage();
@@ -50,7 +50,7 @@ int sleep_main(int argc, char **argv)
 		duration += xatoul_range_sfx(*argv, 0, UINT_MAX-duration, sfx);
 	} while (*++argv);
 
-#else  /* CONFIG_FEATURE_FANCY_SLEEP */
+#else  /* FEATURE_FANCY_SLEEP */
 
 	if (argc != 2) {
 		bb_show_usage();
@@ -58,7 +58,7 @@ int sleep_main(int argc, char **argv)
 
 	duration = xatou(argv[1]);
 
-#endif /* CONFIG_FEATURE_FANCY_SLEEP */
+#endif /* FEATURE_FANCY_SLEEP */
 
 	if (sleep(duration)) {
 		bb_perror_nomsg_and_die();

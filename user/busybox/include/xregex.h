@@ -11,12 +11,8 @@
 #ifndef __BB_REGEX__
 #define __BB_REGEX__
 
-#if defined(__UC_LIBC__)
-#include <regexp.h>
-#else
 #include <regex.h>
 char* regcomp_or_errmsg(regex_t *preg, const char *regex, int cflags);
 void xregcomp(regex_t *preg, const char *regex, int cflags);
-#endif
 
 #endif

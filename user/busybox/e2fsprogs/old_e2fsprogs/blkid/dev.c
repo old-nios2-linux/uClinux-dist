@@ -82,7 +82,7 @@ void blkid_debug_dump_dev(blkid_dev dev)
 		else
 			printf("    tag: NULL\n");
 	}
-	puts("");
+	bb_putchar('\n');
 }
 #endif
 
@@ -161,7 +161,7 @@ void usage(char *prog)
 int main(int argc, char **argv)
 {
 	blkid_dev_iterate	iter;
-	blkid_cache 		cache = NULL;
+	blkid_cache		cache = NULL;
 	blkid_dev		dev;
 	int			c, ret;
 	char			*tmp;

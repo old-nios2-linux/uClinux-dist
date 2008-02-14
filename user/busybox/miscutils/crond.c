@@ -5,17 +5,14 @@
  * run as root, but NOT setuid root
  *
  * Copyright 1994 Matthew Dillon (dillon@apollo.west.oic.com)
+ * (version 2.3.2)
  * Vladimir Oleynik <dzo@simtreas.ru> (C) 2002
  *
  * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
 
-#define VERSION "2.3.2"
-
-#include "busybox.h"
 #include <sys/syslog.h>
-
-#define arysize(ary)    (sizeof(ary)/sizeof((ary)[0]))
+#include "libbb.h"
 
 #ifndef CRONTABS
 #define CRONTABS        "/var/spool/cron/crontabs"
@@ -24,7 +21,7 @@
 #define TMPDIR          "/var/spool/cron"
 #endif
 #ifndef SENDMAIL
-#define SENDMAIL        "/usr/sbin/sendmail"
+#define SENDMAIL        "sendmail"
 #endif
 #ifndef SENDMAIL_ARGS
 #define SENDMAIL_ARGS   "-ti", "oem"
@@ -114,14 +111,14 @@ static void crondlog(const char *ctl, ...)
 		if (LogFile == 0) {
 			vsyslog(type, fmt, va);
 		} else {
+#if !ENABLE_DEBUG_CROND_OPTION
 			int logfd = open(LogFile, O_WRONLY | O_CREAT | O_APPEND, 0600);
+#else
+			int logfd = open3_or_warn(LogFile, O_WRONLY | O_CREAT | O_APPEND, 0600);
+#endif
 			if (logfd >= 0) {
 				vdprintf(logfd, fmt, va);
 				close(logfd);
-#if ENABLE_DEBUG_CROND_OPTION
-			} else {
-				bb_perror_msg("can't open log file");
-#endif
 			}
 		}
 	}
@@ -131,81 +128,49 @@ static void crondlog(const char *ctl, ...)
 	}
 }
 
-int crond_main(int ac, char **av);
+int crond_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int crond_main(int ac, char **av)
 {
 	unsigned opt;
 	char *lopt, *Lopt, *copt;
+	USE_DEBUG_CROND_OPTION(char *dopt;)
 
-#if ENABLE_DEBUG_CROND_OPTION
-	char *dopt;
-
-	opt_complementary = "f-b:b-f:S-L:L-S:d-l";
-#else
-	opt_complementary = "f-b:b-f:S-L:L-S";
-#endif
-
+	opt_complementary = "f-b:b-f:S-L:L-S" USE_DEBUG_CROND_OPTION(":d-l");
 	opterr = 0;			/* disable getopt 'errors' message. */
-	opt = getopt32(ac, av, "l:L:fbSc:"
-#if ENABLE_DEBUG_CROND_OPTION
-							"d:"
-#endif
-							, &lopt, &Lopt, &copt
-#if ENABLE_DEBUG_CROND_OPTION
-							, &dopt
-#endif
-		);
-	if (opt & 1) {
+	opt = getopt32(av, "l:L:fbSc:" USE_DEBUG_CROND_OPTION("d:"),
+			&lopt, &Lopt, &copt USE_DEBUG_CROND_OPTION(, &dopt));
+	if (opt & 1) /* -l */
 		LogLevel = xatou(lopt);
-	}
-	if (opt & 2) {
-		if (*Lopt != 0) {
+	if (opt & 2) /* -L */
+		if (*Lopt)
 			LogFile = Lopt;
-		}
-	}
-	if (opt & 32) {
-		if (*copt != 0) {
+	if (opt & 32) /* -c */
+		if (*copt)
 			CDir = copt;
-		}
-	}
 #if ENABLE_DEBUG_CROND_OPTION
-	if (opt & 64) {
+	if (opt & 64) { /* -d */
 		DebugOpt = xatou(dopt);
 		LogLevel = 0;
 	}
 #endif
 
-	/*
-	 * change directory
-	 */
-
-	xchdir(CDir);
-	signal(SIGHUP, SIG_IGN);	/* hmm.. but, if kill -HUP original
-								 * version - his died. ;(
-								 */
-	/*
-	 * close stdin and stdout, stderr.
+	/* close stdin and stdout, stderr.
 	 * close unused descriptors -  don't need.
 	 * optional detach from controlling terminal
 	 */
+	if (!(opt & 4))
+		bb_daemonize_or_rexec(DAEMON_CLOSE_EXTRA_FDS, av);
 
-	if (!(opt & 4)) {
-#ifdef BB_NOMMU
-		/* reexec for vfork() do continue parent */
-		vfork_daemon_rexec(1, 0, ac, av, "-f");
-#else
-		xdaemon(1, 0);
-#endif
-	}
+	xchdir(CDir);
+	signal(SIGHUP, SIG_IGN); /* ? original crond dies on HUP... */
 
-	(void) startlogger();	/* need if syslog mode selected */
+	startlogger();	/* need if syslog mode selected */
 
 	/*
 	 * main loop - synchronize to 1 second after the minute, minimum sleep
 	 *             of 1 second.
 	 */
-
-	crondlog("\011%s " VERSION " dillon, started, log level %d\n",
+	crondlog("\011%s " BB_VER " started, log level %d\n",
 			 applet_name, LogLevel);
 
 	SynchronizeDir();
@@ -217,6 +182,7 @@ int crond_main(int ac, char **av)
 		int rescan = 60;
 		short sleep_time = 60;
 
+		write_pidfile("/var/run/crond.pid");
 		for (;;) {
 			sleep((sleep_time + 1) - (short) (time(NULL) % sleep_time));
 
@@ -312,66 +278,28 @@ static void startlogger(void)
 	else {				/* test logfile */
 		int logfd;
 
-		if ((logfd = open(LogFile, O_WRONLY | O_CREAT | O_APPEND, 0600)) >= 0) {
+		logfd = open3_or_warn(LogFile, O_WRONLY | O_CREAT | O_APPEND, 0600);
+		if (logfd >= 0) {
 			close(logfd);
-		} else {
-			bb_perror_msg("failed to open log file '%s': ", LogFile);
 		}
 	}
 #endif
 }
 
 
-static const char *const DowAry[] = {
-	"sun",
-	"mon",
-	"tue",
-	"wed",
-	"thu",
-	"fri",
-	"sat",
+static const char DowAry[] ALIGN1 =
+	"sun""mon""tue""wed""thu""fri""sat"
+	/* "Sun""Mon""Tue""Wed""Thu""Fri""Sat" */
+;
 
-	"Sun",
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-	NULL
-};
-
-static const char *const MonAry[] = {
-	"jan",
-	"feb",
-	"mar",
-	"apr",
-	"may",
-	"jun",
-	"jul",
-	"aug",
-	"sep",
-	"oct",
-	"nov",
-	"dec",
-
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-	NULL
-};
+static const char MonAry[] ALIGN1 =
+	"jan""feb""mar""apr""may""jun""jul""aug""sep""oct""nov""dec"
+	/* "Jan""Feb""Mar""Apr""May""Jun""Jul""Aug""Sep""Oct""Nov""Dec" */
+;
 
 static char *ParseField(char *user, char *ary, int modvalue, int off,
-						const char *const *names, char *ptr)
+				const char *names, char *ptr)
+/* 'names' is a pointer to a set of 3-char abbreviations */
 {
 	char *base = ptr;
 	int n1 = -1;
@@ -401,19 +329,18 @@ static char *ParseField(char *user, char *ary, int modvalue, int off,
 		} else if (names) {
 			int i;
 
-			for (i = 0; names[i]; ++i) {
-				if (strncmp(ptr, names[i], strlen(names[i])) == 0) {
+			for (i = 0; names[i]; i += 3) {
+				/* was using strncmp before... */
+				if (strncasecmp(ptr, &names[i], 3) == 0) {
+					ptr += 3;
+					if (n1 < 0) {
+						n1 = i / 3;
+					} else {
+						n2 = i / 3;
+					}
+					skip = 1;
 					break;
 				}
-			}
-			if (names[i]) {
-				ptr += strlen(names[i]);
-				if (n1 < 0) {
-					n1 = i;
-				} else {
-					n2 = i;
-				}
-				skip = 1;
 			}
 		}
 
@@ -500,13 +427,13 @@ static void FixDayDow(CronLine * line)
 	int weekUsed = 0;
 	int daysUsed = 0;
 
-	for (i = 0; i < (int)(arysize(line->cl_Dow)); ++i) {
+	for (i = 0; i < (int)(ARRAY_SIZE(line->cl_Dow)); ++i) {
 		if (line->cl_Dow[i] == 0) {
 			weekUsed = 1;
 			break;
 		}
 	}
-	for (i = 0; i < (int)(arysize(line->cl_Days)); ++i) {
+	for (i = 0; i < (int)(ARRAY_SIZE(line->cl_Days)); ++i) {
 		if (line->cl_Days[i] == 0) {
 			daysUsed = 1;
 			break;
@@ -974,8 +901,10 @@ static void EndJob(const char *user, CronLine * line)
 		return;
 	}
 
-	if (fstat(mailFd, &sbuf) < 0 || sbuf.st_uid != DaemonUid ||	sbuf.st_nlink != 0 ||
-		sbuf.st_size == line->cl_MailPos || !S_ISREG(sbuf.st_mode)) {
+	if (fstat(mailFd, &sbuf) < 0 || sbuf.st_uid != DaemonUid
+	 || sbuf.st_nlink != 0 || sbuf.st_size == line->cl_MailPos
+	 || !S_ISREG(sbuf.st_mode)
+	) {
 		close(mailFd);
 		return;
 	}

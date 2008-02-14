@@ -10,12 +10,9 @@
 
 /* no options, no getopt */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "busybox.h"
+#include "libbb.h"
 
-int reset_main(int argc, char **argv);
+int reset_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int reset_main(int argc, char **argv)
 {
 	if (isatty(1)) {

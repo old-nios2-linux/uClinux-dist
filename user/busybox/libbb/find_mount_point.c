@@ -16,8 +16,6 @@
  *
  * Given any other file (or directory), find the mount table entry for its
  * filesystem.
- *
- * Ignores rootfs 
  */
 struct mntent *find_mount_point(const char *name, const char *table)
 {
@@ -25,7 +23,6 @@ struct mntent *find_mount_point(const char *name, const char *table)
 	dev_t mountDevice;
 	FILE *mountTable;
 	struct mntent *mountEntry;
-	int found = 0;
 
 	if (stat(name, &s) != 0)
 		return 0;
@@ -40,22 +37,16 @@ struct mntent *find_mount_point(const char *name, const char *table)
 	if (!mountTable)
 		return 0;
 
-	while (!found && (mountEntry = getmntent(mountTable)) != 0) {
+	while ((mountEntry = getmntent(mountTable)) != 0) {
 		if (strcmp(name, mountEntry->mnt_dir) == 0
 		 || strcmp(name, mountEntry->mnt_fsname) == 0
 		) { /* String match. */
-			found = 1;
+			break;
 		}
 		if (stat(mountEntry->mnt_fsname, &s) == 0 && s.st_rdev == mountDevice)	/* Match the device. */
-			found = 1;
+			break;
 		if (stat(mountEntry->mnt_dir, &s) == 0 && s.st_dev == mountDevice)	/* Match the directory's mount point. */
-			found = 1;
-
-		if (strcmp(mountEntry->mnt_fsname, "rootfs") == 0) {
-			/* rootfs is not a real filesystem */
-			found = 0;
-		}
-
+			break;
 	}
 	endmntent(mountTable);
 	return mountEntry;

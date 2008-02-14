@@ -12,7 +12,10 @@
  * http://www.opengroup.org/onlinepubs/007904975/utilities/sort.html
  */
 
-#include "busybox.h"
+#include "libbb.h"
+
+/* This is a NOEXEC applet. Be very careful! */
+
 
 /*
 	sort [-m][-o output][-bdfinru][-t char][-k keydef]... [file...]
@@ -20,7 +23,7 @@
 */
 
 /* These are sort types */
-static const char OPT_STR[] = "ngMucszbrdfimS:T:o:k:t:";
+static const char OPT_STR[] ALIGN1 = "ngMucszbrdfimS:T:o:k:t:";
 enum {
 	FLAG_n  = 1,            /* Numeric sort */
 	FLAG_g  = 2,            /* Sort using strtod() */
@@ -271,7 +274,7 @@ static unsigned str2u(char **str)
 }
 #endif
 
-int sort_main(int argc, char **argv);
+int sort_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int sort_main(int argc, char **argv)
 {
 	FILE *fp, *outfile = stdout;
@@ -285,9 +288,9 @@ int sort_main(int argc, char **argv)
 
 	/* Parse command line options */
 	/* -o and -t can be given at most once */
-	opt_complementary = "?:o--o:t--t:" /* -t, -o: maximum one of each */
+	opt_complementary = "o--o:t--t:" /* -t, -o: maximum one of each */
 			"k::"; /* -k takes list */
-	getopt32(argc, argv, OPT_STR, &str_ignored, &str_ignored, &str_o, &lst_k, &str_t);
+	getopt32(argv, OPT_STR, &str_ignored, &str_ignored, &str_o, &lst_k, &str_t);
 #if ENABLE_FEATURE_SORT_BIG
 	if (option_mask32 & FLAG_o) outfile = xfopen(str_o, "w");
 	if (option_mask32 & FLAG_t) {
@@ -296,7 +299,6 @@ int sort_main(int argc, char **argv)
 		key_separator = str_t[0];
 	}
 	/* parse sort key */
-	lst_k = llist_rev(lst_k);
 	while (lst_k) {
 		enum {
 			FLAG_allowed_for_k =
@@ -372,9 +374,9 @@ int sort_main(int argc, char **argv)
 		for (i = 1; i < linecount; i++)
 			if (compare_keys(&lines[i-1], &lines[i]) > j) {
 				fprintf(stderr, "Check line %d\n", i);
-				return 1;
+				return EXIT_FAILURE;
 			}
-		return 0;
+		return EXIT_SUCCESS;
 	}
 #endif
 	/* Perform the actual sort */

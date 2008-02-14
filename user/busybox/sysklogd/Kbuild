@@ -8,6 +8,4 @@ lib-y:=
 lib-$(CONFIG_KLOGD)		+= klogd.o
 lib-$(CONFIG_LOGGER)		+= logger.o
 lib-$(CONFIG_LOGREAD)		+= logread.o
-lib-$(CONFIG_SYSLOGD)		+= syslogd.o local.o config.o
-lib-$(CONFIG_FEATURE_REMOTE_LOG) += remote.o
-lib-$(CONFIG_USER_SMTP_SMTPCLIENT) += email.o
+lib-$(CONFIG_SYSLOGD)		+= syslogd.o

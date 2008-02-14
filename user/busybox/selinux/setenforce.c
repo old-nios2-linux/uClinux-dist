@@ -6,7 +6,7 @@
  *
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
 /* These strings are arranged so that odd ones
  * result in security_setenforce(1) being done,
@@ -19,7 +19,7 @@ static const char *const setenforce_cmd[] = {
 	NULL,
 };
 
-int setenforce_main(int argc, char **argv);
+int setenforce_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int setenforce_main(int argc, char **argv)
 {
 	int i, rc;

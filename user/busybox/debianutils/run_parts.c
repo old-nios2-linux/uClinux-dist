@@ -2,8 +2,10 @@
 /*
  * Mini run-parts implementation for busybox
  *
+ * Copyright (C) 2007 Bernhard Fischer
  *
- * Copyright (C) 2001 by Emanuele Aina <emanuele.aina@tiscali.it>
+ * Based on a older version that was in busybox which was 1k big..
+ *   Copyright (C) 2001 by Emanuele Aina <emanuele.aina@tiscali.it>
  *
  * Based on the Debian run-parts program, version 1.15
  *   Copyright (C) 1996 Jeff Noxon <jeff@router.patch.net>,
@@ -25,168 +27,148 @@
  *				execute them.
  * -a ARG		argument. Pass ARG as an argument the program executed. It can
  *				be repeated to pass multiple arguments.
- * -u MASK		umask. Set the umask of the program executed to MASK. */
-
-/* TODO
- * done - convert calls to error in perror... and remove error()
- * done - convert malloc/realloc to their x... counterparts
- * done - remove catch_sigchld
- * done - use bb's concat_path_file()
- * done - declare run_parts_main() as extern and any other function as static?
+ * -u MASK		umask. Set the umask of the program executed to MASK.
  */
 
-#include "busybox.h"
 #include <getopt.h>
 
-static const struct option runparts_long_options[] = {
-	{ "test",       0,      NULL,   't' },
-	{ "umask",      1,      NULL,   'u' },
-	{ "arg",        1,      NULL,   'a' },
-	{ 0,            0,      0,      0   }
+#include "libbb.h"
+
+struct globals {
+	char **names;
+	int    cur;
+	char  *cmd[1];
+};
+#define G (*(struct globals*)&bb_common_bufsiz1)
+#define names (G.names)
+#define cur   (G.cur  )
+#define cmd   (G.cmd  )
+
+enum { NUM_CMD = (COMMON_BUFSIZE - sizeof(struct globals)) / sizeof(cmd[0]) };
+
+enum {
+	RUN_PARTS_OPT_a = (1 << 0),
+	RUN_PARTS_OPT_u = (1 << 1),
+	RUN_PARTS_OPT_t = (1 << 2),
+	RUN_PARTS_OPT_l = (1 << 3) * ENABLE_FEATURE_RUN_PARTS_FANCY,
 };
 
-/* valid_name */
-/* True or false? Is this a valid filename (upper/lower alpha, digits,
+#if ENABLE_FEATURE_RUN_PARTS_FANCY
+#define list_mode (option_mask32 & RUN_PARTS_OPT_l)
+#else
+#define list_mode 0
+#endif
+
+/* Is this a valid filename (upper/lower alpha, digits,
  * underscores, and hyphens only?)
  */
-static int valid_name(const struct dirent *d)
+static bool invalid_name(const char *c)
 {
-	const char *c = d->d_name;
+	c = bb_basename(c);
 
-	while (*c) {
-		if (!isalnum(*c) && (*c != '_') && (*c != '-')) {
-			return 0;
-		}
-		++c;
-	}
-	return 1;
+	while (*c && (isalnum(*c) || *c == '_' || *c == '-'))
+		c++;
+
+	return *c; /* TRUE (!0) if terminating NUL is not reached */
 }
 
-/* test mode = 1 is the same as official run_parts
- * test_mode = 2 means to fail silently on missing directories
- */
-static int run_parts(char **args, const unsigned char test_mode)
+static int bb_alphasort(const void *p1, const void *p2)
 {
-	struct dirent **namelist = 0;
-	struct stat st;
-	char *filename;
-	char *arg0 = args[0];
-	int entries;
-	int i;
-	int exitstatus = 0;
+	return strcmp(*(char **) p1, *(char **) p2);
+}
 
-#if __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &i;
-	(void) &exitstatus;
+static int act(const char *file, struct stat *statbuf, void *args, int depth)
+{
+	if (depth == 1)
+		return TRUE;
+
+	if (depth == 2
+	 && (  !(statbuf->st_mode & (S_IFREG | S_IFLNK))
+	    || invalid_name(file)
+	    || (!list_mode && access(file, X_OK) != 0))
+	) {
+		return SKIP;
+	}
+
+	names = xrealloc(names, (cur + 2) * sizeof(names[0]));
+	names[cur++] = xstrdup(file);
+	names[cur] = NULL;
+
+	return TRUE;
+}
+
+#if ENABLE_FEATURE_RUN_PARTS_LONG_OPTIONS
+static const char runparts_longopts[] ALIGN1 =
+	"arg\0"     Required_argument "a"
+	"umask\0"   Required_argument "u"
+	"test\0"    No_argument       "t"
+#if ENABLE_FEATURE_RUN_PARTS_FANCY
+	"list\0"    No_argument       "l"
+//TODO: "reverse\0" No_argument       "r"
+//TODO: "verbose\0" No_argument       "v"
 #endif
-	/* scandir() isn't POSIX, but it makes things easy. */
-	entries = scandir(arg0, &namelist, valid_name, alphasort);
+	;
+#endif
 
-	if (entries == -1) {
-		if (test_mode & 2) {
-			return 2;
-		}
-		bb_perror_msg_and_die("cannot open '%s'", arg0);
-	}
-
-	for (i = 0; i < entries; i++) {
-		filename = concat_path_file(arg0, namelist[i]->d_name);
-
-		xstat(filename, &st);
-		if (S_ISREG(st.st_mode) && !access(filename, X_OK)) {
-			if (test_mode) {
-				puts(filename);
-			} else {
-				/* exec_errno is common vfork variable */
-				volatile int exec_errno = 0;
-				int result;
-				int pid;
-
-				if ((pid = vfork()) < 0) {
-					bb_perror_msg_and_die("failed to fork");
-				} else if (!pid) {
-					args[0] = filename;
-					execve(filename, args, environ);
-					exec_errno = errno;
-					_exit(1);
-				}
-
-				waitpid(pid, &result, 0);
-				if (exec_errno) {
-					errno = exec_errno;
-					bb_perror_msg("failed to exec %s", filename);
-					exitstatus = 1;
-				}
-				if (WIFEXITED(result) && WEXITSTATUS(result)) {
-					bb_perror_msg("%s exited with return code %d", filename, WEXITSTATUS(result));
-					exitstatus = 1;
-				} else if (WIFSIGNALED(result)) {
-					bb_perror_msg("%s exited because of uncaught signal %d", filename, WTERMSIG(result));
-					exitstatus = 1;
-				}
-			}
-		} else if (!S_ISDIR(st.st_mode)) {
-			bb_error_msg("component %s is not an executable plain file", filename);
-			exitstatus = 1;
-		}
-
-		free(namelist[i]);
-		free(filename);
-	}
-	free(namelist);
-
-	return exitstatus;
-}
-
-
-/* run_parts_main */
-/* Process options */
-int run_parts_main(int argc, char **argv);
+int run_parts_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int run_parts_main(int argc, char **argv)
 {
-	char **args = xmalloc(2 * sizeof(char *));
-	unsigned char test_mode = 0;
-	unsigned short argcount = 1;
-	int opt;
+	const char *umask_p = "22";
+	llist_t *arg_list = NULL;
+	unsigned n;
+	int ret;
 
-	umask(022);
-
-	while ((opt = getopt_long(argc, argv, "tu:a:",
-					runparts_long_options, NULL)) > 0)
-	{
-		switch (opt) {
-		/* Enable test mode */
-		case 't':
-			test_mode++;
-			break;
-		/* Set the umask of the programs executed */
-		case 'u':
-			/* Check and set the umask of the program executed. As stated in the original
-			 * run-parts, the octal conversion in libc is not foolproof; it will take the
-			 * 8 and 9 digits under some circumstances. We'll just have to live with it.
-			 */
-			umask(xstrtoul_range(optarg, 8, 0, 07777));
-			break;
-		/* Pass an argument to the programs */
-		case 'a':
-			/* Add an argument to the commands that we will call.
-			 * Called once for every argument. */
-			args = xrealloc(args, (argcount + 2) * (sizeof(char *)));
-			args[argcount++] = optarg;
-			break;
-		default:
-			bb_show_usage();
-		}
-	}
-
+#if ENABLE_FEATURE_RUN_PARTS_LONG_OPTIONS
+	applet_long_options = runparts_longopts;
+#endif
 	/* We require exactly one argument: the directory name */
-	if (optind != (argc - 1)) {
-		bb_show_usage();
+	opt_complementary = "=1:a::";
+	getopt32(argv, "a:u:t"USE_FEATURE_RUN_PARTS_FANCY("l"), &arg_list, &umask_p);
+
+	umask(xstrtou_range(umask_p, 8, 0, 07777));
+
+	n = 1;
+	while (arg_list && n < NUM_CMD) {
+		cmd[n] = arg_list->data;
+		arg_list = arg_list->link;
+		n++;
+	}
+	/* cmd[n] = NULL; - is already zeroed out */
+
+	/* run-parts has to sort executables by name before running them */
+
+	recursive_action(argv[optind],
+			ACTION_RECURSE|ACTION_FOLLOWLINKS,
+			act,            /* file action */
+			act,            /* dir action */
+			NULL,           /* user data */
+			1               /* depth */
+		);
+
+	if (!names)
+		return 0;
+
+	qsort(names, cur, sizeof(char *), bb_alphasort);
+
+	n = 0;
+	while (1) {
+		char *name = *names++;
+		if (!name)
+			break;
+		if (option_mask32 & (RUN_PARTS_OPT_t | RUN_PARTS_OPT_l)) {
+			puts(name);
+			continue;
+		}
+		cmd[0] = name;
+		ret = wait4pid(spawn(cmd));
+		if (ret == 0)
+			continue;
+		n = 1;
+		if (ret < 0)
+			bb_perror_msg("failed to exec %s", name);
+		else /* ret > 0 */
+			bb_error_msg("%s exited with return code %d", name, ret);
 	}
 
-	args[0] = argv[optind];
-	args[argcount] = 0;
-
-	return run_parts(args, test_mode);
+	return n;
 }

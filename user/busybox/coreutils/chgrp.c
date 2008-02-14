@@ -11,14 +11,12 @@
 /* BB_AUDIT GNU defects - unsupported long options. */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/chgrp.html */
 
-#include "busybox.h"
+#include "libbb.h"
 
-/* Don't use lchown glibc older then 2.1.x */
-#if ((__GLIBC__ <= 2) && (__GLIBC_MINOR__ < 1)) || defined(__UC_LIBC__)
-#define lchown	chown
-#endif
+/* This is a NOEXEC applet. Be very careful! */
 
-int chgrp_main(int argc, char **argv);
+
+int chgrp_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int chgrp_main(int argc, char **argv)
 {
 	/* "chgrp [opts] abc file(s)" == "chown [opts] :abc file(s)" */

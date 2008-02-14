@@ -3,7 +3,6 @@
  * Mini ar implementation for busybox
  *
  * Copyright (C) 2000 by Glenn McGrath
- * Written by Glenn McGrath <bug1@iinet.net.au> 1 June 2000
  *
  * Based in part on BusyBox tar, Debian dpkg-deb and GNU ar.
  *
@@ -14,7 +13,7 @@
  * http://www.unix-systems.org/single_unix_specification_v2/xcu/ar.html
  */
 
-#include "busybox.h"
+#include "libbb.h"
 #include "unarchive.h"
 
 static void header_verbose_list_ar(const file_header_t *file_header)
@@ -38,20 +37,21 @@ static void header_verbose_list_ar(const file_header_t *file_header)
 #define AR_OPT_CREATE		0x20
 #define AR_OPT_INSERT		0x40
 
-int ar_main(int argc, char **argv);
+int ar_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ar_main(int argc, char **argv)
 {
+	static const char msg_unsupported_err[] ALIGN1 =
+		"archive %s is not supported";
+
 	archive_handle_t *archive_handle;
 	unsigned opt;
-	static const char msg_unsupported_err[] =
-			"Archive %s not supported.  Install binutils 'ar'.";
 	char magic[8];
 
 	archive_handle = init_handle();
 
 	/* Prepend '-' to the first argument if required */
-	opt_complementary = "--:p:t:x:-1:?:p--tx:t--px:x--pt";
-	opt = getopt32(argc, argv, "ptxovcr");
+	opt_complementary = "--:p:t:x:-1:p--tx:t--px:x--pt";
+	opt = getopt32(argv, "ptxovcr");
 
 	if (opt & AR_CTX_PRINT) {
 		archive_handle->action_data = data_extract_to_stdout;
@@ -88,7 +88,8 @@ int ar_main(int argc, char **argv)
 	}
 	archive_handle->offset += 7;
 
-	while (get_header_ar(archive_handle) == EXIT_SUCCESS) /* repeat */;
+	while (get_header_ar(archive_handle) == EXIT_SUCCESS)
+		continue;
 
 	return EXIT_SUCCESS;
 }

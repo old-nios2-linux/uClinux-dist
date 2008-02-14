@@ -5,9 +5,10 @@
  *
  * Copyright (C) 2006 - 2007 KaiGai Kohei <kaigai@kaigai.gr.jp>
  */
-#include "busybox.h"
 #include <getopt.h>
 #include <selinux/context.h>
+
+#include "libbb.h"
 
 #define OPT_RECURSIVE		(1<<0)	/* 'R' */
 #define OPT_CHANHES		(1<<1)	/* 'c' */
@@ -104,31 +105,30 @@ skip:
 }
 
 #if ENABLE_FEATURE_CHCON_LONG_OPTIONS
-static struct option chcon_options[] = {
-	{ "recursive",      0, NULL, 'R' },
-	{ "changes",        0, NULL, 'c' },
-	{ "no-dereference", 0, NULL, 'h' },
-	{ "silent",         0, NULL, 'f' },
-	{ "quiet",          0, NULL, 'f' },
-	{ "user",           1, NULL, 'u' },
-	{ "role",           1, NULL, 'r' },
-	{ "type",           1, NULL, 't' },
-	{ "range",          1, NULL, 'l' },
-	{ "verbose",        0, NULL, 'v' },
-	{ "reference",      1, NULL, 0xff }, /* no short option */
-	{ NULL,             0, NULL, 0 },
-};
+static const char chcon_longopts[] ALIGN1 =
+	"recursive\0"      No_argument       "R"
+	"changes\0"        No_argument       "c"
+	"no-dereference\0" No_argument       "h"
+	"silent\0"         No_argument       "f"
+	"quiet\0"          No_argument       "f"
+	"user\0"           Required_argument "u"
+	"role\0"           Required_argument "r"
+	"type\0"           Required_argument "t"
+	"range\0"          Required_argument "l"
+	"verbose\0"        No_argument       "v"
+	"reference\0"      Required_argument "\xff" /* no short option */
+	;
 #endif
 
-int chcon_main(int argc, char *argv[]);
-int chcon_main(int argc, char *argv[])
+int chcon_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int chcon_main(int argc, char **argv)
 {
 	char *reference_file;
 	char *fname;
 	int i, errors = 0;
 
 #if ENABLE_FEATURE_CHCON_LONG_OPTIONS
-	applet_long_options = chcon_options;
+	applet_long_options = chcon_longopts;
 #endif
 	opt_complementary = "-1"  /* at least 1 param */
 		":?"  /* error if exclusivity constraints are violated */
@@ -136,7 +136,7 @@ int chcon_main(int argc, char *argv[])
 		":\xff--urtl:u--\xff:r--\xff:t--\xff:l--\xff"
 #endif
 		":f--v:v--f";  /* 'verbose' and 'quiet' are exclusive */
-	getopt32(argc, argv, "Rchf:u:r:t:l:v",
+	getopt32(argv, "Rchfu:r:t:l:v",
 		&user, &role, &type, &range, &reference_file);
 	argv += optind;
 
@@ -163,9 +163,7 @@ int chcon_main(int argc, char *argv[])
 		fname[fname_len] = '\0';
 
 		if (recursive_action(fname,
-				     option_mask32 & OPT_RECURSIVE,
-				     FALSE,	/* followLinks */
-				     FALSE,	/* depthFirst */
+				     1<<option_mask32 & OPT_RECURSIVE,
 				     change_filedir_context,
 				     change_filedir_context,
 				     NULL, 0) != TRUE)

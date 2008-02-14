@@ -9,9 +9,9 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
 
-int setlogcons_main(int argc, char **argv);
+int setlogcons_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int setlogcons_main(int argc, char **argv)
 {
 	struct {
@@ -25,8 +25,7 @@ int setlogcons_main(int argc, char **argv)
 	if (argc == 2)
 		arg.subarg = xatoul_range(argv[1], 0, 63);
 
-	if (ioctl(xopen(VC_1, O_RDONLY), TIOCLINUX, &arg))
-		bb_perror_msg_and_die("TIOCLINUX");
+	xioctl(xopen(VC_1, O_RDONLY), TIOCLINUX, &arg);
 
 	return 0;
 }

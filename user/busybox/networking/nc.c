@@ -7,7 +7,11 @@
  *  Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
-#include "busybox.h"
+#include "libbb.h"
+
+#if ENABLE_DESKTOP
+#include "nc_bloaty.c"
+#else
 
 /* Lots of small differences in features
  * when compared to "standard" nc
@@ -18,7 +22,7 @@ static void timeout(int signum)
 	bb_error_msg_and_die("timed out");
 }
 
-int nc_main(int argc, char **argv);
+int nc_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int nc_main(int argc, char **argv)
 {
 	/* sfd sits _here_ only because of "repeat" option (-l -l). */
@@ -106,10 +110,10 @@ int nc_main(int argc, char **argv)
 			if (!lport) {
 				socklen_t addrlen = lsa->len;
 				getsockname(sfd, &lsa->sa, &addrlen);
-				lport = get_nport(lsa);
+				lport = get_nport(&lsa->sa);
 				fdprintf(2, "%d\n", ntohs(lport));
 			}
-			fcntl(sfd, F_SETFD, FD_CLOEXEC);
+			close_on_exec_on(sfd);
  accept_again:
 			cfd = accept(sfd, NULL, 0);
 			if (cfd < 0)
@@ -170,11 +174,10 @@ int nc_main(int argc, char **argv)
 		if (select(FD_SETSIZE, &testfds, NULL, NULL, NULL) < 0)
 			bb_perror_msg_and_die("select");
 
+#define iobuf bb_common_bufsiz1
 		for (fd = 0; fd < FD_SETSIZE; fd++) {
 			if (FD_ISSET(fd, &testfds)) {
-				nread = safe_read(fd, bb_common_bufsiz1,
-							sizeof(bb_common_bufsiz1));
-
+				nread = safe_read(fd, iobuf, sizeof(iobuf));
 				if (fd == cfd) {
 					if (nread < 1)
 						exit(0);
@@ -188,10 +191,10 @@ int nc_main(int argc, char **argv)
 					}
 					ofd = cfd;
 				}
-
-				xwrite(ofd, bb_common_bufsiz1, nread);
+				xwrite(ofd, iobuf, nread);
 				if (delay > 0) sleep(delay);
 			}
 		}
 	}
 }
+#endif

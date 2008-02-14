@@ -10,10 +10,10 @@
 /* BB_AUDIT SUSv3 compliant */
 /* http://www.opengroup.org/onlinepubs/007904975/utilities/tee.html */
 
-#include "busybox.h"
+#include "libbb.h"
 #include <signal.h>
 
-int tee_main(int argc, char **argv);
+int tee_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int tee_main(int argc, char **argv)
 {
 	const char *mode = "w\0a";
@@ -22,13 +22,14 @@ int tee_main(int argc, char **argv)
 	char **names;
 	char **np;
 	char retval;
+//TODO: make unconditional
 #if ENABLE_FEATURE_TEE_USE_BLOCK_IO
 	ssize_t c;
 # define buf bb_common_bufsiz1
 #else
 	int c;
 #endif
-	retval = getopt32(argc, argv, "ia");	/* 'a' must be 2nd */
+	retval = getopt32(argv, "ia");	/* 'a' must be 2nd */
 	argc -= optind;
 	argv += optind;
 
@@ -62,7 +63,7 @@ int tee_main(int argc, char **argv)
 	/* names[0] will be filled later */
 
 #if ENABLE_FEATURE_TEE_USE_BLOCK_IO
-	while ((c = safe_read(STDIN_FILENO, buf, BUFSIZ)) > 0) {
+	while ((c = safe_read(STDIN_FILENO, buf, sizeof(buf))) > 0) {
 		fp = files;
 		do
 			fwrite(buf, 1, c, *fp++);
