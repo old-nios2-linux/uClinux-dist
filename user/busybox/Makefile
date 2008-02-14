@@ -274,15 +274,15 @@ MAKEFLAGS += -rR
 
 # Make variables (CC, etc...)
 
-AS		= $(CROSS_COMPILE)as
-CC		= $(CROSS_COMPILE)gcc
-LD		= $(CC) -nostdlib
-CPP		= $(CC) -E
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
-STRIP		= $(CROSS_COMPILE)strip
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
+#AS		= $(CROSS_COMPILE)as
+#CC		= $(CROSS_COMPILE)gcc
+#LD		= $(CC) -nostdlib
+#CPP		= $(CC) -E
+#AR		= $(CROSS_COMPILE)ar
+#NM		= $(CROSS_COMPILE)nm
+#STRIP		= $(CROSS_COMPILE)strip
+#OBJCOPY		= $(CROSS_COMPILE)objcopy
+#OBJDUMP		= $(CROSS_COMPILE)objdump
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 DEPMOD		= /sbin/depmod
@@ -467,7 +467,23 @@ ifeq ($(dot-config),1)
 # If .config needs to be updated, it will be done via the dependency
 # that autoconf has on .config.
 # To avoid any implicit rule to kick in, define an empty command
-.config .kconfig.d: ;
+.kconfig.d : ;
+
+Config.in: Kconfig
+	sh ./mkConfig.in
+
+.config: $(ROOTDIR)/config/.config Config.in
+	sh ./mkconfig > .config.tmp
+	if cmp -s .config .config.tmp ; \
+	then \
+		echo "CONFIGs the same!" ; \
+		rm -f .config.tmp ; \
+	else \
+		echo "CALLING make clean!" ; \
+		mv -f .config.tmp .config ; \
+		$(MAKE) clean; \
+	fi
+
 
 # Now we can define CFLAGS etc according to .config
 include $(srctree)/Makefile.flags
@@ -568,7 +584,7 @@ busybox-all  := $(core-y) $(libs-y)
 # Rule to link busybox - also used during CONFIG_KALLSYMS
 # May be overridden by arch/$(ARCH)/Makefile
 quiet_cmd_busybox__ ?= LINK    $@
-      cmd_busybox__ ?= $(srctree)/scripts/trylink \
+      cmd_busybox__ ?= \
       "$@" \
       "$(CC)" \
       "$(LDFLAGS) $(EXTRA_LDFLAGS)" \
@@ -810,6 +826,8 @@ quiet_cmd_split_autoconf   = SPLIT   include/autoconf.h -> include/config/*
       cmd_split_autoconf   = scripts/basic/split-include include/autoconf.h include/config
 #bbox# piggybacked generation of few .h files
 include/config/MARKER: scripts/basic/split-include include/autoconf.h
+	chmod +x $(srctree)/scripts/mkconfigs
+	chmod +x $(srctree)/applets/usage_compressed
 	$(call cmd,split_autoconf)
 	$(call cmd,gen_bbconfigopts)
 	@touch $@
@@ -842,7 +860,7 @@ depend dep:
 # ---------------------------------------------------------------------------
 # Modules
 
-ifdef CONFIG_MODULES
+ifdef _CONFIG_MODULES
 
 # 	By default, build modules as well
 
@@ -895,7 +913,7 @@ PHONY += _modinst_post
 _modinst_post: _modinst_
 	if [ -r System.map -a -x $(DEPMOD) ]; then $(DEPMOD) -ae -F System.map $(depmod_opts) $(KERNELRELEASE); fi
 
-else # CONFIG_MODULES
+else # _CONFIG_MODULES
 
 # Modules not configured
 # ---------------------------------------------------------------------------
@@ -908,7 +926,7 @@ modules modules_install: FORCE
 	@echo
 	@exit 1
 
-endif # CONFIG_MODULES
+endif # _CONFIG_MODULES
 
 ###
 # Cleaning is done on three levels.
@@ -961,6 +979,7 @@ $(mrproper-dirs):
 	$(Q)$(MAKE) $(clean)=$(patsubst _mrproper_%,%,$@)
 
 mrproper: clean archmrproper $(mrproper-dirs)
+	@find . -name Config.in | xargs rm -f
 	$(call cmd,rmdirs)
 	$(call cmd,rmfiles)
 
