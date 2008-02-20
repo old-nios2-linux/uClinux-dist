@@ -76,7 +76,6 @@ try $CC $LDFLAGS \
 	-o $EXE \
 	-Wl,--sort-common \
 	$SORT_SECTION \
-	-Wl,--gc-sections \
 	-Wl,--start-group $O_FILES $A_FILES -Wl,--end-group \
 	$l_list \
 || {
@@ -100,7 +99,6 @@ while test "$LDLIBS"; do
 		-o $EXE \
 		-Wl,--sort-common \
 		$SORT_SECTION \
-		-Wl,--gc-sections \
 		-Wl,--start-group $O_FILES $A_FILES -Wl,--end-group \
 		$l_list
 	if test $? = 0; then
@@ -129,7 +127,6 @@ if ! test -f busybox_ldscript; then
 	    -o $EXE \
 	    -Wl,--sort-common \
 	    $SORT_SECTION \
-	    -Wl,--gc-sections \
 	    -Wl,--start-group $O_FILES $A_FILES -Wl,--end-group \
 	    $l_list \
 	    -Wl,--warn-common \
