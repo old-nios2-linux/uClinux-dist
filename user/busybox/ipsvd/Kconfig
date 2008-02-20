@@ -5,13 +5,13 @@
 
 menu "ipsvd utilities"
 
-config TCPSVD
+config USER_BUSYBOX_TCPSVD
 	bool "tcpsvd"
 	default n
 	help
 	  tcpsvd listens on a tcp port and runs a program for each new connection
 
-config UDPSVD
+config USER_BUSYBOX_UDPSVD
 	bool "udpsvd"
 	default n
 	help

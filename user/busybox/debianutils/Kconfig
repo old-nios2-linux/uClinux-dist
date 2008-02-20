@@ -5,19 +5,19 @@
 
 menu "Debian Utilities"
 
-config MKTEMP
+config USER_BUSYBOX_MKTEMP
 	bool "mktemp"
 	default n
 	help
 	  mktemp is used to create unique temporary files
 
-config PIPE_PROGRESS
+config USER_BUSYBOX_PIPE_PROGRESS
 	bool "pipe_progress"
 	default n
 	help
 	  Display a dot to indicate pipe activity.
 
-config RUN_PARTS
+config USER_BUSYBOX_RUN_PARTS
 	bool "run-parts"
 	default n
 	help
@@ -32,23 +32,23 @@ config RUN_PARTS
 	  Unless you know that run-parts is used in some of your scripts
 	  you can safely say N here.
 
-config FEATURE_RUN_PARTS_LONG_OPTIONS
+config USER_BUSYBOX_FEATURE_RUN_PARTS_LONG_OPTIONS
 	bool "Enable long options"
 	default n
-	depends on RUN_PARTS && GETOPT_LONG
+	depends on USER_BUSYBOX_RUN_PARTS && USER_BUSYBOX_GETOPT_LONG
 	help
 	  Support long options for the run-parts applet.
 
-config FEATURE_RUN_PARTS_FANCY
+config USER_BUSYBOX_FEATURE_RUN_PARTS_FANCY
 	bool "Support additional arguments"
 	default n
-	depends on RUN_PARTS
+	depends on USER_BUSYBOX_RUN_PARTS
 	help
 	  Support additional options:
 	  -l --list print the names of the all matching files (not
 	            limited to executables), but don't actually run them.
 
-config START_STOP_DAEMON
+config USER_BUSYBOX_START_STOP_DAEMON
 	bool "start-stop-daemon"
 	default y
 	help
@@ -56,23 +56,23 @@ config START_STOP_DAEMON
 	  termination of system-level processes, usually the ones
 	  started during the startup of the system.
 
-config FEATURE_START_STOP_DAEMON_FANCY
+config USER_BUSYBOX_FEATURE_START_STOP_DAEMON_FANCY
 	bool "Support additional arguments"
 	default y
-	depends on START_STOP_DAEMON
+	depends on USER_BUSYBOX_START_STOP_DAEMON
 	help
 	  Support additional arguments.
 	  -o|--oknodo ignored since we exit with 0 anyway
 	  -v|--verbose
 
-config FEATURE_START_STOP_DAEMON_LONG_OPTIONS
+config USER_BUSYBOX_FEATURE_START_STOP_DAEMON_LONG_OPTIONS
 	bool "Enable long options"
 	default n
-	depends on START_STOP_DAEMON && GETOPT_LONG
+	depends on USER_BUSYBOX_START_STOP_DAEMON && USER_BUSYBOX_GETOPT_LONG
 	help
 	  Support long options for the start-stop-daemon applet.
 
-config WHICH
+config USER_BUSYBOX_WHICH
 	bool "which"
 	default n
 	help

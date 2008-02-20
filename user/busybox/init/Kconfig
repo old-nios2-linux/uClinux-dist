@@ -5,32 +5,32 @@
 
 menu "Init Utilities"
 
-config INIT
+config USER_BUSYBOX_INIT
 	bool "init"
 	default n
-	select FEATURE_SYSLOG
+	select USER_BUSYBOX_FEATURE_SYSLOG
 	help
 	  init is the first program run when the system boots.
 
-config DEBUG_INIT
+config USER_BUSYBOX_DEBUG_INIT
 	bool "debugging aid"
 	default n
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  Turn this on to disable all the dangerous
 	  rebooting stuff when debugging.
 
-config FEATURE_USE_INITTAB
+config USER_BUSYBOX_FEATURE_USE_INITTAB
 	bool "Support reading an inittab file"
 	default y
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  Allow init to read an inittab file when the system boot.
 
-config FEATURE_INIT_SCTTY
+config USER_BUSYBOX_FEATURE_INIT_SCTTY
 	bool "Support running commands with a controlling-tty"
 	default n
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  If this option is enabled a command starting with hyphen (-)
 	  is run in its own session (setsid(2)) and possibly with a
@@ -39,22 +39,22 @@ config FEATURE_INIT_SCTTY
 	  the console is only accessed during development or for maintenance.
 	  NB: using cttyhack applet may work better.
 
-config FEATURE_INIT_SYSLOG
+config USER_BUSYBOX_FEATURE_INIT_SYSLOG
 	bool "Enable init to write to syslog"
 	default n
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 
-config FEATURE_EXTRA_QUIET
+config USER_BUSYBOX_FEATURE_EXTRA_QUIET
 	bool "Be _extra_ quiet on boot"
 	default y
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  Prevent init from logging some messages to the console during boot.
 
-config FEATURE_INIT_COREDUMPS
+config USER_BUSYBOX_FEATURE_INIT_COREDUMPS
 	bool "Support dumping core for child processes (debugging only)"
 	default n
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  If this option is enabled and the file /.init_enable_core
 	  exists, then init will call setrlimit() to allow unlimited
@@ -63,10 +63,10 @@ config FEATURE_INIT_COREDUMPS
 
 
 
-config FEATURE_INITRD
+config USER_BUSYBOX_FEATURE_INITRD
 	bool "Support running init from within an initrd (not initramfs)"
 	default y
-	depends on INIT
+	depends on USER_BUSYBOX_INIT
 	help
 	  Legacy support for running init under the old-style initrd.  Allows
 	  the name linuxrc to act as init, and it doesn't assume init is PID 1.
@@ -74,13 +74,13 @@ config FEATURE_INITRD
 	  This does not apply to initramfs, which runs /init as PID 1 and
 	  requires no special support.
 
-config HALT
+config USER_BUSYBOX_HALT
 	bool "poweroff, halt, and reboot"
 	default y
 	help
 	  Stop all processes and either halt, reboot, or power off the system.
 
-config MESG
+config USER_BUSYBOX_MESG
 	bool "mesg"
 	default y
 	help

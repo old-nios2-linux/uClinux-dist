@@ -5,7 +5,7 @@
 
 menu "Archival Utilities"
 
-config AR
+config USER_BUSYBOX_AR
 	bool "ar"
 	default n
 	help
@@ -28,17 +28,17 @@ config AR
 	  Unless you have a specific application which requires ar, you should
 	  probably say N here.
 
-config FEATURE_AR_LONG_FILENAMES
+config USER_BUSYBOX_FEATURE_AR_LONG_FILENAMES
 	bool "Enable support for long filenames (not need for debs)"
 	default n
-	depends on AR
+	depends on USER_BUSYBOX_AR
 	help
 	  By default the ar format can only store the first 15 characters of the
 	  filename, this option removes that limitation.
 	  It supports the GNU ar long filename method which moves multiple long
 	  filenames into a the data section of a new ar entry.
 
-config BUNZIP2
+config USER_BUSYBOX_BUNZIP2
 	bool "bunzip2"
 	default n
 	help
@@ -51,7 +51,7 @@ config BUNZIP2
 	  Unless you have a specific application which requires bunzip2, you
 	  should probably say N here.
 
-config BZIP2
+config USER_BUSYBOX_BZIP2
 	bool "bzip2"
 	default n
 	help
@@ -64,7 +64,7 @@ config BZIP2
 	  Unless you have a specific application which requires bzip2, you
 	  should probably say N here.
 
-config CPIO
+config USER_BUSYBOX_CPIO
 	bool "cpio"
 	default n
 	help
@@ -78,7 +78,7 @@ config CPIO
 	  Unless you have a specific application which requires cpio, you should
 	  probably say N here.
 
-config DPKG
+config USER_BUSYBOX_DPKG
 	bool "dpkg"
 	default n
 	help
@@ -87,7 +87,7 @@ config DPKG
 	  This implementation of dpkg has a number of limitations, you should use the
 	  official dpkg if possible.
 
-config DPKG_DEB
+config USER_BUSYBOX_DPKG_DEB
 	bool "dpkg_deb"
 	default n
 	help
@@ -98,16 +98,16 @@ config DPKG_DEB
 	  Unless you have a specific application which requires dpkg-deb, you should
 	  probably say N here.
 
-config FEATURE_DPKG_DEB_EXTRACT_ONLY
+config USER_BUSYBOX_FEATURE_DPKG_DEB_EXTRACT_ONLY
 	bool "extract only (-x)"
 	default n
-	depends on DPKG_DEB
+	depends on USER_BUSYBOX_DPKG_DEB
 	help
 	  This reduces dpkg-deb to the equivalent of "ar -p <deb> data.tar.gz | tar -zx".
 	  However it saves space as none of the extra dpkg-deb, ar or tar options are
 	  needed, they are linked to internally.
 
-config GUNZIP
+config USER_BUSYBOX_GUNZIP
 	bool "gunzip"
 	default n
 	help
@@ -115,42 +115,42 @@ config GUNZIP
 	  You can use the `-t' option to test the integrity of
 	  an archive, without decompressing it.
 
-config FEATURE_GUNZIP_UNCOMPRESS
+config USER_BUSYBOX_FEATURE_GUNZIP_UNCOMPRESS
 	bool "Uncompress support"
 	default n
-	depends on GUNZIP
+	depends on USER_BUSYBOX_GUNZIP
 	help
 	  Enable if you want gunzip to have the ability to decompress
 	  archives created by the program compress (not much
 	  used anymore).
 
-config GZIP
+config USER_BUSYBOX_GZIP
 	bool "gzip"
 	default n
 	help
 	  gzip is used to compress files.
 	  It's probably the most widely used UNIX compression program.
 
-config RPM2CPIO
+config USER_BUSYBOX_RPM2CPIO
 	bool "rpm2cpio"
 	default n
 	help
 	  Converts an RPM file into a CPIO archive.
 
-config RPM
+config USER_BUSYBOX_RPM
 	bool "rpm"
 	default n
 	help
 	  Mini RPM applet - queries and extracts RPM packages.
 
-config FEATURE_RPM_BZ2
+config USER_BUSYBOX_FEATURE_RPM_BZ2
 	bool "Enable handling of rpms with bzip2-compressed data inside"
 	default n
-	depends on RPM
+	depends on USER_BUSYBOX_RPM
 	help
 	  Enable handling of rpms with bzip2-compressed data inside.
 
-config TAR
+config USER_BUSYBOX_TAR
 	bool "tar"
 	default n
 	help
@@ -158,95 +158,95 @@ config TAR
 	  create compressed archives. It's probably the most widely used
 	  UNIX archive program.
 
-config FEATURE_TAR_CREATE
+config USER_BUSYBOX_FEATURE_TAR_CREATE
 	bool "Enable archive creation"
 	default y
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option you'll be able to create
 	  tar archives using the `-c' option.
 
-config FEATURE_TAR_BZIP2
+config USER_BUSYBOX_FEATURE_TAR_BZIP2
 	bool "Enable -j option to handle .tar.bz2 files"
 	default n
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option you'll be able to extract
 	  archives compressed with bzip2.
 
-config FEATURE_TAR_LZMA
+config USER_BUSYBOX_FEATURE_TAR_LZMA
 	bool "Enable -a option to handle .tar.lzma files"
 	default n
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option you'll be able to extract
 	  archives compressed with lzma.
 
-config FEATURE_TAR_FROM
+config USER_BUSYBOX_FEATURE_TAR_FROM
 	bool "Enable -X (exclude from) and -T (include from) options)"
 	default n
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option you'll be able to specify
 	  a list of files to include or exclude from an archive.
 
-config FEATURE_TAR_GZIP
+config USER_BUSYBOX_FEATURE_TAR_GZIP
 	bool "Enable -z option"
 	default y
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option tar will be able to call gzip,
 	  when creating or extracting tar gziped archives.
 
-config FEATURE_TAR_COMPRESS
+config USER_BUSYBOX_FEATURE_TAR_COMPRESS
 	bool "Enable -Z option"
 	default n
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  If you enable this option tar will be able to call uncompress,
 	  when extracting .tar.Z archives.
 
-config FEATURE_TAR_OLDGNU_COMPATIBILITY
+config USER_BUSYBOX_FEATURE_TAR_OLDGNU_COMPATIBILITY
 	bool "Enable support for old tar header format"
 	default N
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  This option is required to unpack archives created in
 	  the old GNU format; help to kill this old format by
 	  repacking your ancient archives with the new format.
 
-config FEATURE_TAR_OLDSUN_COMPATIBILITY
+config USER_BUSYBOX_FEATURE_TAR_OLDSUN_COMPATIBILITY
 	bool "Enable untarring of tarballs with checksums produced by buggy Sun tar"
 	default N
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  This option is required to unpack archives created by some old
 	  version of Sun's tar (it was calculating checksum using signed arithmetic).
 	  It is said to be fixed in newer Sun tar, but "old" tarballs still exist.
 
-config FEATURE_TAR_GNU_EXTENSIONS
+config USER_BUSYBOX_FEATURE_TAR_GNU_EXTENSIONS
 	bool "Enable support for some GNU tar extensions"
 	default y
-	depends on TAR
+	depends on USER_BUSYBOX_TAR
 	help
 	  With this option busybox supports GNU long filenames and
 	  linknames.
 
-config FEATURE_TAR_LONG_OPTIONS
+config USER_BUSYBOX_FEATURE_TAR_LONG_OPTIONS
 	bool "Enable long options"
 	default n
-	depends on TAR && GETOPT_LONG
+	depends on USER_BUSYBOX_TAR && USER_BUSYBOX_GETOPT_LONG
 	help
 		Enable use of long options, increases size by about 400 Bytes
 
-config UNCOMPRESS
+config USER_BUSYBOX_UNCOMPRESS
 	bool "uncompress"
 	default n
 	help
 	  uncompress is used to decompress archives created by compress.
 	  Not much used anymore, replaced by gzip/gunzip.
 
-config UNLZMA
+config USER_BUSYBOX_UNLZMA
 	bool "unlzma"
 	default n
 	help
@@ -261,15 +261,15 @@ config UNLZMA
 	  Unless you have a specific application which requires unlzma, you
 	  should probably say N here.
 
-config FEATURE_LZMA_FAST
+config USER_BUSYBOX_FEATURE_LZMA_FAST
 	bool "Optimze unlzma for speed"
 	default n
-	depends on UNLZMA
+	depends on USER_BUSYBOX_UNLZMA
 	help
 	  This option reduces decompression time by about 33% at the cost of
 	  a 2K bigger binary.
 
-config UNZIP
+config USER_BUSYBOX_UNZIP
 	bool "unzip"
 	default n
 	help
@@ -280,31 +280,31 @@ config UNZIP
 	  directory of your choice.
 
 comment "Common options for cpio and tar"
-	depends on CPIO || TAR
+	depends on USER_BUSYBOX_CPIO || USER_BUSYBOX_TAR
 
-config FEATURE_UNARCHIVE_TAPE
+config USER_BUSYBOX_FEATURE_UNARCHIVE_TAPE
 	bool "Enable tape drive support"
 	default n
-	depends on CPIO || TAR
+	depends on USER_BUSYBOX_CPIO || USER_BUSYBOX_TAR
 	help
 	  I don't think this is needed anymore.
 
 comment "Common options for dpkg and dpkg_deb"
-	depends on DPKG || DPKG_DEB
+	depends on USER_BUSYBOX_DPKG || USER_BUSYBOX_DPKG_DEB
 
-config FEATURE_DEB_TAR_GZ
+config USER_BUSYBOX_FEATURE_DEB_TAR_GZ
 	bool "gzip debian packages (normal)"
-	default y if DPKG || DPKG_DEB
-	depends on DPKG || DPKG_DEB
+	default y if USER_BUSYBOX_DPKG || USER_BUSYBOX_DPKG_DEB
+	depends on USER_BUSYBOX_DPKG || USER_BUSYBOX_DPKG_DEB
 	help
 	  This is the default compression method inside the debian ar file.
 
 	  If you want compatibility with standard .deb's you should say yes here.
 
-config FEATURE_DEB_TAR_BZ2
+config USER_BUSYBOX_FEATURE_DEB_TAR_BZ2
 	bool "bzip2 debian packages"
 	default n
-	depends on DPKG || DPKG_DEB
+	depends on USER_BUSYBOX_DPKG || USER_BUSYBOX_DPKG_DEB
 	help
 	  This allows dpkg and dpkg-deb to extract deb's that are compressed internally
 	  with bzip2 instead of gzip.
@@ -312,10 +312,10 @@ config FEATURE_DEB_TAR_BZ2
 	  You only want this if you are creating your own custom debian packages that
 	  use an internal control.tar.bz2 or data.tar.bz2.
 
-config FEATURE_DEB_TAR_LZMA
+config USER_BUSYBOX_FEATURE_DEB_TAR_LZMA
 	bool "lzma debian packages"
 	default n
-	depends on DPKG || DPKG_DEB
+	depends on USER_BUSYBOX_DPKG || USER_BUSYBOX_DPKG_DEB
 	help
 	  This allows dpkg and dpkg-deb to extract deb's that are compressed
 	  internally with lzma instead of gzip.
