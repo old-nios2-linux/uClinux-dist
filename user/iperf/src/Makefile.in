@@ -268,7 +268,7 @@ clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 iperf$(EXEEXT): $(iperf_OBJECTS) $(iperf_DEPENDENCIES) 
 	@rm -f iperf$(EXEEXT)
-	$(CXXLINK) $(iperf_LDFLAGS) $(iperf_OBJECTS) $(iperf_LDADD) $(LIBS)
+	$(CXXLINK) $(iperf_LDFLAGS) $(iperf_OBJECTS) $(iperf_LDADD) $(LIBS) $(PTHREAD_LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
