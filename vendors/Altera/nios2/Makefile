@@ -5,7 +5,8 @@
 KERNELZ  = $(IMAGEDIR)/zImage
 
 ROMFS_DIRS = bin sbin dev etc home lib mnt proc usr var sys tmp \
-	etc/config etc/default etc/dhcpc home/ftp home/httpd home/httpd/cgi-bin usr/bin usr/sbin
+	etc/config etc/default etc/dhcpc home/ftp home/httpd home/httpd/cgi-bin usr/bin usr/sbin usr/share \
+	/usr/share/udhcpc
 
 all:
 	dirs=$(DIRS) ; \
@@ -39,6 +40,8 @@ romfs:
 	$(ROMFSINST) /etc/ftpusers
 	$(ROMFSINST) /etc/boa.conf
 	$(ROMFSINST) /etc/mime.types
+	$(ROMFSINST) /usr/share/udhcpc/default.script
+	chmod 777 $(ROMFSDIR)/usr/share/udhcpc/default.script
 	echo "$(VERSIONSTR) -- " `date` > $(ROMFSDIR)/etc/version
 
 image:
