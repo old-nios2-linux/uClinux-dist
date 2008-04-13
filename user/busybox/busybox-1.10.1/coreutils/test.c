@@ -169,7 +169,7 @@ struct statics {
 
 /* Make it reside in writable memory, yet make compiler understand
  * that it is not going to change. */
-static struct statics *const ptr_to_statics __attribute__ ((section (".data")));
+static struct statics *const ptr_to_statics;
 
 #define S (*ptr_to_statics)
 #define t_wp            (S.t_wp         )
