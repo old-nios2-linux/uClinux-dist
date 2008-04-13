@@ -1,6 +1,6 @@
 -include ../user.mak
 
-#CONFOPTS=
+CONFOPTS= --with-ldopts="$(LDFLAGS)"
 
 all: build/build
 	$(MAKE) -C build
