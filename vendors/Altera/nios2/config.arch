@@ -62,7 +62,6 @@ ifdef UCLINUX_BUILD_LIB
   else
 	CFLAGS  :=  -O2 -g
   endif
-	CFLAGS  += -G 0
 	CFLAGS  += $(VENDOR_CFLAGS)
 	CFLAGS  += -DEMBED
 
@@ -92,7 +91,6 @@ ifdef UCLINUX_BUILD_USER
   else
 	CFLAGS  :=  -O2 -g
   endif
-	CFLAGS  += -G 0
 	CFLAGS  += $(VENDOR_CFLAGS)
 	CFLAGS  += -Dlinux -D__linux__ -Dunix -D__uClinux__ -DEMBED
 	CFLAGS  += -I$(ROOTDIR)
