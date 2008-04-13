@@ -200,7 +200,7 @@ struct globals_misc {
 	char gotsig[NSIG - 1];
 };
 /* Make it reside in writable memory, yet make compiler understand that it is not going to change. */
-static struct globals_misc *const ptr_to_globals_misc __attribute__ ((section (".data")));
+static struct globals_misc *const ptr_to_globals_misc;
 #define G_misc (*ptr_to_globals_misc)
 #define rootpid   (G_misc.rootpid  )
 #define shlvl     (G_misc.shlvl    )
@@ -1153,7 +1153,7 @@ struct globals_memstack {
 	struct stack_block stackbase;
 };
 /* Make it reside in writable memory, yet make compiler understand that it is not going to change. */
-static struct globals_memstack *const ptr_to_globals_memstack __attribute__ ((section (".data")));
+static struct globals_memstack *const ptr_to_globals_memstack;
 #define G_memstack (*ptr_to_globals_memstack)
 #define g_stackp     (G_memstack.g_stackp    )
 #define markp        (G_memstack.markp       )
@@ -1772,7 +1772,7 @@ struct globals_var {
 	struct var varinit[ARRAY_SIZE(varinit_data)];
 };
 /* Make it reside in writable memory, yet make compiler understand that it is not going to change. */
-static struct globals_var *const ptr_to_globals_var __attribute__ ((section (".data")));
+static struct globals_var *const ptr_to_globals_var;
 #define G_var (*ptr_to_globals_var)
 #define shellparam    (G_var.shellparam   )
 #define redirlist     (G_var.redirlist    )

@@ -120,7 +120,7 @@ int find_applet_by_name(const char *name)
 
 #ifdef __GLIBC__
 /* Make it reside in R/W memory: */
-int *const bb_errno __attribute__ ((section (".data")));
+int *const bb_errno;
 #endif
 
 void lbb_prepare(const char *applet, char **argv)

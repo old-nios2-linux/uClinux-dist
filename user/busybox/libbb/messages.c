@@ -74,4 +74,4 @@ char bb_common_bufsiz1[COMMON_BUFSIZE] __attribute__(( aligned(sizeof(long long)
 
 struct globals;
 /* Make it reside in R/W memory: */
-struct globals *const ptr_to_globals __attribute__ ((section (".data")));
+struct globals *const ptr_to_globals;
