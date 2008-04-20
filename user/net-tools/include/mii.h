@@ -9,6 +9,12 @@
 #ifndef _LINUX_MII_H
 #define _LINUX_MII_H
 
+#include <linux/types.h>
+#include <linux/sockios.h>
+#include <linux/mii.h>
+
+#if 0
+
 /* network interface ioctl's for MII commands */
 #ifndef SIOCGMIIPHY
 #define SIOCGMIIPHY (SIOCDEVPRIVATE)	/* Read from current PHY */
@@ -17,8 +23,6 @@
 #define SIOCGPARAMS (SIOCDEVPRIVATE+3) 	/* Read operational parameters */
 #define SIOCSPARAMS (SIOCDEVPRIVATE+4) 	/* Set operational parameters */
 #endif
-
-#include <linux/types.h>
 
 /* This data structure is used for all the MII ioctl's */
 struct mii_data {
@@ -82,5 +86,6 @@ struct mii_data {
 #define  MII_ANER_NP_ABLE	0x0004
 #define  MII_ANER_PAGE_RX	0x0002
 #define  MII_ANER_LP_AN_ABLE	0x0001
+#endif
 
 #endif /* _LINUX_MII_H */

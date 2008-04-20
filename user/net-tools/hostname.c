@@ -188,7 +188,7 @@ static void setfilename(char *name, int what)
 
     if ((fd = fopen(name, "r")) != NULL) {
 	while (fgets(fline, sizeof(fline), fd) != NULL) {
-	    if ((p = index(fline, '\n')) != NULL)
+	    if ((p = strchr(fline, '\n')) != NULL)
 		*p = '\0';
 	    if (opt_v)
 		fprintf(stderr, ">> %s\n", fline);
@@ -288,7 +288,7 @@ int main(int argc, char **argv)
     bindtextdomain("net-tools", "/usr/share/locale");
     textdomain("net-tools");
 #endif
-    program_name = (rindex(argv[0], '/')) ? rindex(argv[0], '/') + 1 : argv[0];
+    program_name = (strrchr(argv[0], '/')) ? strrchr(argv[0], '/') + 1 : argv[0];
 
     if (!strcmp(program_name, "ypdomainname") ||
 	!strcmp(program_name, "domainname") ||

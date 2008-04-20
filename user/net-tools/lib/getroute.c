@@ -88,7 +88,7 @@ int route_info(const char *afname, int options)
 
 	ap = NULL;
 
-	if ((tmp2 = index(tmp1, ',')))
+	if ((tmp2 = strchr(tmp1, ',')))
 	    *tmp2++ = '\0';
 
 	if (!tmp1[0]) {

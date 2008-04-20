@@ -38,7 +38,6 @@ int flag_econet;
 int flag_x25 = 0;
 int flag_ash;
 
-
 struct aftrans_t {
     char *alias;
     char *name;
@@ -224,7 +223,6 @@ void aftrans_def(char *tool, char *argv0, char *dflt)
     free(buf);
 }
 
-
 /* Check our protocol family table for this family. */
 struct aftype *get_aftype(const char *name)
 {
@@ -239,7 +237,7 @@ struct aftype *get_aftype(const char *name)
 	    return (*afp);
 	afp++;
     }
-    if (index(name, ','))
+    if (strchr(name, ','))
 	fprintf(stderr, _("Please don't supply more than one address family.\n"));
     return (NULL);
 }
@@ -291,7 +289,7 @@ int aftrans_opt(const char *arg)
 
     while (tmp1) {
 
-	tmp2 = index(tmp1, ',');
+	tmp2 = strchr(tmp1, ',');
 
 	if (tmp2)
 	    *(tmp2++) = '\0';

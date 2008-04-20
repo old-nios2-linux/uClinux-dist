@@ -1376,7 +1376,7 @@ static int ipx_info(void)
     while (fgets(buf, 255, f) != NULL) {
 	sscanf(buf, "%s %s %lX %lX %d %d",
 	       sad, dad, &txq, &rxq, &state, &uid);
-	if ((st = rindex(sad, ':'))) {
+	if ((st = strrchr(sad, ':'))) {
 	    *st++ = '\0';
 	    sscanf(st, "%X", &sport);	/* net byt order */
 	    sport = ntohs(sport);
@@ -1386,7 +1386,7 @@ static int ipx_info(void)
 	}
 	nc = 0;
 	if (strcmp(dad, "Not_Connected") != 0) {
-	    if ((st = rindex(dad, ':'))) {
+	    if ((st = strrchr(dad, ':'))) {
 		*st++ = '\0';
 		sscanf(st, "%X", &dport);	/* net byt order */
 		dport = ntohs(dport);
