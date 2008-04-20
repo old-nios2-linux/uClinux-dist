@@ -1,0 +1,10 @@
+.*
+*.o
+*.gdb
+*.o.*
+*.a
+images/*
+romfs/*
+include/*
+!include/Makefile
+Config.in
