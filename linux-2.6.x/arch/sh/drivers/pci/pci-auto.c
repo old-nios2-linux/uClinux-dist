@@ -184,11 +184,7 @@ retry:
 		bar_size = ~(bar_response & addr_mask) + 1;
 
 		/* Allocate a base address */
-		bar_value = (*lower_limit + (bar_size - 1)) & ~(bar_size - 1);
-
-		/* some combos can wrap,  check for this */
-		if (bar_value < *lower_limit)
-			continue;
+		bar_value = ((*lower_limit - 1) & ~(bar_size - 1)) + bar_size;
 
 		if ((bar_value + bar_size) > *upper_limit) {
 			if (bar_response & PCI_BASE_ADDRESS_SPACE) {
@@ -520,10 +516,8 @@ pciauto_bus_scan(struct pci_channel *hose, int top_bus, int current_bus)
 					 PCI_COMMAND, cmdstat | PCI_COMMAND_IO |
 					 PCI_COMMAND_MEMORY |
 					 PCI_COMMAND_MASTER);
-#if !defined(CONFIG_SH_HS7751RVOIP) && !defined(CONFIG_SH_RTS7751R2D)
 		early_write_config_byte(hose, top_bus, current_bus, pci_devfn,
 					PCI_LATENCY_TIMER, 0x80);
-#endif
 
 		/* Allocate PCI I/O and/or memory space */
 		pciauto_setup_bars(hose, top_bus, current_bus, pci_devfn, PCI_BASE_ADDRESS_5);

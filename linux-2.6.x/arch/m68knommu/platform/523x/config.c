@@ -22,10 +22,6 @@
 #include <asm/mcfsim.h>
 #include <asm/mcfuart.h>
 
-#ifdef CONFIG_MTD
-#include <linux/mtd/physmap.h>
-#endif
-
 /***************************************************************************/
 
 void coldfire_reset(void);
@@ -102,68 +98,9 @@ void mcf_autovector(unsigned int vec)
 
 /***************************************************************************/
 
-#if defined(CONFIG_SAVANT)
-
-/*
- *	Do special config for SAVANT BSP
- */
-static void __init config_savantBSP(char *commandP, int size)
-{
-	/* setup BOOTPARAM_STRING */
-	strncpy(commandP, "root=/dev/mtdblock1 ro rootfstype=romfs", size);
-	/* Look at Chatter DIP Switch, if CS3 is enabled */
-	{
-		uint32_t *csmr3 = (uint32_t *) (MCF_IPSBAR + MCF523x_CSMR3);
-		uint32_t *csar3 = (uint32_t *) (MCF_IPSBAR + MCF523x_CSAR3);
-		uint16_t *dipsP = (uint16_t *) *csar3;
-		uint16_t dipSetOff = *dipsP & 0x0100; // switch #1
-		uint16_t *btnPressP = (uint16_t *)(*csar3 + 0x10);
-		uint16_t shortButtonPress = *btnPressP & 0x8000;
-		if (*csmr3 & 1) {
-			/* CS3 enabled */
-			if (!dipSetOff && shortButtonPress) {
-				/* switch on, so be quiet */
-				strncat(commandP, " console=", size-strlen(commandP)-1);
-			}
-		}
-	}
-	commandP[size-1] = 0;
-
-	/* Set on-chip peripheral space to user mode */
-	{
-		uint8_t *gpacr = (uint8_t *) (MCF_IPSBAR + MCF523x_GPACR);
-		uint8_t *pacr1 = (uint8_t *) (MCF_IPSBAR + MCF523x_PACR1);
-		uint8_t *pacr4 = (uint8_t *) (MCF_IPSBAR + MCF523x_PACR4);
-		uint8_t *pacr7 = (uint8_t *) (MCF_IPSBAR + MCF523x_PACR7);
-		uint8_t *pacr8 = (uint8_t *) (MCF_IPSBAR + MCF523x_PACR8);
-		*gpacr = 0x04;
-		*pacr1 = 0x40; /* EIM required for Chip Select access */
-		*pacr4 = 0x40; /* I2C */
-		*pacr7 = 0x44; /* INTC0 & 1 handy for debug */
-		*pacr8 = 0x40; /* FEC MAC */
-	}
-
-#ifdef CONFIG_MTD
-	/* all board spins cannot access flash from linux unless we change the map here */
-	{
-		uint32_t *csar0 = (uint32_t *) (MCF_IPSBAR + MCF523x_CSAR0);
-		uint32_t start = *csar0;
-		uint32_t size = 0xffffFFFF - start + 1;
-		physmap_configure(start, size, CONFIG_MTD_PHYSMAP_BANKWIDTH, NULL);
-	}
-#endif
-}
-
-#endif /* CONFIG_SAVANT */
-
-/***************************************************************************/
-
 void __init config_BSP(char *commandp, int size)
 {
 	mcf_disableall();
-#if defined(CONFIG_SAVANT)
-	config_savantBSP(commandp, size);
-#endif /* CONFIG_SAVANT */
 	mach_reset = coldfire_reset;
 	m523x_uarts_init();
 }

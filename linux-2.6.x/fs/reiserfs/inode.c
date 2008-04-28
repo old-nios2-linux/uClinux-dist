@@ -453,8 +453,7 @@ static int reiserfs_get_block_create_0(struct inode *inode, sector_t block,
 {
 	return reiserfs_get_block(inode, block, bh_result, GET_BLOCK_NO_HOLE);
 }
- 
-#ifdef CONFIG_DIRECTIO
+
 /* This is special helper for reiserfs_get_block in case we are executing
    direct_IO request. */
 static int reiserfs_get_blocks_direct_io(struct inode *inode,
@@ -498,7 +497,6 @@ static int reiserfs_get_blocks_direct_io(struct inode *inode,
       out:
 	return ret;
 }
-#endif
 
 /*
 ** helper function for when reiserfs_get_block is called for a hole
@@ -1538,7 +1536,7 @@ static struct dentry *reiserfs_get_dentry(struct super_block *sb,
 	if (!inode)
 		inode = ERR_PTR(-ESTALE);
 	if (IS_ERR(inode))
-		return ERR_PTR(PTR_ERR(inode));
+		return ERR_CAST(inode);
 	result = d_alloc_anon(inode);
 	if (!result) {
 		iput(inode);
@@ -2145,7 +2143,7 @@ int reiserfs_truncate_file(struct inode *p_s_inode, int update_timestamps)
 		/* if we are not on a block boundary */
 		if (length) {
 			length = blocksize - length;
-			zero_user_page(page, offset, length, KM_USER0);
+			zero_user(page, offset, length);
 			if (buffer_mapped(bh) && bh->b_blocknr != 0) {
 				mark_buffer_dirty(bh);
 			}
@@ -2369,7 +2367,7 @@ static int reiserfs_write_full_page(struct page *page,
 			unlock_page(page);
 			return 0;
 		}
-		zero_user_page(page, last_offset, PAGE_CACHE_SIZE - last_offset, KM_USER0);
+		zero_user_segment(page, last_offset, PAGE_CACHE_SIZE);
 	}
 	bh = head;
 	block = page->index << (PAGE_CACHE_SHIFT - s->s_blocksize_bits);
@@ -3037,7 +3035,6 @@ static int reiserfs_releasepage(struct page *page, gfp_t unused_gfp_flags)
 	return ret;
 }
 
-#ifdef CONFIG_DIRECTIO
 /* We thank Mingming Cao for helping us understand in great detail what
    to do in this section of the code. */
 static ssize_t reiserfs_direct_IO(int rw, struct kiocb *iocb,
@@ -3051,7 +3048,6 @@ static ssize_t reiserfs_direct_IO(int rw, struct kiocb *iocb,
 				  offset, nr_segs,
 				  reiserfs_get_blocks_direct_io, NULL);
 }
-#endif
 
 int reiserfs_setattr(struct dentry *dentry, struct iattr *attr)
 {
@@ -3167,8 +3163,6 @@ const struct address_space_operations reiserfs_address_space_operations = {
 	.write_begin = reiserfs_write_begin,
 	.write_end = reiserfs_write_end,
 	.bmap = reiserfs_aop_bmap,
-#ifdef CONFIG_DIRECTIO
 	.direct_IO = reiserfs_direct_IO,
-#endif
 	.set_page_dirty = reiserfs_set_page_dirty,
 };

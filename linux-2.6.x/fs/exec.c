@@ -112,14 +112,14 @@ asmlinkage long sys_uselib(const char __user * library)
 		goto out;
 
 	error = -EINVAL;
-	if (!S_ISREG(nd.dentry->d_inode->i_mode))
+	if (!S_ISREG(nd.path.dentry->d_inode->i_mode))
 		goto exit;
 
 	error = vfs_permission(&nd, MAY_READ | MAY_EXEC);
 	if (error)
 		goto exit;
 
-	file = nameidata_to_filp(&nd, O_RDONLY);
+	file = nameidata_to_filp(&nd, O_RDONLY|O_LARGEFILE);
 	error = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out;
@@ -148,7 +148,7 @@ out:
   	return error;
 exit:
 	release_open_intent(&nd);
-	path_release(&nd);
+	path_put(&nd.path);
 	goto out;
 }
 
@@ -173,8 +173,15 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 		return NULL;
 
 	if (write) {
-		struct rlimit *rlim = current->signal->rlim;
 		unsigned long size = bprm->vma->vm_end - bprm->vma->vm_start;
+		struct rlimit *rlim;
+
+		/*
+		 * We've historically supported up to 32 pages (ARG_MAX)
+		 * of argument strings even with small stacks
+		 */
+		if (size <= ARG_MAX)
+			return page;
 
 		/*
 		 * Limit to 1/4-th the stack size for the argv+env strings.
@@ -183,6 +190,7 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 		 *  - the program will have a reasonable amount of stack left
 		 *    to work from.
 		 */
+		rlim = current->signal->rlim;
 		if (size > rlim[RLIMIT_STACK].rlim_cur / 4) {
 			put_page(page);
 			return NULL;
@@ -652,13 +660,14 @@ struct file *open_exec(const char *name)
 	file = ERR_PTR(err);
 
 	if (!err) {
-		struct inode *inode = nd.dentry->d_inode;
+		struct inode *inode = nd.path.dentry->d_inode;
 		file = ERR_PTR(-EACCES);
 		if (S_ISREG(inode->i_mode)) {
 			int err = vfs_permission(&nd, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
-				file = nameidata_to_filp(&nd, O_RDONLY);
+				file = nameidata_to_filp(&nd,
+							O_RDONLY|O_LARGEFILE);
 				if (!IS_ERR(file)) {
 					err = deny_write_access(file);
 					if (err) {
@@ -671,7 +680,7 @@ out:
 			}
 		}
 		release_open_intent(&nd);
-		path_release(&nd);
+		path_put(&nd.path);
 	}
 	goto out;
 }
@@ -760,7 +769,7 @@ static int de_thread(struct task_struct *tsk)
 	 */
 	read_lock(&tasklist_lock);
 	spin_lock_irq(lock);
-	if (sig->flags & SIGNAL_GROUP_EXIT) {
+	if (signal_group_exit(sig)) {
 		/*
 		 * Another group action in progress, just
 		 * return so that the signal is processed.
@@ -778,31 +787,13 @@ static int de_thread(struct task_struct *tsk)
 	if (unlikely(tsk->group_leader == task_child_reaper(tsk)))
 		task_active_pid_ns(tsk)->child_reaper = tsk;
 
+	sig->group_exit_task = tsk;
 	zap_other_threads(tsk);
 	read_unlock(&tasklist_lock);
 
-	/*
-	 * Account for the thread group leader hanging around:
-	 */
-	count = 1;
-	if (!thread_group_leader(tsk)) {
-		count = 2;
-		/*
-		 * The SIGALRM timer survives the exec, but needs to point
-		 * at us as the new group leader now.  We have a race with
-		 * a timer firing now getting the old leader, so we need to
-		 * synchronize with any firing (by calling del_timer_sync)
-		 * before we can safely let the old group leader die.
-		 */
-		sig->tsk = tsk;
-		spin_unlock_irq(lock);
-		if (hrtimer_cancel(&sig->real_timer))
-			hrtimer_restart(&sig->real_timer);
-		spin_lock_irq(lock);
-	}
-
+	/* Account for the thread group leader hanging around: */
+	count = thread_group_leader(tsk) ? 1 : 2;
 	sig->notify_count = count;
-	sig->group_exit_task = tsk;
 	while (atomic_read(&sig->count) > count) {
 		__set_current_state(TASK_UNINTERRUPTIBLE);
 		spin_unlock_irq(lock);
@@ -871,15 +862,10 @@ static int de_thread(struct task_struct *tsk)
 		leader->exit_state = EXIT_DEAD;
 
 		write_unlock_irq(&tasklist_lock);
-        }
+	}
 
 	sig->group_exit_task = NULL;
 	sig->notify_count = 0;
-	/*
-	 * There may be one thread left which is just exiting,
-	 * but it's safe to stop telling the group to kill themselves.
-	 */
-	sig->flags = 0;
 
 no_thread_group:
 	exit_itimers(sig);
@@ -947,12 +933,13 @@ static void flush_old_files(struct files_struct * files)
 	spin_unlock(&files->file_lock);
 }
 
-void get_task_comm(char *buf, struct task_struct *tsk)
+char *get_task_comm(char *buf, struct task_struct *tsk)
 {
 	/* buf must be at least sizeof(tsk->comm) in size */
 	task_lock(tsk);
 	strncpy(buf, tsk->comm, sizeof(tsk->comm));
 	task_unlock(tsk);
+	return buf;
 }
 
 void set_task_comm(struct task_struct *tsk, char *buf)
@@ -1188,7 +1175,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	int try,retval;
 	struct linux_binfmt *fmt;
-#ifdef __alpha__
+#if defined(__alpha__) && defined(CONFIG_ARCH_SUPPORTS_AOUT)
 	/* handle /sbin/loader.. */
 	{
 	    struct exec * eh = (struct exec *) bprm->buf;
@@ -1548,7 +1535,7 @@ static inline int zap_threads(struct task_struct *tsk, struct mm_struct *mm,
 	int err = -EAGAIN;
 
 	spin_lock_irq(&tsk->sighand->siglock);
-	if (!(tsk->signal->flags & SIGNAL_GROUP_EXIT)) {
+	if (!signal_group_exit(tsk->signal)) {
 		tsk->signal->group_exit_code = exit_code;
 		zap_process(tsk);
 		err = 0;
@@ -1670,14 +1657,6 @@ int get_dumpable(struct mm_struct *mm)
 	return (ret >= 2) ? 2 : ret;
 }
 
-/* for systems with sizeof(void*) == 4: */
-#define MAPS_LINE_FORMAT4	  KERN_ERR "%08lx-%08lx %s %08lx %02x:%02x %lu %s\n"
-
-/* for systems with sizeof(void*) == 8: */
-#define MAPS_LINE_FORMAT8	  KERN_ERR "%016lx-%016lx %s %016lx %02x:%02x %lu %s\n"
-
-#define MAPS_LINE_FORMAT	(sizeof(void*) == 4 ? MAPS_LINE_FORMAT4 : MAPS_LINE_FORMAT8)
-
 int do_coredump(long signr, int exit_code, struct pt_regs * regs)
 {
 	char corename[CORENAME_MAX_SIZE + 1];
@@ -1693,104 +1672,6 @@ int do_coredump(long signr, int exit_code, struct pt_regs * regs)
 	char **helper_argv = NULL;
 	int helper_argc = 0;
 	char *delimit;
-
-#ifdef CONFIG_COREDUMP_PRINTK
-	int32_t *stack=NULL;
-	int lines=0;
-	char output_buf[80];
-	char *output = output_buf;
-	int32_t value = 0;
-
-	printk(KERN_ERR "%s[%d] killed because of sig - %ld", current->comm, 
-			current->pid, signr);
-	/* TODO
-	 * print out mmaps.
-	 */
-
-	/*
-	 * We print out the stack.  We start by pointing the stack before the
-	 * call to do_coredump.  Note that we are assuming the kernel stack is 
-	 * the same as the user stack when we are calling do_coredump.
-	 */
-	printk("\n");
-	printk(KERN_ERR"STACK DUMP:\n");
-	for (lines=0,stack=(int32_t *)user_stack(regs);(lines < 10) && 
-			(stack <= (int32_t *)current->mm->start_stack);lines++) {
-		/* print out the address */
-		output+=snprintf(output, 79-(output-output_buf), "0x%08x: ", 
-				(unsigned)stack);
-		/* now print out the stack contents */
-		for (;(stack <= (int32_t*)current->mm->start_stack) && 
-				(79-(output-output_buf) > sizeof("FFFF0000 "));stack++) {
-			copy_from_user(&value, stack, sizeof(int32_t));
-			output += snprintf(output, 79-(output-output_buf),
-					"%08x ", value);
-		}
-		output--;
-		*output++ = '\n';
-		*output = '\0';
-		printk(KERN_ERR "%s", output_buf);
-		output = output_buf;
-	}
-	show_regs(regs);
-#ifdef CONFIG_MMU
-	{
-	struct mm_struct *mm=NULL;
-	struct vm_area_struct *map;
-	char buf[PAGE_SIZE]={0};
-	int flags=0;
-	char *line;
-	dev_t dev = 0;
-	unsigned long ino = 0;
-
-	mm = current->mm;
-	if (mm) 
-		atomic_inc(&mm->mm_users);
-	if (!mm)
-		goto finished;
-
-	down_read(&mm->mmap_sem);
-	map = mm->mmap;
-
-	while (map) {
-		char str[5];
-
-		if (map->vm_file != NULL) {
-			dev = map->vm_file->f_dentry->d_inode->i_sb->s_dev;
-			ino = map->vm_file->f_dentry->d_inode->i_ino;
-			line = d_path(map->vm_file->f_dentry,
-			      map->vm_file->f_vfsmnt,
-			      buf, sizeof(buf));
-		} else {
-			line=NULL;
-		}
-
-		flags = map->vm_flags;
-
-		str[0] = flags & VM_READ ? 'r' : '-';
-		str[1] = flags & VM_WRITE ? 'w' : '-';
-		str[2] = flags & VM_EXEC ? 'x' : '-';
-		str[3] = flags & VM_MAYSHARE ? 's' : 'p';
-		str[4] = 0;
-
-		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end,
-				str,
-				map->vm_pgoff << PAGE_SHIFT,
-				MAJOR(dev), MINOR(dev), ino, line?line:"");
-		map = map->vm_next;
-	}
-	up_read(&mm->mmap_sem);
-	mmput(mm);
-	}
-#else
-	/*
-	 * How do we find base address of shared libs??
-	 */
-#endif
-
-finished:
-#endif
-
 
 	audit_core_dumps(signr);
 

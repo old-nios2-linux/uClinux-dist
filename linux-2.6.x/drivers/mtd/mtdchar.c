@@ -18,7 +18,6 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/compatmac.h>
 
-#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 
 static struct class *mtd_class;
@@ -28,12 +27,10 @@ static void mtd_notify_add(struct mtd_info* mtd)
 	if (!mtd)
 		return;
 
-	class_device_create(mtd_class, NULL, MKDEV(MTD_CHAR_MAJOR, mtd->index*2),
-			    NULL, "mtd%d", mtd->index);
+	device_create(mtd_class, NULL, MKDEV(MTD_CHAR_MAJOR, mtd->index*2), "mtd%d", mtd->index);
 
-	class_device_create(mtd_class, NULL,
-			    MKDEV(MTD_CHAR_MAJOR, mtd->index*2+1),
-			    NULL, "mtd%dro", mtd->index);
+	device_create(mtd_class, NULL,
+		      MKDEV(MTD_CHAR_MAJOR, mtd->index*2+1), "mtd%dro", mtd->index);
 }
 
 static void mtd_notify_remove(struct mtd_info* mtd)
@@ -41,8 +38,8 @@ static void mtd_notify_remove(struct mtd_info* mtd)
 	if (!mtd)
 		return;
 
-	class_device_destroy(mtd_class, MKDEV(MTD_CHAR_MAJOR, mtd->index*2));
-	class_device_destroy(mtd_class, MKDEV(MTD_CHAR_MAJOR, mtd->index*2+1));
+	device_destroy(mtd_class, MKDEV(MTD_CHAR_MAJOR, mtd->index*2));
+	device_destroy(mtd_class, MKDEV(MTD_CHAR_MAJOR, mtd->index*2+1));
 }
 
 static struct mtd_notifier notifier = {
@@ -151,7 +148,7 @@ static int mtd_close(struct inode *inode, struct file *file)
 /* FIXME: This _really_ needs to die. In 2.5, we should lock the
    userspace buffer down and use it directly with readv/writev.
 */
-#define MAX_KMALLOC_SIZE 0x2000
+#define MAX_KMALLOC_SIZE 0x20000
 
 static ssize_t mtd_read(struct file *file, char __user *buf, size_t count,loff_t *ppos)
 {
@@ -246,14 +243,11 @@ static ssize_t mtd_read(struct file *file, char __user *buf, size_t count,loff_t
 	return total_retlen;
 } /* mtd_read */
 
-#define WRITE_KBUF_SIZE MAX_KMALLOC_SIZE
-static DECLARE_MUTEX(write_kbuf_sem);
-static char *write_kbuf;
-
 static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count,loff_t *ppos)
 {
 	struct mtd_file_info *mfi = file->private_data;
 	struct mtd_info *mtd = mfi->mtd;
+	char *kbuf;
 	size_t retlen;
 	size_t total_retlen=0;
 	int ret=0;
@@ -270,17 +264,23 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 	if (!count)
 		return 0;
 
-	down(&write_kbuf_sem);
+	if (count > MAX_KMALLOC_SIZE)
+		kbuf=kmalloc(MAX_KMALLOC_SIZE, GFP_KERNEL);
+	else
+		kbuf=kmalloc(count, GFP_KERNEL);
+
+	if (!kbuf)
+		return -ENOMEM;
 
 	while (count) {
 
-		if (count > WRITE_KBUF_SIZE)
-			len = WRITE_KBUF_SIZE;
+		if (count > MAX_KMALLOC_SIZE)
+			len = MAX_KMALLOC_SIZE;
 		else
 			len = count;
 
-		if (copy_from_user(write_kbuf, buf, len)) {
-			up(&write_kbuf_sem);
+		if (copy_from_user(kbuf, buf, len)) {
+			kfree(kbuf);
 			return -EFAULT;
 		}
 
@@ -293,7 +293,7 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 				ret = -EOPNOTSUPP;
 				break;
 			}
-			ret = mtd->write_user_prot_reg(mtd, *ppos, len, &retlen, write_kbuf);
+			ret = mtd->write_user_prot_reg(mtd, *ppos, len, &retlen, kbuf);
 			break;
 
 		case MTD_MODE_RAW:
@@ -301,7 +301,7 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 			struct mtd_oob_ops ops;
 
 			ops.mode = MTD_OOB_RAW;
-			ops.datbuf = write_kbuf;
+			ops.datbuf = kbuf;
 			ops.oobbuf = NULL;
 			ops.len = len;
 
@@ -311,7 +311,7 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 		}
 
 		default:
-			ret = (*(mtd->write))(mtd, *ppos, len, &retlen, write_kbuf);
+			ret = (*(mtd->write))(mtd, *ppos, len, &retlen, kbuf);
 		}
 		if (!ret) {
 			*ppos += retlen;
@@ -320,12 +320,12 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 			buf += retlen;
 		}
 		else {
-			up(&write_kbuf_sem);
+			kfree(kbuf);
 			return ret;
 		}
 	}
 
-	up(&write_kbuf_sem);
+	kfree(kbuf);
 	return total_retlen;
 } /* mtd_write */
 
@@ -481,6 +481,7 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 	{
 		struct mtd_oob_buf buf;
 		struct mtd_oob_ops ops;
+	        uint32_t retlen;
 
 		if(!(file->f_mode & 2))
 			return -EPERM;
@@ -520,8 +521,11 @@ static int mtd_ioctl(struct inode *inode, struct file *file,
 		buf.start &= ~(mtd->oobsize - 1);
 		ret = mtd->write_oob(mtd, buf.start, &ops);
 
-		if (copy_to_user(argp + sizeof(uint32_t), &ops.oobretlen,
-				 sizeof(uint32_t)))
+		if (ops.oobretlen > 0xFFFFFFFFU)
+			ret = -EOVERFLOW;
+		retlen = ops.oobretlen;
+		if (copy_to_user(&((struct mtd_oob_buf *)argp)->length,
+				 &retlen, sizeof(buf.length)))
 			ret = -EFAULT;
 
 		kfree(ops.oobbuf);
@@ -785,17 +789,6 @@ static int __init init_mtdchar(void)
 		unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
 		return PTR_ERR(mtd_class);
 	}
-
-	/* Allocate write buffer. */
-	down(&write_kbuf_sem);
-	write_kbuf = kmalloc(WRITE_KBUF_SIZE, GFP_KERNEL);
-	if (write_kbuf == NULL) {
-		up(&write_kbuf_sem);
-		class_destroy(mtd_class);
-		unregister_chrdev(MTD_CHAR_MAJOR, "mtd");
-		return -ENOMEM;
-	}
-	up(&write_kbuf_sem);
 
 	register_mtd_user(&notifier);
 	return 0;

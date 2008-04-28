@@ -14,26 +14,21 @@
 #ifndef __ASM_ARCH_UNCOMPRESS_H
 #define __ASM_ARCH_UNCOMPRESS_H
 
-#include <asm/mach-types.h>
 #include <asm/io.h>
 #include <asm/arch/regs-uart.h>
 
 static void putc(char c)
 {
-	if (!machine_is_lite300() && !machine_is_sg310()) {
-		while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTHRE))
-			barrier();
+	while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTHRE))
+		barrier();
 
-		__raw_writel(c, KS8695_UART_PA + KS8695_URTH);
-	}
+	__raw_writel(c, KS8695_UART_PA + KS8695_URTH);
 }
 
 static inline void flush(void)
 {
-	if (!machine_is_lite300() && !machine_is_sg310()) {
-		while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTE))
-			barrier();
-	}
+	while (!(__raw_readl(KS8695_UART_PA + KS8695_URLS) & URLS_URTE))
+		barrier();
 }
 
 #define arch_decomp_setup()

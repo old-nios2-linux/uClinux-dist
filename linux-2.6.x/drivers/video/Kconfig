@@ -553,6 +553,19 @@ config FB_BF54X_LQ043
 	help
 	 This is the framebuffer device driver for a SHARP LQ043T1DG01 TFT LCD
 
+config FB_BFIN_T350MCQB
+	tristate "Varitronix COG-T350MCQB TFT LCD display (BF527 EZKIT)"
+	depends on FB && BLACKFIN
+	select BFIN_GPTIMERS
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	help
+	 This is the framebuffer device driver for a Varitronix VL-PS-COG-T350MCQB-01 display TFT LCD
+	 This display is a QVGA 320x240 24-bit RGB display interfaced by an 8-bit wide PPI
+	 It uses PPI[0..7] PPI_FS1, PPI_FS2 and PPI_CLK.
+
+
 config FB_STI
 	tristate "HP STI frame buffer device support"
 	depends on FB && PARISC
@@ -889,7 +902,7 @@ config FB_S1D13XXX
 
 config FB_ATMEL
 	tristate "AT91/AT32 LCD Controller support"
-	depends on FB && (ARCH_AT91SAM9261 || ARCH_AT91SAM9263 || AVR32)
+	depends on FB && (ARCH_AT91SAM9261 || ARCH_AT91SAM9263 || ARCH_AT91SAM9RL || ARCH_AT91CAP9 || AVR32)
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
@@ -1615,32 +1628,6 @@ config FB_PM3
 	  chipset, used in Formac ProFormance III, 3DLabs Oxygen VX1 &
 	  similar boards, 3DLabs Permedia3 Create!, Appian Jeronimo 2000
 	  and maybe other boards.
-	  
-config FB_M532x
-	tristate "Coldfire MCF532x Framebuffer"
-	depends on FB && M532x
-	select FB_CFB_FILLRECT
-	select FB_CFB_COPYAREA
-	select FB_CFB_IMAGEBLIT
-	select FRAMEBUFFER_CONSOLE
-	help
-	  FB in MCF5329
-	  
-choice
-	prompt "Select LCD display resolution"
-	depends on FB_M532x
-
-	config LCD_640x480
-	bool "640x480"
-
-	config LCD_800x600
-	bool "800x600"
-	
-	config LCD_240x320
-	bool "240x320"
-	
-endchoice
-	  
 
 config FB_AU1100
 	bool "Au1100 LCD Driver"
@@ -1771,32 +1758,6 @@ config FB_PXA_PARAMETERS
 	  option disabled.
 
 	  <file:Documentation/fb/pxafb.txt> describes the available parameters.
-
-config FB_DM270
-	tristate "TI TMS320DM270 OSD framebuffer support"
-	depends on FB && ARM && MACH_DM270
-	---help---
-	  Frame buffer driver for TI TMS320DM270 on-chip OSD Controller.
-	  See <http://www.linux-fbdev.org/> for information on framebuffer
-	  devices.
-
-	  This driver is also available as a module ( = code which can be
-	  inserted and removed from the running kernel whenever you want). The
-	  module will be called vfb. If you want to compile it as a module,
-	  say M here and read <file:Documentation/modules.txt>.
-
-	  If unsure, say N.
-
-config FB_S1D13XXX
-	tristate "Epson S1D13XXX framebuffer support"
-	depends on FB
-	select FB_CFB_FILLRECT
-	select FB_CFB_COPYAREA
-	select FB_CFB_IMAGEBLIT
-	help
-	  Support for S1D13XXX framebuffer device family (currently only
-	  working with S1D13806). Product specs at
-	  <http://www.erd.epson.com/vdc/html/legacy_13xxx.htm>
 
 config FB_MBX
 	tristate "2700G LCD framebuffer support"
@@ -1931,6 +1892,20 @@ config FB_XILINX
 	  Include support for the Xilinx ML300/ML403 reference design
 	  framebuffer. ML300 carries a 640*480 LCD display on the board,
 	  ML403 uses a standard DB15 VGA connector.
+
+config FB_METRONOME
+       tristate "Metronome display controller support"
+       depends on FB && ARCH_PXA && MMU
+       select FB_SYS_FILLRECT
+       select FB_SYS_COPYAREA
+       select FB_SYS_IMAGEBLIT
+       select FB_SYS_FOPS
+       select FB_DEFERRED_IO
+       help
+         This enables support for the Metronome display controller. Tested
+         with an E-Ink 800x600 display and Gumstix Connex through an AMLCD
+         interface. Please read <file:Documentation/fb/metronomefb.txt>
+         for more information.
 
 config FB_VIRTUAL
 	tristate "Virtual Frame Buffer support (ONLY FOR TESTING!)"

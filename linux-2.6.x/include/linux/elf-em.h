@@ -31,8 +31,8 @@
 #define EM_V850		87	/* NEC v850 */
 #define EM_M32R		88	/* Renesas M32R */
 #define EM_H8_300	46	/* Renesas H8/300,300H,H8S */
+#define EM_MN10300	89	/* Panasonic/MEI MN10300, AM33 */
 #define EM_BLACKFIN     106     /* ADI Blackfin Processor */
-#define EM_ALTERA_NIOS2 113	/* Altera Nios II soft-core processor */
 #define EM_FRV		0x5441	/* Fujitsu FR-V */
 #define EM_AVR32	0x18ad	/* Atmel AVR32 */
 
@@ -48,6 +48,8 @@
 #define EM_CYGNUS_M32R	0x9041
 /* This is the old interim value for S/390 architecture */
 #define EM_S390_OLD	0xA390
+/* Also Panasonic/MEI MN10300, AM33 */
+#define EM_CYGNUS_MN10300 0xbeef
 
 
 #endif /* _LINUX_ELF_EM_H */

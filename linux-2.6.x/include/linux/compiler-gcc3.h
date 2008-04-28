@@ -7,10 +7,8 @@
 
 #if __GNUC_MINOR__ >= 3
 # define __used			__attribute__((__used__))
-# define __attribute_used__	__used				/* deprecated */
 #else
 # define __used			__attribute__((__unused__))
-# define __attribute_used__	__used				/* deprecated */
 #endif
 
 #if __GNUC_MINOR__ >= 4
@@ -24,15 +22,3 @@
 #define uninitialized_var(x) x = x
 
 #define __always_inline		inline __attribute__((always_inline))
-
-#if __GNUC_MINOR__ <= 0
-#undef __always_inline
-#define __always_inline		inline
-#undef inline
-#undef __inline__
-#undef __inline
-#undef __deprecated
-#define __deprecated
-#undef  noinline
-#define  noinline
-#endif

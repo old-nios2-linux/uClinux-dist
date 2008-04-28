@@ -8,11 +8,6 @@
 #include <linux/wait.h>
 #include "hcd.h"
 
-#ifdef CONFIG_LEDMAN
-#include <linux/ledman.h>
-static int ledcnt = 0;
-#endif
-
 #define to_urb(d) container_of(d, struct urb, kref)
 
 static void urb_destroy(struct kref *kref)
@@ -47,6 +42,7 @@ void usb_init_urb(struct urb *urb)
 		INIT_LIST_HEAD(&urb->anchor_list);
 	}
 }
+EXPORT_SYMBOL_GPL(usb_init_urb);
 
 /**
  * usb_alloc_urb - creates a new urb for a USB driver to use
@@ -78,6 +74,7 @@ struct urb *usb_alloc_urb(int iso_packets, gfp_t mem_flags)
 	usb_init_urb(urb);
 	return urb;
 }
+EXPORT_SYMBOL_GPL(usb_alloc_urb);
 
 /**
  * usb_free_urb - frees the memory used by a urb when all users of it are finished
@@ -94,6 +91,7 @@ void usb_free_urb(struct urb *urb)
 	if (urb)
 		kref_put(&urb->kref, urb_destroy);
 }
+EXPORT_SYMBOL_GPL(usb_free_urb);
 
 /**
  * usb_get_urb - increments the reference count of the urb
@@ -105,12 +103,13 @@ void usb_free_urb(struct urb *urb)
  *
  * A pointer to the urb with the incremented reference counter is returned.
  */
-struct urb * usb_get_urb(struct urb *urb)
+struct urb *usb_get_urb(struct urb *urb)
 {
 	if (urb)
 		kref_get(&urb->kref);
 	return urb;
 }
+EXPORT_SYMBOL_GPL(usb_get_urb);
 
 /**
  * usb_anchor_urb - anchors an URB while it is processed
@@ -177,7 +176,7 @@ EXPORT_SYMBOL_GPL(usb_unanchor_urb);
  * describing that request to the USB subsystem.  Request completion will
  * be indicated later, asynchronously, by calling the completion handler.
  * The three types of completion are success, error, and unlink
- * (a software-induced fault, also called "request cancellation").  
+ * (a software-induced fault, also called "request cancellation").
  *
  * URBs may be submitted in interrupt context.
  *
@@ -260,7 +259,7 @@ EXPORT_SYMBOL_GPL(usb_unanchor_urb);
  *       semaphores), or
  *   (c) current->state != TASK_RUNNING, this is the case only after
  *       you've changed it.
- * 
+ *
  * GFP_NOIO is used in the block io path and error handling of storage
  * devices.
  *
@@ -289,7 +288,8 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 
 	if (!urb || urb->hcpriv || !urb->complete)
 		return -EINVAL;
-	if (!(dev = urb->dev) || dev->state < USB_STATE_DEFAULT)
+	dev = urb->dev;
+	if ((!dev) || (dev->state < USB_STATE_DEFAULT))
 		return -ENODEV;
 
 	/* For now, get the endpoint from the pipe.  Eventually drivers
@@ -352,11 +352,11 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 			max *= mult;
 		}
 
-		if (urb->number_of_packets <= 0)		    
+		if (urb->number_of_packets <= 0)
 			return -EINVAL;
 		for (n = 0; n < urb->number_of_packets; n++) {
 			len = urb->iso_frame_desc[n].length;
-			if (len < 0 || len > max) 
+			if (len < 0 || len > max)
 				return -EMSGSIZE;
 			urb->iso_frame_desc[n].status = -EXDEV;
 			urb->iso_frame_desc[n].actual_length = 0;
@@ -421,7 +421,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 		/* too big? */
 		switch (dev->speed) {
 		case USB_SPEED_HIGH:	/* units are microframes */
-			// NOTE usb handles 2^15
+			/* NOTE usb handles 2^15 */
 			if (urb->interval > (1024 * 8))
 				urb->interval = 1024 * 8;
 			max = 1024 * 8;
@@ -431,12 +431,12 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 			if (xfertype == USB_ENDPOINT_XFER_INT) {
 				if (urb->interval > 255)
 					return -EINVAL;
-				// NOTE ohci only handles up to 32
+				/* NOTE ohci only handles up to 32 */
 				max = 128;
 			} else {
 				if (urb->interval > 1024)
 					urb->interval = 1024;
-				// NOTE usb and ohci handle up to 2^15
+				/* NOTE usb and ohci handle up to 2^15 */
 				max = 1024;
 			}
 			break;
@@ -447,13 +447,9 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 		urb->interval = min(max, 1 << ilog2(urb->interval));
 	}
 
-#ifdef CONFIG_LEDMAN
-	if (ledcnt++ % 10 == 0)
-		ledman_cmd(LEDMAN_CMD_SET, LEDMAN_USB1_TX);
-#endif
-
 	return usb_hcd_submit_urb(urb, mem_flags);
 }
+EXPORT_SYMBOL_GPL(usb_submit_urb);
 
 /*-------------------------------------------------------------------*/
 
@@ -524,6 +520,7 @@ int usb_unlink_urb(struct urb *urb)
 		return -EIDRM;
 	return usb_hcd_unlink_urb(urb, -ECONNRESET);
 }
+EXPORT_SYMBOL_GPL(usb_unlink_urb);
 
 /**
  * usb_kill_urb - cancel a transfer request and wait for it to finish
@@ -563,6 +560,7 @@ void usb_kill_urb(struct urb *urb)
 	--urb->reject;
 	mutex_unlock(&reject_mutex);
 }
+EXPORT_SYMBOL_GPL(usb_kill_urb);
 
 /**
  * usb_kill_anchored_urbs - cancel transfer requests en masse
@@ -577,7 +575,8 @@ void usb_kill_anchored_urbs(struct usb_anchor *anchor)
 
 	spin_lock_irq(&anchor->lock);
 	while (!list_empty(&anchor->urb_list)) {
-		victim = list_entry(anchor->urb_list.prev, struct urb, anchor_list);
+		victim = list_entry(anchor->urb_list.prev, struct urb,
+				    anchor_list);
 		/* we must make sure the URB isn't freed before we kill it*/
 		usb_get_urb(victim);
 		spin_unlock_irq(&anchor->lock);
@@ -605,11 +604,3 @@ int usb_wait_anchor_empty_timeout(struct usb_anchor *anchor,
 				  msecs_to_jiffies(timeout));
 }
 EXPORT_SYMBOL_GPL(usb_wait_anchor_empty_timeout);
-
-EXPORT_SYMBOL(usb_init_urb);
-EXPORT_SYMBOL(usb_alloc_urb);
-EXPORT_SYMBOL(usb_free_urb);
-EXPORT_SYMBOL(usb_get_urb);
-EXPORT_SYMBOL(usb_submit_urb);
-EXPORT_SYMBOL(usb_unlink_urb);
-EXPORT_SYMBOL(usb_kill_urb);

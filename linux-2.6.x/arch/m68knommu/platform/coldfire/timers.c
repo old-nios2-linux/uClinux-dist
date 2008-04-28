@@ -162,7 +162,7 @@ static struct irqaction coldfire_profile_irq = {
 
 void coldfire_profile_init(void)
 {
-	printk(KERN_INFO "PROFILE: lodging TIMER2 @ %dHz as profile timer\n", 
+	printk(KERN_INFO "PROFILE: lodging TIMER2 @ %dHz as profile timer\n",
 	       PROFILEHZ);
 
 	setup_irq(mcf_profilevector, &coldfire_profile_irq);

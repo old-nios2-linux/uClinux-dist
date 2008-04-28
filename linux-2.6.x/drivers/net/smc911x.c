@@ -1988,12 +1988,6 @@ static int __init smc911x_probe(struct net_device *dev, unsigned long ioaddr)
 
 	/* Get the MAC address */
 	SMC_GET_MAC_ADDR(dev->dev_addr);
-#ifdef CONFIG_EXCALIBUR
-	{
-		extern unsigned char *excalibur_enet_hwaddr;
-		memcpy(dev->dev_addr, excalibur_enet_hwaddr, 6);
-	}
-#endif
 
 	/* now, reset the chip, and put it into a known state */
 	smc911x_reset(dev);

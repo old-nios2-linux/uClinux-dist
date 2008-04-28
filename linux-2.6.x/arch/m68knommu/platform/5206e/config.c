@@ -24,7 +24,7 @@ void coldfire_reset(void);
 
 /***************************************************************************/
 
-static struct mcf_platform_uart m5206_uart_platform[] = {
+static struct mcf_platform_uart m5206e_uart_platform[] = {
 	{
 		.mapbase	= MCF_MBAR + MCFUART_BASE1,
 		.irq		= 73,
@@ -36,14 +36,14 @@ static struct mcf_platform_uart m5206_uart_platform[] = {
 	{ },
 };
 
-static struct platform_device m5206_uart = {
+static struct platform_device m5206e_uart = {
 	.name			= "mcfuart",
 	.id			= 0,
-	.dev.platform_data	= m5206_uart_platform,
+	.dev.platform_data	= m5206e_uart_platform,
 };
 
-static struct platform_device *m5206_devices[] __initdata = {
-	&m5206_uart,
+static struct platform_device *m5206e_devices[] __initdata = {
+	&m5206e_uart,
 };
 
 /***************************************************************************/
@@ -61,13 +61,13 @@ static void __init m5206_uart_init_line(int line, int irq)
 	}
 }
 
-static void __init m5206_uarts_init(void)
+static void __init m5206e_uarts_init(void)
 {
-	const int nrlines = ARRAY_SIZE(m5206_uart_platform);
+	const int nrlines = ARRAY_SIZE(m5206e_uart_platform);
 	int line;
 
 	for (line = 0; (line < nrlines); line++)
-		m5206_uart_init_line(line, m5206_uart_platform[line].irq);
+		m5206e_uart_init_line(line, m5206e_uart_platform[line].irq);
 }
 
 /***************************************************************************/
@@ -125,8 +125,8 @@ void __init config_BSP(char *commandp, int size)
 
 static int __init init_BSP(void)
 {
-	m5206_uarts_init();
-	platform_add_devices(m5206_devices, ARRAY_SIZE(m5206_devices));
+	m5206e_uarts_init();
+	platform_add_devices(m5206e_devices, ARRAY_SIZE(m5206e_devices));
 	return 0;
 }
 

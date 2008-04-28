@@ -67,16 +67,6 @@ static irqreturn_t hw_tick(int irq, void *dummy)
 
 /***************************************************************************/
 
-static irqreturn_t hw_tick(int irq, void *dummy)
-{
-	/* Reset Timer1 */
-	TSTAT &= 0;
-
-	return arch_timer_interrupt(irq, dummy);
-}
-
-/***************************************************************************/
-
 static struct irqaction m68328_timer_irq = {
 	.name	 = "timer",
 	.flags	 = IRQF_DISABLED | IRQF_TIMER,
@@ -102,7 +92,7 @@ static cycle_t m68328_read_clk(void)
 static struct clocksource m68328_clk = {
 	.name	= "timer",
 	.rating	= 250,
-        .read	= m68328_read_clk,
+	.read	= m68328_read_clk,
 	.shift	= 20,
 	.mask	= CLOCKSOURCE_MASK(32),
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,

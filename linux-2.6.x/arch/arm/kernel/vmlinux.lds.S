@@ -30,7 +30,7 @@ SECTIONS
 	}
 
 	.init : {			/* Init code and data		*/
-			*(.init.text)
+			INIT_TEXT
 		_einittext = .;
 		__proc_info_begin = .;
 			*(.proc.info.init)
@@ -70,15 +70,15 @@ SECTIONS
 		__per_cpu_end = .;
 #ifndef CONFIG_XIP_KERNEL
 		__init_begin = _stext;
-		*(.init.data)
+		INIT_DATA
 		. = ALIGN(4096);
 		__init_end = .;
 #endif
 	}
 
 	/DISCARD/ : {			/* Exit code and data		*/
-		*(.exit.text)
-		*(.exit.data)
+		EXIT_TEXT
+		EXIT_DATA
 		*(.exitcall.exit)
 #ifndef CONFIG_MMU
 		*(.fixup)
@@ -94,6 +94,7 @@ SECTIONS
 			TEXT_TEXT
 			SCHED_TEXT
 			LOCK_TEXT
+			KPROBES_TEXT
 #ifdef CONFIG_MMU
 			*(.fixup)
 #endif
@@ -129,7 +130,7 @@ SECTIONS
 #ifdef CONFIG_XIP_KERNEL
 		. = ALIGN(4096);
 		__init_begin = .;
-		*(.init.data)
+		INIT_DATA
 		. = ALIGN(4096);
 		__init_end = .;
 #endif
@@ -187,5 +188,5 @@ SECTIONS
  * If you have to comment these two assert statements out, your
  * binutils is too old (for other reasons as well)
  */
-/*ASSERT((__proc_info_end - __proc_info_begin), "missing CPU support")*/
-/*ASSERT((__arch_info_end - __arch_info_begin), "no machine record defined")*/
+ASSERT((__proc_info_end - __proc_info_begin), "missing CPU support")
+ASSERT((__arch_info_end - __arch_info_begin), "no machine record defined")

@@ -39,6 +39,8 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
+#include "timeconst.h"
+
 /*
  * The timezone where the local system is located.  Used as a default by some
  * programs who obtain this value by using gettimeofday.
@@ -46,63 +48,6 @@
 struct timezone sys_tz;
 
 EXPORT_SYMBOL(sys_tz);
-
-#ifndef __ARCH_WANT_SYS_TIME
-#error ICSA specification requires the logging of time changes.  This architecture will not log changes.
-#endif
-
-static void print_time_change(const char *msg, struct timeval new_tv)
-{
-	long s, j, d, m, y;
-
-	j = new_tv.tv_sec / 86400L + 719469;
-	s = new_tv.tv_sec % 86400L;
-
-	if( s < 0 ) { s += 86400L; j--; }
-
-	y = (4L * j - 1L) / 146097L;
-	j = 4L * j - 1L - 146097L * y;
-	d = j / 4L;
-	j = (4L * d + 3L) / 1461L;
-	d = 4L * d + 3L - 1461L * j;
-	d = (d + 4L) / 4L;
-	m = (5L * d - 3L) / 153L;
-	d = 5L * d - 3 - 153L * m;
-	d = (d + 5L) / 5L;
-	y = 100L * y + j;
-	if (m < 10)
-		m += 2;
-	else
-	{
-		m -= 10;
-		++y;
-	}
-	printk(KERN_NOTICE "Clock: %s time %04d/%02d/%02d - %02d:%02d:%02d GMT\n",
-		msg, (int) y, (int) m + 1, (int) d, (int) (s / 3600 ), (int) (s / 60) % 60, (int) s % 60);
-}
-
-#ifndef ABS
-#define ABS(X) ((X) < 0 ? -(X) : (X))
-#endif
-
-static void check_print_time_change(const struct timeval old_tv, const struct timeval new_tv)
-{
-	static long accumulated_usecs;
-
-	if (ABS(new_tv.tv_sec - old_tv.tv_sec) <= 2) {
-		/* No more than 2 seconds of change */
-		accumulated_usecs += (new_tv.tv_sec - old_tv.tv_sec) * 1000000L + (new_tv.tv_usec - old_tv.tv_usec);
-		if (ABS(accumulated_usecs) < 1000000L) {
-			/* Less than 1 second of accumulated change */
-			return;
-		}
-	}
-
-	accumulated_usecs = 0;
-
-	print_time_change("old", old_tv);
-	print_time_change("new", new_tv);
-}
 
 #ifdef __ARCH_WANT_SYS_TIME
 
@@ -134,7 +79,6 @@ asmlinkage long sys_stime(time_t __user *tptr)
 {
 	struct timespec tv;
 	int err;
-	struct timeval old_tv, new_tv;
 
 	if (get_user(tv.tv_sec, tptr))
 		return -EFAULT;
@@ -145,16 +89,14 @@ asmlinkage long sys_stime(time_t __user *tptr)
 	if (err)
 		return err;
 
-	do_gettimeofday(&old_tv);
 	do_settimeofday(&tv);
-	do_gettimeofday(&new_tv);
-	check_print_time_change(old_tv, new_tv);
 	return 0;
 }
 
 #endif /* __ARCH_WANT_SYS_TIME */
 
-asmlinkage long sys_gettimeofday(struct timeval __user *tv, struct timezone __user *tz)
+asmlinkage long sys_gettimeofday(struct timeval __user *tv,
+				 struct timezone __user *tz)
 {
 	if (likely(tv != NULL)) {
 		struct timeval ktv;
@@ -179,7 +121,7 @@ asmlinkage long sys_gettimeofday(struct timeval __user *tv, struct timezone __us
  * hard to make the program warp the clock precisely n hours)  or
  * compile in the timezone information into the kernel.  Bad, bad....
  *
- *              				- TYT, 1992-01-01
+ *						- TYT, 1992-01-01
  *
  * The best thing to do is to keep the CMOS clock in universal time (UTC)
  * as real UNIX machines always do it. This avoids all headaches about
@@ -190,6 +132,7 @@ static inline void warp_clock(void)
 	write_seqlock_irq(&xtime_lock);
 	wall_to_monotonic.tv_sec -= sys_tz.tz_minuteswest * 60;
 	xtime.tv_sec += sys_tz.tz_minuteswest * 60;
+	update_xtime_cache(0);
 	write_sequnlock_irq(&xtime_lock);
 	clock_was_set();
 }
@@ -209,7 +152,6 @@ int do_sys_settimeofday(struct timespec *tv, struct timezone *tz)
 {
 	static int firsttime = 1;
 	int error = 0;
-	struct timeval old_tv, new_tv;
 
 	if (tv && !timespec_valid(tv))
 		return -EINVAL;
@@ -233,12 +175,9 @@ int do_sys_settimeofday(struct timespec *tv, struct timezone *tz)
 		/* SMP safe, again the code in arch/foo/time.c should
 		 * globally block out interrupts when it runs.
 		 */
-		do_gettimeofday(&old_tv);
-		error = do_settimeofday(tv);
-		do_gettimeofday(&new_tv);
-		check_print_time_change(old_tv, new_tv);
+		return do_settimeofday(tv);
 	}
-	return error;
+	return 0;
 }
 
 asmlinkage long sys_settimeofday(struct timeval __user *tv,
@@ -304,7 +243,11 @@ unsigned int inline jiffies_to_msecs(const unsigned long j)
 #elif HZ > MSEC_PER_SEC && !(HZ % MSEC_PER_SEC)
 	return (j + (HZ / MSEC_PER_SEC) - 1)/(HZ / MSEC_PER_SEC);
 #else
-	return (j * MSEC_PER_SEC) / HZ;
+# if BITS_PER_LONG == 32
+	return ((u64)HZ_TO_MSEC_MUL32 * j) >> HZ_TO_MSEC_SHR32;
+# else
+	return (j * HZ_TO_MSEC_NUM) / HZ_TO_MSEC_DEN;
+# endif
 #endif
 }
 EXPORT_SYMBOL(jiffies_to_msecs);
@@ -316,7 +259,11 @@ unsigned int inline jiffies_to_usecs(const unsigned long j)
 #elif HZ > USEC_PER_SEC && !(HZ % USEC_PER_SEC)
 	return (j + (HZ / USEC_PER_SEC) - 1)/(HZ / USEC_PER_SEC);
 #else
-	return (j * USEC_PER_SEC) / HZ;
+# if BITS_PER_LONG == 32
+	return ((u64)HZ_TO_USEC_MUL32 * j) >> HZ_TO_USEC_SHR32;
+# else
+	return (j * HZ_TO_USEC_NUM) / HZ_TO_USEC_DEN;
+# endif
 #endif
 }
 EXPORT_SYMBOL(jiffies_to_usecs);
@@ -331,7 +278,7 @@ EXPORT_SYMBOL(jiffies_to_usecs);
  *
  * This function should be only used for timestamps returned by
  * current_kernel_time() or CURRENT_TIME, not with do_gettimeofday() because
- * it doesn't handle the better resolution of the later.
+ * it doesn't handle the better resolution of the latter.
  */
 struct timespec timespec_trunc(struct timespec t, unsigned gran)
 {
@@ -379,7 +326,7 @@ EXPORT_SYMBOL_GPL(getnstimeofday);
  * This algorithm was first published by Gauss (I think).
  *
  * WARNING: this function will overflow on 2106-02-07 06:28:16 on
- * machines were long is 32-bit! (However, as time_t is signed, we
+ * machines where long is 32-bit! (However, as time_t is signed, we
  * will already get problems at other places on 2038-01-19 03:14:08)
  */
 unsigned long
@@ -416,7 +363,7 @@ EXPORT_SYMBOL(mktime);
  * normalize to the timespec storage format
  *
  * Note: The tv_nsec part is always in the range of
- * 	0 <= tv_nsec < NSEC_PER_SEC
+ *	0 <= tv_nsec < NSEC_PER_SEC
  * For negative values only the tv_sec field is negative !
  */
 void set_normalized_timespec(struct timespec *ts, time_t sec, long nsec)
@@ -517,12 +464,13 @@ unsigned long msecs_to_jiffies(const unsigned int m)
 	/*
 	 * Generic case - multiply, round and divide. But first
 	 * check that if we are doing a net multiplication, that
-	 * we wouldnt overflow:
+	 * we wouldn't overflow:
 	 */
 	if (HZ > MSEC_PER_SEC && m > jiffies_to_msecs(MAX_JIFFY_OFFSET))
 		return MAX_JIFFY_OFFSET;
 
-	return (m * HZ + MSEC_PER_SEC - 1) / MSEC_PER_SEC;
+	return ((u64)MSEC_TO_HZ_MUL32 * m + MSEC_TO_HZ_ADJ32)
+		>> MSEC_TO_HZ_SHR32;
 #endif
 }
 EXPORT_SYMBOL(msecs_to_jiffies);
@@ -536,7 +484,8 @@ unsigned long usecs_to_jiffies(const unsigned int u)
 #elif HZ > USEC_PER_SEC && !(HZ % USEC_PER_SEC)
 	return u * (HZ / USEC_PER_SEC);
 #else
-	return (u * HZ + USEC_PER_SEC - 1) / USEC_PER_SEC;
+	return ((u64)USEC_TO_HZ_MUL32 * u + USEC_TO_HZ_ADJ32)
+		>> USEC_TO_HZ_SHR32;
 #endif
 }
 EXPORT_SYMBOL(usecs_to_jiffies);
@@ -630,7 +579,11 @@ EXPORT_SYMBOL(jiffies_to_timeval);
 clock_t jiffies_to_clock_t(long x)
 {
 #if (TICK_NSEC % (NSEC_PER_SEC / USER_HZ)) == 0
+# if HZ < USER_HZ
+	return x * (USER_HZ / HZ);
+# else
 	return x / (HZ / USER_HZ);
+# endif
 #else
 	u64 tmp = (u64)x * TICK_NSEC;
 	do_div(tmp, (NSEC_PER_SEC / USER_HZ));
@@ -663,7 +616,14 @@ EXPORT_SYMBOL(clock_t_to_jiffies);
 u64 jiffies_64_to_clock_t(u64 x)
 {
 #if (TICK_NSEC % (NSEC_PER_SEC / USER_HZ)) == 0
+# if HZ < USER_HZ
+	x *= USER_HZ;
+	do_div(x, HZ);
+# elif HZ > USER_HZ
 	do_div(x, HZ / USER_HZ);
+# else
+	/* Nothing to do */
+# endif
 #else
 	/*
 	 * There are better ways that don't overflow early,
@@ -675,7 +635,6 @@ u64 jiffies_64_to_clock_t(u64 x)
 #endif
 	return x;
 }
-
 EXPORT_SYMBOL(jiffies_64_to_clock_t);
 
 u64 nsec_to_clock_t(u64 x)
@@ -710,7 +669,6 @@ u64 get_jiffies_64(void)
 	} while (read_seqretry(&xtime_lock, seq));
 	return ret;
 }
-
 EXPORT_SYMBOL(get_jiffies_64);
 #endif
 

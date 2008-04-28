@@ -26,21 +26,7 @@
 #include <asm/rtc.h>
 
 #define DRV_NAME	"sh-rtc"
-#define DRV_VERSION	"0.1.3"
-
-#ifdef CONFIG_CPU_SH3
-#define rtc_reg_size		sizeof(u16)
-#define RTC_BIT_INVERTED	0	/* No bug on SH7708, SH7709A */
-#define RTC_DEF_CAPABILITIES	0UL
-#elif defined(CONFIG_CPU_SH4)
-#define rtc_reg_size		sizeof(u32)
-#if defined(CONFIG_CPU_SUBTYPE_SH7751R)
-#define RTC_BIT_INVERTED	0	/* No bug on SH7751R? */
-#else
-#define RTC_BIT_INVERTED	0x40	/* bug on SH7750, SH7750S */
-#endif
-#define RTC_DEF_CAPABILITIES	RTC_CAP_4_DIGIT_YEAR
-#endif
+#define DRV_VERSION	"0.1.6"
 
 #define RTC_REG(r)	((r) * rtc_reg_size)
 
@@ -61,6 +47,18 @@
 #define RMONAR		RTC_REG(13)	/* ALARM month */
 #define RCR1		RTC_REG(14)	/* Control */
 #define RCR2		RTC_REG(15)	/* Control */
+
+/*
+ * Note on RYRAR and RCR3: Up until this point most of the register
+ * definitions are consistent across all of the available parts. However,
+ * the placement of the optional RYRAR and RCR3 (the RYRAR control
+ * register used to control RYRCNT/RYRAR compare) varies considerably
+ * across various parts, occasionally being mapped in to a completely
+ * unrelated address space. For proper RYRAR support a separate resource
+ * would have to be handed off, but as this is purely optional in
+ * practice, we simply opt not to support it, thereby keeping the code
+ * quite a bit more simplified.
+ */
 
 /* ALARM Bits - or with BCD encoded value */
 #define AR_ENB		0x80	/* Enable for alarm cmp   */
@@ -232,6 +230,7 @@ static int sh_rtc_open(struct device *dev)
 	if (unlikely(ret)) {
 		dev_err(dev, "request carry IRQ failed with %d, IRQ %d\n",
 			ret, rtc->carry_irq);
+		free_irq(rtc->periodic_irq, dev);
 		goto err_bad_carry;
 	}
 
@@ -303,7 +302,8 @@ static int sh_rtc_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
 
 static int sh_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
-	struct sh_rtc *rtc = dev_get_drvdata(dev);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct sh_rtc *rtc = platform_get_drvdata(pdev);
 	unsigned int sec128, sec2, yr, yr100, cf_bit;
 
 	do {
@@ -363,7 +363,8 @@ static int sh_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 static int sh_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
-	struct sh_rtc *rtc = dev_get_drvdata(dev);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct sh_rtc *rtc = platform_get_drvdata(pdev);
 	unsigned int tmp;
 	int year;
 
@@ -663,3 +664,4 @@ MODULE_DESCRIPTION("SuperH on-chip RTC driver");
 MODULE_VERSION(DRV_VERSION);
 MODULE_AUTHOR("Paul Mundt <lethal@linux-sh.org>, Jamie Lenehan <lenehan@twibble.org>");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:" DRV_NAME);

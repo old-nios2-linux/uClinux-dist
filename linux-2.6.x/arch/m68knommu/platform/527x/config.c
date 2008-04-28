@@ -75,7 +75,7 @@ static void __init m527x_uart_init_line(int line, int irq)
 
 	/*
 	 * External Pin Mask Setting & Enable External Pin for Interface
-       	 */
+	 */
 	sepmask = readw(MCF_IPSBAR + MCF_GPIO_PAR_UART);
 	if (line == 0)
 		sepmask |= UART0_ENABLE_MASK;

@@ -12,6 +12,7 @@
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/kprobes.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -20,13 +21,35 @@
 
 #include "fault.h"
 
+
+#ifdef CONFIG_KPROBES
+static inline int notify_page_fault(struct pt_regs *regs, unsigned int fsr)
+{
+	int ret = 0;
+
+	if (!user_mode(regs)) {
+		/* kprobe_running() needs smp_processor_id() */
+		preempt_disable();
+		if (kprobe_running() && kprobe_fault_handler(regs, fsr))
+			ret = 1;
+		preempt_enable();
+	}
+
+	return ret;
+}
+#else
+static inline int notify_page_fault(struct pt_regs *regs, unsigned int fsr)
+{
+	return 0;
+}
+#endif
+
 /*
  * This is useful to dump out the page tables associated with
  * 'addr' in mm 'mm'.
  */
 void show_pte(struct mm_struct *mm, unsigned long addr)
 {
-#ifdef CONFIG_MMU
 	pgd_t *pgd;
 
 	if (!mm)
@@ -71,7 +94,6 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 	} while(0);
 
 	printk("\n");
-#endif /* CONFIG_MMU */
 }
 
 /*
@@ -217,12 +239,15 @@ out:
 	return fault;
 }
 
-static int
+static int __kprobes
 do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 {
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	int fault, sig, code;
+
+	if (notify_page_fault(regs, fsr))
+		return 0;
 
 	tsk = current;
 	mm  = tsk->mm;
@@ -313,11 +338,10 @@ no_context:
  * interrupt or a critical region, and should only copy the information
  * from the master page table, nothing more.
  */
-static int
+static int __kprobes
 do_translation_fault(unsigned long addr, unsigned int fsr,
 		     struct pt_regs *regs)
 {
-#ifdef CONFIG_MMU
 	unsigned int index;
 	pgd_t *pgd, *pgd_k;
 	pmd_t *pmd, *pmd_k;
@@ -349,7 +373,6 @@ do_translation_fault(unsigned long addr, unsigned int fsr,
 	return 0;
 
 bad_area:
-#endif /* CONFIG_MMU */
 	do_bad_area(addr, fsr, regs);
 	return 0;
 }

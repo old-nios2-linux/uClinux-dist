@@ -22,7 +22,6 @@ obj-$(CONFIG_BLK_DEV_PDC202XX_OLD)	+= pdc202xx_old.o
 obj-$(CONFIG_BLK_DEV_PDC202XX_NEW)	+= pdc202xx_new.o
 obj-$(CONFIG_BLK_DEV_PIIX)		+= piix.o
 obj-$(CONFIG_BLK_DEV_RZ1000)		+= rz1000.o
-obj-$(CONFIG_BLK_DEV_P20575)		+= p20575.o
 obj-$(CONFIG_BLK_DEV_SVWKS)		+= serverworks.o
 obj-$(CONFIG_BLK_DEV_SGIIOC4)		+= sgiioc4.o
 obj-$(CONFIG_BLK_DEV_SIIMAGE)		+= siimage.o
@@ -35,6 +34,11 @@ obj-$(CONFIG_BLK_DEV_TRM290)		+= trm290.o
 obj-$(CONFIG_BLK_DEV_VIA82CXXX)		+= via82cxxx.o
 
 # Must appear at the end of the block
-obj-$(CONFIG_BLK_DEV_GENERIC)          += generic.o
+obj-$(CONFIG_BLK_DEV_GENERIC)		+= ide-pci-generic.o
+ide-pci-generic-y			+= generic.o
+
+ifeq ($(CONFIG_BLK_DEV_CMD640), m)
+	obj-m += cmd640.o
+endif
 
 EXTRA_CFLAGS	:= -Idrivers/ide

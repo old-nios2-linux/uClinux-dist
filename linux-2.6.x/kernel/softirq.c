@@ -3,7 +3,9 @@
  *
  *	Copyright (C) 1992 Linus Torvalds
  *
- * Rewritten. Old one was good in 2.2, but in 2.3 it was immoral. --ANK (990903)
+ *	Distribute under GPLv2.
+ *
+ *	Rewritten. Old one was good in 2.2, but in 2.3 it was immoral. --ANK (990903)
  */
 
 #include <linux/module.h>
@@ -61,13 +63,6 @@ static inline void wakeup_softirqd(void)
 
 	if (tsk && tsk->state != TASK_RUNNING)
 		wake_up_process(tsk);
-}
-
-static inline int softirqd_is_waken(void)
-{
-	struct task_struct *tsk = __get_cpu_var(ksoftirqd);
-
-	return tsk && tsk->state == TASK_RUNNING;
 }
 
 /*
@@ -212,7 +207,7 @@ EXPORT_SYMBOL(local_bh_enable_ip);
  */
 #define MAX_SOFTIRQ_RESTART 10
 
-static asmlinkage void __do_softirq2(void)
+asmlinkage void __do_softirq(void)
 {
 	struct softirq_action *h;
 	__u32 pending;
@@ -258,12 +253,6 @@ restart:
 	_local_bh_enable();
 }
 
-asmlinkage void __do_softirq(void)
-{
-	if (!softirqd_is_waken())
-		__do_softirq2();
-}
-
 #ifndef __ARCH_HAS_DO_SOFTIRQ
 
 asmlinkage void do_softirq(void)
@@ -291,9 +280,14 @@ asmlinkage void do_softirq(void)
  */
 void irq_enter(void)
 {
+#ifdef CONFIG_NO_HZ
+	int cpu = smp_processor_id();
+	if (idle_cpu(cpu) && !in_interrupt())
+		tick_nohz_stop_idle(cpu);
+#endif
 	__irq_enter();
 #ifdef CONFIG_NO_HZ
-	if (idle_cpu(smp_processor_id()))
+	if (idle_cpu(cpu))
 		tick_nohz_update_jiffies();
 #endif
 }
@@ -319,6 +313,7 @@ void irq_exit(void)
 	/* Make sure that timer wheel updates are propagated */
 	if (!in_interrupt() && idle_cpu(smp_processor_id()) && !need_resched())
 		tick_nohz_stop_sched_tick();
+	rcu_irq_exit();
 #endif
 	preempt_enable_no_resched();
 }
@@ -326,7 +321,7 @@ void irq_exit(void)
 /*
  * This function must run with irqs disabled!
  */
-inline fastcall void raise_softirq_irqoff(unsigned int nr)
+inline void raise_softirq_irqoff(unsigned int nr)
 {
 	__raise_softirq_irqoff(nr);
 
@@ -343,7 +338,7 @@ inline fastcall void raise_softirq_irqoff(unsigned int nr)
 		wakeup_softirqd();
 }
 
-void fastcall raise_softirq(unsigned int nr)
+void raise_softirq(unsigned int nr)
 {
 	unsigned long flags;
 
@@ -369,7 +364,7 @@ struct tasklet_head
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_vec) = { NULL };
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_hi_vec) = { NULL };
 
-void fastcall __tasklet_schedule(struct tasklet_struct *t)
+void __tasklet_schedule(struct tasklet_struct *t)
 {
 	unsigned long flags;
 
@@ -382,7 +377,7 @@ void fastcall __tasklet_schedule(struct tasklet_struct *t)
 
 EXPORT_SYMBOL(__tasklet_schedule);
 
-void fastcall __tasklet_hi_schedule(struct tasklet_struct *t)
+void __tasklet_hi_schedule(struct tasklet_struct *t)
 {
 	unsigned long flags;
 
@@ -498,9 +493,6 @@ void __init softirq_init(void)
 
 static int ksoftirqd(void * __bind_cpu)
 {
-	unsigned long flags;
-
-	set_user_nice(current, 19);
 	set_current_state(TASK_INTERRUPTIBLE);
 
 	while (!kthread_should_stop()) {
@@ -519,11 +511,7 @@ static int ksoftirqd(void * __bind_cpu)
 			   don't process */
 			if (cpu_is_offline((long)__bind_cpu))
 				goto wait_to_die;
-
-			local_irq_save(flags);
-			__do_softirq2();
-			local_irq_restore(flags);
-
+			do_softirq();
 			preempt_enable_no_resched();
 			cond_resched();
 			preempt_disable();

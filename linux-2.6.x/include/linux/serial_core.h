@@ -149,19 +149,12 @@
 /* Freescale ColdFire */
 #define PORT_MCF	78
 
-/* DCC(JTAG) emulation port types */
-#define PORT_DCC_JTAG1	79
+#define PORT_SC26XX	79
 
-/* Samsung S3C4510B */
-#define PORT_S3C4510B   80
 
-#define PORT_P2001	81
-
-/* TI TMS320DM270 */
-#define PORT_DM270      82
-
-/* Alter Nios II UART */
-#define PORT_JTAG_UART	83
+/* MN10300 on-chip UART numbers */
+#define PORT_MN10300		80
+#define PORT_MN10300_CTS	81
 
 #ifdef __KERNEL__
 

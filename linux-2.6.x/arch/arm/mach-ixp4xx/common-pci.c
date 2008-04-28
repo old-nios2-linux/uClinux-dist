@@ -87,7 +87,7 @@ static inline int check_master_abort(void)
 	if (isr & PCI_ISR_PFE) {
 		/* make sure the Master Abort bit is reset */    
 		*PCI_ISR = PCI_ISR_PFE;
-		pr_debug("%s failed\n", __FUNCTION__);
+		pr_debug("%s failed\n", __func__);
 		return 1;
 	}
 
@@ -535,5 +535,3 @@ pci_set_consistent_dma_mask(struct pci_dev *dev, u64 mask)
 EXPORT_SYMBOL(ixp4xx_pci_read);
 EXPORT_SYMBOL(ixp4xx_pci_write);
 
-EXPORT_SYMBOL(pci_set_dma_mask);
-EXPORT_SYMBOL(pci_set_consistent_dma_mask);
