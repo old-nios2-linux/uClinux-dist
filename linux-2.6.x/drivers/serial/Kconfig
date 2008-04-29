@@ -1020,6 +1020,38 @@ config SERIAL_68360
 	depends on SERIAL_68360_SMC || SERIAL_68360_SCC
 	default y
 
+config NIOS_SERIAL
+	bool "Nios serial support"
+	depends on NIOS || NIOS2
+	help
+	  This driver supports the Nios softcore UART port.
+
+config NIOS_SERIAL_CONSOLE
+	bool "Support for console on Nios UART"
+	depends on NIOS_SERIAL=y
+	help
+	  If you would like to be able to use the Nios UART as the console,
+	  you can do so by answering Y to this option.
+	default y
+
+config SERIAL_AJUART
+	tristate "Altera JTAG UART support"
+	depends on NIOS2
+	select SERIAL_CORE
+	help
+	  This driver supports the JTAG UART core (Avalon interface)
+	  coming with Nios II softcore.
+	  Say Y or M if you want to be able to use these serial ports.
+
+config SERIAL_AJUART_CONSOLE
+	bool "Support for console on Altera JTAG UART"
+	depends on SERIAL_AJUART=y
+	select SERIAL_CORE_CONSOLE
+	help
+	  If you would like to be able to use the JTAG UART as the console,
+	  you can do so by answering Y to this option.
+	default n
+
 config SERIAL_PMACZILOG
 	tristate "PowerMac z85c30 ESCC support"
 	depends on PPC_OF && PPC_PMAC

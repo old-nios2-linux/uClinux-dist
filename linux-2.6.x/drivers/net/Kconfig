@@ -880,6 +880,18 @@ config SMC9194
 	  To compile this driver as a module, choose M here. The module
 	  will be called smc9194.
 
+config OPEN_ETH
+	bool "Opencores (Igor) Emac support"
+	help
+	  This is support for the opencores Igor emac driver implemented
+	  in an FPGA.
+
+config MTIP1000_ETH
+	bool "MoreThanIP 10_100_1000 Emac support"
+	help
+	  This is support for the MoreThanIP 10_100_1000 emac driver implemented
+	  in an FPGA.
+
 config SMC91X
 	tristate "SMC 91C9x/91C1xxx support"
 	select CRC32

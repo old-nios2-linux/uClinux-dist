@@ -590,5 +590,34 @@ config MTD_PLATRAM
 
 	  This selection automatically selects the map_ram driver.
 
+config MTD_MICROTRONIX
+	tristate "Maps for Microtronix boards, or Altera Cyclone 1C12 Eval board"
+	depends on MTD_PARTITIONS && !MMU && ( MICROTRONIX_UKIT || MICROTRONIX_STRATIX || MICROTRONIX_CYCLONE || ALTERA_CYCLONE_1C12_EVAL || MICROTRONIX_PSK)
+	default n
+	help
+	  Map driver for accessing flash memory on Microtronix Development
+	  board (including Stratix, Cyclone and ukit), or Altera Cyclone 1C12
+	  Evaluation board.
+
+config MTD_EPCS_MAP
+	tristate "Maps for Altera EPCS Configuration Device"
+	depends on MTD_PARTITIONS && !MMU && MTD_EPCS
+	default y
+	help
+		Map driver for accessing EPCS Flash by Altera. Please edit epcs_map.c
+		to setup the appropriate partitions. Since the driver will automatically
+		detect the EPCS chip present, it is your responsibility to setup 
+		appropriate partition sizes/offsets such that you do not conflict with
+		the detected size. IE: Don't specify a partition size of 4 Megabytes when
+		you only have a 1 Megabit chip available!
+
+config MTD_ALTERA
+	tristate "Maps for Altera Nios Development Kit"
+	depends on MTD_PARTITIONS && !MMU && ( ALTERA_STRATIX || ALTERA_STRATIX_PRO || ALTERA_CYCLONE || ALTERA_STRATIX_II || ALTERA_DE2)
+	default y
+	help
+	  Map driver for accessing flash memory on Altera Nios Development kit,
+	  Cyclone, Stratix or Stratix Pro edition.
+
 endmenu
 

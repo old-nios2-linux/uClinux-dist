@@ -156,6 +156,9 @@
 #define PORT_MN10300		80
 #define PORT_MN10300_CTS	81
 
+/* Alter Nios II UART */
+#define PORT_JTAG_UART	83
+
 #ifdef __KERNEL__
 
 #include <linux/compiler.h>
