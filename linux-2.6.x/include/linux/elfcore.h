@@ -4,9 +4,7 @@
 #include <linux/types.h>
 #include <linux/signal.h>
 #include <linux/time.h>
-#ifdef __KERNEL__
 #include <linux/user.h>
-#endif
 #include <linux/ptrace.h>
 
 struct elf_siginfo
