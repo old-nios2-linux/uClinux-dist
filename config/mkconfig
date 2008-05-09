@@ -40,7 +40,7 @@ echo "comment \"Select the Vendor you wish to target\""
 echo
 echo "choice"
 echo "	prompt \"Vendor\""
-echo "	default DEFAULTS_SECURECOMPUTING"
+echo "	default DEFAULTS_ALTERA"
 echo
 
 oldv=
@@ -163,7 +163,7 @@ echo
 # expect an explosion of libc's just yet either ;-)
 #
 
-LIBCS="`ls -d glibc glibc-* 2>/dev/null` `ls -d uClibc uClibc-* 2>/dev/null` `ls -d lib/libc 2>/dev/null` None"
+LIBCS="None `ls -d glibc glibc-* 2>/dev/null` `ls -d uClibc uClibc-* 2>/dev/null` `ls -d lib/libc 2>/dev/null`"
 NLIBCS="`echo ${LIBCS} | wc -w`"
 if [ ${NLIBCS} -gt 1 ]; then
 	echo "choice"
