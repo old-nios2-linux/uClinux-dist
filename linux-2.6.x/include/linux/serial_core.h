@@ -160,6 +160,7 @@
 
 /* Alter Nios II UART */
 #define PORT_JTAG_UART	83
+#define PORT_AVALON_UART	84
 
 #ifdef __KERNEL__
 

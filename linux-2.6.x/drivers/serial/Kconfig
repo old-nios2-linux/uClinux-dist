@@ -1023,19 +1023,37 @@ config SERIAL_68360
 	depends on SERIAL_68360_SMC || SERIAL_68360_SCC
 	default y
 
-config NIOS_SERIAL
-	bool "Nios serial support"
-	depends on NIOS || NIOS2
+config SERIAL_AVALON_UART
+	bool "Altera Avalon UART support"
+	depends on NIOS2
+	select SERIAL_CORE
 	help
-	  This driver supports the Nios softcore UART port.
+	  This driver supports the Altera Avalon softcore UART port.
 
-config NIOS_SERIAL_CONSOLE
-	bool "Support for console on Nios UART"
-	depends on NIOS_SERIAL=y
+config SERIAL_AVALON_UART_MAXPORTS
+	int "Maximum number of Avalon UART ports"
+	depends on SERIAL_AVALON_UART
+	default 4
 	help
-	  If you would like to be able to use the Nios UART as the console,
-	  you can do so by answering Y to this option.
-	default y
+	  This setting lets you define the maximum number of the Avalon
+	  UART ports. The usual default varies from board to board, and
+	  this setting is a way of catering for that.
+
+config SERIAL_AVALON_UART_BAUDRATE
+	int "Default baudrate for Avalon UART ports"
+	depends on SERIAL_AVALON_UART
+	default 115200
+	help
+	  This setting lets you define what the default baudrate is for the
+	  Avalon UART ports. The usual default varies from board to board,
+	  and this setting is a way of catering for that.
+
+config SERIAL_AVALON_UART_CONSOLE
+	bool "Avalon UART console support"
+	depends on SERIAL_AVALON_UART
+	select SERIAL_CORE_CONSOLE
+	help
+	  Enable a Avalon UART port to be the system console.
 
 config SERIAL_AJUART
 	tristate "Altera JTAG UART support"
