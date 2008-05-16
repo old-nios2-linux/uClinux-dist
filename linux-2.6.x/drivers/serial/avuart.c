@@ -54,7 +54,7 @@ static unsigned int avalon_uart_get_mctrl(struct uart_port *port)
 
 	spin_lock_irqsave(&port->lock, flags);
 	sigs = (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_CTS_MSK) ?
-		0 : TIOCM_CTS;
+		TIOCM_CTS : 0;
 	sigs |= (pp->sigs & TIOCM_RTS);
 	sigs |= (avalon_uart_getppdcd(port->line) ? TIOCM_CD : 0);
 	sigs |= (avalon_uart_getppdtr(port->line) ? TIOCM_DTR : 0);
