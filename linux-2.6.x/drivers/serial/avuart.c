@@ -35,15 +35,15 @@
  *	Local per-uart structure.
  */
 struct avalon_uart {
-	struct uart_port	port;
-	unsigned int		sigs;		/* Local copy of line sigs */
-	unsigned short		imr;		/* Local IMR mirror */
+	struct uart_port port;
+	unsigned int sigs;	/* Local copy of line sigs */
+	unsigned short imr;	/* Local IMR mirror */
 };
 
 static unsigned int avalon_uart_tx_empty(struct uart_port *port)
 {
-	return (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_TMT_MSK) ?
-		TIOCSER_TEMT : 0;
+	return (readw(port->membase + AVALON_UART_STATUS_REG) &
+		AVALON_UART_STATUS_TMT_MSK) ? TIOCSER_TEMT : 0;
 }
 
 static unsigned int avalon_uart_get_mctrl(struct uart_port *port)
@@ -53,8 +53,9 @@ static unsigned int avalon_uart_get_mctrl(struct uart_port *port)
 	unsigned int sigs;
 
 	spin_lock_irqsave(&port->lock, flags);
-	sigs = (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_CTS_MSK) ?
-		TIOCM_CTS : 0;
+	sigs =
+	    (readw(port->membase + AVALON_UART_STATUS_REG) &
+	     AVALON_UART_STATUS_CTS_MSK) ? TIOCM_CTS : 0;
 	sigs |= (pp->sigs & TIOCM_RTS);
 	sigs |= (avalon_uart_getppdcd(port->line) ? TIOCM_CD : 0);
 	sigs |= (avalon_uart_getppdtr(port->line) ? TIOCM_DTR : 0);
@@ -159,8 +160,9 @@ static void avalon_uart_shutdown(struct uart_port *port)
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
-static void avalon_uart_set_termios(struct uart_port *port, struct ktermios *termios,
-	struct ktermios *old)
+static void avalon_uart_set_termios(struct uart_port *port,
+				    struct ktermios *termios,
+				    struct ktermios *old)
 {
 	unsigned long flags;
 	unsigned int baud, baudclk;
@@ -180,14 +182,13 @@ static void avalon_uart_rx_chars(struct avalon_uart *pp)
 	unsigned short status;
 
 	while ((status = readw(port->membase + AVALON_UART_STATUS_REG)) &
-			AVALON_UART_STATUS_RRDY_MSK) {
+	       AVALON_UART_STATUS_RRDY_MSK) {
 		ch = readb(port->membase + AVALON_UART_RXDATA_REG);
 		flag = TTY_NORMAL;
 		port->icount.rx++;
 
 		if (status & AVALON_UART_STATUS_E_MSK) {
-			writew(status,
-				port->membase + AVALON_UART_STATUS_REG);
+			writew(status, port->membase + AVALON_UART_STATUS_REG);
 
 			if (status & AVALON_UART_STATUS_BRK_MSK) {
 				port->icount.brk++;
@@ -213,7 +214,8 @@ static void avalon_uart_rx_chars(struct avalon_uart *pp)
 
 		if (uart_handle_sysrq_char(port, ch))
 			continue;
-		uart_insert_char(port, status, AVALON_UART_STATUS_ROE_MSK, ch, flag);
+		uart_insert_char(port, status, AVALON_UART_STATUS_ROE_MSK, ch,
+				 flag);
 	}
 
 	tty_flip_buffer_push(port->info->tty);
@@ -232,11 +234,13 @@ static void avalon_uart_tx_chars(struct avalon_uart *pp)
 		return;
 	}
 
-	while (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_TRDY_MSK) {
+	while (readw(port->membase + AVALON_UART_STATUS_REG) &
+	       AVALON_UART_STATUS_TRDY_MSK) {
 		if (xmit->head == xmit->tail)
 			break;
-		writeb(xmit->buf[xmit->tail], port->membase + AVALON_UART_TXDATA_REG);
-		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE -1);
+		writeb(xmit->buf[xmit->tail],
+		       port->membase + AVALON_UART_TXDATA_REG);
+		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
 		port->icount.tx++;
 	}
 
@@ -270,9 +274,10 @@ static void avalon_uart_config_port(struct uart_port *port, int flags)
 	/* Clear mask, so no surprise interrupts. */
 	writeb(0, port->membase + AVALON_UART_CONTROL_REG);
 
-	if (request_irq(port->irq, avalon_uart_interrupt, IRQF_DISABLED, "UART", port))
+	if (request_irq
+	    (port->irq, avalon_uart_interrupt, IRQF_DISABLED, "UART", port))
 		printk(KERN_ERR "AVALON_UART: unable to attach Avalon UART %d "
-			"interrupt vector=%d\n", port->line, port->irq);
+		       "interrupt vector=%d\n", port->line, port->irq);
 }
 
 static const char *avalon_uart_type(struct uart_port *port)
@@ -291,7 +296,8 @@ static void avalon_uart_release_port(struct uart_port *port)
 	/* Nothing to release... */
 }
 
-static int avalon_uart_verify_port(struct uart_port *port, struct serial_struct *ser)
+static int avalon_uart_verify_port(struct uart_port *port,
+				   struct serial_struct *ser)
 {
 	if ((ser->type != PORT_UNKNOWN) && (ser->type != PORT_AVALON_UART))
 		return -EINVAL;
@@ -302,22 +308,22 @@ static int avalon_uart_verify_port(struct uart_port *port, struct serial_struct 
  *	Define the basic serial functions we support.
  */
 static struct uart_ops avalon_uart_ops = {
-	.tx_empty	= avalon_uart_tx_empty,
-	.get_mctrl	= avalon_uart_get_mctrl,
-	.set_mctrl	= avalon_uart_set_mctrl,
-	.start_tx	= avalon_uart_start_tx,
-	.stop_tx	= avalon_uart_stop_tx,
-	.stop_rx	= avalon_uart_stop_rx,
-	.enable_ms	= avalon_uart_enable_ms,
-	.break_ctl	= avalon_uart_break_ctl,
-	.startup	= avalon_uart_startup,
-	.shutdown	= avalon_uart_shutdown,
-	.set_termios	= avalon_uart_set_termios,
-	.type		= avalon_uart_type,
-	.request_port	= avalon_uart_request_port,
-	.release_port	= avalon_uart_release_port,
-	.config_port	= avalon_uart_config_port,
-	.verify_port	= avalon_uart_verify_port,
+	.tx_empty = avalon_uart_tx_empty,
+	.get_mctrl = avalon_uart_get_mctrl,
+	.set_mctrl = avalon_uart_set_mctrl,
+	.start_tx = avalon_uart_start_tx,
+	.stop_tx = avalon_uart_stop_tx,
+	.stop_rx = avalon_uart_stop_rx,
+	.enable_ms = avalon_uart_enable_ms,
+	.break_ctl = avalon_uart_break_ctl,
+	.startup = avalon_uart_startup,
+	.shutdown = avalon_uart_shutdown,
+	.set_termios = avalon_uart_set_termios,
+	.type = avalon_uart_type,
+	.request_port = avalon_uart_request_port,
+	.release_port = avalon_uart_release_port,
+	.config_port = avalon_uart_config_port,
+	.verify_port = avalon_uart_verify_port,
 };
 
 static struct avalon_uart avalon_uart_ports[CONFIG_SERIAL_AVALON_UART_MAXPORTS];
@@ -329,14 +335,16 @@ int __init early_avalon_uart_setup(struct avalon_uart_platform_uart *platp)
 	struct uart_port *port;
 	int i;
 
-	for (i = 0; ((i < CONFIG_SERIAL_AVALON_UART_MAXPORTS) && (platp[i].mapbase)); i++) {
+	for (i = 0;
+	     ((i < CONFIG_SERIAL_AVALON_UART_MAXPORTS) && (platp[i].mapbase));
+	     i++) {
 		port = &avalon_uart_ports[i].port;
 
 		port->line = i;
 		port->type = PORT_AVALON_UART;
 		port->mapbase = platp[i].mapbase;
 		port->membase = (platp[i].membase) ? platp[i].membase :
-			(unsigned char __iomem *) port->mapbase;
+		    (unsigned char __iomem *)port->mapbase;
 		port->iotype = SERIAL_IO_MEM;
 		port->irq = platp[i].irq;
 		port->uartclk = platp[i].uartclk;
@@ -353,17 +361,20 @@ static void avalon_uart_console_putc(struct console *co, const char c)
 	int i;
 
 	for (i = 0; (i < 0x10000); i++) {
-		if (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_TRDY_MSK)
+		if (readw(port->membase + AVALON_UART_STATUS_REG) &
+		    AVALON_UART_STATUS_TRDY_MSK)
 			break;
 	}
 	writeb(c, port->membase + AVALON_UART_TXDATA_REG);
 	for (i = 0; (i < 0x10000); i++) {
-		if (readw(port->membase + AVALON_UART_STATUS_REG) & AVALON_UART_STATUS_TRDY_MSK)
+		if (readw(port->membase + AVALON_UART_STATUS_REG) &
+		    AVALON_UART_STATUS_TRDY_MSK)
 			break;
 	}
 }
 
-static void avalon_uart_console_write(struct console *co, const char *s, unsigned int count)
+static void avalon_uart_console_write(struct console *co, const char *s,
+				      unsigned int count)
 {
 	for (; (count); count--, s++) {
 		avalon_uart_console_putc(co, *s);
@@ -380,7 +391,8 @@ static int __init avalon_uart_console_setup(struct console *co, char *options)
 	int parity = 'n';
 	int flow = 'n';
 
-	if ((co->index >= 0) && (co->index <= CONFIG_SERIAL_AVALON_UART_MAXPORTS))
+	if ((co->index >= 0)
+	    && (co->index <= CONFIG_SERIAL_AVALON_UART_MAXPORTS))
 		co->index = 0;
 	port = &avalon_uart_ports[co->index].port;
 	if (port->membase == 0)
@@ -395,13 +407,13 @@ static int __init avalon_uart_console_setup(struct console *co, char *options)
 static struct uart_driver avalon_uart_driver;
 
 static struct console avalon_uart_console = {
-	.name		= "ttyS",
-	.write		= avalon_uart_console_write,
-	.device		= uart_console_device,
-	.setup		= avalon_uart_console_setup,
-	.flags		= CON_PRINTBUFFER,
-	.index		= -1,
-	.data		= &avalon_uart_driver,
+	.name = "ttyS",
+	.write = avalon_uart_console_write,
+	.device = uart_console_device,
+	.setup = avalon_uart_console_setup,
+	.flags = CON_PRINTBUFFER,
+	.index = -1,
+	.data = &avalon_uart_driver,
 };
 
 static int __init avalon_uart_console_init(void)
@@ -424,13 +436,13 @@ console_initcall(avalon_uart_console_init);
  *	Define the avalon_uart UART driver structure.
  */
 static struct uart_driver avalon_uart_driver = {
-	.owner		= THIS_MODULE,
-	.driver_name	= "avalon_uart",
-	.dev_name	= "ttyS",
-	.major		= TTY_MAJOR,
-	.minor		= 64,
-	.nr		= CONFIG_SERIAL_AVALON_UART_MAXPORTS,
-	.cons		= AVALON_UART_CONSOLE,
+	.owner = THIS_MODULE,
+	.driver_name = "avalon_uart",
+	.dev_name = "ttyS",
+	.major = TTY_MAJOR,
+	.minor = 64,
+	.nr = CONFIG_SERIAL_AVALON_UART_MAXPORTS,
+	.cons = AVALON_UART_CONSOLE,
 };
 
 static int __devinit avalon_uart_probe(struct platform_device *pdev)
@@ -439,14 +451,16 @@ static int __devinit avalon_uart_probe(struct platform_device *pdev)
 	struct uart_port *port;
 	int i;
 
-	for (i = 0; ((i < CONFIG_SERIAL_AVALON_UART_MAXPORTS) && (platp[i].mapbase)); i++) {
+	for (i = 0;
+	     ((i < CONFIG_SERIAL_AVALON_UART_MAXPORTS) && (platp[i].mapbase));
+	     i++) {
 		port = &avalon_uart_ports[i].port;
 
 		port->line = i;
 		port->type = PORT_AVALON_UART;
 		port->mapbase = platp[i].mapbase;
 		port->membase = (platp[i].membase) ? platp[i].membase :
-			(unsigned char __iomem *) platp[i].mapbase;
+		    (unsigned char __iomem *)platp[i].mapbase;
 		port->iotype = SERIAL_IO_MEM;
 		port->irq = platp[i].irq;
 		port->uartclk = platp[i].uartclk;
@@ -474,12 +488,12 @@ static int avalon_uart_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver avalon_uart_platform_driver = {
-	.probe		= avalon_uart_probe,
-	.remove		= __devexit_p(avalon_uart_remove),
-	.driver		= {
-		.name	= "avalon_uart",
-		.owner	= THIS_MODULE,
-	},
+	.probe = avalon_uart_probe,
+	.remove = __devexit_p(avalon_uart_remove),
+	.driver = {
+		   .name = "avalon_uart",
+		   .owner = THIS_MODULE,
+		   },
 };
 
 static int __init avalon_uart_init(void)
