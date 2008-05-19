@@ -13,7 +13,7 @@
 #include <linux/serial.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
-#include <asm/avuart.h>
+#include <linux/avuart.h>
 
 /*
  *	Some boards implement the DTR/DCD lines using GPIO lines, most
