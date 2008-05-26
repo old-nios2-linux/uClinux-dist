@@ -1,6 +1,15 @@
 /*
  *	avuart.c -- Altera Avalon UART driver
- *	based on : mcf.c
+ *
+ *	Based on mcf.c -- Freescale ColdFire UART driver
+ *
+ *	(C) Copyright 2003-2007, Greg Ungerer <gerg@snapgear.com>
+ *	(C) Copyright 2008, Thomas Chou <thomas@wytron.com.tw>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <linux/kernel.h>
@@ -305,7 +314,7 @@ static irqreturn_t avalon_uart_interrupt(int irq, void *data)
 		avalon_uart_rx_chars(pp);
 	if (isr & AVALON_UART_STATUS_TRDY_MSK)
 		avalon_uart_tx_chars(pp);
-	return IRQ_HANDLED;
+	return IRQ_RETVAL(isr);
 }
 
 static void avalon_uart_config_port(struct uart_port *port, int flags)
@@ -316,7 +325,8 @@ static void avalon_uart_config_port(struct uart_port *port, int flags)
 	writeb(0, port->membase + AVALON_UART_CONTROL_REG);
 
 	if (request_irq
-	    (port->irq, avalon_uart_interrupt, IRQF_DISABLED, "UART", port))
+	    (port->irq, avalon_uart_interrupt, IRQF_DISABLED | IRQF_SHARED,
+	     "UART", port))
 		printk(KERN_ERR "AVALON_UART: unable to attach Avalon UART %d "
 		       "interrupt vector=%d\n", port->line, port->irq);
 }

@@ -1,6 +1,5 @@
 /*
  *	avuart.h -- Altera Avalon UART driver defines.
- *	based on : mcfuart.h
  */
 
 #ifndef	avuart_h
