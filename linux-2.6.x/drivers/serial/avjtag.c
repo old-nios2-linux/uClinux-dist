@@ -310,13 +310,13 @@ int __init early_avalon_jtaguart_setup(struct avalon_jtaguart_platform_uart
 	return 0;
 }
 
-#ifdef CONFIG_SERIAL_AVALON_JTAGUART_CONSOLE_BYPASS
+#if defined(CONFIG_SERIAL_AVALON_JTAGUART_CONSOLE_BYPASS)
 static void avalon_jtaguart_console_putc(struct console *co, const char c)
 {
 	struct uart_port *port = &(avalon_jtaguart_ports + co->index)->port;
 	unsigned long status;
 
-	while ((status = readl(port->membase + AVALON_JTAGUART_CONTROL_REG) &
+	while (((status = readl(port->membase + AVALON_JTAGUART_CONTROL_REG)) &
 		AVALON_JTAGUART_CONTROL_WSPACE_MSK) == 0) {
 		if ((status & AVALON_JTAGUART_CONTROL_AC_MSK) == 0)
 			return;	/* no connection activity */
@@ -327,9 +327,8 @@ static void avalon_jtaguart_console_putc(struct console *co, const char c)
 static void avalon_jtaguart_console_putc(struct console *co, const char c)
 {
 	struct uart_port *port = &(avalon_jtaguart_ports + co->index)->port;
-	unsigned long status;
 
-	while ((status = readl(port->membase + AVALON_JTAGUART_CONTROL_REG) &
+	while ((readl(port->membase + AVALON_JTAGUART_CONTROL_REG) &
 		AVALON_JTAGUART_CONTROL_WSPACE_MSK) == 0) ;
 	writeb(c, port->membase + AVALON_JTAGUART_DATA_REG);
 }
