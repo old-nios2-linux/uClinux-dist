@@ -158,8 +158,8 @@
 
 #define PORT_SC26XX	82
 
-/* Alter Nios II UART */
-#define PORT_JTAG_UART	83
+/* Altera Avalon UARTs */
+#define PORT_AVALON_JTAGUART	83
 #define PORT_AVALON_UART	84
 
 #ifdef __KERNEL__
