@@ -31,7 +31,3 @@ unifdef-y += termbits.h
 unifdef-y += termios.h
 unifdef-y += types.h
 unifdef-y += unistd.h
-
-# These probably shouldn't be exported
-unifdef-y += elf.h
-unifdef-y += page.h
