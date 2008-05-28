@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux m32r.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -27,11 +25,13 @@
 #include "inferior.h"
 #include "osabi.h"
 #include "reggroups.h"
+#include "regset.h"
 
 #include "gdb_string.h"
 
 #include "glibc-tdep.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 
 #include "trad-frame.h"
 #include "frame-unwind.h"
@@ -76,7 +76,7 @@
    to the ones used by the kernel.  Therefore, these trampolines are
    supported too.  */
 
-static const unsigned char linux_sigtramp_code[] = {
+static const gdb_byte linux_sigtramp_code[] = {
   0x67, 0x77, 0x10, 0xf2,
 };
 
@@ -86,7 +86,7 @@ static const unsigned char linux_sigtramp_code[] = {
 static CORE_ADDR
 m32r_linux_sigtramp_start (CORE_ADDR pc, struct frame_info *next_frame)
 {
-  unsigned char buf[4];
+  gdb_byte buf[4];
 
   /* We only recognize a signal trampoline if PC is at the start of
      one of the instructions.  We optimize for finding the PC at the
@@ -124,7 +124,7 @@ m32r_linux_sigtramp_start (CORE_ADDR pc, struct frame_info *next_frame)
 
    The effect is to call the system call rt_sigreturn.  */
 
-static const unsigned char linux_rt_sigtramp_code[] = {
+static const gdb_byte linux_rt_sigtramp_code[] = {
   0x97, 0xf0, 0x00, 0xad, 0x10, 0xf2, 0xf0, 0x00,
 };
 
@@ -134,7 +134,7 @@ static const unsigned char linux_rt_sigtramp_code[] = {
 static CORE_ADDR
 m32r_linux_rt_sigtramp_start (CORE_ADDR pc, struct frame_info *next_frame)
 {
-  unsigned char buf[4];
+  gdb_byte buf[4];
 
   /* We only recognize a signal trampoline if PC is at the start of
      one of the instructions.  We optimize for finding the PC at the
@@ -248,7 +248,7 @@ m32r_linux_sigtramp_frame_cache (struct frame_info *next_frame,
       if (addr)
 	sigcontext_addr += 128;
       else
-	addr = frame_func_unwind (next_frame);
+	addr = frame_func_unwind (next_frame, NORMAL_FRAME);
     }
   cache->pc = addr;
 
@@ -281,7 +281,7 @@ m32r_linux_sigtramp_frame_prev_register (struct frame_info *next_frame,
 					 int regnum, int *optimizedp,
 					 enum lval_type *lvalp,
 					 CORE_ADDR *addrp,
-					 int *realnump, void *valuep)
+					 int *realnump, gdb_byte *valuep)
 {
   struct m32r_frame_cache *cache =
     m32r_linux_sigtramp_frame_cache (next_frame, this_cache);
@@ -309,6 +309,97 @@ m32r_linux_sigtramp_frame_sniffer (struct frame_info *next_frame)
   return NULL;
 }
 
+/* Mapping between the registers in `struct pt_regs'
+   format and GDB's register array layout.  */
+
+static int m32r_pt_regs_offset[] = {
+  4 * 4,			/* r0 */
+  4 * 5,			/* r1 */
+  4 * 6,			/* r2 */
+  4 * 7,			/* r3 */
+  4 * 0,			/* r4 */
+  4 * 1,			/* r5 */
+  4 * 2,			/* r6 */
+  4 * 8,			/* r7 */
+  4 * 9,			/* r8 */
+  4 * 10,			/* r9 */
+  4 * 11,			/* r10 */
+  4 * 12,			/* r11 */
+  4 * 13,			/* r12 */
+  4 * 24,			/* fp */
+  4 * 25,			/* lr */
+  4 * 23,			/* sp */
+  4 * 19,			/* psw */
+  4 * 19,			/* cbr */
+  4 * 26,			/* spi */
+  4 * 23,			/* spu */
+  4 * 22,			/* bpc */
+  4 * 20,			/* pc */
+  4 * 16,			/* accl */
+  4 * 15			/* acch */
+};
+
+#define PSW_OFFSET (4 * 19)
+#define BBPSW_OFFSET (4 * 21)
+#define SPU_OFFSET (4 * 23)
+#define SPI_OFFSET (4 * 26)
+
+static void
+m32r_linux_supply_gregset (const struct regset *regset,
+			   struct regcache *regcache, int regnum,
+			   const void *gregs, size_t size)
+{
+  const char *regs = gregs;
+  unsigned long psw, bbpsw;
+  int i;
+
+  psw = *((unsigned long *) (regs + PSW_OFFSET));
+  bbpsw = *((unsigned long *) (regs + BBPSW_OFFSET));
+
+  for (i = 0; i < sizeof (m32r_pt_regs_offset) / 4; i++)
+    {
+      if (regnum != -1 && regnum != i)
+	continue;
+
+      switch (i)
+	{
+	case PSW_REGNUM:
+	  *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	    ((0x00c1 & bbpsw) << 8) | ((0xc100 & psw) >> 8);
+	  break;
+	case CBR_REGNUM:
+	  *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	    ((psw >> 8) & 1);
+	  break;
+	case M32R_SP_REGNUM:
+	  if (psw & 0x8000)
+	    *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	      *((unsigned long *) (regs + SPU_OFFSET));
+	  else
+	    *((unsigned long *) (regs + m32r_pt_regs_offset[i])) =
+	      *((unsigned long *) (regs + SPI_OFFSET));
+	  break;
+	}
+
+      regcache_raw_supply (regcache, i,
+			   regs + m32r_pt_regs_offset[i]);
+    }
+}
+
+static struct regset m32r_linux_gregset = {
+  NULL, m32r_linux_supply_gregset
+};
+
+static const struct regset *
+m32r_linux_regset_from_core_section (struct gdbarch *core_arch,
+				     const char *sect_name, size_t sect_size)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (core_arch);
+  if (strcmp (sect_name, ".reg") == 0)
+    return &m32r_linux_gregset;
+  return NULL;
+}
+
 static void
 m32r_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -321,8 +412,17 @@ m32r_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   frame_unwind_append_sniffer (gdbarch, m32r_linux_sigtramp_frame_sniffer);
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
+
+  /* Core file support.  */
+  set_gdbarch_regset_from_core_section
+    (gdbarch, m32r_linux_regset_from_core_section);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */

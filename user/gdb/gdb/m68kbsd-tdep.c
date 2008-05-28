@@ -1,12 +1,12 @@
 /* Target-dependent code for Motorola 68000 BSD's.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,15 +15,17 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
+#include "frame.h"
 #include "osabi.h"
 #include "regcache.h"
 #include "regset.h"
+#include "trad-frame.h"
+#include "tramp-frame.h"
+#include "gdbtypes.h"
 
 #include "gdb_assert.h"
 #include "gdb_string.h"
@@ -42,10 +44,12 @@
 int
 m68kbsd_fpreg_offset (int regnum)
 {
+  int fp_len = TYPE_LENGTH (gdbarch_register_type (current_gdbarch, regnum));
+  
   if (regnum >= M68K_FPC_REGNUM)
-    return 8 * 12 + (regnum - M68K_FPC_REGNUM) * 4;
+    return 8 * fp_len + (regnum - M68K_FPC_REGNUM) * 4;
 
-  return (regnum - M68K_FP0_REGNUM) * 12;
+  return (regnum - M68K_FP0_REGNUM) * fp_len;
 }
 
 /* Supply register REGNUM from the buffer specified by FPREGS and LEN
@@ -57,7 +61,7 @@ m68kbsd_supply_fpregset (const struct regset *regset,
 			 struct regcache *regcache,
 			 int regnum, const void *fpregs, size_t len)
 {
-  const char *regs = fpregs;
+  const gdb_byte *regs = fpregs;
   int i;
 
   gdb_assert (len >= M68KBSD_SIZEOF_FPREGS);
@@ -78,7 +82,7 @@ m68kbsd_supply_gregset (const struct regset *regset,
 			struct regcache *regcache,
 			int regnum, const void *gregs, size_t len)
 {
-  const char *regs = gregs;
+  const gdb_byte *regs = gregs;
   int i;
 
   gdb_assert (len >= M68KBSD_SIZEOF_GREGS);
@@ -128,15 +132,58 @@ m68kbsd_regset_from_core_section (struct gdbarch *gdbarch,
 }
 
 
-/* Support for shared libraries.  */
+/* Signal trampolines.  */
 
-/* Return non-zero if we are in a shared library trampoline code stub.  */
-
-int
-m68kbsd_aout_in_solib_call_trampoline (CORE_ADDR pc, char *name)
+static void
+m68kobsd_sigtramp_cache_init (const struct tramp_frame *self,
+			      struct frame_info *next_frame,
+			      struct trad_frame_cache *this_cache,
+			      CORE_ADDR func)
 {
-  return (name && !strcmp (name, "_DYNAMIC"));
+  CORE_ADDR addr, base, pc;
+  int regnum;
+
+  base = frame_unwind_register_unsigned (next_frame, M68K_SP_REGNUM);
+
+  /* The 'addql #4,%sp' instruction at offset 8 adjusts the stack
+     pointer.  Adjust the frame base accordingly.  */
+  pc = frame_unwind_register_unsigned (next_frame, M68K_PC_REGNUM);
+  if ((pc - func) > 8)
+    base -= 4;
+
+  /* Get frame pointer, stack pointer, program counter and processor
+     state from `struct sigcontext'.  */
+  addr = get_frame_memory_unsigned (next_frame, base + 8, 4);
+  trad_frame_set_reg_addr (this_cache, M68K_FP_REGNUM, addr + 8);
+  trad_frame_set_reg_addr (this_cache, M68K_SP_REGNUM, addr + 12);
+  trad_frame_set_reg_addr (this_cache, M68K_PC_REGNUM, addr + 20);
+  trad_frame_set_reg_addr (this_cache, M68K_PS_REGNUM, addr + 24);
+
+  /* The sc_ap member of `struct sigcontext' points to additional
+     hardware state.  Here we find the missing registers.  */
+  addr = get_frame_memory_unsigned (next_frame, addr + 16, 4) + 4;
+  for (regnum = M68K_D0_REGNUM; regnum < M68K_FP_REGNUM; regnum++, addr += 4)
+    trad_frame_set_reg_addr (this_cache, regnum, addr);
+
+  /* Construct the frame ID using the function start.  */
+  trad_frame_set_id (this_cache, frame_id_build (base, func));
 }
+
+static const struct tramp_frame m68kobsd_sigtramp = {
+  SIGTRAMP_FRAME,
+  2,
+  {
+    { 0x206f, -1 }, { 0x000c, -1},	/* moveal %sp@(12),%a0 */
+    { 0x4e90, -1 },			/* jsr %a0@ */
+    { 0x588f, -1 },			/* addql #4,%sp */
+    { 0x4e41, -1 },			/* trap #1 */
+    { 0x2f40, -1 }, { 0x0004, -1 },	/* moveal %d0,%sp@(4) */
+    { 0x7001, -1 },			/* moveq #SYS_exit,%d0 */
+    { 0x4e40, -1 },			/* trap #0 */
+    { TRAMP_SENTINEL_INSN, -1 }
+  },
+  m68kobsd_sigtramp_cache_init
+};
 
 
 static void
@@ -146,6 +193,8 @@ m68kbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tdep->jb_pc = 5;
   tdep->jb_elt_size = 4;
+
+  set_gdbarch_decr_pc_after_break (gdbarch, 2);
 
   set_gdbarch_regset_from_core_section
     (gdbarch, m68kbsd_regset_from_core_section);
@@ -162,9 +211,7 @@ m68kbsd_aout_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tdep->struct_return = reg_struct_return;
 
-  /* Assume SunOS-style shared libraries.  */
-  set_gdbarch_in_solib_call_trampoline
-    (gdbarch, m68kbsd_aout_in_solib_call_trampoline);
+  tramp_frame_prepend_unwinder (gdbarch, &m68kobsd_sigtramp);
 }
 
 /* NetBSD ELF.  */
@@ -181,8 +228,6 @@ m68kbsd_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->struct_return = pcc_struct_return;
 
   /* NetBSD ELF uses SVR4-style shared libraries.  */
-  set_gdbarch_in_solib_call_trampoline
-    (gdbarch, generic_in_solib_call_trampoline);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 }

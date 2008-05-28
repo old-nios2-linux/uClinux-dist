@@ -1,21 +1,20 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2004
+   Copyright 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    Please email any bugs, comments, and/or additions to this file to:
    bug-gdb@prep.ai.mit.edu  */
@@ -47,9 +46,35 @@ long long_val2 = -321;
 
 float float_val1 = 3.14159;
 float float_val2 = -2.3765;
+float float_val3 = 0.25;
+float float_val4 = 1.25;
+float float_val5 = 2.25;
+float float_val6 = 3.25;
+float float_val7 = 4.25;
+float float_val8 = 5.25;
+float float_val9 = 6.25;
+float float_val10 = 7.25;
+float float_val11 = 8.25;
+float float_val12 = 9.25;
+float float_val13 = 10.25;
+float float_val14 = 11.25;
+float float_val15 = 12.25;
 
 double double_val1 = 45.654;
 double double_val2 = -67.66;
+double double_val3 = 0.25;
+double double_val4 = 1.25;
+double double_val5 = 2.25;
+double double_val6 = 3.25;
+double double_val7 = 4.25;
+double double_val8 = 5.25;
+double double_val9 = 6.25;
+double double_val10 = 7.25;
+double double_val11 = 8.25;
+double double_val12 = 9.25;
+double double_val13 = 10.25;
+double double_val14 = 11.25;
+double double_val15 = 12.25;
 
 #define DELTA (0.001)
 
@@ -299,6 +324,39 @@ t_float_values2 (float float_arg1, float float_arg2)
 	  && (float_arg2 - float_val2) > -DELTA);
 }
 
+/* This function has many arguments to force some of them to be passed via
+   the stack instead of registers, to test that GDB can construct correctly
+   the parameter save area. Note that Linux/ppc32 has 8 float registers to use
+   for float parameter passing and Linux/ppc64 has 13, so the number of
+   arguments has to be at least 14 to contemplate these platforms.  */
+
+float
+#ifdef NO_PROTOTYPES
+t_float_many_args (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13,
+		   f14, f15)
+     float f1, float f2, float f3, float f4, float f5, float f6, float f7,
+     float f8, float f9, float f10, float f11, float f12, float f13, float f14,
+     float f15;
+#else
+t_float_many_args (float f1, float f2, float f3, float f4, float f5, float f6,
+		   float f7, float f8, float f9, float f10, float f11,
+		   float f12, float f13, float f14, float f15)
+#endif
+{
+  float sum_args;
+  float sum_values;
+
+  sum_args = f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12
+	     + f13 + f14 + f15;
+  sum_values = float_val1 + float_val2 + float_val3 + float_val4 + float_val5
+	       + float_val6 + float_val7 + float_val8 + float_val9
+	       + float_val10 + float_val11 + float_val12 + float_val13
+	       + float_val14 + float_val15;
+
+  return ((sum_args - sum_values) < DELTA
+	  && (sum_args - sum_values) > -DELTA);
+}
+
 #ifdef PROTOTYPES
 int t_double_values (double double_arg1, double double_arg2)
 #else
@@ -310,6 +368,39 @@ double double_arg1, double_arg2;
 	  && (double_arg1 - double_val1) > -DELTA
 	  && (double_arg2 - double_val2) < DELTA
 	  && (double_arg2 - double_val2) > -DELTA);
+}
+
+/* This function has many arguments to force some of them to be passed via
+   the stack instead of registers, to test that GDB can construct correctly
+   the parameter save area. Note that Linux/ppc32 has 8 float registers to use
+   for float parameter passing and Linux/ppc64 has 13, so the number of
+   arguments has to be at least 14 to contemplate these platforms.  */
+
+double
+#ifdef NO_PROTOTYPES
+t_double_many_args (f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13,
+		   f14, f15)
+     double f1, double f2, double f3, double f4, double f5, double f6,
+     double f7, double f8, double f9, double f10, double f11, double f12,
+     double f13, double f14, double f15;
+#else
+t_double_many_args (double f1, double f2, double f3, double f4, double f5,
+		    double f6, double f7, double f8, double f9, double f10,
+		    double f11, double f12, double f13, double f14, double f15)
+#endif
+{
+  double sum_args;
+  double sum_values;
+
+  sum_args = f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12
+	     + f13 + f14 + f15;
+  sum_values = double_val1 + double_val2 + double_val3 + double_val4
+	       + double_val5 + double_val6 + double_val7 + double_val8
+	       + double_val9 + double_val10 + double_val11 + double_val12
+	       + double_val13 + double_val14 + double_val15;
+
+  return ((sum_args - sum_values) < DELTA
+	  && (sum_args - sum_values) > -DELTA);
 }
 
 #ifdef PROTOTYPES
@@ -334,6 +425,29 @@ char char_array_arg1[], char_array_arg2[];
 	  !strcmp (char_array_arg2, char_array_val2));
 }
 
+#ifdef PROTOTYPES
+int t_double_int (double double_arg1, int int_arg2)
+#else
+int t_double_int (double_arg1, int_arg2)
+double double_arg1;
+int int_arg2;
+#endif
+{
+  return ((double_arg1 - int_arg2) < DELTA
+	  && (double_arg1 - int_arg2) > -DELTA);
+}
+
+#ifdef PROTOTYPES
+int t_int_double (int int_arg1, double double_arg2)
+#else
+int t_int_double (int_arg1, double_arg2)
+int int_arg1;
+double double_arg2;
+#endif
+{
+  return ((int_arg1 - double_arg2) < DELTA
+	  && (int_arg1 - double_arg2) > -DELTA);
+}
 
 /* This used to simply compare the function pointer arguments with
    known values for func_val1 and func_val2.  Doing so is valid ANSI

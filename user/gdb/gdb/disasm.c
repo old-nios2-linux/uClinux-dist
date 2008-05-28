@@ -1,12 +1,13 @@
 /* Disassemble support for GDB.
 
-   Copyright 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
@@ -46,10 +45,10 @@ struct dis_line_entry
 
 /* Like target_read_memory, but slightly different parameters.  */
 static int
-dis_asm_read_memory (bfd_vma memaddr, bfd_byte *myaddr, unsigned int len,
+dis_asm_read_memory (bfd_vma memaddr, gdb_byte *myaddr, unsigned int len,
 		     struct disassemble_info *info)
 {
-  return target_read_memory (memaddr, (char *) myaddr, len);
+  return target_read_memory (memaddr, myaddr, len);
 }
 
 /* Like memory_error with slightly different parameters.  */
@@ -134,7 +133,7 @@ dump_insns (struct ui_out *uiout, struct disassemble_info * di,
 	xfree (name);
 
       ui_file_rewind (stb->stream);
-      pc += TARGET_PRINT_INSN (pc, di);
+      pc += gdbarch_print_insn (current_gdbarch, pc, di);
       ui_out_field_stream (uiout, "inst", stb);
       ui_file_rewind (stb->stream);
       do_cleanups (ui_out_chain);
@@ -313,7 +312,7 @@ do_assembly_only (struct ui_out *uiout, struct disassemble_info * di,
 /* Initialize the disassemble info struct ready for the specified
    stream.  */
 
-static int
+static int ATTR_FORMAT (printf, 2, 3)
 fprintf_disasm (void *stream, const char *format, ...)
 {
   va_list args;
@@ -344,6 +343,7 @@ gdb_disassemble_info (struct gdbarch *gdbarch, struct ui_file *file)
   di.arch = gdbarch_bfd_arch_info (gdbarch)->arch;
   di.mach = gdbarch_bfd_arch_info (gdbarch)->mach;
   di.endian = gdbarch_byte_order (gdbarch);
+  disassemble_init_for_target (&di);
   return di;
 }
 
@@ -385,11 +385,24 @@ gdb_disassembly (struct ui_out *uiout,
 }
 
 /* Print the instruction at address MEMADDR in debugged memory,
-   on STREAM.  Returns length of the instruction, in bytes.  */
+   on STREAM.  Returns the length of the instruction, in bytes,
+   and, if requested, the number of branch delay slot instructions.  */
 
 int
-gdb_print_insn (CORE_ADDR memaddr, struct ui_file *stream)
+gdb_print_insn (CORE_ADDR memaddr, struct ui_file *stream,
+		int *branch_delay_insns)
 {
-  struct disassemble_info di = gdb_disassemble_info (current_gdbarch, stream);
-  return TARGET_PRINT_INSN (memaddr, &di);
+  struct disassemble_info di;
+  int length;
+
+  di = gdb_disassemble_info (current_gdbarch, stream);
+  length = gdbarch_print_insn (current_gdbarch, memaddr, &di);
+  if (branch_delay_insns)
+    {
+      if (di.insn_info_valid)
+	*branch_delay_insns = di.branch_delay_insns;
+      else
+	*branch_delay_insns = 0;
+    }
+  return length;
 }

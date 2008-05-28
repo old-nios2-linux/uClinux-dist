@@ -1,11 +1,13 @@
 /* Target-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -38,17 +38,10 @@
 #include "elf/frv.h"
 #include "osabi.h"
 #include "infcall.h"
+#include "solib.h"
 #include "frv-tdep.h"
 
 extern void _initialize_frv_tdep (void);
-
-static gdbarch_init_ftype frv_gdbarch_init;
-
-static gdbarch_register_name_ftype frv_register_name;
-static gdbarch_breakpoint_from_pc_ftype frv_breakpoint_from_pc;
-static gdbarch_adjust_breakpoint_address_ftype frv_gdbarch_adjust_breakpoint_address;
-static gdbarch_skip_prologue_ftype frv_skip_prologue;
-
 
 struct frv_unwind_cache		/* was struct frame_extra_info */
   {
@@ -99,8 +92,6 @@ struct gdbarch_tdep
   char **register_names;
 };
 
-#define CURRENT_VARIANT (gdbarch_tdep (current_gdbarch))
-
 /* Return the FR-V ABI associated with GDBARCH.  */
 enum frv_abi
 frv_abi (struct gdbarch *gdbarch)
@@ -119,17 +110,19 @@ frv_fdpic_loadmap_addresses (struct gdbarch *gdbarch, CORE_ADDR *interp_addr,
     return -1;
   else
     {
+      struct regcache *regcache = get_current_regcache ();
+
       if (interp_addr != NULL)
 	{
 	  ULONGEST val;
-	  regcache_cooked_read_unsigned (current_regcache,
+	  regcache_cooked_read_unsigned (regcache,
 					 fdpic_loadmap_interp_regnum, &val);
 	  *interp_addr = val;
 	}
       if (exec_addr != NULL)
 	{
 	  ULONGEST val;
-	  regcache_cooked_read_unsigned (current_regcache,
+	  regcache_cooked_read_unsigned (regcache,
 					 fdpic_loadmap_exec_regnum, &val);
 	  *exec_addr = val;
 	}
@@ -284,14 +277,14 @@ set_variant_scratch_registers (struct gdbarch_tdep *var)
 }
 
 static const char *
-frv_register_name (int reg)
+frv_register_name (struct gdbarch *gdbarch, int reg)
 {
   if (reg < 0)
     return "?toosmall?";
   if (reg >= frv_num_regs + frv_num_pseudo_regs)
     return "?toolarge?";
 
-  return CURRENT_VARIANT->register_names[reg];
+  return gdbarch_tdep (gdbarch)->register_names[reg];
 }
 
 
@@ -308,7 +301,7 @@ frv_register_type (struct gdbarch *gdbarch, int reg)
 
 static void
 frv_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
-                          int reg, void *buffer)
+                          int reg, gdb_byte *buffer)
 {
   if (reg == iacc0_regnum)
     {
@@ -334,7 +327,7 @@ frv_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 
 static void
 frv_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
-                          int reg, const void *buffer)
+                          int reg, const gdb_byte *buffer)
 {
   if (reg == iacc0_regnum)
     {
@@ -357,7 +350,7 @@ frv_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 }
 
 static int
-frv_register_sim_regno (int reg)
+frv_register_sim_regno (struct gdbarch *gdbarch, int reg)
 {
   static const int spr_map[] =
     {
@@ -401,7 +394,7 @@ frv_register_sim_regno (int reg)
       H_SPR_FNER1,		/* fner1_regnum */
     };
 
-  gdb_assert (reg >= 0 && reg < NUM_REGS);
+  gdb_assert (reg >= 0 && reg < gdbarch_num_regs (gdbarch));
 
   if (first_gpr_regnum <= reg && reg <= last_gpr_regnum)
     return reg - first_gpr_regnum + SIM_FRV_GR0_REGNUM;
@@ -420,11 +413,11 @@ frv_register_sim_regno (int reg)
 	return SIM_FRV_SPR0_REGNUM + spr_reg_offset;
     }
 
-  internal_error (__FILE__, __LINE__, "Bad register number %d", reg);
+  internal_error (__FILE__, __LINE__, _("Bad register number %d"), reg);
 }
 
 static const unsigned char *
-frv_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenp)
+frv_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenp)
 {
   static unsigned char breakpoint[] = {0xc0, 0x70, 0x00, 0x01};
   *lenp = sizeof (breakpoint);
@@ -442,7 +435,7 @@ static const int frv_instr_size = 4;
    constraint that a break instruction must not appear as any but the
    first instruction in the bundle.  */
 static CORE_ADDR
-frv_gdbarch_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
+frv_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
 {
   int count = max_instrs_per_bundle;
   CORE_ADDR addr = bpaddr - frv_instr_size;
@@ -456,7 +449,7 @@ frv_gdbarch_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr
       char instr[frv_instr_size];
       int status;
 
-      status = deprecated_read_memory_nobpt (addr, instr, sizeof instr);
+      status = read_memory_nobpt (addr, instr, sizeof instr);
 
       if (status != 0)
 	break;
@@ -945,9 +938,9 @@ frv_analyze_prologue (CORE_ADDR pc, struct frame_info *next_frame,
          because instructions may save relative to the SP, but we need
          their addresses relative to the FP.  */
       if (fp_set)
-	  frame_unwind_unsigned_register (next_frame, fp_regnum, &this_base);
+	this_base = frame_unwind_register_unsigned (next_frame, fp_regnum);
       else
-	  frame_unwind_unsigned_register (next_frame, sp_regnum, &this_base);
+	this_base = frame_unwind_register_unsigned (next_frame, sp_regnum);
 
       for (i = 0; i < 64; i++)
 	if (gr_saved[i])
@@ -975,7 +968,7 @@ frv_analyze_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 
 
 static CORE_ADDR
-frv_skip_prologue (CORE_ADDR pc)
+frv_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, func_end, new_pc;
 
@@ -1023,14 +1016,15 @@ frv_frame_unwind_cache (struct frame_info *next_frame,
   info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
   /* Prologue analysis does the rest...  */
-  frv_analyze_prologue (frame_func_unwind (next_frame), next_frame, info);
+  frv_analyze_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
+			next_frame, info);
 
   return info;
 }
 
 static void
 frv_extract_return_value (struct type *type, struct regcache *regcache,
-                          void *valbuf)
+                          gdb_byte *valbuf)
 {
   int len = TYPE_LENGTH (type);
 
@@ -1049,21 +1043,7 @@ frv_extract_return_value (struct type *type, struct regcache *regcache,
       store_unsigned_integer ((bfd_byte *) valbuf + 4, 4, regval);
     }
   else
-    internal_error (__FILE__, __LINE__, "Illegal return value length: %d", len);
-}
-
-static CORE_ADDR
-frv_extract_struct_value_address (struct regcache *regcache)
-{
-  ULONGEST addr;
-  regcache_cooked_read_unsigned (regcache, struct_return_regnum, &addr);
-  return addr;
-}
-
-static void
-frv_store_struct_return (CORE_ADDR addr, CORE_ADDR sp)
-{
-  write_register (struct_return_regnum, addr);
+    internal_error (__FILE__, __LINE__, _("Illegal return value length: %d"), len);
 }
 
 static CORE_ADDR
@@ -1078,6 +1058,13 @@ find_func_descr (struct gdbarch *gdbarch, CORE_ADDR entry_point)
 {
   CORE_ADDR descr;
   char valbuf[4];
+  CORE_ADDR start_addr;
+
+  /* If we can't find the function in the symbol table, then we assume
+     that the function address is already in descriptor form.  */
+  if (!find_pc_partial_function (entry_point, NULL, &start_addr, NULL)
+      || entry_point != start_addr)
+    return entry_point;
 
   descr = frv_fdpic_find_canonical_descriptor (entry_point);
 
@@ -1139,7 +1126,7 @@ frv_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   stack_space = 0;
   for (argnum = 0; argnum < nargs; ++argnum)
-    stack_space += align_up (TYPE_LENGTH (VALUE_TYPE (args[argnum])), 4);
+    stack_space += align_up (TYPE_LENGTH (value_type (args[argnum])), 4);
 
   stack_space -= (6 * 4);
   if (stack_space > 0)
@@ -1159,7 +1146,7 @@ frv_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   for (argnum = 0; argnum < nargs; ++argnum)
     {
       arg = args[argnum];
-      arg_type = check_typedef (VALUE_TYPE (arg));
+      arg_type = check_typedef (value_type (arg));
       len = TYPE_LENGTH (arg_type);
       typecode = TYPE_CODE (arg_type);
 
@@ -1180,7 +1167,7 @@ frv_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  store_unsigned_integer
 	    (valbuf, 4,
 	     find_func_descr (gdbarch,
-	                      extract_unsigned_integer (VALUE_CONTENTS (arg),
+	                      extract_unsigned_integer (value_contents (arg),
 			                                4)));
 	  typecode = TYPE_CODE_PTR;
 	  len = 4;
@@ -1188,7 +1175,7 @@ frv_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	}
       else
 	{
-	  val = (char *) VALUE_CONTENTS (arg);
+	  val = (char *) value_contents (arg);
 	}
 
       while (len > 0)
@@ -1239,7 +1226,7 @@ frv_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 static void
 frv_store_return_value (struct type *type, struct regcache *regcache,
-                        const void *valbuf)
+                        const gdb_byte *valbuf)
 {
   int len = TYPE_LENGTH (type);
 
@@ -1257,7 +1244,34 @@ frv_store_return_value (struct type *type, struct regcache *regcache,
     }
   else
     internal_error (__FILE__, __LINE__,
-                    "Don't know how to return a %d-byte value.", len);
+                    _("Don't know how to return a %d-byte value."), len);
+}
+
+enum return_value_convention
+frv_return_value (struct gdbarch *gdbarch, struct type *valtype,
+		  struct regcache *regcache, gdb_byte *readbuf,
+		  const gdb_byte *writebuf)
+{
+  int struct_return = TYPE_CODE (valtype) == TYPE_CODE_STRUCT
+		      || TYPE_CODE (valtype) == TYPE_CODE_UNION
+		      || TYPE_CODE (valtype) == TYPE_CODE_ARRAY;
+
+  if (writebuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      frv_store_return_value (valtype, regcache, writebuf);
+    }
+
+  if (readbuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      frv_extract_return_value (valtype, regcache, readbuf);
+    }
+
+  if (struct_return)
+    return RETURN_VALUE_STRUCT_CONVENTION;
+  else
+    return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
 
@@ -1265,9 +1279,9 @@ frv_store_return_value (struct type *type, struct regcache *regcache,
    and FR400.  */
 
 int
-frv_check_watch_resources (int type, int cnt, int ot)
+frv_check_watch_resources (struct gdbarch *gdbarch, int type, int cnt, int ot)
 {
-  struct gdbarch_tdep *var = CURRENT_VARIANT;
+  struct gdbarch_tdep *var = gdbarch_tdep (gdbarch);
 
   /* Watchpoints not supported on simulator.  */
   if (strcmp (target_shortname, "sim") == 0)
@@ -1296,13 +1310,14 @@ frv_check_watch_resources (int type, int cnt, int ot)
 int
 frv_stopped_data_address (CORE_ADDR *addr_p)
 {
+  struct frame_info *frame = get_current_frame ();
   CORE_ADDR brr, dbar0, dbar1, dbar2, dbar3;
 
-  brr = read_register (brr_regnum);
-  dbar0 = read_register (dbar0_regnum);
-  dbar1 = read_register (dbar1_regnum);
-  dbar2 = read_register (dbar2_regnum);
-  dbar3 = read_register (dbar3_regnum);
+  brr = get_frame_register_unsigned (frame, brr_regnum);
+  dbar0 = get_frame_register_unsigned (frame, dbar0_regnum);
+  dbar1 = get_frame_register_unsigned (frame, dbar1_regnum);
+  dbar2 = get_frame_register_unsigned (frame, dbar2_regnum);
+  dbar3 = get_frame_register_unsigned (frame, dbar3_regnum);
 
   if (brr & (1<<11))
     *addr_p = dbar0;
@@ -1346,7 +1361,7 @@ frv_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Check if the stack is empty.  */
   msym_stack = lookup_minimal_symbol ("_stack", NULL, NULL);
@@ -1369,7 +1384,7 @@ frv_frame_prev_register (struct frame_info *next_frame,
 			  void **this_prologue_cache,
 			  int regnum, int *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, void *bufferp)
+			  int *realnump, gdb_byte *bufferp)
 {
   struct frv_unwind_cache *info
     = frv_frame_unwind_cache (next_frame, this_prologue_cache);
@@ -1497,14 +1512,10 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, frv_skip_prologue);
   set_gdbarch_breakpoint_from_pc (gdbarch, frv_breakpoint_from_pc);
-  set_gdbarch_adjust_breakpoint_address (gdbarch, frv_gdbarch_adjust_breakpoint_address);
+  set_gdbarch_adjust_breakpoint_address
+    (gdbarch, frv_adjust_breakpoint_address);
 
-  set_gdbarch_deprecated_use_struct_convention (gdbarch, always_use_struct_convention);
-  set_gdbarch_extract_return_value (gdbarch, frv_extract_return_value);
-
-  set_gdbarch_deprecated_store_struct_return (gdbarch, frv_store_struct_return);
-  set_gdbarch_store_return_value (gdbarch, frv_store_return_value);
-  set_gdbarch_deprecated_extract_struct_value_address (gdbarch, frv_extract_struct_value_address);
+  set_gdbarch_return_value (gdbarch, frv_return_value);
 
   /* Frame stuff.  */
   set_gdbarch_unwind_pc (gdbarch, frv_unwind_pc);
@@ -1520,11 +1531,6 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Settings that should be unnecessary.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-
-  set_gdbarch_write_pc (gdbarch, generic_target_write_pc);
-
-  set_gdbarch_remote_translate_xfer_address
-    (gdbarch, generic_remote_translate_xfer_address);
 
   /* Hardware watchpoint / breakpoint support.  */
   switch (info.bfd_arch_info->mach)
@@ -1557,11 +1563,17 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     set_gdbarch_convert_from_func_ptr_addr (gdbarch,
 					    frv_convert_from_func_ptr_addr);
 
+  set_solib_ops (gdbarch, &frv_so_ops);
+
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
 
   /* Set the fallback (prologue based) frame sniffer.  */
   frame_unwind_append_sniffer (gdbarch, frv_frame_sniffer);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             frv_fetch_objfile_link_map);
 
   return gdbarch;
 }

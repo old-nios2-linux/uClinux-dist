@@ -1,14 +1,14 @@
 /* Machine independent variables that describe the core file under GDB.
 
-   Copyright 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2004 Free Software Foundation,
-   Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Interface routines for core, executable, etc.  */
 
@@ -27,6 +25,7 @@
 #define GDBCORE_H 1
 
 struct type;
+struct regcache;
 
 #include "bfd.h"
 
@@ -49,8 +48,8 @@ extern int have_core_file_p (void);
    the get_frame_memory methods, code reading from an exec can use the
    target methods.  */
 
-extern int deprecated_read_memory_nobpt (CORE_ADDR memaddr, char *myaddr,
-					 unsigned len);
+extern int read_memory_nobpt (CORE_ADDR memaddr, gdb_byte *myaddr,
+			      unsigned len);
 
 /* Report a memory error with error().  */
 
@@ -58,7 +57,7 @@ extern void memory_error (int status, CORE_ADDR memaddr);
 
 /* Like target_read_memory, but report an error if can't read.  */
 
-extern void read_memory (CORE_ADDR memaddr, char *myaddr, int len);
+extern void read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
 /* Read an integer from debugged memory, given address and number of
    bytes.  */
@@ -86,7 +85,7 @@ CORE_ADDR read_memory_typed_address (CORE_ADDR addr, struct type *type);
    byteswapping, alignment, different sizes for host vs. target types,
    etc.  */
 
-extern void write_memory (CORE_ADDR memaddr, char *myaddr, int len);
+extern void write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, int len);
 
 /* Store VALUE at ADDR in the inferior as a LEN-byte unsigned integer.  */
 extern void write_memory_unsigned_integer (CORE_ADDR addr, int len,
@@ -106,13 +105,13 @@ extern void generic_search (int len, char *data, char *mask,
 extern void (*deprecated_exec_file_display_hook) (char *filename);
 
 /* Hook for "file_command", which is more useful than above
-   (because it is invoked AFTER symbols are read, not before) */
+   (because it is invoked AFTER symbols are read, not before).  */
 
 extern void (*deprecated_file_changed_hook) (char *filename);
 
 extern void specify_exec_file_hook (void (*hook) (char *filename));
 
-/* Binary File Diddlers for the exec and core files */
+/* Binary File Diddlers for the exec and core files.  */
 
 extern bfd *core_bfd;
 extern bfd *exec_bfd;
@@ -123,20 +122,11 @@ extern int write_files;
 
 extern void core_file_command (char *filename, int from_tty);
 
-extern void exec_open (char *filename, int from_tty);
-
 extern void exec_file_attach (char *filename, int from_tty);
 
 extern void exec_file_clear (int from_tty);
 
 extern void validate_files (void);
-
-extern CORE_ADDR register_addr (int regno, CORE_ADDR blockend);
-
-#if !defined (KERNEL_U_ADDR)
-extern CORE_ADDR kernel_u_addr;
-#define KERNEL_U_ADDR kernel_u_addr
-#endif
 
 /* The target vector for core files. */
 
@@ -176,8 +166,8 @@ struct core_fns
 
     int (*core_sniffer) (struct core_fns *, bfd *);
 
-    /* Extract the register values out of the core file and store them where
-       `read_register' will find them.
+    /* Extract the register values out of the core file and supply them
+       into REGCACHE.
 
        CORE_REG_SECT points to the register values themselves, read into
        memory.
@@ -197,7 +187,8 @@ struct core_fns
        registers in a large upage-plus-stack ".reg" section.  Original upage
        address X is at location core_reg_sect+x+reg_addr. */
 
-    void (*core_read_registers) (char *core_reg_sect,
+    void (*core_read_registers) (struct regcache *regcache,
+				 char *core_reg_sect,
 				 unsigned core_reg_size,
 				 int which, CORE_ADDR reg_addr);
 

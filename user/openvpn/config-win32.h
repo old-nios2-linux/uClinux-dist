@@ -35,6 +35,7 @@
 
 #include <windows.h>
 #include <winsock2.h>
+#include "autodefs/defs.h"
 
 #define sleep(x) Sleep((x)*1000)
 
@@ -52,18 +53,17 @@ typedef unsigned long in_addr_t;
 /*#define DEBUG_LABEL "DEBUG1"*/
 
 /* Should we print debug info from driver? */
-/*#define TAP_WIN32_DEBUG*/
+#ifdef PRODUCT_TAP_DEBUG
+#define TAP_WIN32_DEBUG
+#endif
 
 /*
  * Minimum TAP-Win32 version number expected by userspace
  *
  * The TAP-Win32 version number is defined in tap-win32/SOURCES
  */
-#define TAP_WIN32_MIN_MAJOR 8
+#define TAP_WIN32_MIN_MAJOR 9
 #define TAP_WIN32_MIN_MINOR 1
-
-/* Allow --askpass and --auth-user-pass passwords to be read from a file */
-/* #undef ENABLE_PASSWORD_SAVE */
 
 /* Enable client/server capability */
 #define ENABLE_CLIENT_SERVER 1
@@ -73,6 +73,9 @@ typedef unsigned long in_addr_t;
 
 /* Enable management server capability */
 #define ENABLE_MANAGEMENT 1
+
+/* Enable PKCS#11 support */
+#define USE_PKCS11 1
 
 /* Enable HTTP proxy support */
 #define ENABLE_HTTP_PROXY 1
@@ -94,6 +97,9 @@ typedef unsigned long in_addr_t;
 
 /* Dimension size to use for empty array declaration */
 #define EMPTY_ARRAY_SIZE 0
+
+/* Define to 1 if you have the `getsockname' function. */
+#define HAVE_GETSOCKNAME 1
 
 /* Define to 1 if you have the <openssl/engine.h> header file. */
 #define HAVE_OPENSSL_ENGINE_H 1
@@ -209,25 +215,25 @@ typedef unsigned long in_addr_t;
 #define HAVE_GETPASS 1
 
 /* Name of package */
-#define PACKAGE "openvpn"
+#define PACKAGE PRODUCT_UNIX_NAME
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "openvpn-users@lists.sourceforge.net"
+//#define PACKAGE_BUGREPORT "openvpn-users@lists.sourceforge.net"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "OpenVPN"
+#define PACKAGE_NAME PRODUCT_NAME
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "openvpn"
+#define PACKAGE_TARNAME PACKAGE
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "2.0.5" /* AUTO_VERSION */
+#define PACKAGE_VERSION PRODUCT_VERSION
 
 /* Define to the full name and version of this package. */
 #ifdef DEBUG_LABEL
-#define PACKAGE_STRING "OpenVPN " PACKAGE_VERSION " " DEBUG_LABEL
+#define PACKAGE_STRING PACKAGE_NAME " " PACKAGE_VERSION " " DEBUG_LABEL
 #else
-#define PACKAGE_STRING "OpenVPN " PACKAGE_VERSION
+#define PACKAGE_STRING PACKAGE_NAME " " PACKAGE_VERSION
 #endif
 
 /* Define as the return type of signal handlers (`int' or `void'). */
@@ -259,6 +265,12 @@ typedef unsigned long in_addr_t;
 
 /* Use LZO compression library */
 #define USE_LZO 1
+
+/* LZO version number */
+#define LZO_VERSION_NUM "2"
+
+/* Use lzo/ directory prefix for LZO header files (for LZO 2.0) */
+#define LZO_HEADER_DIR 1
 
 /* Use OpenSSL SSL library */
 #define USE_SSL 1

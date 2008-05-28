@@ -1,24 +1,25 @@
 /* chew
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2003
+   2002, 2003, 2005, 2007
    Free Software Foundation, Inc.
    Contributed by steve chamberlain @cygnus
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 /* Yet another way of extracting documentation from source.
    No, I haven't finished it yet, but I hope you people like it better
@@ -83,10 +84,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    Foo.  */
 
 #include "ansidecl.h"
-#include "sysdep.h"
 #include <assert.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define DEF_SIZE 5000
 #define STACK 50
@@ -118,6 +120,7 @@ static void overwrite_string (string_type *, string_type *);
 static void catbuf (string_type *, char *, unsigned int);
 static void cattext (string_type *, char *);
 static void catstr (string_type *, string_type *);
+static void die (char *);
 #endif
 
 static void
@@ -160,7 +163,9 @@ write_buffer (buffer, f)
      string_type *buffer;
      FILE *f;
 {
-  fwrite (buffer->ptr, buffer->write_idx, 1, f);
+  if (buffer->write_idx != 0
+      && fwrite (buffer->ptr, buffer->write_idx, 1, f) != 1)
+    die ("cannot write output");
 }
 
 static void
@@ -587,45 +592,6 @@ translatecomments ()
 
   pc++;
 }
-
-#if 0
-
-/* This is not currently used.  */
-
-/* turn everything not starting with a . into a comment */
-
-static void
-manglecomments ()
-{
-  unsigned int idx = 0;
-  string_type out;
-  init_string (&out);
-
-  while (at (tos, idx))
-    {
-      if (at (tos, idx) == '\n' && at (tos, idx + 1) == '*')
-	{
-	  cattext (&out, "	/*");
-	  idx += 2;
-	}
-      else if (at (tos, idx) == '*' && at (tos, idx + 1) == '}')
-	{
-	  cattext (&out, "*/");
-	  idx += 2;
-	}
-      else
-	{
-	  catchar (&out, at (tos, idx));
-	  idx++;
-	}
-    }
-
-  overwrite_string (tos, &out);
-
-  pc++;
-}
-
-#endif
 
 /* Mod tos so that only lines with leading dots remain */
 static void

@@ -1,6 +1,7 @@
 /* Objective-C language support routines for GDB, the GNU debugger.
 
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
    Written by Michael Snyder.
@@ -9,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -30,6 +29,7 @@
 #include "language.h"
 #include "c-lang.h"
 #include "objc-lang.h"
+#include "exceptions.h"
 #include "complaints.h"
 #include "value.h"
 #include "symfile.h"
@@ -93,14 +93,14 @@ lookup_struct_typedef (char *name, struct block *block, int noerr)
       if (noerr)
 	return 0;
       else 
-	error ("No struct type named %s.", name);
+	error (_("No struct type named %s."), name);
     }
   if (TYPE_CODE (SYMBOL_TYPE (sym)) != TYPE_CODE_STRUCT)
     {
       if (noerr)
 	return 0;
       else
-	error ("This context has class, union or enum %s, not a struct.", 
+	error (_("This context has class, union or enum %s, not a struct."), 
 	       name);
     }
   return sym;
@@ -123,7 +123,7 @@ lookup_objc_class (char *classname)
     function = find_function_in_inferior("objc_lookup_class");
   else
     {
-      complaint (&symfile_complaints, "no way to lookup Objective-C classes");
+      complaint (&symfile_complaints, _("no way to lookup Objective-C classes"));
       return 0;
     }
 
@@ -150,7 +150,7 @@ lookup_child_selector (char *selname)
     function = find_function_in_inferior("sel_get_any_uid");
   else
     {
-      complaint (&symfile_complaints, "no way to lookup Objective-C selectors");
+      complaint (&symfile_complaints, _("no way to lookup Objective-C selectors"));
       return 0;
     }
 
@@ -201,9 +201,9 @@ value_nsstring (char *ptr, int len)
       nsstringValue = call_function_by_hand(function, 3, &stringValue[0]);
     }
   else
-    error ("NSString: internal error -- no way to create new NSString");
+    error (_("NSString: internal error -- no way to create new NSString"));
 
-  VALUE_TYPE(nsstringValue) = type;
+  deprecated_set_value_type (nsstringValue, type);
   return nsstringValue;
 }
 
@@ -334,7 +334,7 @@ objc_printchar (int c, struct ui_file *stream)
    FORCE_ELLIPSES.  */
 
 static void
-objc_printstr (struct ui_file *stream, char *string, 
+objc_printstr (struct ui_file *stream, const gdb_byte *string, 
 	       unsigned int length, int width, int force_ellipses)
 {
   unsigned int i;
@@ -422,147 +422,6 @@ objc_printstr (struct ui_file *stream, char *string,
     fputs_filtered ("...", stream);
 }
 
-/* Create a fundamental C type using default reasonable for the
-   current target.
-
-   Some object/debugging file formats (DWARF version 1, COFF, etc) do
-   not define fundamental types such as "int" or "double".  Others
-   (stabs or DWARF version 2, etc) do define fundamental types.  For
-   the formats which don't provide fundamental types, gdb can create
-   such types using this function.
-
-   FIXME: Some compilers distinguish explicitly signed integral types
-   (signed short, signed int, signed long) from "regular" integral
-   types (short, int, long) in the debugging information.  There is
-   some disagreement as to how useful this feature is.  In particular,
-   gcc does not support this.  Also, only some debugging formats allow
-   the distinction to be passed on to a debugger.  For now, we always
-   just use "short", "int", or "long" as the type name, for both the
-   implicit and explicitly signed types.  This also makes life easier
-   for the gdb test suite since we don't have to account for the
-   differences in output depending upon what the compiler and
-   debugging format support.  We will probably have to re-examine the
-   issue when gdb starts taking it's fundamental type information
-   directly from the debugging information supplied by the compiler.
-   fnf@cygnus.com */
-
-static struct type *
-objc_create_fundamental_type (struct objfile *objfile, int typeid)
-{
-  struct type *type = NULL;
-
-  switch (typeid)
-    {
-      default:
-	/* FIXME: For now, if we are asked to produce a type not in
-	   this language, create the equivalent of a C integer type
-	   with the name "<?type?>".  When all the dust settles from
-	   the type reconstruction work, this should probably become
-	   an error.  */
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
-			  0, "<?type?>", objfile);
-        warning ("internal error: no C/C++ fundamental type %d", typeid);
-	break;
-      case FT_VOID:
-	type = init_type (TYPE_CODE_VOID,
-			  TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			  0, "void", objfile);
-	break;
-      case FT_CHAR:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			  0, "char", objfile);
-	break;
-      case FT_SIGNED_CHAR:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			  0, "signed char", objfile);
-	break;
-      case FT_UNSIGNED_CHAR:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			  TYPE_FLAG_UNSIGNED, "unsigned char", objfile);
-	break;
-      case FT_SHORT:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			  0, "short", objfile);
-	break;
-      case FT_SIGNED_SHORT:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			  0, "short", objfile);	/* FIXME-fnf */
-	break;
-      case FT_UNSIGNED_SHORT:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			  TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
-	break;
-      case FT_INTEGER:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
-			  0, "int", objfile);
-	break;
-      case FT_SIGNED_INTEGER:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
-			  0, "int", objfile); /* FIXME -fnf */
-	break;
-      case FT_UNSIGNED_INTEGER:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
-			  TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
-	break;
-      case FT_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			  0, "long", objfile);
-	break;
-      case FT_SIGNED_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			  0, "long", objfile); /* FIXME -fnf */
-	break;
-      case FT_UNSIGNED_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			  TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
-	break;
-      case FT_LONG_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			  0, "long long", objfile);
-	break;
-      case FT_SIGNED_LONG_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			  0, "signed long long", objfile);
-	break;
-      case FT_UNSIGNED_LONG_LONG:
-	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			  TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
-	break;
-      case FT_FLOAT:
-	type = init_type (TYPE_CODE_FLT,
-			  TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-			  0, "float", objfile);
-	break;
-      case FT_DBL_PREC_FLOAT:
-	type = init_type (TYPE_CODE_FLT,
-			  TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-			  0, "double", objfile);
-	break;
-      case FT_EXT_PREC_FLOAT:
-	type = init_type (TYPE_CODE_FLT,
-			  TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
-			  0, "long double", objfile);
-	break;
-      }
-  return (type);
-}
-
 /* Determine if we are currently in the Objective-C dispatch function.
    If so, get the address of the method function that the dispatcher
    would call and use that as the function to step into instead. Also
@@ -570,12 +429,13 @@ objc_create_fundamental_type (struct objfile *objfile, int typeid)
    for the user since they are only interested in stepping into the
    method function anyway.  */
 static CORE_ADDR 
-objc_skip_trampoline (CORE_ADDR stop_pc)
+objc_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
 {
   CORE_ADDR real_stop_pc;
   CORE_ADDR method_stop_pc;
   
-  real_stop_pc = SKIP_TRAMPOLINE_CODE (stop_pc);
+  real_stop_pc = gdbarch_skip_trampoline_code
+		   (current_gdbarch, frame, stop_pc);
 
   if (real_stop_pc != 0)
     find_objc_msgcall (real_stop_pc, &method_stop_pc);
@@ -584,7 +444,8 @@ objc_skip_trampoline (CORE_ADDR stop_pc)
 
   if (method_stop_pc)
     {
-      real_stop_pc = SKIP_TRAMPOLINE_CODE (method_stop_pc);
+      real_stop_pc = gdbarch_skip_trampoline_code
+		       (current_gdbarch, frame, method_stop_pc);
       if (real_stop_pc == 0)
 	real_stop_pc = method_stop_pc;
     }
@@ -630,32 +491,9 @@ static const struct op_print objc_op_print_tab[] =
     {NULL, OP_NULL, PREC_NULL, 0}
 };
 
-struct type ** const (objc_builtin_types[]) = 
-{
-  &builtin_type_int,
-  &builtin_type_long,
-  &builtin_type_short,
-  &builtin_type_char,
-  &builtin_type_float,
-  &builtin_type_double,
-  &builtin_type_void,
-  &builtin_type_long_long,
-  &builtin_type_signed_char,
-  &builtin_type_unsigned_char,
-  &builtin_type_unsigned_short,
-  &builtin_type_unsigned_int,
-  &builtin_type_unsigned_long,
-  &builtin_type_unsigned_long_long,
-  &builtin_type_long_double,
-  &builtin_type_complex,
-  &builtin_type_double_complex,
-  0
-};
-
 const struct language_defn objc_language_defn = {
   "objective-c",		/* Language name */
   language_objc,
-  objc_builtin_types,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -667,7 +505,6 @@ const struct language_defn objc_language_defn = {
   objc_printchar,		/* Print a character constant */
   objc_printstr,		/* Function to print string constant */
   objc_emit_char,
-  objc_create_fundamental_type,	/* Create fundamental type in this language */
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -680,9 +517,11 @@ const struct language_defn objc_language_defn = {
   objc_op_print_tab,		/* Expression operators for printing */
   1,				/* C-style arrays */
   0,				/* String lower bound */
-  &builtin_type_char,		/* Type of string elements */
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  default_make_symbol_completion_list,
+  c_language_arch_info,
+  default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -761,7 +600,7 @@ end_msglist(void)
   msglist_sel = sel->msglist_sel;
   selid = lookup_child_selector(p);
   if (!selid)
-    error("Can't find selector \"%s\"", p);
+    error (_("Can't find selector \"%s\""), p);
   write_exp_elt_longcst (selid);
   xfree(p);
   write_exp_elt_longcst (val);	/* Number of args */
@@ -808,12 +647,12 @@ compare_selectors (const void *a, const void *b)
   aname = SYMBOL_PRINT_NAME (*(struct symbol **) a);
   bname = SYMBOL_PRINT_NAME (*(struct symbol **) b);
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_selectors(1)");
+    error (_("internal: compare_selectors(1)"));
 
   aname = strchr(aname, ' ');
   bname = strchr(bname, ' ');
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_selectors(2)");
+    error (_("internal: compare_selectors(2)"));
 
   return specialcmp (aname+1, bname+1);
 }
@@ -868,7 +707,7 @@ selectors_info (char *regexp, int from_tty)
     {
       val = re_comp (myregexp);
       if (val != 0)
-	error ("Invalid regexp (%s): %s", val, regexp);
+	error (_("Invalid regexp (%s): %s"), val, regexp);
     }
 
   /* First time thru is JUST to get max length and count.  */
@@ -898,7 +737,7 @@ selectors_info (char *regexp, int from_tty)
     }
   if (matches)
     {
-      printf_filtered ("Selectors matching \"%s\":\n\n", 
+      printf_filtered (_("Selectors matching \"%s\":\n\n"), 
 		       regexp ? regexp : "*");
 
       sym_arr = alloca (matches * sizeof (struct symbol *));
@@ -945,7 +784,7 @@ selectors_info (char *regexp, int from_tty)
       begin_line();
     }
   else
-    printf_filtered ("No selectors matching \"%s\"\n", regexp ? regexp : "*");
+    printf_filtered (_("No selectors matching \"%s\"\n"), regexp ? regexp : "*");
 }
 
 /*
@@ -963,7 +802,7 @@ compare_classes (const void *a, const void *b)
   aname = SYMBOL_PRINT_NAME (*(struct symbol **) a);
   bname = SYMBOL_PRINT_NAME (*(struct symbol **) b);
   if (aname == NULL || bname == NULL)
-    error ("internal: compare_classes(1)");
+    error (_("internal: compare_classes(1)"));
 
   return specialcmp (aname+1, bname+1);
 }
@@ -1008,7 +847,7 @@ classes_info (char *regexp, int from_tty)
     {
       val = re_comp (myregexp);
       if (val != 0)
-	error ("Invalid regexp (%s): %s", val, regexp);
+	error (_("Invalid regexp (%s): %s"), val, regexp);
     }
 
   /* First time thru is JUST to get max length and count.  */
@@ -1032,7 +871,7 @@ classes_info (char *regexp, int from_tty)
     }
   if (matches)
     {
-      printf_filtered ("Classes matching \"%s\":\n\n", 
+      printf_filtered (_("Classes matching \"%s\":\n\n"), 
 		       regexp ? regexp : "*");
       sym_arr = alloca (matches * sizeof (struct symbol *));
       matches = 0;
@@ -1071,7 +910,7 @@ classes_info (char *regexp, int from_tty)
       begin_line();
     }
   else
-    printf_filtered ("No classes matching \"%s\"\n", regexp ? regexp : "*");
+    printf_filtered (_("No classes matching \"%s\"\n"), regexp ? regexp : "*");
 }
 
 /* 
@@ -1527,7 +1366,7 @@ print_object_command (char *args, int from_tty)
   struct value *object, *function, *description;
   CORE_ADDR string_addr, object_addr;
   int i = 0;
-  char c = -1;
+  gdb_byte c = 0;
 
   if (!args || !*args)
     error (
@@ -1550,16 +1389,16 @@ print_object_command (char *args, int from_tty)
 
   function = find_function_in_inferior ("_NSPrintForDebugger");
   if (function == NULL)
-    error ("Unable to locate _NSPrintForDebugger in child process");
+    error (_("Unable to locate _NSPrintForDebugger in child process"));
 
   description = call_function_by_hand (function, 1, &object);
 
   string_addr = value_as_long (description);
   if (string_addr == 0)
-    error ("object returns null description");
+    error (_("object returns null description"));
 
   read_memory (string_addr + i++, &c, 1);
-  if (c != '\0')
+  if (c != 0)
     do
       { /* Read and print characters up to EOS.  */
 	QUIT;
@@ -1567,7 +1406,7 @@ print_object_command (char *args, int from_tty)
 	read_memory (string_addr + i++, &c, 1);
       } while (c != 0);
   else
-    printf_filtered("<object returns empty description>");
+    printf_filtered(_("<object returns empty description>"));
   printf_filtered ("\n");
 }
 
@@ -1645,7 +1484,7 @@ find_objc_msgsend (void)
  * The old function "pc_off_limits" used to do a lot of other things
  * in addition, such as detecting shared library jump stubs and
  * returning the address of the shlib function that would be called.
- * That functionality has been moved into the SKIP_TRAMPOLINE_CODE and
+ * That functionality has been moved into the gdbarch_skip_trampoline_code and
  * IN_SOLIB_TRAMPOLINE macros, which are resolved in the target-
  * dependent modules.  
  */
@@ -1719,11 +1558,11 @@ _initialize_objc_language (void)
 {
   add_language (&objc_language_defn);
   add_info ("selectors", selectors_info,    /* INFO SELECTORS command.  */
-	    "All Objective-C selectors, or those matching REGEXP.");
+	    _("All Objective-C selectors, or those matching REGEXP."));
   add_info ("classes", classes_info, 	    /* INFO CLASSES   command.  */
-	    "All Objective-C classes, or those matching REGEXP.");
+	    _("All Objective-C classes, or those matching REGEXP."));
   add_com ("print-object", class_vars, print_object_command, 
-	   "Ask an Objective-C object to print itself.");
+	   _("Ask an Objective-C object to print itself."));
   add_com_alias ("po", "print-object", class_vars, 1);
 }
 
@@ -1842,7 +1681,8 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel)
 }
 
 #define OBJC_FETCH_POINTER_ARGUMENT(argi) \
-  FETCH_POINTER_ARGUMENT (get_current_frame (), argi, builtin_type_void_func_ptr)
+  gdbarch_fetch_pointer_argument (current_gdbarch, get_current_frame (), \
+				  argi, builtin_type_void_func_ptr)
 
 static int
 resolve_msgsend (CORE_ADDR pc, CORE_ADDR *new_pc)

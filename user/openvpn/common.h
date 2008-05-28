@@ -26,9 +26,19 @@
 #define COMMON_H
 
 /*
- * Statistics counters.
+ * Statistics counters and associated printf formats.
  */
-typedef unsigned long counter_type;
+#ifdef USE_64_BIT_COUNTERS
+  typedef unsigned long long int counter_type;
+# ifdef WIN32
+#  define counter_format  "%I64u"
+# else
+#  define counter_format  "%llu"
+# endif
+#else
+  typedef unsigned int counter_type;
+# define counter_format   "%u"
+#endif
 
 /*
  * Time intervals
@@ -43,7 +53,6 @@ typedef int interval_t;
 /*
  * Printf formats for special types
  */
-#define counter_format          "%lu"
 #define ptr_format              "0x%08lx"
 #define time_format             "%lu"
 #define fragment_header_format  "0x%08x"
@@ -63,5 +72,13 @@ typedef unsigned long ptr_type;
  * on both server and client.
  */
 #define TLS_CHANNEL_BUF_SIZE 1024
+
+/*
+ * A sort of pseudo-filename for data provided inline within
+ * the configuration file.
+ */
+#if ENABLE_INLINE_FILES
+#define INLINE_FILE_TAG "[[INLINE]]"
+#endif
 
 #endif

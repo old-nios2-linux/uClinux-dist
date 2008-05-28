@@ -62,6 +62,8 @@ char spi_c_version[] = "RCSID $Id: spi.c,v 1.112.2.3 2006-02-15 04:36:36 paul Ex
 #include "alg_info.h"
 #include "kernel_alg.h"
 
+#include "os_select.h"
+
 struct encap_msghdr *em;
 
 /* 	
@@ -101,7 +103,7 @@ char sa[SATOT_BUF];
 
 extern unsigned int pfkey_lib_debug; /* used by libfreeswan/pfkey_v2_build */
 int pfkey_sock;
-fd_set pfkey_socks;
+os_fd_set pfkey_socks;
 uint32_t pfkey_seq = 0;
 enum life_severity {
 	life_soft = 0,

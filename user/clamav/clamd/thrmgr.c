@@ -34,6 +34,11 @@
 #define FALSE (0)
 #define TRUE (1)
 
+/* BSD and HP-UX need a bigger stacksize than the system default */
+#if defined (C_BSD) || defined (C_HPUX)
+#define C_BIGSTACK 1
+#endif
+
 static work_queue_t *work_queue_new(void)
 {
 	work_queue_t *work_q;
@@ -123,6 +128,7 @@ void thrmgr_destroy(threadpool_t *threadpool)
   	}
 	
 	pthread_mutex_destroy(&(threadpool->pool_mutex));
+	pthread_cond_destroy(&(threadpool)->idle_cond);
 	pthread_cond_destroy(&(threadpool->pool_cond));
 	pthread_attr_destroy(&(threadpool->pool_attr));
 	free(threadpool->queue);
@@ -133,7 +139,7 @@ void thrmgr_destroy(threadpool_t *threadpool)
 threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void *))
 {
 	threadpool_t *threadpool;
-#if defined(C_BIGSTACK) || defined(C_BSD)
+#if defined(C_BIGSTACK)
 	size_t stacksize;
 #endif
 	
@@ -164,8 +170,17 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 		free(threadpool);
 		return NULL;
 	}
-		
+
+	if (pthread_cond_init(&(threadpool->idle_cond),NULL) != 0)  {
+		pthread_cond_destroy(&(threadpool->pool_cond));
+		pthread_mutex_destroy(&(threadpool->pool_mutex));
+		free(threadpool->queue);
+		free(threadpool);
+		return NULL;
+	}
+
 	if (pthread_attr_init(&(threadpool->pool_attr)) != 0) {
+		pthread_cond_destroy(&(threadpool->idle_cond));
 		pthread_cond_destroy(&(threadpool->pool_cond));
 		pthread_mutex_destroy(&(threadpool->pool_mutex));
 		free(threadpool->queue);
@@ -175,6 +190,7 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 	
 	if (pthread_attr_setdetachstate(&(threadpool->pool_attr), PTHREAD_CREATE_DETACHED) != 0) {
 		pthread_attr_destroy(&(threadpool->pool_attr));
+		pthread_cond_destroy(&(threadpool->idle_cond));
 		pthread_cond_destroy(&(threadpool->pool_cond));
 		pthread_mutex_destroy(&(threadpool->pool_mutex));
 		free(threadpool->queue);
@@ -182,7 +198,7 @@ threadpool_t *thrmgr_new(int max_threads, int idle_timeout, void (*handler)(void
 		return NULL;
 	}
 
-#if defined(C_BIGSTACK) || defined(C_BSD)
+#if defined(C_BIGSTACK)
 	pthread_attr_getstacksize(&(threadpool->pool_attr), &stacksize);
 	stacksize = stacksize + 64 * 1024;
 	if (stacksize < 1048576) stacksize = 1048576; /* at least 1MB please */
@@ -214,6 +230,7 @@ static void *thrmgr_worker(void *arg)
 		while (((job_data=work_queue_pop(threadpool->queue)) == NULL)
 				&& (threadpool->state != POOL_EXIT)) {
 			/* Sleep, awaiting wakeup */
+			pthread_cond_signal(&threadpool->idle_cond);
 			retval = pthread_cond_timedwait(&(threadpool->pool_cond),
 				&(threadpool->pool_mutex), &timeout);
 			if (retval == ETIMEDOUT) {

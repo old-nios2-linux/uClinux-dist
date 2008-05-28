@@ -192,9 +192,6 @@ typedef nsis_z_stream FAR *nsis_z_streamp;
 #define Z_DEFAULT_STRATEGY    0
 /* compression strategy; see deflateInit2() below for details */
 
-#define Z_BINARY   0
-#define Z_ASCII    1
-#define Z_UNKNOWN  2
 /* Possible values of the data_type field */
 
 #define Z_DEFLATED   8

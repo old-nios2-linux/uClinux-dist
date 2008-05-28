@@ -1,5 +1,5 @@
-This is stabs.info, produced by makeinfo version 4.7 from
-./stabs.texinfo.
+This is stabs.info, produced by makeinfo version 4.8 from
+../.././gdb/doc/stabs.texinfo.
 
 INFO-DIR-SECTION Software development
 START-INFO-DIR-ENTRY
@@ -8,9 +8,9 @@ END-INFO-DIR-ENTRY
 
    This document describes the stabs debugging symbol tables.
 
-   Copyright 1992,1993,1994,1995,1997,1998,2000,2001    Free Software
-Foundation, Inc.  Contributed by Cygnus Support.  Written by Julia
-Menapace, Jim Kingdon, and David MacKenzie.
+   Copyright (C) 1992,1993,1994,1995,1997,1998,2000,2001    Free
+Software Foundation, Inc.  Contributed by Cygnus Support.  Written by
+Julia Menapace, Jim Kingdon, and David MacKenzie.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.1 or
@@ -34,6 +34,7 @@ This document describes the stabs debugging format.
 * Constants::			Constants
 * Variables::
 * Types::			Type definitions
+* Macro define and undefine::	Representation of #define and #undef
 * Symbol Tables::		Symbol information in symbol tables
 * Cplusplus::			Stabs specific to C++
 * Stab Types::			Symbol types in a.out files
@@ -988,7 +989,7 @@ start of the relevant section for that compilation unit.  SunPRO has
 plans to have the linker stop relocating stabs; I suspect that their the
 debugger gets the address from the corresponding ELF (not stab) symbol.
 I'm not sure how to find which symbol of that name is the right one.
-The clean way to do all this would be to have a the value of a symbol
+The clean way to do all this would be to have the value of a symbol
 descriptor `S' symbol be an offset relative to the start of the file,
 just like everything else, but that introduces obvious compatibility
 problems.  For more information on linker stab relocation, *Note ELF
@@ -1218,7 +1219,7 @@ guess); the value of the `C' stab is the offset in the argument list
 where the size of the array (in elements? in bytes?) is stored.
 
 
-File: stabs.info,  Node: Types,  Next: Symbol Tables,  Prev: Variables,  Up: Top
+File: stabs.info,  Node: Types,  Next: Macro define and undefine,  Prev: Variables,  Up: Top
 
 5 Defining Types
 ****************
@@ -2094,9 +2095,66 @@ generates the following code:
 new type, 25, which is a function returning `int'.
 
 
-File: stabs.info,  Node: Symbol Tables,  Next: Cplusplus,  Prev: Types,  Up: Top
+File: stabs.info,  Node: Macro define and undefine,  Next: Symbol Tables,  Prev: Types,  Up: Top
 
-6 Symbol Information in Symbol Tables
+6 Representation of #define and #undef
+**************************************
+
+This section describes the stabs support for macro define and undefine
+information, supported on some systems.  (e.g., with `-g3' `-gstabs'
+when using GCC).
+
+   A `#define MACRO-NAME MACRO-BODY' is represented with an
+`N_MAC_DEFINE' stab with a string field of `MACRO-NAME MACRO-BODY'.  
+
+   An `#undef MACRO-NAME' is represented with an `N_MAC_UNDEF' stabs
+with a string field of simply `MACRO-NAME'.  
+
+   For both `N_MAC_DEFINE' and `N_MAC_UNDEF', the desc field is the
+line number within the file where the corresponding `#define' or
+`#undef' occurred.
+
+   For example, the following C code:
+
+         #define NONE	42
+         #define TWO(a, b)	(a + (a) + 2 * b)
+         #define ONE(c)	(c + 19)
+
+         main(int argc, char *argv[])
+         {
+           func(NONE, TWO(10, 11));
+           func(NONE, ONE(23));
+
+         #undef ONE
+         #define ONE(c)	(c + 23)
+
+           func(NONE, ONE(-23));
+
+           return (0);
+         }
+
+         int global;
+
+         func(int arg1, int arg2)
+         {
+           global = arg1 + arg2;
+         }
+
+produces the following stabs (as well as many others):
+
+         .stabs	"NONE 42",54,0,1,0
+         .stabs	"TWO(a,b) (a + (a) + 2 * b)",54,0,2,0
+         .stabs	"ONE(c) (c + 19)",54,0,3,0
+         .stabs	"ONE",58,0,10,0
+         .stabs	"ONE(c) (c + 23)",54,0,11,0
+
+NOTE: In the above example, `54' is `N_MAC_DEFINE' and `58' is
+`N_MAC_UNDEF'.
+
+
+File: stabs.info,  Node: Symbol Tables,  Next: Cplusplus,  Prev: Macro define and undefine,  Up: Top
+
+7 Symbol Information in Symbol Tables
 *************************************
 
 This chapter describes the format of symbol table entries and how stab
@@ -2111,7 +2169,7 @@ transformations that the assembler and linker make on data from stabs.
 
 File: stabs.info,  Node: Symbol Table Format,  Next: Transformations On Symbol Tables,  Up: Symbol Tables
 
-6.1 Symbol Table Format
+7.1 Symbol Table Format
 =======================
 
 Each time the assembler encounters a stab directive, it puts each field
@@ -2143,7 +2201,7 @@ executable by the assembler or the linker.
 
 File: stabs.info,  Node: Transformations On Symbol Tables,  Prev: Symbol Table Format,  Up: Symbol Tables
 
-6.2 Transformations on Symbol Tables
+7.2 Transformations on Symbol Tables
 ====================================
 
 The linker concatenates object files and does fixups of externally
@@ -2175,7 +2233,7 @@ relocatable address and the linker turns it into an absolute address.
 
 File: stabs.info,  Node: Transformations On Static Variables,  Next: Transformations On Global Variables,  Up: Transformations On Symbol Tables
 
-6.2.1 Transformations on Static Variables
+7.2.1 Transformations on Static Variables
 -----------------------------------------
 
 This source line defines a static variable at file scope:
@@ -2199,7 +2257,7 @@ relocatable address absolute.
 
 File: stabs.info,  Node: Transformations On Global Variables,  Next: Stab Section Transformations,  Prev: Transformations On Static Variables,  Up: Transformations On Symbol Tables
 
-6.2.2 Transformations on Global Variables
+7.2.2 Transformations on Global Variables
 -----------------------------------------
 
 Stabs for global variables do not contain location information. In this
@@ -2233,7 +2291,7 @@ entry now holds an absolute address:
 
 File: stabs.info,  Node: Stab Section Transformations,  Prev: Transformations On Global Variables,  Up: Transformations On Symbol Tables
 
-6.2.3 Transformations of Stabs in separate sections
+7.2.3 Transformations of Stabs in separate sections
 ---------------------------------------------------
 
 For object file formats using stabs in separate sections (*note Stab
@@ -2272,7 +2330,7 @@ the value is absolute, not relocatable, and so the object file contains
 
 File: stabs.info,  Node: Cplusplus,  Next: Stab Types,  Prev: Symbol Tables,  Up: Top
 
-7 GNU C++ Stabs
+8 GNU C++ Stabs
 ***************
 
 * Menu:
@@ -2295,7 +2353,7 @@ File: stabs.info,  Node: Cplusplus,  Next: Stab Types,  Prev: Symbol Tables,  Up
 
 File: stabs.info,  Node: Class Names,  Next: Nested Symbols,  Up: Cplusplus
 
-7.1 C++ Class Names
+8.1 C++ Class Names
 ===================
 
 In C++, a class name which is declared with `class', `struct', or
@@ -2323,7 +2381,7 @@ type name and a tag.
 
 File: stabs.info,  Node: Nested Symbols,  Next: Basic Cplusplus Types,  Prev: Class Names,  Up: Cplusplus
 
-7.2 Defining a Symbol Within Another Type
+8.2 Defining a Symbol Within Another Type
 =========================================
 
 In C++, a symbol (such as a type name) can be defined within another
@@ -2343,7 +2401,7 @@ descriptor, and `5=*6' is the type information.
 
 File: stabs.info,  Node: Basic Cplusplus Types,  Next: Simple Classes,  Prev: Nested Symbols,  Up: Cplusplus
 
-7.3 Basic Types For C++
+8.3 Basic Types For C++
 =======================
 
 << the examples that follow are based on a01.C >>
@@ -2381,7 +2439,7 @@ virtual methods defined.
 
 File: stabs.info,  Node: Simple Classes,  Next: Class Instance,  Prev: Basic Cplusplus Types,  Up: Cplusplus
 
-7.4 Simple Class Definition
+8.4 Simple Class Definition
 ===========================
 
 The stabs describing C++ language features are an extension of the
@@ -2471,7 +2529,7 @@ for virtual methods.
 
 File: stabs.info,  Node: Class Instance,  Next: Methods,  Prev: Simple Classes,  Up: Cplusplus
 
-7.5 Class Instance
+8.5 Class Instance
 ==================
 
 As shown above, describing even a simple C++ class definition is
@@ -2494,7 +2552,7 @@ different from a standard C stab describing a local variable.
 
 File: stabs.info,  Node: Methods,  Next: Method Type Descriptor,  Prev: Class Instance,  Up: Cplusplus
 
-7.6 Method Definition
+8.6 Method Definition
 =====================
 
 The class definition shown above declares Ameth.  The C++ source below
@@ -2550,7 +2608,7 @@ frame pointer.
 
 File: stabs.info,  Node: Method Type Descriptor,  Next: Member Type Descriptor,  Prev: Methods,  Up: Cplusplus
 
-7.7 The `#' Type Descriptor
+8.7 The `#' Type Descriptor
 ===========================
 
 This is used to describe a class method.  This is a function which takes
@@ -2576,13 +2634,12 @@ the compiler it can also be used in other contexts.
 
 File: stabs.info,  Node: Member Type Descriptor,  Next: Protections,  Prev: Method Type Descriptor,  Up: Cplusplus
 
-7.8 The `@' Type Descriptor
+8.8 The `@' Type Descriptor
 ===========================
 
-The `@' type descriptor is used together with the `*' type descriptor
-for a pointer-to-non-static-member-data type.  It is followed by type
-information for the class (or union), a comma, and type information for
-the member data.
+The `@' type descriptor is used for a pointer-to-non-static-member-data
+type.  It is followed by type information for the class (or union), a
+comma, and type information for the member data.
 
    The following C++ source:
 
@@ -2590,7 +2647,7 @@ the member data.
 
    generates the following stab:
 
-     .stabs "int_in_a:t20=*21=@19,1",128,0,0,0
+     .stabs "int_in_a:t20=21=@19,1",128,0,0,0
 
    Note that there is a conflict between this and type attributes
 (*note String Field::); both use type descriptor `@'.  Fortunately, the
@@ -2600,7 +2657,7 @@ digit, `(', or `-', and type attributes never start with those things.
 
 File: stabs.info,  Node: Protections,  Next: Method Modifiers,  Prev: Member Type Descriptor,  Up: Cplusplus
 
-7.9 Protections
+8.9 Protections
 ===============
 
 In the simple class definition shown above all member data and
@@ -2675,7 +2732,7 @@ descriptors apply to the class name struct tag and struct type.
 
 File: stabs.info,  Node: Method Modifiers,  Next: Virtual Methods,  Prev: Protections,  Up: Cplusplus
 
-7.10 Method Modifiers (`const', `volatile', `const volatile')
+8.10 Method Modifiers (`const', `volatile', `const volatile')
 =============================================================
 
 << based on a6.C >>
@@ -2711,7 +2768,7 @@ the class definition below:
 
 File: stabs.info,  Node: Virtual Methods,  Next: Inheritance,  Prev: Method Modifiers,  Up: Cplusplus
 
-7.11 Virtual Methods
+8.11 Virtual Methods
 ====================
 
 << The following examples are based on a4.C >>
@@ -2794,7 +2851,7 @@ This is preceded by `~%' and followed by a final semi-colon.
 
 File: stabs.info,  Node: Inheritance,  Next: Virtual Base Classes,  Prev: Virtual Methods,  Up: Cplusplus
 
-7.12 Inheritance
+8.12 Inheritance
 ================
 
 Stabs describing C++ derived classes include additional sections that
@@ -2889,7 +2946,7 @@ the derivation of this class is encoded as follows.
 
 File: stabs.info,  Node: Virtual Base Classes,  Next: Static Members,  Prev: Inheritance,  Up: Cplusplus
 
-7.13 Virtual Base Classes
+8.13 Virtual Base Classes
 =========================
 
 A derived class object consists of a concatenation in memory of the data
@@ -2934,7 +2991,7 @@ for `B' at 128, and `Ddat' at 160.
 
 File: stabs.info,  Node: Static Members,  Prev: Virtual Base Classes,  Up: Cplusplus
 
-7.14 Static Members
+8.14 Static Members
 ===================
 
 The data area for a class is a concatenation of the space used by the
@@ -3078,8 +3135,15 @@ languages other than C.
 `0x34     N_NOMAP'
      No DST map; see *Note N_NOMAP::.
 
+`0x36     N_MAC_DEFINE'
+     Name and body of a `#define'd macro; see *Note Macro define and
+     undefine::.
+
 `0x38 N_OBJ'
      Object file (Solaris2).
+
+`0x3a     N_MAC_UNDEF'
+     Name of an `#undef'ed macro; see *Note Macro define and undefine::.
 
 `0x3c N_OPT'
      Debugger options (Solaris2).
@@ -3852,7 +3916,7 @@ Appendix G GNU Free Documentation License
                       Version 1.2, November 2002
 
      Copyright (C) 2000,2001,2002 Free Software Foundation, Inc.
-     59 Temple Place, Suite 330, Boston, MA  02111-1307, USA
+     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
      Everyone is permitted to copy and distribute verbatim copies
      of this license document, but changing it is not allowed.
@@ -4332,6 +4396,10 @@ Symbol Types Index
 * N_LSYM, for stack variables:           Stack Variables.      (line 11)
 * N_LSYM, for types:                     Typedefs.             (line  6)
 * N_M2C:                                 N_M2C.                (line  7)
+* N_MAC_DEFINE:                          Macro define and undefine.
+                                                               (line 11)
+* N_MAC_UNDEF:                           Macro define and undefine.
+                                                               (line 14)
 * N_MAIN:                                Main Program.         (line  6)
 * N_MOD2:                                N_MOD2.               (line  7)
 * N_NBBSS:                               Gould.                (line  9)
@@ -4358,97 +4426,98 @@ Symbol Types Index
 
 
 Tag Table:
-Node: Top859
-Node: Overview1839
-Node: Flow3254
-Node: Stabs Format4780
-Node: String Field6342
-Node: C Example11773
-Node: Assembly Code12318
-Node: Program Structure14289
-Node: Main Program15015
-Node: Source Files15576
-Node: Include Files18028
-Node: Line Numbers20693
-Node: Procedures22227
-Node: Nested Procedures28117
-Node: Block Structure29293
-Node: Alternate Entry Points30699
-Node: Constants31432
-Node: Variables34544
-Node: Stack Variables35232
-Node: Global Variables36933
-Node: Register Variables38089
-Node: Common Blocks38911
-Node: Statics40165
-Node: Based Variables42746
-Node: Parameters44131
-Node: Register Parameters45743
-Node: Local Variable Parameters48004
-Node: Reference Parameters50919
-Node: Conformant Arrays51539
-Node: Types52256
-Node: Builtin Types53191
-Node: Traditional Builtin Types54337
-Node: Traditional Integer Types54738
-Node: Traditional Other Types57046
-Node: Builtin Type Descriptors57960
-Node: Negative Type Numbers61460
-Node: Miscellaneous Types67815
-Node: Cross-References69701
-Node: Subranges71376
-Node: Arrays72615
-Node: Strings75840
-Node: Enumerations76902
-Node: Structures79287
-Node: Typedefs81994
-Node: Unions83318
-Node: Function Types84899
-Node: Symbol Tables86481
-Node: Symbol Table Format86913
-Node: Transformations On Symbol Tables88361
-Node: Transformations On Static Variables89715
-Node: Transformations On Global Variables90451
-Node: Stab Section Transformations91694
-Node: Cplusplus93077
-Node: Class Names93660
-Node: Nested Symbols94405
-Node: Basic Cplusplus Types95251
-Node: Simple Classes96811
-Node: Class Instance101105
-Node: Methods101822
-Node: Method Type Descriptor104041
-Node: Member Type Descriptor105241
-Node: Protections106072
-Node: Method Modifiers109162
-Node: Virtual Methods110790
-Node: Inheritance114591
-Node: Virtual Base Classes118287
-Node: Static Members120531
-Node: Stab Types121001
-Node: Non-Stab Symbol Types121625
-Node: Stab Symbol Types123056
-Node: Symbol Descriptors126779
-Node: Type Descriptors129558
-Node: Expanded Reference132770
-Node: N_PC134188
-Node: N_NSYMS134556
-Node: N_NOMAP134797
-Node: N_M2C135103
-Node: N_BROWS135537
-Node: N_DEFD135820
-Node: N_EHDECL136277
-Node: N_MOD2136528
-Node: N_CATCH136766
-Node: N_SSYM137260
-Node: N_SCOPE137545
-Node: Gould137735
-Node: N_LENG138727
-Node: Questions138955
-Node: Stab Sections140599
-Node: Stab Section Basics141197
-Node: ELF Linker Relocation144538
-Node: GNU Free Documentation License147948
-Node: Symbol Types Index170377
+Node: Top877
+Node: Overview1924
+Node: Flow3339
+Node: Stabs Format4865
+Node: String Field6427
+Node: C Example11858
+Node: Assembly Code12403
+Node: Program Structure14374
+Node: Main Program15100
+Node: Source Files15661
+Node: Include Files18113
+Node: Line Numbers20778
+Node: Procedures22312
+Node: Nested Procedures28202
+Node: Block Structure29378
+Node: Alternate Entry Points30784
+Node: Constants31517
+Node: Variables34629
+Node: Stack Variables35317
+Node: Global Variables37018
+Node: Register Variables38174
+Node: Common Blocks38996
+Node: Statics40250
+Node: Based Variables42829
+Node: Parameters44214
+Node: Register Parameters45826
+Node: Local Variable Parameters48087
+Node: Reference Parameters51002
+Node: Conformant Arrays51622
+Node: Types52339
+Node: Builtin Types53286
+Node: Traditional Builtin Types54432
+Node: Traditional Integer Types54833
+Node: Traditional Other Types57141
+Node: Builtin Type Descriptors58055
+Node: Negative Type Numbers61555
+Node: Miscellaneous Types67910
+Node: Cross-References69796
+Node: Subranges71471
+Node: Arrays72710
+Node: Strings75935
+Node: Enumerations76997
+Node: Structures79382
+Node: Typedefs82089
+Node: Unions83413
+Node: Function Types84994
+Node: Macro define and undefine86576
+Node: Symbol Tables88153
+Node: Symbol Table Format88605
+Node: Transformations On Symbol Tables90053
+Node: Transformations On Static Variables91407
+Node: Transformations On Global Variables92143
+Node: Stab Section Transformations93386
+Node: Cplusplus94769
+Node: Class Names95352
+Node: Nested Symbols96097
+Node: Basic Cplusplus Types96943
+Node: Simple Classes98503
+Node: Class Instance102797
+Node: Methods103514
+Node: Method Type Descriptor105733
+Node: Member Type Descriptor106933
+Node: Protections107725
+Node: Method Modifiers110815
+Node: Virtual Methods112443
+Node: Inheritance116244
+Node: Virtual Base Classes119940
+Node: Static Members122184
+Node: Stab Types122654
+Node: Non-Stab Symbol Types123278
+Node: Stab Symbol Types124709
+Node: Symbol Descriptors128640
+Node: Type Descriptors131419
+Node: Expanded Reference134631
+Node: N_PC136049
+Node: N_NSYMS136417
+Node: N_NOMAP136658
+Node: N_M2C136964
+Node: N_BROWS137398
+Node: N_DEFD137681
+Node: N_EHDECL138138
+Node: N_MOD2138389
+Node: N_CATCH138627
+Node: N_SSYM139121
+Node: N_SCOPE139406
+Node: Gould139596
+Node: N_LENG140588
+Node: Questions140816
+Node: Stab Sections142460
+Node: Stab Section Basics143058
+Node: ELF Linker Relocation146399
+Node: GNU Free Documentation License149809
+Node: Symbol Types Index172243
 
 End Tag Table

@@ -1,6 +1,8 @@
 /* Support for printing Fortran values for GDB, the GNU debugger.
-   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2003
-   Free Software Foundation, Inc.
+
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2003, 2005, 2006,
+   2007, 2008 Free Software Foundation, Inc.
+
    Contributed by Motorola.  Adapted from the C definitions by Farooq Butt
    (fmbutt@engage.sps.mot.com), additionally worked over by Stan Shebs.
 
@@ -8,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -42,13 +42,6 @@ static int there_is_a_visible_common_named (char *);
 extern void _initialize_f_valprint (void);
 static void info_common_command (char *, int);
 static void list_all_visible_commons (char *);
-static void f77_print_array (struct type *, char *, CORE_ADDR,
-			     struct ui_file *, int, int, int,
-			     enum val_prettyprint);
-static void f77_print_array_1 (int, int, struct type *, char *,
-			       CORE_ADDR, struct ui_file *, int, int, int,
-			       enum val_prettyprint,
-			       int *elts);
 static void f77_create_arrayprint_offset_tbl (struct type *,
 					      struct ui_file *);
 static void f77_get_dynamic_length_of_aggregate (struct type *);
@@ -70,13 +63,15 @@ int f77_array_offset_tbl[MAX_FORTRAN_DIMS + 1][2];
 int
 f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
 {
+  struct frame_info *frame;
   CORE_ADDR current_frame_addr;
   CORE_ADDR ptr_to_lower_bound;
 
   switch (TYPE_ARRAY_LOWER_BOUND_TYPE (type))
     {
     case BOUND_BY_VALUE_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  *lower_bound =
@@ -96,11 +91,12 @@ f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
       break;
 
     case BOUND_CANNOT_BE_DETERMINED:
-      error ("Lower bound may not be '*' in F77");
+      error (_("Lower bound may not be '*' in F77"));
       break;
 
     case BOUND_BY_REF_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  ptr_to_lower_bound =
@@ -119,7 +115,7 @@ f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
     case BOUND_BY_REF_IN_REG:
     case BOUND_BY_VALUE_IN_REG:
     default:
-      error ("??? unhandled dynamic array bound type ???");
+      error (_("??? unhandled dynamic array bound type ???"));
       break;
     }
   return BOUND_FETCH_OK;
@@ -128,13 +124,15 @@ f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
 int
 f77_get_dynamic_upperbound (struct type *type, int *upper_bound)
 {
+  struct frame_info *frame;
   CORE_ADDR current_frame_addr = 0;
   CORE_ADDR ptr_to_upper_bound;
 
   switch (TYPE_ARRAY_UPPER_BOUND_TYPE (type))
     {
     case BOUND_BY_VALUE_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  *upper_bound =
@@ -163,7 +161,8 @@ f77_get_dynamic_upperbound (struct type *type, int *upper_bound)
       break;
 
     case BOUND_BY_REF_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  ptr_to_upper_bound =
@@ -182,7 +181,7 @@ f77_get_dynamic_upperbound (struct type *type, int *upper_bound)
     case BOUND_BY_REF_IN_REG:
     case BOUND_BY_VALUE_IN_REG:
     default:
-      error ("??? unhandled dynamic array bound type ???");
+      error (_("??? unhandled dynamic array bound type ???"));
       break;
     }
   return BOUND_FETCH_OK;
@@ -213,11 +212,11 @@ f77_get_dynamic_length_of_aggregate (struct type *type)
   /* Recursion ends here, start setting up lengths.  */
   retcode = f77_get_dynamic_lowerbound (type, &lower_bound);
   if (retcode == BOUND_FETCH_ERROR)
-    error ("Cannot obtain valid array lower bound");
+    error (_("Cannot obtain valid array lower bound"));
 
   retcode = f77_get_dynamic_upperbound (type, &upper_bound);
   if (retcode == BOUND_FETCH_ERROR)
-    error ("Cannot obtain valid array upper bound");
+    error (_("Cannot obtain valid array upper bound"));
 
   /* Patch in a valid length value. */
 
@@ -245,11 +244,11 @@ f77_create_arrayprint_offset_tbl (struct type *type, struct ui_file *stream)
 
       retcode = f77_get_dynamic_upperbound (tmp_type, &upper);
       if (retcode == BOUND_FETCH_ERROR)
-	error ("Cannot obtain dynamic upper bound");
+	error (_("Cannot obtain dynamic upper bound"));
 
       retcode = f77_get_dynamic_lowerbound (tmp_type, &lower);
       if (retcode == BOUND_FETCH_ERROR)
-	error ("Cannot obtain dynamic lower bound");
+	error (_("Cannot obtain dynamic lower bound"));
 
       F77_DIM_SIZE (ndimen) = upper - lower + 1;
 
@@ -278,8 +277,9 @@ f77_create_arrayprint_offset_tbl (struct type *type, struct ui_file *stream)
    the superior.  Address == the address in the inferior.  */
 
 static void
-f77_print_array_1 (int nss, int ndimensions, struct type *type, char *valaddr,
-		   CORE_ADDR address, struct ui_file *stream, int format,
+f77_print_array_1 (int nss, int ndimensions, struct type *type,
+		   const gdb_byte *valaddr, CORE_ADDR address,
+		   struct ui_file *stream, int format,
 		   int deref_ref, int recurse, enum val_prettyprint pretty,
 		   int *elts)
 {
@@ -323,8 +323,9 @@ f77_print_array_1 (int nss, int ndimensions, struct type *type, char *valaddr,
    stuff and then immediately call f77_print_array_1() */
 
 static void
-f77_print_array (struct type *type, char *valaddr, CORE_ADDR address,
-		 struct ui_file *stream, int format, int deref_ref, int recurse,
+f77_print_array (struct type *type, const gdb_byte *valaddr,
+		 CORE_ADDR address, struct ui_file *stream,
+		 int format, int deref_ref, int recurse,
 		 enum val_prettyprint pretty)
 {
   int ndimensions;
@@ -333,7 +334,7 @@ f77_print_array (struct type *type, char *valaddr, CORE_ADDR address,
   ndimensions = calc_f77_array_dims (type);
 
   if (ndimensions > MAX_FORTRAN_DIMS || ndimensions < 0)
-    error ("Type node corrupt! F77 arrays cannot have %d subscripts (%d Max)",
+    error (_("Type node corrupt! F77 arrays cannot have %d subscripts (%d Max)"),
 	   ndimensions, MAX_FORTRAN_DIMS);
 
   /* Since F77 arrays are stored column-major, we set up an 
@@ -361,7 +362,7 @@ f77_print_array (struct type *type, char *valaddr, CORE_ADDR address,
    The PRETTY parameter controls prettyprinting.  */
 
 int
-f_val_print (struct type *type, char *valaddr, int embedded_offset,
+f_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	     CORE_ADDR address, struct ui_file *stream, int format,
 	     int deref_ref, int recurse, enum val_prettyprint pretty)
 {
@@ -369,6 +370,7 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
   struct type *elttype;
   LONGEST val;
   CORE_ADDR addr;
+  int index;
 
   CHECK_TYPEDEF (type);
   switch (TYPE_CODE (type))
@@ -405,7 +407,7 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 	    }
 
 	  if (addressprint && format != 's')
-	    print_address_numeric (addr, 1, stream);
+	    fputs_filtered (paddress (addr), stream);
 
 	  /* For a pointer to char or unsigned char, also print the string
 	     pointed to, unless pointer is null.  */
@@ -429,7 +431,7 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 	  CORE_ADDR addr
 	    = extract_typed_address (valaddr + embedded_offset, type);
 	  fprintf_filtered (stream, "@");
-	  print_address_numeric (addr, 1, stream);
+	  fputs_filtered (paddress (addr), stream);
 	  if (deref_ref)
 	    fputs_filtered (": ", stream);
 	}
@@ -442,17 +444,9 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 	      value_at
 	      (TYPE_TARGET_TYPE (type),
 	       unpack_pointer (lookup_pointer_type (builtin_type_void),
-			       valaddr + embedded_offset),
-	       NULL);
-	      val_print (VALUE_TYPE (deref_val),
-			 VALUE_CONTENTS (deref_val),
-			 0,
-			 VALUE_ADDRESS (deref_val),
-			 stream,
-			 format,
-			 deref_ref,
-			 recurse,
-			 pretty);
+			       valaddr + embedded_offset));
+	      common_val_print (deref_val, stream, format, deref_ref, recurse,
+				pretty);
 	    }
 	  else
 	    fputs_filtered ("???", stream);
@@ -492,6 +486,13 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 			     stream);
 	    }
 	}
+      break;
+
+    case TYPE_CODE_FLAGS:
+      if (format)
+	  print_scalar_formatted (valaddr, type, format, 0, stream);
+      else
+	val_print_type_code_flags (type, valaddr, stream);
       break;
 
     case TYPE_CODE_FLT:
@@ -536,7 +537,7 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 	      break;
 
 	    default:
-	      error ("Logicals of length %d bytes not supported",
+	      error (_("Logicals of length %d bytes not supported"),
 		     TYPE_LENGTH (type));
 
 	    }
@@ -571,7 +572,7 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
 	  type = builtin_type_f_real_s16;
 	  break;
 	default:
-	  error ("Cannot print out complex*%d variables", TYPE_LENGTH (type));
+	  error (_("Cannot print out complex*%d variables"), TYPE_LENGTH (type));
 	}
       fputs_filtered ("(", stream);
       print_floating (valaddr, type, stream);
@@ -587,8 +588,24 @@ f_val_print (struct type *type, char *valaddr, int embedded_offset,
       fprintf_filtered (stream, "<incomplete type>");
       break;
 
+    case TYPE_CODE_STRUCT:
+      /* Starting from the Fortran 90 standard, Fortran supports derived
+         types.  */
+      fprintf_filtered (stream, "{ ");
+      for (index = 0; index < TYPE_NFIELDS (type); index++)
+        {
+          int offset = TYPE_FIELD_BITPOS (type, index) / 8;
+          f_val_print (TYPE_FIELD_TYPE (type, index), valaddr + offset,
+                       embedded_offset, address, stream,
+                       format, deref_ref, recurse, pretty);
+          if (index != TYPE_NFIELDS (type) - 1)
+            fputs_filtered (", ", stream);
+        }
+      fprintf_filtered (stream, "}");
+      break;     
+
     default:
-      error ("Invalid F77 type code %d in symbol table.", TYPE_CODE (type));
+      error (_("Invalid F77 type code %d in symbol table."), TYPE_CODE (type));
     }
   gdb_flush (stream);
   return 0;
@@ -601,7 +618,7 @@ list_all_visible_commons (char *funname)
 
   tmp = head_common_list;
 
-  printf_filtered ("All COMMON blocks visible at this level:\n\n");
+  printf_filtered (_("All COMMON blocks visible at this level:\n\n"));
 
   while (tmp != NULL)
     {
@@ -630,10 +647,7 @@ info_common_command (char *comname, int from_tty)
      first make sure that it is visible and if so, let 
      us display its contents */
 
-  fi = deprecated_selected_frame;
-
-  if (fi == NULL)
-    error ("No frame selected");
+  fi = get_selected_frame (_("No frame selected"));
 
   /* The following is generally ripped off from stack.c's routine 
      print_frame_info() */
@@ -655,7 +669,8 @@ info_common_command (char *comname, int from_tty)
          be any minimal symbols in the middle of a function.
          FIXME:  (Not necessarily true.  What about text labels) */
 
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
+      struct minimal_symbol *msymbol = 
+	lookup_minimal_symbol_by_pc (get_frame_pc (fi));
 
       if (msymbol != NULL
 	  && (SYMBOL_VALUE_ADDRESS (msymbol)
@@ -671,6 +686,8 @@ info_common_command (char *comname, int from_tty)
 
       if (msymbol != NULL)
 	funname = DEPRECATED_SYMBOL_NAME (msymbol);
+      else /* Got no 'funname', code below will fail.  */
+	error (_("No function found for frame."));
     }
 
   /* If comname is NULL, we assume the user wishes to see the 
@@ -687,9 +704,9 @@ info_common_command (char *comname, int from_tty)
   if (the_common)
     {
       if (strcmp (comname, BLANK_COMMON_NAME_LOCAL) == 0)
-	printf_filtered ("Contents of blank COMMON block:\n");
+	printf_filtered (_("Contents of blank COMMON block:\n"));
       else
-	printf_filtered ("Contents of F77 COMMON block '%s':\n", comname);
+	printf_filtered (_("Contents of F77 COMMON block '%s':\n"), comname);
 
       printf_filtered ("\n");
       entry = the_common->entries;
@@ -703,7 +720,7 @@ info_common_command (char *comname, int from_tty)
 	}
     }
   else
-    printf_filtered ("Cannot locate the common block %s in function '%s'\n",
+    printf_filtered (_("Cannot locate the common block %s in function '%s'\n"),
 		     comname, funname);
 }
 
@@ -720,12 +737,9 @@ there_is_a_visible_common_named (char *comname)
   struct symbol *func;
 
   if (comname == NULL)
-    error ("Cannot deal with NULL common name!");
+    error (_("Cannot deal with NULL common name!"));
 
-  fi = deprecated_selected_frame;
-
-  if (fi == NULL)
-    error ("No frame selected");
+  fi = get_selected_frame (_("No frame selected"));
 
   /* The following is generally ripped off from stack.c's routine 
      print_frame_info() */
@@ -775,8 +789,8 @@ void
 _initialize_f_valprint (void)
 {
   add_info ("common", info_common_command,
-	    "Print out the values contained in a Fortran COMMON block.");
+	    _("Print out the values contained in a Fortran COMMON block."));
   if (xdb_commands)
     add_com ("lc", class_info, info_common_command,
-	     "Print out the values contained in a Fortran COMMON block.");
+	     _("Print out the values contained in a Fortran COMMON block."));
 }

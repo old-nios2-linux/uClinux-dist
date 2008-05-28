@@ -4,7 +4,7 @@
  *
  * This code is distributed under the terms of GNU GPL v2
  *
- * $Id: iptables-restore.c 6828 2007-05-10 15:00:39Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
+ * $Id: iptables-restore.c 7087 2007-11-05 19:35:31Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
  */
 
 #include <getopt.h>
@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "iptables.h"
+#include "xtables.h"
 #include "libiptc/libiptc.h"
 
 #ifdef DEBUG
@@ -32,6 +33,7 @@ static struct option options[] = {
 	{ "help", 0, 0, 'h' },
 	{ "noflush", 0, 0, 'n'},
 	{ "modprobe", 1, 0, 'M'},
+	{ "table", 1, 0, 'T'},
 	{ 0 }
 };
 
@@ -46,6 +48,7 @@ static void print_usage(const char *name, const char *version)
 			"	   [ --test ]\n"
 			"	   [ --help ]\n"
 			"	   [ --noflush ]\n"
+			"	   [ --table=<TABLE> ]\n"
 		        "          [ --modprobe=<command>]\n", name);
 		
 	exit(1);
@@ -59,7 +62,7 @@ iptc_handle_t create_handle(const char *tablename, const char* modprobe )
 
 	if (!handle) {
 		/* try to insmod the module if iptc_init failed */
-		iptables_insmod("ip_tables", modprobe, 0);
+		load_xtables_ko(modprobe, 0);
 		handle = iptc_init(tablename);
 	}
 
@@ -73,7 +76,15 @@ iptc_handle_t create_handle(const char *tablename, const char* modprobe )
 
 static int parse_counters(char *string, struct ipt_counters *ctr)
 {
-	return (sscanf(string, "[%llu:%llu]", (unsigned long long *)&ctr->pcnt, (unsigned long long *)&ctr->bcnt) == 2);
+	unsigned long long pcnt, bcnt;
+	int ret;
+
+	ret = sscanf(string, "[%llu:%llu]",
+		     (unsigned long long *)&pcnt,
+		     (unsigned long long *)&bcnt);
+	ctr->pcnt = pcnt;
+	ctr->bcnt = bcnt;
+	return ret == 2;
 }
 
 /* global new argv and argc */
@@ -114,6 +125,7 @@ main(int argc, char *argv[])
 	FILE *in;
 	const char *modprobe = 0;
 	int in_table = 0, testing = 0;
+	const char *tablename = 0;
 
 	program_name = "iptables-restore";
 	program_version = IPTABLES_VERSION;
@@ -127,7 +139,7 @@ main(int argc, char *argv[])
 	init_extensions();
 #endif
 
-	while ((c = getopt_long(argc, argv, "bcvthnM:", options, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "bcvthnM:T:", options, NULL)) != -1) {
 		switch (c) {
 			case 'b':
 				binary = 1;
@@ -150,6 +162,9 @@ main(int argc, char *argv[])
 				break;
 			case 'M':
 				modprobe = optarg;
+				break;
+			case 'T':
+				tablename = optarg;
 				break;
 		}
 	}
@@ -203,6 +218,8 @@ main(int argc, char *argv[])
 			strncpy(curtable, table, IPT_TABLE_MAXNAMELEN);
 			curtable[IPT_TABLE_MAXNAMELEN] = '\0';
 
+			if (tablename && (strcmp(tablename, table) != 0))
+				continue;
 			if (handle)
 				iptc_free(&handle);
 
@@ -429,6 +446,8 @@ main(int argc, char *argv[])
 
 			free_argv();
 		}
+		if (tablename && (strcmp(tablename, curtable) != 0))
+			continue;
 		if (!ret) {
 			fprintf(stderr, "%s: line %u failed\n",
 					program_name, line);

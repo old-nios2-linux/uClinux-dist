@@ -1,7 +1,8 @@
 /* Parse expressions for GDB.
 
-   Copyright 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
@@ -10,7 +11,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +20,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Parse an expression from text in a string,
    and return the result as a  struct expression  pointer.
@@ -43,14 +42,16 @@
 #include "value.h"
 #include "command.h"
 #include "language.h"
+#include "f-lang.h"
 #include "parser-defs.h"
 #include "gdbcmd.h"
 #include "symfile.h"		/* for overlay functions */
-#include "inferior.h"		/* for NUM_PSEUDO_REGS.  NOTE: replace 
-				   with "gdbarch.h" when appropriate.  */
+#include "inferior.h"
 #include "doublest.h"
 #include "gdb_assert.h"
 #include "block.h"
+#include "source.h"
+#include "objfiles.h"
 
 /* Standard set of definitions for printing, dumping, prefixifying,
  * and evaluating expressions.  */
@@ -64,21 +65,6 @@ const struct exp_descriptor exp_descriptor_standard =
     evaluate_subexp_standard
   };
 
-/* Symbols which architectures can redefine.  */
-
-/* Some systems have routines whose names start with `$'.  Giving this
-   macro a non-zero value tells GDB's expression parser to check for
-   such routines when parsing tokens that begin with `$'.
-
-   On HP-UX, certain system routines (millicode) have names beginning
-   with `$' or `$$'.  For example, `$$dyncall' is a millicode routine
-   that handles inter-space procedure calls on PA-RISC.  */
-#ifndef SYMBOLS_CAN_START_WITH_DOLLAR
-#define SYMBOLS_CAN_START_WITH_DOLLAR (0)
-#endif
-
-
-
 /* Global variables declared in parser-defs.h (and commented there).  */
 struct expression *expout;
 int expout_size;
@@ -91,11 +77,26 @@ union type_stack_elt *type_stack;
 int type_stack_depth, type_stack_size;
 char *lexptr;
 char *prev_lexptr;
-char *namecopy;
 int paren_depth;
 int comma_terminates;
+
+/* A temporary buffer for identifiers, so we can null-terminate them.
+
+   We allocate this with xrealloc.  parse_exp_1 used to allocate with
+   alloca, using the size of the whole expression as a conservative
+   estimate of the space needed.  However, macro expansion can
+   introduce names longer than the original expression; there's no
+   practical way to know beforehand how large that might be.  */
+char *namecopy;
+size_t namecopy_size;
 
 static int expressiondebug = 0;
+static void
+show_expressiondebug (struct ui_file *file, int from_tty,
+		      struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Expression debugging is %s.\n"), value);
+}
 
 static void free_funcalls (void *ignore);
 
@@ -189,6 +190,7 @@ void
 write_exp_elt_opcode (enum exp_opcode expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.opcode = expelt;
 
@@ -199,6 +201,7 @@ void
 write_exp_elt_sym (struct symbol *expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.symbol = expelt;
 
@@ -209,7 +212,17 @@ void
 write_exp_elt_block (struct block *b)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
   tmp.block = b;
+  write_exp_elt (tmp);
+}
+
+void
+write_exp_elt_objfile (struct objfile *objfile)
+{
+  union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
+  tmp.objfile = objfile;
   write_exp_elt (tmp);
 }
 
@@ -217,6 +230,7 @@ void
 write_exp_elt_longcst (LONGEST expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.longconst = expelt;
 
@@ -227,8 +241,21 @@ void
 write_exp_elt_dblcst (DOUBLEST expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.doubleconst = expelt;
+
+  write_exp_elt (tmp);
+}
+
+void
+write_exp_elt_decfloatcst (gdb_byte expelt[16])
+{
+  union exp_element tmp;
+  int index;
+
+  for (index = 0; index < 16; index++)
+    tmp.decfloatconst[index] = expelt[index];
 
   write_exp_elt (tmp);
 }
@@ -237,6 +264,7 @@ void
 write_exp_elt_type (struct type *expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.type = expelt;
 
@@ -247,6 +275,7 @@ void
 write_exp_elt_intern (struct internalvar *expelt)
 {
   union exp_element tmp;
+  memset (&tmp, 0, sizeof (union exp_element));
 
   tmp.internalvar = expelt;
 
@@ -366,15 +395,12 @@ write_exp_bitstring (struct stoken str)
    based on the language, but they no longer have names like "int", so
    the initial rationale is gone.  */
 
-static struct type *msym_text_symbol_type;
-static struct type *msym_data_symbol_type;
-static struct type *msym_unknown_symbol_type;
-
 void
 write_exp_msymbol (struct minimal_symbol *msymbol, 
 		   struct type *text_symbol_type, 
 		   struct type *data_symbol_type)
 {
+  struct gdbarch *gdbarch = current_gdbarch;
   CORE_ADDR addr;
 
   write_exp_elt_opcode (OP_LONG);
@@ -388,24 +414,41 @@ write_exp_msymbol (struct minimal_symbol *msymbol,
 
   write_exp_elt_opcode (OP_LONG);
 
+  if (SYMBOL_BFD_SECTION (msymbol)
+      && SYMBOL_BFD_SECTION (msymbol)->flags & SEC_THREAD_LOCAL)
+    {
+      bfd *bfd = SYMBOL_BFD_SECTION (msymbol)->owner;
+      struct objfile *ofp;
+
+      ALL_OBJFILES (ofp)
+	if (ofp->obfd == bfd)
+	  break;
+
+      write_exp_elt_opcode (UNOP_MEMVAL_TLS);
+      write_exp_elt_objfile (ofp);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_tls_symbol);
+      write_exp_elt_opcode (UNOP_MEMVAL_TLS);
+      return;
+    }
+
   write_exp_elt_opcode (UNOP_MEMVAL);
   switch (msymbol->type)
     {
     case mst_text:
     case mst_file_text:
     case mst_solib_trampoline:
-      write_exp_elt_type (msym_text_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_text_symbol);
       break;
 
     case mst_data:
     case mst_file_data:
     case mst_bss:
     case mst_file_bss:
-      write_exp_elt_type (msym_data_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_data_symbol);
       break;
 
     default:
-      write_exp_elt_type (msym_unknown_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_unknown_symbol);
       break;
     }
   write_exp_elt_opcode (UNOP_MEMVAL);
@@ -437,6 +480,10 @@ write_exp_msymbol (struct minimal_symbol *msymbol,
 void
 write_dollar_variable (struct stoken str)
 {
+  struct symbol *sym = NULL;
+  struct minimal_symbol *msym = NULL;
+  struct internalvar *isym = NULL;
+
   /* Handle the tokens $digits; also $ (short for $0) and $$ (short for $$1)
      and $$digits (equivalent to $<-digits> if you could type that). */
 
@@ -469,47 +516,48 @@ write_dollar_variable (struct stoken str)
 
   /* Handle tokens that refer to machine registers:
      $ followed by a register name.  */
-  i = frame_map_name_to_regnum (deprecated_selected_frame,
+  i = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
 				str.ptr + 1, str.length - 1);
   if (i >= 0)
     goto handle_register;
 
-  if (SYMBOLS_CAN_START_WITH_DOLLAR)
+  /* Any names starting with $ are probably debugger internal variables.  */
+
+  isym = lookup_only_internalvar (copy_name (str) + 1);
+  if (isym)
     {
-      struct symbol *sym = NULL;
-      struct minimal_symbol *msym = NULL;
-
-      /* On HP-UX, certain system routines (millicode) have names beginning
-	 with $ or $$, e.g. $$dyncall, which handles inter-space procedure
-	 calls on PA-RISC. Check for those, first. */
-
-      /* This code is not enabled on non HP-UX systems, since worst case 
-	 symbol table lookup performance is awful, to put it mildly. */
-
-      sym = lookup_symbol (copy_name (str), (struct block *) NULL,
-			   VAR_DOMAIN, (int *) NULL, (struct symtab **) NULL);
-      if (sym)
-	{
-	  write_exp_elt_opcode (OP_VAR_VALUE);
-	  write_exp_elt_block (block_found);	/* set by lookup_symbol */
-	  write_exp_elt_sym (sym);
-	  write_exp_elt_opcode (OP_VAR_VALUE);
-	  return;
-	}
-      msym = lookup_minimal_symbol (copy_name (str), NULL, NULL);
-      if (msym)
-	{
-	  write_exp_msymbol (msym,
-			     lookup_function_type (builtin_type_int),
-			     builtin_type_int);
-	  return;
-	}
+      write_exp_elt_opcode (OP_INTERNALVAR);
+      write_exp_elt_intern (isym);
+      write_exp_elt_opcode (OP_INTERNALVAR);
+      return;
     }
 
-  /* Any other names starting in $ are debugger internal variables.  */
+  /* On some systems, such as HP-UX and hppa-linux, certain system routines 
+     have names beginning with $ or $$.  Check for those, first. */
+
+  sym = lookup_symbol (copy_name (str), (struct block *) NULL,
+		       VAR_DOMAIN, (int *) NULL, (struct symtab **) NULL);
+  if (sym)
+    {
+      write_exp_elt_opcode (OP_VAR_VALUE);
+      write_exp_elt_block (block_found);	/* set by lookup_symbol */
+      write_exp_elt_sym (sym);
+      write_exp_elt_opcode (OP_VAR_VALUE);
+      return;
+    }
+  msym = lookup_minimal_symbol (copy_name (str), NULL, NULL);
+  if (msym)
+    {
+      write_exp_msymbol (msym,
+			 lookup_function_type (builtin_type_int),
+			 builtin_type_int);
+      return;
+    }
+
+  /* Any other names are assumed to be debugger internal variables.  */
 
   write_exp_elt_opcode (OP_INTERNALVAR);
-  write_exp_elt_intern (lookup_internalvar (copy_name (str) + 1));
+  write_exp_elt_intern (create_internalvar (copy_name (str) + 1));
   write_exp_elt_opcode (OP_INTERNALVAR);
   return;
 handle_last:
@@ -519,192 +567,13 @@ handle_last:
   return;
 handle_register:
   write_exp_elt_opcode (OP_REGISTER);
-  write_exp_elt_longcst (i);
+  str.length--;
+  str.ptr++;
+  write_exp_string (str);
   write_exp_elt_opcode (OP_REGISTER);
   return;
 }
 
-
-/* Parse a string that is possibly a namespace / nested class
-   specification, i.e., something of the form A::B::C::x.  Input
-   (NAME) is the entire string; LEN is the current valid length; the
-   output is a string, TOKEN, which points to the largest recognized
-   prefix which is a series of namespaces or classes.  CLASS_PREFIX is
-   another output, which records whether a nested class spec was
-   recognized (= 1) or a fully qualified variable name was found (=
-   0).  ARGPTR is side-effected (if non-NULL) to point to beyond the
-   string recognized and consumed by this routine.
-
-   The return value is a pointer to the symbol for the base class or
-   variable if found, or NULL if not found.  Callers must check this
-   first -- if NULL, the outputs may not be correct. 
-
-   This function is used c-exp.y.  This is used specifically to get
-   around HP aCC (and possibly other compilers), which insists on
-   generating names with embedded colons for namespace or nested class
-   members.
-
-   (Argument LEN is currently unused. 1997-08-27)
-
-   Callers must free memory allocated for the output string TOKEN.  */
-
-static const char coloncolon[2] =
-{':', ':'};
-
-struct symbol *
-parse_nested_classes_for_hpacc (char *name, int len, char **token,
-				int *class_prefix, char **argptr)
-{
-  /* Comment below comes from decode_line_1 which has very similar
-     code, which is called for "break" command parsing. */
-
-  /* We have what looks like a class or namespace
-     scope specification (A::B), possibly with many
-     levels of namespaces or classes (A::B::C::D).
-
-     Some versions of the HP ANSI C++ compiler (as also possibly
-     other compilers) generate class/function/member names with
-     embedded double-colons if they are inside namespaces. To
-     handle this, we loop a few times, considering larger and
-     larger prefixes of the string as though they were single
-     symbols.  So, if the initially supplied string is
-     A::B::C::D::foo, we have to look up "A", then "A::B",
-     then "A::B::C", then "A::B::C::D", and finally
-     "A::B::C::D::foo" as single, monolithic symbols, because
-     A, B, C or D may be namespaces.
-
-     Note that namespaces can nest only inside other
-     namespaces, and not inside classes.  So we need only
-     consider *prefixes* of the string; there is no need to look up
-     "B::C" separately as a symbol in the previous example. */
-
-  char *p;
-  char *start, *end;
-  char *prefix = NULL;
-  char *tmp;
-  struct symbol *sym_class = NULL;
-  struct symbol *sym_var = NULL;
-  struct type *t;
-  int prefix_len = 0;
-  int done = 0;
-  char *q;
-
-  /* Check for HP-compiled executable -- in other cases
-     return NULL, and caller must default to standard GDB
-     behaviour. */
-
-  if (!deprecated_hp_som_som_object_present)
-    return (struct symbol *) NULL;
-
-  p = name;
-
-  /* Skip over whitespace and possible global "::" */
-  while (*p && (*p == ' ' || *p == '\t'))
-    p++;
-  if (p[0] == ':' && p[1] == ':')
-    p += 2;
-  while (*p && (*p == ' ' || *p == '\t'))
-    p++;
-
-  while (1)
-    {
-      /* Get to the end of the next namespace or class spec. */
-      /* If we're looking at some non-token, fail immediately */
-      start = p;
-      if (!(isalpha (*p) || *p == '$' || *p == '_'))
-	return (struct symbol *) NULL;
-      p++;
-      while (*p && (isalnum (*p) || *p == '$' || *p == '_'))
-	p++;
-
-      if (*p == '<')
-	{
-	  /* If we have the start of a template specification,
-	     scan right ahead to its end */
-	  q = find_template_name_end (p);
-	  if (q)
-	    p = q;
-	}
-
-      end = p;
-
-      /* Skip over "::" and whitespace for next time around */
-      while (*p && (*p == ' ' || *p == '\t'))
-	p++;
-      if (p[0] == ':' && p[1] == ':')
-	p += 2;
-      while (*p && (*p == ' ' || *p == '\t'))
-	p++;
-
-      /* Done with tokens? */
-      if (!*p || !(isalpha (*p) || *p == '$' || *p == '_'))
-	done = 1;
-
-      tmp = (char *) alloca (prefix_len + end - start + 3);
-      if (prefix)
-	{
-	  memcpy (tmp, prefix, prefix_len);
-	  memcpy (tmp + prefix_len, coloncolon, 2);
-	  memcpy (tmp + prefix_len + 2, start, end - start);
-	  tmp[prefix_len + 2 + end - start] = '\000';
-	}
-      else
-	{
-	  memcpy (tmp, start, end - start);
-	  tmp[end - start] = '\000';
-	}
-
-      prefix = tmp;
-      prefix_len = strlen (prefix);
-
-      /* See if the prefix we have now is something we know about */
-
-      if (!done)
-	{
-	  /* More tokens to process, so this must be a class/namespace */
-	  sym_class = lookup_symbol (prefix, 0, STRUCT_DOMAIN,
-				     0, (struct symtab **) NULL);
-	}
-      else
-	{
-	  /* No more tokens, so try as a variable first */
-	  sym_var = lookup_symbol (prefix, 0, VAR_DOMAIN,
-				   0, (struct symtab **) NULL);
-	  /* If failed, try as class/namespace */
-	  if (!sym_var)
-	    sym_class = lookup_symbol (prefix, 0, STRUCT_DOMAIN,
-				       0, (struct symtab **) NULL);
-	}
-
-      if (sym_var ||
-	  (sym_class &&
-	   (t = check_typedef (SYMBOL_TYPE (sym_class)),
-	    (TYPE_CODE (t) == TYPE_CODE_STRUCT
-	     || TYPE_CODE (t) == TYPE_CODE_UNION))))
-	{
-	  /* We found a valid token */
-	  *token = (char *) xmalloc (prefix_len + 1);
-	  memcpy (*token, prefix, prefix_len);
-	  (*token)[prefix_len] = '\000';
-	  break;
-	}
-
-      /* No variable or class/namespace found, no more tokens */
-      if (done)
-	return (struct symbol *) NULL;
-    }
-
-  /* Out of loop, so we must have found a valid token */
-  if (sym_var)
-    *class_prefix = 0;
-  else
-    *class_prefix = 1;
-
-  if (argptr)
-    *argptr = done ? p : end;
-
-  return sym_var ? sym_var : sym_class;		/* found */
-}
 
 char *
 find_template_name_end (char *p)
@@ -774,8 +643,16 @@ find_template_name_end (char *p)
 char *
 copy_name (struct stoken token)
 {
+  /* Make sure there's enough space for the token.  */
+  if (namecopy_size < token.length + 1)
+    {
+      namecopy_size = token.length + 1;
+      namecopy = xrealloc (namecopy, token.length + 1);
+    }
+      
   memcpy (namecopy, token.ptr, token.length);
   namecopy[token.length] = 0;
+
   return namecopy;
 }
 
@@ -785,8 +662,7 @@ copy_name (struct stoken token)
 static void
 prefixify_expression (struct expression *expr)
 {
-  int len =
-  sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
+  int len = sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
   struct expression *temp;
   int inpos = expr->nelts, outpos = 0;
 
@@ -836,10 +712,11 @@ operator_length_standard (struct expression *expr, int endpos,
 {
   int oplen = 1;
   int args = 0;
+  enum f90_range_type range_type;
   int i;
 
   if (endpos < 1)
-    error ("?error in operator_length_standard");
+    error (_("?error in operator_length_standard"));
 
   i = (int) expr->elts[endpos - 1].opcode;
 
@@ -853,6 +730,7 @@ operator_length_standard (struct expression *expr, int endpos,
 
     case OP_LONG:
     case OP_DOUBLE:
+    case OP_DECFLOAT:
     case OP_VAR_VALUE:
       oplen = 4;
       break;
@@ -860,7 +738,6 @@ operator_length_standard (struct expression *expr, int endpos,
     case OP_TYPE:
     case OP_BOOL:
     case OP_LAST:
-    case OP_REGISTER:
     case OP_INTERNALVAR:
       oplen = 3;
       break;
@@ -893,6 +770,11 @@ operator_length_standard (struct expression *expr, int endpos,
       args = 1;
       break;
 
+    case UNOP_MEMVAL_TLS:
+      oplen = 4;
+      args = 1;
+      break;
+
     case UNOP_ABS:
     case UNOP_CAP:
     case UNOP_CHR:
@@ -910,12 +792,12 @@ operator_length_standard (struct expression *expr, int endpos,
     case STRUCTOP_PTR:
       args = 1;
       /* fall through */
+    case OP_REGISTER:
     case OP_M2_STRING:
     case OP_STRING:
     case OP_OBJC_NSSTRING:	/* Objective C Foundation Class NSString constant */
     case OP_OBJC_SELECTOR:	/* Objective C "@selector" pseudo-op */
     case OP_NAME:
-    case OP_EXPRSTRING:
       oplen = longest_to_int (expr->elts[endpos - 2].longconst);
       oplen = 4 + BYTES_TO_EXP_ELEM (oplen + 1);
       break;
@@ -954,6 +836,26 @@ operator_length_standard (struct expression *expr, int endpos,
     case OP_THIS:
     case OP_OBJC_SELF:
       oplen = 2;
+      break;
+
+    case OP_F90_RANGE:
+      oplen = 3;
+
+      range_type = longest_to_int (expr->elts[endpos - 2].longconst);
+      switch (range_type)
+	{
+	case LOW_BOUND_DEFAULT:
+	case HIGH_BOUND_DEFAULT:
+	  args = 1;
+	  break;
+	case BOTH_BOUND_DEFAULT:
+	  args = 0;
+	  break;
+	case NONE_BOUND_DEFAULT:
+	  args = 2;
+	  break;
+	}
+
       break;
 
     default:
@@ -1047,20 +949,33 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   comma_terminates = comma;
 
   if (lexptr == 0 || *lexptr == 0)
-    error_no_arg ("expression to compute");
+    error_no_arg (_("expression to compute"));
 
   old_chain = make_cleanup (free_funcalls, 0 /*ignore*/);
   funcall_chain = 0;
+
+  /* If no context specified, try using the current frame, if any. */
+
+  if (!block)
+    block = get_selected_block (&expression_context_pc);
+
+  /* Fall back to using the current source static context, if any. */
+
+  if (!block)
+    {
+      struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+      if (cursal.symtab)
+	block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (cursal.symtab), STATIC_BLOCK);
+    }
+
+  /* Save the context, if specified by caller, or found above. */
 
   if (block)
     {
       expression_context_block = block;
       expression_context_pc = BLOCK_START (block);
     }
-  else
-    expression_context_block = get_selected_block (&expression_context_pc);
 
-  namecopy = (char *) alloca (strlen (lexptr) + 1);
   expout_size = 10;
   expout_ptr = 0;
   expout = (struct expression *)
@@ -1109,21 +1024,7 @@ parse_expression (char *string)
   struct expression *exp;
   exp = parse_exp_1 (&string, 0, 0);
   if (*string)
-    error ("Junk after end of expression.");
-  return exp;
-}
-
-
-/* As for parse_expression, except that if VOID_CONTEXT_P, then
-   no value is expected from the expression.  */
-
-struct expression *
-parse_expression_in_context (char *string, int void_context_p)
-{
-  struct expression *exp;
-  exp = parse_exp_in_context (&string, 0, 0, void_context_p);
-  if (*string != '\000')
-    error ("Junk after end of expression.");
+    error (_("Junk after end of expression."));
   return exp;
 }
 
@@ -1281,24 +1182,6 @@ follow_types (struct type *follow_type)
   return follow_type;
 }
 
-static void build_parse (void);
-static void
-build_parse (void)
-{
-  int i;
-
-  msym_text_symbol_type =
-    init_type (TYPE_CODE_FUNC, 1, 0, "<text variable, no debug info>", NULL);
-  TYPE_TARGET_TYPE (msym_text_symbol_type) = builtin_type_int;
-  msym_data_symbol_type =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / HOST_CHAR_BIT, 0,
-	       "<data variable, no debug info>", NULL);
-  msym_unknown_symbol_type =
-    init_type (TYPE_CODE_INT, 1, 0,
-	       "<variable (not text or data), no debug info>",
-	       NULL);
-}
-
 /* This function avoids direct calls to fprintf 
    in the parser generated debug code.  */
 void
@@ -1324,21 +1207,12 @@ _initialize_parse (void)
   type_stack = (union type_stack_elt *)
     xmalloc (type_stack_size * sizeof (*type_stack));
 
-  build_parse ();
-
-  /* FIXME - For the moment, handle types by swapping them in and out.
-     Should be using the per-architecture data-pointer and a large
-     struct. */
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_text_symbol_type);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_data_symbol_type);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_unknown_symbol_type);
-  deprecated_register_gdbarch_swap (NULL, 0, build_parse);
-
-  deprecated_add_show_from_set
-    (add_set_cmd ("expression", class_maintenance, var_zinteger,
-		  (char *) &expressiondebug,
-		  "Set expression debugging.\n\
-When non-zero, the internal representation of expressions will be printed.",
-		  &setdebuglist),
-     &showdebuglist);
+  add_setshow_zinteger_cmd ("expression", class_maintenance,
+			    &expressiondebug, _("\
+Set expression debugging."), _("\
+Show expression debugging."), _("\
+When non-zero, the internal representation of expressions will be printed."),
+			    NULL,
+			    show_expressiondebug,
+			    &setdebuglist, &showdebuglist);
 }

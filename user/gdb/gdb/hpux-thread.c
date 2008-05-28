@@ -1,14 +1,14 @@
 /* Low level interface for debugging HPUX/DCE threads for GDB, the GNU
    debugger.
 
-   Copyright 1996, 1998, 1999, 2000, 2001, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module implements a sort of half target that sits between the
    machine-independent parts of GDB and the ptrace interface (infptrace.c) to
@@ -44,8 +42,11 @@
 #include "inferior.h"
 #include "regcache.h"
 #include <fcntl.h>
+#include <string.h>
 #include "gdb_stat.h"
 #include "gdbcore.h"
+#include "hppa-tdep.h"
+#include "observer.h"
 
 extern int child_suppress_run;
 
@@ -126,7 +127,7 @@ find_tcb (ptid_t ptid)
 	  }
     }
 
-  error ("Can't find TCB %d", thread);
+  error (_("Can't find TCB %d"), thread);
   return NULL;
 }
 
@@ -179,15 +180,6 @@ hpux_thread_resume (ptid_t ptid, int step, enum target_signal signo)
   ptid = main_ptid;
   inferior_ptid = main_ptid;
 
-#if 0
-  if (pid != -1)
-    {
-      pid = thread_to_lwp (pid, -2);
-      if (pid == -2)		/* Inactive thread */
-	error ("This version of Solaris can't start inactive threads.");
-    }
-#endif
-
   deprecated_child_ops.to_resume (ptid, step, signo);
 
   cached_thread = 0;
@@ -220,7 +212,7 @@ hpux_thread_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
   return rtnval;
 }
 
-static char regmap[NUM_REGS] =
+static char regmap[] =
 {
   -2, -1, -1, 0, 4, 8, 12, 16, 20, 24,	/* flags, r1 -> r9 */
   28, 32, 36, 40, 44, 48, 52, 56, 60, -1,	/* r10 -> r19 */
@@ -247,8 +239,9 @@ static char regmap[NUM_REGS] =
 };
 
 static void
-hpux_thread_fetch_registers (int regno)
+hpux_thread_fetch_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   cma__t_int_tcb tcb, *tcb_ptr;
   struct cleanup *old_chain;
   int i;
@@ -262,7 +255,7 @@ hpux_thread_fetch_registers (int regno)
 
   if (tcb_ptr->state == cma__c_state_running)
     {
-      deprecated_child_ops.to_fetch_registers (regno);
+      deprecated_child_ops.to_fetch_registers (regcache, regno);
 
       do_cleanups (old_chain);
 
@@ -272,7 +265,7 @@ hpux_thread_fetch_registers (int regno)
   if (regno == -1)
     {
       first_regno = 0;
-      last_regno = NUM_REGS - 1;
+      last_regno = gdbarch_num_regs (gdbarch) - 1;
     }
   else
     {
@@ -283,7 +276,7 @@ hpux_thread_fetch_registers (int regno)
   for (regno = first_regno; regno <= last_regno; regno++)
     {
       if (regmap[regno] == -1)
-	deprecated_child_ops.to_fetch_registers (regno);
+	deprecated_child_ops.to_fetch_registers (regcache, regno);
       else
 	{
 	  unsigned char buf[MAX_REGISTER_SIZE];
@@ -291,17 +284,18 @@ hpux_thread_fetch_registers (int regno)
 
 	  sp = (CORE_ADDR) tcb_ptr->static_ctx.sp - 160;
 
-	  if (regno == FLAGS_REGNUM)
+	  if (regno == HPPA_FLAGS_REGNUM)
 	    /* Flags must be 0 to avoid bogus value for SS_INSYSCALL */
-	    memset (buf, '\000', register_size (current_gdbarch, regno));
-	  else if (regno == SP_REGNUM)
+	    memset (buf, '\000', register_size (gdbarch, regno));
+	  else if (regno == HPPA_SP_REGNUM)
 	    store_unsigned_integer (buf, sizeof sp, sp);
-	  else if (regno == PC_REGNUM)
-	    read_memory (sp - 20, buf, register_size (current_gdbarch, regno));
+	  else if (regno == HPPA_PCOQ_HEAD_REGNUM)
+	    read_memory (sp - 20, buf, register_size (gdbarch, regno));
 	  else
-	    read_memory (sp + regmap[regno], buf, register_size (current_gdbarch, regno));
+	    read_memory (sp + regmap[regno], buf,
+			 register_size (gdbarch, regno));
 
-	  regcache_raw_supply (current_regcache, regno, buf);
+	  regcache_raw_supply (regcache, regno, buf);
 	}
     }
 
@@ -309,8 +303,9 @@ hpux_thread_fetch_registers (int regno)
 }
 
 static void
-hpux_thread_store_registers (int regno)
+hpux_thread_store_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   cma__t_int_tcb tcb, *tcb_ptr;
   struct cleanup *old_chain;
   int i;
@@ -324,7 +319,7 @@ hpux_thread_store_registers (int regno)
 
   if (tcb_ptr->state == cma__c_state_running)
     {
-      deprecated_child_ops.to_store_registers (regno);
+      deprecated_child_ops.to_store_registers (regcache, regno);
 
       do_cleanups (old_chain);
 
@@ -334,7 +329,7 @@ hpux_thread_store_registers (int regno)
   if (regno == -1)
     {
       first_regno = 0;
-      last_regno = NUM_REGS - 1;
+      last_regno = gdbarch_num_regs (gdbarch) - 1;
     }
   else
     {
@@ -345,7 +340,7 @@ hpux_thread_store_registers (int regno)
   for (regno = first_regno; regno <= last_regno; regno++)
     {
       if (regmap[regno] == -1)
-	deprecated_child_ops.to_store_registers (regno);
+	deprecated_child_ops.to_store_registers (regcache, regno);
       else
 	{
 	  unsigned char buf[MAX_REGISTER_SIZE];
@@ -353,25 +348,28 @@ hpux_thread_store_registers (int regno)
 
 	  sp = (CORE_ADDR) tcb_ptr->static_ctx.sp - 160;
 
-	  if (regno == FLAGS_REGNUM)
-	    deprecated_child_ops.to_store_registers (regno);	/* Let lower layer handle this... */
-	  else if (regno == SP_REGNUM)
+	  if (regno == HPPA_FLAGS_REGNUM)
+	    deprecated_child_ops.to_store_registers (regcache, regno);	/* Let lower layer handle this... */
+	  else if (regno == HPPA_SP_REGNUM)
 	    {
-	      write_memory ((CORE_ADDR) & tcb_ptr->static_ctx.sp,
-			    &deprecated_registers[DEPRECATED_REGISTER_BYTE (regno)],
-			    register_size (current_gdbarch, regno));
-	      tcb_ptr->static_ctx.sp = (cma__t_hppa_regs *)
-		(extract_unsigned_integer (&deprecated_registers[DEPRECATED_REGISTER_BYTE (regno)],
-					   register_size (current_gdbarch, regno)) + 160);
+	      regcache_raw_collect (regcache, regno, buf);
+	      write_memory ((CORE_ADDR) &tcb_ptr->static_ctx.sp, buf,
+			    register_size (gdbarch, regno));
+	      tcb_ptr->static_ctx.sp
+		= (cma__t_hppa_regs *) ((CORE_ADDR) buf + 160);
 	    }
-	  else if (regno == PC_REGNUM)
-	    write_memory (sp - 20,
-			  &deprecated_registers[DEPRECATED_REGISTER_BYTE (regno)],
-			  register_size (current_gdbarch, regno));
+	  else if (regno == HPPA_PCOQ_HEAD_REGNUM)
+	    {
+	      regcache_raw_collect (regcache, regno, buf);
+	      write_memory (sp - 20, buf,
+			    register_size (gdbarch, regno));
+	    }
 	  else
-	    write_memory (sp + regmap[regno],
-			  &deprecated_registers[DEPRECATED_REGISTER_BYTE (regno)],
-			  register_size (current_gdbarch, regno));
+	    {
+	      regcache_raw_collect (regcache, regno, buf);
+	      write_memory (sp + regmap[regno], buf,
+			    register_size (gdbarch, regno));
+	    }
 	}
     }
 
@@ -385,9 +383,9 @@ hpux_thread_store_registers (int regno)
    debugged.  */
 
 static void
-hpux_thread_prepare_to_store (void)
+hpux_thread_prepare_to_store (struct regcache *regcache)
 {
-  deprecated_child_ops.to_prepare_to_store ();
+  deprecated_child_ops.to_prepare_to_store (regcache);
 }
 
 static int
@@ -456,14 +454,7 @@ hpux_thread_create_inferior (char *exec_file, char *allargs, char **env,
    those variables don't show up until the library gets mapped and the symbol
    table is read in.  */
 
-/* This new_objfile event is now managed by a chained function pointer. 
- * It is the callee's responsability to call the next client on the chain.
- */
-
-/* Saved pointer to previous owner of the new_objfile event. */
-static void (*target_new_objfile_chain) (struct objfile *);
-
-void
+static void
 hpux_thread_new_objfile (struct objfile *objfile)
 {
   struct minimal_symbol *ms;
@@ -471,28 +462,24 @@ hpux_thread_new_objfile (struct objfile *objfile)
   if (!objfile)
     {
       hpux_thread_active = 0;
-      goto quit;
+      return;
     }
 
   ms = lookup_minimal_symbol ("cma__g_known_threads", NULL, objfile);
 
   if (!ms)
-    goto quit;
+    return;
 
   P_cma__g_known_threads = SYMBOL_VALUE_ADDRESS (ms);
 
   ms = lookup_minimal_symbol ("cma__g_current_thread", NULL, objfile);
 
   if (!ms)
-    goto quit;
+    return;
 
   P_cma__g_current_thread = SYMBOL_VALUE_ADDRESS (ms);
 
   hpux_thread_active = 1;
-quit:
-  /* Call predecessor on chain, if any. */
-  if (target_new_objfile_chain)
-    target_new_objfile_chain (objfile);
 }
 
 /* Clean up after the inferior dies.  */
@@ -583,7 +570,6 @@ _initialize_hpux_thread (void)
   add_target (&hpux_thread_ops);
 
   child_suppress_run = 1;
-  /* Hook into new_objfile notification. */
-  target_new_objfile_chain = deprecated_target_new_objfile_hook;
-  deprecated_target_new_objfile_hook  = hpux_thread_new_objfile;
+  /* Hook into new_objfile notification.  */
+  observer_attach_new_objfile (hpux_thread_new_objfile);
 }

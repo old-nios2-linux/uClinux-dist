@@ -40,7 +40,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: options.c,v 1.21 2007-11-23 06:12:46 asallawa Exp $"
+#define RCSID	"$Id: options.c,v 1.22 2008-05-13 04:40:06 gerg Exp $"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -51,7 +51,7 @@
 #include <syslog.h>
 #include <string.h>
 #include <pwd.h>
-#ifdef PLUGIN
+#ifdef PLUGIN_DYNAMIC
 #include <dlfcn.h>
 #endif
 

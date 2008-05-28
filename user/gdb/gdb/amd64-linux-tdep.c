@@ -1,13 +1,14 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright 2001, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -26,6 +25,9 @@
 #include "regcache.h"
 #include "osabi.h"
 #include "symtab.h"
+#include "gdbtypes.h"
+#include "reggroups.h"
+#include "amd64-linux-tdep.h"
 
 #include "gdb_string.h"
 
@@ -72,7 +74,7 @@ static int amd64_linux_gregset_reg_offset[] =
 #define LINUX_SIGTRAMP_INSN1	0x0f	/* syscall */
 #define LINUX_SIGTRAMP_OFFSET1	7
 
-static const unsigned char linux_sigtramp_code[] =
+static const gdb_byte linux_sigtramp_code[] =
 {
   /* mov $__NR_rt_sigreturn, %rax */
   LINUX_SIGTRAMP_INSN0, 0xc7, 0xc0, 0x0f, 0x00, 0x00, 0x00,
@@ -89,7 +91,7 @@ static CORE_ADDR
 amd64_linux_sigtramp_start (struct frame_info *next_frame)
 {
   CORE_ADDR pc = frame_pc_unwind (next_frame);
-  unsigned char buf[LINUX_SIGTRAMP_LEN];
+  gdb_byte buf[LINUX_SIGTRAMP_LEN];
 
   /* We only recognize a signal trampoline if PC is at the start of
      one of the two instructions.  We optimize for finding the PC at
@@ -98,7 +100,7 @@ amd64_linux_sigtramp_start (struct frame_info *next_frame)
      PC is not at the start of the instruction sequence, there will be
      a few trailing readable bytes on the stack.  */
 
-  if (!safe_frame_unwind_memory (next_frame, pc, buf, LINUX_SIGTRAMP_LEN))
+  if (!safe_frame_unwind_memory (next_frame, pc, buf, sizeof buf))
     return 0;
 
   if (buf[0] != LINUX_SIGTRAMP_INSN0)
@@ -107,8 +109,7 @@ amd64_linux_sigtramp_start (struct frame_info *next_frame)
 	return 0;
 
       pc -= LINUX_SIGTRAMP_OFFSET1;
-
-      if (!safe_frame_unwind_memory (next_frame, pc, buf, LINUX_SIGTRAMP_LEN))
+      if (!safe_frame_unwind_memory (next_frame, pc, buf, sizeof buf))
 	return 0;
     }
 
@@ -151,9 +152,10 @@ static CORE_ADDR
 amd64_linux_sigcontext_addr (struct frame_info *next_frame)
 {
   CORE_ADDR sp;
-  char buf[8];
+  gdb_byte buf[8];
 
-  frame_unwind_register (next_frame, SP_REGNUM, buf);
+  frame_unwind_register (next_frame,
+			 gdbarch_sp_regnum (get_frame_arch (next_frame)), buf);
   sp = extract_unsigned_integer (buf, 8);
 
   /* The sigcontext structure is part of the user context.  A pointer
@@ -200,6 +202,61 @@ static int amd64_linux_sc_reg_offset[] =
   -1				/* %gs */
 };
 
+/* Replacement register functions which know about %orig_rax.  */
+
+static const char *
+amd64_linux_register_name (struct gdbarch *gdbarch, int reg)
+{
+  if (reg == AMD64_LINUX_ORIG_RAX_REGNUM)
+    return "orig_rax";
+
+  return amd64_register_name (gdbarch, reg);
+}
+
+static struct type *
+amd64_linux_register_type (struct gdbarch *gdbarch, int reg)
+{
+  if (reg == AMD64_LINUX_ORIG_RAX_REGNUM)
+    return builtin_type_int64;
+
+  return amd64_register_type (gdbarch, reg);
+}
+
+static int
+amd64_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
+				 struct reggroup *group)
+{ 
+  if (regnum == AMD64_LINUX_ORIG_RAX_REGNUM)
+    return (group == system_reggroup
+            || group == save_reggroup
+            || group == restore_reggroup);
+  return default_register_reggroup_p (gdbarch, regnum, group);
+}
+
+/* Set the program counter for process PTID to PC.  */
+
+static void
+amd64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  regcache_cooked_write_unsigned (regcache, AMD64_RIP_REGNUM, pc);
+
+  /* We must be careful with modifying the program counter.  If we
+     just interrupted a system call, the kernel might try to restart
+     it when we resume the inferior.  On restarting the system call,
+     the kernel will try backing up the program counter even though it
+     no longer points at the system call.  This typically results in a
+     SIGSEGV or SIGILL.  We can prevent this by writing `-1' in the
+     "orig_rax" pseudo-register.
+
+     Note that "orig_rax" is saved when setting up a dummy call frame.
+     This means that it is properly restored when that frame is
+     popped, and that the interrupted system call will be restarted
+     when we resume the inferior on return from a function call from
+     within GDB.  In all other cases the system call will not be
+     restarted.  */
+  regcache_cooked_write_unsigned (regcache, AMD64_LINUX_ORIG_RAX_REGNUM, -1);
+}
+
 static void
 amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -219,6 +276,17 @@ amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* GNU/Linux uses SVR4-style shared libraries.  */
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_lp64_fetch_link_map_offsets);
+
+  /* Add the %orig_rax register used for syscall restarting.  */
+  set_gdbarch_write_pc (gdbarch, amd64_linux_write_pc);
+  set_gdbarch_num_regs (gdbarch, AMD64_LINUX_NUM_REGS);
+  set_gdbarch_register_name (gdbarch, amd64_linux_register_name);
+  set_gdbarch_register_type (gdbarch, amd64_linux_register_type);
+  set_gdbarch_register_reggroup_p (gdbarch, amd64_linux_register_reggroup_p);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
 }
 
 

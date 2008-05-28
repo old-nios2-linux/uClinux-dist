@@ -1,22 +1,21 @@
 /* MIPS Simulator definition.
-   Copyright (C) 1997, 1998, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 2003, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SIM_MAIN_H
 #define SIM_MAIN_H
@@ -312,7 +311,7 @@ struct _sim_cpu {
    state. */
 
 #ifndef TM_MIPS_H
-#define LAST_EMBED_REGNUM (89)
+#define LAST_EMBED_REGNUM (96)
 #define NUM_REGS (LAST_EMBED_REGNUM + 1)
 
 #define FP0_REGNUM 38           /* Floating point register 0 (single float) */
@@ -348,6 +347,52 @@ struct _sim_cpu {
 #define Debug	(REGISTERS[86])
 #define DEPC	(REGISTERS[87])
 #define EPC	(REGISTERS[88])
+#define ACX	(REGISTERS[89])
+
+#define AC0LOIDX	(33)	/* Must be the same register as LO */
+#define AC0HIIDX	(34)	/* Must be the same register as HI */
+#define AC1LOIDX	(90)
+#define AC1HIIDX	(91)
+#define AC2LOIDX	(92)
+#define AC2HIIDX	(93)
+#define AC3LOIDX	(94)
+#define AC3HIIDX	(95)
+
+#define DSPLO(N)	(REGISTERS[DSPLO_REGNUM[N]])
+#define DSPHI(N)	(REGISTERS[DSPHI_REGNUM[N]])
+
+#define DSPCRIDX	(96)	/* DSP control register */
+#define DSPCR		(REGISTERS[DSPCRIDX])
+
+#define DSPCR_POS_SHIFT		(0)
+#define DSPCR_POS_MASK		(0x3f)
+#define DSPCR_POS_SMASK		(DSPCR_POS_MASK << DSPCR_POS_SHIFT)
+
+#define DSPCR_SCOUNT_SHIFT	(7)
+#define DSPCR_SCOUNT_MASK	(0x3f)
+#define DSPCR_SCOUNT_SMASK	(DSPCR_SCOUNT_MASK << DSPCR_SCOUNT_SHIFT)
+
+#define DSPCR_CARRY_SHIFT	(13)
+#define DSPCR_CARRY_MASK	(1)
+#define DSPCR_CARRY_SMASK	(DSPCR_CARRY_MASK << DSPCR_CARRY_SHIFT)
+#define DSPCR_CARRY		(1 << DSPCR_CARRY_SHIFT)
+
+#define DSPCR_EFI_SHIFT		(14)
+#define DSPCR_EFI_MASK		(1)
+#define DSPCR_EFI_SMASK		(DSPCR_EFI_MASK << DSPCR_EFI_SHIFT)
+#define DSPCR_EFI		(1 << DSPCR_EFI_MASK)
+
+#define DSPCR_OUFLAG_SHIFT	(16)
+#define DSPCR_OUFLAG_MASK	(0xff)
+#define DSPCR_OUFLAG_SMASK	(DSPCR_OUFLAG_MASK << DSPCR_OUFLAG_SHIFT)
+#define DSPCR_OUFLAG4		(1 << (DSPCR_OUFLAG_SHIFT + 4))
+#define DSPCR_OUFLAG5		(1 << (DSPCR_OUFLAG_SHIFT + 5))
+#define DSPCR_OUFLAG6		(1 << (DSPCR_OUFLAG_SHIFT + 6))
+#define DSPCR_OUFLAG7		(1 << (DSPCR_OUFLAG_SHIFT + 7))
+
+#define DSPCR_CCOND_SHIFT	(24)
+#define DSPCR_CCOND_MASK	(0xf)
+#define DSPCR_CCOND_SMASK	(DSPCR_CCOND_MASK << DSPCR_CCOND_SHIFT)
 
   /* All internal state modified by signal_exception() that may need to be
      rolled back for passing moment-of-exception image back to gdb. */
@@ -932,6 +977,9 @@ INLINE_SIM_MAIN (unsigned16) ifetch16 PARAMS ((SIM_DESC sd, sim_cpu *cpu, addres
 
 void dotrace PARAMS ((SIM_DESC sd, sim_cpu *cpu, FILE *tracefh, int type, SIM_ADDR address, int width, char *comment, ...));
 extern FILE *tracefh;
+
+extern int DSPLO_REGNUM[4];
+extern int DSPHI_REGNUM[4];
 
 INLINE_SIM_MAIN (void) pending_tick PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia));
 extern SIM_CORE_SIGNAL_FN mips_core_signal;

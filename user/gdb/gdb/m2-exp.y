@@ -1,7 +1,6 @@
 /* YACC grammar for Modula-2 expressions, for GDB.
-   Copyright 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999,
-   2000
-   Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999,
+   2000, 2007, 2008 Free Software Foundation, Inc.
    Generated from expread.y (now c-exp.y) and contributed by the Department
    of Computer Science at the State University of New York at Buffalo, 1991.
 
@@ -19,7 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Parse a Modula-2 expression from text in a string,
    and return the result as a  struct expression  pointer.
@@ -174,6 +174,7 @@ static struct block *modblock=0;
 %token <sval> TYPENAME
 
 %token SIZE CAP ORD HIGH ABS MIN_FUNC MAX_FUNC FLOAT_FUNC VAL CHR ODD TRUNC
+%token TSIZE
 %token INC DEC INCL EXCL
 
 /* The GDB scope operator */
@@ -288,6 +289,10 @@ exp	:	TRUNC '(' exp ')'
 			{ write_exp_elt_opcode (UNOP_TRUNC); }
 	;
 
+exp	:	TSIZE '(' exp ')'
+			{ write_exp_elt_opcode (UNOP_SIZEOF); }
+	;
+
 exp	:	SIZE exp       %prec UNARY
 			{ write_exp_elt_opcode (UNOP_SIZEOF); }
 	;
@@ -352,6 +357,10 @@ exp     :       exp '['
 			  write_exp_elt_longcst ((LONGEST) end_arglist());
 			  write_exp_elt_opcode (MULTI_SUBSCRIPT); }
         ;
+
+exp	:	exp '[' exp ']'
+			{ write_exp_elt_opcode (BINOP_SUBSCRIPT); }
+	;
 
 exp	:	exp '('
 			/* This is to save the value of arglist_len
@@ -809,6 +818,7 @@ static struct keyword keytab[] =
     {"SIZE",  SIZE       },
     {"FLOAT", FLOAT_FUNC },
     {"TRUNC", TRUNC	 },
+    {"TSIZE", SIZE       },
 };
 
 
@@ -835,7 +845,7 @@ yylex ()
 
   /* See if it is a special token of length 2 */
   for( i = 0 ; i < (int) (sizeof tokentab2 / sizeof tokentab2[0]) ; i++)
-     if(DEPRECATED_STREQN(tokentab2[i].name, tokstart, 2))
+     if (strncmp (tokentab2[i].name, tokstart, 2) == 0)
      {
 	lexptr += 2;
 	return tokentab2[i].token;
@@ -992,7 +1002,8 @@ yylex ()
 
   /*  Lookup special keywords */
   for(i = 0 ; i < (int) (sizeof(keytab) / sizeof(keytab[0])) ; i++)
-     if(namelen == strlen(keytab[i].keyw) && DEPRECATED_STREQN(tokstart,keytab[i].keyw,namelen))
+     if (namelen == strlen (keytab[i].keyw)
+	 && strncmp (tokstart, keytab[i].keyw, namelen) == 0)
 	   return keytab[i].token;
 
   yylval.sval.ptr = tokstart;
@@ -1066,12 +1077,12 @@ yylex ()
     else
     {
        /* Built-in BOOLEAN type.  This is sort of a hack. */
-       if(DEPRECATED_STREQN(tokstart,"TRUE",4))
+       if (strncmp (tokstart, "TRUE", 4) == 0)
        {
 	  yylval.ulval = 1;
 	  return M2_TRUE;
        }
-       else if(DEPRECATED_STREQN(tokstart,"FALSE",5))
+       else if (strncmp (tokstart, "FALSE", 5) == 0)
        {
 	  yylval.ulval = 0;
 	  return M2_FALSE;

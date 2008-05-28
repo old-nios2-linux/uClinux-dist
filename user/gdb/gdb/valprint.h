@@ -1,11 +1,13 @@
 /* Declarations for value printing routines for GDB, the GNU debugger.
-   Copyright 1986, 1988, 1989, 1991-1994, 2000 Free Software Foundation, Inc.
+
+   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 2000, 2005, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef VALPRINT_H
 #define VALPRINT_H
@@ -48,25 +48,38 @@ extern int output_format;
 
 extern int stop_print_at_null;	/* Stop printing at null char? */
 
-extern void val_print_array_elements (struct type *, char *, CORE_ADDR,
-				      struct ui_file *, int, int, int,
-				      enum val_prettyprint, unsigned int);
+extern int print_array_indexes_p (void);
+ 
+extern int get_array_low_bound (struct type *type, long *low_bound);
 
-extern void val_print_type_code_int (struct type *, char *,
+extern void maybe_print_array_index (struct type *index_type, LONGEST index,
+                                     struct ui_file *stream, int format,
+                                     enum val_prettyprint pretty);
+
+extern void val_print_array_elements (struct type *, const gdb_byte *,
+				      CORE_ADDR, struct ui_file *, int,
+				      int, int, enum val_prettyprint,
+				      unsigned int);
+
+extern void val_print_type_code_int (struct type *, const gdb_byte *,
 				     struct ui_file *);
 
-extern void print_binary_chars (struct ui_file *, unsigned char *,
+extern void val_print_type_code_flags (struct type *type,
+				       const gdb_byte *valaddr,
+				       struct ui_file *stream);
+
+extern void print_binary_chars (struct ui_file *, const gdb_byte *,
 				unsigned int);
 
-extern void print_octal_chars (struct ui_file *, unsigned char *,
+extern void print_octal_chars (struct ui_file *, const gdb_byte *,
 			       unsigned int);
 
-extern void print_decimal_chars (struct ui_file *, unsigned char *,
+extern void print_decimal_chars (struct ui_file *, const gdb_byte *,
 				 unsigned int);
 
-extern void print_hex_chars (struct ui_file *, unsigned char *,
+extern void print_hex_chars (struct ui_file *, const gdb_byte *,
 			     unsigned int);
 
-extern void print_char_chars (struct ui_file *, unsigned char *,
+extern void print_char_chars (struct ui_file *, const gdb_byte *,
 			      unsigned int);
 #endif

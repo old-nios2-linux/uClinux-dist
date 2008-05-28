@@ -1,13 +1,13 @@
 /* Intel 387 floating point stuff.
 
-   Copyright 1988, 1989, 1991, 1992, 1993, 1994, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1991, 1992, 1993, 1994, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "doublest.h"
@@ -36,13 +34,10 @@
 #include "i386-tdep.h"
 #include "i387-tdep.h"
 
-/* Implement the `info float' layout based on the register definitions
-   in `tm-i386.h'.  */
-
 /* Print the floating point number specified by RAW.  */
 
 static void
-print_i387_value (char *raw, struct ui_file *file)
+print_i387_value (const gdb_byte *raw, struct ui_file *file)
 {
   DOUBLEST value;
 
@@ -66,7 +61,7 @@ print_i387_value (char *raw, struct ui_file *file)
 /* Print the classification for the register contents RAW.  */
 
 static void
-print_i387_ext (unsigned char *raw, struct ui_file *file)
+print_i387_ext (const gdb_byte *raw, struct ui_file *file)
 {
   int sign;
   int integer;
@@ -206,7 +201,7 @@ i387_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
 		       struct frame_info *frame, const char *args)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (frame));
-  char buf[4];
+  gdb_byte buf[4];
   ULONGEST fctrl;
   ULONGEST fstat;
   ULONGEST ftag;
@@ -237,7 +232,7 @@ i387_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
 
   for (fpreg = 7; fpreg >= 0; fpreg--)
     {
-      unsigned char raw[I386_MAX_REGISTER_SIZE];
+      gdb_byte raw[I386_MAX_REGISTER_SIZE];
       int tag = (ftag >> (fpreg * 2)) & 3;
       int i;
 
@@ -290,27 +285,45 @@ i387_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
 }
 
 
+/* Return nonzero if a value of type TYPE stored in register REGNUM
+   needs any special handling.  */
+
+int
+i387_convert_register_p (struct gdbarch *gdbarch, int regnum, struct type *type)
+{
+  if (i386_fp_regnum_p (regnum))
+    {
+      /* Floating point registers must be converted unless we are
+	 accessing them in their hardware type.  */
+      if (type == builtin_type_i387_ext)
+	return 0;
+      else
+	return 1;
+    }
+
+  return 0;
+}
+
 /* Read a value of type TYPE from register REGNUM in frame FRAME, and
    return its contents in TO.  */
 
 void
 i387_register_to_value (struct frame_info *frame, int regnum,
-			struct type *type, void *to)
+			struct type *type, gdb_byte *to)
 {
-  char from[I386_MAX_REGISTER_SIZE];
+  gdb_byte from[I386_MAX_REGISTER_SIZE];
 
   gdb_assert (i386_fp_regnum_p (regnum));
 
   /* We only support floating-point values.  */
   if (TYPE_CODE (type) != TYPE_CODE_FLT)
     {
-      warning ("Cannot convert floating-point register value "
-	       "to non-floating-point type.");
+      warning (_("Cannot convert floating-point register value "
+	       "to non-floating-point type."));
       return;
     }
 
-  /* Convert to TYPE.  This should be a no-op if TYPE is equivalent to
-     the extended floating-point format used by the FPU.  */
+  /* Convert to TYPE.  */
   get_frame_register (frame, regnum, from);
   convert_typed_floating (from, builtin_type_i387_ext, to, type);
 }
@@ -320,34 +333,27 @@ i387_register_to_value (struct frame_info *frame, int regnum,
 
 void
 i387_value_to_register (struct frame_info *frame, int regnum,
-			struct type *type, const void *from)
+			struct type *type, const gdb_byte *from)
 {
-  char to[I386_MAX_REGISTER_SIZE];
+  gdb_byte to[I386_MAX_REGISTER_SIZE];
 
   gdb_assert (i386_fp_regnum_p (regnum));
 
   /* We only support floating-point values.  */
   if (TYPE_CODE (type) != TYPE_CODE_FLT)
     {
-      warning ("Cannot convert non-floating-point type "
-	       "to floating-point register value.");
+      warning (_("Cannot convert non-floating-point type "
+	       "to floating-point register value."));
       return;
     }
 
-  /* Convert from TYPE.  This should be a no-op if TYPE is equivalent
-     to the extended floating-point format used by the FPU.  */
+  /* Convert from TYPE.  */
   convert_typed_floating (from, type, to, builtin_type_i387_ext);
   put_frame_register (frame, regnum, to);
 }
 
 
 /* Handle FSAVE and FXSAVE formats.  */
-
-/* FIXME: kettenis/20030927: The functions below should accept a
-   `regcache' argument, but I don't want to change the function
-   signature just yet.  There's some band-aid in the functions below
-   in the form of the `regcache' local variables.  This will ease the
-   transition later on.  */
 
 /* At fsave_offset[REGNUM] you'll find the offset to the location in
    the data structure used by the "fsave" instruction where GDB
@@ -385,7 +391,7 @@ void
 i387_supply_fsave (struct regcache *regcache, int regnum, const void *fsave)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
-  const char *regs = fsave;
+  const gdb_byte *regs = fsave;
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -410,7 +416,7 @@ i387_supply_fsave (struct regcache *regcache, int regnum, const void *fsave)
 	if (i >= I387_FCTRL_REGNUM
 	    && i != I387_FIOFF_REGNUM && i != I387_FOOFF_REGNUM)
 	  {
-	    unsigned char val[4];
+	    gdb_byte val[4];
 
 	    memcpy (val, FSAVE_ADDR (regs, i), 2);
 	    val[2] = val[3] = 0;
@@ -428,7 +434,7 @@ i387_supply_fsave (struct regcache *regcache, int regnum, const void *fsave)
       regcache_raw_supply (regcache, i, NULL);
   if (regnum == -1 || regnum == I387_MXCSR_REGNUM)
     {
-      char buf[4];
+      gdb_byte buf[4];
 
       store_unsigned_integer (buf, 4, 0x1f80);
       regcache_raw_supply (regcache, I387_MXCSR_REGNUM, buf);
@@ -446,8 +452,8 @@ i387_supply_fsave (struct regcache *regcache, int regnum, const void *fsave)
 void
 i387_collect_fsave (const struct regcache *regcache, int regnum, void *fsave)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  char *regs = fsave;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
+  gdb_byte *regs = fsave;
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -464,7 +470,7 @@ i387_collect_fsave (const struct regcache *regcache, int regnum, void *fsave)
 	if (i >= I387_FCTRL_REGNUM
 	    && i != I387_FIOFF_REGNUM && i != I387_FOOFF_REGNUM)
 	  {
-	    unsigned char buf[4];
+	    gdb_byte buf[4];
 
 	    regcache_raw_collect (regcache, i, buf);
 
@@ -481,17 +487,6 @@ i387_collect_fsave (const struct regcache *regcache, int regnum, void *fsave)
 	  regcache_raw_collect (regcache, i, FSAVE_ADDR (regs, i));
       }
 #undef I387_ST0_REGNUM
-}
-
-/* Fill register REGNUM (if it is a floating-point register) in *FSAVE
-   with the value in GDB's register cache.  If REGNUM is -1, do this
-   for all registers.  This function doesn't touch any of the reserved
-   bits in *FSAVE.  */
-
-void
-i387_fill_fsave (void *fsave, int regnum)
-{
-  i387_collect_fsave (current_regcache, regnum, fsave);
 }
 
 
@@ -545,7 +540,7 @@ static int fxsave_offset[] =
 
 #define FXSAVE_MXCSR_ADDR(fxsave) (fxsave + 24)
 
-static int i387_tag (const unsigned char *raw);
+static int i387_tag (const gdb_byte *raw);
 
 
 /* Fill register REGNUM in REGCACHE with the appropriate
@@ -556,7 +551,7 @@ void
 i387_supply_fxsave (struct regcache *regcache, int regnum, const void *fxsave)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
-  const char *regs = fxsave;
+  const gdb_byte *regs = fxsave;
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -582,7 +577,7 @@ i387_supply_fxsave (struct regcache *regcache, int regnum, const void *fxsave)
 	if (i >= I387_FCTRL_REGNUM && i < I387_XMM0_REGNUM
 	    && i != I387_FIOFF_REGNUM && i != I387_FOOFF_REGNUM)
 	  {
-	    unsigned char val[4];
+	    gdb_byte val[4];
 
 	    memcpy (val, FXSAVE_ADDR (regs, i), 2);
 	    val[2] = val[3] = 0;
@@ -645,8 +640,8 @@ i387_supply_fxsave (struct regcache *regcache, int regnum, const void *fxsave)
 void
 i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  char *regs = fxsave;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
+  gdb_byte *regs = fxsave;
   int i;
 
   gdb_assert (tdep->st0_regnum >= I386_ST0_REGNUM);
@@ -666,7 +661,7 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 	if (i >= I387_FCTRL_REGNUM && i < I387_XMM0_REGNUM
 	    && i != I387_FIOFF_REGNUM && i != I387_FOOFF_REGNUM)
 	  {
-	    unsigned char buf[4];
+	    gdb_byte buf[4];
 
 	    regcache_raw_collect (regcache, i, buf);
 
@@ -710,22 +705,11 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 #undef I387_NUM_XMM_REGS
 }
 
-/* Fill register REGNUM (if it is a floating-point or SSE register) in
-   *FXSAVE with the value in GDB's register cache.  If REGNUM is -1, do
-   this for all registers.  This function doesn't touch any of the
-   reserved bits in *FXSAVE.  */
-
-void
-i387_fill_fxsave (void *fxsave, int regnum)
-{
-  i387_collect_fxsave (current_regcache, regnum, fxsave);
-}
-
 /* Recreate the FTW (tag word) valid bits from the 80-bit FP data in
    *RAW.  */
 
 static int
-i387_tag (const unsigned char *raw)
+i387_tag (const gdb_byte *raw)
 {
   int integer;
   unsigned int exponent;

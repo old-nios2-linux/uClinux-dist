@@ -1,12 +1,12 @@
 /* Target-dependent mdebug code for the ALPHA architecture.
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -27,8 +25,10 @@
 #include "gdbcore.h"
 #include "block.h"
 #include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include "alpha-tdep.h"
+#include "mdebugread.h"
 
 /* FIXME: Some of this code should perhaps be merged with mips.  */
 
@@ -90,17 +90,18 @@
 /* Locate the mdebug PDR for the given PC.  Return null if one can't
    be found; you'll have to fall back to other methods in that case.  */
 
-static alpha_extra_func_info_t
+static struct mdebug_extra_func_info *
 find_proc_desc (CORE_ADDR pc)
 {
   struct block *b = block_for_pc (pc);
-  alpha_extra_func_info_t proc_desc = NULL;
+  struct mdebug_extra_func_info *proc_desc = NULL;
   struct symbol *sym = NULL;
+  char *sh_name = NULL;
 
   if (b)
     {
       CORE_ADDR startaddr;
-      find_pc_partial_function (pc, NULL, &startaddr, NULL);
+      find_pc_partial_function (pc, &sh_name, &startaddr, NULL);
 
       if (startaddr > BLOCK_START (b))
 	/* This is the "pathological" case referred to in a comment in
@@ -108,12 +109,22 @@ find_proc_desc (CORE_ADDR pc)
 	   symbol reading.  */
 	sym = NULL;
       else
-	sym = lookup_symbol (MIPS_EFI_SYMBOL_NAME, b, LABEL_DOMAIN, 0, NULL);
+	sym = lookup_symbol (MDEBUG_EFI_SYMBOL_NAME, b, LABEL_DOMAIN, 0, NULL);
     }
 
   if (sym)
     {
-      proc_desc = (alpha_extra_func_info_t) SYMBOL_VALUE (sym);
+      proc_desc = (struct mdebug_extra_func_info *) SYMBOL_VALUE (sym);
+
+      /* Correct incorrect setjmp procedure descriptor from the library
+         to make backtrace through setjmp work.  */
+      if (proc_desc->pdr.pcreg == 0
+	  && strcmp (sh_name, "setjmp") == 0)
+	{
+	  proc_desc->pdr.pcreg = ALPHA_RA_REGNUM;
+	  proc_desc->pdr.regmask = 0x80000000;
+	  proc_desc->pdr.regoffset = -4;
+	}
 
       /* If we never found a PDR for this function in symbol reading,
 	 then examine prologues to find the information.  */
@@ -128,7 +139,7 @@ find_proc_desc (CORE_ADDR pc)
    find the prologue, then return 0.  */
 
 static CORE_ADDR
-alpha_mdebug_after_prologue (CORE_ADDR pc, alpha_extra_func_info_t proc_desc)
+alpha_mdebug_after_prologue (CORE_ADDR pc, struct mdebug_extra_func_info *proc_desc)
 {
   if (proc_desc)
     {
@@ -146,7 +157,7 @@ alpha_mdebug_after_prologue (CORE_ADDR pc, alpha_extra_func_info_t proc_desc)
    if we are definitively *not* in a function prologue.  */
 
 static int
-alpha_mdebug_in_prologue (CORE_ADDR pc, alpha_extra_func_info_t proc_desc)
+alpha_mdebug_in_prologue (CORE_ADDR pc, struct mdebug_extra_func_info *proc_desc)
 {
   CORE_ADDR after_prologue_pc = alpha_mdebug_after_prologue (pc, proc_desc);
   return (after_prologue_pc == 0 || pc < after_prologue_pc);
@@ -157,7 +168,7 @@ alpha_mdebug_in_prologue (CORE_ADDR pc, alpha_extra_func_info_t proc_desc)
 
 struct alpha_mdebug_unwind_cache
 {
-  alpha_extra_func_info_t proc_desc;
+  struct mdebug_extra_func_info *proc_desc;
   CORE_ADDR vfp;
   CORE_ADDR *saved_regs;
 };
@@ -170,7 +181,7 @@ alpha_mdebug_frame_unwind_cache (struct frame_info *next_frame,
 				 void **this_prologue_cache)
 {
   struct alpha_mdebug_unwind_cache *info;
-  alpha_extra_func_info_t proc_desc;
+  struct mdebug_extra_func_info *proc_desc;
   ULONGEST vfp;
   CORE_ADDR pc, reg_position;
   unsigned long mask;
@@ -193,7 +204,7 @@ alpha_mdebug_frame_unwind_cache (struct frame_info *next_frame,
   info->saved_regs = frame_obstack_zalloc (SIZEOF_FRAME_SAVED_REGS);
 
   /* The VFP of the frame is at FRAME_REG+FRAME_OFFSET.  */
-  frame_unwind_unsigned_register (next_frame, PROC_FRAME_REG (proc_desc), &vfp);
+  vfp = frame_unwind_register_unsigned (next_frame, PROC_FRAME_REG (proc_desc));
   vfp += PROC_FRAME_OFFSET (info->proc_desc);
   info->vfp = vfp;
 
@@ -245,7 +256,8 @@ alpha_mdebug_frame_this_id (struct frame_info *next_frame,
   struct alpha_mdebug_unwind_cache *info
     = alpha_mdebug_frame_unwind_cache (next_frame, this_prologue_cache);
 
-  *this_id = frame_id_build (info->vfp, frame_func_unwind (next_frame));
+  *this_id = frame_id_build (info->vfp,
+			     frame_func_unwind (next_frame, NORMAL_FRAME));
 }
 
 /* Retrieve the value of REGNUM in FRAME.  Don't give up!  */
@@ -255,7 +267,7 @@ alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
 				  void **this_prologue_cache,
 				  int regnum, int *optimizedp,
 				  enum lval_type *lvalp, CORE_ADDR *addrp,
-				  int *realnump, void *bufferp)
+				  int *realnump, gdb_byte *bufferp)
 {
   struct alpha_mdebug_unwind_cache *info
     = alpha_mdebug_frame_unwind_cache (next_frame, this_prologue_cache);
@@ -293,8 +305,12 @@ alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
     }
 
   /* Otherwise assume the next frame has the same register value.  */
-  frame_register (next_frame, regnum, optimizedp, lvalp, addrp,
-  		  realnump, bufferp);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (bufferp)
+    frame_unwind_register (next_frame, *realnump, bufferp);
 }
 
 static const struct frame_unwind alpha_mdebug_frame_unwind = {
@@ -306,8 +322,8 @@ static const struct frame_unwind alpha_mdebug_frame_unwind = {
 const struct frame_unwind *
 alpha_mdebug_frame_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
-  alpha_extra_func_info_t proc_desc;
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
+  struct mdebug_extra_func_info *proc_desc;
 
   /* If this PC does not map to a PDR, then clearly this isn't an
      mdebug frame.  */
@@ -363,8 +379,8 @@ static const struct frame_base alpha_mdebug_frame_base = {
 static const struct frame_base *
 alpha_mdebug_frame_base_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
-  alpha_extra_func_info_t proc_desc;
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
+  struct mdebug_extra_func_info *proc_desc;
 
   /* If this PC does not map to a PDR, then clearly this isn't an
      mdebug frame.  */

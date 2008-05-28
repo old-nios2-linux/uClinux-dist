@@ -1,6 +1,7 @@
 /* Output generating routines for GDB.
 
-   Copyright 1999, 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
@@ -9,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -178,12 +177,12 @@ static void default_field_fmt (struct ui_out *uiout, int fldno,
 			       int width, enum ui_align align,
 			       const char *fldname,
 			       const char *format,
-			       va_list args);
+			       va_list args) ATTR_FORMAT (printf, 6, 0);
 static void default_spaces (struct ui_out *uiout, int numspaces);
 static void default_text (struct ui_out *uiout, const char *string);
 static void default_message (struct ui_out *uiout, int verbosity,
 			     const char *format,
-			     va_list args);
+			     va_list args) ATTR_FORMAT (printf, 3, 0);
 static void default_wrap_hint (struct ui_out *uiout, char *identstring);
 static void default_flush (struct ui_out *uiout);
 
@@ -248,11 +247,13 @@ static void uo_field_string (struct ui_out *uiout, int fldno, int width,
 			     const char *string);
 static void uo_field_fmt (struct ui_out *uiout, int fldno, int width,
 			  enum ui_align align, const char *fldname,
-			  const char *format, va_list args);
+			  const char *format, va_list args)
+     ATTR_FORMAT (printf, 6, 0);
 static void uo_spaces (struct ui_out *uiout, int numspaces);
 static void uo_text (struct ui_out *uiout, const char *string);
 static void uo_message (struct ui_out *uiout, int verbosity,
-			const char *format, va_list args);
+			const char *format, va_list args)
+     ATTR_FORMAT (printf, 3, 0);
 static void uo_wrap_hint (struct ui_out *uiout, char *identstring);
 static void uo_flush (struct ui_out *uiout);
 static int uo_redirect (struct ui_out *uiout, struct ui_file *outstream);
@@ -280,8 +281,8 @@ ui_out_table_begin (struct ui_out *uiout, int nbrofcols,
 {
   if (uiout->table.flag)
     internal_error (__FILE__, __LINE__,
-		    "tables cannot be nested; table_begin found before \
-previous table_end.");
+		    _("tables cannot be nested; table_begin found before \
+previous table_end."));
 
   uiout->table.flag = 1;
   uiout->table.body_flag = 0;
@@ -301,16 +302,16 @@ ui_out_table_body (struct ui_out *uiout)
 {
   if (!uiout->table.flag)
     internal_error (__FILE__, __LINE__,
-		    "table_body outside a table is not valid; it must be \
-after a table_begin and before a table_end.");
+		    _("table_body outside a table is not valid; it must be \
+after a table_begin and before a table_end."));
   if (uiout->table.body_flag)
     internal_error (__FILE__, __LINE__,
-		    "extra table_body call not allowed; there must be \
-only one table_body after a table_begin and before a table_end.");
+		    _("extra table_body call not allowed; there must be \
+only one table_body after a table_begin and before a table_end."));
   if (uiout->table.header_next->colno != uiout->table.columns)
     internal_error (__FILE__, __LINE__,
-		    "number of headers differ from number of table \
-columns.");
+		    _("number of headers differ from number of table \
+columns."));
 
   uiout->table.body_flag = 1;
   uiout->table.header_next = uiout->table.header_first;
@@ -323,7 +324,7 @@ ui_out_table_end (struct ui_out *uiout)
 {
   if (!uiout->table.flag)
     internal_error (__FILE__, __LINE__,
-		    "misplaced table_end or missing table_begin.");
+		    _("misplaced table_end or missing table_begin."));
 
   uiout->table.entry_level = 0;
   uiout->table.body_flag = 0;
@@ -343,8 +344,8 @@ ui_out_table_header (struct ui_out *uiout, int width, enum ui_align alignment,
 {
   if (!uiout->table.flag || uiout->table.body_flag)
     internal_error (__FILE__, __LINE__,
-		    "table header must be specified after table_begin \
-and before table_body.");
+		    _("table header must be specified after table_begin \
+and before table_body."));
 
   append_header_to_list (uiout, width, alignment, col_name, colhdr);
 
@@ -375,8 +376,8 @@ ui_out_begin (struct ui_out *uiout,
   int new_level;
   if (uiout->table.flag && !uiout->table.body_flag)
     internal_error (__FILE__, __LINE__,
-		    "table header or table_body expected; lists must be \
-specified after table_body.");
+		    _("table header or table_body expected; lists must be \
+specified after table_body."));
 
   /* Be careful to verify the ``field'' before the new tuple/list is
      pushed onto the stack.  That way the containing list/table/row is
@@ -490,12 +491,15 @@ ui_out_field_core_addr (struct ui_out *uiout,
 			CORE_ADDR address)
 {
   char addstr[20];
+  int addr_bit = gdbarch_addr_bit (current_gdbarch);
+
+  if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
+    address &= ((CORE_ADDR) 1 << addr_bit) - 1;
 
   /* FIXME: cagney/2002-05-03: Need local_address_string() function
      that returns the language localized string formatted to a width
-     based on TARGET_ADDR_BIT.  */
-  /* print_address_numeric (address, 1, local_stream); */
-  if (TARGET_ADDR_BIT <= 32)
+     based on gdbarch_addr_bit.  */
+  if (addr_bit <= 32)
     strcpy (addstr, hex_string_custom (address, 8));
   else
     strcpy (addstr, hex_string_custom (address, 16));
@@ -1028,15 +1032,20 @@ append_header_to_list (struct ui_out *uiout,
   temphdr = XMALLOC (struct ui_out_hdr);
   temphdr->width = width;
   temphdr->alignment = alignment;
-  /* we have to copy the column title as the original may be an automatic */
+  /* We have to copy the column title as the original may be an
+     automatic.  */
   if (colhdr != NULL)
     temphdr->colhdr = xstrdup (colhdr);
   else
     temphdr->colhdr = NULL;
+
   if (col_name != NULL)
+    temphdr->col_name = xstrdup (col_name);
+  else if (colhdr != NULL)
     temphdr->col_name = xstrdup (colhdr);
   else
-    temphdr->col_name = xstrdup (colhdr);
+    temphdr->col_name = NULL;
+
   temphdr->next = NULL;
   if (uiout->table.header_first == NULL)
     {
@@ -1090,8 +1099,8 @@ verify_field (struct ui_out *uiout, int *fldno, int *width, int *align)
     {
       if (!uiout->table.body_flag)
 	internal_error (__FILE__, __LINE__,
-			"table_body missing; table fields must be \
-specified after table_body and inside a list.");
+			_("table_body missing; table fields must be \
+specified after table_body and inside a list."));
       /* NOTE: cagney/2001-12-08: There was a check here to ensure
 	 that this code was only executed when uiout->level was
 	 greater than zero.  That no longer applies - this code is run
@@ -1107,7 +1116,7 @@ specified after table_body and inside a list.");
     {
       if (*fldno != current->field_count)
 	internal_error (__FILE__, __LINE__,
-			"ui-out internal error in handling headers.");
+			_("ui-out internal error in handling headers."));
     }
   else
     {

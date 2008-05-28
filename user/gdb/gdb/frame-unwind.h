@@ -1,12 +1,12 @@
 /* Definitions for a frame unwinder, for GDB, the GNU debugger.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (FRAME_UNWIND_H)
 #define FRAME_UNWIND_H 1
@@ -72,7 +70,7 @@ typedef int (frame_sniffer_ftype) (const struct frame_unwind *self,
 
    THIS_PROLOGUE_CACHE can be used to share any prolog analysis data
    with the other unwind methods.  Memory for that cache should be
-   allocated using frame_obstack_zalloc().  */
+   allocated using FRAME_OBSTACK_ZALLOC().  */
 
 typedef void (frame_this_id_ftype) (struct frame_info *next_frame,
 				    void **this_prologue_cache,
@@ -108,7 +106,7 @@ typedef void (frame_this_id_ftype) (struct frame_info *next_frame,
 
    THIS_PROLOGUE_CACHE can be used to share any prolog analysis data
    with the other unwind methods.  Memory for that cache should be
-   allocated using frame_obstack_zalloc().  */
+   allocated using FRAME_OBSTACK_ZALLOC().  */
 
 typedef void (frame_prev_register_ftype) (struct frame_info *next_frame,
 					  void **this_prologue_cache,
@@ -116,7 +114,19 @@ typedef void (frame_prev_register_ftype) (struct frame_info *next_frame,
 					  int *optimized,
 					  enum lval_type * lvalp,
 					  CORE_ADDR *addrp,
-					  int *realnump, void *valuep);
+					  int *realnump, gdb_byte *valuep);
+
+/* Assuming the frame chain: (outer) prev <-> this <-> next (inner);
+   use the NEXT frame, and its register unwind method, to return the PREV
+   frame's program-counter.  */
+
+typedef CORE_ADDR (frame_prev_pc_ftype) (struct frame_info *next_frame,
+					 void **this_prologue_cache);
+
+/* Deallocate extra memory associated with the frame cache if any.  */
+
+typedef void (frame_dealloc_cache_ftype) (struct frame_info *self,
+					  void *this_cache);
 
 struct frame_unwind
 {
@@ -129,6 +139,8 @@ struct frame_unwind
   frame_prev_register_ftype *prev_register;
   const struct frame_data *unwind_data;
   frame_sniffer_ftype *sniffer;
+  frame_prev_pc_ftype *prev_pc;
+  frame_dealloc_cache_ftype *dealloc_cache;
 };
 
 /* Register a frame unwinder, _prepending_ it to the front of the

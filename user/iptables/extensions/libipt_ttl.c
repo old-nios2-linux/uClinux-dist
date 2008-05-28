@@ -1,7 +1,7 @@
 /* Shared library add-on to iptables to add TTL matching support 
  * (C) 2000 by Harald Welte <laforge@gnumonks.org>
  *
- * $Id: libipt_ttl.c 4544 2005-11-18 17:59:56Z /C=DE/ST=Berlin/L=Berlin/O=Netfilter Project/OU=Development/CN=kaber/emailAddress=kaber@netfilter.org $
+ * $Id: libipt_ttl.c 7061 2007-10-04 16:28:39Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
  *
  * This program is released under the terms of GNU GPL */
 
@@ -14,7 +14,7 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv4/ipt_ttl.h>
 
-static void help(void) 
+static void ttl_help(void)
 {
 	printf(
 "TTL match v%s options:\n"
@@ -24,9 +24,8 @@ static void help(void)
 , IPTABLES_VERSION);
 }
 
-static int parse(int c, char **argv, int invert, unsigned int *flags,
-		const struct ipt_entry *entry, unsigned int *nfcache,
-		struct ipt_entry_match **match)
+static int ttl_parse(int c, char **argv, int invert, unsigned int *flags,
+                     const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_ttl_info *info = (struct ipt_ttl_info *) (*match)->data;
 	unsigned int value;
@@ -84,7 +83,7 @@ static int parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-static void final_check(unsigned int flags)
+static void ttl_check(unsigned int flags)
 {
 	if (!flags) 
 		exit_error(PARAMETER_PROBLEM,
@@ -92,9 +91,8 @@ static void final_check(unsigned int flags)
 			"`--ttl-eq', `--ttl-lt', `--ttl-gt");
 }
 
-static void print(const struct ipt_ip *ip, 
-		const struct ipt_entry_match *match,
-		int numeric)
+static void ttl_print(const void *ip, const struct xt_entry_match *match,
+                      int numeric)
 {
 	const struct ipt_ttl_info *info = 
 		(struct ipt_ttl_info *) match->data;
@@ -117,8 +115,7 @@ static void print(const struct ipt_ip *ip,
 	printf("%u ", info->ttl);
 }
 
-static void save(const struct ipt_ip *ip, 
-		const struct ipt_entry_match *match)
+static void ttl_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ipt_ttl_info *info =
 		(struct ipt_ttl_info *) match->data;
@@ -143,30 +140,29 @@ static void save(const struct ipt_ip *ip,
 	printf("%u ", info->ttl);
 }
 
-static struct option opts[] = {
-	{ "ttl", 1, 0, '2' },
-	{ "ttl-eq", 1, 0, '2'},
-	{ "ttl-lt", 1, 0, '3'},
-	{ "ttl-gt", 1, 0, '4'},
-	{ 0 }
+static const struct option ttl_opts[] = {
+	{ "ttl", 1, NULL, '2' },
+	{ "ttl-eq", 1, NULL, '2'},
+	{ "ttl-lt", 1, NULL, '3'},
+	{ "ttl-gt", 1, NULL, '4'},
+	{ }
 };
 
-static struct iptables_match ttl = {
-	.next		= NULL,
+static struct iptables_match ttl_match = {
 	.name		= "ttl",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_ttl_info)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_ttl_info)),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= ttl_help,
+	.parse		= ttl_parse,
+	.final_check	= ttl_check,
+	.print		= ttl_print,
+	.save		= ttl_save,
+	.extra_opts	= ttl_opts,
 };
 
 
 void _init(void) 
 {
-	register_match(&ttl);
+	register_match(&ttl_match);
 }

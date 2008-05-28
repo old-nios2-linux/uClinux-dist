@@ -1,12 +1,12 @@
 /* Portable <sys/ptrace.h>
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
    
 #ifndef GDB_PTRACE_H
 #define GDB_PTRACE_H
@@ -40,6 +38,10 @@
 
 /* No need to include <unistd.h> since it's already included by
    "defs.h".  */
+
+#ifndef PT_TRACE_ME
+# define PT_TRACE_ME	0
+#endif
 
 #ifndef PT_READ_I
 # define PT_READ_I	1	/* Read word in child's I space.  */
@@ -92,8 +94,8 @@
 
 /* Not all systems support attaching and detaching.   */
 
-#ifndef PT_ATTCH
-# ifdef PTRACE_DETACH
+#ifndef PT_ATTACH
+# ifdef PTRACE_ATTACH
 #  define PT_ATTACH PTRACE_ATTACH
 # endif
 #endif
@@ -107,8 +109,18 @@
 /* Some systems, in particular DEC OSF/1, Digital Unix, Compaq Tru64
    or whatever it's called these days, don't provide a prototype for
    ptrace.  Provide one to silence compiler warnings.  */
+
 #ifndef HAVE_DECL_PTRACE
 extern PTRACE_TYPE_RET ptrace();
+#endif
+
+/* Some systems, at least AIX and HP-UX have a ptrace with five
+   arguments.  Since we never use the fifth argument, define a ptrace
+   macro that calls the real ptrace with the last argument set to
+   zero.  */
+
+#ifdef PTRACE_TYPE_ARG5
+# define ptrace(request, pid, addr, data) ptrace (request, pid, addr, data, 0)
 #endif
 
 #endif /* gdb_ptrace.h */

@@ -1,5 +1,5 @@
 /* Renesas / SuperH specific support for Symbian 32-bit ELF files
-   Copyright 2004
+   Copyright 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Contributed by Red Hat
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,7 +17,9 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
+
 
 /* Stop elf32-sh.c from defining any target vectors.  */
 #define SH_TARGET_ALREADY_DEFINED
@@ -26,8 +28,8 @@
 #include "elf32-sh.c"
 
 
-//#define DEBUG 1
-#define DEBUG 0
+//#define SYMBIAN_DEBUG 1
+#define SYMBIAN_DEBUG 0
 
 #define DIRECTIVE_HEADER	"#<SYMEDIT>#\n"
 #define DIRECTIVE_IMPORT	"IMPORT "
@@ -36,7 +38,7 @@
 
 /* Macro to advance 's' until either it reaches 'e' or the
    character pointed to by 's' is equal to 'c'.  If 'e' is
-   reached and DEBUG is enabled then the error message 'm'
+   reached and SYMBIAN_DEBUG is enabled then the error message 'm'
    is displayed.  */
 #define SKIP_UNTIL(s,e,c,m)					\
   do								\
@@ -45,7 +47,7 @@
 	++ s;							\
       if (s >= e)						\
 	{							\
-          if (DEBUG)						\
+          if (SYMBIAN_DEBUG)					\
 	    fprintf (stderr, "Corrupt directive: %s\n", m);	\
 	  result = FALSE;					\
 	}							\
@@ -63,7 +65,7 @@
 	++ s;							\
       if (s >= e)						\
 	{							\
-          if (DEBUG)						\
+          if (SYMBIAN_DEBUG)					\
 	    fprintf (stderr, "Corrupt directive: %s\n", m);	\
 	  result = FALSE;					\
 	}							\
@@ -74,7 +76,7 @@
 
 /* Macro to advance 's' until either it reaches 'e' or the
    character pointed to by 's' is not equal to 'c'.  If 'e'
-   is reached and DEBUG is enabled then the error message
+   is reached and SYMBIAN_DEBUG is enabled then the error message
    'm' is displayed.  */
 #define SKIP_WHILE(s,e,c,m)					\
   do								\
@@ -83,7 +85,7 @@
 	++ s;							\
       if (s >= e)						\
 	{							\
-          if (DEBUG)						\
+          if (SYMBIAN_DEBUG)					\
 	    fprintf (stderr, "Corrupt directive: %s\n", m);	\
 	  result = FALSE;					\
 	}							\
@@ -96,8 +98,8 @@
 typedef struct symbol_rename
 {
   struct symbol_rename *       next;
-  bfd_byte *                   current_name;
-  bfd_byte *                   new_name;
+  char *                       current_name;
+  char *                       new_name;
   struct elf_link_hash_entry * current_hash;
   unsigned long                new_symndx;
 }
@@ -109,12 +111,12 @@ static symbol_rename * rename_list = NULL;
 
 static bfd_boolean
 sh_symbian_import_as (struct bfd_link_info *info, bfd * abfd,
-		      bfd_byte * current_name, bfd_byte * new_name)
+		      char * current_name, char * new_name)
 {
   struct elf_link_hash_entry * new_hash;
   symbol_rename * node;
 
-  if (DEBUG)
+  if (SYMBIAN_DEBUG)
     fprintf (stderr, "IMPORT '%s' AS '%s'\n", current_name, new_name);
 
   for (node = rename_list; node; node = node->next)
@@ -132,14 +134,14 @@ sh_symbian_import_as (struct bfd_link_info *info, bfd * abfd,
 
   if ((node = bfd_malloc (sizeof * node)) == NULL)
     {
-      if (DEBUG)
+      if (SYMBIAN_DEBUG)
 	fprintf (stderr, "IMPORT AS: No mem for new rename node\n");
       return FALSE;
     }
 
   if ((node->current_name = bfd_malloc (strlen (current_name) + 1)) == NULL)
     {
-      if (DEBUG)
+      if (SYMBIAN_DEBUG)
 	fprintf (stderr, "IMPORT AS: No mem for current name field in rename node\n");
       free (node);
       return FALSE;
@@ -149,7 +151,7 @@ sh_symbian_import_as (struct bfd_link_info *info, bfd * abfd,
   
   if ((node->new_name = bfd_malloc (strlen (new_name) + 1)) == NULL)
     {
-      if (DEBUG)
+      if (SYMBIAN_DEBUG)
 	fprintf (stderr, "IMPORT AS: No mem for new name field in rename node\n");
       free (node->current_name);
       free (node);
@@ -173,9 +175,9 @@ sh_symbian_import_as (struct bfd_link_info *info, bfd * abfd,
 
 
 static bfd_boolean
-sh_symbian_import (bfd * abfd ATTRIBUTE_UNUSED, bfd_byte * name)
+sh_symbian_import (bfd * abfd ATTRIBUTE_UNUSED, char * name)
 {
-  if (DEBUG)
+  if (SYMBIAN_DEBUG)
     fprintf (stderr, "IMPORT '%s'\n", name);
 
   /* XXX: Generate an import somehow ?  */
@@ -184,9 +186,9 @@ sh_symbian_import (bfd * abfd ATTRIBUTE_UNUSED, bfd_byte * name)
 }
 
 static bfd_boolean
-sh_symbian_export (bfd * abfd ATTRIBUTE_UNUSED, bfd_byte * name)
+sh_symbian_export (bfd * abfd ATTRIBUTE_UNUSED, char * name)
 {
-  if (DEBUG)
+  if (SYMBIAN_DEBUG)
     fprintf (stderr, "EXPORT '%s'\n", name);
 
   /* XXX: Generate an export somehow ?  */
@@ -202,14 +204,14 @@ static bfd_boolean
 sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 				      asection * sec, bfd_byte * contents)
 {
-  bfd_byte *s;
-  bfd_byte *e;
+  char *s;
+  char *e;
   bfd_boolean result = TRUE;
   bfd_size_type sz = sec->rawsize ? sec->rawsize : sec->size;
 
-  for (s = contents, e = s + sz; s < e;)
+  for (s = (char *) contents, e = s + sz; s < e;)
     {
-      bfd_byte * directive = s;
+      char * directive = s;
 
       switch (*s)
 	{
@@ -225,13 +227,13 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 	  break;
 
 	case 'I':
-	  if (strncmp (s, DIRECTIVE_IMPORT, strlen (DIRECTIVE_IMPORT)))
+	  if (! CONST_STRNEQ (s, DIRECTIVE_IMPORT))
 	    result = FALSE;
 	  else
 	    {
-	      bfd_byte * new_name;
-	      bfd_byte * new_name_end;
-	      bfd_byte   name_end_char;
+	      char * new_name;
+	      char * new_name_end;
+	      char   name_end_char;
 
 	      /* Skip the IMPORT directive.  */
 	      s += strlen (DIRECTIVE_IMPORT);
@@ -261,12 +263,12 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 	      name_end_char = * new_name_end;
 	      * new_name_end = 0;
 
-	      /* Check to see if 'AS '... is present.  If se we have an IMPORT AS
-		 directive, otherwise we have an IMPORT directive.  */
-	      if (strncmp (s, DIRECTIVE_AS, strlen (DIRECTIVE_AS)))
+	      /* Check to see if 'AS '... is present.  If so we have an
+		 IMPORT AS directive, otherwise we have an IMPORT directive.  */
+	      if (! CONST_STRNEQ (s, DIRECTIVE_AS))
 		{
 		  /* Skip the new-line at the end of the name.  */
-		  if (DEBUG && name_end_char != '\n')
+		  if (SYMBIAN_DEBUG && name_end_char != '\n')
 		    fprintf (stderr, "IMPORT: No newline at end of directive\n");
 		  else
 		    s ++;
@@ -276,15 +278,15 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 		  /* Skip past the NUL character.  */
 		  if (* s ++ != 0)
 		    {
-		      if (DEBUG)
+		      if (SYMBIAN_DEBUG)
 			fprintf (stderr, "IMPORT: No NUL at end of directive\n");
 		    }
 		}
 	      else
 		{
-		  bfd_byte * current_name;
-		  bfd_byte * current_name_end;
-		  bfd_byte   current_name_end_char;
+		  char * current_name;
+		  char * current_name_end;
+		  char   current_name_end_char;
 
 		  /* Skip the 'AS '.  */
 		  s += strlen (DIRECTIVE_AS);
@@ -300,7 +302,7 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 		  SKIP_WHILE (s, e, ' ', "IMPORT AS: Current name just followed by spaces");
 		  /* Skip past the newline character.  */
 		  if (* s ++ != '\n')
-		    if (DEBUG)
+		    if (SYMBIAN_DEBUG)
 		      fprintf (stderr, "IMPORT AS: No newline at end of directive\n");
 
 		  /* Terminate the current name after having performed the skips.  */
@@ -311,7 +313,7 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 		  /* The next character should be a NUL.  */
 		  if (* s != 0)
 		    {
-		      if (DEBUG)
+		      if (SYMBIAN_DEBUG)
 			fprintf (stderr, "IMPORT AS: Junk at end of directive\n");
 		      result = FALSE;
 		    }
@@ -327,13 +329,13 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 	  break;
 
 	case 'E':
-	  if (strncmp (s, DIRECTIVE_EXPORT, strlen (DIRECTIVE_EXPORT)))
+	  if (! CONST_STRNEQ (s, DIRECTIVE_EXPORT))
 	    result = FALSE;
 	  else
 	    {
-	      bfd_byte * name;
-	      bfd_byte * name_end;
-	      bfd_byte   name_end_char;
+	      char * name;
+	      char * name_end;
+	      char   name_end_char;
 
 	      /* Skip the directive.  */
 	      s += strlen (DIRECTIVE_EXPORT);
@@ -355,7 +357,7 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 	      /* The next character should be a NUL.  */
 	      if (* s != 0)
 		{
-		  if (DEBUG)
+		  if (SYMBIAN_DEBUG)
 		    fprintf (stderr, "EXPORT: Junk at end of directive\n");
 		  result = FALSE;
 		}
@@ -373,8 +375,9 @@ sh_symbian_process_embedded_commands (struct bfd_link_info *info, bfd * abfd,
 
       if (! result)
 	{
-	  if (DEBUG)
-	    fprintf (stderr, "offset into .directive section: %d\n", directive - contents);
+	  if (SYMBIAN_DEBUG)
+	    fprintf (stderr, "offset into .directive section: %ld\n",
+		     (long) (directive - (char *) contents));
 	  
 	  bfd_set_error (bfd_error_invalid_operation);
 	  _bfd_error_handler (_("%B: Unrecognised .directive command: %s"),
@@ -463,7 +466,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 
 	  if (ptr->current_hash == NULL)
 	    {
-	      if (DEBUG)
+	      if (SYMBIAN_DEBUG)
 		fprintf (stderr, "IMPORT AS: current symbol '%s' does not exist\n", ptr->current_name);
 	      continue;
 	    }
@@ -491,8 +494,11 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 	      new_sym.st_other = ELF_ST_VISIBILITY (STV_DEFAULT);
 	      new_sym.st_shndx = SHN_UNDEF;
 
-	      if (! _bfd_elf_merge_symbol (input_bfd, info, ptr->new_name, & new_sym, & psec,
-					   & new_value, & new_hash, & skip, & override, & type_change_ok,
+	      if (! _bfd_elf_merge_symbol (input_bfd, info,
+					   ptr->new_name, & new_sym,
+					   & psec, & new_value, NULL,
+					   & new_hash, & skip,
+					   & override, & type_change_ok,
 					   & size_change_ok))
 		{
 		  _bfd_error_handler (_("%B: Failed to add renamed symbol %s"),
@@ -507,7 +513,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 	      if (new_hash->dynindx == -1)
 		new_hash->def_regular = 1;
 
-	      if (DEBUG)
+	      if (SYMBIAN_DEBUG)
 		fprintf (stderr, "Created new symbol %s\n", ptr->new_name);
 	    }
 
@@ -517,7 +523,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 	      if (* h == new_hash)
 		{
 		  ptr->new_symndx = h - sym_hashes + num_local_syms;
-		  if (DEBUG)
+		  if (SYMBIAN_DEBUG)
 		    fprintf (stderr, "Converted new hash to index of %ld\n", ptr->new_symndx);
 		  break;
 		}
@@ -535,7 +541,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 	      new_sym_hashes = bfd_alloc (input_bfd, num_global_syms * sizeof * sym_hashes);
 	      if (new_sym_hashes == NULL)
 		{
-		  if (DEBUG)
+		  if (SYMBIAN_DEBUG)
 		    fprintf (stderr, "Out of memory extending hash table\n");
 		  continue;
 		}
@@ -547,7 +553,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 
 	      ptr->new_symndx = num_global_syms - 1 + num_local_syms;
 
-	      if (DEBUG)
+	      if (SYMBIAN_DEBUG)
 		fprintf (stderr, "Extended symbol hash table to insert new symbol as index %ld\n",
 			 ptr->new_symndx);
 	    }
@@ -597,7 +603,7 @@ sh_symbian_relocate_section (bfd *                  output_bfd,
 	    if (h == ptr->current_hash)
 	      {
 		BFD_ASSERT (ptr->new_symndx);
-		if (DEBUG)
+		if (SYMBIAN_DEBUG)
 		  fprintf (stderr, "convert reloc %lx from using index %ld to using index %ld\n",
 			   (long) rel->r_info, (long) ELF32_R_SYM (rel->r_info), ptr->new_symndx);
 		rel->r_info = ELF32_R_INFO (ptr->new_symndx, r_type);

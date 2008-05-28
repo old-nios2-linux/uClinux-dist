@@ -22,23 +22,22 @@
 #endif /* IPT_RECENT_NAME_LEN */
 
 /* Options for this module */
-static struct option opts[] = {
-	{ .name = "set",      .has_arg = 0, .flag = 0, .val = 201 }, 
-	{ .name = "rcheck",   .has_arg = 0, .flag = 0, .val = 202 }, 
-	{ .name = "update",   .has_arg = 0, .flag = 0, .val = 203 },
-	{ .name = "seconds",  .has_arg = 1, .flag = 0, .val = 204 }, 
-	{ .name = "hitcount", .has_arg = 1, .flag = 0, .val = 205 },
-	{ .name = "remove",   .has_arg = 0, .flag = 0, .val = 206 },
-	{ .name = "rttl",     .has_arg = 0, .flag = 0, .val = 207 },
-	{ .name = "name",     .has_arg = 1, .flag = 0, .val = 208 },
-	{ .name = "rsource",  .has_arg = 0, .flag = 0, .val = 209 },
-	{ .name = "rdest",    .has_arg = 0, .flag = 0, .val = 210 },
-	{ .name = 0,          .has_arg = 0, .flag = 0, .val = 0   }
+static const struct option recent_opts[] = {
+	{ .name = "set",      .has_arg = 0, .val = 201 }, 
+	{ .name = "rcheck",   .has_arg = 0, .val = 202 }, 
+	{ .name = "update",   .has_arg = 0, .val = 203 },
+	{ .name = "seconds",  .has_arg = 1, .val = 204 }, 
+	{ .name = "hitcount", .has_arg = 1, .val = 205 },
+	{ .name = "remove",   .has_arg = 0, .val = 206 },
+	{ .name = "rttl",     .has_arg = 0, .val = 207 },
+	{ .name = "name",     .has_arg = 1, .val = 208 },
+	{ .name = "rsource",  .has_arg = 0, .val = 209 },
+	{ .name = "rdest",    .has_arg = 0, .val = 210 },
+	{ }
 };
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void recent_help(void)
 {
 	printf(
 "recent v%s options:\n"
@@ -67,8 +66,7 @@ IPTABLES_VERSION);
 }
   
 /* Initialize the match. */
-static void
-init(struct ipt_entry_match *match, unsigned int *nfcache)
+static void recent_init(struct xt_entry_match *match)
 {
 	struct ipt_recent_info *info = (struct ipt_recent_info *)(match)->data;
 
@@ -82,11 +80,8 @@ init(struct ipt_entry_match *match, unsigned int *nfcache)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      unsigned int *nfcache,
-      struct ipt_entry_match **match)
+static int recent_parse(int c, char **argv, int invert, unsigned int *flags,
+                        const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_recent_info *info = (struct ipt_recent_info *)(*match)->data;
 	switch (c) {
@@ -163,8 +158,7 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 }
 
 /* Final check; must have specified a specific option. */
-static void
-final_check(unsigned int flags)
+static void recent_check(unsigned int flags)
 {
 
 	if (!flags)
@@ -174,10 +168,8 @@ final_check(unsigned int flags)
 }
 
 /* Prints out the matchinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_match *match,
-      int numeric)
+static void recent_print(const void *ip, const struct xt_entry_match *match,
+                         int numeric)
 {
 	struct ipt_recent_info *info = (struct ipt_recent_info *)match->data;
 
@@ -198,8 +190,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_matchinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
+static void recent_save(const void *ip, const struct xt_entry_match *match)
 {
 	struct ipt_recent_info *info = (struct ipt_recent_info *)match->data;
 
@@ -219,22 +210,21 @@ save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
 }
 
 /* Structure for iptables to use to communicate with module */
-static struct iptables_match recent = { 
-    .next          = NULL,
+static struct iptables_match recent_match = {
     .name          = "recent",
     .version       = IPTABLES_VERSION,
     .size          = IPT_ALIGN(sizeof(struct ipt_recent_info)),
     .userspacesize = IPT_ALIGN(sizeof(struct ipt_recent_info)),
-    .help          = &help,
-    .init          = &init,
-    .parse         = &parse,
-    .final_check   = &final_check,
-    .print         = &print,
-    .save          = &save,
-    .extra_opts    = opts
+    .help          = recent_help,
+    .init          = recent_init,
+    .parse         = recent_parse,
+    .final_check   = recent_check,
+    .print         = recent_print,
+    .save          = recent_save,
+    .extra_opts    = recent_opts,
 };
 
 void _init(void)
 {
-	register_match(&recent);
+	register_match(&recent_match);
 }

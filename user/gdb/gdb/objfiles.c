@@ -1,7 +1,7 @@
 /* GDB routines for manipulating objfiles.
 
-   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file contains support routines for creating, manipulating, and
    destroying objfile structures. */
@@ -33,6 +31,9 @@
 #include "gdb-stabs.h"
 #include "target.h"
 #include "bcache.h"
+#include "mdebugread.h"
+#include "expression.h"
+#include "parser-defs.h"
 
 #include "gdb_assert.h"
 #include <sys/types.h>
@@ -45,6 +46,8 @@
 #include "breakpoint.h"
 #include "block.h"
 #include "dictionary.h"
+#include "source.h"
+#include "addrmap.h"
 
 /* Prototypes for local functions */
 
@@ -191,7 +194,7 @@ allocate_objfile (bfd *abfd, int flags)
 
       if (build_objfile_section_table (objfile))
 	{
-	  error ("Can't find the file sections in `%s': %s",
+	  error (_("Can't find the file sections in `%s': %s"),
 		 objfile->name, bfd_errmsg (bfd_get_error ()));
 	}
     }
@@ -305,7 +308,7 @@ put_objfile_before (struct objfile *objfile, struct objfile *before_this)
     }
   
   internal_error (__FILE__, __LINE__,
-		  "put_objfile_before: before objfile not in list");
+		  _("put_objfile_before: before objfile not in list"));
 }
 
 /* Put OBJFILE at the front of the list.  */
@@ -357,7 +360,7 @@ unlink_objfile (struct objfile *objfile)
     }
 
   internal_error (__FILE__, __LINE__,
-		  "unlink_objfile: objfile already unlinked");
+		  _("unlink_objfile: objfile already unlinked"));
 }
 
 
@@ -392,6 +395,10 @@ free_objfile (struct objfile *objfile)
       objfile->separate_debug_objfile_backlink->separate_debug_objfile = NULL;
     }
   
+  /* Remove any references to this objfile in the global value
+     lists.  */
+  preserve_values (objfile);
+
   /* First do any symbol file specific actions required when we are
      finished with a particular symbol file.  Note that if the objfile
      is using reusable symbol information (via mmalloc) then each of
@@ -410,7 +417,7 @@ free_objfile (struct objfile *objfile)
     {
       char *name = bfd_get_filename (objfile->obfd);
       if (!bfd_close (objfile->obfd))
-	warning ("cannot close \"%s\": %s",
+	warning (_("cannot close \"%s\": %s"),
 		 name, bfd_errmsg (bfd_get_error ()));
       xfree (name);
     }
@@ -432,9 +439,29 @@ free_objfile (struct objfile *objfile)
      is unknown, but we play it safe for now and keep each action until
      it is shown to be no longer needed. */
 
-  /* I *think* all our callers call clear_symtab_users.  If so, no need
-     to call this here.  */
+  /* Not all our callers call clear_symtab_users (objfile_purge_solibs,
+     for example), so we need to call this here.  */
   clear_pc_function_cache ();
+
+  /* Clear globals which might have pointed into a removed objfile.
+     FIXME: It's not clear which of these are supposed to persist
+     between expressions and which ought to be reset each time.  */
+  expression_context_block = NULL;
+  innermost_block = NULL;
+
+  /* Check to see if the current_source_symtab belongs to this objfile,
+     and if so, call clear_current_source_symtab_and_line. */
+
+  {
+    struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+    struct symtab *s;
+
+    ALL_OBJFILE_SYMTABS (objfile, s)
+      {
+	if (s == cursal.symtab)
+	  clear_current_source_symtab_and_line ();
+      }
+  }
 
   /* The last thing we do is free the objfile struct itself. */
 
@@ -538,6 +565,9 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 	  b = BLOCKVECTOR_BLOCK (bv, i);
 	  BLOCK_START (b) += ANOFFSET (delta, s->block_line_section);
 	  BLOCK_END (b) += ANOFFSET (delta, s->block_line_section);
+          if (BLOCKVECTOR_MAP (bv))
+            addrmap_relocate (BLOCKVECTOR_MAP (bv),
+                              ANOFFSET (delta, s->block_line_section));
 
 	  ALL_BLOCK_SYMBOLS (b, iter, sym)
 	    {
@@ -555,15 +585,6 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 		  SYMBOL_VALUE_ADDRESS (sym) +=
 		    ANOFFSET (delta, SYMBOL_SECTION (sym));
 		}
-#ifdef MIPS_EFI_SYMBOL_NAME
-	      /* Relocate Extra Function Info for ecoff.  */
-
-	      else if (SYMBOL_CLASS (sym) == LOC_CONST
-		       && SYMBOL_DOMAIN (sym) == LABEL_DOMAIN
-		       && strcmp (DEPRECATED_SYMBOL_NAME (sym), MIPS_EFI_SYMBOL_NAME) == 0)
-		ecoff_relocate_efi (sym, ANOFFSET (delta,
-						   s->block_line_section));
-#endif
 	    }
 	}
     }
@@ -774,23 +795,6 @@ in_plt_section (CORE_ADDR pc, char *name)
 	    && s->the_bfd_section->name != NULL
 	    && strcmp (s->the_bfd_section->name, ".plt") == 0);
   return (retval);
-}
-
-/* Return nonzero if NAME is in the import list of OBJFILE.  Else
-   return zero.  */
-
-int
-is_in_import_list (char *name, struct objfile *objfile)
-{
-  int i;
-
-  if (!objfile || !name || !*name)
-    return 0;
-
-  for (i = 0; i < objfile->import_list_size; i++)
-    if (objfile->import_list[i] && DEPRECATED_STREQ (name, objfile->import_list[i]))
-      return 1;
-  return 0;
 }
 
 

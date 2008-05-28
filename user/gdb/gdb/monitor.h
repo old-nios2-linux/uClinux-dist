@@ -1,13 +1,13 @@
 /* Definitions for remote debugging interface for ROM monitors.
-   Copyright 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000
-   Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support. Written by Rob Savoye for Cygnus.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef MONITOR_H
@@ -100,10 +98,11 @@ struct monitor_ops
        GDB with the value of a register.  */
     char *dump_registers;	/* Command to dump all regs at once */
     char *register_pattern;	/* Pattern that picks out register from reg dump */
-    void (*supply_register) (char *name, int namelen, char *val, int vallen);
+    void (*supply_register) (struct regcache *regcache, char *name,
+			     int namelen, char *val, int vallen);
     void (*load_routine) (struct serial *desc, char *file,
 			  int hashmark);	/* Download routine */
-    int (*dumpregs) (void);	/* routine to dump all registers */
+    int (*dumpregs) (struct regcache *);	/* Dump all registers */
     int (*continue_hook) (void);	/* Emit the continue command */
     int (*wait_filter) (char *buf,	/* Maybe contains registers */
 			int bufmax,
@@ -242,7 +241,8 @@ struct monitor_ops
 
 extern void monitor_open (char *args, struct monitor_ops *ops, int from_tty);
 extern void monitor_close (int quitting);
-extern char *monitor_supply_register (int regno, char *valstr);
+extern char *monitor_supply_register (struct regcache *regcache,
+				      int regno, char *valstr);
 extern int monitor_expect (char *prompt, char *buf, int buflen);
 extern int monitor_expect_prompt (char *buf, int buflen);
 /* Note: The variable argument functions monitor_printf and
@@ -255,6 +255,6 @@ extern void monitor_write (char *buf, int buflen);
 extern int monitor_readchar (void);
 extern char *monitor_get_dev_name (void);
 extern void init_monitor_ops (struct target_ops *);
-extern int monitor_dump_reg_block (char *dump_cmd);
+extern int monitor_dump_reg_block (struct regcache *regcache, char *dump_cmd);
 
 #endif

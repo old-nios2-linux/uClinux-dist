@@ -1,5 +1,5 @@
 /* Thread management interface, for the remote server for GDB.
-   Copyright 2002
+   Copyright (C) 2002, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 
@@ -27,23 +25,15 @@
 
 extern int debug_threads;
 
+static int thread_db_use_events;
+
 #ifdef HAVE_THREAD_DB_H
 #include <thread_db.h>
 #endif
 
-/* Correct for all GNU/Linux targets (for quite some time).  */
-#define GDB_GREGSET_T elf_gregset_t
-#define GDB_FPREGSET_T elf_fpregset_t
+#include "gdb_proc_service.h"
 
-#ifndef HAVE_ELF_FPREGSET_T
-/* Make sure we have said types.  Not all platforms bring in <linux/elf.h>
-   via <sys/procfs.h>.  */
-#ifdef HAVE_LINUX_ELF_H
-#include <linux/elf.h>
-#endif
-#endif
-
-#include "../gdb_proc_service.h"
+#include <stdint.h>
 
 /* Structure that identifies the child process for the
    <proc_service.h> interface.  */
@@ -52,6 +42,7 @@ static struct ps_prochandle proc_handle;
 /* Connection to the libthread_db library.  */
 static td_thragent_t *thread_agent;
 
+static int find_one_thread (int);
 static int find_new_threads_callback (const td_thrhandle_t *th_p, void *data);
 
 static char *
@@ -103,6 +94,10 @@ thread_db_err_str (td_err_e err)
       return "only part of register set was written/read";
     case TD_NOXREGS:
       return "X register set not available for this thread";
+#ifdef HAVE_TD_VERSION
+    case TD_VERSION:
+      return "version mismatch between libthread_db and libpthread";
+#endif
     default:
       snprintf (buf, sizeof (buf), "unknown thread_db error '%d'", err);
       return buf;
@@ -136,17 +131,15 @@ thread_db_state_str (td_thr_state_e state)
 }
 #endif
 
-static void
+static int
 thread_db_create_event (CORE_ADDR where)
 {
   td_event_msg_t msg;
   td_err_e err;
-  struct inferior_linux_data *tdata;
+  struct process_info *process;
 
   if (debug_threads)
     fprintf (stderr, "Thread creation event.\n");
-
-  tdata = inferior_target_data (current_inferior);
 
   /* FIXME: This assumes we don't get another event.
      In the LinuxThreads implementation, this is safe,
@@ -157,17 +150,28 @@ thread_db_create_event (CORE_ADDR where)
     fprintf (stderr, "thread getmsg err: %s\n",
 	     thread_db_err_str (err));
 
+  /* If we do not know about the main thread yet, this would be a good time to
+     find it.  We need to do this to pick up the main thread before any newly
+     created threads.  */
+  process = get_thread_process (current_inferior);
+  if (process->thread_known == 0)
+    find_one_thread (process->lwpid);
+
   /* msg.event == TD_EVENT_CREATE */
 
   find_new_threads_callback (msg.th_p, NULL);
+
+  return 0;
 }
 
 #if 0
-static void
+static int
 thread_db_death_event (CORE_ADDR where)
 {
   if (debug_threads)
     fprintf (stderr, "Thread death event.\n");
+
+  return 0;
 }
 #endif
 
@@ -226,6 +230,62 @@ thread_db_enable_reporting ()
   return 1;
 }
 
+static int
+find_one_thread (int lwpid)
+{
+  td_thrhandle_t th;
+  td_thrinfo_t ti;
+  td_err_e err;
+  struct thread_info *inferior;
+  struct process_info *process;
+
+  inferior = (struct thread_info *) find_inferior_id (&all_threads, lwpid);
+  process = get_thread_process (inferior);
+  if (process->thread_known)
+    return 1;
+
+  /* Get information about this thread.  */
+  err = td_ta_map_lwp2thr (thread_agent, process->lwpid, &th);
+  if (err != TD_OK)
+    error ("Cannot get thread handle for LWP %d: %s",
+	   lwpid, thread_db_err_str (err));
+
+  err = td_thr_get_info (&th, &ti);
+  if (err != TD_OK)
+    error ("Cannot get thread info for LWP %d: %s",
+	   lwpid, thread_db_err_str (err));
+
+  if (debug_threads)
+    fprintf (stderr, "Found thread %ld (LWP %d)\n",
+	     ti.ti_tid, ti.ti_lid);
+
+  if (process->lwpid != ti.ti_lid)
+    {
+      warning ("PID mismatch!  Expected %ld, got %ld",
+	       (long) process->lwpid, (long) ti.ti_lid);
+      return 0;
+    }
+
+  if (thread_db_use_events)
+    {
+      err = td_thr_event_enable (&th, 1);
+      if (err != TD_OK)
+	error ("Cannot enable thread event reporting for %d: %s",
+	       ti.ti_lid, thread_db_err_str (err));
+    }
+
+  /* If the new thread ID is zero, a final thread ID will be available
+     later.  Do not enable thread debugging yet.  */
+  if (ti.ti_tid == 0)
+    return 0;
+
+  process->thread_known = 1;
+  process->tid = ti.ti_tid;
+  process->th = th;
+
+  return 1;
+}
+
 static void
 maybe_attach_thread (const td_thrhandle_t *th_p, td_thrinfo_t *ti_p)
 {
@@ -233,31 +293,17 @@ maybe_attach_thread (const td_thrhandle_t *th_p, td_thrinfo_t *ti_p)
   struct thread_info *inferior;
   struct process_info *process;
 
-  /* If we are attaching to our first thread, things are a little
-     different.  */
-  if (all_threads.head == all_threads.tail)
-    {
-      inferior = (struct thread_info *) all_threads.head;
-      process = get_thread_process (inferior);
-      if (process->thread_known == 0)
-	{
-	  /* Switch to indexing the threads list by TID.  */
-	  change_inferior_id (&all_threads, ti_p->ti_tid);
-	  goto found;
-	}
-    }
-  
   inferior = (struct thread_info *) find_inferior_id (&all_threads,
-						      ti_p->ti_tid);
+						      ti_p->ti_lid);
   if (inferior != NULL)
     return;
 
   if (debug_threads)
     fprintf (stderr, "Attaching to thread %ld (LWP %d)\n",
 	     ti_p->ti_tid, ti_p->ti_lid);
-  linux_attach_lwp (ti_p->ti_lid, ti_p->ti_tid);
+  linux_attach_lwp (ti_p->ti_lid);
   inferior = (struct thread_info *) find_inferior_id (&all_threads,
-						      ti_p->ti_tid);
+						      ti_p->ti_lid);
   if (inferior == NULL)
     {
       warning ("Could not attach to thread %ld (LWP %d)\n",
@@ -267,17 +313,17 @@ maybe_attach_thread (const td_thrhandle_t *th_p, td_thrinfo_t *ti_p)
 
   process = inferior_target_data (inferior);
 
-found:
-  new_thread_notify (ti_p->ti_tid);
-
   process->tid = ti_p->ti_tid;
-  process->lwpid = ti_p->ti_lid;
-
   process->thread_known = 1;
-  err = td_thr_event_enable (th_p, 1);
-  if (err != TD_OK)
-    error ("Cannot enable thread event reporting for %d: %s",
-           ti_p->ti_lid, thread_db_err_str (err));
+  process->th = *th_p;
+
+  if (thread_db_use_events)
+    {
+      err = td_thr_event_enable (th_p, 1);
+      if (err != TD_OK)
+	error ("Cannot enable thread event reporting for %d: %s",
+	       ti_p->ti_lid, thread_db_err_str (err));
+    }
 }
 
 static int
@@ -304,6 +350,12 @@ thread_db_find_new_threads (void)
 {
   td_err_e err;
 
+  /* This function is only called when we first initialize thread_db.
+     First locate the initial thread.  If it is not ready for
+     debugging yet, then stop.  */
+  if (find_one_thread (all_threads.head->id) == 0)
+    return;
+
   /* Iterate over all user-space threads to discover new threads.  */
   err = td_ta_thr_iter (thread_agent, find_new_threads_callback, NULL,
 			TD_THR_ANY_STATE, TD_THR_LOWEST_PRIORITY,
@@ -328,7 +380,39 @@ thread_db_look_up_symbols (void)
 }
 
 int
-thread_db_init ()
+thread_db_get_tls_address (struct thread_info *thread, CORE_ADDR offset,
+			   CORE_ADDR load_module, CORE_ADDR *address)
+{
+#if HAVE_TD_THR_TLS_GET_ADDR
+  psaddr_t addr;
+  td_err_e err;
+  struct process_info *process;
+
+  process = get_thread_process (thread);
+  if (!process->thread_known)
+    find_one_thread (process->lwpid);
+  if (!process->thread_known)
+    return TD_NOTHR;
+
+  /* Note the cast through uintptr_t: this interface only works if
+     a target address fits in a psaddr_t, which is a host pointer.
+     So a 32-bit debugger can not access 64-bit TLS through this.  */
+  err = td_thr_tls_get_addr (&process->th, (psaddr_t) (uintptr_t) load_module,
+			     offset, &addr);
+  if (err == TD_OK)
+    {
+      *address = (CORE_ADDR) (uintptr_t) addr;
+      return 0;
+    }
+  else
+    return err;
+#else
+  return -1;
+#endif
+}
+
+int
+thread_db_init (int use_events)
 {
   int err;
 
@@ -344,6 +428,11 @@ thread_db_init ()
      process in the list is the thread group leader.  */
   proc_handle.pid = ((struct inferior_list_entry *)current_inferior)->id;
 
+  /* Allow new symbol lookups.  */
+  all_symbols_looked_up = 0;
+
+  thread_db_use_events = use_events;
+
   err = td_ta_new (&proc_handle, &thread_agent);
   switch (err)
     {
@@ -354,14 +443,16 @@ thread_db_init ()
     case TD_OK:
       /* The thread library was detected.  */
 
-      if (thread_db_enable_reporting () == 0)
+      if (use_events && thread_db_enable_reporting () == 0)
 	return 0;
       thread_db_find_new_threads ();
       thread_db_look_up_symbols ();
+      all_symbols_looked_up = 1;
       return 1;
 
     default:
-      warning ("error initializing thread_db library.");
+      warning ("error initializing thread_db library: %s",
+	       thread_db_err_str (err));
     }
 
   return 0;

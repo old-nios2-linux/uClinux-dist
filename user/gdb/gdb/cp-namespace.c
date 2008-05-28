@@ -1,5 +1,5 @@
 /* Helper routines for C++ support in GDB.
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by David Carlton and by Kealia, Inc.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "cp-support.h"
@@ -491,7 +489,7 @@ lookup_symbol_file (const char *name,
     }
   else
     {
-      sym = lookup_symbol_global (name, linkage_name, domain, symtab);
+      sym = lookup_symbol_global (name, linkage_name, block, domain, symtab);
     }
 
   if (sym != NULL)
@@ -552,7 +550,7 @@ cp_lookup_nested_type (struct type *parent_type,
       }
     default:
       internal_error (__FILE__, __LINE__,
-		      "cp_lookup_nested_type called on a non-aggregate type.");
+		      _("cp_lookup_nested_type called on a non-aggregate type."));
     }
 }
 
@@ -849,7 +847,7 @@ static void
 maintenance_cplus_namespace (char *args, int from_tty)
 {
   struct objfile *objfile;
-  printf_unfiltered ("Possible namespaces:\n");
+  printf_unfiltered (_("Possible namespaces:\n"));
   ALL_OBJFILES (objfile)
     {
       struct dict_iterator iter;
@@ -866,6 +864,6 @@ void
 _initialize_cp_namespace (void)
 {
   add_cmd ("namespace", class_maintenance, maintenance_cplus_namespace,
-	   "Print the list of possible C++ namespaces.",
+	   _("Print the list of possible C++ namespaces."),
 	   &maint_cplus_cmd_list);
 }

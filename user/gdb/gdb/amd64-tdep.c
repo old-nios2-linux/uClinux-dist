@@ -1,13 +1,15 @@
 /* Target-dependent code for AMD64.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
+
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -49,90 +49,34 @@
 
 /* Register information.  */
 
-struct amd64_register_info
+static const char *amd64_register_names[] = 
 {
-  char *name;
-  struct type **type;
-};
-
-static struct amd64_register_info amd64_register_info[] =
-{
-  { "rax", &builtin_type_int64 },
-  { "rbx", &builtin_type_int64 },
-  { "rcx", &builtin_type_int64 },
-  { "rdx", &builtin_type_int64 },
-  { "rsi", &builtin_type_int64 },
-  { "rdi", &builtin_type_int64 },
-  { "rbp", &builtin_type_void_data_ptr },
-  { "rsp", &builtin_type_void_data_ptr },
+  "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
 
   /* %r8 is indeed register number 8.  */
-  { "r8", &builtin_type_int64 },
-  { "r9", &builtin_type_int64 },
-  { "r10", &builtin_type_int64 },
-  { "r11", &builtin_type_int64 },
-  { "r12", &builtin_type_int64 },
-  { "r13", &builtin_type_int64 },
-  { "r14", &builtin_type_int64 },
-  { "r15", &builtin_type_int64 },
-  { "rip", &builtin_type_void_func_ptr },
-  { "eflags", &builtin_type_int32 },
-  { "cs", &builtin_type_int32 },
-  { "ss", &builtin_type_int32 },
-  { "ds", &builtin_type_int32 },
-  { "es", &builtin_type_int32 },
-  { "fs", &builtin_type_int32 },
-  { "gs", &builtin_type_int32 },
+  "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+  "rip", "eflags", "cs", "ss", "ds", "es", "fs", "gs",
 
   /* %st0 is register number 24.  */
-  { "st0", &builtin_type_i387_ext },
-  { "st1", &builtin_type_i387_ext },
-  { "st2", &builtin_type_i387_ext },
-  { "st3", &builtin_type_i387_ext },
-  { "st4", &builtin_type_i387_ext },
-  { "st5", &builtin_type_i387_ext },
-  { "st6", &builtin_type_i387_ext },
-  { "st7", &builtin_type_i387_ext },
-  { "fctrl", &builtin_type_int32 },
-  { "fstat", &builtin_type_int32 },
-  { "ftag", &builtin_type_int32 },
-  { "fiseg", &builtin_type_int32 },
-  { "fioff", &builtin_type_int32 },
-  { "foseg", &builtin_type_int32 },
-  { "fooff", &builtin_type_int32 },
-  { "fop", &builtin_type_int32 },
+  "st0", "st1", "st2", "st3", "st4", "st5", "st6", "st7",
+  "fctrl", "fstat", "ftag", "fiseg", "fioff", "foseg", "fooff", "fop",
 
   /* %xmm0 is register number 40.  */
-  { "xmm0", &builtin_type_v4sf },
-  { "xmm1", &builtin_type_v4sf },
-  { "xmm2", &builtin_type_v4sf },
-  { "xmm3", &builtin_type_v4sf },
-  { "xmm4", &builtin_type_v4sf },
-  { "xmm5", &builtin_type_v4sf },
-  { "xmm6", &builtin_type_v4sf },
-  { "xmm7", &builtin_type_v4sf },
-  { "xmm8", &builtin_type_v4sf },
-  { "xmm9", &builtin_type_v4sf },
-  { "xmm10", &builtin_type_v4sf },
-  { "xmm11", &builtin_type_v4sf },
-  { "xmm12", &builtin_type_v4sf },
-  { "xmm13", &builtin_type_v4sf },
-  { "xmm14", &builtin_type_v4sf },
-  { "xmm15", &builtin_type_v4sf },
-  { "mxcsr", &builtin_type_int32 }
+  "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+  "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
+  "mxcsr",
 };
 
 /* Total number of registers.  */
-#define AMD64_NUM_REGS \
-  (sizeof (amd64_register_info) / sizeof (amd64_register_info[0]))
+#define AMD64_NUM_REGS	ARRAY_SIZE (amd64_register_names)
 
 /* Return the name of register REGNUM.  */
 
-static const char *
-amd64_register_name (int regnum)
+const char *
+amd64_register_name (struct gdbarch *gdbarch, int regnum)
 {
   if (regnum >= 0 && regnum < AMD64_NUM_REGS)
-    return amd64_register_info[regnum].name;
+    return amd64_register_names[regnum];
 
   return NULL;
 }
@@ -140,12 +84,31 @@ amd64_register_name (int regnum)
 /* Return the GDB type object for the "standard" data type of data in
    register REGNUM. */
 
-static struct type *
+struct type *
 amd64_register_type (struct gdbarch *gdbarch, int regnum)
 {
-  gdb_assert (regnum >= 0 && regnum < AMD64_NUM_REGS);
+  if (regnum >= AMD64_RAX_REGNUM && regnum <= AMD64_RDI_REGNUM)
+    return builtin_type_int64;
+  if (regnum == AMD64_RBP_REGNUM || regnum == AMD64_RSP_REGNUM)
+    return builtin_type_void_data_ptr;
+  if (regnum >= AMD64_R8_REGNUM && regnum <= AMD64_R15_REGNUM)
+    return builtin_type_int64;
+  if (regnum == AMD64_RIP_REGNUM)
+    return builtin_type_void_func_ptr;
+  if (regnum == AMD64_EFLAGS_REGNUM)
+    return i386_eflags_type;
+  if (regnum >= AMD64_CS_REGNUM && regnum <= AMD64_GS_REGNUM)
+    return builtin_type_int32;
+  if (regnum >= AMD64_ST0_REGNUM && regnum <= AMD64_ST0_REGNUM + 7)
+    return builtin_type_i387_ext;
+  if (regnum >= AMD64_FCTRL_REGNUM && regnum <= AMD64_FCTRL_REGNUM + 7)
+    return builtin_type_int32;
+  if (regnum >= AMD64_XMM0_REGNUM && regnum <= AMD64_XMM0_REGNUM + 15)
+    return i386_sse_type (gdbarch);
+  if (regnum == AMD64_MXCSR_REGNUM)
+    return i386_mxcsr_type;
 
-  return *amd64_register_info[regnum].type;
+  internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
 
 /* DWARF Register Number Mapping as defined in the System V psABI,
@@ -186,7 +149,35 @@ static int amd64_dwarf_regmap[] =
   AMD64_ST0_REGNUM + 0, AMD64_ST0_REGNUM + 1,
   AMD64_ST0_REGNUM + 2, AMD64_ST0_REGNUM + 3,
   AMD64_ST0_REGNUM + 4, AMD64_ST0_REGNUM + 5,
-  AMD64_ST0_REGNUM + 6, AMD64_ST0_REGNUM + 7
+  AMD64_ST0_REGNUM + 6, AMD64_ST0_REGNUM + 7,
+  
+  /* Control and Status Flags Register.  */
+  AMD64_EFLAGS_REGNUM,
+
+  /* Selector Registers.  */
+  AMD64_ES_REGNUM,
+  AMD64_CS_REGNUM,
+  AMD64_SS_REGNUM,
+  AMD64_DS_REGNUM,
+  AMD64_FS_REGNUM,
+  AMD64_GS_REGNUM,
+  -1,
+  -1,
+
+  /* Segment Base Address Registers.  */
+  -1,
+  -1,
+  -1,
+  -1,
+
+  /* Special Selector Registers.  */
+  -1,
+  -1,
+
+  /* Floating Point Control Registers.  */
+  AMD64_MXCSR_REGNUM,
+  AMD64_FCTRL_REGNUM,
+  AMD64_FSTAT_REGNUM
 };
 
 static const int amd64_dwarf_regmap_len =
@@ -196,27 +187,19 @@ static const int amd64_dwarf_regmap_len =
    number used by GDB.  */
 
 static int
-amd64_dwarf_reg_to_regnum (int reg)
+amd64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   int regnum = -1;
 
-  if (reg >= 0 || reg < amd64_dwarf_regmap_len)
+  if (reg >= 0 && reg < amd64_dwarf_regmap_len)
     regnum = amd64_dwarf_regmap[reg];
 
   if (regnum == -1)
-    warning ("Unmapped DWARF Register #%d encountered\n", reg);
+    warning (_("Unmapped DWARF Register #%d encountered."), reg);
 
   return regnum;
 }
 
-/* Return nonzero if a value of type TYPE stored in register REGNUM
-   needs any special handling.  */
-
-static int
-amd64_convert_register_p (int regnum, struct type *type)
-{
-  return i386_fp_regnum_p (regnum);
-}
 
 
 /* Register classes as defined in the psABI.  */
@@ -375,20 +358,25 @@ amd64_classify (struct type *type, enum amd64_reg_class class[2])
      range types, used by languages such as Ada, are also in the INTEGER
      class.  */
   if ((code == TYPE_CODE_INT || code == TYPE_CODE_ENUM
-       || code == TYPE_CODE_RANGE
+       || code == TYPE_CODE_BOOL || code == TYPE_CODE_RANGE
+       || code == TYPE_CODE_CHAR
        || code == TYPE_CODE_PTR || code == TYPE_CODE_REF)
       && (len == 1 || len == 2 || len == 4 || len == 8))
     class[0] = AMD64_INTEGER;
 
-  /* Arguments of types float, double and __m64 are in class SSE.  */
-  else if (code == TYPE_CODE_FLT && (len == 4 || len == 8))
+  /* Arguments of types float, double, _Decimal32, _Decimal64 and __m64
+     are in class SSE.  */
+  else if ((code == TYPE_CODE_FLT || code == TYPE_CODE_DECFLOAT)
+	   && (len == 4 || len == 8))
     /* FIXME: __m64 .  */
     class[0] = AMD64_SSE;
 
-  /* Arguments of types __float128 and __m128 are split into two
-     halves.  The least significant ones belong to class SSE, the most
+  /* Arguments of types __float128, _Decimal128 and __m128 are split into
+     two halves.  The least significant ones belong to class SSE, the most
      significant one to class SSEUP.  */
-  /* FIXME: __float128, __m128.  */
+  else if (code == TYPE_CODE_DECFLOAT && len == 16)
+    /* FIXME: __float128, __m128.  */
+    class[0] = AMD64_SSE, class[1] = AMD64_SSEUP;
 
   /* The 64-bit mantissa of arguments of type long double belongs to
      class X87, the 16-bit exponent plus 6 bytes of padding belongs to
@@ -406,7 +394,7 @@ amd64_classify (struct type *type, enum amd64_reg_class class[2])
 static enum return_value_convention
 amd64_return_value (struct gdbarch *gdbarch, struct type *type,
 		    struct regcache *regcache,
-		    void *readbuf, const void *writebuf)
+		    gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   enum amd64_reg_class class[2];
   int len = TYPE_LENGTH (type);
@@ -503,10 +491,10 @@ amd64_return_value (struct gdbarch *gdbarch, struct type *type,
 
       if (readbuf)
 	regcache_raw_read_part (regcache, regnum, offset, min (len, 8),
-				(char *) readbuf + i * 8);
+				readbuf + i * 8);
       if (writebuf)
 	regcache_raw_write_part (regcache, regnum, offset, min (len, 8),
-				 (const char *) writebuf + i * 8);
+				 writebuf + i * 8);
     }
 
   return RETURN_VALUE_REGISTER_CONVENTION;
@@ -548,7 +536,7 @@ amd64_push_arguments (struct regcache *regcache, int nargs,
 
   for (i = 0; i < nargs; i++)
     {
-      struct type *type = VALUE_TYPE (args[i]);
+      struct type *type = value_type (args[i]);
       int len = TYPE_LENGTH (type);
       enum amd64_reg_class class[2];
       int needed_integer_regs = 0;
@@ -581,8 +569,8 @@ amd64_push_arguments (struct regcache *regcache, int nargs,
       else
 	{
 	  /* The argument will be passed in registers.  */
-	  char *valbuf = VALUE_CONTENTS (args[i]);
-	  char buf[8];
+	  const gdb_byte *valbuf = value_contents (args[i]);
+	  gdb_byte buf[8];
 
 	  gdb_assert (len <= 16);
 
@@ -629,8 +617,8 @@ amd64_push_arguments (struct regcache *regcache, int nargs,
   /* Write out the arguments to the stack.  */
   for (i = 0; i < num_stack_args; i++)
     {
-      struct type *type = VALUE_TYPE (stack_args[i]);
-      char *valbuf = VALUE_CONTENTS (stack_args[i]);
+      struct type *type = value_type (stack_args[i]);
+      const gdb_byte *valbuf = value_contents (stack_args[i]);
       int len = TYPE_LENGTH (type);
 
       write_memory (sp + element * 8, valbuf, len);
@@ -651,7 +639,7 @@ amd64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		       int nargs, struct value **args,	CORE_ADDR sp,
 		       int struct_return, CORE_ADDR struct_addr)
 {
-  char buf[8];
+  gdb_byte buf[8];
 
   /* Pass arguments.  */
   sp = amd64_push_arguments (regcache, nargs, args, sp, struct_return);
@@ -697,15 +685,12 @@ struct amd64_frame_cache
   int frameless_p;
 };
 
-/* Allocate and initialize a frame cache.  */
+/* Initialize a frame cache.  */
 
-static struct amd64_frame_cache *
-amd64_alloc_frame_cache (void)
+static void
+amd64_init_frame_cache (struct amd64_frame_cache *cache)
 {
-  struct amd64_frame_cache *cache;
   int i;
-
-  cache = FRAME_OBSTACK_ZALLOC (struct amd64_frame_cache);
 
   /* Base address.  */
   cache->base = 0;
@@ -720,7 +705,17 @@ amd64_alloc_frame_cache (void)
 
   /* Frameless until proven otherwise.  */
   cache->frameless_p = 1;
+}
 
+/* Allocate and initialize a frame cache.  */
+
+static struct amd64_frame_cache *
+amd64_alloc_frame_cache (void)
+{
+  struct amd64_frame_cache *cache;
+
+  cache = FRAME_OBSTACK_ZALLOC (struct amd64_frame_cache);
+  amd64_init_frame_cache (cache);
   return cache;
 }
 
@@ -740,9 +735,9 @@ static CORE_ADDR
 amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 			struct amd64_frame_cache *cache)
 {
-  static unsigned char proto[3] = { 0x48, 0x89, 0xe5 };
-  unsigned char buf[3];
-  unsigned char op;
+  static gdb_byte proto[3] = { 0x48, 0x89, 0xe5 }; /* movq %rsp, %rbp */
+  gdb_byte buf[3];
+  gdb_byte op;
 
   if (current_pc <= pc)
     return current_pc;
@@ -776,11 +771,12 @@ amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 /* Return PC of first real instruction.  */
 
 static CORE_ADDR
-amd64_skip_prologue (CORE_ADDR start_pc)
+amd64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   struct amd64_frame_cache cache;
   CORE_ADDR pc;
 
+  amd64_init_frame_cache (&cache);
   pc = amd64_analyze_prologue (start_pc, 0xffffffffffffffffLL, &cache);
   if (cache.frameless_p)
     return start_pc;
@@ -795,7 +791,7 @@ static struct amd64_frame_cache *
 amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache;
-  char buf[8];
+  gdb_byte buf[8];
   int i;
 
   if (*this_cache)
@@ -804,7 +800,7 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache = amd64_alloc_frame_cache ();
   *this_cache = cache;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
     amd64_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
 
@@ -862,14 +858,15 @@ static void
 amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 			   int regnum, int *optimizedp,
 			   enum lval_type *lvalp, CORE_ADDR *addrp,
-			   int *realnump, void *valuep)
+			   int *realnump, gdb_byte *valuep)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct amd64_frame_cache *cache =
     amd64_frame_cache (next_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
-  if (regnum == SP_REGNUM && cache->saved_sp)
+  if (regnum == gdbarch_sp_regnum (gdbarch) && cache->saved_sp)
     {
       *optimizedp = 0;
       *lvalp = not_lval;
@@ -893,13 +890,17 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  /* Read the value in from memory.  */
 	  read_memory (*addrp, valuep,
-		       register_size (current_gdbarch, regnum));
+		       register_size (gdbarch, regnum));
 	}
       return;
     }
 
-  frame_register_unwind (next_frame, regnum,
-			 optimizedp, lvalp, addrp, realnump, valuep);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (valuep)
+    frame_unwind_register (next_frame, (*realnump), valuep);
 }
 
 static const struct frame_unwind amd64_frame_unwind =
@@ -926,9 +927,9 @@ static struct amd64_frame_cache *
 amd64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
   CORE_ADDR addr;
-  char buf[8];
+  gdb_byte buf[8];
   int i;
 
   if (*this_cache)
@@ -965,7 +966,7 @@ amd64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 				    void **this_cache,
 				    int regnum, int *optimizedp,
 				    enum lval_type *lvalp, CORE_ADDR *addrp,
-				    int *realnump, void *valuep)
+				    int *realnump, gdb_byte *valuep)
 {
   /* Make sure we've initialized the cache.  */
   amd64_sigtramp_frame_cache (next_frame, this_cache);
@@ -1030,7 +1031,7 @@ static const struct frame_base amd64_frame_base =
 static struct frame_id
 amd64_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  char buf[8];
+  gdb_byte buf[8];
   CORE_ADDR fp;
 
   frame_unwind_register (next_frame, AMD64_RBP_REGNUM, buf);
@@ -1151,7 +1152,7 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_frame_align (gdbarch, amd64_frame_align);
   set_gdbarch_frame_red_zone_size (gdbarch, 128);
 
-  set_gdbarch_convert_register_p (gdbarch, amd64_convert_register_p);
+  set_gdbarch_convert_register_p (gdbarch, i387_convert_register_p);
   set_gdbarch_register_to_value (gdbarch, i387_register_to_value);
   set_gdbarch_value_to_register (gdbarch, i387_value_to_register);
 
@@ -1164,11 +1165,6 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->mm0_regnum = -1;
 
   set_gdbarch_unwind_dummy_id (gdbarch, amd64_unwind_dummy_id);
-
-  /* FIXME: kettenis/20021026: This is ELF-specific.  Fine for now,
-     since all supported AMD64 targets are ELF, but that might change
-     in the future.  */
-  set_gdbarch_in_solib_call_trampoline (gdbarch, in_plt_section);
 
   frame_unwind_append_sniffer (gdbarch, amd64_sigtramp_frame_sniffer);
   frame_unwind_append_sniffer (gdbarch, amd64_frame_sniffer);
@@ -1203,7 +1199,7 @@ amd64_supply_fxsave (struct regcache *regcache, int regnum,
 
   if (fxsave && gdbarch_ptr_bit (get_regcache_arch (regcache)) == 64)
     {
-      const char *regs = fxsave;
+      const gdb_byte *regs = fxsave;
 
       if (regnum == -1 || regnum == I387_FISEG_REGNUM)
 	regcache_raw_supply (regcache, I387_FISEG_REGNUM, regs + 12);
@@ -1221,7 +1217,7 @@ void
 amd64_collect_fxsave (const struct regcache *regcache, int regnum,
 		      void *fxsave)
 {
-  char *regs = fxsave;
+  gdb_byte *regs = fxsave;
 
   i387_collect_fxsave (regcache, regnum, fxsave);
 

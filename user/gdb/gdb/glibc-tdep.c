@@ -1,12 +1,12 @@
 /* Target-dependent code for the GNU C Library (glibc).
 
-   Copyright 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -90,8 +88,13 @@ glibc_skip_solib_resolver (struct gdbarch *gdbarch, CORE_ADDR pc)
 
   if (resolver)
     {
+      /* The dynamic linker began using this name in early 2005.  */
       struct minimal_symbol *fixup
-	= lookup_minimal_symbol ("fixup", NULL, objfile);
+	= lookup_minimal_symbol ("_dl_fixup", NULL, objfile);
+      
+      /* This is the name used in older versions.  */
+      if (! fixup)
+        fixup = lookup_minimal_symbol ("fixup", NULL, objfile);
 
       if (fixup && SYMBOL_VALUE_ADDRESS (fixup) == pc)
 	return frame_pc_unwind (get_current_frame ());

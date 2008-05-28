@@ -1,12 +1,12 @@
 /* Target-dependent code for FreeBSD/amd64.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -26,9 +24,11 @@
 #include "regcache.h"
 #include "osabi.h"
 
+#include "gdb_assert.h"
 #include "gdb_string.h"
 
 #include "amd64-tdep.h"
+#include "bsd-uthread.h"
 #include "solib-svr4.h"
 
 /* Support for signal handlers.  */
@@ -86,8 +86,8 @@ static int amd64fbsd_r_reg_offset[] =
 };
 
 /* Location of the signal trampoline.  */
-CORE_ADDR amd64fbsd_sigtramp_start_addr = 0x7fffffffffc0;
-CORE_ADDR amd64fbsd_sigtramp_end_addr = 0x7fffffffffe0;
+CORE_ADDR amd64fbsd_sigtramp_start_addr = 0x7fffffffffc0ULL;
+CORE_ADDR amd64fbsd_sigtramp_end_addr = 0x7fffffffffe0ULL;
 
 /* From <machine/signal.h>.  */
 int amd64fbsd_sc_reg_offset[] =
@@ -118,6 +118,68 @@ int amd64fbsd_sc_reg_offset[] =
   -1				/* %gs */
 };
 
+/* From /usr/src/lib/libc/amd64/gen/_setjmp.S.  */
+static int amd64fbsd_jmp_buf_reg_offset[] =
+{
+  -1,				/* %rax */
+  1 * 8,			/* %rbx */
+  -1,				/* %rcx */
+  -1,				/* %rdx */
+  -1,				/* %rsi */
+  -1,				/* %rdi */
+  3 * 8,			/* %rbp */
+  2 * 8,			/* %rsp */
+  -1,				/* %r8 ... */
+  -1,
+  -1,
+  -1,				/* ... %r11 */
+  4 * 8,			/* %r12 ... */
+  5 * 8,
+  6 * 8,
+  7 * 8,			/* ... %r15 */
+  0 * 8				/* %rip */
+};
+
+static void
+amd64fbsd_supply_uthread (struct regcache *regcache,
+			  int regnum, CORE_ADDR addr)
+{
+  gdb_byte buf[8];
+  int i;
+
+  gdb_assert (regnum >= -1);
+
+  for (i = 0; i < ARRAY_SIZE (amd64fbsd_jmp_buf_reg_offset); i++)
+    {
+      if (amd64fbsd_jmp_buf_reg_offset[i] != -1
+	  && (regnum == -1 || regnum == i))
+	{
+	  read_memory (addr + amd64fbsd_jmp_buf_reg_offset[i], buf, 8);
+	  regcache_raw_supply (regcache, i, buf);
+	}
+    }
+}
+
+static void
+amd64fbsd_collect_uthread (const struct regcache *regcache,
+			   int regnum, CORE_ADDR addr)
+{
+  gdb_byte buf[8];
+  int i;
+
+  gdb_assert (regnum >= -1);
+
+  for (i = 0; i < ARRAY_SIZE (amd64fbsd_jmp_buf_reg_offset); i++)
+    {
+      if (amd64fbsd_jmp_buf_reg_offset[i] != -1
+	  && (regnum == -1 || regnum == i))
+	{
+	  regcache_raw_collect (regcache, i, buf);
+	  write_memory (addr + amd64fbsd_jmp_buf_reg_offset[i], buf, 8);
+	}
+    }
+}
+
 void
 amd64fbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -137,6 +199,10 @@ amd64fbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sigcontext_addr = amd64fbsd_sigcontext_addr;
   tdep->sc_reg_offset = amd64fbsd_sc_reg_offset;
   tdep->sc_num_regs = ARRAY_SIZE (amd64fbsd_sc_reg_offset);
+
+  /* FreeBSD provides a user-level threads implementation.  */
+  bsd_uthread_set_supply_uthread (gdbarch, amd64fbsd_supply_uthread);
+  bsd_uthread_set_collect_uthread (gdbarch, amd64fbsd_collect_uthread);
 
   /* FreeBSD uses SVR4-style shared libraries.  */
   set_solib_svr4_fetch_link_map_offsets

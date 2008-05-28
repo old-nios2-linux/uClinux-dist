@@ -1,12 +1,15 @@
 /* Top level stuff for GDB, the GNU debugger.
-   Copyright 1999, 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
+
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "top.h"
@@ -28,6 +29,8 @@
 #include "event-top.h"
 #include "interps.h"
 #include <signal.h>
+#include "exceptions.h"
+#include "cli/cli-script.h"     /* for reset_command_nest_depth */
 
 /* For dont_repeat() */
 #include "gdbcmd.h"
@@ -45,14 +48,14 @@ static void command_line_handler_continuation (struct continuation_arg *arg);
 static void change_line_handler (void);
 static void change_annotation_level (void);
 static void command_handler (char *command);
-static void async_do_nothing (gdb_client_data arg);
-static void async_disconnect (gdb_client_data arg);
-static void async_stop_sig (gdb_client_data arg);
-static void async_float_handler (gdb_client_data arg);
 
 /* Signal handlers. */
+#ifdef SIGQUIT
 static void handle_sigquit (int sig);
+#endif
+#ifdef SIGHUP
 static void handle_sighup (int sig);
+#endif
 static void handle_sigfpe (int sig);
 #if defined(SIGWINCH) && defined(SIGWINCH_HANDLER)
 static void handle_sigwinch (int sig);
@@ -60,10 +63,16 @@ static void handle_sigwinch (int sig);
 
 /* Functions to be invoked by the event loop in response to
    signals. */
+#if defined (SIGQUIT) || defined (SIGHUP)
 static void async_do_nothing (gdb_client_data);
+#endif
+#ifdef SIGHUP
 static void async_disconnect (gdb_client_data);
+#endif
 static void async_float_handler (gdb_client_data);
+#ifdef STOP_SIGNAL
 static void async_stop_sig (gdb_client_data);
+#endif
 
 /* Readline offers an alternate interface, via callback
    functions. These are all included in the file callback.c in the
@@ -129,7 +138,9 @@ void *sigint_token;
 #ifdef SIGHUP
 void *sighup_token;
 #endif
+#ifdef SIGQUIT
 void *sigquit_token;
+#endif
 void *sigfpe_token;
 #if defined(SIGWINCH) && defined(SIGWINCH_HANDLER)
 void *sigwinch_token;
@@ -173,19 +184,20 @@ rl_callback_read_char_wrapper (gdb_client_data client_data)
 void
 cli_command_loop (void)
 {
-  int length;
-  char *a_prompt;
-  char *gdb_prompt = get_prompt ();
-
   /* If we are using readline, set things up and display the first
      prompt, otherwise just print the prompt. */
   if (async_command_editing_p)
     {
+      int length;
+      char *a_prompt;
+      char *gdb_prompt = get_prompt ();
+
       /* Tell readline what the prompt to display is and what function it
          will need to call after a whole line is read. This also displays
          the first prompt. */
-      length = strlen (PREFIX (0)) + strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
-      a_prompt = (char *) xmalloc (length);
+      length = strlen (PREFIX (0)) 
+	+ strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
+      a_prompt = (char *) alloca (length);
       strcpy (a_prompt, PREFIX (0));
       strcat (a_prompt, gdb_prompt);
       strcat (a_prompt, SUFFIX (0));
@@ -247,6 +259,9 @@ display_gdb_prompt (char *new_prompt)
 {
   int prompt_length = 0;
   char *gdb_prompt = get_prompt ();
+
+  /* Reset the nesting depth used when trace-commands is set.  */
+  reset_command_nest_depth ();
 
   /* Each interpreter has its own rules on displaying the command
      prompt.  */
@@ -321,7 +336,7 @@ change_annotation_level (void)
     {
       /* The prompt stack has not been initialized to "", we are
          using gdb w/o the --async switch */
-      warning ("Command has same effect as set annotate");
+      warning (_("Command has same effect as set annotate"));
       return;
     }
 
@@ -406,7 +421,7 @@ stdin_event_handler (int error, gdb_client_data client_data)
 {
   if (error)
     {
-      printf_unfiltered ("error detected on stdin\n");
+      printf_unfiltered (_("error detected on stdin\n"));
       delete_file_handler (input_fd);
       discard_all_continuations ();
       /* If stdin died, we may as well kill gdb. */
@@ -485,7 +500,10 @@ command_handler (char *command)
      but GDB is still alive. In such a case, we just quit gdb
      killing the inferior program too. */
   if (command == 0)
-    quit_command ((char *) 0, stdin == instream);
+    {
+      printf_unfiltered ("quit\n");
+      execute_command ("quit", stdin == instream);
+    }
 
   time_at_cmd_start = get_run_time ();
 
@@ -529,7 +547,7 @@ command_handler (char *command)
 	{
 	  long cmd_time = get_run_time () - time_at_cmd_start;
 
-	  printf_unfiltered ("Command execution time: %ld.%06ld\n",
+	  printf_unfiltered (_("Command execution time: %ld.%06ld\n"),
 			     cmd_time / 1000000, cmd_time % 1000000);
 	}
 
@@ -540,7 +558,7 @@ command_handler (char *command)
 	  long space_now = lim - lim_at_start;
 	  long space_diff = space_now - space_at_cmd_start;
 
-	  printf_unfiltered ("Space used: %ld (%c%ld for this command)\n",
+	  printf_unfiltered (_("Space used: %ld (%c%ld for this command)\n"),
 			     space_now,
 			     (space_diff >= 0 ? '+' : '-'),
 			     space_diff);
@@ -568,7 +586,7 @@ command_line_handler_continuation (struct continuation_arg *arg)
     {
       long cmd_time = get_run_time () - time_at_cmd_start;
 
-      printf_unfiltered ("Command execution time: %ld.%06ld\n",
+      printf_unfiltered (_("Command execution time: %ld.%06ld\n"),
 			 cmd_time / 1000000, cmd_time % 1000000);
     }
   if (display_space)
@@ -578,7 +596,7 @@ command_line_handler_continuation (struct continuation_arg *arg)
       long space_now = lim - lim_at_start;
       long space_diff = space_now - space_at_cmd_start;
 
-      printf_unfiltered ("Space used: %ld (%c%ld for this command)\n",
+      printf_unfiltered (_("Space used: %ld (%c%ld for this command)\n"),
 			 space_now,
 			 (space_diff >= 0 ? '+' : '-'),
 			 space_diff);
@@ -611,9 +629,9 @@ command_line_handler (char *rl)
 
   if (annotation_level > 1 && instream == stdin)
     {
-      printf_unfiltered ("\n\032\032post-");
+      printf_unfiltered (("\n\032\032post-"));
       puts_unfiltered (async_annotation_suffix);
-      printf_unfiltered ("\n");
+      printf_unfiltered (("\n"));
     }
 
   if (linebuffer == 0)
@@ -645,15 +663,7 @@ command_line_handler (char *rl)
   gdb_flush (gdb_stderr);
 
   if (source_file_name != NULL)
-    {
-      ++source_line_number;
-      sprintf (source_error,
-	       "%s%s:%d: Error in sourced command file:\n",
-	       source_pre_error,
-	       source_file_name,
-	       source_line_number);
-      error_pre_print = source_error;
-    }
+    ++source_line_number;
 
   /* If we are in this case, then command_handler will call quit 
      and exit from gdb. */
@@ -661,6 +671,7 @@ command_line_handler (char *rl)
     {
       got_eof = 1;
       command_handler (0);
+      return;			/* Lint. */
     }
   if (strlen (rl) + 1 + (p - linebuffer) > linelength)
     {
@@ -741,8 +752,8 @@ command_line_handler (char *rl)
 	    }
 	  strcpy (linebuffer, history_value);
 	  p = linebuffer + strlen (linebuffer);
-	  xfree (history_value);
 	}
+      xfree (history_value);
     }
 
   /* If we just got an empty line, and that is supposed
@@ -852,6 +863,7 @@ gdb_readline2 (gdb_client_data client_data)
 	    break;
 	  xfree (result);
 	  (*input_handler) (0);
+	  return;
 	}
 
       if (c == '\n')
@@ -892,6 +904,7 @@ async_init_signals (void)
   signal (SIGINT, handle_sigint);
   sigint_token =
     create_async_signal_handler (async_request_quit, NULL);
+  signal (SIGTERM, handle_sigterm);
 
   /* If SIGTRAP was set to SIG_IGN, then the SIG_IGN will get passed
      to the inferior and breakpoints will be ignored.  */
@@ -899,6 +912,7 @@ async_init_signals (void)
   signal (SIGTRAP, SIG_DFL);
 #endif
 
+#ifdef SIGQUIT
   /* If we initialize SIGQUIT to SIG_IGN, then the SIG_IGN will get
      passed to the inferior, which we don't want.  It would be
      possible to do a "signal (SIGQUIT, SIG_DFL)" after we fork, but
@@ -910,6 +924,7 @@ async_init_signals (void)
   signal (SIGQUIT, handle_sigquit);
   sigquit_token =
     create_async_signal_handler (async_do_nothing, NULL);
+#endif
 #ifdef SIGHUP
   if (signal (SIGHUP, handle_sighup) != SIG_IGN)
     sighup_token =
@@ -947,6 +962,13 @@ handle_sigint (int sig)
 {
   signal (sig, handle_sigint);
 
+  /* We could be running in a loop reading in symfiles or something so
+     it may be quite a while before we get back to the event loop.  So
+     set quit_flag to 1 here. Then if QUIT is called before we get to
+     the event loop, we will unwind as expected.  */
+
+  quit_flag = 1;
+
   /* If immediate_quit is set, we go ahead and process the SIGINT right
      away, even if we usually would defer this to the event loop. The
      assumption here is that it is safe to process ^C immediately if
@@ -962,14 +984,30 @@ handle_sigint (int sig)
     mark_async_signal_handler_wrapper (sigint_token);
 }
 
+/* Quit GDB if SIGTERM is received.
+   GDB would quit anyway, but this way it will clean up properly.  */
+void
+handle_sigterm (int sig)
+{
+  signal (sig, handle_sigterm);
+  quit_force ((char *) 0, stdin == instream);
+}
+
 /* Do the quit. All the checks have been done by the caller. */
 void
 async_request_quit (gdb_client_data arg)
 {
-  quit_flag = 1;
-  quit ();
+  /* If the quit_flag has gotten reset back to 0 by the time we get
+     back here, that means that an exception was thrown to unwind the
+     current command before we got back to the event loop.  So there
+     is no reason to call quit again here, unless immediate_quit is
+     set.*/
+
+  if (quit_flag || immediate_quit)
+    quit ();
 }
 
+#ifdef SIGQUIT
 /* Tell the event loop what to do if SIGQUIT is received. 
    See event-signal.c. */
 static void
@@ -978,13 +1016,17 @@ handle_sigquit (int sig)
   mark_async_signal_handler_wrapper (sigquit_token);
   signal (sig, handle_sigquit);
 }
+#endif
 
-/* Called by the event loop in response to a SIGQUIT. */
+#if defined (SIGQUIT) || defined (SIGHUP)
+/* Called by the event loop in response to a SIGQUIT or an
+   ignored SIGHUP.  */
 static void
 async_do_nothing (gdb_client_data arg)
 {
   /* Empty function body. */
 }
+#endif
 
 #ifdef SIGHUP
 /* Tell the event loop what to do if SIGHUP is received. 
@@ -1060,7 +1102,7 @@ async_float_handler (gdb_client_data arg)
 {
   /* This message is based on ANSI C, section 4.7. Note that integer
      divide by zero causes this, so "float" is a misnomer. */
-  error ("Erroneous arithmetic operation.");
+  error (_("Erroneous arithmetic operation."));
 }
 
 /* Tell the event loop what to do if SIGWINCH is received. 
@@ -1106,8 +1148,10 @@ gdb_setup_readline (void)
      that the sync setup is ALL done in gdb_init, and we would only
      mess it up here.  The sync stuff should really go away over
      time.  */
+  extern int batch_silent;
 
-  gdb_stdout = stdio_fileopen (stdout);
+  if (!batch_silent)
+    gdb_stdout = stdio_fileopen (stdout);
   gdb_stderr = stdio_fileopen (stderr);
   gdb_stdlog = gdb_stderr;  /* for moment */
   gdb_stdtarg = gdb_stderr; /* for moment */

@@ -19,8 +19,7 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include "../include/linux/netfilter_ipv4/ipt_CLUSTERIP.h"
 
-static void
-help(void)
+static void CLUSTERIP_help(void)
 {
 	printf(
 "CLUSTERIP target v%s options:\n"
@@ -44,20 +43,15 @@ IPTABLES_VERSION);
 #define PARAM_LOCALNODE	0x0010
 #define PARAM_HASHINIT	0x0020
 
-static struct option opts[] = {
-	{ "new", 0, 0, '1' },
-	{ "hashmode", 1, 0, '2' },
-	{ "clustermac", 1, 0, '3' },
-	{ "total-nodes", 1, 0, '4' },
-	{ "local-node", 1, 0, '5' },
-	{ "hash-init", 1, 0, '6' },
-	{ 0 }
+static const struct option CLUSTERIP_opts[] = {
+	{ "new", 0, NULL, '1' },
+	{ "hashmode", 1, NULL, '2' },
+	{ "clustermac", 1, NULL, '3' },
+	{ "total-nodes", 1, NULL, '4' },
+	{ "local-node", 1, NULL, '5' },
+	{ "hash-init", 1, NULL, '6' },
+	{ }
 };
-
-static void
-init(struct ipt_entry_target *t, unsigned int *nfcache)
-{
-}
 
 static void
 parse_mac(const char *mac, char *macbuf)
@@ -83,10 +77,8 @@ parse_mac(const char *mac, char *macbuf)
 	}
 }
 
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      struct ipt_entry_target **target)
+static int CLUSTERIP_parse(int c, char **argv, int invert, unsigned int *flags,
+                           const void *entry, struct xt_entry_target **target)
 {
 	struct ipt_clusterip_tgt_info *cipinfo
 		= (struct ipt_clusterip_tgt_info *)(*target)->data;
@@ -163,8 +155,7 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-static void
-final_check(unsigned int flags)
+static void CLUSTERIP_check(unsigned int flags)
 {
 	if (flags == 0)
 		return;
@@ -206,10 +197,8 @@ static char *mac2str(const u_int8_t mac[ETH_ALEN])
 			
 
 /* Prints out the targinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_target *target,
-      int numeric)
+static void CLUSTERIP_print(const void *ip,
+                            const struct xt_entry_target *target, int numeric)
 {
 	const struct ipt_clusterip_tgt_info *cipinfo =
 		(const struct ipt_clusterip_tgt_info *)target->data;
@@ -228,8 +217,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_targinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
+static void CLUSTERIP_save(const void *ip, const struct xt_entry_target *target)
 {
 	const struct ipt_clusterip_tgt_info *cipinfo =
 		(const struct ipt_clusterip_tgt_info *)target->data;
@@ -247,22 +235,20 @@ save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
 	       cipinfo->hash_initval);
 }
 
-static struct iptables_target clusterip = { 
-	.next		= NULL,
+static struct iptables_target clusterip_target = {
 	.name		= "CLUSTERIP",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_clusterip_tgt_info)),
 	.userspacesize	= offsetof(struct ipt_clusterip_tgt_info, config),
- 	.help		= &help,
-	.init		= &init,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+ 	.help		= CLUSTERIP_help,
+	.parse		= CLUSTERIP_parse,
+	.final_check	= CLUSTERIP_check,
+	.print		= CLUSTERIP_print,
+	.save		= CLUSTERIP_save,
+	.extra_opts	= CLUSTERIP_opts,
 };
 
 void _init(void)
 {
-	register_target(&clusterip);
+	register_target(&clusterip_target);
 }

@@ -1,5 +1,8 @@
 /* Output generating routines for GDB.
-   Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
+
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
+
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
 
@@ -7,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef UI_OUT_H
 #define UI_OUT_H 1
@@ -123,7 +124,8 @@ extern void ui_out_field_stream (struct ui_out *uiout, const char *fldname,
 				 struct ui_stream *buf);
 
 extern void ui_out_field_fmt (struct ui_out *uiout, const char *fldname,
-			      const char *format, ...);
+			      const char *format, ...)
+     ATTR_FORMAT (printf, 3, 4);
 
 extern void ui_out_field_skip (struct ui_out *uiout, const char *fldname);
 
@@ -132,7 +134,8 @@ extern void ui_out_spaces (struct ui_out *uiout, int numspaces);
 extern void ui_out_text (struct ui_out *uiout, const char *string);
 
 extern void ui_out_message (struct ui_out *uiout, int verbosity,
-			    const char *format, ...);
+			    const char *format, ...)
+     ATTR_FORMAT (printf, 3, 4);
 
 extern struct ui_stream *ui_out_stream_new (struct ui_out *uiout);
 
@@ -223,12 +226,13 @@ typedef void (field_fmt_ftype) (struct ui_out * uiout, int fldno, int width,
 				enum ui_align align,
 				const char *fldname,
 				const char *format,
-				va_list args);
+				va_list args) ATTRIBUTE_FPTR_PRINTF(6,0);
 typedef void (spaces_ftype) (struct ui_out * uiout, int numspaces);
 typedef void (text_ftype) (struct ui_out * uiout,
 			   const char *string);
 typedef void (message_ftype) (struct ui_out * uiout, int verbosity,
-			      const char *format, va_list args);
+			      const char *format, va_list args)
+     ATTRIBUTE_FPTR_PRINTF(3,0);
 typedef void (wrap_hint_ftype) (struct ui_out * uiout, char *identstring);
 typedef void (flush_ftype) (struct ui_out * uiout);
 typedef int (redirect_ftype) (struct ui_out * uiout,

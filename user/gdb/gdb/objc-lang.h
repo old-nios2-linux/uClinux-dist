@@ -1,12 +1,12 @@
 /* Objective-C language support definitions for GDB, the GNU debugger.
 
-   Copyright 1992 Free Software Foundation, Inc.
+   Copyright (C) 1992, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined(OBJC_LANG_H)
 #define OBJC_LANG_H
@@ -30,13 +28,6 @@ struct block;
 extern int objc_parse (void);		/* Defined in c-exp.y */
 
 extern void objc_error (char *);	/* Defined in c-exp.y */
-
-extern int c_val_print (struct type *, char *, int, 
-			CORE_ADDR, struct ui_file *, int,
-			int, int, enum val_prettyprint);
-
-extern int c_value_print (struct value *, struct ui_file *, 
-			  int, enum val_prettyprint);
 
 extern CORE_ADDR lookup_objc_class     (char *classname);
 extern CORE_ADDR lookup_child_selector (char *methodname);

@@ -1,13 +1,13 @@
 /* Generic serial interface routines
 
-   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include <ctype.h>
@@ -184,15 +182,21 @@ serial_open (const char *name)
 
   if (strcmp (name, "pc") == 0)
     ops = serial_interface_lookup ("pc");
-  else if (strchr (name, ':'))
-    ops = serial_interface_lookup ("tcp");
   else if (strncmp (name, "lpt", 3) == 0)
     ops = serial_interface_lookup ("parallel");
   else if (strncmp (name, "|", 1) == 0)
     {
       ops = serial_interface_lookup ("pipe");
-      open_name = name + 1; /* discard ``|'' */
+      /* Discard ``|'' and any space before the command itself.  */
+      ++open_name;
+      while (isspace (*open_name))
+	++open_name;
     }
+  /* Check for a colon, suggesting an IP address/port pair.
+     Do this *after* checking for all the interesting prefixes.  We
+     don't want to constrain the syntax of what can follow them.  */
+  else if (strchr (name, ':'))
+    ops = serial_interface_lookup ("tcp");
   else
     ops = serial_interface_lookup ("hardwire");
 
@@ -205,8 +209,10 @@ serial_open (const char *name)
 
   scb->bufcnt = 0;
   scb->bufp = scb->buf;
+  scb->error_fd = -1;
 
-  if (scb->ops->open (scb, open_name))
+  /* `...->open (...)' would get expanded by an the open(2) syscall macro.  */
+  if ((*scb->ops->open) (scb, open_name))
     {
       xfree (scb);
       return NULL;
@@ -233,6 +239,22 @@ serial_open (const char *name)
   return scb;
 }
 
+/* Return the open serial device for FD, if found, or NULL if FD
+   is not already opened.  */
+
+struct serial *
+serial_for_fd (int fd)
+{
+  struct serial *scb;
+  struct serial_ops *ops;
+
+  for (scb = scb_base; scb; scb = scb->next)
+    if (scb->fd == fd)
+      return scb;
+
+  return NULL;
+}
+
 struct serial *
 serial_fdopen (const int fd)
 {
@@ -246,12 +268,14 @@ serial_fdopen (const int fd)
 	return scb;
       }
 
-  ops = serial_interface_lookup ("hardwire");
+  ops = serial_interface_lookup ("terminal");
+  if (!ops)
+    ops = serial_interface_lookup ("hardwire");
 
   if (!ops)
     return NULL;
 
-  scb = XMALLOC (struct serial);
+  scb = XCALLOC (1, struct serial);
 
   scb->ops = ops;
 
@@ -347,7 +371,7 @@ serial_readchar (struct serial *scb, int timeout)
      code is finished. */
   if (0 && serial_is_async_p (scb) && timeout < 0)
     internal_error (__FILE__, __LINE__,
-		    "serial_readchar: blocking read in async mode");
+		    _("serial_readchar: blocking read in async mode"));
 
   ch = scb->ops->readchar (scb, timeout);
   if (serial_logfp != NULL)
@@ -491,12 +515,12 @@ serial_async (struct serial *scb,
 	      serial_event_ftype *handler,
 	      void *context)
 {
-  /* Only change mode if there is a need. */
-  if ((scb->async_handler == NULL)
-      != (handler == NULL))
-    scb->ops->async (scb, handler != NULL);
+  int changed = ((scb->async_handler == NULL) != (handler == NULL));
   scb->async_handler = handler;
   scb->async_context = context;
+  /* Only change mode if there is a need.  */
+  if (changed)
+    scb->ops->async (scb, handler != NULL);
 }
 
 int
@@ -507,7 +531,7 @@ deprecated_serial_fd (struct serial *scb)
   if (scb->fd < 0)
     {
       internal_error (__FILE__, __LINE__,
-		      "serial: FD not valid");
+		      _("serial: FD not valid"));
     }
   return scb->fd; /* sigh */
 }
@@ -524,6 +548,26 @@ serial_debug_p (struct serial *scb)
   return scb->debug_p || global_serial_debug_p;
 }
 
+#ifdef USE_WIN32API
+void
+serial_wait_handle (struct serial *scb, HANDLE *read, HANDLE *except)
+{
+  if (scb->ops->wait_handle)
+    scb->ops->wait_handle (scb, read, except);
+  else
+    {
+      *read = (HANDLE) _get_osfhandle (scb->fd);
+      *except = NULL;
+    }
+}
+
+void
+serial_done_wait_handle (struct serial *scb)
+{
+  if (scb->ops->done_wait_handle)
+    scb->ops->done_wait_handle (scb);
+}
+#endif
 
 #if 0
 /* The connect command is #if 0 because I hadn't thought of an elegant
@@ -597,7 +641,7 @@ connect_command (char *args, int fromtty)
 		break;
 
 	      if (c < 0)
-		perror_with_name ("connect");
+		perror_with_name (_("connect"));
 
 	      cx = c;
 	      serial_write (port_desc, &cx, 1);
@@ -635,7 +679,7 @@ connect_command (char *args, int fromtty)
 		break;
 
 	      if (c < 0)
-		perror_with_name ("connect");
+		perror_with_name (_("connect"));
 
 	      cx = c;
 
@@ -669,45 +713,46 @@ void
 _initialize_serial (void)
 {
 #if 0
-  add_com ("connect", class_obscure, connect_command,
-	   "Connect the terminal directly up to the command monitor.\n\
-Use <CR>~. or <CR>~^D to break out.");
+  add_com ("connect", class_obscure, connect_command, _("\
+Connect the terminal directly up to the command monitor.\n\
+Use <CR>~. or <CR>~^D to break out."));
 #endif /* 0 */
 
-  add_prefix_cmd ("serial", class_maintenance, serial_set_cmd, "\
-Set default serial/parallel port configuration.",
+  add_prefix_cmd ("serial", class_maintenance, serial_set_cmd, _("\
+Set default serial/parallel port configuration."),
 		  &serial_set_cmdlist, "set serial ",
 		  0/*allow-unknown*/,
 		  &setlist);
 
-  add_prefix_cmd ("serial", class_maintenance, serial_show_cmd, "\
-Show default serial/parallel port configuration.",
+  add_prefix_cmd ("serial", class_maintenance, serial_show_cmd, _("\
+Show default serial/parallel port configuration."),
 		  &serial_show_cmdlist, "show serial ",
 		  0/*allow-unknown*/,
 		  &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("remotelogfile", no_class,
-		  var_filename, (char *) &serial_logfile,
-		  "Set filename for remote session recording.\n\
+  add_setshow_filename_cmd ("remotelogfile", no_class, &serial_logfile, _("\
+Set filename for remote session recording."), _("\
+Show filename for remote session recording."), _("\
 This file is used to record the remote session for future playback\n\
-by gdbserver.",
-		  &setlist),
-     &showlist);
+by gdbserver."),
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_enum_cmd ("remotelogbase", no_class,
-		       logbase_enums, &serial_logbase,
-		       "Set numerical base for remote session logging",
-		       &setlist),
-     &showlist);
+  add_setshow_enum_cmd ("remotelogbase", no_class, logbase_enums,
+			&serial_logbase, _("\
+Set numerical base for remote session logging"), _("\
+Show numerical base for remote session logging"), NULL,
+			NULL,
+			NULL, /* FIXME: i18n: */
+			&setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("serial",
-		  class_maintenance,
-		  var_zinteger,
-		  (char *)&global_serial_debug_p,
-		  "Set serial debugging.\n\
-When non-zero, serial port debugging is enabled.", &setdebuglist),
-     &showdebuglist);
+  add_setshow_zinteger_cmd ("serial", class_maintenance,
+			    &global_serial_debug_p, _("\
+Set serial debugging."), _("\
+Show serial debugging."), _("\
+When non-zero, serial port debugging is enabled."),
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setdebuglist, &showdebuglist);
 }

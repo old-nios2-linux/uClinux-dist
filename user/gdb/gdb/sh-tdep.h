@@ -1,12 +1,12 @@
 /* Target-specific definition for a Renesas Super-H.
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SH_TDEP_H
 #define SH_TDEP_H
@@ -41,6 +39,7 @@ enum
     FPUL_REGNUM = 23,
     /* Floating point registers */
     FPSCR_REGNUM = 24,
+    FR0_REGNUM = 25,
     FLOAT_ARG0_REGNUM = 29,
     FLOAT_ARGLAST_REGNUM = 36,
     FP_LAST_REGNUM = 40,
@@ -84,6 +83,6 @@ enum
   };
 
 extern gdbarch_init_ftype sh64_gdbarch_init;
-extern void sh64_show_regs (void);
+extern void sh64_show_regs (struct frame_info *);
 
 #endif /* SH_TDEP_H */

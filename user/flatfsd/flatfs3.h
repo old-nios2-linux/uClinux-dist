@@ -17,7 +17,7 @@
  *	Magic numbers used in flat file-system.
  */
 #define	FLATFS_MAGIC_V3		0xcafe4567
-
+#define	FLATFS_MAGIC_V4		0xcafe4568
 
 /*
  * Flat file-system header structure. The version 1/2 file entry header
@@ -30,6 +30,14 @@ struct flathdr3 {
 	unsigned int	tstamp;
 };
 
+struct flatent2 {
+	unsigned int	length;
+	unsigned int	mode;
+	unsigned int	uid;
+	unsigned int	gid;
+	unsigned int	atime;
+	unsigned int	mtime;
+};
 
 extern unsigned int flat3_gethdr(void);
 extern int flat3_checkfs(void);

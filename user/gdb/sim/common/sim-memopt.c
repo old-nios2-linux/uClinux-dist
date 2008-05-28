@@ -1,22 +1,21 @@
 /* Simulator memory option handling.
-   Copyright (C) 1996-1999 Free Software Foundation, Inc.
+   Copyright (C) 1996-1999, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "cconfig.h"
 
@@ -90,8 +89,8 @@ static const OPTION memory_options[] =
       memory_option_handler },
 
   { {"memory-size", required_argument, NULL, OPTION_MEMORY_SIZE },
-      '\0', "SIZE", "Add memory at address zero",
-      memory_option_handler },
+      '\0', "<size>[in bytes, Kb (k suffix), Mb (m suffix) or Gb (g suffix)]",
+     "Add memory at address zero", memory_option_handler },
 
   { {"memory-fill", required_argument, NULL, OPTION_MEMORY_FILL },
       '\0', "VALUE", "Fill subsequently added memory regions",
@@ -286,11 +285,28 @@ parse_size (char *chp,
 	    address_word *nr_bytes,
 	    unsigned *modulo)
 {
-  /* <nr_bytes> [ "%" <modulo> ] */
+  /* <nr_bytes>[K|M|G] [ "%" <modulo> ] */
   *nr_bytes = strtoul (chp, &chp, 0);
-  if (*chp == '%')
+  switch (*chp)
     {
+    case '%':
       *modulo = strtoul (chp + 1, &chp, 0);
+      break;
+    case 'g': case 'G': /* Gigabyte suffix.  */
+      *nr_bytes <<= 10;
+      /* Fall through.  */
+    case 'm': case 'M': /* Megabyte suffix.  */
+      *nr_bytes <<= 10;
+      /* Fall through.  */
+    case 'k': case 'K': /* Kilobyte suffix.  */
+      *nr_bytes <<= 10;
+      /* Check for a modulo specifier after the suffix.  */
+      ++ chp;
+      if (* chp == 'b' || * chp == 'B')
+	++ chp;
+      if (* chp == '%')
+	*modulo = strtoul (chp + 1, &chp, 0);
+      break;
     }
   return chp;
 }

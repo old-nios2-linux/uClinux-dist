@@ -1,11 +1,12 @@
-/* Common target dependent code for GDB on Alpha systems running BSD.
-   Copyright 2002 Free Software Foundation, Inc.
+/* Common target dependent code for Alpha BSD's.
+
+   Copyright (C) 2002, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,20 +15,26 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef ALPHABSD_TDEP_H
 #define ALPHABSD_TDEP_H
 
-void alphabsd_supply_reg (char *, int);
-void alphabsd_fill_reg (char *, int);
+struct regcache;
 
-void alphabsd_supply_fpreg (char *, int);
-void alphabsd_fill_fpreg (char *, int);
+void alphabsd_supply_reg (struct regcache *, const char *, int);
+void alphabsd_fill_reg (const struct regcache *, char *, int);
 
-#define SIZEOF_STRUCT_REG	(32 * 8)
-#define SIZEOF_STRUCT_FPREG	(33 * 8)
+void alphabsd_supply_fpreg (struct regcache *, const char *, int);
+void alphabsd_fill_fpreg (const struct regcache *, char *, int);
+
 
-#endif /* ALPHABSD_TDEP_H */
+/* Functions exported from alphanbsd-tdep.c.  */
+
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
+extern const struct regset *
+  alphanbsd_regset_from_core_section (struct gdbarch *gdbarch,
+				      const char *sect_name, size_t len);
+
+#endif /* alphabsd-tdep.h */

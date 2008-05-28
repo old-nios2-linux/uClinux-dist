@@ -1,6 +1,6 @@
 /* MI Command Set for GDB, the GNU debugger.
 
-   Copyright 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "top.h"
@@ -53,11 +51,7 @@ struct mi_cmd mi_cmds[] =
   { "data-read-memory", { NULL, 0 }, 0, mi_cmd_data_read_memory},
   { "data-write-memory", { NULL, 0 }, 0, mi_cmd_data_write_memory},
   { "data-write-register-values", { NULL, 0 }, 0, mi_cmd_data_write_register_values},
-  { "display-delete", { NULL, 0 }, NULL, NULL },
-  { "display-disable", { NULL, 0 }, NULL, NULL },
-  { "display-enable", { NULL, 0 }, NULL, NULL },
-  { "display-insert", { NULL, 0 }, NULL, NULL },
-  { "display-list", { NULL, 0 }, NULL, NULL },
+  { "enable-timings", { NULL, 0 }, 0, mi_cmd_enable_timings},
   { "environment-cd", { NULL, 0 }, 0, mi_cmd_env_cd},
   { "environment-directory", { NULL, 0 }, 0, mi_cmd_env_dir},
   { "environment-path", { NULL, 0 }, 0, mi_cmd_env_path},
@@ -91,11 +85,10 @@ struct mi_cmd mi_cmds[] =
   { "gdb-show", { "show", 1 }, NULL, NULL },
   { "gdb-source", { NULL, 0 }, NULL, NULL },
   { "gdb-version", { "show version", 0 }, 0 },
+  { "inferior-tty-set", { NULL, 0 }, NULL, mi_cmd_inferior_tty_set},
+  { "inferior-tty-show", { NULL, 0 }, NULL, mi_cmd_inferior_tty_show},
   { "interpreter-exec", { NULL, 0 }, 0, mi_cmd_interpreter_exec},
-  { "kod-info", { NULL, 0 }, NULL, NULL },
-  { "kod-list", { NULL, 0 }, NULL, NULL },
-  { "kod-list-object-types", { NULL, 0 }, NULL, NULL },
-  { "kod-show", { NULL, 0 }, NULL, NULL },
+  { "list-features", { NULL, 0 }, 0, mi_cmd_list_features},
   { "overlay-auto", { NULL, 0 }, NULL, NULL },
   { "overlay-list-mapping-state", { NULL, 0 }, NULL, NULL },
   { "overlay-list-overlays", { NULL, 0 }, NULL, NULL },
@@ -107,7 +100,7 @@ struct mi_cmd mi_cmds[] =
   { "signal-list-handle-actions", { NULL, 0 }, NULL, NULL },
   { "signal-list-signal-types", { NULL, 0 }, NULL, NULL },
   { "stack-info-depth", { NULL, 0 }, 0, mi_cmd_stack_info_depth},
-  { "stack-info-frame", { NULL, 0 }, NULL, NULL },
+  { "stack-info-frame", { NULL, 0 }, 0, mi_cmd_stack_info_frame},
   { "stack-list-arguments", { NULL, 0 }, 0, mi_cmd_stack_list_args},
   { "stack-list-exception-handlers", { NULL, 0 }, NULL, NULL },
   { "stack-list-frames", { NULL, 0 }, 0, mi_cmd_stack_list_frames},
@@ -130,6 +123,9 @@ struct mi_cmd mi_cmds[] =
   { "target-disconnect", { "disconnect", 0 }, 0 },
   { "target-download", { NULL, 0 }, mi_cmd_target_download},
   { "target-exec-status", { NULL, 0 }, NULL, NULL },
+  { "target-file-delete", { NULL, 0 }, NULL, mi_cmd_target_file_delete },
+  { "target-file-get", { NULL, 0 }, NULL, mi_cmd_target_file_get },
+  { "target-file-put", { NULL, 0 }, NULL, mi_cmd_target_file_put },
   { "target-list-available-targets", { NULL, 0 }, NULL, NULL },
   { "target-list-current-targets", { NULL, 0 }, NULL, NULL },
   { "target-list-parameters", { NULL, 0 }, NULL, NULL },
@@ -157,11 +153,14 @@ struct mi_cmd mi_cmds[] =
   { "var-create", { NULL, 0 }, 0, mi_cmd_var_create},
   { "var-delete", { NULL, 0 }, 0, mi_cmd_var_delete},
   { "var-evaluate-expression", { NULL, 0 }, 0, mi_cmd_var_evaluate_expression},
+  { "var-info-path-expression", { NULL, 0 }, 0, 
+    mi_cmd_var_info_path_expression},
   { "var-info-expression", { NULL, 0 }, 0, mi_cmd_var_info_expression},
   { "var-info-num-children", { NULL, 0 }, 0, mi_cmd_var_info_num_children},
   { "var-info-type", { NULL, 0 }, 0, mi_cmd_var_info_type},
   { "var-list-children", { NULL, 0 }, 0, mi_cmd_var_list_children},
   { "var-set-format", { NULL, 0 }, 0, mi_cmd_var_set_format},
+  { "var-set-frozen", { NULL, 0 }, 0, mi_cmd_var_set_frozen},
   { "var-show-attributes", { NULL, 0 }, 0, mi_cmd_var_show_attributes},
   { "var-show-format", { NULL, 0 }, 0, mi_cmd_var_show_format},
   { "var-update", { NULL, 0 }, 0, mi_cmd_var_update},
@@ -241,7 +240,7 @@ build_table (struct mi_cmd *commands)
       struct mi_cmd **entry = lookup_table (command->name);
       if (*entry)
 	internal_error (__FILE__, __LINE__,
-			"command `%s' appears to be duplicated",
+			_("command `%s' appears to be duplicated"),
 			command->name);
       *entry = command;
       if (0)

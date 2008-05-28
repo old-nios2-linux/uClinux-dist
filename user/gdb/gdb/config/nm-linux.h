@@ -1,12 +1,13 @@
 /* Native support for GNU/Linux.
 
-   Copyright 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,40 +16,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 struct target_ops;
-
-/* GNU/Linux is SVR4-ish but its /proc file system isn't.  */
-#undef USE_PROC_FS
-
-/* Since we're building a native debugger, we can include <signal.h>
-   to find the range of real-time signals.  */
-
-#include <signal.h>
-
-#ifdef __SIGRTMIN
-#define REALTIME_LO	__SIGRTMIN
-#define REALTIME_HI	(__SIGRTMAX + 1)
-#endif
-
-/* We define this if link.h is available, because with ELF we use SVR4
-   style shared libraries.  */
-
-#ifdef HAVE_LINK_H
-#include "solib.h"             /* Support for shared libraries.  */
-#endif
-
-
-/* Override child_wait in `inftarg.c'.  */
-struct target_waitstatus;
-extern ptid_t child_wait (ptid_t ptid, struct target_waitstatus *ourstatus);
-#define CHILD_WAIT
-
-extern void lin_lwp_attach_lwp (ptid_t ptid, int verbose);
-#define ATTACH_LWP(ptid, verbose) lin_lwp_attach_lwp ((ptid), (verbose))
 
 extern void lin_thread_get_thread_signals (sigset_t *mask);
 #define GET_THREAD_SIGNALS(mask) lin_thread_get_thread_signals (mask)
@@ -58,17 +28,3 @@ extern void lin_thread_get_thread_signals (sigset_t *mask);
 
 #define GDB_GREGSET_T  elf_gregset_t
 #define GDB_FPREGSET_T elf_fpregset_t
-
-/* Override child_pid_to_exec_file in 'inftarg.c'.  */
-#define CHILD_PID_TO_EXEC_FILE
-
-#define CHILD_INSERT_FORK_CATCHPOINT
-#define CHILD_INSERT_VFORK_CATCHPOINT
-#define CHILD_INSERT_EXEC_CATCHPOINT
-#define CHILD_POST_STARTUP_INFERIOR
-#define CHILD_POST_ATTACH
-#define CHILD_FOLLOW_FORK
-#define DEPRECATED_KILL_INFERIOR
-
-#define NATIVE_XFER_AUXV	procfs_xfer_auxv
-#include "auxv.h"		/* Declares it. */

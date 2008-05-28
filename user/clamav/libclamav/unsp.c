@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2006 aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -142,9 +144,9 @@ uint32_t unspack(char *start_of_stuff, char *dest, cli_ctx *ctx, uint32_t rva, u
   i = allocsz;
   c = (tre+i)&0xff;
   tablesz = ((0x300<<c)+0x736)*sizeof(uint16_t);
-  if(ctx->limits && ctx->limits->maxfilesize && tablesz > ctx->limits->maxfilesize) {
+
+  if(cli_checklimits("nspack", ctx, tablesz, 0, 0)!=CL_CLEAN)
     return 1; /* Should be ~15KB, if it's so big it's prolly just not nspacked */
-  }
     
   cli_dbgmsg("unsp: table size = %d\n", tablesz);
   if (!(table = cli_malloc(tablesz))) return 1;
@@ -353,7 +355,7 @@ uint32_t very_real_unpack(uint16_t *table, uint32_t tablesz, uint32_t tre, uint3
       if (!CLI_ISCONTAINED(dst, dsize, &dst[unpacked_so_far], backsize) ||
 	  !CLI_ISCONTAINED(dst, dsize, &dst[unpacked_so_far - backbytes], backsize)
 	  ) {
-	cli_dbgmsg("%x %x %x %x\n", dst, dsize, &dst[unpacked_so_far], backsize);
+	cli_dbgmsg("%p %x %p %x\n", dst, dsize, &dst[unpacked_so_far], backsize);
 	return 1;
       }
       

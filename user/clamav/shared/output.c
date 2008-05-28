@@ -79,7 +79,7 @@ pthread_mutex_t logg_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 FILE *logg_fd = NULL;
 
-short int logg_verbose = 0, logg_lock = 1, logg_time = 0, logg_foreground = 1;
+short int logg_verbose = 0, logg_nowarn = 0, logg_lock = 1, logg_time = 0, logg_foreground = 1;
 unsigned int logg_size = 0;
 const char *logg_file = NULL;
 #if defined(USE_SYSLOG) && !defined(C_AIX)
@@ -87,7 +87,7 @@ short logg_syslog;
 #endif
 
 short int mprintf_disabled = 0, mprintf_verbose = 0, mprintf_quiet = 0,
-	  mprintf_stdout = 0;
+	  mprintf_stdout = 0, mprintf_nowarn = 0;
 
 int mdprintf(int desc, const char *str, ...)
 {
@@ -202,7 +202,8 @@ int logg(const char *str, ...)
 	    if(*vbuff == '!') {
 		fprintf(logg_fd, "ERROR: %s", vbuff + 1);
 	    } else if(*vbuff == '^') {
-		fprintf(logg_fd, "WARNING: %s", vbuff + 1);
+		if(!logg_nowarn)
+		    fprintf(logg_fd, "WARNING: %s", vbuff + 1);
 	    } else if(*vbuff == '*') {
 		if(logg_verbose)
 		    fprintf(logg_fd, "%s", vbuff + 1);
@@ -220,7 +221,8 @@ int logg(const char *str, ...)
 	if(vbuff[0] == '!') {
 	    syslog(LOG_ERR, "%s", vbuff + 1);
 	} else if(vbuff[0] == '^') {
-	    syslog(LOG_WARNING, "%s", vbuff + 1);
+	    if(!logg_nowarn)
+		syslog(LOG_WARNING, "%s", vbuff + 1);
 	} else if(vbuff[0] == '*') {
 	    if(logg_verbose) {
 		syslog(LOG_DEBUG, "%s", vbuff + 1);
@@ -285,9 +287,11 @@ void mprintf(const char *str, ...)
 	fprintf(fd, "ERROR: %s", &buff[1]);
     } else if(!mprintf_quiet) {
 	if(buff[0] == '^') {
-	    if(!mprintf_stdout)
-		fd = stderr;
-	    fprintf(fd, "WARNING: %s", &buff[1]);
+	    if(!mprintf_nowarn) {
+		if(!mprintf_stdout)
+		    fd = stderr;
+		fprintf(fd, "WARNING: %s", &buff[1]);
+	    }
 	} else if(buff[0] == '*') {
 	    if(mprintf_verbose)
 		fprintf(fd, "%s", &buff[1]);

@@ -1,12 +1,12 @@
 /* TUI Interpreter definitions for GDB, the GNU debugger.
 
-   Copyright 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "interps.h"
@@ -31,8 +29,10 @@
 #include "tui/tui-win.h"
 #include "tui/tui.h"
 #include "tui/tui-io.h"
+#include "exceptions.h"
 
-/* Set to 1 when the TUI mode must be activated when we first start gdb.  */
+/* Set to 1 when the TUI mode must be activated when we first start
+   gdb.  */
 static int tui_start_enabled = 0;
 
 /* Cleanup the tui before exiting.  */
@@ -40,8 +40,8 @@ static int tui_start_enabled = 0;
 static void
 tui_exit (void)
 {
-  /* Disable the tui.  Curses mode is left leaving the screen
-     in a clean state (see endwin()).  */
+  /* Disable the tui.  Curses mode is left leaving the screen in a
+     clean state (see endwin()).  */
   tui_disable ();
 }
 
@@ -56,6 +56,7 @@ tui_init (void)
   tui_initialize_static_data ();
 
   tui_initialize_io ();
+  tui_initialize_win ();
   tui_initialize_readline ();
 
   return NULL;
@@ -66,8 +67,9 @@ tui_resume (void *data)
 {
   struct ui_file *stream;
 
-  /* gdb_setup_readline will change gdb_stdout.  If the TUI was previously
-     writing to gdb_stdout, then set it to the new gdb_stdout afterwards.  */
+  /* gdb_setup_readline will change gdb_stdout.  If the TUI was
+     previously writing to gdb_stdout, then set it to the new
+     gdb_stdout afterwards.  */
 
   stream = cli_out_set_stream (tui_old_uiout, gdb_stdout);
   if (stream != gdb_stdout)
@@ -105,10 +107,10 @@ tui_display_prompt_p (void *data)
     return 1;
 }
 
-static int
+static struct gdb_exception
 tui_exec (void *data, const char *command_str)
 {
-  internal_error (__FILE__, __LINE__, "tui_exec called");
+  internal_error (__FILE__, __LINE__, _("tui_exec called"));
 }
 
 
@@ -118,19 +120,20 @@ tui_exec (void *data, const char *command_str)
 static void
 tui_command_loop (void *data)
 {
-  int length;
-  char *a_prompt;
-  char *gdb_prompt = get_prompt ();
-
   /* If we are using readline, set things up and display the first
      prompt, otherwise just print the prompt.  */
   if (async_command_editing_p)
     {
+      int length;
+      char *a_prompt;
+      char *gdb_prompt = get_prompt ();
+
       /* Tell readline what the prompt to display is and what function
          it will need to call after a whole line is read. This also
          displays the first prompt.  */
-      length = strlen (PREFIX (0)) + strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
-      a_prompt = (char *) xmalloc (length);
+      length = strlen (PREFIX (0)) 
+	+ strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
+      a_prompt = (char *) alloca (length);
       strcpy (a_prompt, PREFIX (0));
       strcat (a_prompt, gdb_prompt);
       strcat (a_prompt, SUFFIX (0));
@@ -196,15 +199,15 @@ _initialize_tui_interp (void)
   };
   struct interp *tui_interp;
 
-  /* Create a default uiout builder for the TUI. */
+  /* Create a default uiout builder for the TUI.  */
   tui_out = tui_out_new (gdb_stdout);
-  interp_add (interp_new ("tui", NULL, tui_out, &procs));
-  if (interpreter_p && strcmp (interpreter_p, "tui") == 0)
+  interp_add (interp_new (INTERP_TUI, NULL, tui_out, &procs));
+  if (interpreter_p && strcmp (interpreter_p, INTERP_TUI) == 0)
     tui_start_enabled = 1;
 
   if (interpreter_p && strcmp (interpreter_p, INTERP_CONSOLE) == 0)
     {
       xfree (interpreter_p);
-      interpreter_p = xstrdup ("tui");
+      interpreter_p = xstrdup (INTERP_TUI);
     }
 }

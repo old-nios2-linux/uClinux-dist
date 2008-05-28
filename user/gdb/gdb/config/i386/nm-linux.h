@@ -1,13 +1,13 @@
 /* Native support for GNU/Linux x86.
 
-   Copyright 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef NM_LINUX_H
 #define NM_LINUX_H
@@ -29,20 +27,6 @@
 #include "i386/nm-i386.h"
 #include "config/nm-linux.h"
 
-/* Support for the user area.  */
-
-/* Return the size of the user struct.  */
-extern int kernel_u_size (void);
-#define KERNEL_U_SIZE kernel_u_size()
-
-/* This is the amount to substract from u.u_ar0 to get the offset in
-   the core file of the register values.  */
-#define KERNEL_U_ADDR 0
-
-extern CORE_ADDR register_u_addr (CORE_ADDR blockend, int regnum);
-#define REGISTER_U_ADDR(addr, blockend, regnum) \
-  (addr) = register_u_addr (blockend, regnum)
-
 /* Provide access to the i386 hardware debugging registers.  */
 
 extern void i386_linux_dr_set_control (unsigned long control);
@@ -62,33 +46,9 @@ extern unsigned long i386_linux_dr_get_status (void);
   i386_linux_dr_get_status ()
 
 
-/* Override copies of {fetch,store}_inferior_registers in `infptrace.c'.  */
-#define FETCH_INFERIOR_REGISTERS
-
-/* Nevertheless, define CANNOT_{FETCH,STORE}_REGISTER, because we
-   might fall back on the code `infptrace.c' (well a copy of that code
-   in `i386-linux-nat.c' for now) and we can access only the
-   general-purpose registers in that way.  */
-extern int cannot_fetch_register (int regno);
-extern int cannot_store_register (int regno);
-#define CANNOT_FETCH_REGISTER(regno) cannot_fetch_register (regno)
-#define CANNOT_STORE_REGISTER(regno) cannot_store_register (regno)
-
 #ifdef HAVE_PTRACE_GETFPXREGS
 /* Include register set support for the SSE registers.  */
 #define FILL_FPXREGSET
 #endif
-
-/* Override child_resume in `infptrace.c'.  */
-#define DEPRECATED_CHILD_RESUME
-
-/* `linux-nat.c' and `i386-nat.c' have their own versions of
-   child_post_startup_inferior.  Define this to use the copy in
-   `i386-linux-nat.c' instead, which calls both.
-   
-   NOTE drow/2003-08-17: This is ugly beyond words, but properly
-   fixing it will require some serious surgery.  Ideally the target
-   stack could be used for this.  */
-#define LINUX_CHILD_POST_STARTUP_INFERIOR
 
 #endif /* nm-linux.h */

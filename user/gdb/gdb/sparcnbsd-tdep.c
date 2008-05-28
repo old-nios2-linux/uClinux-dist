@@ -1,13 +1,14 @@
 /* Target-dependent code for NetBSD/sparc.
 
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,15 +17,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "floatformat.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "gdbcore.h"
+#include "gdbtypes.h"
 #include "osabi.h"
 #include "regcache.h"
 #include "regset.h"
@@ -37,6 +36,11 @@
 
 #include "sparc-tdep.h"
 #include "nbsd-tdep.h"
+
+/* Macros to extract fields from SPARC instructions.  */
+#define X_RS1(i) (((i) >> 14) & 0x1f)
+#define X_RS2(i) ((i) & 0x1f)
+#define X_I(i) (((i) >> 13) & 1)
 
 const struct sparc_gregset sparc32nbsd_gregset =
 {
@@ -224,7 +228,7 @@ sparc32nbsd_sigcontext_frame_prev_register (struct frame_info *next_frame,
 					    int regnum, int *optimizedp,
 					    enum lval_type *lvalp,
 					    CORE_ADDR *addrp,
-					    int *realnump, void *valuep)
+					    int *realnump, gdb_byte *valuep)
 {
   struct sparc_frame_cache *cache =
     sparc32nbsd_sigcontext_frame_cache (next_frame, this_cache);
@@ -256,14 +260,27 @@ sparc32nbsd_sigtramp_frame_sniffer (struct frame_info *next_frame)
   return NULL;
 }
 
+/* Return the address of a system call's alternative return
+   address.  */
 
-/* Return non-zero if we are in a shared library trampoline code stub.  */
-
-static int
-sparcnbsd_aout_in_solib_call_trampoline (CORE_ADDR pc, char *name)
+CORE_ADDR
+sparcnbsd_step_trap (struct frame_info *frame, unsigned long insn)
 {
-  return (name && !strcmp (name, "_DYNAMIC"));
+  if ((X_I (insn) == 0 && X_RS1 (insn) == 0 && X_RS2 (insn) == 0)
+      || (X_I (insn) == 1 && X_RS1 (insn) == 0 && (insn & 0x7f) == 0))
+    {
+      /* "New" system call.  */
+      ULONGEST number = get_frame_register_unsigned (frame, SPARC_G1_REGNUM);
+
+      if (number & 0x400)
+	return get_frame_register_unsigned (frame, SPARC_G2_REGNUM);
+      if (number & 0x800)
+	return get_frame_register_unsigned (frame, SPARC_G7_REGNUM);
+    }
+
+  return 0;
 }
+
 
 static void
 sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
@@ -272,13 +289,16 @@ sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* NetBSD doesn't support the 128-bit `long double' from the psABI.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   tdep->gregset = regset_alloc (gdbarch, sparc32nbsd_supply_gregset, NULL);
   tdep->sizeof_gregset = 20 * 4;
 
   tdep->fpregset = regset_alloc (gdbarch, sparc32nbsd_supply_fpregset, NULL);
   tdep->sizeof_fpregset = 33 * 4;
+
+  /* Make sure we can single-step "new" syscalls.  */
+  tdep->step_trap = sparcnbsd_step_trap;
 
   frame_unwind_append_sniffer (gdbarch, sparc32nbsd_sigtramp_frame_sniffer);
 }
@@ -287,12 +307,9 @@ static void
 sparc32nbsd_aout_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   sparc32nbsd_init_abi (info, gdbarch);
-
-  set_gdbarch_in_solib_call_trampoline
-    (gdbarch, sparcnbsd_aout_in_solib_call_trampoline);
 }
 
-static void
+void
 sparc32nbsd_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   sparc32nbsd_init_abi (info, gdbarch);

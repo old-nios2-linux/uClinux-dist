@@ -1,22 +1,24 @@
 /* Support for memory-mapped windows into a BFD.
-   Copyright 1995, 1996, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 2001, 2002, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Cygnus Support.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "sysdep.h"
 
@@ -144,7 +146,6 @@ bfd_get_file_window (bfd *abfd,
       file_ptr file_offset, offset2;
       size_t real_size;
       int fd;
-      FILE *f;
 
       /* Find the real file and the real offset into it.  */
       while (abfd->my_archive != NULL)
@@ -152,8 +153,13 @@ bfd_get_file_window (bfd *abfd,
 	  offset += abfd->origin;
 	  abfd = abfd->my_archive;
 	}
-      f = bfd_cache_lookup (abfd);
-      fd = fileno (f);
+
+      /* Seek into the file, to ensure it is open if cacheable.  */
+      if (abfd->iostream == NULL
+	  && (abfd->iovec == NULL
+	      || abfd->iovec->bseek (abfd, offset, SEEK_SET) != 0))
+	return FALSE;
+      fd = fileno ((FILE *) abfd->iostream);
 
       /* Compute offsets and size for mmap and for the user's data.  */
       offset2 = offset % pagesize;
@@ -218,16 +224,16 @@ bfd_get_file_window (bfd *abfd,
   if (debug_windows)
     fprintf (stderr, "\n\t%s(%6ld)",
 	     i->data ? "realloc" : " malloc", (long) size_to_alloc);
-  i->data = bfd_realloc (i->data, size_to_alloc);
+  i->data = bfd_realloc_or_free (i->data, size_to_alloc);
   if (debug_windows)
     fprintf (stderr, "\t-> %p\n", i->data);
-  i->refcount = 1;
   if (i->data == NULL)
     {
       if (size_to_alloc == 0)
 	return TRUE;
       return FALSE;
     }
+  i->refcount = 1;
   if (bfd_seek (abfd, offset, SEEK_SET) != 0)
     return FALSE;
   i->size = bfd_bread (i->data, size, abfd);

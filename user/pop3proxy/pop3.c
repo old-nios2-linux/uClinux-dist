@@ -40,6 +40,7 @@
 #include <wait.h>
 
 #if defined (__linux__)
+#  include <linux/types.h>
 #  include <linux/netfilter_ipv4.h>
 #endif
 

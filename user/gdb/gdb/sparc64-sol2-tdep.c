@@ -1,12 +1,12 @@
 /* Target-dependent code for Solaris UltraSPARC.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -30,6 +28,7 @@
 
 #include "gdb_assert.h"
 
+#include "sol2-tdep.h"
 #include "sparc64-tdep.h"
 #include "solib-svr4.h"
 
@@ -119,7 +118,7 @@ sparc64_sol2_sigtramp_frame_prev_register (struct frame_info *next_frame,
 					   int regnum, int *optimizedp,
 					   enum lval_type *lvalp,
 					   CORE_ADDR *addrp,
-					   int *realnump, void *valuep)
+					   int *realnump, gdb_byte *valuep)
 {
   struct sparc_frame_cache *cache =
     sparc64_sol2_sigtramp_frame_cache (next_frame, this_cache);
@@ -158,9 +157,19 @@ sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   sparc64_init_abi (info, gdbarch);
 
+  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop, SunPRO)
+     compiler puts out 0 instead of the address in N_SO stabs.  Starting with
+     SunPRO 3.0, the compiler does this for N_FUN stabs too.  */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
+  /* The Sun compilers also do "globalization"; see the comment in
+     sparc_sol2_static_transform_name for more information.  */
+  set_gdbarch_static_transform_name
+    (gdbarch, sparc_sol2_static_transform_name);
+
   /* Solaris has SVR4-style shared libraries...  */
-  set_gdbarch_in_solib_call_trampoline (gdbarch, in_plt_section);
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
+  set_gdbarch_skip_solib_resolver (gdbarch, sol2_skip_solib_resolver);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_lp64_fetch_link_map_offsets);
 

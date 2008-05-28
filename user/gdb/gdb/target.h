@@ -1,7 +1,8 @@
 /* Interface between GDB and target environments, including files and processes
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -9,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (TARGET_H)
 #define TARGET_H
@@ -29,6 +28,8 @@ struct objfile;
 struct ui_file;
 struct mem_attrib;
 struct target_ops;
+struct bp_target_info;
+struct regcache;
 
 /* This include file defines the interface between the main part
    of the debugger, and the part which is target-specific, or
@@ -53,6 +54,7 @@ struct target_ops;
 #include "symtab.h"
 #include "dcache.h"
 #include "memattr.h"
+#include "vec.h"
 
 enum strata
   {
@@ -178,82 +180,102 @@ extern char *target_signal_to_name (enum target_signal);
 /* Given a name (SIGHUP, etc.), return its signal.  */
 enum target_signal target_signal_from_name (char *);
 
-/* Request the transfer of up to LEN 8-bit bytes of the target's
-   OBJECT.  The OFFSET, for a seekable object, specifies the starting
-   point.  The ANNEX can be used to provide additional data-specific
-   information to the target.
-
-   Return the number of bytes actually transfered, zero when no
-   further transfer is possible, and -1 when the transfer is not
-   supported.
-
-   NOTE: cagney/2003-10-17: The current interface does not support a
-   "retry" mechanism.  Instead it assumes that at least one byte will
-   be transfered on each call.
-
-   NOTE: cagney/2003-10-17: The current interface can lead to
-   fragmented transfers.  Lower target levels should not implement
-   hacks, such as enlarging the transfer, in an attempt to compensate
-   for this.  Instead, the target stack should be extended so that it
-   implements supply/collect methods and a look-aside object cache.
-   With that available, the lowest target can safely and freely "push"
-   data up the stack.
-
-   NOTE: cagney/2003-10-17: Unlike the old query and the memory
-   transfer mechanisms, these methods are explicitly parameterized by
-   the target that it should be applied to.
-
-   NOTE: cagney/2003-10-17: Just like the old query and memory xfer
-   methods, these new methods perform partial transfers.  The only
-   difference is that these new methods thought to include "partial"
-   in the name.  The old code's failure to do this lead to much
-   confusion and duplication of effort as each target object attempted
-   to locally take responsibility for something it didn't have to
-   worry about.
-
-   NOTE: cagney/2003-10-17: With a TARGET_OBJECT_KOD object, for
-   backward compatibility with the "target_query" method that this
-   replaced, when OFFSET and LEN are both zero, return the "minimum"
-   buffer size.  See "remote.c" for further information.  */
+/* Target objects which can be transfered using target_read,
+   target_write, et cetera.  */
 
 enum target_object
 {
-  /* Kernel Object Display transfer.  See "kod.c" and "remote.c".  */
-  TARGET_OBJECT_KOD,
   /* AVR target specific transfer.  See "avr-tdep.c" and "remote.c".  */
   TARGET_OBJECT_AVR,
+  /* SPU target specific transfer.  See "spu-tdep.c".  */
+  TARGET_OBJECT_SPU,
   /* Transfer up-to LEN bytes of memory starting at OFFSET.  */
   TARGET_OBJECT_MEMORY,
+  /* Memory, avoiding GDB's data cache and trusting the executable.
+     Target implementations of to_xfer_partial never need to handle
+     this object, and most callers should not use it.  */
+  TARGET_OBJECT_RAW_MEMORY,
   /* Kernel Unwind Table.  See "ia64-tdep.c".  */
   TARGET_OBJECT_UNWIND_TABLE,
   /* Transfer auxilliary vector.  */
   TARGET_OBJECT_AUXV,
   /* StackGhost cookie.  See "sparc-tdep.c".  */
-  TARGET_OBJECT_WCOOKIE
-
+  TARGET_OBJECT_WCOOKIE,
+  /* Target memory map in XML format.  */
+  TARGET_OBJECT_MEMORY_MAP,
+  /* Flash memory.  This object can be used to write contents to
+     a previously erased flash memory.  Using it without erasing
+     flash can have unexpected results.  Addresses are physical
+     address on target, and not relative to flash start.  */
+  TARGET_OBJECT_FLASH,
+  /* Available target-specific features, e.g. registers and coprocessors.
+     See "target-descriptions.c".  ANNEX should never be empty.  */
+  TARGET_OBJECT_AVAILABLE_FEATURES,
+  /* Currently loaded libraries, in XML format.  */
+  TARGET_OBJECT_LIBRARIES
   /* Possible future objects: TARGET_OBJECT_FILE, TARGET_OBJECT_PROC, ... */
 };
 
-extern LONGEST target_read_partial (struct target_ops *ops,
-				    enum target_object object,
-				    const char *annex, void *buf,
-				    ULONGEST offset, LONGEST len);
+/* Request that OPS transfer up to LEN 8-bit bytes of the target's
+   OBJECT.  The OFFSET, for a seekable object, specifies the
+   starting point.  The ANNEX can be used to provide additional
+   data-specific information to the target.
 
-extern LONGEST target_write_partial (struct target_ops *ops,
-				     enum target_object object,
-				     const char *annex, const void *buf,
-				     ULONGEST offset, LONGEST len);
+   Return the number of bytes actually transfered, or -1 if the
+   transfer is not supported or otherwise fails.  Return of a positive
+   value less than LEN indicates that no further transfer is possible.
+   Unlike the raw to_xfer_partial interface, callers of these
+   functions do not need to retry partial transfers.  */
 
-/* Wrappers to perform the full transfer.  */
 extern LONGEST target_read (struct target_ops *ops,
 			    enum target_object object,
-			    const char *annex, void *buf,
+			    const char *annex, gdb_byte *buf,
 			    ULONGEST offset, LONGEST len);
 
 extern LONGEST target_write (struct target_ops *ops,
 			     enum target_object object,
-			     const char *annex, const void *buf,
+			     const char *annex, const gdb_byte *buf,
 			     ULONGEST offset, LONGEST len);
+
+/* Similar to target_write, except that it also calls PROGRESS with
+   the number of bytes written and the opaque BATON after every
+   successful partial write (and before the first write).  This is
+   useful for progress reporting and user interaction while writing
+   data.  To abort the transfer, the progress callback can throw an
+   exception.  */
+
+LONGEST target_write_with_progress (struct target_ops *ops,
+				    enum target_object object,
+				    const char *annex, const gdb_byte *buf,
+				    ULONGEST offset, LONGEST len,
+				    void (*progress) (ULONGEST, void *),
+				    void *baton);
+
+/* Wrapper to perform a full read of unknown size.  OBJECT/ANNEX will
+   be read using OPS.  The return value will be -1 if the transfer
+   fails or is not supported; 0 if the object is empty; or the length
+   of the object otherwise.  If a positive value is returned, a
+   sufficiently large buffer will be allocated using xmalloc and
+   returned in *BUF_P containing the contents of the object.
+
+   This method should be used for objects sufficiently small to store
+   in a single xmalloc'd buffer, when no fixed bound on the object's
+   size is known in advance.  Don't try to read TARGET_OBJECT_MEMORY
+   through this function.  */
+
+extern LONGEST target_read_alloc (struct target_ops *ops,
+				  enum target_object object,
+				  const char *annex, gdb_byte **buf_p);
+
+/* Read OBJECT/ANNEX using OPS.  The result is NUL-terminated and
+   returned as a string, allocated using xmalloc.  If an error occurs
+   or the transfer is unsupported, NULL is returned.  Empty objects
+   are returned as allocated but empty strings.  A warning is issued
+   if the result contains any embedded NUL bytes.  */
+
+extern char *target_read_stralloc (struct target_ops *ops,
+				   enum target_object object,
+				   const char *annex);
 
 /* Wrappers to target read/write that perform memory transfers.  They
    throw an error if the memory transfer fails.
@@ -263,7 +285,7 @@ extern LONGEST target_write (struct target_ops *ops,
    which in turn lifted it from read_memory.  */
 
 extern void get_target_memory (struct target_ops *ops, CORE_ADDR addr,
-			       void *buf, LONGEST len);
+			       gdb_byte *buf, LONGEST len);
 extern ULONGEST get_target_memory_unsigned (struct target_ops *ops,
 					    CORE_ADDR addr, int len);
 
@@ -301,12 +323,12 @@ struct target_ops
     void (*to_attach) (char *, int);
     void (*to_post_attach) (int);
     void (*to_detach) (char *, int);
-    void (*to_disconnect) (char *, int);
+    void (*to_disconnect) (struct target_ops *, char *, int);
     void (*to_resume) (ptid_t, int, enum target_signal);
     ptid_t (*to_wait) (ptid_t, struct target_waitstatus *);
-    void (*to_fetch_registers) (int);
-    void (*to_store_registers) (int);
-    void (*to_prepare_to_store) (void);
+    void (*to_fetch_registers) (struct regcache *, int);
+    void (*to_store_registers) (struct regcache *, int);
+    void (*to_prepare_to_store) (struct regcache *);
 
     /* Transfer LEN bytes of memory between GDB address MYADDR and
        target address MEMADDR.  If WRITE, transfer them to the target, else
@@ -329,23 +351,24 @@ struct target_ops
        NOTE: cagney/2004-10-01: This has been entirely superseeded by
        to_xfer_partial and inferior inheritance.  */
 
-    int (*deprecated_xfer_memory) (CORE_ADDR memaddr, char *myaddr,
+    int (*deprecated_xfer_memory) (CORE_ADDR memaddr, gdb_byte *myaddr,
 				   int len, int write,
 				   struct mem_attrib *attrib,
 				   struct target_ops *target);
 
     void (*to_files_info) (struct target_ops *);
-    int (*to_insert_breakpoint) (CORE_ADDR, char *);
-    int (*to_remove_breakpoint) (CORE_ADDR, char *);
+    int (*to_insert_breakpoint) (struct bp_target_info *);
+    int (*to_remove_breakpoint) (struct bp_target_info *);
     int (*to_can_use_hw_breakpoint) (int, int, int);
-    int (*to_insert_hw_breakpoint) (CORE_ADDR, char *);
-    int (*to_remove_hw_breakpoint) (CORE_ADDR, char *);
+    int (*to_insert_hw_breakpoint) (struct bp_target_info *);
+    int (*to_remove_hw_breakpoint) (struct bp_target_info *);
     int (*to_remove_watchpoint) (CORE_ADDR, int, int);
     int (*to_insert_watchpoint) (CORE_ADDR, int, int);
     int (*to_stopped_by_watchpoint) (void);
+    int to_have_steppable_watchpoint;
     int to_have_continuable_watchpoint;
     int (*to_stopped_data_address) (struct target_ops *, CORE_ADDR *);
-    int (*to_region_size_ok_for_hw_watchpoint) (int);
+    int (*to_region_ok_for_hw_watchpoint) (CORE_ADDR, int);
     void (*to_terminal_init) (void);
     void (*to_terminal_inferior) (void);
     void (*to_terminal_ours_for_output) (void);
@@ -358,12 +381,12 @@ struct target_ops
     void (*to_create_inferior) (char *, char *, char **, int);
     void (*to_post_startup_inferior) (ptid_t);
     void (*to_acknowledge_created_inferior) (int);
-    int (*to_insert_fork_catchpoint) (int);
+    void (*to_insert_fork_catchpoint) (int);
     int (*to_remove_fork_catchpoint) (int);
-    int (*to_insert_vfork_catchpoint) (int);
+    void (*to_insert_vfork_catchpoint) (int);
     int (*to_remove_vfork_catchpoint) (int);
-    int (*to_follow_fork) (int);
-    int (*to_insert_exec_catchpoint) (int);
+    int (*to_follow_fork) (struct target_ops *, int);
+    void (*to_insert_exec_catchpoint) (int);
     int (*to_remove_exec_catchpoint) (int);
     int (*to_reported_exec_events_per_exec_call) (void);
     int (*to_has_exited) (int, int, int *);
@@ -376,11 +399,8 @@ struct target_ops
     char *(*to_extra_thread_info) (struct thread_info *);
     void (*to_stop) (void);
     void (*to_rcmd) (char *command, struct ui_file *output);
-    struct symtab_and_line *(*to_enable_exception_callback) (enum
-							     exception_event_kind,
-							     int);
-    struct exception_event_record *(*to_get_current_exception_event) (void);
     char *(*to_pid_to_exec_file) (int pid);
+    void (*to_log_command) (const char *);
     enum strata to_stratum;
     int to_has_all_memory;
     int to_has_memory;
@@ -411,16 +431,74 @@ struct target_ops
        thread-local storage hasn't been allocated yet, this function
        may return an error.  */
     CORE_ADDR (*to_get_thread_local_address) (ptid_t ptid,
-					      struct objfile *objfile,
+					      CORE_ADDR load_module_addr,
 					      CORE_ADDR offset);
 
-    /* Perform partial transfers on OBJECT.  See target_read_partial
-       and target_write_partial for details of each variant.  One, and
-       only one, of readbuf or writebuf must be non-NULL.  */
+    /* Request that OPS transfer up to LEN 8-bit bytes of the target's
+       OBJECT.  The OFFSET, for a seekable object, specifies the
+       starting point.  The ANNEX can be used to provide additional
+       data-specific information to the target.
+
+       Return the number of bytes actually transfered, zero when no
+       further transfer is possible, and -1 when the transfer is not
+       supported.  Return of a positive value smaller than LEN does
+       not indicate the end of the object, only the end of the
+       transfer; higher level code should continue transferring if
+       desired.  This is handled in target.c.
+
+       The interface does not support a "retry" mechanism.  Instead it
+       assumes that at least one byte will be transfered on each
+       successful call.
+
+       NOTE: cagney/2003-10-17: The current interface can lead to
+       fragmented transfers.  Lower target levels should not implement
+       hacks, such as enlarging the transfer, in an attempt to
+       compensate for this.  Instead, the target stack should be
+       extended so that it implements supply/collect methods and a
+       look-aside object cache.  With that available, the lowest
+       target can safely and freely "push" data up the stack.
+
+       See target_read and target_write for more information.  One,
+       and only one, of readbuf or writebuf must be non-NULL.  */
+
     LONGEST (*to_xfer_partial) (struct target_ops *ops,
 				enum target_object object, const char *annex,
-				void *readbuf, const void *writebuf,
+				gdb_byte *readbuf, const gdb_byte *writebuf,
 				ULONGEST offset, LONGEST len);
+
+    /* Returns the memory map for the target.  A return value of NULL
+       means that no memory map is available.  If a memory address
+       does not fall within any returned regions, it's assumed to be
+       RAM.  The returned memory regions should not overlap.
+
+       The order of regions does not matter; target_memory_map will
+       sort regions by starting address. For that reason, this
+       function should not be called directly except via
+       target_memory_map.
+
+       This method should not cache data; if the memory map could
+       change unexpectedly, it should be invalidated, and higher
+       layers will re-fetch it.  */
+    VEC(mem_region_s) *(*to_memory_map) (struct target_ops *);
+
+    /* Erases the region of flash memory starting at ADDRESS, of
+       length LENGTH.
+
+       Precondition: both ADDRESS and ADDRESS+LENGTH should be aligned
+       on flash block boundaries, as reported by 'to_memory_map'.  */
+    void (*to_flash_erase) (struct target_ops *,
+                           ULONGEST address, LONGEST length);
+
+    /* Finishes a flash memory write sequence.  After this operation
+       all flash memory should be available for writing and the result
+       of reading from areas written by 'to_flash_write' should be
+       equal to what was written.  */
+    void (*to_flash_done) (struct target_ops *);
+
+    /* Describe the architecture-specific features of this target.
+       Returns the description found, or NULL if no description
+       was available.  */
+    const struct target_desc *(*to_read_description) (struct target_ops *ops);
 
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
@@ -511,15 +589,15 @@ extern void target_disconnect (char *, int);
 
 /* Fetch at least register REGNO, or all regs if regno == -1.  No result.  */
 
-#define	target_fetch_registers(regno)	\
-     (*current_target.to_fetch_registers) (regno)
+#define	target_fetch_registers(regcache, regno)	\
+     (*current_target.to_fetch_registers) (regcache, regno)
 
 /* Store at least register REGNO, or all regs if REGNO == -1.
    It can store as many registers as it wants to, so target_prepare_to_store
    must have been previously called.  Calls error() if there are problems.  */
 
-#define	target_store_registers(regs)	\
-     (*current_target.to_store_registers) (regs)
+#define	target_store_registers(regcache, regs)	\
+     (*current_target.to_store_registers) (regcache, regs)
 
 /* Get ready to modify the registers array.  On machines which store
    individual registers, this doesn't need to do anything.  On machines
@@ -527,71 +605,74 @@ extern void target_disconnect (char *, int);
    that REGISTERS contains all the registers from the program being
    debugged.  */
 
-#define	target_prepare_to_store()	\
-     (*current_target.to_prepare_to_store) ()
+#define	target_prepare_to_store(regcache)	\
+     (*current_target.to_prepare_to_store) (regcache)
 
 extern DCACHE *target_dcache;
 
-extern int do_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
-			   struct mem_attrib *attrib);
-
 extern int target_read_string (CORE_ADDR, char **, int, int *);
 
-extern int target_read_memory (CORE_ADDR memaddr, char *myaddr, int len);
+extern int target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
-extern int target_write_memory (CORE_ADDR memaddr, char *myaddr, int len);
+extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
+				int len);
 
-extern int xfer_memory (CORE_ADDR, char *, int, int,
+extern int xfer_memory (CORE_ADDR, gdb_byte *, int, int,
 			struct mem_attrib *, struct target_ops *);
 
-extern int child_xfer_memory (CORE_ADDR, char *, int, int,
-			      struct mem_attrib *, struct target_ops *);
+/* Fetches the target's memory map.  If one is found it is sorted
+   and returned, after some consistency checking.  Otherwise, NULL
+   is returned.  */
+VEC(mem_region_s) *target_memory_map (void);
 
-/* Make a single attempt at transfering LEN bytes.  On a successful
-   transfer, the number of bytes actually transfered is returned and
-   ERR is set to 0.  When a transfer fails, -1 is returned (the number
-   of bytes actually transfered is not defined) and ERR is set to a
-   non-zero error indication.  */
+/* Erase the specified flash region.  */
+void target_flash_erase (ULONGEST address, LONGEST length);
 
-extern int target_read_memory_partial (CORE_ADDR addr, char *buf, int len,
-				       int *err);
+/* Finish a sequence of flash operations.  */
+void target_flash_done (void);
 
-extern int target_write_memory_partial (CORE_ADDR addr, char *buf, int len,
-					int *err);
+/* Describes a request for a memory write operation.  */
+struct memory_write_request
+  {
+    /* Begining address that must be written. */
+    ULONGEST begin;
+    /* Past-the-end address. */
+    ULONGEST end;
+    /* The data to write. */
+    gdb_byte *data;
+    /* A callback baton for progress reporting for this request.  */
+    void *baton;
+  };
+typedef struct memory_write_request memory_write_request_s;
+DEF_VEC_O(memory_write_request_s);
 
-extern char *child_pid_to_exec_file (int);
+/* Enumeration specifying different flash preservation behaviour.  */
+enum flash_preserve_mode
+  {
+    flash_preserve,
+    flash_discard
+  };
 
-extern char *child_core_file_to_sym_file (char *);
+/* Write several memory blocks at once.  This version can be more
+   efficient than making several calls to target_write_memory, in
+   particular because it can optimize accesses to flash memory.
 
-#if defined(CHILD_POST_ATTACH)
-extern void child_post_attach (int);
-#endif
+   Moreover, this is currently the only memory access function in gdb
+   that supports writing to flash memory, and it should be used for
+   all cases where access to flash memory is desirable.
 
-extern void child_post_startup_inferior (ptid_t);
+   REQUESTS is the vector (see vec.h) of memory_write_request.
+   PRESERVE_FLASH_P indicates what to do with blocks which must be
+     erased, but not completely rewritten.
+   PROGRESS_CB is a function that will be periodically called to provide
+     feedback to user.  It will be called with the baton corresponding
+     to the request currently being written.  It may also be called
+     with a NULL baton, when preserved flash sectors are being rewritten.
 
-extern void child_acknowledge_created_inferior (int);
-
-extern int child_insert_fork_catchpoint (int);
-
-extern int child_remove_fork_catchpoint (int);
-
-extern int child_insert_vfork_catchpoint (int);
-
-extern int child_remove_vfork_catchpoint (int);
-
-extern void child_acknowledge_created_inferior (int);
-
-extern int child_follow_fork (int);
-
-extern int child_insert_exec_catchpoint (int);
-
-extern int child_remove_exec_catchpoint (int);
-
-extern int child_reported_exec_events_per_exec_call (void);
-
-extern int child_has_exited (int, int, int *);
-
-extern int child_thread_alive (ptid_t);
+   The function returns 0 on success, and error otherwise.  */
+int target_write_memory_blocks (VEC(memory_write_request_s) *requests,
+				enum flash_preserve_mode preserve_flash_p,
+				void (*progress_cb) (ULONGEST, void *));
 
 /* From infrun.c.  */
 
@@ -610,22 +691,17 @@ extern void print_section_info (struct target_ops *, bfd *);
 #define	target_files_info()	\
      (*current_target.to_files_info) (&current_target)
 
-/* Insert a breakpoint at address ADDR in the target machine.  SAVE is
-   a pointer to memory allocated for saving the target contents.  It
-   is guaranteed by the caller to be long enough to save the number of
-   breakpoint bytes indicated by BREAKPOINT_FROM_PC.  Result is 0 for
-   success, or an errno value.  */
+/* Insert a breakpoint at address BP_TGT->placed_address in the target
+   machine.  Result is 0 for success, or an errno value.  */
 
-#define	target_insert_breakpoint(addr, save)	\
-     (*current_target.to_insert_breakpoint) (addr, save)
+#define	target_insert_breakpoint(bp_tgt)	\
+     (*current_target.to_insert_breakpoint) (bp_tgt)
 
-/* Remove a breakpoint at address ADDR in the target machine.
-   SAVE is a pointer to the same save area
-   that was previously passed to target_insert_breakpoint.
-   Result is 0 for success, or an errno value.  */
+/* Remove a breakpoint at address BP_TGT->placed_address in the target
+   machine.  Result is 0 for success, or an errno value.  */
 
-#define	target_remove_breakpoint(addr, save)	\
-     (*current_target.to_remove_breakpoint) (addr, save)
+#define	target_remove_breakpoint(bp_tgt)	\
+     (*current_target.to_remove_breakpoint) (bp_tgt)
 
 /* Initialize the terminal settings we record for the inferior,
    before we actually run the inferior.  */
@@ -678,7 +754,14 @@ extern void print_section_info (struct target_ops *, bfd *);
 
 /* Load an executable file into the target process.  This is expected
    to not only bring new code into the target process, but also to
-   update GDB's symbol tables to match.  */
+   update GDB's symbol tables to match.
+
+   ARG contains command-line arguments, to be broken down with
+   buildargv ().  The first non-switch argument is the filename to
+   load, FILE; the second is a number (as parsed by strtoul (..., ...,
+   0)), which is an offset to apply to the load addresses of FILE's
+   sections.  The target may define switches, or other non-switch
+   arguments, as it pleases.  */
 
 extern void target_load (char *arg, int from_tty);
 
@@ -746,8 +829,7 @@ extern void target_load (char *arg, int from_tty);
    This function returns 1 if the inferior should not be resumed
    (i.e. there is another event pending).  */
 
-#define target_follow_fork(follow_child) \
-     (*current_target.to_follow_fork) (follow_child)
+int target_follow_fork (int follow_child);
 
 /* On some targets, we can catch an inferior exec event when it
    occurs.  These functions insert/remove an already-created
@@ -800,7 +882,7 @@ extern void target_load (char *arg, int from_tty);
 /* Query for new threads and add them to the thread list.  */
 
 #define target_find_new_threads() \
-     (*current_target.to_find_new_threads) (); \
+     (*current_target.to_find_new_threads) ()
 
 /* Make target stop in a continuable fashion.  (For instance, under
    Unix, this should act like SIGSTOP).  This function is normally
@@ -815,21 +897,6 @@ extern void target_load (char *arg, int from_tty);
 #define target_rcmd(command, outbuf) \
      (*current_target.to_rcmd) (command, outbuf)
 
-
-/* Get the symbol information for a breakpointable routine called when
-   an exception event occurs.
-   Intended mainly for C++, and for those
-   platforms/implementations where such a callback mechanism is available,
-   e.g. HP-UX with ANSI C++ (aCC).  Some compilers (e.g. g++) support
-   different mechanisms for debugging exceptions.  */
-
-#define target_enable_exception_callback(kind, enable) \
-     (*current_target.to_enable_exception_callback) (kind, enable)
-
-/* Get the current exception event kind -- throw or catch, etc.  */
-
-#define target_get_current_exception_event() \
-     (*current_target.to_get_current_exception_event) ()
 
 /* Does the target include all of memory, or only part of it?  This
    determines whether we look up the target chain for other parts of
@@ -855,11 +922,12 @@ extern void target_load (char *arg, int from_tty);
      (current_target.to_has_registers)
 
 /* Does the target have execution?  Can we make it jump (through
-   hoops), or pop its stack a few times?  FIXME: If this is to work that
-   way, it needs to check whether an inferior actually exists.
-   remote-udi.c and probably other targets can be the current target
-   when the inferior doesn't actually exist at the moment.  Right now
-   this just tells us whether this target is *capable* of execution.  */
+   hoops), or pop its stack a few times?  This means that the current
+   target is currently executing; for some targets, that's the same as
+   whether or not the target is capable of execution, but there are
+   also targets which can be current while not executing.  In that
+   case this will become true after target_create_inferior or
+   target_attach.  */
 
 #define	target_has_execution	\
      (current_target.to_has_execution)
@@ -903,8 +971,6 @@ extern void target_load (char *arg, int from_tty);
 
 extern int target_async_mask (int mask);
 
-extern void target_link (char *, CORE_ADDR *);
-
 /* Converts a process id to a string.  Usually, the string just contains
    `process xyz', but on some systems it may contain
    `process xyz thread abc'.  */
@@ -924,36 +990,6 @@ extern char *normal_pid_to_str (ptid_t ptid);
 
 #define target_extra_thread_info(TP) \
      (current_target.to_extra_thread_info (TP))
-
-/*
- * New Objfile Event Hook:
- *
- * Sometimes a GDB component wants to get notified whenever a new
- * objfile is loaded.  Mainly this is used by thread-debugging
- * implementations that need to know when symbols for the target
- * thread implemenation are available.
- *
- * The old way of doing this is to define a macro 'target_new_objfile'
- * that points to the function that you want to be called on every
- * objfile/shlib load.
-
-   The new way is to grab the function pointer,
-   'deprecated_target_new_objfile_hook', and point it to the function
-   that you want to be called on every objfile/shlib load.
-
-   If multiple clients are willing to be cooperative, they can each
-   save a pointer to the previous value of
-   deprecated_target_new_objfile_hook before modifying it, and arrange
-   for their function to call the previous function in the chain.  In
-   that way, multiple clients can receive this notification (something
-   like with signal handlers).  */
-
-extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
-
-#ifndef target_pid_or_tid_to_str
-#define target_pid_or_tid_to_str(ID) \
-     target_pid_to_str (ID)
-#endif
 
 /* Attempts to find the pathname of the executable file
    that was run to create a specified process.
@@ -993,12 +1029,6 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 #define target_get_thread_local_address_p() \
     (target_get_thread_local_address != NULL)
 
-/* Hook to call target dependent code just after inferior target process has
-   started.  */
-
-#ifndef TARGET_CREATE_INFERIOR_HOOK
-#define TARGET_CREATE_INFERIOR_HOOK(PID)
-#endif
 
 /* Hardware watchpoint interfaces.  */
 
@@ -1010,23 +1040,18 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
    (*current_target.to_stopped_by_watchpoint) ()
 #endif
 
+/* Non-zero if we have steppable watchpoints  */
+
+#ifndef HAVE_STEPPABLE_WATCHPOINT
+#define HAVE_STEPPABLE_WATCHPOINT \
+   (current_target.to_have_steppable_watchpoint)
+#endif
+
 /* Non-zero if we have continuable watchpoints  */
 
 #ifndef HAVE_CONTINUABLE_WATCHPOINT
 #define HAVE_CONTINUABLE_WATCHPOINT \
    (current_target.to_have_continuable_watchpoint)
-#endif
-
-/* HP-UX supplies these operations, which respectively disable and enable
-   the memory page-protections that are used to implement hardware watchpoints
-   on that platform.  See wait_for_inferior's use of these.  */
-
-#if !defined(TARGET_DISABLE_HW_WATCHPOINTS)
-#define TARGET_DISABLE_HW_WATCHPOINTS(pid)
-#endif
-
-#if !defined(TARGET_ENABLE_HW_WATCHPOINTS)
-#define TARGET_ENABLE_HW_WATCHPOINTS(pid)
 #endif
 
 /* Provide defaults for hardware watchpoint functions.  */
@@ -1044,9 +1069,9 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
  (*current_target.to_can_use_hw_breakpoint) (TYPE, CNT, OTHERTYPE);
 #endif
 
-#if !defined(TARGET_REGION_SIZE_OK_FOR_HW_WATCHPOINT)
-#define TARGET_REGION_SIZE_OK_FOR_HW_WATCHPOINT(byte_count) \
-    (*current_target.to_region_size_ok_for_hw_watchpoint) (byte_count)
+#ifndef TARGET_REGION_OK_FOR_HW_WATCHPOINT
+#define TARGET_REGION_OK_FOR_HW_WATCHPOINT(addr, len) \
+    (*current_target.to_region_ok_for_hw_watchpoint) (addr, len)
 #endif
 
 
@@ -1063,11 +1088,11 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 #endif
 
 #ifndef target_insert_hw_breakpoint
-#define target_insert_hw_breakpoint(addr, save) \
-     (*current_target.to_insert_hw_breakpoint) (addr, save)
+#define target_insert_hw_breakpoint(bp_tgt) \
+     (*current_target.to_insert_hw_breakpoint) (bp_tgt)
 
-#define target_remove_hw_breakpoint(addr, save) \
-     (*current_target.to_remove_hw_breakpoint) (addr, save)
+#define target_remove_hw_breakpoint(bp_tgt) \
+     (*current_target.to_remove_hw_breakpoint) (bp_tgt)
 #endif
 
 extern int target_stopped_data_address_p (struct target_ops *);
@@ -1080,27 +1105,15 @@ extern int target_stopped_data_address_p (struct target_ops *);
 #define target_stopped_data_address_p(CURRENT_TARGET) (1)
 #endif
 
-/* This will only be defined by a target that supports catching vfork events,
-   such as HP-UX.
+extern const struct target_desc *target_read_description (struct target_ops *);
 
-   On some targets (such as HP-UX 10.20 and earlier), resuming a newly vforked
-   child process after it has exec'd, causes the parent process to resume as
-   well.  To prevent the parent from running spontaneously, such targets should
-   define this to a function that prevents that from happening.  */
-#if !defined(ENSURE_VFORKING_PARENT_REMAINS_STOPPED)
-#define ENSURE_VFORKING_PARENT_REMAINS_STOPPED(PID) (0)
-#endif
+/* Command logging facility.  */
 
-/* This will only be defined by a target that supports catching vfork events,
-   such as HP-UX.
-
-   On some targets (such as HP-UX 10.20 and earlier), a newly vforked child
-   process must be resumed when it delivers its exec event, before the parent
-   vfork event will be delivered to us.  */
-
-#if !defined(RESUME_EXECD_VFORKING_CHILD_TO_GET_PARENT_VFORK)
-#define RESUME_EXECD_VFORKING_CHILD_TO_GET_PARENT_VFORK() (0)
-#endif
+#define target_log_command(p)						\
+  do									\
+    if (current_target.to_log_command)					\
+      (*current_target.to_log_command) (p);				\
+  while (0)
 
 /* Routines for maintenance of the target structures...
 
@@ -1123,9 +1136,21 @@ extern int push_target (struct target_ops *);
 
 extern int unpush_target (struct target_ops *);
 
+extern void target_pre_inferior (int);
+
 extern void target_preopen (int);
 
 extern void pop_target (void);
+
+extern CORE_ADDR target_translate_tls_address (struct objfile *objfile,
+					       CORE_ADDR offset);
+
+/* Mark a pushed target as running or exited, for targets which do not
+   automatically pop when not active.  */
+
+void target_mark_running (struct target_ops *);
+
+void target_mark_exited (struct target_ops *);
 
 /* Struct section_table maps address ranges to file sections.  It is
    mostly used with BFD files, but can be used without (e.g. for handling
@@ -1148,13 +1173,13 @@ struct section_table *target_section_by_addr (struct target_ops *target,
 
 /* From mem-break.c */
 
-extern int memory_remove_breakpoint (CORE_ADDR, char *);
+extern int memory_remove_breakpoint (struct bp_target_info *);
 
-extern int memory_insert_breakpoint (CORE_ADDR, char *);
+extern int memory_insert_breakpoint (struct bp_target_info *);
 
-extern int default_memory_remove_breakpoint (CORE_ADDR, char *);
+extern int default_memory_remove_breakpoint (struct gdbarch *, struct bp_target_info *);
 
-extern int default_memory_insert_breakpoint (CORE_ADDR, char *);
+extern int default_memory_insert_breakpoint (struct gdbarch *, struct bp_target_info *);
 
 
 /* From target.c */

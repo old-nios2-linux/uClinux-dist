@@ -1,6 +1,7 @@
 /* MI Command Set for GDB, the GNU debugger.
 
-   Copyright 2000, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MI_CMDS_H
 #define MI_CMDS_H
@@ -38,10 +37,6 @@ enum mi_cmd_result
        asprintf'd into the mi_error_message buffer.  The main loop will
        display the error message and the completion prompt. */
     MI_CMD_ERROR,
-    /* An error condition was detected and caught.  The error message is
-       in the global error message buffer. The main loop will display
-       the error message and the completion prompt. */
-    MI_CMD_CAUGHT_ERROR,
     /* The MI command has already displayed its completion message.
        Main loop will not display a completion message but will display
        the completion prompt. */
@@ -53,6 +48,10 @@ enum print_values {
    PRINT_ALL_VALUES,
    PRINT_SIMPLE_VALUES
 };
+
+extern const char mi_no_values[];
+extern const char mi_simple_values[];
+extern const char mi_all_values[];
 
 typedef enum mi_cmd_result (mi_cmd_argv_ftype) (char *command, char **argv, int argc);
 
@@ -72,6 +71,7 @@ extern mi_cmd_argv_ftype mi_cmd_data_list_changed_registers;
 extern mi_cmd_argv_ftype mi_cmd_data_read_memory;
 extern mi_cmd_argv_ftype mi_cmd_data_write_memory;
 extern mi_cmd_argv_ftype mi_cmd_data_write_register_values;
+extern mi_cmd_argv_ftype mi_cmd_enable_timings;
 extern mi_cmd_argv_ftype mi_cmd_env_cd;
 extern mi_cmd_argv_ftype mi_cmd_env_dir;
 extern mi_cmd_argv_ftype mi_cmd_env_path;
@@ -89,14 +89,21 @@ extern mi_cmd_args_ftype mi_cmd_exec_interrupt;
 extern mi_cmd_argv_ftype mi_cmd_file_list_exec_source_file;
 extern mi_cmd_argv_ftype mi_cmd_file_list_exec_source_files;
 extern mi_cmd_argv_ftype mi_cmd_gdb_exit;
+extern mi_cmd_argv_ftype mi_cmd_inferior_tty_set;
+extern mi_cmd_argv_ftype mi_cmd_inferior_tty_show;
 extern mi_cmd_argv_ftype mi_cmd_interpreter_exec;
+extern mi_cmd_argv_ftype mi_cmd_list_features;
 extern mi_cmd_argv_ftype mi_cmd_stack_info_depth;
+extern mi_cmd_argv_ftype mi_cmd_stack_info_frame;
 extern mi_cmd_argv_ftype mi_cmd_stack_list_args;
 extern mi_cmd_argv_ftype mi_cmd_stack_list_frames;
 extern mi_cmd_argv_ftype mi_cmd_stack_list_locals;
 extern mi_cmd_argv_ftype mi_cmd_stack_select_frame;
 extern mi_cmd_argv_ftype mi_cmd_symbol_list_lines;
 extern mi_cmd_args_ftype mi_cmd_target_download;
+extern mi_cmd_argv_ftype mi_cmd_target_file_get;
+extern mi_cmd_argv_ftype mi_cmd_target_file_put;
+extern mi_cmd_argv_ftype mi_cmd_target_file_delete;
 extern mi_cmd_args_ftype mi_cmd_target_select;
 extern mi_cmd_argv_ftype mi_cmd_thread_list_ids;
 extern mi_cmd_argv_ftype mi_cmd_thread_select;
@@ -105,10 +112,12 @@ extern mi_cmd_argv_ftype mi_cmd_var_create;
 extern mi_cmd_argv_ftype mi_cmd_var_delete;
 extern mi_cmd_argv_ftype mi_cmd_var_evaluate_expression;
 extern mi_cmd_argv_ftype mi_cmd_var_info_expression;
+extern mi_cmd_argv_ftype mi_cmd_var_info_path_expression;
 extern mi_cmd_argv_ftype mi_cmd_var_info_num_children;
 extern mi_cmd_argv_ftype mi_cmd_var_info_type;
 extern mi_cmd_argv_ftype mi_cmd_var_list_children;
 extern mi_cmd_argv_ftype mi_cmd_var_set_format;
+extern mi_cmd_argv_ftype mi_cmd_var_set_frozen;
 extern mi_cmd_argv_ftype mi_cmd_var_show_attributes;
 extern mi_cmd_argv_ftype mi_cmd_var_show_format;
 extern mi_cmd_argv_ftype mi_cmd_var_update;

@@ -1,21 +1,20 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
-# Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 # long_long.exp   Test printing of 64-bit things in 32-bit gdb.
 #                 Also test differnet kinds of formats.
@@ -44,8 +43,9 @@ if {$hp_cc_compiler} {
     set flag ""
 }
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug "additional_flags=$flag -w"]] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug additional_flags=$flag nowarnings]] != "" } {
+     untested long_long.exp
+     return -1
 }
 
 # use this to debug:
@@ -201,13 +201,17 @@ gdb_test_ptr "p/a val.oct" "" "" "0x77053977" "0xa72ee53977053977"
 gdb_test "p/c val.oct" "'w'"
 
 if { $sizeof_double == 8 || $sizeof_long_double == 8 } {
-    # ARM floating point numbers are not strictly little endian or big endian,
-    # but a hybrid.  They are in little endian format with the two words
-    # swapped in big endian format.
+    # ARM FPA floating point numbers are not strictly little endian or big
+    # endian, but a hybrid.  They are in little endian format with the two
+    # words swapped in big endian format.
+    # EABI targets default to natural-endian VFP format.
 
-    if { [istarget "arm*-*-*"] || \
-	    [istarget "xscale*-*-*"] || \
-	    [istarget "strongarm*-*-*"] } then {
+    if { ([istarget "arm*-*-*"] || \
+	  [istarget "xscale*-*-*"] || \
+	  [istarget "strongarm*-*-*"]) \
+	 && !([istarget "*-*-*eabi"] || \
+	      [istarget "*-*-openbsd*"] || \
+	      [istarget "*-*-symbianelf"]) } then {
 	# assume the long long represents a floating point double in ARM format
 	gdb_test "p/f val.oct" "2.1386676354387559e\\+265"
     } else {
@@ -224,7 +228,7 @@ gdb_test_char "p/d *(char *)c" "1"
 gdb_test_char "p/u *(char *)c" "1"
 gdb_test_char "p/o *(char *)c" "01"
 gdb_test_char "p/t *(char *)c" "1"
-gdb_test_char "p/a *(char *)c" "0x1"
+gdb_test_char "p/a *(char *)c" "0x1( <.*>)?"
 gdb_test_char "p/f *(char *)c" "1"
 gdb_test_char "p/c *(char *)c" "1 '.001'"
 
@@ -233,7 +237,7 @@ gdb_test_short "p/d *(short *)s" "" "291" ""
 gdb_test_short "p/u *(short *)s" "" "291" ""
 gdb_test_short "p/o *(short *)s" "" "0443" ""
 gdb_test_short "p/t *(short *)s" "" "100100011" ""
-gdb_test_short "p/a *(short *)s" "" "0x123" ""
+gdb_test_short "p/a *(short *)s" "" "0x123( <.*>)?" ""
 gdb_test_short "p/f *(short *)s" "" "291" ""
 gdb_test_short "p/c *(short *)s" "" "35 '.'" ""
 

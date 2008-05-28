@@ -94,6 +94,12 @@ char pfkey_v2_parser_c_version[] = "$Id: pfkey_v2_parser.c,v 1.134.2.4 2007-10-3
 
 #define SENDERR(_x) do { error = -(_x); goto errlab; } while (0)
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,24)
+#define	l_inet_addr_type	inet_addr_type
+#else
+#define	l_inet_addr_type(a)	inet_addr_type(&init_net, a)
+#endif
+
 struct sklist_t {
 	struct socket *sk;
 	struct sklist_t* next;
@@ -290,7 +296,7 @@ pfkey_getspi_parse(struct sock *sk, struct sadb_ext **extensions, struct pfkey_e
 		SENDERR(EEXIST);
 	}
 
-	if(inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
+	if(l_inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
 		extr->ips->ips_flags |= EMT_INBOUND;
 	}
 	
@@ -439,7 +445,7 @@ pfkey_update_parse(struct sock *sk, struct sadb_ext **extensions, struct pfkey_e
 		SENDERR(ENOENT);
 	}
 
-	if(inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
+	if(l_inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
 		extr->ips->ips_flags |= EMT_INBOUND;
 	}
 
@@ -716,7 +722,7 @@ pfkey_add_parse(struct sock *sk, struct sadb_ext **extensions, struct pfkey_extr
 		SENDERR(EEXIST);
 	}
 
-	if(inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
+	if(l_inet_addr_type((unsigned long)extr->ips->ips_said.dst.u.v4.sin_addr.s_addr) == RTN_LOCAL) {
 		extr->ips->ips_flags |= EMT_INBOUND;
 	}
 

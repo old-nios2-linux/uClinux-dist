@@ -1,11 +1,13 @@
 /* Java language support definitions for GDB, the GNU debugger.
-   Copyright 1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+
+   Copyright (C) 1997, 1998, 1999, 2000, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef JV_LANG_H
 #define JV_LANG_H
@@ -40,7 +40,7 @@ extern struct type *java_float_type;
 extern struct type *java_double_type;
 extern struct type *java_void_type;
 
-extern int java_val_print (struct type *, char *, int, CORE_ADDR,
+extern int java_val_print (struct type *, const gdb_byte *, int, CORE_ADDR,
 			   struct ui_file *, int, int, int,
 			   enum val_prettyprint);
 

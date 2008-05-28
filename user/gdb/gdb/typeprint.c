@@ -1,13 +1,13 @@
 /* Language independent support for printing types for GDB, the GNU debugger.
 
-   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1998,
-   1999, 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1998, 1999,
+   2000, 2001, 2003, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -44,8 +42,6 @@ extern int objectprint;		/* Controls looking up an object's derived type
 extern void _initialize_typeprint (void);
 
 static void ptype_command (char *, int);
-
-static struct type *ptype_eval (struct expression *);
 
 static void whatis_command (char *, int);
 
@@ -90,7 +86,7 @@ typedef_print (struct type *type, struct symbol *new, struct ui_file *stream)
       break;
 #endif
     default:
-      error ("Language not supported.");
+      error (_("Language not supported."));
     }
   fprintf_filtered (stream, ";\n");
 }
@@ -133,14 +129,13 @@ whatis_exp (char *exp, int show)
   else
     val = access_value_history (0);
 
-  type = VALUE_TYPE (val);
+  type = value_type (val);
 
   if (objectprint)
     {
-      if (((TYPE_CODE (type) == TYPE_CODE_PTR) ||
-           (TYPE_CODE (type) == TYPE_CODE_REF))
-          &&
-          (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
+      if (((TYPE_CODE (type) == TYPE_CODE_PTR)
+	   || (TYPE_CODE (type) == TYPE_CODE_REF))
+	  && (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
         {
           real_type = value_rtti_target_type (val, &full, &top, &using_enc);
           if (real_type)
@@ -152,7 +147,7 @@ whatis_exp (char *exp, int show)
             }
         }
       else if (TYPE_CODE (type) == TYPE_CODE_CLASS)
-  real_type = value_rtti_type (val, &full, &top, &using_enc);
+	real_type = value_rtti_type (val, &full, &top, &using_enc);
     }
 
   printf_filtered ("type = ");
@@ -182,55 +177,12 @@ whatis_command (char *exp, int from_tty)
   whatis_exp (exp, -1);
 }
 
-/* Simple subroutine for ptype_command.  */
-
-static struct type *
-ptype_eval (struct expression *exp)
-{
-  if (exp->elts[0].opcode == OP_TYPE)
-    {
-      return (exp->elts[1].type);
-    }
-  else
-    {
-      return (NULL);
-    }
-}
-
 /* TYPENAME is either the name of a type, or an expression.  */
 
 static void
 ptype_command (char *typename, int from_tty)
 {
-  struct type *type;
-  struct expression *expr;
-  struct cleanup *old_chain;
-
-  if (typename == NULL)
-    {
-      /* Print type of last thing in value history. */
-      whatis_exp (typename, 1);
-    }
-  else
-    {
-      expr = parse_expression (typename);
-      old_chain = make_cleanup (free_current_contents, &expr);
-      type = ptype_eval (expr);
-      if (type != NULL)
-	{
-	  /* User did "ptype <typename>" */
-	  printf_filtered ("type = ");
-	  type_print (type, "", gdb_stdout, 1);
-	  printf_filtered ("\n");
-	  do_cleanups (old_chain);
-	}
-      else
-	{
-	  /* User did "ptype <symbolname>" */
-	  do_cleanups (old_chain);
-	  whatis_exp (typename, 1);
-	}
-    }
+  whatis_exp (typename, 1);
 }
 
 /* Print integral scalar data VAL, of type TYPE, onto stdio stream STREAM.
@@ -243,7 +195,7 @@ ptype_command (char *typename, int from_tty)
    currently use it, and it wasn't clear if it really belonged somewhere
    else (like printcmd.c).  There are a lot of other gdb routines that do
    something similar, but they are generally concerned with printing values
-   that come from the inferior in target byte order and target size. */
+   that come from the inferior in target byte order and target size.  */
 
 void
 print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
@@ -302,22 +254,23 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
     case TYPE_CODE_SET:
     case TYPE_CODE_STRING:
     case TYPE_CODE_ERROR:
-    case TYPE_CODE_MEMBER:
+    case TYPE_CODE_MEMBERPTR:
+    case TYPE_CODE_METHODPTR:
     case TYPE_CODE_METHOD:
     case TYPE_CODE_REF:
     case TYPE_CODE_NAMESPACE:
-      error ("internal error: unhandled type in print_type_scalar");
+      error (_("internal error: unhandled type in print_type_scalar"));
       break;
 
     default:
-      error ("Invalid type code in symbol table.");
+      error (_("Invalid type code in symbol table."));
     }
   gdb_flush (stream);
 }
 
 /* Dump details of a type specified either directly or indirectly.
    Uses the same sort of type lookup mechanism as ptype_command()
-   and whatis_command(). */
+   and whatis_command().  */
 
 void
 maintenance_print_type (char *typename, int from_tty)
@@ -341,7 +294,7 @@ maintenance_print_type (char *typename, int from_tty)
 	  /* The user expression may name a type indirectly by naming an
 	     object of that type.  Find that indirectly named type. */
 	  val = evaluate_type (expr);
-	  type = VALUE_TYPE (val);
+	  type = value_type (val);
 	}
       if (type != NULL)
 	{
@@ -355,14 +308,12 @@ maintenance_print_type (char *typename, int from_tty)
 void
 _initialize_typeprint (void)
 {
-
-  add_com ("ptype", class_vars, ptype_command,
-	   "Print definition of type TYPE.\n\
+  add_com ("ptype", class_vars, ptype_command, _("\
+Print definition of type TYPE.\n\
 Argument may be a type name defined by typedef, or \"struct STRUCT-TAG\"\n\
 or \"class CLASS-NAME\" or \"union UNION-TAG\" or \"enum ENUM-TAG\".\n\
-The selected stack frame's lexical context is used to look up the name.");
+The selected stack frame's lexical context is used to look up the name."));
 
   add_com ("whatis", class_vars, whatis_command,
-	   "Print data type of expression EXP.");
-
+	   _("Print data type of expression EXP."));
 }

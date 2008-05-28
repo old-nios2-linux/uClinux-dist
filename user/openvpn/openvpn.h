@@ -118,6 +118,31 @@ struct context_buffers
 };
 
 /*
+ * always-persistent context variables
+ */
+struct context_persist
+{
+  int restart_sleep_seconds;
+};
+
+/* 
+ * level 0 context contains data related to
+ * once-per OpenVPN instantiation events
+ * such as daemonization.
+ */
+struct context_0
+{
+  /* workspace for get_pid_file/write_pid */
+  struct pid_state pid_state;
+
+  /* workspace for --user/--group */
+  bool uid_gid_specified;
+  bool uid_gid_set;
+  struct user_state user_state;
+  struct group_state group_state;
+};
+
+/*
  * Contains the persist-across-restart OpenVPN tunnel instance state.
  * Reset only for SIGHUP restarts.
  */
@@ -156,10 +181,6 @@ struct context_1
   struct socks_proxy_info *socks_proxy;
 #endif
 
-  /* shared object plugins */
-  struct plugin_list *plugins;
-  bool plugins_owned;
-  
 #if P2MP
 
 #if P2MP_SERVER
@@ -209,8 +230,8 @@ struct context_2
   struct link_socket_info *link_socket_info;
   const struct link_socket *accept_from; /* possibly do accept() on a parent link_socket */
 
-  struct sockaddr_in to_link_addr;	 /* IP address of remote */
-  struct sockaddr_in from;               /* address of incoming datagram */
+  struct link_socket_actual *to_link_addr;	/* IP address of remote */
+  struct link_socket_actual from;               /* address of incoming datagram */
 
   /* MTU frame parameters */
   struct frame frame;
@@ -237,15 +258,24 @@ struct context_2
   counter_type link_read_bytes;
   counter_type link_read_bytes_auth;
   counter_type link_write_bytes;
+#ifdef PACKET_TRUNCATION_CHECK
+  counter_type n_trunc_tun_read;
+  counter_type n_trunc_tun_write;
+  counter_type n_trunc_pre_encrypt;
+  counter_type n_trunc_post_decrypt;
+#endif
 
   /*
    * Timer objects for ping and inactivity
    * timeout features.
    */
   struct event_timeout wait_for_connect;
-  struct event_timeout inactivity_interval;
   struct event_timeout ping_send_interval;
   struct event_timeout ping_rec_interval;
+
+  /* --inactive */
+  struct event_timeout inactivity_interval;
+  int inactivity_bytes;
 
 #ifdef ENABLE_OCC
   /* the option strings must match across peers */
@@ -335,15 +365,6 @@ struct context_2
    */
   bool ipv4_tun;
 
-  /* workspace for get_pid_file/write_pid */
-  struct pid_state pid_state;
-
-  /* workspace for --user/--group */
-  bool uid_gid_specified;
-  bool uid_gid_set;
-  struct user_state user_state;
-  struct group_state group_state;
-
   /* should we print R|W|r|w to console on packet transfers? */
   bool log_rw;
 
@@ -382,6 +403,7 @@ struct context_2
 
   /* environmental variables to pass to scripts */
   struct env_set *es;
+  bool es_owned;
 
   /* don't wait for TUN/TAP/UDP to be ready to accept write */
   bool fast_io;
@@ -444,8 +466,20 @@ struct context
   /* signal info */
   struct signal_info *sig;
 
+  /* shared object plugins */
+  struct plugin_list *plugins;
+  bool plugins_owned;
+  
   /* set to true after we daemonize */
   bool did_we_daemonize;
+
+  /* persistent across SIGHUP */
+  struct context_persist persist;
+
+  /* level 0 context contains data related to
+     once-per OpenVPN instantiation events
+     such as daemonization */
+  struct context_0 *c0;
 
   /* level 1 context is preserved for
      SIGUSR1 restarts, but initialized

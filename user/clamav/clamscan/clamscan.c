@@ -46,6 +46,8 @@
 #include "shared/output.h"
 #include "shared/options.h"
 
+#include "libclamav/str.h"
+
 void help(void);
 
 #if defined(C_WINDOWS) && defined(CL_DEBUG)
@@ -144,11 +146,22 @@ int main(int argc, char **argv)
 
     /* validate some numerical options */
 
-    if(opt_check(opt, "max-space")) {
-	pt = opt_arg(opt, "max-space");
+    if(opt_check(opt, "max-scansize")) {
+	pt = opt_arg(opt, "max-scansize");
 	if(!strchr(pt, 'M') && !strchr(pt, 'm')) {
-	    if(!isnumb(pt)) {
-		logg("!--max-space requires a natural number\n");
+	    if(!cli_isnumber(pt)) {
+		logg("!--max-scansize requires a natural number\n");
+		opt_free(opt);
+		return 40;
+	    }
+	}
+    }
+
+    if(opt_check(opt, "max-filesize")) {
+	pt = opt_arg(opt, "max-filesize");
+	if(!strchr(pt, 'M') && !strchr(pt, 'm')) {
+	    if(!cli_isnumber(pt)) {
+		logg("!--max-filesize requires a natural number\n");
 		opt_free(opt);
 		return 40;
 	    }
@@ -156,7 +169,7 @@ int main(int argc, char **argv)
     }
 
     if(opt_check(opt, "max-files")) {
-	if(!isnumb(opt_arg(opt, "max-files"))) {
+	if(!cli_isnumber(opt_arg(opt, "max-files"))) {
 	    logg("!--max-files requires a natural number\n");
 	    opt_free(opt);
 	    return 40;
@@ -164,7 +177,7 @@ int main(int argc, char **argv)
     }
 
     if(opt_check(opt, "max-recursion")) {
-	if(!isnumb(opt_arg(opt, "max-recursion"))) {
+	if(!cli_isnumber(opt_arg(opt, "max-recursion"))) {
 	    logg("!--max-recursion requires a natural number\n");
 	    opt_free(opt);
 	    return 40;
@@ -172,7 +185,7 @@ int main(int argc, char **argv)
     }
 
     if(opt_check(opt, "max-mail-recursion")) {
-	if(!isnumb(opt_arg(opt, "max-mail-recursion"))) {
+	if(!cli_isnumber(opt_arg(opt, "max-mail-recursion"))) {
 	    logg("!--max-mail-recursion requires a natural number\n");
 	    opt_free(opt);
 	    return 40;
@@ -180,7 +193,7 @@ int main(int argc, char **argv)
     }
 
     if(opt_check(opt, "max-dir-recursion")) {
-	if(!isnumb(opt_arg(opt, "max-dir-recursion"))) {
+	if(!cli_isnumber(opt_arg(opt, "max-dir-recursion"))) {
 	    logg("!--max-dir-recursion requires a natural number\n");
 	    opt_free(opt);
 	    return 40;
@@ -188,7 +201,7 @@ int main(int argc, char **argv)
     }
 
     if(opt_check(opt, "max-ratio")) {
-	if(!isnumb(opt_arg(opt, "max-ratio"))) {
+	if(!cli_isnumber(opt_arg(opt, "max-ratio"))) {
 	    logg("!--max-ratio requires a natural number\n");
 	    opt_free(opt);
 	    return 40;
@@ -308,17 +321,13 @@ void help(void)
     mprintf("    --no-archive                         Disable libclamav archive support\n");
     mprintf("    --detect-broken                      Try to detect broken executable files\n");
     mprintf("    --block-encrypted                    Block encrypted archives\n");
-    mprintf("    --block-max                          Block archives that exceed limits\n");
     mprintf("    --mail-follow-urls                   Download and scan URLs\n");
     mprintf("\n");
-    mprintf("    --max-space=#n                       Only extract first #n kilobytes from\n");
-    mprintf("                                         archived files\n");
-    mprintf("    --max-files=#n                       Only extract first #n files from\n");
-    mprintf("                                         archives\n");
-    mprintf("    --max-ratio=#n                       Maximum compression ratio limit\n");
-    mprintf("    --max-recursion=#n                   Maximum archive recursion level\n");
+    mprintf("    --max-filesize=#n                    Files larger than this will be skipped and assumed clean\n");
+    mprintf("    --max-scansize=#n                    The maximum amount of data to scan for each container file (*)\n");
+    mprintf("    --max-files=#n                       The maximum number of files to scan for each container file (*)\n");
+    mprintf("    --max-recursion=#n                   Maximum archive recursion level for container file (*)\n");
     mprintf("    --max-dir-recursion=#n               Maximum directory recursion level\n");
-    mprintf("    --max-mail-recursion=#n              Maximum mail recursion level\n");
     mprintf("    --unzip[=FULLPATH]                   Enable support for .zip files\n");
     mprintf("    --unrar[=FULLPATH]                   Enable support for .rar files\n");
     mprintf("    --arj[=FULLPATH]                     Enable support for .arj files\n");
@@ -328,4 +337,6 @@ void help(void)
     mprintf("    --tar[=FULLPATH]                     Enable support for .tar files\n");
     mprintf("    --deb[=FULLPATH to ar]               Enable support for .deb files\n");
     mprintf("    --tgz[=FULLPATH]                     Enable support for .tar.gz, .tgz files\n\n");
+    mprintf("(*) Certain files (e.g. documents, archives, etc.) may in turn contain other files inside.\n");
+    mprintf("    The above options ensure safe processing of this kind of data.\n\n");
 }

@@ -1,11 +1,11 @@
 /* GDB-specific functions for operating on agent expressions
-   Copyright 1998, 1999, 2000 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef AX_GDB_H
 #define AX_GDB_H
@@ -92,16 +90,6 @@ struct axs_value
 
 
 /* Translating GDB expressions into agent expressions.  */
-
-/* Given a GDB expression EXPR, translate it into the agent bytecode,
-   and return it.  FLAGS are from enum expr_to_agent_flags.  */
-extern struct agent_expr *expr_to_agent (struct expression *EXPR,
-					 struct axs_value *VALUE);
-
-/* Given a GDB expression EXPR denoting an lvalue in memory, produce a
-   string of agent bytecode which will leave its address and size on
-   the top of stack.  Return the agent expression.  */
-extern struct agent_expr *expr_to_address_and_size (struct expression *EXPR);
 
 /* Given a GDB expression EXPR, return bytecode to trace its value.
    The result will use the `trace' and `trace_quick' bytecodes to

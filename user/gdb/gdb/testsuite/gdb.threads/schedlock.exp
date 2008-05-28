@@ -1,18 +1,18 @@
-# Copyright (C) 1996, 1997, 2002, 2003 Free Software Foundation, Inc.
+# Copyright (C) 1996, 1997, 2002, 2003, 2007, 2008
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -33,6 +33,9 @@ set testfile "schedlock"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 
+# The number of threads, including the main thread.
+set NUM 2
+
 if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [list debug "incdir=${objdir}"]] != "" } {
     return -1
 }
@@ -45,11 +48,11 @@ proc get_args { } {
 
   send_gdb "print args\n"
   gdb_expect {
-    -re "\\\$\[0-9\]+ = {(\[0-9\]+), (\[0-9\]+), (\[0-9\]+), (\[0-9\]+), (\[0-9\]+), (\[0-9\]+)}.*$gdb_prompt"
+    -re "\\\$\[0-9\]+ = {(\[0-9\]+), (\[0-9\]+)}.*$gdb_prompt"
       {
 	set list_count [expr $list_count + 1]
 	pass "listed args ($list_count)"
-	return [list $expect_out(1,string) $expect_out(2,string) $expect_out(3,string) $expect_out(4,string) $expect_out(5,string) $expect_out(6,string)]
+	return [list $expect_out(1,string) $expect_out(2,string)]
       }
     -re "$gdb_prompt"
       {
@@ -113,7 +116,7 @@ proc my_continue { msg } {
   stop_process "stop all threads ($msg)"
 
   # Make sure we're in one of the non-main looping threads.
-  gdb_breakpoint [concat [gdb_get_line_number "schedlock.exp: main loop"] " if arg != 5"]
+  gdb_breakpoint [concat [gdb_get_line_number "schedlock.exp: main loop"] " if arg != 0"]
   gdb_continue_to_breakpoint "return to loop ($msg)"
   delete_breakpoints
 }
@@ -199,12 +202,16 @@ my_continue "initial"
 
 set cont_args [get_args]
 
-for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
+set ok 1
+for {set i 0} {[expr $i < $NUM]} {set i [expr $i + 1]} {
   if {[lindex $start_args $i] == [lindex $cont_args $i]} {
-    fail "thread $i ran (didn't run)"
-  } else {
-    pass "thread $i ran"
+    set ok 0
   }
+}
+if { $ok } {
+  pass "all threads alive"
+} else {
+  fail "all threads alive"
 }
 
 # We can't change threads, unfortunately, in current GDB.  Use
@@ -231,7 +238,7 @@ set start_args $cont_args
 set cont_args [get_args]
 
 set num_other_threads 0
-for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
+for {set i 0} {[expr $i < $NUM]} {set i [expr $i + 1]} {
   if {[lindex $start_args $i] == [lindex $cont_args $i]} {
     if {$i == $curthread} {
       fail "current thread stepped (didn't run)"
@@ -249,9 +256,9 @@ for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
   }
 }
 if {$num_other_threads > 0} {
-  pass "other threads ran (1)"
+  pass "other threads ran - unlocked"
 } else {
-  fail "other threads ran (no other threads ran) (1)"
+  fail "other threads ran - unlocked"
 }
 
 # Test continue with scheduler locking
@@ -270,20 +277,24 @@ if {$curthread == $newthread} {
 set start_args $cont_args
 set cont_args [get_args]
 
-for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
+set num_other_threads 0
+for {set i 0} {[expr $i < $NUM]} {set i [expr $i + 1]} {
   if {[lindex $start_args $i] == [lindex $cont_args $i]} {
     if {$i == $curthread} {
       fail "current thread ran (didn't run)"
-    } else {
-      pass "other thread $i didn't run"
     }
   } else {
     if {$i == $curthread} {
       pass "current thread ran"
     } else {
-      fail "other thread $i didn't run (ran)"
+      incr num_other_threads
     }
   }
+}
+if {$num_other_threads > 0} {
+  fail "other threads didn't run - locked"
+} else {
+  pass "other threads didn't run - locked"
 }
 
 # Test stepping with scheduler locking
@@ -300,12 +311,11 @@ if {$curthread == $newthread} {
 set start_args $cont_args
 set cont_args [get_args]
 
-for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
+set num_other_threads 0
+for {set i 0} {[expr $i < $NUM]} {set i [expr $i + 1]} {
   if {[lindex $start_args $i] == [lindex $cont_args $i]} {
     if {$i == $curthread} {
       fail "current thread stepped locked (didn't run)"
-    } else {
-      pass "other thread $i didn't run (stepping)"
     }
   } else {
     if {$i == $curthread} {
@@ -315,9 +325,14 @@ for {set i 0} {[expr $i < 6]} {set i [expr $i + 1]} {
 	    fail "current thread stepped locked (wrong amount)"
 	}
     } else {
-      fail "other thread $i didn't run (stepping) (ran)"
+      incr num_other_threads
     }
   }
+}
+if {$num_other_threads > 0} {
+  fail "other threads didn't run - step locked"
+} else {
+  pass "other threads didn't run - step locked"
 }
 
 return 0

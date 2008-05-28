@@ -1,18 +1,17 @@
-# Copyright 2002, 2004 Free Software Foundation, Inc.
+# Copyright 2002, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -34,6 +33,7 @@ set binfile  ${objdir}/${subdir}/${testfile}
 set options  {debug}
 
 set is64bitonly "no"
+set endian "auto"
 
 if [istarget "alpha*-*-*"] then {
     # SREC etc cannot handle 64-bit addresses.  Force the test
@@ -41,12 +41,13 @@ if [istarget "alpha*-*-*"] then {
     lappend options "additional_flags=-Wl,-taso"
 }
 
-if [istarget "ia64*-*-*"] then {
+if {[istarget "ia64*-*-*"] || [istarget "hppa64-*-*"]} then {
     set is64bitonly "yes"
 }
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable ${options}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested dump.exp
+     return -1
 }
 
 # Start with a fresh gdb.
@@ -65,7 +66,21 @@ remote_exec build "rm -f intarr1.bin intarr1b.bin intarr1.ihex intarr1.srec inta
 # Run target program until data structs are initialized.
 
 if { ! [ runto checkpoint1 ] } then {
-    gdb_suppress_entire_file "Program failed to run, so all tests in this file will automatically fail."
+    untested dump.exp
+    return -1
+}
+
+# Get the endianness for the later use with endianless formats.
+
+send_gdb "show endian\n"
+gdb_expect {
+    -re ".* (big|little) endian.*$gdb_prompt $" { 
+	set endian $expect_out(1,string) 
+	pass "endianness: $endian"
+    }
+    default {
+	fail "(timeout) getting target endianness"
+    }
 }
 
 # Now generate some dump files.
@@ -188,6 +203,18 @@ gdb_exit
 gdb_start
 gdb_file_cmd ${binfile}
 
+# Now fix the endianness at the correct state.
+
+send_gdb "set endian $endian\n"
+gdb_expect {
+    -re ".* (big|little) endian.*$gdb_prompt $" { 
+	pass "setting $endian endianness"
+    }
+    default {
+	fail "(timeout) setting $endian endianness"
+    }
+}
+
 # Reload saved values one by one, and compare.
 
 if { ![string compare $array_val \
@@ -276,7 +303,8 @@ gdb_load ${binfile}
 
 # Run to main.
 if { ! [ runto_main ] } then {
-    gdb_suppress_entire_file "Program failed to run, so remaining tests in this file will automatically fail."
+    untested dump.exp
+    return -1
 }
 
 if { ![string compare $array_val \

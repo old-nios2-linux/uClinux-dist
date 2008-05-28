@@ -1,12 +1,12 @@
 /* Interface to C preprocessor macro tables for GDB.
-   Copyright 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MACROTAB_H
 #define MACROTAB_H
@@ -154,15 +152,15 @@ struct macro_source_file
    amongst compilation units in an executable file; if BCACHE is zero,
    don't cache these things.
 
-   Note that, if either OBSTACK or BCACHE are non-zero, then you
-   should only ever add information the macro table --- you should
-   never remove things from it.  You'll get an error if you try.  At
-   the moment, since we only provide obstacks and bcaches for macro
-   tables for symtabs, this restriction makes a nice sanity check.
-   Obstacks and bcaches are pretty much grow-only structures anyway.
-   However, if we find that it's occasionally useful to delete things
-   even from the symtab's tables, and the storage leak isn't a
-   problem, this restriction could be lifted.  */
+   Note that, if either OBSTACK or BCACHE are non-zero, then removing
+   information from the table may leak memory.  Neither obstacks nor
+   bcaches really allow you to remove information, so although we can
+   update the data structure to record the change, we can't free the
+   old data.  At the moment, since we only provide obstacks and
+   bcaches for macro tables for symtabs, this isn't a problem; only
+   odd debugging information makes a definition and then deletes it at
+   the same source location (although 'gcc -DFOO -UFOO -DFOO=2' does
+   do that in GCC 4.1.2.).  */
 struct macro_table *new_macro_table (struct obstack *obstack,
                                      struct bcache *bcache);
 

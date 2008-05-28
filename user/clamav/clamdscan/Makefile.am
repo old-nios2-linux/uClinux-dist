@@ -38,6 +38,6 @@ clamdscan_SOURCES = \
 
 endif
 
-DEFS = @DEFS@ -DCL_NOTHREADS
-INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/clamscan -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
-LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @THREAD_LIBS@
+DEFS = @DEFS@ -DCL_NOTHREADS -DCL_NOLIBCLAMAV
+AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/clamscan -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
+LIBS = $(top_builddir)/libclamav/libclamav_internal_utils.la @FRESHCLAM_LIBS@

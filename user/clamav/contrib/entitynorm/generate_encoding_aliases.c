@@ -18,11 +18,12 @@
  *
  */
 
-#include <clamav-config.h>
-#include <others.h>
-#include <htmlnorm.h>
-#include <hashtab.h>
-#include <entconv.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "../../libclamav/htmlnorm.h"
+#include "../../libclamav/entconv.h"
+#include "../../libclamav/hashtab.h"
 #include <string.h>
 
 static const struct {
@@ -57,14 +58,15 @@ static const struct {
 };
 
 static const size_t aliases_cnt = sizeof(aliases)/sizeof(aliases[0]);
+extern short cli_debug_flag;
 
 int main(int argc, char* argv[])
 {
 	struct hashtable ht;
 	size_t i;
 
-	cl_debug();
-	hashtab_init(&ht,aliases_cnt*5/4);
+	cli_debug_flag=1;
+	hashtab_init(&ht,aliases_cnt);
 
 	for(i=0;i < aliases_cnt;i++) {
 		hashtab_insert(&ht,(const unsigned char*)aliases[i].alias,strlen(aliases[i].alias),aliases[i].encoding);

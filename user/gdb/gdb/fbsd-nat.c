@@ -1,12 +1,12 @@
 /* Native-dependent code for FreeBSD.
 
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -27,8 +25,9 @@
 
 #include "gdb_assert.h"
 #include "gdb_string.h"
-#include <sys/procfs.h>
 #include <sys/types.h>
+#include <sys/procfs.h>
+#include <sys/sysctl.h>
 
 #include "elf-bfd.h"
 #include "fbsd-nat.h"
@@ -39,18 +38,30 @@
 char *
 fbsd_pid_to_exec_file (int pid)
 {
+  size_t len = MAXPATHLEN;
+  char *buf = xcalloc (len, sizeof (char));
   char *path;
-  char *buf;
+
+#ifdef KERN_PROC_PATHNAME
+  int mib[4];
+
+  mib[0] = CTL_KERN;
+  mib[1] = KERN_PROC;
+  mib[2] = KERN_PROC_PATHNAME;
+  mib[3] = pid;
+  if (sysctl (mib, 4, buf, &len, NULL, 0) == 0)
+    return buf;
+#endif
 
   path = xstrprintf ("/proc/%d/file", pid);
-  buf = xcalloc (MAXPATHLEN, sizeof (char));
-  make_cleanup (xfree, path);
-  make_cleanup (xfree, buf);
+  if (readlink (path, buf, MAXPATHLEN) == -1)
+    {
+      xfree (buf);
+      buf = NULL;
+    }
 
-  if (readlink (path, buf, MAXPATHLEN) > 0)
-    return buf;
-
-  return NULL;
+  xfree (path);
+  return buf;
 }
 
 static int
@@ -93,7 +104,7 @@ fbsd_find_memory_regions (int (*func) (CORE_ADDR, unsigned long,
   mapfilename = xstrprintf ("/proc/%ld/map", (long) pid);
   mapfile = fopen (mapfilename, "r");
   if (mapfile == NULL)
-    error ("Couldn't open %s\n", mapfilename);
+    error (_("Couldn't open %s."), mapfilename);
 
   if (info_verbose)
     fprintf_filtered (gdb_stdout, 
@@ -132,8 +143,8 @@ fbsd_find_memory_regions (int (*func) (CORE_ADDR, unsigned long,
 char *
 fbsd_make_corefile_notes (bfd *obfd, int *note_size)
 {
-  struct gdbarch *gdbarch = current_gdbarch;
-  const struct regcache *regcache = current_regcache;
+  const struct regcache *regcache = get_current_regcache ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   gregset_t gregs;
   fpregset_t fpregs;
   char *note_data = NULL;

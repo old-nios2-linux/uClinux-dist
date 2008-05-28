@@ -1,23 +1,24 @@
 /* ia64-opc-b.c -- IA-64 `B' opcode table.
-   Copyright 1998, 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2002, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
-   This file is part of GDB, GAS, and the GNU binutils.
+   This file is part of the GNU opcodes library.
 
-   GDB, GAS, and the GNU binutils are free software; you can redistribute
-   them and/or modify them under the terms of the GNU General Public
-   License as published by the Free Software Foundation; either version
-   2, or (at your option) any later version.
+   This library is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-   GDB, GAS, and the GNU binutils are distributed in the hope that they
-   will be useful, but WITHOUT ANY WARRANTY; without even the implied
-   warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
-   the GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
    You should have received a copy of the GNU General Public License
    along with this file; see the file COPYING.  If not, write to the
-   Free Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "ia64-opc.h"
 
@@ -197,6 +198,8 @@ struct ia64_opcode ia64_opcodes_b[] =
     {"bsw.0",		B0, OpX6 (0, 0x0c), {0, }, NO_PRED | LAST | PRIV, 0, NULL},
     {"bsw.1",		B0, OpX6 (0, 0x0d), {0, }, NO_PRED | LAST | PRIV, 0, NULL},
     {"epc",		B0, OpX6 (0, 0x10), {0, }, NO_PRED, 0, NULL},
+    {"vmsw.0",		B0, OpX6 (0, 0x18), {0, }, NO_PRED | PRIV, 0, NULL},
+    {"vmsw.1",		B0, OpX6 (0, 0x19), {0, }, NO_PRED | PRIV, 0, NULL},
 
     {"break.b",		B0, OpX6 (0, 0x00), {IMMU21}, EMPTY},
 

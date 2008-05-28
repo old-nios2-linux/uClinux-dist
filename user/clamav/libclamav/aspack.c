@@ -1,7 +1,7 @@
 /*
- *  Copyright (C) 2007 Amaketos, LLC
- *  Authors: Luciano Giuseppe 'Pnluck' <pnluck@virgilio.it>
- *           aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Luciano Giuseppe 'Pnluck', Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -35,8 +35,6 @@ struct DICT_HELPER {
 struct ASPK {
   uint32_t bitpos;
   uint32_t hash;
-  uint8_t array1[19];
-  uint8_t array2[758];
   uint32_t init_array[58];
   struct DICT_HELPER dict_helper[4];
   uint8_t *input;
@@ -45,6 +43,8 @@ struct ASPK {
   uint32_t decarray3[4][24];
   uint32_t decarray4[4][24];
   int dict_ok;
+  uint8_t array2[758];
+  uint8_t array1[19];
 };
 
 

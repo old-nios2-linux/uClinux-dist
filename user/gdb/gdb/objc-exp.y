@@ -1,7 +1,7 @@
 /* YACC parser for C expressions, for GDB.
 
-   Copyright 1986, 1989, 1990, 1991, 1993, 1994, 2002 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1993, 1994, 2002, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /* Parse a C expression from text in a string, and return the result
    as a struct expression pointer.  That structure contains arithmetic
@@ -108,13 +108,13 @@
 #endif
 
 int
-yyparse PARAMS ((void));
+yyparse (void);
 
 static int
-yylex PARAMS ((void));
+yylex (void);
 
 void
-yyerror PARAMS ((char *));
+yyerror (char *);
 
 %}
 
@@ -151,7 +151,7 @@ yyerror PARAMS ((char *));
 %{
 /* YYSTYPE gets defined by %union.  */
 static int
-parse_number PARAMS ((char *, int, int, YYSTYPE *));
+parse_number (char *, int, int, YYSTYPE *);
 %}
 
 %type <voidval> exp exp1 type_exp start variable qualified_name lcurly
@@ -680,7 +680,7 @@ qualified_name:	typebase COLONCOLON name
 			    error ("`%s' is not defined as an aggregate type.",
 				   TYPE_NAME (type));
 
-			  if (!DEPRECATED_STREQ (type_name_no_tag (type), $4.ptr))
+			  if (strcmp (type_name_no_tag (type), $4.ptr) != 0)
 			    error ("invalid destructor `%s::~%s'",
 				   type_name_no_tag (type), $4.ptr);
 
@@ -858,8 +858,6 @@ func_mod:	'(' ')'
    is a pointer to member type.  Stroustrup loses again!  */
 
 type	:	ptype
-	|	typebase COLONCOLON '*'
-			{ $$ = lookup_member_type (builtin_type_int, $1); }
 	;
 
 typebase  /* Implements (approximately): (type-qualifier)* type-specifier.  */
@@ -1025,23 +1023,8 @@ parse_number (p, len, parsed_float, putithere)
 
       /* It's a float since it contains a point or an exponent.  */
 
-      if (sizeof (putithere->typed_val_float.dval) <= sizeof (float))
-	sscanf (p, "%g", (float *)&putithere->typed_val_float.dval);
-      else if (sizeof (putithere->typed_val_float.dval) <= sizeof (double))
-	sscanf (p, "%lg", (double *)&putithere->typed_val_float.dval);
-      else
-	{
-#ifdef PRINTF_HAS_LONG_DOUBLE
-	  sscanf (p, "%Lg", &putithere->typed_val_float.dval);
-#else
-	  /* Scan it into a double, then assign it to the long double.
-	     This at least wins with values representable in the range
-	     of doubles.  */
-	  double temp;
-	  sscanf (p, "%lg", &temp);
-	  putithere->typed_val_float.dval = temp;
-#endif
-	}
+      sscanf (p, "%" DOUBLEST_SCAN_FORMAT "%c",
+	      &putithere->typed_val_float.dval, &c);
 
       /* See if it has `f' or `l' suffix (float or long double).  */
 
@@ -1151,16 +1134,16 @@ parse_number (p, len, parsed_float, putithere)
      shift it right and see whether anything remains.  Note that we
      can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
      operation, because many compilers will warn about such a shift
-     (which always produces a zero result).  Sometimes TARGET_INT_BIT
-     or TARGET_LONG_BIT will be that big, sometimes not.  To deal with
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_int will be that big, sometimes not.  To deal with
      the case where it is we just always shift the value more than
      once, with fewer bits each time.  */
 
   un = (unsigned LONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (TARGET_INT_BIT - 2)) == 0)
+      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((unsigned LONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((unsigned LONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -1172,16 +1155,16 @@ parse_number (p, len, parsed_float, putithere)
       signed_type = builtin_type_int;
     }
   else if (long_p <= 1
-	   && (un >> (TARGET_LONG_BIT - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((unsigned LONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((unsigned LONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
       unsigned_type = builtin_type_unsigned_long;
       signed_type = builtin_type_long;
     }
   else
     {
       high_bit = (((unsigned LONGEST)1)
-		  << (TARGET_LONG_LONG_BIT - 32 - 1)
+		  << (gdbarch_long_long_bit (current_gdbarch) - 32 - 1)
 		  << 16
 		  << 16);
       if (high_bit == 0)
@@ -1265,7 +1248,7 @@ yylex ()
   tokstart = lexptr;
   /* See if it is a special token of length 3.  */
   for (i = 0; i < sizeof tokentab3 / sizeof tokentab3[0]; i++)
-    if (DEPRECATED_STREQN (tokstart, tokentab3[i].operator, 3))
+    if (strncmp (tokstart, tokentab3[i].operator, 3) == 0)
       {
 	lexptr += 3;
 	yylval.opcode = tokentab3[i].opcode;
@@ -1274,7 +1257,7 @@ yylex ()
 
   /* See if it is a special token of length 2.  */
   for (i = 0; i < sizeof tokentab2 / sizeof tokentab2[0]; i++)
-    if (DEPRECATED_STREQN (tokstart, tokentab2[i].operator, 2))
+    if (strncmp (tokstart, tokentab2[i].operator, 2) == 0)
       {
 	lexptr += 2;
 	yylval.opcode = tokentab2[i].opcode;
@@ -1589,43 +1572,43 @@ yylex ()
   switch (namelen)
     {
     case 8:
-      if (DEPRECATED_STREQN (tokstart, "unsigned", 8))
+      if (strncmp (tokstart, "unsigned", 8) == 0)
 	return UNSIGNED;
       if (current_language->la_language == language_cplus
 	  && strncmp (tokstart, "template", 8) == 0)
 	return TEMPLATE;
-      if (DEPRECATED_STREQN (tokstart, "volatile", 8))
+      if (strncmp (tokstart, "volatile", 8) == 0)
 	return VOLATILE_KEYWORD;
       break;
     case 6:
-      if (DEPRECATED_STREQN (tokstart, "struct", 6))
+      if (strncmp (tokstart, "struct", 6) == 0)
 	return STRUCT;
-      if (DEPRECATED_STREQN (tokstart, "signed", 6))
+      if (strncmp (tokstart, "signed", 6) == 0)
 	return SIGNED_KEYWORD;
-      if (DEPRECATED_STREQN (tokstart, "sizeof", 6))      
+      if (strncmp (tokstart, "sizeof", 6) == 0)
 	return SIZEOF;
-      if (DEPRECATED_STREQN (tokstart, "double", 6))      
+      if (strncmp (tokstart, "double", 6) == 0) 
 	return DOUBLE_KEYWORD;
       break;
     case 5:
       if ((current_language->la_language == language_cplus)
 	  && strncmp (tokstart, "class", 5) == 0)
 	return CLASS;
-      if (DEPRECATED_STREQN (tokstart, "union", 5))
+      if (strncmp (tokstart, "union", 5) == 0)
 	return UNION;
-      if (DEPRECATED_STREQN (tokstart, "short", 5))
+      if (strncmp (tokstart, "short", 5) == 0)
 	return SHORT;
-      if (DEPRECATED_STREQN (tokstart, "const", 5))
+      if (strncmp (tokstart, "const", 5) == 0)
 	return CONST_KEYWORD;
       break;
     case 4:
-      if (DEPRECATED_STREQN (tokstart, "enum", 4))
+      if (strncmp (tokstart, "enum", 4) == 0)
 	return ENUM;
-      if (DEPRECATED_STREQN (tokstart, "long", 4))
+      if (strncmp (tokstart, "long", 4) == 0)
 	return LONG;
       break;
     case 3:
-      if (DEPRECATED_STREQN (tokstart, "int", 3))
+      if (strncmp (tokstart, "int", 3) == 0)
 	return INT_KEYWORD;
       break;
     default:

@@ -42,10 +42,11 @@
 #include <pthread.h>
 
 #ifdef	USE_SYSLOG
+#include <strsafe.h>
 #include "syslog.h"
 #endif
 
-static const char *basename (const char *file_name);
+static	const	char	*basename(const char *file_name);
 
 /* Offset between 1/1/1601 and 1/1/1970 in 100 nanosec units */
 #define _W32_FT_OFFSET (116444736000000000ULL)
@@ -281,7 +282,7 @@ mmap(caddr_t address, size_t length, int protection, int flags, int fd, off_t of
 	struct mmap_context *ctx;
 
 	if(flags != MAP_PRIVATE) {
-		cli_errmsg("mmap: only MAP_SHARED is supported\n");
+		cli_errmsg("mmap: only MAP_PRIVATE is supported\n");
 		return MAP_FAILED;
 	}
 	if(protection != PROT_READ) {
@@ -334,27 +335,31 @@ mmap(caddr_t address, size_t length, int protection, int flags, int fd, off_t of
 int
 munmap(caddr_t addr, size_t length)
 {
-	struct mmap_context *ctx, *lctx = NULL;
+	struct mmap_context *ctx = mmaps, *lctx = NULL;
 
 	pthread_mutex_lock(&mmap_mutex);
-	for(ctx = mmaps; ctx && (ctx->view != addr); ) {
+	
+	for(; ctx && (ctx->view != addr); ctx = ctx->link)
 		lctx = ctx;
-		ctx = ctx->link;
-	}
+
 	if(ctx == NULL) {
 		pthread_mutex_unlock(&mmap_mutex);
 		cli_warnmsg("munmap with no corresponding mmap\n");
 		return -1;
 	}
+
 	if(ctx->length != length) {
 		pthread_mutex_unlock(&mmap_mutex);
-		cli_warnmsg("munmap with incorrect length specified - partial munmap unsupported\n");
+		cli_warnmsg("munmap with incorrect length specified (%u != %u) - partial munmap unsupported\n",
+			length, ctx->length);
 		return -1;
 	}
-	if(NULL == lctx)
+
+	if(lctx == NULL)
 		mmaps = ctx->link;
 	else
 		lctx->link = ctx->link;
+
 	pthread_mutex_unlock(&mmap_mutex);
 
 	UnmapViewOfFile(ctx->view);
@@ -372,40 +377,120 @@ chown(const char *filename, short uid, short gid)
 
 #ifdef	USE_SYSLOG
 /*
- * Put into the Windows Event Log (Right Click My Computer->Manage->Event Viewer->Application
+ * Put into the Windows Event Log
+ *	Right Click My Computer->Manage->Event Viewer->Application
  * See http://cybertiggyr.com/gene/wel/src/insert-log.c for inspiration
+ * http://msdn2.microsoft.com/en-gb/library/aa363634(VS.85).aspx
+ * and http://msdn2.microsoft.com/en-us/library/aa363680(VS.85).aspx
+ *
+ * FIXME: Not thread safe, but see shared/output.c, which ensures this code is
+ *	single threaded - therefore don't call this code directly
  */
 static	HANDLE	logg_handle;
+static	int	initlog(const char *source);
 
 void
 openlog(const char *name, int options, int facility)
 {
+	if(logg_handle != NULL)
+		closelog();
+	else
+		(void)initlog(name);
+
 	logg_handle = RegisterEventSource(NULL, name);
+
+	if(logg_handle == NULL)
+		cli_warnmsg("openlog: Can't register source %s - error %d\n", name, GetLastError());
 }
 
 void
 closelog(void)
 {
 	if(logg_handle != NULL)
-		CloseEventLog(logg_handle);
+		DeregisterEventSource(logg_handle);
 }
 
 void
 syslog(int level, const char *format, ...)
 {
+	if(logg_handle == NULL)
+		openlog("Clam AntiVirus", 0, LOG_LOCAL6);
+		
 	if(logg_handle != NULL) {
 		va_list args;
 		char buff[512];
+		char *ptr;
 
 		va_start(args, format);
 		(void)vsnprintf(buff, sizeof(buff), format, args);
 		va_end(args);
 		
-		/*
-		 * Category = 0, eventId = 0, SID = NULL, 1 string
-		 */
-		(void)ReportEvent(logg_handle, (WORD)level, 0, 0, NULL, 1, 0, (LPCSTR *)buff, NULL);
-	}
+		ptr = buff;
 
+		/*
+		 * Category = 0, eventId = CLAMAV_EVENTMSG, SID = NULL, 1 string
+		 */
+		if(!ReportEventA(logg_handle, (WORD)level, 0, CLAMAV_EVENTMSG, NULL, 1, 0, (LPCSTR *)&ptr, NULL))
+			cli_warnmsg("syslog: ReportEventA(%d, %d, 0, %d, NULL, 1, 0, %s, NULL) failed: %d\n",
+				logg_handle, level, CLAMAV_EVENTMSG, buff, GetLastError());
+	}
+}
+
+static int
+initlog(const char *source)
+{
+	/*DWORD dwCategoryNum = 1;	/* The number of categories for the event source. */
+	HKEY hk; 
+	DWORD dwData, /*dwDisp,*/ len;
+	char path[MAX_PATH];
+
+	/* Create the event source as a subkey of the log. */
+	(void)snprintf(path, sizeof(path),
+		"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s",
+		source);
+ 
+	if(RegCreateKey(HKEY_LOCAL_MACHINE, path, &hk) != 0) {
+		cli_warnmsg("Could not create the registry key\n"); 
+		/*return 0;*/
+	}
+ 
+	/* Set the name of the message file. */
+	GetModuleFileName(NULL, path, sizeof(path));
+	path[sizeof(path) - 1] = '\0';
+	len = (DWORD)(strlen(path) + 1);
+
+	if(RegSetValueEx(hk, "EventMessageFile", 0, REG_EXPAND_SZ, (LPBYTE)path, len)) {
+		cli_warnmsg("Could not set the event message file\n"); 
+		RegCloseKey(hk); 
+		return 0;
+	}
+ 
+	/* Set the supported event types. */
+	dwData = EVENTLOG_ERROR_TYPE | EVENTLOG_WARNING_TYPE | EVENTLOG_INFORMATION_TYPE; 
+ 
+	if(RegSetValueEx(hk, "TypesSupported", 0, REG_DWORD, (LPBYTE)&dwData, sizeof(DWORD))) { 
+		cli_warnmsg("Could not set the supported types\n"); 
+		RegCloseKey(hk); 
+		return 0;
+	}
+ 
+#if	0
+	/* Set the category message file and number of categories. */
+	if(RegSetValueEx(hk, "CategoryMessageFile", 0, REG_EXPAND_SZ,
+	    (LPBYTE)path, len)) {
+		cli_warnmsg("Could not set the category message file\n"); 
+		RegCloseKey(hk); 
+		return 0;
+	}
+ 
+	if(RegSetValueEx(hk, "CategoryCount", 0, REG_DWORD, (LPBYTE)&dwCategoryNum, sizeof(DWORD))) {
+		cli_warnmsg("Could not set the category count\n"); 
+		RegCloseKey(hk); 
+		return 0;
+	}
+#endif
+
+	RegCloseKey(hk); 
+	return 1;
 }
 #endif

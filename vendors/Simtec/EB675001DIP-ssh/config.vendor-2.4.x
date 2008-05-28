@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu Apr 10 01:35:31 2008
+# Thu May 15 01:41:53 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -52,6 +52,7 @@ CONFIG_LIB_ZLIB=y
 # CONFIG_LIB_LIBCRYPT_OLD is not set
 # CONFIG_LIB_PWLIB is not set
 # CONFIG_LIB_LIBOPENH323 is not set
+# CONFIG_LIB_LIBJUDY is not set
 
 #
 # Library Configuration
@@ -88,6 +89,7 @@ CONFIG_LIB_ZLIB=y
 # CONFIG_USER_TQRECV_TQRECV is not set
 # CONFIG_USER_UPNPD is not set
 # CONFIG_USER_WINSD_WS is not set
+# CONFIG_USER_TRUSTEDSOURCE_V2 is not set
 
 #
 # Supported Languages
@@ -263,7 +265,6 @@ CONFIG_USER_AGETTY_AGETTY=y
 # CONFIG_USER_APPWEB_APPWEB is not set
 # CONFIG_USER_ASTERISK is not set
 # CONFIG_USER_TRUSTEDSOURCE is not set
-# CONFIG_USER_TRUSTEDSOURCE_V2 is not set
 # CONFIG_USER_BIND_BIND is not set
 # CONFIG_USER_FNORD_HTTPD is not set
 # CONFIG_USER_FNORD_PAM is not set
@@ -495,6 +496,7 @@ CONFIG_USER_PING_PING=y
 # CONFIG_USER_UNRAR_UNRAR is not set
 # CONFIG_USER_UNZIP_UNZIP is not set
 # CONFIG_USER_UNZOO_UNZOO is not set
+# CONFIG_USER_WATCHDOGD is not set
 # CONFIG_USER_LRZSZ_LRZSZ is not set
 
 #

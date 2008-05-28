@@ -1,6 +1,5 @@
 /* Memory breakpoint interfaces for the remote server for GDB.
-   Copyright 2002
-   Free Software Foundation, Inc.
+   Copyright (C) 2002, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -8,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MEM_BREAK_H
 #define MEM_BREAK_H
@@ -27,10 +24,16 @@
 /* Breakpoints are opaque.  */
 
 /* Create a new breakpoint at WHERE, and call HANDLER when
-   it is hit.  */
+   it is hit.  HANDLER should return 1 if the breakpoint
+   should be deleted, 0 otherwise.  */
 
 void set_breakpoint_at (CORE_ADDR where,
-			void (*handler) (CORE_ADDR));
+			int (*handler) (CORE_ADDR));
+
+/* Delete a breakpoint previously inserted at ADDR with
+   set_breakpoint_at.  */
+
+void delete_breakpoint_at (CORE_ADDR addr);
 
 /* Create a reinsertion breakpoint at STOP_AT for the breakpoint
    currently at STOP_PC (and temporarily remove the breakpoint at
@@ -55,17 +58,21 @@ int check_breakpoints (CORE_ADDR stop_pc);
    to MEM_ADDR + MEM_LEN.  Update the data already read from the target
    (in BUF) if necessary.  */
 
-void check_mem_read (CORE_ADDR mem_addr, char *buf, int mem_len);
+void check_mem_read (CORE_ADDR mem_addr, unsigned char *buf, int mem_len);
 
 /* See if any breakpoints shadow the target memory area from MEM_ADDR
    to MEM_ADDR + MEM_LEN.  Update the data to be written to the target
    (in BUF) if necessary, as well as the original data for any breakpoints.  */
 
-void check_mem_write (CORE_ADDR mem_addr, char *buf, int mem_len);
+void check_mem_write (CORE_ADDR mem_addr, unsigned char *buf, int mem_len);
 
 /* Set the byte pattern to insert for memory breakpoints.  This function
    must be called before any breakpoints are set.  */
 
-void set_breakpoint_data (const char *bp_data, int bp_len);
+void set_breakpoint_data (const unsigned char *bp_data, int bp_len);
+
+/* Delete all breakpoints.  */
+
+void delete_all_breakpoints (void);
 
 #endif /* MEM_BREAK_H */

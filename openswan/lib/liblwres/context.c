@@ -34,6 +34,7 @@
 #include <sys/select.h>
 #endif
 
+#include "os_select.h"
 #include "context_p.h"
 #include "assert_p.h"
 
@@ -343,7 +344,7 @@ lwres_context_sendrecv(lwres_context_t *ctx,
 {
 	lwres_result_t result;
 	int ret2;
-	fd_set readfds;
+	os_fd_set readfds;
 	struct timeval timeout;
 
 	/*
@@ -361,9 +362,9 @@ lwres_context_sendrecv(lwres_context_t *ctx,
 	if (result != LWRES_R_SUCCESS)
 		return (result);
  again:
-	FD_ZERO(&readfds);
-	FD_SET(ctx->sock, &readfds);
-	ret2 = select(ctx->sock + 1, &readfds, NULL, NULL, &timeout);
+	OS_FD_ZERO(&readfds);
+	OS_FD_SET(ctx->sock, &readfds);
+	ret2 = os_select(ctx->sock + 1, &readfds, NULL, NULL, &timeout);
 	
 	/*
 	 * What happened with select?

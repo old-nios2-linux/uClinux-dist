@@ -1,11 +1,11 @@
 /* Target-dependent code for OSF/1 on Alpha.
-   Copyright 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -35,14 +33,11 @@ alpha_osf1_pc_in_sigtramp (CORE_ADDR pc, char *func_name)
 }
 
 static CORE_ADDR
-alpha_osf1_sigcontext_addr (struct frame_info *frame)
+alpha_osf1_sigcontext_addr (struct frame_info *next_frame)
 {
-  struct frame_info *next_frame = get_next_frame (frame);
+  const struct frame_id next_id = get_frame_id (next_frame);
 
-  if (next_frame != NULL)
-    return (read_memory_integer (get_frame_base (next_frame), 8));
-  else
-    return (read_memory_integer (get_frame_base (frame), 8));
+  return (read_memory_integer (next_id.stack_addr, 8));
 }
 
 static void

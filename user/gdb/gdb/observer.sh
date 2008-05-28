@@ -1,5 +1,10 @@
 #!/bin/sh -e
 
+# Make certain that the script is not running in an internationalized
+# environment.
+LANG=c ; export LANG
+LC_ALL=c ; export LC_ALL
+
 if test $# -ne 3
 then
     echo "Usage: $0 <h|inc> <observer.texi> <observer.out>" 1>&2
@@ -8,35 +13,38 @@ fi
 
 lang=$1 ; shift
 texi=$1 ; shift
-o=$1 ; shift
-echo "Creating ${o}-tmp" 1>&2
-rm -f ${o}-tmp
+o=$1
+case $lang in
+  h) tmp=htmp ;;
+  inc) tmp=itmp ;;
+esac
+otmp="`echo $1 | sed -e 's,\.[^.]*$,,'`.$tmp"; shift
+echo "Creating ${otmp}" 1>&2
+rm -f ${otmp}
 
 # Can use any of the following: cat cmp cp diff echo egrep expr false
 # grep install-info ln ls mkdir mv pwd rm rmdir sed sleep sort tar
 # test touch true
 
-cat <<EOF >>${o}-tmp
+cat <<EOF >>${otmp}
 /* GDB Notifications to Observers.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-
+  
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-
+  
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    --
 
@@ -46,17 +54,25 @@ EOF
 
 
 case $lang in
-    h) cat <<EOF >>${o}-tmp
+    h) cat <<EOF >>${otmp}
 #ifndef OBSERVER_H
 #define OBSERVER_H
 
 struct observer;
 struct bpstats;
 struct so_list;
+struct objfile;
 EOF
         ;;
 esac
 
+# We are about to set IFS=:, so DOS-style file names with a drive
+# letter and a colon will be in trouble.
+
+if test -n "$DJGPP"
+then
+     texi=`echo $texi | sed -e 's,^\([a-zA-Z]\):/,/dev/\1/,'`
+fi
 
 # generate a list of events that can be observed
 
@@ -87,7 +103,7 @@ sed -n '
 ' $texi | while read event formal actual
 do
   case $lang in
-      h) cat <<EOF >>${o}-tmp
+      h) cat <<EOF >>${otmp}
 
 /* ${event} notifications.  */
 
@@ -100,7 +116,7 @@ EOF
 	;;
 
       inc)
-      	cat <<EOF >>${o}-tmp
+      	cat <<EOF >>${otmp}
 
 /* ${event} notifications.  */
 
@@ -146,12 +162,12 @@ done
 
 
 case $lang in
-    h) cat <<EOF >>${o}-tmp
+    h) cat <<EOF >>${otmp}
 
 #endif /* OBSERVER_H */
 EOF
 esac
 
 
-echo Moving ${o}-tmp to ${o}
-mv ${o}-tmp ${o}
+echo Moving ${otmp} to ${o}
+mv ${otmp} ${o}

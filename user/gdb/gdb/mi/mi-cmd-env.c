@@ -1,6 +1,6 @@
 /* MI Command Set - environment commands.
 
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat Inc.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -70,7 +68,7 @@ enum mi_cmd_result
 mi_cmd_env_pwd (char *command, char **argv, int argc)
 {
   if (argc > 0)
-    error ("mi_cmd_env_pwd: No arguments required");
+    error (_("mi_cmd_env_pwd: No arguments required"));
           
   if (mi_version (uiout) < 2)
     {
@@ -91,7 +89,7 @@ enum mi_cmd_result
 mi_cmd_env_cd (char *command, char **argv, int argc)
 {
   if (argc == 0 || argc > 1)
-    error ("mi_cmd_env_cd: Usage DIRECTORY");
+    error (_("mi_cmd_env_cd: Usage DIRECTORY"));
           
   env_execute_cli_command ("cd", argv[0]);
 
@@ -126,7 +124,7 @@ mi_cmd_env_path (char *command, char **argv, int argc)
   static struct mi_opt opts[] =
   {
     {"r", RESET_OPT, 0},
-    0
+    { 0, 0, 0 }
   };
 
   dont_repeat ();
@@ -198,7 +196,7 @@ mi_cmd_env_dir (char *command, char **argv, int argc)
   static struct mi_opt opts[] =
   {
     {"r", RESET_OPT, 0},
-    0
+    { 0, 0, 0 }
   };
 
   dont_repeat ();
@@ -240,6 +238,30 @@ mi_cmd_env_dir (char *command, char **argv, int argc)
 
   ui_out_field_string (uiout, "source-path", source_path);
   forget_cached_source_info ();
+
+  return MI_CMD_DONE;
+}
+
+/* Set the inferior terminal device name.  */
+enum mi_cmd_result
+mi_cmd_inferior_tty_set (char *command, char **argv, int argc)
+{
+  set_inferior_io_terminal (argv[0]);
+
+  return MI_CMD_DONE;
+}
+
+/* Print the inferior terminal device name  */
+enum mi_cmd_result
+mi_cmd_inferior_tty_show (char *command, char **argv, int argc)
+{
+  const char *inferior_io_terminal = get_inferior_io_terminal ();
+  
+  if ( !mi_valid_noargs ("mi_cmd_inferior_tty_show", argc, argv))
+    error (_("mi_cmd_inferior_tty_show: Usage: No args"));
+
+  if (inferior_io_terminal)
+    ui_out_field_string (uiout, "inferior_tty_terminal", inferior_io_terminal);
 
   return MI_CMD_DONE;
 }

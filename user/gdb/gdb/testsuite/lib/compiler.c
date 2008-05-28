@@ -1,20 +1,20 @@
 /* This test file is part of GDB, the GNU debugger.
 
-   Copyright 1995, 1997, 1999, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 1995, 1997, 1999, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    */
 
@@ -63,4 +63,14 @@ set compiler_info [join {hpcc __HP_cc} -]
 
 #if defined (__HP_aCC)
 set compiler_info [join {hpacc __HP_aCC} -]
+#endif
+
+#if defined (__xlc__)
+/* IBM'x xlc compiler. NOTE:  __xlc__ expands to a double quoted string of four
+   numbers seperated by '.'s: currently "7.0.0.0" */
+set need_a_set [regsub -all {\.} [join {xlc __xlc__} -] - compiler_info]
+#endif
+
+#if defined (__ARMCC_VERSION)
+set compiler_info [join {armcc __ARMCC_VERSION} -]
 #endif

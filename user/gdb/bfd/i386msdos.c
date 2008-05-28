@@ -1,6 +1,6 @@
 /* BFD back-end for MS-DOS executables.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2001, 2002,
-   2003, 2004 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
    Written by Bryan Ford of the University of Utah.
 
    Contributed by the Center for Software Science at the
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -20,60 +20,29 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "libaout.h"
-
-#if 0
-struct exe_header
-{
-  unsigned short magic;
-  unsigned short bytes_in_last_page;
-  unsigned short npages;	/* number of 512-byte "pages" including this header */
-  unsigned short nrelocs;
-  unsigned short header_paras;	/* number of 16-byte paragraphs in header */
-  unsigned short reserved;
-  unsigned short load_switch;
-  unsigned short ss_ofs;
-  unsigned short sp;
-  unsigned short checksum;
-  unsigned short ip;
-  unsigned short cs_ofs;
-  unsigned short reloc_ofs;
-  unsigned short reserved2;
-  unsigned short something1;
-  unsigned short something2;
-  unsigned short something3;
-};
-#endif
 
 #define EXE_MAGIC	0x5a4d
 #define EXE_LOAD_HIGH	0x0000
 #define EXE_LOAD_LOW	0xffff
 #define EXE_PAGE_SIZE	512
 
-static int msdos_sizeof_headers
-  PARAMS ((bfd *, bfd_boolean));
-static bfd_boolean msdos_write_object_contents
-  PARAMS ((bfd *));
-static bfd_boolean msdos_set_section_contents
-  PARAMS ((bfd *, sec_ptr, const PTR, file_ptr, bfd_size_type));
-
 static int
-msdos_sizeof_headers (abfd, exec)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     bfd_boolean exec ATTRIBUTE_UNUSED;
+msdos_sizeof_headers (bfd *abfd ATTRIBUTE_UNUSED,
+		      struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
   return 0;
 }
 
 static bfd_boolean
-msdos_write_object_contents (abfd)
-     bfd *abfd;
+msdos_write_object_contents (bfd *abfd)
 {
   static char hdr[EXE_PAGE_SIZE];
   file_ptr outfile_size = sizeof(hdr);
@@ -135,12 +104,11 @@ msdos_write_object_contents (abfd)
 }
 
 static bfd_boolean
-msdos_set_section_contents (abfd, section, location, offset, count)
-     bfd *abfd;
-     sec_ptr section;
-     const PTR location;
-     file_ptr offset;
-     bfd_size_type count;
+msdos_set_section_contents (bfd *abfd,
+			    sec_ptr section,
+			    const void *location,
+			    file_ptr offset,
+			    bfd_size_type count)
 {
 
   if (count == 0)
@@ -163,6 +131,7 @@ msdos_set_section_contents (abfd, section, location, offset, count)
 #define msdos_mkobject aout_32_mkobject
 #define msdos_make_empty_symbol aout_32_make_empty_symbol
 #define msdos_bfd_reloc_type_lookup aout_32_reloc_type_lookup
+#define msdos_bfd_reloc_name_lookup aout_32_reloc_name_lookup
 
 #define	msdos_close_and_cleanup _bfd_generic_close_and_cleanup
 #define msdos_bfd_free_cached_info _bfd_generic_bfd_free_cached_info
@@ -192,6 +161,7 @@ msdos_set_section_contents (abfd, section, location, offset, count)
 #define msdos_print_symbol _bfd_nosymbols_print_symbol
 #define msdos_get_symbol_info _bfd_nosymbols_get_symbol_info
 #define msdos_find_nearest_line _bfd_nosymbols_find_nearest_line
+#define msdos_find_inliner_info _bfd_nosymbols_find_inliner_info
 #define msdos_get_lineno _bfd_nosymbols_get_lineno
 #define msdos_bfd_is_target_special_symbol ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 #define msdos_bfd_is_local_label_name _bfd_nosymbols_bfd_is_local_label_name

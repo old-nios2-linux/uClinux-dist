@@ -1,13 +1,13 @@
 /* ELF executable support for BFD.
 
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,10 +17,12 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-/*  SECTION
 
+/*
+SECTION
 	ELF backends
 
 	BFD support for ELF formats is being worked on.
@@ -33,19 +35,22 @@
 
 /* For sparc64-cross-sparc32.  */
 #define _SYSCALL32
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "bfdlink.h"
 #include "libbfd.h"
 #define ARCH_SIZE 0
 #include "elf-bfd.h"
 #include "libiberty.h"
+#include "safe-ctype.h"
 
 static int elf_sort_sections (const void *, const void *);
 static bfd_boolean assign_file_positions_except_relocs (bfd *, struct bfd_link_info *);
 static bfd_boolean prep_headers (bfd *);
 static bfd_boolean swap_out_syms (bfd *, struct bfd_strtab_hash **, int) ;
-static bfd_boolean elfcore_read_notes (bfd *, file_ptr, bfd_size_type) ;
+static bfd_boolean elf_read_notes (bfd *, file_ptr, bfd_size_type) ;
+static bfd_boolean elf_parse_notes (bfd *abfd, char *buf, size_t size,
+				    file_ptr offset);
 
 /* Swap version information in and out.  The version information is
    currently size independent.  If that ever changes, this code will
@@ -206,71 +211,91 @@ bfd_elf_hash (const char *namearg)
   return h & 0xffffffff;
 }
 
-/* Read a specified number of bytes at a specified offset in an ELF
-   file, into a newly allocated buffer, and return a pointer to the
-   buffer.  */
+/* DT_GNU_HASH hash function.  Do not change this function; you will
+   cause invalid hash tables to be generated.  */
 
-static char *
-elf_read (bfd *abfd, file_ptr offset, bfd_size_type size)
+unsigned long
+bfd_elf_gnu_hash (const char *namearg)
 {
-  char *buf;
+  const unsigned char *name = (const unsigned char *) namearg;
+  unsigned long h = 5381;
+  unsigned char ch;
 
-  if ((buf = bfd_alloc (abfd, size)) == NULL)
-    return NULL;
-  if (bfd_seek (abfd, offset, SEEK_SET) != 0)
-    return NULL;
-  if (bfd_bread (buf, size, abfd) != size)
-    {
-      if (bfd_get_error () != bfd_error_system_call)
-	bfd_set_error (bfd_error_file_truncated);
-      return NULL;
-    }
-  return buf;
+  while ((ch = *name++) != '\0')
+    h = (h << 5) + h + ch;
+  return h & 0xffffffff;
 }
 
+/* Create a tdata field OBJECT_SIZE bytes in length, zeroed out and with
+   the object_id field of an elf_obj_tdata field set to OBJECT_ID.  */
 bfd_boolean
-bfd_elf_mkobject (bfd *abfd)
+bfd_elf_allocate_object (bfd *abfd,
+			 size_t object_size,
+			 enum elf_object_id object_id)
 {
-  /* This just does initialization.  */
-  /* coff_mkobject zalloc's space for tdata.coff_obj_data ...  */
-  elf_tdata (abfd) = bfd_zalloc (abfd, sizeof (struct elf_obj_tdata));
-  if (elf_tdata (abfd) == 0)
+  BFD_ASSERT (object_size >= sizeof (struct elf_obj_tdata));
+  abfd->tdata.any = bfd_zalloc (abfd, object_size);
+  if (abfd->tdata.any == NULL)
     return FALSE;
-  /* Since everything is done at close time, do we need any
-     initialization?  */
 
+  elf_object_id (abfd) = object_id;
+  elf_program_header_size (abfd) = (bfd_size_type) -1;
   return TRUE;
+}
+
+
+bfd_boolean
+bfd_elf_make_generic_object (bfd *abfd)
+{
+  return bfd_elf_allocate_object (abfd, sizeof (struct elf_obj_tdata),
+				  GENERIC_ELF_TDATA);
 }
 
 bfd_boolean
 bfd_elf_mkcorefile (bfd *abfd)
 {
   /* I think this can be done just like an object file.  */
-  return bfd_elf_mkobject (abfd);
+  return bfd_elf_make_generic_object (abfd);
 }
 
 char *
 bfd_elf_get_str_section (bfd *abfd, unsigned int shindex)
 {
   Elf_Internal_Shdr **i_shdrp;
-  char *shstrtab = NULL;
+  bfd_byte *shstrtab = NULL;
   file_ptr offset;
   bfd_size_type shstrtabsize;
 
   i_shdrp = elf_elfsections (abfd);
-  if (i_shdrp == 0 || i_shdrp[shindex] == 0)
-    return 0;
+  if (i_shdrp == 0
+      || shindex >= elf_numsections (abfd)
+      || i_shdrp[shindex] == 0)
+    return NULL;
 
-  shstrtab = (char *) i_shdrp[shindex]->contents;
+  shstrtab = i_shdrp[shindex]->contents;
   if (shstrtab == NULL)
     {
       /* No cached one, attempt to read, and cache what we read.  */
       offset = i_shdrp[shindex]->sh_offset;
       shstrtabsize = i_shdrp[shindex]->sh_size;
-      shstrtab = elf_read (abfd, offset, shstrtabsize);
+
+      /* Allocate and clear an extra byte at the end, to prevent crashes
+	 in case the string table is not terminated.  */
+      if (shstrtabsize + 1 == 0
+	  || (shstrtab = bfd_alloc (abfd, shstrtabsize + 1)) == NULL
+	  || bfd_seek (abfd, offset, SEEK_SET) != 0)
+	shstrtab = NULL;
+      else if (bfd_bread (shstrtab, shstrtabsize, abfd) != shstrtabsize)
+	{
+	  if (bfd_get_error () != bfd_error_system_call)
+	    bfd_set_error (bfd_error_file_truncated);
+	  shstrtab = NULL;
+	}
+      else
+	shstrtab[shstrtabsize] = '\0';
       i_shdrp[shindex]->contents = shstrtab;
     }
-  return shstrtab;
+  return (char *) shstrtab;
 }
 
 char *
@@ -283,6 +308,9 @@ bfd_elf_string_from_elf_section (bfd *abfd,
   if (strindex == 0)
     return "";
 
+  if (elf_elfsections (abfd) == NULL || shindex >= elf_numsections (abfd))
+    return NULL;
+
   hdr = elf_elfsections (abfd)[shindex];
 
   if (hdr->contents == NULL
@@ -291,13 +319,13 @@ bfd_elf_string_from_elf_section (bfd *abfd,
 
   if (strindex >= hdr->sh_size)
     {
+      unsigned int shstrndx = elf_elfheader(abfd)->e_shstrndx;
       (*_bfd_error_handler)
 	(_("%B: invalid string offset %u >= %lu for section `%s'"),
 	 abfd, strindex, (unsigned long) hdr->sh_size,
-	 ((shindex == elf_elfheader(abfd)->e_shstrndx
-	   && strindex == hdr->sh_name)
+	 (shindex == shstrndx && strindex == hdr->sh_name
 	  ? ".shstrtab"
-	  : elf_string_from_elf_strtab (abfd, hdr->sh_name)));
+	  : bfd_elf_string_from_elf_section (abfd, shstrndx, hdr->sh_name)));
       return "";
     }
 
@@ -308,7 +336,9 @@ bfd_elf_string_from_elf_section (bfd *abfd,
    SYMCOUNT specifies the number of symbols to read, starting from
    symbol SYMOFFSET.  If any of INTSYM_BUF, EXTSYM_BUF or EXTSHNDX_BUF
    are non-NULL, they are used to store the internal symbols, external
-   symbols, and symbol section index extensions, respectively.  */
+   symbols, and symbol section index extensions, respectively.
+   Returns a pointer to the internal symbol buffer (malloced if necessary)
+   or NULL if there were no symbols or some kind of problem.  */
 
 Elf_Internal_Sym *
 bfd_elf_get_elf_syms (bfd *ibfd,
@@ -331,6 +361,9 @@ bfd_elf_get_elf_syms (bfd *ibfd,
   bfd_size_type amt;
   file_ptr pos;
 
+  if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour)
+    abort ();
+
   if (symcount == 0)
     return intsym_buf;
 
@@ -348,7 +381,7 @@ bfd_elf_get_elf_syms (bfd *ibfd,
   pos = symtab_hdr->sh_offset + symoffset * extsym_size;
   if (extsym_buf == NULL)
     {
-      alloc_ext = bfd_malloc (amt);
+      alloc_ext = bfd_malloc2 (symcount, extsym_size);
       extsym_buf = alloc_ext;
     }
   if (extsym_buf == NULL
@@ -367,7 +400,8 @@ bfd_elf_get_elf_syms (bfd *ibfd,
       pos = shndx_hdr->sh_offset + symoffset * sizeof (Elf_External_Sym_Shndx);
       if (extshndx_buf == NULL)
 	{
-	  alloc_extshndx = bfd_malloc (amt);
+	  alloc_extshndx = bfd_malloc2 (symcount,
+					sizeof (Elf_External_Sym_Shndx));
 	  extshndx_buf = alloc_extshndx;
 	}
       if (extshndx_buf == NULL
@@ -381,8 +415,7 @@ bfd_elf_get_elf_syms (bfd *ibfd,
 
   if (intsym_buf == NULL)
     {
-      bfd_size_type amt = symcount * sizeof (Elf_Internal_Sym);
-      intsym_buf = bfd_malloc (amt);
+      intsym_buf = bfd_malloc2 (symcount, sizeof (Elf_Internal_Sym));
       if (intsym_buf == NULL)
 	goto out;
     }
@@ -392,7 +425,15 @@ bfd_elf_get_elf_syms (bfd *ibfd,
   for (esym = extsym_buf, isym = intsym_buf, shndx = extshndx_buf;
        isym < isymend;
        esym += extsym_size, isym++, shndx = shndx != NULL ? shndx + 1 : NULL)
-    (*bed->s->swap_symbol_in) (ibfd, esym, shndx, isym);
+    if (!(*bed->s->swap_symbol_in) (ibfd, esym, shndx, isym))
+      {
+	symoffset += (esym - (bfd_byte *) extsym_buf) / extsym_size;
+	(*_bfd_error_handler) (_("%B symbol number %lu references "
+				 "nonexistent SHT_SYMTAB_SHNDX section"),
+			       ibfd, (unsigned long) symoffset);
+	intsym_buf = NULL;
+	goto out;
+      }
 
  out:
   if (alloc_ext != NULL)
@@ -405,17 +446,31 @@ bfd_elf_get_elf_syms (bfd *ibfd,
 
 /* Look up a symbol name.  */
 const char *
-bfd_elf_local_sym_name (bfd *abfd, Elf_Internal_Sym *isym)
+bfd_elf_sym_name (bfd *abfd,
+		  Elf_Internal_Shdr *symtab_hdr,
+		  Elf_Internal_Sym *isym,
+		  asection *sym_sec)
 {
+  const char *name;
   unsigned int iname = isym->st_name;
-  unsigned int shindex = elf_tdata (abfd)->symtab_hdr.sh_link;
-  if (iname == 0 && ELF_ST_TYPE (isym->st_info) == STT_SECTION)
+  unsigned int shindex = symtab_hdr->sh_link;
+
+  if (iname == 0 && ELF_ST_TYPE (isym->st_info) == STT_SECTION
+      /* Check for a bogus st_shndx to avoid crashing.  */
+      && isym->st_shndx < elf_numsections (abfd)
+      && !(isym->st_shndx >= SHN_LORESERVE && isym->st_shndx <= SHN_HIRESERVE))
     {
       iname = elf_elfsections (abfd)[isym->st_shndx]->sh_name;
       shindex = elf_elfheader (abfd)->e_shstrndx;
     }
 
-  return bfd_elf_string_from_elf_section (abfd, shindex, iname);
+  name = bfd_elf_string_from_elf_section (abfd, shindex, iname);
+  if (name == NULL)
+    name = "(null)";
+  else if (sym_sec && *name == '\0')
+    name = bfd_section_name (abfd, sym_sec);
+
+  return name;
 }
 
 /* Elf_Internal_Shdr->contents is an array of these for SHT_GROUP
@@ -438,8 +493,11 @@ group_signature (bfd *abfd, Elf_Internal_Shdr *ghdr)
   Elf_External_Sym_Shndx eshndx;
   Elf_Internal_Sym isym;
 
-  /* First we need to ensure the symbol table is available.  */
-  if (! bfd_section_from_shdr (abfd, ghdr->sh_link))
+  /* First we need to ensure the symbol table is available.  Make sure
+     that it is a symbol table section.  */
+  hdr = elf_elfsections (abfd) [ghdr->sh_link];
+  if (hdr->sh_type != SHT_SYMTAB
+      || ! bfd_section_from_shdr (abfd, ghdr->sh_link))
     return NULL;
 
   /* Go read the symbol.  */
@@ -448,7 +506,7 @@ group_signature (bfd *abfd, Elf_Internal_Shdr *ghdr)
 			    &isym, esym, &eshndx) == NULL)
     return NULL;
 
-  return bfd_elf_local_sym_name (abfd, &isym);
+  return bfd_elf_sym_name (abfd, hdr, &isym, NULL);
 }
 
 /* Set next_in_group list pointer, and group name for NEWSECT.  */
@@ -468,23 +526,35 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 	 section with just a flag word (ie. sh_size is 4), ignore it.  */
       shnum = elf_numsections (abfd);
       num_group = 0;
+
+#define IS_VALID_GROUP_SECTION_HEADER(shdr)		\
+	(   (shdr)->sh_type == SHT_GROUP		\
+	 && (shdr)->sh_size >= (2 * GRP_ENTRY_SIZE)	\
+	 && (shdr)->sh_entsize == GRP_ENTRY_SIZE	\
+	 && ((shdr)->sh_size % GRP_ENTRY_SIZE) == 0)
+
       for (i = 0; i < shnum; i++)
 	{
 	  Elf_Internal_Shdr *shdr = elf_elfsections (abfd)[i];
-	  if (shdr->sh_type == SHT_GROUP && shdr->sh_size >= 8)
+
+	  if (IS_VALID_GROUP_SECTION_HEADER (shdr))
 	    num_group += 1;
 	}
 
       if (num_group == 0)
-	num_group = (unsigned) -1;
-      elf_tdata (abfd)->num_group = num_group;
-
-      if (num_group > 0)
+	{
+	  num_group = (unsigned) -1;
+	  elf_tdata (abfd)->num_group = num_group;
+	}
+      else
 	{
 	  /* We keep a list of elf section headers for group sections,
 	     so we can find them quickly.  */
-	  bfd_size_type amt = num_group * sizeof (Elf_Internal_Shdr *);
-	  elf_tdata (abfd)->group_sect_ptr = bfd_alloc (abfd, amt);
+	  bfd_size_type amt;
+
+	  elf_tdata (abfd)->num_group = num_group;
+	  elf_tdata (abfd)->group_sect_ptr
+	    = bfd_alloc2 (abfd, num_group, sizeof (Elf_Internal_Shdr *));
 	  if (elf_tdata (abfd)->group_sect_ptr == NULL)
 	    return FALSE;
 
@@ -492,7 +562,8 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 	  for (i = 0; i < shnum; i++)
 	    {
 	      Elf_Internal_Shdr *shdr = elf_elfsections (abfd)[i];
-	      if (shdr->sh_type == SHT_GROUP && shdr->sh_size >= 8)
+
+	      if (IS_VALID_GROUP_SECTION_HEADER (shdr))
 		{
 		  unsigned char *src;
 		  Elf_Internal_Group *dest;
@@ -504,9 +575,20 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 		  /* Read the raw contents.  */
 		  BFD_ASSERT (sizeof (*dest) >= 4);
 		  amt = shdr->sh_size * sizeof (*dest) / 4;
-		  shdr->contents = bfd_alloc (abfd, amt);
-		  if (shdr->contents == NULL
-		      || bfd_seek (abfd, shdr->sh_offset, SEEK_SET) != 0
+		  shdr->contents = bfd_alloc2 (abfd, shdr->sh_size,
+					       sizeof (*dest) / 4);
+		  /* PR binutils/4110: Handle corrupt group headers.  */
+		  if (shdr->contents == NULL)
+		    {
+		      _bfd_error_handler
+			(_("%B: Corrupt size field in group section header: 0x%lx"), abfd, shdr->sh_size);
+		      bfd_set_error (bfd_error_bad_value);
+		      return FALSE;
+		    }
+
+		  memset (shdr->contents, 0, amt);
+
+		  if (bfd_seek (abfd, shdr->sh_offset, SEEK_SET) != 0
 		      || (bfd_bread (shdr->contents, shdr->sh_size, abfd)
 			  != shdr->sh_size))
 		    return FALSE;
@@ -612,12 +694,56 @@ setup_group (bfd *abfd, Elf_Internal_Shdr *hdr, asection *newsect)
 }
 
 bfd_boolean
-_bfd_elf_setup_group_pointers (bfd *abfd)
+_bfd_elf_setup_sections (bfd *abfd)
 {
   unsigned int i;
   unsigned int num_group = elf_tdata (abfd)->num_group;
   bfd_boolean result = TRUE;
+  asection *s;
 
+  /* Process SHF_LINK_ORDER.  */
+  for (s = abfd->sections; s != NULL; s = s->next)
+    {
+      Elf_Internal_Shdr *this_hdr = &elf_section_data (s)->this_hdr;
+      if ((this_hdr->sh_flags & SHF_LINK_ORDER) != 0)
+	{
+	  unsigned int elfsec = this_hdr->sh_link;
+	  /* FIXME: The old Intel compiler and old strip/objcopy may
+	     not set the sh_link or sh_info fields.  Hence we could
+	     get the situation where elfsec is 0.  */
+	  if (elfsec == 0)
+	    {
+	      const struct elf_backend_data *bed
+		= get_elf_backend_data (abfd);
+	      if (bed->link_order_error_handler)
+		bed->link_order_error_handler
+		  (_("%B: warning: sh_link not set for section `%A'"),
+		   abfd, s);
+	    }
+	  else
+	    {
+	      asection *link;
+
+	      this_hdr = elf_elfsections (abfd)[elfsec];
+
+	      /* PR 1991, 2008:
+		 Some strip/objcopy may leave an incorrect value in
+		 sh_link.  We don't want to proceed.  */
+	      link = this_hdr->bfd_section;
+	      if (link == NULL)
+		{
+		  (*_bfd_error_handler)
+		    (_("%B: sh_link [%d] in section `%A' is incorrect"),
+		     s->owner, s, elfsec);
+		  result = FALSE;
+		}
+
+	      elf_linked_to_section (s) = link;
+	    }
+	}
+    }
+
+  /* Process section groups.  */
   if (num_group == (unsigned) -1)
     return result;
 
@@ -645,7 +771,10 @@ _bfd_elf_setup_group_pointers (bfd *abfd)
 	      (_("%B: unknown [%d] section `%s' in group [%s]"),
 	       abfd,
 	       (unsigned int) idx->shdr->sh_type,
-	       elf_string_from_elf_strtab (abfd, idx->shdr->sh_name),
+	       bfd_elf_string_from_elf_section (abfd,
+						(elf_elfheader (abfd)
+						 ->e_shstrndx),
+						idx->shdr->sh_name),
 	       shdr->bfd_section->name);
 	    result = FALSE;
 	  }
@@ -659,36 +788,14 @@ bfd_elf_is_group_section (bfd *abfd ATTRIBUTE_UNUSED, const asection *sec)
   return elf_next_in_group (sec) != NULL;
 }
 
-bfd_boolean
-bfd_elf_discard_group (bfd *abfd ATTRIBUTE_UNUSED,
-		       asection *group ATTRIBUTE_UNUSED)
-{
-#if 0
-  asection *first = elf_next_in_group (group);
-  asection *s = first;
-
-  while (s != NULL)
-    {
-      s->output_section = bfd_abs_section_ptr;
-      s = elf_next_in_group (s);
-      /* These lists are circular.  */
-      if (s == first)
-	break;
-    }
-#else
-  /* FIXME: Never used. Remove it!  */
-  abort ();
-#endif
-  return TRUE;
-}
-
 /* Make a BFD section from an ELF section.  We store a pointer to the
    BFD section in the bfd_section field of the header.  */
 
 bfd_boolean
 _bfd_elf_make_section_from_shdr (bfd *abfd,
 				 Elf_Internal_Shdr *hdr,
-				 const char *name)
+				 const char *name,
+				 int shindex)
 {
   asection *newsect;
   flagword flags;
@@ -707,6 +814,7 @@ _bfd_elf_make_section_from_shdr (bfd *abfd,
 
   hdr->bfd_section = newsect;
   elf_section_data (newsect)->this_hdr = *hdr;
+  elf_section_data (newsect)->this_idx = shindex;
 
   /* Always use the real type/flags.  */
   elf_section_type (newsect) = hdr->sh_type;
@@ -750,25 +858,45 @@ _bfd_elf_make_section_from_shdr (bfd *abfd,
   if ((hdr->sh_flags & SHF_TLS) != 0)
     flags |= SEC_THREAD_LOCAL;
 
-  /* The debugging sections appear to be recognized only by name, not
-     any sort of flag.  */
-  {
-    static const char *debug_sec_names [] =
+  if ((flags & SEC_ALLOC) == 0)
     {
-      ".debug",
-      ".gnu.linkonce.wi.",
-      ".line",
-      ".stab"
-    };
-    int i;
+      /* The debugging sections appear to be recognized only by name,
+	 not any sort of flag.  Their SEC_ALLOC bits are cleared.  */
+      static const struct
+	{
+	  const char *name;
+	  int len;
+	} debug_sections [] =
+	{
+	  { STRING_COMMA_LEN ("debug") },	/* 'd' */
+	  { NULL,		 0  },	/* 'e' */
+	  { NULL,		 0  },	/* 'f' */
+	  { STRING_COMMA_LEN ("gnu.linkonce.wi.") },	/* 'g' */
+	  { NULL,		 0  },	/* 'h' */
+	  { NULL,		 0  },	/* 'i' */
+	  { NULL,		 0  },	/* 'j' */
+	  { NULL,		 0  },	/* 'k' */
+	  { STRING_COMMA_LEN ("line") },	/* 'l' */
+	  { NULL,		 0  },	/* 'm' */
+	  { NULL,		 0  },	/* 'n' */
+	  { NULL,		 0  },	/* 'o' */
+	  { NULL,		 0  },	/* 'p' */
+	  { NULL,		 0  },	/* 'q' */
+	  { NULL,		 0  },	/* 'r' */
+	  { STRING_COMMA_LEN ("stab") }	/* 's' */
+	};
 
-    for (i = ARRAY_SIZE (debug_sec_names); i--;)
-      if (strncmp (name, debug_sec_names[i], strlen (debug_sec_names[i])) == 0)
-	break;
-
-    if (i >= 0)
-      flags |= SEC_DEBUGGING;
-  }
+      if (name [0] == '.')
+	{
+	  int i = name [1] - 'd';
+	  if (i >= 0
+	      && i < (int) ARRAY_SIZE (debug_sections)
+	      && debug_sections [i].name != NULL
+	      && strncmp (&name [1], debug_sections [i].name,
+			  debug_sections [i].len) == 0)
+	    flags |= SEC_DEBUGGING;
+	}
+    }
 
   /* As a GNU extension, if the name begins with .gnu.linkonce, we
      only link a single copy of the section.  This is used to support
@@ -776,7 +904,7 @@ _bfd_elf_make_section_from_shdr (bfd *abfd,
      The symbols will be defined as weak, so that multiple definitions
      are permitted.  The GNU linker extension is to actually discard
      all but one of the sections.  */
-  if (strncmp (name, ".gnu.linkonce", sizeof ".gnu.linkonce" - 1) == 0
+  if (CONST_STRNEQ (name, ".gnu.linkonce")
       && elf_next_in_group (newsect) == NULL)
     flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD;
 
@@ -788,14 +916,36 @@ _bfd_elf_make_section_from_shdr (bfd *abfd,
   if (! bfd_set_section_flags (abfd, newsect, flags))
     return FALSE;
 
+  /* We do not parse the PT_NOTE segments as we are interested even in the
+     separate debug info files which may have the segments offsets corrupted.
+     PT_NOTEs from the core files are currently not parsed using BFD.  */
+  if (hdr->sh_type == SHT_NOTE)
+    {
+      char *contents;
+
+      contents = bfd_malloc (hdr->sh_size);
+      if (!contents)
+	return FALSE;
+
+      if (!bfd_get_section_contents (abfd, hdr->bfd_section, contents, 0,
+				     hdr->sh_size)
+	  || !elf_parse_notes (abfd, contents, hdr->sh_size, -1))
+	{
+	  free (contents);
+	  return FALSE;
+	}
+      
+      free (contents);
+    }
+
   if ((flags & SEC_ALLOC) != 0)
     {
       Elf_Internal_Phdr *phdr;
       unsigned int i;
 
       /* Look through the phdrs to see if we need to adjust the lma.
-         If all the p_paddr fields are zero, we ignore them, since
-         some ELF linkers produce such output.  */
+	 If all the p_paddr fields are zero, we ignore them, since
+	 some ELF linkers produce such output.  */
       phdr = elf_tdata (abfd)->phdr;
       for (i = 0; i < elf_elfheader (abfd)->e_phnum; i++, phdr++)
 	{
@@ -816,9 +966,9 @@ _bfd_elf_make_section_from_shdr (bfd *abfd,
 		 refuse to set the LMA if it was 0.  This is wrong
 		 though, as a perfectly valid initialised segment can
 		 have a p_paddr of zero.  Some architectures, eg ARM,
-	         place special significance on the address 0 and
-	         executables need to be able to have a segment which
-	         covers this address.  */
+		 place special significance on the address 0 and
+		 executables need to be able to have a segment which
+		 covers this address.  */
 	      if (phdr->p_type == PT_LOAD
 		  && (bfd_vma) hdr->sh_offset >= phdr->p_offset
 		  && (hdr->sh_offset + hdr->sh_size
@@ -933,61 +1083,6 @@ bfd_elf_generic_reloc (bfd *abfd ATTRIBUTE_UNUSED,
   return bfd_reloc_continue;
 }
 
-/* Make sure sec_info_type is cleared if sec_info is cleared too.  */
-
-static void
-merge_sections_remove_hook (bfd *abfd ATTRIBUTE_UNUSED,
-			    asection *sec)
-{
-  BFD_ASSERT (sec->sec_info_type == ELF_INFO_TYPE_MERGE);
-  sec->sec_info_type = ELF_INFO_TYPE_NONE;
-}
-
-/* Finish SHF_MERGE section merging.  */
-
-bfd_boolean
-_bfd_elf_merge_sections (bfd *abfd, struct bfd_link_info *info)
-{
-  bfd *ibfd;
-  asection *sec;
-
-  if (!is_elf_hash_table (info->hash))
-    return FALSE;
-
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
-    if ((ibfd->flags & DYNAMIC) == 0)
-      for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-	if ((sec->flags & SEC_MERGE) != 0
-	    && !bfd_is_abs_section (sec->output_section))
-	  {
-	    struct bfd_elf_section_data *secdata;
-
-	    secdata = elf_section_data (sec);
-	    if (! _bfd_add_merge_section (abfd,
-					  &elf_hash_table (info)->merge_info,
-					  sec, &secdata->sec_info))
-	      return FALSE;
-	    else if (secdata->sec_info)
-	      sec->sec_info_type = ELF_INFO_TYPE_MERGE;
-	  }
-
-  if (elf_hash_table (info)->merge_info != NULL)
-    _bfd_merge_sections (abfd, info, elf_hash_table (info)->merge_info,
-			 merge_sections_remove_hook);
-  return TRUE;
-}
-
-void
-_bfd_elf_link_just_syms (asection *sec, struct bfd_link_info *info)
-{
-  sec->output_section = bfd_abs_section_ptr;
-  sec->output_offset = sec->vma;
-  if (!is_elf_hash_table (info->hash))
-    return;
-
-  sec->sec_info_type = ELF_INFO_TYPE_JUST_SYMS;
-}
-
 /* Copy the program header and other data from one object module to
    another.  */
 
@@ -1005,7 +1100,33 @@ _bfd_elf_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
   elf_gp (obfd) = elf_gp (ibfd);
   elf_elfheader (obfd)->e_flags = elf_elfheader (ibfd)->e_flags;
   elf_flags_init (obfd) = TRUE;
+
+  /* Copy object attributes.  */
+  _bfd_elf_copy_obj_attributes (ibfd, obfd);
+
   return TRUE;
+}
+
+static const char *
+get_segment_type (unsigned int p_type)
+{
+  const char *pt;
+  switch (p_type)
+    {
+    case PT_NULL: pt = "NULL"; break;
+    case PT_LOAD: pt = "LOAD"; break;
+    case PT_DYNAMIC: pt = "DYNAMIC"; break;
+    case PT_INTERP: pt = "INTERP"; break;
+    case PT_NOTE: pt = "NOTE"; break;
+    case PT_SHLIB: pt = "SHLIB"; break;
+    case PT_PHDR: pt = "PHDR"; break;
+    case PT_TLS: pt = "TLS"; break;
+    case PT_GNU_EH_FRAME: pt = "EH_FRAME"; break;
+    case PT_GNU_STACK: pt = "STACK"; break;
+    case PT_GNU_RELRO: pt = "RELRO"; break;
+    default: pt = NULL; break;
+    }
+  return pt;
 }
 
 /* Print out the program headers.  */
@@ -1027,23 +1148,13 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
       c = elf_elfheader (abfd)->e_phnum;
       for (i = 0; i < c; i++, p++)
 	{
-	  const char *pt;
+	  const char *pt = get_segment_type (p->p_type);
 	  char buf[20];
 
-	  switch (p->p_type)
+	  if (pt == NULL)
 	    {
-	    case PT_NULL: pt = "NULL"; break;
-	    case PT_LOAD: pt = "LOAD"; break;
-	    case PT_DYNAMIC: pt = "DYNAMIC"; break;
-	    case PT_INTERP: pt = "INTERP"; break;
-	    case PT_NOTE: pt = "NOTE"; break;
-	    case PT_SHLIB: pt = "SHLIB"; break;
-	    case PT_PHDR: pt = "PHDR"; break;
-	    case PT_TLS: pt = "TLS"; break;
-	    case PT_GNU_EH_FRAME: pt = "EH_FRAME"; break;
-	    case PT_GNU_STACK: pt = "STACK"; break;
-	    case PT_GNU_RELRO: pt = "RELRO"; break;
-	    default: sprintf (buf, "0x%lx", p->p_type); pt = buf; break;
+	      sprintf (buf, "0x%lx", p->p_type);
+	      pt = buf;
 	    }
 	  fprintf (f, "%8s off    0x", pt);
 	  bfd_fprintf_vma (abfd, f, p->p_offset);
@@ -1167,6 +1278,7 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
 	    case DT_AUXILIARY: name = "AUXILIARY"; stringp = TRUE; break;
 	    case DT_USED: name = "USED"; break;
 	    case DT_FILTER: name = "FILTER"; stringp = TRUE; break;
+	    case DT_GNU_HASH: name = "GNU_HASH"; break;
 	    }
 
 	  fprintf (f, "  %-11s ", name);
@@ -1192,7 +1304,7 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
   if ((elf_dynverdef (abfd) != 0 && elf_tdata (abfd)->verdef == NULL)
       || (elf_dynverref (abfd) != 0 && elf_tdata (abfd)->verref == NULL))
     {
-      if (! _bfd_elf_slurp_version_tables (abfd))
+      if (! _bfd_elf_slurp_version_tables (abfd, FALSE))
 	return FALSE;
     }
 
@@ -1204,8 +1316,9 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
       for (t = elf_tdata (abfd)->verdef; t != NULL; t = t->vd_nextdef)
 	{
 	  fprintf (f, "%d 0x%2.2x 0x%8.8lx %s\n", t->vd_ndx,
-		   t->vd_flags, t->vd_hash, t->vd_nodename);
-	  if (t->vd_auxptr->vda_nextptr != NULL)
+		   t->vd_flags, t->vd_hash,
+		   t->vd_nodename ? t->vd_nodename : "<corrupt>");
+	  if (t->vd_auxptr != NULL && t->vd_auxptr->vda_nextptr != NULL)
 	    {
 	      Elf_Internal_Verdaux *a;
 
@@ -1213,7 +1326,8 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
 	      for (a = t->vd_auxptr->vda_nextptr;
 		   a != NULL;
 		   a = a->vda_nextptr)
-		fprintf (f, "%s ", a->vda_nodename);
+		fprintf (f, "%s ",
+			 a->vda_nodename ? a->vda_nodename : "<corrupt>");
 	      fprintf (f, "\n");
 	    }
 	}
@@ -1228,10 +1342,12 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
 	{
 	  Elf_Internal_Vernaux *a;
 
-	  fprintf (f, _("  required from %s:\n"), t->vn_filename);
+	  fprintf (f, _("  required from %s:\n"),
+		   t->vn_filename ? t->vn_filename : "<corrupt>");
 	  for (a = t->vn_auxptr; a != NULL; a = a->vna_nextptr)
 	    fprintf (f, "    0x%8.8lx 0x%2.2x %2.2d %s\n", a->vna_hash,
-		     a->vna_flags, a->vna_other, a->vna_nodename);
+		     a->vna_flags, a->vna_other,
+		     a->vna_nodename ? a->vna_nodename : "<corrupt>");
 	}
     }
 
@@ -1287,7 +1403,7 @@ bfd_elf_print_symbol (bfd *abfd,
 	   we've already printed the size; now print the alignment.
 	   For other symbols, we have no specified alignment, and
 	   we've printed the address; now print the size.  */
-	if (bfd_is_com_section (symbol->section))
+	if (symbol->section && bfd_is_com_section (symbol->section))
 	  val = ((elf_symbol_type *) symbol)->internal_elf_sym.st_value;
 	else
 	  val = ((elf_symbol_type *) symbol)->internal_elf_sym.st_size;
@@ -1364,331 +1480,7 @@ bfd_elf_print_symbol (bfd *abfd,
       break;
     }
 }
-
-/* Create an entry in an ELF linker hash table.  */
 
-struct bfd_hash_entry *
-_bfd_elf_link_hash_newfunc (struct bfd_hash_entry *entry,
-			    struct bfd_hash_table *table,
-			    const char *string)
-{
-  /* Allocate the structure if it has not already been allocated by a
-     subclass.  */
-  if (entry == NULL)
-    {
-      entry = bfd_hash_allocate (table, sizeof (struct elf_link_hash_entry));
-      if (entry == NULL)
-	return entry;
-    }
-
-  /* Call the allocation method of the superclass.  */
-  entry = _bfd_link_hash_newfunc (entry, table, string);
-  if (entry != NULL)
-    {
-      struct elf_link_hash_entry *ret = (struct elf_link_hash_entry *) entry;
-      struct elf_link_hash_table *htab = (struct elf_link_hash_table *) table;
-
-      /* Set local fields.  */
-      ret->indx = -1;
-      ret->dynindx = -1;
-      ret->got = ret->plt = htab->init_refcount;
-      memset (&ret->size, 0, (sizeof (struct elf_link_hash_entry)
-			      - offsetof (struct elf_link_hash_entry, size)));
-      /* Assume that we have been called by a non-ELF symbol reader.
-         This flag is then reset by the code which reads an ELF input
-         file.  This ensures that a symbol created by a non-ELF symbol
-         reader will have the flag set correctly.  */
-      ret->non_elf = 1;
-    }
-
-  return entry;
-}
-
-/* Copy data from an indirect symbol to its direct symbol, hiding the
-   old indirect symbol.  Also used for copying flags to a weakdef.  */
-
-void
-_bfd_elf_link_hash_copy_indirect (const struct elf_backend_data *bed,
-				  struct elf_link_hash_entry *dir,
-				  struct elf_link_hash_entry *ind)
-{
-  bfd_signed_vma tmp;
-  bfd_signed_vma lowest_valid = bed->can_refcount;
-
-  /* Copy down any references that we may have already seen to the
-     symbol which just became indirect.  */
-
-  dir->ref_dynamic |= ind->ref_dynamic;
-  dir->ref_regular |= ind->ref_regular;
-  dir->ref_regular_nonweak |= ind->ref_regular_nonweak;
-  dir->non_got_ref |= ind->non_got_ref;
-  dir->needs_plt |= ind->needs_plt;
-  dir->pointer_equality_needed |= ind->pointer_equality_needed;
-
-  if (ind->root.type != bfd_link_hash_indirect)
-    return;
-
-  /* Copy over the global and procedure linkage table refcount entries.
-     These may have been already set up by a check_relocs routine.  */
-  tmp = dir->got.refcount;
-  if (tmp < lowest_valid)
-    {
-      dir->got.refcount = ind->got.refcount;
-      ind->got.refcount = tmp;
-    }
-  else
-    BFD_ASSERT (ind->got.refcount < lowest_valid);
-
-  tmp = dir->plt.refcount;
-  if (tmp < lowest_valid)
-    {
-      dir->plt.refcount = ind->plt.refcount;
-      ind->plt.refcount = tmp;
-    }
-  else
-    BFD_ASSERT (ind->plt.refcount < lowest_valid);
-
-  if (dir->dynindx == -1)
-    {
-      dir->dynindx = ind->dynindx;
-      dir->dynstr_index = ind->dynstr_index;
-      ind->dynindx = -1;
-      ind->dynstr_index = 0;
-    }
-  else
-    BFD_ASSERT (ind->dynindx == -1);
-}
-
-void
-_bfd_elf_link_hash_hide_symbol (struct bfd_link_info *info,
-				struct elf_link_hash_entry *h,
-				bfd_boolean force_local)
-{
-  h->plt = elf_hash_table (info)->init_offset;
-  h->needs_plt = 0;
-  if (force_local)
-    {
-      h->forced_local = 1;
-      if (h->dynindx != -1)
-	{
-	  h->dynindx = -1;
-	  _bfd_elf_strtab_delref (elf_hash_table (info)->dynstr,
-				  h->dynstr_index);
-	}
-    }
-}
-
-/* Initialize an ELF linker hash table.  */
-
-bfd_boolean
-_bfd_elf_link_hash_table_init
-  (struct elf_link_hash_table *table,
-   bfd *abfd,
-   struct bfd_hash_entry *(*newfunc) (struct bfd_hash_entry *,
-				      struct bfd_hash_table *,
-				      const char *))
-{
-  bfd_boolean ret;
-
-  table->dynamic_sections_created = FALSE;
-  table->dynobj = NULL;
-  /* Make sure can_refcount is extended to the width and signedness of
-     init_refcount before we subtract one from it.  */
-  table->init_refcount.refcount = get_elf_backend_data (abfd)->can_refcount;
-  table->init_refcount.refcount -= 1;
-  table->init_offset.offset = -(bfd_vma) 1;
-  /* The first dynamic symbol is a dummy.  */
-  table->dynsymcount = 1;
-  table->dynstr = NULL;
-  table->bucketcount = 0;
-  table->needed = NULL;
-  table->hgot = NULL;
-  table->merge_info = NULL;
-  memset (&table->stab_info, 0, sizeof (table->stab_info));
-  memset (&table->eh_info, 0, sizeof (table->eh_info));
-  table->dynlocal = NULL;
-  table->runpath = NULL;
-  table->tls_sec = NULL;
-  table->tls_size = 0;
-  table->loaded = NULL;
-
-  ret = _bfd_link_hash_table_init (&table->root, abfd, newfunc);
-  table->root.type = bfd_link_elf_hash_table;
-
-  return ret;
-}
-
-/* Create an ELF linker hash table.  */
-
-struct bfd_link_hash_table *
-_bfd_elf_link_hash_table_create (bfd *abfd)
-{
-  struct elf_link_hash_table *ret;
-  bfd_size_type amt = sizeof (struct elf_link_hash_table);
-
-  ret = bfd_malloc (amt);
-  if (ret == NULL)
-    return NULL;
-
-  if (! _bfd_elf_link_hash_table_init (ret, abfd, _bfd_elf_link_hash_newfunc))
-    {
-      free (ret);
-      return NULL;
-    }
-
-  return &ret->root;
-}
-
-/* This is a hook for the ELF emulation code in the generic linker to
-   tell the backend linker what file name to use for the DT_NEEDED
-   entry for a dynamic object.  */
-
-void
-bfd_elf_set_dt_needed_name (bfd *abfd, const char *name)
-{
-  if (bfd_get_flavour (abfd) == bfd_target_elf_flavour
-      && bfd_get_format (abfd) == bfd_object)
-    elf_dt_name (abfd) = name;
-}
-
-int
-bfd_elf_get_dyn_lib_class (bfd *abfd)
-{
-  int lib_class;
-  if (bfd_get_flavour (abfd) == bfd_target_elf_flavour
-      && bfd_get_format (abfd) == bfd_object)
-    lib_class = elf_dyn_lib_class (abfd);
-  else
-    lib_class = 0;
-  return lib_class;
-}
-
-void
-bfd_elf_set_dyn_lib_class (bfd *abfd, int lib_class)
-{
-  if (bfd_get_flavour (abfd) == bfd_target_elf_flavour
-      && bfd_get_format (abfd) == bfd_object)
-    elf_dyn_lib_class (abfd) = lib_class;
-}
-
-/* Get the list of DT_NEEDED entries for a link.  This is a hook for
-   the linker ELF emulation code.  */
-
-struct bfd_link_needed_list *
-bfd_elf_get_needed_list (bfd *abfd ATTRIBUTE_UNUSED,
-			 struct bfd_link_info *info)
-{
-  if (! is_elf_hash_table (info->hash))
-    return NULL;
-  return elf_hash_table (info)->needed;
-}
-
-/* Get the list of DT_RPATH/DT_RUNPATH entries for a link.  This is a
-   hook for the linker ELF emulation code.  */
-
-struct bfd_link_needed_list *
-bfd_elf_get_runpath_list (bfd *abfd ATTRIBUTE_UNUSED,
-			  struct bfd_link_info *info)
-{
-  if (! is_elf_hash_table (info->hash))
-    return NULL;
-  return elf_hash_table (info)->runpath;
-}
-
-/* Get the name actually used for a dynamic object for a link.  This
-   is the SONAME entry if there is one.  Otherwise, it is the string
-   passed to bfd_elf_set_dt_needed_name, or it is the filename.  */
-
-const char *
-bfd_elf_get_dt_soname (bfd *abfd)
-{
-  if (bfd_get_flavour (abfd) == bfd_target_elf_flavour
-      && bfd_get_format (abfd) == bfd_object)
-    return elf_dt_name (abfd);
-  return NULL;
-}
-
-/* Get the list of DT_NEEDED entries from a BFD.  This is a hook for
-   the ELF linker emulation code.  */
-
-bfd_boolean
-bfd_elf_get_bfd_needed_list (bfd *abfd,
-			     struct bfd_link_needed_list **pneeded)
-{
-  asection *s;
-  bfd_byte *dynbuf = NULL;
-  int elfsec;
-  unsigned long shlink;
-  bfd_byte *extdyn, *extdynend;
-  size_t extdynsize;
-  void (*swap_dyn_in) (bfd *, const void *, Elf_Internal_Dyn *);
-
-  *pneeded = NULL;
-
-  if (bfd_get_flavour (abfd) != bfd_target_elf_flavour
-      || bfd_get_format (abfd) != bfd_object)
-    return TRUE;
-
-  s = bfd_get_section_by_name (abfd, ".dynamic");
-  if (s == NULL || s->size == 0)
-    return TRUE;
-
-  if (!bfd_malloc_and_get_section (abfd, s, &dynbuf))
-    goto error_return;
-
-  elfsec = _bfd_elf_section_from_bfd_section (abfd, s);
-  if (elfsec == -1)
-    goto error_return;
-
-  shlink = elf_elfsections (abfd)[elfsec]->sh_link;
-
-  extdynsize = get_elf_backend_data (abfd)->s->sizeof_dyn;
-  swap_dyn_in = get_elf_backend_data (abfd)->s->swap_dyn_in;
-
-  extdyn = dynbuf;
-  extdynend = extdyn + s->size;
-  for (; extdyn < extdynend; extdyn += extdynsize)
-    {
-      Elf_Internal_Dyn dyn;
-
-      (*swap_dyn_in) (abfd, extdyn, &dyn);
-
-      if (dyn.d_tag == DT_NULL)
-	break;
-
-      if (dyn.d_tag == DT_NEEDED)
-	{
-	  const char *string;
-	  struct bfd_link_needed_list *l;
-	  unsigned int tagv = dyn.d_un.d_val;
-	  bfd_size_type amt;
-
-	  string = bfd_elf_string_from_elf_section (abfd, shlink, tagv);
-	  if (string == NULL)
-	    goto error_return;
-
-	  amt = sizeof *l;
-	  l = bfd_alloc (abfd, amt);
-	  if (l == NULL)
-	    goto error_return;
-
-	  l->by = abfd;
-	  l->name = string;
-	  l->next = *pneeded;
-	  *pneeded = l;
-	}
-    }
-
-  free (dynbuf);
-
-  return TRUE;
-
- error_return:
-  if (dynbuf != NULL)
-    free (dynbuf);
-  return FALSE;
-}
-
 /* Allocate an ELF string table--force the first byte to be zero.  */
 
 struct bfd_strtab_hash *
@@ -1724,7 +1516,11 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
   const struct elf_backend_data *bed = get_elf_backend_data (abfd);
   const char *name;
 
-  name = elf_string_from_elf_strtab (abfd, hdr->sh_name);
+  name = bfd_elf_string_from_elf_section (abfd,
+					  elf_elfheader (abfd)->e_shstrndx,
+					  hdr->sh_name);
+  if (name == NULL)
+    return FALSE;
 
   switch (hdr->sh_type)
     {
@@ -1740,10 +1536,14 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
     case SHT_FINI_ARRAY:	/* .fini_array section.  */
     case SHT_PREINIT_ARRAY:	/* .preinit_array section.  */
     case SHT_GNU_LIBLIST:	/* .gnu.liblist section.  */
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
+    case SHT_GNU_HASH:		/* .gnu.hash section.  */
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_DYNAMIC:	/* Dynamic linking information.  */
-      if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name))
+      if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex))
+	return FALSE;
+      if (hdr->sh_link > elf_numsections (abfd)
+	  || elf_elfsections (abfd)[hdr->sh_link] == NULL)
 	return FALSE;
       if (elf_elfsections (abfd)[hdr->sh_link]->sh_type != SHT_STRTAB)
 	{
@@ -1779,7 +1579,8 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
       if (elf_onesymtab (abfd) == shindex)
 	return TRUE;
 
-      BFD_ASSERT (hdr->sh_entsize == bed->s->sizeof_sym);
+      if (hdr->sh_entsize != bed->s->sizeof_sym)
+	return FALSE;
       BFD_ASSERT (elf_onesymtab (abfd) == 0);
       elf_onesymtab (abfd) = shindex;
       elf_tdata (abfd)->symtab_hdr = *hdr;
@@ -1787,23 +1588,51 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
       abfd->flags |= HAS_SYMS;
 
       /* Sometimes a shared object will map in the symbol table.  If
-         SHF_ALLOC is set, and this is a shared object, then we also
-         treat this section as a BFD section.  We can not base the
-         decision purely on SHF_ALLOC, because that flag is sometimes
-         set in a relocatable object file, which would confuse the
-         linker.  */
+	 SHF_ALLOC is set, and this is a shared object, then we also
+	 treat this section as a BFD section.  We can not base the
+	 decision purely on SHF_ALLOC, because that flag is sometimes
+	 set in a relocatable object file, which would confuse the
+	 linker.  */
       if ((hdr->sh_flags & SHF_ALLOC) != 0
 	  && (abfd->flags & DYNAMIC) != 0
-	  && ! _bfd_elf_make_section_from_shdr (abfd, hdr, name))
+	  && ! _bfd_elf_make_section_from_shdr (abfd, hdr, name,
+						shindex))
 	return FALSE;
 
+      /* Go looking for SHT_SYMTAB_SHNDX too, since if there is one we
+	 can't read symbols without that section loaded as well.  It
+	 is most likely specified by the next section header.  */
+      if (elf_elfsections (abfd)[elf_symtab_shndx (abfd)]->sh_link != shindex)
+	{
+	  unsigned int i, num_sec;
+
+	  num_sec = elf_numsections (abfd);
+	  for (i = shindex + 1; i < num_sec; i++)
+	    {
+	      Elf_Internal_Shdr *hdr2 = elf_elfsections (abfd)[i];
+	      if (hdr2->sh_type == SHT_SYMTAB_SHNDX
+		  && hdr2->sh_link == shindex)
+		break;
+	    }
+	  if (i == num_sec)
+	    for (i = 1; i < shindex; i++)
+	      {
+		Elf_Internal_Shdr *hdr2 = elf_elfsections (abfd)[i];
+		if (hdr2->sh_type == SHT_SYMTAB_SHNDX
+		    && hdr2->sh_link == shindex)
+		  break;
+	      }
+	  if (i != shindex)
+	    return bfd_section_from_shdr (abfd, i);
+	}
       return TRUE;
 
     case SHT_DYNSYM:		/* A dynamic symbol table */
       if (elf_dynsymtab (abfd) == shindex)
 	return TRUE;
 
-      BFD_ASSERT (hdr->sh_entsize == bed->s->sizeof_sym);
+      if (hdr->sh_entsize != bed->s->sizeof_sym)
+	return FALSE;
       BFD_ASSERT (elf_dynsymtab (abfd) == 0);
       elf_dynsymtab (abfd) = shindex;
       elf_tdata (abfd)->dynsymtab_hdr = *hdr;
@@ -1812,17 +1641,13 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 
       /* Besides being a symbol table, we also treat this as a regular
 	 section, so that objcopy can handle it.  */
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_SYMTAB_SHNDX:	/* Symbol section indices when >64k sections */
       if (elf_symtab_shndx (abfd) == shindex)
 	return TRUE;
 
-      /* Get the associated symbol table.  */
-      if (! bfd_section_from_shdr (abfd, hdr->sh_link)
-	  || hdr->sh_link != elf_onesymtab (abfd))
-	return FALSE;
-
+      BFD_ASSERT (elf_symtab_shndx (abfd) == 0);
       elf_symtab_shndx (abfd) = shindex;
       elf_tdata (abfd)->symtab_shndx_hdr = *hdr;
       elf_elfsections (abfd)[shindex] = &elf_tdata (abfd)->symtab_shndx_hdr;
@@ -1837,49 +1662,51 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	  elf_elfsections (abfd)[shindex] = &elf_tdata (abfd)->shstrtab_hdr;
 	  return TRUE;
 	}
-      {
-	unsigned int i, num_sec;
+      if (elf_elfsections (abfd)[elf_onesymtab (abfd)]->sh_link == shindex)
+	{
+	symtab_strtab:
+	  elf_tdata (abfd)->strtab_hdr = *hdr;
+	  elf_elfsections (abfd)[shindex] = &elf_tdata (abfd)->strtab_hdr;
+	  return TRUE;
+	}
+      if (elf_elfsections (abfd)[elf_dynsymtab (abfd)]->sh_link == shindex)
+	{
+	dynsymtab_strtab:
+	  elf_tdata (abfd)->dynstrtab_hdr = *hdr;
+	  hdr = &elf_tdata (abfd)->dynstrtab_hdr;
+	  elf_elfsections (abfd)[shindex] = hdr;
+	  /* We also treat this as a regular section, so that objcopy
+	     can handle it.  */
+	  return _bfd_elf_make_section_from_shdr (abfd, hdr, name,
+						  shindex);
+	}
 
-	num_sec = elf_numsections (abfd);
-	for (i = 1; i < num_sec; i++)
-	  {
-	    Elf_Internal_Shdr *hdr2 = elf_elfsections (abfd)[i];
-	    if (hdr2->sh_link == shindex)
-	      {
-		if (! bfd_section_from_shdr (abfd, i))
-		  return FALSE;
-		if (elf_onesymtab (abfd) == i)
-		  {
-		    elf_tdata (abfd)->strtab_hdr = *hdr;
-		    elf_elfsections (abfd)[shindex] =
-		      &elf_tdata (abfd)->strtab_hdr;
-		    return TRUE;
-		  }
-		if (elf_dynsymtab (abfd) == i)
-		  {
-		    elf_tdata (abfd)->dynstrtab_hdr = *hdr;
-		    elf_elfsections (abfd)[shindex] = hdr =
-		      &elf_tdata (abfd)->dynstrtab_hdr;
-		    /* We also treat this as a regular section, so
-		       that objcopy can handle it.  */
-		    break;
-		  }
-#if 0 /* Not handling other string tables specially right now.  */
-		hdr2 = elf_elfsections (abfd)[i];	/* in case it moved */
-		/* We have a strtab for some random other section.  */
-		newsect = (asection *) hdr2->bfd_section;
-		if (!newsect)
-		  break;
-		hdr->bfd_section = newsect;
-		hdr2 = &elf_section_data (newsect)->str_hdr;
-		*hdr2 = *hdr;
-		elf_elfsections (abfd)[shindex] = hdr2;
-#endif
-	      }
-	  }
-      }
+      /* If the string table isn't one of the above, then treat it as a
+	 regular section.  We need to scan all the headers to be sure,
+	 just in case this strtab section appeared before the above.  */
+      if (elf_onesymtab (abfd) == 0 || elf_dynsymtab (abfd) == 0)
+	{
+	  unsigned int i, num_sec;
 
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
+	  num_sec = elf_numsections (abfd);
+	  for (i = 1; i < num_sec; i++)
+	    {
+	      Elf_Internal_Shdr *hdr2 = elf_elfsections (abfd)[i];
+	      if (hdr2->sh_link == shindex)
+		{
+		  /* Prevent endless recursion on broken objects.  */
+		  if (i == shindex)
+		    return FALSE;
+		  if (! bfd_section_from_shdr (abfd, i))
+		    return FALSE;
+		  if (elf_onesymtab (abfd) == i)
+		    goto symtab_strtab;
+		  if (elf_dynsymtab (abfd) == i)
+		    goto dynsymtab_strtab;
+		}
+	    }
+	}
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_REL:
     case SHT_RELA:
@@ -1889,6 +1716,11 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	Elf_Internal_Shdr *hdr2;
 	unsigned int num_sec = elf_numsections (abfd);
 
+	if (hdr->sh_entsize
+	    != (bfd_size_type) (hdr->sh_type == SHT_REL
+				? bed->s->sizeof_rel : bed->s->sizeof_rela))
+	  return FALSE;
+
 	/* Check for a bogus link to avoid crashing.  */
 	if ((hdr->sh_link >= SHN_LORESERVE && hdr->sh_link <= SHN_HIRESERVE)
 	    || hdr->sh_link >= num_sec)
@@ -1896,7 +1728,8 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	    ((*_bfd_error_handler)
 	     (_("%B: invalid link %lu for reloc section %s (index %u)"),
 	      abfd, hdr->sh_link, name, shindex));
-	    return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
+	    return _bfd_elf_make_section_from_shdr (abfd, hdr, name,
+						    shindex);
 	  }
 
 	/* For some incomprehensible reason Oracle distributes
@@ -1931,7 +1764,8 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	  }
 
 	/* Get the symbol table.  */
-	if (elf_elfsections (abfd)[hdr->sh_link]->sh_type == SHT_SYMTAB
+	if ((elf_elfsections (abfd)[hdr->sh_link]->sh_type == SHT_SYMTAB
+	     || elf_elfsections (abfd)[hdr->sh_link]->sh_type == SHT_DYNSYM)
 	    && ! bfd_section_from_shdr (abfd, hdr->sh_link))
 	  return FALSE;
 
@@ -1940,9 +1774,15 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	   represent such a section, so at least for now, we don't
 	   try.  We just present it as a normal section.  We also
 	   can't use it as a reloc section if it points to the null
-	   section.  */
-	if (hdr->sh_link != elf_onesymtab (abfd) || hdr->sh_info == SHN_UNDEF)
-	  return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
+	   section, an invalid section, or another reloc section.  */
+	if (hdr->sh_link != elf_onesymtab (abfd)
+	    || hdr->sh_info == SHN_UNDEF
+	    || (hdr->sh_info >= SHN_LORESERVE && hdr->sh_info <= SHN_HIRESERVE)
+	    || hdr->sh_info >= num_sec
+	    || elf_elfsections (abfd)[hdr->sh_info]->sh_type == SHT_REL
+	    || elf_elfsections (abfd)[hdr->sh_info]->sh_type == SHT_RELA)
+	  return _bfd_elf_make_section_from_shdr (abfd, hdr, name,
+						  shindex);
 
 	if (! bfd_section_from_shdr (abfd, hdr->sh_info))
 	  return FALSE;
@@ -1959,6 +1799,8 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	    BFD_ASSERT (elf_section_data (target_sect)->rel_hdr2 == NULL);
 	    amt = sizeof (*hdr2);
 	    hdr2 = bfd_alloc (abfd, amt);
+	    if (hdr2 == NULL)
+	      return FALSE;
 	    elf_section_data (target_sect)->rel_hdr2 = hdr2;
 	  }
 	*hdr2 = *hdr;
@@ -1974,25 +1816,23 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	abfd->flags |= HAS_RELOC;
 	return TRUE;
       }
-      break;
 
     case SHT_GNU_verdef:
       elf_dynverdef (abfd) = shindex;
       elf_tdata (abfd)->dynverdef_hdr = *hdr;
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
-      break;
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_GNU_versym:
+      if (hdr->sh_entsize != sizeof (Elf_External_Versym))
+	return FALSE;
       elf_dynversym (abfd) = shindex;
       elf_tdata (abfd)->dynversym_hdr = *hdr;
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
-      break;
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_GNU_verneed:
       elf_dynverref (abfd) = shindex;
       elf_tdata (abfd)->dynverref_hdr = *hdr;
-      return _bfd_elf_make_section_from_shdr (abfd, hdr, name);
-      break;
+      return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
 
     case SHT_SHLIB:
       return TRUE;
@@ -2001,15 +1841,17 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
       /* We need a BFD section for objcopy and relocatable linking,
 	 and it's handy to have the signature available as the section
 	 name.  */
+      if (! IS_VALID_GROUP_SECTION_HEADER (hdr))
+	return FALSE;
       name = group_signature (abfd, hdr);
       if (name == NULL)
 	return FALSE;
-      if (!_bfd_elf_make_section_from_shdr (abfd, hdr, name))
+      if (!_bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex))
 	return FALSE;
       if (hdr->contents != NULL)
 	{
 	  Elf_Internal_Group *idx = (Elf_Internal_Group *) hdr->contents;
-	  unsigned int n_elt = hdr->sh_size / 4;
+	  unsigned int n_elt = hdr->sh_size / GRP_ENTRY_SIZE;
 	  asection *s;
 
 	  if (idx->flags & GRP_COMDAT)
@@ -2019,22 +1861,78 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
 	  /* We try to keep the same section order as it comes in.  */
 	  idx += n_elt;
 	  while (--n_elt != 0)
-	    if ((s = (--idx)->shdr->bfd_section) != NULL
-		&& elf_next_in_group (s) != NULL)
-	      {
-		elf_next_in_group (hdr->bfd_section) = s;
-		break;
-	      }
+	    {
+	      --idx;
+
+	      if (idx->shdr != NULL
+		  && (s = idx->shdr->bfd_section) != NULL
+		  && elf_next_in_group (s) != NULL)
+		{
+		  elf_next_in_group (hdr->bfd_section) = s;
+		  break;
+		}
+	    }
 	}
       break;
 
     default:
+      /* Possibly an attributes section.  */
+      if (hdr->sh_type == SHT_GNU_ATTRIBUTES
+	  || hdr->sh_type == bed->obj_attrs_section_type)
+	{
+	  if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex))
+	    return FALSE;
+	  _bfd_elf_parse_attributes (abfd, hdr);
+	  return TRUE;
+	}
+
       /* Check for any processor-specific section types.  */
-      {
-	if (bed->elf_backend_section_from_shdr)
-	  (*bed->elf_backend_section_from_shdr) (abfd, hdr, name);
-      }
-      break;
+      if (bed->elf_backend_section_from_shdr (abfd, hdr, name, shindex))
+	return TRUE;
+
+      if (hdr->sh_type >= SHT_LOUSER && hdr->sh_type <= SHT_HIUSER)
+	{
+	  if ((hdr->sh_flags & SHF_ALLOC) != 0)
+	    /* FIXME: How to properly handle allocated section reserved
+	       for applications?  */
+	    (*_bfd_error_handler)
+	      (_("%B: don't know how to handle allocated, application "
+		 "specific section `%s' [0x%8x]"),
+	       abfd, name, hdr->sh_type);
+	  else
+	    /* Allow sections reserved for applications.  */
+	    return _bfd_elf_make_section_from_shdr (abfd, hdr, name,
+						    shindex);
+	}
+      else if (hdr->sh_type >= SHT_LOPROC
+	       && hdr->sh_type <= SHT_HIPROC)
+	/* FIXME: We should handle this section.  */
+	(*_bfd_error_handler)
+	  (_("%B: don't know how to handle processor specific section "
+	     "`%s' [0x%8x]"),
+	   abfd, name, hdr->sh_type);
+      else if (hdr->sh_type >= SHT_LOOS && hdr->sh_type <= SHT_HIOS)
+	{
+	  /* Unrecognised OS-specific sections.  */
+	  if ((hdr->sh_flags & SHF_OS_NONCONFORMING) != 0)
+	    /* SHF_OS_NONCONFORMING indicates that special knowledge is
+	       required to correctly process the section and the file should
+	       be rejected with an error message.  */
+	    (*_bfd_error_handler)
+	      (_("%B: don't know how to handle OS specific section "
+		 "`%s' [0x%8x]"),
+	       abfd, name, hdr->sh_type);
+	  else
+	    /* Otherwise it should be processed.  */
+	    return _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
+	}
+      else
+	/* FIXME: We should handle this section.  */
+	(*_bfd_error_handler)
+	  (_("%B: don't know how to handle section `%s' [0x%8x]"),
+	   abfd, name, hdr->sh_type);
+
+      return FALSE;
     }
 
   return TRUE;
@@ -2049,36 +1947,35 @@ bfd_section_from_r_symndx (bfd *abfd,
 			   asection *sec,
 			   unsigned long r_symndx)
 {
-  Elf_Internal_Shdr *symtab_hdr;
-  unsigned char esym[sizeof (Elf64_External_Sym)];
-  Elf_External_Sym_Shndx eshndx;
-  Elf_Internal_Sym isym;
   unsigned int ent = r_symndx % LOCAL_SYM_CACHE_SIZE;
+  asection *s;
 
-  if (cache->abfd == abfd && cache->indx[ent] == r_symndx)
-    return cache->sec[ent];
-
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  if (bfd_elf_get_elf_syms (abfd, symtab_hdr, 1, r_symndx,
-			    &isym, esym, &eshndx) == NULL)
-    return NULL;
-
-  if (cache->abfd != abfd)
+  if (cache->abfd != abfd || cache->indx[ent] != r_symndx)
     {
-      memset (cache->indx, -1, sizeof (cache->indx));
-      cache->abfd = abfd;
+      Elf_Internal_Shdr *symtab_hdr;
+      unsigned char esym[sizeof (Elf64_External_Sym)];
+      Elf_External_Sym_Shndx eshndx;
+      Elf_Internal_Sym isym;
+
+      symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+      if (bfd_elf_get_elf_syms (abfd, symtab_hdr, 1, r_symndx,
+				&isym, esym, &eshndx) == NULL)
+	return NULL;
+
+      if (cache->abfd != abfd)
+	{
+	  memset (cache->indx, -1, sizeof (cache->indx));
+	  cache->abfd = abfd;
+	}
+      cache->indx[ent] = r_symndx;
+      cache->shndx[ent] = isym.st_shndx;
     }
-  cache->indx[ent] = r_symndx;
-  cache->sec[ent] = sec;
-  if ((isym.st_shndx != SHN_UNDEF && isym.st_shndx < SHN_LORESERVE)
-      || isym.st_shndx > SHN_HIRESERVE)
-    {
-      asection *s;
-      s = bfd_section_from_elf_index (abfd, isym.st_shndx);
-      if (s != NULL)
-	cache->sec[ent] = s;
-    }
-  return cache->sec[ent];
+
+  s = bfd_section_from_elf_index (abfd, cache->shndx[ent]);
+  if (s != NULL)
+    return s;
+
+  return sec;
 }
 
 /* Given an ELF section number, retrieve the corresponding BFD
@@ -2092,71 +1989,159 @@ bfd_section_from_elf_index (bfd *abfd, unsigned int index)
   return elf_elfsections (abfd)[index]->bfd_section;
 }
 
-static struct bfd_elf_special_section const special_sections[] =
+static const struct bfd_elf_special_section special_sections_b[] =
 {
-  { ".bss",            4, -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE },
-  { ".gnu.linkonce.b",15, -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE },
-  { ".comment",        8,  0, SHT_PROGBITS, 0 },
-  { ".data",           5, -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
-  { ".data1",          6,  0, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
-  { ".debug",          6,  0, SHT_PROGBITS, 0 },
-  { ".fini",           5,  0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { ".init",           5,  0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { ".line",           5,  0, SHT_PROGBITS, 0 },
-  { ".rodata",         7, -2, SHT_PROGBITS, SHF_ALLOC },
-  { ".rodata1",        8,  0, SHT_PROGBITS, SHF_ALLOC },
-  { ".tbss",           5, -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE + SHF_TLS },
-  { ".tdata",          6, -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE + SHF_TLS },
-  { ".text",           5, -2, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { ".init_array",    11,  0, SHT_INIT_ARRAY, SHF_ALLOC + SHF_WRITE },
-  { ".fini_array",    11,  0, SHT_FINI_ARRAY, SHF_ALLOC + SHF_WRITE },
-  { ".preinit_array", 14,  0, SHT_PREINIT_ARRAY, SHF_ALLOC + SHF_WRITE },
-  { ".debug_line",    11,  0, SHT_PROGBITS, 0 },
-  { ".debug_info",    11,  0, SHT_PROGBITS, 0 },
-  { ".debug_abbrev",  13,  0, SHT_PROGBITS, 0 },
-  { ".debug_aranges", 14,  0, SHT_PROGBITS, 0 },
-  { ".dynamic",        8,  0, SHT_DYNAMIC,  SHF_ALLOC },
-  { ".dynstr",         7,  0, SHT_STRTAB,   SHF_ALLOC },
-  { ".dynsym",         7,  0, SHT_DYNSYM,   SHF_ALLOC },
-  { ".got",            4,  0, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
-  { ".hash",           5,  0, SHT_HASH,     SHF_ALLOC },
-  { ".interp",         7,  0, SHT_PROGBITS, 0 },
-  { ".plt",            4,  0, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
-  { ".shstrtab",       9,  0, SHT_STRTAB,   0 },
-  { ".strtab",         7,  0, SHT_STRTAB,   0 },
-  { ".symtab",         7,  0, SHT_SYMTAB,   0 },
-  { ".gnu.version",   12,  0, SHT_GNU_versym, 0 },
-  { ".gnu.version_d", 14,  0, SHT_GNU_verdef, 0 },
-  { ".gnu.version_r", 14,  0, SHT_GNU_verneed, 0 },
-  { ".note.GNU-stack",15,  0, SHT_PROGBITS, 0 },
-  { ".note",           5, -1, SHT_NOTE,     0 },
-  { ".rela",           5, -1, SHT_RELA,     0 },
-  { ".rel",            4, -1, SHT_REL,      0 },
-  { ".stabstr",        5,  3, SHT_STRTAB,   0 },
-  { ".gnu.liblist",   12,  0, SHT_GNU_LIBLIST, SHF_ALLOC },
-  { ".gnu.conflict",  13,  0, SHT_RELA,     SHF_ALLOC },
-  { NULL,              0,  0, 0,            0 }
+  { STRING_COMMA_LEN (".bss"), -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE },
+  { NULL,                   0,  0, 0,            0 }
 };
 
-static const struct bfd_elf_special_section *
-get_special_section (const char *name,
-		     const struct bfd_elf_special_section *special_sections,
-		     unsigned int rela)
+static const struct bfd_elf_special_section special_sections_c[] =
+{
+  { STRING_COMMA_LEN (".comment"), 0, SHT_PROGBITS, 0 },
+  { NULL,                       0, 0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_d[] =
+{
+  { STRING_COMMA_LEN (".data"),         -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".data1"),         0, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".debug"),         0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".debug_line"),    0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".debug_info"),    0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".debug_abbrev"),  0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".debug_aranges"), 0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".dynamic"),       0, SHT_DYNAMIC,  SHF_ALLOC },
+  { STRING_COMMA_LEN (".dynstr"),        0, SHT_STRTAB,   SHF_ALLOC },
+  { STRING_COMMA_LEN (".dynsym"),        0, SHT_DYNSYM,   SHF_ALLOC },
+  { NULL,                      0,        0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_f[] =
+{
+  { STRING_COMMA_LEN (".fini"),       0, SHT_PROGBITS,   SHF_ALLOC + SHF_EXECINSTR },
+  { STRING_COMMA_LEN (".fini_array"), 0, SHT_FINI_ARRAY, SHF_ALLOC + SHF_WRITE },
+  { NULL,                          0, 0, 0,              0 }
+};
+
+static const struct bfd_elf_special_section special_sections_g[] =
+{
+  { STRING_COMMA_LEN (".gnu.linkonce.b"), -2, SHT_NOBITS,      SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".got"),             0, SHT_PROGBITS,    SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".gnu.version"),     0, SHT_GNU_versym,  0 },
+  { STRING_COMMA_LEN (".gnu.version_d"),   0, SHT_GNU_verdef,  0 },
+  { STRING_COMMA_LEN (".gnu.version_r"),   0, SHT_GNU_verneed, 0 },
+  { STRING_COMMA_LEN (".gnu.liblist"),     0, SHT_GNU_LIBLIST, SHF_ALLOC },
+  { STRING_COMMA_LEN (".gnu.conflict"),    0, SHT_RELA,        SHF_ALLOC },
+  { STRING_COMMA_LEN (".gnu.hash"),        0, SHT_GNU_HASH,    SHF_ALLOC },
+  { NULL,                        0,        0, 0,               0 }
+};
+
+static const struct bfd_elf_special_section special_sections_h[] =
+{
+  { STRING_COMMA_LEN (".hash"), 0, SHT_HASH,     SHF_ALLOC },
+  { NULL,                    0, 0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_i[] =
+{
+  { STRING_COMMA_LEN (".init"),       0, SHT_PROGBITS,   SHF_ALLOC + SHF_EXECINSTR },
+  { STRING_COMMA_LEN (".init_array"), 0, SHT_INIT_ARRAY, SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".interp"),     0, SHT_PROGBITS,   0 },
+  { NULL,                      0,     0, 0,              0 }
+};
+
+static const struct bfd_elf_special_section special_sections_l[] =
+{
+  { STRING_COMMA_LEN (".line"), 0, SHT_PROGBITS, 0 },
+  { NULL,                    0, 0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_n[] =
+{
+  { STRING_COMMA_LEN (".note.GNU-stack"), 0, SHT_PROGBITS, 0 },
+  { STRING_COMMA_LEN (".note"),          -1, SHT_NOTE,     0 },
+  { NULL,                    0,           0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_p[] =
+{
+  { STRING_COMMA_LEN (".preinit_array"), 0, SHT_PREINIT_ARRAY, SHF_ALLOC + SHF_WRITE },
+  { STRING_COMMA_LEN (".plt"),           0, SHT_PROGBITS,      SHF_ALLOC + SHF_EXECINSTR },
+  { NULL,                   0,           0, 0,                 0 }
+};
+
+static const struct bfd_elf_special_section special_sections_r[] =
+{
+  { STRING_COMMA_LEN (".rodata"), -2, SHT_PROGBITS, SHF_ALLOC },
+  { STRING_COMMA_LEN (".rodata1"), 0, SHT_PROGBITS, SHF_ALLOC },
+  { STRING_COMMA_LEN (".rela"),   -1, SHT_RELA,     0 },
+  { STRING_COMMA_LEN (".rel"),    -1, SHT_REL,      0 },
+  { NULL,                   0,     0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section special_sections_s[] =
+{
+  { STRING_COMMA_LEN (".shstrtab"), 0, SHT_STRTAB, 0 },
+  { STRING_COMMA_LEN (".strtab"),   0, SHT_STRTAB, 0 },
+  { STRING_COMMA_LEN (".symtab"),   0, SHT_SYMTAB, 0 },
+  /* See struct bfd_elf_special_section declaration for the semantics of
+     this special case where .prefix_length != strlen (.prefix).  */
+  { ".stabstr",			5,  3, SHT_STRTAB, 0 },
+  { NULL,                       0,  0, 0,          0 }
+};
+
+static const struct bfd_elf_special_section special_sections_t[] =
+{
+  { STRING_COMMA_LEN (".text"),  -2, SHT_PROGBITS, SHF_ALLOC + SHF_EXECINSTR },
+  { STRING_COMMA_LEN (".tbss"),  -2, SHT_NOBITS,   SHF_ALLOC + SHF_WRITE + SHF_TLS },
+  { STRING_COMMA_LEN (".tdata"), -2, SHT_PROGBITS, SHF_ALLOC + SHF_WRITE + SHF_TLS },
+  { NULL,                     0,  0, 0,            0 }
+};
+
+static const struct bfd_elf_special_section *special_sections[] =
+{
+  special_sections_b,		/* 'b' */
+  special_sections_c,		/* 'c' */
+  special_sections_d,		/* 'd' */
+  NULL,				/* 'e' */
+  special_sections_f,		/* 'f' */
+  special_sections_g,		/* 'g' */
+  special_sections_h,		/* 'h' */
+  special_sections_i,		/* 'i' */
+  NULL,				/* 'j' */
+  NULL,				/* 'k' */
+  special_sections_l,		/* 'l' */
+  NULL,				/* 'm' */
+  special_sections_n,		/* 'n' */
+  NULL,				/* 'o' */
+  special_sections_p,		/* 'p' */
+  NULL,				/* 'q' */
+  special_sections_r,		/* 'r' */
+  special_sections_s,		/* 's' */
+  special_sections_t,		/* 't' */
+};
+
+const struct bfd_elf_special_section *
+_bfd_elf_get_special_section (const char *name,
+			      const struct bfd_elf_special_section *spec,
+			      unsigned int rela)
 {
   int i;
-  int len = strlen (name);
+  int len;
 
-  for (i = 0; special_sections[i].prefix != NULL; i++)
+  len = strlen (name);
+
+  for (i = 0; spec[i].prefix != NULL; i++)
     {
       int suffix_len;
-      int prefix_len = special_sections[i].prefix_length;
+      int prefix_len = spec[i].prefix_length;
 
       if (len < prefix_len)
 	continue;
-      if (memcmp (name, special_sections[i].prefix, prefix_len) != 0)
+      if (memcmp (name, spec[i].prefix, prefix_len) != 0)
 	continue;
 
-      suffix_len = special_sections[i].suffix_length;
+      suffix_len = spec[i].suffix_length;
       if (suffix_len <= 0)
 	{
 	  if (name[prefix_len] != 0)
@@ -2165,7 +2150,7 @@ get_special_section (const char *name,
 		continue;
 	      if (name[prefix_len] != '.'
 		  && (suffix_len == -2
-		      || (rela && special_sections[i].type == SHT_REL)))
+		      || (rela && spec[i].type == SHT_REL)))
 		continue;
 	    }
 	}
@@ -2174,41 +2159,58 @@ get_special_section (const char *name,
 	  if (len < prefix_len + suffix_len)
 	    continue;
 	  if (memcmp (name + len - suffix_len,
-		      special_sections[i].prefix + prefix_len,
+		      spec[i].prefix + prefix_len,
 		      suffix_len) != 0)
 	    continue;
 	}
-      return &special_sections[i];
+      return &spec[i];
     }
 
   return NULL;
 }
 
 const struct bfd_elf_special_section *
-_bfd_elf_get_sec_type_attr (bfd *abfd, const char *name)
+_bfd_elf_get_sec_type_attr (bfd *abfd, asection *sec)
 {
-  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
-  const struct bfd_elf_special_section *ssect = NULL;
+  int i;
+  const struct bfd_elf_special_section *spec;
+  const struct elf_backend_data *bed;
 
   /* See if this is one of the special sections.  */
-  if (name)
+  if (sec->name == NULL)
+    return NULL;
+
+  bed = get_elf_backend_data (abfd);
+  spec = bed->special_sections;
+  if (spec)
     {
-      unsigned int rela = bed->default_use_rela_p;
-
-      if (bed->special_sections)
-	ssect = get_special_section (name, bed->special_sections, rela);
-
-      if (! ssect)
-	ssect = get_special_section (name, special_sections, rela);
+      spec = _bfd_elf_get_special_section (sec->name,
+					   bed->special_sections,
+					   sec->use_rela_p);
+      if (spec != NULL)
+	return spec;
     }
 
-  return ssect;
+  if (sec->name[0] != '.')
+    return NULL;
+
+  i = sec->name[1] - 'b';
+  if (i < 0 || i > 't' - 'b')
+    return NULL;
+
+  spec = special_sections[i];
+
+  if (spec == NULL)
+    return NULL;
+
+  return _bfd_elf_get_special_section (sec->name, spec, sec->use_rela_p);
 }
 
 bfd_boolean
 _bfd_elf_new_section_hook (bfd *abfd, asection *sec)
 {
   struct bfd_elf_section_data *sdata;
+  const struct elf_backend_data *bed;
   const struct bfd_elf_special_section *ssect;
 
   sdata = (struct bfd_elf_section_data *) sec->used_by_bfd;
@@ -2220,18 +2222,28 @@ _bfd_elf_new_section_hook (bfd *abfd, asection *sec)
       sec->used_by_bfd = sdata;
     }
 
-  elf_section_type (sec) = SHT_NULL;
-  ssect = _bfd_elf_get_sec_type_attr (abfd, sec->name);
-  if (ssect != NULL)
+  /* Indicate whether or not this section should use RELA relocations.  */
+  bed = get_elf_backend_data (abfd);
+  sec->use_rela_p = bed->default_use_rela_p;
+
+  /* When we read a file, we don't need to set ELF section type and
+     flags.  They will be overridden in _bfd_elf_make_section_from_shdr
+     anyway.  We will set ELF section type and flags for all linker
+     created sections.  If user specifies BFD section flags, we will
+     set ELF section type and flags based on BFD section flags in
+     elf_fake_sections.  */
+  if ((!sec->flags && abfd->direction != read_direction)
+      || (sec->flags & SEC_LINKER_CREATED) != 0)
     {
-      elf_section_type (sec) = ssect->type;
-      elf_section_flags (sec) = ssect->attr;
+      ssect = (*bed->get_sec_type_attr) (abfd, sec);
+      if (ssect != NULL)
+	{
+	  elf_section_type (sec) = ssect->type;
+	  elf_section_flags (sec) = ssect->attr;
+	}
     }
 
-  /* Indicate whether or not this section should use RELA relocations.  */
-  sec->use_rela_p = get_elf_backend_data (abfd)->default_use_rela_p;
-
-  return TRUE;
+  return _bfd_generic_new_section_hook (abfd, sec);
 }
 
 /* Create a new bfd section from an ELF program header.
@@ -2252,7 +2264,7 @@ _bfd_elf_new_section_hook (bfd *abfd, asection *sec)
    for the single program segment.  The first has the length specified by
    the file size of the segment, and the second has the length specified
    by the difference between the two sizes.  In effect, the segment is split
-   into it's initialized and uninitialized parts.
+   into its initialized and uninitialized parts.
 
  */
 
@@ -2271,40 +2283,46 @@ _bfd_elf_make_section_from_phdr (bfd *abfd,
   split = ((hdr->p_memsz > 0)
 	    && (hdr->p_filesz > 0)
 	    && (hdr->p_memsz > hdr->p_filesz));
-  sprintf (namebuf, "%s%d%s", typename, index, split ? "a" : "");
-  len = strlen (namebuf) + 1;
-  name = bfd_alloc (abfd, len);
-  if (!name)
-    return FALSE;
-  memcpy (name, namebuf, len);
-  newsect = bfd_make_section (abfd, name);
-  if (newsect == NULL)
-    return FALSE;
-  newsect->vma = hdr->p_vaddr;
-  newsect->lma = hdr->p_paddr;
-  newsect->size = hdr->p_filesz;
-  newsect->filepos = hdr->p_offset;
-  newsect->flags |= SEC_HAS_CONTENTS;
-  newsect->alignment_power = bfd_log2 (hdr->p_align);
-  if (hdr->p_type == PT_LOAD)
+
+  if (hdr->p_filesz > 0)
     {
-      newsect->flags |= SEC_ALLOC;
-      newsect->flags |= SEC_LOAD;
-      if (hdr->p_flags & PF_X)
+      sprintf (namebuf, "%s%d%s", typename, index, split ? "a" : "");
+      len = strlen (namebuf) + 1;
+      name = bfd_alloc (abfd, len);
+      if (!name)
+	return FALSE;
+      memcpy (name, namebuf, len);
+      newsect = bfd_make_section (abfd, name);
+      if (newsect == NULL)
+	return FALSE;
+      newsect->vma = hdr->p_vaddr;
+      newsect->lma = hdr->p_paddr;
+      newsect->size = hdr->p_filesz;
+      newsect->filepos = hdr->p_offset;
+      newsect->flags |= SEC_HAS_CONTENTS;
+      newsect->alignment_power = bfd_log2 (hdr->p_align);
+      if (hdr->p_type == PT_LOAD)
 	{
-	  /* FIXME: all we known is that it has execute PERMISSION,
-	     may be data.  */
-	  newsect->flags |= SEC_CODE;
+	  newsect->flags |= SEC_ALLOC;
+	  newsect->flags |= SEC_LOAD;
+	  if (hdr->p_flags & PF_X)
+	    {
+	      /* FIXME: all we known is that it has execute PERMISSION,
+		 may be data.  */
+	      newsect->flags |= SEC_CODE;
+	    }
+	}
+      if (!(hdr->p_flags & PF_W))
+	{
+	  newsect->flags |= SEC_READONLY;
 	}
     }
-  if (!(hdr->p_flags & PF_W))
-    {
-      newsect->flags |= SEC_READONLY;
-    }
 
-  if (split)
+  if (hdr->p_memsz > hdr->p_filesz)
     {
-      sprintf (namebuf, "%s%db", typename, index);
+      bfd_vma align;
+
+      sprintf (namebuf, "%s%d%s", typename, index, split ? "b" : "");
       len = strlen (namebuf) + 1;
       name = bfd_alloc (abfd, len);
       if (!name)
@@ -2316,8 +2334,21 @@ _bfd_elf_make_section_from_phdr (bfd *abfd,
       newsect->vma = hdr->p_vaddr + hdr->p_filesz;
       newsect->lma = hdr->p_paddr + hdr->p_filesz;
       newsect->size = hdr->p_memsz - hdr->p_filesz;
+      newsect->filepos = hdr->p_offset + hdr->p_filesz;
+      align = newsect->vma & -newsect->vma;
+      if (align == 0 || align > hdr->p_align)
+	align = hdr->p_align;
+      newsect->alignment_power = bfd_log2 (align);
       if (hdr->p_type == PT_LOAD)
 	{
+	  /* Hack for gdb.  Segments that have not been modified do
+	     not have their contents written to a core file, on the
+	     assumption that a debugger can find the contents in the
+	     executable.  We flag this case by setting the fake
+	     section size to zero.  Note that "real" bss sections will
+	     always have their contents dumped to the core file.  */
+	  if (bfd_get_format (abfd) == bfd_core)
+	    newsect->size = 0;
 	  newsect->flags |= SEC_ALLOC;
 	  if (hdr->p_flags & PF_X)
 	    newsect->flags |= SEC_CODE;
@@ -2351,7 +2382,7 @@ bfd_section_from_phdr (bfd *abfd, Elf_Internal_Phdr *hdr, int index)
     case PT_NOTE:
       if (! _bfd_elf_make_section_from_phdr (abfd, hdr, index, "note"))
 	return FALSE;
-      if (! elfcore_read_notes (abfd, hdr->p_offset, hdr->p_filesz))
+      if (! elf_read_notes (abfd, hdr->p_offset, hdr->p_filesz))
 	return FALSE;
       return TRUE;
 
@@ -2372,13 +2403,9 @@ bfd_section_from_phdr (bfd *abfd, Elf_Internal_Phdr *hdr, int index)
       return _bfd_elf_make_section_from_phdr (abfd, hdr, index, "relro");
 
     default:
-      /* Check for any processor-specific program segment types.
-         If no handler for them, default to making "segment" sections.  */
+      /* Check for any processor-specific program segment types.  */
       bed = get_elf_backend_data (abfd);
-      if (bed->elf_backend_section_from_phdr)
-	return (*bed->elf_backend_section_from_phdr) (abfd, hdr, index);
-      else
-	return _bfd_elf_make_section_from_phdr (abfd, hdr, index, "segment");
+      return bed->elf_backend_section_from_phdr (abfd, hdr, index, "proc");
     }
 }
 
@@ -2426,11 +2453,12 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
   const struct elf_backend_data *bed = get_elf_backend_data (abfd);
   bfd_boolean *failedptr = failedptrarg;
   Elf_Internal_Shdr *this_hdr;
+  unsigned int sh_type;
 
   if (*failedptr)
     {
       /* We already failed; just get out of the bfd_map_over_sections
-         loop.  */
+	 loop.  */
       return;
     }
 
@@ -2444,7 +2472,7 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
       return;
     }
 
-  this_hdr->sh_flags = 0;
+  /* Don't clear sh_flags. Assembler may set additional bits.  */
 
   if ((asect->flags & SEC_ALLOC) != 0
       || asect->user_set_vma)
@@ -2464,38 +2492,28 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
 
   /* If the section type is unspecified, we set it based on
      asect->flags.  */
+  if ((asect->flags & SEC_GROUP) != 0)
+    sh_type = SHT_GROUP;
+  else if ((asect->flags & SEC_ALLOC) != 0
+	   && (((asect->flags & (SEC_LOAD | SEC_HAS_CONTENTS)) == 0)
+	       || (asect->flags & SEC_NEVER_LOAD) != 0))
+    sh_type = SHT_NOBITS;
+  else
+    sh_type = SHT_PROGBITS;
+
   if (this_hdr->sh_type == SHT_NULL)
+    this_hdr->sh_type = sh_type;
+  else if (this_hdr->sh_type == SHT_NOBITS
+	   && sh_type == SHT_PROGBITS
+	   && (asect->flags & SEC_ALLOC) != 0)
     {
-      if ((asect->flags & SEC_GROUP) != 0)
-	{
-	  /* We also need to mark SHF_GROUP here for relocatable
-	     link.  */
-	  struct bfd_link_order *l;
-	  asection *elt;
-
-	  for (l = asect->link_order_head; l != NULL; l = l->next)
-	    if (l->type == bfd_indirect_link_order
-		&& (elt = elf_next_in_group (l->u.indirect.section)) != NULL)
-	      do
-		{
-		  /* The name is not important. Anything will do.  */
-		  elf_group_name (elt->output_section) = "G";
-		  elf_section_flags (elt->output_section) |= SHF_GROUP;
-
-		  elt = elf_next_in_group (elt);
-		  /* During a relocatable link, the lists are
-		     circular.  */
-		}
-	      while (elt != elf_next_in_group (l->u.indirect.section));
-
-	  this_hdr->sh_type = SHT_GROUP;
-	}
-      else if ((asect->flags & SEC_ALLOC) != 0
-	  && (((asect->flags & (SEC_LOAD | SEC_HAS_CONTENTS)) == 0)
-	      || (asect->flags & SEC_NEVER_LOAD) != 0))
-	this_hdr->sh_type = SHT_NOBITS;
-      else
-	this_hdr->sh_type = SHT_PROGBITS;
+      /* Warn if we are changing a NOBITS section to PROGBITS, but
+	 allow the link to proceed.  This can happen when users link
+	 non-bss input sections to bss output sections, or emit data
+	 to a bss output section via a linker script.  */
+      (*_bfd_error_handler)
+	(_("warning: section `%A' type changed to PROGBITS"), asect);
+      this_hdr->sh_type = sh_type;
     }
 
   switch (this_hdr->sh_type)
@@ -2541,8 +2559,8 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
      case SHT_GNU_verdef:
       this_hdr->sh_entsize = 0;
       /* objcopy or strip will copy over sh_info, but may not set
-         cverdefs.  The linker will set cverdefs, but sh_info will be
-         zero.  */
+	 cverdefs.  The linker will set cverdefs, but sh_info will be
+	 zero.  */
       if (this_hdr->sh_info == 0)
 	this_hdr->sh_info = elf_tdata (abfd)->cverdefs;
       else
@@ -2553,8 +2571,8 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
     case SHT_GNU_verneed:
       this_hdr->sh_entsize = 0;
       /* objcopy or strip will copy over sh_info, but may not set
-         cverrefs.  The linker will set cverrefs, but sh_info will be
-         zero.  */
+	 cverrefs.  The linker will set cverrefs, but sh_info will be
+	 zero.  */
       if (this_hdr->sh_info == 0)
 	this_hdr->sh_info = elf_tdata (abfd)->cverrefs;
       else
@@ -2563,7 +2581,11 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
       break;
 
     case SHT_GROUP:
-      this_hdr->sh_entsize = 4;
+      this_hdr->sh_entsize = GRP_ENTRY_SIZE;
+      break;
+
+    case SHT_GNU_HASH:
+      this_hdr->sh_entsize = bed->s->arch_size == 64 ? 0 : 4;
       break;
     }
 
@@ -2585,23 +2607,33 @@ elf_fake_sections (bfd *abfd, asection *asect, void *failedptrarg)
   if ((asect->flags & SEC_THREAD_LOCAL) != 0)
     {
       this_hdr->sh_flags |= SHF_TLS;
-      if (asect->size == 0 && (asect->flags & SEC_HAS_CONTENTS) == 0)
+      if (asect->size == 0
+	  && (asect->flags & SEC_HAS_CONTENTS) == 0)
 	{
-	  struct bfd_link_order *o;
+	  struct bfd_link_order *o = asect->map_tail.link_order;
 
 	  this_hdr->sh_size = 0;
-	  for (o = asect->link_order_head; o != NULL; o = o->next)
-	    if (this_hdr->sh_size < o->offset + o->size)
+	  if (o != NULL)
+	    {
 	      this_hdr->sh_size = o->offset + o->size;
-	  if (this_hdr->sh_size)
-	    this_hdr->sh_type = SHT_NOBITS;
+	      if (this_hdr->sh_size != 0)
+		this_hdr->sh_type = SHT_NOBITS;
+	    }
 	}
     }
 
   /* Check for processor-specific section types.  */
+  sh_type = this_hdr->sh_type;
   if (bed->elf_backend_fake_sections
       && !(*bed->elf_backend_fake_sections) (abfd, this_hdr, asect))
     *failedptr = TRUE;
+
+  if (sh_type == SHT_NOBITS && asect->size != 0)
+    {
+      /* Don't change the header type from NOBITS if we are being
+	 called for objcopy --only-keep-debug.  */
+      this_hdr->sh_type = sh_type;
+    }
 
   /* If the section has relocs, set up a section header for the
      SHT_REL[A] section.  If two relocation sections are required for
@@ -2624,10 +2656,11 @@ bfd_elf_set_group_contents (bfd *abfd, asection *sec, void *failedptrarg)
   unsigned long symindx;
   asection *elt, *first;
   unsigned char *loc;
-  struct bfd_link_order *l;
   bfd_boolean gas;
 
-  if (elf_section_data (sec)->this_hdr.sh_type != SHT_GROUP
+  /* Ignore linker created group section.  See elfNN_ia64_object_p in
+     elfxx-ia64.c.  */
+  if (((sec->flags & (SEC_GROUP | SEC_LINKER_CREATED)) != SEC_GROUP)
       || *failedptr)
     return;
 
@@ -2691,22 +2724,6 @@ bfd_elf_set_group_contents (bfd *abfd, asection *sec, void *failedptrarg)
 	break;
     }
 
-  /* If this is a relocatable link, then the above did nothing because
-     SEC is the output section.  Look through the input sections
-     instead.  */
-  for (l = sec->link_order_head; l != NULL; l = l->next)
-    if (l->type == bfd_indirect_link_order
-	&& (elt = elf_next_in_group (l->u.indirect.section)) != NULL)
-      do
-	{
-	  loc -= 4;
-	  H_PUT_32 (abfd,
-		    elf_section_data (elt->output_section)->this_idx, loc);
-	  elt = elf_next_in_group (elt);
-	  /* During a relocatable link, the lists are circular.  */
-	}
-      while (elt != elf_next_in_group (l->u.indirect.section));
-
   if ((loc -= 4) != sec->contents)
     abort ();
 
@@ -2718,25 +2735,54 @@ bfd_elf_set_group_contents (bfd *abfd, asection *sec, void *failedptrarg)
    in here too, while we're at it.  */
 
 static bfd_boolean
-assign_section_numbers (bfd *abfd)
+assign_section_numbers (bfd *abfd, struct bfd_link_info *link_info)
 {
   struct elf_obj_tdata *t = elf_tdata (abfd);
   asection *sec;
   unsigned int section_number, secn;
   Elf_Internal_Shdr **i_shdrp;
-  bfd_size_type amt;
+  struct bfd_elf_section_data *d;
 
   section_number = 1;
 
   _bfd_elf_strtab_clear_all_refs (elf_shstrtab (abfd));
 
+  /* SHT_GROUP sections are in relocatable files only.  */
+  if (link_info == NULL || link_info->relocatable)
+    {
+      /* Put SHT_GROUP sections first.  */
+      for (sec = abfd->sections; sec != NULL; sec = sec->next)
+	{
+	  d = elf_section_data (sec);
+
+	  if (d->this_hdr.sh_type == SHT_GROUP)
+	    {
+	      if (sec->flags & SEC_LINKER_CREATED)
+		{
+		  /* Remove the linker created SHT_GROUP sections.  */
+		  bfd_section_list_remove (abfd, sec);
+		  abfd->section_count--;
+		}
+	      else
+		{
+		  if (section_number == SHN_LORESERVE)
+		    section_number += SHN_HIRESERVE + 1 - SHN_LORESERVE;
+		  d->this_idx = section_number++;
+		}
+	    }
+	}
+    }
+
   for (sec = abfd->sections; sec; sec = sec->next)
     {
-      struct bfd_elf_section_data *d = elf_section_data (sec);
+      d = elf_section_data (sec);
 
-      if (section_number == SHN_LORESERVE)
-	section_number += SHN_HIRESERVE + 1 - SHN_LORESERVE;
-      d->this_idx = section_number++;
+      if (d->this_hdr.sh_type != SHT_GROUP)
+	{
+	  if (section_number == SHN_LORESERVE)
+	    section_number += SHN_HIRESERVE + 1 - SHN_LORESERVE;
+	  d->this_idx = section_number++;
+	}
       _bfd_elf_strtab_addref (elf_shstrtab (abfd), d->this_hdr.sh_name);
       if ((sec->flags & SEC_RELOC) == 0)
 	d->rel_idx = 0;
@@ -2798,13 +2844,11 @@ assign_section_numbers (bfd *abfd)
 
   /* Set up the list of section header pointers, in agreement with the
      indices.  */
-  amt = section_number * sizeof (Elf_Internal_Shdr *);
-  i_shdrp = bfd_zalloc (abfd, amt);
+  i_shdrp = bfd_zalloc2 (abfd, section_number, sizeof (Elf_Internal_Shdr *));
   if (i_shdrp == NULL)
     return FALSE;
 
-  amt = sizeof (Elf_Internal_Shdr);
-  i_shdrp[0] = bfd_zalloc (abfd, amt);
+  i_shdrp[0] = bfd_zalloc (abfd, sizeof (Elf_Internal_Shdr));
   if (i_shdrp[0] == NULL)
     {
       bfd_release (abfd, i_shdrp);
@@ -2859,48 +2903,60 @@ assign_section_numbers (bfd *abfd)
 	{
 	  s = elf_linked_to_section (sec);
 	  if (s)
-	    d->this_hdr.sh_link = elf_section_data (s)->this_idx;
+	    {
+	      /* elf_linked_to_section points to the input section.  */
+	      if (link_info != NULL)
+		{
+		  /* Check discarded linkonce section.  */
+		  if (elf_discarded_section (s))
+		    {
+		      asection *kept;
+		      (*_bfd_error_handler)
+			(_("%B: sh_link of section `%A' points to discarded section `%A' of `%B'"),
+			 abfd, d->this_hdr.bfd_section,
+			 s, s->owner);
+		      /* Point to the kept section if it has the same
+			 size as the discarded one.  */
+		      kept = _bfd_elf_check_kept_section (s, link_info);
+		      if (kept == NULL)
+			{
+			  bfd_set_error (bfd_error_bad_value);
+			  return FALSE;
+			}
+		      s = kept;
+		    }
+
+		  s = s->output_section;
+		  BFD_ASSERT (s != NULL);
+		}
+	      else
+		{
+		  /* Handle objcopy. */
+		  if (s->output_section == NULL)
+		    {
+		      (*_bfd_error_handler)
+			(_("%B: sh_link of section `%A' points to removed section `%A' of `%B'"),
+			 abfd, d->this_hdr.bfd_section, s, s->owner);
+		      bfd_set_error (bfd_error_bad_value);
+		      return FALSE;
+		    }
+		  s = s->output_section;
+		}
+	      d->this_hdr.sh_link = elf_section_data (s)->this_idx;
+	    }
 	  else
 	    {
-	      struct bfd_link_order *p;
-
-	      /* Find out what the corresponding section in output
-		 is.  */
-	      for (p = sec->link_order_head; p != NULL; p = p->next)
-		{
-		  s = p->u.indirect.section;
-		  if (p->type == bfd_indirect_link_order
-		      && (bfd_get_flavour (s->owner)
-			  == bfd_target_elf_flavour))
-		    {
-		      Elf_Internal_Shdr ** const elf_shdrp
-			= elf_elfsections (s->owner);
-		      int elfsec
-			= _bfd_elf_section_from_bfd_section (s->owner, s);
-		      elfsec = elf_shdrp[elfsec]->sh_link;
-		      /* PR 290:
-			 The Intel C compiler generates SHT_IA_64_UNWIND with
-			 SHF_LINK_ORDER.  But it doesn't set theh sh_link or
-			 sh_info fields.  Hence we could get the situation
-		         where elfsec is 0.  */
-		      if (elfsec == 0)
-			{
-			  const struct elf_backend_data *bed
-			    = get_elf_backend_data (abfd);
-			  if (bed->link_order_error_handler)
-			    bed->link_order_error_handler
-			      (_("%B: warning: sh_link not set for section `%S'"),
-			       abfd, s);
-			}
-		      else
-			{
-			  s = elf_shdrp[elfsec]->bfd_section->output_section;
-			  BFD_ASSERT (s != NULL);
-			  d->this_hdr.sh_link = elf_section_data (s)->this_idx;
-			}
-		      break;
-		    }
-		}
+	      /* PR 290:
+		 The Intel C compiler generates SHT_IA_64_UNWIND with
+		 SHF_LINK_ORDER.  But it doesn't set the sh_link or
+		 sh_info fields.  Hence we could get the situation
+		 where s is NULL.  */
+	      const struct elf_backend_data *bed
+		= get_elf_backend_data (abfd);
+	      if (bed->link_order_error_handler)
+		bed->link_order_error_handler
+		  (_("%B: warning: sh_link not set for section `%A'"),
+		   abfd, sec);
 	    }
 	}
 
@@ -2934,7 +2990,7 @@ assign_section_numbers (bfd *abfd)
 	     string section.  We look for a section with the same name
 	     but without the trailing ``str'', and set its sh_link
 	     field to point to this section.  */
-	  if (strncmp (sec->name, ".stab", sizeof ".stab" - 1) == 0
+	  if (CONST_STRNEQ (sec->name, ".stab")
 	      && strcmp (sec->name + strlen (sec->name) - 3, "str") == 0)
 	    {
 	      size_t len;
@@ -2974,9 +3030,8 @@ assign_section_numbers (bfd *abfd)
 
 	case SHT_GNU_LIBLIST:
 	  /* sh_link is the section header index of the prelink library
-	     list 
-	     used for the dynamic entries, or the symbol table, or the
-	     version strings.  */
+	     list used for the dynamic entries, or the symbol table, or
+	     the version strings.  */
 	  s = bfd_get_section_by_name (abfd, (sec->flags & SEC_ALLOC)
 					     ? ".dynstr" : ".gnu.libstr");
 	  if (s != NULL)
@@ -2984,6 +3039,7 @@ assign_section_numbers (bfd *abfd)
 	  break;
 
 	case SHT_HASH:
+	case SHT_GNU_HASH:
 	case SHT_GNU_versym:
 	  /* sh_link is the section header index of the symbol table
 	     this hash table or version table is for.  */
@@ -3009,7 +3065,7 @@ assign_section_numbers (bfd *abfd)
 /* Map symbol from it's internal number to the external number, moving
    all local symbols to be at the head of the list.  */
 
-static int
+static bfd_boolean
 sym_is_global (bfd *abfd, asymbol *sym)
 {
   /* If the backend has a special mapping, use it.  */
@@ -3020,6 +3076,20 @@ sym_is_global (bfd *abfd, asymbol *sym)
   return ((sym->flags & (BSF_GLOBAL | BSF_WEAK)) != 0
 	  || bfd_is_und_section (bfd_get_section (sym))
 	  || bfd_is_com_section (bfd_get_section (sym)));
+}
+
+/* Don't output section symbols for sections that are not going to be
+   output.  Also, don't output section symbols for reloc and other
+   special sections.  */
+
+static bfd_boolean
+ignore_section_sym (bfd *abfd, asymbol *sym)
+{
+  return ((sym->flags & BSF_SECTION_SYM) != 0
+	  && (sym->value != 0
+	      || (sym->section->owner != abfd
+		  && (sym->section->output_section->owner != abfd
+		      || sym->section->output_offset != 0))));
 }
 
 static bfd_boolean
@@ -3036,7 +3106,6 @@ elf_map_symbols (bfd *abfd)
   unsigned int idx;
   asection *asect;
   asymbol **new_syms;
-  bfd_size_type amt;
 
 #ifdef DEBUG
   fprintf (stderr, "elf_map_symbols\n");
@@ -3050,8 +3119,7 @@ elf_map_symbols (bfd *abfd)
     }
 
   max_index++;
-  amt = max_index * sizeof (asymbol *);
-  sect_syms = bfd_zalloc (abfd, amt);
+  sect_syms = bfd_zalloc2 (abfd, max_index, sizeof (asymbol *));
   if (sect_syms == NULL)
     return FALSE;
   elf_section_syms (abfd) = sect_syms;
@@ -3064,51 +3132,29 @@ elf_map_symbols (bfd *abfd)
       asymbol *sym = syms[idx];
 
       if ((sym->flags & BSF_SECTION_SYM) != 0
-	  && sym->value == 0)
+	  && !ignore_section_sym (abfd, sym))
 	{
-	  asection *sec;
+	  asection *sec = sym->section;
 
-	  sec = sym->section;
+	  if (sec->owner != abfd)
+	    sec = sec->output_section;
 
-	  if (sec->owner != NULL)
-	    {
-	      if (sec->owner != abfd)
-		{
-		  if (sec->output_offset != 0)
-		    continue;
-
-		  sec = sec->output_section;
-
-		  /* Empty sections in the input files may have had a
-		     section symbol created for them.  (See the comment
-		     near the end of _bfd_generic_link_output_symbols in
-		     linker.c).  If the linker script discards such
-		     sections then we will reach this point.  Since we know
-		     that we cannot avoid this case, we detect it and skip
-		     the abort and the assignment to the sect_syms array.
-		     To reproduce this particular case try running the
-		     linker testsuite test ld-scripts/weak.exp for an ELF
-		     port that uses the generic linker.  */
-		  if (sec->owner == NULL)
-		    continue;
-
-		  BFD_ASSERT (sec->owner == abfd);
-		}
-	      sect_syms[sec->index] = syms[idx];
-	    }
+	  sect_syms[sec->index] = syms[idx];
 	}
     }
 
   /* Classify all of the symbols.  */
   for (idx = 0; idx < symcount; idx++)
     {
+      if (ignore_section_sym (abfd, syms[idx]))
+	continue;
       if (!sym_is_global (abfd, syms[idx]))
 	num_locals++;
       else
 	num_globals++;
     }
 
-  /* We will be adding a section symbol for each BFD section.  Most normal
+  /* We will be adding a section symbol for each normal BFD section.  Most
      sections will already have a section symbol in outsymbols, but
      eg. SHT_GROUP sections will not, and we need the section symbol mapped
      at least in that case.  */
@@ -3124,8 +3170,7 @@ elf_map_symbols (bfd *abfd)
     }
 
   /* Now sort the symbols so the local symbols are first.  */
-  amt = (num_locals + num_globals) * sizeof (asymbol *);
-  new_syms = bfd_alloc (abfd, amt);
+  new_syms = bfd_alloc2 (abfd, num_locals + num_globals, sizeof (asymbol *));
 
   if (new_syms == NULL)
     return FALSE;
@@ -3135,6 +3180,8 @@ elf_map_symbols (bfd *abfd)
       asymbol *sym = syms[idx];
       unsigned int i;
 
+      if (ignore_section_sym (abfd, sym))
+	continue;
       if (!sym_is_global (abfd, sym))
 	i = num_locals2++;
       else
@@ -3209,7 +3256,7 @@ _bfd_elf_compute_section_file_positions (bfd *abfd,
 {
   const struct elf_backend_data *bed = get_elf_backend_data (abfd);
   bfd_boolean failed;
-  struct bfd_strtab_hash *strtab;
+  struct bfd_strtab_hash *strtab = NULL;
   Elf_Internal_Shdr *shstrtab_hdr;
 
   if (abfd->output_has_begun)
@@ -3231,7 +3278,7 @@ _bfd_elf_compute_section_file_positions (bfd *abfd,
   if (failed)
     return FALSE;
 
-  if (!assign_section_numbers (abfd))
+  if (!assign_section_numbers (abfd, link_info))
     return FALSE;
 
   /* The backend linker builds symbol table information itself.  */
@@ -3286,7 +3333,7 @@ _bfd_elf_compute_section_file_positions (bfd *abfd,
       elf_tdata (abfd)->next_file_pos = off;
 
       /* Now that we know where the .strtab section goes, write it
-         out.  */
+	 out.  */
       if (bfd_seek (abfd, hdr->sh_offset, SEEK_SET) != 0
 	  || ! _bfd_stringtab_emit (abfd, strtab))
 	return FALSE;
@@ -3296,6 +3343,125 @@ _bfd_elf_compute_section_file_positions (bfd *abfd,
   abfd->output_has_begun = TRUE;
 
   return TRUE;
+}
+
+/* Make an initial estimate of the size of the program header.  If we
+   get the number wrong here, we'll redo section placement.  */
+
+static bfd_size_type
+get_program_header_size (bfd *abfd, struct bfd_link_info *info)
+{
+  size_t segs;
+  asection *s;
+  const struct elf_backend_data *bed;
+
+  /* Assume we will need exactly two PT_LOAD segments: one for text
+     and one for data.  */
+  segs = 2;
+
+  s = bfd_get_section_by_name (abfd, ".interp");
+  if (s != NULL && (s->flags & SEC_LOAD) != 0)
+    {
+      /* If we have a loadable interpreter section, we need a
+	 PT_INTERP segment.  In this case, assume we also need a
+	 PT_PHDR segment, although that may not be true for all
+	 targets.  */
+      segs += 2;
+    }
+
+  if (bfd_get_section_by_name (abfd, ".dynamic") != NULL)
+    {
+      /* We need a PT_DYNAMIC segment.  */
+      ++segs;
+    }
+
+  if (info->relro)
+    {
+      /* We need a PT_GNU_RELRO segment.  */
+      ++segs;
+    }
+
+  if (elf_tdata (abfd)->eh_frame_hdr)
+    {
+      /* We need a PT_GNU_EH_FRAME segment.  */
+      ++segs;
+    }
+
+  if (elf_tdata (abfd)->stack_flags)
+    {
+      /* We need a PT_GNU_STACK segment.  */
+      ++segs;
+    }
+
+  for (s = abfd->sections; s != NULL; s = s->next)
+    {
+      if ((s->flags & SEC_LOAD) != 0
+	  && CONST_STRNEQ (s->name, ".note"))
+	{
+	  /* We need a PT_NOTE segment.  */
+	  ++segs;
+	  /* Try to create just one PT_NOTE segment
+	     for all adjacent loadable .note* sections.
+	     gABI requires that within a PT_NOTE segment
+	     (and also inside of each SHT_NOTE section)
+	     each note is padded to a multiple of 4 size,
+	     so we check whether the sections are correctly
+	     aligned.  */
+	  if (s->alignment_power == 2)
+	    while (s->next != NULL
+		   && s->next->alignment_power == 2
+		   && (s->next->flags & SEC_LOAD) != 0
+		   && CONST_STRNEQ (s->next->name, ".note"))
+	      s = s->next;
+	}
+    }
+
+  for (s = abfd->sections; s != NULL; s = s->next)
+    {
+      if (s->flags & SEC_THREAD_LOCAL)
+	{
+	  /* We need a PT_TLS segment.  */
+	  ++segs;
+	  break;
+	}
+    }
+
+  /* Let the backend count up any program headers it might need.  */
+  bed = get_elf_backend_data (abfd);
+  if (bed->elf_backend_additional_program_headers)
+    {
+      int a;
+
+      a = (*bed->elf_backend_additional_program_headers) (abfd, info);
+      if (a == -1)
+	abort ();
+      segs += a;
+    }
+
+  return segs * bed->s->sizeof_phdr;
+}
+
+/* Find the segment that contains the output_section of section.  */
+
+Elf_Internal_Phdr *
+_bfd_elf_find_segment_containing_section (bfd * abfd, asection * section)
+{
+  struct elf_segment_map *m;
+  Elf_Internal_Phdr *p;
+
+  for (m = elf_tdata (abfd)->segment_map,
+	 p = elf_tdata (abfd)->phdr;
+       m != NULL;
+       m = m->next, p++)
+    {
+      int i;
+
+      for (i = m->count - 1; i >= 0; i--)
+	if (m->sections[i] == section)
+	  return p;
+    }
+
+  return NULL;
 }
 
 /* Create a mapping from a set of sections to a program segment.  */
@@ -3348,364 +3514,463 @@ _bfd_elf_make_dynamic_segment (bfd *abfd, asection *dynsec)
   m->p_type = PT_DYNAMIC;
   m->count = 1;
   m->sections[0] = dynsec;
-  
+
   return m;
+}
+
+/* Possibly add or remove segments from the segment map.  */
+
+static bfd_boolean
+elf_modify_segment_map (bfd *abfd,
+			struct bfd_link_info *info,
+			bfd_boolean remove_empty_load)
+{
+  struct elf_segment_map **m;
+  const struct elf_backend_data *bed;
+
+  /* The placement algorithm assumes that non allocated sections are
+     not in PT_LOAD segments.  We ensure this here by removing such
+     sections from the segment map.  We also remove excluded
+     sections.  Finally, any PT_LOAD segment without sections is
+     removed.  */
+  m = &elf_tdata (abfd)->segment_map;
+  while (*m)
+    {
+      unsigned int i, new_count;
+
+      for (new_count = 0, i = 0; i < (*m)->count; i++)
+	{
+	  if (((*m)->sections[i]->flags & SEC_EXCLUDE) == 0
+	      && (((*m)->sections[i]->flags & SEC_ALLOC) != 0
+		  || (*m)->p_type != PT_LOAD))
+	    {
+	      (*m)->sections[new_count] = (*m)->sections[i];
+	      new_count++;
+	    }
+	}
+      (*m)->count = new_count;
+
+      if (remove_empty_load && (*m)->p_type == PT_LOAD && (*m)->count == 0)
+	*m = (*m)->next;
+      else
+	m = &(*m)->next;
+    }
+
+  bed = get_elf_backend_data (abfd);
+  if (bed->elf_backend_modify_segment_map != NULL)
+    {
+      if (!(*bed->elf_backend_modify_segment_map) (abfd, info))
+	return FALSE;
+    }
+
+  return TRUE;
 }
 
 /* Set up a mapping from BFD sections to program segments.  */
 
-static bfd_boolean
-map_sections_to_segments (bfd *abfd)
+bfd_boolean
+_bfd_elf_map_sections_to_segments (bfd *abfd, struct bfd_link_info *info)
 {
-  asection **sections = NULL;
-  asection *s;
-  unsigned int i;
   unsigned int count;
-  struct elf_segment_map *mfirst;
-  struct elf_segment_map **pm;
   struct elf_segment_map *m;
-  asection *last_hdr;
-  bfd_vma last_size;
-  unsigned int phdr_index;
-  bfd_vma maxpagesize;
-  asection **hdrpp;
-  bfd_boolean phdr_in_segment = TRUE;
-  bfd_boolean writable;
-  int tls_count = 0;
-  asection *first_tls = NULL;
-  asection *dynsec, *eh_frame_hdr;
-  bfd_size_type amt;
+  asection **sections = NULL;
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
+  bfd_boolean no_user_phdrs;
 
-  if (elf_tdata (abfd)->segment_map != NULL)
-    return TRUE;
-
-  if (bfd_count_sections (abfd) == 0)
-    return TRUE;
-
-  /* Select the allocated sections, and sort them.  */
-
-  amt = bfd_count_sections (abfd) * sizeof (asection *);
-  sections = bfd_malloc (amt);
-  if (sections == NULL)
-    goto error_return;
-
-  i = 0;
-  for (s = abfd->sections; s != NULL; s = s->next)
+  no_user_phdrs = elf_tdata (abfd)->segment_map == NULL;
+  if (no_user_phdrs && bfd_count_sections (abfd) != 0)
     {
-      if ((s->flags & SEC_ALLOC) != 0)
-	{
-	  sections[i] = s;
-	  ++i;
-	}
-    }
-  BFD_ASSERT (i <= bfd_count_sections (abfd));
-  count = i;
+      asection *s;
+      unsigned int i;
+      struct elf_segment_map *mfirst;
+      struct elf_segment_map **pm;
+      asection *last_hdr;
+      bfd_vma last_size;
+      unsigned int phdr_index;
+      bfd_vma maxpagesize;
+      asection **hdrpp;
+      bfd_boolean phdr_in_segment = TRUE;
+      bfd_boolean writable;
+      int tls_count = 0;
+      asection *first_tls = NULL;
+      asection *dynsec, *eh_frame_hdr;
+      bfd_size_type amt;
 
-  qsort (sections, (size_t) count, sizeof (asection *), elf_sort_sections);
+      /* Select the allocated sections, and sort them.  */
 
-  /* Build the mapping.  */
-
-  mfirst = NULL;
-  pm = &mfirst;
-
-  /* If we have a .interp section, then create a PT_PHDR segment for
-     the program headers and a PT_INTERP segment for the .interp
-     section.  */
-  s = bfd_get_section_by_name (abfd, ".interp");
-  if (s != NULL && (s->flags & SEC_LOAD) != 0)
-    {
-      amt = sizeof (struct elf_segment_map);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_PHDR;
-      /* FIXME: UnixWare and Solaris set PF_X, Irix 5 does not.  */
-      m->p_flags = PF_R | PF_X;
-      m->p_flags_valid = 1;
-      m->includes_phdrs = 1;
-
-      *pm = m;
-      pm = &m->next;
-
-      amt = sizeof (struct elf_segment_map);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_INTERP;
-      m->count = 1;
-      m->sections[0] = s;
-
-      *pm = m;
-      pm = &m->next;
-    }
-
-  /* Look through the sections.  We put sections in the same program
-     segment when the start of the second section can be placed within
-     a few bytes of the end of the first section.  */
-  last_hdr = NULL;
-  last_size = 0;
-  phdr_index = 0;
-  maxpagesize = get_elf_backend_data (abfd)->maxpagesize;
-  writable = FALSE;
-  dynsec = bfd_get_section_by_name (abfd, ".dynamic");
-  if (dynsec != NULL
-      && (dynsec->flags & SEC_LOAD) == 0)
-    dynsec = NULL;
-
-  /* Deal with -Ttext or something similar such that the first section
-     is not adjacent to the program headers.  This is an
-     approximation, since at this point we don't know exactly how many
-     program headers we will need.  */
-  if (count > 0)
-    {
-      bfd_size_type phdr_size;
-
-      phdr_size = elf_tdata (abfd)->program_header_size;
-      if (phdr_size == 0)
-	phdr_size = get_elf_backend_data (abfd)->s->sizeof_phdr;
-      if ((abfd->flags & D_PAGED) == 0
-	  || sections[0]->lma < phdr_size
-	  || sections[0]->lma % maxpagesize < phdr_size % maxpagesize)
-	phdr_in_segment = FALSE;
-    }
-
-  for (i = 0, hdrpp = sections; i < count; i++, hdrpp++)
-    {
-      asection *hdr;
-      bfd_boolean new_segment;
-
-      hdr = *hdrpp;
-
-      /* See if this section and the last one will fit in the same
-         segment.  */
-
-      if (last_hdr == NULL)
-	{
-	  /* If we don't have a segment yet, then we don't need a new
-	     one (we build the last one after this loop).  */
-	  new_segment = FALSE;
-	}
-      else if (last_hdr->lma - last_hdr->vma != hdr->lma - hdr->vma)
-	{
-	  /* If this section has a different relation between the
-             virtual address and the load address, then we need a new
-             segment.  */
-	  new_segment = TRUE;
-	}
-      else if (BFD_ALIGN (last_hdr->lma + last_size, maxpagesize)
-	       < BFD_ALIGN (hdr->lma, maxpagesize))
-	{
-	  /* If putting this section in this segment would force us to
-             skip a page in the segment, then we need a new segment.  */
-	  new_segment = TRUE;
-	}
-      else if ((last_hdr->flags & (SEC_LOAD | SEC_THREAD_LOCAL)) == 0
-	       && (hdr->flags & (SEC_LOAD | SEC_THREAD_LOCAL)) != 0)
-	{
-	  /* We don't want to put a loadable section after a
-             nonloadable section in the same segment.
-             Consider .tbss sections as loadable for this purpose.  */
-	  new_segment = TRUE;
-	}
-      else if ((abfd->flags & D_PAGED) == 0)
-	{
-	  /* If the file is not demand paged, which means that we
-             don't require the sections to be correctly aligned in the
-             file, then there is no other reason for a new segment.  */
-	  new_segment = FALSE;
-	}
-      else if (! writable
-	       && (hdr->flags & SEC_READONLY) == 0
-	       && (((last_hdr->lma + last_size - 1)
-		    & ~(maxpagesize - 1))
-		   != (hdr->lma & ~(maxpagesize - 1))))
-	{
-	  /* We don't want to put a writable section in a read only
-             segment, unless they are on the same page in memory
-             anyhow.  We already know that the last section does not
-             bring us past the current section on the page, so the
-             only case in which the new section is not on the same
-             page as the previous section is when the previous section
-             ends precisely on a page boundary.  */
-	  new_segment = TRUE;
-	}
-      else
-	{
-	  /* Otherwise, we can use the same segment.  */
-	  new_segment = FALSE;
-	}
-
-      if (! new_segment)
-	{
-	  if ((hdr->flags & SEC_READONLY) == 0)
-	    writable = TRUE;
-	  last_hdr = hdr;
-	  /* .tbss sections effectively have zero size.  */
-	  if ((hdr->flags & (SEC_THREAD_LOCAL | SEC_LOAD)) != SEC_THREAD_LOCAL)
-	    last_size = hdr->size;
-	  else
-	    last_size = 0;
-	  continue;
-	}
-
-      /* We need a new program segment.  We must create a new program
-         header holding all the sections from phdr_index until hdr.  */
-
-      m = make_mapping (abfd, sections, phdr_index, i, phdr_in_segment);
-      if (m == NULL)
+      sections = bfd_malloc2 (bfd_count_sections (abfd), sizeof (asection *));
+      if (sections == NULL)
 	goto error_return;
 
-      *pm = m;
-      pm = &m->next;
+      i = 0;
+      for (s = abfd->sections; s != NULL; s = s->next)
+	{
+	  if ((s->flags & SEC_ALLOC) != 0)
+	    {
+	      sections[i] = s;
+	      ++i;
+	    }
+	}
+      BFD_ASSERT (i <= bfd_count_sections (abfd));
+      count = i;
 
-      if ((hdr->flags & SEC_READONLY) == 0)
-	writable = TRUE;
-      else
-	writable = FALSE;
+      qsort (sections, (size_t) count, sizeof (asection *), elf_sort_sections);
 
-      last_hdr = hdr;
-      /* .tbss sections effectively have zero size.  */
-      if ((hdr->flags & (SEC_THREAD_LOCAL | SEC_LOAD)) != SEC_THREAD_LOCAL)
-	last_size = hdr->size;
-      else
-	last_size = 0;
-      phdr_index = i;
-      phdr_in_segment = FALSE;
-    }
+      /* Build the mapping.  */
 
-  /* Create a final PT_LOAD program segment.  */
-  if (last_hdr != NULL)
-    {
-      m = make_mapping (abfd, sections, phdr_index, i, phdr_in_segment);
-      if (m == NULL)
-	goto error_return;
+      mfirst = NULL;
+      pm = &mfirst;
 
-      *pm = m;
-      pm = &m->next;
-    }
-
-  /* If there is a .dynamic section, throw in a PT_DYNAMIC segment.  */
-  if (dynsec != NULL)
-    {
-      m = _bfd_elf_make_dynamic_segment (abfd, dynsec);
-      if (m == NULL)
-	goto error_return;
-      *pm = m;
-      pm = &m->next;
-    }
-
-  /* For each loadable .note section, add a PT_NOTE segment.  We don't
-     use bfd_get_section_by_name, because if we link together
-     nonloadable .note sections and loadable .note sections, we will
-     generate two .note sections in the output file.  FIXME: Using
-     names for section types is bogus anyhow.  */
-  for (s = abfd->sections; s != NULL; s = s->next)
-    {
-      if ((s->flags & SEC_LOAD) != 0
-	  && strncmp (s->name, ".note", 5) == 0)
+      /* If we have a .interp section, then create a PT_PHDR segment for
+	 the program headers and a PT_INTERP segment for the .interp
+	 section.  */
+      s = bfd_get_section_by_name (abfd, ".interp");
+      if (s != NULL && (s->flags & SEC_LOAD) != 0)
 	{
 	  amt = sizeof (struct elf_segment_map);
 	  m = bfd_zalloc (abfd, amt);
 	  if (m == NULL)
 	    goto error_return;
 	  m->next = NULL;
-	  m->p_type = PT_NOTE;
+	  m->p_type = PT_PHDR;
+	  /* FIXME: UnixWare and Solaris set PF_X, Irix 5 does not.  */
+	  m->p_flags = PF_R | PF_X;
+	  m->p_flags_valid = 1;
+	  m->includes_phdrs = 1;
+
+	  *pm = m;
+	  pm = &m->next;
+
+	  amt = sizeof (struct elf_segment_map);
+	  m = bfd_zalloc (abfd, amt);
+	  if (m == NULL)
+	    goto error_return;
+	  m->next = NULL;
+	  m->p_type = PT_INTERP;
 	  m->count = 1;
 	  m->sections[0] = s;
 
 	  *pm = m;
 	  pm = &m->next;
 	}
-      if (s->flags & SEC_THREAD_LOCAL)
+
+      /* Look through the sections.  We put sections in the same program
+	 segment when the start of the second section can be placed within
+	 a few bytes of the end of the first section.  */
+      last_hdr = NULL;
+      last_size = 0;
+      phdr_index = 0;
+      maxpagesize = bed->maxpagesize;
+      writable = FALSE;
+      dynsec = bfd_get_section_by_name (abfd, ".dynamic");
+      if (dynsec != NULL
+	  && (dynsec->flags & SEC_LOAD) == 0)
+	dynsec = NULL;
+
+      /* Deal with -Ttext or something similar such that the first section
+	 is not adjacent to the program headers.  This is an
+	 approximation, since at this point we don't know exactly how many
+	 program headers we will need.  */
+      if (count > 0)
 	{
-	  if (! tls_count)
-	    first_tls = s;
-	  tls_count++;
+	  bfd_size_type phdr_size = elf_tdata (abfd)->program_header_size;
+
+	  if (phdr_size == (bfd_size_type) -1)
+	    phdr_size = get_program_header_size (abfd, info);
+	  if ((abfd->flags & D_PAGED) == 0
+	      || sections[0]->lma < phdr_size
+	      || sections[0]->lma % maxpagesize < phdr_size % maxpagesize)
+	    phdr_in_segment = FALSE;
 	}
-    }
 
-  /* If there are any SHF_TLS output sections, add PT_TLS segment.  */
-  if (tls_count > 0)
-    {
-      int i;
-
-      amt = sizeof (struct elf_segment_map);
-      amt += (tls_count - 1) * sizeof (asection *);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_TLS;
-      m->count = tls_count;
-      /* Mandated PF_R.  */
-      m->p_flags = PF_R;
-      m->p_flags_valid = 1;
-      for (i = 0; i < tls_count; ++i)
+      for (i = 0, hdrpp = sections; i < count; i++, hdrpp++)
 	{
-	  BFD_ASSERT (first_tls->flags & SEC_THREAD_LOCAL);
-	  m->sections[i] = first_tls;
-	  first_tls = first_tls->next;
+	  asection *hdr;
+	  bfd_boolean new_segment;
+
+	  hdr = *hdrpp;
+
+	  /* See if this section and the last one will fit in the same
+	     segment.  */
+
+	  if (last_hdr == NULL)
+	    {
+	      /* If we don't have a segment yet, then we don't need a new
+		 one (we build the last one after this loop).  */
+	      new_segment = FALSE;
+	    }
+	  else if (last_hdr->lma - last_hdr->vma != hdr->lma - hdr->vma)
+	    {
+	      /* If this section has a different relation between the
+		 virtual address and the load address, then we need a new
+		 segment.  */
+	      new_segment = TRUE;
+	    }
+	  else if (BFD_ALIGN (last_hdr->lma + last_size, maxpagesize)
+		   < BFD_ALIGN (hdr->lma, maxpagesize))
+	    {
+	      /* If putting this section in this segment would force us to
+		 skip a page in the segment, then we need a new segment.  */
+	      new_segment = TRUE;
+	    }
+	  else if ((last_hdr->flags & (SEC_LOAD | SEC_THREAD_LOCAL)) == 0
+		   && (hdr->flags & (SEC_LOAD | SEC_THREAD_LOCAL)) != 0)
+	    {
+	      /* We don't want to put a loadable section after a
+		 nonloadable section in the same segment.
+		 Consider .tbss sections as loadable for this purpose.  */
+	      new_segment = TRUE;
+	    }
+	  else if ((abfd->flags & D_PAGED) == 0)
+	    {
+	      /* If the file is not demand paged, which means that we
+		 don't require the sections to be correctly aligned in the
+		 file, then there is no other reason for a new segment.  */
+	      new_segment = FALSE;
+	    }
+	  else if (! writable
+		   && (hdr->flags & SEC_READONLY) == 0
+		   && (((last_hdr->lma + last_size - 1)
+			& ~(maxpagesize - 1))
+		       != (hdr->lma & ~(maxpagesize - 1))))
+	    {
+	      /* We don't want to put a writable section in a read only
+		 segment, unless they are on the same page in memory
+		 anyhow.  We already know that the last section does not
+		 bring us past the current section on the page, so the
+		 only case in which the new section is not on the same
+		 page as the previous section is when the previous section
+		 ends precisely on a page boundary.  */
+	      new_segment = TRUE;
+	    }
+	  else
+	    {
+	      /* Otherwise, we can use the same segment.  */
+	      new_segment = FALSE;
+	    }
+
+	  /* Allow interested parties a chance to override our decision.  */
+	  if (last_hdr && info->callbacks->override_segment_assignment)
+	    new_segment = info->callbacks->override_segment_assignment (info, abfd, hdr, last_hdr, new_segment);
+
+	  if (! new_segment)
+	    {
+	      if ((hdr->flags & SEC_READONLY) == 0)
+		writable = TRUE;
+	      last_hdr = hdr;
+	      /* .tbss sections effectively have zero size.  */
+	      if ((hdr->flags & (SEC_THREAD_LOCAL | SEC_LOAD))
+		  != SEC_THREAD_LOCAL)
+		last_size = hdr->size;
+	      else
+		last_size = 0;
+	      continue;
+	    }
+
+	  /* We need a new program segment.  We must create a new program
+	     header holding all the sections from phdr_index until hdr.  */
+
+	  m = make_mapping (abfd, sections, phdr_index, i, phdr_in_segment);
+	  if (m == NULL)
+	    goto error_return;
+
+	  *pm = m;
+	  pm = &m->next;
+
+	  if ((hdr->flags & SEC_READONLY) == 0)
+	    writable = TRUE;
+	  else
+	    writable = FALSE;
+
+	  last_hdr = hdr;
+	  /* .tbss sections effectively have zero size.  */
+	  if ((hdr->flags & (SEC_THREAD_LOCAL | SEC_LOAD)) != SEC_THREAD_LOCAL)
+	    last_size = hdr->size;
+	  else
+	    last_size = 0;
+	  phdr_index = i;
+	  phdr_in_segment = FALSE;
 	}
 
-      *pm = m;
-      pm = &m->next;
+      /* Create a final PT_LOAD program segment.  */
+      if (last_hdr != NULL)
+	{
+	  m = make_mapping (abfd, sections, phdr_index, i, phdr_in_segment);
+	  if (m == NULL)
+	    goto error_return;
+
+	  *pm = m;
+	  pm = &m->next;
+	}
+
+      /* If there is a .dynamic section, throw in a PT_DYNAMIC segment.  */
+      if (dynsec != NULL)
+	{
+	  m = _bfd_elf_make_dynamic_segment (abfd, dynsec);
+	  if (m == NULL)
+	    goto error_return;
+	  *pm = m;
+	  pm = &m->next;
+	}
+
+      /* For each batch of consecutive loadable .note sections,
+	 add a PT_NOTE segment.  We don't use bfd_get_section_by_name,
+	 because if we link together nonloadable .note sections and
+	 loadable .note sections, we will generate two .note sections
+	 in the output file.  FIXME: Using names for section types is
+	 bogus anyhow.  */
+      for (s = abfd->sections; s != NULL; s = s->next)
+	{
+	  if ((s->flags & SEC_LOAD) != 0
+	      && CONST_STRNEQ (s->name, ".note"))
+	    {
+	      asection *s2;
+	      unsigned count = 1;
+	      amt = sizeof (struct elf_segment_map);
+	      if (s->alignment_power == 2)
+		for (s2 = s; s2->next != NULL; s2 = s2->next)
+		  {
+		    if (s2->next->alignment_power == 2
+			&& (s2->next->flags & SEC_LOAD) != 0
+			&& CONST_STRNEQ (s2->next->name, ".note")
+			&& align_power (s2->vma + s2->size, 2)
+			   == s2->next->vma)
+		      count++;
+		    else
+		      break;
+		  }
+	      amt += (count - 1) * sizeof (asection *);
+	      m = bfd_zalloc (abfd, amt);
+	      if (m == NULL)
+		goto error_return;
+	      m->next = NULL;
+	      m->p_type = PT_NOTE;
+	      m->count = count;
+	      while (count > 1)
+		{
+		  m->sections[m->count - count--] = s;
+		  BFD_ASSERT ((s->flags & SEC_THREAD_LOCAL) == 0);
+		  s = s->next;
+		}
+	      m->sections[m->count - 1] = s;
+	      BFD_ASSERT ((s->flags & SEC_THREAD_LOCAL) == 0);
+	      *pm = m;
+	      pm = &m->next;
+	    }
+	  if (s->flags & SEC_THREAD_LOCAL)
+	    {
+	      if (! tls_count)
+		first_tls = s;
+	      tls_count++;
+	    }
+	}
+
+      /* If there are any SHF_TLS output sections, add PT_TLS segment.  */
+      if (tls_count > 0)
+	{
+	  int i;
+
+	  amt = sizeof (struct elf_segment_map);
+	  amt += (tls_count - 1) * sizeof (asection *);
+	  m = bfd_zalloc (abfd, amt);
+	  if (m == NULL)
+	    goto error_return;
+	  m->next = NULL;
+	  m->p_type = PT_TLS;
+	  m->count = tls_count;
+	  /* Mandated PF_R.  */
+	  m->p_flags = PF_R;
+	  m->p_flags_valid = 1;
+	  for (i = 0; i < tls_count; ++i)
+	    {
+	      BFD_ASSERT (first_tls->flags & SEC_THREAD_LOCAL);
+	      m->sections[i] = first_tls;
+	      first_tls = first_tls->next;
+	    }
+
+	  *pm = m;
+	  pm = &m->next;
+	}
+
+      /* If there is a .eh_frame_hdr section, throw in a PT_GNU_EH_FRAME
+	 segment.  */
+      eh_frame_hdr = elf_tdata (abfd)->eh_frame_hdr;
+      if (eh_frame_hdr != NULL
+	  && (eh_frame_hdr->output_section->flags & SEC_LOAD) != 0)
+	{
+	  amt = sizeof (struct elf_segment_map);
+	  m = bfd_zalloc (abfd, amt);
+	  if (m == NULL)
+	    goto error_return;
+	  m->next = NULL;
+	  m->p_type = PT_GNU_EH_FRAME;
+	  m->count = 1;
+	  m->sections[0] = eh_frame_hdr->output_section;
+
+	  *pm = m;
+	  pm = &m->next;
+	}
+
+      if (elf_tdata (abfd)->stack_flags)
+	{
+	  amt = sizeof (struct elf_segment_map);
+	  m = bfd_zalloc (abfd, amt);
+	  if (m == NULL)
+	    goto error_return;
+	  m->next = NULL;
+	  m->p_type = PT_GNU_STACK;
+	  m->p_flags = elf_tdata (abfd)->stack_flags;
+	  m->p_flags_valid = 1;
+
+	  *pm = m;
+	  pm = &m->next;
+	}
+
+      if (info->relro)
+	{
+	  for (m = mfirst; m != NULL; m = m->next)
+	    {
+	      if (m->p_type == PT_LOAD)
+		{
+		  asection *last = m->sections[m->count - 1];
+		  bfd_vma vaddr = m->sections[0]->vma;
+		  bfd_vma filesz = last->vma - vaddr + last->size;
+
+		  if (vaddr < info->relro_end
+		      && vaddr >= info->relro_start
+		      && (vaddr + filesz) >= info->relro_end)
+		    break;
+		}
+	      }
+
+	  /* Make a PT_GNU_RELRO segment only when it isn't empty.  */
+	  if (m != NULL)
+	    {
+	      amt = sizeof (struct elf_segment_map);
+	      m = bfd_zalloc (abfd, amt);
+	      if (m == NULL)
+		goto error_return;
+	      m->next = NULL;
+	      m->p_type = PT_GNU_RELRO;
+	      m->p_flags = PF_R;
+	      m->p_flags_valid = 1;
+
+	      *pm = m;
+	      pm = &m->next;
+	    }
+	}
+
+      free (sections);
+      elf_tdata (abfd)->segment_map = mfirst;
     }
 
-  /* If there is a .eh_frame_hdr section, throw in a PT_GNU_EH_FRAME
-     segment.  */
-  eh_frame_hdr = elf_tdata (abfd)->eh_frame_hdr;
-  if (eh_frame_hdr != NULL
-      && (eh_frame_hdr->output_section->flags & SEC_LOAD) != 0)
-    {
-      amt = sizeof (struct elf_segment_map);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_GNU_EH_FRAME;
-      m->count = 1;
-      m->sections[0] = eh_frame_hdr->output_section;
+  if (!elf_modify_segment_map (abfd, info, no_user_phdrs))
+    return FALSE;
 
-      *pm = m;
-      pm = &m->next;
-    }
+  for (count = 0, m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+    ++count;
+  elf_tdata (abfd)->program_header_size = count * bed->s->sizeof_phdr;
 
-  if (elf_tdata (abfd)->stack_flags)
-    {
-      amt = sizeof (struct elf_segment_map);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_GNU_STACK;
-      m->p_flags = elf_tdata (abfd)->stack_flags;
-      m->p_flags_valid = 1;
-
-      *pm = m;
-      pm = &m->next;
-    }
-
-  if (elf_tdata (abfd)->relro)
-    {
-      amt = sizeof (struct elf_segment_map);
-      m = bfd_zalloc (abfd, amt);
-      if (m == NULL)
-	goto error_return;
-      m->next = NULL;
-      m->p_type = PT_GNU_RELRO;
-      m->p_flags = PF_R;
-      m->p_flags_valid = 1;
-
-      *pm = m;
-      pm = &m->next;
-    }
-
-  free (sections);
-  sections = NULL;
-
-  elf_tdata (abfd)->segment_map = mfirst;
   return TRUE;
 
  error_return:
@@ -3792,7 +4057,7 @@ elf_sort_sections (const void *arg1, const void *arg2)
      adjustment = vma_offset + bed->maxpagesize - off_offset;
    else
      adjustment = vma_offset - off_offset;
-     
+
    which can can be collapsed into the expression below.  */
 
 static file_ptr
@@ -3801,116 +4066,95 @@ vma_page_aligned_bias (bfd_vma vma, ufile_ptr off, bfd_vma maxpagesize)
   return ((vma - off) % maxpagesize);
 }
 
+static void
+print_segment_map (const struct elf_segment_map *m)
+{
+  unsigned int j;
+  const char *pt = get_segment_type (m->p_type);
+  char buf[32];
+
+  if (pt == NULL)
+    {
+      if (m->p_type >= PT_LOPROC && m->p_type <= PT_HIPROC)
+	sprintf (buf, "LOPROC+%7.7x",
+		 (unsigned int) (m->p_type - PT_LOPROC));
+      else if (m->p_type >= PT_LOOS && m->p_type <= PT_HIOS)
+	sprintf (buf, "LOOS+%7.7x",
+		 (unsigned int) (m->p_type - PT_LOOS));
+      else
+	snprintf (buf, sizeof (buf), "%8.8x",
+		  (unsigned int) m->p_type);
+      pt = buf;
+    }
+  fprintf (stderr, "%s:", pt);
+  for (j = 0; j < m->count; j++)
+    fprintf (stderr, " %s", m->sections [j]->name);
+  putc ('\n',stderr);
+}
+
 /* Assign file positions to the sections based on the mapping from
    sections to segments.  This function also sets up some fields in
-   the file header, and writes out the program headers.  */
+   the file header.  */
 
 static bfd_boolean
-assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
+assign_file_positions_for_load_sections (bfd *abfd,
+					 struct bfd_link_info *link_info)
 {
   const struct elf_backend_data *bed = get_elf_backend_data (abfd);
-  unsigned int count;
   struct elf_segment_map *m;
-  unsigned int alloc;
   Elf_Internal_Phdr *phdrs;
-  file_ptr off, voff;
-  bfd_vma filehdr_vaddr, filehdr_paddr;
-  bfd_vma phdrs_vaddr, phdrs_paddr;
   Elf_Internal_Phdr *p;
-  bfd_size_type amt;
+  file_ptr off;
+  bfd_size_type maxpagesize;
+  unsigned int alloc;
+  unsigned int i, j;
 
-  if (elf_tdata (abfd)->segment_map == NULL)
-    {
-      if (! map_sections_to_segments (abfd))
-	return FALSE;
-    }
-  else
-    {
-      /* The placement algorithm assumes that non allocated sections are
-	 not in PT_LOAD segments.  We ensure this here by removing such
-	 sections from the segment map.  */
-      for (m = elf_tdata (abfd)->segment_map;
-	   m != NULL;
-	   m = m->next)
-	{
-	  unsigned int new_count;
-	  unsigned int i;
+  if (link_info == NULL
+      && !elf_modify_segment_map (abfd, link_info, FALSE))
+    return FALSE;
 
-	  if (m->p_type != PT_LOAD)
-	    continue;
-
-	  new_count = 0;
-	  for (i = 0; i < m->count; i ++)
-	    {
-	      if ((m->sections[i]->flags & SEC_ALLOC) != 0)
-		{
-		  if (i != new_count)
-		    m->sections[new_count] = m->sections[i];
-
-		  new_count ++;
-		}
-	    }
-
-	  if (new_count != m->count)
-	    m->count = new_count;
-	}
-    }
-
-  if (bed->elf_backend_modify_segment_map)
-    {
-      if (! (*bed->elf_backend_modify_segment_map) (abfd, link_info))
-	return FALSE;
-    }
-
-  count = 0;
+  alloc = 0;
   for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
-    ++count;
+    ++alloc;
 
   elf_elfheader (abfd)->e_phoff = bed->s->sizeof_ehdr;
   elf_elfheader (abfd)->e_phentsize = bed->s->sizeof_phdr;
-  elf_elfheader (abfd)->e_phnum = count;
+  elf_elfheader (abfd)->e_phnum = alloc;
 
-  if (count == 0)
-    return TRUE;
-
-  /* If we already counted the number of program segments, make sure
-     that we allocated enough space.  This happens when SIZEOF_HEADERS
-     is used in a linker script.  */
-  alloc = elf_tdata (abfd)->program_header_size / bed->s->sizeof_phdr;
-  if (alloc != 0 && count > alloc)
-    {
-      ((*_bfd_error_handler)
-       (_("%B: Not enough room for program headers (allocated %u, need %u)"),
-	abfd, alloc, count));
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  if (elf_tdata (abfd)->program_header_size == (bfd_size_type) -1)
+    elf_tdata (abfd)->program_header_size = alloc * bed->s->sizeof_phdr;
+  else
+    BFD_ASSERT (elf_tdata (abfd)->program_header_size
+		>= alloc * bed->s->sizeof_phdr);
 
   if (alloc == 0)
-    alloc = count;
+    {
+      elf_tdata (abfd)->next_file_pos = bed->s->sizeof_ehdr;
+      return TRUE;
+    }
 
-  amt = alloc * sizeof (Elf_Internal_Phdr);
-  phdrs = bfd_alloc (abfd, amt);
+  phdrs = bfd_alloc2 (abfd, alloc, sizeof (Elf_Internal_Phdr));
+  elf_tdata (abfd)->phdr = phdrs;
   if (phdrs == NULL)
     return FALSE;
+
+  maxpagesize = 1;
+  if ((abfd->flags & D_PAGED) != 0)
+    maxpagesize = bed->maxpagesize;
 
   off = bed->s->sizeof_ehdr;
   off += alloc * bed->s->sizeof_phdr;
 
-  filehdr_vaddr = 0;
-  filehdr_paddr = 0;
-  phdrs_vaddr = 0;
-  phdrs_paddr = 0;
-
-  for (m = elf_tdata (abfd)->segment_map, p = phdrs;
+  for (m = elf_tdata (abfd)->segment_map, p = phdrs, j = 0;
        m != NULL;
-       m = m->next, p++)
+       m = m->next, p++, j++)
     {
-      unsigned int i;
       asection **secpp;
+      bfd_vma off_adjust;
+      bfd_boolean no_contents;
 
       /* If elf_segment_map is not from map_sections_to_segments, the
-         sections may not be correctly ordered.  NOTE: sorting should
+	 sections may not be correctly ordered.  NOTE: sorting should
 	 not be done to the PT_NOTE section of a corefile, which may
 	 contain several pseudo-sections artificially created by bfd.
 	 Sorting these pseudo-sections breaks things badly.  */
@@ -3924,24 +4168,57 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 	 number of sections with contents contributing to both p_filesz
 	 and p_memsz, followed by a number of sections with no contents
 	 that just contribute to p_memsz.  In this loop, OFF tracks next
-	 available file offset for PT_LOAD and PT_NOTE segments.  VOFF is
-	 an adjustment we use for segments that have no file contents
-	 but need zero filled memory allocation.  */
-      voff = 0;
+	 available file offset for PT_LOAD and PT_NOTE segments.  */
       p->p_type = m->p_type;
       p->p_flags = m->p_flags;
 
+      if (m->count == 0)
+	p->p_vaddr = 0;
+      else
+	p->p_vaddr = m->sections[0]->vma - m->p_vaddr_offset;
+
+      if (m->p_paddr_valid)
+	p->p_paddr = m->p_paddr;
+      else if (m->count == 0)
+	p->p_paddr = 0;
+      else
+	p->p_paddr = m->sections[0]->lma - m->p_vaddr_offset;
+
+      if (p->p_type == PT_LOAD
+	  && (abfd->flags & D_PAGED) != 0)
+	{
+	  /* p_align in demand paged PT_LOAD segments effectively stores
+	     the maximum page size.  When copying an executable with
+	     objcopy, we set m->p_align from the input file.  Use this
+	     value for maxpagesize rather than bed->maxpagesize, which
+	     may be different.  Note that we use maxpagesize for PT_TLS
+	     segment alignment later in this function, so we are relying
+	     on at least one PT_LOAD segment appearing before a PT_TLS
+	     segment.  */
+	  if (m->p_align_valid)
+	    maxpagesize = m->p_align;
+
+	  p->p_align = maxpagesize;
+	}
+      else if (m->p_align_valid)
+	p->p_align = m->p_align;
+      else if (m->count == 0)
+	p->p_align = 1 << bed->s->log_file_align;
+      else
+	p->p_align = 0;
+
+      no_contents = FALSE;
+      off_adjust = 0;
       if (p->p_type == PT_LOAD
 	  && m->count > 0)
 	{
 	  bfd_size_type align;
-	  bfd_vma adjust;
+	  unsigned int align_power = 0;
 
-	  if ((abfd->flags & D_PAGED) != 0)
-	    align = bed->maxpagesize;
+	  if (m->p_align_valid)
+	    align = p->p_align;
 	  else
 	    {
-	      unsigned int align_power = 0;
 	      for (i = 0, secpp = m->sections; i < m->count; i++, secpp++)
 		{
 		  unsigned int secalign;
@@ -3951,33 +4228,49 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 		    align_power = secalign;
 		}
 	      align = (bfd_size_type) 1 << align_power;
+	      if (align < maxpagesize)
+		align = maxpagesize;
 	    }
 
-	  adjust = vma_page_aligned_bias (m->sections[0]->vma, off, align);
-	  off += adjust;
-	  if (adjust != 0
-	      && !m->includes_filehdr
-	      && !m->includes_phdrs
-	      && (ufile_ptr) off >= align)
+	  for (i = 0; i < m->count; i++)
+	    if ((m->sections[i]->flags & (SEC_LOAD | SEC_HAS_CONTENTS)) == 0)
+	      /* If we aren't making room for this section, then
+		 it must be SHT_NOBITS regardless of what we've
+		 set via struct bfd_elf_special_section.  */
+	      elf_section_type (m->sections[i]) = SHT_NOBITS;
+
+	  /* Find out whether this segment contains any loadable
+	     sections.  If the first section isn't loadable, the same
+	     holds for any other sections.  */
+	  i = 0;
+	  while (elf_section_type (m->sections[i]) == SHT_NOBITS)
 	    {
-	      /* If the first section isn't loadable, the same holds for
-		 any other sections.  Since the segment won't need file
-		 space, we can make p_offset overlap some prior segment.
-		 However, .tbss is special.  If a segment starts with
-		 .tbss, we need to look at the next section to decide
-		 whether the segment has any loadable sections.  */
-	      i = 0;
-	      while ((m->sections[i]->flags & SEC_LOAD) == 0)
+	      /* If a segment starts with .tbss, we need to look
+		 at the next section to decide whether the segment
+		 has any loadable sections.  */
+	      if ((elf_section_flags (m->sections[i]) & SHF_TLS) == 0
+		  || ++i >= m->count)
 		{
-		  if ((m->sections[i]->flags & SEC_THREAD_LOCAL) == 0
-		      || ++i >= m->count)
-		    {
-		      off -= adjust;
-		      voff = adjust - align;
-		      break;
-		    }
+		  no_contents = TRUE;
+		  break;
 		}
 	    }
+
+	  off_adjust = vma_page_aligned_bias (m->sections[0]->vma, off, align);
+	  off += off_adjust;
+	  if (no_contents)
+	    {
+	      /* We shouldn't need to align the segment on disk since
+		 the segment doesn't need file space, but the gABI
+		 arguably requires the alignment and glibc ld.so
+		 checks it.  So to comply with the alignment
+		 requirement but not waste file space, we adjust
+		 p_offset for just this segment.  (OFF_ADJUST is
+		 subtracted from OFF later.)  This may put p_offset
+		 past the end of file, but that shouldn't matter.  */
+	    }
+	  else
+	    off_adjust = 0;
 	}
       /* Make sure the .dynamic section is the first section in the
 	 PT_DYNAMIC segment.  */
@@ -3991,26 +4284,10 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 	  bfd_set_error (bfd_error_bad_value);
 	  return FALSE;
 	}
-
-      if (m->count == 0)
-	p->p_vaddr = 0;
-      else
-	p->p_vaddr = m->sections[0]->vma;
-
-      if (m->p_paddr_valid)
-	p->p_paddr = m->p_paddr;
-      else if (m->count == 0)
-	p->p_paddr = 0;
-      else
-	p->p_paddr = m->sections[0]->lma;
-
-      if (p->p_type == PT_LOAD
-	  && (abfd->flags & D_PAGED) != 0)
-	p->p_align = bed->maxpagesize;
-      else if (m->count == 0)
-	p->p_align = 1 << bed->s->log_file_align;
-      else
-	p->p_align = 0;
+      /* Set the note section type to SHT_NOTE.  */
+      else if (p->p_type == PT_NOTE)
+	for (i = 0; i < m->count; i++)
+	  elf_section_type (m->sections[i]) = SHT_NOTE;
 
       p->p_offset = 0;
       p->p_filesz = 0;
@@ -4018,9 +4295,8 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 
       if (m->includes_filehdr)
 	{
-	  if (! m->p_flags_valid)
+	  if (!m->p_flags_valid)
 	    p->p_flags |= PF_R;
-	  p->p_offset = 0;
 	  p->p_filesz = bed->s->sizeof_ehdr;
 	  p->p_memsz = bed->s->sizeof_ehdr;
 	  if (m->count > 0)
@@ -4037,30 +4313,17 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 		}
 
 	      p->p_vaddr -= off;
-	      if (! m->p_paddr_valid)
+	      if (!m->p_paddr_valid)
 		p->p_paddr -= off;
-	    }
-	  if (p->p_type == PT_LOAD)
-	    {
-	      filehdr_vaddr = p->p_vaddr;
-	      filehdr_paddr = p->p_paddr;
 	    }
 	}
 
       if (m->includes_phdrs)
 	{
-	  if (! m->p_flags_valid)
+	  if (!m->p_flags_valid)
 	    p->p_flags |= PF_R;
 
-	  if (m->includes_filehdr)
-	    {
-	      if (p->p_type == PT_LOAD)
-		{
-		  phdrs_vaddr = p->p_vaddr + bed->s->sizeof_ehdr;
-		  phdrs_paddr = p->p_paddr + bed->s->sizeof_ehdr;
-		}
-	    }
-	  else
+	  if (!m->includes_filehdr)
 	    {
 	      p->p_offset = bed->s->sizeof_ehdr;
 
@@ -4068,17 +4331,9 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 		{
 		  BFD_ASSERT (p->p_type == PT_LOAD);
 		  p->p_vaddr -= off - p->p_offset;
-		  if (! m->p_paddr_valid)
+		  if (!m->p_paddr_valid)
 		    p->p_paddr -= off - p->p_offset;
 		}
-
-	      if (p->p_type == PT_LOAD)
-		{
-		  phdrs_vaddr = p->p_vaddr;
-		  phdrs_paddr = p->p_paddr;
-		}
-	      else
-		phdrs_vaddr = bed->maxpagesize + bed->s->sizeof_ehdr;
 	    }
 
 	  p->p_filesz += alloc * bed->s->sizeof_phdr;
@@ -4088,36 +4343,44 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
       if (p->p_type == PT_LOAD
 	  || (p->p_type == PT_NOTE && bfd_get_format (abfd) == bfd_core))
 	{
-	  if (! m->includes_filehdr && ! m->includes_phdrs)
-	    p->p_offset = off + voff;
+	  if (!m->includes_filehdr && !m->includes_phdrs)
+	    p->p_offset = off;
 	  else
 	    {
 	      file_ptr adjust;
 
 	      adjust = off - (p->p_offset + p->p_filesz);
-	      p->p_filesz += adjust;
+	      if (!no_contents)
+		p->p_filesz += adjust;
 	      p->p_memsz += adjust;
 	    }
 	}
 
+      /* Set up p_filesz, p_memsz, p_align and p_flags from the section
+	 maps.  Set filepos for sections in PT_LOAD segments, and in
+	 core files, for sections in PT_NOTE segments.
+	 assign_file_positions_for_non_load_sections will set filepos
+	 for other sections and update p_filesz for other segments.  */
       for (i = 0, secpp = m->sections; i < m->count; i++, secpp++)
 	{
 	  asection *sec;
-	  flagword flags;
 	  bfd_size_type align;
+	  Elf_Internal_Shdr *this_hdr;
 
 	  sec = *secpp;
-	  flags = sec->flags;
-	  align = 1 << bfd_get_section_alignment (abfd, sec);
+	  this_hdr = &elf_section_data (sec)->this_hdr;
+	  align = (bfd_size_type) 1 << bfd_get_section_alignment (abfd, sec);
 
 	  if (p->p_type == PT_LOAD
 	      || p->p_type == PT_TLS)
 	    {
-	      bfd_signed_vma adjust;
+	      bfd_signed_vma adjust = sec->lma - (p->p_paddr + p->p_memsz);
 
-	      if ((flags & SEC_LOAD) != 0)
+	      if (this_hdr->sh_type != SHT_NOBITS
+		  || ((this_hdr->sh_flags & SHF_ALLOC) != 0
+		      && ((this_hdr->sh_flags & SHF_TLS) == 0
+			  || p->p_type == PT_TLS)))
 		{
-		  adjust = sec->lma - (p->p_paddr + p->p_filesz);
 		  if (adjust < 0)
 		    {
 		      (*_bfd_error_handler)
@@ -4125,24 +4388,13 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 			 abfd, sec, (unsigned long) sec->lma);
 		      adjust = 0;
 		    }
-		  off += adjust;
-		  p->p_filesz += adjust;
 		  p->p_memsz += adjust;
-		}
-	      /* .tbss is special.  It doesn't contribute to p_memsz of
-		 normal segments.  */
-	      else if ((flags & SEC_THREAD_LOCAL) == 0
-		       || p->p_type == PT_TLS)
-		{
-		  /* The section VMA must equal the file position
-		     modulo the page size.  */
-		  bfd_size_type page = align;
-		  if ((abfd->flags & D_PAGED) != 0)
-		    page = bed->maxpagesize;
-		  adjust = vma_page_aligned_bias (sec->vma,
-						  p->p_vaddr + p->p_memsz,
-						  page);
-		  p->p_memsz += adjust;
+
+		  if (this_hdr->sh_type != SHT_NOBITS)
+		    {
+		      off += adjust;
+		      p->p_filesz += adjust;
+		    }
 		}
 	    }
 
@@ -4152,9 +4404,9 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 		 everything.  */
 	      if (i == 0)
 		{
-		  sec->filepos = off;
-		  off += sec->size;
-		  p->p_filesz = sec->size;
+		  this_hdr->sh_offset = sec->filepos = off;
+		  off += this_hdr->sh_size;
+		  p->p_filesz = this_hdr->sh_size;
 		  p->p_memsz = 0;
 		  p->p_align = 1;
 		}
@@ -4171,95 +4423,234 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 	    {
 	      if (p->p_type == PT_LOAD)
 		{
-		  sec->filepos = off;
-		  /* FIXME: The SEC_HAS_CONTENTS test here dates back to
-		     1997, and the exact reason for it isn't clear.  One
-		     plausible explanation is that it is to work around
-		     a problem we have with linker scripts using data
-		     statements in NOLOAD sections.  I don't think it
-		     makes a great deal of sense to have such a section
-		     assigned to a PT_LOAD segment, but apparently
-		     people do this.  The data statement results in a
-		     bfd_data_link_order being built, and these need
-		     section contents to write into.  Eventually, we get
-		     to _bfd_elf_write_object_contents which writes any
-		     section with contents to the output.  Make room
-		     here for the write, so that following segments are
-		     not trashed.  */
-		  if ((flags & SEC_LOAD) != 0
-		      || (flags & SEC_HAS_CONTENTS) != 0)
-		    off += sec->size;
+		  this_hdr->sh_offset = sec->filepos = off;
+		  if (this_hdr->sh_type != SHT_NOBITS)
+		    off += this_hdr->sh_size;
 		}
 
-	      if ((flags & SEC_LOAD) != 0)
+	      if (this_hdr->sh_type != SHT_NOBITS)
 		{
-		  p->p_filesz += sec->size;
-		  p->p_memsz += sec->size;
+		  p->p_filesz += this_hdr->sh_size;
+		  /* A load section without SHF_ALLOC is something like
+		     a note section in a PT_NOTE segment.  These take
+		     file space but are not loaded into memory.  */
+		  if ((this_hdr->sh_flags & SHF_ALLOC) != 0)
+		    p->p_memsz += this_hdr->sh_size;
 		}
-	      /* .tbss is special.  It doesn't contribute to p_memsz of
-		 normal segments.  */
-	      else if ((flags & SEC_THREAD_LOCAL) == 0
-		       || p->p_type == PT_TLS)
-		p->p_memsz += sec->size;
-
-	      if (p->p_type == PT_TLS
-		  && sec->size == 0
-		  && (sec->flags & SEC_HAS_CONTENTS) == 0)
+	      else if ((this_hdr->sh_flags & SHF_ALLOC) != 0)
 		{
-		  struct bfd_link_order *o;
-		  bfd_vma tbss_size = 0;
+		  if (p->p_type == PT_TLS)
+		    p->p_memsz += this_hdr->sh_size;
 
-		  for (o = sec->link_order_head; o != NULL; o = o->next)
-		    if (tbss_size < o->offset + o->size)
-		      tbss_size = o->offset + o->size;
-
-		  p->p_memsz += tbss_size;
+		  /* .tbss is special.  It doesn't contribute to p_memsz of
+		     normal segments.  */
+		  else if ((this_hdr->sh_flags & SHF_TLS) == 0)
+		    p->p_memsz += this_hdr->sh_size;
 		}
 
 	      if (align > p->p_align
-		  && (p->p_type != PT_LOAD || (abfd->flags & D_PAGED) == 0))
+		  && !m->p_align_valid
+		  && (p->p_type != PT_LOAD
+		      || (abfd->flags & D_PAGED) == 0))
 		p->p_align = align;
 	    }
 
-	  if (! m->p_flags_valid)
+	  if (!m->p_flags_valid)
 	    {
 	      p->p_flags |= PF_R;
-	      if ((flags & SEC_CODE) != 0)
+	      if ((this_hdr->sh_flags & SHF_EXECINSTR) != 0)
 		p->p_flags |= PF_X;
-	      if ((flags & SEC_READONLY) == 0)
+	      if ((this_hdr->sh_flags & SHF_WRITE) != 0)
 		p->p_flags |= PF_W;
 	    }
+	}
+      off -= off_adjust;
+
+      /* Check that all sections are in a PT_LOAD segment.
+	 Don't check funky gdb generated core files.  */
+      if (p->p_type == PT_LOAD && bfd_get_format (abfd) != bfd_core)
+	for (i = 0, secpp = m->sections; i < m->count; i++, secpp++)
+	  {
+	    Elf_Internal_Shdr *this_hdr;
+	    asection *sec;
+
+	    sec = *secpp;
+	    this_hdr = &(elf_section_data(sec)->this_hdr);
+	    if (this_hdr->sh_size != 0
+		&& !ELF_IS_SECTION_IN_SEGMENT_FILE (this_hdr, p))
+	      {
+		(*_bfd_error_handler)
+		  (_("%B: section `%A' can't be allocated in segment %d"),
+		   abfd, sec, j);
+		print_segment_map (m);
+		bfd_set_error (bfd_error_bad_value);
+		return FALSE;
+	      }
+	  }
+    }
+
+  elf_tdata (abfd)->next_file_pos = off;
+  return TRUE;
+}
+
+/* Assign file positions for the other sections.  */
+
+static bfd_boolean
+assign_file_positions_for_non_load_sections (bfd *abfd,
+					     struct bfd_link_info *link_info)
+{
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
+  Elf_Internal_Shdr **i_shdrpp;
+  Elf_Internal_Shdr **hdrpp;
+  Elf_Internal_Phdr *phdrs;
+  Elf_Internal_Phdr *p;
+  struct elf_segment_map *m;
+  bfd_vma filehdr_vaddr, filehdr_paddr;
+  bfd_vma phdrs_vaddr, phdrs_paddr;
+  file_ptr off;
+  unsigned int num_sec;
+  unsigned int i;
+  unsigned int count;
+
+  i_shdrpp = elf_elfsections (abfd);
+  num_sec = elf_numsections (abfd);
+  off = elf_tdata (abfd)->next_file_pos;
+  for (i = 1, hdrpp = i_shdrpp + 1; i < num_sec; i++, hdrpp++)
+    {
+      struct elf_obj_tdata *tdata = elf_tdata (abfd);
+      Elf_Internal_Shdr *hdr;
+
+      hdr = *hdrpp;
+      if (hdr->bfd_section != NULL
+	  && (hdr->bfd_section->filepos != 0
+	      || (hdr->sh_type == SHT_NOBITS
+		  && hdr->contents == NULL)))
+	BFD_ASSERT (hdr->sh_offset == hdr->bfd_section->filepos);
+      else if ((hdr->sh_flags & SHF_ALLOC) != 0)
+	{
+	  if (hdr->sh_size != 0)
+	    ((*_bfd_error_handler)
+	     (_("%B: warning: allocated section `%s' not in segment"),
+	      abfd,
+	      (hdr->bfd_section == NULL
+	       ? "*unknown*"
+	       : hdr->bfd_section->name)));
+	  /* We don't need to page align empty sections.  */
+	  if ((abfd->flags & D_PAGED) != 0 && hdr->sh_size != 0)
+	    off += vma_page_aligned_bias (hdr->sh_addr, off,
+					  bed->maxpagesize);
+	  else
+	    off += vma_page_aligned_bias (hdr->sh_addr, off,
+					  hdr->sh_addralign);
+	  off = _bfd_elf_assign_file_position_for_section (hdr, off,
+							   FALSE);
+	}
+      else if (((hdr->sh_type == SHT_REL || hdr->sh_type == SHT_RELA)
+		&& hdr->bfd_section == NULL)
+	       || hdr == i_shdrpp[tdata->symtab_section]
+	       || hdr == i_shdrpp[tdata->symtab_shndx_section]
+	       || hdr == i_shdrpp[tdata->strtab_section])
+	hdr->sh_offset = -1;
+      else
+	off = _bfd_elf_assign_file_position_for_section (hdr, off, TRUE);
+
+      if (i == SHN_LORESERVE - 1)
+	{
+	  i += SHN_HIRESERVE + 1 - SHN_LORESERVE;
+	  hdrpp += SHN_HIRESERVE + 1 - SHN_LORESERVE;
 	}
     }
 
   /* Now that we have set the section file positions, we can set up
      the file positions for the non PT_LOAD segments.  */
+  count = 0;
+  filehdr_vaddr = 0;
+  filehdr_paddr = 0;
+  phdrs_vaddr = bed->maxpagesize + bed->s->sizeof_ehdr;
+  phdrs_paddr = 0;
+  phdrs = elf_tdata (abfd)->phdr;
   for (m = elf_tdata (abfd)->segment_map, p = phdrs;
        m != NULL;
        m = m->next, p++)
     {
-      if (p->p_type != PT_LOAD && m->count > 0)
-	{
-	  BFD_ASSERT (! m->includes_filehdr && ! m->includes_phdrs);
-	  /* If the section has not yet been assigned a file position,
-	     do so now.  The ARM BPABI requires that .dynamic section
-	     not be marked SEC_ALLOC because it is not part of any
-	     PT_LOAD segment, so it will not be processed above.  */
-	  if (p->p_type == PT_DYNAMIC && m->sections[0]->filepos == 0)
-	    {
-	      unsigned int i;
-	      Elf_Internal_Shdr ** const i_shdrpp = elf_elfsections (abfd);
+      ++count;
+      if (p->p_type != PT_LOAD)
+	continue;
 
-	      i = 1;
-	      while (i_shdrpp[i]->bfd_section != m->sections[0])
-		++i;
-	      off = (_bfd_elf_assign_file_position_for_section 
-		     (i_shdrpp[i], off, TRUE));
-	      p->p_filesz = m->sections[0]->size;
-	    }
-	  p->p_offset = m->sections[0]->filepos;
+      if (m->includes_filehdr)
+	{
+	  filehdr_vaddr = p->p_vaddr;
+	  filehdr_paddr = p->p_paddr;
 	}
-      if (m->count == 0)
+      if (m->includes_phdrs)
+	{
+	  phdrs_vaddr = p->p_vaddr;
+	  phdrs_paddr = p->p_paddr;
+	  if (m->includes_filehdr)
+	    {
+	      phdrs_vaddr += bed->s->sizeof_ehdr;
+	      phdrs_paddr += bed->s->sizeof_ehdr;
+	    }
+	}
+    }
+
+  for (m = elf_tdata (abfd)->segment_map, p = phdrs;
+       m != NULL;
+       m = m->next, p++)
+    {
+      if (m->count != 0)
+	{
+	  if (p->p_type != PT_LOAD
+	      && (p->p_type != PT_NOTE
+		  || bfd_get_format (abfd) != bfd_core))
+	    {
+	      Elf_Internal_Shdr *hdr;
+	      asection *sect;
+
+	      BFD_ASSERT (!m->includes_filehdr && !m->includes_phdrs);
+
+	      sect = m->sections[m->count - 1];
+	      hdr = &elf_section_data (sect)->this_hdr;
+	      p->p_filesz = sect->filepos - m->sections[0]->filepos;
+	      if (hdr->sh_type != SHT_NOBITS)
+		p->p_filesz += hdr->sh_size;
+
+	      if (p->p_type == PT_GNU_RELRO)
+		{
+		  /* When we get here, we are copying executable
+		     or shared library. But we need to use the same
+		     linker logic.  */
+		  Elf_Internal_Phdr *lp;
+
+		  for (lp = phdrs; lp < phdrs + count; ++lp)
+		    {
+		      if (lp->p_type == PT_LOAD
+			  && lp->p_paddr == p->p_paddr)
+			break;
+		    }
+	  
+		  if (lp < phdrs + count)
+		    {
+		      /* We should use p_size if it is valid since it
+			 may contain the first few bytes of the next
+			 SEC_ALLOC section.  */
+		      if (m->p_size_valid)
+			p->p_filesz = m->p_size;
+		      else
+			abort ();
+		      p->p_vaddr = lp->p_vaddr;
+		      p->p_offset = lp->p_offset;
+		      p->p_memsz = p->p_filesz;
+		      p->p_align = 1;
+		    }
+		  else
+		    abort ();
+		}
+	      else
+		p->p_offset = m->sections[0]->filepos;
+	    }
+	}
+      else
 	{
 	  if (m->includes_filehdr)
 	    {
@@ -4282,8 +4673,8 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 		  if (lp->p_type == PT_LOAD
 		      && lp->p_vaddr <= link_info->relro_end
 		      && lp->p_vaddr >= link_info->relro_start
-		      && lp->p_vaddr + lp->p_filesz
-			 >= link_info->relro_end)
+		      && (lp->p_vaddr + lp->p_filesz
+			  >= link_info->relro_end))
 		    break;
 		}
 
@@ -4307,129 +4698,9 @@ assign_file_positions_for_segments (bfd *abfd, struct bfd_link_info *link_info)
 	}
     }
 
-  /* Clear out any program headers we allocated but did not use.  */
-  for (; count < alloc; count++, p++)
-    {
-      memset (p, 0, sizeof *p);
-      p->p_type = PT_NULL;
-    }
-
-  elf_tdata (abfd)->phdr = phdrs;
-
   elf_tdata (abfd)->next_file_pos = off;
 
-  /* Write out the program headers.  */
-  if (bfd_seek (abfd, (bfd_signed_vma) bed->s->sizeof_ehdr, SEEK_SET) != 0
-      || bed->s->write_out_phdrs (abfd, phdrs, alloc) != 0)
-    return FALSE;
-
   return TRUE;
-}
-
-/* Get the size of the program header.
-
-   If this is called by the linker before any of the section VMA's are set, it
-   can't calculate the correct value for a strange memory layout.  This only
-   happens when SIZEOF_HEADERS is used in a linker script.  In this case,
-   SORTED_HDRS is NULL and we assume the normal scenario of one text and one
-   data segment (exclusive of .interp and .dynamic).
-
-   ??? User written scripts must either not use SIZEOF_HEADERS, or assume there
-   will be two segments.  */
-
-static bfd_size_type
-get_program_header_size (bfd *abfd)
-{
-  size_t segs;
-  asection *s;
-  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
-
-  /* We can't return a different result each time we're called.  */
-  if (elf_tdata (abfd)->program_header_size != 0)
-    return elf_tdata (abfd)->program_header_size;
-
-  if (elf_tdata (abfd)->segment_map != NULL)
-    {
-      struct elf_segment_map *m;
-
-      segs = 0;
-      for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
-	++segs;
-      elf_tdata (abfd)->program_header_size = segs * bed->s->sizeof_phdr;
-      return elf_tdata (abfd)->program_header_size;
-    }
-
-  /* Assume we will need exactly two PT_LOAD segments: one for text
-     and one for data.  */
-  segs = 2;
-
-  s = bfd_get_section_by_name (abfd, ".interp");
-  if (s != NULL && (s->flags & SEC_LOAD) != 0)
-    {
-      /* If we have a loadable interpreter section, we need a
-	 PT_INTERP segment.  In this case, assume we also need a
-	 PT_PHDR segment, although that may not be true for all
-	 targets.  */
-      segs += 2;
-    }
-
-  if (bfd_get_section_by_name (abfd, ".dynamic") != NULL)
-    {
-      /* We need a PT_DYNAMIC segment.  */
-      ++segs;
-    }
-
-  if (elf_tdata (abfd)->eh_frame_hdr)
-    {
-      /* We need a PT_GNU_EH_FRAME segment.  */
-      ++segs;
-    }
-
-  if (elf_tdata (abfd)->stack_flags)
-    {
-      /* We need a PT_GNU_STACK segment.  */
-      ++segs;
-    }
-
-  if (elf_tdata (abfd)->relro)
-    {
-      /* We need a PT_GNU_RELRO segment.  */
-      ++segs;
-    }
-
-  for (s = abfd->sections; s != NULL; s = s->next)
-    {
-      if ((s->flags & SEC_LOAD) != 0
-	  && strncmp (s->name, ".note", 5) == 0)
-	{
-	  /* We need a PT_NOTE segment.  */
-	  ++segs;
-	}
-    }
-
-  for (s = abfd->sections; s != NULL; s = s->next)
-    {
-      if (s->flags & SEC_THREAD_LOCAL)
-	{
-	  /* We need a PT_TLS segment.  */
-	  ++segs;
-	  break;
-	}
-    }
-
-  /* Let the backend count up any program headers it might need.  */
-  if (bed->elf_backend_additional_program_headers)
-    {
-      int a;
-
-      a = (*bed->elf_backend_additional_program_headers) (abfd);
-      if (a == -1)
-	abort ();
-      segs += a;
-    }
-
-  elf_tdata (abfd)->program_header_size = segs * bed->s->sizeof_phdr;
-  return elf_tdata (abfd)->program_header_size;
 }
 
 /* Work out the file positions of all the sections.  This is called by
@@ -4450,16 +4721,16 @@ static bfd_boolean
 assign_file_positions_except_relocs (bfd *abfd,
 				     struct bfd_link_info *link_info)
 {
-  struct elf_obj_tdata * const tdata = elf_tdata (abfd);
-  Elf_Internal_Ehdr * const i_ehdrp = elf_elfheader (abfd);
-  Elf_Internal_Shdr ** const i_shdrpp = elf_elfsections (abfd);
-  unsigned int num_sec = elf_numsections (abfd);
+  struct elf_obj_tdata *tdata = elf_tdata (abfd);
+  Elf_Internal_Ehdr *i_ehdrp = elf_elfheader (abfd);
   file_ptr off;
   const struct elf_backend_data *bed = get_elf_backend_data (abfd);
 
   if ((abfd->flags & (EXEC_P | DYNAMIC)) == 0
       && bfd_get_format (abfd) != bfd_core)
     {
+      Elf_Internal_Shdr ** const i_shdrpp = elf_elfsections (abfd);
+      unsigned int num_sec = elf_numsections (abfd);
       Elf_Internal_Shdr **hdrpp;
       unsigned int i;
 
@@ -4494,57 +4765,30 @@ assign_file_positions_except_relocs (bfd *abfd,
     }
   else
     {
-      unsigned int i;
-      Elf_Internal_Shdr **hdrpp;
+      unsigned int alloc;
 
       /* Assign file positions for the loaded sections based on the
-         assignment of sections to segments.  */
-      if (! assign_file_positions_for_segments (abfd, link_info))
+	 assignment of sections to segments.  */
+      if (!assign_file_positions_for_load_sections (abfd, link_info))
 	return FALSE;
 
-      /* Assign file positions for the other sections.  */
+      /* And for non-load sections.  */
+      if (!assign_file_positions_for_non_load_sections (abfd, link_info))
+	return FALSE;
 
-      off = elf_tdata (abfd)->next_file_pos;
-      for (i = 1, hdrpp = i_shdrpp + 1; i < num_sec; i++, hdrpp++)
+      if (bed->elf_backend_modify_program_headers != NULL)
 	{
-	  Elf_Internal_Shdr *hdr;
-
-	  hdr = *hdrpp;
-	  if (hdr->bfd_section != NULL
-	      && hdr->bfd_section->filepos != 0)
-	    hdr->sh_offset = hdr->bfd_section->filepos;
-	  else if ((hdr->sh_flags & SHF_ALLOC) != 0)
-	    {
-	      ((*_bfd_error_handler)
-	       (_("%B: warning: allocated section `%s' not in segment"),
-		abfd,
-		(hdr->bfd_section == NULL
-		 ? "*unknown*"
-		 : hdr->bfd_section->name)));
-	      if ((abfd->flags & D_PAGED) != 0)
-		off += vma_page_aligned_bias (hdr->sh_addr, off,
-					      bed->maxpagesize);
-	      else
-		off += vma_page_aligned_bias (hdr->sh_addr, off,
-					      hdr->sh_addralign);
-	      off = _bfd_elf_assign_file_position_for_section (hdr, off,
-							       FALSE);
-	    }
-	  else if (((hdr->sh_type == SHT_REL || hdr->sh_type == SHT_RELA)
-		    && hdr->bfd_section == NULL)
-		   || hdr == i_shdrpp[tdata->symtab_section]
-		   || hdr == i_shdrpp[tdata->symtab_shndx_section]
-		   || hdr == i_shdrpp[tdata->strtab_section])
-	    hdr->sh_offset = -1;
-	  else
-	    off = _bfd_elf_assign_file_position_for_section (hdr, off, TRUE);
-
-	  if (i == SHN_LORESERVE - 1)
-	    {
-	      i += SHN_HIRESERVE + 1 - SHN_LORESERVE;
-	      hdrpp += SHN_HIRESERVE + 1 - SHN_LORESERVE;
-	    }
+	  if (!(*bed->elf_backend_modify_program_headers) (abfd, link_info))
+	    return FALSE;
 	}
+
+      /* Write out the program headers.  */
+      alloc = tdata->program_header_size / bed->s->sizeof_phdr;
+      if (bfd_seek (abfd, (bfd_signed_vma) bed->s->sizeof_ehdr, SEEK_SET) != 0
+	  || bed->s->write_out_phdrs (abfd, tdata->phdr, alloc) != 0)
+	return FALSE;
+
+      off = tdata->next_file_pos;
     }
 
   /* Place the section headers.  */
@@ -4552,7 +4796,7 @@ assign_file_positions_except_relocs (bfd *abfd,
   i_ehdrp->e_shoff = off;
   off += i_ehdrp->e_shnum * i_ehdrp->e_shentsize;
 
-  elf_tdata (abfd)->next_file_pos = off;
+  tdata->next_file_pos = off;
 
   return TRUE;
 }
@@ -4626,18 +4870,8 @@ prep_headers (bfd *abfd)
 
   /* If we're building an executable, we'll need a program header table.  */
   if (abfd->flags & EXEC_P)
-    {
-      /* It all happens later.  */
-#if 0
-      i_ehdrp->e_phentsize = sizeof (Elf_External_Phdr);
-
-      /* elf_build_phdrs() returns a (NULL-terminated) array of
-	 Elf_Internal_Phdrs.  */
-      i_phdrp = elf_build_phdrs (abfd, i_ehdrp, i_shdrp, &i_ehdrp->e_phnum);
-      i_ehdrp->e_phoff = outbase;
-      outbase += i_ehdrp->e_phentsize * i_ehdrp->e_phnum;
-#endif
-    }
+    /* It all happens later.  */
+    ;
   else
     {
       i_ehdrp->e_phentsize = 0;
@@ -4727,15 +4961,23 @@ _bfd_elf_write_object_contents (bfd *abfd)
     }
 
   /* Write out the section header names.  */
-  if (bfd_seek (abfd, elf_tdata (abfd)->shstrtab_hdr.sh_offset, SEEK_SET) != 0
-      || ! _bfd_elf_strtab_emit (abfd, elf_shstrtab (abfd)))
+  if (elf_shstrtab (abfd) != NULL
+      && (bfd_seek (abfd, elf_tdata (abfd)->shstrtab_hdr.sh_offset, SEEK_SET) != 0
+	  || !_bfd_elf_strtab_emit (abfd, elf_shstrtab (abfd))))
     return FALSE;
 
   if (bed->elf_backend_final_write_processing)
     (*bed->elf_backend_final_write_processing) (abfd,
 						elf_tdata (abfd)->linker);
 
-  return bed->s->write_shdrs_and_ehdr (abfd);
+  if (!bed->s->write_shdrs_and_ehdr (abfd))
+    return FALSE;
+
+  /* This is last since write_shdrs_and_ehdr can touch i_shdrp[0].  */
+  if (elf_tdata (abfd)->after_write_object_contents)
+    return (*elf_tdata (abfd)->after_write_object_contents) (abfd);
+
+  return TRUE;
 }
 
 bfd_boolean
@@ -4764,19 +5006,7 @@ _bfd_elf_section_from_bfd_section (bfd *abfd, struct bfd_section *asect)
   else if (bfd_is_und_section (asect))
     index = SHN_UNDEF;
   else
-    {
-      Elf_Internal_Shdr **i_shdrp = elf_elfsections (abfd);
-      int maxindex = elf_numsections (abfd);
-
-      for (index = 1; index < maxindex; index++)
-	{
-	  Elf_Internal_Shdr *hdr = i_shdrp[index];
-
-	  if (hdr != NULL && hdr->bfd_section == asect)
-	    return index;
-	}
-      index = -1;
-    }
+    index = -1;
 
   bed = get_elf_backend_data (abfd);
   if (bed->elf_backend_section_from_bfd_section)
@@ -4812,13 +5042,14 @@ _bfd_elf_symbol_from_bfd_symbol (bfd *abfd, asymbol **asym_ptr_ptr)
       && (flags & BSF_SECTION_SYM)
       && asym_ptr->section)
     {
+      asection *sec;
       int indx;
 
-      if (asym_ptr->section->output_section != NULL)
-	indx = asym_ptr->section->output_section->index;
-      else
-	indx = asym_ptr->section->index;
-      if (indx < elf_num_section_syms (abfd)
+      sec = asym_ptr->section;
+      if (sec->owner != abfd && sec->output_section != NULL)
+	sec = sec->output_section;
+      if (sec->owner == abfd
+	  && (indx = sec->index) < elf_num_section_syms (abfd)
 	  && elf_section_syms (abfd)[indx] != NULL)
 	asym_ptr->udata.i = elf_section_syms (abfd)[indx]->udata.i;
     }
@@ -4828,7 +5059,7 @@ _bfd_elf_symbol_from_bfd_symbol (bfd *abfd, asymbol **asym_ptr_ptr)
   if (idx == 0)
     {
       /* This case can occur when using --strip-symbol on a symbol
-         which is used in a relocation entry.  */
+	 which is used in a relocation entry.  */
       (*_bfd_error_handler)
 	(_("%B: symbol `%s' required but not present"),
 	 abfd, bfd_asymbol_name (asym_ptr));
@@ -4849,10 +5080,10 @@ _bfd_elf_symbol_from_bfd_symbol (bfd *abfd, asymbol **asym_ptr_ptr)
   return idx;
 }
 
-/* Copy private BFD data.  This copies any program header information.  */
+/* Rewrite program header information.  */
 
 static bfd_boolean
-copy_private_bfd_data (bfd *ibfd, bfd *obfd)
+rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
 {
   Elf_Internal_Ehdr *iehdr;
   struct elf_segment_map *map;
@@ -4867,13 +5098,6 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
   struct elf_segment_map *phdr_adjust_seg = NULL;
   unsigned int phdr_adjust_num = 0;
   const struct elf_backend_data *bed;
-
-  if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour
-      || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
-    return TRUE;
-
-  if (elf_tdata (ibfd)->phdr == NULL)
-    return TRUE;
 
   bed = get_elf_backend_data (ibfd);
   iehdr = elf_elfheader (ibfd);
@@ -4908,14 +5132,21 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
    && (section->lma + SECTION_SIZE (section, segment)			\
        <= SEGMENT_END (segment, base)))
 
-  /* Special case: corefile "NOTE" section containing regs, prpsinfo etc.  */
-#define IS_COREFILE_NOTE(p, s)						\
+  /* Handle PT_NOTE segment.  */
+#define IS_NOTE(p, s)							\
   (p->p_type == PT_NOTE							\
-   && bfd_get_format (ibfd) == bfd_core					\
-   && s->vma == 0 && s->lma == 0					\
+   && elf_section_type (s) == SHT_NOTE					\
    && (bfd_vma) s->filepos >= p->p_offset				\
-   && ((bfd_vma) s->filepos + s->size				\
+   && ((bfd_vma) s->filepos + s->size					\
        <= p->p_offset + p->p_filesz))
+
+  /* Special case: corefile "NOTE" section containing regs, prpsinfo
+     etc.  */
+#define IS_COREFILE_NOTE(p, s)						\
+  (IS_NOTE (p, s)							\
+   && bfd_get_format (ibfd) == bfd_core					\
+   && s->vma == 0							\
+   && s->lma == 0)
 
   /* The complicated case when p_vaddr is 0 is to handle the Solaris
      linker, which generates a PT_INTERP section with p_vaddr and
@@ -4928,33 +5159,48 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
    && (s->flags & SEC_HAS_CONTENTS) != 0				\
    && s->size > 0							\
    && (bfd_vma) s->filepos >= p->p_offset				\
-   && ((bfd_vma) s->filepos + s->size				\
+   && ((bfd_vma) s->filepos + s->size					\
        <= p->p_offset + p->p_filesz))
 
   /* Decide if the given section should be included in the given segment.
      A section will be included if:
        1. It is within the address space of the segment -- we use the LMA
-          if that is set for the segment and the VMA otherwise,
-       2. It is an allocated segment,
+	  if that is set for the segment and the VMA otherwise,
+       2. It is an allocated section or a NOTE section in a PT_NOTE
+	  segment.         
        3. There is an output section associated with it,
        4. The section has not already been allocated to a previous segment.
        5. PT_GNU_STACK segments do not include any sections.
        6. PT_TLS segment includes only SHF_TLS sections.
-       7. SHF_TLS sections are only in PT_TLS or PT_LOAD segments.  */
-#define INCLUDE_SECTION_IN_SEGMENT(section, segment, bed)		\
+       7. SHF_TLS sections are only in PT_TLS or PT_LOAD segments.
+       8. PT_DYNAMIC should not contain empty sections at the beginning
+	  (with the possible exception of .dynamic).  */
+#define IS_SECTION_IN_INPUT_SEGMENT(section, segment, bed)		\
   ((((segment->p_paddr							\
       ? IS_CONTAINED_BY_LMA (section, segment, segment->p_paddr)	\
       : IS_CONTAINED_BY_VMA (section, segment))				\
      && (section->flags & SEC_ALLOC) != 0)				\
-    || IS_COREFILE_NOTE (segment, section))				\
-   && section->output_section != NULL					\
+    || IS_NOTE (segment, section))					\
    && segment->p_type != PT_GNU_STACK					\
    && (segment->p_type != PT_TLS					\
        || (section->flags & SEC_THREAD_LOCAL))				\
    && (segment->p_type == PT_LOAD					\
        || segment->p_type == PT_TLS					\
        || (section->flags & SEC_THREAD_LOCAL) == 0)			\
-   && ! section->segment_mark)
+   && (segment->p_type != PT_DYNAMIC					\
+       || SECTION_SIZE (section, segment) > 0				\
+       || (segment->p_paddr						\
+	   ? segment->p_paddr != section->lma				\
+	   : segment->p_vaddr != section->vma)				\
+       || (strcmp (bfd_get_section_name (ibfd, section), ".dynamic")	\
+	   == 0))							\
+   && !section->segment_mark)
+
+/* If the output section of a section in the input segment is NULL,
+   it is removed from the corresponding output segment.   */
+#define INCLUDE_SECTION_IN_SEGMENT(section, segment, bed)		\
+  (IS_SECTION_IN_INPUT_SEGMENT (section, segment, bed)		\
+   && section->output_section != NULL)
 
   /* Returns TRUE iff seg1 starts after the end of seg2.  */
 #define SEGMENT_AFTER_SEGMENT(seg1, seg2, field)			\
@@ -4968,9 +5214,9 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
      LMA.  */
 #define SEGMENT_OVERLAPS(seg1, seg2)					\
   (   !(SEGMENT_AFTER_SEGMENT (seg1, seg2, p_vaddr)			\
-        || SEGMENT_AFTER_SEGMENT (seg2, seg1, p_vaddr)) 		\
+	|| SEGMENT_AFTER_SEGMENT (seg2, seg1, p_vaddr))			\
    && !(SEGMENT_AFTER_SEGMENT (seg1, seg2, p_paddr)			\
-        || SEGMENT_AFTER_SEGMENT (seg2, seg1, p_paddr)))
+	|| SEGMENT_AFTER_SEGMENT (seg2, seg1, p_paddr)))
 
   /* Initialise the segment mark field.  */
   for (section = ibfd->sections; section != NULL; section = section->next)
@@ -4998,29 +5244,33 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	    }
 
       if (segment->p_type != PT_LOAD)
-	continue;
+	{
+	  /* Remove PT_GNU_RELRO segment.  */
+	  if (segment->p_type == PT_GNU_RELRO)
+	    segment->p_type = PT_NULL;
+	  continue;
+	}
 
       /* Determine if this segment overlaps any previous segments.  */
-      for (j = 0, segment2 = elf_tdata (ibfd)->phdr; j < i; j++, segment2 ++)
+      for (j = 0, segment2 = elf_tdata (ibfd)->phdr; j < i; j++, segment2++)
 	{
 	  bfd_signed_vma extra_length;
 
 	  if (segment2->p_type != PT_LOAD
-	      || ! SEGMENT_OVERLAPS (segment, segment2))
+	      || !SEGMENT_OVERLAPS (segment, segment2))
 	    continue;
 
 	  /* Merge the two segments together.  */
 	  if (segment2->p_vaddr < segment->p_vaddr)
 	    {
 	      /* Extend SEGMENT2 to include SEGMENT and then delete
-                 SEGMENT.  */
-	      extra_length =
-		SEGMENT_END (segment, segment->p_vaddr)
-		- SEGMENT_END (segment2, segment2->p_vaddr);
+		 SEGMENT.  */
+	      extra_length = (SEGMENT_END (segment, segment->p_vaddr)
+			      - SEGMENT_END (segment2, segment2->p_vaddr));
 
 	      if (extra_length > 0)
 		{
-		  segment2->p_memsz  += extra_length;
+		  segment2->p_memsz += extra_length;
 		  segment2->p_filesz += extra_length;
 		}
 
@@ -5034,14 +5284,13 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	  else
 	    {
 	      /* Extend SEGMENT to include SEGMENT2 and then delete
-                 SEGMENT2.  */
-	      extra_length =
-		SEGMENT_END (segment2, segment2->p_vaddr)
-		- SEGMENT_END (segment, segment->p_vaddr);
+		 SEGMENT2.  */
+	      extra_length = (SEGMENT_END (segment2, segment2->p_vaddr)
+			      - SEGMENT_END (segment, segment->p_vaddr));
 
 	      if (extra_length > 0)
 		{
-		  segment->p_memsz  += extra_length;
+		  segment->p_memsz += extra_length;
 		  segment->p_filesz += extra_length;
 		}
 
@@ -5053,52 +5302,71 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
   /* The second scan attempts to assign sections to segments.  */
   for (i = 0, segment = elf_tdata (ibfd)->phdr;
        i < num_segments;
-       i ++, segment ++)
+       i++, segment++)
     {
-      unsigned int  section_count;
-      asection **   sections;
-      asection *    output_section;
-      unsigned int  isec;
-      bfd_vma       matching_lma;
-      bfd_vma       suggested_lma;
-      unsigned int  j;
+      unsigned int section_count;
+      asection **sections;
+      asection *output_section;
+      unsigned int isec;
+      bfd_vma matching_lma;
+      bfd_vma suggested_lma;
+      unsigned int j;
       bfd_size_type amt;
+      asection *first_section;
+      bfd_boolean first_matching_lma;
+      bfd_boolean first_suggested_lma;
 
       if (segment->p_type == PT_NULL)
 	continue;
 
+      first_section = NULL;
       /* Compute how many sections might be placed into this segment.  */
       for (section = ibfd->sections, section_count = 0;
 	   section != NULL;
 	   section = section->next)
-	if (INCLUDE_SECTION_IN_SEGMENT (section, segment, bed))
-	  ++section_count;
+	{
+	  /* Find the first section in the input segment, which may be
+	     removed from the corresponding output segment.   */
+	  if (IS_SECTION_IN_INPUT_SEGMENT (section, segment, bed))
+	    {
+	      if (first_section == NULL)
+		first_section = section;
+	      if (section->output_section != NULL)
+		++section_count;
+	    }
+	}
 
       /* Allocate a segment map big enough to contain
 	 all of the sections we have selected.  */
       amt = sizeof (struct elf_segment_map);
       amt += ((bfd_size_type) section_count - 1) * sizeof (asection *);
-      map = bfd_alloc (obfd, amt);
+      map = bfd_zalloc (obfd, amt);
       if (map == NULL)
 	return FALSE;
 
       /* Initialise the fields of the segment map.  Default to
 	 using the physical address of the segment in the input BFD.  */
-      map->next          = NULL;
-      map->p_type        = segment->p_type;
-      map->p_flags       = segment->p_flags;
+      map->next = NULL;
+      map->p_type = segment->p_type;
+      map->p_flags = segment->p_flags;
       map->p_flags_valid = 1;
-      map->p_paddr       = segment->p_paddr;
-      map->p_paddr_valid = 1;
+
+      /* If the first section in the input segment is removed, there is
+	 no need to preserve segment physical address in the corresponding
+	 output segment.  */
+      if (!first_section || first_section->output_section != NULL)
+	{
+	  map->p_paddr = segment->p_paddr;
+	  map->p_paddr_valid = 1;
+	}
 
       /* Determine if this segment contains the ELF file header
 	 and if it contains the program headers themselves.  */
       map->includes_filehdr = (segment->p_offset == 0
 			       && segment->p_filesz >= iehdr->e_ehsize);
-
       map->includes_phdrs = 0;
 
-      if (! phdr_included || segment->p_type != PT_LOAD)
+      if (!phdr_included || segment->p_type != PT_LOAD)
 	{
 	  map->includes_phdrs =
 	    (segment->p_offset <= (bfd_vma) iehdr->e_phoff
@@ -5117,9 +5385,9 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	     something.  They are allowed by the ELF spec however, so only
 	     a warning is produced.  */
 	  if (segment->p_type == PT_LOAD)
-	    (*_bfd_error_handler)
-	      (_("%B: warning: Empty loadable segment detected, is this intentional ?\n"),
-	       ibfd);
+	    (*_bfd_error_handler) (_("%B: warning: Empty loadable segment"
+				     " detected, is this intentional ?\n"),
+				   ibfd);
 
 	  map->count = 0;
 	  *pointer_to_map = map;
@@ -5158,8 +5426,7 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 
       /* Gcc 2.96 miscompiles this code on mips. Don't do casting here
 	 to work around this long long bug.  */
-      amt = section_count * sizeof (asection *);
-      sections = bfd_malloc (amt);
+      sections = bfd_malloc2 (section_count, sizeof (asection *));
       if (sections == NULL)
 	return FALSE;
 
@@ -5172,16 +5439,22 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
       isec = 0;
       matching_lma = 0;
       suggested_lma = 0;
+      first_matching_lma = TRUE;
+      first_suggested_lma = TRUE;
 
-      for (j = 0, section = ibfd->sections;
+      for (section = ibfd->sections;
 	   section != NULL;
 	   section = section->next)
+	if (section == first_section)
+	  break;
+
+      for (j = 0; section != NULL; section = section->next)
 	{
 	  if (INCLUDE_SECTION_IN_SEGMENT (section, segment, bed))
 	    {
 	      output_section = section->output_section;
 
-	      sections[j ++] = section;
+	      sections[j++] = section;
 
 	      /* The Solaris native linker always sets p_paddr to 0.
 		 We try to catch that case here, and set it to the
@@ -5189,37 +5462,45 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 		 p_paddr be left as zero.  */
 	      if (segment->p_paddr == 0
 		  && segment->p_vaddr != 0
-		  && (! bed->want_p_paddr_set_to_zero)
+		  && !bed->want_p_paddr_set_to_zero
 		  && isec == 0
 		  && output_section->lma != 0
-		  && (output_section->vma == (segment->p_vaddr
-					      + (map->includes_filehdr
-						 ? iehdr->e_ehsize
-						 : 0)
-					      + (map->includes_phdrs
-						 ? (iehdr->e_phnum
-						    * iehdr->e_phentsize)
-						 : 0))))
+		  && output_section->vma == (segment->p_vaddr
+					     + (map->includes_filehdr
+						? iehdr->e_ehsize
+						: 0)
+					     + (map->includes_phdrs
+						? (iehdr->e_phnum
+						   * iehdr->e_phentsize)
+						: 0)))
 		map->p_paddr = segment->p_vaddr;
 
 	      /* Match up the physical address of the segment with the
 		 LMA address of the output section.  */
 	      if (IS_CONTAINED_BY_LMA (output_section, segment, map->p_paddr)
 		  || IS_COREFILE_NOTE (segment, section)
-		  || (bed->want_p_paddr_set_to_zero &&
-		      IS_CONTAINED_BY_VMA (output_section, segment))
-                )
+		  || (bed->want_p_paddr_set_to_zero
+		      && IS_CONTAINED_BY_VMA (output_section, segment)))
 		{
-		  if (matching_lma == 0)
-		    matching_lma = output_section->lma;
+		  if (first_matching_lma || output_section->lma < matching_lma)
+		    {
+		      matching_lma = output_section->lma;
+		      first_matching_lma = FALSE;
+		    }
 
 		  /* We assume that if the section fits within the segment
 		     then it does not overlap any other section within that
 		     segment.  */
-		  map->sections[isec ++] = output_section;
+		  map->sections[isec++] = output_section;
 		}
-	      else if (suggested_lma == 0)
-		suggested_lma = output_section->lma;
+	      else if (first_suggested_lma)
+		{
+		  suggested_lma = output_section->lma;
+		  first_suggested_lma = FALSE;
+		}
+
+	      if (j == section_count)
+		break;
 	    }
 	}
 
@@ -5237,12 +5518,20 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	  *pointer_to_map = map;
 	  pointer_to_map = &map->next;
 
+	  if (!bed->want_p_paddr_set_to_zero
+	      && matching_lma != map->p_paddr
+	      && !map->includes_filehdr && !map->includes_phdrs)
+	    /* There is some padding before the first section in the
+	       segment.  So, we must account for that in the output
+	       segment's vma.  */
+	    map->p_vaddr_offset = matching_lma - map->p_paddr;
+
 	  free (sections);
 	  continue;
 	}
       else
 	{
-	  if (matching_lma != 0)
+	  if (!first_matching_lma)
 	    {
 	      /* At least one section fits inside the current segment.
 		 Keep it, but modify its physical address to match the
@@ -5288,6 +5577,7 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	{
 	  map->count = 0;
 	  suggested_lma = 0;
+	  first_suggested_lma = TRUE;
 
 	  /* Fill the current segment with sections that fit.  */
 	  for (j = 0; j < section_count; j++)
@@ -5309,17 +5599,17 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 		      /* If the first section in a segment does not start at
 			 the beginning of the segment, then something is
 			 wrong.  */
-		      if (output_section->lma !=
-			  (map->p_paddr
-			   + (map->includes_filehdr ? iehdr->e_ehsize : 0)
-			   + (map->includes_phdrs
-			      ? iehdr->e_phnum * iehdr->e_phentsize
-			      : 0)))
+		      if (output_section->lma
+			  != (map->p_paddr
+			      + (map->includes_filehdr ? iehdr->e_ehsize : 0)
+			      + (map->includes_phdrs
+				 ? iehdr->e_phnum * iehdr->e_phentsize
+				 : 0)))
 			abort ();
 		    }
 		  else
 		    {
-		      asection * prev_sec;
+		      asection *prev_sec;
 
 		      prev_sec = map->sections[map->count - 1];
 
@@ -5329,11 +5619,14 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 		      if ((BFD_ALIGN (prev_sec->lma + prev_sec->size,
 				      maxpagesize)
 			   < BFD_ALIGN (output_section->lma, maxpagesize))
-			  || ((prev_sec->lma + prev_sec->size)
+			  || (prev_sec->lma + prev_sec->size
 			      > output_section->lma))
 			{
-			  if (suggested_lma == 0)
-			    suggested_lma = output_section->lma;
+			  if (first_suggested_lma)
+			    {
+			      suggested_lma = output_section->lma;
+			      first_suggested_lma = FALSE;
+			    }
 
 			  continue;
 			}
@@ -5344,8 +5637,11 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 		  sections[j] = NULL;
 		  section->segment_mark = TRUE;
 		}
-	      else if (suggested_lma == 0)
-		suggested_lma = output_section->lma;
+	      else if (first_suggested_lma)
+		{
+		  suggested_lma = output_section->lma;
+		  first_suggested_lma = FALSE;
+		}
 	    }
 
 	  BFD_ASSERT (map->count > 0);
@@ -5371,14 +5667,14 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	      /* Initialise the fields of the segment map.  Set the physical
 		 physical address to the LMA of the first section that has
 		 not yet been assigned.  */
-	      map->next             = NULL;
-	      map->p_type           = segment->p_type;
-	      map->p_flags          = segment->p_flags;
-	      map->p_flags_valid    = 1;
-	      map->p_paddr          = suggested_lma;
-	      map->p_paddr_valid    = 1;
+	      map->next = NULL;
+	      map->p_type = segment->p_type;
+	      map->p_flags = segment->p_flags;
+	      map->p_flags_valid = 1;
+	      map->p_paddr = suggested_lma;
+	      map->p_paddr_valid = 1;
 	      map->includes_filehdr = 0;
-	      map->includes_phdrs   = 0;
+	      map->includes_phdrs = 0;
 	    }
 	}
       while (isec < section_count);
@@ -5414,40 +5710,301 @@ copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 	  -= (count - phdr_adjust_num) * iehdr->e_phentsize;
     }
 
-#if 0
-  /* Final Step: Sort the segments into ascending order of physical
-     address.  */
-  if (map_first != NULL)
-    {
-      struct elf_segment_map *prev;
-
-      prev = map_first;
-      for (map = map_first->next; map != NULL; prev = map, map = map->next)
-	{
-	  /* Yes I know - its a bubble sort....  */
-	  if (map->next != NULL && (map->next->p_paddr < map->p_paddr))
-	    {
-	      /* Swap map and map->next.  */
-	      prev->next = map->next;
-	      map->next = map->next->next;
-	      prev->next->next = map;
-
-	      /* Restart loop.  */
-	      map = map_first;
-	    }
-	}
-    }
-#endif
-
 #undef SEGMENT_END
 #undef SECTION_SIZE
 #undef IS_CONTAINED_BY_VMA
 #undef IS_CONTAINED_BY_LMA
+#undef IS_NOTE
 #undef IS_COREFILE_NOTE
 #undef IS_SOLARIS_PT_INTERP
+#undef IS_SECTION_IN_INPUT_SEGMENT
 #undef INCLUDE_SECTION_IN_SEGMENT
 #undef SEGMENT_AFTER_SEGMENT
 #undef SEGMENT_OVERLAPS
+  return TRUE;
+}
+
+/* Copy ELF program header information.  */
+
+static bfd_boolean
+copy_elf_program_header (bfd *ibfd, bfd *obfd)
+{
+  Elf_Internal_Ehdr *iehdr;
+  struct elf_segment_map *map;
+  struct elf_segment_map *map_first;
+  struct elf_segment_map **pointer_to_map;
+  Elf_Internal_Phdr *segment;
+  unsigned int i;
+  unsigned int num_segments;
+  bfd_boolean phdr_included = FALSE;
+
+  iehdr = elf_elfheader (ibfd);
+
+  map_first = NULL;
+  pointer_to_map = &map_first;
+
+  num_segments = elf_elfheader (ibfd)->e_phnum;
+  for (i = 0, segment = elf_tdata (ibfd)->phdr;
+       i < num_segments;
+       i++, segment++)
+    {
+      asection *section;
+      unsigned int section_count;
+      bfd_size_type amt;
+      Elf_Internal_Shdr *this_hdr;
+      asection *first_section = NULL;
+      asection *lowest_section = NULL;
+
+      /* Compute how many sections are in this segment.  */
+      for (section = ibfd->sections, section_count = 0;
+	   section != NULL;
+	   section = section->next)
+	{
+	  this_hdr = &(elf_section_data(section)->this_hdr);
+	  if (ELF_IS_SECTION_IN_SEGMENT_FILE (this_hdr, segment))
+	    {
+	      if (!first_section)
+		first_section = lowest_section = section;
+	      if (section->lma < lowest_section->lma)
+		lowest_section = section;
+	      section_count++;
+	    }
+	}
+
+      /* Allocate a segment map big enough to contain
+	 all of the sections we have selected.  */
+      amt = sizeof (struct elf_segment_map);
+      if (section_count != 0)
+	amt += ((bfd_size_type) section_count - 1) * sizeof (asection *);
+      map = bfd_zalloc (obfd, amt);
+      if (map == NULL)
+	return FALSE;
+
+      /* Initialize the fields of the output segment map with the
+	 input segment.  */
+      map->next = NULL;
+      map->p_type = segment->p_type;
+      map->p_flags = segment->p_flags;
+      map->p_flags_valid = 1;
+      map->p_paddr = segment->p_paddr;
+      map->p_paddr_valid = 1;
+      map->p_align = segment->p_align;
+      map->p_align_valid = 1;
+      map->p_vaddr_offset = 0;
+
+      if (map->p_type == PT_GNU_RELRO
+	  && segment->p_filesz == segment->p_memsz)
+	{
+	  /* The PT_GNU_RELRO segment may contain the first a few
+	     bytes in the .got.plt section even if the whole .got.plt
+	     section isn't in the PT_GNU_RELRO segment.  We won't
+	     change the size of the PT_GNU_RELRO segment.  */
+	  map->p_size = segment->p_filesz;
+	  map->p_size_valid = 1;
+	}
+
+      /* Determine if this segment contains the ELF file header
+	 and if it contains the program headers themselves.  */
+      map->includes_filehdr = (segment->p_offset == 0
+			       && segment->p_filesz >= iehdr->e_ehsize);
+
+      map->includes_phdrs = 0;
+      if (! phdr_included || segment->p_type != PT_LOAD)
+	{
+	  map->includes_phdrs =
+	    (segment->p_offset <= (bfd_vma) iehdr->e_phoff
+	     && (segment->p_offset + segment->p_filesz
+		 >= ((bfd_vma) iehdr->e_phoff
+		     + iehdr->e_phnum * iehdr->e_phentsize)));
+
+	  if (segment->p_type == PT_LOAD && map->includes_phdrs)
+	    phdr_included = TRUE;
+	}
+
+      if (!map->includes_phdrs && !map->includes_filehdr)
+	/* There is some other padding before the first section.  */
+	map->p_vaddr_offset = ((lowest_section ? lowest_section->lma : 0)
+			       - segment->p_paddr);
+
+      if (section_count != 0)
+	{
+	  unsigned int isec = 0;
+
+	  for (section = first_section;
+	       section != NULL;
+	       section = section->next)
+	    {
+	      this_hdr = &(elf_section_data(section)->this_hdr);
+	      if (ELF_IS_SECTION_IN_SEGMENT_FILE (this_hdr, segment))
+		{
+		  map->sections[isec++] = section->output_section;
+		  if (isec == section_count)
+		    break;
+		}
+	    }
+	}
+
+      map->count = section_count;
+      *pointer_to_map = map;
+      pointer_to_map = &map->next;
+    }
+
+  elf_tdata (obfd)->segment_map = map_first;
+  return TRUE;
+}
+
+/* Copy private BFD data.  This copies or rewrites ELF program header
+   information.  */
+
+static bfd_boolean
+copy_private_bfd_data (bfd *ibfd, bfd *obfd)
+{
+  if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour
+      || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
+    return TRUE;
+
+  if (elf_tdata (ibfd)->phdr == NULL)
+    return TRUE;
+
+  if (ibfd->xvec == obfd->xvec)
+    {
+      /* Check to see if any sections in the input BFD
+	 covered by ELF program header have changed.  */
+      Elf_Internal_Phdr *segment;
+      asection *section, *osec;
+      unsigned int i, num_segments;
+      Elf_Internal_Shdr *this_hdr;
+      const struct elf_backend_data *bed;
+
+      bed = get_elf_backend_data (ibfd);
+
+      /* Regenerate the segment map if p_paddr is set to 0.  */
+      if (bed->want_p_paddr_set_to_zero)
+	goto rewrite;
+
+      /* Initialize the segment mark field.  */
+      for (section = obfd->sections; section != NULL;
+	   section = section->next)
+	section->segment_mark = FALSE;
+
+      num_segments = elf_elfheader (ibfd)->e_phnum;
+      for (i = 0, segment = elf_tdata (ibfd)->phdr;
+	   i < num_segments;
+	   i++, segment++)
+	{
+	  /* PR binutils/3535.  The Solaris linker always sets the p_paddr
+	     and p_memsz fields of special segments (DYNAMIC, INTERP) to 0
+	     which severly confuses things, so always regenerate the segment
+	     map in this case.  */
+	  if (segment->p_paddr == 0
+	      && segment->p_memsz == 0
+	      && (segment->p_type == PT_INTERP || segment->p_type == PT_DYNAMIC))
+	    goto rewrite;
+
+	  for (section = ibfd->sections;
+	       section != NULL; section = section->next)
+	    {
+	      /* We mark the output section so that we know it comes
+		 from the input BFD.  */
+	      osec = section->output_section;
+	      if (osec)
+		osec->segment_mark = TRUE;
+
+	      /* Check if this section is covered by the segment.  */
+	      this_hdr = &(elf_section_data(section)->this_hdr);
+	      if (ELF_IS_SECTION_IN_SEGMENT_FILE (this_hdr, segment))
+		{
+		  /* FIXME: Check if its output section is changed or
+		     removed.  What else do we need to check?  */
+		  if (osec == NULL
+		      || section->flags != osec->flags
+		      || section->lma != osec->lma
+		      || section->vma != osec->vma
+		      || section->size != osec->size
+		      || section->rawsize != osec->rawsize
+		      || section->alignment_power != osec->alignment_power)
+		    goto rewrite;
+		}
+	    }
+	}
+
+      /* Check to see if any output section do not come from the
+	 input BFD.  */
+      for (section = obfd->sections; section != NULL;
+	   section = section->next)
+	{
+	  if (section->segment_mark == FALSE)
+	    goto rewrite;
+	  else
+	    section->segment_mark = FALSE;
+	}
+
+      return copy_elf_program_header (ibfd, obfd);
+    }
+
+rewrite:
+  return rewrite_elf_program_header (ibfd, obfd);
+}
+
+/* Initialize private output section information from input section.  */
+
+bfd_boolean
+_bfd_elf_init_private_section_data (bfd *ibfd,
+				    asection *isec,
+				    bfd *obfd,
+				    asection *osec,
+				    struct bfd_link_info *link_info)
+
+{
+  Elf_Internal_Shdr *ihdr, *ohdr;
+  bfd_boolean need_group = link_info == NULL || link_info->relocatable;
+
+  if (ibfd->xvec->flavour != bfd_target_elf_flavour
+      || obfd->xvec->flavour != bfd_target_elf_flavour)
+    return TRUE;
+
+  /* Don't copy the output ELF section type from input if the
+     output BFD section flags have been set to something different.
+     elf_fake_sections will set ELF section type based on BFD
+     section flags.  */
+  if (elf_section_type (osec) == SHT_NULL
+      && (osec->flags == isec->flags || !osec->flags))
+    elf_section_type (osec) = elf_section_type (isec);
+
+  /* FIXME: Is this correct for all OS/PROC specific flags?  */
+  elf_section_flags (osec) |= (elf_section_flags (isec)
+			       & (SHF_MASKOS | SHF_MASKPROC));
+
+  /* Set things up for objcopy and relocatable link.  The output
+     SHT_GROUP section will have its elf_next_in_group pointing back
+     to the input group members.  Ignore linker created group section.
+     See elfNN_ia64_object_p in elfxx-ia64.c.  */
+  if (need_group)
+    {
+      if (elf_sec_group (isec) == NULL
+	  || (elf_sec_group (isec)->flags & SEC_LINKER_CREATED) == 0)
+	{
+	  if (elf_section_flags (isec) & SHF_GROUP)
+	    elf_section_flags (osec) |= SHF_GROUP;
+	  elf_next_in_group (osec) = elf_next_in_group (isec);
+	  elf_group_name (osec) = elf_group_name (isec);
+	}
+    }
+
+  ihdr = &elf_section_data (isec)->this_hdr;
+
+  /* We need to handle elf_linked_to_section for SHF_LINK_ORDER. We
+     don't use the output section of the linked-to section since it
+     may be NULL at this point.  */
+  if ((ihdr->sh_flags & SHF_LINK_ORDER) != 0)
+    {
+      ohdr = &elf_section_data (osec)->this_hdr;
+      ohdr->sh_flags |= SHF_LINK_ORDER;
+      elf_linked_to_section (osec) = elf_linked_to_section (isec);
+    }
+
+  osec->use_rela_p = isec->use_rela_p;
+
   return TRUE;
 }
 
@@ -5477,15 +6034,8 @@ _bfd_elf_copy_private_section_data (bfd *ibfd,
       || ihdr->sh_type == SHT_GNU_verdef)
     ohdr->sh_info = ihdr->sh_info;
 
-  /* Set things up for objcopy.  The output SHT_GROUP section will
-     have its elf_next_in_group pointing back to the input group
-     members.  */
-  elf_next_in_group (osec) = elf_next_in_group (isec);
-  elf_group_name (osec) = elf_group_name (isec);
-
-  osec->use_rela_p = isec->use_rela_p;
-
-  return TRUE;
+  return _bfd_elf_init_private_section_data (ibfd, isec, obfd, osec,
+					     NULL);
 }
 
 /* Copy private header information.  */
@@ -5493,6 +6043,8 @@ _bfd_elf_copy_private_section_data (bfd *ibfd,
 bfd_boolean
 _bfd_elf_copy_private_header_data (bfd *ibfd, bfd *obfd)
 {
+  asection *isec;
+
   if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour
       || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
     return TRUE;
@@ -5507,6 +6059,27 @@ _bfd_elf_copy_private_header_data (bfd *ibfd, bfd *obfd)
       if (! copy_private_bfd_data (ibfd, obfd))
 	return FALSE;
     }
+
+  /* _bfd_elf_copy_private_section_data copied over the SHF_GROUP flag
+     but this might be wrong if we deleted the group section.  */
+  for (isec = ibfd->sections; isec != NULL; isec = isec->next)
+    if (elf_section_type (isec) == SHT_GROUP
+	&& isec->output_section == NULL)
+      {
+	asection *first = elf_next_in_group (isec);
+	asection *s = first;
+	while (s != NULL)
+	  {
+	    if (s->output_section != NULL)
+	      {
+		elf_section_flags (s->output_section) &= ~SHF_GROUP;
+		elf_group_name (s->output_section) = NULL;
+	      }
+	    s = elf_next_in_group (s);
+	    if (s == first)
+	      break;
+	  }
+      }
 
   return TRUE;
 }
@@ -5539,6 +6112,7 @@ _bfd_elf_copy_private_symbol_data (bfd *ibfd,
   osym = elf_symbol_from (obfd, osymarg);
 
   if (isym != NULL
+      && isym->internal_elf_sym.st_shndx != 0
       && osym != NULL
       && bfd_is_abs_section (isym->symbol.section))
     {
@@ -5575,8 +6149,8 @@ swap_out_syms (bfd *abfd,
   Elf_Internal_Shdr *symtab_hdr;
   Elf_Internal_Shdr *symtab_shndx_hdr;
   Elf_Internal_Shdr *symstrtab_hdr;
-  char *outbound_syms;
-  char *outbound_shndx;
+  bfd_byte *outbound_syms;
+  bfd_byte *outbound_shndx;
   int idx;
   bfd_size_type amt;
   bfd_boolean name_local_sections;
@@ -5601,8 +6175,7 @@ swap_out_syms (bfd *abfd,
   symstrtab_hdr = &elf_tdata (abfd)->strtab_hdr;
   symstrtab_hdr->sh_type = SHT_STRTAB;
 
-  amt = (bfd_size_type) (1 + symcount) * bed->s->sizeof_sym;
-  outbound_syms = bfd_alloc (abfd, amt);
+  outbound_syms = bfd_alloc2 (abfd, 1 + symcount, bed->s->sizeof_sym);
   if (outbound_syms == NULL)
     {
       _bfd_stringtab_free (stt);
@@ -5615,7 +6188,8 @@ swap_out_syms (bfd *abfd,
   if (symtab_shndx_hdr->sh_name != 0)
     {
       amt = (bfd_size_type) (1 + symcount) * sizeof (Elf_External_Sym_Shndx);
-      outbound_shndx = bfd_zalloc (abfd, amt);
+      outbound_shndx = bfd_zalloc2 (abfd, 1 + symcount,
+				    sizeof (Elf_External_Sym_Shndx));
       if (outbound_shndx == NULL)
 	{
 	  _bfd_stringtab_free (stt);
@@ -5780,6 +6354,10 @@ Unable to find equivalent output section for symbol '%s' from section '%s'"),
 	type = STT_FUNC;
       else if ((flags & BSF_OBJECT) != 0)
 	type = STT_OBJECT;
+      else if ((flags & BSF_RELC) != 0)
+	type = STT_RELC;
+      else if ((flags & BSF_SRELC) != 0)
+	type = STT_SRELC;
       else
 	type = STT_NOTYPE;
 
@@ -5800,7 +6378,15 @@ Unable to find equivalent output section for symbol '%s' from section '%s'"),
 	    sym.st_info = ELF_ST_INFO (STB_LOCAL, STT_SECTION);
 	}
       else if (bfd_is_com_section (syms[idx]->section))
-	sym.st_info = ELF_ST_INFO (STB_GLOBAL, type);
+	{
+#ifdef USE_STT_COMMON
+	  if (type == STT_OBJECT)
+	    sym.st_info = ELF_ST_INFO (STB_GLOBAL, STT_COMMON);
+	  else
+#else
+	    sym.st_info = ELF_ST_INFO (STB_GLOBAL, type);
+#endif
+	}
       else if (bfd_is_und_section (syms[idx]->section))
 	sym.st_info = ELF_ST_INFO (((flags & BSF_WEAK)
 				    ? STB_WEAK
@@ -5943,10 +6529,10 @@ _bfd_elf_canonicalize_dynamic_symtab (bfd *abfd,
   return symcount;
 }
 
-/* Return the size required for the dynamic reloc entries.  Any
-   section that was actually installed in the BFD, and has type
-   SHT_REL or SHT_RELA, and uses the dynamic symbol table, is
-   considered to be a dynamic reloc section.  */
+/* Return the size required for the dynamic reloc entries.  Any loadable
+   section that was actually installed in the BFD, and has type SHT_REL
+   or SHT_RELA, and uses the dynamic symbol table, is considered to be a
+   dynamic reloc section.  */
 
 long
 _bfd_elf_get_dynamic_reloc_upper_bound (bfd *abfd)
@@ -5962,7 +6548,8 @@ _bfd_elf_get_dynamic_reloc_upper_bound (bfd *abfd)
 
   ret = sizeof (arelent *);
   for (s = abfd->sections; s != NULL; s = s->next)
-    if (elf_section_data (s)->this_hdr.sh_link == elf_dynsymtab (abfd)
+    if ((s->flags & SEC_LOAD) != 0
+	&& elf_section_data (s)->this_hdr.sh_link == elf_dynsymtab (abfd)
 	&& (elf_section_data (s)->this_hdr.sh_type == SHT_REL
 	    || elf_section_data (s)->this_hdr.sh_type == SHT_RELA))
       ret += ((s->size / elf_section_data (s)->this_hdr.sh_entsize)
@@ -5971,14 +6558,13 @@ _bfd_elf_get_dynamic_reloc_upper_bound (bfd *abfd)
   return ret;
 }
 
-/* Canonicalize the dynamic relocation entries.  Note that we return
-   the dynamic relocations as a single block, although they are
-   actually associated with particular sections; the interface, which
-   was designed for SunOS style shared libraries, expects that there
-   is only one set of dynamic relocs.  Any section that was actually
-   installed in the BFD, and has type SHT_REL or SHT_RELA, and uses
-   the dynamic symbol table, is considered to be a dynamic reloc
-   section.  */
+/* Canonicalize the dynamic relocation entries.  Note that we return the
+   dynamic relocations as a single block, although they are actually
+   associated with particular sections; the interface, which was
+   designed for SunOS style shared libraries, expects that there is only
+   one set of dynamic relocs.  Any loadable section that was actually
+   installed in the BFD, and has type SHT_REL or SHT_RELA, and uses the
+   dynamic symbol table, is considered to be a dynamic reloc section.  */
 
 long
 _bfd_elf_canonicalize_dynamic_reloc (bfd *abfd,
@@ -5999,7 +6585,8 @@ _bfd_elf_canonicalize_dynamic_reloc (bfd *abfd,
   ret = 0;
   for (s = abfd->sections; s != NULL; s = s->next)
     {
-      if (elf_section_data (s)->this_hdr.sh_link == elf_dynsymtab (abfd)
+      if ((s->flags & SEC_LOAD) != 0
+	  && elf_section_data (s)->this_hdr.sh_link == elf_dynsymtab (abfd)
 	  && (elf_section_data (s)->this_hdr.sh_type == SHT_REL
 	      || elf_section_data (s)->this_hdr.sh_type == SHT_RELA))
 	{
@@ -6024,109 +6611,10 @@ _bfd_elf_canonicalize_dynamic_reloc (bfd *abfd,
 /* Read in the version information.  */
 
 bfd_boolean
-_bfd_elf_slurp_version_tables (bfd *abfd)
+_bfd_elf_slurp_version_tables (bfd *abfd, bfd_boolean default_imported_symver)
 {
   bfd_byte *contents = NULL;
-  bfd_size_type amt;
-
-  if (elf_dynverdef (abfd) != 0)
-    {
-      Elf_Internal_Shdr *hdr;
-      Elf_External_Verdef *everdef;
-      Elf_Internal_Verdef *iverdef;
-      Elf_Internal_Verdef *iverdefarr;
-      Elf_Internal_Verdef iverdefmem;
-      unsigned int i;
-      unsigned int maxidx;
-
-      hdr = &elf_tdata (abfd)->dynverdef_hdr;
-
-      contents = bfd_malloc (hdr->sh_size);
-      if (contents == NULL)
-	goto error_return;
-      if (bfd_seek (abfd, hdr->sh_offset, SEEK_SET) != 0
-	  || bfd_bread (contents, hdr->sh_size, abfd) != hdr->sh_size)
-	goto error_return;
-
-      /* We know the number of entries in the section but not the maximum
-	 index.  Therefore we have to run through all entries and find
-	 the maximum.  */
-      everdef = (Elf_External_Verdef *) contents;
-      maxidx = 0;
-      for (i = 0; i < hdr->sh_info; ++i)
-	{
-	  _bfd_elf_swap_verdef_in (abfd, everdef, &iverdefmem);
-
-	  if ((iverdefmem.vd_ndx & ((unsigned) VERSYM_VERSION)) > maxidx)
-	    maxidx = iverdefmem.vd_ndx & ((unsigned) VERSYM_VERSION);
-
-	  everdef = ((Elf_External_Verdef *)
-		     ((bfd_byte *) everdef + iverdefmem.vd_next));
-	}
-
-      amt = (bfd_size_type) maxidx * sizeof (Elf_Internal_Verdef);
-      elf_tdata (abfd)->verdef = bfd_zalloc (abfd, amt);
-      if (elf_tdata (abfd)->verdef == NULL)
-	goto error_return;
-
-      elf_tdata (abfd)->cverdefs = maxidx;
-
-      everdef = (Elf_External_Verdef *) contents;
-      iverdefarr = elf_tdata (abfd)->verdef;
-      for (i = 0; i < hdr->sh_info; i++)
-	{
-	  Elf_External_Verdaux *everdaux;
-	  Elf_Internal_Verdaux *iverdaux;
-	  unsigned int j;
-
-	  _bfd_elf_swap_verdef_in (abfd, everdef, &iverdefmem);
-
-	  iverdef = &iverdefarr[(iverdefmem.vd_ndx & VERSYM_VERSION) - 1];
-	  memcpy (iverdef, &iverdefmem, sizeof (Elf_Internal_Verdef));
-
-	  iverdef->vd_bfd = abfd;
-
-	  amt = (bfd_size_type) iverdef->vd_cnt * sizeof (Elf_Internal_Verdaux);
-	  iverdef->vd_auxptr = bfd_alloc (abfd, amt);
-	  if (iverdef->vd_auxptr == NULL)
-	    goto error_return;
-
-	  everdaux = ((Elf_External_Verdaux *)
-		      ((bfd_byte *) everdef + iverdef->vd_aux));
-	  iverdaux = iverdef->vd_auxptr;
-	  for (j = 0; j < iverdef->vd_cnt; j++, iverdaux++)
-	    {
-	      _bfd_elf_swap_verdaux_in (abfd, everdaux, iverdaux);
-
-	      iverdaux->vda_nodename =
-		bfd_elf_string_from_elf_section (abfd, hdr->sh_link,
-						 iverdaux->vda_name);
-	      if (iverdaux->vda_nodename == NULL)
-		goto error_return;
-
-	      if (j + 1 < iverdef->vd_cnt)
-		iverdaux->vda_nextptr = iverdaux + 1;
-	      else
-		iverdaux->vda_nextptr = NULL;
-
-	      everdaux = ((Elf_External_Verdaux *)
-			  ((bfd_byte *) everdaux + iverdaux->vda_next));
-	    }
-
-	  iverdef->vd_nodename = iverdef->vd_auxptr->vda_nodename;
-
-	  if (i + 1 < hdr->sh_info)
-	    iverdef->vd_nextdef = iverdef + 1;
-	  else
-	    iverdef->vd_nextdef = NULL;
-
-	  everdef = ((Elf_External_Verdef *)
-		     ((bfd_byte *) everdef + iverdef->vd_next));
-	}
-
-      free (contents);
-      contents = NULL;
-    }
+  unsigned int freeidx = 0;
 
   if (elf_dynverref (abfd) != 0)
     {
@@ -6134,11 +6622,12 @@ _bfd_elf_slurp_version_tables (bfd *abfd)
       Elf_External_Verneed *everneed;
       Elf_Internal_Verneed *iverneed;
       unsigned int i;
+      bfd_byte *contents_end;
 
       hdr = &elf_tdata (abfd)->dynverref_hdr;
 
-      amt = (bfd_size_type) hdr->sh_info * sizeof (Elf_Internal_Verneed);
-      elf_tdata (abfd)->verref = bfd_zalloc (abfd, amt);
+      elf_tdata (abfd)->verref = bfd_zalloc2 (abfd, hdr->sh_info,
+					      sizeof (Elf_Internal_Verneed));
       if (elf_tdata (abfd)->verref == NULL)
 	goto error_return;
 
@@ -6146,11 +6635,22 @@ _bfd_elf_slurp_version_tables (bfd *abfd)
 
       contents = bfd_malloc (hdr->sh_size);
       if (contents == NULL)
-	goto error_return;
+	{
+error_return_verref:
+	  elf_tdata (abfd)->verref = NULL;
+	  elf_tdata (abfd)->cverrefs = 0;
+	  goto error_return;
+	}
       if (bfd_seek (abfd, hdr->sh_offset, SEEK_SET) != 0
 	  || bfd_bread (contents, hdr->sh_size, abfd) != hdr->sh_size)
-	goto error_return;
+	goto error_return_verref;
 
+      if (hdr->sh_info && hdr->sh_size < sizeof (Elf_External_Verneed))
+	goto error_return_verref;
+
+      BFD_ASSERT (sizeof (Elf_External_Verneed)
+		  == sizeof (Elf_External_Vernaux));
+      contents_end = contents + hdr->sh_size - sizeof (Elf_External_Verneed);
       everneed = (Elf_External_Verneed *) contents;
       iverneed = elf_tdata (abfd)->verref;
       for (i = 0; i < hdr->sh_info; i++, iverneed++)
@@ -6167,11 +6667,21 @@ _bfd_elf_slurp_version_tables (bfd *abfd)
 	    bfd_elf_string_from_elf_section (abfd, hdr->sh_link,
 					     iverneed->vn_file);
 	  if (iverneed->vn_filename == NULL)
-	    goto error_return;
+	    goto error_return_verref;
 
-	  amt = iverneed->vn_cnt;
-	  amt *= sizeof (Elf_Internal_Vernaux);
-	  iverneed->vn_auxptr = bfd_alloc (abfd, amt);
+	  if (iverneed->vn_cnt == 0)
+	    iverneed->vn_auxptr = NULL;
+	  else
+	    {
+	      iverneed->vn_auxptr = bfd_alloc2 (abfd, iverneed->vn_cnt,
+						sizeof (Elf_Internal_Vernaux));
+	      if (iverneed->vn_auxptr == NULL)
+		goto error_return_verref;
+	    }
+
+	  if (iverneed->vn_aux
+	      > (size_t) (contents_end - (bfd_byte *) everneed))
+	    goto error_return_verref;
 
 	  evernaux = ((Elf_External_Vernaux *)
 		      ((bfd_byte *) everneed + iverneed->vn_aux));
@@ -6184,15 +6694,22 @@ _bfd_elf_slurp_version_tables (bfd *abfd)
 		bfd_elf_string_from_elf_section (abfd, hdr->sh_link,
 						 ivernaux->vna_name);
 	      if (ivernaux->vna_nodename == NULL)
-		goto error_return;
+		goto error_return_verref;
 
 	      if (j + 1 < iverneed->vn_cnt)
 		ivernaux->vna_nextptr = ivernaux + 1;
 	      else
 		ivernaux->vna_nextptr = NULL;
 
+	      if (ivernaux->vna_next
+		  > (size_t) (contents_end - (bfd_byte *) evernaux))
+		goto error_return_verref;
+
 	      evernaux = ((Elf_External_Vernaux *)
 			  ((bfd_byte *) evernaux + ivernaux->vna_next));
+
+	      if (ivernaux->vna_other > freeidx)
+		freeidx = ivernaux->vna_other;
 	    }
 
 	  if (i + 1 < hdr->sh_info)
@@ -6200,12 +6717,201 @@ _bfd_elf_slurp_version_tables (bfd *abfd)
 	  else
 	    iverneed->vn_nextref = NULL;
 
+	  if (iverneed->vn_next
+	      > (size_t) (contents_end - (bfd_byte *) everneed))
+	    goto error_return_verref;
+
 	  everneed = ((Elf_External_Verneed *)
 		      ((bfd_byte *) everneed + iverneed->vn_next));
 	}
 
       free (contents);
       contents = NULL;
+    }
+
+  if (elf_dynverdef (abfd) != 0)
+    {
+      Elf_Internal_Shdr *hdr;
+      Elf_External_Verdef *everdef;
+      Elf_Internal_Verdef *iverdef;
+      Elf_Internal_Verdef *iverdefarr;
+      Elf_Internal_Verdef iverdefmem;
+      unsigned int i;
+      unsigned int maxidx;
+      bfd_byte *contents_end_def, *contents_end_aux;
+
+      hdr = &elf_tdata (abfd)->dynverdef_hdr;
+
+      contents = bfd_malloc (hdr->sh_size);
+      if (contents == NULL)
+	goto error_return;
+      if (bfd_seek (abfd, hdr->sh_offset, SEEK_SET) != 0
+	  || bfd_bread (contents, hdr->sh_size, abfd) != hdr->sh_size)
+	goto error_return;
+
+      if (hdr->sh_info && hdr->sh_size < sizeof (Elf_External_Verdef))
+	goto error_return;
+
+      BFD_ASSERT (sizeof (Elf_External_Verdef)
+		  >= sizeof (Elf_External_Verdaux));
+      contents_end_def = contents + hdr->sh_size
+			 - sizeof (Elf_External_Verdef);
+      contents_end_aux = contents + hdr->sh_size
+			 - sizeof (Elf_External_Verdaux);
+
+      /* We know the number of entries in the section but not the maximum
+	 index.  Therefore we have to run through all entries and find
+	 the maximum.  */
+      everdef = (Elf_External_Verdef *) contents;
+      maxidx = 0;
+      for (i = 0; i < hdr->sh_info; ++i)
+	{
+	  _bfd_elf_swap_verdef_in (abfd, everdef, &iverdefmem);
+
+	  if ((iverdefmem.vd_ndx & ((unsigned) VERSYM_VERSION)) > maxidx)
+	    maxidx = iverdefmem.vd_ndx & ((unsigned) VERSYM_VERSION);
+
+	  if (iverdefmem.vd_next
+	      > (size_t) (contents_end_def - (bfd_byte *) everdef))
+	    goto error_return;
+
+	  everdef = ((Elf_External_Verdef *)
+		     ((bfd_byte *) everdef + iverdefmem.vd_next));
+	}
+
+      if (default_imported_symver)
+	{
+	  if (freeidx > maxidx)
+	    maxidx = ++freeidx;
+	  else
+	    freeidx = ++maxidx;
+	}
+      elf_tdata (abfd)->verdef = bfd_zalloc2 (abfd, maxidx,
+					      sizeof (Elf_Internal_Verdef));
+      if (elf_tdata (abfd)->verdef == NULL)
+	goto error_return;
+
+      elf_tdata (abfd)->cverdefs = maxidx;
+
+      everdef = (Elf_External_Verdef *) contents;
+      iverdefarr = elf_tdata (abfd)->verdef;
+      for (i = 0; i < hdr->sh_info; i++)
+	{
+	  Elf_External_Verdaux *everdaux;
+	  Elf_Internal_Verdaux *iverdaux;
+	  unsigned int j;
+
+	  _bfd_elf_swap_verdef_in (abfd, everdef, &iverdefmem);
+
+	  if ((iverdefmem.vd_ndx & VERSYM_VERSION) == 0)
+	    {
+error_return_verdef:
+	      elf_tdata (abfd)->verdef = NULL;
+	      elf_tdata (abfd)->cverdefs = 0;
+	      goto error_return;
+	    }
+
+	  iverdef = &iverdefarr[(iverdefmem.vd_ndx & VERSYM_VERSION) - 1];
+	  memcpy (iverdef, &iverdefmem, sizeof (Elf_Internal_Verdef));
+
+	  iverdef->vd_bfd = abfd;
+
+	  if (iverdef->vd_cnt == 0)
+	    iverdef->vd_auxptr = NULL;
+	  else
+	    {
+	      iverdef->vd_auxptr = bfd_alloc2 (abfd, iverdef->vd_cnt,
+					       sizeof (Elf_Internal_Verdaux));
+	      if (iverdef->vd_auxptr == NULL)
+		goto error_return_verdef;
+	    }
+
+	  if (iverdef->vd_aux
+	      > (size_t) (contents_end_aux - (bfd_byte *) everdef))
+	    goto error_return_verdef;
+
+	  everdaux = ((Elf_External_Verdaux *)
+		      ((bfd_byte *) everdef + iverdef->vd_aux));
+	  iverdaux = iverdef->vd_auxptr;
+	  for (j = 0; j < iverdef->vd_cnt; j++, iverdaux++)
+	    {
+	      _bfd_elf_swap_verdaux_in (abfd, everdaux, iverdaux);
+
+	      iverdaux->vda_nodename =
+		bfd_elf_string_from_elf_section (abfd, hdr->sh_link,
+						 iverdaux->vda_name);
+	      if (iverdaux->vda_nodename == NULL)
+		goto error_return_verdef;
+
+	      if (j + 1 < iverdef->vd_cnt)
+		iverdaux->vda_nextptr = iverdaux + 1;
+	      else
+		iverdaux->vda_nextptr = NULL;
+
+	      if (iverdaux->vda_next
+		  > (size_t) (contents_end_aux - (bfd_byte *) everdaux))
+		goto error_return_verdef;
+
+	      everdaux = ((Elf_External_Verdaux *)
+			  ((bfd_byte *) everdaux + iverdaux->vda_next));
+	    }
+
+	  if (iverdef->vd_cnt)
+	    iverdef->vd_nodename = iverdef->vd_auxptr->vda_nodename;
+
+	  if ((size_t) (iverdef - iverdefarr) + 1 < maxidx)
+	    iverdef->vd_nextdef = iverdef + 1;
+	  else
+	    iverdef->vd_nextdef = NULL;
+
+	  everdef = ((Elf_External_Verdef *)
+		     ((bfd_byte *) everdef + iverdef->vd_next));
+	}
+
+      free (contents);
+      contents = NULL;
+    }
+  else if (default_imported_symver)
+    {
+      if (freeidx < 3)
+	freeidx = 3;
+      else
+	freeidx++;
+
+      elf_tdata (abfd)->verdef = bfd_zalloc2 (abfd, freeidx,
+					      sizeof (Elf_Internal_Verdef));
+      if (elf_tdata (abfd)->verdef == NULL)
+	goto error_return;
+
+      elf_tdata (abfd)->cverdefs = freeidx;
+    }
+
+  /* Create a default version based on the soname.  */
+  if (default_imported_symver)
+    {
+      Elf_Internal_Verdef *iverdef;
+      Elf_Internal_Verdaux *iverdaux;
+
+      iverdef = &elf_tdata (abfd)->verdef[freeidx - 1];;
+
+      iverdef->vd_version = VER_DEF_CURRENT;
+      iverdef->vd_flags = 0;
+      iverdef->vd_ndx = freeidx;
+      iverdef->vd_cnt = 1;
+
+      iverdef->vd_bfd = abfd;
+
+      iverdef->vd_nodename = bfd_elf_get_dt_soname (abfd);
+      if (iverdef->vd_nodename == NULL)
+	goto error_return_verdef;
+      iverdef->vd_nextdef = NULL;
+      iverdef->vd_auxptr = bfd_alloc (abfd, sizeof (Elf_Internal_Verdaux));
+      if (iverdef->vd_auxptr == NULL)
+	goto error_return_verdef;
+
+      iverdaux = iverdef->vd_auxptr;
+      iverdaux->vda_nodename = iverdef->vd_nodename;
+      iverdaux->vda_nextptr = NULL;
     }
 
   return TRUE;
@@ -6304,13 +7010,24 @@ elf_find_function (bfd *abfd ATTRIBUTE_UNUSED,
 		   const char **functionname_ptr)
 {
   const char *filename;
-  asymbol *func;
+  asymbol *func, *file;
   bfd_vma low_func;
   asymbol **p;
+  /* ??? Given multiple file symbols, it is impossible to reliably
+     choose the right file name for global symbols.  File symbols are
+     local symbols, and thus all file symbols must sort before any
+     global symbols.  The ELF spec may be interpreted to say that a
+     file symbol must sort before other local symbols, but currently
+     ld -r doesn't do this.  So, for ld -r output, it is possible to
+     make a better choice of file name for local symbols by ignoring
+     file symbols appearing after a given local symbol.  */
+  enum { nothing_seen, symbol_seen, file_after_symbol_seen } state;
 
   filename = NULL;
   func = NULL;
+  file = NULL;
   low_func = 0;
+  state = nothing_seen;
 
   for (p = symbols; *p != NULL; p++)
     {
@@ -6323,8 +7040,10 @@ elf_find_function (bfd *abfd ATTRIBUTE_UNUSED,
 	default:
 	  break;
 	case STT_FILE:
-	  filename = bfd_asymbol_name (&q->symbol);
-	  break;
+	  file = &q->symbol;
+	  if (state == symbol_seen)
+	    state = file_after_symbol_seen;
+	  continue;
 	case STT_NOTYPE:
 	case STT_FUNC:
 	  if (bfd_get_section (&q->symbol) == section
@@ -6333,9 +7052,16 @@ elf_find_function (bfd *abfd ATTRIBUTE_UNUSED,
 	    {
 	      func = (asymbol *) q;
 	      low_func = q->symbol.value;
+	      filename = NULL;
+	      if (file != NULL
+		  && (ELF_ST_BIND (q->internal_elf_sym.st_info) == STB_LOCAL
+		      || state != file_after_symbol_seen))
+		filename = bfd_asymbol_name (file);
 	    }
 	  break;
 	}
+      if (state == nothing_seen)
+	state = symbol_seen;
     }
 
   if (func == NULL)
@@ -6407,14 +7133,62 @@ _bfd_elf_find_nearest_line (bfd *abfd,
   return TRUE;
 }
 
-int
-_bfd_elf_sizeof_headers (bfd *abfd, bfd_boolean reloc)
-{
-  int ret;
+/* Find the line for a symbol.  */
 
-  ret = get_elf_backend_data (abfd)->s->sizeof_ehdr;
-  if (! reloc)
-    ret += get_program_header_size (abfd);
+bfd_boolean
+_bfd_elf_find_line (bfd *abfd, asymbol **symbols, asymbol *symbol,
+		    const char **filename_ptr, unsigned int *line_ptr)
+{
+  return _bfd_dwarf2_find_line (abfd, symbols, symbol,
+				filename_ptr, line_ptr, 0,
+				&elf_tdata (abfd)->dwarf2_find_line_info);
+}
+
+/* After a call to bfd_find_nearest_line, successive calls to
+   bfd_find_inliner_info can be used to get source information about
+   each level of function inlining that terminated at the address
+   passed to bfd_find_nearest_line.  Currently this is only supported
+   for DWARF2 with appropriate DWARF3 extensions. */
+
+bfd_boolean
+_bfd_elf_find_inliner_info (bfd *abfd,
+			    const char **filename_ptr,
+			    const char **functionname_ptr,
+			    unsigned int *line_ptr)
+{
+  bfd_boolean found;
+  found = _bfd_dwarf2_find_inliner_info (abfd, filename_ptr,
+					 functionname_ptr, line_ptr,
+					 & elf_tdata (abfd)->dwarf2_find_line_info);
+  return found;
+}
+
+int
+_bfd_elf_sizeof_headers (bfd *abfd, struct bfd_link_info *info)
+{
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
+  int ret = bed->s->sizeof_ehdr;
+
+  if (!info->relocatable)
+    {
+      bfd_size_type phdr_size = elf_tdata (abfd)->program_header_size;
+
+      if (phdr_size == (bfd_size_type) -1)
+	{
+	  struct elf_segment_map *m;
+
+	  phdr_size = 0;
+	  for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+	    phdr_size += bed->s->sizeof_phdr;
+
+	  if (phdr_size == 0)
+	    phdr_size = get_program_header_size (abfd, info);
+	}
+
+      elf_tdata (abfd)->program_header_size = phdr_size;
+      ret += phdr_size;
+    }
+
   return ret;
 }
 
@@ -6550,8 +7324,9 @@ _bfd_elf_close_and_cleanup (bfd *abfd)
 {
   if (bfd_get_format (abfd) == bfd_object)
     {
-      if (elf_shstrtab (abfd) != NULL)
+      if (elf_tdata (abfd) != NULL && elf_shstrtab (abfd) != NULL)
 	_bfd_elf_strtab_free (elf_shstrtab (abfd));
+      _bfd_dwarf2_cleanup_debug_info (abfd);
     }
 
   return _bfd_generic_close_and_cleanup (abfd);
@@ -6603,13 +7378,12 @@ elfcore_maybe_make_sect (bfd *abfd, char *name, asection *sect)
   if (bfd_get_section_by_name (abfd, name) != NULL)
     return TRUE;
 
-  sect2 = bfd_make_section (abfd, name);
+  sect2 = bfd_make_section_with_flags (abfd, name, sect->flags);
   if (sect2 == NULL)
     return FALSE;
 
   sect2->size = sect->size;
   sect2->filepos = sect->filepos;
-  sect2->flags = sect->flags;
   sect2->alignment_power = sect->alignment_power;
   return TRUE;
 }
@@ -6641,12 +7415,12 @@ _bfd_elfcore_make_pseudosection (bfd *abfd,
     return FALSE;
   memcpy (threaded_name, buf, len);
 
-  sect = bfd_make_section_anyway (abfd, threaded_name);
+  sect = bfd_make_section_anyway_with_flags (abfd, threaded_name,
+					     SEC_HAS_CONTENTS);
   if (sect == NULL)
     return FALSE;
   sect->size = size;
   sect->filepos = filepos;
-  sect->flags = SEC_HAS_CONTENTS;
   sect->alignment_power = 2;
 
   return elfcore_maybe_make_sect (abfd, name, sect);
@@ -6751,7 +7525,7 @@ elfcore_grok_prfpreg (bfd *abfd, Elf_Internal_Note *note)
 }
 
 /* Linux dumps the Intel SSE regs in a note named "LINUX" with a note
-   type of 5 (NT_PRXFPREG).  Just include the whole note's contents
+   type of NT_PRXFPREG.  Just include the whole note's contents
    literally.  */
 
 static bfd_boolean
@@ -6759,6 +7533,13 @@ elfcore_grok_prxfpreg (bfd *abfd, Elf_Internal_Note *note)
 {
   return elfcore_make_note_pseudosection (abfd, ".reg-xfp", note);
 }
+
+static bfd_boolean
+elfcore_grok_ppc_vmx (bfd *abfd, Elf_Internal_Note *note)
+{
+  return elfcore_make_note_pseudosection (abfd, ".reg-ppc-vmx", note);
+}
+
 
 #if defined (HAVE_PRPSINFO_T)
 typedef prpsinfo_t   elfcore_psinfo_t;
@@ -6925,7 +7706,7 @@ elfcore_grok_lwpstatus (bfd *abfd, Elf_Internal_Note *note)
     return FALSE;
   memcpy (name, buf, len);
 
-  sect = bfd_make_section_anyway (abfd, name);
+  sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
   if (sect == NULL)
     return FALSE;
 
@@ -6940,7 +7721,6 @@ elfcore_grok_lwpstatus (bfd *abfd, Elf_Internal_Note *note)
   sect->filepos = note->descpos + offsetof (lwpstatus_t, pr_reg);
 #endif
 
-  sect->flags = SEC_HAS_CONTENTS;
   sect->alignment_power = 2;
 
   if (!elfcore_maybe_make_sect (abfd, ".reg", sect))
@@ -6955,7 +7735,7 @@ elfcore_grok_lwpstatus (bfd *abfd, Elf_Internal_Note *note)
     return FALSE;
   memcpy (name, buf, len);
 
-  sect = bfd_make_section_anyway (abfd, name);
+  sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
   if (sect == NULL)
     return FALSE;
 
@@ -6970,14 +7750,12 @@ elfcore_grok_lwpstatus (bfd *abfd, Elf_Internal_Note *note)
   sect->filepos = note->descpos + offsetof (lwpstatus_t, pr_fpreg);
 #endif
 
-  sect->flags = SEC_HAS_CONTENTS;
   sect->alignment_power = 2;
 
   return elfcore_maybe_make_sect (abfd, ".reg2", sect);
 }
 #endif /* defined (HAVE_LWPSTATUS_T) */
 
-#if defined (HAVE_WIN32_PSTATUS_T)
 static bfd_boolean
 elfcore_grok_win32pstatus (bfd *abfd, Elf_Internal_Note *note)
 {
@@ -6985,24 +7763,32 @@ elfcore_grok_win32pstatus (bfd *abfd, Elf_Internal_Note *note)
   char *name;
   size_t len;
   asection *sect;
-  win32_pstatus_t pstatus;
+  int type;
+  int is_active_thread;
+  bfd_vma base_addr;
 
-  if (note->descsz < sizeof (pstatus))
+  if (note->descsz < 728)
     return TRUE;
 
-  memcpy (&pstatus, note->descdata, sizeof (pstatus));
+  if (! CONST_STRNEQ (note->namedata, "win32"))
+    return TRUE;
 
-  switch (pstatus.data_type)
+  type = bfd_get_32 (abfd, note->descdata);
+
+  switch (type)
     {
-    case NOTE_INFO_PROCESS:
+    case 1 /* NOTE_INFO_PROCESS */:
       /* FIXME: need to add ->core_command.  */
-      elf_tdata (abfd)->core_signal = pstatus.data.process_info.signal;
-      elf_tdata (abfd)->core_pid = pstatus.data.process_info.pid;
+      /* process_info.pid */
+      elf_tdata (abfd)->core_pid = bfd_get_32 (abfd, note->descdata + 8);
+      /* process_info.signal */
+      elf_tdata (abfd)->core_signal = bfd_get_32 (abfd, note->descdata + 12);
       break;
 
-    case NOTE_INFO_THREAD:
+    case 2 /* NOTE_INFO_THREAD */:
       /* Make a ".reg/999" section.  */
-      sprintf (buf, ".reg/%d", pstatus.data.thread_info.tid);
+      /* thread_info.tid */
+      sprintf (buf, ".reg/%ld", (long) bfd_get_32 (abfd, note->descdata + 8));
 
       len = strlen (buf) + 1;
       name = bfd_alloc (abfd, len);
@@ -7011,25 +7797,29 @@ elfcore_grok_win32pstatus (bfd *abfd, Elf_Internal_Note *note)
 
       memcpy (name, buf, len);
 
-      sect = bfd_make_section_anyway (abfd, name);
+      sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
       if (sect == NULL)
 	return FALSE;
 
-      sect->size = sizeof (pstatus.data.thread_info.thread_context);
-      sect->filepos = (note->descpos
-		       + offsetof (struct win32_pstatus,
-				   data.thread_info.thread_context));
-      sect->flags = SEC_HAS_CONTENTS;
+      /* sizeof (thread_info.thread_context) */
+      sect->size = 716;
+      /* offsetof (thread_info.thread_context) */
+      sect->filepos = note->descpos + 12;
       sect->alignment_power = 2;
 
-      if (pstatus.data.thread_info.is_active_thread)
+      /* thread_info.is_active_thread */
+      is_active_thread = bfd_get_32 (abfd, note->descdata + 8);
+
+      if (is_active_thread)
 	if (! elfcore_maybe_make_sect (abfd, ".reg", sect))
 	  return FALSE;
       break;
 
-    case NOTE_INFO_MODULE:
+    case 3 /* NOTE_INFO_MODULE */:
       /* Make a ".module/xxxxxxxx" section.  */
-      sprintf (buf, ".module/%08x", pstatus.data.module_info.base_address);
+      /* module_info.base_address */
+      base_addr = bfd_get_32 (abfd, note->descdata + 4);
+      sprintf (buf, ".module/%08lx", (long) base_addr);
 
       len = strlen (buf) + 1;
       name = bfd_alloc (abfd, len);
@@ -7038,14 +7828,13 @@ elfcore_grok_win32pstatus (bfd *abfd, Elf_Internal_Note *note)
 
       memcpy (name, buf, len);
 
-      sect = bfd_make_section_anyway (abfd, name);
+      sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
 
       if (sect == NULL)
 	return FALSE;
 
       sect->size = note->descsz;
       sect->filepos = note->descpos;
-      sect->flags = SEC_HAS_CONTENTS;
       sect->alignment_power = 2;
       break;
 
@@ -7055,7 +7844,6 @@ elfcore_grok_win32pstatus (bfd *abfd, Elf_Internal_Note *note)
 
   return TRUE;
 }
-#endif /* HAVE_WIN32_PSTATUS_T */
 
 static bfd_boolean
 elfcore_grok_note (bfd *abfd, Elf_Internal_Note *note)
@@ -7090,15 +7878,20 @@ elfcore_grok_note (bfd *abfd, Elf_Internal_Note *note)
     case NT_FPREGSET:		/* FIXME: rename to NT_PRFPREG */
       return elfcore_grok_prfpreg (abfd, note);
 
-#if defined (HAVE_WIN32_PSTATUS_T)
     case NT_WIN32PSTATUS:
       return elfcore_grok_win32pstatus (abfd, note);
-#endif
 
     case NT_PRXFPREG:		/* Linux SSE extension */
       if (note->namesz == 6
 	  && strcmp (note->namedata, "LINUX") == 0)
 	return elfcore_grok_prxfpreg (abfd, note);
+      else
+	return TRUE;
+
+    case NT_PPC_VMX:
+      if (note->namesz == 6
+	  && strcmp (note->namedata, "LINUX") == 0)
+	return elfcore_grok_ppc_vmx (abfd, note);
       else
 	return TRUE;
 
@@ -7115,17 +7908,43 @@ elfcore_grok_note (bfd *abfd, Elf_Internal_Note *note)
 
     case NT_AUXV:
       {
-	asection *sect = bfd_make_section_anyway (abfd, ".auxv");
+	asection *sect = bfd_make_section_anyway_with_flags (abfd, ".auxv",
+							     SEC_HAS_CONTENTS);
 
 	if (sect == NULL)
 	  return FALSE;
 	sect->size = note->descsz;
 	sect->filepos = note->descpos;
-	sect->flags = SEC_HAS_CONTENTS;
 	sect->alignment_power = 1 + bfd_get_arch_size (abfd) / 32;
 
 	return TRUE;
       }
+    }
+}
+
+static bfd_boolean
+elfobj_grok_gnu_build_id (bfd *abfd, Elf_Internal_Note *note)
+{
+  elf_tdata (abfd)->build_id_size = note->descsz;
+  elf_tdata (abfd)->build_id = bfd_alloc (abfd, note->descsz);
+  if (elf_tdata (abfd)->build_id == NULL)
+    return FALSE;
+
+  memcpy (elf_tdata (abfd)->build_id, note->descdata, note->descsz);
+
+  return TRUE;
+}
+
+static bfd_boolean
+elfobj_grok_gnu_note (bfd *abfd, Elf_Internal_Note *note)
+{
+  switch (note->type)
+    {
+    default:
+      return TRUE;
+
+    case NT_GNU_BUILD_ID:
+      return elfobj_grok_gnu_build_id (abfd, note);
     }
 }
 
@@ -7146,7 +7965,6 @@ elfcore_netbsd_get_lwpid (Elf_Internal_Note *note, int *lwpidp)
 static bfd_boolean
 elfcore_grok_netbsd_procinfo (bfd *abfd, Elf_Internal_Note *note)
 {
-
   /* Signal number at offset 0x08. */
   elf_tdata (abfd)->core_signal
     = bfd_h_get_32 (abfd, (bfd_byte *) note->descdata + 0x08);
@@ -7174,9 +7992,9 @@ elfcore_grok_netbsd_note (bfd *abfd, Elf_Internal_Note *note)
   if (note->type == NT_NETBSDCORE_PROCINFO)
     {
       /* NetBSD-specific core "procinfo".  Note that we expect to
-         find this note before any of the others, which is fine,
-         since the kernel writes this note out first when it
-         creates a core file.  */
+	 find this note before any of the others, which is fine,
+	 since the kernel writes this note out first when it
+	 creates a core file.  */
 
       return elfcore_grok_netbsd_procinfo (abfd, note);
     }
@@ -7192,44 +8010,44 @@ elfcore_grok_netbsd_note (bfd *abfd, Elf_Internal_Note *note)
 
   switch (bfd_get_arch (abfd))
     {
-    /* On the Alpha, SPARC (32-bit and 64-bit), PT_GETREGS == mach+0 and
-       PT_GETFPREGS == mach+2.  */
+      /* On the Alpha, SPARC (32-bit and 64-bit), PT_GETREGS == mach+0 and
+	 PT_GETFPREGS == mach+2.  */
 
     case bfd_arch_alpha:
     case bfd_arch_sparc:
       switch (note->type)
-        {
-        case NT_NETBSDCORE_FIRSTMACH+0:
-          return elfcore_make_note_pseudosection (abfd, ".reg", note);
+	{
+	case NT_NETBSDCORE_FIRSTMACH+0:
+	  return elfcore_make_note_pseudosection (abfd, ".reg", note);
 
-        case NT_NETBSDCORE_FIRSTMACH+2:
-          return elfcore_make_note_pseudosection (abfd, ".reg2", note);
+	case NT_NETBSDCORE_FIRSTMACH+2:
+	  return elfcore_make_note_pseudosection (abfd, ".reg2", note);
 
-        default:
-          return TRUE;
-        }
+	default:
+	  return TRUE;
+	}
 
-    /* On all other arch's, PT_GETREGS == mach+1 and
-       PT_GETFPREGS == mach+3.  */
+      /* On all other arch's, PT_GETREGS == mach+1 and
+	 PT_GETFPREGS == mach+3.  */
 
     default:
       switch (note->type)
-        {
-        case NT_NETBSDCORE_FIRSTMACH+1:
-          return elfcore_make_note_pseudosection (abfd, ".reg", note);
+	{
+	case NT_NETBSDCORE_FIRSTMACH+1:
+	  return elfcore_make_note_pseudosection (abfd, ".reg", note);
 
-        case NT_NETBSDCORE_FIRSTMACH+3:
-          return elfcore_make_note_pseudosection (abfd, ".reg2", note);
+	case NT_NETBSDCORE_FIRSTMACH+3:
+	  return elfcore_make_note_pseudosection (abfd, ".reg2", note);
 
-        default:
-          return TRUE;
-        }
+	default:
+	  return TRUE;
+	}
     }
     /* NOTREACHED */
 }
 
 static bfd_boolean
-elfcore_grok_nto_status (bfd *abfd, Elf_Internal_Note *note, pid_t *tid)
+elfcore_grok_nto_status (bfd *abfd, Elf_Internal_Note *note, long *tid)
 {
   void *ddata = note->descdata;
   char buf[100];
@@ -7261,52 +8079,53 @@ elfcore_grok_nto_status (bfd *abfd, Elf_Internal_Note *note, pid_t *tid)
     elf_tdata (abfd)->core_lwpid = *tid;
 
   /* Make a ".qnx_core_status/%d" section.  */
-  sprintf (buf, ".qnx_core_status/%d", *tid);
+  sprintf (buf, ".qnx_core_status/%ld", *tid);
 
   name = bfd_alloc (abfd, strlen (buf) + 1);
   if (name == NULL)
     return FALSE;
   strcpy (name, buf);
 
-  sect = bfd_make_section_anyway (abfd, name);
+  sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
   if (sect == NULL)
     return FALSE;
 
   sect->size            = note->descsz;
   sect->filepos         = note->descpos;
-  sect->flags           = SEC_HAS_CONTENTS;
   sect->alignment_power = 2;
 
   return (elfcore_maybe_make_sect (abfd, ".qnx_core_status", sect));
 }
 
 static bfd_boolean
-elfcore_grok_nto_gregs (bfd *abfd, Elf_Internal_Note *note, pid_t tid)
+elfcore_grok_nto_regs (bfd *abfd,
+		       Elf_Internal_Note *note,
+		       long tid,
+		       char *base)
 {
   char buf[100];
   char *name;
   asection *sect;
 
-  /* Make a ".reg/%d" section.  */
-  sprintf (buf, ".reg/%d", tid);
+  /* Make a "(base)/%d" section.  */
+  sprintf (buf, "%s/%ld", base, tid);
 
   name = bfd_alloc (abfd, strlen (buf) + 1);
   if (name == NULL)
     return FALSE;
   strcpy (name, buf);
 
-  sect = bfd_make_section_anyway (abfd, name);
+  sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
   if (sect == NULL)
     return FALSE;
 
   sect->size            = note->descsz;
   sect->filepos         = note->descpos;
-  sect->flags           = SEC_HAS_CONTENTS;
   sect->alignment_power = 2;
 
   /* This is the current thread.  */
   if (elf_tdata (abfd)->core_lwpid == tid)
-    return elfcore_maybe_make_sect (abfd, ".reg", sect);
+    return elfcore_maybe_make_sect (abfd, base, sect);
 
   return TRUE;
 }
@@ -7322,60 +8141,90 @@ elfcore_grok_nto_note (bfd *abfd, Elf_Internal_Note *note)
   /* Every GREG section has a STATUS section before it.  Store the
      tid from the previous call to pass down to the next gregs
      function.  */
-  static pid_t tid = 1;
+  static long tid = 1;
 
   switch (note->type)
     {
-    case BFD_QNT_CORE_INFO:   return elfcore_make_note_pseudosection (abfd, ".qnx_core_info", note);
-    case BFD_QNT_CORE_STATUS: return elfcore_grok_nto_status (abfd, note, &tid);
-    case BFD_QNT_CORE_GREG:   return elfcore_grok_nto_gregs (abfd, note, tid);
-    case BFD_QNT_CORE_FPREG:  return elfcore_grok_prfpreg (abfd, note);
-    default:                  return TRUE;
+    case BFD_QNT_CORE_INFO:
+      return elfcore_make_note_pseudosection (abfd, ".qnx_core_info", note);
+    case BFD_QNT_CORE_STATUS:
+      return elfcore_grok_nto_status (abfd, note, &tid);
+    case BFD_QNT_CORE_GREG:
+      return elfcore_grok_nto_regs (abfd, note, tid, ".reg");
+    case BFD_QNT_CORE_FPREG:
+      return elfcore_grok_nto_regs (abfd, note, tid, ".reg2");
+    default:
+      return TRUE;
     }
+}
+
+static bfd_boolean
+elfcore_grok_spu_note (bfd *abfd, Elf_Internal_Note *note)
+{
+  char *name;
+  asection *sect;
+  size_t len;
+
+  /* Use note name as section name.  */
+  len = note->namesz;
+  name = bfd_alloc (abfd, len);
+  if (name == NULL)
+    return FALSE;
+  memcpy (name, note->namedata, len);
+  name[len - 1] = '\0';
+
+  sect = bfd_make_section_anyway_with_flags (abfd, name, SEC_HAS_CONTENTS);
+  if (sect == NULL)
+    return FALSE;
+
+  sect->size            = note->descsz;
+  sect->filepos         = note->descpos;
+  sect->alignment_power = 1;
+
+  return TRUE;
 }
 
 /* Function: elfcore_write_note
 
    Inputs:
-     buffer to hold note
+     buffer to hold note, and current size of buffer
      name of note
      type of note
      data for note
      size of data for note
 
+   Writes note to end of buffer.  ELF64 notes are written exactly as
+   for ELF32, despite the current (as of 2006) ELF gabi specifying
+   that they ought to have 8-byte namesz and descsz field, and have
+   8-byte alignment.  Other writers, eg. Linux kernel, do the same.
+
    Return:
-   End of buffer containing note.  */
+   Pointer to realloc'd buffer, *BUFSIZ updated.  */
 
 char *
-elfcore_write_note (bfd  *abfd,
+elfcore_write_note (bfd *abfd,
 		    char *buf,
-		    int  *bufsiz,
+		    int *bufsiz,
 		    const char *name,
-		    int  type,
+		    int type,
 		    const void *input,
-		    int  size)
+		    int size)
 {
   Elf_External_Note *xnp;
   size_t namesz;
-  size_t pad;
   size_t newspace;
-  char *p, *dest;
+  char *dest;
 
   namesz = 0;
-  pad = 0;
   if (name != NULL)
-    {
-      const struct elf_backend_data *bed;
+    namesz = strlen (name) + 1;
 
-      namesz = strlen (name) + 1;
-      bed = get_elf_backend_data (abfd);
-      pad = -namesz & ((1 << bed->s->log_file_align) - 1);
-    }
+  newspace = 12 + ((namesz + 3) & -4) + ((size + 3) & -4);
 
-  newspace = 12 + namesz + pad + size;
-
-  p = realloc (buf, *bufsiz + newspace);
-  dest = p + *bufsiz;
+  buf = realloc (buf, *bufsiz + newspace);
+  if (buf == NULL)
+    return buf;
+  dest = buf + *bufsiz;
   *bufsiz += newspace;
   xnp = (Elf_External_Note *) dest;
   H_PUT_32 (abfd, namesz, xnp->namesz);
@@ -7386,14 +8235,20 @@ elfcore_write_note (bfd  *abfd,
     {
       memcpy (dest, name, namesz);
       dest += namesz;
-      while (pad != 0)
+      while (namesz & 3)
 	{
 	  *dest++ = '\0';
-	  --pad;
+	  ++namesz;
 	}
     }
   memcpy (dest, input, size);
-  return p;
+  dest += size;
+  while (size & 3)
+    {
+      *dest++ = '\0';
+      ++size;
+    }
+  return buf;
 }
 
 #if defined (HAVE_PRPSINFO_T) || defined (HAVE_PSINFO_T)
@@ -7404,22 +8259,52 @@ elfcore_write_prpsinfo (bfd  *abfd,
 			const char *fname,
 			const char *psargs)
 {
-  int note_type;
-  char *note_name = "CORE";
+  const char *note_name = "CORE";
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
 
-#if defined (HAVE_PSINFO_T)
-  psinfo_t  data;
-  note_type = NT_PSINFO;
+  if (bed->elf_backend_write_core_note != NULL)
+    {
+      char *ret;
+      ret = (*bed->elf_backend_write_core_note) (abfd, buf, bufsiz,
+						 NT_PRPSINFO, fname, psargs);
+      if (ret != NULL)
+	return ret;
+    }
+
+#if defined (HAVE_PRPSINFO32_T) || defined (HAVE_PSINFO32_T)
+  if (bed->s->elfclass == ELFCLASS32)
+    {
+#if defined (HAVE_PSINFO32_T)
+      psinfo32_t data;
+      int note_type = NT_PSINFO;
 #else
-  prpsinfo_t data;
-  note_type = NT_PRPSINFO;
+      prpsinfo32_t data;
+      int note_type = NT_PRPSINFO;
 #endif
 
-  memset (&data, 0, sizeof (data));
-  strncpy (data.pr_fname, fname, sizeof (data.pr_fname));
-  strncpy (data.pr_psargs, psargs, sizeof (data.pr_psargs));
-  return elfcore_write_note (abfd, buf, bufsiz,
-			     note_name, note_type, &data, sizeof (data));
+      memset (&data, 0, sizeof (data));
+      strncpy (data.pr_fname, fname, sizeof (data.pr_fname));
+      strncpy (data.pr_psargs, psargs, sizeof (data.pr_psargs));
+      return elfcore_write_note (abfd, buf, bufsiz,
+				 note_name, note_type, &data, sizeof (data));
+    }
+  else
+#endif
+    {
+#if defined (HAVE_PSINFO_T)
+      psinfo_t data;
+      int note_type = NT_PSINFO;
+#else
+      prpsinfo_t data;
+      int note_type = NT_PRPSINFO;
+#endif
+
+      memset (&data, 0, sizeof (data));
+      strncpy (data.pr_fname, fname, sizeof (data.pr_fname));
+      strncpy (data.pr_psargs, psargs, sizeof (data.pr_psargs));
+      return elfcore_write_note (abfd, buf, bufsiz,
+				 note_name, note_type, &data, sizeof (data));
+    }
 }
 #endif	/* PSINFO_T or PRPSINFO_T */
 
@@ -7432,15 +8317,43 @@ elfcore_write_prstatus (bfd *abfd,
 			int cursig,
 			const void *gregs)
 {
-  prstatus_t prstat;
-  char *note_name = "CORE";
+  const char *note_name = "CORE";
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
 
-  memset (&prstat, 0, sizeof (prstat));
-  prstat.pr_pid = pid;
-  prstat.pr_cursig = cursig;
-  memcpy (&prstat.pr_reg, gregs, sizeof (prstat.pr_reg));
-  return elfcore_write_note (abfd, buf, bufsiz,
-			     note_name, NT_PRSTATUS, &prstat, sizeof (prstat));
+  if (bed->elf_backend_write_core_note != NULL)
+    {
+      char *ret;
+      ret = (*bed->elf_backend_write_core_note) (abfd, buf, bufsiz,
+						 NT_PRSTATUS,
+						 pid, cursig, gregs);
+      if (ret != NULL)
+	return ret;
+    }
+
+#if defined (HAVE_PRSTATUS32_T)
+  if (bed->s->elfclass == ELFCLASS32)
+    {
+      prstatus32_t prstat;
+
+      memset (&prstat, 0, sizeof (prstat));
+      prstat.pr_pid = pid;
+      prstat.pr_cursig = cursig;
+      memcpy (&prstat.pr_reg, gregs, sizeof (prstat.pr_reg));
+      return elfcore_write_note (abfd, buf, bufsiz, note_name,
+				 NT_PRSTATUS, &prstat, sizeof (prstat));
+    }
+  else
+#endif
+    {
+      prstatus_t prstat;
+
+      memset (&prstat, 0, sizeof (prstat));
+      prstat.pr_pid = pid;
+      prstat.pr_cursig = cursig;
+      memcpy (&prstat.pr_reg, gregs, sizeof (prstat.pr_reg));
+      return elfcore_write_note (abfd, buf, bufsiz, note_name,
+				 NT_PRSTATUS, &prstat, sizeof (prstat));
+    }
 }
 #endif /* HAVE_PRSTATUS_T */
 
@@ -7454,7 +8367,7 @@ elfcore_write_lwpstatus (bfd *abfd,
 			 const void *gregs)
 {
   lwpstatus_t lwpstat;
-  char *note_name = "CORE";
+  const char *note_name = "CORE";
 
   memset (&lwpstat, 0, sizeof (lwpstat));
   lwpstat.pr_lwpid  = pid >> 16;
@@ -7481,17 +8394,34 @@ elfcore_write_pstatus (bfd *abfd,
 		       char *buf,
 		       int *bufsiz,
 		       long pid,
-		       int cursig,
-		       const void *gregs)
+		       int cursig ATTRIBUTE_UNUSED,
+		       const void *gregs ATTRIBUTE_UNUSED)
 {
-  pstatus_t pstat;
-  char *note_name = "CORE";
+  const char *note_name = "CORE";
+#if defined (HAVE_PSTATUS32_T)
+  const struct elf_backend_data *bed = get_elf_backend_data (abfd);
 
-  memset (&pstat, 0, sizeof (pstat));
-  pstat.pr_pid = pid & 0xffff;
-  buf = elfcore_write_note (abfd, buf, bufsiz, note_name,
-			    NT_PSTATUS, &pstat, sizeof (pstat));
-  return buf;
+  if (bed->s->elfclass == ELFCLASS32)
+    {
+      pstatus32_t pstat;
+
+      memset (&pstat, 0, sizeof (pstat));
+      pstat.pr_pid = pid & 0xffff;
+      buf = elfcore_write_note (abfd, buf, bufsiz, note_name,
+				NT_PSTATUS, &pstat, sizeof (pstat));
+      return buf;
+    }
+  else
+#endif
+    {
+      pstatus_t pstat;
+
+      memset (&pstat, 0, sizeof (pstat));
+      pstat.pr_pid = pid & 0xffff;
+      buf = elfcore_write_note (abfd, buf, bufsiz, note_name,
+				NT_PSTATUS, &pstat, sizeof (pstat));
+      return buf;
+    }
 }
 #endif /* HAVE_PSTATUS_T */
 
@@ -7502,7 +8432,7 @@ elfcore_write_prfpreg (bfd *abfd,
 		       const void *fpregs,
 		       int size)
 {
-  char *note_name = "CORE";
+  const char *note_name = "CORE";
   return elfcore_write_note (abfd, buf, bufsiz,
 			     note_name, NT_FPREGSET, fpregs, size);
 }
@@ -7519,28 +8449,22 @@ elfcore_write_prxfpreg (bfd *abfd,
 			     note_name, NT_PRXFPREG, xfpregs, size);
 }
 
-static bfd_boolean
-elfcore_read_notes (bfd *abfd, file_ptr offset, bfd_size_type size)
+char *
+elfcore_write_ppc_vmx (bfd *abfd,
+		       char *buf,
+		       int *bufsiz,
+		       const void *ppc_vmx,
+		       int size)
 {
-  char *buf;
+  char *note_name = "LINUX";
+  return elfcore_write_note (abfd, buf, bufsiz,
+			     note_name, NT_PPC_VMX, ppc_vmx, size);
+}
+
+static bfd_boolean
+elf_parse_notes (bfd *abfd, char *buf, size_t size, file_ptr offset)
+{
   char *p;
-
-  if (size <= 0)
-    return TRUE;
-
-  if (bfd_seek (abfd, offset, SEEK_SET) != 0)
-    return FALSE;
-
-  buf = bfd_malloc (size);
-  if (buf == NULL)
-    return FALSE;
-
-  if (bfd_bread (buf, size, abfd) != size)
-    {
-    error:
-      free (buf);
-      return FALSE;
-    }
 
   p = buf;
   while (p < buf + size)
@@ -7558,23 +8482,69 @@ elfcore_read_notes (bfd *abfd, file_ptr offset, bfd_size_type size)
       in.descdata = in.namedata + BFD_ALIGN (in.namesz, 4);
       in.descpos = offset + (in.descdata - buf);
 
-      if (strncmp (in.namedata, "NetBSD-CORE", 11) == 0)
+      switch (bfd_get_format (abfd))
         {
-          if (! elfcore_grok_netbsd_note (abfd, &in))
-            goto error;
-        }
-      else if (strncmp (in.namedata, "QNX", 3) == 0)
-	{
-	  if (! elfcore_grok_nto_note (abfd, &in))
-	    goto error;
+	default:
+	  return TRUE;
+
+	case bfd_core:
+	  if (CONST_STRNEQ (in.namedata, "NetBSD-CORE"))
+	    {
+	      if (! elfcore_grok_netbsd_note (abfd, &in))
+		return FALSE;
+	    }
+	  else if (CONST_STRNEQ (in.namedata, "QNX"))
+	    {
+	      if (! elfcore_grok_nto_note (abfd, &in))
+		return FALSE;
+	    }
+	  else if (CONST_STRNEQ (in.namedata, "SPU/"))
+	    {
+	      if (! elfcore_grok_spu_note (abfd, &in))
+		return FALSE;
+	    }
+	  else
+	    {
+	      if (! elfcore_grok_note (abfd, &in))
+		return FALSE;
+	    }
+	  break;
+
+	case bfd_object:
+	  if (in.namesz == sizeof "GNU" && strcmp (in.namedata, "GNU") == 0)
+	    {
+	      if (! elfobj_grok_gnu_note (abfd, &in))
+		return FALSE;
+	    }
+	  break;
 	}
-      else
-        {
-          if (! elfcore_grok_note (abfd, &in))
-            goto error;
-        }
 
       p = in.descdata + BFD_ALIGN (in.descsz, 4);
+    }
+
+  return TRUE;
+}
+
+static bfd_boolean
+elf_read_notes (bfd *abfd, file_ptr offset, bfd_size_type size)
+{
+  char *buf;
+
+  if (size <= 0)
+    return TRUE;
+
+  if (bfd_seek (abfd, offset, SEEK_SET) != 0)
+    return FALSE;
+
+  buf = bfd_malloc (size);
+  if (buf == NULL)
+    return FALSE;
+
+  if (bfd_bread (buf, size, abfd) != size
+      || !elf_parse_notes (abfd, buf, size, offset))
+    {
+      free (buf);
+      return FALSE;
     }
 
   free (buf);
@@ -7623,63 +8593,6 @@ bfd_get_elf_phdrs (bfd *abfd, void *phdrs)
 	  num_phdrs * sizeof (Elf_Internal_Phdr));
 
   return num_phdrs;
-}
-
-void
-_bfd_elf_sprintf_vma (bfd *abfd ATTRIBUTE_UNUSED, char *buf, bfd_vma value)
-{
-#ifdef BFD64
-  Elf_Internal_Ehdr *i_ehdrp;	/* Elf file header, internal form */
-
-  i_ehdrp = elf_elfheader (abfd);
-  if (i_ehdrp == NULL)
-    sprintf_vma (buf, value);
-  else
-    {
-      if (i_ehdrp->e_ident[EI_CLASS] == ELFCLASS64)
-	{
-#if BFD_HOST_64BIT_LONG
-	  sprintf (buf, "%016lx", value);
-#else
-	  sprintf (buf, "%08lx%08lx", _bfd_int64_high (value),
-		   _bfd_int64_low (value));
-#endif
-	}
-      else
-	sprintf (buf, "%08lx", (unsigned long) (value & 0xffffffff));
-    }
-#else
-  sprintf_vma (buf, value);
-#endif
-}
-
-void
-_bfd_elf_fprintf_vma (bfd *abfd ATTRIBUTE_UNUSED, void *stream, bfd_vma value)
-{
-#ifdef BFD64
-  Elf_Internal_Ehdr *i_ehdrp;	/* Elf file header, internal form */
-
-  i_ehdrp = elf_elfheader (abfd);
-  if (i_ehdrp == NULL)
-    fprintf_vma ((FILE *) stream, value);
-  else
-    {
-      if (i_ehdrp->e_ident[EI_CLASS] == ELFCLASS64)
-	{
-#if BFD_HOST_64BIT_LONG
-	  fprintf ((FILE *) stream, "%016lx", value);
-#else
-	  fprintf ((FILE *) stream, "%08lx%08lx",
-		   _bfd_int64_high (value), _bfd_int64_low (value));
-#endif
-	}
-      else
-	fprintf ((FILE *) stream, "%08lx",
-		 (unsigned long) (value & 0xffffffff));
-    }
-#else
-  fprintf_vma ((FILE *) stream, value);
-#endif
 }
 
 enum elf_reloc_type_class
@@ -7780,7 +8693,7 @@ bfd_elf_bfd_from_remote_memory
   (bfd *templ,
    bfd_vma ehdr_vma,
    bfd_vma *loadbasep,
-   int (*target_read_memory) (bfd_vma, char *, int))
+   int (*target_read_memory) (bfd_vma, bfd_byte *, int))
 {
   return (*get_elf_backend_data (templ)->elf_backend_bfd_from_remote_memory)
     (templ, ehdr_vma, loadbasep, target_read_memory);
@@ -7790,7 +8703,7 @@ long
 _bfd_elf_get_synthetic_symtab (bfd *abfd,
 			       long symcount ATTRIBUTE_UNUSED,
 			       asymbol **syms ATTRIBUTE_UNUSED,
-			       long dynsymcount ATTRIBUTE_UNUSED,
+			       long dynsymcount,
 			       asymbol **dynsyms,
 			       asymbol **ret)
 {
@@ -7806,10 +8719,14 @@ _bfd_elf_get_synthetic_symtab (bfd *abfd,
   char *names;
   asection *plt;
 
+  *ret = NULL;
+
   if ((abfd->flags & (DYNAMIC | EXEC_P)) == 0)
     return 0;
 
-  *ret = NULL;
+  if (dynsymcount <= 0)
+    return 0;
+
   if (!bed->plt_sym_val)
     return 0;
 
@@ -7836,7 +8753,7 @@ _bfd_elf_get_synthetic_symtab (bfd *abfd,
   count = relplt->size / hdr->sh_entsize;
   size = count * sizeof (asymbol);
   p = relplt->relocation;
-  for (i = 0; i < count; i++, s++, p++)
+  for (i = 0; i < count; i++, p++)
     size += strlen ((*p->sym_ptr_ptr)->name) + sizeof ("@plt");
 
   s = *ret = bfd_malloc (size);
@@ -7846,7 +8763,7 @@ _bfd_elf_get_synthetic_symtab (bfd *abfd,
   names = (char *) (s + count);
   p = relplt->relocation;
   n = 0;
-  for (i = 0; i < count; i++, s++, p++)
+  for (i = 0; i < count; i++, p++)
     {
       size_t len;
       bfd_vma addr;
@@ -7856,225 +8773,48 @@ _bfd_elf_get_synthetic_symtab (bfd *abfd,
 	continue;
 
       *s = **p->sym_ptr_ptr;
+      /* Undefined syms won't have BSF_LOCAL or BSF_GLOBAL set.  Since
+	 we are defining a symbol, ensure one of them is set.  */
+      if ((s->flags & BSF_LOCAL) == 0)
+	s->flags |= BSF_GLOBAL;
       s->section = plt;
       s->value = addr - plt->vma;
       s->name = names;
+      s->udata.p = NULL;
       len = strlen ((*p->sym_ptr_ptr)->name);
       memcpy (names, (*p->sym_ptr_ptr)->name, len);
       names += len;
       memcpy (names, "@plt", sizeof ("@plt"));
       names += sizeof ("@plt");
-      ++n;
+      ++s, ++n;
     }
 
   return n;
 }
 
-/* Sort symbol by binding and section. We want to put definitions
-   sorted by section at the beginning.  */
+/* It is only used by x86-64 so far.  */
+asection _bfd_elf_large_com_section
+  = BFD_FAKE_SECTION (_bfd_elf_large_com_section,
+		      SEC_IS_COMMON, NULL, "LARGE_COMMON", 0);
 
-static int
-elf_sort_elf_symbol (const void *arg1, const void *arg2)
+void
+_bfd_elf_set_osabi (bfd * abfd,
+		    struct bfd_link_info * link_info ATTRIBUTE_UNUSED)
 {
-  const Elf_Internal_Sym *s1;
-  const Elf_Internal_Sym *s2;
-  int shndx;
+  Elf_Internal_Ehdr * i_ehdrp;	/* ELF file header, internal form.  */
 
-  /* Make sure that undefined symbols are at the end.  */
-  s1 = (const Elf_Internal_Sym *) arg1;
-  if (s1->st_shndx == SHN_UNDEF)
-    return 1;
-  s2 = (const Elf_Internal_Sym *) arg2;
-  if (s2->st_shndx == SHN_UNDEF)
-    return -1;
+  i_ehdrp = elf_elfheader (abfd);
 
-  /* Sorted by section index.  */
-  shndx = s1->st_shndx - s2->st_shndx;
-  if (shndx != 0)
-    return shndx;
-
-  /* Sorted by binding.  */
-  return ELF_ST_BIND (s1->st_info)  - ELF_ST_BIND (s2->st_info);
+  i_ehdrp->e_ident[EI_OSABI] = get_elf_backend_data (abfd)->elf_osabi;
 }
 
-struct elf_symbol
-{
-  Elf_Internal_Sym *sym;
-  const char *name;
-};
 
-static int
-elf_sym_name_compare (const void *arg1, const void *arg2)
-{
-  const struct elf_symbol *s1 = (const struct elf_symbol *) arg1;
-  const struct elf_symbol *s2 = (const struct elf_symbol *) arg2;
-  return strcmp (s1->name, s2->name);
-}
-
-/* Check if 2 sections define the same set of local and global
-   symbols.  */
+/* Return TRUE for ELF symbol types that represent functions.
+   This is the default version of this function, which is sufficient for
+   most targets.  It returns true if TYPE is STT_FUNC.  */
 
 bfd_boolean
-bfd_elf_match_symbols_in_sections (asection *sec1, asection *sec2)
+_bfd_elf_is_function_type (unsigned int type)
 {
-  bfd *bfd1, *bfd2;
-  const struct elf_backend_data *bed1, *bed2;
-  Elf_Internal_Shdr *hdr1, *hdr2;
-  bfd_size_type symcount1, symcount2;
-  Elf_Internal_Sym *isymbuf1, *isymbuf2;
-  Elf_Internal_Sym *isymstart1 = NULL, *isymstart2 = NULL, *isym;
-  Elf_Internal_Sym *isymend;
-  struct elf_symbol *symp, *symtable1 = NULL, *symtable2 = NULL;
-  bfd_size_type count1, count2, i;
-  int shndx1, shndx2;
-  bfd_boolean result;
-
-  bfd1 = sec1->owner;
-  bfd2 = sec2->owner;
-
-  /* If both are .gnu.linkonce sections, they have to have the same
-     section name.  */
-  if (strncmp (sec1->name, ".gnu.linkonce",
-	       sizeof ".gnu.linkonce" - 1) == 0
-      && strncmp (sec2->name, ".gnu.linkonce",
-		  sizeof ".gnu.linkonce" - 1) == 0)
-    return strcmp (sec1->name + sizeof ".gnu.linkonce",
-		   sec2->name + sizeof ".gnu.linkonce") == 0;
-
-  /* Both sections have to be in ELF.  */
-  if (bfd_get_flavour (bfd1) != bfd_target_elf_flavour
-      || bfd_get_flavour (bfd2) != bfd_target_elf_flavour)
-    return FALSE;
-
-  if (elf_section_type (sec1) != elf_section_type (sec2))
-    return FALSE;
-
-  if ((elf_section_flags (sec1) & SHF_GROUP) != 0
-      && (elf_section_flags (sec2) & SHF_GROUP) != 0)
-    {
-      /* If both are members of section groups, they have to have the
-	 same group name.  */
-      if (strcmp (elf_group_name (sec1), elf_group_name (sec2)) != 0)
-	return FALSE;
-    }
-
-  shndx1 = _bfd_elf_section_from_bfd_section (bfd1, sec1);
-  shndx2 = _bfd_elf_section_from_bfd_section (bfd2, sec2);
-  if (shndx1 == -1 || shndx2 == -1)
-    return FALSE;
-
-  bed1 = get_elf_backend_data (bfd1);
-  bed2 = get_elf_backend_data (bfd2);
-  hdr1 = &elf_tdata (bfd1)->symtab_hdr;
-  symcount1 = hdr1->sh_size / bed1->s->sizeof_sym;
-  hdr2 = &elf_tdata (bfd2)->symtab_hdr;
-  symcount2 = hdr2->sh_size / bed2->s->sizeof_sym;
-
-  if (symcount1 == 0 || symcount2 == 0)
-    return FALSE;
-
-  isymbuf1 = bfd_elf_get_elf_syms (bfd1, hdr1, symcount1, 0,
-				   NULL, NULL, NULL);
-  isymbuf2 = bfd_elf_get_elf_syms (bfd2, hdr2, symcount2, 0,
-				   NULL, NULL, NULL);
-
-  result = FALSE;
-  if (isymbuf1 == NULL || isymbuf2 == NULL)
-    goto done;
-
-  /* Sort symbols by binding and section. Global definitions are at
-     the beginning.  */
-  qsort (isymbuf1, symcount1, sizeof (Elf_Internal_Sym),
-	 elf_sort_elf_symbol);
-  qsort (isymbuf2, symcount2, sizeof (Elf_Internal_Sym),
-	 elf_sort_elf_symbol);
-
-  /* Count definitions in the section.  */
-  count1 = 0;
-  for (isym = isymbuf1, isymend = isym + symcount1;
-       isym < isymend; isym++)
-    {
-      if (isym->st_shndx == (unsigned int) shndx1)
-	{
-	  if (count1 == 0)
-	    isymstart1 = isym;
-	  count1++;
-	}
-
-      if (count1 && isym->st_shndx != (unsigned int) shndx1)
-	break;
-    }
-
-  count2 = 0;
-  for (isym = isymbuf2, isymend = isym + symcount2;
-       isym < isymend; isym++)
-    {
-      if (isym->st_shndx == (unsigned int) shndx2)
-	{
-	  if (count2 == 0)
-	    isymstart2 = isym;
-	  count2++;
-	}
-
-      if (count2 && isym->st_shndx != (unsigned int) shndx2)
-	break;
-    }
-
-  if (count1 == 0 || count2 == 0 || count1 != count2)
-    goto done;
-
-  symtable1 = bfd_malloc (count1 * sizeof (struct elf_symbol));
-  symtable2 = bfd_malloc (count1 * sizeof (struct elf_symbol));
-
-  if (symtable1 == NULL || symtable2 == NULL)
-    goto done;
-
-  symp = symtable1;
-  for (isym = isymstart1, isymend = isym + count1;
-       isym < isymend; isym++)
-    {
-      symp->sym = isym;
-      symp->name = bfd_elf_string_from_elf_section (bfd1,
-						    hdr1->sh_link,
-						    isym->st_name);
-      symp++;
-    }
- 
-  symp = symtable2;
-  for (isym = isymstart2, isymend = isym + count1;
-       isym < isymend; isym++)
-    {
-      symp->sym = isym;
-      symp->name = bfd_elf_string_from_elf_section (bfd2,
-						    hdr2->sh_link,
-						    isym->st_name);
-      symp++;
-    }
-  
-  /* Sort symbol by name.  */
-  qsort (symtable1, count1, sizeof (struct elf_symbol),
-	 elf_sym_name_compare);
-  qsort (symtable2, count1, sizeof (struct elf_symbol),
-	 elf_sym_name_compare);
-
-  for (i = 0; i < count1; i++)
-    /* Two symbols must have the same binding, type and name.  */
-    if (symtable1 [i].sym->st_info != symtable2 [i].sym->st_info
-	|| symtable1 [i].sym->st_other != symtable2 [i].sym->st_other
-	|| strcmp (symtable1 [i].name, symtable2 [i].name) != 0)
-      goto done;
-
-  result = TRUE;
-
-done:
-  if (symtable1)
-    free (symtable1);
-  if (symtable2)
-    free (symtable2);
-  if (isymbuf1)
-    free (isymbuf1);
-  if (isymbuf2)
-    free (isymbuf2);
-
-  return result;
+  return (type == STT_FUNC);
 }

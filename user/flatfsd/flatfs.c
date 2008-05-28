@@ -65,6 +65,8 @@ static int flat_version(void)
 	magic = flat3_gethdr();
 	if (magic == FLATFS_MAGIC_V3)
 		return 3;
+	if (magic == FLATFS_MAGIC_V4)
+		return 4;
 #endif
 
 	syslog(LOG_ERR, "invalid header magic version");
@@ -94,6 +96,7 @@ static int flat_check(void)
 		break;
 #ifdef CONFIG_USER_FLATFSD_COMPRESSED
 	case 3:
+	case 4:
 		rc = flat3_checkfs();
 		break;
 #endif
@@ -134,6 +137,7 @@ static int flat_restorefs(const char *configdir)
 		break;
 #ifdef CONFIG_USER_FLATFSD_COMPRESSED
 	case 3:
+	case 4:
 		rc = flat3_restorefs(numversion, 1);
 		break;
 #endif
@@ -191,6 +195,7 @@ static int flat_savefs(int version, const char *configdir)
 	switch (version) {
 #ifdef CONFIG_USER_FLATFSD_COMPRESSED
 	case 3:
+	case 4:
 		rc = flat3_savefs(0, &total);
 		if ((rc < 0) || (total > flat_part_length())) { 
 			syslog(LOG_ERR, "config will not fit in flash partition");
@@ -212,6 +217,7 @@ static int flat_savefs(int version, const char *configdir)
 	switch (version) {
 #ifdef CONFIG_USER_FLATFSD_COMPRESSED
 	case 3:
+	case 4:
 		rc = flat3_savefs(1, &total);
 		break;
 #endif
@@ -338,7 +344,8 @@ static void usage(int rc)
 		"\t-s save config filesystem to flash\n"
 		"\t-1 force use of version 1 flash layout\n"
 		"\t-2 force use of version 2 flash layout\n"
-		"\t-3 force use of version 3 flash layout (default)\n"
+		"\t-3 force use of version 3 flash layout\n"
+		"\t-4 force use of version 4 flash layout (default)\n"
 		"\t-h this help\n");
 	exit(rc);
 }
@@ -350,13 +357,13 @@ int main(int argc, char *argv[])
 	struct sigaction act;
 	int rc, readonly, clobbercfg, action = 0;
 	char *configdir = DSTDIR;
-	int fsver = 3;
+	int fsver = 4;
 
 	clobbercfg = readonly = 0;
 
 	openlog("flatfs", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
-	while ((rc = getopt(argc, argv, "crsd:123h?")) != EOF) {
+	while ((rc = getopt(argc, argv, "crsd:1234h?")) != EOF) {
 		switch (rc) {
 		case 'c':
 		case 'r':
@@ -379,6 +386,9 @@ int main(int argc, char *argv[])
 			break;
 		case '3':
 			fsver = 3;
+			break;
+		case '4':
+			fsver = 4;
 			break;
 		case 'h':
 		case '?':

@@ -1,5 +1,6 @@
 /* mips.h.  Mips opcode list for GDB, the GNU debugger.
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2008
    Free Software Foundation, Inc.
    Contributed by Ralph Campbell and OSF
    Commented and modified by Ian Lance Taylor, Cygnus Support
@@ -18,7 +19,7 @@ the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this file; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef _MIPS_H_
 #define _MIPS_H_
@@ -147,6 +148,40 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  *
 #define OP_MASK_EXTMSBD		0x1f	/* "ext" MSBD.  */
 #define OP_SH_EXTMSBD		11
 
+/* MIPS DSP ASE */
+#define OP_SH_DSPACC		11
+#define OP_MASK_DSPACC  	0x3
+#define OP_SH_DSPACC_S  	21
+#define OP_MASK_DSPACC_S	0x3
+#define OP_SH_DSPSFT		20
+#define OP_MASK_DSPSFT  	0x3f
+#define OP_SH_DSPSFT_7  	19
+#define OP_MASK_DSPSFT_7	0x7f
+#define OP_SH_SA3		21
+#define OP_MASK_SA3		0x7
+#define OP_SH_SA4		21
+#define OP_MASK_SA4		0xf
+#define OP_SH_IMM8		16
+#define OP_MASK_IMM8		0xff
+#define OP_SH_IMM10		16
+#define OP_MASK_IMM10		0x3ff
+#define OP_SH_WRDSP		11
+#define OP_MASK_WRDSP		0x3f
+#define OP_SH_RDDSP		16
+#define OP_MASK_RDDSP		0x3f
+#define OP_SH_BP		11
+#define OP_MASK_BP		0x3
+
+/* MIPS MT ASE */
+#define OP_SH_MT_U		5
+#define OP_MASK_MT_U		0x1
+#define OP_SH_MT_H		4
+#define OP_MASK_MT_H		0x1
+#define OP_SH_MTACC_T		18
+#define OP_MASK_MTACC_T		0x3
+#define OP_SH_MTACC_D		13
+#define OP_MASK_MTACC_D		0x3
+
 #define	OP_OP_COP0		0x10
 #define	OP_OP_COP1		0x11
 #define	OP_OP_COP2		0x12
@@ -170,6 +205,16 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  *
 #define MDMX_FMTSEL_VEC_QH	0x15
 #define MDMX_FMTSEL_VEC_OB	0x16
 
+/* UDI */
+#define OP_SH_UDI1		6
+#define OP_MASK_UDI1		0x1f
+#define OP_SH_UDI2		6
+#define OP_MASK_UDI2		0x3ff
+#define OP_SH_UDI3		6
+#define OP_MASK_UDI3		0x7fff
+#define OP_SH_UDI4		6
+#define OP_MASK_UDI4		0xfffff
+
 /* This structure holds information for a particular instruction.  */
 
 struct mips_opcode
@@ -192,6 +237,8 @@ struct mips_opcode
      of bits describing the instruction, notably any relevant hazard
      information.  */
   unsigned long pinfo;
+  /* A collection of additional bits describing the instruction. */
+  unsigned long pinfo2;
   /* A collection of bits describing the instruction sets of which this
      instruction or macro is a member. */
   unsigned long membership;
@@ -233,19 +280,20 @@ struct mips_opcode
    "x" accept and ignore register name
    "z" must be zero register
    "K" 5 bit Hardware Register (rdhwr instruction) (OP_*_RD)
-   "+A" 5 bit ins/ext position, which becomes LSB (OP_*_SHAMT).
+   "+A" 5 bit ins/ext/dins/dext/dinsm/dextm position, which becomes
+        LSB (OP_*_SHAMT).
 	Enforces: 0 <= pos < 32.
-   "+B" 5 bit ins size, which becomes MSB (OP_*_INSMSB).
+   "+B" 5 bit ins/dins size, which becomes MSB (OP_*_INSMSB).
 	Requires that "+A" or "+E" occur first to set position.
 	Enforces: 0 < (pos+size) <= 32.
-   "+C" 5 bit ext size, which becomes MSBD (OP_*_EXTMSBD).
+   "+C" 5 bit ext/dext size, which becomes MSBD (OP_*_EXTMSBD).
 	Requires that "+A" or "+E" occur first to set position.
 	Enforces: 0 < (pos+size) <= 32.
 	(Also used by "dext" w/ different limits, but limits for
 	that are checked by the M_DEXT macro.)
-   "+E" 5 bit dins/dext position, which becomes LSB-32 (OP_*_SHAMT).
+   "+E" 5 bit dinsu/dextu position, which becomes LSB-32 (OP_*_SHAMT).
 	Enforces: 32 <= pos < 64.
-   "+F" 5 bit "dinsm" size, which becomes MSB-32 (OP_*_INSMSB).
+   "+F" 5 bit "dinsm/dinsu" size, which becomes MSB-32 (OP_*_INSMSB).
 	Requires that "+A" or "+E" occur first to set position.
 	Enforces: 32 < (pos+size) <= 64.
    "+G" 5 bit "dextm" size, which becomes MSBD-32 (OP_*_EXTMSBD).
@@ -293,6 +341,35 @@ struct mips_opcode
    "Y"	MDMX source register (OP_*_FS)
    "Z"	MDMX source register (OP_*_FT)
 
+   DSP ASE usage:
+   "2" 2 bit unsigned immediate for byte align (OP_*_BP)
+   "3" 3 bit unsigned immediate (OP_*_SA3)
+   "4" 4 bit unsigned immediate (OP_*_SA4)
+   "5" 8 bit unsigned immediate (OP_*_IMM8)
+   "6" 5 bit unsigned immediate (OP_*_RS)
+   "7" 2 bit dsp accumulator register (OP_*_DSPACC)
+   "8" 6 bit unsigned immediate (OP_*_WRDSP)
+   "9" 2 bit dsp accumulator register (OP_*_DSPACC_S)
+   "0" 6 bit signed immediate (OP_*_DSPSFT)
+   ":" 7 bit signed immediate (OP_*_DSPSFT_7)
+   "'" 6 bit unsigned immediate (OP_*_RDDSP)
+   "@" 10 bit signed immediate (OP_*_IMM10)
+
+   MT ASE usage:
+   "!" 1 bit usermode flag (OP_*_MT_U)
+   "$" 1 bit load high flag (OP_*_MT_H)
+   "*" 2 bit dsp/smartmips accumulator register (OP_*_MTACC_T)
+   "&" 2 bit dsp/smartmips accumulator register (OP_*_MTACC_D)
+   "g" 5 bit coprocessor 1 and 2 destination register (OP_*_RD)
+   "+t" 5 bit coprocessor 0 destination register (OP_*_RT)
+   "+T" 5 bit coprocessor 0 destination register (OP_*_RT) - disassembly only
+
+   UDI immediates:
+   "+1" UDI immediate bits 6-10
+   "+2" UDI immediate bits 6-15
+   "+3" UDI immediate bits 6-20
+   "+4" UDI immediate bits 6-25
+
    Other:
    "()" parens surrounding optional value
    ","  separates operands
@@ -300,13 +377,16 @@ struct mips_opcode
    "+"  Start of extension sequence.
 
    Characters used so far, for quick reference when adding more:
-   "%[]<>(),+"
+   "234567890"
+   "%[]<>(),+:'@!$*&"
    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-   "abcdefhijklopqrstuvwxz"
+   "abcdefghijklopqrstuvwxz"
 
    Extension character sequences used so far ("+" followed by the
    following), for quick reference when adding more:
-   "ABCDEFGHI"
+   "1234"
+   "ABCDEFGHIT"
+   "t"
 */
 
 /* These are the bits which may be set in the pinfo field of an
@@ -376,42 +456,76 @@ struct mips_opcode
 #define INSN_MULT                   0x40000000
 /* Instruction synchronize shared memory.  */
 #define INSN_SYNC		    0x80000000
-/* Instruction reads MDMX accumulator.  XXX FIXME: No bits left!  */
-#define INSN_READ_MDMX_ACC	    0
-/* Instruction writes MDMX accumulator.  XXX FIXME: No bits left!  */
-#define INSN_WRITE_MDMX_ACC	    0
+
+/* These are the bits which may be set in the pinfo2 field of an
+   instruction. */
+
+/* Instruction is a simple alias (I.E. "move" for daddu/addu/or) */
+#define	INSN2_ALIAS		    0x00000001
+/* Instruction reads MDMX accumulator. */
+#define INSN2_READ_MDMX_ACC	    0x00000002
+/* Instruction writes MDMX accumulator. */
+#define INSN2_WRITE_MDMX_ACC	    0x00000004
 
 /* Instruction is actually a macro.  It should be ignored by the
    disassembler, and requires special treatment by the assembler.  */
 #define INSN_MACRO                  0xffffffff
 
 /* Masks used to mark instructions to indicate which MIPS ISA level
-   they were introduced in.  ISAs, as defined below, are logical
-   ORs of these bits, indicating that they support the instructions
-   defined at the given level.  */
+   they were introduced in.  INSN_ISA_MASK masks an enumeration that
+   specifies the base ISA level(s).  The remainder of a 32-bit
+   word constructed using these macros is a bitmask of the remaining
+   INSN_* values below.  */
 
-#define INSN_ISA_MASK		  0x00000fff
-#define INSN_ISA1                 0x00000001
-#define INSN_ISA2                 0x00000002
-#define INSN_ISA3                 0x00000004
-#define INSN_ISA4                 0x00000008
-#define INSN_ISA5                 0x00000010
-#define INSN_ISA32                0x00000020
-#define INSN_ISA64                0x00000040
-#define INSN_ISA32R2              0x00000080
-#define INSN_ISA64R2              0x00000100
+#define INSN_ISA_MASK		  0x0000000ful
+
+/* We cannot start at zero due to ISA_UNKNOWN below.  */
+#define INSN_ISA1                 1
+#define INSN_ISA2                 2
+#define INSN_ISA3                 3
+#define INSN_ISA4                 4
+#define INSN_ISA5                 5
+#define INSN_ISA32                6
+#define INSN_ISA32R2              7
+#define INSN_ISA64                8
+#define INSN_ISA64R2              9
+/* Below this point the INSN_* values correspond to combinations of ISAs.
+   They are only for use in the opcodes table to indicate membership of
+   a combination of ISAs that cannot be expressed using the usual inclusion
+   ordering on the above INSN_* values.  */
+#define INSN_ISA3_32              10
+#define INSN_ISA3_32R2            11
+#define INSN_ISA4_32              12
+#define INSN_ISA4_32R2            13
+#define INSN_ISA5_32R2            14
+
+/* Given INSN_ISA* values X and Y, where X ranges over INSN_ISA1 through
+   INSN_ISA5_32R2 and Y ranges over INSN_ISA1 through INSN_ISA64R2,
+   this table describes whether at least one of the ISAs described by X
+   is/are implemented by ISA Y.  (Think of Y as the ISA level supported by
+   a particular core and X as the ISA level(s) at which a certain instruction
+   is defined.)  The ISA(s) described by X is/are implemented by Y iff
+   (mips_isa_table[(Y & INSN_ISA_MASK) - 1] >> ((X & INSN_ISA_MASK) - 1)) & 1
+   is non-zero.  */
+static const unsigned int mips_isa_table[] =
+  { 0x0001, 0x0003, 0x0607, 0x1e0f, 0x3e1f, 0x0a23, 0x3e63, 0x3ebf, 0x3fff };
+
+/* Masks used for Chip specific instructions.  */
+#define INSN_CHIP_MASK		  0xc3ff0800
+
+/* Cavium Networks Octeon instructions.  */
+#define INSN_OCTEON		  0x00000800
 
 /* Masks used for MIPS-defined ASEs.  */
-#define INSN_ASE_MASK		  0x0000f000
+#define INSN_ASE_MASK		  0x3c00f000
 
+/* DSP ASE */ 
+#define INSN_DSP                  0x00001000
+#define INSN_DSP64                0x00002000
 /* MIPS 16 ASE */
-#define INSN_MIPS16               0x00002000
+#define INSN_MIPS16               0x00004000
 /* MIPS-3D ASE */
-#define INSN_MIPS3D               0x00004000
-/* MDMX ASE */ 
-#define INSN_MDMX                 0x00008000
-
-/* Chip specific instructions.  These are bitmasks.  */
+#define INSN_MIPS3D               0x00008000
 
 /* MIPS R4650 instruction.  */
 #define INSN_4650                 0x00010000
@@ -434,20 +548,33 @@ struct mips_opcode
 /* NEC VR5500 instruction.  */
 #define INSN_5500		  0x02000000
 
+/* MDMX ASE */ 
+#define INSN_MDMX                 0x04000000
+/* MT ASE */
+#define INSN_MT                   0x08000000
+/* SmartMIPS ASE  */
+#define INSN_SMARTMIPS            0x10000000
+/* DSP R2 ASE  */
+#define INSN_DSPR2                0x20000000
+/* ST Microelectronics Loongson 2E.  */
+#define INSN_LOONGSON_2E          0x40000000
+/* ST Microelectronics Loongson 2F.  */
+#define INSN_LOONGSON_2F          0x80000000
+
 /* MIPS ISA defines, use instead of hardcoding ISA level.  */
 
 #define       ISA_UNKNOWN     0               /* Gas internal use.  */
-#define       ISA_MIPS1       (INSN_ISA1)
-#define       ISA_MIPS2       (ISA_MIPS1 | INSN_ISA2)
-#define       ISA_MIPS3       (ISA_MIPS2 | INSN_ISA3)
-#define       ISA_MIPS4       (ISA_MIPS3 | INSN_ISA4)
-#define       ISA_MIPS5       (ISA_MIPS4 | INSN_ISA5)
+#define       ISA_MIPS1       INSN_ISA1
+#define       ISA_MIPS2       INSN_ISA2
+#define       ISA_MIPS3       INSN_ISA3
+#define       ISA_MIPS4       INSN_ISA4
+#define       ISA_MIPS5       INSN_ISA5
 
-#define       ISA_MIPS32      (ISA_MIPS2 | INSN_ISA32)
-#define       ISA_MIPS64      (ISA_MIPS5 | INSN_ISA32 | INSN_ISA64)
+#define       ISA_MIPS32      INSN_ISA32
+#define       ISA_MIPS64      INSN_ISA64
 
-#define       ISA_MIPS32R2    (ISA_MIPS32 | INSN_ISA32R2)
-#define       ISA_MIPS64R2    (ISA_MIPS64 | INSN_ISA32R2 | INSN_ISA64R2)
+#define       ISA_MIPS32R2    INSN_ISA32R2
+#define       ISA_MIPS64R2    INSN_ISA64R2
 
 
 /* CPU defines, use instead of hardcoding processor number. Keep this
@@ -470,6 +597,7 @@ struct mips_opcode
 #define CPU_R6000	6000
 #define CPU_RM7000	7000
 #define CPU_R8000	8000
+#define CPU_RM9000	9000
 #define CPU_R10000	10000
 #define CPU_R12000	12000
 #define CPU_MIPS16	16
@@ -479,6 +607,9 @@ struct mips_opcode
 #define CPU_MIPS64      64
 #define CPU_MIPS64R2	65
 #define CPU_SB1         12310201        /* octal 'SB', 01.  */
+#define CPU_LOONGSON_2E 3001
+#define CPU_LOONGSON_2F 3002
+#define CPU_OCTEON	6501
 
 /* Test for membership in an ISA including chip specific ISAs.  INSN
    is pointer to an element of the opcode table; ISA is the specified
@@ -486,9 +617,15 @@ struct mips_opcode
    test, or zero if no CPU specific ISA test is desired.  */
 
 #define OPCODE_IS_MEMBER(insn, isa, cpu)				\
-    (((insn)->membership & isa) != 0					\
+    (((isa & INSN_ISA_MASK) != 0                                        \
+      && ((insn)->membership & INSN_ISA_MASK) != 0                      \
+      && ((mips_isa_table [(isa & INSN_ISA_MASK) - 1] >>                \
+           (((insn)->membership & INSN_ISA_MASK) - 1)) & 1) != 0)       \
+     || ((isa & ~INSN_ISA_MASK)                                         \
+          & ((insn)->membership & ~INSN_ISA_MASK)) != 0                 \
      || (cpu == CPU_R4650 && ((insn)->membership & INSN_4650) != 0)	\
      || (cpu == CPU_RM7000 && ((insn)->membership & INSN_4650) != 0)	\
+     || (cpu == CPU_RM9000 && ((insn)->membership & INSN_4650) != 0)	\
      || (cpu == CPU_R4010 && ((insn)->membership & INSN_4010) != 0)	\
      || (cpu == CPU_VR4100 && ((insn)->membership & INSN_4100) != 0)	\
      || (cpu == CPU_R3900 && ((insn)->membership & INSN_3900) != 0)	\
@@ -499,6 +636,12 @@ struct mips_opcode
      || (cpu == CPU_VR4120 && ((insn)->membership & INSN_4120) != 0)	\
      || (cpu == CPU_VR5400 && ((insn)->membership & INSN_5400) != 0)	\
      || (cpu == CPU_VR5500 && ((insn)->membership & INSN_5500) != 0)	\
+     || (cpu == CPU_LOONGSON_2E                                         \
+         && ((insn)->membership & INSN_LOONGSON_2E) != 0)               \
+     || (cpu == CPU_LOONGSON_2F                                         \
+         && ((insn)->membership & INSN_LOONGSON_2F) != 0)               \
+     || (cpu == CPU_OCTEON						\
+	 && ((insn)->membership & INSN_OCTEON) != 0)			\
      || 0)	/* Please keep this term for easier source merging.  */
 
 /* This is a list of macro expanded instructions.
@@ -515,6 +658,7 @@ enum
   M_ADD_I,
   M_ADDU_I,
   M_AND_I,
+  M_BALIGN,
   M_BEQ,
   M_BEQ_I,
   M_BEQL_I,
@@ -553,6 +697,7 @@ enum
   M_BNE,
   M_BNE_I,
   M_BNEL_I,
+  M_CACHE_AB,
   M_DABS,
   M_DADD_I,
   M_DADDU_I,
@@ -857,7 +1002,14 @@ extern int bfd_mips_num_opcodes;
    "A" 8 bit PC relative address * 4 (MIPS16OP_*_IMM8)
    "B" 5 bit PC relative address * 8 (MIPS16OP_*_IMM5)
    "E" 5 bit PC relative address * 4 (MIPS16OP_*_IMM5)
-   */
+   "m" 7 bit register list for save instruction (18 bit extended)
+   "M" 7 bit register list for restore instruction (18 bit extended)
+  */
+
+/* Save/restore encoding for the args field when all 4 registers are
+   either saved as arguments or saved/restored as statics.  */
+#define MIPS16_ALL_ARGS    0xe
+#define MIPS16_ALL_STATICS 0xb
 
 /* For the mips16, we use the same opcode table format and a few of
    the same flags.  However, most of the flags are different.  */

@@ -1,6 +1,6 @@
 /* Simulator pseudo baseclass.
 
-   Copyright 1997, 1998, 2003 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -8,17 +8,16 @@ This file is part of GDB, the GNU debugger.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 /* Simulator state pseudo baseclass.
@@ -181,13 +180,13 @@ typedef struct {
   /* The program's text section.  */
   struct bfd_section *text_section;
   /* Starting and ending text section addresses from the bfd.  */
-  SIM_ADDR text_start, text_end;
+  bfd_vma text_start, text_end;
 #define STATE_TEXT_SECTION(sd) ((sd)->base.text_section)
 #define STATE_TEXT_START(sd) ((sd)->base.text_start)
 #define STATE_TEXT_END(sd) ((sd)->base.text_end)
 
   /* Start address, set when the program is loaded from the bfd.  */
-  SIM_ADDR start_addr;
+  bfd_vma start_addr;
 #define STATE_START_ADDR(sd) ((sd)->base.start_addr)
 
   /* Size of the simulator's cache, if any.

@@ -57,6 +57,14 @@ LINKFLAGS	+= -EB
 LDFLAGS		+= -EB
 endif
 
+#
+# Determine GCC version for proper compiler options
+#
+GCC_VERSION	:= $(shell $(CROSS_COMPILE)gcc  -v 2>&1 | grep version | cut -f3 -d' ' | cut -f1 -d.)
+
+check_gcc = $(shell if $(CC) $(CFLAGS) $(1) -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo "$(1)"; else echo "$(2)"; fi ;)
+
+
 load-y		:= $(call check_gcc,-mshort-load-bytes,-malignment-traps)
 
 CFLAGS		+= $(apcs-y) $(arch-y) $(tune-y) $(load-y) -msoft-float

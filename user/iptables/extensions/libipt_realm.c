@@ -15,8 +15,7 @@
 #include <linux/netfilter_ipv4/ipt_realm.h>
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void realm_help(void)
 {
 	printf(
 "realm v%s options:\n"
@@ -25,9 +24,9 @@ help(void)
 "\n", IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{ "realm", 1, 0, '1' },
-	{0}
+static const struct option realm_opts[] = {
+	{ "realm", 1, NULL, '1' },
+	{ }
 };
 
 struct realmname { 
@@ -43,7 +42,7 @@ static struct realmname *realms = NULL;
 static int rdberr = 0;
 
 
-void load_realms()
+static void load_realms(void)
 {
 	const char* rfnm = "/etc/iproute2/rt_realms";
 	char buf[512];
@@ -116,7 +115,7 @@ void load_realms()
 }
 
 /* get realm id for name, -1 if error/not found */
-int realm_name2id(const char* name)
+static int realm_name2id(const char* name)
 {
 	struct realmname* cur;
 
@@ -134,7 +133,7 @@ int realm_name2id(const char* name)
 }
 
 /* get realm name for id, NULL if error/not found */
-const char* realm_id2name(int id)
+static const char *realm_id2name(int id)
 {
 	struct realmname* cur;
 
@@ -154,11 +153,8 @@ const char* realm_id2name(int id)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      unsigned int *nfcache,
-      struct ipt_entry_match **match)
+static int realm_parse(int c, char **argv, int invert, unsigned int *flags,
+                       const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_realm_info *realminfo = (struct ipt_realm_info *)(*match)->data;
 	int id;
@@ -214,10 +210,8 @@ print_realm(unsigned long id, unsigned long mask, int numeric)
 }
 
 /* Prints out the matchinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_match *match,
-      int numeric)
+static void realm_print(const void *ip, const struct xt_entry_match *match,
+                        int numeric)
 {
 	struct ipt_realm_info *ri = (struct ipt_realm_info *) match->data;
 
@@ -230,8 +224,7 @@ print(const struct ipt_ip *ip,
 
 
 /* Saves the union ipt_matchinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
+static void realm_save(const void *ip, const struct xt_entry_match *match)
 {
 	struct ipt_realm_info *ri = (struct ipt_realm_info *) match->data;
 
@@ -243,30 +236,29 @@ save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
 }
 
 /* Final check; must have specified --mark. */
-static void
-final_check(unsigned int flags)
+static void realm_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM,
 			   "realm match: You must specify `--realm'");
 }
 
-static struct iptables_match realm = { NULL,
+static struct iptables_match realm_match = {
 	.name		= "realm",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_realm_info)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_realm_info)),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= realm_help,
+	.parse		= realm_parse,
+	.final_check	= realm_check,
+	.print		= realm_print,
+	.save		= realm_save,
+	.extra_opts	= realm_opts,
 };
 
 void _init(void)
 {
-	register_match(&realm);
+	register_match(&realm_match);
 }
 
 

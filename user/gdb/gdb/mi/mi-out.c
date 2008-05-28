@@ -1,6 +1,7 @@
 /* MI Command Set - output generating routines.
 
-   Copyright 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "ui-out.h"
@@ -56,11 +55,12 @@ static void mi_field_string (struct ui_out *uiout, int fldno, int width,
 static void mi_field_fmt (struct ui_out *uiout, int fldno,
 			  int width, enum ui_align align,
 			  const char *fldname, const char *format,
-			  va_list args);
+			  va_list args) ATTR_FORMAT (printf, 6, 0);
 static void mi_spaces (struct ui_out *uiout, int numspaces);
 static void mi_text (struct ui_out *uiout, const char *string);
 static void mi_message (struct ui_out *uiout, int verbosity,
-			const char *format, va_list args);
+			const char *format, va_list args)
+     ATTR_FORMAT (printf, 3, 0);
 static void mi_wrap_hint (struct ui_out *uiout, char *identstring);
 static void mi_flush (struct ui_out *uiout);
 
@@ -318,7 +318,7 @@ mi_open (struct ui_out *uiout,
       fputc_unfiltered ('[', data->buffer);
       break;
     default:
-      internal_error (__FILE__, __LINE__, "bad switch");
+      internal_error (__FILE__, __LINE__, _("bad switch"));
     }
 }
 
@@ -336,7 +336,7 @@ mi_close (struct ui_out *uiout,
       fputc_unfiltered (']', data->buffer);
       break;
     default:
-      internal_error (__FILE__, __LINE__, "bad switch");
+      internal_error (__FILE__, __LINE__, _("bad switch"));
     }
   data->suppress_field_separator = 0;
 }

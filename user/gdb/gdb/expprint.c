@@ -1,13 +1,13 @@
 /* Print in infix form a struct expression.
 
-   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -31,6 +29,8 @@
 #include "target.h"
 #include "gdb_string.h"
 #include "block.h"
+#include "objfiles.h"
+#include "gdb_assert.h"
 
 #ifdef HAVE_CTYPE_H
 #include <ctype.h>
@@ -129,10 +129,8 @@ print_subexp_standard (struct expression *exp, int *pos,
 
     case OP_REGISTER:
       {
-	int regnum = longest_to_int (exp->elts[pc + 1].longconst);
-	const char *name = user_reg_map_regnum_to_name (current_gdbarch,
-							regnum);
-	(*pos) += 2;
+	const char *name = &exp->elts[pc + 2].string;
+	(*pos) += 3 + BYTES_TO_EXP_ELEM (exp->elts[pc + 1].longconst + 1);
 	fprintf_filtered (stream, "$%s", name);
 	return;
       }
@@ -165,7 +163,6 @@ print_subexp_standard (struct expression *exp, int *pos,
       return;
 
     case OP_NAME:
-    case OP_EXPRSTRING:
       nargs = longest_to_int (exp->elts[pc + 1].longconst);
       (*pos) += 3 + BYTES_TO_EXP_ELEM (nargs + 1);
       fputs_filtered (&exp->elts[pc + 2].string, stream);
@@ -205,7 +202,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 	if (0 == target_read_string (exp->elts[pc + 1].longconst,
 				     &selector, 1024, NULL))
 	  {
-	    error ("bad selector");
+	    error (_("bad selector"));
 	    return;
 	  }
 	if (nargs)
@@ -216,6 +213,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 	    for (tem = 0; tem < nargs; tem++)
 	      {
 		nextS = strchr (s, ':');
+		gdb_assert (nextS);	/* Make sure we found ':'.  */
 		*nextS = '\0';
 		fprintf_unfiltered (stream, " %s: ", s);
 		s = nextS + 1;
@@ -346,6 +344,18 @@ print_subexp_standard (struct expression *exp, int *pos,
       fputs_filtered (&exp->elts[pc + 2].string, stream);
       return;
 
+    case STRUCTOP_MEMBER:
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered (".*", stream);
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      return;
+
+    case STRUCTOP_MPTR:
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered ("->*", stream);
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      return;
+
     case BINOP_SUBSCRIPT:
       print_subexp (exp, pos, stream, PREC_SUFFIX);
       fputs_filtered ("[", stream);
@@ -388,8 +398,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 	     its type; print the value in the type of the MEMVAL.  */
 	  (*pos) += 4;
 	  val = value_at_lazy (exp->elts[pc + 1].type,
-			       (CORE_ADDR) exp->elts[pc + 5].longconst,
-			       NULL);
+			       (CORE_ADDR) exp->elts[pc + 5].longconst);
 	  value_print (val, stream, 0, Val_no_prettyprint);
 	}
       else
@@ -399,6 +408,18 @@ print_subexp_standard (struct expression *exp, int *pos,
 	  fputs_filtered ("} ", stream);
 	  print_subexp (exp, pos, stream, PREC_PREFIX);
 	}
+      if ((int) prec > (int) PREC_PREFIX)
+	fputs_filtered (")", stream);
+      return;
+
+    case UNOP_MEMVAL_TLS:
+      (*pos) += 3;
+      if ((int) prec > (int) PREC_PREFIX)
+	fputs_filtered ("(", stream);
+      fputs_filtered ("{", stream);
+      type_print (exp->elts[pc + 2].type, "", stream, 0);
+      fputs_filtered ("} ", stream);
+      print_subexp (exp, pos, stream, PREC_PREFIX);
       if ((int) prec > (int) PREC_PREFIX)
 	fputs_filtered (")", stream);
       return;
@@ -419,7 +440,7 @@ print_subexp_standard (struct expression *exp, int *pos,
       if (op_print_tab[tem].opcode != opcode)
 	/* Not found; don't try to keep going because we don't know how
 	   to interpret further elements.  */
-	error ("Invalid expression");
+	error (_("Invalid expression"));
       break;
 
       /* C++ ops */
@@ -463,7 +484,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 
     case BINOP_INCL:
     case BINOP_EXCL:
-      error ("print_subexp:  Not implemented.");
+      error (_("print_subexp:  Not implemented."));
 
       /* Default ops */
 
@@ -481,7 +502,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 	/* Not found; don't try to keep going because we don't know how
 	   to interpret further elements.  For example, this happens
 	   if opcode is OP_TYPE.  */
-	error ("Invalid expression");
+	error (_("Invalid expression"));
     }
 
   /* Note that PREC_BUILTIN will always emit parentheses. */
@@ -683,6 +704,8 @@ op_name_standard (enum exp_opcode opcode)
       return "UNOP_CAST";
     case UNOP_MEMVAL:
       return "UNOP_MEMVAL";
+    case UNOP_MEMVAL_TLS:
+      return "UNOP_MEMVAL_TLS";
     case UNOP_NEG:
       return "UNOP_NEG";
     case UNOP_LOGICAL_NOT:
@@ -874,6 +897,8 @@ dump_subexp_body_standard (struct expression *exp,
     case BINOP_IN:
     case BINOP_RANGE:
     case BINOP_END:
+    case STRUCTOP_MEMBER:
+    case STRUCTOP_MPTR:
       elt = dump_subexp (exp, stream, elt);
     case UNOP_NEG:
     case UNOP_LOGICAL_NOT:
@@ -938,9 +963,8 @@ dump_subexp_body_standard (struct expression *exp,
       elt += 2;
       break;
     case OP_REGISTER:
-      fprintf_filtered (stream, "Register %ld",
-			(long) exp->elts[elt].longconst);
-      elt += 2;
+      fprintf_filtered (stream, "Register $%s", &exp->elts[elt + 1].string);
+      elt += 3 + BYTES_TO_EXP_ELEM (exp->elts[elt].longconst + 1);
       break;
     case OP_INTERNALVAR:
       fprintf_filtered (stream, "Internal var @");
@@ -986,6 +1010,16 @@ dump_subexp_body_standard (struct expression *exp,
       fprintf_filtered (stream, ")");
       elt = dump_subexp (exp, stream, elt + 2);
       break;
+    case UNOP_MEMVAL_TLS:
+      fprintf_filtered (stream, "TLS type @");
+      gdb_print_host_address (exp->elts[elt + 1].type, stream);
+      fprintf_filtered (stream, " (__thread /* \"%s\" */ ",
+                        (exp->elts[elt].objfile == NULL ? "(null)"
+			 : exp->elts[elt].objfile->name));
+      type_print (exp->elts[elt + 1].type, NULL, stream, 0);
+      fprintf_filtered (stream, ")");
+      elt = dump_subexp (exp, stream, elt + 3);
+      break;
     case OP_TYPE:
       fprintf_filtered (stream, "Type @");
       gdb_print_host_address (exp->elts[elt].type, stream);
@@ -1027,8 +1061,6 @@ dump_subexp_body_standard (struct expression *exp,
       break;
     default:
     case OP_NULL:
-    case STRUCTOP_MEMBER:
-    case STRUCTOP_MPTR:
     case MULTI_SUBSCRIPT:
     case OP_F77_UNDETERMINED_ARGLIST:
     case OP_COMPLEX:
@@ -1039,7 +1071,6 @@ dump_subexp_body_standard (struct expression *exp,
     case OP_THIS:
     case OP_LABELED:
     case OP_NAME:
-    case OP_EXPRSTRING:
       fprintf_filtered (stream, "Unknown format");
     }
 

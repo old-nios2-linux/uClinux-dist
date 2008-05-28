@@ -1,19 +1,18 @@
-# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004
-# Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004,
+# 2006, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Fred Fish. (fnf@cygnus.com)
 # And rewritten by Michael Chastain <mec.gnu@mindspring.com>.
@@ -33,7 +32,8 @@ set srcfile ${testfile}.cc
 set binfile ${objdir}/${subdir}/${testfile}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {c++ debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested virtfunc.exp
+     return -1
 }
 
 proc test_ptype_of_classes {} {
@@ -216,6 +216,14 @@ proc test_virtual_calls {} {
 	-re "\\$\[0-9]+ = 102$nl$gdb_prompt $" {
 	    pass "print pEe->D::vg()"
 	}
+	-re "\\$\[0-9]+ = 202$nl$gdb_prompt $" {
+	    # To get this result, we have called pEe->*(&D::vg) ().
+	    # That's how GDB interprets this, but it's wrong; in fact
+	    # the explicit D:: means to bypass virtual function lookup,
+	    # and call D::vg as if it were non-virtual.  We still have
+	    # to e.g. adjust "this", though.
+	    kfail "gdb/1064" "print pEe->D::vg()"
+	}
 	-re "Attempt to take address of value not located in memory.$nl$gdb_prompt $" {
 	    kfail "gdb/1064" "print pEe->D::vg()"
 	}
@@ -245,6 +253,10 @@ proc do_tests {} {
     gdb_breakpoint test_calls
     gdb_test "continue" ".*Breakpoint .* test_calls.*" ""
     test_virtual_calls
+
+    gdb_test "next" ".*pAa->f.*" "next to pAa->f call"
+    gdb_test "next" ".*pDe->vg.*" "next to pDe->vg call"
+    gdb_test "step" ".*E::vg.*" "step through thunk into E::vg"
 }
 
 do_tests

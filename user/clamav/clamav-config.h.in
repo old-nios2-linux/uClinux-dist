@@ -3,9 +3,6 @@
 /* enable bind8 compatibility */
 #undef BIND_8_COMPAT
 
-/* Define if your snprintf is busted */
-#undef BROKEN_SNPRINTF
-
 /* "build clamd" */
 #undef BUILD_CLAMD
 
@@ -141,14 +138,11 @@
 /* Define to 1 if you have the `getpagesize' function. */
 #undef HAVE_GETPAGESIZE
 
-/* have gmp installed */
-#undef HAVE_GMP
-
 /* Define to 1 if you have the <grp.h> header file. */
 #undef HAVE_GRP_H
 
-/* Define to 1 if you have the <iconv.h> header file. */
-#undef HAVE_ICONV_H
+/* iconv() available */
+#undef HAVE_ICONV
 
 /* Define to 1 if you have the `inet_ntop' function. */
 #undef HAVE_INET_NTOP
@@ -164,6 +158,9 @@
 
 /* in_port_t is defined */
 #undef HAVE_IN_PORT_T
+
+/* Define if you have the gmp library. */
+#undef HAVE_LIBGMP
 
 /* Define to 1 if you have the <libmilter/mfapi.h> header file. */
 #undef HAVE_LIBMILTER_MFAPI_H
@@ -239,6 +236,9 @@
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the `strcasestr' function. */
+#undef HAVE_STRCASESTR
 
 /* Define to 1 if you have the `strerror_r' function. */
 #undef HAVE_STRERROR_R
@@ -389,6 +389,10 @@
 
 /* Define to `long int' if <sys/types.h> does not define. */
 #undef off_t
+
+/* Define to equivalent of C99 restrict keyword, or to nothing if this is not
+   supported. Do not define if restrict is supported directly. */
+#undef restrict
 
 /* Define to "int" if <sys/socket.h> does not define. */
 #undef socklen_t

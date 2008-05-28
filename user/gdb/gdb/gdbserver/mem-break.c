@@ -1,6 +1,5 @@
 /* Memory breakpoint operations for the remote server for GDB.
-   Copyright 2002
-   Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -8,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,13 +16,11 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 
-const char *breakpoint_data;
+const unsigned char *breakpoint_data;
 int breakpoint_len;
 
 #define MAX_BREAKPOINT_LEN 8
@@ -42,14 +39,16 @@ struct breakpoint
      in the *next chain somewhere).  */
   struct breakpoint *breakpoint_to_reinsert;
 
-  /* Function to call when we hit this breakpoint.  */
-  void (*handler) (CORE_ADDR);
+  /* Function to call when we hit this breakpoint.  If it returns 1,
+     the breakpoint will be deleted; 0, it will be reinserted for
+     another round.  */
+  int (*handler) (CORE_ADDR);
 };
 
 struct breakpoint *breakpoints;
 
 void
-set_breakpoint_at (CORE_ADDR where, void (*handler) (CORE_ADDR))
+set_breakpoint_at (CORE_ADDR where, int (*handler) (CORE_ADDR))
 {
   struct breakpoint *bp;
 
@@ -114,7 +113,15 @@ find_breakpoint_at (CORE_ADDR where)
   return NULL;
 }
 
-static void
+void
+delete_breakpoint_at (CORE_ADDR addr)
+{
+  struct breakpoint *bp = find_breakpoint_at (addr);
+  if (bp != NULL)
+    delete_breakpoint (bp);
+}
+
+static int
 reinsert_breakpoint_handler (CORE_ADDR stop_pc)
 {
   struct breakpoint *stop_bp, *orig_bp;
@@ -130,7 +137,7 @@ reinsert_breakpoint_handler (CORE_ADDR stop_pc)
   (*the_target->write_memory) (orig_bp->pc, breakpoint_data,
 			       breakpoint_len);
   orig_bp->reinserting = 0;
-  delete_breakpoint (stop_bp);
+  return 1;
 }
 
 void
@@ -138,11 +145,11 @@ reinsert_breakpoint_by_bp (CORE_ADDR stop_pc, CORE_ADDR stop_at)
 {
   struct breakpoint *bp, *orig_bp;
 
-  set_breakpoint_at (stop_at, reinsert_breakpoint_handler);
-
   orig_bp = find_breakpoint_at (stop_pc);
   if (orig_bp == NULL)
     error ("Could not find original breakpoint in list.");
+
+  set_breakpoint_at (stop_at, reinsert_breakpoint_handler);
 
   bp = find_breakpoint_at (stop_at);
   if (bp == NULL)
@@ -198,19 +205,24 @@ check_breakpoints (CORE_ADDR stop_pc)
       return 0;
     }
 
-  (*bp->handler) (bp->pc);
-  return 1;
+  if ((*bp->handler) (bp->pc))
+    {
+      delete_breakpoint (bp);
+      return 2;
+    }
+  else
+    return 1;
 }
 
 void
-set_breakpoint_data (const char *bp_data, int bp_len)
+set_breakpoint_data (const unsigned char *bp_data, int bp_len)
 {
   breakpoint_data = bp_data;
   breakpoint_len = bp_len;
 }
 
 void
-check_mem_read (CORE_ADDR mem_addr, char *buf, int mem_len)
+check_mem_read (CORE_ADDR mem_addr, unsigned char *buf, int mem_len)
 {
   struct breakpoint *bp = breakpoints;
   CORE_ADDR mem_end = mem_addr + mem_len;
@@ -243,7 +255,7 @@ check_mem_read (CORE_ADDR mem_addr, char *buf, int mem_len)
 }
 
 void
-check_mem_write (CORE_ADDR mem_addr, char *buf, int mem_len)
+check_mem_write (CORE_ADDR mem_addr, unsigned char *buf, int mem_len)
 {
   struct breakpoint *bp = breakpoints;
   CORE_ADDR mem_end = mem_addr + mem_len;
@@ -275,4 +287,13 @@ check_mem_write (CORE_ADDR mem_addr, char *buf, int mem_len)
       if (bp->reinserting == 0)
 	memcpy (buf + buf_offset, breakpoint_data + copy_offset, copy_len);
     }
+}
+
+/* Delete all breakpoints.  */
+
+void
+delete_all_breakpoints (void)
+{
+  while (breakpoints)
+    delete_breakpoint (breakpoints);
 }

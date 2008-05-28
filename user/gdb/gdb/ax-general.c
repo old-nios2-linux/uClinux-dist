@@ -1,11 +1,11 @@
 /* Functions for manipulating expressions designed to be executed on the agent
-   Copyright 1998, 1999, 2000 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Despite what the above comment says about this file being part of
    GDB, we would like to keep these functions free of GDB
@@ -116,7 +114,7 @@ read_const (struct agent_expr *x, int o, int n)
 
   /* Make sure we're not reading off the end of the expression.  */
   if (o + n > x->len)
-    error ("GDB bug: ax-general.c (read_const): incomplete constant");
+    error (_("GDB bug: ax-general.c (read_const): incomplete constant"));
 
   for (i = 0; i < n; i++)
     accum = (accum << 8) | x->buf[o + i];
@@ -141,10 +139,10 @@ generic_ext (struct agent_expr *x, enum agent_op op, int n)
 {
   /* N must fit in a byte.  */
   if (n < 0 || n > 255)
-    error ("GDB bug: ax-general.c (generic_ext): bit count out of range");
+    error (_("GDB bug: ax-general.c (generic_ext): bit count out of range"));
   /* That had better be enough range.  */
   if (sizeof (LONGEST) * 8 > 255)
-    error ("GDB bug: ax-general.c (generic_ext): opcode has inadequate range");
+    error (_("GDB bug: ax-general.c (generic_ext): opcode has inadequate range"));
 
   grow_expr (x, 2);
   x->buf[x->len++] = op;
@@ -174,7 +172,7 @@ ax_trace_quick (struct agent_expr *x, int n)
 {
   /* N must fit in a byte.  */
   if (n < 0 || n > 255)
-    error ("GDB bug: ax-general.c (ax_trace_quick): size out of range for trace_quick");
+    error (_("GDB bug: ax-general.c (ax_trace_quick): size out of range for trace_quick"));
 
   grow_expr (x, 2);
   x->buf[x->len++] = aop_trace_quick;
@@ -209,7 +207,7 @@ ax_label (struct agent_expr *x, int patch, int target)
   /* Make sure the value is in range.  Don't accept 0xffff as an
      offset; that's our magic sentinel value for unpatched branches.  */
   if (target < 0 || target >= 0xffff)
-    error ("GDB bug: ax-general.c (ax_label): label target out of range");
+    error (_("GDB bug: ax-general.c (ax_label): label target out of range"));
 
   x->buf[patch] = (target >> 8) & 0xff;
   x->buf[patch + 1] = target & 0xff;
@@ -231,8 +229,12 @@ ax_const_l (struct agent_expr *x, LONGEST l)
      signed or unsigned; we always reproduce the value exactly, and
      use the shortest representation.  */
   for (op = 0, size = 8; size < 64; size *= 2, op++)
-    if (-((LONGEST) 1 << size) <= l && l < ((LONGEST) 1 << size))
-      break;
+    {
+      LONGEST lim = 1 << (size - 1);
+
+      if (-lim <= l && l <= lim - 1)
+        break;
+    }
 
   /* Emit the right opcode... */
   ax_simple (x, ops[op]);
@@ -251,7 +253,7 @@ void
 ax_const_d (struct agent_expr *x, LONGEST d)
 {
   /* FIXME: floating-point support not present yet.  */
-  error ("GDB bug: ax-general.c (ax_const_d): floating point not supported yet");
+  error (_("GDB bug: ax-general.c (ax_const_d): floating point not supported yet"));
 }
 
 
@@ -262,7 +264,7 @@ ax_reg (struct agent_expr *x, int reg)
 {
   /* Make sure the register number is in range.  */
   if (reg < 0 || reg > 0xffff)
-    error ("GDB bug: ax-general.c (ax_reg): register number out of range");
+    error (_("GDB bug: ax-general.c (ax_reg): register number out of range"));
   grow_expr (x, 3);
   x->buf[x->len] = aop_reg;
   x->buf[x->len + 1] = (reg >> 8) & 0xff;
@@ -340,7 +342,7 @@ ax_print (struct ui_file *f, struct agent_expr *x)
      the enum, to catch additions that people didn't sync.  */
   if ((sizeof (aop_map) / sizeof (aop_map[0]))
       != aop_last)
-    error ("GDB bug: ax-general.c (ax_print): opcode map out of sync");
+    error (_("GDB bug: ax-general.c (ax_print): opcode map out of sync"));
 
   for (i = 0; i < x->len;)
     {
@@ -349,13 +351,13 @@ ax_print (struct ui_file *f, struct agent_expr *x)
       if (op >= (sizeof (aop_map) / sizeof (aop_map[0]))
 	  || !aop_map[op].name)
 	{
-	  fprintf_filtered (f, "%3d  <bad opcode %02x>\n", i, op);
+	  fprintf_filtered (f, _("%3d  <bad opcode %02x>\n"), i, op);
 	  i++;
 	  continue;
 	}
       if (i + 1 + aop_map[op].op_size > x->len)
 	{
-	  fprintf_filtered (f, "%3d  <incomplete opcode %s>\n",
+	  fprintf_filtered (f, _("%3d  <incomplete opcode %s>\n"),
 			    i, aop_map[op].name);
 	  break;
 	}
@@ -388,15 +390,15 @@ ax_reqs (struct agent_expr *ax, struct agent_reqs *reqs)
   int reg_mask_len = 1;
   unsigned char *reg_mask = xmalloc (reg_mask_len * sizeof (reg_mask[0]));
 
-  /* Jump target table.  targets[i] is non-zero iff there is a jump to
-     offset i.  */
+  /* Jump target table.  targets[i] is non-zero iff we have found a
+     jump to offset i.  */
   char *targets = (char *) alloca (ax->len * sizeof (targets[0]));
 
-  /* Instruction boundary table.  boundary[i] is non-zero iff an
-     instruction starts at offset i.  */
+  /* Instruction boundary table.  boundary[i] is non-zero iff our scan
+     has reached an instruction starting at offset i.  */
   char *boundary = (char *) alloca (ax->len * sizeof (boundary[0]));
 
-  /* Stack height record.  iff either targets[i] or boundary[i] is
+  /* Stack height record.  If either targets[i] or boundary[i] is
      non-zero, heights[i] is the height the stack should have before
      executing the bytecode at that point.  */
   int *heights = (int *) alloca (ax->len * sizeof (heights[0]));
@@ -437,8 +439,9 @@ ax_reqs (struct agent_expr *ax, struct agent_reqs *reqs)
 	  return;
 	}
 
-      /* If this instruction is a jump target, does the current stack
-         height match the stack height at the jump source?  */
+      /* If this instruction is a forward jump target, does the
+         current stack height match the stack height at the jump
+         source?  */
       if (targets[i] && (heights[i] != height))
 	{
 	  reqs->flaw = agent_flaw_height_mismatch;
@@ -472,21 +475,22 @@ ax_reqs (struct agent_expr *ax, struct agent_reqs *reqs)
 	      xfree (reg_mask);
 	      return;
 	    }
-	  /* Have we already found other jumps to the same location?  */
-	  else if (targets[target])
+
+	  /* Do we have any information about what the stack height
+             should be at the target?  */
+	  if (targets[target] || boundary[target])
 	    {
-	      if (heights[i] != height)
+	      if (heights[target] != height)
 		{
 		  reqs->flaw = agent_flaw_height_mismatch;
 		  xfree (reg_mask);
 		  return;
 		}
 	    }
-	  else
-	    {
-	      targets[target] = 1;
-	      heights[target] = height;
-	    }
+
+          /* Record the target, along with the stack height we expect.  */
+          targets[target] = 1;
+          heights[target] = height;
 	}
 
       /* For unconditional jumps with a successor, check that the

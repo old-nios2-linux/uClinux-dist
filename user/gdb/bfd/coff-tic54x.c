@@ -1,5 +1,5 @@
 /* BFD back-end for TMS320C54X coff binaries.
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,11 +17,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "coff/tic54x.h"
@@ -229,6 +229,7 @@ reloc_howto_type tic54x_howto_table[] =
   };
 
 #define coff_bfd_reloc_type_lookup tic54x_coff_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup tic54x_coff_reloc_name_lookup
 
 /* For the case statement use the code values used tc_gen_reloc (defined in
    bfd/reloc.c) to map to the howto table entries.  */
@@ -257,6 +258,22 @@ tic54x_coff_reloc_type_lookup (abfd, code)
     default:
       return (reloc_howto_type *) NULL;
     }
+}
+
+static reloc_howto_type *
+tic54x_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			       const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < sizeof (tic54x_howto_table) / sizeof (tic54x_howto_table[0]);
+       i++)
+    if (tic54x_howto_table[i].name != NULL
+	&& strcasecmp (tic54x_howto_table[i].name, r_name) == 0)
+      return &tic54x_howto_table[i];
+
+  return NULL;
 }
 
 /* Code to turn a r_type into a howto ptr, uses the above howto table.
@@ -327,6 +344,15 @@ ticoff_bfd_is_local_label_name (abfd, name)
 }
 
 #define coff_bfd_is_local_label_name ticoff_bfd_is_local_label_name
+
+/* Clear the r_reserved field in relocs.  */
+#define SWAP_OUT_RELOC_EXTRA(abfd,src,dst) \
+  do \
+    { \
+      dst->r_reserved[0] = 0; \
+      dst->r_reserved[1] = 0; \
+    } \
+  while (0)
 
 /* Customize coffcode.h; the default coff_ functions are set up to use COFF2;
    coff_bad_format_hook uses BADMAG, so set that for COFF2.  The COFF1

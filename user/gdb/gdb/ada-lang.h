@@ -1,22 +1,22 @@
 /* Ada language support definitions for GDB, the GNU debugger.
-   Copyright 1992, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
 
-This file is part of GDB.
+   Copyright (C) 1992, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2008 Free Software Foundation, Inc.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This file is part of GDB.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (ADA_LANG_H)
 #define ADA_LANG_H 1
@@ -32,7 +32,7 @@ struct frame_info;
    system and that might consider (confusing) debugging information.
    Each name (a basic regular expression string) is followed by a
    comma.  FIXME: Should be part of a configuration file. */
-#if defined(__alpha__) && defined(__osf__) && !defined(VXWORKS_TARGET)
+#if defined(__alpha__) && defined(__osf__)
 #define ADA_KNOWN_RUNTIME_FILE_NAME_PATTERNS \
    "^[agis]-.*\\.ad[bs]$", \
    "/usr/shlib/libpthread\\.so",
@@ -52,7 +52,7 @@ struct frame_info;
    interest to users. Each name (a basic regular expression string)
    is followed by a comma. */
 #define ADA_KNOWN_AUXILIARY_FUNCTION_NAME_PATTERNS \
-   "___clean[.a-zA-Z0-9_]*$",
+   "___clean[.$a-zA-Z0-9_]*$",
 
 /* The maximum number of frame levels searched for non-local,
  * non-global symbols.  This limit exists as a precaution to prevent
@@ -113,6 +113,54 @@ enum ada_operator
        type TYPE (typically a subrange). */
     UNOP_IN_RANGE,
 
+    /* An aggregate.   A single immediate operand, N>0, gives
+       the number of component specifications that follow.  The
+       immediate operand is followed by a second OP_AGGREGATE.  
+       Next come N component specifications.  A component
+       specification is either an OP_OTHERS (others=>...), an
+       OP_CHOICES (for named associations), or other expression (for
+       positional aggregates only).  Aggregates currently
+       occur only as the right sides of assignments. */
+    OP_AGGREGATE,
+
+    /* An others clause.  Followed by a single expression. */
+    OP_OTHERS,
+
+    /* An aggregate component association.  A single immediate operand, N, 
+       gives the number of choices that follow.  This is followed by a second
+       OP_CHOICES operator.  Next come N operands, each of which is an
+       expression, an OP_DISCRETE_RANGE, or an OP_NAME---the latter 
+       for a simple name that must be a record component name and does 
+       not correspond to a single existing symbol.  After the N choice 
+       indicators comes an expression giving the value.
+
+       In an aggregate such as (X => E1, ...), where X is a simple
+       name, X could syntactically be either a component_selector_name 
+       or an expression used as a discrete_choice, depending on the
+       aggregate's type context.  Since this is not known at parsing
+       time, we don't attempt to disambiguate X if it has multiple
+       definitions, but instead supply an OP_NAME.  If X has a single
+       definition, we represent it with an OP_VAR_VALUE, even though
+       it may turn out to be within a record aggregate.  Aggregate 
+       evaluation can use either OP_NAMEs or OP_VAR_VALUEs to get a
+       record field name, and can evaluate OP_VAR_VALUE normally to
+       get its value as an expression.  Unfortunately, we lose out in
+       cases where X has multiple meanings and is part of an array
+       aggregate.  I hope these are not common enough to annoy users,
+       who can work around the problem in any case by putting
+       parentheses around X. */
+    OP_CHOICES,
+
+    /* A positional aggregate component association.  The operator is 
+       followed by a single integer indicating the position in the 
+       aggregate (0-based), followed by a second OP_POSITIONAL.  Next 
+       follows a single expression giving the component value.  */
+    OP_POSITIONAL,
+
+    /* A range of values.  Followed by two expressions giving the
+       upper and lower bounds of the range. */
+    OP_DISCRETE_RANGE,       
+
     /* End marker */
     OP_ADA_LAST
   };
@@ -124,6 +172,28 @@ struct ada_symbol_info {
   struct block* block;
   struct symtab* symtab;
 };
+
+/* Denotes a type of renaming symbol (see ada_parse_renaming).  */
+enum ada_renaming_category
+  {
+    /* Indicates a symbol that does not encode a renaming.  */
+    ADA_NOT_RENAMING,
+
+    /* For symbols declared
+         Foo : TYPE renamed OBJECT;  */
+    ADA_OBJECT_RENAMING,
+
+    /* For symbols declared
+         Foo : exception renames EXCEPTION;  */
+    ADA_EXCEPTION_RENAMING,
+    /* For packages declared
+          package Foo renames PACKAGE; */
+    ADA_PACKAGE_RENAMING,
+    /* For subprograms declared
+          SUBPROGRAM_SPEC renames SUBPROGRAM;
+       (Currently not used).  */
+    ADA_SUBPROGRAM_RENAMING
+  };
 
 /* Ada task structures.  */
 
@@ -139,6 +209,10 @@ struct task_control_block
   CORE_ADDR call;
   CORE_ADDR thread;
   CORE_ADDR lwp;    /* This field is not always present in the ATCB.  */
+
+  /* If the task is waiting on a task entry, this field contains the
+   task_id of the other task.  */
+  CORE_ADDR called_task;
 };
 
 struct task_ptid
@@ -160,9 +234,6 @@ struct task_entry
   int stack_per;
 };
 
-/* The maximum number of tasks known to the Ada runtime.  */
-extern const int MAX_NUMBER_OF_KNOWN_TASKS;
-
 /* task entry list.  */
 extern struct task_entry *task_list;
 
@@ -171,9 +242,9 @@ extern struct task_entry *task_list;
    least M objects, updating V and S as necessary. */
 
 #define GROW_VECT(v, s, m)                                              \
-   if ((s) < (m)) grow_vect ((void**) &(v), &(s), (m), sizeof(*(v)));
+   if ((s) < (m)) (v) = grow_vect (v, &(s), m, sizeof *(v));
 
-extern void grow_vect (void **, size_t *, size_t, int);
+extern void *grow_vect (void *, size_t *, size_t, int);
 
 extern int ada_get_field_index (const struct type *type,
                                 const char *field_name,
@@ -187,7 +258,7 @@ extern void ada_error (char *); /* Defined in ada-exp.y */
 extern void ada_print_type (struct type *, char *, struct ui_file *, int,
                             int);
 
-extern int ada_val_print (struct type *, char *, int, CORE_ADDR,
+extern int ada_val_print (struct type *, const gdb_byte *, int, CORE_ADDR,
                           struct ui_file *, int, int, int,
                           enum val_prettyprint);
 
@@ -196,17 +267,20 @@ extern int ada_value_print (struct value *, struct ui_file *, int,
 
                                 /* Defined in ada-lang.c */
 
-extern struct value *value_from_contents_and_address (struct type *, char *,
+extern struct value *value_from_contents_and_address (struct type *,
+						      const gdb_byte *,
                                                       CORE_ADDR);
 
 extern void ada_emit_char (int, struct ui_file *, int, int);
 
 extern void ada_printchar (int, struct ui_file *);
 
-extern void ada_printstr (struct ui_file *, char *, unsigned int, int, int);
+extern void ada_printstr (struct ui_file *, const gdb_byte *,
+			  unsigned int, int, int);
 
-extern void ada_convert_actuals (struct value *, int, struct value **,
-                                 CORE_ADDR *);
+struct value *ada_convert_actual (struct value *actual,
+                                  struct type *formal_type0,
+                                  CORE_ADDR *sp);
 
 extern struct value *ada_value_subscript (struct value *, int,
                                           struct value **);
@@ -238,9 +312,6 @@ extern enum language ada_update_initial_language (enum language,
 
 extern void clear_ada_sym_cache (void);
 
-extern char **ada_make_symbol_completion_list (const char *text0,
-                                               const char *word);
-
 extern int ada_lookup_symbol_list (const char *, const struct block *,
                                    domain_enum, struct ada_symbol_info**);
 
@@ -249,6 +320,11 @@ extern char *ada_fold_name (const char *);
 extern struct symbol *ada_lookup_symbol (const char *, const struct block *,
                                          domain_enum, int *, 
 					 struct symtab **);
+
+extern struct symbol *
+ada_lookup_encoded_symbol (const char *, const struct block *,
+			   domain_enum namespace, 
+			   struct block **, struct symtab **);
 
 extern struct minimal_symbol *ada_lookup_simple_minsym (const char *);
 
@@ -275,7 +351,8 @@ extern int ada_is_ignored_field (struct type *, int);
 
 extern int ada_is_packed_array_type (struct type *);
 
-extern struct value *ada_value_primitive_packed_val (struct value *, char *,
+extern struct value *ada_value_primitive_packed_val (struct value *,
+						     const gdb_byte *,
                                                      long, int, int,
                                                      struct type *);
 
@@ -309,13 +386,14 @@ extern int ada_in_variant (LONGEST, struct type *, int);
 
 extern char *ada_variant_discrim_name (struct type *);
 
-extern struct value *ada_value_struct_elt (struct value *, char *, char *);
+extern struct value *ada_value_struct_elt (struct value *, char *, int);
 
 extern int ada_is_aligner_type (struct type *);
 
 extern struct type *ada_aligned_type (struct type *);
 
-extern char *ada_aligned_value_addr (struct type *, char *);
+extern const gdb_byte *ada_aligned_value_addr (struct type *,
+					       const gdb_byte *);
 
 extern const char *ada_attribute_name (enum exp_opcode);
 
@@ -337,15 +415,18 @@ extern struct value *ada_vax_float_print_function (struct type *);
 
 extern struct type *ada_system_address_type (void);
 
-extern int ada_which_variant_applies (struct type *, struct type *, char *);
+extern int ada_which_variant_applies (struct type *, struct type *,
+				      const gdb_byte *);
 
-extern struct type *ada_to_fixed_type (struct type *, char *, CORE_ADDR,
-                                       struct value *);
+extern struct type *ada_to_fixed_type (struct type *, const gdb_byte *,
+				       CORE_ADDR, struct value *,
+                                       int check_tag);
 
-extern struct type *
-  ada_template_to_fixed_record_type_1 (struct type *type, char *valaddr,
-                                       CORE_ADDR address, struct value *dval0,
-                                       int keep_dynamic_fields);
+extern struct type *ada_template_to_fixed_record_type_1 (struct type *type,
+							 const gdb_byte *valaddr,
+							 CORE_ADDR address,
+							 struct value *dval0,
+							 int keep_dynamic_fields);
 
 extern int ada_name_prefix_len (const char *);
 
@@ -383,11 +464,9 @@ extern void ada_print_scalar (struct type *, LONGEST, struct ui_file *);
 
 extern int ada_is_range_type_name (const char *);
 
-extern const char *ada_renaming_type (struct type *);
-
-extern int ada_is_object_renaming (struct symbol *);
-
-extern char *ada_simple_renamed_entity (struct symbol *);
+extern enum ada_renaming_category ada_parse_renaming (struct symbol *,
+						      const char **,
+						      int *, const char **);
 
 extern char *ada_breakpoint_rewrite (char *, int *);
 
@@ -413,20 +492,21 @@ extern int ada_print_exception_breakpoint_nontask (struct breakpoint *);
 
 extern void ada_print_exception_breakpoint_task (struct breakpoint *);
 
-extern void ada_find_printable_frame (struct frame_info *fi);
-
 extern void ada_reset_thread_registers (void);
 
 extern int ada_build_task_list (void);
 
-/* Look up a symbol by name using the search conventions of 
-   a specific language (optional block, optional symtab). 
-   FIXME: Should be symtab.h. */
+extern int ada_exception_catchpoint_p (struct breakpoint *b);
+  
+extern struct symtab_and_line
+  ada_decode_exception_location (char *args, char **addr_string,
+                                 char **exp_string, char **cond_string,
+                                 struct expression **cond,
+                                 struct breakpoint_ops **ops);
 
-extern struct symbol *lookup_symbol_in_language (const char *, 
-						 const struct block *,
-						 domain_enum, 
-						 enum language,
-						 int *,
-						 struct symtab **);
+extern struct symtab_and_line
+  ada_decode_assert_location (char *args, char **addr_string,
+                              struct breakpoint_ops **ops);
+
+
 #endif

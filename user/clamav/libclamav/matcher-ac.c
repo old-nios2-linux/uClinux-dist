@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,8 +42,9 @@ uint8_t cli_ac_maxdepth = AC_DEFAULT_MAX_DEPTH;
 
 int cli_ac_addpatt(struct cli_matcher *root, struct cli_ac_patt *pattern)
 {
-	struct cli_ac_node *pt, *next, **newtable;
+	struct cli_ac_node *pt, *next;
 	struct cli_ac_patt *ph;
+	void *newtable;
 	struct cli_ac_alt *a1, *a2;
 	uint8_t i, match;
 	uint16_t len = MIN(root->ac_maxdepth, pattern->length);
@@ -89,7 +92,7 @@ int cli_ac_addpatt(struct cli_matcher *root, struct cli_ac_patt *pattern)
 	    }
 
 	    root->ac_nodes++;
-	    newtable = (struct cli_ac_node **) cli_realloc(root->ac_nodetable, root->ac_nodes * sizeof(struct cli_ac_node *));
+	    newtable = cli_realloc(root->ac_nodetable, root->ac_nodes * sizeof(struct cli_ac_node *));
 	    if(!newtable) {
 		root->ac_nodes--;
 		cli_errmsg("cli_ac_addpatt: Can't realloc ac_nodetable\n");
@@ -98,8 +101,8 @@ int cli_ac_addpatt(struct cli_matcher *root, struct cli_ac_patt *pattern)
 		free(next);
 		return CL_EMEM;
 	    }
-	    newtable[root->ac_nodes - 1] = next;
-	    root->ac_nodetable = newtable;
+	    root->ac_nodetable = (struct cli_ac_node **) newtable;
+	    root->ac_nodetable[root->ac_nodes - 1] = next;
 
 	    pt->trans[(unsigned char) (pattern->pattern[i] & 0xff)] = next;
 	    pt->leaf = 0;
@@ -109,11 +112,13 @@ int cli_ac_addpatt(struct cli_matcher *root, struct cli_ac_patt *pattern)
     }
 
     root->ac_patterns++;
-    root->ac_pattable = (struct cli_ac_patt **) cli_realloc2(root->ac_pattable, root->ac_patterns * sizeof(struct cli_ac_patt *));
-    if(!root->ac_pattable) {
+    newtable = cli_realloc(root->ac_pattable, root->ac_patterns * sizeof(struct cli_ac_patt *));
+    if(!newtable) {
+	root->ac_patterns--;
 	cli_errmsg("cli_ac_addpatt: Can't realloc ac_pattable\n");
 	return CL_EMEM;
     }
+    root->ac_pattable = (struct cli_ac_patt **) newtable;
     root->ac_pattable[root->ac_patterns - 1] = pattern;
 
     pt->final = 1;
@@ -341,11 +346,7 @@ void cli_ac_free(struct cli_matcher *root)
 
     for(i = 0; i < root->ac_patterns; i++) {
 	patt = root->ac_pattable[i];
-
-	if(patt->prefix)
-	    free(patt->prefix);
-	else
-	    free(patt->pattern);
+	patt->prefix ? free(patt->prefix) : free(patt->pattern);
 	free(patt->virname);
 	if(patt->offset)
 	    free(patt->offset);
@@ -383,19 +384,19 @@ void cli_ac_free(struct cli_matcher *root)
     switch(wc = p & CLI_MATCH_WILDCARD) {				\
 	case CLI_MATCH_CHAR:						\
 	    if((unsigned char) p != b)					\
-		return 0;						\
+		match = 0;						\
 	    break;							\
 									\
 	case CLI_MATCH_IGNORE:						\
 	    break;							\
 									\
 	case CLI_MATCH_ALTERNATIVE:					\
-	    found = 0;							\
+	    match = 0;							\
 	    alt = pattern->alttable[altcnt];				\
 	    if(alt->chmode) {						\
 		for(j = 0; j < alt->num; j++) {				\
 		    if(alt->str[j] == b) {				\
-			found = 1;					\
+			match = 1;					\
 			break;						\
 		    }							\
 		}							\
@@ -403,7 +404,7 @@ void cli_ac_free(struct cli_matcher *root)
 		while(alt) {						\
 		    if(bp + alt->len <= length) {			\
 			if(!memcmp(&buffer[bp], alt->str, alt->len)) {	\
-			    found = 1;					\
+			    match = 1;					\
 			    bp += alt->len - 1;				\
 			    break;					\
 			}						\
@@ -411,31 +412,28 @@ void cli_ac_free(struct cli_matcher *root)
 		    alt = alt->next;					\
 		}							\
 	    }								\
-	    if(!found)							\
-		return 0;						\
 	    altcnt++;							\
 	    break;							\
 									\
 	case CLI_MATCH_NIBBLE_HIGH:					\
 	    if((unsigned char) (p & 0x00f0) != (b & 0xf0))		\
-		return 0;						\
+		match = 0;						\
 	    break;							\
 									\
 	case CLI_MATCH_NIBBLE_LOW:					\
 	    if((unsigned char) (p & 0x000f) != (b & 0x0f))		\
-		return 0;						\
+		match = 0;						\
 	    break;							\
 									\
 	default:							\
 	    cli_errmsg("ac_findmatch: Unknown wildcard 0x%x\n", wc);	\
-	    return 0;							\
+	    match = 0;							\
     }
 
 inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uint32_t length, const struct cli_ac_patt *pattern, uint32_t *end)
 {
-	uint32_t bp;
+	uint32_t bp, match;
 	uint16_t wc, i, j, altcnt = pattern->alt_pattern;
-	uint8_t found;
 	struct cli_ac_alt *alt;
 
 
@@ -444,20 +442,59 @@ inline static int ac_findmatch(const unsigned char *buffer, uint32_t offset, uin
 
     bp = offset + pattern->depth;
 
+    match = 1;
     for(i = pattern->depth; i < pattern->length && bp < length; i++) {
 	AC_MATCH_CHAR(pattern->pattern[i],buffer[bp]);
+	if(!match)
+	    return 0;
 	bp++;
     }
     *end = bp;
 
+    if(!(pattern->ch[1] & CLI_MATCH_IGNORE)) {
+	bp += pattern->ch_mindist[1];
+	for(i = pattern->ch_mindist[1]; i <= pattern->ch_maxdist[1]; i++) {
+	    if(bp >= length)
+		return 0;
+	    match = 1;
+	    AC_MATCH_CHAR(pattern->ch[1],buffer[bp]);
+	    if(match)
+		break;
+	    bp++;
+	}
+	if(!match)
+	    return 0;
+    }
+
     if(pattern->prefix) {
 	altcnt = 0;
 	bp = offset - pattern->prefix_length;
-
+	match = 1;
 	for(i = 0; i < pattern->prefix_length; i++) {
 	    AC_MATCH_CHAR(pattern->prefix[i],buffer[bp]);
+	    if(!match)
+		return 0;
 	    bp++;
 	}
+    }
+
+    if(!(pattern->ch[0] & CLI_MATCH_IGNORE)) {
+	bp = offset - pattern->prefix_length;
+	if(pattern->ch_mindist[0] + 1 > bp)
+	    return 0;
+	bp -= pattern->ch_mindist[0] + 1;
+	for(i = pattern->ch_mindist[0]; i <= pattern->ch_maxdist[0]; i++) {
+	    match = 1;
+	    AC_MATCH_CHAR(pattern->ch[0],buffer[bp]);
+	    if(match)
+		break;
+	    if(!bp)
+		return 0;
+	    else
+		bp--;
+	}
+	if(!match)
+	    return 0;
     }
 
     return 1;
@@ -501,12 +538,15 @@ void cli_ac_freedata(struct cli_ac_data *data)
     }
 }
 
-inline static int ac_addtype(struct cli_matched_type **list, cli_file_t type, off_t offset)
+inline static int ac_addtype(struct cli_matched_type **list, cli_file_t type, off_t offset, const cli_ctx *ctx)
 {
 	struct cli_matched_type *tnode, *tnode_last;
 
 
-    if(*list && (*list)->cnt >= MAX_EMBEDDED_OBJ)
+    if(type == CL_TYPE_ZIPSFX) {
+	if(*list && ctx && ctx->limits && ctx->limits->maxfiles && (*list)->cnt > ctx->limits->maxfiles)
+	    return CL_SUCCESS;
+    } else if(*list && (*list)->cnt >= MAX_EMBEDDED_OBJ)
 	return CL_SUCCESS;
 
     if(!(tnode = cli_calloc(1, sizeof(struct cli_matched_type)))) {
@@ -530,7 +570,7 @@ inline static int ac_addtype(struct cli_matched_type **list, cli_file_t type, of
     return CL_SUCCESS;
 }
 
-int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_matcher *root, struct cli_ac_data *mdata, uint8_t otfrec, uint32_t offset, cli_file_t ftype, int fd, struct cli_matched_type **ftoffset)
+int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cli_matcher *root, struct cli_ac_data *mdata, uint32_t offset, cli_file_t ftype, int fd, struct cli_matched_type **ftoffset, unsigned int mode, const cli_ctx *ctx)
 {
 	struct cli_ac_node *current;
 	struct cli_ac_patt *patt, *pt;
@@ -567,6 +607,12 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 		if(ac_findmatch(buffer, bp, length, patt, &matchend)) {
 		    pt = patt;
 		    while(pt) {
+
+			if((pt->type && !(mode & AC_SCAN_FT)) || (!pt->type && !(mode & AC_SCAN_VIR))) {
+			    pt = pt->next_same;
+			    continue;
+			}
+
 			realoff = offset + bp - pt->prefix_length;
 
 			if((pt->offset || pt->target) && (!pt->sigid || pt->partno == 1)) {
@@ -632,25 +678,31 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 				    offmatrix[pt->parts - 1][offmatrix[pt->partno - 1][0]] = realoff;
 			    } else if(found && pt->partno == pt->parts) {
 				if(pt->type) {
-				    if(otfrec) {
-					if(pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) {
-					    cli_dbgmsg("Matched signature for file type %s\n", pt->virname);
-					    type = pt->type;
-					    if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
-						/* FIXME: we don't know which offset of the first part is the correct one */
-						for(j = 1; j <= AC_DEFAULT_TRACKLEN && offmatrix[0][j] != -1; j++) {
-						    if(ac_addtype(ftoffset, type, offmatrix[pt->parts - 1][j])) {
-							if(info.exeinfo.section)
-							    free(info.exeinfo.section);
-							return CL_EMEM;
-						    }
+
+				    if(pt->type == CL_TYPE_IGNORED && (!pt->rtype || ftype == pt->rtype)) {
+					if(info.exeinfo.section)
+					    free(info.exeinfo.section);
+
+					return CL_TYPE_IGNORED;
+				    }
+
+				    if((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) && (!pt->rtype || ftype == pt->rtype)) {
+					cli_dbgmsg("Matched signature for file type %s\n", pt->virname);
+					type = pt->type;
+					if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
+					    /* FIXME: we don't know which offset of the first part is the correct one */
+					    for(j = 1; j <= AC_DEFAULT_TRACKLEN && offmatrix[0][j] != -1; j++) {
+						if(ac_addtype(ftoffset, type, offmatrix[pt->parts - 1][j], ctx)) {
+						    if(info.exeinfo.section)
+							free(info.exeinfo.section);
+						    return CL_EMEM;
 						}
 					    }
-
-					    memset(offmatrix[0], -1, pt->parts * (AC_DEFAULT_TRACKLEN + 1) * sizeof(int32_t));
-					    for(j = 0; j < pt->parts; j++)
-						offmatrix[j][0] = 0;
 					}
+
+					memset(offmatrix[0], -1, pt->parts * (AC_DEFAULT_TRACKLEN + 1) * sizeof(int32_t));
+					for(j = 0; j < pt->parts; j++)
+					    offmatrix[j][0] = 0;
 				    }
 
 				} else { /* !pt->type */
@@ -666,17 +718,21 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 
 			} else { /* old type signature */
 			    if(pt->type) {
-				if(otfrec) {
-				    if(pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) {
-					cli_dbgmsg("Matched signature for file type %s at %u\n", pt->virname, realoff);
-					type = pt->type;
-					if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
+				if(pt->type == CL_TYPE_IGNORED && (!pt->rtype || ftype == pt->rtype)) {
+				    if(info.exeinfo.section)
+					free(info.exeinfo.section);
 
-					    if(ac_addtype(ftoffset, type, realoff)) {
-						if(info.exeinfo.section)
-						    free(info.exeinfo.section);
-						return CL_EMEM;
-					    }
+				    return CL_TYPE_IGNORED;
+				}
+				if((pt->type > type || pt->type >= CL_TYPE_SFX || pt->type == CL_TYPE_MSEXE) && (!pt->rtype || ftype == pt->rtype)) {
+				    cli_dbgmsg("Matched signature for file type %s at %u\n", pt->virname, realoff);
+				    type = pt->type;
+				    if(ftoffset && (!*ftoffset || (*ftoffset)->cnt < MAX_EMBEDDED_OBJ || type == CL_TYPE_ZIPSFX) && ((ftype == CL_TYPE_MSEXE && type >= CL_TYPE_SFX) || ((ftype == CL_TYPE_MSEXE || ftype == CL_TYPE_ZIP) && type == CL_TYPE_MSEXE)))  {
+
+					if(ac_addtype(ftoffset, type, realoff, ctx)) {
+					    if(info.exeinfo.section)
+						free(info.exeinfo.section);
+					    return CL_EMEM;
 					}
 				    }
 				}
@@ -700,15 +756,15 @@ int cli_ac_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
     if(info.exeinfo.section)
 	free(info.exeinfo.section);
 
-    return otfrec ? type : CL_CLEAN;
+    return (mode & AC_SCAN_FT) ? type : CL_CLEAN;
 }
 
 /* FIXME: clean up the code */
-int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, uint8_t target)
+int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hexsig, uint32_t sigid, uint16_t parts, uint16_t partno, uint16_t rtype, uint16_t type, uint32_t mindist, uint32_t maxdist, const char *offset, uint8_t target)
 {
 	struct cli_ac_patt *new;
-	char *pt, *hex = NULL;
-	uint16_t i, j, ppos = 0, pend;
+	char *pt, *pt2, *hex = NULL, *hexcpy = NULL;
+	uint16_t i, j, ppos = 0, pend, *dec;
 	uint8_t wprefix = 0, zprefix = 1, namelen, plen = 0;
 	struct cli_ac_alt *newalt, *altpt, **newtable;
 	int ret, error = CL_SUCCESS;
@@ -720,6 +776,7 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     if((new = (struct cli_ac_patt *) cli_calloc(1, sizeof(struct cli_ac_patt))) == NULL)
 	return CL_EMEM;
 
+    new->rtype = rtype;
     new->type = type;
     new->sigid = sigid;
     new->parts = parts;
@@ -727,11 +784,94 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     new->mindist = mindist;
     new->maxdist = maxdist;
     new->target = target;
+    new->ch[0] |= CLI_MATCH_IGNORE;
+    new->ch[1] |= CLI_MATCH_IGNORE;
+
+    if(strchr(hexsig, '[')) {
+	if(!(hexcpy = cli_strdup(hexsig))) {
+	    free(new);
+	    return CL_EMEM;
+	}
+
+	hex = hexcpy;
+	for(i = 0; i < 2; i++) {
+		unsigned int n1, n2;
+
+	    if(!(pt = strchr(hex, '[')))
+		break;
+	    *pt++ = 0;
+
+	    if(!(pt2 = strchr(pt, ']'))) {
+		cli_dbgmsg("cli_ac_addsig: missing closing square bracket\n");
+		error = CL_EMALFDB;
+		break;
+	    }
+	    *pt2++ = 0;
+
+            if(sscanf(pt, "%u-%u", &n1, &n2) != 2) {
+		cli_dbgmsg("cli_ac_addsig: incorrect range inside square brackets\n");
+		error = CL_EMALFDB;
+		break;
+	    }
+
+	    if((n1 > n2) || (n2 > AC_CH_MAXDIST)) {
+		cli_dbgmsg("cli_ac_addsig: incorrect range inside square brackets\n");
+		error = CL_EMALFDB;
+		break;
+	    }
+
+	    if(strlen(hex) == 2) {
+		if(i) {
+		    error = CL_EMALFDB;
+		    break;
+		}
+		dec = cli_hex2ui(hex);
+		if(!dec) {
+		    error = CL_EMALFDB;
+		    break;
+		}
+		new->ch[i] = *dec;
+		free(dec);
+		new->ch_mindist[i] = n1;
+		new->ch_maxdist[i] = n2;
+		hex = pt2;
+	    } else if(strlen(pt2) == 2) {
+		i = 1;
+		dec = cli_hex2ui(pt2);
+		if(!dec) {
+		    error = CL_EMALFDB;
+		    break;
+		}
+		new->ch[i] = *dec;
+		free(dec);
+		new->ch_mindist[i] = n1;
+		new->ch_maxdist[i] = n2;
+	    } else {
+		error = CL_EMALFDB;
+		break;
+	    }
+	}
+
+	if(error) {
+	    free(hexcpy);
+	    free(new);
+	    return error;
+	}
+
+	hex = cli_strdup(hex);
+	free(hexcpy);
+	if(!hex) {
+	    free(new);
+	    return CL_EMEM;
+	}
+    }
 
     if(strchr(hexsig, '(')) {
-	    char *hexcpy, *hexnew, *start, *h, *c;
+	    char *hexnew, *start, *h, *c;
 
-	if(!(hexcpy = cli_strdup(hexsig))) {
+	if(hex) {
+	    hexcpy = hex;
+	} else if(!(hexcpy = cli_strdup(hexsig))) {
 	    free(new);
 	    return CL_EMEM;
 	}
@@ -860,17 +1000,15 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
 	}
     }
 
-    if((new->pattern = cli_hex2ui(new->alt ? hex : hexsig)) == NULL) {
-	if(new->alt) {
-	    free(hex);
+    if((new->pattern = cli_hex2ui(hex ? hex : hexsig)) == NULL) {
+	if(new->alt)
 	    ac_free_alt(new);
-	}
+	free(hex);
 	free(new);
 	return CL_EMALFDB;
     }
-    new->length = strlen(new->alt ? hex : hexsig) / 2;
-    if(new->alt)
-	free(hex);
+    new->length = strlen(hex ? hex : hexsig) / 2;
+    free(hex);
 
     for(i = 0; i < root->ac_maxdepth && i < new->length; i++) {
 	if(new->pattern[i] & CLI_MATCH_WILDCARD) {
@@ -928,20 +1066,14 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
 
     if(!namelen) {
 	cli_errmsg("cli_ac_addsig: No virus name\n");
-	if(new->prefix)
-	    free(new->prefix);
-	else
-	    free(new->pattern);
+	new->prefix ? free(new->prefix) : free(new->pattern);
 	ac_free_alt(new);
 	free(new);
 	return CL_EMALFDB;
     }
 
     if((new->virname = cli_calloc(namelen + 1, sizeof(char))) == NULL) {
-	if(new->prefix)
-	    free(new->prefix);
-	else
-	    free(new->pattern);
+	new->prefix ? free(new->prefix) : free(new->pattern);
 	ac_free_alt(new);
 	free(new);
 	return CL_EMEM;
@@ -951,10 +1083,7 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     if(offset) {
 	new->offset = cli_strdup(offset);
 	if(!new->offset) {
-	    if(new->prefix)
-		free(new->prefix);
-	    else
-		free(new->pattern);
+	    new->prefix ? free(new->prefix) : free(new->pattern);
 	    ac_free_alt(new);
 	    free(new->virname);
 	    free(new);
@@ -963,10 +1092,7 @@ int cli_ac_addsig(struct cli_matcher *root, const char *virname, const char *hex
     }
 
     if((ret = cli_ac_addpatt(root, new))) {
-	if(new->prefix)
-	    free(new->prefix);
-	else
-	    free(new->pattern);
+	new->prefix ? free(new->prefix) : free(new->pattern);
 	free(new->virname);
 	ac_free_alt(new);
 	if(new->offset)

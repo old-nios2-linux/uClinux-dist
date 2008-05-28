@@ -1,13 +1,13 @@
 /* Handle SunOS shared libraries for GDB, the GNU Debugger.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
-   2000, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -438,10 +436,8 @@ sunos_current_sos (void)
       target_read_string (LM_NAME (new), &buffer,
 			  SO_NAME_MAX_PATH_SIZE - 1, &errcode);
       if (errcode != 0)
-	{
-	  warning ("current_sos: Can't read pathname for load map: %s\n",
-		   safe_strerror (errcode));
-	}
+	warning (_("Can't read pathname for load map: %s."),
+		 safe_strerror (errcode));
       else
 	{
 	  strncpy (new->so_name, buffer, SO_NAME_MAX_PATH_SIZE - 1);
@@ -539,7 +535,7 @@ disable_break (void)
 
   if (stop_pc != breakpoint_addr)
     {
-      warning ("stopped at unknown breakpoint while handling shared libraries");
+      warning (_("stopped at unknown breakpoint while handling shared libraries"));
     }
 
   return 1;
@@ -695,7 +691,7 @@ sunos_special_symbol_handling (void)
 
    SYNOPSIS
 
-   void sunos_solib_create_inferior_hook()
+   void sunos_solib_create_inferior_hook ()
 
    DESCRIPTION
 
@@ -750,7 +746,7 @@ sunos_solib_create_inferior_hook (void)
 
   if (!enable_break ())
     {
-      warning ("shared library handler failed to enable breakpoint");
+      warning (_("shared library handler failed to enable breakpoint"));
       return;
     }
 
@@ -769,7 +765,7 @@ sunos_solib_create_inferior_hook (void)
   do
     {
       target_resume (pid_to_ptid (-1), 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
   stop_soon = NO_STOP_QUIETLY;
@@ -777,17 +773,23 @@ sunos_solib_create_inferior_hook (void)
   /* We are now either at the "mapping complete" breakpoint (or somewhere
      else, a condition we aren't prepared to deal with anyway), so adjust
      the PC as necessary after a breakpoint, disable the breakpoint, and
-     add any shared libraries that were mapped in. */
+     add any shared libraries that were mapped in.
 
-  if (DECR_PC_AFTER_BREAK)
+     Note that adjust_pc_after_break did not perform any PC adjustment,
+     as the breakpoint the inferior just hit was not inserted by GDB,
+     but by the dynamic loader itself, and is therefore not found on
+     the GDB software break point list.  Thus we have to adjust the
+     PC here.  */
+
+  if (gdbarch_decr_pc_after_break (current_gdbarch))
     {
-      stop_pc -= DECR_PC_AFTER_BREAK;
-      write_register (PC_REGNUM, stop_pc);
+      stop_pc -= gdbarch_decr_pc_after_break (current_gdbarch);
+      write_pc (stop_pc);
     }
 
   if (!disable_break ())
     {
-      warning ("shared library handler failed to disable breakpoint");
+      warning (_("shared library handler failed to disable breakpoint"));
     }
 
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);

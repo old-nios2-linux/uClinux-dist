@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -42,15 +44,15 @@
 #include "str.h"
 #include "cltypes.h"
 
-static cli_file_t targettab[CL_TARGET_TABLE_SIZE] = { 0, CL_TYPE_MSEXE, CL_TYPE_MSOLE2, CL_TYPE_HTML, CL_TYPE_MAIL, CL_TYPE_GRAPHICS, CL_TYPE_ELF };
 
-int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cl_engine *engine, cli_file_t ftype)
+int cli_scanbuff(const unsigned char *buffer, uint32_t length, cli_ctx *ctx, cli_file_t ftype)
 {
 	int ret = CL_CLEAN;
 	unsigned int i;
 	struct cli_ac_data mdata;
 	struct cli_matcher *groot, *troot = NULL;
-
+	const char **virname=ctx->virname;
+	const struct cl_engine *engine=ctx->engine;
 
     if(!engine) {
 	cli_errmsg("cli_scanbuff: engine == NULL\n");
@@ -60,8 +62,8 @@ int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virn
     groot = engine->root[0]; /* generic signatures */
 
     if(ftype) {
-	for(i = 1; i < CL_TARGET_TABLE_SIZE; i++) {
-	    if(targettab[i] == ftype) {
+	for(i = 1; i < CLI_MTARGETS; i++) {
+	    if(cli_mtargets[i].target == ftype) {
 		troot = engine->root[i];
 		break;
 	    }
@@ -74,7 +76,7 @@ int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virn
 	    return ret;
 
 	if(troot->ac_only || (ret = cli_bm_scanbuff(buffer, length, virname, troot, 0, ftype, -1)) != CL_VIRUS)
-	    ret = cli_ac_scanbuff(buffer, length, virname, troot, &mdata, 0, 0, ftype, -1, NULL);
+	    ret = cli_ac_scanbuff(buffer, length, virname, troot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
 
 	cli_ac_freedata(&mdata);
 
@@ -86,29 +88,11 @@ int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virn
 	return ret;
 
     if(groot->ac_only || (ret = cli_bm_scanbuff(buffer, length, virname, groot, 0, ftype, -1)) != CL_VIRUS)
-	ret = cli_ac_scanbuff(buffer, length, virname, groot, &mdata, 0, 0, ftype, -1, NULL);
+	ret = cli_ac_scanbuff(buffer, length, virname, groot, &mdata, 0, ftype, -1, NULL, AC_SCAN_VIR, NULL);
 
     cli_ac_freedata(&mdata);
 
     return ret;
-}
-
-struct cli_md5_node *cli_vermd5(const unsigned char *md5, const struct cl_engine *engine)
-{
-	struct cli_md5_node *pt;
-
-
-    if(!(pt = engine->md5_hlist[md5[0] & 0xff]))
-	return NULL;
-
-    while(pt) {
-	if(!memcmp(pt->md5, md5, 16))
-	    return pt;
-
-	pt = pt->next;
-    }
-
-    return NULL;
 }
 
 off_t cli_caloff(const char *offstr, struct cli_target_info *info, int fd, cli_file_t ftype, int *ret, unsigned int *maxshift)
@@ -214,32 +198,21 @@ off_t cli_caloff(const char *offstr, struct cli_target_info *info, int fd, cli_f
 
 static int cli_checkfp(int fd, const struct cl_engine *engine)
 {
-	struct cli_md5_node *md5_node;
 	unsigned char *digest;
+	const char *virname;
 
 
-    if(engine->md5_hlist) {
-
+    if(engine->md5_fp) {
 	if(!(digest = cli_md5digest(fd))) {
 	    cli_errmsg("cli_checkfp(): Can't generate MD5 checksum\n");
 	    return 0;
 	}
 
-	if((md5_node = cli_vermd5(digest, engine)) && md5_node->fp) {
-		struct stat sb;
-
-	    if(fstat(fd, &sb))
-		return CL_EIO;
-
-	    if((unsigned int) sb.st_size != md5_node->size) {
-		cli_warnmsg("Detected false positive MD5 match. Please report.\n");
-	    } else {
-		cli_dbgmsg("Eliminated false positive match (fp sig: %s)\n", md5_node->virname);
-		free(digest);
-		return 1;
-	    }
+	if(cli_bm_scanbuff(digest, 16, &virname, engine->md5_fp, 0, 0, -1) == CL_VIRUS) {
+	    cli_dbgmsg("Eliminated false positive match (fp sig: %s)\n", virname);
+	    free(digest);
+	    return 1;
 	}
-
 	free(digest);
     }
 
@@ -263,11 +236,11 @@ int cli_validatesig(cli_file_t ftype, const char *offstr, off_t fileoff, struct 
 
 	if(maxshift) {
 	    if((fileoff < offset) || (fileoff > offset + (off_t) maxshift)) {
-		/* cli_dbgmsg("Signature offset: %lu, expected: [%lu..%lu] (%s)\n", fileoff, offset, offset + maxshift, virname); */
+		/* cli_dbgmsg("Signature offset: %lu, expected: [%lu..%lu] (%s)\n", (unsigned long int) fileoff, (unsigned long int) offset, (unsigned long int) (offset + maxshift), virname); */
 		return 0;
 	    }
 	} else if(fileoff != offset) {
-	    /* cli_dbgmsg("Signature offset: %lu, expected: %lu (%s)\n", fileoff, offset, virname); */
+	    /* cli_dbgmsg("Signature offset: %lu, expected: %lu (%s)\n", (unsigned long int) fileoff, (unsigned long int) offset, virname); */
 	    return 0;
 	}
     }
@@ -275,7 +248,7 @@ int cli_validatesig(cli_file_t ftype, const char *offstr, off_t fileoff, struct 
     return 1;
 }
 
-int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset)
+int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset, unsigned int acmode)
 {
  	unsigned char *buffer, *buff, *endbl, *upt;
 	int ret = CL_CLEAN, type = CL_CLEAN, i, bytes;
@@ -283,7 +256,6 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 	struct cli_ac_data gdata, tdata;
 	cli_md5_ctx md5ctx;
 	unsigned char digest[16];
-	struct cli_md5_node *md5_node;
 	struct cli_matcher *groot = NULL, *troot = NULL;
 
 
@@ -296,8 +268,8 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 	groot = ctx->engine->root[0]; /* generic signatures */
 
     if(ftype) {
-	for(i = 1; i < CL_TARGET_TABLE_SIZE; i++) {
-	    if(targettab[i] == ftype) {
+	for(i = 1; i < CLI_MTARGETS; i++) {
+	    if(cli_mtargets[i].target == ftype) {
 		troot = ctx->engine->root[i];
 		break;
 	    }
@@ -331,7 +303,7 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 	    return ret;
     }
 
-    if(!ftonly && ctx->engine->md5_hlist)
+    if(!ftonly && ctx->engine->md5_hdb)
 	cli_md5_init(&md5ctx);
 
     buff = buffer;
@@ -352,7 +324,7 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 
 	if(troot) {
 	    if(troot->ac_only || (ret = cli_bm_scanbuff(upt, length, ctx->virname, troot, offset, ftype, desc)) != CL_VIRUS)
-		ret = cli_ac_scanbuff(upt, length, ctx->virname, troot, &tdata, otfrec, offset, ftype, desc, ftoffset);
+		ret = cli_ac_scanbuff(upt, length, ctx->virname, troot, &tdata, offset, ftype, desc, ftoffset, acmode, NULL);
 
 	    if(ret == CL_VIRUS) {
 		free(buffer);
@@ -370,7 +342,7 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 
 	if(!ftonly) {
 	    if(groot->ac_only || (ret = cli_bm_scanbuff(upt, length, ctx->virname, groot, offset, ftype, desc)) != CL_VIRUS)
-		ret = cli_ac_scanbuff(upt, length, ctx->virname, groot, &gdata, otfrec, offset, ftype, desc, ftoffset);
+		ret = cli_ac_scanbuff(upt, length, ctx->virname, groot, &gdata, offset, ftype, desc, ftoffset, acmode, NULL);
 
 	    if(ret == CL_VIRUS) {
 		free(buffer);
@@ -383,12 +355,12 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
 		else
 		    return CL_VIRUS;
 
-	    } else if(otfrec && ret >= CL_TYPENO) {
+	    } else if((acmode & AC_SCAN_FT) && ret >= CL_TYPENO) {
 		if(ret > type)
 		    type = ret;
 	    }
 
-	    if(ctx->engine->md5_hlist)
+	    if(ctx->engine->md5_hdb)
 		cli_md5_update(&md5ctx, buff + shift, bytes);
 	}
 
@@ -415,25 +387,11 @@ int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8
     if(troot)
 	cli_ac_freedata(&tdata);
 
-    if(!ftonly && ctx->engine->md5_hlist) {
+    if(!ftonly && ctx->engine->md5_hdb) {
 	cli_md5_final(digest, &md5ctx);
-
-	if((md5_node = cli_vermd5(digest, ctx->engine)) && !md5_node->fp) {
-		struct stat sb;
-
-	    if(fstat(desc, &sb))
-		return CL_EIO;
-
-	    if((unsigned int) sb.st_size != md5_node->size) {
-		cli_warnmsg("Detected false positive MD5 match. Please report.\n");
-	    } else {
-		if(ctx->virname)
-		    *ctx->virname = md5_node->virname;
-
-		return CL_VIRUS;
-	    }
-	}
+	if(cli_bm_scanbuff(digest, 16, ctx->virname, ctx->engine->md5_hdb, 0, 0, -1) == CL_VIRUS && (cli_bm_scanbuff(digest, 16, NULL, ctx->engine->md5_fp, 0, 0, -1) != CL_VIRUS))
+	    return CL_VIRUS;
     }
 
-    return otfrec ? type : CL_CLEAN;
+    return (acmode & AC_SCAN_FT) ? type : CL_CLEAN;
 }

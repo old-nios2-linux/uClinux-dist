@@ -1,18 +1,17 @@
-# Copyright 2002, 2003 Free Software Foundation, Inc.
+# Copyright 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -40,7 +39,8 @@ if [get_compiler_info ${binfile} "c++"] {
 }
 
 if {[gdb_compile $srcdir/$subdir/$srcfile $binfile executable {debug c++}] != ""} {
-  gdb_suppress_entire_file "Testcase compile failed, so all test in this file will automatically fail."
+  untested gdb792.exp
+  return -1
 }
 
 # Test that children of classes are properly reported
@@ -49,7 +49,7 @@ if {[gdb_compile $srcdir/$subdir/$srcfile $binfile executable {debug c++}] != ""
 mi_run_to_main
 
 mi_gdb_test "-var-create - * a" \
-  "(&\".*\"\r\n)*\\^done,name=\"var1\",numchild=\"3\",type=\"A\"" \
+  "(&\".*\"\r\n)*\\^done,name=\"var1\",numchild=\"3\",value=\".*\",type=\"A\"" \
   "create var for class A"
 
 mi_gdb_test "-var-list-children var1" \
@@ -81,7 +81,7 @@ mi_gdb_test "-var-list-children var1.protected.b.private" \
   "list children of A.protected.b.private"
 
 mi_gdb_test "-var-create - * c" \
-  "(&\".*\"\r\n)*\\^done,name=\"var2\",numchild=\"3\",type=\"C\"" \
+  "(&\".*\"\r\n)*\\^done,name=\"var2\",numchild=\"3\",value=\".*\",type=\"C\"" \
   "create var for class C which has baseclass A"
 
 mi_gdb_test "-var-list-children var2" \

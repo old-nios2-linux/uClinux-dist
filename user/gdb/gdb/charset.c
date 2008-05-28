@@ -1,12 +1,12 @@
 /* Character set conversion support for GDB.
 
-   Copyright 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "charset.h"
@@ -165,7 +163,23 @@ struct translation {
 #endif
 
 static const char *host_charset_name = GDB_DEFAULT_HOST_CHARSET;
+static void
+show_host_charset_name (struct ui_file *file, int from_tty,
+			struct cmd_list_element *c,
+			const char *value)
+{
+  fprintf_filtered (file, _("The host character set is \"%s\".\n"), value);
+}
+
 static const char *target_charset_name = GDB_DEFAULT_TARGET_CHARSET;
+static void
+show_target_charset_name (struct ui_file *file, int from_tty,
+			  struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("The target character set is \"%s\".\n"),
+		    value);
+}
+
 
 static const char *host_charset_enum[] = 
 {
@@ -394,8 +408,8 @@ check_iconv_cache (struct cached_iconv *ci,
       ci->i = (iconv_t) 0;
       
       if (iconv_close (i) == -1)
-        error ("Error closing `iconv' descriptor for "
-               "`%s'-to-`%s' character conversion: %s",
+        error (_("Error closing `iconv' descriptor for "
+		 "`%s'-to-`%s' character conversion: %s"),
                ci->from->name, ci->to->name, safe_strerror (errno));
     }
 
@@ -444,8 +458,8 @@ cached_iconv_convert (struct cached_iconv *ci, int from_char, int *to_char)
 
       /* Anything else is mysterious.  */
       internal_error (__FILE__, __LINE__,
-		      "Error converting character `%d' from `%s' to `%s' "
-                      "character set: %s",
+		      _("Error converting character `%d' from `%s' to `%s' "
+			"character set: %s"),
                       from_char, ci->from->name, ci->to->name,
                       safe_strerror (errno));
     }
@@ -923,7 +937,7 @@ lookup_charset_or_error (const char *name)
   struct charset *cs = lookup_charset (name);
 
   if (! cs)
-    error ("GDB doesn't know of any character set named `%s'.", name);
+    error (_("GDB doesn't know of any character set named `%s'."), name);
 
   return cs;
 }
@@ -932,7 +946,7 @@ static void
 check_valid_host_charset (struct charset *cs)
 {
   if (! cs->valid_host_charset)
-    error ("GDB can't use `%s' as its host character set.", cs->name);
+    error (_("GDB can't use `%s' as its host character set."), cs->name);
 }
 
 /* Set the host and target character sets to HOST and TARGET.  */
@@ -962,14 +976,14 @@ set_host_and_target_charsets (struct charset *host, struct charset *target)
         {
           if (check_iconv_cache (&cached_iconv_host_to_target, host, target)
               < 0)
-            error ("GDB can't convert from the `%s' character set to `%s'.",
+            error (_("GDB can't convert from the `%s' character set to `%s'."),
                    host->name, target->name);
         }
       if (! t2h || ! t2h->convert_char)
         {
           if (check_iconv_cache (&cached_iconv_target_to_host, target, host)
               < 0)
-            error ("GDB can't convert from the `%s' character set to `%s'.",
+            error (_("GDB can't convert from the `%s' character set to `%s'."),
                    target->name, host->name);
         }
     }
@@ -1075,19 +1089,19 @@ set_target_charset_sfunc (char *charset, int from_tty,
 
 /* sfunc for the 'show charset' command.  */
 static void
-show_charset (char *arg, int from_tty)
+show_charset (struct ui_file *file, int from_tty, struct cmd_list_element *c,
+	      const char *name)
 {
   if (current_host_charset == current_target_charset)
-    {
-      printf_filtered ("The current host and target character set is `%s'.\n",
-                       host_charset ());
-    }
+    fprintf_filtered (file,
+		      _("The current host and target character set is `%s'.\n"),
+		      host_charset ());
   else
     {
-      printf_filtered ("The current host character set is `%s'.\n",
-                       host_charset ());
-      printf_filtered ("The current target character set is `%s'.\n",
-                       target_charset ());
+      fprintf_filtered (file, _("The current host character set is `%s'.\n"),
+			host_charset ());
+      fprintf_filtered (file, _("The current target character set is `%s'.\n"),
+			target_charset ());
     }
 }
 
@@ -1218,60 +1232,43 @@ _initialize_charset (void)
   set_host_charset (host_charset_name);
   set_target_charset (target_charset_name);
 
-  new_cmd = add_set_enum_cmd ("charset",
-			      class_support,
-			      host_charset_enum,
-			      &host_charset_name,
-                              "Set the host and target character sets.\n"
-                              "The `host character set' is the one used by the system GDB is running on.\n"
-                              "The `target character set' is the one used by the program being debugged.\n"
-                              "You may only use supersets of ASCII for your host character set; GDB does\n"
-                              "not support any others.\n"
-                              "To see a list of the character sets GDB supports, type `set charset <TAB>'.",
-			      &setlist);
+  add_setshow_enum_cmd ("charset", class_support,
+			host_charset_enum, &host_charset_name, _("\
+Set the host and target character sets."), _("\
+Show the host and target character sets."), _("\
+The `host character set' is the one used by the system GDB is running on.\n\
+The `target character set' is the one used by the program being debugged.\n\
+You may only use supersets of ASCII for your host character set; GDB does\n\
+not support any others.\n\
+To see a list of the character sets GDB supports, type `set charset <TAB>'."),
+			/* Note that the sfunc below needs to set
+			   target_charset_name, because the 'set
+			   charset' command sets two variables.  */
+			set_charset_sfunc,
+			show_charset,
+			&setlist, &showlist);
 
-  /* Note that the sfunc below needs to set target_charset_name, because 
-     the 'set charset' command sets two variables.  */
-  set_cmd_sfunc (new_cmd, set_charset_sfunc);
-  /* Don't use set_from_show - need to print some extra info. */
-  add_cmd ("charset", class_support, show_charset,
-	   "Show the host and target character sets.\n"
-	   "The `host character set' is the one used by the system GDB is running on.\n"
-	   "The `target character set' is the one used by the program being debugged.\n"
-	   "You may only use supersets of ASCII for your host character set; GDB does\n"
-	   "not support any others.\n"
-	   "To see a list of the character sets GDB supports, type `set charset <TAB>'.", 
-	   &showlist);
+  add_setshow_enum_cmd ("host-charset", class_support,
+			host_charset_enum, &host_charset_name, _("\
+Set the host character set."), _("\
+Show the host character set."), _("\
+The `host character set' is the one used by the system GDB is running on.\n\
+You may only use supersets of ASCII for your host character set; GDB does\n\
+not support any others.\n\
+To see a list of the character sets GDB supports, type `set host-charset <TAB>'."),
+			set_host_charset_sfunc,
+			show_host_charset_name,
+			&setlist, &showlist);
 
-
-  new_cmd = add_set_enum_cmd ("host-charset",
-			      class_support,
-			      host_charset_enum,
-			      &host_charset_name,
-			      "Set the host character set.\n"
-			      "The `host character set' is the one used by the system GDB is running on.\n"
-			      "You may only use supersets of ASCII for your host character set; GDB does\n"
-			      "not support any others.\n"
-			      "To see a list of the character sets GDB supports, type `set host-charset <TAB>'.",
-			      &setlist);
-
-  set_cmd_sfunc (new_cmd, set_host_charset_sfunc);
-
-  deprecated_add_show_from_set (new_cmd, &showlist);
-
-
-
-  new_cmd = add_set_enum_cmd ("target-charset",
-			      class_support,
-			      target_charset_enum,
-			      &target_charset_name,
-			      "Set the target character set.\n"
-			      "The `target character set' is the one used by the program being debugged.\n"
-			      "GDB translates characters and strings between the host and target\n"
-			      "character sets as needed.\n"
-			      "To see a list of the character sets GDB supports, type `set target-charset'<TAB>",
-			      &setlist);
-
-  set_cmd_sfunc (new_cmd, set_target_charset_sfunc);
-  deprecated_add_show_from_set (new_cmd, &showlist);
+  add_setshow_enum_cmd ("target-charset", class_support,
+			target_charset_enum, &target_charset_name, _("\
+Set the target character set."), _("\
+Show the target character set."), _("\
+The `target character set' is the one used by the program being debugged.\n\
+GDB translates characters and strings between the host and target\n\
+character sets as needed.\n\
+To see a list of the character sets GDB supports, type `set target-charset'<TAB>"),
+			set_target_charset_sfunc,
+			show_target_charset_name,
+			&setlist, &showlist);
 }

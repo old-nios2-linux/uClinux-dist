@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2003 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,7 +24,7 @@
 #include <stdio.h>
 #include "clamav.h"
 
-int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short warn, unsigned int options);
+int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short warn, unsigned int options, unsigned int cld);
 int cli_untgz(int fd, const char *destdir);
 
 #endif

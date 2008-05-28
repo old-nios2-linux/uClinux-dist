@@ -1,10 +1,10 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2004 Free Software Foundation, Inc.
+# Copyright 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Check that GDB can and only executes single instructions when
 # stepping through a sequence of breakpoints interleaved by a signal
@@ -29,6 +28,11 @@
 # instruction.  Since the kernel problems can be "fixed" using
 # software single-step this is KFAILed rather than XFAILed.
 
+if [target_info exists gdb,nosignals] {
+    verbose "Skipping sigbpt.exp because of nosignals."
+    continue
+}
+
 if $tracelevel {
     strace $tracelevel
 }
@@ -40,7 +44,8 @@ set testfile "sigbpt"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+    untested sigbpt.exp
+    return -1
 }
 
 gdb_exit
@@ -80,16 +85,17 @@ gdb_test "break keeper"
 # of the actual SIGSEGV in segv_addr.
 
 set bowler_addrs bowler
+set segv_addr none
 gdb_test {display/i $pc}
 gdb_test "advance *bowler" "bowler.*" "advance to the bowler"
 set test "stepping to SIGSEGV"
 gdb_test_multiple "stepi" "$test" {
-    -re "Program received signal SIGSEGV.*pc *(0x\[0-9a-f\]*).*$gdb_prompt $" {
-	set segv_addr $expect_out(1,string)
+    -re "Program received signal SIGSEGV.*pc(\r\n| *) *(0x\[0-9a-f\]*).*$gdb_prompt $" {
+	set segv_addr $expect_out(2,string)
 	pass "$test"
     }
-    -re " .*pc *(0x\[0-9a-f\]*).*bowler.*$gdb_prompt $" {
-	set bowler_addrs [concat $expect_out(1,string) $bowler_addrs]
+    -re " .*pc(\r\n| *)(0x\[0-9a-f\]*).*bowler.*$gdb_prompt $" {
+	set bowler_addrs [concat $expect_out(2,string) $bowler_addrs]
 	send_gdb "stepi\n"
 	exp_continue
     }
@@ -161,6 +167,10 @@ proc stepi_out { name args } {
     # trampoline, and back to the instruction that faulted.
     set test "${name}; stepi out of handler"
     gdb_test_multiple "stepi" "$test" {
+	-re "Could not insert single-step breakpoint.*$gdb_prompt $" {
+	    setup_kfail "sparc*-*-openbsd*" gdb/1736
+	    fail "$test (could not insert single-step breakpoint)"
+	}
 	-re "keeper.*$gdb_prompt $" {
 	    send_gdb "stepi\n"
 	    exp_continue
@@ -172,19 +182,19 @@ proc stepi_out { name args } {
 	-re "Program received signal SIGSEGV.*$gdb_prompt $" {
 	    kfail gdb/1702 "$test (executed fault insn)"
 	}
-	-re "Breakpoint.*pc *[at_segv] .*bowler.*$gdb_prompt $" {
+	-re "Breakpoint.*pc(\r\n| *)[at_segv] .*bowler.*$gdb_prompt $" {
 	    pass "$test (at breakpoint)"
 	}
-	-re "Breakpoint.*pc *[after_segv] .*bowler.*$gdb_prompt $" {
+	-re "Breakpoint.*pc(\r\n| *)[after_segv] .*bowler.*$gdb_prompt $" {
 	    kfail gdb/1702 "$test (executed breakpoint)"
 	}
-	-re "pc *[at_segv] .*bowler.*$gdb_prompt $" {
+	-re "pc(\r\n| *)[at_segv] .*bowler.*$gdb_prompt $" {
 	    pass "$test"
 	}
-	-re "pc *[after_segv] .*bowler.*$gdb_prompt $" {
+	-re "pc(\r\n| *)[after_segv] .*bowler.*$gdb_prompt $" {
 	    kfail gdb/1702 "$test (skipped fault insn)"
 	}
-	-re "pc *0x\[a-z0-9\]* .*bowler.*$gdb_prompt $" {
+	-re "pc(\r\n| *)0x\[a-z0-9\]* .*bowler.*$gdb_prompt $" {
 	    kfail gdb/1702 "$test (corrupt pc)"
 	}
     }
@@ -228,12 +238,12 @@ proc cont_out { name args } {
     # inserted at the faulting instruction.  Note that the breakpoint
     # instruction wasn't executed, rather the inferior was SIGTRAPed
     # with the PC at the breakpoint.
-    gdb_test "continue" "Breakpoint.*pc *[at_segv] .*" \
+    gdb_test "continue" "Breakpoint.*pc(\r\n| *)[at_segv] .*" \
 	"${name}; continue to breakpoint at fault"
 
     # Now single step the faulted instrction at that breakpoint.
     gdb_test "stepi" \
-	"Program received signal SIGSEGV.*pc *[at_segv] .*" \
+	"Program received signal SIGSEGV.*pc(\r\n| *)[at_segv] .*" \
 	"${name}; stepi fault"    
 
     # Clear any breakpoints

@@ -33,7 +33,7 @@
  */
 static	char	const	rcsid[] = "$Id: clamav-milter.c,v 1.312 2007/02/12 22:24:21 njh Exp $";
 
-#define	CM_VERSION	"0.92.1"
+#define	CM_VERSION	"0.93"
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -103,6 +103,10 @@ static	char	const	rcsid[] = "$Id: clamav-milter.c,v 1.312 2007/02/12 22:24:21 nj
 #undef HAVE_MMAP
 #endif
 #endif
+
+#define NONBLOCK_SELECT_MAX_FAILURES	3
+#define NONBLOCK_MAX_ATTEMPTS	10
+#define	CONNECT_TIMEOUT	5	/* Allow 5 seconds to connect */
 
 #ifdef	C_LINUX
 #include <sys/sendfile.h>	/* FIXME: use sendfile on BSD not Linux */
@@ -230,7 +234,9 @@ static struct cidr_net {	/* don't make this const because of -I flag */
 	uint32_t	mask;
 } localNets[] = {
 	/*{ PACKADDR(127,   0,   0,   0), MAKEMASK(24) },	/*   127.0.0.0/24 */
-	{ PACKADDR(192, 168,   0,   0), MAKEMASK(16) },	/* 192.168.0.0/16 */
+	{ PACKADDR(192, 168,   0,   0), MAKEMASK(24) },	/* 192.168.0.0/24 - RFC3330 */
+	/*{ PACKADDR(192, 18,   0,   0), MAKEMASK(17) },	/* 192.18.0.0/17 - RFC2544 */
+	/*{ PACKADDR(192, 0,   2,   0), MAKEMASK(8) },	/* 192.0.2.0/8 - RFC3330 */
 	{ PACKADDR( 10,   0,   0,   0), MAKEMASK(8) },	/*    10.0.0.0/8 */
 	{ PACKADDR(172,  16,   0,   0), MAKEMASK(12) },	/*  172.16.0.0/12 */
 	{ PACKADDR(169, 254,   0,   0), MAKEMASK(16) },	/* 169.254.0.0/16 */
@@ -347,6 +353,8 @@ static	int	loadDatabase(void);
 static	int	increment_connexions(void);
 static	void	decrement_connexions(void);
 static	void	dump_blacklist(char *key, int value, void *v);
+static	int	nonblock_connect(int sock, const struct sockaddr_in *sin, const char *hostname);
+static	int	connect_error(int sock, const char *hostname);
 
 #ifdef	SESSION
 static	pthread_mutex_t	version_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -1190,10 +1198,12 @@ main(int argc, char **argv)
 
 			if(setuid(user->pw_uid) < 0)
 				perror(cpt->strarg);
+#ifdef	CL_DEBUG
 			else
-				cli_dbgmsg(_("Running as user %s (UID %d, GID %d)\n"),
+				printf(_("Running as user %s (UID %d, GID %d)\n"),
 					cpt->strarg, (int)user->pw_uid,
 					(int)user->pw_gid);
+#endif
 
 			/*
 			 * Note, some O/Ss (e.g. OpenBSD/Fedora Linux) FORCE
@@ -1253,7 +1263,7 @@ main(int argc, char **argv)
 				}
 			}
 		} else
-			logg(_("^%s: running as root is not recommended (check \"User\" in %s)\n"), argv[0], cfgfile);
+			printf(_("^%s: running as root is not recommended (check \"User\" in %s)\n"), argv[0], cfgfile);
 	} else if(iface) {
 		fprintf(stderr, _("%s: Only root can set an interface for --broadcast\n"), argv[0]);
 		return EX_USAGE;
@@ -1551,9 +1561,13 @@ main(int argc, char **argv)
 			free(hostname);
 		}
 
-		cli_dbgmsg("numServers: %d\n", numServers);
+#ifdef	CL_DEBUG
+		printf("numServers: %d\n", numServers);
+#endif
 
 		serverIPs = (in_addr_t *)cli_malloc(numServers * sizeof(in_addr_t));
+		if(serverIPs == NULL)
+			return EX_OSERR;
 		activeServers = 0;
 
 #ifdef	SESSION
@@ -1624,7 +1638,7 @@ main(int argc, char **argv)
 						break;
 					if(checkClamd(1))	/* will try all servers */
 						break;
-					logg(_("Waiting for clamd to come up\n"));
+					puts(_("Waiting for clamd to come up"));
 					/*
 					 * something to do as the system starts
 					 */
@@ -1638,13 +1652,13 @@ main(int argc, char **argv)
 			if(pingServer(i))
 				activeServers++;
 			else {
-				cli_warnmsg(_("Can't talk to clamd server %s on port %d\n"),
+				printf(_("Can't talk to clamd server %s on port %d\n"),
 					hostname, tcpSocket);
 				if(serverIPs[i] == htonl(INADDR_LOOPBACK)) {
 					if(cfgopt(copt, "TCPAddr")->enabled)
-						cli_warnmsg(_("Check the value for TCPAddr in %s\n"), cfgfile);
+						printf(_("Check the value for TCPAddr in %s\n"), cfgfile);
 				} else
-					cli_warnmsg(_("Check the value for TCPAddr in clamd.conf on %s\n"), hostname);
+					printf(_("Check the value for TCPAddr in clamd.conf on %s\n"), hostname);
 			}
 #endif
 
@@ -1660,15 +1674,14 @@ main(int argc, char **argv)
 			if(createSession(i) < 0)
 				return EX_UNAVAILABLE;
 		if(activeServers == 0) {
-			logg(_("!Can't find any clamd server\n"));
-			cli_warnmsg(_("Check your entry for TCPSocket in %s\n"),
+			fprintf(stderr, _("Check your entry for TCPSocket in %s\n"),
 				cfgfile);
 		}
 #else
 		if(activeServers == 0) {
-			cli_errmsg(_("Check your entry for TCPSocket in %s\n"),
+			fprintf(stderr, _("Check your entry for TCPSocket in %s\n"),
 				cfgfile);
-			logg(_("!Can't find any clamd server\n"));
+			fputs(_("Can't find any clamd server\n"), stderr);
 			return EX_CONFIG;
 		}
 		last_failed_pings = (time_t *)cli_calloc(numServers, sizeof(time_t));
@@ -1691,7 +1704,7 @@ main(int argc, char **argv)
 		unsigned int session;
 
 		/*
-		 * We need to know how many connexion to establish to clamd
+		 * We need to know how many connexions to establish to clamd
 		 */
 		if(max_children == 0) {
 			fprintf(stderr, _("%s: --max-children must be given in sessions mode\n"), argv[0]);
@@ -1836,23 +1849,6 @@ main(int argc, char **argv)
 #endif
 		}
 
-#if defined(USE_SYSLOG) && !defined(C_AIX)
-		if(cfgopt(copt, "LogSyslog")->enabled) {
-			int fac = LOG_LOCAL6;
-
-			cpt = cfgopt(copt, "LogFacility");
-			if((fac = logg_facility(cpt->strarg)) == -1) {
-				logg("!LogFacility: %s: No such facility.\n", cpt->strarg);
-				logg_close();
-				freecfg(copt);
-				return 1;
-			}
-
-			openlog("clamav-milter", LOG_PID, fac);
-			logg_syslog = 1;
-		}
-#endif
-
 		close(2);
 		dup(1);
 
@@ -1894,8 +1890,6 @@ main(int argc, char **argv)
 			options |= CL_SCAN_DISABLERAR;*/
 		if(cfgopt(copt, "ArchiveBlockEncrypted")->enabled)
 			options |= CL_SCAN_BLOCKENCRYPTED;
-		if(cfgopt(copt, "ArchiveBlockMax")->enabled)
-			options |= CL_SCAN_BLOCKMAX;
 		if(cfgopt(copt, "ScanPE")->enabled)
 			options |= CL_SCAN_PE;
 		if(cfgopt(copt, "DetectBrokenExecutables")->enabled)
@@ -1909,31 +1903,27 @@ main(int argc, char **argv)
 
 		memset(&limits, '\0', sizeof(struct cl_limits));
 
-		if(((cpt = cfgopt(copt, "MailMaxRecursion")) != NULL) && cpt->enabled)
-			limits.maxmailrec = cpt->numarg;
+		if(((cpt = cfgopt(copt, "MaxScanSize")) != NULL) && cpt->enabled)
+			limits.maxscansize = cpt->numarg;
+		else
+			limits.maxscansize = 104857600;
+		if(((cpt = cfgopt(copt, "MaxFileSize")) != NULL) && cpt->enabled)
+			limits.maxfilesize = cpt->numarg;
+		else
+			limits.maxfilesize = 10485760;
+
+		if(((cpt = cfgopt(copt, "MaxRecursion")) != NULL) && cpt->enabled)
+			limits.maxreclevel = cpt->numarg;
+		else
+			limits.maxreclevel = 8;
+
+		if(((cpt = cfgopt(copt, "MaxFiles")) != NULL) && cpt->enabled)
+			limits.maxfiles = cpt->numarg;
+		else
+			limits.maxfiles = 1000;
 
 		if(cfgopt(copt, "ScanArchive")->enabled) {
 			options |= CL_SCAN_ARCHIVE;
-			if(((cpt = cfgopt(copt, "ArchiveMaxFileSize")) != NULL) && cpt->enabled)
-				limits.maxfilesize = cpt->numarg;
-			else
-				limits.maxfilesize = 10485760;
-
-			if(((cpt = cfgopt(copt, "ArchiveMaxRecursion")) != NULL) && cpt->enabled)
-				limits.maxreclevel = cpt->numarg;
-			else
-				limits.maxreclevel = 8;
-
-			if(((cpt = cfgopt(copt, "ArchiveMaxFiles")) != NULL) && cpt->enabled)
-				limits.maxfiles = cpt->numarg;
-			else
-				limits.maxfiles = 1000;
-
-			if(((cpt = cfgopt(copt, "ArchiveMaxCompressionRatio")) != NULL) && cpt->enabled)
-				limits.maxratio = cpt->numarg;
-			else
-				limits.maxratio = 250;
-
 			if(cfgopt(copt, "ArchiveLimitMemoryUsage")->enabled)
 				limits.archivememlim = 1;
 			else
@@ -2041,14 +2031,14 @@ main(int argc, char **argv)
 	}
 
 	if(smfi_register(smfilter) == MI_FAILURE) {
-		cli_errmsg("smfi_register failure, ensure that you have linked against the correct version of sendmail\n");
+		fprintf(stderr, "smfi_register failure, ensure that you have linked against the correct version of sendmail\n");
 		return EX_UNAVAILABLE;
 	}
 
 #if	((SENDMAIL_VERSION_A > 8) || ((SENDMAIL_VERSION_A == 8) && (SENDMAIL_VERSION_B >= 13)))
 	if(smfi_opensocket(1) == MI_FAILURE) {
 		perror(port);
-		cli_errmsg("Can't open/create %s\n", port);
+		fprintf(stderr, "Can't open/create %s\n", port);
 		return EX_CONFIG;
 	}
 #endif
@@ -2093,13 +2083,13 @@ main(int argc, char **argv)
 		tableIterate(blacklist, dump_blacklist, NULL);
 	}
 
-	cli_dbgmsg("Started: %s\n", clamav_version);
 #ifdef	SESSION
 	pthread_mutex_unlock(&version_mutex);
 #endif
 
 	(void)signal(SIGSEGV, sigsegv);
-	(void)signal(SIGHUP, sighup);
+	if(!logg_foreground)
+		(void)signal(SIGHUP, sighup);
 	if(!external)
 		(void)signal(SIGUSR2, sigusr2);
 
@@ -2209,6 +2199,7 @@ pingServer(int serverNumber)
 		}
 	} else {
 		struct sockaddr_in server;
+		char *hostname;
 
 		memset((char *)&server, 0, sizeof(struct sockaddr_in));
 		server.sin_family = AF_INET;
@@ -2227,10 +2218,12 @@ pingServer(int serverNumber)
 			perror("socket");
 			return 0;
 		}
+		hostname = cli_strtok(serverHostNames, serverNumber, ":");
 		/*
-		 * FIXME: use non-blocking connect
+		 * FIXME: use non-blocking connect, once the code is
+		 * amalgomated
 		 */
-		if(connect(sock, (struct sockaddr *)&server, sizeof(struct sockaddr_in)) < 0) {
+		if(nonblock_connect(sock, &server, hostname) < 0) {
 			int is_connected = 0;
 
 #if	(!defined(NTRIES)) || ((NTRIES <= 1))
@@ -2248,21 +2241,21 @@ pingServer(int serverNumber)
 				 */
 				sync();
 				sleep(2);
-				if(connect(sock, (struct sockaddr *)&server, sizeof(struct sockaddr_in)) >= 0)
+				if(nonblock_connect(sock, &server, hostname) >= 0)
 					is_connected = 1;
 			}
 #endif
 			if(!is_connected) {
-				char *hostname = cli_strtok(serverHostNames,
-					serverNumber, ":");
-
-				perror(hostname ? hostname : "connect");
+				if(errno != EINPROGRESS)
+					perror(hostname ? hostname : "connect");
 				close(sock);
 				if(hostname)
 					free(hostname);
 				return 0;
 			}
 		}
+		if(hostname)
+			free(hostname);
 	}
 
 	/*
@@ -2541,7 +2534,8 @@ findServer(void)
 /*
  * How many servers are up at the moment? If a server is marked as down,
  *	don't keep on flooding it with requests to see if it's now back up
- * If only one server is active, let the caller know
+ * If only one server is active, let the caller know, which server is the
+ *	active one
  */
 static int
 active_servers(int *active)
@@ -2616,6 +2610,8 @@ try_server(void *var)
 
 /*
  * Sendmail wants to establish a connexion to us
+ * TODO: is it possible (desirable?) to determine if the remote machine has been
+ *	compromised?
  */
 static sfsistat
 clamfi_connect(SMFICTX *ctx, char *hostname, _SOCK_ADDR *hostaddr)
@@ -2955,8 +2951,14 @@ clamfi_envfrom(SMFICTX *ctx, char **argv)
 
 	privdata->from = cli_strdup(mailaddr);
 
-	if(hflag)
+	if(hflag) {
 		privdata->headers = header_list_new();
+
+		if(privdata->headers == NULL) {
+			clamfi_free(privdata, 1);
+			return cl_error;
+		}
+	}
 
 	return SMFIS_CONTINUE;
 }
@@ -2978,6 +2980,9 @@ clamfi_envrcpt(SMFICTX *ctx, char **argv)
 	const char *to, *ptr;
 
 	logg("*clamfi_envrcpt: %s\n", argv[0]);
+
+	if(privdata == NULL)	/* sanity check */
+		return cl_error;
 
 	if(privdata->to == NULL) {
 		privdata->to = cli_malloc(sizeof(char *) * 2);
@@ -3205,6 +3210,9 @@ clamfi_body(SMFICTX *ctx, u_char *bodyp, size_t len)
 	if(len == 0)	/* unlikely */
 		return SMFIS_CONTINUE;
 
+	if(privdata == NULL)	/* sanity check */
+		return cl_error;
+
 	/*
 	 * TODO:
 	 *	If not in external mode, call cli_scanbuff here, at least for
@@ -3411,6 +3419,10 @@ clamfi_eom(SMFICTX *ctx)
 		session = &sessions[privdata->serverNumber];
 #endif
 
+	sendmailId = smfi_getsymval(ctx, "i");
+	if(sendmailId == NULL)
+		sendmailId = "Unknown";
+
 	if(external) {
 		int nbytes;
 #ifdef	SESSION
@@ -3440,15 +3452,30 @@ clamfi_eom(SMFICTX *ctx)
 			char *hostname = cli_strtok(serverHostNames, privdata->serverNumber, ":");
 #endif
 			if(privdata->subject)
-				logg(_("clamfi_eom: read nothing from clamd on %s, from %s (%s)"),
-					hostname, privdata->from, privdata->subject);
+				logg(_("^%s: clamfi_eom: read nothing from clamd on %s, from %s (%s)\n"),
+					sendmailId, hostname, privdata->from,
+					privdata->subject);
 			else
-				logg(_("clamfi_eom: read nothing from clamd on %s, from %s"),
-					hostname, privdata->from);
+				logg(_("^%s: clamfi_eom: read nothing from clamd on %s, from %s\n"),
+					sendmailId, hostname, privdata->from);
 
+			if((!nflag) && (cl_error == SMFIS_ACCEPT))
+				smfi_addheader(ctx, "X-Virus-Status", _("Not Scanned - Read timeout exceeded"));
 #ifndef	MAXHOSTNAMELEN
 			free(hostname);
 #endif
+
+#ifdef	CL_DEBUG
+			/*
+			 * Save the file which caused the timeout, for
+			 * debugging
+			 */
+			if(quarantine_dir) {
+				logg(_("Quarantining failed email\n"));
+				qfile(privdata, sendmailId, "scanning-timeout");
+			}
+#endif
+
 			/*
 			 * TODO: if more than one host has been specified, try
 			 * another one - setting cl_error to SMFIS_TEMPFAIL
@@ -3474,10 +3501,6 @@ clamfi_eom(SMFICTX *ctx)
 		privdata->cmdSocket = -1;
 #endif
 	}
-
-	sendmailId = smfi_getsymval(ctx, "i");
-	if(sendmailId == NULL)
-		sendmailId = "Unknown";
 
 	if(!nflag) {
 		char buf[1024];
@@ -4376,6 +4399,9 @@ header_list_free(header_list_t list)
 {
 	struct header_node_t *iter;
 
+	if(list == NULL)
+		return;
+
 	iter = list->first;
 	while(iter) {
 		struct header_node_t *iter2 = iter->next;
@@ -4392,6 +4418,9 @@ header_list_add(header_list_t list, const char *headerf, const char *headerv)
 	char *header;
 	size_t len;
 	struct header_node_t *new_node;
+
+	if(list == NULL)
+		return;
 
 	len = (size_t)(strlen(headerf) + strlen(headerv) + 3);
 
@@ -4616,7 +4645,7 @@ connect2clamd(struct privdata *privdata)
 		 */
 		if((privdata->dataSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 			perror("socket");
-			logg(_("!failed to create TCPSocket to talk to clamd"));
+			logg(_("!failed to create TCPSocket to talk to clamd\n"));
 			return 0;
 		}
 
@@ -4627,9 +4656,9 @@ connect2clamd(struct privdata *privdata)
 		if(nbytes <= 0) {
 			if(nbytes < 0) {
 				perror("recv");
-				logg(_("!recv failed from clamd getting PORT"));
+				logg(_("!recv failed from clamd getting PORT\n"));
 			} else
-				logg(_("!EOF from clamd getting PORT"));
+				logg(_("!EOF from clamd getting PORT\n"));
 
 			pthread_mutex_lock(&sstatus_mutex);
 			session->status = CMDSOCKET_DOWN;
@@ -4640,9 +4669,9 @@ connect2clamd(struct privdata *privdata)
 		if(nbytes <= 0) {
 			if(nbytes < 0) {
 				perror("recv");
-				logg(_("!recv failed from clamd getting PORT"));
+				logg(_("!recv failed from clamd getting PORT\n"));
 			} else
-				logg(_("!EOF from clamd getting PORT"));
+				logg(_("!EOF from clamd getting PORT\n"));
 
 			return 0;
 		}
@@ -4653,7 +4682,7 @@ connect2clamd(struct privdata *privdata)
 			cli_dbgmsg("Received: %s", buf);
 #endif
 		if(sscanf(buf, "PORT %hu\n", &p) != 1) {
-			logg(_("!Expected port information from clamd, got '%s'"),
+			logg(_("!Expected port information from clamd, got '%s'\n"),
 				buf);
 #ifdef	SESSION
 			session->status = CMDSOCKET_DOWN;
@@ -5258,7 +5287,7 @@ isLocal(const char *addr)
 
 #ifdef HAVE_INET_NTOP
 	if(inet_pton(AF_INET, addr, &ip) > 0)
-		return isLocalAddr (ip.s_addr);
+		return isLocalAddr(ip.s_addr);
 #ifdef AF_INET6
 	else if(inet_pton (AF_INET6, addr, &ip6) > 0) {
 		int i;
@@ -5282,11 +5311,9 @@ isLocal(const char *addr)
 			pnet6++;
 		 }
 	}
-	return 0;
-#endif /* AF_INET6 */
-#else
+#endif	/* AF_INET6 */
+#endif	/* HAVE_INET_NTOP */
 	return isLocalAddr(inet_addr(addr));
-#endif
 }
 
 /*
@@ -5824,7 +5851,7 @@ loadDatabase(void)
 		cl_free(oldroot);
 		logg("#Database correctly reloaded (%u viruses)\n", signatures);
 	} else
-		cli_dbgmsg("Database loaded\n");
+		logg("*Database loaded\n");
 
 	return cl_statinidir(dbdir, &dbstat);
 }
@@ -5838,7 +5865,7 @@ sigsegv(int sig)
 	print_trace();
 #endif
 
-	logg("!Segmentation fault :-( Bye..\n");
+	logg("!Segmentation fault :-( Bye.., notify bugs@clamav.net\n");
 
 	quitting++;
 	smfi_stop();
@@ -5847,20 +5874,24 @@ sigsegv(int sig)
 static void
 sighup(int sig)
 {
-	const struct cfgstruct *cpt;
+	extern FILE *logg_fd;
 
 	signal(SIGHUP, sighup);
 
+	if(!(cfgopt(copt, "LogFile"))->enabled)
+		return;
+
 	logg("SIGHUP caught: re-opening log file\n");
 	logg_close();
-	if(!logg_file && (cpt = cfgopt(copt, "LogFile"))->enabled)
-		logg_file = cpt->strarg;
+	logg("*Log file re-opened\n");
+	close(2);
+	dup(fileno(logg_fd));
 }
 
 static void
 sigusr2(int sig)
 {
-	signal(SIGUSR2, sighup);
+	signal(SIGUSR2, sigusr2);
 
 	logg("^SIGUSR2 caught: scheduling database reload\n");
 	reload++;
@@ -5878,7 +5909,7 @@ print_trace(void)
 	size = backtrace(array, BACKTRACE_SIZE);
 	strings = backtrace_symbols(array, size);
 
-	cli_dbgmsg("Backtrace of pid %d:\n", pid);
+	logg("*Backtrace of pid %d:\n", pid);
 
 	for(i = 0; i < size; i++)
 		logg("bt[%u]: %s", i, strings[i]);
@@ -5899,7 +5930,11 @@ print_trace(void)
  *
  * You wouldn't believe the amount of time I used to waste chasing bug reports
  *	from people who's sendmail.cf didn't tally with the arguments given to
- *	clamav-milter before I put this check in!
+ *	clamav-milter before I put this check in, which is why bug 726 must
+ *	never be acted upon.
+ *
+ * FIXME: return different codes for "the value is wrong" and "sendmail.cf"
+ *	hasn't been set up, though that's not so easy to work out.
  */
 static int
 verifyIncomingSocketName(const char *sockName)
@@ -5974,7 +6009,7 @@ isWhitelisted(const char *emailaddress, int to)
 	static table_t *to_whitelist, *from_whitelist;	/* never freed */
 	table_t *table;
 
-	cli_dbgmsg("isWhitelisted %s\n", emailaddress);
+	logg("*isWhitelisted %s\n", emailaddress);
 
 	/*
 	 * Don't scan messages to the quarantine email address
@@ -6073,7 +6108,7 @@ isBlacklisted(const char *ip_address)
 		/* Blacklisting not being used */
 		return 0;
 
-	cli_dbgmsg("isBlacklisted %s\n", ip_address);
+	logg("*isBlacklisted %s\n", ip_address);
 
 	if(isLocal(ip_address))
 		return 0;
@@ -6530,7 +6565,7 @@ black_hole(const struct privdata *privdata)
 		FILE *sendmail;
 		char buf[BUFSIZ];
 
-		cli_dbgmsg("Calling \"%s -bv %s\"\n", SENDMAIL_BIN, *to);
+		logg("*Calling \"%s -bv %s\"\n", SENDMAIL_BIN, *to);
 
 		if(pipe(pv) < 0) {
 			perror("pipe");
@@ -6575,7 +6610,7 @@ black_hole(const struct privdata *privdata)
 			if(cli_chomp(buf) == 0)
 				continue;
 
-			cli_dbgmsg("sendmail output: %s\n", buf);
+			logg("*sendmail output: %s\n", buf);
 
 			if(strstr(buf, "... deliverable: mailer ")) {
 				const char *p = strstr(buf, ", user ");
@@ -6701,11 +6736,11 @@ increment_connexions(void)
 		}
 		n_children++;
 
-		cli_dbgmsg(">n_children = %d\n", n_children);
+		logg("*>n_children = %d\n", n_children);
 		pthread_mutex_unlock(&n_children_mutex);
 
 		if(child_timeout && (rc == ETIMEDOUT))
-			logg(_("*Timeout waiting for a child to die\n"));
+			logg(_("Timeout waiting for a child to die\n"));
 	}
 
 	return 1;
@@ -6716,22 +6751,22 @@ decrement_connexions(void)
 {
 	if(max_children > 0) {
 		pthread_mutex_lock(&n_children_mutex);
-		cli_dbgmsg("decrement_connexions: n_children = %d\n", n_children);
+		logg("*decrement_connexions: n_children = %d\n", n_children);
 		/*
 		 * Deliberately errs on the side of broadcasting too many times
 		 */
 		if(n_children > 0)
 			if(--n_children == 0) {
-				cli_dbgmsg("%s is idle\n", progname);
+				logg("*%s is idle\n", progname);
 				if(pthread_cond_broadcast(&watchdog_cond) < 0)
 					perror("pthread_cond_broadcast");
 			}
 #ifdef	CL_DEBUG
-		cli_dbgmsg("pthread_cond_broadcast\n");
+		logg("*pthread_cond_broadcast\n");
 #endif
 		if(pthread_cond_broadcast(&n_children_cond) < 0)
 			perror("pthread_cond_broadcast");
-		cli_dbgmsg("<n_children = %d\n", n_children);
+		logg("*<n_children = %d\n", n_children);
 		pthread_mutex_unlock(&n_children_mutex);
 	}
 }
@@ -6740,4 +6775,148 @@ static void
 dump_blacklist(char *key, int value, void *v)
 {
 	logg(_("Won't blacklist %s\n"), key);
+}
+
+/*
+ * Non-blocking connect, based on an idea by Everton da Silva Marques
+ *	 <everton.marques@gmail.com>
+ * FIXME: There are lots of copies of this code :-(
+ */
+static int
+nonblock_connect(int sock, const struct sockaddr_in *sin, const char *hostname)
+{
+	int select_failures;	/* Max. of unexpected select() failures */
+	int attempts;
+	struct timeval timeout;	/* When we should time out */
+	int numfd;		/* Highest fdset fd plus 1 */
+	long flags;
+
+	gettimeofday(&timeout, 0);	/* store when we started to connect */
+
+	if(hostname == NULL)
+		hostname = "clamav-milter";	/* It's only used in debug messages */
+
+#ifdef	F_GETFL
+	flags = fcntl(sock, F_GETFL, 0);
+
+	if(flags == -1L)
+		logg("^getfl: %s\n", strerror(errno));
+	else if(fcntl(sock, F_SETFL, (long)(flags | O_NONBLOCK)) < 0)
+		logg("^setfl: %s\n", strerror(errno));
+#else
+	flags = -1L;
+#endif
+	if(connect(sock, (const struct sockaddr *)sin, sizeof(struct sockaddr_in)) != 0)
+		switch(errno) {
+			case EALREADY:
+			case EINPROGRESS:
+				logg("*%s: connect: %s\n", hostname,
+					strerror(errno));
+				break; /* wait for connection */
+			case EISCONN:
+				return 0; /* connected */
+			default:
+				logg("^%s: connect: %s\n", hostname,
+					strerror(errno));
+#ifdef	F_SETFL
+				if(flags != -1L)
+					if(fcntl(sock, F_SETFL, flags))
+						logg("^f_setfl: %s\n", strerror(errno));
+#endif
+				return -1; /* failed */
+		}
+	else {
+#ifdef	F_SETFL
+		if(flags != -1L)
+			if(fcntl(sock, F_SETFL, flags))
+				logg("^f_setfl: %s\n", strerror(errno));
+#endif
+		return connect_error(sock, hostname);
+	}
+
+	numfd = (int)sock + 1;
+	select_failures = NONBLOCK_SELECT_MAX_FAILURES;
+	attempts = 1;
+	timeout.tv_sec += CONNECT_TIMEOUT;
+
+	for (;;) {
+		int n, t;
+		fd_set fds;
+		struct timeval now, waittime;
+
+		/* Force timeout if we ran out of time */
+		gettimeofday(&now, 0);
+		t = (now.tv_sec == timeout.tv_sec) ?
+			(now.tv_usec > timeout.tv_usec) :
+			(now.tv_sec > timeout.tv_sec);
+
+		if(t) {
+			logg("^%s: connect timeout (%d secs)\n",
+				hostname, CONNECT_TIMEOUT);
+			break;
+		}
+
+		/* Calculate how long to wait */
+		waittime.tv_sec = timeout.tv_sec - now.tv_sec;
+		waittime.tv_usec = timeout.tv_usec - now.tv_usec;
+		if(waittime.tv_usec < 0) {
+			waittime.tv_sec--;
+			waittime.tv_usec += 1000000;
+		}
+
+		/* Init fds with 'sock' as the only fd */
+		FD_ZERO(&fds);
+		FD_SET(sock, &fds);
+
+		n = select(numfd, 0, &fds, 0, &waittime);
+		if(n < 0) {
+			logg("^%s: select attempt %d %s\n",
+				hostname, select_failures, strerror(errno));
+			if(--select_failures >= 0)
+				continue; /* not timed-out, try again */
+			break; /* failed */
+		}
+
+		logg("*%s: select = %d\n", hostname, n);
+
+		if(n) {
+#ifdef	F_SETFL
+			if(flags != -1L)
+				if(fcntl(sock, F_SETFL, flags))
+					logg("^f_setfl: %s\n", strerror(errno));
+#endif
+			return connect_error(sock, hostname);
+		}
+
+		/* timeout */
+		if(attempts++ == NONBLOCK_MAX_ATTEMPTS) {
+			logg("^timeout connecting to %s\n", hostname);
+			break;
+		}
+	}
+
+#ifdef	F_SETFL
+	if(flags != -1L)
+		if(fcntl(sock, F_SETFL, flags))
+			logg("^f_setfl: %s\n", strerror(errno));
+#endif
+	return -1; /* failed */
+}
+
+static int
+connect_error(int sock, const char *hostname)
+{
+#ifdef	SO_ERROR
+	int optval;
+	socklen_t optlen = sizeof(optval);
+
+	getsockopt(sock, SOL_SOCKET, SO_ERROR, &optval, &optlen);
+
+	if(optval) {
+		logg("^%s: %s\n", hostname, strerror(optval));
+		return -1;
+	}
+#endif
+
+	return 0;
 }

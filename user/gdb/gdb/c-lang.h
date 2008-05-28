@@ -1,12 +1,13 @@
 /* C language support definitions for GDB, the GNU debugger.
-   Copyright 1992, 1994, 1995, 1996, 1997, 1998, 2000, 2002
-   Free Software Foundation, Inc.
+
+   Copyright (C) 1992, 1994, 1995, 1996, 1997, 1998, 2000, 2002, 2005, 2006,
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 #if !defined (C_LANG_H)
@@ -38,7 +37,7 @@ extern void c_error (char *);	/* Defined in c-exp.y */
 extern void c_print_type (struct type *, char *, struct ui_file *, int,
 			  int);
 
-extern int c_val_print (struct type *, char *, int, CORE_ADDR,
+extern int c_val_print (struct type *, const gdb_byte *, int, CORE_ADDR,
 			struct ui_file *, int, int, int,
 			enum val_prettyprint);
 
@@ -49,7 +48,7 @@ extern int c_value_print (struct value *, struct ui_file *, int,
 
 extern void c_printchar (int, struct ui_file *);
 
-extern void c_printstr (struct ui_file * stream, char *string,
+extern void c_printstr (struct ui_file * stream, const gdb_byte *string,
 			unsigned int length, int width,
 			int force_ellipses);
 
@@ -59,8 +58,6 @@ extern void finished_macro_expansion (void);
 
 extern macro_lookup_ftype *expression_macro_lookup_func;
 extern void *expression_macro_lookup_baton;
-
-extern struct type *c_create_fundamental_type (struct objfile *, int);
 
 extern void c_language_arch_info (struct gdbarch *gdbarch,
 				  struct language_arch_info *lai);
@@ -75,13 +72,12 @@ extern int vtblprint;		/* Controls printing of vtbl's */
 
 extern int static_field_print;
 
-extern void cp_print_class_member (char *, struct type *, struct ui_file *,
-				   char *);
+extern void cp_print_class_member (const gdb_byte *, struct type *,
+				   struct ui_file *, char *);
 
-extern void cp_print_class_method (char *, struct type *, struct ui_file *);
-
-extern void cp_print_value_fields (struct type *, struct type *, char *,
-				   int, CORE_ADDR, struct ui_file *, int,
+extern void cp_print_value_fields (struct type *, struct type *,
+				   const gdb_byte *, int, CORE_ADDR,
+				   struct ui_file *, int,
 				   int, enum val_prettyprint,
 				   struct type **, int);
 

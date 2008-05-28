@@ -5,50 +5,31 @@
 #include <iptables.h>
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void unclean_help(void)
 {
 	printf(
 "unclean v%s takes no options\n"
 "\n", IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{0}
-};
-
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      unsigned int *nfcache,
-      struct ipt_entry_match **match)
+static int unclean_parse(int c, char **argv, int invert, unsigned int *flags,
+                         const void *entry, struct xt_entry_match **match)
 {
 	return 0;
 }
 
-/* Final check; must have specified --mac. */
-static void final_check(unsigned int flags)
-{
-}
-
-static
-struct iptables_match unclean = { 
-	.next		= NULL,
+static struct iptables_match unclean_match = {
 	.name		= "unclean",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(0),
 	.userspacesize	= IPT_ALIGN(0),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= NULL,
-	.save		= NULL,
-	.extra_opts	= opts
+	.help		= unclean_help,
+	.parse		= unclean_parse,
 };
 
 void _init(void)
 {
-	register_match(&unclean);
+	register_match(&unclean_match);
 }

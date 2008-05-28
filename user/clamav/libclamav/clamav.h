@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -69,10 +71,10 @@ extern "C"
 #define CL_DB_ACONLY	    0x4 /* WARNING: only for developers */
 #define CL_DB_PHISHING_URLS 0x8
 #define CL_DB_PUA	    0x10
+#define CL_DB_CVDNOTMP	    0x20
 
 #define CL_DB_DROP_PERCENT_MASK	0x7f000000
 #define CL_DB_DROP_PERCENT_MULT	0x01000000
-#define CL_DB_DROP_NONE		0x00800000
 
 /* recommended db settings */
 #define CL_DB_STDOPT	    (CL_DB_PHISHING | CL_DB_PHISHING_URLS)
@@ -87,16 +89,15 @@ extern "C"
 #define CL_SCAN_PE		    0x20
 #define CL_SCAN_BLOCKBROKEN	    0x40
 #define CL_SCAN_MAILURL		    0x80
-#define CL_SCAN_BLOCKMAX	    0x100
+#define CL_SCAN_BLOCKMAX	    0x100 /* ignored */
 #define CL_SCAN_ALGORITHMIC	    0x200
-#define CL_SCAN_PHISHING_DOMAINLIST 0x400
 #define CL_SCAN_PHISHING_BLOCKSSL   0x800 /* ssl mismatches, not ssl by itself*/
 #define CL_SCAN_PHISHING_BLOCKCLOAK 0x1000
 #define CL_SCAN_ELF		    0x2000
 #define CL_SCAN_PDF		    0x4000
 
 /* recommended scan settings */
-#define CL_SCAN_STDOPT		(CL_SCAN_ARCHIVE | CL_SCAN_MAIL | CL_SCAN_OLE2 | CL_SCAN_HTML | CL_SCAN_PE | CL_SCAN_ALGORITHMIC | CL_SCAN_ELF | CL_SCAN_PHISHING_DOMAINLIST) 
+#define CL_SCAN_STDOPT		(CL_SCAN_ARCHIVE | CL_SCAN_MAIL | CL_SCAN_OLE2 | CL_SCAN_HTML | CL_SCAN_PE | CL_SCAN_ALGORITHMIC | CL_SCAN_ELF)
 
 /* aliases for backward compatibility */
 #define CL_RAW		CL_SCAN_RAW
@@ -115,11 +116,14 @@ struct cl_engine {
     /* Roots table */
     void **root;
 
-    /* MD5 */
-    void **md5_hlist;
+    /* B-M matcher for standard MD5 sigs */
+    void *md5_hdb;
 
     /* B-M matcher for MD5 sigs for PE sections */
-    void *md5_sect;
+    void *md5_mdb;
+
+    /* B-M matcher for whitelist db */
+    void *md5_fp;
 
     /* Zip metadata */
     void *zip_mlist;
@@ -134,19 +138,26 @@ struct cl_engine {
 
     /* Dynamic configuration */
     void *dconf;
+
+    /* Filetype definitions */
+    void *ftypes;
+
+    /* Ignored signatures */
+    void *ignored;
 };
 
 struct cl_limits {
+    unsigned long int maxscansize;  /* during the scanning of archives this size
+				     * will never be exceeded
+				     */
+    unsigned long int maxfilesize;  /* compressed files will only be decompressed
+				     * and scanned up to this size
+				     */
     unsigned int maxreclevel;	    /* maximum recursion level for archives */
     unsigned int maxfiles;	    /* maximum number of files to be scanned
 				     * within a single archive
 				     */
-    unsigned int maxmailrec;	    /* maximum recursion level for mail files */
-    unsigned int maxratio;	    /* maximum compression ratio */
     unsigned short archivememlim;   /* limit memory usage for some unpackers */
-    unsigned long int maxfilesize;  /* compressed files larger than this limit
-				     * will not be scanned
-				     */
 };
 
 struct cl_stat {

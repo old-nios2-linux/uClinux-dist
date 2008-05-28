@@ -193,9 +193,10 @@ char *post_miss;
 unsigned long post_mlen;
 unsigned long post_len=0;
 #endif
+extern int auth_fallback;
 
 #ifdef USE_AUTH
-char *config_file = "boa.conf";
+char *config_file = "/etc/config/boa.conf";
 #endif
 
 #if _FILE_OFFSET_BITS == 64
@@ -399,6 +400,7 @@ static const char *cgivars[] = {
   "PATH_INFO=",
   "PATH_TRANSLATED="
   "PATH=",
+  "AUTH_FALLBACK="
 };
 
 #define CGIENVLEN (sizeof(cgivars) / sizeof(*cgivars))
@@ -569,6 +571,12 @@ static void do_cgi(const char* pathinfo,const char* const* envp) {
     tmp+=realpath(pathinfo,tmp)?str_len(tmp):str_copy(tmp,pathinfo);
     ++tmp;
   }
+  
+  if (auth_fallback) {
+    cgi_env[++i]=tmp;
+    tmp+=str_copy(tmp,"AUTH_FALLBACK=true");
+    *tmp=0; ++tmp;
+  }
 
   /* Set the default path for cgis */
   cgi_env[++i]="PATH=/bin:/usr/bin:/sbin:/usr/sbin";
@@ -644,6 +652,14 @@ static void sig_child_handler(int sig)
   signal(SIGCHLD, sig_child_handler);
 }
 #endif
+
+static int got_sighup = 0;
+
+static void sig_hup_handler(int sig)
+{
+  /*syslog(LOG_INFO, "got SIGHUP, (%d) setting flag to exit", getpid());*/
+  got_sighup = 1;
+}
 
 static void cgi_send_correct_http(const char*s,unsigned int sl) {
   unsigned int i;
@@ -723,6 +739,23 @@ static void start_cgi(int nph,const char* pathinfo,const char *const *envp) {
 		buffer_puts(buffer_1,"HTTP/1.0 302 CGI-Redirect\r\nConnection: close\r\n");
 		signal(SIGCHLD,SIG_IGN);
 		cgi_send_correct_http(ibuf,n);
+		buffer_flush(buffer_1);
+		dolog(0);
+		exit(0);
+	      }
+	      else if (byte_diff(ibuf,24,"Authorization Required: ") == 0) {
+		retcode=401;
+		buffer_puts(buffer_1,"HTTP/1.0 401 Authorization Required\r\n"
+		  "WWW-Authenticate: Basic realm=\"");
+		signal(SIGCHLD,SIG_IGN);
+#ifdef CONFIG_USER_DNSMASQ2_RESOLVE_AS_SERVER
+		buffer_puts(buffer_1, local_ip);
+#else
+		buffer_puts(buffer_1, host);
+#endif
+		buffer_puts(buffer_1,"\"\r\nConnection: close\r\n\r\n"
+		  "Access to this site is restricted.\r\n"
+		  "Please provide credentials.\r\n");
 		buffer_flush(buffer_1);
 		dolog(0);
 		exit(0);
@@ -1667,11 +1700,37 @@ int main(int argc,char *argv[],const char *const *envp) {
 #endif
   get_ucspi_env();
 
+  {
+    /* 
+     * Catch any SIGHUPs and set a flag to tell us to exit 
+     * at the next available opportunity i.e. after we've finished 
+     * processing the current request, so that we reload any 
+     * configuration changes.
+     */
+    struct sigaction sa;
+    sa.sa_handler = sig_hup_handler;
+    sigfillset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGHUP, &sa, NULL) != 0) {
+      syslog(LOG_ERR, "Failed to install signal handler");
+    }
+  }
+
 #ifdef KEEPALIVE
 handlenext:
   encoding=0;
 #endif
 //  alarm(20);
+
+  /* 
+   * If we got a SIGHUP during the last request, and we've 
+   * looped back here, bail out.
+   */
+  if (got_sighup) {
+    /*syslog(LOG_INFO, "Exiting due to SIGHUP (%d)", getpid());*/
+    exit(0);
+  }
 
   {
     int found=0;
@@ -1683,6 +1742,7 @@ handlenext:
     duh.events=POLLIN;
     for (in=len=0;found<2;) {
       int tmp;
+      /* If we get a SIGHUP here we will exit which is what is desired */
       switch (poll(&duh,1,READTIMEOUT*1000)) {
       case 0: if (time(&now)<fini) continue;	/* fall through */
       case -1:	/* timeout or error */

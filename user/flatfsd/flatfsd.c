@@ -42,10 +42,10 @@
 /*****************************************************************************/
 
 /*
- * By default create version 3 flat fs files (compressed/duplicated).
+ * By default create version 4 flat fs files (compressed/duplicated).
  * Allow it to be overriden on the command line with args though.
  */
-static int fsver = 3;
+static int fsver = 4;
 
 /*****************************************************************************/
 
@@ -56,16 +56,16 @@ static int fsver = 3;
 
 /*****************************************************************************/
 
-#define ACTION_NONE 0
-#define ACTION_EXIT    (1<<1)
-#define ACTION_READ    (1<<2)
-#define ACTION_WRITE   (1<<3)
-#define ACTION_RESET   (1<<4)
-#define ACTION_REBOOT  (1<<5)
-#define ACTION_HALT    (1<<6)
-#define ACTION_BUTTON  (1<<7)
-#define ACTION_DIRTY   (1<<8)
-#define ACTION_REBOOT_NOW  (1<<9)
+#define ACTION_NONE		0
+#define ACTION_EXIT		(1<<1)
+#define ACTION_READ		(1<<2)
+#define ACTION_WRITE		(1<<3)
+#define ACTION_RESET		(1<<4)
+#define ACTION_REBOOT		(1<<5)
+#define ACTION_HALT		(1<<6)
+#define ACTION_BUTTON		(1<<7)
+#define ACTION_DIRTY		(1<<8)
+#define ACTION_REBOOT_NOW	(1<<9)
 
 static int action = 0;
 static time_t dirty;
@@ -97,14 +97,14 @@ static struct {
 
 /*****************************************************************************/
 
-static int recv_hup = 0;	/* SIGHUP = reboot device */
-static int recv_usr1 = 0;	/* SIGUSR1 = write config to flash */
-static int recv_usr2 = 0;	/* SIGUSR2 = erase flash and reboot */
-static int recv_pwr = 0;	/* SIGPWR = halt device */
-static int recv_chld = 0;	/* SIGCHLD */
-static int stopped = 0;
-static int exit_flatfsd = 0;  /* SIGINT, SIGTERM, SIGQUIT */
-static int nowrite = 0;
+static int recv_hup;		/* SIGHUP = reboot device */
+static int recv_usr1;		/* SIGUSR1 = write config to flash */
+static int recv_usr2;		/* SIGUSR2 = erase flash and reboot */
+static int recv_pwr;		/* SIGPWR = halt device */
+static int recv_chld;		/* SIGCHLD */
+static int stopped;
+static int exit_flatfsd;	/* SIGINT, SIGTERM, SIGQUIT */
+static int nowrite;
 static char *configdir = DSTDIR;
 
 static void sigusr1(int signr)
@@ -146,11 +146,11 @@ static void sigexit(int signr)
 
 static char *get_caller(void)
 {
-	char	procname[64];
-	char	cmdline[64];
-	pid_t	pp;
-	FILE	*fp;
-	char	*arg;
+	char procname[64];
+	char cmdline[64];
+	pid_t pp;
+	FILE *fp;
+	char *arg;
 
 	procname[0] = '\0';
 
@@ -545,7 +545,7 @@ skip_out:
 
 static void usage(int rc)
 {
-	printf("usage: flatfsd [-a|-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn123]\n"
+	printf("usage: flatfsd [-a|-b|-H|-c|-r|-w|-i|-s|-v|-h|-?] [-dn1234]\n"
 		"\t-a <action> send a command to the running flatfsd\n"
 		"\t-b safely reboot the system\n"
 		"\t-H safely halt the system\n"
@@ -560,7 +560,8 @@ static void usage(int rc)
 		"\t-S save config filesystem to flash (rate limited)\n"
 		"\t-1 force use of version 1 flash layout\n"
 		"\t-2 force use of version 2 flash layout\n"
-		"\t-3 force use of version 3 flash layout (default)\n"
+		"\t-3 force use of version 3 flash layout\n"
+		"\t-4 force use of version 4 flash layout (default)\n"
 		"\t-v print version\n"
 		"\t-h this help\n");
 	exit(rc);
@@ -646,16 +647,13 @@ int main(int argc, char *argv[])
 	struct timeval timeout;
 	fd_set fds;
 	time_t dirtyprev, now;
-	int dirtydelay;
 	pid_t pid;
-	int sockfd;
-	int rc;
-	int fd;
+	int fd, sockfd, dirtydelay, rc;
 
 	openlog("flatfsd", LOG_PERROR|LOG_PID, LOG_DAEMON);
 
 	action = 0;
-	while ((rc = getopt(argc, argv, "a:vcd:nribwH123hsS?")) != EOF) {
+	while ((rc = getopt(argc, argv, "a:vcd:nribwH1234hsS?")) != EOF) {
 		switch (rc) {
 		case 'a':
 			action = rc;
@@ -667,8 +665,8 @@ int main(int argc, char *argv[])
 		case 'd':
 			configdir = optarg;
 			if (access(configdir, R_OK | W_OK) < 0) {
-				printf("%s: directory does not exist or is not writeable\n",
-					   configdir);
+				printf("%s: directory does not exist or "
+					"is not writeable\n", configdir);
 				exit(1);
 			}
 			break;
@@ -694,6 +692,9 @@ int main(int argc, char *argv[])
 			break;
 		case '3':
 			fsver = 3;
+			break;
+		case '4':
+			fsver = 4;
 			break;
 		case 'h':
 		case '?':
@@ -785,6 +786,8 @@ int main(int argc, char *argv[])
 	sigaction(SIGQUIT, &act, NULL);
 
 	register_resetpid();
+
+	umask(0777);
 
 	/*
 	 * Spin forever, waiting for a signal to write...

@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2007 aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire Inc.
+ *
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -29,19 +31,28 @@
 #include <unistd.h>
 #endif
 
+#if HAVE_MMAP
+#ifdef HAVE_SYS_MMAN_H
+#include <sys/mman.h>
+#endif
+#endif
+
 #include "others.h"
 #include "cltypes.h"
 #include "nsis_bzlib.h"
-#include "LZMADecode.h"
+/* #include "zlib.h" */
 #include "nsis_zlib.h"
+#include "lzma_iface.h"
 #include "matcher.h"
 #include "scanners.h"
 #include "nulsft.h" /* SHUT UP GCC -Wextra */
 
+/* NSIS zlib is not thread safe */
 #ifdef CL_THREAD_SAFE
 #  include <pthread.h>
 static pthread_mutex_t nsis_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
+/* NSIS zlib is not thread safe */
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -61,24 +72,21 @@ struct nsis_st {
   int ifd;
   int ofd;
   off_t off;
+  off_t fullsz;
   char *dir;
   uint32_t asz;
   uint32_t hsz;
   uint32_t fno;
-  struct {
-    uint32_t avail_in;
-    unsigned char *next_in;
-    uint32_t avail_out;
-    unsigned char *next_out;
-  } nsis;
-  nsis_bzstream bz;
-  lzma_stream lz;
-  nsis_z_stream z;
-  unsigned char *freeme;
   uint8_t comp;
   uint8_t solid;
   uint8_t freecomp;
   uint8_t eof;
+  struct stream_state nsis;
+  nsis_bzstream bz;
+  CLI_LZMA* lz;
+/*   z_stream z; */
+  nsis_z_stream z;
+  unsigned char *freeme;
   char ofn[1024];
 };
 
@@ -90,15 +98,19 @@ struct nsis_st {
 static int nsis_init(struct nsis_st *n) {
   switch(n->comp) {
   case COMP_BZIP2:
+    memset(&n->bz, 0, sizeof(nsis_bzstream));
     if (nsis_BZ2_bzDecompressInit(&n->bz, 0, 0)!=BZ_OK)
       return CL_EBZIP;
     n->freecomp=1;
     break;
   case COMP_LZMA:
-    lzmaInit(&n->lz);
+    cli_LzmaInit(&n->lz, 0xffffffffffffffffULL);
     n->freecomp=1;
     break;
   case COMP_ZLIB:
+    memset(&n->bz, 0, sizeof(z_stream));
+/*     inflateInit2(&n->z, -MAX_WBITS); */
+/*     n->freecomp=1; */
     nsis_inflateInit(&n->z);
     n->freecomp=0;
   }
@@ -114,8 +126,10 @@ static void nsis_shutdown(struct nsis_st *n) {
     nsis_BZ2_bzDecompressEnd(&n->bz);
     break;
   case COMP_LZMA:
-    lzmaShutdown(&n->lz);
+    cli_LzmaShutdown(&n->lz);
+    break;
   case COMP_ZLIB:
+/*     inflateEnd(&n->z); */
     break;
   }
 
@@ -143,27 +157,20 @@ static int nsis_decomp(struct nsis_st *n) {
     n->nsis.next_out = n->bz.next_out;
     break;
   case COMP_LZMA:
-    n->lz.avail_in = n->nsis.avail_in;
-    n->lz.next_in = n->nsis.next_in;
-    n->lz.avail_out = n->nsis.avail_out;
-    n->lz.next_out = n->nsis.next_out;
-    switch (lzmaDecode(&n->lz)) {
-    case LZMA_OK:
+    switch (cli_LzmaDecode(&n->lz, &n->nsis)) {
+    case LZMA_RESULT_OK:
       ret = CL_SUCCESS;
       break;
     case LZMA_STREAM_END:
       ret = CL_BREAK;
     }
-    n->nsis.avail_in = n->lz.avail_in;
-    n->nsis.next_in = n->lz.next_in;
-    n->nsis.avail_out = n->lz.avail_out;
-    n->nsis.next_out = n->lz.next_out;
     break;
   case COMP_ZLIB:
     n->z.avail_in = n->nsis.avail_in;
     n->z.next_in = n->nsis.next_in;
     n->z.avail_out = n->nsis.avail_out;
     n->z.next_out = n->nsis.next_out;
+/*  switch (inflate(&n->z, Z_NO_FLUSH)) { */
     switch (nsis_inflate(&n->z)) {
     case Z_OK:
       ret = CL_SUCCESS;
@@ -183,17 +190,16 @@ static int nsis_decomp(struct nsis_st *n) {
 static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
   unsigned char *ibuf;
   uint32_t size, loops;
-  int ret;
+  int ret, gotsome=0;
   unsigned char obuf[BUFSIZ];
 
   if (n->eof) {
     cli_dbgmsg("NSIS: extraction complete\n");
     return CL_BREAK;
   }
-  if (ctx->limits && ctx->limits->maxfiles && n->fno >= ctx->limits->maxfiles) {
-    cli_dbgmsg("NSIS: Files limit reached (max: %u)\n", ctx->limits->maxfiles);
-    return CL_EMAXFILES;
-  }
+  
+  if ((ret=cli_checklimits("NSIS", ctx, 0, 0, 0))!=CL_CLEAN)
+    return ret;
 
   if (n->fno)
     snprintf(n->ofn, 1023, "%s/content.%.3u", n->dir, n->fno);
@@ -231,11 +237,10 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
 
     n->asz -= size+4;
 
-    if (ctx->limits && ctx->limits->maxfilesize && size > ctx->limits->maxfilesize) {
-      cli_dbgmsg("NSIS: Skipping file due to size limit (%u, max: %lu)\n", size, ctx->limits->maxfilesize);
+    if ((ret=cli_checklimits("NSIS", ctx, size, 0, 0))!=CL_CLEAN) {
       close(n->ofd);
       if (lseek(n->ifd, size, SEEK_CUR)==-1) return CL_EIO;
-      return CL_EMAXSIZE;
+      return ret;
     }
     if (!(ibuf= (unsigned char *) cli_malloc(size))) {
       	cli_dbgmsg("NSIS: out of memory"__AT__"\n");
@@ -271,43 +276,54 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
 
       while ((ret=nsis_decomp(n))==CL_SUCCESS) {
 	if ((size = n->nsis.next_out - obuf)) {
+	  gotsome=1;
 	  if (cli_writen(n->ofd, obuf, size) != (ssize_t) size) {
 	    cli_dbgmsg("NSIS: cannot write output file"__AT__"\n");
 	    free(ibuf);
 	    close(n->ofd);
+	    nsis_shutdown(n);
 	    return CL_EIO;
 	  }
 	  n->nsis.next_out = obuf;
 	  n->nsis.avail_out = BUFSIZ;
 	  loops=0;
-	  if (ctx->limits && ctx->limits->maxfilesize && size > ctx->limits->maxfilesize) {
-	    cli_dbgmsg("NSIS: Skipping file due to size limit (%u, max: %lu)\n", size, ctx->limits->maxfilesize);
+	  if ((ret=cli_checklimits("NSIS", ctx, size, 0, 0))!=CL_CLEAN) {
 	    free(ibuf);
 	    close(n->ofd);
 	    nsis_shutdown(n);
-	    return CL_EMAXSIZE;
+	    return ret;
 	  }
-	} else if (++loops > 10) {
+	} else if (++loops > 20) {
 	  cli_dbgmsg("NSIS: xs looping, breaking out"__AT__"\n");
-	  ret = CL_BREAK;
+	  ret = CL_EFORMAT;
 	  break;
 	}
       }
 
-      if (ret != CL_BREAK) {
-	cli_dbgmsg("NSIS: bad stream"__AT__"\n");
-	free(ibuf);
-	close(n->ofd);
-	return CL_EFORMAT;
+      nsis_shutdown(n);
+
+      if (n->nsis.next_out - obuf) {
+	gotsome=1;
+	if (cli_writen(n->ofd, obuf, n->nsis.next_out - obuf) != n->nsis.next_out - obuf) {
+	  cli_dbgmsg("NSIS: cannot write output file"__AT__"\n");
+	  free(ibuf);
+	  close(n->ofd);
+	  return CL_EIO;
+	}
       }
 
-      if (cli_writen(n->ofd, obuf, n->nsis.next_out - obuf) != n->nsis.next_out - obuf) {
-	cli_dbgmsg("NSIS: cannot write output file"__AT__"\n");
+      if (ret != CL_SUCCESS && ret != CL_BREAK) {
+	cli_dbgmsg("NSIS: bad stream"__AT__"\n");
+	if (gotsome) {
+	  ret = CL_SUCCESS;
+	} else {
+	  ret = CL_EMAXSIZE;
+	  close(n->ofd);
+	}
 	free(ibuf);
-	close(n->ofd);
-	return CL_EIO;
+	return ret;
       }
-      nsis_shutdown(n);
+
     }
 
     free(ibuf);
@@ -320,8 +336,21 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
 	close(n->ofd);
 	return ret;
       }
+#if HAVE_MMAP
+      if((n->freeme= (unsigned char *)mmap(NULL, n->fullsz, PROT_READ, MAP_PRIVATE, n->ifd, 0))==MAP_FAILED) {
+	cli_dbgmsg("NSIS: mmap() failed"__AT__"\n");
+	close(n->ofd);
+	return CL_EIO;
+      }
+      n->nsis.next_in = n->freeme+n->off+0x1c;
+#else /* HAVE_MMAP */
+      if(!size || size > CLI_MAX_ALLOCATION) {
+	cli_dbgmsg("NSIS: mmap() support not compiled in and input file too big\n");
+	close(n->ofd);
+	return CL_EMEM;
+      }
       if (!(n->freeme= (unsigned char *) cli_malloc(n->asz))) {
-	cli_dbgmsg("NSIS: out of memory\n");
+	cli_dbgmsg("NSIS: out of memory"__AT__"\n");
 	close(n->ofd);
 	return CL_EMEM;
       }
@@ -331,6 +360,7 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
 	return CL_EIO;
       }
       n->nsis.next_in = n->freeme;
+#endif /* HAVE_MMAP */
       n->nsis.avail_in = n->asz;
     }
 
@@ -359,10 +389,9 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
     }
 
     size=cli_readint32(obuf);
-    if (ctx->limits && ctx->limits->maxfilesize && size > ctx->limits->maxfilesize) {
-      cli_dbgmsg("NSIS: Breaking out due to filesize limit (%u, max: %lu) in solid archive\n", size, ctx->limits->maxfilesize);
+    if ((ret=cli_checklimits("NSIS", ctx, size, 0, 0))!=CL_CLEAN) {
       close(n->ofd);
-      return CL_EFORMAT;
+      return ret;
     }
 
     n->nsis.next_out = obuf;
@@ -372,32 +401,47 @@ static int nsis_unpack_next(struct nsis_st *n, cli_ctx *ctx) {
     while (size && (ret=nsis_decomp(n))==CL_SUCCESS) {
       unsigned int wsz;
       if ((wsz = n->nsis.next_out - obuf)) {
+	gotsome=1;
 	if (cli_writen(n->ofd, obuf, wsz) != (ssize_t) wsz) {
+	  cli_dbgmsg("NSIS: cannot write output file"__AT__"\n");
 	  close(n->ofd);
 	  return CL_EIO;
 	}
 	size-=wsz;
+	loops=0;
 	n->nsis.next_out = obuf;
 	n->nsis.avail_out = MIN(size,BUFSIZ);
       } else if ( ++loops > 20 ) {
 	cli_dbgmsg("NSIS: xs looping, breaking out"__AT__"\n");
-	ret = CL_BREAK;
+	ret = CL_EFORMAT;
 	break;
       }
     }
 
-    if (ret == CL_BREAK) {
+    if (n->nsis.next_out - obuf) {
+      gotsome=1;
       if (cli_writen(n->ofd, obuf, n->nsis.next_out - obuf) != n->nsis.next_out - obuf) {
+	cli_dbgmsg("NSIS: cannot write output file"__AT__"\n");
 	close(n->ofd);
 	return CL_EIO;
       }
+    }
+
+    if (ret == CL_EFORMAT) {
+      cli_dbgmsg("NSIS: bad stream"__AT__"\n");
+      if (!gotsome) {
+	close(n->ofd);
+	return CL_EMAXSIZE;
+      } 
+    }
+
+    if (ret == CL_EFORMAT || ret == CL_BREAK) {
       n->eof=1;
     } else if (ret != CL_SUCCESS) {
       cli_dbgmsg("NSIS: bad stream"__AT__"\n");
       close(n->ofd);
       return CL_EFORMAT;
     }
-    
     return CL_SUCCESS;
   }
 
@@ -423,6 +467,7 @@ static int nsis_headers(struct nsis_st *n, cli_ctx *ctx) {
 
   n->hsz = (uint32_t)cli_readint32(buf+0x14);
   n->asz = (uint32_t)cli_readint32(buf+0x18);
+  n->fullsz = st.st_size;
 
   cli_dbgmsg("NSIS: Header info - Flags=%x, Header size=%x, Archive size=%x\n", cli_readint32(buf), n->hsz, n->asz);
 
@@ -480,7 +525,13 @@ static int cli_nsis_unpack(struct nsis_st *n, cli_ctx *ctx) {
 
 static void cli_nsis_free(struct nsis_st *n) {
   nsis_shutdown(n);
-  if (n->solid && n->freeme) free(n->freeme);
+  if (n->solid && n->freeme) {
+#if HAVE_MMAP
+    munmap(n->freeme, n->fullsz);
+#else
+    free(n->freeme);
+#endif
+  }
 }
 
 int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
@@ -488,10 +539,6 @@ int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
 	struct nsis_st nsist;
 
     cli_dbgmsg("in scannulsft()\n");
-    if(ctx->limits && ctx->limits->maxreclevel && ctx->arec >= ctx->limits->maxreclevel) {
-        cli_dbgmsg("Archive recursion limit exceeded (arec == %u).\n", ctx->arec+1);
-	return CL_EMAXREC;
-    }
 
     memset(&nsist, 0, sizeof(struct nsis_st));
 
@@ -507,8 +554,6 @@ int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
 
     if(cli_leavetemps_flag) cli_dbgmsg("NSIS: Extracting files to %s\n", nsist.dir);
 
-    ctx->arec++;
-
     do {
 #ifdef CL_THREAD_SAFE
         pthread_mutex_lock(&nsis_mutex);
@@ -517,29 +562,22 @@ int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
 #ifdef CL_THREAD_SAFE
 	pthread_mutex_unlock(&nsis_mutex);
 #endif
-	if(ret != CL_SUCCESS) {
-	    if(ret == CL_EMAXSIZE) {
-	        if(BLOCKMAX) {
-		    *ctx->virname = "NSIS.ExceededFileSize";
-		    ret=CL_VIRUS;
-		} else {
-		    ret = nsist.solid ? CL_BREAK : CL_SUCCESS;
-		}
-	    }
-	} else {
-	    cli_dbgmsg("NSIS: Successully extracted file #%u\n", nsist.fno);
-	    lseek(nsist.ofd, 0, SEEK_SET);
-	    if(nsist.fno == 1)
-	        ret=cli_scandesc(nsist.ofd, ctx, 0, 0, 0, NULL);
-	    else
-	        ret=cli_magic_scandesc(nsist.ofd, ctx);
-	    close(nsist.ofd);
-	    if(!cli_leavetemps_flag)
-	        unlink(nsist.ofn);
+	if (ret == CL_SUCCESS) {
+	  cli_dbgmsg("NSIS: Successully extracted file #%u\n", nsist.fno);
+	  lseek(nsist.ofd, 0, SEEK_SET);
+	  if(nsist.fno == 1)
+	    ret=cli_scandesc(nsist.ofd, ctx, 0, 0, NULL, AC_SCAN_VIR);
+	  else
+	    ret=cli_magic_scandesc(nsist.ofd, ctx);
+	  close(nsist.ofd);
+	  if(!cli_leavetemps_flag)
+	    unlink(nsist.ofn);
+	} else if(ret == CL_EMAXSIZE) {
+	    ret = nsist.solid ? CL_BREAK : CL_SUCCESS;
 	}
     } while(ret == CL_SUCCESS);
 
-    if(ret == CL_BREAK)
+    if(ret == CL_BREAK || ret == CL_EMAXFILES)
 	ret = CL_CLEAN;
 
     cli_nsis_free(&nsist);
@@ -549,7 +587,6 @@ int cli_scannulsft(int desc, cli_ctx *ctx, off_t offset) {
 
     free(nsist.dir);
 
-    ctx->arec--;    
     return ret;
 }
 

@@ -1,12 +1,12 @@
 /* Traditional frame unwind support, for GDB the GNU Debugger.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -53,7 +51,7 @@ trad_frame_alloc_saved_regs (struct frame_info *next_frame)
 {
   int regnum;
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
-  int numregs = NUM_REGS + NUM_PSEUDO_REGS;
+  int numregs = gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
   struct trad_frame_saved_reg *this_saved_regs
     = FRAME_OBSTACK_CALLOC (numregs, struct trad_frame_saved_reg);
   for (regnum = 0; regnum < numregs; regnum++)
@@ -98,6 +96,15 @@ trad_frame_set_value (struct trad_frame_saved_reg this_saved_regs[],
 }
 
 void
+trad_frame_set_reg_value (struct trad_frame_cache *this_trad_cache,
+			  int regnum, LONGEST val)
+{
+  /* External interface for users of trad_frame_cache
+     (who cannot access the prev_regs object directly).  */
+  trad_frame_set_value (this_trad_cache->prev_regs, regnum, val);
+}
+
+void
 trad_frame_set_reg_realreg (struct trad_frame_cache *this_trad_cache,
 			    int regnum, int realreg)
 {
@@ -126,7 +133,7 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
 			      struct trad_frame_saved_reg this_saved_regs[],
 			      int regnum, int *optimizedp,
 			      enum lval_type *lvalp, CORE_ADDR *addrp,
-			      int *realregp, void *bufferp)
+			      int *realregp, gdb_byte *bufferp)
 {
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
   if (trad_frame_addr_p (this_saved_regs, regnum))
@@ -145,9 +152,13 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
     }
   else if (trad_frame_realreg_p (this_saved_regs, regnum))
     {
+      *optimizedp = 0;
+      *lvalp = lval_register;
+      *addrp = 0;
+      *realregp = this_saved_regs[regnum].realreg;
       /* Ask the next frame to return the value of the register.  */
-      frame_register_unwind (next_frame, this_saved_regs[regnum].realreg,
-			     optimizedp, lvalp, addrp, realregp, bufferp);
+      if (bufferp)
+	frame_unwind_register (next_frame, (*realregp), bufferp);
     }
   else if (trad_frame_value_p (this_saved_regs, regnum))
     {
@@ -162,7 +173,7 @@ trad_frame_get_prev_register (struct frame_info *next_frame,
     }
   else
     {
-      error ("Register %s not available",
+      error (_("Register %s not available"),
 	     gdbarch_register_name (gdbarch, regnum));
     }
 }
@@ -172,7 +183,7 @@ trad_frame_get_register (struct trad_frame_cache *this_trad_cache,
 			 struct frame_info *next_frame,
 			 int regnum, int *optimizedp,
 			 enum lval_type *lvalp, CORE_ADDR *addrp,
-			 int *realregp, void *bufferp)
+			 int *realregp, gdb_byte *bufferp)
 {
   trad_frame_get_prev_register (next_frame, this_trad_cache->prev_regs,
 				regnum, optimizedp, lvalp, addrp, realregp,

@@ -32,6 +32,8 @@ sigtool_SOURCES = \
     $(top_srcdir)/shared/sha256.c \
     $(top_srcdir)/shared/cdiff.c \
     $(top_srcdir)/shared/cdiff.h \
+    $(top_srcdir)/shared/tar.c \
+    $(top_srcdir)/shared/tar.h \
     vba.c \
     vba.h \
     sigtool.c
@@ -39,5 +41,5 @@ sigtool_SOURCES = \
 #sigtool_LDADD = $(top_builddir)/clamscan/others.o 
 
 DEFS = @DEFS@ -DCL_NOTHREADS
-INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
+AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/shared -I$(top_srcdir)/libclamav
 LIBS = $(top_builddir)/libclamav/libclamav.la @FRESHCLAM_LIBS@ @THREAD_LIBS@

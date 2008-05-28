@@ -1,13 +1,13 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
 
-   Copyright 1986, 1989, 1992, 1994, 2000, 2003 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1989, 1992, 1994, 2000, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (EXPRESSION_H)
 #define EXPRESSION_H 1
@@ -166,9 +164,8 @@ enum exp_opcode
        With another OP_LAST at the end, this makes three exp_elements.  */
     OP_LAST,
 
-    /* OP_REGISTER is followed by an integer in the next exp_element.
-       This is the number of a register to fetch (as an int).
-       With another OP_REGISTER at the end, this makes three exp_elements.  */
+    /* OP_REGISTER is followed by a string in the next exp_element.
+       This is the name of a register to fetch.  */
     OP_REGISTER,
 
     /* OP_INTERNALVAR is followed by an internalvar ptr in the next exp_element.
@@ -192,7 +189,7 @@ enum exp_opcode
     /* This is EXACTLY like OP_FUNCALL but is semantically different.  
        In F77, array subscript expressions, substring expressions
        and function calls are  all exactly the same syntactically. They may 
-       only be dismabiguated at runtime.  Thus this operator, which 
+       only be disambiguated at runtime.  Thus this operator, which 
        indicates that we have found something of the form <name> ( <stuff> ) */
     OP_F77_UNDETERMINED_ARGLIST,
 
@@ -233,6 +230,13 @@ enum exp_opcode
        It casts the contents of the word addressed by the value of the
        following subexpression.  */
     UNOP_MEMVAL,
+
+    /* UNOP_MEMVAL_TLS is followed by a `struct objfile' pointer in the next
+       exp_element and a type pointer in the following exp_element.
+       With another UNOP_MEMVAL_TLS at the end, this makes four exp_elements.
+       It casts the contents of the word offsetted by the value of the
+       following subexpression from the TLS specified by `struct objfile'.  */
+    UNOP_MEMVAL_TLS,
 
     /* UNOP_... operate on one value from a following subexpression
        and replace it with a result.  They take no immediate arguments.  */
@@ -318,11 +322,16 @@ enum exp_opcode
     /* An un-looked-up identifier. */
     OP_NAME,
 
-    /* An unparsed expression.  Used for Scheme (for now at least) */
-    OP_EXPRSTRING,
-
     /* An Objective C Foundation Class NSString constant */
     OP_OBJC_NSSTRING,
+
+    /* A F90 array range operator (for "exp:exp", "exp:", ":exp" and ":").  */
+    OP_F90_RANGE,
+
+    /* OP_DECFLOAT is followed by a type pointer in the next exp_element
+       and a dec long constant value in the following exp_element.
+       Then comes another OP_DECFLOAT.  */
+    OP_DECFLOAT,
 
      /* First extension operator.  Individual language modules define
         extra operators they need as constants with values 
@@ -351,12 +360,14 @@ union exp_element
     struct symbol *symbol;
     LONGEST longconst;
     DOUBLEST doubleconst;
+    gdb_byte decfloatconst[16];
     /* Really sizeof (union exp_element) characters (or less for the last
        element of a string).  */
     char string;
     struct type *type;
     struct internalvar *internalvar;
     struct block *block;
+    struct objfile *objfile;
   };
 
 struct expression
@@ -377,8 +388,6 @@ struct expression
 /* From parse.c */
 
 extern struct expression *parse_expression (char *);
-
-extern struct expression *parse_expression_in_context (char *, int);
 
 extern struct expression *parse_exp_1 (char **, struct block *, int);
 

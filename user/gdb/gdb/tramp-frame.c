@@ -1,12 +1,12 @@
 /* Signal trampoline unwinder, for GDB the GNU Debugger.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "tramp-frame.h"
@@ -76,7 +74,7 @@ tramp_frame_prev_register (struct frame_info *next_frame,
 			   int *optimizedp,
 			   enum lval_type * lvalp,
 			   CORE_ADDR *addrp,
-			   int *realnump, void *valuep)
+			   int *realnump, gdb_byte *valuep)
 {
   struct trad_frame_cache *trad_cache
     = tramp_frame_cache (next_frame, this_cache);
@@ -97,7 +95,7 @@ tramp_frame_start (const struct tramp_frame *tramp,
       int i;
       for (i = 0; 1; i++)
 	{
-	  bfd_byte buf[sizeof (tramp->insn[0])];
+	  gdb_byte buf[sizeof (tramp->insn[0])];
 	  ULONGEST insn;
 	  if (tramp->insn[i].bytes == TRAMP_SENTINEL_INSN)
 	    return func;
@@ -122,19 +120,12 @@ tramp_frame_sniffer (const struct frame_unwind *self,
   const struct tramp_frame *tramp = self->unwind_data->tramp_frame;
   CORE_ADDR pc = frame_pc_unwind (next_frame);
   CORE_ADDR func;
-  char *name;
   struct tramp_frame_cache *tramp_cache;
 
-  /* If the function has a valid symbol name, it isn't a
-     trampoline.  */
-  find_pc_partial_function (pc, &name, NULL, NULL);
-  if (name != NULL)
-    return 0;
-  /* If the function lives in a valid section (even without a starting
-     point) it isn't a trampoline.  */
-  if (find_pc_section (pc) != NULL)
-    return 0;
-  /* Finally, check that the trampoline matches at PC.  */
+  /* tausq/2004-12-12: We used to assume if pc has a name or is in a valid 
+     section, then this is not a trampoline.  However, this assumption is
+     false on HPUX which has a signal trampoline that has a name; it can
+     also be false when using an alternative signal stack.  */
   func = tramp_frame_start (tramp, next_frame, pc);
   if (func == 0)
     return 0;
@@ -166,7 +157,7 @@ tramp_frame_prepend_unwinder (struct gdbarch *gdbarch,
   unwinder = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct frame_unwind);
 
   data->tramp_frame = tramp_frame;
-  unwinder->type = SIGTRAMP_FRAME;
+  unwinder->type = tramp_frame->frame_type;
   unwinder->unwind_data = data;
   unwinder->sniffer = tramp_frame_sniffer;
   unwinder->this_id = tramp_frame_this_id;

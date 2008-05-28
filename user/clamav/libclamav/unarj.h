@@ -1,7 +1,9 @@
 /*
  *  Extract component parts of ARJ archives
  *
- *  Copyright (C) 2007 trog@uncon.org
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,12 +24,12 @@
 #define __UNARJ_H
 
 typedef struct arj_metadata_tag {
+	char *filename;
 	uint32_t comp_size;
 	uint32_t orig_size;
-	uint8_t method;
-	char *filename;
 	int encrypted;
 	int ofd;
+	uint8_t method;
 } arj_metadata_t;
 
 int cli_unarj_open(int fd, const char *dirname);

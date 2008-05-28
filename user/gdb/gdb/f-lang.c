@@ -1,6 +1,8 @@
 /* Fortran language support routines for GDB, the GNU debugger.
-   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2007, 2008 Free Software Foundation, Inc.
+
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
 
@@ -8,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -32,22 +32,6 @@
 #include "valprint.h"
 #include "value.h"
 
-/* The built-in types of F77.  FIXME: integer*4 is missing, plain
-   logical is missing (builtin_type_logical is logical*4).  */
-
-struct type *builtin_type_f_character;
-struct type *builtin_type_f_logical;
-struct type *builtin_type_f_logical_s1;
-struct type *builtin_type_f_logical_s2;
-struct type *builtin_type_f_integer;
-struct type *builtin_type_f_integer_s2;
-struct type *builtin_type_f_real;
-struct type *builtin_type_f_real_s8;
-struct type *builtin_type_f_real_s16;
-struct type *builtin_type_f_complex_s8;
-struct type *builtin_type_f_complex_s16;
-struct type *builtin_type_f_complex_s32;
-struct type *builtin_type_f_void;
 
 /* Following is dubious stuff that had been in the xcoff reader. */
 
@@ -86,10 +70,6 @@ static SAVED_F77_COMMON_PTR allocate_saved_f77_common_node (void);
 static void patch_common_entries (SAVED_F77_COMMON_PTR, CORE_ADDR, int);
 #endif
 
-static struct type *f_create_fundamental_type (struct objfile *, int);
-static void f_printstr (struct ui_file * stream, char *string,
-			unsigned int length, int width,
-			int force_ellipses);
 static void f_printchar (int c, struct ui_file * stream);
 static void f_emit_char (int c, struct ui_file * stream, int quoter);
 
@@ -161,8 +141,8 @@ f_printchar (int c, struct ui_file *stream)
    be replaced with a true F77 version. */
 
 static void
-f_printstr (struct ui_file *stream, char *string, unsigned int length,
-	    int width, int force_ellipses)
+f_printstr (struct ui_file *stream, const gdb_byte *string,
+	    unsigned int length, int width, int force_ellipses)
 {
   unsigned int i;
   unsigned int things_printed = 0;
@@ -242,164 +222,6 @@ f_printstr (struct ui_file *stream, char *string, unsigned int length,
   if (force_ellipses || i < length)
     fputs_filtered ("...", stream);
 }
-
-/* FIXME:  This is a copy of c_create_fundamental_type(), before
-   all the non-C types were stripped from it.  Needs to be fixed
-   by an experienced F77 programmer. */
-
-static struct type *
-f_create_fundamental_type (struct objfile *objfile, int typeid)
-{
-  struct type *type = NULL;
-
-  switch (typeid)
-    {
-    case FT_VOID:
-      type = init_type (TYPE_CODE_VOID,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "VOID", objfile);
-      break;
-    case FT_BOOLEAN:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "boolean", objfile);
-      break;
-    case FT_STRING:
-      type = init_type (TYPE_CODE_STRING,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "string", objfile);
-      break;
-    case FT_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "character", objfile);
-      break;
-    case FT_SIGNED_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "integer*1", objfile);
-      break;
-    case FT_UNSIGNED_CHAR:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "logical*1", objfile);
-      break;
-    case FT_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			0, "integer*2", objfile);
-      break;
-    case FT_SIGNED_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			0, "short", objfile);	/* FIXME-fnf */
-      break;
-    case FT_UNSIGNED_SHORT:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "logical*2", objfile);
-      break;
-    case FT_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
-			0, "integer*4", objfile);
-      break;
-    case FT_SIGNED_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
-			0, "integer", objfile);		/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_INTEGER:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "logical*4", objfile);
-      break;
-    case FT_FIXED_DECIMAL:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
-			0, "fixed decimal", objfile);
-      break;
-    case FT_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			0, "long", objfile);
-      break;
-    case FT_SIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			0, "long", objfile);	/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
-      break;
-    case FT_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			0, "long long", objfile);
-      break;
-    case FT_SIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			0, "signed long long", objfile);
-      break;
-    case FT_UNSIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
-      break;
-    case FT_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-			0, "real", objfile);
-      break;
-    case FT_DBL_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-			0, "real*8", objfile);
-      break;
-    case FT_FLOAT_DECIMAL:
-      type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-			0, "floating decimal", objfile);
-      break;
-    case FT_EXT_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
-			0, "real*16", objfile);
-      break;
-    case FT_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-			0, "complex*8", objfile);
-      TYPE_TARGET_TYPE (type) = builtin_type_f_real;
-      break;
-    case FT_DBL_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-			0, "complex*16", objfile);
-      TYPE_TARGET_TYPE (type) = builtin_type_f_real_s8;
-      break;
-    case FT_EXT_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
-			0, "complex*32", objfile);
-      TYPE_TARGET_TYPE (type) = builtin_type_f_real_s16;
-      break;
-    default:
-      /* FIXME:  For now, if we are asked to produce a type not in this
-         language, create the equivalent of a C integer type with the
-         name "<?type?>".  When all the dust settles from the type
-         reconstruction work, this should probably become an error. */
-      type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
-			0, "<?type?>", objfile);
-      warning ("internal error: no F77 fundamental type %d", typeid);
-      break;
-    }
-  return (type);
-}
 
 
 /* Table of operators and their precedences for printing expressions.  */
@@ -429,25 +251,54 @@ static const struct op_print f_op_print_tab[] =
   {NULL, 0, 0, 0}
 };
 
-struct type **const (f_builtin_types[]) =
-{
-  &builtin_type_f_character,
-    &builtin_type_f_logical,
-    &builtin_type_f_logical_s1,
-    &builtin_type_f_logical_s2,
-    &builtin_type_f_integer,
-    &builtin_type_f_integer_s2,
-    &builtin_type_f_real,
-    &builtin_type_f_real_s8,
-    &builtin_type_f_real_s16,
-    &builtin_type_f_complex_s8,
-    &builtin_type_f_complex_s16,
-#if 0
-    &builtin_type_f_complex_s32,
-#endif
-    &builtin_type_f_void,
-    0
+enum f_primitive_types {
+  f_primitive_type_character,
+  f_primitive_type_logical,
+  f_primitive_type_logical_s1,
+  f_primitive_type_logical_s2,
+  f_primitive_type_integer,
+  f_primitive_type_integer_s2,
+  f_primitive_type_real,
+  f_primitive_type_real_s8,
+  f_primitive_type_real_s16,
+  f_primitive_type_complex_s8,
+  f_primitive_type_complex_s16,
+  f_primitive_type_void,
+  nr_f_primitive_types
 };
+
+static void
+f_language_arch_info (struct gdbarch *gdbarch,
+		      struct language_arch_info *lai)
+{
+  const struct builtin_f_type *builtin = builtin_f_type (gdbarch);
+
+  lai->string_char_type = builtin->builtin_character;
+  lai->primitive_type_vector
+    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_f_primitive_types + 1,
+                              struct type *);
+
+  lai->primitive_type_vector [f_primitive_type_character]
+    = builtin->builtin_character;
+  lai->primitive_type_vector [f_primitive_type_logical]
+    = builtin->builtin_logical;
+  lai->primitive_type_vector [f_primitive_type_logical_s1]
+    = builtin->builtin_logical_s1;
+  lai->primitive_type_vector [f_primitive_type_logical_s2]
+    = builtin->builtin_logical_s2;
+  lai->primitive_type_vector [f_primitive_type_real]
+    = builtin->builtin_real;
+  lai->primitive_type_vector [f_primitive_type_real_s8]
+    = builtin->builtin_real_s8;
+  lai->primitive_type_vector [f_primitive_type_real_s16]
+    = builtin->builtin_real_s16;
+  lai->primitive_type_vector [f_primitive_type_complex_s8]
+    = builtin->builtin_complex_s8;
+  lai->primitive_type_vector [f_primitive_type_complex_s16]
+    = builtin->builtin_complex_s16;
+  lai->primitive_type_vector [f_primitive_type_void]
+    = builtin->builtin_void;
+}
 
 /* This is declared in c-lang.h but it is silly to import that file for what
    is already just a hack. */
@@ -458,7 +309,6 @@ const struct language_defn f_language_defn =
 {
   "fortran",
   language_fortran,
-  f_builtin_types,
   range_check_on,
   type_check_on,
   case_sensitive_off,
@@ -470,7 +320,6 @@ const struct language_defn f_language_defn =
   f_printchar,			/* Print character constant */
   f_printstr,			/* function to print string constant */
   f_emit_char,			/* Function to print a single character */
-  f_create_fundamental_type,	/* Create fundamental type in this language */
   f_print_type,			/* Print a type using appropriate syntax */
   f_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* FIXME */
@@ -483,112 +332,115 @@ const struct language_defn f_language_defn =
   f_op_print_tab,		/* expression operators for printing */
   0,				/* arrays are first-class (not c-style) */
   1,				/* String lower bound */
-  &builtin_type_f_character,	/* Type of string elements */
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  default_make_symbol_completion_list,
+  f_language_arch_info,
+  default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
-static void
-build_fortran_types (void)
+static void *
+build_fortran_types (struct gdbarch *gdbarch)
 {
-  builtin_type_f_void =
+  struct builtin_f_type *builtin_f_type
+    = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct builtin_f_type);
+
+  builtin_f_type->builtin_void =
     init_type (TYPE_CODE_VOID, 1,
 	       0,
 	       "VOID", (struct objfile *) NULL);
 
-  builtin_type_f_character =
+  builtin_f_type->builtin_character =
     init_type (TYPE_CODE_INT, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
 	       0,
 	       "character", (struct objfile *) NULL);
 
-  builtin_type_f_logical_s1 =
+  builtin_f_type->builtin_logical_s1 =
     init_type (TYPE_CODE_BOOL, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED,
 	       "logical*1", (struct objfile *) NULL);
 
-  builtin_type_f_integer_s2 =
-    init_type (TYPE_CODE_INT, TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "integer*2", (struct objfile *) NULL);
+  builtin_f_type->builtin_integer_s2 =
+    init_type (TYPE_CODE_INT,
+	       gdbarch_short_bit (gdbarch) / TARGET_CHAR_BIT,
+	       0, "integer*2", (struct objfile *) NULL);
 
-  builtin_type_f_logical_s2 =
-    init_type (TYPE_CODE_BOOL, TARGET_SHORT_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "logical*2", (struct objfile *) NULL);
+  builtin_f_type->builtin_logical_s2 =
+    init_type (TYPE_CODE_BOOL,
+	       gdbarch_short_bit (gdbarch) / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED, "logical*2", (struct objfile *) NULL);
 
-  builtin_type_f_integer =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "integer", (struct objfile *) NULL);
+  builtin_f_type->builtin_integer =
+    init_type (TYPE_CODE_INT, 
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
+	       0, "integer", (struct objfile *) NULL);
 
-  builtin_type_f_logical =
-    init_type (TYPE_CODE_BOOL, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "logical*4", (struct objfile *) NULL);
+  builtin_f_type->builtin_logical =
+    init_type (TYPE_CODE_BOOL, 
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED, "logical*4", (struct objfile *) NULL);
 
-  builtin_type_f_real =
-    init_type (TYPE_CODE_FLT, TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_real =
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_float_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "real", (struct objfile *) NULL);
 
-  builtin_type_f_real_s8 =
-    init_type (TYPE_CODE_FLT, TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_real_s8 =
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_double_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "real*8", (struct objfile *) NULL);
 
-  builtin_type_f_real_s16 =
-    init_type (TYPE_CODE_FLT, TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_real_s16 =
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_long_double_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "real*16", (struct objfile *) NULL);
 
-  builtin_type_f_complex_s8 =
-    init_type (TYPE_CODE_COMPLEX, 2 * TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_complex_s8 =
+    init_type (TYPE_CODE_COMPLEX,
+	       2 * gdbarch_float_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "complex*8", (struct objfile *) NULL);
-  TYPE_TARGET_TYPE (builtin_type_f_complex_s8) = builtin_type_f_real;
+  TYPE_TARGET_TYPE (builtin_f_type->builtin_complex_s8)
+    = builtin_f_type->builtin_real;
 
-  builtin_type_f_complex_s16 =
-    init_type (TYPE_CODE_COMPLEX, 2 * TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_complex_s16 =
+    init_type (TYPE_CODE_COMPLEX,
+	       2 * gdbarch_double_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "complex*16", (struct objfile *) NULL);
-  TYPE_TARGET_TYPE (builtin_type_f_complex_s16) = builtin_type_f_real_s8;
+  TYPE_TARGET_TYPE (builtin_f_type->builtin_complex_s16)
+    = builtin_f_type->builtin_real_s8;
 
   /* We have a new size == 4 double floats for the
      complex*32 data type */
 
-  builtin_type_f_complex_s32 =
-    init_type (TYPE_CODE_COMPLEX, 2 * TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+  builtin_f_type->builtin_complex_s32 =
+    init_type (TYPE_CODE_COMPLEX,
+	       2 * gdbarch_long_double_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "complex*32", (struct objfile *) NULL);
-  TYPE_TARGET_TYPE (builtin_type_f_complex_s32) = builtin_type_f_real_s16;
+  TYPE_TARGET_TYPE (builtin_f_type->builtin_complex_s32)
+    = builtin_f_type->builtin_real_s16;
+
+  return builtin_f_type;
+}
+
+static struct gdbarch_data *f_type_data;
+
+const struct builtin_f_type *
+builtin_f_type (struct gdbarch *gdbarch)
+{
+  return gdbarch_data (gdbarch, f_type_data);
 }
 
 void
 _initialize_f_language (void)
 {
-  build_fortran_types ();
-
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_character);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_logical); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_logical_s1); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_logical_s2); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_integer); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_integer_s2); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_real); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_real_s8); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_real_s16); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_complex_s8); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_complex_s16); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_complex_s32); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_f_void); 
-  DEPRECATED_REGISTER_GDBARCH_SWAP (builtin_type_string); 
-  deprecated_register_gdbarch_swap (NULL, 0, build_fortran_types);
-
-  builtin_type_string =
-    init_type (TYPE_CODE_STRING, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "character string", (struct objfile *) NULL);
+  f_type_data = gdbarch_data_register_post_init (build_fortran_types);
 
   add_language (&f_language_defn);
 }
@@ -686,7 +538,7 @@ add_common_block (char *name, CORE_ADDR offset, int secnum, char *func_stab)
   if (c)
     *c = '\0';
   else
-    error ("Malformed function STAB found in add_common_block()");
+    error (_("Malformed function STAB found in add_common_block()"));
 
 
   tmp->owning_function = xmalloc (strlen (local_copy_func_stab) + 1);
@@ -734,7 +586,7 @@ add_common_entry (struct symbol *entry_sym_ptr)
   tmp->symbol = entry_sym_ptr;
 
   if (current_common == NULL)
-    error ("Attempt to add COMMON entry with no block open!");
+    error (_("Attempt to add COMMON entry with no block open!"));
   else
     {
       if (current_common->entries == NULL)
@@ -786,8 +638,8 @@ find_common_for_function (char *name, char *funcname)
 
   while (tmp != NULL)
     {
-      if (DEPRECATED_STREQ (tmp->name, name)
-	  && DEPRECATED_STREQ (tmp->owning_function, funcname))
+      if (strcmp (tmp->name, name) == 0
+	  && strcmp (tmp->owning_function, funcname) == 0)
 	return (tmp);
       else
 	tmp = tmp->next;
@@ -927,7 +779,7 @@ get_bf_for_fcn (long the_function)
 
   if (saved_bf_list == NULL)
     internal_error (__FILE__, __LINE__,
-		    "cannot get .bf node off empty list");
+		    _("cannot get .bf node off empty list"));
 
   if (current_head_bf_list != NULL)
     if (current_head_bf_list->symnum_fcn == the_function)

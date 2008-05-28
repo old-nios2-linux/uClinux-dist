@@ -11,14 +11,15 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef NO_SHARED_LIBS
-#include <dlfcn.h>
-#endif
 #include <time.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "libiptc/libip6tc.h"
 #include "ip6tables.h"
+
+#ifndef NO_SHARED_LIBS
+#include <dlfcn.h>
+#endif
 
 static int binary = 0, counters = 0;
 
@@ -233,7 +234,9 @@ static int for_each_table(int (*func)(const char *tablename))
 
 	procfile = fopen("/proc/net/ip6_tables_names", "r");
 	if (!procfile)
-		return 0;
+		exit_error(OTHER_PROBLEM,
+			   "Unable to open /proc/net/ip6_tables_names: %s\n",
+			   strerror(errno));
 
 	while (fgets(tablename, sizeof(tablename), procfile)) {
 		if (tablename[strlen(tablename) - 1] != '\n')
@@ -316,7 +319,11 @@ static int do_output(const char *tablename)
  * :Chain name POLICY packets bytes
  * rule
  */
+#ifdef IPTABLES_MULTI
+int ip6tables_save_main(int argc, char *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
 	const char *tablename = NULL;
 	int c;

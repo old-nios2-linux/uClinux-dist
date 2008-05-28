@@ -1,5 +1,6 @@
 /* Remote debugging interface to dBUG ROM monitor for GDB, the GNU debugger.
-   Copyright 1996, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2007, 2008
+   Free Software Foundation, Inc.
 
    Written by Stan Shebs of Cygnus Support.
 
@@ -7,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* dBUG is a monitor supplied on various Motorola boards, including
    m68k, ColdFire, and PowerPC-based designs.  The code here assumes
@@ -37,9 +36,11 @@
 static void dbug_open (char *args, int from_tty);
 
 static void
-dbug_supply_register (char *regname, int regnamelen, char *val, int vallen)
+dbug_supply_register (struct regcache *regcache, char *regname,
+		      int regnamelen, char *val, int vallen)
 {
   int regno;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   if (regnamelen != 2)
     return;
@@ -49,12 +50,12 @@ dbug_supply_register (char *regname, int regnamelen, char *val, int vallen)
     case 'S':
       if (regname[1] != 'R')
 	return;
-      regno = PS_REGNUM;
+      regno = gdbarch_ps_regnum (gdbarch);
       break;
     case 'P':
       if (regname[1] != 'C')
 	return;
-      regno = PC_REGNUM;
+      regno = gdbarch_pc_regnum (gdbarch);
       break;
     case 'D':
       if (regname[1] < '0' || regname[1] > '7')
@@ -70,7 +71,7 @@ dbug_supply_register (char *regname, int regnamelen, char *val, int vallen)
       return;
     }
 
-  monitor_supply_register (regno, val);
+  monitor_supply_register (regcache, regno, val);
 }
 
 /* This array of registers needs to match the indexes used by GDB. The
@@ -90,7 +91,7 @@ dbug_regname (int index)
   };
 
   if ((index >= (sizeof (regnames) / sizeof (regnames[0]))) 
-      || (index < 0) || (index >= NUM_REGS))
+      || (index < 0) || (index >= gdbarch_num_regs (current_gdbarch)))
     return NULL;
   else
     return regnames[index];

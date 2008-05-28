@@ -1,20 +1,19 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    Please email any bugs, comments, and/or additions to this file to:
    bug-gdb@prep.ai.mit.edu  */
@@ -30,6 +29,13 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+
+/* This test was written for >2GB core files on 32-bit systems.  On
+   current 64-bit systems, generating a >4EB (2 ** 63) core file is
+   not practical, and getting as close as we can takes a lot of
+   useless CPU time.  So limit ourselves to a bit bigger than
+   32-bit, which is still a useful test.  */
+#define RLIMIT_CAP (1ULL << 34)
 
 /* Print routines:
 
@@ -110,6 +116,8 @@ maximize_rlimit (int resource, const char *prefix)
   print_rlimit (resource);
   getrlimit (resource, &rl);
   rl.rlim_cur = rl.rlim_max;
+  if (sizeof (rl.rlim_cur) >= sizeof (RLIMIT_CAP))
+    rl.rlim_cur = (rlim_t) RLIMIT_CAP;
   setrlimit (resource, &rl);
   print_string (" -> ");
   print_rlimit (resource);
@@ -178,7 +186,8 @@ main ()
     int fd;
     large_off_t tmp;
     unlink ("bigcore.corefile");
-    fd = open ("bigcore.corefile", O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE);
+    fd = open ("bigcore.corefile", O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE,
+	       0666);
     for (tmp = 1; tmp > 0; tmp <<= 1)
       {
 	if (large_lseek (fd, tmp, SEEK_SET) > 0)

@@ -1,11 +1,15 @@
-/* Dwarf2 Expression Evaluator
-   Copyright 2001, 2002, 2003 Free Software Foundation, Inc.
-   Contributed by Daniel Berlin (dan@dberlin.org)
+/* DWARF 2 Expression Evaluator.
+
+   Copyright (C) 2001, 2002, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
+
+   Contributed by Daniel Berlin <dan@dberlin.org>.
+
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (DWARF2EXPR_H)
 #define DWARF2EXPR_H
@@ -40,14 +42,12 @@ struct dwarf_expr_context
   CORE_ADDR (*read_reg) (void *baton, int regnum);
 
   /* Read LENGTH bytes at ADDR into BUF.  */
-  void (*read_mem) (void *baton, char *buf, CORE_ADDR addr,
-		    size_t length);
+  void (*read_mem) (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t length);
 
   /* Return the location expression for the frame base attribute, in
      START and LENGTH.  The result must be live until the current
      expression evaluation is complete.  */
-  void (*get_frame_base) (void *baton, unsigned char **start,
-			 size_t *length);
+  void (*get_frame_base) (void *baton, gdb_byte **start, size_t *length);
 
   /* Return the thread-local storage address for
      DW_OP_GNU_push_tls_address.  */
@@ -74,6 +74,10 @@ struct dwarf_expr_context
   /* Non-zero if the result is in a register.  The register number
      will be on the expression stack.  */
   int in_reg;
+
+  /* Initialization status of variable: Non-zero if variable has been
+     initialized; zero otherwise.  */
+  int initialized;
 
   /* An array of pieces.  PIECES points to its first element;
      NUM_PIECES is its length.
@@ -129,11 +133,9 @@ void dwarf_expr_eval (struct dwarf_expr_context *ctx, unsigned char *addr,
 CORE_ADDR dwarf_expr_fetch (struct dwarf_expr_context *ctx, int n);
 
 
-unsigned char *read_uleb128 (unsigned char *buf, unsigned char *buf_end,
-			     ULONGEST * r);
-unsigned char *read_sleb128 (unsigned char *buf, unsigned char *buf_end,
-			     LONGEST * r);
-CORE_ADDR dwarf2_read_address (unsigned char *buf, unsigned char *buf_end,
+gdb_byte *read_uleb128 (gdb_byte *buf, gdb_byte *buf_end, ULONGEST * r);
+gdb_byte *read_sleb128 (gdb_byte *buf, gdb_byte *buf_end, LONGEST * r);
+CORE_ADDR dwarf2_read_address (gdb_byte *buf, gdb_byte *buf_end,
 			       int *bytes_read);
 
-#endif
+#endif /* dwarf2expr.h */

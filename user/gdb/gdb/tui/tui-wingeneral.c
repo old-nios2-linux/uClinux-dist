@@ -1,7 +1,7 @@
 /* General window behavior.
 
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation,
-   Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "tui/tui.h"
@@ -34,9 +32,9 @@
 ** PUBLIC FUNCTIONS
 ***********************/
 
-/* Refresh the window.   */
+/* Refresh the window.  */
 void
-tui_refresh_win (struct tui_gen_win_info * win_info)
+tui_refresh_win (struct tui_gen_win_info *win_info)
 {
   if (win_info->type == DATA_WIN && win_info->content_size > 0)
     {
@@ -44,10 +42,10 @@ tui_refresh_win (struct tui_gen_win_info * win_info)
 
       for (i = 0; (i < win_info->content_size); i++)
 	{
-	  struct tui_gen_win_info * data_item_win_ptr;
+	  struct tui_gen_win_info *data_item_win_ptr;
 
 	  data_item_win_ptr = &((tui_win_content)
-			     win_info->content)[i]->which_element.data_window;
+				win_info->content)[i]->which_element.data_window;
 	  if (data_item_win_ptr != NULL
 	      && data_item_win_ptr->handle != (WINDOW *) NULL)
 	    wrefresh (data_item_win_ptr->handle);
@@ -55,7 +53,7 @@ tui_refresh_win (struct tui_gen_win_info * win_info)
     }
   else if (win_info->type == CMD_WIN)
     {
-      /* Do nothing */
+      /* Do nothing.  */
     }
   else
     {
@@ -67,9 +65,9 @@ tui_refresh_win (struct tui_gen_win_info * win_info)
 }
 
 
-/* Function to delete the curses window, checking for NULL.   */
+/* Function to delete the curses window, checking for NULL.  */
 void
-tui_delete_win (WINDOW * window)
+tui_delete_win (WINDOW *window)
 {
   if (window != (WINDOW *) NULL)
     delwin (window);
@@ -80,7 +78,8 @@ tui_delete_win (WINDOW * window)
 
 /* Draw a border arround the window.  */
 void
-box_win (struct tui_gen_win_info * win_info, int highlight_flag)
+box_win (struct tui_gen_win_info *win_info, 
+	 int highlight_flag)
 {
   if (win_info && win_info->handle)
     {
@@ -110,9 +109,10 @@ box_win (struct tui_gen_win_info * win_info, int highlight_flag)
 
 
 void
-tui_unhighlight_win (struct tui_win_info * win_info)
+tui_unhighlight_win (struct tui_win_info *win_info)
 {
-  if (win_info != NULL && win_info->generic.handle != (WINDOW *) NULL)
+  if (win_info != NULL 
+      && win_info->generic.handle != (WINDOW *) NULL)
     {
       box_win ((struct tui_gen_win_info *) win_info, NO_HILITE);
       wrefresh (win_info->generic.handle);
@@ -122,7 +122,7 @@ tui_unhighlight_win (struct tui_win_info * win_info)
 
 
 void
-tui_highlight_win (struct tui_win_info * win_info)
+tui_highlight_win (struct tui_win_info *win_info)
 {
   if (win_info != NULL
       && win_info->can_highlight
@@ -135,7 +135,7 @@ tui_highlight_win (struct tui_win_info * win_info)
 }
 
 void
-tui_check_and_display_highlight_if_needed (struct tui_win_info * win_info)
+tui_check_and_display_highlight_if_needed (struct tui_win_info *win_info)
 {
   if (win_info != NULL && win_info->generic.type != CMD_WIN)
     {
@@ -150,7 +150,7 @@ tui_check_and_display_highlight_if_needed (struct tui_win_info * win_info)
 
 
 void
-tui_make_window (struct tui_gen_win_info * win_info, int box_it)
+tui_make_window (struct tui_gen_win_info *win_info, int box_it)
 {
   WINDOW *handle;
 
@@ -175,7 +175,7 @@ tui_make_window (struct tui_gen_win_info * win_info, int box_it)
 static void
 make_visible (struct tui_gen_win_info *win_info, int visible)
 {
-  /* Don't tear down/recreate command window */
+  /* Don't tear down/recreate command window.  */
   if (win_info->type == CMD_WIN)
     return;
 
@@ -189,8 +189,9 @@ make_visible (struct tui_gen_win_info *win_info, int visible)
 	  win_info->is_visible = TRUE;
 	}
     }
-  else if (!visible &&
-	   win_info->is_visible && win_info->handle != (WINDOW *) NULL)
+  else if (!visible
+	   && win_info->is_visible
+	   && win_info->handle != (WINDOW *) NULL)
     {
       win_info->is_visible = FALSE;
       tui_delete_win (win_info->handle);
@@ -213,7 +214,8 @@ tui_make_invisible (struct tui_gen_win_info *win_info)
 }
 
 
-/* Makes all windows invisible (except the command and locator windows).   */
+/* Makes all windows invisible (except the command and locator
+   windows).  */
 static void
 make_all_visible (int visible)
 {
@@ -249,10 +251,10 @@ tui_make_all_invisible (void)
 /* Function to refresh all the windows currently displayed.  */
 
 void
-tui_refresh_all (struct tui_win_info * * list)
+tui_refresh_all (struct tui_win_info **list)
 {
   enum tui_win_type type;
-  struct tui_gen_win_info * locator = tui_locator_win_info_ptr ();
+  struct tui_gen_win_info *locator = tui_locator_win_info_ptr ();
 
   for (type = SRC_WIN; (type < MAX_MAJOR_WINDOWS); type++)
     {

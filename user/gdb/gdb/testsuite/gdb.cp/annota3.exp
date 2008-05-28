@@ -1,18 +1,17 @@
-# Copyright 2003, 2004 Free Software Foundation, Inc.
+# Copyright 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
@@ -33,8 +32,9 @@ set testfile "annota3"
 set srcfile ${testfile}.cc
 set binfile ${objdir}/${subdir}/${testfile}
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++ additional_flags=-w}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++ nowarnings}] != "" } {
+    untested annota3.exp
+    return -1
 }
 
 # are we on a target board? If so, don't run these tests.
@@ -93,12 +93,12 @@ send_gdb "run\n"
 gdb_expect_list "first run until main breakpoint" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "Starting program: .*annota3 \r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
     "\r\n\032\032breakpoint 1\r\n"
     "\r\n"
-    "Breakpoint 1, main \\(\\) at .*annota3.cc:25\r\n"
+    "Breakpoint 1, "
+    "\r\n\032\032frame-begin 0 0x\[0-9a-z\]+\r\n"
+    "main \\(\\) at .*annota3.cc:25\r\n"
     "\r\n\032\032source.*annota3.cc:25:.*:beg:0x\[0-9a-z\]+\r\n"
     "\r\n\032\032stopped\r\n"
 }
@@ -122,13 +122,10 @@ gdb_expect_list "continue to exit" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "Continuing.\r\n"
     "\r\n\032\032starting\r\n"
-    "\r\n\032\032frames-invalid\r\n"
     "a.x is 1\r\n"
-    "\r\n\032\032frames-invalid\r\n"
     "\r\n\032\032exited 0\r\n"
     "\r\n"
     "Program exited normally.\r\n"
-    "\r\n\032\032frames-invalid\r\n"
     "\r\n\032\032stopped\r\n"
 }
 
@@ -155,7 +152,6 @@ gdb_expect {
 send_gdb "break 22\n"
 gdb_expect_list "break at main" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "Breakpoint.*at 0x\[a-z0-9\]+: file.*annota3.cc, line 22.\r\n"
 }
 
@@ -167,12 +163,12 @@ gdb_expect_list "break at main" "$gdb_prompt$" {
 send_gdb "run\n"
 gdb_expect_list "second run until main breakpoint" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
     "\r\n\032\032breakpoint 2\r\n"
     "\r\n"
-    "Breakpoint 2, main \\(\\) at .*annota3.cc:22\r\n"
+    "Breakpoint 2, "
+    "\r\n\032\032frame-begin 0 0x\[0-9a-z\]+\r\n"
+    "main \\(\\) at .*annota3.cc:22\r\n"
     "\r\n\032\032source.*annota3.cc:22:.*:beg:0x\[0-9a-z\]+\r\n"
     "\r\n\032\032stopped\r\n"
 }
@@ -183,7 +179,6 @@ gdb_expect_list "second run until main breakpoint" "$gdb_prompt$" {
 send_gdb "watch a.x\n"
 gdb_expect_list "set watch on a.x" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     ".*atchpoint 3: a.x\r\n" \
 }
 
@@ -193,10 +188,10 @@ gdb_expect_list "set watch on a.x" "$gdb_prompt$" {
 #
 send_gdb "next\n"
 gdb_expect {
-    -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\(\r\n\032\032frames-invalid\r\n\)+\r\n\032\032watchpoint 3\r\n.*atchpoint 3: a.x\r\n\r\nOld value = 0\r\nNew value = 1\r\nmain \\(\\) at .*$srcfile:$decimal\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n.*$gdb_prompt$" { 
+    -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\r\n\032\032watchpoint 3\r\n.*atchpoint 3: a.x\r\n\r\nOld value = 0\r\nNew value = 1\r\n\r\n(\032\032frame-begin 0 0x\[0-9a-z\]+\r\n|)main \\(\\) at .*$srcfile:$decimal\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n.*$gdb_prompt$" { 
 	pass "watch triggered on a.x"
     }
-    -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\r\n\032\032frames-invalid\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n$gdb_prompt$" {
+    -re "\r\n\032\032post-prompt\r\n\r\n\032\032starting\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032stopped\r\n$gdb_prompt$" {
 	kfail "gdb/38" "watch triggered on a.x"
     }
     -re ".*$gdb_prompt$" {

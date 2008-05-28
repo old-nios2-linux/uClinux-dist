@@ -1,11 +1,11 @@
 /* Common target dependent code for GDB on ARM systems.
-   Copyright 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,21 +14,22 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* Register numbers of various important registers.  Note that some of
-   these values are "real" register numbers, and correspond to the
-   general registers of the machine, and some are "phony" register
-   numbers which are too large to be actual register numbers as far as
-   the user is concerned but do serve to get the desired values when
-   passed to read_register.  */
+#ifndef ARM_TDEP_H
+#define ARM_TDEP_H
+
+/* Forward declarations.  */
+struct gdbarch;
+struct regset;
+
+/* Register numbers of various important registers.  */
 
 enum gdb_regnum {
   ARM_A1_REGNUM = 0,		/* first integer-like argument */
   ARM_A4_REGNUM = 3,		/* last integer-like argument */
   ARM_AP_REGNUM = 11,
+  ARM_IP_REGNUM = 12,
   ARM_SP_REGNUM = 13,		/* Contains address of top of stack */
   ARM_LR_REGNUM = 14,		/* address to return to from a function call */
   ARM_PC_REGNUM = 15,		/* Contains program counter */
@@ -37,6 +38,19 @@ enum gdb_regnum {
   ARM_F7_REGNUM = 23, 		/* last floating point register */
   ARM_FPS_REGNUM = 24,		/* floating point status register */
   ARM_PS_REGNUM = 25,		/* Contains processor status */
+  ARM_WR0_REGNUM,		/* WMMX data registers.  */
+  ARM_WR15_REGNUM = ARM_WR0_REGNUM + 15,
+  ARM_WC0_REGNUM,		/* WMMX control registers.  */
+  ARM_WCSSF_REGNUM = ARM_WC0_REGNUM + 2,
+  ARM_WCASF_REGNUM = ARM_WC0_REGNUM + 3,
+  ARM_WC7_REGNUM = ARM_WC0_REGNUM + 7,
+  ARM_WCGR0_REGNUM,		/* WMMX general purpose registers.  */
+  ARM_WCGR3_REGNUM = ARM_WCGR0_REGNUM + 3,
+  ARM_WCGR7_REGNUM = ARM_WCGR0_REGNUM + 7,
+
+  ARM_NUM_REGS,
+
+  /* Other useful registers.  */
   ARM_FP_REGNUM = 11,		/* Frame register in ARM code, if used.  */
   THUMB_FP_REGNUM = 7,		/* Frame register in Thumb code, if used.  */
   ARM_NUM_ARG_REGS = 4, 
@@ -59,7 +73,7 @@ enum gdb_regnum {
 #define STATUS_REGISTER_SIZE	4
 
 /* Number of machine registers.  The only define actually required 
-   is NUM_REGS.  The other definitions are used for documentation
+   is gdbarch_num_regs.  The other definitions are used for documentation
    purposes and code readability.  */
 /* For 26 bit ARM code, a fake copy of the PC is placed in register 25 (PS)
    (and called PS for processor status) so the status bits can be cleared
@@ -113,13 +127,33 @@ enum arm_float_model
   ARM_FLOAT_LAST	/* Keep at end.  */
 };
 
-/* A method to the setting based on user's choice and ABI setting.  */
-enum arm_float_model arm_get_fp_model (struct gdbarch *);
+/* ABI used by the inferior.  */
+enum arm_abi_kind
+{
+  ARM_ABI_AUTO,
+  ARM_ABI_APCS,
+  ARM_ABI_AAPCS,
+  ARM_ABI_LAST
+};
+
+/* Convention for returning structures.  */
+
+enum struct_return
+{
+  pcc_struct_return,		/* Return "short" structures in memory.  */
+  reg_struct_return		/* Return "short" structures in registers.  */
+};
 
 /* Target-dependent structure in gdbarch.  */
 struct gdbarch_tdep
 {
+  /* The ABI for this architecture.  It should never be set to
+     ARM_ABI_AUTO.  */
+  enum arm_abi_kind arm_abi;
+
   enum arm_float_model fp_model; /* Floating point calling conventions.  */
+
+  int have_fpa_registers;	/* Does the target report the FPA registers?  */
 
   CORE_ADDR lowest_pc;		/* Lowest address at which instructions 
 				   will appear.  */
@@ -133,17 +167,26 @@ struct gdbarch_tdep
 				   If this is negative, longjmp support
 				   will be disabled.  */
   size_t jb_elt_size;		/* And the size of each entry in the buf.  */
+
+  /* Convention for returning structures.  */
+  enum struct_return struct_return;
+
+  /* Cached core file helpers.  */
+  struct regset *gregset, *fpregset;
 };
 
-#ifndef LOWEST_PC
-#define LOWEST_PC (gdbarch_tdep (current_gdbarch)->lowest_pc)
-#endif
 
-/* Prototypes for internal interfaces needed by more than one MD file.  */
-int arm_pc_is_thumb_dummy (CORE_ADDR);
+CORE_ADDR arm_skip_stub (struct frame_info *, CORE_ADDR);
+CORE_ADDR arm_get_next_pc (struct frame_info *, CORE_ADDR);
+int arm_software_single_step (struct frame_info *);
 
-int arm_pc_is_thumb (CORE_ADDR);
+/* Functions exported from armbsd-tdep.h.  */
 
-CORE_ADDR thumb_get_next_pc (CORE_ADDR);
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-CORE_ADDR arm_get_next_pc (CORE_ADDR);
+extern const struct regset *
+  armbsd_regset_from_core_section (struct gdbarch *gdbarch,
+				   const char *sect_name, size_t sect_size);
+
+#endif /* arm-tdep.h */

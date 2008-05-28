@@ -1,6 +1,6 @@
 /* BFD back-end for PowerPC Microsoft Portable Executable files.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Original version pieced together by Kim Knuttila (krk@cygnus.com)
@@ -13,7 +13,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -23,8 +23,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /* Current State:
    - objdump works
@@ -33,9 +33,8 @@
    - dlltool will not produce correct output in some .reloc cases, and will
      not produce the right glue code for dll function calls.  */
 
-#include "bfd.h"
 #include "sysdep.h"
-
+#include "bfd.h"
 #include "libbfd.h"
 
 #include "coff/powerpc.h"
@@ -127,11 +126,6 @@ struct ppc_coff_link_hash_table
 static struct bfd_hash_entry *ppc_coff_link_hash_newfunc
   PARAMS ((struct bfd_hash_entry *, struct bfd_hash_table *,
 	   const char *));
-static bfd_boolean ppc_coff_link_hash_table_init
-  PARAMS ((struct ppc_coff_link_hash_table *, bfd *,
-	   struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
-				       struct bfd_hash_table *,
-				       const char *)));
 static struct bfd_link_hash_table *ppc_coff_link_hash_table_create
   PARAMS ((bfd *));
 static bfd_boolean coff_ppc_relocate_section
@@ -184,14 +178,14 @@ ppc_coff_link_hash_newfunc (entry, table, string)
 /* Initialize a PE linker hash table.  */
 
 static bfd_boolean
-ppc_coff_link_hash_table_init (table, abfd, newfunc)
-     struct ppc_coff_link_hash_table *table;
-     bfd *abfd;
-     struct bfd_hash_entry *(*newfunc) PARAMS ((struct bfd_hash_entry *,
-						struct bfd_hash_table *,
-						const char *));
+ppc_coff_link_hash_table_init (struct ppc_coff_link_hash_table *table,
+			       bfd *abfd,
+			       struct bfd_hash_entry *(*newfunc) (struct bfd_hash_entry *,
+								  struct bfd_hash_table *,
+								  const char *),
+			       unsigned int entsize)
 {
-  return _bfd_coff_link_hash_table_init (&table->root, abfd, newfunc);
+  return _bfd_coff_link_hash_table_init (&table->root, abfd, newfunc, entsize);
 }
 
 /* Create a PE linker hash table.  */
@@ -206,8 +200,9 @@ ppc_coff_link_hash_table_create (abfd)
   ret = (struct ppc_coff_link_hash_table *) bfd_malloc (amt);
   if (ret == NULL)
     return NULL;
-  if (! ppc_coff_link_hash_table_init (ret, abfd,
-					ppc_coff_link_hash_newfunc))
+  if (!ppc_coff_link_hash_table_init (ret, abfd,
+				      ppc_coff_link_hash_newfunc,
+				      sizeof (struct ppc_coff_link_hash_entry)))
     {
       free (ret);
       return (struct bfd_link_hash_table *) NULL;
@@ -326,15 +321,6 @@ static bfd_reloc_status_type ppc_refhi_reloc PARAMS ((bfd *abfd,
 						      asection *section,
 						      bfd *output_bfd,
 						      char **error));
-#if 0
-static bfd_reloc_status_type ppc_reflo_reloc PARAMS ((bfd *abfd,
-						      arelent *reloc,
-						      asymbol *symbol,
-						      PTR data,
-						      asection *section,
-						      bfd *output_bfd,
-						      char **error));
-#endif
 static bfd_reloc_status_type ppc_pair_reloc PARAMS ((bfd *abfd,
 						     arelent *reloc,
 						     asymbol *symbol,
@@ -351,15 +337,6 @@ static bfd_reloc_status_type ppc_toc16_reloc PARAMS ((bfd *abfd,
 						      bfd *output_bfd,
 						      char **error));
 
-#if 0
-static bfd_reloc_status_type ppc_addr32nb_reloc PARAMS ((bfd *abfd,
-							 arelent *reloc,
-							 asymbol *symbol,
-							 PTR data,
-							 asection *section,
-							 bfd *output_bfd,
-							 char **error));
-#endif
 static bfd_reloc_status_type ppc_section_reloc PARAMS ((bfd *abfd,
 							arelent *reloc,
 							asymbol *symbol,
@@ -1005,66 +982,17 @@ static bfd_boolean in_reloc_p(abfd, howto)
       && (howto->type != IMAGE_REL_PPC_TOCREL16_DEFN) ;
 }
 
-#if 0
-
-/* This function is in charge of performing all the ppc PE relocations
-   Don't yet know if we want to do this this particular way ... (krk).  */
-/* FIXME: (it is not yet enabled).  */
-
-static bfd_reloc_status_type
-pe_ppc_reloc (abfd, reloc_entry, symbol_in, data, input_section, output_bfd,
-	      error_message)
-     bfd *abfd;
-     arelent *reloc_entry;
-     asymbol *symbol_in;
-     PTR data;
-     asection *input_section;
-     bfd *output_bfd;
-     char **error_message;
+static bfd_boolean
+write_base_file_entry (bfd *obfd, struct bfd_link_info *info, bfd_vma addr)
 {
-  /* The consth relocation comes in two parts, we have to remember
-     the state between calls, in these variables.  */
-  static bfd_boolean part1_consth_active = FALSE;
-  static unsigned long part1_consth_value;
+  if (coff_data (obfd)->pe)
+     addr -= pe_data (obfd)->pe_opthdr.ImageBase;
+  if (fwrite (&addr, sizeof (addr), 1, (FILE *) info->base_file) == 1)
+    return TRUE;
 
-  unsigned long sym_value;
-  unsigned short r_type;
-  unsigned long addr = reloc_entry->address ; /*+ input_section->vma*/
-
-  r_type = reloc_entry->howto->type;
-
-  if (output_bfd)
-    {
-      /* Partial linking - do nothing.  */
-      reloc_entry->address += input_section->output_offset;
-      return bfd_reloc_ok;
-    }
-
-  if (symbol_in != NULL
-      && bfd_is_und_section (symbol_in->section))
-    {
-      /* Keep the state machine happy in case we're called again.  */
-      if (r_type == IMAGE_REL_PPC_REFHI)
-	{
-	  part1_consth_active = TRUE;
-	  part1_consth_value  = 0;
-	}
-      return(bfd_reloc_undefined);
-    }
-
-  if ((part1_consth_active) && (r_type != IMAGE_REL_PPC_PAIR))
-    {
-      part1_consth_active = FALSE;
-      *error_message = (char *) _("Missing PAIR");
-      return(bfd_reloc_dangerous);
-    }
-
-  sym_value = get_symbol_value(symbol_in);
-
-  return(bfd_reloc_ok);
+  bfd_set_error (bfd_error_system_call);
+  return FALSE;
 }
-
-#endif /* 0 */
 
 /* The reloc processing routine for the optimized COFF linker.  */
 
@@ -1321,10 +1249,8 @@ coff_ppc_relocate_section (output_bfd, info, input_bfd, input_section,
 		bfd_vma addr = (toc_section->output_section->vma
 				+ toc_section->output_offset + our_toc_offset);
 
-		if (coff_data (output_bfd)->pe)
-		  addr -= pe_data(output_bfd)->pe_opthdr.ImageBase;
-
-		fwrite (&addr, 1,4, (FILE *) info->base_file);
+		if (!write_base_file_entry (output_bfd, info, addr))
+		  return FALSE;
 	      }
 
 	    /* FIXME: this test is conservative.  */
@@ -1415,7 +1341,7 @@ coff_ppc_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	    DUMP_RELOC2 (howto->name, rel);
 
-	    if (strncmp(".idata$2",input_section->name,8) == 0 && first_thunk_address == 0)
+	    if (CONST_STRNEQ (input_section->name, ".idata$2") && first_thunk_address == 0)
 	      {
 		/* Set magic values.  */
 		int idata5offset;
@@ -1537,15 +1463,13 @@ coff_ppc_relocate_section (output_bfd, info, input_bfd, input_section,
 	      /* Relocation to a symbol in a section which
 		 isn't absolute - we output the address here
 		 to a file.  */
-	      bfd_vma addr = rel->r_vaddr
-		- input_section->vma
-		+ input_section->output_offset
-		  + input_section->output_section->vma;
+	      bfd_vma addr = (rel->r_vaddr
+			      - input_section->vma
+			      + input_section->output_offset
+			      + input_section->output_section->vma);
 
-	      if (coff_data (output_bfd)->pe)
-		addr -= pe_data (output_bfd)->pe_opthdr.ImageBase;
-
-	      fwrite (&addr, 1,4, (FILE *) info->base_file);
+	      if (!write_base_file_entry (output_bfd, info, addr))
+		return FALSE;
 	    }
 	}
 
@@ -1563,7 +1487,7 @@ coff_ppc_relocate_section (output_bfd, info, input_bfd, input_section,
 	    if (symndx == -1)
 	      name = "*ABS*";
 	    else if (h != NULL)
-	      name = h->root.root.root.string;
+	      name = NULL;
 	    else if (sym == NULL)
 	      name = "*unknown*";
 	    else if (sym->_n._n_n._n_zeroes == 0
@@ -1577,7 +1501,7 @@ coff_ppc_relocate_section (output_bfd, info, input_bfd, input_section,
 	      }
 
 	    if (! ((*info->callbacks->reloc_overflow)
-		   (info, name, howto->name,
+		   (info, (h ? &h->root.root : NULL), name, howto->name,
 		    (bfd_vma) 0, input_bfd,
 		    input_section, rel->r_vaddr - input_section->vma)))
 	      return FALSE;
@@ -1773,30 +1697,6 @@ ppc_refhi_reloc (abfd, reloc_entry, symbol, data,
   return bfd_reloc_undefined;
 }
 
-#if 0
-
-static bfd_reloc_status_type
-ppc_reflo_reloc (abfd, reloc_entry, symbol, data,
-		 input_section, output_bfd, error_message)
-     bfd *abfd;
-     arelent *reloc_entry;
-     asymbol *symbol;
-     PTR data;
-     asection *input_section;
-     bfd *output_bfd;
-     char **error_message;
-{
-  UN_IMPL("REFLO");
-  DUMP_RELOC("REFLO",reloc_entry);
-
-  if (output_bfd == (bfd *) NULL)
-    return bfd_reloc_continue;
-
-  return bfd_reloc_undefined;
-}
-
-#endif
-
 static bfd_reloc_status_type
 ppc_pair_reloc (abfd, reloc_entry, symbol, data,
 		input_section, output_bfd, error_message)
@@ -1836,31 +1736,6 @@ ppc_toc16_reloc (abfd, reloc_entry, symbol, data,
 
   return bfd_reloc_ok;
 }
-
-#if 0
-
-/* ADDR32NB : 32 bit address relative to the virtual origin.
-              (On the alpha, this is always a linker generated thunk)
-              (i.e. 32bit addr relative to the image base).  */
-
-static bfd_reloc_status_type
-ppc_addr32nb_reloc (abfd, reloc_entry, symbol, data,
-		    input_section, output_bfd, error_message)
-     bfd *abfd;
-     arelent *reloc_entry;
-     asymbol *symbol;
-     PTR data;
-     asection *input_section;
-     bfd *output_bfd;
-     char **error_message;
-{
-  UN_IMPL("ADDR32NB");
-  DUMP_RELOC("ADDR32NB",reloc_entry);
-
-  return bfd_reloc_ok;
-}
-
-#endif
 
 static bfd_reloc_status_type
 ppc_secrel_reloc (abfd, reloc_entry, symbol, data,
@@ -2093,8 +1968,23 @@ ppc_coff_reloc_type_lookup (abfd, code)
       return NULL;
     }
 }
-
 #undef HOW2MAP
+
+static reloc_howto_type *
+ppc_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			    const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < sizeof (ppc_coff_howto_table) / sizeof (ppc_coff_howto_table[0]);
+       i++)
+    if (ppc_coff_howto_table[i].name != NULL
+	&& strcasecmp (ppc_coff_howto_table[i].name, r_name) == 0)
+      return &ppc_coff_howto_table[i];
+
+  return NULL;
+}
 
 /* Tailor coffcode.h -- macro heaven.  */
 
@@ -2103,15 +1993,12 @@ ppc_coff_reloc_type_lookup (abfd, code)
 /* We use the special COFF backend linker, with our own special touch.  */
 
 #define coff_bfd_reloc_type_lookup   ppc_coff_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup ppc_coff_reloc_name_lookup
 #define coff_rtype_to_howto          coff_ppc_rtype_to_howto
 #define coff_relocate_section        coff_ppc_relocate_section
 #define coff_bfd_final_link          ppc_bfd_coff_final_link
 
 #ifndef COFF_IMAGE_WITH_PE
-/* FIXME: This no longer works.  */
-#if 0
-#define coff_swap_sym_in_hook        ppc_coff_swap_sym_in_hook
-#endif
 #endif
 
 #define SELECT_RELOC(internal, howto) {internal.r_type=howto->type;}
@@ -2139,62 +2026,6 @@ ppc_coff_reloc_type_lookup (abfd, code)
 
 #include "coffcode.h"
 
-#ifndef COFF_IMAGE_WITH_PE
-/* FIXME: This no longer works.  */
-#if 0
-/* FIXME:
-   What we're trying to do here is allocate a toc section (early), and attach
-   it to the last bfd to be processed. This avoids the problem of having a toc
-   written out before all files have been processed. This code allocates
-   a toc section for every file, and records the last one seen. There are
-   at least two problems with this approach:
-   1. We allocate whole bunches of toc sections that are ignored, but at
-      at least we will not allocate a toc if no .toc is present.
-   2. It's not clear to me that being the last bfd read necessarily means
-      that you are the last bfd closed.
-   3. Doing it on a "swap in" hook depends on when the "swap in" is called,
-      and how often, etc. It's not clear to me that there isn't a hole here.  */
-static void ppc_coff_swap_sym_in_hook PARAMS ((bfd *, PTR, PTR));
-
-static void
-ppc_coff_swap_sym_in_hook (abfd, ext1, in1)
-     bfd            *abfd;
-     PTR ext1 ATTRIBUTE_UNUSED;
-     PTR in1;
-{
-  struct internal_syment * in = (struct internal_syment *)in1;
-
-  if (bfd_of_toc_owner != 0) /* We already have a toc, so go home.  */
-    return;
-
-  if (strcmp (in->_n._n_name, ".toc") == 0)
-    {
-      flagword flags;
-      register asection *s;
-
-      s = bfd_get_section_by_name (abfd, TOC_SECTION_NAME);
-      if (s != NULL)
-	return;
-
-      flags = SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS | SEC_IN_MEMORY ;
-
-      s = bfd_make_section (abfd, TOC_SECTION_NAME);
-
-      if (s == NULL
-	  || !bfd_set_section_flags (abfd, s, flags)
-	  || !bfd_set_section_alignment (abfd, s, 2))
-	/* FIXME: set appropriate bfd error.  */
-	abort ();
-
-      /* Save the bfd for later allocation.  */
-      bfd_of_toc_owner = abfd;
-    }
-
-  return;
-}
-#endif
-#endif
-
 #ifndef COFF_IMAGE_WITH_PE
 
 static bfd_boolean ppc_do_last PARAMS ((bfd *));
@@ -2301,7 +2132,7 @@ ppc_bfd_coff_final_link (abfd, info)
       o->reloc_count = 0;
       o->lineno_count = 0;
 
-      for (p = o->link_order_head; p != NULL; p = p->next)
+      for (p = o->map_head.link_order; p != NULL; p = p->next)
 	{
 	  if (p->type == bfd_indirect_link_order)
 	    {
@@ -2483,7 +2314,7 @@ ppc_bfd_coff_final_link (abfd, info)
 
   for (o = abfd->sections; o != NULL; o = o->next)
     {
-      for (p = o->link_order_head; p != NULL; p = p->next)
+      for (p = o->map_head.link_order; p != NULL; p = p->next)
 	{
 	  if (p->type == bfd_indirect_link_order
 	      && (bfd_get_flavour (p->u.indirect.section->owner)

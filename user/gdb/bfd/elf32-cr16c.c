@@ -1,11 +1,11 @@
 /* BFD back-end for National Semiconductor's CR16C ELF
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,10 +15,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "elf/cr16c.h"
@@ -148,6 +149,20 @@ elf_cr16c_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* printf ("This relocation Type is not supported - %x\n", code); */
   return 0;
+}
+
+static reloc_howto_type *
+elf_cr16c_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			     const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0; i < sizeof (elf_howto_table) / sizeof (elf_howto_table[0]); i++)
+    if (elf_howto_table[i].name != NULL
+	&& strcasecmp (elf_howto_table[i].name, r_name) == 0)
+      return &elf_howto_table[i];
+
+  return NULL;
 }
 
 static void
@@ -426,8 +441,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    return bfd_reloc_overflow;
 	  value &= 0xFF;
 	  bfd_put_8 (abfd, (bfd_vma) value, (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_16:	/* Two bytes.  */
 	  if (value > (int) MAX_UWORD || value < MIN_WORD)
 	    return bfd_reloc_overflow;
@@ -435,13 +450,13 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  sword = value;
 	  bfd_put_16 (abfd, (bfd_vma) sword,
 		      (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_32:	/* Four bytes.  */
 	  value &= 0xFFFFFFFF;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	default:
 	  return bfd_reloc_notsupported;
 	}
@@ -459,8 +474,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  value <<= 4;
 	  value |= left_val;
 	  bfd_put_8 (abfd, (bfd_vma) value, (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_08:    /* word1(0-3,8-11).  */
 	  if (value > 255 || value < -256 || value == 0x80)
 	    return bfd_reloc_overflow;
@@ -471,8 +486,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  sword |= left_val;
 	  bfd_put_16 (abfd, (bfd_vma) sword,
 		      (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_16:    /* word2.  */
 	  if (value > 65535 || value < -65536)
 	    return bfd_reloc_overflow;
@@ -482,8 +497,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  sword = value;
 	  bfd_put_16 (abfd, (bfd_vma) sword,
 		      (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_24_a:	/* word1(0-7),word2.  */
 	  if (value > 16777215 || value < -16777216)
 	    return bfd_reloc_overflow;
@@ -493,8 +508,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x00800000) >> 7) | ((value & 0x007F8000) >> 15);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_24:    /* word2(0-3,8-11),word3.  */
 	  if (value > 16777215 || value < -16777216)
 	    return bfd_reloc_overflow;
@@ -507,8 +522,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x000F0000) >> 8) | ((value & 0x00F00000) >> 20);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	default:
 	  return bfd_reloc_notsupported;
 	}
@@ -523,8 +538,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  value &= 0xF;
 	  value |= left_val;
 	  bfd_put_8 (abfd, (bfd_vma) value, (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_04_a:	/* word1(12-15) not scaled.  */
 	  if (value > 26 || value < 0)
 	    return bfd_reloc_overflow;
@@ -532,8 +547,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  value >>= 1;
 	  value |= left_val;
 	  bfd_put_8 (abfd, (bfd_vma) value, (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_14:	/* word1(4-5),word2(0-3,8-15).  */
 	  if (value < 0 || value > 16383)
 	    return bfd_reloc_overflow;
@@ -543,8 +558,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x0000000F) << 16) | (value & 0x00000030);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_16:	/* word2.  */
 	  if (value > 65535 || value < 0)
 	    return bfd_reloc_overflow;
@@ -552,8 +567,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  sword = value;
 	  bfd_put_16 (abfd, (bfd_vma) sword,
 		      (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_20:	/* word2(8-11),word3.  */
 	  /* if (value > 1048575 || value < 0) RELOC_ERROR(1); */
 	  value &= 0xFFFFF;
@@ -573,8 +588,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	      bfd_put_8 (abfd, (bfd_vma) value,
 			 (unsigned char *) data + octets - 3);
 	    }
-	  return bfd_reloc_ok;
 	  break;
+
 	default:
 	  return bfd_reloc_notsupported;
 	}
@@ -591,8 +606,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x000F0000) >> 16);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_24:	/* word2(0-3,8-11),word3.  */
 	  /* if (value > 16777215 || value < 0) RELOC_ERROR(1); */
 	  value &= 0xFFFFFF;
@@ -600,8 +615,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x000F0000) >> 8) | ((value & 0x00F00000) >> 20);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	default:
 	  return bfd_reloc_notsupported;
 	}
@@ -617,8 +632,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  value <<= 4;
 	  value |= left_val;
 	  bfd_put_8 (abfd, (bfd_vma) value, (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_16:	/* word2.  */
 	  if (value > 32767 || value < -32768)
 	    return bfd_reloc_overflow;
@@ -626,8 +641,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	  sword = value;
 	  bfd_put_16 (abfd, (bfd_vma) sword,
 		      (unsigned char *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_20:	/* word1(0-3),word2.  */
 	  if (value > 1048575 || value < 0)
 	    return bfd_reloc_overflow;
@@ -636,15 +651,15 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
 	    ((value & 0x000F0000) >> 16);
 	  value |= left_val;
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	case R_S_16C_32:	/* word2, word3.  */
 	  value &= 0xFFFFFFFF;
 	  value = ((value & 0x0000FFFF) << 16) |
 	    ((value & 0xFFFF0000) >> 16);
 	  bfd_put_32 (abfd, (bfd_vma) value, (bfd_byte *) data + octets);
-	  return bfd_reloc_ok;
 	  break;
+
 	default:
 	  return bfd_reloc_notsupported;
 	}
@@ -652,6 +667,8 @@ cr16c_elf_final_link_relocate (reloc_howto_type *howto,
     default:
       return bfd_reloc_notsupported;
     }
+
+  return bfd_reloc_ok;
 }
 
 /* Relocate a CR16C ELF section.  */
@@ -690,26 +707,6 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
       r_type = ELF32_R_TYPE (rel->r_info);
       howto = elf_howto_table + r_type;
 
-      if (info->relocatable)
-	{
-	  /* This is a relocatable link.  We don't have to change
-	     anything, unless the reloc is against a section symbol,
-	     in which case we have to adjust according to where the
-	     section symbol winds up in the output section.  */
-	  if (r_symndx < symtab_hdr->sh_info)
-	    {
-	      sym = local_syms + r_symndx;
-	      if (ELF_ST_TYPE (sym->st_info) == STT_SECTION)
-		{
-		  sec = local_sections[r_symndx];
-		  rel->r_addend += sec->output_offset + sym->st_value;
-		}
-	    }
-
-	  continue;
-	}
-
-      /* This is a final link.  */
       h = NULL;
       sym = NULL;
       sec = NULL;
@@ -727,6 +724,28 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
 				   unresolved_reloc, warned);
+	}
+
+      if (sec != NULL && elf_discarded_section (sec))
+	{
+	  /* For relocs against symbols from removed linkonce sections,
+	     or sections discarded by a linker script, we just want the
+	     section contents zeroed.  Avoid any special processing.  */
+	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
+	  rel->r_info = 0;
+	  rel->r_addend = 0;
+	  continue;
+	}
+
+      if (info->relocatable)
+	{
+	  /* This is a relocatable link.  We don't have to change
+	     anything, unless the reloc is against a section symbol,
+	     in which case we have to adjust according to where the
+	     section symbol winds up in the output section.  */
+	  if (sym != NULL && ELF_ST_TYPE (sym->st_info) == STT_SECTION)
+	    rel->r_addend += sec->output_offset;
+	  continue;
 	}
 
       r = cr16c_elf_final_link_relocate (howto, input_bfd, output_bfd,
@@ -754,8 +773,9 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 	    {
 	    case bfd_reloc_overflow:
 	      if (!((*info->callbacks->reloc_overflow)
-		    (info, name, howto->name, (bfd_vma) 0,
-		     input_bfd, input_section, rel->r_offset)))
+		    (info, (h ? &h->root : NULL), name, howto->name,
+		     (bfd_vma) 0, input_bfd, input_section,
+		     rel->r_offset)))
 		return FALSE;
 	      break;
 
@@ -792,53 +812,6 @@ elf32_cr16c_relocate_section (bfd *output_bfd,
 	}
     }
 
-  return TRUE;
-}
-
-static asection *
-elf32_cr16c_gc_mark_hook (asection *sec,
-			  struct bfd_link_info *info ATTRIBUTE_UNUSED,
-			  Elf_Internal_Rela *rel,
-			  struct elf_link_hash_entry *h,
-			  Elf_Internal_Sym *sym)
-{
-  if (h != NULL)
-    {
-      switch (ELF32_R_TYPE (rel->r_info))
-	{
-
-	default:
-	  switch (h->root.type)
-	    {
-	    case bfd_link_hash_defined:
-	    case bfd_link_hash_defweak:
-	      return h->root.u.def.section;
-
-	    case bfd_link_hash_common:
-	      return h->root.u.c.p->section;
-
-	    default:
-	      break;
-	    }
-	}
-    }
-  else
-    {
-      return bfd_section_from_elf_index (sec->owner, sym->st_shndx);
-    }
-
-  return NULL;
-}
-
-/* Update the got entry reference counts for the section being removed.  */
-
-static bfd_boolean
-elf32_cr16c_gc_sweep_hook (bfd *abfd ATTRIBUTE_UNUSED,
-			   struct bfd_link_info *info ATTRIBUTE_UNUSED,
-			   asection *sec ATTRIBUTE_UNUSED,
-			   const Elf_Internal_Rela *relocs ATTRIBUTE_UNUSED)
-{
-  /* We don't support garbage collection of GOT and PLT relocs yet.  */
   return TRUE;
 }
 
@@ -985,11 +958,10 @@ elf32_cr16c_link_output_symbol_hook (struct bfd_link_info *info ATTRIBUTE_UNUSED
 #define elf_symbol_leading_char		'_'
 
 #define bfd_elf32_bfd_reloc_type_lookup		elf_cr16c_reloc_type_lookup
+#define bfd_elf32_bfd_reloc_name_lookup	elf_cr16c_reloc_name_lookup
 #define elf_info_to_howto			elf_cr16c_info_to_howto
 #define elf_info_to_howto_rel			elf_cr16c_info_to_howto_rel
 #define elf_backend_relocate_section		elf32_cr16c_relocate_section
-#define elf_backend_gc_mark_hook        	elf32_cr16c_gc_mark_hook
-#define elf_backend_gc_sweep_hook       	elf32_cr16c_gc_sweep_hook
 #define elf_backend_symbol_processing		elf32_cr16c_symbol_processing
 #define elf_backend_section_from_bfd_section 	elf32_cr16c_section_from_bfd_section
 #define elf_backend_add_symbol_hook		elf32_cr16c_add_symbol_hook

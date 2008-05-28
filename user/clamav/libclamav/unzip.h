@@ -1,10 +1,7 @@
 /*
- *  Copyright (C) 2003 - 2006 Tomasz Kojm <tkojm@clamav.net>
- *	      (C) 2006 Sensory Networks, Inc.
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
  *
- *  The code of this module was based on zziplib 0.12.83:
- *  (c) 1999 - 2002 Guido Draheim <guidod@gmx.de>, published under
- *  the Lesser GNU General Public License
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,195 +25,125 @@
 #include "clamav-config.h"
 #endif
 
-#include <stddef.h>
-#include <stdio.h>
-#include <sys/types.h>
+#include "others.h"
+int cli_unzip(int, cli_ctx *);
 
-#include "cltypes.h"
+#if HAVE_MMAP
+int cli_unzip_single(int, cli_ctx *, off_t);
+#else
+#define cli_unzip_single(a,b,c) cli_unzip((a),(b))
+#endif /* HAVE_MMAP */
 
-#ifndef HAVE_ATTRIB_PACKED
-#define __attribute__(x)
-#endif
+#ifdef UNZIP_PRIVATE
+#define F_ENCR  (1<<0)
+#define F_ALGO1 (1<<1)
+#define F_ALGO2 (1<<2)
+#define F_USEDD (1<<3)
+#define F_RSVD1 (1<<4)
+#define F_PATCH (1<<5)
+#define F_STRNG (1<<6)
+#define F_UNUS1 (1<<7)
+#define F_UNUS2 (1<<8)
+#define F_UNUS3 (1<<9)
+#define F_UNUS4 (1<<10)
+#define F_UTF8  (1<<11)
+#define F_RSVD2 (1<<12)
+#define F_MSKED (1<<13)
+#define F_RSVD3 (1<<14)
+#define F_RSVD4 (1<<15)
 
-#ifdef HAVE_PRAGMA_PACK
-#pragma pack(1)
-#endif
-
-#ifdef HAVE_PRAGMA_PACK_HPPA
-#pragma pack 1
-#endif
-
-/******** Zip format structures *********/
-
-/* Local file header */
-struct zip_file_header
-{
-#   define ZIP_FILE_HEADER_MAGIC 0x04034b50
-    uint32_t	    z_magic;	    /* local file header signature */
-    uint16_t	    z_version;	    /* version needed to extract */
-    uint16_t	    z_flags;	    /* general purpose bit flag */
-    uint16_t	    z_compr;	    /* compression method */
-    uint16_t	    z_modtime;	    /* last mod file time */
-    uint16_t	    z_moddate;	    /* last mod file date */
-    uint32_t	    z_crc32;	    /* crc-32 */
-    uint32_t	    z_csize;	    /* compressed size */
-    uint32_t	    z_usize;	    /* uncompressed size */
-    uint16_t	    z_namlen;	    /* file name length */
-    uint16_t	    z_extras;	    /* extra field length */
-
-    /* followed by filename (of variable size) */
-    /* followed by extra field (of variable size) */
-} __attribute__((packed));
-
-/* Data descriptor (only if bit 3 of z_flags is set) */
-struct zip_file_trailer
-{
-#   define ZIP_FILE_TRAILER_MAGIC 0x08074B50
-    uint32_t z_magic; /* data descriptor signature (0x08074b50) */
-    uint32_t z_crc32; /* crc-32 */
-    uint32_t z_csize; /* compressed size */
-    uint32_t z_usize; /* uncompressed size */
-} __attribute__((packed));
-
-/* Central file header */
-struct zip_root_dirent
-{
-#   define ZIP_ROOT_DIRENT_MAGIC 0x02014b50
-    uint32_t	    z_magic;	    /* central file header signature */
-    uint16_t	    z_version1;	    /* version made by */
-    uint16_t	    z_version2;	    /* version needed to extract */
-    uint16_t	    z_flags;	    /* general purpose bit flag */
-    uint16_t	    z_compr;	    /* compression method */
-    uint16_t	    z_modtime;	    /* last mod file time */
-    uint16_t	    z_moddate;	    /* last mod file date */
-    uint32_t	    z_crc32;	    /* crc-32 */
-    uint32_t	    z_csize;	    /* compressed size */
-    uint32_t	    z_usize;	    /* uncompressed size */
-    uint16_t	    z_namlen;	    /* file name length */
-    uint16_t	    z_extras;	    /* extra field length */
-    uint16_t	    z_comment;	    /* file comment length */
-    uint16_t	    z_diskstart;    /* disk number start */
-    uint16_t	    z_filetype;	    /* internal file attributes */
-    uint32_t	    z_filemode;	    /* extrnal file attributes */
-    uint32_t	    z_off;	    /* relative offset of local header */
-
-    /* followed by filename (of variable size) */
-    /* followed by extra field (of variable size) */
-    /* followed by file comment (of variable size) */
-} __attribute__((packed));
-
-/* End of central directory record */
-struct zip_disk_trailer
-{
-#   define	    ZIP_DISK_TRAILER_MAGIC 0x06054b50
-    uint32_t	    z_magic;		/* end of central dir signature */
-    uint16_t	    z_disk;		/* number of this disk */
-    uint16_t	    z_finaldisk;	/* number of the disk with the start
-					 * of the central dir
-					 */
-    uint16_t	    z_entries;		/* total number of entries in the
-					 * central dir on this disk
-					 */
-    uint16_t	    z_finalentries;	/* total number of entries in the
-					 * central dir
-					 */
-    uint32_t	    z_rootsize;		/* size of the central directory */
-    uint32_t	    z_rootseek;		/* offset of start of central directory
-					 * with respect to the starting disk
-					 * number
-					 */
-    uint16_t	    z_comment;		/* zipfile comment length */
-
-    /* followed by zipfile comment (of variable size) */
-} __attribute__((packed));
-
-#define ZIP_METHOD_STORED	    0
-#define ZIP_METHOD_SHRUNK	    1
-#define ZIP_METHOD_REDUCEDx1	    2
-#define ZIP_METHOD_REDUCEDx2	    3
-#define ZIP_METHOD_REDUCEDx3	    4
-#define ZIP_METHOD_REDUCEDx4	    5
-#define ZIP_METHOD_IMPLODED	    6
-#define ZIP_METHOD_TOKENIZED	    7
-#define ZIP_METHOD_DEFLATED	    8
-#define ZIP_METHOD_DEFLATED64	    9
-#define ZIP_METHOD_IMPLODED_DCL	    10
-#define ZIP_METHOD_BZIP2	    12
-#define ZIP_METHOD_AES		    99
-
-
-/******** Internal structures *********/
-
-struct __zip_file
-{
-    struct __zip_dir *dir; 
-    uint16_t method;
-    int16_t *bf;
-    size_t restlen;
-    size_t crestlen;
-    size_t usize;
-    size_t csize;
-    char *buf32k;
-    z_stream d_stream;
+enum ALGO {
+  ALG_STORED,
+  ALG_SHRUNK,
+  ALG_REDUCE1,
+  ALG_REDUCE2,
+  ALG_REDUCE3,
+  ALG_REDUCE4,
+  ALG_IMPLODE,
+  ALG_TOKENZD,
+  ALG_DEFLATE,
+  ALG_DEFLATE64,
+  ALG_OLDTERSE,
+  ALG_RSVD1,
+  ALG_BZIP2,
+  ALG_RSVD2,
+  ALG_LZMA,
+  ALG_RSVD3,
+  ALG_RSVD4,
+  ALG_RSVD5,
+  ALG_NEWTERSE,
+  ALG_LZ77,
+  ALG_WAVPACK = 97,
+  ALG_PPMD
 };
 
-struct __zip_dir_hdr
-{
-    uint32_t    d_usize;	/* uncompressed size */
-    uint32_t    d_csize;        /* compressed size */
-    uint32_t    d_crc32;        /* crc-32 */
-    uint32_t    d_off;          /* offset of file in zipfile */
-    uint16_t    d_reclen;       /* next dir_hdr structure offset */
-    uint16_t    d_namlen;       /* explicit namelen of d_name */
-    uint16_t    d_compr;        /* compression type */
-    int16_t	d_bf[2];	/* compression type/brute force */
-    uint16_t	d_flags;	/* general purpose flags */
-    char        d_name[1];      /* actual name of the entry */
-};
 
-struct __zip_dirent
-{
-    uint16_t 	d_compr;	/* compression method */
-    uint32_t    d_csize;        /* compressed size */
-    uint32_t 	st_size;	/* file size / decompressed size */
-    uint16_t	d_flags;	/* general purpose flags */
-    char	*d_name;	/* file name / strdupped name */
-    uint32_t    d_crc32;        /* crc-32 */
-    uint32_t    d_off;          /* the offset in the file */
-};
+/* struct LH { */
+/*   uint32_t magic; */
+/*   uint16_t version; */
+/*   uint16_t flags; */
+/*   uint16_t method; */
+/*   uint32_t mtime; */
+/*   uint32_t crc32; */
+/*   uint32_t csize; */
+/*   uint32_t usize; */
+/*   uint16_t flen; */
+/*   uint16_t elen; */
+/*   char fname[flen] */
+/*   char extra[elen] */
+/* } __attribute__((packed)); */
 
-struct __zip_dir
-{
-    int fd;
-    int errcode;
-    struct {
-        struct __zip_file *fp;
-        char *buf32k;
-    } cache;
-    struct __zip_dir_hdr *hdr0;
-    struct __zip_dir_hdr *hdr;
-    struct __zip_dirent dirent;
-}; 
+#define LH_magic	((uint32_t)cli_readint32((uint8_t *)(lh)+0))
+#define LH_version	((uint16_t)cli_readint16((uint8_t *)(lh)+4))
+#define LH_flags	((uint16_t)cli_readint16((uint8_t *)(lh)+6))
+#define LH_method	((uint16_t)cli_readint16((uint8_t *)(lh)+8))
+#define LH_mtime	((uint32_t)cli_readint32((uint8_t *)(lh)+10))
+#define LH_crc32	((uint32_t)cli_readint32((uint8_t *)(lh)+14))
+#define LH_csize	((uint32_t)cli_readint32((uint8_t *)(lh)+18))
+#define LH_usize	((uint32_t)cli_readint32((uint8_t *)(lh)+22))
+#define LH_flen 	((uint16_t)cli_readint16((uint8_t *)(lh)+26))
+#define LH_elen 	((uint16_t)cli_readint16((uint8_t *)(lh)+28))
+#define SIZEOF_LH 30
 
-/* typedefs */
-typedef struct __zip_dir	zip_dir;
-typedef struct __zip_dir_hdr	zip_dir_hdr;
-typedef struct __zip_file	zip_file;
-typedef struct __zip_dirent 	zip_dirent;
+/* struct CH { */
+/*   uint32_t magic; */
+/*   uint16_t vermade; */
+/*   uint16_t verneed; */
+/*   uint16_t flags; */
+/*   uint16_t method; */
+/*   uint32_t mtime; */
+/*   uint32_t crc32; */
+/*   uint32_t csize; */
+/*   uint32_t usize; */
+/*   uint16_t flen; */
+/*   uint16_t elen; */
+/*   uint16_t clen; */
+/*   uint16_t dsk; */
+/*   uint16_t iattrib; */
+/*   uint32_t eattrib; */
+/*   uint32_t off; */
+/*   char fname[flen] */
+/*   char extra[elen] */
+/*   char comment[clen] */
+/* } __attribute__((packed)); */
 
-zip_dir *zip_dir_open(int fd, off_t start, int *errcode_p);
-int zip_dir_read(zip_dir *dir, zip_dirent *d);
-zip_file *zip_file_open(zip_dir *dir, const char *name, int d_off);
-ssize_t zip_file_read(zip_file *fp, char *buf, size_t len);
-int zip_file_close(zip_file *fp);
-int zip_dir_close(zip_dir *dir);
-
-#ifdef HAVE_PRAGMA_PACK
-#pragma pack()
-#endif
-
-#ifdef HAVE_PRAGMA_PACK_HPPA
-#pragma pack
-#endif
+#define CH_magic	((uint32_t)cli_readint32((uint8_t *)(ch)+0))
+#define CH_vermade	((uint16_t)cli_readint16((uint8_t *)(ch)+4))
+#define CH_verneed	((uint16_t)cli_readint16((uint8_t *)(ch)+6))
+#define CH_flags	((uint16_t)cli_readint16((uint8_t *)(ch)+8))
+#define CH_method	((uint16_t)cli_readint16((uint8_t *)(ch)+10))
+#define CH_mtime	((uint32_t)cli_readint32((uint8_t *)(ch)+12))
+#define CH_crc32	((uint32_t)cli_readint32((uint8_t *)(ch)+16))
+#define CH_csize	((uint32_t)cli_readint32((uint8_t *)(ch)+20))
+#define CH_usize	((uint32_t)cli_readint32((uint8_t *)(ch)+24))
+#define CH_flen 	((uint16_t)cli_readint16((uint8_t *)(ch)+28))
+#define CH_elen 	((uint16_t)cli_readint16((uint8_t *)(ch)+30))
+#define CH_clen 	((uint16_t)cli_readint16((uint8_t *)(ch)+32))
+#define CH_dsk  	((uint16_t)cli_readint16((uint8_t *)(ch)+34))
+#define CH_iattrib	((uint16_t)cli_readint16((uint8_t *)(ch)+36))
+#define CH_eattrib	((uint32_t)cli_readint32((uint8_t *)(ch)+38))
+#define CH_off  	((uint32_t)cli_readint32((uint8_t *)(ch)+42))
+#define SIZEOF_CH 46
+#endif /* UNZIP_PRIVATE */
 
 #endif /* __UNZIP_H */

@@ -82,6 +82,7 @@ dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
+dir_5_$(CONFIG_LIB_LIBJUDY)      += libjudy
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
@@ -195,6 +196,8 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/libidn/build/lib/.libs/libidn.a \
 	$(ROOTDIR)/lib/libcurl/build/lib/.libs/libcurl.a \
 	$(ROOTDIR)/lib/libcurl/build/lib/.libs/libcurl.so \
+	$(ROOTDIR)/lib/libjudy/src/obj/.libs/libJudy.a \
+	$(ROOTDIR)/lib/libjudy/src/obj/.libs/libJudy.so \
 	$(ROOTDIR)/lib/libssl/build/*.so* \
 	$(ROOTDIR)/lib/libssl/build/*.a \
 	$(ROOTDIR)/lib/zlib/libz.a* \
@@ -249,6 +252,10 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/fltk/lib/*.a \
 	$(ROOTDIR)/lib/fltk-1.1/lib/*.a
 
+# The dynamic linker library needs to be linked into lib via a different name
+LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
+LD_LIB_DEST = $(ROOTDIR)/lib/ld-linux.so.2
+
 ##############################################################################
 
 make_links: clean_links
@@ -260,7 +267,8 @@ make_links: clean_links
 			[ -L "./`basename $$i`" ] && continue; \
 			ln -s $$i .; \
 		done ; \
-	done
+	done	
+	@ln -sf $(LD_LIB) $(LD_LIB_DEST)		
 
 clean_links:
 	@-for i in *; do \

@@ -1,22 +1,22 @@
 /* collection of junk waiting time to sort out
-   Copyright (C) 1998, 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Red Hat
 
 This file is part of the GNU Simulators.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef FRV_SIM_H
 #define FRV_SIM_H
@@ -143,7 +143,7 @@ struct _device { int foo; };
 
 /* maintain the address of the start of the previous VLIW insn sequence.  */
 extern IADDR previous_vliw_pc;
-extern CGEN_ATTR_VALUE_TYPE frv_current_fm_slot;
+extern CGEN_ATTR_VALUE_ENUM_TYPE frv_current_fm_slot;
 
 /* Hardware status.  */
 #define GET_HSR0() GET_H_SPR (H_SPR_HSR0)

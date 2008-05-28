@@ -1,7 +1,7 @@
 /* Source-language-related definitions for GDB.
 
-   Copyright 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2003,
-   2004 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2003, 2004,
+   2007, 2008 Free Software Foundation, Inc.
 
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (LANGUAGE_H)
 #define LANGUAGE_H 1
@@ -29,10 +27,9 @@
 /* Forward decls for prototypes */
 struct value;
 struct objfile;
+struct frame_info;
 struct expression;
 struct ui_file;
-
-/* enum exp_opcode;     ANSI's `wisdom' didn't include forward enum decls. */
 
 /* This used to be included to configure GDB for one or more specific
    languages.  Now it is left out to configure for all of them.  FIXME.  */
@@ -130,13 +127,6 @@ struct language_arch_info
   struct type *string_char_type;
 };
 
-struct type *language_string_char_type (const struct language_defn *l,
-					struct gdbarch *gdbarch);
-
-struct type *language_lookup_primitive_type_by_name (const struct language_defn *l,
-						     struct gdbarch *gdbarch,
-						     const char *name);
-
 /* Structure tying together assorted information about a language.  */
 
 struct language_defn
@@ -148,13 +138,6 @@ struct language_defn
     /* its symtab language-enum (defs.h) */
 
     enum language la_language;
-
-    /* Its builtin types.  This is a vector ended by a NULL pointer.  These
-       types can be specified by name in parsing types in expressions,
-       regardless of whether the program being debugged actually defines
-       such a type.  */
-
-    struct type **const *la_builtin_type_vector;
 
     /* Default range checking */
 
@@ -193,13 +176,11 @@ struct language_defn
 
     void (*la_printchar) (int ch, struct ui_file * stream);
 
-    void (*la_printstr) (struct ui_file * stream, char *string,
+    void (*la_printstr) (struct ui_file * stream, const gdb_byte *string,
 			 unsigned int length, int width,
 			 int force_ellipses);
 
     void (*la_emitchar) (int ch, struct ui_file * stream, int quoter);
-
-    struct type *(*la_fund_type) (struct objfile *, int);
 
     /* Print a type using syntax appropriate for this language. */
 
@@ -208,7 +189,7 @@ struct language_defn
 
     /* Print a value using syntax appropriate for this language. */
 
-    int (*la_val_print) (struct type *, char *, int, CORE_ADDR,
+    int (*la_val_print) (struct type *, const gdb_byte *, int, CORE_ADDR,
 			 struct ui_file *, int, int, int,
 			 enum val_prettyprint);
 
@@ -221,7 +202,7 @@ struct language_defn
        If that PC falls in a trampoline belonging to this language,
        return the address of the first pc in the real function, or 0
        if it isn't a language tramp for this language.  */
-    CORE_ADDR (*skip_trampoline) (CORE_ADDR pc);
+    CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
 
     /* Now come some hooks for lookup_symbol.  */
 
@@ -265,15 +246,27 @@ struct language_defn
     /* Index to use for extracting the first element of a string. */
     char string_lower_bound;
 
-    /* Type of elements of strings. */
-    struct type **string_char_type;
-
     /* The list of characters forming word boundaries.  */
     char *(*la_word_break_characters) (void);
+
+    /* Should return a NULL terminated array of all symbols which
+       are possible completions for TEXT.  WORD is the entire command
+       on which the completion is being made.  */
+    char **(*la_make_symbol_completion_list) (char *text, char *word);
 
     /* The per-architecture (OS/ABI) language information.  */
     void (*la_language_arch_info) (struct gdbarch *,
 				   struct language_arch_info *);
+
+    /* Print the index of an element of an array.  */
+    void (*la_print_array_index) (struct value *index_value,
+                                  struct ui_file *stream,
+                                  int format,
+                                  enum val_prettyprint pretty);
+
+    /* Return non-zero if TYPE should be passed (and returned) by
+       reference at the language level.  */
+    int (*la_pass_by_reference) (struct type *type);
 
     /* Add fields above this point, so the magic number is always last. */
     /* Magic number for compat checking */
@@ -317,6 +310,14 @@ extern enum language_mode
     language_mode_auto, language_mode_manual
   }
 language_mode;
+
+struct type *language_string_char_type (const struct language_defn *l,
+					struct gdbarch *gdbarch);
+
+struct type *language_lookup_primitive_type_by_name (const struct language_defn *l,
+						     struct gdbarch *gdbarch,
+						     const char *name);
+
 
 /* These macros define the behaviour of the expression 
    evaluator.  */
@@ -343,9 +344,6 @@ extern enum language set_language (enum language);
    the current setting of working_lang, which the user sets
    with the "set language" command. */
 
-#define create_fundamental_type(objfile,typeid) \
-  (current_language->la_fund_type(objfile, typeid))
-
 #define LA_PRINT_TYPE(type,varstring,stream,show,level) \
   (current_language->la_print_type(type,varstring,stream,show,level))
 
@@ -361,6 +359,9 @@ extern enum language set_language (enum language);
   (current_language->la_printstr(stream, string, length, width, force_ellipses))
 #define LA_EMIT_CHAR(ch, stream, quoter) \
   (current_language->la_emitchar(ch, stream, quoter))
+
+#define LA_PRINT_ARRAY_INDEX(index_value, stream, format, pretty) \
+  (current_language->la_print_array_index(index_value, stream, format, pretty))
 
 /* Test a character to decide whether it can be printed in literal form
    or needs to be printed in another representation.  For example,
@@ -412,9 +413,6 @@ extern void binop_type_check (struct value *, struct value *, int);
 
 /* Error messages */
 
-extern void op_error (const char *lhs, enum exp_opcode,
-		      const char *rhs);
-
 extern void type_error (const char *, ...) ATTR_FORMAT (printf, 1, 2);
 
 extern void range_error (const char *, ...) ATTR_FORMAT (printf, 1, 2);
@@ -444,7 +442,7 @@ extern enum language get_frame_language (void);	/* In stack.c */
 
 /* Check for a language-specific trampoline. */
 
-extern CORE_ADDR skip_language_trampoline (CORE_ADDR pc);
+extern CORE_ADDR skip_language_trampoline (struct frame_info *, CORE_ADDR pc);
 
 /* Return demangled language symbol, or NULL.  */
 extern char *language_demangle (const struct language_defn *current_language, 
@@ -456,5 +454,20 @@ extern char *language_class_name_from_physname (const struct language_defn *,
 
 /* Splitting strings into words.  */
 extern char *default_word_break_characters (void);
+
+/* Print the index of an array element using the C99 syntax.  */
+extern void default_print_array_index (struct value *index_value,
+                                       struct ui_file *stream,
+                                       int format,
+                                       enum val_prettyprint pretty);
+
+/* Return non-zero if TYPE should be passed (and returned) by
+   reference at the language level.  */
+int language_pass_by_reference (struct type *type);
+
+/* Return zero; by default, types are passed by value at the language
+   level.  The target ABI may pass or return some structs by reference
+   independent of this.  */
+int default_pass_by_reference (struct type *type);
 
 #endif /* defined (LANGUAGE_H) */

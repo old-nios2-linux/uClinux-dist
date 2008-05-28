@@ -1,12 +1,12 @@
 /* Common target dependent code for GDB on Alpha systems.
-   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002, 2003 Free
-   Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002, 2003, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,12 +15,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef ALPHA_TDEP_H
 #define ALPHA_TDEP_H
+
+struct regcache;
 
 /* Say how long (ordinary) registers are.  This is a piece of bogosity
    used in push_word and a few other places; register_size() is the
@@ -40,6 +40,7 @@
 
 #define ALPHA_V0_REGNUM	     0  /* Function integer return value */
 #define ALPHA_T7_REGNUM	     8  /* Return address register for OSF/1 __add* */
+#define ALPHA_S0_REGNUM      9	/* First saved register */
 #define ALPHA_GCC_FP_REGNUM 15  /* Used by gcc as frame register */
 #define ALPHA_A0_REGNUM     16  /* Loc of first arg during a subr call */
 #define ALPHA_T9_REGNUM     23  /* Return address register for OSF/1 __div* */
@@ -53,6 +54,9 @@
 #define ALPHA_FPCR_REGNUM   63  /* Floating point control register */
 #define ALPHA_PC_REGNUM     64  /* Contains program counter */
 #define ALPHA_UNIQUE_REGNUM 66	/* PAL_rduniq value */
+
+/* Instruction size.  */
+#define ALPHA_INSN_SIZE	4
 
 /* The alpha has two different virtual pointers for arguments and locals.
    
@@ -88,6 +92,9 @@ struct gdbarch_tdep
      sigtramp unwinders.  */
   int (*pc_in_sigtramp) (CORE_ADDR pc, char *name);
 
+  /* If TYPE will be returned in memory, return true.  */
+  int (*return_in_memory) (struct type *type);
+
   /* Offset of registers in `struct sigcontext'.  */
   int sc_pc_offset;
   int sc_regs_offset;
@@ -100,16 +107,19 @@ struct gdbarch_tdep
 };
 
 extern unsigned int alpha_read_insn (CORE_ADDR pc);
-extern void alpha_software_single_step (enum target_signal, int);
+extern int alpha_software_single_step (struct frame_info *frame);
 extern CORE_ADDR alpha_after_prologue (CORE_ADDR pc);
 
 extern void alpha_mdebug_init_abi (struct gdbarch_info, struct gdbarch *);
 extern void alpha_dwarf2_init_abi (struct gdbarch_info, struct gdbarch *);
 
-extern void alpha_supply_int_regs (int, const void *, const void *,
-				   const void *);
-extern void alpha_fill_int_regs (int, void *, void *, void *);
-extern void alpha_supply_fp_regs (int, const void *, const void *);
-extern void alpha_fill_fp_regs (int, void *, void *);
+extern void alpha_supply_int_regs (struct regcache *, int, const void *,
+				   const void *, const void *);
+extern void alpha_fill_int_regs (const struct regcache *, int,
+				 void *, void *, void *);
+extern void alpha_supply_fp_regs (struct regcache *, int,
+				  const void *, const void *);
+extern void alpha_fill_fp_regs (const struct regcache *,
+				int, void *, void *);
 
 #endif /* ALPHA_TDEP_H */

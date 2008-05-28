@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2006 Michal 'GiM' Spadlinski http://gim.org.pl/
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Michal 'GiM' Spadlinski
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,12 +16,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
- */
-
-/*
- * upack.c
- *
- *
  */
 
 #if HAVE_CONFIG_H
@@ -282,7 +277,7 @@ int unupack(int upack, char *dest, uint32_t dsize, char *buff, uint32_t vma, uin
 			if (!CLI_ISCONTAINED(dest, dsize, loc_esi, 12))
 				return -1;
 
-			cli_dbgmsg("Upack: %08x %08x %08x %08x\n", loc_esi, dest, cli_readint32(loc_esi), base);
+			cli_dbgmsg("Upack: %p %p %08x %08x\n", loc_esi, dest, cli_readint32(loc_esi), base);
 			loc_ebx_u = loc_esi - (dest + cli_readint32(loc_esi) - base);
 			cli_dbgmsg("Upack: EBX: %08x\n", loc_ebx_u);
 			loc_esi += 4;
@@ -401,7 +396,7 @@ int unupack(int upack, char *dest, uint32_t dsize, char *buff, uint32_t vma, uin
 	while(save3) {
 		if (!CLI_ISCONTAINED(dest, dsize, pushed_esi + loc_ecx, 1))
 		{
-			cli_dbgmsg("Upack: callfixerr %08x %08x = %08x, %08x\n", dest, dsize, dest+dsize, pushed_esi+loc_ecx);
+			cli_dbgmsg("Upack: callfixerr %p %08x = %p, %p\n", dest, dsize, dest+dsize, pushed_esi+loc_ecx);
 			return -1;
 		}
 		if (pushed_esi[loc_ecx] == '\xe8' || pushed_esi[loc_ecx] == '\xe9')
@@ -445,10 +440,11 @@ int unupack399(char *bs, uint32_t bl, uint32_t init_eax, char *init_ebx, uint32_
 	p.p1 = cli_readint32(init_ebx);
 	p.p2 = cli_readint32(init_ebx + 4);
 
-	cli_dbgmsg("\n\tp0: %08x\n\tp1: %08x\n\tp2: %08x\n", p.p0, p.p1, p.p2);
-	for (i = 0; i<6; i++)
-		state[i] = cli_readint32(loc_ebx + (i<<2)),
+	cli_dbgmsg("\n\tp0: %p\n\tp1: %08x\n\tp2: %08x\n", p.p0, p.p1, p.p2);
+	for (i = 0; i<6; i++) {
+		state[i] = cli_readint32(loc_ebx + (i<<2));
 		cli_dbgmsg("state[%d] = %08x\n", i, state[i]);
+	}
 	do {
 		loc_eax = eax_copy;
 		loc_edx = loc_ebx + (loc_eax<<2) + 0x58;

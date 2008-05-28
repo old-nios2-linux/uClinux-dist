@@ -1,11 +1,11 @@
 /* GDB-friendly replacement for <assert.h>.
-   Copyright 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef GDB_ASSERT_H
 #define GDB_ASSERT_H
@@ -47,11 +45,11 @@
    want to continue, dump core, or just exit.  */
 #if defined (ASSERT_FUNCTION)
 #define gdb_assert_fail(assertion, file, line, function)                      \
-  internal_error (file, line, "%s: Assertion `%s' failed.",                   \
+  internal_error (file, line, _("%s: Assertion `%s' failed."),                   \
 		  function, assertion)
 #else
 #define gdb_assert_fail(assertion, file, line, function)                      \
-  internal_error (file, line, "Assertion `%s' failed.",                       \
+  internal_error (file, line, _("Assertion `%s' failed."),                       \
 		  assertion)
 #endif
 

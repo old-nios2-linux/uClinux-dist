@@ -1,12 +1,12 @@
 /* BFD library support routines for the MSP architecture.
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
    Contributed by Dmitry Diky <diwil@mail.ru>
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,10 +16,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 
 static const bfd_arch_info_type *compatible
@@ -64,23 +65,26 @@ static const bfd_arch_info_type arch_info_struct[] =
   /* msp430x16x.  */
   N (16, bfd_mach_msp16, "msp:16", FALSE, & arch_info_struct[7]),
 
+  /* msp430x21x.  */
+  N (16, bfd_mach_msp21, "msp:21", FALSE, & arch_info_struct[8]),
+
   /* msp430x31x.  */
-  N (16, bfd_mach_msp31, "msp:31", FALSE, & arch_info_struct[8]), 
+  N (16, bfd_mach_msp31, "msp:31", FALSE, & arch_info_struct[9]), 
 
   /* msp430x32x.  */
-  N (16, bfd_mach_msp32, "msp:32", FALSE, & arch_info_struct[9]), 
+  N (16, bfd_mach_msp32, "msp:32", FALSE, & arch_info_struct[10]), 
 
   /* msp430x33x.  */
-  N (16, bfd_mach_msp33, "msp:33", FALSE, & arch_info_struct[10]),
+  N (16, bfd_mach_msp33, "msp:33", FALSE, & arch_info_struct[11]),
   
   /* msp430x41x.  */
-  N (16, bfd_mach_msp41, "msp:41", FALSE, & arch_info_struct[11]),
+  N (16, bfd_mach_msp41, "msp:41", FALSE, & arch_info_struct[12]),
 
   /* msp430x42x.  */
-  N (16, bfd_mach_msp42, "msp:42", FALSE, & arch_info_struct[12]),
+  N (16, bfd_mach_msp42, "msp:42", FALSE, & arch_info_struct[13]),
 
   /* msp430x43x.  */
-  N (16, bfd_mach_msp43, "msp:43", FALSE, & arch_info_struct[13]),
+  N (16, bfd_mach_msp43, "msp:43", FALSE, & arch_info_struct[14]),
 
   /* msp430x44x.  */
   N (16, bfd_mach_msp43, "msp:44", FALSE, NULL)

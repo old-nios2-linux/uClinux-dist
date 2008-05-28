@@ -1,3 +1,85 @@
+2007-09-01  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	PR gdb/2138
+	From readline 5.2:
+	* configure.in (CROSS_COMPILE): Initialize to empty.
+	* configure: Regenerated.
+
+2007-03-27  Brooks Moses  <brooks.moses@codesourcery.com>
+
+	* Makefile.in: Add dummy "pdf" target.
+
+2006-11-13  Denis Pilat  <denis.pilat@st.com>
+
+	* terminal.c (_rl_get_screen_size): use wr and wc variable to store
+	window size.
+
+2006-10-21  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* callback.c: Include "xmalloc.h".
+	* Makefile.in: Add dependency.
+
+2006-04-24  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	Imported readline 5.1, and upstream patches 001-004.
+
+2006-03-21  Denis Pilat  <denis.pilat@st.com>
+
+	* histfile.c (read_history_range): Remove '\r' character from
+	history lines.
+
+2005-02-10  Denis Pilat  <denis.pilat@st.com>
+
+	* readline/terminal.c (_rl_get_screen_size): Get console size from
+	the Windows API when compiling with MinGW.
+
+2005-07-25  Mark Mitchell <mark@codesourcery.com>
+
+	* input.c (rl_getc): Use getch to read console input on
+	Windows.
+	* readline.c (bind_arrow_keys_internal): Translate
+	Windows keysequences into ANSI key sequences.
+	* rldefs.h (NO_TTY_DRIVER): Define on MinGW.
+	* rltty.c: Conditionalize on NO_TTY_DRIVER throughout.
+	
+2005-07-03  Mark Kettenis <kettenis@gnu.org>
+
+	From Martin Simmons:
+	* configure.in: Check for getpwnam instead of getpwname.
+	* configure: Regenerate.
+
+2005-05-09  Mark Mitchell <mark@codesourcery.com>
+
+	* aclocal.m4: Use AC_TRY_LINK to check for mbstate_t.
+	* complete.c (pwd.h): Guard with HAVE_PWD_H.
+	(getpwent): Guard with HAVE_GETPWENT.
+	(rl_username_completion_function): Guard use of getpwent.
+	(endpwent): Likewise.
+	* config.h.in (HAVE_FCNTL): New macro.
+	(HAVE_GETPWENT): Likewise.
+	(HAVE_GETPWNAM): Likewise.
+	(HAVE_GETPWUID): Likewise.
+	(HAVE_KILL): Likewise.
+	(HAVE_PWD_H): Likewise.
+	* configure: Regenerated.
+	* configure.in: Handle MinGW when cross compiling.  Check for
+	getpwnam, getpwent, getpwuid, kill, and pwd.h.
+	* display.c (rl_clear_screen): Treat Windows like DOS.
+	(insert_some_chars): Likewise.
+	(delete_chars): Likewise.
+	* shell.c (pwd.h): Guard with HAVE_PWD_H.
+	(getpwuid): Guard with HAVE_GETPWUID.
+	(sh_unset_nodelay_mode): Guard use of fnctl with HAVE_FNCTL_H.
+	* signals.c (rl_signal_handler): Don't use SIGALRM or
+	SIGQUIT if not defined.  Use "raise" if "kill" is not available.
+	(rl_set_signals): Don't set handlers for SIGQUIT or SIGALRM if
+	they are not defined.
+	(rl_clear_signals): Likewise.
+	* tilde.c (pwd.h): Guard with HAVE_PWD_H.
+	(getpwuid): Guard declaration with HAVE_GETPWUID.
+	(getpwnam): Guard declaration with HAVE_GETPWNAM.
+	(tilde_expand_word): Guard use of getpwnam with HAVE_GETPWNAM.
+
 2004-02-19  Andrew Cagney  <cagney@redhat.com>
 
 	* config.guess: Update from version 2003-06-12 to 2004-02-16.
@@ -209,12 +291,17 @@
 	(insert_some_chars) [__MSDOS__]: Don't call tputs.
 	(delete_chars) [__MSDOS__]: Don't call tputs.
 
-2000-07-09  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+2000-07-08  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+        * readline/readline.h: Ifdef out the export of savestring().
+        It should not have been in the distribution.
+
+2000-07-07  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
         * Import of readline 4.1.
 
         Locally modified files: Makefile.in, configure.in, configure
-        (regenerated), config.h.in (regenerated), readline.h, rltty.c,
+        (regenerated), config.h.in (regenerated), rltty.c,
  	shell.c signals.c.
 
         Locally added files: acconfig.h, config/*, config.h.bot,

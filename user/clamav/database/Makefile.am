@@ -22,7 +22,7 @@ DBINST = @DBDIR@
 CLAMAVUSER = @CLAMAVUSER@
 CLAMAVGROUP = @CLAMAVGROUP@
  
-install:
+install-data-local:
 	$(mkinstalldirs) $(DESTDIR)$(DBINST)
 	@test -f $(DESTDIR)$(DBINST)/main.cvd || test -d $(DESTDIR)$(DBINST)/main.inc || $(INSTALL_DATA) $(srcdir)/main.cvd $(DESTDIR)$(DBINST)
 	@test -f $(DESTDIR)$(DBINST)/daily.cvd || test -d $(DESTDIR)$(DBINST)/daily.inc || $(INSTALL_DATA) $(srcdir)/daily.cvd $(DESTDIR)$(DBINST)

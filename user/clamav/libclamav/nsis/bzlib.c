@@ -13,7 +13,7 @@
    This file was modified for ClamAV by aCaB <acab@clamav.net>
 
    This program is released under the terms of the license contained
-   in the file COPYING.nsis.
+   in the file COPYING.bzip2.
    ------------------------------------------------------------------ */
 
 /* CHANGES
@@ -33,7 +33,7 @@
 #include "bzlib_private.h"
 #include "others.h"
 
-const Int32 BZ2_rNums[512] = { 
+static const Int32 BZ2_rNums[512] = { 
    619, 720, 127, 481, 931, 816, 813, 233, 566, 247, 
    985, 724, 205, 454, 863, 491, 741, 242, 949, 214, 
    733, 859, 335, 708, 621, 574, 73, 654, 730, 472, 
@@ -255,6 +255,7 @@ Bool unRLE_obuf_to_output_FAST ( DState* s )
       UInt32        c_tPos               = s->tPos;
       UChar*        cs_next_out          = s->strm->next_out;
       unsigned int  cs_avail_out         = s->strm->avail_out;
+      Int32         ro_blockSize100k     = s->blockSize100k;
       /* end restore */
 
       UInt32       avail_out_INIT = cs_avail_out;

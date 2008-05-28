@@ -1,3 +1,1801 @@
+2008-03-26  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (MIPS Features, PowerPC Features): Add @node.
+
+2008-02-26  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Set Breaks): Revert description of Enb column of
+	breakpoint table.
+
+2008-02-19  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.texinfo (vAttach, vRun): Remove requirement of the stub
+	killing the inferior when it is already debugging a process.
+
+2008-02-13  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdbint.texinfo (Build Script): New section. Mention new build script
+	gdb_buildall.sh.
+
+2008-02-01  Jim Blandy  <jimb@red-bean.com>
+
+	* gdb.texinfo (Help): Summarize 'info args' correctly.
+
+2008-01-30  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo: (Decimal Floating Point): Mention pseudo-registers
+	available in PowerPC architecture.
+	(Embedded Processors): Change node name of PowerPC item in menu.
+	(PowerPC): Rename to...
+	(PowerPC Embedded): this.
+	(Architectures): Add new PowerPC item in menu.
+	(PowerPC): New node.
+
+2008-01-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Multi-Process Mode for gdbserver): Use @kbd for
+	commands.
+
+2008-01-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Setting Catchpoints): Mention features
+	supported on GNU/Linux.
+
+2008-01-30  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI File Commands): Describe new output
+	field for MI command -file-list-exec-source-file.
+
+2008-01-29  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Using the `gdbserver' Program): Add security
+	warning.  Rearrange into subsections and subsubsections.  Document
+	--multi and --debug.  Correct --with-sysroot typo.  Update --attach
+	usage.  Make load reference clearer.  Document monitor exit.
+	(Remote Configuration): Document set remote exec-file, attach-packet,
+	and run-packet.
+	(Packets): Document vAttach and vRun.
+
+2008-01-29  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Processes): Mention process command.
+ 	detach-on-follow -> detach-on-fork.
+
+2008-01-28  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Native Conditionals): Remove
+	SHELL_COMMAND_CONCAT and SHELL_FILE.
+
+2008-01-26  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Specify Location): Improve wording.
+
+2008-01-23  Chris Demetriou  <cgd@google.com>
+
+	* gdb.texinfo (Threads): Document new "set print thread-events"
+	and "show print thread-events" commands.
+
+2008-01-19  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Specify Location): New section.
+	(Delete Breaks, Edit, Set Breaks): Remove description of
+	locations.  Instead, add a reference to "Specify Location".
+	(Machine Code, Jumping, Thread Stops, Continuing and Stepping)
+	(Symbols): Refer to "Specify Location" for the valid forms of
+	linespecs and locations.
+
+2008-01-18  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdbint.texinfo (Target Conditionals): Replace the description of
+	BITS_BIG_ENDIAN with a description of gdbarch_bits_big_endian.
+
+2008-01-12  Paul Hilfinger  <hilfinger@adacore.com>
+
+	* gdb.texinfo (C Operators): Remove incorrect parenthetical comment
+	about &&var, which is rejected by the expression parser.
+
+2008-01-09  Luis Machado  <luisgpm@br.ibm.com>
+
+	* gdb.texinfo (Output): Update documentation on using printf with DFP
+	types.
+
+2008-01-07  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo (C and C++): Add Decimal Floating Point format
+	subsubsection.
+	(Decimal Floating Point format): New subsubsection.
+
+2008-01-05  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.texinfo (File Options): Remove mention of the attempt to
+	open a core file with the -p option.  Don't list -c as a valid
+	option to attach to a process.
+
+2008-01-05  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdbint.texinfo (Host Conditionals): Remove mention of
+	ALIGN_STACK_ON_ENTRY.
+
+2008-01-05  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdbint.texinfo (Start of New Year Procedure): Add item
+	describing how to update the source and documentation copyright
+	notices.
+
+2007-12-18  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Set Watchpoints): Integrate per-thread
+	watchpoint explanation into the main description of the watchpoint
+	command; update synopses of 'watch', 'rwatch', and 'awatch'
+	commands.
+
+2007-12-18  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Miscellaneous gdb/mi Commands):
+	Document 'pending-breakpoints' feature of
+	-list-features.
+
+2007-12-17  Luis Machado  <luisgpm@br.ibm.com>
+
+	* doc/gdb.texinfo: Add new parameter's description.
+
+2007-12-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Overview): Clarify run-length encoding
+	example.  Remove the restriction on "+" and "-" characters.
+
+2007-12-15  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Host I/O Packets): Fix xref syntax.
+
+2007-12-14  Vladimir Prus  <vladimir@codesourcery.com>
+	
+	* gdb.texinfo (GDB/MI Breakpoint Commands): Document
+	the -f option for -break-insert, remove -r option,
+	and clarify specification of location.
+
+2007-11-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Debugging Programs with Multiple Processes): Correct
+	formatting.
+	(Remote Debugging): Add File Transfer section.
+	(Remote Configuration): Document Host I/O packets.
+	(GDB/MI): Add GDB/MI File Transfer Commands section.
+	(Host I/O Packets): New section in "Remote Protocol".
+	(Packets): Add vFile.
+
+2007-11-17  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Set Breaks, Disabling): Clarify behavior of
+	breakpoints with multiple locations.
+	(Breakpoint Menus): Improve wording.
+	(Output): Fix last change.
+
+2007-11-17  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* Makefile.in (Makefile): Do not depend on target_makefile_frag.
+
+2007-11-15  Doug Evans  <dje@google.com>
+
+	* gdb.texinfo (Symbols): Update output of "maint info symtabs".
+
+2007-11-15  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdbint.texinfo (Native Conditionals): Remove
+	mention of CLEAR_SOLIB.
+	
+2007-11-11  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Print Settings): Add documentation for "set/show
+	print frame-arguments".
+
+2007-11-05  Luis Machado  <luisgpm@br.ibm.com>
+
+	* gdb.texinfo (Output): Update printf command's description.
+
+2007-10-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (PowerPC): Document "set powerpc vector-abi" and "set
+	powerpc soft-float".
+
+2007-10-24  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Files): Correct formatting.  Mention Expat
+	requirement.
+	(Requirements for Building GDB): Expand the list of Expat
+	uses.
+	(Library List Format, Memory Map Format): Mention Expat.
+	(Target Descriptions): Update Expat wording.
+
+2007-10-24  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Register and Memory Data, Target Conditionals):
+	Document that gdbarch_convert_register_p should return zero for no-op
+	conversions.
+
+2007-10-22  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texi (Compiler Characteristics): Move documentation
+	of set_gdbarch_sofun_address_maybe_missing back to ...
+	(Target Conditionals): ... here to fix build break.
+
+2007-10-19  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texi (Target Conditionals): Remove documentation of
+	SOFUN_ADDRESS_MAYBE_MISSING, replaced by ...
+	(Compiler Characteristics): ... documentation of
+	set_gdbarch_sofun_address_maybe_missing.
+
+2007-10-17  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Target Conditionals): Use
+	frame_unwind_register_unsigned in examples instead of
+	frame_unwind_unsigned_register.
+
+2007-10-15  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Predefined Target Types): Add int128
+	and uint128.
+	(Standard Target Features): Add PowerPC features.
+
+2007-10-15  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Maintenance Commands): Document "maint print c-tdesc".
+
+2007-10-12  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texi (Target Conditionals): Remove documentation
+	of and references to DEPRECATED_EXTRACT_STRUCT_VALUE_ADDRESS,
+	gdbarch_extract_return_value, and gdbarch_store_return_value.
+
+2007-10-12  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texi (Target Conditionals): Remove documentation of
+	and references to DEPRECATED_REG_STRUCT_HAS_ADDR.
+
+2007-10-11  Kazu Hirata  <kazu@codesourcery.com>
+
+	* gdb.texinfo: Mention that inaccessible-by-default is on by
+	default.
+
+2007-10-11  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Target Conditionals): Remove VARIABLES_INSIDE_BLOCK.
+
+2007-09-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Setting Watchpoints): Adjust warning text about
+	multi-threaded watchpoints.
+	* gdbint.texinfo (Watchpoints): Describe how watchpoints are
+	checked.  Describe sticky notification.  Expand description
+	of steppable and continuable watchpoints.
+	(Watchpoints and Threads): New subsection.
+
+2007-09-28  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Setting Breakpoints): Revise
+	documentation for pending breakpoints.  Document
+	breakpoints with multiple locations.
+	
+2007-09-19  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Miscellaneous gdb/mi Commands):
+	Document -list-features.
+	
+2007-09-15  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Output): Spell out which features of C's printf are
+	not supported by GDB's printf.
+	(Separate Debug Files): More accurate wording regarding build ID
+	and a reference to the ld manual rather than the Fedora wiki.
+
+2007-09-04  Daniel Jacobowitz  <dan@codesourcery.com>
+	    Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Output Formats): Update 'c' description.  Describe 's'.
+	(Examining Memory): Update mentions of the 's' format.
+	(Automatic Display): Likewise.
+
+2007-09-02  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo: Update the FSF's Back-Cover Text.
+
+2007-09-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Separate Debug Files): Cosmetic quoting removal.
+	Fixed the ``build ID'' name.  New binaries build instructions for the
+	build ID inclusion.  Explain how the commands are specific to the build
+	ID vs. debug link.
+
+2007-09-01  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Separate Debug Files): Fix last change.  Add
+	indexing for ``build ID'' support.
+
+2007-09-01  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.texinfo (Separate Debug Files): Included a BUILD ID description.
+	Enlisted BUILD ID to the debug file searching example.
+	Included a BUILD ID `.note.gnu.build-id' section description.
+	Updated/added the debug files splitting instructions for OBJCOPY.
+
+2007-08-31  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Variable Objects): Adjust docs
+	for -var-info-expression and document
+	-var-info-path-expression.
+
+2007-08-20  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Top): Dedicate manual to the memory of Fred Fish.
+	(title page): Include the dedication in the printed manual, as a
+	separate page after the copyright notice.
+	
+	* gdb.texinfo (The F Reply Packet): Avoid confusing texi2html:
+	don't break a @var across a line.
+
+2007-07-25  Maciej W. Rozycki  <macro@mips.com>
+
+	* Makefile.in (MAKEHTMLFLAGS): Also search the current directory
+	for include files.
+
+2007-07-12  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Server Prefix): New node.  Adapt from existing node
+        in annotate.texinfo.
+        (Command History): Link to new node.
+
+2007-07-05  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdbint.texinfo (PC_LOAD_SEGMENT): Remove description.
+
+2007-07-05  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdbint.texinfo (Target Conditionals): Fix last change.
+
+2007-07-03  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdb.texinfo: Replace following macros by their appropriate gdbarch
+	routines:
+	(TARGET_CHAR_SIGNED, CALL_DUMMY_LOCATION, CANNOT_FETCH_REGISTER)
+	(CANNOT_STORE_REGISTER, GET_LONGJMP_TARGET, POINTER_TO_ADDRESS)
+	(ADDRESS_TO_POINTER, INNER_THAN, FRAME_NUM_ARGS)
+	(HAVE_NONSTEPPABLE_WATCHPOINT, TARGET_SHORT_BIT, TARGET_INT_BIT)
+	(TARGET_LONG_BIT, TARGET_LONG_LONG_BIT, TARGET_FLOAT_BIT)
+	(TARGET_DOUBLE_BIT, TARGET_LONG_DOUBLE_BIT, TARGET_PTR_BIT
+	(TARGET_ADDR_BIT, SP_REGNUM, PC_REGNUM, PS_REGNUM, FP0_REGNUM)
+	(STAB_REG_TO_REGNUM, ECOFF_REG_TO_REGNUM, DWARF_REG_TO_REGNUM)
+	(SDB_REG_TO_REGNUM, DWARF2_REG_TO_REGNUM, BELIEVE_PCC_PROMOTION)
+	(CONVERT_REGISTER_P, REGISTER_TO_VALUE, VALUE_TO_REGISTER)
+	(POINTER_TO_ADDRESS, ADDRESS_TO_POINTER, EXTRACT_RETURN_VALUE)
+	(STORE_RETURN_VALUE, SKIP_PROLOGUE, MEMORY_INSERT_BREAKPOINT)
+	(BREAKPOINT_FROM_PC, MEMORY_REMOVE_BREAKPOINT, DECR_PC_AFTER_BREAK)
+	(ADDR_BITS_REMOVE, TARGET_PRINT_INSN, SKIP_TRAMPOLINE_CODE)
+	(IN_SOLIB_RETURN_TRAMPOLINE, NAME_OF_MALLOC, ADDRESS_CLASS_TYPE_FLAGS)
+	(ADDRESS_CLASS_TYPE_FLAGS_TO_NAME, ADDRESS_CLASS_TYPE_FLAGS_P).
+	(ADDRESS_CLASS_NAME_to_TYPE_FLAGS, ADJUST_BREAKPOINT_ADDRESS)
+	(PRINT_FLOAT_INFO, PRINT_VECTOR_INFO, INTEGER_TO_ADDRESS)
+	(SKIP_PERMANENT_BREAKPOINT, TARGET_VIRTUAL_FRAME_POINTER)
+	(SOFTWARE_SINGLE_STEP_P)
+
+	(push_dummy_call, stabs_argument_has_addr, unwind_sp, unwind_pc)
+	(print_registers_info, push_dummy_code, unwind_dummy_id): Rework
+
+	(REGISTER_CONVERT_TO_TYPE, END_OF_TEXT_DEFAULT, GDB_MULTI_ARCH)
+	(GDB_TARGET_IS_HPPA, DEPRECATED_GET_SAVED_REGISTER)
+	(SYMBOLS_CAN_START_WITH_DOLLAR, DEPRECATED_INIT_EXTRA_FRAME_INFO)
+	(DEPRECATED_INIT_FRAME_PC, DEPRECATED_SIGTRAMP_START)
+	(IN_SOLIB_CALL_TRAMPOLINE, NO_HIF_SUPPORT, REGISTER_CONVERTIBLE)
+	(DEPRECATED_REGISTER_RAW_SIZE, PARM_BOUNDARY, DEPRECATED_STACK_ALIGN)
+	(PROLOGUE_FIRSTLINE_OVERLAP, DEPRECATED_POP_FRAME, STEP_SKIPS_DELAY)
+	(TARGET_COMPLEX_BIT, TARGET_DOUBLE_COMPLEX_BIT)
+	(OS9K_VARIABLES_INSIDE_BLOCK, KERNEL_U_ADDR, KERNEL_U_ADDR_HPUX)
+	(REGISTER_U_ADDR, U_REGS_OFFSET, DEBUG_PTRACE): Remove description.
+
+	(Converting an existing Target Architecture to Multi-arch): Remove
+	 section.
+
+	(gdbarch_unwind_pc, gdbarch_unwind_sp): Renew code example.
+	(gdbarch_addr_bits_remove): Add code example.
+
+	* gdb.texinfo: Replace REGISTER_NAME by gdbarch_register_name.
+
+2007-07-02  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Remote Configuration): Document library-info-packet.
+	Add other missing entries.  Adjust the table size to fit.
+	(Stop Reply Packets): Use @itemize instead of @enumerate.  Document
+	stop reasons including the new "library" event.
+	(General Query Packets): Adjust table widths for qSupported.  Mention
+	qXfer:libraries:read reply to qSupported and document the new packet.
+	(Library List Format): New section.
+
+2007-07-01  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.texinfo (Attach): Fixed GDB exit inferior detachment.
+
+2007-06-28  Michael Snyder  <msnyder@svkmacdonelllnx>
+
+	* gdbint.texinfo (Table, Tuple and List Functions) Fix typo.
+
+2007-06-25  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdbint.texinfo (Register and Memory Data): Break sections
+	into nodes and add a menu.
+
+2007-06-21  Maciej W. Rozycki  <macro@mips.com>
+
+	* gdb.texinfo (Examining Memory): Document the new behaviour.
+
+2007-06-21  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Standard Target Features): Document
+	m68k features.
+
+2007-06-18  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (General Query Packets): Document qOffsets changes.
+
+2007-06-13  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Target Description Format): Add version attribute
+	for <target>.
+
+2007-06-13  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (MIPS Features): Document org.gnu.gdb.mips.linux.
+
+2007-06-13  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (MIPS Features): New subsection.
+
+2007-06-12  Ulrich Weigand  <uweigand@de.ibm.com>
+	    Markus Deuling  <deuling@de.ibm.com>
+
+	* gdb.texinfo (General Query Packets): Document qXfer:spu:read
+	and qXfer:spu:write packets and mention them under qSupported.
+
+2007-06-12  Ulrich Weigand  <uweigand@de.ibm.com>
+	    Markus Deuling  <deuling@de.ibm.com>
+
+	* gdb.texinfo (Architectures): Add new SPU section to document
+	Cell Broadband Engine SPU architecture specific commands.
+
+2007-06-09  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Editorial
+	comments.
+
+2007-06-07  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Emacs): Describe GDB under Emacs 22.1.
+
+2007-05-29  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Overview): Doc fix.
+
+2007-05-22  Maciej W. Rozycki  <macro@mips.com>
+
+	* gdb.texinfo (Remote Configuration): Document "set/show
+	remoteflow".
+
+2007-05-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (MIPS): Remove documentation for set mips
+	saved-gpreg-size, show mips saved-gpreg-size, and set mips
+	stack-arg-size.
+
+2007-05-14  Bob Wilson  <bob.wilson@acm.org>
+	
+	* all-cfg.texi (GDBTUI): New.
+	* gdb.texinfo (Mode Options): Use GDBTUI variable.
+	(TUI, TUI Overview, TUI Keys, TUI Single Key Mode, TUI Commands)
+	(TUI Configuration): Edit to improve clarity and fix problems of
+	both style and content.
+	
+2007-05-11  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* observer.texi (GDB Observers): New observer "new_objfile".
+
+2007-05-08  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texinfo (Native Conditionals): Remove USE_PROC_FS.
+
+2007-04-14  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Document
+	frozen variables objects.
+	
+2007-04-13  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Memory): Reference Remote Debugging chapter.
+	(Character Sets, Caching Data of Remote Targets): Likewise.
+	(Targets): Delete Remote node.  Move its text...
+	(Debugging Remote Programs): ...to here.  Delete description
+	of the "remote" command.
+	(Remote configuration): Delete description of "set remotedevice"
+	and "show remotedevice".
+	(Embedded Processors): Delete H8/300, H8/500, and SH nodes.
+
+2007-04-11  Bob Wilson  <bob.wilson@acm.org>
+
+        * gdb.texinfo (Contributors, Continuing and Stepping)
+        (Fortran Defaults, HPPA, TUI, TUI Commands, Configure Options)
+        (General Query Packets, File-I/O Remote Protocol Extension)
+        (Protocol Basics, The F Reply Packet, Write)
+        (Protocol-specific Representation of Datatypes, Memory Transfer):
+        Fix hyphenation, punctuation and grammar problems.
+        (Cygwin Native): Likewise.  Also fix misuse of @pxref and use
+        'section' instead of 'subsection' in the text.
+        (Non-debug DLL Symbols): Avoid 'subsubsection' in the text.
+        (i386): Remove period from section name.
+	(Installing GDB, Requirements, Running Configure,  Separate Objdir)
+	(Config Names, Configure Options): Use @file{configure}.
+
+2007-04-11  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Writing Tests): Mention gdb_test_multiple
+	and tab expansion.
+
+2007-04-10  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (SOM): Correct location of the SOM reader.
+
+2007-04-02  Bob Wilson  <bob.wilson@acm.org>
+	
+	* gdb.texinfo: Consistently capitalize all significant words in
+	node names, chapter titles, section titles, and headings.  Update
+	cross references to match.
+	(Starting and Stopping Trace Experiment): Make node name plural.
+	(Breakpoint related warnings): Hyphenate "Breakpoint-related".
+	
+2007-03-30  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* gdb.texinfo (WinCE): Delete obsolete subsection.
+
+2007-03-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (M68K): Remove obsolete ROM monitors.
+	* gdbint.texinfo (DWARF 1): Delete section and other dwarfread.c
+	references.
+
+2007-03-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Startup): Delete references to some alternate
+	names for .gdbinit.
+	(Thread): Remove LynxOS reference.
+	(Tandem ST2000): Delete target-specific documentation.
+	* gdbint.texinfo (Symbol Handling): Remove mention of NLM.
+	(Target Architecture Definition): Remove mention of GDB_OSABI_NETWARE
+	and GDB_OSABI_LYNXOS.
+
+2007-03-29  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texi (Native Conditionals): Remove PTRACE_ARG3_TYPE.
+
+2007-03-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* gdbint.texinfo (Target Conditionals): Remove mention of
+	DEPRECATED_REMOTE_BREAKPOINT, DEPRECATED_BIG_REMOTE_BREAKPOINT,
+	and DEPRECATED_LITTLE_REMOTE_BREAKPOINT.
+
+2007-03-27  Brooks Moses  <brooks.moses@codesourcery.com>
+
+	* Makefile.in: Add "pdfdir" installation
+	directory, PDFTEX macro, support for "install-pdf" target,
+	and rules for making a pdf version of refcard.texi.
+	* refcard.tex: Specify paper size for PDF output.
+
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+	
+	* gdb.texinfo (Omissions from Ada, Additions to Ada): Wrap long lines.
+	
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+	
+	* gdb.texinfo (Invoking GDB): Use @value{GDBP}.
+	(Source Path, Character Sets, Macros, Define)
+	(GDB/MI Result Records, GDB/MI Simple Examples)
+	(GDB/MI Program Execution, GDB/MI File Commands)
+	(Maintenance Commands, Packets, File-I/O Overview): Use @value{GDBN}.
+	(Bug Reporting): Use @value{GCC}.
+	
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+	
+	* gdb.texinfo (Help): Fix formatting of examples.
+	(Variables): Use @ifnotinfo instead of @iftex.
+	(Non-debug DLL symbols): Use @ref instead of @pxref.
+	(Sparclet File): Use @samp instead of quotes.
+	
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (Variables, C): Update cross reference to GCC docs.
+
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (Top): Move TUI and Annotations menu entries to match
+	the order of the nodes.
+	(C Operators, C Constants, Debugging C): Remove extra menus.
+	(Method Names in Commands): Do not specify next/prev/up nodes.
+	
+2007-03-26  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (File Options): Add missing parenthesis.
+	(Breakpoints, Special Fortran commands, PowerPC): Fix typos.
+
+2007-02-26  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Monitor commands for gdbserver): New subsection.
+
+2007-02-26  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* src/gdb/doc/gdb.texinfo (Standard Target Features): Mention
+	case insensitivity.
+	(ARM Features): Describe org.gnu.gdb.xscale.iwmmxt.
+
+2007-02-18  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Top): Put Appendix A after numbered sections.
+	(Files): Add section name to argument list for pxref.
+	(Non-debug DLL symbols): Don't use `see' for pxref.
+	(Embedded Processors): Fix typo.
+	(GDB/MI Breakpoint Commands): Execution commands generate
+	*stopped not ^done.
+
+2007-02-13  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Describe meanings of
+	values for in_scope.  Mention that only root variables can be
+	updated.
+	(GDB/MI Development and Front Ends): Explain new values may be
+	added to existing fields.
+
+2007-02-08  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (-target-disconnect): Use @smallexample.
+	(Requirements): Add anchor for Expat.  Update description.
+	(Target Descriptions): Mention Expat.
+	(Target Description Format): Document new elements.  Use
+	@smallexample.
+	(Predefined Target Types, Standard Target Features): New sections.
+	* doc/gdbint.texinfo (Target Descriptions): New section.
+
+2007-02-07  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Target Description Format): Add section on XInclude.
+
+2006-02-03  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Miscellaneous Commands): Describe the new
+	command -enable-timings.
+
+2007-02-02  Markus Deuling  <deuling@de.ibm.com>  (tiny change)
+
+        * gdbint.texinfo (Operation System ABI Variant Handling): Update
+	descriptions for new/deleted elements in gdb_osabi.  Add missing
+	description for function generic_elf_osabi_sniff_abi_tag_sections.
+
+2007-01-29  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Maintenance Commands): Add documentation for
+	the new "maint print target-stack" command.
+
+2007-01-26  Jan Kratochvil <jan.kratochvil@redhat.com>
+	    Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo: Describe CHAR array vs. string identification rules.
+
+2007-01-26  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Compilation, Files, Bootstrapping, Bug Reporting):
+	Use @value{NGCC} instead of @value{GCC}.
+
+2007-01-20  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>  (tiny change)
+
+	* agentexpr.texi: Fix typos.
+	* annotate.texinfo: Likewise.
+	* gdb.texinfo: Likewise.
+	* gdbint.texinfo: Likewise.
+	* observer.texi: Likewise.
+	* stabs.texinfo: Likewise.
+
+2007-01-20  Markus Deuling  <deuling@de.ibm.com>  (tiny change)
+
+	* gdbint.texinfo (Support Libraries): Remove mmalloc
+	entry.  Describe readline library.
+
+2007-01-09  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Target Descriptions): New section.
+	(General Query Packets): Add QPassSignals anchor.  Mention
+	qXfer:features:read under qSupported.  Expand mentions of
+	qXfer:memory-map:read and QPassSignals.  Document
+	qXfer:features:read.
+
+2007-01-08  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Commands to specify files): Describe
+	"set sysroot" and "show sysroot".
+	(Using the `gdbserver' program): Lowercase argument
+	to @var.  Expand description of setting up GDB on the
+	host.
+
+2007-01-05  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Set Catchpoints): Add documentation for the new
+	catch exception, catch exception unhandled, and catch assert
+	commands.
+
+2007-01-04  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Debugging Output): Document "set debug xml"
+	and "show debug xml".
+
+2007-01-04  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Compiler Warnings): Update for -Wall use.
+
+2007-01-01  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdbint.texinfo (Start of New Year Procedure): Add missing item.
+
+2006-12-08  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Wrap historical
+	note in @ignore, to be removed later if nobody complains.
+
+2006-12-04  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Describe -c option
+	of -var-delete.
+
+2006-11-22  Vladimir Prus  <vladimir@codesourcery.com>
+        
+	* gdb.texinfo (Setting breakpoints): Document
+        automatic software/hardware breakpoint usage and
+        the "set breakpoint auto-hw" command.
+
+2006-11-21  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Memory Access Checking): New.
+
+2006-11-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Remote configuration): Mention
+	"pass-signals-packet".
+	(General Query Packets): Document QPassSignals.  Fix
+	a typo.
+
+2006-11-14  Maxim Grigoriev  <maxim@tensilica.com>
+
+	* gdb.texinfo (Contributors): Add contributors of Xtensa port.
+
+2006-11-14  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Remote configuration): Rewrite documentation for
+	packet configuration commands.
+	(OS Information): Adjust reference to qXfer:auxv:read.
+	(General Query Packets): Remove references to read-aux-vector-packet
+	and set remote get-thread-local-storage-address.
+
+2006-11-10  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Target Architecture Definition): Add new
+	Initializing a New Architecture section.
+
+2006-10-31  David Taylor  <dtaylor@emc.com>
+
+	* stabs.texinfo (Macro define and undefine): New node describing
+	stabs for #define and #undef.
+
+2006-10-27  Andreas Schwab  <schwab@suse.de>
+
+	* gdb.texinfo (Processes): Rename "detach-fork" to "detach fork".
+
+2006-10-21  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Breakpoints, Set Watchpoints): Elaborate and
+	clarify on the possible meanings of ``expression'' watched by
+	watchpoints.  Add indexing.
+	(Prompting, Errors, Invalidation, Annotations for Running)
+	(Source Annotations): Fix index entries by adding "annotation" to
+	them, to discriminate from index entries that point to the more
+	general topic descriptions.
+
+2006-10-17  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Target Vector Definition): Move most
+	content into Existing Targets.  Add a menu.
+	(Existing Targets): New section, moved from Target Vector
+	Definition.  Use @subsection.
+	(Managing Execution State): New section.
+
+2006-10-16  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (ST2000): Use Ctrl- instead of C-.
+
+2006-10-15  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Sample Session, Invocation, Quitting GDB)
+	(Command Syntax, Signals, Backtrace, Connecting)
+	(Remote configuration, Renesas Boards, Console I/O): Fix last
+	change: use Ctrl- instead of C-, except wrt Emacs.
+	(File-I/O Examples): Put Ctrl-c in @kbd.
+	(Cygwin Native, File-I/O Overview, The Ctrl-C message)
+	(Console I/O): Use @samp with Ctrl-.
+	(Signals, Set Breaks, Set Watchpoints): Document optional
+	arguments to `info signals'  `handle', `info breakpoints', and
+	`info watchpoints'.
+
+2006-10-14  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Backtrace): Fix last change.
+
+2006-10-14  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Backtrace): Order correctly and add other cases.
+
+2006-10-10  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (Command Syntax, Connecting, Remote configuration)
+	(Renesas Boards, ST2000, TUI Keys, TUI Single Key Mode)
+	(TUI Commands, Emacs, Console I/O): Fix @key and @kbd usage.
+
+2006-09-21  Vladimir Prus  <vladimir@codesourcery.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Packets): Document vFlashErase,
+	vFlashWrite and vFlashDone packets.
+	(General Query Packets): Document qXfer:memory-map:read.
+	Add a new feature for qXfer:memory-map:read.
+	(Memory map format): New section.
+	(Target Commands): Mention that gdb can write flash.
+
+2006-09-21  Vladimir Prus  <vladimir@codesourcery.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Memory Region Attributes): Mention target-supplied
+	memory regions and "mem auto".
+
+2006-09-21  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* gdbint.texinfo (Array Containers): New section.
+
+2006-09-17  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Stack Manipulation): Mention that
+	-stack-list-arguments HIGH_FRAME argument can be larger then the
+	actual number of frames.
+
+2006-09-07  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Stack Manipulation): Mention that
+        -stack-list-locals HIGH_FRAME argument can be larger then the
+        actual number of frames.
+
+2006-09-02  Bob Wilson  <bob.wilson@acm.org>
+
+	* gdb.texinfo (Packets, Stop Reply Packets, General Query Packets,
+	Register Packet Format, Tracepoint Packets): Fix spelling errors.
+
+2006-09-02  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdbint.texinfo (Overall Structure): New section "Source Tree
+	Structure".
+
+2006-08-17  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Stop Reply Packets): Note similarity of 'S' and 'T'
+	responses.
+
+2006-08-08  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Source Path): Add documentation for new
+	substitute-path commands.
+
+2006-08-08  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Installing GDB): Update menu.  Move text to...
+	(Running Configure): ...here.
+	(Requirements): New node.  Mention expat.
+
+2006-08-08  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (Target Commands): Remove 
+	'set download-write-size' and 'show download-write-size'.
+
+2006-08-01  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* stabs.texinfo (Member Type Descriptor): Correct example for
+	pointer to member types.
+
+2006-07-21  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Optional warnings and messages): Add
+	'set/show trace-commands'.
+	(Command files): Add '-v' to source command.
+
+2006-07-12  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (OS Information): Update qPart reference to
+	qXfer.
+	(Remote configuration): Likewise.
+	(Overview): Move @cindex to the start of a paragraph.  Talk
+	about binary data encoding.
+	(Packets): Refer to the overview for the details of the X
+	packet encoding.
+	(General Query Packets): Remove qPart description.  Add qXfer
+	description.  Add an anchor to qSupported.  Correct feature
+	table title.  Add a new feature for qXfer:auxv:read.
+	(Interrupts): Add a missing parenthesis.
+
+2006-07-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* doc/gdb.texinfo (KOD): Remove node.
+	(GDB/MI Kod Commands): Remove commented out node.
+
+2006-07-01  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (GDB/MI Output Syntax, GDB/MI Simple Examples)
+	(GDB/MI Breakpoint Commands, GDB/MI Program Context)
+	(GDB/MI Thread Commands, GDB/MI Program Execution)
+	(GDB/MI Stack Manipulation, GDB/MI Variable Objects)
+	(GDB/MI Data Manipulation, GDB/MI Symbol Query)
+	(GDB/MI File Commands, GDB/MI Target Manipulation)
+	(GDB/MI Miscellaneous Commands): Change (@value{GDBP})->(gdb),
+	since the MI prompt is hard-wired into the code.
+
+2006-07-01  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Compatibility with CLI): Qualify more carefully.
+	(GDB/MI Simple Examples): Use @subheading for "A Bad Command".
+	(GDB/MI Data Manipulation): Remove description of unimplemented
+	display related commands as variable objects perform this function
+	and are superior: -display-delete, -display-disable,
+	-display-enable, -display-insert and -display-list.  Move
+	-environment-cd, -environment-directory, -environment-path
+	and -environment-pwd to "Program Context".
+	(GDB/MI Program Control): Rename to "Program Execution".  Move
+	-exec-arguments -exec-abort to...
+	(GDB/MI Program Context): ...here.  New node split from "Data
+	 Manipulation".
+
+2006-06-21  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Remote configuration): Document set / show
+	remote supported-packets.
+	(General Query Packets): Document qSupported packet.
+
+2006-06-10  Sandra Loosemore <sandra@codesourcery.com>
+
+	* gdb.texinfo (File-I/O overview): Copy edit for grammar, spelling,
+	and font markup.
+	(Protocol basics): Likewise.
+	(The F request packet): Likewise.
+	(The F reply packet): Likewise.
+	(Memory transfer): Move this node to be a subsubsection of
+	"Protocol specific representation of datatypes".
+	(The Ctrl-C message): More copy editing.
+	(Console I/O): Likewise.
+	(The isatty call): Delete this node, and merge its content into
+	the "isatty" node.  Fixed references elsewhere.
+	(The system call): Delete this node, and merge its content into
+	the "system" node.  Fixed references elsewhere.
+	(open): Reformat to use @table, and add appropriate font markup.
+	(close): Likewise.
+	(read): Likewise.
+	(write): Likewise.
+	(lseek): Likewise.
+	(rename): Likewise.
+	(unlink): Likewise.
+	(stat/fstat): Likewise.
+	(gettimeofday): Likewise.
+	(isatty): Likewise.
+	(system): Likewise, plus minor changes to fix confusing wording.
+	(Integral datatypes): Fix font markup.
+	(Pointer values): Likewise.
+	(struct stat): Fix markup to use @table, plus minor copy editing.
+	(struct timeval): Fix font markup, plus minor copy editing.
+	(Constants): Minor copy editing.
+	(Errno values): Add font markup.
+	(File-I/O Examples): Likewise.
+
+2006-06-10  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI): Remove duplicate acknowledgements.
+	(GDB/MI Simple Examples): Move node up one level.  Use real
+	examples.
+	(GDB/MI Compatibility with CLI): Update.
+	(GDB/MI Result Records): Add "connected" and "exit" result
+	classes.
+	(GDB/MI Stream Records): Clarify target output.
+	(GDB/MI Command Description Format): Modify example description.
+	(GDB/MI Breakpoint Table Commands): Rename to...
+	(GDB/MI Breakpoint Commands): ...this
+	(GDB/MI Breakpoint Commands): Add optional thread field.
+	(GDB/MI Program Control): Add an introduction.  Move "Program
+	termination" examples into exec-run description.
+	(GDB/MI File Commands): Mention similar CLI commands.
+	(GDB/MI Miscellaneous Commands): Move to end.  Mention "show version"
+	is similar to "-gdb-version".
+
+2006-06-09  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Symbols): Fix "(gdb)"=>"(@value{GDBP})".
+
+2006-06-02  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Development and Front Ends): Use
+	sourceware.org for mailing lists.
+	(GDB/MI File Commands): New node split from Program Control.
+
+2006-06-01  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Development and Front Ends): New node.
+
+2006-05-22  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Cygwin Native): Fix last change.
+
+2006-05-22  Christopher Faylor  <cgf@timesys.com>
+
+	* gdb.texinfo (Cygwin Native): Document set/show cygwin-exceptions.
+
+2006-05-15  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdbint.texinfo (Algorithms): Correct spelling and punctuation.
+	(Releasing GDB, Testsuite): Remove details for including DejaGnu.
+
+2006-05-14  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (General Query Packets): Recommend not starting
+	new packets with qC and clarify.
+
+2006-05-13  Gaius Mulley  <gaius@glam.ac.uk>
+
+	* gdb.texinfo (M2 Types): New section.
+
+2006-05-10  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* agentexpr.texi: Add a copyright and license notice.
+	* observer.texi: Likewise, with GPL clause for function prototypes.
+	Remove trailing whitespace.
+
+2006-05-05  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (General Query Packets): Document conventions for
+	terminating packet names, and their violations.
+
+2006-05-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (GDB_DOC_SOURCE_INCLUDES): Update for readline 5.1.
+	* gdb.texinfo: Likewise.
+
+2006-05-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Remote Configuration): Remove "set remotedebug"
+	and "show remotedebug".
+	(Debugging Output): Add additional index entries.
+
+2006-04-27  Michael Snyder  <msnyder@redhat.com>
+
+	* gdb.texinfo (delete-fork): Command renamed to "delete fork".
+
+2006-04-22  Andrew Cagney  <cagney@redhat.com>
+
+	* gdb.texinfo (Contributors): Credit frame unwinder contributors.
+	* gdbint.texinfo (Algorithms): Fix errors in frame documentation.
+
+2006-04-18  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (x86 Watchpoints, Target Conditionals): Update insert
+	and remove breakpoint prototypes.
+	(Watchpoints): Move description of target_insert_hw_breakpoint and
+	target_remove_hw_breakpoint ...
+	(Breakpoints): ... to here.  Document target_insert_breakpoint and
+	target_remove_breakpoint.
+
+2006-04-17  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdb.texinfo (Packets): Note that 'addr' arguments to s, S, c,
+	and C packets are optional.
+
+2006-04-14  Frederic Riss  <frederic.riss@st.com>
+
+	* gdb.texinfo (Specifying source directories): Update the description
+	of the source file search to reflect the fact that the source path
+	always contains at least $cdir and $cwd.
+
+2006-03-31  Michael Snyder  <msnyder@redhat.com>
+
+	* gdb.texinfo: Update copyright dates.
+
+2006-03-31  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Overview): Add an index entry to "empty response".
+
+2006-03-28  Jim Blandy  <jimb@codesourcery.com>
+
+	* gdbint.texinfo (Prologue Analysis): New section.
+
+2006-03-07  Jim Blandy  <jimb@red-bean.com>
+
+	* gdb.texinfo (Connecting): Document 'target remote pipe'.
+
+	* gdb.texinfo (Target Commands): Update text describing how to
+	specify a target.  Refer to the detailed section on remote
+	debugging, not the brief mention.
+
+	* gdb.texinfo (Connecting): Organize the different 'target remote'
+	connection methods into a table.  Add a 'target remote' index
+	entry. (!!!)
+
+2006-02-17  Fred Fish  <fnf@specifix.com>
+
+	* gdb.texinfo (Symbols): Update descriptions of 'whatis' and
+	'ptype' commands to reflect the fact that the only significant
+	difference between them is that ptype prints the complete type
+	description instead of just the name.
+
+2006-02-13  Wu Zhou  <woodzltc@cn.ibm.com>
+
+	* gdbint.texinfo (Watchpoints): Delete
+	TARGET_REGION_SIZE_OK_FOR_HW_WATCHPOINT.
+
+2006-02-10  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Breakpoint Table Commands): Add fullname and
+	times fields where needed.  Fix typos.  Update general form given
+	for output of -break-insert.
+	(GDB/MI): Abbreviate some unnecessarily long fullnames.
+
+2006-02-06  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdbint.texinfo (Symbol Handling): Add a section
+	on memory management.
+
+2006-02-06  Vladimir Prus  <ghost@cs.msu.su>
+
+	* gdb.texinfo (Breakpoint table commands): Document the fullname
+	field in -break-list output.
+
+2006-02-03  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Cygwin Native): Fix typos.  Clarify the types of
+	debugging information produced by the various "set debug..."
+	options.
+
+2006-02-01  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Files): Remove obsolete bits from the description
+	of "symbol-file".
+
+2006-01-25  Jim Blandy  <jimb@redhat.com>
+
+	* gdbint.texinfo (Testsuite): Explain how to run selected tests.
+
+2006-01-24  Jim Blandy  <jimb@redhat.com>
+
+	* gdbint.texinfo (Frames): Document the basics of GDB's register
+	unwinding model, and explain the existence of the "sentinel" frame.
+
+2006-01-23  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Choosing files): Mention that -directory is used
+	for script files.
+	(Specifying source directories): Likewise.
+	(Command files): Explain how script files are found.
+
+2006-01-21  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Backtrace): Describe how to get backtrace of all
+	the threads in a multi-threaded program.
+	(Threads): The threadno argument of "thread apply" can be a range
+	of numbers.
+
+2006-01-18  Jim Blandy  <jimb@redhat.com>
+
+	* gdbint.texinfo (Coding): Add entry for -Wno-pointer-sign to list
+	of warning flags.
+
+2006-01-13  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Sequences): Improve menu annotations.
+	(Define): Add index entries for arguments of user-defined
+	commands.  Move the description of flow-control commands...
+	(Command Files): ...to here.  Document loop_break and
+	loop_continue.
+	(Define, Command Files): Document `end' and add index entries for
+	it.
+
+2006-01-04  Michael Snyder  <msnyder@redhat.com>
+
+	* gdb.texinfo: Add documentation for linux-fork.
+	* gdbint.texinfo: Add internal documentation for checkpoints. 
+
+2006-01-02  Paul N. Hilfinger  <hilfinger@gnat.com>
+
+	* gdb.texinfo (Omissions from Ada): Document that there is now
+	limited aggregate support.
+
+2005-12-28  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Registers): Describe how to refer to SSE and MMX
+	registers and the likes.
+
+2005-12-24  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Target Commands, Bug Reporting, File Options)
+	(Symbols): Fix usage of "e.g.".
+	(Memory Region Attributes): Fix usage of "etc."
+
+	* gdbint.texinfo (libgdb, Symbol Handling, Native Debugging)
+	(Coding): Fix usage of "e.g.".
+
+2005-12-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* stabs.texinfo: 
+	* refcard.tex: 
+	* gpl.texi:
+	* gdbint.texinfo: 
+	* gdb.texinfo: 
+	* gdb-cfg.texi: 
+	* fdl.texi:
+	* annotate.texinfo: 
+	* all-cfg.texi: 
+	* Makefile.in: Add (C) after Copyright.  Update the FSF
+	address.
+
+2005-12-03  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Connecting): Explain that `monitor' is a way to
+	extend GDB with commands for external monitor.
+
+2005-12-02  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Convenience variables): Add init-if-undefined command.
+
+2005-11-25  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdbint.texinfo (Start of New Year Procedure): New chapter.
+
+2005-11-21  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (Tracepoint Packets): Document restrictions on
+	placement of 'R' actions in tracepoint action packets; document
+	dependence of 'X' and 'M' actions on a preceding 'R' action for
+	their registers.
+
+2005-11-19  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (Tracepoint Packets): New node.
+	(General Query Packets): Add entries for the tracepoint packets,
+	referring to the "Tracepoint Packets" node.
+	(Tracepoints): Add reference to "Tracepoint Packets".
+	
+2005-11-18  Kevin Buettner  <kevinb@redhat.com>
+
+	* gdb.texinfo (set remotebreak): Add anchor.
+	(X packet): Likewise.
+	(Remote Protocol): Add new section `Interrupts' and new index
+	entry `interrupts (remote protocol)'.
+
+2005-11-18  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (Packets): Move information out of 'q' and 'Q'
+	entries into the General Query Packets section.  Add a
+	cross-reference to that section.  Drop description of replies, as
+	these are covered in the descriptions of each packet.
+	(General Query Packets): Add introductory text.  Explain naming
+	conventions, and how the end of a name is recognized.
+
+2005-11-17  Kevin Buettner  <kevinb@redhat.com>
+
+	* gdb.texinfo (Remote configuration): Fix typo in description of
+	"set remotebreak" command.
+
+2005-11-16  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (Packets, Stop Reply Packets)
+	(General Query Packets): Various formatting cleanups.
+	- Use @samp for packet contents.
+	- Drop summaries from packet @item lines; the same information appears
+	  immediately below in the description.
+	- Delete paragraph breaks after packet @item commands, so that the
+	  description appears directly to the right of the packet prototype
+	  in the printed manual, if it fits.
+	- Place spaces in packet prototypes between @vars and non-@var
+	  letters, and explain that they're just for formatting.
+	- Use @dots{} instead of '...'.
+	- Fix uses of @code where @var was needed.
+	- Replace "deprecated" markers with English text spelling out the
+	  packet's status and the preferred alternatives.
+	- Remove "(reserved)" markers on 'A' and 'I' packets; it's unclear
+	  what this ever meant.
+	- Remove "(draft)" markers on 'i' packets; nobody has commented on
+	  this for a long time.
+	- Remove "(draft)" markers on 'z' and 'Z' packets; these have been
+	  implemented several times, and have been in use for years.
+
+2005-11-15  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (Packets): Add index entries for 'm' packet
+	disclaimers.
+	
+	* gdb.texinfo (Packets): Clarify lack of restrictions on behavior
+	of stub when processing an 'm' packet.
+
+	* gdb.texinfo (Packets): Mention that packets beginning with
+	letters are reserved once, at the top, instead of actually listing
+	them all and saying "reserved".
+
+2005-11-15  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (User-defined commands): Add $argc. Add missing 'end'.
+	Change @var{$arg0 to @code{$arg0.
+
+2005-11-14  Wu Zhou  <woodzltc@cn.ibm.com>
+
+	* gdb.texinfo (Fortran): Add some words about Fortran debugging.
+
+2005-11-12  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (General Query Packets): Put packets in alphabetical
+	order.  Remove extraneous 'z'.
+
+2005-11-07  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Choosing files): Add --eval-command.
+
+2005-11-04  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Choosing modes): Add --return-child-result.
+
+
+2005-11-01  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* gdb.texinfo (Choosing modes): Add --batch-silent.
+
+2005-10-28  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Fix @pxref usage under
+	"The -var-update Command".
+
+2005-10-03  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Print Settings): Add documentation for set/show
+	print array-indexes.
+
+2005-09-17  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.texinfo (Contributors): Thank Andrew Cagney for releases
+	6.2 and 6.3.
+
+2005-08-27  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (File Options): Don't document --mapped, it's gone
+	since 19-Jan-2004.
+	(Files): Likewise.
+	(Variables, Symbols): Document the "<incomplete type>" message and
+	its reasons.
+
+2005-08-01  Fred Fish  <fnf@specifix.com>
+
+	* gdb.texinfo (SETUP_ARBITRARY_FRAME): Remove obsolete reference.
+
+2005-07-15  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Describe print-values
+	option for -var-list-children and -var-update.
+	(GDB/MI Stack Manipulation): Simplify description of
+	print-values option for -stack-list-locals.
+	(GDB/MI Command Description Format): Clarify.
+	(Mode Options): Spelling of superseded.
+
+2005-07-12  Bob Rossi  <bob@brasko.net>
+
+	* gdb.texinfo (GDB/MI Miscellaneous Commands): Fix -inferior-tty-show
+	corresponding GDB command comment.
+
+2005-07-06  Bob Rossi  <bob@brasko.net>
+
+	* gdb.texinfo (GDB/MI Miscellaneous Commands): Add -inferior-tty-set
+	and -inferior-tty-show.
+	(Input/Output): Document "set/show inferior-tty" and tty alias.
+
+2005-07-02  Nathan J. Williams  <nathanw@wasabisystems.com>
+
+	* gdb.texinfo (Packets): Change description of 'D' packet to note
+	that GDB does wait for a response.
+
+2005-06-22  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (History) Rename "Command History".
+	(Command History): Move node "Server Prefix" from section on
+	Annotations here.
+
+2005-06-19  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Stack Manipulation):
+	Re-instate -stack-info-frame with example.  Say that it gets
+	info on selected frame, not current frame.
+
+2005-06-18  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Server): Clarify that `file' should be used before
+	connecting to the server.
+	(Files): Add an xref to the above description.
+	(Output Formats): More detailed description of the `c' format.
+	(Memory): List explicitly all the formats supported by `x'.
+	(Threads): Add an @cindex entry for "thread apply".
+	(Files): Document the possibility of loading unlinked object
+	files.  Add more indexing for solib-absolute-prefix and
+	--with-sysroot.
+	(Machine Code): Document possible problems with locations in
+	shared libraries.
+	(Backtrace): Document that free-standing environments do not need
+	to have a `main' function.
+
+2005-06-18  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (GDB/MI Stack Manipulation): Remove reference to
+	-stack-info-frame.
+
+2005-06-07  Andrew Cagney  <cagney@gnu.org>
+
+	* gdb.texinfo (Contributors): Note the original multi-arch
+	contributors.
+
+2005-06-03  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Registers): Add index entries for the standard
+	registers.
+	(Frames): Add cross-reference from frame pointer description to
+	the Registers node.
+	(Annotations Overview): Fix the reference to GDB name.
+
+2005-06-01  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Set Watchpoints): Remove @vindex entry for
+	can-use-hw-watchpoints.
+
+2005-05-28  Bob Rossi  <bob@brasko.net>
+
+	* gdb.texinfo (GDB/MI Out-of-band Records): Add bullet enumerating
+	the possible reasons why an exec async record would be returned to FE.
+
+2005-05-26  Andrew Cagney  <cagney@gnu.org>
+
+	* gdb.texinfo: Note that Elena Zannoni, Fernando Nasser, and
+	Andrew Cagney implemented the original GDB/MI.
+
+2005-05-23  Orjan Friberg  <orjanf@axis.com>
+
+	* gdb.texinfo (CRIS): Update the cris-version and cris-dwarf2-cfi
+	documentation.  Add documentation for cris-mode.
+
+2005-05-20  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Numbers): Explain the example and make the wording
+	more acurate.
+
+2005-05-17  Daniel Jacobowitz  <dan@codesourcery.com>
+	    Dennis Brueni  <dennis@slickedit.com>
+
+	* gdb.texinfo (GDB/MI Breakpoint Table Commands)
+	(GDB/MI Data Manipulation, GDB/MI Program Control)
+	(GDB/MI Stack Manipulation): Update examples to include the fullname
+	attribute in stack frames.
+
+2005-05-12  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Startup): Fix last change.  Treat gdb.ini like we
+	do with other non-standard names of init files.
+
+2005-05-11  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Command Files): Move the description of the startup
+	from here...
+	(Startup): ...to this new subsection of the Invocation chapter.
+	Rearrange the description of init files more logically and add a
+	cross-reference to "Command Files".  Document the special gdbinit
+	name for CISCO 68k.  Expand the description of what GDB does
+	during startup.
+	(History): Add index entry for HISTSIZE.
+
+2005-05-02  Mark Kettenis  <kettenis@gnu.org>
+
+	* gdb.texinfo (Files): Remove documentation for auto-solib-limit.
+
+2005-05-02  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (SVR4 Process Information, The isatty call)
+	(The system call): Don't use foo(N) notation for man pages and
+	functions.
+	(Compilation, DJGPP Native): Improve wording.
+
+2005-04-27  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Backtrace): Describe backtraces with arguments that
+	were optimized away.
+
+2005-04-22  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Remote configuration): Document "set/show
+	get-thread-local-storage-address".  Add cross-reference to the
+	description of the qGetTLSAddr packet.
+	(General Query Packets): Mention "set remote
+	get-thread-local-storage-address" and add a reference to its
+	description.
+
+2005-04-19  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Backtrace): Describe 'bt full'.
+
+2005-04-17  Nick Roberts  <nickrob@snap.net.nz>
+
+	* gdb.texinfo (Mode Options): Fix typo.
+	(GDB/MI): Describe how to invoke GDB/MI.
+
+2005-04-16  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (OS Information): Renamed from Auxiliary Vector; all
+	references changed.  Add description of "info udot".
+	(Files): Document "set/show stop-on-solib-events".
+	(M32R/D): Document "set/show download-path", "set/show
+	board-address", "set/show server-address", "upload", "tload".
+	Document "sdireset", "sdistatus", "debug_chaos", "use_debug_dma",
+	"use_mon_code", "use_ib_break", "use_dbt_break".
+	(Maintenance Commands): Improve indexing.
+	(Target Commands): Document "set/show hash", "set/show debug
+	monitor".
+	(SVR4 Process Information): Document "info pidlist" and "info
+	meminfo".  Document "set/show procfs-tarce" and "set/show
+	procfs-file".  Document "proc-trace-*" and "proc-untrace-*".
+	(Symbols, The Print Command with Objective-C): Improve indexing.
+	(Objective-C): Add references to "info classes" and "info
+	selectors".
+	(Debugging Output): Improve wording.  Document "set/show debug
+	solib-frv".  Fix "set/show debugvarobj".
+	(Set Breaks): Add index entry for "hardware breakpoints".
+	(Renesas ICE): Document "e7000", "ftplogin", "ftpload", "drain",
+	and "set/show usehardbreakpoints".
+	(MIPS Embedded): Document "se/show syn-garbage-limit", "set/show
+	monitor-prompt", "set/show monitor-warnings", "pmon".
+	(ARM): Document "rdilogfile", "rdilogenable", "set/show
+	rdiromatzero", "set/show rdiheartbeat".
+	(PowerPC): Document SDS-specific commands "set/show sdstimeout",
+	"sds".
+	(Embedded Processors): Document the "sim" command.
+	(Remote): Document the "remote" command.
+	(DJGPP Native): Document the "info serial" command.
+	(Threads): Document "maint info sol-threads".
+	(Files): Document "nosharedlibrary", "add-symbol-file-from-memory".
+	(Set Breaks): Improve indexing.
+	(Command Syntax): Add a reference to dont-repeat.
+	(Define): Document "dont-repeat".
+	(TUI Commands): Document "tabset".
+	(WinCE): New subsection.  Document "set/show remotedirectory",
+	"set/show remoteupload", "set/show remoteaddhost".
+
+2005-04-15  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Hurd Native): New subsection, documents
+	Hurd-specific commands.
+	(Maintenance Commands): Add cross-reference to "Debugging Output".
+	(Debugging Output): Document "set/show debug lin-lwp".
+	(MIPS): Improve documentation of heuristic-fence-post.  Document
+	"set/show mips abi", "set/show mips saved-gpreg-size", "set/show
+	mips stack-arg-size", "set/show mips mask-address", "set/show mips
+	remote-mips64-transfers-32bit-regs", "set/show debug mips".
+	(ARM): Document ARM-specific commands.
+	(AVR): New section.  Document "info io_registers".
+	(CRIS): New section.  Document "set/show cris-version" and
+	"set/show cris-dwarf2-cfi".
+	(HPPA): New section.  Document "set/show debug hppa" and "maint
+	print unwind".
+	(Neutrino): New subsection.  Document "set/show debug nto-debug".
+	(Super-H): New section.  Document the "regs" command.
+	(Debugging Output): Document "set/show debug aix-thread".
+
+2005-04-09  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Print Settings): Document "set/show print
+	pascal_static-members", "set print repeats", "show print
+	null-stop".  Improve indexing.  Fix documentation of "set print
+	union".
+	(Pascal): New section.
+	(Supported languages): Rename from "Support"; all references
+	updated.  Add a menu item for Pascal.
+	(Numbers): Document "set radix.
+	(Screen Size): Document "set/show pagination".
+	(MIPS Embedded): Remove "set processor" documentation.
+	(Remote configuration): Document "set/show X/P/Z-packet",
+	"set/show read-aux-vector-packet", "set/show remote
+	symbol-lookup-packet", "set/show remote verbose-resume-packet",
+	"set/show remoteaddresssize", "set/show remotebaud", "set/show
+	remotedebug", "set/show remotebreak", "set/show remotedevice",
+	"set/show remotelogfile".
+	(Auxiliary Vector): Add reference to the description of the
+	read-aux-vector-packet setting.
+	(Set Watchpoints): Add a cross-reference to "set remote
+	hardware-breakpoint-limit".
+	(General Query Packets): Add indexing of requests and
+	cross-references to related commands in "Remote configuration".
+	(File-I/O Overview, The system call): Fix wording and typos.
+	(Thread Stops): Add index entries.
+	(Continuing and Stepping): Document "show step-mode".
+	(i386): New node.  Document "set/show struct-convention".
+	(Files): Document "show trust-readonly-sections".
+	(Calling): Document "set/show unwindonsignal".
+	(Messages/Warnings): Add index entries.
+	(Maintenance Commands): Document "set/show watchdog".
+	(Annotations Overview): Document "show annotate".
+	(Set Watchpoints): Add index entries.
+	(Symbols): Fix doc of case-sensitive.
+	(ABI): Document "show coerce-float-to-double".
+	(Convenience Vars, Help): Improve indexing.
+	(Machine Code): Document "show disassembly-flavor".
+	(Debugging C plus plus): Document "show overload-resolution".
+	(Value History, Signaling): Add index entries.
+
+2005-04-08  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Show): Move @kindex entries to their proper places.
+	(Processes): Fix wording.
+	(History, List, Logging output, Define, Symbols, Print Settings):
+	Improve indexing.
+
+2005-04-03  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Targets): Document "set/show architecture".  Remove
+	redundant index entry for "target" command.
+	(Backtrace): Add index entries.
+	(Symbols, Fortran): Document the "set case-sensitive" command.
+	(DJGPP Native): Document "set com1base", "set com1irq", etc.
+	(Print Settings): Add index entry for "set demangle-style".
+	(Target Commands): Document "set download-write-size".
+	(Debugging Output): Document "set exec-done-display".
+
+2005-04-02  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Files): Fix the name and documentation of
+	add-shared-symbol-files.  Document its alias assf.  Update the
+	list of OSs where GDB supports shared libraries.  Fix markup.
+	(Continuing and Stepping): Add reference to @var{location} in the
+	text.
+	(Dump/Restore Files): Fix reference to @{filename}.
+	(Help): Fix wording.
+	(Attach): Ditto.
+	(Set Watchpoints): Ditto.
+	(Backtrace): Remove redundant index entries.  Improve index
+	entries.
+	(Delete Breaks): Fix wording.
+	(Memory): Document the compare-sections command.
+	(Memory Region Attributes): Improve wording.
+	(Disabling): Improve wording.
+	(Fortran): New subsection.  Document the "info common" command.
+	(Help): Document aliases "info copying" and "info warranty".
+	(Caching Remote Data): New section.  Document the "set/show
+	remotecache" and "info dcache" commands.
+	(Show): Fix wording of the documentation of the "set
+	extension-language" command.
+	(Signals): Add index entry for "info handle".
+	(Memory Region Attributes): Fix punctuation.
+	(Symbols): Change the arg name to "location" and refer to it in
+	the text.  Fix wording of "info types" doc.
+	(Threads): Fix usage of @enumerate @item's.
+	(Listing Tracepoints): Add index entry for "info tp".
+	(Set Watchpoints): Add xref to "info break" description.
+	(Macros): Add an index entry for "macro exp1".  Document the
+	"macro list" command.
+	(Maintenance Commands): Document "flushregs", "maint agent",
+	"maint check-symtabs", "maint cplus", "maint demangle", "maint
+	deprecate", "maint undeprecate", "maint dump-me", "maint packet",
+	"maint print architecture", "maint print objfiles", "maint print
+	statistics", "maint print type", "maint show-debug-regs", "maint
+	space", "maint time", and "maint translate-address".
+	(Connecting): Document the "monitor" command.
+	(Annotations Overview): Describe the "set annotate" command.
+
+2005-04-01  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Set Watchpoints): Document can-use-hw-watchpoints.
+	Rearrange index entries and improve wording about support for
+	hardware watchpoints.
+
+2005-03-10  Bob Rossi  <bob@brasko.net>
+
+	* gdb.texinfo: Update copyright
+
+2005-02-09  Theodore A. Roth  <troth@openavr.org>
+
+	* gdb.texinfo (General Query Packets): Fix texinfo compile warning and
+	error.
+
+2005-02-03  Kevin Buettner  <kevinb@redhat.com>
+
+	* gdb.texinfo (General Query Packets): Document qGetTLSAddr packet.
+
+2005-01-17  Michael Snyder  <msnyder@redhat.com>
+
+	* gdb.texinfo: Fix spelling, infinte  ->  infinite.
+
+2005-01-08  Mark Kettenis  <kettenis@gnu.org>
+
+	* observer.texi (GDB Observers): Document "solib_loaded".
+
+2005-01-07  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Rename configure.in, require autoconf 2.59.
+	* configure: Re-generate.
+
+	* configure.in: Replace configdirs with multiple references to
+	AC_CONFIG_SUBDIRS.
+	* configure: Re-generate.
+	
+2005-01-04  Andrew Cagney  <cagney@gnu.org>
+
+	* gdbint.texinfo (Versions and Branches): Make the date (YYYYMMDD)
+	part of the version number.
+
+2004-12-24  Mark Kettenis  <kettenis@gnu.org>
+
+	* gdbint.texinfo (Algorithms): Remove description of
+	TARGET_DISABLE_HW_WATCHPOINTS and TARGET_ENABLE_HW_WATCHPOINTS.
+
+2004-12-07  Jim Blandy  <jimb@redhat.com>
+
+	* gdb.texinfo (General Query Packets): Specify that thread ID's in
+	the 'qC' and 'qThreadInfo' packets are unsigned hexidecimal
+	numbers.
+
+2004-12-07  Andreas Schwab  <schwab@suse.de>
+
+	* gdb.texinfo (Mode Options): Document -l option.
+
+2004-12-04  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdbint.texinfo (Algorithms): More accurate description of
+	STOPPED_BY_WATCHPOINT.  Point out that target_stopped_data_address
+	is not needed unless data-read and data-access watchpoints are
+	supported.  Add a description of how GDB checks whether the
+	inferior stopped because a watchpoint was hit.
+
+2004-11-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (Files): Add cross-reference to description of
+	-readnow command-line switch.
+
+2004-11-10  Randolph Chung  <tausq@debian.org>
+
+	* gdb.texinfo: Document set/show backtrace past-entry commands.
+	Rearrange index entries for set/show backtrace past-main.
+
+2004-11-10  Jon Beniston <jon@beniston.com>
+
+	Committed by Andrew Cagney  <cagney@gnu.org>.
+        * gdb.texinfo (Remote Serial Protocol): Further describe 
+        binary transfer escaping mechanism .
+
+2004-11-08  Randolph Chung  <tausq@debian.org>
+
+	* gdb.texinfo (inferior_debugging info): Document "set debug infrun"
+	and "show debug infrun".  Add index entries.
+
+2004-10-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* gdb.texinfo (SVR4 Process Information): Document subcommands of
+	"info proc" that are already implemented.  Add index entries.
+	(Working Directory): Add a cross-reference to "info proc" command.
+	(Files): Add a tip for decreasing memory used for symtabs from
+	shared libraries.
+	(Starting): Fix whitespace; make "elaboration" stand out where it
+	is first used, and add an index entry for the term.
+	(Calling): Expand and elaborate text.  Add "print".  Add the
+	description of problems with weak aliases.
+	(Core File Generation): New section.
+
 2004-10-12  Andrew Cagney  <cagney@gnu.org>
 
 	* gdbint.texinfo (Versions and Branches): New chapter.

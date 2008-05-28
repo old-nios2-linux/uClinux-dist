@@ -74,7 +74,6 @@ static int	buffer_size = 8192;
  *	OV data stream support.
  */
 static const char	 *trk_filename;
-static FILE		 *trk_fd;
 static OggVorbis_File	  vf;
 static int		  dspfd, dsphw;
 
@@ -257,7 +256,16 @@ static void usage(int rc)
 /****************************************************************************/
 /* define custom OV decode call backs so that we can handle encrypted content.
  */
+#include <sys/stat.h>
+#include <sys/mman.h>
 
+static long filelen;
+static int fd;
+static char *fmem;
+static long fps;
+static int aggressive = 0;
+
+#if 0
 static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
 	if (f == NULL)
 		return -1;
@@ -275,17 +283,88 @@ static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
 	return r;
 }
 
-static int fseek_wrap(FILE *f, ogg_int64_t off, int whence){
+static int fseek_wrap(FILE *f, ogg_int64_t off, int whence) {
 	if (f == NULL)
 		return -1;
 	return fseek(f, (int)off, whence);
+}
+#endif
+static int fread_wrap(unsigned char *ptr, size_t sz, size_t n, FILE *f) {
+	int bytes = sz * n;
+
+	if (fps + bytes >= filelen) {
+		n = (filelen - fps) / sz;
+		bytes = sz * n;
+	}
+	if (n > 0) {
+		memcpy(ptr, fmem + fps, bytes);
+		if (crypto_keylen > 0) {
+			long pos = fps % crypto_keylen;
+			int i;
+
+			for (i=0; i<bytes; i++) {
+				ptr[i] ^= crypto_key[pos++];
+				if (pos >= crypto_keylen)
+					pos = 0;
+			}
+		}
+		fps += bytes;
+	}
+	return n;
+}
+
+static int fseek_wrap(FILE *f, ogg_int64_t off, int whence) {
+	switch(whence) {
+	case SEEK_SET:
+		fps = off;
+		if (fps == 0) {
+			aggressive = 1;
+			madvise(fmem, filelen, MADV_SEQUENTIAL);
+		}
+		break;
+	case SEEK_CUR:
+		fps += off;
+		break;
+	case SEEK_END:
+		fps = filelen + off;
+		break;
+	default:
+		errno = EINVAL;
+		return -1;
+	}
+	if (fps < 0)
+		fps = 0;
+	else if (fps > filelen)
+		fps = filelen;
+	return 0;
+}
+
+static long ftell_wrap(FILE *f) {
+	return fps;
+}
+static int fclose_wrap(FILE *f) {
+	munmap(fmem, filelen);
+	return close(fd);
+}
+
+static FILE *fopen_wrap(const char *fname, const char *mode) {
+	struct stat st;
+
+	fd = open(fname, O_RDONLY);
+	if (fd == -1)
+		return NULL;
+	fstat(fd, &st);
+	filelen = st.st_size;
+	fmem = mmap(NULL, filelen, PROT_READ, MAP_SHARED, fd, 0);
+	fps = 0;
+	return (FILE *) fmem;
 }
 
 static ov_callbacks ovcb = {
 	(size_t (*)(void *, size_t, size_t, void *))	&fread_wrap,
 	(int (*)(void *, ogg_int64_t, int))		&fseek_wrap,
-	(int (*)(void *))				&fclose,
-	(long (*)(void *))				&ftell
+	(int (*)(void *))				&fclose_wrap,
+	(long (*)(void *))				&ftell_wrap
 };
 
 /****************************************************************************/
@@ -297,24 +376,26 @@ static int play_one(const char *file) {
 	unsigned long	us;
 	struct timeval	tvstart, tvend;
 	char		**user_comments = NULL;
+	FILE		 *trk_fd;
 
 	trk_filename = file;
 
-	trk_fd = fopen(trk_filename, "r");
+	trk_fd = fopen_wrap(trk_filename, "r");
 
 	if (trk_fd == NULL) {
 		fprintf(stderr, "ERROR: Unable to open '%s', errno=%d\n",
 			trk_filename, errno);
 		return 1;
 	}
-	setvbuf(trk_fd, NULL, _IOFBF, buffer_size);
-retry:	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
+	//setvbuf(trk_fd, NULL, _IOFBF, buffer_size);
+retry:	aggressive = 0;
+	if (ov_open_callbacks(trk_fd, &vf, NULL, 0, ovcb) < 0) {
 		if (crypto_keylen > 0) {
 			crypto_keylen = 0;
-			rewind(trk_fd);
+			fseek_wrap(trk_fd, 0L, SEEK_SET);
 			goto retry;
 		}
-		fclose(trk_fd);
+		fclose_wrap(trk_fd);
 		fprintf(stderr, "ERROR: Unable to ov_open '%s', errno=%d\n",
 			trk_filename, errno);
 		return 1;
@@ -500,7 +581,7 @@ int main(int argc, char *argv[])
 #endif
 
 	/* Make ourselves the top priority process! */
-	setpriority(PRIO_PROCESS, 0, -20);
+	setpriority(PRIO_PROCESS, 0, -10);
 	srandom(time(NULL) ^ getpid());
 
 	/* Open the audio playback device */

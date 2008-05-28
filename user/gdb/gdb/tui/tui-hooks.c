@@ -1,12 +1,13 @@
 /* GDB hooks for TUI.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -35,6 +34,7 @@
 #include "gdb-events.h"
 #include "ui-out.h"
 #include "top.h"
+#include "observer.h"
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -58,37 +58,28 @@
 
 int tui_target_has_run = 0;
 
-static void (* tui_target_new_objfile_chain) (struct objfile*);
-
 static void
 tui_new_objfile_hook (struct objfile* objfile)
 {
   if (tui_active)
     tui_display_main ();
-  
-  if (tui_target_new_objfile_chain)
-    tui_target_new_objfile_chain (objfile);
 }
 
-static int
-tui_query_hook (const char * msg, va_list argp)
+static int ATTR_FORMAT (printf, 1, 0)
+tui_query_hook (const char *msg, va_list argp)
 {
   int retval;
   int ans2;
   int answer;
 
-  /* Automatically answer "yes" if input is not from a terminal.  */
-  if (!input_from_terminal_p ())
-    return 1;
-
   echo ();
   while (1)
     {
-      wrap_here ("");		/* Flush any buffered output */
+      wrap_here ("");		/* Flush any buffered output.  */
       gdb_flush (gdb_stdout);
 
       vfprintf_filtered (gdb_stdout, msg, argp);
-      printf_filtered ("(y or n) ");
+      printf_filtered (_("(y or n) "));
 
       wrap_here ("");
       gdb_flush (gdb_stdout);
@@ -100,7 +91,7 @@ tui_query_hook (const char * msg, va_list argp)
 	  retval = 1;
 	  break;
 	}
-      /* Eat rest of input line, to EOF or newline */
+      /* Eat rest of input line, to EOF or newline.  */
       if (answer != '\n')
 	do
 	  {
@@ -121,38 +112,22 @@ tui_query_hook (const char * msg, va_list argp)
 	  retval = 0;
 	  break;
 	}
-      printf_filtered ("Please answer y or n.\n");
+      printf_filtered (_("Please answer y or n.\n"));
     }
   noecho ();
   return retval;
 }
 
-/* Prevent recursion of deprecated_registers_changed_hook().  */
+/* Prevent recursion of deprecated_register_changed_hook().  */
 static int tui_refreshing_registers = 0;
-
-static void
-tui_registers_changed_hook (void)
-{
-  struct frame_info *fi;
-
-  fi = deprecated_selected_frame;
-  if (fi && tui_refreshing_registers == 0)
-    {
-      tui_refreshing_registers = 1;
-#if 0
-      tui_check_data_values (fi);
-#endif
-      tui_refreshing_registers = 0;
-    }
-}
 
 static void
 tui_register_changed_hook (int regno)
 {
   struct frame_info *fi;
 
-  fi = deprecated_selected_frame;
-  if (fi && tui_refreshing_registers == 0)
+  fi = get_selected_frame (NULL);
+  if (tui_refreshing_registers == 0)
     {
       tui_refreshing_registers = 1;
       tui_check_data_values (fi);
@@ -190,8 +165,7 @@ tui_event_default (int number)
 
 static struct gdb_events *tui_old_event_hooks;
 
-static struct gdb_events tui_event_hooks =
-{
+static struct gdb_events tui_event_hooks = {
   tui_event_create_breakpoint,
   tui_event_delete_breakpoint,
   tui_event_modify_breakpoint,
@@ -203,7 +177,8 @@ static struct gdb_events tui_event_hooks =
 /* Called when going to wait for the target.
    Leave curses mode and setup program mode.  */
 static ptid_t
-tui_target_wait_hook (ptid_t pid, struct target_waitstatus *status)
+tui_target_wait_hook (ptid_t pid, 
+		      struct target_waitstatus *status)
 {
   ptid_t res;
 
@@ -227,24 +202,30 @@ tui_target_wait_hook (ptid_t pid, struct target_waitstatus *status)
 }
 
 /* The selected frame has changed.  This is happens after a target
-   stop or when the user explicitly changes the frame (up/down/thread/...).  */
+   stop or when the user explicitly changes the frame
+   (up/down/thread/...).  */
 static void
 tui_selected_frame_level_changed_hook (int level)
 {
   struct frame_info *fi;
 
-  fi = deprecated_selected_frame;
-  /* Ensure that symbols for this frame are read in.  Also, determine the
-     source language of this frame, and switch to it if desired.  */
+  /* Negative level means that the selected frame was cleared.  */
+  if (level < 0)
+    return;
+
+  fi = get_selected_frame (NULL);
+  /* Ensure that symbols for this frame are read in.  Also, determine
+     the source language of this frame, and switch to it if
+     desired.  */
   if (fi)
     {
       struct symtab *s;
       
       s = find_pc_symtab (get_frame_pc (fi));
-      /* elz: this if here fixes the problem with the pc not being displayed
-         in the tui asm layout, with no debug symbols. The value of s 
-         would be 0 here, and select_source_symtab would abort the
-         command by calling the 'error' function */
+      /* elz: This if here fixes the problem with the pc not being
+         displayed in the tui asm layout, with no debug symbols.  The
+         value of s would be 0 here, and select_source_symtab would
+         abort the command by calling the 'error' function.  */
       if (s)
         select_source_symtab (s);
 
@@ -263,11 +244,13 @@ tui_selected_frame_level_changed_hook (int level)
 
 /* Called from print_frame_info to list the line we stopped in.  */
 static void
-tui_print_frame_info_listing_hook (struct symtab *s, int line,
-                                   int stopline, int noerror)
+tui_print_frame_info_listing_hook (struct symtab *s,
+				   int line,
+                                   int stopline, 
+				   int noerror)
 {
   select_source_symtab (s);
-  tui_show_frame_info (deprecated_selected_frame);
+  tui_show_frame_info (get_selected_frame (NULL));
 }
 
 /* Called when the target process died or is detached.
@@ -292,7 +275,6 @@ tui_install_hooks (void)
   /* Install the event hooks.  */
   tui_old_event_hooks = deprecated_set_gdb_event_hooks (&tui_event_hooks);
 
-  deprecated_registers_changed_hook = tui_registers_changed_hook;
   deprecated_register_changed_hook = tui_register_changed_hook;
   deprecated_detach_hook = tui_detach_hook;
 }
@@ -305,7 +287,6 @@ tui_remove_hooks (void)
   deprecated_selected_frame_level_changed_hook = 0;
   deprecated_print_frame_info_listing_hook = 0;
   deprecated_query_hook = 0;
-  deprecated_registers_changed_hook = 0;
   deprecated_register_changed_hook = 0;
   deprecated_detach_hook = 0;
 
@@ -319,6 +300,5 @@ void
 _initialize_tui_hooks (void)
 {
   /* Install the permanent hooks.  */
-  tui_target_new_objfile_chain = deprecated_target_new_objfile_hook;
-  deprecated_target_new_objfile_hook = tui_new_objfile_hook;
+  observer_attach_new_objfile (tui_new_objfile_hook);
 }

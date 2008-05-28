@@ -1,13 +1,13 @@
 /* GNU/Linux S/390 specific low level interface, for the remote server
    for GDB.
-   Copyright 2001, 2002
+   Copyright (C) 2001, 2002, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file is used for both 31-bit and 64-bit S/390 systems.  */
 
@@ -75,9 +73,67 @@ s390_cannot_store_register (int regno)
   return 0;
 }
 
+/* Provide only a fill function for the general register set.  ps_lgetregs
+   will use this for NPTL support.  */
+
+static void s390_fill_gregset (void *buf)
+{
+  int i;
+
+  for (i = 0; i < 34; i++)
+    collect_register (i, (char *) buf + s390_regmap[i]);
+}
+
+struct regset_info target_regsets[] = {
+  { 0, 0, 0, GENERAL_REGS, s390_fill_gregset, NULL },
+  { 0, 0, -1, -1, NULL, NULL }
+};
+
+
+static const unsigned char s390_breakpoint[] = { 0, 1 };
+#define s390_breakpoint_len 2
+
+static CORE_ADDR
+s390_get_pc ()
+{
+  unsigned long pc;
+  collect_register_by_name ("pswa", &pc);
+#ifndef __s390x__
+  pc &= 0x7fffffff;
+#endif
+  return pc;
+}
+
+static void
+s390_set_pc (CORE_ADDR newpc)
+{
+  unsigned long pc = newpc;
+#ifndef __s390x__
+  pc |= 0x80000000;
+#endif
+  supply_register_by_name ("pswa", &pc);
+}
+
+static int
+s390_breakpoint_at (CORE_ADDR pc)
+{
+  unsigned char c[s390_breakpoint_len];
+  read_inferior_memory (pc, c, s390_breakpoint_len);
+  return memcmp (c, s390_breakpoint, s390_breakpoint_len) == 0;
+}
+
+
 struct linux_target_ops the_low_target = {
   s390_num_regs,
   s390_regmap,
   s390_cannot_fetch_register,
   s390_cannot_store_register,
+  s390_get_pc,
+  s390_set_pc,
+  s390_breakpoint,
+  s390_breakpoint_len,
+  NULL,
+  s390_breakpoint_len,
+  s390_breakpoint_at,
 };
+

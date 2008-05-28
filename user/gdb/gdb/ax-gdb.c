@@ -1,13 +1,13 @@
 /* GDB-specific functions for operating on agent expressions.
 
-   Copyright 1998, 1999, 2000, 2001, 2003 Free Software Foundation,
-   Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -321,7 +319,7 @@ gen_traced_pop (struct agent_expr *ax, struct axs_value *value)
 
       case axs_lvalue_memory:
 	{
-	  int length = TYPE_LENGTH (value->type);
+	  int length = TYPE_LENGTH (check_typedef (value->type));
 
 	  /* There's no point in trying to use a trace_quick bytecode
 	     here, since "trace_quick SIZE pop" is three bytes, whereas
@@ -414,7 +412,7 @@ gen_fetch (struct agent_expr *ax, struct type *type)
 	     In any case, it's a bug the user shouldn't see.  */
 	default:
 	  internal_error (__FILE__, __LINE__,
-			  "gen_fetch: strange size");
+			  _("gen_fetch: strange size"));
 	}
 
       gen_sign_extend (ax, type);
@@ -426,7 +424,7 @@ gen_fetch (struct agent_expr *ax, struct type *type)
          something we should be (this code's fault).  In any case,
          it's a bug the user shouldn't see.  */
       internal_error (__FILE__, __LINE__,
-		      "gen_fetch: bad type code");
+		      _("gen_fetch: bad type code"));
     }
 }
 
@@ -461,7 +459,8 @@ gen_frame_args_address (struct agent_expr *ax)
   int frame_reg;
   LONGEST frame_offset;
 
-  TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+  gdbarch_virtual_frame_pointer (current_gdbarch,
+				 ax->scope, &frame_reg, &frame_offset);
   ax_reg (ax, frame_reg);
   gen_offset (ax, frame_offset);
 }
@@ -475,7 +474,8 @@ gen_frame_locals_address (struct agent_expr *ax)
   int frame_reg;
   LONGEST frame_offset;
 
-  TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+  gdbarch_virtual_frame_pointer (current_gdbarch,
+				 ax->scope, &frame_reg, &frame_offset);
   ax_reg (ax, frame_reg);
   gen_offset (ax, frame_offset);
 }
@@ -539,7 +539,7 @@ gen_var_ref (struct agent_expr *ax, struct axs_value *value, struct symbol *var)
 
     case LOC_CONST_BYTES:
       internal_error (__FILE__, __LINE__,
-		      "gen_var_ref: LOC_CONST_BYTES symbols are not supported");
+		      _("gen_var_ref: LOC_CONST_BYTES symbols are not supported"));
 
       /* Variable at a fixed location in memory.  Easy.  */
     case LOC_STATIC:
@@ -578,7 +578,7 @@ gen_var_ref (struct agent_expr *ax, struct axs_value *value, struct symbol *var)
       break;
 
     case LOC_TYPEDEF:
-      error ("Cannot compute value of typedef `%s'.",
+      error (_("Cannot compute value of typedef `%s'."),
 	     SYMBOL_PRINT_NAME (var));
       break;
 
@@ -610,7 +610,7 @@ gen_var_ref (struct agent_expr *ax, struct axs_value *value, struct symbol *var)
 	struct minimal_symbol *msym
 	= lookup_minimal_symbol (DEPRECATED_SYMBOL_NAME (var), NULL, NULL);
 	if (!msym)
-	  error ("Couldn't resolve symbol `%s'.", SYMBOL_PRINT_NAME (var));
+	  error (_("Couldn't resolve symbol `%s'."), SYMBOL_PRINT_NAME (var));
 
 	/* Push the address of the variable.  */
 	ax_const_l (ax, SYMBOL_VALUE_ADDRESS (msym));
@@ -629,12 +629,12 @@ gen_var_ref (struct agent_expr *ax, struct axs_value *value, struct symbol *var)
       break;
 
     case LOC_OPTIMIZED_OUT:
-      error ("The variable `%s' has been optimized out.",
+      error (_("The variable `%s' has been optimized out."),
 	     SYMBOL_PRINT_NAME (var));
       break;
 
     default:
-      error ("Cannot find value of botched symbol `%s'.",
+      error (_("Cannot find value of botched symbol `%s'."),
 	     SYMBOL_PRINT_NAME (var));
       break;
     }
@@ -650,7 +650,7 @@ gen_int_literal (struct agent_expr *ax, struct axs_value *value, LONGEST k,
 {
   ax_const_l (ax, k);
   value->kind = axs_rvalue;
-  value->type = type;
+  value->type = check_typedef (type);
 }
 
 
@@ -854,7 +854,7 @@ gen_usual_arithmetic (struct agent_expr *ax, struct axs_value *value1,
 	  ax_simple (ax, aop_swap);
 	}
 
-      value1->type = value2->type = target;
+      value1->type = value2->type = check_typedef (target);
     }
 }
 
@@ -899,15 +899,14 @@ gen_cast (struct agent_expr *ax, struct axs_value *value, struct type *type)
     case TYPE_CODE_STRUCT:
     case TYPE_CODE_UNION:
     case TYPE_CODE_FUNC:
-      error ("Illegal type cast: intended type must be scalar.");
+      error (_("Invalid type cast: intended type must be scalar."));
 
     case TYPE_CODE_ENUM:
       /* We don't have to worry about the size of the value, because
          all our integral values are fully sign-extended, and when
          casting pointers we can do anything we like.  Is there any
-         way for us to actually know what GCC actually does with a
-         cast like this?  */
-      value->type = type;
+         way for us to know what GCC actually does with a cast like
+         this?  */
       break;
 
     case TYPE_CODE_INT:
@@ -922,7 +921,7 @@ gen_cast (struct agent_expr *ax, struct axs_value *value, struct type *type)
       break;
 
     default:
-      error ("Casts to requested type are not yet implemented.");
+      error (_("Casts to requested type are not yet implemented."));
     }
 
   value->type = type;
@@ -989,7 +988,7 @@ gen_add (struct agent_expr *ax, struct axs_value *value,
     }
 
   else
-    error ("Illegal combination of types in %s.", name);
+    error (_("Invalid combination of types in %s."), name);
 
   value->kind = axs_rvalue;
 }
@@ -1026,9 +1025,9 @@ gen_sub (struct agent_expr *ax, struct axs_value *value,
 	  value->type = builtin_type_long;	/* FIXME --- should be ptrdiff_t */
 	}
       else
-	error ("\
+	error (_("\
 First argument of `-' is a pointer, but second argument is neither\n\
-an integer nor a pointer of the same type.");
+an integer nor a pointer of the same type."));
     }
 
   /* Must be number + number.  */
@@ -1041,7 +1040,7 @@ an integer nor a pointer of the same type.");
     }
 
   else
-    error ("Illegal combination of types in subtraction.");
+    error (_("Invalid combination of types in subtraction."));
 
   value->kind = axs_rvalue;
 }
@@ -1060,7 +1059,7 @@ gen_binop (struct agent_expr *ax, struct axs_value *value,
   /* We only handle INT op INT.  */
   if ((TYPE_CODE (value1->type) != TYPE_CODE_INT)
       || (TYPE_CODE (value2->type) != TYPE_CODE_INT))
-    error ("Illegal combination of types in %s.", name);
+    error (_("Invalid combination of types in %s."), name);
 
   ax_simple (ax,
 	     TYPE_UNSIGNED (value1->type) ? op_unsigned : op);
@@ -1076,7 +1075,7 @@ gen_logical_not (struct agent_expr *ax, struct axs_value *value)
 {
   if (TYPE_CODE (value->type) != TYPE_CODE_INT
       && TYPE_CODE (value->type) != TYPE_CODE_PTR)
-    error ("Illegal type of operand to `!'.");
+    error (_("Invalid type of operand to `!'."));
 
   gen_usual_unary (ax, value);
   ax_simple (ax, aop_log_not);
@@ -1088,7 +1087,7 @@ static void
 gen_complement (struct agent_expr *ax, struct axs_value *value)
 {
   if (TYPE_CODE (value->type) != TYPE_CODE_INT)
-    error ("Illegal type of operand to `~'.");
+    error (_("Invalid type of operand to `~'."));
 
   gen_usual_unary (ax, value);
   gen_integral_promotions (ax, value);
@@ -1108,7 +1107,7 @@ gen_deref (struct agent_expr *ax, struct axs_value *value)
      this, and we don't know what error message to generate.  */
   if (TYPE_CODE (value->type) != TYPE_CODE_PTR)
     internal_error (__FILE__, __LINE__,
-		    "gen_deref: expected a pointer");
+		    _("gen_deref: expected a pointer"));
 
   /* We've got an rvalue now, which is a pointer.  We want to yield an
      lvalue, whose address is exactly that pointer.  So we don't
@@ -1136,10 +1135,10 @@ gen_address_of (struct agent_expr *ax, struct axs_value *value)
     switch (value->kind)
       {
       case axs_rvalue:
-	error ("Operand of `&' is an rvalue, which has no address.");
+	error (_("Operand of `&' is an rvalue, which has no address."));
 
       case axs_lvalue_register:
-	error ("Operand of `&' is in a register, and has no address.");
+	error (_("Operand of `&' is in a register, and has no address."));
 
       case axs_lvalue_memory:
 	value->kind = axs_rvalue;
@@ -1164,21 +1163,24 @@ find_field (struct type *type, char *name)
   /* Make sure this isn't C++.  */
   if (TYPE_N_BASECLASSES (type) != 0)
     internal_error (__FILE__, __LINE__,
-		    "find_field: derived classes supported");
+		    _("find_field: derived classes supported"));
 
   for (i = 0; i < TYPE_NFIELDS (type); i++)
     {
       char *this_name = TYPE_FIELD_NAME (type, i);
 
-      if (this_name && strcmp (name, this_name) == 0)
-	return i;
+      if (this_name)
+	{
+	  if (strcmp (name, this_name) == 0)
+	    return i;
 
-      if (this_name[0] == '\0')
-	internal_error (__FILE__, __LINE__,
-			"find_field: anonymous unions not supported");
+	  if (this_name[0] == '\0')
+	    internal_error (__FILE__, __LINE__,
+			    _("find_field: anonymous unions not supported"));
+	}
     }
 
-  error ("Couldn't find member named `%s' in struct/union `%s'",
+  error (_("Couldn't find member named `%s' in struct/union `%s'"),
 	 name, TYPE_TAG_NAME (type));
 
   return 0;
@@ -1248,7 +1250,7 @@ gen_bitfield_ref (struct agent_expr *ax, struct axs_value *value,
   /* Can we fetch the number of bits requested at all?  */
   if ((end - start) > ((1 << num_ops) * 8))
     internal_error (__FILE__, __LINE__,
-		    "gen_bitfield_ref: bitfield too wide");
+		    _("gen_bitfield_ref: bitfield too wide"));
 
   /* Note that we know here that we only need to try each opcode once.
      That may not be true on machines with weird byte sizes.  */
@@ -1317,7 +1319,7 @@ gen_bitfield_ref (struct agent_expr *ax, struct axs_value *value,
 	     the sign/zero extension will wipe them out.
 	     - If we're in the interior of the word, then there is no garbage
 	     on either end, because the ref operators zero-extend.  */
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	    gen_left_shift (ax, end - (offset + op_size));
 	  else
 	    gen_left_shift (ax, offset - start);
@@ -1370,13 +1372,13 @@ gen_struct_ref (struct agent_expr *ax, struct axs_value *value, char *field,
   /* This must yield a structure or a union.  */
   if (TYPE_CODE (type) != TYPE_CODE_STRUCT
       && TYPE_CODE (type) != TYPE_CODE_UNION)
-    error ("The left operand of `%s' is not a %s.",
+    error (_("The left operand of `%s' is not a %s."),
 	   operator_name, operand_name);
 
   /* And it must be in memory; we don't deal with structure rvalues,
      or structures living in registers.  */
   if (value->kind != axs_lvalue_memory)
-    error ("Structure does not live in memory.");
+    error (_("Structure does not live in memory."));
 
   i = find_field (type, field);
 
@@ -1415,7 +1417,7 @@ gen_repeat (union exp_element **pc, struct agent_expr *ax,
      here.  */
   gen_expr (pc, ax, &value1);
   if (value1.kind != axs_lvalue_memory)
-    error ("Left operand of `@' must be an object in memory.");
+    error (_("Left operand of `@' must be an object in memory."));
 
   /* Evaluate the length; it had better be a constant.  */
   {
@@ -1423,12 +1425,12 @@ gen_repeat (union exp_element **pc, struct agent_expr *ax,
     int length;
 
     if (!v)
-      error ("Right operand of `@' must be a constant, in agent expressions.");
-    if (TYPE_CODE (v->type) != TYPE_CODE_INT)
-      error ("Right operand of `@' must be an integer.");
+      error (_("Right operand of `@' must be a constant, in agent expressions."));
+    if (TYPE_CODE (value_type (v)) != TYPE_CODE_INT)
+      error (_("Right operand of `@' must be an integer."));
     length = value_as_long (v);
     if (length <= 0)
-      error ("Right operand of `@' must be positive.");
+      error (_("Right operand of `@' must be positive."));
 
     /* The top of the stack is already the address of the object, so
        all we need to do is frob the type of the lvalue.  */
@@ -1472,6 +1474,7 @@ gen_sizeof (union exp_element **pc, struct agent_expr *ax,
 
 /* Generating bytecode from GDB expressions: general recursive thingy  */
 
+/* XXX: i18n */
 /* A gen_expr function written by a Gen-X'er guy.
    Append code for the subexpression of EXPR starting at *POS_P to AX.  */
 static void
@@ -1490,7 +1493,7 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
       {
 	ax_const_l (ax, value_as_long (v));
 	value->kind = axs_rvalue;
-	value->type = check_typedef (VALUE_TYPE (v));
+	value->type = check_typedef (value_type (v));
 	return;
       }
   }
@@ -1537,7 +1540,7 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 	case BINOP_SUBSCRIPT:
 	  gen_add (ax, value, &value1, &value2, "array subscripting");
 	  if (TYPE_CODE (value->type) != TYPE_CODE_PTR)
-	    error ("Illegal combination of types in array subscripting.");
+	    error (_("Invalid combination of types in array subscripting."));
 	  gen_deref (ax, value);
 	  break;
 	case BINOP_BITWISE_AND:
@@ -1559,7 +1562,7 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 	  /* We should only list operators in the outer case statement
 	     that we actually handle in the inner case statement.  */
 	  internal_error (__FILE__, __LINE__,
-			  "gen_expr: op case sets don't match");
+			  _("gen_expr: op case sets don't match"));
 	}
       break;
 
@@ -1596,8 +1599,18 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 
     case OP_REGISTER:
       {
-	int reg = (int) (*pc)[1].longconst;
-	(*pc) += 3;
+	const char *name = &(*pc)[2].string;
+	int reg;
+	(*pc) += 4 + BYTES_TO_EXP_ELEM ((*pc)[1].longconst + 1);
+	reg = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
+					name, strlen (name));
+	if (reg == -1)
+	  internal_error (__FILE__, __LINE__,
+			  _("Register $%s not available"), name);
+	if (reg >= gdbarch_num_regs (current_gdbarch))
+	  error (_("'%s' is a pseudo-register; "
+		   "GDB cannot yet trace pseudoregister contents."),
+		 name);
 	value->kind = axs_lvalue_register;
 	value->u.reg = reg;
 	value->type = register_type (current_gdbarch, reg);
@@ -1605,7 +1618,7 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
       break;
 
     case OP_INTERNALVAR:
-      error ("GDB agent expressions cannot use convenience variables.");
+      error (_("GDB agent expressions cannot use convenience variables."));
 
       /* Weirdo operator: see comments for gen_repeat for details.  */
     case BINOP_REPEAT:
@@ -1635,12 +1648,19 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 	if (value->kind != axs_rvalue)
 	  /* This would be weird.  */
 	  internal_error (__FILE__, __LINE__,
-			  "gen_expr: OP_MEMVAL operand isn't an rvalue???");
+			  _("gen_expr: OP_MEMVAL operand isn't an rvalue???"));
 	value->type = type;
 	value->kind = axs_lvalue_memory;
       }
       break;
 
+    case UNOP_PLUS:
+      (*pc)++;
+      /* + FOO is equivalent to 0 + FOO, which can be optimized. */
+      gen_expr (pc, ax, value);
+      gen_usual_unary (ax, value);
+      break;
+      
     case UNOP_NEG:
       (*pc)++;
       /* -FOO is equivalent to 0 - FOO.  */
@@ -1669,7 +1689,7 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
       gen_expr (pc, ax, value);
       gen_usual_unary (ax, value);
       if (TYPE_CODE (value->type) != TYPE_CODE_PTR)
-	error ("Argument of unary `*' is not a pointer.");
+	error (_("Argument of unary `*' is not a pointer."));
       gen_deref (ax, value);
       break;
 
@@ -1704,71 +1724,21 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 	  /* If this `if' chain doesn't handle it, then the case list
 	     shouldn't mention it, and we shouldn't be here.  */
 	  internal_error (__FILE__, __LINE__,
-			  "gen_expr: unhandled struct case");
+			  _("gen_expr: unhandled struct case"));
       }
       break;
 
     case OP_TYPE:
-      error ("Attempt to use a type name as an expression.");
+      error (_("Attempt to use a type name as an expression."));
 
     default:
-      error ("Unsupported operator in expression.");
+      error (_("Unsupported operator in expression."));
     }
 }
 
 
 
 /* Generating bytecode from GDB expressions: driver */
-
-/* Given a GDB expression EXPR, produce a string of agent bytecode
-   which computes its value.  Return the agent expression, and set
-   *VALUE to describe its type, and whether it's an lvalue or rvalue.  */
-struct agent_expr *
-expr_to_agent (struct expression *expr, struct axs_value *value)
-{
-  struct cleanup *old_chain = 0;
-  struct agent_expr *ax = new_agent_expr (0);
-  union exp_element *pc;
-
-  old_chain = make_cleanup_free_agent_expr (ax);
-
-  pc = expr->elts;
-  trace_kludge = 0;
-  gen_expr (&pc, ax, value);
-
-  /* We have successfully built the agent expr, so cancel the cleanup
-     request.  If we add more cleanups that we always want done, this
-     will have to get more complicated.  */
-  discard_cleanups (old_chain);
-  return ax;
-}
-
-
-#if 0				/* not used */
-/* Given a GDB expression EXPR denoting an lvalue in memory, produce a
-   string of agent bytecode which will leave its address and size on
-   the top of stack.  Return the agent expression.
-
-   Not sure this function is useful at all.  */
-struct agent_expr *
-expr_to_address_and_size (struct expression *expr)
-{
-  struct axs_value value;
-  struct agent_expr *ax = expr_to_agent (expr, &value);
-
-  /* Complain if the result is not a memory lvalue.  */
-  if (value.kind != axs_lvalue_memory)
-    {
-      free_agent_expr (ax);
-      error ("Expression does not denote an object in memory.");
-    }
-
-  /* Push the object's size on the stack.  */
-  ax_const_l (ax, TYPE_LENGTH (value.type));
-
-  return ax;
-}
-#endif
 
 /* Given a GDB expression EXPR, return bytecode to trace its value.
    The result will use the `trace' and `trace_quick' bytecodes to
@@ -1815,10 +1785,10 @@ agent_command (char *exp, int from_tty)
      another command, change the error message; the user shouldn't
      have to know anything about agent expressions.  */
   if (overlay_debugging)
-    error ("GDB can't do agent expression translation with overlays.");
+    error (_("GDB can't do agent expression translation with overlays."));
 
   if (exp == 0)
-    error_no_arg ("expression to translate");
+    error_no_arg (_("expression to translate"));
 
   expr = parse_expression (exp);
   old_chain = make_cleanup (free_current_contents, &expr);
@@ -1841,6 +1811,6 @@ void
 _initialize_ax_gdb (void)
 {
   add_cmd ("agent", class_maintenance, agent_command,
-	   "Translate an expression into remote agent bytecode.",
+	   _("Translate an expression into remote agent bytecode."),
 	   &maintenancelist);
 }

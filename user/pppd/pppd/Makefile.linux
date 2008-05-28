@@ -1,6 +1,6 @@
 #
 # pppd makefile for Linux
-# $Id: Makefile.linux,v 1.9 2007-10-03 08:22:36 philipc Exp $
+# $Id: Makefile.linux,v 1.10 2008-05-13 04:40:06 gerg Exp $
 #
 
 # Default installation locations
@@ -237,6 +237,11 @@ endif
 
 ifdef MAXOCTETS
      CFLAGS += -DMAXOCTETS
+endif
+ifdef CONFIG_DEFAULTS_LIBC_UC_LIBC
+        CFLAGS += -DNO_DRAND48
+else
+        CFLAGS += -DUSE_LASTLOG
 endif
 
 INSTALL= install

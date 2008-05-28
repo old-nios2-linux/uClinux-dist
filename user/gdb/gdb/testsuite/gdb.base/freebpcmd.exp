@@ -1,18 +1,17 @@
-#   Copyright 2003 Free Software Foundation, Inc.
+#   Copyright 2003, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 # This is a regression test for the following bug, as of 2003-12-12:
@@ -53,7 +52,8 @@ set srcfile1 ${testfile}1.c
 set binfile ${objdir}/${subdir}/${testfile}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested freebpcmd.exp
+     return -1
 }
 
 gdb_exit
@@ -108,6 +108,9 @@ if {$i >= [llength $lines]} {
 }
 
 gdb_run_cmd
+
+set timeout 120
+
 gdb_test_multiple "" "run program with breakpoint commands" {
     -re "warning: Invalid control type in command structure" {
         kfail "gdb/1489" "run program with breakpoint commands"

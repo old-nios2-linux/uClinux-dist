@@ -198,6 +198,16 @@ struct outer_struct {
 	long outer_long;
 } nested_su;
 
+struct highest
+{
+  int a;
+  struct
+  {
+    int b;
+    struct { int c; } anonymous_level_2;
+  } anonymous_level_1;
+} the_highest;
+
 /**** Enumerations *******/
 
 enum 
@@ -256,6 +266,15 @@ func_type v_func_type;
    those, but GDB can read them, so the related tests in ptype.exp
    will all xfail.  */
 
+
+/***********/
+
+typedef int foo;
+
+foo intfoo (afoo)
+{
+  return (afoo * 2);
+}
 
 /***********/
 
@@ -342,6 +361,8 @@ int main ()
 
   nested_su.outer_int = 0;
   v_t_struct_p = 0;
+
+  the_highest.a = 0;
 
   v_boolean = FALSE;
   v_boolean2 = my_false;

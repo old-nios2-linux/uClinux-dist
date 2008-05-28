@@ -1,18 +1,17 @@
-# Copyright 2003, 2004 Free Software Foundation, Inc.
+# Copyright 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
@@ -39,10 +38,11 @@ set bug_id 0
 
 set testfile "annota3"
 set srcfile ${testfile}.c
-set binfile ${objdir}/${subdir}/${testfile}
+set binfile ${objdir}/${subdir}/${testfile}$EXEEXT
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-w}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
+    untested annota3.exp
+    return -1
 }
 
 
@@ -98,15 +98,37 @@ gdb_expect_list "annotation set at level 3" "\r\n$gdb_prompt$" {
     "set annotate 3"
 }
 
-
+#
+# if construct:
+#
+send_gdb "if 1\n"
+gdb_expect {
+    -re "^if 1\r\n\r\n\032\032post-prompt\r\n\r\n\032\032pre-commands\r\n >\r\n\032\032commands\r\n$" {
+	pass "start if construct"
+    }
+    -re ".*\032\032commands\r\n" {
+	fail "start if construct"
+    }
+    timeout { fail "start if construct (timeout)" }
+}
+send_gdb "end\n"
+gdb_expect {
+    -re "^end\r\n\r\n\032\032post-commands\r\n$gdb_prompt$" {
+ 	pass "end if construct"
+    }
+    -re ".*$gdb_prompt$" {
+	fail "end if construct"
+    }
+    timeout { fail "end if construct (timeout)" }
+}
 #
 # info break:
 #
 send_gdb "info break\n" 
 gdb_expect_list "breakpoint info" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "Num Type           Disp Enb Address    +What\r\n"
-    "1   breakpoint     keep y   0x\[0-9a-zA-Z\]+ +in main at .*annota3.c:32\r\n"
+    "Num     Type           Disp Enb Address    +What\r\n"
+    "1       breakpoint     keep y   0x\[0-9a-zA-Z\]+ +in main at .*annota3.c:32\r\n"
 }
 
 
@@ -117,13 +139,13 @@ gdb_expect_list "breakpoint info" "$gdb_prompt$" {
 send_gdb "run\n"
 gdb_expect_list "run until main breakpoint" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "Starting program: .*annota3 \r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
+    "Starting program: .*annota3(|\.exe) \r\n"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032\(frames-invalid|breakpoints-invalid\)\r\n\)+"
     "\r\n\032\032breakpoint 1\r\n"
     "\r\n"
-    "Breakpoint 1, main \\(\\) at .*annota3.c:32\r\n"
+    "Breakpoint 1, "
+    "\r\n\032\032frame-begin 0 0x\[0-9a-z\]+\r\n"
+    "main \\(\\) at .*annota3.c:32\r\n"
     "\r\n\032\032source.*annota3.c:32:.*:beg:0x\[0-9a-z\]+\r\n"
     "\r\n\032\032stopped\r\n"
 }
@@ -139,7 +161,6 @@ send_gdb "next\n"
 gdb_expect_list "go after array init line" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032frames-invalid\r\n\)+"
     "\r\n\032\032source .*annota3.c:\[0-9\]+:\[0-9\]+:beg:0x\[0-9a-z\]+\r\n"
     "\r\n\032\032stopped\r\n"
 }
@@ -177,7 +198,6 @@ gdb_expect_list "print non_existent_value" "$gdb_prompt$" {
 send_gdb "break handle_USR1\n"
 gdb_expect_list "breakpoint handle_USR1" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "Breakpoint.*at 0x\[0-9a-z\]+: file.*annota3.c, line.*\r\n"
 }
 
@@ -187,7 +207,6 @@ gdb_expect_list "breakpoint handle_USR1" "$gdb_prompt$" {
 send_gdb "break printf\n"
 gdb_expect_list "breakpoint printf" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "Breakpoint.*at 0x\[0-9a-z\]+.*"
 }
 
@@ -199,7 +218,6 @@ gdb_expect_list "continue to printf" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "Continuing.\r\n"
     "\r\n\032\032starting\r\n"
-    "\r\n\032\032frames-invalid\r\n"
     "\r\n\032\032breakpoint 3\r\n"
     "\r\n"
     "Breakpoint 3, \[^\r\n\]*\r\n"
@@ -209,7 +227,7 @@ gdb_expect_list "continue to printf" "$gdb_prompt$" {
 send_gdb "backtrace\n"
 gdb_expect_list "backtrace from shlibrary" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "#0 .* printf \[^\r\n\]*\r\n"
+    "#0 .* .*printf \[^\r\n\]*\r\n"
     "#1 .* main \[^\r\n\]*\r\n"
 }
 
@@ -227,9 +245,11 @@ if [target_info exists gdb,nosignals] {
 	"\r\n\032\032post-prompt\r\n"
 	"Continuing with signal SIGUSR1.\r\n"
 	"\r\n\032\032starting\r\n"
-	"\r\n\032\032frames-invalid\r\n"
 	"\r\n\032\032breakpoint 2\r\n"
-	"Breakpoint 2, handle_USR1 \\(sig=\[0-9\]+\\) at .*annota3.c:\[0-9\]+\r\n"
+	"\r\n"
+	"Breakpoint 2, "
+	"\r\n\032\032frame-begin 0 0x\[0-9a-z\]+\r\n"
+	"handle_USR1 \\(sig=\[0-9\]+\\) at .*annota3.c:\[0-9\]+\r\n"
 	"\r\n\032\032source .*annota3.c:\[0-9\]+:\[0-9\]+:beg:0x\[0-9a-z\]+\r\n"
 	"\r\n\032\032stopped\r\n"
     }
@@ -247,7 +267,7 @@ if [target_info exists gdb,nosignals] {
     gdb_expect_list "backtrace @ signal handler" "$gdb_prompt$" {
 	"#0 +handle_USR1 \[^\r\n\]+\r\n"
 	"#1 +.signal handler called.\r\n"
-	"#2 .* printf \[^\r\n\]+\r\n"
+	"#2 .* .*printf \[^\r\n\]+\r\n"
 	"#3 .* main \[^\r\n\]+\r\n"
     }
 }
@@ -277,7 +297,6 @@ gdb_expect_list "delete bp 3" "$gdb_prompt$" {
 send_gdb "break main\n"
 gdb_expect_list "break at 28" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "Breakpoint 4 at 0x\[0-9a-z\]+: file .*annota3.c, line 32.\r\n"
 }
 
@@ -312,11 +331,12 @@ gdb_expect {
 #
 # Test that breakpoints-invalid is issued once and only once for
 # breakpoint ignore count changes, after annotation stopped.
-#
+# NOTE: breakpoints-invalid annotations have been removed from
+# level 3 but keep these tests for continuity and comparison
+# with annota1.exp.
 send_gdb "break 46\n"
 gdb_expect_list  "break at 46" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "Breakpoint 5 at 0x\[0-9a-z\]+: file .*annota3.c, line 46.\r\n"
 }
 
@@ -324,20 +344,20 @@ send_gdb "ignore 5 4\n"
 gdb_expect_list "ignore 5 4" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "Will ignore next 4 crossings of breakpoint 5"
-    "\r\n\032\032breakpoints-invalid\r\n"
     "\r\n"
 }
 
 send_gdb "continue\n"
 gdb_expect_list "annotate ignore count change" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "\(\r\n\032\032frames-invalid\r\n\)+"
     "\r\n\032\032breakpoint 5\r\n"
-    "Breakpoint 5, main \\(\\) at .*annota3.c:46\r\n"
+    "\r\n"
+    "Breakpoint 5, "
+    "\r\n\032\032frame-begin 0 0x\[0-9a-z\]+\r\n"
+    "main \\(\\) at .*annota3.c:46\r\n"
     "\r\n\032\032source .*annota3.c:46:\[0-9\]+:beg:0x\[0-9a-z\]+\r\n"
     "1: value = 11\r\n"
     "\r\n\032\032stopped\r\n"
-    "\r\n\032\032breakpoints-invalid\r\n"
 }
 
 # check that ignore command is working, or the above can provide
@@ -347,7 +367,6 @@ send_gdb "next\n"
 gdb_expect_list "next to exit loop" "$gdb_prompt$"  {
     "\r\n\032\032post-prompt\r\n"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032frames-invalid\r\n\)+"
     "\r\n\032\032source.*annota3.c:\[0-9\]+:\[0-9\]+:beg:0x\[0-9a-z\]+\r\n"
     "1: value = 12\r\n"
     "\r\n\032\032stopped\r\n"
@@ -357,7 +376,6 @@ send_gdb "next\n"
 gdb_expect_list "breakpoint ignore count" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
     "\r\n\032\032starting\r\n"
-    "\(\r\n\032\032frames-invalid\r\n\)+"
     "\r\n\032\032source.*annota3.c:49:\[0-9\]+:beg:0x\[0-9a-z\]+\r\n"
     "1: value = 12\r\n"
     "\r\n\032\032stopped\r\n"
@@ -384,8 +402,6 @@ if [target_info exists gdb,nosignals] {
 	"\r\n\032\032post-prompt\r\n"
 	"Continuing with signal SIGTRAP.\r\n"
 	"\r\n\032\032starting\r\n"
-	"\r\n\032\032frames-invalid\r\n"
-	"\r\n\032\032frames-invalid\r\n"
 	"\r\n\032\032signalled\r\n"
 	"\r\nProgram terminated with signal SIGTRAP, Trace.breakpoint trap.\r\n"
 	"The program no longer exists.\r\n"

@@ -1,19 +1,18 @@
-# Copyright 1988, 1990, 1991, 1992, 1994, 1997, 1999, 2000, 2002,
-# 2003, 2004 Free Software Foundation, Inc.
+# Copyright 1988, 1990, 1991, 1992, 1994, 1997, 1999, 2000, 2002, 2003, 2004,
+# 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Rob Savoye. (rob@cygnus.com)
 
@@ -25,7 +24,7 @@ set prms_id 0
 set bug_id 0
 
 # are we on a target board
-if [is_remote target] {
+if { [is_remote target] || ![isnative] } then {
     return
 }
 
@@ -40,6 +39,7 @@ proc do_steps_and_nexts {} {
  
     gdb_reinitialize_dir $srcdir/..
 
+    set unlikely_line 0
     for {set count 0} {$count < 32} {incr count} {
 	send_gdb "list\n"
 	# NOTE: carlton/2002-12-11: The "initial brace" and
@@ -75,8 +75,16 @@ proc do_steps_and_nexts {} {
 		set description "step over execarg initialization"
 		set command "step"
 	    }
+	    -re ".*pidarg = NULL.*$gdb_prompt $" {
+		set description "step over pidarg initialization"
+		set command "step"
+	    }
 	    -re ".*corearg = NULL.*$gdb_prompt $" {
 		set description "step over corearg initialization"
+		set command "step"
+	    }
+	    -re ".*pid_or_core_arg = NULL.*$gdb_prompt $" {
+		set description "step over pid_or_core_arg initialization"
 		set command "step"
 	    }
 	    -re ".*cdarg = NULL.*$gdb_prompt $" {
@@ -158,7 +166,7 @@ proc do_steps_and_nexts {} {
 		set description "next over textdomain PACKAGE"
 		set command "next"
 	    }
-	    -re "\[0-9\]*\t\{\r\n$gdb_prompt $" {
+	    -re "\[0-9\]+\[\t \]+\{\r\n$gdb_prompt $" {
 		set description "step over initial brace"
 		set command "step"
 	    }
@@ -184,14 +192,33 @@ proc do_steps_and_nexts {} {
 		set description "next over getcwd"
 		set command "next"
 	    }
-	    -re "\[ \t\]+\{\r\n$gdb_prompt $" {
-		setup_xfail "mips-*-irix5*"
-		fail "$description ended up at odd location"
+	    -re ".*quit_flag = 0.*$gdb_prompt $" {
+		set description "step over quit_flag initialization"
+		set command "step"
+	    }
+	    -re ".*gdb_stdout = stdio_fileopen .stdout.;.*$gdb_prompt $" {
+		set description "step over gdb_stdout initialization"
+		set command "step"
+	    }
+	    -re ".*gdb_stderr = stdio_fileopen .stderr.;.*$gdb_prompt $" {
+		set description "step over gdb_stderr initialization"
+		set command "step"
 	    }
 	    -re ".*main.c.*No such file or directory.*$gdb_prompt $" {
 		setup_xfail "rs6000-*-aix3*"
 		fail "must be able to list source lines"
 		return
+	    }
+	    -re ".*interpreter_p = xstrdup.*$gdb_prompt $" {
+		if { $unlikely_line == 0 } {
+		    # This is a GCC optimization bug; a constant has been
+		    # associated with the wrong line number.
+		    setup_xfail "*-*-*" gcc/26475
+		    fail "$description (unlikely line from gcc)"
+		    set unlikely_line 1
+		}
+		set description "next over xstrdup"
+		set command "next"
 	    }
 	    -re ".*$gdb_prompt $" {
 		fail "unknown source line after $description"
@@ -391,18 +418,26 @@ proc test_with_self { executable } {
     send_gdb "continue\n"
     gdb_expect {
 	-re "GNU gdb \[0-9\.\]*.*
-Copyright \[0-9\]* Free Software Foundation, Inc.*
+Copyright \\(C\\) \[0-9\]* Free Software Foundation, Inc.*
+License GPLv3\\+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.*
+This is free software: you are free to change and redistribute it.*
+There is NO WARRANTY, to the extent permitted by law.  Type \"show copying\".*
+and \"show warranty\" for details.*
+This GDB was configured as .*$gdb_prompt $"\
+	    { pass "xgdb is at prompt" }
+	-re "GNU gdb \[0-9\.\]*.*
+Copyright \\(C\\) \[0-9\]* Free Software Foundation, Inc.*
 GDB is free software, covered by the GNU General Public License, and you are.*
 welcome to change it and/or distribute copies of it under certain conditions.*
 Type \"show copying\" to see the conditions.*
 There is absolutely no warranty for GDB.  Type \"show warranty\" for details.*
 This GDB was configured as .*$gdb_prompt $"\
-	    { pass "xgdb is at prompt" }
+	    { pass "xgdb is at prompt (obsolescent gdb 2)" }
 	-re "GDB is free software and you are welcome to distribute copies of it.*
  under certain conditions; type \"show copying\" to see the conditions..*
 There is absolutely no warranty for GDB; type \"show warranty\" for details..*
 GDB.*Copyright \[0-9\]+ Free Software Foundation, Inc..*$gdb_prompt $"\
-	    { pass "xgdb is at prompt (obsolescent gdb)" }
+	    { pass "xgdb is at prompt (obsolescent gdb 1)" }
 	-re ".*$gdb_prompt $"       { fail "xgdb is at prompt" }
 	timeout	            { fail "(timeout) xgdb is at prompt" }
     }

@@ -1,6 +1,7 @@
 /*
- *  Copyright (C) 2007 Sourcefire Inc.
- *  Author: aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -78,9 +79,9 @@ static unsigned int u2a(uint8_t *dest, unsigned int len) {
 *********************/
 
 struct MT {
-  uint32_t mt[624];
-  uint32_t items;
   uint32_t *next;
+  uint32_t items;
+  uint32_t mt[624];
 };
 
 static uint8_t MT_getnext(struct MT *MT) {
@@ -181,7 +182,7 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
   uint8_t b[300], comp;
   uint8_t *buf = b;
   uint32_t s, m4sum=0;
-  int i;
+  int i, ret;
   unsigned int files=0;
   char tempfile[1024];
   struct UNP UNP;
@@ -192,7 +193,7 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
   for (i=0; i<16; i++)
     m4sum += buf[i];
 
-  while(!ctx->limits || !ctx->limits->maxfiles || files < ctx->limits->maxfiles) {
+  while((ret=cli_checklimits("autoit", ctx, 0, 0, 0))==CL_CLEAN) {
     buf = b;
     if (cli_readn(desc, buf, 8)!=8)
       return CL_CLEAN;
@@ -250,8 +251,8 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
     cli_dbgmsg("autoit: advertised uncompressed size %x\n", cli_readint32((char *)buf+5) ^ 0x45aa);
     cli_dbgmsg("autoit: ref chksum: %x\n", cli_readint32((char *)buf+9) ^ 0xc3d2);
 
-    if(ctx->limits && ctx->limits->maxfilesize && UNP.csize > ctx->limits->maxfilesize) {
-      cli_dbgmsg("autoit: skipping file due to size limit (%u, max: %lu)\n", UNP.csize, ctx->limits->maxfilesize);
+    
+    if(cli_checklimits("autoit", ctx, UNP.csize, 0, 0)!=CL_CLEAN) {
       lseek(desc, UNP.csize, SEEK_CUR);
       continue;
     }
@@ -275,8 +276,7 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
 
       if(!(UNP.usize = be32_to_host(*(uint32_t *)(buf+4))))
 	UNP.usize = UNP.csize; /* only a specifically crafted or badly corrupted sample should land here */
-      if(ctx->limits && ctx->limits->maxfilesize && UNP.usize > ctx->limits->maxfilesize) {
-	cli_dbgmsg("autoit: skipping file due to size limit (%u, max: %lu)\n", UNP.csize, ctx->limits->maxfilesize);
+      if(cli_checklimits("autoit", ctx, UNP.usize, 0, 0)!=CL_CLEAN) {
 	free(buf);
 	continue;
       }
@@ -382,8 +382,7 @@ static int ea05(int desc, cli_ctx *ctx, char *tmpd) {
     close(i);
     if(!cli_leavetemps_flag) unlink(tempfile);
   }
-  cli_dbgmsg("autoit: files limit reached (max: %u)\n", ctx->limits->maxfiles);
-  return CL_EMAXFILES;
+  return ret;
 }
 
 
@@ -478,7 +477,7 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
   uint8_t b[600], comp, script;
   uint8_t *buf;
   uint32_t s;
-  int i;
+  int i, ret;
   unsigned int files=0;
   char tempfile[1024];
   const char prefixes[] = { '\0', '\0', '@', '$', '\0', '.', '"', '#' };
@@ -492,7 +491,7 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
   /*   buf+=0x10; */
   lseek(desc, 16, SEEK_CUR);   /* for now we just skip the garbage */
 
-  while(!ctx->limits || !ctx->limits->maxfiles || files < ctx->limits->maxfiles) {
+  while((ret=cli_checklimits("cli_autoit", ctx, 0, 0, 0))==CL_CLEAN) {
     buf = b;
     if (cli_readn(desc, buf, 8)!=8)
       return CL_CLEAN;
@@ -555,8 +554,7 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
     cli_dbgmsg("autoit: advertised uncompressed size %x\n", cli_readint32((char *)buf+5) ^ 0x87bc);
     cli_dbgmsg("autoit: ref chksum: %x\n", cli_readint32((char *)buf+9) ^ 0xa685);
 
-    if(ctx->limits && ctx->limits->maxfilesize && UNP.csize > ctx->limits->maxfilesize) {
-      cli_dbgmsg("autoit: skipping file due to size limit (%u, max: %lu)\n", UNP.csize, ctx->limits->maxfilesize);
+    if(cli_checklimits("autoit", ctx, UNP.csize, 0, 0)!=CL_CLEAN) {
       lseek(desc, UNP.csize, SEEK_CUR);
       continue;
     }
@@ -581,7 +579,7 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
 
       if(!(UNP.usize = be32_to_host(*(uint32_t *)(buf+4))))
 	UNP.usize = UNP.csize; /* only a specifically crafted or badly corrupted sample should land here */
-      if(ctx->limits && ctx->limits->maxfilesize && UNP.usize > ctx->limits->maxfilesize) {
+      if(cli_checklimits("autoit", ctx, UNP.usize, 0, 0)!=CL_CLEAN) {
 	free(buf);
 	continue;
       }
@@ -893,8 +891,7 @@ static int ea06(int desc, cli_ctx *ctx, char *tmpd) {
     close(i);
     if(!cli_leavetemps_flag) unlink(tempfile);
   }
-  cli_dbgmsg("autoit: Files limit reached (max: %u)\n", ctx->limits->maxfiles);
-  return CL_EMAXFILES;
+  return ret;
 }
 
 #endif /* FPU_WORDS_BIGENDIAN */

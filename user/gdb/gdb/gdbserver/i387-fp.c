@@ -1,12 +1,12 @@
 /* i387-specific utility functions, for the remote server for GDB.
-   Copyright 2000, 2001, 2002
+   Copyright (C) 2000, 2001, 2002, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 #include "i387-fp.h"
@@ -33,17 +31,21 @@ int num_xmm_registers = 8;
 struct i387_fsave {
   /* All these are only sixteen bits, plus padding, except for fop (which
      is only eleven bits), and fooff / fioff (which are 32 bits each).  */
-  unsigned int fctrl;
-  unsigned int fstat;
-  unsigned int ftag;
+  unsigned short fctrl;
+  unsigned short pad1;
+  unsigned short fstat;
+  unsigned short pad2;
+  unsigned short ftag;
+  unsigned short pad3;
   unsigned int fioff;
   unsigned short fiseg;
   unsigned short fop;
   unsigned int fooff;
-  unsigned int foseg;
+  unsigned short foseg;
+  unsigned short pad4;
 
   /* Space for eight 80-bit FP values.  */
-  char st_space[80];
+  unsigned char st_space[80];
 };
 
 struct i387_fxsave {
@@ -54,19 +56,20 @@ struct i387_fxsave {
   unsigned short ftag;
   unsigned short fop;
   unsigned int fioff;
-  unsigned int fiseg;
+  unsigned short fiseg;
+  unsigned short pad1;
   unsigned int fooff;
-  unsigned int foseg;
+  unsigned short foseg;
+  unsigned short pad12;
 
   unsigned int mxcsr;
-
-  unsigned int _pad1;
+  unsigned int pad3;
 
   /* Space for eight 80-bit FP values in 128-bit spaces.  */
-  char st_space[128];
+  unsigned char st_space[128];
 
   /* Space for eight 128-bit XMM values, or 16 on x86-64.  */
-  char xmm_space[256];
+  unsigned char xmm_space[256];
 };
 
 void
@@ -89,23 +92,23 @@ i387_cache_to_fsave (void *buf)
 
   /* Some registers are 16-bit.  */
   collect_register_by_name ("fctrl", &val);
-  *(unsigned short *) &fp->fctrl = val;
+  fp->fctrl = val;
 
   collect_register_by_name ("fstat", &val);
   val &= 0xFFFF;
-  *(unsigned short *) &fp->fstat = val;
+  fp->fstat = val;
 
   collect_register_by_name ("ftag", &val);
   val &= 0xFFFF;
-  *(unsigned short *) &fp->ftag = val;
+  fp->ftag = val;
 
   collect_register_by_name ("fiseg", &val);
   val &= 0xFFFF;
-  *(unsigned short *) &fp->fiseg = val;
+  fp->fiseg = val;
 
   collect_register_by_name ("foseg", &val);
   val &= 0xFFFF;
-  *(unsigned short *) &fp->foseg = val;
+  fp->foseg = val;
 }
 
 void
@@ -138,6 +141,7 @@ i387_fsave_to_cache (const void *buf)
   val = fp->foseg & 0xFFFF;
   supply_register_by_name ("foseg", &val);
 
+  /* fop has only 11 valid bits.  */
   val = (fp->fop) & 0x7FF;
   supply_register_by_name ("fop", &val);
 }
@@ -166,15 +170,15 @@ i387_cache_to_fxsave (void *buf)
 
   /* Some registers are 16-bit.  */
   collect_register_by_name ("fctrl", &val);
-  *(unsigned short *) &fp->fctrl = val;
+  fp->fctrl = val;
 
   collect_register_by_name ("fstat", &val);
-  val &= 0xFFFF;
-  *(unsigned short *) &fp->fstat = val;
+  fp->fstat = val;
 
   /* Convert to the simplifed tag form stored in fxsave data.  */
   collect_register_by_name ("ftag", &val);
   val &= 0xFFFF;
+  val2 = 0;
   for (i = 7; i >= 0; i--)
     {
       int tag = (val >> (i * 2)) & 3;
@@ -182,15 +186,13 @@ i387_cache_to_fxsave (void *buf)
       if (tag != 3)
 	val2 |= (1 << i);
     }
-  *(unsigned short *) &fp->ftag = val2;
+  fp->ftag = val2;
 
   collect_register_by_name ("fiseg", &val);
-  val &= 0xFFFF;
-  *(unsigned short *) &fp->fiseg = val;
+  fp->fiseg = val;
 
   collect_register_by_name ("foseg", &val);
-  val &= 0xFFFF;
-  *(unsigned short *) &fp->foseg = val;
+  fp->foseg = val;
 }
 
 static int
@@ -271,7 +273,7 @@ i387_fxsave_to_cache (const void *buf)
   for (i = 7; i >= 0; i--)
     {
       int tag;
-      if (val & (1 << i))
+      if (fp->ftag & (1 << i))
 	tag = i387_ftag (fp, (i + 8 - top) % 8);
       else
 	tag = 3;

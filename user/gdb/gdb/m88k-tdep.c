@@ -1,12 +1,12 @@
 /* Target-dependent code for the Motorola 88000 series.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -51,7 +49,7 @@ m88k_fetch_instruction (CORE_ADDR pc)
 /* Return the name of register REGNUM.  */
 
 static const char *
-m88k_register_name (int regnum)
+m88k_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static char *register_names[] =
   {
@@ -102,11 +100,11 @@ m88k_addr_bits_remove (CORE_ADDR addr)
    *LEN and optionally adjust *PC to point to the correct memory
    location for inserting the breakpoint.  */
    
-static const unsigned char *
-m88k_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+static const gdb_byte *
+m88k_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   /* tb 0,r0,511 */
-  static unsigned char break_insn[] = { 0xf0, 0x00, 0xd1, 0xff };
+  static gdb_byte break_insn[] = { 0xf0, 0x00, 0xd1, 0xff };
 
   *len = sizeof (break_insn);
   return break_insn;
@@ -122,7 +120,7 @@ m88k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 }
 
 static void
-m88k_write_pc (CORE_ADDR pc, ptid_t ptid)
+m88k_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   /* According to the MC88100 RISC Microprocessor User's Manual,
      section 6.4.3.1.2:
@@ -140,9 +138,9 @@ m88k_write_pc (CORE_ADDR pc, ptid_t ptid)
      with it.  We could even (presumably) give it a totally bogus
      value.  */
 
-  write_register_pid (M88K_SXIP_REGNUM, pc, ptid);
-  write_register_pid (M88K_SNIP_REGNUM, pc | 2, ptid);
-  write_register_pid (M88K_SFIP_REGNUM, (pc + 4) | 2, ptid);
+  regcache_cooked_write_unsigned (regcache, M88K_SXIP_REGNUM, pc);
+  regcache_cooked_write_unsigned (regcache, M88K_SNIP_REGNUM, pc | 2);
+  regcache_cooked_write_unsigned (regcache, M88K_SFIP_REGNUM, (pc + 4) | 2);
 }
 
 
@@ -266,13 +264,13 @@ m88k_store_arguments (struct regcache *regcache, int nargs,
 
   for (i = 0; i < nargs; i++)
     {
-      struct type *type = VALUE_TYPE (args[i]);
+      struct type *type = value_type (args[i]);
       int len = TYPE_LENGTH (type);
 
       if (m88k_integral_or_pointer_p (type) && len < 4)
 	{
 	  args[i] = value_cast (builtin_type_int32, args[i]);
-	  type = VALUE_TYPE (args[i]);
+	  type = value_type (args[i]);
 	  len = TYPE_LENGTH (type);
 	}
 
@@ -306,8 +304,8 @@ m88k_store_arguments (struct regcache *regcache, int nargs,
 
   for (i = 0; i < nargs; i++)
     {
-      char *valbuf = VALUE_CONTENTS (args[i]);
-      struct type *type = VALUE_TYPE (args[i]);
+      const bfd_byte *valbuf = value_contents (args[i]);
+      struct type *type = value_type (args[i]);
       int len = TYPE_LENGTH (type);
       int stack_word = num_stack_words;
 
@@ -384,11 +382,11 @@ m88k_unwind_dummy_id (struct gdbarch *arch, struct frame_info *next_frame)
 
 static enum return_value_convention
 m88k_return_value (struct gdbarch *gdbarch, struct type *type,
-		   struct regcache *regcache, void *readbuf,
-		   const void *writebuf)
+		   struct regcache *regcache, gdb_byte *readbuf,
+		   const gdb_byte *writebuf)
 {
   int len = TYPE_LENGTH (type);
-  char buf[8];
+  gdb_byte buf[8];
 
   if (!m88k_integral_or_pointer_p (type) && !m88k_floating_p (type))
     return RETURN_VALUE_STRUCT_CONVENTION;
@@ -628,7 +626,7 @@ const int m88k_max_prologue_size = 128 * M88K_INSN_SIZE;
    starting at PC.  */
 
 static CORE_ADDR
-m88k_skip_prologue (CORE_ADDR pc)
+m88k_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct symtab_and_line sal;
   CORE_ADDR func_start, func_end;
@@ -659,12 +657,9 @@ m88k_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
   cache->fp_offset = -1;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
-    {
-      CORE_ADDR addr_in_block = frame_unwind_address_in_block (next_frame);
-      m88k_analyze_prologue (cache->pc, addr_in_block, cache);
-    }
+    m88k_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
 
   /* Calculate the stack pointer used in the prologue.  */
   if (cache->fp_offset != -1)
@@ -721,7 +716,7 @@ static void
 m88k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 			  int regnum, int *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, void *valuep)
+			  int *realnump, gdb_byte *valuep)
 {
   struct m88k_frame_cache *cache = m88k_frame_cache (next_frame, this_cache);
 
@@ -798,7 +793,7 @@ m88k_supply_gregset (const struct regset *regset,
 		     struct regcache *regcache,
 		     int regnum, const void *gregs, size_t len)
 {
-  const char *regs = gregs;
+  const gdb_byte *regs = gregs;
   int i;
 
   for (i = 0; i < M88K_NUM_REGS; i++)
@@ -845,7 +840,7 @@ m88k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* There is no real `long double'.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   set_gdbarch_num_regs (gdbarch, M88K_NUM_REGS);
   set_gdbarch_register_name (gdbarch, m88k_register_name);

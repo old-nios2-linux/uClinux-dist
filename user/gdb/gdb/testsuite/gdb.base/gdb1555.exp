@@ -1,18 +1,17 @@
-# Copyright 2004 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -25,10 +24,18 @@ if $tracelevel then {
     strace $tracelevel
 }
 
+if {[skip_shlib_tests]} {
+    return 0
+}
+
 set testfile gdb1555-main
 set libfile gdb1555
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
+
+set libsrc "${srcdir}/${subdir}/${libfile}.c"
+set libobj "${objdir}/${subdir}/${libfile}.so"
+set execsrc "${srcdir}/${subdir}/${srcfile}"
 
 remote_exec build "rm -f ${binfile}"
 
@@ -37,56 +44,17 @@ if [get_compiler_info ${binfile}] {
     return -1
 }
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}.o" object {debug}] != "" } {
+if { [gdb_compile_shlib $libsrc $libobj {debug}] != ""
+     || [gdb_compile $execsrc ${binfile} executable \
+	     [list debug shlib=${libobj}]] != "" } {
     return -1
 }
-
-# Build the shared libraries this test case needs.
-#
-
-if {$gcc_compiled == 0} {
-    if [istarget "hppa*-hp-hpux*"] then {
-        set additional_flags "additional_flags=+z"
-    } elseif { [istarget "mips-sgi-irix*"] } {
-        # Disable SGI compiler's implicit -Dsgi
-        set additional_flags "additional_flags=-Usgi"
-    } else {
-        # don't know what the compiler is...
-        set additional_flags ""
-    }
-} else {
-    if { ([istarget "powerpc*-*-aix*"]
-    || [istarget "rs6000*-*-aix*"]) } {
-        set additional_flags ""
-    } else {
-        set additional_flags "additional_flags=-fpic"
-    }
-}
-
-set additional_flags "$additional_flags -shared"
-if {[gdb_compile "${srcdir}/${subdir}/${libfile}.c" "${objdir}/${subdir}/${libfile}.so" executable [list debug $additional_flags "incdir=${objdir}"]] != ""} {
-    return -1
-}
-
-if { ($gcc_compiled 
-&&  ([istarget "powerpc*-*-aix*"]
-|| [istarget "rs6000*-*-aix*"] )) } {
-    set additional_flags "additional_flags=-L${objdir}/${subdir}"
-} elseif { [istarget "mips-sgi-irix*"] } {
-    set additional_flags "additional_flags=-rpath ${objdir}/${subdir}"
-} else {
-    set additional_flags ""
-}
-
-if {[gdb_compile "${objdir}/${subdir}/${testfile}.o ${objdir}/${subdir}/${libfile}.so" "${binfile}" executable [list debug $additional_flags]] != ""} {
-    return -1
-}
-
 
 gdb_exit
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
+gdb_load_shlibs $libobj
 
 if ![runto_main] then {
     fail "Can't run to main"
@@ -97,7 +65,7 @@ if ![runto_main] then {
 set name "Step into shared lib function"
 gdb_test_multiple "s" $name \
 {
-    -re "hithere2 \\(\\) at.*${libfile}.c:25\r\n25.*a = 21;.*$gdb_prompt $"  {
+    -re "hithere2 \\(\\) at.*${libfile}.c:\[0-9\]+\r\n\[0-9\]+.*a = 21;.*$gdb_prompt $"  {
 	pass $name
     }
     -re "0x\[0-9a-f\]+ in .* \\(\\) from /lib/ld.so.1.*$gdb_prompt $" { 
@@ -109,7 +77,7 @@ gdb_test_multiple "s" $name \
 set name "Next while in a shared lib function"
 gdb_test_multiple "n" $name \
 {
-    -re "26.*return a;.*$gdb_prompt $" {
+    -re "\[0-9\]+.*return a;.*$gdb_prompt $" {
 	pass $name
     }
     -re "Single stepping until exit from function .*, \r\nwhich has no line number information.\r\n\r\nProgram exited normally.*$gdb_prompt $" { 

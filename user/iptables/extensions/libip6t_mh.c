@@ -58,7 +58,7 @@ static void print_types_all(void)
 	printf("\n");
 }
 
-static void help(void)
+static void mh_help(void)
 {
 	printf(
 "MH v%s options:\n"
@@ -67,7 +67,7 @@ IPTABLES_VERSION);
 	print_types_all();
 }
 
-static void init(struct ip6t_entry_match *m, unsigned int *nfcache)
+static void mh_init(struct xt_entry_match *m)
 {
 	struct ip6t_mh *mhinfo = (struct ip6t_mh *)m->data;
 
@@ -125,10 +125,8 @@ static void parse_mh_types(const char *mhtype, u_int8_t *types)
 
 #define MH_TYPES 0x01
 
-static int parse(int c, char **argv, int invert, unsigned int *flags,
-		 const struct ip6t_entry *entry,
-		 unsigned int *nfcache,
-		 struct ip6t_entry_match **match)
+static int mh_parse(int c, char **argv, int invert, unsigned int *flags,
+                    const void *entry, struct xt_entry_match **match)
 {
 	struct ip6t_mh *mhinfo = (struct ip6t_mh *)(*match)->data;
 
@@ -149,11 +147,6 @@ static int parse(int c, char **argv, int invert, unsigned int *flags,
 	}
 
 	return 1;
-}
-
-/* Final check; we don't care. */
-static void final_check(unsigned int flags)
-{
 }
 
 static const char *type_to_name(u_int8_t type)
@@ -195,9 +188,8 @@ static void print_types(u_int8_t min, u_int8_t max, int invert, int numeric)
 	}
 }
 
-static void print(const struct ip6t_ip6 *ip,
-		  const struct ip6t_entry_match *match,
-		  int numeric)
+static void mh_print(const void *ip, const struct xt_entry_match *match,
+                     int numeric)
 {
 	const struct ip6t_mh *mhinfo = (struct ip6t_mh *)match->data;
 
@@ -210,8 +202,7 @@ static void print(const struct ip6t_ip6 *ip,
 		       mhinfo->invflags & ~IP6T_MH_INV_MASK);
 }
 
-static void save(const struct ip6t_ip6 *ip,
-		 const struct ip6t_entry_match *match)
+static void mh_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ip6t_mh *mhinfo = (struct ip6t_mh *)match->data;
 
@@ -227,26 +218,25 @@ static void save(const struct ip6t_ip6 *ip,
 		printf("--mh-type %u ", mhinfo->types[0]);
 }
 
-static struct option opts[] = {
-	{ "mh-type", 1, 0, '1' },
-	{0}
+static const struct option mh_opts[] = {
+	{ "mh-type", 1, NULL, '1' },
+	{ }
 };
 
-static struct ip6tables_match mh = {
+static struct ip6tables_match mh_match6 = {
 	.name		= "mh",
 	.version	= IPTABLES_VERSION,
 	.size		= IP6T_ALIGN(sizeof(struct ip6t_mh)),
 	.userspacesize	= IP6T_ALIGN(sizeof(struct ip6t_mh)),
-	.help		= &help,
-	.init		= &init,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts,
+	.help		= mh_help,
+	.init		= mh_init,
+	.parse		= mh_parse,
+	.print		= mh_print,
+	.save		= mh_save,
+	.extra_opts	= mh_opts,
 };
 
 void _init(void)
 {
-	register_match6(&mh);
+	register_match6(&mh_match6);
 }

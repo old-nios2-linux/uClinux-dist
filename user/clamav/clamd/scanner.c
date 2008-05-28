@@ -202,12 +202,11 @@ static int dirscan(const char *dirname, const char **virname, unsigned long int 
 					    return 1;
 					}
 
-					while(!multi_pool->thr_idle) /* non-critical */
-#ifdef C_WINDOWS
-					    Sleep(1);
-#else
-					    usleep(200);
-#endif
+					pthread_mutex_lock(&multi_pool->pool_mutex);
+					while(!multi_pool->thr_idle) /* non-critical */ {
+						pthread_cond_wait(&multi_pool->idle_cond, &multi_pool->pool_mutex);
+					}
+					pthread_mutex_unlock(&multi_pool->pool_mutex);
 
 				    } else { /* CONTSCAN, SCAN */
 
@@ -371,40 +370,6 @@ int scan(const char *filename, unsigned long int *scanned, const struct cl_engin
 	mdprintf(odesc, "%s: OK\n", filename);
 
     /* mdprintf(odesc, "\n"); */ /* Terminate response with a blank line boundary */
-    return ret;
-}
-
-int scanfd(const int fd, unsigned long int *scanned, const struct cl_engine *engine, const struct cl_limits *limits, unsigned int options, const struct cfgstruct *copt, int odesc)
-{
-	int ret;
-	const char *virname;
-	struct stat statbuf;
-	char fdstr[32];      
-
-
-    if(fstat(fd, &statbuf) == -1)
-	return -1;
-
-    if(!S_ISREG(statbuf.st_mode))
-	return -1;
-
-    snprintf(fdstr, sizeof(fdstr), "fd[%d]", fd);
-
-    ret = cl_scandesc(fd, &virname, scanned, engine, limits, options);
-
-    if(ret == CL_VIRUS) {
-	mdprintf(odesc, "%s: %s FOUND\n", fdstr, virname);
-	logg("%s: %s FOUND\n", fdstr, virname);
-	virusaction(fdstr, virname, copt);
-    } else if(ret != CL_CLEAN) {
-	mdprintf(odesc, "%s: %s ERROR\n", fdstr, cl_strerror(ret));
-	logg("%s: %s ERROR\n", fdstr, cl_strerror(ret));
-    } else {
-	mdprintf(odesc, "%s: OK\n", fdstr);
-        if(logok)
-	    logg("%s: OK\n", fdstr); 
-    }
-
     return ret;
 }
 

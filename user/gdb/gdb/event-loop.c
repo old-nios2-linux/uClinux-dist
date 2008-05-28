@@ -1,12 +1,13 @@
 /* Event loop machinery for GDB, the GNU debugger.
-   Copyright 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "event-loop.h"
@@ -35,6 +34,9 @@
 #include "gdb_string.h"
 #include <errno.h>
 #include <sys/time.h>
+#include "exceptions.h"
+#include "gdb_assert.h"
+#include "gdb_select.h"
 
 typedef struct gdb_event gdb_event;
 typedef void (event_handler_func) (int);
@@ -131,6 +133,11 @@ event_queue;
 #endif /* HAVE_POLL */
 
 static unsigned char use_poll = USE_POLL;
+
+#ifdef USE_WIN32API
+#include <windows.h>
+#include <io.h>
+#endif
 
 static struct
   {
@@ -451,7 +458,7 @@ add_file_handler (int fd, handler_func * proc, gdb_client_data client_data)
 	use_poll = 0;
 #else
       internal_error (__FILE__, __LINE__,
-		      "use_poll without HAVE_POLL");
+		      _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
     }
   if (use_poll)
@@ -460,7 +467,7 @@ add_file_handler (int fd, handler_func * proc, gdb_client_data client_data)
       create_file_handler (fd, POLLIN, proc, client_data);
 #else
       internal_error (__FILE__, __LINE__,
-		      "use_poll without HAVE_POLL");
+		      _("use_poll without HAVE_POLL"));
 #endif
     }
   else
@@ -518,7 +525,7 @@ create_file_handler (int fd, int mask, handler_func * proc, gdb_client_data clie
 	  (gdb_notifier.poll_fds + gdb_notifier.num_fds - 1)->revents = 0;
 #else
 	  internal_error (__FILE__, __LINE__,
-			  "use_poll without HAVE_POLL");
+			  _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
 	}
       else
@@ -596,7 +603,7 @@ delete_file_handler (int fd)
       gdb_notifier.num_fds--;
 #else
       internal_error (__FILE__, __LINE__,
-		      "use_poll without HAVE_POLL");
+		      _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
     }
   else
@@ -687,25 +694,25 @@ handle_file_event (int event_file_desc)
 		  /* Work in progress. We may need to tell somebody what
 		     kind of error we had. */
 		  if (error_mask_returned & POLLHUP)
-		    printf_unfiltered ("Hangup detected on fd %d\n", file_ptr->fd);
+		    printf_unfiltered (_("Hangup detected on fd %d\n"), file_ptr->fd);
 		  if (error_mask_returned & POLLERR)
-		    printf_unfiltered ("Error detected on fd %d\n", file_ptr->fd);
+		    printf_unfiltered (_("Error detected on fd %d\n"), file_ptr->fd);
 		  if (error_mask_returned & POLLNVAL)
-		    printf_unfiltered ("Invalid or non-`poll'able fd %d\n", file_ptr->fd);
+		    printf_unfiltered (_("Invalid or non-`poll'able fd %d\n"), file_ptr->fd);
 		  file_ptr->error = 1;
 		}
 	      else
 		file_ptr->error = 0;
 #else
 	      internal_error (__FILE__, __LINE__,
-			      "use_poll without HAVE_POLL");
+			      _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
 	    }
 	  else
 	    {
 	      if (file_ptr->ready_mask & GDB_EXCEPTION)
 		{
-		  printf_unfiltered ("Exception condition detected on fd %d\n", file_ptr->fd);
+		  printf_unfiltered (_("Exception condition detected on fd %d\n"), file_ptr->fd);
 		  file_ptr->error = 1;
 		}
 	      else
@@ -757,10 +764,10 @@ gdb_wait_for_event (void)
       /* Don't print anything if we get out of poll because of a
          signal. */
       if (num_found == -1 && errno != EINTR)
-	perror_with_name ("Poll");
+	perror_with_name (("poll"));
 #else
       internal_error (__FILE__, __LINE__,
-		      "use_poll without HAVE_POLL");
+		      _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
     }
   else
@@ -768,12 +775,12 @@ gdb_wait_for_event (void)
       gdb_notifier.ready_masks[0] = gdb_notifier.check_masks[0];
       gdb_notifier.ready_masks[1] = gdb_notifier.check_masks[1];
       gdb_notifier.ready_masks[2] = gdb_notifier.check_masks[2];
-      num_found = select (gdb_notifier.num_fds,
-			  &gdb_notifier.ready_masks[0],
-			  &gdb_notifier.ready_masks[1],
-			  &gdb_notifier.ready_masks[2],
-			  gdb_notifier.timeout_valid
-			  ? &gdb_notifier.select_timeout : NULL);
+      num_found = gdb_select (gdb_notifier.num_fds,
+			      &gdb_notifier.ready_masks[0],
+			      &gdb_notifier.ready_masks[1],
+			      &gdb_notifier.ready_masks[2],
+			      gdb_notifier.timeout_valid
+			      ? &gdb_notifier.select_timeout : NULL);
 
       /* Clear the masks after an error from select. */
       if (num_found == -1)
@@ -783,7 +790,7 @@ gdb_wait_for_event (void)
 	  FD_ZERO (&gdb_notifier.ready_masks[2]);
 	  /* Dont print anything is we got a signal, let gdb handle it. */
 	  if (errno != EINTR)
-	    perror_with_name ("Select");
+	    perror_with_name (("select"));
 	}
     }
 
@@ -816,13 +823,12 @@ gdb_wait_for_event (void)
 		  file_event_ptr = create_file_event (file_ptr->fd);
 		  async_queue_event (file_event_ptr, TAIL);
 		}
+	      file_ptr->ready_mask = (gdb_notifier.poll_fds + i)->revents;
 	    }
-
-	  file_ptr->ready_mask = (gdb_notifier.poll_fds + i)->revents;
 	}
 #else
       internal_error (__FILE__, __LINE__,
-		      "use_poll without HAVE_POLL");
+		      _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
     }
   else
@@ -942,7 +948,7 @@ delete_async_signal_handler (async_signal_handler ** async_handler_ptr)
   else
     {
       prev_ptr = sighandler_list.first_handler;
-      while (prev_ptr->next_handler != (*async_handler_ptr) && prev_ptr)
+      while (prev_ptr && prev_ptr->next_handler != (*async_handler_ptr))
 	prev_ptr = prev_ptr->next_handler;
       prev_ptr->next_handler = (*async_handler_ptr)->next_handler;
       if (sighandler_list.last_handler == (*async_handler_ptr))
@@ -1143,7 +1149,7 @@ poll_timers (void)
 	  gdb_notifier.poll_timeout = delta.tv_sec * 1000;
 #else
 	  internal_error (__FILE__, __LINE__,
-			  "use_poll without HAVE_POLL");
+			  _("use_poll without HAVE_POLL"));
 #endif /* HAVE_POLL */
 	}
       else

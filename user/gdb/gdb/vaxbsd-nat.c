@@ -1,12 +1,12 @@
 /* Native-dependent code for modern VAX BSD's.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -36,7 +34,7 @@
 static void
 vaxbsd_supply_gregset (struct regcache *regcache, const void *gregs)
 {
-  const char *regs = gregs;
+  const gdb_byte *regs = gregs;
   int regnum;
 
   for (regnum = 0; regnum < VAX_NUM_REGS; regnum++)
@@ -50,7 +48,7 @@ static void
 vaxbsd_collect_gregset (const struct regcache *regcache,
 			void *gregs, int regnum)
 {
-  char *regs = gregs;
+  gdb_byte *regs = gregs;
   int i;
 
   for (i = 0; i <= VAX_NUM_REGS; i++)
@@ -65,34 +63,34 @@ vaxbsd_collect_gregset (const struct regcache *regcache,
    for all registers.  */
 
 static void
-vaxbsd_fetch_inferior_registers (int regnum)
+vaxbsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   struct reg regs;
 
   if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-    perror_with_name ("Couldn't get registers");
+    perror_with_name (_("Couldn't get registers"));
 
-  vaxbsd_supply_gregset (current_regcache, &regs);
+  vaxbsd_supply_gregset (regcache, &regs);
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers.  */
 
 static void
-vaxbsd_store_inferior_registers (int regnum)
+vaxbsd_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   struct reg regs;
 
   if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-    perror_with_name ("Couldn't get registers");
+    perror_with_name (_("Couldn't get registers"));
 
-  vaxbsd_collect_gregset (current_regcache, &regs, regnum);
+  vaxbsd_collect_gregset (regcache, &regs, regnum);
 
   if (ptrace (PT_SETREGS, PIDGET (inferior_ptid),
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-    perror_with_name ("Couldn't write registers");
+    perror_with_name (_("Couldn't write registers"));
 }
 
 

@@ -1,6 +1,6 @@
 /* Register groupings for GDB, the GNU debugger.
 
-   Copyright 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "reggroups.h"
@@ -159,16 +157,14 @@ default_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   int float_p;
   int raw_p;
 
-  if (REGISTER_NAME (regnum) == NULL
-      || *REGISTER_NAME (regnum) == '\0')
+  if (gdbarch_register_name (gdbarch, regnum) == NULL
+      || *gdbarch_register_name (gdbarch, regnum) == '\0')
     return 0;
   if (group == all_reggroup)
     return 1;
   vector_p = TYPE_VECTOR (register_type (gdbarch, regnum));
   float_p = TYPE_CODE (register_type (gdbarch, regnum)) == TYPE_CODE_FLT;
-  /* FIXME: cagney/2003-04-13: Can't yet use gdbarch_num_regs
-     (gdbarch), as not all architectures are multi-arch.  */
-  raw_p = regnum < NUM_REGS;
+  raw_p = regnum < gdbarch_num_regs (gdbarch);
   if (group == float_reggroup)
     return float_p;
   if (group == vector_reggroup)
@@ -215,7 +211,7 @@ reggroups_dump (struct gdbarch *gdbarch, struct ui_file *file)
 		type = "internal";
 		break;
 	      default:
-		internal_error (__FILE__, __LINE__, "bad switch");
+		internal_error (__FILE__, __LINE__, _("bad switch"));
 	      }
 	  }
 	fprintf_unfiltered (file, " %-10s", type);
@@ -240,7 +236,7 @@ maintenance_print_reggroups (char *args, int from_tty)
     {
       struct ui_file *file = gdb_fopen (args, "w");
       if (file == NULL)
-	perror_with_name ("maintenance print reggroups");
+	perror_with_name (_("maintenance print reggroups"));
       reggroups_dump (current_gdbarch, file);    
       ui_file_delete (file);
     }
@@ -280,9 +276,9 @@ _initialize_reggroup (void)
   add_group (&default_groups, restore_reggroup, XMALLOC (struct reggroup_el));
 
   add_cmd ("reggroups", class_maintenance,
-	   maintenance_print_reggroups, "\
+	   maintenance_print_reggroups, _("\
 Print the internal register group names.\n\
-Takes an optional file parameter.",
+Takes an optional file parameter."),
 	   &maintenanceprintlist);
 
 }

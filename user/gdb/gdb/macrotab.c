@@ -1,12 +1,12 @@
 /* C preprocessor macro tables for GDB.
-   Copyright 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -89,8 +87,14 @@ macro_alloc (int size, struct macro_table *t)
 static void
 macro_free (void *object, struct macro_table *t)
 {
-  gdb_assert (! t->obstack);
-  xfree (object);
+  if (t->obstack)
+    /* There are cases where we need to remove entries from a macro
+       table, even when reading debugging information.  This should be
+       rare, and there's no easy way to free arbitrary data from an
+       obstack, so we just leak it.  */
+    ;
+  else
+    xfree (object);
 }
 
 
@@ -122,12 +126,18 @@ macro_bcache_str (struct macro_table *t, const char *s)
 
 
 /* Free a possibly bcached object OBJ.  That is, if the macro table T
-   has a bcache, it's an error; otherwise, xfree OBJ.  */
+   has a bcache, do nothing; otherwise, xfree OBJ.  */
 static void
 macro_bcache_free (struct macro_table *t, void *obj)
 {
-  gdb_assert (! t->bcache);
-  xfree (obj);
+  if (t->bcache)
+    /* There are cases where we need to remove entries from a macro
+       table, even when reading debugging information.  This should be
+       rare, and there's no easy way to free data from a bcache, so we
+       just leak it.  */
+    ;
+  else
+    xfree (obj);
 }
 
 
@@ -445,7 +455,7 @@ macro_include (struct macro_source_file *source,
 
          First, squawk.  */
       complaint (&symfile_complaints,
-		 "both `%s' and `%s' allegedly #included at %s:%d", included,
+		 _("both `%s' and `%s' allegedly #included at %s:%d"), included,
 		 (*link)->filename, source->filename, line);
 
       /* Now, choose a new, unoccupied line number for this
@@ -704,7 +714,7 @@ check_for_redefinition (struct macro_source_file *source, int line,
       if (! same)
         {
 	  complaint (&symfile_complaints,
-		     "macro `%s' redefined at %s:%d; original definition at %s:%d",
+		     _("macro `%s' redefined at %s:%d; original definition at %s:%d"),
 		     name, source->filename, line,
 		     found_key->start_file->filename, found_key->start_line);
         }
@@ -783,25 +793,39 @@ macro_undef (struct macro_source_file *source, int line,
 
   if (n)
     {
-      /* This function is the only place a macro's end-of-scope
-         location gets set to anything other than "end of the
-         compilation unit" (i.e., end_file is zero).  So if this macro
-         already has its end-of-scope set, then we're probably seeing
-         a second #undefinition for the same #definition.  */
       struct macro_key *key = (struct macro_key *) n->key;
 
-      if (key->end_file)
-        {
-	  complaint (&symfile_complaints,
-		     "macro '%s' is #undefined twice, at %s:%d and %s:%d", name,
-		     source->filename, line, key->end_file->filename,
-		     key->end_line);
-        }
+      /* If we're removing a definition at exactly the same point that
+         we defined it, then just delete the entry altogether.  GCC
+         4.1.2 will generate DWARF that says to do this if you pass it
+         arguments like '-DFOO -UFOO -DFOO=2'.  */
+      if (source == key->start_file
+          && line == key->start_line)
+        splay_tree_remove (source->table->definitions, n->key);
 
-      /* Whatever the case, wipe out the old ending point, and 
-         make this the ending point.  */
-      key->end_file = source;
-      key->end_line = line;
+      else
+        {
+          /* This function is the only place a macro's end-of-scope
+             location gets set to anything other than "end of the
+             compilation unit" (i.e., end_file is zero).  So if this
+             macro already has its end-of-scope set, then we're
+             probably seeing a second #undefinition for the same
+             #definition.  */
+          if (key->end_file)
+            {
+              complaint (&symfile_complaints,
+                         _("macro '%s' is #undefined twice,"
+                           " at %s:%d and %s:%d"),
+                         name,
+                         source->filename, line,
+                         key->end_file->filename, key->end_line);
+            }
+
+          /* Whether or not we've seen a prior #undefinition, wipe out
+             the old ending point, and make this the ending point.  */
+          key->end_file = source;
+          key->end_line = line;
+        }
     }
   else
     {
@@ -810,7 +834,7 @@ macro_undef (struct macro_source_file *source, int line,
          ignore it too.  */
 #if 0
       complaint (&symfile_complaints,
-		 "no definition for macro `%s' in scope to #undef at %s:%d",
+		 _("no definition for macro `%s' in scope to #undef at %s:%d"),
 		 name, source->filename, line);
 #endif
     }

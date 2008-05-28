@@ -1,31 +1,32 @@
 #   Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999,
-#   2000, 2002, 2003, 2004
-#   Free Software Foundation, Inc.
+#   2000, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
 
 # Based on break.exp, written by Rob Savoye. (rob@cygnus.com)
 # Modified to test gdb's handling of separate debug info files.
+# Modified to test gdb's handling of a debug-id retrieval.
 
 # This file has two parts. The first is testing that gdb behaves
 # normally after reading in an executable and its corresponding
 # separate debug file. The second moves the .debug file to a different
 # location and tests the "set debug-file-directory" command.
+# The third is for testing build-id retrievel by finding the separate
+# ".debug-id/ab/cdef.debug" file.
 
 
 if $tracelevel then {
@@ -40,44 +41,12 @@ set bug_id 0
 
 set testfile "sepdebug"
 set srcfile ${testfile}.c
-set binfile ${objdir}/${subdir}/${testfile}
+set binfile ${objdir}/${subdir}/${testfile}${EXEEXT}
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-w}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
-}
-
-# FIXME: this is nasty. We need to check for the stabs debug format.
-# To do this we must run gdb on the unstripped executable, list 'main'
-# (as to have a default source file), use get_debug_format (which does
-# 'info source') and then see if the debug info is stabs. If so, we
-# bail out.  We cannot do this any other way because get_debug_format
-# finds out the debug format using gdb itself, and in case of stabs we
-# get an error loading the program if it is already stripped.  An
-# alternative would be to find out the debug info from the flags
-# passed to dejagnu when the test is run.
-
-gdb_exit
-gdb_start
-gdb_reinitialize_dir $srcdir/$subdir
-gdb_load ${binfile}
-gdb_test "list main" "" ""
-get_debug_format
-if { [test_debug_format "stabs"] } then {
-    # the separate debug info feature doesn't work well in binutils with stabs.
-    # It produces a corrupted debug info only file, and gdb chokes on it.
-    # It is almost impossible to capture the failing message out of gdb,
-    # because it happens inside gdb_load. At that point any error message
-    # is intercepted by dejagnu itself, and, because of the error threshold,
-    # any faulty test result is changed into an UNRESOLVED. 
-    # (see dejagnu/lib/framework.exp)
-    unsupported "no separate debug info handling with stabs"
-    return -1
-} elseif { [test_debug_format "unknown"] } then {
-    # gdb doesn't know what the debug format is. We are out of luck here. 
-    unsupported "unknown debugging format"
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
+    untested sepdebug.exp
     return -1
 }
-gdb_exit
 
 # Note: the procedure gdb_gnu_strip_debug will produce an executable called
 # ${binfile}, which is just like the executable ($binfile) but without
@@ -210,7 +179,7 @@ set bp_location8 [gdb_get_line_number "set breakpoint 8 here"]
 set bp_location9 [gdb_get_line_number "set breakpoint 9 here"]
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$main_line.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in marker2 at .*$srcfile:($bp_location8|$bp_location9).*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in factorial at .*$srcfile:$bp_location7.*
@@ -232,27 +201,16 @@ if [istarget "mips-idt-*"] then {
 #
 # run until the breakpoint at main is hit. For non-stubs-using targets.
 #
-if ![target_info exists use_gdb_stub] {
-  if [istarget "*-*-vxworks*"] then {
-    send_gdb "run vxmain \"2\"\n"
-    set timeout 120
-    verbose "Timeout is now $timeout seconds" 2
-  } else {
-	send_gdb "run\n"
-  }
-  gdb_expect {
-    -re "The program .* has been started already.*y or n. $" {
-	send_gdb "y\n"
-	exp_continue
+gdb_run_cmd
+gdb_expect {
+    -re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $" {
+	pass "run until function breakpoint"
     }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $"\
-	                    { pass "run until function breakpoint" }
-    -re ".*$gdb_prompt $"       { fail "run until function breakpoint" }
-    timeout	            { fail "run until function breakpoint (timeout)" }
-  }
-} else {
-    if ![target_info exists gdb_stub] {
-	gdb_test continue ".*Continuing\\..*Breakpoint \[0-9\]+, main \\(argc=.*, argv=.*, envp=.*\\) at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.*\{.*" "stub continue"
+    -re "$gdb_prompt $" {
+	fail "run until function breakpoint"
+    }
+    timeout {
+	fail "run until function breakpoint (timeout)"
     }
 }
 
@@ -340,7 +298,7 @@ gdb_test  "tbreak $srcfile:$bp_location11" "Breakpoint.*at.* file .*$srcfile, li
 #
 # check to see what breakpoints are set (temporary this time)
 #
-gdb_test "info break" "Num Type.*Disp Enb Address.*What.*\[\r\n\]
+gdb_test "info break" "Num     Type.*Disp Enb Address.*What.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in main at .*$srcfile:$main_line.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in factorial at .*$srcfile:$bp_location7.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in main at .*$srcfile:$bp_location1.*\[\r\n\]
@@ -792,26 +750,14 @@ proc test_next_with_recursion {} {
     global decimal
     global binfile
 
-    if [target_info exists use_gdb_stub] {
-	# Reload the program.
-	delete_breakpoints
-	gdb_load ${binfile};
-    } else {
-	# FIXME: should be using runto
-	gdb_test "kill" "" "kill program" "Kill the program being debugged.*y or n. $" "y"
-
-	delete_breakpoints
-    }
+    gdb_test "kill" "" "kill program" "Kill the program being debugged.*y or n. $" "y"
+    delete_breakpoints
 
     gdb_test "break factorial" "Breakpoint $decimal at .*" "break at factorial"
 
     # Run until we call factorial with 6
 
-    if [istarget "*-*-vxworks*"] then {
-	send_gdb "run vxmain \"6\"\n"
-    } else {
-	gdb_run_cmd
-    }
+    gdb_run_cmd
     gdb_expect {
 	-re "Break.* factorial .value=6. .*$gdb_prompt $" {}
 	-re ".*$gdb_prompt $" {
@@ -885,103 +831,153 @@ test_next_with_recursion
 
 #********
 
+proc test_different_dir {type test_different_dir xfail} {
+    global srcdir subdir objdir binfile srcfile timeout gdb_prompt
+    global pf_prefix
+    global bp_location6 decimal hex
+
+    set old_pf_prefix $pf_prefix
+    append pf_prefix " $type:"
+
+    gdb_exit
+    gdb_start
+    gdb_reinitialize_dir $srcdir/$subdir
+    gdb_test "set debug-file-directory ${test_different_dir}" ".*" "set separate debug location"
+    gdb_load ${binfile}
+
+    if [target_info exists gdb_stub] {
+	gdb_step_for_stub;
+    }
+
+    #
+    # test break at function
+    #
+    if {$xfail} {
+	setup_xfail "*-*-*"
+    }
+    gdb_test "break main" \
+	"Breakpoint.*at.* file .*$srcfile, line.*" \
+	"breakpoint function, optimized file"
+
+    #
+    # test break at function
+    #
+    if {$xfail} {
+	setup_xfail "*-*-*"
+    }
+    gdb_test "break marker4" \
+	"Breakpoint.*at.* file .*$srcfile, line.*" \
+	"breakpoint small function, optimized file"
+
+    #
+    # run until the breakpoint at main is hit. For non-stubs-using targets.
+    #
+    gdb_run_cmd
+    if {$xfail} {
+	setup_xfail "*-*-*"
+    }
+    gdb_expect {
+	-re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $" {
+	    pass "run until function breakpoint, optimized file"
+	}
+	-re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$gdb_prompt $" {
+	    pass "run until function breakpoint, optimized file (code motion)"
+	}
+	-re "$gdb_prompt $" {
+	    fail "run until function breakpoint, optimized file"
+	}
+	timeout {
+	    fail "run until function breakpoint, optimized file (timeout)"
+	}
+    }
+
+    #
+    # run until the breakpoint at a small function
+    #
+
+    #
+    # Add a second pass pattern.  The behavior differs here between stabs
+    # and dwarf for one-line functions.  Stabs preserves two line symbols
+    # (one before the prologue and one after) with the same line number, 
+    # but dwarf regards these as duplicates and discards one of them.
+    # Therefore the address after the prologue (where the breakpoint is)
+    # has no exactly matching line symbol, and GDB reports the breakpoint
+    # as if it were in the middle of a line rather than at the beginning.
+
+    set bp_location13 [gdb_get_line_number "set breakpoint 13 here"]
+    set bp_location14 [gdb_get_line_number "set breakpoint 14 here"]
+    send_gdb "continue\n"
+    if {$xfail} {
+	setup_xfail "*-*-*"
+    }
+    gdb_expect {
+	-re "Breakpoint $decimal, marker4 \\(d=177601976\\) at .*$srcfile:$bp_location13\[\r\n\]+$bp_location13\[\t \]+void marker4.*" {
+	    pass "run until breakpoint set at small function, optimized file"
+	}
+	-re "Breakpoint $decimal, $hex in marker4 \\(d=177601976\\) at .*$srcfile:$bp_location13\[\r\n\]+$bp_location13\[\t \]+void marker4.*" {
+	    pass "run until breakpoint set at small function, optimized file"
+	}
+	-re "Breakpoint $decimal, marker4 \\(d=177601976\\) at .*$srcfile:$bp_location14\[\r\n\]+$bp_location14\[\t \]+void marker4.*" {
+	    # marker4() is defined at line 46 when compiled with -DPROTOTYPES
+	    pass "run until breakpoint set at small function, optimized file (line bp_location14)"
+	}
+	-re ".*$gdb_prompt " {
+	    fail "run until breakpoint set at small function, optimized file"
+	}
+	timeout {
+	    fail "run until breakpoint set at small function, optimized file (timeout)"
+	}
+    }
+
+
+    # Reset the default arguments for VxWorks
+    if [istarget "*-*-vxworks*"] {
+	set timeout 10
+	verbose "Timeout is now $timeout seconds" 2
+	send_gdb "set args main\n"
+	gdb_expect -re ".*$gdb_prompt $" {}
+    }
+
+    set pf_prefix $old_pf_prefix
+# proc test_different_dir
+}
+
+
 # now move the .debug file to a different location so that we can test
 # the "set debug-file-directory" command.
   
 remote_exec build "mv ${objdir}/${subdir}/.debug/${testfile}.debug ${objdir}/${subdir}"
-gdb_exit
-gdb_start
-gdb_reinitialize_dir $srcdir/$subdir
-gdb_test "set debug-file-directory ${objdir}/${subdir}" ".*" "set separate debug location"
-gdb_load ${binfile}
+set debugfile "${objdir}/${subdir}/${testfile}.debug"
 
-if [target_info exists gdb_stub] {
-    gdb_step_for_stub;
-}
+test_different_dir debuglink "${objdir}/${subdir}" 0
 
-#
-# test break at function
-#
-gdb_test "break main" \
-    "Breakpoint.*at.* file .*$srcfile, line.*" \
-    "breakpoint function, optimized file"
 
-#
-# test break at function
-#
-gdb_test "break marker4" \
-    "Breakpoint.*at.* file .*$srcfile, line.*" \
-    "breakpoint small function, optimized file"
+# NT_GNU_BUILD_ID / .note.gnu.build-id test:
 
-#
-# run until the breakpoint at main is hit. For non-stubs-using targets.
-#
-if ![target_info exists use_gdb_stub] {
-  if [istarget "*-*-vxworks*"] then {
-    send_gdb "run vxmain \"2\"\n"
-    set timeout 120
-    verbose "Timeout is now $timeout seconds" 2
-  } else {
-	send_gdb "run\n"
-  }
-  gdb_expect {
-    -re "The program .* has been started already.*y or n. $" {
-	send_gdb "y\n"
-	exp_continue
-    }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $"\
-	                    { pass "run until function breakpoint, optimized file" }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$gdb_prompt $"\
-	                    { pass "run until function breakpoint, optimized file (code motion)" }
-    -re ".*$gdb_prompt $"       { fail "run until function breakpoint, optimized file" }
-    timeout	            { fail "run until function breakpoint, optimized file (timeout)" }
-  }
+set build_id_debug_filename [build_id_debug_filename_get $binfile]
+if ![string compare $build_id_debug_filename ""] then {
+    unsupported "build-id is not supported by the compiler"
+
+    # Spare debug files may confuse testsuite runs in the future.
+    remote_exec build "rm -f $debugfile"
 } else {
-    if ![target_info exists gdb_stub] {
-	gdb_test continue ".*Continuing\\..*Breakpoint \[0-9\]+, main \\(argc=.*, argv=.*, envp=.*\\) at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.*\{.*" "stub continue, optimized file"
+    set build_id_debugself_filename [build_id_debug_filename_get $debugfile]
+    set test "build-id support by binutils"
+    set xfail 0
+    if ![string compare $build_id_debugself_filename ""] then {
+	unsupported $test
+	set xfail 1
+    } elseif {[string compare $build_id_debugself_filename $build_id_debug_filename] != 0} then {
+	fail $test
+    } else {
+	pass $test
     }
-}
 
-#
-# run until the breakpoint at a small function
-#
+    file mkdir [file dirname ${objdir}/${subdir}/${build_id_debug_filename}]
+    remote_exec build "mv $debugfile ${objdir}/${subdir}/${build_id_debug_filename}"
 
-#
-# Add a second pass pattern.  The behavior differs here between stabs
-# and dwarf for one-line functions.  Stabs preserves two line symbols
-# (one before the prologue and one after) with the same line number, 
-# but dwarf regards these as duplicates and discards one of them.
-# Therefore the address after the prologue (where the breakpoint is)
-# has no exactly matching line symbol, and GDB reports the breakpoint
-# as if it were in the middle of a line rather than at the beginning.
+    test_different_dir build-id "${objdir}/${subdir}" $xfail
 
-set bp_location13 [gdb_get_line_number "set breakpoint 13 here"]
-set bp_location14 [gdb_get_line_number "set breakpoint 14 here"]
-send_gdb "continue\n"
-gdb_expect {
-    -re "Breakpoint $decimal, marker4 \\(d=177601976\\) at .*$srcfile:$bp_location13\[\r\n\]+$bp_location13\[\t \]+void marker4.*" {
-	pass "run until breakpoint set at small function, optimized file"
-    }
-    -re "Breakpoint $decimal, $hex in marker4 \\(d=177601976\\) at .*$srcfile:$bp_location13\[\r\n\]+$bp_location13\[\t \]+void marker4.*" {
-	pass "run until breakpoint set at small function, optimized file"
-    }
-    -re "Breakpoint $decimal, marker4 \\(d=177601976\\) at .*$srcfile:$bp_location14\[\r\n\]+$bp_location14\[\t \]+void marker4.*" {
-        # marker4() is defined at line 46 when compiled with -DPROTOTYPES
-	pass "run until breakpoint set at small function, optimized file (line bp_location14)"
-    }
-    -re ".*$gdb_prompt " {
-	fail "run until breakpoint set at small function, optimized file"
-    }
-    timeout {
-	fail "run until breakpoint set at small function, optimized file (timeout)"
-    }
-}
-
-
-# Reset the default arguments for VxWorks
-if [istarget "*-*-vxworks*"] {
-    set timeout 10
-    verbose "Timeout is now $timeout seconds" 2
-    send_gdb "set args main\n"
-    gdb_expect -re ".*$gdb_prompt $" {}
+    # Spare debug files may confuse testsuite runs in the future.
+    remote_exec build "rm -f ${objdir}/${subdir}/${build_id_debug_filename}"
 }

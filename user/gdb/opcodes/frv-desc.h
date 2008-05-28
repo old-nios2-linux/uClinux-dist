@@ -2,28 +2,30 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2004 Free Software Foundation, Inc.
+Copyright 1996-2007 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   You should have received a copy of the GNU General Public License along
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
 #ifndef FRV_CPU_H
 #define FRV_CPU_H
+
+#include "opcode/cgen-bitset.h"
 
 #define CGEN_ARCH frv
 
@@ -468,9 +470,16 @@ typedef enum spr_names {
  , H_SPR_DBMR02 = 2078, H_SPR_DBMR03 = 2079, H_SPR_DBMR10 = 2080, H_SPR_DBMR11 = 2081
  , H_SPR_DBMR12 = 2082, H_SPR_DBMR13 = 2083, H_SPR_DBMR20 = 2084, H_SPR_DBMR21 = 2085
  , H_SPR_DBMR22 = 2086, H_SPR_DBMR23 = 2087, H_SPR_DBMR30 = 2088, H_SPR_DBMR31 = 2089
- , H_SPR_DBMR32 = 2090, H_SPR_DBMR33 = 2091, H_SPR_CPCFR = 2092, H_SPR_CPCR = 2093
- , H_SPR_CPSR = 2094, H_SPR_CPESR0 = 2096, H_SPR_CPESR1 = 2097, H_SPR_CPEMR0 = 2098
- , H_SPR_CPEMR1 = 2099, H_SPR_IHSR8 = 3848
+ , H_SPR_DBMR32 = 2090, H_SPR_DBMR33 = 2091, H_SPR_CPCFR = 2304, H_SPR_CPCR = 2305
+ , H_SPR_CPSR = 2306, H_SPR_CPTR = 2307, H_SPR_CPHSR0 = 2308, H_SPR_CPHSR1 = 2309
+ , H_SPR_CPESR0 = 2320, H_SPR_CPESR1 = 2321, H_SPR_CPEMR0 = 2322, H_SPR_CPEMR1 = 2323
+ , H_SPR_IPERR0 = 2324, H_SPR_IPERR1 = 2325, H_SPR_IPJSR = 2326, H_SPR_IPJRR = 2327
+ , H_SPR_IPCSR0 = 2336, H_SPR_IPCSR1 = 2337, H_SPR_IPCWER0 = 2338, H_SPR_IPCWER1 = 2339
+ , H_SPR_IPCWR = 2340, H_SPR_MBHSR = 2352, H_SPR_MBSSR = 2353, H_SPR_MBRSR = 2354
+ , H_SPR_MBSDR = 2355, H_SPR_MBRDR = 2356, H_SPR_MBSMR = 2357, H_SPR_MBSTR0 = 2359
+ , H_SPR_MBSTR1 = 2360, H_SPR_SLPR = 2368, H_SPR_SLDR = 2369, H_SPR_SLHSR = 2370
+ , H_SPR_SLTR = 2371, H_SPR_SLWR = 2372, H_SPR_IHSR8 = 3848, H_SPR_IHSR9 = 3849
+ , H_SPR_IHSR10 = 3850
 } SPR_NAMES;
 
 /* Enum declaration for .  */
@@ -605,8 +614,6 @@ typedef enum fr550_major_attr {
 
 /* Ifield support.  */
 
-extern const struct cgen_ifld frv_cgen_ifld_table[];
-
 /* Ifield attribute indices.  */
 
 /* Enum declaration for cgen_ifld attrs.  */
@@ -618,6 +625,15 @@ typedef enum cgen_ifld_attr {
 
 /* Number of non-boolean elements in cgen_ifld_attr.  */
 #define CGEN_IFLD_NBOOL_ATTRS (CGEN_IFLD_END_NBOOLS - CGEN_IFLD_START_NBOOLS - 1)
+
+/* cgen_ifld attribute accessor macros.  */
+#define CGEN_ATTR_CGEN_IFLD_MACH_VALUE(attrs) ((attrs)->nonbool[CGEN_IFLD_MACH-CGEN_IFLD_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_IFLD_VIRTUAL_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_VIRTUAL)) != 0)
+#define CGEN_ATTR_CGEN_IFLD_PCREL_ADDR_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_PCREL_ADDR)) != 0)
+#define CGEN_ATTR_CGEN_IFLD_ABS_ADDR_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_ABS_ADDR)) != 0)
+#define CGEN_ATTR_CGEN_IFLD_RESERVED_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_RESERVED)) != 0)
+#define CGEN_ATTR_CGEN_IFLD_SIGN_OPT_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_SIGN_OPT)) != 0)
+#define CGEN_ATTR_CGEN_IFLD_SIGNED_VALUE(attrs) (((attrs)->bool & (1 << CGEN_IFLD_SIGNED)) != 0)
 
 /* Enum declaration for frv ifield types.  */
 typedef enum ifield_type {
@@ -647,7 +663,7 @@ typedef enum ifield_type {
  , FRV_F_MISC_NULL_4, FRV_F_MISC_NULL_5, FRV_F_MISC_NULL_6, FRV_F_MISC_NULL_7
  , FRV_F_MISC_NULL_8, FRV_F_MISC_NULL_9, FRV_F_MISC_NULL_10, FRV_F_MISC_NULL_11
  , FRV_F_LRA_NULL, FRV_F_TLBPR_NULL, FRV_F_LI_OFF, FRV_F_LI_ON
- , FRV_F_MAX
+ , FRV_F_RELOC_ANN, FRV_F_MAX
 } IFIELD_TYPE;
 
 #define MAX_IFLD ((int) FRV_F_MAX)
@@ -663,21 +679,28 @@ typedef enum cgen_hw_attr {
 /* Number of non-boolean elements in cgen_hw_attr.  */
 #define CGEN_HW_NBOOL_ATTRS (CGEN_HW_END_NBOOLS - CGEN_HW_START_NBOOLS - 1)
 
+/* cgen_hw attribute accessor macros.  */
+#define CGEN_ATTR_CGEN_HW_MACH_VALUE(attrs) ((attrs)->nonbool[CGEN_HW_MACH-CGEN_HW_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_HW_VIRTUAL_VALUE(attrs) (((attrs)->bool & (1 << CGEN_HW_VIRTUAL)) != 0)
+#define CGEN_ATTR_CGEN_HW_CACHE_ADDR_VALUE(attrs) (((attrs)->bool & (1 << CGEN_HW_CACHE_ADDR)) != 0)
+#define CGEN_ATTR_CGEN_HW_PC_VALUE(attrs) (((attrs)->bool & (1 << CGEN_HW_PC)) != 0)
+#define CGEN_ATTR_CGEN_HW_PROFILE_VALUE(attrs) (((attrs)->bool & (1 << CGEN_HW_PROFILE)) != 0)
+
 /* Enum declaration for frv hardware types.  */
 typedef enum cgen_hw_type {
   HW_H_MEMORY, HW_H_SINT, HW_H_UINT, HW_H_ADDR
- , HW_H_IADDR, HW_H_PC, HW_H_PSR_IMPLE, HW_H_PSR_VER
- , HW_H_PSR_ICE, HW_H_PSR_NEM, HW_H_PSR_CM, HW_H_PSR_BE
- , HW_H_PSR_ESR, HW_H_PSR_EF, HW_H_PSR_EM, HW_H_PSR_PIL
- , HW_H_PSR_PS, HW_H_PSR_ET, HW_H_PSR_S, HW_H_TBR_TBA
- , HW_H_TBR_TT, HW_H_BPSR_BS, HW_H_BPSR_BET, HW_H_GR
- , HW_H_GR_DOUBLE, HW_H_GR_HI, HW_H_GR_LO, HW_H_FR
- , HW_H_FR_DOUBLE, HW_H_FR_INT, HW_H_FR_HI, HW_H_FR_LO
- , HW_H_FR_0, HW_H_FR_1, HW_H_FR_2, HW_H_FR_3
- , HW_H_CPR, HW_H_CPR_DOUBLE, HW_H_SPR, HW_H_ACCG
- , HW_H_ACC40S, HW_H_ACC40U, HW_H_IACC0, HW_H_ICCR
- , HW_H_FCCR, HW_H_CCCR, HW_H_PACK, HW_H_HINT_TAKEN
- , HW_H_HINT_NOT_TAKEN, HW_MAX
+ , HW_H_IADDR, HW_H_RELOC_ANN, HW_H_PC, HW_H_PSR_IMPLE
+ , HW_H_PSR_VER, HW_H_PSR_ICE, HW_H_PSR_NEM, HW_H_PSR_CM
+ , HW_H_PSR_BE, HW_H_PSR_ESR, HW_H_PSR_EF, HW_H_PSR_EM
+ , HW_H_PSR_PIL, HW_H_PSR_PS, HW_H_PSR_ET, HW_H_PSR_S
+ , HW_H_TBR_TBA, HW_H_TBR_TT, HW_H_BPSR_BS, HW_H_BPSR_BET
+ , HW_H_GR, HW_H_GR_DOUBLE, HW_H_GR_HI, HW_H_GR_LO
+ , HW_H_FR, HW_H_FR_DOUBLE, HW_H_FR_INT, HW_H_FR_HI
+ , HW_H_FR_LO, HW_H_FR_0, HW_H_FR_1, HW_H_FR_2
+ , HW_H_FR_3, HW_H_CPR, HW_H_CPR_DOUBLE, HW_H_SPR
+ , HW_H_ACCG, HW_H_ACC40S, HW_H_ACC40U, HW_H_IACC0
+ , HW_H_ICCR, HW_H_FCCR, HW_H_CCCR, HW_H_PACK
+ , HW_H_HINT_TAKEN, HW_H_HINT_NOT_TAKEN, HW_MAX
 } CGEN_HW_TYPE;
 
 #define MAX_HW ((int) HW_MAX)
@@ -694,6 +717,18 @@ typedef enum cgen_operand_attr {
 
 /* Number of non-boolean elements in cgen_operand_attr.  */
 #define CGEN_OPERAND_NBOOL_ATTRS (CGEN_OPERAND_END_NBOOLS - CGEN_OPERAND_START_NBOOLS - 1)
+
+/* cgen_operand attribute accessor macros.  */
+#define CGEN_ATTR_CGEN_OPERAND_MACH_VALUE(attrs) ((attrs)->nonbool[CGEN_OPERAND_MACH-CGEN_OPERAND_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_OPERAND_VIRTUAL_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_VIRTUAL)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_PCREL_ADDR_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_PCREL_ADDR)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_ABS_ADDR_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_ABS_ADDR)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_SIGN_OPT_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_SIGN_OPT)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_SIGNED_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_SIGNED)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_NEGATIVE_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_NEGATIVE)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_RELAX_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_RELAX)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_SEM_ONLY_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_SEM_ONLY)) != 0)
+#define CGEN_ATTR_CGEN_OPERAND_HASH_PREFIX_VALUE(attrs) (((attrs)->bool & (1 << CGEN_OPERAND_HASH_PREFIX)) != 0)
 
 /* Enum declaration for frv operand types.  */
 typedef enum cgen_operand_type {
@@ -712,17 +747,18 @@ typedef enum cgen_operand_type {
  , FRV_OPERAND_U6, FRV_OPERAND_S5, FRV_OPERAND_COND, FRV_OPERAND_CCOND
  , FRV_OPERAND_HINT, FRV_OPERAND_HINT_TAKEN, FRV_OPERAND_HINT_NOT_TAKEN, FRV_OPERAND_LI
  , FRV_OPERAND_LOCK, FRV_OPERAND_DEBUG, FRV_OPERAND_AE, FRV_OPERAND_LABEL16
- , FRV_OPERAND_LABEL24, FRV_OPERAND_LRAE, FRV_OPERAND_LRAD, FRV_OPERAND_LRAS
- , FRV_OPERAND_TLBPROPX, FRV_OPERAND_TLBPRL, FRV_OPERAND_A0, FRV_OPERAND_A1
- , FRV_OPERAND_FRINTIEVEN, FRV_OPERAND_FRINTJEVEN, FRV_OPERAND_FRINTKEVEN, FRV_OPERAND_D12
- , FRV_OPERAND_S12, FRV_OPERAND_U12, FRV_OPERAND_SPR, FRV_OPERAND_ULO16
- , FRV_OPERAND_SLO16, FRV_OPERAND_UHI16, FRV_OPERAND_PSR_ESR, FRV_OPERAND_PSR_S
+ , FRV_OPERAND_LRAE, FRV_OPERAND_LRAD, FRV_OPERAND_LRAS, FRV_OPERAND_TLBPROPX
+ , FRV_OPERAND_TLBPRL, FRV_OPERAND_A0, FRV_OPERAND_A1, FRV_OPERAND_FRINTIEVEN
+ , FRV_OPERAND_FRINTJEVEN, FRV_OPERAND_FRINTKEVEN, FRV_OPERAND_D12, FRV_OPERAND_S12
+ , FRV_OPERAND_U12, FRV_OPERAND_SPR, FRV_OPERAND_ULO16, FRV_OPERAND_SLO16
+ , FRV_OPERAND_UHI16, FRV_OPERAND_LABEL24, FRV_OPERAND_PSR_ESR, FRV_OPERAND_PSR_S
  , FRV_OPERAND_PSR_PS, FRV_OPERAND_PSR_ET, FRV_OPERAND_BPSR_BS, FRV_OPERAND_BPSR_BET
- , FRV_OPERAND_TBR_TBA, FRV_OPERAND_TBR_TT, FRV_OPERAND_MAX
+ , FRV_OPERAND_TBR_TBA, FRV_OPERAND_TBR_TT, FRV_OPERAND_LDANN, FRV_OPERAND_LDDANN
+ , FRV_OPERAND_CALLANN, FRV_OPERAND_MAX
 } CGEN_OPERAND_TYPE;
 
 /* Number of operands types.  */
-#define MAX_OPERANDS 86
+#define MAX_OPERANDS 89
 
 /* Maximum number of operands referenced by any insn.  */
 #define MAX_OPERAND_INSTANCES 8
@@ -743,8 +779,34 @@ typedef enum cgen_insn_attr {
 /* Number of non-boolean elements in cgen_insn_attr.  */
 #define CGEN_INSN_NBOOL_ATTRS (CGEN_INSN_END_NBOOLS - CGEN_INSN_START_NBOOLS - 1)
 
+/* cgen_insn attribute accessor macros.  */
+#define CGEN_ATTR_CGEN_INSN_MACH_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_MACH-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_UNIT_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_UNIT-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_FR400_MAJOR_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_FR400_MAJOR-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_FR450_MAJOR_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_FR450_MAJOR-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_FR500_MAJOR_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_FR500_MAJOR-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_FR550_MAJOR_VALUE(attrs) ((attrs)->nonbool[CGEN_INSN_FR550_MAJOR-CGEN_INSN_START_NBOOLS-1].nonbitset)
+#define CGEN_ATTR_CGEN_INSN_ALIAS_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_ALIAS)) != 0)
+#define CGEN_ATTR_CGEN_INSN_VIRTUAL_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_VIRTUAL)) != 0)
+#define CGEN_ATTR_CGEN_INSN_UNCOND_CTI_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_UNCOND_CTI)) != 0)
+#define CGEN_ATTR_CGEN_INSN_COND_CTI_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_COND_CTI)) != 0)
+#define CGEN_ATTR_CGEN_INSN_SKIP_CTI_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_SKIP_CTI)) != 0)
+#define CGEN_ATTR_CGEN_INSN_DELAY_SLOT_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_DELAY_SLOT)) != 0)
+#define CGEN_ATTR_CGEN_INSN_RELAXABLE_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_RELAXABLE)) != 0)
+#define CGEN_ATTR_CGEN_INSN_RELAXED_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_RELAXED)) != 0)
+#define CGEN_ATTR_CGEN_INSN_NO_DIS_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_NO_DIS)) != 0)
+#define CGEN_ATTR_CGEN_INSN_PBB_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_PBB)) != 0)
+#define CGEN_ATTR_CGEN_INSN_PRIVILEGED_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_PRIVILEGED)) != 0)
+#define CGEN_ATTR_CGEN_INSN_NON_EXCEPTING_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_NON_EXCEPTING)) != 0)
+#define CGEN_ATTR_CGEN_INSN_CONDITIONAL_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_CONDITIONAL)) != 0)
+#define CGEN_ATTR_CGEN_INSN_FR_ACCESS_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_FR_ACCESS)) != 0)
+#define CGEN_ATTR_CGEN_INSN_PRESERVE_OVF_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_PRESERVE_OVF)) != 0)
+#define CGEN_ATTR_CGEN_INSN_AUDIO_VALUE(attrs) (((attrs)->bool & (1 << CGEN_INSN_AUDIO)) != 0)
+
 /* cgen.h uses things we just defined.  */
 #include "opcode/cgen.h"
+
+extern const struct cgen_ifld frv_cgen_ifld_table[];
 
 /* Attributes.  */
 extern const CGEN_ATTR_TABLE frv_cgen_hardware_attr_table[];

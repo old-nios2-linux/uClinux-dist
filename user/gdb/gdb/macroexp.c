@@ -1,12 +1,12 @@
 /* C preprocessor macro expansion for GDB.
-   Copyright 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -81,9 +79,6 @@ struct macro_buffer
 static void
 init_buffer (struct macro_buffer *b, int n)
 {
-  /* Small value for initial testing.  */
-  n = 1;
-
   b->size = n;
   if (n > 0)
     b->text = (char *) xmalloc (n);
@@ -236,7 +231,7 @@ get_comment (struct macro_buffer *tok, char *p, char *end)
             return 1;
           }
 
-      error ("Unterminated comment in macro expansion.");
+      error (_("Unterminated comment in macro expansion."));
     }
   else if (p[0] == '/'
            && p[1] == '/')
@@ -339,12 +334,12 @@ get_character_constant (struct macro_buffer *tok, char *p, char *end)
       for (;;)
         {
           if (p >= end)
-            error ("Unmatched single quote.");
+            error (_("Unmatched single quote."));
           else if (*p == '\'')
             {
               if (p == body_start)
-                error ("A character constant must contain at least one "
-                       "character.");
+                error (_("A character constant must contain at least one "
+                       "character."));
               p++;
               break;
             }
@@ -390,15 +385,15 @@ get_string_literal (struct macro_buffer *tok, char *p, char *end)
       for (;;)
         {
           if (p >= end)
-            error ("Unterminated string in expression.");
+            error (_("Unterminated string in expression."));
           else if (*p == '\"')
             {
               p++;
               break;
             }
           else if (*p == '\n')
-            error ("Newline characters may not appear in string "
-                   "constants.");
+            error (_("Newline characters may not appear in string "
+                   "constants."));
           else if (*p == '\\')
             {
               p++;
@@ -616,7 +611,7 @@ append_tokens_without_splicing (struct macro_buffer *dest,
   /* As far as I know, there's no case where inserting a space isn't
      enough to prevent a splice.  */
   internal_error (__FILE__, __LINE__,
-                  "unable to avoid splicing tokens during macro expansion");
+                  _("unable to avoid splicing tokens during macro expansion"));
 }
 
 
@@ -715,7 +710,7 @@ gather_arguments (const char *name, struct macro_buffer *src, int *argc_p)
   get_token (&tok, src);
 
   args_len = 0;
-  args_size = 1;                /* small for initial testing */
+  args_size = 6;
   args = (struct macro_buffer *) xmalloc (sizeof (*args) * args_size);
 
   for (;;)
@@ -741,7 +736,7 @@ gather_arguments (const char *name, struct macro_buffer *src, int *argc_p)
           char *start = src->text;
 
           if (! get_token (&tok, src))
-            error ("Malformed argument list for macro `%s'.", name);
+            error (_("Malformed argument list for macro `%s'."), name);
       
           /* Is tok an opening paren?  */
           if (tok.len == 1 && tok.text[0] == '(')
@@ -841,13 +836,13 @@ substitute_args (struct macro_buffer *dest,
       /* Is this token the stringification operator?  */
       if (tok.len == 1
           && tok.text[0] == '#')
-        error ("Stringification is not implemented yet.");
+        error (_("Stringification is not implemented yet."));
 
       /* Is this token the splicing operator?  */
       if (tok.len == 2
           && tok.text[0] == '#'
           && tok.text[1] == '#')
-        error ("Token splicing is not implemented yet.");
+        error (_("Token splicing is not implemented yet."));
 
       /* Is this token an identifier?  */
       if (tok.is_identifier)
@@ -857,7 +852,7 @@ substitute_args (struct macro_buffer *dest,
           /* Is it the magic varargs parameter?  */
           if (tok.len == 11
               && ! memcmp (tok.text, "__VA_ARGS__", 11))
-            error ("Variable-arity macros not implemented yet.");
+            error (_("Variable-arity macros not implemented yet."));
 
           /* Is it one of the parameters?  */
           for (i = 0; i < def->argc; i++)
@@ -927,14 +922,14 @@ expand (const char *id,
   else if (def->kind == macro_function_like)
     {
       struct cleanup *back_to = make_cleanup (null_cleanup, 0);
-      int argc;
+      int argc = 0;
       struct macro_buffer *argv = NULL;
       struct macro_buffer substituted;
       struct macro_buffer substituted_src;
 
       if (def->argc >= 1
           && strcmp (def->argv[def->argc - 1], "...") == 0)
-        error ("Varargs macros not implemented yet.");
+        error (_("Varargs macros not implemented yet."));
 
       make_cleanup (free_current_contents, &argv);
       argv = gather_arguments (id, src, &argc);
@@ -957,8 +952,8 @@ expand (const char *id,
           if (! (argc == 1
                  && argv[0].len == 0
                  && def->argc == 0))
-            error ("Wrong number of arguments to macro `%s' "
-                   "(expected %d, got %d).",
+            error (_("Wrong number of arguments to macro `%s' "
+                   "(expected %d, got %d)."),
                    id, def->argc, argc);
         }
 
@@ -991,7 +986,7 @@ expand (const char *id,
       return 1;
     }
   else
-    internal_error (__FILE__, __LINE__, "bad macro definition kind");
+    internal_error (__FILE__, __LINE__, _("bad macro definition kind"));
 }
 
 
@@ -1122,7 +1117,7 @@ macro_expand_once (const char *source,
                    macro_lookup_ftype *lookup_func,
                    void *lookup_func_baton)
 {
-  error ("Expand-once not implemented yet.");
+  error (_("Expand-once not implemented yet."));
 }
 
 

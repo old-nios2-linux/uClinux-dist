@@ -53,7 +53,7 @@ static const struct icmpv6_names icmpv6_codes[] = {
 };
 
 static void
-print_icmpv6types()
+print_icmpv6types(void)
 {
 	unsigned int i;
 	printf("Valid ICMPv6 Types:");
@@ -74,8 +74,7 @@ print_icmpv6types()
 }
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void icmp6_help(void)
 {
 	printf(
 "ICMPv6 v%s options:\n"
@@ -85,9 +84,9 @@ help(void)
 	print_icmpv6types();
 }
 
-static struct option opts[] = {
-	{ "icmpv6-type", 1, 0, '1' },
-	{0}
+static const struct option icmp6_opts[] = {
+	{ "icmpv6-type", 1, NULL, '1' },
+	{ }
 };
 
 static void
@@ -144,8 +143,7 @@ parse_icmpv6(const char *icmpv6type, u_int8_t *type, u_int8_t code[])
 }
 
 /* Initialize the match. */
-static void
-init(struct ip6t_entry_match *m, unsigned int *nfcache)
+static void icmp6_init(struct xt_entry_match *m)
 {
 	struct ip6t_icmp *icmpv6info = (struct ip6t_icmp *)m->data;
 
@@ -154,11 +152,8 @@ init(struct ip6t_entry_match *m, unsigned int *nfcache)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ip6t_entry *entry,
-      unsigned int *nfcache,
-      struct ip6t_entry_match **match)
+static int icmp6_parse(int c, char **argv, int invert, unsigned int *flags,
+                       const void *entry, struct xt_entry_match **match)
 {
 	struct ip6t_icmp *icmpv6info = (struct ip6t_icmp *)(*match)->data;
 
@@ -220,10 +215,8 @@ static void print_icmpv6type(u_int8_t type,
 }
 
 /* Prints out the union ipt_matchinfo. */
-static void
-print(const struct ip6t_ip6 *ip,
-      const struct ip6t_entry_match *match,
-      int numeric)
+static void icmp6_print(const void *ip, const struct xt_entry_match *match,
+                        int numeric)
 {
 	const struct ip6t_icmp *icmpv6 = (struct ip6t_icmp *)match->data;
 
@@ -238,7 +231,7 @@ print(const struct ip6t_ip6 *ip,
 }
 
 /* Saves the match in parsable form to stdout. */
-static void save(const struct ip6t_ip6 *ip, const struct ip6t_entry_match *match)
+static void icmp6_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ip6t_icmp *icmpv6 = (struct ip6t_icmp *)match->data;
 
@@ -251,28 +244,28 @@ static void save(const struct ip6t_ip6 *ip, const struct ip6t_entry_match *match
 	printf(" ");
 }
 
-static void final_check(unsigned int flags)
+static void icmp6_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM,
 			   "icmpv6 match: You must specify `--icmpv6-type'");
 }
 
-static struct ip6tables_match icmpv6 = {
+static struct ip6tables_match icmp6_match6 = {
 	.name 		= "icmp6",
 	.version 	= IPTABLES_VERSION,
 	.size		= IP6T_ALIGN(sizeof(struct ip6t_icmp)),
 	.userspacesize	= IP6T_ALIGN(sizeof(struct ip6t_icmp)),
-	.help		= &help,
-	.init		= &init,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts,
+	.help		= icmp6_help,
+	.init		= icmp6_init,
+	.parse		= icmp6_parse,
+	.final_check	= icmp6_check,
+	.print		= icmp6_print,
+	.save		= icmp6_save,
+	.extra_opts	= icmp6_opts,
 };
 
 void _init(void)
 {
-	register_match6(&icmpv6);
+	register_match6(&icmp6_match6);
 }

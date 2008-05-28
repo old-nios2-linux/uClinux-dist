@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -30,6 +32,7 @@
 
 #include "matcher-ac.h"
 #include "matcher-bm.h"
+#include "hashtab.h"
 
 #define CLI_MATCH_WILDCARD	0xff00
 #define CLI_MATCH_CHAR		0x0000
@@ -39,37 +42,48 @@
 #define CLI_MATCH_NIBBLE_LOW	0x0400
 
 struct cli_matcher {
-    uint16_t maxpatlen;
-    uint8_t ac_only;
-
     /* Extended Boyer-Moore */
     uint8_t *bm_shift;
     struct cli_bm_patt **bm_suffix;
+    struct hashset md5_sizes_hs;
     uint32_t *soff, soff_len; /* for PE section sigs */
+    uint32_t bm_patterns;
 
     /* Extended Aho-Corasick */
-    uint8_t ac_mindepth, ac_maxdepth;
+    uint32_t ac_partsigs, ac_nodes, ac_patterns;
     struct cli_ac_node *ac_root, **ac_nodetable;
     struct cli_ac_patt **ac_pattable;
-    uint32_t ac_partsigs, ac_nodes, ac_patterns;
-};
+    uint8_t ac_mindepth, ac_maxdepth;
 
-struct cli_md5_node {
-    char *virname;
-    unsigned char *md5;
-    unsigned int size;
-    unsigned short fp;
-    struct cli_md5_node *next;
+    uint16_t maxpatlen;
+    uint8_t ac_only;
 };
 
 struct cli_meta_node {
-    int csize, size, method;
-    unsigned int crc32, fileno, encrypted, maxdepth;
     char *filename, *virname;
     struct cli_meta_node *next;
+    int csize, size, method;
+    unsigned int crc32, fileno, encrypted, maxdepth;
 };
 
-#define CL_TARGET_TABLE_SIZE 7
+struct cli_mtarget {
+    cli_file_t target;
+    const char *name;
+    uint8_t idx;    /* idx of matcher */
+    uint8_t ac_only;
+};
+
+#define CLI_MTARGETS 8
+static const struct cli_mtarget cli_mtargets[CLI_MTARGETS] =  {
+    { 0,		    "GENERIC",	    0,	0   },
+    { CL_TYPE_MSEXE,	    "PE",	    1,	0   },
+    { CL_TYPE_MSOLE2,	    "OLE2",	    2,	1   },
+    { CL_TYPE_HTML,	    "HTML",	    3,	1   },
+    { CL_TYPE_MAIL,	    "MAIL",	    4,	1   },
+    { CL_TYPE_GRAPHICS,	    "GRAPHICS",	    5,	1   },
+    { CL_TYPE_ELF,	    "ELF",	    6,	1   },
+    { CL_TYPE_TEXT_ASCII,   "ASCII",	    7,	1   }
+};
 
 struct cli_target_info {
     off_t fsize;
@@ -77,13 +91,11 @@ struct cli_target_info {
     int8_t status; /* 0 == not initialised, 1 == initialised OK, -1 == error */
 };
 
-int cli_scanbuff(const unsigned char *buffer, uint32_t length, const char **virname, const struct cl_engine *engine, cli_file_t ftype);
+int cli_scanbuff(const unsigned char *buffer, uint32_t length, cli_ctx *ctx, cli_file_t ftype);
 
-int cli_scandesc(int desc, cli_ctx *ctx, uint8_t otfrec, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset);
+int cli_scandesc(int desc, cli_ctx *ctx, cli_file_t ftype, uint8_t ftonly, struct cli_matched_type **ftoffset, unsigned int acmode);
 
 int cli_validatesig(cli_file_t ftype, const char *offstr, off_t fileoff, struct cli_target_info *info, int desc, const char *virname);
-
-struct cli_md5_node *cli_vermd5(const unsigned char *md5, const struct cl_engine *engine);
 
 off_t cli_caloff(const char *offstr, struct cli_target_info *info, int fd, cli_file_t ftype, int *ret, unsigned int *maxshift);
 

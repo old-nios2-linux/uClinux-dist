@@ -1,20 +1,19 @@
 #   Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999,
-#   2000, 2001, 2002, 2003
+#   2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008
 #   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -149,7 +148,7 @@ gdb_expect {
     -re "Reinitialize source path to empty.*y or n. $"  {
 	send_gdb "y\n"
 	gdb_expect {
-	    -re "Source directories searched: .cdir:.cwd.*$gdb_prompt $"\
+	    -re "Source directories searched: .cdir\[:;\].cwd.*$gdb_prompt $"\
 		    { pass "directory prompt" }
 	    timeout		{ fail "(timeout) directory prompt" }
 	}
@@ -302,7 +301,7 @@ gdb_test "info bogus-gdb-command" "Undefined info command: \"bogus-gdb-command\"
 #test info breakpoints
 gdb_test "info breakpoints" "No breakpoints or watchpoints." "info breakpoints"
 #test info catch
-gdb_test "info catch" "You can't do that without a process to debug." "info catch"
+gdb_test "info catch" "No frame selected." "info catch"
 #test info copying
 # FIXME -- doesn't work worth a shit
 #send_gdb "info copying"
@@ -354,7 +353,7 @@ gdb_test "info variables" "All defined variables:" "info variables"
 #test info vector
 gdb_test "info vector" "The program has no registers now." "info vector"
 #test info warranty
-gdb_test "info warranty" "NO WARRANTY(\[^\r\n\]*\[\r\n\])+  *11.  *BECAUSE THE PROGRAM IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY(\[^\r\n\]*\[\r\n\])+FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW.  EXCEPT WHEN(\[^\r\n\]*\[\r\n\])+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES(\[^\r\n\]*\[\r\n\])+PROVIDE THE PROGRAM \"AS IS\" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED(\[^\r\n\]*\[\r\n\])+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF(\[^\r\n\]*\[\r\n\])+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS(\[^\r\n\]*\[\r\n\])+TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.  SHOULD THE(\[^\r\n\]*\[\r\n\])+PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,(\[^\r\n\]*\[\r\n\])+REPAIR OR CORRECTION.(\[^\r\n\]*\[\r\n\])+  *12.  *IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING(\[^\r\n\]*\[\r\n\])+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR(\[^\r\n\]*\[\r\n\])+REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,(\[^\r\n\]*\[\r\n\])+INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING(\[^\r\n\]*\[\r\n\])+OUT OF THE USE OR INABILITY TO USE THE PROGRAM .INCLUDING BUT NOT LIMITED(\[^\r\n\]*\[\r\n\])+TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY(\[^\r\n\]*\[\r\n\])+YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER(\[^\r\n\]*\[\r\n\])+PROGRAMS., EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE(\[^\r\n\]*\[\r\n\])+POSSIBILITY OF SUCH DAMAGES.*" "info warranty"
+gdb_test "info warranty" "15. *Disclaimer of Warranty.*" "info warranty"
 #test info watchpoints
 gdb_test "info watchpoints" "No breakpoints or watchpoints." "info watchpoints"
 #test inspect
@@ -604,7 +603,7 @@ gdb_test "show confirm" "Whether to confirm potentially dangerous operations is 
 #test show convenience
 gdb_test "show convenience" "No debugger convenience variables now defined.(\[^\r\n\]*\[\r\n\])+Convenience variables have names starting with \".\";(\[^\r\n\]*\[\r\n\])+use \"set\" as in \"set .foo = 5\" to define them." "show convenience"
 #test show directories
-gdb_test "show directories" "Source directories searched: .cdir:.cwd" "show directories"
+gdb_test "show directories" "Source directories searched: .cdir\[:;\].cwd" "show directories"
 #test show editing
 gdb_test "show editing" "Editing of command lines as they are typed is o\[a-z\]*." "show editing"
 #test show height
@@ -667,7 +666,7 @@ gdb_test "show values" "" "show values"
 #test show verbose
 gdb_test "show verbose" "Verbose printing of informational messages is o.*|Verbosity is off.*" "show verbose"
 #test show version
-gdb_test "show version" "GNU gdb \[0-9\.\]*(\[^\r\n\]*\[\r\n\])+Copyright \[0-9\]* Free Software Foundation, Inc(\[^\r\n\]*\[\r\n\])+GDB is free software, covered by the GNU General Public License, and you are(\[^\r\n\]*\[\r\n\])+welcome to change it and/or distribute copies of it under certain conditions(\[^\r\n\]*\[\r\n\])+Type \"show copying\" to see the conditions(\[^\r\n\]*\[\r\n\])+There is absolutely no warranty for GDB.  Type \"show warranty\" for details(\[^\r\n\]*\[\r\n\])+This GDB was configured as .*|GDB is free software and you are welcome to distribute copies of it(\[^\r\n\]*\[\r\n\])+ under certain conditions; type \"show copying\" to see the conditions.(\[^\r\n\]*\[\r\n\])+There is absolutely no warranty for GDB; type \"show warranty\" for details.(\[^\r\n\]*\[\r\n\])+GDB.*Copyright \[0-9\]* Free Software Foundation, Inc.*" "show version"
+gdb_test "show version" "GNU gdb \[0-9\.\]*(\[^\r\n\]*\[\r\n\])+Copyright \\(C\\) \[0-9\]* Free Software Foundation, Inc(\[^\r\n\]*\[\r\n\])+License GPLv3\\+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>(\[^\r\n\]*\[\r\n\])+This is free software: you are free to change and redistribute it.(\[^\r\n\]*\[\r\n\])+There is NO WARRANTY, to the extent permitted by law.  Type \"show copying\"(\[^\r\n\]*\[\r\n\])+and \"show warranty\" for details..*" "show version" 
 #test show width
 gdb_test "show width" "Number of characters gdb thinks are in a line is.*" "show width"
 #test show write
@@ -682,7 +681,7 @@ gdb_test "stepi" "The program is not being run." "stepi"
 #test signal
 gdb_test "signal" "The program is not being run." "signal"
 #test source
-gdb_test "source" "source command requires pathname of file to source..*|No such file or directory.*" "source"
+gdb_test "source" "source command requires file name of file to source..*|No such file or directory.*" "source"
 #test step "s" abbreviation
 gdb_test "s" "The program is not being run." "step \"s\" abbreviation #2"
 #test step
@@ -754,7 +753,7 @@ gdb_test "target" "Argument required .target name.*" "target"
 #test tbreak
 gdb_test "tbreak" "No default breakpoint address now." "tbreak"
 #test tty
-gdb_test "tty" "Argument required .terminal name for running target process.*" "tty"
+gdb_test "tty" "Argument required .filename to set it to\..*" "tty"
 #test until "u" abbreviation
 gdb_test "u" "The program is not running." "until \"u\" abbreviation"
 #test until

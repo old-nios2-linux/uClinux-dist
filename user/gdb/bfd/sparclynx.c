@@ -1,32 +1,24 @@
 /* BFD support for Sparc binaries under LynxOS.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1997, 1998, 2000,
-   2001, 2002, 2003 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#if 0
-#define N_SHARED_LIB(x) 0
-
-#define TEXT_START_ADDR 0
-#define TARGET_PAGE_SIZE 4096
-#define SEGMENT_SIZE TARGET_PAGE_SIZE
-#define DEFAULT_ARCH bfd_arch_sparc
-
-#endif
 
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
    remove whitespace added here, and thus will fail to concatenate
@@ -34,8 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define MY(OP) CONCAT2 (sparclynx_aout_,OP)
 #define TARGETNAME "a.out-sparc-lynx"
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 
 #include "aout/sun4.h"
@@ -118,11 +110,6 @@ NAME(lynx,set_arch_mach) (abfd, machtype)
       machine = 0;
       break;
 
-    case M_29K:
-      arch = bfd_arch_a29k;
-      machine = 0;
-      break;
-
     case M_HPUX:
       arch = bfd_arch_m68k;
       machine = 0;
@@ -149,7 +136,6 @@ choose_reloc_size (abfd)
   switch (bfd_get_arch (abfd))
     {
     case bfd_arch_sparc:
-    case bfd_arch_a29k:
       obj_reloc_entry_size (abfd) = RELOC_EXT_SIZE;
       break;
     default:
@@ -189,9 +175,6 @@ NAME(aout,sparclynx_write_object_contents) (abfd)
       break;
     case bfd_arch_i386:
       N_SET_MACHTYPE (*execp, M_386);
-      break;
-    case bfd_arch_a29k:
-      N_SET_MACHTYPE (*execp, M_29K);
       break;
     default:
       N_SET_MACHTYPE (*execp, M_UNKNOWN);

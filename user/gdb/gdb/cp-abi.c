@@ -1,11 +1,13 @@
 /* Generic code for supporting multiple C++ ABI's
-   Copyright 2001, 2002, 2003 Free Software Foundation, Inc.
+
+   Copyright (C) 2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -40,7 +40,7 @@ enum ctor_kinds
 is_constructor_name (const char *name)
 {
   if ((current_cp_abi.is_constructor_name) == NULL)
-    error ("ABI doesn't define required function is_constructor_name");
+    error (_("ABI doesn't define required function is_constructor_name"));
   return (*current_cp_abi.is_constructor_name) (name);
 }
 
@@ -48,7 +48,7 @@ enum dtor_kinds
 is_destructor_name (const char *name)
 {
   if ((current_cp_abi.is_destructor_name) == NULL)
-    error ("ABI doesn't define required function is_destructor_name");
+    error (_("ABI doesn't define required function is_destructor_name"));
   return (*current_cp_abi.is_destructor_name) (name);
 }
 
@@ -56,7 +56,7 @@ int
 is_vtable_name (const char *name)
 {
   if ((current_cp_abi.is_vtable_name) == NULL)
-    error ("ABI doesn't define required function is_vtable_name");
+    error (_("ABI doesn't define required function is_vtable_name"));
   return (*current_cp_abi.is_vtable_name) (name);
 }
 
@@ -64,16 +64,16 @@ int
 is_operator_name (const char *name)
 {
   if ((current_cp_abi.is_operator_name) == NULL)
-    error ("ABI doesn't define required function is_operator_name");
+    error (_("ABI doesn't define required function is_operator_name"));
   return (*current_cp_abi.is_operator_name) (name);
 }
 
 int
-baseclass_offset (struct type *type, int index, char *valaddr,
+baseclass_offset (struct type *type, int index, const bfd_byte *valaddr,
 		  CORE_ADDR address)
 {
   if (current_cp_abi.baseclass_offset == NULL)
-    error ("ABI doesn't define required function baseclass_offset");
+    error (_("ABI doesn't define required function baseclass_offset"));
   return (*current_cp_abi.baseclass_offset) (type, index, valaddr, address);
 }
 
@@ -92,6 +92,55 @@ value_rtti_type (struct value *v, int *full, int *top, int *using_enc)
   if ((current_cp_abi.rtti_type) == NULL)
     return NULL;
   return (*current_cp_abi.rtti_type) (v, full, top, using_enc);
+}
+
+void
+cplus_print_method_ptr (const gdb_byte *contents, struct type *type,
+			struct ui_file *stream)
+{
+  if (current_cp_abi.print_method_ptr == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  (*current_cp_abi.print_method_ptr) (contents, type, stream);
+}
+
+int
+cplus_method_ptr_size (void)
+{
+  if (current_cp_abi.method_ptr_size == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  return (*current_cp_abi.method_ptr_size) ();
+}
+
+void
+cplus_make_method_ptr (gdb_byte *contents, CORE_ADDR value, int is_virtual)
+{
+  if (current_cp_abi.make_method_ptr == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  (*current_cp_abi.make_method_ptr) (contents, value, is_virtual);
+}
+
+CORE_ADDR
+cplus_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
+{
+  if (current_cp_abi.skip_trampoline == NULL)
+    return 0;
+  return (*current_cp_abi.skip_trampoline) (frame, stop_pc);
+}
+
+struct value *
+cplus_method_ptr_to_value (struct value **this_p, struct value *method_ptr)
+{
+  if (current_cp_abi.method_ptr_to_value == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  return (*current_cp_abi.method_ptr_to_value) (this_p, method_ptr);
+}
+
+int
+cp_pass_by_reference (struct type *type)
+{
+  if ((current_cp_abi.pass_by_reference) == NULL)
+    return 0;
+  return (*current_cp_abi.pass_by_reference) (type);
 }
 
 /* Set the current C++ ABI to SHORT_NAME.  */
@@ -116,7 +165,7 @@ register_cp_abi (struct cp_abi_ops *abi)
 {
   if (num_cp_abis == CP_ABI_MAX)
     internal_error (__FILE__, __LINE__,
-		    "Too many C++ ABIs, please increase CP_ABI_MAX in cp-abi.c");
+		    _("Too many C++ ABIs, please increase CP_ABI_MAX in cp-abi.c"));
 
   cp_abis[num_cp_abis++] = abi;
 
@@ -133,7 +182,7 @@ set_cp_abi_as_auto_default (const char *short_name)
 
   if (abi == NULL)
     internal_error (__FILE__, __LINE__,
-		    "Cannot find C++ ABI \"%s\" to set it as auto default.",
+		    _("Cannot find C++ ABI \"%s\" to set it as auto default."),
 		    short_name);
 
   if (auto_cp_abi.longname != NULL)
@@ -144,14 +193,11 @@ set_cp_abi_as_auto_default (const char *short_name)
   auto_cp_abi = *abi;
 
   auto_cp_abi.shortname = "auto";
-  new_longname = xmalloc (strlen ("currently ") + 1 + strlen (abi->shortname)
-			  + 1 + 1);
-  sprintf (new_longname, "currently \"%s\"", abi->shortname);
+  new_longname = xstrprintf ("currently \"%s\"", abi->shortname);
   auto_cp_abi.longname = new_longname;
 
-  new_doc = xmalloc (strlen ("Automatically selected; currently ")
-		     + 1 + strlen (abi->shortname) + 1 + 1);
-  sprintf (new_doc, "Automatically selected; currently \"%s\"", abi->shortname);
+  new_doc = xstrprintf ("Automatically selected; currently \"%s\"",
+	     abi->shortname);
   auto_cp_abi.doc = new_doc;
 
   /* Since we copy the current ABI into current_cp_abi instead of
@@ -218,7 +264,7 @@ set_cp_abi_cmd (char *args, int from_tty)
     }
 
   if (!switch_to_cp_abi (args))
-    error ("Could not find \"%s\" in ABI list", args);
+    error (_("Could not find \"%s\" in ABI list"), args);
 }
 
 /* Show the currently selected C++ ABI.  */
@@ -242,11 +288,11 @@ _initialize_cp_abi (void)
   register_cp_abi (&auto_cp_abi);
   switch_to_cp_abi ("auto");
 
-  add_cmd ("cp-abi", class_obscure, set_cp_abi_cmd,
-	   "Set the ABI used for inspecting C++ objects.\n"
-	   "\"set cp-abi\" with no arguments will list the available ABIs.",
+  add_cmd ("cp-abi", class_obscure, set_cp_abi_cmd, _("\
+Set the ABI used for inspecting C++ objects.\n\
+\"set cp-abi\" with no arguments will list the available ABIs."),
 	   &setlist);
 
   add_cmd ("cp-abi", class_obscure, show_cp_abi_cmd,
-	   "Show the ABI used for inspecting C++ objects.", &showlist);
+	   _("Show the ABI used for inspecting C++ objects."), &showlist);
 }

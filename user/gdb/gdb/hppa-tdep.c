@@ -1,8 +1,8 @@
-/* Target-dependent code for the HP PA architecture, for GDB.
+/* Target-dependent code for the HP PA-RISC architecture.
 
-   Copyright 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
@@ -11,7 +11,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -20,9 +20,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
@@ -31,6 +29,7 @@
 #include "completer.h"
 #include "osabi.h"
 #include "gdb_assert.h"
+#include "gdb_stdint.h"
 #include "arch-utils.h"
 /* For argument passing to the inferior */
 #include "symtab.h"
@@ -41,6 +40,7 @@
 
 #include "gdbcore.h"
 #include "gdbcmd.h"
+#include "gdbtypes.h"
 #include "objfiles.h"
 #include "hppa-tdep.h"
 
@@ -67,107 +67,6 @@ const struct objfile_data *hppa_objfile_priv_data = NULL;
 /* Sizes (in bytes) of the native unwind entries.  */
 #define UNWIND_ENTRY_SIZE 16
 #define STUB_UNWIND_ENTRY_SIZE 8
-
-/* FIXME: brobecker 2002-11-07: We will likely be able to make the
-   following functions static, once we hppa is partially multiarched.  */
-int hppa_pc_requires_run_before_use (CORE_ADDR pc);
-int hppa_instruction_nullified (void);
-
-/* Handle 32/64-bit struct return conventions.  */
-
-static enum return_value_convention
-hppa32_return_value (struct gdbarch *gdbarch,
-		     struct type *type, struct regcache *regcache,
-		     void *readbuf, const void *writebuf)
-{
-  if (TYPE_LENGTH (type) <= 2 * 4)
-    {
-      /* The value always lives in the right hand end of the register
-	 (or register pair)?  */
-      int b;
-      int reg = TYPE_CODE (type) == TYPE_CODE_FLT ? HPPA_FP4_REGNUM : 28;
-      int part = TYPE_LENGTH (type) % 4;
-      /* The left hand register contains only part of the value,
-	 transfer that first so that the rest can be xfered as entire
-	 4-byte registers.  */
-      if (part > 0)
-	{
-	  if (readbuf != NULL)
-	    regcache_cooked_read_part (regcache, reg, 4 - part,
-				       part, readbuf);
-	  if (writebuf != NULL)
-	    regcache_cooked_write_part (regcache, reg, 4 - part,
-					part, writebuf);
-	  reg++;
-	}
-      /* Now transfer the remaining register values.  */
-      for (b = part; b < TYPE_LENGTH (type); b += 4)
-	{
-	  if (readbuf != NULL)
-	    regcache_cooked_read (regcache, reg, (char *) readbuf + b);
-	  if (writebuf != NULL)
-	    regcache_cooked_write (regcache, reg, (const char *) writebuf + b);
-	  reg++;
-	}
-      return RETURN_VALUE_REGISTER_CONVENTION;
-    }
-  else
-    return RETURN_VALUE_STRUCT_CONVENTION;
-}
-
-static enum return_value_convention
-hppa64_return_value (struct gdbarch *gdbarch,
-		     struct type *type, struct regcache *regcache,
-		     void *readbuf, const void *writebuf)
-{
-  /* RM: Floats are returned in FR4R, doubles in FR4.  Integral values
-     are in r28, padded on the left.  Aggregates less that 65 bits are
-     in r28, right padded.  Aggregates upto 128 bits are in r28 and
-     r29, right padded.  */ 
-  if (TYPE_CODE (type) == TYPE_CODE_FLT
-      && TYPE_LENGTH (type) <= 8)
-    {
-      /* Floats are right aligned?  */
-      int offset = register_size (gdbarch, HPPA_FP4_REGNUM) - TYPE_LENGTH (type);
-      if (readbuf != NULL)
-	regcache_cooked_read_part (regcache, HPPA_FP4_REGNUM, offset,
-				   TYPE_LENGTH (type), readbuf);
-      if (writebuf != NULL)
-	regcache_cooked_write_part (regcache, HPPA_FP4_REGNUM, offset,
-				    TYPE_LENGTH (type), writebuf);
-      return RETURN_VALUE_REGISTER_CONVENTION;
-    }
-  else if (TYPE_LENGTH (type) <= 8 && is_integral_type (type))
-    {
-      /* Integrals are right aligned.  */
-      int offset = register_size (gdbarch, HPPA_FP4_REGNUM) - TYPE_LENGTH (type);
-      if (readbuf != NULL)
-	regcache_cooked_read_part (regcache, 28, offset,
-				   TYPE_LENGTH (type), readbuf);
-      if (writebuf != NULL)
-	regcache_cooked_write_part (regcache, 28, offset,
-				    TYPE_LENGTH (type), writebuf);
-      return RETURN_VALUE_REGISTER_CONVENTION;
-    }
-  else if (TYPE_LENGTH (type) <= 2 * 8)
-    {
-      /* Composite values are left aligned.  */
-      int b;
-      for (b = 0; b < TYPE_LENGTH (type); b += 8)
-	{
-	  int part = min (8, TYPE_LENGTH (type) - b);
-	  if (readbuf != NULL)
-	    regcache_cooked_read_part (regcache, 28 + b / 8, 0, part,
-				       (char *) readbuf + b);
-	  if (writebuf != NULL)
-	    regcache_cooked_write_part (regcache, 28 + b / 8, 0, part,
-					(const char *) writebuf + b);
-	}
-      return RETURN_VALUE_REGISTER_CONVENTION;
-    }
-  else
-    return RETURN_VALUE_STRUCT_CONVENTION;
-}
 
 /* Routines to extract various sized constants out of hppa 
    instructions. */
@@ -274,6 +173,20 @@ hppa_symbol_address(const char *sym)
   else
     return (CORE_ADDR)-1;
 }
+
+struct hppa_objfile_private *
+hppa_init_objfile_priv_data (struct objfile *objfile)
+{
+  struct hppa_objfile_private *priv;
+
+  priv = (struct hppa_objfile_private *)
+  	 obstack_alloc (&objfile->objfile_obstack,
+	 		sizeof (struct hppa_objfile_private));
+  set_objfile_data (objfile, hppa_objfile_priv_data, priv);
+  memset (priv, 0, sizeof (*priv));
+
+  return priv;
+}
 
 
 /* Compare the start address for two unwind entries returning 1 if 
@@ -339,6 +252,10 @@ internalize_unwinds (struct objfile *objfile, struct unwind_table_entry *table,
 
 	  text_offset = low_text_segment_address;
 	}
+      else if (gdbarch_tdep (current_gdbarch)->solib_get_text_base)
+        {
+	  text_offset = gdbarch_tdep (current_gdbarch)->solib_get_text_base (objfile);
+	}
 
       bfd_get_section_contents (objfile->obfd, section, buf, 0, size);
 
@@ -359,7 +276,7 @@ internalize_unwinds (struct objfile *objfile, struct unwind_table_entry *table,
 	  table[i].Millicode = (tmp >> 30) & 0x1;
 	  table[i].Millicode_save_sr0 = (tmp >> 29) & 0x1;
 	  table[i].Region_description = (tmp >> 27) & 0x3;
-	  table[i].reserved1 = (tmp >> 26) & 0x1;
+	  table[i].reserved = (tmp >> 26) & 0x1;
 	  table[i].Entry_SR = (tmp >> 25) & 0x1;
 	  table[i].Entry_FR = (tmp >> 21) & 0xf;
 	  table[i].Entry_GR = (tmp >> 16) & 0x1f;
@@ -369,23 +286,23 @@ internalize_unwinds (struct objfile *objfile, struct unwind_table_entry *table,
 	  table[i].Frame_Extension_Millicode = (tmp >> 12) & 0x1;
 	  table[i].Stack_Overflow_Check = (tmp >> 11) & 0x1;
 	  table[i].Two_Instruction_SP_Increment = (tmp >> 10) & 0x1;
-	  table[i].Ada_Region = (tmp >> 9) & 0x1;
+	  table[i].sr4export = (tmp >> 9) & 0x1;
 	  table[i].cxx_info = (tmp >> 8) & 0x1;
 	  table[i].cxx_try_catch = (tmp >> 7) & 0x1;
 	  table[i].sched_entry_seq = (tmp >> 6) & 0x1;
-	  table[i].reserved2 = (tmp >> 5) & 0x1;
+	  table[i].reserved1 = (tmp >> 5) & 0x1;
 	  table[i].Save_SP = (tmp >> 4) & 0x1;
 	  table[i].Save_RP = (tmp >> 3) & 0x1;
 	  table[i].Save_MRP_in_frame = (tmp >> 2) & 0x1;
-	  table[i].extn_ptr_defined = (tmp >> 1) & 0x1;
+	  table[i].save_r19 = (tmp >> 1) & 0x1;
 	  table[i].Cleanup_defined = tmp & 0x1;
 	  tmp = bfd_get_32 (objfile->obfd, (bfd_byte *) buf);
 	  buf += 4;
 	  table[i].MPE_XL_interrupt_marker = (tmp >> 31) & 0x1;
 	  table[i].HP_UX_interrupt_marker = (tmp >> 30) & 0x1;
 	  table[i].Large_frame = (tmp >> 29) & 0x1;
-	  table[i].Pseudo_SP_Set = (tmp >> 28) & 0x1;
-	  table[i].reserved4 = (tmp >> 27) & 0x1;
+	  table[i].alloca_frame = (tmp >> 28) & 0x1;
+	  table[i].reserved2 = (tmp >> 27) & 0x1;
 	  table[i].Total_frame_size = tmp & 0x7ffffff;
 
 	  /* Stub unwinds are handled elsewhere. */
@@ -443,7 +360,7 @@ read_unwind_info (struct objfile *objfile)
     }
 
   /* Now compute the size of the stub unwinds.  Note the ELF tools do not
-     use stub unwinds at the curren time.  */
+     use stub unwinds at the current time.  */
   stub_unwind_sec = bfd_get_section_by_name (objfile->obfd, "$UNWIND_END$");
 
   if (stub_unwind_sec)
@@ -526,15 +443,8 @@ read_unwind_info (struct objfile *objfile)
   obj_private = (struct hppa_objfile_private *) 
 	        objfile_data (objfile, hppa_objfile_priv_data);
   if (obj_private == NULL)
-    {
-      obj_private = (struct hppa_objfile_private *)
-	obstack_alloc (&objfile->objfile_obstack, 
-                       sizeof (struct hppa_objfile_private));
-      set_objfile_data (objfile, hppa_objfile_priv_data, obj_private);
-      obj_private->unwind_info = NULL;
-      obj_private->so_info = NULL;
-      obj_private->dp = 0;
-    }
+    obj_private = hppa_init_objfile_priv_data (objfile);
+
   obj_private->unwind_info = ui;
 }
 
@@ -575,7 +485,7 @@ find_unwind_entry (CORE_ADDR pc)
 	read_unwind_info (objfile);
         priv = objfile_data (objfile, hppa_objfile_priv_data);
 	if (priv == NULL)
-	  error ("Internal error reading unwind information.");
+	  error (_("Internal error reading unwind information."));
         ui = ((struct hppa_objfile_private *) priv)->unwind_info;
       }
 
@@ -587,7 +497,7 @@ find_unwind_entry (CORE_ADDR pc)
       {
 	if (hppa_debug)
 	  fprintf_unfiltered (gdb_stdlog, "0x%s (cached) }\n",
-            paddr_nz ((CORE_ADDR) ui->cache));
+            paddr_nz ((uintptr_t) ui->cache));
         return ui->cache;
       }
 
@@ -605,7 +515,7 @@ find_unwind_entry (CORE_ADDR pc)
 	    ui->cache = &ui->table[middle];
 	    if (hppa_debug)
 	      fprintf_unfiltered (gdb_stdlog, "0x%s }\n",
-                paddr_nz ((CORE_ADDR) ui->cache));
+                paddr_nz ((uintptr_t) ui->cache));
 	    return &ui->table[middle];
 	  }
 
@@ -622,8 +532,46 @@ find_unwind_entry (CORE_ADDR pc)
   return NULL;
 }
 
+/* The epilogue is defined here as the area either on the `bv' instruction 
+   itself or an instruction which destroys the function's stack frame. 
+   
+   We do not assume that the epilogue is at the end of a function as we can
+   also have return sequences in the middle of a function.  */
+static int
+hppa_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
+{
+  unsigned long status;
+  unsigned int inst;
+  char buf[4];
+  int off;
+
+  status = read_memory_nobpt (pc, buf, 4);
+  if (status != 0)
+    return 0;
+
+  inst = extract_unsigned_integer (buf, 4);
+
+  /* The most common way to perform a stack adjustment ldo X(sp),sp 
+     We are destroying a stack frame if the offset is negative.  */
+  if ((inst & 0xffffc000) == 0x37de0000
+      && hppa_extract_14 (inst) < 0)
+    return 1;
+
+  /* ldw,mb D(sp),X or ldd,mb D(sp),X */
+  if (((inst & 0x0fc010e0) == 0x0fc010e0 
+       || (inst & 0x0fc010e0) == 0x0fc010e0)
+      && hppa_extract_14 (inst) < 0)
+    return 1;
+
+  /* bv %r0(%rp) or bv,n %r0(%rp) */
+  if (inst == 0xe840c000 || inst == 0xe840c002)
+    return 1;
+
+  return 0;
+}
+
 static const unsigned char *
-hppa_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+hppa_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static const unsigned char breakpoint[] = {0x00, 0x01, 0x00, 0x04};
   (*len) = sizeof (breakpoint);
@@ -632,8 +580,8 @@ hppa_breakpoint_from_pc (CORE_ADDR *pc, int *len)
 
 /* Return the name of a register.  */
 
-const char *
-hppa32_register_name (int i)
+static const char *
+hppa32_register_name (struct gdbarch *gdbarch, int i)
 {
   static char *names[] = {
     "flags",  "r1",      "rp",     "r3",
@@ -675,8 +623,8 @@ hppa32_register_name (int i)
     return names[i];
 }
 
-const char *
-hppa64_register_name (int i)
+static const char *
+hppa64_register_name (struct gdbarch *gdbarch, int i)
 {
   static char *names[] = {
     "flags",  "r1",      "rp",     "r3",
@@ -710,6 +658,21 @@ hppa64_register_name (int i)
     return names[i];
 }
 
+static int
+hppa64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+{
+  /* r0-r31 and sar map one-to-one.  */
+  if (reg <= 32)
+    return reg;
+
+  /* fr4-fr31 are mapped from 72 in steps of 2.  */
+  if (reg >= 72 || reg < 72 + 28 * 2)
+    return HPPA64_FP4_REGNUM + (reg - 72) / 2;
+
+  error ("Invalid DWARF register num %d.", reg);
+  return -1;
+}
+
 /* This function pushes a stack frame with arguments as part of the
    inferior function calling mechanism.
 
@@ -720,7 +683,7 @@ hppa64_register_name (int i)
    We simply allocate the appropriate amount of stack space and put
    arguments into their proper slots.  */
    
-CORE_ADDR
+static CORE_ADDR
 hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			struct regcache *regcache, CORE_ADDR bp_addr,
 			int nargs, struct value **args, CORE_ADDR sp,
@@ -758,7 +721,7 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       for (i = 0; i < nargs; i++)
 	{
 	  struct value *arg = args[i];
-	  struct type *type = check_typedef (VALUE_TYPE (arg));
+	  struct type *type = check_typedef (value_type (arg));
 	  /* The corresponding parameter that is pushed onto the
 	     stack, and [possibly] passed in a register.  */
 	  char param_val[8];
@@ -771,7 +734,7 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	      param_len = 4;
 	      struct_ptr += align_up (TYPE_LENGTH (type), 8);
 	      if (write_pass)
-		write_memory (struct_end - struct_ptr, VALUE_CONTENTS (arg),
+		write_memory (struct_end - struct_ptr, value_contents (arg),
 			      TYPE_LENGTH (type));
 	      store_unsigned_integer (param_val, 4, struct_end - struct_ptr);
 	    }
@@ -783,13 +746,13 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	      param_len = align_up (TYPE_LENGTH (type), 4);
 	      store_unsigned_integer (param_val, param_len,
 				      unpack_long (type,
-						   VALUE_CONTENTS (arg)));
+						   value_contents (arg)));
 	    }
 	  else if (TYPE_CODE (type) == TYPE_CODE_FLT)
             {
 	      /* Floating point value store, right aligned.  */
 	      param_len = align_up (TYPE_LENGTH (type), 4);
-	      memcpy (param_val, VALUE_CONTENTS (arg), param_len);
+	      memcpy (param_val, value_contents (arg), param_len);
             }
 	  else
 	    {
@@ -797,7 +760,7 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 	      /* Small struct value are stored right-aligned.  */
 	      memcpy (param_val + param_len - TYPE_LENGTH (type),
-		      VALUE_CONTENTS (arg), TYPE_LENGTH (type));
+		      value_contents (arg), TYPE_LENGTH (type));
 
 	      /* Structures of size 5, 6 and 7 bytes are special in that
 	         the higher-ordered word is stored in the lower-ordered
@@ -863,15 +826,16 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* If a structure has to be returned, set up register 28 to hold its
      address */
   if (struct_return)
-    write_register (28, struct_addr);
+    regcache_cooked_write_unsigned (regcache, 28, struct_addr);
 
-  gp = tdep->find_global_pointer (function);
+  gp = tdep->find_global_pointer (gdbarch, function);
 
   if (gp != 0)
-    write_register (19, gp);
+    regcache_cooked_write_unsigned (regcache, 19, gp);
 
   /* Set the return address.  */
-  regcache_cooked_write_unsigned (regcache, HPPA_RP_REGNUM, bp_addr);
+  if (!gdbarch_push_dummy_code_p (gdbarch))
+    regcache_cooked_write_unsigned (regcache, HPPA_RP_REGNUM, bp_addr);
 
   /* Update the Stack Pointer.  */
   regcache_cooked_write_unsigned (regcache, HPPA_SP_REGNUM, param_end);
@@ -879,140 +843,408 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   return param_end;
 }
 
-/* This function pushes a stack frame with arguments as part of the
-   inferior function calling mechanism.
+/* The 64-bit PA-RISC calling conventions are documented in "64-Bit
+   Runtime Architecture for PA-RISC 2.0", which is distributed as part
+   as of the HP-UX Software Transition Kit (STK).  This implementation
+   is based on version 3.3, dated October 6, 1997.  */
 
-   This is the version for the PA64, in which later arguments appear
-   at higher addresses.  (The stack always grows towards higher
-   addresses.)
+/* Check whether TYPE is an "Integral or Pointer Scalar Type".  */
 
-   We simply allocate the appropriate amount of stack space and put
-   arguments into their proper slots.
+static int
+hppa64_integral_or_pointer_p (const struct type *type)
+{
+  switch (TYPE_CODE (type))
+    {
+    case TYPE_CODE_INT:
+    case TYPE_CODE_BOOL:
+    case TYPE_CODE_CHAR:
+    case TYPE_CODE_ENUM:
+    case TYPE_CODE_RANGE:
+      {
+	int len = TYPE_LENGTH (type);
+	return (len == 1 || len == 2 || len == 4 || len == 8);
+      }
+    case TYPE_CODE_PTR:
+    case TYPE_CODE_REF:
+      return (TYPE_LENGTH (type) == 8);
+    default:
+      break;
+    }
 
-   This ABI also requires that the caller provide an argument pointer
-   to the callee, so we do that too.  */
-   
-CORE_ADDR
+  return 0;
+}
+
+/* Check whether TYPE is a "Floating Scalar Type".  */
+
+static int
+hppa64_floating_p (const struct type *type)
+{
+  switch (TYPE_CODE (type))
+    {
+    case TYPE_CODE_FLT:
+      {
+	int len = TYPE_LENGTH (type);
+	return (len == 4 || len == 8 || len == 16);
+      }
+    default:
+      break;
+    }
+
+  return 0;
+}
+
+/* If CODE points to a function entry address, try to look up the corresponding
+   function descriptor and return its address instead.  If CODE is not a
+   function entry address, then just return it unchanged.  */
+static CORE_ADDR
+hppa64_convert_code_addr_to_fptr (CORE_ADDR code)
+{
+  struct obj_section *sec, *opd;
+
+  sec = find_pc_section (code);
+
+  if (!sec)
+    return code;
+
+  /* If CODE is in a data section, assume it's already a fptr.  */
+  if (!(sec->the_bfd_section->flags & SEC_CODE))
+    return code;
+
+  ALL_OBJFILE_OSECTIONS (sec->objfile, opd)
+    {
+      if (strcmp (opd->the_bfd_section->name, ".opd") == 0)
+        break;
+    }
+
+  if (opd < sec->objfile->sections_end)
+    {
+      CORE_ADDR addr;
+
+      for (addr = opd->addr; addr < opd->endaddr; addr += 2 * 8)
+        {
+	  ULONGEST opdaddr;
+	  char tmp[8];
+
+	  if (target_read_memory (addr, tmp, sizeof (tmp)))
+	      break;
+	  opdaddr = extract_unsigned_integer (tmp, sizeof (tmp));
+
+          if (opdaddr == code)
+	    return addr - 16;
+	}
+    }
+
+  return code;
+}
+
+static CORE_ADDR
 hppa64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			struct regcache *regcache, CORE_ADDR bp_addr,
 			int nargs, struct value **args, CORE_ADDR sp,
 			int struct_return, CORE_ADDR struct_addr)
 {
-  /* NOTE: cagney/2004-02-27: This is a guess - its implemented by
-     reverse engineering testsuite failures.  */
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int i, offset = 0;
+  CORE_ADDR gp;
 
-  /* Stack base address at which any pass-by-reference parameters are
-     stored.  */
-  CORE_ADDR struct_end = 0;
-  /* Stack base address at which the first parameter is stored.  */
-  CORE_ADDR param_end = 0;
+  /* "The outgoing parameter area [...] must be aligned at a 16-byte
+     boundary."  */
+  sp = align_up (sp, 16);
 
-  /* The inner most end of the stack after all the parameters have
-     been pushed.  */
-  CORE_ADDR new_sp = 0;
-
-  /* Two passes.  First pass computes the location of everything,
-     second pass writes the bytes out.  */
-  int write_pass;
-  for (write_pass = 0; write_pass < 2; write_pass++)
+  for (i = 0; i < nargs; i++)
     {
-      CORE_ADDR struct_ptr = 0;
-      CORE_ADDR param_ptr = 0;
-      int i;
-      for (i = 0; i < nargs; i++)
+      struct value *arg = args[i];
+      struct type *type = value_type (arg);
+      int len = TYPE_LENGTH (type);
+      const bfd_byte *valbuf;
+      bfd_byte fptrbuf[8];
+      int regnum;
+
+      /* "Each parameter begins on a 64-bit (8-byte) boundary."  */
+      offset = align_up (offset, 8);
+
+      if (hppa64_integral_or_pointer_p (type))
 	{
-	  struct value *arg = args[i];
-	  struct type *type = check_typedef (VALUE_TYPE (arg));
-	  if ((TYPE_CODE (type) == TYPE_CODE_INT
-	       || TYPE_CODE (type) == TYPE_CODE_ENUM)
-	      && TYPE_LENGTH (type) <= 8)
+	  /* "Integral scalar parameters smaller than 64 bits are
+             padded on the left (i.e., the value is in the
+             least-significant bits of the 64-bit storage unit, and
+             the high-order bits are undefined)."  Therefore we can
+             safely sign-extend them.  */
+	  if (len < 8)
 	    {
-	      /* Integer value store, right aligned.  "unpack_long"
-		 takes care of any sign-extension problems.  */
-	      param_ptr += 8;
-	      if (write_pass)
-		{
-		  ULONGEST val = unpack_long (type, VALUE_CONTENTS (arg));
-		  int reg = 27 - param_ptr / 8;
-		  write_memory_unsigned_integer (param_end - param_ptr,
-						 val, 8);
-		  if (reg >= 19)
-		    regcache_cooked_write_unsigned (regcache, reg, val);
-		}
+	      arg = value_cast (builtin_type_int64, arg);
+	      len = 8;
+	    }
+	}
+      else if (hppa64_floating_p (type))
+	{
+	  if (len > 8)
+	    {
+	      /* "Quad-precision (128-bit) floating-point scalar
+		 parameters are aligned on a 16-byte boundary."  */
+	      offset = align_up (offset, 16);
+
+	      /* "Double-extended- and quad-precision floating-point
+                 parameters within the first 64 bytes of the parameter
+                 list are always passed in general registers."  */
 	    }
 	  else
 	    {
-	      /* Small struct value, store left aligned?  */
-	      int reg;
-	      if (TYPE_LENGTH (type) > 8)
+	      if (len == 4)
 		{
-		  param_ptr = align_up (param_ptr, 16);
-		  reg = 26 - param_ptr / 8;
-		  param_ptr += align_up (TYPE_LENGTH (type), 16);
+		  /* "Single-precision (32-bit) floating-point scalar
+		     parameters are padded on the left with 32 bits of
+		     garbage (i.e., the floating-point value is in the
+		     least-significant 32 bits of a 64-bit storage
+		     unit)."  */
+		  offset += 4;
 		}
-	      else
+
+	      /* "Single- and double-precision floating-point
+                 parameters in this area are passed according to the
+                 available formal parameter information in a function
+                 prototype.  [...]  If no prototype is in scope,
+                 floating-point parameters must be passed both in the
+                 corresponding general registers and in the
+                 corresponding floating-point registers."  */
+	      regnum = HPPA64_FP4_REGNUM + offset / 8;
+
+	      if (regnum < HPPA64_FP4_REGNUM + 8)
 		{
-		  param_ptr = align_up (param_ptr, 8);
-		  reg = 26 - param_ptr / 8;
-		  param_ptr += align_up (TYPE_LENGTH (type), 8);
-		}
-	      if (write_pass)
-		{
-		  int byte;
-		  write_memory (param_end - param_ptr, VALUE_CONTENTS (arg),
-				TYPE_LENGTH (type));
-		  for (byte = 0; byte < TYPE_LENGTH (type); byte += 8)
-		    {
-		      if (reg >= 19)
-			{
-			  int len = min (8, TYPE_LENGTH (type) - byte);
-			  regcache_cooked_write_part (regcache, reg, 0, len,
-						      VALUE_CONTENTS (arg) + byte);
-			}
-		      reg--;
-		    }
+		  /* "Single-precision floating-point parameters, when
+		     passed in floating-point registers, are passed in
+		     the right halves of the floating point registers;
+		     the left halves are unused."  */
+		  regcache_cooked_write_part (regcache, regnum, offset % 8,
+					      len, value_contents (arg));
 		}
 	    }
 	}
-      /* Update the various stack pointers.  */
-      if (!write_pass)
+      else
 	{
-	  struct_end = sp + struct_ptr;
-	  /* PARAM_PTR already accounts for all the arguments passed
-	     by the user.  However, the ABI mandates minimum stack
-	     space allocations for outgoing arguments.  The ABI also
-	     mandates minimum stack alignments which we must
-	     preserve.  */
-	  param_end = struct_end + max (align_up (param_ptr, 16), 64);
+	  if (len > 8)
+	    {
+	      /* "Aggregates larger than 8 bytes are aligned on a
+		 16-byte boundary, possibly leaving an unused argument
+		 slot, which is filled with garbage. If necessary,
+		 they are padded on the right (with garbage), to a
+		 multiple of 8 bytes."  */
+	      offset = align_up (offset, 16);
+	    }
+	}
+
+      /* If we are passing a function pointer, make sure we pass a function
+         descriptor instead of the function entry address.  */
+      if (TYPE_CODE (type) == TYPE_CODE_PTR
+          && TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC)
+        {
+	  ULONGEST codeptr, fptr;
+
+	  codeptr = unpack_long (type, value_contents (arg));
+	  fptr = hppa64_convert_code_addr_to_fptr (codeptr);
+	  store_unsigned_integer (fptrbuf, TYPE_LENGTH (type), fptr);
+	  valbuf = fptrbuf;
+	}
+      else
+        {
+          valbuf = value_contents (arg);
+	}
+
+      /* Always store the argument in memory.  */
+      write_memory (sp + offset, valbuf, len);
+
+      regnum = HPPA_ARG0_REGNUM - offset / 8;
+      while (regnum > HPPA_ARG0_REGNUM - 8 && len > 0)
+	{
+	  regcache_cooked_write_part (regcache, regnum,
+				      offset % 8, min (len, 8), valbuf);
+	  offset += min (len, 8);
+	  valbuf += min (len, 8);
+	  len -= min (len, 8);
+	  regnum--;
+	}
+
+      offset += len;
+    }
+
+  /* Set up GR29 (%ret1) to hold the argument pointer (ap).  */
+  regcache_cooked_write_unsigned (regcache, HPPA_RET1_REGNUM, sp + 64);
+
+  /* Allocate the outgoing parameter area.  Make sure the outgoing
+     parameter area is multiple of 16 bytes in length.  */
+  sp += max (align_up (offset, 16), 64);
+
+  /* Allocate 32-bytes of scratch space.  The documentation doesn't
+     mention this, but it seems to be needed.  */
+  sp += 32;
+
+  /* Allocate the frame marker area.  */
+  sp += 16;
+
+  /* If a structure has to be returned, set up GR 28 (%ret0) to hold
+     its address.  */
+  if (struct_return)
+    regcache_cooked_write_unsigned (regcache, HPPA_RET0_REGNUM, struct_addr);
+
+  /* Set up GR27 (%dp) to hold the global pointer (gp).  */
+  gp = tdep->find_global_pointer (gdbarch, function);
+  if (gp != 0)
+    regcache_cooked_write_unsigned (regcache, HPPA_DP_REGNUM, gp);
+
+  /* Set up GR2 (%rp) to hold the return pointer (rp).  */
+  if (!gdbarch_push_dummy_code_p (gdbarch))
+    regcache_cooked_write_unsigned (regcache, HPPA_RP_REGNUM, bp_addr);
+
+  /* Set up GR30 to hold the stack pointer (sp).  */
+  regcache_cooked_write_unsigned (regcache, HPPA_SP_REGNUM, sp);
+
+  return sp;
+}
+
+
+/* Handle 32/64-bit struct return conventions.  */
+
+static enum return_value_convention
+hppa32_return_value (struct gdbarch *gdbarch,
+		     struct type *type, struct regcache *regcache,
+		     gdb_byte *readbuf, const gdb_byte *writebuf)
+{
+  if (TYPE_LENGTH (type) <= 2 * 4)
+    {
+      /* The value always lives in the right hand end of the register
+	 (or register pair)?  */
+      int b;
+      int reg = TYPE_CODE (type) == TYPE_CODE_FLT ? HPPA_FP4_REGNUM : 28;
+      int part = TYPE_LENGTH (type) % 4;
+      /* The left hand register contains only part of the value,
+	 transfer that first so that the rest can be xfered as entire
+	 4-byte registers.  */
+      if (part > 0)
+	{
+	  if (readbuf != NULL)
+	    regcache_cooked_read_part (regcache, reg, 4 - part,
+				       part, readbuf);
+	  if (writebuf != NULL)
+	    regcache_cooked_write_part (regcache, reg, 4 - part,
+					part, writebuf);
+	  reg++;
+	}
+      /* Now transfer the remaining register values.  */
+      for (b = part; b < TYPE_LENGTH (type); b += 4)
+	{
+	  if (readbuf != NULL)
+	    regcache_cooked_read (regcache, reg, readbuf + b);
+	  if (writebuf != NULL)
+	    regcache_cooked_write (regcache, reg, writebuf + b);
+	  reg++;
+	}
+      return RETURN_VALUE_REGISTER_CONVENTION;
+    }
+  else
+    return RETURN_VALUE_STRUCT_CONVENTION;
+}
+
+static enum return_value_convention
+hppa64_return_value (struct gdbarch *gdbarch,
+		     struct type *type, struct regcache *regcache,
+		     gdb_byte *readbuf, const gdb_byte *writebuf)
+{
+  int len = TYPE_LENGTH (type);
+  int regnum, offset;
+
+  if (len > 16)
+    {
+      /* All return values larget than 128 bits must be aggregate
+         return values.  */
+      gdb_assert (!hppa64_integral_or_pointer_p (type));
+      gdb_assert (!hppa64_floating_p (type));
+
+      /* "Aggregate return values larger than 128 bits are returned in
+	 a buffer allocated by the caller.  The address of the buffer
+	 must be passed in GR 28."  */
+      return RETURN_VALUE_STRUCT_CONVENTION;
+    }
+
+  if (hppa64_integral_or_pointer_p (type))
+    {
+      /* "Integral return values are returned in GR 28.  Values
+         smaller than 64 bits are padded on the left (with garbage)."  */
+      regnum = HPPA_RET0_REGNUM;
+      offset = 8 - len;
+    }
+  else if (hppa64_floating_p (type))
+    {
+      if (len > 8)
+	{
+	  /* "Double-extended- and quad-precision floating-point
+	     values are returned in GRs 28 and 29.  The sign,
+	     exponent, and most-significant bits of the mantissa are
+	     returned in GR 28; the least-significant bits of the
+	     mantissa are passed in GR 29.  For double-extended
+	     precision values, GR 29 is padded on the right with 48
+	     bits of garbage."  */
+	  regnum = HPPA_RET0_REGNUM;
+	  offset = 0;
+	}
+      else
+	{
+	  /* "Single-precision and double-precision floating-point
+	     return values are returned in FR 4R (single precision) or
+	     FR 4 (double-precision)."  */
+	  regnum = HPPA64_FP4_REGNUM;
+	  offset = 8 - len;
+	}
+    }
+  else
+    {
+      /* "Aggregate return values up to 64 bits in size are returned
+         in GR 28.  Aggregates smaller than 64 bits are left aligned
+         in the register; the pad bits on the right are undefined."
+
+	 "Aggregate return values between 65 and 128 bits are returned
+	 in GRs 28 and 29.  The first 64 bits are placed in GR 28, and
+	 the remaining bits are placed, left aligned, in GR 29.  The
+	 pad bits on the right of GR 29 (if any) are undefined."  */
+      regnum = HPPA_RET0_REGNUM;
+      offset = 0;
+    }
+
+  if (readbuf)
+    {
+      while (len > 0)
+	{
+	  regcache_cooked_read_part (regcache, regnum, offset,
+				     min (len, 8), readbuf);
+	  readbuf += min (len, 8);
+	  len -= min (len, 8);
+	  regnum++;
 	}
     }
 
-  /* If a structure has to be returned, set up register 28 to hold its
-     address */
-  if (struct_return)
-    write_register (28, struct_addr);
+  if (writebuf)
+    {
+      while (len > 0)
+	{
+	  regcache_cooked_write_part (regcache, regnum, offset,
+				      min (len, 8), writebuf);
+	  writebuf += min (len, 8);
+	  len -= min (len, 8);
+	  regnum++;
+	}
+    }
 
-  /* Set the return address.  */
-  regcache_cooked_write_unsigned (regcache, HPPA_RP_REGNUM, bp_addr);
-
-  /* Update the Stack Pointer.  */
-  regcache_cooked_write_unsigned (regcache, HPPA_SP_REGNUM, param_end + 64);
-
-  /* The stack will have 32 bytes of additional space for a frame marker.  */
-  return param_end + 64;
+  return RETURN_VALUE_REGISTER_CONVENTION;
 }
+
 
 static CORE_ADDR
-hppa32_convert_from_func_ptr_addr (struct gdbarch *gdbarch,
-				   CORE_ADDR addr,
+hppa32_convert_from_func_ptr_addr (struct gdbarch *gdbarch, CORE_ADDR addr,
 				   struct target_ops *targ)
 {
   if (addr & 2)
     {
-      CORE_ADDR plabel;
-
-      plabel = addr & ~3;
-      target_read_memory(plabel, (char *)&addr, 4);
+      CORE_ADDR plabel = addr & ~3;
+      return read_memory_typed_address (plabel, builtin_type_void_func_ptr);
     }
 
   return addr;
@@ -1035,42 +1267,31 @@ hppa64_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
   return align_up (addr, 16);
 }
 
-
-/* Get the PC from %r31 if currently in a syscall.  Also mask out privilege
-   bits.  */
-
-static CORE_ADDR
-hppa_target_read_pc (ptid_t ptid)
+CORE_ADDR
+hppa_read_pc (struct regcache *regcache)
 {
-  int flags = read_register_pid (HPPA_FLAGS_REGNUM, ptid);
+  ULONGEST ipsw;
+  ULONGEST pc;
 
-  /* The following test does not belong here.  It is OS-specific, and belongs
-     in native code.  */
-  /* Test SS_INSYSCALL */
-  if (flags & 2)
-    return read_register_pid (31, ptid) & ~0x3;
+  regcache_cooked_read_unsigned (regcache, HPPA_IPSW_REGNUM, &ipsw);
+  regcache_cooked_read_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, &pc);
 
-  return read_register_pid (HPPA_PCOQ_HEAD_REGNUM, ptid) & ~0x3;
+  /* If the current instruction is nullified, then we are effectively
+     still executing the previous instruction.  Pretend we are still
+     there.  This is needed when single stepping; if the nullified
+     instruction is on a different line, we don't want GDB to think
+     we've stepped onto that line.  */
+  if (ipsw & 0x00200000)
+    pc -= 4;
+
+  return pc & ~0x3;
 }
 
-/* Write out the PC.  If currently in a syscall, then also write the new
-   PC value into %r31.  */
-
-static void
-hppa_target_write_pc (CORE_ADDR v, ptid_t ptid)
+void
+hppa_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  int flags = read_register_pid (HPPA_FLAGS_REGNUM, ptid);
-
-  /* The following test does not belong here.  It is OS-specific, and belongs
-     in native code.  */
-  /* If in a syscall, then set %r31.  Also make sure to get the 
-     privilege bits set correctly.  */
-  /* Test SS_INSYSCALL */
-  if (flags & 2)
-    write_register_pid (31, v | 0x3, ptid);
-
-  write_register_pid (HPPA_PCOQ_HEAD_REGNUM, v, ptid);
-  write_register_pid (HPPA_PCOQ_TAIL_REGNUM, v + 4, ptid);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, pc);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_TAIL_REGNUM, pc + 4);
 }
 
 /* return the alignment of a type in bytes. Structures have the maximum
@@ -1131,9 +1352,9 @@ prologue_inst_adjust_sp (unsigned long inst)
   if ((inst & 0xffe00008) == 0x73c00008)
     return (inst & 0x1 ? -1 << 13 : 0) | (((inst >> 4) & 0x3ff) << 3);
 
-  /* addil high21,%r1; ldo low11,(%r1),%r30)
+  /* addil high21,%r30; ldo low11,(%r1),%r30)
      save high bits in save_high21 for later use.  */
-  if ((inst & 0xffe00000) == 0x28200000)
+  if ((inst & 0xffe00000) == 0x2bc00000)
     {
       save_high21 = hppa_extract_21 (inst);
       return 0;
@@ -1247,14 +1468,16 @@ inst_saves_fr (unsigned long inst)
    be in the prologue.  */
 
 
-CORE_ADDR
-skip_prologue_hard_way (CORE_ADDR pc)
+static CORE_ADDR
+skip_prologue_hard_way (struct gdbarch *gdbarch, CORE_ADDR pc,
+			int stop_before_branch)
 {
   char buf[4];
   CORE_ADDR orig_pc = pc;
   unsigned long inst, stack_remaining, save_gr, save_fr, save_rp, save_sp;
   unsigned long args_stored, status, i, restart_gr, restart_fr;
   struct unwind_table_entry *u;
+  int final_iteration;
 
   restart_gr = 0;
   restart_fr = 0;
@@ -1298,6 +1521,8 @@ restart:
     save_fr |= (1 << i);
   save_fr &= ~restart_fr;
 
+  final_iteration = 0;
+
   /* Loop until we find everything of interest or hit a branch.
 
      For unoptimized GCC code and for any HP CC code this will never ever
@@ -1327,7 +1552,7 @@ restart:
       old_save_sp = save_sp;
       old_stack_remaining = stack_remaining;
 
-      status = deprecated_read_memory_nobpt (pc, buf, 4);
+      status = read_memory_nobpt (pc, buf, 4);
       inst = extract_unsigned_integer (buf, 4);
 
       /* Yow! */
@@ -1339,7 +1564,7 @@ restart:
 
       /* There are limited ways to store the return pointer into the
 	 stack.  */
-      if (inst == 0x6bc23fd9 || inst == 0x0fc212c1)
+      if (inst == 0x6bc23fd9 || inst == 0x0fc212c1 || inst == 0x73c23fe1)
 	save_rp = 0;
 
       /* These are the only ways we save SP into the stack.  At this time
@@ -1371,12 +1596,14 @@ restart:
 
          FIXME.  Can still die if we have a mix of GR and FR argument
          stores!  */
-      if (reg_num >= (TARGET_PTR_BIT == 64 ? 19 : 23) && reg_num <= 26)
+      if (reg_num >= (gdbarch_ptr_bit (gdbarch) == 64 ? 19 : 23)
+	  && reg_num <= 26)
 	{
-	  while (reg_num >= (TARGET_PTR_BIT == 64 ? 19 : 23) && reg_num <= 26)
+	  while (reg_num >= (gdbarch_ptr_bit (gdbarch) == 64 ? 19 : 23)
+		 && reg_num <= 26)
 	    {
 	      pc += 4;
-	      status = deprecated_read_memory_nobpt (pc, buf, 4);
+	      status = read_memory_nobpt (pc, buf, 4);
 	      inst = extract_unsigned_integer (buf, 4);
 	      if (status != 0)
 		return pc;
@@ -1389,7 +1616,7 @@ restart:
       reg_num = inst_saves_fr (inst);
       save_fr &= ~(1 << reg_num);
 
-      status = deprecated_read_memory_nobpt (pc + 4, buf, 4);
+      status = read_memory_nobpt (pc + 4, buf, 4);
       next_inst = extract_unsigned_integer (buf, 4);
 
       /* Yow! */
@@ -1400,7 +1627,8 @@ restart:
          save.  */
       if ((inst & 0xfc000000) == 0x34000000
 	  && inst_saves_fr (next_inst) >= 4
-	  && inst_saves_fr (next_inst) <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+	  && inst_saves_fr (next_inst)
+	       <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	{
 	  /* So we drop into the code below in a reasonable state.  */
 	  reg_num = inst_saves_fr (next_inst);
@@ -1411,18 +1639,21 @@ restart:
          This is a kludge as on the HP compiler sets this bit and it
          never does prologue scheduling.  So once we see one, skip past
          all of them.  */
-      if (reg_num >= 4 && reg_num <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+      if (reg_num >= 4
+	  && reg_num <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	{
-	  while (reg_num >= 4 && reg_num <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+	  while (reg_num >= 4
+		 && reg_num
+		      <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	    {
 	      pc += 8;
-	      status = deprecated_read_memory_nobpt (pc, buf, 4);
+	      status = read_memory_nobpt (pc, buf, 4);
 	      inst = extract_unsigned_integer (buf, 4);
 	      if (status != 0)
 		return pc;
 	      if ((inst & 0xfc000000) != 0x34000000)
 		break;
-	      status = deprecated_read_memory_nobpt (pc + 4, buf, 4);
+	      status = read_memory_nobpt (pc + 4, buf, 4);
 	      next_inst = extract_unsigned_integer (buf, 4);
 	      if (status != 0)
 		return pc;
@@ -1434,7 +1665,7 @@ restart:
 
       /* Quit if we hit any kind of branch.  This can happen if a prologue
          instruction is in the delay slot of the first call/branch.  */
-      if (is_branch (inst))
+      if (is_branch (inst) && stop_before_branch)
 	break;
 
       /* What a crock.  The HP compilers set args_stored even if no
@@ -1455,6 +1686,13 @@ restart:
 
       /* Bump the PC.  */
       pc += 4;
+
+      /* !stop_before_branch, so also look at the insn in the delay slot 
+         of the branch.  */
+      if (final_iteration)
+	break;
+      if (is_branch (inst))
+	final_iteration = 1;
     }
 
   /* We've got a tenative location for the end of the prologue.  However
@@ -1513,15 +1751,16 @@ after_prologue (CORE_ADDR pc)
 
 /* To skip prologues, I use this predicate.  Returns either PC itself
    if the code at PC does not look like a function prologue; otherwise
-   returns an address that (if we're lucky) follows the prologue.  If
-   LENIENT, then we must skip everything which is involved in setting
-   up the frame (it's OK to skip more, just so long as we don't skip
-   anything which might clobber the registers which are being saved.
-   Currently we must not skip more on the alpha, but we might the lenient
-   stuff some day.  */
+   returns an address that (if we're lucky) follows the prologue.  
+   
+   hppa_skip_prologue is called by gdb to place a breakpoint in a function.
+   It doesn't necessarily skips all the insns in the prologue. In fact
+   we might not want to skip all the insns because a prologue insn may
+   appear in the delay slot of the first branch, and we don't want to
+   skip over the branch in that case.  */
 
 static CORE_ADDR
-hppa_skip_prologue (CORE_ADDR pc)
+hppa_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   unsigned long inst;
   int offset;
@@ -1543,7 +1782,23 @@ hppa_skip_prologue (CORE_ADDR pc)
   if (post_prologue_pc != 0)
     return max (pc, post_prologue_pc);
   else
-    return (skip_prologue_hard_way (pc));
+    return (skip_prologue_hard_way (gdbarch, pc, 1));
+}
+
+/* Return an unwind entry that falls within the frame's code block.  */
+static struct unwind_table_entry *
+hppa_find_unwind_entry_in_block (struct frame_info *f)
+{
+  CORE_ADDR pc = frame_unwind_address_in_block (f, NORMAL_FRAME);
+
+  /* FIXME drow/20070101: Calling gdbarch_addr_bits_remove on the
+     result of frame_unwind_address_in_block implies a problem.
+     The bits should have been removed earlier, before the return
+     value of frame_pc_unwind.  That might be happening already;
+     if it isn't, it should be fixed.  Then this call can be
+     removed.  */
+  pc = gdbarch_addr_bits_remove (get_frame_arch (f), pc);
+  return find_unwind_entry (pc);
 }
 
 struct hppa_frame_cache
@@ -1555,6 +1810,7 @@ struct hppa_frame_cache
 static struct hppa_frame_cache *
 hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct hppa_frame_cache *cache;
   long saved_gr_mask;
   long saved_fr_mask;
@@ -1562,6 +1818,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   long frame_size;
   struct unwind_table_entry *u;
   CORE_ADDR prologue_end;
+  int fp_in_r1 = 0;
   int i;
 
   if (hppa_debug)
@@ -1580,7 +1837,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
   /* Yow! */
-  u = find_unwind_entry (frame_pc_unwind (next_frame));
+  u = hppa_find_unwind_entry_in_block (next_frame);
   if (!u)
     {
       if (hppa_debug)
@@ -1620,23 +1877,39 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
      GCC code.  */
   {
     int final_iteration = 0;
-    CORE_ADDR pc, end_pc;
+    CORE_ADDR pc, start_pc, end_pc;
     int looking_for_sp = u->Save_SP;
     int looking_for_rp = u->Save_RP;
     int fp_loc = -1;
 
-    /* We have to use hppa_skip_prologue instead of just 
+    /* We have to use skip_prologue_hard_way instead of just 
        skip_prologue_using_sal, in case we stepped into a function without
        symbol information.  hppa_skip_prologue also bounds the returned
        pc by the passed in pc, so it will not return a pc in the next
-       function.  */
+       function.  
+       
+       We used to call hppa_skip_prologue to find the end of the prologue,
+       but if some non-prologue instructions get scheduled into the prologue,
+       and the program is compiled with debug information, the "easy" way
+       in hppa_skip_prologue will return a prologue end that is too early
+       for us to notice any potential frame adjustments.  */
 
     /* We used to use frame_func_unwind () to locate the beginning of the
        function to pass to skip_prologue ().  However, when objects are 
        compiled without debug symbols, frame_func_unwind can return the wrong 
-       function (or 0).  We can do better than that by using unwind records.  */
+       function (or 0).  We can do better than that by using unwind records.  
+       This only works if the Region_description of the unwind record
+       indicates that it includes the entry point of the function.  
+       HP compilers sometimes generate unwind records for regions that
+       do not include the entry or exit point of a function.  GNU tools
+       do not do this.  */
 
-    prologue_end = hppa_skip_prologue (u->region_start);
+    if ((u->Region_description & 0x2) == 0)
+      start_pc = u->region_start;
+    else
+      start_pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+
+    prologue_end = skip_prologue_hard_way (gdbarch, start_pc, 0);
     end_pc = frame_pc_unwind (next_frame);
 
     if (prologue_end != 0 && end_pc > prologue_end)
@@ -1644,7 +1917,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 
     frame_size = 0;
 
-    for (pc = u->region_start;
+    for (pc = start_pc;
 	 ((saved_gr_mask || saved_fr_mask
 	   || looking_for_sp || looking_for_rp
 	   || frame_size < (u->Total_frame_size << 3))
@@ -1653,8 +1926,16 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
       {
 	int reg;
 	char buf4[4];
-	long status = deprecated_read_memory_nobpt (pc, buf4, sizeof buf4);
-	long inst = extract_unsigned_integer (buf4, sizeof buf4);
+	long inst;
+
+	if (!safe_frame_unwind_memory (next_frame, pc, buf4, 
+				       sizeof buf4)) 
+	  {
+	    error (_("Cannot read instruction at 0x%s."), paddr_nz (pc));
+	    return (*this_cache);
+	  }
+
+	inst = extract_unsigned_integer (buf4, sizeof buf4);
 
 	/* Note the interesting effects of this instruction.  */
 	frame_size += prologue_inst_adjust_sp (inst);
@@ -1671,7 +1952,8 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 	    looking_for_rp = 0;
 	    cache->saved_regs[HPPA_RP_REGNUM].addr = -24;
 	  }
-	else if (inst == 0x0fc212c1) /* std rp,-0x10(sr0,sp) */
+	else if (inst == 0x0fc212c1 
+	         || inst == 0x73c23fe1) /* std rp,-0x10(sr0,sp) */
 	  {
 	    looking_for_rp = 0;
 	    cache->saved_regs[HPPA_RP_REGNUM].addr = -16;
@@ -1685,6 +1967,10 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 	  {
 	    looking_for_sp = 0;
 	    cache->saved_regs[HPPA_FP_REGNUM].addr = 0;
+	  }
+	else if (inst == 0x08030241) /* copy %r3, %r1 */
+	  {
+	    fp_in_r1 = 1;
 	  }
 	
 	/* Account for general and floating-point register saves.  */
@@ -1794,21 +2080,21 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
         and saved on the stack, the Save_SP flag is set.  We use this to
         decide whether to use the frame pointer for unwinding.
 	
-	fp may be zero if it is not available in an inner frame because
-	it has been modified by not yet saved.
-	
         TODO: For the HP compiler, maybe we should use the alloca_frame flag 
 	instead of Save_SP.  */
  
      fp = frame_unwind_register_unsigned (next_frame, HPPA_FP_REGNUM);
+
+     if (u->alloca_frame)
+       fp -= u->Total_frame_size << 3;
  
      if (frame_pc_unwind (next_frame) >= prologue_end
-         && u->Save_SP && fp != 0)
+         && (u->Save_SP || u->alloca_frame) && fp != 0)
       {
  	cache->base = fp;
  
  	if (hppa_debug)
-	  fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [frame pointer] }",
+	  fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [frame pointer]",
  	    paddr_nz (cache->base));
       }
      else if (u->Save_SP 
@@ -1817,10 +2103,11 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
             /* Both we're expecting the SP to be saved and the SP has been
 	       saved.  The entry SP value is saved at this frame's SP
 	       address.  */
-            cache->base = read_memory_integer (this_sp, TARGET_PTR_BIT / 8);
+            cache->base = read_memory_integer
+			    (this_sp, gdbarch_ptr_bit (gdbarch) / 8);
 
 	    if (hppa_debug)
-	      fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [saved] }",
+	      fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [saved]",
 			          paddr_nz (cache->base));
       }
     else
@@ -1829,7 +2116,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 	   the SP back.  */
         cache->base = this_sp - frame_size;
 	if (hppa_debug)
-	  fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [unwind adjust] } ",
+	  fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [unwind adjust]",
 			      paddr_nz (cache->base));
 
       }
@@ -1841,39 +2128,76 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (u->Millicode)
     {
       if (trad_frame_addr_p (cache->saved_regs, 31))
-        cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = cache->saved_regs[31];
+        {
+          cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = cache->saved_regs[31];
+	  if (hppa_debug)
+	    fprintf_unfiltered (gdb_stdlog, " (pc=r31) [stack] } ");
+        }
       else
 	{
 	  ULONGEST r31 = frame_unwind_register_unsigned (next_frame, 31);
 	  trad_frame_set_value (cache->saved_regs, HPPA_PCOQ_HEAD_REGNUM, r31);
+	  if (hppa_debug)
+	    fprintf_unfiltered (gdb_stdlog, " (pc=r31) [frame] } ");
         }
     }
   else
     {
       if (trad_frame_addr_p (cache->saved_regs, HPPA_RP_REGNUM))
-        cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = cache->saved_regs[HPPA_RP_REGNUM];
+        {
+          cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = 
+	    cache->saved_regs[HPPA_RP_REGNUM];
+	  if (hppa_debug)
+	    fprintf_unfiltered (gdb_stdlog, " (pc=rp) [stack] } ");
+        }
       else
 	{
 	  ULONGEST rp = frame_unwind_register_unsigned (next_frame, HPPA_RP_REGNUM);
 	  trad_frame_set_value (cache->saved_regs, HPPA_PCOQ_HEAD_REGNUM, rp);
+	  if (hppa_debug)
+	    fprintf_unfiltered (gdb_stdlog, " (pc=rp) [frame] } ");
 	}
     }
 
-  /* If the frame pointer was not saved in this frame, but we should be saving
-     it, set it to an invalid value so that another frame will not pick up the 
-     wrong frame pointer.  This can happen if we start unwinding after the 
-     frame pointer has been modified, but before we've saved it to the
-     stack.  */
-  if (u->Save_SP && !trad_frame_addr_p (cache->saved_regs, HPPA_FP_REGNUM))
-    trad_frame_set_value (cache->saved_regs, HPPA_FP_REGNUM, 0);
+  /* If Save_SP is set, then we expect the frame pointer to be saved in the
+     frame.  However, there is a one-insn window where we haven't saved it
+     yet, but we've already clobbered it.  Detect this case and fix it up.
+
+     The prologue sequence for frame-pointer functions is:
+	0: stw %rp, -20(%sp)
+	4: copy %r3, %r1
+	8: copy %sp, %r3
+	c: stw,ma %r1, XX(%sp)
+
+     So if we are at offset c, the r3 value that we want is not yet saved
+     on the stack, but it's been overwritten.  The prologue analyzer will
+     set fp_in_r1 when it sees the copy insn so we know to get the value 
+     from r1 instead.  */
+  if (u->Save_SP && !trad_frame_addr_p (cache->saved_regs, HPPA_FP_REGNUM)
+      && fp_in_r1)
+    {
+      ULONGEST r1 = frame_unwind_register_unsigned (next_frame, 1);
+      trad_frame_set_value (cache->saved_regs, HPPA_FP_REGNUM, r1);
+    }
 
   {
     /* Convert all the offsets into addresses.  */
     int reg;
-    for (reg = 0; reg < NUM_REGS; reg++)
+    for (reg = 0; reg < gdbarch_num_regs (gdbarch); reg++)
       {
 	if (trad_frame_addr_p (cache->saved_regs, reg))
 	  cache->saved_regs[reg].addr += cache->base;
+      }
+  }
+
+  {
+    struct gdbarch_tdep *tdep;
+
+    tdep = gdbarch_tdep (gdbarch);
+
+    if (tdep->unwind_adjust_stub)
+      {
+        tdep->unwind_adjust_stub (next_frame, cache->base, cache->saved_regs);
       }
   }
 
@@ -1892,7 +2216,7 @@ hppa_frame_this_id (struct frame_info *next_frame, void **this_cache,
   struct unwind_table_entry *u;
 
   info = hppa_frame_cache (next_frame, this_cache);
-  u = find_unwind_entry (pc);
+  u = hppa_find_unwind_entry_in_block (next_frame);
 
   (*this_id) = frame_id_build (info->base, u->region_start);
 }
@@ -1902,7 +2226,7 @@ hppa_frame_prev_register (struct frame_info *next_frame,
 			  void **this_cache,
 			  int regnum, int *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, void *valuep)
+			  int *realnump, gdb_byte *valuep)
 {
   struct hppa_frame_cache *info = hppa_frame_cache (next_frame, this_cache);
   hppa_frame_prev_register_helper (next_frame, info->saved_regs, regnum,
@@ -1919,9 +2243,7 @@ static const struct frame_unwind hppa_frame_unwind =
 static const struct frame_unwind *
 hppa_frame_unwind_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
-
-  if (find_unwind_entry (pc))
+  if (hppa_find_unwind_entry_in_block (next_frame))
     return &hppa_frame_unwind;
 
   return NULL;
@@ -1939,72 +2261,66 @@ static struct hppa_frame_cache *
 hppa_fallback_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct hppa_frame_cache *cache;
-  unsigned int frame_size;
-  int found_rp;
-  CORE_ADDR pc, start_pc, end_pc, cur_pc;
+  unsigned int frame_size = 0;
+  int found_rp = 0;
+  CORE_ADDR start_pc;
 
   if (hppa_debug)
-    fprintf_unfiltered (gdb_stdlog, "{ hppa_fallback_frame_cache (frame=%d)-> ",
-      frame_relative_level(next_frame));
+    fprintf_unfiltered (gdb_stdlog,
+			"{ hppa_fallback_frame_cache (frame=%d) -> ",
+			frame_relative_level (next_frame));
 
   cache = FRAME_OBSTACK_ZALLOC (struct hppa_frame_cache);
   (*this_cache) = cache;
   cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
-  pc = frame_func_unwind (next_frame);
-  cur_pc = frame_pc_unwind (next_frame);
-  frame_size = 0;
-  found_rp = 0;
-
-  find_pc_partial_function (pc, NULL, &start_pc, &end_pc);
-
-  if (start_pc == 0 || end_pc == 0)
+  start_pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+  if (start_pc)
     {
-      error ("Cannot find bounds of current function (@0x%s), unwinding will "
-	     "fail.", paddr_nz (pc));
-      return cache;
-    }
+      CORE_ADDR cur_pc = frame_pc_unwind (next_frame);
+      CORE_ADDR pc;
 
-  if (end_pc > cur_pc)
-    end_pc = cur_pc;
+      for (pc = start_pc; pc < cur_pc; pc += 4)
+	{
+	  unsigned int insn;
 
-  for (pc = start_pc; pc < end_pc; pc += 4)
-    {
-      unsigned int insn;
+	  insn = read_memory_unsigned_integer (pc, 4);
+	  frame_size += prologue_inst_adjust_sp (insn);
 
-      insn = read_memory_unsigned_integer (pc, 4);
-
-      frame_size += prologue_inst_adjust_sp (insn);
-
-      /* There are limited ways to store the return pointer into the
-	 stack.  */
-      if (insn == 0x6bc23fd9) /* stw rp,-0x14(sr0,sp) */
-	 {
-	   cache->saved_regs[HPPA_RP_REGNUM].addr = -20;
-	   found_rp = 1;
-	 }
-      else if (insn == 0x0fc212c1) /* std rp,-0x10(sr0,sp) */
-	 {
-	   cache->saved_regs[HPPA_RP_REGNUM].addr = -16;
-	   found_rp = 1;
-	 }
+	  /* There are limited ways to store the return pointer into the
+	     stack.  */
+	  if (insn == 0x6bc23fd9) /* stw rp,-0x14(sr0,sp) */
+	    {
+	      cache->saved_regs[HPPA_RP_REGNUM].addr = -20;
+	      found_rp = 1;
+	    }
+	  else if (insn == 0x0fc212c1
+	           || insn == 0x73c23fe1) /* std rp,-0x10(sr0,sp) */
+	    {
+	      cache->saved_regs[HPPA_RP_REGNUM].addr = -16;
+	      found_rp = 1;
+	    }
+	}
     }
 
   if (hppa_debug)
-    fprintf_unfiltered (gdb_stdlog, " frame_size = %d, found_rp = %d }\n",
-      frame_size, found_rp);
+    fprintf_unfiltered (gdb_stdlog, " frame_size=%d, found_rp=%d }\n",
+			frame_size, found_rp);
 
-  cache->base = frame_unwind_register_unsigned (next_frame, HPPA_SP_REGNUM) - frame_size;
+  cache->base = frame_unwind_register_unsigned (next_frame, HPPA_SP_REGNUM);
+  cache->base -= frame_size;
   trad_frame_set_value (cache->saved_regs, HPPA_SP_REGNUM, cache->base);
 
   if (trad_frame_addr_p (cache->saved_regs, HPPA_RP_REGNUM))
     {
       cache->saved_regs[HPPA_RP_REGNUM].addr += cache->base;
-      cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = cache->saved_regs[HPPA_RP_REGNUM];
+      cache->saved_regs[HPPA_PCOQ_HEAD_REGNUM] = 
+	cache->saved_regs[HPPA_RP_REGNUM];
     }
   else
     {
-      ULONGEST rp = frame_unwind_register_unsigned (next_frame, HPPA_RP_REGNUM);
+      ULONGEST rp;
+      rp = frame_unwind_register_unsigned (next_frame, HPPA_RP_REGNUM);
       trad_frame_set_value (cache->saved_regs, HPPA_PCOQ_HEAD_REGNUM, rp);
     }
 
@@ -2017,7 +2333,8 @@ hppa_fallback_frame_this_id (struct frame_info *next_frame, void **this_cache,
 {
   struct hppa_frame_cache *info = 
     hppa_fallback_frame_cache (next_frame, this_cache);
-  (*this_id) = frame_id_build (info->base, frame_func_unwind (next_frame));
+  (*this_id) = frame_id_build (info->base,
+			       frame_func_unwind (next_frame, NORMAL_FRAME));
 }
 
 static void
@@ -2025,7 +2342,7 @@ hppa_fallback_frame_prev_register (struct frame_info *next_frame,
 			  void **this_cache,
 			  int regnum, int *optimizedp,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, void *valuep)
+			  int *realnump, gdb_byte *valuep)
 {
   struct hppa_frame_cache *info = 
     hppa_fallback_frame_cache (next_frame, this_cache);
@@ -2098,7 +2415,12 @@ hppa_stub_frame_this_id (struct frame_info *next_frame,
 {
   struct hppa_stub_unwind_cache *info
     = hppa_stub_frame_unwind_cache (next_frame, this_prologue_cache);
-  *this_id = frame_id_build (info->base, frame_pc_unwind (next_frame));
+
+  if (info)
+    *this_id = frame_id_build (info->base,
+			       frame_func_unwind (next_frame, NORMAL_FRAME));
+  else
+    *this_id = null_frame_id;
 }
 
 static void
@@ -2106,12 +2428,17 @@ hppa_stub_frame_prev_register (struct frame_info *next_frame,
 			       void **this_prologue_cache,
 			       int regnum, int *optimizedp,
 			       enum lval_type *lvalp, CORE_ADDR *addrp,
-			       int *realnump, void *valuep)
+			       int *realnump, gdb_byte *valuep)
 {
   struct hppa_stub_unwind_cache *info
     = hppa_stub_frame_unwind_cache (next_frame, this_prologue_cache);
-  hppa_frame_prev_register_helper (next_frame, info->saved_regs, regnum,
-		                   optimizedp, lvalp, addrp, realnump, valuep);
+
+  if (info)
+    hppa_frame_prev_register_helper (next_frame, info->saved_regs, regnum,
+				     optimizedp, lvalp, addrp, realnump, 
+				     valuep);
+  else
+    error (_("Requesting registers from null frame."));
 }
 
 static const struct frame_unwind hppa_stub_frame_unwind = {
@@ -2123,11 +2450,14 @@ static const struct frame_unwind hppa_stub_frame_unwind = {
 static const struct frame_unwind *
 hppa_stub_unwind_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (pc == 0
-      || IN_SOLIB_CALL_TRAMPOLINE (pc, NULL)
-      || IN_SOLIB_RETURN_TRAMPOLINE (pc, NULL))
+      || (tdep->in_solib_call_trampoline != NULL
+	  && tdep->in_solib_call_trampoline (pc, NULL))
+      || gdbarch_in_solib_return_trampoline (gdbarch, pc, NULL))
     return &hppa_stub_frame_unwind;
   return NULL;
 }
@@ -2140,20 +2470,49 @@ hppa_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 			 frame_pc_unwind (next_frame));
 }
 
-static CORE_ADDR
+CORE_ADDR
 hppa_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_signed (next_frame, HPPA_PCOQ_HEAD_REGNUM) & ~3;
+  ULONGEST ipsw;
+  CORE_ADDR pc;
+
+  ipsw = frame_unwind_register_unsigned (next_frame, HPPA_IPSW_REGNUM);
+  pc = frame_unwind_register_unsigned (next_frame, HPPA_PCOQ_HEAD_REGNUM);
+
+  /* If the current instruction is nullified, then we are effectively
+     still executing the previous instruction.  Pretend we are still
+     there.  This is needed when single stepping; if the nullified
+     instruction is on a different line, we don't want GDB to think
+     we've stepped onto that line.  */
+  if (ipsw & 0x00200000)
+    pc -= 4;
+
+  return pc & ~0x3;
 }
 
-/* Instead of this nasty cast, add a method pvoid() that prints out a
-   host VOID data type (remember %p isn't portable).  */
+/* Return the minimal symbol whose name is NAME and stub type is STUB_TYPE.
+   Return NULL if no such symbol was found.  */
 
-static CORE_ADDR
-hppa_pointer_to_address_hack (void *ptr)
+struct minimal_symbol *
+hppa_lookup_stub_minimal_symbol (const char *name,
+                                 enum unwind_stub_types stub_type)
 {
-  gdb_assert (sizeof (ptr) == TYPE_LENGTH (builtin_type_void_data_ptr));
-  return POINTER_TO_ADDRESS (builtin_type_void_data_ptr, &ptr);
+  struct objfile *objfile;
+  struct minimal_symbol *msym;
+
+  ALL_MSYMBOLS (objfile, msym)
+    {
+      if (strcmp (SYMBOL_LINKAGE_NAME (msym), name) == 0)
+        {
+          struct unwind_table_entry *u;
+
+          u = find_unwind_entry (SYMBOL_VALUE (msym));
+          if (u != NULL && u->stub_unwind.stub_type == stub_type)
+            return msym;
+        }
+    }
+
+  return NULL;
 }
 
 static void
@@ -2177,8 +2536,7 @@ unwind_command (char *exp, int from_tty)
       return;
     }
 
-  printf_unfiltered ("unwind_table_entry (0x%s):\n",
-		     paddr_nz (hppa_pointer_to_address_hack (u)));
+  printf_unfiltered ("unwind_table_entry (0x%lx):\n", (unsigned long)u);
 
   printf_unfiltered ("\tregion_start = ");
   print_address (u->region_start, gdb_stdout);
@@ -2201,15 +2559,19 @@ unwind_command (char *exp, int from_tty)
   pif (Frame_Extension_Millicode);
   pif (Stack_Overflow_Check);
   pif (Two_Instruction_SP_Increment);
-  pif (Ada_Region);
+  pif (sr4export);
+  pif (cxx_info);
+  pif (cxx_try_catch);
+  pif (sched_entry_seq);
   pif (Save_SP);
   pif (Save_RP);
   pif (Save_MRP_in_frame);
-  pif (extn_ptr_defined);
+  pif (save_r19);
   pif (Cleanup_defined);
   pif (MPE_XL_interrupt_marker);
   pif (HP_UX_interrupt_marker);
   pif (Large_frame);
+  pif (alloca_frame);
 
   putchar_unfiltered ('\n');
 
@@ -2219,107 +2581,93 @@ unwind_command (char *exp, int from_tty)
   pin (Entry_FR);
   pin (Entry_GR);
   pin (Total_frame_size);
+
+  if (u->stub_unwind.stub_type)
+    {
+      printf_unfiltered ("\tstub type = ");
+      switch (u->stub_unwind.stub_type)
+        {
+	  case LONG_BRANCH:
+	    printf_unfiltered ("long branch\n");
+	    break;
+	  case PARAMETER_RELOCATION:
+	    printf_unfiltered ("parameter relocation\n");
+	    break;
+	  case EXPORT:
+	    printf_unfiltered ("export\n");
+	    break;
+	  case IMPORT:
+	    printf_unfiltered ("import\n");
+	    break;
+	  case IMPORT_SHLIB:
+	    printf_unfiltered ("import shlib\n");
+	    break;
+	  default:
+	    printf_unfiltered ("unknown (%d)\n", u->stub_unwind.stub_type);
+	}
+    }
 }
 
-void
-hppa_skip_permanent_breakpoint (void)
-{
-  /* To step over a breakpoint instruction on the PA takes some
-     fiddling with the instruction address queue.
-
-     When we stop at a breakpoint, the IA queue front (the instruction
-     we're executing now) points at the breakpoint instruction, and
-     the IA queue back (the next instruction to execute) points to
-     whatever instruction we would execute after the breakpoint, if it
-     were an ordinary instruction.  This is the case even if the
-     breakpoint is in the delay slot of a branch instruction.
-
-     Clearly, to step past the breakpoint, we need to set the queue
-     front to the back.  But what do we put in the back?  What
-     instruction comes after that one?  Because of the branch delay
-     slot, the next insn is always at the back + 4.  */
-  write_register (HPPA_PCOQ_HEAD_REGNUM, read_register (HPPA_PCOQ_TAIL_REGNUM));
-  write_register (HPPA_PCSQ_HEAD_REGNUM, read_register (HPPA_PCSQ_TAIL_REGNUM));
-
-  write_register (HPPA_PCOQ_TAIL_REGNUM, read_register (HPPA_PCOQ_TAIL_REGNUM) + 4);
-  /* We can leave the tail's space the same, since there's no jump.  */
-}
-
-int
-hppa_pc_requires_run_before_use (CORE_ADDR pc)
-{
-  /* Sometimes we may pluck out a minimal symbol that has a negative address.
-  
-     An example of this occurs when an a.out is linked against a foo.sl.
-     The foo.sl defines a global bar(), and the a.out declares a signature
-     for bar().  However, the a.out doesn't directly call bar(), but passes
-     its address in another call.
-  
-     If you have this scenario and attempt to "break bar" before running,
-     gdb will find a minimal symbol for bar() in the a.out.  But that
-     symbol's address will be negative.  What this appears to denote is
-     an index backwards from the base of the procedure linkage table (PLT)
-     into the data linkage table (DLT), the end of which is contiguous
-     with the start of the PLT.  This is clearly not a valid address for
-     us to set a breakpoint on.
-  
-     Note that one must be careful in how one checks for a negative address.
-     0xc0000000 is a legitimate address of something in a shared text
-     segment, for example.  Since I don't know what the possible range
-     is of these "really, truly negative" addresses that come from the
-     minimal symbols, I'm resorting to the gross hack of checking the
-     top byte of the address for all 1's.  Sigh.  */
-
-  return (!target_has_stack && (pc & 0xFF000000));
-}
-
-int
-hppa_instruction_nullified (void)
-{
-  /* brobecker 2002/11/07: Couldn't we use a ULONGEST here? It would
-     avoid the type cast.  I'm leaving it as is for now as I'm doing
-     semi-mechanical multiarching-related changes.  */
-  const int ipsw = (int) read_register (HPPA_IPSW_REGNUM);
-  const int flags = (int) read_register (HPPA_FLAGS_REGNUM);
-
-  return ((ipsw & 0x00200000) && !(flags & 0x2));
-}
-
-/* Return the GDB type object for the "standard" data type of data
-   in register N.  */
+/* Return the GDB type object for the "standard" data type of data in
+   register REGNUM.  */
 
 static struct type *
-hppa32_register_type (struct gdbarch *gdbarch, int reg_nr)
+hppa32_register_type (struct gdbarch *gdbarch, int regnum)
 {
-   if (reg_nr < HPPA_FP4_REGNUM)
+   if (regnum < HPPA_FP4_REGNUM)
      return builtin_type_uint32;
    else
-     return builtin_type_ieee_single_big;
+     return builtin_type_ieee_single;
 }
-
-/* Return the GDB type object for the "standard" data type of data
-   in register N.  hppa64 version.  */
 
 static struct type *
-hppa64_register_type (struct gdbarch *gdbarch, int reg_nr)
+hppa64_register_type (struct gdbarch *gdbarch, int regnum)
 {
-   if (reg_nr < HPPA_FP4_REGNUM)
+   if (regnum < HPPA64_FP4_REGNUM)
      return builtin_type_uint64;
    else
-     return builtin_type_ieee_double_big;
+     return builtin_type_ieee_double;
 }
 
-/* Return True if REGNUM is not a register available to the user
-   through ptrace().  */
+/* Return non-zero if REGNUM is not a register available to the user
+   through ptrace/ttrace.  */
 
 static int
-hppa_cannot_store_register (int regnum)
+hppa32_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   return (regnum == 0
           || regnum == HPPA_PCSQ_HEAD_REGNUM
           || (regnum >= HPPA_PCSQ_TAIL_REGNUM && regnum < HPPA_IPSW_REGNUM)
           || (regnum > HPPA_IPSW_REGNUM && regnum < HPPA_FP4_REGNUM));
+}
 
+static int
+hppa32_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
+{
+  /* cr26 and cr27 are readable (but not writable) from userspace.  */
+  if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
+    return 0;
+  else
+    return hppa32_cannot_store_register (gdbarch, regnum);
+}
+
+static int
+hppa64_cannot_store_register (struct gdbarch *gdbarch, int regnum)
+{
+  return (regnum == 0
+          || regnum == HPPA_PCSQ_HEAD_REGNUM
+          || (regnum >= HPPA_PCSQ_TAIL_REGNUM && regnum < HPPA_IPSW_REGNUM)
+          || (regnum > HPPA_IPSW_REGNUM && regnum < HPPA64_FP4_REGNUM));
+}
+
+static int
+hppa64_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
+{
+  /* cr26 and cr27 are readable (but not writable) from userspace.  */
+  if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
+    return 0;
+  else
+    return hppa64_cannot_store_register (gdbarch, regnum);
 }
 
 static CORE_ADDR
@@ -2335,30 +2683,29 @@ hppa_smash_text_address (CORE_ADDR addr)
   return (addr &= ~0x3);
 }
 
-/* Get the ith function argument for the current function.  */
-CORE_ADDR
+/* Get the ARGIth function argument for the current function.  */
+
+static CORE_ADDR
 hppa_fetch_pointer_argument (struct frame_info *frame, int argi, 
 			     struct type *type)
 {
-  CORE_ADDR addr;
-  get_frame_register (frame, HPPA_R0_REGNUM + 26 - argi, &addr);
-  return addr;
+  return get_frame_register_unsigned (frame, HPPA_R0_REGNUM + 26 - argi);
 }
 
 static void
 hppa_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
-			   int regnum, void *buf)
+			   int regnum, gdb_byte *buf)
 {
     ULONGEST tmp;
 
     regcache_raw_read_unsigned (regcache, regnum, &tmp);
     if (regnum == HPPA_PCOQ_HEAD_REGNUM || regnum == HPPA_PCOQ_TAIL_REGNUM)
       tmp &= ~0x3;
-    store_unsigned_integer (buf, sizeof(tmp), tmp);
+    store_unsigned_integer (buf, sizeof tmp, tmp);
 }
 
 static CORE_ADDR
-hppa_find_global_pointer (struct value *function)
+hppa_find_global_pointer (struct gdbarch *gdbarch, struct value *function)
 {
   return 0;
 }
@@ -2368,21 +2715,42 @@ hppa_frame_prev_register_helper (struct frame_info *next_frame,
 			         struct trad_frame_saved_reg saved_regs[],
 				 int regnum, int *optimizedp,
 				 enum lval_type *lvalp, CORE_ADDR *addrp,
-				 int *realnump, void *valuep)
+				 int *realnump, gdb_byte *valuep)
 {
+  struct gdbarch *arch = get_frame_arch (next_frame);
+
   if (regnum == HPPA_PCOQ_TAIL_REGNUM)
     {
       if (valuep)
 	{
+	  int size = register_size (arch, HPPA_PCOQ_HEAD_REGNUM);
 	  CORE_ADDR pc;
 
 	  trad_frame_get_prev_register (next_frame, saved_regs,
 					HPPA_PCOQ_HEAD_REGNUM, optimizedp,
 					lvalp, addrp, realnump, valuep);
 
-	  pc = extract_unsigned_integer (valuep, 4);
-	  store_unsigned_integer (valuep, 4, pc + 4);
+	  pc = extract_unsigned_integer (valuep, size);
+	  store_unsigned_integer (valuep, size, pc + 4);
 	}
+
+      /* It's a computed value.  */
+      *optimizedp = 0;
+      *lvalp = not_lval;
+      *addrp = 0;
+      *realnump = -1;
+      return;
+    }
+
+  /* Make sure the "flags" register is zero in all unwound frames.
+     The "flags" registers is a HP-UX specific wart, and only the code
+     in hppa-hpux-tdep.c depends on it.  However, it is easier to deal
+     with it here.  This shouldn't affect other systems since those
+     should provide zero for the "flags" register anyway.  */
+  if (regnum == HPPA_FLAGS_REGNUM)
+    {
+      if (valuep)
+	store_unsigned_integer (valuep, register_size (arch, regnum), 0);
 
       /* It's a computed value.  */
       *optimizedp = 0;
@@ -2394,6 +2762,223 @@ hppa_frame_prev_register_helper (struct frame_info *next_frame,
 
   trad_frame_get_prev_register (next_frame, saved_regs, regnum,
 				optimizedp, lvalp, addrp, realnump, valuep);
+}
+
+
+/* An instruction to match.  */
+struct insn_pattern
+{
+  unsigned int data;            /* See if it matches this....  */
+  unsigned int mask;            /* ... with this mask.  */
+};
+
+/* See bfd/elf32-hppa.c */
+static struct insn_pattern hppa_long_branch_stub[] = {
+  /* ldil LR'xxx,%r1 */
+  { 0x20200000, 0xffe00000 },
+  /* be,n RR'xxx(%sr4,%r1) */
+  { 0xe0202002, 0xffe02002 }, 
+  { 0, 0 }
+};
+
+static struct insn_pattern hppa_long_branch_pic_stub[] = {
+  /* b,l .+8, %r1 */
+  { 0xe8200000, 0xffe00000 },
+  /* addil LR'xxx - ($PIC_pcrel$0 - 4), %r1 */
+  { 0x28200000, 0xffe00000 },
+  /* be,n RR'xxxx - ($PIC_pcrel$0 - 8)(%sr4, %r1) */
+  { 0xe0202002, 0xffe02002 }, 
+  { 0, 0 }
+};
+
+static struct insn_pattern hppa_import_stub[] = {
+  /* addil LR'xxx, %dp */
+  { 0x2b600000, 0xffe00000 },
+  /* ldw RR'xxx(%r1), %r21 */
+  { 0x48350000, 0xffffb000 },
+  /* bv %r0(%r21) */
+  { 0xeaa0c000, 0xffffffff },
+  /* ldw RR'xxx+4(%r1), %r19 */
+  { 0x48330000, 0xffffb000 },
+  { 0, 0 }
+};
+
+static struct insn_pattern hppa_import_pic_stub[] = {
+  /* addil LR'xxx,%r19 */
+  { 0x2a600000, 0xffe00000 },
+  /* ldw RR'xxx(%r1),%r21 */
+  { 0x48350000, 0xffffb000 },
+  /* bv %r0(%r21) */
+  { 0xeaa0c000, 0xffffffff },
+  /* ldw RR'xxx+4(%r1),%r19 */
+  { 0x48330000, 0xffffb000 },
+  { 0, 0 },
+};
+
+static struct insn_pattern hppa_plt_stub[] = {
+  /* b,l 1b, %r20 - 1b is 3 insns before here */
+  { 0xea9f1fdd, 0xffffffff },
+  /* depi 0,31,2,%r20 */
+  { 0xd6801c1e, 0xffffffff },
+  { 0, 0 }
+};
+
+static struct insn_pattern hppa_sigtramp[] = {
+  /* ldi 0, %r25 or ldi 1, %r25 */
+  { 0x34190000, 0xfffffffd },
+  /* ldi __NR_rt_sigreturn, %r20 */
+  { 0x3414015a, 0xffffffff },
+  /* be,l 0x100(%sr2, %r0), %sr0, %r31 */
+  { 0xe4008200, 0xffffffff },
+  /* nop */
+  { 0x08000240, 0xffffffff },
+  { 0, 0 }
+};
+
+/* Maximum number of instructions on the patterns above.  */
+#define HPPA_MAX_INSN_PATTERN_LEN	4
+
+/* Return non-zero if the instructions at PC match the series
+   described in PATTERN, or zero otherwise.  PATTERN is an array of
+   'struct insn_pattern' objects, terminated by an entry whose mask is
+   zero.
+
+   When the match is successful, fill INSN[i] with what PATTERN[i]
+   matched.  */
+
+static int
+hppa_match_insns (CORE_ADDR pc, struct insn_pattern *pattern,
+		  unsigned int *insn)
+{
+  CORE_ADDR npc = pc;
+  int i;
+
+  for (i = 0; pattern[i].mask; i++)
+    {
+      gdb_byte buf[HPPA_INSN_SIZE];
+
+      read_memory_nobpt (npc, buf, HPPA_INSN_SIZE);
+      insn[i] = extract_unsigned_integer (buf, HPPA_INSN_SIZE);
+      if ((insn[i] & pattern[i].mask) == pattern[i].data)
+        npc += 4;
+      else
+        return 0;
+    }
+
+  return 1;
+}
+
+/* This relaxed version of the insstruction matcher allows us to match
+   from somewhere inside the pattern, by looking backwards in the
+   instruction scheme.  */
+
+static int
+hppa_match_insns_relaxed (CORE_ADDR pc, struct insn_pattern *pattern,
+			  unsigned int *insn)
+{
+  int offset, len = 0;
+
+  while (pattern[len].mask)
+    len++;
+
+  for (offset = 0; offset < len; offset++)
+    if (hppa_match_insns (pc - offset * HPPA_INSN_SIZE, pattern, insn))
+      return 1;
+
+  return 0;
+}
+
+static int
+hppa_in_dyncall (CORE_ADDR pc)
+{
+  struct unwind_table_entry *u;
+
+  u = find_unwind_entry (hppa_symbol_address ("$$dyncall"));
+  if (!u)
+    return 0;
+
+  return (pc >= u->region_start && pc <= u->region_end);
+}
+
+int
+hppa_in_solib_call_trampoline (CORE_ADDR pc, char *name)
+{
+  unsigned int insn[HPPA_MAX_INSN_PATTERN_LEN];
+  struct unwind_table_entry *u;
+
+  if (in_plt_section (pc, name) || hppa_in_dyncall (pc))
+    return 1;
+
+  /* The GNU toolchain produces linker stubs without unwind
+     information.  Since the pattern matching for linker stubs can be
+     quite slow, so bail out if we do have an unwind entry.  */
+
+  u = find_unwind_entry (pc);
+  if (u != NULL)
+    return 0;
+
+  return (hppa_match_insns_relaxed (pc, hppa_import_stub, insn)
+	  || hppa_match_insns_relaxed (pc, hppa_import_pic_stub, insn)
+	  || hppa_match_insns_relaxed (pc, hppa_long_branch_stub, insn)
+	  || hppa_match_insns_relaxed (pc, hppa_long_branch_pic_stub, insn));
+}
+
+/* This code skips several kind of "trampolines" used on PA-RISC
+   systems: $$dyncall, import stubs and PLT stubs.  */
+
+CORE_ADDR
+hppa_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
+{
+  unsigned int insn[HPPA_MAX_INSN_PATTERN_LEN];
+  int dp_rel;
+
+  /* $$dyncall handles both PLABELs and direct addresses.  */
+  if (hppa_in_dyncall (pc))
+    {
+      pc = get_frame_register_unsigned (frame, HPPA_R0_REGNUM + 22);
+
+      /* PLABELs have bit 30 set; if it's a PLABEL, then dereference it.  */
+      if (pc & 0x2)
+	pc = read_memory_typed_address (pc & ~0x3, builtin_type_void_func_ptr);
+
+      return pc;
+    }
+
+  dp_rel = hppa_match_insns (pc, hppa_import_stub, insn);
+  if (dp_rel || hppa_match_insns (pc, hppa_import_pic_stub, insn))
+    {
+      /* Extract the target address from the addil/ldw sequence.  */
+      pc = hppa_extract_21 (insn[0]) + hppa_extract_14 (insn[1]);
+
+      if (dp_rel)
+        pc += get_frame_register_unsigned (frame, HPPA_DP_REGNUM);
+      else
+        pc += get_frame_register_unsigned (frame, HPPA_R0_REGNUM + 19);
+
+      /* fallthrough */
+    }
+
+  if (in_plt_section (pc, NULL))
+    {
+      pc = read_memory_typed_address (pc, builtin_type_void_func_ptr);
+
+      /* If the PLT slot has not yet been resolved, the target will be
+         the PLT stub.  */
+      if (in_plt_section (pc, NULL))
+	{
+	  /* Sanity check: are we pointing to the PLT stub?  */
+  	  if (!hppa_match_insns (pc, hppa_plt_stub, insn))
+	    {
+	      warning (_("Cannot resolve PLT stub at 0x%s."), paddr_nz (pc));
+	      return 0;
+	    }
+
+	  /* This should point to the fixup routine.  */
+	  pc = read_memory_typed_address (pc + 8, builtin_type_void_func_ptr);
+	}
+    }
+
+  return pc;
 }
 
 
@@ -2474,14 +3059,24 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
         set_gdbarch_num_regs (gdbarch, hppa32_num_regs);
         set_gdbarch_register_name (gdbarch, hppa32_register_name);
         set_gdbarch_register_type (gdbarch, hppa32_register_type);
+	set_gdbarch_cannot_store_register (gdbarch,
+					   hppa32_cannot_store_register);
+	set_gdbarch_cannot_fetch_register (gdbarch,
+					   hppa32_cannot_fetch_register);
         break;
       case 8:
         set_gdbarch_num_regs (gdbarch, hppa64_num_regs);
         set_gdbarch_register_name (gdbarch, hppa64_register_name);
         set_gdbarch_register_type (gdbarch, hppa64_register_type);
+        set_gdbarch_dwarf_reg_to_regnum (gdbarch, hppa64_dwarf_reg_to_regnum);
+        set_gdbarch_dwarf2_reg_to_regnum (gdbarch, hppa64_dwarf_reg_to_regnum);
+	set_gdbarch_cannot_store_register (gdbarch,
+					   hppa64_cannot_store_register);
+	set_gdbarch_cannot_fetch_register (gdbarch,
+					   hppa64_cannot_fetch_register);
         break;
       default:
-        internal_error (__FILE__, __LINE__, "Unsupported address size: %d",
+        internal_error (__FILE__, __LINE__, _("Unsupported address size: %d"),
                         tdep->bytes_per_address);
     }
 
@@ -2492,21 +3087,21 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      and LP64, but might show differences some day.  */
   set_gdbarch_long_long_bit (gdbarch, 64);
   set_gdbarch_long_double_bit (gdbarch, 128);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ia64_quad_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ia64_quad);
 
   /* The following gdbarch vector elements do not depend on the address
      size, or in any other gdbarch element previously set.  */
   set_gdbarch_skip_prologue (gdbarch, hppa_skip_prologue);
+  set_gdbarch_in_function_epilogue_p (gdbarch,
+				      hppa_in_function_epilogue_p);
   set_gdbarch_inner_than (gdbarch, core_addr_greaterthan);
   set_gdbarch_sp_regnum (gdbarch, HPPA_SP_REGNUM);
   set_gdbarch_fp0_regnum (gdbarch, HPPA_FP0_REGNUM);
-  set_gdbarch_cannot_store_register (gdbarch, hppa_cannot_store_register);
-  set_gdbarch_cannot_fetch_register (gdbarch, hppa_cannot_store_register);
   set_gdbarch_addr_bits_remove (gdbarch, hppa_smash_text_address);
   set_gdbarch_smash_text_address (gdbarch, hppa_smash_text_address);
   set_gdbarch_believe_pcc_promotion (gdbarch, 1);
-  set_gdbarch_read_pc (gdbarch, hppa_target_read_pc);
-  set_gdbarch_write_pc (gdbarch, hppa_target_write_pc);
+  set_gdbarch_read_pc (gdbarch, hppa_read_pc);
+  set_gdbarch_write_pc (gdbarch, hppa_write_pc);
 
   /* Helper for function argument information.  */
   set_gdbarch_fetch_pointer_argument (gdbarch, hppa_fetch_pointer_argument);
@@ -2533,7 +3128,7 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_frame_align (gdbarch, hppa64_frame_align);
       break;
     default:
-      internal_error (__FILE__, __LINE__, "bad switch");
+      internal_error (__FILE__, __LINE__, _("bad switch"));
     }
       
   /* Struct return methods.  */
@@ -2546,7 +3141,7 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       set_gdbarch_return_value (gdbarch, hppa64_return_value);
       break;
     default:
-      internal_error (__FILE__, __LINE__, "bad switch");
+      internal_error (__FILE__, __LINE__, _("bad switch"));
     }
       
   set_gdbarch_breakpoint_from_pc (gdbarch, hppa_breakpoint_from_pc);
@@ -2568,9 +3163,9 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 }
 
 static void
-hppa_dump_tdep (struct gdbarch *current_gdbarch, struct ui_file *file)
+hppa_dump_tdep (struct gdbarch *gdbarch, struct ui_file *file)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   fprintf_unfiltered (file, "bytes_per_address = %d\n", 
                       tdep->bytes_per_address);
@@ -2581,52 +3176,24 @@ void
 _initialize_hppa_tdep (void)
 {
   struct cmd_list_element *c;
-  void break_at_finish_command (char *arg, int from_tty);
-  void tbreak_at_finish_command (char *arg, int from_tty);
-  void break_at_finish_at_depth_command (char *arg, int from_tty);
 
   gdbarch_register (bfd_arch_hppa, hppa_gdbarch_init, hppa_dump_tdep);
 
   hppa_objfile_priv_data = register_objfile_data ();
 
   add_cmd ("unwind", class_maintenance, unwind_command,
-	   "Print unwind table entry at given address.",
+	   _("Print unwind table entry at given address."),
 	   &maintenanceprintlist);
 
-  deprecate_cmd (add_com ("xbreak", class_breakpoint, 
-			  break_at_finish_command,
-			  concat ("Set breakpoint at procedure exit. \n\
-Argument may be function name, or \"*\" and an address.\n\
-If function is specified, break at end of code for that function.\n\
-If an address is specified, break at the end of the function that contains \n\
-that exact address.\n",
-		   "With no arg, uses current execution address of selected stack frame.\n\
-This is useful for breaking on return to a stack frame.\n\
-\n\
-Multiple breakpoints at one place are permitted, and useful if conditional.\n\
-\n\
-Do \"help breakpoints\" for info on other commands dealing with breakpoints.", NULL)), NULL);
-  deprecate_cmd (add_com_alias ("xb", "xbreak", class_breakpoint, 1), NULL);
-  deprecate_cmd (add_com_alias ("xbr", "xbreak", class_breakpoint, 1), NULL);
-  deprecate_cmd (add_com_alias ("xbre", "xbreak", class_breakpoint, 1), NULL);
-  deprecate_cmd (add_com_alias ("xbrea", "xbreak", class_breakpoint, 1), NULL);
-
-  deprecate_cmd (c = add_com ("txbreak", class_breakpoint, 
-			      tbreak_at_finish_command,
-"Set temporary breakpoint at procedure exit.  Either there should\n\
-be no argument or the argument must be a depth.\n"), NULL);
-  set_cmd_completer (c, location_completer);
-  
-  if (xdb_commands)
-    deprecate_cmd (add_com ("bx", class_breakpoint, 
-			    break_at_finish_at_depth_command,
-"Set breakpoint at procedure exit.  Either there should\n\
-be no argument or the argument must be a depth.\n"), NULL);
-
   /* Debug this files internals. */
-  deprecated_add_show_from_set
-    (add_set_cmd ("hppa", class_maintenance, var_zinteger,
-		  &hppa_debug, "Set hppa debugging.\n\
-When non-zero, hppa specific debugging is enabled.", &setdebuglist),
-     &showdebuglist);
+  add_setshow_boolean_cmd ("hppa", class_maintenance, &hppa_debug, _("\
+Set whether hppa target specific debugging information should be displayed."),
+			   _("\
+Show whether hppa target specific debugging information is displayed."), _("\
+This flag controls whether hppa target specific debugging information is\n\
+displayed.  This information is particularly useful for debugging frame\n\
+unwinding problems."),
+			   NULL,
+			   NULL, /* FIXME: i18n: hppa debug flag is %s.  */
+			   &setdebuglist, &showdebuglist);
 }

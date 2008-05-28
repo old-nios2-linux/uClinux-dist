@@ -1,14 +1,20 @@
+
 ifdef CONFIG_USER_SAMBA_SHARED
 SHARED := enable
 else
 SHARED := disable
 endif
 
-CONFOPTS = --prefix= --with-smbmount --with-privatedir=/etc/config \
-			--with-configdir=/etc/config --with-logfilebase=/var/log \
+CONFOPTS = --prefix= --with-smbmount --with-logfilebase=/var/log \
 			--without-ldap --disable-cups --disable-pie \
 			--$(SHARED)-shared --disable-debug --disable-developer \
 			--disable-krb5developer --disable-dmalloc --disable-nls
+
+ifdef CONFIG_USER_FLATFSD_FLATFSD
+CONFOPTS += --with-privatedir=/etc/config --with-configdir=/etc/config
+else
+CONFOPTS += --with-privatedir=/etc/samba --with-configdir=/etc/samba
+endif
 
 ifeq ($(ARCH),arm)
 CFLAGS := $(CFLAGS:-O1=-Os)
@@ -33,3 +39,5 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_SAMBA_SMBMOUNT build/bin/smbmnt /bin/smbmnt
 	$(ROMFSINST) -e CONFIG_USER_SAMBA_SMBMOUNT build/bin/smbmount /bin/smbmount
 	$(ROMFSINST) -e CONFIG_USER_SAMBA_SMBUMOUNT build/bin/smbumount /bin/smbumount
+	$(ROMFSINST) -e CONFIG_USER_SAMBA_MOUNT_CIFS build/bin/mount.cifs /bin/mount.cifs
+	$(ROMFSINST) -e CONFIG_USER_SAMBA_UMOUNT_CIFS build/bin/umount.cifs /bin/umount.cifs

@@ -1,5 +1,5 @@
 /* libthread_db helper functions for the remote server for GDB.
-   Copyright 2002, 2004
+   Copyright (C) 2002, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 
@@ -29,19 +27,7 @@
 
 #include "linux-low.h"
 
-/* Correct for all GNU/Linux targets (for quite some time).  */
-#define GDB_GREGSET_T elf_gregset_t
-#define GDB_FPREGSET_T elf_fpregset_t
-
-#ifndef HAVE_ELF_FPREGSET_T
-/* Make sure we have said types.  Not all platforms bring in <linux/elf.h>
-   via <sys/procfs.h>.  */
-#ifdef HAVE_LINUX_ELF_H   
-#include <linux/elf.h>    
-#endif
-#endif
-
-#include "../gdb_proc_service.h"
+#include "gdb_proc_service.h"
 
 typedef struct ps_prochandle *gdb_ps_prochandle_t;
 typedef void *gdb_ps_read_buf_t;
@@ -75,14 +61,14 @@ gregset_info(void)
 
 ps_err_e
 ps_pglobal_lookup (gdb_ps_prochandle_t ph, const char *obj,
-		   const char *name, paddr_t *sym_addr)
+		   const char *name, psaddr_t *sym_addr)
 {
   CORE_ADDR addr;
 
   if (look_up_one_symbol (name, &addr) == 0)
     return PS_NOSYM;
 
-  *sym_addr = (paddr_t) (unsigned long) addr;
+  *sym_addr = (psaddr_t) (unsigned long) addr;
   return PS_OK;
 }
 
@@ -90,20 +76,20 @@ ps_pglobal_lookup (gdb_ps_prochandle_t ph, const char *obj,
    them into BUF.  */
 
 ps_err_e
-ps_pdread (gdb_ps_prochandle_t ph, paddr_t addr,
+ps_pdread (gdb_ps_prochandle_t ph, psaddr_t addr,
 	   gdb_ps_read_buf_t buf, gdb_ps_size_t size)
 {
-  read_inferior_memory (addr, buf, size);
+  read_inferior_memory ((unsigned long) addr, buf, size);
   return PS_OK;
 }
 
 /* Write SIZE bytes from BUF into the target process PH at address ADDR.  */
 
 ps_err_e
-ps_pdwrite (gdb_ps_prochandle_t ph, paddr_t addr,
+ps_pdwrite (gdb_ps_prochandle_t ph, psaddr_t addr,
 	    gdb_ps_write_buf_t buf, gdb_ps_size_t size)
 {
-  return write_inferior_memory (addr, buf, size);
+  return write_inferior_memory ((unsigned long) addr, buf, size);
 }
 
 /* Get the general registers of LWP LWPID within the target process PH
@@ -113,13 +99,15 @@ ps_err_e
 ps_lgetregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, prgregset_t gregset)
 {
 #ifdef HAVE_REGSETS
+  struct process_info *process;
   struct thread_info *reg_inferior, *save_inferior;
 
-  reg_inferior = (struct thread_info *) find_inferior_id (&all_threads,
-							  lwpid);
-  if (reg_inferior == NULL)
+  process = (struct process_info *) find_inferior_id (&all_processes,
+						      lwpid);
+  if (process == NULL)
     return PS_ERR;
 
+  reg_inferior = get_process_thread (process);
   save_inferior = current_inferior;
   current_inferior = reg_inferior;
 
@@ -147,8 +135,7 @@ ps_lsetregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, const prgregset_t gregset)
    process PH and store them in FPREGSET.  */
 
 ps_err_e
-ps_lgetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
-	       gdb_prfpregset_t *fpregset)
+ps_lgetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, void *fpregset)
 {
   /* Unneeded.  */
   return PS_ERR;
@@ -158,8 +145,7 @@ ps_lgetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
    process PH from FPREGSET.  */
 
 ps_err_e
-ps_lsetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
-	       const gdb_prfpregset_t *fpregset)
+ps_lsetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, void *fpregset)
 {
   /* Unneeded.  */
   return PS_ERR;

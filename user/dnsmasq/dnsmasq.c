@@ -40,7 +40,7 @@ int main (int argc, char **argv)
   char *runfile = RUNFILE;
   time_t resolv_changed = 0;
   time_t now, last = 0;
-  off_t lease_file_size = (off_t)0;
+  time_t lease_file_change = 0;
   ino_t lease_file_inode = (ino_t)0;
   struct irec *iface, *interfaces = NULL;
   char *mxname = NULL;
@@ -318,6 +318,7 @@ int main (int argc, char **argv)
 
 	  if (lease_file)
 	    {
+syslog(LOG_WARNING, "checking lease file %s", lease_file);
 	      if (stat(lease_file, &statbuf) == -1)
 		{
 		  if (!logged_lease)
@@ -327,10 +328,10 @@ int main (int argc, char **argv)
 	      else
 		{ 
 		  logged_lease = 0;
-		  if ((statbuf.st_size > lease_file_size) ||
+		  if ((statbuf.st_mtime != lease_file_change) ||
 		      (statbuf.st_ino != lease_file_inode))
 		    {
-		      lease_file_size = statbuf.st_size;
+		      lease_file_change = statbuf.st_mtime;
 		      lease_file_inode = statbuf.st_ino;
 		      load_dhcp(lease_file, domain_suffix, now, dnamebuff);
 		    }

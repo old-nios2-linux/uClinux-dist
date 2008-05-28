@@ -1,12 +1,12 @@
 /* Native-dependent code for the i386.
 
-   Copyright 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "breakpoint.h"
@@ -231,8 +229,6 @@ i386_cleanup_dregs (void)
   dr_status_mirror  = 0;
 }
 
-#ifndef LINUX_CHILD_POST_STARTUP_INFERIOR
-
 /* Reset all debug registers at each new startup to avoid missing
    watchpoints after restart.  */
 
@@ -241,8 +237,6 @@ child_post_startup_inferior (ptid_t ptid)
 {
   i386_cleanup_dregs ();
 }
-
-#endif /* LINUX_CHILD_POST_STARTUP_INFERIOR */
 
 /* Print the values of the mirrored debug registers.  This is called
    when maint_show_dr is non-zero.  To set that up, type "maint
@@ -310,8 +304,8 @@ i386_length_and_rw_bits (int len, enum target_hw_bp_type type)
 	break;
 #endif
       default:
-	internal_error (__FILE__, __LINE__, "\
-Invalid hardware breakpoint type %d in i386_length_and_rw_bits.\n",
+	internal_error (__FILE__, __LINE__, _("\
+Invalid hardware breakpoint type %d in i386_length_and_rw_bits.\n"),
 			(int) type);
     }
 
@@ -327,8 +321,8 @@ Invalid hardware breakpoint type %d in i386_length_and_rw_bits.\n",
         if (TARGET_HAS_DR_LEN_8)
  	  return (DR_LEN_8 | rw);
       default:
-	internal_error (__FILE__, __LINE__, "\
-Invalid hardware breakpoint length %d in i386_length_and_rw_bits.\n", len);
+	internal_error (__FILE__, __LINE__, _("\
+Invalid hardware breakpoint length %d in i386_length_and_rw_bits.\n"), len);
     }
 }
 
@@ -478,8 +472,8 @@ i386_handle_nonaligned_watchpoint (i386_wp_op_t what, CORE_ADDR addr, int len,
 	  else if (what == WP_REMOVE)
 	    status = i386_remove_aligned_watchpoint (addr, len_rw);
 	  else
-	    internal_error (__FILE__, __LINE__, "\
-Invalid value %d of operation in i386_handle_nonaligned_watchpoint.\n",
+	    internal_error (__FILE__, __LINE__, _("\
+Invalid value %d of operation in i386_handle_nonaligned_watchpoint.\n"),
 			    (int)what);
 	  /* We keep the loop going even after a failure, because some
 	     of the other aligned watchpoints might still succeed
@@ -629,12 +623,13 @@ i386_stopped_by_hwbp (void)
   return 0;
 }
 
-/* Insert a hardware-assisted breakpoint at address ADDR.  SHADOW is
-   unused.  Return 0 on success, EBUSY on failure.  */
+/* Insert a hardware-assisted breakpoint at BP_TGT->placed_address.
+   Return 0 on success, EBUSY on failure.  */
 int
-i386_insert_hw_breakpoint (CORE_ADDR addr, void *shadow)
+i386_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
 {
   unsigned len_rw = i386_length_and_rw_bits (1, hw_execute);
+  CORE_ADDR addr = bp_tgt->placed_address;
   int retval = i386_insert_aligned_watchpoint (addr, len_rw) ? EBUSY : 0;
 
   if (maint_show_dr)
@@ -643,13 +638,14 @@ i386_insert_hw_breakpoint (CORE_ADDR addr, void *shadow)
   return retval;
 }
 
-/* Remove a hardware-assisted breakpoint at address ADDR.  SHADOW is
-   unused.  Return 0 on success, -1 on failure.  */
+/* Remove a hardware-assisted breakpoint at BP_TGT->placed_address.
+   Return 0 on success, -1 on failure.  */
 
 int
-i386_remove_hw_breakpoint (CORE_ADDR addr, void *shadow)
+i386_remove_hw_breakpoint (struct bp_target_info *bp_tgt)
 {
   unsigned len_rw = i386_length_and_rw_bits (1, hw_execute);
+  CORE_ADDR addr = bp_tgt->placed_address;
   int retval = i386_remove_aligned_watchpoint (addr, len_rw);
 
   if (maint_show_dr)
@@ -670,13 +666,13 @@ _initialize_i386_nat (void)
 #ifdef I386_USE_GENERIC_WATCHPOINTS
   /* A maintenance command to enable printing the internal DRi mirror
      variables.  */
-  add_set_cmd ("show-debug-regs", class_maintenance,
-	       var_boolean, (char *) &maint_show_dr,
-	       "\
+  deprecated_add_set_cmd ("show-debug-regs", class_maintenance,
+			  var_boolean, (char *) &maint_show_dr, _("\
 Set whether to show variables that mirror the x86 debug registers.\n\
 Use \"on\" to enable, \"off\" to disable.\n\
 If enabled, the debug registers values are shown when GDB inserts\n\
 or removes a hardware breakpoint or watchpoint, and when the inferior\n\
-triggers a breakpoint or watchpoint.", &maintenancelist);
+triggers a breakpoint or watchpoint."),
+			  &maintenancelist);
 #endif
 }

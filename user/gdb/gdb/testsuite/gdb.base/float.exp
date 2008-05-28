@@ -1,8 +1,8 @@
-# Copyright 2003 Free Software Foundation, Inc.
+# Copyright 2003, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -11,8 +11,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@gnu.org
@@ -34,7 +33,8 @@ set testfile "run"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+    untested float.exp
+    return -1
 }
 
 gdb_exit
@@ -62,9 +62,25 @@ if { [istarget "alpha*-*-*"] } then {
 } elseif [istarget "ia64-*-*"] then {
     gdb_test "info float" "f0.*f1.*f127.*" "info float"
 } elseif [istarget "m68k-*-*"] then {
-    gdb_test "info float" "fp0.*fp1.*fp7.*" "info float"
+    gdb_test_multiple "info float" "info_float" {
+        -re "fp0.*fp1.*fp7.*$gdb_prompt $" {
+            pass "info float (with FPU)"
+	}
+        -re "No floating.point info available for this processor.*" {
+            pass "info float (without FPU)"
+	}
+    }
 } elseif [istarget "mips*-*-*"] then {
     gdb_test "info float" "f0:.*flt:.*dbl:.*" "info float"
+} elseif [istarget "powerpc*-*-*"] then {
+    gdb_test_multiple "info float" "info_float" {
+        -re "f0.*f1.*f31.*fpscr.*$gdb_prompt $" {
+            pass "info float (with FPU)"
+	}
+        -re "No floating.point info available for this processor.*" {
+            pass "info float (without FPU)"
+	}
+    }
 } elseif [istarget "s390*-*-*"] then {
     gdb_test "info float" "fpc.*f0.*f1.*f15.*" "info float"
 } elseif [istarget "sh*-*"] then {
@@ -79,6 +95,8 @@ if { [istarget "alpha*-*-*"] } then {
     }
 } elseif [istarget "hppa*-*"] then {
     gdb_test "info float" "fr4.*fr4R.*fr31R.*" "info float"
+} elseif [istarget "sparc*-*-*"] then {
+    gdb_test "info float" "f0.*f1.*f31.*d0.*d30.*" "info float"
 } else {
     gdb_test "info float" "No floating.point info available for this processor." "info float (unknown target)"
 }

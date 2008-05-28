@@ -1,11 +1,11 @@
 /* Native macro definitions for GDB on an Intel i[3456]86.
-   Copyright 2001, 2004 Free Software Foundation, Inc.
+   Copyright 2001, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef NM_I386_H
 #define NM_I386_H 1
@@ -52,13 +50,14 @@ extern int i386_stopped_by_hwbp (void);
    true.  Otherwise, return false.  */
 extern int i386_stopped_data_address (CORE_ADDR *);
 
-/* Insert a hardware-assisted breakpoint at address ADDR.  SHADOW is
-   unused.  Return 0 on success, EBUSY on failure.  */
-extern int i386_insert_hw_breakpoint (CORE_ADDR addr, void *shadow);
+/* Insert a hardware-assisted breakpoint at BP_TGT->placed_address.
+   Return 0 on success, EBUSY on failure.  */
+struct bp_target_info;
+extern int i386_insert_hw_breakpoint (struct bp_target_info *bp_tgt);
 
-/* Remove a hardware-assisted breakpoint at address ADDR.  SHADOW is
-   unused. Return 0 on success, -1 on failure.  */
-extern int  i386_remove_hw_breakpoint (CORE_ADDR addr, void *shadow);
+/* Remove a hardware-assisted breakpoint at BP_TGT->placed_address.
+   Return 0 on success, -1 on failure.  */
+extern int  i386_remove_hw_breakpoint (struct bp_target_info *bp_tgt);
 
 /* Returns the number of hardware watchpoints of type TYPE that we can
    set.  Value is positive if we can set CNT watchpoints, zero if
@@ -105,15 +104,11 @@ extern int i386_stopped_by_watchpoint (void);
 #define target_remove_watchpoint(addr, len, type) \
   i386_remove_watchpoint (addr, len, type)
 
-#define target_insert_hw_breakpoint(addr, shadow) \
-  i386_insert_hw_breakpoint (addr, shadow)
+#define target_insert_hw_breakpoint(bp_tgt) \
+  i386_insert_hw_breakpoint (bp_tgt)
 
-#define target_remove_hw_breakpoint(addr, shadow) \
-  i386_remove_hw_breakpoint (addr, shadow)
-
-/* child_post_startup_inferior used to
-   reset all debug registers by calling i386_cleanup_dregs ().  */ 
-#define CHILD_POST_STARTUP_INFERIOR
+#define target_remove_hw_breakpoint(bp_tgt) \
+  i386_remove_hw_breakpoint (bp_tgt)
 
 #endif /* I386_USE_GENERIC_WATCHPOINTS */
 

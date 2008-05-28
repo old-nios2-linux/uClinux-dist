@@ -1,25 +1,25 @@
 /* Machine independent support for SVR4 /proc (process file system) for GDB.
 
-   Copyright 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2003, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software Foundation, 
-Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /*
  * Pretty-print trace of api calls to the /proc api
@@ -780,18 +780,17 @@ _initialize_proc_api (void)
 {
   struct cmd_list_element *c;
 
-  c = add_set_cmd ("procfs-trace", no_class,
-		   var_boolean, (char *) &procfs_trace, 
-		   "Set tracing for /proc api calls.\n", &setlist);
+  add_setshow_boolean_cmd ("procfs-trace", no_class, &procfs_trace, _("\
+Set tracing for /proc api calls."), _("\
+Show tracing for /proc api calls."), NULL,
+			   set_procfs_trace_cmd,
+			   NULL, /* FIXME: i18n: */
+			   &setlist, &showlist);
 
-  deprecated_add_show_from_set (c, &showlist);
-  set_cmd_sfunc (c, set_procfs_trace_cmd);
-  set_cmd_completer (c, filename_completer);
-
-  c = add_set_cmd ("procfs-file", no_class, var_filename,
-		   (char *) &procfs_filename, 
-		   "Set filename for /proc tracefile.\n", &setlist);
-
-  deprecated_add_show_from_set (c, &showlist);
-  set_cmd_sfunc (c, set_procfs_file_cmd);
+  add_setshow_filename_cmd ("procfs-file", no_class, &procfs_filename, _("\
+Set filename for /proc tracefile."), _("\
+Show filename for /proc tracefile."), NULL,
+			    set_procfs_file_cmd,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 }

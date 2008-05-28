@@ -1,23 +1,21 @@
 /* Unwinder test program.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef SYMBOL_PREFIX
 #define SYMBOL(str)	SYMBOL_PREFIX #str
@@ -34,6 +32,9 @@ int
 main (void)
 {
   standard ();
+  stack_align_ecx ();
+  stack_align_edx ();
+  stack_align_eax ();
   gdb1253 ();
   gdb1718 ();
   gdb1338 ();
@@ -110,3 +111,55 @@ asm(".text\n"
     "    movl  %ebp,%esp\n"
     "    popl  %ebp\n"
     "    ret\n");
+
+asm(".text\n"
+    "    .align 8\n"
+    SYMBOL (stack_align_ecx) ":\n"
+    "    leal  4(%esp), %ecx\n"
+    "    andl  $-16, %esp\n"
+    "    pushl -4(%ecx)\n"
+    "    pushl %ebp\n"
+    "    movl  %esp, %ebp\n"
+    "    pushl %edi\n"
+    "    pushl %ecx\n"
+    "    int   $0x03\n"
+    "    popl  %ecx\n"
+    "    popl  %edi\n"
+    "    popl  %ebp\n"
+    "    leal  -4(%ecx), %esp\n"
+    "    ret\n");
+
+asm(".text\n"
+    "    .align 8\n"
+    SYMBOL (stack_align_edx) ":\n"
+    "    leal  4(%esp), %edx\n"
+    "    andl  $-16, %esp\n"
+    "    pushl -4(%edx)\n"
+    "    pushl %ebp\n"
+    "    movl  %esp, %ebp\n"
+    "    pushl %edi\n"
+    "    pushl %ecx\n"
+    "    int   $0x03\n"
+    "    popl  %ecx\n"
+    "    popl  %edi\n"
+    "    popl  %ebp\n"
+    "    leal  -4(%edx), %esp\n"
+    "    ret\n");
+
+asm(".text\n"
+    "    .align 8\n"
+    SYMBOL (stack_align_eax) ":\n"
+    "    leal  4(%esp), %eax\n"
+    "    andl  $-16, %esp\n"
+    "    pushl -4(%eax)\n"
+    "    pushl %ebp\n"
+    "    movl  %esp, %ebp\n"
+    "    pushl %edi\n"
+    "    pushl %ecx\n"
+    "    int   $0x03\n"
+    "    popl  %ecx\n"
+    "    popl  %edi\n"
+    "    popl  %ebp\n"
+    "    leal  -4(%eax), %esp\n"
+    "    ret\n");
+

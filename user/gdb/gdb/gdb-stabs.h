@@ -1,5 +1,5 @@
 /* Definitions for symbol-reading containing "stabs", for GDB.
-   Copyright 1992, 1993, 1995, 1996, 1997, 1999, 2000
+   Copyright (C) 1992, 1993, 1995, 1996, 1997, 1999, 2000, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file exists to hold the common definitions required of most of
    the symbol-readers that end up using stabs.  The common use of
@@ -44,8 +42,8 @@ struct stab_section_info
   };
 
 /* Information is passed among various dbxread routines for accessing
-   symbol files.  A pointer to this structure is kept in the sym_stab_info
-   field of the objfile struct.  */
+   symbol files.  A pointer to this structure is kept in the
+   deprecated_sym_stab_info field of the objfile struct.  */
 
 struct dbx_symfile_info
   {
@@ -74,7 +72,7 @@ struct dbx_symfile_info
     asection *stab_section;
   };
 
-#define DBX_SYMFILE_INFO(o)	((o)->sym_stab_info)
+#define DBX_SYMFILE_INFO(o)	((o)->deprecated_sym_stab_info)
 #define DBX_TEXT_ADDR(o)	(DBX_SYMFILE_INFO(o)->text_addr)
 #define DBX_TEXT_SIZE(o)	(DBX_SYMFILE_INFO(o)->text_size)
 #define DBX_SYMCOUNT(o)		(DBX_SYMFILE_INFO(o)->symcount)

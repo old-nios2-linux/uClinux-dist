@@ -1,7 +1,565 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+*** Changes in GDB 6.8
+
+* New native configurations
+
+NetBSD/hppa			hppa*-*netbsd*
+Xtensa GNU/Linux		xtensa*-*-linux*
+
+* New targets
+
+NetBSD/hppa			hppa*-*-netbsd*
+Xtensa GNU/Lunux		xtensa*-*-linux*
+
+* Change in command line behavior -- corefiles vs. process ids.
+
+  When the '-p NUMBER' or '--pid NUMBER' options are used, and
+  attaching to process NUMBER fails, GDB no longer attempts to open a
+  core file named NUMBER.  Attaching to a program using the -c option
+  is no longer supported.  Instead, use the '-p' or '--pid' options.
+
+* GDB can now be built as a native debugger for debugging Windows x86
+(mingw32) Portable Executable (PE) programs.
+
+* Pending breakpoints no longer change their number when their address
+is resolved.
+
+* GDB now supports breakpoints with multiple locations,
+including breakpoints on C++ constructors, inside C++ templates,
+and in inlined functions.
+
+* GDB's ability to debug optimized code has been improved.  GDB more
+accurately identifies function bodies and lexical blocks that occupy
+more than one contiguous range of addresses.
+
+* Target descriptions can now describe registers for PowerPC.
+
+* The GDB remote stub, gdbserver, now supports the AltiVec and SPE
+registers on PowerPC targets.
+
+* The GDB remote stub, gdbserver, now supports thread debugging on GNU/Linux
+targets even when the libthread_db library is not available.
+
+* The GDB remote stub, gdbserver, now supports the new file transfer
+commands (remote put, remote get, and remote delete).
+
+* The GDB remote stub, gdbserver, now supports run and attach in
+extended-remote mode.
+
+* hppa*64*-*-hpux11* target broken
+  The debugger is unable to start a program and fails with the following
+  error: "Error trying to get information about dynamic linker".
+  The gdb-6.7 release is also affected.
+
+* GDB now supports the --enable-targets= configure option to allow
+building a single GDB executable that supports multiple remote
+target architectures.
+
+* GDB now supports debugging C and C++ programs which use the
+Decimal Floating Point extension.  In addition, the PowerPC target
+now has a set of pseudo-registers to inspect decimal float values
+stored in two consecutive float registers.
+
+* The -break-insert MI command can optionally create pending
+breakpoints now.
+
+* Improved support for debugging Ada
+  Many improvements to the Ada language support have been made.  These
+  include:
+    - Better support for Ada2005 interface types
+    - Improved handling of arrays and slices in general
+    - Better support for Taft-amendment types
+    - The '{type} ADDRESS' expression is now allowed on the left hand-side
+      of an assignment
+    - Improved command completion in Ada
+    - Several bug fixes
+
+* New commands
+
+set print frame-arguments (all|scalars|none)
+show print frame-arguments
+  The value of this variable can be changed to control which argument
+  values should be printed by the debugger when displaying a frame.
+
+remote put
+remote get
+remote delete
+  Transfer files to and from a remote target, and delete remote files.
+
+* New MI commands
+
+-target-file-put
+-target-file-get
+-target-file-delete
+  Transfer files to and from a remote target, and delete remote files.
+
+* New remote packets
+
+vFile:open:
+vFile:close:
+vFile:pread:
+vFile:pwrite:
+vFile:unlink:
+  Open, close, read, write, and delete files on the remote system.
+
+* GDB on GNU/Linux and HP/UX can now debug through "exec" of a new
+process.
+
+vAttach
+  Attach to an existing process on the remote system, in extended-remote
+  mode.
+
+vRun
+  Run a new process on the remote system, in extended-remote mode.
+
+*** Changes in GDB 6.7
+
+* Resolved 101 resource leaks, null pointer dereferences, etc. in gdb, 
+bfd, libiberty and opcodes, as revealed by static analysis donated by
+Coverity, Inc. (http://scan.coverity.com).
+
+* When looking up multiply-defined global symbols, GDB will now prefer the
+symbol definition in the current shared library if it was built using the
+-Bsymbolic linker option.
+
+* When the Text User Interface (TUI) is not configured, GDB will now
+recognize the -tui command-line option and print a message that the TUI
+is not supported.
+
+* The GDB remote stub, gdbserver, now has lower overhead for high 
+frequency signals (e.g. SIGALRM) via the QPassSignals packet.
+
+* GDB for MIPS targets now autodetects whether a remote target provides
+32-bit or 64-bit register values.
+
+* Support for C++ member pointers has been improved.
+
+* GDB now understands XML target descriptions, which specify the
+target's overall architecture.  GDB can read a description from
+a local file or over the remote serial protocol.
+
+* Vectors of single-byte data use a new integer type which is not
+automatically displayed as character or string data.
+
+* The /s format now works with the print command.  It displays
+arrays of single-byte integers and pointers to single-byte integers
+as strings.
+
+* Target descriptions can now describe target-specific registers,
+for architectures which have implemented the support (currently
+only ARM, M68K, and MIPS).
+
+* GDB and the GDB remote stub, gdbserver, now support the XScale
+iWMMXt coprocessor.
+
+* The GDB remote stub, gdbserver, has been updated to support
+ARM Windows CE (mingw32ce) debugging, and GDB Windows CE support
+has been rewritten to use the standard GDB remote protocol.
+
+* GDB can now step into C++ functions which are called through thunks.
+
+* GDB for the Cell/B.E. SPU now supports overlay debugging.
+
+* The GDB remote protocol "qOffsets" packet can now honor ELF segment
+layout.  It also supports a TextSeg= and DataSeg= response when only
+segment base addresses (rather than offsets) are available.
+
+* The /i format now outputs any trailing branch delay slot instructions 
+immediately following the last instruction within the count specified.
+
+* The GDB remote protocol "T" stop reply packet now supports a
+"library" response.  Combined with the new "qXfer:libraries:read"
+packet, this response allows GDB to debug shared libraries on targets
+where the operating system manages the list of loaded libraries (e.g.
+Windows and SymbianOS).
+
+* The GDB remote stub, gdbserver, now supports dynamic link libraries
+(DLLs) on Windows and Windows CE targets.
+
+* GDB now supports a faster verification that a .debug file matches its binary
+according to its build-id signature, if the signature is present.
+
+* New commands
+
+set remoteflow
+show remoteflow
+  Enable or disable hardware flow control (RTS/CTS) on the serial port
+  when debugging using remote targets.
+
+set mem inaccessible-by-default
+show mem inaccessible-by-default
+  If the target supplies a memory map, for instance via the remote
+  protocol's "qXfer:memory-map:read" packet, setting this variable
+  prevents GDB from accessing memory outside the memory map.  This
+  is useful for targets with memory mapped registers or which react
+  badly to accesses of unmapped address space.
+
+set breakpoint auto-hw
+show breakpoint auto-hw
+  If the target supplies a memory map, for instance via the remote
+  protocol's "qXfer:memory-map:read" packet, setting this variable
+  lets GDB use hardware breakpoints automatically for memory regions
+  where it can not use software breakpoints.  This covers both the
+  "break" command and internal breakpoints used for other commands
+  including "next" and "finish".
+
+catch exception
+catch exception unhandled
+  Stop the program execution when Ada exceptions are raised.
+
+catch assert
+  Stop the program execution when an Ada assertion failed.
+
+set sysroot
+show sysroot
+  Set an alternate system root for target files.  This is a more
+  general version of "set solib-absolute-prefix", which is now
+  an alias to "set sysroot".
+
+info spu
+  Provide extended SPU facility status information.  This set of
+  commands is available only when debugging the Cell/B.E. SPU
+  architecture.
+
+* New native configurations
+
+OpenBSD/sh			sh*-*openbsd*
+
+set tdesc filename
+unset tdesc filename
+show tdesc filename
+  Use the specified local file as an XML target description, and do
+  not query the target for its built-in description.
+
+* New targets
+
+OpenBSD/sh			sh*-*-openbsd*
+MIPS64 GNU/Linux (gdbserver)	mips64-linux-gnu
+Toshiba Media Processor		mep-elf
+
+* New remote packets
+
+QPassSignals:
+  Ignore the specified signals; pass them directly to the debugged program
+  without stopping other threads or reporting them to GDB.
+
+qXfer:features:read:
+  Read an XML target description from the target, which describes its
+  features.
+
+qXfer:spu:read:
+qXfer:spu:write:
+  Read or write contents of an spufs file on the target system.  These
+  packets are available only on the Cell/B.E. SPU architecture.
+
+qXfer:libraries:read:
+  Report the loaded shared libraries.  Combined with new "T" packet
+  response, this packet allows GDB to debug shared libraries on
+  targets where the operating system manages the list of loaded
+  libraries (e.g. Windows and SymbianOS).
+
+* Removed targets
+
+Support for these obsolete configurations has been removed.
+
+alpha*-*-osf1*
+alpha*-*-osf2*
+d10v-*-*
+hppa*-*-hiux*
+i[34567]86-ncr-*
+i[34567]86-*-dgux*
+i[34567]86-*-lynxos*
+i[34567]86-*-netware*
+i[34567]86-*-sco3.2v5*
+i[34567]86-*-sco3.2v4*
+i[34567]86-*-sco*
+i[34567]86-*-sysv4.2*
+i[34567]86-*-sysv4*
+i[34567]86-*-sysv5*
+i[34567]86-*-unixware2*
+i[34567]86-*-unixware*
+i[34567]86-*-sysv*
+i[34567]86-*-isc*
+m68*-cisco*-*
+m68*-tandem-*
+mips*-*-pe
+rs6000-*-lynxos*
+sh*-*-pe
+
+* Other removed features
+
+target abug
+target cpu32bug
+target est
+target rom68k
+
+	Various m68k-only ROM monitors.
+
+target hms
+target e7000
+target sh3
+target sh3e
+
+	Various Renesas ROM monitors and debugging interfaces for SH and
+	H8/300.
+
+target ocd
+
+	Support for a Macraigor serial interface to on-chip debugging.
+	GDB does not directly support the newer parallel or USB
+	interfaces.
+
+DWARF 1 support
+
+	A debug information format.  The predecessor to DWARF 2 and 
+	DWARF 3, which are still supported.
+
+Support for the HP aCC compiler on HP-UX/PA-RISC
+
+	SOM-encapsulated symbolic debugging information, automatic
+	invocation of pxdb, and the aCC custom C++ ABI.  This does not
+	affect HP-UX for Itanium or GCC for HP-UX/PA-RISC.  Code compiled
+	with aCC can still be debugged on an assembly level.
+
+MIPS ".pdr" sections
+
+	A MIPS-specific format used to describe stack frame layout
+	in debugging information.
+
+Scheme support
+
+	GDB could work with an older version of Guile to debug
+	the interpreter and Scheme programs running in it.
+
+set mips stack-arg-size
+set mips saved-gpreg-size
+
+	Use "set mips abi" to control parameter passing for MIPS.
+
+*** Changes in GDB 6.6
+
+* New targets
+
+Xtensa				xtensa-elf
+Cell Broadband Engine SPU	spu-elf
+
+* GDB can now be configured as a cross-debugger targeting native Windows
+(mingw32) or Cygwin.  It can communicate with a remote debugging stub
+running on a Windows system over TCP/IP to debug Windows programs.
+
+* The GDB remote stub, gdbserver, has been updated to support Windows and
+Cygwin debugging.  Both single-threaded and multi-threaded programs are
+supported.
+
+* The "set trust-readonly-sections" command works again.  This command was
+broken in GDB 6.3, 6.4, and 6.5.
+
+* The "load" command now supports writing to flash memory, if the remote
+stub provides the required support.
+
+* Support for GNU/Linux Thread Local Storage (TLS, per-thread variables) no
+longer requires symbolic debug information (e.g. DWARF-2).
+
+* New commands
+
+set substitute-path
+unset substitute-path
+show substitute-path
+  Manage a list of substitution rules that GDB uses to rewrite the name
+  of the directories where the sources are located. This can be useful
+  for instance when the sources were moved to a different location
+  between compilation and debugging.
+
+set trace-commands
+show trace-commands
+  Print each CLI command as it is executed.  Each command is prefixed with
+  a number of `+' symbols representing the nesting depth.
+  The source command now has a `-v' option to enable the same feature.
+
+* REMOVED features
+
+The ARM Demon monitor support (RDP protocol, "target rdp").
+
+Kernel Object Display, an embedded debugging feature which only worked with
+an obsolete version of Cisco IOS.
+
+The 'set download-write-size' and 'show download-write-size' commands.
+
+* New remote packets
+
+qSupported:
+  Tell a stub about GDB client features, and request remote target features.
+  The first feature implemented is PacketSize, which allows the target to
+  specify the size of packets it can handle - to minimize the number of
+  packets required and improve performance when connected to a remote
+  target.
+
+qXfer:auxv:read:
+  Fetch an OS auxilliary vector from the remote stub.  This packet is a
+  more efficient replacement for qPart:auxv:read.
+
+qXfer:memory-map:read:
+  Fetch a memory map from the remote stub, including information about
+  RAM, ROM, and flash memory devices.
+
+vFlashErase:
+vFlashWrite:
+vFlashDone:
+  Erase and program a flash memory device.
+
+* Removed remote packets
+
+qPart:auxv:read:
+  This packet has been replaced by qXfer:auxv:read.  Only GDB 6.4 and 6.5
+  used it, and only gdbserver implemented it.
+
+*** Changes in GDB 6.5
+
+* New targets
+
+Renesas M32C/M16C		m32c-elf
+
+Morpho Technologies ms1		ms1-elf
+
+* New commands
+
+init-if-undefined		Initialize a convenience variable, but
+				only if it doesn't already have a value.
+
+The following commands are presently only implemented for native GNU/Linux:
+
+checkpoint			Save a snapshot of the program state.
+
+restart	<n>			Return the program state to a 
+				previously saved state.
+
+info checkpoints		List currently saved checkpoints.
+
+delete-checkpoint <n>		Delete a previously saved checkpoint.
+
+set|show detach-on-fork		Tell gdb whether to detach from a newly
+				forked process, or to keep debugging it.
+
+info forks			List forks of the user program that
+				are available to be debugged.
+
+fork <n>			Switch to debugging one of several
+				forks of the user program that are
+				available to be debugged.
+
+delete-fork <n>			Delete a fork from the list of forks
+				that are available to be debugged (and
+				kill the forked process).
+
+detach-fork <n>			Delete a fork from the list of forks
+				that are available to be debugged (and
+				allow the process to continue).
+
+* New architecture
+
+Morpho Technologies ms2		ms1-elf
+
+* Improved Windows host support
+
+GDB now builds as a cross debugger hosted on i686-mingw32, including
+native console support, and remote communications using either
+network sockets or serial ports.
+
+* Improved Modula-2 language support
+
+GDB can now print most types in the Modula-2 syntax.  This includes:
+basic types, set types, record types, enumerated types, range types,
+pointer types and ARRAY types.  Procedure var parameters are correctly
+printed and hexadecimal addresses and character constants are also
+written in the Modula-2 syntax.  Best results can be obtained by using
+GNU Modula-2 together with the -gdwarf-2 command line option.
+
+* REMOVED features
+
+The ARM rdi-share module.
+
+The Netware NLM debug server.
+
+*** Changes in GDB 6.4
+
+* New native configurations
+
+OpenBSD/arm			arm*-*-openbsd*
+OpenBSD/mips64			mips64-*-openbsd*
+
+* New targets
+
+Morpho Technologies ms1		ms1-elf
+
+* New command line options
+
+--batch-silent			As for --batch, but totally silent.
+--return-child-result		The debugger will exist with the same value
+				the child (debugged) program exited with.
+--eval-command COMMAND, -ex COMMAND
+				Execute a single GDB CLI command. This may be
+				specified multiple times and in conjunction
+				with the --command (-x) option.
+
+* Deprecated commands removed
+
+The following commands, that were deprecated in 2000, have been
+removed:
+
+  Command				Replacement
+  set|show arm disassembly-flavor	set|show arm disassembler
+  othernames				set arm disassembler
+  set|show remotedebug			set|show debug remote
+  set|show archdebug			set|show debug arch
+  set|show eventdebug			set|show debug event
+  regs					info registers
+
+* New BSD user-level threads support
+
+It is now possible to debug programs using the user-level threads
+library on OpenBSD and FreeBSD.  Currently supported (target)
+configurations are:
+
+FreeBSD/amd64			x86_64-*-freebsd*
+FreeBSD/i386			i386-*-freebsd*
+OpenBSD/i386			i386-*-openbsd*
+
+Note that the new kernel threads libraries introduced in FreeBSD 5.x
+are not yet supported.
+
+* New support for Matsushita MN10300 w/sim added
+(Work in progress).  mn10300-elf.
+
+* REMOVED configurations and files
+
+VxWorks and the XDR protocol			*-*-vxworks
+Motorola MCORE                                  mcore-*-*
+National Semiconductor NS32000			ns32k-*-*
+
+* New "set print array-indexes" command
+
+After turning this setting "on", GDB prints the index of each element
+when displaying arrays.  The default is "off" to preserve the previous
+behavior.
+
+* VAX floating point support
+
+GDB now supports the not-quite-ieee VAX F and D floating point formats.
+
+* User-defined command support
+
+In addition to using $arg0..$arg9 for argument passing, it is now possible
+to use $argc to determine now many arguments have been passed.  See the
+section on user-defined commands in the user manual for more information.
+
 *** Changes in GDB 6.3:
+
+* New command line option
+
+GDB now accepts -l followed by a number to set the timeout for remote
+debugging.
 
 * GDB works with GCC -feliminate-dwarf2-dups
 

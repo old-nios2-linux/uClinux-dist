@@ -1,14 +1,14 @@
 /* GDB CLI command scripting.
 
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004 Free Software
-   Foundation, Inc.
+   Copyright (c) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -28,11 +26,13 @@
 
 #include "ui-out.h"
 #include "gdb_string.h"
-
+#include "exceptions.h"
 #include "top.h"
+#include "breakpoint.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
+#include "gdb_assert.h"
 
 /* Prototypes for local functions */
 
@@ -45,17 +45,23 @@ static struct cleanup * setup_user_args (char *p);
 
 static void validate_comname (char *);
 
-/* Level of control structure.  */
+/* Level of control structure when reading.  */
 static int control_level;
 
-/* Source command state variable. */
-static int source_error_allocated;
+/* Level of control structure when executing.  */
+static int command_nest_depth = 1;
+
+/* This is to prevent certain commands being printed twice.  */
+static int suppress_next_print_command_trace = 0;
 
 /* Structure for arguments to user defined functions.  */
 #define MAXUSERARGS 10
 struct user_args
   {
     struct user_args *next;
+    /* It is necessary to store a malloced copy of the command line to
+       ensure that the arguments are not overwritten before they are used.  */
+    char *command;
     struct
       {
 	char *arg;
@@ -75,8 +81,9 @@ build_command_line (enum command_control_type type, char *args)
 {
   struct command_line *cmd;
 
-  if (args == NULL)
-    error ("if/while commands require arguments.\n");
+  if (args == NULL && (type == if_control || type == while_control))
+    error (_("if/while commands require arguments."));
+  gdb_assert (args != NULL);
 
   cmd = (struct command_line *) xmalloc (sizeof (struct command_line));
   cmd->next = NULL;
@@ -88,6 +95,7 @@ build_command_line (enum command_control_type type, char *args)
 					* cmd->body_count);
   memset (cmd->body_list, 0, sizeof (struct command_line *) * cmd->body_count);
   cmd->line = savestring (args, strlen (args));
+
   return cmd;
 }
 
@@ -108,7 +116,7 @@ get_command_line (enum command_control_type type, char *arg)
   /* Read in the body of this command.  */
   if (recurse_read_control_structure (cmd) == invalid_control)
     {
-      warning ("error reading in control structure\n");
+      warning (_("Error reading in canned sequence of commands."));
       do_cleanups (old_chain);
       return NULL;
     }
@@ -200,6 +208,23 @@ print_command_lines (struct ui_out *uiout, struct command_line *cmd,
 	  continue;
 	}
 
+      /* A commands command.  Print the breakpoint commands and continue.  */
+      if (list->control_type == commands_control)
+	{
+	  if (*(list->line))
+	    ui_out_field_fmt (uiout, NULL, "commands %s", list->line);
+	  else
+	    ui_out_field_string (uiout, NULL, "commands");
+	  ui_out_text (uiout, "\n");
+	  print_command_lines (uiout, *list->body_list, depth + 1);
+	  if (depth)
+	    ui_out_spaces (uiout, 2 * depth);
+	  ui_out_field_string (uiout, NULL, "end");
+	  ui_out_text (uiout, "\n");
+	  list = list->next;
+	  continue;
+	}
+
       /* ignore illegal command type and try next */
       list = list->next;
     }				/* while (list) */
@@ -243,9 +268,9 @@ static void
 do_restore_user_call_depth (void * call_depth)
 {	
   int * depth = call_depth;
-  /* We will be returning_to_top_level() at this point, so we want to
-     reset our depth. */
-  (*depth) = 0;
+  (*depth)--;
+  if ((*depth) == 0)
+    in_user_command = 0;
 }
 
 
@@ -266,27 +291,72 @@ execute_user_command (struct cmd_list_element *c, char *args)
     return;
 
   if (++user_call_depth > max_user_call_depth)
-    error ("Max user call depth exceeded -- command aborted\n");
+    error (_("Max user call depth exceeded -- command aborted."));
 
-  old_chain = make_cleanup (do_restore_user_call_depth, &user_call_depth);
+  make_cleanup (do_restore_user_call_depth, &user_call_depth);
 
   /* Set the instream to 0, indicating execution of a
      user-defined function.  */
-  old_chain = make_cleanup (do_restore_instream_cleanup, instream);
+  make_cleanup (do_restore_instream_cleanup, instream);
   instream = (FILE *) 0;
+
+  /* Also set the global in_user_command, so that NULL instream is
+     not confused with Insight.  */
+  in_user_command = 1;
+
+  command_nest_depth++;
   while (cmdlines)
     {
       ret = execute_control_command (cmdlines);
       if (ret != simple_control && ret != break_control)
 	{
-	  warning ("Error in control structure.\n");
+	  warning (_("Error executing canned sequence of commands."));
 	  break;
 	}
       cmdlines = cmdlines->next;
     }
+  command_nest_depth--;
   do_cleanups (old_chain);
+}
 
-  user_call_depth--;
+/* This function is called every time GDB prints a prompt.
+   It ensures that errors and the like to not confuse the command tracing.  */
+
+void
+reset_command_nest_depth (void)
+{
+  command_nest_depth = 1;
+
+  /* Just in case.  */
+  suppress_next_print_command_trace = 0;
+}
+
+/* Print the command, prefixed with '+' to represent the call depth.
+   This is slightly complicated because this function may be called
+   from execute_command and execute_control_command.  Unfortunately
+   execute_command also prints the top level control commands.
+   In these cases execute_command will call execute_control_command
+   via while_command or if_command.  Inner levels of 'if' and 'while'
+   are dealt with directly.  Therefore we can use these functions
+   to determine whether the command has been printed already or not.  */
+void
+print_command_trace (const char *cmd)
+{
+  int i;
+
+  if (suppress_next_print_command_trace)
+    {
+      suppress_next_print_command_trace = 0;
+      return;
+    }
+
+  if (!source_verbose && !trace_commands)
+    return;
+
+  for (i=0; i < command_nest_depth; i++)
+    printf_filtered ("+");
+
+  printf_filtered ("%s\n", cmd);
 }
 
 enum command_control_type
@@ -318,7 +388,16 @@ execute_control_command (struct command_line *cmd)
       break;
 
     case continue_control:
+      print_command_trace ("loop_continue");
+
+      /* Return for "continue", and "break" so we can either
+         continue the loop at the top, or break out.  */
+      ret = cmd->control_type;
+      break;
+
     case break_control:
+      print_command_trace ("loop_break");
+
       /* Return for "continue", and "break" so we can either
          continue the loop at the top, or break out.  */
       ret = cmd->control_type;
@@ -326,6 +405,10 @@ execute_control_command (struct command_line *cmd)
 
     case while_control:
       {
+	char *buffer = alloca (strlen (cmd->line) + 7);
+	sprintf (buffer, "while %s", cmd->line);
+	print_command_trace (buffer);
+
 	/* Parse the loop control expression for the while statement.  */
 	new_line = insert_args (cmd->line);
 	if (!new_line)
@@ -358,7 +441,9 @@ execute_control_command (struct command_line *cmd)
 	    current = *cmd->body_list;
 	    while (current)
 	      {
+		command_nest_depth++;
 		ret = execute_control_command (current);
+		command_nest_depth--;
 
 		/* If we got an error, or a "break" command, then stop
 		   looping.  */
@@ -387,6 +472,10 @@ execute_control_command (struct command_line *cmd)
 
     case if_control:
       {
+	char *buffer = alloca (strlen (cmd->line) + 4);
+	sprintf (buffer, "if %s", cmd->line);
+	print_command_trace (buffer);
+
 	new_line = insert_args (cmd->line);
 	if (!new_line)
 	  break;
@@ -413,7 +502,9 @@ execute_control_command (struct command_line *cmd)
 	/* Execute commands in the given arm.  */
 	while (current)
 	  {
+	    command_nest_depth++;
 	    ret = execute_control_command (current);
+	    command_nest_depth--;
 
 	    /* If we got an error, get out.  */
 	    if (ret != simple_control)
@@ -425,9 +516,20 @@ execute_control_command (struct command_line *cmd)
 
 	break;
       }
+    case commands_control:
+      {
+	/* Breakpoint commands list, record the commands in the breakpoint's
+	   command list and return.  */
+	new_line = insert_args (cmd->line);
+	if (!new_line)
+	  break;
+	make_cleanup (free_current_contents, &new_line);
+	ret = commands_from_control_command (new_line, cmd);
+	break;
+      }
 
     default:
-      warning ("Invalid control type in command structure.");
+      warning (_("Invalid control type in canned commands structure."));
       break;
     }
 
@@ -450,6 +552,7 @@ while_command (char *arg, int from_tty)
   if (command == NULL)
     return;
 
+  suppress_next_print_command_trace = 1;
   execute_control_command (command);
   free_command_lines (&command);
 }
@@ -468,6 +571,7 @@ if_command (char *arg, int from_tty)
   if (command == NULL)
     return;
 
+  suppress_next_print_command_trace = 1;
   execute_control_command (command);
   free_command_lines (&command);
 }
@@ -479,9 +583,10 @@ arg_cleanup (void *ignore)
   struct user_args *oargs = user_args;
   if (!user_args)
     internal_error (__FILE__, __LINE__,
-		    "arg_cleanup called with no user args.\n");
+		    _("arg_cleanup called with no user args.\n"));
 
   user_args = user_args->next;
+  xfree (oargs->command);
   xfree (oargs);
 }
 
@@ -506,6 +611,8 @@ setup_user_args (char *p)
   if (p == NULL)
     return old_chain;
 
+  user_args->command = p = xstrdup (p);
+
   while (*p)
     {
       char *start_arg;
@@ -515,7 +622,7 @@ setup_user_args (char *p)
 
       if (arg_count >= MAXUSERARGS)
 	{
-	  error ("user defined function may only have %d arguments.\n",
+	  error (_("user defined function may only have %d arguments."),
 		 MAXUSERARGS);
 	  return old_chain;
 	}
@@ -575,7 +682,8 @@ locate_arg (char *p)
 {
   while ((p = strchr (p, '$')))
     {
-      if (strncmp (p, "$arg", 4) == 0 && isdigit (p[4]))
+      if (strncmp (p, "$arg", 4) == 0
+	  && (isdigit (p[4]) || p[4] == 'c'))
 	return p;
       p++;
     }
@@ -591,6 +699,11 @@ insert_args (char *line)
   char *p, *save_line, *new_line;
   unsigned len, i;
 
+  /* If we are not in a user-defined function, treat $argc, $arg0, et
+     cetera as normal convenience variables.  */
+  if (user_args == NULL)
+    return xstrdup (line);
+
   /* First we need to know how much memory to allocate for the new line.  */
   save_line = line;
   len = 0;
@@ -599,12 +712,20 @@ insert_args (char *line)
       len += p - line;
       i = p[4] - '0';
 
-      if (i >= user_args->count)
+      if (p[4] == 'c')
 	{
-	  error ("Missing argument %d in user function.\n", i);
+	  /* $argc.  Number will be <=10.  */
+	  len += user_args->count == 10 ? 2 : 1;
+	}
+      else if (i >= user_args->count)
+	{
+	  error (_("Missing argument %d in user function."), i);
 	  return NULL;
 	}
-      len += user_args->a[i].len;
+      else
+	{
+	  len += user_args->a[i].len;
+	}
       line = p + 5;
     }
 
@@ -628,13 +749,27 @@ insert_args (char *line)
 
       memcpy (new_line, line, p - line);
       new_line += p - line;
-      i = p[4] - '0';
 
-      len = user_args->a[i].len;
-      if (len)
+      if (p[4] == 'c')
 	{
-	  memcpy (new_line, user_args->a[i].arg, len);
-	  new_line += len;
+	  gdb_assert (user_args->count >= 0 && user_args->count <= 10);
+	  if (user_args->count == 10)
+	    {
+	      *(new_line++) = '1';
+	      *(new_line++) = '0';
+	    }
+	  else
+	    *(new_line++) = user_args->count + '0';
+	}
+      else
+	{
+	  i = p[4] - '0';
+	  len = user_args->a[i].len;
+	  if (len)
+	  {
+	    memcpy (new_line, user_args->a[i].arg, len);
+	    new_line += len;
+	  }
 	}
       line = p + 5;
     }
@@ -666,6 +801,7 @@ realloc_body_list (struct command_line *command, int new_length)
     xmalloc (sizeof (struct command_line *) * new_length);
 
   memcpy (body_list, command->body_list, sizeof (struct command_line *) * n);
+  memset (body_list + n, 0, sizeof (struct command_line *) * (new_length - n));
 
   xfree (command->body_list);
   command->body_list = body_list;
@@ -682,7 +818,7 @@ read_next_line (struct command_line **command)
   int i = 0;
 
   if (control_level >= 254)
-    error ("Control nesting too deep!\n");
+    error (_("Control nesting too deep!"));
 
   /* Set a prompt based on the nesting of the control commands.  */
   if (instream == stdin || (instream == 0 && deprecated_readline_hook != NULL))
@@ -742,6 +878,14 @@ read_next_line (struct command_line **command)
         first_arg++;
       *command = build_command_line (if_control, first_arg);
     }
+  else if (p1 - p >= 8 && !strncmp (p, "commands", 8))
+    {
+      char *first_arg;
+      first_arg = p + 8;
+      while (first_arg < p1 && isspace (*first_arg))
+        first_arg++;
+      *command = build_command_line (commands_control, first_arg);
+    }
   else if (p1 - p == 10 && !strncmp (p, "loop_break", 10))
     {
       *command = (struct command_line *)
@@ -797,16 +941,10 @@ recurse_read_control_structure (struct command_line *current_cmd)
 
   /* Sanity checks.  */
   if (current_cmd->control_type == simple_control)
-    {
-      error ("Recursed on a simple control type\n");
-      return invalid_control;
-    }
+    error (_("Recursed on a simple control type."));
 
   if (current_body > current_cmd->body_count)
-    {
-      error ("Allocated body is smaller than this command type needs\n");
-      return invalid_control;
-    }
+    error (_("Allocated body is smaller than this command type needs."));
 
   /* Read lines from the input stream and build control structures.  */
   while (1)
@@ -823,9 +961,10 @@ recurse_read_control_structure (struct command_line *current_cmd)
       if (val == end_command)
 	{
 	  if (current_cmd->control_type == while_control
-	      || current_cmd->control_type == if_control)
+	      || current_cmd->control_type == if_control
+	      || current_cmd->control_type == commands_control)
 	    {
-	      /* Success reading an entire control structure.  */
+	      /* Success reading an entire canned sequence of commands.  */
 	      ret = simple_control;
 	      break;
 	    }
@@ -873,7 +1012,8 @@ recurse_read_control_structure (struct command_line *current_cmd)
       /* If the latest line is another control structure, then recurse
          on it.  */
       if (next->control_type == while_control
-	  || next->control_type == if_control)
+	  || next->control_type == if_control
+	  || next->control_type == commands_control)
 	{
 	  control_level++;
 	  ret = recurse_read_control_structure (next);
@@ -905,15 +1045,19 @@ read_command_lines (char *prompt_arg, int from_tty)
   enum misc_command_type val;
 
   control_level = 0;
-  if (deprecated_readline_begin_hook)
+
+  if (from_tty && input_from_terminal_p ())
     {
-      /* Note - intentional to merge messages with no newline */
-      (*deprecated_readline_begin_hook) ("%s  %s\n", prompt_arg, END_MESSAGE);
-    }
-  else if (from_tty && input_from_terminal_p ())
-    {
-      printf_unfiltered ("%s\n%s\n", prompt_arg, END_MESSAGE);
-      gdb_flush (gdb_stdout);
+      if (deprecated_readline_begin_hook)
+	{
+	  /* Note - intentional to merge messages with no newline */
+	  (*deprecated_readline_begin_hook) ("%s  %s\n", prompt_arg, END_MESSAGE);
+	}
+      else
+	{
+	  printf_unfiltered ("%s\n%s\n", prompt_arg, END_MESSAGE);
+	  gdb_flush (gdb_stdout);
+	}
     }
 
   head = tail = NULL;
@@ -921,6 +1065,7 @@ read_command_lines (char *prompt_arg, int from_tty)
 
   while (1)
     {
+      dont_repeat ();
       val = read_next_line (&next);
 
       /* Ignore blank lines or comments.  */
@@ -940,7 +1085,8 @@ read_command_lines (char *prompt_arg, int from_tty)
 	}
 
       if (next->control_type == while_control
-	  || next->control_type == if_control)
+	  || next->control_type == if_control
+	  || next->control_type == commands_control)
 	{
 	  control_level++;
 	  ret = recurse_read_control_structure (next);
@@ -974,7 +1120,7 @@ read_command_lines (char *prompt_arg, int from_tty)
 	do_cleanups (old_chain);
     }
 
-  if (deprecated_readline_end_hook)
+  if (deprecated_readline_end_hook && from_tty && input_from_terminal_p ())
     {
       (*deprecated_readline_end_hook) ();
     }
@@ -1055,13 +1201,13 @@ validate_comname (char *comname)
   char *p;
 
   if (comname == 0)
-    error_no_arg ("name of command to define");
+    error_no_arg (_("name of command to define"));
 
   p = comname;
   while (*p)
     {
       if (!isalnum (*p) && *p != '-' && *p != '_')
-	error ("Junk in argument list: \"%s\"", p);
+	error (_("Junk in argument list: \"%s\""), p);
       p++;
     }
 }
@@ -1106,11 +1252,11 @@ define_command (char *comname, int from_tty)
     {
       int q;
       if (c->class == class_user || c->class == class_alias)
-	q = query ("Redefine command \"%s\"? ", c->name);
+	q = query (_("Redefine command \"%s\"? "), c->name);
       else
-	q = query ("Really redefine built-in command \"%s\"? ", c->name);
+	q = query (_("Really redefine built-in command \"%s\"? "), c->name);
       if (!q)
-	error ("Command \"%s\" not redefined.", c->name);
+	error (_("Command \"%s\" not redefined."), c->name);
     }
 
   /* If this new command is a hook, then mark the command which it
@@ -1137,10 +1283,10 @@ define_command (char *comname, int from_tty)
 	hookc = 0;
       if (!hookc)
 	{
-	  warning ("Your new `%s' command does not hook any existing command.",
+	  warning (_("Your new `%s' command does not hook any existing command."),
 		   comname);
 	  if (!query ("Proceed? "))
-	    error ("Not confirmed.");
+	    error (_("Not confirmed."));
 	}
     }
 
@@ -1179,7 +1325,7 @@ define_command (char *comname, int from_tty)
           break;
         default:
           /* Should never come here as hookc would be 0. */
-	  internal_error (__FILE__, __LINE__, "bad switch");
+	  internal_error (__FILE__, __LINE__, _("bad switch"));
         }
     }
 }
@@ -1197,7 +1343,7 @@ document_command (char *comname, int from_tty)
   c = lookup_cmd (&tem, cmdlist, "", 0, 1);
 
   if (c->class != class_user)
-    error ("Command \"%s\" is built-in.", comname);
+    error (_("Command \"%s\" is built-in."), comname);
 
   sprintf (tmpbuf, "Type documentation for \"%s\".", comname);
   doclines = read_command_lines (tmpbuf, from_tty);
@@ -1230,8 +1376,6 @@ struct source_cleanup_lines_args
 {
   int old_line;
   char *old_file;
-  char *old_pre_error;
-  char *old_error_pre_print;
 };
 
 static void
@@ -1241,14 +1385,24 @@ source_cleanup_lines (void *args)
   (struct source_cleanup_lines_args *) args;
   source_line_number = p->old_line;
   source_file_name = p->old_file;
-  source_pre_error = p->old_pre_error;
-  error_pre_print = p->old_error_pre_print;
 }
 
 static void
 do_fclose_cleanup (void *stream)
 {
   fclose (stream);
+}
+
+struct wrapped_read_command_file_args
+{
+  FILE *stream;
+};
+
+static void
+wrapped_read_command_file (struct ui_out *uiout, void *data)
+{
+  struct wrapped_read_command_file_args *args = data;
+  read_command_file (args->stream);
 }
 
 /* Used to implement source_command */
@@ -1261,39 +1415,39 @@ script_from_file (FILE *stream, char *file)
   int needed_length;
 
   if (stream == NULL)
-    {
-      internal_error (__FILE__, __LINE__, "called with NULL file pointer!");
-    }
+    internal_error (__FILE__, __LINE__, _("called with NULL file pointer!"));
 
   old_cleanups = make_cleanup (do_fclose_cleanup, stream);
 
   old_lines.old_line = source_line_number;
   old_lines.old_file = source_file_name;
-  old_lines.old_pre_error = source_pre_error;
-  old_lines.old_error_pre_print = error_pre_print;
   make_cleanup (source_cleanup_lines, &old_lines);
   source_line_number = 0;
   source_file_name = file;
-  source_pre_error = error_pre_print == NULL ? "" : error_pre_print;
-  source_pre_error = savestring (source_pre_error, strlen (source_pre_error));
-  make_cleanup (xfree, source_pre_error);
   /* This will get set every time we read a line.  So it won't stay "" for
      long.  */
   error_pre_print = "";
 
-  needed_length = strlen (source_file_name) + strlen (source_pre_error) + 80;
-  if (source_error_allocated < needed_length)
-    {
-      source_error_allocated *= 2;
-      if (source_error_allocated < needed_length)
-	source_error_allocated = needed_length;
-      if (source_error == NULL)
-	source_error = xmalloc (source_error_allocated);
-      else
-	source_error = xrealloc (source_error, source_error_allocated);
-    }
-
-  read_command_file (stream);
+  {
+    struct gdb_exception e;
+    struct wrapped_read_command_file_args args;
+    args.stream = stream;
+    e = catch_exception (uiout, wrapped_read_command_file, &args,
+			 RETURN_MASK_ERROR);
+    switch (e.reason)
+      {
+      case 0:
+	break;
+      case RETURN_ERROR:
+	/* Re-throw the error, but with the file name information
+	   prepended.  */
+	throw_error (e.error,
+		     _("%s:%d: Error in sourced command file:\n%s"),
+		     source_file_name, source_line_number, e.message);
+      default:
+	internal_error (__FILE__, __LINE__, _("bad reason"));
+      }
+  }
 
   do_cleanups (old_cleanups);
 }

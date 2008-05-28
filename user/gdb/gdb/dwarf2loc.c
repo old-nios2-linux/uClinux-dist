@@ -1,23 +1,23 @@
 /* DWARF 2 location expression support for GDB.
-   Copyright 2003 Free Software Foundation, Inc.
+
+   Copyright (C) 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
+
    Contributed by Daniel Jacobowitz, MontaVista Software, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or (at
-   your option) any later version.
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   This program is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "ui-out.h"
@@ -30,16 +30,14 @@
 #include "ax-gdb.h"
 #include "regcache.h"
 #include "objfiles.h"
+#include "exceptions.h"
 
 #include "elf/dwarf2.h"
 #include "dwarf2expr.h"
 #include "dwarf2loc.h"
 
 #include "gdb_string.h"
-
-#ifndef DWARF2_REG_TO_REGNUM
-#define DWARF2_REG_TO_REGNUM(REG) (REG)
-#endif
+#include "gdb_assert.h"
 
 /* A helper function for dealing with location lists.  Given a
    symbol baton (BATON) and a pc value (PC), find the appropriate
@@ -49,13 +47,14 @@
    For now, only return the first matching location expression; there
    can be more than one in the list.  */
 
-static char *
+static gdb_byte *
 find_location_expression (struct dwarf2_loclist_baton *baton,
 			  size_t *locexpr_length, CORE_ADDR pc)
 {
   CORE_ADDR low, high;
-  char *loc_ptr, *buf_end;
-  unsigned int addr_size = TARGET_ADDR_BIT / TARGET_CHAR_BIT, length;
+  gdb_byte *loc_ptr, *buf_end;
+  int length;
+  unsigned int addr_size = gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT;
   CORE_ADDR base_mask = ~(~(CORE_ADDR)1 << (addr_size * 8 - 1));
   /* Adjust base_address for relocatable objects.  */
   CORE_ADDR base_offset = ANOFFSET (baton->objfile->section_offsets,
@@ -110,35 +109,25 @@ struct dwarf_expr_baton
 
 /* Helper functions for dwarf2_evaluate_loc_desc.  */
 
-/* Using the frame specified in BATON, read register REGNUM.  The lval
-   type will be returned in LVALP, and for lval_memory the register
-   save address will be returned in ADDRP.  */
+/* Using the frame specified in BATON, return the value of register
+   REGNUM, treated as a pointer.  */
 static CORE_ADDR
 dwarf_expr_read_reg (void *baton, int dwarf_regnum)
 {
   struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
-  CORE_ADDR result, save_addr;
-  enum lval_type lval_type;
-  char *buf;
-  int optimized, regnum, realnum, regsize;
+  CORE_ADDR result;
+  int regnum;
 
-  regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
-  regsize = register_size (current_gdbarch, regnum);
-  buf = (char *) alloca (regsize);
-
-  frame_register (debaton->frame, regnum, &optimized, &lval_type, &save_addr,
-		  &realnum, buf);
-  /* NOTE: cagney/2003-05-22: This extract is assuming that a DWARF 2
-     address is always unsigned.  That may or may not be true.  */
-  result = extract_unsigned_integer (buf, regsize);
-
+  regnum = gdbarch_dwarf2_reg_to_regnum (current_gdbarch, dwarf_regnum);
+  result = address_from_register (builtin_type_void_data_ptr,
+				  regnum, debaton->frame);
   return result;
 }
 
 /* Read memory at ADDR (length LEN) into BUF.  */
 
 static void
-dwarf_expr_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
+dwarf_expr_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
 {
   read_memory (addr, buf, len);
 }
@@ -147,7 +136,7 @@ dwarf_expr_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
    describing the frame base.  Return a pointer to it in START and
    its length in LENGTH.  */
 static void
-dwarf_expr_frame_base (void *baton, unsigned char **start, size_t * length)
+dwarf_expr_frame_base (void *baton, gdb_byte **start, size_t * length)
 {
   /* FIXME: cagney/2003-03-26: This code should be using
      get_frame_base_address(), and then implement a dwarf2 specific
@@ -157,12 +146,19 @@ dwarf_expr_frame_base (void *baton, unsigned char **start, size_t * length)
 
   framefunc = get_frame_function (debaton->frame);
 
+  /* If we found a frame-relative symbol then it was certainly within
+     some function associated with a frame. If we can't find the frame,
+     something has gone wrong.  */
+  gdb_assert (framefunc != NULL);
+
   if (SYMBOL_OPS (framefunc) == &dwarf2_loclist_funcs)
     {
       struct dwarf2_loclist_baton *symbaton;
+      struct frame_info *frame = debaton->frame;
+
       symbaton = SYMBOL_LOCATION_BATON (framefunc);
       *start = find_location_expression (symbaton, length,
-					 get_frame_pc (debaton->frame));
+					 get_frame_address_in_block (frame));
     }
   else
     {
@@ -173,7 +169,7 @@ dwarf_expr_frame_base (void *baton, unsigned char **start, size_t * length)
     }
 
   if (*start == NULL)
-    error ("Could not find the frame base for \"%s\".",
+    error (_("Could not find the frame base for \"%s\"."),
 	   SYMBOL_NATURAL_NAME (framefunc));
 }
 
@@ -183,18 +179,8 @@ static CORE_ADDR
 dwarf_expr_tls_address (void *baton, CORE_ADDR offset)
 {
   struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
-  CORE_ADDR addr;
 
-  if (target_get_thread_local_address_p ())
-    addr = target_get_thread_local_address (inferior_ptid,
-					    debaton->objfile,
-					    offset);
-  /* It wouldn't be wrong here to try a gdbarch method, too; finding
-     TLS is an ABI-specific thing.  But we don't do that yet.  */
-  else
-    error ("Cannot find thread-local variables on this target");
-
-  return addr;
+  return target_translate_tls_address (debaton->objfile, offset);
 }
 
 /* Evaluate a location description, starting at DATA and with length
@@ -202,7 +188,7 @@ dwarf_expr_tls_address (void *baton, CORE_ADDR offset)
    of FRAME.  */
 static struct value *
 dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
-			  unsigned char *data, unsigned short size,
+			  gdb_byte *data, unsigned short size,
 			  struct objfile *objfile)
 {
   struct gdbarch *arch = get_frame_arch (frame);
@@ -214,7 +200,8 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
     {
       retval = allocate_value (SYMBOL_TYPE (var));
       VALUE_LVAL (retval) = not_lval;
-      VALUE_OPTIMIZED_OUT (retval) = 1;
+      set_value_optimized_out (retval, 1);
+      return retval;
     }
 
   baton.frame = frame;
@@ -230,16 +217,35 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   dwarf_expr_eval (ctx, data, size);
   if (ctx->num_pieces > 0)
     {
-      /* We haven't implemented splicing together pieces from
-         arbitrary sources yet.  */
-      error ("The value of variable '%s' is distributed across several\n"
-             "locations, and GDB cannot access its value.\n",
-             SYMBOL_NATURAL_NAME (var));
+      int i;
+      long offset = 0;
+      bfd_byte *contents;
+
+      retval = allocate_value (SYMBOL_TYPE (var));
+      contents = value_contents_raw (retval);
+      for (i = 0; i < ctx->num_pieces; i++)
+	{
+	  struct dwarf_expr_piece *p = &ctx->pieces[i];
+	  if (p->in_reg)
+	    {
+	      bfd_byte regval[MAX_REGISTER_SIZE];
+	      int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
+				 (arch, p->value);
+	      get_frame_register (frame, gdb_regnum, regval);
+	      memcpy (contents + offset, regval, p->size);
+	    }
+	  else /* In memory?  */
+	    {
+	      read_memory (p->value, contents + offset, p->size);
+	    }
+	  offset += p->size;
+	}
     }
   else if (ctx->in_reg)
     {
       CORE_ADDR dwarf_regnum = dwarf_expr_fetch (ctx, 0);
-      int gdb_regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
+      int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
+			 (arch, dwarf_regnum);
       retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
     }
   else
@@ -247,12 +253,12 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
       CORE_ADDR address = dwarf_expr_fetch (ctx, 0);
 
       retval = allocate_value (SYMBOL_TYPE (var));
-      VALUE_BFD_SECTION (retval) = SYMBOL_BFD_SECTION (var);
-
       VALUE_LVAL (retval) = lval_memory;
-      VALUE_LAZY (retval) = 1;
+      set_value_lazy (retval, 1);
       VALUE_ADDRESS (retval) = address;
     }
+
+  set_value_initialized (retval, ctx->initialized);
 
   free_dwarf_expr_context (ctx);
 
@@ -281,16 +287,16 @@ needs_frame_read_reg (void *baton, int regnum)
 
 /* Reads from memory do not require a frame.  */
 static void
-needs_frame_read_mem (void *baton, char *buf, CORE_ADDR addr, size_t len)
+needs_frame_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
 {
   memset (buf, 0, len);
 }
 
 /* Frame-relative accesses do require a frame.  */
 static void
-needs_frame_frame_base (void *baton, unsigned char **start, size_t * length)
+needs_frame_frame_base (void *baton, gdb_byte **start, size_t * length)
 {
-  static char lit0 = DW_OP_lit0;
+  static gdb_byte lit0 = DW_OP_lit0;
   struct needs_frame_baton *nf_baton = baton;
 
   *start = &lit0;
@@ -312,7 +318,7 @@ needs_frame_tls_address (void *baton, CORE_ADDR offset)
    requires a frame to evaluate.  */
 
 static int
-dwarf2_loc_desc_needs_frame (unsigned char *data, unsigned short size)
+dwarf2_loc_desc_needs_frame (gdb_byte *data, unsigned short size)
 {
   struct needs_frame_baton baton;
   struct dwarf_expr_context *ctx;
@@ -348,12 +354,12 @@ dwarf2_loc_desc_needs_frame (unsigned char *data, unsigned short size)
 }
 
 static void
-dwarf2_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
-			   struct axs_value * value, unsigned char *data,
+dwarf2_tracepoint_var_ref (struct symbol *symbol, struct agent_expr *ax,
+			   struct axs_value *value, gdb_byte *data,
 			   int size)
 {
   if (size == 0)
-    error ("Symbol \"%s\" has been optimized out.",
+    error (_("Symbol \"%s\" has been optimized out."),
 	   SYMBOL_PRINT_NAME (symbol));
 
   if (size == 1
@@ -376,25 +382,43 @@ dwarf2_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 	 as above.  */
       int frame_reg;
       LONGEST frame_offset;
-      unsigned char *buf_end;
+      gdb_byte *buf_end;
 
       buf_end = read_sleb128 (data + 1, data + size, &frame_offset);
       if (buf_end != data + size)
-	error ("Unexpected opcode after DW_OP_fbreg for symbol \"%s\".",
+	error (_("Unexpected opcode after DW_OP_fbreg for symbol \"%s\"."),
 	       SYMBOL_PRINT_NAME (symbol));
 
-      TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+      gdbarch_virtual_frame_pointer (current_gdbarch, 
+				     ax->scope, &frame_reg, &frame_offset);
       ax_reg (ax, frame_reg);
       ax_const_l (ax, frame_offset);
       ax_simple (ax, aop_add);
 
-      ax_const_l (ax, frame_offset);
+      value->kind = axs_lvalue_memory;
+    }
+  else if (data[0] >= DW_OP_breg0
+	   && data[0] <= DW_OP_breg31)
+    {
+      unsigned int reg;
+      LONGEST offset;
+      gdb_byte *buf_end;
+
+      reg = data[0] - DW_OP_breg0;
+      buf_end = read_sleb128 (data + 1, data + size, &offset);
+      if (buf_end != data + size)
+	error (_("Unexpected opcode after DW_OP_breg%u for symbol \"%s\"."),
+	       reg, SYMBOL_PRINT_NAME (symbol));
+
+      ax_reg (ax, reg);
+      ax_const_l (ax, offset);
       ax_simple (ax, aop_add);
+
       value->kind = axs_lvalue_memory;
     }
   else
-    error ("Unsupported DWARF opcode in the location of \"%s\".",
-	   SYMBOL_PRINT_NAME (symbol));
+    error (_("Unsupported DWARF opcode 0x%x in the location of \"%s\"."),
+	   data[0], SYMBOL_PRINT_NAME (symbol));
 }
 
 /* Return the value of SYMBOL in FRAME using the DWARF-2 expression
@@ -429,9 +453,11 @@ locexpr_describe_location (struct symbol *symbol, struct ui_file *stream)
       && dlbaton->data[0] >= DW_OP_reg0
       && dlbaton->data[0] <= DW_OP_reg31)
     {
-      int regno = DWARF2_REG_TO_REGNUM (dlbaton->data[0] - DW_OP_reg0);
+      int regno = gdbarch_dwarf2_reg_to_regnum
+		    (current_gdbarch, dlbaton->data[0] - DW_OP_reg0);
       fprintf_filtered (stream,
-			"a variable in register %s", REGISTER_NAME (regno));
+			"a variable in register %s",
+			gdbarch_register_name (current_gdbarch, regno));
       return 1;
     }
 
@@ -506,15 +532,21 @@ loclist_read_variable (struct symbol *symbol, struct frame_info *frame)
 {
   struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
-  unsigned char *data;
+  gdb_byte *data;
   size_t size;
 
   data = find_location_expression (dlbaton, &size,
-				   frame ? get_frame_pc (frame) : 0);
+				   frame ? get_frame_address_in_block (frame)
+				   : 0);
   if (data == NULL)
-    error ("Variable \"%s\" is not available.", SYMBOL_NATURAL_NAME (symbol));
-
-  val = dwarf2_evaluate_loc_desc (symbol, frame, data, size, dlbaton->objfile);
+    {
+      val = allocate_value (SYMBOL_TYPE (symbol));
+      VALUE_LVAL (val) = not_lval;
+      set_value_optimized_out (val, 1);
+    }
+  else
+    val = dwarf2_evaluate_loc_desc (symbol, frame, data, size,
+				    dlbaton->objfile);
 
   return val;
 }
@@ -548,12 +580,12 @@ loclist_tracepoint_var_ref (struct symbol * symbol, struct agent_expr * ax,
 			    struct axs_value * value)
 {
   struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
-  unsigned char *data;
+  gdb_byte *data;
   size_t size;
 
   data = find_location_expression (dlbaton, &size, ax->scope);
   if (data == NULL)
-    error ("Variable \"%s\" is not available.", SYMBOL_NATURAL_NAME (symbol));
+    error (_("Variable \"%s\" is not available."), SYMBOL_NATURAL_NAME (symbol));
 
   dwarf2_tracepoint_var_ref (symbol, ax, value, data, size);
 }

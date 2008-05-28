@@ -1,6 +1,6 @@
 /* BFD back-end for Renesas Super-H COFF binaries.
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
    Written by Steve Chamberlain, <sac@cygnus.com>.
    Relaxing code written by Ian Lance Taylor, <ian@cygnus.com>.
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,10 +19,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libiberty.h"
 #include "libbfd.h"
 #include "bfdlink.h"
@@ -494,6 +495,7 @@ static const struct shcoff_reloc_map sh_reloc_map[] =
 /* Given a BFD reloc code, return the howto structure for the
    corresponding SH PE reloc.  */
 #define coff_bfd_reloc_type_lookup	sh_coff_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup sh_coff_reloc_name_lookup
 
 static reloc_howto_type *
 sh_coff_reloc_type_lookup (abfd, code)
@@ -507,6 +509,20 @@ sh_coff_reloc_type_lookup (abfd, code)
       return &sh_coff_howtos[(int) sh_reloc_map[i].shcoff_reloc_val];
 
   fprintf (stderr, "SH Error: unknown reloc type %d\n", code);
+  return NULL;
+}
+
+static reloc_howto_type *
+sh_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			   const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0; i < sizeof (sh_coff_howtos) / sizeof (sh_coff_howtos[0]); i++)
+    if (sh_coff_howtos[i].name != NULL
+	&& strcasecmp (sh_coff_howtos[i].name, r_name) == 0)
+      return &sh_coff_howtos[i];
+
   return NULL;
 }
 
@@ -1656,26 +1672,6 @@ static const struct sh_opcode sh_opcode01[] =
   { 0x00ba, SETS1 | USESSP }			/* sts y1,rn */
 };
 
-/* These sixteen instructions can be handled with one table entry below.  */
-#if 0
-  { 0x0002, SETS1 | USESSP },			/* stc sr,rn */
-  { 0x0012, SETS1 | USESSP },			/* stc gbr,rn */
-  { 0x0022, SETS1 | USESSP },			/* stc vbr,rn */
-  { 0x0032, SETS1 | USESSP },			/* stc ssr,rn */
-  { 0x0042, SETS1 | USESSP },			/* stc spc,rn */
-  { 0x0052, SETS1 | USESSP },			/* stc mod,rn */
-  { 0x0062, SETS1 | USESSP },			/* stc rs,rn */
-  { 0x0072, SETS1 | USESSP },			/* stc re,rn */
-  { 0x0082, SETS1 | USESSP },			/* stc r0_bank,rn */
-  { 0x0092, SETS1 | USESSP },			/* stc r1_bank,rn */
-  { 0x00a2, SETS1 | USESSP },			/* stc r2_bank,rn */
-  { 0x00b2, SETS1 | USESSP },			/* stc r3_bank,rn */
-  { 0x00c2, SETS1 | USESSP },			/* stc r4_bank,rn */
-  { 0x00d2, SETS1 | USESSP },			/* stc r5_bank,rn */
-  { 0x00e2, SETS1 | USESSP },			/* stc r6_bank,rn */
-  { 0x00f2, SETS1 | USESSP }			/* stc r7_bank,rn */
-#endif
-
 static const struct sh_opcode sh_opcode02[] =
 {
   { 0x0002, SETS1 | USESSP },			/* stc <special_reg>,rn */
@@ -1806,44 +1802,6 @@ static const struct sh_opcode sh_opcode40[] =
   { 0x40b2, STORE | SETS1 | USES1 | USESSP },	/* sts.l y1,@-rn */
   { 0x40b6, LOAD | SETS1 | SETSSP | USES1 },	/* lds.l @rm+,y1 */
   { 0x40ba, SETSSP | USES1 }			/* lds.l rm,y1 */
-#if 0 /* These groups sixteen insns can be
-         handled with one table entry each below.  */
-  { 0x4003, STORE | SETS1 | USES1 | USESSP },	/* stc.l sr,@-rn */
-  { 0x4013, STORE | SETS1 | USES1 | USESSP },	/* stc.l gbr,@-rn */
-  { 0x4023, STORE | SETS1 | USES1 | USESSP },	/* stc.l vbr,@-rn */
-  { 0x4033, STORE | SETS1 | USES1 | USESSP },	/* stc.l ssr,@-rn */
-  { 0x4043, STORE | SETS1 | USES1 | USESSP },	/* stc.l spc,@-rn */
-  { 0x4053, STORE | SETS1 | USES1 | USESSP },	/* stc.l mod,@-rn */
-  { 0x4063, STORE | SETS1 | USES1 | USESSP },	/* stc.l rs,@-rn */
-  { 0x4073, STORE | SETS1 | USES1 | USESSP },	/* stc.l re,@-rn */
-  { 0x4083, STORE | SETS1 | USES1 | USESSP },	/* stc.l r0_bank,@-rn */
-  ..
-  { 0x40f3, STORE | SETS1 | USES1 | USESSP },	/* stc.l r7_bank,@-rn */
-
-  { 0x4007, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,sr */
-  { 0x4017, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,gbr */
-  { 0x4027, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,vbr */
-  { 0x4037, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,ssr */
-  { 0x4047, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,spc */
-  { 0x4057, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,mod */
-  { 0x4067, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,rs */
-  { 0x4077, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,re */
-  { 0x4087, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,r0_bank */
-  ..
-  { 0x40f7, LOAD | SETS1 | SETSSP | USES1 },	/* ldc.l @rm+,r7_bank */
-
-  { 0x400e, SETSSP | USES1 },			/* ldc rm,sr */
-  { 0x401e, SETSSP | USES1 },			/* ldc rm,gbr */
-  { 0x402e, SETSSP | USES1 },			/* ldc rm,vbr */
-  { 0x403e, SETSSP | USES1 },			/* ldc rm,ssr */
-  { 0x404e, SETSSP | USES1 },			/* ldc rm,spc */
-  { 0x405e, SETSSP | USES1 },			/* ldc rm,mod */
-  { 0x406e, SETSSP | USES1 },			/* ldc rm,rs */
-  { 0x407e, SETSSP | USES1 }			/* ldc rm,re */
-  { 0x408e, SETSSP | USES1 }			/* ldc rm,r0_bank */
-  ..
-  { 0x40fe, SETSSP | USES1 }			/* ldc rm,r7_bank */
-#endif
 };
 
 static const struct sh_opcode sh_opcode41[] =
@@ -2568,8 +2526,9 @@ _bfd_sh_align_load_span (abfd, sec, contents, swap, relocs,
 
 		  next2_insn = bfd_get_16 (abfd, contents + i + 4);
 		  next2_op = sh_insn_info (next2_insn);
-		  if ((next2_op->flags & (LOAD | STORE)) == 0
-		      && sh_load_use (insn, op, next2_insn, next2_op))
+		  if (next2_op == NULL
+		      || ((next2_op->flags & (LOAD | STORE)) == 0
+			  && sh_load_use (insn, op, next2_insn, next2_op)))
 		    ok = FALSE;
 		}
 
@@ -2946,7 +2905,7 @@ sh_relocate_section (output_bfd, info, input_bfd, input_section, contents,
 	    if (symndx == -1)
 	      name = "*ABS*";
 	    else if (h != NULL)
-	      name = h->root.root.string;
+	      name = NULL;
 	    else if (sym->_n._n_n._n_zeroes == 0
 		     && sym->_n._n_n._n_offset != 0)
 	      name = obj_coff_strings (input_bfd) + sym->_n._n_n._n_offset;
@@ -2958,8 +2917,9 @@ sh_relocate_section (output_bfd, info, input_bfd, input_section, contents,
 	      }
 
 	    if (! ((*info->callbacks->reloc_overflow)
-		   (info, name, howto->name, (bfd_vma) 0, input_bfd,
-		    input_section, rel->r_vaddr - input_section->vma)))
+		   (info, (h ? &h->root : NULL), name, howto->name,
+		    (bfd_vma) 0, input_bfd, input_section,
+		    rel->r_vaddr - input_section->vma)))
 	      return FALSE;
 	  }
 	}

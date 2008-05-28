@@ -1,18 +1,17 @@
-# Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+# Copyright 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -32,7 +31,8 @@ set srcfile  ${testfile}.c
 set binfile  ${objdir}/${subdir}/${testfile}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested gcore.exp
+     return -1
 }
 
 # Start with a fresh gdb.
@@ -62,7 +62,8 @@ gdb_expect {
 }
 
 if { ! [ runto_main ] } then {
-    gdb_suppress_entire_file "Run to main failed, so all tests in this file will automatically fail."
+    untested gcore.exp
+    return -1
 }
 
 proc capture_command_output { command prefix } {
@@ -106,6 +107,7 @@ set pre_corefile_extern_array \
 
 set escapedfilename [string_to_regexp ${objdir}/${subdir}/gcore.test]
 
+set core_supported 0
 gdb_test_multiple "gcore ${objdir}/${subdir}/gcore.test" \
 	"save a corefile" \
 {
@@ -121,7 +123,6 @@ gdb_test_multiple "gcore ${objdir}/${subdir}/gcore.test" \
   }
 }
 
-global core_supported
 if {!$core_supported} {
   return -1
 }

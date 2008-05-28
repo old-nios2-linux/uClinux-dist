@@ -7,28 +7,31 @@
 
 ; OpenVPN install script for Windows, using NSIS
 
+!define HOME ".."
+
+!include "${HOME}\autodefs\defs.nsi"
+!include "${HOME}\autodefs\guidefs.nsi"
 !include "MUI.nsh"
 !include "setpath.nsi"
+!include "GetWindowsVersion.nsi"
 
-!define HOME ".."
 !define BIN "${HOME}\bin"
 
-!define PRODUCT_NAME "OpenVPN"
-!define VERSION "2.0.5" # AUTO_VERSION
+!define PRODUCT_ICON "icon.ico"
 
-!define TAP "tap0801"
+!ifdef PRODUCT_TAP_DEBUG
+!define VERSION "${PRODUCT_VERSION}-DBG"
+!else
+!define VERSION "${PRODUCT_VERSION}"
+!endif
+
+!define TAP "${PRODUCT_TAP_ID}"
 !define TAPDRV "${TAP}.sys"
-
-; something like "-DBG2"
-!define OUTFILE_LABEL ""
-
-; something like "DEBUG2"
-!define TITLE_LABEL ""
 
 ; Default service settings
 !define SERV_CONFIG_DIR   "$INSTDIR\config"
-!define SERV_CONFIG_EXT   "ovpn"
-!define SERV_EXE_PATH     "$INSTDIR\bin\openvpn.exe"
+!define SERV_CONFIG_EXT   "${PRODUCT_FILE_EXT}"
+!define SERV_EXE_PATH     "$INSTDIR\bin\${PRODUCT_UNIX_NAME}.exe"
 !define SERV_LOG_DIR      "$INSTDIR\log"
 !define SERV_PRIORITY     "NORMAL_PRIORITY_CLASS"
 !define SERV_LOG_APPEND   "0"
@@ -38,7 +41,7 @@
 
   ;General
 
-  OutFile "openvpn-${VERSION}${OUTFILE_LABEL}-install.exe"
+  OutFile "${PRODUCT_UNIX_NAME}-${VERSION}${OUTFILE_LABEL}-install.exe"
 
   SetCompressor bzip2
 
@@ -56,19 +59,19 @@
 
   Name "${PRODUCT_NAME} ${VERSION} ${TITLE_LABEL}"
 
-  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of OpenVPN, an Open Source VPN package by James Yonan.\r\n\r\nNote that the Windows version of OpenVPN will only run on Win 2000, XP, or higher.\r\n\r\n\r\n"
+  !define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME}, an Open Source VPN package by James Yonan.\r\n\r\nNote that the Windows version of ${PRODUCT_NAME} will only run on Win 2000, XP, or higher.\r\n\r\n\r\n"
 
-  !define MUI_COMPONENTSPAGE_TEXT_TOP "Select the components to install/upgrade.  Stop any OpenVPN processes or the OpenVPN service if it is running.  All DLLs are installed locally."
+  !define MUI_COMPONENTSPAGE_TEXT_TOP "Select the components to install/upgrade.  Stop any ${PRODUCT_NAME} processes or the ${PRODUCT_NAME} service if it is running.  All DLLs are installed locally."
 
   !define MUI_COMPONENTSPAGE_SMALLDESC
   !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\INSTALL-win32.txt"
   !define MUI_FINISHPAGE_NOAUTOCLOSE
-  !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+#  !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
   !define MUI_ABORTWARNING
-  !define MUI_ICON "${HOME}\install-win32\openvpn.ico"
-  !define MUI_UNICON "${HOME}\install-win32\openvpn.ico"
+  !define MUI_ICON "${HOME}\images\${PRODUCT_ICON}"
+  !define MUI_UNICON "${HOME}\images\${PRODUCT_ICON}"
   !define MUI_HEADERIMAGE
-  !define MUI_HEADERIMAGE_BITMAP "${HOME}\install-win32\install-whirl.bmp"
+  !define MUI_HEADERIMAGE_BITMAP "${HOME}\images\install-whirl.bmp"
   !define MUI_UNFINISHPAGE_NOAUTOCLOSE
 
   !insertmacro MUI_PAGE_WELCOME
@@ -91,23 +94,29 @@
 ;--------------------------------
 ;Language Strings
 
-  LangString DESC_SecOpenVPNUserSpace ${LANG_ENGLISH} "Install OpenVPN user-space components, including openvpn.exe."
+  LangString DESC_SecOpenVPNUserSpace ${LANG_ENGLISH} "Install ${PRODUCT_NAME} user-space components, including ${PRODUCT_UNIX_NAME}.exe."
 
-  LangString DESC_SecOpenVPNEasyRSA ${LANG_ENGLISH} "Install OpenVPN RSA scripts for X509 certificate management."
+!ifdef OPENVPN_GUI_DEFINED
+  LangString DESC_SecOpenVPNGUI ${LANG_ENGLISH} "Install ${PRODUCT_NAME} GUI by Mathias Sundman"
+!endif
+
+  LangString DESC_SecOpenVPNEasyRSA ${LANG_ENGLISH} "Install ${PRODUCT_NAME} RSA scripts for X509 certificate management."
 
   LangString DESC_SecOpenSSLDLLs ${LANG_ENGLISH} "Install OpenSSL DLLs locally (may be omitted if DLLs are already installed globally)."
 
+  LangString DESC_SecPKCS11DLLs ${LANG_ENGLISH} "Install PKCS#11 helper DLLs locally (may be omitted if DLLs are already installed globally)."
+
   LangString DESC_SecTAP ${LANG_ENGLISH} "Install/Upgrade the TAP-Win32 virtual device driver.  Will not interfere with CIPE."
 
-  LangString DESC_SecService ${LANG_ENGLISH} "Install the OpenVPN service wrapper (openvpnserv.exe)"
+  LangString DESC_SecService ${LANG_ENGLISH} "Install the ${PRODUCT_NAME} service wrapper (${PRODUCT_UNIX_NAME}serv.exe)"
 
   LangString DESC_SecOpenSSLUtilities ${LANG_ENGLISH} "Install the OpenSSL Utilities (used for generating public/private key pairs)."
 
-  LangString DESC_SecAddPath ${LANG_ENGLISH} "Add OpenVPN executable directory to the current user's PATH."
+  LangString DESC_SecAddPath ${LANG_ENGLISH} "Add ${PRODUCT_NAME} executable directory to the current user's PATH."
 
-  LangString DESC_SecAddShortcuts ${LANG_ENGLISH} "Add OpenVPN shortcuts to the current user's Start Menu."
+  LangString DESC_SecAddShortcuts ${LANG_ENGLISH} "Add ${PRODUCT_NAME} shortcuts to the current user's Start Menu."
 
-  LangString DESC_SecFileAssociation ${LANG_ENGLISH} "Register OpenVPN config file association (*.${SERV_CONFIG_EXT})"
+  LangString DESC_SecFileAssociation ${LANG_ENGLISH} "Register ${PRODUCT_NAME} config file association (*.${SERV_CONFIG_EXT})"
 
 ;--------------------------------
 ;Reserve Files
@@ -115,7 +124,7 @@
   ;Things that need to be extracted on first (keep these lines before any File command!)
   ;Only useful for BZIP2 compression
   
-  ReserveFile "${HOME}\install-win32\install-whirl.bmp"
+  ReserveFile "${HOME}\images\install-whirl.bmp"
 
 ;--------------------------------
 ;Macros
@@ -168,34 +177,80 @@ FunctionEnd
 
 Function .onInit
   ClearErrors
+
+# Verify that user has admin privs
   UserInfo::GetName
   IfErrors ok
   Pop $R0
   UserInfo::GetAccountType
   Pop $R1
   StrCmp $R1 "Admin" ok
-    Messagebox MB_OK "Administrator privileges required to install OpenVPN [$R0/$R1]"
+    Messagebox MB_OK "Administrator privileges required to install ${PRODUCT_NAME} [$R0/$R1]"
     Abort
   ok:
+
+# Delete previous start menu
+  RMDir /r $SMPROGRAMS\${PRODUCT_NAME}
+
+# Check windows version
+  Call GetWindowsVersion
+  Pop $1
+  StrCmp $1 "2000" goodwinver
+  StrCmp $1 "XP" goodwinver
+  StrCmp $1 "2003" goodwinver
+  StrCmp $1 "VISTA" goodwinver
+
+  Messagebox MB_OK "Sorry, ${PRODUCT_NAME} does not currently support Windows $1"
+  Abort
+
+goodwinver:
+  System::Call "kernel32::GetCurrentProcess() i .s"
+  System::Call "kernel32::IsWow64Process(i s, *i .r0)"
+  IntCmp $0 0 init32bits
+
+  ; we are running on 64-bit windows
+  StrCmp $1 "VISTA" vista64bummer
+
+#  Messagebox MB_OK "Sorry, ${PRODUCT_NAME} doesn't currently support 64-bit Windows."
+#  Abort
+
+vista64bummer:
+
+#  Messagebox MB_OK "Sorry, ${PRODUCT_NAME} doesn't currently support 64-bit Vista because Microsoft doesn't allow the installation of 64 bit unsigned drivers."
+#  Abort
+
+init32bits:
+
 FunctionEnd
 
 !define SF_SELECTED 1
 
-Section "OpenVPN User-Space Components" SecOpenVPNUserSpace
+Section "${PRODUCT_NAME} User-Space Components" SecOpenVPNUserSpace
 
   SetOverwrite on
   SetOutPath "$INSTDIR\bin"
 
-  File "${HOME}\openvpn.exe"
+  File "${BIN}\${PRODUCT_UNIX_NAME}.exe"
 
 SectionEnd
 
-Section "OpenVPN RSA Certificate Management Scripts" SecOpenVPNEasyRSA
+!ifdef OPENVPN_GUI_DEFINED
+Section "${PRODUCT_NAME} GUI" SecOpenVPNGUI
+
+  SetOverwrite on
+  SetOutPath "$INSTDIR\bin"
+
+  File "${BIN}\${OPENVPN_GUI}"
+
+SectionEnd
+!endif
+
+Section "${PRODUCT_NAME} RSA Certificate Management Scripts" SecOpenVPNEasyRSA
 
   SetOverwrite on
   SetOutPath "$INSTDIR\easy-rsa"
 
-  File "${HOME}\install-win32\openssl.cnf.sample"
+  File "${HOME}\samples\openssl.cnf.sample"
   File "${HOME}\easy-rsa\Windows\vars.bat.sample"
 
   File "${HOME}\easy-rsa\Windows\init-config.bat"
@@ -213,37 +268,37 @@ Section "OpenVPN RSA Certificate Management Scripts" SecOpenVPNEasyRSA
 
 SectionEnd
 
-Section "OpenVPN Service" SecService
+Section "${PRODUCT_NAME} Service" SecService
 
   SetOverwrite on
 
   SetOutPath "$INSTDIR\bin"
-  File "${HOME}\service-win32\openvpnserv.exe"
+  File "${BIN}\${PRODUCT_UNIX_NAME}serv.exe"
 
   SetOutPath "$INSTDIR\config"
 
   FileOpen $R0 "$INSTDIR\config\README.txt" w
-  FileWrite $R0 "This directory should contain OpenVPN configuration files$\r$\n"
+  FileWrite $R0 "This directory should contain ${PRODUCT_NAME} configuration files$\r$\n"
   FileWrite $R0 "each having an extension of .${SERV_CONFIG_EXT}$\r$\n"
   FileWrite $R0 "$\r$\n"
-  FileWrite $R0 "When OpenVPN is started as a service, a separate OpenVPN$\r$\n"
+  FileWrite $R0 "When ${PRODUCT_NAME} is started as a service, a separate ${PRODUCT_NAME}$\r$\n"
   FileWrite $R0 "process will be instantiated for each configuration file.$\r$\n"
   FileClose $R0
 
   SetOutPath "$INSTDIR\sample-config"
-  File "${HOME}\install-win32\sample.${SERV_CONFIG_EXT}"
-  File "${HOME}\install-win32\client.${SERV_CONFIG_EXT}"
-  File "${HOME}\install-win32\server.${SERV_CONFIG_EXT}"
+  File "${HOME}\samples\sample.${SERV_CONFIG_EXT}"
+  File "${HOME}\samples\client.${SERV_CONFIG_EXT}"
+  File "${HOME}\samples\server.${SERV_CONFIG_EXT}"
 
   CreateDirectory "$INSTDIR\log"
   FileOpen $R0 "$INSTDIR\log\README.txt" w
-  FileWrite $R0 "This directory will contain the log files for OpenVPN$\r$\n"
+  FileWrite $R0 "This directory will contain the log files for ${PRODUCT_NAME}$\r$\n"
   FileWrite $R0 "sessions which are being run as a service.$\r$\n"
   FileClose $R0
 
 SectionEnd
 
-Section "OpenVPN File Associations" SecFileAssociation
+Section "${PRODUCT_NAME} File Associations" SecFileAssociation
 SectionEnd
 
 Section "OpenSSL DLLs" SecOpenSSLDLLs
@@ -263,11 +318,17 @@ Section "OpenSSL Utilities" SecOpenSSLUtilities
 
 SectionEnd
 
-Section "TAP-Win32 Virtual Ethernet Adapter" SecTAP
+Section "PKCS#11 DLLs" SecPKCS11DLLs
 
   SetOverwrite on
   SetOutPath "$INSTDIR\bin"
-  File "${BIN}\ti3790\tapinstall.exe"
+  File "${BIN}\libpkcs11-helper-1.dll"
+
+SectionEnd
+
+Section "TAP-Win32 Virtual Ethernet Adapter" SecTAP
+
+  SetOverwrite on
 
   FileOpen $R0 "$INSTDIR\bin\addtap.bat" w
   FileWrite $R0 "rem Add a new TAP-Win32 virtual ethernet adapter$\r$\n"
@@ -282,13 +343,44 @@ Section "TAP-Win32 Virtual Ethernet Adapter" SecTAP
   FileWrite $R0 "pause$\r$\n"
   FileClose $R0
 
+  ; Check if we are running on a 64 bit system.
+  System::Call "kernel32::GetCurrentProcess() i .s"
+  System::Call "kernel32::IsWow64Process(i s, *i .r0)"
+  IntCmp $0 0 tap-32bit
+
+; tap-64bit:
+
+  DetailPrint "We are running on a 64-bit system."
+
+  SetOutPath "$INSTDIR\bin"
+
+  File "${BIN}\tapinstall\amd64\tapinstall.exe"
+
   SetOutPath "$INSTDIR\driver"
-  File "${HOME}\tap-win32\i386\OemWin2k.inf"
-  File "${HOME}\tap-win32\i386\${TAPDRV}"
+
+  File "${BIN}\driver\amd64\OemWin2k.inf"
+  File "${BIN}\driver\amd64\${PRODUCT_TAP_ID}.cat"
+  File "${BIN}\driver\amd64\${TAPDRV}"
+
+goto tapend
+
+tap-32bit:
+
+  DetailPrint "We are running on a 32-bit system."
+
+  SetOutPath "$INSTDIR\bin"
+  File "${BIN}\tapinstall\i386\tapinstall.exe"
+
+  SetOutPath "$INSTDIR\driver"
+  File "${BIN}\driver\i386\OemWin2k.inf"
+  File "${BIN}\driver\i386\${PRODUCT_TAP_ID}.cat"
+  File "${BIN}\driver\i386\${TAPDRV}"
+
+  tapend:
 
 SectionEnd
 
-Section "Add OpenVPN to PATH" SecAddPath
+Section "Add ${PRODUCT_NAME} to PATH" SecAddPath
 
   ; remove previously set path (if any)
   Push "$INSTDIR\bin"
@@ -303,12 +395,13 @@ SectionEnd
 Section "Add Shortcuts to Start Menu" SecAddShortcuts
 
   SetOverwrite on
-  CreateDirectory "$SMPROGRAMS\OpenVPN"
-  WriteINIStr "$SMPROGRAMS\OpenVPN\OpenVPN Windows Notes.url" "InternetShortcut" "URL" "http://openvpn.net/INSTALL-win32.html"
-  WriteINIStr "$SMPROGRAMS\OpenVPN\OpenVPN Manual Page.url" "InternetShortcut" "URL" "http://openvpn.net/man.html"
-  WriteINIStr "$SMPROGRAMS\OpenVPN\OpenVPN HOWTO.url" "InternetShortcut" "URL" "http://openvpn.net/howto.html"
-  WriteINIStr "$SMPROGRAMS\OpenVPN\OpenVPN Web Site.url" "InternetShortcut" "URL" "http://openvpn.net/"
-  CreateShortCut "$SMPROGRAMS\OpenVPN\Uninstall OpenVPN.lnk" "$INSTDIR\Uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}\Documentation"
+  WriteINIStr "$SMPROGRAMS\${PRODUCT_NAME}\Documentation\${PRODUCT_NAME} Windows Notes.url" "InternetShortcut" "URL" "http://openvpn.net/INSTALL-win32.html"
+  WriteINIStr "$SMPROGRAMS\${PRODUCT_NAME}\Documentation\${PRODUCT_NAME} Manual Page.url" "InternetShortcut" "URL" "http://openvpn.net/man.html"
+  WriteINIStr "$SMPROGRAMS\${PRODUCT_NAME}\Documentation\${PRODUCT_NAME} HOWTO.url" "InternetShortcut" "URL" "http://openvpn.net/howto.html"
+  WriteINIStr "$SMPROGRAMS\${PRODUCT_NAME}\Documentation\${PRODUCT_NAME} Web Site.url" "InternetShortcut" "URL" "http://openvpn.net/"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\Uninstall.exe"
 
 SectionEnd
 
@@ -357,12 +450,10 @@ Section -post
 
  tapinstall:
     DetailPrint "TAP-Win32 REMOVE OLD TAP"
-    nsExec::ExecToLog '"$INSTDIR\bin\tapinstall.exe" remove TAP'
+
+    nsExec::ExecToLog '"$INSTDIR\bin\tapinstall.exe" remove TAP0801'
     Pop $R0 # return value/error/timeout
-    DetailPrint "tapinstall remove TAP returned: $R0"
-    nsExec::ExecToLog '"$INSTDIR\bin\tapinstall.exe" remove TAPDEV'
-    Pop $R0 # return value/error/timeout
-    DetailPrint "tapinstall remove TAPDEV returned: $R0"
+    DetailPrint "tapinstall remove TAP0801 returned: $R0"
 
     DetailPrint "TAP-Win32 INSTALL (${TAP})"
     nsExec::ExecToLog '"$INSTDIR\bin\tapinstall.exe" install "$INSTDIR\driver\OemWin2k.inf" ${TAP}'
@@ -379,7 +470,7 @@ Section -post
  notap:
 
   ; Store install folder in registry
-  WriteRegStr HKLM SOFTWARE\OpenVPN "" $INSTDIR
+  WriteRegStr HKLM SOFTWARE\${PRODUCT_NAME} "" $INSTDIR
 
   ; install as a service if requested
   SectionGetFlags ${SecService} $R0
@@ -387,19 +478,19 @@ Section -post
   IntCmp $R0 ${SF_SELECTED} "" noserv noserv
 
     ; set registry parameters for openvpnserv	
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "config_dir"  "${SERV_CONFIG_DIR}"
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "config_ext"  "${SERV_CONFIG_EXT}"
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "exe_path"    "${SERV_EXE_PATH}"
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "log_dir"     "${SERV_LOG_DIR}"
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "priority"    "${SERV_PRIORITY}"
-    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\OpenVPN" "log_append"  "${SERV_LOG_APPEND}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "config_dir"  "${SERV_CONFIG_DIR}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "config_ext"  "${SERV_CONFIG_EXT}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "exe_path"    "${SERV_EXE_PATH}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "log_dir"     "${SERV_LOG_DIR}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "priority"    "${SERV_PRIORITY}"
+    !insertmacro WriteRegStringIfUndef HKLM "SOFTWARE\${PRODUCT_NAME}" "log_append"  "${SERV_LOG_APPEND}"
 
     ; install openvpnserv as a service
     DetailPrint "Previous Service REMOVE (if exists)"
-    nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
+    nsExec::ExecToLog '"$INSTDIR\bin\${PRODUCT_UNIX_NAME}serv.exe" -remove'
     Pop $R0 # return value/error/timeout
     DetailPrint "Service INSTALL"
-    nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -install'
+    nsExec::ExecToLog '"$INSTDIR\bin\${PRODUCT_UNIX_NAME}serv.exe" -install'
     Pop $R0 # return value/error/timeout
 
  noserv:
@@ -408,46 +499,73 @@ Section -post
   SetOutPath $INSTDIR
   File "${HOME}\install-win32\INSTALL-win32.txt"
   File "${HOME}\install-win32\license.txt"
-  File "${HOME}\install-win32\openvpn.ico"
+  File "${HOME}\images\${PRODUCT_ICON}"
+
+  ; store sample config files
+  !ifdef SAMPCONF_DIR
+    SetOverwrite on
+    SetOutPath "$INSTDIR\config"
+  !ifdef SAMPCONF_CONF
+    File "${HOME}\..\${SAMPCONF_DIR}\${SAMPCONF_CONF}"
+  !endif
+  !ifdef SAMPCONF_P12
+    File "${HOME}\..\${SAMPCONF_DIR}\${SAMPCONF_P12}"
+  !endif
+  !ifdef SAMPCONF_TA
+    File "${HOME}\..\${SAMPCONF_DIR}\${SAMPCONF_TA}"
+  !endif
+  !endif
 
   ; Create file association if requested
   SectionGetFlags ${SecFileAssociation} $R0
   IntOp $R0 $R0 & ${SF_SELECTED}
   IntCmp $R0 ${SF_SELECTED} "" noass noass
-    !insertmacro WriteRegStringIfUndef HKCR ".${SERV_CONFIG_EXT}" "" "OpenVPNFile"
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile" "" "OpenVPN Config File"
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile\shell" "" "open"
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile\DefaultIcon" "" "$INSTDIR\openvpn.ico,0"
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile\shell\open\command" "" 'notepad.exe "%1"'
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile\shell\run" "" "Start OpenVPN on this config file"
-    !insertmacro WriteRegStringIfUndef HKCR "OpenVPNFile\shell\run\command" "" '"$INSTDIR\bin\openvpn.exe" --pause-exit --config "%1"'
+    WriteRegStr HKCR ".${SERV_CONFIG_EXT}" "" "${PRODUCT_NAME}File"
+    WriteRegStr HKCR "${PRODUCT_NAME}File" "" "${PRODUCT_NAME} Config File"
+    WriteRegStr HKCR "${PRODUCT_NAME}File\shell" "" "open"
+    WriteRegStr HKCR "${PRODUCT_NAME}File\DefaultIcon" "" "$INSTDIR\${PRODUCT_ICON},0"
+    WriteRegStr HKCR "${PRODUCT_NAME}File\shell\open\command" "" 'notepad.exe "%1"'
+    WriteRegStr HKCR "${PRODUCT_NAME}File\shell\run" "" "Start ${PRODUCT_NAME} on this config file"
+    WriteRegStr HKCR "${PRODUCT_NAME}File\shell\run\command" "" '"$INSTDIR\bin\${PRODUCT_UNIX_NAME}.exe" --pause-exit --config "%1"'
+
+  ; Create start menu folders
+ noass:
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}\Utilities"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}\Shortcuts"
+
+    ; Create start menu and desktop shortcuts to OpenVPN GUI
+  !ifdef OPENVPN_GUI_DEFINED
+    IfFileExists "$INSTDIR\bin\${OPENVPN_GUI}" "" tryaddtap
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME} GUI.lnk" "$INSTDIR\bin\${OPENVPN_GUI}" ""
+      CreateShortcut "$DESKTOP\${PRODUCT_NAME} GUI.lnk" "$INSTDIR\bin\${OPENVPN_GUI}"
+  !endif
 
     ; Create start menu shortcuts to addtap.bat and deltapall.bat
- noass:
+ tryaddtap:
     IfFileExists "$INSTDIR\bin\addtap.bat" "" trydeltap
-      CreateShortCut "$SMPROGRAMS\OpenVPN\Add a new TAP-Win32 virtual ethernet adapter.lnk" "$INSTDIR\bin\addtap.bat" ""
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Utilities\Add a new TAP-Win32 virtual ethernet adapter.lnk" "$INSTDIR\bin\addtap.bat" ""
 
  trydeltap:
     IfFileExists "$INSTDIR\bin\deltapall.bat" "" config_shortcut
-      CreateShortCut "$SMPROGRAMS\OpenVPN\Delete ALL TAP-Win32 virtual ethernet adapters.lnk" "$INSTDIR\bin\deltapall.bat" ""
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Utilities\Delete ALL TAP-Win32 virtual ethernet adapters.lnk" "$INSTDIR\bin\deltapall.bat" ""
 
     ; Create start menu shortcuts for config and log directories
  config_shortcut:
     IfFileExists "$INSTDIR\config" "" log_shortcut
-      CreateShortCut "$SMPROGRAMS\OpenVPN\OpenVPN configuration file directory.lnk" "$INSTDIR\config" ""
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Shortcuts\${PRODUCT_NAME} configuration file directory.lnk" "$INSTDIR\config" ""
 
  log_shortcut:
     IfFileExists "$INSTDIR\log" "" samp_shortcut
-      CreateShortCut "$SMPROGRAMS\OpenVPN\OpenVPN log file directory.lnk" "$INSTDIR\log" ""
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Shortcuts\${PRODUCT_NAME} log file directory.lnk" "$INSTDIR\log" ""
 
  samp_shortcut:
     IfFileExists "$INSTDIR\sample-config" "" genkey_shortcut
-      CreateShortCut "$SMPROGRAMS\OpenVPN\OpenVPN Sample Configuration Files.lnk" "$INSTDIR\sample-config" ""
+      CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Shortcuts\${PRODUCT_NAME} Sample Configuration Files.lnk" "$INSTDIR\sample-config" ""
 
  genkey_shortcut:
-    IfFileExists "$INSTDIR\bin\openvpn.exe" "" noshortcuts
+    IfFileExists "$INSTDIR\bin\${PRODUCT_UNIX_NAME}.exe" "" noshortcuts
       IfFileExists "$INSTDIR\config" "" noshortcuts
-        CreateShortCut "$SMPROGRAMS\OpenVPN\Generate a static OpenVPN key.lnk" "$INSTDIR\bin\openvpn.exe" '--pause-exit --verb 3 --genkey --secret "$INSTDIR\config\key.txt"' "$INSTDIR\openvpn.ico" 0
+        CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Utilities\Generate a static ${PRODUCT_NAME} key.lnk" "$INSTDIR\bin\${PRODUCT_UNIX_NAME}.exe" '--pause-exit --verb 3 --genkey --secret "$INSTDIR\config\key.txt"' "$INSTDIR\${PRODUCT_ICON}" 0
 
  noshortcuts:
   ; Create uninstaller
@@ -456,7 +574,7 @@ Section -post
   ; Show up in Add/Remove programs
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME} ${VERSION}"
   WriteRegExpandStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayIcon" "$INSTDIR\openvpn.ico"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayIcon" "$INSTDIR\${PRODUCT_ICON}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayVersion" "${VERSION}"
 
   ; Advise a reboot
@@ -469,10 +587,14 @@ SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNUserSpace} $(DESC_SecOpenVPNUserSpace)
+  !ifdef OPENVPN_GUI_DEFINED
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNGUI} $(DESC_SecOpenVPNGUI)
+  !endif
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenVPNEasyRSA} $(DESC_SecOpenVPNEasyRSA)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecTAP} $(DESC_SecTAP)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenSSLUtilities} $(DESC_SecOpenSSLUtilities)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecOpenSSLDLLs} $(DESC_SecOpenSSLDLLs)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecPKCS11DLLs} $(DESC_SecPKCS11DLLs)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAddPath} $(DESC_SecAddPath)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecAddShortcuts} $(DESC_SecAddShortcuts)
   !insertmacro MUI_DESCRIPTION_TEXT ${SecService} $(DESC_SecService)
@@ -490,7 +612,7 @@ Function un.onInit
   UserInfo::GetAccountType
   Pop $R1
   StrCmp $R1 "Admin" ok
-    Messagebox MB_OK "Administrator privileges required to uninstall OpenVPN [$R0/$R1]"
+    Messagebox MB_OK "Administrator privileges required to uninstall ${PRODUCT_NAME} [$R0/$R1]"
     Abort
   ok:
 FunctionEnd
@@ -498,7 +620,7 @@ FunctionEnd
 Section "Uninstall"
 
   DetailPrint "Service REMOVE"
-  nsExec::ExecToLog '"$INSTDIR\bin\openvpnserv.exe" -remove'
+  nsExec::ExecToLog '"$INSTDIR\bin\${PRODUCT_UNIX_NAME}serv.exe" -remove'
   Pop $R0 # return value/error/timeout
 
   Sleep 2000
@@ -511,12 +633,31 @@ Section "Uninstall"
   Push "$INSTDIR\bin"
   Call un.RemoveFromPath
 
-  RMDir /r $SMPROGRAMS\OpenVPN
+  RMDir /r $SMPROGRAMS\${PRODUCT_NAME}
 
-  Delete "$INSTDIR\bin\openvpn.exe"
-  Delete "$INSTDIR\bin\openvpnserv.exe"
+  ; delete sample config files
+  !ifdef SAMPCONF_DIR
+  !ifdef SAMPCONF_CONF
+    Delete "$INSTDIR\config\${SAMPCONF_CONF}"
+  !endif
+  !ifdef SAMPCONF_P12
+    Delete "$INSTDIR\config\${SAMPCONF_P12}"
+  !endif
+  !ifdef SAMPCONF_TA
+    Delete "$INSTDIR\config\${SAMPCONF_TA}"
+  !endif
+  !endif
+
+  !ifdef OPENVPN_GUI_DEFINED
+    Delete "$INSTDIR\bin\${OPENVPN_GUI}"
+    Delete "$DESKTOP\${PRODUCT_NAME} GUI.lnk"
+  !endif
+
+  Delete "$INSTDIR\bin\${PRODUCT_UNIX_NAME}.exe"
+  Delete "$INSTDIR\bin\${PRODUCT_UNIX_NAME}serv.exe"
   Delete "$INSTDIR\bin\libeay32.dll"
   Delete "$INSTDIR\bin\libssl32.dll"
+  Delete "$INSTDIR\bin\libpkcs11-helper-1.dll"
   Delete "$INSTDIR\bin\tapinstall.exe"
   Delete "$INSTDIR\bin\addtap.bat"
   Delete "$INSTDIR\bin\deltapall.bat"
@@ -527,12 +668,13 @@ Section "Uninstall"
   Delete "$INSTDIR\log\README.txt"
 
   Delete "$INSTDIR\driver\OemWin2k.inf"
+  Delete "$INSTDIR\driver\${PRODUCT_TAP_ID}.cat"
   Delete "$INSTDIR\driver\${TAPDRV}"
 
   Delete "$INSTDIR\bin\openssl.exe"
 
   Delete "$INSTDIR\INSTALL-win32.txt"
-  Delete "$INSTDIR\openvpn.ico"
+  Delete "$INSTDIR\${PRODUCT_ICON}"
   Delete "$INSTDIR\license.txt"
   Delete "$INSTDIR\Uninstall.exe"
 
@@ -551,20 +693,22 @@ Section "Uninstall"
   Delete "$INSTDIR\easy-rsa\revoke-full.bat"
   Delete "$INSTDIR\easy-rsa\serial.start"
 
-  Delete "$INSTDIR\sample-config\*.ovpn"
+  Delete "$INSTDIR\sample-config\*.${PRODUCT_FILE_EXT}"
 
   RMDir "$INSTDIR\bin"
+  RMDir "$INSTDIR\config"
   RMDir "$INSTDIR\driver"
   RMDir "$INSTDIR\easy-rsa"
   RMDir "$INSTDIR\sample-config"
+  RMDir /r "$INSTDIR\log"
   RMDir "$INSTDIR"
 
-  !insertmacro DelRegKeyIfUnchanged HKCR ".${SERV_CONFIG_EXT}" "OpenVPNFile"
-  DeleteRegKey HKCR "OpenVPNFile"
-  DeleteRegKey HKLM SOFTWARE\OpenVPN
+  !insertmacro DelRegKeyIfUnchanged HKCR ".${SERV_CONFIG_EXT}" "${PRODUCT_NAME}File"
+  DeleteRegKey HKCR "${PRODUCT_NAME}File"
+  DeleteRegKey HKLM SOFTWARE\${PRODUCT_NAME}
   DeleteRegKey HKCU "Software\${PRODUCT_NAME}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\OpenVPN"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
-  ;Messagebox MB_OK "IMPORTANT: If you intend on reinstalling OpenVPN after this uninstall, and you are running Win2K, you are strongly urged to reboot before reinstalling (this is an informational message only, pressing OK will not reboot)."
+  ;Messagebox MB_OK "IMPORTANT: If you intend on reinstalling ${PRODUCT_NAME} after this uninstall, and you are running Win2K, you are strongly urged to reboot before reinstalling (this is an informational message only, pressing OK will not reboot)."
 
 SectionEnd

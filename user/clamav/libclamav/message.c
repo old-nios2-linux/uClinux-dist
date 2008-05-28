@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2002-2006 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -223,7 +224,7 @@ messageSetMimeType(message *mess, const char *type)
 
 	assert(mess != NULL);
 	if(type == NULL) {
-		cli_warnmsg("Empty content-type field\n");
+		cli_dbgmsg("Empty content-type field\n");
 		return 0;
 	}
 
@@ -271,8 +272,6 @@ messageSetMimeType(message *mess, const char *type)
 			mess->mimeType = MEXTENSION;
 		else {
 			/*
-			 * Based on a suggestion by James Stevens
-			 *	<James@kyzo.com>
 			 * Force scanning of strange messages
 			 */
 			if(strcasecmp(type, "plain") == 0) {
@@ -299,9 +298,9 @@ messageSetMimeType(message *mess, const char *type)
 					}
 				}
 				if(highestSimil >= 50) {
-					cli_dbgmsg("Unknown MIME type \"%s\" - guessing as %s (%u%% certainty)\n",
+					cli_dbgmsg("Unknown MIME type \"%s\" - guessing as %s (%d%% certainty)\n",
 						type, closest,
-						(int)highestSimil);
+						highestSimil);
 					mess->mimeType = (mime_type)t;
 				} else {
 					cli_dbgmsg("Unknown MIME type: `%s', set to Application - if you believe this file contains a virus, submit it to www.clamav.net\n", type);
@@ -393,6 +392,7 @@ void
 messageAddArgument(message *m, const char *arg)
 {
 	int offset;
+	char *p;
 
 	assert(m != NULL);
 
@@ -418,18 +418,35 @@ messageAddArgument(message *m, const char *arg)
 			return;	/* already in there */
 
 	if(offset == m->numberOfArguments) {
-		char **ptr;
+		char **q;
 
 		m->numberOfArguments++;
-		ptr = (char **)cli_realloc(m->mimeArguments, m->numberOfArguments * sizeof(char *));
-		if(ptr == NULL) {
+		q = (char **)cli_realloc(m->mimeArguments, m->numberOfArguments * sizeof(char *));
+		if(q == NULL) {
 			m->numberOfArguments--;
 			return;
 		}
-		m->mimeArguments = ptr;
+		m->mimeArguments = q;
 	}
 
-	arg = m->mimeArguments[offset] = rfc2231(arg);
+	p = m->mimeArguments[offset] = rfc2231(arg);
+
+	if(strchr(p, '=') == NULL) {
+		if(strncmp(p, "filename", 8) == 0) {
+			/*
+			 * FIXME: Bounce message handling is corrupting the in
+			 * core copies of headers
+			 */
+			cli_dbgmsg("Possible data corruption fixed\n");
+			p[8] = '=';
+		} else {
+			if(p && *p)
+				cli_dbgmsg("messageAddArgument, '%s' contains no '='\n", p);
+			free(m->mimeArguments[offset]);
+			m->mimeArguments[offset] = NULL;
+			return;
+		}
+	}
 
 	/*
 	 * This is terribly broken from an RFC point of view but is useful
@@ -437,7 +454,7 @@ messageAddArgument(message *m, const char *arg)
 	 * mime. By pretending defaulting to an application rather than
 	 * to nomime we can ensure they're saved and scanned
 	 */
-	if(arg && ((strncasecmp(arg, "filename=", 9) == 0) || (strncasecmp(arg, "name=", 5) == 0)))
+	if(p && ((strncasecmp(p, "filename=", 9) == 0) || (strncasecmp(p, "name=", 5) == 0)))
 		if(messageGetMimeType(m) == NOMIME) {
 			cli_dbgmsg("Force mime encoding to application\n");
 			messageSetMimeType(m, "application");
@@ -644,7 +661,7 @@ messageFindArgument(const message *m, const char *variable)
 			while(isspace(*ptr))
 				ptr++;
 			if(*ptr != '=') {
-				cli_warnmsg("messageFindArgument: no '=' sign found in MIME header '%s' (%s)\n", variable, messageGetArgument(m, i));
+				cli_dbgmsg("messageFindArgument: no '=' sign found in MIME header '%s' (%s)\n", variable, messageGetArgument(m, i));
 				return NULL;
 			}
 			if((*++ptr == '"') && (strchr(&ptr[1], '"') != NULL)) {
@@ -656,7 +673,6 @@ messageFindArgument(const message *m, const char *variable)
 					return NULL;
 
 				/*
-				 * Thomas Lamy <Thomas.Lamy@in-online.net>:
 				 * fix un-quoting of boundary strings from
 				 * header, occurs if boundary was given as
 				 *	'boundary="_Test_";'
@@ -707,7 +723,7 @@ messageHasArgument(const message *m, const char *variable)
 		if((ptr == NULL) || (*ptr == '\0'))
 			continue;
 #ifdef	CL_DEBUG
-		cli_dbgmsg("messageArgumentExists: compare %lu bytes of %s with %s\n",
+		cli_dbgmsg("messageHasArgument: compare %lu bytes of %s with %s\n",
 			(unsigned long)len, variable, ptr);
 #endif
 		if(strncasecmp(ptr, variable, len) == 0) {
@@ -715,7 +731,7 @@ messageHasArgument(const message *m, const char *variable)
 			while(isspace(*ptr))
 				ptr++;
 			if(*ptr != '=') {
-				cli_warnmsg("messageArgumentExists: no '=' sign found in MIME header '%s' (%s)\n", variable, messageGetArgument(m, i));
+				cli_dbgmsg("messageHasArgument: no '=' sign found in MIME header '%s' (%s)\n", variable, messageGetArgument(m, i));
 				return 0;
 			}
 			return 1;
@@ -1096,13 +1112,16 @@ messageIsEncoding(message *m)
 	static const char binhex[] = "(This file must be converted with BinHex 4.0)";
 	const char *line = lineGetData(m->body_last->t_line);
 
+	/*if(m->ctx == NULL)
+		cli_dbgmsg("messageIsEncoding, ctx == NULL\n");*/
+
 	if((m->encoding == NULL) &&
 	   (strncasecmp(line, encoding, sizeof(encoding) - 1) == 0) &&
 	   (strstr(line, "7bit") == NULL))
 		m->encoding = m->body_last;
-	else if((m->bounce == NULL) &&
+	else if((m->bounce == NULL) && m->ctx &&
 		(strncasecmp(line, "Received: ", 10) == 0) &&
-		(cli_filetype((const unsigned char *)line, strlen(line)) == CL_TYPE_MAIL))
+		(cli_filetype((const unsigned char *)line, strlen(line), m->ctx->engine) == CL_TYPE_MAIL))
 			m->bounce = m->body_last;
 		/* Not needed with fast track visa technology */
 	/*else if((m->uuencode == NULL) && isuuencodebegin(line))
@@ -1167,7 +1186,6 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		blob *tmp;
 
 		/*
-		 * Table look up by Thomas Lamy <Thomas.Lamy@in-online.net>
 		 * HQX conversion table - illegal chars are 0xff
 		 */
 		const unsigned char hqxtbl[] = {
@@ -1257,7 +1275,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 					continue;
 
 				if((c < 0x20) || (c > 0x7f) || (hqxtbl[c] == 0xff)) {
-					cli_warnmsg("Invalid HQX7 character '%c' (0x%02x)\n", c, c);
+					cli_dbgmsg("Invalid HQX7 character '%c' (0x%02x)\n", c, c);
 					break;
 				}
 				c = hqxtbl[c];
@@ -1356,7 +1374,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 				len);
 		}
 		if(len == 0) {
-			cli_warnmsg("Discarding empty binHex attachment\n");
+			cli_dbgmsg("Discarding empty binHex attachment\n");
 			(*destroy)(ret);
 			blobDestroy(tmp);
 			return NULL;
@@ -1426,7 +1444,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		l = blobGetDataSize(tmp) - byte;
 
 		if(l < dataforklen) {
-			cli_warnmsg("Corrupt BinHex file, claims it is %lu bytes long in a message of %lu bytes\n",
+			cli_dbgmsg("Corrupt BinHex file, claims it is %lu bytes long in a message of %lu bytes\n",
 				dataforklen, l);
 			dataforklen = l;
 		}
@@ -1579,7 +1597,7 @@ messageExport(message *m, const char *dir, void *(*create)(void), void (*destroy
 		 * message
 		 */
 		if(t_line == NULL) {
-			cli_warnmsg("Empty attachment not saved\n");
+			cli_dbgmsg("Empty attachment not saved\n");
 			(*destroy)(ret);
 			return NULL;
 		}
@@ -2009,12 +2027,6 @@ encodingLine(message *m)
 }
 #endif
 
-void
-messageClearMarkers(message *m)
-{
-	m->encoding = m->bounce = m->binhex = NULL;
-}
-
 /*
  * Decode a line and add it to a buffer, return the end of the buffer
  * to help appending callers. There is no new line at the end of "line"
@@ -2077,16 +2089,13 @@ decodeLine(message *m, encoding_type et, const char *line, unsigned char *buf, s
 					}
 
 					/*
-					 * Fix by Torok Edvin
-					 * <edwintorok@gmail.com>
 					 * Handle messages that use a broken
 					 * quoted-printable encoding of
 					 * href=\"http://, instead of =3D
 					 */
-					if(byte != '=') {
-						byte <<= 4;
-						byte += hex(*line);
-					} else
+					if(byte != '=')
+						byte = (byte << 4) | hex(*line);
+					else
 						line -= 2;
 
 					*buf++ = byte;
@@ -2161,7 +2170,7 @@ decodeLine(message *m, encoding_type et, const char *line, unsigned char *buf, s
 				 * the maximum length of a uuencoded line is
 				 * 62 characters
 				 */
-				cli_warnmsg("uudecode: buffer overflow stopped, attempting to ignore but decoding may fail\n");
+				cli_dbgmsg("uudecode: buffer overflow stopped, attempting to ignore but decoding may fail\n");
 			else {
 				(void)decode(m, line, buf, uudecode, (len & 3) == 0);
 				buf = &buf[reallen];
@@ -2197,15 +2206,15 @@ decodeLine(message *m, encoding_type et, const char *line, unsigned char *buf, s
 static void
 sanitiseBase64(char *s)
 {
-	/*cli_dbgmsg("sanitiseBase64 '%s'\n", s);*/
-	for(; *s; s++)
+	cli_dbgmsg("sanitiseBase64 '%s'\n", s);
+	while(*s)
 		if(base64Table[(unsigned int)(*s & 0xFF)] == 255) {
 			char *p1;
 
 			for(p1 = s; p1[0] != '\0'; p1++)
 				p1[0] = p1[1];
-			--s;
-		}
+		} else
+			s++;
 }
 
 /*
@@ -2534,8 +2543,39 @@ rfc2231(const char *in)
 	enum { LANGUAGE, CHARSET, CONTENTS } field;
 
 	if(strstr(in, "*0*=") != NULL) {
-		cli_warnmsg("RFC2231 parameter continuations are not yet handled\n");
-		return cli_strdup(in);
+		char *p;
+
+		/* Don't handle continuations, decode what we can */
+		p = ret = cli_malloc(strlen(in) + 16);
+		if(ret == NULL)
+			return NULL;
+
+		do {
+			switch(*in) {
+				default:
+					*p++ = *in++;
+					continue;
+				case '*':
+					do
+						in++;
+					while((*in != '*') && *in);
+					if(*in) {
+						in++;
+						continue;
+					}
+					*p = '\0';
+					break;
+				case '=':
+					/*strcpy(p, in);*/
+					strcpy(p, "=rfc2231failure");
+					break;
+			}
+			break;
+		} while(*in);
+
+		cli_dbgmsg("RFC2231 parameter continuations are not yet handled, returning \"%s\"\n",
+			ret);
+		return ret;
 	}
 
 	ptr = strstr(in, "*0=");
@@ -2550,8 +2590,12 @@ rfc2231(const char *in)
 		field = LANGUAGE;
 	}
 
-	if(ptr == NULL)	/* quick return */
-		return cli_strdup(in);
+	if(ptr == NULL) {	/* quick return */
+		out = ret = cli_strdup(in);
+		while(*out)
+			*out++ &= 0x7F;
+		return ret;
+	}
 
 	cli_dbgmsg("rfc2231 '%s'\n", in);
 
@@ -2620,7 +2664,7 @@ rfc2231(const char *in)
 
 	if(field != CONTENTS) {
 		free(ret);
-		cli_warnmsg("Invalid RFC2231 header: '%s'\n", in);
+		cli_dbgmsg("Invalid RFC2231 header: '%s'\n", in);
 		return cli_strdup("");
 	}
 

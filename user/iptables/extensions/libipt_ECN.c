@@ -6,7 +6,7 @@
  *
  * libipt_ECN.c borrowed heavily from libipt_DSCP.c
  *
- * $Id: libipt_ECN.c 3507 2004-12-28 13:11:59Z /C=DE/ST=Berlin/L=Berlin/O=Netfilter Project/OU=Development/CN=rusty/emailAddress=rusty@netfilter.org $
+ * $Id: libipt_ECN.c 7062 2007-10-04 16:29:00Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
  */
 #include <stdio.h>
 #include <string.h>
@@ -17,11 +17,7 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv4/ipt_ECN.h>
 
-static void init(struct ipt_entry_target *t, unsigned int *nfcache) 
-{
-}
-
-static void help(void) 
+static void ECN_help(void)
 {
 	printf(
 "ECN target v%s options\n"
@@ -37,18 +33,16 @@ static void help(void)
 #endif
 
 
-static struct option opts[] = {
-	{ "ecn-tcp-remove", 0, 0, 'F' },
-	{ "ecn-tcp-cwr", 1, 0, 'G' },
-	{ "ecn-tcp-ece", 1, 0, 'H' },
-	{ "ecn-ip-ect", 1, 0, '9' },
-	{ 0 }
+static const struct option ECN_opts[] = {
+	{ "ecn-tcp-remove", 0, NULL, 'F' },
+	{ "ecn-tcp-cwr", 1, NULL, 'G' },
+	{ "ecn-tcp-ece", 1, NULL, 'H' },
+	{ "ecn-ip-ect", 1, NULL, '9' },
+	{ }
 };
 
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      struct ipt_entry_target **target)
+static int ECN_parse(int c, char **argv, int invert, unsigned int *flags,
+                     const void *entry, struct xt_entry_target **target)
 {
 	unsigned int result;
 	struct ipt_ECN_info *einfo
@@ -104,8 +98,7 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-static void
-final_check(unsigned int flags)
+static void ECN_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM,
@@ -113,10 +106,8 @@ final_check(unsigned int flags)
 }
 
 /* Prints out the targinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_target *target,
-      int numeric)
+static void ECN_print(const void *ip, const struct xt_entry_target *target,
+                      int numeric)
 {
 	const struct ipt_ECN_info *einfo =
 		(const struct ipt_ECN_info *)target->data;
@@ -140,8 +131,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_targinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
+static void ECN_save(const void *ip, const struct xt_entry_target *target)
 {
 	const struct ipt_ECN_info *einfo =
 		(const struct ipt_ECN_info *)target->data;
@@ -163,23 +153,20 @@ save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
 	}
 }
 
-static
-struct iptables_target ecn = { 
-	.next		= NULL,
+static struct iptables_target ecn_target = {
 	.name		= "ECN",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_ECN_info)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_ECN_info)),
-	.help		= &help,
-	.init		= &init,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= ECN_help,
+	.parse		= ECN_parse,
+	.final_check	= ECN_check,
+	.print		= ECN_print,
+	.save		= ECN_save,
+	.extra_opts	= ECN_opts,
 };
 
 void _init(void)
 {
-	register_target(&ecn);
+	register_target(&ecn_target);
 }

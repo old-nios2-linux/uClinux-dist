@@ -1,19 +1,18 @@
-# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2002, 2003
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2002, 2003, 2007, 2008
 # Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -35,15 +34,18 @@ remote_download host ${srcdir}/${subdir}/list0.h list0.h
 
 
 if  { [gdb_compile "${srcdir}/${subdir}/list0.c" "${binfile}0.o" object {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested list.exp
+     return -1
 }
 
 if  { [gdb_compile "${srcdir}/${subdir}/list1.c" "${binfile}1.o" object {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested list.exp
+     return -1
 }
 
 if  { [gdb_compile "${binfile}0.o ${binfile}1.o" ${binfile} executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested list.exp
+     return -1
 }
 
 
@@ -235,7 +237,6 @@ proc test_list_function {} {
     # Test "list function" for C include file
     # Ultrix gdb is the second case, still correct.
     # SunPRO cc is the third case.
-    setup_xfail "powerpc-*-*"
     gdb_test "list foo" "(3\[ \t\]+.*12\[ \t\]+bar \[(\]+.*\[)\]+;|2\[ \t\]+including file.*11\[ \t\]+bar \[(\]+.*\[)\]+;|1\[ \t\]+/. An include file.*10\[ \t\]+bar \[(\]+.*\[)\]+;)" "list function in include file"
 }
 
@@ -422,7 +423,6 @@ proc test_list_filename_and_function {} {
     # Ultrix gdb is the second case, one line different but still correct.
     # SunPRO cc is the third case.
     setup_xfail "rs6000-*-*" 1804
-    setup_xfail "powerpc-*-*" 1804
     setup_xfail_format "COFF"
     send_gdb "list list0.h:foo\n"
     gdb_expect {

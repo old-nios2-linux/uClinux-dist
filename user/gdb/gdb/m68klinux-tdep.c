@@ -1,13 +1,13 @@
 /* Motorola m68k target-dependent support for GNU/Linux.
 
-   Copyright 1996, 1998, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -35,6 +33,11 @@
 #include "m68k-tdep.h"
 #include "trad-frame.h"
 #include "frame-unwind.h"
+#include "glibc-tdep.h"
+#include "solib-svr4.h"
+#include "auxv.h"
+#include "observer.h"
+#include "elf/common.h"
 
 /* Offsets (in target ints) into jmp_buf.  */
 
@@ -66,7 +69,7 @@ m68k_linux_pc_in_sigtramp (CORE_ADDR pc, char *name)
   char buf[12];
   unsigned long insn0, insn1, insn2;
 
-  if (deprecated_read_memory_nobpt (pc - 4, buf, sizeof (buf)))
+  if (read_memory_nobpt (pc - 4, buf, sizeof (buf)))
     return 0;
   insn1 = extract_unsigned_integer (buf + 4, 4);
   insn2 = extract_unsigned_integer (buf + 8, 4);
@@ -110,7 +113,7 @@ static int m68k_linux_sigcontext_reg_offset[M68K_NUM_REGS] =
   -1,				/* %a5 */
   -1,				/* %fp */
   1 * 4,			/* %sp */
-  5 * 4 + 2,			/* %sr */
+  6 * 4,			/* %sr */
   6 * 4 + 2,			/* %pc */
   8 * 4,			/* %fp0 */
   11 * 4,			/* %fp1 */
@@ -123,6 +126,39 @@ static int m68k_linux_sigcontext_reg_offset[M68K_NUM_REGS] =
   14 * 4,			/* %fpcr */
   15 * 4,			/* %fpsr */
   16 * 4			/* %fpiaddr */
+};
+
+static int m68k_uclinux_sigcontext_reg_offset[M68K_NUM_REGS] =
+{
+  2 * 4,			/* %d0 */
+  3 * 4,			/* %d1 */
+  -1,				/* %d2 */
+  -1,				/* %d3 */
+  -1,				/* %d4 */
+  -1,				/* %d5 */
+  -1,				/* %d6 */
+  -1,				/* %d7 */
+  4 * 4,			/* %a0 */
+  5 * 4,			/* %a1 */
+  -1,				/* %a2 */
+  -1,				/* %a3 */
+  -1,				/* %a4 */
+  6 * 4,			/* %a5 */
+  -1,				/* %fp */
+  1 * 4,			/* %sp */
+  7 * 4,			/* %sr */
+  7 * 4 + 2,			/* %pc */
+  -1,				/* %fp0 */
+  -1,				/* %fp1 */
+  -1,				/* %fp2 */
+  -1,				/* %fp3 */
+  -1,				/* %fp4 */
+  -1,				/* %fp5 */
+  -1,				/* %fp6 */
+  -1,				/* %fp7 */
+  -1,				/* %fpcr */
+  -1,				/* %fpsr */
+  -1				/* %fpiaddr */
 };
 
 /* From <asm/ucontext.h>.  */
@@ -171,12 +207,35 @@ struct m68k_linux_sigtramp_info
   int *sc_reg_offset;
 };
 
+/* Nonzero if running on uClinux.  */
+static int target_is_uclinux;
+
+static void
+m68k_linux_inferior_created (struct target_ops *objfile, int from_tty)
+{
+  /* Record that we will need to re-evaluate whether we are running on a
+     uClinux or normal GNU/Linux target (see m68k_linux_get_sigtramp_info).  */
+  target_is_uclinux = -1;
+}
+
 static struct m68k_linux_sigtramp_info
 m68k_linux_get_sigtramp_info (struct frame_info *next_frame)
 {
   CORE_ADDR sp;
   char buf[4];
   struct m68k_linux_sigtramp_info info;
+
+  if (target_is_uclinux == -1)
+    {
+      /* Determine whether we are running on a uClinux or normal GNU/Linux
+         target so we can use the correct sigcontext layouts.  */
+    
+      CORE_ADDR dummy;
+    
+      target_is_uclinux
+        = target_auxv_search (&current_target, AT_NULL, &dummy) > 0
+          && target_auxv_search (&current_target, AT_PAGESZ, &dummy) == 0;
+    }
 
   frame_unwind_register (next_frame, M68K_SP_REGNUM, buf);
   sp = extract_unsigned_integer (buf, 4);
@@ -187,7 +246,9 @@ m68k_linux_get_sigtramp_info (struct frame_info *next_frame)
   if (m68k_linux_pc_in_sigtramp (frame_pc_unwind (next_frame), 0) == 2)
     info.sc_reg_offset = m68k_linux_ucontext_reg_offset;
   else
-    info.sc_reg_offset = m68k_linux_sigcontext_reg_offset;
+    info.sc_reg_offset
+      = target_is_uclinux ? m68k_uclinux_sigcontext_reg_offset
+			  : m68k_linux_sigcontext_reg_offset;
   return info;
 }
 
@@ -199,7 +260,7 @@ m68k_linux_sigtramp_frame_cache (struct frame_info *next_frame,
 {
   struct frame_id this_id;
   struct trad_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
   struct m68k_linux_sigtramp_info info;
   char buf[4];
   int i;
@@ -246,7 +307,7 @@ m68k_linux_sigtramp_frame_prev_register (struct frame_info *next_frame,
 					 int regnum, int *optimizedp,
 					 enum lval_type *lvalp,
 					 CORE_ADDR *addrp,
-					 int *realnump, void *valuep)
+					 int *realnump, gdb_byte *valuep)
 {
   /* Make sure we've initialized the cache.  */
   struct trad_frame_cache *cache =
@@ -284,7 +345,7 @@ m68k_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->jb_elt_size = M68K_LINUX_JB_ELEMENT_SIZE;
 
   /* GNU/Linux uses a calling convention that's similar to SVR4.  It
-     returns integer values in %d0/%di, pointer values in %a0 and
+     returns integer values in %d0/%d1, pointer values in %a0 and
      floating values in %fp0, just like SVR4, but uses %a1 to pass the
      address to store a structure value.  It also returns small
      structures in registers instead of memory.  */
@@ -292,11 +353,24 @@ m68k_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->struct_value_regnum = M68K_A1_REGNUM;
   tdep->struct_return = reg_struct_return;
 
+  set_gdbarch_decr_pc_after_break (gdbarch, 2);
+
   frame_unwind_append_sniffer (gdbarch, m68k_linux_sigtramp_frame_sniffer);
 
   /* Shared library handling.  */
-  set_gdbarch_in_solib_call_trampoline (gdbarch, in_plt_section);
+
+  /* GNU/Linux uses SVR4-style shared libraries.  */
+  set_solib_svr4_fetch_link_map_offsets (gdbarch,
+					 svr4_ilp32_fetch_link_map_offsets);
+
+  /* GNU/Linux uses the dynamic linker included in the GNU C Library.  */
+  set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
+
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
 }
 
 void
@@ -304,4 +378,5 @@ _initialize_m68k_linux_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_m68k, 0, GDB_OSABI_LINUX,
 			  m68k_linux_init_abi);
+  observer_attach_inferior_created (m68k_linux_inferior_created);
 }

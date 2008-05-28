@@ -1,13 +1,13 @@
 /* Handle OSF/1, Digital UNIX, and Tru64 shared libraries
    for GDB, the GNU Debugger.
-   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* When handling shared libraries, GDB has to find out the pathnames
    of all shared libraries that are currently loaded (to read in their
@@ -220,7 +218,7 @@ fetch_sec_names (struct lm_info *lmi)
       target_read_string (lms->nameaddr, &name, PATH_MAX, &errcode);
       if (errcode != 0)
 	{
-	  warning ("unable to read shared sec name at 0x%lx", lms->nameaddr);
+	  warning (_("unable to read shared sec name at 0x%lx"), lms->nameaddr);
 	  name = xstrdup ("");
 	}
       lms->name = name;
@@ -326,7 +324,7 @@ osf_solib_create_inferior_hook (void)
   do
     {
       target_resume (minus_one_ptid, 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
 
@@ -338,9 +336,6 @@ osf_solib_create_inferior_hook (void)
      suppresses the warning.  */
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
   stop_soon = NO_STOP_QUIETLY;
-
-  /* Enable breakpoints disabled (unnecessarily) by clear_solib().  */
-  re_enable_breakpoints_in_shlibs ();
 }
 
 /* target_so_ops callback.  Do additional symbol handling, lookup, etc. after

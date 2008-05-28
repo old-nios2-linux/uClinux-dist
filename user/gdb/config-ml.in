@@ -1,8 +1,8 @@
 # Configure fragment invoked in the post-target section for subdirs
 # wanting multilib support.
 #
-# Copyright (C) 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
-#   Free Software Foundation, Inc.
+# Copyright (C) 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+# 2005, 2006, 2007  Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,8 +16,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330,
-# Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
 #
 # As a special exception to the GNU General Public License, if you
 # distribute this file as part of a program that contains a
@@ -108,6 +108,11 @@ ml_realsrcdir=${srcdir}
 ml_verbose=--verbose
 for option in ${ac_configure_args}
 do
+  # strip single quotes surrounding individual options
+  case $option in
+  \'*\') eval option=$option ;;
+  esac
+
   case $option in
   --*) ;;
   -*) option=-$option ;;
@@ -535,7 +540,7 @@ multi-do:
 	else \
 	  rootpre=`${PWD_COMMAND}`/; export rootpre; \
 	  srcrootpre=`cd $(srcdir); ${PWD_COMMAND}`/; export srcrootpre; \
-	  lib=`echo $${rootpre} | sed -e 's,^.*/\([^/][^/]*\)/$$,\1,'`; \
+	  lib=`echo "$${rootpre}" | sed -e 's,^.*/\([^/][^/]*\)/$$,\1,'`; \
 	  compiler="$(CC)"; \
 	  for i in `$${compiler} --print-multi-lib 2>/dev/null`; do \
 	    dir=`echo $$i | sed -e 's/;.*$$//'`; \
@@ -546,6 +551,8 @@ multi-do:
 		flags=`echo $$i | sed -e 's/^[^;]*;//' -e 's/@/ -/g'`; \
 		if (cd ../$${dir}/$${lib}; $(MAKE) $(FLAGS_TO_PASS) \
 				CFLAGS="$(CFLAGS) $${flags}" \
+				CCASFLAGS="$(CCASFLAGS) $${flags}" \
+				FCFLAGS="$(FCFLAGS) $${flags}" \
 				FFLAGS="$(FFLAGS) $${flags}" \
 				ADAFLAGS="$(ADAFLAGS) $${flags}" \
 				prefix="$(prefix)" \
@@ -579,8 +586,13 @@ multi-clean:
 	  true; \
 	else \
 	  lib=`${PWD_COMMAND} | sed -e 's,^.*/\([^/][^/]*\)$$,\1,'`; \
-	  for dir in Makefile $(MULTIDIRS); do \
-	    if [ -f ../$${dir}/$${lib}/Makefile ]; then \
+	  for dir in : $(MULTIDIRS); do \
+	    test $$dir != : || continue; \
+EOF
+cat >>Multi.tem <<EOF
+	    if [ -f ../\$\${dir}/\$\${lib}/${Makefile} ]; then \\
+EOF
+cat >>Multi.tem <<\EOF
 	      if (cd ../$${dir}/$${lib}; $(MAKE) $(FLAGS_TO_PASS) $(DO)); \
 	      then true; \
 	      else exit 1; \
@@ -598,7 +610,7 @@ mv Makefile.tem ${Makefile}
 fi # ${ml_toplevel_p} = yes
 
 if [ "${ml_verbose}" = --verbose ]; then
-  echo "Adding multilib support to Makefile in ${ml_realsrcdir}"
+  echo "Adding multilib support to ${Makefile} in ${ml_realsrcdir}"
   if [ "${ml_toplevel_p}" = yes ]; then
     echo "multidirs=${multidirs}"
   fi
@@ -689,7 +701,7 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
   fi
 
   ml_origdir=`${PWDCMD-pwd}`
-  ml_libdir=`echo $ml_origdir | sed -e 's,^.*/,,'`
+  ml_libdir=`echo "$ml_origdir" | sed -e 's,^.*/,,'`
   # cd to top-level-build-dir/${with_target_subdir}
   cd ..
 
@@ -725,7 +737,7 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
 
     case ${srcdir} in
     ".")
-      echo Building symlink tree in `${PWDCMD-pwd}`/${ml_dir}/${ml_libdir}
+      echo "Building symlink tree in `${PWDCMD-pwd}`/${ml_dir}/${ml_libdir}"
       if [ "${with_target_subdir}" != "." ]; then
 	ml_unsubdir="../"
       else
@@ -733,7 +745,7 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
       fi
       (cd ${ml_dir}/${ml_libdir};
        ../${dotdot}${ml_unsubdir}symlink-tree ../${dotdot}${ml_unsubdir}${ml_libdir} "")
-      if [ -f ${ml_dir}/${ml_libdir}/Makefile ]; then
+      if [ -f ${ml_dir}/${ml_libdir}/${Makefile} ]; then
 	if [ x"${MAKE}" = x ]; then
 	  (cd ${ml_dir}/${ml_libdir}; make distclean)
 	else
@@ -779,17 +791,18 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
         break
       fi
     done
-    ml_config_env='CC="${CC_}$flags" CXX="${CXX_}$flags" F77="${F77_}$flags" GCJ="${GCJ_}$flags"'
+    ml_config_env='CC="${CC_}$flags" CXX="${CXX_}$flags" F77="${F77_}$flags" GCJ="${GCJ_}$flags" GFORTRAN="${GFORTRAN_}$flags"'
 
     if [ "${with_target_subdir}" = "." ]; then
 	CC_=$CC' '
 	CXX_=$CXX' '
 	F77_=$F77' '
 	GCJ_=$GCJ' '
+	GFORTRAN_=$GFORTRAN' '
     else
 	# Create a regular expression that matches any string as long
 	# as ML_POPDIR.
-	popdir_rx=`echo ${ML_POPDIR} | sed 's,.,.,g'`
+	popdir_rx=`echo "${ML_POPDIR}" | sed 's,.,.,g'`
 	CC_=
 	for arg in ${CC}; do
 	  case $arg in
@@ -838,6 +851,18 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
 	  esac
 	done
 
+	GFORTRAN_=
+	for arg in ${GFORTRAN}; do
+	  case $arg in
+	  -[BIL]"${ML_POPDIR}"/*)
+	    GFORTRAN_="${GFORTRAN_}"`echo "X${arg}" | sed -n "s/X\\(-[BIL]${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X-[BIL]${popdir_rx}\\(.*\\)/\\1/p"`' ' ;;
+	  "${ML_POPDIR}"/*)
+	    GFORTRAN_="${GFORTRAN_}"`echo "X${arg}" | sed -n "s/X\\(${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X${popdir_rx}\\(.*\\)/\\1/p"`' ' ;;
+	  *)
+	    GFORTRAN_="${GFORTRAN_}${arg} " ;;
+	  esac
+	done
+
 	if test "x${LD_LIBRARY_PATH+set}" = xset; then
 	  LD_LIBRARY_PATH_=
 	  for arg in `echo "$LD_LIBRARY_PATH" | tr ':' ' '`; do
@@ -875,17 +900,17 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
 
     if eval ${ml_config_env} ${ml_config_shell} ${ml_recprog} \
 	--with-multisubdir=${ml_dir} --with-multisrctop=${multisrctop} \
-	${ac_configure_args} ${ml_srcdiroption} ; then
+	${ac_configure_args} ${ml_config_env} ${ml_srcdiroption} ; then
       true
     else
       exit 1
     fi
 
-    cd ${ML_POPDIR}
+    cd "${ML_POPDIR}"
 
   done
 
-  cd ${ml_origdir}
+  cd "${ml_origdir}"
 fi
 
 fi # ${ml_toplevel_p} = yes

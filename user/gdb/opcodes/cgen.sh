@@ -1,23 +1,23 @@
 #! /bin/sh
 # CGEN generic assembler support code.
 #
-#  Copyright 2001 Free Software Foundation, Inc.
+#   Copyright 2000, 2003, 2005, 2007 Free Software Foundation, Inc.
 #
-#   This file is part of the GNU Binutils and GDB, the GNU debugger.
+#   This file is part of the GNU opcodes library.
 #
-#   This program is free software; you can redistribute it and/or modify
+#   This library is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 2, or (at your option)
+#   the Free Software Foundation; either version 3, or (at your option)
 #   any later version.
 #
-#   This program is distributed in the hope that it will be useful,
-#   but WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#   GNU General Public License for more details.
+#   It is distributed in the hope that it will be useful, but WITHOUT
+#   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+#   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+#   License for more details.
 #
 #   You should have received a copy of the GNU General Public License along
 #   with this program; if not, write to the Free Software Foundation, Inc.,
-#   59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+#   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 #
 # Generate CGEN opcode files: arch-desc.[ch], arch-opc.[ch],
 # arch-asm.c, arch-dis.c, arch-opinst.c, arch-ibld.[ch].
@@ -47,7 +47,7 @@ set -e
 
 action=$1
 srcdir=$2
-cgen=$3
+cgen="$3"
 cgendir=$4
 cgenflags=$5
 arch=$6
@@ -93,7 +93,7 @@ opcodes)
 	rm -f tmp-dis.c tmp-dis.in1
 
 	# Run CGEN.
-	${cgen} -s ${cgendir}/cgen-opc.scm \
+	${cgen} ${cgendir}/cgen-opc.scm \
 		-s ${cgendir} \
 		${cgenflags} \
 		-f "${options}" \

@@ -1,12 +1,14 @@
 /* Top level stuff for GDB, the GNU debugger.
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1996,
-   1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1996,
+   1997, 1998, 1999, 2000, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef TOP_H
 #define TOP_H
@@ -26,6 +26,8 @@
 extern char *line;
 extern int linesize;
 extern FILE *instream;
+extern int in_user_command;
+extern int caution;
 extern char gdb_dirbuf[1024];
 extern int inhibit_gdbinit;
 extern int epoch_interface;
@@ -33,7 +35,7 @@ extern char gdbinit[];
 
 extern void print_gdb_version (struct ui_file *);
 
-extern void source_command (char *, int);
+extern void source_script (char *, int);
 extern void cd_command (char *, int);
 extern void read_command_file (FILE *);
 extern void init_history (void);
@@ -65,8 +67,6 @@ extern void gdb_init (char *);
 /* Variables from top.c. */
 extern int source_line_number;
 extern char *source_file_name;
-extern char *source_error;
-extern char *source_pre_error;
 extern int history_expansion_p;
 extern int server_command;
 extern char *lim_at_start;

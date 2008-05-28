@@ -7,7 +7,7 @@
  * 	Rusty Russell <rusty@linuxcare.com.au>
  * This code is distributed under the terms of GNU GPL v2
  *
- * $Id: ip6tables-restore.c 6828 2007-05-10 15:00:39Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
+ * $Id: ip6tables-restore.c 7083 2007-10-23 14:22:34Z /C=EU/ST=EU/CN=Patrick McHardy/emailAddress=kaber@trash.net $
  */
 
 #include <getopt.h>
@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "ip6tables.h"
+#include "xtables.h"
 #include "libiptc/libip6tc.h"
 
 #ifdef DEBUG
@@ -62,7 +63,7 @@ ip6tc_handle_t create_handle(const char *tablename, const char* modprobe)
 
 	if (!handle) {
 		/* try to insmod the module if iptc_init failed */
-		ip6tables_insmod("ip6_tables", modprobe, 0);
+		load_xtables_ko(modprobe, 0);
 		handle = ip6tc_init(tablename);
 	}
 
@@ -76,7 +77,15 @@ ip6tc_handle_t create_handle(const char *tablename, const char* modprobe)
 
 static int parse_counters(char *string, struct ip6t_counters *ctr)
 {
-	return (sscanf(string, "[%llu:%llu]", (unsigned long long *)&ctr->pcnt, (unsigned long long *)&ctr->bcnt) == 2);
+	unsigned long long pcnt, bcnt;
+	int ret;
+
+	ret = sscanf(string, "[%llu:%llu]",
+		     (unsigned long long *)&pcnt,
+		     (unsigned long long *)&bcnt);
+	ctr->pcnt = pcnt;
+	ctr->bcnt = bcnt;
+	return ret == 2;
 }
 
 /* global new argv and argc */
@@ -102,7 +111,11 @@ static void free_argv(void) {
 		free(newargv[i]);
 }
 
+#ifdef IPTABLES_MULTI
+int ip6tables_restore_main(int argc, char *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
 	ip6tc_handle_t handle = NULL;
 	char buffer[10240];

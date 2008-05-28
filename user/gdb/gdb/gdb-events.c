@@ -1,6 +1,7 @@
 /* User Interface Events.
 
-   Copyright 1999, 2001, 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,8 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Work in progress */
 
@@ -32,7 +32,7 @@
    If editing this file, please also run gdb-events.sh and merge any
    changes into that script. Conversely, when making sweeping changes
    to this file, modifying gdb-events.sh and using its output may
-   prove easier. */
+   prove easier.  */
 
 
 #include "defs.h"
@@ -44,6 +44,13 @@ static struct gdb_events queue_event_hooks;
 static struct gdb_events *current_event_hooks = &null_event_hooks;
 
 int gdb_events_debug;
+static void
+show_gdb_events_debug (struct ui_file *file, int from_tty,
+		       struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Event debugging is %s.\n"), value);
+}
+
 
 void
 breakpoint_create_event (int b)
@@ -331,19 +338,12 @@ _initialize_gdb_events (void)
   queue_event_hooks.tracepoint_modify = queue_tracepoint_modify;
   queue_event_hooks.architecture_changed = queue_architecture_changed;
 
-  c = add_set_cmd ("eventdebug", class_maintenance, var_zinteger,
-		   (char *) (&gdb_events_debug), "Set event debugging.\n\
-When non-zero, event/notify debugging is enabled.", &setlist);
-  deprecate_cmd (c, "set debug event");
-  deprecate_cmd (deprecated_add_show_from_set (c, &showlist),
-		 "show debug event");
-
-  deprecated_add_show_from_set
-    (add_set_cmd ("event",
-		  class_maintenance,
-		  var_zinteger,
-		  (char *) (&gdb_events_debug),
-		  "Set event debugging.\n\
-When non-zero, event/notify debugging is enabled.", &setdebuglist),
-     &showdebuglist);
+  add_setshow_zinteger_cmd ("event", class_maintenance,
+			    &gdb_events_debug, _("\
+Set event debugging."), _("\
+Show event debugging."), _("\
+When non-zero, event/notify debugging is enabled."),
+			    NULL,
+			    show_gdb_events_debug,
+			    &setdebuglist, &showdebuglist);
 }

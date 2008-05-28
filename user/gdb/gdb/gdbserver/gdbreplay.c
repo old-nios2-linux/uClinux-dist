@@ -1,12 +1,13 @@
 /* Replay a remote debug session logfile for GDB.
-   Copyright 1996, 1998, 1999, 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Fred Fish (fnf@cygnus.com) from pieces of gdbserver.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,22 +16,23 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
 #include <stdio.h>
+#if HAVE_SYS_FILE_H
 #include <sys/file.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
+#endif
+#if HAVE_SIGNAL_H
 #include <signal.h>
+#endif
 #include <ctype.h>
+#if HAVE_FCNTL_H
 #include <fcntl.h>
+#endif
+#if HAVE_ERRNO_H
 #include <errno.h>
-
+#endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -40,11 +42,85 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_NETINET_IN_H
+#include <netinet/in.h>
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+#if HAVE_NETDB_H
+#include <netdb.h>
+#endif
+#if HAVE_NETINET_TCP_H
+#include <netinet/tcp.h>
+#endif
+#if HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+
+#if USE_WIN32API
+#include <winsock.h>
+#endif
+
+#ifndef HAVE_SOCKLEN_T
+typedef int socklen_t;
+#endif
 
 /* Sort of a hack... */
 #define EOL (EOF - 1)
 
 static int remote_desc;
+
+#ifdef __MINGW32CE__
+
+#ifndef COUNTOF
+#define COUNTOF(STR) (sizeof (STR) / sizeof ((STR)[0]))
+#endif
+
+#define errno (GetLastError ())
+
+char *
+strerror (DWORD error)
+{
+  static char buf[1024];
+  WCHAR *msgbuf;
+  DWORD lasterr = GetLastError ();
+  DWORD chars = FormatMessageW (FORMAT_MESSAGE_FROM_SYSTEM
+				| FORMAT_MESSAGE_ALLOCATE_BUFFER,
+				NULL,
+				error,
+				0, /* Default language */
+				(LPVOID)&msgbuf,
+				0,
+				NULL);
+  if (chars != 0)
+    {
+      /* If there is an \r\n appended, zap it.  */
+      if (chars >= 2
+	  && msgbuf[chars - 2] == '\r'
+	  && msgbuf[chars - 1] == '\n')
+	{
+	  chars -= 2;
+	  msgbuf[chars] = 0;
+	}
+
+      if (chars > ((COUNTOF (buf)) - 1))
+	{
+	  chars = COUNTOF (buf) - 1;
+	  msgbuf [chars] = 0;
+	}
+
+      wcstombs (buf, msgbuf, chars + 1);
+      LocalFree (msgbuf);
+    }
+  else
+    sprintf (buf, "unknown win32 error (%ld)", error);
+
+  SetLastError (lasterr);
+  return buf;
+}
+
+#endif /* __MINGW32CE__ */
 
 /* Print the system error message for errno, and also mention STRING
    as the file name for which the error was encountered.
@@ -85,7 +161,11 @@ sync_error (FILE *fp, char *desc, int expect, int got)
 static void
 remote_close (void)
 {
+#ifdef USE_WIN32API
+  closesocket (remote_desc);
+#else
   close (remote_desc);
+#endif
 }
 
 /* Open a connection to a remote debugger.
@@ -102,15 +182,28 @@ remote_open (char *name)
     }
   else
     {
+#ifdef USE_WIN32API
+      static int winsock_initialized;
+#endif
       char *port_str;
       int port;
       struct sockaddr_in sockaddr;
-      int tmp;
+      socklen_t tmp;
       int tmp_desc;
 
       port_str = strchr (name, ':');
 
       port = atoi (port_str + 1);
+
+#ifdef USE_WIN32API
+      if (!winsock_initialized)
+	{
+	  WSADATA wsad;
+
+	  WSAStartup (MAKEWORD (1, 0), &wsad);
+	  winsock_initialized = 1;
+	}
+#endif
 
       tmp_desc = socket (PF_INET, SOCK_STREAM, 0);
       if (tmp_desc < 0)
@@ -144,13 +237,19 @@ remote_open (char *name)
       setsockopt (remote_desc, IPPROTO_TCP, TCP_NODELAY,
 		  (char *) &tmp, sizeof (tmp));
 
+#ifndef USE_WIN32API
       close (tmp_desc);		/* No longer need this */
 
       signal (SIGPIPE, SIG_IGN);	/* If we don't do this, then gdbreplay simply
 					   exits when the remote side dies.  */
+#else
+      closesocket (tmp_desc);	/* No longer need this */
+#endif
     }
 
+#if defined(F_SETFL) && defined (FASYNC)
   fcntl (remote_desc, F_SETFL, FASYNC);
+#endif
 
   fprintf (stderr, "Replay logfile using %s\n", name);
   fflush (stderr);

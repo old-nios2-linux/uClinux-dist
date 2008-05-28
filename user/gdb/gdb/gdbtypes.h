@@ -1,7 +1,7 @@
 /* Internal type definitions for GDB.
 
-   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,54 +18,16 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (GDBTYPES_H)
 #define GDBTYPES_H 1
 
+#include "hashtab.h"
+
 /* Forward declarations for prototypes.  */
 struct field;
 struct block;
-
-/* Codes for `fundamental types'.  This is a monstrosity based on the
-   bogus notion that there are certain compiler-independent
-   `fundamental types'.  None of these is well-defined (how big is
-   FT_SHORT?  Does it depend on the language?  How does the
-   language-specific code know which type to correlate to FT_SHORT?)  */
-
-#define FT_VOID			0
-#define FT_BOOLEAN		1
-#define FT_CHAR			2	/* we use this for not-unsigned C/C++ chars */
-#define FT_SIGNED_CHAR		3	/* we use this for C++ signed chars */
-#define FT_UNSIGNED_CHAR	4	/* we use this for C/C++ unsigned chars */
-#define FT_SHORT		5
-#define FT_SIGNED_SHORT		6
-#define FT_UNSIGNED_SHORT	7
-#define FT_INTEGER		8
-#define FT_SIGNED_INTEGER	9
-#define FT_UNSIGNED_INTEGER	10
-#define FT_LONG			11
-#define FT_SIGNED_LONG		12
-#define FT_UNSIGNED_LONG	13
-#define FT_LONG_LONG		14
-#define FT_SIGNED_LONG_LONG	15
-#define FT_UNSIGNED_LONG_LONG	16
-#define FT_FLOAT		17
-#define FT_DBL_PREC_FLOAT	18
-#define FT_EXT_PREC_FLOAT	19
-#define FT_COMPLEX		20
-#define FT_DBL_PREC_COMPLEX	21
-#define FT_EXT_PREC_COMPLEX	22
-#define FT_STRING		23
-#define FT_FIXED_DECIMAL	24
-#define FT_FLOAT_DECIMAL	25
-#define FT_BYTE			26
-#define FT_UNSIGNED_BYTE	27
-#define FT_TEMPLATE_ARG		28
-
-#define FT_NUM_MEMBERS		29	/* Highest FT_* above, plus one. */
 
 /* Some macros for char-based bitfields.  */
 
@@ -106,6 +68,7 @@ enum type_code
     TYPE_CODE_STRUCT,		/* C struct or Pascal record */
     TYPE_CODE_UNION,		/* C union or Pascal variant part */
     TYPE_CODE_ENUM,		/* Enumeration type */
+    TYPE_CODE_FLAGS,		/* Bit flags type */
     TYPE_CODE_FUNC,		/* Function type */
     TYPE_CODE_INT,		/* Integer type */
 
@@ -139,8 +102,20 @@ enum type_code
     TYPE_CODE_ERROR,
 
     /* C++ */
-    TYPE_CODE_MEMBER,		/* Member type */
     TYPE_CODE_METHOD,		/* Method type */
+
+    /* Pointer-to-member-function type.  This describes how to access a
+       particular member function of a class (possibly a virtual
+       member function).  The representation may vary between different
+       C++ ABIs.  */
+    TYPE_CODE_METHODPTR,
+
+    /* Pointer-to-member type.  This is the offset within a class to some
+       particular data member.  The only currently supported representation
+       uses an unbiased offset, with -1 representing NULL; this is used
+       by the Itanium C++ ABI (used by GCC on all platforms).  */
+    TYPE_CODE_MEMBERPTR,
+
     TYPE_CODE_REF,		/* C++ Reference types */
 
     TYPE_CODE_CHAR,		/* *real* character type */
@@ -156,7 +131,9 @@ enum type_code
     TYPE_CODE_TEMPLATE,		/* C++ template */
     TYPE_CODE_TEMPLATE_ARG,	/* C++ template arg */
 
-    TYPE_CODE_NAMESPACE		/* C++ namespace.  */
+    TYPE_CODE_NAMESPACE,	/* C++ namespace.  */
+
+    TYPE_CODE_DECFLOAT		/* Decimal floating point.  */
   };
 
 /* For now allow source to use TYPE_CODE_CLASS for C++ classes, as an
@@ -304,6 +281,20 @@ enum type_code
 
 #define TYPE_FLAG_FIXED_INSTANCE (1 << 15)
 
+/* This debug target supports TYPE_STUB(t).  In the unsupported case we have to
+   rely on NFIELDS to be zero etc., see TYPE_IS_OPAQUE ().
+   TYPE_STUB(t) with !TYPE_STUB_SUPPORTED(t) may exist if we only guessed
+   the TYPE_STUB(t) value (see dwarfread.c).  */
+
+#define TYPE_FLAG_STUB_SUPPORTED (1 << 16)
+#define TYPE_STUB_SUPPORTED(t)   (TYPE_FLAGS (t) & TYPE_FLAG_STUB_SUPPORTED)
+
+/* Not textual.  By default, GDB treats all single byte integers as
+   characters (or elements of strings) unless this flag is set.  */
+
+#define TYPE_FLAG_NOTTEXT	(1 << 17)
+#define TYPE_NOTTEXT(t)		(TYPE_FLAGS (t) & TYPE_FLAG_NOTTEXT)
+
 /*  Array bound type.  */
 enum array_bound_type
 {
@@ -384,7 +375,9 @@ struct main_type
   /* Field number of the virtual function table pointer in
      VPTR_BASETYPE.  If -1, we were unable to find the virtual
      function table pointer in initial symbol reading, and
-     fill_in_vptr_fieldno should be called to find it if possible.
+     get_vptr_fieldno should be called to find it if possible.
+     get_vptr_fieldno will update this field if possible.
+     Otherwise the value is left at -1.
 
      Unused if this type does not have virtual functions.  */
 
@@ -412,8 +405,8 @@ struct main_type
     {
       /* Position of this field, counting in bits from start of
 	 containing structure.
-	 For BITS_BIG_ENDIAN=1 targets, it is the bit offset to the MSB.
-	 For BITS_BIG_ENDIAN=0 targets, it is the bit offset to the LSB.
+	 For gdbarch_bits_big_endian=1 targets, it is the bit offset to the MSB.
+	 For gdbarch_bits_big_endian=0 targets, it is the bit offset to the LSB.
 	 For a range bound or enum value, this is the value itself. */
 
       int bitpos;
@@ -461,8 +454,9 @@ struct main_type
   /* For types with virtual functions (TYPE_CODE_STRUCT), VPTR_BASETYPE
      is the base class which defined the virtual function table pointer.  
 
-     For types that are pointer to member types (TYPE_CODE_MEMBER),
-     VPTR_BASETYPE is the type that this pointer is a member of.
+     For types that are pointer to member types (TYPE_CODE_METHODPTR,
+     TYPE_CODE_MEMBERPTR), VPTR_BASETYPE is the type that this pointer
+     is a member of.
 
      For method types (TYPE_CODE_METHOD), VPTR_BASETYPE is the aggregate
      type that contains the method.
@@ -481,11 +475,12 @@ struct main_type
 
     struct cplus_struct_type *cplus_stuff;
 
-    /* FLOATFORMAT is for TYPE_CODE_FLT.  It is a pointer to the
-       floatformat object that describes the floating-point value
-       that resides within the type.  */
+    /* FLOATFORMAT is for TYPE_CODE_FLT.  It is a pointer to two
+       floatformat objects that describe the floating-point value
+       that resides within the type.  The first is for big endian
+       targets and the second is for little endian targets.  */
 
-    const struct floatformat *floatformat;
+    const struct floatformat **floatformat;
   } type_specific;
 };
 
@@ -725,32 +720,6 @@ struct cplus_struct_type
     short ninstantiations;
     struct type **instantiations;
 
-    /* The following points to information relevant to the runtime model
-     * of the compiler.
-     * Currently being used only for HP's ANSI C++ compiler.
-     * (This type may have to be changed/enhanced for other compilers.)
-     *
-     * RUNTIME_PTR is NULL if there is no runtime information (currently
-     * this means the type was not compiled by HP aCC).
-     *
-     * Fields in structure pointed to:
-     * ->HAS_VTABLE : 0 => no virtual table, 1 => vtable present
-     * 
-     * ->PRIMARY_BASE points to the first non-virtual base class that has
-     * a virtual table.
-     *
-     * ->VIRTUAL_BASE_LIST points to a list of struct type * pointers that
-     * point to the type information for all virtual bases among this type's
-     * ancestors.
-     */
-    struct runtime_info
-      {
-	short has_vtable;
-	struct type *primary_base;
-	struct type **virtual_base_list;
-      }
-     *runtime_ptr;
-
     /* Pointer to information about enclosing scope, if this is a
      * local type.  If it is not a local type, this is NULL
      */
@@ -939,12 +908,6 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_FN_FIELD_VIRTUAL_P(thisfn, n) ((thisfn)[n].voffset > 1)
 #define TYPE_FN_FIELD_STATIC_P(thisfn, n) ((thisfn)[n].voffset == VOFFSET_STATIC)
 
-#define TYPE_RUNTIME_PTR(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->runtime_ptr)
-#define TYPE_VTABLE(thistype) (TYPE_RUNTIME_PTR(thistype)->has_vtable)
-#define TYPE_HAS_VTABLE(thistype) (TYPE_RUNTIME_PTR(thistype) && TYPE_VTABLE(thistype))
-#define TYPE_PRIMARY_BASE(thistype) (TYPE_RUNTIME_PTR(thistype)->primary_base)
-#define TYPE_VIRTUAL_BASE_LIST(thistype) (TYPE_RUNTIME_PTR(thistype)->virtual_base_list)
-
 #define TYPE_LOCALTYPE_PTR(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr)
 #define TYPE_LOCALTYPE_FILE(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr->file)
 #define TYPE_LOCALTYPE_LINE(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr->line)
@@ -952,7 +915,8 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_IS_OPAQUE(thistype) (((TYPE_CODE (thistype) == TYPE_CODE_STRUCT) ||        \
                                    (TYPE_CODE (thistype) == TYPE_CODE_UNION))        && \
                                   (TYPE_NFIELDS (thistype) == 0)                     && \
-                                  (TYPE_CPLUS_SPECIFIC (thistype) && (TYPE_NFN_FIELDS (thistype) == 0)))
+                                  (TYPE_CPLUS_SPECIFIC (thistype) && (TYPE_NFN_FIELDS (thistype) == 0)) && \
+                                  (TYPE_STUB (thistype) || !TYPE_STUB_SUPPORTED (thistype)))
 
 struct builtin_type
 {
@@ -975,12 +939,21 @@ struct builtin_type
   /* The target CPU's address type.  This is the ISA address size.  */
   struct type *builtin_core_addr;
 
+
+  /* Types used for symbols with no debug information.  */
+  struct type *nodebug_text_symbol;
+  struct type *nodebug_data_symbol;
+  struct type *nodebug_unknown_symbol;
+  struct type *nodebug_tls_symbol;
+
+
   /* Integral types.  */
 
-  /* We use this for the '/c' print format, because c_char is just a
+  /* We use these for the '/c' print format, because c_char is just a
      one-byte integral type, which languages less laid back than C
      will print as ... well, a one-byte integral type.  */
   struct type *builtin_true_char;
+  struct type *builtin_true_unsigned_char;
 
   /* Implicit size/sign (based on the the architecture's ABI).  */
   struct type *builtin_void;
@@ -1002,52 +975,63 @@ struct builtin_type
   struct type *builtin_bool;
   struct type *builtin_long_long;
   struct type *builtin_unsigned_long_long;
+  struct type *builtin_decfloat;
+  struct type *builtin_decdouble;
+  struct type *builtin_declong;
 };
 
 /* Return the type table for the specified architecture.  */
 extern const struct builtin_type *builtin_type (struct gdbarch *gdbarch);
 
-/* Implicit sizes */
-extern struct type *builtin_type_void;
-extern struct type *builtin_type_char;
-extern struct type *builtin_type_short;
-extern struct type *builtin_type_int;
-extern struct type *builtin_type_long;
-extern struct type *builtin_type_signed_char;
-extern struct type *builtin_type_unsigned_char;
-extern struct type *builtin_type_unsigned_short;
-extern struct type *builtin_type_unsigned_int;
-extern struct type *builtin_type_unsigned_long;
-extern struct type *builtin_type_float;
-extern struct type *builtin_type_double;
-extern struct type *builtin_type_long_double;
-extern struct type *builtin_type_complex;
-extern struct type *builtin_type_double_complex;
-extern struct type *builtin_type_string;
-extern struct type *builtin_type_bool;
+/* Compatibility macros to access types for the current architecture.  */
+#define builtin_type_void_data_ptr \
+	(builtin_type (current_gdbarch)->builtin_data_ptr)
+#define builtin_type_void_func_ptr \
+	(builtin_type (current_gdbarch)->builtin_func_ptr)
+#define builtin_type_CORE_ADDR \
+	(builtin_type (current_gdbarch)->builtin_core_addr)
+#define builtin_type_true_char \
+	(builtin_type (current_gdbarch)->builtin_true_char)
+#define builtin_type_void \
+	(builtin_type (current_gdbarch)->builtin_void)
+#define builtin_type_char \
+	(builtin_type (current_gdbarch)->builtin_char)
+#define builtin_type_short \
+	(builtin_type (current_gdbarch)->builtin_short)
+#define builtin_type_int \
+	(builtin_type (current_gdbarch)->builtin_int)
+#define builtin_type_long \
+	(builtin_type (current_gdbarch)->builtin_long)
+#define builtin_type_signed_char \
+	(builtin_type (current_gdbarch)->builtin_signed_char)
+#define builtin_type_unsigned_char \
+	(builtin_type (current_gdbarch)->builtin_unsigned_char)
+#define builtin_type_unsigned_short \
+	(builtin_type (current_gdbarch)->builtin_unsigned_short)
+#define builtin_type_unsigned_int \
+	(builtin_type (current_gdbarch)->builtin_unsigned_int)
+#define builtin_type_unsigned_long \
+	(builtin_type (current_gdbarch)->builtin_unsigned_long)
+#define builtin_type_float \
+	(builtin_type (current_gdbarch)->builtin_float)
+#define builtin_type_double \
+	(builtin_type (current_gdbarch)->builtin_double)
+#define builtin_type_long_double \
+	(builtin_type (current_gdbarch)->builtin_long_double)
+#define builtin_type_complex \
+	(builtin_type (current_gdbarch)->builtin_complex)
+#define builtin_type_double_complex \
+	(builtin_type (current_gdbarch)->builtin_double_complex)
+#define builtin_type_string \
+	(builtin_type (current_gdbarch)->builtin_string)
+#define builtin_type_bool \
+	(builtin_type (current_gdbarch)->builtin_bool)
+#define builtin_type_long_long \
+	(builtin_type (current_gdbarch)->builtin_long_long)
+#define builtin_type_unsigned_long_long \
+	(builtin_type (current_gdbarch)->builtin_unsigned_long_long)
 
-/* Address/pointer types: */
-/* (C) Language `pointer to data' type.  Some target platforms use an
-   implicitly {sign,zero} -extended 32 bit C language pointer on a 64
-   bit ISA.  */
-extern struct type *builtin_type_void_data_ptr;
-
-/* (C) Language `pointer to function returning void' type.  Since
-   ANSI, C standards have explicitly said that pointers to functions
-   and pointers to data are not interconvertible --- that is, you
-   can't cast a function pointer to void * and back, and expect to get
-   the same value.  However, all function pointer types are
-   interconvertible, so void (*) () can server as a generic function
-   pointer.  */
-extern struct type *builtin_type_void_func_ptr;
-
-/* The target CPU's address type.  This is the ISA address size. */
-extern struct type *builtin_type_CORE_ADDR;
-/* The symbol table address type.  Some object file formats have a 32
-   bit address type even though the TARGET has a 64 bit pointer type
-   (cf MIPS). */
-extern struct type *builtin_type_bfd_vma;
-
+ 
 /* Explicit sizes - see C9X <intypes.h> for naming scheme.  The "int0"
    is for when an architecture needs to describe a register that has
    no size.  */
@@ -1063,82 +1047,110 @@ extern struct type *builtin_type_uint64;
 extern struct type *builtin_type_int128;
 extern struct type *builtin_type_uint128;
 
-/* SIMD types.  We inherit these names from GCC.  */
-extern struct type *builtin_type_v4sf;
-extern struct type *builtin_type_v4si;
-extern struct type *builtin_type_v16qi;
-extern struct type *builtin_type_v8qi;
-extern struct type *builtin_type_v8hi;
-extern struct type *builtin_type_v4hi;
-extern struct type *builtin_type_v2si;
-
-/* Type for 64 bit vectors. */
-extern struct type *builtin_type_vec64;
-extern struct type *builtin_type_vec64i;
-
-/* Type for 128 bit vectors. */
-extern struct type *builtin_type_vec128;
-extern struct type *builtin_type_vec128i;
-
 /* Explicit floating-point formats.  See "floatformat.h".  */
-extern struct type *builtin_type_ieee_single[BFD_ENDIAN_UNKNOWN];
-extern struct type *builtin_type_ieee_single_big;
-extern struct type *builtin_type_ieee_single_little;
-extern struct type *builtin_type_ieee_double[BFD_ENDIAN_UNKNOWN];
-extern struct type *builtin_type_ieee_double_big;
-extern struct type *builtin_type_ieee_double_little;
-extern struct type *builtin_type_ieee_double_littlebyte_bigword;
+extern const struct floatformat *floatformats_ieee_single[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ieee_double[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_m68881_ext[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_arm_ext[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ia64_spill[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ia64_quad[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_vax_f[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN];
+
+extern struct type *builtin_type_ieee_single;
+extern struct type *builtin_type_ieee_double;
 extern struct type *builtin_type_i387_ext;
 extern struct type *builtin_type_m68881_ext;
-extern struct type *builtin_type_i960_ext;
-extern struct type *builtin_type_m88110_ext;
-extern struct type *builtin_type_m88110_harris_ext;
-extern struct type *builtin_type_arm_ext[BFD_ENDIAN_UNKNOWN];
-extern struct type *builtin_type_arm_ext_big;
-extern struct type *builtin_type_arm_ext_littlebyte_bigword;
-extern struct type *builtin_type_ia64_spill[BFD_ENDIAN_UNKNOWN];
-extern struct type *builtin_type_ia64_spill_big;
-extern struct type *builtin_type_ia64_spill_little;
-extern struct type *builtin_type_ia64_quad[BFD_ENDIAN_UNKNOWN];
-extern struct type *builtin_type_ia64_quad_big;
-extern struct type *builtin_type_ia64_quad_little;
-
-/* We use this for the '/c' print format, because builtin_type_char is
-   just a one-byte integral type, which languages less laid back than
-   C will print as ... well, a one-byte integral type.  */
-extern struct type *builtin_type_true_char;
+extern struct type *builtin_type_arm_ext;
+extern struct type *builtin_type_ia64_spill;
+extern struct type *builtin_type_ia64_quad;
 
 /* This type represents a type that was unrecognized in symbol
    read-in.  */
 
 extern struct type *builtin_type_error;
 
-extern struct type *builtin_type_long_long;
-extern struct type *builtin_type_unsigned_long_long;
 
 /* Modula-2 types */
 
-extern struct type *builtin_type_m2_char;
-extern struct type *builtin_type_m2_int;
-extern struct type *builtin_type_m2_card;
-extern struct type *builtin_type_m2_real;
-extern struct type *builtin_type_m2_bool;
+struct builtin_m2_type
+{
+  struct type *builtin_char;
+  struct type *builtin_int;
+  struct type *builtin_card;
+  struct type *builtin_real;
+  struct type *builtin_bool;
+};
+
+/* Return the Modula-2 type table for the specified architecture.  */
+extern const struct builtin_m2_type *builtin_m2_type (struct gdbarch *gdbarch);
+
+/* Compatibility macros to access types for the current architecture.  */
+#define builtin_type_m2_char \
+	(builtin_m2_type (current_gdbarch)->builtin_char)
+#define builtin_type_m2_int \
+	(builtin_m2_type (current_gdbarch)->builtin_int)
+#define builtin_type_m2_card \
+	(builtin_m2_type (current_gdbarch)->builtin_card)
+#define builtin_type_m2_real \
+	(builtin_m2_type (current_gdbarch)->builtin_real)
+#define builtin_type_m2_bool \
+	(builtin_m2_type (current_gdbarch)->builtin_bool)
+
 
 /* Fortran (F77) types */
 
-extern struct type *builtin_type_f_character;
-extern struct type *builtin_type_f_integer;
-extern struct type *builtin_type_f_integer_s2;
-extern struct type *builtin_type_f_logical;
-extern struct type *builtin_type_f_logical_s1;
-extern struct type *builtin_type_f_logical_s2;
-extern struct type *builtin_type_f_real;
-extern struct type *builtin_type_f_real_s8;
-extern struct type *builtin_type_f_real_s16;
-extern struct type *builtin_type_f_complex_s8;
-extern struct type *builtin_type_f_complex_s16;
-extern struct type *builtin_type_f_complex_s32;
-extern struct type *builtin_type_f_void;
+struct builtin_f_type
+{
+  struct type *builtin_character;
+  struct type *builtin_integer;
+  struct type *builtin_integer_s2;
+  struct type *builtin_logical;
+  struct type *builtin_logical_s1;
+  struct type *builtin_logical_s2;
+  struct type *builtin_real;
+  struct type *builtin_real_s8;
+  struct type *builtin_real_s16;
+  struct type *builtin_complex_s8;
+  struct type *builtin_complex_s16;
+  struct type *builtin_complex_s32;
+  struct type *builtin_void;
+};
+
+/* Return the Fortran type table for the specified architecture.  */
+extern const struct builtin_f_type *builtin_f_type (struct gdbarch *gdbarch);
+
+/* Compatibility macros to access types for the current architecture.  */
+#define builtin_type_f_character \
+	(builtin_f_type (current_gdbarch)->builtin_character)
+#define builtin_type_f_integer \
+	(builtin_f_type (current_gdbarch)->builtin_integer)
+#define builtin_type_f_integer_s2 \
+	(builtin_f_type (current_gdbarch)->builtin_integer_s2)
+#define builtin_type_f_logical \
+	(builtin_f_type (current_gdbarch)->builtin_logical)
+#define builtin_type_f_logical_s1 \
+	(builtin_f_type (current_gdbarch)->builtin_logical_s1)
+#define builtin_type_f_logical_s2 \
+	(builtin_f_type (current_gdbarch)->builtin_logical_s2)
+#define builtin_type_f_real \
+	(builtin_f_type (current_gdbarch)->builtin_real)
+#define builtin_type_f_real_s8 \
+	(builtin_f_type (current_gdbarch)->builtin_real_s8)
+#define builtin_type_f_real_s16 \
+	(builtin_f_type (current_gdbarch)->builtin_real_s16)
+#define builtin_type_f_complex_s8 \
+	(builtin_f_type (current_gdbarch)->builtin_complex_s8)
+#define builtin_type_f_complex_s16 \
+	(builtin_f_type (current_gdbarch)->builtin_complex_s16)
+#define builtin_type_f_complex_s32 \
+	(builtin_f_type (current_gdbarch)->builtin_complex_s32)
+#define builtin_type_f_void \
+	(builtin_f_type (current_gdbarch)->builtin_void)
+
 
 /* RTTI for C++ */
 /* extern struct type *builtin_type_cxx_typeinfo; */
@@ -1167,6 +1179,12 @@ extern struct type *builtin_type_f_void;
     ? obstack_alloc (&TYPE_OBJFILE (t) -> objfile_obstack, size) \
     : xmalloc (size))
 
+#define TYPE_ZALLOC(t,size)  \
+   (TYPE_OBJFILE (t) != NULL  \
+    ? memset (obstack_alloc (&TYPE_OBJFILE (t)->objfile_obstack, size),  \
+	      0, size)  \
+    : xzalloc (size))
+
 extern struct type *alloc_type (struct objfile *);
 
 extern struct type *init_type (enum type_code, int, int, char *,
@@ -1181,6 +1199,15 @@ extern struct type *init_type (enum type_code, int, int, char *,
 extern struct type *init_composite_type (char *name, enum type_code code);
 extern void append_composite_type_field (struct type *t, char *name,
 					 struct type *field);
+
+/* Helper functions to construct a bit flags type.  An initially empty
+   type is created using init_flag_type().  Flags are then added using
+   append_flag_type_flag().  */
+extern struct type *init_flags_type (char *name, int length);
+extern void append_flags_type_flag (struct type *type, int bitpos, char *name);
+
+extern void make_vector_type (struct type *array_type);
+extern struct type *init_vector_type (struct type *elt_type, int n);
 
 extern struct type *lookup_reference_type (struct type *);
 
@@ -1197,14 +1224,16 @@ extern const char *address_space_int_to_name (int);
 extern struct type *make_type_with_address_space (struct type *type, 
 						  int space_identifier);
 
-extern struct type *lookup_member_type (struct type *, struct type *);
+extern struct type *lookup_memberptr_type (struct type *, struct type *);
 
-extern void
-smash_to_method_type (struct type *type, struct type *domain,
-		      struct type *to_type, struct field *args,
-		      int nargs, int varargs);
+extern struct type *lookup_methodptr_type (struct type *);
 
-extern void smash_to_member_type (struct type *, struct type *, struct type *);
+extern void smash_to_method_type (struct type *type, struct type *domain,
+				  struct type *to_type, struct field *args,
+				  int nargs, int varargs);
+
+extern void smash_to_memberptr_type (struct type *, struct type *,
+				     struct type *);
 
 extern struct type *allocate_stub_method (struct type *);
 
@@ -1247,57 +1276,13 @@ extern struct type *lookup_typename (char *, struct block *, int);
 extern struct type *lookup_template_type (char *, struct type *,
 					  struct block *);
 
-extern struct type *lookup_fundamental_type (struct objfile *, int);
-
-extern void fill_in_vptr_fieldno (struct type *);
+extern int get_vptr_fieldno (struct type *, struct type **);
 
 extern int get_destructor_fn_field (struct type *, int *, int *);
 
 extern int get_discrete_bounds (struct type *, LONGEST *, LONGEST *);
 
 extern int is_ancestor (struct type *, struct type *);
-
-extern int has_vtable (struct type *);
-
-extern struct type *primary_base_class (struct type *);
-
-extern struct type **virtual_base_list (struct type *);
-
-extern int virtual_base_list_length (struct type *);
-extern int virtual_base_list_length_skip_primaries (struct type *);
-
-extern int virtual_base_index (struct type *, struct type *);
-extern int virtual_base_index_skip_primaries (struct type *, struct type *);
-
-
-extern int class_index_in_primary_list (struct type *);
-
-extern int count_virtual_fns (struct type *);
-
-/* Constants for HP/Taligent ANSI C++ runtime model */
-
-/* Where virtual function entries begin in the
- * virtual table, in the non-RRBC vtable format.
- * First 4 are the metavtable pointer, top offset,
- * typeinfo pointer, and dup base info pointer */
-#define HP_ACC_VFUNC_START        4
-
-/* (Negative) Offset where virtual base offset entries begin 
- * in the virtual table. Skips over metavtable pointer and
- * the self-offset entry. 
- * NOTE: NEGATE THIS BEFORE USING! The virtual base offsets
- * appear before the address point of the vtable (the slot
- * pointed to by the object's vtable pointer), i.e. at lower
- * addresses than the vtable pointer. */
-#define HP_ACC_VBASE_START        2
-
-/* (Positive) Offset where the pointer to the typeinfo
- * object is present in the virtual table */
-#define HP_ACC_TYPEINFO_OFFSET    2
-
-/* (Positive) Offset where the ``top offset'' entry of
- * the virtual table is */
-#define HP_ACC_TOP_OFFSET_OFFSET  1
 
 /* Overload resolution */
 
@@ -1347,7 +1332,7 @@ extern void recursive_dump_type (struct type *, int);
 
 /* printcmd.c */
 
-extern void print_scalar_formatted (void *, struct type *, int, int,
+extern void print_scalar_formatted (const void *, struct type *, int, int,
 				    struct ui_file *);
 
 extern int can_dereference (struct type *);
@@ -1355,5 +1340,11 @@ extern int can_dereference (struct type *);
 extern int is_integral_type (struct type *);
 
 extern void maintenance_print_type (char *, int);
+
+extern htab_t create_copied_types_hash (struct objfile *objfile);
+
+extern struct type *copy_type_recursive (struct objfile *objfile,
+					 struct type *type,
+					 htab_t copied_types);
 
 #endif /* GDBTYPES_H */

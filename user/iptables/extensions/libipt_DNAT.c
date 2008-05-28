@@ -15,13 +15,12 @@
    to. */
 struct ipt_natinfo
 {
-	struct ipt_entry_target t;
+	struct xt_entry_target t;
 	struct ip_nat_multi_range mr;
 };
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void DNAT_help(void)
 {
 	printf(
 "DNAT v%s options:\n"
@@ -32,10 +31,10 @@ help(void)
 IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{ "to-destination", 1, 0, '1' },
-	{ "random", 0, 0, '2' },
-	{ 0 }
+static const struct option DNAT_opts[] = {
+	{ "to-destination", 1, NULL, '1' },
+	{ "random", 0, NULL, '2' },
+	{ }
 };
 
 static struct ipt_natinfo *
@@ -58,7 +57,7 @@ append_range(struct ipt_natinfo *info, const struct ip_nat_range *range)
 }
 
 /* Ranges expected in network order. */
-static struct ipt_entry_target *
+static struct xt_entry_target *
 parse_to(char *arg, int portok, struct ipt_natinfo *info)
 {
 	struct ip_nat_range range;
@@ -139,11 +138,10 @@ parse_to(char *arg, int portok, struct ipt_natinfo *info)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      struct ipt_entry_target **target)
+static int DNAT_parse(int c, char **argv, int invert, unsigned int *flags,
+                      const void *e, struct xt_entry_target **target)
 {
+	const struct ipt_entry *entry = e;
 	struct ipt_natinfo *info = (void *)*target;
 	int portok;
 
@@ -180,13 +178,14 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 			*flags |= IPT_DNAT_OPT_RANDOM;
 		} else
 			*flags |= IPT_DNAT_OPT_RANDOM;
+		return 1;
 	default:
 		return 0;
 	}
 }
 
 /* Final check; must have specfied --to-source. */
-static void final_check(unsigned int flags)
+static void DNAT_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM,
@@ -214,10 +213,8 @@ static void print_range(const struct ip_nat_range *r)
 }
 
 /* Prints out the targinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_target *target,
-      int numeric)
+static void DNAT_print(const void *ip, const struct xt_entry_target *target,
+                       int numeric)
 {
 	struct ipt_natinfo *info = (void *)target;
 	unsigned int i = 0;
@@ -232,8 +229,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_targinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
+static void DNAT_save(const void *ip, const struct xt_entry_target *target)
 {
 	struct ipt_natinfo *info = (void *)target;
 	unsigned int i = 0;
@@ -247,21 +243,20 @@ save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
 	}
 }
 
-static struct iptables_target dnat = { 
-	.next		= NULL,
+static struct iptables_target dnat_target = {
 	.name		= "DNAT",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ip_nat_multi_range)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ip_nat_multi_range)),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= DNAT_help,
+	.parse		= DNAT_parse,
+	.final_check	= DNAT_check,
+	.print		= DNAT_print,
+	.save		= DNAT_save,
+	.extra_opts	= DNAT_opts,
 };
 
 void _init(void)
 {
-	register_target(&dnat);
+	register_target(&dnat_target);
 }

@@ -1,21 +1,19 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
-   USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Test a minimal file containing DWARF-2 information.  This test also
    serves as a skeleton for other DWARF-2 tests.  Most other tests will
@@ -39,17 +37,17 @@ func_cu1:
 	.section .debug_info
 .Lcu1_begin:
 	/* CU header */
-	.int	.Lcu1_end - .Lcu1_start		/* Length of Compilation Unit */
+	.4byte	.Lcu1_end - .Lcu1_start		/* Length of Compilation Unit */
 .Lcu1_start:
-	.short	2				/* DWARF Version */
-	.int	.Labbrev1_begin			/* Offset into abbrev section */
+	.2byte	2				/* DWARF Version */
+	.4byte	.Labbrev1_begin			/* Offset into abbrev section */
 	.byte	4				/* Pointer size */
 
 	/* CU die */
 	.uleb128 1				/* Abbrev: DW_TAG_compile_unit */
-	.int	.Lline1_begin			/* DW_AT_stmt_list */
-	.int	.Lend_text1			/* DW_AT_high_pc */
-	.int	.Lbegin_text1			/* DW_AT_low_pc */
+	.4byte	.Lline1_begin			/* DW_AT_stmt_list */
+	.4byte	.Lend_text1			/* DW_AT_high_pc */
+	.4byte	.Lbegin_text1			/* DW_AT_low_pc */
 	.ascii	"file1.txt\0"			/* DW_AT_name */
 	.ascii	"GNU C 3.3.3\0"			/* DW_AT_producer */
 	.byte	1				/* DW_AT_language (C) */
@@ -60,9 +58,9 @@ func_cu1:
 	.byte		1			/* DW_AT_decl_file */
 	.byte		2			/* DW_AT_decl_line */
 	.ascii		"func_cu1\0"		/* DW_AT_name */
-	.int		.Ltype_int-.Lcu1_begin	/* DW_AT_type */
-	.int		.Lbegin_func_cu1	/* DW_AT_low_pc */
-	.int		.Lend_func_cu1		/* DW_AT_high_pc */
+	.4byte		.Ltype_int-.Lcu1_begin	/* DW_AT_type */
+	.4byte		.Lbegin_func_cu1	/* DW_AT_low_pc */
+	.4byte		.Lend_func_cu1		/* DW_AT_high_pc */
 	.byte		1			/* DW_AT_frame_base: length */
 	.byte		0x55			/* DW_AT_frame_base: DW_OP_reg5 */
 
@@ -137,10 +135,10 @@ func_cu1:
 /* Line table */
 	.section .debug_line
 .Lline1_begin:
-	.int		.Lline1_end - .Lline1_start	/* Initial length */
+	.4byte		.Lline1_end - .Lline1_start	/* Initial length */
 .Lline1_start:
-	.short		2			/* Version */
-	.int		.Lline1_lines - .Lline1_hdr	/* header_length */
+	.2byte		2			/* Version */
+	.4byte		.Lline1_lines - .Lline1_hdr	/* header_length */
 .Lline1_hdr:
 	.byte		1			/* Minimum insn length */
 	.byte		1			/* default_is_stmt */
@@ -180,7 +178,7 @@ func_cu1:
 	.byte		0	/* DW_LNE_set_address */
 	.uleb128	5
 	.byte		2
-	.int		.Lbegin_func_cu1
+	.4byte		.Lbegin_func_cu1
 
 	.byte		3	/* DW_LNS_advance_line */
 	.sleb128	3	/* ... to 4 */
@@ -192,7 +190,7 @@ func_cu1:
 	.byte		0	/* DW_LNE_set_address */
 	.uleb128	5
 	.byte		2
-	.int		.Lend_func_cu1
+	.4byte		.Lend_func_cu1
 
 	.byte		0	/* DW_LNE_end_of_sequence */
 	.uleb128	1

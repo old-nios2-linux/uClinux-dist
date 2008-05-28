@@ -1,18 +1,18 @@
-# Copyright 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+# Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -68,16 +68,19 @@ set srcfile ${testfile}.c
 set srcfile1 ${testfile}1.c
 set binfile ${objdir}/${subdir}/${testfile}
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}0.o" object {debug additional_flags=-w}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}0.o" object {debug nowarnings}] != "" } {
+     untested maint.exp
+     return -1
 }
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile1}" "${binfile}1.o" object {debug additional_flags=-w}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile1}" "${binfile}1.o" object {debug nowarnings}] != "" } {
+     untested maint.exp
+     return -1
 }
 
-if  { [gdb_compile "${binfile}0.o ${binfile}1.o" "${binfile}" executable {debug additional_flags=-w}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${binfile}0.o ${binfile}1.o" "${binfile}" executable {debug nowarnings}] != "" } {
+     untested maint.exp
+     return -1
 }
 
 
@@ -187,6 +190,13 @@ gdb_expect  {
         timeout         { fail "(timeout) maint demangle" }
         }
 
+# The timeout value is raised, because printing all the symbols and
+# statistical information about Cygwin and Windows libraries takes a lot
+# of time.
+if [istarget "*-*-cygwin*"] {
+	set oldtimeout $timeout
+	set timeout [expr $timeout + 500]
+}
 
 send_gdb "maint print statistics\n"
 gdb_expect  {
@@ -316,6 +326,42 @@ gdb_expect  {
         timeout         { fail "(timeout) maint print msymbols" }
         }
 
+# Check that maint print msymbols allows relative pathnames
+set mydir [pwd]
+gdb_test "cd ${objdir}" "Working directory [string_to_regexp ${objdir}]\..*" "cd to objdir"
+gdb_test_multiple "maint print msymbols msymbols_output2 ${subdir}/${testfile}" "maint print msymbols" {
+    -re "^maint print msymbols msymbols_output2 \[^\n\]*\r\n$gdb_prompt $" {
+    	gdb_test_multiple "shell ls msymbols_output2" "maint print msymbols" {
+	    -re "msymbols_output2\r\n$gdb_prompt $" {
+	    	gdb_test_multiple "shell grep factorial msymbols_output2" "maint print msymbols" {
+		    -re "\\\[ *$decimal\\\] T\[ \t\]+$hex factorial.*$gdb_prompt $" {
+		    	pass "maint print msymbols"
+		    }
+		    -re ".*$gdb_prompt $" {
+		        fail "maint print msymbols"
+		    }
+		    timeout {
+		        fail "(timeout) maint print msymbols"
+		    }
+		}
+		gdb_test "shell rm -f msymbols_output2" ""
+	    }
+	    -re ".*$gdb_prompt $" {
+		fail "maint print msymbols"
+	    }
+	    timeout {
+	    	fail "(timeout) maint print msymbols"
+	    }
+	}
+    }
+    -re ".*$gdb_prompt $" {
+	fail "maint print msymbols"
+    }
+    timeout {
+	fail "(timeout) maint print msymbols"
+    }
+}
+gdb_test "cd ${mydir}" "Working directory [string_to_regexp ${mydir}]\..*" "cd to mydir"
 
 send_gdb "maint print symbols\n"
 gdb_expect  {
@@ -402,9 +448,9 @@ gdb_expect  {
 # If you don't have a .text section, this will require tweaking.
 send_gdb "maint info sections .text\n"
 gdb_expect {
-    -re ".*bss.*$gdb_prompt $"      { fail "maint info sections .text" }
-    -re ".*data.*$gdb_prompt $"     { fail "maint info sections .text" }
-    -re ".* .text .*$gdb_prompt $"  { pass "maint info sections .text" }
+    -re ".* \\.bss .*$gdb_prompt $"      { fail "maint info sections .text" }
+    -re ".* \\.data .*$gdb_prompt $"     { fail "maint info sections .text" }
+    -re ".* \\.text .*$gdb_prompt $"  { pass "maint info sections .text" }
     -re ".*$gdb_prompt $"           { fail "maint info sections .text" }
     timeout               { fail "(timeout) maint info sections .text" }
 }
@@ -413,18 +459,22 @@ gdb_expect {
 # If your data section is tagged CODE, xfail this test.
 send_gdb "maint info sections CODE\n"
 gdb_expect {
-    -re ".* .data .*$gdb_prompt $" { fail "maint info sections CODE" }
-    -re ".* .text .*$gdb_prompt $" { pass "maint info sections CODE" }
+    -re ".* \\.data .*$gdb_prompt $" { fail "maint info sections CODE" }
+    -re ".* \\.text .*$gdb_prompt $" { pass "maint info sections CODE" }
     -re ".*$gdb_prompt $"          { fail "maint info sections CODE" }
     timeout              { fail "(timeout) maint info sections CODE" }
 }
 
 # Test for new option: DATA section flag
 # If your text section is tagged DATA, xfail this test.
+#
+# The "maint info sections DATA" test is marked for XFAIL on Cygwin,
+# because Windows has text sections marked DATA.
+setup_xfail "*-*-*cygwin*"
 send_gdb "maint info sections DATA\n"
 gdb_expect {
-    -re ".* .text .*$gdb_prompt $" { fail "maint info sections DATA" }
-    -re ".* .data .*$gdb_prompt $" { pass "maint info sections DATA" }
+    -re ".* \\.text .*$gdb_prompt $" { fail "maint info sections DATA" }
+    -re ".* \\.data .*$gdb_prompt $" { pass "maint info sections DATA" }
     -re ".*$gdb_prompt $"          { fail "maint info sections DATA" }
     timeout              { fail "(timeout) maint info sections DATA" }
 }
@@ -511,10 +561,6 @@ gdb_expect  {
         timeout         { fail "(timeout) help maint demangle" }
         }
 
-# dump-me is disabled ifdef _WIN32.
-if [ishost *cygwin*] {
-    setup_xfail "*-*-*"
-}
 send_gdb "help maint dump-me\n"
 gdb_expect  {
         -re "Get fatal error; make debugger dump its core\\.\r\nGDB sets its handling of SIGQUIT back to SIG_DFL and then sends\r\nitself a SIGQUIT signal\\..*$gdb_prompt $"\
@@ -633,28 +679,20 @@ gdb_expect  {
         timeout         { fail "(timeout) help maint info" }
         }
 
-send_gdb "help maint print\n"
-gdb_expect  {
-        -re "Maintenance command for printing GDB internal state\\.\[\r\n\]+List of maintenance print subcommands:\[\r\n\]+maintenance print architecture -- Print the internal architecture configuration.*maintenance print msymbols -- Print dump of current minimal symbol definitions.*maintenance print objfiles -- Print dump of current object file definitions.*maintenance print psymbols -- Print dump of current partial symbol definitions.*maintenance print statistics -- Print statistics about internal gdb state.*maintenance print symbols -- Print dump of current symbol definitions.*maintenance print type -- Print a type chain for a given symbol.*Type .help maintenance print. followed by maintenance print subcommand name for full documentation\\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\\..*$gdb_prompt $"\
-                        { pass "help maint print" }
-        -re ".*$gdb_prompt $"       { fail "help maint print" }
-        timeout         { fail "(timeout) help maint print" }
-        }
+test_prefix_command_help {"maint print" "maintenance print"} {
+    "Maintenance command for printing GDB internal state\\.\[\r\n\]+"
+}
 
-send_gdb "help maint\n"
-gdb_expect  {
-        -re "Commands for use by GDB maintainers\\.\[\r\n\]+Includes commands to dump specific internal GDB structures in\[\r\n\]+a human readable form, to cause GDB to deliberately dump core,\[\r\n\]+to test internal functions such as the C\\+\\+/ObjC demangler, etc\\..*Type.*help maintenance.*followed by maintenance subcommand name for full documentation\\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\\..*$gdb_prompt $"\
-                        { pass "help maint" }
-        -re ".*$gdb_prompt $"       { fail "help maint" }
-        timeout         { fail "(timeout) help maint" }
-        }
+test_prefix_command_help {"maint" "maintenance"} {
+    "Commands for use by GDB maintainers\\.\[\r\n\]+"
+    "Includes commands to dump specific internal GDB structures in\[\r\n\]+"
+    "a human readable form, to cause GDB to deliberately dump core,\[\r\n\]+"
+    "to test internal functions such as the C\\+\\+/ObjC demangler, etc\\.\[\r\n\]+"
+}
 
 #set oldtimeout $timeout
 #set timeout [expr $timeout + 300]
 
-if [ishost *cygwin*] {
-    setup_xfail "*-*-*"
-}
 send_gdb "maint dump-me\n"
 gdb_expect  {
         -re "Should GDB dump core.*\\(y or n\\) $"\

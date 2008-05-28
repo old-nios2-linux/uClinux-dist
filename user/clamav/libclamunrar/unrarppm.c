@@ -104,12 +104,16 @@ static int sub_allocator_start_sub_allocator(sub_allocator_t *sub_alloc, int sa_
 		return TRUE;
 	}
 	sub_allocator_stop_sub_allocator(sub_alloc);
+	if (t>138412020) {
+		rar_dbgmsg("too much memory needed for uncompressing this file\n");
+		return FALSE;
+	}
 	alloc_size = t/FIXED_UNIT_SIZE*UNIT_SIZE+UNIT_SIZE;
 #if defined(__sparc) || defined(sparc) || defined(__sparcv9)
 	/* Allow for aligned access requirements */
 	alloc_size += UNIT_SIZE;
 #endif
-	if ((sub_alloc->heap_start = (uint8_t *) rar_malloc(alloc_size)) == NULL) {
+	if ((sub_alloc->heap_start = (uint8_t *) malloc(alloc_size)) == NULL) {
 		rar_dbgmsg("sub_alloc start failed\n");
 		return FALSE;
 	}
@@ -600,6 +604,9 @@ NO_LOOP:
 		if ((p=pc->con_ut.u.stats)->symbol != up_state.symbol) {
 			do {
 				p++;
+				if ((void *)p > (void *) ppm_data->sub_alloc.heap_end) {
+					return NULL;
+				}
 			} while (p->symbol != up_state.symbol);
 		}
 		cf = p->freq - 1;
@@ -920,6 +927,13 @@ void ppm_constructor(ppm_data_t *ppm_data)
 void ppm_destructor(ppm_data_t *ppm_data)
 {
 	sub_allocator_stop_sub_allocator(&ppm_data->sub_alloc);
+}
+
+void ppm_cleanup(ppm_data_t *ppm_data)
+{
+	sub_allocator_stop_sub_allocator(&ppm_data->sub_alloc);
+	sub_allocator_start_sub_allocator(&ppm_data->sub_alloc, 1);
+	start_model_rare(ppm_data, 2);
 }
 
 int ppm_decode_init(ppm_data_t *ppm_data, int fd, unpack_data_t *unpack_data, int *EscChar)

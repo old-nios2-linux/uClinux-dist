@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2002 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -37,6 +38,7 @@ typedef struct blob {
 blob	*blobCreate(void);
 void	blobDestroy(blob *b);
 void	blobArrayDestroy(blob *b[], int n);
+void	*blobToMem(blob *b);
 void	blobSetFilename(blob *b, const char *dir, const char *filename);
 int	blobAddData(blob *b, const unsigned char *data, size_t len);
 unsigned char *blobGetData(const blob *b);
@@ -55,10 +57,10 @@ typedef	struct fileblob {
 			 * email, not the full path name of the temporary file
 			 */
 	char	*fullname;	/* full pathname of the file */
+	cli_ctx	*ctx;	/* When set we can scan the blob, otherwise NULL */
+	unsigned	long	bytes_scanned;
 	unsigned	int	isNotEmpty : 1;
 	unsigned	int	isInfected : 1;
-	unsigned	long	bytes_scanned;
-	cli_ctx	*ctx;
 } fileblob;
 
 fileblob	*fileblobCreate(void);

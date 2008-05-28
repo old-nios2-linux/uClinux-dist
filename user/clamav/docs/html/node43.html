@@ -1,6 +1,6 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 
-<!--Converted with LaTeX2HTML 99.2beta8 (1.46)
+<!--Converted with LaTeX2HTML 2002-2-1 (1.71)
 original version by:  Nikos Drakos, CBLU, University of Leeds
 * revised and updated by:  Marcus Hennecke, Ross Moore, Herb Swan
 * with significant contributions from:
@@ -13,8 +13,7 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 <META NAME="resource-type" CONTENT="document">
 <META NAME="distribution" CONTENT="global">
 
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
-<META NAME="Generator" CONTENT="LaTeX2HTML v99.2beta8">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2002-2-1">
 <META HTTP-EQUIV="Content-Style-Type" CONTENT="text/css">
 
 <LINK REL="STYLESHEET" HREF="clamdoc.css">
@@ -26,30 +25,31 @@ original version by:  Nikos Drakos, CBLU, University of Leeds
 </HEAD>
 
 <BODY >
-<!--Navigation Panel-->
-<A NAME="tex2html751"
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A NAME="tex2html750"
   HREF="node44.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html747"
+<A NAME="tex2html746"
   HREF="node42.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html741"
+<A NAME="tex2html740"
   HREF="node42.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html749"
+<A NAME="tex2html748"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html752"
+<B> Next:</B> <A NAME="tex2html751"
   HREF="node44.html">Memory</A>
-<B> Up:</B> <A NAME="tex2html748"
+<B> Up:</B> <A NAME="tex2html747"
   HREF="node42.html">Database reloading</A>
-<B> Previous:</B> <A NAME="tex2html742"
+<B> Previous:</B> <A NAME="tex2html741"
   HREF="node42.html">Database reloading</A>
- &nbsp <B>  <A NAME="tex2html750"
+ &nbsp; <B>  <A NAME="tex2html749"
   HREF="node1.html">Contents</A></B> 
 <BR>
-<BR>
+<BR></DIV>
 <!--End of Navigation Panel-->
 
 <H3><A NAME="SECTION00074100000000000000">
@@ -65,7 +65,7 @@ Data scan functions</A>
 	long int *scanned, const struct cl_engine *engine, const
 	struct cl_limits *limits, unsigned int options);
 </PRE>
-    Both functions will save a virus name under the pointer <code>virname</code>,
+    Both functions will store a virus name under the pointer <code>virname</code>,
     the virus name is part of the engine structure and must not be released
     directly. If the third argument (<code>scanned</code>) is not NULL, the
     functions will increase its value with the size of scanned data (in
@@ -73,100 +73,91 @@ Data scan functions</A>
     limits in order to protect against Denial of Service attacks.
     <PRE>
 struct cl_limits {
-    unsigned int maxreclevel;     /* maximum recursion level for archives */
-    unsigned int maxfiles;        /* maximum number of files to be scanned
-                                   * within a single archive
-                                   */
-    unsigned int maxmailrec;	  /* maximum recursion level for mail files */
-    unsigned int maxratio;	  /* maximum compression ratio */
-    unsigned long int maxfilesize;/* compressed files larger than this limit
-                                   * will not be scanned
-                                   */
-    unsigned short archivememlim;  /* limit memory usage for some unpackers */
+    unsigned long int maxscansize;  /* during the scanning of archives this
+                                     * size will never be exceeded
+                                     */
+    unsigned long int maxfilesize;  /* compressed files will only be
+                                     * decompressed and scanned up to this size
+                                     */
+    unsigned int maxreclevel;       /* maximum recursion level for archives */
+    unsigned int maxfiles;          /* maximum number of files to be scanned
+                                     * within a single archive
+                                     */
+    unsigned short archivememlim;   /* limit memory usage for some unpackers */
 };
 </PRE>
     The last argument (<code>options</code>) configures the scan engine and supports
     the following flags (that can be combined using bit operators):
     
 <UL>
-<LI><B>CL_SCAN_STDOPT</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_STDOPT</SPAN>
 <BR>
 This is an alias for a recommended set of scan options. You
 	      should use it to make your software ready for new features
 	      in the future versions of libclamav.
 </LI>
-<LI><B>CL_SCAN_RAW</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_RAW</SPAN>
 <BR>
 Use it alone if you want to disable support for special files.
 </LI>
-<LI><B>CL_SCAN_ARCHIVE</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_ARCHIVE</SPAN>
 <BR>
 This flag enables transparent scanning of various archive formats.
 </LI>
-<LI><B>CL_SCAN_BLOCKENCRYPTED</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_BLOCKENCRYPTED</SPAN>
 <BR>
 With this flag the library will mark encrypted archives as viruses
 	      (Encrypted.Zip, Encrypted.RAR).
 </LI>
-<LI><B>CL_SCAN_BLOCKMAX</B>
-<BR>
-Mark archives as viruses if <code>maxfiles</code>, <code>maxfilesize</code>,
-	      or <code>maxreclevel</code> limit is reached.
-</LI>
-<LI><B>CL_SCAN_MAIL</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_MAIL</SPAN>
 <BR>
 Enable support for mail files.
 </LI>
-<LI><B>CL_SCAN_MAILURL</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_MAILURL</SPAN>
 <BR>
 The mail scanner will download and scan URLs listed in a mail
 	      body. This flag should not be used on loaded servers. Due to
 	      potential problems please do not enable it by default but make
 	      it optional.
 </LI>
-<LI><B>CL_SCAN_OLE2</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_OLE2</SPAN>
 <BR>
 Enables support for OLE2 containers (used by MS Office and .msi
 	      files).
 </LI>
-<LI><B>CL_SCAN_PDF</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_PDF</SPAN>
 <BR>
 Enables scanning within PDF files.
 </LI>
-<LI><B>CL_SCAN_PE</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_PE</SPAN>
 <BR>
 This flag enables deep scanning of Portable Executable files and
 	      allows libclamav to unpack executables compressed with run-time
 	      unpackers.
 </LI>
-<LI><B>CL_SCAN_ELF</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_ELF</SPAN>
 <BR>
 Enable support for ELF files.
 </LI>
-<LI><B>CL_SCAN_BLOCKBROKEN</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_BLOCKBROKEN</SPAN>
 <BR>
 libclamav will try to detect broken executables and mark them as
 	      Broken.Executable.
 </LI>
-<LI><B>CL_SCAN_HTML</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_HTML</SPAN>
 <BR>
 This flag enables HTML normalisation (including ScrEnc
 	      decryption).
 </LI>
-<LI><B>CL_SCAN_ALGORITHMIC</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_ALGORITHMIC</SPAN>
 <BR>
 Enable algorithmic detection of viruses.
 </LI>
-<LI><B>CL_SCAN_PHISHING_DOMAINLIST</B>
-<BR>
-Phishing module: restrict URL scanning to domains from .pdf
-	      (RECOMMENDED).
-</LI>
-<LI><B>CL_SCAN_PHISHING_BLOCKSSL</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_PHISHING_BLOCKSSL</SPAN>
 <BR>
 Phishing module: always block SSL mismatches in URLs.
 </LI>
-<LI><B>CL_SCAN_PHISHING_BLOCKCLOAK</B>
+<LI><SPAN  CLASS="textbf">CL_SCAN_PHISHING_BLOCKCLOAK</SPAN>
 <BR>
 Phishing module: always block cloaked URLs.
     
@@ -180,14 +171,10 @@ Phishing module: always block cloaked URLs.
 	    const char *virname;
 
 	memset(&amp;limits, 0, sizeof(struct cl_limits));
-	limits.maxfiles = 1000; /* max files */
-	limits.maxfilesize = 10 * 1048576; /* maximum size of archived or
-                                    * compressed file (files exceeding
-                                    * this limit will be ignored)
-                                    */
-	limits.maxreclevel = 5; /* maximum recursion level for archives */
-	limits.maxmailrec = 64; /* maximum recursion level for mail files */
-	limits.maxratio = 200; /* maximum compression ratio */
+	limits.maxfiles = 10000;
+	limits.maxscansize = 100 * 1048576; /* 100 MB */
+	limits.maxfilesize = 10 * 1048576; /* 10 MB */
+	limits.maxreclevel = 16;
 
 	if((ret = cl_scanfile("/tmp/test.exe", &amp;virname, NULL, engine,
 	&amp;limits, CL_STDOPT)) == CL_VIRUS) {
@@ -200,33 +187,34 @@ Phishing module: always block cloaked URLs.
 </PRE>
 
 <P>
-<HR>
+
+<DIV CLASS="navigation"><HR>
 <!--Navigation Panel-->
-<A NAME="tex2html751"
+<A NAME="tex2html750"
   HREF="node44.html">
 <IMG WIDTH="37" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="next" SRC="next.png"></A> 
-<A NAME="tex2html747"
+<A NAME="tex2html746"
   HREF="node42.html">
 <IMG WIDTH="26" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="up" SRC="up.png"></A> 
-<A NAME="tex2html741"
+<A NAME="tex2html740"
   HREF="node42.html">
 <IMG WIDTH="63" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="previous" SRC="prev.png"></A> 
-<A NAME="tex2html749"
+<A NAME="tex2html748"
   HREF="node1.html">
 <IMG WIDTH="65" HEIGHT="24" ALIGN="BOTTOM" BORDER="0" ALT="contents" SRC="contents.png"></A>  
 <BR>
-<B> Next:</B> <A NAME="tex2html752"
+<B> Next:</B> <A NAME="tex2html751"
   HREF="node44.html">Memory</A>
-<B> Up:</B> <A NAME="tex2html748"
+<B> Up:</B> <A NAME="tex2html747"
   HREF="node42.html">Database reloading</A>
-<B> Previous:</B> <A NAME="tex2html742"
+<B> Previous:</B> <A NAME="tex2html741"
   HREF="node42.html">Database reloading</A>
- &nbsp <B>  <A NAME="tex2html750"
-  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A NAME="tex2html749"
+  HREF="node1.html">Contents</A></B> </DIV>
 <!--End of Navigation Panel-->
 <ADDRESS>
 Tomasz Kojm
-2008-01-28
+2008-04-09
 </ADDRESS>
 </BODY>
 </HTML>

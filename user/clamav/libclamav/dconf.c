@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,6 +26,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <zlib.h>
 
 #include "clamav.h"
 #include "cltypes.h"
@@ -85,6 +88,8 @@ static struct dconf_module modules[] = {
     { "DOCUMENT",   "HTML",	    DOC_CONF_HTML,	    1 },
     { "DOCUMENT",   "RTF",	    DOC_CONF_RTF,	    1 },
     { "DOCUMENT",   "PDF",	    DOC_CONF_PDF,	    1 },
+    { "DOCUMENT",   "SCRIPT",	    DOC_CONF_SCRIPT,	    1 },
+    { "DOCUMENT",   "HTMLSKIPRAW",  DOC_CONF_HTML_SKIPRAW,  1 },
 
     { "MAIL",	    "MBOX",	    MAIL_CONF_MBOX,	    1 },
     { "MAIL",	    "TNEF",	    MAIL_CONF_TNEF,	    1 },
@@ -96,7 +101,7 @@ static struct dconf_module modules[] = {
     { "OTHER",	    "CRYPTFF",	    OTHER_CONF_CRYPTFF,	    1 },
 
     { "PHISHING",   "ENGINE",       PHISHING_CONF_ENGINE,   1 },
-    { "PHISHING",   "ENTCONV",      PHISHING_CONF_ENTCONV,  DCONF_ENABLE_EXPERIMENTAL }, /* exp */
+    { "PHISHING",   "ENTCONV",      PHISHING_CONF_ENTCONV,  1 },
 
     { NULL,	    NULL,	    0,			    0 }
 };
@@ -258,7 +263,7 @@ static int chkflevel(const char *entry, int field)
     return 1;
 }
 
-int cli_dconf_load(FILE *fd, struct cl_engine **engine, unsigned int options)
+int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize)
 {
 	char buffer[FILEBUFF];
 	unsigned int line = 0;
@@ -274,7 +279,7 @@ int cli_dconf_load(FILE *fd, struct cl_engine **engine, unsigned int options)
 
     dconf = (struct cli_dconf *) (*engine)->dconf;
 
-    while(fgets(buffer, FILEBUFF, fd)) {
+    while(cli_dbgets(buffer, FILEBUFF, fs, gzs, &gzrsize)) {
 	line++;
 	cli_chomp(buffer);
 

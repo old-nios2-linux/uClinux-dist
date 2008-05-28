@@ -1,14 +1,13 @@
 /* Native-dependent code for Unix SVR4 running on i386's.
 
-   Copyright 1988, 1989, 1991, 1992, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2004
-   Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1991, 1992, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -37,7 +34,9 @@
 
 #include <sys/procfs.h>
 
-/* Prototypes for supply_gregset etc. */
+/* We must not compile this code for 64-bit Solaris x86.  */
+#if !defined (PR_MODEL_NATIVE) || (PR_MODEL_NATIVE == PR_MODEL_ILP32)
+
 #include "gregset.h"
 
 /* The `/proc' interface divides the target machine's register set up
@@ -103,13 +102,13 @@ static int regmap[] =
    in *GREGSETP.  */
 
 void
-supply_gregset (gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const gregset_t *gregsetp)
 {
-  greg_t *regp = (greg_t *) gregsetp;
+  const greg_t *regp = (const greg_t *) gregsetp;
   int regnum;
 
   for (regnum = 0; regnum < I386_NUM_GREGS; regnum++)
-    regcache_raw_supply (current_regcache, regnum, regp + regmap[regnum]);
+    regcache_raw_supply (regcache, regnum, regp + regmap[regnum]);
 }
 
 /* Fill register REGNUM (if it is a general-purpose register) in
@@ -117,14 +116,15 @@ supply_gregset (gregset_t *gregsetp)
    do this for all registers.  */
 
 void
-fill_gregset (gregset_t *gregsetp, int regnum)
+fill_gregset (const struct regcache *regcache,
+	      gregset_t *gregsetp, int regnum)
 {
   greg_t *regp = (greg_t *) gregsetp;
   int i;
 
   for (i = 0; i < I386_NUM_GREGS; i++)
     if (regnum == -1 || regnum == i)
-      regcache_raw_collect (current_regcache, i, regp + regmap[i]);
+      regcache_raw_collect (regcache, i, regp + regmap[i]);
 }
 
 #endif /* HAVE_GREGSET_T */
@@ -135,12 +135,12 @@ fill_gregset (gregset_t *gregsetp, int regnum)
    *FPREGSETP.  */
 
 void
-supply_fpregset (fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const fpregset_t *fpregsetp)
 {
-  if (FP0_REGNUM == 0)
+  if (gdbarch_fp0_regnum (get_regcache_arch (regcache)) == 0)
     return;
 
-  i387_supply_fsave (current_regcache, -1, fpregsetp);
+  i387_supply_fsave (regcache, -1, fpregsetp);
 }
 
 /* Fill register REGNO (if it is a floating-point register) in
@@ -148,14 +148,17 @@ supply_fpregset (fpregset_t *fpregsetp)
    do this for all registers.  */
 
 void
-fill_fpregset (fpregset_t *fpregsetp, int regno)
+fill_fpregset (const struct regcache *regcache,
+	       fpregset_t *fpregsetp, int regno)
 {
-  if (FP0_REGNUM == 0)
+  if (gdbarch_fp0_regnum (get_regcache_arch (regcache)) == 0)
     return;
 
-  i387_fill_fsave ((char *) fpregsetp, regno);
+  i387_collect_fsave (regcache, regno, fpregsetp);
 }
 
 #endif /* HAVE_FPREGSET_T */
+
+#endif /* not 64-bit.  */
 
 #endif /* HAVE_SYS_PROCFS_H */

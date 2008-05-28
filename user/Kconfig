@@ -715,6 +715,14 @@ config USER_SAMBA_SMBUMOUNT
 	bool "smbumount"
 	depends on USER_SAMBA
 
+config USER_SAMBA_MOUNT_CIFS
+	bool "mount.cifs"
+	depends on USER_SAMBA
+
+config USER_SAMBA_UMOUNT_CIFS
+	bool "umount.cifs"
+	depends on USER_SAMBA
+
 config USER_SAMBA_SHARED
 	bool "uses shared library"
 	depends on USER_SAMBA
@@ -845,14 +853,6 @@ config USER_TRUSTEDSOURCE
 	bool "antispam - trusted source"
 	select USER_CLAMAV_CLAMSMTP
 
-config USER_TRUSTEDSOURCE_BLACKLIST
-	bool "antispam - trusted source black and white listing"
-	depends on USER_TRUSTEDSOURCE
-
-config USER_TRUSTEDSOURCE_V2
-	bool "antispam - trusted source v2"
-	select USER_CLAMAV_CLAMSMTP
-
 config USER_BIND_BIND
 	bool "bind"
 	help
@@ -917,6 +917,7 @@ config USER_BPALOGIN_BPALOGIN
 
 config USER_BR2684CTL_BR2684CTL
 	bool "br2684ctl"
+	select LIB_LIBATM
 	help
 	  ATM to ethernet bridging helper program.
 	  Approx. binary size: 28k
@@ -2013,6 +2014,7 @@ config USER_MARADNS_ZONESERVER
 
 config USER_NMAP_NMAP
 	bool "nmap"
+	select LIB_STLPORT
 	help
 	  Network mapper is a tool for network exploration and security auditing.
 
@@ -3315,8 +3317,10 @@ config USER_TINYTCL_TCLSH
 	  Tcl scripts interactively or from a file
 
 config LIB_TINYTCL
-	bool
+	bool "build tinytcl library"
 	default n
+	help
+	  Build the tinytcl library.
 
 config LIB_TINYTCL_STATIC
 	bool "build static libtcl and extensions"
@@ -3360,6 +3364,11 @@ config USER_UNZOO_UNZOO
 	help
 	  The unzoo archive decompression and extraction program.
 	  Can only extract and view contents of zoo archives.
+
+config USER_WATCHDOGD
+	bool "watchdogd"
+	help
+	  A simple watchdog daemon.
 
 config USER_LRZSZ_LRZSZ
 	bool "zmodem utils"

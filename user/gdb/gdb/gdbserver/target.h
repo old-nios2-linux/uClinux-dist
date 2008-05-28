@@ -1,5 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright 2002, 2003, 2004
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef TARGET_H
 #define TARGET_H
@@ -31,7 +29,7 @@
 
 struct thread_resume
 {
-  int thread;
+  unsigned long thread;
 
   /* If non-zero, leave this thread stopped.  */
   int leave_stopped;
@@ -59,21 +57,29 @@ struct target_ops
   /* Attach to a running process.
 
      PID is the process ID to attach to, specified by the user
-     or a higher layer.  */
+     or a higher layer.
 
-  int (*attach) (int pid);
+     Returns -1 if attaching is unsupported, 0 on success, and calls
+     error() otherwise.  */
+
+  int (*attach) (unsigned long pid);
 
   /* Kill all inferiors.  */
 
   void (*kill) (void);
 
-  /* Detach from all inferiors.  */
+  /* Detach from all inferiors.
+     Return -1 on failure, and 0 on success.  */
 
-  void (*detach) (void);
+  int (*detach) (void);
+
+  /* Wait for inferiors to end.  */
+
+  void (*join) (void);
 
   /* Return 1 iff the thread with process ID PID is alive.  */
 
-  int (*thread_alive) (int pid);
+  int (*thread_alive) (unsigned long pid);
 
   /* Resume the inferior process.  */
 
@@ -81,9 +87,11 @@ struct target_ops
 
   /* Wait for the inferior process to change state.
 
-     STATUSP will be filled in with a response code to send to GDB.
+     STATUS will be filled in with a response code to send to GDB.
 
-     Returns the signal which caused the process to stop.  */
+     Returns the signal which caused the process to stop, in the
+     remote protocol numbering (e.g. TARGET_SIGNAL_STOP), or the
+     exit code as an integer if *STATUS is 'W'.  */
 
   unsigned char (*wait) (char *status);
 
@@ -106,7 +114,7 @@ struct target_ops
   
      Returns 0 on success and errno on failure.  */
 
-  int (*read_memory) (CORE_ADDR memaddr, char *myaddr, int len);
+  int (*read_memory) (CORE_ADDR memaddr, unsigned char *myaddr, int len);
 
   /* Write memory to the inferior process.  This should generally be
      called through write_inferior_memory, which handles breakpoint shadowing.
@@ -115,7 +123,8 @@ struct target_ops
 
      Returns 0 on success and errno on failure.  */
 
-  int (*write_memory) (CORE_ADDR memaddr, const char *myaddr, int len);
+  int (*write_memory) (CORE_ADDR memaddr, const unsigned char *myaddr,
+		       int len);
 
   /* Query GDB for the values of any symbols we're interested in.
      This function is called whenever we receive a "qSymbols::"
@@ -125,19 +134,64 @@ struct target_ops
 
   void (*look_up_symbols) (void);
 
-  /* Send a signal to the inferior process, however is appropriate.  */
-  void (*send_signal) (int);
+  /* Send an interrupt request to the inferior process,
+     however is appropriate.  */
+
+  void (*request_interrupt) (void);
 
   /* Read auxiliary vector data from the inferior process.
 
      Read LEN bytes at OFFSET into a buffer at MYADDR.  */
 
-  int (*read_auxv) (CORE_ADDR offset, char *myaddr, unsigned int len);
+  int (*read_auxv) (CORE_ADDR offset, unsigned char *myaddr,
+		    unsigned int len);
 
-  /* If non-zero, handle a `q' op from gdb, updating OWN_BUF with the result.
-     Should return 1 if the op was handled, otherwise 0.  */
+  /* Insert and remove a hardware watchpoint.
+     Returns 0 on success, -1 on failure and 1 on unsupported.  
+     The type is coded as follows:
+       2 = write watchpoint
+       3 = read watchpoint
+       4 = access watchpoint
+  */
 
-  int (*handle_query) (char *own_buf);
+  int (*insert_watchpoint) (char type, CORE_ADDR addr, int len);
+  int (*remove_watchpoint) (char type, CORE_ADDR addr, int len);
+
+  /* Returns 1 if target was stopped due to a watchpoint hit, 0 otherwise.  */
+
+  int (*stopped_by_watchpoint) (void);
+
+  /* Returns the address associated with the watchpoint that hit, if any;  
+     returns 0 otherwise.  */
+
+  CORE_ADDR (*stopped_data_address) (void);
+
+  /* Reports the text, data offsets of the executable.  This is
+     needed for uclinux where the executable is relocated during load
+     time.  */
+  
+  int (*read_offsets) (CORE_ADDR *text, CORE_ADDR *data);
+
+  /* Fetch the address associated with a specific thread local storage
+     area, determined by the specified THREAD, OFFSET, and LOAD_MODULE.
+     Stores it in *ADDRESS and returns zero on success; otherwise returns
+     an error code.  A return value of -1 means this system does not
+     support the operation.  */
+
+  int (*get_tls_address) (struct thread_info *thread, CORE_ADDR offset,
+			  CORE_ADDR load_module, CORE_ADDR *address);
+
+  /* Return a string identifying the current architecture, or NULL if
+     this operation is not supported.  */
+  const char *(*arch_string) (void);
+
+   /* Read/Write from/to spufs using qXfer packets.  */
+  int (*qxfer_spu) (const char *annex, unsigned char *readbuf,
+		    unsigned const char *writebuf, CORE_ADDR offset, int len);
+
+  /* Fill BUF with an hostio error packet representing the last hostio
+     error.  */
+  void (*hostio_last_error) (char *buf);
 };
 
 extern struct target_ops *the_target;
@@ -165,11 +219,15 @@ void set_target_ops (struct target_ops *);
 #define store_inferior_registers(regno) \
   (*the_target->store_registers) (regno)
 
+#define join_inferior() \
+  (*the_target->join) ()
+
 unsigned char mywait (char *statusp, int connected_wait);
 
-int read_inferior_memory (CORE_ADDR memaddr, char *myaddr, int len);
+int read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len);
 
-int write_inferior_memory (CORE_ADDR memaddr, const char *myaddr, int len);
+int write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
+			   int len);
 
 void set_desired_inferior (int id);
 

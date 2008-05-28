@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2004 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -87,6 +89,7 @@ int cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern)
     }
     root->bm_suffix[idx]->cnt++;
 
+    root->bm_patterns++;
     return CL_SUCCESS;
 }
 
@@ -150,7 +153,7 @@ int cli_bm_scanbuff(const unsigned char *buffer, uint32_t length, const char **v
 	struct cli_target_info info;
 
 
-    if(!root->bm_shift)
+    if(!root || !root->bm_shift)
 	return CL_CLEAN;
 
     if(length < BM_MIN_LENGTH)

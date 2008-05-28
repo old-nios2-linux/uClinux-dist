@@ -3,6 +3,7 @@
 
 #include <features.h>
 #include <sys/types.h>
+#include <sys/termios.h>
 #include <linux/termios.h>
 
 __BEGIN_DECLS

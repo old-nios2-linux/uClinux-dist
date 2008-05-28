@@ -1,11 +1,13 @@
 /* Native debugging support for GNU/Linux (LWP layer).
-   Copyright 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,13 +16,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "target.h"
 
-/* Structure describing an LWP.  */
+#include <signal.h>
+
+/* Structure describing an LWP.  This is public only for the purposes
+   of ALL_LWPS; target-specific code should generally not access it
+   directly.  */
 
 struct lwp_info
 {
@@ -54,6 +58,10 @@ struct lwp_info
   /* Non-zero if we were stepping this LWP.  */
   int step;
 
+  /* Non-zero si_signo if this LWP stopped with a trap.  si_addr may
+     be the address of a hardware watchpoint.  */
+  struct siginfo siginfo;
+
   /* If WAITSTATUS->KIND != TARGET_WAITKIND_SPURIOUS, the waitstatus
      for this LWP's last event.  This may correspond to STATUS above,
      or to a local variable in lin_lwp_wait.  */
@@ -63,26 +71,56 @@ struct lwp_info
   struct lwp_info *next;
 };
 
-/* Read/write to target memory via the Linux kernel's "proc file
-   system".  */
-struct mem_attrib;
-struct target_ops;
+/* The global list of LWPs, for ALL_LWPS.  Unlike the threads list,
+   there is always at least one LWP on the list while the GNU/Linux
+   native target is active.  */
+extern struct lwp_info *lwp_list;
 
-extern int linux_proc_xfer_memory (CORE_ADDR addr, char *myaddr, int len,
-				   int write, struct mem_attrib *attrib,
-				   struct target_ops *target);
+/* Iterate over the PTID each active thread (light-weight process).  There
+   must be at least one.  */
+#define ALL_LWPS(LP, PTID)						\
+  for ((LP) = lwp_list, (PTID) = (LP)->ptid;				\
+       (LP) != NULL;							\
+       (LP) = (LP)->next, (PTID) = (LP) ? (LP)->ptid : (PTID))
+
+/* Attempt to initialize libthread_db.  */
+void check_for_thread_db (void);
+
+/* Tell the thread_db layer what native target operations to use.  */
+void thread_db_init (struct target_ops *);
 
 /* Find process PID's pending signal set from /proc/pid/status.  */
 void linux_proc_pending_signals (int pid, sigset_t *pending, sigset_t *blocked, sigset_t *ignored);
 
 /* linux-nat functions for handling fork events.  */
-extern void linux_record_stopped_pid (int pid);
 extern void linux_enable_event_reporting (ptid_t ptid);
-extern ptid_t linux_handle_extended_wait (int pid, int status,
-					  struct target_waitstatus *ourstatus);
-extern void linux_child_post_startup_inferior (ptid_t ptid);
+
+extern int lin_lwp_attach_lwp (ptid_t ptid);
 
 /* Iterator function for lin-lwp's lwp list.  */
 struct lwp_info *iterate_over_lwps (int (*callback) (struct lwp_info *, 
 						     void *), 
 				    void *data);
+
+/* Create a prototype generic GNU/Linux target.  The client can
+   override it with local methods.  */
+struct target_ops * linux_target (void);
+
+/* Create a generic GNU/Linux target using traditional 
+   ptrace register access.  */
+struct target_ops *
+linux_trad_target (CORE_ADDR (*register_u_offset)(struct gdbarch *, int, int));
+
+/* Register the customized GNU/Linux target.  This should be used
+   instead of calling add_target directly.  */
+void linux_nat_add_target (struct target_ops *);
+
+/* Register a method to call whenever a new thread is attached.  */
+void linux_nat_set_new_thread (struct target_ops *, void (*) (ptid_t));
+
+/* Update linux-nat internal state when changing from one fork
+   to another.  */
+void linux_nat_switch_fork (ptid_t new_ptid);
+
+/* Return the saved siginfo associated with PTID.  */
+struct siginfo *linux_nat_get_siginfo (ptid_t ptid);

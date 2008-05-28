@@ -1,7 +1,7 @@
 /*
- *  Copyright (C) 2003 - 2006 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
  *
- *  untgz() is based on public domain minitar utility by Charles G. Waldman
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,6 +40,7 @@
 #include "dsig.h"
 #include "str.h"
 #include "cvd.h"
+#include "readdb.h"
 
 #define TAR_BLOCKSIZE 512
 
@@ -177,6 +178,102 @@ int cli_untgz(int fd, const char *destdir)
     return 0;
 }
 
+static int cli_tgzload(int fd, struct cl_engine **engine, unsigned int *signo, unsigned int options)
+{
+	char osize[13], name[101];
+	char block[TAR_BLOCKSIZE];
+	int nread, fdd, ret;
+	unsigned int type, size, pad;
+	gzFile *infile;
+	z_off_t off;
+
+
+    cli_dbgmsg("in cli_tgzload()\n");
+
+    if((fdd = dup(fd)) == -1) {
+	cli_errmsg("cli_tgzload: Can't duplicate descriptor %d\n", fd);
+	return CL_EIO;
+    }
+
+    if((infile = gzdopen(fdd, "rb")) == NULL) {
+	cli_errmsg("cli_tgzload: Can't gzdopen() descriptor %d, errno = %d\n", fdd, errno);
+	return CL_EIO;
+    }
+
+    gzseek(infile, 512, SEEK_SET);
+
+    while(1) {
+
+	nread = gzread(infile, block, TAR_BLOCKSIZE);
+
+	if(!nread)
+	    break;
+
+	if(nread != TAR_BLOCKSIZE) {
+	    cli_errmsg("cli_tgzload: Incomplete block read\n");
+	    gzclose(infile);
+	    return CL_EMALFDB;
+	}
+
+	if(block[0] == '\0')  /* We're done */
+	    break;
+
+	strncpy(name, block, 100);
+	name[100] = '\0';
+
+	if(strchr(name, '/')) {
+	    cli_errmsg("cli_tgzload: Slash separators are not allowed in CVD\n");
+	    gzclose(infile);
+	    return CL_EMALFDB;
+	}
+
+	type = block[156];
+
+	switch(type) {
+	    case '0':
+	    case '\0':
+		break;
+	    case '5':
+		cli_errmsg("cli_tgzload: Directories are not supported in CVD\n");
+	        gzclose(infile);
+		return CL_EMALFDB;
+	    default:
+		cli_errmsg("cli_tgzload: Unknown type flag '%c'\n", type);
+	        gzclose(infile);
+		return CL_EMALFDB;
+	}
+
+	strncpy(osize, block + 124, 12);
+	osize[12] = '\0';
+
+	if((sscanf(osize, "%o", &size)) == 0) {
+	    cli_errmsg("cli_tgzload: Invalid size in header\n");
+	    gzclose(infile);
+	    return CL_EMALFDB;
+	}
+
+	/* cli_dbgmsg("cli_tgzload: Loading %s, size: %u\n", name, size); */
+	off = gzseek(infile, 0, SEEK_CUR);
+	if(CLI_DBEXT(name)) {
+	    ret = cli_load(name, engine, signo, options, infile, size);
+	    if(ret) {
+		cli_errmsg("cli_tgzload: Invalid size in header\n");
+		gzclose(infile);
+		return CL_EMALFDB;
+	    }
+	}
+	pad = size % TAR_BLOCKSIZE ? (TAR_BLOCKSIZE - (size % TAR_BLOCKSIZE)) : 0;
+	if(off == gzseek(infile, 0, SEEK_CUR))
+	    gzseek(infile, size + pad, SEEK_CUR);
+	else if(pad)
+	    gzseek(infile, pad, SEEK_CUR);
+
+    }
+
+    gzclose(infile);
+    return 0;
+}
+
 struct cl_cvd *cl_cvdparse(const char *head)
 {
 	struct cl_cvd *cvd;
@@ -300,7 +397,7 @@ void cl_cvdfree(struct cl_cvd *cvd)
     free(cvd);
 }
 
-static int cli_cvdverify(FILE *fs, struct cl_cvd *cvdpt)
+static int cli_cvdverify(FILE *fs, struct cl_cvd *cvdpt, unsigned int cld)
 {
 	struct cl_cvd *cvd;
 	char *md5, head[513];
@@ -322,6 +419,11 @@ static int cli_cvdverify(FILE *fs, struct cl_cvd *cvdpt)
     if(cvdpt)
 	memcpy(cvdpt, cvd, sizeof(struct cl_cvd));
 
+    if(cld) {
+	cl_cvdfree(cvd);
+	return CL_SUCCESS;
+    }
+
     md5 = cli_md5stream(fs, NULL);
     cli_dbgmsg("MD5(.tar.gz) = %s\n", md5);
 
@@ -332,7 +434,7 @@ static int cli_cvdverify(FILE *fs, struct cl_cvd *cvdpt)
 	return CL_EMD5;
     }
 
-#ifdef HAVE_GMP
+#ifdef HAVE_LIBGMP
     if(cli_versig(md5, cvd->dsig)) {
 	cli_dbgmsg("cli_cvdverify: Digital signature verification error\n");
 	free(md5);
@@ -343,7 +445,7 @@ static int cli_cvdverify(FILE *fs, struct cl_cvd *cvdpt)
 
     free(md5);
     cl_cvdfree(cvd);
-    return 0;
+    return CL_SUCCESS;
 }
 
 int cl_cvdverify(const char *file)
@@ -357,13 +459,13 @@ int cl_cvdverify(const char *file)
 	return CL_EOPEN;
     }
 
-    ret = cli_cvdverify(fs, NULL);
+    ret = cli_cvdverify(fs, NULL, 0);
     fclose(fs);
 
     return ret;
 }
 
-int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short warn, unsigned int options)
+int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short warn, unsigned int options, unsigned int cld)
 {
         char *dir;
 	struct cl_cvd cvd;
@@ -375,7 +477,7 @@ int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short 
 
     /* verify */
 
-    if((ret = cli_cvdverify(fs, &cvd)))
+    if((ret = cli_cvdverify(fs, &cvd, cld)))
 	return ret;
 
     if(cvd.stime && warn) {
@@ -395,37 +497,44 @@ int cli_cvdload(FILE *fs, struct cl_engine **engine, unsigned int *signo, short 
 	cli_warnmsg("***********************************************************\n");
     }
 
-    dir = cli_gentemp(NULL);
-    if(mkdir(dir, 0700)) {
-	cli_errmsg("cli_cvdload(): Can't create temporary directory %s\n", dir);
-	free(dir);
-	return CL_ETMPDIR;
-    }
-
     cfd = fileno(fs);
-
     /* use only operations on file descriptors, and not on the FILE* from here on 
      * if we seek the FILE*, the underlying descriptor may not seek as expected
      * (for example on OpenBSD, cygwin, etc.).
      * So seek the descriptor directly.
      */ 
-
     if(lseek(cfd, 512, SEEK_SET) == -1) {
 	cli_errmsg("cli_cvdload(): lseek(fs, 512, SEEK_SET) failed\n");
 	return CL_EIO;
     }
 
-    if(cli_untgz(cfd, dir)) {
-	cli_errmsg("cli_cvdload(): Can't unpack CVD file.\n");
+    if(options & CL_DB_CVDNOTMP) {
+
+	return cli_tgzload(cfd, engine, signo, options);
+
+    } else {
+
+	if(!(dir = cli_gentemp(NULL)))
+	    return CL_EMEM;
+
+	if(mkdir(dir, 0700)) {
+	    cli_errmsg("cli_cvdload(): Can't create temporary directory %s\n", dir);
+	    free(dir);
+	    return CL_ETMPDIR;
+	}
+
+	if(cli_untgz(cfd, dir)) {
+	    cli_errmsg("cli_cvdload(): Can't unpack CVD file.\n");
+	    free(dir);
+	    return CL_ECVDEXTR;
+	}
+
+	/* load extracted directory */
+	ret = cl_load(dir, engine, signo, options);
+
+	cli_rmdirs(dir);
 	free(dir);
-	return CL_ECVDEXTR;
+
+	return ret;
     }
-
-    /* load extracted directory */
-    ret = cl_load(dir, engine, signo, options);
-
-    cli_rmdirs(dir);
-    free(dir);
-
-    return ret;
 }

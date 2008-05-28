@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2006 Michal 'GiM' Spadlinski http://gim.org.pl/
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Michal 'GiM' Spadlinski
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -36,6 +37,6 @@ int mew_lzma(char *, char *, uint32_t, uint32_t, uint32_t);
 uint32_t lzma_upack_esi_00(struct lzmastate *, char *, char *, uint32_t);
 uint32_t lzma_upack_esi_50(struct lzmastate *, uint32_t, uint32_t, char **, char *, uint32_t *, char *, uint32_t);
 uint32_t lzma_upack_esi_54(struct lzmastate *, uint32_t, uint32_t *, char **, uint32_t *, char *, uint32_t);
-int unmew11(int, char *, int, int, int, uint32_t, uint32_t, int, char **, char **, int);
+int unmew11(char *, int, int, int, uint32_t, uint32_t, int, int);
 
 #endif

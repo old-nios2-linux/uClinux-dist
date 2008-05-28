@@ -24,6 +24,15 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_MMAP
+#include <sys/mman.h>
+# ifndef MAP_FAILED
+#  define MAP_FAILED -1
+# endif
+# if !defined (MAP_ANONYMOUS) && defined (MAP_ANON)
+#  define MAP_ANONYMOUS MAP_ANON
+# endif
+#endif
 
 #include "sysdep.h"
 #include "bfd.h"
@@ -844,7 +853,7 @@ do { \
 
 #endif
 
-#if defined(__GO32__) || defined(_WIN32)
+#if defined(__GO32__)
 int sim_memory_size = 19;
 #else
 int sim_memory_size = 24;
@@ -959,6 +968,10 @@ ptr (x)
   return (char *) (x + saved_state.asregs.memory);
 }
 
+/* STR points to a zero-terminated string in target byte order.  Return
+   the number of bytes that need to be converted to host byte order in order
+   to use this string as a zero-terminated string on the host.
+   (Not counting the rounding up needed to operate on entire words.)  */
 static int
 strswaplen (str)
      int str;
@@ -971,7 +984,7 @@ strswaplen (str)
     return 0;
   end = str;
   for (end = str; memory[end ^ endian]; end++) ;
-  return end - str;
+  return end - str + 1;
 }
 
 static void
@@ -1416,14 +1429,9 @@ macl (regs, memory, n, m)
      int m, n;
 {
   long tempm, tempn;
-  long prod, macl, mach, sum;
-  long long ans,ansl,ansh,t;
-  unsigned long long high,low,combine;
-  union mac64
-  {
-    long m[2]; /* mach and macl*/
-    long long m64; /* 64 bit MAC */
-  }mac64;
+  long macl, mach;
+  long long ans;
+  long long mac64;
 
   tempm = RSLAT (regs[m]);
   regs[m] += 4;
@@ -1434,15 +1442,15 @@ macl (regs, memory, n, m)
   mach = MACH;
   macl = MACL;
 
-  mac64.m[0] = macl;
-  mac64.m[1] = mach;
+  mac64 = ((long long) macl & 0xffffffff) |
+          ((long long) mach & 0xffffffff) << 32;
 
   ans = (long long) tempm * (long long) tempn; /* Multiply 32bit * 32bit */
 
-  mac64.m64 += ans; /* Accumulate   64bit + 64 bit */
+  mac64 += ans; /* Accumulate 64bit + 64 bit */
 
-  macl = mac64.m[0];
-  mach = mac64.m[1];
+  macl = (long) (mac64 & 0xffffffff);
+  mach = (long) ((mac64 >> 32) & 0xffffffff);
 
   if (S)  /* Store only 48 bits of the result */
     {
@@ -1711,6 +1719,27 @@ static void ppi_insn ();
 
 #include "ppi.c"
 
+/* Provide calloc / free versions that use an anonymous mmap.  This can
+   significantly cut the start-up time when a large simulator memory is
+   required, because pages are only zeroed on demand.  */
+#ifdef MAP_ANONYMOUS
+void *
+mcalloc (size_t nmemb, size_t size)
+{
+  void *page;
+
+  if (nmemb != 1)
+    size *= nmemb;
+  return mmap (0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+	       -1, 0);
+}
+
+#define mfree(start,length) munmap ((start), (length))
+#else
+#define mcalloc calloc
+#define mfree(start,length) free(start)
+#endif
+
 /* Set the memory size to the power of two provided. */
 
 void
@@ -1718,17 +1747,17 @@ sim_size (power)
      int power;
 
 {
-  saved_state.asregs.msize = 1 << power;
-
   sim_memory_size = power;
 
   if (saved_state.asregs.memory)
     {
-      free (saved_state.asregs.memory);
+      mfree (saved_state.asregs.memory, saved_state.asregs.msize);
     }
 
+  saved_state.asregs.msize = 1 << power;
+
   saved_state.asregs.memory =
-    (unsigned char *) calloc (64, saved_state.asregs.msize / 64);
+    (unsigned char *) mcalloc (1, saved_state.asregs.msize);
 
   if (!saved_state.asregs.memory)
     {
@@ -1737,7 +1766,7 @@ sim_size (power)
 	       saved_state.asregs.msize);
 
       saved_state.asregs.msize = 1;
-      saved_state.asregs.memory = (unsigned char *) calloc (1, 1);
+      saved_state.asregs.memory = (unsigned char *) mcalloc (1, 1);
     }
 }
 

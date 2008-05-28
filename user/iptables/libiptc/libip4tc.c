@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <netinet/in.h>
 
 #ifdef DEBUG_CONNTRACK
 #define inline
@@ -151,10 +150,7 @@ dump_entry(STRUCT_ENTRY *e, const TC_HANDLE_T handle)
 	printf("Invflags: %02X\n", e->ip.invflags);
 	printf("Counters: %llu packets, %llu bytes\n",
 	       (unsigned long long)e->counters.pcnt, (unsigned long long)e->counters.bcnt);
-	printf("Cache: %08X ", e->nfcache);
-	if (e->nfcache & NFC_ALTERED) printf("ALTERED ");
-	if (e->nfcache & NFC_UNKNOWN) printf("UNKNOWN ");
-	printf("\n");
+	printf("Cache: %08X\n", e->nfcache);
 
 	IPT_MATCH_ITERATE(e, print_match);
 
@@ -207,8 +203,7 @@ is_same(const STRUCT_ENTRY *a, const STRUCT_ENTRY *b, unsigned char *matchmask)
 			return NULL;
 	}
 
-	if (a->nfcache != b->nfcache
-	    || a->target_offset != b->target_offset
+	if (a->target_offset != b->target_offset
 	    || a->next_offset != b->next_offset)
 		return NULL;
 

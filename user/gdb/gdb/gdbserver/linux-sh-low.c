@@ -1,12 +1,12 @@
 /* GNU/Linux/SH specific low level interface, for the remote server for GDB.
-   Copyright 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 #include "linux-low.h"
@@ -81,7 +79,7 @@ sh_breakpoint_at (CORE_ADDR where)
 {
   unsigned short insn;
 
-  (*the_target->read_memory) (where, (char *) &insn, 2);
+  (*the_target->read_memory) (where, (unsigned char *) &insn, 2);
   if (insn == sh_breakpoint)
     return 1;
 
@@ -90,6 +88,23 @@ sh_breakpoint_at (CORE_ADDR where)
   return 0;
 }
 
+/* Provide only a fill function for the general register set.  ps_lgetregs
+   will use this for NPTL support.  */
+
+static void sh_fill_gregset (void *buf)
+{
+  int i;
+
+  for (i = 0; i < 23; i++)
+    if (sh_regmap[i] != -1)
+      collect_register (i, (char *) buf + sh_regmap[i]);
+}
+
+struct regset_info target_regsets[] = {
+  { 0, 0, 0, GENERAL_REGS, sh_fill_gregset, NULL },
+  { 0, 0, -1, -1, NULL, NULL }
+};
+
 struct linux_target_ops the_low_target = {
   sh_num_regs,
   sh_regmap,
@@ -97,7 +112,7 @@ struct linux_target_ops the_low_target = {
   sh_cannot_store_register,
   sh_get_pc,
   sh_set_pc,
-  (const char *) &sh_breakpoint,
+  (const unsigned char *) &sh_breakpoint,
   sh_breakpoint_len,
   NULL,
   0,

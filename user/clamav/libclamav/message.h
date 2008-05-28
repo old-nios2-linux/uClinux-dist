@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2002 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,19 +23,16 @@
 
 /* The contents could change, ONLY access in message.c */
 typedef struct message {
-	mime_type	mimeType;
 	encoding_type	*encodingTypes;
+	mime_type	mimeType;
 	int	numberOfEncTypes;	/* size of encodingTypes */
 	char	*mimeSubtype;
-	int	numberOfArguments;	/* count of mimeArguments */
 	char	**mimeArguments;
 	char	*mimeDispositionType;	/* probably attachment */
 	text	*body_first, *body_last;
-	cli_ctx	*ctx;
-
-	char	base64_1, base64_2, base64_3;
+	cli_ctx	*ctx;	/* When set we can scan the message, otherwise NULL */
+	int	numberOfArguments;	/* count of mimeArguments */
 	int	base64chars;
-	unsigned	int	isInfected : 1;
 
 	/*
 	 * Markers for the start of various non MIME messages that could
@@ -45,6 +43,10 @@ typedef struct message {
 	text	*yenc;		/* start of a yEnc message */
 	text	*encoding;	/* is the non MIME message encoded? */
 	const text	*dedupedThisFar;
+
+	char	base64_1, base64_2, base64_3;
+	unsigned	int	isInfected : 1;
+
 } message;
 
 message	*messageCreate(void);
@@ -76,7 +78,6 @@ text	*binhexBegin(message *m);
 text	*yEncBegin(message *m);
 text	*bounceBegin(message *m);
 text	*encodingLine(message *m);
-void	messageClearMarkers(message *m);
 unsigned char	*decodeLine(message *m, encoding_type enctype, const char *line, unsigned char *buf, size_t buflen);
 int	isuuencodebegin(const char *line);
 void	messageSetCTX(message *m, cli_ctx *ctx);

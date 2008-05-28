@@ -1,21 +1,20 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
-# Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # use this to debug:
 #
@@ -36,7 +35,8 @@ remote_exec build "rm -f core"
 
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested ending-run.exp
+     return -1
 }
 
 
@@ -66,12 +66,10 @@ gdb_test "b ending-run.c:31" ".*Breakpoint 3.*ending-run.c, line 31.*"
 # Expect to hit the bp at line "1", but symbolize this
 # as line "13".  Then try to clear it--this should work.
 #
-if [target_info exists use_gdb_stub] {
-  gdb_test "continue" ".*Breakpoint.*1.*callee.*13.*"
-} else {
-  gdb_test "r" ".*Breakpoint.*1.*callee.*13.*"
-}
-gdb_test "cle" ".*Deleted breakpoints 2 1.*" "clear worked"
+gdb_run_cmd
+gdb_test "" ".*Breakpoint.*1.*callee.*13.*" "run"
+
+gdb_test "cle" ".*Deleted breakpoints 1 2.*" "clear worked"
 send_gdb "i b\n"
 gdb_expect {
     -re ".* breakpoint .* breakpoint .*$gdb_prompt $" { 
@@ -97,7 +95,7 @@ gdb_expect {
     -re ".*address (0x\[0-9a-fA-F]*).*$gdb_prompt $" {
         set line_eight $expect_out(1,string)
         gdb_test "b 13" ".*Breakpoint.*6.*"
-        gdb_test "cle *$line_eight" ".*Deleted breakpoints 6 4.*" "Clear 2 by address"
+        gdb_test "cle *$line_eight" ".*Deleted breakpoints 4 6.*" "Clear 2 by address"
     }
     -re ".*$gdb_prompt $" {
         fail "need to fix test for new compile outcome"
@@ -111,7 +109,7 @@ gdb_expect {
         gdb_test "b ending-run.c:14" ".*Breakpoint 7.*ending-run.c, line 14.*"
         gdb_test "b *$line_nine" ".*Note.*also.*Breakpoint 8.*" "Breakpoint 7 at *ending-run.c:14"
         gdb_test "c" ".*Breakpoint.*7.*callee.*14.*"
-        gdb_test "cle" ".*Deleted breakpoints 8 7.*" "Clear 2 by default"
+        gdb_test "cle" ".*Deleted breakpoints 7 8.*" "Clear 2 by default"
     }
     -re ".*$gdb_prompt $" {
         fail "need to fix test for new compile outcome"
@@ -152,90 +150,83 @@ set old_timeout $timeout
 set timeout 50
 set program_exited 0
 send_gdb "next\n"
+set nexted 0
 gdb_expect {
     -re "33.*$gdb_prompt $" {
 	# sometimes we stop at the closing brace, if so, do another next
-	send_gdb "next\n"
-	gdb_expect {
-	    -re ".*Unable to find return pc for this frame.*$gdb_prompt $" {
-		fail "step out of main (Old bug came back!)"
-		gdb_test "n" ".*" ""
-	    }
-	    -re ".*in.*start.*$gdb_prompt $" { 
-		pass "step out of main"
-	    }
-	    -re ".*in.*bsp_trap.*$gdb_prompt $" { 
-		pass "step out of main"
-	    }
-	    -re ".*in.*init.*$gdb_prompt $" { 
-		# This is what happens on sparc64-elf ultra.
-		pass "step out of main"
-	    }
-	    -re ".*in.*dll_crt0_1.*$gdb_prompt $" {
-		# This is what happens on Cygwin.
-	        pass "step out of main"
-	    }
-	    -re ".*Program exited normally.*$gdb_prompt $" {
-		# This is what happens on Linux i86 (and I would expect others)
-		set program_exited 1
-		pass "step out of main"
-	    }
-	    -re ".*in .nope ().*$gdb_prompt $" {
-		# This is what happens on Solaris currently -sts 1999-08-25
-		pass "step out of main (on Solaris)"
-	    }
-	    -re ".*in _int_reset ().*$gdb_prompt $" {
-		# This is what happens on Sanyo XStormy16
-		pass "step out of main"
-	    }
-	    -re ".*init ().*$gdb_prompt $" {
-		# This is what happens on many Mips targets
-		pass "step out of main"
-	    }
-	    -re ".*in ..change.mode ().*$gdb_prompt $" {
-		# This is what happens on ARM in thumb mode -fn 2000-02-01
-		pass "step out of main (on ARM thumb)"
-	    }
-	    -re ".*in.*\\\$START\\\$.*from.*dld.sl.*$gdb_prompt $" { 
-		pass "step out of main"
-	    }
-	    -re ".*in __wrap__?main ().*$gdb_prompt $" {
-		pass "step out of main (status wrapper)"
-	    }
-	    -re "__setup_argv_for_main (.*).*$gdb_prompt $" {
-		# On sh, another wrapper function (start_l) exists, so
-		# another `next' is necessary.
-		gdb_test "next" ".*in start_l ().*" "step out of main (on sh)"
-	    }
-            -re ".*$gdb_prompt $" { fail "step out of main (at end 2)" }
-	    timeout { 
-		fail "step out of main (hang or timeout on step at end 2)" 
-	    }
+	if { $nexted } {
+	    fail "step out of main"
+	} else {
+	    set nexted 1
+	    send_gdb "next\n"
+	    exp_continue
 	}
     }
     -re ".*Unable to find return pc for this frame.*$gdb_prompt $" {
-        fail "Old bug came back!"
-        gdb_test "n" ".*" ""
+	fail "step out of main"
+	gdb_test "n" ".*" ""
     }
     -re ".*in.*start.*$gdb_prompt $" { 
-        pass "step out of main"
+	pass "step out of main"
     }
-    -re ".*in.*\\\$START\\\$.*from.*dld.sl.*$gdb_prompt $"  {
-        pass "step out of main (2)"
+    -re ".*in.*bsp_trap.*$gdb_prompt $" { 
+	pass "step out of main"
+    }
+    -re ".*in.*init.*$gdb_prompt $" { 
+	# This is what happens on sparc64-elf ultra.
+	pass "step out of main"
+    }
+    -re ".*in.*dll_crt0_1.*$gdb_prompt $" {
+	# This is what happens on Cygwin.
+	pass "step out of main"
     }
     -re ".*Program exited normally.*$gdb_prompt $" {
 	# This is what happens on Linux i86 (and I would expect others)
 	set program_exited 1
 	pass "step out of main"
     }
+    -re ".*in .nope ().*$gdb_prompt $" {
+	# This is what happens on Solaris currently -sts 1999-08-25
+	pass "step out of main"
+    }
+    -re ".*in _int_reset ().*$gdb_prompt $" {
+	# This is what happens on Sanyo XStormy16
+	pass "step out of main"
+    }
+    -re ".*init ().*$gdb_prompt $" {
+	# This is what happens on many Mips targets
+	pass "step out of main"
+    }
+    -re ".*in ..change.mode ().*$gdb_prompt $" {
+	# This is what happens on ARM in thumb mode -fn 2000-02-01
+	pass "step out of main"
+    }
+    -re ".*__rt_entry ().*$gdb_prompt $" {
+	# This is what happens on the ARM RVDS runtime
+	pass "step out of main"
+    }
+    -re ".*in.*\\\$START\\\$.*from.*dld.sl.*$gdb_prompt $" { 
+	pass "step out of main"
+    }
+    -re ".*in __wrap__?main ().*$gdb_prompt $" {
+	pass "step out of main"
+    }
+    -re "__setup_argv_for_main (.*).*$gdb_prompt $" {
+	# On sh, another wrapper function (start_l) exists, so
+	# another `next' is necessary.
+	gdb_test "next" ".*in start_l ().*" "step out of main"
+    }
     -re ".*in.*currently asm.*$gdb_prompt $" { 
-        pass "step out of main (into assembler)"
+        pass "step out of main"
+    }
+    -re "_*start\[0-9\]* \\(\[^)\]*\\).*$gdb_prompt $" {
+        pass "step out of main"
     }
     -re ".*Program received signal SIGTRAP.*$gdb_prompt $" {
-        pass "Cygmon stopped in ending trap."
+        pass "step out of main"
     }
-    -re ".*$gdb_prompt $" { fail "step out of main (at end 1)" }
-    timeout { fail "step out of main (hang or timeout on step at end 1)" }
+    -re ".*$gdb_prompt $" { fail "step out of main" }
+    timeout { fail "step out of main" }
 }
 
 # When we're talking to a program running on a real stand-alone board,

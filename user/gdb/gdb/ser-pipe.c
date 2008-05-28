@@ -1,5 +1,5 @@
 /* Serial interface for a pipe to a separate program
-   Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,12 +16,11 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "serial.h"
+#include "ser-base.h"
 #include "ser-unix.h"
 
 #include "gdb_vfork.h"
@@ -61,8 +60,11 @@ pipe_open (struct serial *scb, const char *name)
    * published in UNIX Review, Vol. 6, No. 8.
    */
   int pdes[2];
+  int err_pdes[2];
   int pid;
   if (socketpair (AF_UNIX, SOCK_STREAM, 0, pdes) < 0)
+    return -1;
+  if (socketpair (AF_UNIX, SOCK_STREAM, 0, err_pdes) < 0)
     return -1;
 
   /* Create the child process to run the command in.  Note that the
@@ -76,7 +78,16 @@ pipe_open (struct serial *scb, const char *name)
     {
       close (pdes[0]);
       close (pdes[1]);
+      close (err_pdes[0]);
+      close (err_pdes[1]);
       return -1;
+    }
+
+  if (fcntl (err_pdes[0], F_SETFL, O_NONBLOCK) == -1)
+    {
+      close (err_pdes[0]);
+      close (err_pdes[1]);
+      err_pdes[0] = err_pdes[1] = -1;
     }
 
   /* Child. */
@@ -90,6 +101,13 @@ pipe_open (struct serial *scb, const char *name)
 	  close (pdes[1]);
 	}
       dup2 (STDOUT_FILENO, STDIN_FILENO);
+
+      if (err_pdes[0] != -1)
+	{
+	  close (err_pdes[0]);
+	  dup2 (err_pdes[1], STDERR_FILENO);
+	  close (err_pdes[1]);
+	}
 #if 0
       /* close any stray FD's - FIXME - how? */
       /* POSIX.2 B.3.2.2 "popen() shall ensure that any streams
@@ -108,6 +126,7 @@ pipe_open (struct serial *scb, const char *name)
   state = XMALLOC (struct pipe_state);
   state->pid = pid;
   scb->fd = pdes[0];
+  scb->error_fd = err_pdes[0];
   scb->state = state;
 
   /* If we don't do this, GDB simply exits when the remote side dies.  */
@@ -143,19 +162,21 @@ _initialize_ser_pipe (void)
   ops->next = 0;
   ops->open = pipe_open;
   ops->close = pipe_close;
-  ops->readchar = ser_unix_readchar;
-  ops->write = ser_unix_write;
-  ops->flush_output = ser_unix_nop_flush_output;
-  ops->flush_input = ser_unix_flush_input;
-  ops->send_break = ser_unix_nop_send_break;
-  ops->go_raw = ser_unix_nop_raw;
-  ops->get_tty_state = ser_unix_nop_get_tty_state;
-  ops->set_tty_state = ser_unix_nop_set_tty_state;
-  ops->print_tty_state = ser_unix_nop_print_tty_state;
-  ops->noflush_set_tty_state = ser_unix_nop_noflush_set_tty_state;
-  ops->setbaudrate = ser_unix_nop_setbaudrate;
-  ops->setstopbits = ser_unix_nop_setstopbits;
-  ops->drain_output = ser_unix_nop_drain_output;
-  ops->async = ser_unix_async;
+  ops->readchar = ser_base_readchar;
+  ops->write = ser_base_write;
+  ops->flush_output = ser_base_flush_output;
+  ops->flush_input = ser_base_flush_input;
+  ops->send_break = ser_base_send_break;
+  ops->go_raw = ser_base_raw;
+  ops->get_tty_state = ser_base_get_tty_state;
+  ops->set_tty_state = ser_base_set_tty_state;
+  ops->print_tty_state = ser_base_print_tty_state;
+  ops->noflush_set_tty_state = ser_base_noflush_set_tty_state;
+  ops->setbaudrate = ser_base_setbaudrate;
+  ops->setstopbits = ser_base_setstopbits;
+  ops->drain_output = ser_base_drain_output;
+  ops->async = ser_base_async;
+  ops->read_prim = ser_unix_read_prim;
+  ops->write_prim = ser_unix_write_prim;
   serial_add_interface (ops);
 }

@@ -12,7 +12,7 @@
 #include <linux/netfilter_ipv4/ipt_addrtype.h>
 
 /* from linux/rtnetlink.h, must match order of enumeration */
-static char *rtn_names[] = {
+static const char *const rtn_names[] = {
 	"UNSPEC",
 	"UNICAST",
 	"LOCAL",
@@ -28,7 +28,7 @@ static char *rtn_names[] = {
 	NULL
 };
 
-static void help_types(void)
+static void addrtype_help_types(void)
 {
 	int i;
 
@@ -36,7 +36,7 @@ static void help_types(void)
 		printf("                                %s\n", rtn_names[i]);
 }
 
-static void help(void) 
+static void addrtype_help(void)
 {
 	printf(
 "Address type match v%s options:\n"
@@ -45,7 +45,7 @@ static void help(void)
 "\n"
 "Valid types:           \n"
 , IPTABLES_VERSION);
-	help_types();
+	addrtype_help_types();
 }
 
 static int
@@ -81,9 +81,9 @@ static void parse_types(const char *arg, u_int16_t *mask)
 #define IPT_ADDRTYPE_OPT_SRCTYPE	0x1
 #define IPT_ADDRTYPE_OPT_DSTTYPE	0x2
 
-static int parse(int c, char **argv, int invert, unsigned int *flags,
-		const struct ipt_entry *entry, unsigned int *nfcache,
-		struct ipt_entry_match **match)
+static int
+addrtype_parse(int c, char **argv, int invert, unsigned int *flags,
+               const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_addrtype_info *info =
 		(struct ipt_addrtype_info *) (*match)->data;
@@ -116,7 +116,7 @@ static int parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-static void final_check(unsigned int flags)
+static void addrtype_check(unsigned int flags)
 {
 	if (!(flags & (IPT_ADDRTYPE_OPT_SRCTYPE|IPT_ADDRTYPE_OPT_DSTTYPE)))
 		exit_error(PARAMETER_PROBLEM,
@@ -137,9 +137,8 @@ static void print_types(u_int16_t mask)
 	printf(" ");
 }
 
-static void print(const struct ipt_ip *ip, 
-		const struct ipt_entry_match *match,
-		int numeric)
+static void addrtype_print(const void *ip, const struct xt_entry_match *match,
+                           int numeric)
 {
 	const struct ipt_addrtype_info *info = 
 		(struct ipt_addrtype_info *) match->data;
@@ -159,8 +158,7 @@ static void print(const struct ipt_ip *ip,
 	}
 }
 
-static void save(const struct ipt_ip *ip, 
-		const struct ipt_entry_match *match)
+static void addrtype_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ipt_addrtype_info *info =
 		(struct ipt_addrtype_info *) match->data;
@@ -179,29 +177,27 @@ static void save(const struct ipt_ip *ip,
 	}
 }
 
-static struct option opts[] = {
-	{ "src-type", 1, 0, '1' },
-	{ "dst-type", 1, 0, '2' },
-	{ 0 }
+static const struct option addrtype_opts[] = {
+	{ "src-type", 1, NULL, '1' },
+	{ "dst-type", 1, NULL, '2' },
+	{ }
 };
 
-static
-struct iptables_match addrtype = {
-	.next 		= NULL,
+static struct iptables_match addrtype_match = {
 	.name 		= "addrtype",
 	.version 	= IPTABLES_VERSION,
 	.size 		= IPT_ALIGN(sizeof(struct ipt_addrtype_info)),
 	.userspacesize 	= IPT_ALIGN(sizeof(struct ipt_addrtype_info)),
-	.help 		= &help,
-	.parse 		= &parse,
-	.final_check 	= &final_check,
-	.print 		= &print,
-	.save 		= &save,
-	.extra_opts 	= opts
+	.help 		= addrtype_help,
+	.parse 		= addrtype_parse,
+	.final_check 	= addrtype_check,
+	.print 		= addrtype_print,
+	.save 		= addrtype_save,
+	.extra_opts 	= addrtype_opts,
 };
 
 
 void _init(void) 
 {
-	register_match(&addrtype);
+	register_match(&addrtype_match);
 }

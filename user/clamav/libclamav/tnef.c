@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2005 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,10 +16,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
- *
- * The algorithm is based on kdepim/ktnef/lib/ktnefparser.cpp from
- * KDE, rewritten in C by NJH. That algorithm is released under the GPL and is
- *	Copyright (C) 2002 Michael Goffioul <kdeprint@swing.be>
  */
 
 #if HAVE_CONFIG_H
@@ -60,6 +57,8 @@ static	int	tnef_header(FILE *fp, uint8_t *part, uint16_t *type, uint16_t *tag, i
 #define host16(v)	le16_to_host(v)
 #define host32(v)	le32_to_host(v)
 
+/* a TNEF file must be at least this size */
+#define	MIN_SIZE	(sizeof(uint32_t) + sizeof(uint16_t))
 
 int
 cli_tnef(const char *dir, int desc)
@@ -80,6 +79,11 @@ cli_tnef(const char *dir, int desc)
 	}
 	fsize = statb.st_size;
 
+	if(fsize < MIN_SIZE) {
+		cli_dbgmsg("cli_tngs: file too small, ignoring\n");
+		return CL_CLEAN;
+	}
+
 	i = dup(desc);
 	if((fp = fdopen(i, "rb")) == NULL) {
 		cli_errmsg("Can't open descriptor %d\n", desc);
@@ -89,6 +93,7 @@ cli_tnef(const char *dir, int desc)
 
 	if(fread(&i32, sizeof(uint32_t), 1, fp) != 1) {
 		fclose(fp);
+		/* The file is at least MIN_SIZE bytes, so it "can't" fail */
 		return CL_EIO;
 	}
 	if(host32(i32) != TNEF_SIGNATURE) {
@@ -98,6 +103,7 @@ cli_tnef(const char *dir, int desc)
 
 	if(fread(&i16, sizeof(uint16_t), 1, fp) != 1) {
 		fclose(fp);
+		/* The file is at least MIN_SIZE bytes, so it "can't" fail */
 		return CL_EIO;
 	}
 
@@ -121,7 +127,12 @@ cli_tnef(const char *dir, int desc)
 			case 1:
 				break;
 			default:
-				ret = CL_EIO;
+				/*
+				 * Assume truncation, not file I/O error
+				 */
+				/*ret = CL_EIO;*/
+				cli_warnmsg("cli_tnef: file truncated, returning CLEAN\n");
+				ret = CL_CLEAN;
 				alldone = 1;
 				break;
 		}
@@ -167,14 +178,15 @@ cli_tnef(const char *dir, int desc)
 				 * email that's about to be deleted
 				 */
 				if(cli_debug_flag) {
-					int fout;
+					int fout = -1;
 					char *filename = cli_gentemp(NULL);
 					char buffer[BUFSIZ];
 
+					if(filename)
 #ifdef	O_BINARY
-					fout = open(filename, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
+						fout = open(filename, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
 #else
-					fout = open(filename, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC, 0600);
+						fout = open(filename, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC, 0600);
 #endif
 
 					if(fout >= 0) {
@@ -382,7 +394,7 @@ tnef_header(FILE *fp, uint8_t *part, uint16_t *type, uint16_t *tag, int32_t *len
 		return 0;
 
 	if(fread(&i32, sizeof(uint32_t), 1, fp) != 1) {
-		if((*part == '\n') && feof(fp)) {
+		if(((*part == '\n') || (*part == '\r')) && feof(fp)) {
 			/*
 			 * trailing newline in the file, could be caused by
 			 * broken quoted-printable encoding in the source

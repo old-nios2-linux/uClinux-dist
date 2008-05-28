@@ -1,8 +1,12 @@
 /*
- *  Copyright (C) 2006 Török Edwin <edwin@clamav.net>
+ *  Extract embedded objects from RTF files.
+ *
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: TÃ¶rÃ¶k Edvin
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as 
+ *  it under the terms of the GNU General Public License version 2 as
  *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
@@ -50,6 +54,10 @@ typedef int (*rtf_callback_process)(struct rtf_state*, const unsigned char* data
 typedef int (*rtf_callback_end)(struct rtf_state*, cli_ctx*);
 
 struct rtf_state {
+	rtf_callback_begin cb_begin;/* must be non-null if you want cb_process, and cb_end to be called, also it must change cb_data to non-null */
+	rtf_callback_process cb_process;
+	rtf_callback_end cb_end;
+	void* cb_data;/* data set up by cb_begin, used by cb_process, and cleaned up by cb_end. typically state data */
 	size_t default_elements;
 	size_t controlword_cnt;
 	ssize_t controlword_param;
@@ -57,14 +65,10 @@ struct rtf_state {
 	int  controlword_param_sign;
 	int  encounteredTopLevel;/* encountered top-level control words that we care about */
 	char controlword[33];
-	rtf_callback_begin cb_begin;/* must be non-null if you want cb_process, and cb_end to be called, also it must change cb_data to non-null */
-	rtf_callback_process cb_process;
-	rtf_callback_end cb_end;
-	void* cb_data;/* data set up by cb_begin, used by cb_process, and cleaned up by cb_end. typically state data */
 };
 
 static const struct rtf_state base_state = {
-	0,0,0,PARSE_MAIN,0,0,"                              ",NULL,NULL,NULL,NULL
+	NULL,NULL,NULL,NULL,0,0,0,PARSE_MAIN,0,0,"                              "
 };
 
 struct stack {
@@ -304,7 +308,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 						 cli_dbgmsg("RTF: waiting for magic\n");
 						 for(i=0; i<out_cnt && data->bread < rtf_data_magic_len; i++, data->bread++)
 							 if(rtf_data_magic[data->bread] != out_data[i]) {
-								cli_dbgmsg("Warning: rtf objdata magic number not matched, expected:%d, got: %d, at pos:%lu\n",rtf_data_magic[i],out_data[i], (unsigned long int) data->bread);
+								 cli_dbgmsg("Warning: rtf objdata magic number not matched, expected:%d, got: %d, at pos:%lu\n",rtf_data_magic[i],out_data[i], (unsigned long int) data->bread);
 							 }
 						 out_cnt  -= i;
 						 if(data->bread == rtf_data_magic_len) {
@@ -324,7 +328,7 @@ static int rtf_object_process(struct rtf_state* state, const unsigned char* inpu
 							    out_data += i;
 							    data->bread=0;
 							    if(data->desc_len > 64) {
-							    cli_dbgmsg("Description length too big (%lu), showing only 64 bytes of it\n", (unsigned long int) data->desc_len);
+								    cli_dbgmsg("Description length too big (%lu), showing only 64 bytes of it\n", (unsigned long int) data->desc_len);
 								    data->desc_name = cli_malloc(65);
 							    }
 							    else
@@ -533,7 +537,8 @@ int cli_scanrtf(int desc, cli_ctx *ctx)
 		return CL_EMEM;
 	}
 
-	tempname = cli_gentemp(NULL);
+	if(!(tempname = cli_gentemp(NULL)))
+	    return CL_EMEM;
 
 	if(mkdir(tempname, 0700)) {
 	    	cli_dbgmsg("ScanRTF -> Can't create temporary directory %s\n", tempname);

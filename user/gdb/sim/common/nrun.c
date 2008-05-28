@@ -1,19 +1,18 @@
 /* New version of run front end support for simulators.
-   Copyright (C) 1997 Free Software Foundation, Inc.
+   Copyright (C) 1997, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include <signal.h>
 #include "sim-main.h"
@@ -22,6 +21,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #ifdef HAVE_ENVIRON
 extern char **environ;
+#endif
+
+#ifdef HAVE_UNISTD_H
+/* For chdir.  */
+#include <unistd.h>
 #endif
 
 static void usage (void);
@@ -77,6 +81,12 @@ main (int argc, char **argv)
       abort ();
     }
 
+  /* We can't set the endianness in the callback structure until
+     sim_config is called, which happens in sim_open.  */
+  default_callback.target_endian
+    = (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN
+       ? BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE);
+
   /* Was there a program to run?  */
   prog_argv = STATE_PROG_ARGV (sd);
   prog_bfd = STATE_PROG_BFD (sd);
@@ -116,6 +126,16 @@ main (int argc, char **argv)
 #else
   sim_create_inferior (sd, prog_bfd, prog_argv, NULL);
 #endif
+
+  /* To accommodate relative file paths, chdir to sysroot now.  We
+     mustn't do this until BFD has opened the program, else we wouldn't
+     find the executable if it has a relative file path.  */
+  if (simulator_sysroot[0] != '\0' && chdir (simulator_sysroot) < 0)
+    {
+      fprintf (stderr, "%s: can't change directory to \"%s\"\n",
+	       myname, simulator_sysroot);
+      exit (1);
+    }
 
   /* Run/Step the program.  */
   if (single_step)

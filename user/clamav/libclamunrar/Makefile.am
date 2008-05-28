@@ -4,9 +4,13 @@
 
 if ENABLE_UNRAR
 
-INCLUDES = -I$(top_srcdir)
+AM_CPPFLAGS = -I$(top_srcdir)
 
 libclamunrar_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ -no-undefined
+
+if VERSIONSCRIPT
+libclamunrar_la_LDFLAGS += -Wl,@VERSIONSCRIPTFLAG@,@top_srcdir@/libclamunrar/libclamunrar.map
+endif
 
 libclamunrar_la_SOURCES = \
 	unrar15.c \
@@ -28,5 +32,6 @@ libclamunrar_la_SOURCES = \
 	unrarhlp.h
 
 lib_LTLIBRARIES = libclamunrar.la
-
 endif
+
+EXTRA_DIST = libclamunrar.map

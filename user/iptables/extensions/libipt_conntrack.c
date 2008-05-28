@@ -18,8 +18,7 @@
 #endif
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void conntrack_help(void)
 {
 	printf(
 "conntrack match v%s options:\n"
@@ -41,18 +40,16 @@ help(void)
 "\n", IPTABLES_VERSION);
 }
 
-
-
-static struct option opts[] = {
-	{ "ctstate", 1, 0, '1' },
-	{ "ctproto", 1, 0, '2' },
-	{ "ctorigsrc", 1, 0, '3' },
-	{ "ctorigdst", 1, 0, '4' },
-	{ "ctreplsrc", 1, 0, '5' },
-	{ "ctrepldst", 1, 0, '6' },
-	{ "ctstatus", 1, 0, '7' },
-	{ "ctexpire", 1, 0, '8' },
-	{0}
+static const struct option conntrack_opts[] = {
+	{ "ctstate", 1, NULL, '1' },
+	{ "ctproto", 1, NULL, '2' },
+	{ "ctorigsrc", 1, NULL, '3' },
+	{ "ctorigdst", 1, NULL, '4' },
+	{ "ctreplsrc", 1, NULL, '5' },
+	{ "ctrepldst", 1, NULL, '6' },
+	{ "ctstatus", 1, NULL, '7' },
+	{ "ctexpire", 1, NULL, '8' },
+	{ }
 };
 
 static int
@@ -127,18 +124,6 @@ parse_statuses(const char *arg, struct ipt_conntrack_info *sinfo)
 		exit_error(PARAMETER_PROBLEM, "Bad ctstatus `%s'", arg);
 }
 
-#ifdef KERNEL_64_USERSPACE_32
-static unsigned long long
-parse_expire(const char *s)
-{
-	unsigned long long len;
-	
-	if (string_to_number_ll(s, 0, 0, &len) == -1)
-		exit_error(PARAMETER_PROBLEM, "expire value invalid: `%s'\n", s);
-	else
-		return len;
-}
-#else
 static unsigned long
 parse_expire(const char *s)
 {
@@ -149,7 +134,6 @@ parse_expire(const char *s)
 	else
 		return len;
 }
-#endif
 
 /* If a single value is provided, min and max are both set to the value */
 static void
@@ -172,22 +156,14 @@ parse_expires(const char *s, struct ipt_conntrack_info *sinfo)
 	
 	if (sinfo->expires_min > sinfo->expires_max)
 		exit_error(PARAMETER_PROBLEM,
-#ifdef KERNEL_64_USERSPACE_32
-		           "expire min. range value `%llu' greater than max. "
-		           "range value `%llu'", sinfo->expires_min, sinfo->expires_max);
-#else
 		           "expire min. range value `%lu' greater than max. "
 		           "range value `%lu'", sinfo->expires_min, sinfo->expires_max);
-#endif
 }
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      unsigned int *nfcache,
-      struct ipt_entry_match **match)
+static int conntrack_parse(int c, char **argv, int invert, unsigned int *flags,
+                           const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_conntrack_info *sinfo = (struct ipt_conntrack_info *)(*match)->data;
 	char *protocol = NULL;
@@ -228,7 +204,7 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 		break;
 
 	case '3':
-		check_inverse(optarg, &invert, &optind, 9);
+		check_inverse(optarg, &invert, &optind, 0);
 
 		if (invert)
 			sinfo->invflags |= IPT_CONNTRACK_ORIGSRC;
@@ -335,8 +311,7 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-static void
-final_check(unsigned int flags)
+static void conntrack_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM, "You must specify one or more options");
@@ -430,7 +405,7 @@ print_addr(struct in_addr *addr, struct in_addr *mask, int inv, int numeric)
 
 /* Saves the matchinfo in parsable form to stdout. */
 static void
-matchinfo_print(const struct ipt_ip *ip, const struct ipt_entry_match *match, int numeric, const char *optpfx)
+matchinfo_print(const void *ip, const struct xt_entry_match *match, int numeric, const char *optpfx)
 {
 	struct ipt_conntrack_info *sinfo = (struct ipt_conntrack_info *)match->data;
 
@@ -500,50 +475,40 @@ matchinfo_print(const struct ipt_ip *ip, const struct ipt_entry_match *match, in
         	if (sinfo->invflags & IPT_CONNTRACK_EXPIRES)
                 	printf("! ");
 
-#ifdef KERNEL_64_USERSPACE_32
-        	if (sinfo->expires_max == sinfo->expires_min)
-                	printf("%llu ", sinfo->expires_min);
-        	else
-                	printf("%llu:%llu ", sinfo->expires_min, sinfo->expires_max);
-#else
         	if (sinfo->expires_max == sinfo->expires_min)
                 	printf("%lu ", sinfo->expires_min);
         	else
                 	printf("%lu:%lu ", sinfo->expires_min, sinfo->expires_max);
-#endif
 	}
 }
 
 /* Prints out the matchinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_match *match,
-      int numeric)
+static void conntrack_print(const void *ip, const struct xt_entry_match *match,
+                            int numeric)
 {
 	matchinfo_print(ip, match, numeric, "");
 }
 
 /* Saves the matchinfo in parsable form to stdout. */
-static void save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
+static void conntrack_save(const void *ip, const struct xt_entry_match *match)
 {
 	matchinfo_print(ip, match, 1, "--");
 }
 
-static struct iptables_match conntrack = { 
-	.next 		= NULL,
+static struct iptables_match conntrack_match = {
 	.name		= "conntrack",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_conntrack_info)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_conntrack_info)),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= conntrack_help,
+	.parse		= conntrack_parse,
+	.final_check	= conntrack_check,
+	.print		= conntrack_print,
+	.save		= conntrack_save,
+	.extra_opts	= conntrack_opts,
 };
 
 void _init(void)
 {
-	register_match(&conntrack);
+	register_match(&conntrack_match);
 }

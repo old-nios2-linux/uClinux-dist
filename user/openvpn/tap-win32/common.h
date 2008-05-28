@@ -1,15 +1,15 @@
 /*
- *  TAP-Win32 -- A kernel driver to provide virtual tap device functionality
- *               on Windows.  Originally derived from the CIPE-Win32
- *               project by Damion K. Wilson, with extensive modifications by
- *               James Yonan.
+ *  TAP-Win32/TAP-Win64 -- A kernel driver to provide virtual tap
+ *                         device functionality on Windows.
  *
- *  All source code which derives from the CIPE-Win32 project is
- *  Copyright (C) Damion K. Wilson, 2003, and is released under the
- *  GPL version 2 (see below).
+ *  This code was inspired by the CIPE-Win32 driver by Damion K. Wilson.
  *
- *  All other source code is Copyright (C) 2002-2005 OpenVPN Solutions LLC,
- *  and is released under the GPL version 2 (see below).
+ *  This source code is Copyright (C) 2002-2007 OpenVPN Solutions LLC,
+ *  and is released under the GPL version 2 (see below), however due
+ *  to the extra costs of supporting Windows Vista, OpenVPN Solutions
+ *  LLC reserves the right to change the terms of the TAP-Win32/TAP-Win64
+ *  license for versions 9.1 and higher prior to the official release of
+ *  OpenVPN 2.1.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2
@@ -32,12 +32,16 @@
 // common to both.
 //===============================================
 
+#include "../autodefs/defs.h"
+
 //=============
 // TAP IOCTLs
 //=============
 
 #define TAP_CONTROL_CODE(request,method) \
   CTL_CODE (FILE_DEVICE_UNKNOWN, request, method, FILE_ANY_ACCESS)
+
+// Present in 8.1
 
 #define TAP_IOCTL_GET_MAC               TAP_CONTROL_CODE (1, METHOD_BUFFERED)
 #define TAP_IOCTL_GET_VERSION           TAP_CONTROL_CODE (2, METHOD_BUFFERED)
@@ -48,6 +52,11 @@
 #define TAP_IOCTL_CONFIG_DHCP_MASQ      TAP_CONTROL_CODE (7, METHOD_BUFFERED)
 #define TAP_IOCTL_GET_LOG_LINE          TAP_CONTROL_CODE (8, METHOD_BUFFERED)
 #define TAP_IOCTL_CONFIG_DHCP_SET_OPT   TAP_CONTROL_CODE (9, METHOD_BUFFERED)
+
+// Added in 8.2
+
+/* obsoletes TAP_IOCTL_CONFIG_POINT_TO_POINT */
+#define TAP_IOCTL_CONFIG_TUN            TAP_CONTROL_CODE (10, METHOD_BUFFERED)
 
 //=================
 // Registry keys
@@ -72,4 +81,4 @@
 // simultaneously.
 //=========================================================
 
-#define TAP_COMPONENT_ID "tap0801"
+#define TAP_COMPONENT_ID PRODUCT_TAP_ID

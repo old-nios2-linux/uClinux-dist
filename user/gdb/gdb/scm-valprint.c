@@ -1,12 +1,13 @@
 /* Scheme/Guile language support routines for GDB, the GNU debugger.
-   Copyright 1995, 1996, 1998, 1999, 2000, 2001
+
+   Copyright (C) 1995, 1996, 1998, 1999, 2000, 2001, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -29,11 +28,8 @@
 #include "scm-lang.h"
 #include "valprint.h"
 #include "gdbcore.h"
-
-/* FIXME: Should be in a header file that we import. */
-extern int c_val_print (struct type *, char *, int, CORE_ADDR,
-			struct ui_file *, int, int, int,
-			enum val_prettyprint);
+#include "c-lang.h"
+#include "infcall.h"
 
 static void scm_ipruk (char *, LONGEST, struct ui_file *);
 static void scm_scmlist_print (LONGEST, struct ui_file *, int, int,
@@ -42,14 +38,55 @@ static int scm_inferior_print (LONGEST, struct ui_file *, int, int,
 			       int, enum val_prettyprint);
 
 /* Prints the SCM value VALUE by invoking the inferior, if appropraite.
-   Returns >= 0 on succes;  retunr -1 if the inferior cannot/should not
+   Returns >= 0 on success;  return -1 if the inferior cannot/should not
    print VALUE. */
 
 static int
 scm_inferior_print (LONGEST value, struct ui_file *stream, int format,
 		    int deref_ref, int recurse, enum val_prettyprint pretty)
 {
-  return -1;
+  struct value *func, *arg, *result;
+  struct symbol *gdb_output_sym, *gdb_output_len_sym;
+  char *output;
+  int ret, output_len;
+
+  func = find_function_in_inferior ("gdb_print");
+  arg = value_from_longest (builtin_type_CORE_ADDR, value);
+
+  result = call_function_by_hand (func, 1, &arg);
+  ret = (int) value_as_long (result);
+  if (ret == 0)
+    {
+      /* XXX: Should we cache these symbols?  */
+      gdb_output_sym =
+	lookup_symbol_global ("gdb_output", NULL, NULL,
+			      VAR_DOMAIN,
+			      (struct symtab **) NULL);
+      gdb_output_len_sym =
+	lookup_symbol_global ("gdb_output_length", NULL, NULL,
+			      VAR_DOMAIN,
+			      (struct symtab **) NULL);
+
+      if ((gdb_output_sym == NULL) || (gdb_output_len_sym == NULL))
+	ret = -1;
+      else
+	{
+	  struct value *remote_buffer;
+
+	  read_memory (SYMBOL_VALUE_ADDRESS (gdb_output_len_sym),
+		       (char *) &output_len, sizeof (output_len));
+
+	  output = (char *) alloca (output_len);
+	  remote_buffer = value_at (builtin_type_CORE_ADDR,
+				    SYMBOL_VALUE_ADDRESS (gdb_output_sym));
+	  read_memory (value_as_address (remote_buffer),
+		       output, output_len);
+
+	  ui_file_write (stream, output, output_len);
+	}
+    }
+
+  return ret;
 }
 
 /* {Names of immediate symbols}
@@ -223,7 +260,7 @@ taloop:
 	    int i;
 	    int done = 0;
 	    int buf_size;
-	    char buffer[64];
+	    gdb_byte buffer[64];
 	    int truncate = print_max && len > (int) print_max;
 	    if (truncate)
 	      len = print_max;
@@ -251,8 +288,8 @@ taloop:
 	  {
 	    int len = SCM_LENGTH (svalue);
 
-	    char *str = (char *) alloca (len);
-	    read_memory (SCM_CDR (svalue), str, len + 1);
+	    char *str = alloca (len);
+	    read_memory (SCM_CDR (svalue), (gdb_byte *) str, len + 1);
 	    /* Should handle weird characters FIXME */
 	    str[len] = '\0';
 	    fputs_filtered (str, stream);
@@ -290,8 +327,9 @@ taloop:
 	      {
 		result
 		  = scm_apply (hook,
-			scm_listify (exp, port, (writing ? BOOL_T : BOOL_F),
-				     SCM_UNDEFINED),
+			       scm_listify (exp, port, 
+					    (writing ? BOOL_T : BOOL_F),
+					    SCM_UNDEFINED),
 			       EOL);
 		if (result == BOOL_F)
 		  goto punk;
@@ -338,7 +376,9 @@ taloop:
 	  break;
 	case tc7_port:
 	  i = PTOBNUM (exp);
-	  if (i < scm_numptob && scm_ptobs[i].print && (scm_ptobs[i].print) (exp, port, writing))
+	  if (i < scm_numptob 
+	      && scm_ptobs[i].print 
+	      && (scm_ptobs[i].print) (exp, port, writing))
 	    break;
 	  goto punk;
 	case tc7_smob:
@@ -359,13 +399,15 @@ taloop:
 }
 
 int
-scm_val_print (struct type *type, char *valaddr, int embedded_offset,
-	       CORE_ADDR address, struct ui_file *stream, int format,
-	       int deref_ref, int recurse, enum val_prettyprint pretty)
+scm_val_print (struct type *type, const gdb_byte *valaddr,
+	       int embedded_offset, CORE_ADDR address,
+	       struct ui_file *stream, int format, int deref_ref,
+	       int recurse, enum val_prettyprint pretty)
 {
   if (is_scmvalue_type (type))
     {
       LONGEST svalue = extract_signed_integer (valaddr, TYPE_LENGTH (type));
+
       if (scm_inferior_print (svalue, stream, format,
 			      deref_ref, recurse, pretty) >= 0)
 	{
@@ -390,6 +432,5 @@ int
 scm_value_print (struct value *val, struct ui_file *stream, int format,
 		 enum val_prettyprint pretty)
 {
-  return (val_print (VALUE_TYPE (val), VALUE_CONTENTS (val), 0,
-		     VALUE_ADDRESS (val), stream, format, 1, 0, pretty));
+  return (common_val_print (val, stream, format, 1, 0, pretty));
 }

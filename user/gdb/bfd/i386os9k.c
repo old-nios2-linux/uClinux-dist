@@ -1,48 +1,38 @@
 /* BFD back-end for os9000 i386 binaries.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2001, 2002,
-   2004 Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "libaout.h"		/* BFD a.out internal data structures */
 #include "os9k.h"
 
-static const bfd_target * os9k_callback
-  PARAMS ((bfd *));
-static const bfd_target * os9k_object_p
-  PARAMS ((bfd *));
-static int os9k_sizeof_headers
-  PARAMS ((bfd *, bfd_boolean));
-bfd_boolean os9k_swap_exec_header_in
-  PARAMS ((bfd *, mh_com *, struct internal_exec *));
-
 /* Swaps the information in an executable header taken from a raw byte
    stream memory image, into the internal exec_header structure.  */
-bfd_boolean
-os9k_swap_exec_header_in (abfd, raw_bytes, execp)
-     bfd *abfd;
-     mh_com *raw_bytes;
-     struct internal_exec *execp;
+static bfd_boolean
+os9k_swap_exec_header_in (bfd *abfd,
+			  mh_com *raw_bytes,
+			  struct internal_exec *execp)
 {
   mh_com *bytes = (mh_com *) raw_bytes;
   unsigned int dload, dmemsize, dmemstart;
@@ -77,78 +67,12 @@ os9k_swap_exec_header_in (abfd, raw_bytes, execp)
   return TRUE;
 }
 
-#if 0
-/* Swaps the information in an internal exec header structure into the
-   supplied buffer ready for writing to disk.  */
-
-void os9k_swap_exec_header_out
-  PARAMS ((bfd *, struct internal_exec *, struct mh_com *));
-
-void
-os9k_swap_exec_header_out (abfd, execp, raw_bytes)
-     bfd *abfd;
-     struct internal_exec *execp;
-     mh_com *raw_bytes;
-{
-  mh_com *bytes = (mh_com *) raw_bytes;
-
-  /* Now fill in fields in the raw data, from the fields in the exec struct. */
-  H_PUT_32 (abfd, execp->a_info, bytes->e_info);
-  H_PUT_32 (abfd, execp->a_text, bytes->e_text);
-  H_PUT_32 (abfd, execp->a_data, bytes->e_data);
-  H_PUT_32 (abfd, execp->a_bss, bytes->e_bss);
-  H_PUT_32 (abfd, execp->a_syms, bytes->e_syms);
-  H_PUT_32 (abfd, execp->a_entry, bytes->e_entry);
-  H_PUT_32 (abfd, execp->a_trsize, bytes->e_trsize);
-  H_PUT_32 (abfd, execp->a_drsize, bytes->e_drsize);
-  H_PUT_32 (abfd, execp->a_tload, bytes->e_tload);
-  H_PUT_32 (abfd, execp->a_dload, bytes->e_dload);
-  bytes->e_talign[0] = execp->a_talign;
-  bytes->e_dalign[0] = execp->a_dalign;
-  bytes->e_balign[0] = execp->a_balign;
-  bytes->e_relaxable[0] = execp->a_relaxable;
-}
-
-#endif	/* 0 */
-
-static const bfd_target *
-os9k_object_p (abfd)
-     bfd *abfd;
-{
-  struct internal_exec anexec;
-  mh_com exec_bytes;
-
-  if (bfd_bread ((PTR) &exec_bytes, (bfd_size_type) MHCOM_BYTES_SIZE, abfd)
-      != MHCOM_BYTES_SIZE)
-    {
-      if (bfd_get_error () != bfd_error_system_call)
-	bfd_set_error (bfd_error_wrong_format);
-      return 0;
-    }
-
-  anexec.a_info = H_GET_16 (abfd, exec_bytes.m_sync);
-  if (N_BADMAG (anexec))
-    {
-      bfd_set_error (bfd_error_wrong_format);
-      return 0;
-    }
-
-  if (! os9k_swap_exec_header_in (abfd, &exec_bytes, &anexec))
-    {
-      if (bfd_get_error () != bfd_error_system_call)
-	bfd_set_error (bfd_error_wrong_format);
-      return NULL;
-    }
-  return aout_32_some_aout_object_p (abfd, &anexec, os9k_callback);
-}
-
 
 /* Finish up the opening of a b.out file for reading.  Fill in all the
    fields that are not handled by common code.  */
 
 static const bfd_target *
-os9k_callback (abfd)
-     bfd *abfd;
+os9k_callback (bfd *abfd)
 {
   struct internal_exec *execp = exec_hdr (abfd);
   unsigned long bss_start;
@@ -190,129 +114,39 @@ os9k_callback (abfd)
   return abfd->xvec;
 }
 
-#if 0
-struct bout_data_struct
+static const bfd_target *
+os9k_object_p (bfd *abfd)
 {
-  struct aoutdata a;
-  struct internal_exec e;
-};
+  struct internal_exec anexec;
+  mh_com exec_bytes;
 
-static bfd_boolean
-os9k_mkobject (abfd)
-     bfd *abfd;
-{
-  struct bout_data_struct *rawptr;
-  bfd_size_type amt = sizeof (struct bout_data_struct);
-
-  rawptr = (struct bout_data_struct *) bfd_zalloc (abfd, amt);
-  if (rawptr == NULL)
-    return FALSE;
-
-  abfd->tdata.bout_data = rawptr;
-  exec_hdr (abfd) = &rawptr->e;
-
-  obj_textsec (abfd) = (asection *) NULL;
-  obj_datasec (abfd) = (asection *) NULL;
-  obj_bsssec (abfd) = (asection *) NULL;
-
-  return TRUE;
-}
-
-static bfd_boolean
-os9k_write_object_contents (abfd)
-     bfd *abfd;
-{
-  struct external_exec swapped_hdr;
-
-  if (! aout_32_make_sections (abfd))
-    return FALSE;
-
-  exec_hdr (abfd)->a_info = BMAGIC;
-
-  exec_hdr (abfd)->a_text = obj_textsec (abfd)->size;
-  exec_hdr (abfd)->a_data = obj_datasec (abfd)->size;
-  exec_hdr (abfd)->a_bss = obj_bsssec (abfd)->size;
-  exec_hdr (abfd)->a_syms = bfd_get_symcount (abfd) * sizeof (struct nlist);
-  exec_hdr (abfd)->a_entry = bfd_get_start_address (abfd);
-  exec_hdr (abfd)->a_trsize = ((obj_textsec (abfd)->reloc_count) *
-			       sizeof (struct relocation_info));
-  exec_hdr (abfd)->a_drsize = ((obj_datasec (abfd)->reloc_count) *
-			       sizeof (struct relocation_info));
-
-  exec_hdr (abfd)->a_talign = obj_textsec (abfd)->alignment_power;
-  exec_hdr (abfd)->a_dalign = obj_datasec (abfd)->alignment_power;
-  exec_hdr (abfd)->a_balign = obj_bsssec (abfd)->alignment_power;
-
-  exec_hdr (abfd)->a_tload = obj_textsec (abfd)->vma;
-  exec_hdr (abfd)->a_dload = obj_datasec (abfd)->vma;
-
-  bout_swap_exec_header_out (abfd, exec_hdr (abfd), &swapped_hdr);
-
-  if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0
-      || bfd_bwrite ((PTR) & swapped_hdr, (bfd_size_type) EXEC_BYTES_SIZE,
-		    abfd) != EXEC_BYTES_SIZE)
-    return FALSE;
-
-  /* Now write out reloc info, followed by syms and strings.  */
-  if (bfd_get_symcount (abfd) != 0)
+  if (bfd_bread ((PTR) &exec_bytes, (bfd_size_type) MHCOM_BYTES_SIZE, abfd)
+      != MHCOM_BYTES_SIZE)
     {
-      if (bfd_seek (abfd, (file_ptr) (N_SYMOFF (*exec_hdr (abfd))), SEEK_SET)
-	  != 0)
-	return FALSE;
-
-      if (!aout_32_write_syms (abfd))
-	return FALSE;
-
-      if (bfd_seek (abfd, (file_ptr) (N_TROFF (*exec_hdr (abfd))), SEEK_SET)
-	  != 0)
-	return FALSE;
-
-      if (!b_out_squirt_out_relocs (abfd, obj_textsec (abfd)))
-	return FALSE;
-      if (bfd_seek (abfd, (file_ptr) (N_DROFF (*exec_hdr (abfd))), SEEK_SET)
-	  != 0)
-	return FALSE;
-
-      if (!b_out_squirt_out_relocs (abfd, obj_datasec (abfd)))
-	return FALSE;
+      if (bfd_get_error () != bfd_error_system_call)
+	bfd_set_error (bfd_error_wrong_format);
+      return 0;
     }
-  return TRUE;
-}
-
-static bfd_boolean
-os9k_set_section_contents (abfd, section, location, offset, count)
-     bfd *abfd;
-     sec_ptr section;
-     unsigned char *location;
-     file_ptr offset;
-     int count;
-{
 
-  if (! abfd->output_has_begun)
-    {				/* set by bfd.c handler */
-      if (! aout_32_make_sections (abfd))
-	return FALSE;
-
-      obj_textsec (abfd)->filepos = sizeof (struct internal_exec);
-      obj_datasec (abfd)->filepos = obj_textsec (abfd)->filepos
-	+ obj_textsec (abfd)->size;
-
+  anexec.a_info = H_GET_16 (abfd, exec_bytes.m_sync);
+  if (N_BADMAG (anexec))
+    {
+      bfd_set_error (bfd_error_wrong_format);
+      return 0;
     }
-  /* Regardless, once we know what we're doing, we might as well get going.  */
-  if (bfd_seek (abfd, section->filepos + offset, SEEK_SET) != 0)
-    return FALSE;
 
-  if (count != 0)
-    return bfd_bwrite ((PTR) location, (bfd_size_type) count, abfd) == count;
-
-  return TRUE;
+  if (! os9k_swap_exec_header_in (abfd, &exec_bytes, &anexec))
+    {
+      if (bfd_get_error () != bfd_error_system_call)
+	bfd_set_error (bfd_error_wrong_format);
+      return NULL;
+    }
+  return aout_32_some_aout_object_p (abfd, &anexec, os9k_callback);
 }
-#endif	/* 0 */
 
 static int
-os9k_sizeof_headers (ignore_abfd, ignore)
-     bfd *ignore_abfd ATTRIBUTE_UNUSED;
-     bfd_boolean ignore ATTRIBUTE_UNUSED;
+os9k_sizeof_headers (bfd *abfd ATTRIBUTE_UNUSED,
+		     struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
   return sizeof (struct internal_exec);
 }
@@ -324,6 +158,7 @@ os9k_sizeof_headers (ignore_abfd, ignore)
 #define aout_32_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
 
 #define aout_32_bfd_reloc_type_lookup _bfd_norelocs_bfd_reloc_type_lookup
+#define aout_32_bfd_reloc_name_lookup _bfd_norelocs_bfd_reloc_name_lookup
 
 #define aout_32_get_section_contents_in_window \
   _bfd_generic_get_section_contents_in_window

@@ -1,7 +1,7 @@
 /* Remote debugging interface for MIPS remote debugging protocol.
 
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by Ian Lance Taylor
    <ian@cygnus.com>.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -31,7 +29,7 @@
 #include "gdbcore.h"
 #include "serial.h"
 #include "target.h"
-#include "remote-utils.h"
+#include "exceptions.h"
 #include "gdb_string.h"
 #include "gdb_stat.h"
 #include "regcache.h"
@@ -96,18 +94,18 @@ static ptid_t mips_wait (ptid_t ptid,
 
 static int mips_map_regno (int regno);
 
-static void mips_fetch_registers (int regno);
+static void mips_fetch_registers (struct regcache *regcache, int regno);
 
-static void mips_prepare_to_store (void);
+static void mips_prepare_to_store (struct regcache *regcache);
 
-static void mips_store_registers (int regno);
+static void mips_store_registers (struct regcache *regcache, int regno);
 
 static unsigned int mips_fetch_word (CORE_ADDR addr);
 
 static int mips_store_word (CORE_ADDR addr, unsigned int value,
 			    char *old_contents);
 
-static int mips_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
+static int mips_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
 			     int write, 
 			     struct mem_attrib *attrib,
 			     struct target_ops *target);
@@ -142,12 +140,13 @@ static void mips_load (char *file, int from_tty);
 static int mips_make_srec (char *buffer, int type, CORE_ADDR memaddr,
 			   unsigned char *myaddr, int len);
 
-static int set_breakpoint (CORE_ADDR addr, int len, enum break_type type);
+static int mips_set_breakpoint (CORE_ADDR addr, int len, enum break_type type);
 
-static int clear_breakpoint (CORE_ADDR addr, int len, enum break_type type);
+static int mips_clear_breakpoint (CORE_ADDR addr, int len,
+				  enum break_type type);
 
-static int common_breakpoint (int set, CORE_ADDR addr, int len,
-			      enum break_type type);
+static int mips_common_breakpoint (int set, CORE_ADDR addr, int len,
+				   enum break_type type);
 
 /* Forward declarations.  */
 extern struct target_ops mips_ops;
@@ -496,7 +495,7 @@ mips_error (char *string,...)
   printf_unfiltered ("Ending remote MIPS debugging.\n");
   target_mourn_inferior ();
 
-  throw_exception (RETURN_ERROR);
+  deprecated_throw_reason (RETURN_ERROR);
 }
 
 /* putc_readable - print a character, displaying non-printable chars in
@@ -1212,7 +1211,7 @@ mips_request (int cmd,
     {
       if (mips_need_reply)
 	internal_error (__FILE__, __LINE__,
-			"mips_request: Trying to send command before reply");
+			_("mips_request: Trying to send command before reply"));
       sprintf (buff, "0x0 %c 0x%s 0x%s", cmd, paddr_nz (addr), paddr_nz (data));
       mips_send_packet (buff, 1);
       mips_need_reply = 1;
@@ -1223,7 +1222,7 @@ mips_request (int cmd,
 
   if (!mips_need_reply)
     internal_error (__FILE__, __LINE__,
-		    "mips_request: Trying to get reply before command");
+		    _("mips_request: Trying to get reply before command"));
 
   mips_need_reply = 0;
 
@@ -1452,7 +1451,7 @@ mips_initialize (void)
 
   /* Clear all breakpoints: */
   if ((mips_monitor == MON_IDT
-       && clear_breakpoint (-1, 0, BREAK_UNUSED) == 0)
+       && mips_clear_breakpoint (-1, 0, BREAK_UNUSED) == 0)
       || mips_monitor == MON_LSI)
     monitor_supports_breakpoints = 1;
   else
@@ -1583,10 +1582,10 @@ device is attached to the target board (e.g., /dev/ttya).\n"
      of some sort.  That doesn't happen here (in fact, it may not be
      possible to get the monitor to send the appropriate packet).  */
 
-  flush_cached_frames ();
+  reinit_frame_cache ();
   registers_changed ();
   stop_pc = read_pc ();
-  print_stack_frame (get_selected_frame (), 0, SRC_AND_LOC);
+  print_stack_frame (get_selected_frame (NULL), 0, SRC_AND_LOC);
   xfree (serial_port_name);
 }
 
@@ -1594,10 +1593,10 @@ static void
 mips_open (char *name, int from_tty)
 {
   const char *monitor_prompt = NULL;
-  if (TARGET_ARCHITECTURE != NULL
-      && TARGET_ARCHITECTURE->arch == bfd_arch_mips)
+  if (gdbarch_bfd_arch_info (current_gdbarch) != NULL
+      && gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_mips)
     {
-    switch (TARGET_ARCHITECTURE->mach)
+    switch (gdbarch_bfd_arch_info (current_gdbarch)->mach)
       {
       case bfd_mach_mips4100:
       case bfd_mach_mips4300:
@@ -1755,19 +1754,30 @@ mips_wait (ptid_t ptid, struct target_waitstatus *status)
 		    &rpc, &rfp, &rsp, flags);
   if (nfields >= 3)
     {
+      struct regcache *regcache = get_current_regcache ();
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
       char buf[MAX_REGISTER_SIZE];
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, PC_REGNUM), rpc);
-      regcache_raw_supply (current_regcache, PC_REGNUM, buf);
+      store_unsigned_integer (buf,
+			      register_size
+			        (gdbarch, gdbarch_pc_regnum (gdbarch)), rpc);
+      regcache_raw_supply (regcache, gdbarch_pc_regnum (gdbarch), buf);
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, PC_REGNUM), rfp);
-      regcache_raw_supply (current_regcache, 30, buf);	/* This register they are avoiding and so it is unnamed */
+      store_unsigned_integer
+	(buf, register_size (gdbarch, gdbarch_pc_regnum (gdbarch)), rfp);
+      regcache_raw_supply (regcache, 30, buf);	/* This register they are avoiding and so it is unnamed */
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, SP_REGNUM), rsp);
-      regcache_raw_supply (current_regcache, SP_REGNUM, buf);
+      store_unsigned_integer (buf, register_size (gdbarch,
+			      gdbarch_sp_regnum (gdbarch)), rsp);
+      regcache_raw_supply (regcache, gdbarch_sp_regnum (gdbarch), buf);
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, DEPRECATED_FP_REGNUM), 0);
-      regcache_raw_supply (current_regcache, DEPRECATED_FP_REGNUM, buf);
+      store_unsigned_integer (buf,
+			      register_size (gdbarch,
+					     gdbarch_deprecated_fp_regnum
+					       (gdbarch)),
+			      0);
+      regcache_raw_supply (regcache,
+			   gdbarch_deprecated_fp_regnum (gdbarch), buf);
 
       if (nfields == 9)
 	{
@@ -1860,8 +1870,7 @@ mips_wait (ptid_t ptid, struct target_waitstatus *status)
 }
 
 /* We have to map between the register numbers used by gdb and the
-   register numbers used by the debugging protocol.  This function
-   assumes that we are using tm-mips.h.  */
+   register numbers used by the debugging protocol.  */
 
 #define REGNO_OFFSET 96
 
@@ -1893,20 +1902,22 @@ mips_map_regno (int regno)
 /* Fetch the remote registers.  */
 
 static void
-mips_fetch_registers (int regno)
+mips_fetch_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   unsigned LONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < NUM_REGS; regno++)
-	mips_fetch_registers (regno);
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
+	mips_fetch_registers (regcache, regno);
       return;
     }
 
-  if (regno == DEPRECATED_FP_REGNUM || regno == ZERO_REGNUM)
-    /* DEPRECATED_FP_REGNUM on the mips is a hack which is just
+  if (regno == gdbarch_deprecated_fp_regnum (gdbarch)
+      || regno == MIPS_ZERO_REGNUM)
+    /* gdbarch_deprecated_fp_regnum on the mips is a hack which is just
        supposed to read zero (see also mips-nat.c).  */
     val = 0;
   else
@@ -1938,8 +1949,8 @@ mips_fetch_registers (int regno)
 
     /* We got the number the register holds, but gdb expects to see a
        value in the target byte ordering.  */
-    store_unsigned_integer (buf, register_size (current_gdbarch, regno), val);
-    regcache_raw_supply (current_regcache, regno, buf);
+    store_unsigned_integer (buf, register_size (gdbarch, regno), val);
+    regcache_raw_supply (regcache, regno, buf);
   }
 }
 
@@ -1947,26 +1958,28 @@ mips_fetch_registers (int regno)
    registers, so this function doesn't have to do anything.  */
 
 static void
-mips_prepare_to_store (void)
+mips_prepare_to_store (struct regcache *regcache)
 {
 }
 
 /* Store remote register(s).  */
 
 static void
-mips_store_registers (int regno)
+mips_store_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  ULONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < NUM_REGS; regno++)
-	mips_store_registers (regno);
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
+	mips_store_registers (regcache, regno);
       return;
     }
 
-  mips_request ('R', mips_map_regno (regno),
-		read_register (regno),
+  regcache_cooked_read_unsigned (regcache, regno, &val);
+  mips_request ('R', mips_map_regno (regno), val,
 		&err, mips_receive_wait, NULL);
   if (err)
     mips_error ("Can't write register %d: %s", regno, safe_strerror (errno));
@@ -2029,7 +2042,7 @@ mips_store_word (CORE_ADDR addr, unsigned int val, char *old_contents)
 static int mask_address_p = 1;
 
 static int
-mips_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
+mips_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 		  struct mem_attrib *attrib, struct target_ops *target)
 {
   int i;
@@ -2148,7 +2161,7 @@ Give up (and stop debugging it)? "))
 	  printf_unfiltered ("Ending remote MIPS debugging.\n");
 	  target_mourn_inferior ();
 
-	  throw_exception (RETURN_QUIT);
+	  deprecated_throw_reason (RETURN_QUIT);
 	}
 
       target_terminal_inferior ();
@@ -2197,7 +2210,7 @@ Can't pass arguments to remote MIPS board; arguments ignored.");
 
   /* FIXME: Should we set inferior_ptid here?  */
 
-  proceed (entry_pt, TARGET_SIGNAL_DEFAULT, 0);
+  write_pc (entry_pt);
 }
 
 /* Clean up after a process.  Actually nothing to do.  */
@@ -2216,27 +2229,28 @@ mips_mourn_inferior (void)
 /* Insert a breakpoint.  On targets that don't have built-in
    breakpoint support, we read the contents of the target location and
    stash it, then overwrite it with a breakpoint instruction.  ADDR is
-   the target location in the target machine.  CONTENTS_CACHE is a
-   pointer to memory allocated for saving the target contents.  It is
-   guaranteed by the caller to be long enough to save the breakpoint
-   length returned by BREAKPOINT_FROM_PC.  */
+   the target location in the target machine.  BPT is the breakpoint
+   being inserted or removed, which contains memory for saving the
+   target contents.  */
 
 static int
-mips_insert_breakpoint (CORE_ADDR addr, char *contents_cache)
+mips_insert_breakpoint (struct bp_target_info *bp_tgt)
 {
   if (monitor_supports_breakpoints)
-    return set_breakpoint (addr, MIPS_INSTLEN, BREAK_FETCH);
+    return mips_set_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
+				BREAK_FETCH);
   else
-    return memory_insert_breakpoint (addr, contents_cache);
+    return memory_insert_breakpoint (bp_tgt);
 }
 
 static int
-mips_remove_breakpoint (CORE_ADDR addr, char *contents_cache)
+mips_remove_breakpoint (struct bp_target_info *bp_tgt)
 {
   if (monitor_supports_breakpoints)
-    return clear_breakpoint (addr, MIPS_INSTLEN, BREAK_FETCH);
+    return mips_clear_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
+				  BREAK_FETCH);
   else
-    return memory_remove_breakpoint (addr, contents_cache);
+    return memory_remove_breakpoint (bp_tgt);
 }
 
 /* Tell whether this target can support a hardware breakpoint.  CNT
@@ -2280,7 +2294,7 @@ calculate_mask (CORE_ADDR addr, int len)
 int
 mips_insert_watchpoint (CORE_ADDR addr, int len, int type)
 {
-  if (set_breakpoint (addr, len, type))
+  if (mips_set_breakpoint (addr, len, type))
     return -1;
 
   return 0;
@@ -2289,7 +2303,7 @@ mips_insert_watchpoint (CORE_ADDR addr, int len, int type)
 int
 mips_remove_watchpoint (CORE_ADDR addr, int len, int type)
 {
-  if (clear_breakpoint (addr, len, type))
+  if (mips_clear_breakpoint (addr, len, type))
     return -1;
 
   return 0;
@@ -2305,18 +2319,18 @@ mips_stopped_by_watchpoint (void)
 /* Insert a breakpoint.  */
 
 static int
-set_breakpoint (CORE_ADDR addr, int len, enum break_type type)
+mips_set_breakpoint (CORE_ADDR addr, int len, enum break_type type)
 {
-  return common_breakpoint (1, addr, len, type);
+  return mips_common_breakpoint (1, addr, len, type);
 }
 
 
 /* Clear a breakpoint.  */
 
 static int
-clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
+mips_clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
 {
-  return common_breakpoint (0, addr, len, type);
+  return mips_common_breakpoint (0, addr, len, type);
 }
 
 
@@ -2325,10 +2339,10 @@ clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
    print the warning text and return 0.  If it's an error, print
    the error text and return 1.  <ADDR> is the address of the breakpoint
    that was being set.  <RERRFLG> is the error code returned by PMON. 
-   This is a helper function for common_breakpoint.  */
+   This is a helper function for mips_common_breakpoint.  */
 
 static int
-check_lsi_error (CORE_ADDR addr, int rerrflg)
+mips_check_lsi_error (CORE_ADDR addr, int rerrflg)
 {
   struct lsi_error *err;
   char *saddr = paddr_nz (addr);	/* printable address string */
@@ -2347,15 +2361,15 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
 	      if ((err->code & rerrflg) == err->code)
 		{
 		  found = 1;
-		  fprintf_unfiltered (gdb_stderr,
-				  "common_breakpoint (0x%s): Warning: %s\n",
+		  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Warning: %s\n",
 				      saddr,
 				      err->string);
 		}
 	    }
 	  if (!found)
-	    fprintf_unfiltered (gdb_stderr,
-			"common_breakpoint (0x%s): Unknown warning: 0x%x\n",
+	    fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Unknown warning: 0x%x\n",
 				saddr,
 				rerrflg);
 	}
@@ -2367,15 +2381,15 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
     {
       if ((err->code & rerrflg) == err->code)
 	{
-	  fprintf_unfiltered (gdb_stderr,
-			      "common_breakpoint (0x%s): Error: %s\n",
+	  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Error: %s\n",
 			      saddr,
 			      err->string);
 	  return 1;
 	}
     }
-  fprintf_unfiltered (gdb_stderr,
-		      "common_breakpoint (0x%s): Unknown error: 0x%x\n",
+  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Unknown error: 0x%x\n",
 		      saddr,
 		      rerrflg);
   return 1;
@@ -2396,14 +2410,14 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
    Return 0 if successful; otherwise 1.  */
 
 static int
-common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
+mips_common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 {
   char buf[DATA_MAXLEN + 1];
   char cmd, rcmd;
   int rpid, rerrflg, rresponse, rlen;
   int nfields;
 
-  addr = ADDR_BITS_REMOVE (addr);
+  addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
 
   if (mips_monitor == MON_LSI)
     {
@@ -2429,7 +2443,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  /* Clear the table entry and tell PMON to clear the breakpoint.  */
 	  if (i == MAX_LSI_BREAKPOINTS)
 	    {
-	      warning ("common_breakpoint: Attempt to clear bogus breakpoint at %s\n",
+	      warning ("\
+mips_common_breakpoint: Attempt to clear bogus breakpoint at %s\n",
 		       paddr_nz (addr));
 	      return 1;
 	    }
@@ -2443,9 +2458,11 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 
 	  nfields = sscanf (buf, "0x%x b 0x0 0x%x", &rpid, &rerrflg);
 	  if (nfields != 2)
-	    mips_error ("common_breakpoint: Bad response from remote board: %s", buf);
+	    mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
+			buf);
 
-	  return (check_lsi_error (addr, rerrflg));
+	  return (mips_check_lsi_error (addr, rerrflg));
 	}
       else
 	/* set a breakpoint */
@@ -2495,10 +2512,12 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  nfields = sscanf (buf, "0x%x %c 0x%x 0x%x",
 			    &rpid, &rcmd, &rresponse, &rerrflg);
 	  if (nfields != 4 || rcmd != cmd || rresponse > 255)
-	    mips_error ("common_breakpoint: Bad response from remote board: %s", buf);
+	    mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
+			buf);
 
 	  if (rerrflg != 0)
-	    if (check_lsi_error (addr, rerrflg))
+	    if (mips_check_lsi_error (addr, rerrflg))
 	      return 1;
 
 	  /* rresponse contains PMON's breakpoint number.  Record the
@@ -2540,7 +2559,7 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	      flags = "f";
 	      break;
 	    default:
-	      internal_error (__FILE__, __LINE__, "failed internal consistency check");
+	      internal_error (__FILE__, __LINE__, _("failed internal consistency check"));
 	    }
 
 	  cmd = 'B';
@@ -2562,7 +2581,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 			&rpid, &rcmd, &rerrflg, &rresponse);
 
       if (nfields != 4 || rcmd != cmd)
-	mips_error ("common_breakpoint: Bad response from remote board: %s",
+	mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
 		    buf);
 
       if (rerrflg != 0)
@@ -2572,8 +2592,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  if (mips_monitor == MON_DDB)
 	    rresponse = rerrflg;
 	  if (rresponse != 22)	/* invalid argument */
-	    fprintf_unfiltered (gdb_stderr,
-			     "common_breakpoint (0x%s):  Got error: 0x%x\n",
+	    fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s):  Got error: 0x%x\n",
 				paddr_nz (addr), rresponse);
 	  return 1;
 	}
@@ -2657,7 +2677,8 @@ mips_load_srec (char *args)
 
 	      bfd_get_section_contents (abfd, s, buffer, i, numbytes);
 
-	      reclen = mips_make_srec (srec, '3', s->vma + i, buffer, numbytes);
+	      reclen = mips_make_srec (srec, '3', s->vma + i, 
+				       buffer, numbytes);
 	      send_srec (srec, reclen, s->vma + i);
 
 	      if (deprecated_ui_load_progress_hook)
@@ -3174,7 +3195,8 @@ pmon_load_fast (char *file)
 		   the line: */
 		for (; ((binamount - binptr) > 0);)
 		  {
-		    pmon_make_fastrec (&bp, binbuf, &binptr, binamount, &reclen, &csum, &zerofill);
+		    pmon_make_fastrec (&bp, binbuf, &binptr, binamount, 
+				       &reclen, &csum, &zerofill);
 		    if (reclen >= (MAXRECSIZE - CHECKSIZE))
 		      {
 			reclen = pmon_checkset (reclen, &bp, &csum);
@@ -3259,7 +3281,8 @@ mips_load (char *file, int from_tty)
       /* Work around problem where PMON monitor updates the PC after a load
          to a different value than GDB thinks it has. The following ensures
          that the write_pc() WILL update the PC value: */
-      deprecated_register_valid[PC_REGNUM] = 0;
+      regcache_set_valid_p (get_current_regcache (),
+			    gdbarch_pc_regnum (current_gdbarch), 0);
     }
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));
@@ -3318,6 +3341,7 @@ _initialize_remote_mips (void)
   mips_ops.to_load = mips_load;
   mips_ops.to_create_inferior = mips_create_inferior;
   mips_ops.to_mourn_inferior = mips_mourn_inferior;
+  mips_ops.to_log_command = serial_log_command;
   mips_ops.to_stratum = process_stratum;
   mips_ops.to_has_all_memory = 1;
   mips_ops.to_has_memory = 1;
@@ -3368,56 +3392,60 @@ of the TFTP temporary file, if it differs from the filename seen by the board.";
   add_target (&ddb_ops);
   add_target (&lsi_ops);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("timeout", no_class, var_zinteger,
-		  (char *) &mips_receive_wait,
-		  "Set timeout in seconds for remote MIPS serial I/O.",
-		  &setlist),
-     &showlist);
+  add_setshow_zinteger_cmd ("timeout", no_class, &mips_receive_wait, _("\
+Set timeout in seconds for remote MIPS serial I/O."), _("\
+Show timeout in seconds for remote MIPS serial I/O."), NULL,
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("retransmit-timeout", no_class, var_zinteger,
-		  (char *) &mips_retransmit_wait, "\
-Set retransmit timeout in seconds for remote MIPS serial I/O.\n\
+  add_setshow_zinteger_cmd ("retransmit-timeout", no_class,
+			    &mips_retransmit_wait, _("\
+Set retransmit timeout in seconds for remote MIPS serial I/O."), _("\
+Show retransmit timeout in seconds for remote MIPS serial I/O."), _("\
 This is the number of seconds to wait for an acknowledgement to a packet\n\
-before resending the packet.", &setlist),
-     &showlist);
+before resending the packet."),
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("syn-garbage-limit", no_class, var_zinteger,
-		  (char *) &mips_syn_garbage, "\
-Set the maximum number of characters to ignore when scanning for a SYN.\n\
+  add_setshow_zinteger_cmd ("syn-garbage-limit", no_class,
+			    &mips_syn_garbage,  _("\
+Set the maximum number of characters to ignore when scanning for a SYN."), _("\
+Show the maximum number of characters to ignore when scanning for a SYN."), _("\
 This is the maximum number of characters GDB will ignore when trying to\n\
 synchronize with the remote system.  A value of -1 means that there is no\n\
 limit. (Note that these characters are printed out even though they are\n\
-ignored.)",
-		  &setlist),
-     &showlist);
+ignored.)"),
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("monitor-prompt", class_obscure, var_string,
-		  (char *) &mips_monitor_prompt,
-		  "Set the prompt that GDB expects from the monitor.",
-		  &setlist),
-     &showlist);
+  add_setshow_string_cmd ("monitor-prompt", class_obscure,
+			  &mips_monitor_prompt, _("\
+Set the prompt that GDB expects from the monitor."), _("\
+Show the prompt that GDB expects from the monitor."), NULL,
+			  NULL,
+			  NULL, /* FIXME: i18n: */
+			  &setlist, &showlist);
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("monitor-warnings", class_obscure, var_zinteger,
-		  (char *) &monitor_warnings,
-		  "Set printing of monitor warnings.\n"
-		  "When enabled, monitor warnings about hardware breakpoints "
-		  "will be displayed.",
-		  &setlist),
-     &showlist);
+  add_setshow_zinteger_cmd ("monitor-warnings", class_obscure,
+			    &monitor_warnings, _("\
+Set printing of monitor warnings."), _("\
+Show printing of monitor warnings."), _("\
+When enabled, monitor warnings about hardware breakpoints will be displayed."),
+			    NULL,
+			    NULL, /* FIXME: i18n: */
+			    &setlist, &showlist);
 
-  add_com ("pmon <command>", class_obscure, pmon_command,
-	   "Send a packet to PMON (must be in debug mode).");
+  add_com ("pmon", class_obscure, pmon_command,
+	   _("Send a packet to PMON (must be in debug mode)."));
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("mask-address", no_class,
-		  var_boolean, &mask_address_p, "\
-Set zeroing of upper 32 bits of 64-bit addresses when talking to PMON targets.\n\
-Use \"on\" to enable the masking and \"off\" to disable it.\n",
-		  &setlist),
-     &showlist);
+  add_setshow_boolean_cmd ("mask-address", no_class, &mask_address_p, _("\
+Set zeroing of upper 32 bits of 64-bit addresses when talking to PMON targets."), _("\
+Show zeroing of upper 32 bits of 64-bit addresses when talking to PMON targets."), _("\
+Use \"on\" to enable the masking and \"off\" to disable it."),
+			   NULL,
+			   NULL, /* FIXME: i18n: */
+			   &setlist, &showlist);
 }

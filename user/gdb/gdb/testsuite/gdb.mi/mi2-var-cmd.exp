@@ -1,8 +1,9 @@
-# Copyright 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2004, 2007, 2008
+# Free Software Foundation, Inc.
 #
-# This Program Is Free software; you can redistribute it and/or modify
+# This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -11,8 +12,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Test essential Machine interface (MI) operations
 #
@@ -32,7 +32,8 @@ set testfile "var-cmd"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-DFAKEARGV}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+    untested mi2-var-cmd.exp
+    return -1
 }
 
 mi_delete_breakpoints
@@ -50,7 +51,7 @@ mi_gdb_load ${binfile}
 # Desc:  Create global variable
 
 mi_gdb_test "111-var-create global_simple * global_simple" \
-	"111\\^done,name=\"global_simple\",numchild=\"6\",type=\"simpleton\"" \
+	"111\\^done,name=\"global_simple\",numchild=\"6\",value=\"{...}\",type=\"simpleton\"" \
 	"create global variable"
 
 # Test: c_variable-1.2
@@ -69,77 +70,82 @@ mi_gdb_test "113-var-create argc * argc" \
 
 mi_runto do_locals_tests
 
+set line_dlt_first_real [gdb_get_line_number "linteger = 1234;"]
+
+mi_continue_to_line $line_dlt_first_real "step to real start of do_locals_test"
+
+
 # Test: c_variable-1.4
 # Desc: create local variables
 
 mi_gdb_test "-var-create linteger * linteger" \
-	"\\^done,name=\"linteger\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"linteger\",numchild=\"0\",value=\".*\",type=\"int\"" \
 	"create local variable linteger"
 
 mi_gdb_test "-var-create lpinteger * lpinteger" \
-	"\\^done,name=\"lpinteger\",numchild=\"1\",type=\"int \\*\"" \
+	"\\^done,name=\"lpinteger\",numchild=\"1\",value=\"$hex\",type=\"int \\*\"" \
 	"create local variable lpinteger"
 
-mi_gdb_test "-var-create lcharacter * lcharacter" \
-	"\\^done,name=\"lcharacter\",numchild=\"0\",type=\"char\"" \
-	"create local variablelcharacter "
+mi_gdb_test "-var-create lcharacter * lcharacter\[0\]" \
+	"\\^done,name=\"lcharacter\",numchild=\"0\",value=\".*\",type=\"char\"" \
+	"create local variable lcharacter "
 
 mi_gdb_test "-var-create lpcharacter * lpcharacter" \
-	"\\^done,name=\"lpcharacter\",numchild=\"1\",type=\"char \\*\"" \
+	"\\^done,name=\"lpcharacter\",numchild=\"1\",value=\"$hex.*\",type=\"char \\*\"" \
 	"create local variable lpcharacter"
 
 mi_gdb_test "-var-create llong * llong" \
-	"\\^done,name=\"llong\",numchild=\"0\",type=\"long int\"" \
+	"\\^done,name=\"llong\",numchild=\"0\",value=\".*\",type=\"long int\"" \
 	"create local variable llong"
 
 mi_gdb_test "-var-create lplong * lplong" \
-	"\\^done,name=\"lplong\",numchild=\"1\",type=\"long int \\*\"" \
+	"\\^done,name=\"lplong\",numchild=\"1\",value=\"$hex\",type=\"long int \\*\"" \
 	"create local variable lplong"
 
 mi_gdb_test "-var-create lfloat * lfloat" \
-	"\\^done,name=\"lfloat\",numchild=\"0\",type=\"float\"" \
+	"\\^done,name=\"lfloat\",numchild=\"0\",value=\".*\",type=\"float\"" \
 	"create local variable lfloat"
 
 mi_gdb_test "-var-create lpfloat * lpfloat" \
-	"\\^done,name=\"lpfloat\",numchild=\"1\",type=\"float \\*\"" \
+	"\\^done,name=\"lpfloat\",numchild=\"1\",value=\"$hex\",type=\"float \\*\"" \
 	"create local variable lpfloat"
 
 mi_gdb_test "-var-create ldouble * ldouble" \
-	"\\^done,name=\"ldouble\",numchild=\"0\",type=\"double\"" \
+	"\\^done,name=\"ldouble\",numchild=\"0\",value=\".*\",type=\"double\"" \
 	"create local variable ldouble"
 
 mi_gdb_test "-var-create lpdouble * lpdouble" \
-	"\\^done,name=\"lpdouble\",numchild=\"1\",type=\"double \\*\"" \
+	"\\^done,name=\"lpdouble\",numchild=\"1\",value=\"$hex\",type=\"double \\*\"" \
 	"create local variable lpdouble"
 
 mi_gdb_test "-var-create lsimple * lsimple" \
-	"\\^done,name=\"lsimple\",numchild=\"6\",type=\"struct _simple_struct\"" \
+	"\\^done,name=\"lsimple\",numchild=\"6\",value=\"{...}\",type=\"struct _simple_struct\"" \
 	"create local variable lsimple"
 
 mi_gdb_test "-var-create lpsimple * lpsimple" \
-	"\\^done,name=\"lpsimple\",numchild=\"6\",type=\"struct _simple_struct \\*\"" \
+	"\\^done,name=\"lpsimple\",numchild=\"6\",value=\"$hex\",type=\"struct _simple_struct \\*\"" \
 	"create local variable lpsimple"
 
 mi_gdb_test "-var-create func * func" \
-	"\\^done,name=\"func\",numchild=\"0\",type=\"void \\(\\*\\)\\((void|)\\)\"" \
+	"\\^done,name=\"func\",numchild=\"0\",value=\".*\",type=\"void \\(\\*\\)\\((void|)\\)\"" \
 	"create local variable func"
 
 # Test: c_variable-1.5
 # Desc: create lsimple.character
 mi_gdb_test "-var-create lsimple.character * lsimple.character" \
-	"\\^done,name=\"lsimple.character\",numchild=\"0\",type=\"char\"" \
+	"\\^done,name=\"lsimple.character\",numchild=\"0\",value=\".*\",type=\"char\"" \
 	"create lsimple.character"
 
 # Test: c_variable-1.6
 # Desc: create lpsimple->integer
 mi_gdb_test "-var-create lsimple->integer * lsimple->integer" \
-	"\\^done,name=\"lsimple->integer\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"lsimple->integer\",numchild=\"0\",value=\".*\",type=\"int\"" \
 	"create lsimple->integer"
 
 # Test: c_variable-1.7
 # Desc: ceate lsimple.integer
 mi_gdb_test "-var-create lsimple.integer * lsimple.integer" \
-	"\\^done,name=\"lsimple.integer\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"lsimple.integer\",numchild=\"0\",value=\".*\",type=\"int\"" \
 	"create lsimple->integer"
 
 
@@ -148,7 +154,7 @@ mi_gdb_test "-var-create lsimple.integer * lsimple.integer" \
 #    Type names (like int, long, etc..) are all proper expressions to gdb.
 #    make sure variable code does not allow users to create variables, though.
 mi_gdb_test "-var-create int * int" \
-	"&\"Attempt to use a type name as an expression.mi_cmd_var_create: unable to create variable object\\\\n\".*\\^error,msg=\"mi_cmd_var_create: unable to create variable object\"" \
+	"&\"Attempt to use a type name as an expression.\\\\n\".*&\"mi_cmd_var_create: unable to create variable object\\\\n\".*\\^error,msg=\"mi_cmd_var_create: unable to create variable object\"" \
 	"create int"
 
 
@@ -259,8 +265,8 @@ mi_execute_to "exec-step 8" "end-stepping-range" "do_locals_tests" "" \
 # Note: this test also checks that lpsimple->integer and lsimple.integer have
 #       changed (they are the same)
 mi_gdb_test "-var-update *" \
-	"\\^done,changelist=\\\[\{name=\"lsimple.integer\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lsimple->integer\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lsimple.character\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"ldouble\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lfloat\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"llong\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lcharacter\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"linteger\",in_scope=\"true\",type_changed=\"false\"\}\\\]" \
-	"update all vars: func and lpsimple changed"
+	"\\^done,changelist=\\\[\{name=\"lsimple.integer\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lsimple->integer\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lsimple.character\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"ldouble\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lfloat\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"llong\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lpcharacter\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"lcharacter\",in_scope=\"true\",type_changed=\"false\"\},\{name=\"linteger\",in_scope=\"true\",type_changed=\"false\"\}\\\]" \
+	"update all vars: lsimple and others changed"
 
 
 ### 
@@ -276,8 +282,13 @@ mi_gdb_test "-var-assign linteger 3333" \
 	"\\^done,value=\"3333\"" \
 	"assign to linteger"
 
+# Allow lpcharacter to update, optionally.  Because it points to a
+# char variable instead of a zero-terminated string, if linteger is
+# directly after it in memory the printed characters may appear to
+# change.
+set lpchar_update "\{name=\"lpcharacter\",in_scope=\"true\",type_changed=\"false\"\},"
 mi_gdb_test "-var-update *" \
-	"\\^done,changelist=\\\[\{name=\"linteger\",in_scope=\"true\",type_changed=\"false\"\}\\\]" \
+	"\\^done,changelist=\\\[($lpchar_update)?\{name=\"linteger\",in_scope=\"true\",type_changed=\"false\"\}\\\]" \
 	"update all vars: linteger changed after assign"
 
 mi_gdb_test "-var-assign linteger 3333" \
@@ -386,21 +397,16 @@ mi_gdb_test "-var-assign lsimple.integer 333" \
 
 set line_subroutine1_body [gdb_get_line_number "global_simple.integer = i + 3;"]
 
-mi_gdb_test "-break-insert subroutine1" \
-	"\\^done,bkpt=\{number=\"2\",type=\"breakpoint\",disp=\"keep\",enabled=\"y\",addr=\"$hex\",func=\"subroutine1\",file=\".*var-cmd.c\",line=\"$line_subroutine1_body\",times=\"0\"\}" \
-	"break-insert subroutine1"
-mi_continue_to "2" "subroutine1" \
-	"\{name=\"i\",value=\"4321\"\},\{name=\"l\",value=\"$hex\"\}" \
-	"var-cmd.c" $line_subroutine1_body "continue to subroutine1"
+mi_continue_to "subroutine1"
 
 # Test: c_variable-2.10
 # Desc: create variable for locals i,l in subroutine1
 mi_gdb_test "-var-create i  * i" \
-	"\\^done,name=\"i\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"i\",numchild=\"0\",value=\"4321\",type=\"int\"" \
 	"create i"
 
 mi_gdb_test "-var-create l * l" \
-	"\\^done,name=\"l\",numchild=\"1\",type=\"long int \\*\"" \
+	"\\^done,name=\"l\",numchild=\"1\",value=\"$hex\",type=\"long int \\*\"" \
 	"create l"
 
 # Test: c_variable-2.11
@@ -533,21 +539,13 @@ mi_gdb_test "-var-delete l" \
 
 # Test whether we can follow the name of a variable through multiple
 # stack frames.
-mi_gdb_test "-break-insert do_special_tests" \
-  {\^done,bkpt=.*} \
-  "set breakpoint at do_special_tests"
-
-mi_continue_to {.*} do_special_tests {.*} {.*var-cmd.c} {.*} {stop in do_special_tests}
+mi_continue_to do_special_tests
 
 mi_gdb_test "-var-create selected_a @ a" \
-  {\^done,name="selected_a",numchild="0",type="int"} \
+  {\^done,name="selected_a",numchild="0",value=".*",type="int"} \
   "create selected_a"
 
-mi_gdb_test "-break-insert incr_a" \
-  {\^done,bkpt=.*} \
-  "set breakpoint at incr_a"
-
-mi_continue_to {.*} incr_a {.*} {.*var-cmd.c} {.*} {stop in incr_a}
+mi_continue_to incr_a
 
 mi_gdb_test "-var-update selected_a" \
 	"\\^done,changelist=\\\[\{name=\"selected_a\",in_scope=\"true\",new_type=\"char\",new_num_children=\"0\"\}\\\]" \

@@ -2,6 +2,8 @@
 # Makefile for net-snmp
 #
 
+CFLAGS = -D__deprecated=
+
 NET_SNMP_CFG = --prefix= 
 
 ifdef CONFIG_CPU_BIG_ENDIAN

@@ -18,9 +18,10 @@ endif
 
 all: $(TARGETS)
 	$(MAKE) -C build
-	if [ "$(CONFIG_USER_GDB_HOST)" == "y" ]; then 	\
-		$(MAKE) -C host;			\
-	fi
+ifdef CONFIG_USER_GDB_HOST
+	$(MAKE) -C host
+	ln -sf $(ROOTDIR)/user/gdb/host/gdb/gdb $(ROOTDIR)/tools/$(ARCH)-gdb
+endif
 
 build/build: makefile
 	rm -rf build
@@ -42,6 +43,9 @@ host/build: makefile
 
 clean:
 	rm -rf build host
+ifdef CONFIG_USER_GDB_HOST
+	rm -f ../../tools/$(ARCH)-gdb
+endif
 
 romfs:
 ifdef CONFIG_USER_GDB_TARGET

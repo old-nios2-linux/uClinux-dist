@@ -1,14 +1,14 @@
 /* Floating point definitions for GDB.
 
-   Copyright 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2003 Free Software Foundation,
-   Inc.
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef DOUBLEST_H
 #define DOUBLEST_H
@@ -48,20 +46,44 @@ struct floatformat;
    host's `long double'.  In general, we'll probably reduce the precision of
    any such values and print a warning.  */
 
-#ifdef HAVE_LONG_DOUBLE
+#if (defined HAVE_LONG_DOUBLE && defined PRINTF_HAS_LONG_DOUBLE \
+     && defined SCANF_HAS_LONG_DOUBLE)
 typedef long double DOUBLEST;
+# define DOUBLEST_PRINT_FORMAT "Lg"
+# define DOUBLEST_SCAN_FORMAT "Lg"
 #else
 typedef double DOUBLEST;
+# define DOUBLEST_PRINT_FORMAT "g"
+# define DOUBLEST_SCAN_FORMAT "lg"
+/* If we can't scan or print long double, we don't want to use it
+   anywhere.  */
+# undef HAVE_LONG_DOUBLE
+# undef PRINTF_HAS_LONG_DOUBLE
+# undef SCANF_HAS_LONG_DOUBLE
 #endif
+
+/* Different kinds of floatformat numbers recognized by
+   floatformat_classify.  To avoid portability issues, we use local
+   values instead of the C99 macros (FP_NAN et cetera).  */
+enum float_kind {
+  float_nan,
+  float_infinite,
+  float_zero,
+  float_normal,
+  float_subnormal
+};
 
 extern void floatformat_to_doublest (const struct floatformat *,
 				     const void *in, DOUBLEST *out);
 extern void floatformat_from_doublest (const struct floatformat *,
 				       const DOUBLEST *in, void *out);
 
-extern int floatformat_is_negative (const struct floatformat *, char *);
-extern int floatformat_is_nan (const struct floatformat *, char *);
-extern char *floatformat_mantissa (const struct floatformat *, char *);
+extern int floatformat_is_negative (const struct floatformat *,
+				    const bfd_byte *);
+extern enum float_kind floatformat_classify (const struct floatformat *,
+					     const bfd_byte *);
+extern const char *floatformat_mantissa (const struct floatformat *,
+					 const bfd_byte *);
 
 /* These functions have been replaced by extract_typed_floating and
    store_typed_floating.
@@ -87,12 +109,5 @@ extern void store_typed_floating (void *addr, const struct type *type,
 extern void convert_typed_floating (const void *from,
 				    const struct type *from_type,
                                     void *to, const struct type *to_type);
-
-/* Table of convenient float-formats.  */
-extern const struct floatformat *floatformat_ieee_single[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ieee_double[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ieee_quad[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_arm_ext[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ia64_spill[BFD_ENDIAN_UNKNOWN];
 
 #endif

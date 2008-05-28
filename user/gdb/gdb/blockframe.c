@@ -1,15 +1,15 @@
 /* Get info from stack frames; convert between frames, blocks,
    functions and pc values.
 
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -28,9 +26,9 @@
 #include "objfiles.h"
 #include "frame.h"
 #include "gdbcore.h"
-#include "value.h"		/* for read_register */
-#include "target.h"		/* for target_has_stack */
-#include "inferior.h"		/* for read_pc */
+#include "value.h"
+#include "target.h"
+#include "inferior.h"
 #include "annotate.h"
 #include "regcache.h"
 #include "gdb_assert.h"
@@ -42,14 +40,6 @@
 /* Prototypes for exported functions. */
 
 void _initialize_blockframe (void);
-
-/* Test whether THIS_FRAME is inside the process entry point function.  */
-
-int
-inside_entry_func (struct frame_info *this_frame)
-{
-  return (get_frame_func (this_frame) == entry_point_address ());
-}
 
 /* Return the innermost lexical block in execution
    in a specified stack frame.  The frame address is assumed valid.
@@ -288,27 +278,34 @@ find_pc_partial_function (CORE_ADDR pc, char **name, CORE_ADDR *address,
   cache_pc_function_name = DEPRECATED_SYMBOL_NAME (msymbol);
   cache_pc_function_section = section;
 
-  /* Use the lesser of the next minimal symbol in the same section, or
-     the end of the section, as the end of the function.  */
+  /* If the minimal symbol has a size, use it for the cache.
+     Otherwise use the lesser of the next minimal symbol in the same
+     section, or the end of the section, as the end of the
+     function.  */
 
-  /* Step over other symbols at this same address, and symbols in
-     other sections, to find the next symbol in this section with
-     a different address.  */
-
-  for (i = 1; DEPRECATED_SYMBOL_NAME (msymbol + i) != NULL; i++)
-    {
-      if (SYMBOL_VALUE_ADDRESS (msymbol + i) != SYMBOL_VALUE_ADDRESS (msymbol)
-	  && SYMBOL_BFD_SECTION (msymbol + i) == SYMBOL_BFD_SECTION (msymbol))
-	break;
-    }
-
-  if (DEPRECATED_SYMBOL_NAME (msymbol + i) != NULL
-      && SYMBOL_VALUE_ADDRESS (msymbol + i) < osect->endaddr)
-    cache_pc_function_high = SYMBOL_VALUE_ADDRESS (msymbol + i);
+  if (MSYMBOL_SIZE (msymbol) != 0)
+    cache_pc_function_high = cache_pc_function_low + MSYMBOL_SIZE (msymbol);
   else
-    /* We got the start address from the last msymbol in the objfile.
-       So the end address is the end of the section.  */
-    cache_pc_function_high = osect->endaddr;
+    {
+      /* Step over other symbols at this same address, and symbols in
+	 other sections, to find the next symbol in this section with
+	 a different address.  */
+
+      for (i = 1; DEPRECATED_SYMBOL_NAME (msymbol + i) != NULL; i++)
+	{
+	  if (SYMBOL_VALUE_ADDRESS (msymbol + i) != SYMBOL_VALUE_ADDRESS (msymbol)
+	      && SYMBOL_BFD_SECTION (msymbol + i) == SYMBOL_BFD_SECTION (msymbol))
+	    break;
+	}
+
+      if (DEPRECATED_SYMBOL_NAME (msymbol + i) != NULL
+	  && SYMBOL_VALUE_ADDRESS (msymbol + i) < osect->endaddr)
+	cache_pc_function_high = SYMBOL_VALUE_ADDRESS (msymbol + i);
+      else
+	/* We got the start address from the last msymbol in the objfile.
+	   So the end address is the end of the section.  */
+	cache_pc_function_high = osect->endaddr;
+    }
 
  return_cached_value:
 
@@ -359,14 +356,15 @@ block_innermost_frame (struct block *block)
   start = BLOCK_START (block);
   end = BLOCK_END (block);
 
-  frame = NULL;
-  while (1)
+  frame = get_current_frame ();
+  while (frame != NULL)
     {
-      frame = get_prev_frame (frame);
-      if (frame == NULL)
-	return NULL;
       calling_pc = get_frame_address_in_block (frame);
       if (calling_pc >= start && calling_pc < end)
 	return frame;
+
+      frame = get_prev_frame (frame);
     }
+
+  return NULL;
 }

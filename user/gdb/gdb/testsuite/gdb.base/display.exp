@@ -1,19 +1,18 @@
-#   Copyright 1997, 1998, 1999, 2000, 2001, 2003
+#   Copyright 1997, 1998, 1999, 2000, 2001, 2003, 2007, 2008
 #   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -31,8 +30,9 @@ set binfile  ${objdir}/${subdir}/${testfile}
 
 
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-w}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
+    untested display.exp
+    return -1
 }
 if [target_info exists gdb_stub] {
     gdb_step_for_stub;
@@ -94,7 +94,7 @@ gdb_test "break 19"     ".*Breakpoint 4.*" "break 19"
 gdb_test "info disp" ".*There are no auto-display expressions now..*" "inf disp"
 gdb_test "disp i" ".*1: i = 0.*" "display i"
 gdb_test "disp/x j" ".*2: /x j = 0x0.*" "display j"
-gdb_test "disp/i &k" ".*3: x/i &k  $hex:.*" "display &k"
+gdb_test "disp/i &k" ".*3: x/i &k(\r\n|  )$hex:.*" "display &k"
 gdb_test "disp/f f" ".*4: /f f = 3.1415*" "display/f f"
 gdb_test "disp/s &sum" ".*5: x/s &sum  $hex.*sum.:.*" "display/s &sum"
 
@@ -178,6 +178,8 @@ gdb_test "printf \"\\\\!\\a\\f\\r\\t\\v\\b\\n\"" ".*!.*"
 gdb_test "printf \"\"" ".*" "re-set term"
 gdb_test "printf \"\\w\"" ".*Unrecognized escape character.*"
 gdb_test "printf \"%d\" j" ".*Invalid argument syntax.*"
+gdb_test "printf \"%p\\n\", 0" "\\(nil\\)"
+gdb_test "printf \"%p\\n\", 1" "0x1"
 
 # play with "print", too
 #
@@ -195,7 +197,7 @@ if [istarget "hppa*-hp-hpux*"] {
     gdb_test "x/rx j" ".*(Cannot access|Error accessing) memory.*|.*0xa:\[ \t\]*\[0-9\]+.*"
 }
 gdb_test "print/0 j" ".*Item count other than 1 is meaningless.*" "print/0 j"
-gdb_test "print/s sum" ".*Format letter.*is meaningless.*" " no s"
+gdb_test "print/s sum" " = 1000" "ignored s"
 gdb_test "print/i sum" ".*Format letter.*is meaningless.*.*" "no i"
 gdb_test "print/a &sum" ".*= $hex.*<sum>.*"
 # If the constant below is larger than the length of main, then

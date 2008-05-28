@@ -71,65 +71,7 @@ typedef long int __swblk_t;	/* Type of a swap block maybe?  */
 
 /* fd_set for select.  */
 
-#ifdef __linux__
-
-#if 1
-
 #include <linux/posix_types.h>
-
-#ifndef __FDSET_LONGS
-#define __FDSET_LONGS __FDSET_INTS
-#endif
-
-typedef struct __fd_set {
-        unsigned long fds_bits [__FDSET_LONGS];
-} __fd_set;
-
-#else
-
-#ifndef __FDSET_LONGS
-#define __FDSET_LONGS 8
-#endif
-
-typedef struct __fd_set {
-        unsigned long fds_bits [__FDSET_LONGS];
-} __fd_set;
-
-
-#ifndef __NFDBITS
-
-#define	__NFDBITS	(sizeof(unsigned long int) * 8)
-
-#ifndef __FD_SETSIZE
-#define __FD_SETSIZE	(__FDSET_LONGS*__NFDBITS)
-#endif
-
-#define __FD_SET(fd,fdsetp) \
-	__asm__ __volatile__ ("btsl %1,%0": \
-		"=m" (*(__fd_set *) (fdsetp)):"r" ((int) (fd)))
-
-#define __FD_CLR(fd,fdsetp) \
-	__asm__ __volatile__("btrl %1,%0": \
-		"=m" (*(__fd_set *) (fdsetp)):"r" ((int) (fd)))
-
-#define __FD_ISSET(fd,fdsetp) __extension__ ({ \
-	unsigned char __result; \
-	__asm__ __volatile__("btl %1,%2 ; setb %0" \
-        	:"=q" (__result) :"r" ((int) (fd)), \
-		"m" (*(__fd_set *) (fdsetp))); \
-	__result; })
-
-#define __FD_ZERO(fdsetp) \
-	__asm__ __volatile__("cld ; rep ; stosl" \
-        	:"=m" (*(__fd_set *) (fdsetp)) \
-        	:"a" (0), "c" (__FDSET_LONGS), \
-		"D" ((__fd_set *) (fdsetp)) :"cx","di")
-
-#endif /* __NFDBITS */
-
-#endif
-
-#else /* __linux__ */
 
 /* Number of descriptors that can fit in an `fd_set'.  */
 #ifndef __FD_SETSIZE
@@ -141,6 +83,7 @@ typedef struct __fd_set {
 #define	__NFDBITS	(sizeof(unsigned long int) * 8)
 #define	__FDELT(d)	((d) / __NFDBITS)
 #define	__FDMASK(d)	(1 << ((d) % __NFDBITS))
+#endif
 
 typedef struct
 {
@@ -148,13 +91,12 @@ typedef struct
 } __fd_set;
 
 /* This line MUST be split!  Otherwise m4 will not change it.  */
+#ifndef __FD_ZERO
 #define	__FD_ZERO(set)	\
   ((void) memset((__ptr_t) (set), 0, sizeof(fd_set)))
-#define	__FD_SET(d, set)	((set)->__bits[__FDELT(d)] |= __FDMASK(d))
-#define	__FD_CLR(d, set)	((set)->__bits[__FDELT(d)] &= ~__FDMASK(d))
-#define	__FD_ISSET(d, set)	((set)->__bits[__FDELT(d)] & __FDMASK(d))
+#define	__FD_SET(d, set)	((set)->fds_bits[__FDELT(d)] |= __FDMASK(d))
+#define	__FD_CLR(d, set)	((set)->fds_bits[__FDELT(d)] &= ~__FDMASK(d))
+#define	__FD_ISSET(d, set)	((set)->fds_bits[__FDELT(d)] & __FDMASK(d))
 #endif
-
-#endif /* __linux__ */
 
 #endif /* gnu/types.h */

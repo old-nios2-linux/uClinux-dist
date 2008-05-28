@@ -1,11 +1,11 @@
 /*
- *  Copyright (C) 2004 - 2006 Tomasz Kojm <tkojm@clamav.net>
- *			      aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu, Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,11 +23,12 @@
 #endif
 
 #include <stdio.h>
+#if HAVE_STRING_H
 #include <string.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -81,15 +82,9 @@
 #define PESALIGN(o,a) (((a))?(((o)/(a)+((o)%(a)!=0))*(a)):(o))
 
 #define CLI_UNPSIZELIMITS(NAME,CHK) \
-if(ctx->limits && ctx->limits->maxfilesize && (CHK) > ctx->limits->maxfilesize) { \
-    cli_dbgmsg(NAME": Sizes exceeded (%lu > %lu)\n", (CHK), ctx->limits->maxfilesize); \
-    free(exe_sections); \
-    if(BLOCKMAX) { \
-        *ctx->virname = "PE."NAME".ExceededFileSize"; \
-        return CL_VIRUS; \
-    } else { \
-        return CL_CLEAN; \
-    } \
+if(cli_checklimits(NAME, ctx, (CHK), 0, 0)!=CL_CLEAN) {	\
+    free(exe_sections);					\
+    return CL_CLEAN;					\
 }
 
 #define CLI_UNPTEMP(NAME,FREEME) \
@@ -123,12 +118,6 @@ if((ndesc = open(tempfile, O_RDWR|O_CREAT|O_TRUNC|O_BINARY, S_IRWXU)) < 0) { \
 	close(ndesc); \
 	unlink(tempfile); \
 	cli_dbgmsg("PESpin: Size exceeded\n"); \
-	if(BLOCKMAX) { \
-	    free(tempfile); \
-	    free(exe_sections); \
-	    *ctx->virname = "PE.Pespin.ExceededFileSize"; \
-	    return CL_VIRUS; \
-	} \
 	free(tempfile); \
 	break; \
 
@@ -783,7 +772,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
 	if (exe_sections[i].rsz) { /* Don't bother with virtual only sections */
 	    if (exe_sections[i].raw >= fsize) { /* really broken */
-	        cli_dbgmsg("Broken PE file - Section %d starts beyond the end of file (Offset@ %d, Total filesize %d)\n", i, exe_sections[i].raw, fsize);
+	      cli_dbgmsg("Broken PE file - Section %d starts beyond the end of file (Offset@ %lu, Total filesize %lu)\n", i, (unsigned long)exe_sections[i].raw, (unsigned long)fsize);
 		free(section_hdr);
 		free(exe_sections);
 		if(DETECT_BROKEN) {
@@ -797,16 +786,24 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    if(SCAN_ALGO && (DCONF & PE_CONF_POLIPOS) && !*sname && exe_sections[i].vsz > 40000 && exe_sections[i].vsz < 70000 && exe_sections[i].chr == 0xe0000060) polipos = i;
 
 	    /* check MD5 section sigs */
-	    md5_sect = ctx->engine->md5_sect;
+	    md5_sect = ctx->engine->md5_mdb;
 	    if((DCONF & PE_CONF_MD5SECT) && md5_sect) {
 		found = 0;
 		for(j = 0; j < md5_sect->soff_len && md5_sect->soff[j] <= exe_sections[i].rsz; j++) {
 		    if(md5_sect->soff[j] == exe_sections[i].rsz) {
 			unsigned char md5_dig[16];
-			if(cli_md5sect(desc, &exe_sections[i], md5_dig) && cli_bm_scanbuff(md5_dig, 16, ctx->virname, ctx->engine->md5_sect, 0, 0, -1) == CL_VIRUS) {
+			if(cli_md5sect(desc, &exe_sections[i], md5_dig) && cli_bm_scanbuff(md5_dig, 16, ctx->virname, ctx->engine->md5_mdb, 0, 0, -1) == CL_VIRUS) {
+			    /* Since .mdb sigs are not fp-prone, to save
+			     * performance we don't call cli_checkfp() here,
+			     * just give the possibility of whitelisting
+			     * idividual .mdb entries via daily.fp
+			     */
+			    if(cli_bm_scanbuff(md5_dig, 16, NULL, ctx->engine->md5_fp, 0, 0, -1) != CL_VIRUS) {
+
 				free(section_hdr);
 				free(exe_sections);
 				return CL_VIRUS;
+			    }
 			}
 			break;
 		    }
@@ -1107,7 +1104,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    }
 
 	    if((bytes = read(desc, buff, 0xb0)) != 0xb0) {
-	        cli_dbgmsg("MEW: Can't read 0xb0 bytes at 0x%x (%d) %d\n", fileoffset, fileoffset, bytes);
+	        cli_dbgmsg("MEW: Can't read 0xb0 bytes at 0x%x (%d) %lu\n", fileoffset, fileoffset, (unsigned long)bytes);
 		break;
 	    }
 
@@ -1145,12 +1142,12 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    }
 
 	    if((bytes = read(desc, src + dsize, exe_sections[i + 1].rsz)) != exe_sections[i + 1].rsz) {
-	        cli_dbgmsg("MEW: Can't read %d bytes [read: %d]\n", exe_sections[i + 1].rsz, bytes);
+	      cli_dbgmsg("MEW: Can't read %d bytes [read: %lu]\n", exe_sections[i + 1].rsz, (unsigned long)bytes);
 		free(exe_sections);
 		free(src);
 		return CL_EIO;
 	    }
-	    cli_dbgmsg("MEW: %d (%08x) bytes read\n", bytes, bytes);
+	    cli_dbgmsg("MEW: %u (%08x) bytes read\n", (unsigned int)bytes, (unsigned int)bytes);
 
 	    /* count offset to lzma proc, if lzma used, 0xe8 -> call */
 	    if (buff[0x7b] == '\xe8') {
@@ -1165,7 +1162,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    }
 
 	    CLI_UNPTEMP("MEW",(src,exe_sections,0));
-	    CLI_UNPRESULTS("MEW",(unmew11(i, src, offdiff, ssize, dsize, EC32(optional_hdr32.ImageBase), exe_sections[0].rva, uselzma, NULL, NULL, ndesc)),1,(src,0));
+	    CLI_UNPRESULTS("MEW",(unmew11(src, offdiff, ssize, dsize, EC32(optional_hdr32.ImageBase), exe_sections[0].rva, uselzma, ndesc)),1,(src,0));
 	    break;
 	}
     }
@@ -1246,7 +1243,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
 	    CLI_UNPSIZELIMITS("Upack", MAX(MAX(dsize, ssize), exe_sections[1].ursz));
 
-	    if (exe_sections[1].rva - off > dsize || exe_sections[1].rva - off > dsize - exe_sections[1].ursz || (upack && (exe_sections[2].rva - exe_sections[0].rva > dsize || exe_sections[2].rva - exe_sections[0].rva > dsize - ssize)) || ssize > dsize) {
+	    if (!CLI_ISCONTAINED(0, dsize, exe_sections[1].rva - off, exe_sections[1].ursz) || (upack && !CLI_ISCONTAINED(0, dsize, exe_sections[2].rva - exe_sections[0].rva, ssize)) || ssize > dsize) {
 	        cli_dbgmsg("Upack: probably malformed pe-header, skipping to next unpacker\n");
 		break;
 	    }
@@ -1259,9 +1256,8 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	    lseek(desc, 0, SEEK_SET);
 	    if(read(desc, dest, ssize) != ssize) {
 	        cli_dbgmsg("Upack: Can't read raw data of section 0\n");
-		free(exe_sections);
 		free(dest);
-		return CL_EIO;
+		break;
 	    }
 
 	    if(upack) memmove(dest + exe_sections[2].rva - exe_sections[0].rva, dest, ssize);
@@ -1270,9 +1266,8 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
 	    if(read(desc, dest + exe_sections[1].rva - off, exe_sections[1].ursz) != exe_sections[1].ursz) {
 		cli_dbgmsg("Upack: Can't read raw data of section 1\n");
-		free(exe_sections);
 		free(dest);
-		return CL_EIO;
+		break;
 	    }
 
 	    CLI_UNPTEMP("Upack",(dest,exe_sections,0));
@@ -1797,7 +1792,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 		    if(!cli_seeksect(desc, &exe_sections[i]) || (unsigned int) cli_readn(desc, dest + exe_sections[i].rva - min, exe_sections[i].ursz) != exe_sections[i].ursz) {
 			free(exe_sections);
 			free(dest);
-			return CL_EIO;
+			return CL_CLEAN;
 		    }
 		}
 	    }
@@ -1825,7 +1820,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
 	lseek(desc, 0, SEEK_SET);
 	if((size_t) cli_readn(desc, spinned, fsize) != fsize) {
-	    cli_dbgmsg("PESpin: Can't read %d bytes\n", fsize);
+	    cli_dbgmsg("PESpin: Can't read %lu bytes\n", (unsigned long)fsize);
 	    free(spinned);
 	    free(exe_sections);
 	    return CL_EIO;
@@ -1851,7 +1846,7 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 
 	lseek(desc, 0, SEEK_SET);
 	if((size_t) cli_readn(desc, spinned, fsize) != fsize) {
-	    cli_dbgmsg("yC: Can't read %d bytes\n", fsize);
+	    cli_dbgmsg("yC: Can't read %lu bytes\n", (unsigned long)fsize);
 	    free(spinned);
 	    free(exe_sections);
 	    return CL_EIO;
@@ -1861,106 +1856,65 @@ int cli_scanpe(int desc, cli_ctx *ctx)
 	CLI_UNPRESULTS("yC",(yc_decrypt(spinned, fsize, exe_sections, nsections-1, e_lfanew, ndesc)),0,(spinned,0));
     }
 
-
     /* WWPack */
 
-    if((DCONF & PE_CONF_WWPACK) && nsections > 1 &&
-       exe_sections[nsections-1].raw>0x2b1 &&
+    while ((DCONF & PE_CONF_WWPACK) && nsections > 1 &&
        vep == exe_sections[nsections - 1].rva &&
-       exe_sections[nsections - 1].rva + exe_sections[nsections - 1].rsz == max &&
        memcmp(epbuff, "\x53\x55\x8b\xe8\x33\xdb\xeb", 7) == 0 &&
        memcmp(epbuff+0x68, "\xe8\x00\x00\x00\x00\x58\x2d\x6d\x00\x00\x00\x50\x60\x33\xc9\x50\x58\x50\x50", 19) == 0)  {
-	uint32_t headsize=exe_sections[nsections - 1].raw;
-	char *dest, *wwp;
+	uint32_t head = exe_sections[nsections - 1].raw;
+        uint8_t *packer;
 
-	for(i = 0 ; i < (unsigned int)nsections-1; i++)
-	    if (exe_sections[i].raw<headsize) headsize=exe_sections[i].raw;
-      
-	dsize = max-min+headsize-exe_sections[nsections - 1].rsz;
+	ssize = 0;
+	for(i=0 ; ; i++) {
+	    if(exe_sections[i].raw<head) 
+	        head=exe_sections[i].raw;
+	    if(i==nsections-1) break;
+	    if(ssize<exe_sections[i].rva+exe_sections[i].vsz)
+		ssize=exe_sections[i].rva+exe_sections[i].vsz;
+	}
+	if(!head || !ssize || head>ssize) break;
 
-	CLI_UNPSIZELIMITS("WWPack", dsize);
+	CLI_UNPSIZELIMITS("WWPack", ssize);
 
-	if((dest = (char *) cli_calloc(dsize, sizeof(char))) == NULL) {
-	    cli_dbgmsg("WWPack: Can't allocate %d bytes\n", dsize);
+        if(!(src=(char *)cli_calloc(ssize, sizeof(char)))) {
 	    free(exe_sections);
 	    return CL_EMEM;
 	}
-
 	lseek(desc, 0, SEEK_SET);
-	if((size_t) cli_readn(desc, dest, headsize) != headsize) {
-	    cli_dbgmsg("WWPack: Can't read %d bytes from headers\n", headsize);
-	    free(dest);
+	if((size_t) cli_readn(desc, src, head) != head) {
+	    cli_dbgmsg("WWPack: Can't read %d bytes from headers\n", head);
+	    free(src);
 	    free(exe_sections);
 	    return CL_EIO;
 	}
-
-	for(i = 0 ; i < (unsigned int)nsections-1; i++) {
-	    if(exe_sections[i].rsz) {
-		if(!cli_seeksect(desc, &exe_sections[i]) || (unsigned int) cli_readn(desc, dest + headsize + exe_sections[i].rva - min, exe_sections[i].rsz) != exe_sections[i].rsz) {
-		    free(dest);
-		    free(exe_sections);
-		    return CL_EIO;
-		}
-	    }
-	}
-
-	if((wwp = (char *) cli_calloc(exe_sections[nsections - 1].rsz, sizeof(char))) == NULL) {
-	    cli_dbgmsg("WWPack: Can't allocate %d bytes\n", exe_sections[nsections - 1].rsz);
-	    free(dest);
+        for(i = 0 ; i < (unsigned int)nsections-1; i++) {
+	    if(!exe_sections[i].rsz) continue;
+	    if(!cli_seeksect(desc, &exe_sections[i])) break;
+            if(!CLI_ISCONTAINED(src, ssize, src+exe_sections[i].rva, exe_sections[i].rsz)) break;
+            if(cli_readn(desc, src+exe_sections[i].rva, exe_sections[i].rsz)!=exe_sections[i].rsz) break;
+        }
+        if(i!=nsections-1) {
+            cli_dbgmsg("WWpack: Probably hacked/damaged file.\n");
+            free(src);
+            break;
+        }
+	if((packer = (uint8_t *) cli_calloc(exe_sections[nsections - 1].rsz, sizeof(char))) == NULL) {
+	    free(src);
 	    free(exe_sections);
 	    return CL_EMEM;
 	}
-
-	if(!cli_seeksect(desc, &exe_sections[nsections - 1]) || (size_t) cli_readn(desc, wwp, exe_sections[nsections - 1].rsz) != exe_sections[nsections - 1].rsz) {
+	if(!cli_seeksect(desc, &exe_sections[nsections - 1]) || (size_t) cli_readn(desc, packer, exe_sections[nsections - 1].rsz) != exe_sections[nsections - 1].rsz) {
 	    cli_dbgmsg("WWPack: Can't read %d bytes from wwpack sect\n", exe_sections[nsections - 1].rsz);
-	    free(dest);
-	    free(wwp);
+	    free(src);
+	    free(packer);
 	    free(exe_sections);
 	    return CL_EIO;
 	}
 
-	if (!wwunpack(dest, dsize, headsize, min, exe_sections[nsections-1].rva, e_lfanew, wwp, exe_sections[nsections - 1].rsz, nsections-1)) {
-	
-	    free(wwp);
-
-	    CLI_UNPTEMP("WWPack",(dest,exe_sections,0));
-
-	    if((unsigned int) write(ndesc, dest, dsize) != dsize) {
-		cli_dbgmsg("WWPack: Can't write %d bytes\n", dsize);
-		close(ndesc);
-		free(tempfile);
-		free(dest);
-		free(exe_sections);
-		return CL_EIO;
-	    }
-
-	    free(dest);
-	    if (cli_leavetemps_flag)
-		cli_dbgmsg("WWPack: Unpacked and rebuilt executable saved in %s\n", tempfile);
-	    else
-		cli_dbgmsg("WWPack: Unpacked and rebuilt executable\n");
-
-	    fsync(ndesc);
-	    lseek(ndesc, 0, SEEK_SET);
-
-	    if(cli_magic_scandesc(ndesc, ctx) == CL_VIRUS) {
-		free(exe_sections);
-		close(ndesc);
-		if(!cli_leavetemps_flag)
-		    unlink(tempfile);
-		free(tempfile);
-		return CL_VIRUS;
-	    }
-
-	    close(ndesc);
-	    if(!cli_leavetemps_flag)
-		unlink(tempfile);
-	    free(tempfile);
-	} else {
-	    free(wwp);
-	    free(dest);
-	    cli_dbgmsg("WWPpack: Decompression failed\n");
-	}
+	CLI_UNPTEMP("WWPack",(src,packer,exe_sections,0));
+	CLI_UNPRESULTS("WWPack",(wwunpack((uint8_t *)src, ssize, packer, exe_sections, nsections-1, e_lfanew, ndesc)),0,(src,packer,0));
+	break;
     }
 
 

@@ -1,12 +1,12 @@
 /* Support for printing Pascal types for GDB, the GNU debugger.
-   Copyright 2000, 2001, 2002
+   Copyright (C) 2000, 2001, 2002, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,8 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file is derived from p-typeprint.c */
 
@@ -58,23 +57,23 @@ pascal_print_type (struct type *type, char *varstring, struct ui_file *stream,
   if (show > 0)
     CHECK_TYPEDEF (type);
 
-  if ((code == TYPE_CODE_FUNC ||
-       code == TYPE_CODE_METHOD))
+  if ((code == TYPE_CODE_FUNC
+       || code == TYPE_CODE_METHOD))
     {
       pascal_type_print_varspec_prefix (type, stream, show, 0);
     }
   /* first the name */
   fputs_filtered (varstring, stream);
 
-  if ((varstring != NULL && *varstring != '\0') &&
-      !(code == TYPE_CODE_FUNC ||
-	code == TYPE_CODE_METHOD))
+  if ((varstring != NULL && *varstring != '\0')
+      && !(code == TYPE_CODE_FUNC
+	   || code == TYPE_CODE_METHOD))
     {
       fputs_filtered (" : ", stream);
     }
 
-  if (!(code == TYPE_CODE_FUNC ||
-	code == TYPE_CODE_METHOD))
+  if (!(code == TYPE_CODE_FUNC
+	|| code == TYPE_CODE_METHOD))
     {
       pascal_type_print_varspec_prefix (type, stream, show, 0);
     }
@@ -139,8 +138,8 @@ void
 pascal_type_print_method_args (char *physname, char *methodname,
 			       struct ui_file *stream)
 {
-  int is_constructor = DEPRECATED_STREQN (physname, "__ct__", 6);
-  int is_destructor = DEPRECATED_STREQN (physname, "__dt__", 6);
+  int is_constructor = (strncmp (physname, "__ct__", 6) == 0);
+  int is_destructor = (strncmp (physname, "__dt__", 6) == 0);
 
   if (is_constructor || is_destructor)
     {
@@ -207,19 +206,6 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
       pascal_type_print_varspec_prefix (TYPE_TARGET_TYPE (type), stream, 0, 1);
       break;			/* pointer should be handled normally in pascal */
 
-    case TYPE_CODE_MEMBER:
-      if (passed_a_ptr)
-	fprintf_filtered (stream, "(");
-      pascal_type_print_varspec_prefix (TYPE_TARGET_TYPE (type), stream, 0, 0);
-      fprintf_filtered (stream, " ");
-      name = type_name_no_tag (TYPE_DOMAIN_TYPE (type));
-      if (name)
-	fputs_filtered (name, stream);
-      else
-	pascal_type_print_base (TYPE_DOMAIN_TYPE (type), stream, 0, passed_a_ptr);
-      fprintf_filtered (stream, "::");
-      break;
-
     case TYPE_CODE_METHOD:
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
@@ -264,7 +250,7 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
       fprintf_filtered (stream, "array ");
-      if (TYPE_LENGTH (type) >= 0 && TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
+      if (TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
 	&& TYPE_ARRAY_UPPER_BOUND_TYPE (type) != BOUND_CANNOT_BE_DETERMINED)
 	fprintf_filtered (stream, "[%d..%d] ",
 			  TYPE_ARRAY_LOWER_BOUND_VALUE (type),
@@ -294,7 +280,7 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
          gcc -Wall will reveal any types that haven't been handled.  */
       break;
     default:
-      error ("type not handled in pascal_type_print_varspec_prefix()");
+      error (_("type not handled in pascal_type_print_varspec_prefix()"));
       break;
     }
 }
@@ -350,12 +336,6 @@ pascal_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_ARRAY:
       if (passed_a_ptr)
 	fprintf_filtered (stream, ")");
-      break;
-
-    case TYPE_CODE_MEMBER:
-      if (passed_a_ptr)
-	fprintf_filtered (stream, ")");
-      pascal_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0);
       break;
 
     case TYPE_CODE_METHOD:
@@ -415,7 +395,7 @@ pascal_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
          gcc -Wall will report types that may not have been considered.  */
       break;
     default:
-      error ("type not handled in pascal_type_print_varspec_suffix()");
+      error (_("type not handled in pascal_type_print_varspec_suffix()"));
       break;
     }
 }
@@ -480,7 +460,6 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
     {
     case TYPE_CODE_TYPEDEF:
     case TYPE_CODE_PTR:
-    case TYPE_CODE_MEMBER:
     case TYPE_CODE_REF:
       /* case TYPE_CODE_FUNC:
          case TYPE_CODE_METHOD: */
@@ -559,7 +538,7 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 	    {
 	      QUIT;
 	      /* Don't print out virtual function table.  */
-	      if (DEPRECATED_STREQN (TYPE_FIELD_NAME (type, i), "_vptr", 5)
+	      if ((strncmp (TYPE_FIELD_NAME (type, i), "_vptr", 5) == 0)
 		  && is_cplus_marker ((TYPE_FIELD_NAME (type, i))[5]))
 		continue;
 
@@ -637,8 +616,8 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 		{
 		  char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
 
-		  int is_constructor = DEPRECATED_STREQN (physname, "__ct__", 6);
-		  int is_destructor = DEPRECATED_STREQN (physname, "__dt__", 6);
+		  int is_constructor = (strncmp (physname, "__ct__", 6) == 0);
+		  int is_destructor = (strncmp (physname, "__dt__", 6) == 0);
 
 		  QUIT;
 		  if (TYPE_FN_FIELD_PROTECTED (f, j))
@@ -686,8 +665,9 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 		    {
 		      fprintf_filtered (stream, "destructor  ");
 		    }
-		  else if (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j)) != 0 &&
-			   TYPE_CODE (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j))) != TYPE_CODE_VOID)
+		  else if (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j)) != 0
+			   && TYPE_CODE (TYPE_TARGET_TYPE (
+				TYPE_FN_FIELD_TYPE (f, j))) != TYPE_CODE_VOID)
 		    {
 		      fprintf_filtered (stream, "function  ");
 		    }
@@ -701,8 +681,9 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 						 method_name,
 						 stream);
 
-		  if (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j)) != 0 &&
-		      TYPE_CODE (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j))) != TYPE_CODE_VOID)
+		  if (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j)) != 0
+		      && TYPE_CODE (TYPE_TARGET_TYPE (
+			   TYPE_FN_FIELD_TYPE (f, j))) != TYPE_CODE_VOID)
 		    {
 		      fputs_filtered (" : ", stream);
 		      type_print (TYPE_TARGET_TYPE (TYPE_FN_FIELD_TYPE (f, j)),

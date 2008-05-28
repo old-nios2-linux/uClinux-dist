@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2005 aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -194,9 +196,9 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
 
   cli_dbgmsg("spin: Key8 is %x, Len is %x\n", key8, len);
 
-  if (!CLI_ISCONTAINED(spinned, sections[sectcnt].rsz, ep, len+0x1fe5-1) || !CLI_ISCONTAINED(spinned, sections[sectcnt].rsz, ep+0x3217, 4)) {
+  if (!CLI_ISCONTAINED(spinned, sections[sectcnt].rsz, ep, len+0x1fe5-1)) {
     free(spinned);
-    cli_dbgmsg("spin: len or key out of bounds, giving up\n");
+    cli_dbgmsg("spin: len out of bounds, giving up\n");
     return 1;
   }
 
@@ -210,6 +212,12 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   while ( len-- ) {
     *curr=(*curr)^(key8--);
     curr--;
+  }
+
+  if (!CLI_ISCONTAINED(spinned, sections[sectcnt].rsz, ep+0x3217, 4)) {
+    free(spinned);
+    cli_dbgmsg("spin: key out of bounds, giving up\n");
+    return 1;
   }
 
   curr = ep+0x26eb;
@@ -261,7 +269,7 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
       char *ptr = src + sections[j].raw;
       uint32_t keydup = key32;
       
-      if (!CLI_ISCONTAINED(src, (unsigned int)ssize, ptr, size)) {
+      if (!CLI_ISCONTAINED(src, ssize, ptr, size)) {
 	cli_dbgmsg("spin: sect %d out of file, giving up\n", j);
 	return 1; /* FIXME: Already checked in pe.c? */
       }
@@ -293,7 +301,7 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   cli_dbgmsg("spin: Key is %x, Len is %x\n", key32, len);
   curr = ep+0x28d3;
 
-  if (!CLI_ISCONTAINED(src, (unsigned int)ssize, curr, len)) { /* always true but i may decide to remove the previous check */
+  if (!CLI_ISCONTAINED(src, ssize, curr, len)) { /* always true but i may decide to remove the previous check */
     cli_dbgmsg("spin: key out of bounds, giving up\n");
     return 1;
   }
@@ -318,7 +326,7 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   cli_dbgmsg("spin: POLY1 len is %x\n", len);
   curr+=0xf; /* POLY1 */
   emu = ep+0x6d4;
-  if (!CLI_ISCONTAINED(src, (unsigned int)ssize, emu, len)) {
+  if (!CLI_ISCONTAINED(src, ssize, emu, len)) {
     cli_dbgmsg("spin: poly1 out of bounds\n");
     return 1;
   }
@@ -366,34 +374,42 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   bitmap = cli_readint32(ep+0x3061);
   bitman = bitmap;
 
+  /* FIXMELIMITS: possibly rewrite to use the limits api */
+  if(ctx->limits && ctx->limits->maxfilesize) {
+    unsigned long int filesize = 0;
+    
+    for (j=0; j<sectcnt; j++) {
+      if (bitmap&1) {
+	if ( filesize > ctx->limits->maxfilesize || sections[j].vsz > ctx->limits->maxfilesize - filesize ) return 2;
+	filesize += sections[j].vsz;
+      }
+      bitmap>>=1;
+    }
+    
+    bitmap = bitman;
+  }
+
   cli_dbgmsg("spin: Compression bitmap is %x\n", bitmap);
   if ( (sects= (char **) cli_malloc(sectcnt*sizeof(char *))) == NULL )
     return 1;
 
-  key8 = 0;
+  len = 0;
   for (j=0; j<sectcnt; j++) {
-    uint32_t thissize = (bitmap&1) ? sections[j].vsz : sections[j].rsz;
-    if(ctx->limits && ctx->limits->maxfilesize && ((unsigned long int)thissize > ctx->limits->maxfilesize || (unsigned long int)blobsz > ctx->limits->maxfilesize - thissize)) {
-      key8++;
-      cli_dbgmsg("spin: section %d size exceeded (%u, %lu)\n", j, thissize, ctx->limits->maxfilesize);
-      break;
-    }
     if (bitmap&1) {
-      if ( (sects[j] = (char *) cli_calloc(thissize, sizeof(char)) ) == NULL ) {
-	cli_dbgmsg("spin: malloc(%d) failed\n", thissize);
-	key8++;
-	break;
-      }
-      blobsz+=thissize;
-      cli_dbgmsg("spin: Growing sect%d: was %x will be %x\n", j, sections[j].rsz, thissize);
-      if ( cli_unfsg(src + sections[j].raw, sects[j], sections[j].rsz, thissize, NULL, NULL) == -1 ) {
-	key8++;
-	j++;
-	cli_dbgmsg("spin: Unpack failure\n");
-	break;
-      }
+       if ( (sects[j] = (char *) cli_malloc(sections[j].vsz) ) == NULL ) {
+	 cli_dbgmsg("spin: malloc(%d) failed\n", sections[j].vsz);
+	 len = 1;
+	 break;
+       }
+       blobsz+=sections[j].vsz;
+       memset(sects[j], 0, sections[j].vsz);
+       cli_dbgmsg("spin: Growing sect%d: was %x will be %x\n", j, sections[j].rsz, sections[j].vsz);
+       if ( cli_unfsg(src + sections[j].raw, sects[j], sections[j].rsz, sections[j].vsz, NULL, NULL) == -1 ) {
+	 len++;
+         cli_dbgmsg("spin: Unpack failure\n");
+       }
     } else {
-      blobsz+=thissize;
+      blobsz+=sections[j].rsz;
       sects[j] = src + sections[j].raw;
       cli_dbgmsg("spin: Not growing sect%d\n", j);
     }
@@ -402,12 +418,12 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   
   cli_dbgmsg("spin: decompression complete\n");
  
-  if ( key8 ) {
+  if ( len ) {
     int t;
     for (t=0 ; t<j ; t++) {
       if (bitman&1)
 	free(sects[t]);
-      bitman = bitman >>1;
+      bitman = bitman >>1 & 0x7fffffff;
     }
     free(sects);
     return 1;
@@ -419,7 +435,7 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
     /*    len = cli_readint32(ep+0x2fc8); -- Using vsizes instead */
 
     for (j=0; j<sectcnt; j++) {
-      if (sections[j].rva <= key32 && sections[j].rva+sections[j].rsz > key32)
+      if (sections[j].rva <= key32 && key32-sections[j].rva < sections[j].vsz && CLI_ISCONTAINED(src + sections[j].raw, sections[j].rsz, src + sections[j].raw, key32 - sections[j].rva))
 	break;
     }
 
@@ -485,7 +501,7 @@ int unspin(char *src, int ssize, struct cli_exe_section *sections, int sectcnt, 
   cli_dbgmsg ("spin: free bitmap is %x\n", bitman);
   for (j=0; j<sectcnt; j++) {
     if (bitmap&1) free(sects[j]);
-    bitman = bitman >>1;
+    bitman = bitman >>1 & 0x7fffffff;
   }
   free(sects);
   return 1; /* :( */

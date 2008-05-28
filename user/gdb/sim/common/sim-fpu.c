@@ -2,29 +2,20 @@
    of the floating point routines in libgcc1.c for targets without
    hardware floating point.  */
 
-/* Copyright 1994, 1997, 1998, 2003 Free Software Foundation, Inc.
+/* Copyright 1994, 1997, 1998, 2003, 2007, 2008 Free Software Foundation, Inc.
 
-This file is free software; you can redistribute it and/or modify it
-under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
-later version.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file with other programs, and to distribute
-those programs without any restriction coming from the use of this
-file.  (The General Public License restrictions do apply in other
-respects; for example, they cover modification of the file, and
-distribution when not linked into another program.)
-
-This file is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program; see the file COPYING.  If not, write to
-the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* As a special exception, if you link this library with other files,
    some of which are compiled with GCC, to produce an executable,
@@ -201,7 +192,11 @@ pack_fpu (const sim_fpu *src,
       /* force fraction to correct class */
       fraction = src->fraction;
       fraction >>= NR_GUARDS;
+#ifdef SIM_QUIET_NAN_NEGATED
+      fraction |= QUIET_NAN - 1;
+#else
       fraction |= QUIET_NAN;
+#endif
       break;
     case sim_fpu_class_snan:
       sign = src->sign;
@@ -209,7 +204,11 @@ pack_fpu (const sim_fpu *src,
       /* force fraction to correct class */
       fraction = src->fraction;
       fraction >>= NR_GUARDS;
+#ifdef SIM_QUIET_NAN_NEGATED
+      fraction |= QUIET_NAN;
+#else
       fraction &= ~QUIET_NAN;
+#endif
       break;
     case sim_fpu_class_infinity:
       sign = src->sign;
@@ -362,10 +361,17 @@ unpack_fpu (sim_fpu *dst, unsigned64 packed, int is_double)
 	}
       else
 	{
+	  int qnan;
+
 	  /* Non zero fraction, means NaN */
 	  dst->sign = sign;
 	  dst->fraction = (fraction << NR_GUARDS);
-	  if (fraction >= QUIET_NAN)
+#ifdef SIM_QUIET_NAN_NEGATED
+	  qnan = (fraction & QUIET_NAN) == 0;
+#else
+	  qnan = fraction >= QUIET_NAN;
+#endif
+	  if (qnan)
 	    dst->class = sim_fpu_class_qnan;
 	  else
 	    dst->class = sim_fpu_class_snan;
@@ -1733,19 +1739,13 @@ INLINE_SIM_FPU (int)
 sim_fpu_abs (sim_fpu *f,
 	     const sim_fpu *r)
 {
+  *f = *r;
+  f->sign = 0;
   if (sim_fpu_is_snan (r))
     {
-      *f = *r;
       f->class = sim_fpu_class_qnan;
       return sim_fpu_status_invalid_snan;
     }
-  if (sim_fpu_is_qnan (r))
-    {
-      *f = *r;
-      return 0;
-    }
-  *f = *r;
-  f->sign = 0;
   return 0;
 }
 

@@ -1,5 +1,6 @@
 /* Helper routines for C++ support in GDB.
-   Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
    Namespace support contributed by David Carlton.
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef CP_SUPPORT_H
 #define CP_SUPPORT_H
@@ -35,6 +34,7 @@ struct obstack;
 struct block;
 struct objfile;
 struct type;
+struct demangle_component;
 
 /* This struct is designed to store data from using directives.  It
    says that names from namespace INNER should be visible within
@@ -51,6 +51,8 @@ struct using_direct
 
 
 /* Functions from cp-support.c.  */
+
+extern char *cp_canonicalize_string (const char *string);
 
 extern char *cp_class_name_from_physname (const char *physname);
 
@@ -113,8 +115,22 @@ extern void cp_check_possible_namespace_symbols (const char *name,
 
 struct type *cp_lookup_transparent_type (const char *name);
 
+/* Functions from cp-name-parser.y.  */
+
+extern struct demangle_component *cp_demangled_name_to_comp
+  (const char *demangled_name, const char **errmsg);
+
+extern char *cp_comp_to_string (struct demangle_component *result,
+				int estimated_len);
+
 /* The list of "maint cplus" commands.  */
 
 extern struct cmd_list_element *maint_cplus_cmd_list;
+
+/* Pointer to member function.  Depends on compiler implementation.  */
+
+#define METHOD_PTR_IS_VIRTUAL(ADDR)  ((ADDR) & 0x80000000)
+#define METHOD_PTR_FROM_VOFFSET(OFFSET) (0x80000000 + (OFFSET))
+#define METHOD_PTR_TO_VOFFSET(ADDR) (~0x80000000 & (ADDR))
 
 #endif /* CP_SUPPORT_H */

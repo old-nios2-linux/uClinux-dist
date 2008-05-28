@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2004 aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -45,7 +47,6 @@
 #include "fsg.h"
 
 int unfsg_200(char *source, char *dest, int ssize, int dsize, uint32_t rva, uint32_t base, uint32_t ep, int file) {
-  char *tsrc;
   struct cli_exe_section section; /* Yup, just one ;) */
   
   if ( cli_unfsg(source, dest, ssize, dsize, NULL, NULL) ) return -1;

@@ -1,11 +1,12 @@
 /* Memory attributes support, for GDB.
-   Copyright 2001 Free Software Foundation, Inc.
+
+   Copyright (C) 2001, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,18 +15,22 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MEMATTR_H
 #define MEMATTR_H
 
+#include "vec.h"
+
 enum mem_access_mode
 {
+  MEM_NONE,                     /* Memory that is not physically present. */
   MEM_RW,			/* read/write */
   MEM_RO,			/* read only */
-  MEM_WO			/* write only */
+  MEM_WO,			/* write only */
+
+  /* Read/write, but special steps are required to write to it.  */
+  MEM_FLASH
 };
 
 enum mem_access_width
@@ -63,17 +68,17 @@ struct mem_attrib
   /* enables memory verification.  after a write, memory is re-read
      to verify that the write was successful. */
   int verify; 
+
+  /* Block size.  Only valid if mode == MEM_FLASH.  */
+  int blocksize;
 };
 
 struct mem_region 
 {
-  /* FIXME: memory regions are stored in an unsorted singly-linked
-     list.  This probably won't scale to handle hundreds of memory
-     regions --- that many could be needed to describe the allowed
-     access modes for memory mapped i/o device registers. */
-  struct mem_region *next;
-  
+  /* Lowest address in the region.  */
   CORE_ADDR lo;
+  /* Address past the highest address of the region. 
+     If 0, upper bound is "infinity".  */
   CORE_ADDR hi;
 
   /* Item number of this memory region. */
@@ -86,6 +91,18 @@ struct mem_region
   struct mem_attrib attrib;
 };
 
+/* Declare a vector type for a group of mem_region structures.  The
+   typedef is necessary because vec.h can not handle a struct tag.
+   Except during construction, these vectors are kept sorted.  */
+typedef struct mem_region mem_region_s;
+DEF_VEC_O(mem_region_s);
+
 extern struct mem_region *lookup_mem_region(CORE_ADDR);
+
+void invalidate_target_mem_regions (void);
+
+void mem_region_init (struct mem_region *);
+
+int mem_region_cmp (const void *, const void *);
 
 #endif	/* MEMATTR_H */

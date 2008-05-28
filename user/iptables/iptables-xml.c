@@ -23,15 +23,13 @@
 #define DEBUGP(x, args...)
 #endif
 
-#ifndef EMBED
+#ifndef IPTABLES_MULTI
 /* no need to link with iptables.o */
 const char *program_name;
 const char *program_version;
-#endif
-
-#ifndef IPTABLES_MULTI
 int line = 0;
-void exit_error(enum exittype status, char *msg, ...)
+
+void exit_error(enum exittype status, const char *msg, ...)
 {
 	va_list args;
 
@@ -72,12 +70,16 @@ print_usage(const char *name, const char *version)
 static int
 parse_counters(char *string, struct ipt_counters *ctr)
 {
-	if (string != NULL)
+	u_int64_t *pcnt, *bcnt;
+
+	if (string != NULL) {
+		pcnt = &ctr->pcnt;
+		bcnt = &ctr->bcnt;
 		return (sscanf
 			(string, "[%llu:%llu]",
-			 (unsigned long long *) &ctr->pcnt,
-			 (unsigned long long *) &ctr->bcnt) == 2);
-	else
+			 (unsigned long long *)pcnt,
+			 (unsigned long long *)bcnt) == 2);
+	} else
 		return (0 == 2);
 }
 
@@ -361,6 +363,18 @@ isTarget(char *arg)
 		    || strcmp((arg), "--goto") == 0));
 }
 
+// is it a terminating target like -j ACCEPT, etc
+// (or I guess -j SNAT in nat table, but we don't check for that yet
+static int
+isTerminatingTarget(char *arg)
+{
+	return ((arg)
+		&& (strcmp((arg), "ACCEPT") == 0
+		    || strcmp((arg), "DROP") == 0
+		    || strcmp((arg), "QUEUE") == 0
+		    || strcmp((arg), "RETURN") == 0));
+}
+
 // part=-1 means do conditions, part=1 means do rules, part=0 means do both
 static void
 do_rule_part(char *leveltag1, char *leveltag2, int part, int argc,
@@ -538,7 +552,19 @@ compareRules()
 
 	while (new < newargc && old < oldargc) {
 		if (isTarget(oldargv[old]) && isTarget(newargv[new])) {
-			compare = 1;
+			/* if oldarg was a terminating action then it makes no sense
+			 * to combine further actions into the same xml */
+			if (((strcmp((oldargv[old]), "-j") == 0 
+					|| strcmp((oldargv[old]), "--jump") == 0) 
+				&& old+1 < oldargc
+				&& isTerminatingTarget(oldargv[old+1]) )
+			    || strcmp((oldargv[old]), "-g") == 0 
+			    || strcmp((oldargv[old]), "--goto") == 0 ) {
+				/* Previous rule had terminating action */	
+				compare = 0;
+			} else {
+				compare = 1;
+			}
 			break;
 		}
 		// break when old!=new

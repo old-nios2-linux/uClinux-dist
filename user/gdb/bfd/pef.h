@@ -1,12 +1,12 @@
 /* PEF support for BFD.
-   Copyright 1999, 2000, 2001, 2002
+   Copyright 1999, 2000, 2001, 2002, 2007
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,7 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "bfd.h"
 
@@ -176,11 +177,11 @@ struct bfd_pef_xlib_data_struct
 };
 typedef struct bfd_pef_xlib_data_struct bfd_pef_xlib_data_struct;
 
-int  bfd_pef_parse_loader_header    PARAMS ((bfd *, unsigned char *, size_t, bfd_pef_loader_header *));
-int  bfd_pef_print_loader_section   PARAMS ((bfd *, FILE *));
-void bfd_pef_print_loader_header    PARAMS ((bfd *, bfd_pef_loader_header *, FILE *));
-int  bfd_pef_parse_imported_library PARAMS ((bfd *, unsigned char *, size_t, bfd_pef_imported_library *));
-int  bfd_pef_parse_imported_symbol  PARAMS ((bfd *, unsigned char *, size_t, bfd_pef_imported_symbol *));
-int  bfd_pef_scan_section           PARAMS ((bfd *, bfd_pef_section *));
-int  bfd_pef_scan_start_address     PARAMS ((bfd *));
-int  bfd_pef_scan                   PARAMS ((bfd *, bfd_pef_header *, bfd_pef_data_struct *));
+int  bfd_pef_parse_loader_header    (bfd *, unsigned char *, size_t, bfd_pef_loader_header *);
+int  bfd_pef_print_loader_section   (bfd *, FILE *);
+void bfd_pef_print_loader_header    (bfd *, bfd_pef_loader_header *, FILE *);
+int  bfd_pef_parse_imported_library (bfd *, unsigned char *, size_t, bfd_pef_imported_library *);
+int  bfd_pef_parse_imported_symbol  (bfd *, unsigned char *, size_t, bfd_pef_imported_symbol *);
+int  bfd_pef_scan_section           (bfd *, bfd_pef_section *);
+int  bfd_pef_scan_start_address     (bfd *);
+int  bfd_pef_scan                   (bfd *, bfd_pef_header *, bfd_pef_data_struct *);

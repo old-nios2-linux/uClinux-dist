@@ -1,12 +1,12 @@
 /* Native-dependent code for SPARC.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -135,9 +133,8 @@ sparc32_fpregset_supplies_p (int regnum)
    for all registers (including the floating-point registers).  */
 
 void
-fetch_inferior_registers (int regnum)
+sparc_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
-  struct regcache *regcache = current_regcache;
   int pid;
 
   /* NOTE: cagney/2002-12-03: This code assumes that the currently
@@ -168,7 +165,7 @@ fetch_inferior_registers (int regnum)
       gregset_t regs;
 
       if (ptrace (PTRACE_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-	perror_with_name ("Couldn't get registers");
+	perror_with_name (_("Couldn't get registers"));
 
       sparc_supply_gregset (sparc_gregset, regcache, -1, &regs);
       if (regnum != -1)
@@ -180,16 +177,15 @@ fetch_inferior_registers (int regnum)
       fpregset_t fpregs;
 
       if (ptrace (PTRACE_GETFPREGS, pid, (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	perror_with_name ("Couldn't get floating point status");
+	perror_with_name (_("Couldn't get floating point status"));
 
       sparc_supply_fpregset (regcache, -1, &fpregs);
     }
 }
 
 void
-store_inferior_registers (int regnum)
+sparc_store_inferior_registers (struct regcache *regcache, int regnum)
 {
-  struct regcache *regcache = current_regcache;
   int pid;
 
   /* NOTE: cagney/2002-12-02: See comment in fetch_inferior_registers
@@ -203,12 +199,12 @@ store_inferior_registers (int regnum)
       gregset_t regs;
 
       if (ptrace (PTRACE_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-	perror_with_name ("Couldn't get registers");
+	perror_with_name (_("Couldn't get registers"));
 
       sparc_collect_gregset (sparc_gregset, regcache, regnum, &regs);
 
       if (ptrace (PTRACE_SETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-	perror_with_name ("Couldn't write registers");
+	perror_with_name (_("Couldn't write registers"));
 
       /* Deal with the stack regs.  */
       if (regnum == -1 || regnum == SPARC_SP_REGNUM
@@ -229,7 +225,7 @@ store_inferior_registers (int regnum)
       fpregset_t fpregs, saved_fpregs;
 
       if (ptrace (PTRACE_GETFPREGS, pid, (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	perror_with_name ("Couldn't get floating-point registers");
+	perror_with_name (_("Couldn't get floating-point registers"));
 
       memcpy (&saved_fpregs, &fpregs, sizeof (fpregs));
       sparc_collect_fpregset (regcache, regnum, &fpregs);
@@ -242,7 +238,7 @@ store_inferior_registers (int regnum)
 	{
 	  if (ptrace (PTRACE_SETFPREGS, pid,
 		      (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	    perror_with_name ("Couldn't write floating-point registers");
+	    perror_with_name (_("Couldn't write floating-point registers"));
 	}
 
       if (regnum != -1)
@@ -255,8 +251,8 @@ store_inferior_registers (int regnum)
 
 LONGEST
 sparc_xfer_wcookie (struct target_ops *ops, enum target_object object,
-		    const char *annex, void *readbuf, const void *writebuf,
-		    ULONGEST offset, LONGEST len)
+		    const char *annex, gdb_byte *readbuf,
+		    const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
 {
   unsigned long wcookie = 0;
   char *buf = (char *)&wcookie;
@@ -264,14 +260,16 @@ sparc_xfer_wcookie (struct target_ops *ops, enum target_object object,
   gdb_assert (object == TARGET_OBJECT_WCOOKIE);
   gdb_assert (readbuf && writebuf == NULL);
 
-  if (offset >= sizeof (unsigned long))
+  if (offset == sizeof (unsigned long))
+    return 0;			/* Signal EOF.  */
+  if (offset > sizeof (unsigned long))
     return -1;
 
 #ifdef PT_WCOOKIE
   /* If PT_WCOOKIE is defined (by <sys/ptrace.h>), assume we're
      running on an OpenBSD release that uses StackGhost (3.1 or
-     later).  As of release 3.4, OpenBSD doesn't use a randomized
-     cookie yet, but a future release probably will.  */
+     later).  Since release 3.6, OpenBSD uses a fully randomized
+     cookie.  */
   {
     int pid;
 
@@ -288,7 +286,7 @@ sparc_xfer_wcookie (struct target_ops *ops, enum target_object object,
     if (ptrace (PT_WCOOKIE, pid, (PTRACE_TYPE_ARG3) &wcookie, 0) == -1)
       {
 	if (errno != EINVAL)
-	  perror_with_name ("Couldn't get StackGhost cookie");
+	  perror_with_name (_("Couldn't get StackGhost cookie"));
 
 	/* Although PT_WCOOKIE is defined on OpenBSD 3.1 and later,
 	   the request wasn't implemented until after OpenBSD 3.4.  If
@@ -305,6 +303,23 @@ sparc_xfer_wcookie (struct target_ops *ops, enum target_object object,
   memcpy (readbuf, buf + offset, len);
   return len;
 }
+
+LONGEST (*inf_ptrace_xfer_partial) (struct target_ops *, enum target_object,
+				    const char *, gdb_byte *, const gdb_byte *,
+				    ULONGEST, LONGEST);
+
+static LONGEST
+sparc_xfer_partial (struct target_ops *ops, enum target_object object,
+		    const char *annex, gdb_byte *readbuf,
+		    const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
+{
+  if (object == TARGET_OBJECT_WCOOKIE)
+    return sparc_xfer_wcookie (ops, object, annex, readbuf, writebuf, 
+			       offset, len);
+
+  return inf_ptrace_xfer_partial (ops, object, annex, readbuf, writebuf,
+				  offset, len);
+}
 
 /* Create a prototype generic SPARC target.  The client can override
    it with local methods.  */
@@ -315,8 +330,10 @@ sparc_target (void)
   struct target_ops *t;
 
   t = inf_ptrace_target ();
-  t->to_fetch_registers = fetch_inferior_registers;
-  t->to_store_registers = store_inferior_registers;
+  t->to_fetch_registers = sparc_fetch_inferior_registers;
+  t->to_store_registers = sparc_store_inferior_registers;
+  inf_ptrace_xfer_partial = t->to_xfer_partial;
+  t->to_xfer_partial = sparc_xfer_partial;
   return t;
 }
 

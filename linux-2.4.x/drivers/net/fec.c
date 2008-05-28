@@ -2414,7 +2414,7 @@ int __init fec_enet_init(struct net_device *dev)
 
 #if defined(CONFIG_M5235) || defined(CONFIG_M527x) || \
     defined(CONFIG_M5282) || defined(CONFIG_M5280) || \
-    defined(CONFIG_M5208
+    defined(CONFIG_M5208)
 	fecp->fec_hash_table_high = 0;
 	fecp->fec_hash_table_low = 0;
 #endif

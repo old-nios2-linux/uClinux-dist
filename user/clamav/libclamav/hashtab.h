@@ -1,10 +1,12 @@
 /*
  *  HTML Entity & Encoding normalization.
  *
- *  Copyright (C) 2006 Török Edvin <edwin@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: TÃ¶rÃ¶k Edvin
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as 
+ *  it under the terms of the GNU General Public License version 2 as
  *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
@@ -16,7 +18,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
- *
  */
 
 #include <stdio.h>
@@ -57,10 +58,11 @@ typedef struct {
 #define STRUCT_PROFILE
 
 #endif
-struct element 
+struct element
 {
-	const unsigned char* key;
+	const char* key;
 	element_data data;
+	size_t len;
 };
 
 struct hashtable {
@@ -75,14 +77,33 @@ struct hashtable {
 
 
 int hashtab_generate_c(const struct hashtable *s,const char* name);
-struct element* hashtab_find(const struct hashtable *s,const unsigned char* key,const size_t len);
+struct element* hashtab_find(const struct hashtable *s, const char* key, const size_t len);
 int hashtab_init(struct hashtable *s,size_t capacity);
-int hashtab_insert(struct hashtable *s,const unsigned char* key,size_t len,element_data data);
-void hashtab_delete(struct hashtable *s,const unsigned char* key,const size_t len);
+int hashtab_insert(struct hashtable *s, const char* key, const size_t len, const element_data data);
+void hashtab_delete(struct hashtable *s,const char* key,const size_t len);
 void hashtab_clear(struct hashtable *s);
 
 int hashtab_load(FILE* in, struct hashtable *s);
 int hashtab_store(const struct hashtable *s,FILE* out);
+
+/* A set of unique keys. */
+struct hashset {
+	uint32_t* keys;
+	uint32_t* bitmap;
+	size_t capacity;
+	size_t mask;
+	size_t count;
+	size_t limit;
+	uint8_t load_factor;
+};
+
+int hashset_init(struct hashset* hs, size_t initial_capacity, uint8_t load_factor);
+int hashset_addkey(struct hashset* hs, const uint32_t key);
+int hashset_removekey(struct hashset* hs, const uint32_t key);
+int hashset_contains(const struct hashset* hs, const uint32_t key);
+int hashset_clear(struct hashset* hs);
+void hashset_destroy(struct hashset* hs);
+ssize_t hashset_toarray(const struct hashset* hs, uint32_t** array);
 
 #endif
 

@@ -1,14 +1,13 @@
 /* GDB routines for manipulating the minimal symbol tables.
-   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004
-   Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 /* This file contains support routines for creating, manipulating, and
@@ -168,20 +165,19 @@ lookup_minimal_symbol (const char *name, const char *sfile,
   unsigned int hash = msymbol_hash (name) % MINIMAL_SYMBOL_HASH_SIZE;
   unsigned int dem_hash = msymbol_hash_iw (name) % MINIMAL_SYMBOL_HASH_SIZE;
 
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   if (sfile != NULL)
     {
       char *p = strrchr (sfile, '/');
       if (p != NULL)
 	sfile = p + 1;
     }
-#endif
 
   for (objfile = object_files;
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  /* Do two passes: the first over the ordinary hash table,
 	     and the second over the demangled hash table.  */
@@ -212,18 +208,9 @@ lookup_minimal_symbol (const char *name, const char *sfile,
                       case mst_file_text:
                       case mst_file_data:
                       case mst_file_bss:
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
                         if (sfile == NULL
 			    || strcmp (msymbol->filename, sfile) == 0)
                           found_file_symbol = msymbol;
-#else
-                        /* We have neither the ability nor the need to
-                           deal with the SFILE parameter.  If we find
-                           more than one symbol, just return the latest
-                           one (the user can't expect useful behavior in
-                           that case).  */
-                        found_file_symbol = msymbol;
-#endif
                         break;
 
                       case mst_solib_trampoline:
@@ -288,7 +275,8 @@ lookup_minimal_symbol_text (const char *name, struct objfile *objf)
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  for (msymbol = objfile->msymbol_hash[hash];
 	       msymbol != NULL && found_symbol == NULL;
@@ -344,7 +332,8 @@ lookup_minimal_symbol_solib_trampoline (const char *name,
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  for (msymbol = objfile->msymbol_hash[hash];
 	       msymbol != NULL && found_symbol == NULL;
@@ -359,7 +348,6 @@ lookup_minimal_symbol_solib_trampoline (const char *name,
 
   return NULL;
 }
-
 
 /* Search through the minimal symbol table for each objfile and find
    the symbol whose address is the largest address that is still less
@@ -389,20 +377,20 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc, asection *section)
   if (pc_section == NULL)
     return NULL;
 
-  /* NOTE: cagney/2004-01-27: Removed code (added 2003-07-19) that was
-     trying to force the PC into a valid section as returned by
-     find_pc_section.  It broke IRIX 6.5 mdebug which relies on this
-     code returning an absolute symbol - the problem was that
-     find_pc_section wasn't returning an absolute section and hence
-     the code below would skip over absolute symbols.  Since the
-     original problem was with finding a frame's function, and that
-     uses [indirectly] lookup_minimal_symbol_by_pc, the original
-     problem has been fixed by having that function use
-     find_pc_section.  */
+  /* We can not require the symbol found to be in pc_section, because
+     e.g. IRIX 6.5 mdebug relies on this code returning an absolute
+     symbol - but find_pc_section won't return an absolute section and
+     hence the code below would skip over absolute symbols.  We can
+     still take advantage of the call to find_pc_section, though - the
+     object file still must match.  In case we have separate debug
+     files, search both the file and its separate debug file.  There's
+     no telling which one will have the minimal symbols.  */
 
-  for (objfile = object_files;
-       objfile != NULL;
-       objfile = objfile->next)
+  objfile = pc_section->objfile;
+  if (objfile->separate_debug_objfile)
+    objfile = objfile->separate_debug_objfile;
+
+  for (; objfile != NULL; objfile = objfile->separate_debug_objfile_backlink)
     {
       /* If this objfile has a minimal symbol table, go search it using
          a binary search.  Note that a minimal symbol table always consists
@@ -412,6 +400,8 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc, asection *section)
 
       if (objfile->minimal_symbol_count > 0)
 	{
+	  int best_zero_sized = -1;
+
           msymbol = objfile->msymbols;
 	  lo = 0;
 	  hi = objfile->minimal_symbol_count - 1;
@@ -461,33 +451,107 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc, asection *section)
 			 == SYMBOL_VALUE_ADDRESS (&msymbol[hi + 1])))
 		hi++;
 
+	      /* Skip various undesirable symbols.  */
+	      while (hi >= 0)
+		{
+		  /* Skip any absolute symbols.  This is apparently
+		     what adb and dbx do, and is needed for the CM-5.
+		     There are two known possible problems: (1) on
+		     ELF, apparently end, edata, etc. are absolute.
+		     Not sure ignoring them here is a big deal, but if
+		     we want to use them, the fix would go in
+		     elfread.c.  (2) I think shared library entry
+		     points on the NeXT are absolute.  If we want
+		     special handling for this it probably should be
+		     triggered by a special mst_abs_or_lib or some
+		     such.  */
+
+		  if (msymbol[hi].type == mst_abs)
+		    {
+		      hi--;
+		      continue;
+		    }
+
+		  /* If SECTION was specified, skip any symbol from
+		     wrong section.  */
+		  if (section
+		      /* Some types of debug info, such as COFF,
+			 don't fill the bfd_section member, so don't
+			 throw away symbols on those platforms.  */
+		      && SYMBOL_BFD_SECTION (&msymbol[hi]) != NULL
+		      && (!matching_bfd_sections
+			  (SYMBOL_BFD_SECTION (&msymbol[hi]), section)))
+		    {
+		      hi--;
+		      continue;
+		    }
+
+		  /* If the minimal symbol has a zero size, save it
+		     but keep scanning backwards looking for one with
+		     a non-zero size.  A zero size may mean that the
+		     symbol isn't an object or function (e.g. a
+		     label), or it may just mean that the size was not
+		     specified.  */
+		  if (MSYMBOL_SIZE (&msymbol[hi]) == 0
+		      && best_zero_sized == -1)
+		    {
+		      best_zero_sized = hi;
+		      hi--;
+		      continue;
+		    }
+
+		  /* If we are past the end of the current symbol, try
+		     the previous symbol if it has a larger overlapping
+		     size.  This happens on i686-pc-linux-gnu with glibc;
+		     the nocancel variants of system calls are inside
+		     the cancellable variants, but both have sizes.  */
+		  if (hi > 0
+		      && MSYMBOL_SIZE (&msymbol[hi]) != 0
+		      && pc >= (SYMBOL_VALUE_ADDRESS (&msymbol[hi])
+				+ MSYMBOL_SIZE (&msymbol[hi]))
+		      && pc < (SYMBOL_VALUE_ADDRESS (&msymbol[hi - 1])
+			       + MSYMBOL_SIZE (&msymbol[hi - 1])))
+		    {
+		      hi--;
+		      continue;
+		    }
+
+		  /* Otherwise, this symbol must be as good as we're going
+		     to get.  */
+		  break;
+		}
+
+	      /* If HI has a zero size, and best_zero_sized is set,
+		 then we had two or more zero-sized symbols; prefer
+		 the first one we found (which may have a higher
+		 address).  Also, if we ran off the end, be sure
+		 to back up.  */
+	      if (best_zero_sized != -1
+		  && (hi < 0 || MSYMBOL_SIZE (&msymbol[hi]) == 0))
+		hi = best_zero_sized;
+
+	      /* If the minimal symbol has a non-zero size, and this
+		 PC appears to be outside the symbol's contents, then
+		 refuse to use this symbol.  If we found a zero-sized
+		 symbol with an address greater than this symbol's,
+		 use that instead.  We assume that if symbols have
+		 specified sizes, they do not overlap.  */
+
+	      if (hi >= 0
+		  && MSYMBOL_SIZE (&msymbol[hi]) != 0
+		  && pc >= (SYMBOL_VALUE_ADDRESS (&msymbol[hi])
+			    + MSYMBOL_SIZE (&msymbol[hi])))
+		{
+		  if (best_zero_sized != -1)
+		    hi = best_zero_sized;
+		  else
+		    /* Go on to the next object file.  */
+		    continue;
+		}
+
 	      /* The minimal symbol indexed by hi now is the best one in this
 	         objfile's minimal symbol table.  See if it is the best one
 	         overall. */
-
-	      /* Skip any absolute symbols.  This is apparently what adb
-	         and dbx do, and is needed for the CM-5.  There are two
-	         known possible problems: (1) on ELF, apparently end, edata,
-	         etc. are absolute.  Not sure ignoring them here is a big
-	         deal, but if we want to use them, the fix would go in
-	         elfread.c.  (2) I think shared library entry points on the
-	         NeXT are absolute.  If we want special handling for this
-	         it probably should be triggered by a special
-	         mst_abs_or_lib or some such.  */
-	      while (hi >= 0
-		     && msymbol[hi].type == mst_abs)
-		--hi;
-
-	      /* If "section" specified, skip any symbol from wrong section */
-	      /* This is the new code that distinguishes it from the old function */
-	      if (section)
-		while (hi >= 0
-		       /* Some types of debug info, such as COFF,
-			  don't fill the bfd_section member, so don't
-			  throw away symbols on those platforms.  */
-		       && SYMBOL_BFD_SECTION (&msymbol[hi]) != NULL
-		       && SYMBOL_BFD_SECTION (&msymbol[hi]) != section)
-		  --hi;
 
 	      if (hi >= 0
 		  && ((best_symbol == NULL) ||
@@ -973,7 +1037,7 @@ lookup_solib_trampoline_symbol_by_pc (CORE_ADDR pc)
    a duplicate function in case this matters someday.  */
 
 CORE_ADDR
-find_solib_trampoline_target (CORE_ADDR pc)
+find_solib_trampoline_target (struct frame_info *frame, CORE_ADDR pc)
 {
   struct objfile *objfile;
   struct minimal_symbol *msymbol;

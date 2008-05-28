@@ -1,7 +1,8 @@
 /* Read ELF (Executable and Linking Format) object files for GDB.
 
-   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -9,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,14 +19,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
 #include "gdb_string.h"
 #include "elf-bfd.h"
+#include "elf/common.h"
+#include "elf/internal.h"
 #include "elf/mips.h"
 #include "symtab.h"
 #include "symfile.h"
@@ -44,16 +45,82 @@ extern void _initialize_elfread (void);
 
 struct elfinfo
   {
-    file_ptr dboffset;		/* Offset to dwarf debug section */
-    unsigned int dbsize;	/* Size of dwarf debug section */
-    file_ptr lnoffset;		/* Offset to dwarf line number section */
-    unsigned int lnsize;	/* Size of dwarf line number section */
     asection *stabsect;		/* Section pointer for .stab section */
     asection *stabindexsect;	/* Section pointer for .stab.index section */
     asection *mdebugsect;	/* Section pointer for .mdebug section */
   };
 
 static void free_elfinfo (void *);
+
+/* Locate the segments in ABFD.  */
+
+static struct symfile_segment_data *
+elf_symfile_segments (bfd *abfd)
+{
+  Elf_Internal_Phdr *phdrs, **segments;
+  long phdrs_size;
+  int num_phdrs, num_segments, num_sections, i;
+  asection *sect;
+  struct symfile_segment_data *data;
+
+  phdrs_size = bfd_get_elf_phdr_upper_bound (abfd);
+  if (phdrs_size == -1)
+    return NULL;
+
+  phdrs = alloca (phdrs_size);
+  num_phdrs = bfd_get_elf_phdrs (abfd, phdrs);
+  if (num_phdrs == -1)
+    return NULL;
+
+  num_segments = 0;
+  segments = alloca (sizeof (Elf_Internal_Phdr *) * num_phdrs);
+  for (i = 0; i < num_phdrs; i++)
+    if (phdrs[i].p_type == PT_LOAD)
+      segments[num_segments++] = &phdrs[i];
+
+  if (num_segments == 0)
+    return NULL;
+
+  data = XZALLOC (struct symfile_segment_data);
+  data->num_segments = num_segments;
+  data->segment_bases = XCALLOC (num_segments, CORE_ADDR);
+  data->segment_sizes = XCALLOC (num_segments, CORE_ADDR);
+
+  for (i = 0; i < num_segments; i++)
+    {
+      data->segment_bases[i] = segments[i]->p_vaddr;
+      data->segment_sizes[i] = segments[i]->p_memsz;
+    }
+
+  num_sections = bfd_count_sections (abfd);
+  data->segment_info = XCALLOC (num_sections, int);
+
+  for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
+    {
+      int j;
+      CORE_ADDR vma;
+
+      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+	continue;
+
+      vma = bfd_get_section_vma (abfd, sect);
+
+      for (j = 0; j < num_segments; j++)
+	if (segments[j]->p_memsz > 0
+	    && vma >= segments[j]->p_vaddr
+	    && vma < segments[j]->p_vaddr + segments[j]->p_memsz)
+	  {
+	    data->segment_info[i] = j + 1;
+	    break;
+	  }
+
+      if (bfd_get_section_size (sect) > 0 && j == num_segments)
+	warning (_("Loadable segment \"%s\" outside of ELF segments"),
+		 bfd_section_name (abfd, sect));
+    }
+
+  return data;
+}
 
 /* We are called once per section from elf_symfile_read.  We
    need to examine each section we are passed, check to see
@@ -80,17 +147,7 @@ elf_locate_sections (bfd *ignore_abfd, asection *sectp, void *eip)
   struct elfinfo *ei;
 
   ei = (struct elfinfo *) eip;
-  if (strcmp (sectp->name, ".debug") == 0)
-    {
-      ei->dboffset = sectp->filepos;
-      ei->dbsize = bfd_get_section_size (sectp);
-    }
-  else if (strcmp (sectp->name, ".line") == 0)
-    {
-      ei->lnoffset = sectp->filepos;
-      ei->lnsize = bfd_get_section_size (sectp);
-    }
-  else if (strcmp (sectp->name, ".stab") == 0)
+  if (strcmp (sectp->name, ".stab") == 0)
     {
       ei->stabsect = sectp;
     }
@@ -110,7 +167,7 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 		       asection *bfd_section, struct objfile *objfile)
 {
   if (ms_type == mst_text || ms_type == mst_file_text)
-    address = SMASH_TEXT_ADDRESS (address);
+    address = gdbarch_smash_text_address (current_gdbarch, address);
 
   return prim_record_minimal_symbol_and_info
     (name, address, ms_type, NULL, bfd_section->index, bfd_section, objfile);
@@ -124,13 +181,14 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 
    SYNOPSIS
 
-   void elf_symtab_read (struct objfile *objfile, int dynamic)
+   void elf_symtab_read (struct objfile *objfile, int type,
+			 long number_of_symbols, asymbol **symbol_table)
 
    DESCRIPTION
 
-   Given an objfile and a flag that specifies whether or not the objfile
-   is for an executable or not (may be shared library for example), add
-   all the global function and data symbols to the minimal symbol table.
+   Given an objfile, a symbol table, and a flag indicating whether the
+   symbol table contains regular, dynamic, or synthetic symbols, add all
+   the global function and data symbols to the minimal symbol table.
 
    In stabs-in-ELF, as implemented by Sun, there are some local symbols
    defined in the ELF symbol table, which can be used to locate
@@ -140,15 +198,17 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 
  */
 
+#define ST_REGULAR 0
+#define ST_DYNAMIC 1
+#define ST_SYNTHETIC 2
+
 static void
-elf_symtab_read (struct objfile *objfile, int dynamic)
+elf_symtab_read (struct objfile *objfile, int type,
+		 long number_of_symbols, asymbol **symbol_table)
 {
   long storage_needed;
   asymbol *sym;
-  asymbol **symbol_table;
-  long number_of_symbols;
   long i;
-  struct cleanup *back_to;
   CORE_ADDR symaddr;
   CORE_ADDR offset;
   enum minimal_symbol_type ms_type;
@@ -158,297 +218,303 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
   /* If filesym is nonzero, it points to a file symbol, but we haven't
      seen any section info for it yet.  */
   asymbol *filesym = 0;
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   /* Name of filesym, as saved on the objfile_obstack.  */
   char *filesymname = obsavestring ("", 0, &objfile->objfile_obstack);
-#endif
-  struct dbx_symfile_info *dbx = objfile->sym_stab_info;
+  struct dbx_symfile_info *dbx = objfile->deprecated_sym_stab_info;
   int stripped = (bfd_get_symcount (objfile->obfd) == 0);
 
-  if (dynamic)
+  for (i = 0; i < number_of_symbols; i++)
     {
-      storage_needed = bfd_get_dynamic_symtab_upper_bound (objfile->obfd);
-
-      /* Nothing to be done if there is no dynamic symtab.  */
-      if (storage_needed < 0)
-	return;
-    }
-  else
-    {
-      storage_needed = bfd_get_symtab_upper_bound (objfile->obfd);
-      if (storage_needed < 0)
-	error ("Can't read symbols from %s: %s", bfd_get_filename (objfile->obfd),
-	       bfd_errmsg (bfd_get_error ()));
-    }
-  if (storage_needed > 0)
-    {
-      symbol_table = (asymbol **) xmalloc (storage_needed);
-      back_to = make_cleanup (xfree, symbol_table);
-      if (dynamic)
-	number_of_symbols = bfd_canonicalize_dynamic_symtab (objfile->obfd,
-							     symbol_table);
-      else
-	number_of_symbols = bfd_canonicalize_symtab (objfile->obfd, symbol_table);
-      if (number_of_symbols < 0)
-	error ("Can't read symbols from %s: %s", bfd_get_filename (objfile->obfd),
-	       bfd_errmsg (bfd_get_error ()));
-
-      for (i = 0; i < number_of_symbols; i++)
+      sym = symbol_table[i];
+      if (sym->name == NULL || *sym->name == '\0')
 	{
-	  sym = symbol_table[i];
-	  if (sym->name == NULL || *sym->name == '\0')
-	    {
-	      /* Skip names that don't exist (shouldn't happen), or names
-	         that are null strings (may happen). */
-	      continue;
-	    }
+	  /* Skip names that don't exist (shouldn't happen), or names
+	     that are null strings (may happen). */
+	  continue;
+	}
 
-          offset = ANOFFSET (objfile->section_offsets, sym->section->index);
-	  if (dynamic
-	      && sym->section == &bfd_und_section
-	      && (sym->flags & BSF_FUNCTION))
-	    {
-	      struct minimal_symbol *msym;
+      /* Skip "special" symbols, e.g. ARM mapping symbols.  These are
+	 symbols which do not correspond to objects in the symbol table,
+	 but have some other target-specific meaning.  */
+      if (bfd_is_target_special_symbol (objfile->obfd, sym))
+	continue;
 
-	      /* Symbol is a reference to a function defined in
-	         a shared library.
-	         If its value is non zero then it is usually the address
-	         of the corresponding entry in the procedure linkage table,
-	         plus the desired section offset.
-	         If its value is zero then the dynamic linker has to resolve
-	         the symbol. We are unable to find any meaningful address
-	         for this symbol in the executable file, so we skip it.  */
-	      symaddr = sym->value;
-	      if (symaddr == 0)
-		continue;
-	      symaddr += offset;
-	      msym = record_minimal_symbol
-		((char *) sym->name, symaddr,
-		 mst_solib_trampoline, sym->section, objfile);
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
-	      if (msym != NULL)
-		msym->filename = filesymname;
-#endif
-	      continue;
-	    }
+      offset = ANOFFSET (objfile->section_offsets, sym->section->index);
+      if (type == ST_DYNAMIC
+	  && sym->section == &bfd_und_section
+	  && (sym->flags & BSF_FUNCTION))
+	{
+	  struct minimal_symbol *msym;
+	  bfd *abfd = objfile->obfd;
+	  asection *sect; 
 
-	  /* If it is a nonstripped executable, do not enter dynamic
-	     symbols, as the dynamic symbol table is usually a subset
-	     of the main symbol table.  */
-	  if (dynamic && !stripped)
+	  /* Symbol is a reference to a function defined in
+	     a shared library.
+	     If its value is non zero then it is usually the address
+	     of the corresponding entry in the procedure linkage table,
+	     plus the desired section offset.
+	     If its value is zero then the dynamic linker has to resolve
+	     the symbol. We are unable to find any meaningful address
+	     for this symbol in the executable file, so we skip it.  */
+	  symaddr = sym->value;
+	  if (symaddr == 0)
 	    continue;
-	  if (sym->flags & BSF_FILE)
-	    {
-	      /* STT_FILE debugging symbol that helps stabs-in-elf debugging.
-	         Chain any old one onto the objfile; remember new sym.  */
-	      if (sectinfo != NULL)
-		{
-		  sectinfo->next = dbx->stab_section_info;
-		  dbx->stab_section_info = sectinfo;
-		  sectinfo = NULL;
-		}
-	      filesym = sym;
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
-	      filesymname =
-		obsavestring ((char *) filesym->name, strlen (filesym->name),
-			      &objfile->objfile_obstack);
-#endif
-	    }
-	  else if (sym->flags & (BSF_GLOBAL | BSF_LOCAL | BSF_WEAK))
-	    {
-	      struct minimal_symbol *msym;
 
-	      /* Select global/local/weak symbols.  Note that bfd puts abs
-	         symbols in their own section, so all symbols we are
-	         interested in will have a section. */
-	      /* Bfd symbols are section relative. */
-	      symaddr = sym->value + sym->section->vma;
-	      /* Relocate all non-absolute symbols by the section offset.  */
-	      if (sym->section != &bfd_abs_section)
+	  /* sym->section is the undefined section.  However, we want to
+	     record the section where the PLT stub resides with the
+	     minimal symbol.  Search the section table for the one that
+	     covers the stub's address.  */
+	  for (sect = abfd->sections; sect != NULL; sect = sect->next)
+	    {
+	      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+		continue;
+
+	      if (symaddr >= bfd_get_section_vma (abfd, sect)
+		  && symaddr < bfd_get_section_vma (abfd, sect)
+			       + bfd_get_section_size (sect))
+		break;
+	    }
+	  if (!sect)
+	    continue;
+
+	  symaddr += ANOFFSET (objfile->section_offsets, sect->index);
+
+	  msym = record_minimal_symbol
+	    ((char *) sym->name, symaddr, mst_solib_trampoline, sect, objfile);
+	  if (msym != NULL)
+	    msym->filename = filesymname;
+	  continue;
+	}
+
+      /* If it is a nonstripped executable, do not enter dynamic
+	 symbols, as the dynamic symbol table is usually a subset
+	 of the main symbol table.  */
+      if (type == ST_DYNAMIC && !stripped)
+	continue;
+      if (sym->flags & BSF_FILE)
+	{
+	  /* STT_FILE debugging symbol that helps stabs-in-elf debugging.
+	     Chain any old one onto the objfile; remember new sym.  */
+	  if (sectinfo != NULL)
+	    {
+	      sectinfo->next = dbx->stab_section_info;
+	      dbx->stab_section_info = sectinfo;
+	      sectinfo = NULL;
+	    }
+	  filesym = sym;
+	  filesymname =
+	    obsavestring ((char *) filesym->name, strlen (filesym->name),
+			  &objfile->objfile_obstack);
+	}
+      else if (sym->flags & BSF_SECTION_SYM)
+	continue;
+      else if (sym->flags & (BSF_GLOBAL | BSF_LOCAL | BSF_WEAK))
+	{
+	  struct minimal_symbol *msym;
+
+	  /* Select global/local/weak symbols.  Note that bfd puts abs
+	     symbols in their own section, so all symbols we are
+	     interested in will have a section. */
+	  /* Bfd symbols are section relative. */
+	  symaddr = sym->value + sym->section->vma;
+	  /* Relocate all non-absolute symbols by the section offset.  */
+	  if (sym->section != &bfd_abs_section)
+	    {
+	      symaddr += offset;
+	    }
+	  /* For non-absolute symbols, use the type of the section
+	     they are relative to, to intuit text/data.  Bfd provides
+	     no way of figuring this out for absolute symbols. */
+	  if (sym->section == &bfd_abs_section)
+	    {
+	      /* This is a hack to get the minimal symbol type
+		 right for Irix 5, which has absolute addresses
+		 with special section indices for dynamic symbols.
+
+		 NOTE: uweigand-20071112: Synthetic symbols do not
+		 have an ELF-private part, so do not touch those.  */
+	      unsigned short shndx = type == ST_SYNTHETIC ? 0 : 
+		((elf_symbol_type *) sym)->internal_elf_sym.st_shndx;
+
+	      switch (shndx)
 		{
+		case SHN_MIPS_TEXT:
+		  ms_type = mst_text;
+		  break;
+		case SHN_MIPS_DATA:
+		  ms_type = mst_data;
+		  break;
+		case SHN_MIPS_ACOMMON:
+		  ms_type = mst_bss;
+		  break;
+		default:
+		  ms_type = mst_abs;
+		}
+
+	      /* If it is an Irix dynamic symbol, skip section name
+		 symbols, relocate all others by section offset. */
+	      if (ms_type != mst_abs)
+		{
+		  if (sym->name[0] == '.')
+		    continue;
 		  symaddr += offset;
 		}
-	      /* For non-absolute symbols, use the type of the section
-	         they are relative to, to intuit text/data.  Bfd provides
-	         no way of figuring this out for absolute symbols. */
-	      if (sym->section == &bfd_abs_section)
+	    }
+	  else if (sym->section->flags & SEC_CODE)
+	    {
+	      if (sym->flags & (BSF_GLOBAL | BSF_WEAK))
 		{
-		  /* This is a hack to get the minimal symbol type
-		     right for Irix 5, which has absolute addresses
-		     with special section indices for dynamic symbols. */
-		  unsigned short shndx =
-		  ((elf_symbol_type *) sym)->internal_elf_sym.st_shndx;
-
-		  switch (shndx)
+		  ms_type = mst_text;
+		}
+	      else if ((sym->name[0] == '.' && sym->name[1] == 'L')
+		       || ((sym->flags & BSF_LOCAL)
+			   && sym->name[0] == '$'
+			   && sym->name[1] == 'L'))
+		/* Looks like a compiler-generated label.  Skip
+		   it.  The assembler should be skipping these (to
+		   keep executables small), but apparently with
+		   gcc on the (deleted) delta m88k SVR4, it loses.
+		   So to have us check too should be harmless (but
+		   I encourage people to fix this in the assembler
+		   instead of adding checks here).  */
+		continue;
+	      else
+		{
+		  ms_type = mst_file_text;
+		}
+	    }
+	  else if (sym->section->flags & SEC_ALLOC)
+	    {
+	      if (sym->flags & (BSF_GLOBAL | BSF_WEAK))
+		{
+		  if (sym->section->flags & SEC_LOAD)
 		    {
-		    case SHN_MIPS_TEXT:
-		      ms_type = mst_text;
-		      break;
-		    case SHN_MIPS_DATA:
 		      ms_type = mst_data;
-		      break;
-		    case SHN_MIPS_ACOMMON:
+		    }
+		  else
+		    {
 		      ms_type = mst_bss;
-		      break;
-		    default:
-		      ms_type = mst_abs;
-		    }
-
-		  /* If it is an Irix dynamic symbol, skip section name
-		     symbols, relocate all others by section offset. */
-		  if (ms_type != mst_abs)
-		    {
-		      if (sym->name[0] == '.')
-			continue;
-		      symaddr += offset;
 		    }
 		}
-	      else if (sym->section->flags & SEC_CODE)
+	      else if (sym->flags & BSF_LOCAL)
 		{
-		  if (sym->flags & BSF_GLOBAL)
-		    {
-		      ms_type = mst_text;
-		    }
-		  else if ((sym->name[0] == '.' && sym->name[1] == 'L')
-			   || ((sym->flags & BSF_LOCAL)
-			       && sym->name[0] == '$'
-			       && sym->name[1] == 'L'))
-		    /* Looks like a compiler-generated label.  Skip
-		       it.  The assembler should be skipping these (to
-		       keep executables small), but apparently with
-		       gcc on the (deleted) delta m88k SVR4, it loses.
-		       So to have us check too should be harmless (but
-		       I encourage people to fix this in the assembler
-		       instead of adding checks here).  */
-		    continue;
+		  /* Named Local variable in a Data section.
+		     Check its name for stabs-in-elf.  */
+		  int special_local_sect;
+		  if (strcmp ("Bbss.bss", sym->name) == 0)
+		    special_local_sect = SECT_OFF_BSS (objfile);
+		  else if (strcmp ("Ddata.data", sym->name) == 0)
+		    special_local_sect = SECT_OFF_DATA (objfile);
+		  else if (strcmp ("Drodata.rodata", sym->name) == 0)
+		    special_local_sect = SECT_OFF_RODATA (objfile);
 		  else
+		    special_local_sect = -1;
+		  if (special_local_sect >= 0)
 		    {
-		      ms_type = mst_file_text;
-		    }
-		}
-	      else if (sym->section->flags & SEC_ALLOC)
-		{
-		  if (sym->flags & (BSF_GLOBAL | BSF_WEAK))
-		    {
-		      if (sym->section->flags & SEC_LOAD)
+		      /* Found a special local symbol.  Allocate a
+			 sectinfo, if needed, and fill it in.  */
+		      if (sectinfo == NULL)
 			{
-			  ms_type = mst_data;
-			}
-		      else
-			{
-			  ms_type = mst_bss;
-			}
-		    }
-		  else if (sym->flags & BSF_LOCAL)
-		    {
-		      /* Named Local variable in a Data section.
-		         Check its name for stabs-in-elf.  */
-		      int special_local_sect;
-		      if (strcmp ("Bbss.bss", sym->name) == 0)
-			special_local_sect = SECT_OFF_BSS (objfile);
-		      else if (strcmp ("Ddata.data", sym->name) == 0)
-			special_local_sect = SECT_OFF_DATA (objfile);
-		      else if (strcmp ("Drodata.rodata", sym->name) == 0)
-			special_local_sect = SECT_OFF_RODATA (objfile);
-		      else
-			special_local_sect = -1;
-		      if (special_local_sect >= 0)
-			{
-			  /* Found a special local symbol.  Allocate a
-			     sectinfo, if needed, and fill it in.  */
-			  if (sectinfo == NULL)
+			  int max_index;
+			  size_t size;
+
+			  max_index 
+			    = max (SECT_OFF_BSS (objfile),
+				   max (SECT_OFF_DATA (objfile),
+					SECT_OFF_RODATA (objfile)));
+
+			  /* max_index is the largest index we'll
+			     use into this array, so we must
+			     allocate max_index+1 elements for it.
+			     However, 'struct stab_section_info'
+			     already includes one element, so we
+			     need to allocate max_index aadditional
+			     elements.  */
+			  size = (sizeof (struct stab_section_info) 
+				  + (sizeof (CORE_ADDR)
+				     * max_index));
+			  sectinfo = (struct stab_section_info *)
+			    xmalloc (size);
+			  memset (sectinfo, 0, size);
+			  sectinfo->num_sections = max_index;
+			  if (filesym == NULL)
 			    {
-			      int max_index;
-			      size_t size;
-
-			      max_index 
-				= max (SECT_OFF_BSS (objfile),
-				       max (SECT_OFF_DATA (objfile),
-					    SECT_OFF_RODATA (objfile)));
-
-                              /* max_index is the largest index we'll
-                                 use into this array, so we must
-                                 allocate max_index+1 elements for it.
-                                 However, 'struct stab_section_info'
-                                 already includes one element, so we
-                                 need to allocate max_index aadditional
-                                 elements.  */
-			      size = (sizeof (struct stab_section_info) 
-				      + (sizeof (CORE_ADDR)
-					 * max_index));
-			      sectinfo = (struct stab_section_info *)
-				xmalloc (size);
-			      memset (sectinfo, 0, size);
-			      sectinfo->num_sections = max_index;
-			      if (filesym == NULL)
-				{
-				  complaint (&symfile_complaints,
-					     "elf/stab section information %s without a preceding file symbol",
-					     sym->name);
-				}
-			      else
-				{
-				  sectinfo->filename =
-				    (char *) filesym->name;
-				}
+			      complaint (&symfile_complaints,
+					 _("elf/stab section information %s without a preceding file symbol"),
+					 sym->name);
 			    }
-			  if (sectinfo->sections[special_local_sect] != 0)
-			    complaint (&symfile_complaints,
-				       "duplicated elf/stab section information for %s",
-				       sectinfo->filename);
-			  /* BFD symbols are section relative.  */
-			  symaddr = sym->value + sym->section->vma;
-			  /* Relocate non-absolute symbols by the
-                             section offset.  */
-			  if (sym->section != &bfd_abs_section)
-			    symaddr += offset;
-			  sectinfo->sections[special_local_sect] = symaddr;
-			  /* The special local symbols don't go in the
-			     minimal symbol table, so ignore this one.  */
-			  continue;
+			  else
+			    {
+			      sectinfo->filename =
+				(char *) filesym->name;
+			    }
 			}
-		      /* Not a special stabs-in-elf symbol, do regular
-		         symbol processing.  */
-		      if (sym->section->flags & SEC_LOAD)
-			{
-			  ms_type = mst_file_data;
-			}
-		      else
-			{
-			  ms_type = mst_file_bss;
-			}
+		      if (sectinfo->sections[special_local_sect] != 0)
+			complaint (&symfile_complaints,
+				   _("duplicated elf/stab section information for %s"),
+				   sectinfo->filename);
+		      /* BFD symbols are section relative.  */
+		      symaddr = sym->value + sym->section->vma;
+		      /* Relocate non-absolute symbols by the
+			 section offset.  */
+		      if (sym->section != &bfd_abs_section)
+			symaddr += offset;
+		      sectinfo->sections[special_local_sect] = symaddr;
+		      /* The special local symbols don't go in the
+			 minimal symbol table, so ignore this one.  */
+		      continue;
+		    }
+		  /* Not a special stabs-in-elf symbol, do regular
+		     symbol processing.  */
+		  if (sym->section->flags & SEC_LOAD)
+		    {
+		      ms_type = mst_file_data;
 		    }
 		  else
 		    {
-		      ms_type = mst_unknown;
+		      ms_type = mst_file_bss;
 		    }
 		}
 	      else
 		{
-		  /* FIXME:  Solaris2 shared libraries include lots of
-		     odd "absolute" and "undefined" symbols, that play 
-		     hob with actions like finding what function the PC
-		     is in.  Ignore them if they aren't text, data, or bss.  */
-		  /* ms_type = mst_unknown; */
-		  continue;	/* Skip this symbol. */
+		  ms_type = mst_unknown;
 		}
-	      msym = record_minimal_symbol
-		((char *) sym->name, symaddr,
-		 ms_type, sym->section, objfile);
-	      if (msym)
-	      {
-		/* Pass symbol size field in via BFD.  FIXME!!!  */
-		unsigned long size = ((elf_symbol_type *) sym)->internal_elf_sym.st_size;
-		MSYMBOL_SIZE(msym) = size;
-	      }
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
-	      if (msym != NULL)
-		msym->filename = filesymname;
-#endif
-	      ELF_MAKE_MSYMBOL_SPECIAL (sym, msym);
 	    }
+	  else
+	    {
+	      /* FIXME:  Solaris2 shared libraries include lots of
+		 odd "absolute" and "undefined" symbols, that play 
+		 hob with actions like finding what function the PC
+		 is in.  Ignore them if they aren't text, data, or bss.  */
+	      /* ms_type = mst_unknown; */
+	      continue;	/* Skip this symbol. */
+	    }
+	  msym = record_minimal_symbol
+	    ((char *) sym->name, symaddr,
+	     ms_type, sym->section, objfile);
+
+	  if (msym)
+	    {
+	      /* Pass symbol size field in via BFD.  FIXME!!!  */
+	      elf_symbol_type *elf_sym;
+
+	      /* NOTE: uweigand-20071112: A synthetic symbol does not have an
+		 ELF-private part.  However, in some cases (e.g. synthetic
+		 'dot' symbols on ppc64) the udata.p entry is set to point back
+		 to the original ELF symbol it was derived from.  Get the size
+		 from that symbol.  */ 
+	      if (type != ST_SYNTHETIC)
+		elf_sym = (elf_symbol_type *) sym;
+	      else
+		elf_sym = (elf_symbol_type *) sym->udata.p;
+
+	      if (elf_sym)
+		MSYMBOL_SIZE(msym) = elf_sym->internal_elf_sym.st_size;
+	    }
+	  if (msym != NULL)
+	    msym->filename = filesymname;
+	  gdbarch_elf_make_msymbol_special (current_gdbarch, sym, msym);
 	}
-      do_cleanups (back_to);
     }
 }
 
@@ -474,7 +540,6 @@ elf_symtab_read (struct objfile *objfile, int dynamic)
    We look for sections with specific names, to tell us what debug
    format to look for:  FIXME!!!
 
-   dwarf_build_psymtabs() builds psymtabs for DWARF symbols;
    elfstab_build_psymtabs() handles STABS symbols;
    mdebug_build_psymtabs() handles ECOFF debugging information.
 
@@ -491,6 +556,9 @@ elf_symfile_read (struct objfile *objfile, int mainline)
   struct elfinfo ei;
   struct cleanup *back_to;
   CORE_ADDR offset;
+  long symcount = 0, dynsymcount = 0, synthcount, storage_needed;
+  asymbol **symbol_table = NULL, **dyn_symbol_table = NULL;
+  asymbol *synthsyms;
 
   init_minimal_symbol_collection ();
   back_to = make_cleanup_discard_minimal_symbols ();
@@ -498,20 +566,68 @@ elf_symfile_read (struct objfile *objfile, int mainline)
   memset ((char *) &ei, 0, sizeof (ei));
 
   /* Allocate struct to keep track of the symfile */
-  objfile->sym_stab_info = (struct dbx_symfile_info *)
+  objfile->deprecated_sym_stab_info = (struct dbx_symfile_info *)
     xmalloc (sizeof (struct dbx_symfile_info));
-  memset ((char *) objfile->sym_stab_info, 0, sizeof (struct dbx_symfile_info));
+  memset ((char *) objfile->deprecated_sym_stab_info, 0, sizeof (struct dbx_symfile_info));
   make_cleanup (free_elfinfo, (void *) objfile);
 
   /* Process the normal ELF symbol table first.  This may write some 
-     chain of info into the dbx_symfile_info in objfile->sym_stab_info,
+     chain of info into the dbx_symfile_info in objfile->deprecated_sym_stab_info,
      which can later be used by elfstab_offset_sections.  */
 
-  elf_symtab_read (objfile, 0);
+  storage_needed = bfd_get_symtab_upper_bound (objfile->obfd);
+  if (storage_needed < 0)
+    error (_("Can't read symbols from %s: %s"), bfd_get_filename (objfile->obfd),
+	   bfd_errmsg (bfd_get_error ()));
+
+  if (storage_needed > 0)
+    {
+      symbol_table = (asymbol **) xmalloc (storage_needed);
+      make_cleanup (xfree, symbol_table);
+      symcount = bfd_canonicalize_symtab (objfile->obfd, symbol_table);
+
+      if (symcount < 0)
+	error (_("Can't read symbols from %s: %s"), bfd_get_filename (objfile->obfd),
+	       bfd_errmsg (bfd_get_error ()));
+
+      elf_symtab_read (objfile, ST_REGULAR, symcount, symbol_table);
+    }
 
   /* Add the dynamic symbols.  */
 
-  elf_symtab_read (objfile, 1);
+  storage_needed = bfd_get_dynamic_symtab_upper_bound (objfile->obfd);
+
+  if (storage_needed > 0)
+    {
+      dyn_symbol_table = (asymbol **) xmalloc (storage_needed);
+      make_cleanup (xfree, dyn_symbol_table);
+      dynsymcount = bfd_canonicalize_dynamic_symtab (objfile->obfd,
+						     dyn_symbol_table);
+
+      if (dynsymcount < 0)
+	error (_("Can't read symbols from %s: %s"), bfd_get_filename (objfile->obfd),
+	       bfd_errmsg (bfd_get_error ()));
+
+      elf_symtab_read (objfile, ST_DYNAMIC, dynsymcount, dyn_symbol_table);
+    }
+
+  /* Add synthetic symbols - for instance, names for any PLT entries.  */
+
+  synthcount = bfd_get_synthetic_symtab (abfd, symcount, symbol_table,
+					 dynsymcount, dyn_symbol_table,
+					 &synthsyms);
+  if (synthcount > 0)
+    {
+      asymbol **synth_symbol_table;
+      long i;
+
+      make_cleanup (xfree, synthsyms);
+      synth_symbol_table = xmalloc (sizeof (asymbol *) * synthcount);
+      for (i = 0; i < synthcount; i++)
+	synth_symbol_table[i] = synthsyms + i;
+      make_cleanup (xfree, synth_symbol_table);
+      elf_symtab_read (objfile, ST_SYNTHETIC, synthcount, synth_symbol_table);
+    }
 
   /* Install any minimal symbols that have been collected as the current
      minimal symbols for this objfile.  The debug readers below this point
@@ -580,28 +696,21 @@ elf_symfile_read (struct objfile *objfile, int mainline)
       /* DWARF 2 sections */
       dwarf2_build_psymtabs (objfile, mainline);
     }
-  else if (ei.dboffset && ei.lnoffset)
-    {
-      /* DWARF sections */
-      dwarf_build_psymtabs (objfile,
-			    mainline,
-			    ei.dboffset, ei.dbsize,
-			    ei.lnoffset, ei.lnsize);
-    }
 
   /* FIXME: kettenis/20030504: This still needs to be integrated with
      dwarf2read.c in a better way.  */
   dwarf2_build_frame_info (objfile);
 }
 
-/* This cleans up the objfile's sym_stab_info pointer, and the chain of
-   stab_section_info's, that might be dangling from it.  */
+/* This cleans up the objfile's deprecated_sym_stab_info pointer, and
+   the chain of stab_section_info's, that might be dangling from
+   it.  */
 
 static void
 free_elfinfo (void *objp)
 {
   struct objfile *objfile = (struct objfile *) objp;
-  struct dbx_symfile_info *dbxinfo = objfile->sym_stab_info;
+  struct dbx_symfile_info *dbxinfo = objfile->deprecated_sym_stab_info;
   struct stab_section_info *ssi, *nssi;
 
   ssi = dbxinfo->stab_section_info;
@@ -637,10 +746,12 @@ elf_new_init (struct objfile *ignore)
 static void
 elf_symfile_finish (struct objfile *objfile)
 {
-  if (objfile->sym_stab_info != NULL)
+  if (objfile->deprecated_sym_stab_info != NULL)
     {
-      xfree (objfile->sym_stab_info);
+      xfree (objfile->deprecated_sym_stab_info);
     }
+
+  dwarf2_free_objfile (objfile);
 }
 
 /* ELF specific initialization routine for reading symbols.
@@ -673,7 +784,7 @@ void
 elfstab_offset_sections (struct objfile *objfile, struct partial_symtab *pst)
 {
   char *filename = pst->filename;
-  struct dbx_symfile_info *dbx = objfile->sym_stab_info;
+  struct dbx_symfile_info *dbx = objfile->deprecated_sym_stab_info;
   struct stab_section_info *maybe = dbx->stab_section_info;
   struct stab_section_info *questionable = 0;
   int i;
@@ -703,7 +814,7 @@ elfstab_offset_sections (struct objfile *objfile, struct partial_symtab *pst)
   if (maybe == 0 && questionable != 0)
     {
       complaint (&symfile_complaints,
-		 "elf/stab section information questionable for %s", filename);
+		 _("elf/stab section information questionable for %s"), filename);
       maybe = questionable;
     }
 
@@ -722,7 +833,7 @@ elfstab_offset_sections (struct objfile *objfile, struct partial_symtab *pst)
   /* We were unable to find any offsets for this file.  Complain.  */
   if (dbx->stab_section_info)	/* If there *is* any info, */
     complaint (&symfile_complaints,
-	       "elf/stab section information missing for %s", filename);
+	       _("elf/stab section information missing for %s"), filename);
 }
 
 /* Register that we are able to handle ELF object file formats.  */
@@ -735,6 +846,9 @@ static struct sym_fns elf_sym_fns =
   elf_symfile_read,		/* sym_read: read a symbol file into symtab */
   elf_symfile_finish,		/* sym_finish: finished with file, cleanup */
   default_symfile_offsets,	/* sym_offsets:  Translate ext. to int. relocation */
+  elf_symfile_segments,		/* sym_segments: Get segment information from
+				   a file.  */
+  NULL,                         /* sym_read_linetable */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

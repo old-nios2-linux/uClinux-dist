@@ -1,12 +1,13 @@
 /* Target-dependent code for the i386.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef I386_TDEP_H
 #define I386_TDEP_H
@@ -39,7 +38,7 @@ struct regcache;
    - SSE control register
 
    The general purpose registers for the x86-64 architecture are quite
-   different from IA-32.  Therefore, the FP0_REGNUM target macro
+   different from IA-32.  Therefore, gdbarch_fp0_regnum
    determines the register number at which the FPU data registers
    start.  The number of FPU data and control registers is the same
    for both architectures.  The number of SSE registers however,
@@ -103,6 +102,10 @@ struct gdbarch_tdep
      is deprecated, please use `sc_reg_offset' instead.  */
   int sc_pc_offset;
   int sc_sp_offset;
+
+  /* ISA-specific data types.  */
+  struct type *i386_mmx_type;
+  struct type *i386_sse_type;
 };
 
 /* Floating-point registers.  */
@@ -149,11 +152,23 @@ enum i386_regnum
 /* Size of the largest register.  */
 #define I386_MAX_REGISTER_SIZE	16
 
+/* Types for i386-specific registers.  */
+extern struct type *i386_eflags_type;
+extern struct type *i386_mxcsr_type;
+
+extern struct type *i386_mmx_type (struct gdbarch *gdbarch);
+extern struct type *i386_sse_type (struct gdbarch *gdbarch);
+
+/* Segment selectors.  */
+#define I386_SEL_RPL	0x0003  /* Requester's Privilege Level mask.  */
+#define I386_SEL_UPL	0x0003	/* User Privilige Level. */
+#define I386_SEL_KPL	0x0000	/* Kernel Privilige Level. */
+
 /* Functions exported from i386-tdep.c.  */
 extern CORE_ADDR i386_pe_skip_trampoline_code (CORE_ADDR pc, char *name);
 
 /* Return the name of register REGNUM.  */
-extern char const *i386_register_name (int regnum);
+extern char const *i386_register_name (struct gdbarch * gdbarch, int regnum);
 
 /* Return non-zero if REGNUM is a member of the specified group.  */
 extern int i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
@@ -165,6 +180,14 @@ extern int i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 extern void i386_supply_gregset (const struct regset *regset,
 				 struct regcache *regcache, int regnum,
 				 const void *gregs, size_t len);
+
+/* Collect register REGNUM from the register cache REGCACHE and store
+   it in the buffer specified by GREGS and LEN as described by the
+   general-purpose register set REGSET.  If REGNUM is -1, do this for
+   all registers in REGSET.  */
+extern void i386_collect_gregset (const struct regset *regset,
+				  const struct regcache *regcache,
+				  int regnum, void *gregs, size_t len);
 
 /* Return the appropriate register set for the core section identified
    by SECT_NAME and SECT_SIZE.  */

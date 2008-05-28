@@ -1,6 +1,6 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,12 +17,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #ifndef INTERPS_H
 #define INTERPS_H
+
+#include "exceptions.h"
 
 struct ui_out;
 struct interp;
@@ -31,14 +31,16 @@ extern int interp_resume (struct interp *interp);
 extern int interp_suspend (struct interp *interp);
 extern int interp_prompt_p (struct interp *interp);
 extern int interp_exec_p (struct interp *interp);
-extern int interp_exec (struct interp *interp, const char *command);
+extern struct gdb_exception interp_exec (struct interp *interp,
+					 const char *command);
 extern int interp_quiet_p (struct interp *interp);
 
 typedef void *(interp_init_ftype) (void);
 typedef int (interp_resume_ftype) (void *data);
 typedef int (interp_suspend_ftype) (void *data);
 typedef int (interp_prompt_p_ftype) (void *data);
-typedef int (interp_exec_ftype) (void *data, const char *command);
+typedef struct gdb_exception (interp_exec_ftype) (void *data,
+						  const char *command);
 typedef void (interp_command_loop_ftype) (void *data);
 
 struct interp_procs
@@ -72,5 +74,6 @@ extern void clear_interpreter_hooks (void);
 #define INTERP_MI3             "mi3"
 #define INTERP_MI		"mi"
 #define INTERP_TUI		"tui"
+#define INTERP_INSIGHT		"insight"
 
 #endif

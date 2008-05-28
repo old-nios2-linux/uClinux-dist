@@ -1,12 +1,12 @@
 /* Handling of inferior events for the event loop for GDB, the GNU debugger.
-   Copyright 1999 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2007, 2008 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "inferior.h"		/* For fetch_inferior_event. */
@@ -26,6 +24,7 @@
 #include "event-top.h"
 #include "inf-loop.h"
 #include "remote.h"
+#include "exceptions.h"
 
 static int fetch_inferior_event_wrapper (gdb_client_data client_data);
 static void complete_execution (void);
@@ -47,7 +46,7 @@ inferior_event_handler (enum inferior_event_type event_type,
   switch (event_type)
     {
     case INF_ERROR:
-      printf_unfiltered ("error detected from target.\n");
+      printf_unfiltered (_("error detected from target.\n"));
       target_async (NULL, 0);
       pop_target ();
       discard_all_continuations ();
@@ -93,7 +92,7 @@ inferior_event_handler (enum inferior_event_type event_type,
 
     case INF_TIMER:
     default:
-      printf_unfiltered ("Event type not recognized.\n");
+      printf_unfiltered (_("Event type not recognized.\n"));
       break;
     }
 }
@@ -127,6 +126,6 @@ complete_execution (void)
   else
     {
       if (exec_done_display_p)
-	printf_unfiltered ("completed.\n");
+	printf_unfiltered (_("completed.\n"));
     }
 }

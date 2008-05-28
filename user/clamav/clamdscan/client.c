@@ -52,8 +52,6 @@
 # define SOCKET_INET	AF_INET
 #endif
 
-/* #define ENABLE_FD_PASSING	    FIXME: Doesn't work yet */
-
 void move_infected(const char *filename, const struct optstruct *opt);
 int notremoved = 0, notmoved = 0;
 
@@ -83,20 +81,18 @@ static int dsresult(int sockd, const struct optstruct *opt)
 		    *pt = 0;
 		    move_infected(buff, opt);
 		} else {
-		    mprintf("@Broken data format. File not %s.\n", opt_check(opt, "move") ? "moved" : "copied");
+		    logg("!Incorrect output from clamd. File not %s.\n", opt_check(opt, "move") ? "moved" : "copied");
 		}
 
 	    } else if(opt_check(opt, "remove")) {
 		if(!(pt = strrchr(buff, ':'))) {
-		    mprintf("@Broken data format. File not removed.\n");
+		    logg("!Incorrect output from clamd. File not removed.\n");
 		} else {
 		    *pt = 0;
 		    if(unlink(buff)) {
-			mprintf("~%s: Can't remove.\n", buff);
-			logg("~%s: Can't remove.\n", buff);
+			logg("!%s: Can't remove.\n", buff);
 			notremoved++;
 		    } else {
-			mprintf("~%s: Removed.\n", buff);
 			logg("~%s: Removed.\n", buff);
 		    }
 		}
@@ -104,7 +100,7 @@ static int dsresult(int sockd, const struct optstruct *opt)
 	}
 
 	if(strstr(buff, "ERROR\n")) {
-	    logg("%s", buff);
+	    logg("~%s", buff);
 	    waserror = 1;
 	}
     }
@@ -140,50 +136,6 @@ static int dsfile(int sockd, const char *scantype, const char *filename, const s
 
     return ret;
 }
-
-#if defined(ENABLE_FD_PASSING) && defined(HAVE_SENDMSG) && (defined(HAVE_ACCRIGHTS_IN_MSGHDR) || defined(HAVE_CONTROL_IN_MSGHDR)) && !defined(C_CYGWIN)
-
-/* Submitted by Richard Lyons <frob-clamav*webcentral.com.au> */
-static int dsfd(int sockfd, int fd, const struct optstruct *opt)
-{
-	struct iovec iov[1];
-	struct msghdr msg;
-#ifdef HAVE_CONTROL_IN_MSGHDR
-#ifndef CMSG_SPACE
-#define CMSG_SPACE(len)	    (_CMSG_ALIGN(sizeof(struct cmsghdr)) + _CMSG_ALIGN(len))
-#endif
-#ifndef CMSG_LEN
-#define CMSG_LEN(len)	    (_CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
-#endif
-	struct cmsghdr *cmsg;
-	char tmp[CMSG_SPACE(sizeof(fd))];
-#endif
-
-    iov[0].iov_base = "";
-    iov[0].iov_len = 1;
-    memset(&msg, 0, sizeof(msg));
-    msg.msg_iov = iov;
-    msg.msg_iovlen = 1;
-#ifdef HAVE_CONTROL_IN_MSGHDR
-    msg.msg_control = tmp;
-    msg.msg_controllen = sizeof(tmp);
-    cmsg = CMSG_FIRSTHDR(&msg);
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
-    *(int *)CMSG_DATA(cmsg) = fd;
-#endif
-#ifdef HAVE_ACCRIGHTS_IN_MSGHDR
-    msg.msg_accrights = (caddr_t)&fd;
-    msg.msg_accrightslen = sizeof(fd);
-#endif
-    if (sendmsg(sockfd, &msg, 0) != iov[0].iov_len) {
-	logg("^Can't write to the socket.\n");
-	return -1;
-    }
-    return dsresult(sockfd, opt);
-}
-#endif
 
 static int dsstream(int sockd, const struct optstruct *opt)
 {
@@ -242,7 +194,7 @@ static int dsstream(int sockd, const struct optstruct *opt)
 	    server.sin_addr.s_addr = peer.sin_addr.s_addr;
 	    break;
 	default:
-	    mprintf("^Unexpected socket type: %d.\n", peer.sin_family);
+	    logg("^Unexpected socket type: %d.\n", peer.sin_family);
 	    return -1;
     }
 
@@ -390,6 +342,29 @@ static int dconnect(const struct optstruct *opt)
     return sockd;
 }
 
+int get_clamd_version(const struct optstruct *opt)
+{
+	char buff[64];
+	int bread, sockd;
+
+
+    if((sockd = dconnect(opt)) < 0)
+	return 2;
+
+    if(write(sockd, "VERSION", 7) <= 0) {
+	logg("^Can't write to the socket.\n");
+	return 2;
+    }
+
+    while((bread = read(sockd, buff, sizeof(buff)-1)) > 0) {
+	buff[bread] = '\0';
+	printf("%s\n", buff);
+    }
+
+    close(sockd);
+    return 0;
+}
+
 int client(const struct optstruct *opt, int *infected)
 {
 	char cwd[200], *fullpath;
@@ -421,18 +396,6 @@ int client(const struct optstruct *opt, int *infected)
 
 	close(sockd);
 
-#if defined(ENABLE_FD_PASSING) && defined(HAVE_SENDMSG) && (defined(HAVE_ACCRIGHTS_IN_MSGHDR) || defined(HAVE_CONTROL_IN_MSGHDR)) && !defined(C_CYGWIN)
-    } else if(!strcmp(opt->filename, "-")) { /* scan data from stdin */
-	if((sockd = dconnect(opt)) < 0)
-	    return 2;
-
-	if((ret = dsfd(sockd, 0, opt)) >= 0)
-	    *infected += ret;
-	else
-	    errors++;
-
-	close(sockd);
-#else
     } else if(!strcmp(opt->filename, "-")) { /* scan data from stdin */
 	if((sockd = dconnect(opt)) < 0)
 	    return 2;
@@ -443,7 +406,6 @@ int client(const struct optstruct *opt, int *infected)
 	    errors++;
 
 	close(sockd);
-#endif
 
     } else {
 	int x;

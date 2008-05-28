@@ -11,14 +11,14 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netinet/in.h>
-#ifndef NO_SHARED_LIBS
-#include <dlfcn.h>
-#endif
 #include <time.h>
 #include <netdb.h>
 #include "libiptc/libiptc.h"
 #include "iptables.h"
+
+#ifndef NO_SHARED_LIBS
+#include <dlfcn.h>
+#endif
 
 static int binary = 0, counters = 0;
 
@@ -144,6 +144,9 @@ static int print_match(const struct ipt_entry_match *e,
 /* print a given ip including mask if neccessary */
 static void print_ip(char *prefix, u_int32_t ip, u_int32_t mask, int invert)
 {
+	u_int32_t bits, hmask = ntohl(mask);
+	int i;
+
 	if (!mask && !ip && !invert)
 		return;
 
@@ -152,10 +155,19 @@ static void print_ip(char *prefix, u_int32_t ip, u_int32_t mask, int invert)
 		invert ? "! " : "",
 		IP_PARTS(ip));
 
-	if (mask != 0xffffffff) 
-		printf("/%u.%u.%u.%u ", IP_PARTS(mask));
+	if (mask == 0xFFFFFFFFU) {
+		printf("/32 ");
+		return;
+	}
+
+	i    = 32;
+	bits = 0xFFFFFFFEU;
+	while (--i >= 0 && hmask != bits)
+		bits <<= 1;
+	if (i >= 0)
+		printf("/%u ", i);
 	else
-		printf(" ");
+		printf("/%u.%u.%u.%u ", IP_PARTS(mask));
 }
 
 /* We want this to be readable, so only print out neccessary fields.
@@ -245,7 +257,9 @@ static int for_each_table(int (*func)(const char *tablename))
 
 	procfile = fopen("/proc/net/ip_tables_names", "r");
 	if (!procfile)
-		return 0;
+		exit_error(OTHER_PROBLEM,
+			   "Unable to open /proc/net/ip_tables_names: %s\n",
+			   strerror(errno));
 
 	while (fgets(tablename, sizeof(tablename), procfile)) {
 		if (tablename[strlen(tablename) - 1] != '\n')

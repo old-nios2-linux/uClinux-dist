@@ -13,7 +13,7 @@
  
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. */
+    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. */
 
 /* This file contains a complete ARMulator memory model, modelling a
 "virtual memory" system. A much simpler model can be found in armfast.c,
@@ -139,7 +139,7 @@ ARMul_MemoryInit (ARMul_State * state, unsigned long initmemsize)
   if (initmemsize)
     state->MemSize = initmemsize;
 
-  pagetable = (ARMword **) malloc (sizeof (ARMword) * NUMPAGES);
+  pagetable = (ARMword **) malloc (sizeof (ARMword *) * NUMPAGES);
 
   if (pagetable == NULL)
     return FALSE;

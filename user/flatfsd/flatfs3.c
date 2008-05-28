@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
+#include <utime.h>
 #include <assert.h>
 #include <syslog.h>
 #include <zlib.h>
@@ -39,7 +40,7 @@
 /*
  * Maximum path name size that we will support. This is completely arbitary.
  */
-#define	MAXNAME	128
+#define	MAXNAME	256
 
 /*
  * General work buffer size (these are often allocated on the stack).
@@ -66,12 +67,24 @@ struct flatzfs_s {
 struct flatzfs_s flatzfs;
 
 /*
- *	Keep track of the current highest tstamp value, and which partition
- *	the last restore came from. Helps us when it comes time to save the
- *	fs again.
+ * Keep track of the current highest tstamp value, and which partition
+ * the last restore came from. Helps us when it comes time to save the
+ * fs again.
  */
 int numvalid = -1;
 unsigned int numstamp;
+
+/*****************************************************************************/
+
+/*
+ * Currently the code here supports the version 3 and version 4 formats.
+ * It can read both types, it only ever writes version 4.
+ */
+
+static inline int flat3_validmagic(unsigned int m)
+{
+	return ((m == FLATFS_MAGIC_V3) || (m == FLATFS_MAGIC_V4));
+}
 
 /*****************************************************************************/
 
@@ -294,7 +307,7 @@ static int flat3_gethdroffset(off_t off, struct flathdr3 *hp)
                 return ERROR_CODE();
 	if (flat_read((void *) hp, sizeof(*hp)) != sizeof(*hp))
 		return ERROR_CODE();
-	if (hp->magic != FLATFS_MAGIC_V3)
+	if (! flat3_validmagic(hp->magic))
 		return ERROR_CODE();
 	return 0;
 }
@@ -314,7 +327,7 @@ unsigned int flat3_gethdr(void)
 
 	psize = flat_part_length();
 	rc = flat3_gethdroffset(0, &hdr);
-	if ((rc < 0) || (hdr.magic != FLATFS_MAGIC_V3)) {
+	if ((rc < 0) || (! flat3_validmagic(hdr.magic))) {
 		rc = flat3_gethdroffset(psize, &hdr);
 		if (rc < 0)
 			hdr.magic = 0;
@@ -354,19 +367,84 @@ static void parseconfig(char *buf)
  * and build the directories as required.
  */
 
-static int makefilepath(char *filename)
+static int restoredirectory(char *dirname, struct flatent *ent, struct flatent2 *ent2, int dowrite)
 {
-	char *s;
+	if (dowrite) {
+		if (mkdir(dirname, (mode_t) ent2->mode) < 0)
+			return ERROR_CODE();
+		chown(dirname, (uid_t) ent2->uid, (gid_t) ent2->gid);
+	}
 
-	for (s = filename; (*s != '\0'); s++) {
-		if (*s == '/') {
-			*s = '\0';
-			if (mkdir(filename, 0777) < 0) {
-				if (errno != EEXIST)
-					return ERROR_CODE();
-			}
-			*s = '/';
+	return 0;
+}
+
+/*****************************************************************************/
+
+/*
+ * Read our special flatfsd config file.
+ */
+
+static int restoredotconfig(char *filename, struct flatent *ent, struct flatent2 *ent2, int dowrite)
+{
+	char *confbuf;
+
+	if (ent->filelen == 0) {
+#ifndef HAS_RTC
+		/* This file was not written correctly, so just ignore it */
+		syslog(LOG_WARNING, "%s is zero length, ignoring", filename);
+#endif
+	} else if ((confbuf = malloc(ent->filelen)) == 0) {
+		syslog(LOG_ERR, "Failed to allocate memory for %s -- ignoring it", filename);
+	} else {
+		if (flatz_read(confbuf, ent->filelen) != ent->filelen)
+			return ERROR_CODE();
+#ifndef HAS_RTC
+		if (dowrite)
+			parseconfig(confbuf);
+#endif
+		free(confbuf);
+	}
+
+	return 0;
+}
+
+/*****************************************************************************/
+
+/*
+ * Write out the contents of the file from the flash backing store to create
+ * a regular file in the RAM filesystem.
+ */
+
+static int restorefile(char *filename, struct flatent *ent, struct flatent2 *ent2, int dowrite)
+{
+	unsigned char buf[BUF_SIZE];
+	unsigned int size, n;
+	int fdfile = -1;
+
+	if (dowrite) {
+		fdfile = open(filename, (O_WRONLY | O_TRUNC | O_CREAT), 0600);
+		if (fdfile < 0)
+			return ERROR_CODE();
+	}
+
+	for (size = ent->filelen; (size > 0); size -= n) {
+		n = (size > sizeof(buf)) ? sizeof(buf) : size;
+		if (flatz_read(&buf[0], n) != n)
+			return ERROR_CODE();
+		if (dowrite) {
+			if (write(fdfile, &buf[0], n) != n)
+				return ERROR_CODE();
 		}
+	}
+
+	if (dowrite) {
+		struct utimbuf tt;;
+		fchmod(fdfile, (mode_t) (ent2->mode & 07777));
+		fchown(fdfile, (uid_t) ent2->uid, (gid_t) ent2->gid);
+		close(fdfile);
+		tt.actime = ent2->atime;
+		tt.modtime = ent2->mtime;
+		utime(filename, &tt);
 	}
 
 	return 0;
@@ -384,16 +462,21 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 {
 	struct flathdr3 hdr;
 	struct flatent ent;
-	unsigned int size, n = 0;
-	char filename[MAXNAME], *confbuf;
-	unsigned char buf[BUF_SIZE];
-	mode_t mode;
-	int fdfile, rc;
+	struct flatent2 ent2;
+	char filename[MAXNAME], padding[4];
+	unsigned int n;
+	int rc;
+
+	memset(&ent2, 0, sizeof(ent2));
 
 	if ((rc = flatz_open("r")) < 0)
 		return rc;
 
-	if (flat_seek(offset+sizeof(hdr), SEEK_SET) != (offset+sizeof(hdr))) {
+	if (flat_seek(offset, SEEK_SET) != offset) {
+		flatz_close();
+		return ERROR_CODE();
+	}
+	if (flat_read(&hdr, sizeof(hdr)) != sizeof(hdr)) {
 		flatz_close();
 		return ERROR_CODE();
 	}
@@ -420,72 +503,37 @@ static int flat3_restorefsoffset(off_t offset, int dowrite)
 			return ERROR_CODE();
 		}
 
-		if (makefilepath(filename)) {
-			flatz_close();
-			return ERROR_CODE();
-		}
+		if (hdr.magic == FLATFS_MAGIC_V3) {
+			if (flatz_read((void *) &ent2.mode, sizeof(ent2.mode)) != sizeof(ent2.mode)) {
+				flatz_close();
+				return ERROR_CODE();
+			}
+		} else /* FLATFS_MAGIC_V4 */ {
+			if (flatz_read(&ent2, sizeof(ent2)) != sizeof(ent2)) {
+				flatz_close();
+				return ERROR_CODE();
+			}
 
-		if (flatz_read((void *) &mode, sizeof(mode)) != sizeof(mode)) {
-			flatz_close();
-			return ERROR_CODE();
 		}
 
 		/*fprintf(stderr, "filename - %s, mode - %o, namelen - %d\n",
 				filename, mode, ent.namelen);*/
 
-		if (strcmp(filename, FLATFSD_CONFIG) == 0) {
-			/* Read our special flatfsd config file into memory */
-			if (ent.filelen == 0) {
-#ifndef HAS_RTC
-				/* This file was not written correctly, so just ignore it */
-				syslog(LOG_WARNING, "%s is zero length, ignoring", filename);
-#endif
-			} else if ((confbuf = malloc(ent.filelen)) == 0) {
-				syslog(LOG_ERR, "Failed to allocate memory for %s -- ignoring it", filename);
-			} else {
-				if (flatz_read(confbuf, ent.filelen) != ent.filelen) {
-					flatz_close();
-					return ERROR_CODE();
-				}
-#ifndef HAS_RTC
-				if (dowrite)
-					parseconfig(confbuf);
-#endif
-				free(confbuf);
-			}
+		if (S_ISDIR(ent2.mode)) {
+			rc = restoredirectory(filename, &ent, &ent2, dowrite);
+		} else if (strcmp(filename, FLATFSD_CONFIG) == 0) {
+			rc = restoredotconfig(filename, &ent, &ent2, dowrite);
 		} else {
-			/* Write contents of file out for real. */
-			if (dowrite) {
-				fdfile = open(filename, (O_WRONLY | O_TRUNC | O_CREAT), mode);
-				if (fdfile < 0) {
-					flatz_close();
-					return ERROR_CODE();
-				}
-			} else {
-				fdfile = -1;
-			}
-			
-			for (size = ent.filelen; (size > 0); size -= n) {
-				n = (size > sizeof(buf)) ? sizeof(buf) : size;
-				if (flatz_read(&buf[0], n) != n) {
-					flatz_close();
-					return ERROR_CODE();
-				}
-				if (dowrite) {
-					if (write(fdfile, (void *) &buf[0], n) != n) {
-						flatz_close();
-						return ERROR_CODE();
-					}
-				}
-			}
-
-			if (dowrite)
-				close(fdfile);
+			rc = restorefile(filename, &ent, &ent2, dowrite);
+		}
+		if (rc) {
+			flatz_close();
+			return rc;
 		}
 
 		/* Read alignment padding */
 		n = ((ent.filelen + 3) & ~0x3) - ent.filelen;
-		if (flatz_read(&buf[0], n) != n) {
+		if (flatz_read(&padding[0], n) != n) {
 			flatz_close();
 			return ERROR_CODE();
 		}
@@ -550,9 +598,9 @@ static int oldest_header(struct flathdr3 *hdr1, struct flathdr3 *hdr0)
 	unsigned stamp1, stamp0;
 
 	/* Partition without magic is invalid */
-	if (hdr0->magic != FLATFS_MAGIC_V3)
+	if (! flat3_validmagic(hdr0->magic))
 		return 0;
-	if (hdr1->magic != FLATFS_MAGIC_V3)
+	if (! flat3_validmagic(hdr1->magic))
 		return 1;
 
 	/* Partition with tstamp of 0xffffffff indicates that 
@@ -620,7 +668,7 @@ int flat3_restorefs(int version, int dowrite)
 
 	/* Get base header, and see how many partitions we have */
 	rc = flat3_gethdroffset(0, &hdr[0]);
-	if (hdr[0].magic != FLATFS_MAGIC_V3)
+	if (! flat3_validmagic(hdr[0].magic))
 		memset(&hdr[0], 0, sizeof(hdr[0]));
 
 	if ((hdr[0].nrparts == 2) || (nrparts == 2)) {
@@ -662,7 +710,7 @@ int flat3_restorefs(int version, int dowrite)
 	}
 
 dobase:
-	if (hdr[part].magic != FLATFS_MAGIC_V3)
+	if (! flat3_validmagic(hdr[part].magic))
 		return ERROR_CODE();
 
 	off = (part) ? psize : 0;
@@ -670,8 +718,7 @@ dobase:
 	numvalid = part;
 	numstamp = hdr[part].tstamp;
 	if (dowrite) {
-		logd("read-partition", "%d, tstamp=%d",
-			part, hdr[part].tstamp);
+		logd("read-partition", "%d, tstamp=%d", part, hdr[part].tstamp);
 		syslog(LOG_INFO, "restore fs+ from partition %d, tstamp=%d",
 			part, numstamp);
 	}
@@ -682,12 +729,12 @@ dobase:
 
 static int writefile(char *name, unsigned int *ptotal, int dowrite)
 {
+	char buf[BUF_SIZE];
 	struct flatent ent;
+	struct flatent2 ent2;
 	struct stat st;
 	unsigned int size;
 	int fdfile, zero = 0;
-	mode_t mode;
-	char buf[BUF_SIZE];
 	int n, written;
 
 	/*
@@ -697,6 +744,8 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 	 */
 	if (stat(name, &st) < 0)
 		return ERROR_CODE();
+	if (! S_ISREG(st.st_mode))
+		st.st_size = 0;
 
 	size = strlen(name) + 1;
 	if (size > MAXNAME) {
@@ -716,11 +765,19 @@ static int writefile(char *name, unsigned int *ptotal, int dowrite)
 	if (flatz_write(&zero, size, dowrite) < 0)
 		return ERROR_CODE();
 
-	/* Write out the permissions */
-	mode = (mode_t) st.st_mode;
-	size = sizeof(mode);
-	if (flatz_write(&mode, size, dowrite) < 0)
+	/* Write out the permissions, ownership, etc */
+	ent2.length = sizeof(ent2);
+	ent2.mode = st.st_mode;
+	ent2.uid = st.st_uid;
+	ent2.gid = st.st_gid;
+	ent2.atime = st.st_atime;
+	ent2.mtime = st.st_mtime;
+	if (flatz_write(&ent2, sizeof(ent2), dowrite) < 0)
 		return ERROR_CODE();
+
+	/* If not a regular file then we are done here */
+	if (! S_ISREG(st.st_mode))
+		return 0;
 
 	/* Write the contents of the file. */
 	size = st.st_size;
@@ -798,6 +855,12 @@ static int writedirectory(char *path, DIR *dirp, unsigned int *ptotal, int dowri
 		if (stat(filename, &st) < 0)
 			return ERROR_CODE();
 
+		rc = writefile(filename, ptotal, dowrite);
+		if (rc < 0) {
+			syslog(LOG_ERR, "Failed to write write file %s "
+				"(%d): %m %d", filename, rc, errno);
+		}
+
 		if (S_ISDIR(st.st_mode)) {
 			if ((subdirp = opendir(filename)) == NULL)
 				return ERROR_CODE();
@@ -806,15 +869,6 @@ static int writedirectory(char *path, DIR *dirp, unsigned int *ptotal, int dowri
 			if (rc)
 				return rc;
 			continue;
-		}
-
-		if (! S_ISREG(st.st_mode))
-			continue;
-
-		rc = writefile(filename, ptotal, dowrite);
-		if (rc < 0) {
-			syslog(LOG_ERR, "Failed to write write file %s "
-				"(%d): %m %d", filename, rc, errno);
 		}
 	}
 
@@ -900,7 +954,7 @@ static int flat3_savefsoffset(int dowrite, off_t off, size_t len, int nrparts, u
 		numstamp = next_tstamp(numstamp);
 
 		/* Construct header */
-		hdr.magic = FLATFS_MAGIC_V3;
+		hdr.magic = FLATFS_MAGIC_V4;
 		hdr.chksum = tstamp_chksum(numstamp);
 		hdr.nrparts = nrparts;
 		hdr.tstamp = numstamp;

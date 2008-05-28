@@ -1,20 +1,19 @@
 # static.exp -- test script, for GDB, the GNU debugger.
 
-# Copyright 2004 Free Software Foundation, Inc.
+# Copyright 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Based on manythreads written by Jeff Johnston, contributed by Red
 # Hat.
@@ -50,7 +49,7 @@ runto_main
 gdb_test "break sem_post"
 set test "Continue to main's call of sem_post"
 gdb_test_multiple "continue" "$test" {
-    -re " sem_post .*$gdb_prompt " {
+    -re "Breakpoint .*, .*sem_post .*$gdb_prompt " {
 	pass "$test"
     }
     -re "Program received signal .*$gdb_prompt " {
@@ -62,10 +61,17 @@ gdb_test_multiple "continue" "$test" {
 # See if handle SIG32 helps (a little) with a static multi-threaded
 # program.
 
+set sig "SIG32"
+
+# SIGRTMIN is 37 on hppa-linux and hpux
+if [istarget hppa*-*-*] {
+  set sig "SIG37"
+}
+
 rerun_to_main
-gdb_test "handle SIG32 nostop noprint pass"
-set test "Handle SIG32 helps"
-gdb_test "continue" " sem_post .*" "handle SIG32 helps"
+gdb_test "handle $sig nostop noprint pass"
+set test "Handle $sig helps"
+gdb_test "continue" " .*sem_post .*" "handle $sig helps"
 
 
 # See if info threads produces anything approaching a thread list.

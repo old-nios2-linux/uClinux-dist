@@ -27,6 +27,8 @@
  *
  */
 
+#include "os_select.h"
+
 typedef unsigned int pcr_req_id;
 
 typedef struct wire_chunk {
@@ -134,8 +136,8 @@ extern void init_crypto_helpers(int nhelpers);
 extern err_t send_crypto_helper_request(struct pluto_crypto_req *r
 					, struct pluto_crypto_req_cont *cn
 					, bool *toomuch);
-extern void pluto_crypto_helper_sockets(fd_set *readfds);
-extern int  pluto_crypto_helper_ready(fd_set *readfds);
+extern void pluto_crypto_helper_sockets(os_fd_set *readfds);
+extern int  pluto_crypto_helper_ready(os_fd_set *readfds);
 
 extern void pluto_do_crypto_op(struct pluto_crypto_req *r);
 extern void pluto_crypto_helper(int fd, int helpernum);

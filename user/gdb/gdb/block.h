@@ -1,12 +1,12 @@
 /* Code dealing with blocks for GDB.
 
-   Copyright 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef BLOCK_H
 #define BLOCK_H
@@ -30,6 +28,7 @@ struct block_namespace_info;
 struct using_direct;
 struct obstack;
 struct dictionary;
+struct addrmap;
 
 /* All of the name-scope contours of the program
    are represented by `struct block' objects.
@@ -97,25 +96,12 @@ struct block
     cplus_specific;
   }
   language_specific;
-
-  /* Version of GCC used to compile the function corresponding
-     to this block, or 0 if not compiled with GCC.  When possible,
-     GCC should be compatible with the native compiler, or if that
-     is not feasible, the differences should be fixed during symbol
-     reading.  As of 16 Apr 93, this flag is never used to distinguish
-     between gcc2 and the native compiler.
-
-     If there is no function corresponding to this block, this meaning
-     of this flag is undefined.  */
-
-  unsigned char gcc_compile_flag;
 };
 
 #define BLOCK_START(bl)		(bl)->startaddr
 #define BLOCK_END(bl)		(bl)->endaddr
 #define BLOCK_FUNCTION(bl)	(bl)->function
 #define BLOCK_SUPERBLOCK(bl)	(bl)->superblock
-#define BLOCK_GCC_COMPILED(bl)	(bl)->gcc_compile_flag
 #define BLOCK_DICT(bl)		(bl)->dict
 #define BLOCK_NAMESPACE(bl)   (bl)->language_specific.cplus_specific.namespace
 
@@ -130,12 +116,17 @@ struct blockvector
 {
   /* Number of blocks in the list.  */
   int nblocks;
+  /* An address map mapping addresses to blocks in this blockvector.
+     This pointer is zero if the blocks' start and end addresses are
+     enough.  */
+  struct addrmap *map;
   /* The blocks themselves.  */
   struct block *block[1];
 };
 
 #define BLOCKVECTOR_NBLOCKS(blocklist) (blocklist)->nblocks
 #define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block[n]
+#define BLOCKVECTOR_MAP(blocklist) ((blocklist)->map)
 
 /* Special block numbers */
 
@@ -145,10 +136,11 @@ extern struct symbol *block_function (const struct block *);
 
 extern int contained_in (const struct block *, const struct block *);
 
-extern struct blockvector *blockvector_for_pc (CORE_ADDR, int *);
+extern struct blockvector *blockvector_for_pc (CORE_ADDR, struct block **);
 
 extern struct blockvector *blockvector_for_pc_sect (CORE_ADDR, asection *,
-						    int *, struct symtab *);
+						    struct block **,
+                                                    struct symtab *);
 
 extern struct block *block_for_pc (CORE_ADDR);
 

@@ -1,6 +1,8 @@
 #ifndef _SYS_VFS_H
 #define _SYS_VFS_H
 
+typedef unsigned long long u64;
+
 #include <features.h>
 #include <linux/vfs.h>
 

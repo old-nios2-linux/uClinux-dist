@@ -1,13 +1,13 @@
 /* Definitions for symbol file management in GDB.
 
-   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (OBJFILES_H)
 #define OBJFILES_H
@@ -148,24 +146,6 @@ struct obj_section
     /* True if this "overlay section" is mapped into an "overlay region". */
     int ovly_mapped;
   };
-
-/* An import entry contains information about a symbol that
-   is used in this objfile but not defined in it, and so needs
-   to be imported from some other objfile */
-/* Currently we just store the name; no attributes. 1997-08-05 */
-typedef char *ImportEntry;
-
-
-/* An export entry contains information about a symbol that
-   is defined in this objfile and available for use in other
-   objfiles */
-typedef struct
-  {
-    char *name;			/* name of exported symbol */
-    int address;		/* offset subject to relocation */
-    /* Currently no other attributes 1997-08-05 */
-  }
-ExportEntry;
 
 
 /* The "objstats" structure provides a place for gdb to record some
@@ -299,18 +279,6 @@ struct objfile
 
     struct minimal_symbol *msymbol_demangled_hash[MINIMAL_SYMBOL_HASH_SIZE];
 
-    /* For object file formats which don't specify fundamental types, gdb
-       can create such types.  For now, it maintains a vector of pointers
-       to these internally created fundamental types on a per objfile basis,
-       however it really should ultimately keep them on a per-compilation-unit
-       basis, to account for linkage-units that consist of a number of
-       compilation units that may have different fundamental types, such as
-       linking C modules with ADA modules, or linking C modules that are
-       compiled with 32-bit ints with C modules that are compiled with 64-bit
-       ints (not inherently evil with a smarter linker). */
-
-    struct type **fundamental_types;
-
     /* The mmalloc() malloc-descriptor for this objfile if we are using
        the memory mapped malloc() package to manage storage for this objfile's
        data.  NULL if we are not. */
@@ -338,26 +306,35 @@ struct objfile
 
     /* Information about stabs.  Will be filled in with a dbx_symfile_info
        struct by those readers that need it. */
+    /* NOTE: cagney/2004-10-23: This has been replaced by per-objfile
+       data points implemented using "data" and "num_data" below.  For
+       an example of how to use this replacement, see "objfile_data"
+       in "mips-tdep.c".  */
 
-    struct dbx_symfile_info *sym_stab_info;
+    struct dbx_symfile_info *deprecated_sym_stab_info;
 
     /* Hook for information for use by the symbol reader (currently used
        for information shared by sym_init and sym_read).  It is
        typically a pointer to malloc'd memory.  The symbol reader's finish
        function is responsible for freeing the memory thusly allocated.  */
+    /* NOTE: cagney/2004-10-23: This has been replaced by per-objfile
+       data points implemented using "data" and "num_data" below.  For
+       an example of how to use this replacement, see "objfile_data"
+       in "mips-tdep.c".  */
 
-    void *sym_private;
+    void *deprecated_sym_private;
 
     /* Hook for target-architecture-specific information.  This must
        point to memory allocated on one of the obstacks in this objfile,
        so that it gets freed automatically when reading a new object
        file. */
 
-    void *obj_private;
+    void *deprecated_obj_private;
 
     /* Per objfile data-pointers required by other GDB modules.  */
     /* FIXME: kettenis/20030711: This mechanism could replace
-       sym_stab_info, sym_private and obj_private entirely.  */
+       deprecated_sym_stab_info, deprecated_sym_private and
+       deprecated_obj_private entirely.  */
 
     void **data;
     unsigned num_data;
@@ -396,18 +373,6 @@ struct objfile
 
     struct obj_section
      *sections, *sections_end;
-
-    /* Imported symbols */
-    /* FIXME: ezannoni 2004-02-10: This is just SOM (HP) specific (see
-       somread.c). It should not pollute generic objfiles.  */
-    ImportEntry *import_list;
-    int import_list_size;
-
-    /* Exported symbols */
-    /* FIXME: ezannoni 2004-02-10: This is just SOM (HP) specific (see
-       somread.c). It should not pollute generic objfiles.  */
-    ExportEntry *export_list;
-    int export_list_size;
 
     /* Link to objfile that contains the debug symbols for this one.
        One is loaded if this file has an debug link to an existing
@@ -549,8 +514,6 @@ extern struct obj_section *find_pc_sect_section (CORE_ADDR pc,
 
 extern int in_plt_section (CORE_ADDR, char *);
 
-extern int is_in_import_list (char *, struct objfile *);
-
 /* Keep a registry of per-objfile data-pointers required by other GDB
    modules.  */
 
@@ -594,6 +557,14 @@ extern void *objfile_data (struct objfile *objfile,
   ALL_OBJFILES (objfile)	 \
     ALL_OBJFILE_SYMTABS (objfile, s)
 
+/* Traverse all symtabs in all objfiles, skipping included files
+   (which share a blockvector with their primary symtab).  */
+
+#define ALL_PRIMARY_SYMTABS(objfile, s) \
+  ALL_OBJFILES (objfile)		\
+    ALL_OBJFILE_SYMTABS (objfile, s)	\
+      if ((s)->primary)
+
 /* Traverse all psymtabs in all objfiles.  */
 
 #define	ALL_PSYMTABS(objfile, p) \
@@ -615,17 +586,17 @@ extern void *objfile_data (struct objfile *objfile,
 
 #define SECT_OFF_DATA(objfile) \
      ((objfile->sect_index_data == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_data not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_data not initialized")), -1) \
       : objfile->sect_index_data)
 
 #define SECT_OFF_RODATA(objfile) \
      ((objfile->sect_index_rodata == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_rodata not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_rodata not initialized")), -1) \
       : objfile->sect_index_rodata)
 
 #define SECT_OFF_TEXT(objfile) \
      ((objfile->sect_index_text == -1) \
-      ? (internal_error (__FILE__, __LINE__, "sect_index_text not initialized"), -1) \
+      ? (internal_error (__FILE__, __LINE__, _("sect_index_text not initialized")), -1) \
       : objfile->sect_index_text)
 
 /* Sometimes the .bss section is missing from the objfile, so we don't

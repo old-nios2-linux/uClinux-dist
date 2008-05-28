@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 1999 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm, Trog
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -85,7 +87,7 @@ static pthread_mutex_t cli_ctime_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define       P_tmpdir        "C:\\WINDOWS\\TEMP"
 #endif
 
-#define CL_FLEVEL 26 /* don't touch it */
+#define CL_FLEVEL 29 /* don't touch it */
 
 uint8_t cli_debug_flag = 0, cli_leavetemps_flag = 0;
 
@@ -114,13 +116,12 @@ void cli_errmsg(const char *str, ...)
     MSGCODE("LibClamAV Error: ");
 }
 
-void cli_dbgmsg(const char *str, ...)
+void cli_dbgmsg_internal(const char *str, ...)
 {
-    if(cli_debug_flag) {
-	MSGCODE("LibClamAV debug: ");
-    }
+    MSGCODE("LibClamAV debug: ");
 }
 
+#ifndef CLI_MEMFUNSONLY
 void cl_debug(void)
 {
     cli_debug_flag = 1;
@@ -198,6 +199,51 @@ const char *cl_strerror(int clerror)
 	default:
 	    return "Unknown error code";
     }
+}
+
+int cli_checklimits(const char *who, cli_ctx *ctx, unsigned long need1, unsigned long need2, unsigned long need3) {
+    int ret = CL_SUCCESS;
+    unsigned long needed;
+
+    /* if called without limits, go on, unpack, scan */
+    if(!ctx || !ctx->limits) return CL_CLEAN;
+
+    needed = (need1>need2)?need1:need2;
+    needed = (needed>need3)?needed:need3;
+
+    /* if we have global scan limits */
+    if(needed && ctx->limits->maxscansize) {
+        /* if the remaining scansize is too small... */
+        if(ctx->limits->maxscansize-ctx->scansize<needed) {
+	    /* ... we tell the caller to skip this file */
+	    cli_dbgmsg("%s: scansize exceeded (initial: %lu, remaining: %lu, needed: %lu)\n", who, ctx->limits->maxscansize, ctx->scansize, needed);
+	    ret = CL_EMAXSIZE;
+	}
+    }
+
+    /* if we have per-file size limits, and we are overlimit... */
+    if(needed && ctx->limits->maxfilesize && ctx->limits->maxfilesize<needed) {
+	/* ... we tell the caller to skip this file */
+        cli_dbgmsg("%s: filesize exceeded (allowed: %lu, needed: %lu)\n", who, ctx->limits->maxfilesize, needed);
+	ret = CL_EMAXSIZE;
+    }
+
+    if(ctx->limits->maxfiles && ctx->scannedfiles>=ctx->limits->maxfiles) {
+        cli_dbgmsg("%s: files limit reached (max: %u)\n", who, ctx->limits->maxfiles);
+	return CL_EMAXFILES;
+    }
+    return ret;
+}
+
+int cli_updatelimits(cli_ctx *ctx, unsigned long needed) {
+    int ret=cli_checklimits("cli_updatelimits", ctx, needed, 0, 0);
+
+    if (ret != CL_CLEAN) return ret;
+    ctx->scannedfiles++;
+    ctx->scansize+=needed;
+    if(ctx->scansize > ctx->limits->maxscansize)
+        ctx->scansize = ctx->limits->maxscansize;
+    return CL_CLEAN;
 }
 
 unsigned char *cli_md5digest(int desc)
@@ -295,6 +341,7 @@ static char *cli_md5buff(const unsigned char *buffer, unsigned int len, unsigned
 
     return md5str;
 }
+#endif
 
 void *cli_malloc(size_t size)
 {
@@ -302,7 +349,7 @@ void *cli_malloc(size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("cli_malloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
+	cli_errmsg("cli_malloc(): Attempt to allocate %lu bytes. Please report to http://bugs.clamav.net\n", (unsigned long int) size);
 	return NULL;
     }
 
@@ -313,7 +360,7 @@ void *cli_malloc(size_t size)
 #endif
 
     if(!alloc) {
-	cli_errmsg("cli_malloc(): Can't allocate memory (%u bytes).\n", size);
+	cli_errmsg("cli_malloc(): Can't allocate memory (%lu bytes).\n", (unsigned long int) size);
 	perror("malloc_problem");
 	return NULL;
     } else return alloc;
@@ -325,7 +372,7 @@ void *cli_calloc(size_t nmemb, size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("cli_calloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
+	cli_errmsg("cli_calloc(): Attempt to allocate %lu bytes. Please report to http://bugs.clamav.net\n", (unsigned long int) size);
 	return NULL;
     }
 
@@ -336,7 +383,7 @@ void *cli_calloc(size_t nmemb, size_t size)
 #endif
 
     if(!alloc) {
-	cli_errmsg("cli_calloc(): Can't allocate memory (%u bytes).\n", nmemb * size);
+	cli_errmsg("cli_calloc(): Can't allocate memory (%lu bytes).\n", (unsigned long int) (nmemb * size));
 	perror("calloc_problem");
 	return NULL;
     } else return alloc;
@@ -348,14 +395,14 @@ void *cli_realloc(void *ptr, size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("cli_realloc(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
+	cli_errmsg("cli_realloc(): Attempt to allocate %lu bytes. Please report to http://bugs.clamav.net\n", (unsigned long int) size);
 	return NULL;
     }
 
     alloc = realloc(ptr, size);
 
     if(!alloc) {
-	cli_errmsg("cli_realloc(): Can't re-allocate memory to %u bytes.\n", size);
+	cli_errmsg("cli_realloc(): Can't re-allocate memory to %lu bytes.\n", (unsigned long int) size);
 	perror("realloc_problem");
 	return NULL;
     } else return alloc;
@@ -367,14 +414,14 @@ void *cli_realloc2(void *ptr, size_t size)
 
 
     if(!size || size > CLI_MAX_ALLOCATION) {
-	cli_errmsg("cli_realloc2(): Attempt to allocate %u bytes. Please report to http://bugs.clamav.net\n", size);
+	cli_errmsg("cli_realloc2(): Attempt to allocate %lu bytes. Please report to http://bugs.clamav.net\n", (unsigned long int) size);
 	return NULL;
     }
 
     alloc = realloc(ptr, size);
 
     if(!alloc) {
-	cli_errmsg("cli_realloc2(): Can't re-allocate memory to %u bytes.\n", size);
+	cli_errmsg("cli_realloc2(): Can't re-allocate memory to %lu bytes.\n", (unsigned long int) size);
 	perror("realloc_problem");
 	if(ptr)
 	    free(ptr);
@@ -399,7 +446,7 @@ char *cli_strdup(const char *s)
 #endif
 
     if(!alloc) {
-        cli_errmsg("cli_strdup(): Can't allocate memory (%u bytes).\n", strlen(s));
+        cli_errmsg("cli_strdup(): Can't allocate memory (%u bytes).\n", (unsigned int) strlen(s));
         perror("strdup_problem");
         return NULL;
     }
@@ -407,6 +454,7 @@ char *cli_strdup(const char *s)
     return alloc;
 }
 
+#ifndef CLI_MEMFUNSONLY
 unsigned int cli_rndnum(unsigned int max)
 {
     if(name_salt[0] == 16) { /* minimizes re-seeding after the first call to cli_gentemp() */
@@ -511,6 +559,7 @@ int cli_gentempfd(const char *dir, char **name, int *fd)
 
     return CL_SUCCESS;
 }
+#endif
 
 #ifdef	C_WINDOWS
 /*
@@ -629,11 +678,7 @@ int cli_rmdirs(const char *dirname)
 			    return -1;
 			}
 
-#ifdef	C_WINDOWS
-			sprintf(path, "%s\\%s", dirname, dent->d_name);
-#else
 			sprintf(path, "%s/%s", dirname, dent->d_name);
-#endif
 
 			/* stat the file */
 			if(lstat(path, &statbuf) != -1) {
@@ -855,33 +900,49 @@ int cli_bitset_test(bitset_t *bs, unsigned long bit_offset)
 	return (bs->bitset[char_offset] & ((unsigned char)1 << bit_offset));
 }
 
+/* returns converted timestamp, in case of error the returned string contains at least one character */
 const char* cli_ctime(const time_t *timep, char *buf, const size_t bufsize)
 {
+	const char *ret;
 	if(bufsize < 26) {
 		/* standard says we must have at least 26 bytes buffer */
 		cli_warnmsg("buffer too small for ctime\n");
-		return NULL;
+		return " ";
 	}
+	if((uint32_t)(*timep) > 0x7fffffff) {
+		/* some systems can consider these timestamps invalid */
+		strncpy(buf, "invalid timestamp", bufsize-1);
+		buf[bufsize-1] = '\0';
+		return buf;
+	}
+
 #ifdef HAVE_CTIME_R	
 # ifdef HAVE_CTIME_R_2
-	{
-	    char *y = ctime_r(timep, buf);
-	    return y;
-	}
+	ret = ctime_r(timep, buf);
 # else
-	return ctime_r(timep, buf, bufsize);
+	ret = ctime_r(timep, buf, bufsize);
 # endif
 #else /* no ctime_r */
 
 # ifdef CL_THREAD_SAFE
 	pthread_mutex_lock(&cli_ctime_mutex);
 # endif
-	strncpy(buf, ctime(timep), bufsize-1);
-	buf[bufsize-1] = '\0';
+	ret = ctime(timep);
+	if(ret) {
+		strncpy(buf, ret, bufsize-1);
+		buf[bufsize-1] = '\0';
+		ret = buf;
+	}
 # ifdef CL_THREAD_SAFE
 	pthread_mutex_unlock(&cli_ctime_mutex);
 # endif
-	return buf;
 #endif
+	/* common */
+	if(!ret) {
+		buf[0] = ' ';
+		buf[1] = '\0';
+		return buf;
+	}
+	return ret;
 }
 

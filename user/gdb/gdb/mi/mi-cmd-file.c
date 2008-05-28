@@ -1,12 +1,12 @@
 /* MI Command Set - breakpoint and watchpoint commands.
-   Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "mi-cmds.h"
@@ -31,24 +29,24 @@
    current file being executed. */
 
 enum mi_cmd_result
-mi_cmd_file_list_exec_source_file(char *command, char **argv, int argc)
+mi_cmd_file_list_exec_source_file (char *command, char **argv, int argc)
 {
   struct symtab_and_line st;
   int optind = 0;
   char *optarg;
   
-  if ( !mi_valid_noargs("mi_cmd_file_list_exec_source_file", argc, argv) )
-    error ("mi_cmd_file_list_exec_source_file: Usage: No args");
+  if (!mi_valid_noargs ("mi_cmd_file_list_exec_source_file", argc, argv))
+    error (_("mi_cmd_file_list_exec_source_file: Usage: No args"));
 
   /* Set the default file and line, also get them */
-  set_default_source_symtab_and_line();
-  st = get_current_source_symtab_and_line();
+  set_default_source_symtab_and_line ();
+  st = get_current_source_symtab_and_line ();
 
   /* We should always get a symtab. 
      Apparently, filename does not need to be tested for NULL.
      The documentation in symtab.h suggests it will always be correct */
   if (!st.symtab)
-    error ("mi_cmd_file_list_exec_source_file: No symtab");
+    error (_("mi_cmd_file_list_exec_source_file: No symtab"));
 
   /* Extract the fullname if it is not known yet */
   symtab_to_fullname (st.symtab);
@@ -61,6 +59,8 @@ mi_cmd_file_list_exec_source_file(char *command, char **argv, int argc)
   if (st.symtab->fullname)
   ui_out_field_string (uiout, "fullname", st.symtab->fullname);
 
+  ui_out_field_int (uiout, "macro-info", st.symtab->macro_table ? 1 : 0);
+
   return MI_CMD_DONE;
 }
 
@@ -72,7 +72,7 @@ mi_cmd_file_list_exec_source_files (char *command, char **argv, int argc)
   struct objfile *objfile;
 
   if (!mi_valid_noargs ("mi_cmd_file_list_exec_source_files", argc, argv))
-    error ("mi_cmd_file_list_exec_source_files: Usage: No args");
+    error (_("mi_cmd_file_list_exec_source_files: Usage: No args"));
 
   /* Print the table header */
   ui_out_begin (uiout, ui_out_type_list, "files");

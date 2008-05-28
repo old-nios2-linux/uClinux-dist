@@ -1,12 +1,12 @@
 /* Native-dependent code for Motorola 68000 BSD's.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -30,6 +28,7 @@
 #include <machine/reg.h>
 
 #include "m68k-tdep.h"
+#include "inf-ptrace.h"
 
 static int
 m68kbsd_gregset_supplies_p (int regnum)
@@ -106,8 +105,8 @@ m68kbsd_collect_fpregset (struct regcache *regcache,
 /* Fetch register REGNUM from the inferior.  If REGNUM is -1, do this
    for all registers (including the floating-point registers).  */
 
-void
-fetch_inferior_registers (int regnum)
+static void
+m68kbsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1 || m68kbsd_gregset_supplies_p (regnum))
     {
@@ -115,9 +114,9 @@ fetch_inferior_registers (int regnum)
 
       if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-	perror_with_name ("Couldn't get registers");
+	perror_with_name (_("Couldn't get registers"));
 
-      m68kbsd_supply_gregset (current_regcache, &regs);
+      m68kbsd_supply_gregset (regcache, &regs);
     }
 
   if (regnum == -1 || m68kbsd_fpregset_supplies_p (regnum))
@@ -126,17 +125,17 @@ fetch_inferior_registers (int regnum)
 
       if (ptrace (PT_GETFPREGS, PIDGET (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	perror_with_name ("Couldn't get floating point status");
+	perror_with_name (_("Couldn't get floating point status"));
 
-      m68kbsd_supply_fpregset (current_regcache, &fpregs);
+      m68kbsd_supply_fpregset (regcache, &fpregs);
     }
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers (including the floating-point registers).  */
 
-void
-store_inferior_registers (int regnum)
+static void
+m68kbsd_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1 || m68kbsd_gregset_supplies_p (regnum))
     {
@@ -144,13 +143,13 @@ store_inferior_registers (int regnum)
 
       if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
                   (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-        perror_with_name ("Couldn't get registers");
+        perror_with_name (_("Couldn't get registers"));
 
-      m68kbsd_collect_gregset (current_regcache, &regs, regnum);
+      m68kbsd_collect_gregset (regcache, &regs, regnum);
 
       if (ptrace (PT_SETREGS, PIDGET (inferior_ptid),
 	          (PTRACE_TYPE_ARG3) &regs, 0) == -1)
-        perror_with_name ("Couldn't write registers");
+        perror_with_name (_("Couldn't write registers"));
     }
 
   if (regnum == -1 || m68kbsd_fpregset_supplies_p (regnum))
@@ -159,13 +158,13 @@ store_inferior_registers (int regnum)
 
       if (ptrace (PT_GETFPREGS, PIDGET (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	perror_with_name ("Couldn't get floating point status");
+	perror_with_name (_("Couldn't get floating point status"));
 
-      m68kbsd_collect_fpregset (current_regcache, &fpregs, regnum);
+      m68kbsd_collect_fpregset (regcache, &fpregs, regnum);
 
       if (ptrace (PT_SETFPREGS, PIDGET (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
-	perror_with_name ("Couldn't write floating point status");
+	perror_with_name (_("Couldn't write floating point status"));
     }
 }
 
@@ -223,6 +222,13 @@ void _initialize_m68kbsd_nat (void);
 void
 _initialize_m68kbsd_nat (void)
 {
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = m68kbsd_fetch_inferior_registers;
+  t->to_store_registers = m68kbsd_store_inferior_registers;
+  add_target (t);
+
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (m68kbsd_supply_pcb);
 }

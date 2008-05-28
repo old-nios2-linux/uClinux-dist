@@ -9,7 +9,7 @@
 #include <linux/netfilter_ipv4/ipt_tos.h>
 
 /* TOS names and values. */
-static
+static const
 struct TOS_value
 {
 	unsigned char TOS;
@@ -23,8 +23,7 @@ struct TOS_value
 };
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void tos_help(void)
 {
 	unsigned int i;
 
@@ -42,9 +41,9 @@ IPTABLES_VERSION);
 	fputc('\n', stdout);
 }
 
-static struct option opts[] = {
-	{ "tos", 1, 0, '1' },
-	{0}
+static const struct option tos_opts[] = {
+	{ "tos", 1, NULL, '1' },
+	{ }
 };
 
 static void
@@ -74,11 +73,8 @@ parse_tos(const char *s, struct ipt_tos_info *info)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      unsigned int *nfcache,
-      struct ipt_entry_match **match)
+static int tos_parse(int c, char **argv, int invert, unsigned int *flags,
+                     const void *entry, struct xt_entry_match **match)
 {
 	struct ipt_tos_info *tosinfo = (struct ipt_tos_info *)(*match)->data;
 
@@ -118,8 +114,7 @@ print_tos(u_int8_t tos, int numeric)
 }
 
 /* Final check; must have specified --tos. */
-static void
-final_check(unsigned int flags)
+static void tos_check(unsigned int flags)
 {
 	if (!flags)
 		exit_error(PARAMETER_PROBLEM,
@@ -127,10 +122,8 @@ final_check(unsigned int flags)
 }
 
 /* Prints out the matchinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_match *match,
-      int numeric)
+static void tos_print(const void *ip, const struct xt_entry_match *match,
+                      int numeric)
 {
 	const struct ipt_tos_info *info = (const struct ipt_tos_info *)match->data;
     
@@ -141,8 +134,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_matchinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
+static void tos_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ipt_tos_info *info = (const struct ipt_tos_info *)match->data;
     
@@ -152,21 +144,20 @@ save(const struct ipt_ip *ip, const struct ipt_entry_match *match)
 	print_tos(info->tos, 0);
 }
 
-static struct iptables_match tos = { 
-	.next		= NULL,
+static struct iptables_match tos_match = {
 	.name		= "tos",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ipt_tos_info)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_tos_info)),
-	.help		= &help,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= tos_help,
+	.parse		= tos_parse,
+	.final_check	= tos_check,
+	.print		= tos_print,
+	.save		= tos_save,
+	.extra_opts	= tos_opts,
 };
 
 void _init(void)
 {
-	register_match(&tos);
+	register_match(&tos_match);
 }

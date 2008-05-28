@@ -46,7 +46,7 @@
 #include <getopt.h>
 #include <linux/if_slip.h>
 
-#if defined(__GLIBC__)
+#if defined(__GLIBC__) || defined(__UC_LIBC__)
 #if __GLIBC__ == 2 && __GLIBC_MINOR__ == 0
 # include <termbits.h>
 #else

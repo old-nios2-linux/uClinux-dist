@@ -1,12 +1,12 @@
 /* Native-dependent code for NetBSD/amd64.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,15 +15,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
 
 #include "gdb_assert.h"
 
+#include "nbsd-nat.h"
 #include "amd64-tdep.h"
 #include "amd64-nat.h"
 
@@ -63,10 +62,14 @@ void _initialize_amd64nbsd_nat (void);
 void
 _initialize_amd64nbsd_nat (void)
 {
+  struct target_ops *t;
+
   amd64_native_gregset32_reg_offset = amd64nbsd32_r_reg_offset;
   amd64_native_gregset32_num_regs = ARRAY_SIZE (amd64nbsd32_r_reg_offset);
   amd64_native_gregset64_reg_offset = amd64nbsd_r_reg_offset;
 
-  /* We've got nothing to add to the common *BSD/amd64 target.  */
-  add_target (amd64bsd_target ());
+  /* Add some extra features to the common *BSD/amd64 target.  */
+  t = amd64bsd_target ();
+  t->to_pid_to_exec_file = nbsd_pid_to_exec_file;
+  add_target (t);
 }

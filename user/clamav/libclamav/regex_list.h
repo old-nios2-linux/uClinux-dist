@@ -1,10 +1,12 @@
 /*
  *  Match a string against a list of patterns/regexes.
  *
- *  Copyright (C) 2006 Török Edvin <edwin@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: TÃ¶rÃ¶k Edvin
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as 
+ *  it under the terms of the GNU General Public License version 2 as
  *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
@@ -16,7 +18,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
- *
  */
 
 
@@ -34,6 +35,7 @@
 #endif
 
 #include "phishcheck.h"
+#include <zlib.h> /* for gzFile */
 struct node_stack {
 	struct tree_node** data;
 	size_t capacity;
@@ -44,17 +46,17 @@ struct regex_matcher {
 	struct cli_matcher* root_hosts;
 	struct tree_node* root_regex;
 	struct tree_node* root_regex_hostonly; 
+	struct node_stack node_stack;
+	struct node_stack node_stack_alt;
 	size_t root_hosts_cnt;
 	int list_inited;
 	int list_loaded;
 	int list_built;
-	struct node_stack node_stack;
-	struct node_stack node_stack_alt;
 };
 
 int regex_list_match(struct regex_matcher* matcher, char* real_url,const char* display_url,const struct pre_fixup_info* pre_fixup, int hostOnly,const char** info,int is_whitelist);
 int init_regex_list(struct regex_matcher* matcher);
-int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int options,int is_whitelist);
+int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int options,int is_whitelist,gzFile *gzs,unsigned int gzrsize);
 void regex_list_cleanup(struct regex_matcher* matcher);
 void regex_list_done(struct regex_matcher* matcher);
 int is_regex_ok(struct regex_matcher* matcher);

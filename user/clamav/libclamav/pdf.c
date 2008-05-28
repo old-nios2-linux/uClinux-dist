@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2005-2007 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -13,7 +14,8 @@
  *
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ *  MA 02110-1301, USA.
  *
  * TODO: Embedded fonts
  * TODO: Predictor image handling
@@ -56,13 +58,18 @@ static	char	const	rcsid[] = "$Id: pdf.c,v 1.61 2007/02/12 20:46:09 njh Exp $";
 #include "others.h"
 #include "mbox.h"
 #include "pdf.h"
+#include "scanners.h"
+
+#ifndef	O_BINARY
+#define	O_BINARY	0
+#endif
 
 #ifdef	CL_DEBUG
 /*#define	SAVE_TMP	/* Save the file being worked on in tmp */
 #endif
 
-static	int	try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, const cli_ctx *ctx);
-static	int	flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx);
+static	int	try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, cli_ctx *ctx);
+static	int	flatedecode(unsigned char *buf, off_t len, int fout, cli_ctx *ctx);
 static	int	ascii85decode(const char *buf, off_t len, unsigned char *output);
 static	const	char	*pdf_nextlinestart(const char *ptr, size_t len);
 static	const	char	*pdf_nextobject(const char *ptr, size_t len);
@@ -72,14 +79,13 @@ static	const	char	*cli_pmemstr(const char *haystack, size_t hs, const char *need
  * TODO: handle embedded URLs if (options&CL_SCAN_MAILURL)
  */
 int
-cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
+cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 {
 	off_t size;	/* total number of bytes in the file */
 	off_t bytesleft, trailerlength;
-	char *buf, *alloced;	/* start of memory mapped area */
+	char *buf;	/* start of memory mapped area */
 	const char *p, *q, *trailerstart;
 	const char *xrefstart;	/* cross reference table */
-	const struct cl_limits *limits;
 	/*size_t xreflength;*/
 	table_t *md5table;
 	int printed_predictor_message, printed_embedded_font_message, rc;
@@ -88,30 +94,20 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 
 	cli_dbgmsg("in cli_pdf(%s)\n", dir);
 
-	if(fstat(desc, &statb) < 0)
+	if(fstat(desc, &statb) < 0) {
+		cli_errmsg("cli_pdf: fstat() failed\n");
 		return CL_EOPEN;
+	}
 
 	size = statb.st_size;
 
-	if(size == 0)
+	if(size <= 7)	/* doesn't even include the file header */
 		return CL_CLEAN;
 
-	if(size <= 7)	/* doesn't even include the file header */
-		return CL_EFORMAT;
-
 	p = buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, desc, 0);
-	if(buf == MAP_FAILED)
+	if(buf == MAP_FAILED) {
+		cli_errmsg("cli_pdf: mmap() failed\n");
 		return CL_EMEM;
-
-	alloced = cli_malloc(size);
-	if(alloced) {
-		/*
-		 * FIXME: now I have this, there's no need for the lack of
-		 *	support on systems without mmap, e.g. cygwin
-		 */
-		memcpy(alloced, buf, size);
-		munmap(buf, size);
-		p = alloced;
 	}
 
 	cli_dbgmsg("cli_pdf: scanning %lu bytes\n", (unsigned long)size);
@@ -120,21 +116,16 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 
 	/* File Header */
 	if(memcmp(p, "%PDF-1.", 7) != 0) {
-		if(alloced)
-			free(alloced);
-		else
-			munmap(buf, size);
-		return CL_EFORMAT;
+		munmap(buf, size);
+		cli_dbgmsg("cli_pdf: file header not found\n");
+		return CL_CLEAN;
 	}
 
 #if	0
 	q = pdf_nextlinestart(&p[6], size - 6);
 	if(q == NULL) {
-		if(alloced)
-			free(alloced);
-		else
-			munmap(buf, size);
-		return CL_EFORMAT;
+		munmap(buf, size);
+		return CL_CLEAN;
 	}
 	bytesleft = size - (long)(q - p);
 	p = q;
@@ -149,11 +140,9 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			break;
 
 	if(q <= p) {
-		if(alloced)
-			free(alloced);
-		else
-			munmap(buf, size);
-		return CL_EFORMAT;
+		munmap(buf, size);
+		cli_dbgmsg("cli_pdf: trailer not found\n");
+		return CL_CLEAN;
 	}
 
 	for(trailerstart = &q[-7]; trailerstart > p; --trailerstart)
@@ -167,13 +156,12 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 	if(cli_pmemstr(trailerstart, trailerlength, "Encrypt", 7)) {
 		/*
 		 * This tends to mean that the file is, in effect, read-only
+		 * http://www.cs.cmu.edu/~dst/Adobe/Gallery/anon21jul01-pdf-encryption.txt
+		 * http://www.adobe.com/devnet/pdf/
 		 */
-		if(alloced)
-			free(alloced);
-		else
-			munmap(buf, size);
-		cli_warnmsg("Encrypted PDF files not yet supported\n");
-		return CL_EFORMAT;
+		munmap(buf, size);
+		cli_dbgmsg("cli_pdf: Encrypted PDF files not yet supported\n");
+		return CL_CLEAN;
 	}
 
 	/*
@@ -194,11 +182,9 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 				break;
 
 	if(xrefstart == p) {
-		if(alloced)
-			free(alloced);
-		else
-			munmap(buf, size);
-		return CL_EFORMAT;
+		munmap(buf, size);
+		cli_dbgmsg("cli_pdf: xref not found\n");
+		return CL_CLEAN;
 	}
 
 	printed_predictor_message = printed_embedded_font_message = 0;
@@ -210,23 +196,24 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 	bytesleft -= xreflength;
 	 */
 
-	rc = CL_CLEAN;
 	files = 0;
-	limits = ctx->limits;
+
+	rc = CL_CLEAN;
 
 	/*
 	 * The body section consists of a sequence of indirect objects
 	 */
-	while((p < xrefstart) && (rc == CL_CLEAN) &&
+	while((p < xrefstart) && (cli_checklimits("cli_pdf", ctx, 0, 0, 0)==CL_CLEAN) &&
 	      ((q = pdf_nextobject(p, bytesleft)) != NULL)) {
 		int is_ascii85decode, is_flatedecode, fout, len, has_cr;
 		/*int object_number, generation_number;*/
 		const char *objstart, *objend, *streamstart, *streamend;
-		char *md5digest;
+		unsigned char *md5digest;
 		unsigned long length, objlen, real_streamlen, calculated_streamlen;
 		int is_embedded_font, predictor;
 		char fullname[NAME_MAX + 1];
 
+		rc = CL_CLEAN;
 		if(q == xrefstart)
 			break;
 		if(memcmp(q, "xref", 4) == 0)
@@ -239,14 +226,12 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		if(memcmp(q, "endobj", 6) == 0)
 			continue;
 		if(!isdigit(*q)) {
-			cli_warnmsg("cli_pdf: Object number missing\n");
-			rc = CL_EFORMAT;
+			cli_dbgmsg("cli_pdf: Object number missing\n");
 			break;
 		}
 		q = pdf_nextobject(p, bytesleft);
 		if((q == NULL) || !isdigit(*q)) {
-			cli_warnmsg("cli_pdf: Generation number missing\n");
-			rc = CL_EFORMAT;
+			cli_dbgmsg("cli_pdf: Generation number missing\n");
 			break;
 		}
 		/*generation_number = atoi(q);*/
@@ -255,8 +240,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 
 		q = pdf_nextobject(p, bytesleft);
 		if((q == NULL) || (memcmp(q, "obj", 3) != 0)) {
-			cli_warnmsg("Indirect object missing \"obj\"\n");
-			rc = CL_EFORMAT;
+			cli_dbgmsg("cli_pdf: Indirect object missing \"obj\"\n");
 			break;
 		}
 
@@ -264,7 +248,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		objstart = p = &q[3];
 		objend = cli_pmemstr(p, bytesleft, "endobj", 6);
 		if(objend == NULL) {
-			cli_dbgmsg("No matching endobj\n");
+			cli_dbgmsg("cli_pdf: No matching endobj\n");
 			break;
 		}
 		bytesleft -= (off_t)((objend - p) + 6);
@@ -301,17 +285,15 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 						char b[14];
 
 						q += 4;
-						cli_dbgmsg("Length is in indirect obj %ld\n",
+						cli_dbgmsg("cli_pdf: Length is in indirect obj %lu\n",
 							length);
 						snprintf(b, sizeof(b),
-							"\n%ld 0 obj", length);
+							"\n%lu 0 obj", length);
 						length = (unsigned long)strlen(b);
-						r = cli_pmemstr(alloced ? alloced : buf,
-							size, b, length);
+						r = cli_pmemstr(buf, size, b, length);
 						if(r == NULL) {
 							b[0] = '\r';
-							r = cli_pmemstr(alloced ? alloced : buf,
-								size, b, length);
+							r = cli_pmemstr(buf, size, b, length);
 						}
 						if(r) {
 							r += length - 1;
@@ -320,12 +302,12 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 								length = atoi(r);
 								while(isdigit(*r))
 									r++;
-								cli_dbgmsg("length in '%s' %ld\n",
+								cli_dbgmsg("cli_pdf: length in '%s' %lu\n",
 									&b[1],
 									length);
 							}
 						} else
-							cli_warnmsg("Couldn't find '%s'\n",
+							cli_dbgmsg("cli_pdf: Couldn't find '%s'\n",
 								&b[1]);
 					}
 					q--;
@@ -358,7 +340,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			 * (http://safari.adobepress.com/0321304748)
 			 */
 			if(!printed_embedded_font_message) {
-				cli_dbgmsg("Embedded fonts not yet supported\n");
+				cli_dbgmsg("cli_pdf: Embedded fonts not yet supported\n");
 				printed_embedded_font_message = 1;
 			}
 			continue;
@@ -368,7 +350,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 			 * Needs some thought
 			 */
 			if(!printed_predictor_message) {
-				cli_dbgmsg("Predictor %d not honoured for embedded image\n",
+				cli_dbgmsg("cli_pdf: Predictor %d not honoured for embedded image\n",
 					predictor);
 				printed_predictor_message = 1;
 			}
@@ -387,34 +369,14 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		if(streamend == NULL) {
 			streamend = cli_pmemstr(streamstart, len, "endstream\r", 10);
 			if(streamend == NULL) {
-				cli_dbgmsg("No endstream\n");
+				cli_dbgmsg("cli_pdf: No endstream\n");
 				break;
 			}
 			has_cr = 1;
 		} else
 			has_cr = 0;
-		snprintf(fullname, sizeof(fullname), "%s/pdfXXXXXX", dir);
-#if	defined(C_LINUX) || defined(C_BSD) || defined(HAVE_MKSTEMP) || defined(C_SOLARIS) || defined(C_CYGWIN)
-		fout = mkstemp(fullname);
-#elif	defined(C_WINDOWS)
-		if(_mktemp(fullname) == NULL) {
-			/* mktemp only allows 26 files */
-			char *name = cli_gentemp(dir);
-			if(name == NULL)
-				fout = -1;
-			else {
-				strcpy(fullname, name);
-				free(name);
-				fout = open(fullname,
-					O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
-			}
-		} else
-			fout = open(fullname, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
-#else
-		mktemp(fullname);
-		fout = open(fullname, O_WRONLY|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
-#endif
-
+		snprintf(fullname, sizeof(fullname), "%s/pdf%02u", dir, files);
+		fout = open(fullname, O_RDWR|O_CREAT|O_EXCL|O_TRUNC|O_BINARY, 0600);
 		if(fout < 0) {
 			cli_errmsg("cli_pdf: can't create temporary file %s: %s\n", fullname, strerror(errno));
 			rc = CL_ETMPFILE;
@@ -432,7 +394,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 
 		if(streamend <= streamstart) {
 			close(fout);
-			cli_dbgmsg("Empty stream\n");
+			cli_dbgmsg("cli_pdf: Empty stream\n");
 			unlink(fullname);
 			continue;
 		}
@@ -442,7 +404,7 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 		if(calculated_streamlen != real_streamlen)
 			cli_dbgmsg("cli_pdf: Incorrect Length field in file attempting to recover\n");
 
-		cli_dbgmsg("length %ld, calculated_streamlen %ld isFlate %d isASCII85 %d\n",
+		cli_dbgmsg("cli_pdf: length %lu, calculated_streamlen %lu isFlate %d isASCII85 %d\n",
 			length, calculated_streamlen,
 			is_flatedecode, is_ascii85decode);
 
@@ -454,13 +416,20 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 #endif
 
 		if(is_ascii85decode) {
-			unsigned char *tmpbuf = cli_malloc(calculated_streamlen * 5);
-			int ret;
+			unsigned char *tmpbuf;
+			int ret = cli_checklimits("cli_pdf", ctx, calculated_streamlen * 5, calculated_streamlen, real_streamlen);
+
+			if(ret != CL_CLEAN) {
+				close(fout);
+				unlink(fullname);
+				continue;
+			}
+
+			tmpbuf = cli_malloc(calculated_streamlen * 5);
 
 			if(tmpbuf == NULL) {
 				close(fout);
 				unlink(fullname);
-				rc = CL_EMEM;
 				continue;
 			}
 
@@ -470,7 +439,6 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 				free(tmpbuf);
 				close(fout);
 				unlink(fullname);
-				rc = CL_EFORMAT;
 				continue;
 			}
 			if(ret) {
@@ -478,13 +446,11 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 
 				real_streamlen = ret;
 				/* free unused trailing bytes */
-				t = (unsigned char *)cli_realloc(tmpbuf,
-					calculated_streamlen);
+				t = (unsigned char *)cli_realloc(tmpbuf,calculated_streamlen);
 				if(t == NULL) {
 					free(tmpbuf);
 					close(fout);
 					unlink(fullname);
-					rc = CL_EMEM;
 					continue;
 				}
 				tmpbuf = t;
@@ -492,42 +458,55 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
 				 * Note that it will probably be both
 				 * ascii85encoded and flateencoded
 				 */
+
 				if(is_flatedecode)
 					rc = try_flatedecode((unsigned char *)tmpbuf, real_streamlen, real_streamlen, fout, ctx);
 				else
-					cli_writen(fout, (const char *)streamstart, real_streamlen);
+				  rc = (unsigned long)cli_writen(fout, (const char *)streamstart, real_streamlen)==real_streamlen ? CL_CLEAN : CL_EIO;
 			}
 			free(tmpbuf);
-		} else if(is_flatedecode)
+		} else if(is_flatedecode) {
 			rc = try_flatedecode((unsigned char *)streamstart, real_streamlen, calculated_streamlen, fout, ctx);
 
-		else {
+		} else {
 			cli_dbgmsg("cli_pdf: writing %lu bytes from the stream\n",
 				(unsigned long)real_streamlen);
-			cli_writen(fout, (const char *)streamstart, real_streamlen);
+			if((rc = cli_checklimits("cli_pdf", ctx, real_streamlen, 0, 0))==CL_CLEAN)
+				rc = (unsigned long)cli_writen(fout, (const char *)streamstart, real_streamlen) == real_streamlen ? CL_CLEAN : CL_EIO;
 		}
 
-		close(fout);
-		md5digest = cli_md5file(fullname);
-		if(tableFind(md5table, md5digest) >= 0) {
-			cli_dbgmsg("cli_pdf: not scanning duplicate embedded file '%s'\n", fullname);
-			unlink(fullname);
-		} else
-			tableInsert(md5table, md5digest, 1);
-		free(md5digest);
-		cli_dbgmsg("cli_pdf: extracted file %d to %s\n", ++files,
-			fullname);
-		if(limits && limits->maxfiles && (files >= limits->maxfiles)) {
-			/* Bug 698 */
-			cli_dbgmsg("cli_pdf: number of files exceeded %u\n", limits->maxfiles);
-			rc = CL_EMAXFILES;
+		if (rc == CL_CLEAN) {
+			cli_dbgmsg("cli_pdf: extracted file %u to %s\n", files, fullname);
+			files++;
+	
+			lseek(fout, 0, SEEK_SET);
+			if((md5digest = cli_md5digest(fout))) {
+				unsigned int i;
+				char md5str[33];
+
+				for(i = 0; i < 16; i++)
+					sprintf(md5str + 2*i, "%02x", md5digest[i]);
+				md5str[32] = 0;
+				free(md5digest);
+
+				if(tableFind(md5table, md5str) >= 0) {
+					cli_dbgmsg("cli_pdf: not scanning duplicate embedded file '%s'\n", fullname);
+					close(fout);
+					unlink(fullname);
+					continue;
+				} else
+					tableInsert(md5table, md5str, 1);
+			}
+
+			lseek(fout, 0, SEEK_SET);
+			rc = cli_magic_scandesc(fout, ctx);
 		}
+		close(fout);
+		if(!cli_leavetemps_flag) unlink(fullname);
+		if(rc != CL_CLEAN) break;
 	}
 
-	if(alloced)
-		free(alloced);
-	else
-		munmap(buf, size);
+	munmap(buf, size);
 
 	tableDestroy(md5table);
 
@@ -539,35 +518,38 @@ cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
  * flate inflation - returns clamAV status, e.g CL_SUCCESS, CL_EZIP
  */
 static int
-try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, const cli_ctx *ctx)
+try_flatedecode(unsigned char *buf, off_t real_len, off_t calculated_len, int fout, cli_ctx *ctx)
 {
-	int ret = flatedecode(buf, real_len, fout, ctx);
+	int ret = cli_checklimits("cli_pdf", ctx, real_len, 0, 0);
 
-	if(ret == CL_SUCCESS)
-		return CL_SUCCESS;
+	if (ret==CL_CLEAN && flatedecode(buf, real_len, fout, ctx) == CL_SUCCESS)
+		return CL_CLEAN;
 
 	if(real_len == calculated_len) {
 		/*
 		 * Nothing more we can do to inflate
 		 */
-		cli_warnmsg("Bad compression in flate stream\n");
-		return (ret == CL_SUCCESS) ? CL_EFORMAT : ret;
+		cli_dbgmsg("cli_pdf: Bad compression in flate stream\n");
+		return CL_CLEAN;
 	}
 
+	if(cli_checklimits("cli_pdf", ctx, calculated_len, 0, 0)!=CL_CLEAN)
+		return CL_CLEAN;
+
 	ret = flatedecode(buf, calculated_len, fout, ctx);
-	if(ret == CL_SUCCESS)
-		return CL_SUCCESS;
+	if(ret == CL_CLEAN)
+		return CL_CLEAN;
 
 	/* i.e. the PDF file is broken :-( */
-	cli_warnmsg("cli_pdf: Bad compressed block length in flate stream\n");
+	cli_dbgmsg("cli_pdf: Bad compressed block length in flate stream\n");
 
 	return ret;
 }
 
 static int
-flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
+flatedecode(unsigned char *buf, off_t len, int fout, cli_ctx *ctx)
 {
-	int zstat;
+	int zstat, ret;
 	off_t nbytes;
 	z_stream stream;
 	unsigned char output[BUFSIZ];
@@ -579,7 +561,7 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 	cli_dbgmsg("cli_pdf: flatedecode %lu bytes\n", (unsigned long)len);
 
 	if(len == 0) {
-		cli_warnmsg("cli_pdf: flatedecode len == 0\n");
+		cli_dbgmsg("cli_pdf: flatedecode len == 0\n");
 		return CL_CLEAN;
 	}
 
@@ -595,7 +577,7 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 	tmpfd = mkstemp(tmpfilename);
 	if(tmpfd < 0) {
 		perror(tmpfilename);
-		cli_errmsg("Can't make debugging file\n");
+		cli_errmsg("cli_pdf: Can't make debugging file\n");
 	} else {
 		FILE *tmpfp = fdopen(tmpfd, "w");
 
@@ -619,7 +601,7 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 	zstat = inflateInit(&stream);
 	if(zstat != Z_OK) {
 		cli_warnmsg("cli_pdf: inflateInit failed");
-		return CL_EZIP;
+		return CL_EMEM;
 	}
 
 	nbytes = 0;
@@ -629,20 +611,17 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 		switch(zstat) {
 			case Z_OK:
 				if(stream.avail_out == 0) {
-
-					nbytes += cli_writen(fout, output, sizeof(output));
-
-					if(ctx->limits &&
-					   ctx->limits->maxfilesize &&
-					   (nbytes > (off_t) ctx->limits->maxfilesize)) {
-						cli_dbgmsg("cli_pdf: flatedecode size exceeded (%lu)\n",
-							(unsigned long)nbytes);
+				  	int written;
+					if ((written=cli_writen(fout, output, sizeof(output)))!=sizeof(output)) {
+						cli_errmsg("cli_pdf: failed to write output file\n");
 						inflateEnd(&stream);
-						if(BLOCKMAX) {
-							*ctx->virname = "PDF.ExceededFileSize";
-							return CL_VIRUS;
-						}
-						return CL_EZIP;
+						return CL_EIO;
+					}
+					nbytes += written;
+
+					if((ret=cli_checklimits("cli_pdf", ctx, nbytes, 0, 0))!=CL_CLEAN) {
+						inflateEnd(&stream);
+						return ret;
 					}
 					stream.next_out = output;
 					stream.avail_out = sizeof(output);
@@ -652,47 +631,31 @@ flatedecode(unsigned char *buf, off_t len, int fout, const cli_ctx *ctx)
 				break;
 			default:
 				if(stream.msg)
-					cli_dbgmsg("pdf: after writing %lu bytes, got error \"%s\" inflating PDF attachment\n",
+					cli_dbgmsg("cli_pdf: after writing %lu bytes, got error \"%s\" inflating PDF attachment\n",
 						(unsigned long)nbytes,
 						stream.msg);
 				else
-					cli_dbgmsg("pdf: after writing %lu bytes, got error %d inflating PDF attachment\n",
+					cli_dbgmsg("cli_pdf: after writing %lu bytes, got error %d inflating PDF attachment\n",
 						(unsigned long)nbytes, zstat);
 				inflateEnd(&stream);
-				return (zstat == Z_OK) ? CL_SUCCESS : CL_EZIP;
+				return CL_CLEAN;
 		}
 		break;
 	}
 
-	if(stream.avail_out != sizeof(output))
-		if(cli_writen(fout, output, sizeof(output) - stream.avail_out) < 0)
+	if(stream.avail_out != sizeof(output)) {
+		if(cli_writen(fout, output, sizeof(output) - stream.avail_out) < 0) {
+			cli_errmsg("cli_pdf: failed to write output file\n");
+			inflateEnd(&stream);
 			return CL_EIO;
-
-	/*
-	 * On BSD systems total_in and total_out are "long long", so these
-	 * numbers could (in theory) get truncated in the debug statement
-	 */
-	cli_dbgmsg("cli_pdf: flatedecode in=%lu out=%lu ratio %lu (max %u)\n",
-		(unsigned long)stream.total_in, (unsigned long)stream.total_out,
-		(unsigned long)(stream.total_out / stream.total_in),
-		ctx->limits ? ctx->limits->maxratio : 0);
-
-	if(ctx->limits &&
-	   ctx->limits->maxratio &&
-	   ((stream.total_out / stream.total_in) > ctx->limits->maxratio)) {
-		cli_dbgmsg("cli_pdf: flatedecode Max ratio reached\n");
-		inflateEnd(&stream);
-		if(BLOCKMAX) {
-			*ctx->virname = "Oversized.PDF";
-			return CL_VIRUS;
 		}
-		return CL_EZIP;
 	}
-
+			
 #ifdef	SAVE_TMP
 	unlink(tmpfilename);
 #endif
-	return inflateEnd(&stream) == Z_OK ? CL_SUCCESS : CL_EZIP;
+	inflateEnd(&stream);
+	return CL_CLEAN;
 }
 
 /*
@@ -709,7 +672,7 @@ ascii85decode(const char *buf, off_t len, unsigned char *output)
 	int ret = 0;
 
 	if(cli_pmemstr(buf, len, "~>", 2) == NULL)
-		cli_warnmsg("ascii85decode: no EOF marker found\n");
+		cli_dbgmsg("cli_pdf: ascii85decode: no EOF marker found\n");
 
 	ptr = buf;
 
@@ -734,7 +697,7 @@ ascii85decode(const char *buf, off_t len, unsigned char *output)
 			}
 		} else if(byte == 'z') {
 			if(quintet) {
-				cli_warnmsg("ascii85decode: unexpected 'z'\n");
+				cli_dbgmsg("ascii85decode: unexpected 'z'\n");
 				return -1;
 			}
 			*output++ = '\0';
@@ -748,7 +711,7 @@ ascii85decode(const char *buf, off_t len, unsigned char *output)
 				int i;
 
 				if(quintet == 1) {
-					cli_warnmsg("ascii85Decode: only 1 byte in last quintet\n");
+					cli_dbgmsg("ascii85Decode: only 1 byte in last quintet\n");
 					return -1;
 				}
 				for(i = quintet; i < 5; i++)
@@ -764,7 +727,7 @@ ascii85decode(const char *buf, off_t len, unsigned char *output)
 			len = 0;
 			break;
 		} else if(!isspace(byte)) {
-			cli_warnmsg("ascii85Decode: invalid character 0x%x, len %lu\n",
+			cli_dbgmsg("ascii85Decode: invalid character 0x%x, len %lu\n",
 				byte & 0xFF, (unsigned long)len);
 			return -1;
 		}
@@ -883,9 +846,9 @@ cli_pmemstr(const char *haystack, size_t hs, const char *needle, size_t ns)
 #include "pdf.h"
 
 int
-cli_pdf(const char *dir, int desc, const cli_ctx *ctx)
+cli_pdf(const char *dir, int desc, cli_ctx *ctx)
 {
-	cli_warnmsg("File not decoded - PDF decoding needs mmap() (for now)\n");
+	cli_dbgmsg("File not decoded - PDF decoding needs mmap() (for now)\n");
 	return CL_CLEAN;
 }
 #endif

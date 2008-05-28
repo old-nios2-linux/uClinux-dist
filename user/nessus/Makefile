@@ -108,7 +108,7 @@ build:
 
 # The base libraries are needed for everything
 nessus-libraries/config.status: Makefile
-	-$(MAKE) -C nessus-libraries distclean ;			\
+	$(MAKE) -C nessus-libraries distclean ;				\
 	cd nessus-libraries ; 								\
 		LDFLAGS="$(LDFLAGS)"							\
 		sh configure $(CONFIGURE_OPTS) 					\
@@ -128,7 +128,6 @@ nessus-libraries: build nessus-libraries/config.status
 
 # Includes the NASL scripting language
 libnasl/config.status: Makefile
-	-$(MAKE) -C libnasl distclean ;						\
 	cd libnasl ; 										\
 		sh configure $(CONFIGURE_OPTS)  				\
 			--disable-fast-install						\
@@ -146,7 +145,6 @@ libnasl: nessus-libraries libnasl/config.status
 
 # Includes the nessus daemon and nessus command line tool
 nessus-core/config.status: Makefile
-	-$(MAKE) -C nessus-core distclean ;					\
 	cd nessus-core ; 									\
 		sh configure $(CONFIGURE_OPTS)  				\
 			--disable-fast-install 						\
@@ -164,7 +162,6 @@ nessus-core: libnasl nessus-core/config.status
 
 # The scripts etc
 nessus-plugins/config.status: Makefile
-	-$(MAKE) -C nessus-plugins distclean ;				\
 	cd nessus-plugins ; 								\
 		sh configure $(CONFIGURE_OPTS)  				\
 			--disable-fast-install 						\

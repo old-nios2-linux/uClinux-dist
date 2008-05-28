@@ -1,7 +1,6 @@
 /* Multi-process/thread control defs for GDB, the GNU debugger.
-   Copyright 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1997, 1998, 1999,
-   2000
-   Free Software Foundation, Inc.
+   Copyright (C) 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1997, 1998, 1999,
+   2000, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
    
 
@@ -9,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef GDBTHREAD_H
 #define GDBTHREAD_H
@@ -52,7 +49,7 @@ struct thread_info
   struct symtab *current_symtab;
   int trap_expected;
   int handling_longjmp;
-  int another_trap;
+  int stepping_over_breakpoint;
 
   /* This is set TRUE when a catchpoint of a shared library event
      triggers.  Since we don't wish to leave the inferior in the
@@ -72,10 +69,15 @@ struct thread_info
 /* Create an empty thread list, or empty the existing one.  */
 extern void init_thread_list (void);
 
-/* Add a thread to the thread list.
-   Note that add_thread now returns the handle of the new thread,
-   so that the caller may initialize the private thread data.  */
+/* Add a thread to the thread list, print a message
+   that a new thread is found, and return the pointer to
+   the new thread.  Caller my use this pointer to 
+   initialize the private thread data.  */
 extern struct thread_info *add_thread (ptid_t ptid);
+
+/* Same as add_thread, but does not print a message
+   about new thread.  */
+extern struct thread_info *add_thread_silent (ptid_t ptid);
 
 /* Delete an existing thread list entry.  */
 extern void delete_thread (ptid_t);
@@ -138,7 +140,14 @@ extern void load_infrun_state (ptid_t ptid,
 			       int       *current_line,
 			       struct symtab **current_symtab);
 
+/* Switch from one thread to another.  */
+extern void switch_to_thread (ptid_t ptid);
+
 /* Commands with a prefix of `thread'.  */
 extern struct cmd_list_element *thread_cmd_list;
+
+/* Print notices on thread events (attach, detach, etc.), set with
+   `set print thread-events'.  */
+extern int print_thread_events;
 
 #endif /* GDBTHREAD_H */

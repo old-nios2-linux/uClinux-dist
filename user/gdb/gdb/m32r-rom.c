@@ -1,8 +1,8 @@
 /* Remote debugging interface to m32r and mon2000 ROM monitors for GDB, 
    the GNU debugger.
 
-   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Adapted by Michael Snyder of Cygnus Support.
 
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,21 +19,21 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module defines communication with the Renesas m32r monitor */
 
 #include "defs.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "exceptions.h"
 #include "monitor.h"
 #include "serial.h"
 #include "symtab.h"
 #include "command.h"
 #include "gdbcmd.h"
 #include "symfile.h"		/* for generic load */
+#include <sys/time.h>
 #include <time.h>		/* for time_t */
 #include "gdb_string.h"
 #include "objfiles.h"		/* for ALL_OBJFILES etc. */
@@ -44,11 +44,15 @@
 /*
  * All this stuff just to get my host computer's IP address!
  */
+#ifdef __MINGW32__
+#include <winsock.h>
+#else
 #include <sys/types.h>
 #include <netdb.h>		/* for hostent */
 #include <netinet/in.h>		/* for struct in_addr */
 #if 1
 #include <arpa/inet.h>		/* for inet_ntoa */
+#endif
 #endif
 
 static char *board_addr;	/* user-settable IP address for M32R-EVA */
@@ -81,8 +85,9 @@ m32r_load_section (bfd *abfd, asection *s, void *obj)
       *data_count += section_size;
 
       printf_filtered ("Loading section %s, size 0x%lx lma ",
-		       bfd_section_name (abfd, s), section_size);
-      print_address_numeric (section_base, 1, gdb_stdout);
+		       bfd_section_name (abfd, s),
+		       (unsigned long) section_size);
+      fputs_filtered (paddress (section_base), gdb_stdout);
       printf_filtered ("\n");
       gdb_flush (gdb_stdout);
       monitor_printf ("%s mw\r", paddr_nz (section_base));
@@ -118,17 +123,17 @@ m32r_load (char *filename, int from_tty)
   bfd *abfd;
   asection *s;
   unsigned int i, data_count = 0;
-  time_t start_time, end_time;	/* for timing of download */
+  struct timeval start_time, end_time;
 
   if (filename == NULL || filename[0] == 0)
     filename = get_exec_file (1);
 
   abfd = bfd_openr (filename, 0);
   if (!abfd)
-    error ("Unable to open file %s\n", filename);
+    error (_("Unable to open file %s."), filename);
   if (bfd_check_format (abfd, bfd_object) == 0)
-    error ("File is not an object file\n");
-  start_time = time (NULL);
+    error (_("File is not an object file."));
+  gettimeofday (&start_time, NULL);
 #if 0
   for (s = abfd->sections; s; s = s->next)
     if (s->flags & SEC_LOAD)
@@ -141,7 +146,7 @@ m32r_load (char *filename, int from_tty)
 
 	printf_filtered ("Loading section %s, size 0x%lx vma ",
 			 bfd_section_name (abfd, s), section_size);
-	print_address_numeric (section_base, 1, gdb_stdout);
+	fputs_filtered (paddress (section_base), gdb_stdout);
 	printf_filtered ("\n");
 	gdb_flush (gdb_stdout);
 	monitor_printf ("%x mw\r", section_base);
@@ -162,10 +167,11 @@ m32r_load (char *filename, int from_tty)
       return;
     }
 #endif
-  end_time = time (NULL);
-  printf_filtered ("Start address 0x%lx\n", bfd_get_start_address (abfd));
-  print_transfer_performance (gdb_stdout, data_count, 0,
-			      end_time - start_time);
+  gettimeofday (&end_time, NULL);
+  printf_filtered ("Start address 0x%lx\n",
+		   (unsigned long) bfd_get_start_address (abfd));
+  print_transfer_performance (gdb_stdout, data_count, 0, &start_time,
+			      &end_time);
 
   /* Finally, make the PC point at the start address */
   if (exec_bfd)
@@ -204,10 +210,12 @@ static char *m32r_regnames[] =
 };
 
 static void
-m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
+m32r_supply_register (struct regcache *regcache, char *regname,
+		      int regnamelen, char *val, int vallen)
 {
   int regno;
   int num_regs = sizeof (m32r_regnames) / sizeof (m32r_regnames[0]);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   for (regno = 0; regno < num_regs; regno++)
     if (strncmp (regname, m32r_regnames[regno], regnamelen) == 0)
@@ -218,14 +226,14 @@ m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
 
   if (regno == ACCL_REGNUM)
     {				/* special handling for 64-bit acc reg */
-      monitor_supply_register (ACCH_REGNUM, val);
+      monitor_supply_register (regcache, ACCH_REGNUM, val);
       val = strchr (val, ':');	/* skip past ':' to get 2nd word */
       if (val != NULL)
-	monitor_supply_register (ACCL_REGNUM, val + 1);
+	monitor_supply_register (regcache, ACCL_REGNUM, val + 1);
     }
   else
     {
-      monitor_supply_register (regno, val);
+      monitor_supply_register (regcache, regno, val);
       if (regno == PSW_REGNUM)
 	{
 	  unsigned long psw = strtoul (val, NULL, 16);
@@ -233,45 +241,47 @@ m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
 
 #ifdef SM_REGNUM
 	  /* Stack mode bit */
-	  monitor_supply_register (SM_REGNUM, (psw & 0x80) ? one : zero);
+	  monitor_supply_register (regcache, SM_REGNUM, (psw & 0x80) ? one : zero);
 #endif
 #ifdef BSM_REGNUM
 	  /* Backup stack mode bit */
-	  monitor_supply_register (BSM_REGNUM, (psw & 0x8000) ? one : zero);
+	  monitor_supply_register (regcache, BSM_REGNUM, (psw & 0x8000) ? one : zero);
 #endif
 #ifdef IE_REGNUM
 	  /* Interrupt enable bit */
-	  monitor_supply_register (IE_REGNUM, (psw & 0x40) ? one : zero);
+	  monitor_supply_register (regcache, IE_REGNUM, (psw & 0x40) ? one : zero);
 #endif
 #ifdef BIE_REGNUM
 	  /* Backup interrupt enable bit */
-	  monitor_supply_register (BIE_REGNUM, (psw & 0x4000) ? one : zero);
+	  monitor_supply_register (regcache, BIE_REGNUM, (psw & 0x4000) ? one : zero);
 #endif
 #ifdef COND_REGNUM
 	  /* Condition bit (carry etc.) */
-	  monitor_supply_register (COND_REGNUM, (psw & 0x1) ? one : zero);
+	  monitor_supply_register (regcache, COND_REGNUM, (psw & 0x1) ? one : zero);
 #endif
 #ifdef CBR_REGNUM
-	  monitor_supply_register (CBR_REGNUM, (psw & 0x1) ? one : zero);
+	  monitor_supply_register (regcache, CBR_REGNUM, (psw & 0x1) ? one : zero);
 #endif
 #ifdef BPC_REGNUM
-	  monitor_supply_register (BPC_REGNUM, zero);	/* KLUDGE:   (???????) */
+	  monitor_supply_register (regcache, BPC_REGNUM, zero);	/* KLUDGE:   (???????) */
 #endif
 #ifdef BCARRY_REGNUM
-	  monitor_supply_register (BCARRY_REGNUM, zero);	/* KLUDGE: (??????) */
+	  monitor_supply_register (regcache, BCARRY_REGNUM, zero);	/* KLUDGE: (??????) */
 #endif
 	}
 
       if (regno == SPI_REGNUM || regno == SPU_REGNUM)
 	{			/* special handling for stack pointer (spu or spi) */
 	  ULONGEST stackmode, psw;
-	  regcache_cooked_read_unsigned (current_regcache, PSW_REGNUM, &psw);
+	  regcache_cooked_read_unsigned (regcache, PSW_REGNUM, &psw);
 	  stackmode = psw & 0x80;
 
 	  if (regno == SPI_REGNUM && !stackmode)	/* SP == SPI */
-	    monitor_supply_register (SP_REGNUM, val);
+	    monitor_supply_register (regcache,
+				     gdbarch_sp_regnum (gdbarch), val);
 	  else if (regno == SPU_REGNUM && stackmode)	/* SP == SPU */
-	    monitor_supply_register (SP_REGNUM, val);
+	    monitor_supply_register (regcache,
+				     gdbarch_sp_regnum (gdbarch), val);
 	}
     }
 }
@@ -404,7 +414,7 @@ m32r_upload_command (char *args, int from_tty)
 {
   bfd *abfd;
   asection *s;
-  time_t start_time, end_time;	/* for timing of download */
+  struct timeval start_time, end_time;
   int resp_len, data_count = 0;
   char buf[1024];
   struct hostent *hostent;
@@ -414,7 +424,7 @@ m32r_upload_command (char *args, int from_tty)
   monitor_printf ("ust\r");
   resp_len = monitor_expect_prompt (buf, sizeof (buf));
   if (!strchr (buf, ':'))
-    error ("No ethernet connection!");
+    error (_("No ethernet connection!"));
 
   if (board_addr == 0)
     {
@@ -433,6 +443,13 @@ m32r_upload_command (char *args, int from_tty)
     }
   if (server_addr == 0)
     {
+#ifdef __MINGW32__
+      WSADATA wd;
+      /* Winsock initialization. */
+      if (WSAStartup (MAKEWORD (1, 1), &wd))
+	error (_("Couldn't initialize WINSOCK."));
+#endif
+
       buf[0] = 0;
       gethostname (buf, sizeof (buf));
       if (buf[0] != 0)
@@ -466,7 +483,7 @@ m32r_upload_command (char *args, int from_tty)
 	  ("Need to know default download path (use 'set download-path')");
     }
 
-  start_time = time (NULL);
+  gettimeofday (&start_time, NULL);
   monitor_printf ("uhip %s\r", server_addr);
   resp_len = monitor_expect_prompt (buf, sizeof (buf));	/* parse result? */
   monitor_printf ("ulip %s\r", board_addr);
@@ -490,7 +507,7 @@ m32r_upload_command (char *args, int from_tty)
   else
     printf_filtered (" -- Ethernet load complete.\n");
 
-  end_time = time (NULL);
+  gettimeofday (&end_time, NULL);
   abfd = bfd_openr (args, 0);
   if (abfd != NULL)
     {				/* Download is done -- print section statistics */
@@ -508,16 +525,18 @@ m32r_upload_command (char *args, int from_tty)
 	    data_count += section_size;
 
 	    printf_filtered ("Loading section %s, size 0x%lx lma ",
-			     bfd_section_name (abfd, s), section_size);
-	    print_address_numeric (section_base, 1, gdb_stdout);
+			     bfd_section_name (abfd, s),
+			     (unsigned long) section_size);
+	    fputs_filtered (paddress (section_base), gdb_stdout);
 	    printf_filtered ("\n");
 	    gdb_flush (gdb_stdout);
 	  }
       /* Finally, make the PC point at the start address */
       write_pc (bfd_get_start_address (abfd));
-      printf_filtered ("Start address 0x%lx\n", bfd_get_start_address (abfd));
-      print_transfer_performance (gdb_stdout, data_count, 0,
-				  end_time - start_time);
+      printf_filtered ("Start address 0x%lx\n", 
+		       (unsigned long) bfd_get_start_address (abfd));
+      print_transfer_performance (gdb_stdout, data_count, 0, &start_time,
+				  &end_time);
     }
   inferior_ptid = null_ptid;	/* No process now */
 
@@ -558,29 +577,32 @@ Specify the serial device it is connected to (e.g. /dev/ttya).";
   mon2000_ops.to_open = mon2000_open;
   add_target (&mon2000_ops);
 
-  add_setshow_string_cmd ("download-path", class_obscure, &download_path, "\
-Set the default path for downloadable SREC files.", "\
-Show the default path for downloadable SREC files.", "\
-Determines the default path for downloadable SREC files.", "\
-The default path for downloadable SREC files is %s.",
-		   NULL, NULL, &setlist, &showlist);
+  add_setshow_string_cmd ("download-path", class_obscure, &download_path, _("\
+Set the default path for downloadable SREC files."), _("\
+Show the default path for downloadable SREC files."), _("\
+Determines the default path for downloadable SREC files."),
+			  NULL,
+			  NULL, /* FIXME: i18n: The default path for downloadable SREC files is %s.  */
+			  &setlist, &showlist);
 
-  add_setshow_string_cmd ("board-address", class_obscure, &board_addr, "\
-Set IP address for M32R-EVA target board.", "\
-Show IP address for M32R-EVA target board.", "\
-Determine the IP address for M32R-EVA target board.", "\
-IP address for M32R-EVA target board is %s",
-		   NULL, NULL, &setlist, &showlist);
+  add_setshow_string_cmd ("board-address", class_obscure, &board_addr, _("\
+Set IP address for M32R-EVA target board."), _("\
+Show IP address for M32R-EVA target board."), _("\
+Determine the IP address for M32R-EVA target board."),
+			  NULL,
+			  NULL, /* FIXME: i18n: IP address for M32R-EVA target board is %s.  */
+			  &setlist, &showlist);
 
-  add_setshow_string_cmd ("server-address", class_obscure, &server_addr, "\
-Set IP address for download server (GDB's host computer).", "\
-Show IP address for download server (GDB's host computer).", "\
-Determine the IP address for download server (GDB's host computer).", "\
-IP address for download server (GDB's host computer) is %s.",
-		   NULL, NULL, &setlist, &showlist);
+  add_setshow_string_cmd ("server-address", class_obscure, &server_addr, _("\
+Set IP address for download server (GDB's host computer)."), _("\
+Show IP address for download server (GDB's host computer)."), _("\
+Determine the IP address for download server (GDB's host computer)."),
+			  NULL,
+			  NULL, /* FIXME: i18n: IP address for download server (GDB's host computer) is %s.  */
+			  &setlist, &showlist);
 
-  add_com ("upload", class_obscure, m32r_upload_command,
-	   "Upload the srec file via the monitor's Ethernet upload capability.");
+  add_com ("upload", class_obscure, m32r_upload_command, _("\
+Upload the srec file via the monitor's Ethernet upload capability."));
 
-  add_com ("tload", class_obscure, m32r_load, "test upload command.");
+  add_com ("tload", class_obscure, m32r_load, _("test upload command."));
 }

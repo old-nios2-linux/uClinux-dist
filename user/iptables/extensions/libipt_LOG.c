@@ -13,16 +13,12 @@
 
 #ifndef IPT_LOG_UID /* Old kernel */
 #define IPT_LOG_UID	0x08	/* Log UID owning local socket */
-#endif
-#ifndef IPT_LOG_NFLOG
-#define IPT_LOG_NFLOG	0x10	/* Log using nf_log backend */
 #undef  IPT_LOG_MASK
-#define IPT_LOG_MASK	0x1f
+#define IPT_LOG_MASK	0x0f
 #endif
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void LOG_help(void)
 {
 	printf(
 "LOG v%s options:\n"
@@ -31,25 +27,22 @@ help(void)
 " --log-tcp-sequence		Log TCP sequence numbers.\n\n"
 " --log-tcp-options		Log TCP options.\n\n"
 " --log-ip-options		Log IP options.\n\n"
-" --log-uid			Log UID owning the local socket.\n\n"
-" --log-nf			Log using nf_log backend.\n\n",
+" --log-uid			Log UID owning the local socket.\n\n",
 IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{ .name = "log-level",        .has_arg = 1, .flag = 0, .val = '!' },
-	{ .name = "log-prefix",       .has_arg = 1, .flag = 0, .val = '#' },
-	{ .name = "log-tcp-sequence", .has_arg = 0, .flag = 0, .val = '1' },
-	{ .name = "log-tcp-options",  .has_arg = 0, .flag = 0, .val = '2' },
-	{ .name = "log-ip-options",   .has_arg = 0, .flag = 0, .val = '3' },
-	{ .name = "log-uid",          .has_arg = 0, .flag = 0, .val = '4' },
-	{ .name = "log-nf",           .has_arg = 0, .flag = 0, .val = '5' },
-	{ .name = 0 }
+static const struct option LOG_opts[] = {
+	{ .name = "log-level",        .has_arg = 1, .val = '!' },
+	{ .name = "log-prefix",       .has_arg = 1, .val = '#' },
+	{ .name = "log-tcp-sequence", .has_arg = 0, .val = '1' },
+	{ .name = "log-tcp-options",  .has_arg = 0, .val = '2' },
+	{ .name = "log-ip-options",   .has_arg = 0, .val = '3' },
+	{ .name = "log-uid",          .has_arg = 0, .val = '4' },
+	{ }
 };
 
 /* Initialize the target. */
-static void
-init(struct ipt_entry_target *t, unsigned int *nfcache)
+static void LOG_init(struct xt_entry_target *t)
 {
 	struct ipt_log_info *loginfo = (struct ipt_log_info *)t->data;
 
@@ -62,7 +55,7 @@ struct ipt_log_names {
 	unsigned int level;
 };
 
-static struct ipt_log_names ipt_log_names[]
+static const struct ipt_log_names ipt_log_names[]
 = { { .name = "alert",   .level = LOG_ALERT },
     { .name = "crit",    .level = LOG_CRIT },
     { .name = "debug",   .level = LOG_DEBUG },
@@ -110,14 +103,11 @@ parse_level(const char *level)
 #define IPT_LOG_OPT_TCPOPT 0x08
 #define IPT_LOG_OPT_IPOPT 0x10
 #define IPT_LOG_OPT_UID 0x20
-#define IPT_LOG_OPT_NFLOG 0x40
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      struct ipt_entry_target **target)
+static int LOG_parse(int c, char **argv, int invert, unsigned int *flags,
+                     const void *entry, struct xt_entry_target **target)
 {
 	struct ipt_log_info *loginfo = (struct ipt_log_info *)(*target)->data;
 
@@ -198,15 +188,6 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 		*flags |= IPT_LOG_OPT_UID;
 		break;
 
-	case '5':
-		if (*flags & IPT_LOG_OPT_NFLOG)
-			exit_error(PARAMETER_PROBLEM,
-				   "Can't specify --log-nf twice");
-
-		loginfo->logflags |= IPT_LOG_NFLOG;
-		*flags |= IPT_LOG_OPT_NFLOG;
-		break;
-
 	default:
 		return 0;
 	}
@@ -214,16 +195,9 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-/* Final check; nothing. */
-static void final_check(unsigned int flags)
-{
-}
-
 /* Prints out the targinfo. */
-static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_target *target,
-      int numeric)
+static void LOG_print(const void *ip, const struct xt_entry_target *target,
+                      int numeric)
 {
 	const struct ipt_log_info *loginfo
 		= (const struct ipt_log_info *)target->data;
@@ -252,8 +226,6 @@ print(const struct ipt_ip *ip,
 			printf("ip-options ");
 		if (loginfo->logflags & IPT_LOG_UID)
 			printf("uid ");
-		if (loginfo->logflags & IPT_LOG_NFLOG)
-			printf("nflog ");
 		if (loginfo->logflags & ~(IPT_LOG_MASK))
 			printf("unknown-flags ");
 	}
@@ -263,8 +235,7 @@ print(const struct ipt_ip *ip,
 }
 
 /* Saves the union ipt_targinfo in parsable form to stdout. */
-static void
-save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
+static void LOG_save(const void *ip, const struct xt_entry_target *target)
 {
 	const struct ipt_log_info *loginfo
 		= (const struct ipt_log_info *)target->data;
@@ -283,27 +254,22 @@ save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
 		printf("--log-ip-options ");
 	if (loginfo->logflags & IPT_LOG_UID)
 		printf("--log-uid ");
-	if (loginfo->logflags & IPT_LOG_NFLOG)
-		printf("--log-nf ");
 }
 
-static
-struct iptables_target log
-= {
+static struct iptables_target log_target = {
     .name          = "LOG",
     .version       = IPTABLES_VERSION,
     .size          = IPT_ALIGN(sizeof(struct ipt_log_info)),
     .userspacesize = IPT_ALIGN(sizeof(struct ipt_log_info)),
-    .help          = &help,
-    .init          = &init,
-    .parse         = &parse,
-    .final_check   = &final_check,
-    .print         = &print,
-    .save          = &save,
-    .extra_opts    = opts
+    .help          = LOG_help,
+    .init          = LOG_init,
+    .parse         = LOG_parse,
+    .print         = LOG_print,
+    .save          = LOG_save,
+    .extra_opts    = LOG_opts,
 };
 
 void _init(void)
 {
-	register_target(&log);
+	register_target(&log_target);
 }

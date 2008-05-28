@@ -1,13 +1,13 @@
 /* Target-dependent code for the Motorola 68000 series.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000,
-   2001, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2001,
+   2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef M68K_TDEP_H
 #define M68K_TDEP_H
@@ -60,6 +58,14 @@ enum struct_return
   reg_struct_return		/* Return "short" structures in registers.  */
 };
 
+/* Particular flavour of m68k.  */
+enum m68k_flavour
+  {
+    m68k_no_flavour,
+    m68k_coldfire_flavour,
+    m68k_fido_flavour
+  };
+
 /* Target-dependent structure in gdbarch.  */
 
 struct gdbarch_tdep
@@ -76,6 +82,16 @@ struct gdbarch_tdep
 
   /* Convention for returning structures.  */
   enum struct_return struct_return;
+
+  /* Convention for returning floats.  zero in int regs, non-zero in float.  */
+  int float_return;
+
+  /* The particular flavour of m68k.  */
+  enum m68k_flavour flavour;
+
+  /* Flag set if the floating point registers are present, or assumed
+     to be present.  */
+  int fpregs_present;
 };
 
 /* Initialize a SVR4 architecture variant.  */

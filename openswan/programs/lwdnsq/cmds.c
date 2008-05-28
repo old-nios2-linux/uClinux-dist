@@ -36,7 +36,7 @@
 #include <lwres/netdb.h>
 #include <lwres/async.h>
 
-
+#include "os_select.h"
 #include "lwdnsq.h"
 
 static void cmd_not_implemented(dnskey_glob *gs, const char *what)
@@ -100,9 +100,9 @@ again:
 	timeout.tv_sec = lwres_async_timeout(ctx);
 	sock = lwres_async_fd(ctx);
 
-	FD_ZERO(&readfds);
-	FD_SET(sock, &readfds);
-	ret2 = select(sock + 1, &readfds, NULL, NULL, &timeout);
+	OS_FD_ZERO(&readfds);
+	OS_FD_SET(sock, &readfds);
+	ret2 = os_select(sock + 1, &readfds, NULL, NULL, &timeout);
 	
 	/*
 	 * What happened with select?

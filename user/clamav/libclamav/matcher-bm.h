@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2004 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -25,11 +27,11 @@
 
 struct cli_bm_patt {
     unsigned char *pattern, *prefix;
-    uint16_t length, prefix_length;
     char *virname, *offset;
-    uint8_t target;
     struct cli_bm_patt *next;
+    uint16_t length, prefix_length;
     uint16_t cnt;
+    uint8_t target;
 };
 
 int cli_bm_addpatt(struct cli_matcher *root, struct cli_bm_patt *pattern);

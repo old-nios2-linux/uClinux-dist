@@ -1,6 +1,5 @@
 /* YACC parser for Pascal expressions, for GDB.
-   Copyright 2000
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -16,7 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* This file is derived from c-exp.y */
 
@@ -157,7 +157,7 @@ static int
 parse_number (char *, int, int, YYSTYPE *);
 
 static struct type *current_type;
-
+static int leftdiv_is_integer;
 static void push_current_type (void);
 static void pop_current_type (void);
 static int search_field;
@@ -233,6 +233,7 @@ static int search_field;
 
 start   :	{ current_type = NULL;
 		  search_field = 0;
+		  leftdiv_is_integer = 0;
 		}
 		normal_start {}
 	;
@@ -332,7 +333,10 @@ exp	:	exp '('
 			{ write_exp_elt_opcode (OP_FUNCALL);
 			  write_exp_elt_longcst ((LONGEST) end_arglist ());
 			  write_exp_elt_opcode (OP_FUNCALL); 
-			  pop_current_type (); }
+			  pop_current_type ();
+			  if (current_type)
+ 	  		    current_type = TYPE_TARGET_TYPE (current_type);
+			}
 	;
 
 arglist	:
@@ -367,8 +371,24 @@ exp	:	exp '*' exp
 			{ write_exp_elt_opcode (BINOP_MUL); }
 	;
 
-exp	:	exp '/' exp
-			{ write_exp_elt_opcode (BINOP_DIV); }
+exp	:	exp '/' {
+			  if (current_type && is_integral_type (current_type))
+			    leftdiv_is_integer = 1;
+			} 
+		exp
+			{ 
+			  if (leftdiv_is_integer && current_type
+			      && is_integral_type (current_type))
+			    {
+			      write_exp_elt_opcode (UNOP_CAST);
+			      write_exp_elt_type (builtin_type_long_double);
+			      current_type = builtin_type_long_double;
+			      write_exp_elt_opcode (UNOP_CAST);
+			      leftdiv_is_integer = 0;
+			    }
+
+			  write_exp_elt_opcode (BINOP_DIV); 
+			}
 	;
 
 exp	:	exp DIV exp
@@ -396,27 +416,39 @@ exp	:	exp RSH exp
 	;
 
 exp	:	exp '=' exp
-			{ write_exp_elt_opcode (BINOP_EQUAL); }
+			{ write_exp_elt_opcode (BINOP_EQUAL); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp NOTEQUAL exp
-			{ write_exp_elt_opcode (BINOP_NOTEQUAL); }
+			{ write_exp_elt_opcode (BINOP_NOTEQUAL); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp LEQ exp
-			{ write_exp_elt_opcode (BINOP_LEQ); }
+			{ write_exp_elt_opcode (BINOP_LEQ); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp GEQ exp
-			{ write_exp_elt_opcode (BINOP_GEQ); }
+			{ write_exp_elt_opcode (BINOP_GEQ); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp '<' exp
-			{ write_exp_elt_opcode (BINOP_LESS); }
+			{ write_exp_elt_opcode (BINOP_LESS); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp '>' exp
-			{ write_exp_elt_opcode (BINOP_GTR); }
+			{ write_exp_elt_opcode (BINOP_GTR); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp ANDAND exp
@@ -438,18 +470,21 @@ exp	:	exp ASSIGN exp
 exp	:	TRUEKEYWORD
 			{ write_exp_elt_opcode (OP_BOOL);
 			  write_exp_elt_longcst ((LONGEST) $1);
+			  current_type = builtin_type_bool;
 			  write_exp_elt_opcode (OP_BOOL); }
 	;
 
 exp	:	FALSEKEYWORD
 			{ write_exp_elt_opcode (OP_BOOL);
 			  write_exp_elt_longcst ((LONGEST) $1);
+			  current_type = builtin_type_bool;
 			  write_exp_elt_opcode (OP_BOOL); }
 	;
 
 exp	:	INT
 			{ write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_type ($1.type);
+			  current_type = $1.type;
 			  write_exp_elt_longcst ((LONGEST)($1.val));
 			  write_exp_elt_opcode (OP_LONG); }
 	;
@@ -459,6 +494,7 @@ exp	:	NAME_OR_INT
 			  parse_number ($1.stoken.ptr, $1.stoken.length, 0, &val);
 			  write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_type (val.typed_val_int.type);
+			  current_type = val.typed_val_int.type;
 			  write_exp_elt_longcst ((LONGEST)val.typed_val_int.val);
 			  write_exp_elt_opcode (OP_LONG);
 			}
@@ -468,6 +504,7 @@ exp	:	NAME_OR_INT
 exp	:	FLOAT
 			{ write_exp_elt_opcode (OP_DOUBLE);
 			  write_exp_elt_type ($1.type);
+			  current_type = $1.type;
 			  write_exp_elt_dblcst ($1.dval);
 			  write_exp_elt_opcode (OP_DOUBLE); }
 	;
@@ -521,7 +558,7 @@ exp	:	THIS
 			  /* we need type of this */
 			  this_val = value_of_this (0); 
 			  if (this_val)
-			    this_type = this_val->type;
+			    this_type = value_type (this_val);
 			  else
 			    this_type = NULL;
 			  if (this_type)
@@ -640,9 +677,9 @@ variable:	name_not_typename
 			    {
 			      if (symbol_read_needs_frame (sym))
 				{
-				  if (innermost_block == 0 ||
-				      contained_in (block_found,
-						    innermost_block))
+				  if (innermost_block == 0
+				      || contained_in (block_found,
+						       innermost_block))
 				    innermost_block = block_found;
 				}
 
@@ -661,8 +698,9 @@ variable:	name_not_typename
 			      /* Object pascal: it hangs off of `this'.  Must
 			         not inadvertently convert from a method call
 				 to data ref.  */
-			      if (innermost_block == 0 ||
-				  contained_in (block_found, innermost_block))
+			      if (innermost_block == 0
+				  || contained_in (block_found,
+						   innermost_block))
 				innermost_block = block_found;
 			      write_exp_elt_opcode (OP_THIS);
 			      write_exp_elt_opcode (OP_THIS);
@@ -672,7 +710,7 @@ variable:	name_not_typename
 			      /* we need type of this */
 			      this_val = value_of_this (0); 
 			      if (this_val)
-				this_type = this_val->type;
+				this_type = value_type (this_val);
 			      else
 				this_type = NULL;
 			      if (this_type)
@@ -717,8 +755,6 @@ ptype	:	typebase
    is a pointer to member type.  Stroustrup loses again!  */
 
 type	:	ptype
-	|	typebase COLONCOLON '*'
-			{ $$ = lookup_member_type (builtin_type_int, $1); }
 	;
 
 typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
@@ -798,23 +834,8 @@ parse_number (p, len, parsed_float, putithere)
       char saved_char = p[len];
 
       p[len] = 0;	/* null-terminate the token */
-      if (sizeof (putithere->typed_val_float.dval) <= sizeof (float))
-	num = sscanf (p, "%g%c", (float *) &putithere->typed_val_float.dval,&c);
-      else if (sizeof (putithere->typed_val_float.dval) <= sizeof (double))
-	num = sscanf (p, "%lg%c", (double *) &putithere->typed_val_float.dval,&c);
-      else
-	{
-#ifdef SCANF_HAS_LONG_DOUBLE
-	  num = sscanf (p, "%Lg%c", &putithere->typed_val_float.dval,&c);
-#else
-	  /* Scan it into a double, then assign it to the long double.
-	     This at least wins with values representable in the range
-	     of doubles. */
-	  double temp;
-	  num = sscanf (p, "%lg%c", &temp,&c);
-	  putithere->typed_val_float.dval = temp;
-#endif
-	}
+      num = sscanf (p, "%" DOUBLEST_SCAN_FORMAT "%c",
+		    &putithere->typed_val_float.dval, &c);
       p[len] = saved_char;	/* restore the input stream */
       if (num != 1) 		/* check scanf found ONLY a float ... */
 	return ERROR;
@@ -926,16 +947,16 @@ parse_number (p, len, parsed_float, putithere)
      shift it right and see whether anything remains.  Note that we
      can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
      operation, because many compilers will warn about such a shift
-     (which always produces a zero result).  Sometimes TARGET_INT_BIT
-     or TARGET_LONG_BIT will be that big, sometimes not.  To deal with
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_bit will be that big, sometimes not.  To deal with
      the case where it is we just always shift the value more than
      once, with fewer bits each time.  */
 
   un = (ULONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (TARGET_INT_BIT - 2)) == 0)
+      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -947,20 +968,21 @@ parse_number (p, len, parsed_float, putithere)
       signed_type = builtin_type_int;
     }
   else if (long_p <= 1
-	   && (un >> (TARGET_LONG_BIT - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
       unsigned_type = builtin_type_unsigned_long;
       signed_type = builtin_type_long;
     }
   else
     {
       int shift;
-      if (sizeof (ULONGEST) * HOST_CHAR_BIT < TARGET_LONG_LONG_BIT)
+      if (sizeof (ULONGEST) * HOST_CHAR_BIT
+	  < gdbarch_long_long_bit (current_gdbarch))
 	/* A long long does not fit in a LONGEST.  */
 	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
       else
-	shift = (TARGET_LONG_LONG_BIT - 1);
+	shift = (gdbarch_long_long_bit (current_gdbarch) - 1);
       high_bit = (ULONGEST) 1 << shift;
       unsigned_type = builtin_type_unsigned_long_long;
       signed_type = builtin_type_long_long;
@@ -1358,6 +1380,7 @@ yylex ()
      removed from the input stream.  */
   if (namelen == 2 && uptokstart[0] == 'I' && uptokstart[1] == 'F')
     {
+      free (uptokstart);
       return 0;
     }
 
@@ -1369,29 +1392,43 @@ yylex ()
   switch (namelen)
     {
     case 6:
-      if (DEPRECATED_STREQ (uptokstart, "OBJECT"))
-	return CLASS;
-      if (DEPRECATED_STREQ (uptokstart, "RECORD"))
-	return STRUCT;
-      if (DEPRECATED_STREQ (uptokstart, "SIZEOF"))
-	return SIZEOF;
+      if (strcmp (uptokstart, "OBJECT") == 0)
+	{
+	  free (uptokstart);
+	  return CLASS;
+	}
+      if (strcmp (uptokstart, "RECORD") == 0)
+	{
+	  free (uptokstart);
+	  return STRUCT;
+	}
+      if (strcmp (uptokstart, "SIZEOF") == 0)
+	{
+	  free (uptokstart);
+	  return SIZEOF;
+	}
       break;
     case 5:
-      if (DEPRECATED_STREQ (uptokstart, "CLASS"))
-	return CLASS;
-      if (DEPRECATED_STREQ (uptokstart, "FALSE"))
+      if (strcmp (uptokstart, "CLASS") == 0)
+	{
+	  free (uptokstart);
+	  return CLASS;
+	}
+      if (strcmp (uptokstart, "FALSE") == 0)
 	{
           yylval.lval = 0;
+	  free (uptokstart);
           return FALSEKEYWORD;
         }
       break;
     case 4:
-      if (DEPRECATED_STREQ (uptokstart, "TRUE"))
+      if (strcmp (uptokstart, "TRUE") == 0)
 	{
           yylval.lval = 1;
+	  free (uptokstart);
   	  return TRUEKEYWORD;
         }
-      if (DEPRECATED_STREQ (uptokstart, "SELF"))
+      if (strcmp (uptokstart, "SELF") == 0)
         {
           /* here we search for 'this' like
              inserted in FPC stabs debug info */
@@ -1400,7 +1437,10 @@ yylex ()
 	  if (lookup_symbol (this_name, expression_context_block,
 			     VAR_DOMAIN, (int *) NULL,
 			     (struct symtab **) NULL))
-	    return THIS;
+	    {
+	      free (uptokstart);
+	      return THIS;
+	    }
 	}
       break;
     default:
@@ -1417,6 +1457,7 @@ yylex ()
         so in expression to enter hexadecimal values
         we still need to use C syntax with 0xff  */
       write_dollar_variable (yylval.sval);
+      free (uptokstart);
       return VARIABLE;
     }
 
@@ -1509,16 +1550,18 @@ yylex ()
 	strncpy (tempbuf, tokstart, namelen); tempbuf [namelen] = 0;
 	yylval.sval.ptr = tempbuf;
 	yylval.sval.length = namelen; 
+	free (uptokstart);
 	return FIELDNAME;
       } 
     /* Call lookup_symtab, not lookup_partial_symtab, in case there are
        no psymtabs (coff, xcoff, or some future change to blow away the
        psymtabs once once symbols are read).  */
-    if ((sym && SYMBOL_CLASS (sym) == LOC_BLOCK) ||
-        lookup_symtab (tmp))
+    if ((sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
+        || lookup_symtab (tmp))
       {
 	yylval.ssym.sym = sym;
 	yylval.ssym.is_a_field_of_this = is_a_field_of_this;
+	free (uptokstart);
 	return BLOCKNAME;
       }
     if (sym && SYMBOL_CLASS (sym) == LOC_TYPEDEF)
@@ -1609,20 +1652,24 @@ yylex ()
 #else /* not 0 */
 	  yylval.tsym.type = SYMBOL_TYPE (sym);
 #endif /* not 0 */
+	  free (uptokstart);
 	  return TYPENAME;
         }
     yylval.tsym.type
       = language_lookup_primitive_type_by_name (current_language,
 						current_gdbarch, tmp);
     if (yylval.tsym.type != NULL)
-      return TYPENAME;
+      {
+	free (uptokstart);
+	return TYPENAME;
+      }
 
     /* Input names that aren't symbols but ARE valid hex numbers,
        when the input radix permits them, can be names or numbers
        depending on the parse.  Note we support radixes > 16 here.  */
-    if (!sym &&
-        ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10) ||
-         (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
+    if (!sym
+        && ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10)
+            || (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
       {
  	YYSTYPE newlval;	/* Its value is ignored.  */
 	hextype = parse_number (tokstart, namelen, 0, &newlval);
@@ -1630,6 +1677,7 @@ yylex ()
 	  {
 	    yylval.ssym.sym = sym;
 	    yylval.ssym.is_a_field_of_this = is_a_field_of_this;
+	    free (uptokstart);
 	    return NAME_OR_INT;
 	  }
       }

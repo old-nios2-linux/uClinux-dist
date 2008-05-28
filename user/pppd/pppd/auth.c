@@ -83,7 +83,7 @@
 #include <sys/socket.h>
 #include <utmp.h>
 #include <fcntl.h>
-#if defined(_PATH_LASTLOG) && defined(__linux__)
+#if defined(USE_LASTLOG) && defined(_PATH_LASTLOG) && defined(__linux__)
 #include <lastlog.h>
 #endif
 
@@ -1654,7 +1654,7 @@ plogin(user, passwd, msg)
 	tty += 5;
     logwtmp(tty, user, ifname);		/* Add wtmp login entry */
 
-#if defined(_PATH_LASTLOG) && !defined(USE_PAM)
+#if defined(USE_LASTLOG) && defined(_PATH_LASTLOG) && !defined(USE_PAM)
     if (pw != (struct passwd *)NULL) {
 	    struct lastlog ll;
 	    int fd;
@@ -1668,7 +1668,7 @@ plogin(user, passwd, msg)
 		(void)close(fd);
 	    }
     }
-#endif /* _PATH_LASTLOG and not USE_PAM */
+#endif /* USE_LASTLOG and _PATH_LASTLOG and not USE_PAM */
 
     info("user %s logged in", user);
     logged_in = 1;

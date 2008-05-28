@@ -1,6 +1,6 @@
 /* Shared library support for IRIX.
-   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2004
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2004,
+   2007, 2008 Free Software Foundation, Inc.
 
    This file was created using portions of irix5-nat.c originally
    contributed to GDB by Ian Lance Taylor.
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -35,6 +33,9 @@
 #include "inferior.h"
 
 #include "solist.h"
+#include "solib.h"
+#include "solib-irix.h"
+
 
 /* Link map info to include in an allocate so_list entry.  Unlike some
    of the other solib backends, this (Irix) backend chooses to decode
@@ -62,12 +63,12 @@ struct lm_info
 
 typedef struct
 {
-  char b[4];
+  gdb_byte b[4];
 }
 gdb_int32_bytes;
 typedef struct
 {
-  char b[8];
+  gdb_byte b[8];
 }
 gdb_int64_bytes;
 
@@ -152,7 +153,7 @@ fetch_lm_info (CORE_ADDR addr)
      being at the end of a page or the like.)  */
   read_memory (addr, (char *) &buf, sizeof (buf.ol32));
 
-  if (extract_unsigned_integer (&buf.magic, sizeof (buf.magic)) != 0xffffffff)
+  if (extract_unsigned_integer (buf.magic.b, sizeof (buf.magic)) != 0xffffffff)
     {
       /* Use buf.ol32... */
       char obj_buf[432];
@@ -168,7 +169,7 @@ fetch_lm_info (CORE_ADDR addr)
 	- extract_mips_address (&obj_buf[248], 4);
 
     }
-  else if (extract_unsigned_integer (&buf.oi32.oi_size,
+  else if (extract_unsigned_integer (buf.oi32.oi_size.b,
 				     sizeof (buf.oi32.oi_size))
 	   == sizeof (buf.oi32))
     {
@@ -188,11 +189,11 @@ fetch_lm_info (CORE_ADDR addr)
 				sizeof (buf.oi32.oi_orig_ehdr));
       li.pathname_addr = extract_mips_address (&buf.oi32.oi_pathname,
 					       sizeof (buf.oi32.oi_pathname));
-      li.pathname_len = extract_unsigned_integer (&buf.oi32.oi_pathname_len,
+      li.pathname_len = extract_unsigned_integer (buf.oi32.oi_pathname_len.b,
 						  sizeof (buf.oi32.
 							  oi_pathname_len));
     }
-  else if (extract_unsigned_integer (&buf.oi64.oi_size,
+  else if (extract_unsigned_integer (buf.oi64.oi_size.b,
 				     sizeof (buf.oi64.oi_size))
 	   == sizeof (buf.oi64))
     {
@@ -212,13 +213,13 @@ fetch_lm_info (CORE_ADDR addr)
 				sizeof (buf.oi64.oi_orig_ehdr));
       li.pathname_addr = extract_mips_address (&buf.oi64.oi_pathname,
 					       sizeof (buf.oi64.oi_pathname));
-      li.pathname_len = extract_unsigned_integer (&buf.oi64.oi_pathname_len,
+      li.pathname_len = extract_unsigned_integer (buf.oi64.oi_pathname_len.b,
 						  sizeof (buf.oi64.
 							  oi_pathname_len));
     }
   else
     {
-      error ("Unable to fetch shared library obj_info or obj_list info.");
+      error (_("Unable to fetch shared library obj_info or obj_list info."));
     }
 
   return li;
@@ -227,10 +228,9 @@ fetch_lm_info (CORE_ADDR addr)
 /* The symbol which starts off the list of shared libraries.  */
 #define DEBUG_BASE "__rld_obj_head"
 
-char shadow_contents[BREAKPOINT_MAX];	/* Stash old bkpt addr contents */
+static void *base_breakpoint;
 
 static CORE_ADDR debug_base;	/* Base of dynamic linker structures */
-static CORE_ADDR breakpoint_addr;	/* Address where end bkpt is set */
 
 /*
 
@@ -319,10 +319,12 @@ disable_break (void)
   /* Note that breakpoint address and original contents are in our address
      space, so we just need to write the original contents back. */
 
-  if (memory_remove_breakpoint (breakpoint_addr, shadow_contents) != 0)
+  if (deprecated_remove_raw_breakpoint (base_breakpoint) != 0)
     {
       status = 0;
     }
+
+  base_breakpoint = NULL;
 
   /* Note that it is possible that we have stopped at a location that
      is different from the location where we inserted our breakpoint.
@@ -352,12 +354,13 @@ disable_break (void)
 static int
 enable_break (void)
 {
-  if (symfile_objfile != NULL
-      && target_insert_breakpoint (entry_point_address (),
-				   shadow_contents) == 0)
+  if (symfile_objfile != NULL)
     {
-      breakpoint_addr = entry_point_address ();
-      return 1;
+      base_breakpoint
+	= deprecated_insert_raw_breakpoint (entry_point_address ());
+
+      if (base_breakpoint != NULL)
+	return 1;
     }
 
   return 0;
@@ -371,7 +374,7 @@ enable_break (void)
 
    SYNOPSIS
 
-   void solib_create_inferior_hook()
+   void solib_create_inferior_hook ()
 
    DESCRIPTION
 
@@ -420,7 +423,7 @@ irix_solib_create_inferior_hook (void)
 {
   if (!enable_break ())
     {
-      warning ("shared library handler failed to enable breakpoint");
+      warning (_("shared library handler failed to enable breakpoint"));
       return;
     }
 
@@ -435,7 +438,7 @@ irix_solib_create_inferior_hook (void)
   do
     {
       target_resume (pid_to_ptid (-1), 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
 
@@ -446,7 +449,7 @@ irix_solib_create_inferior_hook (void)
 
   if (!disable_break ())
     {
-      warning ("shared library handler failed to disable breakpoint");
+      warning (_("shared library handler failed to disable breakpoint"));
     }
 
   /* solib_add will call reinit_frame_cache.
@@ -457,7 +460,6 @@ irix_solib_create_inferior_hook (void)
      suppresses the warning.  */
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
   stop_soon = NO_STOP_QUIETLY;
-  re_enable_breakpoints_in_shlibs ();
 }
 
 /* LOCAL FUNCTION
@@ -501,8 +503,12 @@ irix_current_sos (void)
 	return 0;
     }
 
-  read_memory (debug_base, addr_buf, TARGET_ADDR_BIT / TARGET_CHAR_BIT);
-  lma = extract_mips_address (addr_buf, TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+  read_memory (debug_base,
+	       addr_buf,
+	       gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT);
+  lma = extract_mips_address (addr_buf,
+			      gdbarch_addr_bit (current_gdbarch)
+				/ TARGET_CHAR_BIT);
 
   while (lma)
     {
@@ -539,10 +545,8 @@ irix_current_sos (void)
 	  target_read_string (lm.pathname_addr, &name_buf,
 			      name_size, &errcode);
 	  if (errcode != 0)
-	    {
-	      warning ("current_sos: Can't read pathname for load map: %s\n",
+	    warning (_("Can't read pathname for load map: %s."),
 		       safe_strerror (errcode));
-	    }
 	  else
 	    {
 	      strncpy (new->so_name, name_buf, name_size);
@@ -605,8 +609,12 @@ irix_open_symbol_file_object (void *from_ttyp)
     return 0;			/* failed somehow...  */
 
   /* First link map member should be the executable.  */
-  read_memory (debug_base, addr_buf, TARGET_ADDR_BIT / TARGET_CHAR_BIT);
-  lma = extract_mips_address (addr_buf, TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+  read_memory (debug_base,
+	       addr_buf,
+	       gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT);
+  lma = extract_mips_address (addr_buf,
+			      gdbarch_addr_bit (current_gdbarch)
+				/ TARGET_CHAR_BIT);
   if (lma == 0)
     return 0;			/* failed somehow...  */
 
@@ -621,7 +629,7 @@ irix_open_symbol_file_object (void *from_ttyp)
 
   if (errcode)
     {
-      warning ("failed to read exec filename from attached file: %s",
+      warning (_("failed to read exec filename from attached file: %s"),
 	       safe_strerror (errcode));
       return 0;
     }
@@ -700,7 +708,7 @@ irix_in_dynsym_resolve_code (CORE_ADDR pc)
   return 0;
 }
 
-static struct target_so_ops irix_so_ops;
+struct target_so_ops irix_so_ops;
 
 void
 _initialize_irix_solib (void)
@@ -713,7 +721,4 @@ _initialize_irix_solib (void)
   irix_so_ops.current_sos = irix_current_sos;
   irix_so_ops.open_symbol_file_object = irix_open_symbol_file_object;
   irix_so_ops.in_dynsym_resolve_code = irix_in_dynsym_resolve_code;
-
-  /* FIXME: Don't do this here.  *_gdbarch_init() should set so_ops. */
-  current_target_so_ops = &irix_so_ops;
 }

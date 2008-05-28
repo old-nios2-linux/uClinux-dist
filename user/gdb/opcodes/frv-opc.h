@@ -2,23 +2,23 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2004 Free Software Foundation, Inc.
+Copyright 1996-2007 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   You should have received a copy of the GNU General Public License along
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -38,29 +38,30 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 /* Vliw support.  */
 #define FRV_VLIW_SIZE 8 /* fr550 has largest vliw size of 8.  */
 #define PAD_VLIW_COMBO ,UNIT_NIL,UNIT_NIL,UNIT_NIL,UNIT_NIL
-typedef CGEN_ATTR_VALUE_TYPE VLIW_COMBO[FRV_VLIW_SIZE];
+
+typedef CGEN_ATTR_VALUE_ENUM_TYPE VLIW_COMBO[FRV_VLIW_SIZE];
 
 typedef struct
 {
-  int                   next_slot;
-  int                   constraint_violation;
-  unsigned long         mach;
-  unsigned long         elf_flags;
-  CGEN_ATTR_VALUE_TYPE *unit_mapping;
-  VLIW_COMBO           *current_vliw;
-  CGEN_ATTR_VALUE_TYPE  major[FRV_VLIW_SIZE];
-  const CGEN_INSN*      insn[FRV_VLIW_SIZE];
+  int                    next_slot;
+  int                    constraint_violation;
+  unsigned long          mach;
+  unsigned long          elf_flags;
+  CGEN_ATTR_VALUE_ENUM_TYPE * unit_mapping;
+  VLIW_COMBO *           current_vliw;
+  CGEN_ATTR_VALUE_ENUM_TYPE   major[FRV_VLIW_SIZE];
+  const CGEN_INSN *      insn[FRV_VLIW_SIZE];
 } FRV_VLIW;
 
-int frv_is_branch_major PARAMS ((CGEN_ATTR_VALUE_TYPE, unsigned long));
-int frv_is_float_major  PARAMS ((CGEN_ATTR_VALUE_TYPE, unsigned long));
-int frv_is_media_major  PARAMS ((CGEN_ATTR_VALUE_TYPE, unsigned long));
-int frv_is_branch_insn  PARAMS ((const CGEN_INSN *));
-int frv_is_float_insn   PARAMS ((const CGEN_INSN *));
-int frv_is_media_insn   PARAMS ((const CGEN_INSN *));
-void frv_vliw_reset     PARAMS ((FRV_VLIW *, unsigned long mach, unsigned long elf_flags));
-int frv_vliw_add_insn   PARAMS ((FRV_VLIW *, const CGEN_INSN *));
-int spr_valid           PARAMS ((long));
+int frv_is_branch_major (CGEN_ATTR_VALUE_ENUM_TYPE, unsigned long);
+int frv_is_float_major  (CGEN_ATTR_VALUE_ENUM_TYPE, unsigned long);
+int frv_is_media_major  (CGEN_ATTR_VALUE_ENUM_TYPE, unsigned long);
+int frv_is_branch_insn  (const CGEN_INSN *);
+int frv_is_float_insn   (const CGEN_INSN *);
+int frv_is_media_insn   (const CGEN_INSN *);
+void frv_vliw_reset     (FRV_VLIW *, unsigned long, unsigned long);
+int frv_vliw_add_insn   (FRV_VLIW *, const CGEN_INSN *);
+int spr_valid           (long);
 /* -- */
 /* Enum declaration for frv instruction types.  */
 typedef enum cgen_insn_type {
@@ -366,6 +367,7 @@ struct cgen_fields
   long f_TLBPR_null;
   long f_LI_off;
   long f_LI_on;
+  long f_reloc_ann;
 };
 
 #define CGEN_INIT_PARSE(od) \

@@ -1,10 +1,11 @@
 /*
- *  Copyright (C) 2002 Nigel Horne <njh@bandsman.co.uk>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Nigel Horne
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU General Public License version 2 as
+ *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -16,6 +17,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
  */
+
 static	char	const	rcsid[] = "$Id: blob.c,v 1.64 2007/02/12 22:25:14 njh Exp $";
 
 #if HAVE_CONFIG_H
@@ -49,6 +51,7 @@ static	char	const	rcsid[] = "$Id: blob.c,v 1.64 2007/02/12 22:25:14 njh Exp $";
 #include "mbox.h"
 #include "matcher.h"
 #include "scanners.h"
+#include "filetypes.h"
 
 #ifndef	CL_DEBUG
 #define	NDEBUG	/* map CLAMAV debug onto standard */
@@ -64,11 +67,12 @@ static	char	const	rcsid[] = "$Id: blob.c,v 1.64 2007/02/12 22:25:14 njh Exp $";
 #include <windows.h>
 #endif
 
-#define	MAX_SCAN_SIZE	20*1024	/*
-				 * The performance benefit of scanning
-				 * early disappears on medium and
-				 * large sized files
-				 */
+/* Scehduled for rewite in 0.94 (bb#804). Disabling for now */
+/* #define	MAX_SCAN_SIZE	20*1024	/\* */
+/* 				 * The performance benefit of scanning */
+/* 				 * early disappears on medium and */
+/* 				 * large sized files */
+/* 				 *\/ */
 
 static	const	char	*blobGetFilename(const blob *b);
 
@@ -120,6 +124,31 @@ blobArrayDestroy(blob *blobList[], int n)
 			blobList[n] = NULL;
 		}
 	}
+}
+
+/*
+ * No longer needed to be growable, so turn into a normal memory area which
+ * the caller must free. The passed blob is destroyed
+ */
+void *
+blobToMem(blob *b)
+{
+	void *ret;
+
+	assert(b != NULL);
+	assert(b->magic == BLOBCLASS);
+
+	if(!b->isClosed)
+		blobClose(b);
+	if(b->name)
+		free(b->name);
+#ifdef	CL_DEBUG
+	b->magic = INVALIDCLASS;
+#endif
+	ret = (void *)b->data;
+	free(b);
+
+	return ret;
 }
 
 /*ARGSUSED*/
@@ -502,6 +531,12 @@ fileblobSetFilename(fileblob *fb, const char *dir, const char *filename)
 
 #if	defined(C_LINUX) || defined(C_BSD) || defined(HAVE_MKSTEMP) || defined(C_SOLARIS) || defined(C_CYGWIN) || defined(C_QNX6)
 	cli_dbgmsg("fileblobSetFilename: mkstemp(%s)\n", fullname);
+	/*
+	 * On older Cygwin, mkstemp opened in O_TEXT mode, rather than
+	 *	O_BINARY. I understand this is now fixed, but I don't know in
+	 *	what version
+	 * See http://cygwin.com/ml/cygwin-patches/2006-q2/msg00014.html
+	 */
 	fd = mkstemp(fullname);
 	if((fd < 0) && (errno == EINVAL)) {
 		/*
@@ -586,9 +621,8 @@ fileblobAddData(fileblob *fb, const unsigned char *data, size_t len)
 		if(ctx) {
 			int do_scan = 1;
 
-			if(ctx->limits)
-				if(fb->bytes_scanned >= ctx->limits->maxfilesize)
-					do_scan = 0;
+			if(cli_checklimits("fileblobAddData", ctx, fb->bytes_scanned, 0, 0)!=CL_CLEAN)
+			        do_scan = 0;
 
 			if(fb->bytes_scanned > MAX_SCAN_SIZE)
 				do_scan = 0;
@@ -596,8 +630,8 @@ fileblobAddData(fileblob *fb, const unsigned char *data, size_t len)
 				if(ctx->scanned)
 					*ctx->scanned += (unsigned long)len / CL_COUNT_PRECISION;
 				fb->bytes_scanned += (unsigned long)len;
-
-				if((len > 5) && (cli_scanbuff(data, (unsigned int)len, ctx->virname, ctx->engine, CL_TYPE_UNKNOWN_DATA) == CL_VIRUS)) {
+				
+				if((len > 5) && cli_updatelimits(ctx, len)==CL_CLEAN && (cli_scanbuff(data, (unsigned int)len, ctx->virname, ctx->engine, CL_TYPE_BINARY_DATA) == CL_VIRUS)) {
 					cli_dbgmsg("fileblobAddData: found %s\n", *ctx->virname);
 					fb->isInfected = 1;
 				}
@@ -639,6 +673,7 @@ fileblobScan(const fileblob *fb)
 {
 #ifndef	C_WINDOWS
 	int rc, fd;
+	cli_file_t ftype;
 #endif
 
 	if(fb->isInfected)
@@ -674,6 +709,16 @@ fileblobScan(const fileblob *fb)
 	}*/
 
 	rc = cli_magic_scandesc(fd, fb->ctx);
+
+	if(rc == CL_CLEAN) {
+		lseek(fd, 0, SEEK_SET);
+		ftype = cli_filetype2(fd, fb->ctx->engine);
+		if(ftype >= CL_TYPE_TEXT_ASCII && ftype <= CL_TYPE_TEXT_UTF16BE) {
+			lseek(fd, 0, SEEK_SET);
+			rc = cli_scandesc(fd, fb->ctx, CL_TYPE_MAIL, 0, NULL, AC_SCAN_VIR);
+		}
+	}
+
 	close(fd);
 
 	if(rc == CL_VIRUS) {
@@ -710,7 +755,6 @@ sanitiseName(char *name)
 #ifdef	C_DARWIN
 		*name &= '\177';
 #endif
-		/* Also check for tab - "Heinz Martin" <Martin@hemag.ch> */
 #if	defined(MSDOS) || defined(C_OS2)
 		/*
 		 * Don't take it from this that ClamAV supports DOS, it doesn't

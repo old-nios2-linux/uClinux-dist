@@ -1,6 +1,8 @@
 /*
- *  Copyright (C) 2006 Sensory Networks, Inc.
- *             Written by aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu
+ *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
  *  published by the Free Software Foundation.
@@ -20,8 +22,8 @@
 #define __WWP32_H
 
 #include "cltypes.h"
-#include "rebuildpe.h"
+#include "execs.h"
 
-int wwunpack(char *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, char *, uint32_t, uint16_t);
+int wwunpack(uint8_t *, uint32_t, uint8_t *, struct cli_exe_section *, uint16_t, uint32_t, int);
 
 #endif

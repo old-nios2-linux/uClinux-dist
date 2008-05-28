@@ -1,5 +1,5 @@
 /* Shared library support for RS/6000 (xcoff) object files, for GDB.
-   Copyright 1991, 1992, 1995, 1996, 1999, 2000, 2001
+   Copyright (C) 1991, 1992, 1995, 1996, 1999, 2000, 2001, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by IBM Corporation.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
@@ -109,7 +107,7 @@ sharedlibrary_command (char *pattern, int from_tty)
       char *re_err = re_comp (pattern);
 
       if (re_err)
-	error ("Invalid regexp: %s", re_err);
+	error (_("Invalid regexp: %s"), re_err);
     }
 
   /* Walk the list of currently loaded shared libraries, and read
@@ -157,40 +155,23 @@ sharedlibrary_command (char *pattern, int from_tty)
   }
 }
 
-/* LOCAL FUNCTION
-
-   no_shared_libraries -- handle command to explicitly discard symbols
-   from shared libraries.
-
-   DESCRIPTION
-
-   Implements the command "nosharedlibrary", which discards symbols
-   that have been auto-loaded from shared libraries.  Symbols from
-   shared libraries that were added by explicit request of the user
-   are not discarded.  Also called from remote.c.  */
-
-void
-no_shared_libraries (char *ignored, int from_tty)
-{
-  /* FIXME */
-}
-
 void
 _initialize_xcoffsolib (void)
 {
   add_com ("sharedlibrary", class_files, sharedlibrary_command,
-	   "Load shared object library symbols for files matching REGEXP.");
+	   _("Load shared object library symbols for files matching REGEXP."));
   add_info ("sharedlibrary", solib_info,
-	    "Status of loaded shared object libraries");
+	    _("Status of loaded shared object libraries"));
 
-  deprecated_add_show_from_set
-    (add_set_cmd ("auto-solib-add", class_support, var_boolean,
-		  (char *) &auto_solib_add,
-		  "Set autoloading of shared library symbols.\n\
+  add_setshow_boolean_cmd ("auto-solib-add", class_support,
+			   &auto_solib_add, _("\
+Set autoloading of shared library symbols."), _("\
+Show autoloading of shared library symbols."), _("\
 If \"on\", symbols from all shared object libraries will be loaded\n\
 automatically when the inferior begins execution, when the dynamic linker\n\
 informs gdb that a new library has been loaded, or when attaching to the\n\
-inferior.  Otherwise, symbols must be loaded manually, using `sharedlibrary'.",
-		  &setlist),
-     &showlist);
+inferior.  Otherwise, symbols must be loaded manually, using `sharedlibrary'."),
+			   NULL,
+			   NULL, /* FIXME: i18n: */
+			   &setlist, &showlist);
 }

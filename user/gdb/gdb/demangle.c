@@ -1,7 +1,7 @@
 /* Basic C++ demangling support for GDB.
 
-   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
+   2003, 2007, 2008 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 /*  This file contains support code for C++ demangling that is common
@@ -56,6 +54,14 @@ static char *current_demangling_style_string;
    _initialize_demangler from libiberty_demanglers[] array.  */
 
 static const char **demangling_style_names;
+static void
+show_demangling_style_names(struct ui_file *file, int from_tty,
+			    struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("The current C++ demangling style is \"%s\".\n"),
+		    value);
+}
+
 
 static void set_demangling_command (char *, int, struct cmd_list_element *);
 
@@ -105,10 +111,10 @@ set_demangling_command (char *ignore, int from_tty, struct cmd_list_element *c)
     {
       if (*current_demangling_style_string != '\0')
 	{
-	  printf_unfiltered ("Unknown demangling style `%s'.\n",
+	  printf_unfiltered (_("Unknown demangling style `%s'.\n"),
 			     current_demangling_style_string);
 	}
-      printf_unfiltered ("The currently understood settings are:\n\n");
+      printf_unfiltered (_("The currently understood settings are:\n\n"));
       for (dem = libiberty_demanglers; 
 	   dem->demangling_style != unknown_demangling; 
 	   dem++)
@@ -133,7 +139,7 @@ set_demangling_command (char *ignore, int from_tty, struct cmd_list_element *c)
 	    savestring (
               libiberty_demanglers[0].demangling_style_name,
 	      strlen (libiberty_demanglers[0].demangling_style_name));
-	  warning ("`%s' style demangling chosen as the default.\n",
+	  warning (_("`%s' style demangling chosen as the default."),
 		   current_demangling_style_string);
 	}
     }
@@ -189,14 +195,19 @@ _initialize_demangler (void)
     demangling_style_names[i] =
       xstrdup (libiberty_demanglers[i].demangling_style_name);
 
-  set = add_set_enum_cmd ("demangle-style", class_support,
-			  demangling_style_names,
-			  (const char **) &current_demangling_style_string,
-			  "Set the current C++ demangling style.\n\
-Use `set demangle-style' without arguments for a list of demangling styles.",
-			  &setlist);
-  show = deprecated_add_show_from_set (set, &showlist);
-  set_cmd_sfunc (set, set_demangling_command);
+  /* FIXME: cagney/2005-02-20: The code implementing this variable are
+     malloc-ing and free-ing current_demangling_style_string when it
+     should instead just point to an element of
+     demangling_style_names.  */
+  add_setshow_enum_cmd ("demangle-style", class_support,
+			demangling_style_names,
+			(const char **) &current_demangling_style_string, _("\
+Set the current C++ demangling style."), _("\
+Show the current C++ demangling style."), _("\
+Use `set demangle-style' without arguments for a list of demangling styles."),
+			set_demangling_command,
+			show_demangling_style_names,
+			&setlist, &showlist);
 
   /* Set the default demangling style chosen at compilation time. */
   set_demangling_style (DEFAULT_DEMANGLING_STYLE);

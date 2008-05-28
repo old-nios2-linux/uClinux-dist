@@ -1,12 +1,12 @@
 /* S-record download support for GDB, the GNU debugger.
-   Copyright 1995, 1996, 1997, 1999, 2000, 2001, 2003, 2004
+   Copyright (C) 1995, 1996, 1997, 1999, 2000, 2001, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "serial.h"
@@ -64,13 +62,13 @@ load_srec (struct serial *desc, const char *file, bfd_vma load_offset,
   abfd = bfd_openr (file, 0);
   if (!abfd)
     {
-      printf_filtered ("Unable to open file %s\n", file);
+      printf_filtered (_("Unable to open file %s\n"), file);
       return;
     }
 
   if (bfd_check_format (abfd, bfd_object) == 0)
     {
-      printf_filtered ("File is not an object file\n");
+      printf_filtered (_("File is not an object file\n"));
       return;
     }
 
@@ -127,7 +125,7 @@ load_srec (struct serial *desc, const char *file, bfd_vma load_offset,
 		if (deprecated_ui_load_progress_hook)
 		  if (deprecated_ui_load_progress_hook (section_name,
 							(unsigned long) i))
-		    error ("Canceled the download");
+		    error (_("Canceled the download"));
 	      }
 	    while (waitack != NULL && !waitack ());
 
@@ -141,7 +139,7 @@ load_srec (struct serial *desc, const char *file, bfd_vma load_offset,
 	if (deprecated_ui_load_progress_hook)
 	  if (deprecated_ui_load_progress_hook (section_name,
 						(unsigned long) i))
-	    error ("Canceled the download");
+	    error (_("Canceled the download"));
 	putchar_unfiltered ('\n');
       }
 
@@ -254,7 +252,7 @@ make_srec (char *srec, CORE_ADDR targ_addr, bfd *abfd, asection *sect,
     addr_size = 4;
   else
     internal_error (__FILE__, __LINE__,
-		    "make_srec:  Bad address (0x%s), or bad flags (0x%x).",
+		    _("make_srec:  Bad address (0x%s), or bad flags (0x%x)."),
 		    paddr (targ_addr), flags);
 
   /* Now that we know the address size, we can figure out how much

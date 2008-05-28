@@ -1,26 +1,27 @@
 /* Motorola 68HC11/HC12-specific support for 32-bit ELF
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "bfdlink.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
@@ -70,8 +71,9 @@ m68hc11_elf_hash_table_create (bfd *abfd)
     return NULL;
 
   memset (ret, 0, amt);
-  if (! _bfd_elf_link_hash_table_init (&ret->root, abfd,
-				       _bfd_elf_link_hash_newfunc))
+  if (!_bfd_elf_link_hash_table_init (&ret->root, abfd,
+				      _bfd_elf_link_hash_newfunc,
+				      sizeof (struct elf_link_hash_entry)))
     {
       free (ret);
       return NULL;
@@ -85,7 +87,8 @@ m68hc11_elf_hash_table_create (bfd *abfd)
       free (ret);
       return NULL;
     }
-  if (!bfd_hash_table_init (ret->stub_hash_table, stub_hash_newfunc))
+  if (!bfd_hash_table_init (ret->stub_hash_table, stub_hash_newfunc,
+			    sizeof (struct elf32_m68hc11_stub_hash_entry)))
     return NULL;
 
   ret->stub_bfd = NULL;
@@ -229,7 +232,7 @@ elf32_m68hc11_setup_section_lists (bfd *output_bfd, struct bfd_link_info *info)
 
   htab = m68hc11_elf_hash_table (info);
 
-  if (htab->root.root.creator->flavour != bfd_target_elf_flavour)
+  if (bfd_get_flavour (info->output_bfd) != bfd_target_elf_flavour)
     return 0;
 
   /* Count the number of input BFDs and find the top input section id.
@@ -265,7 +268,7 @@ elf32_m68hc11_setup_section_lists (bfd *output_bfd, struct bfd_link_info *info)
 
   /* We can't use output_bfd->section_count here to find the top output
      section index as some sections may have been removed, and
-     _bfd_strip_section_from_output doesn't renumber the indices.  */
+     strip_excluded_output_sections doesn't renumber the indices.  */
   for (section = output_bfd->sections, top_index = 0;
        section != NULL;
        section = section->next)
@@ -808,48 +811,6 @@ m68hc11_elf_special_reloc (bfd *abfd ATTRIBUTE_UNUSED,
   abort();
 }
 
-asection *
-elf32_m68hc11_gc_mark_hook (asection *sec,
-                            struct bfd_link_info *info ATTRIBUTE_UNUSED,
-                            Elf_Internal_Rela *rel,
-                            struct elf_link_hash_entry *h,
-                            Elf_Internal_Sym *sym)
-{
-  if (h != NULL)
-    {
-      switch (ELF32_R_TYPE (rel->r_info))
-	{
-	default:
-	  switch (h->root.type)
-	    {
-	    case bfd_link_hash_defined:
-	    case bfd_link_hash_defweak:
-	      return h->root.u.def.section;
-
-	    case bfd_link_hash_common:
-	      return h->root.u.c.p->section;
-
-	    default:
-	      break;
-	    }
-	}
-    }
-  else
-    return bfd_section_from_elf_index (sec->owner, sym->st_shndx);
-
-  return NULL;
-}
-
-bfd_boolean
-elf32_m68hc11_gc_sweep_hook (bfd *abfd ATTRIBUTE_UNUSED,
-                             struct bfd_link_info *info ATTRIBUTE_UNUSED,
-                             asection *sec ATTRIBUTE_UNUSED,
-                             const Elf_Internal_Rela *relocs ATTRIBUTE_UNUSED)
-{
-  /* We don't use got and plt entries for 68hc11/68hc12.  */
-  return TRUE;
-}
-
 /* Look through the relocs for a section during the first phase.
    Since we don't do .gots or .plts, we just need to consider the
    virtual table relocs for gc.  */
@@ -860,7 +821,6 @@ elf32_m68hc11_check_relocs (bfd *abfd, struct bfd_link_info *info,
 {
   Elf_Internal_Shdr *           symtab_hdr;
   struct elf_link_hash_entry ** sym_hashes;
-  struct elf_link_hash_entry ** sym_hashes_end;
   const Elf_Internal_Rela *     rel;
   const Elf_Internal_Rela *     rel_end;
 
@@ -869,10 +829,6 @@ elf32_m68hc11_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
   symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (abfd);
-  sym_hashes_end = sym_hashes + symtab_hdr->sh_size / sizeof (Elf32_External_Sym);
-  if (!elf_bad_symtab (abfd))
-    sym_hashes_end -= symtab_hdr->sh_info;
-
   rel_end = relocs + sec->reloc_count;
 
   for (rel = relocs; rel < rel_end; rel++)
@@ -885,7 +841,12 @@ elf32_m68hc11_check_relocs (bfd *abfd, struct bfd_link_info *info,
       if (r_symndx < symtab_hdr->sh_info)
         h = NULL;
       else
-        h = sym_hashes [r_symndx - symtab_hdr->sh_info];
+	{
+	  h = sym_hashes [r_symndx - symtab_hdr->sh_info];
+	  while (h->root.type == bfd_link_hash_indirect
+		 || h->root.type == bfd_link_hash_warning)
+	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	}
 
       switch (ELF32_R_TYPE (rel->r_info))
         {
@@ -899,92 +860,14 @@ elf32_m68hc11_check_relocs (bfd *abfd, struct bfd_link_info *info,
         /* This relocation describes which C++ vtable entries are actually
            used.  Record for later use during GC.  */
         case R_M68HC11_GNU_VTENTRY:
-          if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+          BFD_ASSERT (h != NULL);
+          if (h != NULL
+              && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
             return FALSE;
           break;
         }
     }
 
-  return TRUE;
-}
-
-static bfd_boolean
-m68hc11_get_relocation_value (bfd *input_bfd, struct bfd_link_info *info,
-			      asection *input_section,
-                              asection **local_sections,
-                              Elf_Internal_Sym *local_syms,
-                              Elf_Internal_Rela *rel,
-                              const char **name,
-                              bfd_vma *relocation, bfd_boolean *is_far)
-{
-  Elf_Internal_Shdr *symtab_hdr;
-  struct elf_link_hash_entry **sym_hashes;
-  unsigned long r_symndx;
-  asection *sec;
-  struct elf_link_hash_entry *h;
-  Elf_Internal_Sym *sym;
-  const char* stub_name = 0;
-
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
-  sym_hashes = elf_sym_hashes (input_bfd);
-
-  r_symndx = ELF32_R_SYM (rel->r_info);
-
-  /* This is a final link.  */
-  h = NULL;
-  sym = NULL;
-  sec = NULL;
-  if (r_symndx < symtab_hdr->sh_info)
-    {
-      sym = local_syms + r_symndx;
-      sec = local_sections[r_symndx];
-      *relocation = (sec->output_section->vma
-                     + sec->output_offset
-                     + sym->st_value);
-      *is_far = (sym && (sym->st_other & STO_M68HC12_FAR));
-      if (*is_far)
-        stub_name = (bfd_elf_string_from_elf_section
-                     (input_bfd, symtab_hdr->sh_link,
-                      sym->st_name));
-    }
-  else
-    {
-      bfd_boolean unresolved_reloc, warned;
-
-      RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
-			       r_symndx, symtab_hdr, sym_hashes,
-			       h, sec, *relocation, unresolved_reloc, warned);
-
-      *is_far = (h && (h->other & STO_M68HC12_FAR));
-      stub_name = h->root.root.string;
-    }
-
-  if (h != NULL)
-    *name = h->root.root.string;
-  else
-    {
-      *name = (bfd_elf_string_from_elf_section
-               (input_bfd, symtab_hdr->sh_link, sym->st_name));
-      if (*name == NULL || **name == '\0')
-        *name = bfd_section_name (input_bfd, sec);
-    }
-
-  if (*is_far && ELF32_R_TYPE (rel->r_info) == R_M68HC11_16)
-    {
-      struct elf32_m68hc11_stub_hash_entry* stub;
-      struct m68hc11_elf_link_hash_table *htab;
-
-      htab = m68hc11_elf_hash_table (info);
-      stub = m68hc12_stub_hash_lookup (htab->stub_hash_table,
-                                       *name, FALSE, FALSE);
-      if (stub)
-        {
-          *relocation = stub->stub_offset
-            + stub->stub_sec->output_section->vma
-            + stub->stub_sec->output_offset;
-          *is_far = FALSE;
-        }
-    }
   return TRUE;
 }
 
@@ -1000,7 +883,7 @@ elf32_m68hc11_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
   Elf_Internal_Shdr *symtab_hdr;
   struct elf_link_hash_entry **sym_hashes;
   Elf_Internal_Rela *rel, *relend;
-  const char *name;
+  const char *name = NULL;
   struct m68hc11_page_info *pinfo;
   const struct elf_backend_data * const ebd = get_elf_backend_data (input_bfd);
 
@@ -1021,13 +904,15 @@ elf32_m68hc11_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
       unsigned long r_symndx;
       Elf_Internal_Sym *sym;
       asection *sec;
-      bfd_vma relocation;
+      bfd_vma relocation = 0;
       bfd_reloc_status_type r = bfd_reloc_undefined;
       bfd_vma phys_page;
       bfd_vma phys_addr;
       bfd_vma insn_addr;
       bfd_vma insn_page;
-      bfd_boolean is_far;
+      bfd_boolean is_far = FALSE;
+      struct elf_link_hash_entry *h;
+      const char* stub_name = 0;
 
       r_symndx = ELF32_R_SYM (rel->r_info);
       r_type = ELF32_R_TYPE (rel->r_info);
@@ -1036,30 +921,86 @@ elf32_m68hc11_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
           || r_type == R_M68HC11_GNU_VTINHERIT )
         continue;
 
+      (*ebd->elf_info_to_howto_rel) (input_bfd, &arel, rel);
+      howto = arel.howto;
+
+      h = NULL;
+      sym = NULL;
+      sec = NULL;
+      if (r_symndx < symtab_hdr->sh_info)
+	{
+	  sym = local_syms + r_symndx;
+	  sec = local_sections[r_symndx];
+	  relocation = (sec->output_section->vma
+			+ sec->output_offset
+			+ sym->st_value);
+	  is_far = (sym && (sym->st_other & STO_M68HC12_FAR));
+	  if (is_far)
+	    stub_name = (bfd_elf_string_from_elf_section
+			 (input_bfd, symtab_hdr->sh_link,
+			  sym->st_name));
+	}
+      else
+	{
+	  bfd_boolean unresolved_reloc, warned;
+
+	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
+				   r_symndx, symtab_hdr, sym_hashes,
+				   h, sec, relocation, unresolved_reloc,
+				   warned);
+
+	  is_far = (h && (h->other & STO_M68HC12_FAR));
+	  stub_name = h->root.root.string;
+	}
+
+      if (sec != NULL && elf_discarded_section (sec))
+	{
+	  /* For relocs against symbols from removed linkonce sections,
+	     or sections discarded by a linker script, we just want the
+	     section contents zeroed.  Avoid any special processing.  */
+	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
+	  rel->r_info = 0;
+	  rel->r_addend = 0;
+	  continue;
+	}
+
       if (info->relocatable)
 	{
 	  /* This is a relocatable link.  We don't have to change
 	     anything, unless the reloc is against a section symbol,
 	     in which case we have to adjust according to where the
 	     section symbol winds up in the output section.  */
-	  if (r_symndx < symtab_hdr->sh_info)
-	    {
-	      sym = local_syms + r_symndx;
-	      if (ELF_ST_TYPE (sym->st_info) == STT_SECTION)
-		{
-		  sec = local_sections[r_symndx];
-		  rel->r_addend += sec->output_offset + sym->st_value;
-		}
-	    }
-
+	  if (sym != NULL && ELF_ST_TYPE (sym->st_info) == STT_SECTION)
+	    rel->r_addend += sec->output_offset;
 	  continue;
 	}
-      (*ebd->elf_info_to_howto_rel) (input_bfd, &arel, rel);
-      howto = arel.howto;
 
-      m68hc11_get_relocation_value (input_bfd, info, input_section, 
-				    local_sections, local_syms,
-                                    rel, &name, &relocation, &is_far);
+      if (h != NULL)
+	name = h->root.root.string;
+      else
+	{
+	  name = (bfd_elf_string_from_elf_section
+		  (input_bfd, symtab_hdr->sh_link, sym->st_name));
+	  if (name == NULL || *name == '\0')
+	    name = bfd_section_name (input_bfd, sec);
+	}
+
+      if (is_far && ELF32_R_TYPE (rel->r_info) == R_M68HC11_16)
+	{
+	  struct elf32_m68hc11_stub_hash_entry* stub;
+	  struct m68hc11_elf_link_hash_table *htab;
+
+	  htab = m68hc11_elf_hash_table (info);
+	  stub = m68hc12_stub_hash_lookup (htab->stub_hash_table,
+					   name, FALSE, FALSE);
+	  if (stub)
+	    {
+	      relocation = stub->stub_offset
+		+ stub->stub_sec->output_section->vma
+		+ stub->stub_sec->output_offset;
+	      is_far = FALSE;
+	    }
+	}
 
       /* Do the memory bank mapping.  */
       phys_addr = m68hc11_phys_addr (pinfo, relocation + rel->r_addend);
@@ -1173,7 +1114,7 @@ elf32_m68hc11_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    {
 	    case bfd_reloc_overflow:
 	      if (!((*info->callbacks->reloc_overflow)
-		    (info, name, howto->name, (bfd_vma) 0,
+		    (info, NULL, name, howto->name, (bfd_vma) 0,
 		     input_bfd, input_section, rel->r_offset)))
 		return FALSE;
 	      break;

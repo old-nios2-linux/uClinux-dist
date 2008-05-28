@@ -1,5 +1,5 @@
-##Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2002, 2003
-##Free Software Foundation, Inc.
+##Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2002, 2003,
+##2007, 2008 Free Software Foundation, Inc.
 
 # Makefile for GDB documentation.
 # This file is part of GDB.
@@ -16,7 +16,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 srcdir = @srcdir@
 VPATH = @srcdir@
@@ -24,6 +24,7 @@ VPATH = @srcdir@
 prefix = @prefix@
 
 infodir = @infodir@
+pdfdir = $(prefix)/share/doc/gdb
 htmldir = $(prefix)/html
 
 SHELL = @SHELL@
@@ -33,6 +34,8 @@ LN_S = @LN_S@
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_DATA = @INSTALL_DATA@
+
+mkinstalldirs = $(SHELL) $(srcdir)/../../mkinstalldirs
 
 # main GDB source directory
 gdbdir = $(srcdir)/..
@@ -46,9 +49,11 @@ MAKEINFO=makeinfo
 # Note that texinfo 4.0's makeinfo --html can only generate a
 # single file, which would be too large, so continue to use
 # texi2html. -sts 2000-03-28
-
+# Contrary to documentation, the current directory is not
+# searched by texi2html, so specify it explicitly.
+# -macro 2007-07-26
 MAKEHTML = texi2html
-MAKEHTMLFLAGS = -menu -split_chapter
+MAKEHTMLFLAGS = -menu -split_chapter -I .
 
 # where to find texi2roff, ditto
 TEXI2ROFF=texi2roff
@@ -68,6 +73,9 @@ SET_TEXINPUTS = \
 
 # Files which should be generated via 'info' and installed by 'install-info'
 INFO_DEPS = gdb.info gdbint.info stabs.info annotate.info
+
+# Files which should be generated via 'pdf' and installed by 'install-pdf'
+PDFFILES = gdb.pdf gdbint.pdf stabs.pdf refcard.pdf annotate.pdf
 
 # There may be alternate predefined collections of switches to configure
 # the GDB manual.  Normally this is not done in synch with the software
@@ -92,6 +100,7 @@ REFEDITS =
 
 # Don Knuth's TeX formatter
 TEX = tex
+PDFTEX = pdftex
 
 # Program to generate Postscript files from DVI files.
 DVIPS = dvips
@@ -101,7 +110,7 @@ GDB_DOC_SOURCE_INCLUDES = \
 	$(srcdir)/fdl.texi \
 	$(srcdir)/gpl.texi \
 	$(srcdir)/agentexpr.texi \
-	$(READLINE_DIR)/rluser.texinfo \
+	$(READLINE_DIR)/rluser.texi \
 	$(READLINE_DIR)/inc-hist.texinfo
 GDB_DOC_BUILD_INCLUDES = \
 	gdb-cfg.texi \
@@ -151,7 +160,7 @@ info: $(INFO_DEPS)
 dvi: gdb.dvi gdbint.dvi stabs.dvi refcard.dvi annotate.dvi
 ps: gdb.ps gdbint.ps stabs.ps refcard.ps annotate.ps
 html: gdb_toc.html gdbint_toc.html stabs_toc.html annotate_toc.html
-pdf: gdb.pdf gdbint.pdf stabs.pdf annotate.pdf
+pdf: $(PDFFILES)
 all-doc: info dvi ps # pdf
 diststuff: info
 
@@ -195,6 +204,18 @@ uninstall-info:
 install-html: html
 	for i in *.html ; do \
 		$(INSTALL_DATA) $$i $(DESTDIR)$(htmldir)/$$i ; \
+	done
+
+pdf__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+
+install-pdf: $(PDFFILES)
+	@$(NORMAL_INSTALL)
+	test -z "$(pdfdir)" || $(mkinstalldirs) "$(DESTDIR)$(pdfdir)"
+	@list='$(PDFFILES)'; for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  f=$(pdf__strip_dir) \
+	  echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(pdfdir)/$$f'"; \
+	  $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(pdfdir)/$$f"; \
 	done
 
 STAGESTUFF = *.info* gdb-all.texi GDBvn.texi *.ps *.dvi *.pdf
@@ -243,6 +264,17 @@ refcard.dvi : refcard.tex $(REFEDITS)
 
 refcard.ps : refcard.dvi
 	$(DVIPS) -t landscape -o $@ $?
+
+refcard.pdf : refcard.tex $(REFEDITS)
+	echo > tmp.sed
+	for f in x $(REFEDITS) ; do \
+		test x$$f = xx && continue ; \
+		cat $(srcdir)/$$f >>tmp.sed ; \
+	done
+	sed -f tmp.sed $(srcdir)/refcard.tex >sedref.tex
+	$(SET_TEXINPUTS) $(PDFTEX) sedref.tex
+	mv sedref.pdf refcard.pdf
+	rm -f sedref.log sedref.tex tmp.sed
 
 # File to record current GDB version number (copied from main dir version.in)
 GDBvn.texi : ${gdbdir}/version.in
@@ -457,7 +489,7 @@ annotate_toc.html: $(ANNOTATE_DOC_FILES)
 
 force:
 
-Makefile: Makefile.in $(host_makefile_frag) $(target_makefile_frag) config.status
+Makefile: Makefile.in $(host_makefile_frag) config.status
 	$(SHELL) ./config.status
 
 

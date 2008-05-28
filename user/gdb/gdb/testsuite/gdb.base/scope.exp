@@ -1,19 +1,18 @@
-# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2002, 2003,
-# 2004 Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004,
+# 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -32,15 +31,18 @@ set binfile ${objdir}/${subdir}/${testfile}
 
 
 if  { [gdb_compile "${srcdir}/${subdir}/scope0.c" "${binfile}0.o" object {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested scope.exp
+     return -1
 }
 
 if  { [gdb_compile "${srcdir}/${subdir}/scope1.c" "${binfile}1.o" object {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested scope.exp
+     return -1
 }
 
 if  { [gdb_compile "${binfile}0.o ${binfile}1.o" ${binfile} executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested scope.exp
+     return -1
 }
 
 # Create and source the file that provides information about the compiler
@@ -61,12 +63,12 @@ proc test_at_main {} {
     global subdir
     global hp_cc_compiler
 
-    # skip past init.  There may be a call to __main at the start of
-    # main, so the first next may only get us to the init0 call.
-    if [gdb_test "next" "$decimal.*foo \\(\\);" "next over init0() in main"  "$decimal.*init0 \\(\\);" "next"] { 
-      gdb_suppress_tests ; 
-    }
-
+    # skip past init0.
+    # This used to do an extra "next" if the first one didn't get us
+    # over the call to init0, to handle calls to __main in the
+    # prologue, etc.  But if a breakpoint at main doesn't leave us on
+    # the first line of real code in the function, that's a GDB bug.
+    gdb_test "next" "$decimal.*foo \\(\\);" "next over init0() in main"
 
     # Print scope0.c::filelocal, which is 1
 
@@ -94,8 +96,7 @@ proc test_at_main {} {
 
     # Print scope0.c::filelocal_ro, which is 201
 
-    # No clue why the powerpc fails this test.
-    setup_xfail "powerpc-*-*"
+    # No clue why the rs6000 fails this test.
     if { [test_compiler_info gcc-*-*] } then { setup_xfail "rs6000-*-*" }
     if [gdb_test "print filelocal_ro" "\\\$$decimal = 201" "print filelocal_ro in test_at_main" ] { 
       gdb_suppress_tests ; 
@@ -103,7 +104,6 @@ proc test_at_main {} {
 
 
     if { [test_compiler_info gcc-*-*] } then { setup_xfail "rs6000-*-*" }
-    setup_xfail "powerpc-*-*"
     if [gdb_test "print 'scope0.c'::filelocal_ro" "\\\$$decimal = 201" "print 'scope0.c'::filelocal_ro"  "No symbol \"scope0.c\" in current context.*" "print '$srcdir/$subdir/scope0.c'::filelocal_ro"] { 
       gdb_suppress_tests ; 
     }
@@ -204,7 +204,6 @@ proc test_at_foo {} {
     # Print scope0.c::filelocal_ro, which is 201
 
     if { [test_compiler_info gcc-*-*] } then { setup_xfail "rs6000-*-*" }
-    setup_xfail "powerpc-*-*"
     if [gdb_test "print 'scope0.c'::filelocal_ro" "\\\$$decimal = 201" "print 'scope0.c'::filelocal_ro"  "No symbol \"scope0.c\" in current context.*" "print '$srcdir/$subdir/scope0.c'::filelocal_ro"] { 
       gdb_suppress_tests ; 
     }
@@ -309,7 +308,6 @@ proc test_at_bar {} {
    # Print scope0.c::filelocal_ro, which is 201
 
     if { [test_compiler_info gcc-*-*] } then { setup_xfail "rs6000-*-*" }
-    setup_xfail "powerpc-*-*"
     if [gdb_test "print 'scope0.c'::filelocal_ro" "\\\$$decimal = 201" "print 'scope0.c'::filelocal_ro at bar"  "No symbol \"scope0.c\" in current context.*" "print '$srcdir/$subdir/scope0.c'::filelocal_ro"] { 
       gdb_suppress_tests ; 
     }
@@ -540,7 +538,6 @@ if [istarget "*-*-vxworks*"] {
 
 # AIX--sections get mapped to the same address so we can't get the right one.
 setup_xfail "rs6000-*-*"
-setup_xfail "powerpc-*-*"
 
 gdb_test "print 'scope0.c'::filelocal_ro" "= 201"
 

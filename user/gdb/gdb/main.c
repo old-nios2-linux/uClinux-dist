@@ -1,14 +1,14 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "top.h"
@@ -28,6 +26,7 @@
 #include "symfile.h"
 #include "gdbcore.h"
 
+#include "exceptions.h"
 #include "getopt.h"
 
 #include <sys/types.h>
@@ -72,6 +71,15 @@ struct ui_file *gdb_stdtargin;
 struct ui_file *gdb_stdtarg;
 struct ui_file *gdb_stdtargerr;
 
+/* Support for the --batch-silent option.  */
+int batch_silent = 0;
+
+/* Support for --return-child-result option.
+   Set the default to -1 to return error in the case
+   that the program does not run or does not complete.  */
+int return_child_result = 0;
+int return_child_result_value = -1;
+
 /* Whether to enable writing into executable and core files */
 extern int write_files;
 
@@ -111,7 +119,6 @@ captured_main (void *data)
   struct captured_main_args *context = data;
   int argc = context->argc;
   char **argv = context->argv;
-  int count;
   static int quiet = 0;
   static int batch = 0;
   static int set_args = 0;
@@ -119,7 +126,9 @@ captured_main (void *data)
   /* Pointers to various arguments from command line.  */
   char *symarg = NULL;
   char *execarg = NULL;
+  char *pidarg = NULL;
   char *corearg = NULL;
+  char *pid_or_core_arg = NULL;
   char *cdarg = NULL;
   char *ttyarg = NULL;
 
@@ -128,7 +137,13 @@ captured_main (void *data)
   static int print_version;
 
   /* Pointers to all arguments of --command option.  */
-  char **cmdarg;
+  struct cmdarg {
+    enum {
+      CMDARG_FILE,
+      CMDARG_COMMAND
+    } type;
+    char *string;
+  } *cmdarg;
   /* Allocated size of cmdarg.  */
   int cmdsize;
   /* Number of elements of cmdarg used.  */
@@ -142,7 +157,7 @@ captured_main (void *data)
   int ndir;
 
   struct stat homebuf, cwdbuf;
-  char *homedir, *homeinit;
+  char *homedir;
 
   int i;
 
@@ -161,14 +176,8 @@ captured_main (void *data)
   lim_at_start = (char *) sbrk (0);
 #endif
 
-#if defined (ALIGN_STACK_ON_STARTUP)
-  i = (int) &count & 0x3;
-  if (i != 0)
-    alloca (4 - i);
-#endif
-
   cmdsize = 1;
-  cmdarg = (char **) xmalloc (cmdsize * sizeof (*cmdarg));
+  cmdarg = (struct cmdarg *) xmalloc (cmdsize * sizeof (*cmdarg));
   ncmd = 0;
   dirsize = 1;
   dirarg = (char **) xmalloc (dirsize * sizeof (*dirarg));
@@ -190,9 +199,6 @@ captured_main (void *data)
   gdb_stdtargerr = gdb_stderr;	/* for moment */
   gdb_stdtargin = gdb_stdin;	/* for moment */
 
-  /* initialize error() */
-  error_init ();
-
   /* Set the sysroot path.  */
 #ifdef TARGET_SYSTEM_ROOT_RELOCATABLE
   gdb_sysroot = make_relative_prefix (argv[0], BINDIR, TARGET_SYSTEM_ROOT);
@@ -208,18 +214,59 @@ captured_main (void *data)
       if (res == 0)
 	{
 	  xfree (gdb_sysroot);
-	  gdb_sysroot = TARGET_SYSTEM_ROOT;
+	  gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
 	}
     }
   else
-    gdb_sysroot = TARGET_SYSTEM_ROOT;
+    gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
 #else
-#if defined (TARGET_SYSTEM_ROOT)
-  gdb_sysroot = TARGET_SYSTEM_ROOT;
+  gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
+#endif
+
+  /* Canonicalize the sysroot path.  */
+  if (*gdb_sysroot)
+    {
+      char *canon_sysroot = lrealpath (gdb_sysroot);
+      if (canon_sysroot)
+	{
+	  xfree (gdb_sysroot);
+	  gdb_sysroot = canon_sysroot;
+	}
+    }
+
+#ifdef DEBUGDIR_RELOCATABLE
+  debug_file_directory = make_relative_prefix (argv[0], BINDIR, DEBUGDIR);
+  if (debug_file_directory)
+    {
+      struct stat s;
+      int res = 0;
+
+      if (stat (debug_file_directory, &s) == 0)
+	if (S_ISDIR (s.st_mode))
+	  res = 1;
+
+      if (res == 0)
+	{
+	  xfree (debug_file_directory);
+	  debug_file_directory = xstrdup (DEBUGDIR);
+	}
+    }
+  else
+    debug_file_directory = xstrdup (DEBUGDIR);
 #else
-  gdb_sysroot = "";
+  debug_file_directory = xstrdup (DEBUGDIR);
 #endif
-#endif
+
+  /* Canonicalize the debugfile path.  */
+  if (*debug_file_directory)
+    {
+      char *canon_debug = lrealpath (debug_file_directory);
+      if (canon_debug)
+	{
+	  xfree (debug_file_directory);
+	  debug_file_directory = canon_debug;
+	}
+    }
 
   /* There will always be an interpreter.  Either the one passed into
      this captured main, or one specified by the user at start up, or
@@ -244,9 +291,7 @@ captured_main (void *data)
     };
     static struct option long_options[] =
     {
-#if defined(TUI)
       {"tui", no_argument, 0, OPT_TUI},
-#endif
       {"xdb", no_argument, &xdb_commands, 1},
       {"dbx", no_argument, &dbx_commands, 1},
       {"readnow", no_argument, &readnow_symbol_files, 1},
@@ -256,6 +301,7 @@ captured_main (void *data)
       {"silent", no_argument, &quiet, 1},
       {"nx", no_argument, &inhibit_gdbinit, 1},
       {"n", no_argument, &inhibit_gdbinit, 1},
+      {"batch-silent", no_argument, 0, 'B'},
       {"batch", no_argument, &batch, 1},
       {"epoch", no_argument, &epoch_interface, 1},
 
@@ -277,8 +323,10 @@ captured_main (void *data)
       {"pid", required_argument, 0, 'p'},
       {"p", required_argument, 0, 'p'},
       {"command", required_argument, 0, 'x'},
+      {"eval-command", required_argument, 0, 'X'},
       {"version", no_argument, &print_version, 1},
       {"x", required_argument, 0, 'x'},
+      {"ex", required_argument, 0, 'X'},
 #ifdef GDBTK
       {"tclcommand", required_argument, 0, 'z'},
       {"enable-external-editor", no_argument, 0, 'y'},
@@ -300,6 +348,8 @@ captured_main (void *data)
       {"statistics", no_argument, 0, OPT_STATISTICS},
       {"write", no_argument, &write_files, 1},
       {"args", no_argument, &set_args, 1},
+     {"l", required_argument, 0, 'l'},
+      {"return-child-result", no_argument, &return_child_result, 1},
       {0, no_argument, 0, 0}
     };
 
@@ -339,12 +389,24 @@ captured_main (void *data)
 	    break;
 	  case OPT_TUI:
 	    /* --tui is equivalent to -i=tui.  */
+#ifdef TUI
 	    xfree (interpreter_p);
-	    interpreter_p = xstrdup ("tui");
+	    interpreter_p = xstrdup (INTERP_TUI);
+#else
+	    fprintf_unfiltered (gdb_stderr,
+				_("%s: TUI mode is not supported\n"),
+				argv[0]);
+	    exit (1);
+#endif
 	    break;
 	  case OPT_WINDOWS:
 	    /* FIXME: cagney/2003-03-01: Not sure if this option is
                actually useful, and if it is, what it should do.  */
+#ifdef GDBTK
+	    /* --windows is equivalent to -i=insight.  */
+	    xfree (interpreter_p);
+	    interpreter_p = xstrdup (INTERP_INSIGHT);
+#endif
 	    use_windows = 1;
 	    break;
 	  case OPT_NOWINDOWS:
@@ -368,17 +430,31 @@ captured_main (void *data)
 	    corearg = optarg;
 	    break;
 	  case 'p':
-	    /* "corearg" is shared by "--core" and "--pid" */
-	    corearg = optarg;
+	    pidarg = optarg;
 	    break;
 	  case 'x':
-	    cmdarg[ncmd++] = optarg;
+	    cmdarg[ncmd].type = CMDARG_FILE;
+	    cmdarg[ncmd++].string = optarg;
 	    if (ncmd >= cmdsize)
 	      {
 		cmdsize *= 2;
-		cmdarg = (char **) xrealloc ((char *) cmdarg,
-					     cmdsize * sizeof (*cmdarg));
+		cmdarg = xrealloc ((char *) cmdarg,
+				   cmdsize * sizeof (*cmdarg));
 	      }
+	    break;
+	  case 'X':
+	    cmdarg[ncmd].type = CMDARG_COMMAND;
+	    cmdarg[ncmd++].string = optarg;
+	    if (ncmd >= cmdsize)
+	      {
+		cmdsize *= 2;
+		cmdarg = xrealloc ((char *) cmdarg,
+				   cmdsize * sizeof (*cmdarg));
+	      }
+	    break;
+	  case 'B':
+	    batch = batch_silent = 1;
+	    gdb_stdout = ui_file_new();
 	    break;
 #ifdef GDBTK
 	  case 'z':
@@ -490,33 +566,41 @@ extern int gdbtk_test (char *);
       }
     else
       {
-	/* OK, that's all the options.  The other arguments are filenames.  */
-	count = 0;
-	for (; optind < argc; optind++)
-	  switch (++count)
-	    {
-	    case 1:
-	      symarg = argv[optind];
-	      execarg = argv[optind];
-	      break;
-	    case 2:
-	      /* The documentation says this can be a "ProcID" as well. 
-	         We will try it as both a corefile and a pid.  */
-	      corearg = argv[optind];
-	      break;
-	    case 3:
-	      fprintf_unfiltered (gdb_stderr,
-				  _("Excess command line arguments ignored. (%s%s)\n"),
-				  argv[optind], (optind == argc - 1) ? "" : " ...");
-	      break;
-	    }
+	/* OK, that's all the options.  */
+
+	/* The first argument, if specified, is the name of the
+	   executable.  */
+	if (optind < argc)
+	  {
+	    symarg = argv[optind];
+	    execarg = argv[optind];
+	    optind++;
+	  }
+
+	/* If the user hasn't already specified a PID or the name of a
+	   core file, then a second optional argument is allowed.  If
+	   present, this argument should be interpreted as either a
+	   PID or a core file, whichever works.  */
+	if (pidarg == NULL && corearg == NULL && optind < argc)
+	  {
+	    pid_or_core_arg = argv[optind];
+	    optind++;
+	  }
+
+	/* Any argument left on the command line is unexpected and
+	   will be ignored.  Inform the user.  */
+	if (optind < argc)
+	  fprintf_unfiltered (gdb_stderr, _("\
+Excess command line arguments ignored. (%s%s)\n"),
+			      argv[optind],
+			      (optind == argc - 1) ? "" : " ...");
       }
     if (batch)
       quiet = 1;
   }
 
   /* Initialize all files.  Give the interpreter a chance to take
-     control of the console via the deprecated_init_ui_hook().  */
+     control of the console via the deprecated_init_ui_hook ().  */
   gdb_init (argv[0]);
 
   /* Do these (and anything which might call wrap_here or *_filtered)
@@ -551,6 +635,7 @@ extern int gdbtk_test (char *);
       if (symarg)
 	printf_filtered ("..");
       wrap_here ("");
+      printf_filtered ("\n");
       gdb_flush (gdb_stdout);	/* Force to screen during slow operations */
     }
 
@@ -562,7 +647,7 @@ extern int gdbtk_test (char *);
     /* Find it.  */
     struct interp *interp = interp_lookup (interpreter_p);
     if (interp == NULL)
-      error ("Interpreter `%s' unrecognized", interpreter_p);
+      error (_("Interpreter `%s' unrecognized"), interpreter_p);
     /* Install it.  */
     if (!interp_set (interp))
       {
@@ -585,13 +670,13 @@ extern int gdbtk_test (char *);
       if (symarg)
 	printf_filtered ("..");
       wrap_here ("");
+      printf_filtered ("\n");
       gdb_flush (gdb_stdout);	/* Force to screen during slow operations */
     }
 
-  error_pre_print = "\n\n";
+  /* Set off error and warning messages with a blank line.  */
+  error_pre_print = "\n";
   quit_pre_print = error_pre_print;
-
-  /* We may get more than one warning, don't double space all of them... */
   warning_pre_print = _("\nwarning: ");
 
   /* Read and execute $HOME/.gdbinit file, if it exists.  This is done
@@ -601,15 +686,11 @@ extern int gdbtk_test (char *);
   homedir = getenv ("HOME");
   if (homedir)
     {
-      homeinit = (char *) alloca (strlen (homedir) +
-				  strlen (gdbinit) + 10);
-      strcpy (homeinit, homedir);
-      strcat (homeinit, "/");
-      strcat (homeinit, gdbinit);
+      char *homeinit = xstrprintf ("%s/%s", homedir, gdbinit);
 
       if (!inhibit_gdbinit)
 	{
-	  catch_command_errors (source_command, homeinit, 0, RETURN_MASK_ALL);
+	  catch_command_errors (source_script, homeinit, 0, RETURN_MASK_ALL);
 	}
 
       /* Do stats; no need to do them elsewhere since we'll only
@@ -623,6 +704,7 @@ extern int gdbtk_test (char *);
       stat (homeinit, &homebuf);
       stat (gdbinit, &cwdbuf);	/* We'll only need this if
 				   homedir was set.  */
+      xfree (homeinit);
     }
 
   /* Now perform all the actions indicated by the arguments.  */
@@ -632,7 +714,7 @@ extern int gdbtk_test (char *);
     }
 
   for (i = 0; i < ndir; i++)
-    catch_command_errors (directory_command, dirarg[i], 0, RETURN_MASK_ALL);
+    catch_command_errors (directory_switch, dirarg[i], 0, RETURN_MASK_ALL);
   xfree (dirarg);
 
   if (execarg != NULL
@@ -653,30 +735,31 @@ extern int gdbtk_test (char *);
 	catch_command_errors (symbol_file_add_main, symarg, 0, RETURN_MASK_ALL);
     }
 
-  /* After the symbol file has been read, print a newline to get us
-     beyond the copyright line...  But errors should still set off
-     the error message with a (single) blank line.  */
-  if (!quiet)
-    printf_filtered ("\n");
-  error_pre_print = "\n";
-  quit_pre_print = error_pre_print;
-  warning_pre_print = _("\nwarning: ");
+  if (corearg && pidarg)
+    error (_("\
+Can't attach to process and specify a core file at the same time."));
 
   if (corearg != NULL)
+    catch_command_errors (core_file_command, corearg,
+			  !batch, RETURN_MASK_ALL);
+  else if (pidarg != NULL)
+    catch_command_errors (attach_command, pidarg,
+			  !batch, RETURN_MASK_ALL);
+  else if (pid_or_core_arg)
     {
-      /* corearg may be either a corefile or a pid.
-	 If its first character is a digit, try attach first
-	 and then corefile.  Otherwise try corefile first. */
+      /* The user specified 'gdb program pid' or gdb program core'.
+	 If pid_or_core_arg's first character is a digit, try attach
+	 first and then corefile.  Otherwise try just corefile.  */
 
-      if (isdigit (corearg[0]))
+      if (isdigit (pid_or_core_arg[0]))
 	{
-	  if (catch_command_errors (attach_command, corearg, 
+	  if (catch_command_errors (attach_command, pid_or_core_arg,
 				    !batch, RETURN_MASK_ALL) == 0)
-	    catch_command_errors (core_file_command, corearg, 
+	    catch_command_errors (core_file_command, pid_or_core_arg,
 				  !batch, RETURN_MASK_ALL);
 	}
-      else /* Can't be a pid, better be a corefile. */
-	catch_command_errors (core_file_command, corearg, 
+      else /* Can't be a pid, better be a corefile.  */
+	catch_command_errors (core_file_command, pid_or_core_arg,
 			      !batch, RETURN_MASK_ALL);
     }
 
@@ -695,7 +778,7 @@ extern int gdbtk_test (char *);
       || memcmp ((char *) &homebuf, (char *) &cwdbuf, sizeof (struct stat)))
     if (!inhibit_gdbinit)
       {
-	catch_command_errors (source_command, gdbinit, 0, RETURN_MASK_ALL);
+	catch_command_errors (source_script, gdbinit, 0, RETURN_MASK_ALL);
       }
 
   for (i = 0; i < ncmd; i++)
@@ -713,11 +796,16 @@ extern int gdbtk_test (char *);
 	    read_command_file (stdin);
 	  else
 #endif
-	    source_command (cmdarg[i], !batch);
+	    source_script (cmdarg[i], !batch);
 	  do_cleanups (ALL_CLEANUPS);
 	}
 #endif
-      catch_command_errors (source_command, cmdarg[i], !batch, RETURN_MASK_ALL);
+      if (cmdarg[i].type == CMDARG_FILE)
+        catch_command_errors (source_script, cmdarg[i].string,
+			      !batch, RETURN_MASK_ALL);
+      else  /* cmdarg[i].type == CMDARG_COMMAND */
+        catch_command_errors (execute_command, cmdarg[i].string,
+			      !batch, RETURN_MASK_ALL);
     }
   xfree (cmdarg);
 
@@ -726,15 +814,8 @@ extern int gdbtk_test (char *);
 
   if (batch)
     {
-      if (attach_flag)
-	/* Either there was a problem executing the command in the
-	   batch file aborted early, or the batch file forgot to do an
-	   explicit detach.  Explicitly detach the inferior ensuring
-	   that there are no zombies.  */
-	target_detach (NULL, 0);
-      
       /* We have hit the end of the batch file.  */
-      exit (0);
+      quit_force (NULL, 0);
     }
 
   /* Do any host- or target-specific hacks.  This is used for i960 targets
@@ -772,9 +853,9 @@ extern int gdbtk_test (char *);
       if (!SET_TOP_LEVEL ())
 	{
 	  do_cleanups (ALL_CLEANUPS);	/* Do complete cleanup */
-	  /* GUIs generally have their own command loop, mainloop, or whatever.
-	     This is a good place to gain control because many error
-	     conditions will end up here via longjmp(). */
+	  /* GUIs generally have their own command loop, mainloop, or
+	     whatever.  This is a good place to gain control because
+	     many error conditions will end up here via longjmp().  */
 	  if (deprecated_command_loop_hook)
 	    deprecated_command_loop_hook ();
 	  else
@@ -831,13 +912,17 @@ Options:\n\n\
   --args             Arguments after executable-file are passed to inferior\n\
 "), stream);
   fputs_unfiltered (_("\
-  --[no]async        Enable (disable) asynchronous version of CLI\n\
-"), stream);
-  fputs_unfiltered (_("\
   -b BAUDRATE        Set serial port baud rate used for remote debugging.\n\
   --batch            Exit after processing options.\n\
+  --batch-silent     As for --batch, but suppress all gdb stdout output.\n\
+  --return-child-result\n\
+                     GDB exit code will be the child's exit code.\n\
   --cd=DIR           Change current directory to DIR.\n\
-  --command=FILE     Execute GDB commands from FILE.\n\
+  --command=FILE, -x Execute GDB commands from FILE.\n\
+  --eval-command=COMMAND, -ex\n\
+                     Execute a single GDB command.\n\
+                     May be used multiple times and in conjunction\n\
+                     with --command.\n\
   --core=COREFILE    Analyze the core dump COREFILE.\n\
   --pid=PID          Attach to running process PID.\n\
 "), stream);
@@ -854,7 +939,7 @@ Options:\n\n\
                      Select a specific interpreter / user interface\n\
 "), stream);
   fputs_unfiltered (_("\
-  --mapped           Use mapped symbol files if supported on this system.\n\
+  -l TIMEOUT         Set timeout in seconds for remote debugging.\n\
   --nw		     Do not use a window interface.\n\
   --nx               Do not read "), stream);
   fputs_unfiltered (gdbinit, stream);

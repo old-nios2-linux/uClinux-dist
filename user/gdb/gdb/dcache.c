@@ -1,13 +1,13 @@
 /* Caching code for GDB, the GNU debugger.
 
-   Copyright 1992, 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003 Free
-   Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "dcache.h"
@@ -124,7 +122,7 @@ struct dcache_block
   {
     struct dcache_block *p;	/* next in list */
     CORE_ADDR addr;		/* Address for which data is recorded.  */
-    char data[LINE_SIZE];	/* bytes at given address */
+    gdb_byte data[LINE_SIZE];	/* bytes at given address */
     unsigned char state[LINE_SIZE];	/* what state the data is in */
 
     /* whether anything in state is dirty - used to speed up the 
@@ -162,10 +160,6 @@ struct dcache_struct
     struct dcache_block *the_cache;
   };
 
-static int dcache_poke_byte (DCACHE *dcache, CORE_ADDR addr, char *ptr);
-
-static int dcache_peek_byte (DCACHE *dcache, CORE_ADDR addr, char *ptr);
-
 static struct dcache_block *dcache_hit (DCACHE *dcache, CORE_ADDR addr);
 
 static int dcache_write_line (DCACHE *dcache, struct dcache_block *db);
@@ -181,6 +175,13 @@ static void dcache_info (char *exp, int tty);
 void _initialize_dcache (void);
 
 static int dcache_enabled_p = 0;
+static void
+show_dcache_enabled_p (struct ui_file *file, int from_tty,
+		       struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Cache use for remote targets is %s.\n"), value);
+}
+
 
 DCACHE *last_cache;		/* Used by info dcache */
 
@@ -243,7 +244,7 @@ static int
 dcache_write_line (DCACHE *dcache, struct dcache_block *db)
 {
   CORE_ADDR memaddr;
-  char *myaddr;
+  gdb_byte *myaddr;
   int len;
   int res;
   int reg_len;
@@ -299,19 +300,15 @@ dcache_write_line (DCACHE *dcache, struct dcache_block *db)
 	  }
 
 	  dirty_len = e - s;
-	  while (dirty_len > 0)
-	    {
-	      res = do_xfer_memory(memaddr, myaddr, dirty_len, 1,
-				   &region->attrib);
-	      if (res <= 0)
-		return 0;
+	  res = target_write (&current_target, TARGET_OBJECT_RAW_MEMORY,
+			      NULL, myaddr, memaddr, dirty_len);
+	  if (res < dirty_len)
+	    return 0;
 
-	      memset (&db->state[XFORM(memaddr)], ENTRY_OK, res);
-	      memaddr   += res;
-	      myaddr    += res;
-	      len       -= res;
-	      dirty_len -= res;
-	    }
+	  memset (&db->state[XFORM(memaddr)], ENTRY_OK, res);
+	  memaddr += res;
+	  myaddr += res;
+	  len -= res;
 	}
     }
 
@@ -324,7 +321,7 @@ static int
 dcache_read_line (DCACHE *dcache, struct dcache_block *db)
 {
   CORE_ADDR memaddr;
-  char *myaddr;
+  gdb_byte *myaddr;
   int len;
   int res;
   int reg_len;
@@ -358,18 +355,14 @@ dcache_read_line (DCACHE *dcache, struct dcache_block *db)
 	  continue;
 	}
       
-      while (reg_len > 0)
-	{
-	  res = do_xfer_memory (memaddr, myaddr, reg_len, 0,
-				&region->attrib);
-	  if (res <= 0)
-	    return 0;
+      res = target_read (&current_target, TARGET_OBJECT_RAW_MEMORY,
+			 NULL, myaddr, memaddr, reg_len);
+      if (res < reg_len)
+	return 0;
 
-	  memaddr += res;
-	  myaddr  += res;
-	  len     -= res;
-	  reg_len -= res;
-	}
+      memaddr += res;
+      myaddr += res;
+      len -= res;
     }
 
   memset (db->state, ENTRY_OK, sizeof (db->data));
@@ -443,7 +436,7 @@ dcache_writeback (DCACHE *dcache)
    Returns 0 on error. */
 
 static int
-dcache_peek_byte (DCACHE *dcache, CORE_ADDR addr, char *ptr)
+dcache_peek_byte (DCACHE *dcache, CORE_ADDR addr, gdb_byte *ptr)
 {
   struct dcache_block *db = dcache_hit (dcache, addr);
 
@@ -470,7 +463,7 @@ dcache_peek_byte (DCACHE *dcache, CORE_ADDR addr, char *ptr)
  */
 
 static int
-dcache_poke_byte (DCACHE *dcache, CORE_ADDR addr, char *ptr)
+dcache_poke_byte (DCACHE *dcache, CORE_ADDR addr, gdb_byte *ptr)
 {
   struct dcache_block *db = dcache_hit (dcache, addr);
 
@@ -525,11 +518,11 @@ dcache_free (DCACHE *dcache)
    This routine is indended to be called by remote_xfer_ functions. */
 
 int
-dcache_xfer_memory (DCACHE *dcache, CORE_ADDR memaddr, char *myaddr, int len,
-		    int should_write)
+dcache_xfer_memory (DCACHE *dcache, CORE_ADDR memaddr, gdb_byte *myaddr,
+		    int len, int should_write)
 {
   int i;
-  int (*xfunc) (DCACHE *dcache, CORE_ADDR addr, char *ptr);
+  int (*xfunc) (DCACHE *dcache, CORE_ADDR addr, gdb_byte *ptr);
   xfunc = should_write ? dcache_poke_byte : dcache_peek_byte;
 
   for (i = 0; i < len; i++)
@@ -558,22 +551,22 @@ dcache_info (char *exp, int tty)
 {
   struct dcache_block *p;
 
-  printf_filtered ("Dcache line width %d, depth %d\n",
+  printf_filtered (_("Dcache line width %d, depth %d\n"),
 		   LINE_SIZE, DCACHE_SIZE);
 
   if (last_cache)
     {
-      printf_filtered ("Cache state:\n");
+      printf_filtered (_("Cache state:\n"));
 
       for (p = last_cache->valid_head; p; p = p->p)
 	{
 	  int j;
-	  printf_filtered ("Line at %s, referenced %d times\n",
+	  printf_filtered (_("Line at %s, referenced %d times\n"),
 			   paddr (p->addr), p->refs);
 
 	  for (j = 0; j < LINE_SIZE; j++)
 	    printf_filtered ("%02x", p->data[j] & 0xFF);
-	  printf_filtered ("\n");
+	  printf_filtered (("\n"));
 
 	  for (j = 0; j < LINE_SIZE; j++)
 	    printf_filtered ("%2x", p->state[j]);
@@ -585,20 +578,20 @@ dcache_info (char *exp, int tty)
 void
 _initialize_dcache (void)
 {
-  deprecated_add_show_from_set
-    (add_set_cmd ("remotecache", class_support, var_boolean,
-		  (char *) &dcache_enabled_p,
-		  "\
-Set cache use for remote targets.\n\
+  add_setshow_boolean_cmd ("remotecache", class_support,
+			   &dcache_enabled_p, _("\
+Set cache use for remote targets."), _("\
+Show cache use for remote targets."), _("\
 When on, use data caching for remote targets.  For many remote targets\n\
 this option can offer better throughput for reading target memory.\n\
 Unfortunately, gdb does not currently know anything about volatile\n\
 registers and thus data caching will produce incorrect results with\n\
-volatile registers are in use.  By default, this option is off.",
-		  &setlist),
-     &showlist);
+volatile registers are in use.  By default, this option is off."),
+			   NULL,
+			   show_dcache_enabled_p,
+			   &setlist, &showlist);
 
   add_info ("dcache", dcache_info,
-	    "Print information on the dcache performance.");
+	    _("Print information on the dcache performance."));
 
 }

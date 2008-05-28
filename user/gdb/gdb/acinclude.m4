@@ -2,46 +2,20 @@ dnl written by Rob Savoye <rob@cygnus.com> for Cygnus Support
 dnl major rewriting for Tcl 7.5 by Don Libes <libes@nist.gov>
 
 dnl gdb/configure.in uses BFD_NEED_DECLARATION, so get its definition.
-sinclude(../bfd/acinclude.m4)
+sinclude(../bfd/bfd.m4)
 
 dnl This gets the standard macros, like the TCL, TK, etc ones.
 sinclude(../config/acinclude.m4)
 
-dnl CYGNUS LOCAL: This gets the right posix flag for gcc
-AC_DEFUN([CY_AC_TCL_LYNX_POSIX],
-[AC_REQUIRE([AC_PROG_CC])AC_REQUIRE([AC_PROG_CPP])
-AC_MSG_CHECKING([if running LynxOS])
-AC_CACHE_VAL(ac_cv_os_lynx,
-[AC_EGREP_CPP(yes,
-[/*
- * The old Lynx "cc" only defines "Lynx", but the newer one uses "__Lynx__"
- */
-#if defined(__Lynx__) || defined(Lynx)
-yes
-#endif
-], ac_cv_os_lynx=yes, ac_cv_os_lynx=no)])
-#
-if test "$ac_cv_os_lynx" = "yes" ; then
-  AC_MSG_RESULT(yes)
-  AC_DEFINE(LYNX)
-  AC_MSG_CHECKING([whether -mposix or -X is available])
-  AC_CACHE_VAL(ac_cv_c_posix_flag,
-  [AC_TRY_COMPILE(,[
-  /*
-   * This flag varies depending on how old the compiler is.
-   * -X is for the old "cc" and "gcc" (based on 1.42).
-   * -mposix is for the new gcc (at least 2.5.8).
-   */
-  #if defined(__GNUC__) && __GNUC__ >= 2
-  choke me
-  #endif
-  ], ac_cv_c_posix_flag=" -mposix", ac_cv_c_posix_flag=" -X")])
-  CC="$CC $ac_cv_c_posix_flag"
-  AC_MSG_RESULT($ac_cv_c_posix_flag)
-  else
-  AC_MSG_RESULT(no)
-fi
-])
+dnl This gets GCC_HEADER_STDINT.
+sinclude(../config/stdint.m4)
+
+sinclude(../config/gettext-sister.m4)
+
+dnl For AC_LIB_HAVE_LINKFLAGS.
+sinclude(../config/lib-ld.m4)
+sinclude(../config/lib-prefix.m4)
+sinclude(../config/lib-link.m4)
 
 #
 # Sometimes the native compiler is a bogus stub for gcc or /usr/ucb/cc. This
@@ -735,19 +709,12 @@ AC_SUBST(ITKHDIR)
 ])
 
 
-dnl sinclude(../gettext.m4) already included by bfd/acinclude.m4
-dnl The lines below arrange for aclocal not to bring gettext.m4's
-dnl CY_GNU_GETTEXT into aclocal.m4.
-ifelse(yes,no,[
-AC_DEFUN([CY_GNU_GETTEXT],)
-])
-
 ## ----------------------------------------- ##
 ## ANSIfy the C compiler whenever possible.  ##
 ## From Franc,ois Pinard                     ##
 ## ----------------------------------------- ##
 
-# Copyright 1996, 1997, 1999, 2000, 2001 Free Software Foundation, Inc.
+# Copyright (C) 1996, 1997, 1999, 2000, 2001 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -761,8 +728,8 @@ AC_DEFUN([CY_GNU_GETTEXT],)
 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-# 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA 02110-1301, USA.
 
 # serial 1
 
@@ -918,15 +885,6 @@ size_t iconv();
     LIBICONV="-liconv"
   fi
   AC_SUBST(LIBICONV)
-])
-
-# AC_GNU_SOURCE
-# -------------
-# FIXME: Remove thise once we start using Autoconf 2.5x (x>=4).
-AC_DEFUN([AC_GNU_SOURCE],
-[AC_BEFORE([$0], [AC_TRY_COMPILE])dnl
-AC_BEFORE([$0], [AC_TRY_RUN])dnl
-AC_DEFINE([_GNU_SOURCE])
 ])
 
 dnl written by Guido Draheim <guidod@gmx.de>, original by Alexandre Oliva 

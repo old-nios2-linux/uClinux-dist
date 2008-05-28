@@ -1,12 +1,12 @@
 /* Low level Alpha interface, for GDB when running native.
-   Copyright 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003
+   Copyright (C) 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -29,21 +27,12 @@
 #include "alpha-tdep.h"
 
 #include <sys/ptrace.h>
-#ifdef __linux__
-#include <asm/reg.h>
-#include <alpha/ptrace.h>
-#else
 #include <alpha/coreregs.h>
-#endif
 #include <sys/user.h>
 
-/* Prototypes for local functions. */
-
-static void fetch_osf_core_registers (char *, unsigned, int, CORE_ADDR);
-static void fetch_elf_core_registers (char *, unsigned, int, CORE_ADDR);
 
 /* Extract the register values out of the core file and store
-   them where `read_register' will find them.
+   them into REGCACHE.
 
    CORE_REG_SECT points to the register values themselves, read into memory.
    CORE_REG_SIZE is the size of that area.
@@ -56,9 +45,11 @@ static void fetch_elf_core_registers (char *, unsigned, int, CORE_ADDR);
  */
 
 static void
-fetch_osf_core_registers (char *core_reg_sect, unsigned core_reg_size,
+fetch_osf_core_registers (struct regcache *regcache,
+			  char *core_reg_sect, unsigned core_reg_size,
 			  int which, CORE_ADDR reg_addr)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int regno;
   int addr;
   int bad_reg = -1;
@@ -80,7 +71,7 @@ fetch_osf_core_registers (char *core_reg_sect, unsigned core_reg_size,
     EFL + 8, EFL + 9, EFL + 10, EFL + 11, EFL + 12, EFL + 13, EFL + 14, EFL + 15,
     EFL + 16, EFL + 17, EFL + 18, EFL + 19, EFL + 20, EFL + 21, EFL + 22, EFL + 23,
     EFL + 24, EFL + 25, EFL + 26, EFL + 27, EFL + 28, EFL + 29, EFL + 30, EFL + 31,
-    CF_PC, -1
+    CF_PC, -1, -1
 #else
 #define EFL (EF_SIZE / 8)
     EF_V0, EF_T0, EF_T1, EF_T2, EF_T3, EF_T4, EF_T5, EF_T6,
@@ -91,15 +82,15 @@ fetch_osf_core_registers (char *core_reg_sect, unsigned core_reg_size,
     EFL + 8, EFL + 9, EFL + 10, EFL + 11, EFL + 12, EFL + 13, EFL + 14, EFL + 15,
     EFL + 16, EFL + 17, EFL + 18, EFL + 19, EFL + 20, EFL + 21, EFL + 22, EFL + 23,
     EFL + 24, EFL + 25, EFL + 26, EFL + 27, EFL + 28, EFL + 29, EFL + 30, EFL + 31,
-    EF_PC, -1
+    EF_PC, -1, -1
 #endif
   };
 
   for (regno = 0; regno < ALPHA_NUM_REGS; regno++)
     {
-      if (CANNOT_FETCH_REGISTER (regno))
+      if (gdbarch_cannot_fetch_register (gdbarch, regno))
 	{
-	  regcache_raw_supply (current_regcache, regno, NULL);
+	  regcache_raw_supply (regcache, regno, NULL);
 	  continue;
 	}
       addr = 8 * core_reg_mapping[regno];
@@ -108,7 +99,7 @@ fetch_osf_core_registers (char *core_reg_sect, unsigned core_reg_size,
 	  /* ??? UNIQUE is a new addition.  Don't generate an error.  */
 	  if (regno == ALPHA_UNIQUE_REGNUM)
 	    {
-	      regcache_raw_supply (current_regcache, regno, NULL);
+	      regcache_raw_supply (regcache, regno, NULL);
 	      continue;
 	    }
 	  if (bad_reg < 0)
@@ -116,105 +107,42 @@ fetch_osf_core_registers (char *core_reg_sect, unsigned core_reg_size,
 	}
       else
 	{
-	  regcache_raw_supply (current_regcache, regno, core_reg_sect + addr);
+	  regcache_raw_supply (regcache, regno, core_reg_sect + addr);
 	}
     }
   if (bad_reg >= 0)
     {
-      error ("Register %s not found in core file.", REGISTER_NAME (bad_reg));
-    }
-}
-
-static void
-fetch_elf_core_registers (char *core_reg_sect, unsigned core_reg_size,
-			  int which, CORE_ADDR reg_addr)
-{
-  if (core_reg_size < 32 * 8)
-    {
-      error ("Core file register section too small (%u bytes).", core_reg_size);
-      return;
-    }
-
-  switch (which)
-    {
-    case 0: /* integer registers */
-      /* PC is in slot 32; UNIQUE is in slot 33, if present.  */
-      alpha_supply_int_regs (-1, core_reg_sect, core_reg_sect + 31*8,
-			     (core_reg_size >= 33 * 8
-			      ? core_reg_sect + 32*8 : NULL));
-      break;
-
-    case 2: /* floating-point registers */
-      /* FPCR is in slot 32.  */
-      alpha_supply_fp_regs (-1, core_reg_sect, core_reg_sect + 31*8);
-      break;
-
-    default:
-      break;
+      error (_("Register %s not found in core file."),
+	     gdbarch_register_name (gdbarch, bad_reg));
     }
 }
 
 
-/* Map gdb internal register number to a ptrace ``address''.
-   These ``addresses'' are defined in <sys/ptrace.h>, with
-   the exception of ALPHA_UNIQUE_PTRACE_ADDR.  */
-
-#ifndef ALPHA_UNIQUE_PTRACE_ADDR
-#define ALPHA_UNIQUE_PTRACE_ADDR 0
-#endif
-
-CORE_ADDR
-register_addr (int regno, CORE_ADDR blockend)
-{
-  if (regno == PC_REGNUM)
-    return PC;
-  if (regno == ALPHA_UNIQUE_REGNUM)
-    return ALPHA_UNIQUE_PTRACE_ADDR;
-  if (regno < FP0_REGNUM)
-    return GPR_BASE + regno;
-  else
-    return FPR_BASE + regno - FP0_REGNUM;
-}
-
-int
-kernel_u_size (void)
-{
-  return (sizeof (struct user));
-}
-
-#if defined(USE_PROC_FS) || defined(HAVE_GREGSET_T)
 #include <sys/procfs.h>
-
 /* Prototypes for supply_gregset etc. */
 #include "gregset.h"
-
-/* Locate the UNIQUE value within the gregset_t.  */
-#ifndef ALPHA_REGSET_UNIQUE
-#define ALPHA_REGSET_UNIQUE(ptr) NULL
-#endif
 
 /*
  * See the comment in m68k-tdep.c regarding the utility of these functions.
  */
 
 void
-supply_gregset (gdb_gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const gdb_gregset_t *gregsetp)
 {
-  long *regp = ALPHA_REGSET_BASE (gregsetp);
-  void *unique = ALPHA_REGSET_UNIQUE (gregsetp);
+  const long *regp = gregsetp->regs;
 
   /* PC is in slot 32.  */
-  alpha_supply_int_regs (-1, regp, regp + 31, unique);
+  alpha_supply_int_regs (regcache, -1, regp, regp + 31, NULL);
 }
 
 void
-fill_gregset (gdb_gregset_t *gregsetp, int regno)
+fill_gregset (const struct regcache *regcache,
+	      gdb_gregset_t *gregsetp, int regno)
 {
-  long *regp = ALPHA_REGSET_BASE (gregsetp);
-  void *unique = ALPHA_REGSET_UNIQUE (gregsetp);
+  long *regp = gregsetp->regs;
 
   /* PC is in slot 32.  */
-  alpha_fill_int_regs (regno, regp, regp + 31, unique);
+  alpha_fill_int_regs (regcache, regno, regp, regp + 31, NULL);
 }
 
 /*
@@ -223,23 +151,23 @@ fill_gregset (gdb_gregset_t *gregsetp, int regno)
  */
 
 void
-supply_fpregset (gdb_fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const gdb_fpregset_t *fpregsetp)
 {
-  long *regp = ALPHA_REGSET_BASE (fpregsetp);
+  const long *regp = fpregsetp->regs;
 
   /* FPCR is in slot 32.  */
-  alpha_supply_fp_regs (-1, regp, regp + 31);
+  alpha_supply_fp_regs (regcache, -1, regp, regp + 31);
 }
 
 void
-fill_fpregset (gdb_fpregset_t *fpregsetp, int regno)
+fill_fpregset (const struct regcache *regcache,
+	       gdb_fpregset_t *fpregsetp, int regno)
 {
-  long *regp = ALPHA_REGSET_BASE (fpregsetp);
+  long *regp = fpregsetp->regs;
 
   /* FPCR is in slot 32.  */
-  alpha_fill_fp_regs (regno, regp, regp + 31);
+  alpha_fill_fp_regs (regcache, regno, regp, regp + 31);
 }
-#endif
 
 
 /* Register that we are able to handle alpha core file formats. */
@@ -255,18 +183,8 @@ static struct core_fns alpha_osf_core_fns =
   NULL					/* next */
 };
 
-static struct core_fns alpha_elf_core_fns =
-{
-  bfd_target_elf_flavour,		/* core_flavour */
-  default_check_format,			/* check_format */
-  default_core_sniffer,			/* core_sniffer */
-  fetch_elf_core_registers,		/* core_read_registers */
-  NULL					/* next */
-};
-
 void
 _initialize_core_alpha (void)
 {
   deprecated_add_core_fns (&alpha_osf_core_fns);
-  deprecated_add_core_fns (&alpha_elf_core_fns);
 }

@@ -1,14 +1,14 @@
 /* Code dealing with dummy stack frames, for GDB, the GNU debugger.
 
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
-   Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 #include "defs.h"
@@ -52,7 +50,7 @@ static struct dummy_frame *dummy_frame_stack = NULL;
 /* Function: deprecated_pc_in_call_dummy (pc)
 
    Return non-zero if the PC falls in a dummy frame created by gdb for
-   an inferior call.  The code below which allows DECR_PC_AFTER_BREAK
+   an inferior call.  The code below which allows gdbarch_decr_pc_after_break
    is for infrun.c, which may give the function a PC without that
    subtracted out.
 
@@ -75,7 +73,8 @@ deprecated_pc_in_call_dummy (CORE_ADDR pc)
        dummyframe = dummyframe->next)
     {
       if ((pc >= dummyframe->id.code_addr)
-	  && (pc <= dummyframe->id.code_addr + DECR_PC_AFTER_BREAK))
+	  && (pc <= dummyframe->id.code_addr
+		    + gdbarch_decr_pc_after_break (current_gdbarch)))
 	return 1;
     }
   return 0;
@@ -88,6 +87,7 @@ void
 dummy_frame_push (struct regcache *caller_regcache,
 		  const struct frame_id *dummy_id)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (caller_regcache);
   struct dummy_frame *dummy_frame;
 
   /* Check to see if there are stale dummy frames, perhaps left over
@@ -96,7 +96,7 @@ dummy_frame_push (struct regcache *caller_regcache,
   dummy_frame = dummy_frame_stack;
   while (dummy_frame)
     /* FIXME: cagney/2004-08-02: Should just test IDs.  */
-    if (frame_id_inner (dummy_frame->id, (*dummy_id)))
+    if (frame_id_inner (gdbarch, dummy_frame->id, (*dummy_id)))
       /* Stale -- destroy!  */
       {
 	dummy_frame_stack = dummy_frame->next;
@@ -137,25 +137,31 @@ dummy_frame_sniffer (const struct frame_unwind *self,
      entry point, or some random address on the stack.  Trying to use
      that PC to apply standard frame ID unwind techniques is just
      asking for trouble.  */
-  /* Use an architecture specific method to extract the prev's dummy
-     ID from the next frame.  Note that this method uses
-     frame_register_unwind to obtain the register values needed to
-     determine the dummy frame's ID.  */
-  this_id = gdbarch_unwind_dummy_id (get_frame_arch (next_frame), next_frame);
-
-  /* Use that ID to find the corresponding cache entry.  */
-  for (dummyframe = dummy_frame_stack;
-       dummyframe != NULL;
-       dummyframe = dummyframe->next)
+  
+  /* Don't bother unles there is at least one dummy frame.  */
+  if (dummy_frame_stack != NULL)
     {
-      if (frame_id_eq (dummyframe->id, this_id))
+      /* Use an architecture specific method to extract the prev's
+	 dummy ID from the next frame.  Note that this method uses
+	 frame_register_unwind to obtain the register values needed to
+	 determine the dummy frame's ID.  */
+      this_id = gdbarch_unwind_dummy_id (get_frame_arch (next_frame), 
+					 next_frame);
+
+      /* Use that ID to find the corresponding cache entry.  */
+      for (dummyframe = dummy_frame_stack;
+	   dummyframe != NULL;
+	   dummyframe = dummyframe->next)
 	{
-	  struct dummy_frame_cache *cache;
-	  cache = FRAME_OBSTACK_ZALLOC (struct dummy_frame_cache);
-	  cache->prev_regcache = dummyframe->regcache;
-	  cache->this_id = this_id;
-	  (*this_prologue_cache) = cache;
-	  return 1;
+	  if (frame_id_eq (dummyframe->id, this_id))
+	    {
+	      struct dummy_frame_cache *cache;
+	      cache = FRAME_OBSTACK_ZALLOC (struct dummy_frame_cache);
+	      cache->prev_regcache = dummyframe->regcache;
+	      cache->this_id = this_id;
+	      (*this_prologue_cache) = cache;
+	      return 1;
+	    }
 	}
     }
   return 0;
@@ -169,7 +175,7 @@ dummy_frame_prev_register (struct frame_info *next_frame,
 			   void **this_prologue_cache,
 			   int regnum, int *optimized,
 			   enum lval_type *lvalp, CORE_ADDR *addrp,
-			   int *realnum, void *bufferp)
+			   int *realnum, gdb_byte *bufferp)
 {
   /* The dummy-frame sniffer always fills in the cache.  */
   struct dummy_frame_cache *cache = (*this_prologue_cache);
@@ -246,7 +252,7 @@ maintenance_print_dummy_frames (char *args, int from_tty)
     {
       struct ui_file *file = gdb_fopen (args, "w");
       if (file == NULL)
-	perror_with_name ("maintenance print dummy-frames");
+	perror_with_name (_("maintenance print dummy-frames"));
       fprint_dummy_frames (file);    
       ui_file_delete (file);
     }
@@ -258,7 +264,7 @@ void
 _initialize_dummy_frame (void)
 {
   add_cmd ("dummy-frames", class_maintenance, maintenance_print_dummy_frames,
-	   "Print the contents of the internal dummy-frame stack.",
+	   _("Print the contents of the internal dummy-frame stack."),
 	   &maintenanceprintlist);
 
 }

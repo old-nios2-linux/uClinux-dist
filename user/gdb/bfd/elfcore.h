@@ -1,12 +1,12 @@
 /* ELF core file support for BFD.
-   Copyright 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003
+   Copyright 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,7 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 char*
 elf_core_file_failing_command (bfd *abfd)
@@ -157,7 +158,7 @@ elf_core_file_p (bfd *abfd)
 
 	  if ((*target_ptr)->flavour != bfd_target_elf_flavour)
 	    continue;
-	  back = (const struct elf_backend_data *) (*target_ptr)->backend_data;
+	  back = xvec_get_elf_backend_data (*target_ptr);
 	  if (back->elf_machine_code == i_ehdrp->e_machine
 	      || (back->elf_machine_alt1 != 0
 	          && i_ehdrp->e_machine == back->elf_machine_alt1)
@@ -207,12 +208,19 @@ elf_core_file_p (bfd *abfd)
   /* Set the machine architecture.  Do this before processing the
      program headers since we need to know the architecture type
      when processing the notes of some systems' core files.  */
-  if (! bfd_default_set_arch_mach (abfd, ebd->arch, 0))
-    {
+  if (! bfd_default_set_arch_mach (abfd, ebd->arch, 0)
       /* It's OK if this fails for the generic target.  */
-      if (ebd->elf_machine_code != EM_NONE)
-	goto fail;
-    }
+      && ebd->elf_machine_code != EM_NONE)
+    goto fail;
+
+  /* Let the backend double check the format and override global
+     information.  We do this before processing the program headers
+     to allow the correct machine (as opposed to just the default
+     machine) to be set, making it possible for grok_prstatus and
+     grok_psinfo to rely on the mach setting.  */
+  if (ebd->elf_backend_object_p != NULL
+      && ! ebd->elf_backend_object_p (abfd))
+    goto wrong;
 
   /* Process each program header.  */
   for (phindex = 0; phindex < i_ehdrp->e_phnum; ++phindex)
@@ -221,12 +229,6 @@ elf_core_file_p (bfd *abfd)
 
   /* Save the entry point from the ELF header.  */
   bfd_get_start_address (abfd) = i_ehdrp->e_entry;
-
-  /* Let the backend double check the format and override global
-     information.  */
-  if (ebd->elf_backend_object_p
-      && (! (*ebd->elf_backend_object_p) (abfd)))
-    goto wrong;
 
   bfd_preserve_finish (abfd, &preserve);
   return abfd->xvec;

@@ -1,14 +1,15 @@
 /* Default child (native) target interface, for GDB when running under
    Unix.
 
-   Copyright 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1998, 1999, 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "regcache.h"
@@ -33,22 +32,24 @@
    for all registers.  */
 
 static void
-inf_child_fetch_inferior_registers (int regnum)
+inf_child_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
     {
-      for (regnum = 0; regnum < NUM_REGS; regnum++)
-	regcache_raw_supply (current_regcache, regnum, NULL);
+      for (regnum = 0;
+	   regnum < gdbarch_num_regs (get_regcache_arch (regcache));
+	   regnum++)
+	regcache_raw_supply (regcache, regnum, NULL);
     }
   else
-    regcache_raw_supply (current_regcache, regnum, NULL);
+    regcache_raw_supply (regcache, regnum, NULL);
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers (including the floating point registers).  */
 
 static void
-inf_child_store_inferior_registers (int regnum)
+inf_child_store_inferior_registers (struct regcache *regcache, int regnum)
 {
 }
 
@@ -66,14 +67,14 @@ inf_child_post_attach (int pid)
    program being debugged.  */
 
 static void
-inf_child_prepare_to_store (void)
+inf_child_prepare_to_store (struct regcache *regcache)
 {
 }
 
 static void
 inf_child_open (char *arg, int from_tty)
 {
-  error ("Use the \"run\" command to start a Unix child process.");
+  error (_("Use the \"run\" command to start a Unix child process."));
 }
 
 static void
@@ -90,12 +91,11 @@ inf_child_acknowledge_created_inferior (int pid)
      created inferior" operation by a debugger.  */
 }
 
-static int
+static void
 inf_child_insert_fork_catchpoint (int pid)
 {
   /* This version of Unix doesn't support notification of fork
      events.  */
-  return 0;
 }
 
 static int
@@ -106,12 +106,11 @@ inf_child_remove_fork_catchpoint (int pid)
   return 0;
 }
 
-static int
+static void
 inf_child_insert_vfork_catchpoint (int pid)
 {
   /* This version of Unix doesn't support notification of vfork
      events.  */
-  return 0;
 }
 
 static int
@@ -123,19 +122,18 @@ inf_child_remove_vfork_catchpoint (int pid)
 }
 
 static int
-inf_child_follow_fork (int follow_child)
+inf_child_follow_fork (struct target_ops *ops, int follow_child)
 {
   /* This version of Unix doesn't support following fork or vfork
      events.  */
   return 0;
 }
 
-static int
+static void
 inf_child_insert_exec_catchpoint (int pid)
 {
   /* This version of Unix doesn't support notification of exec
      events.  */
-  return 0;
 }
 
 static int
@@ -158,19 +156,6 @@ static int
 inf_child_can_run (void)
 {
   return 1;
-}
-
-static struct symtab_and_line *
-inf_child_enable_exception_callback (enum exception_event_kind kind,
-				     int enable)
-{
-  return (struct symtab_and_line *) NULL;
-}
-
-static struct exception_event_record *
-inf_child_get_current_exception_event (void)
-{
-  return (struct exception_event_record *) NULL;
 }
 
 static char *
@@ -213,8 +198,6 @@ inf_child_target (void)
   t->to_reported_exec_events_per_exec_call =
     inf_child_reported_exec_events_per_exec_call;
   t->to_can_run = inf_child_can_run;
-  t->to_enable_exception_callback = inf_child_enable_exception_callback;
-  t->to_get_current_exception_event = inf_child_get_current_exception_event;
   t->to_pid_to_exec_file = inf_child_pid_to_exec_file;
   t->to_stratum = process_stratum;
   t->to_has_all_memory = 1;

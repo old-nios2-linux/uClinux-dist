@@ -1,26 +1,26 @@
 /* BFD back-end for Motorola MCore COFF/PE
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "coff/mcore.h"
 #include "coff/internal.h"
@@ -40,10 +40,6 @@ Boston, MA 02111-1307, USA.  */
    final_link routine once.  */
 extern bfd_boolean mcore_bfd_coff_final_link
   PARAMS ((bfd *, struct bfd_link_info *));
-#if 0
-static struct bfd_link_hash_table *coff_mcore_link_hash_table_create
-  PARAMS ((bfd *));
-#endif
 static bfd_reloc_status_type mcore_coff_unsupported_reloc
   PARAMS ((bfd *, arelent *, asymbol *, PTR, asection *, bfd *, char **));
 static bfd_boolean coff_mcore_relocate_section
@@ -55,8 +51,6 @@ static reloc_howto_type *coff_mcore_rtype_to_howto
   PARAMS ((bfd *, asection *, struct internal_reloc *,
 	   struct coff_link_hash_entry *, struct internal_syment *,
 	   bfd_vma *));
-static void mcore_emit_base_file_entry
-  PARAMS ((struct bfd_link_info *, bfd *, asection *, bfd_vma));
 static bfd_boolean in_reloc_p PARAMS ((bfd *, reloc_howto_type *));
 
 /* The NT loader points the toc register to &toc + 32768, in order to
@@ -222,44 +216,14 @@ mcore_hash_table;
 #define coff_mcore_hash_table(info) \
   ((mcore_hash_table *) ((info)->hash))
 
-#if 0
-/* Create an MCore coff linker hash table.  */
-
-static struct bfd_link_hash_table *
-coff_mcore_link_hash_table_create (abfd)
-     bfd * abfd;
-{
-  mcore_hash_table * ret;
-
-  ret = (mcore_hash_table *) bfd_malloc ((bfd_size_type) sizeof (* ret));
-  if (ret == (mcore_hash_table *) NULL)
-    return NULL;
-
-  if (! _bfd_coff_link_hash_table_init
-      (& ret->root, abfd, _bfd_coff_link_hash_newfunc))
-    {
-      free (ret);
-      return (struct bfd_link_hash_table *) NULL;
-    }
-
-  ret->bfd_of_toc_owner = NULL;
-  ret->global_toc_size  = 0;
-  ret->import_table_size = 0;
-  ret->first_thunk_address = 0;
-  ret->thunk_size = 0;
-
-  return & ret->root.root;
-}
-#endif
 
 /* Add an entry to the base file.  */
 
-static void
-mcore_emit_base_file_entry (info, output_bfd, input_section, reloc_offset)
-      struct bfd_link_info * info;
-      bfd *                  output_bfd;
-      asection *             input_section;
-      bfd_vma                reloc_offset;
+static bfd_boolean
+mcore_emit_base_file_entry (struct bfd_link_info *info,
+			    bfd *output_bfd,
+			    asection *input_section,
+			    bfd_vma reloc_offset)
 {
   bfd_vma addr = reloc_offset
                  - input_section->vma
@@ -269,7 +233,11 @@ mcore_emit_base_file_entry (info, output_bfd, input_section, reloc_offset)
   if (coff_data (output_bfd)->pe)
      addr -= pe_data (output_bfd)->pe_opthdr.ImageBase;
 
-  fwrite (&addr, 1, sizeof (addr), (FILE *) info->base_file);
+  if (fwrite (&addr, sizeof (addr), 1, (FILE *) info->base_file) == 1)
+    return TRUE;
+
+  bfd_set_error (bfd_error_system_call);
+  return FALSE;
 }
 
 static bfd_reloc_status_type
@@ -316,8 +284,24 @@ mcore_coff_reloc_type_lookup (abfd, code)
     }
   /*NOTREACHED*/
 }
-
 #undef HOW2MAP
+
+static reloc_howto_type *
+mcore_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			      const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (mcore_coff_howto_table)
+	    / sizeof (mcore_coff_howto_table[0]));
+       i++)
+    if (mcore_coff_howto_table[i].name != NULL
+	&& strcasecmp (mcore_coff_howto_table[i].name, r_name) == 0)
+      return &mcore_coff_howto_table[i];
+
+  return NULL;
+}
 
 #define RTYPE2HOWTO(cache_ptr, dst) \
   (cache_ptr)->howto = mcore_coff_howto_table + (dst)->r_type;
@@ -539,12 +523,13 @@ coff_mcore_relocate_section (output_bfd, info, input_bfd, input_section,
 	  break;
 	}
 
-      if (info->base_file)
-	{
-	  /* Emit a reloc if the backend thinks it needs it.  */
-	  if (sym && pe_data (output_bfd)->in_reloc_p (output_bfd, howto))
-            mcore_emit_base_file_entry (info, output_bfd, input_section, rel->r_vaddr);
-	}
+      /* Emit a reloc if the backend thinks it needs it.  */
+      if (info->base_file
+	  && sym
+	  && pe_data (output_bfd)->in_reloc_p (output_bfd, howto)
+	  && !mcore_emit_base_file_entry (info, output_bfd, input_section,
+					  rel->r_vaddr))
+	return FALSE;
 
       switch (rstat)
 	{
@@ -556,7 +541,7 @@ coff_mcore_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	case bfd_reloc_overflow:
 	  if (! ((*info->callbacks->reloc_overflow)
-		 (info, my_name, howto->name,
+		 (info, (h ? &h->root : NULL), my_name, howto->name,
 		  (bfd_vma) 0, input_bfd,
 		  input_section, rel->r_vaddr - input_section->vma)))
 	    return FALSE;
@@ -571,6 +556,7 @@ coff_mcore_relocate_section (output_bfd, info, input_bfd, input_section,
 /* We use the special COFF backend linker, with our own special touch.  */
 
 #define coff_bfd_reloc_type_lookup   mcore_coff_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup mcore_coff_reloc_name_lookup
 #define coff_relocate_section        coff_mcore_relocate_section
 #define coff_rtype_to_howto          coff_mcore_rtype_to_howto
 

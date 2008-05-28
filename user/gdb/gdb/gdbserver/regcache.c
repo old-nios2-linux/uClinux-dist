@@ -1,12 +1,12 @@
 /* Register support routines for the remote server for GDB.
-   Copyright 2001, 2002, 2004
+   Copyright (C) 2001, 2002, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 #include "regdef.h"
@@ -32,7 +30,7 @@
 struct inferior_regcache_data
 {
   int registers_valid;
-  char *registers;
+  unsigned char *registers;
 };
 
 static int register_bytes;
@@ -144,7 +142,7 @@ set_register_cache (struct reg *regs, int n)
 void
 registers_to_string (char *buf)
 {
-  char *registers = get_regcache (current_inferior, 1)->registers;
+  unsigned char *registers = get_regcache (current_inferior, 1)->registers;
 
   convert_int_to_ascii (registers, buf, register_bytes);
 }
@@ -153,7 +151,7 @@ void
 registers_from_string (char *buf)
 {
   int len = strlen (buf);
-  char *registers = get_regcache (current_inferior, 1)->registers;
+  unsigned char *registers = get_regcache (current_inferior, 1)->registers;
 
   if (len != register_bytes * 2)
     {
@@ -200,10 +198,11 @@ register_size (int n)
   return reg_defs[n].size / 8;
 }
 
-static char *
+static unsigned char *
 register_data (int n, int fetch)
 {
-  char *registers = get_regcache (current_inferior, fetch)->registers;
+  unsigned char *registers
+    = get_regcache (current_inferior, fetch)->registers;
 
   return registers + (reg_defs[n].offset / 8);
 }

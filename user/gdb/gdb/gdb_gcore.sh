@@ -1,23 +1,19 @@
 #!/bin/sh
 
-#   Copyright 2003  Free Software Foundation, Inc.
+#   Copyright (C) 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
-
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #
 # gcore.sh
@@ -48,6 +44,17 @@ then
     shift; shift
 fi
 
+# Create a temporary file.  Use mktemp if available, but cope if it is not.
+tmpfile=`mktemp ${name}.XXXXXX 2>/dev/null` || {
+  tmpfile=${name}.$$
+  if test -e $tmpfile; then
+    echo "Could not create temporary file $tmpfile"
+    exit 1
+  fi
+  touch $tmpfile
+}
+trap "rm -f $tmpfile" EXIT
+
 # Initialise return code.
 rc=0
 
@@ -55,16 +62,14 @@ rc=0
 for pid in $*
 do
 	# Write gdb script for pid $pid.  
-
-	# Avoid need for temporary files by using funky "here
-	# document" feature of sh.
-
-	/usr/bin/gdb > /dev/null << EOF
-	attach $pid
-	gcore $name.$pid
-	detach
-	quit
+	cat >>$tmpfile <<EOF
+attach $pid
+gcore $name.$pid
+detach
+quit
 EOF
+
+	gdb -x $tmpfile -batch
 
 	if [ -r $name.$pid ] ; then 
 	    rc=0
@@ -78,4 +83,3 @@ EOF
 done
 
 exit $rc
-

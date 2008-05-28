@@ -16,7 +16,7 @@
 
 Summary:	OpenVPN is a robust and highly flexible VPN daemon by James Yonan.
 Name:           openvpn
-Version:        2.0.5
+Version:        2.1_rc7
 Release:	1
 URL:		http://openvpn.net/
 Source0:	http://prdownloads.sourceforge.net/openvpn/%{name}-%{version}.tar.gz
@@ -51,6 +51,9 @@ Requires:      openssl       >= 0.9.6
 
 %{!?without_pam:BuildRequires: pam-devel}
 %{!?without_pam:Requires:      pam}
+
+%{!?with_pkcs11:BuildRequires: pkcs11-helper-devel}
+%{!?with_pkcs11:Requires:      pkcs11-helper}
 
 #
 # Description
@@ -223,6 +226,8 @@ fi
 %doc contrib/ easy-rsa/ management/ sample-*/ plugin/README.*
 
 %changelog
+* Thu Dec 14 2006 Alon Bar-Lev
+- Added with_pkcs11
 
 * Mon Aug 2 2005 James Yonan
 - Fixed build problem with --define 'without_pam 1'

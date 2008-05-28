@@ -9,8 +9,7 @@
 #include <linux/netfilter/nf_nat.h>
 
 /* Function which prints out usage message. */
-static void
-help(void)
+static void MASQUERADE_help(void)
 {
 	printf(
 "MASQUERADE v%s options:\n"
@@ -23,15 +22,14 @@ help(void)
 IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{ "to-ports", 1, 0, '1' },
-	{ "random", 0, 0, '2' },
-	{ 0 }
+static const struct option MASQUERADE_opts[] = {
+	{ "to-ports", 1, NULL, '1' },
+	{ "random", 0, NULL, '2' },
+	{ }
 };
 
 /* Initialize the target. */
-static void
-init(struct ipt_entry_target *t, unsigned int *nfcache)
+static void MASQUERADE_init(struct xt_entry_target *t)
 {
 	struct ip_nat_multi_range *mr = (struct ip_nat_multi_range *)t->data;
 
@@ -76,11 +74,10 @@ parse_ports(const char *arg, struct ip_nat_multi_range *mr)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ipt_entry *entry,
-      struct ipt_entry_target **target)
+static int MASQUERADE_parse(int c, char **argv, int invert, unsigned int *flags,
+                            const void *e, struct xt_entry_target **target)
 {
+	const struct ipt_entry *entry = e;
 	int portok;
 	struct ip_nat_multi_range *mr
 		= (struct ip_nat_multi_range *)(*target)->data;
@@ -114,16 +111,10 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	}
 }
 
-/* Final check; don't care. */
-static void final_check(unsigned int flags)
-{
-}
-
 /* Prints out the targinfo. */
 static void
-print(const struct ipt_ip *ip,
-      const struct ipt_entry_target *target,
-      int numeric)
+MASQUERADE_print(const void *ip, const struct xt_entry_target *target,
+                 int numeric)
 {
 	struct ip_nat_multi_range *mr
 		= (struct ip_nat_multi_range *)target->data;
@@ -143,7 +134,7 @@ print(const struct ipt_ip *ip,
 
 /* Saves the union ipt_targinfo in parsable form to stdout. */
 static void
-save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
+MASQUERADE_save(const void *ip, const struct xt_entry_target *target)
 {
 	struct ip_nat_multi_range *mr
 		= (struct ip_nat_multi_range *)target->data;
@@ -160,21 +151,20 @@ save(const struct ipt_ip *ip, const struct ipt_entry_target *target)
 		printf("--random ");
 }
 
-static struct iptables_target masq = { NULL,
+static struct iptables_target masquerade_target = {
 	.name		= "MASQUERADE",
 	.version	= IPTABLES_VERSION,
 	.size		= IPT_ALIGN(sizeof(struct ip_nat_multi_range)),
 	.userspacesize	= IPT_ALIGN(sizeof(struct ip_nat_multi_range)),
-	.help		= &help,
-	.init		= &init,
-	.parse		= &parse,
-	.final_check	= &final_check,
-	.print		= &print,
-	.save		= &save,
-	.extra_opts	= opts
+	.help		= MASQUERADE_help,
+	.init		= MASQUERADE_init,
+	.parse		= MASQUERADE_parse,
+	.print		= MASQUERADE_print,
+	.save		= MASQUERADE_save,
+	.extra_opts	= MASQUERADE_opts,
 };
 
 void _init(void)
 {
-	register_target(&masq);
+	register_target(&masquerade_target);
 }

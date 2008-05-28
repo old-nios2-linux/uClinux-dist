@@ -1,14 +1,14 @@
 /* Functions specific to running gdb native on IA-64 running
    GNU/Linux.
 
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -27,6 +25,8 @@
 #include "target.h"
 #include "gdbcore.h"
 #include "regcache.h"
+#include "ia64-tdep.h"
+#include "linux-nat.h"
 
 #include <signal.h>
 #include <sys/ptrace.h>
@@ -301,13 +301,13 @@ static int u_offsets[] =
     -1, -1, -1, -1, -1, -1, -1, -1,
   };
 
-CORE_ADDR
-register_addr (int regno, CORE_ADDR blockend)
+static CORE_ADDR
+ia64_register_addr (struct gdbarch *gdbarch, int regno)
 {
   CORE_ADDR addr;
 
-  if (regno < 0 || regno >= NUM_REGS)
-    error ("Invalid register number %d.", regno);
+  if (regno < 0 || regno >= gdbarch_num_regs (gdbarch))
+    error (_("Invalid register number %d."), regno);
 
   if (u_offsets[regno] == -1)
     addr = 0;
@@ -317,14 +317,16 @@ register_addr (int regno, CORE_ADDR blockend)
   return addr;
 }
 
-int ia64_cannot_fetch_register (regno)
-     int regno;
+static int
+ia64_cannot_fetch_register (struct gdbarch *gdbarch, int regno)
 {
-  return regno < 0 || regno >= NUM_REGS || u_offsets[regno] == -1;
+  return regno < 0
+	 || regno >= gdbarch_num_regs (gdbarch)
+	 || u_offsets[regno] == -1;
 }
 
-int ia64_cannot_store_register (regno)
-     int regno;
+static int
+ia64_cannot_store_register (struct gdbarch *gdbarch, int regno)
 {
   /* Rationale behind not permitting stores to bspstore...
   
@@ -355,70 +357,58 @@ int ia64_cannot_store_register (regno)
      were previously read from the inferior process to be written
      back.)  */
 
-  return regno < 0 || regno >= NUM_REGS || u_offsets[regno] == -1
+  return regno < 0
+	 || regno >= gdbarch_num_regs (gdbarch)
+	 || u_offsets[regno] == -1
          || regno == IA64_BSPSTORE_REGNUM;
 }
 
 void
-supply_gregset (gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const gregset_t *gregsetp)
 {
   int regi;
-  greg_t *regp = (greg_t *) gregsetp;
+  const greg_t *regp = (const greg_t *) gregsetp;
 
   for (regi = IA64_GR0_REGNUM; regi <= IA64_GR31_REGNUM; regi++)
     {
-      regcache_raw_supply (current_regcache, regi,
-			   (char *) (regp + (regi - IA64_GR0_REGNUM)));
+      regcache_raw_supply (regcache, regi, regp + (regi - IA64_GR0_REGNUM));
     }
 
   /* FIXME: NAT collection bits are at index 32; gotta deal with these
      somehow... */
 
-  regcache_raw_supply (current_regcache, IA64_PR_REGNUM, (char *) (regp + 33));
+  regcache_raw_supply (regcache, IA64_PR_REGNUM, regp + 33);
 
   for (regi = IA64_BR0_REGNUM; regi <= IA64_BR7_REGNUM; regi++)
     {
-      regcache_raw_supply (current_regcache, regi,
-			   (char *) (regp + 34 + (regi - IA64_BR0_REGNUM)));
+      regcache_raw_supply (regcache, regi,
+			   regp + 34 + (regi - IA64_BR0_REGNUM));
     }
 
-  regcache_raw_supply (current_regcache, IA64_IP_REGNUM,
-		       (char *) (regp + 42));
-  regcache_raw_supply (current_regcache, IA64_CFM_REGNUM,
-		       (char *) (regp + 43));
-  regcache_raw_supply (current_regcache, IA64_PSR_REGNUM,
-		       (char *) (regp + 44));
-  regcache_raw_supply (current_regcache, IA64_RSC_REGNUM,
-		       (char *) (regp + 45));
-  regcache_raw_supply (current_regcache, IA64_BSP_REGNUM,
-		       (char *) (regp + 46));
-  regcache_raw_supply (current_regcache, IA64_BSPSTORE_REGNUM,
-		       (char *) (regp + 47));
-  regcache_raw_supply (current_regcache, IA64_RNAT_REGNUM,
-		       (char *) (regp + 48));
-  regcache_raw_supply (current_regcache, IA64_CCV_REGNUM,
-		       (char *) (regp + 49));
-  regcache_raw_supply (current_regcache, IA64_UNAT_REGNUM,
-		       (char *) (regp + 50));
-  regcache_raw_supply (current_regcache, IA64_FPSR_REGNUM,
-		       (char *) (regp + 51));
-  regcache_raw_supply (current_regcache, IA64_PFS_REGNUM,
-		       (char *) (regp + 52));
-  regcache_raw_supply (current_regcache, IA64_LC_REGNUM,
-		       (char *) (regp + 53));
-  regcache_raw_supply (current_regcache, IA64_EC_REGNUM,
-		       (char *) (regp + 54));
+  regcache_raw_supply (regcache, IA64_IP_REGNUM, regp + 42);
+  regcache_raw_supply (regcache, IA64_CFM_REGNUM, regp + 43);
+  regcache_raw_supply (regcache, IA64_PSR_REGNUM, regp + 44);
+  regcache_raw_supply (regcache, IA64_RSC_REGNUM, regp + 45);
+  regcache_raw_supply (regcache, IA64_BSP_REGNUM, regp + 46);
+  regcache_raw_supply (regcache, IA64_BSPSTORE_REGNUM, regp + 47);
+  regcache_raw_supply (regcache, IA64_RNAT_REGNUM, regp + 48);
+  regcache_raw_supply (regcache, IA64_CCV_REGNUM, regp + 49);
+  regcache_raw_supply (regcache, IA64_UNAT_REGNUM, regp + 50);
+  regcache_raw_supply (regcache, IA64_FPSR_REGNUM, regp + 51);
+  regcache_raw_supply (regcache, IA64_PFS_REGNUM, regp + 52);
+  regcache_raw_supply (regcache, IA64_LC_REGNUM, regp + 53);
+  regcache_raw_supply (regcache, IA64_EC_REGNUM, regp + 54);
 }
 
 void
-fill_gregset (gregset_t *gregsetp, int regno)
+fill_gregset (const struct regcache *regcache, gregset_t *gregsetp, int regno)
 {
   int regi;
   greg_t *regp = (greg_t *) gregsetp;
 
 #define COPY_REG(_idx_,_regi_) \
   if ((regno == -1) || regno == _regi_) \
-    regcache_raw_collect (current_regcache, _regi_, regp + _idx_)
+    regcache_raw_collect (regcache, _regi_, regp + _idx_)
 
   for (regi = IA64_GR0_REGNUM; regi <= IA64_GR31_REGNUM; regi++)
     {
@@ -454,15 +444,15 @@ fill_gregset (gregset_t *gregsetp, int regno)
    idea of the current floating point register values. */
 
 void
-supply_fpregset (fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const fpregset_t *fpregsetp)
 {
   int regi;
-  char *from;
+  const char *from;
 
   for (regi = IA64_FR0_REGNUM; regi <= IA64_FR127_REGNUM; regi++)
     {
-      from = (char *) &((*fpregsetp)[regi - IA64_FR0_REGNUM]);
-      regcache_raw_supply (current_regcache, regi, from);
+      from = (const char *) &((*fpregsetp)[regi - IA64_FR0_REGNUM]);
+      regcache_raw_supply (regcache, regi, from);
     }
 }
 
@@ -472,14 +462,15 @@ supply_fpregset (fpregset_t *fpregsetp)
    them all. */
 
 void
-fill_fpregset (fpregset_t *fpregsetp, int regno)
+fill_fpregset (const struct regcache *regcache,
+	       fpregset_t *fpregsetp, int regno)
 {
   int regi;
 
   for (regi = IA64_FR0_REGNUM; regi <= IA64_FR127_REGNUM; regi++)
     {
       if ((regno == -1) || (regno == regi))
-	regcache_raw_collect (current_regcache, regi,
+	regcache_raw_collect (regcache, regi,
 			      &((*fpregsetp)[regi - IA64_FR0_REGNUM]));
     }
 }
@@ -490,31 +481,19 @@ fill_fpregset (fpregset_t *fpregsetp, int regno)
 static void
 enable_watchpoints_in_psr (ptid_t ptid)
 {
-  CORE_ADDR psr;
+  struct regcache *regcache = get_thread_regcache (ptid);
+  ULONGEST psr;
 
-  psr = read_register_pid (IA64_PSR_REGNUM, ptid);
+  regcache_cooked_read_unsigned (regcache, IA64_PSR_REGNUM, &psr);
   if (!(psr & IA64_PSR_DB))
     {
       psr |= IA64_PSR_DB;	/* Set the db bit - this enables hardware
 			           watchpoints and breakpoints. */
-      write_register_pid (IA64_PSR_REGNUM, psr, ptid);
+      regcache_cooked_write_unsigned (regcache, IA64_PSR_REGNUM, psr);
     }
 }
 
-static long
-fetch_debug_register (ptid_t ptid, int idx)
-{
-  long val;
-  int tid;
-
-  tid = TIDGET (ptid);
-  if (tid == 0)
-    tid = PIDGET (ptid);
-
-  val = ptrace (PT_READ_U, tid, (PTRACE_TYPE_ARG3) (PT_DBR + 8 * idx), 0);
-
-  return val;
-}
+static long debug_registers[8];
 
 static void
 store_debug_register (ptid_t ptid, int idx, long val)
@@ -526,15 +505,6 @@ store_debug_register (ptid_t ptid, int idx, long val)
     tid = PIDGET (ptid);
 
   (void) ptrace (PT_WRITE_U, tid, (PTRACE_TYPE_ARG3) (PT_DBR + 8 * idx), val);
-}
-
-static void
-fetch_debug_register_pair (ptid_t ptid, int idx, long *dbr_addr, long *dbr_mask)
-{
-  if (dbr_addr)
-    *dbr_addr = fetch_debug_register (ptid, 2 * idx);
-  if (dbr_mask)
-    *dbr_mask = fetch_debug_register (ptid, 2 * idx + 1);
 }
 
 static void
@@ -559,9 +529,11 @@ is_power_of_2 (int val)
   return onecount <= 1;
 }
 
-int
-ia64_linux_insert_watchpoint (ptid_t ptid, CORE_ADDR addr, int len, int rw)
+static int
+ia64_linux_insert_watchpoint (CORE_ADDR addr, int len, int rw)
 {
+  struct lwp_info *lp;
+  ptid_t ptid;
   int idx;
   long dbr_addr, dbr_mask;
   int max_watchpoints = 4;
@@ -571,7 +543,7 @@ ia64_linux_insert_watchpoint (ptid_t ptid, CORE_ADDR addr, int len, int rw)
 
   for (idx = 0; idx < max_watchpoints; idx++)
     {
-      fetch_debug_register_pair (ptid, idx, NULL, &dbr_mask);
+      dbr_mask = debug_registers[idx * 2 + 1];
       if ((dbr_mask & (0x3UL << 62)) == 0)
 	{
 	  /* Exit loop if both r and w bits clear */
@@ -600,14 +572,19 @@ ia64_linux_insert_watchpoint (ptid_t ptid, CORE_ADDR addr, int len, int rw)
       return -1;
     }
 
-  store_debug_register_pair (ptid, idx, &dbr_addr, &dbr_mask);
-  enable_watchpoints_in_psr (ptid);
+  debug_registers[2 * idx] = dbr_addr;
+  debug_registers[2 * idx + 1] = dbr_mask;
+  ALL_LWPS (lp, ptid)
+    {
+      store_debug_register_pair (ptid, idx, &dbr_addr, &dbr_mask);
+      enable_watchpoints_in_psr (ptid);
+    }
 
   return 0;
 }
 
-int
-ia64_linux_remove_watchpoint (ptid_t ptid, CORE_ADDR addr, int len)
+static int
+ia64_linux_remove_watchpoint (CORE_ADDR addr, int len, int type)
 {
   int idx;
   long dbr_addr, dbr_mask;
@@ -618,59 +595,253 @@ ia64_linux_remove_watchpoint (ptid_t ptid, CORE_ADDR addr, int len)
 
   for (idx = 0; idx < max_watchpoints; idx++)
     {
-      fetch_debug_register_pair (ptid, idx, &dbr_addr, &dbr_mask);
+      dbr_addr = debug_registers[2 * idx];
+      dbr_mask = debug_registers[2 * idx + 1];
       if ((dbr_mask & (0x3UL << 62)) && addr == (CORE_ADDR) dbr_addr)
 	{
+	  struct lwp_info *lp;
+	  ptid_t ptid;
+
+	  debug_registers[2 * idx] = 0;
+	  debug_registers[2 * idx + 1] = 0;
 	  dbr_addr = 0;
 	  dbr_mask = 0;
-	  store_debug_register_pair (ptid, idx, &dbr_addr, &dbr_mask);
+
+	  ALL_LWPS (lp, ptid)
+	    store_debug_register_pair (ptid, idx, &dbr_addr, &dbr_mask);
+
 	  return 0;
 	}
     }
   return -1;
 }
 
-int
-ia64_linux_stopped_data_address (CORE_ADDR *addr_p)
+static void
+ia64_linux_new_thread (ptid_t ptid)
+{
+  int i, any;
+
+  any = 0;
+  for (i = 0; i < 8; i++)
+    {
+      if (debug_registers[i] != 0)
+	any = 1;
+      store_debug_register (ptid, i, debug_registers[i]);
+    }
+
+  if (any)
+    enable_watchpoints_in_psr (ptid);
+}
+
+static int
+ia64_linux_stopped_data_address (struct target_ops *ops, CORE_ADDR *addr_p)
 {
   CORE_ADDR psr;
-  int tid;
-  struct siginfo siginfo;
-  ptid_t ptid = inferior_ptid;
+  struct siginfo *siginfo_p;
+  struct regcache *regcache = get_current_regcache ();
 
-  tid = TIDGET(ptid);
-  if (tid == 0)
-    tid = PIDGET (ptid);
-  
-  errno = 0;
-  ptrace (PTRACE_GETSIGINFO, tid, (PTRACE_TYPE_ARG3) 0, &siginfo);
+  siginfo_p = linux_nat_get_siginfo (inferior_ptid);
 
-  if (errno != 0 || siginfo.si_signo != SIGTRAP || 
-      (siginfo.si_code & 0xffff) != 0x0004 /* TRAP_HWBKPT */)
+  if (siginfo_p->si_signo != SIGTRAP
+      || (siginfo_p->si_code & 0xffff) != 0x0004 /* TRAP_HWBKPT */)
     return 0;
 
-  psr = read_register_pid (IA64_PSR_REGNUM, ptid);
+  regcache_cooked_read_unsigned (regcache, IA64_PSR_REGNUM, &psr);
   psr |= IA64_PSR_DD;	/* Set the dd bit - this will disable the watchpoint
                            for the next instruction */
-  write_register_pid (IA64_PSR_REGNUM, psr, ptid);
+  regcache_cooked_write_unsigned (regcache, IA64_PSR_REGNUM, psr);
 
-  *addr_p = (CORE_ADDR)siginfo.si_addr;
+  *addr_p = (CORE_ADDR)siginfo_p->si_addr;
   return 1;
 }
 
-int
+static int
 ia64_linux_stopped_by_watchpoint (void)
 {
   CORE_ADDR addr;
-  return ia64_linux_stopped_data_address (&addr);
+  return ia64_linux_stopped_data_address (&current_target, &addr);
 }
 
-LONGEST 
-ia64_linux_xfer_unwind_table (struct target_ops *ops,
-			      enum target_object object,
-			      const char *annex,
-			      void *readbuf, const void *writebuf,
-			      ULONGEST offset, LONGEST len)
+static int
+ia64_linux_can_use_hw_breakpoint (int type, int cnt, int othertype)
 {
-  return syscall (__NR_getunwind, readbuf, len);
+  return 1;
+}
+
+
+/* Fetch register REGNUM from the inferior.  */
+
+static void
+ia64_linux_fetch_register (struct regcache *regcache, int regnum)
+{
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  CORE_ADDR addr;
+  size_t size;
+  PTRACE_TYPE_RET *buf;
+  int pid, i;
+
+  if (ia64_cannot_fetch_register (gdbarch, regnum))
+    {
+      regcache_raw_supply (regcache, regnum, NULL);
+      return;
+    }
+
+  /* Cater for systems like GNU/Linux, that implement threads as
+     separate processes.  */
+  pid = ptid_get_lwp (inferior_ptid);
+  if (pid == 0)
+    pid = ptid_get_pid (inferior_ptid);
+
+  /* This isn't really an address, but ptrace thinks of it as one.  */
+  addr = ia64_register_addr (gdbarch, regnum);
+  size = register_size (gdbarch, regnum);
+
+  gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
+  buf = alloca (size);
+
+  /* Read the register contents from the inferior a chunk at a time.  */
+  for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
+    {
+      errno = 0;
+      buf[i] = ptrace (PT_READ_U, pid, (PTRACE_TYPE_ARG3)addr, 0);
+      if (errno != 0)
+	error (_("Couldn't read register %s (#%d): %s."),
+	       gdbarch_register_name (gdbarch, regnum),
+	       regnum, safe_strerror (errno));
+
+      addr += sizeof (PTRACE_TYPE_RET);
+    }
+  regcache_raw_supply (regcache, regnum, buf);
+}
+
+/* Fetch register REGNUM from the inferior.  If REGNUM is -1, do this
+   for all registers.  */
+
+static void
+ia64_linux_fetch_registers (struct regcache *regcache, int regnum)
+{
+  if (regnum == -1)
+    for (regnum = 0;
+	 regnum < gdbarch_num_regs (get_regcache_arch (regcache));
+	 regnum++)
+      ia64_linux_fetch_register (regcache, regnum);
+  else
+    ia64_linux_fetch_register (regcache, regnum);
+}
+
+/* Store register REGNUM into the inferior.  */
+
+static void
+ia64_linux_store_register (const struct regcache *regcache, int regnum)
+{
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  CORE_ADDR addr;
+  size_t size;
+  PTRACE_TYPE_RET *buf;
+  int pid, i;
+
+  if (ia64_cannot_store_register (gdbarch, regnum))
+    return;
+
+  /* Cater for systems like GNU/Linux, that implement threads as
+     separate processes.  */
+  pid = ptid_get_lwp (inferior_ptid);
+  if (pid == 0)
+    pid = ptid_get_pid (inferior_ptid);
+
+  /* This isn't really an address, but ptrace thinks of it as one.  */
+  addr = ia64_register_addr (gdbarch, regnum);
+  size = register_size (gdbarch, regnum);
+
+  gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
+  buf = alloca (size);
+
+  /* Write the register contents into the inferior a chunk at a time.  */
+  regcache_raw_collect (regcache, regnum, buf);
+  for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
+    {
+      errno = 0;
+      ptrace (PT_WRITE_U, pid, (PTRACE_TYPE_ARG3)addr, buf[i]);
+      if (errno != 0)
+	error (_("Couldn't write register %s (#%d): %s."),
+	       gdbarch_register_name (gdbarch, regnum),
+	       regnum, safe_strerror (errno));
+
+      addr += sizeof (PTRACE_TYPE_RET);
+    }
+}
+
+/* Store register REGNUM back into the inferior.  If REGNUM is -1, do
+   this for all registers.  */
+
+static void
+ia64_linux_store_registers (struct regcache *regcache, int regnum)
+{
+  if (regnum == -1)
+    for (regnum = 0;
+	 regnum < gdbarch_num_regs (get_regcache_arch (regcache));
+	 regnum++)
+      ia64_linux_store_register (regcache, regnum);
+  else
+    ia64_linux_store_register (regcache, regnum);
+}
+
+
+static LONGEST (*super_xfer_partial) (struct target_ops *, enum target_object,
+				      const char *, gdb_byte *, const gdb_byte *,
+				      ULONGEST, LONGEST);
+
+static LONGEST 
+ia64_linux_xfer_partial (struct target_ops *ops,
+			 enum target_object object,
+			 const char *annex,
+			 gdb_byte *readbuf, const gdb_byte *writebuf,
+			 ULONGEST offset, LONGEST len)
+{
+  if (object == TARGET_OBJECT_UNWIND_TABLE && writebuf == NULL && offset == 0)
+    return syscall (__NR_getunwind, readbuf, len);
+
+  return super_xfer_partial (ops, object, annex, readbuf, writebuf,
+			     offset, len);
+}
+
+void _initialize_ia64_linux_nat (void);
+
+void
+_initialize_ia64_linux_nat (void)
+{
+  struct target_ops *t = linux_target ();
+
+  /* Fill in the generic GNU/Linux methods.  */
+  t = linux_target ();
+
+  /* Override the default fetch/store register routines.  */
+  t->to_fetch_registers = ia64_linux_fetch_registers;
+  t->to_store_registers = ia64_linux_store_registers;
+
+  /* Override the default to_xfer_partial.  */
+  super_xfer_partial = t->to_xfer_partial;
+  t->to_xfer_partial = ia64_linux_xfer_partial;
+
+  /* Override watchpoint routines.  */
+
+  /* The IA-64 architecture can step over a watch point (without triggering
+     it again) if the "dd" (data debug fault disable) bit in the processor
+     status word is set.
+
+     This PSR bit is set in ia64_linux_stopped_by_watchpoint when the
+     code there has determined that a hardware watchpoint has indeed
+     been hit.  The CPU will then be able to execute one instruction
+     without triggering a watchpoint. */
+
+  t->to_have_steppable_watchpoint = 1;
+  t->to_can_use_hw_breakpoint = ia64_linux_can_use_hw_breakpoint;
+  t->to_stopped_by_watchpoint = ia64_linux_stopped_by_watchpoint;
+  t->to_stopped_data_address = ia64_linux_stopped_data_address;
+  t->to_insert_watchpoint = ia64_linux_insert_watchpoint;
+  t->to_remove_watchpoint = ia64_linux_remove_watchpoint;
+
+  /* Register the target.  */
+  linux_nat_add_target (t);
+  linux_nat_set_new_thread (t, ia64_linux_new_thread);
 }

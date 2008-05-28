@@ -1,6 +1,6 @@
 /* YACC parser for C expressions, for GDB.
-   Copyright 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2003, 2004
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2003, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GDB.
@@ -17,7 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Parse a C expression from text in a string,
    and return the result as a  struct expression  pointer.
@@ -52,6 +53,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "charset.h"
 #include "block.h"
 #include "cp-support.h"
+#include "dfp.h"
 
 /* Remap normal yacc parser interface names (yyparse, yylex, yyerror, etc),
    as well as gratuitiously global symbol names, so we can have multiple
@@ -130,6 +132,10 @@ void yyerror (char *);
       DOUBLEST dval;
       struct type *type;
     } typed_val_float;
+    struct {
+      gdb_byte val[16];
+      struct type *type;
+    } typed_val_decfloat;
     struct symbol *sym;
     struct type *tval;
     struct stoken sval;
@@ -162,6 +168,7 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 %token <typed_val_int> INT
 %token <typed_val_float> FLOAT
+%token <typed_val_decfloat> DECFLOAT
 
 /* Both NAME and TYPENAME tokens represent symbols in the input,
    and both convey their data as strings.
@@ -254,6 +261,10 @@ exp	:	'&' exp    %prec UNARY
 
 exp	:	'-' exp    %prec UNARY
 			{ write_exp_elt_opcode (UNOP_NEG); }
+	;
+
+exp	:	'+' exp    %prec UNARY
+			{ write_exp_elt_opcode (UNOP_PLUS); }
 	;
 
 exp	:	'!' exp    %prec UNARY
@@ -490,6 +501,13 @@ exp	:	FLOAT
 			  write_exp_elt_type ($1.type);
 			  write_exp_elt_dblcst ($1.dval);
 			  write_exp_elt_opcode (OP_DOUBLE); }
+	;
+
+exp	:	DECFLOAT
+			{ write_exp_elt_opcode (OP_DECFLOAT);
+			  write_exp_elt_type ($1.type);
+			  write_exp_elt_decfloatcst ($1.val);
+			  write_exp_elt_opcode (OP_DECFLOAT); }
 	;
 
 exp	:	variable
@@ -785,7 +803,7 @@ func_mod:	'(' ')'
 			{ free ($2); $$ = 0; }
 	;
 
-/* We used to try to recognize more pointer to member types here, but
+/* We used to try to recognize pointer to member types here, but
    that didn't work (shift/reduce conflicts meant that these rules never
    got executed).  The problem is that
      int (foo::bar::baz::bizzle)
@@ -794,8 +812,6 @@ func_mod:	'(' ')'
    is a pointer to member type.  Stroustrup loses again!  */
 
 type	:	ptype
-	|	typebase COLONCOLON '*'
-			{ $$ = lookup_member_type (builtin_type (current_gdbarch)->builtin_int, $1); }
 	;
 
 typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
@@ -1070,44 +1086,71 @@ parse_number (p, len, parsed_float, putithere)
   if (parsed_float)
     {
       /* It's a float since it contains a point or an exponent.  */
-      char c;
+      char *s = malloc (len);
       int num = 0;	/* number of tokens scanned by scanf */
       char saved_char = p[len];
 
       p[len] = 0;	/* null-terminate the token */
-      if (sizeof (putithere->typed_val_float.dval) <= sizeof (float))
-	num = sscanf (p, "%g%c", (float *) &putithere->typed_val_float.dval,&c);
-      else if (sizeof (putithere->typed_val_float.dval) <= sizeof (double))
-	num = sscanf (p, "%lg%c", (double *) &putithere->typed_val_float.dval,&c);
-      else
+
+      /* If it ends at "df", "dd" or "dl", take it as type of decimal floating
+         point.  Return DECFLOAT.  */
+
+      if (p[len - 2] == 'd' && p[len - 1] == 'f')
 	{
-#ifdef SCANF_HAS_LONG_DOUBLE
-	  num = sscanf (p, "%Lg%c", &putithere->typed_val_float.dval,&c);
-#else
-	  /* Scan it into a double, then assign it to the long double.
-	     This at least wins with values representable in the range
-	     of doubles. */
-	  double temp;
-	  num = sscanf (p, "%lg%c", &temp,&c);
-	  putithere->typed_val_float.dval = temp;
-#endif
+	  p[len - 2] = '\0';
+	  putithere->typed_val_decfloat.type
+	    = builtin_type (current_gdbarch)->builtin_decfloat;
+	  decimal_from_string (putithere->typed_val_decfloat.val, 4, p);
+	  p[len] = saved_char;
+	  return (DECFLOAT);
 	}
+
+      if (p[len - 2] == 'd' && p[len - 1] == 'd')
+	{
+	  p[len - 2] = '\0';
+	  putithere->typed_val_decfloat.type
+	    = builtin_type (current_gdbarch)->builtin_decdouble;
+	  decimal_from_string (putithere->typed_val_decfloat.val, 8, p);
+	  p[len] = saved_char;
+	  return (DECFLOAT);
+	}
+
+      if (p[len - 2] == 'd' && p[len - 1] == 'l')
+	{
+	  p[len - 2] = '\0';
+	  putithere->typed_val_decfloat.type
+	    = builtin_type (current_gdbarch)->builtin_declong;
+	  decimal_from_string (putithere->typed_val_decfloat.val, 16, p);
+	  p[len] = saved_char;
+	  return (DECFLOAT);
+	}
+
+      num = sscanf (p, "%" DOUBLEST_SCAN_FORMAT "%s",
+		    &putithere->typed_val_float.dval, s);
       p[len] = saved_char;	/* restore the input stream */
-      if (num != 1) 		/* check scanf found ONLY a float ... */
-	return ERROR;
-      /* See if it has `f' or `l' suffix (float or long double).  */
 
-      c = tolower (p[len - 1]);
+      if (num == 1)
+	putithere->typed_val_float.type = 
+	  builtin_type (current_gdbarch)->builtin_double;
 
-      if (c == 'f')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_float;
-      else if (c == 'l')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_long_double;
-      else if (isdigit (c) || c == '.')
-	putithere->typed_val_float.type = builtin_type (current_gdbarch)->builtin_double;
-      else
-	return ERROR;
+      if (num == 2 )
+	{
+	  /* See if it has any float suffix: 'f' for float, 'l' for long 
+	     double.  */
+	  if (!strcasecmp (s, "f"))
+	    putithere->typed_val_float.type = 
+	      builtin_type (current_gdbarch)->builtin_float;
+	  else if (!strcasecmp (s, "l"))
+	    putithere->typed_val_float.type = 
+	      builtin_type (current_gdbarch)->builtin_long_double;
+	  else
+	    {
+	      free (s);
+	      return ERROR;
+	    }
+	}
 
+      free (s);
       return FLOAT;
     }
 
@@ -1203,16 +1246,16 @@ parse_number (p, len, parsed_float, putithere)
      shift it right and see whether anything remains.  Note that we
      can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
      operation, because many compilers will warn about such a shift
-     (which always produces a zero result).  Sometimes TARGET_INT_BIT
-     or TARGET_LONG_BIT will be that big, sometimes not.  To deal with
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_bit will be that big, sometimes not.  To deal with
      the case where it is we just always shift the value more than
      once, with fewer bits each time.  */
 
   un = (ULONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (TARGET_INT_BIT - 2)) == 0)
+      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -1224,20 +1267,21 @@ parse_number (p, len, parsed_float, putithere)
       signed_type = builtin_type (current_gdbarch)->builtin_int;
     }
   else if (long_p <= 1
-	   && (un >> (TARGET_LONG_BIT - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
       unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long;
       signed_type = builtin_type (current_gdbarch)->builtin_long;
     }
   else
     {
       int shift;
-      if (sizeof (ULONGEST) * HOST_CHAR_BIT < TARGET_LONG_LONG_BIT)
+      if (sizeof (ULONGEST) * HOST_CHAR_BIT 
+	  < gdbarch_long_long_bit (current_gdbarch))
 	/* A long long does not fit in a LONGEST.  */
 	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
       else
-	shift = (TARGET_LONG_LONG_BIT - 1);
+	shift = (gdbarch_long_long_bit (current_gdbarch) - 1);
       high_bit = (ULONGEST) 1 << shift;
       unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long_long;
       signed_type = builtin_type (current_gdbarch)->builtin_long_long;
@@ -1310,10 +1354,8 @@ yylex ()
   int tempbufindex;
   static char *tempbuf;
   static int tempbufsize;
-  struct symbol * sym_class = NULL;
   char * token_string = NULL;
   int class_prefix = 0;
-  int unquoted_expr;
    
  retry:
 
@@ -1329,7 +1371,6 @@ yylex ()
     }
 
   prev_lexptr = lexptr;
-  unquoted_expr = 1;
 
   tokstart = lexptr;
   /* See if it is a special token of length 3.  */
@@ -1401,7 +1442,6 @@ yylex ()
 	  if (namelen > 2)
 	    {
 	      lexptr = tokstart + namelen;
-              unquoted_expr = 0;
 	      if (lexptr[-1] != '\'')
 		error ("Unmatched single quote.");
 	      namelen -= 2;
@@ -1698,30 +1738,6 @@ yylex ()
     {
       write_dollar_variable (yylval.sval);
       return VARIABLE;
-    }
-  
-  /* Look ahead and see if we can consume more of the input
-     string to get a reasonable class/namespace spec or a
-     fully-qualified name.  This is a kludge to get around the
-     HP aCC compiler's generation of symbol names with embedded
-     colons for namespace and nested classes. */
-
-  /* NOTE: carlton/2003-09-24: I don't entirely understand the
-     HP-specific code, either here or in linespec.  Having said that,
-     I suspect that we're actually moving towards their model: we want
-     symbols whose names are fully qualified, which matches the
-     description above.  */
-  if (unquoted_expr)
-    {
-      /* Only do it if not inside single quotes */ 
-      sym_class = parse_nested_classes_for_hpacc (yylval.sval.ptr, yylval.sval.length,
-                                                  &token_string, &class_prefix, &lexptr);
-      if (sym_class)
-        {
-          /* Replace the current token with the bigger one we found */ 
-          yylval.sval.ptr = token_string;
-          yylval.sval.length = strlen (token_string);
-        }
     }
   
   /* Use token-type BLOCKNAME for symbols that happen to be defined as

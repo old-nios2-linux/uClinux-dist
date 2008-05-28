@@ -29,7 +29,6 @@
 #include <syslog.h>
 #include <sys/types.h>
 #include <pwd.h>
-
 #include <config/autoconf.h>
 
 #ifndef HOSTBUILD
@@ -73,6 +72,7 @@ typedef struct _auth_dir_ auth_dir;
 
 static auth_dir *auth_list = 0;
 
+int auth_fallback = 0;
 /*
  * Name: auth_add
  *
@@ -310,7 +310,24 @@ int auth_authorize(const char *host, const char *url, const char *remote_ip_addr
 					denied = 3;
 				access__attempted(denied, auth_userpass);
 #endif
+#ifdef AUTH_PAM
 				if (denied) {
+
+					if (denied == 3) {
+						/* If we have had an authentication failure, we're logging in as root,
+						 * and we're not trying to netflash, try the fallback authentication service 
+						 */
+						const char *fallback_service = "fnord-fallback";	
+						if ((strcmp(auth_userpass, "root") == 0) 
+							&& (strcmp(current->service, "fnord") == 0)) {
+							denied = auth_check_pam(auth_userpass, pwd, fallback_service, id);
+							auth_fallback = 1;
+						}
+					}
+				}
+#endif AUTH_PAM
+				if (denied) {				
+	
 					switch (denied) {
 						case 1:
 							syslog(LOG_ERR, "Authentication attempt failed for %s from %s because: Bad Password\n",

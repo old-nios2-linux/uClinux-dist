@@ -1,8 +1,8 @@
 # Copyright 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation
 
-# This Program Is Free software; you can redistribute it and/or modify
+# This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -11,8 +11,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Test essential Machine interface (MI) operations
 #
@@ -32,7 +31,8 @@ set testfile "var-cmd"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-DFAKEARGV}] != "" } {
-    gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+    untested mi2-var-child.exp
+    return -1
 }
 
 mi_delete_breakpoints
@@ -40,6 +40,9 @@ mi_gdb_reinitialize_dir $srcdir/$subdir
 mi_gdb_load ${binfile}
 
 mi_runto do_children_tests
+
+set line_dlt_first_real [gdb_get_line_number "weird = &struct_declarations;"]
+mi_continue_to_line $line_dlt_first_real "step to real start of do_children_test"
 
 #####        #####
 #                #
@@ -51,7 +54,7 @@ mi_runto do_children_tests
 # Test: c_variable-4.2
 # Desc: create variable "struct_declarations"
 mi_gdb_test "-var-create struct_declarations * struct_declarations" \
-	"\\^done,name=\"struct_declarations\",numchild=\"11\",type=\"struct _struct_decl\"" \
+	"\\^done,name=\"struct_declarations\",numchild=\"11\",value=\"{...}\",type=\"struct _struct_decl\"" \
 	"create local variable struct_declarations"
 
 # Test: c_variable-4.3
@@ -559,7 +562,7 @@ mi_step_to do_children_tests {} {.*var-cmd.c} \
 # Test: c_variable-4.81
 # Desc: create local variable "weird"
 mi_gdb_test "-var-create weird * weird" \
-	"\\^done,name=\"weird\",numchild=\"11\",type=\"weird_struct \\*\"" \
+	"\\^done,name=\"weird\",numchild=\"11\",value=\"$hex\",type=\"weird_struct \\*\"" \
 	"create local variable weird"
 
 # Test: c_variable-4.82
@@ -623,7 +626,7 @@ mi_gdb_test "-var-info-num-children weird.int_ptr_ptr.*int_ptr_ptr" \
 # Test: c_variable-4.90
 # Desc: create weird->int_ptr_ptr
 mi_gdb_test "-var-create weird->int_ptr_ptr * weird->int_ptr_ptr" \
-	"\\^done,name=\"weird->int_ptr_ptr\",numchild=\"1\",type=\"int \\*\\*\"" \
+	"\\^done,name=\"weird->int_ptr_ptr\",numchild=\"1\",value=\"$hex\",type=\"int \\*\\*\"" \
 	"create local variable weird->int_ptr_ptr"
 
 # Test: c_variable-4.91
@@ -835,7 +838,7 @@ mi_gdb_test "-var-update *" \
 
 
 # Step over "weird->func_ptr = nothing;"
-set line_dct_a0_0 [gdb_get_line_number "a0 = '0';"]
+set line_dct_a0_0 [gdb_get_line_number "a0\[0\] = '0';"]
 mi_step_to do_children_tests {} {.*var-cmd.c} \
     $line_dct_a0_0 "step \$line_dct_a0_0"
 
@@ -865,7 +868,7 @@ mi_execute_to "exec-step 43" "end-stepping-range" do_children_tests {} {.*var-cm
 # Test: c_variable-5.10
 # Desc: create psnp->char_ptr
 mi_gdb_test "-var-create  psnp->char_ptr *  psnp->char_ptr" \
-	"\\^done,name=\"psnp->char_ptr\",numchild=\"1\",type=\"char \\*\\*\\*\\*\"" \
+	"\\^done,name=\"psnp->char_ptr\",numchild=\"1\",value=\".*\",type=\"char \\*\\*\\*\\*\"" \
 	"create local variable  psnp->char_ptr"
 
 # Test: c_variable-5.11
@@ -938,7 +941,7 @@ mi_gdb_test "-var-info-num-children psnp->char_ptr.*psnp->char_ptr.**psnp->char_
 # Test: c_variable-5.19
 # Desc: create psnp->long_ptr
 mi_gdb_test "-var-create  psnp->long_ptr *  psnp->long_ptr" \
-	"\\^done,name=\"psnp->long_ptr\",numchild=\"1\",type=\"long int \\*\\*\\*\\*\"" \
+	"\\^done,name=\"psnp->long_ptr\",numchild=\"1\",value=\"$hex\",type=\"long int \\*\\*\\*\\*\"" \
 	"create local variable  psnp->long_ptr"
 
 # Test: c_variable-5.20
@@ -1005,7 +1008,7 @@ mi_gdb_test "-var-info-num-children psnp->long_ptr.*psnp->long_ptr.**psnp->long_
 # Test: c_variable-5.30
 # Desc: create psnp->ptrs
 mi_gdb_test "-var-create  psnp->ptrs *  psnp->ptrs" \
-	"\\^done,name=\"psnp->ptrs\",numchild=\"3\",type=\"struct _struct_n_pointer \\*\\\[3\\\]\"" \
+	"\\^done,name=\"psnp->ptrs\",numchild=\"3\",value=\"\\\[3\\\]\",type=\"struct _struct_n_pointer \\*\\\[3\\\]\"" \
 	"create local variable  psnp->ptrs"
 
 # Test: c_variable-5.31

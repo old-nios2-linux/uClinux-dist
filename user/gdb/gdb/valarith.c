@@ -1,14 +1,14 @@
 /* Perform arithmetic and other operations on values, for GDB.
 
-   Copyright 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -30,6 +28,7 @@
 #include "language.h"
 #include "gdb_string.h"
 #include "doublest.h"
+#include "dfp.h"
 #include <math.h>
 #include "infcall.h"
 
@@ -41,6 +40,9 @@
 #endif
 
 static struct value *value_subscripted_rvalue (struct value *, struct value *, int);
+static struct type *unop_result_type (enum exp_opcode op, struct type *type1);
+static struct type *binop_result_type (enum exp_opcode op, struct type *type1,
+				       struct type *type2);
 
 void _initialize_valarith (void);
 
@@ -73,11 +75,11 @@ find_size_for_pointer_math (struct type *ptr_type)
 	  if (name == NULL)
 	    name = TYPE_TAG_NAME (ptr_target);
 	  if (name == NULL)
-	    error ("Cannot perform pointer math on incomplete types, "
-		   "try casting to a known type, or void *.");
+	    error (_("Cannot perform pointer math on incomplete types, "
+		   "try casting to a known type, or void *."));
 	  else
-	    error ("Cannot perform pointer math on incomplete type \"%s\", "
-		   "try casting to a known type, or void *.", name);
+	    error (_("Cannot perform pointer math on incomplete type \"%s\", "
+		   "try casting to a known type, or void *."), name);
 	}
     }
   return sz;
@@ -91,10 +93,10 @@ value_add (struct value *arg1, struct value *arg2)
   LONGEST sz;
   struct type *type1, *type2, *valptrtype;
 
-  COERCE_ARRAY (arg1);
-  COERCE_ARRAY (arg2);
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+  arg1 = coerce_array (arg1);
+  arg2 = coerce_array (arg2);
+  type1 = check_typedef (value_type (arg1));
+  type2 = check_typedef (value_type (arg2));
 
   if ((TYPE_CODE (type1) == TYPE_CODE_PTR
        || TYPE_CODE (type2) == TYPE_CODE_PTR)
@@ -122,7 +124,6 @@ value_add (struct value *arg1, struct value *arg2)
       retval = value_from_pointer (valptrtype,
 				   value_as_address (valptr)
 				   + (sz * value_as_long (valint)));
-      VALUE_BFD_SECTION (retval) = VALUE_BFD_SECTION (valptr);
       return retval;
     }
 
@@ -133,10 +134,10 @@ struct value *
 value_sub (struct value *arg1, struct value *arg2)
 {
   struct type *type1, *type2;
-  COERCE_ARRAY (arg1);
-  COERCE_ARRAY (arg2);
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+  arg1 = coerce_array (arg1);
+  arg2 = coerce_array (arg2);
+  type1 = check_typedef (value_type (arg1));
+  type2 = check_typedef (value_type (arg2));
 
   if (TYPE_CODE (type1) == TYPE_CODE_PTR)
     {
@@ -161,9 +162,9 @@ value_sub (struct value *arg1, struct value *arg2)
 	}
       else
 	{
-	  error ("\
+	  error (_("\
 First argument of `-' is a pointer and second argument is neither\n\
-an integer nor a pointer of the same type.");
+an integer nor a pointer of the same type."));
 	}
     }
 
@@ -183,9 +184,8 @@ value_subscript (struct value *array, struct value *idx)
   int c_style = current_language->c_style_arrays;
   struct type *tarray;
 
-  COERCE_REF (array);
-  tarray = check_typedef (VALUE_TYPE (array));
-  COERCE_VARYING_ARRAY (array, tarray);
+  array = coerce_ref (array);
+  tarray = check_typedef (value_type (array));
 
   if (TYPE_CODE (tarray) == TYPE_CODE_ARRAY
       || TYPE_CODE (tarray) == TYPE_CODE_STRING)
@@ -205,7 +205,7 @@ value_subscript (struct value *array, struct value *idx)
 	  /* Emit warning unless we have an array of unknown size.
 	     An array of unknown size has lowerbound 0 and upperbound -1.  */
 	  if (upperbound > -1)
-	    warning ("array or string index out of range");
+	    warning (_("array or string index out of range"));
 	  /* fall doing C stuff */
 	  c_style = 1;
 	}
@@ -228,27 +228,29 @@ value_subscript (struct value *array, struct value *idx)
       LONGEST lowerbound, upperbound;
       get_discrete_bounds (range_type, &lowerbound, &upperbound);
       if (index < lowerbound || index > upperbound)
-	error ("bitstring index out of range");
+	error (_("bitstring index out of range"));
       index -= lowerbound;
       offset = index / TARGET_CHAR_BIT;
-      byte = *((char *) VALUE_CONTENTS (array) + offset);
+      byte = *((char *) value_contents (array) + offset);
       bit_index = index % TARGET_CHAR_BIT;
-      byte >>= (BITS_BIG_ENDIAN ? TARGET_CHAR_BIT - 1 - bit_index : bit_index);
+      byte >>= (gdbarch_bits_big_endian (current_gdbarch) ?
+		TARGET_CHAR_BIT - 1 - bit_index : bit_index);
       v = value_from_longest (LA_BOOL_TYPE, byte & 1);
-      VALUE_BITPOS (v) = bit_index;
-      VALUE_BITSIZE (v) = 1;
+      set_value_bitpos (v, bit_index);
+      set_value_bitsize (v, 1);
       VALUE_LVAL (v) = VALUE_LVAL (array);
       if (VALUE_LVAL (array) == lval_internalvar)
 	VALUE_LVAL (v) = lval_internalvar_component;
       VALUE_ADDRESS (v) = VALUE_ADDRESS (array);
-      VALUE_OFFSET (v) = offset + VALUE_OFFSET (array);
+      VALUE_FRAME_ID (v) = VALUE_FRAME_ID (array);
+      set_value_offset (v, offset + value_offset (array));
       return v;
     }
 
   if (c_style)
     return value_ind (value_add (array, idx));
   else
-    error ("not an array or string");
+    error (_("not an array or string"));
 }
 
 /* Return the value of EXPR[IDX], expr an aggregate rvalue
@@ -258,7 +260,7 @@ value_subscript (struct value *array, struct value *idx)
 static struct value *
 value_subscripted_rvalue (struct value *array, struct value *idx, int lowerbound)
 {
-  struct type *array_type = check_typedef (VALUE_TYPE (array));
+  struct type *array_type = check_typedef (value_type (array));
   struct type *elt_type = check_typedef (TYPE_TARGET_TYPE (array_type));
   unsigned int elt_size = TYPE_LENGTH (elt_type);
   LONGEST index = value_as_long (idx);
@@ -266,27 +268,29 @@ value_subscripted_rvalue (struct value *array, struct value *idx, int lowerbound
   struct value *v;
 
   if (index < lowerbound || elt_offs >= TYPE_LENGTH (array_type))
-    error ("no such vector element");
+    error (_("no such vector element"));
 
   v = allocate_value (elt_type);
-  if (VALUE_LAZY (array))
-    VALUE_LAZY (v) = 1;
+  if (value_lazy (array))
+    set_value_lazy (v, 1);
   else
-    memcpy (VALUE_CONTENTS (v), VALUE_CONTENTS (array) + elt_offs, elt_size);
+    memcpy (value_contents_writeable (v),
+	    value_contents (array) + elt_offs, elt_size);
 
   if (VALUE_LVAL (array) == lval_internalvar)
     VALUE_LVAL (v) = lval_internalvar_component;
   else
     VALUE_LVAL (v) = VALUE_LVAL (array);
   VALUE_ADDRESS (v) = VALUE_ADDRESS (array);
-  VALUE_REGNO (v) = VALUE_REGNO (array);
-  VALUE_OFFSET (v) = VALUE_OFFSET (array) + elt_offs;
+  VALUE_REGNUM (v) = VALUE_REGNUM (array);
+  VALUE_FRAME_ID (v) = VALUE_FRAME_ID (array);
+  set_value_offset (v, value_offset (array) + elt_offs);
   return v;
 }
 
-/* Check to see if either argument is a structure.  This is called so
-   we know whether to go ahead with the normal binop or look for a 
-   user defined function instead.
+/* Check to see if either argument is a structure, or a reference to
+   one.  This is called so we know whether to go ahead with the normal
+   binop or look for a user defined function instead.
 
    For now, we do not overload the `=' operator.  */
 
@@ -296,14 +300,17 @@ binop_user_defined_p (enum exp_opcode op, struct value *arg1, struct value *arg2
   struct type *type1, *type2;
   if (op == BINOP_ASSIGN || op == BINOP_CONCAT)
     return 0;
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+
+  type1 = check_typedef (value_type (arg1));
+  if (TYPE_CODE (type1) == TYPE_CODE_REF)
+    type1 = check_typedef (TYPE_TARGET_TYPE (type1));
+
+  type2 = check_typedef (value_type (arg2));
+  if (TYPE_CODE (type2) == TYPE_CODE_REF)
+    type2 = check_typedef (TYPE_TARGET_TYPE (type2));
+
   return (TYPE_CODE (type1) == TYPE_CODE_STRUCT
-	  || TYPE_CODE (type2) == TYPE_CODE_STRUCT
-	  || (TYPE_CODE (type1) == TYPE_CODE_REF
-	      && TYPE_CODE (TYPE_TARGET_TYPE (type1)) == TYPE_CODE_STRUCT)
-	  || (TYPE_CODE (type2) == TYPE_CODE_REF
-	      && TYPE_CODE (TYPE_TARGET_TYPE (type2)) == TYPE_CODE_STRUCT));
+	  || TYPE_CODE (type2) == TYPE_CODE_STRUCT);
 }
 
 /* Check to see if argument is a structure.  This is called so
@@ -318,7 +325,7 @@ unop_user_defined_p (enum exp_opcode op, struct value *arg1)
   struct type *type1;
   if (op == UNOP_ADDR)
     return 0;
-  type1 = check_typedef (VALUE_TYPE (arg1));
+  type1 = check_typedef (value_type (arg1));
   for (;;)
     {
       if (TYPE_CODE (type1) == TYPE_CODE_STRUCT)
@@ -348,16 +355,16 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
   char tstr[13];
   int static_memfuncp;
 
-  COERCE_REF (arg1);
-  COERCE_REF (arg2);
-  COERCE_ENUM (arg1);
-  COERCE_ENUM (arg2);
+  arg1 = coerce_ref (arg1);
+  arg2 = coerce_ref (arg2);
+  arg1 = coerce_enum (arg1);
+  arg2 = coerce_enum (arg2);
 
   /* now we know that what we have to do is construct our
      arg vector and find the right function to call it with.  */
 
-  if (TYPE_CODE (check_typedef (VALUE_TYPE (arg1))) != TYPE_CODE_STRUCT)
-    error ("Can't do that binary op on that type");	/* FIXME be explicit */
+  if (TYPE_CODE (check_typedef (value_type (arg1))) != TYPE_CODE_STRUCT)
+    error (_("Can't do that binary op on that type"));	/* FIXME be explicit */
 
   argvec = (struct value **) alloca (sizeof (struct value *) * 4);
   argvec[1] = value_addr (arg1);
@@ -443,7 +450,7 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
 	  break;
 	case BINOP_MOD:	/* invalid */
 	default:
-	  error ("Invalid binary operation specified.");
+	  error (_("Invalid binary operation specified."));
 	}
       break;
     case BINOP_SUBSCRIPT:
@@ -469,7 +476,7 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
       break;
     case BINOP_MOD:		/* invalid */
     default:
-      error ("Invalid binary operation specified.");
+      error (_("Invalid binary operation specified."));
     }
 
   argvec[0] = value_struct_elt (&arg1, argvec + 1, tstr, &static_memfuncp, "structure");
@@ -485,12 +492,12 @@ value_x_binop (struct value *arg1, struct value *arg2, enum exp_opcode op,
 	{
 	  struct type *return_type;
 	  return_type
-	    = TYPE_TARGET_TYPE (check_typedef (VALUE_TYPE (argvec[0])));
+	    = TYPE_TARGET_TYPE (check_typedef (value_type (argvec[0])));
 	  return value_zero (return_type, VALUE_LVAL (arg1));
 	}
       return call_function_by_hand (argvec[0], 2 - static_memfuncp, argvec + 1);
     }
-  error ("member function %s not found", tstr);
+  error (_("member function %s not found"), tstr);
 #ifdef lint
   return call_function_by_hand (argvec[0], 2 - static_memfuncp, argvec + 1);
 #endif
@@ -510,14 +517,14 @@ value_x_unop (struct value *arg1, enum exp_opcode op, enum noside noside)
   char tstr[13], mangle_tstr[13];
   int static_memfuncp, nargs;
 
-  COERCE_REF (arg1);
-  COERCE_ENUM (arg1);
+  arg1 = coerce_ref (arg1);
+  arg1 = coerce_enum (arg1);
 
   /* now we know that what we have to do is construct our
      arg vector and find the right function to call it with.  */
 
-  if (TYPE_CODE (check_typedef (VALUE_TYPE (arg1))) != TYPE_CODE_STRUCT)
-    error ("Can't do that unary op on that type");	/* FIXME be explicit */
+  if (TYPE_CODE (check_typedef (value_type (arg1))) != TYPE_CODE_STRUCT)
+    error (_("Can't do that unary op on that type"));	/* FIXME be explicit */
 
   argvec = (struct value **) alloca (sizeof (struct value *) * 4);
   argvec[1] = value_addr (arg1);
@@ -559,11 +566,14 @@ value_x_unop (struct value *arg1, enum exp_opcode op, enum noside noside)
     case UNOP_NEG:
       strcpy (ptr, "-");
       break;
+    case UNOP_PLUS:
+      strcpy (ptr, "+");
+      break;
     case UNOP_IND:
       strcpy (ptr, "*");
       break;
     default:
-      error ("Invalid unary operation specified.");
+      error (_("Invalid unary operation specified."));
     }
 
   argvec[0] = value_struct_elt (&arg1, argvec + 1, tstr, &static_memfuncp, "structure");
@@ -580,12 +590,12 @@ value_x_unop (struct value *arg1, enum exp_opcode op, enum noside noside)
 	{
 	  struct type *return_type;
 	  return_type
-	    = TYPE_TARGET_TYPE (check_typedef (VALUE_TYPE (argvec[0])));
+	    = TYPE_TARGET_TYPE (check_typedef (value_type (argvec[0])));
 	  return value_zero (return_type, VALUE_LVAL (arg1));
 	}
       return call_function_by_hand (argvec[0], nargs, argvec + 1);
     }
-  error ("member function %s not found", tstr);
+  error (_("member function %s not found"), tstr);
   return 0;			/* For lint -- never reached */
 }
 
@@ -621,11 +631,8 @@ value_concat (struct value *arg1, struct value *arg2)
   int count, idx;
   char *ptr;
   char inchar;
-  struct type *type1 = check_typedef (VALUE_TYPE (arg1));
-  struct type *type2 = check_typedef (VALUE_TYPE (arg2));
-
-  COERCE_VARYING_ARRAY (arg1, type1);
-  COERCE_VARYING_ARRAY (arg2, type2);
+  struct type *type1 = check_typedef (value_type (arg1));
+  struct type *type2 = check_typedef (value_type (arg2));
 
   /* First figure out if we are dealing with two values to be concatenated
      or a repeat count and a value to be repeated.  INVAL1 is set to the
@@ -662,7 +669,7 @@ value_concat (struct value *arg1, struct value *arg2)
 	  if (TYPE_CODE (type2) == TYPE_CODE_CHAR)
 	    {
 	      inchar = (char) unpack_long (type2,
-					   VALUE_CONTENTS (inval2));
+					   value_contents (inval2));
 	      for (idx = 0; idx < count; idx++)
 		{
 		  *(ptr + idx) = inchar;
@@ -672,7 +679,7 @@ value_concat (struct value *arg1, struct value *arg2)
 	    {
 	      for (idx = 0; idx < count; idx++)
 		{
-		  memcpy (ptr + (idx * inval2len), VALUE_CONTENTS (inval2),
+		  memcpy (ptr + (idx * inval2len), value_contents (inval2),
 			  inval2len);
 		}
 	    }
@@ -681,11 +688,11 @@ value_concat (struct value *arg1, struct value *arg2)
       else if (TYPE_CODE (type2) == TYPE_CODE_BITSTRING
 	       || TYPE_CODE (type2) == TYPE_CODE_BOOL)
 	{
-	  error ("unimplemented support for bitstring/boolean repeats");
+	  error (_("unimplemented support for bitstring/boolean repeats"));
 	}
       else
 	{
-	  error ("can't repeat values of that type");
+	  error (_("can't repeat values of that type"));
 	}
     }
   else if (TYPE_CODE (type1) == TYPE_CODE_STRING
@@ -695,27 +702,27 @@ value_concat (struct value *arg1, struct value *arg2)
       if (TYPE_CODE (type2) != TYPE_CODE_STRING
 	  && TYPE_CODE (type2) != TYPE_CODE_CHAR)
 	{
-	  error ("Strings can only be concatenated with other strings.");
+	  error (_("Strings can only be concatenated with other strings."));
 	}
       inval1len = TYPE_LENGTH (type1);
       inval2len = TYPE_LENGTH (type2);
       ptr = (char *) alloca (inval1len + inval2len);
       if (TYPE_CODE (type1) == TYPE_CODE_CHAR)
 	{
-	  *ptr = (char) unpack_long (type1, VALUE_CONTENTS (inval1));
+	  *ptr = (char) unpack_long (type1, value_contents (inval1));
 	}
       else
 	{
-	  memcpy (ptr, VALUE_CONTENTS (inval1), inval1len);
+	  memcpy (ptr, value_contents (inval1), inval1len);
 	}
       if (TYPE_CODE (type2) == TYPE_CODE_CHAR)
 	{
 	  *(ptr + inval1len) =
-	    (char) unpack_long (type2, VALUE_CONTENTS (inval2));
+	    (char) unpack_long (type2, value_contents (inval2));
 	}
       else
 	{
-	  memcpy (ptr + inval1len, VALUE_CONTENTS (inval2), inval2len);
+	  memcpy (ptr + inval1len, value_contents (inval2), inval2len);
 	}
       outval = value_string (ptr, inval1len + inval2len);
     }
@@ -726,19 +733,422 @@ value_concat (struct value *arg1, struct value *arg2)
       if (TYPE_CODE (type2) != TYPE_CODE_BITSTRING
 	  && TYPE_CODE (type2) != TYPE_CODE_BOOL)
 	{
-	  error ("Bitstrings or booleans can only be concatenated with other bitstrings or booleans.");
+	  error (_("Bitstrings or booleans can only be concatenated with other bitstrings or booleans."));
 	}
-      error ("unimplemented support for bitstring/boolean concatenation.");
+      error (_("unimplemented support for bitstring/boolean concatenation."));
     }
   else
     {
       /* We don't know how to concatenate these operands. */
-      error ("illegal operands for concatenation.");
+      error (_("illegal operands for concatenation."));
     }
   return (outval);
 }
 
+/* Return result type of OP performed on TYPE1.
+   The result type follows ANSI C rules.
+   If the result is not appropropriate for any particular language then it
+   needs to patch this function to return the correct type.  */
 
+static struct type *
+unop_result_type (enum exp_opcode op, struct type *type1)
+{
+  struct type *result_type;
+
+  type1 = check_typedef (type1);
+  result_type = type1;
+
+  switch (op)
+    {
+    case UNOP_PLUS:
+    case UNOP_NEG:
+      break;
+    case UNOP_COMPLEMENT:
+      /* Reject floats and decimal floats.  */
+      if (!is_integral_type (type1))
+	error (_("Argument to complement operation not an integer or boolean."));
+      break;
+    default:
+      error (_("Invalid unary operation on numbers."));
+    }
+
+  if (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT
+      || TYPE_CODE (type1) == TYPE_CODE_FLT)
+    {
+      return result_type;
+    }
+  else if (is_integral_type (type1))
+    {
+      /* Perform integral promotion for ANSI C/C++.
+	 If not appropropriate for any particular language it needs to
+	 modify this function to return the correct result for it.  */
+      if (TYPE_LENGTH (type1) < TYPE_LENGTH (builtin_type_int))
+	result_type = builtin_type_int;
+
+      return result_type;
+    }
+  else
+    {
+      error (_("Argument to unary operation not a number."));
+      return 0; /* For lint -- never reached */
+    }
+}
+
+/* Return result type of OP performed on TYPE1, TYPE2.
+   If the result is not appropropriate for any particular language then it
+   needs to patch this function to return the correct type.  */
+
+static struct type *
+binop_result_type (enum exp_opcode op, struct type *type1, struct type *type2)
+{
+  type1 = check_typedef (type1);
+  type2 = check_typedef (type2);
+
+  if ((TYPE_CODE (type1) != TYPE_CODE_FLT
+       && TYPE_CODE (type1) != TYPE_CODE_DECFLOAT
+       && !is_integral_type (type1))
+      ||
+      (TYPE_CODE (type2) != TYPE_CODE_FLT
+       && TYPE_CODE (type2) != TYPE_CODE_DECFLOAT
+       && !is_integral_type (type2)))
+    error (_("Argument to arithmetic operation not a number or boolean."));
+
+  if (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT
+      || TYPE_CODE (type2) == TYPE_CODE_DECFLOAT)
+    {
+      switch (op)
+	{
+	case BINOP_ADD:
+	case BINOP_SUB:
+	case BINOP_MUL:
+	case BINOP_DIV:
+	case BINOP_EXP:
+	  break;
+	default:
+	  error (_("Operation not valid for decimal floating point number."));
+	}
+
+      if (TYPE_CODE (type1) != TYPE_CODE_DECFLOAT)
+	/* If type1 is not a decimal float, the type of the result is the type
+	   of the decimal float argument, type2.  */
+	return type2;
+      else if (TYPE_CODE (type2) != TYPE_CODE_DECFLOAT)
+	/* Same logic, for the case where type2 is not a decimal float.  */
+	return type1;
+      else
+	/* Both are decimal floats, the type of the result is the bigger
+	   of the two.  */
+	return (TYPE_LENGTH (type1) > TYPE_LENGTH (type2)) ? type1 : type2;
+    }
+  else if (TYPE_CODE (type1) == TYPE_CODE_FLT
+	   || TYPE_CODE (type2) == TYPE_CODE_FLT)
+    {
+      switch (op)
+	{
+	case BINOP_ADD:
+	case BINOP_SUB:
+	case BINOP_MUL:
+	case BINOP_DIV:
+	case BINOP_EXP:
+	case BINOP_MIN:
+	case BINOP_MAX:
+	  break;
+	default:
+	  error (_("Integer-only operation on floating point number."));
+	}
+
+      switch (current_language->la_language)
+	{
+	case language_c:
+	case language_cplus:
+	case language_asm:
+	case language_objc:
+	  /* Perform ANSI/ISO-C promotions.
+	     If only one type is float, use its type.
+	     Otherwise use the bigger type.  */
+	  if (TYPE_CODE (type1) != TYPE_CODE_FLT)
+	    return type2;
+	  else if (TYPE_CODE (type2) != TYPE_CODE_FLT)
+	    return type1;
+	  else
+	    return (TYPE_LENGTH (type1) > TYPE_LENGTH (type2)) ? type1 : type2;
+
+	default:
+	  /* For other languages the result type is unchanged from gdb
+	     version 6.7 for backward compatibility.
+	     If either arg was long double, make sure that value is also long
+	     double.  Otherwise use double.  */
+	  if (TYPE_LENGTH (type1) * 8 > gdbarch_double_bit (current_gdbarch)
+	      || TYPE_LENGTH (type2) * 8 > gdbarch_double_bit (current_gdbarch))
+	    return builtin_type_long_double;
+	  else
+	    return builtin_type_double;
+	}
+    }
+  else if (TYPE_CODE (type1) == TYPE_CODE_BOOL
+	   && TYPE_CODE (type2) == TYPE_CODE_BOOL)
+    {
+      switch (op)
+	{
+	case BINOP_BITWISE_AND:
+	case BINOP_BITWISE_IOR:
+	case BINOP_BITWISE_XOR:
+        case BINOP_EQUAL:
+        case BINOP_NOTEQUAL:
+	  break;
+	default:
+	  error (_("Invalid operation on booleans."));
+	}
+
+      return type1;
+    }
+  else
+    /* Integral operations here.  */
+    /* FIXME: Also mixed integral/booleans, with result an integer.  */
+    {
+      unsigned int promoted_len1 = TYPE_LENGTH (type1);
+      unsigned int promoted_len2 = TYPE_LENGTH (type2);
+      int is_unsigned1 = TYPE_UNSIGNED (type1);
+      int is_unsigned2 = TYPE_UNSIGNED (type2);
+      unsigned int result_len;
+      int unsigned_operation;
+
+      /* Determine type length and signedness after promotion for
+         both operands.  */
+      if (promoted_len1 < TYPE_LENGTH (builtin_type_int))
+	{
+	  is_unsigned1 = 0;
+	  promoted_len1 = TYPE_LENGTH (builtin_type_int);
+	}
+      if (promoted_len2 < TYPE_LENGTH (builtin_type_int))
+	{
+	  is_unsigned2 = 0;
+	  promoted_len2 = TYPE_LENGTH (builtin_type_int);
+	}
+
+      /* Determine type length of the result, and if the operation should
+	 be done unsigned.  For exponentiation and shift operators,
+	 use the length and type of the left operand.  Otherwise,
+	 use the signedness of the operand with the greater length.
+	 If both operands are of equal length, use unsigned operation
+	 if one of the operands is unsigned.  */
+      if (op == BINOP_RSH || op == BINOP_LSH || op == BINOP_EXP)
+	{
+	  /* In case of the shift operators and exponentiation the type of
+	     the result only depends on the type of the left operand.  */
+	  unsigned_operation = is_unsigned1;
+	  result_len = promoted_len1;
+	}
+      else if (promoted_len1 > promoted_len2)
+	{
+	  unsigned_operation = is_unsigned1;
+	  result_len = promoted_len1;
+	}
+      else if (promoted_len2 > promoted_len1)
+	{
+	  unsigned_operation = is_unsigned2;
+	  result_len = promoted_len2;
+	}
+      else
+	{
+	  unsigned_operation = is_unsigned1 || is_unsigned2;
+	  result_len = promoted_len1;
+	}
+
+      switch (op)
+	{
+	case BINOP_ADD:
+	case BINOP_SUB:
+	case BINOP_MUL:
+	case BINOP_DIV:
+	case BINOP_INTDIV:
+	case BINOP_EXP:
+	case BINOP_REM:
+	case BINOP_MOD:
+	case BINOP_LSH:
+	case BINOP_RSH:
+	case BINOP_BITWISE_AND:
+	case BINOP_BITWISE_IOR:
+	case BINOP_BITWISE_XOR:
+	case BINOP_LOGICAL_AND:
+	case BINOP_LOGICAL_OR:
+	case BINOP_MIN:
+	case BINOP_MAX:
+	case BINOP_EQUAL:
+	case BINOP_NOTEQUAL:
+	case BINOP_LESS:
+	  break;
+
+	default:
+	  error (_("Invalid binary operation on numbers."));
+	}
+
+      switch (current_language->la_language)
+	{
+	case language_c:
+	case language_cplus:
+	case language_asm:
+	case language_objc:
+	  if (result_len <= TYPE_LENGTH (builtin_type_int))
+	    {
+	      return (unsigned_operation
+		      ? builtin_type_unsigned_int
+		      : builtin_type_int);
+	    }
+	  else if (result_len <= TYPE_LENGTH (builtin_type_long))
+	    {
+	      return (unsigned_operation
+		      ? builtin_type_unsigned_long
+		      : builtin_type_long);
+	    }
+	  else
+	    {
+	      return (unsigned_operation
+		      ? builtin_type_unsigned_long_long
+		      : builtin_type_long_long);
+	    }
+
+	default:
+	  /* For other languages the result type is unchanged from gdb
+	     version 6.7 for backward compatibility.
+	     If either arg was long long, make sure that value is also long
+	     long.  Otherwise use long.  */
+	  if (unsigned_operation)
+	    {
+	      if (result_len > gdbarch_long_bit (current_gdbarch) / HOST_CHAR_BIT)
+		return builtin_type_unsigned_long_long;
+	      else
+		return builtin_type_unsigned_long;
+	    }
+	  else
+	    {
+	      if (result_len > gdbarch_long_bit (current_gdbarch) / HOST_CHAR_BIT)
+		return builtin_type_long_long;
+	      else
+		return builtin_type_long;
+	    }
+	}
+    }
+
+  return NULL; /* avoid -Wall warning */
+}
+
+/* Integer exponentiation: V1**V2, where both arguments are
+   integers.  Requires V1 != 0 if V2 < 0.  Returns 1 for 0 ** 0.  */
+static LONGEST
+integer_pow (LONGEST v1, LONGEST v2)
+{
+  if (v2 < 0)
+    {
+      if (v1 == 0)
+	error (_("Attempt to raise 0 to negative power."));
+      else
+	return 0;
+    }
+  else 
+    {
+      /* The Russian Peasant's Algorithm */
+      LONGEST v;
+      
+      v = 1;
+      for (;;)
+	{
+	  if (v2 & 1L) 
+	    v *= v1;
+	  v2 >>= 1;
+	  if (v2 == 0)
+	    return v;
+	  v1 *= v1;
+	}
+    }
+}
+
+/* Integer exponentiation: V1**V2, where both arguments are
+   integers.  Requires V1 != 0 if V2 < 0.  Returns 1 for 0 ** 0.  */
+static ULONGEST
+uinteger_pow (ULONGEST v1, LONGEST v2)
+{
+  if (v2 < 0)
+    {
+      if (v1 == 0)
+	error (_("Attempt to raise 0 to negative power."));
+      else
+	return 0;
+    }
+  else 
+    {
+      /* The Russian Peasant's Algorithm */
+      ULONGEST v;
+      
+      v = 1;
+      for (;;)
+	{
+	  if (v2 & 1L) 
+	    v *= v1;
+	  v2 >>= 1;
+	  if (v2 == 0)
+	    return v;
+	  v1 *= v1;
+	}
+    }
+}
+
+/* Obtain decimal value of arguments for binary operation, converting from
+   other types if one of them is not decimal floating point.  */
+static void
+value_args_as_decimal (struct value *arg1, struct value *arg2,
+		       gdb_byte *x, int *len_x, gdb_byte *y, int *len_y)
+{
+  struct type *type1, *type2;
+
+  type1 = check_typedef (value_type (arg1));
+  type2 = check_typedef (value_type (arg2));
+
+  /* At least one of the arguments must be of decimal float type.  */
+  gdb_assert (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT
+	      || TYPE_CODE (type2) == TYPE_CODE_DECFLOAT);
+
+  if (TYPE_CODE (type1) == TYPE_CODE_FLT
+      || TYPE_CODE (type2) == TYPE_CODE_FLT)
+    /* The DFP extension to the C language does not allow mixing of
+     * decimal float types with other float types in expressions
+     * (see WDTR 24732, page 12).  */
+    error (_("Mixing decimal floating types with other floating types is not allowed."));
+
+  /* Obtain decimal value of arg1, converting from other types
+     if necessary.  */
+
+  if (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT)
+    {
+      *len_x = TYPE_LENGTH (type1);
+      memcpy (x, value_contents (arg1), *len_x);
+    }
+  else if (is_integral_type (type1))
+    {
+      *len_x = TYPE_LENGTH (type2);
+      decimal_from_integral (arg1, x, *len_x);
+    }
+  else
+    error (_("Don't know how to convert from %s to %s."), TYPE_NAME (type1),
+	     TYPE_NAME (type2));
+
+  /* Obtain decimal value of arg2, converting from other types
+     if necessary.  */
+
+  if (TYPE_CODE (type2) == TYPE_CODE_DECFLOAT)
+    {
+      *len_y = TYPE_LENGTH (type2);
+      memcpy (y, value_contents (arg2), *len_y);
+    }
+  else if (is_integral_type (type2))
+    {
+      *len_y = TYPE_LENGTH (type1);
+      decimal_from_integral (arg2, y, *len_y);
+    }
+  else
+    error (_("Don't know how to convert from %s to %s."), TYPE_NAME (type1),
+	     TYPE_NAME (type2));
+}
 
 /* Perform a binary operation on two operands which have reasonable
    representations as integers or floats.  This includes booleans,
@@ -750,21 +1160,39 @@ struct value *
 value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 {
   struct value *val;
-  struct type *type1, *type2;
+  struct type *result_type;
 
-  COERCE_REF (arg1);
-  COERCE_REF (arg2);
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+  arg1 = coerce_ref (arg1);
+  arg2 = coerce_ref (arg2);
 
-  if ((TYPE_CODE (type1) != TYPE_CODE_FLT && !is_integral_type (type1))
-      ||
-      (TYPE_CODE (type2) != TYPE_CODE_FLT && !is_integral_type (type2)))
-    error ("Argument to arithmetic operation not a number or boolean.");
+  result_type = binop_result_type (op, value_type (arg1), value_type (arg2));
 
-  if (TYPE_CODE (type1) == TYPE_CODE_FLT
-      ||
-      TYPE_CODE (type2) == TYPE_CODE_FLT)
+  if (TYPE_CODE (result_type) == TYPE_CODE_DECFLOAT)
+    {
+      struct type *v_type;
+      int len_v1, len_v2, len_v;
+      gdb_byte v1[16], v2[16];
+      gdb_byte v[16];
+
+      value_args_as_decimal (arg1, arg2, v1, &len_v1, v2, &len_v2);
+
+      switch (op)
+	{
+	case BINOP_ADD:
+	case BINOP_SUB:
+	case BINOP_MUL:
+	case BINOP_DIV:
+	case BINOP_EXP:
+	  decimal_binop (op, v1, len_v1, v2, len_v2, v, &len_v);
+	  break;
+
+	default:
+	  error (_("Operation not valid for decimal floating point number."));
+	}
+
+      val = value_from_decfloat (result_type, v);
+    }
+  else if (TYPE_CODE (result_type) == TYPE_CODE_FLT)
     {
       /* FIXME-if-picky-about-floating-accuracy: Should be doing this
          in target format.  real.c in GCC probably has the necessary
@@ -772,6 +1200,7 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
       DOUBLEST v1, v2, v = 0;
       v1 = value_as_double (arg1);
       v2 = value_as_double (arg2);
+
       switch (op)
 	{
 	case BINOP_ADD:
@@ -790,30 +1219,29 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  v = v1 / v2;
 	  break;
 
-        case BINOP_EXP:
-          v = pow (v1, v2);
-          if (errno)
-            error ("Cannot perform exponentiation: %s", safe_strerror (errno));
-          break;
+	case BINOP_EXP:
+	  errno = 0;
+	  v = pow (v1, v2);
+	  if (errno)
+	    error (_("Cannot perform exponentiation: %s"), safe_strerror (errno));
+	  break;
+
+	case BINOP_MIN:
+	  v = v1 < v2 ? v1 : v2;
+	  break;
+	      
+	case BINOP_MAX:
+	  v = v1 > v2 ? v1 : v2;
+	  break;
 
 	default:
-	  error ("Integer-only operation on floating point number.");
+	  error (_("Integer-only operation on floating point number."));
 	}
 
-      /* If either arg was long double, make sure that value is also long
-         double.  */
-
-      if (TYPE_LENGTH (type1) * 8 > TARGET_DOUBLE_BIT
-	  || TYPE_LENGTH (type2) * 8 > TARGET_DOUBLE_BIT)
-	val = allocate_value (builtin_type_long_double);
-      else
-	val = allocate_value (builtin_type_double);
-
-      store_typed_floating (VALUE_CONTENTS_RAW (val), VALUE_TYPE (val), v);
+      val = allocate_value (result_type);
+      store_typed_floating (value_contents_raw (val), value_type (val), v);
     }
-  else if (TYPE_CODE (type1) == TYPE_CODE_BOOL
-	   &&
-	   TYPE_CODE (type2) == TYPE_CODE_BOOL)
+  else if (TYPE_CODE (result_type) == TYPE_CODE_BOOL)
     {
       LONGEST v1, v2, v = 0;
       v1 = value_as_long (arg1);
@@ -842,68 +1270,36 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  break;
 
 	default:
-	  error ("Invalid operation on booleans.");
+	  error (_("Invalid operation on booleans."));
 	}
 
-      val = allocate_value (type1);
-      store_signed_integer (VALUE_CONTENTS_RAW (val),
-			    TYPE_LENGTH (type1),
+      val = allocate_value (result_type);
+      store_signed_integer (value_contents_raw (val),
+			    TYPE_LENGTH (result_type),
 			    v);
     }
   else
     /* Integral operations here.  */
-    /* FIXME:  Also mixed integral/booleans, with result an integer. */
-    /* FIXME: This implements ANSI C rules (also correct for C++).
-       What about FORTRAN and (the deleted) chill ?  */
     {
-      unsigned int promoted_len1 = TYPE_LENGTH (type1);
-      unsigned int promoted_len2 = TYPE_LENGTH (type2);
-      int is_unsigned1 = TYPE_UNSIGNED (type1);
-      int is_unsigned2 = TYPE_UNSIGNED (type2);
-      unsigned int result_len;
-      int unsigned_operation;
-
-      /* Determine type length and signedness after promotion for
-         both operands.  */
-      if (promoted_len1 < TYPE_LENGTH (builtin_type_int))
-	{
-	  is_unsigned1 = 0;
-	  promoted_len1 = TYPE_LENGTH (builtin_type_int);
-	}
-      if (promoted_len2 < TYPE_LENGTH (builtin_type_int))
-	{
-	  is_unsigned2 = 0;
-	  promoted_len2 = TYPE_LENGTH (builtin_type_int);
-	}
-
-      /* Determine type length of the result, and if the operation should
-         be done unsigned.
-         Use the signedness of the operand with the greater length.
-         If both operands are of equal length, use unsigned operation
-         if one of the operands is unsigned.  */
-      if (promoted_len1 > promoted_len2)
-	{
-	  unsigned_operation = is_unsigned1;
-	  result_len = promoted_len1;
-	}
-      else if (promoted_len2 > promoted_len1)
-	{
-	  unsigned_operation = is_unsigned2;
-	  result_len = promoted_len2;
-	}
-      else
-	{
-	  unsigned_operation = is_unsigned1 || is_unsigned2;
-	  result_len = promoted_len1;
-	}
+      int unsigned_operation = TYPE_UNSIGNED (result_type);
 
       if (unsigned_operation)
 	{
+	  unsigned int len1, len2, result_len;
+	  LONGEST v2_signed = value_as_long (arg2);
 	  ULONGEST v1, v2, v = 0;
 	  v1 = (ULONGEST) value_as_long (arg1);
-	  v2 = (ULONGEST) value_as_long (arg2);
+	  v2 = (ULONGEST) v2_signed;
 
-	  /* Truncate values to the type length of the result.  */
+	  /* Truncate values to the type length of the result.
+	     Things are mildly tricky because binop_result_type may
+	     return a long which on amd64 is 8 bytes, and that's a problem if
+	     ARG1, ARG2 are both <= 4 bytes: we need to truncate the values
+	     at 4 bytes not 8.  So fetch the lengths of the original types
+	     and truncate at the larger of the two.  */
+	  len1 = TYPE_LENGTH (value_type (arg1));
+	  len2 = TYPE_LENGTH (value_type (arg1));
+	  result_len = len1 > len2 ? len1 : len2;
 	  if (result_len < sizeof (ULONGEST))
 	    {
 	      v1 &= ((LONGEST) 1 << HOST_CHAR_BIT * result_len) - 1;
@@ -925,17 +1321,22 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	      break;
 
 	    case BINOP_DIV:
-	      v = v1 / v2;
+	    case BINOP_INTDIV:
+	      if (v2 != 0)
+		v = v1 / v2;
+	      else
+		error (_("Division by zero"));
 	      break;
 
-            case BINOP_EXP:
-              v = pow (v1, v2);
-              if (errno)
-                error ("Cannot perform exponentiation: %s", safe_strerror (errno));
-              break;
+	    case BINOP_EXP:
+              v = uinteger_pow (v1, v2_signed);
+	      break;
 
 	    case BINOP_REM:
-	      v = v1 % v2;
+	      if (v2 != 0)
+		v = v1 % v2;
+	      else
+		error (_("Division by zero"));
 	      break;
 
 	    case BINOP_MOD:
@@ -1002,24 +1403,12 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	      break;
 
 	    default:
-	      error ("Invalid binary operation on numbers.");
+	      error (_("Invalid binary operation on numbers."));
 	    }
 
-	  /* This is a kludge to get around the fact that we don't
-	     know how to determine the result type from the types of
-	     the operands.  (I'm not really sure how much we feel the
-	     need to duplicate the exact rules of the current
-	     language.  They can get really hairy.  But not to do so
-	     makes it hard to document just what we *do* do).  */
-
-	  /* Can't just call init_type because we wouldn't know what
-	     name to give the type.  */
-	  val = allocate_value
-	    (result_len > TARGET_LONG_BIT / HOST_CHAR_BIT
-	     ? builtin_type_unsigned_long_long
-	     : builtin_type_unsigned_long);
-	  store_unsigned_integer (VALUE_CONTENTS_RAW (val),
-				  TYPE_LENGTH (VALUE_TYPE (val)),
+	  val = allocate_value (result_type);
+	  store_unsigned_integer (value_contents_raw (val),
+				  TYPE_LENGTH (value_type (val)),
 				  v);
 	}
       else
@@ -1043,23 +1432,22 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	      break;
 
 	    case BINOP_DIV:
+	    case BINOP_INTDIV:
 	      if (v2 != 0)
 		v = v1 / v2;
 	      else
-		error ("Division by zero");
+		error (_("Division by zero"));
               break;
 
-            case BINOP_EXP:
-              v = pow (v1, v2);
-              if (errno)
-                error ("Cannot perform exponentiation: %s", safe_strerror (errno));
+	    case BINOP_EXP:
+              v = integer_pow (v1, v2);
 	      break;
 
 	    case BINOP_REM:
 	      if (v2 != 0)
 		v = v1 % v2;
 	      else
-		error ("Division by zero");
+		error (_("Division by zero"));
 	      break;
 
 	    case BINOP_MOD:
@@ -1126,24 +1514,12 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	      break;
 
 	    default:
-	      error ("Invalid binary operation on numbers.");
+	      error (_("Invalid binary operation on numbers."));
 	    }
 
-	  /* This is a kludge to get around the fact that we don't
-	     know how to determine the result type from the types of
-	     the operands.  (I'm not really sure how much we feel the
-	     need to duplicate the exact rules of the current
-	     language.  They can get really hairy.  But not to do so
-	     makes it hard to document just what we *do* do).  */
-
-	  /* Can't just call init_type because we wouldn't know what
-	     name to give the type.  */
-	  val = allocate_value
-	    (result_len > TARGET_LONG_BIT / HOST_CHAR_BIT
-	     ? builtin_type_long_long
-	     : builtin_type_long);
-	  store_signed_integer (VALUE_CONTENTS_RAW (val),
-				TYPE_LENGTH (VALUE_TYPE (val)),
+	  val = allocate_value (result_type);
+	  store_signed_integer (value_contents_raw (val),
+				TYPE_LENGTH (value_type (val)),
 				v);
 	}
     }
@@ -1157,17 +1533,19 @@ int
 value_logical_not (struct value *arg1)
 {
   int len;
-  char *p;
+  const gdb_byte *p;
   struct type *type1;
 
-  COERCE_NUMBER (arg1);
-  type1 = check_typedef (VALUE_TYPE (arg1));
+  arg1 = coerce_number (arg1);
+  type1 = check_typedef (value_type (arg1));
 
   if (TYPE_CODE (type1) == TYPE_CODE_FLT)
     return 0 == value_as_double (arg1);
+  else if (TYPE_CODE (type1) == TYPE_CODE_DECFLOAT)
+    return decimal_is_zero (value_contents (arg1), TYPE_LENGTH (type1));
 
   len = TYPE_LENGTH (type1);
-  p = VALUE_CONTENTS (arg1);
+  p = value_contents (arg1);
 
   while (--len >= 0)
     {
@@ -1184,10 +1562,10 @@ value_logical_not (struct value *arg1)
 static int
 value_strcmp (struct value *arg1, struct value *arg2)
 {
-  int len1 = TYPE_LENGTH (VALUE_TYPE (arg1));
-  int len2 = TYPE_LENGTH (VALUE_TYPE (arg2));
-  char *s1 = VALUE_CONTENTS (arg1);
-  char *s2 = VALUE_CONTENTS (arg2);
+  int len1 = TYPE_LENGTH (value_type (arg1));
+  int len2 = TYPE_LENGTH (value_type (arg2));
+  const gdb_byte *s1 = value_contents (arg1);
+  const gdb_byte *s2 = value_contents (arg2);
   int i, len = len1 < len2 ? len1 : len2;
 
   for (i = 0; i < len; i++)
@@ -1215,17 +1593,18 @@ int
 value_equal (struct value *arg1, struct value *arg2)
 {
   int len;
-  char *p1, *p2;
+  const gdb_byte *p1;
+  const gdb_byte *p2;
   struct type *type1, *type2;
   enum type_code code1;
   enum type_code code2;
   int is_int1, is_int2;
 
-  COERCE_ARRAY (arg1);
-  COERCE_ARRAY (arg2);
+  arg1 = coerce_array (arg1);
+  arg2 = coerce_array (arg2);
 
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+  type1 = check_typedef (value_type (arg1));
+  type2 = check_typedef (value_type (arg2));
   code1 = TYPE_CODE (type1);
   code2 = TYPE_CODE (type2);
   is_int1 = is_integral_type (type1);
@@ -1236,7 +1615,22 @@ value_equal (struct value *arg1, struct value *arg2)
 						       BINOP_EQUAL)));
   else if ((code1 == TYPE_CODE_FLT || is_int1)
 	   && (code2 == TYPE_CODE_FLT || is_int2))
-    return value_as_double (arg1) == value_as_double (arg2);
+    {
+      /* NOTE: kettenis/20050816: Avoid compiler bug on systems where
+	 `long double' values are returned in static storage (m68k).  */
+      DOUBLEST d = value_as_double (arg1);
+      return d == value_as_double (arg2);
+    }
+  else if ((code1 == TYPE_CODE_DECFLOAT || is_int1)
+	   && (code2 == TYPE_CODE_DECFLOAT || is_int2))
+    {
+      gdb_byte v1[16], v2[16];
+      int len_v1, len_v2;
+
+      value_args_as_decimal (arg1, arg2, v1, &len_v1, v2, &len_v2);
+
+      return decimal_compare (v1, len_v1, v2, len_v2) == 0;
+    }
 
   /* FIXME: Need to promote to either CORE_ADDR or LONGEST, whichever
      is bigger.  */
@@ -1249,8 +1643,8 @@ value_equal (struct value *arg1, struct value *arg2)
 	   && ((len = (int) TYPE_LENGTH (type1))
 	       == (int) TYPE_LENGTH (type2)))
     {
-      p1 = VALUE_CONTENTS (arg1);
-      p2 = VALUE_CONTENTS (arg2);
+      p1 = value_contents (arg1);
+      p2 = value_contents (arg2);
       while (--len >= 0)
 	{
 	  if (*p1++ != *p2++)
@@ -1264,7 +1658,7 @@ value_equal (struct value *arg1, struct value *arg2)
     }
   else
     {
-      error ("Invalid type combination in equality test.");
+      error (_("Invalid type combination in equality test."));
       return 0;			/* For lint -- never reached */
     }
 }
@@ -1280,11 +1674,11 @@ value_less (struct value *arg1, struct value *arg2)
   struct type *type1, *type2;
   int is_int1, is_int2;
 
-  COERCE_ARRAY (arg1);
-  COERCE_ARRAY (arg2);
+  arg1 = coerce_array (arg1);
+  arg2 = coerce_array (arg2);
 
-  type1 = check_typedef (VALUE_TYPE (arg1));
-  type2 = check_typedef (VALUE_TYPE (arg2));
+  type1 = check_typedef (value_type (arg1));
+  type2 = check_typedef (value_type (arg2));
   code1 = TYPE_CODE (type1);
   code2 = TYPE_CODE (type2);
   is_int1 = is_integral_type (type1);
@@ -1295,7 +1689,22 @@ value_less (struct value *arg1, struct value *arg2)
 						       BINOP_LESS)));
   else if ((code1 == TYPE_CODE_FLT || is_int1)
 	   && (code2 == TYPE_CODE_FLT || is_int2))
-    return value_as_double (arg1) < value_as_double (arg2);
+    {
+      /* NOTE: kettenis/20050816: Avoid compiler bug on systems where
+	 `long double' values are returned in static storage (m68k).  */
+      DOUBLEST d = value_as_double (arg1);
+      return d < value_as_double (arg2);
+    }
+  else if ((code1 == TYPE_CODE_DECFLOAT || is_int1)
+	   && (code2 == TYPE_CODE_DECFLOAT || is_int2))
+    {
+      gdb_byte v1[16], v2[16];
+      int len_v1, len_v2;
+
+      value_args_as_decimal (arg1, arg2, v1, &len_v1, v2, &len_v2);
+
+      return decimal_compare (v1, len_v1, v2, len_v2) == -1;
+    }
   else if (code1 == TYPE_CODE_PTR && code2 == TYPE_CODE_PTR)
     return value_as_address (arg1) < value_as_address (arg2);
 
@@ -1309,37 +1718,73 @@ value_less (struct value *arg1, struct value *arg2)
     return value_strcmp (arg1, arg2) < 0;
   else
     {
-      error ("Invalid type combination in ordering comparison.");
+      error (_("Invalid type combination in ordering comparison."));
       return 0;
     }
 }
 
-/* The unary operators - and ~.  Both free the argument ARG1.  */
+/* The unary operators +, - and ~.  They free the argument ARG1.  */
+
+struct value *
+value_pos (struct value *arg1)
+{
+  struct type *type;
+  struct type *result_type;
+
+  arg1 = coerce_ref (arg1);
+  type = check_typedef (value_type (arg1));
+  result_type = unop_result_type (UNOP_PLUS, value_type (arg1));
+
+  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+    return value_from_double (result_type, value_as_double (arg1));
+  else if (TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
+    return value_from_decfloat (result_type, value_contents (arg1));
+  else if (is_integral_type (type))
+    {
+      return value_from_longest (result_type, value_as_long (arg1));
+    }
+  else
+    {
+      error ("Argument to positive operation not a number.");
+      return 0;			/* For lint -- never reached */
+    }
+}
 
 struct value *
 value_neg (struct value *arg1)
 {
   struct type *type;
-  struct type *result_type = VALUE_TYPE (arg1);
+  struct type *result_type;
 
-  COERCE_REF (arg1);
+  arg1 = coerce_ref (arg1);
+  type = check_typedef (value_type (arg1));
+  result_type = unop_result_type (UNOP_NEG, value_type (arg1));
 
-  type = check_typedef (VALUE_TYPE (arg1));
+  if (TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
+    {
+      struct value *val = allocate_value (result_type);
+      int len = TYPE_LENGTH (type);
+      gdb_byte decbytes[16];  /* a decfloat is at most 128 bits long */
 
-  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+      memcpy (decbytes, value_contents (arg1), len);
+
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
+	decbytes[len-1] = decbytes[len - 1] | 0x80;
+      else
+	decbytes[0] = decbytes[0] | 0x80;
+
+      memcpy (value_contents_raw (val), decbytes, len);
+      return val;
+    }
+  else if (TYPE_CODE (type) == TYPE_CODE_FLT)
     return value_from_double (result_type, -value_as_double (arg1));
   else if (is_integral_type (type))
     {
-      /* Perform integral promotion for ANSI C/C++.  FIXME: What about
-         FORTRAN and (the deleted) chill ?  */
-      if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin_type_int))
-	result_type = builtin_type_int;
-
       return value_from_longest (result_type, -value_as_long (arg1));
     }
   else
     {
-      error ("Argument to negate operation not a number.");
+      error (_("Argument to negate operation not a number."));
       return 0;			/* For lint -- never reached */
     }
 }
@@ -1348,29 +1793,24 @@ struct value *
 value_complement (struct value *arg1)
 {
   struct type *type;
-  struct type *result_type = VALUE_TYPE (arg1);
+  struct type *result_type;
 
-  COERCE_REF (arg1);
-
-  type = check_typedef (VALUE_TYPE (arg1));
+  arg1 = coerce_ref (arg1);
+  type = check_typedef (value_type (arg1));
+  result_type = unop_result_type (UNOP_COMPLEMENT, value_type (arg1));
 
   if (!is_integral_type (type))
-    error ("Argument to complement operation not an integer or boolean.");
-
-  /* Perform integral promotion for ANSI C/C++.
-     FIXME: What about FORTRAN ?  */
-  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin_type_int))
-    result_type = builtin_type_int;
+    error (_("Argument to complement operation not an integer or boolean."));
 
   return value_from_longest (result_type, ~value_as_long (arg1));
 }
 
-/* The INDEX'th bit of SET value whose VALUE_TYPE is TYPE,
-   and whose VALUE_CONTENTS is valaddr.
+/* The INDEX'th bit of SET value whose value_type is TYPE,
+   and whose value_contents is valaddr.
    Return -1 if out of range, -2 other error. */
 
 int
-value_bit_index (struct type *type, char *valaddr, int index)
+value_bit_index (struct type *type, const gdb_byte *valaddr, int index)
 {
   LONGEST low_bound, high_bound;
   LONGEST word;
@@ -1384,7 +1824,7 @@ value_bit_index (struct type *type, char *valaddr, int index)
   word = unpack_long (builtin_type_unsigned_char,
 		      valaddr + (rel_index / TARGET_CHAR_BIT));
   rel_index %= TARGET_CHAR_BIT;
-  if (BITS_BIG_ENDIAN)
+  if (gdbarch_bits_big_endian (current_gdbarch))
     rel_index = TARGET_CHAR_BIT - 1 - rel_index;
   return (word >> rel_index) & 1;
 }
@@ -1393,21 +1833,21 @@ struct value *
 value_in (struct value *element, struct value *set)
 {
   int member;
-  struct type *settype = check_typedef (VALUE_TYPE (set));
-  struct type *eltype = check_typedef (VALUE_TYPE (element));
+  struct type *settype = check_typedef (value_type (set));
+  struct type *eltype = check_typedef (value_type (element));
   if (TYPE_CODE (eltype) == TYPE_CODE_RANGE)
     eltype = TYPE_TARGET_TYPE (eltype);
   if (TYPE_CODE (settype) != TYPE_CODE_SET)
-    error ("Second argument of 'IN' has wrong type");
+    error (_("Second argument of 'IN' has wrong type"));
   if (TYPE_CODE (eltype) != TYPE_CODE_INT
       && TYPE_CODE (eltype) != TYPE_CODE_CHAR
       && TYPE_CODE (eltype) != TYPE_CODE_ENUM
       && TYPE_CODE (eltype) != TYPE_CODE_BOOL)
-    error ("First argument of 'IN' has wrong type");
-  member = value_bit_index (settype, VALUE_CONTENTS (set),
+    error (_("First argument of 'IN' has wrong type"));
+  member = value_bit_index (settype, value_contents (set),
 			    value_as_long (element));
   if (member < 0)
-    error ("First argument of 'IN' not in range");
+    error (_("First argument of 'IN' not in range"));
   return value_from_longest (LA_BOOL_TYPE, member);
 }
 

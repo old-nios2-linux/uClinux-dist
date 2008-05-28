@@ -29,6 +29,7 @@
 
 #include <lwres/async.h>
 
+#include "os_select.h"
 #include "assert_p.h"
 
 int
@@ -41,7 +42,7 @@ lwres_getrrsetbyname_async(const char *hostname, unsigned int rdclass,
 	struct lwres_async_state las;
 	struct lwres_async_state *plas;
 	struct timeval timeout;
-	fd_set readfds;
+	os_fd_set readfds;
 	int    sock;
 
 	ret = lwres_async_init(&ctx);
@@ -63,9 +64,9 @@ lwres_getrrsetbyname_async(const char *hostname, unsigned int rdclass,
 	timeout.tv_sec = lwres_async_timeout(ctx);
 	sock = lwres_async_fd(ctx);
 
-	FD_ZERO(&readfds);
-	FD_SET(sock, &readfds);
-	ret2 = select(sock + 1, &readfds, NULL, NULL, &timeout);
+	OS_FD_ZERO(&readfds);
+	OS_FD_SET(sock, &readfds);
+	ret2 = os_select(sock + 1, &readfds, NULL, NULL, &timeout);
 	
 	/*
 	 * What happened with select?

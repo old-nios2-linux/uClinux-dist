@@ -1,11 +1,11 @@
 
 MEMORY {
-	ram    : ORIGIN = 0x30020000, LENGTH = 0xe0000
+	ram    : ORIGIN = 0x20000, LENGTH = 0x1E0000
 }
 
 SECTIONS {
 
-	.text 0x30020000 : {
+	.text : {
 		_stext = . ;
         	*(.text)
 		*(.text.exit)

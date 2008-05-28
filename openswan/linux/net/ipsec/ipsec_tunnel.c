@@ -53,7 +53,11 @@ char ipsec_tunnel_c_version[] = "RCSID $Id: ipsec_tunnel.c,v 1.232.2.7 2007-09-1
 
 #ifdef NET_21
 # include <linux/in6.h>
-# define ip_chk_addr inet_addr_type
+# if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,24)
+#  define ip_chk_addr inet_addr_type
+# else
+#  define ip_chk_addr(a) inet_addr_type(&init_net, a)
+# endif
 # define IS_MYADDR RTN_LOCAL
 # include <net/dst.h>
 # undef dev_kfree_skb
@@ -593,7 +597,12 @@ ipsec_tunnel_send(struct ipsec_xmit_state*ixs)
 	fl.nl_u.ip4_u.saddr = ixs->pass ? 0 : ip_hdr(ixs->skb)->saddr;
 	fl.nl_u.ip4_u.tos = RT_TOS(ip_hdr(ixs->skb)->tos);
 	fl.proto = ip_hdr(ixs->skb)->protocol;
- 	if ((ixs->error = ip_route_output_key(&ixs->route, &fl))) {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,24)
+ 	ixs->error = ip_route_output_key(&ixs->route, &fl);
+#else
+ 	ixs->error = ip_route_output_key(&init_net, &ixs->route, &fl);
+#endif
+ 	if (ixs->error) {
 #else
 	/*skb_orphan(ixs->skb);*/
 	if((ixs->error = ip_route_output(&ixs->route,

@@ -1,21 +1,20 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1992, 1994, 1995, 1996, 1997, 1999, 2000, 2002, 2003, 2004
-# Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1999, 2000, 2002, 2003, 2004, 2007,
+# 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@gnu.org
@@ -33,7 +32,8 @@ set testfile "printcmds"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested printcmds.exp
+     return -1
 }
 
 # Set the current language to C.  This counts as a test.  If it
@@ -668,6 +668,57 @@ proc test_printf {} {
 0xfeedface, 0xdeadbeef, 5.0" "bad -99.54\[0-9\]+, z feedface, deadbeef, 5.0+"
 }
 
+#Test printing DFP values with printf
+proc test_printf_with_dfp {} {
+
+    # Test various dfp values, covering 32-bit, 64-bit and 128-bit ones
+
+    # _Decimal32 constants, which can support up to 7 digits
+    gdb_test "printf \"%Hf\\n\",1.2df" "1.2"
+    gdb_test "printf \"%Hf\\n\",-1.2df" "-1.2"
+    gdb_test "printf \"%Hf\\n\",1.234567df" "1.234567"
+    gdb_test "printf \"%Hf\\n\",-1.234567df" "-1.234567"
+    gdb_test "printf \"%Hf\\n\",1234567.df" "1234567"
+    gdb_test "printf \"%Hf\\n\",-1234567.df" "-1234567"
+
+    gdb_test "printf \"%Hf\\n\",1.2E1df" "12"
+    gdb_test "printf \"%Hf\\n\",1.2E10df" "1.2E\\+10"
+    gdb_test "printf \"%Hf\\n\",1.2E-10df" "1.2E-10"
+
+    # The largest exponent for 32-bit dfp value is 96.
+    gdb_test "printf \"%Hf\\n\",1.2E96df" "1.200000E\\+96"
+
+    # _Decimal64 constants, which can support up to 16 digits
+    gdb_test "printf \"%Df\\n\",1.2dd" "1.2"
+    gdb_test "printf \"%Df\\n\",-1.2dd" "-1.2"
+    gdb_test "printf \"%Df\\n\",1.234567890123456dd" "1.234567890123456"
+    gdb_test "printf \"%Df\\n\",-1.234567890123456dd" "-1.234567890123456"
+    gdb_test "printf \"%Df\\n\",1234567890123456.dd" "1234567890123456"
+    gdb_test "printf \"%Df\\n\",-1234567890123456.dd" "-1234567890123456"
+
+    gdb_test "printf \"%Df\\n\",1.2E1dd" "12"
+    gdb_test "printf \"%Df\\n\",1.2E10dd" "1.2E\\+10"
+    gdb_test "printf \"%Df\\n\",1.2E-10dd" "1.2E-10"
+
+    # The largest exponent for 64-bit dfp value is 384.
+    gdb_test "printf \"%Df\\n\",1.2E384dd" "1.200000000000000E\\+384"
+
+    # _Decimal128 constants, which can support up to 34 digits
+    gdb_test "printf \"%DDf\\n\",1.2dl" "1.2"
+    gdb_test "printf \"%DDf\\n\",-1.2dl" "-1.2"
+    gdb_test "printf \"%DDf\\n\",1.234567890123456789012345678901234dl" "1.234567890123456789012345678901234"
+    gdb_test "printf \"%DDf\\n\",-1.234567890123456789012345678901234dl" "-1.234567890123456789012345678901234"
+    gdb_test "printf \"%DDf\\n\",1234567890123456789012345678901234.dl" "1234567890123456789012345678901234"
+    gdb_test "printf \"%DDf\\n\",-1234567890123456789012345678901234.dl" "-1234567890123456789012345678901234"
+
+    gdb_test "printf \"%DDf\\n\",1.2E1dl" "12"
+    gdb_test "printf \"%DDf\\n\",1.2E10dl" "1.2E\\+10"
+    gdb_test "printf \"%DDf\\n\",1.2E-10dl" "1.2E-10"
+
+    # The largest exponent for 128-bit dfp value is 6144.
+    gdb_test "printf \"%DDf\\n\",1.2E6144dl" "1.200000000000000000000000000000000E\\+6144"
+}
+
 # Escape a left curly brace to prevent it from being interpreted as 
 # the beginning of a bound
 proc gdb_test_escape_braces { args } {
@@ -711,6 +762,7 @@ if [set_lang_c] then {
 	test_print_string_constants
 	test_print_array_constants
 	test_printf
+	test_printf_with_dfp
     }
 } else {
     fail "C print command tests suppressed"

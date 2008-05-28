@@ -95,6 +95,14 @@ static void scanner_thread(void *arg)
 #ifndef	C_WINDOWS
     /* ignore all signals */
     sigfillset(&sigset);
+    /* The behavior of a process is undefined after it ignores a 
+     * SIGFPE, SIGILL, SIGSEGV, or SIGBUS signal */
+    sigdelset(&sigset, SIGFPE);
+    sigdelset(&sigset, SIGILL);
+    sigdelset(&sigset, SIGSEGV);
+#ifdef SIGBUS
+    sigdelset(&sigset, SIGBUS);
+#endif
     pthread_sigmask(SIG_SETMASK, &sigset, NULL);
 #endif
 
@@ -183,7 +191,7 @@ static struct cl_engine *reload_db(struct cl_engine *engine, unsigned int dbopti
 {
 	const char *dbdir;
 	int retval;
-	unsigned int sigs = 0, try = 1;
+	unsigned int sigs = 0, attempt = 1;
 
     *ret = 0;
     if(do_check) {
@@ -229,8 +237,8 @@ static struct cl_engine *reload_db(struct cl_engine *engine, unsigned int dbopti
     }
 
     while((retval = cl_load(dbdir, &engine, &sigs, dboptions)) == CL_ELOCKDB) {
-	logg("!reload db failed: %s (try %u)\n", cl_strerror(retval), try);
-	if(++try > 3)
+	logg("!reload db failed: %s (attempt %u/3)\n", cl_strerror(retval), attempt);
+	if(++attempt > 3)
 	    break;
     }
 
@@ -280,10 +288,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	pid_t mainpid;
 	int idletimeout;
 
-#if defined(C_BIGSTACK) || defined(C_BSD)
-        size_t stacksize;
-#endif
-
 #ifdef CLAMUKO
 	pthread_t clamuko_pid;
 	pthread_attr_t clamuko_attr;
@@ -311,34 +315,37 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     logg("*Listening daemon: PID: %u\n", (unsigned int) mainpid);
     max_threads = cfgopt(copt, "MaxThreads")->numarg;
 
+
+    memset(&limits, 0, sizeof(struct cl_limits));
+
+    if((limits.maxscansize = cfgopt(copt, "MaxScanSize")->numarg)) {
+    	logg("Limits: Global size limit set to %lu bytes.\n", limits.maxscansize);
+    } else {
+    	logg("^Limits: Global size limit protection disabled.\n");
+    }
+
+    if((limits.maxfilesize = cfgopt(copt, "MaxFileSize")->numarg)) {
+    	logg("Limits: File size limit set to %lu bytes.\n", limits.maxfilesize);
+    } else {
+	logg("^Limits: File size limit protection disabled.\n");
+    }
+
+    if((limits.maxreclevel = cfgopt(copt, "MaxRecursion")->numarg)) {
+        logg("Limits: Recursion level limit set to %u.\n", limits.maxreclevel);
+    } else {
+        logg("^Limits: Recursion level limit protection disabled.\n");
+    }
+
+    if((limits.maxfiles = cfgopt(copt, "MaxFiles")->numarg)) {
+        logg("Limits: Files limit set to %u.\n", limits.maxfiles);
+    } else {
+        logg("^Limits: Files limit protection disabled.\n");
+    }
+
     if(cfgopt(copt, "ScanArchive")->enabled) {
 
-	/* set up limits */
-	memset(&limits, 0, sizeof(struct cl_limits));
-
-	if((limits.maxfilesize = cfgopt(copt, "ArchiveMaxFileSize")->numarg)) {
-	    logg("Archive: Archived file size limit set to %lu bytes.\n", limits.maxfilesize);
-	} else {
-	    logg("^Archive: File size limit protection disabled.\n");
-	}
-
-	if((limits.maxreclevel = cfgopt(copt, "ArchiveMaxRecursion")->numarg)) {
-	    logg("Archive: Recursion level limit set to %u.\n", limits.maxreclevel);
-	} else {
-	    logg("^Archive: Recursion level limit protection disabled.\n");
-	}
-
-	if((limits.maxfiles = cfgopt(copt, "ArchiveMaxFiles")->numarg)) {
-	    logg("Archive: Files limit set to %u.\n", limits.maxfiles);
-	} else {
-	    logg("^Archive: Files limit protection disabled.\n");
-	}
-
-	if((limits.maxratio = cfgopt(copt, "ArchiveMaxCompressionRatio")->numarg)) {
-	    logg("Archive: Compression ratio limit set to %u.\n", limits.maxratio);
-	} else {
-	    logg("^Archive: Compression ratio limit disabled.\n");
-	}
+	logg("Archive support enabled.\n");
+	options |= CL_SCAN_ARCHIVE;
 
 	if(cfgopt(copt, "ArchiveLimitMemoryUsage")->enabled) {
 	    limits.archivememlim = 1;
@@ -346,20 +353,10 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	} else {
 	    limits.archivememlim = 0;
 	}
-    }
-
-    if(cfgopt(copt, "ScanArchive")->enabled) {
-	logg("Archive support enabled.\n");
-	options |= CL_SCAN_ARCHIVE;
 
 	if(cfgopt(copt, "ArchiveBlockEncrypted")->enabled) {
 	    logg("Archive: Blocking encrypted archives.\n");
 	    options |= CL_SCAN_BLOCKENCRYPTED;
-	}
-
-	if(cfgopt(copt, "ArchiveBlockMax")->enabled) {
-	    logg("Archive: Blocking archives that exceed limits.\n");
-	    options |= CL_SCAN_BLOCKMAX;
 	}
 
     } else {
@@ -403,12 +400,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	    options |= CL_SCAN_MAILURL;
 	}
 
-	if((limits.maxmailrec = cfgopt(copt, "MailMaxRecursion")->numarg)) {
-	    logg("Mail: Recursion level limit set to %u.\n", limits.maxmailrec);
-	} else {
-	    logg("^Mail: Recursion level limit protection disabled.\n");
-	}
-
     } else {
 	logg("Mail files support disabled.\n");
     }
@@ -435,19 +426,6 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     }
 
     if(cfgopt(copt,"PhishingScanURLs")->enabled) {
-
-	if(cfgopt(copt,"PhishingRestrictedScan")->enabled) {
-	    /* we don't scan urls from all domains, just those listed in
-	     * .pdb file. This is the safe default
-	     */
-	    options |= CL_SCAN_PHISHING_DOMAINLIST;
-	} else {
-	    /* This is a false positive prone option, since newsletters, etc.
-	     * often contain links that will be classified as phishing attempts,
-	     * even though the site they link to isn't a phish site.
-	     */
-	    logg("Phishing: Checking all URLs, regardless of domain (FP prone).\n");
-	}
 
 	if(cfgopt(copt,"PhishingAlwaysBlockCloak")->enabled) {
 	    options |= CL_SCAN_PHISHING_BLOCKCLOAK; 
@@ -494,8 +472,16 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     sigdelset(&sigset, SIGHUP);
     sigdelset(&sigset, SIGPIPE);
     sigdelset(&sigset, SIGUSR2);
+    /* The behavior of a process is undefined after it ignores a 
+     * SIGFPE, SIGILL, SIGSEGV, or SIGBUS signal */
+    sigdelset(&sigset, SIGFPE);
+    sigdelset(&sigset, SIGILL);
+    sigdelset(&sigset, SIGSEGV);
+#ifdef SIGBUS    
+    sigdelset(&sigset, SIGBUS);
+#endif
     sigprocmask(SIG_SETMASK, &sigset, NULL);
- 
+
     /* SIGINT, SIGTERM, SIGSEGV */
     sigact.sa_handler = sighandler_th;
     sigemptyset(&sigact.sa_mask);
@@ -540,6 +526,7 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
     	}
 #if !defined(C_WINDOWS) && !defined(C_BEOS)
 	if(new_sd != -1 && fstat(socketd, &st_buf) == -1) {
+	    logg("!fstat(): socket descriptor gone\n");
 	    memmove(socketds, socketds + 1, sizeof(socketds[0]) * nsockets);
 	    nsockets--;
 	    if(!nsockets) {
@@ -551,9 +538,12 @@ int acceptloop_th(int *socketds, int nsockets, struct cl_engine *engine, unsigne
 	if (new_sd != -1)
 	    new_sd = accept(socketd, NULL, NULL);
 	if((new_sd == -1) && (errno != EINTR)) {
+	    pthread_mutex_lock(&exit_mutex);
 	    if(progexit) {
+		pthread_mutex_unlock(&exit_mutex);
 	    	break;
 	    }
+	    pthread_mutex_unlock(&exit_mutex);
 	    /* very bad - need to exit or restart */
 #ifdef HAVE_STRERROR_R
 	    strerror_r(errno, buff, BUFFSIZE);

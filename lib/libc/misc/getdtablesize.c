@@ -20,6 +20,10 @@
 #include <unistd.h>
 #include <sys/resource.h>
 
+#ifndef OPEN_MAX
+#define	OPEN_MAX	256
+#endif
+
 /* Return the maximum number of file descriptors
    the current process could possibly have.  */
 int getdtablesize (void)

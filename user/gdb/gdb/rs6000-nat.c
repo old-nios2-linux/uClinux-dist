@@ -1,14 +1,14 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
 
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -30,11 +28,16 @@
 #include "objfiles.h"
 #include "libbfd.h"		/* For bfd_default_set_arch_mach (FIXME) */
 #include "bfd.h"
+#include "exceptions.h"
 #include "gdb-stabs.h"
 #include "regcache.h"
 #include "arch-utils.h"
+#include "inf-ptrace.h"
 #include "ppc-tdep.h"
+#include "rs6000-tdep.h"
 #include "exec.h"
+#include "gdb_stdint.h"
+#include "observer.h"
 
 #include <sys/ptrace.h>
 #include <sys/reg.h>
@@ -74,17 +77,6 @@
 #else
 # define ARCH64() (register_size (current_gdbarch, 0) == 8)
 #endif
-
-/* Union of 32-bit and 64-bit ".reg" core file sections. */
-
-typedef union {
-#ifdef ARCH3264
-  struct __context64 r64;
-#else
-  struct mstsave r64;
-#endif
-  struct mstsave r32;
-} CoreRegs;
 
 /* Union of 32-bit and 64-bit versions of ld_info. */
 
@@ -138,9 +130,7 @@ static int objfile_symbol_add (void *);
 
 static void vmap_symtab (struct vmap *);
 
-static void fetch_core_registers (char *, unsigned int, int, CORE_ADDR);
-
-static void exec_one_dummy_insn (void);
+static void exec_one_dummy_insn (struct gdbarch *);
 
 extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
 
@@ -150,9 +140,9 @@ extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
    ISFLOAT to indicate whether REGNO is a floating point register.  */
 
 static int
-regmap (int regno, int *isfloat)
+regmap (struct gdbarch *gdbarch, int regno, int *isfloat)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   *isfloat = 0;
   if (tdep->ppc_gp0_regnum <= regno
@@ -165,7 +155,7 @@ regmap (int regno, int *isfloat)
       *isfloat = 1;
       return regno - tdep->ppc_fp0_regnum + FPR0;
     }
-  else if (regno == PC_REGNUM)
+  else if (regno == gdbarch_pc_regnum (gdbarch))
     return IAR;
   else if (regno == tdep->ppc_ps_regnum)
     return MSR;
@@ -202,7 +192,7 @@ rs6000_ptrace32 (int req, int id, int *addr, int data, int *buf)
 /* Call ptracex(REQ, ID, ADDR, DATA, BUF). */
 
 static int
-rs6000_ptrace64 (int req, int id, long long addr, int data, int *buf)
+rs6000_ptrace64 (int req, int id, long long addr, int data, void *buf)
 {
 #ifdef ARCH3264
   int ret = ptracex (req, id, addr, data, buf);
@@ -219,15 +209,16 @@ rs6000_ptrace64 (int req, int id, long long addr, int data, int *buf)
 /* Fetch register REGNO from the inferior. */
 
 static void
-fetch_register (int regno)
+fetch_register (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
 
   /* Retrieved values may be -1, so infer errors from errno. */
   errno = 0;
 
-  nr = regmap (regno, &isfloat);
+  nr = regmap (gdbarch, regno, &isfloat);
 
   /* Floating-point registers. */
   if (isfloat)
@@ -236,7 +227,7 @@ fetch_register (int regno)
   /* Bogus register number. */
   else if (nr < 0)
     {
-      if (regno >= NUM_REGS)
+      if (regno >= gdbarch_num_regs (gdbarch))
 	fprintf_unfiltered (gdb_stderr,
 			    "gdb error: register no %d not implemented.\n",
 			    regno);
@@ -253,8 +244,8 @@ fetch_register (int regno)
 	  /* PT_READ_GPR requires the buffer parameter to point to long long,
 	     even if the register is really only 32 bits. */
 	  long long buf;
-	  rs6000_ptrace64 (PT_READ_GPR, PIDGET (inferior_ptid), nr, 0, (int *)&buf);
-	  if (register_size (current_gdbarch, regno) == 8)
+	  rs6000_ptrace64 (PT_READ_GPR, PIDGET (inferior_ptid), nr, 0, &buf);
+	  if (register_size (gdbarch, regno) == 8)
 	    memcpy (addr, &buf, 8);
 	  else
 	    *addr = buf;
@@ -262,7 +253,7 @@ fetch_register (int regno)
     }
 
   if (!errno)
-    regcache_raw_supply (current_regcache, regno, (char *) addr);
+    regcache_raw_supply (regcache, regno, (char *) addr);
   else
     {
 #if 0
@@ -276,18 +267,19 @@ fetch_register (int regno)
 /* Store register REGNO back into the inferior. */
 
 static void
-store_register (int regno)
+store_register (const struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
 
   /* Fetch the register's value from the register cache.  */
-  regcache_raw_collect (current_regcache, regno, addr);
+  regcache_raw_collect (regcache, regno, addr);
 
   /* -1 can be a successful return value, so infer errors from errno. */
   errno = 0;
 
-  nr = regmap (regno, &isfloat);
+  nr = regmap (gdbarch, regno, &isfloat);
 
   /* Floating-point registers. */
   if (isfloat)
@@ -296,7 +288,7 @@ store_register (int regno)
   /* Bogus register number. */
   else if (nr < 0)
     {
-      if (regno >= NUM_REGS)
+      if (regno >= gdbarch_num_regs (gdbarch))
 	fprintf_unfiltered (gdb_stderr,
 			    "gdb error: register no %d not implemented.\n",
 			    regno);
@@ -305,13 +297,13 @@ store_register (int regno)
   /* Fixed-point registers. */
   else
     {
-      if (regno == SP_REGNUM)
+      if (regno == gdbarch_sp_regnum (gdbarch))
 	/* Execute one dummy instruction (which is a breakpoint) in inferior
 	   process to give kernel a chance to do internal housekeeping.
 	   Otherwise the following ptrace(2) calls will mess up user stack
 	   since kernel will get confused about the bottom of the stack
 	   (%sp). */
-	exec_one_dummy_insn ();
+	exec_one_dummy_insn (gdbarch);
 
       /* The PT_WRITE_GPR operation is rather odd.  For 32-bit inferiors,
          the register's value is passed by value, but for 64-bit inferiors,
@@ -323,11 +315,11 @@ store_register (int regno)
 	  /* PT_WRITE_GPR requires the buffer parameter to point to an 8-byte
 	     area, even if the register is really only 32 bits. */
 	  long long buf;
-	  if (register_size (current_gdbarch, regno) == 8)
+	  if (register_size (gdbarch, regno) == 8)
 	    memcpy (&buf, addr, 8);
 	  else
 	    buf = *addr;
-	  rs6000_ptrace64 (PT_WRITE_GPR, PIDGET (inferior_ptid), nr, 0, (int *)&buf);
+	  rs6000_ptrace64 (PT_WRITE_GPR, PIDGET (inferior_ptid), nr, 0, &buf);
 	}
     }
 
@@ -341,40 +333,41 @@ store_register (int regno)
 /* Read from the inferior all registers if REGNO == -1 and just register
    REGNO otherwise. */
 
-void
-fetch_inferior_registers (int regno)
+static void
+rs6000_fetch_inferior_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
-    fetch_register (regno);
+    fetch_register (regcache, regno);
 
   else
     {
-      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
       /* Read 32 general purpose registers.  */
       for (regno = tdep->ppc_gp0_regnum;
            regno < tdep->ppc_gp0_regnum + ppc_num_gprs;
 	   regno++)
 	{
-	  fetch_register (regno);
+	  fetch_register (regcache, regno);
 	}
 
       /* Read general purpose floating point registers.  */
       if (tdep->ppc_fp0_regnum >= 0)
         for (regno = 0; regno < ppc_num_fprs; regno++)
-          fetch_register (tdep->ppc_fp0_regnum + regno);
+          fetch_register (regcache, tdep->ppc_fp0_regnum + regno);
 
       /* Read special registers.  */
-      fetch_register (PC_REGNUM);
-      fetch_register (tdep->ppc_ps_regnum);
-      fetch_register (tdep->ppc_cr_regnum);
-      fetch_register (tdep->ppc_lr_regnum);
-      fetch_register (tdep->ppc_ctr_regnum);
-      fetch_register (tdep->ppc_xer_regnum);
+      fetch_register (regcache, gdbarch_pc_regnum (gdbarch));
+      fetch_register (regcache, tdep->ppc_ps_regnum);
+      fetch_register (regcache, tdep->ppc_cr_regnum);
+      fetch_register (regcache, tdep->ppc_lr_regnum);
+      fetch_register (regcache, tdep->ppc_ctr_regnum);
+      fetch_register (regcache, tdep->ppc_xer_regnum);
       if (tdep->ppc_fpscr_regnum >= 0)
-        fetch_register (tdep->ppc_fpscr_regnum);
+        fetch_register (regcache, tdep->ppc_fpscr_regnum);
       if (tdep->ppc_mq_regnum >= 0)
-	fetch_register (tdep->ppc_mq_regnum);
+	fetch_register (regcache, tdep->ppc_mq_regnum);
     }
 }
 
@@ -382,139 +375,200 @@ fetch_inferior_registers (int regno)
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
 
-void
-store_inferior_registers (int regno)
+static void
+rs6000_store_inferior_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
-    store_register (regno);
+    store_register (regcache, regno);
 
   else
     {
-      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
       /* Write general purpose registers first.  */
       for (regno = tdep->ppc_gp0_regnum;
            regno < tdep->ppc_gp0_regnum + ppc_num_gprs;
 	   regno++)
 	{
-	  store_register (regno);
+	  store_register (regcache, regno);
 	}
 
       /* Write floating point registers.  */
       if (tdep->ppc_fp0_regnum >= 0)
         for (regno = 0; regno < ppc_num_fprs; regno++)
-          store_register (tdep->ppc_fp0_regnum + regno);
+          store_register (regcache, tdep->ppc_fp0_regnum + regno);
 
       /* Write special registers.  */
-      store_register (PC_REGNUM);
-      store_register (tdep->ppc_ps_regnum);
-      store_register (tdep->ppc_cr_regnum);
-      store_register (tdep->ppc_lr_regnum);
-      store_register (tdep->ppc_ctr_regnum);
-      store_register (tdep->ppc_xer_regnum);
+      store_register (regcache, gdbarch_pc_regnum (gdbarch));
+      store_register (regcache, tdep->ppc_ps_regnum);
+      store_register (regcache, tdep->ppc_cr_regnum);
+      store_register (regcache, tdep->ppc_lr_regnum);
+      store_register (regcache, tdep->ppc_ctr_regnum);
+      store_register (regcache, tdep->ppc_xer_regnum);
       if (tdep->ppc_fpscr_regnum >= 0)
-        store_register (tdep->ppc_fpscr_regnum);
+        store_register (regcache, tdep->ppc_fpscr_regnum);
       if (tdep->ppc_mq_regnum >= 0)
-	store_register (tdep->ppc_mq_regnum);
+	store_register (regcache, tdep->ppc_mq_regnum);
     }
 }
 
-/* Store in *TO the 32-bit word at 32-bit-aligned ADDR in the child
-   process, which is 64-bit if ARCH64 and 32-bit otherwise.  Return
-   success. */
 
-static int
-read_word (CORE_ADDR from, int *to, int arch64)
+/* Attempt a transfer all LEN bytes starting at OFFSET between the
+   inferior's OBJECT:ANNEX space and GDB's READBUF/WRITEBUF buffer.
+   Return the number of bytes actually transferred.  */
+
+static LONGEST
+rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
+		     const char *annex, gdb_byte *readbuf,
+		     const gdb_byte *writebuf,
+		     ULONGEST offset, LONGEST len)
 {
-  /* Retrieved values may be -1, so infer errors from errno. */
-  errno = 0;
-
-  if (arch64)
-    *to = rs6000_ptrace64 (PT_READ_I, PIDGET (inferior_ptid), from, 0, NULL);
-  else
-    *to = rs6000_ptrace32 (PT_READ_I, PIDGET (inferior_ptid), (int *)(long) from,
-                    0, NULL);
-
-  return !errno;
-}
-
-/* Copy LEN bytes to or from inferior's memory starting at MEMADDR
-   to debugger memory starting at MYADDR.  Copy to inferior if
-   WRITE is nonzero.
-
-   Returns the length copied, which is either the LEN argument or
-   zero.  This xfer function does not do partial moves, since
-   deprecated_child_ops doesn't allow memory operations to cross below
-   us in the target stack anyway.  */
-
-int
-child_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
-		   int write, struct mem_attrib *attrib,
-		   struct target_ops *target)
-{
-  /* Round starting address down to 32-bit word boundary. */
-  int mask = sizeof (int) - 1;
-  CORE_ADDR addr = memaddr & ~(CORE_ADDR)mask;
-
-  /* Round ending address up to 32-bit word boundary. */
-  int count = ((memaddr + len - addr + mask) & ~(CORE_ADDR)mask)
-    / sizeof (int);
-
-  /* Allocate word transfer buffer. */
-  /* FIXME (alloca): This code, cloned from infptrace.c, is unsafe
-     because it uses alloca to allocate a buffer of arbitrary size.
-     For very large xfers, this could crash GDB's stack.  */
-  int *buf = (int *) alloca (count * sizeof (int));
-
+  pid_t pid = ptid_get_pid (inferior_ptid);
   int arch64 = ARCH64 ();
-  int i;
 
-  if (!write)
+  switch (object)
     {
-      /* Retrieve memory a word at a time. */
-      for (i = 0; i < count; i++, addr += sizeof (int))
+    case TARGET_OBJECT_MEMORY:
+      {
+	union
 	{
-	  if (!read_word (addr, buf + i, arch64))
-	    return 0;
-	  QUIT;
+	  PTRACE_TYPE_RET word;
+	  gdb_byte byte[sizeof (PTRACE_TYPE_RET)];
+	} buffer;
+	ULONGEST rounded_offset;
+	LONGEST partial_len;
+
+	/* Round the start offset down to the next long word
+	   boundary.  */
+	rounded_offset = offset & -(ULONGEST) sizeof (PTRACE_TYPE_RET);
+
+	/* Since ptrace will transfer a single word starting at that
+	   rounded_offset the partial_len needs to be adjusted down to
+	   that (remember this function only does a single transfer).
+	   Should the required length be even less, adjust it down
+	   again.  */
+	partial_len = (rounded_offset + sizeof (PTRACE_TYPE_RET)) - offset;
+	if (partial_len > len)
+	  partial_len = len;
+
+	if (writebuf)
+	  {
+	    /* If OFFSET:PARTIAL_LEN is smaller than
+	       ROUNDED_OFFSET:WORDSIZE then a read/modify write will
+	       be needed.  Read in the entire word.  */
+	    if (rounded_offset < offset
+		|| (offset + partial_len
+		    < rounded_offset + sizeof (PTRACE_TYPE_RET)))
+	      {
+		/* Need part of initial word -- fetch it.  */
+		if (arch64)
+		  buffer.word = rs6000_ptrace64 (PT_READ_I, pid,
+						 rounded_offset, 0, NULL);
+		else
+		  buffer.word = rs6000_ptrace32 (PT_READ_I, pid,
+						 (int *)(uintptr_t)rounded_offset,
+						 0, NULL);
+	      }
+
+	    /* Copy data to be written over corresponding part of
+	       buffer.  */
+	    memcpy (buffer.byte + (offset - rounded_offset),
+		    writebuf, partial_len);
+
+	    errno = 0;
+	    if (arch64)
+	      rs6000_ptrace64 (PT_WRITE_D, pid,
+			       rounded_offset, buffer.word, NULL);
+	    else
+	      rs6000_ptrace32 (PT_WRITE_D, pid,
+			       (int *)(uintptr_t)rounded_offset, buffer.word, NULL);
+	    if (errno)
+	      return 0;
+	  }
+
+	if (readbuf)
+	  {
+	    errno = 0;
+	    if (arch64)
+	      buffer.word = rs6000_ptrace64 (PT_READ_I, pid,
+					     rounded_offset, 0, NULL);
+	    else
+	      buffer.word = rs6000_ptrace32 (PT_READ_I, pid,
+					     (int *)(uintptr_t)rounded_offset,
+					     0, NULL);
+	    if (errno)
+	      return 0;
+
+	    /* Copy appropriate bytes out of the buffer.  */
+	    memcpy (readbuf, buffer.byte + (offset - rounded_offset),
+		    partial_len);
+	  }
+
+	return partial_len;
+      }
+
+    default:
+      return -1;
+    }
+}
+
+/* Wait for the child specified by PTID to do something.  Return the
+   process ID of the child, or MINUS_ONE_PTID in case of error; store
+   the status in *OURSTATUS.  */
+
+static ptid_t
+rs6000_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
+{
+  pid_t pid;
+  int status, save_errno;
+
+  do
+    {
+      set_sigint_trap ();
+      set_sigio_trap ();
+
+      do
+	{
+	  pid = waitpid (ptid_get_pid (ptid), &status, 0);
+	  save_errno = errno;
+	}
+      while (pid == -1 && errno == EINTR);
+
+      clear_sigio_trap ();
+      clear_sigint_trap ();
+
+      if (pid == -1)
+	{
+	  fprintf_unfiltered (gdb_stderr,
+			      _("Child process unexpectedly missing: %s.\n"),
+			      safe_strerror (save_errno));
+
+	  /* Claim it exited with unknown signal.  */
+	  ourstatus->kind = TARGET_WAITKIND_SIGNALLED;
+	  ourstatus->value.sig = TARGET_SIGNAL_UNKNOWN;
+	  return minus_one_ptid;
 	}
 
-      /* Copy memory to supplied buffer. */
-      addr -= count * sizeof (int);
-      memcpy (myaddr, (char *)buf + (memaddr - addr), len);
+      /* Ignore terminated detached child processes.  */
+      if (!WIFSTOPPED (status) && pid != ptid_get_pid (inferior_ptid))
+	pid = -1;
     }
+  while (pid == -1);
+
+  /* AIX has a couple of strange returns from wait().  */
+
+  /* stop after load" status.  */
+  if (status == 0x57c)
+    ourstatus->kind = TARGET_WAITKIND_LOADED;
+  /* signal 0. I have no idea why wait(2) returns with this status word.  */
+  else if (status == 0x7f)
+    ourstatus->kind = TARGET_WAITKIND_SPURIOUS;
+  /* A normal waitstatus.  Let the usual macros deal with it.  */
   else
-    {
-      /* Fetch leading memory needed for alignment. */
-      if (addr < memaddr)
-	if (!read_word (addr, buf, arch64))
-	  return 0;
+    store_waitstatus (ourstatus, status);
 
-      /* Fetch trailing memory needed for alignment. */
-      if (addr + count * sizeof (int) > memaddr + len)
-	if (!read_word (addr + (count - 1) * sizeof (int),
-                        buf + count - 1, arch64))
-	  return 0;
-
-      /* Copy supplied data into memory buffer. */
-      memcpy ((char *)buf + (memaddr - addr), myaddr, len);
-
-      /* Store memory one word at a time. */
-      for (i = 0, errno = 0; i < count; i++, addr += sizeof (int))
-	{
-	  if (arch64)
-	    rs6000_ptrace64 (PT_WRITE_D, PIDGET (inferior_ptid), addr, buf[i], NULL);
-	  else
-	    rs6000_ptrace32 (PT_WRITE_D, PIDGET (inferior_ptid), (int *)(long) addr,
-		      buf[i], NULL);
-
-	  if (errno)
-	    return 0;
-	  QUIT;
-	}
-    }
-
-  return len;
+  return pid_to_ptid (pid);
 }
 
 /* Execute one dummy breakpoint instruction.  This way we give the kernel
@@ -522,19 +576,19 @@ child_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
    including u_area. */
 
 static void
-exec_one_dummy_insn (void)
+exec_one_dummy_insn (struct gdbarch *gdbarch)
 {
-#define	DUMMY_INSN_ADDR	(TEXT_SEGMENT_BASE)+0x200
+#define	DUMMY_INSN_ADDR	gdbarch_tdep (gdbarch)->text_segment_base+0x200
 
-  char shadow_contents[BREAKPOINT_MAX];		/* Stash old bkpt addr contents */
   int ret, status, pid;
   CORE_ADDR prev_pc;
+  void *bp;
 
   /* We plant one dummy breakpoint into DUMMY_INSN_ADDR address. We
      assume that this address will never be executed again by the real
      code. */
 
-  target_insert_breakpoint (DUMMY_INSN_ADDR, shadow_contents);
+  bp = deprecated_insert_raw_breakpoint (DUMMY_INSN_ADDR);
 
   /* You might think this could be done with a single ptrace call, and
      you'd be correct for just about every platform I've ever worked
@@ -558,88 +612,7 @@ exec_one_dummy_insn (void)
   while (pid != PIDGET (inferior_ptid));
 
   write_pc (prev_pc);
-  target_remove_breakpoint (DUMMY_INSN_ADDR, shadow_contents);
-}
-
-/* Fetch registers from the register section in core bfd. */
-
-static void
-fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
-		      int which, CORE_ADDR reg_addr)
-{
-  CoreRegs *regs;
-  int regi;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch); 
-
-  if (which != 0)
-    {
-      fprintf_unfiltered
-	(gdb_stderr,
-	 "Gdb error: unknown parameter to fetch_core_registers().\n");
-      return;
-    }
-
-  regs = (CoreRegs *) core_reg_sect;
-
-  /* Put the register values from the core file section in the regcache.  */
-
-  if (ARCH64 ())
-    {
-      for (regi = 0; regi < ppc_num_gprs; regi++)
-        regcache_raw_supply (current_regcache, tdep->ppc_gp0_regnum + regi,
-			     (char *) &regs->r64.gpr[regi]);
-
-      if (tdep->ppc_fp0_regnum >= 0)
-        for (regi = 0; regi < ppc_num_fprs; regi++)
-          regcache_raw_supply (current_regcache, tdep->ppc_fp0_regnum + regi,
-			       (char *) &regs->r64.fpr[regi]);
-
-      regcache_raw_supply (current_regcache, PC_REGNUM,
-			   (char *) &regs->r64.iar);
-      regcache_raw_supply (current_regcache, tdep->ppc_ps_regnum,
-			   (char *) &regs->r64.msr);
-      regcache_raw_supply (current_regcache, tdep->ppc_cr_regnum,
-			   (char *) &regs->r64.cr);
-      regcache_raw_supply (current_regcache, tdep->ppc_lr_regnum,
-			   (char *) &regs->r64.lr);
-      regcache_raw_supply (current_regcache, tdep->ppc_ctr_regnum,
-			   (char *) &regs->r64.ctr);
-      regcache_raw_supply (current_regcache, tdep->ppc_xer_regnum,
-			   (char *) &regs->r64.xer);
-      if (tdep->ppc_fpscr_regnum >= 0)
-        regcache_raw_supply (current_regcache, tdep->ppc_fpscr_regnum,
-			     (char *) &regs->r64.fpscr);
-    }
-  else
-    {
-      for (regi = 0; regi < ppc_num_gprs; regi++)
-        regcache_raw_supply (current_regcache, tdep->ppc_gp0_regnum + regi,
-			     (char *) &regs->r32.gpr[regi]);
-
-      if (tdep->ppc_fp0_regnum >= 0)
-        for (regi = 0; regi < ppc_num_fprs; regi++)
-          regcache_raw_supply (current_regcache, tdep->ppc_fp0_regnum + regi,
-			       (char *) &regs->r32.fpr[regi]);
-
-      regcache_raw_supply (current_regcache, PC_REGNUM,
-			   (char *) &regs->r32.iar);
-      regcache_raw_supply (current_regcache, tdep->ppc_ps_regnum,
-			   (char *) &regs->r32.msr);
-      regcache_raw_supply (current_regcache, tdep->ppc_cr_regnum,
-			   (char *) &regs->r32.cr);
-      regcache_raw_supply (current_regcache, tdep->ppc_lr_regnum,
-			   (char *) &regs->r32.lr);
-      regcache_raw_supply (current_regcache, tdep->ppc_ctr_regnum,
-			   (char *) &regs->r32.ctr);
-      regcache_raw_supply (current_regcache, tdep->ppc_xer_regnum,
-			   (char *) &regs->r32.xer);
-      if (tdep->ppc_fpscr_regnum >= 0)
-        regcache_raw_supply (current_regcache, tdep->ppc_fpscr_regnum,
-			     (char *) &regs->r32.fpscr);
-      if (tdep->ppc_mq_regnum >= 0)
-	regcache_raw_supply (current_regcache, tdep->ppc_mq_regnum,
-			     (char *) &regs->r32.mq);
-    }
+  deprecated_remove_raw_breakpoint (bp);
 }
 
 
@@ -774,7 +747,7 @@ add_vmap (LdInfo *ldi)
     abfd = bfd_fdopenr (objname, gnutarget, fd);
   if (!abfd)
     {
-      warning ("Could not open `%s' as an executable file: %s",
+      warning (_("Could not open `%s' as an executable file: %s"),
 	       objname, bfd_errmsg (bfd_get_error ()));
       return NULL;
     }
@@ -789,19 +762,19 @@ add_vmap (LdInfo *ldi)
       last = 0;
       /* FIXME??? am I tossing BFDs?  bfd? */
       while ((last = bfd_openr_next_archived_file (abfd, last)))
-	if (DEPRECATED_STREQ (mem, last->filename))
+	if (strcmp (mem, last->filename) == 0)
 	  break;
 
       if (!last)
 	{
-	  warning ("\"%s\": member \"%s\" missing.", objname, mem);
+	  warning (_("\"%s\": member \"%s\" missing."), objname, mem);
 	  bfd_close (abfd);
 	  return NULL;
 	}
 
       if (!bfd_check_format (last, bfd_object))
 	{
-	  warning ("\"%s\": member \"%s\" not in executable format: %s.",
+	  warning (_("\"%s\": member \"%s\" not in executable format: %s."),
 		   objname, mem, bfd_errmsg (bfd_get_error ()));
 	  bfd_close (last);
 	  bfd_close (abfd);
@@ -812,7 +785,7 @@ add_vmap (LdInfo *ldi)
     }
   else
     {
-      warning ("\"%s\": not in executable format: %s.",
+      warning (_("\"%s\": not in executable format: %s."),
 	       objname, bfd_errmsg (bfd_get_error ()));
       bfd_close (abfd);
       return NULL;
@@ -856,7 +829,7 @@ vmap_ldinfo (LdInfo *ldi)
 	  /* The kernel sets ld_info to -1, if the process is still using the
 	     object, and the object is removed. Keep the symbol info for the
 	     removed object and issue a warning.  */
-	  warning ("%s (fd=%d) has disappeared, keeping its symbols",
+	  warning (_("%s (fd=%d) has disappeared, keeping its symbols"),
 		   name, fd);
 	  continue;
 	}
@@ -873,8 +846,8 @@ vmap_ldinfo (LdInfo *ldi)
 
 	  /* The filenames are not always sufficient to match on. */
 
-	  if ((name[0] == '/' && !DEPRECATED_STREQ (name, vp->name))
-	      || (memb[0] && !DEPRECATED_STREQ (memb, vp->member)))
+	  if ((name[0] == '/' && strcmp (name, vp->name) != 0)
+	      || (memb[0] && strcmp (memb, vp->member) != 0))
 	    continue;
 
 	  /* See if we are referring to the same file.
@@ -885,7 +858,7 @@ vmap_ldinfo (LdInfo *ldi)
 	      || objfile->obfd == NULL
 	      || bfd_stat (objfile->obfd, &vi) < 0)
 	    {
-	      warning ("Unable to stat %s, keeping its symbols", name);
+	      warning (_("Unable to stat %s, keeping its symbols"), name);
 	      continue;
 	    }
 
@@ -909,9 +882,9 @@ vmap_ldinfo (LdInfo *ldi)
 	  vmap_symtab (vp);
 
 	  /* Announce new object files.  Doing this after symbol relocation
-	     makes aix-thread.c's job easier. */
-	  if (deprecated_target_new_objfile_hook && vp->objfile)
-	    deprecated_target_new_objfile_hook (vp->objfile);
+	     makes aix-thread.c's job easier.  */
+	  if (vp->objfile)
+	    observer_notify_new_objfile (vp->objfile);
 
 	  /* There may be more, so we don't break out of the loop.  */
 	}
@@ -933,11 +906,11 @@ vmap_ldinfo (LdInfo *ldi)
      running a different copy of the same executable.  */
   if (symfile_objfile != NULL && !got_exec_file)
     {
-      warning ("Symbol file %s\nis not mapped; discarding it.\n\
+      warning (_("Symbol file %s\nis not mapped; discarding it.\n\
 If in fact that file has symbols which the mapped files listed by\n\
 \"info files\" lack, you can load symbols with the \"symbol-file\" or\n\
 \"add-symbol-file\" commands (note that you must take care of relocating\n\
-symbols to the proper address).",
+symbols to the proper address)."),
 	       symfile_objfile->name);
       free_objfile (symfile_objfile);
       symfile_objfile = NULL;
@@ -967,21 +940,23 @@ vmap_exec (void)
   execbfd = exec_bfd;
 
   if (!vmap || !exec_ops.to_sections)
-    error ("vmap_exec: vmap or exec_ops.to_sections == 0\n");
+    error (_("vmap_exec: vmap or exec_ops.to_sections == 0."));
 
   for (i = 0; &exec_ops.to_sections[i] < exec_ops.to_sections_end; i++)
     {
-      if (DEPRECATED_STREQ (".text", exec_ops.to_sections[i].the_bfd_section->name))
+      if (strcmp (".text", exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->tstart - vmap->tvma;
 	  exec_ops.to_sections[i].endaddr += vmap->tstart - vmap->tvma;
 	}
-      else if (DEPRECATED_STREQ (".data", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (strcmp (".data",
+		       exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;
 	}
-      else if (DEPRECATED_STREQ (".bss", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (strcmp (".bss",
+		       exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;
@@ -992,13 +967,17 @@ vmap_exec (void)
 /* Set the current architecture from the host running GDB.  Called when
    starting a child process. */
 
+static void (*super_create_inferior) (char *exec_file, char *allargs,
+				      char **env, int from_tty);
 static void
-set_host_arch (int pid)
+rs6000_create_inferior (char *exec_file, char *allargs, char **env, int from_tty)
 {
   enum bfd_architecture arch;
   unsigned long mach;
   bfd abfd;
   struct gdbarch_info info;
+
+  super_create_inferior (exec_file, allargs, env, from_tty);
 
   if (__power_rs ())
     {
@@ -1035,15 +1014,15 @@ set_host_arch (int pid)
   info.abfd = exec_bfd;
 
   if (!gdbarch_update_p (info))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "set_host_arch: failed to select architecture");
-    }
+    internal_error (__FILE__, __LINE__,
+		    _("rs6000_create_inferior: failed to select architecture"));
 }
 
 
 /* xcoff_relocate_symtab -      hook for symbol table relocation.
-   also reads shared libraries.. */
+   
+   This is only applicable to live processes, and is a no-op when
+   debugging a core file.  */
 
 void
 xcoff_relocate_symtab (unsigned int pid)
@@ -1054,6 +1033,9 @@ xcoff_relocate_symtab (unsigned int pid)
   int arch64 = ARCH64 ();
   int ldisize = arch64 ? sizeof (ldi->l64) : sizeof (ldi->l32);
   int size;
+
+  if (ptid_equal (inferior_ptid, null_ptid))
+    return;
 
   do
     {
@@ -1078,7 +1060,7 @@ xcoff_relocate_symtab (unsigned int pid)
           if (errno == ENOMEM)
             load_segs *= 2;
           else
-            perror_with_name ("ptrace ldinfo");
+            perror_with_name (_("ptrace ldinfo"));
         }
       else
 	{
@@ -1192,19 +1174,13 @@ xcoff_relocate_core (struct target_ops *target)
 
       vmap_symtab (vp);
 
-      if (deprecated_target_new_objfile_hook && vp != vmap && vp->objfile)
-	deprecated_target_new_objfile_hook (vp->objfile);
+      if (vp != vmap && vp->objfile)
+	observer_notify_new_objfile (vp->objfile);
     }
   while (LDI_NEXT (ldi, arch64) != 0);
   vmap_exec ();
   breakpoint_re_set ();
   do_cleanups (old);
-}
-
-int
-kernel_u_size (void)
-{
-  return (sizeof (struct user));
 }
 
 /* Under AIX, we have to pass the correct TOC pointer to a function
@@ -1228,30 +1204,28 @@ find_toc_address (CORE_ADDR pc)
 					      : vp->objfile);
 	}
     }
-  error ("Unable to find TOC entry for pc %s\n", hex_string (pc));
+  error (_("Unable to find TOC entry for pc %s."), hex_string (pc));
 }
 
-/* Register that we are able to handle rs6000 core file formats. */
-
-static struct core_fns rs6000_core_fns =
-{
-  bfd_target_xcoff_flavour,		/* core_flavour */
-  default_check_format,			/* check_format */
-  default_core_sniffer,			/* core_sniffer */
-  fetch_core_registers,			/* core_read_registers */
-  NULL					/* next */
-};
 
 void
-_initialize_core_rs6000 (void)
+_initialize_rs6000_nat (void)
 {
-  /* Initialize hook in rs6000-tdep.c for determining the TOC address when
-     calling functions in the inferior.  */
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = rs6000_fetch_inferior_registers;
+  t->to_store_registers = rs6000_store_inferior_registers;
+  t->to_xfer_partial = rs6000_xfer_partial;
+
+  super_create_inferior = t->to_create_inferior;
+  t->to_create_inferior = rs6000_create_inferior;
+
+  t->to_wait = rs6000_wait;
+
+  add_target (t);
+
+  /* Initialize hook in rs6000-tdep.c for determining the TOC address
+     when calling functions in the inferior.  */
   rs6000_find_toc_address_hook = find_toc_address;
-
-  /* Initialize hook in rs6000-tdep.c to set the current architecture when
-     starting a child process. */
-  rs6000_set_host_arch_hook = set_host_arch;
-
-  deprecated_add_core_fns (&rs6000_core_fns);
 }

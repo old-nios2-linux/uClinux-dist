@@ -1,6 +1,6 @@
 /* YACC parser for Fortran expressions, for GDB.
-   Copyright 1986, 1989, 1990, 1991, 1993, 1994, 1995, 1996, 2000, 2001
-   Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1993, 1994, 1995, 1996, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -19,7 +19,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* This was blantantly ripped off the C expression parser, please 
    be aware of that as you look at its basic structure -FMB */ 
@@ -179,7 +180,6 @@ static int parse_number (char *, int, int, YYSTYPE *);
 %token <tsym> TYPENAME
 %type <sval> name
 %type <ssym> name_not_typename
-%type <tsym> typename
 
 /* A NAME_OR_INT is a symbol which is not known in the symbol table,
    but which would parse as a valid number in the current input radix.
@@ -218,7 +218,9 @@ static int parse_number (char *, int, int, YYSTYPE *);
 %left LSH RSH
 %left '@'
 %left '+' '-'
-%left '*' '/' '%'
+%left '*' '/'
+%right STARSTAR
+%right '%'
 %right UNARY 
 %right '('
 
@@ -284,18 +286,39 @@ arglist	:	exp
 			{ arglist_len = 1; }
 	;
 
-arglist :      substring
-                        { arglist_len = 2;}
+arglist :	subrange
+			{ arglist_len = 1; }
 	;
    
 arglist	:	arglist ',' exp   %prec ABOVE_COMMA
 			{ arglist_len++; }
 	;
 
-substring:	exp ':' exp   %prec ABOVE_COMMA
-			{ } 
+/* There are four sorts of subrange types in F90.  */
+
+subrange:	exp ':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (OP_F90_RANGE); 
+			  write_exp_elt_longcst (NONE_BOUND_DEFAULT);
+			  write_exp_elt_opcode (OP_F90_RANGE); }
 	;
 
+subrange:	exp ':'	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (OP_F90_RANGE);
+			  write_exp_elt_longcst (HIGH_BOUND_DEFAULT);
+			  write_exp_elt_opcode (OP_F90_RANGE); }
+	;
+
+subrange:	':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (OP_F90_RANGE);
+			  write_exp_elt_longcst (LOW_BOUND_DEFAULT);
+			  write_exp_elt_opcode (OP_F90_RANGE); }
+	;
+
+subrange:	':'	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (OP_F90_RANGE);
+			  write_exp_elt_longcst (BOTH_BOUND_DEFAULT);
+			  write_exp_elt_opcode (OP_F90_RANGE); }
+	;
 
 complexnum:     exp ',' exp 
                 	{ }                          
@@ -311,10 +334,20 @@ exp	:	'(' type ')' exp  %prec UNARY
 			  write_exp_elt_opcode (UNOP_CAST); }
 	;
 
+exp     :       exp '%' name
+                        { write_exp_elt_opcode (STRUCTOP_STRUCT);
+                          write_exp_string ($3);
+                          write_exp_elt_opcode (STRUCTOP_STRUCT); }
+        ;
+
 /* Binary operators in order of decreasing precedence.  */
 
 exp	:	exp '@' exp
 			{ write_exp_elt_opcode (BINOP_REPEAT); }
+	;
+
+exp	:	exp STARSTAR exp
+			{ write_exp_elt_opcode (BINOP_EXP); }
 	;
 
 exp	:	exp '*' exp
@@ -323,10 +356,6 @@ exp	:	exp '*' exp
 
 exp	:	exp '/' exp
 			{ write_exp_elt_opcode (BINOP_DIV); }
-	;
-
-exp	:	exp '%' exp
-			{ write_exp_elt_opcode (BINOP_REM); }
 	;
 
 exp	:	exp '+' exp
@@ -597,9 +626,6 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 			{ $$ = builtin_type_f_complex_s32;}
 	;
 
-typename:	TYPENAME
-	;
-
 nonempty_typelist
 	:	type
 		{ $$ = (struct type **) malloc (sizeof (struct type *) * 2);
@@ -614,11 +640,7 @@ nonempty_typelist
 	;
 
 name	:	NAME
-			{ $$ = $1.stoken; }
-	|	TYPENAME
-			{ $$ = $1.stoken; }
-	|	NAME_OR_INT
-			{ $$ = $1.stoken; }
+		{  $$ = $1.stoken; }
 	;
 
 name_not_typename :	NAME
@@ -744,23 +766,24 @@ parse_number (p, len, parsed_float, putithere)
      target int size is different to the target long size.
      
      In the expression below, we could have tested
-     (n >> TARGET_INT_BIT)
+     (n >> gdbarch_int_bit (current_gdbarch))
      to see if it was zero,
      but too many compilers warn about that, when ints and longs
      are the same size.  So we shift it twice, with fewer bits
      each time, for the same result.  */
   
-  if ((TARGET_INT_BIT != TARGET_LONG_BIT 
-       && ((n >> 2) >> (TARGET_INT_BIT-2)))   /* Avoid shift warning */
+  if ((gdbarch_int_bit (current_gdbarch) != gdbarch_long_bit (current_gdbarch)
+       && ((n >> 2)
+	   >> (gdbarch_int_bit (current_gdbarch)-2))) /* Avoid shift warning */
       || long_p)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch)-1);
       unsigned_type = builtin_type_unsigned_long;
       signed_type = builtin_type_long;
     }
   else 
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch)-1);
       unsigned_type = builtin_type_unsigned_int;
       signed_type = builtin_type_int;
     }    
@@ -954,7 +977,7 @@ yylex ()
 	}
     }
   
-  /* See if it is a special .foo. operator */
+  /* See if it is a special .foo. operator.  */
   
   for (i = 0; dot_ops[i].operator != NULL; i++)
     if (strncmp (tokstart, dot_ops[i].operator, strlen (dot_ops[i].operator)) == 0)
@@ -964,6 +987,15 @@ yylex ()
 	return dot_ops[i].token;
       }
   
+  /* See if it is an exponentiation operator.  */
+
+  if (strncmp (tokstart, "**", 2) == 0)
+    {
+      lexptr += 2;
+      yylval.opcode = BINOP_EXP;
+      return STARSTAR;
+    }
+
   switch (c = *tokstart)
     {
     case 0:

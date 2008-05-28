@@ -1,13 +1,13 @@
 /* Target signal translation functions for GDB.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef GDBSERVER
 #include "server.h"
@@ -28,7 +26,9 @@
 #include "gdb_string.h"
 #endif
 
+#ifdef HAVE_SIGNAL_H
 #include <signal.h>
+#endif
 
 /* Always use __SIGRTMIN if it's available.  SIGRTMIN is the lowest
    _available_ realtime signal, not the lowest supported; glibc takes
@@ -37,15 +37,15 @@
 #ifndef REALTIME_LO
 # if defined(__SIGRTMIN)
 #  define REALTIME_LO __SIGRTMIN
-#  define REALTIME_HI __SIGRTMAX
+#  define REALTIME_HI (__SIGRTMAX + 1)
 # elif defined(SIGRTMIN)
 #  define REALTIME_LO SIGRTMIN
-#  define REALTIME_HI SIGRTMAX
+#  define REALTIME_HI (SIGRTMAX + 1)
 # endif
 #endif
 
 /* This table must match in order and size the signals in enum target_signal
-   in target.h.  */
+   in src/include/gdb/signals.h.  */
 /* *INDENT-OFF* */
 static struct {
   char *name;
@@ -219,7 +219,7 @@ static struct {
 char *
 target_signal_to_string (enum target_signal sig)
 {
-  if ((sig >= TARGET_SIGNAL_FIRST) && (sig <= TARGET_SIGNAL_LAST))
+  if ((int) sig >= TARGET_SIGNAL_FIRST && (int) sig <= TARGET_SIGNAL_LAST)
     return signals[sig].string;
   else
     return signals[TARGET_SIGNAL_UNKNOWN].string;
@@ -229,7 +229,7 @@ target_signal_to_string (enum target_signal sig)
 char *
 target_signal_to_name (enum target_signal sig)
 {
-  if ((sig >= TARGET_SIGNAL_FIRST) && (sig <= TARGET_SIGNAL_LAST)
+  if ((int) sig >= TARGET_SIGNAL_FIRST && (int) sig <= TARGET_SIGNAL_LAST
       && signals[sig].name != NULL)
     return signals[sig].name;
   else
@@ -519,6 +519,9 @@ do_target_signal_to_host (enum target_signal oursig,
 			  int *oursig_ok)
 {
   int retsig;
+  /* Silence the 'not used' warning, for targets that
+     do not support signals.  */
+  (void) retsig;
 
   *oursig_ok = 1;
   switch (oursig)

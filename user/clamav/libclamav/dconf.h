@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2007 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,7 +21,9 @@
 #ifndef __DCONF_H
 #define __DCONF_H
 
+
 #include <stdio.h>
+#include <zlib.h>
 
 #include "clamav.h"
 #include "cltypes.h"
@@ -69,9 +73,11 @@ struct cli_dconf {
 #define ARCH_CONF_AUTOIT    0x2000
 
 /* Document flags */
-#define DOC_CONF_HTML	    0x1
-#define DOC_CONF_RTF	    0x2
-#define DOC_CONF_PDF	    0x4
+#define DOC_CONF_HTML		0x1
+#define DOC_CONF_RTF		0x2
+#define DOC_CONF_PDF		0x4
+#define DOC_CONF_SCRIPT 	0x8
+#define DOC_CONF_HTML_SKIPRAW	0x16
 
 /* Mail flags */
 #define MAIL_CONF_MBOX	    0x1
@@ -90,6 +96,5 @@ struct cli_dconf {
 
 struct cli_dconf *cli_dconf_init(void);
 void cli_dconf_print(struct cli_dconf *dconf);
-int cli_dconf_load(FILE *fd, struct cl_engine **engine, unsigned int options);
-
+int cli_dconf_load(FILE *fs, struct cl_engine **engine, unsigned int options, gzFile *gzs, unsigned int gzrsize);
 #endif

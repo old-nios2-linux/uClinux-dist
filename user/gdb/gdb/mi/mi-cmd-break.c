@@ -1,12 +1,12 @@
 /* MI Command Set - breakpoint and watchpoint commands.
-   Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "mi-cmds.h"
@@ -28,6 +26,7 @@
 #include "mi-getopt.h"
 #include "gdb-events.h"
 #include "gdb.h"
+#include "exceptions.h"
 
 enum
   {
@@ -39,7 +38,7 @@ enum
 static void
 breakpoint_notify (int b)
 {
-  gdb_breakpoint_query (uiout, b);
+  gdb_breakpoint_query (uiout, b, NULL);
 }
 
 
@@ -58,14 +57,8 @@ enum bp_type
     REGEXP_BP
   };
 
-/* Insert a breakpoint. The type of breakpoint is specified by the
-   first argument: -break-insert <location> --> insert a regular
-   breakpoint.  -break-insert -t <location> --> insert a temporary
-   breakpoint.  -break-insert -h <location> --> insert an hardware
-   breakpoint.  -break-insert -t -h <location> --> insert a temporary
-   hw bp.  
-   -break-insert -r <regexp> --> insert a bp at functions matching
-   <regexp> */
+/* Implements the -break-insert command.
+   See the MI manual for the list of possible options.  */
 
 enum mi_cmd_result
 mi_cmd_break_insert (char *command, char **argv, int argc)
@@ -76,12 +69,13 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
   int thread = -1;
   int ignore_count = 0;
   char *condition = NULL;
-  enum gdb_rc rc;
+  int pending = 0;
+  struct gdb_exception e;
   struct gdb_events *old_hooks;
   enum opt
     {
       HARDWARE_OPT, TEMP_OPT /*, REGEXP_OPT */ , CONDITION_OPT,
-      IGNORE_COUNT_OPT, THREAD_OPT
+      IGNORE_COUNT_OPT, THREAD_OPT, PENDING_OPT
     };
   static struct mi_opt opts[] =
   {
@@ -90,7 +84,8 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
     {"c", CONDITION_OPT, 1},
     {"i", IGNORE_COUNT_OPT, 1},
     {"p", THREAD_OPT, 1},
-    0
+    {"f", PENDING_OPT, 0},
+    { 0, 0, 0 }
   };
 
   /* Parse arguments. It could be -r or -h or -t, <location> or ``--''
@@ -124,48 +119,56 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 	case THREAD_OPT:
 	  thread = atol (optarg);
 	  break;
+	case PENDING_OPT:
+	  pending = 1;
+	  break;
 	}
     }
 
   if (optind >= argc)
-    error ("mi_cmd_break_insert: Missing <location>");
+    error (_("mi_cmd_break_insert: Missing <location>"));
   if (optind < argc - 1)
-    error ("mi_cmd_break_insert: Garbage following <location>");
+    error (_("mi_cmd_break_insert: Garbage following <location>"));
   address = argv[optind];
 
   /* Now we have what we need, let's insert the breakpoint! */
   old_hooks = deprecated_set_gdb_event_hooks (&breakpoint_hooks);
-  switch (type)
+  /* Make sure we restore hooks even if exception is thrown.  */
+  TRY_CATCH (e, RETURN_MASK_ALL)
     {
-    case REG_BP:
-      rc = gdb_breakpoint (address, condition,
-			   0 /*hardwareflag */ , temp_p,
-			   thread, ignore_count);
-      break;
-    case HW_BP:
-      rc = gdb_breakpoint (address, condition,
-			   1 /*hardwareflag */ , temp_p,
-			   thread, ignore_count);
-      break;
+      switch (type)
+	{
+	case REG_BP:
+	  set_breakpoint (address, condition,
+			  0 /*hardwareflag */ , temp_p,
+			  thread, ignore_count,
+			  pending);
+	  break;
+	case HW_BP:
+	  set_breakpoint (address, condition,
+			  1 /*hardwareflag */ , temp_p,
+			  thread, ignore_count,
+			  pending);
+	  break;
 #if 0
-    case REGEXP_BP:
-      if (temp_p)
-	error ("mi_cmd_break_insert: Unsupported tempoary regexp breakpoint");
-      else
-	rbreak_command_wrapper (address, FROM_TTY);
-      return MI_CMD_DONE;
-      break;
+	case REGEXP_BP:
+	  if (temp_p)
+	    error (_("mi_cmd_break_insert: Unsupported tempoary regexp breakpoint"));
+	  else
+	    rbreak_command_wrapper (address, FROM_TTY);
+	  return MI_CMD_DONE;
+	  break;
 #endif
-    default:
-      internal_error (__FILE__, __LINE__,
-		      "mi_cmd_break_insert: Bad switch.");
+	default:
+	  internal_error (__FILE__, __LINE__,
+			  _("mi_cmd_break_insert: Bad switch."));
+	}
     }
   deprecated_set_gdb_event_hooks (old_hooks);
+  if (e.reason < 0)
+    throw_exception (e);
 
-  if (rc == GDB_RC_FAIL)
-    return MI_CMD_CAUGHT_ERROR;
-  else
-    return MI_CMD_DONE;
+  return MI_CMD_DONE;
 }
 
 enum wp_type
@@ -194,7 +197,7 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
   {
     {"r", READ_OPT, 0},
     {"a", ACCESS_OPT, 0},
-    0
+    { 0, 0, 0 }
   };
 
   /* Parse arguments. */
@@ -216,9 +219,9 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
 	}
     }
   if (optind >= argc)
-    error ("mi_cmd_break_watch: Missing <expression>");
+    error (_("mi_cmd_break_watch: Missing <expression>"));
   if (optind < argc - 1)
-    error ("mi_cmd_break_watch: Garbage following <expression>");
+    error (_("mi_cmd_break_watch: Garbage following <expression>"));
   expr = argv[optind];
 
   /* Now we have what we need, let's insert the watchpoint! */
@@ -234,7 +237,7 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
       awatch_command_wrapper (expr, FROM_TTY);
       break;
     default:
-      error ("mi_cmd_break_watch: Unknown watchpoint type.");
+      error (_("mi_cmd_break_watch: Unknown watchpoint type."));
     }
   return MI_CMD_DONE;
 }

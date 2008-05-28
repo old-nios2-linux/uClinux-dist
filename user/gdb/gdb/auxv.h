@@ -1,12 +1,12 @@
 /* Auxiliary vector support for GDB, the GNU debugger.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef AUXV_H
 #define AUXV_H
@@ -31,18 +29,12 @@
 struct target_ops;		/* Forward declaration.  */
 
 
-/* Read all the auxv data into a contiguous xmalloc'd buffer,
-   stored in *DATA.  Return the size in bytes of this data.
-   If zero, there is no data and *DATA is null.
-   if < 0, there was an error and *DATA is null.  */
-extern LONGEST target_auxv_read (struct target_ops *ops, char **data);
-
 /* Read one auxv entry from *READPTR, not reading locations >= ENDPTR.
    Return 0 if *READPTR is already at the end of the buffer.
    Return -1 if there is insufficient buffer for a whole entry.
    Return 1 if an entry was read into *TYPEP and *VALP.  */
 extern int target_auxv_parse (struct target_ops *ops,
-			      char **readptr, char *endptr,
+			      gdb_byte **readptr, gdb_byte *endptr,
 			      CORE_ADDR *typep, CORE_ADDR *valp);
 
 /* Extract the auxiliary vector entry with a_type matching MATCH.
@@ -66,8 +58,8 @@ extern int fprint_target_auxv (struct ui_file *file, struct target_ops *ops);
 extern LONGEST procfs_xfer_auxv (struct target_ops *ops,
 				 int /* enum target_object */ object,
 				 const char *annex,
-				 void *readbuf,
-				 const void *writebuf,
+				 gdb_byte *readbuf,
+				 const gdb_byte *writebuf,
 				 ULONGEST offset,
 				 LONGEST len);
 

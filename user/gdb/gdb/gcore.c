@@ -1,12 +1,13 @@
 /* Generate a core file for the inferior process.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "elf-bfd.h"
@@ -30,6 +29,11 @@
 #include "cli/cli-decode.h"
 
 #include "gdb_assert.h"
+
+/* The largest amount of memory to read from the target at once.  We
+   must throttle it to limit the amount of memory used by GDB during
+   generate-core-file for programs with large resident data.  */
+#define MAX_COPY_BYTES (1024 * 1024)
 
 static char *default_gcore_target (void);
 static enum bfd_architecture default_gcore_arch (void);
@@ -68,7 +72,7 @@ gcore_command (char *args, int from_tty)
   /* Open the output file.  */
   obfd = bfd_openw (corefilename, default_gcore_target ());
   if (!obfd)
-    error ("Failed to open '%s' for output.", corefilename);
+    error (_("Failed to open '%s' for output."), corefilename);
 
   /* Need a cleanup that will close the file (FIXME: delete it?).  */
   old_chain = make_cleanup_bfd_close (obfd);
@@ -82,27 +86,28 @@ gcore_command (char *args, int from_tty)
   /* Create the note section.  */
   if (note_data != NULL && note_size != 0)
     {
-      note_sec = bfd_make_section_anyway (obfd, "note0");
+      note_sec = bfd_make_section_anyway_with_flags (obfd, "note0",
+						     SEC_HAS_CONTENTS
+						     | SEC_READONLY
+						     | SEC_ALLOC);
       if (note_sec == NULL)
-	error ("Failed to create 'note' section for corefile: %s",
+	error (_("Failed to create 'note' section for corefile: %s"),
 	       bfd_errmsg (bfd_get_error ()));
 
       bfd_set_section_vma (obfd, note_sec, 0);
-      bfd_set_section_flags (obfd, note_sec,
-			     SEC_HAS_CONTENTS | SEC_READONLY | SEC_ALLOC);
       bfd_set_section_alignment (obfd, note_sec, 0);
       bfd_set_section_size (obfd, note_sec, note_size);
     }
 
   /* Now create the memory/load sections.  */
   if (gcore_memory_sections (obfd) == 0)
-    error ("gcore: failed to get corefile memory sections from target.");
+    error (_("gcore: failed to get corefile memory sections from target."));
 
   /* Write out the contents of the note section.  */
   if (note_data != NULL && note_size != 0)
     {
       if (!bfd_set_section_contents (obfd, note_sec, note_data, 0, note_size))
-	warning ("writing note section (%s)", bfd_errmsg (bfd_get_error ()));
+	warning (_("writing note section (%s)"), bfd_errmsg (bfd_get_error ()));
     }
 
   /* Succeeded.  */
@@ -119,14 +124,13 @@ default_gcore_mach (void)
 #if 1	/* See if this even matters...  */
   return 0;
 #else
-#ifdef TARGET_ARCHITECTURE
-  const struct bfd_arch_info *bfdarch = TARGET_ARCHITECTURE;
+
+  const struct bfd_arch_info *bfdarch = gdbarch_bfd_arch_info (current_gdbarch);
 
   if (bfdarch != NULL)
     return bfdarch->mach;
-#endif /* TARGET_ARCHITECTURE */
   if (exec_bfd == NULL)
-    error ("Can't find default bfd machine type (need execfile).");
+    error (_("Can't find default bfd machine type (need execfile)."));
 
   return bfd_get_mach (exec_bfd);
 #endif /* 1 */
@@ -135,14 +139,13 @@ default_gcore_mach (void)
 static enum bfd_architecture
 default_gcore_arch (void)
 {
-#ifdef TARGET_ARCHITECTURE
-  const struct bfd_arch_info * bfdarch = TARGET_ARCHITECTURE;
+  const struct bfd_arch_info * bfdarch = gdbarch_bfd_arch_info
+					 (current_gdbarch);
 
   if (bfdarch != NULL)
     return bfdarch->arch;
-#endif
   if (exec_bfd == NULL)
-    error ("Can't find bfd architecture for corefile (need execfile).");
+    error (_("Can't find bfd architecture for corefile (need execfile)."));
 
   return bfd_get_arch (exec_bfd);
 }
@@ -181,8 +184,8 @@ derive_stack_segment (bfd_vma *bottom, bfd_vma *top)
   /* Save frame pointer of TOS frame.  */
   *top = get_frame_base (fi);
   /* If current stack pointer is more "inner", use that instead.  */
-  if (INNER_THAN (read_sp (), *top))
-    *top = read_sp ();
+  if (gdbarch_inner_than (get_frame_arch (fi), get_frame_sp (fi), *top))
+    *top = get_frame_sp (fi);
 
   /* Find prev-most frame.  */
   while ((tmp_fi = get_prev_frame (fi)) != NULL)
@@ -355,6 +358,7 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
 	      && !(bfd_get_file_flags (abfd) & BFD_IN_MEMORY))
 	    {
 	      flags &= ~SEC_LOAD;
+	      flags |= SEC_NEVER_LOAD;
 	      goto keep;	/* break out of two nested for loops */
 	    }
 	}
@@ -368,10 +372,10 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
   else
     flags |= SEC_DATA;
 
-  osec = bfd_make_section_anyway (obfd, "load");
+  osec = bfd_make_section_anyway_with_flags (obfd, "load", flags);
   if (osec == NULL)
     {
-      warning ("Couldn't make gcore segment: %s",
+      warning (_("Couldn't make gcore segment: %s"),
 	       bfd_errmsg (bfd_get_error ()));
       return 1;
     }
@@ -385,7 +389,6 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
   bfd_set_section_size (obfd, osec, size);
   bfd_set_section_vma (obfd, osec, vaddr);
   bfd_section_lma (obfd, osec) = 0; /* ??? bfd_set_section_lma?  */
-  bfd_set_section_flags (obfd, osec, flags);
   return 0;
 }
 
@@ -444,7 +447,8 @@ objfile_find_memory_regions (int (*func) (CORE_ADDR, unsigned long,
 static void
 gcore_copy_callback (bfd *obfd, asection *osec, void *ignored)
 {
-  bfd_size_type size = bfd_section_size (obfd, osec);
+  bfd_size_type size, total_size = bfd_section_size (obfd, osec);
+  file_ptr offset = 0;
   struct cleanup *old_chain = NULL;
   void *memhunk;
 
@@ -456,19 +460,35 @@ gcore_copy_callback (bfd *obfd, asection *osec, void *ignored)
   if (strncmp ("load", bfd_section_name (obfd, osec), 4) != 0)
     return;
 
+  size = min (total_size, MAX_COPY_BYTES);
   memhunk = xmalloc (size);
   /* ??? This is crap since xmalloc should never return NULL.  */
   if (memhunk == NULL)
-    error ("Not enough memory to create corefile.");
+    error (_("Not enough memory to create corefile."));
   old_chain = make_cleanup (xfree, memhunk);
 
-  if (target_read_memory (bfd_section_vma (obfd, osec),
-			  memhunk, size) != 0)
-    warning ("Memory read failed for corefile section, %s bytes at 0x%s\n",
-	     paddr_d (size), paddr (bfd_section_vma (obfd, osec)));
-  if (!bfd_set_section_contents (obfd, osec, memhunk, 0, size))
-    warning ("Failed to write corefile contents (%s).",
-	     bfd_errmsg (bfd_get_error ()));
+  while (total_size > 0)
+    {
+      if (size > total_size)
+	size = total_size;
+
+      if (target_read_memory (bfd_section_vma (obfd, osec) + offset,
+			      memhunk, size) != 0)
+	{
+	  warning (_("Memory read failed for corefile section, %s bytes at 0x%s."),
+		   paddr_d (size), paddr (bfd_section_vma (obfd, osec)));
+	  break;
+	}
+      if (!bfd_set_section_contents (obfd, osec, memhunk, offset, size))
+	{
+	  warning (_("Failed to write corefile contents (%s)."),
+		   bfd_errmsg (bfd_get_error ()));
+	  break;
+	}
+
+      total_size -= size;
+      offset += size;
+    }
 
   do_cleanups (old_chain);	/* Frees MEMHUNK.  */
 }
@@ -491,10 +511,9 @@ gcore_memory_sections (bfd *obfd)
 void
 _initialize_gcore (void)
 {
-  add_com ("generate-core-file", class_files, gcore_command,
-	   "\
+  add_com ("generate-core-file", class_files, gcore_command, _("\
 Save a core file with the current state of the debugged process.\n\
-Argument is optional filename.  Default filename is 'core.<process_id>'.");
+Argument is optional filename.  Default filename is 'core.<process_id>'."));
 
   add_com_alias ("gcore", "generate-core-file", class_files, 1);
   exec_set_find_memory_regions (objfile_find_memory_regions);

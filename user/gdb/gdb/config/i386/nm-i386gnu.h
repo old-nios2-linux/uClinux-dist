@@ -1,11 +1,11 @@
 /* Native-dependent definitions for Intel 386 running the GNU Hurd
-   Copyright 1994, 1995, 1996, 2002 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 2002, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,15 +14,20 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef NM_I386GNU_H
 #define NM_I386GNU_H
 
-/* Include common definitions for GNU systems.  */
-#include "config/nm-gnu.h"
+#include <unistd.h>
+#include <mach.h>
+#include <mach/exception.h>
+#include "regcache.h"
+
+extern char *gnu_target_pid_to_str (int pid);
+
+/* Don't do wait_for_inferior on attach.  */
+#define ATTACH_NO_WAIT
 
 /* Thread flavors used in re-setting the T bit.  */
 #define THREAD_STATE_FLAVOR		i386_REGS_SEGS_STATE

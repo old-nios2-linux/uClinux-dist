@@ -726,6 +726,38 @@ create_atc_entry:
 #endif /* CPU_M68020_OR_M68030 */
 #endif /* !CONFIG_SUN3 */
 
+#if defined(CONFIG_COLDFIRE)
+static const char *accesserror_type[] ={
+				"Not an access or address error nor an interrupted debug service routine", /* 0 */
+				"Reserved", /* 1 */
+				"Interrupt during a debug service routine for faults other than access errors", /* 2 */
+				"Reserved", /* 3 */
+				"Error on instruction fetch", /* 4 */
+				"TLB miss on opword of instruction fetch", /* 5 */
+				"TLB miss on extension word of instruction fetch", /* 6 */
+				"IFP access error while executing in emulator mode", /* 7 */
+				"Error on data write", /* 8 */
+				"Error on attempted write to write-protected space", /* 9 */
+				"TLB miss on data write", /* 10 */
+				"Reserved", /* 11 */
+				"Error on data read", /* 12 */
+				"Attempted read, read-modify-write of protected space", /* 13 */
+				"TLB miss on data read, or read-modify-write", /* 14 */
+				"OEP access error while executing in emulator mode" /* 15 */ };
+
+static inline void access_errorCF (struct frame *fp)
+{
+	unsigned int vector = fp->ptregs.vector;
+	unsigned int fs;
+	
+	fs = ((vector & 0x0c00) >> 8) | (vector & 0x0003);
+	printk(KERN_ERR "Access Error Exception %d: %s\n", fs, accesserror_type[fs]);
+
+	die_if_kernel("Oops", &fp->ptregs, 0);
+	force_sig(SIGSEGV, current);
+}
+#endif
+
 asmlinkage void buserr_c(struct frame *fp)
 {
 	/* Only set esp0 if coming from user mode */
@@ -752,6 +784,11 @@ asmlinkage void buserr_c(struct frame *fp)
 	case 0xb:
 	  bus_error030 (fp);
 	  break;
+#endif
+#if defined (CONFIG_COLDFIRE)
+	case 0x4:
+		access_errorCF (fp);
+		break;
 #endif
 	default:
 	  die_if_kernel("bad frame format",&fp->ptregs,0);

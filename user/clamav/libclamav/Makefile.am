@@ -1,5 +1,5 @@
 #
-#  Copyright (C) 2002 - 2006 Tomasz Kojm <tkojm@clamav.net>
+#  Copyright (C) 2002 - 2007 Tomasz Kojm <tkojm@clamav.net>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -16,16 +16,21 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
+SUBDIRS = lzma .
 
-INCLUDES = -I$(top_srcdir) -I@srcdir@/nsis
+AM_CPPFLAGS = -I$(top_srcdir) -I@srcdir@/nsis -I@srcdir@/lzma
 
 if ENABLE_UNRAR
-libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
+libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la $(top_builddir)/libclamunrar_iface/libclamunrar_iface.la
 else
-libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@
+libclamav_la_LIBADD = @LIBCLAMAV_LIBS@ @THREAD_LIBS@ lzma/liblzma.la
 endif
 
 libclamav_la_LDFLAGS = @TH_SAFE@ -version-info @LIBCLAMAV_VERSION@ -no-undefined
+
+if VERSIONSCRIPT
+libclamav_la_LDFLAGS += -Wl,@VERSIONSCRIPTFLAG@,@top_srcdir@/libclamav/libclamav.map
+endif
 
 include_HEADERS = clamav.h
 
@@ -51,8 +56,11 @@ libclamav_la_SOURCES = \
 	str.h \
 	scanners.c \
 	scanners.h \
+	textdet.c \
+	textdet.h \
 	filetypes.c \
 	filetypes.h \
+	filetypes_int.h \
 	rtf.c \
 	rtf.h \
 	blob.c \
@@ -61,8 +69,6 @@ libclamav_la_SOURCES = \
 	mbox.h \
 	message.c \
 	message.h \
-	snprintf.c \
-	snprintf.h \
 	table.c \
 	table.h \
 	text.c \
@@ -106,6 +112,10 @@ libclamav_la_SOURCES = \
 	untar.h \
 	unzip.c \
 	unzip.h \
+	inflate64.c \
+	inflate64.h \
+	inffixed64.h \
+	inflate64_priv.h \
 	special.c \
 	special.h \
 	binhex.c \
@@ -128,17 +138,15 @@ libclamav_la_SOURCES = \
 	regex/utils.h \
 	unarj.c \
 	unarj.h \
-	nsis/LZMADecode.c \
-	nsis/LZMADecode.h \
 	nsis/bzlib.c \
 	nsis/bzlib_private.h \
-	nsis/infblock.c \
 	nsis/nsis_bzlib.h \
+	nsis/nulsft.c \
+	nsis/nulsft.h \
+	nsis/infblock.c \
 	nsis/nsis_zconf.h \
 	nsis/nsis_zlib.h \
 	nsis/nsis_zutil.h \
-	nsis/nulsft.c \
-	nsis/nulsft.h \
 	pdf.c \
 	pdf.h \
 	spin.c \
@@ -173,8 +181,20 @@ libclamav_la_SOURCES = \
 	hashtab.h \
 	dconf.c \
 	dconf.h \
-	lockdb.c \
-	lockdb.h
+	lzma_iface.c \
+	lzma_iface.h \
+	explode.c \
+	explode.h \
+	textnorm.c \
+	textnorm.h
 
+libclamav_internal_utils_la_SOURCES=str.c \
+				    str.h \
+				    others.c \
+				    others.h
+
+libclamav_internal_utils_la_LDFLAGS=-static
+libclamav_internal_utils_la_CFLAGS=-DCLI_MEMFUNSONLY
 lib_LTLIBRARIES = libclamav.la
-EXTRA_DIST = regex/engine.c
+noinst_LTLIBRARIES = libclamav_internal_utils.la
+EXTRA_DIST = regex/engine.c libclamav.map

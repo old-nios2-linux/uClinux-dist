@@ -174,10 +174,6 @@ int scanmanager(const struct optstruct *opt)
 
     if(!opt_check(opt,"no-phishing-scan-urls"))
 	dboptions |= CL_DB_PHISHING_URLS;
-    if(!opt_check(opt,"no-phishing-restrictedscan")) {
-	/* not scanning all domains, check only URLs with domains from .pdb */
-	options |= CL_SCAN_PHISHING_DOMAINLIST;
-    }
     if(opt_check(opt,"phishing-ssl")) {
 	options |= CL_SCAN_PHISHING_BLOCKSSL;
     }
@@ -224,9 +220,22 @@ int scanmanager(const struct optstruct *opt)
     /* set limits */
     memset(&limits, 0, sizeof(struct cl_limits));
 
-    if(opt_check(opt, "max-space")) {
+    if(opt_check(opt, "max-scansize")) {
 	char *cpy, *ptr;
-	ptr = opt_arg(opt, "max-space");
+	ptr = opt_arg(opt, "max-scansize");
+	if(tolower(ptr[strlen(ptr) - 1]) == 'm') {
+	    cpy = calloc(strlen(ptr), 1);
+	    strncpy(cpy, ptr, strlen(ptr) - 1);
+	    limits.maxscansize = atoi(cpy) * 1024 * 1024;
+	    free(cpy);
+	} else
+	    limits.maxscansize = atoi(ptr) * 1024;
+    } else
+	limits.maxscansize = 104857600;
+
+    if(opt_check(opt, "max-filesize")) {
+	char *cpy, *ptr;
+	ptr = opt_arg(opt, "max-filesize");
 	if(tolower(ptr[strlen(ptr) - 1]) == 'm') {
 	    cpy = calloc(strlen(ptr), 1);
 	    strncpy(cpy, ptr, strlen(ptr) - 1);
@@ -235,27 +244,17 @@ int scanmanager(const struct optstruct *opt)
 	} else
 	    limits.maxfilesize = atoi(ptr) * 1024;
     } else
-	limits.maxfilesize = 10485760;
+	limits.maxfilesize = 26214400;
 
     if(opt_check(opt, "max-files"))
 	limits.maxfiles = atoi(opt_arg(opt, "max-files"));
     else
-        limits.maxfiles = 500;
+        limits.maxfiles = 10000;
 
     if(opt_check(opt, "max-recursion"))
         limits.maxreclevel = atoi(opt_arg(opt, "max-recursion"));
     else
-        limits.maxreclevel = 8;
-
-    if(opt_check(opt, "max-mail-recursion"))
-        limits.maxmailrec = atoi(opt_arg(opt, "max-mail-recursion"));
-    else
-        limits.maxmailrec = 64;
-
-    if(opt_check(opt, "max-ratio"))
-        limits.maxratio = atoi(opt_arg(opt, "max-ratio"));
-    else
-        limits.maxratio = 250;
+        limits.maxreclevel = 16;
 
     /* set options */
 
@@ -269,9 +268,6 @@ int scanmanager(const struct optstruct *opt)
 
     if(opt_check(opt, "block-encrypted"))
 	options |= CL_SCAN_BLOCKENCRYPTED;
-
-    if(opt_check(opt, "block-max"))
-	options |= CL_SCAN_BLOCKMAX;
 
     if(opt_check(opt, "no-pe"))
 	options &= ~CL_SCAN_PE;
@@ -420,28 +416,27 @@ static int clamav_unpack(const char *prog, const char **args, const char *tmpdir
 {
 	pid_t pid;
 	int status, wret, fdevnull;
-	unsigned int maxfiles, maxspace;
+	unsigned int maxfiles, maxscansize;
 	struct s_du n;
 
 
     if(opt_check(opt, "max-files"))
 	maxfiles = atoi(opt_arg(opt, "max-files"));
     else
-	maxfiles = 0;
+	maxfiles = 10000;
 
-    if(opt_check(opt, "max-space")) {
+    if(opt_check(opt, "max-scansize")) {
 	    char *cpy, *ptr;
-	ptr = opt_arg(opt, "max-space");
+	ptr = opt_arg(opt, "max-scansize");
 	if(tolower(ptr[strlen(ptr) - 1]) == 'm') { /* megabytes */
 	    cpy = calloc(strlen(ptr), 1);
 	    strncpy(cpy, ptr, strlen(ptr) - 1);
-	    maxspace = atoi(cpy) * 1024;
+	    maxscansize = atoi(cpy) * 1024;
 	    free(cpy);
 	} else /* default - kilobytes */
-	    maxspace = atoi(ptr);
+	    maxscansize = atoi(ptr);
     } else
-	maxspace = 0;
-
+	maxscansize = 104857600;
 
     switch(pid = fork()) {
 	case -1:
@@ -493,12 +488,12 @@ static int clamav_unpack(const char *prog, const char **args, const char *tmpdir
 	    break;
 	default:
 
-	    if(maxfiles || maxspace) {
+	    if(maxscansize || maxfiles) {
 		while(!(wret = waitpid(pid, &status, WNOHANG))) {
 		    memset(&n, 0, sizeof(struct s_du));
 
 		    if(!du(tmpdir, &n))
-			if((maxfiles && n.files > maxfiles) || (maxspace && n.space > maxspace)) {
+			if((maxfiles && n.files > maxfiles) || (maxscansize && n.space > maxscansize)) {
 			    logg("*n.files: %u, n.space: %lu\n", n.files, n.space);
 			    kill(pid, 9); /* stop it immediately */
 			}
@@ -1025,6 +1020,10 @@ int scanfile(const char *filename, struct cl_engine *engine, const struct passwd
      */
 
     if((cli_strbcasestr(filename, ".zip") || cli_strbcasestr(filename, ".rar")) && (options & CL_SCAN_ARCHIVE)) {
+
+#ifndef ENABLE_UNRAR
+      if(cli_strbcasestr(filename, ".zip"))
+#endif
 	/* try to use internal archivers */
 	if((ret = checkfile(filename, engine, limits, options, 1)) == CL_VIRUS) {
 	    if(opt_check(opt, "remove")) {

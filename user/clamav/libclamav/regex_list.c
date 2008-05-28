@@ -1,10 +1,12 @@
 /*
  *  Match a string against a list of patterns/regexes.
  *
- *  Copyright (C) 2006-2007 Török Edvin <edwin@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: TÃ¶rÃ¶k Edvin
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as 
+ *  it under the terms of the GNU General Public License version 2 as
  *  published by the Free Software Foundation.
  *
  *  This program is distributed in the hope that it will be useful,
@@ -16,7 +18,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
- *
  */
 
 #if HAVE_CONFIG_H
@@ -33,21 +34,11 @@
 #endif
 #endif
 
-
-/* TODO: when implementation of new version is complete, enable it in CL_EXPERIMENTAL */
-#ifdef CL_EXPERIMENTAL
-/*#define USE_NEW_VERSION*/
-#endif
-
-#ifndef USE_NEW_VERSION
-/*this is the old version of regex_list.c
- *reason for redesign: there is only one node type that has to handle all the cases: binary search among children, alternatives list, match.
- * This design is very error-prone.*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <zlib.h>
 
 #include <limits.h>
 #include <sys/types.h>
@@ -59,7 +50,9 @@
 #include "others.h"
 #include "regex_list.h"
 #include "matcher-ac.h"
+#include "matcher.h"
 #include "str.h"
+#include "readdb.h"
 
 /*Tree*/
 enum token_op_t {OP_CHAR,OP_STDCLASS,OP_CUSTOMCLASS,OP_DOT,OP_LEAF,OP_ROOT,OP_PARCLOSE};
@@ -75,15 +68,15 @@ typedef unsigned char* char_bitmap_p;
  */
 struct tree_node {
 	struct tree_node* next;/* next regex/complex sibling, or parent, if no more siblings , can't be NULL except for root node*/
-	unsigned char c;
-	enum token_op_t op;
-	char alternatives;/* number of (non-regex) children of node, i.e. sizeof(children)*/
-	char listend;/* no more siblings, next pointer is pointer to parent*/
 	union {
 		struct tree_node** children;/* alternatives nr. of children, followed by (a null pointer terminated) regex leaf node pointers) */
 		char_bitmap_p* bitmap;
 		struct leaf_info*  leaf;
 	} u;
+	enum token_op_t op;
+	unsigned char c;
+	char alternatives;/* number of (non-regex) children of node, i.e. sizeof(children)*/
+	char listend;/* no more siblings, next pointer is pointer to parent*/
 };
 
 struct leaf_info {
@@ -236,7 +229,7 @@ static inline size_t get_char_at_pos_with_skip(const struct pre_fixup_info* info
 		realpos++;
 	}
 	while(str[realpos]==' ') realpos++;
-	cli_dbgmsg("calc_pos_with_skip:%s\n",str+realpos);	
+	cli_dbgmsg("calc_pos_with_skip:%s\n",str+realpos);
 	return (pos>0 && !str[realpos]) ? '\0' : str[realpos>0?realpos-1:0];
 }
 
@@ -255,6 +248,7 @@ static inline size_t get_char_at_pos_with_skip(const struct pre_fixup_info* info
  */
 int regex_list_match(struct regex_matcher* matcher,char* real_url,const char* display_url,const struct pre_fixup_info* pre_fixup,int hostOnly,const char** info,int is_whitelist)
 {
+	char* orig_real_url = real_url;
 	massert(matcher);
 	massert(real_url);
 	massert(display_url);
@@ -262,6 +256,9 @@ int regex_list_match(struct regex_matcher* matcher,char* real_url,const char* di
 	if(!matcher->list_inited)
 		return 0;
 	massert(matcher->list_built);
+	/* skip initial '.' inserted by get_host */
+	if(real_url[0] == '.') real_url++;
+	if(display_url[0] == '.') display_url++;
 	{
 		size_t real_len    = strlen(real_url);
 		size_t display_len = strlen(display_url);
@@ -278,7 +275,7 @@ int regex_list_match(struct regex_matcher* matcher,char* real_url,const char* di
 		buffer[real_len]= (!is_whitelist && hostOnly) ? '\0' : ':';
 		if(!hostOnly || is_whitelist) {
 			strncpy(buffer+real_len+1,display_url,display_len);
-			if(is_whitelist) 
+			if(is_whitelist)
 				buffer[buffer_len - 1] = '/';
 			buffer[buffer_len]=0;
 		}
@@ -291,34 +288,44 @@ int regex_list_match(struct regex_matcher* matcher,char* real_url,const char* di
 
 			for(i = 0; i < matcher->root_hosts_cnt; i++) {
 				/* doesn't need to match terminating \0*/
-				rc = cli_ac_scanbuff((unsigned char*)buffer,buffer_len,info, &matcher->root_hosts[i] ,&mdata,0,0,0,-1,NULL);
+				rc = cli_ac_scanbuff((unsigned char*)buffer,buffer_len,info, &matcher->root_hosts[i] ,&mdata,0,0,-1,NULL,AC_SCAN_VIR,NULL);
 				cli_ac_freedata(&mdata);
 				if(rc) {
 					char c;
-					const char* matched = strchr(*info,':');	
+					const char* matched = strchr(*info,':');
 					const size_t match_len = matched ? strlen(matched+1) : 0;
 					if(((c=get_char_at_pos_with_skip(pre_fixup,buffer,buffer_len+1))==' ' || c=='\0' || c=='/' || c=='?') &&
 						(match_len == buffer_len || /* full match */
 					        (match_len < buffer_len &&
-						((c=get_char_at_pos_with_skip(pre_fixup,buffer,buffer_len-match_len))=='.' || (c==' ')) ) 
+						((c=get_char_at_pos_with_skip(pre_fixup,buffer,buffer_len-match_len))=='.' || (c==' ')) )
 						/* subdomain matched*/)) {
 
-						cli_dbgmsg("Got a match: %s with %s\n",buffer,*info);
-						cli_dbgmsg("Before inserting .: %s\n",real_url);
+						cli_dbgmsg("Got a match: %s with %s\n", buffer, *info);
+						cli_dbgmsg("Before inserting .: %s\n", orig_real_url);
 						if(real_len >= match_len + 1) {
-							real_url[real_len-match_len-1]='.';
-							cli_dbgmsg("After inserting .: %s\n",real_url);
+							const size_t pos = real_len - match_len - 1;
+							if(real_url[pos] != '.') {
+								/* we need to shift left, and insert a '.'
+								 * we have an extra '.' at the beginning inserted by get_host to have room,
+								 * orig_real_url has to be used here, 
+								 * because we want to overwrite that extra '.' */
+								size_t orig_real_len = strlen(orig_real_url);
+								cli_dbgmsg("No dot here:%s\n",real_url+pos);
+								real_url = orig_real_url;
+								memmove(real_url, real_url+1, orig_real_len-match_len-1);
+								real_url[orig_real_len-match_len-1]='.';
+								cli_dbgmsg("After inserting .: %s\n", real_url);
+							}
 						}
 						break;
 					}
-					cli_dbgmsg("Ignoring false match: %s with %s,%c\n",buffer,*info,c);
+					cli_dbgmsg("Ignoring false match: %s with %s, mismatched character: %c\n", buffer, *info, c);
 					rc=0;
 				}
 			}
 		} else
 			rc = 0;
-    
-		if(!rc) 
+		if(!rc)
 			rc = match_node(hostOnly ? matcher->root_regex_hostonly : matcher->root_regex,(unsigned char*)buffer,buffer_len,info) == MATCH_SUCCESS ? CL_VIRUS : CL_SUCCESS;
 		free(buffer);
 		if(!rc)
@@ -437,6 +444,7 @@ static int add_regex_list_element(struct cli_matcher* root,const char* pattern,c
 
        len = strlen(pattern);
        /* need not to match \0 too */
+       new->rtype = 0;
        new->type = 0;
        new->sigid = 0;
        new->parts = 0;
@@ -446,6 +454,7 @@ static int add_regex_list_element(struct cli_matcher* root,const char* pattern,c
        new->offset = 0;
        new->target = 0;
        new->length = len;
+       new->ch[0] = new->ch[1] |= CLI_MATCH_IGNORE;
        if(new->length > root->maxpatlen)
                root->maxpatlen = new->length;
 
@@ -513,13 +522,12 @@ static int functionality_level_check(char* line)
 
 
 /* Load patterns/regexes from file */
-int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int options,int is_whitelist)
+int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int options,int is_whitelist,gzFile *gzs,unsigned int gzrsize)
 {
 	int rc,line=0;
 	char buffer[FILEBUFF];
 
 	massert(matcher);
-	massert(fd);
 
 	if(matcher->list_inited==-1)
 		return CL_EMALFDB; /* already failed to load */
@@ -527,7 +535,7 @@ int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int optio
 		cli_warnmsg("Regex list has already been loaded, ignoring further requests for load\n");
 		return CL_SUCCESS;
 	}*/
-	if(!fd) {
+	if(!fd && !gzs) {
 		cli_errmsg("Unable to load regex list (null file)\n");
 		return CL_EIO;
 	}
@@ -562,7 +570,7 @@ int load_regex_matcher(struct regex_matcher* matcher,FILE* fd,unsigned int optio
 	 * If a line in the file doesn't conform to this format, loading fails
 	 * 
 	 */
-	while(fgets(buffer,FILEBUFF,fd)) {
+	while(cli_dbgets(buffer, FILEBUFF, fd, gzs, &gzrsize)) {
 		char* pattern;
 		char* flags;
 		cli_chomp(buffer);
@@ -1539,404 +1547,3 @@ void dump_tree(struct tree_node* root)
 	printf("}\n");
 }
 #endif
-
-
-#else
-/*------------------------New version of regex_list.c------------------------*/
-
-/* Regex_list.c: 
- * A scalable, trie-based implementation for matching against 
- * a list of regular expressions.
- *
- * A trivial way to implement matching against a list of regular expressions 
- * would have been to construct a single regular expression, by concatenating 
- * the list with the alternate (|) operator.
- * BUT a usual DFA implementation of regular expression matching (eg.: GNU libc)
- * leads to "state explosion" when there are many (5000+) alternate (|) operators.
- * This is the reason for using a trie-based implementation.
- *
- *
- * Design considerations:
- *
- * Recursive call points: there are situations when match has to be retried on a different sub-trie, or with a different repeat count.
- * Alternate operators, and repeat/range operators (+,*,{}) are recursiv call points. When a failure is encountered during a match,
- * the function simply returns from the recursive call, and ends up at a failure point (recursive call point).
- *
- * "go to parent" below actually means, return from recursive call.
- *
- * fail_action: we need to return to closest failure point (recursive call point),
- *  and switch current node to node pointed by fail_action
- *
- * Node types:
- * 	OP_ROOT: contains information that applies to the entire trie.
- * 		it can only appear as root node, and not as child node.
- * 		On child fail: match has failed
- * 		This is NOT a recursive call point
- * 	OP_CHAR_BINARY_SEARCH: chooses a sub-trie, based on current character; 
- * 			using binary-search
- * 			On fail: go to node indicated by fail_action, or if 
- * 				fail_action is NULL, to parent
- * 			On child fail: execute fail of current node
- * 	OP_ALTERNATIVES: try matching each sub-trie, if all fails execute fail
- * 		action of current node. This is a recursive call point
- * 	OP_CHAR_REPEAT: repeat specified character a number of times in range:
- *		[min_range, max_range]; 
- *			min_range: 0 for * operator
- *				   1 for + operator
- *			max_range: remaining length of current string for *,+ operator
- *			OR: min_range, max_range as specified by the {min,max} operator
- *		On fail: fail_action, or parent if NULL
- *		On child fail: reduce match repeat count, try again on child, if
- *			repeat count<min_range, execute fail of current node
- *		Also has a bitmap on what characters are accepted beyond it,
- *		as an optimizations for the case, when a maximum match isn't possible
- *		Not recomended to use this when min_range=max_range=1
- *		This is a recursive call point
- *	OP_DOT_REPEAT: like OP_CHAR_REPEAT but accept any character
- *		Not recomended to use this when min_range=max_range=1
- *		This is a recursive call point
- *	OP_GROUP_START: start of a group "(", also specifies group flags:
- *		repeat: is_repeat, min_range, max_range
- *		This is a recursive call point if is_repeat
- *	OP_GROUP_END: end of group ")"
- *      OP_STRCMP: compare with specified string,
- *      	   it has an array of fail actions, one for each character
- *      	   default fail action: go to parent
- *      	   This was introduced from memory- and speed-efficiency
- *      	   considerations. 
- *      OP_CHAR_CLASS_REPEAT: match character with character class
- *      	min_range, max_range
- *      	For a single character class min_range=max_range=1
- *	OP_MATCH_OK: match has succeeded
- *
- * TODO: maybe we'll need a more efficient way to choose between character classes.
- *       OP_DOT_REPEAT/OP_CHAR_REPEAT needs a more efficient specification of its failure function, instead of using
- *       backtracking approach.
- *
- * The failure function/action is just for optimization, the match algorithms works even without it.
- * TODO:In this first draft fail action will always be NULL, in a later version I'll implement fail actions too.
- *
- *
- */ 
-
-#include <string.h>
-#include "cltypes.h"
-#include "others.h"
-
-/* offsetof is not ANSI C */
-#ifndef offsetof
-#   define offsetof(type,memb) ((size_t)&((type*)0)->memb)
-#endif
-
-#define container_of(ptr, type, member) ( (type *) ((char *)ptr - offsetof(type, member)) )
-#define container_of_const(ptr, type, member) ( (type *) ((const char *)ptr - offsetof(type, member)) )
-
-enum trie_node_type {
-	OP_ROOT,
-	OP_CHAR_BINARY_SEARCH,
-	OP_ALTERNATIVES,
-	OP_CHAR_REPEAT,
-	OP_DOT_REPEAT,
-	OP_CHAR_CLASS_REPEAT,
-	OP_STRCMP,
-	OP_GROUP_START,
-	OP_GROUP_END,
-	OP_MATCH_OK
-};
-
-
-/* the comon definition of a trie node */
-struct trie_node
-{
-	enum trie_node_type type;
-};
-
-struct trie_node_match {
-	struct trie_node node;
-	/* additional match info */
-};
-
-struct trie_node_root
-{
-	struct trie_node node;
-	struct trie_node* child;
-};
-
-struct trie_node_binary_search
-{
-	struct trie_node node;
-	uint8_t children_count;/* number of children to search among -1! 255 = 256 children*/	
-	struct trie_node* fail_action;
-	unsigned char* char_choices;/* children_count elements */
-	struct trie_node** children;/*children_count elements */
-};
-
-struct trie_node_alternatives
-{
-	struct trie_node node;
-	uint32_t alternatives_count;
-	/* need to support node with lots of alternatives, 
-	 * for a worst-case scenario where each line ends up as a sub-trie of OP_ALTERNATIVES*/
-	struct trie_node* fail_action;
-	struct trie_node** children;
-};
-
-struct trie_node_char_repeat
-{
-	struct trie_node node;
-	unsigned char character;
-	uint8_t range_min, range_max;/* according to POSIX we need not support more than 255 repetitions*/
-	struct char_bitmap* bitmap_accept_after;/* bitmap of characters accepted after this, 
-						   to optimize repeat < max_range case; if its NULL
-						   there is no optimization*/
-	struct trie_node* child;
-	struct trie_node* fail_action;
-};
-
-struct trie_node_dot_repeat
-{
-	struct trie_node node;
-	uint8_t range_min, range_max;/* according to POSIX we need not support more than 255 repetitions*/
-	struct char_bitmap* bitmap_accept_after;/* bitmap of characters accepted after this, 
-						   to optimize repeat < max_range case; if its NULL
-						   there is no optimization*/
-	struct trie_node* child;
-	struct trie_node* fail_action;
-};
-
-struct trie_node_group_start
-{
-	struct trie_node node;
-	uint8_t range_min, range_max;/* if range_min==range_max==1, then this is NOT a repeat, thus not a recursive call point*/
-	struct trie_node* child;
-	struct trie_node* fail_action;	
-};
-
-struct trie_node_group_end
-{
-	struct trie_node node;
-	struct trie_node* child;
-};
-
-struct trie_node_strcmp
-{
-	struct trie_node node;
-	uint8_t string_length;/* for longer strings a sequence of node_strcmp should be used */
-	unsigned char* string;
-	struct trie_node* child;
-	struct trie_node** fail_actions;/* this has string_length elements, or NULL if no fail_actions are computed */
-};
-
-struct trie_node_char_class_repeat
-{
-	struct trie_node node;
-	struct char_bitmap* bitmap;
-	struct char_bitmap* bitmap_accept_after;
-	uint8_t range_min, range_max;
-	struct trie_node* child;
-	struct trie_node* fail_action;
-};
-
-static inline int bitmap_accepts(const struct char_bitmap* bitmap, const char c)
-{
-	/* TODO: check if c is accepted by bitmap */
-	return 0;
-}
-
-#define MATCH_FAILED 0
-#define MATCH_OK     1
-
-#define FAIL_ACTION( fail_node ) (*fail_action = (fail_node), MATCH_FAILED)
-
-
-#ifndef MIN
-#define MIN(a,b) ((a)<(b) ? (a) : (b))
-#endif
-
-static int match_node(const struct trie_node* node, const unsigned char* text, const unsigned char* text_end, const struct trie_node** fail_action);
-
-static int match_repeat(const unsigned char* text, const unsigned char* text_end, const size_t range_min, const size_t repeat_start, 
-		const struct char_bitmap* bitmap_accept_after, const struct trie_node* child, const struct trie_node** fail_action,
-		const struct trie_node* this_fail_action)
-{
-	size_t i;
-	for(i = repeat_start;i > range_min;i--) {
-		if(!bitmap_accept_after || bitmap_accepts( bitmap_accept_after, text[i-1])) {
-			int rc = match_node(child, &text[i], text_end, fail_action);
-			/* ignore fail_action for now, we have the bitmap_accepts_after optimization */
-			if(rc) {
-				return MATCH_OK;
-			}
-		}						
-	}
-	if(!range_min) {
-		/* this match is optional, try child only */
-		int rc = match_node(child, text, text_end, fail_action);
-		if(rc) {
-			return MATCH_OK;
-		}
-	}
-	return FAIL_ACTION(this_fail_action);
-}
-
-/* text_end points to \0 in text */
-static int match_node(const struct trie_node* node, const unsigned char* text, const unsigned char* text_end, const struct trie_node** fail_action)
-{
-	while(node && text < text_end) {	
-		switch(node->type) {
-			case OP_ROOT:
-				{	
-					const struct trie_node_root* root_node = container_of_const(node, const struct trie_node_root, node);
-					node = root_node->child;
-					break;
-				}
-			case OP_CHAR_BINARY_SEARCH:
-				{					
-					const struct trie_node_binary_search* bin_node = container_of_const(node, const struct trie_node_binary_search, node);
-					const unsigned char csearch = *text;
-					size_t mid, left = 0, right = bin_node->children_count-1;					
-					while(left<=right) {
-						mid = left+(right-left)/2;
-						if(bin_node->char_choices[mid] == csearch)
-							break;
-						else if(bin_node->char_choices[mid] < csearch)
-							left = mid+1;
-						else
-							right = mid-1;
-					}
-					if(left <= right) {
-						/* match successful */
-						node = bin_node->children[mid];
-						++text;
-					}
-					else {
-						return FAIL_ACTION( bin_node->fail_action );
-					}
-					break;
-				}
-			case OP_ALTERNATIVES:
-				{
-					const struct trie_node_alternatives* alt_node = container_of_const(node, const struct trie_node_alternatives, node);
-					size_t i;
-					*fail_action = NULL;
-					for(i=0;i < alt_node->alternatives_count;i++) {
-						int rc = match_node(alt_node->children[i], text, text_end, fail_action);
-						if(rc) {							
-							return MATCH_OK;
-						}
-						/* supporting fail_actions is tricky,
-						 *  if we just go to the node specified, what happens if the match fails, and no
-						 *  further fail_action is specified? We should know where to continue the search.
-						 * For now fail_action isn't supported for OP_ALTERNATIVES*/						
-					}
-					break;
-				}
-			case OP_CHAR_REPEAT:
-				{
-					const struct trie_node_char_repeat* char_rep_node = container_of_const(node, const struct trie_node_char_repeat, node);
-					const size_t max_len = MIN( text_end - text, char_rep_node->range_max-1);
-					/* todo: what about the 8 bit limitation of range_max, and what about inf (+,*)? */
-					const char caccept = char_rep_node->character;
-					size_t rep;
-
-					if(max_len < char_rep_node->range_min)
-						return FAIL_ACTION(char_rep_node->fail_action);
-
-					for(rep=0;rep < max_len;rep++) {
-						if(text[rep] != caccept) {
-							break;
-						}
-					}
-
-					return match_repeat(text, text_end, char_rep_node->range_min, rep,
-							char_rep_node->bitmap_accept_after, char_rep_node->child, fail_action,
-							char_rep_node->fail_action);
-				}
-			case OP_DOT_REPEAT:
-				{
-					const struct trie_node_dot_repeat* dot_rep_node = container_of_const(node, const struct trie_node_dot_repeat, node);
-					const size_t max_len = MIN( text_end - text, dot_rep_node->range_max-1);
-					/* todo: what about the 8 bit limitation of range_max, and what about inf (+,*)? */
-
-					if(max_len < dot_rep_node->range_min)
-						return FAIL_ACTION(dot_rep_node->fail_action);
-
-					return match_repeat(text, text_end, dot_rep_node->range_min, max_len,
-							dot_rep_node->bitmap_accept_after, dot_rep_node->child, fail_action,
-							dot_rep_node->fail_action);
-				}
-			case OP_CHAR_CLASS_REPEAT:
-				{
-					const struct trie_node_char_class_repeat* class_rep_node = container_of_const(node, const struct trie_node_char_class_repeat, node);
-					const size_t max_len = MIN( text_end - text, class_rep_node->range_max-1);
-					/* todo: what about the 8 bit limitation of range_max, and what about inf (+,*)? */
-					size_t rep;
-
-					if(max_len < class_rep_node->range_min)
-						return FAIL_ACTION(class_rep_node->fail_action);
-
-					for(rep=0;rep < max_len;rep++) {
-						if(!bitmap_accepts( class_rep_node->bitmap, text[rep])) {
-							break;
-						}
-					}
-
-					return match_repeat(text, text_end, class_rep_node->range_min, rep,
-							class_rep_node->bitmap_accept_after, class_rep_node->child, fail_action,
-							class_rep_node->fail_action);
-					break;
-				}
-			case OP_STRCMP:
-				{
-					const struct trie_node_strcmp* strcmp_node = container_of_const(node, const struct trie_node_strcmp, node);
-					size_t i;
-					if(strcmp_node->fail_actions) {
-						const size_t max_len = MIN(strcmp_node->string_length, text_end-text);
-						/* we don't use strncmp, because we need the exact match-fail point */
-						for(i=0;i < max_len;i++) {
-							if(text[i] != strcmp_node->string[i]) {
-								return FAIL_ACTION( strcmp_node->fail_actions[i] );
-							}
-						}
-						if(max_len < strcmp_node->string_length) {
-							/* failed, because text was shorter */
-							return FAIL_ACTION( strcmp_node->fail_actions[max_len] );
-						}
-					}
-					else {
-						/* no fail_actions computed, some shortcuts possible on compare */
-						if((text_end - text < strcmp_node->string_length) ||
-								strncmp((const char*)text, (const char*)strcmp_node->string, strcmp_node->string_length)) {
-
-							return FAIL_ACTION( NULL );
-						}
-					}
-					/* match successful */
-					node = strcmp_node->child;
-					text += strcmp_node->string_length;
-					break;
-				}
-			case OP_GROUP_START:
-				{
-					const struct trie_node_group_start* group_start_node = container_of_const(node, const struct trie_node_group_start, node);
-					/* TODO: implement */
-					break;
-				}
-			case OP_GROUP_END:
-				{					
-					const struct trie_node_group_end* group_end_node = container_of_const(node, const struct trie_node_group_end, node);
-					/* TODO: implement */
-					break;
-				}
-			case OP_MATCH_OK:
-				{
-					return MATCH_OK;
-				}
-		}
-	}
-	/* if fail_action was NULL, or text ended*/
-	return MATCH_FAILED;
-}
-
-#endif
-

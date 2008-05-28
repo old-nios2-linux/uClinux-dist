@@ -1,22 +1,21 @@
 /* Target-dependent code for GNU/Linux running on PA-RISC, for GDB.
 
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -29,6 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "trad-frame.h"
 #include "dwarf2-frame.h"
 #include "value.h"
+#include "regset.h"
+#include "regcache.h"
 #include "hppa-tdep.h"
 
 #include "elf/common.h"
@@ -47,17 +48,17 @@ hppa_dwarf_reg_to_regnum (int reg)
   if (reg >= 32 && reg <= 85)
     return HPPA_FP4_REGNUM + (reg - 32);
 
-  warning ("Unmapped DWARF Register #%d encountered\n", reg);
+  warning (_("Unmapped DWARF Register #%d encountered."), reg);
   return -1;
 }
 #endif
 
 static void
-hppa_linux_target_write_pc (CORE_ADDR v, ptid_t ptid)
+hppa_linux_target_write_pc (struct regcache *regcache, CORE_ADDR v)
 {
   /* Probably this should be done by the kernel, but it isn't.  */
-  write_register_pid (HPPA_PCOQ_HEAD_REGNUM, v | 0x3, ptid);
-  write_register_pid (HPPA_PCOQ_TAIL_REGNUM, (v + 4) | 0x3, ptid);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, v | 0x3);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_TAIL_REGNUM, (v + 4) | 0x3);
 }
 
 /* An instruction to match.  */
@@ -65,57 +66,6 @@ struct insn_pattern
 {
   unsigned int data;            /* See if it matches this....  */
   unsigned int mask;            /* ... with this mask.  */
-};
-
-/* See bfd/elf32-hppa.c */
-static struct insn_pattern hppa_long_branch_stub[] = {
-  /* ldil LR'xxx,%r1 */
-  { 0x20200000, 0xffe00000 },
-  /* be,n RR'xxx(%sr4,%r1) */
-  { 0xe0202002, 0xffe02002 }, 
-  { 0, 0 }
-};
-
-static struct insn_pattern hppa_long_branch_pic_stub[] = {
-  /* b,l .+8, %r1 */
-  { 0xe8200000, 0xffe00000 },
-  /* addil LR'xxx - ($PIC_pcrel$0 - 4), %r1 */
-  { 0x28200000, 0xffe00000 },
-  /* be,n RR'xxxx - ($PIC_pcrel$0 - 8)(%sr4, %r1) */
-  { 0xe0202002, 0xffe02002 }, 
-  { 0, 0 }
-};
-
-static struct insn_pattern hppa_import_stub[] = {
-  /* addil LR'xxx, %dp */
-  { 0x2b600000, 0xffe00000 },
-  /* ldw RR'xxx(%r1), %r21 */
-  { 0x48350000, 0xffffb000 },
-  /* bv %r0(%r21) */
-  { 0xeaa0c000, 0xffffffff },
-  /* ldw RR'xxx+4(%r1), %r19 */
-  { 0x48330000, 0xffffb000 },
-  { 0, 0 }
-};
-
-static struct insn_pattern hppa_import_pic_stub[] = {
-  /* addil LR'xxx,%r19 */
-  { 0x2a600000, 0xffe00000 },
-  /* ldw RR'xxx(%r1),%r21 */
-  { 0x48350000, 0xffffb000 },
-  /* bv %r0(%r21) */
-  { 0xeaa0c000, 0xffffffff },
-  /* ldw RR'xxx+4(%r1),%r19 */
-  { 0x48330000, 0xffffb000 },
-  { 0, 0 },
-};
-
-static struct insn_pattern hppa_plt_stub[] = {
-  /* b,l 1b, %r20 - 1b is 3 insns before here */
-  { 0xea9f1fdd, 0xffffffff },
-  /* depi 0,31,2,%r20 */
-  { 0xd6801c1e, 0xffffffff },
-  { 0, 0 }
 };
 
 static struct insn_pattern hppa_sigtramp[] = {
@@ -151,7 +101,7 @@ insns_match_pattern (CORE_ADDR pc,
     {
       char buf[4];
 
-      deprecated_read_memory_nobpt (npc, buf, 4);
+      read_memory_nobpt (npc, buf, 4);
       insn[i] = extract_unsigned_integer (buf, 4);
       if ((insn[i] & pattern[i].mask) == pattern[i].data)
         npc += 4;
@@ -159,97 +109,6 @@ insns_match_pattern (CORE_ADDR pc,
         return 0;
     }
   return 1;
-}
-
-static int
-hppa_linux_in_dyncall (CORE_ADDR pc)
-{
-  return pc == hppa_symbol_address("$$dyncall");
-}
-
-/* There are several kinds of "trampolines" that we need to deal with:
-   - long branch stubs: these are inserted by the linker when a branch
-     target is too far away for a branch insn to reach
-   - plt stubs: these should go into the .plt section, so are easy to find
-   - import stubs: used to call from object to shared lib or shared lib to 
-     shared lib; these go in regular text sections.  In fact the linker tries
-     to put them throughout the code because branches have limited reachability.
-     We use the same mechanism as ppc64 to recognize the stub insn patterns.
-   - $$dyncall: similar to hpux, hppa-linux uses $$dyncall for indirect function
-     calls. $$dyncall is exported by libgcc.a  */
-static int
-hppa_linux_in_solib_call_trampoline (CORE_ADDR pc, char *name)
-{
-  unsigned int insn[HPPA_MAX_INSN_PATTERN_LEN];
-  int r;
-
-  r = in_plt_section (pc, name)
-      || hppa_linux_in_dyncall (pc)
-      || insns_match_pattern (pc, hppa_import_stub, insn)
-      || insns_match_pattern (pc, hppa_import_pic_stub, insn)
-      || insns_match_pattern (pc, hppa_long_branch_stub, insn)
-      || insns_match_pattern (pc, hppa_long_branch_pic_stub, insn);
-
-  return r;
-}
-
-static CORE_ADDR
-hppa_linux_skip_trampoline_code (CORE_ADDR pc)
-{
-  unsigned int insn[HPPA_MAX_INSN_PATTERN_LEN];
-  int dp_rel, pic_rel;
-
-  /* dyncall handles both PLABELs and direct addresses */
-  if (hppa_linux_in_dyncall (pc))
-    {
-      pc = (CORE_ADDR) read_register (22);
-
-      /* PLABELs have bit 30 set; if it's a PLABEL, then dereference it */
-      if (pc & 0x2)
-	pc = (CORE_ADDR) read_memory_integer (pc & ~0x3, TARGET_PTR_BIT / 8);
-
-      return pc;
-    }
-
-  dp_rel = pic_rel = 0;
-  if ((dp_rel = insns_match_pattern (pc, hppa_import_stub, insn))
-      || (pic_rel = insns_match_pattern (pc, hppa_import_pic_stub, insn)))
-    {
-      /* Extract the target address from the addil/ldw sequence.  */
-      pc = hppa_extract_21 (insn[0]) + hppa_extract_14 (insn[1]);
-
-      if (dp_rel)
-        pc += (CORE_ADDR) read_register (27);
-      else
-        pc += (CORE_ADDR) read_register (19);
-
-      /* fallthrough */
-    }
-
-  if (in_plt_section (pc, NULL))
-    {
-      pc = (CORE_ADDR) read_memory_integer (pc, TARGET_PTR_BIT / 8);
-
-      /* if the plt slot has not yet been resolved, the target will
-         be the plt stub */
-      if (in_plt_section (pc, NULL))
-	{
-	  /* Sanity check: are we pointing to the plt stub? */
-  	  if (insns_match_pattern (pc, hppa_plt_stub, insn))
-	    {
-	      /* this should point to the fixup routine */
-      	      pc = (CORE_ADDR) read_memory_integer (pc + 8, TARGET_PTR_BIT / 8);
-	    }
-	  else
-	    {
-	      error ("Cannot resolve plt stub at 0x%s\n",
-		     paddr_nz (pc));
-	      pc = 0;
-	    }
-	}
-    }
-
-  return pc;
 }
 
 /* Signal frames.  */
@@ -424,7 +283,7 @@ hppa_linux_sigtramp_frame_prev_register (struct frame_info *next_frame,
 					 int regnum, int *optimizedp,
 					 enum lval_type *lvalp, 
 					 CORE_ADDR *addrp,
-					 int *realnump, void *valuep)
+					 int *realnump, gdb_byte *valuep)
 {
   struct hppa_linux_sigtramp_unwind_cache *info
     = hppa_linux_sigtramp_frame_unwind_cache (next_frame, this_prologue_cache);
@@ -466,7 +325,7 @@ hppa_linux_sigtramp_unwind_sniffer (struct frame_info *next_frame)
    d_un.d_ptr value is the global pointer.  */
 
 static CORE_ADDR
-hppa_linux_find_global_pointer (struct value *function)
+hppa_linux_find_global_pointer (struct gdbarch *gdbarch, struct value *function)
 {
   struct obj_section *faddr_sect;
   CORE_ADDR faddr;
@@ -541,6 +400,112 @@ hppa_linux_find_global_pointer (struct value *function)
     }
   return 0;
 }
+
+/*
+ * Registers saved in a coredump:
+ * gr0..gr31
+ * sr0..sr7
+ * iaoq0..iaoq1
+ * iasq0..iasq1
+ * sar, iir, isr, ior, ipsw
+ * cr0, cr24..cr31
+ * cr8,9,12,13
+ * cr10, cr15
+ */
+
+#define GR_REGNUM(_n)	(HPPA_R0_REGNUM+_n)
+#define TR_REGNUM(_n)	(HPPA_TR0_REGNUM+_n)
+static const int greg_map[] =
+  {
+    GR_REGNUM(0), GR_REGNUM(1), GR_REGNUM(2), GR_REGNUM(3),
+    GR_REGNUM(4), GR_REGNUM(5), GR_REGNUM(6), GR_REGNUM(7),
+    GR_REGNUM(8), GR_REGNUM(9), GR_REGNUM(10), GR_REGNUM(11),
+    GR_REGNUM(12), GR_REGNUM(13), GR_REGNUM(14), GR_REGNUM(15),
+    GR_REGNUM(16), GR_REGNUM(17), GR_REGNUM(18), GR_REGNUM(19),
+    GR_REGNUM(20), GR_REGNUM(21), GR_REGNUM(22), GR_REGNUM(23),
+    GR_REGNUM(24), GR_REGNUM(25), GR_REGNUM(26), GR_REGNUM(27),
+    GR_REGNUM(28), GR_REGNUM(29), GR_REGNUM(30), GR_REGNUM(31),
+
+    HPPA_SR4_REGNUM+1, HPPA_SR4_REGNUM+2, HPPA_SR4_REGNUM+3, HPPA_SR4_REGNUM+4,
+    HPPA_SR4_REGNUM, HPPA_SR4_REGNUM+5, HPPA_SR4_REGNUM+6, HPPA_SR4_REGNUM+7,
+
+    HPPA_PCOQ_HEAD_REGNUM, HPPA_PCOQ_TAIL_REGNUM,
+    HPPA_PCSQ_HEAD_REGNUM, HPPA_PCSQ_TAIL_REGNUM,
+
+    HPPA_SAR_REGNUM, HPPA_IIR_REGNUM, HPPA_ISR_REGNUM, HPPA_IOR_REGNUM,
+    HPPA_IPSW_REGNUM, HPPA_RCR_REGNUM,
+
+    TR_REGNUM(0), TR_REGNUM(1), TR_REGNUM(2), TR_REGNUM(3),
+    TR_REGNUM(4), TR_REGNUM(5), TR_REGNUM(6), TR_REGNUM(7),
+
+    HPPA_PID0_REGNUM, HPPA_PID1_REGNUM, HPPA_PID2_REGNUM, HPPA_PID3_REGNUM,
+    HPPA_CCR_REGNUM, HPPA_EIEM_REGNUM,
+  };
+
+static void
+hppa_linux_supply_regset (const struct regset *regset,
+			  struct regcache *regcache,
+			  int regnum, const void *regs, size_t len)
+{
+  struct gdbarch *arch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (arch);
+  const char *buf = regs;
+  int i, offset;
+
+  offset = 0;
+  for (i = 0; i < ARRAY_SIZE (greg_map); i++)
+    {
+      if (regnum == greg_map[i] || regnum == -1)
+        regcache_raw_supply (regcache, greg_map[i], buf + offset);
+
+      offset += tdep->bytes_per_address;
+    }
+}
+
+static void
+hppa_linux_supply_fpregset (const struct regset *regset,
+			    struct regcache *regcache,
+			    int regnum, const void *regs, size_t len)
+{
+  const char *buf = regs;
+  int i, offset;
+
+  offset = 0;
+  for (i = 0; i < 31; i++)
+    {
+      if (regnum == HPPA_FP0_REGNUM + i || regnum == -1)
+        regcache_raw_supply (regcache, HPPA_FP0_REGNUM + i, 
+			     buf + offset);
+      offset += 8;
+    }
+}
+
+/* HPPA Linux kernel register set.  */
+static struct regset hppa_linux_regset =
+{
+  NULL,
+  hppa_linux_supply_regset
+};
+
+static struct regset hppa_linux_fpregset =
+{
+  NULL,
+  hppa_linux_supply_fpregset
+};
+
+static const struct regset *
+hppa_linux_regset_from_core_section (struct gdbarch *gdbarch,
+				     const char *sect_name,
+				     size_t sect_size)
+{
+  if (strcmp (sect_name, ".reg") == 0)
+    return &hppa_linux_regset;
+  else if (strcmp (sect_name, ".reg2") == 0)
+    return &hppa_linux_fpregset;
+
+  return NULL;
+}
+
 
 /* Forward declarations.  */
 extern initialize_file_ftype _initialize_hppa_linux_tdep;
@@ -563,10 +528,8 @@ hppa_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
-  set_gdbarch_in_solib_call_trampoline
-        (gdbarch, hppa_linux_in_solib_call_trampoline);
-  set_gdbarch_skip_trampoline_code
-	(gdbarch, hppa_linux_skip_trampoline_code);
+  tdep->in_solib_call_trampoline = hppa_in_solib_call_trampoline;
+  set_gdbarch_skip_trampoline_code (gdbarch, hppa_skip_trampoline_code);
 
   /* GNU/Linux uses the dynamic linker included in the GNU C Library.  */
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
@@ -576,6 +539,9 @@ hppa_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
      more work in gcc and glibc first.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
 
+  set_gdbarch_regset_from_core_section
+    (gdbarch, hppa_linux_regset_from_core_section);
+
 #if 0
   /* Dwarf-2 unwinding support.  Not yet working.  */
   set_gdbarch_dwarf_reg_to_regnum (gdbarch, hppa_dwarf_reg_to_regnum);
@@ -583,10 +549,15 @@ hppa_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
   frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
 #endif
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
 }
 
 void
 _initialize_hppa_linux_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_hppa, 0, GDB_OSABI_LINUX, hppa_linux_init_abi);
+  gdbarch_register_osabi (bfd_arch_hppa, bfd_mach_hppa20w, GDB_OSABI_LINUX, hppa_linux_init_abi);
 }

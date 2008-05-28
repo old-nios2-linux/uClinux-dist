@@ -1,14 +1,14 @@
 /* Symbol table definitions for GDB.
 
-   Copyright 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
@@ -42,7 +40,7 @@ struct agent_expr;
      struct symbol
      struct partial_symbol
 
-   These structures are layed out to encourage good packing.
+   These structures are laid out to encourage good packing.
    They use ENUM_BITFIELD and short int fields, and they order the
    structure members so that fields less than a word are next
    to each other so they can be packed together. */
@@ -110,7 +108,7 @@ struct general_symbol_info
 
     struct block *block;
 
-    char *bytes;
+    gdb_byte *bytes;
 
     CORE_ADDR address;
 
@@ -346,10 +344,8 @@ struct minimal_symbol
 
   unsigned long size;
 
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   /* Which source file is this symbol in?  Only relevant for mst_file_*.  */
   char *filename;
-#endif
 
   /* Classification type for this minimal symbol.  */
 
@@ -554,7 +550,7 @@ enum address_class
   LOC_INDIRECT,
 
   /* The variable's address is computed by a set of location
-     functions (see "struct location_funcs" below).  */
+     functions (see "struct symbol_ops" below).  */
   LOC_COMPUTED,
 
   /* Same as LOC_COMPUTED, but for function arguments.  */
@@ -608,6 +604,10 @@ struct symbol
   /* Data type of value */
 
   struct type *type;
+
+  /* The symbol table containing this symbol.  This is the file
+     associated with LINE.  */
+  struct symtab *symtab;
 
   /* Domain code.  */
 
@@ -664,6 +664,7 @@ struct symbol
 #define SYMBOL_CLASS(symbol)		(symbol)->aclass
 #define SYMBOL_TYPE(symbol)		(symbol)->type
 #define SYMBOL_LINE(symbol)		(symbol)->line
+#define SYMBOL_SYMTAB(symbol)		(symbol)->symtab
 #define SYMBOL_BASEREG(symbol)		(symbol)->aux_value.basereg
 #define SYMBOL_OBJFILE(symbol)          (symbol)->aux_value.objfile
 #define SYMBOL_OPS(symbol)              (symbol)->ops
@@ -754,7 +755,7 @@ struct section_offsets
 
 #define	ANOFFSET(secoff, whichone) \
    ((whichone == -1) \
-    ? (internal_error (__FILE__, __LINE__, "Section index is uninitialized"), -1) \
+    ? (internal_error (__FILE__, __LINE__, _("Section index is uninitialized")), -1) \
     : secoff->offsets[whichone])
 
 /* The size of a section_offsets table for N sections.  */
@@ -846,9 +847,9 @@ struct symtab
 
   char *debugformat;
 
-  /* String of version information.  May be zero.  */
+  /* String of producer version information.  May be zero.  */
 
-  char *version;
+  char *producer;
 
   /* Full name of file as found by searching the source path.
      NULL if not yet known.  */
@@ -1002,7 +1003,17 @@ extern int asm_demangle;
 
 extern struct symtab *lookup_symtab (const char *);
 
-/* lookup a symbol by name (optional block, optional symtab) */
+/* lookup a symbol by name (optional block, optional symtab) in language */
+
+extern struct symbol *lookup_symbol_in_language (const char *,
+						 const struct block *,
+						 const domain_enum,
+						 enum language,
+						 int *,
+						 struct symtab **);
+
+/* lookup a symbol by name (optional block, optional symtab)
+   in the current language */
 
 extern struct symbol *lookup_symbol (const char *, const struct block *,
 				     const domain_enum, int *,
@@ -1034,6 +1045,7 @@ extern struct symbol *lookup_symbol_static (const char *name,
 
 extern struct symbol *lookup_symbol_global (const char *name,
 					    const char *linkage_name,
+					    const struct block *block,
 					    const domain_enum domain,
 					    struct symtab **symtab);
 
@@ -1175,7 +1187,7 @@ extern struct minimal_symbol *lookup_minimal_symbol_by_pc_section (CORE_ADDR,
 extern struct minimal_symbol
   *lookup_solib_trampoline_symbol_by_pc (CORE_ADDR);
 
-extern CORE_ADDR find_solib_trampoline_target (CORE_ADDR);
+extern CORE_ADDR find_solib_trampoline_target (struct frame_info *, CORE_ADDR);
 
 extern void init_minimal_symbol_collection (void);
 
@@ -1198,6 +1210,8 @@ struct symtab_and_line
 
   CORE_ADDR pc;
   CORE_ADDR end;
+  int explicit_pc;
+  int explicit_line;
 };
 
 extern void init_sal (struct symtab_and_line *sal);
@@ -1308,6 +1322,7 @@ extern void forget_cached_source_info (void);
 
 extern void select_source_symtab (struct symtab *);
 
+extern char **default_make_symbol_completion_list (char *, char *);
 extern char **make_symbol_completion_list (char *, char *);
 
 extern char **make_file_symbol_completion_list (char *, char *, char *);
@@ -1315,6 +1330,8 @@ extern char **make_file_symbol_completion_list (char *, char *, char *);
 extern char **make_source_files_completion_list (char *, char *);
 
 /* symtab.c */
+
+int matching_bfd_sections (asection *, asection *);
 
 extern struct partial_symtab *find_main_psymtab (void);
 
@@ -1380,9 +1397,14 @@ extern struct cleanup *make_cleanup_free_search_symbols (struct symbol_search
 extern void set_main_name (const char *name);
 extern /*const */ char *main_name (void);
 
-/* Global to indicate presence of HP-compiled objects,
-   in particular, SOM executable file with SOM debug info 
-   Defined in symtab.c, used in hppa-tdep.c. */
-extern int deprecated_hp_som_som_object_present;
+/* Check global symbols in objfile.  */
+struct symbol *lookup_global_symbol_from_objfile (const struct objfile *objfile,
+						  const char *name,
+						  const char *linkage_name,
+						  const domain_enum domain,
+						  struct symtab **symtab);
+
+extern struct symtabs_and_lines
+expand_line_sal (struct symtab_and_line sal);
 
 #endif /* !defined(SYMTAB_H) */

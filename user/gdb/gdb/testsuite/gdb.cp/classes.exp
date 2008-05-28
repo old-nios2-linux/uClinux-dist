@@ -1,19 +1,18 @@
-# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-# 2003, 2004 Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+# 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Fred Fish. (fnf@cygnus.com)
 # And rewritten by Michael Chastain <mec.gnu@mindspring.com>.
@@ -33,7 +32,8 @@ set srcfile ${testfile}.cc
 set binfile ${objdir}/${subdir}/${testfile}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested classes.exp
+     return -1
 }
 
 # Test ptype of class objects.
@@ -497,10 +497,13 @@ proc test_enums {} {
 # Pointers to class members
 
 proc test_pointers_to_class_members {} {
-    gdb_test "print Bar::z" "\\$\[0-9\]+ = \\(int ?\\( ?Bar::& ?\\) ?\\) ?Bar::z"
-    gdb_test "print &Foo::x" "\\$\[0-9\]+ = \\(int ?\\( ?Foo::\\* ?\\) ?\\) ?&Foo::x"
+    gdb_test "print Bar::z" "Cannot reference non-static field \"z\""
+    gdb_test "print &Foo::x" "\\$\[0-9\]+ = &Foo::x"
     gdb_test "print (int)&Foo::x" "\\$\[0-9\]+ = 0"
     gdb_test "print (int)&Bar::y == 2*sizeof(int)" "\\$\[0-9\]+ = true"
+
+    gdb_test "ptype Bar::z" "type = int"
+    gdb_test "ptype &Bar::z" "type = int Bar::\\*"
 
     # TODO: this is a bogus test.  It's looking at a variable that
     # has not even been declared yet, so it's accessing random junk
@@ -578,7 +581,14 @@ proc do_tests {} {
 
     gdb_breakpoint enums2
     gdb_test "continue" ".*Breakpoint .* enums2.*" "continue to enums2(\\(\\)|)"
-    gdb_test "finish" "" ""
+    # Leave enums2.  Make sure we reach the next line, in case there
+    # are any more instructions to finish the function call.
+    gdb_test_multiple "finish" "" {
+	-re "enums2 \\(\\);.*$gdb_prompt $" {
+	    gdb_test "next" "" ""
+	}
+	-re "$gdb_prompt $" { }
+    }
     test_enums
 
     gdb_test "finish" "" ""

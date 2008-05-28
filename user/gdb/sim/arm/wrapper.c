@@ -1,23 +1,21 @@
 /* run front end support for arm
-   Copyright (C) 1995, 1996, 1997, 2000, 2001, 2002
+   Copyright (C) 1995, 1996, 1997, 2000, 2001, 2002, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of ARM SIM.
 
-   GCC is free software; you can redistribute it and/or modify it
-   under the terms of the GNU General Public License as published
-   by the Free Software Foundation; either version 2, or (at your
-   option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   GCC is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.   See
-   the GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public
-   License along with this program; if not, write to the Free
-   Software Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file provides the interface between the simulator and
    run.c and gdb (when the simulator is linked with gdb).
@@ -37,6 +35,7 @@
 #include "sim-utils.h"
 #include "run-sim.h"
 #include "gdb/sim-arm.h"
+#include "gdb/signals.h"
 
 host_callback *sim_callback;
 
@@ -267,7 +266,7 @@ sim_create_inferior (sd, abfd, argv, env)
 	 removes the FPE emulator, since it conflicts with its coprocessors.
 	 For the most generic ARM support, we want the FPE emulator in place.  */
     case bfd_mach_arm_XScale:
-      ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_XScale_Prop);
+      ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_XScale_Prop | ARM_v6_Prop);
       break;
 
     case bfd_mach_arm_iWMMXt:
@@ -769,7 +768,7 @@ sim_target_parse_arg_array (argv)
   for (i = 0; argv[i]; i++)
     ;
 
-  return (void) sim_target_parse_command_line (i, argv);
+  sim_target_parse_command_line (i, argv);
 }
 
 void
@@ -902,7 +901,7 @@ sim_stop_reason (sd, reason, sigrc)
   if (stop_simulator)
     {
       *reason = sim_stopped;
-      *sigrc = SIGINT;
+      *sigrc = TARGET_SIGNAL_INT;
     }
   else if (state->EndCondition == 0)
     {
@@ -913,10 +912,10 @@ sim_stop_reason (sd, reason, sigrc)
     {
       *reason = sim_stopped;
       if (state->EndCondition == RDIError_BreakpointReached)
-	*sigrc = SIGTRAP;
+	*sigrc = TARGET_SIGNAL_TRAP;
       else if (   state->EndCondition == RDIError_DataAbort
 	       || state->EndCondition == RDIError_AddressException)
-	*sigrc = SIGBUS;
+	*sigrc = TARGET_SIGNAL_BUS;
       else
 	*sigrc = 0;
     }

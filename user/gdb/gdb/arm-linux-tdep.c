@@ -1,11 +1,13 @@
 /* GNU/Linux on ARM target support.
-   Copyright 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
@@ -29,187 +29,49 @@
 #include "doublest.h"
 #include "solib-svr4.h"
 #include "osabi.h"
+#include "regset.h"
+#include "trad-frame.h"
+#include "tramp-frame.h"
+#include "breakpoint.h"
 
 #include "arm-tdep.h"
+#include "arm-linux-tdep.h"
 #include "glibc-tdep.h"
+
+#include "gdb_string.h"
+
+extern int arm_apcs_32;
 
 /* Under ARM GNU/Linux the traditional way of performing a breakpoint
    is to execute a particular software interrupt, rather than use a
    particular undefined instruction to provoke a trap.  Upon exection
    of the software interrupt the kernel stops the inferior with a
-   SIGTRAP, and wakes the debugger.  Since ARM GNU/Linux doesn't support
-   Thumb at the moment we only override the ARM breakpoints.  */
+   SIGTRAP, and wakes the debugger.  */
 
 static const char arm_linux_arm_le_breakpoint[] = { 0x01, 0x00, 0x9f, 0xef };
 
 static const char arm_linux_arm_be_breakpoint[] = { 0xef, 0x9f, 0x00, 0x01 };
 
+/* However, the EABI syscall interface (new in Nov. 2005) does not look at
+   the operand of the swi if old-ABI compatibility is disabled.  Therefore,
+   use an undefined instruction instead.  This is supported as of kernel
+   version 2.5.70 (May 2003), so should be a safe assumption for EABI
+   binaries.  */
+
+static const char eabi_linux_arm_le_breakpoint[] = { 0xf0, 0x01, 0xf0, 0xe7 };
+
+static const char eabi_linux_arm_be_breakpoint[] = { 0xe7, 0xf0, 0x01, 0xf0 };
+
+/* All the kernels which support Thumb support using a specific undefined
+   instruction for the Thumb breakpoint.  */
+
+static const char arm_linux_thumb_be_breakpoint[] = {0xde, 0x01};
+
+static const char arm_linux_thumb_le_breakpoint[] = {0x01, 0xde};
+
 /* Description of the longjmp buffer.  */
 #define ARM_LINUX_JB_ELEMENT_SIZE	INT_REGISTER_SIZE
 #define ARM_LINUX_JB_PC			21
-
-/* Extract from an array REGBUF containing the (raw) register state
-   a function return value of type TYPE, and copy that, in virtual format,
-   into VALBUF.  */
-/* FIXME rearnsha/2002-02-23: This function shouldn't be necessary.
-   The ARM generic one should be able to handle the model used by
-   linux and the low-level formatting of the registers should be
-   hidden behind the regcache abstraction.  */
-static void
-arm_linux_extract_return_value (struct type *type,
-				char regbuf[],
-				char *valbuf)
-{
-  /* ScottB: This needs to be looked at to handle the different
-     floating point emulators on ARM GNU/Linux.  Right now the code
-     assumes that fetch inferior registers does the right thing for
-     GDB.  I suspect this won't handle NWFPE registers correctly, nor
-     will the default ARM version (arm_extract_return_value()).  */
-
-  int regnum = ((TYPE_CODE_FLT == TYPE_CODE (type))
-		? ARM_F0_REGNUM : ARM_A1_REGNUM);
-  memcpy (valbuf, &regbuf[DEPRECATED_REGISTER_BYTE (regnum)], TYPE_LENGTH (type));
-}
-
-/* Note: ScottB
-
-   This function does not support passing parameters using the FPA
-   variant of the APCS.  It passes any floating point arguments in the
-   general registers and/or on the stack.
-   
-   FIXME:  This and arm_push_arguments should be merged.  However this 
-   	   function breaks on a little endian host, big endian target
-   	   using the COFF file format.  ELF is ok.  
-   	   
-   	   ScottB.  */
-   	   
-/* Addresses for calling Thumb functions have the bit 0 set.
-   Here are some macros to test, set, or clear bit 0 of addresses.  */
-#define IS_THUMB_ADDR(addr)	((addr) & 1)
-#define MAKE_THUMB_ADDR(addr)	((addr) | 1)
-#define UNMAKE_THUMB_ADDR(addr) ((addr) & ~1)
-   	  
-static CORE_ADDR
-arm_linux_push_arguments (int nargs, struct value **args, CORE_ADDR sp,
-		          int struct_return, CORE_ADDR struct_addr)
-{
-  char *fp;
-  int argnum, argreg, nstack_size;
-
-  /* Walk through the list of args and determine how large a temporary
-     stack is required.  Need to take care here as structs may be
-     passed on the stack, and we have to to push them.  */
-  nstack_size = -4 * DEPRECATED_REGISTER_SIZE;	/* Some arguments go into A1-A4.  */
-
-  if (struct_return)			/* The struct address goes in A1.  */
-    nstack_size += DEPRECATED_REGISTER_SIZE;
-
-  /* Walk through the arguments and add their size to nstack_size.  */
-  for (argnum = 0; argnum < nargs; argnum++)
-    {
-      int len;
-      struct type *arg_type;
-
-      arg_type = check_typedef (VALUE_TYPE (args[argnum]));
-      len = TYPE_LENGTH (arg_type);
-
-      /* ANSI C code passes float arguments as integers, K&R code
-         passes float arguments as doubles.  Correct for this here.  */
-      if (TYPE_CODE_FLT == TYPE_CODE (arg_type) && DEPRECATED_REGISTER_SIZE == len)
-	nstack_size += TARGET_DOUBLE_BIT / TARGET_CHAR_BIT;
-      else
-	nstack_size += len;
-    }
-
-  /* Allocate room on the stack, and initialize our stack frame
-     pointer.  */
-  fp = NULL;
-  if (nstack_size > 0)
-    {
-      sp -= nstack_size;
-      fp = (char *) sp;
-    }
-
-  /* Initialize the integer argument register pointer.  */
-  argreg = ARM_A1_REGNUM;
-
-  /* The struct_return pointer occupies the first parameter passing
-     register.  */
-  if (struct_return)
-    write_register (argreg++, struct_addr);
-
-  /* Process arguments from left to right.  Store as many as allowed
-     in the parameter passing registers (A1-A4), and save the rest on
-     the temporary stack.  */
-  for (argnum = 0; argnum < nargs; argnum++)
-    {
-      int len;
-      char *val;
-      CORE_ADDR regval;
-      enum type_code typecode;
-      struct type *arg_type, *target_type;
-
-      arg_type = check_typedef (VALUE_TYPE (args[argnum]));
-      target_type = TYPE_TARGET_TYPE (arg_type);
-      len = TYPE_LENGTH (arg_type);
-      typecode = TYPE_CODE (arg_type);
-      val = (char *) VALUE_CONTENTS (args[argnum]);
-
-      /* ANSI C code passes float arguments as integers, K&R code
-         passes float arguments as doubles.  The .stabs record for 
-         for ANSI prototype floating point arguments records the
-         type as FP_INTEGER, while a K&R style (no prototype)
-         .stabs records the type as FP_FLOAT.  In this latter case
-         the compiler converts the float arguments to double before
-         calling the function.  */
-      if (TYPE_CODE_FLT == typecode && DEPRECATED_REGISTER_SIZE == len)
-	{
-	  DOUBLEST dblval;
-	  dblval = deprecated_extract_floating (val, len);
-	  len = TARGET_DOUBLE_BIT / TARGET_CHAR_BIT;
-	  val = alloca (len);
-	  deprecated_store_floating (val, len, dblval);
-	}
-
-      /* If the argument is a pointer to a function, and it is a Thumb
-         function, set the low bit of the pointer.  */
-      if (TYPE_CODE_PTR == typecode
-	  && NULL != target_type
-	  && TYPE_CODE_FUNC == TYPE_CODE (target_type))
-	{
-	  CORE_ADDR regval = extract_unsigned_integer (val, len);
-	  if (arm_pc_is_thumb (regval))
-	    store_unsigned_integer (val, len, MAKE_THUMB_ADDR (regval));
-	}
-
-      /* Copy the argument to general registers or the stack in
-         register-sized pieces.  Large arguments are split between
-         registers and stack.  */
-      while (len > 0)
-	{
-	  int partial_len = len < DEPRECATED_REGISTER_SIZE ? len : DEPRECATED_REGISTER_SIZE;
-
-	  if (argreg <= ARM_LAST_ARG_REGNUM)
-	    {
-	      /* It's an argument being passed in a general register.  */
-	      regval = extract_unsigned_integer (val, partial_len);
-	      write_register (argreg++, regval);
-	    }
-	  else
-	    {
-	      /* Push the arguments onto the stack.  */
-	      write_memory ((CORE_ADDR) fp, val, DEPRECATED_REGISTER_SIZE);
-	      fp += DEPRECATED_REGISTER_SIZE;
-	    }
-
-	  len -= partial_len;
-	  val += partial_len;
-	}
-    }
-
-  /* Return adjusted stack pointer.  */
-  return sp;
-}
 
 /*
    Dynamic Linking on ARM GNU/Linux
@@ -330,49 +192,6 @@ arm_linux_push_arguments (int nargs, struct value **args, CORE_ADDR sp,
    with.  Before the fixup/resolver code returns, it actually calls
    the requested function and repairs &GOT[n+3].  */
 
-/* Fetch, and possibly build, an appropriate link_map_offsets structure
-   for ARM linux targets using the struct offsets defined in <link.h>.
-   Note, however, that link.h is not actually referred to in this file.
-   Instead, the relevant structs offsets were obtained from examining
-   link.h.  (We can't refer to link.h from this file because the host
-   system won't necessarily have it, or if it does, the structs which
-   it defines will refer to the host system, not the target).  */
-
-static struct link_map_offsets *
-arm_linux_svr4_fetch_link_map_offsets (void)
-{
-  static struct link_map_offsets lmo;
-  static struct link_map_offsets *lmp = 0;
-
-  if (lmp == 0)
-    {
-      lmp = &lmo;
-
-      lmo.r_debug_size = 8;	/* Actual size is 20, but this is all we
-                                   need.  */
-
-      lmo.r_map_offset = 4;
-      lmo.r_map_size   = 4;
-
-      lmo.link_map_size = 20;	/* Actual size is 552, but this is all we
-                                   need.  */
-
-      lmo.l_addr_offset = 0;
-      lmo.l_addr_size   = 4;
-
-      lmo.l_name_offset = 4;
-      lmo.l_name_size   = 4;
-
-      lmo.l_next_offset = 12;
-      lmo.l_next_size   = 4;
-
-      lmo.l_prev_offset = 16;
-      lmo.l_prev_size   = 4;
-    }
-
-    return lmp;
-}
-
 /* The constants below were determined by examining the following files
    in the linux kernel sources:
 
@@ -384,75 +203,390 @@ arm_linux_svr4_fetch_link_map_offsets (void)
 #define ARM_LINUX_SIGRETURN_INSTR	0xef900077
 #define ARM_LINUX_RT_SIGRETURN_INSTR	0xef9000ad
 
-/* arm_linux_in_sigtramp determines if PC points at one of the
-   instructions which cause control to return to the Linux kernel upon
-   return from a signal handler.  FUNC_NAME is unused.  */
+/* For ARM EABI, the syscall number is not in the SWI instruction
+   (instead it is loaded into r7).  We recognize the pattern that
+   glibc uses...  alternatively, we could arrange to do this by
+   function name, but they are not always exported.  */
+#define ARM_SET_R7_SIGRETURN		0xe3a07077
+#define ARM_SET_R7_RT_SIGRETURN		0xe3a070ad
+#define ARM_EABI_SYSCALL		0xef000000
 
-int
-arm_linux_in_sigtramp (CORE_ADDR pc, char *func_name)
+static void
+arm_linux_sigtramp_cache (struct frame_info *next_frame,
+			  struct trad_frame_cache *this_cache,
+			  CORE_ADDR func, int regs_offset)
 {
-  unsigned long inst;
+  CORE_ADDR sp = frame_unwind_register_unsigned (next_frame, ARM_SP_REGNUM);
+  CORE_ADDR base = sp + regs_offset;
+  int i;
 
-  inst = read_memory_integer (pc, 4);
+  for (i = 0; i < 16; i++)
+    trad_frame_set_reg_addr (this_cache, i, base + i * 4);
 
-  return (inst == ARM_LINUX_SIGRETURN_INSTR
-	  || inst == ARM_LINUX_RT_SIGRETURN_INSTR);
+  trad_frame_set_reg_addr (this_cache, ARM_PS_REGNUM, base + 16 * 4);
 
+  /* The VFP or iWMMXt registers may be saved on the stack, but there's
+     no reliable way to restore them (yet).  */
+
+  /* Save a frame ID.  */
+  trad_frame_set_id (this_cache, frame_id_build (sp, func));
 }
 
-/* arm_linux_sigcontext_register_address returns the address in the
-   sigcontext of register REGNO given a stack pointer value SP and
-   program counter value PC.  The value 0 is returned if PC is not
-   pointing at one of the signal return instructions or if REGNO is
-   not saved in the sigcontext struct.  */
+/* There are a couple of different possible stack layouts that
+   we need to support.
 
-CORE_ADDR
-arm_linux_sigcontext_register_address (CORE_ADDR sp, CORE_ADDR pc, int regno)
+   Before version 2.6.18, the kernel used completely independent
+   layouts for non-RT and RT signals.  For non-RT signals the stack
+   began directly with a struct sigcontext.  For RT signals the stack
+   began with two redundant pointers (to the siginfo and ucontext),
+   and then the siginfo and ucontext.
+
+   As of version 2.6.18, the non-RT signal frame layout starts with
+   a ucontext and the RT signal frame starts with a siginfo and then
+   a ucontext.  Also, the ucontext now has a designated save area
+   for coprocessor registers.
+
+   For RT signals, it's easy to tell the difference: we look for
+   pinfo, the pointer to the siginfo.  If it has the expected
+   value, we have an old layout.  If it doesn't, we have the new
+   layout.
+
+   For non-RT signals, it's a bit harder.  We need something in one
+   layout or the other with a recognizable offset and value.  We can't
+   use the return trampoline, because ARM usually uses SA_RESTORER,
+   in which case the stack return trampoline is not filled in.
+   We can't use the saved stack pointer, because sigaltstack might
+   be in use.  So for now we guess the new layout...  */
+
+/* There are three words (trap_no, error_code, oldmask) in
+   struct sigcontext before r0.  */
+#define ARM_SIGCONTEXT_R0 0xc
+
+/* There are five words (uc_flags, uc_link, and three for uc_stack)
+   in the ucontext_t before the sigcontext.  */
+#define ARM_UCONTEXT_SIGCONTEXT 0x14
+
+/* There are three elements in an rt_sigframe before the ucontext:
+   pinfo, puc, and info.  The first two are pointers and the third
+   is a struct siginfo, with size 128 bytes.  We could follow puc
+   to the ucontext, but it's simpler to skip the whole thing.  */
+#define ARM_OLD_RT_SIGFRAME_SIGINFO 0x8
+#define ARM_OLD_RT_SIGFRAME_UCONTEXT 0x88
+
+#define ARM_NEW_RT_SIGFRAME_UCONTEXT 0x80
+
+#define ARM_NEW_SIGFRAME_MAGIC 0x5ac3c35a
+
+static void
+arm_linux_sigreturn_init (const struct tramp_frame *self,
+			  struct frame_info *next_frame,
+			  struct trad_frame_cache *this_cache,
+			  CORE_ADDR func)
 {
-  unsigned long inst;
-  CORE_ADDR reg_addr = 0;
+  CORE_ADDR sp = frame_unwind_register_unsigned (next_frame, ARM_SP_REGNUM);
+  ULONGEST uc_flags = read_memory_unsigned_integer (sp, 4);
 
-  inst = read_memory_integer (pc, 4);
+  if (uc_flags == ARM_NEW_SIGFRAME_MAGIC)
+    arm_linux_sigtramp_cache (next_frame, this_cache, func,
+			      ARM_UCONTEXT_SIGCONTEXT
+			      + ARM_SIGCONTEXT_R0);
+  else
+    arm_linux_sigtramp_cache (next_frame, this_cache, func,
+			      ARM_SIGCONTEXT_R0);
+}
 
-  if (inst == ARM_LINUX_SIGRETURN_INSTR
-      || inst == ARM_LINUX_RT_SIGRETURN_INSTR)
+static void
+arm_linux_rt_sigreturn_init (const struct tramp_frame *self,
+			  struct frame_info *next_frame,
+			  struct trad_frame_cache *this_cache,
+			  CORE_ADDR func)
+{
+  CORE_ADDR sp = frame_unwind_register_unsigned (next_frame, ARM_SP_REGNUM);
+  ULONGEST pinfo = read_memory_unsigned_integer (sp, 4);
+
+  if (pinfo == sp + ARM_OLD_RT_SIGFRAME_SIGINFO)
+    arm_linux_sigtramp_cache (next_frame, this_cache, func,
+			      ARM_OLD_RT_SIGFRAME_UCONTEXT
+			      + ARM_UCONTEXT_SIGCONTEXT
+			      + ARM_SIGCONTEXT_R0);
+  else
+    arm_linux_sigtramp_cache (next_frame, this_cache, func,
+			      ARM_NEW_RT_SIGFRAME_UCONTEXT
+			      + ARM_UCONTEXT_SIGCONTEXT
+			      + ARM_SIGCONTEXT_R0);
+}
+
+static struct tramp_frame arm_linux_sigreturn_tramp_frame = {
+  SIGTRAMP_FRAME,
+  4,
+  {
+    { ARM_LINUX_SIGRETURN_INSTR, -1 },
+    { TRAMP_SENTINEL_INSN }
+  },
+  arm_linux_sigreturn_init
+};
+
+static struct tramp_frame arm_linux_rt_sigreturn_tramp_frame = {
+  SIGTRAMP_FRAME,
+  4,
+  {
+    { ARM_LINUX_RT_SIGRETURN_INSTR, -1 },
+    { TRAMP_SENTINEL_INSN }
+  },
+  arm_linux_rt_sigreturn_init
+};
+
+static struct tramp_frame arm_eabi_linux_sigreturn_tramp_frame = {
+  SIGTRAMP_FRAME,
+  4,
+  {
+    { ARM_SET_R7_SIGRETURN, -1 },
+    { ARM_EABI_SYSCALL, -1 },
+    { TRAMP_SENTINEL_INSN }
+  },
+  arm_linux_sigreturn_init
+};
+
+static struct tramp_frame arm_eabi_linux_rt_sigreturn_tramp_frame = {
+  SIGTRAMP_FRAME,
+  4,
+  {
+    { ARM_SET_R7_RT_SIGRETURN, -1 },
+    { ARM_EABI_SYSCALL, -1 },
+    { TRAMP_SENTINEL_INSN }
+  },
+  arm_linux_rt_sigreturn_init
+};
+
+/* Core file and register set support.  */
+
+#define ARM_LINUX_SIZEOF_GREGSET (18 * INT_REGISTER_SIZE)
+
+void
+arm_linux_supply_gregset (const struct regset *regset,
+			  struct regcache *regcache,
+			  int regnum, const void *gregs_buf, size_t len)
+{
+  const gdb_byte *gregs = gregs_buf;
+  int regno;
+  CORE_ADDR reg_pc;
+  gdb_byte pc_buf[INT_REGISTER_SIZE];
+
+  for (regno = ARM_A1_REGNUM; regno < ARM_PC_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+      regcache_raw_supply (regcache, regno,
+			   gregs + INT_REGISTER_SIZE * regno);
+
+  if (regnum == ARM_PS_REGNUM || regnum == -1)
     {
-      CORE_ADDR sigcontext_addr;
-
-      /* The sigcontext structure is at different places for the two
-         signal return instructions.  For ARM_LINUX_SIGRETURN_INSTR,
-	 it starts at the SP value.  For ARM_LINUX_RT_SIGRETURN_INSTR,
-	 it is at SP+8.  For the latter instruction, it may also be
-	 the case that the address of this structure may be determined
-	 by reading the 4 bytes at SP, but I'm not convinced this is
-	 reliable.
-
-	 In any event, these magic constants (0 and 8) may be
-	 determined by examining struct sigframe and struct
-	 rt_sigframe in arch/arm/kernel/signal.c in the Linux kernel
-	 sources.  */
-
-      if (inst == ARM_LINUX_RT_SIGRETURN_INSTR)
-	sigcontext_addr = sp + 8;
-      else /* inst == ARM_LINUX_SIGRETURN_INSTR */
-        sigcontext_addr = sp + 0;
-
-      /* The layout of the sigcontext structure for ARM GNU/Linux is
-         in include/asm-arm/sigcontext.h in the Linux kernel sources.
-
-	 There are three 4-byte fields which precede the saved r0
-	 field.  (This accounts for the 12 in the code below.)  The
-	 sixteen registers (4 bytes per field) follow in order.  The
-	 PSR value follows the sixteen registers which accounts for
-	 the constant 19 below. */
-
-      if (0 <= regno && regno <= ARM_PC_REGNUM)
-	reg_addr = sigcontext_addr + 12 + (4 * regno);
-      else if (regno == ARM_PS_REGNUM)
-	reg_addr = sigcontext_addr + 19 * 4;
+      if (arm_apcs_32)
+	regcache_raw_supply (regcache, ARM_PS_REGNUM,
+			     gregs + INT_REGISTER_SIZE * ARM_CPSR_REGNUM);
+      else
+	regcache_raw_supply (regcache, ARM_PS_REGNUM,
+			     gregs + INT_REGISTER_SIZE * ARM_PC_REGNUM);
     }
 
-  return reg_addr;
+  if (regnum == ARM_PC_REGNUM || regnum == -1)
+    {
+      reg_pc = extract_unsigned_integer (gregs
+					 + INT_REGISTER_SIZE * ARM_PC_REGNUM,
+					 INT_REGISTER_SIZE);
+      reg_pc = gdbarch_addr_bits_remove (get_regcache_arch (regcache), reg_pc);
+      store_unsigned_integer (pc_buf, INT_REGISTER_SIZE, reg_pc);
+      regcache_raw_supply (regcache, ARM_PC_REGNUM, pc_buf);
+    }
+}
+
+void
+arm_linux_collect_gregset (const struct regset *regset,
+			   const struct regcache *regcache,
+			   int regnum, void *gregs_buf, size_t len)
+{
+  gdb_byte *gregs = gregs_buf;
+  int regno;
+
+  for (regno = ARM_A1_REGNUM; regno < ARM_PC_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+      regcache_raw_collect (regcache, regno,
+			    gregs + INT_REGISTER_SIZE * regno);
+
+  if (regnum == ARM_PS_REGNUM || regnum == -1)
+    {
+      if (arm_apcs_32)
+	regcache_raw_collect (regcache, ARM_PS_REGNUM,
+			      gregs + INT_REGISTER_SIZE * ARM_CPSR_REGNUM);
+      else
+	regcache_raw_collect (regcache, ARM_PS_REGNUM,
+			      gregs + INT_REGISTER_SIZE * ARM_PC_REGNUM);
+    }
+
+  if (regnum == ARM_PC_REGNUM || regnum == -1)
+    regcache_raw_collect (regcache, ARM_PC_REGNUM,
+			  gregs + INT_REGISTER_SIZE * ARM_PC_REGNUM);
+}
+
+/* Support for register format used by the NWFPE FPA emulator.  */
+
+#define typeNone		0x00
+#define typeSingle		0x01
+#define typeDouble		0x02
+#define typeExtended		0x03
+
+void
+supply_nwfpe_register (struct regcache *regcache, int regno,
+		       const gdb_byte *regs)
+{
+  const gdb_byte *reg_data;
+  gdb_byte reg_tag;
+  gdb_byte buf[FP_REGISTER_SIZE];
+
+  reg_data = regs + (regno - ARM_F0_REGNUM) * FP_REGISTER_SIZE;
+  reg_tag = regs[(regno - ARM_F0_REGNUM) + NWFPE_TAGS_OFFSET];
+  memset (buf, 0, FP_REGISTER_SIZE);
+
+  switch (reg_tag)
+    {
+    case typeSingle:
+      memcpy (buf, reg_data, 4);
+      break;
+    case typeDouble:
+      memcpy (buf, reg_data + 4, 4);
+      memcpy (buf + 4, reg_data, 4);
+      break;
+    case typeExtended:
+      /* We want sign and exponent, then least significant bits,
+	 then most significant.  NWFPE does sign, most, least.  */
+      memcpy (buf, reg_data, 4);
+      memcpy (buf + 4, reg_data + 8, 4);
+      memcpy (buf + 8, reg_data + 4, 4);
+      break;
+    default:
+      break;
+    }
+
+  regcache_raw_supply (regcache, regno, buf);
+}
+
+void
+collect_nwfpe_register (const struct regcache *regcache, int regno,
+			gdb_byte *regs)
+{
+  gdb_byte *reg_data;
+  gdb_byte reg_tag;
+  gdb_byte buf[FP_REGISTER_SIZE];
+
+  regcache_raw_collect (regcache, regno, buf);
+
+  /* NOTE drow/2006-06-07: This code uses the tag already in the
+     register buffer.  I've preserved that when moving the code
+     from the native file to the target file.  But this doesn't
+     always make sense.  */
+
+  reg_data = regs + (regno - ARM_F0_REGNUM) * FP_REGISTER_SIZE;
+  reg_tag = regs[(regno - ARM_F0_REGNUM) + NWFPE_TAGS_OFFSET];
+
+  switch (reg_tag)
+    {
+    case typeSingle:
+      memcpy (reg_data, buf, 4);
+      break;
+    case typeDouble:
+      memcpy (reg_data, buf + 4, 4);
+      memcpy (reg_data + 4, buf, 4);
+      break;
+    case typeExtended:
+      memcpy (reg_data, buf, 4);
+      memcpy (reg_data + 4, buf + 8, 4);
+      memcpy (reg_data + 8, buf + 4, 4);
+      break;
+    default:
+      break;
+    }
+}
+
+void
+arm_linux_supply_nwfpe (const struct regset *regset,
+			struct regcache *regcache,
+			int regnum, const void *regs_buf, size_t len)
+{
+  const gdb_byte *regs = regs_buf;
+  int regno;
+
+  if (regnum == ARM_FPS_REGNUM || regnum == -1)
+    regcache_raw_supply (regcache, ARM_FPS_REGNUM,
+			 regs + NWFPE_FPSR_OFFSET);
+
+  for (regno = ARM_F0_REGNUM; regno <= ARM_F7_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+      supply_nwfpe_register (regcache, regno, regs);
+}
+
+void
+arm_linux_collect_nwfpe (const struct regset *regset,
+			 const struct regcache *regcache,
+			 int regnum, void *regs_buf, size_t len)
+{
+  gdb_byte *regs = regs_buf;
+  int regno;
+
+  for (regno = ARM_F0_REGNUM; regno <= ARM_F7_REGNUM; regno++)
+    if (regnum == -1 || regnum == regno)
+      collect_nwfpe_register (regcache, regno, regs);
+
+  if (regnum == ARM_FPS_REGNUM || regnum == -1)
+    regcache_raw_collect (regcache, ARM_FPS_REGNUM,
+			  regs + INT_REGISTER_SIZE * ARM_FPS_REGNUM);
+}
+
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
+
+static const struct regset *
+arm_linux_regset_from_core_section (struct gdbarch *gdbarch,
+				    const char *sect_name, size_t sect_size)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (strcmp (sect_name, ".reg") == 0
+      && sect_size == ARM_LINUX_SIZEOF_GREGSET)
+    {
+      if (tdep->gregset == NULL)
+        tdep->gregset = regset_alloc (gdbarch, arm_linux_supply_gregset,
+                                      arm_linux_collect_gregset);
+      return tdep->gregset;
+    }
+
+  if (strcmp (sect_name, ".reg2") == 0
+      && sect_size == ARM_LINUX_SIZEOF_NWFPE)
+    {
+      if (tdep->fpregset == NULL)
+        tdep->fpregset = regset_alloc (gdbarch, arm_linux_supply_nwfpe,
+                                       arm_linux_collect_nwfpe);
+      return tdep->fpregset;
+    }
+
+  return NULL;
+}
+
+/* Insert a single step breakpoint at the next executed instruction.  */
+
+int
+arm_linux_software_single_step (struct frame_info *frame)
+{
+  CORE_ADDR next_pc = arm_get_next_pc (frame, get_frame_pc (frame));
+
+  /* The Linux kernel offers some user-mode helpers in a high page.  We can
+     not read this page (as of 2.6.23), and even if we could then we couldn't
+     set breakpoints in it, and even if we could then the atomic operations
+     would fail when interrupted.  They are all called as functions and return
+     to the address in LR, so step to there instead.  */
+  if (next_pc > 0xffff0000)
+    next_pc = get_frame_register_unsigned (frame, ARM_LR_REGNUM);
+
+  insert_single_step_breakpoint (next_pc);
+
+  return 1;
 }
 
 static void
@@ -463,27 +597,56 @@ arm_linux_init_abi (struct gdbarch_info info,
 
   tdep->lowest_pc = 0x8000;
   if (info.byte_order == BFD_ENDIAN_BIG)
-    tdep->arm_breakpoint = arm_linux_arm_be_breakpoint;
+    {
+      if (tdep->arm_abi == ARM_ABI_AAPCS)
+	tdep->arm_breakpoint = eabi_linux_arm_be_breakpoint;
+      else
+	tdep->arm_breakpoint = arm_linux_arm_be_breakpoint;
+      tdep->thumb_breakpoint = arm_linux_thumb_be_breakpoint;
+    }
   else
-    tdep->arm_breakpoint = arm_linux_arm_le_breakpoint;
+    {
+      if (tdep->arm_abi == ARM_ABI_AAPCS)
+	tdep->arm_breakpoint = eabi_linux_arm_le_breakpoint;
+      else
+	tdep->arm_breakpoint = arm_linux_arm_le_breakpoint;
+      tdep->thumb_breakpoint = arm_linux_thumb_le_breakpoint;
+    }
   tdep->arm_breakpoint_size = sizeof (arm_linux_arm_le_breakpoint);
+  tdep->thumb_breakpoint_size = sizeof (arm_linux_thumb_le_breakpoint);
 
-  tdep->fp_model = ARM_FLOAT_FPA;
+  if (tdep->fp_model == ARM_FLOAT_AUTO)
+    tdep->fp_model = ARM_FLOAT_FPA;
 
   tdep->jb_pc = ARM_LINUX_JB_PC;
   tdep->jb_elt_size = ARM_LINUX_JB_ELEMENT_SIZE;
 
   set_solib_svr4_fetch_link_map_offsets
-    (gdbarch, arm_linux_svr4_fetch_link_map_offsets);
+    (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
-  /* The following two overrides shouldn't be needed.  */
-  set_gdbarch_deprecated_extract_return_value (gdbarch, arm_linux_extract_return_value);
-  set_gdbarch_deprecated_push_arguments (gdbarch, arm_linux_push_arguments);
+  /* Single stepping.  */
+  set_gdbarch_software_single_step (gdbarch, arm_linux_software_single_step);
 
   /* Shared library handling.  */
-  set_gdbarch_in_solib_call_trampoline (gdbarch, in_plt_section);
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
+
+  tramp_frame_prepend_unwinder (gdbarch,
+				&arm_linux_sigreturn_tramp_frame);
+  tramp_frame_prepend_unwinder (gdbarch,
+				&arm_linux_rt_sigreturn_tramp_frame);
+  tramp_frame_prepend_unwinder (gdbarch,
+				&arm_eabi_linux_sigreturn_tramp_frame);
+  tramp_frame_prepend_unwinder (gdbarch,
+				&arm_eabi_linux_rt_sigreturn_tramp_frame);
+
+  /* Core file support.  */
+  set_gdbarch_regset_from_core_section (gdbarch,
+					arm_linux_regset_from_core_section);
 }
 
 void

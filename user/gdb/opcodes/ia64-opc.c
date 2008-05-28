@@ -1,27 +1,27 @@
 /* ia64-opc.c -- Functions to access the compacted opcode table
-   Copyright 1999, 2000, 2003 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2003, 2005, 2007 Free Software Foundation, Inc.
    Written by Bob Manson of Cygnus Solutions, <manson@cygnus.com>
 
-   This file is part of GDB, GAS, and the GNU binutils.
+   This file is part of the GNU opcodes library.
 
-   GDB, GAS, and the GNU binutils are free software; you can redistribute
-   them and/or modify them under the terms of the GNU General Public
-   License as published by the Free Software Foundation; either version
-   2, or (at your option) any later version.
+   This library is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-   GDB, GAS, and the GNU binutils are distributed in the hope that they
-   will be useful, but WITHOUT ANY WARRANTY; without even the implied
-   warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
-   the GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
    You should have received a copy of the GNU General Public License
    along with this file; see the file COPYING.  If not, write to the
-   Free Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "ansidecl.h"
-#include "libiberty.h"
 #include "sysdep.h"
+#include "libiberty.h"
 #include "ia64-asmtab.h"
 #include "ia64-asmtab.c"
 
@@ -365,7 +365,7 @@ locate_opcode_ent (ia64_insn opcode, enum ia64_insn_type type)
       unsigned int op;
       int currbitnum = bitpos[currstatenum];
       int oplen;
-      int opval[3];
+      int opval[3] = {0};
       int next_op;
       int currbit;
 

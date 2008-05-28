@@ -9,8 +9,7 @@
 #include <linux/netfilter_ipv6/ip6t_frag.h>
                                         
 /* Function which prints out usage message. */
-static void
-help(void)
+static void frag_help(void)
 {
 	printf(
 "FRAG v%s options:\n"
@@ -23,14 +22,14 @@ help(void)
 IPTABLES_VERSION);
 }
 
-static struct option opts[] = {
-	{ .name = "fragid",    .has_arg = 1, .flag = 0, .val = '1' },
-	{ .name = "fraglen",   .has_arg = 1, .flag = 0, .val = '2' },
-	{ .name = "fragres",   .has_arg = 0, .flag = 0, .val = '3' },
-	{ .name = "fragfirst", .has_arg = 0, .flag = 0, .val = '4' },
-	{ .name = "fragmore",  .has_arg = 0, .flag = 0, .val = '5' },
-	{ .name = "fraglast",  .has_arg = 0, .flag = 0, .val = '6' },
-	{ .name = 0 }
+static const struct option frag_opts[] = {
+	{ .name = "fragid",    .has_arg = 1, .val = '1' },
+	{ .name = "fraglen",   .has_arg = 1, .val = '2' },
+	{ .name = "fragres",   .has_arg = 0, .val = '3' },
+	{ .name = "fragfirst", .has_arg = 0, .val = '4' },
+	{ .name = "fragmore",  .has_arg = 0, .val = '5' },
+	{ .name = "fraglast",  .has_arg = 0, .val = '6' },
+	{ }
 };
 
 static u_int32_t
@@ -77,8 +76,7 @@ parse_frag_ids(const char *idstring, u_int32_t *ids)
 }
 
 /* Initialize the match. */
-static void
-init(struct ip6t_entry_match *m, unsigned int *nfcache)
+static void frag_init(struct xt_entry_match *m)
 {
 	struct ip6t_frag *fraginfo = (struct ip6t_frag *)m->data;
 
@@ -91,11 +89,8 @@ init(struct ip6t_entry_match *m, unsigned int *nfcache)
 
 /* Function which parses command options; returns true if it
    ate an option */
-static int
-parse(int c, char **argv, int invert, unsigned int *flags,
-      const struct ip6t_entry *entry,
-      unsigned int *nfcache,
-      struct ip6t_entry_match **match)
+static int frag_parse(int c, char **argv, int invert, unsigned int *flags,
+                      const void *entry, struct xt_entry_match **match)
 {
 	struct ip6t_frag *fraginfo = (struct ip6t_frag *)(*match)->data;
 
@@ -157,12 +152,6 @@ parse(int c, char **argv, int invert, unsigned int *flags,
 	return 1;
 }
 
-/* Final check; we don't care. */
-static void
-final_check(unsigned int flags)
-{
-}
-
 static void
 print_ids(const char *name, u_int32_t min, u_int32_t max,
 	    int invert)
@@ -179,9 +168,8 @@ print_ids(const char *name, u_int32_t min, u_int32_t max,
 }
 
 /* Prints out the union ip6t_matchinfo. */
-static void
-print(const struct ip6t_ip6 *ip,
-      const struct ip6t_entry_match *match, int numeric)
+static void frag_print(const void *ip, const struct xt_entry_match *match,
+                       int numeric)
 {
 	const struct ip6t_frag *frag = (struct ip6t_frag *)match->data;
 
@@ -213,7 +201,7 @@ print(const struct ip6t_ip6 *ip,
 }
 
 /* Saves the union ip6t_matchinfo in parsable form to stdout. */
-static void save(const struct ip6t_ip6 *ip, const struct ip6t_entry_match *match)
+static void frag_save(const void *ip, const struct xt_entry_match *match)
 {
 	const struct ip6t_frag *fraginfo = (struct ip6t_frag *)match->data;
 
@@ -250,23 +238,21 @@ static void save(const struct ip6t_ip6 *ip, const struct ip6t_entry_match *match
 		printf("--fraglast ");
 }
 
-static
-struct ip6tables_match frag = {
+static struct ip6tables_match frag_match6 = {
 	.name          = "frag",
 	.version       = IPTABLES_VERSION,
 	.size          = IP6T_ALIGN(sizeof(struct ip6t_frag)),
 	.userspacesize = IP6T_ALIGN(sizeof(struct ip6t_frag)),
-	.help          = &help,
-	.init          = &init,
-	.parse         = &parse,
-	.final_check   = &final_check,
-	.print         = &print,
-	.save          = &save,
-	.extra_opts    = opts
+	.help          = frag_help,
+	.init          = frag_init,
+	.parse         = frag_parse,
+	.print         = frag_print,
+	.save          = frag_save,
+	.extra_opts    = frag_opts,
 };
 
 void
 _init(void)
 {
-	register_match6(&frag);
+	register_match6(&frag_match6);
 }

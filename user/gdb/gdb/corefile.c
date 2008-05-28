@@ -1,13 +1,13 @@
 /* Core dump and executable file functions above target vector, for GDB.
 
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1996, 1997,
-   1998, 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1996, 1997, 1998,
+   1999, 2000, 2001, 2003, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -35,6 +33,7 @@
 #include "dis-asm.h"
 #include "gdb_stat.h"
 #include "completer.h"
+#include "exceptions.h"
 
 /* Local function declarations.  */
 
@@ -72,7 +71,7 @@ core_file_command (char *filename, int from_tty)
 
   t = find_core_target ();
   if (t == NULL)
-    error ("GDB can't read core files on this machine.");
+    error (_("GDB can't read core files on this machine."));
 
   if (!filename)
     (t->to_detach) (filename, from_tty);
@@ -81,8 +80,9 @@ core_file_command (char *filename, int from_tty)
 }
 
 
-/* If there are two or more functions that wish to hook into exec_file_command,
- * this function will call all of the hook functions. */
+/* If there are two or more functions that wish to hook into
+   exec_file_command, this function will call all of the hook
+   functions.  */
 
 static void
 call_extra_exec_file_hooks (char *filename)
@@ -107,7 +107,7 @@ specify_exec_file_hook (void (*hook) (char *))
        * and the subsequent hooks called. */
       if (exec_file_hook_count == 0)
 	{
-	  /* If this is the first extra hook, initialize the hook array. */
+	  /* If this is the first extra hook, initialize the hook array.  */
 	  exec_file_extra_hooks = (hook_type *) xmalloc (sizeof (hook_type));
 	  exec_file_extra_hooks[0] = deprecated_exec_file_display_hook;
 	  deprecated_exec_file_display_hook = call_extra_exec_file_hooks;
@@ -153,8 +153,8 @@ reopen_exec_file (void)
   struct stat st;
   long mtime;
 
-  /* Don't do anything if the current target isn't exec. */
-  if (exec_bfd == NULL || strcmp (target_shortname, "exec") != 0)
+  /* Don't do anything if there isn't an exec file. */
+  if (exec_bfd == NULL)
     return;
 
   /* If the timestamp of the exec file has changed, reopen it. */
@@ -164,9 +164,7 @@ reopen_exec_file (void)
   res = stat (filename, &st);
 
   if (mtime && mtime != st.st_mtime)
-    {
-      exec_open (filename, 0);
-    }
+    exec_file_attach (filename, 0);
 #endif
 }
 
@@ -179,9 +177,9 @@ validate_files (void)
   if (exec_bfd && core_bfd)
     {
       if (!core_file_matches_executable_p (core_bfd, exec_bfd))
-	warning ("core file may not match specified executable file.");
+	warning (_("core file may not match specified executable file."));
       else if (bfd_get_mtime (exec_bfd) > bfd_get_mtime (core_bfd))
-	warning ("exec file is newer than core file.");
+	warning (_("exec file is newer than core file."));
     }
 }
 
@@ -197,8 +195,8 @@ get_exec_file (int err)
   if (!err)
     return NULL;
 
-  error ("No executable file specified.\n\
-Use the \"file\" or \"exec-file\" command.");
+  error (_("No executable file specified.\n\
+Use the \"file\" or \"exec-file\" command."));
   return NULL;
 }
 
@@ -216,12 +214,12 @@ memory_error (int status, CORE_ADDR memaddr)
       /* Actually, address between memaddr and memaddr + len
          was out of bounds. */
       fprintf_unfiltered (tmp_stream, "Cannot access memory at address ");
-      print_address_numeric (memaddr, 1, tmp_stream);
+      fputs_filtered (paddress (memaddr), tmp_stream);
     }
   else
     {
       fprintf_filtered (tmp_stream, "Error accessing memory address ");
-      print_address_numeric (memaddr, 1, tmp_stream);
+      fputs_filtered (paddress (memaddr), tmp_stream);
       fprintf_filtered (tmp_stream, ": %s.",
 		       safe_strerror (status));
     }
@@ -231,7 +229,7 @@ memory_error (int status, CORE_ADDR memaddr)
 
 /* Same as target_read_memory, but report an error if can't read.  */
 void
-read_memory (CORE_ADDR memaddr, char *myaddr, int len)
+read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
 {
   int status;
   status = target_read_memory (memaddr, myaddr, len);
@@ -293,7 +291,7 @@ safe_read_memory_integer (CORE_ADDR memaddr, int len, LONGEST *return_value)
 LONGEST
 read_memory_integer (CORE_ADDR memaddr, int len)
 {
-  char buf[sizeof (LONGEST)];
+  gdb_byte buf[sizeof (LONGEST)];
 
   read_memory (memaddr, buf, len);
   return extract_signed_integer (buf, len);
@@ -302,7 +300,7 @@ read_memory_integer (CORE_ADDR memaddr, int len)
 ULONGEST
 read_memory_unsigned_integer (CORE_ADDR memaddr, int len)
 {
-  char buf[sizeof (ULONGEST)];
+  gdb_byte buf[sizeof (ULONGEST)];
 
   read_memory (memaddr, buf, len);
   return extract_unsigned_integer (buf, len);
@@ -338,18 +336,20 @@ read_memory_string (CORE_ADDR memaddr, char *buffer, int max_len)
 CORE_ADDR
 read_memory_typed_address (CORE_ADDR addr, struct type *type)
 {
-  char *buf = alloca (TYPE_LENGTH (type));
+  gdb_byte *buf = alloca (TYPE_LENGTH (type));
   read_memory (addr, buf, TYPE_LENGTH (type));
   return extract_typed_address (buf, type);
 }
 
 /* Same as target_write_memory, but report an error if can't write.  */
 void
-write_memory (CORE_ADDR memaddr, char *myaddr, int len)
+write_memory (CORE_ADDR memaddr, const bfd_byte *myaddr, int len)
 {
   int status;
-
-  status = target_write_memory (memaddr, myaddr, len);
+  gdb_byte *bytes = alloca (len);
+  
+  memcpy (bytes, myaddr, len);
+  status = target_write_memory (memaddr, bytes, len);
   if (status != 0)
     memory_error (status, memaddr);
 }
@@ -358,7 +358,7 @@ write_memory (CORE_ADDR memaddr, char *myaddr, int len)
 void
 write_memory_unsigned_integer (CORE_ADDR addr, int len, ULONGEST value)
 {
-  char *buf = alloca (len);
+  gdb_byte *buf = alloca (len);
   store_unsigned_integer (buf, len, value);
   write_memory (addr, buf, len);
 }
@@ -367,7 +367,7 @@ write_memory_unsigned_integer (CORE_ADDR addr, int len, ULONGEST value)
 void
 write_memory_signed_integer (CORE_ADDR addr, int len, LONGEST value)
 {
-  char *buf = alloca (len);
+  gdb_byte *buf = alloca (len);
   store_signed_integer (buf, len, value);
   write_memory (addr, buf, len);
 }
@@ -412,6 +412,12 @@ char *gnutarget;
 
 /* Same thing, except it is "auto" not NULL for the default case.  */
 static char *gnutarget_string;
+static void
+show_gnutarget_string (struct ui_file *file, int from_tty,
+		       struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("The current BFD target is \"%s\".\n"), value);
+}
 
 static void set_gnutarget_command (char *, int, struct cmd_list_element *);
 
@@ -438,19 +444,21 @@ void
 _initialize_core (void)
 {
   struct cmd_list_element *c;
-  c = add_cmd ("core-file", class_files, core_file_command,
-	       "Use FILE as core dump for examining memory and registers.\n\
+  c = add_cmd ("core-file", class_files, core_file_command, _("\
+Use FILE as core dump for examining memory and registers.\n\
 No arg means have no core file.  This command has been superseded by the\n\
-`target core' and `detach' commands.", &cmdlist);
+`target core' and `detach' commands."), &cmdlist);
   set_cmd_completer (c, filename_completer);
 
-  c = add_set_cmd ("gnutarget", class_files, var_string_noescape,
-		   (char *) &gnutarget_string,
-		   "Set the current BFD target.\n\
-Use `set gnutarget auto' to specify automatic detection.",
-		   &setlist);
-  set_cmd_sfunc (c, set_gnutarget_command);
-  deprecated_add_show_from_set (c, &showlist);
+  
+  add_setshow_string_noescape_cmd ("gnutarget", class_files,
+				   &gnutarget_string, _("(\
+Set the current BFD target."), _("\
+Show the current BFD target."), _("\
+Use `set gnutarget auto' to specify automatic detection."),
+				   set_gnutarget_command,
+				   show_gnutarget_string,
+				   &setlist, &showlist);
 
   if (getenv ("GNUTARGET"))
     set_gnutarget (getenv ("GNUTARGET"));

@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 1999 - 2005 Tomasz Kojm <tkojm@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -80,9 +82,10 @@ typedef struct {
     const struct cli_matcher *root;
     const struct cl_engine *engine;
     const struct cl_limits *limits;
+    unsigned long scansize;
     unsigned int options;
-    unsigned int arec;
-    unsigned int mrec;
+    unsigned int recursion;
+    unsigned int scannedfiles;
     unsigned int found_possibly_unwanted;
     struct cli_dconf *dconf;
 } cli_ctx;
@@ -96,38 +99,68 @@ typedef struct {
 #define SCAN_ELF	    (ctx->options & CL_SCAN_ELF)
 #define SCAN_ALGO 	    (ctx->options & CL_SCAN_ALGORITHMIC)
 #define DETECT_ENCRYPTED    (ctx->options & CL_SCAN_BLOCKENCRYPTED)
-#define BLOCKMAX	    (ctx->options & CL_SCAN_BLOCKMAX)
+/* #define BLOCKMAX	    (ctx->options & CL_SCAN_BLOCKMAX) */
 #define DETECT_BROKEN	    (ctx->options & CL_SCAN_BLOCKBROKEN)
 
+/* based on macros from A. Melnikoff */
+#define cbswap16(v) (((v & 0xff) << 8) | (((v) >> 8) & 0xff))
+#define cbswap32(v) ((((v) & 0x000000ff) << 24) | (((v) & 0x0000ff00) << 8) | \
+		    (((v) & 0x00ff0000) >> 8)  | (((v) & 0xff000000) >> 24))
+#define cbswap64(v) ((((v) & 0x00000000000000ff) << 56) | \
+		     (((v) & 0x000000000000ff00) << 40) | \
+		     (((v) & 0x0000000000ff0000) << 24) | \
+		     (((v) & 0x00000000ff000000) <<  8) | \
+		     (((v) & 0x000000ff00000000) >>  8) | \
+		     (((v) & 0x0000ff0000000000) >> 24) | \
+		     (((v) & 0x00ff000000000000) >> 40) | \
+		     (((v) & 0xff00000000000000) >> 56))
+
+
 #if WORDS_BIGENDIAN == 0
-/* new macros from A. Melnikoff */
+/* Little endian */
 #define le16_to_host(v)	(v)
 #define le32_to_host(v)	(v)
 #define le64_to_host(v)	(v)
-#define	be16_to_host(v)	((v >> 8) | ((v & 0xFF) << 8))
-#define	be32_to_host(v)	((v >> 24) | ((v & 0x00FF0000) >> 8) | \
-				((v & 0x0000FF00) << 8) | (v << 24))
-#define be64_to_host(v)	((v >> 56) | ((v & 0x00FF000000000000LL) >> 40) | \
-				((v & 0x0000FF0000000000LL) >> 24) | \
-				((v & 0x000000FF00000000LL) >> 8) |  \
-				((v & 0x00000000FF000000LL) << 8) |  \
-				((v & 0x0000000000FF0000LL) << 24) | \
-				((v & 0x000000000000FF00LL) << 40) | \
-				(v << 56))
+#define	be16_to_host(v)	cbswap16(v)
+#define	be32_to_host(v)	cbswap32(v)
+#define be64_to_host(v) cbswap64(v)
+#define cli_readint32(buff) (*(const int32_t *)(buff))
+#define cli_readint16(buff) (*(const int16_t *)(buff))
+#define cli_writeint32(offset, value) (*(uint32_t *)(offset)=(uint32_t)(value))
 #else
-#define	le16_to_host(v)	((v >> 8) | ((v & 0xFF) << 8))
-#define	le32_to_host(v)	((v >> 24) | ((v & 0x00FF0000) >> 8) | \
-				((v & 0x0000FF00) << 8) | (v << 24))
-#define le64_to_host(v)	((v >> 56) | ((v & 0x00FF000000000000LL) >> 40) | \
-				((v & 0x0000FF0000000000LL) >> 24) | \
-				((v & 0x000000FF00000000LL) >> 8) |  \
-				((v & 0x00000000FF000000LL) << 8) |  \
-				((v & 0x0000000000FF0000LL) << 24) | \
-				((v & 0x000000000000FF00LL) << 40) | \
-				(v << 56))
+/* Big endian */
+#define	le16_to_host(v)	cbswap16(v)
+#define	le32_to_host(v)	cbswap32(v)
+#define le64_to_host(v) cbswap64(v)
 #define be16_to_host(v)	(v)
 #define be32_to_host(v)	(v)
 #define be64_to_host(v)	(v)
+
+static inline int32_t cli_readint32(const char *buff)
+{
+	int32_t ret;
+    ret = buff[0] & 0xff;
+    ret |= (buff[1] & 0xff) << 8;
+    ret |= (buff[2] & 0xff) << 16;
+    ret |= (buff[3] & 0xff) << 24;
+    return ret;
+}
+
+static inline int16_t cli_readint16(const char *buff)
+{
+	int16_t ret;
+    ret = buff[0] & 0xff;
+    ret |= (buff[1] & 0xff) << 8;
+    return ret;
+}
+
+static inline void cli_writeint32(char *offset, uint32_t value)
+{
+    offset[0] = value & 0xff;
+    offset[1] = (value & 0xff00) >> 8;
+    offset[2] = (value & 0xff0000) >> 16;
+    offset[3] = (value & 0xff000000) >> 24;
+}
 #endif
 
 /* used by: spin, yc (C) aCaB */
@@ -163,9 +196,33 @@ typedef struct bitset_tag
         unsigned long length;
 } bitset_t;
 
+#ifdef __GNUC__
+void cli_warnmsg(const char *str, ...) __attribute__((format(printf, 1, 2)));
+#else
 void cli_warnmsg(const char *str, ...);
+#endif
+
+#ifdef __GNUC__
+void cli_errmsg(const char *str, ...) __attribute__((format(printf, 1, 2)));
+#else
 void cli_errmsg(const char *str, ...);
-void cli_dbgmsg(const char *str, ...);
+#endif
+
+/* tell compiler about branches that are very rarely taken,
+ * such as debug paths, and error paths */
+#if (__GNUC__ >= 4) || (__GNUC__ == 3 && __GNUC_MINOR__ >= 2)
+#define UNLIKELY(cond) __builtin_expect(!!(cond), 0)
+#else
+#define UNLIKELY(cond) (cond)
+#endif
+
+#define cli_dbgmsg (!UNLIKELY(cli_debug_flag)) ? (void)0 : cli_dbgmsg_internal
+
+#ifdef __GNUC__
+void cli_dbgmsg_internal(const char *str, ...) __attribute__((format(printf, 1, 2)));
+#else
+void cli_dbgmsg_internal(const char *str, ...);
+#endif
 
 void *cli_malloc(size_t nmemb);
 void *cli_calloc(size_t nmemb, size_t size);
@@ -187,28 +244,7 @@ void cli_bitset_free(bitset_t *bs);
 int cli_bitset_set(bitset_t *bs, unsigned long bit_offset);
 int cli_bitset_test(bitset_t *bs, unsigned long bit_offset);
 const char* cli_ctime(const time_t *timep, char *buf, const size_t bufsize);
-
-#if WORDS_BIGENDIAN == 0
-#define cli_readint32(buff) (*(const int32_t *)(buff))
-#define cli_writeint32(offset, value) (*(uint32_t *)(offset)=(uint32_t)(value))
-#else
-static inline int32_t cli_readint32(const char *buff)
-{
-	int32_t ret;
-    ret = buff[0] & 0xff;
-    ret |= (buff[1] & 0xff) << 8;
-    ret |= (buff[2] & 0xff) << 16;
-    ret |= (buff[3] & 0xff) << 24;
-    return ret;
-}
-
-static inline void cli_writeint32(char *offset, uint32_t value)
-{
-    offset[0] = value & 0xff;
-    offset[1] = (value & 0xff00) >> 8;
-    offset[2] = (value & 0xff0000) >> 16;
-    offset[3] = (value & 0xff000000) >> 24;
-}
-#endif /* WORDS_BIGENDIAN == 0 */
-
+int cli_checklimits(const char *, cli_ctx *, unsigned long, unsigned long, unsigned long);
+int cli_updatelimits(cli_ctx *, unsigned long);
+unsigned long cli_getsizelimit(cli_ctx *, unsigned long);
 #endif

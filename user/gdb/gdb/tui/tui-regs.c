@@ -1,7 +1,7 @@
 /* TUI display registers in window.
 
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "tui/tui.h"
@@ -51,14 +49,20 @@ tui_display_register (struct tui_data_element *data,
                       struct tui_gen_win_info *win_info);
 
 static enum tui_status
-tui_show_register_group (struct gdbarch *gdbarch, struct reggroup *group,
-                         struct frame_info *frame, int refresh_values_only);
+tui_show_register_group (struct gdbarch *gdbarch, 
+			 struct reggroup *group,
+                         struct frame_info *frame, 
+			 int refresh_values_only);
 
 static enum tui_status
-tui_get_register (struct gdbarch *gdbarch, struct frame_info *frame,
-                  struct tui_data_element *data, int regnum, int *changedp);
-static void tui_register_format
-  (struct gdbarch *, struct frame_info *, struct tui_data_element*, int);
+tui_get_register (struct gdbarch *gdbarch, 
+		  struct frame_info *frame,
+                  struct tui_data_element *data, 
+		  int regnum, int *changedp);
+static void tui_register_format (struct gdbarch *, 
+				 struct frame_info *, 
+				 struct tui_data_element*, 
+				 int);
 static void tui_scroll_regs_forward_command (char *, int);
 static void tui_scroll_regs_backward_command (char *, int);
 
@@ -114,8 +118,8 @@ tui_line_from_reg_element_no (int element_no)
 }
 
 
-/* Answer the index of the first element in line_no.  If line_no is past
-   the register area (-1) is returned.  */
+/* Answer the index of the first element in line_no.  If line_no is
+   past the register area (-1) is returned.  */
 int
 tui_first_reg_element_no_inline (int line_no)
 {
@@ -162,7 +166,8 @@ tui_show_registers (struct reggroup *group)
   if (group == 0)
     group = general_reggroup;
 
-  /* Say that registers should be displayed, even if there is a problem.  */
+  /* Say that registers should be displayed, even if there is a
+     problem.  */
   display_info->display_regs = TRUE;
 
   if (target_has_registers && target_has_stack && target_has_memory)
@@ -180,7 +185,7 @@ tui_show_registers (struct reggroup *group)
     {
       int i;
 
-      /* Clear all notation of changed values */
+      /* Clear all notation of changed values.  */
       for (i = 0; i < display_info->regs_content_count; i++)
 	{
 	  struct tui_gen_win_info *data_item_win;
@@ -198,12 +203,14 @@ tui_show_registers (struct reggroup *group)
 
 
 /* Set the data window to display the registers of the register group
-   using the given frame.  Values are refreshed only when refresh_values_only
-   is TRUE.  */
+   using the given frame.  Values are refreshed only when
+   refresh_values_only is TRUE.  */
 
 static enum tui_status
-tui_show_register_group (struct gdbarch *gdbarch, struct reggroup *group,
-                         struct frame_info *frame, int refresh_values_only)
+tui_show_register_group (struct gdbarch *gdbarch, 
+			 struct reggroup *group,
+                         struct frame_info *frame, 
+			 int refresh_values_only)
 {
   enum tui_status ret = TUI_FAILURE;
   int nr_regs;
@@ -220,7 +227,10 @@ tui_show_register_group (struct gdbarch *gdbarch, struct reggroup *group,
 
   /* See how many registers must be displayed.  */
   nr_regs = 0;
-  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+  for (regnum = 0;
+       regnum < gdbarch_num_regs (current_gdbarch)
+		+ gdbarch_num_pseudo_regs (current_gdbarch);
+       regnum++)
     {
       /* Must be in the group and have a name.  */
       if (gdbarch_register_reggroup_p (gdbarch, regnum, group)
@@ -254,9 +264,12 @@ tui_show_register_group (struct gdbarch *gdbarch, struct reggroup *group,
 	  display_info->regs_content_count = nr_regs;
 	}
 
-      /* Now set the register names and values */
+      /* Now set the register names and values.  */
       pos = 0;
-      for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+      for (regnum = 0;
+	   regnum < gdbarch_num_regs (current_gdbarch)
+		    + gdbarch_num_pseudo_regs (current_gdbarch);
+	   regnum++)
         {
 	  struct tui_gen_win_info *data_item_win;
           struct tui_data_element *data;
@@ -306,8 +319,8 @@ tui_display_registers_from (int start_element_no)
 {
   struct tui_data_info *display_info = &TUI_DATA_WIN->detail.data_display_info;
 
-  if (display_info->regs_content != (tui_win_content) NULL &&
-      display_info->regs_content_count > 0)
+  if (display_info->regs_content != (tui_win_content) NULL 
+      && display_info->regs_content_count > 0)
     {
       int i = start_element_no;
       int j, value_chars_wide, item_win_width, cur_y;
@@ -347,21 +360,21 @@ tui_display_registers_from (int start_element_no)
       item_win_width =
         (TUI_DATA_WIN->generic.width - 2) / display_info->regs_column_count;
 
-      /*
-         ** Now create each data "sub" window, and write the display into it.
-       */
+      /* Now create each data "sub" window, and write the display into
+	 it.  */
       cur_y = 1;
-      while (i < display_info->regs_content_count &&
-	     cur_y <= TUI_DATA_WIN->generic.viewport_height)
+      while (i < display_info->regs_content_count 
+	     && cur_y <= TUI_DATA_WIN->generic.viewport_height)
 	{
 	  for (j = 0;
-	       (j < display_info->regs_column_count &&
-		i < display_info->regs_content_count); j++)
+	       j < display_info->regs_column_count
+		 && i < display_info->regs_content_count;
+	       j++)
 	    {
-	      struct tui_gen_win_info * data_item_win;
-	      struct tui_data_element * data_element_ptr;
+	      struct tui_gen_win_info *data_item_win;
+	      struct tui_data_element *data_element_ptr;
 
-	      /* create the window if necessary */
+	      /* Create the window if necessary.  */
 	      data_item_win = &display_info->regs_content[i]
                 ->which_element.data_window;
 	      data_element_ptr = &((struct tui_win_element *)
@@ -390,9 +403,9 @@ tui_display_registers_from (int start_element_no)
 	      /* Get the printable representation of the register
                  and display it.  */
               tui_display_register (data_element_ptr, data_item_win);
-	      i++;		/* next register */
+	      i++;		/* Next register.  */
 	    }
-	  cur_y++;		/* next row; */
+	  cur_y++;		/* Next row.  */
 	}
     }
 }
@@ -403,10 +416,11 @@ tui_display_registers_from (int start_element_no)
    content or the end of the display height.  This function checks
    that we won't display off the end of the register display.  */
 void
-tui_display_reg_element_at_line (int start_element_no, int start_line_no)
+tui_display_reg_element_at_line (int start_element_no,
+				 int start_line_no)
 {
-  if (TUI_DATA_WIN->detail.data_display_info.regs_content != (tui_win_content) NULL &&
-      TUI_DATA_WIN->detail.data_display_info.regs_content_count > 0)
+  if (TUI_DATA_WIN->detail.data_display_info.regs_content != (tui_win_content) NULL
+      && TUI_DATA_WIN->detail.data_display_info.regs_content_count > 0)
     {
       int element_no = start_element_no;
 
@@ -418,13 +432,13 @@ tui_display_reg_element_at_line (int start_element_no, int start_line_no)
 	  first_line_on_last_page = last_line_no - (TUI_DATA_WIN->generic.height - 2);
 	  if (first_line_on_last_page < 0)
 	    first_line_on_last_page = 0;
-	  /*
-	     ** If there is no other data displayed except registers,
-	     ** and the element_no causes us to scroll past the end of the
-	     ** registers, adjust what element to really start the display at.
-	   */
-	  if (TUI_DATA_WIN->detail.data_display_info.data_content_count <= 0 &&
-	      start_line_no > first_line_on_last_page)
+
+	  /* If there is no other data displayed except registers, and
+	     the element_no causes us to scroll past the end of the
+	     registers, adjust what element to really start the
+	     display at.  */
+	  if (TUI_DATA_WIN->detail.data_display_info.data_content_count <= 0
+	      && start_line_no > first_line_on_last_page)
 	    element_no = tui_first_reg_element_no_inline (first_line_on_last_page);
 	}
       tui_display_registers_from (element_no);
@@ -437,7 +451,8 @@ tui_display_reg_element_at_line (int start_element_no, int start_line_no)
    data window.  Answers the line number that the display actually
    started from.  If nothing is displayed (-1) is returned.  */
 int
-tui_display_registers_from_line (int line_no, int force_display)
+tui_display_registers_from_line (int line_no, 
+				 int force_display)
 {
   if (TUI_DATA_WIN->detail.data_display_info.regs_content_count > 0)
     {
@@ -446,10 +461,9 @@ tui_display_registers_from_line (int line_no, int force_display)
       if (line_no < 0)
 	line = 0;
       else if (force_display)
-	{			/*
-				   ** If we must display regs (force_display is true), then make
-				   ** sure that we don't display off the end of the registers.
-				 */
+	{ /* If we must display regs (force_display is true), then
+	     make sure that we don't display off the end of the
+	     registers.  */
 	  if (line_no >= tui_last_regs_line_no ())
 	    {
 	      if ((line = tui_line_from_reg_element_no (
@@ -471,7 +485,7 @@ tui_display_registers_from_line (int line_no, int force_display)
       return line;
     }
 
-  return (-1);			/* nothing was displayed */
+  return (-1);			/* Nothing was displayed.  */
 }
 
 
@@ -481,12 +495,14 @@ tui_display_registers_from_line (int line_no, int force_display)
 void
 tui_check_register_values (struct frame_info *frame)
 {
-  if (TUI_DATA_WIN != NULL && TUI_DATA_WIN->generic.is_visible)
+  if (TUI_DATA_WIN != NULL
+      && TUI_DATA_WIN->generic.is_visible)
     {
       struct tui_data_info *display_info
         = &TUI_DATA_WIN->detail.data_display_info;
 
-      if (display_info->regs_content_count <= 0 && display_info->display_regs)
+      if (display_info->regs_content_count <= 0 
+	  && display_info->display_regs)
 	tui_show_registers (display_info->current_group);
       else
 	{
@@ -516,8 +532,8 @@ tui_check_register_values (struct frame_info *frame)
     }
 }
 
-/* Display a register in a window.  If hilite is TRUE,
-   then the value will be displayed in reverse video  */
+/* Display a register in a window.  If hilite is TRUE, then the value
+   will be displayed in reverse video.  */
 static void
 tui_display_register (struct tui_data_element *data,
                       struct tui_gen_win_info *win_info)
@@ -582,8 +598,8 @@ static struct cmd_list_element *tuireglist;
 static void
 tui_reg_command (char *args, int from_tty)
 {
-  printf_unfiltered ("\"tui reg\" must be followed by the name of a "
-                     "tui reg command.\n");
+  printf_unfiltered (_("\"tui reg\" must be followed by the name of a "
+                     "tui reg command.\n"));
   help_list (tuireglist, "tui reg ", -1, gdb_stdout);
 }
 
@@ -595,35 +611,35 @@ _initialize_tui_regs (void)
   tuicmd = tui_get_cmd_list ();
 
   add_prefix_cmd ("reg", class_tui, tui_reg_command,
-                  "TUI commands to control the register window.",
+                  _("TUI commands to control the register window."),
                   &tuireglist, "tui reg ", 0,
                   tuicmd);
 
   add_cmd ("float", class_tui, tui_reg_float_command,
-           "Display only floating point registers\n",
+           _("Display only floating point registers."),
            &tuireglist);
   add_cmd ("general", class_tui, tui_reg_general_command,
-           "Display only general registers\n",
+           _("Display only general registers."),
            &tuireglist);
   add_cmd ("system", class_tui, tui_reg_system_command,
-           "Display only system registers\n",
+           _("Display only system registers."),
            &tuireglist);
   add_cmd ("next", class_tui, tui_reg_next_command,
-           "Display next register group\n",
+           _("Display next register group."),
            &tuireglist);
 
   if (xdb_commands)
     {
       add_com ("fr", class_tui, tui_reg_float_command,
-	       "Display only floating point registers\n");
+	       _("Display only floating point registers\n"));
       add_com ("gr", class_tui, tui_reg_general_command,
-	       "Display only general registers\n");
+	       _("Display only general registers\n"));
       add_com ("sr", class_tui, tui_reg_system_command,
-	       "Display only special registers\n");
+	       _("Display only special registers\n"));
       add_com ("+r", class_tui, tui_scroll_regs_forward_command,
-	       "Scroll the registers window forward\n");
+	       _("Scroll the registers window forward\n"));
       add_com ("-r", class_tui, tui_scroll_regs_backward_command,
-	       "Scroll the register window backward\n");
+	       _("Scroll the register window backward\n"));
     }
 }
 
@@ -645,8 +661,10 @@ tui_restore_gdbout (void *ui)
 /* Get the register from the frame and make a printable representation
    of it in the data element.  */
 static void
-tui_register_format (struct gdbarch *gdbarch, struct frame_info *frame,
-                     struct tui_data_element *data_element, int regnum)
+tui_register_format (struct gdbarch *gdbarch, 
+		     struct frame_info *frame,
+                     struct tui_data_element *data_element, 
+		     int regnum)
 {
   struct ui_file *stream;
   struct ui_file *old_stdout;
@@ -654,7 +672,7 @@ tui_register_format (struct gdbarch *gdbarch, struct frame_info *frame,
   struct cleanup *cleanups;
   char *p, *s;
   int pos;
-  struct type *type = gdbarch_register_type (gdbarch, regnum);
+  struct type *type = register_type (gdbarch, regnum);
 
   name = gdbarch_register_name (gdbarch, regnum);
   if (name == 0)
@@ -669,7 +687,7 @@ tui_register_format (struct gdbarch *gdbarch, struct frame_info *frame,
   cleanups = make_cleanup (tui_restore_gdbout, (void*) old_stdout);
   if (TYPE_VECTOR (type) != 0 && 0)
     {
-      char buf[MAX_REGISTER_SIZE];
+      gdb_byte buf[MAX_REGISTER_SIZE];
       int len;
 
       len = register_size (current_gdbarch, regnum);
@@ -696,12 +714,14 @@ tui_register_format (struct gdbarch *gdbarch, struct frame_info *frame,
   do_cleanups (cleanups);
 }
 
-/* Get the register value from the given frame and format it for
-   the display.  When changep is set, check if the new register value
-   has changed with respect to the previous call.  */
+/* Get the register value from the given frame and format it for the
+   display.  When changep is set, check if the new register value has
+   changed with respect to the previous call.  */
 static enum tui_status
-tui_get_register (struct gdbarch *gdbarch, struct frame_info *frame,
-                  struct tui_data_element *data, int regnum, int *changedp)
+tui_get_register (struct gdbarch *gdbarch, 
+		  struct frame_info *frame,
+                  struct tui_data_element *data, 
+		  int regnum, int *changedp)
 {
   enum tui_status ret = TUI_FAILURE;
 
@@ -709,33 +729,28 @@ tui_get_register (struct gdbarch *gdbarch, struct frame_info *frame,
     *changedp = FALSE;
   if (target_has_registers)
     {
-      char buf[MAX_REGISTER_SIZE];
-
+      gdb_byte buf[MAX_REGISTER_SIZE];
       get_frame_register (frame, regnum, buf);
-      /* NOTE: cagney/2003-03-13: This is bogus.  It is refering to
-         the register cache and not the frame which could have pulled
-         the register value off the stack.  */
-      if (register_cached (regnum) >= 0)
-        {
-          if (changedp)
-            {
-              int size = register_size (gdbarch, regnum);
-              char *old = (char*) data->value;
-              int i;
 
-              for (i = 0; i < size; i++)
-                if (buf[i] != old[i])
-                  {
-                    *changedp = TRUE;
-                    old[i] = buf[i];
-                  }
-            }
+      if (changedp)
+	{
+	  int size = register_size (gdbarch, regnum);
+	  char *old = (char*) data->value;
+	  int i;
 
-          /* Reformat the data content if the value changed.  */
-          if (changedp == 0 || *changedp == TRUE)
-            tui_register_format (gdbarch, frame, data, regnum);
-          ret = TUI_SUCCESS;
-        }
+	  for (i = 0; i < size; i++)
+	    if (buf[i] != old[i])
+	      {
+		*changedp = TRUE;
+		old[i] = buf[i];
+	      }
+	}
+
+      /* Reformat the data content if the value changed.  */
+      if (changedp == 0 || *changedp == TRUE)
+	tui_register_format (gdbarch, frame, data, regnum);
+
+      ret = TUI_SUCCESS;
     }
   return ret;
 }

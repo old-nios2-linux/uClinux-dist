@@ -1,12 +1,12 @@
 /* MI Command Set - MI Option Parser.
-   Copyright 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "mi-getopt.h"
@@ -34,7 +32,7 @@ mi_getopt (const char *prefix,
   /* We assume that argv/argc are ok. */
   if (*optind > argc || *optind < 0)
     internal_error (__FILE__, __LINE__,
-		    "mi_getopt_long: optind out of bounds");
+		    _("mi_getopt_long: optind out of bounds"));
   if (*optind == argc)
     return -1;
   arg = argv[*optind];
@@ -60,7 +58,7 @@ mi_getopt (const char *prefix,
 	{
 	  /* A non-simple optarg option. */
 	  if (argc < *optind + 2)
-	    error ("%s: Option %s requires an argument", prefix, arg);
+	    error (_("%s: Option %s requires an argument"), prefix, arg);
 	  *optarg = argv[(*optind) + 1];
 	  *optind = (*optind) + 2;
 	  return opt->index;
@@ -72,7 +70,7 @@ mi_getopt (const char *prefix,
 	  return opt->index;
 	}
     }
-  error ("%s: Unknown option ``%s''", prefix, arg + 1);
+  error (_("%s: Unknown option ``%s''"), prefix, arg + 1);
 }
 
 int 
@@ -82,7 +80,7 @@ mi_valid_noargs (const char *prefix, int argc, char **argv)
   char *optarg;
   static struct mi_opt opts[] =
   {
-    0
+    { 0, 0, 0 }
   };
 
   if (mi_getopt (prefix, argc, argv, opts, &optind, &optarg) == -1)

@@ -1,10 +1,11 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
+# Copyright 2000, 2002, 2003, 2004, 2005, 2007, 2008
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -13,8 +14,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 if [target_info exists gdb,noinferiorio] {
     verbose "Skipping fileio.exp because of no fileio capabilities."
@@ -35,7 +35,8 @@ set testfile "sizeof"
 set srcfile ${testfile}.c
 set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+     untested sizeof.exp
+     return -1
 }
 
 if [get_compiler_info ${binfile}] {
@@ -131,7 +132,7 @@ set signof_char [get_valueof "/d" "(int) (char) -1" -1]
 set signof_signed_char [get_valueof "/d" "(int) (signed char) -1" -1]
 set signof_unsigned_char [get_valueof "/d" "(int) (unsigned char) -1" -1]
 
-check_valueof "'\\\\377'" ${signof_byte}
+check_valueof "'\\377'" ${signof_byte}
 check_valueof "(int) (char) -1" ${signof_char}
 check_valueof "(int) (signed char) -1" ${signof_signed_char}
 check_valueof "(int) (unsigned char) -1" ${signof_unsigned_char}

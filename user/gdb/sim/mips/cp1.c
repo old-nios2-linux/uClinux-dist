@@ -1,6 +1,6 @@
 /*> cp1.c <*/
 /* MIPS Simulator FPU (CoProcessor 1) support.
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
    Originally created by Cygnus Solutions.  Extensive modifications,
    including paired-single operation support and MIPS-3D support
    contributed by Ed Satterthwaite and Chris Demetriou, of Broadcom
@@ -10,17 +10,16 @@ This file is part of GDB, the GNU debugger.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* XXX: The following notice should be removed as soon as is practical:  */
 /* Floating Point Support for gdb MIPS simulators
@@ -111,10 +110,10 @@ value_fpr (sim_cpu *cpu,
   int err = 0;
 
   /* Treat unused register values, as fixed-point 64bit values.  */
-  if ((fmt == fmt_uninterpreted) || (fmt == fmt_unknown))
+  if (fmt == fmt_unknown)
     {
 #if 1
-      /* If request to read data as "uninterpreted", then use the current
+      /* If request to read data as "unknown", then use the current
 	 encoding:  */
       fmt = FPR_STATE[fpr];
 #else
@@ -123,20 +122,23 @@ value_fpr (sim_cpu *cpu,
     }
 
   /* For values not yet accessed, set to the desired format.  */
-  if (FPR_STATE[fpr] == fmt_uninterpreted)
+  if (fmt < fmt_uninterpreted) 
     {
-      FPR_STATE[fpr] = fmt;
+      if (FPR_STATE[fpr] == fmt_uninterpreted)
+	{
+	  FPR_STATE[fpr] = fmt;
 #ifdef DEBUG
-      printf ("DBG: Register %d was fmt_uninterpreted. Now %s\n", fpr,
-	      fpu_format_name (fmt));
+	  printf ("DBG: Register %d was fmt_uninterpreted. Now %s\n", fpr,
+		  fpu_format_name (fmt));
 #endif /* DEBUG */
-    }
-  if (fmt != FPR_STATE[fpr])
-    {
-      sim_io_eprintf (SD, "FPR %d (format %s) being accessed with format %s - setting to unknown (PC = 0x%s)\n",
-		      fpr, fpu_format_name (FPR_STATE[fpr]),
-		      fpu_format_name (fmt), pr_addr (cia));
-      FPR_STATE[fpr] = fmt_unknown;
+	}
+      else if (fmt != FPR_STATE[fpr])
+	{
+	  sim_io_eprintf (SD, "FPR %d (format %s) being accessed with format %s - setting to unknown (PC = 0x%s)\n",
+			  fpr, fpu_format_name (FPR_STATE[fpr]),
+			  fpu_format_name (fmt), pr_addr (cia));
+	  FPR_STATE[fpr] = fmt_unknown;
+	}
     }
 
   if (FPR_STATE[fpr] == fmt_unknown)
@@ -156,11 +158,13 @@ value_fpr (sim_cpu *cpu,
     {
       switch (fmt)
 	{
+	case fmt_uninterpreted_32:
 	case fmt_single:
 	case fmt_word:
 	  value = (FGR[fpr] & 0xFFFFFFFF);
 	  break;
 
+	case fmt_uninterpreted_64:
 	case fmt_uninterpreted:
 	case fmt_double:
 	case fmt_long:
@@ -177,11 +181,13 @@ value_fpr (sim_cpu *cpu,
     {
       switch (fmt)
 	{
+	case fmt_uninterpreted_32:
 	case fmt_single:
 	case fmt_word:
 	  value = (FGR[fpr] & 0xFFFFFFFF);
 	  break;
 
+	case fmt_uninterpreted_64:
 	case fmt_uninterpreted:
 	case fmt_double:
 	case fmt_long:
@@ -299,7 +305,7 @@ store_fpr (sim_cpu *cpu,
 	  else
 	    {
 	      FPR_STATE[fpr] = fmt_unknown;
-	      FPR_STATE[fpr + 1] = fmt_unknown;
+	      FPR_STATE[fpr ^ 1] = fmt_unknown;
 	      SignalException (ReservedInstruction, 0);
 	    }
 	  break;

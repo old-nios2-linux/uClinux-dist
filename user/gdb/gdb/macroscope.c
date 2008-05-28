@@ -1,12 +1,12 @@
 /* Functions for deciding which macros are currently in scope.
-   Copyright 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -33,7 +31,7 @@
 struct macro_scope *
 sal_macro_scope (struct symtab_and_line sal)
 {
-  struct macro_source_file *main, *inclusion;
+  struct macro_source_file *main_file, *inclusion;
   struct macro_scope *ms;
 
   if (! sal.symtab
@@ -42,8 +40,8 @@ sal_macro_scope (struct symtab_and_line sal)
 
   ms = (struct macro_scope *) xmalloc (sizeof (*ms));
 
-  main = macro_main (sal.symtab->macro_table);
-  inclusion = macro_lookup_inclusion (main, sal.symtab->filename);
+  main_file = macro_main (sal.symtab->macro_table);
+  inclusion = macro_lookup_inclusion (main_file, sal.symtab->filename);
 
   if (inclusion)
     {
@@ -66,12 +64,12 @@ sal_macro_scope (struct symtab_and_line sal)
 
          For the time being, though, we'll just treat these as
          occurring at the end of the main source file.  */
-      ms->file = main;
+      ms->file = main_file;
       ms->line = -1;
 
       complaint (&symfile_complaints,
-                 "symtab found for `%s', but that file\n"
-                 "is not covered in the compilation unit's macro information",
+                 _("symtab found for `%s', but that file\n"
+                 "is not covered in the compilation unit's macro information"),
                  sal.symtab->filename);
     }
 
@@ -83,19 +81,15 @@ struct macro_scope *
 default_macro_scope (void)
 {
   struct symtab_and_line sal;
-  struct macro_source_file *main;
   struct macro_scope *ms;
+  struct frame_info *frame;
 
-  /* If there's a selected frame, use its PC.  */ 
-  if (deprecated_selected_frame)
-    sal = find_pc_line (get_frame_pc (deprecated_selected_frame), 0);
+  /* If there's a selected frame, use its PC.  */
+  frame = deprecated_safe_get_selected_frame ();
+  if (frame)
+    sal = find_pc_line (get_frame_pc (frame), 0);
   
-  /* If the target has any registers at all, then use its PC.  Why we
-     would have registers but no stack, I'm not sure.  */
-  else if (target_has_registers)
-    sal = find_pc_line (read_pc (), 0);
-
-  /* If all else fails, fall back to the current listing position.  */
+  /* Fall back to the current listing position.  */
   else
     {
       /* Don't call select_source_symtab here.  That can raise an

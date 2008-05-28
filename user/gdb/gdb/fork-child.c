@@ -1,7 +1,7 @@
 /* Fork a Unix child process, and set up to debug it, for GDB.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
-   2000, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -33,13 +31,12 @@
 #include "terminal.h"
 #include "gdbthread.h"
 #include "command.h" /* for dont_repeat () */
+#include "solib.h"
 
 #include <signal.h>
 
 /* This just gets used as a default if we can't find SHELL.  */
-#ifndef SHELL_FILE
 #define SHELL_FILE "/bin/sh"
-#endif
 
 extern char **environ;
 
@@ -137,6 +134,7 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   char **save_our_env;
   int shell = 0;
   static char **argv;
+  const char *inferior_io_terminal = get_inferior_io_terminal ();
 
   /* If no exec file handed to us, get it from the exec-file command
      -- with a good, common error message if none is specified.  */
@@ -162,15 +160,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
      fact that it may expand when quoted; it is a worst-case number
      based on every character being '.  */
   len = 5 + 4 * strlen (exec_file) + 1 + strlen (allargs) + 1 + /*slop */ 12;
-  /* If desired, concat something onto the front of ALLARGS.
-     SHELL_COMMAND is the result.  */
-#ifdef SHELL_COMMAND_CONCAT
-  shell_command = (char *) alloca (strlen (SHELL_COMMAND_CONCAT) + len);
-  strcpy (shell_command, SHELL_COMMAND_CONCAT);
-#else
   shell_command = (char *) alloca (len);
   shell_command[0] = '\0';
-#endif
 
   if (!shell)
     {
@@ -274,16 +265,24 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   if (pre_trace_fun != NULL)
     (*pre_trace_fun) ();
 
-  /* Create the child process.  Note that the apparent call to vfork()
-     below *might* actually be a call to fork() due to the fact that
-     autoconf will ``#define vfork fork'' on certain platforms.  */
-  if (debug_fork)
+  /* Create the child process.  Since the child process is going to
+     exec(3) shortly afterwards, try to reduce the overhead by
+     calling vfork(2).  However, if PRE_TRACE_FUN is non-null, it's
+     likely that this optimization won't work since there's too much
+     work to do between the vfork(2) and the exec(3).  This is known
+     to be the case on ttrace(2)-based HP-UX, where some handshaking
+     between parent and child needs to happen between fork(2) and
+     exec(2).  However, since the parent is suspended in the vforked
+     state, this doesn't work.  Also note that the vfork(2) call might
+     actually be a call to fork(2) due to the fact that autoconf will
+     ``#define vfork fork'' on certain platforms.  */
+  if (pre_trace_fun || debug_fork)
     pid = fork ();
   else
     pid = vfork ();
 
   if (pid < 0)
-    perror_with_name ("vfork");
+    perror_with_name (("vfork"));
 
   if (pid == 0)
     {
@@ -326,11 +325,9 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
       environ = env;
 
       /* If we decided above to start up with a shell, we exec the
-        shell, "-c" says to interpret the next arg as a shell command
-        to execute, and this command is "exec <target-program>
-        <args>".  "-f" means "fast startup" to the c-shell, which
-        means don't do .cshrc file. Doing .cshrc may cause fork/exec
-        events which will confuse debugger start-up code.  */
+	 shell, "-c" says to interpret the next arg as a shell command
+	 to execute, and this command is "exec <target-program>
+	 <args>".  */
       if (shell)
 	{
 	  execlp (shell_file, shell_file, "-c", shell_command, (char *) 0);
@@ -388,15 +385,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   /* We are now in the child process of interest, having exec'd the
      correct program, and are poised at the first instruction of the
      new program.  */
-
-  /* Allow target dependent code to play with the new process.  This
-     might be used to have target-specific code initialize a variable
-     in the new process prior to executing the first instruction.  */
-  TARGET_CREATE_INFERIOR_HOOK (pid);
-
-#ifdef SOLIB_CREATE_INFERIOR_HOOK
-  SOLIB_CREATE_INFERIOR_HOOK (pid);
-#endif
 }
 
 /* Accept NTRAPS traps from the inferior.  */
@@ -415,10 +403,6 @@ startup_inferior (int ntraps)
 
   init_wait_for_inferior ();
 
-  if (STARTUP_WITH_SHELL)
-    inferior_ignoring_startup_exec_events = ntraps;
-  else
-    inferior_ignoring_startup_exec_events = 0;
   inferior_ignoring_leading_exec_events =
     target_reported_exec_events_per_exec_call () - 1;
 
@@ -426,7 +410,7 @@ startup_inferior (int ntraps)
     {
       /* Make wait_for_inferior be quiet. */
       stop_soon = STOP_QUIETLY;
-      wait_for_inferior ();
+      wait_for_inferior (1);
       if (stop_signal != TARGET_SIGNAL_TRAP)
 	{
 	  /* Let shell child handle its own signals in its own way.

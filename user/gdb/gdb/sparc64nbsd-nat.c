@@ -1,12 +1,12 @@
 /* Native-dependent code for NetBSD/sparc64.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,11 +15,10 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdbcore.h"
 #include "regcache.h"
 #include "target.h"
 
@@ -35,7 +34,7 @@ sparc64nbsd_supply_gregset (const struct sparc_gregset *gregset,
 			    struct regcache *regcache,
 			    int regnum, const void *gregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
 
   if (sparc32)
     sparc32_supply_gregset (&sparc32nbsd_gregset, regcache, regnum, gregs);
@@ -48,7 +47,7 @@ sparc64nbsd_collect_gregset (const struct sparc_gregset *gregset,
 			     const struct regcache *regcache,
 			     int regnum, void *gregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
 
   if (sparc32)
     sparc32_collect_gregset (&sparc32nbsd_gregset, regcache, regnum, gregs);
@@ -60,7 +59,7 @@ static void
 sparc64nbsd_supply_fpregset (struct regcache *regcache,
 			     int regnum, const void *fpregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
 
   if (sparc32)
     sparc32_supply_fpregset (regcache, regnum, fpregs);
@@ -72,7 +71,7 @@ static void
 sparc64nbsd_collect_fpregset (const struct regcache *regcache,
 			      int regnum, void *fpregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
 
   if (sparc32)
     sparc32_collect_fpregset (regcache, regnum, fpregs);
@@ -136,6 +135,7 @@ sparc64nbsd_fpregset_supplies_p (int regnum)
 static int
 sparc64nbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 {
+  u_int64_t state;
   int regnum;
 
   /* The following is true for NetBSD 1.6.2:
@@ -148,8 +148,18 @@ sparc64nbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
   if (pcb->pcb_sp == 0)
     return 0;
 
+  /* If the program counter is zero, this is probably a core dump, and
+     we can get %pc from the stack.  */
+  if (pcb->pcb_pc == 0)
+      read_memory(pcb->pcb_sp + BIAS - 176 + (11 * 8), 
+		  (gdb_byte *)&pcb->pcb_pc, sizeof pcb->pcb_pc);
+
+
   regcache_raw_supply (regcache, SPARC_SP_REGNUM, &pcb->pcb_sp);
   regcache_raw_supply (regcache, SPARC64_PC_REGNUM, &pcb->pcb_pc);
+
+  state = pcb->pcb_pstate << 8 | pcb->pcb_cwp;
+  regcache_raw_supply (regcache, SPARC64_STATE_REGNUM, &state);
 
   sparc_supply_rwindow (regcache, pcb->pcb_sp, -1);
 

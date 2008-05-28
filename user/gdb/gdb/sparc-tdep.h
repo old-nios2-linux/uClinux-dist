@@ -1,12 +1,12 @@
 /* Target-dependent code for SPARC.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SPARC_TDEP_H
 #define SPARC_TDEP_H 1
@@ -65,6 +63,9 @@ struct gdbarch_tdep
   /* Size of an Procedure Linkage Table (PLT) entry, 0 if we shouldn't
      treat the PLT special when doing prologue analysis.  */
   size_t plt_entry_size;
+
+  /* Alternative location for trap return.  Used for single-stepping.  */
+  CORE_ADDR (*step_trap) (struct frame_info *frame, unsigned long insn);
 };
 
 /* Register numbers of various important registers.  */
@@ -150,7 +151,8 @@ extern unsigned long sparc_fetch_instruction (CORE_ADDR pc);
 /* Fetch StackGhost Per-Process XOR cookie.  */
 extern ULONGEST sparc_fetch_wcookie (void);
 
-extern CORE_ADDR sparc_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
+extern CORE_ADDR sparc_analyze_prologue (struct gdbarch *gdbarch,
+					 CORE_ADDR pc, CORE_ADDR current_pc,
 					 struct sparc_frame_cache *cache);
 
 extern struct sparc_frame_cache *
@@ -161,8 +163,7 @@ extern struct sparc_frame_cache *
 
 
 
-extern void sparc_software_single_step (enum target_signal sig,
-					int insert_breakpoints_p);
+extern int sparc_software_single_step (struct frame_info *frame);
 
 extern void sparc_supply_rwindow (struct regcache *regcache,
 				  CORE_ADDR sp, int regnum);
@@ -190,6 +191,8 @@ extern const struct sparc_gregset sparc32_sol2_gregset;
 
 extern int sparc_sol2_pc_in_sigtramp (CORE_ADDR pc, char *name);
 
+extern char *sparc_sol2_static_transform_name (char *name);
+
 extern void sparc32_sol2_init_abi (struct gdbarch_info info,
 				   struct gdbarch *gdbarch);
 
@@ -197,6 +200,14 @@ extern void sparc32_sol2_init_abi (struct gdbarch_info info,
 
 /* Register offsets for NetBSD.  */
 extern const struct sparc_gregset sparc32nbsd_gregset;
+
+/* Return the address of a system call's alternative return
+   address.  */
+extern CORE_ADDR sparcnbsd_step_trap (struct frame_info *frame,
+				      unsigned long insn);
+
+extern void sparc32nbsd_elf_init_abi (struct gdbarch_info info,
+				      struct gdbarch *gdbarch);
 
 extern struct trad_frame_saved_reg *
   sparc32nbsd_sigcontext_saved_regs (struct frame_info *next_frame);

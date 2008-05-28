@@ -1,5 +1,7 @@
 /*
- *  Copyright (C) 2006 aCaB <acab@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Alberto Wu, Michal 'GiM' Spadlinski
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -15,7 +17,6 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA 02110-1301, USA.
  */
-
 
 #if HAVE_CONFIG_H
 #include "clamav-config.h"
@@ -278,7 +279,7 @@ int unmew(char *source, char *dest, int ssize, int dsize, char **endsrc, char **
       }
       if (!CLI_ISCONTAINED(dest, dsize, cdst, myecx_backsize) || !CLI_ISCONTAINED(dest, dsize, cdst-myeax_backbytes, myecx_backsize))
       {
-	cli_dbgmsg("MEW: rete: %d %d %d %d %d || %d %d %d %d %d\n", dest, dsize, cdst, myecx_backsize,
+	cli_dbgmsg("MEW: rete: %p %d %p %d %d || %p %d %p %d %d\n", dest, dsize, cdst, myecx_backsize,
 			CLI_ISCONTAINED(dest, dsize, cdst, myecx_backsize),
 			dest, dsize, cdst-myeax_backbytes, myecx_backsize,
       			CLI_ISCONTAINED(dest, dsize, cdst-myeax_backbytes, myecx_backsize) );
@@ -293,7 +294,7 @@ int unmew(char *source, char *dest, int ssize, int dsize, char **endsrc, char **
       /* 15d */
       if (cdst < dest || cdst >= dest+dsize || csrc < source || csrc >= source+ssize)
       {
-	cli_dbgmsg("MEW: retf %08x %08x+%08x=%08x, %08x %08x+%08x=%08x\n",
+	cli_dbgmsg("MEW: retf %p %p+%08x=%p, %p %p+%08x=%p\n",
 			cdst, dest, dsize, dest+dsize, csrc, source, ssize, source+ssize);
 	return -1;
       }

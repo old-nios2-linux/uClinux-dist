@@ -1,12 +1,12 @@
 /* MI Command Set - disassemble commands.
-   Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
@@ -84,7 +82,7 @@ mi_cmd_disassemble (char *command, char **argv, int argc)
     {"n", NUM_OPT, 1},
     {"s", START_OPT, 1},
     {"e", END_OPT, 1},
-    0
+    { 0, 0, 0 }
   };
 
   /* Get the options with their arguments. Keep track of what we
@@ -137,7 +135,7 @@ mi_cmd_disassemble (char *command, char **argv, int argc)
 
   mixed_source_and_assembly = atoi (argv[0]);
   if ((mixed_source_and_assembly != 0) && (mixed_source_and_assembly != 1))
-    error ("mi_cmd_disassemble: Mixed_mode argument must be 0 or 1.");
+    error (_("mi_cmd_disassemble: Mixed_mode argument must be 0 or 1."));
 
 
   /* We must get the function beginning and end where line_num is
@@ -147,11 +145,11 @@ mi_cmd_disassemble (char *command, char **argv, int argc)
     {
       s = lookup_symtab (file_string);
       if (s == NULL)
-	error ("mi_cmd_disassemble: Invalid filename.");
+	error (_("mi_cmd_disassemble: Invalid filename."));
       if (!find_line_pc (s, line_num, &start))
-	error ("mi_cmd_disassemble: Invalid line number");
+	error (_("mi_cmd_disassemble: Invalid line number"));
       if (find_pc_partial_function (start, NULL, &low, &high) == 0)
-	error ("mi_cmd_disassemble: No function contains specified address");
+	error (_("mi_cmd_disassemble: No function contains specified address"));
     }
 
   gdb_disassembly (uiout,

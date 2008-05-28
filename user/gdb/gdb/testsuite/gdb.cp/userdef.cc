@@ -1,21 +1,20 @@
 /* This test script is part of GDB, the GNU debugger.
 
-   Copyright 1999, 2002, 2003, 2004,
+   Copyright 1999, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
    */
 
 #include <iostream>
@@ -63,6 +62,7 @@ A1 operator/(const A1&);
 A1 operator=(const A1&);
 
 A1 operator~();
+A1 operator+();
 A1 operator-();
 int operator!();
 A1 operator++();
@@ -225,6 +225,15 @@ A1 A1::operator-(void)
  return (neg);
 }
 
+A1 A1::operator+(void)
+{
+ A1 pos(0,0);
+ pos.x = +x;
+ pos.y = +y;
+
+ return (pos);
+}
+
 A1 A1::operator~(void)
 {
  A1 acompl(0,0);
@@ -286,11 +295,41 @@ ostream& operator<<(ostream& outs, A1 one)
  return (outs << endl << "x = " << one.x << endl << "y = " << one.y << endl << "-------" << endl); 
 }
 
+class A2 {
+  public:
+A2 operator+();
+};
+
+A2 A2::operator+()
+{
+  return A2 ();
+}
+
+class Member
+{
+public:
+  int z;
+};
+
+class Container
+{
+public:
+  Member m;
+
+  Member& operator* ();
+};
+
+Member& Container::operator* ()
+{
+  return this->m;
+}
+
 int main (void)
 {
  A1 one(2,3);
  A1 two(4,5);
  A1 three(0,0);
+ Container c;
  int val;
  
  marker1(); // marker1-returns-here
@@ -342,6 +381,8 @@ int main (void)
  
  val = (!one);
  cout << "! " << val << endl << "-----"<<endl;
+ three = (+one);
+ cout << "+ " << three;
  three = (-one);
  cout << "- " << three;
  three = (~one);
@@ -355,6 +396,8 @@ int main (void)
  cout << "predec " << three;
  ++three;
  cout << "preinc " << three;
+
+ (*c).z = 1;
 
  return 0;
 

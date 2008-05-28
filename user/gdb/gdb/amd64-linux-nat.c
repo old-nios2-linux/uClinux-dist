@@ -1,13 +1,14 @@
 /* Native-dependent code for GNU/Linux x86-64.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,15 +17,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "regcache.h"
 #include "linux-nat.h"
+#include "amd64-linux-tdep.h"
 
 #include "gdb_assert.h"
 #include "gdb_string.h"
@@ -67,7 +67,12 @@ static int amd64_linux_gregset64_reg_offset[] =
   RIP * 8, EFLAGS * 8,		/* %rip, %eflags */
   CS * 8, SS * 8,		/* %cs, %ss */
   DS * 8, ES * 8,		/* %ds, %es */
-  FS * 8, GS * 8		/* %fs, %gs */
+  FS * 8, GS * 8,		/* %fs, %gs */
+  -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  ORIG_RAX * 8
 };
 
 
@@ -104,9 +109,9 @@ static int amd64_linux_gregset32_reg_offset[] =
    in *GREGSETP.  */
 
 void
-supply_gregset (elf_gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const elf_gregset_t *gregsetp)
 {
-  amd64_supply_native_gregset (current_regcache, gregsetp, -1);
+  amd64_supply_native_gregset (regcache, gregsetp, -1);
 }
 
 /* Fill register REGNUM (if it is a general-purpose register) in
@@ -114,9 +119,10 @@ supply_gregset (elf_gregset_t *gregsetp)
    do this for all registers.  */
 
 void
-fill_gregset (elf_gregset_t *gregsetp, int regnum)
+fill_gregset (const struct regcache *regcache,
+	      elf_gregset_t *gregsetp, int regnum)
 {
-  amd64_collect_native_gregset (current_regcache, gregsetp, regnum);
+  amd64_collect_native_gregset (regcache, gregsetp, regnum);
 }
 
 /* Transfering floating-point registers between GDB, inferiors and cores.  */
@@ -125,9 +131,9 @@ fill_gregset (elf_gregset_t *gregsetp, int regnum)
    values in *FPREGSETP.  */
 
 void
-supply_fpregset (elf_fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const elf_fpregset_t *fpregsetp)
 {
-  amd64_supply_fxsave (current_regcache, -1, fpregsetp);
+  amd64_supply_fxsave (regcache, -1, fpregsetp);
 }
 
 /* Fill register REGNUM (if it is a floating-point or SSE register) in
@@ -135,9 +141,10 @@ supply_fpregset (elf_fpregset_t *fpregsetp)
    -1, do this for all registers.  */
 
 void
-fill_fpregset (elf_fpregset_t *fpregsetp, int regnum)
+fill_fpregset (const struct regcache *regcache,
+	       elf_fpregset_t *fpregsetp, int regnum)
 {
-  amd64_collect_fxsave (current_regcache, regnum, fpregsetp);
+  amd64_collect_fxsave (regcache, regnum, fpregsetp);
 }
 
 
@@ -147,9 +154,10 @@ fill_fpregset (elf_fpregset_t *fpregsetp, int regnum)
    this for all registers (including the floating point and SSE
    registers).  */
 
-void
-fetch_inferior_registers (int regnum)
+static void
+amd64_linux_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int tid;
 
   /* GNU/Linux LWP ID's are process ID's.  */
@@ -157,26 +165,26 @@ fetch_inferior_registers (int regnum)
   if (tid == 0)
     tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
-  if (regnum == -1 || amd64_native_gregset_supplies_p (regnum))
+  if (regnum == -1 || amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_gregset_t regs;
 
       if (ptrace (PTRACE_GETREGS, tid, 0, (long) &regs) < 0)
-	perror_with_name ("Couldn't get registers");
+	perror_with_name (_("Couldn't get registers"));
 
-      amd64_supply_native_gregset (current_regcache, &regs, -1);
+      amd64_supply_native_gregset (regcache, &regs, -1);
       if (regnum != -1)
 	return;
     }
 
-  if (regnum == -1 || !amd64_native_gregset_supplies_p (regnum))
+  if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_fpregset_t fpregs;
 
       if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
-	perror_with_name ("Couldn't get floating point status");
+	perror_with_name (_("Couldn't get floating point status"));
 
-      amd64_supply_fxsave (current_regcache, -1, &fpregs);
+      amd64_supply_fxsave (regcache, -1, &fpregs);
     }
 }
 
@@ -184,9 +192,10 @@ fetch_inferior_registers (int regnum)
    -1, do this for all registers (including the floating-point and SSE
    registers).  */
 
-void
-store_inferior_registers (int regnum)
+static void
+amd64_linux_store_inferior_registers (struct regcache *regcache, int regnum)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int tid;
 
   /* GNU/Linux LWP ID's are process ID's.  */
@@ -194,61 +203,63 @@ store_inferior_registers (int regnum)
   if (tid == 0)
     tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
-  if (regnum == -1 || amd64_native_gregset_supplies_p (regnum))
+  if (regnum == -1 || amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_gregset_t regs;
 
       if (ptrace (PTRACE_GETREGS, tid, 0, (long) &regs) < 0)
-	perror_with_name ("Couldn't get registers");
+	perror_with_name (_("Couldn't get registers"));
 
-      amd64_collect_native_gregset (current_regcache, &regs, regnum);
+      amd64_collect_native_gregset (regcache, &regs, regnum);
 
       if (ptrace (PTRACE_SETREGS, tid, 0, (long) &regs) < 0)
-	perror_with_name ("Couldn't write registers");
+	perror_with_name (_("Couldn't write registers"));
 
       if (regnum != -1)
 	return;
     }
 
-  if (regnum == -1 || !amd64_native_gregset_supplies_p (regnum))
+  if (regnum == -1 || !amd64_native_gregset_supplies_p (gdbarch, regnum))
     {
       elf_fpregset_t fpregs;
 
       if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
-	perror_with_name ("Couldn't get floating point status");
+	perror_with_name (_("Couldn't get floating point status"));
 
-      amd64_collect_fxsave (current_regcache, regnum, &fpregs);
+      amd64_collect_fxsave (regcache, regnum, &fpregs);
 
       if (ptrace (PTRACE_SETFPREGS, tid, 0, (long) &fpregs) < 0)
-	perror_with_name ("Couldn't write floating point status");
+	perror_with_name (_("Couldn't write floating point status"));
 
       return;
     }
 }
 
+/* Support for debug registers.  */
+
+static unsigned long amd64_linux_dr[DR_CONTROL + 1];
 
 static unsigned long
-amd64_linux_dr_get (int regnum)
+amd64_linux_dr_get (ptid_t ptid, int regnum)
 {
   int tid;
   unsigned long value;
 
-  /* FIXME: kettenis/2001-01-29: It's not clear what we should do with
-     multi-threaded processes here.  For now, pretend there is just
-     one thread.  */
-  tid = PIDGET (inferior_ptid);
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
 
   /* FIXME: kettenis/2001-03-27: Calling perror_with_name if the
      ptrace call fails breaks debugging remote targets.  The correct
      way to fix this is to add the hardware breakpoint and watchpoint
-     stuff to the target vectore.  For now, just return zero if the
+     stuff to the target vector.  For now, just return zero if the
      ptrace call fails.  */
   errno = 0;
-  value = ptrace (PT_READ_U, tid,
+  value = ptrace (PTRACE_PEEKUSER, tid,
 		  offsetof (struct user, u_debugreg[regnum]), 0);
   if (errno != 0)
 #if 0
-    perror_with_name ("Couldn't read debug register");
+    perror_with_name (_("Couldn't read debug register"));
 #else
     return 0;
 #endif
@@ -257,47 +268,66 @@ amd64_linux_dr_get (int regnum)
 }
 
 static void
-amd64_linux_dr_set (int regnum, unsigned long value)
+amd64_linux_dr_set (ptid_t ptid, int regnum, unsigned long value)
 {
   int tid;
 
-  /* FIXME: kettenis/2001-01-29: It's not clear what we should do with
-     multi-threaded processes here.  For now, pretend there is just
-     one thread.  */
-  tid = PIDGET (inferior_ptid);
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
 
   errno = 0;
-  ptrace (PT_WRITE_U, tid, offsetof (struct user, u_debugreg[regnum]), value);
+  ptrace (PTRACE_POKEUSER, tid,
+	  offsetof (struct user, u_debugreg[regnum]), value);
   if (errno != 0)
-    perror_with_name ("Couldn't write debug register");
+    perror_with_name (_("Couldn't write debug register"));
 }
 
 void
 amd64_linux_dr_set_control (unsigned long control)
 {
-  amd64_linux_dr_set (DR_CONTROL, control);
+  struct lwp_info *lp;
+  ptid_t ptid;
+
+  amd64_linux_dr[DR_CONTROL] = control;
+  ALL_LWPS (lp, ptid)
+    amd64_linux_dr_set (ptid, DR_CONTROL, control);
 }
 
 void
 amd64_linux_dr_set_addr (int regnum, CORE_ADDR addr)
 {
+  struct lwp_info *lp;
+  ptid_t ptid;
+
   gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
 
-  amd64_linux_dr_set (DR_FIRSTADDR + regnum, addr);
+  amd64_linux_dr[DR_FIRSTADDR + regnum] = addr;
+  ALL_LWPS (lp, ptid)
+    amd64_linux_dr_set (ptid, DR_FIRSTADDR + regnum, addr);
 }
 
 void
 amd64_linux_dr_reset_addr (int regnum)
 {
-  gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
-
-  amd64_linux_dr_set (DR_FIRSTADDR + regnum, 0L);
+  amd64_linux_dr_set_addr (regnum, 0);
 }
 
 unsigned long
 amd64_linux_dr_get_status (void)
 {
-  return amd64_linux_dr_get (DR_STATUS);
+  return amd64_linux_dr_get (inferior_ptid, DR_STATUS);
+}
+
+static void
+amd64_linux_new_thread (ptid_t ptid)
+{
+  int i;
+
+  for (i = DR_FIRSTADDR; i <= DR_LASTADDR; i++)
+    amd64_linux_dr_set (ptid, i, amd64_linux_dr[i]);
+
+  amd64_linux_dr_set (ptid, DR_CONTROL, amd64_linux_dr[DR_CONTROL]);
 }
 
 
@@ -360,11 +390,13 @@ ps_get_thread_area (const struct ps_prochandle *ph,
 }
 
 
-void
-child_post_startup_inferior (ptid_t ptid)
+static void (*super_post_startup_inferior) (ptid_t ptid);
+
+static void
+amd64_linux_child_post_startup_inferior (ptid_t ptid)
 {
   i386_cleanup_dregs ();
-  linux_child_post_startup_inferior (ptid);
+  super_post_startup_inferior (ptid);
 }
 
 
@@ -374,12 +406,30 @@ void _initialize_amd64_linux_nat (void);
 void
 _initialize_amd64_linux_nat (void)
 {
+  struct target_ops *t;
+
   amd64_native_gregset32_reg_offset = amd64_linux_gregset32_reg_offset;
   amd64_native_gregset32_num_regs = I386_LINUX_NUM_REGS;
   amd64_native_gregset64_reg_offset = amd64_linux_gregset64_reg_offset;
+  amd64_native_gregset64_num_regs = AMD64_LINUX_NUM_REGS;
 
   gdb_assert (ARRAY_SIZE (amd64_linux_gregset32_reg_offset)
 	      == amd64_native_gregset32_num_regs);
   gdb_assert (ARRAY_SIZE (amd64_linux_gregset64_reg_offset)
 	      == amd64_native_gregset64_num_regs);
+
+  /* Fill in the generic GNU/Linux methods.  */
+  t = linux_target ();
+
+  /* Override the GNU/Linux inferior startup hook.  */
+  super_post_startup_inferior = t->to_post_startup_inferior;
+  t->to_post_startup_inferior = amd64_linux_child_post_startup_inferior;
+
+  /* Add our register access methods.  */
+  t->to_fetch_registers = amd64_linux_fetch_inferior_registers;
+  t->to_store_registers = amd64_linux_store_inferior_registers;
+
+  /* Register the target.  */
+  linux_nat_add_target (t);
+  linux_nat_set_new_thread (t, amd64_linux_new_thread);
 }

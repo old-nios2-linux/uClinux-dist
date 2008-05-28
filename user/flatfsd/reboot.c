@@ -95,7 +95,6 @@ static int shutdown_now(int rb_which)
 #endif
 #ifdef CONFIG_SNAPDOG
 	/* Turn off user servicing of the watchdog */
-	/*write(open("/dev/watchdog", O_WRONLY), "V", 1);*/
 	write(open("/dev/watchdog", O_WRONLY), "V", 1);
 #endif
 

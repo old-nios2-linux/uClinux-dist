@@ -1,5 +1,5 @@
 /* Interface definition for configurable Xtensa ISA support.
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -15,7 +15,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef XTENSA_LIBISA_H
 #define XTENSA_LIBISA_H
@@ -23,9 +23,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Use the statically-linked version for the GNU tools.  */
-#define STATIC_LIBISA 1
 
 /* Version number: This is intended to help support code that works with
    versions of this library from multiple Xtensa releases.  */
@@ -65,7 +62,7 @@ extern "C" {
 typedef struct xtensa_isa_opaque { int unused; } *xtensa_isa;
 
 
-/* Opcodes, formats, regfiles, states, sysregs, ctypes, and protos are
+/* Most of the Xtensa ISA entities (e.g., opcodes, regfiles, etc.) are
    represented here using sequential integers beginning with 0.  The
    specific values are only fixed for a particular instantiation of an
    xtensa_isa structure, so these values should only be used
@@ -137,8 +134,8 @@ typedef int xtensa_funcUnit;
    retrieved with the "errno" function.  For any result other than
    xtensa_isa_ok, an error message containing additional information
    about the problem can be retrieved using the "error_msg" function.
-   The error messages are stored in an internal buffer, which should not
-   should be freed and may be overwritten by subsequent operations.  */
+   The error messages are stored in an internal buffer, which should
+   not be freed and may be overwritten by subsequent operations.  */
 
 typedef enum xtensa_isa_status_enum
 {
@@ -167,6 +164,7 @@ xtensa_isa_errno (xtensa_isa isa);
 
 extern char *
 xtensa_isa_error_msg (xtensa_isa isa);
+
 
 
 /* Instruction buffers.  */
@@ -209,11 +207,12 @@ xtensa_insnbuf_free (xtensa_isa isa, xtensa_insnbuf buf);
 
 extern int
 xtensa_insnbuf_to_chars (xtensa_isa isa, const xtensa_insnbuf insn,
-			 char *cp, int num_chars);
+			 unsigned char *cp, int num_chars);
 
 extern void
 xtensa_insnbuf_from_chars (xtensa_isa isa, xtensa_insnbuf insn,
-			   const char *cp, int num_chars);
+			   const unsigned char *cp, int num_chars);
+
 
 
 /* ISA information.  */
@@ -242,7 +241,7 @@ xtensa_isa_maxlength (xtensa_isa isa);
    XTENSA_UNDEFINED on error.  */
 
 extern int
-xtensa_isa_length_from_chars (xtensa_isa isa, const char *cp);
+xtensa_isa_length_from_chars (xtensa_isa isa, const unsigned char *cp);
 
 
 /* Get the number of stages in the processor's pipeline.  The pipeline
@@ -278,6 +277,7 @@ xtensa_isa_num_interfaces (xtensa_isa isa);
 
 extern int
 xtensa_isa_num_funcUnits (xtensa_isa isa);
+
 
 
 /* Instruction formats.  */
@@ -341,6 +341,7 @@ xtensa_format_get_slot (xtensa_isa isa, xtensa_format fmt, int slot,
 extern int
 xtensa_format_set_slot (xtensa_isa isa, xtensa_format fmt, int slot,
 			xtensa_insnbuf insn, const xtensa_insnbuf slotbuf);
+
 
 
 /* Opcode information.  */
@@ -412,7 +413,6 @@ xtensa_opcode_is_call (xtensa_isa isa, xtensa_opcode opc);
 extern int
 xtensa_opcode_num_operands (xtensa_isa isa, xtensa_opcode opc);
 
-
 extern int
 xtensa_opcode_num_stateOperands (xtensa_isa isa, xtensa_opcode opc);
 
@@ -437,6 +437,7 @@ xtensa_opcode_num_funcUnit_uses (xtensa_isa isa, xtensa_opcode opc);
 
 extern xtensa_funcUnit_use *
 xtensa_opcode_funcUnit_use (xtensa_isa isa, xtensa_opcode opc, int u);
+
 
 
 /* Operand information.  */
@@ -572,6 +573,7 @@ extern int
 xtensa_operand_undo_reloc (xtensa_isa isa, xtensa_opcode opc, int opnd,
 			   uint32 *valp, uint32 pc);
 
+
 
 /* State Operands.  */
 
@@ -588,6 +590,7 @@ xtensa_stateOperand_state (xtensa_isa isa, xtensa_opcode opc, int stOp);
 extern char
 xtensa_stateOperand_inout (xtensa_isa isa, xtensa_opcode opc, int stOp);
 
+
 
 /* Interface Operands.  */
 
@@ -597,6 +600,7 @@ xtensa_stateOperand_inout (xtensa_isa isa, xtensa_opcode opc, int stOp);
 extern xtensa_interface
 xtensa_interfaceOperand_interface (xtensa_isa isa, xtensa_opcode opc,
 				   int ifOp);
+
 
 
 /* Register Files.  */
@@ -651,6 +655,7 @@ xtensa_regfile_num_bits (xtensa_isa isa, xtensa_regfile rf);
 extern int
 xtensa_regfile_num_entries (xtensa_isa isa, xtensa_regfile rf);
 
+
 
 /* Processor States.  */
 
@@ -679,6 +684,7 @@ xtensa_state_num_bits (xtensa_isa isa, xtensa_state st);
 
 extern int
 xtensa_state_is_exported (xtensa_isa isa, xtensa_state st);
+
 
 
 /* Sysregs ("special registers" and "user registers").  */
@@ -717,6 +723,7 @@ xtensa_sysreg_number (xtensa_isa isa, xtensa_sysreg sysreg);
 extern int
 xtensa_sysreg_is_user (xtensa_isa isa, xtensa_sysreg sysreg);
 
+
 
 /* Interfaces.  */
 
@@ -754,6 +761,20 @@ xtensa_interface_inout (xtensa_isa isa, xtensa_interface intf);
 
 extern int
 xtensa_interface_has_side_effect (xtensa_isa isa, xtensa_interface intf);
+
+
+/* Some interfaces may be related such that accessing one interface
+   has side effects on a set of related interfaces.  The interfaces
+   are partitioned into equivalence classes of related interfaces, and
+   each class is assigned a unique identifier number.  This function
+   returns the class identifier for an interface, or XTENSA_UNDEFINED
+   on error.  These identifiers can be compared to determine if two
+   interfaces are related; the specific values of the identifiers have
+   no particular meaning otherwise.  */
+
+extern int
+xtensa_interface_class_id (xtensa_isa isa, xtensa_interface intf);
+
 
 
 /* Functional Units.  */

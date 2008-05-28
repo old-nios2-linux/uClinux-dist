@@ -1,12 +1,12 @@
 /* GDB Notifications to Observers.
 
-   Copyright 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* An observer is an entity who is interested in being notified when GDB
    reaches certain states, or certain events occur in GDB. The entity being
@@ -57,6 +55,12 @@
 #include "gdbcmd.h"
 
 static int observer_debug;
+static void
+show_observer_debug (struct ui_file *file, int from_tty,
+		     struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Observer debugging is %s.\n"), value);
+}
 
 /* The internal generic observer.  */
 
@@ -146,7 +150,7 @@ generic_observer_detach (struct observer_list **subject,
 
   /* We should never reach this point.  However, this should not be
      a very serious error, so simply report a warning to the user.  */
-  warning ("Failed to detach observer");
+  warning (_("Failed to detach observer"));
 }
 
 /* Send a notification to all the observers of SUBJECT.  ARGS is passed to
@@ -199,12 +203,13 @@ extern initialize_file_ftype _initialize_observer; /* -Wmissing-prototypes */
 void
 _initialize_observer (void)
 {
-  add_setshow_zinteger_cmd ("observer", class_maintenance, &observer_debug, "\
-Set observer debugging.", "\
-Show observer debugging.", "\
-When non-zero, observer debugging is enabled.", "\
-Observer debugging is %s.",
-			    NULL, NULL,
+  add_setshow_zinteger_cmd ("observer", class_maintenance,
+			    &observer_debug, _("\
+Set observer debugging."), _("\
+Show observer debugging."), _("\
+When non-zero, observer debugging is enabled."),
+			    NULL,
+			    show_observer_debug,
 			    &setdebuglist, &showdebuglist);
 }
 

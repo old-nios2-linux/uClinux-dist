@@ -48,11 +48,12 @@ char spigrp_c_version[] = "RCSID $Id: spigrp.c,v 1.50.2.1 2005-08-18 14:04:51 ke
 #include "openswan/ipsec_encap.h"
 #include "openswan/ipsec_ah.h"
 
+#include "os_select.h"
 
 char *program_name;
 
 int pfkey_sock;
-fd_set pfkey_socks;
+os_fd_set pfkey_socks;
 uint32_t pfkey_seq = 0;
  
 struct said_af {

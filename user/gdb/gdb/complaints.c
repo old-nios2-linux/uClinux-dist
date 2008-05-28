@@ -1,13 +1,13 @@
 /* Support for complaint handling during symbol reading in GDB.
 
-   Copyright 1990, 1991, 1992, 1993, 1995, 1998, 1999, 2000, 2002,
-   2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1995, 1998, 1999, 2000, 2002, 2004,
+   2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "complaints.h"
@@ -161,12 +159,12 @@ find_complaint (struct complaints *complaints, const char *file,
    before we stop whining about it?  Default is no whining at all,
    since so many systems have ill-constructed symbol files.  */
 
-static unsigned int stop_whining = 0;
+static int stop_whining = 0;
 
 /* Print a complaint, and link the complaint block into a chain for
    later handling.  */
 
-static void
+static void ATTR_FORMAT (printf, 4, 0)
 vcomplaint (struct complaints **c, const char *file, int line, const char *fmt,
 	    va_list args)
 {
@@ -202,6 +200,7 @@ vcomplaint (struct complaints **c, const char *file, int line, const char *fmt,
 	  wrap_here ("");
 	  if (series != SUBSEQUENT_MESSAGE)
 	    begin_line ();
+	  /* XXX: i18n */
 	  fprintf_filtered (gdb_stderr, "%s%s%s",
 			    complaints->explanation[series].prefix, msg,
 			    complaints->explanation[series].postfix);
@@ -297,7 +296,7 @@ clear_complaints (struct complaints **c, int less_verbose, int noisy)
       fputs_unfiltered ("\n", gdb_stderr);
       break;
     default:
-      internal_error (__FILE__, __LINE__, "bad switch");
+      internal_error (__FILE__, __LINE__, _("bad switch"));
     }
 
   if (!less_verbose)
@@ -308,14 +307,21 @@ clear_complaints (struct complaints **c, int less_verbose, int noisy)
     complaints->series = SHORT_FIRST_MESSAGE;
 }
 
+static void
+complaints_show_value (struct ui_file *file, int from_tty,
+		       struct cmd_list_element *cmd, const char *value)
+{
+  fprintf_filtered (file, _("Max number of complaints about incorrect"
+			    " symbols is %s.\n"),
+		    value);
+}
+
 void
 _initialize_complaints (void)
 {
-  add_setshow_zinteger_cmd ("complaints", class_support, &stop_whining, "\
-Set max number of complaints about incorrect symbols.", "\
-Show max number of complaints about incorrect symbols.", NULL, "\
-Max number of complaints about incorrect symbols is %s.",
-			    NULL, NULL,
+  add_setshow_zinteger_cmd ("complaints", class_support, &stop_whining, _("\
+Set max number of complaints about incorrect symbols."), _("\
+Show max number of complaints about incorrect symbols."), NULL,
+			    NULL, complaints_show_value,
 			    &setlist, &showlist);
-
 }

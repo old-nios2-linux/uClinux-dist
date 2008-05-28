@@ -1,6 +1,7 @@
 /* Native support for GNU/Linux x86-64.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Jiri Smid, SuSE Labs.
 
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef NM_LINUX64_H
 #define NM_LINUX64_H
@@ -50,14 +49,5 @@ extern void amd64_linux_dr_reset_addr (int regnum);
 extern unsigned long amd64_linux_dr_get_status (void);
 #define I386_DR_LOW_GET_STATUS() \
   amd64_linux_dr_get_status ()
-
-
-/* Override copies of {fetch,store}_inferior_registers in `infptrace.c'.  */
-#define FETCH_INFERIOR_REGISTERS
-
-/* `linux-nat.c' and `i386-nat.c' have their own versions of
-   child_post_startup_inferior.  Define this to use the copy in
-   `x86-86-linux-nat.c' instead, which calls both.  */
-#define LINUX_CHILD_POST_STARTUP_INFERIOR
 
 #endif /* nm-linux64.h */

@@ -57,8 +57,6 @@
 #include <linux/ppp-comp.h>
 #include <asm/scatterlist.h>
 
-#include "ppp_mppe.h"
-
 MODULE_AUTHOR("Frank Cusack <fcusack@fcusack.com>");
 MODULE_DESCRIPTION("Point-to-Point Protocol Microsoft Point-to-Point Encryption support");
 MODULE_LICENSE("Dual BSD/GPL");

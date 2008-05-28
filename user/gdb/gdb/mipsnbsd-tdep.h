@@ -1,12 +1,12 @@
 /* Common target dependent code for GDB on MIPS systems running NetBSD.
 
-   Copyright 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,20 +15,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MIPSNBSD_TDEP_H
 #define MIPSNBSD_TDEP_H
 
-void mipsnbsd_supply_reg (char *, int);
-void mipsnbsd_fill_reg (char *, int);
+void mipsnbsd_supply_reg (struct regcache *, const char *, int);
+void mipsnbsd_fill_reg (const struct regcache *, char *, int);
 
-void mipsnbsd_supply_fpreg (char *, int);
-void mipsnbsd_fill_fpreg (char *, int);
-
-#define SIZEOF_STRUCT_REG	(38 * mips_isa_regsize (current_gdbarch))
-#define SIZEOF_STRUCT_FPREG	(33 * mips_isa_regsize (current_gdbarch))
+void mipsnbsd_supply_fpreg (struct regcache *, const char *, int);
+void mipsnbsd_fill_fpreg (const struct regcache *, char *, int);
 
 #endif /* MIPSNBSD_TDEP_H */

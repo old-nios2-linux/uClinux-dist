@@ -81,6 +81,8 @@
 #include "nat_traversal.h"
 #endif
 
+#include "os_select.h"
+
 /*
  *  Server main loop and socket initialization routines.
  */
@@ -1006,8 +1008,8 @@ call_server(void)
 
     for (;;)
     {
-	fd_set readfds;
-	fd_set writefds;
+	os_fd_set readfds;
+	os_fd_set writefds;
 	int ndes;
 
 	/* wait for next interesting thing */
@@ -1035,11 +1037,11 @@ call_server(void)
 		reapchildren();
 	    }
 
-	    FD_ZERO(&readfds);
-	    FD_ZERO(&writefds);
-	    FD_SET(ctl_fd, &readfds);
+	    OS_FD_ZERO(&readfds);
+	    OS_FD_ZERO(&writefds);
+	    OS_FD_SET(ctl_fd, &readfds);
 #ifdef IPSECPOLICY
-	    FD_SET(info_fd, &readfds);
+	    OS_FD_SET(info_fd, &readfds);
 	    if (maxfd < info_fd)
 		maxfd = info_fd;
 #endif
@@ -1049,14 +1051,14 @@ call_server(void)
 	    {
 		if (maxfd < adns_qfd)
 		    maxfd = adns_qfd;
-		FD_SET(adns_qfd, &writefds);
+		OS_FD_SET(adns_qfd, &writefds);
 	    }
 
 	    if (adns_afd != NULL_FD)
 	    {
 		if (maxfd < adns_afd)
 		    maxfd = adns_afd;
-		FD_SET(adns_afd, &readfds);
+		OS_FD_SET(adns_afd, &readfds);
 	    }
 
 #ifdef KLIPS
@@ -1068,8 +1070,8 @@ call_server(void)
 		    kernel_ops->process_queue();
 		if (maxfd < fd)
 		    maxfd = fd;
-		passert(!FD_ISSET(fd, &readfds));
-		FD_SET(fd, &readfds);
+		passert(!OS_FD_ISSET(fd, &readfds));
+		OS_FD_SET(fd, &readfds);
 	    }
 #endif
 
@@ -1079,8 +1081,8 @@ call_server(void)
 		{
 		    if (maxfd < ifp->fd)
 			maxfd = ifp->fd;
-		    passert(!FD_ISSET(ifp->fd, &readfds));
-		    FD_SET(ifp->fd, &readfds);
+		    passert(!OS_FD_ISSET(ifp->fd, &readfds));
+		    OS_FD_SET(ifp->fd, &readfds);
 		}
 	    }
 
@@ -1091,7 +1093,7 @@ call_server(void)
 	    {
 		/* select without timer */
 
-		ndes = select(maxfd + 1, &readfds, &writefds, NULL, NULL);
+		ndes = os_select(maxfd + 1, &readfds, &writefds, NULL, NULL);
 	    }
 	    else if (next_time == 0)
 	    {
@@ -1108,7 +1110,7 @@ call_server(void)
 
 		tm.tv_sec = next_time;
 		tm.tv_usec = 0;
-		ndes = select(maxfd + 1, &readfds, &writefds, NULL, &tm);
+		ndes = os_select(maxfd + 1, &readfds, &writefds, NULL, &tm);
 	    }
 
 	    if (ndes != -1)
@@ -1140,7 +1142,7 @@ call_server(void)
 	{
 	    /* at least one file descriptor is ready */
 
-	    if (adns_qfd != NULL_FD && FD_ISSET(adns_qfd, &writefds))
+	    if (adns_qfd != NULL_FD && OS_FD_ISSET(adns_qfd, &writefds))
 	    {
 		passert(ndes > 0);
 		send_unsent_ADNS_queries();
@@ -1148,7 +1150,7 @@ call_server(void)
 		ndes--;
 	    }
 
-	    if (adns_afd != NULL_FD && FD_ISSET(adns_afd, &readfds))
+	    if (adns_afd != NULL_FD && OS_FD_ISSET(adns_afd, &readfds))
 	    {
 		passert(ndes > 0);
 		DBG(DBG_CONTROL,
@@ -1161,7 +1163,7 @@ call_server(void)
 
 #ifdef KLIPS
 	    if (kern_interface != NO_KERNEL
-		&& FD_ISSET(*kernel_ops->async_fdp, &readfds))
+		&& OS_FD_ISSET(*kernel_ops->async_fdp, &readfds))
 	    {
 		passert(ndes > 0);
 		DBG(DBG_CONTROL,
@@ -1175,7 +1177,7 @@ call_server(void)
 
 	    for (ifp = interfaces; ifp != NULL; ifp = ifp->next)
 	    {
-		if (FD_ISSET(ifp->fd, &readfds))
+		if (OS_FD_ISSET(ifp->fd, &readfds))
 		{
 		    /* comm_handle will print DBG_CONTROL intro,
 		     * with more info than we have here.
@@ -1188,7 +1190,7 @@ call_server(void)
 		}
 	    }
 
-	    if (FD_ISSET(ctl_fd, &readfds))
+	    if (OS_FD_ISSET(ctl_fd, &readfds))
 	    {
 		passert(ndes > 0);
 		DBG(DBG_CONTROL,
@@ -1200,7 +1202,7 @@ call_server(void)
 	    }
 
 #ifdef IPSECPOLICY
-	    if (FD_ISSET(info_fd, &readfds))
+	    if (OS_FD_ISSET(info_fd, &readfds))
 	    {
 		passert(ndes > 0);
 		DBG(DBG_CONTROL,

@@ -1,12 +1,12 @@
 /* Very simple "bfd" target, for GDB, the GNU debugger.
 
-   Copyright 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
@@ -71,8 +69,9 @@ build_target_sections_from_bfd (struct target_ops *targ, struct bfd *abfd)
 LONGEST
 target_bfd_xfer_partial (struct target_ops *ops,
 			 enum target_object object,
-			 const char *annex, void *readbuf,
-			 const void *writebuf, ULONGEST offset, LONGEST len)
+			 const char *annex, gdb_byte *readbuf,
+			 const gdb_byte *writebuf,
+			 ULONGEST offset, LONGEST len)
 {
   switch (object)
     {
@@ -121,8 +120,8 @@ target_bfd_reopen (struct bfd *bfd)
 {
   struct target_ops *t = XZALLOC (struct target_ops);
   t->to_shortname = "bfd";
-  t->to_longname = "BFD backed target";
-  t->to_doc = "You should never see this";
+  t->to_longname = _("BFD backed target");
+  t->to_doc = _("You should never see this");
   t->to_xfer_partial = target_bfd_xfer_partial;
   t->to_xclose = target_bfd_xclose;
   t->to_data = bfd;

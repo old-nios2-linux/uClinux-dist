@@ -1,20 +1,20 @@
 # Makefile fragment for common parts of all simulators.
-# Copyright 1997, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007, 2008
+# Free Software Foundation, Inc.
 # Contributed by Cygnus Support.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This Makefile fragment consists of two separate parts.
 # They are merged into the final Makefile at points denoted by
@@ -228,7 +228,7 @@ CSEARCH = -I. -I$(srcdir) -I../common -I$(srccom) \
   -I../../include -I$(srcroot)/include \
   -I../../bfd -I$(srcroot)/bfd \
   -I../../opcodes -I$(srcroot)/opcodes \
-  -I../../intl -I$(srcroot)/intl
+  @INCINTL@
 ALL_CFLAGS = $(CONFIG_CFLAGS) $(CSEARCH) $(CFLAGS)
 BUILD_CFLAGS = -g -O $(CSEARCH)
 
@@ -237,12 +237,12 @@ COMMON_DEP_CFLAGS = $(CONFIG_CFLAGS) $(CSEARCH)
 LIBIBERTY_LIB = ../../libiberty/libiberty.a
 BFD_LIB = ../../bfd/libbfd.a
 OPCODES_LIB = ../../opcodes/libopcodes.a
-INTLLIBS = @INTLLIBS@
-INTLDEPS = @INTLDEPS@
+LIBINTL = @LIBINTL@
+LIBINTL_DEP = @LIBINTL_DEP@
 CONFIG_LIBS = @LIBS@
-LIBDEPS = $(BFD_LIB) $(OPCODES_LIB) $(INTLLIBS) $(LIBIBERTY_LIB) \
+LIBDEPS = $(BFD_LIB) $(OPCODES_LIB) $(LIBINTL_DEP) $(LIBIBERTY_LIB) \
 	$(SIM_EXTRA_LIBDEPS)
-EXTRA_LIBS = $(BFD_LIB) $(OPCODES_LIB) $(INTLLIBS) $(LIBIBERTY_LIB) \
+EXTRA_LIBS = $(BFD_LIB) $(OPCODES_LIB) $(LIBINTL) $(LIBIBERTY_LIB) \
 	$(CONFIG_LIBS) $(SIM_EXTRA_LIBS)
 
 LIB_OBJS = callback.o syscall.o targ-map.o $(SIM_OBJS)
@@ -252,14 +252,14 @@ RUNTESTFLAGS =
 callback_h = $(srcroot)/include/gdb/callback.h
 remote_sim_h = $(srcroot)/include/gdb/remote-sim.h
 
-all: $(SIM_EXTRA_ALL) libsim.a run .gdbinit
+all: $(SIM_EXTRA_ALL) libsim.a run$(EXEEXT) .gdbinit
 
 libsim.a: $(LIB_OBJS)
 	rm -f libsim.a
 	$(AR) $(AR_FLAGS) libsim.a $(LIB_OBJS)
 	$(RANLIB) libsim.a
 
-run: $(SIM_RUN_OBJS) libsim.a $(LIBDEPS)
+run$(EXEEXT): $(SIM_RUN_OBJS) libsim.a $(LIBDEPS)
 	$(CC) $(ALL_CFLAGS) -o run$(EXEEXT) \
 	  $(SIM_RUN_OBJS) libsim.a $(EXTRA_LIBS)
 
@@ -298,43 +298,78 @@ stamp-tvals: gentmap
 
 sim_main_headers = \
 	sim-main.h \
-	$(srccom)/sim-assert.h \
-	$(srccom)/sim-base.h \
-	$(srccom)/sim-basics.h \
-	$(srccom)/sim-config.h \
-	$(srccom)/sim-cpu.h \
-	$(srccom)/sim-engine.h \
-	$(srccom)/sim-events.h \
-	$(srccom)/sim-inline.h \
-	$(srccom)/sim-memopt.h \
-	$(srccom)/sim-model.h \
-	$(srccom)/sim-module.h \
-	$(srccom)/sim-profile.h \
-	$(srccom)/sim-signal.h \
-	$(srccom)/sim-trace.h \
-	$(srccom)/sim-watch.h \
-	tconfig.h \
+	$(sim-assert_h) \
+	$(sim-base_h) \
+	$(sim-cpu_h) \
+	$(sim-engine_h) \
+	$(sim-events_h) \
+	$(sim-memopt_h) \
+	$(sim-model_h) \
+	$(sim-module_h) \
+	$(sim-profile_h) \
+	$(sim-trace_h) \
+	$(sim-watch_h) \
+	$(sim-basics_h) \
 	$(SIM_EXTRA_DEPS)
 
 # Exported version of sim_main_headers.
 SIM_MAIN_DEPS = \
 	$(sim_main_headers)
 
+sim-alu_h = $(srccom)/sim-alu.h
+sim-arange_h = $(srccom)/sim-arange.h \
+		$(srccom)/sim-arange.c
 sim-assert_h = $(srccom)/sim-assert.h
-sim-endian_h = $(srccom)/sim-endian.h
-sim-n-endian_h = $(srccom)/sim-n-endian.h
-sim-arange_h = $(srccom)/sim-arange.h
-sim-bits_h = $(srccom)/sim-bits.h
+sim-base_h = $(srccom)/sim-base.h \
+		$(sim-module_h) \
+		$(sim-trace_h) \
+		$(sim-core_h) \
+		$(sim-events_h) \
+		$(sim-profile_h) \
+		$(sim-model_h) \
+		$(sim-io_h) \
+		$(sim-engine_h) \
+		$(sim-watch_h) \
+		$(sim-memopt_h) \
+		$(sim-cpu_h)
+sim-basics_h = $(srccom)/sim-basics.h \
+		../common/cconfig.h \
+		tconfig.h \
+		$(sim-config_h) \
+		$(callback_h) \
+		$(sim-inline_h) \
+		$(sim-types_h) \
+		$(sim-bits_h) \
+		$(sim-endian_h) \
+		$(sim-signal_h) \
+		$(sim-arange_h) \
+		$(sim-utils_h)
+sim-bits_h = $(srccom)/sim-bits.h \
+		$(srccom)/sim-bits.c
 sim-config_h = $(srccom)/sim-config.h
-sim-n-bits_h = $(srccom)/sim-n-bits.h
 sim-core_h = $(srccom)/sim-core.h
-sim-n-core_h = $(srccom)/sim-n-core.h
+sim-cpu_h = $(srccom)/sim-cpu.h
+sim-endian_h = $(srccom)/sim-endian.h \
+		$(srccom)/sim-endian.c
 sim-engine_h = $(srccom)/sim-engine.h
 sim-events_h = $(srccom)/sim-events.h
 sim-fpu_h = $(srccom)/sim-fpu.h
+sim-hw_h = $(srccom)/sim-hw.h
+sim-inline_h = $(srccom)/sim-inline.h
 sim-io_h = $(srccom)/sim-io.h
+sim-memopt_h = $(srccom)/sim-memopt.h
+sim-model_h = $(srccom)/sim-model.h
+sim-module_h = $(srccom)/sim-module.h
+sim-n-bits_h = $(srccom)/sim-n-bits.h
+sim-n-core_h = $(srccom)/sim-n-core.h
+sim-n-endian_h = $(srccom)/sim-n-endian.h
 sim-options_h = $(srccom)/sim-options.h
+sim-profile_h = $(srccom)/sim-profile.h
 sim-signal_h = $(srccom)/sim-signal.h
+sim-trace_h = $(srccom)/sim-trace.h
+sim-types_h = $(srccom)/sim-types.h
+sim-utils_h = $(srccom)/sim-utils.h
+sim-watch_h = $(srccom)/sim-watch.h
 
 hw-alloc_h = $(srccom)/hw-alloc.h
 hw-base_h = $(srccom)/hw-base.h
@@ -472,7 +507,7 @@ sim-utils.o: $(srccom)/sim-utils.c $(sim_main_headers)
 sim-watch.o: $(srccom)/sim-watch.c $(sim_main_headers)
 	$(CC) -c $(srccom)/sim-watch.c $(ALL_CFLAGS)
 
-sim-load.o: $(srccom)/sim-load.c $(callback_h)
+sim-load.o: $(srccom)/sim-load.c $(callback_h) $(sim-basics_h) $(remote_sim_h)
 	$(CC) -c $(srccom)/sim-load.c $(ALL_CFLAGS)
 
 
@@ -581,14 +616,14 @@ install: install-common $(SIM_EXTRA_INSTALL)
 
 install-common: installdirs
 	n=`echo run | sed '$(program_transform_name)'`; \
-	$(INSTALL_PROGRAM) run$(EXEEXT) $(bindir)/$$n$(EXEEXT)
+	$(INSTALL_PROGRAM) run$(EXEEXT) $(DESTDIR)$(bindir)/$$n$(EXEEXT)
 	n=`echo libsim.a | sed s/libsim.a/lib$(target_alias)-sim.a/`; \
-	$(INSTALL_DATA) libsim.a $(libdir)/$$n ; \
-	( cd $(libdir) ; $(RANLIB) $$n )
+	$(INSTALL_DATA) libsim.a $(DESTDIR)$(libdir)/$$n ; \
+	( cd $(DESTDIR)$(libdir) ; $(RANLIB) $$n )
 
 installdirs:
-	$(SHELL) $(srcdir)/../../mkinstalldirs $(bindir)
-	$(SHELL) $(srcdir)/../../mkinstalldirs $(libdir)
+	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(bindir)
+	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(libdir)
 
 check:
 	cd ../testsuite && $(MAKE) check RUNTESTFLAGS="$(RUNTESTFLAGS)"
@@ -611,7 +646,7 @@ TAGS: force
 
 clean: $(SIM_EXTRA_CLEAN)
 	rm -f *.[oa] *~ core
-	rm -f run libsim.a
+	rm -f run$(EXEEXT) libsim.a
 	rm -f gentmap targ-map.c targ-vals.h stamp-tvals
 	if [ ! -f Make-common.in ] ; then \
 		rm -f $(BUILT_SRC_FROM_COMMON) ; \
@@ -647,7 +682,7 @@ stamp-h: config.in config.status
 # CGEN support
 
 CGENDIR = @cgendir@
-CGEN = `if [ -f ../../guile/libguile/guile ]; then echo ../../guile/libguile/guile; else echo guile ; fi`
+CGEN = "`if [ -f ../../guile/libguile/guile ]; then echo ../../guile/libguile/guile; else echo guile ; fi` -l $(CGENDIR)/guile.scm -s"
 CGENFLAGS = -v
 CGEN_CPU_DIR = $(CGENDIR)/cpu
 
@@ -665,7 +700,7 @@ CGEN_CPU_SEM = -S tmp-sem.c1
 CGEN_CPU_SEMSW = -X tmp-semsw.c1
 
 CGEN_FLAGS_TO_PASS = \
-	CGEN=$(CGEN) \
+	CGEN='$(CGEN)' \
 	CGENFLAGS="$(CGENFLAGS)"
 
 # We store the generated files in the source directory until we decide to
@@ -705,6 +740,6 @@ cgen-desc: force
 	$(SHELL) $(srccom)/cgen.sh desc $(srcdir) \
 		$(CGEN) $(CGENDIR) "$(CGENFLAGS)" \
 		$(arch) "$(FLAGS)" $(cpu) "$(isa)" $(mach) "$(SUFFIX)" \
-		$(archfile) ignored
+		$(archfile) ignored $(opcfile)
 
 ## End COMMON_POST_CONFIG_FRAG

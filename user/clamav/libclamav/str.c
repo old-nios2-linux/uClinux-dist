@@ -1,7 +1,7 @@
 /*
- *  Copyright (C) 2002 - 2005 Tomasz Kojm <tkojm@clamav.net>
- *  cli_strrcpy(): Copyright (C) 2002 Nigel Horne <njh@bandsman.co.uk>
- *  cli_strtokenize(): Copyright (C) 2007 Edwin Torok <edwin@clamav.net>
+ *  Copyright (C) 2007-2008 Sourcefire, Inc.
+ *
+ *  Authors: Tomasz Kojm, Nigel Horne, Török Edvin
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -206,7 +206,7 @@ char *cli_utf16toascii(const char *str, unsigned int length)
 
 
     if(length < 2) {
-	cli_warnmsg("cli_utf16toascii: length < 2\n");
+	cli_dbgmsg("cli_utf16toascii: length < 2\n");
 	return NULL;
     }
 
@@ -397,6 +397,24 @@ char *cli_strrcpy(char *dest, const char *source) /* by NJH */
     return --dest;
 }
 
+#ifndef HAVE_STRCASESTR
+const char* cli_strcasestr(const char* a, const char *b)
+{
+	size_t l;
+	char f[3];
+	const size_t strlen_a = strlen(a);
+	const size_t strlen_b = strlen(b);
+
+	f[0] = tolower(*b);
+	f[1] = toupper(*b);
+	f[2] = '\0';
+	for (l = strcspn(a, f); l != strlen_a; l += strcspn(a + l + 1, f) + 1)
+		if (strncasecmp(a + l, b, strlen_b) == 0)
+			return(a + l);
+	return(NULL);
+}
+#endif
+
 void cli_strtokenize(char *buffer, const char delim, const size_t token_count, const char **tokens)
 {
 	size_t tokens_found;
@@ -414,4 +432,13 @@ void cli_strtokenize(char *buffer, const char delim, const size_t token_count, c
 	    return;
 	}
     }
+}
+
+int cli_isnumber(const char *str)
+{
+    while(*str++)
+	if(!strchr("0123456789", *str))
+	    return 0;
+
+    return 1;
 }

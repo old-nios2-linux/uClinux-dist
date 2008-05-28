@@ -1,6 +1,8 @@
 /* Fortran language support definitions for GDB, the GNU debugger.
-   Copyright 1992, 1993, 1994, 1995, 1998, 2000
+
+   Copyright (C) 1992, 1993, 1994, 1995, 1998, 2000, 2005, 2007, 2008
    Free Software Foundation, Inc.
+
    Contributed by Motorola.  Adapted from the C definitions by Farooq Butt
    (fmbutt@engage.sps.mot.com).
 
@@ -8,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 extern int f_parse (void);
 
@@ -28,11 +28,24 @@ extern void f_error (char *);	/* Defined in f-exp.y */
 extern void f_print_type (struct type *, char *, struct ui_file *, int,
 			  int);
 
-extern int f_val_print (struct type *, char *, int, CORE_ADDR,
+extern int f_val_print (struct type *, const gdb_byte *, int, CORE_ADDR,
 			struct ui_file *, int, int, int,
 			enum val_prettyprint);
 
 /* Language-specific data structures */
+
+/* In F90 subrange expression, either bound could be empty, indicating that
+   its value is by default that of the corresponding bound of the array or
+   string.  So we have four sorts of subrange in F90.  This enumeration type
+   is to identify this.  */
+   
+enum f90_range_type
+  {
+    BOTH_BOUND_DEFAULT,		/* "(:)"  */
+    LOW_BOUND_DEFAULT,		/* "(:high)"  */
+    HIGH_BOUND_DEFAULT,		/* "(low:)"  */
+    NONE_BOUND_DEFAULT		/* "(low:high)"  */
+  };
 
 struct common_entry
   {

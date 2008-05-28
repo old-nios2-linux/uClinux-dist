@@ -1,13 +1,14 @@
 /* Parser for linespec for the GNU debugger, GDB.
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -35,6 +34,8 @@
 #include "block.h"
 #include "objc-lang.h"
 #include "linespec.h"
+#include "exceptions.h"
+#include "language.h"
 
 /* We share this one with symtab.c, but it is not exported widely. */
 
@@ -73,6 +74,7 @@ static struct symtabs_and_lines find_method (int funfirstline,
 					     struct symbol *sym_class);
 
 static int collect_methods (char *copy, struct type *t,
+			    struct symbol *sym_class,
 			    struct symbol **sym_arr);
 
 static NORETURN void cplusplus_error (const char *name,
@@ -81,12 +83,15 @@ static NORETURN void cplusplus_error (const char *name,
 
 static int total_number_of_methods (struct type *type);
 
-static int find_methods (struct type *, char *, struct symbol **);
+static int find_methods (struct type *, char *,
+			 enum language, struct symbol **);
 
 static int add_matching_methods (int method_counter, struct type *t,
+				 enum language language,
 				 struct symbol **sym_arr);
 
 static int add_constructors (int method_counter, struct type *t,
+			     enum language language,
 			     struct symbol **sym_arr);
 
 static void build_canonical_line_spec (struct symtab_and_line *,
@@ -194,7 +199,8 @@ total_number_of_methods (struct type *type)
    Note that this function is g++ specific.  */
 
 static int
-find_methods (struct type *t, char *name, struct symbol **sym_arr)
+find_methods (struct type *t, char *name, enum language language,
+	      struct symbol **sym_arr)
 {
   int i1 = 0;
   int ibase;
@@ -204,8 +210,8 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
      unless we figure out how to get the physname without the name of
      the class, then the loop can't do any good.  */
   if (class_name
-      && (lookup_symbol (class_name, (struct block *) NULL,
-			 STRUCT_DOMAIN, (int *) NULL,
+      && (lookup_symbol_in_language (class_name, (struct block *) NULL,
+			 STRUCT_DOMAIN, language, (int *) NULL,
 			 (struct symtab **) NULL)))
     {
       int method_counter;
@@ -236,12 +242,12 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
 	  if (strcmp_iw (name, method_name) == 0)
 	    /* Find all the overloaded methods with that name.  */
-	    i1 += add_matching_methods (method_counter, t,
+	    i1 += add_matching_methods (method_counter, t, language,
 					sym_arr + i1);
 	  else if (strncmp (class_name, name, name_len) == 0
 		   && (class_name[name_len] == '\0'
 		       || class_name[name_len] == '<'))
-	    i1 += add_constructors (method_counter, t,
+	    i1 += add_constructors (method_counter, t, language,
 				    sym_arr + i1);
 	}
     }
@@ -259,7 +265,8 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
   if (i1 == 0)
     for (ibase = 0; ibase < TYPE_N_BASECLASSES (t); ibase++)
-      i1 += find_methods (TYPE_BASECLASS (t, ibase), name, sym_arr + i1);
+      i1 += find_methods (TYPE_BASECLASS (t, ibase), name,
+			  language, sym_arr + i1);
 
   return i1;
 }
@@ -270,7 +277,7 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
 static int
 add_matching_methods (int method_counter, struct type *t,
-		      struct symbol **sym_arr)
+		      enum language language, struct symbol **sym_arr)
 {
   int field_counter;
   int i1 = 0;
@@ -297,14 +304,15 @@ add_matching_methods (int method_counter, struct type *t,
 	}
       else
 	phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
-		
+
       /* Destructor is handled by caller, don't add it to
 	 the list.  */
       if (is_destructor_name (phys_name) != 0)
 	continue;
 
-      sym_arr[i1] = lookup_symbol (phys_name,
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
+				   language,
 				   (int *) NULL,
 				   (struct symtab **) NULL);
       if (sym_arr[i1])
@@ -331,7 +339,7 @@ add_matching_methods (int method_counter, struct type *t,
 
 static int
 add_constructors (int method_counter, struct type *t,
-		  struct symbol **sym_arr)
+		  enum language language, struct symbol **sym_arr)
 {
   int field_counter;
   int i1 = 0;
@@ -347,7 +355,7 @@ add_constructors (int method_counter, struct type *t,
     {
       struct fn_field *f;
       char *phys_name;
-		  
+
       f = TYPE_FN_FIELDLIST1 (t, method_counter);
 
       /* GCC 3.x will never produce stabs stub methods, so
@@ -360,8 +368,9 @@ add_constructors (int method_counter, struct type *t,
 
       /* If this method is actually defined, include it in the
 	 list.  */
-      sym_arr[i1] = lookup_symbol (phys_name,
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
+				   language,
 				   (int *) NULL,
 				   (struct symtab **) NULL);
       if (sym_arr[i1])
@@ -498,7 +507,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
     }
 
   i = 0;
-  printf_unfiltered ("[0] cancel\n[1] all\n");
+  printf_unfiltered (_("[0] cancel\n[1] all\n"));
   while (i < nelts)
     {
       init_sal (&return_values.sals[i]);	/* Initialize to zeroes.  */
@@ -513,14 +522,14 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
 			       values.sals[i].symtab->filename,
 			       values.sals[i].line);
 	  else
-	    printf_unfiltered ("[%d] %s at ?FILE:%d [No symtab? Probably broken debug info...]\n",
+	    printf_unfiltered (_("[%d] %s at ?FILE:%d [No symtab? Probably broken debug info...]\n"),
 			       (i + 2),
 			       SYMBOL_PRINT_NAME (sym_arr[i]),
 			       values.sals[i].line);
 
 	}
       else
-	printf_unfiltered ("?HERE\n");
+	printf_unfiltered (_("?HERE\n"));
       i++;
     }
 
@@ -532,7 +541,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
   args = command_line_input (prompt, 0, "overload-choice");
 
   if (args == 0 || *args == 0)
-    error_no_arg ("one or more choice numbers");
+    error_no_arg (_("one or more choice numbers"));
 
   i = 0;
   while (*args)
@@ -543,12 +552,12 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
       while (*arg1 >= '0' && *arg1 <= '9')
 	arg1++;
       if (*arg1 && *arg1 != ' ' && *arg1 != '\t')
-	error ("Arguments must be choice numbers.");
+	error (_("Arguments must be choice numbers."));
 
       num = atoi (args);
 
       if (num == 0)
-	error ("canceled");
+	error (_("canceled"));
       else if (num == 1)
 	{
 	  if (canonical_arr)
@@ -571,7 +580,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
 
       if (num >= nelts + 2)
 	{
-	  printf_unfiltered ("No choice number %d.\n", num);
+	  printf_unfiltered (_("No choice number %d.\n"), num);
 	}
       else
 	{
@@ -589,7 +598,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
 	    }
 	  else
 	    {
-	      printf_unfiltered ("duplicate request for %d ignored.\n", num);
+	      printf_unfiltered (_("duplicate request for %d ignored.\n"), num);
 	    }
 	}
 
@@ -805,7 +814,7 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
     {
       p = skip_quoted (*argptr);
       if (p[-1] != '\'')
-	error ("Unmatched single quote.");
+	error (_("Unmatched single quote."));
     }
   else if (is_objc_method)
     {
@@ -954,6 +963,7 @@ decode_indirect (char **argptr)
   values.sals[0] = find_pc_line (pc, 0);
   values.sals[0].pc = pc;
   values.sals[0].section = find_pc_overlay (pc);
+  values.sals[0].explicit_pc = 1;
 
   return values;
 }
@@ -1010,7 +1020,7 @@ locate_first_half (char **argptr, int *is_quote_enclosed)
 	{
 	  char *temp_end = find_template_name_end (p);
 	  if (!temp_end)
-	    error ("malformed template specification in command");
+	    error (_("malformed template specification in command"));
 	  p = temp_end;
 	}
       /* Check for a colon and a plus or minus and a [ (which
@@ -1078,8 +1088,8 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
   struct symbol *sym = NULL;
   char *copy = NULL;
   struct block *block = NULL;
-  int i1 = 0;
-  int i2 = 0;
+  unsigned i1 = 0;
+  unsigned i2 = 0;
 
   values.sals = NULL;
   values.nelts = 0;
@@ -1094,7 +1104,7 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
   if (i1 > 0)
     {
       sym_arr = (struct symbol **) alloca ((i1 + 1) * sizeof (struct symbol *));
-      sym_arr[i1] = 0;
+      sym_arr[i1] = NULL;
 
       copy = find_imps (file_symtab, block, *argptr, sym_arr, &i1, &i2); 
       *argptr = copy;
@@ -1117,7 +1127,7 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
 	  sym = find_pc_function (SYMBOL_VALUE_ADDRESS (sym_arr[0]));
 	  if ((sym != NULL) && strcmp (SYMBOL_LINKAGE_NAME (sym_arr[0]), SYMBOL_LINKAGE_NAME (sym)) != 0)
 	    {
-	      warning ("debugging symbol \"%s\" does not match selector; ignoring", SYMBOL_LINKAGE_NAME (sym));
+	      warning (_("debugging symbol \"%s\" does not match selector; ignoring"), SYMBOL_LINKAGE_NAME (sym));
 	      sym = NULL;
 	    }
 	}
@@ -1134,7 +1144,7 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
       else
 	{
 	  /* The only match was a non-debuggable symbol.  */
-	  values.sals[0].symtab = 0;
+	  values.sals[0].symtab = NULL;
 	  values.sals[0].line = 0;
 	  values.sals[0].end = 0;
 	  values.sals[0].pc = SYMBOL_VALUE_ADDRESS (sym_arr[0]);
@@ -1225,7 +1235,7 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
 	    {
 	      temp_end = find_template_name_end (p);
 	      if (!temp_end)
-		error ("malformed template specification in command");
+		error (_("malformed template specification in command"));
 	      p = temp_end;
 	    }
 	  /* Note that, since, at the start of this loop, p would be
@@ -1400,7 +1410,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
 	     char *copy, struct type *t, struct symbol *sym_class)
 {
   struct symtabs_and_lines values;
-  struct symbol *sym = 0;
+  struct symbol *sym = NULL;
   int i1;	/*  Counter for the symbol array.  */
   struct symbol **sym_arr =  alloca (total_number_of_methods (t)
 				     * sizeof (struct symbol *));
@@ -1408,7 +1418,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
   /* Find all methods with a matching name, and put them in
      sym_arr.  */
 
-  i1 = collect_methods (copy, t, sym_arr);
+  i1 = collect_methods (copy, t, sym_class, sym_arr);
 
   if (i1 == 1)
     {
@@ -1425,6 +1435,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
 	}
       else
 	{
+	  values.sals = NULL;
 	  values.nelts = 0;
 	}
       return values;
@@ -1463,7 +1474,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
 
 static int
 collect_methods (char *copy, struct type *t,
-		 struct symbol **sym_arr)
+		 struct symbol *sym_class, struct symbol **sym_arr)
 {
   int i1 = 0;	/*  Counter for the symbol array.  */
 
@@ -1485,7 +1496,7 @@ collect_methods (char *copy, struct type *t,
 	}
     }
   else
-    i1 = find_methods (t, copy, sym_arr);
+    i1 = find_methods (t, copy, SYMBOL_LANGUAGE (sym_class), sym_arr);
 
   return i1;
 }
@@ -1524,20 +1535,10 @@ symtab_from_filename (char **argptr, char *p, int is_quote_enclosed,
   if (file_symtab == 0)
     {
       if (!have_full_symbols () && !have_partial_symbols ())
-	error ("No symbol table is loaded.  Use the \"file\" command.");
+	error (_("No symbol table is loaded.  Use the \"file\" command."));
       if (not_found_ptr)
-	{
-	  *not_found_ptr = 1;
-	  /* The caller has indicated that it wishes quiet notification of any
-	     error where the function or file is not found.  A call to 
-	     error_silent causes an error to occur, but it does not issue 
-	     the supplied message.  The message can be manually output by
-	     the caller, if desired.  This is used, for example, when 
-	     attempting to set breakpoints for functions in shared libraries 
-	     that have not yet been loaded.  */
-	  error_silent ("No source file named %s.", copy);
-	}
-      error ("No source file named %s.", copy);
+	*not_found_ptr = 1;
+      throw_error (NOT_FOUND_ERROR, _("No source file named %s."), copy);
     }
 
   /* Discard the file name from the arg.  */
@@ -1571,7 +1572,7 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
   sign = none;
 
   /* We might need a canonical line spec if no file was specified.  */
-  int need_canonical = (file_symtab == 0) ? 1 : 0;
+  int need_canonical = (file_symtab == NULL) ? 1 : 0;
 
   init_sal (&val);
 
@@ -1633,6 +1634,7 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
   values.nelts = 1;
   if (need_canonical)
     build_canonical_line_spec (values.sals, NULL, canonical);
+  values.sals[0].explicit_line = 1;
   return values;
 }
 
@@ -1663,8 +1665,8 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
       /* We have a value history reference.  */
       sscanf ((copy[1] == '$') ? copy + 2 : copy + 1, "%d", &index);
       valx = access_value_history ((copy[1] == '$') ? -index : index);
-      if (TYPE_CODE (VALUE_TYPE (valx)) != TYPE_CODE_INT)
-	error ("History values used in line specs must have integer values.");
+      if (TYPE_CODE (value_type (valx)) != TYPE_CODE_INT)
+	error (_("History values used in line specs must have integer values."));
     }
   else
     {
@@ -1673,7 +1675,7 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
 
       /* Look up entire name as a symbol first.  */
       sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0, &sym_symtab);
-      file_symtab = (struct symtab *) 0;
+      file_symtab = (struct symtab *) NULL;
       need_canonical = 1;
       /* Symbol was found --> jump to normal symbol processing.  */
       if (sym)
@@ -1687,10 +1689,9 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
 	return minsym_found (funfirstline, msymbol);
 
       /* Not a user variable or function -- must be convenience variable.  */
-      need_canonical = (file_symtab == 0) ? 1 : 0;
       valx = value_of_internalvar (lookup_internalvar (copy + 1));
-      if (TYPE_CODE (VALUE_TYPE (valx)) != TYPE_CODE_INT)
-	error ("Convenience variables used in line specs must have integer values.");
+      if (TYPE_CODE (value_type (valx)) != TYPE_CODE_INT)
+	error (_("Convenience variables used in line specs must have integer values."));
     }
 
   init_sal (&val);
@@ -1745,22 +1746,11 @@ decode_variable (char *copy, int funfirstline, char ***canonical,
 
   if (!have_full_symbols () &&
       !have_partial_symbols () && !have_minimal_symbols ())
-    error ("No symbol table is loaded.  Use the \"file\" command.");
+    error (_("No symbol table is loaded.  Use the \"file\" command."));
 
   if (not_found_ptr)
-    {
-      *not_found_ptr = 1;
-      /* The caller has indicated that it wishes quiet notification of any
-	 error where the function or file is not found.  A call to 
-	 error_silent causes an error to occur, but it does not issue 
-	 the supplied message.  The message can be manually output by
-	 the caller, if desired.  This is used, for example, when 
-	 attempting to set breakpoints for functions in shared libraries 
-	 that have not yet been loaded.  */
-      error_silent ("Function \"%s\" not defined.", copy);
-    }
-  
-  error ("Function \"%s\" not defined.", copy);
+    *not_found_ptr = 1;
+  throw_error (NOT_FOUND_ERROR, _("Function \"%s\" not defined."), copy);
 }
 
 
@@ -1805,7 +1795,7 @@ symbol_found (int funfirstline, char ***canonical, char *copy,
   else
     {
       if (funfirstline)
-	error ("\"%s\" is not a function", copy);
+	error (_("\"%s\" is not a function"), copy);
       else if (SYMBOL_LINE (sym) != 0)
 	{
 	  /* We know its line number.  */
@@ -1823,7 +1813,7 @@ symbol_found (int funfirstline, char ***canonical, char *copy,
 	/* FIXME: Shouldn't we just set .line and .symtab to zero
 	   and return?  For example, "info line foo" could print
 	   the address.  */
-	error ("Line number not known for symbol \"%s\"", copy);
+	error (_("Line number not known for symbol \"%s\""), copy);
     }
 }
 
@@ -1842,9 +1832,27 @@ minsym_found (int funfirstline, struct minimal_symbol *msymbol)
   values.sals[0].section = SYMBOL_BFD_SECTION (msymbol);
   if (funfirstline)
     {
-      values.sals[0].pc += DEPRECATED_FUNCTION_START_OFFSET;
-      values.sals[0].pc = SKIP_PROLOGUE (values.sals[0].pc);
+      struct symtab_and_line sal;
+
+      values.sals[0].pc
+	+= gdbarch_deprecated_function_start_offset (current_gdbarch);
+      values.sals[0].pc = gdbarch_skip_prologue
+			    (current_gdbarch, values.sals[0].pc);
+
+      sal = find_pc_sect_line (values.sals[0].pc, values.sals[0].section, 0);
+
+      /* Check if SKIP_PROLOGUE left us in mid-line, and the next
+	 line is still part of the same function.  If there is no
+	 line information here, sal.pc will be the passed in PC.  */
+      if (sal.pc != values.sals[0].pc
+	  && (lookup_minimal_symbol_by_pc_section (values.sals[0].pc,
+						   values.sals[0].section)
+	      == lookup_minimal_symbol_by_pc_section (sal.end,
+						      values.sals[0].section)))
+	/* Recalculate the line number (might not be N+1).  */
+	values.sals[0] = find_pc_sect_line (sal.end, values.sals[0].section, 0);
     }
+
   values.nelts = 1;
   return values;
 }

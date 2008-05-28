@@ -1,6 +1,6 @@
 /* Generic remote debugging interface for simulators.
 
-   Copyright 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat, Inc.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,14 +17,12 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SIM_REGNO_H
 #define SIM_REGNO_H
 
-/* The REGISTER_SIM_REGNO(REGNUM) method, when there is a
+/* The gdbarch_register_sim_regno (REGNUM) method, when there is a
    corresponding simulator register, returns that register number as a
    cardinal.  When there is no corresponding register, it returns a
    negative value.  */
@@ -40,6 +38,6 @@ enum sim_regno {
 
 /* Treat all raw registers as valid.  */
 
-extern int one2one_register_sim_regno (int regnum);
+extern int one2one_register_sim_regno (struct gdbarch *gdbarch, int regnum);
 
 #endif

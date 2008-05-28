@@ -1,9 +1,9 @@
 /* Header file for GDB CLI command implementation library.
-   Copyright 2000 Free Software Foundation, Inc.
+   Copyright (c) 2000,2006,2007,2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -12,9 +12,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (CLI_CMDS_H)
 #define CLI_CMDS_H 1
@@ -38,6 +36,10 @@ extern struct cmd_list_element *disablelist;
 /* Chain containing all defined delete subcommands. */
 
 extern struct cmd_list_element *deletelist;
+
+/* Chain containing all defined detach subcommands. */
+
+extern struct cmd_list_element *detachlist;
 
 /* Chain containing all defined toggle subcommands. */
 
@@ -115,11 +117,16 @@ extern void cd_command (char *, int);
 
 extern void quit_command (char *, int);
 
-extern void source_command (char *, int);
+extern void source_script (char *, int);
 
 /* Used everywhere whenever at least one parameter is required and
   none is specified. */
 
 extern NORETURN void error_no_arg (char *) ATTR_NORETURN;
+
+/* Command tracing state.  */
+
+extern int source_verbose;
+extern int trace_commands;
 
 #endif /* !defined (CLI_CMDS_H) */

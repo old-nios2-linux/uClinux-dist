@@ -1,12 +1,13 @@
 /* Target-dependent code for GNU/Linux i386.
 
-   Copyright 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -27,24 +26,25 @@
 #include "inferior.h"
 #include "osabi.h"
 #include "reggroups.h"
-
+#include "dwarf2-frame.h"
 #include "gdb_string.h"
 
 #include "i386-tdep.h"
 #include "i386-linux-tdep.h"
 #include "glibc-tdep.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 
 /* Return the name of register REG.  */
 
 static const char *
-i386_linux_register_name (int reg)
+i386_linux_register_name (struct gdbarch *gdbarch, int reg)
 {
   /* Deal with the extra "orig_eax" pseudo register.  */
   if (reg == I386_LINUX_ORIG_EAX_REGNUM)
     return "orig_eax";
 
-  return i386_register_name (reg);
+  return i386_register_name (gdbarch, reg);
 }
 
 /* Return non-zero, when the register is in the corresponding register
@@ -106,7 +106,7 @@ i386_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 #define LINUX_SIGTRAMP_INSN2	0xcd	/* int */
 #define LINUX_SIGTRAMP_OFFSET2	6
 
-static const unsigned char linux_sigtramp_code[] =
+static const gdb_byte linux_sigtramp_code[] =
 {
   LINUX_SIGTRAMP_INSN0,					/* pop %eax */
   LINUX_SIGTRAMP_INSN1, 0x77, 0x00, 0x00, 0x00,		/* mov $0x77, %eax */
@@ -122,7 +122,7 @@ static CORE_ADDR
 i386_linux_sigtramp_start (struct frame_info *next_frame)
 {
   CORE_ADDR pc = frame_pc_unwind (next_frame);
-  unsigned char buf[LINUX_SIGTRAMP_LEN];
+  gdb_byte buf[LINUX_SIGTRAMP_LEN];
 
   /* We only recognize a signal trampoline if PC is at the start of
      one of the three instructions.  We optimize for finding the PC at
@@ -175,7 +175,7 @@ i386_linux_sigtramp_start (struct frame_info *next_frame)
 #define LINUX_RT_SIGTRAMP_INSN1		0xcd /* int */
 #define LINUX_RT_SIGTRAMP_OFFSET1	5
 
-static const unsigned char linux_rt_sigtramp_code[] =
+static const gdb_byte linux_rt_sigtramp_code[] =
 {
   LINUX_RT_SIGTRAMP_INSN0, 0xad, 0x00, 0x00, 0x00,	/* mov $0xad, %eax */
   LINUX_RT_SIGTRAMP_INSN1, 0x80				/* int $0x80 */
@@ -190,7 +190,7 @@ static CORE_ADDR
 i386_linux_rt_sigtramp_start (struct frame_info *next_frame)
 {
   CORE_ADDR pc = frame_pc_unwind (next_frame);
-  unsigned char buf[LINUX_RT_SIGTRAMP_LEN];
+  gdb_byte buf[LINUX_RT_SIGTRAMP_LEN];
 
   /* We only recognize a signal trampoline if PC is at the start of
      one of the two instructions.  We optimize for finding the PC at
@@ -244,6 +244,27 @@ i386_linux_sigtramp_p (struct frame_info *next_frame)
 	  || strcmp ("__restore_rt", name) == 0);
 }
 
+/* Return one if the unwound PC from NEXT_FRAME is in a signal trampoline
+   which may have DWARF-2 CFI.  */
+
+static int
+i386_linux_dwarf_signal_frame_p (struct gdbarch *gdbarch,
+				 struct frame_info *next_frame)
+{
+  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  char *name;
+
+  find_pc_partial_function (pc, &name, NULL, NULL);
+
+  /* If a vsyscall DSO is in use, the signal trampolines may have these
+     names.  */
+  if (name && (strcmp (name, "__kernel_sigreturn") == 0
+	       || strcmp (name, "__kernel_rt_sigreturn") == 0))
+    return 1;
+
+  return 0;
+}
+
 /* Offset to struct sigcontext in ucontext, from <asm/ucontext.h>.  */
 #define I386_LINUX_UCONTEXT_SIGCONTEXT_OFFSET 20
 
@@ -255,7 +276,7 @@ i386_linux_sigcontext_addr (struct frame_info *next_frame)
 {
   CORE_ADDR pc;
   CORE_ADDR sp;
-  char buf[4];
+  gdb_byte buf[4];
 
   frame_unwind_register (next_frame, I386_ESP_REGNUM, buf);
   sp = extract_unsigned_integer (buf, 4);
@@ -287,16 +308,16 @@ i386_linux_sigcontext_addr (struct frame_info *next_frame)
       return ucontext_addr + I386_LINUX_UCONTEXT_SIGCONTEXT_OFFSET;
     }
 
-  error ("Couldn't recognize signal trampoline.");
+  error (_("Couldn't recognize signal trampoline."));
   return 0;
 }
 
 /* Set the program counter for process PTID to PC.  */
 
 static void
-i386_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
+i386_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  write_register_pid (I386_EIP_REGNUM, pc, ptid);
+  regcache_cooked_write_unsigned (regcache, I386_EIP_REGNUM, pc);
 
   /* We must be careful with modifying the program counter.  If we
      just interrupted a system call, the kernel might try to restart
@@ -312,7 +333,7 @@ i386_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
      when we resume the inferior on return from a function call from
      within GDB.  In all other cases the system call will not be
      restarted.  */
-  write_register_pid (I386_LINUX_ORIG_EAX_REGNUM, -1, ptid);
+  regcache_cooked_write_unsigned (regcache, I386_LINUX_ORIG_EAX_REGNUM, -1);
 }
 
 
@@ -408,12 +429,23 @@ i386_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sc_reg_offset = i386_linux_sc_reg_offset;
   tdep->sc_num_regs = ARRAY_SIZE (i386_linux_sc_reg_offset);
 
+  /* N_FUN symbols in shared libaries have 0 for their values and need
+     to be relocated. */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
   /* GNU/Linux uses SVR4-style shared libraries.  */
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
   /* GNU/Linux uses the dynamic linker included in the GNU C Library.  */
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
+
+  dwarf2_frame_set_signal_frame_p (gdbarch, i386_linux_dwarf_signal_frame_p);
+
+  /* Enable TLS support.  */
+  set_gdbarch_fetch_tls_load_module_address (gdbarch,
+                                             svr4_fetch_objfile_link_map);
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
