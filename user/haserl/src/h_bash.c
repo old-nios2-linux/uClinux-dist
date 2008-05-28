@@ -63,7 +63,11 @@ bash_setup (char *shell, list_t * env)
   retcode = pipe (&subshell_pipe[PARENT_IN]);
   if (retcode == 0)
     {
+#ifdef EMBED
+      subshell_pid = vfork ();
+#else
       subshell_pid = fork ();
+#endif
       if (subshell_pid == -1)
 	{
 	  die_with_message (NULL, NULL, g_err_msg[E_SUBSHELL_FAIL]);

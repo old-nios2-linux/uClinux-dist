@@ -210,7 +210,7 @@ myputenv (list_t * cur, char *str, char *prefix)
     }
   memcpy ((char *) (entry + strlen (prefix)), str, strlen (str));
 
-  keylen = (size_t) (index (entry, '=') - entry);
+  keylen = (size_t) (strchr (entry, '=') - entry);
 
   if (keylen <= 0)
     {
