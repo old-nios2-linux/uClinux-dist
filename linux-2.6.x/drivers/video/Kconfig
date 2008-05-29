@@ -1988,7 +1988,7 @@ config XEN_FBDEV_FRONTEND
 	  in another domain.
 
 config FB_ALTERA_VGA
-	tristate "Altera Avalon VGA framebuffer support"
+	tristate "Altera VGA framebuffer support"
 	depends on FB && EMBEDDED
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
