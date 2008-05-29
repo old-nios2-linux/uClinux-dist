@@ -334,60 +334,6 @@ config SERIAL_AMBA_PL011_CONSOLE
 	  your boot loader (lilo or loadlin) about how to pass options to the
 	  kernel at boot time.)
 
-config SERIAL_AVALON_JTAGUART
-	bool "Altera Avalon JTAG UART support"
-	depends on  EMBEDDED
-	select SERIAL_CORE
-	help
-	  This driver supports the Altera Avalon JTAG UART port.
-
-config SERIAL_AVALON_JTAGUART_CONSOLE
-	bool "Avalon JTAG UART console support"
-	depends on SERIAL_AVALON_JTAGUART
-	select SERIAL_CORE_CONSOLE
-	help
-	  Enable a Avalon JTAG UART port to be the system console.
-
-config SERIAL_AVALON_JTAGUART_CONSOLE_BYPASS
-	bool "Bypass output when no connection"
-	depends on SERIAL_AVALON_JTAGUART_CONSOLE
-	select SERIAL_CORE_CONSOLE
-	help
-	  Bypass console output and keep going even if there is no
-	  JTAG terminal connection with PC.
-
-config SERIAL_AVALON_UART
-	bool "Altera Avalon UART support"
-	depends on  EMBEDDED
-	select SERIAL_CORE
-	help
-	  This driver supports the Altera Avalon softcore UART port.
-
-config SERIAL_AVALON_UART_MAXPORTS
-	int "Maximum number of Avalon UART ports"
-	depends on SERIAL_AVALON_UART
-	default 4
-	help
-	  This setting lets you define the maximum number of the Avalon
-	  UART ports. The usual default varies from board to board, and
-	  this setting is a way of catering for that.
-
-config SERIAL_AVALON_UART_BAUDRATE
-	int "Default baudrate for Avalon UART ports"
-	depends on SERIAL_AVALON_UART
-	default 115200
-	help
-	  This setting lets you define what the default baudrate is for the
-	  Avalon UART ports. The usual default varies from board to board,
-	  and this setting is a way of catering for that.
-
-config SERIAL_AVALON_UART_CONSOLE
-	bool "Avalon UART console support"
-	depends on SERIAL_AVALON_UART
-	select SERIAL_CORE_CONSOLE
-	help
-	  Enable a Avalon UART port to be the system console.
-
 config SERIAL_SB1250_DUART
 	tristate "BCM1xxx on-chip DUART serial support"
 	depends on SIBYTE_SB1xxx_SOC=y
@@ -1455,5 +1401,59 @@ config SPORT_BAUD_RATE
 	default 38400 if (SERIAL_SPORT_BAUD_RATE_38400)
 	default 19200 if (SERIAL_SPORT_BAUD_RATE_19200)
 	default 9600 if (SERIAL_SPORT_BAUD_RATE_9600)
+
+config SERIAL_ALTERA_JTAGUART
+	bool "Altera JTAG UART support"
+	depends on  EMBEDDED
+	select SERIAL_CORE
+	help
+	  This driver supports the Altera JTAG UART port.
+
+config SERIAL_ALTERA_JTAGUART_CONSOLE
+	bool "Altera JTAG UART console support"
+	depends on SERIAL_ALTERA_JTAGUART
+	select SERIAL_CORE_CONSOLE
+	help
+	  Enable a Altera JTAG UART port to be the system console.
+
+config SERIAL_ALTERA_JTAGUART_CONSOLE_BYPASS
+	bool "Bypass output when no connection"
+	depends on SERIAL_ALTERA_JTAGUART_CONSOLE
+	select SERIAL_CORE_CONSOLE
+	help
+	  Bypass console output and keep going even if there is no
+	  JTAG terminal connection with PC.
+
+config SERIAL_ALTERA_UART
+	bool "Altera UART support"
+	depends on  EMBEDDED
+	select SERIAL_CORE
+	help
+	  This driver supports the Altera softcore UART port.
+
+config SERIAL_ALTERA_UART_MAXPORTS
+	int "Maximum number of Altera UART ports"
+	depends on SERIAL_ALTERA_UART
+	default 4
+	help
+	  This setting lets you define the maximum number of the Altera
+	  UART ports. The usual default varies from board to board, and
+	  this setting is a way of catering for that.
+
+config SERIAL_ALTERA_UART_BAUDRATE
+	int "Default baudrate for Altera UART ports"
+	depends on SERIAL_ALTERA_UART
+	default 115200
+	help
+	  This setting lets you define what the default baudrate is for the
+	  Altera UART ports. The usual default varies from board to board,
+	  and this setting is a way of catering for that.
+
+config SERIAL_ALTERA_UART_CONSOLE
+	bool "Altera UART console support"
+	depends on SERIAL_ALTERA_UART
+	select SERIAL_CORE_CONSOLE
+	help
+	  Enable a Altera UART port to be the system console.
 
 endmenu

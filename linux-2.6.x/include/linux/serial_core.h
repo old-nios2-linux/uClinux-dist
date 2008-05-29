@@ -158,9 +158,9 @@
 
 #define PORT_SC26XX	82
 
-/* Altera Avalon UARTs */
-#define PORT_AVALON_JTAGUART	83
-#define PORT_AVALON_UART	84
+/* Altera UARTs */
+#define PORT_ALTERA_JTAGUART	83
+#define PORT_ALTERA_UART	84
 
 #ifdef __KERNEL__
 

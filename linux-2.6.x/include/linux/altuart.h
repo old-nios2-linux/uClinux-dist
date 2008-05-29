@@ -1,17 +1,18 @@
 /*
- *	avjtag.h -- Altera Avalon JTAG UART driver defines.
+ *	altuart.h -- Altera UART driver defines.
  */
 
-#ifndef	avjtag_h
-#define	avjtag_h
+#ifndef	altuart_h
+#define	altuart_h
 
 #include <linux/serial_core.h>
 #include <linux/platform_device.h>
 
-struct avalon_jtaguart_platform_uart {
+struct altera_uart_platform_uart {
 	unsigned long mapbase;	/* Physical address base */
 	void __iomem *membase;	/* Virtual address if mapped */
 	unsigned int irq;	/* Interrupt vector */
+	unsigned int uartclk;	/* UART clock rate */
 };
 
-#endif /* avjtag_h */
+#endif /* altuart_h */
