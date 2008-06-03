@@ -12,7 +12,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
 #include <linux/mtd/partitions.h>
-#include <asm/nios.h>
+#include <asm/nios2.h>
 
 /* map solutions */
 #define WINDOW_ADDR na_flash_kernel
