@@ -17,7 +17,12 @@
 /* map solutions */
 #define WINDOW_ADDR na_flash_kernel
 #define WINDOW_SIZE na_flash_kernel_size
+
+#if defined(CONFIG_ALTERA_NEEK_C3)
+#define BUSWIDTH 2
+#else
 #define BUSWIDTH 1
+#endif
 
 static struct mtd_info *mymtd;
 
@@ -81,6 +86,25 @@ static struct mtd_partition alteramap_partitions[] = {
 		.name =		"loader/kernel",
 		.size =		0x200000,
 		.offset =	0,
+	}
+#elif defined(CONFIG_ALTERA_NEEK_C3)
+	{
+		.name =		"romfs/jffs2",
+		.size =		0x300000,
+		.offset =	0xd00000,
+	},{
+		.name =		"catalog",
+		.size =		0x020000,
+		.offset =	0,
+	}, {
+		.name =		"application",
+		.size =		0xb80000,
+		.offset =	0x180000,
+	}, {
+		.name =		"selector",
+		.size =		0x160000,
+		.offset =	0x020000,
+		.mask_flags =	MTD_WRITEABLE,  /* force read-only */
 	}
 #else
 	{

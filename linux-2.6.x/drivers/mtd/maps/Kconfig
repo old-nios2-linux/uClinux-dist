@@ -609,7 +609,8 @@ config MTD_EPCS_MAP
 
 config MTD_ALTERA
 	tristate "Maps for Altera Nios Development Kit"
-	depends on MTD_PARTITIONS && !MMU && ( ALTERA_STRATIX || ALTERA_STRATIX_PRO || ALTERA_CYCLONE || ALTERA_STRATIX_II || ALTERA_DE2)
+	depends on MTD_PARTITIONS && ( ALTERA_STRATIX || ALTERA_STRATIX_PRO || \
+		ALTERA_CYCLONE || ALTERA_STRATIX_II || ALTERA_DE2 || ALTERA_NEEK_C3)
 	default y
 	help
 	  Map driver for accessing flash memory on Altera Nios Development kit,
