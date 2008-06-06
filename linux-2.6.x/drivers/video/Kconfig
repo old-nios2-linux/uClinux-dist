@@ -1988,14 +1988,14 @@ config XEN_FBDEV_FRONTEND
 	  in another domain.
 
 config FB_ALTERA_VGA
-	tristate "Altera VGA framebuffer support"
+	tristate "Altera framebuffer support"
 	depends on FB && EMBEDDED
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	---help---
 	  This is the frame buffer driver for the VGA controller 
-	  in Altera Nios forum.
+	  in Altera Nios forum and the video pipeline of NEEK.
 
 source "drivers/video/omap/Kconfig"
 
