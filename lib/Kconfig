@@ -351,6 +351,9 @@ config LIB_LIBOPENH323
 	  Only enable this if you want to force the library to be built.  The
 	  Config will make sure this library is built if it is needed.
 
+config LIB_TSLIB
+	bool "Build tslib"
+
 config LIB_NXLIB
 	bool 'Build nxlib'
 	select USER_MICROWIN_NANOX
