@@ -231,7 +231,7 @@ static const struct tslib_ops __ts_input_ops = {
 	.fini	= ts_input_fini,
 };
 
-TSAPI struct tslib_module_info *mod_init(struct tsdev *dev, const char *params)
+TSAPI struct tslib_module_info *input_mod_init(struct tsdev *dev, const char *params)
 {
 	struct tslib_input *i;
 
