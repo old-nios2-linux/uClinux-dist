@@ -899,6 +899,20 @@ config MTIP1000_ETH
 	  This is support for the MoreThanIP 10_100_1000 emac driver implemented
 	  in an FPGA.
 
+config ATSE
+	bool "Altera Tripple Speed Ethernet support (EXPERIMENTAL)"
+	help
+
+	  This is support for Altera Tripple Speed (TSE) Ethernet MAC
+	  implemented in an FPGA.
+
+	  If you have one of the following of Development Board
+	  Daughter Cards, say y:
+	  "10/100/1000 Ethernet PHY Daughter Board with Marvell PHY (88E1111)"
+
+	   default n
+	   depends on NIOS2
+
 config SMC91X
 	tristate "SMC 91C9x/91C1xxx support"
 	select CRC32
