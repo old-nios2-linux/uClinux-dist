@@ -227,7 +227,7 @@ endif
 
 ifeq ($(THREADSAFE), Y)
 DEFINES += -DTHREADSAFE=1
-LDFLAGS += -pthread
+LDFLAGS += -lpthread
 endif
 
 # Driver-specific stuff
