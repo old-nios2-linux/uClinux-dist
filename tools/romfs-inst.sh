@@ -114,6 +114,12 @@ file_append()
 		[ "$v" ] && echo "File pattern already installed."
 	else
 		[ "$v" ] && echo "Installing entry into ${ROMFSDIR}${dst}."
+		if [ -s ${ROMFSDIR}${dst} ] ; then
+			# if file lacks a trailing new line, add it before appending the text
+			if [ $(tail -n1 ${ROMFSDIR}${dst} | tr -d '\n' | wc -c) = $(tail -n1 ${ROMFSDIR}${dst} | wc -c) ] ; then
+				echo "" >> ${ROMFSDIR}${dst} || return 1
+			fi
+		fi
 		echo "${src}" >> ${ROMFSDIR}${dst} || return 1
 	fi
 	setperm ${ROMFSDIR}${dst}
@@ -152,7 +158,7 @@ then
 	exit 1
 fi
 
-v=1
+v=
 option=y
 noption=
 pattern=

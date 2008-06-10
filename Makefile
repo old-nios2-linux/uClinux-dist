@@ -18,7 +18,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 ifeq (.config,$(wildcard .config))
 include .config
 
-all: tools subdirs romfs image
+all: ucfront cksum staging subdirs romfs image
 else
 all: config_error
 endif
@@ -31,13 +31,14 @@ endif
 LINUXDIR = $(CONFIG_LINUXDIR)
 LIBCDIR  = $(CONFIG_LIBCDIR)
 ROOTDIR  = $(shell pwd)
-PATH	 := $(PATH):$(ROOTDIR)/tools
+PATH	 := $(ROOTDIR)/tools:$(PATH)
 HOSTCC   = cc
 IMAGEDIR = $(ROOTDIR)/images
 RELDIR   = $(ROOTDIR)/release
 ROMFSDIR = $(ROOTDIR)/romfs
 ROMFSINST= romfs-inst.sh
 SCRIPTSDIR = $(ROOTDIR)/config/kconfig
+STAGEDIR = $(ROOTDIR)/staging
 TFTPDIR    = /tftpboot
 BUILD_START_STRING ?= $(shell date "+%a, %d %b %Y %T %z")
 ifndef NON_SMP_BUILD
@@ -49,7 +50,8 @@ endif
 LINUX_CONFIG  = $(ROOTDIR)/$(LINUXDIR)/.config
 CONFIG_CONFIG = $(ROOTDIR)/config/.config
 MODULES_CONFIG = $(ROOTDIR)/modules/.config
-
+-include $(CONFIG_CONFIG)
+-include $(LINUX_CONFIG)
 
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
@@ -67,14 +69,18 @@ endif
 KERNEL_CROSS_COMPILE ?= $(CROSS_COMPILE)
 ifneq ($(SUBARCH),)
 # Using UML, so make the kernel and non-kernel with different ARCHs
-MAKEARCH = $(MAKE) ARCH=$(SUBARCH)
+MAKEARCH = $(MAKE) ARCH=$(SUBARCH) CROSS_COMPILE=$(CROSS_COMPILE)
 MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) SUBARCH=$(SUBARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
 else
 MAKEARCH = $(MAKE) ARCH=$(ARCH)
 MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
 endif
 
-DIRS    = $(VENDOR_TOPDIRS) include lib include user
+DIRS    = $(VENDOR_TOPDIRS) lib user
+
+# some older configure's do not check for proper pkg-config named binaries
+PKG_CONFIG = $(ROOTDIR)/tools/$(CROSS_COMPILE)pkg-config
+export PKG_CONFIG
 
 export VENDOR PRODUCT ROOTDIR LINUXDIR HOSTCC CONFIG_SHELL
 export CONFIG_CONFIG LINUX_CONFIG MODULES_CONFIG ROMFSDIR SCRIPTSDIR
@@ -82,12 +88,9 @@ export VERSIONPKG VERSIONSTR ROMFSINST PATH IMAGEDIR RELDIR RELFILES TFTPDIR
 export BUILD_START_STRING
 export HOST_NCPU
 
-.PHONY: tools
-tools: ucfront cksum
-	chmod +x tools/romfs-inst.sh tools/modules-alias.sh
-
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
+no-ucfront-for-blackfin:
 	$(MAKE) -C tools/ucfront
 	ln -sf $(ROOTDIR)/tools/ucfront/ucfront tools/ucfront-gcc
 	ln -sf $(ROOTDIR)/tools/ucfront/ucfront tools/ucfront-g++
@@ -99,6 +102,16 @@ tools/cksum: tools/sg-cksum/*.c
 	$(MAKE) -C tools/sg-cksum
 	ln -sf $(ROOTDIR)/tools/sg-cksum/cksum tools/cksum
 
+.PHONY: staging
+ifneq ($(CROSS_COMPILE),)
+staging: tools/$(CROSS_COMPILE)pkg-config
+tools/$(CROSS_COMPILE)pkg-config:
+	ln -sf staging-pkg-config $@
+else
+staging:
+	@echo "Error: you have not configured things yet" ; false
+endif
+
 ############################################################################
 
 #
@@ -106,41 +119,99 @@ tools/cksum: tools/sg-cksum/*.c
 # running the kernel and other config scripts
 #
 
+.PHONY: vendors/Kconfig
+vendors/Kconfig:
+	find vendors -mindepth 2 '(' -name .svn -prune ')' -o -type f -name Kconfig -print | sed 's:^:source ../:' > vendors/Kconfig
+
 .PHONY: Kconfig
-Kconfig:
+Kconfig: vendors/Kconfig
 	@chmod u+x config/mkconfig
 	config/mkconfig > Kconfig
 
 include config/Makefile.conf
 
-SCRIPTS_BINARY_config     = conf
-SCRIPTS_BINARY_menuconfig = mconf
-SCRIPTS_BINARY_qconfig    = qconf
-SCRIPTS_BINARY_gconfig    = gconf
-SCRIPTS_BINARY_xconfig    = gconf
-.PHONY: config menuconfig qconfig gconfig xconfig
-menuconfig: mconf
-qconfig: qconf
-gconfig: gconf
-xconfig: $(SCRIPTS_BINARY_xconfig)
-config menuconfig qconfig gconfig xconfig: Kconfig conf
-	$(SCRIPTSDIR)/$(SCRIPTS_BINARY_$@) Kconfig
+.PHONY: config
+config: Kconfig conf
+	$(SCRIPTSDIR)/conf Kconfig
+	@chmod u+x config/setconfig
+	@config/setconfig defaults
+	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
+		$(MAKE) linux_config; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
+		$(MAKE) modules_config; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
+		$(MAKE) config_config; \
+	 fi
+	@config/setconfig final
+
+.PHONY: menuconfig
+menuconfig: Kconfig conf mconf
+	$(SCRIPTSDIR)/mconf Kconfig
 	@if [ ! -f .config ]; then \
 		echo; \
-		echo "You have not saved your config, please re-run 'make $@'"; \
+		echo "You have not saved your config, please re-run make config"; \
 		echo; \
 		exit 1; \
 	 fi
 	@chmod u+x config/setconfig
 	@config/setconfig defaults
 	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
-		$(MAKE) linux_$@; \
+		$(MAKE) linux_menuconfig; \
 	 fi
 	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
-		$(MAKE) modules_$@; \
+		$(MAKE) modules_menuconfig; \
 	 fi
 	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
-		$(MAKE) config_$@; \
+		$(MAKE) config_menuconfig; \
+	 fi
+	@config/setconfig final
+
+.PHONY: xconfig
+xconfig: gconfig
+
+.PHONY: qconfig
+qconfig: Kconfig conf qconf
+	$(SCRIPTSDIR)/qconf Kconfig
+	@if [ ! -f .config ]; then \
+		echo; \
+		echo "You have not saved your config, please re-run make config"; \
+		echo; \
+		exit 1; \
+	 fi
+	@chmod u+x config/setconfig
+	@config/setconfig defaults
+	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
+		$(MAKE) linux_qconfig; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
+		$(MAKE) modules_qconfig; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
+		$(MAKE) config_qconfig; \
+	 fi
+	@config/setconfig final
+
+.PHONY: gconfig
+gconfig: Kconfig conf gconf
+	$(SCRIPTSDIR)/gconf Kconfig
+	@if [ ! -f .config ]; then \
+		echo; \
+		echo "You have not saved your config, please re-run make config"; \
+		echo; \
+		exit 1; \
+	 fi
+	@chmod u+x config/setconfig
+	@config/setconfig defaults
+	@if egrep "^CONFIG_DEFAULTS_KERNEL=y" .config > /dev/null; then \
+		$(MAKE) linux_gconfig; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_MODULES=y" .config > /dev/null; then \
+		$(MAKE) modules_gconfig; \
+	 fi
+	@if egrep "^CONFIG_DEFAULTS_VENDOR=y" .config > /dev/null; then \
+		$(MAKE) config_gconfig; \
 	 fi
 	@config/setconfig final
 
@@ -167,38 +238,20 @@ modules_install:
 	. $(CONFIG_CONFIG); \
 	if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(ROMFSDIR)/lib/modules ] || mkdir -p $(ROMFSDIR)/lib/modules; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD="../user/busybox/examples/depmod.pl" modules_install; \
+		rm -f $(ROMFSDIR)/lib/modules/modules.dep; \
+		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=true modules_install; \
 		rm -f $(ROMFSDIR)/lib/modules/*/build; \
 		rm -f $(ROMFSDIR)/lib/modules/*/source; \
-		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \
-		if [ "$$CONFIG_USER_BUSYBOX_FEATURE_MODPROBE_FANCY_ALIAS" = "y" ]; \
-		then \
-			find $(ROMFSDIR)/lib/modules -type f -name "*o" | \
-			/bin/sh $(ROOTDIR)/tools/modules-alias.sh \
-					$(ROMFSDIR)/etc/modprobe.conf;\
-		fi; \
+		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs $(STRIP) -R .comment -R .note -g --strip-unneeded; \
+		env NM=$(CROSS_COMPILE)nm $(ROOTDIR)/user/busybox/depmod.pl -P _ -b $(ROMFSDIR)/lib/modules/ -k $(ROOTDIR)/$(LINUXDIR)/vmlinux; \
 	fi
 
-linux_xconfig:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) xconfig
-linux_menuconfig:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) menuconfig
-linux_config:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) config
-modules_xconfig:
-	[ ! -d modules ] || $(MAKEARCH) -C modules xconfig
-modules_menuconfig:
-	[ ! -d modules ] || $(MAKEARCH) -C modules menuconfig
-modules_config:
-	[ ! -d modules ] || $(MAKEARCH) -C modules config
-modules_clean:
-	-[ ! -d modules ] || $(MAKEARCH) -C modules clean
-config_xconfig:
-	$(MAKEARCH) -C config xconfig
-config_menuconfig:
-	$(MAKEARCH) -C config menuconfig
-config_config:
-	$(MAKEARCH) -C config config
+linux_%:
+	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) $(patsubst linux_%,%,$@)
+modules_%:
+	[ ! -d modules ] || $(MAKEARCH) -C modules $(patsubst modules_%,%,$@)
+config_%: vendors/Kconfig
+	$(MAKEARCH) -C config $(patsubst config_%,%,$@)
 oldconfig_config:
 	$(MAKEARCH) -C config oldconfig
 oldconfig_modules:
@@ -262,6 +315,7 @@ linux linux%_only:
 		echo "ERROR: you need to do a 'make dep' first" ; \
 		exit 1 ; \
 	fi
+	rm -f $(LINUXDIR)/usr/initramfs_data.cpio.gz
 	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1
 	if [ -f $(LINUXDIR)/vmlinux ]; then \
 		ln -f $(LINUXDIR)/vmlinux $(LINUXDIR)/linux ; \
@@ -294,10 +348,12 @@ relink:
 clean: modules_clean
 	for dir in $(LINUXDIR) $(DIRS); do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
 	rm -rf $(ROMFSDIR)/*
+	rm -rf $(STAGEDIR)/*
 	rm -f $(IMAGEDIR)/*
 	rm -f $(LINUXDIR)/linux
 	rm -f $(LINUXDIR)/include/asm
 	rm -rf $(LINUXDIR)/net/ipsec/alg/libaes $(LINUXDIR)/net/ipsec/alg/perlasm
+	find ./tools/ -maxdepth 1 -type l | xargs rm -f
 
 real_clean mrproper: clean
 	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXDIR) mrproper || :
@@ -307,6 +363,7 @@ real_clean mrproper: clean
 	-$(MAKEARCH) -C config clean
 	rm -rf romfs Kconfig config.arch images
 	rm -rf .config .config.old .oldconfig autoconf.h auto.conf
+	rm -rf staging
 
 distclean: mrproper
 	-$(MAKEARCH_KERNEL) -C $(LINUXDIR) distclean
@@ -316,6 +373,14 @@ distclean: mrproper
 	-rm -f tools/ucfront-gcc tools/ucfront-g++ tools/ucfront-ld
 	-$(MAKE) -C tools/sg-cksum clean
 	-rm -f tools/cksum
+
+bugreport:
+	rm -f ./bugreport.tgz ./toolchain_vers ./host_vers
+	$(HOSTCC) -v 2> ./host_vers
+	$(CROSS_COMPILE)gcc -v 2> ./toolchain_vers
+	tar -czf bugreport.tgz .config linux-2.6.x/.config config/.config toolchain_vers host_vers
+	rm -f ./toolchain_vers ./host_vers
+	echo -e "Please attach the file 'bugreport.tgz' to a bug report at\n http://blackfin.uclinux.org/gf/project/uclinux-dist/tracker/?action=TrackerItemAdd&tracker_id=141"
 
 %_only:
 	@case "$(@)" in \
@@ -333,6 +398,28 @@ distclean: mrproper
 	*)   $(MAKEARCH) -C $(@:_clean=) clean;; \
 	esac
 
+%_config:
+	@if [ ! -d "vendors/$(@:_config=)" ]; then \
+		echo "Can't find $(@:_config=) in the vendors directory" ; \
+		exit 1; \
+	fi
+	@if [ ! -f "vendors/$(@:_config=)/config.device" ]; then \
+		echo "vendors/$(@:_config=)/config.device must exist first"; \
+		exit 1; \
+	fi
+	if [ "`grep -s CONFIG_VENDOR .config | awk -F= '{print $$2}'`" = "`grep -s CONFIG_VENDOR vendors/$(@:_config=)/config.device | awk -F= '{print $$2}'`" ] && \
+	   [ "`grep -s CONFIG_LINUXDIR .config | awk -F= '{print $$2}'`" = "`grep -s CONFIG_LINUXDIR vendors/$(@:_config=)/config.device | awk -F= '{print $$2}'`" ] && \
+	   [ "`grep -s -e 'TARGET_.*=y' ./uClibc/.config`" = "`grep -s -e 'TARGET_.*=y' vendors/$(@:_config=)/config.uClibc`" ] ; then \
+		$(MAKE) -s -C linux-2.6.x distclean ; \
+	else \
+		$(MAKE) -s distclean ; \
+	fi
+	cp vendors/$(@:_config=)/config.device .config
+	chmod u+x config/setconfig
+	yes "" | config/setconfig defaults
+	config/setconfig final
+	$(MAKE) dep
+
 %_romfs:
 	@case "$(@)" in \
 	*/*) d=`expr $(@) : '\([^/]*\)/.*'`; \
@@ -341,17 +428,17 @@ distclean: mrproper
 	*)   $(MAKEARCH) -C $(@:_romfs=) romfs;; \
 	esac
 
-%_default: conf
+%_default: Kconfig conf
 	@if [ ! -f "vendors/$(@:_default=)/config.device" ]; then \
 		echo "vendors/$(@:_default=)/config.device must exist first"; \
 		exit 1; \
 	 fi
 	-$(MAKE) clean > /dev/null 2>&1
 	cp vendors/$(@:_default=)/config.device .config
+	echo CONFIG_DEFAULTS_OVERRIDE=y >> .config
 	chmod u+x config/setconfig
 	yes "" | config/setconfig defaults
 	config/setconfig final
-	$(MAKE) dep
 	$(MAKE)
 
 config_error:

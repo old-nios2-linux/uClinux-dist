@@ -5,7 +5,6 @@
 
 alias_file="$1"
 modinfo="`which modinfo`"
-[ -z "$modinfo" ] && modinfo="`which /sbin/modinfo`"
 
 if [ -z "$alias_file" ]
 then
@@ -17,7 +16,7 @@ fi
 if [ -z "$modinfo" ]
 then
 	echo "You need modinfo installed for create modules.alias" >&2
-	exit 1
+	exit 0
 fi
 
 while read module

@@ -99,7 +99,7 @@ dir_5_$(CONFIG_LIB_LIBJUDY)      += libjudy
 -include Makefile.local
 
 # And build libraries in the prop directory last
-dir_9_y += $(ROOTDIR)/prop
+dir_9_y += $(wildcard $(ROOTDIR)/prop)
 
 DIRS_NUM = 1 2 3 4 5 6 7 8 9
 DIRS_y   = $(foreach n,$(DIRS_NUM),$(sort $(dir_$(n)_y)))
@@ -107,76 +107,58 @@ DIRS_all = $(foreach n,$(DIRS_NUM),$(sort $(dir_$(n)_y) $(dir_$(n)_n) $(dir_$(n)
 
 ##############################################################################
 
+SET_STAGEDIR = \
+	(cd $(STAGEDIR); \
+	chmod 755 ./usr/lib/lib*.so*; \
+	chmod 644 ./usr/lib/lib*.la ./usr/lib/lib*.a; \
+	sed -i -e "/^libdir=/s:=.*:='$(STAGEDIR)/usr/lib':" -e "/^dependency_libs=/s: /usr/lib/: $(STAGEDIR)/usr/lib/:g" ./usr/lib/*.la; \
+	sed -i "/^prefix=/s:=.*:='$(STAGEDIR)/usr':" ./usr/lib/pkgconfig/*.pc ./usr/bin/*-config; \
+	true)
+
 all:
-	$(MAKE) -j1 -C ../include                 || exit $$?
-	[ -z "$(dir_1_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_1_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_2_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_2_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_3_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_3_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_4_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_4_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_5_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_5_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_6_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_6_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_7_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_7_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_8_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_8_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
-	[ -z "$(dir_9_y)" ] ||\
-		$(MAKE) -j$(HOST_NCPU) $(sort $(dir_9_y)) || exit $$?
-	$(MAKE) -j1 -C ../include
-	$(MAKE) make_links                        || exit $$?
+	[ -z "$(dir_1_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_1_y)) || exit $$?
+	[ -z "$(dir_1_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_2_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_2_y)) || exit $$?
+	[ -z "$(dir_2_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_3_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_3_y)) || exit $$?
+	[ -z "$(dir_3_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_4_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_4_y)) || exit $$?
+	[ -z "$(dir_4_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_5_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_5_y)) || exit $$?
+	[ -z "$(dir_5_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_6_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_6_y)) || exit $$?
+	[ -z "$(dir_6_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_7_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_7_y)) || exit $$?
+	[ -z "$(dir_7_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_8_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_8_y)) || exit $$?
+	[ -z "$(dir_8_y)" ] || $(SET_STAGEDIR)
+	[ -z "$(dir_9_y)" ] || $(MAKE) -j$(HOST_NCPU) $(sort $(dir_9_y)) || exit $$?
+	[ -z "$(dir_9_y)" ] || $(SET_STAGEDIR)
 
 # the actual dir target
 .PHONY: $(DIRS_y)
 $(DIRS_y):
-	[ ! -d "$@" ] || ( touch $@/.sgbuilt_lib && $(MAKE) -j1 -C $@ ) || exit $$?
+	[ ! -d "$@" ] || ( touch $@/.sgbuilt_lib && $(MAKE) -C $@ ) || exit $$?
 
 %_only:
-	touch $(@:_only=)/.sgbuilt_lib && $(MAKE) -j1 -C $(@:_only=)
+	touch $(@:_only=)/.sgbuilt_lib && $(MAKE) -C $(@:_only=) -j$(HOST_NCPU)
 
 %_clean:
-	$(MAKE) -j1 -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_lib; true
+	$(MAKE) -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_lib; true
 
 %_romfs:
 	$(MAKE) -j1 -C $(@:_romfs=) romfs
 
 ##############################################################################
 
-# Not the best place to install these symlinks, but it will do for now
 romfs:
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/passwd /etc/passwd
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/group /etc/group
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/mtab /etc/mtab
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/fstab /etc/fstab
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -s config/resolv.conf /etc/resolv.conf
-	$(ROMFSINST) -e CONFIG_USER_FLATFSD_FLATFSD -e CONFIG_USER_TINYLOGIN_SHADOWPASSWDS -s config/shadow /etc/shadow
 	for i in $(DIRS_y) ; do \
 		[ ! -d $$i ] || $(MAKE) -C $$i romfs || exit $$? ; \
 	done
 
 ##############################################################################
 
-clean: clean_links
+clean:
 	-for i in $(DIRS_all); do \
 		if [ -f $$i/.sgbuilt_lib ]; then \
 			$(MAKE) -C $$i clean ; \
@@ -264,10 +246,6 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/freetype/build-freetype-2.3.5/usr/local/lib/*.a \
 	$(ROOTDIR)/lib/libsdl/build-SDL-1.2.13/usr/local/lib/*.a \
 
-# The dynamic linker library needs to be linked into lib via a different name
-LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
-LD_LIB_DEST = $(ROOTDIR)/lib/ld-linux.so.2
-
 ##############################################################################
 
 make_links: clean_links
@@ -279,8 +257,7 @@ make_links: clean_links
 			[ -L "./`basename $$i`" ] && continue; \
 			ln -s $$i .; \
 		done ; \
-	done	
-	@ln -sf $(LD_LIB) $(LD_LIB_DEST)		
+	done
 
 clean_links:
 	@-for i in *; do \

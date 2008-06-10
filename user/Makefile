@@ -10,7 +10,7 @@
 #
 
 ifndef ROOTDIR
-ROOTDIR=..
+ROOTDIR=$(PWD)/..
 endif
 
 UCLINUX_BUILD_USER=1
@@ -433,6 +433,8 @@ dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
 
 dir_y += games
 
+-include Makefile.local
+
 all: config
 	$(MAKE) -j$(HOST_NCPU) $(sort $(dir_y) $(dir_v) $(dir_p)) || exit $$?
 
@@ -447,13 +449,13 @@ fltk-1.1: microwin
 miniupnpd : iptables
 
 $(sort $(dir_y) $(dir_p)):  config
-	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -j1 -C $@ ) || exit $$?
+	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) -C $@ ) || exit $$?
 
 %_only:
-	touch $(@:_only=)/.sgbuilt_user && $(MAKE) -j1 -C $(@:_only=)
+	touch $(@:_only=)/.sgbuilt_user && $(MAKE) -C $(@:_only=) -j$(HOST_NCPU)
 
 %_clean:
-	$(MAKE) -j1 -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_user; true
+	$(MAKE) -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_user; true
 
 %_romfs:
 	$(MAKE) -j1 -C $(@:_romfs=) romfs
