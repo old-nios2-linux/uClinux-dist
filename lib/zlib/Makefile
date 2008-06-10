@@ -24,10 +24,8 @@
 #CFLAGS=-O3 -Wall -Wwrite-strings -Wpointer-arith -Wconversion \
 #           -Wstrict-prototypes -Wmissing-prototypes
 
-CFLAGS += -fPIC
-
-LDFLAGS=libz.a
-LDSHARED=$(CC) -shared
+#LDLIBS=libz.a
+LDSHARED=$(CC) $(LDFLAGS) -shared
 CPP=$(CC) -E
 
 LIBS=libz.a
@@ -35,10 +33,9 @@ SHAREDLIB=libz.so
 SHAREDLIBV=libz.so.1.2.3
 SHAREDLIBM=libz.so.1
 
-#AR=ar
-ARFLAGS=rc
-#RANLIB=ranlib
-#TAR=tar
+AR:=$(AR) rc
+RANLIB?=ranlib
+TAR=tar
 SHELL=/bin/sh
 EXE=
 
@@ -57,14 +54,24 @@ OBJA =
 
 TEST_OBJS = example.o minigzip.o
 
-ifdef CONFIG_UCLINUX
-TARGETLIB = $(LIBS)
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+all: $(LIBS) $(SHAREDLIB)
 else
-TARGETLIB = $(SHAREDLIBV)
+all: $(LIBS)
 endif
+	install -d -m0755 $(STAGEDIR)/usr/lib
+	install -m0644 $(LIBS) $(STAGEDIR)/usr/lib
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+	cp -pP $(SHAREDLIB)* $(STAGEDIR)/usr/lib
+endif
+	install -d -m0755 $(STAGEDIR)/usr/include
+	install -m0644 zconf.h zlib.h $(STAGEDIR)/usr/include
 
-
-all: $(TARGETLIB)
+romfs:
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+	$(ROMFSINST) $(SHAREDLIBV) /lib
+	$(ROMFSINST) -s $(SHAREDLIBV) /lib/$(SHAREDLIBM)
+endif
 
 check: test
 test: all
@@ -78,7 +85,7 @@ test: all
 	fi
 
 libz.a: $(OBJS) $(OBJA)
-	$(AR) $(ARFLAGS) $@ $(OBJS) $(OBJA)
+	$(AR) $@ $(OBJS) $(OBJA)
 	-@ ($(RANLIB) $@ || true) >/dev/null 2>&1
 
 match.o: match.S
@@ -87,8 +94,9 @@ match.o: match.S
 	mv _match.o match.o
 	rm -f _match.s
 
+$(SHAREDLIB): $(SHAREDLIBV)
 $(SHAREDLIBV): $(OBJS)
-	$(LDSHARED) -o $@ $(OBJS)
+	$(LDSHARED) -Wl,-soname,$(SHAREDLIBM) -o $@ $(OBJS)
 	rm -f $(SHAREDLIB) $(SHAREDLIBM)
 	ln -s $@ $(SHAREDLIB)
 	ln -s $@ $(SHAREDLIBM)
@@ -98,13 +106,6 @@ example$(EXE): example.o $(LIBS)
 
 minigzip$(EXE): minigzip.o $(LIBS)
 	$(CC) $(CFLAGS) -o $@ minigzip.o $(LDFLAGS)
-
-romfs:
-	if [ -f $(SHAREDLIBV) ] ; then \
-		$(ROMFSINST) $(SHAREDLIBV) /lib/$(SHAREDLIBV) ; \
-		$(ROMFSINST) -s $(SHAREDLIBV) /lib/$(SHAREDLIBM) ; \
-		$(ROMFSINST) -s $(SHAREDLIBV) /lib/$(SHAREDLIB) ; \
-	fi
 
 install: $(LIBS)
 	-@if [ ! -d $(exec_prefix) ]; then mkdir -p $(exec_prefix); fi
