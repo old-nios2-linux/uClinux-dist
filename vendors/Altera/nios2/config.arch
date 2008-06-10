@@ -108,7 +108,7 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  += -I$(ROOTDIR)/staging/usr/include
 	CFLAGS  += -Dlinux -D__linux__ -D__uClinux__ -Dunix
 
-	LDFLAGS  = $(CFLAGS) -Wl,-d -Wl,-elf2flt
+	LDFLAGS  = $(CFLAGS) -Wl,-d -Wl,-elf2flt -L$(ROOTDIR)/staging/usr/lib
 
 	UCLINUX_BUILD_SET=1
 endif
