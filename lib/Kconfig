@@ -391,6 +391,33 @@ config LIB_FLTK_TEST
 config LIB_DIRECTFB
 	bool "Build DirectFB"
 
+config LIB_LIBSDL
+	bool "Build libSDL"
+
+config LIB_SDL_GFX
+	bool "build SDL_gfx"
+	select LIB_LIBSDL
+
+config LIB_SDL_IMAGE
+	bool "build SDL_image"
+	select LIB_LIBSDL
+	select LIB_LIBJPEG
+	select LIB_LIBPNG
+	select LIB_FREETYPE
+
+config LIB_SDL_MIXER
+	bool "build SDL_mixer"
+	select LIB_LIBMAD
+
+config LIB_SDL_NET
+	bool "build SDL_net"
+	select LIB_LIBSDL
+
+config LIB_SDL_TTF
+	bool "build SDL_ttf"
+	select LIB_LIBSDL
+	select LIB_FREETYPE
+
 config LIB_LIBJUDY
 	bool 'Build libjudy'
 	default n
