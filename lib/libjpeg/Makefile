@@ -54,7 +54,7 @@ SYSDEPMEM= jmemnobs.$(O)
 # miscellaneous OS-dependent stuff
 SHELL= /bin/sh
 # linker
-#LN= $(CC)
+LN= $(CC)
 # file deletion command
 RM= rm -f
 # directory creation command
@@ -133,12 +133,37 @@ DOBJECTS= djpeg.$(O) wrppm.$(O) wrgif.$(O) wrtarga.$(O) wrrle.$(O) \
         wrbmp.$(O) rdcolmap.$(O) cdjpeg.$(O)
 TROBJECTS= jpegtran.$(O) rdswitch.$(O) cdjpeg.$(O) transupp.$(O)
 
+OBJSDLL = $(LIBOBJECTS:.o=.pic.o)
 
 #all:  libjpeg.$(A) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
-all:  libjpeg.$(A) 
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+all:  libjpeg.$(A) libjpeg.so cjpeg djpeg jpegtran rdjpgcom wrjpgcom
+	install -d $(STAGEDIR)/usr/lib
+	install -d $(STAGEDIR)/usr/include
+	install -m0644 libjpeg.$(A) $(STAGEDIR)/usr/lib
+	install -m0644 libjpeg.la $(STAGEDIR)/usr/lib
+	install -m0755 libjpeg.so $(STAGEDIR)/usr/lib/libjpeg.so.62
+	ln -sf libjpeg.so.62 $(STAGEDIR)/usr/lib/libjpeg.so
+	install -m0644 jpeglib.h $(STAGEDIR)/usr/include
+	install -m0644 jconfig.h $(STAGEDIR)/usr/include
+	install -m0644 jmorecfg.h $(STAGEDIR)/usr/include
+	install -m0644 jerror.h $(STAGEDIR)/usr/include
+else
+all:  libjpeg.$(A) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
+	install -d $(STAGEDIR)/usr/lib
+	install -d $(STAGEDIR)/usr/include
+	install -m0644 libjpeg.$(A) $(STAGEDIR)/usr/lib
+	install -m0644 jpeglib.h $(STAGEDIR)/usr/include
+	install -m0644 jconfig.h $(STAGEDIR)/usr/include
+	install -m0644 jmorecfg.h $(STAGEDIR)/usr/include
+	install -m0644 jerror.h $(STAGEDIR)/usr/include
+endif
 
 # Special compilation rules to support ansi2knr and libtool.
-.SUFFIXES: .lo .la
+.SUFFIXES: .lo .la .c .o .pic.o
+
+.c.pic.o:
+	$(CC) -c $(CFLAGS) -o $@ $*.c
 
 # How to compile with libtool.
 # .c.lo:
@@ -173,6 +198,13 @@ libjpeg.la:  $(LIBOBJECTS)
 	$(LIBTOOL) --mode=link $(CC) -o libjpeg.la $(LIBOBJECTS) \
 		-rpath $(libdir) -version-info $(JPEG_LIB_VERSION)
 
+# libjpeg.so
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+libjpeg.so: $(OBJSDLL)
+	$(CC) $(CFLAGS) -shared -Wl,-soname,libjpeg.so.62 -o libjpeg.so \
+	$(OBJSDLL) -lm -lc
+endif
+
 # sample programs:
 
 cjpeg: $(COBJECTS) libjpeg.$(A)
@@ -192,7 +224,7 @@ wrjpgcom: wrjpgcom.$(O)
 
 # Installation rules:
 
-install: cjpeg djpeg jpegtran rdjpgcom wrjpgcom 
+install: cjpeg djpeg jpegtran rdjpgcom wrjpgcom
 	$(INSTALL_PROGRAM) cjpeg $(bindir)/$(binprefix)cjpeg
 	$(INSTALL_PROGRAM) djpeg $(bindir)/$(binprefix)djpeg
 	$(INSTALL_PROGRAM) jpegtran $(bindir)/$(binprefix)jpegtran
@@ -214,13 +246,12 @@ install-headers: jconfig.h
 	$(INSTALL_DATA) $(srcdir)/jerror.h $(includedir)/jerror.h
 
 romfs:
-	#if [ "$(CONFIG_X86)" = "y" ]; then \
-	#	[ -d $(ROMFSDIR)/lib ] || mkdir -p $(ROMFSDIR)/lib ; \
-	#	$(ROMFSINST) libjpeg.so.2 /lib/libjpeg.so.2 ; \
-	#fi
+	if [ "$(CONFIG_FMT_USE_FDPIC_ELF)" = "y" ]; then \
+		$(ROMFSINST) libjpeg.so /lib/libjpeg.so.62 ; \
+	fi
 
 clean:
-	-$(RM) *.o *.lo libjpeg.a libjpeg.la
+	-$(RM) *.o *.lo libjpeg.a *.so
 	-$(RM) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
 	-$(RM) ansi2knr core testout* config.log config.status
 	-$(RM) -r knr .libs _libs
