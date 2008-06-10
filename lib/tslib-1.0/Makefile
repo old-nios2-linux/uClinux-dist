@@ -1,4 +1,3 @@
-STAGEDIR = $(ROOTDIR)/lib/tslib-1.0/build
 
 all: build/Makefile
 	$(MAKE) -C build install DESTDIR=$(STAGEDIR)
@@ -18,13 +17,12 @@ build/Makefile:
 		--disable-h3600 \
 		--disable-mk712 \
 		--disable-arctic2 \
-		--disable-shared \
 		CFLAGS='-DUSE_INPUT_API' 
 
 clean:
 	rm -rf build
 
 romfs:
-	$(ROMFSINST) $(STAGEDIR)/usr/local/bin/ts_calibrate /bin
+	$(ROMFSINST) $(STAGEDIR)/usr/bin/ts_calibrate /usr/bin
 
 .PHONY: all clean romfs

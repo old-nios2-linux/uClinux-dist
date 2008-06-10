@@ -1,5 +1,4 @@
 VER = freetype-2.3.5
-STAGEDIR = $(ROOTDIR)/lib/freetype/build-$(VER)
 
 all: build-$(VER)/Makefile
 	$(MAKE) -C build-$(VER)
