@@ -9,7 +9,7 @@
 # $Id: Makefile.am,v 1.3 2005/02/28 18:56:09 kergoth Exp $
 #
 
-SUBDIRS		= etc src plugins tests
+SUBDIRS		= etc src tests
 EXTRA_DIST	= autogen.sh
 
 ACLOCAL_AMFLAGS = -I m4/internal -I m4/external
