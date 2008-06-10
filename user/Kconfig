@@ -1631,6 +1631,11 @@ config USER_L2TPD_L2TPD
 	  Layer 2 Tunnelling Protocol Daemon
 	  Approx. binary size: 70k
 
+config USER_LINKS_LINKS
+	bool "links"
+	help
+	  A fast, lightweight text and graphical web-browser.
+
 config USER_LINUXIGD_LINUXIGD
 	bool "linux-igd"
 	select LIB_LIBUPNP
