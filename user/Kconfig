@@ -3980,6 +3980,7 @@ menu "MicroWindows"
 
 config USER_MICROWIN
 	bool "MicroWindows"
+	select LIB_TSLIB
 
 comment "Compiling Options"
 
@@ -4218,6 +4219,10 @@ config USER_MICROWIN_DE2TSMOUSE
 
 config USER_MICROWIN_CLEOMOUSE
 	bool "Cleopatra Mouse"
+	depends on USER_MICROWIN
+
+config USER_MICROWIN_TSLIBMOUSE
+	bool "Common touchscreen using tslib"
 	depends on USER_MICROWIN
 
 config USER_MICROWIN_NOMOUSE

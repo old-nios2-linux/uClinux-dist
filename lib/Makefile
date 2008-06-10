@@ -251,7 +251,8 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/nxlib/libnx11.a \
 	$(ROOTDIR)/user/microwin/src/lib/*.a \
 	$(ROOTDIR)/lib/fltk/lib/*.a \
-	$(ROOTDIR)/lib/fltk-1.1/lib/*.a
+	$(ROOTDIR)/lib/fltk-1.1/lib/*.a \
+	$(ROOTDIR)/lib/tslib-1.0/build/usr/local/lib/*.a \
 
 # The dynamic linker library needs to be linked into lib via a different name
 LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
