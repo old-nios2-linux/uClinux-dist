@@ -388,6 +388,9 @@ config LIB_FLTK_TEST
 	help
 	  You must have fluid built from fltk 1.1 on host.
 
+config LIB_DIRECTFB
+	bool "Build DirectFB"
+
 config LIB_LIBJUDY
 	bool 'Build libjudy'
 	default n

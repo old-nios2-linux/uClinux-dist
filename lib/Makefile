@@ -82,6 +82,7 @@ dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
 dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
+dir_5_$(CONFIG_LIB_DIRECTFB)     += DirectFB        # requires zlib(3) libsdl(3) libpng(4)
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 dir_5_$(CONFIG_LIB_LIBJUDY)      += libjudy
 
