@@ -47,7 +47,7 @@ include $(ROOTDIR)/vendors/config/common/config.arch
 #
 TARGETARCH    := nios2-linux-uclibc
 HOSTARCH      := $(shell sh $(ROOTDIR)/tools/config.guess)
-CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
+CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH) --disable-shared
 
 ############################################################################
 #
