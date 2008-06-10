@@ -25,6 +25,6 @@ clean:
 	rm -rf build
 
 romfs:
-	$(ROMFSINST) $(STAGEDIR)/usr/bin/ts_calibrate /bin/
+	$(ROMFSINST) $(STAGEDIR)/usr/local/bin/ts_calibrate /bin
 
 .PHONY: all clean romfs
