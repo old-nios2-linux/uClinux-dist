@@ -1,5 +1,4 @@
 VER = SDL-1.2.13
-STAGEDIR = $(ROOTDIR)/lib/libsdl/build-$(VER)
 
 CONF_OPTS = \
 	--disable-arts \
