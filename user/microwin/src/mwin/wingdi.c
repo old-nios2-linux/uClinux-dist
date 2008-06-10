@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  *
  * Win32 API upper level graphics drawing routines
@@ -7,7 +7,6 @@
 #include "windows.h"
 #include "wintern.h"
 #include "device.h"
-#include "intl.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -19,9 +18,6 @@ BOOL mwERASEMOVE = TRUE;	/* default XORMOVE repaint algorithm*/
 #else
 BOOL mwERASEMOVE = FALSE;	/* default ERASEMOVE repaint algorithm*/
 #endif
-
-/* current encoding for non-wide char text functions*/
-long mwTextCoding = MWTF_UTF8;	/* usually MWTF_ASCII or MWTF_UTF8*/
 
 /* cast a pointer to an integer*/
 #if DOS_TURBOC
@@ -214,22 +210,11 @@ BeginPaint(HWND hwnd, LPPAINTSTRUCT lpPaint)
 		hdc = GetDCEx(hwnd, NULL, DCX_DEFAULTCLIP
 				|DCX_EXCLUDEUPDATE);	/* FIXME - bug*/
 
-		/* erase client background, always w/alpha blending*/
-		if(hwnd->nEraseBkGnd > 0 || mwforceNCpaint)
-			lpPaint->fErase = !SendMessage(hwnd, WM_ERASEBKGND, (WPARAM)hdc, 0L);
-		else
-			lpPaint->fErase = 0;
-
-		hwnd->nEraseBkGnd = 0;
+		/* erase client background*/
+		lpPaint->fErase = !SendMessage(hwnd, WM_ERASEBKGND, (WPARAM)hdc,
+			0L);
 	}
 	lpPaint->hdc = hdc;
-
-	if( hwnd->paintBrush != NULL )
-		DeleteObject ( hwnd->paintBrush );
-	if( hwnd->paintPen != NULL )
-		DeleteObject ( hwnd->paintPen );
-	hwnd->paintBrush = NULL;
-	hwnd->paintPen = NULL;
 
 	GetUpdateRect(hwnd, &lpPaint->rcPaint, FALSE);
 	return hdc;
@@ -238,18 +223,6 @@ BeginPaint(HWND hwnd, LPPAINTSTRUCT lpPaint)
 BOOL WINAPI 
 EndPaint(HWND hwnd, CONST PAINTSTRUCT *lpPaint)
 {
-	if( hwnd->paintBrush != NULL )
-		{
-		SelectObject ( lpPaint->hdc, GetStockObject(NULL_BRUSH) );
-		DeleteObject ( hwnd->paintBrush );
-		hwnd->paintBrush = NULL;
-		}
-	if( hwnd->paintPen != NULL )
-		{
-		SelectObject ( lpPaint->hdc, GetStockObject(BLACK_PEN) );
-		DeleteObject ( hwnd->paintPen );
-		hwnd->paintPen = NULL;
-		}
 	ReleaseDC(hwnd, lpPaint->hdc);
 #if UPDATEREGIONS
 	/* don't clear update region until done dragging*/
@@ -737,38 +710,22 @@ FillRect(HDC hdc, CONST RECT *lprc, HBRUSH hbr)
 	return TRUE;
 }
 
-
-/* set current input coding*/
-void WINAPI
-MwSetTextCoding(long mode)
-{
-	mwTextCoding = mode;
-}
-
-/* ascii or utf8 */
+/* ascii*/
 BOOL WINAPI
 TextOut(HDC hdc, int x, int y, LPCSTR lpszString, int cbString)
 {
 	/* kaffe port wants MWTF_UTF8 here...*/
 	return MwExtTextOut(hdc, x, y, 0, NULL, lpszString, cbString, NULL,
-		mwTextCoding);
+		MWTF_ASCII);
 }
 
-/* UC16 */
-BOOL WINAPI
-TextOutW(HDC hdc, int x, int y, LPCWSTR lpszString, int cbString)
-{
-	/* kaffe port wants MWTF_UTF8 here...*/
-	return MwExtTextOut(hdc, x, y, 0, NULL, lpszString, cbString, NULL, MWTF_UC16 );
-}
-
-/* ascii or utf8 */
+/* ascii*/
 BOOL WINAPI
 ExtTextOut(HDC hdc, int x, int y, UINT fuOptions, CONST RECT *lprc,
 	LPCSTR lpszString, UINT cbCount, CONST INT *lpDx)
 {
 	return MwExtTextOut(hdc, x, y, fuOptions, lprc, lpszString,
-		cbCount, lpDx, mwTextCoding);
+		cbCount, lpDx, MWTF_ASCII);
 }
 
 /* unicode*/
@@ -855,12 +812,11 @@ MwExtTextOut(HDC hdc, int x, int y, UINT fuOptions, CONST RECT *lprc,
 	return TRUE;
 }
 
-/* ascii or utf8 */
+/* ascii*/
 int WINAPI
 DrawTextA(HDC hdc, LPCSTR lpString, int nCount, LPRECT lpRect, UINT uFormat)
 {
-	return MwDrawText(hdc, lpString, nCount, lpRect, uFormat, 
-		mwTextCoding);
+	return MwDrawText(hdc, lpString, nCount, lpRect, uFormat, MWTF_ASCII);
 }
 
 /* unicode*/
@@ -885,7 +841,7 @@ MwDrawText(HDC hdc, LPCVOID lpString, int nCount, LPRECT lpRect, UINT uFormat,
 		if(!hdc)
 			return 0;
 		GdGetTextSize(hdc->font->pfont, lpString, nCount,
-			&width, &height, &baseline, flags);
+			&width, &height, &baseline, MWTF_ASCII);
 	}
 	x = lpRect->left;
 	y = lpRect->top;
@@ -899,16 +855,8 @@ MwDrawText(HDC hdc, LPCVOID lpString, int nCount, LPRECT lpRect, UINT uFormat,
 	if(uFormat & DT_CENTER)
 		x = (lpRect->left + lpRect->right - width) / 2;
 	else if(uFormat & DT_RIGHT)
-		x = lpRect->right - width;
-	
-	if(uFormat & DT_VCENTER)
-	    y = lpRect->bottom / 2;
-	
-	if(uFormat & DT_BOTTOM) {
-	    flags |= MWTF_BOTTOM;
-	    y = lpRect->bottom;
-	}    
-	
+		x += lpRect->right - width;
+
 	/* draw text at DT_TOP using current fg, bg and bkmode*/
 	MwExtTextOut(hdc, x, y, 0, NULL, lpString, nCount, NULL, flags);
 	return height;
@@ -1505,188 +1453,4 @@ GetDeviceCaps(HDC hdc, int nIndex)
 		break;
 	}
 	return 0;
-}
-
-/*
- *  Draw a rectangle indicating focus
- */
-BOOL WINAPI
-DrawFocusRect(HDC hdc, LPRECT prect)
-{
-	unsigned long dm = 0xAAAAAAAA;
-	int dc = 32;
-	int oldmode = GdSetMode(MWMODE_XOR);
-	HPEN holdpen = SelectObject(hdc,
-		CreatePen(PS_SOLID, 1, RGB(255, 255, 255)));
-
-	GdSetDash(&dm, &dc);
-	SelectObject(hdc, GetStockObject(NULL_BRUSH));
-	Rectangle(hdc, prect->left - 1, prect->top, prect->right + 1,
-		  prect->bottom);
-	GdSetDash(&dm, &dc);
-	DeleteObject(SelectObject(hdc, holdpen));
-	GdSetMode(oldmode);
-	return TRUE;
-}
-
-
-/* ascii or utf8 */
-static LONG
-mwTabbedTextOut(HDC hdc, int x, int y, LPCTSTR lpszString, int cbString,
-	int ntabs, LPINT lpTabStops, int nTabOrigin, BOOL noDraw)
-{
-	TEXTMETRIC tm;
-	int count;
-	int tot;
-	int xw, xh, xb;
-	int tabPos = x;
-	int deftab = 32;
-	int orgx = x;
-	LPTSTR szShaped;
-	LPCTSTR pstr;
-	LPINT pTab = lpTabStops;
-	unsigned long attrib = 0;
-
-	if (GetTextMetrics(hdc, &tm))
-		deftab = 8 * tm.tmAveCharWidth;
-
-	if (pTab == NULL)
-		ntabs = 0;
-
-	if (ntabs == 1) {
-		deftab = *pTab;
-		ntabs = 0;
-	}
-
-	if (cbString == -1)
-		cbString = strlen(lpszString);
-
-	/* Duplicate text. If coding is UTF-8, generate it by checking shape/joining*/
-	if (mwTextCoding == MWTF_UTF8)
-		szShaped = doCharShape_UTF8(lpszString, cbString, &cbString,
-					 &attrib);
-	else
-		szShaped = strdup(lpszString);
-
-	if (szShaped == NULL)
-		return 0;
-
-	pstr = szShaped;
-	tot = cbString;
-	GdSetFont(hdc->font->pfont);
-	while (tot > 0) {
-		for (count = 0; (count < tot) && (pstr[count] != '\t'); count++)
-		     continue;
-
-		GdGetTextSize(hdc->font->pfont, pstr, count, &xw, &xh, &xb,
-			      mwTextCoding);
-
-		while ((ntabs > 0) && (nTabOrigin + *pTab <= (x + xw))) {
-			pTab++;
-			ntabs--;
-		}
-
-		if (count == tot)
-			tabPos = x + xw;
-		else if (ntabs > 0)
-			tabPos = nTabOrigin + *pTab;
-		else
-			tabPos = nTabOrigin +
-				((x + xw - nTabOrigin) / deftab + 1) * deftab;
-
-		if (!noDraw) {
-			RECT rect;
-
-			rect.left = x;
-			rect.top = y;
-			rect.right = x + tabPos;
-			rect.bottom = y + xh;
-			//TextOut ( hdc, x, y, pstr, count );
-			if (attrib & TEXTIP_EXTENDED) {
-				LPSTR virtText = doCharBidi_UTF8(pstr, count,
-							NULL, NULL, &attrib);
-				if (virtText) {
-					if ((attrib & TEXTIP_RTOL))
-						DrawTextA(hdc, virtText,
-							  count, &rect,
-							  DT_RIGHT |
-							  DT_SINGLELINE |
-							  DT_TOP);
-					else
-						DrawTextA(hdc, virtText,
-							  count, &rect,
-							  DT_LEFT |
-							  DT_SINGLELINE |
-							  DT_TOP);
-					free(virtText);
-				}
-			} else
-				DrawTextA(hdc, pstr, count, &rect,
-					  DT_LEFT | DT_SINGLELINE | DT_TOP);
-		}
-
-		x = tabPos;
-		tot -= (count + 1);
-		pstr += (count + 1);
-	}
-
-	free(szShaped);
-	return MAKELONG((tabPos - orgx), xh);
-}
-
-
-/* ascii or utf8 */
-LONG WINAPI
-TabbedTextOut(HDC hdc, int x, int y, LPCTSTR lpszString, int cbString,
-	int ntabs, LPINT lpTabStops, int nTabOrigin)
-{
-	return mwTabbedTextOut(hdc, x, y, lpszString, cbString, ntabs,
-			       lpTabStops, nTabOrigin, FALSE);
-}
-
-
-DWORD WINAPI
-GetTabbedTextExtent(HDC hdc, int x, int y, LPCTSTR lpszString, int cbString,
-	int ntabs, LPINT lpTabStops)
-{
-	return mwTabbedTextOut(hdc, x, y, lpszString, cbString, ntabs,
-			       lpTabStops, 0, TRUE);
-}
-
-
-/*
- *  Check in text for the '&' chr, remove it from text and sets rect for pos
- */
-BOOL
-MwCheckUnderlineChar(HDC hdc, char *text, int *pLen, LPRECT rcLine)
-{
-	int i;
-	int txtlen;
-
-	if (pLen)
-		txtlen = *pLen;
-	else
-		txtlen = strlen(text);
-
-	for (i = 0; i < txtlen; i++) {
-		if ((text[i] == '&') && (i + 1 < txtlen)
-		    && (text[i + 1] != '&')) {
-			SIZE sz;
-			TEXTMETRIC tm;
-
-			GetTextMetrics(hdc, &tm);
-			GetTextExtentPoint(hdc, text, i, &sz);
-			rcLine->left = sz.cx;
-			rcLine->top = 0;
-			rcLine->bottom = tm.tmAscent + 1;
-			GetTextExtentPoint(hdc, text + i + 1, 1, &sz);
-			rcLine->right = rcLine->left + sz.cx;
-			memmove(text + i, text + i + 1, txtlen - i);
-			txtlen--;
-			if (pLen)
-				*pLen = txtlen;
-			return TRUE;
-		}
-	}
-	return FALSE;
 }

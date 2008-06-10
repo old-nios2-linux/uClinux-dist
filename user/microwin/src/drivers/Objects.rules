@@ -20,10 +20,6 @@ MW_CORE_OBJS += \
 	$(MW_DIR_OBJ)/drivers/genmem.o
 endif
 
-ifeq ($(HAVE_VNCSERVER_SUPPORT), Y)
-MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/vncserver.o
-endif
-
 ifeq ($(FRAMEBUFFER), Y)
 MW_CORE_OBJS += \
 	$(MW_DIR_OBJ)/drivers/fblin8.o \
@@ -35,13 +31,13 @@ MW_CORE_OBJS += \
 	$(MW_DIR_OBJ)/drivers/fb.o
 
 ifeq ($(FBREVERSE), Y)
-ifeq ($(IPOD_LCD), Y)
-  MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/fblin1rev.o $(MW_DIR_OBJ)/drivers/fblin2revipod.o
+MW_CORE_OBJS += \
+	$(MW_DIR_OBJ)/drivers/fblin1rev.o \
+	$(MW_DIR_OBJ)/drivers/fblin2rev.o
 else
-  MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/fblin1rev.o $(MW_DIR_OBJ)/drivers/fblin2rev.o
-endif
-else
-MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/fblin1.o $(MW_DIR_OBJ)/drivers/fblin2.o
+MW_CORE_OBJS += \
+	$(MW_DIR_OBJ)/drivers/fblin1.o \
+	$(MW_DIR_OBJ)/drivers/fblin2.o
 endif
 
 ifeq ($(FBVGA), Y)
@@ -167,6 +163,11 @@ endif
 
 ifeq ($(ADS7846MOUSE), Y)
 CFLAGS += -DTOUCHSCREEN_ADS7846=1
+MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/mou_touchscreen.o
+endif
+
+ifeq ($(AD7877MOUSE), Y)
+CFLAGS += -DTOUCHSCREEN_AD7877=1
 MW_CORE_OBJS += $(MW_DIR_OBJ)/drivers/mou_touchscreen.o
 endif
 

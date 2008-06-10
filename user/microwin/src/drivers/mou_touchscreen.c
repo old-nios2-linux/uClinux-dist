@@ -41,6 +41,11 @@
 #include "touchscreen_ads7846.h"
 #endif
 
+#ifdef TOUCHSCREEN_AD7877
+#include "touchscreen_ad7877.h"
+#endif
+
+
 /* The tuxscreen just uses the generic ucb1x00 driver */
 #ifdef TOUCHSCREEN_TUXSCREEN
 #include "touchscreen_ucb1x00.h"
@@ -87,7 +92,7 @@ static void PD_GetDefaultAccel(int *pscale,int *pthresh)
 	*pthresh = 5;
 }
 
-static int PD_Read(MWCOORD *px, MWCOORD *py, MWCOORD *pz, int *pb)
+static int PD_Read(MWCOORD *px, MWCOORD *py, MWCOORD *pz, int *pb, int mode)
 {
 	struct ts_event event;
 	int bytes_read;

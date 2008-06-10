@@ -32,7 +32,7 @@ extern SCREENDEVICE scrdev;
 static struct tsdev *ts;
 static char devnode[64];
 
-#define TSLIB_DEVNODE "/dev/input/event0"
+#define TSLIB_DEVNODE "/dev/input/event1"
 
 #define TSLIB_PRESSURE_THRESH 100
 

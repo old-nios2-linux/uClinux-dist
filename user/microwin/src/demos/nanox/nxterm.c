@@ -148,6 +148,36 @@ void maximize(void)
     }
 }
 
+struct geometry {
+	int w, h, x, y;
+};
+void parse_geometry(const char *geostr, struct geometry *geometry)
+{
+	/* parse the format WIDTH[xHEIGHT[+OFFX[+OFFY]]] */
+	char *p;
+
+	/* first the WIDTH */
+	memset(geometry, 0, sizeof(*geometry));
+	geometry->w = atoi(geostr);
+
+	/* then the xHEIGHT */
+	p = strchr(geostr, 'x');
+	if (!p)
+		return;
+	geometry->h = atoi(p + 1);
+
+	/* then the +OFFX */
+	p = strchr(p, '+');
+	if (!p)
+		return;
+	geometry->x = atoi(++p);
+
+	/* then the +OFFY */
+	p = strchr(p, '+');
+	if (!p)
+		return;
+	geometry->y = atoi(++p);
+}
 
 /* **************************************************************************/
 
@@ -916,14 +946,13 @@ int main(int argc, char **argv)
     yp = 0;
     if (geometry) 
     {
-	if (col < 1) 
-	{
-	    col = 80;
-	}
-	if (row < 1) 
-	{
-	    row = 25;
-	}
+#ifndef MAX
+# define MAX(x, y) (x > y ? x : y)
+#endif
+	struct geometry g;
+	parse_geometry(geometry, &g);
+	col = MAX(g.w, 1);
+	row = MAX(g.h, 1);
 	if (col > 0x7f)
 	    colmask = 0xffff;
 	if (row > 0x7f)
@@ -972,8 +1001,8 @@ int main(int argc, char **argv)
 	bitmap1bg[4] = MASK(_,_,X,X,X,_,_);
 	bitmap1bg[5] = MASK(_,_,X,X,X,_,_);
 	bitmap1bg[6] = MASK(_,X,X,X,X,X,_);
-    GrSetCursor(w1, 7, 7, 3, 3, WHITE, BLACK, bitmap1fg, bitmap1bg);
-    GrSetGCForeground(gc1, WHITE);
+    GrSetCursor(w1, 7, 7, 3, 3, GREEN, BLACK, bitmap1fg, bitmap1bg);
+    GrSetGCForeground(gc1, GREEN);
     GrSetGCBackground(gc1, BLACK);
     GrGetWindowInfo(w1,&wi);
     GrGetGCInfo(gc1,&gi);
@@ -1105,14 +1134,14 @@ void sigchild(int signo)
 
 int term_init(void)
 {
-	int tfdMaster,tfdSlave;
+	int tfd;
 	int n = 0;
 	pid_t pid;
 	char pty_name[12];
 
 again:
 	sprintf(pty_name, "/dev/ptyp%d", n);
-	if ((tfdMaster = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
+	if ((tfd = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
 		if ((errno == EBUSY || errno == EIO) && n < 10) {
 			n++;
 			goto again;
@@ -1122,33 +1151,29 @@ again:
 	}
 	signal(SIGCHLD, sigchild);
 	signal(SIGINT, sigchild);
-#ifdef __uClinux__
-#undef fork
-#define fork() vfork()
-#endif
-	if ((pid = fork()) == -1) {
+	if ((pid = vfork()) == -1) {
 		fprintf(stderr, "No processes\n");
 		return -1;
 	}
 	if (!pid) {
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
-		close(tfdMaster);
+		close(tfd);
 		
 		setsid();
 		pty_name[5] = 't';
-		if ((tfdSlave = open(pty_name, O_RDWR)) < 0) {
+		if ((tfd = open(pty_name, O_RDWR)) < 0) {
 			fprintf(stderr, "Child: Can't open pty %s\n", pty_name);
-			exit(1);
+			_exit(1);
 		}
 		close(STDERR_FILENO);
-		dup2(tfdSlave, STDIN_FILENO);
-		dup2(tfdSlave, STDOUT_FILENO);
-		dup2(tfdSlave, STDERR_FILENO);
+		dup2(tfd, STDIN_FILENO);
+		dup2(tfd, STDOUT_FILENO);
+		dup2(tfd, STDERR_FILENO);
 		execv(nargv[0], nargv);
-		exit(1);
+		_exit(1);
 	}
-	return tfdMaster;
+	return tfd;
 }
 
 #if 0

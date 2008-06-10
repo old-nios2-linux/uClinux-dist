@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000 Greg Haerr <greg@censoft.com>
  * Copyright (c) 2000 Morten Rolland
  *
  * Device-independent font selection routines
@@ -18,6 +18,9 @@
 #endif
 
 #if FONTMAPPER
+
+/* entry points*/
+int select_font(const PMWLOGFONT plogfont, char *physname);
 
 /*
  * The following structure, defines and variables are used to administrate
@@ -504,7 +507,7 @@ GdAddFont(char *fndry, char *fmly, char *fontname, PMWLOGFONT lf,
 	char *physname = lf->lfFaceName;
 
 	if ( !strncmp(physname,"T1,",3) ) {
-#if HAVE_T1LIB_SUPPORT
+#ifdef HAVE_T1LIB_SUPPORT
 		/* Can handle Type 1 fonts */
 		physname += 3;
 		fontclass = MWLF_CLASS_T1LIB;

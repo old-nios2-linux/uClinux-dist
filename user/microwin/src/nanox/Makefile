@@ -68,10 +68,6 @@ endif
 all: default $(TARGET)
 endif
 
-ifeq ($(HAVE_VNCSERVER_SUPPORT), Y)
-NANOXSERVERLIBS += $(LIBVNC) $(LIBJPEG) $(LIBZ)
-endif 
-
 endif
 
 ######################### Makefile.rules section #############################
@@ -95,5 +91,5 @@ $(MW_DIR_BIN)/nano-X.o: $(OBJS) $(NANOXFILES) $(NANOXSERVERLIBS) $(CONFIG)
 
 $(MW_DIR_BIN)/nano-X: $(NANOXFILES) $(NANOXSERVERLIBS) $(CONFIG)
 	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
-	$(CC) $(CFLAGS) -o $@ $(NANOXFILES) $(NANOXSERVERLIBS) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(NANOXFILES) $(NANOXSERVERLIBS)
 endif

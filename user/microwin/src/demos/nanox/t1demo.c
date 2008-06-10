@@ -44,7 +44,7 @@
 #define FONT3 "dcr10"
 #define FONT4 "dcbx10"
 #define FONT5 "bchri"
-#elif (HAVE_FREETYPE_SUPPORT | HAVE_FREETYPE_2_SUPPORT)
+#elif HAVE_FREETYPE_SUPPORT
 #define MAXFONTS 5
 #define FONT1 "lt1-r-omega-serif"
 #define FONT2 "arial"
@@ -196,7 +196,7 @@ main(int ac, char **av)
 		GrText(window, gc, x, y, "\275\241\275\241", 4, MWTF_DBCS_GB);
 #elif HAVE_EUCJP_SUPPORT
 		/* encoding EUC_JP test A2 A1 */
-		GrText(window, gc, x, y, "ï¿½Þ¥ï¿½ï¿½ï¿½ï¿½í¥¦ï¿½ï¿½ï¿½ï¿½ï¿½É¥ï¿½ï¿½ï¿½ï¿½Ø¤è¤¦ï¿½ï¿½ï¿½ï¿½!", -1, MWTF_DBCS_EUCJP);
+		GrText(window, gc, x, y, "\242\241", 2, MWTF_DBCS_EUCJP);
 #elif HAVE_JISX0213_SUPPORT
 		/* encoding JISX0213 test A2 A1 */
 		GrText(window, gc, x, y, "\242\241", 2, MWTF_DBCS_JIS);

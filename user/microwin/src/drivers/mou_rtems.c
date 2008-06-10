@@ -1,16 +1,13 @@
-/* kate: space-indent off; indent-width 8; replace-tabs-save off; replace-tabs off; show-tabs on;  tab-width 8; */
 /*
 /////////////////////////////////////////////////////////////////////////////
 //
 // Copyright (c) 2000 - Rosimildo da Silva
 //           (c) 2004 - Andrey Astafiev
-//           (c) 2005 - Alexander Neundorf
 //
 // MODULE DESCRIPTION: 
 // This module implements the mouse driver for systems that implements 
 // the Micro Input Device interface. This driver is not specific in any way
 // to RTEMS. It could be used with any sustem that implements such interface.
-// It can also be used under eCos, only the file descriptor is not required there.
 //
 // The skeleton of this driver was based on standard Microwindows drivers
 // and file input_rtems.c written by Rosimildo da Silva.
@@ -75,9 +72,7 @@ MWMou_Open (MOUSEDEVICE *pmd)
         int rc;
 	m_mou.type = MV_UID_INVALID;
 	rc = uid_open_queue (Q_NAME, O_CREAT | O_RDWR, Q_MAX_MSGS);
-#if RTEMS
 	mou_fd = open (MOUSE_DEVICE, O_NONBLOCK);
-#endif
 	uid_register_device (mou_fd, Q_NAME);
 	return 2;
 }
@@ -89,10 +84,8 @@ static void
 MWMou_Close (void)
 {
         uid_unregister_device (mou_fd);
-        uid_close_queue ();
-#if RTEMS
+	uid_close_queue ();
 	close (mou_fd);
-#endif
 }
 
 /*

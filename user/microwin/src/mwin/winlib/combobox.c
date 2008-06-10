@@ -303,6 +303,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 #endif
     COMBOBOX *lp = (COMBOBOX *)NULL;
     LRESULT   rc;
+    HINSTANCE hInst;
     POINT     cp,cpScreen,pp;
     UINT      uiKey;
     LPCREATESTRUCT lpcs;
@@ -419,16 +420,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
 #endif	/* WM_KEYDOWN */
 
-	case WM_SYSCHAR:
-		if( wParam == VK_DOWN )
-			{
-			PostMessage ( hWnd, CB_SHOWDROPDOWN, !IS_SET(lp,CSF_CAPTUREACTIVE), 0 );
-			break;
-			}
-		/* continue in the next case...*/
-	case WM_KEYDOWN:
     case WM_CHAR:
-	case WM_KEYUP:
         {
         int nNewCur;
         int nOldCur;
@@ -465,9 +457,12 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         /* save ptr to internal structure */
         hWnd->userdata=(DWORD)lp;	/* -SetWindowLong(hWnd, CWD_LPCBDATA, (LONG) lp); */
-        lpcs = (LPCREATESTRUCT)lParam;
+
+        /* this is for CreateWindow calls */
+        hInst = NULL;	/* -GetWindowInstance(hWnd); */
 
         /* fill in the internal structure */
+        lpcs = (LPCREATESTRUCT)lParam;
         lp->bRedraw = 1;
         lp->wStateFlags = 0;
         lp->wStyle  = (UINT)LOWORD(lpcs->style);
@@ -491,20 +486,15 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
            }
 #endif	/* ownerdraw */
 
-        /* get parent font dimensions */
-        hDC = GetDC(GetParent(hWnd));
+        /* get system font dimensions */
+        hDC = GetDC((HWND)0);
         GetTextMetrics(hDC,&tm);
-        ReleaseDC(GetParent(hWnd),hDC);
+        ReleaseDC((HWND)0,hDC);
 
         /* allow different fonts to fit, don't hard code */
         /* otherwise big fonts won't fit. */
         /* ***wEditHeight = ((tm.tmHeight - tm.tmInternalLeading)*7)/4;*****/
-#if 0
         wEditHeight = tm.tmHeight + tm.tmInternalLeading * 3;
-#else
-		/* tmInternalLeading always 0 in mw */
-        wEditHeight = tm.tmHeight + 8;
-#endif
 
         lp->uHeight = (UINT)wEditHeight;
 
@@ -516,7 +506,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
            lp->ButtonRect.bottom = wEditHeight;
            /* for CBS_DROPDOWN/DROPDOWNLIST resize the window  */
            SetWindowPos(hWnd, 0,
-                        lpcs->x, lpcs->y, lpcs->cx, (int)wEditHeight,
+                        0, 0, lpcs->cx, (int)wEditHeight,
                         SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOREDRAW);
            }
         else SetRectEmpty(&lp->ButtonRect);
@@ -543,7 +533,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
            lp->EditControl = CreateWindow("EDIT", NULL, dwStyle,
                                           0, 0, wEditWidth, wEditHeight,
                                           hWnd, (HMENU)CBC_EDITID,
-                                          lpcs->hInstance,(LPVOID)NULL);
+                                          hInst,(LPVOID)NULL);
            }
         else /* CBS_DROPDOWN -- static instead of edit */
              lp->EditControl = 0;
@@ -608,7 +598,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    lp->ListBoxRect.right - lp->ListBoxRect.left,
 	    lp->ListBoxRect.bottom - lp->ListBoxRect.top,
 	    hWnd, 0,
-	    lpcs->hInstance,(LPVOID)NULL);
+	    hInst,(LPVOID)NULL);
 #if MWCLIENT
 #if 0
         GrLowerWindow(lp->ListBoxControl->wid);
@@ -660,7 +650,7 @@ DefComboboxProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0L;
 
     case WM_GETDLGCODE:
-		return DLGC_WANTCHARS | DLGC_HASSETSEL | DLGC_WANTARROWS;
+        return (LRESULT)(DLGC_WANTCHARS|DLGC_WANTARROWS);
 
 /* jmt: twine->mwin bug fixed: */
     case WM_NCLBUTTONDOWN:	/* jmt: a must */
@@ -1769,9 +1759,6 @@ static void CBoxDrawStatic(COMBOBOX *lp, HWND hWnd, UINT uiKey)
 
 
 /*------------------------- < Full Revision History > ----------------------
-** Revision 1.3  2003/10/01 00:00:00  GB
-** modified to works with dialogs.
-**
 ** Revision 1.2  2001/11/06 23:35:46  greg
 **
 ** Revision 1.1.1.1  2001/06/21 06:32:42  greg

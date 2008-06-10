@@ -187,11 +187,6 @@ MWBOOL GdGetNextTimeout(struct timeval *tv, MWTIMEOUT timeout)
 
 	while(t) {
 		i = time_to_expiry(&t->timeout);
-		if( i>0 && i>t->period )
-		{
-			calculate_timeval (&t->timeout, t->period);
-			i = t->period;
-		}
 		if(i < lowest_timeout) lowest_timeout = i;
 		t = t->next;
 	}
@@ -215,14 +210,12 @@ MWBOOL GdGetNextTimeout(struct timeval *tv, MWTIMEOUT timeout)
 MWBOOL GdTimeout(void)
 {
 	MWTIMER *n, *t = timerlist;
-	signed long tempTimeout = 0;
 
 	gettimeofday(&current_time, NULL);
 
 	while(t) {
 		n = t->next;
-		tempTimeout = time_to_expiry(&t->timeout);
-		if( tempTimeout<= 0) {
+		if(time_to_expiry(&t->timeout) <= 0) {
 			t->callback(t->arg);
                         if (t->type == MWTIMER_ONESHOT)
                         {
@@ -234,10 +227,6 @@ MWBOOL GdTimeout(void)
                             /* Periodic timer needs to be reset */
                             calculate_timeval (&t->timeout, t->period);
                         }
-		}
-		else{
-			if( tempTimeout>0 && tempTimeout>t->period )
-				calculate_timeval (&t->timeout, t->period);
 		}
 		t = n;
 	}

@@ -2,6 +2,8 @@
  * Copyright (c) 2000, 2002 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Copyright (c) 1991 David I. Bell
+ * Permission is granted to use, distribute, or modify this source,
+ * provided that this copyright notice remains intact.
  *
  * Graphics server utility routines for windows.
  */
@@ -414,8 +416,8 @@ GsWpDrawBackgroundPixmap(GR_WINDOW *wp, GR_PIXMAP *pm, GR_COORD x,
 			GdStretchBlit(wp->psd, destx + wp->x, desty + wp->y,
 				destwidth, destheight, pm->psd, fromx, fromy,
 				pm->width, pm->height, MWROP_COPY);
-		} else GdBlit(wp->psd, destx + wp->x, desty + wp->y, (width < destwidth)?width:destwidth,
-			(height < destheight)?height:destheight, pm->psd, fromx, fromy, MWROP_COPY);
+		} else GdBlit(wp->psd, destx + wp->x, desty + wp->y, destwidth,
+			destheight, pm->psd, fromx, fromy, MWROP_COPY);
 	}
 
 	if(wp->bgpixmapflags & (GR_BACKGROUND_TRANS|GR_BACKGROUND_STRETCH))

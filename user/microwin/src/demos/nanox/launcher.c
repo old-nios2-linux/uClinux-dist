@@ -434,14 +434,15 @@ void handle_exposure_event(lstate *state)
 							event->wid);
 }
 
-pid_t launch_program(prog_item *prog)
-{
-	pid_t pid;
-
 #ifdef __uClinux__
 #undef fork
 #define fork() vfork()
 #endif
+
+pid_t launch_program(prog_item *prog)
+{
+	pid_t pid;
+
 	if((pid = fork()) == -1) perror("Couldn't fork");
 	else if(!pid) {
 		if(execvp(prog->command, prog->argv) == -1)

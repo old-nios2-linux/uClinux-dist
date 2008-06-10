@@ -73,7 +73,7 @@ GrSetCursor(GR_WINDOW_ID wid, GR_SIZE width, GR_SIZE height, GR_COORD hotx,
 }
 
 /* byte-reversing table for reversing X bitmaps */
-static const unsigned char revbyte[256] = {
+static unsigned char revbyte[256] = {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0,
 	0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
 	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8,
@@ -176,15 +176,8 @@ GrNewBitmapFromData(GR_SIZE width, GR_SIZE height, GR_SIZE bits_width,
 		inbuf += (bits_width + 7) / 8 - (width + 7) / 8;	/* FIXME */
 
 		/* pad to 16 bits */
-		if (xb & 1) {
-			unsigned char c = *(p-1);
-			if (bswap) {
-				*(p-1) = 0;
-				*p++ = c;
-			} else {
-				*p++ = 0;
-			}
-		}
+		if (xb & 1)
+			*p++ = 0;
 	}
 	return buf;
 }

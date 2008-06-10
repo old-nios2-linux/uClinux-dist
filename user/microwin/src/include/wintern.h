@@ -1,6 +1,6 @@
 /* wintern.h*/
 /*
- * Copyright (c) 1999, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999 Greg Haerr <greg@censoft.com>
  *
  * Microwindows internal routines header file
  */
@@ -48,8 +48,6 @@ void		MwSetCursor(HWND wp, PMWCURSOR pcursor);
 void		MwPaintNCArea(HWND hwnd);
 HWND		MwPrepareDC(HDC hdc);
 void		MwSetClipWindow(HDC hdc);
-void		MwSetTextCoding(long mode);
-BOOL		MwCheckUnderlineChar(HDC hdc, char *text, int *pLen, LPRECT rcLine);
 
 /* winsbar.c*/
 void		MwAdjustNCScrollbars(HWND hwnd);
@@ -102,12 +100,11 @@ extern int	mwSYSMETRICS_CYVSCROLL;
 
 /* wingdi.c*/
 extern BOOL	mwERASEMOVE;	/* default repaint algorithm*/
-extern long	mwTextCoding;	/* current text encoding*/
 
 /* winmain.c*/
 int		MwOpen(void);
 void		MwClose(void);
-void		MwSelect(BOOL mayWait);
+void		MwSelect(void);
 int		MwInitialize(void);
 void		MwTerminate(void);
 extern	HWND	listwp;			/* list of all windows */

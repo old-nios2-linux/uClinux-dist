@@ -32,7 +32,7 @@ INSTALL_BIN   = install -c -m 755 $(INSTALL_OWNER2)
 ##############################################################################
 
 # Defines
-DEFINES += -DMWPIXEL_FORMAT=$(SCREEN_PIXTYPE)
+DEFINES += -DMWPIXEL_FORMAT=$(SCREEN_PIXTYPE) -D_GNU_SOURCE
 
 # Includes
 INCLUDEDIRS += -I. -I$(MW_DIR_SRC)/include
@@ -66,15 +66,6 @@ endif
 
 ifeq ($(VGALIB), Y)
 LDFLAGS += -lvga
-endif
-
-ifeq ($(HAVE_VNCSERVER_SUPPORT), Y)
-INCLUDEDIRS += -I$(INCVNC) -I$(INCZ)
-DEFINES += -DHAVE_VNCSERVER=1
-ifeq ($(VNCSERVER_PTHREADED), Y)
-DEFINES += -DVNCSERVER_PTHREADED=1
-LDFLAGS += -lpthread 
-endif
 endif
 
 ifeq ($(ARCH),FREEBSD-X86)
@@ -218,21 +209,6 @@ endif
 INCLUDEDIRS += -I$(INCFT2LIB)/freetype2
 endif
 
-ifeq ($(HAVE_FRIBIDI_SUPPORT), Y)
-DEFINES += -DHAVE_FRIBIDI_SUPPORT=1
-ifneq ($(INCFRIBIDI),)
-INCLUDEDIRS += -I$(INCFRIBIDI)
-endif
-ifneq ($(LIBFRIBIDI),)
-MW_CORE_LIBS += $(LIBFRIBIDI)
-else
-LDFLAGS += -lfribidi
-endif
-endif
-ifeq ($(HAVE_SHAPEJOINING_SUPPORT), Y)
-DEFINES += -DHAVE_SHAPEJOINING_SUPPORT=1
-endif
-
 ifeq ($(NOFONTSORCLIPPING), Y)
 DEFINES += -DNOFONTSORCLIPPING=1
 endif
@@ -251,7 +227,7 @@ endif
 
 ifeq ($(THREADSAFE), Y)
 DEFINES += -DTHREADSAFE=1
-#LDFLAGS += -lpthread
+LDFLAGS += -pthread
 endif
 
 # Driver-specific stuff
@@ -274,10 +250,6 @@ endif
 
 ifeq ($(INVERT4BPP), Y)
 DEFINES += -DINVERT4BPP=1
-endif
-
-ifeq ($(INVERT2BPP), Y)
-DEFINES += -DINVERT2BPP=1
 endif
 endif # FRAMEBUFER
 
@@ -379,7 +351,7 @@ endif
 endif
 
 ifeq ($(DEBUG), Y)
-OPTFLAGS += -ggdb -O0
+OPTFLAGS += -ggdb
 DEFINES += -DDEBUG=1
 else
 #OPTFLAGS += -DNDEBUG
@@ -415,18 +387,13 @@ include $(MW_DIR_SRC)/Arch.rules
 endif
 
 # Tools ...
-ifdef NOT_DEFINED_EVER
 CC = $(TOOLSPREFIX)$(COMPILER)
 CXX = $(TOOLSPREFIX)$(CXX_COMPILER)
 AR = $(TOOLSPREFIX)$(ACHIVER)
 LD = $(TOOLSPREFIX)$(LINKER)
-endif
 NM = $(TOOLSPREFIX)nm
-# STRIP = $(TOOLSPREFIX)strip
+STRIP = $(TOOLSPREFIX)strip
 OBJCOPY = $(TOOLSPREFIX)objcopy
-ifdef NOT_DEFINED_EVER
-RANLIB = $(TOOLSPREFIX)ranlib
-endif
 CP = cp
 MV = mv
 
@@ -580,7 +547,7 @@ endif
 ifeq ($(SHAREDLIBS), Y)
 $(MW_DIR_LIB)/$(LIBNAMESO): $(MW_DIR_LIB)/$(LIBNAME)
 	@echo "Creating shared library $(patsubst $(MW_DIR_LIB)/%,%,$@) ..."
-	$(CC) -shared -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
+	$(LD) -shared -o $@ --whole-archive $^
 endif
 
 #

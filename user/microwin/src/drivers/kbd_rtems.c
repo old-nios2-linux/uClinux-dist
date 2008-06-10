@@ -1,15 +1,12 @@
-/* kate: space-indent off; indent-width 8; replace-tabs-save off; replace-tabs off; show-tabs on;  tab-width 8; */
 /*
 /////////////////////////////////////////////////////////////////////////////
 // Copyright (c) 2000 - Rosimildo da Silva
 //           (c) 2004 - Andrey Astafiev             
-//           (c) 2005 - Alexander Neundorf
 //  
 // MODULE DESCRIPTION: 
 // This module implements the PC keyboard driver for systems that implements 
 // the Micro Input Device interface. This driver is not specific in any way
 // to RTEMS. It could be used with any sustem that implements such interface.
-// It can also be used under eCos, only the file descriptor is not required there.
 //
 // The skeleton of this driver was based on standard Microwindows drivers
 // and input_rtems.c file wrtten by Rosimildo da Silva.
@@ -67,9 +64,7 @@ MWKbd_Open (KBDDEVICE *pkd)
 {
         int rc;
 	m_kbd.type = MV_UID_INVALID;
-#if RTEMS
 	kbd_fd = fileno (stdin);
-#endif
 	rc = uid_open_queue (Q_NAME, O_CREAT | O_RDWR, Q_MAX_MSGS);
 	uid_register_device (kbd_fd, Q_NAME);
 	return 1;
@@ -83,9 +78,7 @@ MWKbd_Close (void)
 {
         uid_unregister_device (kbd_fd);
 	uid_close_queue ();
-#if RTEMS
 	close (kbd_fd);
-#endif
 }
 
 /*
@@ -94,16 +87,13 @@ MWKbd_Close (void)
 void
 MWKbd_GetModifierInfo (MWKEYMOD *modifiers, MWKEYMOD *curmodifiers)
 {
-	if (modifiers)
-		*modifiers = 0;      /* no modifiers available */
-	if (curmodifiers)
-		*curmodifiers = 0;      /* no modifiers available */
+        *modifiers = 0;      /* no modifiers available */
 }
 
 /*
  * This reads one keystroke from the keyboard, and the current state of
  * the mode keys (ALT, SHIFT, CTRL).  Returns -1 on error, 0 if no data
- * is ready, and 1 on keypress, 2 on keyrelease.  This is a non-blocking call.
+ * is ready, and 1 if data was read.  This is a non-blocking call.
  */
 int
 MWKbd_Read (MWKEY *buf, MWKEYMOD *modifiers, MWSCANCODE *scancode)
@@ -114,13 +104,9 @@ MWKbd_Read (MWKEY *buf, MWKEYMOD *modifiers, MWSCANCODE *scancode)
 	        *buf = m_kbd.m.kbd.code;
 //	          *modifiers = m_kbd.m.kbd.modifiers;
 		*modifiers = 0;
+
 		/* consume event */
 		m_kbd.type = MV_UID_INVALID;
-#if __ECOS
-                if (m_kbd.m.kbd.mode==2)
-                   return 2;
-                else
-#endif
 		return 1;
 	}
 	return 0;

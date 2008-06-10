@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2003, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2003 Greg Haerr <greg@censoft.com>
  * GetTextExtent*Point by Roman Guseynov
  * Original contributions by Shane Nay
  *
@@ -195,7 +195,7 @@ GetTextExtentPoint(
 	if (!hdc || !lpszStr || !cchString || !lpSize)
 		return FALSE;
 	GdGetTextSize(hdc->font->pfont, lpszStr, cchString, &width, &height,
-		&baseline, mwTextCoding);
+		&baseline, MWTF_UTF8);
 	lpSize->cx = width;
 	lpSize->cy = height;
 
@@ -205,46 +205,44 @@ GetTextExtentPoint(
 
 BOOL WINAPI
 GetTextExtentExPoint(HDC hdc,	/* handle to DC*/
-	LPCTSTR lpszStr,	/* character string*/
-	int cchString,		/* number of characters*/
-	int nMaxExtent,		/* maximum width of formatted string*/
-	LPINT lpnFit,		/* maximum number of characters*/
-	LPINT alpDx,	 	/* array of partial string widths*/
-	LPSIZE lpSize)		/* string dimensions*/
+	  LPCTSTR lpszStr,	/* character string*/
+	  int cchString,	/* number of characters*/
+	  int nMaxExtent,	/* maximum width of formatted string*/
+	  LPINT lpnFit,		/* maximum number of characters*/
+	  LPINT alpDx,	 	/* array of partial string widths*/
+	  LPSIZE lpSize)	/* string dimensions*/
 
 {
-	int attr, width = 0,height = 0;
+	int attr,width=0,height=0;
 
 	if(!hdc || !lpszStr)
 		return FALSE;
-
-	if (cchString < 0)
+	if (cchString<0)
 		cchString = strlen((char *)lpszStr);
-		
-	attr = hdc->font->pfont->fontattr;
-	if (attr&MWTF_FREETYPE) { 
-		if (GdGetTextSizeEx(hdc->font->pfont, lpszStr, cchString,
-			nMaxExtent, lpnFit, alpDx, &width, &height, NULL,
-								mwTextCoding)) {
+	attr=hdc->font->pfont->fontattr;
+	if (attr&MWTF_FREETYPE)
+	{ 
+		if (GdGetTextSizeEx(hdc->font->pfont,lpszStr,cchString,
+			nMaxExtent,lpnFit,alpDx,&width,&height,NULL,MWTF_UTF8))
+		{
 			lpSize->cx=width;
 			lpSize->cy=height;
 			return TRUE;
 		}
 		return FALSE;
-	} else {
-		int i;
+	}
+	else
+	{
 		SIZE sz;
+		int i;
 
 		if (!GetTextExtentPoint(hdc, lpszStr, cchString, lpSize))
 			return FALSE;
-
-		if (!nMaxExtent || !lpnFit || !alpDx)
+		if ((!nMaxExtent)||(!lpnFit)||(!alpDx))
 			return TRUE;
-
 		for (i=0; i<cchString; i++) {
 			if (!GetTextExtentPoint(hdc, lpszStr, i+1, &sz))
 				return FALSE;
-
 			if (sz.cx <= nMaxExtent)
 				alpDx[i] = sz.cx;
 			else {
@@ -256,89 +254,3 @@ GetTextExtentExPoint(HDC hdc,	/* handle to DC*/
 		return TRUE;	
 	}
 }     
-
-int WINAPI
-EnumFonts(
-	HDC hdc,		/* handle to DC */
-	LPCTSTR lpFaceName,	/* font typeface name */
-	FONTENUMPROC lpFontFunc,/* callback function */
-	LPARAM lParam) 		/* application-supplied data */
-{
-	int		i;
-	PSD		psd = &scrdev;
-	PMWCOREFONT	pf = psd->builtin_fonts;
-	LOGFONT		lf;
-	TEXTMETRIC	tm;
-	TEXTMETRIC	*lptm = &tm;
-	MWFONTINFO	fi;
-	MWSCREENINFO	scrinfo;
-	extern MWCOREFONT *user_builtin_fonts;
-
-	GdGetScreenInfo(psd, &scrinfo);
-	memset(&lf, 0, sizeof(lf));
-	GetTextMetrics(hdc, &tm);
-
-	for (i = 0;; ++i) {
-		if (i < scrinfo.fonts)
-			pf = psd->builtin_fonts + i;
-		else if (user_builtin_fonts == NULL)
-			break;
-		else
-			pf = user_builtin_fonts + (i - scrinfo.fonts);
-		if (pf->name == NULL)
-			break;
-
-		GdGetFontInfo((PMWFONT) pf, &fi);
-		lptm->tmHeight = fi.height;
-		lptm->tmDescent = fi.height - fi.baseline;
-		lptm->tmAscent = fi.baseline;
-		lptm->tmInternalLeading = 0;
-		lptm->tmExternalLeading = 0;
-		lptm->tmAveCharWidth = fi.widths['x'];
-		lptm->tmMaxCharWidth = fi.maxwidth;
-		lptm->tmWeight = FW_NORMAL;
-		lptm->tmOverhang = 0;
-		lptm->tmDigitizedAspectX = fi.maxwidth;
-		lptm->tmDigitizedAspectY = fi.height;
-		lptm->tmFirstChar = 32;
-		lptm->tmLastChar = 255;
-		lptm->tmDefaultChar = '?';
-		lptm->tmBreakChar = 0;
-		lptm->tmItalic = 0;
-		lptm->tmUnderlined = 0;
-		lptm->tmStruckOut = 0;
-		lptm->tmPitchAndFamily = fi.fixed ? FF_DONTCARE :
-			(FF_DONTCARE | TMPF_FIXED_PITCH);
-		lptm->tmCharSet = OEM_CHARSET;
-
-		strncpy(lf.lfFaceName, pf->name, sizeof(lf.lfFaceName));
-		lf.lfHeight = fi.height;
-		lf.lfWidth = fi.widths['x'];
-		lf.lfWeight = FW_NORMAL;
-		if (!lpFontFunc(&lf, &tm, 0, lParam))
-			return 0;
-	}
-
-#if (HAVE_FREETYPE_SUPPORT | HAVE_FREETYPE_2_SUPPORT)
-	if (freetype_init(psd)) {
-		int		n = 0;
-		char		*p;
-		MWFONTLIST	**lst;
-
-		GdGetFontList(&lst, &n);
-		memset(&lf, 0, sizeof(lf));
-		for (i = 0; i < n; i++) {
-			strncpy(lf.lfFaceName, lst[i]->mwname,
-				sizeof(lf.lfFaceName));
-			p = strrchr(lf.lfFaceName, '.');
-			if ((p != NULL) && strcasecmp(p, ".ttf") == 0)
-				*p = 0;
-//snprintf (lf.lfFaceName, sizeof(lf.lfFaceName), "%s:%s", lst[i]->mwname, lst[i]->ttname);
-			if (!lpFontFunc(&lf, &tm, 0, lParam))
-				return 0;
-		}
-		GdFreeFontList(&lst, n);
-	}
-#endif
-	return 1;
-}

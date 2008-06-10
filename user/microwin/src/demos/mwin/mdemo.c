@@ -3,11 +3,7 @@
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  *
  * Demo program for Microwindows
- *
- *  GB: 10-14-2004: Modified to store degrees data on each window, 
- *                  for new Timers features.
  */
-#include <time.h>
 #define MWINCLUDECOLORS
 #include "windows.h"
 #include "wintern.h"		/* for MwSetDesktopWallpaper*/
@@ -20,7 +16,7 @@ unsigned _stklen = 4096;
 
 #define CLIPDEMO	0	/* set for region clipping demo*/
 
-#if !ELKS
+#ifndef ELKS
 #define TIMERDEMO	1	/* set for WM_TIMER demo*/
 #define GRAPH3D		0	/* 3d graphics demo*/
 #define IMAGE		0	/* 256 color image demo*/
@@ -83,7 +79,7 @@ RegisterAppClass(void)
 	wc.style = CS_DBLCLKS | CS_VREDRAW | CS_HREDRAW;
 	wc.lpfnWndProc = (WNDPROC)WndProc;
 	wc.cbClsExtra = 0;
-	wc.cbWndExtra = sizeof(void*);
+	wc.cbWndExtra = 0;
 	wc.hInstance = 0;
 	wc.hIcon = 0; /*LoadIcon(GetHInstance(), MAKEINTRESOURCE( 1));*/
 	wc.hCursor = 0; /*LoadCursor(NULL, IDC_ARROW);*/
@@ -218,20 +214,6 @@ ChildWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 }
 #endif
 
-
-
-#if TIMERDEMO
-typedef struct tag_demoWndData
-{
-#if ARCDEMO
-	int	startdegrees;
-	int	enddegrees;
-#endif
-	unsigned long reserved;
-} demoWndData, *pdemoWndData;
-#endif /* TIMERDEMO */
-
-
 LRESULT CALLBACK
 WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -247,25 +229,21 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
 #if TIMERDEMO
 	static POINT	mousept;
-	pdemoWndData pData;
+#endif
+#if ARCDEMO
+	static int	startdegrees = 0;
+	static int	enddegrees = 30;
 #endif
 
 	switch( msg) {
 #if TIMERDEMO
 	case WM_CREATE:
-		pData = (pdemoWndData) malloc(sizeof(demoWndData));
-		SetWindowLong(hwnd, 0, (LONG)pData);
-		SetTimer(hwnd, 1, (50+random()%250), NULL);
+		SetTimer(hwnd, 1, 100, NULL);
 		mousept.x = 60;
 		mousept.y = 20;
-#if ARCDEMO
-		pData->startdegrees = 0;
-		pData->enddegrees = 30;
-#endif
 		break;
 
 	case WM_TIMER:
-		pData = (pdemoWndData) GetWindowLong(hwnd, 0);
 #if GRAPH3D
 		GetClientRect(hwnd, &rc);
 		if(countup) {
@@ -285,21 +263,18 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			MAKELONG(mousept.x, mousept.y));
 #endif
 #if ARCDEMO
-		pData->startdegrees += 10;
-		if(pData->startdegrees >= 360)
-			pData->startdegrees = 0;
-		pData->enddegrees += 15;
-		if(pData->enddegrees >= 360)
-			pData->enddegrees = 0;
+		startdegrees += 10;
+		if(startdegrees >= 360)
+			startdegrees = 0;
+		enddegrees += 15;
+		if(enddegrees >= 360)
+			enddegrees = 0;
 		InvalidateRect(hwnd, NULL, TRUE);
 #endif
 		break;
 
 	case WM_DESTROY:
 		KillTimer(hwnd, 1);
-		pData = (pdemoWndData) GetWindowLong(hwnd, 0);
-		free ( pData );
-		SetWindowLong(hwnd, 0, 0);
 		break;
 #endif /* TIMERDEMO*/
 	case WM_SIZE:
@@ -351,7 +326,6 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	RECT rc;
 
 	if(hdc != NULL) {
-		pData = (pdemoWndData) GetWindowLong(hwnd, 0);
 		GetWindowRect(hwnd, &rc);
 		rc.top += 13;
 		InflateRect(&rc, -3, -3);
@@ -365,11 +339,11 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		h = rc.bottom - rc.top;
 		w += 10;
 		GdSetForegroundColor(hdc->psd, RGB(0,255,0));
-		GdArcAngle(hdc->psd, x+w/2, y+h/2, w/2, h/2, pData->startdegrees*64,
-			pData->enddegrees*64, MWPIE);
+		GdArcAngle(hdc->psd, x+w/2, y+h/2, w/2, h/2, startdegrees*64,
+			enddegrees*64, MWPIE);
 		GdSetForegroundColor(hdc->psd, RGB(0,0,0));
-		GdArcAngle(hdc->psd, x+w/2, y+h/2, w/2, h/2, pData->startdegrees*64,
-			pData->enddegrees*64, MWARCOUTLINE);
+		GdArcAngle(hdc->psd, x+w/2, y+h/2, w/2, h/2, startdegrees*64,
+			enddegrees*64, MWARCOUTLINE);
 		/*GdSetForegroundColor(hdc->psd, RGB(255,255,255)));*/
 		/*GdPoint(hdc->psd, x+w/2, y+h/2);*/
 	}
@@ -447,7 +421,6 @@ WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 	case WM_MOUSEMOVE:
 #if GRAPH3D
-		pData = (pdemoWndData) GetWindowLong(hwnd, 0);
 		if((GetWindowLong(hwnd, GWL_ID) & 03) == 1) {
 			POINT pt;
 
@@ -482,7 +455,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine,
 	HWND	hwnd;
 	RECT	rc;
 
-	srandom(time(NULL));
 	RegisterAppClass();
 	GetWindowRect(GetDesktopWindow(), &rc);
 #if !(ELKS | MSDOS)

@@ -50,6 +50,7 @@ typedef struct {
 	HWND	hHosting;
 } MAINWINCREATE, *PMAINWINCREATE;
 
+#define IDOK	0
 #define GetCharWidth()		11
 #define GetCharHeight()		13
 

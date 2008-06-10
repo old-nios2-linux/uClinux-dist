@@ -1,18 +1,7 @@
 /*
- * Copyright (c) 1999, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999 Greg Haerr <greg@censoft.com>
  *
  * Win32 API upper level window creation, management and msg routines
- *
- * Modifications:
- *  Date        Author                  Description
- *  2003/09/01  Gabriele Brugnoni       Implemented multiple timers support
- *  2003/09/22  Gabriele Brugnoni       InvalidateRect adds NC-Area only when needed.
- *  2003/09/22  Gabriele Brugnoni       Implemented bErase for Invalidate functions.
- *  2003/09/24  Gabriele Brugnoni       Fixed WM_ACTIVATE msg sent in SetFocus
- *                                      (was sent active and inactive twice at new focused win)
- *  2003/09/24  Gabriele Brugnoni       WA_ACTIVE with WA_INACTIVE is sent before changing
- *                                      the pointer focus variable.
- *  2003/09/24  Gabriele Brugnoni       Implemented WM_SYSCHAR for ALT-Key
  */
 #include "windows.h"
 #include "wintern.h"
@@ -41,18 +30,7 @@ int	mwpaintSerial = 1;		/* experimental alphablend sequencing*/
 int	mwpaintNC = 1;			/* experimental NC paint handling*/
 BOOL 	mwforceNCpaint = FALSE;		/* force NC paint when alpha blending*/
 
-struct timer {			/* private timer structure*/
-	HWND	hwnd;		/* window associated with timer, NULL if none*/
-	UINT	idTimer;	/* id for timer*/
-	UINT	uTimeout;	/* timeout value, in msecs*/
-	DWORD	dwClockExpires;	/* GetTickCount timer expiration value*/
-	TIMERPROC lpTimerFunc;	/* callback function*/
-	struct timer *next;
-};
-static struct timer *timerList = NULL;	/* global timer list*/
-
 static void MwOffsetChildren(HWND hwnd, int offx, int offy);
-static void MwRemoveWndFromTimers(HWND hwnd);
 
 LRESULT WINAPI
 CallWindowProc(WNDPROC lpPrevWndFunc, HWND hwnd, UINT Msg, WPARAM wParam,
@@ -64,9 +42,9 @@ CallWindowProc(WNDPROC lpPrevWndFunc, HWND hwnd, UINT Msg, WPARAM wParam,
 LRESULT WINAPI
 SendMessage(HWND hwnd, UINT Msg,WPARAM wParam,LPARAM lParam)
 {
-	if(IsWindow(hwnd) && hwnd->lpfnWndProc) {
+	if(hwnd && hwnd->pClass) {
 		hwnd->paintSerial = mwpaintSerial; /* assign msg sequence #*/
-		return (*hwnd->lpfnWndProc)(hwnd, Msg, wParam, lParam);
+		return (*hwnd->pClass->lpfnWndProc)(hwnd, Msg, wParam, lParam);
 	}
 	return 0;
 }
@@ -151,7 +129,7 @@ chkPaintMsg(HWND wp, LPMSG lpMsg)
 			/* All other windows we'll check for
 			 * event input first, then allow repaint.
 			 */
-			MwSelect(FALSE);
+			MwSelect();
 			if(mwMsgHead.head == NULL)
 				goto paint;
 		}
@@ -182,7 +160,7 @@ PeekMessage(LPMSG lpMsg, HWND hwnd, UINT uMsgFilterMin, UINT uMsgFilterMax,
 			}
 		}
 #endif
-		MwSelect(FALSE);
+		MwSelect();
 	}
 
 	if(mwMsgHead.head == NULL)
@@ -205,36 +183,16 @@ GetMessage(LPMSG lpMsg,HWND hwnd,UINT wMsgFilterMin,UINT wMsgFilterMax)
 	 * so this code will work
 	 */
 	while(!PeekMessage(lpMsg, hwnd, wMsgFilterMin, wMsgFilterMax,PM_REMOVE))
-	    {
-		/* Call select to suspend process until user input or scheduled timer */
-		MwSelect(TRUE);
-	    MwHandleTimers();
-#ifdef MW_CALL_IDLE_HANDLER	    
-	    idle_handler ();
-#endif	    
 		continue;
-	    }
 	return lpMsg->message != WM_QUIT;
 }
 
 BOOL WINAPI
 TranslateMessage(CONST MSG *lpMsg)
 {
-	static BOOL bAltStatus;	/* store ALT status to send WM_SYSCHAR */
-
 	/* Creat the WM_CHAR on WM_KEYDOWN messages*/
-   	/* if bit 24 in lParam is ON (control key), don't post WM_CHAR */
-	if(lpMsg && (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_KEYUP) &&
-		(lpMsg->wParam == VK_MENU) )
-		bAltStatus = (lpMsg->message == WM_KEYDOWN);
-
-	if(lpMsg && (lpMsg->message == WM_KEYDOWN) &&
-	   (!(lpMsg->lParam & (1<<24)) || bAltStatus) ) {
-		if( !bAltStatus )
-			PostMessage(lpMsg->hwnd, WM_CHAR, lpMsg->wParam, lpMsg->lParam);
-		else
-			PostMessage(lpMsg->hwnd, WM_SYSCHAR, lpMsg->wParam, lpMsg->lParam);
-	}
+	if(lpMsg && (lpMsg->message == WM_KEYDOWN))
+		PostMessage(lpMsg->hwnd, WM_CHAR, lpMsg->wParam, lpMsg->lParam);
 	return FALSE;
 }
 
@@ -305,12 +263,8 @@ CreateWindowEx(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
 	HWND		hwndOwner;
 	PWNDCLASS	pClass;
 	CREATESTRUCT	cs;
-	int			titLen;
 	static int	nextx = 20;
 	static int	nexty = 20;
-	
-	/* WARNING: All modification made here should be reported 
-	   on MwInitialize for the rootwp window */
 
 	pClass = MwFindClassByName(lpClassName);
 	if(!pClass)
@@ -352,12 +306,7 @@ CreateWindowEx(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
 	/* force all clipping on by default*/
 	dwStyle |= WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
-	titLen = 0;
-	if( lpWindowName != NULL )
-		titLen = strlen ( lpWindowName );
-	if( titLen < 64 ) titLen = 64; /* old mw compatibility */
 	wp->pClass = pClass;
-	wp->lpfnWndProc = pClass->lpfnWndProc;
 	wp->style = dwStyle;
 	wp->exstyle = dwExStyle;
 	wp->parent = pwp;
@@ -376,23 +325,11 @@ CreateWindowEx(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
 	wp->unmapcount = pwp->unmapcount + 1;
 	wp->id = (int)hMenu;
 	wp->gotPaintMsg = PAINT_PAINTED;
-	wp->szTitle = (LPTSTR) malloc ( titLen+1 );
-	if( wp->szTitle == NULL ) {
-		free ( wp );
-		return NULL;
-	}
-	if( lpWindowName != NULL )
-		strcpy ( wp->szTitle, lpWindowName );
-	else
-		strcpy ( wp->szTitle, "" );
+	strzcpy(wp->szTitle, lpWindowName, sizeof(wp->szTitle));
 #if UPDATEREGIONS
 	wp->update = GdAllocRegion();
 #endif
 	wp->nextrabytes = pClass->cbWndExtra;
-	wp->hInstance = hInstance;
-	wp->nEraseBkGnd = 1;
-	wp->paintBrush = NULL;
-	wp->paintPen = NULL;
 
 	/* calculate client area*/
 	MwCalcClientRect(wp);
@@ -458,15 +395,9 @@ MwDestroyWindow(HWND hwnd,BOOL bSendMsg)
 		SendMessage(hwnd, WM_DESTROY, 0, 0L);
 
 	/*
-	 * Remove from timers
-	 */
-	MwRemoveWndFromTimers(hwnd);
-
-	/*
 	 * Disable all sendmessages to this window.
 	 */
 	wp->pClass = NULL;
-	wp->lpfnWndProc = NULL;
 
 	/*
 	 * Destroy all children, sending WM_DESTROY messages.
@@ -519,7 +450,7 @@ MwDestroyWindow(HWND hwnd,BOOL bSendMsg)
 		if(pmsg->hwnd == wp) {
 			p = p->next;
 			GdListRemove(&mwMsgHead, &pmsg->link);
-			GdItemFree(pmsg);
+			GdItemFree(p);
 		} else
 			p = p->next;
 	}
@@ -540,8 +471,6 @@ MwDestroyWindow(HWND hwnd,BOOL bSendMsg)
 		wp->owndc = NULL;	/* force destroy with ReleaseDC*/
 		ReleaseDC(wp, hdc);
 	}
-
-	free ( wp->szTitle );
 #if UPDATEREGIONS
 	GdDestroyRegion(wp->update);
 #endif
@@ -587,6 +516,7 @@ ShowWindow(HWND hwnd, int nCmdShow)
 BOOL WINAPI
 InvalidateRect(HWND hwnd, CONST RECT *lpRect, BOOL bErase)
 {
+	/* FIXME: handle bErase*/
 	if(!hwnd)
 		MwRedrawScreen();
 	else {
@@ -594,29 +524,20 @@ InvalidateRect(HWND hwnd, CONST RECT *lpRect, BOOL bErase)
 		RECT	rc;
 
 		/* add to update region*/
-		if(!lpRect) {
+		if(!lpRect)
 			GetClientRect(hwnd, &rc);
-			if( hwnd->style & WS_CAPTION )
-				rc.bottom += mwSYSMETRICS_CYCAPTION;
-			if( (hwnd->style & (WS_BORDER | WS_DLGFRAME)) != 0 ) {
-				rc.bottom += mwSYSMETRICS_CYFRAME + 1;
+		else rc = *lpRect;
+		rc.bottom += mwSYSMETRICS_CYCAPTION +
+			mwSYSMETRICS_CYFRAME + 1;
 		rc.right += mwSYSMETRICS_CXFRAME;
-			}
-		}
-		else
-			rc = *lpRect;
-
 		MwUnionUpdateRegion(hwnd, rc.left, rc.top,
 			rc.right-rc.left, rc.bottom-rc.top, TRUE);
 
 		/* if update region not empty, mark as needing painting*/
 		if(hwnd->update->numRects != 0)
 #endif
-
 			if(hwnd->gotPaintMsg == PAINT_PAINTED)
 				hwnd->gotPaintMsg = PAINT_NEEDSPAINT;
-		if( bErase )
-			hwnd->nEraseBkGnd++;
 	}
 	return TRUE;
 }
@@ -626,6 +547,7 @@ InvalidateRect(HWND hwnd, CONST RECT *lpRect, BOOL bErase)
 BOOL WINAPI
 InvalidateRgn(HWND hwnd, HRGN hrgn, BOOL bErase)
 {
+	/* FIXME: handle bErase*/
 	if(hwnd) {
 		if(!hrgn)
 			/* add client area to update region*/
@@ -643,8 +565,6 @@ InvalidateRgn(HWND hwnd, HRGN hrgn, BOOL bErase)
 		if(hwnd->update->numRects != 0)
 			if(hwnd->gotPaintMsg == PAINT_PAINTED)
 				hwnd->gotPaintMsg = PAINT_NEEDSPAINT;
-		if( bErase )
-			hwnd->nEraseBkGnd++;
 	}
 	return TRUE;
 }
@@ -658,17 +578,12 @@ ValidateRect(HWND hwnd, CONST RECT *lprc)
 		MwRedrawScreen();
 	else {
 		/* subtract from update region*/
-		if(!lprc) {
+		if(!lprc)
 			GetClientRect(hwnd, &rc);
-			if( hwnd->style & WS_CAPTION )
-				rc.bottom += mwSYSMETRICS_CYCAPTION;
-			if( (hwnd->style & (WS_BORDER | WS_DLGFRAME)) != 0 ) {
-				rc.bottom += mwSYSMETRICS_CYFRAME + 1;
+		else rc = *lprc;
+		rc.bottom += mwSYSMETRICS_CYCAPTION +
+			mwSYSMETRICS_CYFRAME + 1;
 		rc.right += mwSYSMETRICS_CXFRAME;
-			}
-		} else
-			rc = *lprc;
-
 		MwUnionUpdateRegion(hwnd, rc.left, rc.top,
 			rc.right-rc.left, rc.bottom-rc.top, FALSE);
 
@@ -743,18 +658,17 @@ SetFocus(HWND hwnd)
 		return focuswp;
 
 	oldfocus = focuswp;
-	top = MwGetTopWindow(oldfocus);
-	top2 = MwGetTopWindow(hwnd);
 	SendMessage(oldfocus, WM_KILLFOCUS, (WPARAM)hwnd, 0L);
-	/* send deactivate. Note: should be sent before changing the focuswp var*/
-	if(top2 != top)
-		SendMessage(top, WM_ACTIVATE, (WPARAM)MAKELONG(WA_INACTIVE, 0), (LPARAM)top2);
-
 	focuswp = hwnd;
 	SendMessage(focuswp, WM_SETFOCUS, (WPARAM)oldfocus, 0L);
 
 	/* FIXME SetActiveWindow() here?*/
+	top = MwGetTopWindow(oldfocus);
+	top2 = MwGetTopWindow(focuswp);
 	if(top2 != top) {
+		/* send deactivate*/
+		SendMessage(top, WM_ACTIVATE, (WPARAM)MAKELONG(WA_INACTIVE, 0),
+			(LPARAM)top2);
 		/* repaint captions*/
 		MwPaintNCArea(top);
 #if 0
@@ -767,8 +681,8 @@ SetFocus(HWND hwnd)
 			top2->winrect.right-top2->winrect.left,
 			mwSYSMETRICS_CYCAPTION+4, TRUE);
 #endif
-		/* send activate*/
-		SendMessage(top2, WM_ACTIVATE, (WPARAM)MAKELONG(WA_ACTIVE, 0),
+		/* send deactivate*/
+		SendMessage(top, WM_ACTIVATE, (WPARAM)MAKELONG(WA_ACTIVE, 0),
 			(LPARAM)top);
 		MwPaintNCArea(top2);
 	}
@@ -825,7 +739,7 @@ GetDesktopWindow(VOID)
 HWND
 MwGetTopWindow(HWND hwnd)
 {
-	while(IsWindow(hwnd) && (hwnd->style & WS_CHILD))
+	while(hwnd->style & WS_CHILD)
 		hwnd = hwnd->parent;
 	return hwnd;
 }
@@ -1042,9 +956,10 @@ GetWindowLong(HWND hwnd, int nIndex)
 {
 	switch(nIndex) {
 	case GWL_WNDPROC:
-		return (LONG)hwnd->lpfnWndProc;
+		return (LONG)hwnd->pClass->lpfnWndProc;
 	case GWL_HINSTANCE:
-		return (LONG)hwnd->hInstance;
+		/* nyi*/
+		break;
 	case GWL_HWNDPARENT:
 		return (LONG)hwnd->parent;
 	case GWL_ID:
@@ -1056,18 +971,8 @@ GetWindowLong(HWND hwnd, int nIndex)
 	case GWL_USERDATA:
 		return hwnd->userdata;
 	default:
-#ifdef ARCH_NEED_ALIGN32  /* some architecture needs data to be 32bit aligned*/
-		if(nIndex+3 < hwnd->nextrabytes) {
-			if(!(nIndex & 3))
-				return *(LONG *)&hwnd->extrabytes[nIndex];
-			return MAKELONG(
-				MAKEWORD(hwnd->extrabytes[nIndex+0], hwnd->extrabytes[nIndex+1]),
-				MAKEWORD(hwnd->extrabytes[nIndex+2], hwnd->extrabytes[nIndex+3]));
-		}
-#else
 		if(nIndex+3 < hwnd->nextrabytes)
 			return *(LONG *)&hwnd->extrabytes[nIndex];
-#endif	
 	}
 	return 0;
 }
@@ -1083,41 +988,20 @@ SetWindowLong(HWND hwnd, int nIndex, LONG lNewLong)
 		hwnd->userdata = lNewLong;
 		break;
 	case GWL_WNDPROC:
-		oldval = (LONG)hwnd->lpfnWndProc;
-		hwnd->lpfnWndProc = (WNDPROC)lNewLong;
+		oldval = (LONG)hwnd->pClass->lpfnWndProc;
+		hwnd->pClass->lpfnWndProc = (WNDPROC)lNewLong;
 		break;
 	case GWL_HINSTANCE:
-		oldval = (LONG)hwnd->hInstance;
-		hwnd->hInstance = (HINSTANCE) lNewLong;
-		break;
-	case GWL_STYLE:
-		oldval = (LONG)hwnd->style;
-		hwnd->style = lNewLong;
-		break;
-	case GWL_EXSTYLE:
-		oldval = (LONG)hwnd->exstyle;
-		hwnd->exstyle = lNewLong;
-		break;
 	case GWL_HWNDPARENT:
 	case GWL_ID:
+	case GWL_STYLE:
+	case GWL_EXSTYLE:
 		/* nyi*/
 		break;
 	default:
 		if(nIndex+3 < hwnd->nextrabytes) {
-#ifdef ARCH_NEED_ALIGN32 /* some architecture needs data to be 32bit aligned*/
-			oldval = GetWindowLong(hwnd, nIndex);
-			if(!(nIndex & 3))
-			    *(LONG *)&hwnd->extrabytes[nIndex] = lNewLong;
-			else {
-			    hwnd->extrabytes[nIndex+0] = LOBYTE(LOWORD(lNewLong));
-			    hwnd->extrabytes[nIndex+1] = HIBYTE(LOWORD(lNewLong));
-			    hwnd->extrabytes[nIndex+2] = LOBYTE(HIWORD(lNewLong));
-			    hwnd->extrabytes[nIndex+3] = HIBYTE(HIWORD(lNewLong));
-			}
-#else
 			oldval = GetWindowLong(hwnd, nIndex);
 			*(LONG *)&hwnd->extrabytes[nIndex] = lNewLong;
-#endif
 		}
 		break;
 	}
@@ -1286,7 +1170,6 @@ SetWindowPos(HWND hwnd, HWND hwndInsertAfter, int x, int y, int cx, int cy,
 
 	++mwpaintSerial;	/* increment paint serial # for alphablending*/
 	++mwpaintNC;		/* increment paint serial # for NC painting*/
-	hwnd->nEraseBkGnd++;
 	if(!bZorder && !hidden)
 		MwShowWindow(hwnd, FALSE);
 
@@ -1412,45 +1295,37 @@ ReleaseCapture(VOID)
 	return TRUE;
 }
 
+struct timer {			/* private timer structure*/
+	HWND	hwnd;		/* window associated with timer, NULL if none*/
+	UINT	idTimer;	/* id for timer*/
+	UINT	uTimeout;	/* timeout value, in msecs*/
+	DWORD	dwClockExpires;	/* GetTickCount timer expiration value*/
+	TIMERPROC lpTimerFunc;	/* callback function*/
+};
+
+static struct timer timer;	/* single global timer FIXME*/
+
 UINT WINAPI
 SetTimer(HWND hwnd, UINT idTimer, UINT uTimeout, TIMERPROC lpTimerFunc)
 {
-	struct timer *tm = (struct timer *) malloc ( sizeof(struct timer) );
 	static UINT nextID = 0;	/* next ID when hwnd is NULL*/
 
 	/* assign timer id based on valid window handle*/
-	if( tm == NULL )
-		return 0;
-	
-	tm->hwnd = hwnd;
-	tm->idTimer = hwnd? idTimer: ++nextID;
-	tm->uTimeout = uTimeout;
-	tm->dwClockExpires = GetTickCount() + uTimeout;
-	tm->lpTimerFunc = lpTimerFunc;
-	tm->next = timerList;
-	timerList = tm;
+	timer.hwnd = hwnd;
+	timer.idTimer = hwnd? idTimer: ++nextID;
+	timer.uTimeout = uTimeout;
+	timer.dwClockExpires = GetTickCount() + uTimeout;
+	timer.lpTimerFunc = lpTimerFunc;
 
-	return tm->idTimer;
+	return timer.idTimer;
 }
 
 BOOL WINAPI
 KillTimer(HWND hwnd, UINT idTimer)
 {
-	struct timer *tm = timerList;
-	struct timer *ltm = NULL;
-
-	while ( tm != NULL ) {
-		if( (tm->hwnd == hwnd) && (tm->idTimer == idTimer) ) {
-			if( ltm != NULL )
-				ltm->next = tm->next;
-			else
-				timerList = tm->next;
-			
-			free ( tm );
-			return TRUE;
-		}
-		ltm = tm;
-		tm = tm->next;
+	if(timer.hwnd == hwnd && timer.idTimer == idTimer) {
+		timer.uTimeout = 0;
+		return TRUE;
 	}
 	return FALSE;
 }
@@ -1461,23 +1336,14 @@ KillTimer(HWND hwnd, UINT idTimer)
 UINT
 MwGetNextTimeoutValue(void)
 {
-	int	bestTimeout = -1;
 	int	timeout;
-	struct timer *tm = timerList;
 
-	while ( tm != NULL ) {
-		timeout = tm->dwClockExpires - GetTickCount();
-		if( (timeout > 0) && ((timeout < bestTimeout) || (bestTimeout == -1)) )
-			bestTimeout = timeout;
-		else {
-			/*  If timer has expired, return zero*/
-			if (timeout <= 0)
-				return 0;
-		}
-		tm = tm->next;
+	if(timer.uTimeout) {
+		timeout = timer.dwClockExpires - GetTickCount();
+		if(timeout > 0)
+			return timeout;
 	}
-
-	return bestTimeout;
+	return 0;
 }
 
 /*
@@ -1486,39 +1352,26 @@ MwGetNextTimeoutValue(void)
 void
 MwHandleTimers(void)
 {
-	DWORD	dwTime = 0;	/* should be system time in UTC*/
-	struct timer *tm = timerList;
+	int	timeout;
+	DWORD	dwTime;
 
-	while ( tm != NULL ) {
-		if( GetTickCount() >= tm->dwClockExpires ) {
-			/* call timer function or post timer message*/
-			if( tm->lpTimerFunc )
-				tm->lpTimerFunc ( tm->hwnd, WM_TIMER, tm->idTimer, dwTime );
-			else
-				PostMessage ( tm->hwnd, WM_TIMER, tm->idTimer, 0 );
+	/* check if timer running*/
+	if(timer.uTimeout == 0)
+		return;
 
-			/* reset timer*/
-			tm->dwClockExpires = GetTickCount() + tm->uTimeout;
-		}
-		tm = tm->next;
-	}
-}
+	/* determine if timer expired*/
+	dwTime = GetTickCount();
+	timeout = timer.dwClockExpires - dwTime;
+	if(timeout > 0)
+		return;
 
-/*
- *  Check in timers list if hwnd is present and remove it.
- */
-static void
-MwRemoveWndFromTimers(HWND hwnd)
-{
-	struct timer *next;
-	struct timer *tm = timerList;
+	/* call timer function or post timer message*/
+	if(timer.lpTimerFunc)
+		timer.lpTimerFunc(timer.hwnd, WM_TIMER, timer.idTimer, dwTime);
+	else PostMessage(timer.hwnd, WM_TIMER, timer.idTimer, 0);
 
-	while ( tm != NULL ) {
-		next = tm->next;
-		if( tm->hwnd == hwnd )
-			KillTimer ( tm->hwnd, tm->idTimer );
-		tm = next;
-	}
+	/* reset timer*/
+	timer.dwClockExpires = dwTime + timer.uTimeout;
 }
 
 int WINAPI
@@ -1567,54 +1420,4 @@ GetDlgItem(HWND hDlg, int nIDDlgItem)
 				return wp;
 	}
 	return 0;
-}
-
-BOOL WINAPI
-EnumChildWindows(HWND hWndParent, WNDENUMPROC lpEnumFunc, LPARAM lParam)
-{
-	int	i;
-	HWND *	hchilds;
-	HWND	hwnd = hWndParent->children;
-	int	count = 0;
-	
-	/*  Calculate the count of childs*/
-	while (hwnd) {
-		count++;
-		hwnd = hwnd->siblings;
-	}
-	if (!count)
-		return FALSE;
-
-	/* Allocate an array of pointer, to store childs in reverse order*/
-	hchilds = (HWND *)malloc(sizeof(HWND)*count);
-	if (hchilds == NULL)
-		return FALSE;
-	
-	hwnd = hWndParent->children;
-	i = count;
-    	while (hwnd && (i > 0)) {
-		hchilds[--i] = hwnd;
-		hwnd = hwnd->siblings;
-	}
-		
-	/* Call lpEnumFunc with correct children order*/
-	for (; i < count; i++)
-		if (!lpEnumFunc(hchilds[i], lParam))
-			break;
-	free (hchilds);
-	return TRUE;
-}
-
-int WINAPI
-GetClassName(HWND hWnd, LPTSTR lpClassName, int nMaxCount)
-{
-	int	ln = 0;
-
-	if (hWnd->pClass && hWnd->pClass->szClassName) {
-		ln = strlen(hWnd->pClass->szClassName);
-		if (ln > nMaxCount)
-			ln = nMaxCount;
-		strncpy(lpClassName, hWnd->pClass->szClassName, nMaxCount);
-	}
-	return ln;
 }

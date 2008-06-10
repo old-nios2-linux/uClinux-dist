@@ -537,11 +537,13 @@ GdFillPoly(PSD psd, int count, MWPOINT *points)
  * Note: this routine correctly draws convex, concave, regular, 
  * and irregular polygons.
  */
+#define USE_FLOAT	HAVEFLOAT	/* set to use floating point*/
+
 #define swap(a,b) do { a ^= b; b ^= a; a ^= b; } while (0)
 
 typedef struct {
 	int     x1, y1, x2, y2;
-#if HAVEFLOAT
+#if USE_FLOAT
 	double  x, m;
 #else
 	int     cx, fn, mn, d;
@@ -560,7 +562,7 @@ edge_cmp(const void *lvp, const void *rvp)
 		return lp->y1 - rp->y1;
 
 	/* if the current x values are different, sort on current x */
-#if HAVEFLOAT
+#if USE_FLOAT
 	if (lp->x < rp->x)
 		return -1;
 	else if (lp->x > rp->x)
@@ -619,7 +621,7 @@ GdFillPoly(PSD psd, int count, MWPOINT * pointtable)
 				swap(get[nge].x1, get[nge].x2);
 				swap(get[nge].y1, get[nge].y2);
 			}
-#if HAVEFLOAT
+#if USE_FLOAT
 			get[nge].x = get[nge].x1;
 			get[nge].m = get[nge].x2 - get[nge].x1;
 			get[nge].m /= get[nge].y2 - get[nge].y1;
@@ -651,7 +653,7 @@ GdFillPoly(PSD psd, int count, MWPOINT * pointtable)
 
 		/* using odd parity, render alternating line segments */
 		for (i = 1; i < nae; i += 2) {
-#if HAVEFLOAT
+#if USE_FLOAT
 			int     l = (int)aet[i - 1].x;
 			int     r = (int)aet[i].x;
 #else
@@ -671,7 +673,7 @@ GdFillPoly(PSD psd, int count, MWPOINT * pointtable)
 			if (aet[i].y2 == y)
 				aet[i--] = aet[--nae];
 			else {
-#if HAVEFLOAT
+#if USE_FLOAT
 				aet[i].x += aet[i].m;
 #else
 				aet[i].fn += aet[i].mn;

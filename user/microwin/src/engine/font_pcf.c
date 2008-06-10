@@ -26,7 +26,7 @@ extern MWBOOL gr_usebg;
 /* The user hase the option including ZLIB and being able to    */
 /* directly read compressed .pcf files, or to omit it and save  */
 /* space.  The following defines make life much easier          */
-#if HAVE_PCFGZ_SUPPORT
+#ifdef HAVE_PCFGZ_SUPPORT
 #include <zlib.h>
 #define FILEP gzFile
 #define FOPEN(path, mode)           gzopen(path, mode)
@@ -600,22 +600,12 @@ pcf_createfont(const char *name, MWCOORD height, int attr)
 		}
 
 		for (h = 0; h < (metrics[i].ascent + metrics[i].descent); h++) {
-				unsigned short *val = (unsigned short *) ptr;
-				int            bearing, carry_shift;
-				unsigned short carry = 0;
+			unsigned short *val = (unsigned short *) ptr;
 
-				/* leftBearing correction*/
-				bearing = metrics[i].leftBearing;
-				if (bearing < 0)	/* negative bearing not handled yet*/
-					bearing = 0;
-				carry_shift = 16 - bearing;
-         
-				for (w = 0; w < lwidth; w++) {
-					*output++ = (val[w] >> bearing) | carry;
-					carry = val[w] << carry_shift;
-				}
-				ptr += (xwidth + 1) / 2;
-				y--;
+			for (w = 0; w < lwidth; w++)
+				*output++ = val[w];
+			ptr += (xwidth + 1) / 2;
+			y--;
 		}
 
 		for (; y > 0; y--)
@@ -632,8 +622,8 @@ pcf_createfont(const char *name, MWCOORD height, int attr)
 		unsigned short n = encoding->map[i];
 		if (n == 0xffff)	/* map non-existent chars to default char */
 			n = encoding->map[encoding->defaultchar];
-		((unsigned long *)pf->cfont->offset)[i] = goffset[n];
-		((unsigned char *)pf->cfont->width)[i] = gwidth[n];
+		pf->cfont->offset[i] = goffset[n];
+		pf->cfont->width[i] = gwidth[n];
 	}
 	pf->cfont->size = encoding->count;
 
@@ -683,11 +673,11 @@ pcf_unloadfont(PMWFONT font)
 
 	if (pfc) {
 		if (pfc->width)
-			free((char *)pf->cfont->width);
+			free(pf->cfont->width);
 		if (pfc->offset)
-			free((char *)pf->cfont->offset);
+			free(pf->cfont->offset);
 		if (pfc->bits)
-			free((char *)pf->cfont->bits);
+			free(pf->cfont->bits);
 
 		free(pf->cfont);
 	}

@@ -84,7 +84,7 @@ MT_Open(MOUSEDEVICE *pmd)
    usleep (250000);
    tcflush (mt_fd, TCIOFLUSH);
 
-   return mt_fd;
+   return 0;
 }
 
 /*

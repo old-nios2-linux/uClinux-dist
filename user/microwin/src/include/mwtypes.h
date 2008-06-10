@@ -1,18 +1,12 @@
 #ifndef _MWTYPES_H
 #define _MWTYPES_H
 /*
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  *
  * Exported Microwindows engine typedefs and defines
  */
 #define MWPACKED	__attribute__ ((aligned(1), packed))
-
-/*include the eCos configuration "translation" header */
-#if __ECOS
-#include <ecosmwconfig.h>
-#endif
-
 
 /* builtin font std names*/
 #define MWFONT_SYSTEM_VAR	"System"	/* winFreeSansSerif 11x13 (ansi)*/
@@ -89,9 +83,8 @@
 #define	MWMODE_SRC_ATOP	23
 #define	MWMODE_DST_ATOP	24
 #define	MWMODE_PORTERDUFF_XOR	25
-#define MWMODE_SRCTRANSCOPY 26
 
-#define	MWMODE_MAX		26
+#define	MWMODE_MAX		25
 
 
 /* Line modes */
@@ -119,8 +112,6 @@
 #define MWRGB(r,g,b)	MWARGB(255,(r),(g),(b))		/* rgb full alpha*/
 #define MW0RGB(r,g,b)	MWARGB(0,(r),(g),(b))		/* rgb no alpha*/
 
-/* no color, used for transparency, should not by 0, -1 or any MWRGB color*/
-#define MWNOCOLOR	0x01000000L
 
 /* convert an MWROP to drawing mode MWMODE value*/
 #define MWROP_TO_MODE(op)	((op) >> 24)
@@ -220,8 +211,6 @@
 #define MWPF_TRUECOLOR555  6	/* pixel is packed 16 bits 5/5/5 truecolor*/
 #define MWPF_TRUECOLOR332  7	/* pixel is packed 8 bits 3/3/2 truecolor*/
 #define MWPF_TRUECOLOR8888 8	/* pixel is packed 32 bits 8/8/8/8 truecolor with alpha */
-#define MWPF_TRUECOLOR233  9	/* pixel is packed 8 bits 2/3/3 truecolor (BGR) */
-#define MWPF_HWPIXELVAL   10	/* pseudo, no convert, pixels are in hw format*/
 
 /*
  * MWPIXELVAL definition: changes based on target system
@@ -237,7 +226,7 @@
  *    2) Will use some other PF_* format, in which case the application
  *       is well aware of which pixel-format it uses and can avoid the
  *       device specific RGB2PIXEL and use RGB2PIXEL565 etc. instead,
- *       and specifiy the pixel format as MWPF_TRUECOLOR565 etc. when
+ *       and specifiy the pixel fomar as MWPF_TRUECOLOR565 etc. when
  *       calling the GrArea function(s).
  */
 #ifndef MWPIXEL_FORMAT
@@ -253,7 +242,7 @@
 #if (MWPIXEL_FORMAT == MWPF_TRUECOLOR565) || (MWPIXEL_FORMAT == MWPF_TRUECOLOR555)
 typedef unsigned short MWPIXELVAL;
 #else
-  #if (MWPIXEL_FORMAT == MWPF_TRUECOLOR332) || (MWPIXEL_FORMAT == MWPF_TRUECOLOR233)
+  #if MWPIXEL_FORMAT == MWPF_TRUECOLOR332
   typedef unsigned char MWPIXELVAL;
   #else
     #if MWPIXEL_FORMAT == MWPF_PALETTE
@@ -526,10 +515,7 @@ typedef struct {
 
 	MWUCHAR lfClass;		/* font class (renderer) */
 
-	/* Following only used by (the legacy) FONTMAPPER when enabled.
-	 * They are only kept around to stay source and binary
-	 * compatible to previous microwindows releases.
-	 */
+	/* following only used by FONTMAPPER when enabled*/
 	MWUCHAR	lfPitch;		/* font pitch */
 	MWUCHAR	lfRoman;		/* =1 for Roman letters (upright) */
 	MWUCHAR	lfSerif;		/* =1 for Serifed font */
@@ -539,7 +525,6 @@ typedef struct {
 	MWUCHAR	lfProportional;		/* =1 for Proportional font */
 	MWUCHAR	lfOblique;		/* =1 for Oblique (kind of Italic) */
 	MWUCHAR	lfSmallCaps;		/* =1 for small caps */
-	/* End of fontmapper-only variables */
 
 	/* render-dependent full path or facename here*/
 	char	lfFaceName[MWLF_FACESIZE];/* font name, may be aliased*/
@@ -667,7 +652,6 @@ typedef struct {
 #define MWIMAGE_BGR		00	/* compression flag: BGR byte order*/
 #define MWIMAGE_RGB		02	/* compression flag: RGB not BGR bytes*/
 #define MWIMAGE_ALPHA_CHANNEL   04	/* compression flag: 32-bit w/alpha */
-#define MWIMAGE_555		0x08	/* compression flag: 5/5/5 format*/
 
 typedef struct {
 	int		width;		/* image width in pixels*/

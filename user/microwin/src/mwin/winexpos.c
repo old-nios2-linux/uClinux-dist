@@ -1,12 +1,8 @@
 /*
- * Copyright (c) 1999, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 1991 David I. Bell
  *
  * Non-Win32 API helper routines for window showing/hiding/exposing
- *
- * Modifications:
- *  Date		Author					Description
- *	2003/09/22	Gabriele Brugnoni		Set eraseBkGnd window flag when exposing.
  */
 #include "windows.h"
 #include "wintern.h"
@@ -42,7 +38,6 @@ MwHideWindow(HWND hwnd,BOOL bChangeFocus, BOOL bSendMsg)
 		return;
 
 	++mwpaintNC;		/* experimental NC paint handling*/
-	wp->nEraseBkGnd++;
 
 	/* send hide message if currently visible*/
 	if(bSendMsg && wp->unmapcount == 0)
@@ -105,7 +100,6 @@ MwShowWindow(HWND hwnd, BOOL bSendMsg)
 		return;
 
 	++mwpaintNC;		/* experimental NC paint handling*/
-	wp->nEraseBkGnd++;
 
 	if (wp->unmapcount)
 		wp->unmapcount--;
@@ -148,7 +142,6 @@ MwRaiseWindow(HWND hwnd)
 		return;
 
 	++mwpaintNC;		/* experimental NC paint handling*/
-	wp->nEraseBkGnd++;
 
 	/*
 	 * If this is already the highest window then we are done.
@@ -203,7 +196,6 @@ MwLowerWindow(HWND hwnd)
 		return;
 
 	++mwpaintNC;		/* experimental NC paint handling*/
-	wp->nEraseBkGnd++;
 
 	/*
 	 * Find the sibling just before this window so we can unlink us.
@@ -323,7 +315,6 @@ MwClearWindow(HWND wp, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height,
 	/*
 	 * Now do the exposure if required.
 	 */
-	wp->nEraseBkGnd++;
 	if (exposeflag)
 		MwDeliverExposureEvent(wp, x, y, width, height);
 }
@@ -342,7 +333,6 @@ MwExposeArea(HWND wp, MWCOORD rootx, MWCOORD rooty, MWCOORD width,
 		return;
 
 	++mwpaintNC;		/* experimental NC paint handling*/
-	wp->nEraseBkGnd++;
 
 	/*
 	 * First see if the area overlaps the window including the border.

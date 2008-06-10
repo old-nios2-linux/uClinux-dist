@@ -1,14 +1,10 @@
 /*
- * Copyright (c) 1999, 2000, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000 Greg Haerr <greg@censoft.com>
  * Copyright (c) 1991 David I. Bell
+ * Permission is granted to use, distribute, or modify this source,
+ * provided that this copyright notice remains intact.
  *
  * Graphics server event routines for windows.
- *
- * Modifications:
- *  Date		Author			Description
- *	2003/09/24	Gabriele Brugnoni	In MwDeliverMouseEvent, if window is disabled,
- *                                      	(or wnd is child and parent disab), do nothing.
- *
  */
 #include "windows.h"
 #include "wintern.h"
@@ -17,10 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static LPFN_KEYBTRANSLATE mwPtrKeyboardTranslator = NULL;
-
 #if !(DOS_TURBOC | DOS_QUICKC | _MINIX | VXWORKS)
-static int
+int
 abs(int n)
 {
 	return n >= 0? n: -n;
@@ -188,7 +182,7 @@ int mwCurrentButtons;
 void 
 MwDeliverMouseEvent(int buttons, int changebuttons, MWKEYMOD modifiers)
 {
-	HWND	hwnd, top;
+	HWND	hwnd;
 	int	hittest;
 	UINT	msg;
 
@@ -197,15 +191,6 @@ MwDeliverMouseEvent(int buttons, int changebuttons, MWKEYMOD modifiers)
 	hwnd = GetCapture();
 	if(!hwnd)
 		hwnd = mousewp;
-
-	/* if wnd is disabled, or window is child and parent disabled, do nothing*/
-	if( hwnd == NULL || !IsWindowEnabled(hwnd) )
-		return;
-
-	top = MwGetTopWindow(hwnd);
-	if( top != NULL && !IsWindowEnabled(top) )
-		return;
-
 	hittest = SendMessage(hwnd, WM_NCHITTEST, 0, MAKELONG(cursorx,cursory));
 
 	if(!changebuttons)
@@ -228,23 +213,13 @@ MwDeliverMouseEvent(int buttons, int changebuttons, MWKEYMOD modifiers)
 }
 
 /*
- *  Keyboard filter function
- */
-void WINAPI
-MwSetKeyboardTranslator(LPFN_KEYBTRANSLATE pFn)
-{
-	mwPtrKeyboardTranslator = pFn;
-}
-
-/*
  * Deliver a keyboard event.
  */
 void
 MwDeliverKeyboardEvent(MWKEY keyvalue, MWKEYMOD modifiers, MWSCANCODE scancode,
 	BOOL pressed)
 {
-	WPARAM VK_Code = -1;		/* set to default if no VK found. */
-    	LPARAM lParam = 0L;		/* used to specify control keys */
+	WPARAM VK_Code = keyvalue;	/* default no translation*/
 
 	/* Keysyms from 1-255 are mapped to ASCII*/
 	if (keyvalue < 1 || keyvalue > 255)
@@ -443,19 +418,10 @@ MwDeliverKeyboardEvent(MWKEY keyvalue, MWKEYMOD modifiers, MWSCANCODE scancode,
 		break;
 	}
 
-	/* if no VK defined, set to keyvalue default*/
-	if( VK_Code == -1 )
-	    VK_Code = keyvalue;
-	else
-	    lParam |= (1 << 24);	/* set control bit in lParam*/
-		
-	if (mwPtrKeyboardTranslator)
-		mwPtrKeyboardTranslator(&VK_Code, &lParam, &pressed);
-
 	if (pressed)
-		PostMessage(focuswp, WM_KEYDOWN, VK_Code, lParam);
+		PostMessage(focuswp, WM_KEYDOWN, VK_Code, 0L);
 	else
-		PostMessage(focuswp, WM_KEYUP, VK_Code, lParam);
+		PostMessage(focuswp, WM_KEYUP, VK_Code, 0L);
 }
 
 /*
@@ -495,7 +461,6 @@ MwUnionUpdateRegion(HWND wp, MWCOORD x, MWCOORD y, MWCOORD width,
 	rc.top = y + wp->winrect.top;
 	rc.right = rc.left + width;
 	rc.bottom = rc.top + height;
-	wp->nEraseBkGnd++;
 
 	if(bUnion)
 		GdUnionRectWithRegion(&rc, wp->update);

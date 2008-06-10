@@ -23,10 +23,6 @@ GdDecodeTIFF(char *path, PMWIMAGEHDR pimage)
 	TIFF 	*tif;
 	int	w, h;
 	long	size;
-	static TIFFErrorHandler prev_handler = NULL;
-
-	if (!prev_handler)
-		prev_handler = TIFFSetErrorHandler(NULL);
 
 	tif = TIFFOpen(path, "r");
 	if (!tif)
@@ -45,8 +41,7 @@ GdDecodeTIFF(char *path, PMWIMAGEHDR pimage)
 	pimage->palette = NULL;
 
 	/* upside down, RGB order (with alpha)*/
-	/* alpha removed for time being, since only handled by display hw*/
-	pimage->compression = MWIMAGE_RGB | /*MWIMAGE_ALPHA_CHANNEL |*/
+	pimage->compression = MWIMAGE_RGB | MWIMAGE_ALPHA_CHANNEL |
 		MWIMAGE_UPSIDEDOWN;
 
 	/* Allocate image */

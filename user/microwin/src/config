@@ -37,20 +37,12 @@
 # note: ELKS can't build client/server nano-X, nor widget lib
 #
 ####################################################################
-ifeq ($(CONFIG_CLEOPATRA), y)
-ARCH                     = CLEOPATRA
-BIGENDIAN                = Y
-else
-ARCH                     = uClinux
-ifeq ($(CONFIG_M68KNOMMU),y)
-BIGENDIAN                = Y
-else
+ARCH                     = blackfin
 BIGENDIAN                = N
-endif
-endif
 NATIVETOOLSPREFIX        = 
 ARMTOOLSPREFIX           = arm-linux-
 MIPSTOOLSPREFIX          = mipsel-linux-
+BLACKFINTOOLSPREFIX	 = $(CROSS_COMPILE)
 POWERPCTOOLSPREFIX       = powerpc-linux-
 SHTOOLSPREFIX            = sh-linux-gnu
 RTEMSTOOLSPREFIX         = i386-rtemself-
@@ -60,53 +52,37 @@ RTEMSTOOLSPREFIX         = i386-rtemself-
 # Compiling options
 #
 ####################################################################
-
-ifdef NOT_DEFINED_EVER
 OPTIMIZE                 = Y
 DEBUG                    = N
 VERBOSE                  = N
 THREADSAFE               = Y
 GPROF                    = N
-else
-OPTIMIZE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_OPTIMIZE))
-DEBUG                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_DEBUG))
-VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_VERBOSE))
-VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_THREADSAFE))
-VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_GPROF))
-endif
 
 ####################################################################
 #
 # Libraries to build: microwin, nano-X, nanowidget, object frameworks
 #
 ####################################################################
-
-ifdef NOT_DEFINED_EVER
 MICROWIN                 = Y
 NANOX                    = Y
 SHAREDLIBS               = N
 OBJFRAMEWORK             = N
-else
-MICROWIN                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_MICROWIN))
-NANOX                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_NANOX))
-SHAREDLIBS               = $(subst y,Y,$(CONFIG_USER_MICROWIN_SHAREDLIBS))
-OBJFRAMEWORK             = $(subst y,Y,$(CONFIG_USER_MICROWIN_OBJFRAMEWORK))
-endif
+
 
 ####################################################################
 #
 # Demos to build
 #
 ####################################################################
-MICROWINDEMO             = $(subst y,Y,$(CONFIG_USER_MICROWIN_MICROWINDEMO))
-NANOXDEMO                = $(subst y,Y,$(CONFIG_USER_MICROWIN_NANOXDEMO))
+MICROWINDEMO             = Y
+NANOXDEMO                = Y
 
 ####################################################################
 #
 # Applications to build
 #
 ####################################################################
-NANOWM                   = $(subst y,Y,$(CONFIG_USER_MICROWIN_NANOWM))
+NANOWM                   = Y
 
 ####################################################################
 #
@@ -124,24 +100,7 @@ NANOWM                   = $(subst y,Y,$(CONFIG_USER_MICROWIN_NANOWM))
 # define MWPF_TRUECOLOR332  /* pixel is packed 8 bits 3/3/2 truecolor*/
 #
 ####################################################################
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_PALETTE),y)
-  SCREEN_PIXTYPE         = MWPF_PALETTE
-endif
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_TRUECOLOR0888),y)
-  SCREEN_PIXTYPE         = MWPF_TRUECOLOR0888
-endif
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_TRUECOLOR888),y)
-  SCREEN_PIXTYPE         = MWPF_TRUECOLOR888
-endif
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_TRUECOLOR565),y)
-  SCREEN_PIXTYPE         = MWPF_TRUECOLOR565
-endif
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_TRUECOLOR555),y)
-  SCREEN_PIXTYPE         = MWPF_TRUECOLOR555
-endif
-ifeq ($(CONFIG_USER_MICROWIN_MWPF_TRUECOLOR332),y)
-  SCREEN_PIXTYPE         = MWPF_TRUECOLOR332
-endif
+SCREEN_PIXTYPE           = MWPF_TRUECOLOR0888
 
 ####################################################################
 #
@@ -150,16 +109,12 @@ endif
 # or for speed or debugging.  This affects the nano-X server only.
 #
 ####################################################################
-LINK_APP_INTO_SERVER     = $(subst y,Y,$(CONFIG_USER_MICROWIN_LINK_APP_INTO_SERVER))
+LINK_APP_INTO_SERVER     = N
 
 ####################################################################
 # Shared memory support for Nano-X client/server protocol speedup
 ####################################################################
-ifdef NOT_DEFINED_EVER
 HAVE_SHAREDMEM_SUPPORT   = N
-else
-HAVE_SHAREDMEM_SUPPORT   = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_SHAREDMEM_SUPPORT))
-endif
 
 ####################################################################
 #
@@ -167,49 +122,36 @@ endif
 # Supporting either below drags in libc stdio, which may not be wanted
 #
 ####################################################################
-HAVE_FILEIO              = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_FILEIO))
+HAVE_FILEIO              = Y
 
 ####################################################################
 # BMP, GIF reading support
 ####################################################################
-HAVE_BMP_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_BMP_SUPPORT))
-HAVE_GIF_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_GIF_SUPPORT))
-HAVE_PNM_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_PNM_SUPPORT))
-HAVE_XPM_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_XPM_SUPPORT))
+HAVE_BMP_SUPPORT         = N
+HAVE_GIF_SUPPORT         = Y
+HAVE_PNM_SUPPORT         = Y
+HAVE_XPM_SUPPORT         = Y
 
 ####################################################################
 # JPEG support through libjpeg, see README.txt in contrib/jpeg
 ####################################################################
-ifdef NOT_DEFINED_EVER
-HAVE_JPEG_SUPPORT        = Y
+HAVE_JPEG_SUPPORT        = N
 INCJPEG                  = .
-LIBJPEG                  = /usr/lib/libjpeg.a
-else
-HAVE_JPEG_SUPPORT        = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_JPEG_SUPPORT))
-LIBJPEG                  = $(ROOTDIR)/lib/libjpeg.a
-endif
+LIBJPEG                  = /usr/lib/libjpeg.so
 
 ####################################################################
 # PNG support via libpng and libz
 ####################################################################
-ifdef NOT_DEFINED_EVER
 HAVE_PNG_SUPPORT         = N
 INCPNG                   = .
 LIBPNG                   = /usr/lib/libpng.a
-INCZ                     = .
-LIBZ                     = /usr/lib/libz.a
-else
-HAVE_PNG_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_PNG_SUPPORT))
-# INCPNG                   = .
-LIBPNG                   = $(ROOTDIR)/lib/libpng.a
-LIBZ                     = $(ROOTDIR)/lib/libz.a
-endif
+LIBZ                     = -lz
 
 ####################################################################
 # TIFF support through libtiff
 ####################################################################
 HAVE_TIFF_SUPPORT        = N
-INCTIFF                  = /usr/include
+INCTIFF                  = .
 LIBTIFF                  = /usr/lib/libtiff.a
 
 ####################################################################
@@ -222,34 +164,25 @@ FNT_FONT_DIR             = "fonts/bdf"
 ####################################################################
 # T1 adobe type1 font support thru t1lib
 ####################################################################
-HAVE_T1LIB_SUPPORT       = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_T1LIB_SUPPORT))
-# INCT1LIB                 = /usr/include
-# LIBT1LIB                 = /usr/lib/libt1.a
+HAVE_T1LIB_SUPPORT       = N
+INCT1LIB                 = /usr/include
+LIBT1LIB                 = /usr/local/lib/libt1.a
 
 ####################################################################
 # TrueType font support thru FreeType 1.x
 ####################################################################
-ifdef NOT_DEFINED_EVER
 HAVE_FREETYPE_SUPPORT    = N
 INCFTLIB                 = /usr/include/freetype1
 LIBFTLIB                 = /usr/lib/libttf.so
-FREETYPE_FONT_DIR        = "fonts/truetype"
-else
-HAVE_FREETYPE_SUPPORT    = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_FREETYPE_SUPPORT))
-# INCFTLIB                 = /usr/include
-# LIBFTLIB                 = /usr/lib/libttf.so
-FREETYPE_FONT_DIR        = "/usr/local/microwin/fonts"
-endif
+FREETYPE_FONT_DIR        = "/usr/fonts/truetype"
 
 ####################################################################
 # Support for many kinds of font thru FreeType 2.x
 # Must also set FREETYPE_FONT_DIR in the Freetype 1.x section
 ####################################################################
-HAVE_FREETYPE_2_SUPPORT  = N
-xINCFT2LIB                = /usr/include
-xLIBFT2LIB                = /usr/lib/libfreetype.a
-INCFT2LIB                = /usr/local/include
-LIBFT2LIB                = /usr/local/lib/libfreetype.a
+HAVE_FREETYPE_2_SUPPORT  = Y
+INCFT2LIB                = $(STAGEDIR)/usr/include
+LIBFT2LIB                = -lfreetype -lz
 
 ####################################################################
 # PCF font support 
@@ -258,23 +191,23 @@ LIBFT2LIB                = /usr/local/lib/libfreetype.a
 ####################################################################
 HAVE_PCF_SUPPORT         = Y
 HAVE_PCFGZ_SUPPORT       = N
-PCF_FONT_DIR             = "fonts/pcf"
+PCF_FONT_DIR             = "/usr/fonts/pcf"
 
 ####################################################################
 # Chinese Han Zi Ku loadable font support
 ####################################################################
-HAVE_HZK_SUPPORT         = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_HZK_SUPPORT))
+HAVE_HZK_SUPPORT         = N
 HZK_FONT_DIR             = "fonts/chinese"
 
 ####################################################################
 # Chinese BIG5 compiled in font support (big5font.c)
 ####################################################################
-HAVE_BIG5_SUPPORT        = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_BIG5_SUPPORT))
+HAVE_BIG5_SUPPORT        = N
 
 ####################################################################
 # Chinese GB2312 compiled in font support (gb2312font.c)
 ####################################################################
-HAVE_GB2312_SUPPORT      = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_GB2312_SUPPORT))
+HAVE_GB2312_SUPPORT      = N
 
 ####################################################################
 # Japanese JISX0213 compiled in font support (jisx0213-12x12.c)
@@ -293,17 +226,9 @@ HAVE_EUCJP_SUPPORT       = N
 EUCJP_FONT_DIR           = "fonts/japanese"
 
 ####################################################################
-# Fribidi and shape/joining support for right to left rendering
-####################################################################
-HAVE_FRIBIDI_SUPPORT     = N
-HAVE_SHAPEJOINING_SUPPORT = N
-INCFRIBIDI               = $(TOP)/../../../include
-LIBFRIBIDI               = $(TOP)/../../../lib/libfribidi.a
-
-####################################################################
 # Generate screen driver interface only with no fonts or clipping
 ####################################################################
-NOFONTSORCLIPPING        = $(subst y,Y,$(CONFIG_USER_MICROWIN_NOFONTSORCLIPPING))
+NOFONTSORCLIPPING        = N
 
 ####################################################################
 #
@@ -315,15 +240,15 @@ NOFONTSORCLIPPING        = $(subst y,Y,$(CONFIG_USER_MICROWIN_NOFONTSORCLIPPING)
 # UPDATEREGIONS paints in update clipping region only for better look and feel
 #
 ####################################################################
-ERASEMOVE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_ERASEMOVE))
-UPDATEREGIONS            = $(subst y,Y,$(CONFIG_USER_MICROWIN_UPDATEREGIONS))
+ERASEMOVE                = Y
+UPDATEREGIONS            = Y
 
 ####################################################################
 #
 # Link with Gray Palette (valid only for 4bpp modes)
 #
 ####################################################################
-GRAYPALETTE              = $(subst y,Y,$(CONFIG_USER_MICROWIN_GRAYPALETTE))
+GRAYPALETTE              = N
 
 ####################################################################
 #
@@ -333,7 +258,7 @@ GRAYPALETTE              = $(subst y,Y,$(CONFIG_USER_MICROWIN_GRAYPALETTE))
 ifneq ($(ARCH), ELKS)
 
 # X Window screen, mouse and kbd drivers
-X11                      = $(subst y,Y,$(CONFIG_USER_MICROWIN_X11))
+X11                      = N
 
 ifeq ($(X11), Y)
 # startup screen width, height, (depth for palette mode only)
@@ -350,32 +275,23 @@ else
 # framebuffer screen driver (linear and/or vga 4 planes)
 # set VTSWITCH to include virtual terminal switch code
 # set FBREVERSE to reverse bit orders in 1,2,4 bpp
-# set FBVGA=N for all systems without VGA hardware (for MIPS must=N)
-ifdef NOT_DEFINED_EVER
+FBVGA                    = N
 FRAMEBUFFER              = Y
-FBVGA                    = Y
-VTSWITCH                 = Y
+FBVGA                    = N
+VTSWITCH                 = N
 FBREVERSE                = N
-else
-FRAMEBUFFER              = $(subst y,Y,$(CONFIG_USER_MICROWIN_FRAMEBUFFER))
-FBVGA                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_FBVGA))
-VTSWITCH                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_VTSWITCH))
-FBREVERSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_FBREVERSE))
-endif
 
 # set HAVETEXTMODE=Y for systems that can switch between text & graphics.
 # On a graphics-only embedded system, such as Osprey and Embedded
 # Planet boards, set HAVETEXTMODE=N
-HAVETEXTMODE             = Y
+HAVETEXTMODE             = N
 
 # svgalib screen driver
-VGALIB                   = $(subst y,Y,$(CONFIG_USER_MICROWIN_VGALIB))
+VGALIB                   = N
 
 # direct VGA hardware access screen driver
-HWVGA                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_HWVGA))
+HWVGA                    = N
 
-#Cleopatra VGA
-CLEOVGA                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_CLEOVGA))
 ####################################################################
 # Mouse drivers
 # GPMMOUSE	gpm mouse
@@ -395,13 +311,12 @@ CLEOVGA                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_CLEOVGA))
 # PSIONMOUSE	Psion 5 (/dev/touch_psion)
 # YOPYMOUSE	Yopy (/dev/yopy-ts)
 # HARRIERMOUSE	NEC Harrier (/dev/tpanel)
+# AD7877MOUSE	Analog Devices AD7877 Touch Screen Digitizer (/dev/ts0)
 # TSLIBMOUSE    Common touchscreen driver using tslib  
 ####################################################################
-ifdef NO_DEFINED_EVER
 GPMMOUSE                 = N
-SERMOUSE                 = Y
+SERMOUSE                 = N
 SUNMOUSE                 = N
-NOMOUSE                  = N
 IPAQMOUSE                = N
 ZAURUSMOUSE              = N
 TUXMOUSE                 = N
@@ -414,61 +329,24 @@ PSIONMOUSE               = N
 YOPYMOUSE                = N
 HARRIERMOUSE             = N
 LIRCMOUSE                = N
+AD7877MOUSE              = N
 TSLIBMOUSE               = N
-else
-GPMMOUSE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_GPMMOUSE))
-SERMOUSE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_SERMOUSE))
-SUNMOUSE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_SUNMOUSE))
-NOMOUSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_NOMOUSE))
-IPAQMOUSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_IPAQMOUSE))
-ZAURUSMOUSE              = $(subst y,Y,$(CONFIG_USER_MICROWIN_ZAURUSMOUSE))
-TUXMOUSE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_TUXMOUSE))
-ADSMOUSE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_ADSMOUSE))
-ADS7846MOUSE             = $(subst y,Y,$(CONFIG_USER_MICROWIN_ADS7846MOUSE))
-EPMOUSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_EPMOUSE))
-VHMOUSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_VHMOUSE))
-MTMOUSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_MTMOUSE))
-PSIONMOUSE               = $(subst y,Y,$(CONFIG_USER_MICROWIN_PSIONMOUSE))
-YOPYMOUSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_YOPYMOUSE))
-UCTSMOUSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_UCTSMOUSE))
-DE2TSMOUSE               = $(subst y,Y,$(CONFIG_USER_MICROWIN_DE2TSMOUSE))
-CLEOMOUSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_CLEOMOUSE))
-LIRCMOUSE                = $(subst y,Y,$(CONFIG_USER_MICROWIN_LIRCMOUSE))
-TSLIBMOUSE               = $(subst y,Y,$(CONFIG_USER_MICROWIN_TSLIBMOUSE))
-endif
+NOMOUSE                  = Y
 
 # keyboard or null kbd driver
-ifdef NOT_DEFINED_EVER
 TTYKBD                   = N
-SCANKBD                  = Y
+SCANKBD                  = N
 PIPEKBD                  = N
 IPAQKBD                  = N
 LIRCKBD                  = N
-NOKBD                    = N
-else
-TTYKBD                   = $(subst y,Y,$(CONFIG_USER_MICROWIN_TTYKBD))
-SCANKBD                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_SCANKBD))
-PIPEKBD                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_PIPEKBD))
-IPAQKBD                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_IPAQKBD))
-LIRCKBD                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_LIRCKBD))
-CLEOKBD                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_CLEOKBD))
-NOKBD                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_NOKBD))
-endif
+NOKBD                    = Y
 
-endif  # X11
+endif
 
 # Secondary keyboard drivers.
 # You may have a normal keyboard driver in addition to these
 # drivers, e.g. for both normal keyboard and IR input.
 LIRCKBD2                 = N
-
-####################################################################
-# VNC server support through libvncserver
-####################################################################
-HAVE_VNCSERVER_SUPPORT   = N
-VNCSERVER_PTHREADED      = N
-LIBVNC                   = /usr/local/lib/libvncserver.a
-INCVNC                   = /usr/local/include
 
 ####################################################################
 # Screen driver specific configuration

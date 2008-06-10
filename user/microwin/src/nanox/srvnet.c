@@ -6,6 +6,9 @@
  * Copyright (c) 2000 Morten Rolland <mortenro@screenmedia.no>
  * Portions Copyright (c) 1991 David I. Bell
  *
+ * Permission is granted to use, distribute, or modify this source,
+ * provided that this copyright notice remains intact.
+ *
  * Completely rewritten for speed by Greg Haerr
  *
  * This is the server side of the network interface, which accepts
@@ -1104,16 +1107,6 @@ GrDrawImageToFitWrapper(void *r)
 }
 
 static void
-GrDrawImagePartToFitWrapper(void *r)
-{
-	nxDrawImagePartToFitReq *req = r;
-
-	GrDrawImagePartToFit(req->drawid, req->gcid, req->dx, req->dy, req->dwidth,
-		req->dheight,req->sx, req->sy, req->swidth,
-		req->sheight, req->imageid);
-}
-
-static void
 GrFreeImageWrapper(void *r)
 {
 	nxFreeImageReq *req = r;
@@ -1133,7 +1126,6 @@ GrGetImageInfoWrapper(void *r)
 }
 #else /* if ! MW_FEATURE_IMAGES */
 #define GrDrawImageToFitWrapper GrNotImplementedWrapper
-#define GrDrawImagePartToFitWrapper GrNotImplementedWrapper
 #define GrFreeImageWrapper GrNotImplementedWrapper
 #define GrGetImageInfoWrapper GrNotImplementedWrapper
 #endif
@@ -1613,8 +1605,7 @@ void GrShmCmdsFlushWrapper(void *r);
 struct GrFunction {
 	void		(*func)(void *);
 	GR_FUNC_NAME 	name;
-};
-static const struct GrFunction GrFunctions[] = {
+} GrFunctions[] = {
 	/*   0 */ {GrOpenWrapper, "GrOpen"},
 	/*   1 */ {GrCloseWrapper, "GrClose"},
 	/*   2 */ {GrGetScreenInfoWrapper, "GrGetScreenInfo"},
@@ -1740,7 +1731,6 @@ static const struct GrFunction GrFunctions[] = {
 	/* 122 */ {GrSetTransformWrapper, "GrSetTransform" },
 	/* 123 */ {GrCreateFontFromBufferWrapper, "GrCreateFontFromBuffer"},
 	/* 124 */ {GrCopyFontWrapper, "GrCopyFont"},
-	/* 125 */ {GrDrawImagePartToFitWrapper, "GrDrawImagePartToFit"},
 };
 
 void
@@ -2230,7 +2220,7 @@ GsHandleClient(int fd)
 	req = (nxReq *)&buf[0];
 
 	if(req->reqType < GrTotalNumCalls) {
-		curfunc = (char *)GrFunctions[req->reqType].name;
+		curfunc = GrFunctions[req->reqType].name;
 		/*DPRINTF("HandleClient %s\n", curfunc);*/
 		GrFunctions[req->reqType].func(req);
 	} else {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2001, 2003, 2005 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
  *
  * Image decode routine for XPM files
  */
@@ -30,7 +30,7 @@ XPM_parse_color(char *color)
 {
 	if (color[0] != '#') {
 		if (!strcmp(color, "None"))
-			return MWNOCOLOR;	/* Transparent */
+			return -1L;	/* Transparent */
 		else
 			return 0;	/* If its an X color, then we bail */
 	} else {
@@ -41,7 +41,7 @@ XPM_parse_color(char *color)
 
 		switch (strlen(sptr)) {
 		case 6:
-			return (255L << 24) | strtol(sptr, NULL, 16);
+			return strtol(sptr, NULL, 16);
 
 		case 9:	/* RRRGGGBBB */
 			strncpy(rstr, sptr, 3);
@@ -55,7 +55,7 @@ XPM_parse_color(char *color)
 			r = strtol(rstr, NULL, 16) >> 4;
 			g = strtol(gstr, NULL, 16) >> 4;
 			b = strtol(bstr, NULL, 16) >> 4;
-			return (long)(255L << 24 | r << 16 | g << 8 | b);
+			return ((long)(r << 16 | g << 8 | b));
 
 		case 12:
 			strncpy(rstr, sptr, 4);
@@ -70,8 +70,7 @@ XPM_parse_color(char *color)
 			g = strtol(gstr, NULL, 16) >> 8;
 			b = strtol(bstr, NULL, 16) >> 8;
 
-			return (long)(255L << 24 |
-				(r & 0xFF) << 16 | (g & 0xFF) << 8 | (b & 0xFF));
+			return ((long)((r & 0xFF) << 16 | (g & 0xFF) << 8 | (b & 0xFF)));
 		}
 	}
 
@@ -89,22 +88,23 @@ XPM_parse_color(char *color)
 
 /* The magic that "should" indicate an XPM (does it really?) */
 #define XPM_MAGIC "/* XPM */"
+#define XPM_TRANSCOLOR 0x01000000
 
 int
 GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 {
 	struct xpm_cmap *colorheap = 0;	/* A "heap" of color structs */
+	struct xpm_cmap *colormap[256];	/* A quick hash of 256 spots for colors */
 	unsigned char *imageptr = 0;
+	MWSCREENINFO sinfo;
+	char xline[300];
+	char dline[300];
 	char *c;
 	int a;
 	int col, row, colors, cpp;
 	int in_color = 0;
 	int read_xline = 0;
 	int status = LOAD_HEADER;
-	MWSCREENINFO sinfo;
-	struct xpm_cmap *colormap[256];	/* A quick hash of 256 spots for colors */
-	char xline[1024];
-	char dline[1024];
 
 	/* Very first thing, get the screen info */
 	GdGetScreenInfo(psd, &sinfo);
@@ -117,7 +117,7 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 
 	/* Start over at the beginning with the file */
 	GdImageBufferSeekTo(src, 0UL);
-	GdImageBufferGetString(src, xline, sizeof(xline));
+	GdImageBufferGetString(src, xline, 300);
 
 	/* Chop the EOL */
 	xline[strlen(xline) - 1] = 0;
@@ -128,7 +128,7 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 
 	while (!GdImageBufferEOF(src)) {
 		/* Get the next line from the file */
-		GdImageBufferGetString(src, xline, sizeof(xline));
+		GdImageBufferGetString(src, xline, 300);
 		xline[strlen(xline) - 1] = 0;
 
 		/* Check it out */
@@ -155,8 +155,10 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 			if (sinfo.bpp <= 8) {
 				pimage->bpp = sinfo.bpp;
 				pimage->compression = 0;
+				pimage->transcolor = -1;
 			} else {
 				pimage->bpp = 32;
+				pimage->transcolor = XPM_TRANSCOLOR;
 				pimage->compression = MWIMAGE_BGR;
 			}
 
@@ -176,8 +178,8 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 				pimage->palette = malloc(256 * sizeof(MWPALENTRY));
 
 			if (!colorheap) {
-				EPRINTF("GdDecodeXPM: No mem for palette\n");
-				return -1;
+				EPRINTF("Couldn't allocate any memory for the colors\n");
+				return (0);
 			}
 
 			status = LOAD_COLORS;
@@ -243,9 +245,9 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 			/* load the palette (duh..) */
 
 			if (sinfo.bpp <= 8) {
-				if (n->color == MWNOCOLOR) {
-					/* set transcolor to palette index*/
+				if (n->color == -1) {
 					pimage->transcolor = in_color;
+					n->color = -1;
 				}
 
 				pimage->palette[in_color].r =
@@ -253,6 +255,10 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 				pimage->palette[in_color].g =
 					(n->color >> 8) & 0xFF;
 				pimage->palette[in_color].b = n->color & 0xFF;
+			} else {
+				if (n->color == -1) {
+					n->color = XPM_TRANSCOLOR;
+				}
 			}
 
 			if (++in_color == colors) {
@@ -268,7 +274,7 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 			int bitcount = 0;
 			long dwordcolor = 0;
 			int i;
-			char pxlstr[5];
+			char pxlstr[3];
 
 			c = dline;
 
@@ -279,8 +285,8 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 					z = *c;
 
 					if (!colormap[z]) {
-						EPRINTF("GdDecodeXPM: No color entry for (%c)\n", z);
-						return -1;
+						EPRINTF("No color entry for (%c)\n", z);
+						return (0);
 					}
 
 					if (sinfo.bpp <= 8)
@@ -297,22 +303,23 @@ GdDecodeXPM(buffer_t * src, PMWIMAGEHDR pimage, PSD psd)
 					z = pxlstr[0];
 
 					if (!colormap[z]) {
-						EPRINTF("GdDecodeXPM: No color entry for (%s)\n",
-							pxlstr);
-						return -1;
+						EPRINTF("No color entry for (%s)\n", pxlstr);
+						return 0;
 					}
 
 					n = colormap[z];
+
 					while (n) {
-						if (!strncmp (n->mapstr, pxlstr, cpp))
+						if (!strncmp
+						    (n->mapstr, pxlstr, cpp))
 							break;
+
 						n = n->next;
 					}
 
 					if (!n) {
-						EPRINTF("GdDecodeXPM: No color found for (%s)\n",
-							pxlstr);
-						return -1;
+						EPRINTF("No color found for (%s)\n", pxlstr);
+						return 0;
 					}
 
 					if (sinfo.bpp <= 8)

@@ -2,6 +2,8 @@
  * Copyright (c) 1999, 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Portions Copyright (c) 1991 David I. Bell
+ * Permission is granted to use, distribute, or modify this source,
+ * provided that this copyright notice remains intact.
  *
  * Device-independent mid level screen device init routines
  *
@@ -311,11 +313,7 @@ GdFindColor(PSD psd, MWCOLORVAL c)
 		/* create 8 bit 3/3/2 format pixel from RGB colorval*/
 		/*RGB2PIXEL332(REDVALUE(c), GREENVALUE(c), BLUEVALUE(c))*/
 		return COLOR2PIXEL332(c);
-	case MWPF_TRUECOLOR233:
-		/* create 8 bit 2/3/3 format pixel from RGB colorval*/
-		/*RGB2PIXEL332(REDVALUE(c), GREENVALUE(c), BLUEVALUE(c))*/
-		return COLOR2PIXEL233(c);
-        }
+	}
 
 	/* case MWPF_PALETTE: must be running 1, 2, 4 or 8 bit palette*/
 
@@ -396,9 +394,6 @@ GdGetColorRGB(PSD psd, MWPIXELVAL pixel)
 	case MWPF_TRUECOLOR332:
 		return PIXEL332TOCOLORVAL(pixel);
 
-	case MWPF_TRUECOLOR233:
-		return PIXEL233TOCOLORVAL(pixel);
-
 	case MWPF_PALETTE:
 		return GETPALENTRY(gr_palette, pixel);
 
@@ -455,9 +450,6 @@ typedef struct {
 #define RMASK332	0xe0
 #define GMASK332	0x1c
 #define BMASK332	0x03
-#define RMASK233	0x07
-#define GMASK233	0x38
-#define BMASK233	0xC0
 #define RMASK555	0x7c00
 #define GMASK555	0x03e0
 #define BMASK555	0x001f
@@ -500,7 +492,7 @@ putdw(unsigned long dw, FILE *ofp)
 int
 GdCaptureScreen(char *path)
 {
-#if defined(HAVE_FILEIO) && ! __ECOS
+#if defined(HAVE_FILEIO)
 	int	ifd, i, j;
 	FILE *	ofp;
 	int	cx, cy, extra, bpp, bytespp, ncolors, sizecolortable;
@@ -584,11 +576,6 @@ GdCaptureScreen(char *path)
 				rmask = RMASK332;
 				gmask = GMASK332;
 				bmask = BMASK332;
-                                break;
-			case MWPF_TRUECOLOR233:
-				rmask = RMASK233;
-				gmask = GMASK233;
-				bmask = BMASK233;
 				break;
 			}
 			putdw(rmask, ofp);

@@ -1,7 +1,9 @@
 /*
- * Copyright (c) 1999, 2000, 2001, 2003, 2005,2007 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2003 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 by Koninklijke Philips Electronics N.V.
  * Portions Copyright (c) 1991 David I. Bell
+ * Permission is granted to use, distribute, or modify this source,
+ * provided that this copyright notice remains intact.
  *
  * Device-independent mid level drawing and color routines.
  *
@@ -777,7 +779,7 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 	MWPIXELVAL pixel;
 	int clip;
 	int extra, linesize;
-	int rgborder, alpha;
+	int rgborder;
 	MWCOLORVAL cr;
 	MWCOORD yoff;
 	unsigned long transcolor;
@@ -839,9 +841,6 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 	case 24:
 		linesize = width*3;
 		break;
-	case 16:
-		linesize = width*2;
-		break;
 	case 4:
 		linesize = PIX2BYTES(width<<2);
 		break;
@@ -851,21 +850,28 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 	}
 	extra = pimage->pitch - linesize;
 
-	/* RGB rather than BGR byte order?*/
+	/* 24bpp RGB rather than BGR byte order?*/
 	rgborder = pimage->compression & MWIMAGE_RGB; 
 
-	/* check transparent color handling with 32bpp alpha channel*/
-	if (pimage->compression & MWIMAGE_ALPHA_CHANNEL) {
-		long *data = (long *)imagebits;
+	if ((bpp == 32)
+	    && ((pimage->compression & MWIMAGE_ALPHA_CHANNEL) != 0)) {
+		long *data = (long *) imagebits;
+
+		/* DPRINTF("Nano-X: GdDrawImage (%d,%d) %dx%d x=%d-%d\n  ",
+		   x,y,width,height,minx,maxx); */
 
 		while (height > 0) {
+
 			cr = *data++;
 #if MW_CPU_BIG_ENDIAN
-			if (rgborder) {
+			if (rgborder)
+			{
 				/* Fix endian and swap R/B order */
 				cr =  ((cr & 0xFFFFFF00UL) >> 8)
 					| ((cr & 0x000000FFUL) << 24);
-			} else {
+			}
+			else
+			{
 				/* Fix endian */
 				cr =  ((cr & 0xFF000000UL) >> 24)
 					| ((cr & 0x00FF0000UL) >> 8)
@@ -880,80 +886,69 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 					| ((cr & 0x000000FFUL) << 16);
 			}
 #endif
-			/* alpha channel handling 
-			 * FIXME - just visible or not, no alpha blending yet */
-			alpha = (cr >> 24);
-			if (alpha != 0) { /* skip if pixel is fully transparent*/
-				if (clip == CLIP_VISIBLE || GdClipPoint(psd, x, y)) {
-					switch (psd->pixtype) {
-					case MWPF_PALETTE:
-					default:
-						pixel = GdFindColor(psd, cr);
-						break;
-					case MWPF_TRUECOLOR8888:
-						pixel = COLOR2PIXEL8888(cr);
-						break;
-					case MWPF_TRUECOLOR0888:
-					case MWPF_TRUECOLOR888:
-						pixel = COLOR2PIXEL888(cr);
-						break;
-					case MWPF_TRUECOLOR565:
-						pixel = COLOR2PIXEL565(cr);
-						break;
-					case MWPF_TRUECOLOR555:
-						pixel = COLOR2PIXEL555(cr);
-						break;
-					case MWPF_TRUECOLOR332:
-						pixel = COLOR2PIXEL332(cr);
-						break;
-					case MWPF_TRUECOLOR233:
-						pixel = COLOR2PIXEL233(cr);
-						break;
-					}
-					psd->DrawPixel(psd, x, y, pixel);
 
-				}
+			switch (psd->pixtype) {
+			case MWPF_PALETTE:
+			default:
+				pixel = GdFindColor(psd, cr);
+				break;
+			case MWPF_TRUECOLOR8888:
+				pixel = COLOR2PIXEL8888(cr);
+				break;
+			case MWPF_TRUECOLOR0888:
+			case MWPF_TRUECOLOR888:
+				pixel = COLOR2PIXEL888(cr);
+				break;
+			case MWPF_TRUECOLOR565:
+				pixel = COLOR2PIXEL565(cr);
+				break;
+			case MWPF_TRUECOLOR555:
+				pixel = COLOR2PIXEL555(cr);
+				break;
+			case MWPF_TRUECOLOR332:
+				pixel = COLOR2PIXEL332(cr);
+				break;
 			}
 
+			if (clip == CLIP_VISIBLE || GdClipPoint(psd, x, y))
+				psd->DrawPixel(psd, x, y, pixel);
+
 			if (x++ == maxx) {
+				/* printf("EOL\n  "); */
 				x = minx;
 				y += yoff;
 				height--;
 				data = (long *) (((char *) data) + extra);
 			}
 		}
-	} else if (bpp > 8) {	/* 16, 24, or 32bpp*/
-		while (height > 0) {
-			/* get value in correct RGB or BGR byte order*/
-			if (bpp == 24) {
-				cr = rgborder
-					? MWRGB(imagebits[0], imagebits[1],
-						imagebits[2])
-					: MWRGB(imagebits[2], imagebits[1],
-						imagebits[0]);
-				imagebits += 3;
-			} else if (bpp == 32) {
-				cr = rgborder
-					? MWARGB(imagebits[3],imagebits[0],
-						imagebits[1], imagebits[2])
-					: MWARGB(imagebits[3],imagebits[2],
-						imagebits[1], imagebits[0]);
-				imagebits += 4;
-			} else {	/* 16 bpp*/
-#if MW_CPU_BIG_ENDIAN
-				unsigned int pv = (imagebits[0] << 8) | imagebits[1];
-#else
-				unsigned int pv = (imagebits[1] << 8) | imagebits[0];
-#endif
+		/* printf("End of image\n"); */
+	} else if ((bpp == 24) || (bpp == 32)) {
+		long trans;
 
-				cr = (pimage->compression & MWIMAGE_555)
-					? PIXEL555TOCOLORVAL(pv)
-					: PIXEL565TOCOLORVAL(pv);
-				imagebits += 2;
+		while (height > 0) {
+			/* RGB rather than BGR byte order? */
+			trans = cr = rgborder
+				? MWRGB(imagebits[0], imagebits[1],
+					imagebits[2])
+				: MWRGB(imagebits[2], imagebits[1],
+					imagebits[0]);
+
+			imagebits += 3;
+
+			if (bpp == 32) {
+				/*
+				 * FIXME Currently, XPM is the only image
+				 * decoder that creates 32bpp images with
+				 * transparency. This is done specifying the
+				 * transparent color 0x01000000, using 0x01
+				 * in the alpha channel as the indicator.
+				 */
+				if (*imagebits++ == 0x01)
+					trans = 0x01000000;
 			}
 
 			/* handle transparent color */
-			if (transcolor != cr) {
+			if (transcolor != trans) {
 
 				switch (psd->pixtype) {
 				case MWPF_PALETTE:
@@ -975,9 +970,6 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 					break;
 				case MWPF_TRUECOLOR332:
 					pixel = COLOR2PIXEL332(cr);
-					break;
-				case MWPF_TRUECOLOR233:
-					pixel = COLOR2PIXEL233(cr);
 					break;
 				}
 
@@ -1049,7 +1041,7 @@ GdDrawImage(PSD psd, MWCOORD x, MWCOORD y, PMWIMAGEHDR pimage)
 				x = maxx;
 			}
 #endif
-		next:
+		      next:
 			if (x++ == maxx) {
 				x = minx;
 				y += yoff;
@@ -1115,6 +1107,7 @@ GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
 	MWCOORD height = gc->dsth;
 	MWCOORD srcx;
 	MWCOORD srcy;
+	int clipped;
 	int rx1, rx2, ry1, ry2, rw, rh;
 	int count;
 #if DYNAMICREGIONS
@@ -1126,21 +1119,20 @@ GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
 	extern int clipcount;
 #endif
 
-	/* check for driver present*/
 	if (!psd->DrawArea)
 		return;
 
-	/* check clipping region*/
-	switch(GdClipArea(psd, x, y, x + width - 1, y + height - 1)) {
-	case CLIP_VISIBLE:
-		psd->DrawArea(psd, gc, op);	/* all visible, draw all*/
+	/* Set up area clipping, and just return if nothing is visible */
+	clipped = GdClipArea(psd, x, y, x + width - 1, y + height - 1);
+	if (clipped == CLIP_INVISIBLE) {
 		return;
-
-	case CLIP_INVISIBLE:
+	} else if (clipped == CLIP_VISIBLE) {
+		psd->DrawArea(psd, gc, op);
 		return;
 	}
-	/* partially clipped, we'll traverse visible region and draw*/
+	/* Partially clipped. */
 
+	/* Save srcX/Y so we can change the originals. */
 	srcx = gc->srcx;
 	srcy = gc->srcy;
 
@@ -1199,6 +1191,7 @@ GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
 	gc->dsth = height;
 	gc->srcx = srcx;
 	gc->srcy = srcy;
+	return;
 }
 
 /**
@@ -1218,7 +1211,6 @@ GdDrawAreaInternal(PSD psd, driver_gc_t * gc, int op)
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
- * MWPF_TRUECOLOR233	unsigned char
  *
  * NOTE: Currently, no translation is performed if the pixtype
  * is not MWPF_RGB.  Pixtype is only then used to determine the
@@ -1256,9 +1248,20 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 	int pixsize;
 	unsigned char r, g, b;
 
-	/* check for hw pixel format and low level driver drawarea call*/
-	if (pixtype == MWPF_HWPIXELVAL && (psd->flags & PSF_HAVEOP_COPY)) {
+	minx = x;
+	maxx = x + width - 1;
+
+	/* Set up area clipping, and just return if nothing is visible */
+	if ( GdClipArea(psd, minx, y, maxx, y + height - 1) == CLIP_INVISIBLE )
+		return;
+
+/* psd->DrawArea driver call temp removed, hasn't been tested with new drawarea routines*/
+#if 0000
+	if (pixtype == MWPF_PIXELVAL) {
 		driver_gc_t hwgc;
+
+		if (!(psd->flags & PSF_HAVEOP_COPY))
+			goto fallback;
 
 		hwgc.pixels = PIXELS;
 		hwgc.src_linelen = width;
@@ -1271,22 +1274,14 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 		hwgc.srcx = 0;
 		hwgc.srcy = 0;
 		GdDrawAreaInternal(psd, &hwgc, PSDOP_COPY);
-
 		GdFixCursor(psd);
 		return;
+	      fallback:
 	}
-
-	/* no fast low level routine, draw point-by-point...*/
-	minx = x;
-	maxx = x + width - 1;
-
-	/* Set up area clipping, and just return if nothing is visible */
-	if (GdClipArea(psd, minx, y, maxx, y + height - 1) == CLIP_INVISIBLE )
-		return;
-
-	/* convert MWPF_HWPIXELVAL to real pixel type*/
-	if (pixtype == MWPF_HWPIXELVAL)
-		pixtype = psd->pixtype;
+	GdFixCursor(psd);
+	return;
+ fallback:
+#endif /* if 0000 temp removed*/
 
 	/* Calculate size of packed pixels*/
 	switch(pixtype) {
@@ -1297,7 +1292,6 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 		pixsize = sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
-	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		pixsize = sizeof(unsigned char);
 		break;
@@ -1331,7 +1325,6 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 		PIXELS += sizeof(MWPIXELVAL);
 		break;
 	case MWPF_PALETTE:
-	case MWPF_TRUECOLOR233:
 	case MWPF_TRUECOLOR332:
 		gr_foreground = *PIXELS++;
 		break;
@@ -1371,13 +1364,11 @@ GdArea(PSD psd, MWCOORD x, MWCOORD y, MWCOORD width, MWCOORD height, void *pixel
 			PIXELS += sizeof(MWCOLORVAL);
 			break;
 		case MWPF_PIXELVAL:
-		case MWPF_HWPIXELVAL:
 			if(gr_foreground != *(MWPIXELVAL *)PIXELS)
 				goto breakwhile;
 			PIXELS += sizeof(MWPIXELVAL);
 			break;
 		case MWPF_PALETTE:
-		case MWPF_TRUECOLOR233:
 		case MWPF_TRUECOLOR332:
 			if(gr_foreground != *(unsigned char *)PIXELS)
 				goto breakwhile;
@@ -2215,7 +2206,6 @@ GdCalcMemGCAlloc(PSD psd, unsigned int width, unsigned int height, int planes,
  * MWPF_TRUECOLOR565	unsigned short
  * MWPF_TRUECOLOR555	unsigned short
  * MWPF_TRUECOLOR332	unsigned char
- * MWPF_TRUECOLOR233	unsigned char
  *
  * @param width Width of rectangle to translate.
  * @param height Height of rectangle to translate.
@@ -2264,10 +2254,6 @@ GdTranslateArea(MWCOORD width, MWCOORD height, void *in, int inpixtype,
 		case MWPF_TRUECOLOR332:
 			pixelval = *inbuf++;
 			colorval = PIXEL332TOCOLORVAL(pixelval);
-			break;
-		case MWPF_TRUECOLOR233:
-			pixelval = *inbuf++;
-			colorval = PIXEL233TOCOLORVAL(pixelval);
 			break;
 		case MWPF_TRUECOLOR0888:
 			pixelval = *(unsigned long *)inbuf;
@@ -2321,9 +2307,6 @@ GdTranslateArea(MWCOORD width, MWCOORD height, void *in, int inpixtype,
 			break;
 		case MWPF_TRUECOLOR332:
 			*outbuf++ = COLOR2PIXEL332(colorval);
-			break;
-		case MWPF_TRUECOLOR233:
-			*outbuf++ = COLOR2PIXEL233(colorval);
 			break;
 		case MWPF_TRUECOLOR0888:
 			*(unsigned long *)outbuf = COLOR2PIXEL888(colorval);

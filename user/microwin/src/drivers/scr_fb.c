@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2000, 2001, 2002, 2007 Greg Haerr <greg@censoft.com>
+ * Copyright (c) 1999, 2000, 2001, 2002 Greg Haerr <greg@censoft.com>
  * Portions Copyright (c) 2002 Koninklijke Philips Electronics
  *
  * Microwindows Screen Driver for Linux kernel framebuffers
@@ -29,6 +29,9 @@
 #include "genmem.h"
 #include "fb.h"
 
+#ifdef ARCH_LINUX_SPARC
+#endif
+
 #define EMBEDDEDPLANET	0	/* =1 for kluge embeddedplanet ppc framebuffer*/
 
 #ifndef FB_TYPE_VGA_PLANES
@@ -40,6 +43,7 @@ static void fb_close(PSD psd);
 static void fb_setportrait(PSD psd, int portraitmode);
 static void fb_setpalette(PSD psd,int first, int count, MWPALENTRY *palette);
 static void gen_getscreeninfo(PSD psd,PMWSCREENINFO psi);
+
 
 SCREENDEVICE	scrdev = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL,
@@ -119,14 +123,9 @@ fb_open(PSD psd)
 	assert(status < 2);
 
 	/* locate and open framebuffer, get info*/
-	if((env = getenv("FRAMEBUFFER")) != NULL)
-		fb = open(env, O_RDWR);
-	else {
-		/* try /dev/fb0 then /dev/fb/0 */
-		fb = open("/dev/fb0", O_RDWR);
-		if (fb < 0)
-			fb = open("/dev/fb/0", O_RDWR);
-	}
+	if(!(env = getenv("FRAMEBUFFER")))
+		env = "/dev/fb0";
+	fb = open(env, O_RDWR);
 	if(fb < 0) {
 		EPRINTF("Error opening %s: %m. Check kernel config\n", env);
 		return NULL;
@@ -165,6 +164,8 @@ fb_open(PSD psd)
 #endif /* !EMBEDDEDPLANET*/
 
 	psd->flags = PSF_SCREEN | PSF_HAVEBLIT;
+	if (psd->bpp == 16)
+		psd->flags |= PSF_HAVEOP_COPY;
 
 	/* set pixel format*/
 #ifndef TPHELIO /* temp kluge: VTech Helio kernel needs changing*/
@@ -261,12 +262,10 @@ fb_open(PSD psd)
 		EPRINTF("Don;t know how to mmap %s with accel %d\n", env, fb_fix.accel);
 		goto fail;
         }
+#elif defined(BLACKFIN)
+	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_FILE,fb,0);
 #else
-#ifndef __uClinux__
 	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_SHARED,fb,0);
-#else
-	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_PRIVATE,fb,0);
-#endif
 #endif
 	if(psd->addr == NULL || psd->addr == (unsigned char *)-1) {
 		EPRINTF("Error mmaping %s: %m\n", env);

@@ -17,6 +17,7 @@ set configfile 0;
 variable arch;
 variable armtoolsprefix;
 variable mipstoolsprefix;
+variable blackfintoolsprefix;
 variable rtemstoolsprefix;
 variable optimize;
 variable debug;
@@ -36,12 +37,6 @@ variable havebmp;
 variable havejpg;
 variable incjpg;
 variable libjpg;
-variable havevnc;
-variable incvnc;
-variable libvnc;
-variable incz;
-variable libz;
-variable vncpthread
 variable haveft;
 variable incft;
 variable libft;
@@ -158,6 +153,7 @@ proc platformoptions {} {
    frame .platform.a4
    frame .platform.a5
    frame .platform.a6
+   frame .platform.a7
 
    radiobutton .platform.a0.b0 -text "Linux (native)" -variable arch -relief flat -value 0 -anchor w
    button .platform.a0.options -text "Options" -command {nativelinuxoptions;};
@@ -173,6 +169,8 @@ proc platformoptions {} {
    button .platform.a5.options -text "Options" -command {elksoptions;};
    radiobutton .platform.a6.b6 -text "Linux-SPARC (x-compile)" -variable arch -relief flat -value 6 -anchor w
    button .platform.a6.options -text "Options" -command {nativelinuxoptions;};
+   radiobutton .platform.a7.b7 -text "Linux-BLACKFIN (x-compile)" -variable arch -relief flat -value 7 -anchor w
+   button .platform.a7.options -text "Options" -command {blackfinlinuxoptions;};
    pack .platform.a0.b0 .platform.a0.options -side left
    pack .platform.a1.b1 .platform.a1.options -side left
    pack .platform.a2.b2 .platform.a2.options -side left
@@ -180,6 +178,7 @@ proc platformoptions {} {
    pack .platform.a4.b4 .platform.a4.options -side left
    pack .platform.a5.b5 .platform.a5.options -side left
    pack .platform.a6.b6 .platform.a6.options -side left
+   pack .platform.a7.b7 .platform.a7.options -side left
    pack .platform.a0  -side top -pady 2 -anchor w -fill x
    pack .platform.a1  -side top -pady 2 -anchor w -fill x
    pack .platform.a2  -side top -pady 2 -anchor w -fill x
@@ -187,8 +186,9 @@ proc platformoptions {} {
    pack .platform.a4  -side top -pady 2 -anchor w -fill x
    pack .platform.a5  -side top -pady 2 -anchor w -fill x
    pack .platform.a6  -side top -pady 2 -anchor w -fill x
+   pack .platform.a7  -side top -pady 2 -anchor w -fill x
    pack .platform.a0.options .platform.a1.options .platform.a2.options \
-   .platform.a3.options .platform.a4.options .platform.a5.options .platform.a6.options -side top -anchor e
+   .platform.a3.options .platform.a4.options .platform.a5.options .platform.a6.options .platform.a7.options -side top -anchor e
 }
 
 
@@ -375,20 +375,11 @@ proc nanoxoptions {} {
    checkbutton .optnanox.a0.sharedmem -text "Enable shared mem support (app/server only)" -variable sharedmem -relief flat
    checkbutton .optnanox.a0.nwidget -text "Compile Nwidget library" -variable nwidget -relief flat
    checkbutton .optnanox.a0.demo -text "Compile demos" -variable nanoxdemo -relief flat
-
-   frame .optnanox.a1
-   checkbutton .optnanox.a1.vnc -text "VNC server (requires libjpeg & libz)" -variable havevnc -relief flat
-   button .optnanox.a1.vncoptions -text "Options" -command {vncoptions;};
-
    pack .optnanox.a0.server  -side top -pady 2 -anchor w
    pack .optnanox.a0.sharedmem  -side top -pady 2 -anchor w
    pack .optnanox.a0.nwidget  -side top -pady 2 -anchor w
    pack .optnanox.a0.demo  -side top -pady 2 -anchor w
    pack .optnanox.a0  -side top -pady 2 -anchor w -fill x
-   pack .optnanox.a1.vnc -side left 
-   pack .optnanox.a1.vncoptions -side right 
-   pack .optnanox.a1 -side top  -pady 2 -anchor w -fill x
-   
 }
 
 
@@ -547,7 +538,6 @@ proc mipslinuxoptions_ok {} {
    set mipstoolsprefix [.optmipslinux.comp.a0.prefix get];
 }
 
-
 ################################################################################
 #
 # Show rtems options dialog
@@ -607,82 +597,6 @@ proc rtemsoptions_ok {} {
    set rtemstoolsprefix [.optrtems.comp.a0.prefix get];
    set rtemsbuild [.optrtems.comp.a1.build get];
    set rtemsbsp [.optrtems.comp.a2.bsp get];
-}
-
-################################################################################
-#
-# Show vnc options dialog
-#
-################################################################################
-proc vncoptions {} {
-    
-   global libvnc;
-   global incvnc;
-   global incz;
-   global libz;
-   global vncpthread;
-
-   toplevel .optvnc
-   wm title .optvnc "VNC server options"
-   wm geometry .optvnc +100+100
-
-   frame .optvnc.buttons
-   pack .optvnc.buttons -side bottom -fill x -pady 2m
-   button .optvnc.buttons.ok -text "Ok" -command "vncoptions_ok; destroy .optvnc"
-   button .optvnc.buttons.help -text "Help" -command "tk_dialog .help message TODO \"\" 0 ok"
-   pack .optvnc.buttons.help .optvnc.buttons.ok -side right -expand 1
-
-   frame .optvnc.a0
-   frame .optvnc.a1
-   frame .optvnc.a2
-   frame .optvnc.a3
-   frame .optvnc.a4
-   label .optvnc.a0.label -text "LibVNCserver include dir:" -anchor e
-   entry .optvnc.a0.incvnc -width 40 -relief sunken
-   label .optvnc.a1.label -text "LibVNCserver path:" -anchor e
-   entry .optvnc.a1.libvnc -width 40 -relief sunken
-   label .optvnc.a2.label -text "Libz include dir:" -anchor e
-   entry .optvnc.a2.incz -width 40 -relief sunken
-   label .optvnc.a3.label -text "Libz path:" -anchor e
-   entry .optvnc.a3.libz -width 40 -relief sunken
-   checkbutton .optvnc.a4.pt -text "VNCserver as separate thread" -variable vncpthread -relief flat
-
-   pack .optvnc.a0.label  -side top -pady 2 -anchor w
-   pack .optvnc.a0.incvnc  -side top -pady 2 -anchor w
-   pack .optvnc.a1.label  -side top -pady 2 -anchor w
-   pack .optvnc.a1.libvnc  -side top -pady 2 -anchor w
-   pack .optvnc.a2.label  -side top -pady 2 -anchor w
-   pack .optvnc.a2.incz  -side top -pady 2 -anchor w
-   pack .optvnc.a3.label  -side top -pady 2 -anchor w
-   pack .optvnc.a3.libz  -side top -pady 2 -anchor w
-   
-   pack .optvnc.a0  -side top -pady 2 -anchor w -fill x
-   pack .optvnc.a1  -side top -pady 2 -anchor w -fill x
-   pack .optvnc.a2  -side top -pady 2 -anchor w -fill x
-   pack .optvnc.a3  -side top -pady 2 -anchor w -fill x
-   pack .optvnc.a4  -side left -pady 2 -anchor w -fill x
-   
-   pack .optvnc.a0.incvnc .optvnc.a1.libvnc .optvnc.a2.incz .optvnc.a3.libz .optvnc.a4.pt -side top -anchor e
-   
-
-   .optvnc.a0.incvnc insert 0 $incvnc;
-   .optvnc.a1.libvnc insert 0 $libvnc;
-   .optvnc.a2.incz insert 0 $incz;
-   .optvnc.a3.libz insert 0 $libz;
-   
-}
-
-proc vncoptions_ok {} {
-   global incvnc;
-   global libvnc;
-   global incz;
-   global libz;
-
-   set incvnc [.optvnc.a0.incvnc get];
-   set libvnc [.optvnc.a1.libvnc get];
-   set incz [.optvnc.a2.incz get];
-   set libz [.optvnc.a3.libz get];
-
 }
 
 
@@ -960,8 +874,6 @@ proc mouseoptions {} {
 ################################################################################
 proc kbdoptions {} {
 
-   global keyblinux;
-
    toplevel .optkbd
    wm title .optkbd "Keyboard driver options"
    wm geometry .optkbd +100+100
@@ -974,33 +886,12 @@ proc kbdoptions {} {
 
    frame .optkbd.a0
    frame .optkbd.a1
-   frame .optkbd.a2
-   frame .optkbd.a3
-   frame .optkbd.a4
-   frame .optkbd.a5
-
    radiobutton .optkbd.a0.b0 -text "TTY" -variable keyblinux -relief flat -value 0 -anchor w
-   radiobutton .optkbd.a1.b0 -text "Scan" -variable keyblinux -relief flat -value 1 -anchor w
-   radiobutton .optkbd.a2.b0 -text "Pipe" -variable keyblinux -relief flat -value 2 -anchor w
-   radiobutton .optkbd.a3.b0 -text "IPAQ" -variable keyblinux -relief flat -value 3 -anchor w
-   radiobutton .optkbd.a4.b0 -text "LIrc" -variable keyblinux -relief flat -value 4 -anchor w
-   radiobutton .optkbd.a5.b0 -text "No keyboard" -variable keyblinux -relief flat -value 5 -anchor w
+   radiobutton .optkbd.a1.b0 -text "No keyboard" -variable keyblinux -relief flat -value 1 -anchor w
    pack .optkbd.a0.b0  -side top -pady 2 -anchor w
    pack .optkbd.a1.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a2.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a3.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a4.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a5.b0  -side top -pady 2 -anchor w
    pack .optkbd.a0  -side top -pady 2 -anchor w -fill x
    pack .optkbd.a1  -side top -pady 2 -anchor w -fill x
-   pack .optkbd.a2  -side top -pady 2 -anchor w -fill x
-   pack .optkbd.a3  -side top -pady 2 -anchor w -fill x
-   pack .optkbd.a4  -side top -pady 2 -anchor w -fill x
-   pack .optkbd.a5  -side top -pady 2 -anchor w -fill x
-   pack .optkbd.a2.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a3.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a4.b0  -side top -pady 2 -anchor w
-   pack .optkbd.a5.b0  -side top -pady 2 -anchor w
 }
 
 
@@ -1130,6 +1021,50 @@ proc elksoptions {} {
 
 ################################################################################
 #
+# Show blackfin linux options dialog
+#
+################################################################################
+proc blackfinlinuxoptions {} {
+   global screenlinux;
+   global blackfintoolsprefix;
+
+   toplevel .optblackfinlinux
+   wm title .optblackfinlinux "BLACKFIN Linux options"
+   wm geometry .optblackfinlinux +100+100
+
+   frame .optblackfinlinux.buttons
+   pack .optblackfinlinux.buttons -side bottom -fill x -pady 2m
+   button .optblackfinlinux.buttons.ok -text "Ok" -command "blackfinlinuxoptions_ok; destroy .optblackfinlinux"
+   button .optblackfinlinux.buttons.help -text "Help" -command "tk_dialog .help message TODO \"\" 0 ok"
+   pack .optblackfinlinux.buttons.help .optblackfinlinux.buttons.ok -side right -expand 1
+
+   frame .optblackfinlinux.comp -borderwidth 1 -relief solid
+   pack .optblackfinlinux.comp -side top -fill x -pady .5c -padx .5c
+
+   frame .optblackfinlinux.comp.a0
+   label .optblackfinlinux.comp.label -text "Compiler options"
+   pack .optblackfinlinux.comp.label -side top
+   label .optblackfinlinux.comp.a0.label -text "Tools Prefix:" -anchor e
+   entry .optblackfinlinux.comp.a0.prefix -width 25 -relief sunken
+   pack .optblackfinlinux.comp.a0.label  -side top -pady 2 -anchor w
+   pack .optblackfinlinux.comp.a0.prefix  -side top -pady 2 -anchor c
+   pack .optblackfinlinux.comp.a0  -side top -pady 2 -anchor w -fill x
+   .optblackfinlinux.comp.a0.prefix insert 0 $blackfintoolsprefix;
+
+   button .optblackfinlinux.screen -text "Screen driver" -command "screenoptions;"
+   button .optblackfinlinux.mouse -text "Mouse driver" -command "mouseoptions;"
+   button .optblackfinlinux.kbd -text "Keyboard driver" -command "kbdoptions;"
+   pack .optblackfinlinux.comp .optblackfinlinux.screen .optblackfinlinux.mouse .optblackfinlinux.kbd -side top -fill x
+}
+
+proc blackfinlinuxoptions_ok {} {
+   global blackfintoolsprefix;
+   set blackfintoolsprefix [.optblackfinlinux.comp.a0.prefix get];
+}
+
+
+################################################################################
+#
 # Read data from the configuration file
 #
 ################################################################################
@@ -1140,6 +1075,7 @@ proc readconfig {} {
    global armtoolsprefix;
    global mipstoolsprefix;
    global rtemstoolsprefix;
+   global blackfintoolsprefix;
    global optimize;
    global debug;
    global verbose
@@ -1158,12 +1094,6 @@ proc readconfig {} {
    global havejpg;
    global incjpg;
    global libjpg;
-   global havevnc;
-   global incvnc;
-   global libvnc;
-   global incz;
-   global libz;
-   global vncpthread
    global haveft;
    global incft;
    global libft;
@@ -1197,6 +1127,7 @@ proc readconfig {} {
    set armtoolsprefix [getvalue "ARMTOOLSPREFIX" 0];
    set mipstoolsprefix [getvalue "MIPSTOOLSPREFIX" 0];
    set rtemstoolsprefix [getvalue "RTEMSTOOLSPREFIX" 0];
+   set blackfintoolsprefix [getvalue "BLACKFINTOOLSPREFIX" 0];
 
    set arch [getvalue "ARCH" 0];
    switch -exact $arch {
@@ -1207,6 +1138,7 @@ proc readconfig {} {
         SOLARIS {set arch 4;}
         ELKS {set arch 5;}
         LINUX-SPARC {set arch 6;}
+	LINUX-BLACKFIN {set arch 7;}
         default {set arch 0}
    }
 
@@ -1252,14 +1184,6 @@ proc readconfig {} {
 
    set graypalette [getvalue "GRAYPALETTE" 1];
 
-   
-   set havevnc [getvalue "HAVE_VNCSERVER_SUPPORT" 1];
-   set incvnc [getvalue "INCVNC" 0];
-   set libvnc [getvalue "LIBVNC" 0];
-   set incz [getvalue "INCZ" 0];
-   set libz [getvalue "LIBZ" 0];
-   set vncpthread [getvalue "VNCSERVER_PTHREADED" 1];
-
    set vgafb [getvalue "FBVGA" 1]
    set portraitfb [getvalue "PORTRAIT_MODE" 1]
 
@@ -1284,11 +1208,7 @@ proc readconfig {} {
    if {[getvalue "NOMOUSE" 1] == 1} {set mouselinux 4}
 
    if {[getvalue "TTYKBD" 1] == 1} {set keyblinux 0;}
-   if {[getvalue "SCANKBD" 1] == 1} {set keyblinux 1;}
-   if {[getvalue "PIPEKBD" 1] == 1} {set keyblinux 2;}
-   if {[getvalue "IPAQKBD" 1] == 1} {set keyblinux 3;}
-   if {[getvalue "LIRCKBD" 1] == 1} {set keyblinux 4;}
-   if {[getvalue "NOKBD" 1] == 1} {set keyblinux 5;}
+   if {[getvalue "NOKBD" 1] == 1} {set keyblinux 1;}
 
    if {[getvalue "ASMVGADRIVER" 1] == 1} {set screenelks 0;}
    if {[getvalue "CVGADRIVER" 1] == 1} {set screenelks 1}
@@ -1358,12 +1278,6 @@ proc writeconfig {} {
    global havejpg;
    global incjpg;
    global libjpg;
-   global havevnc;
-   global incvnc;
-   global libvnc;
-   global incz;
-   global libz;
-   global vncpthread;
    global haveft;
    global incft;
    global libft;
@@ -1384,9 +1298,8 @@ proc writeconfig {} {
    global x11screenwidth;
    global x11screenheight;
    global x11screendepth;
-   global keyblinux;
-   global keyblinux;
    global mouselinux;
+   global keyblinux;
    global vtswitch;
    global sa1100ltlend;
    global rtemsbuild;
@@ -1397,6 +1310,7 @@ proc writeconfig {} {
    } elseif {$arch == 1} {putvalue "ARCH" "LINUX-ARM"
    } elseif {$arch == 2} {putvalue "ARCH" "LINUX-MIPS"
    } elseif {$arch == 6} {putvalue "ARCH" "LINUX-SPARC"
+   } elseif {$arch == 7} {putvalue "ARCH" "blackfin"
    } elseif {$arch == 3} {putvalue "ARCH" "RTEMS"
    } elseif {$arch == 4} {putvalue "ARCH" "SOLARIS"
    } elseif {$arch == 5} {putvalue "ARCH" "ELKS"}
@@ -1428,14 +1342,6 @@ proc writeconfig {} {
    putvalue "HAVE_T1LIB_SUPPORT" $havet1;
    putvalue "INCT1LIB" $inct1;
    putvalue "LIBT1LIB" $libt1;
-
-   putvalue "HAVE_VNCSERVER_SUPPORT" $havevnc;
-   putvalue "INCVNC" $incvnc;
-   putvalue "LIBVNC" $libvnc;
-   putvalue "INCZ" $incz;
-   putvalue "LIBZ" $libz;
-   putvalue "VNCSERVER_PTHREADED" $vncpthread;
-
    putvalue "HAVE_HZK_SUPPORT" $havehzk;
    putvalue "HZK_FONT_DIR"		$hzkdir;
    putvalue "HZK_FONT_SIZE"		$hzkfontsize;
@@ -1510,46 +1416,10 @@ proc writeconfig {} {
 
    if {$keyblinux == 0} {
       putvalue "TTYKBD" 1;
-      putvalue "SCANKBD" 0;
-      putvalue "PIPEKBD" 0;
-      putvalue "IPAQKBD" 0;
-      putvalue "LIRCKBD" 0;
       putvalue "NOKBD" 0;
    } elseif {$keyblinux == 1} {
-       putvalue "TTYKBD" 0;
-       putvalue "SCANKBD" 1;
-       putvalue "PIPEKBD" 0;
-       putvalue "IPAQKBD" 0;
-       putvalue "LIRCKBD" 0;
-       putvalue "NOKBD" 0;
-   } elseif {$keyblinux == 2} {
-       putvalue "TTYKBD" 0;
-       putvalue "SCANKBD" 0;
-       putvalue "PIPEKBD" 1;
-       putvalue "IPAQKBD" 0;
-       putvalue "LIRCKBD" 0;
-       putvalue "NOKBD" 0;
-   } elseif {$keyblinux == 3} {
-       putvalue "TTYKBD" 0;
-       putvalue "SCANKBD" 0;
-       putvalue "PIPEKBD" 0;
-       putvalue "IPAQKBD" 1;
-       putvalue "LIRCKBD" 0;
-       putvalue "NOKBD" 0;
-   } elseif {$keyblinux == 4} {
-       putvalue "TTYKBD" 0;
-       putvalue "SCANKBD" 0;
-       putvalue "PIPEKBD" 0;
-       putvalue "IPAQKBD" 0;
-       putvalue "LIRCKBD" 1;
-       putvalue "NOKBD" 0;
-   } elseif {$keyblinux == 5} {
-       putvalue "TTYKBD" 0;
-       putvalue "SCANKBD" 0;
-       putvalue "PIPEKBD" 0;
-       putvalue "IPAQKBD" 0;
-       putvalue "LIRCKBD" 0;
-       putvalue "NOKBD" 1;
+      putvalue "TTYKBD" 0;
+      putvalue "NOKBD" 1;
    }
 
    putvalue "VTSWITCH" $vtswitch;

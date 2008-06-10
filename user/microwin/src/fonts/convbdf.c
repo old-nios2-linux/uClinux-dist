@@ -1,7 +1,7 @@
 /*
  * Convert BDF files to C source and/or Rockbox .fnt file format
  *
- * Copyright (c) 2002, 2005 by Greg Haerr <greg@censoft.com>
+ * Copyright (c) 2002 by Greg Haerr <greg@censoft.com>
  *
  * What fun it is converting font data...
  *
@@ -36,9 +36,9 @@ typedef struct {
 	int		ascent;		/* ascent (baseline) height*/
 	int		firstchar;	/* first character in bitmap*/
 	int		size;		/* font size in glyphs*/
-	/*const*/ MWIMAGEBITS   *bits;	/* 16-bit right-padded bitmap data*/
-	/*const*/ unsigned long *offset;/* offsets into bitmap data*/
-	/*const*/ unsigned char *width;	/* character widths or NULL if fixed*/
+	MWIMAGEBITS *	bits;		/* 16-bit right-padded bitmap data*/
+	unsigned long *	offset;		/* offsets into bitmap data*/
+	unsigned char *	width;		/* character widths or NULL if fixed*/
 	int		defaultchar;	/* default char (not glyph index)*/
 	long		bits_size;	/* # words of MWIMAGEBITS bits*/
 
@@ -169,7 +169,7 @@ getopts(int *pac, char ***pav)
 
 /* remove directory prefix and file suffix from full path*/
 char *
-base_name(char *path)
+basename(char *path)
 {
 	char *p, *b;
 	static char base[256];
@@ -202,7 +202,7 @@ convbdf(char *path)
 
 	if (gen_c) {
 		if (!oflag) {
-			strcpy(outfile, base_name(path));
+			strcpy(outfile, basename(path));
 			strcat(outfile, ".c");
 		}
 		ret |= gen_c_source(pf, outfile);
@@ -210,7 +210,7 @@ convbdf(char *path)
 
 	if (gen_fnt) {
 		if (!oflag) {
-			strcpy(outfile, base_name(path));
+			strcpy(outfile, basename(path));
 			strcat(outfile, ".fnt");
 		}
 		ret |= gen_fnt_file(pf, outfile);
@@ -283,7 +283,7 @@ bdf_read_font(char *path)
 	if (!pf)
 		goto errout;
 	
-	pf->name = strdup(base_name(path));
+	pf->name = strdup(basename(path));
 
 	if (!bdf_read_header(fp, pf)) {
 		fprintf(stderr, "Error reading font header\n");
@@ -702,7 +702,7 @@ gen_c_source(PMWCFONT pf, char *path)
 		"*/\n"
 		"\n"
 		"/* Font character bitmap data. */\n"
-		"static const MWIMAGEBITS _%s_bits[] = {\n"
+		"static MWIMAGEBITS _%s_bits[] = {\n"
 	};
 
 	ofp = fopen(path, "w");
@@ -796,7 +796,7 @@ gen_c_source(PMWCFONT pf, char *path)
 	if (pf->offset) {
 		/* output offset table*/
 		fprintf(ofp, "/* Character->glyph mapping. */\n"
-			"static const unsigned long _%s_offset[] = {\n",
+			"static unsigned long _%s_offset[] = {\n",
 			pf->name);
 
 		for (i=0; i<pf->size; ++i)
@@ -807,7 +807,7 @@ gen_c_source(PMWCFONT pf, char *path)
 	/* output width table for proportional fonts*/
 	if (pf->width) {
 		fprintf(ofp, 	"/* Character width data. */\n"
-			"static const unsigned char _%s_width[] = {\n",
+			"static unsigned char _%s_width[] = {\n",
 			pf->name);
 
 		for (i=0; i<pf->size; ++i)
@@ -823,7 +823,7 @@ gen_c_source(PMWCFONT pf, char *path)
 		sprintf(buf, "_%s_width,", pf->name);
 	else sprintf(buf, "0,  /* fixed width*/");
 	fprintf(ofp, 	"/* Exported structure definition. */\n"
-		"const MWCFONT font_%s = {\n"
+		"MWCFONT font_%s = {\n"
 		"  \"%s\",\n"
 		"  %d,\n"
 		"  %d,\n"
