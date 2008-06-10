@@ -262,6 +262,7 @@ LINKLIBS=\
 	$(ROOTDIR)/lib/fltk-1.1/lib/*.a \
 	$(ROOTDIR)/lib/tslib-1.0/build/usr/local/lib/*.a \
 	$(ROOTDIR)/lib/freetype/build-freetype-2.3.5/usr/local/lib/*.a \
+	$(ROOTDIR)/lib/libsdl/build-SDL-1.2.13/usr/local/lib/*.a \
 
 # The dynamic linker library needs to be linked into lib via a different name
 LD_LIB = $(ROOTDIR)/lib/uClibc/lib/ld-uClibc-0.9.29.so
