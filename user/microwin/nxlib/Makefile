@@ -26,9 +26,6 @@ clean:
 romfs:	
 	set -e; \
         cd $(NXLIB); \
-        for l in `find -name '*.so'` ; do \
-                $(ROMFSINST) -d $$l /usr/lib/$$l ; \
-        done
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_NXLIB -d $(FLTK)/test/editor /usr/bin/editor
 	
 .PHONY: all clean romfs fltk nxlib
