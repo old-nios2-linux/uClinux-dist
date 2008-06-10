@@ -3980,7 +3980,6 @@ menu "MicroWindows"
 
 config USER_MICROWIN
 	bool "MicroWindows"
-	select LIB_TSLIB
 
 comment "Compiling Options"
 
@@ -4088,10 +4087,12 @@ config USER_MICROWIN_HAVE_XPM_SUPPORT
 config USER_MICROWIN_HAVE_JPEG_SUPPORT
 	bool "Have JPEG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBJPEG
 
 config USER_MICROWIN_HAVE_PNG_SUPPORT
 	bool "Have PNG Support"
 	depends on USER_MICROWIN
+	select LIB_LIBPNG
 
 config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 	bool "Have T1LIB Support"
@@ -4224,6 +4225,7 @@ config USER_MICROWIN_CLEOMOUSE
 config USER_MICROWIN_TSLIBMOUSE
 	bool "Common touchscreen using tslib"
 	depends on USER_MICROWIN
+	select LIB_TSLIB
 
 config USER_MICROWIN_NOMOUSE
 	bool "No Mouse"
@@ -4255,91 +4257,91 @@ comment "Install These Applications"
 
 config USER_MICROWIN_BIN_LANDMINE
 	bool "Landmine"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_LAUNCHER
 	bool "Launcher"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_MOVE
 	bool "Move"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_MTERM
 	bool "MTerm"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_MTEST
 	bool "MTest"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_MTEST2
 	bool "MTest2"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_MUSERFD
 	bool "MUserFd"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NANO_X
 	bool "Nano-X"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NANOWM
 	bool "NanoWM"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOWM
 
 config USER_MICROWIN_BIN_NPANEL
 	bool "NPanel"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NTERM
 	bool "NTerm"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NTEST
 	bool "NTest"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NTETRIS
 	bool "NTetris"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXCLOCK
 	bool "NXclock"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXEV
 	bool "NXev"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXKBD
 	bool "NXkbd"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXLSCLIENTS
 	bool "NXlsclients"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXTERM
 	bool "NXterm"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_NXVIEW
 	bool "NXView"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_SLIDER
 	bool "Slider"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_VNC
 	bool "VNC"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 config USER_MICROWIN_BIN_WORLD
 	bool "World"
-	depends on USER_MICROWIN
+	depends on USER_MICROWIN_NANOXDEMO
 
 endmenu
 
