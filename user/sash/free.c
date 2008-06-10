@@ -10,8 +10,6 @@
 
 #include "sash.h"
 
-#include <linux/autoconf.h>
-
 #include <fcntl.h>
 #include <sys/types.h>
 

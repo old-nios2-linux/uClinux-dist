@@ -36,7 +36,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-/* #include <linux/autoconf.h>*/
 #include "if.h"
 #include "dhcp.h"
 #include "dhcp-options.h"

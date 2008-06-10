@@ -21,7 +21,6 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <linux/autoconf.h>
 #include <linux/version.h>
 #ifdef CONFIG_MTD
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)

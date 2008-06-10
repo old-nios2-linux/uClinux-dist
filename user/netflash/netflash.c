@@ -42,7 +42,6 @@
 #include <netinet/in.h>
 #include <stdarg.h>
 
-#include <linux/autoconf.h>
 #include <linux/version.h>
 #include <config/autoconf.h>
 #include <linux/major.h>
