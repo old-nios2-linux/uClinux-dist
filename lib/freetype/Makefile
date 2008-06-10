@@ -1,4 +1,5 @@
 VER = freetype-2.3.5
+STAGEDIR = $(ROOTDIR)/lib/freetype/build-$(VER)
 
 all: build-$(VER)/Makefile
 	$(MAKE) -C build-$(VER)
@@ -16,6 +17,5 @@ clean:
 	rm -rf build*
 
 romfs:
-	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libfreetype.so.6 /usr/lib/libfreetype.so.6
 
 .PHONY: all clean romfs
