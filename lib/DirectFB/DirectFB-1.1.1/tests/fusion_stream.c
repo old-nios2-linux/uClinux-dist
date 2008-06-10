@@ -218,6 +218,7 @@ main( int argc, char *argv[] )
      u32           checksum    = 0;
      bool          produce     = true;
      int           delay       = 66000;
+     pid_t         child_pid;
 
      if (parse_cmdline( argc, argv ))
           return -1;
@@ -296,7 +297,13 @@ main( int argc, char *argv[] )
      if (do_fork) {
           fusion_world_set_fork_action( world, FFA_FORK );
 
-          switch (fork()) {
+#ifdef EMBED
+	  child_pid = vfork();
+#else
+	  child_pid = fork();
+#endif
+
+          switch (child_pid) {
                case -1:
                     D_PERROR( "fork() failed!\n" );
                     return -1;

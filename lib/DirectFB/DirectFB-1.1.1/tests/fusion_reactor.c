@@ -134,7 +134,11 @@ main( int argc, char *argv[] )
 
      MSG( ".........FORKING NOW.........\n" );
 
+#ifdef EMBED
+     child_pid = vfork();
+#else
      child_pid = fork();
+#endif
 
      switch (child_pid) {
           case -1:
