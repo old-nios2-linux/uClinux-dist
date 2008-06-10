@@ -25,11 +25,11 @@ CONFIGURE_HOST = nios2-linux-uclibc
 
 CONFIG_UCLINUX=y
 
-CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
+CC        = $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
-CXX       = $(ucfront_cxx) $(CROSS_COMPILE)g++ $(CPUFLAGS)
+CXX       = $(CROSS_COMPILE)g++ $(CPUFLAGS)
 AR        = $(CROSS_COMPILE)ar
-LD        = $(ucfront_ld) $(CROSS_COMPILE)ld $(CPULDFLAGS)
+LD        = $(CROSS_COMPILE)ld $(CPULDFLAGS)
 OBJCOPY   = $(CROSS_COMPILE)objcopy
 RANLIB    = $(CROSS_COMPILE)ranlib
 ELF2FLT   = $(CROSS_COMPILE)elf2flt
@@ -123,9 +123,6 @@ ifeq ($(UCLINUX_BUILD_SET),1)
 
 	CXXLIBS = $(LIBSTDCPP) $(CXXSUP)
   	 
-	ucfront_cc  := ucfront-gcc
-	ucfront_cxx := ucfront-g++
-	ucfront_ld  := ucfront-ld
 endif
 
 ############################################################################
