@@ -77,6 +77,7 @@ dir_3_$(CONFIG_LIB_POPT)         += popt
 dir_3_$(CONFIG_LIB_TSLIB)        += tslib-1.0
 dir_3_$(CONFIG_LIB_NXLIB)        += nxlib
 dir_3_$(CONFIG_LIB_LIBSDL)       += libsdl
+dir_4_$(CONFIG_LIB_FREETYPE)     += freetype        # requires zlib(3)
 dir_4_$(CONFIG_LIB_FLTK2)	 += fltk
 dir_4_$(CONFIG_LIB_FLTK)	 += fltk-1.1
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib

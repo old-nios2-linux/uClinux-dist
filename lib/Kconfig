@@ -388,6 +388,10 @@ config LIB_FLTK_TEST
 	help
 	  You must have fluid built from fltk 1.1 on host.
 
+config LIB_FREETYPE
+	bool "Build freetype"
+	select LIB_ZLIB
+
 config LIB_DIRECTFB
 	bool "Build DirectFB"
 
