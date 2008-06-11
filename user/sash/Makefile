@@ -45,7 +45,7 @@ romfs:
 dummy_target:
 
 $(LIBSASH): dummy_target
-	$(MAKE) -C libsash
+	$(MAKE) -j1 -C libsash
 
 clean:
 	-rm -f $(SH) $(SHUTDOWN) $(REBOOT) *.elf *.gdb *.o
