@@ -286,6 +286,10 @@ run_program(const char *program, char **argv, char *msg, int msglen) {
   sigaddset(&set, SIGCHLD);
   sigprocmask(SIG_BLOCK, &set, &oldset);
 
+#ifdef EMBED
+#undef fork
+#define fork() vfork()
+#endif
   // Create child processes that actually run the program for us...
   if ((pid = fork()) == 0) {
     // First child comes here, fork a second child and exit...

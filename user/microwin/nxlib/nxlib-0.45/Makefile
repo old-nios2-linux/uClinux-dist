@@ -22,7 +22,7 @@ X11_FONT_DIR2=$(X11)/fonts/misc
 X11_RGBTXT=$(X11)/rgb.txt
 
 # set to Y to make shared X11 libs
-SHAREDLIB=Y
+SHAREDLIB=N
 LIBNAME = X11
 xSOLIBREV = 6.1
 SOLIBREV = 6.2
@@ -35,7 +35,7 @@ SOEXTRALIBS = -L$(MWIN_LIB) -lnano-X
 INSTALL_DIR = $(X11_LIB)
 
 # compiler flags
-CC = bfin-linux-uclibc-gcc
+CC = $(CROSS_COMPILE)gcc
 LN = ln -s
 MV = mv
 RM = rm -f
@@ -85,7 +85,10 @@ all: $(LIBS)
 
 # static nx11 library
 libnx11.a: keysymstr.h $(OBJS)
+	cp $(MWIN)/lib/libnano-X.a libnx11.a
 	ar r libnx11.a $(OBJS)
+	-rm libX11.a
+	-ln -s libnx11.a libX11.a
 
 # shared X11 library
 lib$(LIBNAME).so.$(SOLIBREV): $(OBJS)
