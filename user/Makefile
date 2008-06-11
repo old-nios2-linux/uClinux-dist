@@ -147,7 +147,6 @@ dir_$(CONFIG_USER_FLASHW_FLASHW)            += flashw
 dir_$(CONFIG_USER_FLATFSD_FLATFSD)          += flatfsd
 dir_$(CONFIG_USER_FLTHDR_FLTHDR)            += flthdr
 dir_$(CONFIG_LIB_FLTK2_TEST)		    += fltk
-dir_$(CONFIG_LIB_FLTK_TEST)		    += fltk-1.1
 dir_$(CONFIG_USER_FREESWAN)                 += freeswan
 dir_$(CONFIG_USER_FROB_LED_FROB_LED)        += frob-led
 dir_$(CONFIG_USER_FROX_FROX)                += frox

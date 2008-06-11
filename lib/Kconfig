@@ -354,14 +354,6 @@ config LIB_LIBOPENH323
 config LIB_TSLIB
 	bool "Build tslib"
 
-config LIB_NXLIB
-	bool 'Build nxlib'
-	select USER_MICROWIN_NANOX
-	help
-	  Nano-X / Xlib Compatibility Library.
-	  Allows X11 binaries to run unmodified using the Microwindows Nano-X
-	  server.
-
 config LIB_FLTK2
 	bool 'Build fltk2'
 	help
@@ -374,19 +366,6 @@ config LIB_FLTK2_TEST
 	depends on LIB_FLTK2
 	help
 	  You must have fluid2 built from fltk 2 on host.
-
-config LIB_FLTK
-	bool 'Build fltk 1.1'
-	help
-	  The Fast Light Tool Kit ("FLTK", pronounced "fulltick") is a LGPL'd
-	  C++ graphical user interface toolkit for X (UNIX(r)), OpenGL(r),
-	  and Microsoft(r) Windows(r).
-
-config LIB_FLTK_TEST
-	bool 'Build fltk 1.1 test programs'
-	depends on LIB_FLTK
-	help
-	  You must have fluid built from fltk 1.1 on host.
 
 config LIB_FREETYPE
 	bool "Build freetype"
