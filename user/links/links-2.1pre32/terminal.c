@@ -918,7 +918,14 @@ void destroy_terminal(struct terminal *term)
 			free_all_itrms();
 #ifndef NO_FORK_ON_EXIT
 			if (!list_empty(terminals)) {
-				if (fork() > 0) _exit(0);
+			  pid_t newpid;
+#ifdef EMBED
+			  newpid = vfork();
+#else
+			  newpid = fork();
+#endif
+
+				if (newpid > 0) _exit(0);
 			}
 #endif
 		}

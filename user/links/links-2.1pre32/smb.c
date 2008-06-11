@@ -113,7 +113,11 @@ void smb_func(struct connection *c)
 		return;
 	}
 	c->from = 0;
+#ifdef EMBED
+	r = vfork();
+#else
 	r = fork();
+#endif
 	if (r == -1) {
 		mem_free(host);
 		mem_free(port);

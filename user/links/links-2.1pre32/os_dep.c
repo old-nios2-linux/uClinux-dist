@@ -435,7 +435,12 @@ int exe(char *path, int fg)
 	pid_t p;
 	int s;
 	fg=fg;  /* ignore flag */
-	if (!(p = fork())) {
+#ifdef EMBED
+	p = vfork();
+#else
+	p = fork();
+#endif
+	if (!p) {
 		setpgid(0, 0);
 		system(path);
 		_exit(0);
@@ -547,7 +552,12 @@ int exe(char *path, int fg)
 	if (*path == '"' && strlen(x1) >= 7 && !strcasecmp(x1 + strlen(x1) - 7, "cmd.exe")) strcat(arg, "\"\" ");
 	strcat(arg, path);
 	ct = GetConsoleTitle(buffer, sizeof buffer);
-	if (!(pid = fork())) {
+#ifdef EMBED
+	pid = vfork();
+#else
+	pid = fork();
+#endif
+	if (!pid) {
 		int i;
 	/* Win98 crashes if we spawn command.com and have some sockets open */
 		for (i = 0; i < FD_SETSIZE; i++) close(i);
@@ -662,7 +672,12 @@ static void call_resize(unsigned char *x1, int x, int y)
 	pid_t pid;
 	unsigned char arg[40];
 	sprintf(arg, "mode %d,%d", x, y);
-	if (!(pid = fork())) {
+#ifdef EMBED
+	pid = vfork();
+#else
+	pid = fork();
+#endif
+	if (!pid)) {
 		int i;
 	/* Win98 crashes if we spawn command.com and have some sockets open */
 		for (i = 0; i < FD_SETSIZE; i++) if (i != 1 && i != 2) close(i);
@@ -1471,7 +1486,12 @@ int start_thread(void (*fn)(void *, int), void *ptr, int l)
 	if (c_pipe(p) < 0) return -1;
 	fcntl(p[0], F_SETFL, O_NONBLOCK);
 	fcntl(p[1], F_SETFL, O_NONBLOCK);
-	if (!(f = fork())) {
+#ifdef EMBED
+	f = vfork();
+#else
+	f = fork();
+#endif
+	if (!f) {
 		close_fork_tty();
 		close(p[0]);
 		fn(ptr, p[1]);

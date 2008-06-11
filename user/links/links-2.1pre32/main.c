@@ -64,7 +64,12 @@ void sig_tstp(struct terminal *t)
 	}
 #endif
 #if defined (SIGCONT) && defined(SIGTTOU) && defined(HAVE_GETPID)
-	if (!(newpid = fork())) {
+#ifdef EMBED
+	newpid = vfork();
+#else
+	newpid = fork();
+#endif
+	if (!newpid) {
 		while (1) {
 			sleep(1);
 			kill(pid, SIGCONT);
