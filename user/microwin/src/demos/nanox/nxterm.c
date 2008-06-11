@@ -1134,14 +1134,14 @@ void sigchild(int signo)
 
 int term_init(void)
 {
-	int tfd;
+	int tfdMaster,tfdSlave;
 	int n = 0;
 	pid_t pid;
 	char pty_name[12];
 
 again:
 	sprintf(pty_name, "/dev/ptyp%d", n);
-	if ((tfd = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
+	if ((tfdMaster = open(pty_name, O_RDWR | O_NONBLOCK)) < 0) {
 		if ((errno == EBUSY || errno == EIO) && n < 10) {
 			n++;
 			goto again;
@@ -1151,29 +1151,33 @@ again:
 	}
 	signal(SIGCHLD, sigchild);
 	signal(SIGINT, sigchild);
-	if ((pid = vfork()) == -1) {
+#ifdef __uClinux__
+#undef fork
+#define fork() vfork()
+#endif
+	if ((pid = fork()) == -1) {
 		fprintf(stderr, "No processes\n");
 		return -1;
 	}
 	if (!pid) {
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
-		close(tfd);
+		close(tfdMaster);
 		
 		setsid();
 		pty_name[5] = 't';
-		if ((tfd = open(pty_name, O_RDWR)) < 0) {
+		if ((tfdSlave = open(pty_name, O_RDWR)) < 0) {
 			fprintf(stderr, "Child: Can't open pty %s\n", pty_name);
 			_exit(1);
 		}
 		close(STDERR_FILENO);
-		dup2(tfd, STDIN_FILENO);
-		dup2(tfd, STDOUT_FILENO);
-		dup2(tfd, STDERR_FILENO);
+		dup2(tfdSlave, STDIN_FILENO);
+		dup2(tfdSlave, STDOUT_FILENO);
+		dup2(tfdSlave, STDERR_FILENO);
 		execv(nargv[0], nargv);
 		_exit(1);
 	}
-	return tfd;
+	return tfdMaster;
 }
 
 #if 0
