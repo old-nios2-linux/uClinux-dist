@@ -4022,6 +4022,10 @@ config USER_MICROWIN_OBJFRAMEWORK
 	bool "OBJFramework"
 	depends on USER_MICROWIN
 
+config USER_MICROWIN_NXLIB
+	bool "nxlib"
+	depends on USER_MICROWIN
+
 comment "Demos"
 
 config USER_MICROWIN_MICROWINDEMO
@@ -4103,8 +4107,8 @@ config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 	bool "Have T1LIB Support"
 	depends on USER_MICROWIN
 
-config USER_MICROWIN_HAVE_FREETYPE_SUPPORT
-	bool "Have FreeType Support"
+config USER_MICROWIN_HAVE_FREETYPE_2_SUPPORT
+	bool "Have FreeType 2 Support"
 	depends on USER_MICROWIN
 
 config USER_MICROWIN_HAVE_SHAREDMEM_SUPPORT

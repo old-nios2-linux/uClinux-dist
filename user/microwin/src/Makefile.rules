@@ -72,6 +72,10 @@ ifeq ($(ARCH),FREEBSD-X86)
 LDFLAGS += -lvgl
 endif
 
+ifeq ($(TSLIBMOUSE), Y)
+MW_CORE_LIBS += $(LIBTS)
+endif
+
 ifeq ($(HAVE_FILEIO), Y)
 
 DEFINES += -DHAVE_FILEIO
@@ -244,10 +248,6 @@ ifeq ($(FBVGA), Y)
 DEFINES += -DFBVGA=1
 endif
 
-ifeq ($(TSLIBMOUSE), Y)
-LDFLAGS += -lts
-endif
-
 ifeq ($(INVERT4BPP), Y)
 DEFINES += -DINVERT4BPP=1
 endif
@@ -413,26 +413,20 @@ MAKEDEPCFLAGS += $(INCLUDEDIRS)
 
 MWINLIBS = \
 	$(MW_DIR_LIB)/libmwin.a \
-	$(MW_DIR_LIB)/libmwimages.a \
-	$(MW_CORE_LIBS)
+	$(MW_DIR_LIB)/libmwimages.a
 CCMWINLIBS = -lmwin -lmwimages -lm $(MW_CORE_LIBS)
 
 NANOXCLIENTLIBS += $(MW_DIR_LIB)/libnano-X.a
 CCNANOXCLIENTLIBS += -lnano-X
 ifeq ($(LINK_APP_INTO_SERVER), Y)
-NANOXCLIENTLIBS += $(MW_CORE_LIBS)
 CCNANOXCLIENTLIBS += $(MW_CORE_LIBS)
 endif
 
 NANOXSERVERLIBS += \
 	$(MW_DIR_LIB)/libmwengine.a \
 	$(MW_DIR_LIB)/libmwdrivers.a \
-	$(MW_DIR_LIB)/libmwfonts.a \
-	$(MW_CORE_LIBS)
-CCNANOXSERVERLIBS += -lmwengine -lmwdrivers -lmwfonts
-ifeq ($(SHAREDLIBS), Y)
-	CCNANOXSERVERLIBS += $(MW_CORE_LIBS)
-endif
+	$(MW_DIR_LIB)/libmwfonts.a
+CCNANOXSERVERLIBS += -lmwengine -lmwdrivers -lmwfonts $(MW_CORE_LIBS)
 
 
 ifeq ($(ARCH), ELKS)
