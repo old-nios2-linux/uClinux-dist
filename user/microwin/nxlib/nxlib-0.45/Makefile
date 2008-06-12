@@ -9,12 +9,12 @@
 
 # set to Microwindows and X11 include and lib directories
 
-MWIN=$$PWD/../../src
-X11=./X11
+MWIN=$(STAGEDIR)/usr
+X11=/usr
 
-MWIN_INCLUDE=$(MWIN)/include
+MWIN_INCLUDE=$(MWIN)/include/microwin
 MWIN_LIB=$(MWIN)/lib
-X11_LIB=$(X11)/lib
+X11_LIB=$(STAGEDIR)/usr/lib
 
 # set to font PCF file search directories, rgb.txt file location
 X11_FONT_DIR1=$(X11)/fonts/100dpi
@@ -85,10 +85,7 @@ all: $(LIBS)
 
 # static nx11 library
 libnx11.a: keysymstr.h $(OBJS)
-	cp $(MWIN)/lib/libnano-X.a libnx11.a
 	ar r libnx11.a $(OBJS)
-	-rm libX11.a
-	-ln -s libnx11.a libX11.a
 
 # shared X11 library
 lib$(LIBNAME).so.$(SOLIBREV): $(OBJS)
@@ -100,6 +97,7 @@ lib$(LIBNAME).so.$(SOLIBREV): $(OBJS)
 	$(MV) $@~ $@
 	$(RM) lib$(LIBNAME).so; $(LN) $@ lib$(LIBNAME).so
 
+ifeq ($(SHAREDLIB), Y)
 install: $(LIBS)
 	$(RM) $(INSTALL_DIR)/lib$(LIBNAME).so; \
 	$(MV) lib$(LIBNAME).so $(INSTALL_DIR)
@@ -108,7 +106,11 @@ install: $(LIBS)
 	$(MV) lib$(LIBNAME).so.$$MAJREV $(INSTALL_DIR)
 	$(RM) $(INSTALL_DIR)/lib$(LIBNAME).so.$(SOLIBREV); \
 	$(MV) lib$(LIBNAME).so.$(SOLIBREV) $(INSTALL_DIR)
-##	$(MV) libnx11.a $(INSTALL_DIR)
+else
+install: $(LIBS)
+	install libnx11.a $(INSTALL_DIR)/libX11.a
+	cp -au X11/* $(STAGEDIR)/usr
+endif
 
 clean: cleanlibs
 	$(RM) *.o *~

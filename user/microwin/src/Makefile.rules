@@ -15,9 +15,9 @@ SHELL = /bin/sh
 endif
 
 # install directories for headers and libraries
-INSTALL_PREFIX  = /usr
-INSTALL_OWNER1  = -o root -g root
-INSTALL_OWNER2  = -o root -g bin
+INSTALL_PREFIX  = $(STAGEDIR)/usr
+INSTALL_OWNER1  =
+INSTALL_OWNER2  =
 HDRINSTALLDIR = $(INSTALL_PREFIX)/include/microwin
 LIBINSTALLDIR = $(INSTALL_PREFIX)/lib
 BININSTALLDIR = $(INSTALL_PREFIX)/bin
@@ -205,12 +205,7 @@ MW_CORE_LIBS += $(LIBFT2LIB)
 # Since FT2 requires $(INCFT2LIB)/freetype2 to always be
 # specified, we take a slightly different (and less reliable)
 # approach and simply skip the well-known system directories.
-ifneq ($(INCFT2LIB),/usr/include)
-ifneq ($(INCFT2LIB),/usr/local/include)
 INCLUDEDIRS += -I$(INCFT2LIB)
-endif
-endif
-INCLUDEDIRS += -I$(INCFT2LIB)/freetype2
 endif
 
 ifeq ($(NOFONTSORCLIPPING), Y)
@@ -231,7 +226,7 @@ endif
 
 ifeq ($(THREADSAFE), Y)
 DEFINES += -DTHREADSAFE=1
-LDFLAGS += -lpthread
+MW_CORE_LIBS += -lpthread
 endif
 
 # Driver-specific stuff
@@ -418,9 +413,7 @@ CCMWINLIBS = -lmwin -lmwimages -lm $(MW_CORE_LIBS)
 
 NANOXCLIENTLIBS += $(MW_DIR_LIB)/libnano-X.a
 CCNANOXCLIENTLIBS += -lnano-X
-ifeq ($(LINK_APP_INTO_SERVER), Y)
 CCNANOXCLIENTLIBS += $(MW_CORE_LIBS)
-endif
 
 NANOXSERVERLIBS += \
 	$(MW_DIR_LIB)/libmwengine.a \

@@ -4000,6 +4000,10 @@ config USER_MICROWIN_VERBOSE
 	bool "Verbose"
 	depends on USER_MICROWIN
 
+config USER_MICROWIN_THREADSAFE
+	bool "Thread safe"
+	depends on USER_MICROWIN
+
 comment "Libraries"
 
 config USER_MICROWIN_MICROWIN

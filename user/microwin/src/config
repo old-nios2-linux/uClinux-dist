@@ -62,8 +62,8 @@ else
 OPTIMIZE                 = $(subst y,Y,$(CONFIG_USER_MICROWIN_OPTIMIZE))
 DEBUG                    = $(subst y,Y,$(CONFIG_USER_MICROWIN_DEBUG))
 VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_VERBOSE))
-VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_THREADSAFE))
-VERBOSE                  = $(subst y,Y,$(CONFIG_USER_MICROWIN_GPROF))
+THREADSAFE               = $(subst y,Y,$(CONFIG_USER_MICROWIN_THREADSAFE))
+GPROF                    = N
 endif
 
 ####################################################################
@@ -234,6 +234,7 @@ HAVE_FREETYPE_2_SUPPORT  = N
 else
 HAVE_FREETYPE_2_SUPPORT  = $(subst y,Y,$(CONFIG_USER_MICROWIN_HAVE_FREETYPE_2_SUPPORT))
 LIBFT2LIB                = -lfreetype -lz
+INCFT2LIB                 = $(STAGEDIR)/usr/include/freetype2
 endif
 
 ####################################################################

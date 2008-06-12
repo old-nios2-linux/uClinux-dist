@@ -65,6 +65,6 @@ $(MW_DIR_BIN)/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
 else
 $(MW_DIR_BIN)/tuxchess: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
 	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CCNANOXCLIENTLIBS)
 endif
 

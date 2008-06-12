@@ -1,12 +1,19 @@
 
 BINDIR=src/bin
 
-all clean:
+all:
 	[ -d src/lib ] || mkdir src/lib
 	[ -d src/bin ] || mkdir src/bin
-	$(MAKE) -C src $@ || exit 1
+	$(MAKE) -C src || exit 1
+	$(MAKE) -C src install || exit 1
 ifeq ($(CONFIG_USER_MICROWIN_NXLIB),y)
-	$(MAKE) -C nxlib $@
+	$(MAKE) -C nxlib
+endif
+
+clean:
+	$(MAKE) -C src clean || exit 1
+ifeq ($(CONFIG_USER_MICROWIN_NXLIB),y)
+	$(MAKE) -C nxlib clean
 endif
 
 romfs:

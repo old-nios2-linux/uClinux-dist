@@ -70,6 +70,6 @@ $(MW_DIR_BIN)/nanowm.o: $(OBJS) $(CONFIG)
 else
 $(MW_DIR_BIN)/nanowm: $(OBJS) $(NANOXCLIENTLIBS) $(CONFIG)
 	@echo "Linking $(patsubst $(MW_DIR_BIN)/%,%,$@) ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(NANOXCLIENTLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(CCNANOXCLIENTLIBS)
 endif
 endif

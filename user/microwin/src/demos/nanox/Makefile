@@ -128,7 +128,7 @@ include $(MW_DIR_SRC)/Makefile.rules
 ifeq ($(SHAREDLIBS), Y)
 LD_NANOXCLIENTLIBS = $(CCNANOXCLIENTLIBS)
 else
-LD_NANOXCLIENTLIBS = $(NANOXCLIENTLIBS)
+LD_NANOXCLIENTLIBS = $(CCNANOXCLIENTLIBS)
 endif
 
 ######################## Tools targets section ###############################
