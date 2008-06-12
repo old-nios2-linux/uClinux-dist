@@ -67,6 +67,7 @@ dir_3_$(CONFIG_LIB_LIBLZMA)      += liblzma
 dir_3_$(CONFIG_LIB_OSIP2)        += osip2
 dir_3_$(CONFIG_LIB_LIBEFENCE)    += libefence
 dir_3_$(CONFIG_LIB_TERMCAP)      += termcap
+dir_3_$(CONFIG_LIB_NCURSES)      += ncurses
 dir_3_$(CONFIG_LIB_LIBSYSFS)     += sysfsutils
 dir_3_$(CONFIG_LIB_LIBNL)        += libnl
 dir_3_$(CONFIG_LIB_NFNETLINK)    += libnfnetlink
