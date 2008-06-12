@@ -75,6 +75,7 @@ dir_3_$(CONFIG_USER_TCL_LIBTCL)  += ../user/tcl
 dir_3_$(CONFIG_LIB_LIBIBERTY)    += libiberty
 dir_3_$(CONFIG_LIB_BFD)          += bfd
 dir_3_$(CONFIG_LIB_POPT)         += popt
+dir_3_$(CONFIG_LIB_LIBMPEG2)     += mpeg2dec
 dir_3_$(CONFIG_LIB_TSLIB)        += tslib-1.0
 dir_3_$(CONFIG_LIB_LIBSDL)       += libsdl
 dir_4_$(CONFIG_LIB_FREETYPE)     += freetype        # requires zlib(3)
