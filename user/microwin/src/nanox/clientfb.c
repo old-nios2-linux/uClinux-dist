@@ -10,7 +10,9 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#ifdef ARCH_LINUX_POWERPC
 #include <asm/page.h>		/* For definition of PAGE_SIZE */
+#endif
 #include <linux/fb.h>
 #endif
 #include "nano-X.h"
@@ -98,8 +100,12 @@ GrOpenClientFramebuffer(void)
 	}
 
 	/* Memory map the device, compensating for buggy PPC mmap() */
+#ifdef ARCH_LINUX_POWERPC
 	frame_offset = (((long)finfo.smem_start) -
 		(((long)finfo.smem_start)&~(PAGE_SIZE-1)));
+#else
+	frame_offset = 0;
+#endif
 	frame_len = finfo.smem_len + frame_offset;
 	frame_map = (unsigned char *)mmap(NULL, frame_len, PROT_READ|PROT_WRITE,
 		MAP_SHARED, frame_fd,
