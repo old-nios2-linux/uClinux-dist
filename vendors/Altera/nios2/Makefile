@@ -18,7 +18,7 @@ clean:
 
 vendor_hwselect:
 	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
-	$(MAKEARCH_KERNEL) -C $(ROOTDIR)/$(LINUXDIR) hwselect
+	$(MAKEARCH_KERNEL) hwselect
 
 romfs:
 	[ -d $(ROMFSDIR)/$$i ] || mkdir -p $(ROMFSDIR)
@@ -47,8 +47,8 @@ romfs:
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	-chmod -R +x $(ROMFSDIR)/bin
-	-rm $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio.gz
-	LDFLAGS="" $(MAKEARCH_KERNEL) -C $(ROOTDIR)/$(LINUXDIR) $(LINUXTARGET)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/nios2/boot/zImage $(KERNELZ)
+	-rm $(LINUXDIR)/usr/initramfs_data.cpio.gz
+	LDFLAGS="" $(MAKEARCH_KERNEL) $(LINUXTARGET)
+	cp $(LINUXDIR)/arch/nios2/boot/zImage $(KERNELZ)
 
 

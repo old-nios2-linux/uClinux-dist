@@ -28,9 +28,10 @@ endif
 # Get the core stuff worked out
 #
 
-LINUXDIR = $(CONFIG_LINUXDIR)
 LIBCDIR  = $(CONFIG_LIBCDIR)
 ROOTDIR  = $(shell pwd)
+LINUXDIR = $(ROOTDIR)/$(CONFIG_LINUXDIR)
+LINUXSRC = $(ROOTDIR)/../linux-2.6
 PATH	 := $(ROOTDIR)/tools:$(PATH)
 HOSTCC   = cc
 IMAGEDIR = $(ROOTDIR)/images
@@ -47,7 +48,7 @@ else
 HOST_NCPU := 1
 endif
 
-LINUX_CONFIG  = $(ROOTDIR)/$(LINUXDIR)/.config
+LINUX_CONFIG  = $(LINUXDIR)/.config
 CONFIG_CONFIG = $(ROOTDIR)/config/.config
 MODULES_CONFIG = $(ROOTDIR)/modules/.config
 -include $(CONFIG_CONFIG)
@@ -70,10 +71,10 @@ KERNEL_CROSS_COMPILE ?= $(CROSS_COMPILE)
 ifneq ($(SUBARCH),)
 # Using UML, so make the kernel and non-kernel with different ARCHs
 MAKEARCH = $(MAKE) ARCH=$(SUBARCH) CROSS_COMPILE=$(CROSS_COMPILE)
-MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) SUBARCH=$(SUBARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
+MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) SUBARCH=$(SUBARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) -C $(LINUXSRC) O=$(LINUXDIR)
 else
 MAKEARCH = $(MAKE) ARCH=$(ARCH)
-MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
+MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) -C $(LINUXSRC) O=$(LINUXDIR)
 endif
 
 DIRS    = $(VENDOR_TOPDIRS) lib user
@@ -82,7 +83,7 @@ DIRS    = $(VENDOR_TOPDIRS) lib user
 PKG_CONFIG = $(ROOTDIR)/tools/$(CROSS_COMPILE)pkg-config
 export PKG_CONFIG
 
-export VENDOR PRODUCT ROOTDIR LINUXDIR HOSTCC CONFIG_SHELL
+export VENDOR PRODUCT ROOTDIR LINUXSRC LINUXDIR HOSTCC CONFIG_SHELL
 export CONFIG_CONFIG LINUX_CONFIG MODULES_CONFIG ROMFSDIR SCRIPTSDIR
 export VERSIONPKG VERSIONSTR ROMFSINST PATH IMAGEDIR RELDIR RELFILES TFTPDIR
 export BUILD_START_STRING
@@ -126,6 +127,7 @@ vendors/Kconfig:
 .PHONY: Kconfig
 Kconfig: vendors/Kconfig
 	@chmod u+x config/mkconfig
+	[ -d linux-2.6.x ] || mkdir linux-2.6.x
 	config/mkconfig > Kconfig
 
 include config/Makefile.conf
@@ -229,7 +231,7 @@ oldconfig: Kconfig conf
 modules:
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(LINUXDIR)/modules ] || mkdir $(LINUXDIR)/modules; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) modules; \
+		$(MAKEARCH_KERNEL) modules; \
 	fi
 
 .PHONY: modules_install
@@ -239,15 +241,15 @@ modules_install:
 	if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(ROMFSDIR)/lib/modules ] || mkdir -p $(ROMFSDIR)/lib/modules; \
 		rm -f $(ROMFSDIR)/lib/modules/modules.dep; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=true modules_install; \
+		$(MAKEARCH_KERNEL) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=true modules_install; \
 		rm -f $(ROMFSDIR)/lib/modules/*/build; \
 		rm -f $(ROMFSDIR)/lib/modules/*/source; \
 		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs $(STRIP) -R .comment -R .note -g --strip-unneeded; \
-		env NM=$(CROSS_COMPILE)nm $(ROOTDIR)/user/busybox/depmod.pl -P _ -b $(ROMFSDIR)/lib/modules/ -k $(ROOTDIR)/$(LINUXDIR)/vmlinux; \
+		env NM=$(CROSS_COMPILE)nm $(ROOTDIR)/user/busybox/depmod.pl -P _ -b $(ROMFSDIR)/lib/modules/ -k $(LINUXDIR)/vmlinux; \
 	fi
 
 linux_%:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) $(patsubst linux_%,%,$@)
+	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) $(patsubst linux_%,%,$@)
 modules_%:
 	[ ! -d modules ] || $(MAKEARCH) -C modules $(patsubst modules_%,%,$@)
 config_%: vendors/Kconfig
@@ -257,7 +259,7 @@ oldconfig_config:
 oldconfig_modules:
 	[ ! -d modules ] || $(MAKEARCH) -C modules oldconfig
 oldconfig_linux:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) oldconfig
+	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) oldconfig
 oldconfig_uClibc:
 	[ -z "$(findstring uClibc,$(LIBCDIR))" ] || $(MAKEARCH) -C $(LIBCDIR) oldconfig
 
@@ -316,18 +318,18 @@ linux linux%_only:
 		exit 1 ; \
 	fi
 	rm -f $(LINUXDIR)/usr/initramfs_data.cpio.gz
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) $(LINUXTARGET) || exit 1
 	if [ -f $(LINUXDIR)/vmlinux ]; then \
 		ln -f $(LINUXDIR)/vmlinux $(LINUXDIR)/linux ; \
 	fi
 
 .PHONY: sparse
 sparse:
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) C=1 $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) C=1 $(LINUXTARGET) || exit 1
 
 .PHONY: sparseall
 sparseall:
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) C=2 $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) C=2 $(LINUXTARGET) || exit 1
 
 .PHONY: subdirs
 subdirs: linux modules
@@ -338,7 +340,7 @@ dep:
 		echo "ERROR: you need to do a 'make config' first" ; \
 		exit 1 ; \
 	fi
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) dep
+	$(MAKEARCH_KERNEL) dep
 
 # This one removes all executables from the tree and forces their relinking
 .PHONY: relink
@@ -356,7 +358,7 @@ clean: modules_clean
 	find ./tools/ -maxdepth 1 -type l | xargs rm -f
 
 real_clean mrproper: clean
-	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXDIR) mrproper || :
+	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) mrproper || :
 	-$(MAKEARCH) -C config clean
 	[ -d uClibc ] && $(MAKEARCH) -C uClibc distclean || :
 	[ -d "$(RELDIR)" ] && $(MAKEARCH) -C $(RELDIR) clean || :
@@ -364,9 +366,10 @@ real_clean mrproper: clean
 	rm -rf romfs Kconfig config.arch images
 	rm -rf .config .config.old .oldconfig autoconf.h auto.conf
 	rm -rf staging
+	rm -rf linux-2.6.x
 
 distclean: mrproper
-	-$(MAKEARCH_KERNEL) -C $(LINUXDIR) distclean
+	-$(MAKEARCH_KERNEL) distclean
 	-rm -f user/tinylogin/applet_source_list user/tinylogin/config.h
 	-rm -f lib/uClibc lib/glibc
 	-$(MAKE) -C tools/ucfront clean
