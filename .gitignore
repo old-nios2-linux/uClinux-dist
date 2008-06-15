@@ -5,6 +5,4 @@
 *.a
 images/*
 romfs/*
-include/*
-!include/Makefile
-Config.in
+linux-2.6.x/*
