@@ -94,7 +94,7 @@ SORT_SECTION=`check_cc "-Wl,--sort-section,alignment" ""`
 GC_SECTIONS=`(
 . ./.config
 if test x"$CONFIG_STATIC" = x"y"; then
-    check_libc_is_glibc "" "-Wl,--gc-sections"
+    echo
 else
     echo "-Wl,--gc-sections"
 fi
