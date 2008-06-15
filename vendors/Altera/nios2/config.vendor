@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Thu May 29 09:02:28 2008
+# Sun Jun 15 16:44:43 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -53,9 +53,17 @@ CONFIG_DISTVERSION="4.0"
 # CONFIG_LIB_LIBCRYPT_OLD is not set
 # CONFIG_LIB_PWLIB is not set
 # CONFIG_LIB_LIBOPENH323 is not set
-# CONFIG_LIB_NXLIB is not set
+# CONFIG_LIB_LIBMPEG2 is not set
+# CONFIG_LIB_TSLIB is not set
 # CONFIG_LIB_FLTK2 is not set
-# CONFIG_LIB_FLTK is not set
+# CONFIG_LIB_FREETYPE is not set
+# CONFIG_LIB_DIRECTFB is not set
+# CONFIG_LIB_LIBSDL is not set
+# CONFIG_LIB_SDL_GFX is not set
+# CONFIG_LIB_SDL_IMAGE is not set
+# CONFIG_LIB_SDL_MIXER is not set
+# CONFIG_LIB_SDL_NET is not set
+# CONFIG_LIB_SDL_TTF is not set
 # CONFIG_LIB_LIBJUDY is not set
 
 #
@@ -273,6 +281,7 @@ CONFIG_USER_INETD_INETD=y
 # CONFIG_USER_KENDIN_CONFIG is not set
 # CONFIG_USER_KLAXON_KLAXON is not set
 # CONFIG_USER_L2TPD_L2TPD is not set
+# CONFIG_USER_LINKS_LINKS is not set
 # CONFIG_USER_LINUXIGD_LINUXIGD is not set
 # CONFIG_USER_MINIUPNPD is not set
 # CONFIG_USER_LOATTACH_LOATTACH is not set
