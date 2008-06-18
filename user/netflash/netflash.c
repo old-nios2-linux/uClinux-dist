@@ -42,6 +42,7 @@
 #include <netinet/in.h>
 #include <stdarg.h>
 
+#include <linux/autoconf.h>
 #include <linux/version.h>
 #include <config/autoconf.h>
 #include <linux/major.h>
@@ -123,6 +124,7 @@
 #define CONFIG_USER_NETFLASH_WATCHDOG 1
 #endif
 
+#define NUM_BLOCKS_TO_KEEP	20
 /****************************************************************************/
 
 char *version = "2.2.0";
@@ -184,6 +186,15 @@ struct stat stat_rdev;
 char	*srcaddr = NULL;
 #endif
 
+/* Used if the -t option is in effect to calculate the hash as blocks are received */
+#ifdef CONFIG_USER_NETFLASH_CRYPTO
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+SHA256_CTX sha_ctx;
+#else
+MD5_CTX md5_ctx;
+#endif
+#endif
+
 static void (* program_segment)(int rd, char *sgdata,
 		int sgpos, int sglength, int sgsize);
 
@@ -213,9 +224,6 @@ void restartinit(void)
 }
 
 
-#ifdef CONFIG_USER_NETFLASH_CRYPTO
-#define memcpy_withsum(d, s, l, sum)	memcpy(d, s, l)
-#else
 static void memcpy_withsum(void *dst, void *src, int len, unsigned int *sum)
 {
 	unsigned char *dp = (unsigned char *)dst;
@@ -226,6 +234,58 @@ static void memcpy_withsum(void *dst, void *src, int len, unsigned int *sum)
 		*sum += *dp++;
 		sp++;
 		len--;
+	}
+}
+
+#ifdef CONFIG_USER_NETFLASH_CRYPTO
+void add_crypto_hash(void)
+{
+	static int progressive_hash_init = 0;
+	struct fileblock *fb;
+	int fullblocks = 0;
+
+	if (!progressive_hash_init) {
+		progressive_hash_init = 1;
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+		SHA256_Init(&sha_ctx);
+#else
+		MD5_Init(&md5_ctx);
+#endif
+	}
+
+	/* 
+	 * Check to see if we have NUM_BLOCKS_TO_KEEP blocks of continuous 
+	 * data available at the front of the block list. If we do, hash 
+	 * the first (NUM_BLOCKS_TO_KEEP - 1) blocks and free the memory. 
+	 * Assume that the blocks are in correct order.
+	 */
+	fb = fileblocks;
+	for (fullblocks = 0; fullblocks < NUM_BLOCKS_TO_KEEP; fullblocks++) {
+		if (!fb || !fb->next) {
+			/* No next block */
+			break;
+		}
+		if (fb->length != fb->maxlength) {
+			/* Not a full block */
+			break;
+		}
+		fb = fb->next;
+	}
+
+	if (fullblocks == NUM_BLOCKS_TO_KEEP) {
+		while (fullblocks > 1) {
+			/* Hash the first (NUM_BLOCKS_TO_KEEP - 1) blocks and free them */
+			fb = fileblocks;
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+			SHA256_Update(&sha_ctx, fb->data, fb->length);
+#else
+			MD5_Update(&md5_ctx, fb->data, fb->length);
+#endif
+			fileblocks = fb->next;
+			free(fb->data);
+			free(fb);
+			fullblocks--;
+		}
 	}
 }
 #endif
@@ -242,6 +302,12 @@ void add_data(unsigned long address, unsigned char * data, unsigned long len)
 	struct fileblock *fbnew;
 	static unsigned long total = 0;
 	static unsigned lastk = 0;
+
+#ifdef CONFIG_USER_NETFLASH_CRYPTO
+	if (dothrow) {
+		add_crypto_hash();
+	}
+#endif
 
 	/* The fileblocks list is ordered, so initialise this outside
 	 * the while loop to save some search time. */
@@ -393,12 +459,6 @@ void chksum()
 	file_checksum = 0;
 
 	if (fileblocks != NULL && file_length >= CHECKSUM_LENGTH) {
-#ifdef CONFIG_USER_NETFLASH_CRYPTO
-		/* No on the fly check sum so we have to calculate it all here */
-		for (fb = fileblocks; fb != NULL; fb = fb->next)
-			for (i=0; i<fb->length; i++)
-				calc_checksum += fb->data[i];
-#endif
 		for (fb = fileblocks; fb != NULL; fb = fb->next) {
 			if ((fb->pos + fb->length) >= (file_length - CHECKSUM_LENGTH)) {
 				sp = fb->data + (file_length - CHECKSUM_LENGTH - fb->pos);
@@ -613,45 +673,36 @@ void hexdump(unsigned char *p, unsigned int len)
 }
 #endif
 
-/*
- *	Check the crypto signature on the image...
- *	This always includes a public key encrypted header and an MD5
- *	(or SHA256) checksum. It optionally includes AES encryption of
- *	the image.
- */
-void check_crypto_signature(void)
+void load_public_key(RSA **pkey)
 {
-	struct fileblock *fb;
-	struct little_header lhdr;
-	struct header hdr;
-	int image_length;
-  	RSA *pkey;
-
 	/* Load public key */
-	{
-		BIO *in;
-		struct stat st;
+	BIO *in;
+	struct stat st;
 
-		if (stat(PUBLIC_KEY_FILE, &st) == -1 && errno == ENOENT) {
-			printf("WARNING: no public key file found, %s\n",
-				PUBLIC_KEY_FILE);
-			return;
-		}
-		in = BIO_new(BIO_s_file());
-		if (in == NULL) {
-			error("cannot allocate a bio structure");
-			exit_failed(BAD_DECRYPT);
-		}
-		if (BIO_read_filename(in, PUBLIC_KEY_FILE) <= 0) {
-			error("cannot open public key file");
-			exit_failed(BAD_PUB_KEY);
-		}
-		pkey = PEM_read_bio_RSA_PUBKEY(in, NULL, NULL, NULL);
-		if (pkey == NULL) {
-			error("cannot read public key");
-			exit_failed(BAD_PUB_KEY);
-		}
+	if (stat(PUBLIC_KEY_FILE, &st) == -1 && errno == ENOENT) {
+		printf("WARNING: no public key file found, %s\n",
+			PUBLIC_KEY_FILE);
+		return;
 	}
+	in = BIO_new(BIO_s_file());
+	if (in == NULL) {
+		error("cannot allocate a bio structure");
+		exit_failed(BAD_DECRYPT);
+	}
+	if (BIO_read_filename(in, PUBLIC_KEY_FILE) <= 0) {
+		error("cannot open public key file");
+		exit_failed(BAD_PUB_KEY);
+	}
+	*pkey = PEM_read_bio_RSA_PUBKEY(in, NULL, NULL, NULL);
+	if (*pkey == NULL) {
+		error("cannot read public key");
+		exit_failed(BAD_PUB_KEY);
+	}
+}
+
+void decode_header_info(struct header *hdr, RSA *pkey, int *img_len)
+{
+	struct little_header lhdr;
 
 	/* Decode header information */
 	extract_data((char *) &lhdr, file_length - sizeof(lhdr), sizeof(lhdr));
@@ -665,16 +716,16 @@ void check_crypto_signature(void)
 	}
 	{
 		unsigned short hlen = ntohs(lhdr.hlen);
-		char tmp[hlen];
-		char t2[hlen];
+		unsigned char tmp[hlen];
+		unsigned char t2[hlen];
 		int len;
 
-		extract_data(tmp, file_length - sizeof(lhdr) - hlen, hlen);
+		extract_data((char *) tmp, file_length - sizeof(lhdr) - hlen, hlen);
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
-		image_length = file_length - sizeof(lhdr) - hlen;
+		*img_len = file_length - sizeof(lhdr) - hlen;
 #else
 		remove_data(sizeof(lhdr) + hlen);
-		image_length = file_length;
+		*img_len = file_length;
 #endif
 		len = RSA_public_decrypt(hlen, tmp, t2,
 				pkey, RSA_PKCS1_PADDING);
@@ -685,13 +736,31 @@ void check_crypto_signature(void)
 		if (len != sizeof(struct header)) {
 			error("Length mismatch %d %d\n", (int)sizeof(struct header), len);
 		}
-		memcpy(&hdr, t2, sizeof(struct header));
+		memcpy(hdr, t2, sizeof(struct header));
 	}
-	RSA_free(pkey);
-	if (hdr.magic != htonl(CRYPTO_MAGIC)) {
+	if (hdr->magic != htonl(CRYPTO_MAGIC)) {
 		error("image not cryptographically enabled");
 		exit_failed(NO_CRYPT);
 	}
+}
+
+/*
+ *	Check the crypto signature on the image...
+ *	This always includes a public key encrypted header and an MD5
+ *	(or SHA256) checksum. It optionally includes AES encryption of
+ *	the image.
+ */
+void check_crypto_signature(void)
+{
+	struct fileblock *fb;
+	struct header hdr;
+	int image_length;
+  	RSA *pkey;
+
+	load_public_key(&pkey);
+	decode_header_info(&hdr, pkey, &image_length);
+	RSA_free(pkey);
+
 	/* Decrypt image if needed */
 	if (hdr.flags & FLAG_ENCRYPTED) {
 		aes_context ac;
@@ -758,6 +827,85 @@ void check_crypto_signature(void)
 #endif
 
 	printf("netflash: signed image approved\n");
+}
+
+void check_crypto_signature_block(void)
+{
+	struct header hdr;
+	int image_length;
+	int length;
+  	RSA *pkey;
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+	unsigned char hash[SHA256_DIGEST_LENGTH];
+#else
+	unsigned char hash[MD5_DIGEST_LENGTH];
+#endif
+	struct fileblock *fb;
+
+	load_public_key(&pkey);
+	decode_header_info(&hdr, pkey, &image_length);
+	RSA_free(pkey);
+
+#ifndef CONFIG_USER_NETFLASH_CRYPTO_V2
+	/* For MD5 hashes, remove any padding */
+	if (hdr.padsize) {
+		image_length -= hdr.padsize;
+	}
+#endif
+
+	/* 
+	 * Extra checking - the only way this could occur is if the size 
+	 * of the header is bigger than a fileblock and we've thrown away 
+	 * all but one fileblocks.
+	 */ 
+	if ((image_length < fileblocks->pos) ||
+			(fileblocks->pos + fileblocks->length > image_length)) {
+		error("Cryptographic header missing - too much data thrown away");
+		exit_failed(BAD_HMAC_SIG);
+	}
+
+	/* Hash the last few blocks, skipping the crypto header at the end */
+	for (fb = fileblocks; (fb != NULL); fb = fb->next) {
+		length = fb->length;
+		if (length > (image_length - fb->pos)) {
+			length = image_length - fb->pos;
+		}
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+		SHA256_Update(&sha_ctx, fb->data, length);
+#else
+		MD5_Update(&md5_ctx, fb->data, length);
+#endif
+		if (length != fb->length)
+			break;
+	}
+
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+	SHA256_Final(hash, &sha_ctx);
+#else
+	MD5_Final(hash, &md5_ctx);
+#endif
+
+	if (hdr.flags & FLAG_ENCRYPTED) {
+		error("Can not decrypt encrypted image when -t option is used.");
+		exit_failed(BAD_CRYPT);
+		return;
+	}
+
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
+	/* Check SHA256 sum */
+	if (memcmp(hdr.hash, hash, SHA256_DIGEST_LENGTH) != 0) {
+		error("bad SHA256 signature");
+		exit_failed(BAD_MD5_SIG);
+	}
+#else
+	/* Check MD5 sum if required */
+	if (memcmp(hdr.md5, hash, MD5_DIGEST_LENGTH) != 0) {
+		error("bad MD5 signature");
+		exit_failed(BAD_MD5_SIG);
+	}
+#endif
+
+	notice("signed image approved");
 }
 #endif
 
@@ -1324,6 +1472,13 @@ static const char *kill_partial[] = {
 #endif
 #ifdef CONFIG_USER_CLAMAV_CLAMD
 	"clamd",
+#endif
+#ifdef CONFIG_USER_SSH_SSHKEYGEN
+	"ssh-keygen",
+	"gen-keys",
+#endif
+#if CONFIG_PROP_HTTPSCERTGEN_HTTPSCERTGEN
+	"https-certgen",
 #endif
 	NULL
 };
@@ -2323,9 +2478,7 @@ int netflashmain(int argc, char *argv[])
 		exit_failed(NO_IMAGE);
 	}
 
-#ifndef CONFIG_USER_NETFLASH_CRYPTO
 	if (!dothrow)
-#endif
 		if (fileblocks->pos != 0) {
 			error("failed to load new image");
 			exit_failed(NO_IMAGE);
@@ -2347,7 +2500,10 @@ int netflashmain(int argc, char *argv[])
 	}
 
 #if defined(CONFIG_USER_NETFLASH_CRYPTO) && !defined(CONFIG_USER_NETFLASH_CRYPTO_V2)
-	check_crypto_signature();
+    if (dothrow)
+        check_crypto_signature_block();
+    else 
+        check_crypto_signature();
 #endif
 
 #ifdef CONFIG_USER_NETFLASH_HMACMD5
@@ -2439,8 +2595,13 @@ int netflashmain(int argc, char *argv[])
 	 * We also leave the sign structures on the image data, so they get
 	 * written to flash as well.
 	 */
-	if (doversion)
-		check_crypto_signature();
+	if (doversion) {
+		if (dothrow) {
+			check_crypto_signature_block();
+		} else {
+			check_crypto_signature();
+		}
+	}
 #endif
 
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS

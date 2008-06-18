@@ -1962,6 +1962,7 @@ grid_paint(image_desc_t   *im)
 		  GFX_H_CENTER, GFX_V_CENTER,
 		  im->title);
     /* rrdtool 'logo' */
+#ifdef DRAW_RRDTOOL_LOGO
     gfx_new_text( im->canvas,
 		  im->ximg-7, 7,
 		  ( im->graph_col[GRC_FONT] & 0xffffff00 ) | 0x00000044,
@@ -1969,7 +1970,7 @@ grid_paint(image_desc_t   *im)
 		  5.5, im->tabwidth, 270,
 		  GFX_H_RIGHT, GFX_V_TOP,
 		  "RRDTOOL / TOBI OETIKER");
-    
+#endif 
     /* graph labels */
     if( !(im->extra_flags & NOLEGEND) & !(im->extra_flags & ONLY_GRAPH) ) {
             for(i=0;i<im->gdes_c;i++){

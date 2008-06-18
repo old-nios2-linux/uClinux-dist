@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: _realsetup.in,v 1.46.2.17 2007-11-05 17:05:48 paul Exp $
+# RCSID $Id: _realsetup.in,v 1.46.2.18 2008-02-15 01:18:08 paul Exp $
 
 me='ipsec setup'		# for messages
 
@@ -411,6 +411,7 @@ case "$1" in
 		eroutes=`ipsec auto --status 2> /dev/null | grep -i "ipsec sa established" | wc -l | sed s/\ //g`
 	fi
 
+	if test -z "${eroutes}"; then  eroutes=0; fi;
 
 	if test -r $ipsecversion
 	then

@@ -150,7 +150,10 @@ static const char rcsid[] _U_ =
 #endif
 
 #ifndef __GLIBC__
-typedef int		socklen_t;
+#ifndef __socklen_t_defined
+typedef int socklen_t;
+#define __socklen_t_defined
+#endif
 #endif
 
 #ifndef MSG_TRUNC

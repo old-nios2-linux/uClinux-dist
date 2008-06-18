@@ -16,6 +16,10 @@ else
 CONFOPTS += --with-privatedir=/etc/samba --with-configdir=/etc/samba
 endif
 
+ifdef CONFIG_LIB_LIBPAM
+CONFOPTS += --with-pam
+endif
+
 ifeq ($(ARCH),arm)
 CFLAGS := $(CFLAGS:-O1=-Os)
 endif

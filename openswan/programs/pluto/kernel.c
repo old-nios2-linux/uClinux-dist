@@ -12,7 +12,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: kernel.c,v 1.232.2.2 2006-10-03 01:16:11 paul Exp $
+ * RCSID $Id: kernel.c,v 1.232.2.4 2008-02-15 17:00:01 paul Exp $
  */
 
 #include <stddef.h>
@@ -76,6 +76,8 @@
 #include "packet.h"  /* for pb_stream in nat_traversal.h */
 #include "nat_traversal.h"
 #endif
+
+const struct pfkey_proto_info null_proto_info[2];
 
 bool can_do_IPcomp = TRUE;  /* can system actually perform IPCOMP? */
 
@@ -2056,6 +2058,10 @@ teardown_half_ipsec_sa(struct state *st, bool inbound)
      * But if there is more than one, they have been grouped
      * so deleting any one will do.  So we just delete the
      * first one found.  It may or may not be the only one.
+     *
+     * Paul: I think this is not true for NETKEY, since we are
+     * leaving the output eroute installed - try to delete that
+     * one seperately
      */
     struct connection *c = st->st_connection;
     struct {
@@ -2076,6 +2082,17 @@ teardown_half_ipsec_sa(struct state *st, bool inbound)
                           , SADB_SATYPE_UNSPEC
                           , narrow_proto_info, 0
                           , ERO_DEL_INBOUND, "delete inbound");
+
+	/* This should move into kernel_netlink.c */
+	if (kernel_ops->type == USE_NETKEY)
+	 (void) raw_eroute(&c->spd.this.host_addr, &c->spd.this.client
+			, &c->spd.that.host_addr, &c->spd.that.client
+			, 256
+			, IPSEC_PROTO_ANY
+			, c->spd.that.protocol
+			, SADB_SATYPE_UNSPEC
+			, null_proto_info, 0
+			, ERO_DELETE, "delete outbound");
     }
 
     if (!kernel_ops->grp_sa)

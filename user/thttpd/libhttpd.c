@@ -2731,7 +2731,7 @@ ls( httpd_conn* hc )
 	    return -1;
 	    }
 	++hc->hs->cgi_count;
-#ifdef EMBED
+#ifdef __uClinux__
 	r = vfork( );
 #else
 	r = fork( );
@@ -3398,7 +3398,11 @@ cgi_child( httpd_conn* hc )
 	    httpd_write_response( hc );
 	    exit( 1 );
 	    }
+#ifdef __uClinux__
+	r = vfork( );
+#else
 	r = fork( );
+#endif
 	if ( r < 0 )
 	    {
 	    syslog( LOG_ERR, "fork - %m" );
@@ -3443,7 +3447,11 @@ cgi_child( httpd_conn* hc )
 	    httpd_write_response( hc );
 	    exit( 1 );
 	    }
+#ifdef __uClinux__
+	r = vfork( );
+#else
 	r = fork( );
+#endif
 	if ( r < 0 )
 	    {
 	    syslog( LOG_ERR, "fork - %m" );
@@ -3549,7 +3557,7 @@ cgi( httpd_conn* hc )
 	    }
 	++hc->hs->cgi_count;
 	httpd_clear_ndelay( hc->conn_fd );
-#ifdef EMBED
+#ifdef __uClinux__
 	r = vfork( );
 #else
 	r = fork( );

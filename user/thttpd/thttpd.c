@@ -506,6 +506,7 @@ main( int argc, char** argv )
 	    exit( 1 );
 	    }
 #else /* HAVE_DAEMON */
+#ifndef __uClinux__
 	switch ( fork() )
 	    {
 	    case 0:
@@ -516,6 +517,7 @@ main( int argc, char** argv )
 	    default:
 	    exit( 0 );
 	    }
+#endif
 #ifdef HAVE_SETSID
         (void) setsid();
 #endif /* HAVE_SETSID */

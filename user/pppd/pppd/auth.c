@@ -240,7 +240,12 @@ char remote_name[MAXNAMELEN];	/* Peer's name for authentication */
 #if USE_PAM
 bool explicit_pamservice = 0;	/* User specified explicit PAM service */
 char pamservice[MAXNAMELEN];	/* Service for pam_start() */
+bool obey_restrictions = 0; 	/* Obey PAM account restrictions */
 #endif
+const char *auth_group = NULL;	/* If our authentication source can provide us
+				   				   with a group, put it here */
+bool external_auth = 0;		/* If we're using an external authenticator (radius, tacas, etc)
+				   set this flag */
 
 static char *uafname;		/* name of most recent +ua file */
 
@@ -405,6 +410,8 @@ option_t auth_options[] = {
     { "pamservice", o_string, pamservice,
       "Set PAM service for authentication", OPT_PRIO | OPT_STATIC,
       &explicit_pamservice, MAXNAMELEN },
+    { "obey_acct_restrict", o_bool, &obey_restrictions,
+      "Obey any PAM account restrictions for an authed user", 1},
 #endif
     { NULL }
 };
@@ -922,6 +929,11 @@ auth_peer_fail(unit, protocol)
      * Authentication failure: take the link down
      */
     status = EXIT_PEER_AUTH_FAILED;
+    if (auth_group) {
+		free(auth_group);
+		auth_group = NULL;
+    }
+
     lcp_close(unit, "Authentication failed");
 }
 
@@ -982,6 +994,11 @@ auth_peer_success(unit, protocol, prot_flavor, name, namelen)
      */
     if ((auth_pending[unit] &= ~bit) == 0)
         network_phase(unit);
+
+    if (auth_group) {
+		free(auth_group);
+		auth_group = NULL;
+    }
 }
 
 /*
@@ -2579,3 +2596,63 @@ auth_script(script)
 
     auth_script_pid = run_program(script, argv, 0, auth_script_done, NULL, 0);
 }
+
+#ifdef USE_PAM
+/* check_pam_account_restrictions - check if the authenticated user account is valid.
+   This is useful when doing CHAPpy things, which don't support PAM as an authentication
+   mechanism. It means we still obey PAM's account restrictions
+ */
+int check_pam_account_restrictions(const char *user) {
+	int pam_error;
+	pam_handle_t *loc_handle;
+
+	if (obey_restrictions) {
+		pam_error = pam_start(explicit_pamservice ? pamservice : "ppp", user, &PAM_conversation, &loc_handle);
+
+		if (pam_error != PAM_SUCCESS) {
+			return 1;
+		}
+		/* If we have an authentication group, send it */
+		if (auth_group != NULL) {
+			char buf[128];
+			snprintf(buf, 128, "SG-GROUP=%s", auth_group);
+			pam_putenv(loc_handle, buf);
+		}
+		/* Call the account management function */
+		pam_error = pam_acct_mgmt(loc_handle, 0);	
+		pam_end(loc_handle, 0);
+
+		if (pam_error != PAM_SUCCESS)
+			return 1;
+	}
+
+	return 0;
+}
+#endif /* USE_PAM */
+
+#ifdef CONFIG_PROP_STATSD_STATSD
+void notify_login_failure(const char *user) {
+	char buf[500];
+        snprintf(buf, 500-1,
+        	"statsd -a incr pam_failed_%s %s \\;"
+                " push pam_last_failure_%s %s \"Permission Denied\" 0 \\;"
+                " incr pam_users %s \\; incr pam_services %s",
+                        user,
+                        explicit_pamservice ? pamservice : "ppp",
+                        user,
+			explicit_pamservice ? pamservice : "ppp",
+			user,
+			explicit_pamservice ? pamservice : "ppp");
+        if (system(buf) == -1) {
+            warn("%s - failed", buf);
+        }
+
+	if (!external_auth) {
+		/* Do the same for pcidssd */
+		snprintf(buf, 500-1, "pcidssd -f %s", user);
+		if (system(buf) == -1) {
+			warn("%s - failed", buf);
+		}
+	}          
+}
+#endif 

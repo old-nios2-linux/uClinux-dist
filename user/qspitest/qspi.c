@@ -67,7 +67,7 @@ int spiRead(int port_fd, uint8_t registerIndex)
 	unsigned int *pi;
 	unsigned char buf[5] = { 0, 0, 0, 0, 0 };
 
-	readData.buf = buf;
+	memcpy(readData.buf, buf, sizeof(buf));
 	pi = (unsigned int *)(&readData.buf[0]);
 	*pi = (0xc0000000 | (opt_channel << 29)) >> opt_cmd_shift;
 

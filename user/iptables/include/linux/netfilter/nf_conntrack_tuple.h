@@ -12,6 +12,17 @@
 
 #include <linux/netfilter/nf_conntrack_tuple_common.h>
 
+/* backwards compatibility crap. only exists in userspace - HW */
+#include <linux/version.h>
+#ifndef KERNEL_VERSION
+#define KERNEL_VERSION(a,b,c) (((a) << 16) | ((b) << 8) | (c))
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0))
+typedef __u16 __be16;
+typedef __u32 __be32;
+#endif
+
 /* A `tuple' is a structure containing the information to uniquely
   identify a connection.  ie. if two packets have the same tuple, they
   are in the same connection; if not, they are not.

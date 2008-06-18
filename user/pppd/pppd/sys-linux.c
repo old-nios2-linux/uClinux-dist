@@ -1584,11 +1584,11 @@ int have_route_to(u_int32_t addr)
  * sifdefaultroute - assign a default route through the address given.
  */
 
-int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, u_int32_t metric)
+int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, u_int32_t metric, bool force)
 {
     struct rtentry rt;
 
-    if (defaultroute_exists(&rt) && strcmp(rt.rt_dev, ifname) != 0) {
+    if (!force && defaultroute_exists(&rt) && strcmp(rt.rt_dev, ifname) != 0) {
 	if (rt.rt_flags & RTF_GATEWAY)
 	    error("not replacing existing default route via %I",
 		  SIN_ADDR(rt.rt_gateway));
@@ -1634,6 +1634,8 @@ int cifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
     memset (&rt, '\0', sizeof (rt));
     SET_SA_FAMILY (rt.rt_dst,     AF_INET);
     SET_SA_FAMILY (rt.rt_gateway, AF_INET);
+
+    rt.rt_dev = ifname;
 
     if (kernel_version > KVERSION(2,1,0)) {
 	SET_SA_FAMILY (rt.rt_genmask, AF_INET);

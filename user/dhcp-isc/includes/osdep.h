@@ -39,7 +39,10 @@
 
 #include "config.h"
 
+#ifndef __UC_LIBC__
 #include <inttypes.h>
+#endif
+
 /* XXX: now that we have a nice autoconf, we should sense this in
  * ./configure.
  */

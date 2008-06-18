@@ -1322,16 +1322,13 @@ isc_result_t got_one (h)
 	struct hardware hfrom;
 	struct iaddr ifrom;
 	int result;
-	union {
 #ifdef __uClinux__
-		static unsigned char packbuf [4095]; /* Packet input buffer.
-					 	 Must be as large as largest
-						 possible MTU. */
-#else
+	static
+#endif
+	union {
 		unsigned char packbuf [4095]; /* Packet input buffer.
 					 	 Must be as large as largest
 						 possible MTU. */
-#endif
 		struct dhcp_packet packet;
 	} u;
 	struct interface_info *ip;

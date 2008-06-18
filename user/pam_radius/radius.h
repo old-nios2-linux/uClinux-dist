@@ -180,8 +180,7 @@ typedef struct pw_auth_hdr {
 
 #if 1 
 /*	Vendor Specific Attribute stuff */
-#define SG_VENDOR_TAG 			1500 /* Pick something arbitrary until we actually go 
-						and do this properly */
+#define SG_VENDOR_TAG 			1573 /* Secure's Enterprise Number */
 #define SG_GROUP_ATTR			1
 
 #define SG_PAM_DATA_HANDLE		"SG-GROUP"

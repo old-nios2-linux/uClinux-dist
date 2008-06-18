@@ -15,7 +15,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: ipsec_param.h,v 1.29.6.4 2007-09-05 02:30:06 paul Exp $
+ * RCSID $Id: ipsec_param.h,v 1.29.6.5 2008-02-18 16:27:19 paul Exp $
  *
  */
 
@@ -175,6 +175,7 @@ extern int sysctl_ipsec_regress_pfkey_lossage;
  */
 #define KLIPS_ERROR(flag, format, args...) if(printk_ratelimit() || flag) printk(KERN_ERR "KLIPS " format, ## args)
 #ifdef CONFIG_KLIPS_DEBUG
+#include <linux/ip.h>
 extern void ipsec_print_ip(struct iphdr *ip);
 
 	#define KLIPS_PRINT(flag, format, args...) \
@@ -257,7 +258,10 @@ extern void ipsec_print_ip(struct iphdr *ip);
 
 /*
  * $Log: ipsec_param.h,v $
- * Revision 1.29.6.4  2007-09-05 02:30:06  paul
+ * Revision 1.29.6.5  2008-02-18 16:27:19  paul
+ * include linux/ip.h for struct iphdr (bug 814) - patch by sedrez
+ *
+ * Revision 1.29.6.4  2007/09/05 02:30:06  paul
  * KLIPS_SATOT macro. Patch by David McCullough
  *
  * Revision 1.29.6.3  2006/05/01 14:32:31  mcr

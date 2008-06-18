@@ -3,13 +3,13 @@
 # wander through an OpenSWAN nat-t directory, creating a patch file (to stdout)
 # that will apply the code to a kernel source directory.
 #
-# $Id: nattpatch,v 1.2 2005-04-06 17:47:44 mcr Exp $
+# $Id: nattpatch,v 1.2.2.1 2008-02-18 15:06:27 paul Exp $
 #
 
 KERN=$1
 shift
 
-source packaging/utils/kernelpatching.sh
+. packaging/utils/kernelpatching.sh
 
 patch20=false
 patch22=false

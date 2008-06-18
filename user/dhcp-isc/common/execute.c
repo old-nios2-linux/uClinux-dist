@@ -233,7 +233,12 @@ int execute_statements (result, packet, lease, client_state,
                         }
                         argv[i] = NULL;
 
-	                if ((p = fork()) > 0) {
+#ifdef __uClinux__
+	                p = vfork();
+#else
+	                p = fork();
+#endif
+	                if (p > 0) {
 		        	int status;
 		        	waitpid(p, &status, 0);
 

@@ -11,7 +11,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: connections.c,v 1.256.2.10 2007-06-05 16:48:58 paul Exp $
+ * RCSID $Id: connections.c,v 1.256.2.12 2008-02-18 22:29:11 paul Exp $
  */
 
 #include <string.h>
@@ -515,10 +515,16 @@ delete_connection(struct connection *c, bool relations)
 #ifdef KERNEL_ALG
     palg_info.ppai_esp = &c->alg_info_esp;
     alg_info_delref(palg_info.ppai);
+    /* causes double free errors
+     * pfree(c->alg_esp); 
+     */
 #endif
 #ifdef IKE_ALG
     palg_info.ppai_ike = &c->alg_info_ike;
     alg_info_delref(palg_info.ppai);
+    /* causes double free errors
+     * pfree(c->alg_ike); 
+     */
 #endif
     pfree(c);
 }
@@ -1319,6 +1325,7 @@ add_connection(const struct whack_message *wm)
 		, c->name);
 
 	c->alg_info_esp = NULL;
+	c->alg_esp = NULL;
 #ifdef KERNEL_ALG
 	if (wm->esp)  
 	{
@@ -1350,6 +1357,7 @@ add_connection(const struct whack_message *wm)
 #endif	
 
 	c->alg_info_ike = NULL;
+	c->alg_ike = NULL;
 #ifdef IKE_ALG
 	if (wm->ike)
 	{

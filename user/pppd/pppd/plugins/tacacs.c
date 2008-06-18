@@ -369,5 +369,6 @@ void tacacs_plugin_init(void)
 	
 	prev_ip_down_hook = ip_down_hook;
 	ip_down_hook = accounting_stop;
+	external_auth = 1;
     }
 }

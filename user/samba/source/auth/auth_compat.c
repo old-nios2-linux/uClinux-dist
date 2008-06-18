@@ -19,6 +19,9 @@
 */
 
 #include "includes.h"
+#include <config/autoconf.h>
+#include <syslog.h>
+#include <stdlib.h>
 
 extern struct auth_context *negprot_global_auth_context;
 extern BOOL global_encrypted_passwords_negotiated;
@@ -126,6 +129,29 @@ BOOL password_ok(char *smb_name, DATA_BLOB password_blob)
 			return True;
 		}
 	}
-
+#ifdef CONFIG_PROP_STATSD_STATSD
+	/* Execute a statsd command to indicate failure to login */
+	{
+		char buf[500];
+		snprintf(buf, 500-1,
+		        "statsd -a incr pam_failed_%s samba \\;"
+		                 " push pam_last_failure_%s samba \"Permission Denied\" 0 \\;"
+		                 " incr pam_users %s \\; incr pam_services samba",
+		        smb_name,
+		        smb_name,
+		       	smb_name);
+		if (system(buf) == -1) {
+			syslog(LOG_ERR, "%s - failed", buf);
+		}
+	}
+	/* Also execute the pcidssd util to indicate that the user failed its login */
+	{
+		char buf[500];
+		snprintf(buf, 500-1, "pcidssd -f %s", smb_name);
+		if (system(buf) == -1) {
+			syslog(LOG_ERR, "%s - failed", buf);
+		}
+	}
+#endif		
 	return False;
 }

@@ -3,7 +3,7 @@
  *
  * Author: JuanJo Ciarlante <jjo-ipsec@mendoza.gov.ar>
  * 
- * $Id: ipsec_alg_null.c,v 1.1.2.1 2006-10-11 18:14:33 paul Exp $
+ * $Id: ipsec_alg_null.c,v 1.1.2.2 2008-01-11 21:07:23 paul Exp $
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +16,9 @@
  * for more details.
  *
  */
+#ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
+#endif
 #include <linux/version.h>
 
 /*	

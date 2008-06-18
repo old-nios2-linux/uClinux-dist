@@ -39,7 +39,7 @@
  * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: pppd.h,v 1.17 2007-11-23 06:12:46 asallawa Exp $
+ * $Id: pppd.h,v 1.16 2007/06/08 04:02:38 gerg Exp $
  */
 
 /*
@@ -55,6 +55,7 @@
 #include <sys/types.h>		/* for u_int32_t, if defined */
 #include <sys/time.h>		/* for struct timeval */
 #include <net/ppp_defs.h>
+#include <config/autoconf.h>
 #include "patchlevel.h"
 
 #if defined(__STDC__)
@@ -252,6 +253,8 @@ extern bool	doing_multilink;
 extern bool	multilink_master;
 extern bool	bundle_eof;
 extern bool	bundle_terminating;
+extern bool external_auth; /* Set if we're using an external authenticator 
+				  			(radius, tacas etc) */
 
 extern struct notifier *pidchange;   /* for notifications of pid changing */
 extern struct notifier *phasechange; /* for notifications of phase changes */
@@ -296,6 +299,7 @@ extern bool	uselogin;	/* Use /etc/passwd for checking PAP */
 extern char	our_name[MAXNAMELEN];/* Our name for authentication purposes */
 extern char	remote_name[MAXNAMELEN]; /* Peer's name for authentication */
 extern bool	explicit_remote;/* remote_name specified with remotename opt */
+extern const char *auth_group;	/* group provided by authenticator */
 extern bool	demand;		/* Do dial-on-demand */
 extern char	*ip_up;		/* user defined ip-up script */
 extern char	*ip_down;	/* user defined ip-down script */
@@ -563,6 +567,14 @@ int  auth_ip_addr __P((int, u_int32_t));
 int  auth_number __P((void));	/* check if remote number is authorized */
 int  bad_ip_adrs __P((u_int32_t));
 				/* check if IP address is unreasonable */
+#ifdef USE_PAM
+int check_pam_account_restrictions __P((const char *));
+				/* check PAM for user account restrictions */
+#endif
+#ifdef CONFIG_PROP_STATSD_STATSD
+void notify_login_failure __P((const char *));
+                                /* Notify statsd of any failures */
+#endif
 
 /* Procedures exported from demand.c */
 void demand_conf __P((void));	/* config interface(s) for demand-dial */
@@ -648,7 +660,7 @@ int  sif6addr __P((int, eui64_t, eui64_t));
 int  cif6addr __P((int, eui64_t, eui64_t));
 				/* Remove an IPv6 address from i/f */
 #endif
-int  sifdefaultroute __P((int, u_int32_t, u_int32_t, u_int32_t));
+int  sifdefaultroute __P((int, u_int32_t, u_int32_t, u_int32_t, bool));
 				/* Create default route through i/f */
 int  cifdefaultroute __P((int, u_int32_t, u_int32_t));
 				/* Delete default route through i/f */

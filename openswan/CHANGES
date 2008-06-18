@@ -1,9 +1,29 @@
 Please see docs/KNOWN_BUGS file for more information
 
+V2.4.12
+* Partial fix for 2.6.24 kernels (new proc_net macro and
+  dev_get_by_name arg), no fix yet for changed dev struct [paul]
+* Fix for lingering 'dir out' XFRM policy when using NETKEY [paul]
+* Various memory leaks [gernot]
+* null_alg was not fixed for linux autoconf [paul]
+* enable HAVE_NEW_SKB_LINEARIZE for Suse Linux SLES10 SP1 [nicole haehnel]
+* Bugtracker bugs fixed
+  #419: Use of "source" vs "." (breaks on Debian /bin/dash) [paul]
+  #496: kernel_alg_esp_auth_ok() call fixed [gernot]
+  #538/#892: IP compression proposal lostin negotiation [sscholz@astaro.com]
+  #771: various memory leaks
+  #814: KLIPS build fails against 2.6.22 kernel (linux.ip.h for iphdr) [sedrez]
+  #816: CRYPTO_API error (KLIPS_ALG was undefined) [paul]
+  #888: dir out XFRM bug 
+  #889: Backport of #ikev2: pluto crasher on --delete connection with netkey
+  #891: passert(sr->eroute_owner ==SOS_NOBODY) crasher [mcr]
+  
+
 v2.4.11
 * Fix typo in startklips bugfix for #834
 * Fix display of nat-t vendor code picked [mcr]
 * Fix for KLIPS on 2.6.23.1 without CONFIG_NF_CONNTRACK* [paul]
+* Sync'ed openwrt packaging with upstream [paul/nbd]
 
 v2.4.10
 * Some workarounds for openwrt related to starter and lack of modprobe [paul]
@@ -307,4 +327,4 @@ v2.1.0
   while travelling.  This is based on Tuomo Soini's Advanced Routing
   patch.
 
-RCSID $Id: CHANGES,v 1.326.2.139 2007-11-20 04:32:33 paul Exp $
+RCSID $Id: CHANGES,v 1.326.2.147 2008-02-18 16:48:06 paul Exp $

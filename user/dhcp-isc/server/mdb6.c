@@ -414,8 +414,12 @@ lease_older(void *a, void *b) {
 	struct iaaddr *ia = (struct iaaddr *)a;
 	struct iaaddr *ib = (struct iaaddr *)b;
 
+#ifdef __UC_LIBC__
+        return (ia->valid_lifetime_end_time < ib->valid_lifetime_end_time);
+#else
 	return difftime(ia->valid_lifetime_end_time, 
 			ib->valid_lifetime_end_time) < 0;
+#endif
 }
 
 /*

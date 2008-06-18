@@ -152,6 +152,7 @@ typedef struct pw_auth_hdr
 #define PW_MS_CHAP_MPPE_KEYS		12	/* string */
 #define PW_MS_MPPE_SEND_KEY		16	/* string */
 #define PW_MS_MPPE_RECV_KEY		17	/* string */
+#define PW_SG_GROUP			1	/* string */
 
 /*	Accounting */
 
@@ -292,6 +293,8 @@ typedef struct pw_auth_hdr
 /* Vendor codes */
 #define VENDOR_NONE     (-1)
 #define VENDOR_MICROSOFT	311
+#define VENDOR_SECURE		1573
+
 
 /* Server data structures */
 
@@ -387,6 +390,7 @@ int rc_avpair_assign __P((VALUE_PAIR *, void *, int));
 VALUE_PAIR *rc_avpair_new __P((int, void *, int, int));
 VALUE_PAIR *rc_avpair_gen __P((AUTH_HDR *));
 VALUE_PAIR *rc_avpair_get __P((VALUE_PAIR *, UINT4));
+VALUE_PAIR *rc_vsa_get __P((VALUE_PAIR *, UINT4, UINT4));
 VALUE_PAIR *rc_avpair_copy __P((VALUE_PAIR *));
 void rc_avpair_insert __P((VALUE_PAIR **, VALUE_PAIR *, VALUE_PAIR *));
 void rc_avpair_free __P((VALUE_PAIR *));

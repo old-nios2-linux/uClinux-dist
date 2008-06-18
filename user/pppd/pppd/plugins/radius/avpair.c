@@ -359,6 +359,24 @@ VALUE_PAIR *rc_avpair_get (VALUE_PAIR *vp, UINT4 attr)
 }
 
 /*
+ * Function: rc_vsa_get
+ *
+ * Purpose: Find the first vendor specific attribute value-pair (which matches the given
+ *          attribute and vendor) from the specified value-pair list.
+ *
+ * Returns: found value_pair
+ *
+ */
+
+VALUE_PAIR *rc_vsa_get (VALUE_PAIR *vp, UINT4 vendor_code, UINT4 attr)
+{
+	for (; vp != (VALUE_PAIR *) NULL && (vp->attribute != attr && vp->vendorcode != vendor_code); vp = vp->next)
+	{
+		continue;
+	}
+	return (vp);
+}
+/*
  * Function: rc_avpair_copy
  *
  * Purpose: Return a copy of the existing list "p" ala strdup().

@@ -18,7 +18,7 @@
  * Daniel Djamaludin <ddjamaludin@cyberguard.com>
  * Copyright (C) 2004-2005 Intel Corporation.  All Rights Reserved.
  *
- * RCSID $Id: pluto_crypt.c,v 1.19.2.2 2007-04-06 17:03:36 paul Exp $
+ * RCSID $Id: pluto_crypt.c,v 1.19.2.4 2008-02-15 21:06:09 paul Exp $
  */
 
 #include <stdlib.h>
@@ -313,6 +313,8 @@ err_t send_crypto_helper_request(struct pluto_crypto_req *r
 	    , DBG_log("failed to find any available worker"));
 
 	*toomuch = TRUE;
+	pfree(cn);
+	pfree(r);
 	return "failed to find any available worker";
     }
 
@@ -323,13 +325,11 @@ err_t send_crypto_helper_request(struct pluto_crypto_req *r
 	    DBG(DBG_CONTROL
 		, DBG_log("found only a dead helper, and failed to restart it"));
 	    *toomuch = TRUE;
+	    pfree(cn);
+	    pfree(r);
 	    return "failed to start a new helper";
 	}
     }
-
-    /* link it to the active worker list */
-    cn->pcrc_next = w->pcw_cont;
-    w->pcw_cont = cn;
 
     passert(w->pcw_pid != -1);
     passert(w->pcw_pipe != -1);
@@ -344,8 +344,14 @@ err_t send_crypto_helper_request(struct pluto_crypto_req *r
     /* send the request, and then mark the work as having more work */
     cnt = write(w->pcw_pipe, r, r->pcr_len);
     if(cnt == -1) {
+	pfree(cn);
+	pfree(r);
 	return "failed to write";
     } 
+
+    /* link it to the active worker list */
+    cn->pcrc_next = w->pcw_cont;
+    w->pcw_cont = cn;
 
     w->pcw_work++;
     *toomuch = FALSE;
@@ -466,6 +472,7 @@ void delete_cryptographic_continuation(struct state *st)
 	     */
 	    (*cn->pcrc_free)(cn, cn->pcrc_pcr, "state removed");
 	} else {
+	    pfree(cn->pcrc_pcr);
 	    pfree(cn);
 	}
     }
@@ -578,6 +585,7 @@ void handle_helper_comm(struct pluto_crypto_worker *w)
     (*cn->pcrc_func)(cn, r, NULL);
 
     /* now free up the continuation */
+    pfree(cn->pcrc_pcr);
     pfree(cn);
 }
 

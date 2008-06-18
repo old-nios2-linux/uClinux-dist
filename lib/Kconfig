@@ -421,6 +421,22 @@ config LIB_LIBJUDY
 	  the required file StringCompare.c in /etc.  To manually
 	  execute the tests look at the tests/Checkit script.
 
+config LIB_CLASSPATH
+	bool 'Build classpath'
+	default n
+	help
+	  Clean room standard Java libraries
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_LIBFFI
+	bool 'Build libffi'
+	default n
+	help
+	  Foreign Function Interface library
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
 comment "Library Configuration"
 
 config LIB_UC_LIBC_TIMEZONE

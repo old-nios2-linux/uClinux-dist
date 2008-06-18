@@ -24,6 +24,7 @@
 #
 
 INCLUDE /etc/radiusclient/dictionary.ms
+INCLUDE /etc/radiusclient/dictionary.sg
 #
 #	Following are the proper new names. Use these.
 #

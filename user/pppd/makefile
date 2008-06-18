@@ -25,4 +25,5 @@ ifdef CONFIG_USER_PPPD_WITH_RADIUS
 	[ -d $(ROMFSDIR)/etc/radiusclient ] || mkdir $(ROMFSDIR)/etc/radiusclient
 	$(ROMFSINST) -e CONFIG_USER_PPPD_WITH_RADIUS scripts/radiusclient/dictionary /etc/radiusclient/dictionary
 	$(ROMFSINST) -e CONFIG_USER_PPPD_WITH_RADIUS scripts/radiusclient/dictionary.ms /etc/radiusclient/dictionary.ms
+	$(ROMFSINST) -e CONFIG_USER_PPPD_WITH_RADIUS scripts/radiusclient/dictionary.sg /etc/radiusclient/dictionary.sg
 endif

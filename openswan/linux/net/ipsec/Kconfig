@@ -12,7 +12,7 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 #
-# RCSID $Id: Kconfig,v 1.6.2.2 2006-10-11 18:14:33 paul Exp $
+# RCSID $Id: Kconfig,v 1.6.2.3 2007-12-06 15:51:01 paul Exp $
 
 config KLIPS
 	tristate "Openswan IPsec (KLIPS26)"
@@ -61,11 +61,12 @@ config KLIPS_AUTH_HMAC_SHA1
 	   a bit more secure. There is little reason not to include it.
 
 config KLIPS_ALG
-	bool 'Enable algorithm plug-ins for encryption'
+	bool 'KLIPS_ALG software encryption'
 	default y
 	help
 	   This option provides support for loading new algorithms into the 
-	   kernel for use to encrypt.
+	   kernel for crypto use.  You should only disable this if using the
+	   external OCF patch for hardware offload.
 
 config KLIPS_ENC_CRYPTOAPI
 	bool 'CryptoAPI algorithm interface'
@@ -139,7 +140,11 @@ endmenu
 #
 #
 # $Log: Kconfig,v $
-# Revision 1.6.2.2  2006-10-11 18:14:33  paul
+# Revision 1.6.2.3  2007-12-06 15:51:01  paul
+# Enable KLIPS_ALG in default build, when not using Makefile.inc.
+# Patch by Laszlo Attila Toth
+#
+# Revision 1.6.2.2  2006/10/11 18:14:33  paul
 # Add JuanJo Ciarlante's ESP_NULL patches for KLIPS, but leave it disabled
 # per default.
 #

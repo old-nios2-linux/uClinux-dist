@@ -188,6 +188,7 @@ dir_$(CONFIG_USER_IPSET_IPSET)              += ipset
 dir_$(CONFIG_USER_IPTABLES_IPTABLES)        += iptables
 dir_$(CONFIG_USER_IPTABLES_IP6TABLES)       += iptables
 dir_$(CONFIG_USER_IPUTILS_IPUTILS)          += iputils
+dir_$(CONFIG_USER_JAMVM_JAMVM)              += jamvm
 dir_$(CONFIG_USER_JPEGVIEW_JPEGVIEW)        += jpegview
 dir_$(CONFIG_USER_KENDIN_CONFIG)            += kendin-config
 dir_$(CONFIG_USER_KLAXON_KLAXON)            += klaxon

@@ -75,6 +75,9 @@ dir_3_$(CONFIG_USER_TCL_LIBTCL)  += ../user/tcl
 dir_3_$(CONFIG_LIB_LIBIBERTY)    += libiberty
 dir_3_$(CONFIG_LIB_BFD)          += bfd
 dir_3_$(CONFIG_LIB_POPT)         += popt
+dir_3_$(CONFIG_LIB_LIBJUDY)      += libjudy
+dir_3_$(CONFIG_LIB_CLASSPATH)    += classpath
+dir_3_$(CONFIG_LIB_LIBFFI)       += libffi
 dir_3_$(CONFIG_LIB_LIBMPEG2)     += mpeg2dec
 dir_3_$(CONFIG_LIB_TSLIB)        += tslib-1.0
 dir_3_$(CONFIG_LIB_LIBSDL)       += libsdl
@@ -91,7 +94,6 @@ dir_5_$(CONFIG_LIB_SDL_MIXER)    += SDL_mixer       # requires libsdl(3) tremor(
 dir_5_$(CONFIG_LIB_SDL_NET)      += SDL_net         # requires libsdl(3)
 dir_5_$(CONFIG_LIB_SDL_TTF)      += SDL_ttf         # requires libsdl(3) freetype(4)
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
-dir_5_$(CONFIG_LIB_LIBJUDY)      += libjudy
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local

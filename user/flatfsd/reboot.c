@@ -19,7 +19,9 @@
 #include <sys/ioctl.h>
 #endif
 
-#if (__GNU_LIBRARY__ > 5) || defined(__dietlibc__) 
+#include "flatfs.h"
+
+#if (__GNU_LIBRARY__ > 5) || defined(__dietlibc__) || defined(__UC_LIBC__)
   #include <sys/reboot.h>
   #define init_reboot(magic) reboot(magic)
 #else
@@ -35,6 +37,11 @@ static const int RB_HALT_SYSTEM = 0xcdef0123;
 
 static int shutdown_now(int rb_which)
 {
+	/**
+	 * Save us some entropy over this event
+	 */
+	logd("entropy", NULL);
+
 	/**
 	 * Write the current date/time to the RTC
 	 */

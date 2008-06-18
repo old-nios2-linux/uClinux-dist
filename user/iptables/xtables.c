@@ -115,19 +115,24 @@ int xtables_insmod(const char *modname, const char *modprobe, int quiet)
 		modprobe = buf;
 	}
 
-	switch (fork()) {
-	case 0:
-		argv[0] = (char *)modprobe;
-		argv[1] = (char *)modname;
-		if (quiet) {
-			argv[2] = "-q";
-			argv[3] = NULL;
-		} else {
-			argv[2] = NULL;
-			argv[3] = NULL;
-		}
-		execv(argv[0], argv);
+	argv[0] = (char *)modprobe;
+	argv[1] = (char *)modname;
+	if (quiet) {
+		argv[2] = "-q";
+		argv[3] = NULL;
+	} else {
+		argv[2] = NULL;
+		argv[3] = NULL;
+	}
 
+#ifdef __uClinux__
+	switch (vfork())
+#else
+	switch (fork())
+#endif
+	{
+	case 0:
+		execv(argv[0], argv);
 		/* not usually reached */
 		exit(1);
 	case -1:

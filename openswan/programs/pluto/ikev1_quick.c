@@ -15,7 +15,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  *
- * RCSID $Id: ikev1_quick.c,v 1.3.2.7 2007-11-02 01:28:36 paul Exp $
+ * RCSID $Id: ikev1_quick.c,v 1.3.2.9 2008-02-14 22:22:34 paul Exp $
  */
 
 #include <stdio.h>
@@ -257,7 +257,7 @@ compute_proto_keymat(struct state *st
 		break;
 	    default:
 #ifdef KERNEL_ALG
-	      if (kernel_alg_esp_auth_ok(pi->attrs.auth, NULL)) {
+	      if (kernel_alg_esp_auth_ok(pi->attrs.auth, NULL) == NULL) {
 		needed_len += kernel_alg_esp_auth_keylen(pi->attrs.auth);
 		break;
 	      } 
@@ -712,8 +712,7 @@ quick_outI1(int whack_sock
 	    , so_serial_t replacing)
 {
     struct state *st = duplicate_state(isakmp_sa);
-    struct qke_continuation *qke = alloc_thing(struct qke_continuation
-					       , "quick_outI1 KE");
+    struct qke_continuation *qke;
     stf_status e;
 
     st->st_whack_sock = whack_sock;
@@ -764,6 +763,7 @@ quick_outI1(int whack_sock
      */
 	    st->st_pfs_group = policy & POLICY_PFS? isakmp_sa->st_oakley.group : NULL;
 
+    qke = alloc_thing(struct qke_continuation, "quick_outI1 KE");
     qke->st = st;
     qke->isakmp_sa = isakmp_sa;
     qke->replacing = replacing;
@@ -1825,7 +1825,7 @@ quick_inI1_outR1_authtail(struct verify_oppo_bundle *b
 
 	{
 	    struct qke_continuation *qke = alloc_thing(struct qke_continuation
-						      , "quick_outI1 KE");
+						      , "quick_inI1_outR1 KE");
 
 	    stf_status e;
 	    enum crypto_importance ci;

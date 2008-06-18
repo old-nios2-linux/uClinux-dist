@@ -40,7 +40,7 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RCSID	"$Id: ipcp.c,v 1.19 2007-11-23 06:12:46 asallawa Exp $"
+#define RCSID	"$Id: ipcp.c,v 1.18 2007/06/08 04:02:38 gerg Exp $"
 
 /*
  * TODO:
@@ -202,6 +202,12 @@ static option_t ipcp_option_list[] = {
     { "-defaultroute", o_bool, &ipcp_allowoptions[0].default_route,
       "disable defaultroute option", OPT_ALIAS | OPT_A2CLR,
       &ipcp_wantoptions[0].default_route },
+
+    { "forcedefaultroute", o_bool, &ipcp_wantoptions[0].force_default_route,
+      "Always add default route", OPT_ENABLE|1, &ipcp_allowoptions[0].force_default_route },
+    { "noforcedefaultroute", o_bool, &ipcp_allowoptions[0].force_default_route,
+      "disable forcedefaultroute option", OPT_A2CLR,
+      &ipcp_wantoptions[0].force_default_route },
 
     { "proxyarp", o_bool, &ipcp_wantoptions[0].proxy_arp,
       "Add proxy ARP entry", OPT_ENABLE|1, &ipcp_allowoptions[0].proxy_arp },
@@ -600,6 +606,7 @@ ipcp_init(unit)
      */
     ao->proxy_arp = 1;
     ao->default_route = 1;
+    ao->force_default_route = 1;
 }
 
 
@@ -1671,7 +1678,7 @@ ip_demand_conf(u)
     if (!sifnpmode(u, PPP_IP, NPMODE_QUEUE))
 	return 0;
     if (wo->default_route)
-	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr, drmetric))
+	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr, drmetric, wo->force_default_route))
 	    default_route_set[u] = 1;
     if (wo->proxy_arp)
 	if (sifproxyarp(u, wo->hisaddr))
@@ -1780,7 +1787,7 @@ ipcp_up(f)
 
 	    /* assign a default route through the interface if required */
 	    if (ipcp_wantoptions[f->unit].default_route) 
-		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric))
+		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric, ipcp_wantoptions[f->unit].force_default_route))
 		    default_route_set[f->unit] = 1;
 
 	    /* Make a proxy ARP entry if requested. */
@@ -1831,7 +1838,7 @@ ipcp_up(f)
 
 	/* assign a default route through the interface if required */
 	if (ipcp_wantoptions[f->unit].default_route) 
-	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric))
+	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric, ipcp_wantoptions[f->unit].force_default_route))
 		default_route_set[f->unit] = 1;
 
 	/* Make a proxy ARP entry if requested. */

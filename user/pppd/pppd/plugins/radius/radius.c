@@ -170,6 +170,7 @@ void radius_plugin_init(void)
 
     add_options(Options);
 
+    external_auth = 1;
     info("RADIUS plugin initialized.");
 }
 
@@ -308,6 +309,18 @@ radius_pap_auth(char *user,
 	}
     }
 
+    /* Before we free all our av pairs, we need to see if we've got group information
+       back
+     */
+    {
+		VALUE_PAIR *sg_group_attr = rc_vsa_get(received, VENDOR_SECURE, PW_SG_GROUP);
+		if (sg_group_attr != NULL) {
+			/* We have a group - set the auth_group variable. It will be free'd
+			   by auth_peer_success or fail 
+			 */
+			auth_group = strdup(sg_group_attr->strvalue);
+		}
+    }
     /* free value pairs */
     rc_avpair_free(received);
     rc_avpair_free(send);
@@ -487,7 +500,20 @@ radius_chap_verify(char *user, char *ourname, int id,
 	    }
 	}
     }
-
+    
+    /* Before we free all our av pairs, we need to see if we've got group information
+       back
+     */
+    {
+		VALUE_PAIR *sg_group_attr = rc_vsa_get(received, VENDOR_SECURE, PW_SG_GROUP);
+		if (sg_group_attr != NULL) {
+			/* We have a group - set the auth_group variable. It will be free'd
+			   by auth_peer_success or fail 
+			 */
+			auth_group = strdup(sg_group_attr->strvalue);
+		}
+    }
+     
     rc_avpair_free(received);
     rc_avpair_free (send);
     return (result == OK_RC);

@@ -348,6 +348,20 @@ chap_handle_response(struct chap_server_state *ss, int id,
 			ss->flags |= AUTH_FAILED;
 			warn("Peer %q failed CHAP authentication", name);
 		}
+#ifdef USE_PAM
+		if (!(ss->flags & AUTH_FAILED)) {
+			if (check_pam_account_restrictions(name)) {
+				ss->flags |= AUTH_FAILED;
+				warn("Peer %q failed PAM Account provisions");
+			}
+		}
+#endif 
+
+#ifdef CONFIG_PROP_STATSD_STATSD
+		if (ss->flags & AUTH_FAILED) {
+			notify_login_failure(name);
+		}
+#endif
 	} else if ((ss->flags & AUTH_DONE) == 0)
 		return;
 

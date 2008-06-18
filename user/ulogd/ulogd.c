@@ -90,9 +90,10 @@
 /* global variables */
 static struct ipulog_handle *libulog_h;	/* our libipulog handle */
 static unsigned char* libulog_buf;	/* the receive buffer */
-static FILE *logfile = NULL;		/* logfile pointer */
 static int loglevel = 1;		/* current loglevel */
 static char *ulogd_configfile = ULOGD_CONFIGFILE;
+
+FILE *logfile = NULL;			/* logfile pointer */
 
 /* linked list for all registered interpreters */
 static ulog_interpreter_t *ulogd_interpreters;

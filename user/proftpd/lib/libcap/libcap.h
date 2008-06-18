@@ -52,7 +52,7 @@ struct _cap_struct {
  */
 
 #if !defined(_LINUX_CAPABILITY_VERSION) || \
-            (_LINUX_CAPABILITY_VERSION <= 0x19980330)
+            (_LINUX_CAPABILITY_VERSION < 0x19980330)
 
 # error "Kernel <linux/capability.h> does not match library"
 # error "file "libcap.h" --> fix and recompile libcap"
