@@ -157,7 +157,10 @@ nod /dev/random 666 0 0 c 1 8
 nod /dev/urandom 666 0 0 c 1 9
 nod /dev/ttyJ0 666 0 0 c 232 16
 nod /dev/button 666 0 0 c 62 0
-nod /dev/spi 666 0 0 c 60 0
+nod /dev/spi0 666 0 0 c 135 0
+nod /dev/spi1 666 0 0 c 135 1
+nod /dev/spi2 666 0 0 c 135 2
+nod /dev/spi3 666 0 0 c 135 3
 nod /dev/i2c-0 666 0 0 c 89 0
 nod /dev/i2c-1 666 0 0 c 89 1
 nod /dev/video0 666 0 0 c 81 0
