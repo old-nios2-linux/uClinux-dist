@@ -5,11 +5,8 @@ OBJS1 = simpleinit.o
 EXEC2 = expand
 OBJS2 = expand.o
 
-ifdef CONFIG_UCLINUX
-BINDIR = /bin
-else
 BINDIR = /sbin
-endif
+
 ifdef CONSOLE_BAUD_RATE
 CFLAGS += -DCONSOLE_BAUD_RATE=$(CONSOLE_BAUD_RATE)
 endif
