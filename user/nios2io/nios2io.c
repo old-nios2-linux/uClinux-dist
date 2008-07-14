@@ -17,11 +17,7 @@
 #include <fcntl.h>
 
 #include <asm/io.h>
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <linux/delay.h>
 
-#include <nios2_system.h>    /* Descriptions of standard peripherals */
 
 static void WriteNios(unsigned long addr, unsigned long value);
 static unsigned long ReadNios(unsigned long addr);
