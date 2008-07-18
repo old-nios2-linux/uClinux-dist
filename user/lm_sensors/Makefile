@@ -435,7 +435,6 @@ manhtml:
 	$(RM) *.[1-8]
 
 romfs:
-	$(ROMFSINST) lib/libsensors.so.3 /lib/
 	$(ROMFSINST) prog/sensors/sensors /bin/sensors
 
 # Here, we define all implicit rules we want to use.

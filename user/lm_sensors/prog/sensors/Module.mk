@@ -38,8 +38,9 @@ REMOVESENSORSMAN := $(patsubst $(MODULE_DIR)/%,$(DESTDIR)$(PROGSENSORSMAN1DIR)/%
 
 LIBICONV := $(shell if /sbin/ldconfig -p | grep -q libiconv\\.so ; then echo \-liconv; else echo; fi)
 
-$(PROGSENSORSTARGETS): $(PROGSENSORSSOURCES:.c=.ro) lib/$(LIBSHBASENAME)
-	$(CC) $(LDFLAGS) $(EXLDFLAGS) -o $@ $(PROGSENSORSSOURCES:.c=.ro) $(LIBICONV) -Llib -lsensors -lm
+$(PROGSENSORSTARGETS): $(PROGSENSORSSOURCES:.c=.ro)
+	$(CC) $(LDFLAGS) $(EXLDFLAGS) -o $@ $(PROGSENSORSSOURCES:.c=.ro) $(LIBICONV) \
+		-Llib -lsensors -lsysfs -lm
 
 all-prog-sensors: $(PROGSENSORSTARGETS)
 user :: all-prog-sensors

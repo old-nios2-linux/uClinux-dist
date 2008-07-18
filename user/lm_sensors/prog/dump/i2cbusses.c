@@ -180,7 +180,7 @@ found:
 
 			fgets(x, 120, f);
 			fclose(f);
-			if((border = index(x, '\n')) != NULL)
+			if((border = strchr(x, '\n')) != NULL)
 				*border = 0;
 			if(count++ == 0 && !procfmt)
 				fprintf(stderr,"  Installed I2C busses:\n");
