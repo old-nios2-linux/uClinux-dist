@@ -754,7 +754,11 @@ do_external(char *cmd, struct hostent *host,
         if (pipe(fd)) {
             snmp_log_perror("pipe");
         }
+#ifdef EMBED
+        if ((pid = vfork()) == 0) {
+#else
         if ((pid = fork()) == 0) {
+#endif
             /*
              * child 
              */

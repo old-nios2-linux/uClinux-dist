@@ -209,7 +209,11 @@ run_exec_command( char *command, char *input,
     DEBUGMSGTL(("run:exec", "running '%s'\n", command));
     pipe(ipipe);
     pipe(opipe);
+#ifdef EMBED
+    if ((pid = vfork()) == 0) {
+#else
     if ((pid = fork()) == 0) {
+#endif
         /*
          * Child process
          */

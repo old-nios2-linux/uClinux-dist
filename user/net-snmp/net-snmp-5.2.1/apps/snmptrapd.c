@@ -1002,7 +1002,11 @@ main(int argc, char *argv[])
     if (dofork && running) {
         int             fd;
 
+#ifdef EMBED
+        switch (vfork()) {
+#else
         switch (fork()) {
+#endif
         case -1:
             fprintf(stderr, "bad fork - %s\n", strerror(errno));
             _exit(1);
