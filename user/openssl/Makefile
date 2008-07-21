@@ -3,7 +3,6 @@
 #
 
 all:
-	$(MAKE) -C $(ROOTDIR)/lib/libssl
 
 clean:
 	:

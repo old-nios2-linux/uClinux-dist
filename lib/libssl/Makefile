@@ -7,7 +7,7 @@ SSL_SHARED := no-dso
 endif
 
 SSL_OPTS = \
-	DIRS="crypto ssl engines" \
+	DIRS="crypto ssl engines apps" \
 	CC=$(CONFIGURE_HOST)-gcc
 
 all: $(VER)/.configure
@@ -18,7 +18,7 @@ $(VER)/.configure:
 	set -e ; \
 	cd $(VER) ; \
 	./Configure \
-		linux-generic32 -DL_ENDIAN \
+		linux-uclinux -DL_ENDIAN \
 		--prefix=/usr \
 		--openssldir=/etc/ssl \
 		$(SSL_SHARED) threads
@@ -31,5 +31,8 @@ clean:
 romfs:
 	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libssl.so.0.9.8 /usr/lib/libssl.so.0.9.8
 	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libcrypto.so.0.9.8 /usr/lib/libcrypto.so.0.9.8
+
+romfs_user:
+	$(ROMFSINST) -e CONFIG_USER_OPENSSL_OPENSSL -d $(STAGEDIR)/usr/bin/openssl /usr/bin/openssl
 
 .PHONY: all clean romfs
