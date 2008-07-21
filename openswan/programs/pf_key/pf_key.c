@@ -232,7 +232,11 @@ main(int argc, char *argv[])
 			fflush(stdout);
 			fflush(stderr);
 			
+#ifdef EMBED
+			pid=vfork();
+#else
 			pid=fork();
+#endif
 			if(pid!=0) {
 				/* in parent! */
 				exit(0);

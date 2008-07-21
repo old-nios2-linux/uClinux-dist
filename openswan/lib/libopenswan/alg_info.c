@@ -649,7 +649,7 @@ alg_info_esp_create_from_str (const char *alg_str
 
     if (!alg_info_esp) goto out;
 
-    pfs_name=index (alg_str, ';');
+    pfs_name=strchr (alg_str, ';');
 
     if (pfs_name) {
 	memcpy(esp_buf, alg_str, pfs_name-alg_str);

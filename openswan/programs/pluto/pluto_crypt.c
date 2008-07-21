@@ -639,7 +639,11 @@ static void init_crypto_helper(struct pluto_crypto_worker *w, int n)
     /* set local so that child inheirits it */
     pc_helper_num = n;
 
+#ifdef EMBED
+    w->pcw_pid = vfork();
+#else
     w->pcw_pid = fork();
+#endif
     errno2 = errno;
     if(w->pcw_pid == 0) { 
 

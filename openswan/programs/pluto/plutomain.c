@@ -655,7 +655,11 @@ main(int argc, char **argv)
     if (fork_desired)
     {
 	{
+#ifdef EMBED
+	    pid_t pid = vfork();
+#else
 	    pid_t pid = fork();
+#endif
 
 	    if (pid < 0)
 	    {

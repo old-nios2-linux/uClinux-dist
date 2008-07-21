@@ -301,7 +301,11 @@ spawn_worker(void)
     wi_roof->qfd = qfds[1];	/* write end of query pipe */
     wi_roof->afd = afds[0];	/* read end of answer pipe */
 
+#ifdef EMBED
+    p = vfork();
+#else
     p = fork();
+#endif
     if (p == -1)
     {
 	/* fork failed: ignore if at least one worker exists */

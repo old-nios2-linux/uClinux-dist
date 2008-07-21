@@ -315,7 +315,7 @@ main(int argc, char **argv)
   natt=0;
   listen_only=0;
   noDNS=0;
-  bzero(&laddr, sizeof(laddr));
+  memset(&laddr, 0, sizeof(laddr));
 
   while((c = getopt_long(argc, argv, "hVnvsp:b:46E:w:", long_opts, 0))!=EOF) {
       switch (c) {
