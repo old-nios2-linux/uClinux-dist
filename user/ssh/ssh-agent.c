@@ -1191,7 +1191,11 @@ main(int ac, char **av)
 		printf("echo Agent pid %ld;\n", (long)parent_pid);
 		goto skip;
 	}
+#ifdef EMBED
+	pid = vfork();
+#else
 	pid = fork();
+#endif
 	if (pid == -1) {
 		perror("fork");
 		cleanup_exit(1);

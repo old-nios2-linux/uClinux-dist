@@ -163,7 +163,11 @@ do_local_cmd(arglist *a)
 			fprintf(stderr, " %s", a->list[i]);
 		fprintf(stderr, "\n");
 	}
+#ifdef EMBED
+	if ((pid = vfork()) == -1)
+#else
 	if ((pid = fork()) == -1)
+#endif
 		fatal("do_local_cmd: fork: %s", strerror(errno));
 
 	if (pid == 0) {

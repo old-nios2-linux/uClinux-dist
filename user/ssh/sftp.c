@@ -236,7 +236,11 @@ local_do_shell(const char *args)
 	if ((shell = getenv("SHELL")) == NULL)
 		shell = _PATH_BSHELL;
 
+#ifdef EMBED
+	if ((pid = vfork()) == -1)
+#else
 	if ((pid = fork()) == -1)
+#endif
 		fatal("Couldn't fork: %s", strerror(errno));
 
 	if (pid == 0) {
@@ -1413,7 +1417,11 @@ connect_to_server(char *path, char **args, int *in, int *out)
 	c_in = c_out = inout[1];
 #endif /* USE_PIPES */
 
+#ifdef EMBED
+	if ((sshpid = vfork()) == -1)
+#else
 	if ((sshpid = fork()) == -1)
+#endif
 		fatal("fork: %s", strerror(errno));
 	else if (sshpid == 0) {
 		if ((dup2(c_in, STDIN_FILENO) == -1) ||
