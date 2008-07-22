@@ -172,6 +172,7 @@ dir_$(CONFIG_USER_HTTPD_HTTPD)              += httpd
 dir_$(CONFIG_USER_HTTPTUNNEL_CLIENT)        += httptunnel
 dir_$(CONFIG_USER_HTTPTUNNEL_SERVER)        += httptunnel
 dir_$(CONFIG_USER_HWCLOCK_HWCLOCK)          += hwclock
+dir_$(CONFIG_USER_I2CTOOLS_I2CTOOLS)        += i2c-tools
 dir_$(CONFIG_USER_IFATTACH_IFATTACH)        += ifattach
 dir_$(CONFIG_USER_IPERF_IPERF)              += iperf
 dir_$(CONFIG_USER_INETD_INETD)              += inetd

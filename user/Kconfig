@@ -3455,6 +3455,8 @@ config USER_LM_SENSORS_SENSORS
 	depends on USER_LM_SENSORS
 	select LIB_LIBSYSFS
 
+config USER_I2CTOOLS_I2CTOOLS
+	bool "i2c-tools"
 
 comment "QSPI"
 
