@@ -2885,7 +2885,11 @@ Return 0 to child process and PID of child to parent process.");
 static PyObject *
 posix_fork(PyObject *self, PyObject *noargs)
 {
+#ifdef EMBED
+	int pid = vfork();
+#else
 	int pid = fork();
+#endif
 	if (pid == -1)
 		return posix_error();
 	if (pid == 0)
