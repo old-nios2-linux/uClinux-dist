@@ -7,12 +7,20 @@ SSL_SHARED := no-dso
 endif
 
 SSL_OPTS = \
-	DIRS="crypto ssl engines apps" \
+	DIRS="crypto ssl engines" \
+	CC=$(CONFIGURE_HOST)-gcc
+
+SSL_OPTS_USER = \
+	DIRS="apps" \
 	CC=$(CONFIGURE_HOST)-gcc
 
 all: $(VER)/.configure
 	$(MAKE) -C $(VER) $(SSL_OPTS)
 	$(MAKE) -C $(VER) $(SSL_OPTS) install_sw INSTALL_PREFIX=$(STAGEDIR)
+
+all_user: $(VER)/.configure
+	$(MAKE) -C $(VER) $(SSL_OPTS_USER)
+	$(MAKE) -C $(VER) $(SSL_OPTS_USER) install_sw INSTALL_PREFIX=$(STAGEDIR)
 
 $(VER)/.configure:
 	set -e ; \
@@ -35,4 +43,4 @@ romfs:
 romfs_user:
 	$(ROMFSINST) -e CONFIG_USER_OPENSSL_OPENSSL -d $(STAGEDIR)/usr/bin/openssl /usr/bin/openssl
 
-.PHONY: all clean romfs
+.PHONY: all clean romfs all_user romfs_user
