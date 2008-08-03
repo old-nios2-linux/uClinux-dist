@@ -90,6 +90,7 @@ static int tslib_read(MWCOORD *px, MWCOORD *py, MWCOORD *pz, int *pb, int mode)
 {
     struct ts_sample sample;
     int ret;
+    static MWCOORD old_x,old_y;
 
     ret = ts_read(ts, &sample, 1);
     if (ret < 0) {
@@ -98,14 +99,17 @@ static int tslib_read(MWCOORD *px, MWCOORD *py, MWCOORD *pz, int *pb, int mode)
 	return -1;
     }
 
-    *px = sample.x;
-    *py = sample.y;
-    *pz = sample.pressure;
-
-    if (sample.pressure > TSLIB_PRESSURE_THRESH)
+    if (ret == 1 && sample.pressure > TSLIB_PRESSURE_THRESH) {
+	*px = old_x = sample.x;
+	*py = old_y = sample.y;
+	*pz = sample.pressure;
 	*pb = MWBUTTON_L;
-    else
+    } else {
+	*px = old_x;
+	*py = old_y;
+	*pz = 0;
 	*pb = 0;
+    }
 
     if(!*pb)
 	return 3;
