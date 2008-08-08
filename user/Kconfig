@@ -4363,6 +4363,10 @@ config USER_MICROWIN_BIN_WORLD
 	bool "World"
 	depends on USER_MICROWIN_NANOXDEMO
 
+config USER_MICROWIN_BIN_NANOXDEMO
+	bool "Other Nano-X demo"
+	depends on USER_MICROWIN_NANOXDEMO
+
 endmenu
 
 #############################################################################
