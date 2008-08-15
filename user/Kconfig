@@ -3013,6 +3013,8 @@ config USER_MAWK_AWK
 config USER_MYSQL
 	bool "mysql"
 	select LIB_TERMCAP
+	select LIB_NCURSES
+	select LIB_ZLIB
 	help
 	  Enable building the various mysql components.
 
