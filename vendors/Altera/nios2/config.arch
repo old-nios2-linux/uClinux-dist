@@ -102,6 +102,7 @@ ifneq ($(UCLINUX_BUILD_USER)$(UCLINUX_BUILD_LIB),)
 	CFLAGS  += $(VENDOR_CFLAGS)
 	CFLAGS  += -Dlinux -D__linux__ -Dunix -D__uClinux__ -DEMBED
 	CFLAGS  += -I$(ROOTDIR)
+	CFLAGS  += -I$(LINUXDIR)/include
 	CFLAGS  += -I$(ROOTDIR)/staging/usr/include
 	CFLAGS  += -fno-builtin
 	CFLAGS  += -D__adjtimex=adjtimex
