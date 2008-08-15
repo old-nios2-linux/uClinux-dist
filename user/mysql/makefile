@@ -1,15 +1,15 @@
 
-CONFOPTS :=	-C --prefix=					\
+CONFOPTS :=	-C --prefix=/usr					\
 		--enable-dependency-tracking				\
 		--with-named-thread-libs=-lpthread \
 		--without-readline --disable-shared			\
-		--with-mysql=$(ROOTDIR)/lib/libmysqlclient		\
 		--with-pic
 MY_EXTRA_CFLAGS := -DHAVE_GETHOSTBYNAME_R_GLIBC2_STYLE=1
 
 
 all: configured
 	$(MAKE) -f Makefile
+	$(MAKE) -f Makefile install DESTDIR=$(STAGEDIR)
 
 configured: makefile
 	@chmod u+x configure
