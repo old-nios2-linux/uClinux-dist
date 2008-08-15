@@ -136,7 +136,7 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  += -fno-builtin
 	CFLAGS  += -D__adjtimex=adjtimex
 
-	CPPFLAGS = $(CFLAGS) $(INCCXX)
+	CXXFLAGS = $(CFLAGS) $(INCCXX)
 
 	LDFLAGS  = $(CFLAGS) -Wl,-d -Wl,-elf2flt -L$(ROOTDIR)/staging/usr/lib
 	CXXLIBS  = $(LDPATH) $(LIBSTDCPP) $(LIBIOSTREAM) $(LIBIO) $(LIBIBERTY) \
