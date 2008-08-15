@@ -243,9 +243,9 @@ setpeer(int argc, char *argv[])
 			ftpverbose = -1;
 		if (command("SYST") == COMPLETE && overbose) {
 			register char *cp, c = 0;
-			cp = index(reply_string+4, ' ');
+			cp = strchr(reply_string+4, ' ');
 			if (cp == NULL)
-				cp = index(reply_string+4, '\r');
+				cp = strchr(reply_string+4, '\r');
 			if (cp) {
 				if (cp[-1] == '.')
 					cp--;
@@ -955,7 +955,7 @@ remglob(char *argv[], int doswitch)
 		(void) fclose(ftemp), ftemp = NULL;
 		return (NULL);
 	}
-	if ((cp = index(buf, '\n')) != NULL)
+	if ((cp = strchr(buf, '\n')) != NULL)
 		*cp = '\0';
 	return (buf);
 }
@@ -2023,11 +2023,11 @@ setnmap(int argc, char *argv[])
 	}
 	mapflag = 1;
 	code = 1;
-	cp = index(altarg, ' ');
+	cp = strchr(altarg, ' ');
 	if (proxy) {
 		while(*++cp == ' ');
 		altarg = cp;
-		cp = index(altarg, ' ');
+		cp = strchr(altarg, ' ');
 	}
 	*cp = '\0';
 	(void) strncpy(mapin, altarg, PATH_MAX - 1);

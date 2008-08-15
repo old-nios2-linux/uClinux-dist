@@ -153,7 +153,7 @@ tftpmain(argc, argv)
 		perror("tftp: socket");
 		exit(3);
 	}
-	bzero((char *)&sin, sizeof (sin));
+	memset((char *)&sin, 0, sizeof (sin));
 
 #ifdef SETSRC
 	if (argc == 3) {
@@ -207,7 +207,7 @@ tftpsetpeer(argc, argv)
 	if ((tftpsin.sin_addr.s_addr = inet_addr(argv[1])) == -1) {
 		if ((host = gethostbyname(argv[1]))) {
 			tftpsin.sin_family = host->h_addrtype;
-			bcopy(host->h_addr, &tftpsin.sin_addr, host->h_length);
+			memmove(&tftpsin.sin_addr, host->h_addr, host->h_length);
 			strcpy(tftphostname, host->h_name);
 		} else {
 			tftpconnected = 0;
@@ -346,7 +346,7 @@ tftpput(argc, argv)
 			herror((char *)NULL);
 			return;
 		}
-		bcopy(hp->h_addr, (caddr_t)&tftpsin.sin_addr, hp->h_length);
+		memmove((caddr_t)&tftpsin.sin_addr, hp->h_addr, hp->h_length);
 		tftpsin.sin_family = hp->h_addrtype;
 		tftpconnected = 1;
 		strcpy(tftphostname, hp->h_name);
@@ -449,7 +449,7 @@ tftpget(argc, argv)
 #endif
 				continue;
 			}
-			bcopy(hp->h_addr, (caddr_t)&tftpsin.sin_addr, hp->h_length);
+			memmove((caddr_t)&tftpsin.sin_addr, hp->h_addr, hp->h_length);
 			tftpsin.sin_family = hp->h_addrtype;
 			tftpconnected = 1;
 			strcpy(tftphostname, hp->h_name);
