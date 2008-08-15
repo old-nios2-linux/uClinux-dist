@@ -807,7 +807,7 @@ recvrequest(const char *cmd,
 #if 0
 	if (strcmp(local, "-") && *local != '|') {
 		if (access(local, W_OK) < 0) {
-			char *dir = rindex(local, '/');
+			char *dir = strrchr(local, '/');
 
 			if (errno != ENOENT && errno != EACCES) {
 				fprintf(stderr, "local: %s: %s\n", local,
@@ -1575,7 +1575,7 @@ static char *
 gunique(char *local)
 {
 	static char new[MAXPATHLEN];
-	char *cp = rindex(local, '/');
+	char *cp = strrchr(local, '/');
 	int d, count=0;
 	char ext = '1';
 
