@@ -148,8 +148,13 @@ bool filter_apply_chain (struct filter * chain)
 	if (pipe (pipes) == -1)
 		flexerror (_("pipe failed"));
 
+#ifdef HAVE_FORK
 	if ((pid = fork ()) == -1)
 		flexerror (_("fork failed"));
+#else
+	if ((pid = vfork ()) == -1)
+		flexerror (_("fork failed"));
+#endif
 
 	if (pid == 0) {
 		/* child */
