@@ -100,16 +100,16 @@ ifneq ($(UCLINUX_BUILD_USER)$(UCLINUX_BUILD_LIB),)
 	CFLAGS  :=  -O2 -g
   endif
 	CFLAGS  += $(VENDOR_CFLAGS)
-	CFLAGS  += -Dlinux -D__linux__ -Dunix -D__uClinux__ -DEMBED
-	CFLAGS  += -I$(ROOTDIR)
-	CFLAGS  += -I$(LINUXDIR)/include
-	CFLAGS  += -I$(ROOTDIR)/staging/usr/include
 	CFLAGS  += -fno-builtin
-	CFLAGS  += -D__adjtimex=adjtimex
+	CPPFLAGS  += -Dlinux -D__linux__ -Dunix -D__uClinux__ -DEMBED
+	CPPFLAGS  += -I$(ROOTDIR)
+	CPPFLAGS  += -I$(LINUXDIR)/include
+	CPPFLAGS  += -I$(ROOTDIR)/staging/usr/include
+	CPPFLAGS  += -D__adjtimex=adjtimex
 
-	CXXFLAGS = $(CFLAGS) $(INCCXX)
+	CXXFLAGS = $(INCCXX)
 
-	LDFLAGS  = $(CFLAGS) -Wl,-d -Wl,-elf2flt -L$(ROOTDIR)/staging/usr/lib
+	LDFLAGS  = -Wl,-d -Wl,-elf2flt -L$(ROOTDIR)/staging/usr/lib
 	CXXLIBS  = $(LDPATH) $(LIBSTDCPP) $(LIBIOSTREAM) $(LIBIO) $(LIBIBERTY) \
 			$(LIBC) $(LIBGCC)
 	
