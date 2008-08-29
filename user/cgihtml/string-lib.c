@@ -1,5 +1,6 @@
 /* string-lib.c - generic string processing routines
-   $Id: string-lib.c,v 1.5 1997/01/21 07:17:48 eekim Exp $
+   Eugene Kim, <eekim@eekim.com>
+   $Id: string-lib.c,v 1.8 1998/05/04 01:43:20 eekim Exp $
 
    Copyright (C) 1996 Eugene Eric Kim
    All Rights Reserved.
@@ -13,7 +14,7 @@
 
 char *newstr(char *str)
 {
-  char *tempstr = malloc(sizeof(char) * strlen(str) + 1);
+  char *tempstr = (char *)malloc(sizeof(char) * strlen(str) + 1);
 
   if (tempstr != NULL)
     strcpy(tempstr,str);
@@ -29,7 +30,7 @@ char *substr(char *str, int offset, int len)
     return NULL;
   else
     slen = strlen(str);
-  nstr = malloc(sizeof(char) * slen + 1);
+  nstr = (char *)malloc(sizeof(char) * slen + 1);
   if (offset >= 0)
     start = offset;
   else
@@ -44,30 +45,34 @@ char *substr(char *str, int offset, int len)
 
 char *replace_ltgt(char *str)
 {
-  int i,j = 0;
-  char *new = malloc(sizeof(char) * (strlen(str) * 4 + 1));
+  unsigned int i,j = 0;
+  char *newstring;
 
+
+  if (str == NULL)
+    return NULL;
+  newstring = (char *)malloc(sizeof(char) * (strlen(str) * 4 + 1));
   for (i = 0; i < strlen(str); i++) {
     if (str[i] == '<') {
-      new[j] = '&';
-      new[j+1] = 'l';
-      new[j+2] = 't';
-      new[j+3] = ';';
+      newstring[j] = '&';
+      newstring[j+1] = 'l';
+      newstring[j+2] = 't';
+      newstring[j+3] = ';';
       j += 3;
     }
     else if (str[i] == '>') {
-      new[j] = '&';
-      new[j+1] = 'g';
-      new[j+2] = 't';
-      new[j+3] = ';';
+      newstring[j] = '&';
+      newstring[j+1] = 'g';
+      newstring[j+2] = 't';
+      newstring[j+3] = ';';
       j += 3;
     }
     else
-      new[j] = str[i];
+      newstring[j] = str[i];
     j++;
   }
-  new[j] = '\0';
-  return new;
+  newstring[j] = '\0';
+  return newstring;
 }
 
 char *lower_case(char *buffer)

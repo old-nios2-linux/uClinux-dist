@@ -1,6 +1,38 @@
 CHANGES for cgihtml
-$Id: CHANGES,v 1.8 1997/02/03 06:42:26 eekim Exp $
+$Id: CHANGES,v 1.13 1998/05/04 02:12:13 eekim Exp $
 ===================
+
+1.68 -> 1.69
+------------
+o Plugged memory leaks in list_clear().
+
+o Allowed read_cgi_input() to have a NULL QUERY_STRING when using
+the GET method (It will return 0 instead of exiting).
+
+o Added explicit casts to realloc() calls.
+
+o Fixed replace_ltgt() to check if string is null.
+
+o Made parse_form_encoded() more robust.
+
+o Documentation now available in both HTML and text form.
+
+1.67 -> 1.68
+------------
+o Fixed double free bug (again).
+
+o Made cgihtml C++ friendly.  Renamed variables called "new".  Made
+implicit casts explicit.
+
+1.66 -> 1.67
+------------
+o Fixed double free bug in parse_CGI_encoded().
+
+o Plugged memory leaks in linked list routines.
+
+o Fixed several upload bugs.  Windows versus UNIX servers.
+
+o Added conditional macros to include files
 
 1.65 -> 1.66
 ------------

@@ -1,10 +1,13 @@
 /* cgi-lib.h - header file for cgi-lib.c
    Eugene Kim, <eekim@eekim.com>
-   $Id: cgi-lib.h,v 1.8 1997/02/03 06:39:32 eekim Exp $
+   $Id: cgi-lib.h,v 1.9 1997/10/06 08:57:55 eekim Exp $
 
    Copyright (C) 1996, 1997 Eugene Eric Kim
    All Rights Reserved
 */
+
+#ifndef _CGI_LIB
+#define _CGI_LIB 1
 
 #include <stdlib.h>
 #include "cgi-llist.h"
@@ -56,3 +59,5 @@ char *escape_input(char *str);
 short is_form_empty(llist l);
 short is_field_exists(llist l, char *str);
 short is_field_empty(llist l, char *str);
+
+#endif
