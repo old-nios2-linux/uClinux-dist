@@ -601,7 +601,11 @@ ntpdmain(
 #   ifdef HAVE_DAEMON
 		daemon(0, 0);
 #   else /* not HAVE_DAEMON */
+#ifdef EMBED
+		if (vfork())	/* HMS: What about a -1? */
+#else
 		if (fork())	/* HMS: What about a -1? */
+#endif
 			exit(0);
 
 		{

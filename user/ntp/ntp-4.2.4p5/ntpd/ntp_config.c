@@ -2447,7 +2447,11 @@ do_resolve_internal(void)
 		exit(1);
 	}
 
+#ifdef EMBED
+	i = vfork();
+#else
 	i = fork();
+#endif
 	/* Shouldn't the code below be re-ordered?
 	 * I.e. first check if the fork() returned an error, then
 	 * check whether we're parent or child.

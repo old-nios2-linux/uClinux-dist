@@ -1,7 +1,7 @@
 
 /*
  *  $Id: makeshell.c,v 4.20 2007/02/04 17:44:12 bkorb Exp $
- * Time-stamp:      "2007-01-27 06:05:45 bkorb"
+ * Time-stamp:      "2008-09-09 15:01:07 thomas"
  *
  *  This module will interpret the options set in the tOptions
  *  structure and create a Bourne shell script capable of parsing them.
@@ -522,7 +522,11 @@ textToVariable( tOptions* pOpts, teTextTo whichVar, tOptDesc* pOD )
         exit( EXIT_FAILURE );
     }
 
+#ifdef EMBED
+    switch (vfork()) {
+#else
     switch (fork()) {
+#endif
     case -1:
         fprintf( stderr, zForkFail, errno, strerror(errno), pOpts->pzProgName);
         exit( EXIT_FAILURE );
@@ -1053,7 +1057,11 @@ genshelloptUsage( tOptions*  pOpts, int exitCode )
     /*
      *  First, print our usage
      */
+#ifdef EMBED
+    switch (vfork()) {
+#else
     switch (fork()) {
+#endif
     case -1:
         optionUsage( pOpts, EXIT_FAILURE );
         /*NOTREACHED*/
@@ -1095,7 +1103,11 @@ genshelloptUsage( tOptions*  pOpts, int exitCode )
     /*
      *  Now, print the client usage.
      */
+#ifdef EMBED
+    switch (vfork()) {
+#else
     switch (fork()) {
+#endif
     case 0:
         pagerState = PAGER_STATE_CHILD;
         /*FALLTHROUGH*/
