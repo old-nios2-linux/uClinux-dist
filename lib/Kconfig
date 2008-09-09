@@ -437,6 +437,13 @@ config LIB_LIBFFI
 	  Only enable this if you want to force the library to be built.
 	  The Config will make sure this library is built if it is needed.
 
+config LIB_LIBVNCSERVER
+	bool "Build LibVNCServer"
+	default n
+	help
+	  A library for easy implementation of a RDP/VNC server.
+
+
 comment "Library Configuration"
 
 config LIB_UC_LIBC_TIMEZONE
