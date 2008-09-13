@@ -79,6 +79,7 @@ dir_3_$(CONFIG_LIB_LIBJUDY)      += libjudy
 dir_3_$(CONFIG_LIB_CLASSPATH)    += classpath
 dir_3_$(CONFIG_LIB_LIBFFI)       += libffi
 dir_3_$(CONFIG_LIB_LIBMPEG2)     += mpeg2dec
+dir_3_$(CONFIG_LIB_SQLITE)       += sqlite
 dir_3_$(CONFIG_LIB_TSLIB)        += tslib-1.0
 dir_3_$(CONFIG_LIB_LIBSDL)       += libsdl
 dir_4_$(CONFIG_LIB_FREETYPE)     += freetype        # requires zlib(3)

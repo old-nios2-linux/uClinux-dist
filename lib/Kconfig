@@ -443,6 +443,12 @@ config LIB_LIBVNCSERVER
 	help
 	  A library for easy implementation of a RDP/VNC server.
 
+config LIB_SQLITE
+	bool "Build sqlite"
+	default n
+	help
+	  SQLite is a software library that implements a self-contained, 
+	  serverless, zero-configuration, transactional SQL database engine.
 
 comment "Library Configuration"
 
