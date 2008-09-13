@@ -1010,6 +1010,14 @@ config USER_CTORRENT_CTORRENT
 	  Bit torrent client written in C.  It is much smaller than most
 	  other torrent clients, but it can't act as a tracker.
 
+config USER_CURL_CURL
+	bool "curl"
+	select LIB_LIBCURL
+	select LIB_LIBIDN
+	select LIB_ZLIB
+	select LIB_LIBBZ2
+	select LIB_LIBSSL
+
 config USER_DHCPCD_DHCPCD
 	bool "dhcpcd"
 	help
