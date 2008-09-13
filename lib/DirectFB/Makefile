@@ -1,4 +1,4 @@
-VER = DirectFB-1.1.1
+VER = DirectFB-1.2.3
 
 USE_ENABLE = $(shell test "$(CONFIG_$(1))" = "y" && echo "--enable-$(2)" || echo "--disable-$(2)")
 
@@ -35,5 +35,10 @@ clean:
 	rm -rf build*
 
 romfs:
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libdirect-1.1.so.0 /usr/lib/libdirect-1.1.so.0
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libdirectfb-1.1.so.0 /usr/lib/libdirectfb-1.1.so.0
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libfusion-1.1.so.0 /usr/lib/libfusion-1.1.so.0
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/directfb-1.1-0 /usr/lib/directfb-1.1-0
+	find $(ROMFSDIR)/usr/lib/directfb-1.1-0 -type f -name '*.la' -print0 | xargs -0 rm -f
 
 .PHONY: all clean romfs
