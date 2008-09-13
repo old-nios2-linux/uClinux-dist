@@ -450,6 +450,11 @@ config LIB_SQLITE
 	  SQLite is a software library that implements a self-contained, 
 	  serverless, zero-configuration, transactional SQL database engine.
 
+config LIB_E2FSPROGS_LIBS
+	bool "Build e2fsprogs-libs"
+	help
+	  This builds libblkid, libcom_err, libss, and libuuid.
+
 comment "Library Configuration"
 
 config LIB_UC_LIBC_TIMEZONE

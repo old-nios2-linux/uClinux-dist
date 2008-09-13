@@ -53,6 +53,7 @@ dir_3_$(CONFIG_LIB_LIBNETOLD)    += libnet
 dir_3_$(CONFIG_LIB_LIBJPEG)      += libjpeg
 dir_3_$(CONFIG_LIB_LIBUPNP)      += libupnp
 dir_3_$(CONFIG_LIB_STLPORT)      += STLport
+dir_3_$(CONFIG_LIB_E2FSPROGS_LIBS)   += e2fsprogs-libs
 dir_3_$(CONFIG_LIB_EXPAT)        += expat
 dir_3_$(CONFIG_LIB_LIBLDAP)      += libldap
 dir_3_$(CONFIG_LIB_TINYTCL)      += ../user/tinytcl
