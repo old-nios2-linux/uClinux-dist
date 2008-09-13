@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Fri Jul 18 20:47:48 2008
+# Sat Sep 13 11:19:12 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -67,6 +67,7 @@ CONFIG_DISTVERSION="4.0"
 # CONFIG_LIB_LIBJUDY is not set
 # CONFIG_LIB_CLASSPATH is not set
 # CONFIG_LIB_LIBFFI is not set
+# CONFIG_LIB_LIBVNCSERVER is not set
 
 #
 # Library Configuration
@@ -238,6 +239,7 @@ CONFIG_USER_BOA_SRC_BOA=y
 # CONFIG_USER_CLAMAV_CLAMAV is not set
 # CONFIG_USER_CONNTRACK_CONNTRACK is not set
 # CONFIG_USER_CTORRENT_CTORRENT is not set
+# CONFIG_USER_CURL_CURL is not set
 # CONFIG_USER_DHCPCD_DHCPCD is not set
 CONFIG_USER_DHCPCD_NEW_DHCPCD=y
 # CONFIG_USER_DHCPD_DHCPD is not set
