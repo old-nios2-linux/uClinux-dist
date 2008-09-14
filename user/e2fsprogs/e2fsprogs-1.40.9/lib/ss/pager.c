@@ -78,7 +78,11 @@ int ss_pager_create(void)
 	if (pipe(filedes) != 0)
 		return(-1);
 
+#ifdef EMBED
+	switch(vfork()) {
+#else
 	switch(fork()) {
+#endif
 	case -1:
 		return(-1);
 	case 0:

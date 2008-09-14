@@ -136,7 +136,11 @@ static int run_program(char **argv)
 #endif
 #endif
 
+#ifdef EMBED
+	pid = vfork();
+#else
 	pid = fork();
+#endif
 	if (pid < 0) {
 		perror("vfork");
 		exit(1);
@@ -262,7 +266,11 @@ int main(int argc, char **argv)
 	send_output("----------------\n", 0, send_flag);
 
 	if (outbuf) {
+#ifdef EMBED
+		pid = vfork();
+#else
 		pid = fork();
+#endif
 		if (pid < 0) {
 			perror("fork");
 			exit(1);

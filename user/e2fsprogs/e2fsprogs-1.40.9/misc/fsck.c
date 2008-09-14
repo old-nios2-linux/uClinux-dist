@@ -492,7 +492,11 @@ static int execute(const char *type, const char *device, const char *mntpt,
 	/* Fork and execute the correct program. */
 	if (noexecute)
 		pid = -1;
+#ifdef EMBED
+	else if ((pid = vfork()) < 0) {
+#else
 	else if ((pid = fork()) < 0) {
+#endif
 		perror("fork");
 		free(inst);
 		return errno;
@@ -642,7 +646,11 @@ static struct fsck_instance *wait_one(int flags)
 			 * time to set up the signal handler
 			 */
 			if (inst2->start_time < time(0)+2) {
+#ifdef EMBED
+				if (vfork() == 0) {
+#else
 				if (fork() == 0) {
+#endif
 					sleep(1);
 					kill(inst2->pid, SIGUSR1);
 					exit(0);

@@ -106,7 +106,11 @@ void ss_help (argc, argv, sci_idx, info_ptr)
 	free(buf);
 	return;
     }
+#if EMBED
+    switch (child = vfork()) {
+#else
     switch (child = fork()) {
+#endif
     case -1:
 	ss_perror(sci_idx, errno, "Can't fork for pager");
 	return;

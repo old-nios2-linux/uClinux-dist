@@ -418,7 +418,11 @@ static int get_uuid_via_daemon(int op, uuid_t out, int *num)
 		if (access_ret == -2)
 			access_ret = access(uuidd_path, X_OK);
 		if (access_ret == 0 && start_attempts++ < 5) {
+#ifdef EMBED
+			if ((pid = vfork()) == 0) {
+#else
 			if ((pid = fork()) == 0) {
+#endif
 				execl(uuidd_path, "uuidd", "-qT", "300", 
 				      (char *) NULL);
 				exit(1);

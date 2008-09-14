@@ -63,7 +63,11 @@ static void create_daemon(void)
 	pid_t pid;
 	uid_t euid;
 
+#ifdef EMBED
+	pid = vfork();
+#else
 	pid = fork();
+#endif
 	if (pid == -1) {
 		perror("fork");
 		exit(1);
