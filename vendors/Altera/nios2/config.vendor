@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Dist builder
-# Sat Sep 13 11:19:12 2008
+# Sun Sep 14 22:36:03 2008
 #
 CONFIG_DISTVERSION="4.0"
 
@@ -68,6 +68,8 @@ CONFIG_DISTVERSION="4.0"
 # CONFIG_LIB_CLASSPATH is not set
 # CONFIG_LIB_LIBFFI is not set
 # CONFIG_LIB_LIBVNCSERVER is not set
+# CONFIG_LIB_SQLITE is not set
+# CONFIG_LIB_E2FSPROGS_LIBS is not set
 
 #
 # Library Configuration
