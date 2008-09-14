@@ -127,7 +127,11 @@ main( int argc, char *argv[] )
      MSG( ".........FORKING NOW.........\n" );
 
      fusion_world_set_fork_action( m_world, FFA_FORK );
+#ifdef EMBED
+     child_pid = vfork();
+#else
      child_pid = fork();
+#endif
      fusion_world_set_fork_action( m_world, FFA_CLOSE );
 
      switch (child_pid) {

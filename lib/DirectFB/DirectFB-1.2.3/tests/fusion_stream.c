@@ -296,7 +296,11 @@ main( int argc, char *argv[] )
      if (do_fork) {
           fusion_world_set_fork_action( world, FFA_FORK );
 
+#ifdef EMBED
+          switch (vfork()) {
+#else
           switch (fork()) {
+#endif
                case -1:
                     D_PERROR( "fork() failed!\n" );
                     return -1;
