@@ -4132,6 +4132,7 @@ config USER_MICROWIN_HAVE_T1LIB_SUPPORT
 config USER_MICROWIN_HAVE_FREETYPE_2_SUPPORT
 	bool "Have FreeType 2 Support"
 	depends on USER_MICROWIN
+	select LIB_FREETYPE
 
 config USER_MICROWIN_HAVE_SHAREDMEM_SUPPORT
 	bool "Have SharedMemory Support"
