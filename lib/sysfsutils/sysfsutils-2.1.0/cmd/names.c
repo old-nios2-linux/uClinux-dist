@@ -68,7 +68,7 @@ static int nl_add(struct pci_access *a, int cat, int id1, int id2, int id3, int 
   if (n)
     return 1;
   n = malloc(sizeof(struct nl_entry));
-  bzero(n, sizeof(struct nl_entry));
+  memset(n, 0, sizeof(struct nl_entry));
   n->id1 = id1;
   n->id2 = id2;
   n->id3 = id3;
@@ -212,7 +212,7 @@ load_name_list(struct pci_access *a)
     err_name_list(a, "read");
   a->nl_list[st.st_size] = 0;
   a->nl_hash = malloc(sizeof(struct nl_entry *) * HASH_SIZE);
-  bzero(a->nl_hash, sizeof(struct nl_entry *) * HASH_SIZE);
+  memset(a->nl_hash, 0, sizeof(struct nl_entry *) * HASH_SIZE);
   parse_name_list(a);
   close(fd);
 }
