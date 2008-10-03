@@ -99,7 +99,7 @@ real_romfs:
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO	/bin/fontdemo
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO	/bin/ftdemo
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO	/bin/ftdemo.txt
-	$(ROMFSINST) -d -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO ../fonts/truetype/lt1-r-omega-serif.ttf /usr/fonts/truetype/lt1-r-omega-serif.ttf
+	$(ROMFSINST) -d -e CONFIG_USER_MICROWIN_HAVE_FREETYPE_2_SUPPORT ../fonts/truetype/lt1-r-omega-serif.ttf /usr/fonts/truetype/lt1-r-omega-serif.ttf
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO	/bin/grabdemo
 	$(ROMFSINST) -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO	/bin/pcfdemo
 	$(ROMFSINST) -d -e CONFIG_USER_MICROWIN_BIN_NANOXDEMO ../fonts/pcf/gb24st.pcf /usr/fonts/pcf/gb24st.pcf
