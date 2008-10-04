@@ -6,9 +6,9 @@
 #define MWINCLUDECOLORS
 #include "nano-X.h"
 
-/*#define FONTNAME	"lt1-r-omega-serif.ttf"*/
+#define FONTNAME	"lt1-r-omega-serif.ttf"
 /*#define FONTNAME	"arial.ttf"*/
-#define FONTNAME	"times.ttf"
+/*#define FONTNAME	"times.ttf"*/
 
 #define FGCOLOR		BLACK
 #define BGCOLOR		WHITE
