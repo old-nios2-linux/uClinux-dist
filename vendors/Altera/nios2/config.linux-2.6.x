@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.27-rc1
+# Linux kernel version: 2.6.27
+# Mon Oct 13 09:44:52 2008
 #
 # CONFIG_FPU is not set
 CONFIG_ZONE_DMA=y
@@ -231,6 +232,7 @@ CONFIG_DEFAULT_TCP_CONG="cubic"
 # CONFIG_TIPC is not set
 # CONFIG_ATM is not set
 # CONFIG_BRIDGE is not set
+# CONFIG_NET_DSA is not set
 # CONFIG_VLAN_8021Q is not set
 # CONFIG_DECNET is not set
 # CONFIG_LLC2 is not set
@@ -251,14 +253,8 @@ CONFIG_DEFAULT_TCP_CONG="cubic"
 # CONFIG_IRDA is not set
 # CONFIG_BT is not set
 # CONFIG_AF_RXRPC is not set
-
-#
-# Wireless
-#
-# CONFIG_CFG80211 is not set
-# CONFIG_WIRELESS_EXT is not set
-# CONFIG_MAC80211 is not set
-# CONFIG_IEEE80211 is not set
+# CONFIG_PHONET is not set
+# CONFIG_WIRELESS is not set
 # CONFIG_RFKILL is not set
 # CONFIG_NET_9P is not set
 
@@ -309,6 +305,7 @@ CONFIG_MII=y
 # CONFIG_OPEN_ETH is not set
 # CONFIG_MTIP1000_ETH is not set
 # CONFIG_ATSE is not set
+# CONFIG_ALT_TSE is not set
 CONFIG_SMC91X=y
 CONFIG_DM9000=y
 CONFIG_DM9000_DEBUGLEVEL=4
@@ -404,6 +401,8 @@ CONFIG_SSB_POSSIBLE=y
 # CONFIG_MFD_CORE is not set
 # CONFIG_MFD_SM501 is not set
 # CONFIG_HTC_PASIC3 is not set
+# CONFIG_UCB1400_CORE is not set
+# CONFIG_MFD_TMIO is not set
 
 #
 # Multimedia devices
@@ -448,7 +447,7 @@ CONFIG_SSB_POSSIBLE=y
 #
 # CONFIG_EXT2_FS is not set
 # CONFIG_EXT3_FS is not set
-# CONFIG_EXT4DEV_FS is not set
+# CONFIG_EXT4_FS is not set
 # CONFIG_REISERFS_FS is not set
 # CONFIG_JFS_FS is not set
 # CONFIG_FS_POSIX_ACL is not set
@@ -565,7 +564,9 @@ CONFIG_DEBUG_INFO=y
 # CONFIG_DEBUG_SG is not set
 # CONFIG_BOOT_PRINTK_DELAY is not set
 # CONFIG_RCU_TORTURE_TEST is not set
+# CONFIG_RCU_CPU_STALL_DETECTOR is not set
 # CONFIG_BACKTRACE_SELF_TEST is not set
+# CONFIG_DEBUG_BLOCK_EXT_DEVT is not set
 # CONFIG_FAULT_INJECTION is not set
 # CONFIG_SAMPLES is not set
 
@@ -574,6 +575,7 @@ CONFIG_DEBUG_INFO=y
 #
 # CONFIG_KEYS is not set
 # CONFIG_SECURITY is not set
+# CONFIG_SECURITYFS is not set
 # CONFIG_SECURITY_FILE_CAPABILITIES is not set
 # CONFIG_CRYPTO is not set
 
