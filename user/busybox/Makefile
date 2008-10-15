@@ -28,7 +28,6 @@ bbdir = build-$(VER)/$(CONFIG_USER_BUSYBOX_PREFIX)
 romfs:
 	rm -rf $(bbdir)
 	$(MAKE) -C build-$(VER) install
-	-test -L $(ROMFSDIR)/sbin && mv $(bbdir)/sbin/* $(bbdir)/bin/ && rmdir $(bbdir)/sbin
 	cp -pPR $(bbdir)/* $(ROMFSDIR)/
 
 .PHONY: all clean romfs
