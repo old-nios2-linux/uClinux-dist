@@ -1,4 +1,4 @@
-VER = busybox-1.11.1
+VER = busybox-1.12.1
 
 export KBUILD_OUTPUT = $(ROOTDIR)/user/busybox/build-$(VER)
 
@@ -28,6 +28,7 @@ bbdir = build-$(VER)/$(CONFIG_USER_BUSYBOX_PREFIX)
 romfs:
 	rm -rf $(bbdir)
 	$(MAKE) -C build-$(VER) install
+	test -L $(ROMFSDIR)/sbin && mv $(bbdir)/sbin/* $(bbdir)/bin/ && rmdir $(bbdir)/sbin
 	cp -pPR $(bbdir)/* $(ROMFSDIR)/
 
 .PHONY: all clean romfs
