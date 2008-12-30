@@ -78,8 +78,11 @@ file_copy()
 			find . -print | grep -E -v '/CVS|/\.svn' | ( cd ${ROMFSDIR}${dst}; xargs chmod u+w )
 			setperm ${ROMFSDIR}${dst}
 			find . -type f | grep -E -v '/CVS|/\.svn' | while read t; do
-				${STRIPTOOL} ${ROMFSDIR}${dst}/$t 2>/dev/null
-				${STRIPTOOL} -R .comment -R .note ${ROMFSDIR}${dst}/$t 2>/dev/null
+				if [ -n "$strip" ]; then
+					${STRIPTOOL} ${ROMFSDIR}${dst}/$t 2>/dev/null
+					${STRIPTOOL} -R .comment -R .note ${ROMFSDIR}${dst}/$t 2>/dev/null
+					${SSTRIPTOOL} ${ROMFSDIR}${dst}/$t 2>/dev/null
+				fi
 			done
 		)
 	else
@@ -103,6 +106,7 @@ file_copy()
 		if [ $rc -eq 0 -a -n "$strip" ]; then
 			${STRIPTOOL} ${dstfile} 2>/dev/null
 			${STRIPTOOL} -R .comment -R .note ${dstfile} 2>/dev/null
+			${SSTRIPTOOL} ${dstfile} 2>/dev/null
 		fi
 	fi
 	return $rc
@@ -121,6 +125,12 @@ file_append()
 		[ "$v" ] && echo "File pattern already installed."
 	else
 		[ "$v" ] && echo "Installing entry into ${ROMFSDIR}${dst}."
+		if [ -s ${ROMFSDIR}${dst} ] ; then
+			# if file lacks a trailing new line, add it before appending the text
+			if [ $(tail -n1 ${ROMFSDIR}${dst} | tr -d '\n' | wc -c) = $(tail -n1 ${ROMFSDIR}${dst} | wc -c) ] ; then
+				echo "" >> ${ROMFSDIR}${dst} || return 1
+			fi
+		fi
 		echo "${src}" >> ${ROMFSDIR}${dst} || return 1
 	fi
 	setperm ${ROMFSDIR}${dst}
@@ -234,6 +244,15 @@ then
 	echo "ROMFSDIR is not set" >&2
 	usage
 	exit 1
+fi
+
+if [ -z "$STRIPTOOL" ]
+then
+	STRIPTOOL=strip
+fi	
+if [ -z "$SSTRIPTOOL" ]
+then
+	SSTRIPTOOL= #sstrip
 fi
 
 shift `expr $OPTIND - 1`
