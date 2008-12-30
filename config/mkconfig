@@ -43,43 +43,43 @@ echo "	prompt \"Vendor\""
 echo "	default DEFAULTS_ALTERA"
 echo
 
-oldv=
-fv=
-def=
 pfile=/tmp/products.$$
 
 trap "rm -f $pfile; exit 1" 1 2 3 15
 
-find vendors -name config.arch -print | \
-		sed -e 's?^vendors/??' -e 's?/[^/]*$??' -e 's?/? ?g' | \
-		(sort; echo "END END END END") | while read v p junk
+find vendors -mindepth 1 -maxdepth 1 -type d -print | \
+		sed -e 's?^vendors/??' | \
+		(sort; echo "END") | while read v
 do
 	[ "$v" = "config" ] && continue
-	pv="`fix_name ${p}`"
-	if [ "$v" != "$oldv" ]; then
-		fv="`fix_name ${v}`"
-		[ "$def" -o "$v" = END ] && (echo "endchoice"; echo) >> $pfile
+	[ "$v" = END ] && break
+	fv=
+	find vendors/$v -name config.arch -print | \
+		sed -e 's?^vendors/??' -e 's?/[^/]*$??' -e 's?/? ?g' | \
+		(sort; echo "END END END END") | while read v p junk
+	do
+		[ "$fv" -a "$v" = END ] && (echo "endchoice"; echo) >> $pfile
 		[ "$v" = END ] && break
+		pv="`fix_name ${p}`"
+		if [ -z "$fv" ]; then
+			fv="`fix_name ${v}`"
 
-		echo "config DEFAULTS_${fv}"
-		echo "	bool \"${v}\""
-		echo
+			echo "config DEFAULTS_${fv}"
+			echo "  bool \"${v}\""
+			echo
 
-		echo_separator >> $pfile
-		echo "choice" >> $pfile
-		echo "	prompt \"${v} Products\"" >> $pfile
-		echo "	depends on DEFAULTS_${fv}" >> $pfile
-		echo "	default DEFAULTS_${fv}_${pv}" >> $pfile
+			echo_separator >> $pfile
+			echo "choice" >> $pfile
+			echo "	prompt \"${v} Products\"" >> $pfile
+			echo "	depends on DEFAULTS_${fv}" >> $pfile
+			echo "	default DEFAULTS_${fv}_${pv}" >> $pfile
+			echo >> $pfile
+		fi
+
+		echo "config DEFAULTS_${fv}_${pv}" >> $pfile
+		echo "	bool \"${p}\"" >> $pfile
 		echo >> $pfile
-
-		def="${p}"
-	fi
-
-	echo "config DEFAULTS_${fv}_${pv}" >> $pfile
-	echo "	bool \"${p}\"" >> $pfile
-	echo >> $pfile
-
-	oldv=$v
+	done
 done
 
 echo "endchoice"
@@ -186,6 +186,12 @@ if [ ${NLIBCS} -gt 1 ]; then
 	done
 
 	echo "endchoice"
+
+	if [ -f glibc/Kconfig ]; then
+		echo
+		echo "source glibc/Kconfig"
+	fi
+
 	echo
 
 elif [ ${NLIBCS} -eq 1 ]; then
@@ -196,6 +202,12 @@ elif [ ${NLIBCS} -eq 1 ]; then
 	echo "config ${CFG}"
 	echo "	bool"
 	echo "	default y"
+
+	if [ -f glibc/Kconfig ]; then
+		echo
+		echo "source glibc/Kconfig"
+	fi
+
 	echo
 
 else
