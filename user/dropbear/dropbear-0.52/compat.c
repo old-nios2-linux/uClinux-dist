@@ -162,7 +162,11 @@ int daemon(int nochdir, int noclose) {
 
 	int fd;
 
+#ifdef EMBED
+	switch (vfork()) {
+#else
 	switch (fork()) {
+#endif
 		case -1:
 			return (-1);
 		case 0:

@@ -133,7 +133,7 @@ void main_noinetd() {
 	for (i = 0; i < MAX_UNAUTH_CLIENTS; i++) {
 		childpipes[i] = -1;
 	}
-	bzero(preauth_addrs, sizeof(preauth_addrs));
+	memset(preauth_addrs, 0, sizeof(preauth_addrs));
 	
 	/* Set up the listening sockets */
 	listensockcount = listensockets(listensocks, MAX_LISTEN_ADDR, &maxsock);
@@ -269,7 +269,11 @@ void main_noinetd() {
 #ifdef DEBUG_NOFORK
 			fork_ret = 0;
 #else
+#ifdef EMBED
+			fork_ret = vfork();
+#else
 			fork_ret = fork();
+#endif
 #endif
 			if (fork_ret < 0) {
 				dropbear_log(LOG_WARNING, "error forking: %s", strerror(errno));
