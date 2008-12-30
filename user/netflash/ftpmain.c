@@ -281,7 +281,7 @@ tail(filename)
 	register char *s;
 	
 	while (*filename) {
-		s = strrchr(filename, '/');
+		s = rindex(filename, '/');
 		if (s == NULL)
 			break;
 		if (s[1])

@@ -91,7 +91,7 @@ int openhttp(char *url)
 		}
 		*sp = 0;
 
-		memset(&sin, 0, sizeof(sin));
+		bzero(&sin, sizeof(sin));
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(portnr);
 		if (inet_aton(urlip, &sin.sin_addr) == 0) {

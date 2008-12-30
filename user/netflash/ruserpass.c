@@ -120,12 +120,12 @@ next:
 				goto match;
 			if (strcasecmp(hostname, tokval) == 0)
 				goto match;
-			if ((tmp = strchr(hostname, '.')) != NULL &&
+			if ((tmp = index(hostname, '.')) != NULL &&
 			    strcasecmp(tmp, mydomain) == 0 &&
 			    strncasecmp(hostname, tokval, tmp-hostname) == 0 &&
 			    tokval[tmp - hostname] == '\0')
 				goto match;
-			if ((tmp = strchr(host, '.')) != NULL &&
+			if ((tmp = index(host, '.')) != NULL &&
 			    strcasecmp(tmp, mydomain) == 0 &&
 			    strncasecmp(host, tokval, tmp - host) == 0 &&
 			    tokval[tmp - host] == '\0')

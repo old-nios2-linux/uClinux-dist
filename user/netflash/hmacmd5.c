@@ -32,10 +32,10 @@ HMACMD5Init(HMACMD5_CTX *ctx, unsigned char* key, int key_len)
      */
 
     /* start out by storing key in pads */
-    memset(ctx->ipad, 0, sizeof(ctx->ipad));
-    memset(ctx->opad, 0, sizeof(ctx->opad));
-    memmove(ctx->ipad, key, key_len);
-    memmove(ctx->opad, key, key_len);
+    bzero(ctx->ipad, sizeof(ctx->ipad));
+    bzero(ctx->opad, sizeof(ctx->opad));
+    bcopy(key, ctx->ipad, key_len);
+    bcopy(key, ctx->opad, key_len);
 
     /* XOR key with ipad and opad values */
     for (i=0; i<64; i++) {
