@@ -53,3 +53,14 @@ install-strip:
           install_sh_PROGRAM="$(INSTALL_STRIP_PROGRAM)" INSTALL_STRIP_FLAG=-s \
           `test -z '$(STRIP)' || \
             echo "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'"` install
+
+
+#---------  Unit Tests ----------------------
+#TESTS = utest_common
+
+#check_PROGRAMS = utest_common
+
+#utest_common: utest_common.c
+
+#--------- End Unit Tests -------------------
+

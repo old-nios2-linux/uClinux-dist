@@ -91,14 +91,33 @@ haserl_t global;
 
 
 /* declare the shell_ function pointers here */
-void (*shell_exec)(buffer_t *buf, char *str);
-void (*shell_echo)(buffer_t *buf, char *str, size_t len);
-void (*shell_eval)(buffer_t *buf, char *str, size_t len);
-void (*shell_setup)( char *, list_t *);
-void (*shell_doscript)( buffer_t *, char *);
+void (*shell_exec) (buffer_t * buf, char *str);
+void (*shell_echo) (buffer_t * buf, char *str, size_t len);
+void (*shell_eval) (buffer_t * buf, char *str, size_t len);
+void (*shell_setup) (char *, list_t *);
+void (*shell_doscript) (buffer_t *, char *);
 void (*shell_destroy) (void);
 
-
+#ifdef BASHEXTENSIONS
+void (*shell_if) (buffer_t * buf, char *str, size_t len);
+void (*shell_elif) (buffer_t * buf, char *str, size_t len);
+void (*shell_else) (buffer_t * buf, char *str, size_t len);
+void (*shell_endif) (buffer_t * buf, char *str, size_t len);
+void (*shell_case) (buffer_t * buf, char *str, size_t len);
+void (*shell_when) (buffer_t * buf, char *str, size_t len);
+void (*shell_otherwise) (buffer_t * buf, char *str, size_t len);
+void (*shell_endcase) (buffer_t * buf, char *str, size_t len);
+void (*shell_while) (buffer_t * buf, char *str, size_t len);
+void (*shell_endwhile) (buffer_t * buf, char *str, size_t len);
+void (*shell_until) (buffer_t * buf, char *str, size_t len);
+void (*shell_enduntil) (buffer_t * buf, char *str, size_t len);
+void (*shell_for) (buffer_t * buf, char *str, size_t len);
+void (*shell_endfor) (buffer_t * buf, char *str, size_t len);
+void (*shell_unless) (buffer_t * buf, char *str, size_t len);
+void (*shell_elun) (buffer_t * buf, char *str, size_t len);
+void (*shell_unelse) (buffer_t * buf, char *str, size_t len);
+void (*shell_endunless) (buffer_t * buf, char *str, size_t len);
+#endif
 
 /* global shell execution function pointers.   These point to the actual functions
    that do the job, based on the language */
@@ -111,10 +130,10 @@ void (*shell_destroy) (void);
 struct option ga_long_options[] = {
   {"version", no_argument, 0, 'v'},
   {"help", no_argument, 0, 'h'},
-  {"debug", no_argument, 0, 'D'},
+  {"debug", no_argument, 0, 'd'},
   {"upload-limit", required_argument, 0, 'u'},
   {"upload-dir", required_argument, 0, 'U'},
-  {"upload-handler", required_argument, 0, 'H' },
+  {"upload-handler", required_argument, 0, 'H'},
   {"accept-all", no_argument, 0, 'a'},
   {"accept-none", no_argument, 0, 'n'},
   {"shell", required_argument, 0, 's'},
@@ -122,7 +141,7 @@ struct option ga_long_options[] = {
   {0, 0, 0, 0}
 };
 
-const char *gs_short_options = "vhDu:U:H:ans:S";
+const char *gs_short_options = "+vhdu:U:H:ans:S";
 
 /*
  * Convert 2 char hex string into char it represents
@@ -202,30 +221,62 @@ myputenv (list_t * cur, char *str, char *prefix)
   list_t *prev = NULL;
   size_t keylen;
   char *entry = NULL;
+  char *temp = NULL;
+  int array = 0;
+  int len;
+
+  temp = memchr (str, '=', strlen (str));
+  /* if we don't have an equal sign, exit early */
+  if (temp == 0)
+    {
+      return (cur);
+    }
+
+  keylen = (size_t) (temp - str);
+
+  /* is this an array */
+  if (memcmp (str + keylen - 2, "[]", 2) == 0)
+    {
+      keylen = keylen - 2;
+      array = 1;
+    }
 
   entry = xmalloc (strlen (str) + strlen (prefix) + 1);
+  entry[0] = '\0';
   if (strlen (prefix))
     {
-      memcpy (entry, prefix, strlen (prefix));
+      strncat (entry, prefix, strlen (prefix));
     }
-  memcpy ((char *) (entry + strlen (prefix)), str, strlen (str));
 
-  keylen = (size_t) (strchr (entry, '=') - entry);
-
-  if (keylen <= 0)
+  if (array == 1)
     {
-      free (entry);
-      return (NULL);
+      strncat (entry, str, keylen);
+      strcat (entry, str + keylen + 2);
+    }
+  else
+    {
+      strcat (entry, str);
     }
 
   /* does the value already exist? */
+  len = keylen + strlen (prefix) + 1;
   while (cur != NULL)
     {
-      if (memcmp (cur->buf, entry, keylen + 1) == 0)
+      if (memcmp (cur->buf, entry, len) == 0)
 	{
-	  entry[keylen] = '\0';
-	  // unsetenv (entry);
-	  entry[keylen] = '=';
+	  if (array == 1)
+	    {
+	      /* if an array, create a new string with this
+	       * value added to the end of the old value(s) 
+	       */
+	      temp = xmalloc (strlen (cur->buf) + len + 1);
+	      memmove (temp, cur->buf, strlen (cur->buf) + 1);
+	      strcat (temp, "\n");
+	      strcat (temp, str + keylen + 3);
+	      free (entry);
+	      entry = temp;
+	    }
+	  /* delete the old entry */
 	  free (cur->buf);
 	  if (prev != NULL)
 	    prev->next = cur->next;
@@ -233,15 +284,15 @@ myputenv (list_t * cur, char *str, char *prefix)
 	  cur = prev;
 	}			/* end if found a matching key */
       prev = cur;
-      if ( cur ) { 
-      	cur = (list_t *) cur->next;
+      if (cur)
+	{
+	  cur = (list_t *) cur->next;
 	}
     }				/* end if matching key */
 
   /* add the value to the end of the chain  */
   cur = xmalloc (sizeof (list_t));
   cur->buf = entry;
-  // putenv (cur->buf);
   if (prev != NULL)
     prev->next = cur;
 
@@ -312,6 +363,7 @@ CookieVars (list_t * env)
 	  token++;
 	}
       myputenv (env, token, global.var_prefix);
+      myputenv (env, token, global.cookie_prefix);
       token = strtok (NULL, ";");
     }
   free (qs);
@@ -395,6 +447,7 @@ ReadCGIQueryString (list_t * env)
     {
       unescape_url (token);
       myputenv (env, token, global.var_prefix);
+      myputenv (env, token, global.get_prefix);
       token = strtok (NULL, "&;");
     }
   free (qs);
@@ -415,9 +468,11 @@ ReadCGIPOSTValues (list_t * env)
   sliding_buffer_t sbuf;
   buffer_t token;
   unsigned char *data;
+  const char *CONTENT_LENGTH = "CONTENT_LENGTH";
 
-  if (getenv ("CONTENT_LENGTH" ) == NULL ) 
-  	return (0);
+  if ((getenv (CONTENT_LENGTH) == NULL) ||
+      (strtoul (getenv (CONTENT_LENGTH), NULL, 10) == 0))
+    return (0);
 
   if (getenv ("CONTENT_TYPE"))
     {
@@ -432,9 +487,9 @@ ReadCGIPOSTValues (list_t * env)
 
   s_buffer_init (&sbuf, 32768);
   sbuf.fh = STDIN;
-  if ( getenv( "CONTENT_LENGTH" ) )
+  if (getenv (CONTENT_LENGTH))
     {
-      sbuf.maxread = strtoul(getenv("CONTENT_LENGTH"), NULL, 10);
+      sbuf.maxread = strtoul (getenv (CONTENT_LENGTH), NULL, 10);
     }
   buffer_init (&token);
 
@@ -470,7 +525,7 @@ ReadCGIPOSTValues (list_t * env)
 	    }
 
 	  /* change plusses into spaces */
-	  j = strlen((char *) data);
+	  j = strlen ((char *) data);
 	  for (i = 0; i <= j; i++)
 	    {
 	      if (data[i] == '+')
@@ -480,6 +535,7 @@ ReadCGIPOSTValues (list_t * env)
 	    }
 	  unescape_url ((char *) data);
 	  myputenv (env, (char *) data, global.var_prefix);
+	  myputenv (env, (char *) data, global.post_prefix);
 	  if (token.data)
 	    {
 	      buffer_reset (&token);
@@ -510,7 +566,7 @@ parseCommandLine (int argc, char *argv[])
     {
       switch (c)
 	{
-	case 'D':
+	case 'd':
 	  global.debug = TRUE;
 	  break;
 	case 's':
@@ -538,13 +594,13 @@ parseCommandLine (int argc, char *argv[])
 	case 'U':
 	  global.uploaddir = optarg;
 	  break;
-	case 'H' :
+	case 'H':
 	  global.uploadhandler = optarg;
 	  break;
 	case 'v':
 	case 'h':
 	  printf ("This is " PACKAGE_NAME " version " PACKAGE_VERSION ""
-		  "(http://haserl.sourceforge.net)\n");
+		  " (http://haserl.sourceforge.net)\n");
 	  exit (0);
 	  break;
 	}
@@ -557,14 +613,14 @@ BecomeUser (uid_t uid, gid_t gid)
 {
   /* This silently fails if it doesn't work */
   /* Following is from Timo Teras */
-  if (getuid() == 0)
-  	setgroups(1, &gid);
-  
+  if (getuid () == 0)
+    setgroups (1, &gid);
+
   setgid (gid);
-  setgid(getgid());
+  setgid (getgid ());
 
   setuid (uid);
-  setuid(getuid());
+  setuid (getuid ());
 
   return (0);
 }
@@ -580,11 +636,14 @@ assignGlobalStartupValues ()
   global.shell = SUBSHELL_CMD;	/* The shell we use                             */
   global.silent = FALSE;	/* We do print errors if we find them           */
   global.uploaddir = TEMPDIR;	/* where to upload to                           */
-  global.uploadhandler = NULL;	/* the upload handler				*/
+  global.uploadhandler = NULL;	/* the upload handler                           */
   global.debug = FALSE;		/* Not in debug mode.                           */
   global.acceptall = FALSE;	/* don't allow POST data for GET method         */
   global.uploadlist = NULL;	/* we don't have any uploaded files             */
-  global.var_prefix = HASERL_VAR_PREFIX;
+  global.var_prefix = "FORM_";
+  global.get_prefix = "GET_";
+  global.post_prefix = "POST_";
+  global.cookie_prefix = "COOKIE_";
   global.nul_prefix = "";
 
 }
@@ -616,27 +675,28 @@ unlink_uploadlist ()
 int
 main (int argc, char *argv[])
 {
-  #ifndef JUST_LUACSHELL
+#ifndef JUST_LUACSHELL
   token_t *tokenchain = NULL;
   buffer_t script_text;
-  #endif
+#endif
   script_t *scriptchain;
 
   int retval = 0;
   char *filename = NULL;
 
   argv_t *av = NULL;
-  char **av2;
+  char **av2 = argv;
+  int av2c = argc;
 
   int command;
   int count;
 
   list_t *env = NULL;
 
-  assignGlobalStartupValues();
-  #ifndef JUST_LUACSHELL
+  assignGlobalStartupValues ();
+#ifndef JUST_LUACSHELL
   buffer_init (&script_text);
-  #endif
+#endif
 
   /* if more than argv[1] and argv[1] is not a file */
   switch (argc)
@@ -645,29 +705,55 @@ main (int argc, char *argv[])
       /* we were run, instead of called as a shell script */
       puts ("This is " PACKAGE_NAME " version " PACKAGE_VERSION "\n"
 	    "This program runs as a cgi interpeter, not interactively\n"
-	    "Please see:  http://haserl.sourceforge.net");
+	    "Please see:  http://haserl.sourceforge.net\n"
+#ifdef USE_LUA
+	    "This version includes Lua (precompiled"
+#ifdef INCLUDE_LUASHELL
+	    " and interpreted"
+#endif
+	    ")\n"
+#endif
+#ifdef BASHEXTENSIONS
+	    "Unsupported bash extensions supplied by simnux enabled\n"
+#endif
+	);
       return (0);
       break;
-    case 2:
-      filename = argv[1];
-      break;
-    default:			/* more than two */
+    default:			/* more than one */
+      /* split combined #! args - linux bundles them as one */
       command = argc_argv (argv[1], &av, "");
 
-      /* and we need to add the original argv[0] command for optarg to work */
-      av2 = xmalloc (sizeof (char *) * (command + 2));
-      av2[0] = argv[0];
-      for (count = 0; count < command; count++)
+      if (command > 1)
 	{
-	  av2[count + 1] = av[count].string;
+	  /* rebuild argv into new av2 */
+	  av2c = argc - 1 + command;
+	  av2 = xmalloc (sizeof (char *) * av2c);
+	  av2[0] = argv[0];
+	  for (count = 1; count <= command; count++)
+	    {
+	      av2[count] = av[count - 1].string;
+	    }
+	  for (; count < av2c; count++)
+	    {
+	      av2[count] = argv[count - command + 1];
+	    }
 	}
-      parseCommandLine (command + 1, av2);
-      argv[1] = av[1].string;
+
+      parseCommandLine (av2c, av2);
       free (av);
-      free (av2);
-      filename = argv[2];
+      if (av2 != argv)
+	free (av2);
+
+      if (optind < av2c)
+	{
+	  filename = av2[optind];
+	}
+      else
+	{
+	  die_with_message (NULL, NULL, "No script file specified");
+	}
+
       break;
-      /* we silently ignore 3,4,etc. */
     }
 
 
@@ -676,47 +762,70 @@ main (int argc, char *argv[])
   BecomeUser (scriptchain->uid, scriptchain->gid);
 
   /* populate the function pointers based on the shell selected */
-  if (strcmp(global.shell, "lua") && strcmp(global.shell, "luac")) /* default to "bash" */
+  if (strcmp (global.shell, "lua") && strcmp (global.shell, "luac"))
+    /* default to "bash" */
     {
-      #ifdef INCLUDE_BASHSHELL
+#ifdef INCLUDE_BASHSHELL
       shell_exec = &bash_exec;
       shell_echo = &bash_echo;
       shell_eval = &bash_eval;
       shell_setup = &bash_setup;
       shell_doscript = &bash_doscript;
       shell_destroy = &bash_destroy;
-      #else
+
+#ifdef BASHEXTENSIONS
+      shell_if = &bash_if;
+      shell_elif = &bash_elif;
+      shell_else = &bash_else;
+      shell_endif = &bash_endif;
+      shell_case = &bash_case;
+      shell_when = &bash_when;
+      shell_otherwise = &bash_otherwise;
+      shell_endcase = &bash_endcase;
+      shell_while = &bash_while;
+      shell_endwhile = &bash_endwhile;
+      shell_until = &bash_until;
+      shell_enduntil = &bash_enduntil;
+      shell_for = &bash_for;
+      shell_endfor = &bash_endfor;
+      shell_unless = &bash_unless;
+      shell_elun = &bash_elun;
+      shell_unelse = &bash_unelse;
+      shell_endunless = &bash_endunless;
+#endif
+
+#else
       die_with_message (NULL, NULL, "Bash shell is not enabled.");
-      #endif
+#endif
     }
   else
     {
-      #ifdef USE_LUA
+#ifdef USE_LUA
       shell_setup = &lua_common_setup;
       shell_destroy = &lua_common_destroy;
       global.var_prefix = "FORM.";
       global.nul_prefix = "ENV.";
 
-      if(global.shell[3] == 'c')	/* compiled Lua specific function ptr... */
-        #ifdef INCLUDE_LUACSHELL
-        shell_doscript = &luac_doscript;
-        #else
-        die_with_message (NULL, NULL, "Compiled Lua shell is not enabled.");
-        #endif
+      if (global.shell[3] == 'c')	/* luac only */
+#ifdef INCLUDE_LUACSHELL
+	shell_doscript = &luac_doscript;
+#else
+	die_with_message (NULL, NULL, "Compiled Lua shell is not enabled.");
+#endif
       else
-        {
-           #ifdef INCLUDE_LUASHELL
-          shell_exec = &lua_exec;
-          shell_echo = &lua_echo;
-          shell_eval = &lua_eval;
-          shell_doscript = &lua_doscript;
-          #else
-          die_with_message (NULL, NULL, "Standard Lua shell is not enabled.");
-          #endif
-        }
-      #else
+	{
+#ifdef INCLUDE_LUASHELL
+	  shell_exec = &lua_exec;
+	  shell_echo = &lua_echo;
+	  shell_eval = &lua_eval;
+	  shell_doscript = &lua_doscript;
+#else
+	  die_with_message (NULL, NULL, "Standard Lua shell is not enabled.");
+#endif
+	}
+#else
       die_with_message (NULL, NULL, "Lua shells are not enabled.");
-      #endif
+#endif
     }
 
 /* Read the current environment into our chain */
@@ -725,13 +834,13 @@ main (int argc, char *argv[])
   sessionid (env);
   haserlflags (env);
 
-  #ifndef JUST_LUACSHELL
+#ifndef JUST_LUACSHELL
   if (strcmp (global.shell, "luac"))
     {
       tokenchain = build_token_list (scriptchain, NULL);
       preprocess_token_list (tokenchain);
     }
-  #endif
+#endif
 
 /* Read the request data */
   if (global.acceptall != NONE)
@@ -756,35 +865,36 @@ main (int argc, char *argv[])
 	}
     }
 
-  /* build a copy of the script to send to the shell */
-  #ifndef JUST_LUACSHELL
+/* build a copy of the script to send to the shell */
+#ifndef JUST_LUACSHELL
   if (strcmp (global.shell, "luac"))
     {
       process_token_list (&script_text, tokenchain);
     }
-  #endif
+#endif
 
   /* run the script */
   if (global.debug == TRUE)
     {
-      #ifndef JUST_LUACSHELL
+#ifndef JUST_LUACSHELL
       if (getenv ("REQUEST_METHOD"))
-        {
-          write (1, "Content-Type: text/plain\n\n", 26);
-        }
+	{
+	  write (1, "Content-Type: text/plain\n\n", 26);
+	}
       write (1, script_text.data, script_text.ptr - script_text.data);
-      #else
-      die_with_message (NULL, NULL, "Debugging output doesn't work with the compiled Lua shell.");
-      #endif
+#else
+      die_with_message (NULL, NULL,
+			"Debugging output doesn't work with the compiled Lua shell.");
+#endif
     }
   else
     {
       shell_setup (global.shell, env);
-      #ifdef JUST_LUACSHELL
+#ifdef JUST_LUACSHELL
       shell_doscript (NULL, scriptchain->name);
-      #else
+#else
       shell_doscript (&script_text, scriptchain->name);
-      #endif
+#endif
       shell_destroy ();
     }
 
@@ -794,12 +904,12 @@ main (int argc, char *argv[])
       unlink_uploadlist ();
       free_token_list (global.uploadlist);
     }
-  
-  #ifndef JUST_LUACSHELL
+
+#ifndef JUST_LUACSHELL
   /* destroy the script */
   buffer_destroy (&script_text);
   free_token_list (tokenchain);
-  #endif
+#endif
 
   free_list_chain (env);
   free_script_list (scriptchain);

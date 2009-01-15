@@ -24,3 +24,11 @@ did so a second time after the entire source tree was reformatted.
 Diego Santa Cruz from spinetix.com provided fixes to some really
 annoying (and sporadic) deadlocks with IE, thttpd, POST requests.  
 
+Scott did the COOKIE_, POST_, GET_ parsing (he's also responsible for 
+the bash extensions)
+
+Mark Blythe identified differences between BSD/OSX and Linux shell 
+handling of #! scripts, and how argv[1] looks.  Then he supplied the
+fix.
+
+

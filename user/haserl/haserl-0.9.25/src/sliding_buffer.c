@@ -68,7 +68,6 @@ s_buffer_read (sliding_buffer_t * sbuf, char *matchstr)
 {
   int len, pos;
   int r;
-  size_t max;
 
   /*
    * if eof and ptr ran off the buffer, then we are done 

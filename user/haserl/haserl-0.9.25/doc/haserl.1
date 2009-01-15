@@ -3,15 +3,13 @@
 .SH NAME
 haserl \- A cgi scripting program for embedded environments
 .SH SYNOPSIS
-.BI "#!/usr/bin/haserl [ shell=" pathspec " ] [ --upload-dir=" dirspec " ]"
-.BI "[ --upload-handler " hander " ]
-.BI "[ --upload-limit= " limit " ] [ --accept-all ] [ --accept-none ] "
-.B "[ --silent ] [ --debug ]"
- [ text ] [ <% shell script %> ] [ text ] ... 
+.BI "#!/usr/bin/haserl [--shell=" pathspec "] [--upload-dir=" dirspec "] [--upload-handler=" handler "] [--upload-limit=" limit "] [--accept-all] [--accept-none] [--silent] [--debug]"
+
+[ text ] [ <% shell script %> ] [ text ] ... 
 
 .SH DESCRIPTION
 Haserl is a small cgi wrapper that allows "PHP" style cgi programming, 
-but uses a UNIX bash-like shell or lua  as the programming language. It is 
+but uses a UNIX bash-like shell or Lua  as the programming language. It is 
 very small, so it can be used in embedded environments, or where 
 something like PHP is too big.
 
@@ -70,25 +68,24 @@ input methods - just the COOKIE data and the REQUEST_METHOD.
 
 .TP
 .BI --accept-none
-If given, haserl will not parse standard input as http content before processing the script. 
-This is useful if calling a haserl script from another haserl script.
+If given, haserl will not parse standard input as http content before 
+processing the script.  This is useful if calling a haserl script from 
+another haserl script.
 
 .TP
-.TP
 .BI --debug
-Instead of executing the script, print out the script that would be executed.  If the environment
-variable 'REQUEST_METHOD' is set, the data is sent with the plain/text content type.  Otherwise,
-the shell script is printed verbatim.  
+Instead of executing the script, print out the script that would be executed.  If the environment variable 'REQUEST_METHOD' is set, the data is sent with the plain/text content type.  Otherwise, the shell script is printed verbatim.  
 
 .TP
 .BI --shell= "pathspec " 
 Specify an alternative bash-like shell to use. Defaults to "/bin/sh"
-.br
-If compiled with lua libraries, then the string "lua" is used to use an integrated lua vm.  This string is 
-case sensitive.  Example:
+
+To include shell parameters do not use the --shell=/bin/sh format. Instead, use the alternative format without the "=", as in --shell "/bin/bash --norc". Be sure to quote the option string to protect any special characters.
+
+If compiled with Lua libraries, then the string "lua" is used to use an integrated Lua vm.  This string is case sensitive.  Example:
 .BI --shell= lua
 
-An alternative is "luac".  This causes the haserl and lua parsers are disabled, and the 
+An alternative is "luac".  This causes the haserl and lua parsers to be disabled, and the 
 script is assumed to be a precompiled lua chunk.  See 
 .B LUAC
 below for more information.
@@ -172,19 +169,33 @@ interpreter performs final cleanup and then terminates.
 .SH CLIENT SIDE INPUT
 The 
 .I haserl 
-interpreter will decode data sent via the GET or POST method from the client.  
-The name of the variable follows the name given by the client, except that a prefix (typically 
+interpreter will decode data sent via the HTTP_COOKIE environment variable, and the GET or POST method from the client,
+and store them as environment variables that can be accessed by haserl.  
+The name of the variable follows the name given in the source, except that a prefix (
 .IR FORM_ )
-is prepended.   For example, if the client sends "foo=bar", the environment variable is
+is prepended.  For example, if the client sends "foo=bar", the environment variable is
 .BR FORM_foo  = bar .
 
-For the GET method, data sent in the form %xx is translated into the characters
-they represent.
+For the HTTP_COOKIE method, variables are also stored with the prefix (
+.IR COOKIE_ ) 
+added.  For example, if HTTP_COOKIE includes "foo=bar", the environment variable is
+.BR COOKIE_foo  = bar .
 
-For the POST method, if the data is sent using 
+For the GET method, data sent in the form %xx is translated into the characters
+they represent, and variables are also stored with the prefix (
+.IR GET_ ) 
+added.  For example, if QUERY_STRING includes "foo=bar", the environment variable is
+.BR GET_foo  = bar .
+
+For the POST method, variables are also stored with the prefix (
+.IR POST_ ) 
+added.  For example, if the post stream includes "foo=bar", the environment variable is
+.BR POST_foo  = bar .
+
+Also, for the POST method, if the data is sent using 
 .I "multipart/form-data" 
 encoding, the data is automatically decoded.   This is typically used when 
-files are uploaded from a web client.
+files are uploaded from a web client using <input type=file>.
 
 .TP
 .B NOTE
@@ -226,6 +237,17 @@ environment variable, the cookie data is parsed.  Cookie data is parsed
 .I before
 the GET or POST data, so in the event of two variables of the same name, the 
 GET or POST data overwrites the cookie information.
+
+.P
+When multiple instances of the same variable are sent from different sources, the FORM_variable will be set according to the order in which variables are processed.  HTTP_COOKIE is always processed first, followed by the REQUEST_METHOD.  If the accept-all option has been set, then HTTP_COOKIE is processed first, followed by the method not specified by REQUEST_METHOD, followed by the REQUEST_METHOD.  The last instance of the variable will be used to set FORM_variable.  Note that the variables are also separately creates as COOKIE_variable, GET_variable and POST_variable.  This allows the use of overlapping names from each source. 
+
+.P
+When multiple instances of the same variable are sent from the same source, 
+only the last one is saved.  To keep all copies (for multi-selects, for 
+instance), add "[]" to the end of the 
+variable name.  All results will be returned, separated by newlines.   For example,
+host=Enoch&host=Esther&host=Joshua results in "FORM_host=Joshua". 
+host[]=Enoch&host[]Esther&host[]=Joshua results in "FORM_host=Enoch\\nEsther\\nJoshua"
 
 .SH LANGUAGE 
 The following language structures are recognized by 
@@ -379,7 +401,7 @@ content-type: text/html
         file was <% cat $FORM_uploadfile | wc -c %> bytes long.</p>
         <% rm -f $FORM_uploadfile %><p>Don't worry, the file has just been deleted
         from the web server.</p>
-<% el %>
+<% else %>
         You haven't uploaded a file yet.
 <% fi %>
 </form>
@@ -387,10 +409,10 @@ content-type: text/html
 .fi
 
 Displays a form that allows for file uploading.  This is accomplished by using the 
-.B --upload-limit 
- and by setting the form 
+.B --upload-limit
+and by setting the form 
 .I enctype
-.RI "to " multipart/form-data .
+.RI "to " multipart/form-data.
 If the client sends a file, then some information regarding the file is printed, and then deleted.  Otherwise, the form states that the client has not uploaded a file.
 
 
