@@ -191,7 +191,11 @@ mime_exec (mime_var_t * obj, char *fifo)
   char *c;
   int fh;
 
+#ifdef EMBED
+  pid = vfork ();
+#else
   pid = fork ();
+#endif
   if (pid == -1)
     {
       empty_stdin ();
