@@ -89,6 +89,7 @@ struct mmap_entry *find_mmap(int data_fd, struct stat *s)
         return NULL;
     }
 
+#ifndef EMBED
 #ifdef HAVE_MADVISE
     {
         int mret;
@@ -104,6 +105,7 @@ struct mmap_entry *find_mmap(int data_fd, struct stat *s)
             return NULL;
         }
     }
+#endif
 #endif
 
     DEBUG(DEBUG_MMAP_CACHE) {
