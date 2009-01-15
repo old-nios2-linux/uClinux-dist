@@ -39,6 +39,7 @@ romfs:
 	$(ROMFSINST) /etc/ftpwelcome
 	$(ROMFSINST) /etc/ftpusers
 	$(ROMFSINST) -o $(CONFIG_USER_BOA_SRC_BOA) -d /etc/boa/boa.conf
+	$(ROMFSINST) -o $(CONFIG_USER_BOA_SRC_BOA) -d /home/httpd/favicon.ico
 	$(ROMFSINST) /etc/mime.types
 	$(ROMFSINST) /usr/share/udhcpc/default.script
 	chmod 777 $(ROMFSDIR)/usr/share/udhcpc/default.script
