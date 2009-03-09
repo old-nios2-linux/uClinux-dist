@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <../../linux-2.6.x/include/nios2_system.h>
 #include <string.h>
 #include <malloc.h>
 #include <sys/types.h>
@@ -8,7 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/ioctl.h>
-//#include <nios2_system.h>
+#include <asm/nios2.h>
 void mydelay(int count)
 {
 int i;
