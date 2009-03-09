@@ -1,0 +1,55 @@
+##############################
+# servfox Makefile
+##############################
+
+AXIS_USABLE_LIBS = UCLIBC GLIBC
+include $(AXIS_TOP_DIR)/tools/build/Rules.axis
+
+WRAPDIR = servfox
+INSTDIR   = $(prefix)/bin
+INSTMODE  = 0755
+INSTOWNER = root
+INSTGROUP = root
+
+PROG     = servfox
+
+
+
+
+
+LDLIBS += -lpthread
+
+
+OBJSERVER= server.o spcav4l.o utils.o tcputils.o 
+
+		
+all:	 $(PROG)
+
+clean:
+	@echo "Cleaning up directory."
+	rm -f *.a *.o servfox   core *~ log errlog
+
+
+servfox: $(OBJSERVER)
+	$(CC) $(LDFLAGS) -o $(PROG) $(OBJSERVER) $(LDLIBS)
+	
+
+	
+server.o:	server.c
+		$(CC) $(CFLAGS) -c -o $@ $<
+	
+spcav4l.o:	spcav4l.c spcav4l.h
+		$(CC) $(CFLAGS) -c -o $@ $<
+		
+utils.o:	utils.c utils.h
+		$(CC) $(CFLAGS) -c -o $@ $<
+				
+tcputils.o:	tcputils.c tcputils.h
+		$(CC) $(CFLAGS) -c -o $@ $<
+	
+
+	 
+install: $(PROG) 
+	$(INSTALL) -d $(INSTDIR)
+	$(INSTALL) -s -m $(INSTMODE) -g $(INSTGROUP) -o $(INSTOWNER) $(PROG) $(INSTDIR) 
+	

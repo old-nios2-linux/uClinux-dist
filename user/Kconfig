@@ -3039,6 +3039,18 @@ config USER_NULL_NULL
 	help
 	  The NULL program. Only useful for testing.
 
+#add by dxzhang
+config USER_MYHELLO_MYHELLO
+	bool "myhello"
+	help
+	  myhello program,for testing
+
+config USER_SERVFOX_SERVFOX
+	bool "servfox"
+	help
+	  servfox program
+#end by dxzhang
+
 config USER_OPROFILE
 	bool "oprofile"
 	select LIB_BFD

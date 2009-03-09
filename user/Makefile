@@ -261,6 +261,12 @@ dir_$(CONFIG_USER_NTPD_NTPD)                += ntp
 dir_$(CONFIG_USER_NTPD_NTPDATE)             += ntp
 dir_$(CONFIG_USER_NTPD_NTPQ)                += ntp
 dir_$(CONFIG_USER_NULL_NULL)                += null
+
+#add by dxzhang
+dir_$(CONFIG_USER_MYHELLO_MYHELLO)	    += myhello
+dir_$(CONFIG_USER_SERVFOX_SERVFOX)          += servfox
+#end by dxzhang
+
 dir_$(CONFIG_USER_NWSH_SH)                  += nwsh
 dir_$(CONFIG_USER_MSH_SH)                   += msh
 dir_$(CONFIG_USER_OGGPLAY_EXAMPLE)          += oggplay
