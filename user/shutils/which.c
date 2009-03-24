@@ -30,7 +30,7 @@ char ** argv;
 		quit = found = 0;
 
 		while(!quit) {
-			cp = index(path, ':');
+			cp = strchr(path, ':');
 			if (cp == NULL) {
 				quit++;
 			} else {

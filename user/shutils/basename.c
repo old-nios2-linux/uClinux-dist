@@ -24,7 +24,7 @@ basename (name)
 {
 	char *base;
 
-	base = rindex (name, '/');
+	base = strrchr (name, '/');
 	return base ? base + 1 : name;
 }
            

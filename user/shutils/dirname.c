@@ -22,7 +22,7 @@ main (argc, argv)
 	
 	if (argc == 2) {
 		strip_trailing_slashes(argv[1]);
-		line = rindex (argv[1],'/');
+		line = strrchr (argv[1],'/');
 		if (line == NULL) {
 			argv[1][0]='.';
 			argv[1][1]=0;
