@@ -23,7 +23,7 @@ nod /dev/sg9 640 0 0 c 21 9
 nod /dev/sda 640 0 0 b 8 0
 nod /dev/sdb 640 0 0 b 8 16
 dir /dev/shm 755 0 0
-nod /dev/rtc 640 0 0 c 10 135
+nod /dev/rtc0 640 0 0 c 254 0
 nod /dev/tty 666 0 0 c 5 0
 nod /dev/hda1 640 0 0 b 3 1
 nod /dev/hda2 640 0 0 b 3 2
