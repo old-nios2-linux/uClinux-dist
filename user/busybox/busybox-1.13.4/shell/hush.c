@@ -458,8 +458,10 @@ struct globals {
 	smallint fake_mode;
 	/* these three support $?, $#, and $1 */
 	smalluint last_return_code;
+	/* is global_argv and global_argv[1..n] malloced? (note: not [0]) */
 	smalluint global_args_malloced;
-	int global_argc; /* NB: $# + 1 */
+	/* how many non-NULL argv's we have. NB: $# + 1 */
+	int global_argc;
 	char **global_argv;
 #if ENABLE_HUSH_LOOPS
 	unsigned depth_break_continue;
@@ -1214,8 +1216,13 @@ static int o_glob(o_string *o, int n)
  * Otherwise, just finish current list[] and start new */
 static int o_save_ptr(o_string *o, int n)
 {
-	if (o->o_glob)
-		return o_glob(o, n); /* o_save_ptr_helper is inside */
+	if (o->o_glob) { /* if globbing is requested */
+		/* If o->has_empty_slot, list[n] was already globbed
+		 * (if it was requested back then when it was filled)
+		 * so don't do that again! */
+		if (!o->has_empty_slot)
+			return o_glob(o, n); /* o_save_ptr_helper is inside */
+	}
 	return o_save_ptr_helper(o, n);
 }
 
@@ -4280,6 +4287,11 @@ int hush_main(int argc, char **argv)
 		switch (opt) {
 		case 'c':
 			G.global_argv = argv + optind;
+			if (!argv[optind]) {
+				/* -c 'script' (no params): prevent empty $0 */
+				*--G.global_argv = argv[0];
+				optind--;
+			} /* else -c 'script' PAR0 PAR1: $0 is PAR0 */
 			G.global_argc = argc - optind;
 			opt = parse_and_run_string(optarg, 0 /* parse_flag */);
 			goto final_return;
@@ -4713,9 +4725,14 @@ static int builtin_shift(char **argv)
 		n = atoi(argv[1]);
 	}
 	if (n >= 0 && n < G.global_argc) {
-		G.global_argv[n] = G.global_argv[0];
+		if (G.global_args_malloced) {
+			int m = 1;
+			while (m <= n)
+				free(G.global_argv[m++]);
+		}
 		G.global_argc -= n;
-		G.global_argv += n;
+		memmove(&G.global_argv[1], &G.global_argv[n+1],
+				G.global_argc * sizeof(G.global_argv[0]));
 		return EXIT_SUCCESS;
 	}
 	return EXIT_FAILURE;

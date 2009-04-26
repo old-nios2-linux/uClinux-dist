@@ -861,7 +861,7 @@ config USER_BUSYBOX_FEATURE_TRACEROUTE_USE_ICMP
 	help
 	  Add feature to allow for ICMP ECHO instead of UDP datagrams.
 
-source ../user/busybox/busybox-1.13.3/networking/udhcp/Kconfig
+source ../user/busybox/busybox-1.13.4/networking/udhcp/Kconfig
 
 config USER_BUSYBOX_VCONFIG
 	bool "vconfig"
