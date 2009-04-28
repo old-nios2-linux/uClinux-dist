@@ -132,9 +132,9 @@ CONFIG_NIOS2_HW_MUL=y
 #
 # Platform drivers Options
 #
+# CONFIG_GENERIC_GPIO is not set
 # CONFIG_AVALON_DMA is not set
 # CONFIG_PCI_ALTPCI is not set
-# CONFIG_I2C_NIOS2_GPIO is not set
 # CONFIG_ALTERA_REMOTE_UPDATE is not set
 
 #
