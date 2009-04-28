@@ -1,0 +1,156 @@
+/* vi: set sw=4 ts=4: */
+/*
+ * addgroup - add groups to /etc/group and /etc/gshadow
+ *
+ * Copyright (C) 1999 by Lineo, inc. and John Beppu
+ * Copyright (C) 1999,2000,2001 by John Beppu <beppu@codepoet.org>
+ * Copyright (C) 2007 by Tito Ragusa <farmatito@tiscali.it>
+ *
+ * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
+ *
+ */
+#include "libbb.h"
+
+#define OPT_GID                       (1 << 0)
+#define OPT_SYSTEM_ACCOUNT            (1 << 1)
+
+/* We assume GID_T_MAX == INT_MAX */
+static void xgroup_study(struct group *g)
+{
+	unsigned max = INT_MAX;
+
+	/* Make sure gr_name is unused */
+	if (getgrnam(g->gr_name)) {
+		bb_error_msg_and_die("%s '%s' in use", "group", g->gr_name);
+		/* these format strings are reused in adduser and addgroup */
+	}
+
+	/* if a specific gid is requested, the --system switch and */
+	/* min and max values are overriden, and the range of valid */
+	/* gid values is set to [0, INT_MAX] */
+	if (!(option_mask32 & OPT_GID)) {
+		if (option_mask32 & OPT_SYSTEM_ACCOUNT) {
+			g->gr_gid = 100; /* FIRST_SYSTEM_GID */
+			max = 999;       /* LAST_SYSTEM_GID */
+		} else {
+			g->gr_gid = 1000; /* FIRST_GID */
+			max = 64999;      /* LAST_GID */
+		}
+	}
+	/* Check if the desired gid is free
+	 * or find the first free one */
+	while (1) {
+		if (!getgrgid(g->gr_gid)) {
+			return; /* found free group: return */
+		}
+		if (option_mask32 & OPT_GID) {
+			/* -g N, cannot pick gid other than N: error */
+			bb_error_msg_and_die("%s '%s' in use", "gid", itoa(g->gr_gid));
+			/* this format strings is reused in adduser and addgroup */
+		}
+		if (g->gr_gid == max) {
+			/* overflowed: error */
+			bb_error_msg_and_die("no %cids left", 'g');
+			/* this format string is reused in adduser and addgroup */
+		}
+		g->gr_gid++;
+	}
+}
+
+/* append a new user to the passwd file */
+static void new_group(char *group, gid_t gid)
+{
+	struct group gr;
+	char *p;
+
+	/* make sure gid and group haven't already been allocated */
+	gr.gr_gid = gid;
+	gr.gr_name = group;
+	xgroup_study(&gr);
+
+	/* add entry to group */
+	p = xasprintf("x:%u:", (unsigned) gr.gr_gid);
+	if (update_passwd(bb_path_group_file, group, p, NULL) < 0)
+		exit(EXIT_FAILURE);
+	if (ENABLE_FEATURE_CLEAN_UP)
+		free(p);
+#if ENABLE_FEATURE_SHADOWPASSWDS
+	/* Ignore errors: if file is missing we suppose admin doesn't want it */
+	update_passwd(bb_path_gshadow_file, group, "!::", NULL);
+#endif
+}
+
+#if ENABLE_FEATURE_ADDGROUP_LONG_OPTIONS
+static const char addgroup_longopts[] ALIGN1 =
+		"gid\0"                 Required_argument "g"
+		"system\0"              No_argument       "S"
+		;
+#endif
+
+/*
+ * addgroup will take a login_name as its first parameter.
+ *
+ * gid can be customized via command-line parameters.
+ * If called with two non-option arguments, addgroup
+ * will add an existing user to an existing group.
+ */
+int addgroup_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
+int addgroup_main(int argc UNUSED_PARAM, char **argv)
+{
+	unsigned opts;
+	unsigned gid = 0;
+
+	/* need to be root */
+	if (geteuid()) {
+		bb_error_msg_and_die(bb_msg_perm_denied_are_you_root);
+	}
+#if ENABLE_FEATURE_ADDGROUP_LONG_OPTIONS
+	applet_long_options = addgroup_longopts;
+#endif
+	/* Syntax:
+	 *  addgroup group
+	 *  addgroup -g num group
+	 *  addgroup user group
+	 * Check for min, max and missing args */
+	opt_complementary = "-1:?2:g+";
+	opts = getopt32(argv, "g:S", &gid);
+	/* move past the commandline options */
+	argv += optind;
+	//argc -= optind;
+
+#if ENABLE_FEATURE_ADDUSER_TO_GROUP
+	if (argv[1]) {
+		struct group *gr;
+
+		if (opts & OPT_GID) {
+			/* -g was there, but "addgroup -g num user group"
+			 * is a no-no */
+			bb_show_usage();
+		}
+
+		/* check if group and user exist */
+		xuname2uid(argv[0]); /* unknown user: exit */
+		gr = xgetgrnam(argv[1]); /* unknown group: exit */
+		/* check if user is already in this group */
+		for (; *(gr->gr_mem) != NULL; (gr->gr_mem)++) {
+			if (!strcmp(argv[0], *(gr->gr_mem))) {
+				/* user is already in group: do nothing */
+				return EXIT_SUCCESS;
+			}
+		}
+		if (update_passwd(bb_path_group_file, argv[1], NULL, argv[0]) < 0) {
+			return EXIT_FAILURE;
+		}
+# if ENABLE_FEATURE_SHADOWPASSWDS
+		update_passwd(bb_path_gshadow_file, argv[1], NULL, argv[0]);
+# endif
+	} else
+#endif /* ENABLE_FEATURE_ADDUSER_TO_GROUP */
+	{
+		die_if_bad_username(argv[0]);
+		new_group(argv[0], gid);
+
+	}
+	/* Reached only on success */
+	return EXIT_SUCCESS;
+}
