@@ -2862,6 +2862,9 @@ config USER_DHRYSTONE_DHRYSTONE
 config USER_DE2TSCAL_DE2TSCAL
 	bool "de2ts-cal"
 
+config USER_EVTEST_EVTEST
+	bool "Input event device test"
+
 config USER_EXPAT_EXAMPLES
 	bool "expat-examples"
 	select LIB_EXPAT
