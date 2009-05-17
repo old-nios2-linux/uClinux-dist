@@ -8,12 +8,17 @@
  * Licensed under GPLv2 or later, see file LICENSE in this tarball for details.
  */
 
+/* Note that unlike older versions of modules.dep/depmod (busybox and m-i-t),
+ * we expect the full dependency list to be specified in modules.dep.  Older
+ * versions would only export the direct dependency list.
+ */
+
 #include "libbb.h"
 #include "modutils.h"
 #include <sys/utsname.h>
 #include <fnmatch.h>
 
-//#define DBG(...) bb_error_msg(__VA_ARGS__)
+//#define DBG(fmt, ...) bb_error_msg("%s: " fmt, __func__, ## __VA_ARGS__)
 #define DBG(...) ((void)0)
 
 #define MODULE_FLAG_LOADED		0x0001
@@ -114,6 +119,7 @@ static void add_probe(const char *name)
 		return;
 	}
 
+	DBG("queuing %s", name);
 	m->probed_name = name;
 	m->flags |= MODULE_FLAG_NEED_DEPS;
 	llist_add_to_end(&G.probes, m);
@@ -206,6 +212,7 @@ static int do_modprobe(struct module_entry *m)
 	struct module_entry *m2;
 	char *fn, *options;
 	int rc = -1;
+	llist_t *l;
 
 	if (!(m->flags & MODULE_FLAG_FOUND_IN_MODDEP)) {
 		DBG("skipping %s, not found in modules.dep", m->modname);
@@ -215,6 +222,9 @@ static int do_modprobe(struct module_entry *m)
 
 	if (!(option_mask32 & MODPROBE_OPT_REMOVE))
 		m->deps = llist_rev(m->deps);
+
+	for (l = m->deps; l != NULL; l = l->link)
+		DBG("dep: %s", l->data);
 
 	rc = 0;
 	while (m->deps && rc == 0) {
@@ -292,7 +302,8 @@ static void load_modules_dep(void)
 			llist_add_to(&m->deps, xstrdup(tokens[0]));
 			if (tokens[1])
 				string_to_llist(tokens[1], &m->deps, " ");
-		}
+		} else
+			DBG("skipping dep line");
 	}
 	config_close(p);
 }
@@ -342,10 +353,12 @@ int modprobe_main(int argc UNUSED_PARAM, char **argv)
 	if (opt & MODPROBE_OPT_INSERT_ALL) {
 		/* Each argument is a module name */
 		do {
+			DBG("adding module %s", *argv);
 			add_probe(*argv++);
 		} while (*argv);
 	} else {
 		/* First argument is module name, rest are parameters */
+		DBG("probing just module %s", *argv);
 		add_probe(argv[0]);
 		G.cmdline_mopts = parse_cmdline_module_options(argv);
 	}

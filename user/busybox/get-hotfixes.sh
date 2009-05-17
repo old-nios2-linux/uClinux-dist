@@ -15,13 +15,11 @@ url="${base_url}${bver}/"
 cd ${bdir}
 
 rm -rf hotfixes
-if [[ -d .svn ]] ; then
-	svn_st=$(svn st)
-	if [[ -n ${svn_st} ]] ; then
-		echo "ERROR: uncommitted changes"
-		echo "${svn_st}"
-		exit 1
-	fi
+svn_st=$(svn st)
+if [[ -n ${svn_st} ]] ; then
+	echo "ERROR: uncommitted changes"
+	echo "${svn_st}"
+	exit 1
 fi
 mkdir hotfixes
 cd hotfixes
@@ -40,13 +38,9 @@ for h in ${hotfixes} ; do
 		echo "APPLYING"
 		patch ${popts} >/dev/null < hotfixes/${h}
 		echo ${h} >> HOTFIXES
-		if [[ -d .svn ]] ; then
-			svn add -q HOTFIXES
-			svn commit -m "apply upstream ${url}${h}"
-		fi
+		svn add -q HOTFIXES
+		svn commit -m "apply upstream ${url}${h}"
 	else
 		echo "!! FAIL !!"
 	fi
 done
-
-rm -rf hotfixes

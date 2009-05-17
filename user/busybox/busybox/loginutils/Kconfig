@@ -157,6 +157,22 @@ config USER_BUSYBOX_FEATURE_ADDUSER_LONG_OPTIONS
 	help
 	  Support long options for the adduser applet.
 
+config USER_BUSYBOX_FIRST_SYSTEM_ID
+	int "First valid system uid or gid for adduser and addgroup"
+	depends on USER_BUSYBOX_ADDUSER || USER_BUSYBOX_ADDGROUP
+	range 0 64900
+	default 100
+	help
+	  First valid system uid or gid for adduser and addgroup
+
+config USER_BUSYBOX_LAST_SYSTEM_ID
+	int "Last valid system uid or gid for adduser and addgroup"
+	depends on USER_BUSYBOX_ADDUSER || USER_BUSYBOX_ADDGROUP
+	range 0 64900
+	default 999
+	help
+	  Last valid system uid or gid for adduser and addgroup
+
 config USER_BUSYBOX_DELUSER
 	bool "deluser"
 	default n

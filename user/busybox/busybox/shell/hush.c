@@ -50,18 +50,13 @@
  *
  * TODOs:
  *      grep for "TODO" and fix (some of them are easy)
- *      change { and } from special chars to reserved words
  *      $var refs in function do not pick up values set by "var=val func"
  *      builtins: ulimit
  *      follow IFS rules more precisely, including update semantics
- *      figure out what to do with backslash-newline
- *      continuation lines, both explicit and implicit - done?
- *      separate job control from interactiveness
- *      (testcase: booting with init=/bin/hush does not show prompt (2009-04))
  *
  * Licensed under the GPL v2 or later, see the file LICENSE in this tarball.
  */
-#include "busybox.h" /* for APPLET_IS_NOFORK/NOEXEC */
+#include "busybox.h"  /* for APPLET_IS_NOFORK/NOEXEC */
 #include <glob.h>
 /* #include <dmalloc.h> */
 #if ENABLE_HUSH_CASE
@@ -70,7 +65,7 @@
 #include "math.h"
 #include "match.h"
 #ifndef PIPE_BUF
-# define PIPE_BUF 4096           /* amount of buffering in a pipe */
+# define PIPE_BUF 4096  /* amount of buffering in a pipe */
 #endif
 
 
@@ -143,6 +138,8 @@
 
 #define SPECIAL_VAR_SYMBOL 3
 
+struct variable;
+
 static const char hush_version_str[] ALIGN1 = "HUSH_VERSION="BB_VER;
 
 /* This supports saving pointers malloced in vfork child,
@@ -151,7 +148,7 @@ static const char hush_version_str[] ALIGN1 = "HUSH_VERSION="BB_VER;
 #if !BB_MMU
 typedef struct nommu_save_t {
 	char **new_env;
-	char **old_env;
+	struct variable *old_vars;
 	char **argv;
 	char **argv_from_re_execing;
 } nommu_save_t;
@@ -287,8 +284,8 @@ struct command {
 #if ENABLE_HUSH_FUNCTIONS
 # define GRP_FUNCTION 2
 #endif
-	struct pipe *group;         /* if non-NULL, this "command" is { list },
-	                             * ( list ), or a compound statement */
+	/* if non-NULL, this "command" is { list }, ( list ), or a compound statement */
+	struct pipe *group;
 #if !BB_MMU
 	char *group_as_string;
 #endif
@@ -780,12 +777,12 @@ static void syntax_error_unterm_str(unsigned lineno, const char *s)
 	die_if_script(lineno, "syntax error: unterminated %s", s);
 }
 
-static void syntax_error_unexpected_ch(unsigned lineno, char ch)
+static void syntax_error_unexpected_ch(unsigned lineno, int ch)
 {
 	char msg[2];
 	msg[0] = ch;
 	msg[1] = '\0';
-	die_if_script(lineno, "syntax error: unexpected %s", msg);
+	die_if_script(lineno, "syntax error: unexpected %s", ch == EOF ? "EOF" : msg);
 }
 
 #if HUSH_DEBUG < 2
@@ -888,6 +885,7 @@ static char **xx_add_strings_to_strings(int lineno, char **strings, char **add, 
 	xx_add_strings_to_strings(__LINE__, strings, add, need_to_dup)
 #endif
 
+/* Note: takes ownership of "add" ptr (it is not strdup'ed) */
 static char **add_string_to_strings(char **strings, char *add)
 {
 	char *v[2];
@@ -906,64 +904,18 @@ static char **xx_add_string_to_strings(int lineno, char **strings, char *add)
 	xx_add_string_to_strings(__LINE__, strings, add)
 #endif
 
-static void putenv_all(char **strings)
-{
-	if (!strings)
-		return;
-	while (*strings) {
-		debug_printf_env("putenv '%s'\n", *strings);
-		putenv(*strings++);
-	}
-}
-
-static char **putenv_all_and_save_old(char **strings)
-{
-	char **old = NULL;
-	char **s = strings;
-
-	if (!strings)
-		return old;
-	while (*strings) {
-		char *v, *eq;
-
-		eq = strchr(*strings, '=');
-		if (eq) {
-			*eq = '\0';
-			v = getenv(*strings);
-			*eq = '=';
-			if (v) {
-				/* v points to VAL in VAR=VAL, go back to VAR */
-				v -= (eq - *strings) + 1;
-				old = add_string_to_strings(old, v);
-			}
-		}
-		strings++;
-	}
-	putenv_all(s);
-	return old;
-}
-
-static void free_strings_and_unsetenv(char **strings, int unset)
+static void free_strings(char **strings)
 {
 	char **v;
 
 	if (!strings)
 		return;
-
 	v = strings;
 	while (*v) {
-		if (unset) {
-			debug_printf_env("unsetenv '%s'\n", *v);
-			bb_unsetenv(*v);
-		}
-		free(*v++);
+		free(*v);
+		v++;
 	}
 	free(strings);
-}
-
-static void free_strings(char **strings)
-{
-	free_strings_and_unsetenv(strings, 0);
 }
 
 
@@ -1247,27 +1199,38 @@ static const char *set_cwd(void)
 }
 
 
-/* Get/check local shell variables */
-static struct variable *get_local_var(const char *name)
+/*
+ * Shell and environment variable support
+ */
+static struct variable **get_ptr_to_local_var(const char *name)
 {
+	struct variable **pp;
 	struct variable *cur;
 	int len;
 
-	if (!name)
-		return NULL;
 	len = strlen(name);
-	for (cur = G.top_var; cur; cur = cur->next) {
+	pp = &G.top_var;
+	while ((cur = *pp) != NULL) {
 		if (strncmp(cur->varstr, name, len) == 0 && cur->varstr[len] == '=')
-			return cur;
+			return pp;
+		pp = &cur->next;
 	}
 	return NULL;
 }
 
-static const char *get_local_var_value(const char *src)
+static struct variable *get_local_var(const char *name)
 {
-	struct variable *var = get_local_var(src);
-	if (var)
-		return strchr(var->varstr, '=') + 1;
+	struct variable **pp = get_ptr_to_local_var(name);
+	if (pp)
+		return *pp;
+	return NULL;
+}
+
+static const char *get_local_var_value(const char *name)
+{
+	struct variable **pp = get_ptr_to_local_var(name);
+	if (pp)
+		return strchr((*pp)->varstr, '=') + 1;
 	return NULL;
 }
 
@@ -1367,25 +1330,21 @@ static int set_local_var(char *str, int flg_export, int flg_read_only)
 	return 0;
 }
 
-static int unset_local_var(const char *name)
+static int unset_local_var_len(const char *name, int name_len)
 {
 	struct variable *cur;
-	struct variable *prev = prev; /* for gcc */
-	int name_len;
+	struct variable **var_pp;
 
 	if (!name)
 		return EXIT_SUCCESS;
-	name_len = strlen(name);
-	cur = G.top_var;
-	while (cur) {
+	var_pp = &G.top_var;
+	while ((cur = *var_pp) != NULL) {
 		if (strncmp(cur->varstr, name, name_len) == 0 && cur->varstr[name_len] == '=') {
 			if (cur->flg_read_only) {
 				bb_error_msg("%s: readonly variable", name);
 				return EXIT_FAILURE;
 			}
-			/* prev is ok to use here because 1st variable, HUSH_VERSION,
-			 * is ro, and we cannot reach this code on the 1st pass */
-			prev->next = cur->next;
+			*var_pp = cur->next;
 			debug_printf_env("%s: unsetenv '%s'\n", __func__, cur->varstr);
 			bb_unsetenv(cur->varstr);
 			if (name_len == 3 && cur->varstr[0] == 'P' && cur->varstr[1] == 'S')
@@ -1395,10 +1354,29 @@ static int unset_local_var(const char *name)
 			free(cur);
 			return EXIT_SUCCESS;
 		}
-		prev = cur;
-		cur = cur->next;
+		var_pp = &cur->next;
 	}
 	return EXIT_SUCCESS;
+}
+
+static int unset_local_var(const char *name)
+{
+	return unset_local_var_len(name, strlen(name));
+}
+
+static void unset_vars(char **strings)
+{
+	char **v;
+
+	if (!strings)
+		return;
+	v = strings;
+	while (*v) {
+		const char *eq = strchrnul(*v, '=');
+		unset_local_var_len(*v, (int)(eq - *v));
+		v++;
+	}
+	free(strings);
 }
 
 #if ENABLE_SH_MATH_SUPPORT
@@ -1428,6 +1406,62 @@ static void arith_set_local_var(const char *name, const char *val, int flags)
 
 
 /*
+ * Helpers for "var1=val1 var2=val2 cmd" feature
+ */
+static void add_vars(struct variable *var)
+{
+	struct variable *next;
+
+	while (var) {
+		next = var->next;
+		var->next = G.top_var;
+		G.top_var = var;
+		if (var->flg_export) {
+			debug_printf_env("%s: restoring exported '%s'\n", __func__, var->varstr);
+			putenv(var->varstr);
+		} else {
+			debug_printf_env("%s: restoring local '%s'\n", __func__, var->varstr);
+		}
+		var = next;
+	}
+}
+
+static struct variable *set_vars_and_save_old(char **strings)
+{
+	char **s;
+	struct variable *old = NULL;
+
+	if (!strings)
+		return old;
+	s = strings;
+	while (*s) {
+		struct variable *var_p;
+		struct variable **var_pp;
+		char *eq;
+
+		eq = strchr(*s, '=');
+		if (eq) {
+			*eq = '\0';
+			var_pp = get_ptr_to_local_var(*s);
+			*eq = '=';
+			if (var_pp) {
+				/* Remove variable from global linked list */
+				var_p = *var_pp;
+				debug_printf_env("%s: removing '%s'\n", __func__, var_p->varstr);
+				*var_pp = var_p->next;
+				/* Add it to returned list */
+				var_p->next = old;
+				old = var_p;
+			}
+			set_local_var(*s, 1, 0);
+		}
+		s++;
+	}
+	return old;
+}
+
+
+/*
  * in_str support
  */
 static int static_get(struct in_str *i)
@@ -1453,8 +1487,9 @@ static void cmdedit_update_prompt(void)
 		if (G.PS1 == NULL)
 			G.PS1 = "\\w \\$ ";
 		G.PS2 = get_local_var_value("PS2");
-	} else
+	} else {
 		G.PS1 = NULL;
+	}
 	if (G.PS2 == NULL)
 		G.PS2 = "> ";
 }
@@ -2645,7 +2680,9 @@ static int setup_redirects(struct command *prog, int squirrel[])
 	for (redir = prog->redirects; redir; redir = redir->next) {
 		if (redir->rd_type == REDIRECT_HEREDOC2) {
 			/* rd_fd<<HERE case */
-			if (squirrel && redir->rd_fd < 3) {
+			if (squirrel && redir->rd_fd < 3
+			 && squirrel[redir->rd_fd] < 0
+			) {
 				squirrel[redir->rd_fd] = dup(redir->rd_fd);
 			}
 			/* for REDIRECT_HEREDOC2, rd_filename holds _contents_
@@ -2681,7 +2718,9 @@ static int setup_redirects(struct command *prog, int squirrel[])
 		}
 
 		if (openfd != redir->rd_fd) {
-			if (squirrel && redir->rd_fd < 3) {
+			if (squirrel && redir->rd_fd < 3
+			 && squirrel[redir->rd_fd] < 0
+			) {
 				squirrel[redir->rd_fd] = dup(redir->rd_fd);
 			}
 			if (openfd == REDIRFD_CLOSE) {
@@ -2855,17 +2894,17 @@ static struct function *new_function(char *name)
 			 * body_as_string was not malloced! */
 			if (funcp->body) {
 				free_pipe_list(funcp->body);
-#if !BB_MMU
+# if !BB_MMU
 				free(funcp->body_as_string);
-#endif
+# endif
 			}
 		} else {
 			debug_printf_exec("reinserting in tree & replacing function '%s'\n", funcp->name);
 			cmd->argv[0] = funcp->name;
 			cmd->group = funcp->body;
-#if !BB_MMU
+# if !BB_MMU
 			cmd->group_as_string = funcp->body_as_string;
-#endif
+# endif
 		}
 		goto skip;
 	}
@@ -2885,16 +2924,16 @@ static void unset_func(const char *name)
 	while ((funcp = *funcpp) != NULL) {
 		if (strcmp(funcp->name, name) == 0) {
 			*funcpp = funcp->next;
-			/* funcp is unlinked now, deleting it */
-			free(funcp->name);
-			/* Note: if !funcp->body, do not free body_as_string!
-			 * This is a special case of "-F name body" function:
-			 * body_as_string was not malloced! */
+			/* funcp is unlinked now, deleting it.
+			 * Note: if !funcp->body, the function was created by
+			 * "-F name body", do not free ->body_as_string
+			 * and ->name as they were not malloced. */
 			if (funcp->body) {
 				free_pipe_list(funcp->body);
-#if !BB_MMU
+				free(funcp->name);
+# if !BB_MMU
 				free(funcp->body_as_string);
-#endif
+# endif
 			}
 			free(funcp);
 			break;
@@ -2903,10 +2942,10 @@ static void unset_func(const char *name)
 	}
 }
 
-#if BB_MMU
+# if BB_MMU
 #define exec_function(nommu_save, funcp, argv) \
 	exec_function(funcp, argv)
-#endif
+# endif
 static void exec_function(nommu_save_t *nommu_save,
 		const struct function *funcp,
 		char **argv) NORETURN;
@@ -2938,37 +2977,31 @@ static int run_function(const struct function *funcp, char **argv)
 {
 	int rc;
 	save_arg_t sv;
-#if ENABLE_HUSH_FUNCTIONS
 	smallint sv_flg;
-#endif
 
 	save_and_replace_G_args(&sv, argv);
-#if ENABLE_HUSH_FUNCTIONS
 	/* "we are in function, ok to use return" */
 	sv_flg = G.flag_return_in_progress;
 	G.flag_return_in_progress = -1;
-#endif
 
 	/* On MMU, funcp->body is always non-NULL */
-#if !BB_MMU
+# if !BB_MMU
 	if (!funcp->body) {
 		/* Function defined by -F */
 		parse_and_run_string(funcp->body_as_string);
 		rc = G.last_exitcode;
 	} else
-#endif
+# endif
 	{
 		rc = run_list(funcp->body);
 	}
 
-#if ENABLE_HUSH_FUNCTIONS
 	G.flag_return_in_progress = sv_flg;
-#endif
 	restore_G_args(&sv, argv);
 
 	return rc;
 }
-#endif
+#endif /* ENABLE_HUSH_FUNCTIONS */
 
 
 #if BB_MMU
@@ -2998,11 +3031,13 @@ static void pseudo_exec_argv(nommu_save_t *nommu_save,
 
 	new_env = expand_assignments(argv, assignment_cnt);
 #if BB_MMU
-	putenv_all(new_env);
+	set_vars_and_save_old(new_env);
 	free(new_env); /* optional */
+	/* we can also destroy set_vars_and_save_old's return value,
+	 * to save memory */
 #else
 	nommu_save->new_env = new_env;
-	nommu_save->old_env = putenv_all_and_save_old(new_env);
+	nommu_save->old_vars = set_vars_and_save_old(new_env);
 #endif
 	if (argv_expanded) {
 		argv = argv_expanded;
@@ -3443,10 +3478,10 @@ static int run_pipe(struct pipe *pi)
 			funcp = new_function(command->argv[0]);
 			/* funcp->name is already set to argv[0] */
 			funcp->body = command->group;
-#if !BB_MMU
+# if !BB_MMU
 			funcp->body_as_string = command->group_as_string;
 			command->group_as_string = NULL;
-#endif
+# endif
 			command->group = NULL;
 			command->argv[0] = NULL;
 			debug_printf_exec("cmd %p has child func at %p\n", command, funcp);
@@ -3481,7 +3516,7 @@ static int run_pipe(struct pipe *pi)
 		enum { funcp = 0 };
 #endif
 		char **new_env = NULL;
-		char **old_env = NULL;
+		struct variable *old_vars = NULL;
 
 		if (argv[command->assignment_cnt] == NULL) {
 			/* Assignments, but no command */
@@ -3529,7 +3564,7 @@ static int run_pipe(struct pipe *pi)
 			rcode = setup_redirects(command, squirrel);
 			if (rcode == 0) {
 				new_env = expand_assignments(argv, command->assignment_cnt);
-				old_env = putenv_all_and_save_old(new_env);
+				old_vars = set_vars_and_save_old(new_env);
 				if (!funcp) {
 					debug_printf_exec(": builtin '%s' '%s'...\n",
 						x->cmd, argv_expanded[1]);
@@ -3548,11 +3583,8 @@ static int run_pipe(struct pipe *pi)
  clean_up_and_ret:
 #endif
 			restore_redirects(squirrel);
-			free_strings_and_unsetenv(new_env, 1);
-			putenv_all(old_env);
-			/* Free the pointers, but the strings themselves
-			 * are in environ now, don't use free_strings! */
-			free(old_env);
+			unset_vars(new_env);
+			add_vars(old_vars);
  clean_up_and_ret1:
 			free(argv_expanded);
 			IF_HAS_KEYWORDS(if (pi->pi_inverted) rcode = !rcode;)
@@ -3567,7 +3599,7 @@ static int run_pipe(struct pipe *pi)
 			rcode = setup_redirects(command, squirrel);
 			if (rcode == 0) {
 				new_env = expand_assignments(argv, command->assignment_cnt);
-				old_env = putenv_all_and_save_old(new_env);
+				old_vars = set_vars_and_save_old(new_env);
 				debug_printf_exec(": run_nofork_applet '%s' '%s'...\n",
 					argv_expanded[0], argv_expanded[1]);
 				rcode = run_nofork_applet(i, argv_expanded);
@@ -3592,7 +3624,7 @@ static int run_pipe(struct pipe *pi)
 #if !BB_MMU
 		volatile nommu_save_t nommu_save;
 		nommu_save.new_env = NULL;
-		nommu_save.old_env = NULL;
+		nommu_save.old_vars = NULL;
 		nommu_save.argv = NULL;
 		nommu_save.argv_from_re_execing = NULL;
 #endif
@@ -3665,11 +3697,8 @@ static int run_pipe(struct pipe *pi)
 		/* Clean up after vforked child */
 		free(nommu_save.argv);
 		free(nommu_save.argv_from_re_execing);
-		free_strings_and_unsetenv(nommu_save.new_env, 1);
-		putenv_all(nommu_save.old_env);
-		/* Free the pointers, but the strings themselves
-		 * are in environ now, don't use free_strings! */
-		free(nommu_save.old_env);
+		unset_vars(nommu_save.new_env);
+		add_vars(nommu_save.old_vars);
 #endif
 		free(argv_expanded);
 		argv_expanded = NULL;
@@ -5342,10 +5371,12 @@ static int parse_stream_dquoted(o_string *as_string,
 		 * $, `, ", \, or <newline>.  A double quote may be quoted
 		 * within double quotes by preceding it with a backslash.
 		 */
-		if (strchr("$`\"\\", next) != NULL) {
+		if (strchr("$`\"\\\n", next) != NULL) {
 			ch = i_getch(input);
-			o_addqchr(dest, ch);
-			nommu_addchr(as_string, ch);
+			if (ch != '\n') {
+				o_addqchr(dest, ch);
+				nommu_addchr(as_string, ch);
+			}
 		} else {
 			o_addqchr(dest, '\\');
 			nommu_addchr(as_string, '\\');
@@ -5443,10 +5474,17 @@ static struct pipe *parse_stream(char **pstring,
 
 			if (heredoc_cnt) {
 				syntax_error_unterm_str("here document");
-				xfunc_die();
+				goto parse_error;
 			}
+			/* end_trigger == '}' case errors out earlier,
+			 * checking only ')' */
+			if (end_trigger == ')') {
+				syntax_error_unterm_ch('('); /* exits */
+				/* goto parse_error; */
+			}
+
 			if (done_word(&dest, &ctx)) {
-				xfunc_die();
+				goto parse_error;
 			}
 			o_free(&dest);
 			done_pipe(&ctx, PIPE_SEQ);
@@ -5665,13 +5703,16 @@ static struct pipe *parse_stream(char **pstring,
 				syntax_error("\\<eof>");
 				xfunc_die();
 			}
-			o_addchr(&dest, '\\');
 			ch = i_getch(input);
-			nommu_addchr(&ctx.as_string, ch);
-			o_addchr(&dest, ch);
-			/* Example: echo Hello \2>file
-			 * we need to know that word 2 is quoted */
-			dest.o_quoted = 1;
+			if (ch != '\n') {
+				o_addchr(&dest, '\\');
+				nommu_addchr(&ctx.as_string, '\\');
+				o_addchr(&dest, ch);
+				nommu_addchr(&ctx.as_string, ch);
+				/* Example: echo Hello \2>file
+				 * we need to know that word 2 is quoted */
+				dest.o_quoted = 1;
+			}
 			break;
 		case '$':
 			if (handle_dollar(&ctx.as_string, &dest, input) != 0) {
@@ -6141,7 +6182,6 @@ int hush_main(int argc, char **argv)
 	/* If we are login shell... */
 	if (argv[0] && argv[0][0] == '-') {
 		FILE *input;
-		/* TODO: what should argv be while sourcing /etc/profile? */
 		debug_printf("sourcing /etc/profile\n");
 		input = fopen_for_read("/etc/profile");
 		if (input != NULL) {
@@ -6874,6 +6914,7 @@ static int builtin_shift(char **argv)
 
 static int builtin_source(char **argv)
 {
+	const char *PATH;
 	FILE *input;
 	save_arg_t sv;
 #if ENABLE_HUSH_FUNCTIONS
@@ -6883,12 +6924,36 @@ static int builtin_source(char **argv)
 	if (*++argv == NULL)
 		return EXIT_FAILURE;
 
-// TODO: search through $PATH is missing
+	if (strchr(*argv, '/') == NULL
+	 && (PATH = get_local_var_value("PATH")) != NULL
+	) {
+		/* Search through $PATH */
+		while (1) {
+			const char *end = strchrnul(PATH, ':');
+			int sz = end - PATH; /* must be int! */
+
+			if (sz != 0) {
+				char *tmp = xasprintf("%.*s/%s", sz, PATH, *argv);
+				input = fopen_for_read(tmp);
+				free(tmp);
+			} else {
+				/* We have xxx::yyyy in $PATH,
+				 * it means "use current dir" */
+				input = fopen_for_read(*argv);
+			}
+			if (input)
+				goto opened_ok;
+			if (*end == '\0')
+				break;
+			PATH = end + 1;
+		}
+	}
 	input = fopen_or_warn(*argv, "r");
 	if (!input) {
 		/* bb_perror_msg("%s", *argv); - done by fopen_or_warn */
 		return EXIT_FAILURE;
 	}
+ opened_ok:
 	close_on_exec_on(fileno(input));
 
 #if ENABLE_HUSH_FUNCTIONS

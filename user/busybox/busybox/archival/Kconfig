@@ -170,6 +170,21 @@ config USER_BUSYBOX_GZIP
 	  gzip is used to compress files.
 	  It's probably the most widely used UNIX compression program.
 
+config USER_BUSYBOX_LZOP
+	bool "lzop"
+	default n
+	help
+	  Lzop compression/decompresion.
+
+config USER_BUSYBOX_LZOP_COMPR_HIGH
+	bool "lzop complession levels 7,8,9 (not very useful)"
+	default n
+	depends on USER_BUSYBOX_LZOP
+	help
+	  High levels (7,8,9) of lzop compression. These levels
+	  are actually slower than gzip at equivalent compression ratios
+	  and take up 3.2K of code.
+
 config USER_BUSYBOX_RPM2CPIO
 	bool "rpm2cpio"
 	default n

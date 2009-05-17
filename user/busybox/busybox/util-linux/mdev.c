@@ -101,8 +101,12 @@ static char *build_alias(char *alias, const char *device_name)
 	return alias;
 }
 
-/* mknod in /dev based on a path like "/sys/block/hda/hda1" */
-/* NB: "mdev -s" may call us many times, do not leak memory/fds! */
+/* mknod in /dev based on a path like "/sys/block/hda/hda1"
+ * NB1: path parameter needs to have SCRATCH_SIZE scratch bytes
+ * after NUL, but we promise to not mangle (IOW: to restore if needed)
+ * path string.
+ * NB2: "mdev -s" may call us many times, do not leak memory/fds!
+ */
 static void make_device(char *path, int delete)
 {
 	char *device_name;
@@ -241,7 +245,8 @@ static void make_device(char *path, int delete)
 			 * the rest the line unless keep_matching == 1 */
 
 			/* 2nd field: uid:gid - device ownership */
-			parse_chown_usergroup_or_die(&ugid, tokens[1]);
+			if (get_uidgid(&ugid, tokens[1], 1) == 0)
+				bb_error_msg("unknown user/group %s", tokens[1]);
 
 			/* 3rd field: mode - device permissions */
 			mode = strtoul(tokens[2], NULL, 8);

@@ -9,6 +9,7 @@
 #include "libbb.h"
 
 #include <linux/if.h>
+#include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <net/ethernet.h>
 #include <linux/netlink.h>
@@ -258,7 +259,7 @@ static void up_iface(void)
 	if (network_ioctl(SIOCGIFADDR, &ifrequest) < 0) {
 		bb_error_msg("can't get interface address");
 	} else if (ifrequest.ifr_addr.sa_family != AF_INET) {
-		bb_perror_msg("The interface is not IP-based");
+		bb_perror_msg("the interface is not IP-based");
 	} else {
 		((struct sockaddr_in*)(&ifrequest.ifr_addr))->sin_addr.s_addr = INADDR_ANY;
 		if (network_ioctl(SIOCSIFADDR, &ifrequest) < 0)
@@ -299,7 +300,7 @@ static void maybe_up_new_iface(void)
 				(uint8_t)(ifrequest.ifr_hwaddr.sa_data[5]));
 		}
 
-		bb_error_msg("Using interface %s%s with driver<%s> (version: %s)",
+		bb_error_msg("using interface %s%s with driver<%s> (version: %s)",
 			G.iface, buf, driver_info.driver, driver_info.version);
 	}
 #endif
@@ -310,6 +311,7 @@ static void maybe_up_new_iface(void)
 static smallint detect_link_mii(void)
 {
 	struct ifreq ifreq;
+	struct mii_ioctl_data *mii = (void *)&ifreq.ifr_data;
 
 	set_ifreq_to_ifname(&ifreq);
 
@@ -318,20 +320,20 @@ static smallint detect_link_mii(void)
 		return IFSTATUS_ERR;
 	}
 
-	((unsigned short*)&ifreq.ifr_data)[1] = 1;
+	mii->reg_num = 1;
 
 	if (network_ioctl(SIOCGMIIREG, &ifreq) < 0) {
 		bb_perror_msg("SIOCGMIIREG failed");
 		return IFSTATUS_ERR;
 	}
 
-	return (((unsigned short*)&ifreq.ifr_data)[3] & 0x0004) ?
-		IFSTATUS_UP : IFSTATUS_DOWN;
+	return (mii->val_out & 0x0004) ? IFSTATUS_UP : IFSTATUS_DOWN;
 }
 
 static smallint detect_link_priv(void)
 {
 	struct ifreq ifreq;
+	struct mii_ioctl_data *mii = (void *)&ifreq.ifr_data;
 
 	set_ifreq_to_ifname(&ifreq);
 
@@ -340,15 +342,14 @@ static smallint detect_link_priv(void)
 		return IFSTATUS_ERR;
 	}
 
-	((unsigned short*) &ifreq.ifr_data)[1] = 1;
+	mii->reg_num = 1;
 
 	if (network_ioctl(SIOCDEVPRIVATE+1, &ifreq) < 0) {
 		bb_perror_msg("SIOCDEVPRIVATE+1 failed");
 		return IFSTATUS_ERR;
 	}
 
-	return (((unsigned short*)&ifreq.ifr_data)[3] & 0x0004) ?
-		IFSTATUS_UP : IFSTATUS_DOWN;
+	return (mii->val_out & 0x0004) ? IFSTATUS_UP : IFSTATUS_DOWN;
 }
 
 static smallint detect_link_ethtool(void)
@@ -591,6 +592,7 @@ static NOINLINE int netlink_open(void)
 	return fd;
 }
 
+#if ENABLE_FEATURE_PIDFILE
 static NOINLINE pid_t read_pid(const char *filename)
 {
 	int len;
@@ -604,6 +606,7 @@ static NOINLINE pid_t read_pid(const char *filename)
 	}
 	return 0;
 }
+#endif
 
 int ifplugd_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
 int ifplugd_main(int argc UNUSED_PARAM, char **argv)
