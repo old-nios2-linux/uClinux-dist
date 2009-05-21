@@ -1,7 +1,8 @@
 # version is based on current git snapshot from here (since releases are not
 # really made anymore by the mtd guys):
-# http://git.infradead.org/?p=mtd-utils.git;a=summary
-VER = 149d3c8ac8d32c05836ed8add1324561ce0952ad
+GITWEB = http://git.infradead.org/?p=$(GITREPO).git
+GITREPO = mtd-utils
+VER = 606f38a2221648ca5c5fa292c9f71d2ddd59fa66
 
 TARGETS-y :=
 TARGETS-$(CONFIG_USER_MTDUTILS_ERASE)        += flash_erase
@@ -18,6 +19,11 @@ TARGETS-$(CONFIG_USER_MTDUTILS_DOC_LOADIPL)  += doc_loadipl
 TARGETS-$(CONFIG_USER_MTDUTILS_MKFSJFFS)     += mkfs.jffs
 TARGETS-$(CONFIG_USER_MTDUTILS_MKFSJFFS2)    += mkfs.jffs2
 
+UBI_UTILS_TARGETS-m :=
+UBI_UTILS_TARGETS-y :=
+UBI_UTILS_TARGETS-$(CONFIG_USER_MTDUTILS_UBIUTILS) += ubiupdatevol ubimkvol ubirmvol ubicrc32 ubinfo ubiattach ubidetach ubinize ubiformat ubirename
+UBI_UTILS_TARGETS = $(UBI_UTILS_TARGETS-m) $(UBI_UTILS_TARGETS-y)
+
 # Host based builds needed for constructing host images
 BUILDTARGETS-m :=
 BUILDTARGETS-y :=
@@ -26,10 +32,10 @@ BUILDTARGETS-$(CONFIG_JFFS2_FS) += mkfs.jffs2
 BUILDTARGETS-$(CONFIG_JFFS2_SUMMARY) += sumtool
 BUILDTARGETS = $(BUILDTARGETS-m) $(BUILDTARGETS-y)
 
-UBI_BUILDTARGETS-m :=
-UBI_BUILDTARGETS-y :=
-UBI_BUILDTARGETS-$(CONFIG_UBIFS_FS) += mkfs.ubifs
-UBI_BUILDTARGETS = $(UBI_BUILDTARGETS-m) $(UBI_BUILDTARGETS-y)
+UBI_UTILS_BUILDTARGETS-m :=
+UBI_UTILS_BUILDTARGETS-y :=
+UBI_UTILS_BUILDTARGETS-$(CONFIG_UBIFS_FS) += mkfs.ubifs
+UBI_UTILS_BUILDTARGETS = $(UBI_UTILS_BUILDTARGETS-m) $(UBI_UTILS_BUILDTARGETS-y)
 
 define MAKE_MTD
 	$(MAKE) -C $(VER)/$(2) WITHOUT_XATTR=1 SUBDIRS= BUILDDIR=$$PWD/build-$(VER)$(3)/$(2) TARGETS="$(1)"
@@ -40,13 +46,12 @@ define MAKE_HOST_MTD
 endef
 all:
 	$(call MAKE_HOST_MTD,$(BUILDTARGETS))
-	$(call MAKE_HOST_MTD,$(UBI_BUILDTARGETS),mkfs.ubifs)
-
+	$(call MAKE_HOST_MTD,$(UBI_UTILS_BUILDTARGETS),mkfs.ubifs)
+	$(call MAKE_MTD,$(UBI_UTILS_TARGETS),ubi-utils)
 	$(call MAKE_MTD,$(TARGETS-y))
 
 clean:
-	rm -rf build-$(VER)*
-	rm -f mkfs.jffs mkfs.jffs2 sumtool
+	rm -rf build-$(VER)* mkfs.jffs mkfs.jffs2 mkfs.ubifs sumtool
 
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_ERASE        build-$(VER)/flash_erase /bin/flash_erase
@@ -62,17 +67,26 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_NANDWRITE    build-$(VER)/nandwrite /bin/nandwrite
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_DOC_LOADBIOS build-$(VER)/doc_loadbios /bin/doc_loadbios
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_DOC_LOADIPL  build-$(VER)/doc_loadipl /bin/doc_loadipl
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubiformat /bin/ubiformat
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubiattach /bin/ubiattach
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubidetach /bin/ubidetach
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubinfo /bin/ubinfo
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubimkvol /bin/ubimkvol
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubirmvol /bin/ubirmvol
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubiupdatevol /bin/ubiupdatevol
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubinize /bin/ubinize
+	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubirename /bin/ubirename
 
 update:
 	set -e ; \
-	tar="http://git.infradead.org`wget -q -O - 'http://git.infradead.org/?p=mtd-utils.git;a=summary' | sed -n '/snapshot/{s:.*href="\([^"]*\).*:\1:;p;q}'`" ; \
+	tar="$(dir $(GITWEB))`wget -q -O - '$(GITWEB)' | sed -n '/snapshot/{s:.*href="\([^"]*\).*:\1:;p;q}'`" ; \
 	ver=`echo $$tar | sed 's:.*h=\([^;]*\).*:\1:'` ; \
 	test "$(VER)" = "$$ver" && exit 0 ; \
-	wget $$tar -O mtd-utils.tar.gz ; \
-	tar xf mtd-utils.tar.gz ; \
+	wget $$tar -O $(GITREPO).tar.gz ; \
+	tar xf $(GITREPO).tar.gz ; \
 	rm -rf $$ver ; \
-	mv mtd-utils $$ver ; \
-	rm mtd-utils.tar.gz ; \
+	mv $(GITREPO) $$ver ; \
+	rm $(GITREPO).tar.gz ; \
 	sed -i "/^VER/s:=.*:= $$ver:" Makefile
 
 .PHONY: all clean romfs update
