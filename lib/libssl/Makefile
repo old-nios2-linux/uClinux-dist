@@ -1,4 +1,4 @@
-VER = openssl-0.9.8h
+VER = openssl-0.9.8k
 
 ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
 SSL_SHARED := shared
@@ -6,27 +6,20 @@ else
 SSL_SHARED := no-dso
 endif
 
-SSL_OPTS = \
+SSL_MAKE = \
+	$(MAKE) -C $(VER) -j1 \
 	DIRS="crypto ssl engines" \
 	CC=$(CONFIGURE_HOST)-gcc
 
-SSL_OPTS_USER = \
-	DIRS="apps" \
-	CC=$(CONFIGURE_HOST)-gcc
-
 all: $(VER)/.configure
-	$(MAKE) -C $(VER) $(SSL_OPTS)
-	$(MAKE) -C $(VER) $(SSL_OPTS) install_sw INSTALL_PREFIX=$(STAGEDIR)
-
-all_user: $(VER)/.configure
-	$(MAKE) -C $(VER) $(SSL_OPTS_USER)
-	$(MAKE) -C $(VER) $(SSL_OPTS_USER) install_sw INSTALL_PREFIX=$(STAGEDIR)
+	$(SSL_MAKE)
+	$(SSL_MAKE) install_sw INSTALL_PREFIX=$(STAGEDIR)
 
 $(VER)/.configure:
 	set -e ; \
 	cd $(VER) ; \
 	./Configure \
-		linux-uclinux -DL_ENDIAN \
+		linux-generic32 -DL_ENDIAN \
 		--prefix=/usr \
 		--openssldir=/etc/ssl \
 		$(SSL_SHARED) threads
@@ -40,7 +33,4 @@ romfs:
 	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libssl.so.0.9.8 /usr/lib/libssl.so.0.9.8
 	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libcrypto.so.0.9.8 /usr/lib/libcrypto.so.0.9.8
 
-romfs_user:
-	$(ROMFSINST) -e CONFIG_USER_OPENSSL_OPENSSL -d $(STAGEDIR)/usr/bin/openssl /usr/bin/openssl
-
-.PHONY: all clean romfs all_user romfs_user
+.PHONY: all clean romfs
