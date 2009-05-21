@@ -5,11 +5,16 @@
 
 # Read installation instructions before saying "make" !!
 
+ifeq ($(CONFIG_LIB_LIBJPEG_BFIN),y)
+CPPFLAGS += -DLIBJPEG_BFIN
+endif
+
 # For compiling with source and object files in different directories.
-srcdir = .
+srcdir = jpeg-6b
+VPATH += $(srcdir)
 
 # Where to install the programs and man pages.
-prefix = /usr/local
+prefix = /usr
 exec_prefix = ${prefix}
 bindir = $(exec_prefix)/bin
 libdir = $(exec_prefix)/lib
@@ -23,7 +28,7 @@ mandir = $(prefix)/man/man$(manext)
 #CC= gcc
 
 # You may need to adjust these cc options:
-CFLAGS += -I$(srcdir)
+CFLAGS += -I$(srcdir) -I.
 # Generally, we recommend defining any configuration symbols in jconfig.h,
 # NOT via -D switches here.
 # However, any special defines for ansi2knr.c may be included here:
@@ -63,6 +68,7 @@ MKDIR= mkdir
 MYAR= $(AR) rc
 # second step in .a creation (use "touch" if not needed)
 #AR2= ranlib
+RANLIB ?= ranlib
 MYAR2 = $(RANLIB)
 # installation program
 INSTALL= /usr/bin/install -c
@@ -117,7 +123,7 @@ CLIBOBJECTS= jcapimin.$(O) jcapistd.$(O) jctrans.$(O) jcparam.$(O) \
         jdatadst.$(O) jcinit.$(O) jcmaster.$(O) jcmarker.$(O) jcmainct.$(O) \
         jcprepct.$(O) jccoefct.$(O) jccolor.$(O) jcsample.$(O) jchuff.$(O) \
         jcphuff.$(O) jcdctmgr.$(O) jfdctfst.$(O) jfdctflt.$(O) \
-        jfdctint.$(O)
+        jfdctint.$(O) jfdctfst_bfin.$(O)
 # decompression library object files
 DLIBOBJECTS= jdapimin.$(O) jdapistd.$(O) jdtrans.$(O) jdatasrc.$(O) \
         jdmaster.$(O) jdinput.$(O) jdmarker.$(O) jdhuff.$(O) jdphuff.$(O) \
@@ -135,35 +141,29 @@ TROBJECTS= jpegtran.$(O) rdswitch.$(O) cdjpeg.$(O) transupp.$(O)
 
 OBJSDLL = $(LIBOBJECTS:.o=.pic.o)
 
-#all:  libjpeg.$(A) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
-ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
-all:  libjpeg.$(A) libjpeg.so cjpeg djpeg jpegtran rdjpgcom wrjpgcom
-	install -d $(STAGEDIR)/usr/lib
-	install -d $(STAGEDIR)/usr/include
-	install -m0644 libjpeg.$(A) $(STAGEDIR)/usr/lib
-	install -m0644 libjpeg.la $(STAGEDIR)/usr/lib
-	install -m0755 libjpeg.so $(STAGEDIR)/usr/lib/libjpeg.so.62
-	ln -sf libjpeg.so.62 $(STAGEDIR)/usr/lib/libjpeg.so
-	install -m0644 jpeglib.h $(STAGEDIR)/usr/include
-	install -m0644 jconfig.h $(STAGEDIR)/usr/include
-	install -m0644 jmorecfg.h $(STAGEDIR)/usr/include
-	install -m0644 jerror.h $(STAGEDIR)/usr/include
-else
 all:  libjpeg.$(A) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
 	install -d $(STAGEDIR)/usr/lib
 	install -d $(STAGEDIR)/usr/include
 	install -m0644 libjpeg.$(A) $(STAGEDIR)/usr/lib
-	install -m0644 jpeglib.h $(STAGEDIR)/usr/include
+	install -m0644 $(srcdir)/jpeglib.h $(STAGEDIR)/usr/include
 	install -m0644 jconfig.h $(STAGEDIR)/usr/include
-	install -m0644 jmorecfg.h $(STAGEDIR)/usr/include
-	install -m0644 jerror.h $(STAGEDIR)/usr/include
+	install -m0644 $(srcdir)/jmorecfg.h $(STAGEDIR)/usr/include
+	install -m0644 $(srcdir)/jerror.h $(STAGEDIR)/usr/include
+ifeq ($(CONFIG_FMT_USE_FDPIC_ELF),y)
+	install -m0755 libjpeg.so $(STAGEDIR)/usr/lib/libjpeg.so.62
+	ln -sf libjpeg.so.62 $(STAGEDIR)/usr/lib/libjpeg.so
+	install -m0644 libjpeg.la $(STAGEDIR)/usr/lib
+all:  libjpeg.so
 endif
 
 # Special compilation rules to support ansi2knr and libtool.
 .SUFFIXES: .lo .la .c .o .pic.o
 
 .c.pic.o:
-	$(CC) -c $(CFLAGS) -o $@ $*.c
+	$(CC) -c $(CFLAGS) -o $@ $(srcdir)/$*.c
+
+.S.pic.o:
+	$(CC) -c $(CFLAGS) -o $@ $(srcdir)/$*.S
 
 # How to compile with libtool.
 # .c.lo:
@@ -246,12 +246,10 @@ install-headers: jconfig.h
 	$(INSTALL_DATA) $(srcdir)/jerror.h $(includedir)/jerror.h
 
 romfs:
-	if [ "$(CONFIG_FMT_USE_FDPIC_ELF)" = "y" ]; then \
-		$(ROMFSINST) libjpeg.so /lib/libjpeg.so.62 ; \
-	fi
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF libjpeg.so /usr/lib/libjpeg.so.62
 
 clean:
-	-$(RM) *.o *.lo libjpeg.a *.so
+	-$(RM) *.o *.lo libjpeg.a *.so *.gdb
 	-$(RM) cjpeg djpeg jpegtran rdjpgcom wrjpgcom
 	-$(RM) ansi2knr core testout* config.log config.status
 	-$(RM) -r knr .libs _libs
@@ -278,7 +276,7 @@ check: test
 
 # Mistake catcher:
 
-jconfig.h: jconfig.doc
+jconfig.h:
 	echo You must prepare a system-dependent jconfig.h file.
 	echo Please read the installation directions in install.doc.
 	exit 1
@@ -322,6 +320,8 @@ jdsample.$(O): jdsample.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h je
 jdtrans.$(O): jdtrans.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h jerror.h
 jerror.$(O): jerror.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jversion.h jerror.h
 jfdctflt.$(O): jfdctflt.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h jerror.h jdct.h
+jfdctfst_bfin.$(O): $(srcdir)/jfdctfst_bfin.S arch-opts.h
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(srcdir)/jfdctfst_bfin.S -o $@
 jfdctfst.$(O): jfdctfst.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h jerror.h jdct.h
 jfdctint.$(O): jfdctint.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h jerror.h jdct.h
 jidctflt.$(O): jidctflt.c jinclude.h jconfig.h jpeglib.h jmorecfg.h jpegint.h jerror.h jdct.h
