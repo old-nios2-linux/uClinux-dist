@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.30-rc3
+# Linux kernel version: 2.6.30-rc6
 #
 # CONFIG_FPU is not set
 CONFIG_ZONE_DMA=y
@@ -176,6 +176,7 @@ CONFIG_SPLIT_PTLOCK_CPUS=4
 CONFIG_ZONE_DMA_FLAG=1
 CONFIG_VIRT_TO_BUS=y
 CONFIG_UNEVICTABLE_LRU=y
+CONFIG_NOMMU_INITIAL_TRIM_EXCESS=1
 CONFIG_BOOT_LINK_OFFSET=0x00500000
 
 #
