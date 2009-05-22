@@ -1,16 +1,18 @@
-VER = i2c-tools-3.0.1
+VER = i2c-tools-3.0.2
+
+FLTFLAGS = -s 0x4000
 
 all:
-	$(MAKE) -C $(VER)
-	$(MAKE) -C $(VER) DESTDIR=$(STAGEDIR) install
+	$(MAKE) -C $(VER) CC=$(CC) CFLAGS="$(CFLAGS)"
 
 clean:
 	$(MAKE) -C $(VER) clean
+	rm -f $(VER)/*/*.gdb
 
 romfs:
-	$(ROMFSINST) -d -e CONFIG_USER_I2CTOOLS_I2CTOOLS $(STAGEDIR)/usr/sbin/i2cdetect /usr/sbin/i2cdetect
-	$(ROMFSINST) -d -e CONFIG_USER_I2CTOOLS_I2CTOOLS $(STAGEDIR)/usr/sbin/i2cdump /usr/sbin/i2cdump
-	$(ROMFSINST) -d -e CONFIG_USER_I2CTOOLS_I2CTOOLS $(STAGEDIR)/usr/sbin/i2cget /usr/sbin/i2cget
-	$(ROMFSINST) -d -e CONFIG_USER_I2CTOOLS_I2CTOOLS $(STAGEDIR)/usr/sbin/i2cset /usr/sbin/i2cset
+	$(ROMFSINST) -d $(VER)/tools/i2cdetect /usr/bin/i2cdetect
+	$(ROMFSINST) -d $(VER)/tools/i2cdump /usr/bin/i2cdump
+	$(ROMFSINST) -d $(VER)/tools/i2cget /usr/bin/i2cget
+	$(ROMFSINST) -d $(VER)/tools/i2cset /usr/bin/i2cset
 
 .PHONY: all clean romfs

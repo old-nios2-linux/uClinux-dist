@@ -4,8 +4,8 @@
 #
 # Licensed under the GNU General Public License.
 
-#DESTDIR	=
-prefix	= /usr
+DESTDIR	=
+prefix	= /usr/local
 bindir	= $(prefix)/bin
 sbindir	= $(prefix)/sbin
 mandir	= $(prefix)/share/man
@@ -18,14 +18,14 @@ INSTALL_DIR	:= $(INSTALL) -m 755 -d
 INSTALL_PROGRAM	:= $(INSTALL) -m 755
 RM		:= rm -f
 
-#CC	:= gcc
-#CFLAGS	:= -Wall
+CC	:= gcc
+CFLAGS	:= -Wall
 
-#CFLAGS	+= -O2
+CFLAGS	+= -O2
 # When debugging, use the following instead
 #CFLAGS	+= -O -g
 
-KERNELVERSION	:= 2.6.26
+KERNELVERSION	:= $(shell uname -r)
 
 .PHONY: all strip clean install uninstall
 

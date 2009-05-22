@@ -25,8 +25,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "i2cbusses.h"
 #include <linux/i2c-dev.h>
+#include "i2cbusses.h"
 #include "../version.h"
 
 #define MODE_AUTO	0
@@ -37,19 +37,11 @@
 static void help(void)
 {
 	fprintf(stderr,
-	        "Syntax: i2cdetect [-y] [-a] [-q|-r] I2CBUS [FIRST LAST]\n"
-	        "        i2cdetect -F I2CBUS\n"
-	        "        i2cdetect -l\n"
-	        "        i2cdetect -V\n"
-	        "  I2CBUS is an integer\n"
-	        "  With -a, probe all addresses (NOT RECOMMENDED)\n"
-	        "  With -q, uses only quick write commands for probing (NOT "
-	        "RECOMMENDED)\n"
-	        "  With -r, uses only read byte commands for probing (NOT "
-	        "RECOMMENDED)\n"
-	        "  If provided, FIRST and LAST limit the probing range.\n"
-	        "  With -l, lists installed busses only\n");
-	print_i2c_busses(0);
+		"Usage: i2cdetect [-y] [-a] [-q|-r] I2CBUS [FIRST LAST]\n"
+		"       i2cdetect -F I2CBUS\n"
+		"       i2cdetect -l\n"
+		"  I2CBUS is an integer or an I2C bus name\n"
+		"  If provided, FIRST and LAST limit the probing range.\n");
 }
 
 static int scan_i2c_bus(int file, int mode, int first, int last)
@@ -77,8 +69,8 @@ static int scan_i2c_bus(int file, int mode, int first, int last)
 					continue;
 				} else {
 					fprintf(stderr, "Error: Could not set "
-					        "address to 0x%02x: %s\n", i+j,
-					        strerror(errno));
+						"address to 0x%02x: %s\n", i+j,
+						strerror(errno));
 					return -1;
 				}
 			}
@@ -159,11 +151,35 @@ static const struct func all_func[] = {
 static void print_functionality(unsigned long funcs)
 {
 	int i;
-	
+
 	for (i = 0; all_func[i].value; i++) {
 		printf("%-32s %s\n", all_func[i].name,
 		       (funcs & all_func[i].value) ? "yes" : "no");
 	}
+}
+
+/*
+ * Print the installed i2c busses. The format is those of Linux 2.4's
+ * /proc/bus/i2c for historical compatibility reasons.
+ */
+static void print_i2c_busses(void)
+{
+	struct i2c_adap *adapters;
+	int count;
+
+	adapters = gather_i2c_busses();
+	if (adapters == NULL) {
+		fprintf(stderr, "Error: Out of memory!\n");
+		return;
+	}
+
+	for (count = 0; adapters[count].name; count++) {
+		printf("i2c-%d\t%-10s\t%-32s\t%s\n",
+			adapters[count].nr, adapters[count].funcs,
+			adapters[count].name, adapters[count].algo);
+	}
+
+	free_adapters(adapters);
 }
 
 int main(int argc, char *argv[])
@@ -186,15 +202,15 @@ int main(int argc, char *argv[])
 		case 'F':
 			if (mode != MODE_AUTO && mode != MODE_FUNC) {
 				fprintf(stderr, "Error: Different modes "
-				        "specified!\n");
+					"specified!\n");
 				exit(1);
 			}
 			mode = MODE_FUNC;
 			break;
-		case 'r': 
+		case 'r':
 			if (mode == MODE_QUICK) {
 				fprintf(stderr, "Error: Different modes "
-				        "specified!\n");
+					"specified!\n");
 				exit(1);
 			}
 			mode = MODE_READ;
@@ -202,7 +218,7 @@ int main(int argc, char *argv[])
 		case 'q':
 			if (mode == MODE_READ) {
 				fprintf(stderr, "Error: Different modes "
-				        "specified!\n");
+					"specified!\n");
 				exit(1);
 			}
 			mode = MODE_QUICK;
@@ -212,8 +228,8 @@ int main(int argc, char *argv[])
 			last = 0x7F;
 			break;
 		default:
-			fprintf(stderr, "Warning: Unsupported flag "
-				"\"-%c\"!\n", argv[1+flags][1]);
+			fprintf(stderr, "Error: Unsupported option "
+				"\"%s\"!\n", argv[1+flags]);
 			help();
 			exit(1);
 		}
@@ -226,7 +242,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (list) {
-		print_i2c_busses(1);
+		print_i2c_busses();
 		exit(0);
 	}
 
@@ -235,15 +251,8 @@ int main(int argc, char *argv[])
 		help();
 		exit(1);
 	}
-	i2cbus = strtol(argv[flags+1], &end, 0);
-	if (*end) {
-		fprintf(stderr, "Error: I2CBUS argument not a number!\n");
-		help();
-		exit(1);
-	}
-	if ((i2cbus < 0) || (i2cbus > 0xff)) {
-		fprintf(stderr, "Error: I2CBUS argument out of range "
-		        "(0-255)!\n");
+	i2cbus = lookup_i2c_bus(argv[flags+1]);
+	if (i2cbus < 0) {
 		help();
 		exit(1);
 	}
@@ -255,13 +264,13 @@ int main(int argc, char *argv[])
 		tmp = strtol(argv[flags+2], &end, 0);
 		if (*end) {
 			fprintf(stderr, "Error: FIRST argment not a "
-			        "number!\n");
+				"number!\n");
 			help();
 			exit(1);
 		}
 		if (tmp < first || tmp > last) {
 			fprintf(stderr, "Error: FIRST argument out of range "
-			        "(0x%02x-0x%02x)!\n", first, last);
+				"(0x%02x-0x%02x)!\n", first, last);
 			help();
 			exit(1);
 		}
@@ -270,13 +279,13 @@ int main(int argc, char *argv[])
 		tmp = strtol(argv[flags+3], &end, 0);
 		if (*end) {
 			fprintf(stderr, "Error: LAST argment not a "
-			        "number!\n");
+				"number!\n");
 			help();
 			exit(1);
 		}
 		if (tmp < first || tmp > last) {
 			fprintf(stderr, "Error: LAST argument out of range "
-			        "(0x%02x-0x%02x)!\n", first, last);
+				"(0x%02x-0x%02x)!\n", first, last);
 			help();
 			exit(1);
 		}
@@ -293,7 +302,7 @@ int main(int argc, char *argv[])
 
 	if (ioctl(file, I2C_FUNCS, &funcs) < 0) {
 		fprintf(stderr, "Error: Could not get the adapter "
-		        "functionality matrix: %s\n", strerror(errno));
+			"functionality matrix: %s\n", strerror(errno));
 		close(file);
 		exit(1);
 	}
@@ -308,13 +317,13 @@ int main(int argc, char *argv[])
 
 	if (mode != MODE_READ && !(funcs & I2C_FUNC_SMBUS_QUICK)) {
 		fprintf(stderr, "Error: Can't use SMBus Quick Write command "
-		        "on this bus (ISA bus?)\n");
+			"on this bus (ISA bus?)\n");
 		close(file);
 		exit(1);
 	}
 	if (mode != MODE_QUICK && !(funcs & I2C_FUNC_SMBUS_READ_BYTE)) {
 		fprintf(stderr, "Error: Can't use SMBus Read Byte command "
-		        "on this bus (ISA bus?)\n");
+			"on this bus (ISA bus?)\n");
 		close(file);
 		exit(1);
 	}
@@ -323,13 +332,13 @@ int main(int argc, char *argv[])
 		char s[2];
 
 		fprintf(stderr, "WARNING! This program can confuse your I2C "
-		        "bus, cause data loss and worse!\n");
+			"bus, cause data loss and worse!\n");
 
 		fprintf(stderr, "I will probe file %s%s.\n", filename,
-		        mode==MODE_QUICK?" using quick write commands":
-		        mode==MODE_READ?" using read byte commands":"");
+			mode==MODE_QUICK?" using quick write commands":
+			mode==MODE_READ?" using read byte commands":"");
 		fprintf(stderr, "I will probe address range 0x%02x-0x%02x.\n",
-		        first, last);
+			first, last);
 
 		fprintf(stderr, "Continue? [Y/n] ");
 		fflush(stderr);
