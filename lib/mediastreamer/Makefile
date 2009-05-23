@@ -1,4 +1,4 @@
-VER = mediastreamer-2.1.0
+VER = mediastreamer-2.2.3
 
 CONF_OPTS = \
 	--disable-strict \
