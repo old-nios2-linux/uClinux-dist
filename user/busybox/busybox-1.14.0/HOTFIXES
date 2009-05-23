@@ -3,3 +3,4 @@ busybox-1.14.0-awk.patch
 busybox-1.14.0-defconfig.patch
 busybox-1.14.0-depmod.patch
 busybox-1.14.0-des.patch
+busybox-1.14.0-dhcp_hostname.patch
