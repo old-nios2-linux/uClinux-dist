@@ -6,3 +6,4 @@ busybox-1.14.0-des.patch
 busybox-1.14.0-dhcp_hostname.patch
 busybox-1.14.0-gzip.patch
 busybox-1.14.0-libbb.patch
+busybox-1.14.0-mdev.patch
