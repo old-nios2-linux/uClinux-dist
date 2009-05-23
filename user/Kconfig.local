@@ -143,6 +143,14 @@ config USER_FPING
 	  different from ping in that you can specify any number of hosts on
 	  the command line, or specify a file containing the lists of hosts to ping. 
 	  http://fping.sourceforge.net/
+config USER_HTTPING
+	bool httping
+	help
+	  Httping is like 'ping' but for http-requests. Give it an url, and it'll
+	  show you how long it takes to connect, send a request and retrieve the
+	  reply (only the headers). Be aware that the transmission across the
+	  network also takes time! 
+	  http://www.vanheusden.com/httping/
 config USER_MPC
 	bool "MPC"
 config USER_MPD
