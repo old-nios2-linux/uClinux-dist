@@ -1,4 +1,4 @@
-VER = ortp-0.13.1
+VER = ortp-0.15.0
 
 CONF_OPTS = --disable-strict
 
@@ -8,4 +8,4 @@ export ac_cv_path_DOXYGEN = false
 include $(ROOTDIR)/tools/autotools.mk
 
 romfs:
-	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libortp.so.5 /usr/lib/libortp.so.5
+	$(ROMFSINST) -d -e CONFIG_FMT_USE_FDPIC_ELF $(STAGEDIR)/usr/lib/libortp.so.8 /usr/lib/libortp.so.8
