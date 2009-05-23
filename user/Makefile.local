@@ -10,6 +10,7 @@ dir_$(CONFIG_USER_DIRECTVNC)                += directvnc
 dir_$(CONFIG_USER_FPING)                    += fping
 dir_$(CONFIG_USER_HTTPING)                  += httping
 dir_$(CONFIG_USER_I2C_TOOLS)                += i2c-tools
+dir_$(CONFIG_USER_IFTOP)                    += iftop
 dir_$(CONFIG_USER_LINPHONE)                 += linphone
 dir_$(CONFIG_USER_LSUIO)                    += lsuio
 dir_$(CONFIG_USER_MPC)                      += mpc

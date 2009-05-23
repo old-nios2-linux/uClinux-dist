@@ -151,6 +151,16 @@ config USER_HTTPING
 	  reply (only the headers). Be aware that the transmission across the
 	  network also takes time! 
 	  http://www.vanheusden.com/httping/
+config USER_IFTOP
+	bool iftop
+	select LIB_NCURSES
+	select LIB_LIBPCAP
+	help
+	  iftop does for network usage what top(1) does for CPU usage.
+	  It listens to network traffic on a named interface and displays a
+	  table of current bandwidth usage by pairs of hosts. Handy for
+	  answering the question "why is our ADSL link so slow?".
+	  http://www.ex-parrot.com/pdw/iftop/
 config USER_MPC
 	bool "MPC"
 config USER_MPD
