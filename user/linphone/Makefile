@@ -1,4 +1,4 @@
-VER = linphone-3.0.0
+VER = linphone-3.1.1
 
 CFLAGS += -fno-strict-aliasing -ffast-math -mfast-fp
 
