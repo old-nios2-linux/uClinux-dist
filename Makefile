@@ -71,7 +71,7 @@ endif
 KERNEL_CROSS_COMPILE ?= $(CROSS_COMPILE)
 ifneq ($(SUBARCH),)
 # Using UML, so make the kernel and non-kernel with different ARCHs
-MAKEARCH = $(MAKE) ARCH=$(SUBARCH) CROSS_COMPILE=$(CROSS_COMPILE)
+MAKEARCH = $(MAKE) ARCH=$(SUBARCH)
 MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) SUBARCH=$(SUBARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
 else
 MAKEARCH = $(MAKE) ARCH=$(ARCH)
@@ -94,8 +94,8 @@ export BUILD_START_STRING PRODUCTDIR
 export HOST_NCPU
 
 .PHONY: tools
-tools: ucfront cksum
-	chmod +x tools/romfs-inst.sh tools/modules-alias.sh
+tools: ucfront cksum pkg-config
+	chmod +x tools/romfs-inst.sh tools/modules-alias.sh tools/build-udev-perms.sh
 
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
@@ -110,6 +110,13 @@ cksum: tools/cksum
 tools/cksum: tools/sg-cksum/*.c
 	$(MAKE) -C tools/sg-cksum
 	ln -sf $(ROOTDIR)/tools/sg-cksum/cksum tools/cksum
+
+.PHONY: pkg-config
+pkg-config: tools/pkg-config
+tools/pkg-config: tools/pkg-config/*.c
+no-pkg-config-for-blackfin:
+	$(MAKE) -C tools/pkg-config
+	ln -sf $(ROOTDIR)/tools/pkg-config/pkg-config tools/pkg-config
 
 .PHONY: sstrip
 tools: sstrip
