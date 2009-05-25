@@ -265,6 +265,13 @@ config LIB_LIVE
 	  libraries for standards-based RTP/RTCP/RTSP/SIP multimedia streaming
 	  http://www.live555.com/
 
+config LIB_LIBMATRIX
+	bool 'Build libmatrix"
+	help
+	  PeerSec Networks MatrixSSL™ is an embedded SSL implementation
+	  designed for small footprint applications and devices.
+	  http://www.matrixssl.org/download.html
+
 config LIB_MEDIASTREAMER
 	bool "Build mediastreamer"
 	select LIB_ORTP
