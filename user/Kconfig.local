@@ -241,6 +241,9 @@ config USER_CURL_CURL
 	select LIB_ZLIB
 	select LIB_LIBBZ2
 	select LIB_LIBSSL
+config USER_LIBSSL_TESTS
+	bool "SSL Test Applications"
+	select LIB_LIBSSL
 config USER_UBOOT_TOOLS
 	bool "U-Boot Tools"
 config USER_I2C_TOOLS
@@ -315,6 +318,12 @@ config USER_NET_AUDIO
 	bool "NetAudio"
 	select USER_MPD
 	select USER_MPC
+
+config USER_MACCHANGER
+	bool "MacChanger"
+	help
+	  A GNU/Linux utility for viewing/manipulating the MAC address of network interface
+	  http://www.alobbs.com/macchanger
 
 config USER_MPC2X
 	bool "mpc2x"
