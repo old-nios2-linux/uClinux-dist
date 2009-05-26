@@ -266,9 +266,9 @@ config LIB_LIVE
 	  http://www.live555.com/
 
 config LIB_LIBMATRIX
-	bool 'Build libmatrix"
+	bool "Build libmatrix"
 	help
-	  PeerSec Networks MatrixSSL™ is an embedded SSL implementation
+	  PeerSec Networks MatrixSSL is an embedded SSL implementation
 	  designed for small footprint applications and devices.
 	  http://www.matrixssl.org/download.html
 
