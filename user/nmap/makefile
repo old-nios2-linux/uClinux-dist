@@ -2,6 +2,8 @@
 # build nmap in a subdir
 #
 
+VER = nmap-4.20
+
 CONFOPTS =	--without-nmapfe		\
 		--includedir=$(ROOTDIR)/include	\
 		--libdir=$(ROOTDIR)/lib/libpcap	\
@@ -15,15 +17,14 @@ all: build/build
 	$(MAKE) -C build
 
 build/build: makefile
-	@chmod u+x configure
+	@chmod u+x $(VER)/configure
 	@rm -rf build
 	@mkdir build
-	find . -type d > .dirs
-	find . ! -type d | grep -v ./makefile > .files
-	while read t; do mkdir -p build/$$t; done < .dirs
-	while read t; do ln -s `pwd`/$$t build/$$t; done < .files
-	rm -f .dirs .files
-	(cd build; CXXPROG="UNUSED" sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
+	(cd $(VER) && find . -type d) > build/.dirs
+	(cd $(VER) && find . ! -type d | grep -v ./makefile) > build/.files
+	while read t; do mkdir -p build/$$t; done < build/.dirs
+	while read t; do ln -s `pwd`/$$t build/$$t; done < build/.files
+	(cd build; CXXPROG="UNUSED" sh ../$(VER)/configure $(CONFIGURE_OPTS) $(CONFOPTS))
 	@touch build/build
 
 clean:
