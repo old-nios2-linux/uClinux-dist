@@ -1,7 +1,7 @@
 VER = iproute2-2.6.29-1
 
 all: $(VER)/Config
-	$(MAKE) -C $(VER) CC="$(CC)"
+	$(MAKE) -C $(VER) CC="$(CC)" LIBUTIL=
 
 $(VER)/Config: Config
 	cp $< $@
