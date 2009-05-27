@@ -2062,7 +2062,8 @@ config USER_MARADNS_ZONESERVER
 
 config USER_NMAP_NMAP
 	bool "nmap"
-	select LIB_STLPORT
+	select LIB_LIBPCAP
+	select LIB_LIBPCRE
 	help
 	  Network mapper is a tool for network exploration and security auditing.
 
