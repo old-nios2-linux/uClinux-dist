@@ -612,19 +612,18 @@ int main(int argc, char *argv[])
 			}
 
 			wait(&status);
-			if (WIFSIGNALED(status)) {
-				int sig_expect = bad_funcs[test].kill_sig;
-				sig_actual = WTERMSIG(status);
-				if (sig_expect == sig_actual) {
-					++pass_count;
-				} else {
-					char *str_expect = strsignal(sig_expect);
-					str_actual = strsignal(sig_actual);
-					printf("FAIL (test failed, but not with the right signal)\n"
-						"\t(We expected %i '%s' but instead we got %i '%s')\n",
-						sig_expect, str_expect, sig_actual, str_actual);
-					exit(EXIT_FAILURE);
-				}
+
+			int sig_expect = bad_funcs[test].kill_sig;
+			sig_actual = WTERMSIG(status);
+			if (sig_expect == sig_actual) {
+				++pass_count;
+			} else {
+				char *str_expect = strsignal(sig_expect);
+				str_actual = strsignal(sig_actual);
+				printf("FAIL (test failed, but not with the right signal)\n"
+					"\t(We expected %i '%s' but instead we got %i '%s')\n",
+					sig_expect, str_expect, sig_actual, str_actual);
+				exit(EXIT_FAILURE);
 			}
 		}
 		str_actual = strsignal(sig_actual);
