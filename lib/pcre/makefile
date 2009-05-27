@@ -1,3 +1,5 @@
+VER = libpcre-5.0
+
 #
 # build using configure
 
@@ -26,7 +28,7 @@ builddir/config.status: makefile
 	cd builddir;						\
 	export CFLAGS="$(subst -Wall,,$(CFLAGS))"; 		\
 	export LDFLAGS='-lc';					\
-	../configure $(CONF_OPTS)
+	../$(VER)/configure $(CONF_OPTS)
 
 clean:
 	rm -rf builddir
