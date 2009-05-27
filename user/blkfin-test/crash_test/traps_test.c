@@ -481,13 +481,14 @@ void list_tests(void)
 void usage(const char *errmsg, char *progname)
 {
 	printf(
-		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [starting test number] [ending test number]\n"
+		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [starting test number] [ending test number]\n"
 		"\n"
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
 		"\t\trunning the test (default is 1)\n"
 		"-l\t\tList tests, then quit\n"
 		"-q\t\tQuiet (don't print out test info)\n"
+		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n\n"
 		"If no test number is specified, the number of tests available will be shown.\n\n"
 		"If a single test number is specified (0 <= n < # of tests), that test will be run.\n\n"
 		"If two tests numbers are specified (0 <= start < end < # tests), those tests will be run\n\n"
@@ -505,7 +506,7 @@ int main(int argc, char *argv[])
 {
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
-	int c, repeat = 1, pass_tests = 0, del;
+	int c, repeat = 1, pass_tests = 0, del, parent = 0;
 	int quiet = 0;
 	struct timespec delay;
 
@@ -518,7 +519,7 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	while ((c = getopt (argc, argv, "1c:d:hlq")) != -1)
+	while ((c = getopt (argc, argv, "1c:d:hlpq")) != -1)
 		switch (c)
 		{
 		case '1':
@@ -542,6 +543,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			list_tests();
+			break;
+		case 'p':
+			parent = 1;
 			break;
 		case 'q':
 			quiet = 1;
@@ -579,6 +583,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (parent && start_test != end_test)
+		printf("Ignoring '-p' option, since running more than one test\n");
+
 	for (test = start_test; test <= end_test ; ++test) {
 		int sig_actual=0, count, pass_count = 0;
 		char *str_actual;
@@ -591,7 +598,7 @@ int main(int argc, char *argv[])
 		nanosleep(&delay, NULL);
 
 		/* should get killed ... */
-		if (repeat == 1 && start_test == end_test ) {
+		if (repeat == 1 && start_test == end_test && parent ) {
 			(*bad_funcs[test].func)();
 			goto bad_exit;
 		}
@@ -605,7 +612,7 @@ int main(int argc, char *argv[])
 
 			pid = vfork();
 			if (pid == 0) {
-				int _ret = execlp(argv[0], argv[0], "-d", "0", "-q", test_num, NULL);
+				int _ret = execlp(argv[0], argv[0], "-d", "0", "-q", "-p", test_num, NULL);
 				fprintf(stderr, "Execution of '%s' failed (%i): %s\n",
 					argv[0], _ret, strerror(errno));
 				_exit(_ret);
