@@ -21,10 +21,15 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/ptrace.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/user.h>
 #include <sys/wait.h>
+#include <asm/ptrace.h>
 
 #ifdef __FDPIC__
 # define _get_func_ptr(addr) ({ unsigned long __addr[2] = { addr, 0 }; __addr; })
@@ -402,7 +407,8 @@ void bad_return_mmr(void)
 /* RAISE 5 instruction                                 HWERRCAUSE 0x18 */
 /* Can't do this in userspace - since this is a supervisor instruction */
 
-/* Now for the main code */
+
+/* List of the tests  - if the tests is not added to the list - it will not be run */
 
 struct {
 	int excause;
@@ -467,6 +473,33 @@ struct {
 	{ 0x3f, stack_push_l1_non_existant, SIGBUS, "Stack push to non-existant L1" },
 };
 
+/* helper functions needed for tracing */
+
+static long xptrace(int request, pid_t pid, void *addr, void *data)
+{
+	int ret;
+
+	/* some requests have -1 as a valid return */
+	errno = 0;
+	ret = ptrace(request, pid, addr, data);
+	if (errno && ret == -1)
+		printf("ptrace(%i, %i, %p, %p) failed: %s\n",
+			request, pid, addr, data, strerror(errno));
+	return ret;
+}
+static long sysnum(pid_t pid)
+{
+	long offset;
+#if defined(__bfin__)
+	offset = PT_ORIG_P0;
+#elif defined(__x86_64__)
+	offset = 8 * ORIG_RAX;
+#endif
+	return xptrace(PTRACE_PEEKUSER, pid, (void *)offset, NULL);
+}
+
+/* Standard helper functions */
+
 void list_tests(void)
 {
 	long test_num;
@@ -481,14 +514,15 @@ void list_tests(void)
 void usage(const char *errmsg, char *progname)
 {
 	printf(
-		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [starting test number] [ending test number]\n"
+		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [-t] [starting test number] [ending test number]\n"
 		"\n"
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
 		"\t\trunning the test (default is 1)\n"
 		"-l\t\tList tests, then quit\n"
 		"-q\t\tQuiet (don't print out test info)\n"
-		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n\n"
+		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n"
+		"-t\t\tTrace (single step) through the failing tests, to simulate gdb\n\n"
 		"If no test number is specified, the number of tests available will be shown.\n\n"
 		"If a single test number is specified (0 <= n < # of tests), that test will be run.\n\n"
 		"If two tests numbers are specified (0 <= start < end < # tests), those tests will be run\n\n"
@@ -502,12 +536,14 @@ void usage(const char *errmsg, char *progname)
 		exit(EXIT_SUCCESS);
 }
 
+/* Now for the main code */
+
 int main(int argc, char *argv[])
 {
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
 	int c, repeat = 1, pass_tests = 0, del, parent = 0;
-	int quiet = 0;
+	int quiet = 0, trace = 0;
 	struct timespec delay;
 
 	delay.tv_sec = 1;
@@ -519,7 +555,7 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	while ((c = getopt (argc, argv, "1c:d:hlpq")) != -1)
+	while ((c = getopt (argc, argv, "1c:d:hlpqt")) != -1)
 		switch (c)
 		{
 		case '1':
@@ -549,6 +585,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'q':
 			quiet = 1;
+			break;
+		case 't':
+			trace = 1;
 			break;
 		case '?':
 		default:
@@ -583,13 +622,21 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (parent && start_test != end_test)
+	if (parent && start_test != end_test) {
 		printf("Ignoring '-p' option, since running more than one test\n");
+		parent = 0;
+	}
+
+	if (parent && repeat > 1 ){
+		printf("Ignoring '-p' option, since count > 1\n");
+		parent = 0;
+	}
 
 	for (test = start_test; test <= end_test ; ++test) {
 		int sig_actual=0, count, pass_count = 0;
 		char *str_actual;
 		char test_num[10];
+		int _ret = 0;
 
 		if (!quiet) {
 			printf("\nRunning test %li for exception 0x%02x: %s\n... ", test, bad_funcs[test].excause, bad_funcs[test].name);
@@ -611,17 +658,87 @@ int main(int argc, char *argv[])
 			count--;
 
 			pid = vfork();
-			if (pid == 0) {
-				int _ret = execlp(argv[0], argv[0], "-d", "0", "-q", "-p", test_num, NULL);
+			if (pid == -1) {
+				fprintf(stderr, "vfork() failed");
+				goto bad_exit;
+			} else if (pid == 0) {
+				if (trace)
+					xptrace(PTRACE_TRACEME, 0, NULL, NULL);
+				_ret = execlp(argv[0], argv[0], "-d", "0", "-q", "-p", test_num, NULL);
+
 				fprintf(stderr, "Execution of '%s' failed (%i): %s\n",
 					argv[0], _ret, strerror(errno));
 				_exit(_ret);
 			}
 
-			wait(&status);
+			if (trace) {
+				/* wait until the child actually starts executing.  we could
+				 * have the child execute an uncommon syscall and do PTRACE_SYSCALL
+				 * until that point so as to speed the test up ...
+				 */
+				long nr = 0;
+#ifdef DEBUG
+				long tmp = 0;
+				struct pt_regs regs;
+#endif
+
+				while (nr != SYS_execve) {
+					if (wait(&status) == -1) {
+						perror("wait() failed");
+						exit(EXIT_FAILURE);
+					}
+					if (WIFEXITED(status)) {
+						printf("child exited with %i", WEXITSTATUS(status));
+						if (WIFSIGNALED(status))
+							printf(" with signal %i (%s)", sig_actual, strsignal(sig_actual));
+						printf("\n");
+						exit(EXIT_FAILURE);
+					}
+					nr = sysnum(pid);
+					xptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+				}
+
+				/* Single step the main test code */
+				while (1) {
+					if (wait(&status) == -1) {
+						perror("wait() failed");
+						exit(EXIT_FAILURE);
+					}
+					if (WIFEXITED(status)) {
+						if (WIFSIGNALED(status))
+							sig_actual = WTERMSIG(status);
+						else
+							sig_actual = 0;
+						break;
+					} else if (WIFSTOPPED(status)) {
+						/* The signal is SIGTRAP when tracing normally */
+						if (WSTOPSIG(status) != SIGTRAP) {
+							sig_actual = WSTOPSIG(status);
+							break;
+						}
+					}
+#ifdef DEBUG
+					xptrace(PTRACE_GETREGS, pid, NULL, &regs);
+					if (tmp >= 17800) {
+						printf("pc(%i)= 0x%08x\tLC0 = 0x%x\n", tmp, regs.pc, regs.lc0);
+						fflush(NULL);
+						sleep(1);
+					}
+					tmp++;
+#endif
+
+					/* last argument is if we want to pass a signal on to the
+					 * child, but since we don't do any tests with signals, no
+					 * need for that.
+					 */
+					xptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
+				}
+			} else {
+				wait(&status);
+				sig_actual = WTERMSIG(status);
+			}
 
 			int sig_expect = bad_funcs[test].kill_sig;
-			sig_actual = WTERMSIG(status);
 			if (sig_expect == sig_actual) {
 				++pass_count;
 			} else {
