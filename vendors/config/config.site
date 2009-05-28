@@ -44,6 +44,8 @@ find_gnuconfig() {
 			return 0
 		fi
 	done
+	echo "config.site: ERROR: could not locate config.$1" 1>&2
+	echo "false"
 	return 1
 }
 SITE_CONFIG_SUB=$(find_gnuconfig sub)
