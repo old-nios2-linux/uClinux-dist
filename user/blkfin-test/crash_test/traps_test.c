@@ -10,7 +10,7 @@
  * it to this list.
  *
  **********************************************************************
- * Copyright Analog Devices Inc 2007
+ * Copyright Analog Devices Inc 2007 - 2009
  * Released under the GPL 2 or later
  *
  ***************************************************************************/
@@ -475,7 +475,7 @@ struct {
 
 /* helper functions needed for tracing */
 
-static long xptrace(int request, pid_t pid, void *addr, void *data)
+static long _xptrace(int request, const char *srequest, pid_t pid, void *addr, void *data)
 {
 	int ret;
 
@@ -483,10 +483,13 @@ static long xptrace(int request, pid_t pid, void *addr, void *data)
 	errno = 0;
 	ret = ptrace(request, pid, addr, data);
 	if (errno && ret == -1)
-		printf("ptrace(%i, %i, %p, %p) failed: %s\n",
-			request, pid, addr, data, strerror(errno));
+		printf("ptrace(%i (%s), %i, %p, %p) failed: %s\n",
+			request, srequest, pid, addr, data, strerror(errno));
 	return ret;
 }
+
+#define xptrace(request, pid, addr, data) _xptrace(request, #request, pid, addr, data)
+
 static long sysnum(pid_t pid)
 {
 	long offset;
@@ -654,6 +657,8 @@ int main(int argc, char *argv[])
 		while (count) {
 			pid_t pid;
 			int status;
+			int sig_expect = bad_funcs[test].kill_sig;
+			siginfo_t info;
 
 			count--;
 
@@ -662,7 +667,7 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "vfork() failed");
 				goto bad_exit;
 			} else if (pid == 0) {
-				if (trace)
+				if (trace && sig_expect != SIGTRAP)
 					xptrace(PTRACE_TRACEME, 0, NULL, NULL);
 				_ret = execlp(argv[0], argv[0], "-d", "0", "-q", "-p", test_num, NULL);
 
@@ -671,19 +676,23 @@ int main(int argc, char *argv[])
 				_exit(_ret);
 			}
 
-			if (trace) {
+			/* since we wait for the specific child pid below - let's make sure it is valid */
+			errno = 0;
+			_ret = waitid(P_PID, pid, &info, WEXITED | WSTOPPED | WCONTINUED | WNOHANG | WNOWAIT);
+			if (errno || _ret == -1) {
+				fprintf(stderr, "pid (%d) of child process didn't seem to start\n", pid);
+				_exit(_ret);
+			}
+
+			if (trace && sig_expect != SIGTRAP) {
 				/* wait until the child actually starts executing.  we could
 				 * have the child execute an uncommon syscall and do PTRACE_SYSCALL
 				 * until that point so as to speed the test up ...
 				 */
 				long nr = 0;
-#ifdef DEBUG
-				long tmp = 0;
-				struct pt_regs regs;
-#endif
 
 				while (nr != SYS_execve) {
-					if (wait(&status) == -1) {
+					if (waitpid(pid, &status, 0) == -1) {
 						perror("wait() failed");
 						exit(EXIT_FAILURE);
 					}
@@ -700,7 +709,7 @@ int main(int argc, char *argv[])
 
 				/* Single step the main test code */
 				while (1) {
-					if (wait(&status) == -1) {
+					if (waitpid(pid, &status, 0) == -1) {
 						perror("wait() failed");
 						exit(EXIT_FAILURE);
 					}
@@ -714,18 +723,12 @@ int main(int argc, char *argv[])
 						/* The signal is SIGTRAP when tracing normally */
 						if (WSTOPSIG(status) != SIGTRAP) {
 							sig_actual = WSTOPSIG(status);
+							/* make sure any zombie child processes aren't left hanging */
+							xptrace(PTRACE_CONT, pid, NULL, (void *)sig_actual);
+							wait(NULL);
 							break;
 						}
 					}
-#ifdef DEBUG
-					xptrace(PTRACE_GETREGS, pid, NULL, &regs);
-					if (tmp >= 17800) {
-						printf("pc(%i)= 0x%08x\tLC0 = 0x%x\n", tmp, regs.pc, regs.lc0);
-						fflush(NULL);
-						sleep(1);
-					}
-					tmp++;
-#endif
 
 					/* last argument is if we want to pass a signal on to the
 					 * child, but since we don't do any tests with signals, no
@@ -734,11 +737,10 @@ int main(int argc, char *argv[])
 					xptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
 				}
 			} else {
-				wait(&status);
+				waitpid(pid, &status, 0);
 				sig_actual = WTERMSIG(status);
 			}
 
-			int sig_expect = bad_funcs[test].kill_sig;
 			if (sig_expect == sig_actual) {
 				++pass_count;
 			} else {
