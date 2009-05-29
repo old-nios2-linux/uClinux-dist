@@ -154,6 +154,7 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_WIRELESS_TOOLS_IWSPY    /bin/iwspy
 	$(ROMFSINST) -e CONFIG_USER_WIRELESS_TOOLS_IWGETID  /bin/iwgetid
 	$(ROMFSINST) -e CONFIG_USER_WIRELESS_TOOLS_IWEVENT  /bin/iwevent
+	$(ROMFSINST) -e CONFIG_USER_WIRELESS_TOOLS_IFRENAME /bin/ifrename
 
 # Compilation of the static library
 $(STATIC): $(OBJS:.o=.so)
