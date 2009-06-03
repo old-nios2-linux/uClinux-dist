@@ -275,7 +275,6 @@ config LIB_LIBMATRIX
 config LIB_MEDIASTREAMER
 	bool "Build mediastreamer"
 	select LIB_ORTP
-	select LIB_SPEEX
 	help
 	  Mediastreamer2 is a powerful and lightweighted streaming engine
 	  specialized for voice/video telephony applications. 
