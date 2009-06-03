@@ -25,12 +25,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <asm/ptrace.h>
 #include <sys/klog.h>
+
+const char *seqstat_path = "/sys/kernel/debug/blackfin/Core Registers/SEQSTAT";
 
 #ifdef __FDPIC__
 # define _get_func_ptr(addr) ({ unsigned long __addr[2] = { addr, 0 }; __addr; })
@@ -504,25 +507,62 @@ static long sysnum(pid_t pid)
 
 /* Standard helper functions */
 
-void list_tests(void)
+void list_tests(char *progname, int verify)
 {
 	long test_num;
+	pid_t pid;
+	int _ret = 0;
+	FILE *seqstat_file;
+	unsigned int ex_actual;
+	char tests[10];
 
-	printf("#\texcause\ttest\n");
-	for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num)
-		printf("%li\t0x%02x\t%s\n", test_num, bad_funcs[test_num].excause, bad_funcs[test_num].name);
+	printf("#\texcause\ttest %i %s\n", verify, progname);
+	if (!verify) {
+		for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num)
+			printf("%li\t0x%02x\t%s\n", test_num, bad_funcs[test_num].excause, bad_funcs[test_num].name);
+	} else {
+		/* turn the equivilent to "dmesg -n 3" */
+		klogctl(8, NULL, 3);
 
-	exit(EXIT_SUCCESS);
+		for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num) {
+			printf("%li\t0x%02x", test_num, bad_funcs[test_num].excause);
+
+			/* Now, let's see what it really is */
+			pid = vfork();
+			if (pid == -1) {
+				fprintf(stderr, "vfork() failed");
+				exit(EXIT_FAILURE);
+			} else if (pid == 0) {
+				sprintf(tests, "%li", test_num);
+				_ret = execlp(progname, progname, "-d", "0", "-q", "-p", tests, NULL);
+				fprintf(stderr, "Execution of '%s' failed (%i): %s\n",
+					progname, _ret, strerror(errno));
+				_exit(_ret);
+			}
+			wait(NULL);
+			seqstat_file = fopen(seqstat_path, "r");
+			if (fscanf(seqstat_file, "%x", &ex_actual)) {
+				printf("(0x%02x)", (0x3F & ex_actual));
+				if ((0x3F & ex_actual) != bad_funcs[test_num].excause)
+					printf("!");
+			}
+			fclose(seqstat_file);
+			printf("\t%s\n", bad_funcs[test_num].name);
+		}
+		klogctl(8, NULL, 7);
+	}
+
 }
 
 void usage(const char *errmsg, char *progname)
 {
 	printf(
-		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [-t] [-v] [starting test number] [ending test number]\n"
+		"Usage: %s [-c count] [-d milliseconds] [-e] [-q] [-l] [-p] [-t] [-v] [starting test number] [ending test number]\n"
 		"\n"
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
 		"\t\trunning the test (default is 1)\n"
+		"-e\t\tverify excause is as expected\n"
 		"-l\t\tList tests, then quit\n"
 		"-q\t\tQuiet (don't print out test info)\n"
 		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n"
@@ -549,19 +589,23 @@ int main(int argc, char *argv[])
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
 	int c, repeat = 1, pass_tests = 0, del, parent = 0;
-	int quiet = 0, trace = 0, verbose = 0;
+	int quiet = 0, trace = 0, verbose = 0, verify = 0, list = 0;
 	struct timespec delay;
+	struct stat last_seqstat;
+	FILE *seqstat_file;
 
 	delay.tv_sec = 1;
 	delay.tv_nsec = 0;
 	del = 1000;
+
+	seqstat_file = NULL;
 
 	if (argc == 1) {
 		printf("%li\n", ARRAY_SIZE(bad_funcs) - 1);
 		return EXIT_SUCCESS;
 	}
 
-	while ((c = getopt (argc, argv, "1c:d:hlpqtv")) != -1)
+	while ((c = getopt (argc, argv, "1c:d:ehlpqtv")) != -1)
 		switch (c)
 		{
 		case '1':
@@ -583,8 +627,11 @@ int main(int argc, char *argv[])
 			delay.tv_sec = del / 1000;
 			delay.tv_nsec = (del - (delay.tv_sec * 1000)) * 1000000;
 			break;
+		case 'e':
+			verify = 1;
+			break;
 		case 'l':
-			list_tests();
+			list = 1;
 			break;
 		case 'p':
 			parent = 1;
@@ -605,6 +652,25 @@ int main(int argc, char *argv[])
 			usage("unknown option", argv[0]);
 			break;
 		}
+
+	if (verify && stat(seqstat_path, &last_seqstat)) {
+		verify = 0;
+		printf("Can't verify excause - could not open '%s' file \n", seqstat_path);
+	}
+
+	if (verify) {
+		seqstat_file = fopen(seqstat_path, "r");
+		if (seqstat_file == NULL) {
+			printf("couldn't open '%s' for reading\n", seqstat_path);
+			goto bad_exit;
+		}
+		fclose(seqstat_file);
+	}
+
+	if (list) {
+		list_tests(argv[0], verify);
+		exit(EXIT_SUCCESS);
+	}
 
 	if ((optind == argc || argc - optind >= 3) && start_test != -1)
 		usage(NULL, argv[0]);
@@ -648,13 +714,15 @@ int main(int argc, char *argv[])
 		klogctl(8, NULL, 3);
 
 	for (test = start_test; test <= end_test ; ++test) {
-		int sig_actual=0, count, pass_count = 0;
+		unsigned int ex_actual = 0, sig_actual=0, count, pass_count = 0;
 		char *str_actual;
 		char test_num[10];
 		int _ret = 0;
+		int sig_expect = bad_funcs[test].kill_sig;
+		int ex_expect = bad_funcs[test].excause;
 
 		if (!quiet) {
-			printf("\nRunning test %li for exception 0x%02x: %s\n... ", test, bad_funcs[test].excause, bad_funcs[test].name);
+			printf("\nRunning test %li for exception 0x%02x: %s\n... ", test, ex_expect, bad_funcs[test].name);
 			fflush(stdout);
 		}
 		nanosleep(&delay, NULL);
@@ -664,12 +732,12 @@ int main(int argc, char *argv[])
 			(*bad_funcs[test].func)();
 			goto bad_exit;
 		}
+
 		sprintf(test_num, "%li", test);
 		count = repeat;
 		while (count) {
 			pid_t pid;
 			int status;
-			int sig_expect = bad_funcs[test].kill_sig;
 			siginfo_t info;
 
 			count--;
@@ -752,6 +820,15 @@ int main(int argc, char *argv[])
 				waitpid(pid, &status, 0);
 				sig_actual = WTERMSIG(status);
 			}
+			if (verify) {
+				seqstat_file = fopen(seqstat_path, "r");
+				if (fscanf(seqstat_file, "%x", &ex_actual)) {
+					if ((ex_actual & 0x3F) != ex_expect)
+						printf("FAIL (test failed with wrong EXCAUSE, expected %x, but got %x)\n",
+							ex_expect, (ex_actual & 0x3F));
+				}
+				fclose(seqstat_file);
+			}
 
 			if (sig_expect == sig_actual) {
 				++pass_count;
@@ -775,6 +852,7 @@ int main(int argc, char *argv[])
 	}
 
 	printf("\n%i/%i tests passed\n", pass_tests, (int)(end_test - start_test) + 1);
+
 	exit((pass_tests == (int)(end_test - start_test) + 1) ? EXIT_SUCCESS : EXIT_FAILURE);
 
 bad_exit:
