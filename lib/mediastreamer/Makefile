@@ -1,9 +1,14 @@
-VER = mediastreamer-2.2.3
+VER = mediastreamer-2.2.4
 
 CONF_OPTS = \
 	--disable-strict \
-	SPEEX_LIBS="-L$(STAGEDIR)/usr/lib -lspeex -lspeexdsp -lm" \
+	--enable-external-ortp \
+	$(call USE_ENABLE,LIB_ALSA_LIB,alsa) \
+	$(call USE_ENABLE,LIB_SPEEX,speex) \
 	$(call USE_ENABLE,LIB_FFMPEG,video)
+
+# disable generation of documentation
+export ac_cv_path_DOXYGEN = false
 
 include $(ROOTDIR)/tools/autotools.mk
 
