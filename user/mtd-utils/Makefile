@@ -81,16 +81,6 @@ romfs:
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubinize /bin/ubinize
 	$(ROMFSINST) -e CONFIG_USER_MTDUTILS_UBIUTILS     build-$(VER)/ubi-utils/ubirename /bin/ubirename
 
-update:
-	set -e ; \
-	tar="$(dir $(GITWEB))`wget -q -O - '$(GITWEB)' | sed -n '/snapshot/{s:.*href="\([^"]*\).*:\1:;p;q}'`" ; \
-	ver=`echo $$tar | sed 's:.*h=\([^;]*\).*:\1:'` ; \
-	test "$(VER)" = "$$ver" && exit 0 ; \
-	wget $$tar -O $(GITREPO).tar.gz ; \
-	tar xf $(GITREPO).tar.gz ; \
-	rm -rf $$ver ; \
-	mv $(GITREPO) $$ver ; \
-	rm $(GITREPO).tar.gz ; \
-	sed -i "/^VER/s:=.*:= $$ver:" Makefile
+include $(ROOTDIR)/tools/gitweb.mk
 
-.PHONY: all clean romfs update
+.PHONY: all clean romfs
