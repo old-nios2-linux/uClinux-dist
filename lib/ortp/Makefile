@@ -1,4 +1,4 @@
-VER = ortp-0.15.0
+VER = ortp-0.16.0
 
 CONF_OPTS = --disable-strict
 
