@@ -30,6 +30,7 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <asm/ptrace.h>
+#include <sys/klog.h>
 
 #ifdef __FDPIC__
 # define _get_func_ptr(addr) ({ unsigned long __addr[2] = { addr, 0 }; __addr; })
@@ -517,7 +518,7 @@ void list_tests(void)
 void usage(const char *errmsg, char *progname)
 {
 	printf(
-		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [-t] [starting test number] [ending test number]\n"
+		"Usage: %s [-c count] [-d milliseconds] [-q] [-l] [-p] [-t] [-v] [starting test number] [ending test number]\n"
 		"\n"
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
@@ -525,7 +526,9 @@ void usage(const char *errmsg, char *progname)
 		"-l\t\tList tests, then quit\n"
 		"-q\t\tQuiet (don't print out test info)\n"
 		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n"
-		"-t\t\tTrace (single step) through the failing tests, to simulate gdb\n\n"
+		"-t\t\tTrace (single step) through the failing tests, to simulate gdb\n"
+		"-v\t\tVerbose. equivilent to 'dmesg -n 7', so that all kernel messages print out\n"
+		"\t\totherwise do 'dmesg -n 3', so things are a little quieter\n\n"
 		"If no test number is specified, the number of tests available will be shown.\n\n"
 		"If a single test number is specified (0 <= n < # of tests), that test will be run.\n\n"
 		"If two tests numbers are specified (0 <= start < end < # tests), those tests will be run\n\n"
@@ -546,7 +549,7 @@ int main(int argc, char *argv[])
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
 	int c, repeat = 1, pass_tests = 0, del, parent = 0;
-	int quiet = 0, trace = 0;
+	int quiet = 0, trace = 0, verbose = 0;
 	struct timespec delay;
 
 	delay.tv_sec = 1;
@@ -558,7 +561,7 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	while ((c = getopt (argc, argv, "1c:d:hlpqt")) != -1)
+	while ((c = getopt (argc, argv, "1c:d:hlpqtv")) != -1)
 		switch (c)
 		{
 		case '1':
@@ -591,6 +594,11 @@ int main(int argc, char *argv[])
 			break;
 		case 't':
 			trace = 1;
+			break;
+		case 'v':
+			/* turn the equivilent to "dmesg -n 7" */
+			klogctl(8, NULL, 7);
+			verbose = 1;
 			break;
 		case '?':
 		default:
@@ -634,6 +642,10 @@ int main(int argc, char *argv[])
 		printf("Ignoring '-p' option, since count > 1\n");
 		parent = 0;
 	}
+
+	/* By default, only KERN_ERR or more serious */
+	if (!verbose && !parent)
+		klogctl(8, NULL, 3);
 
 	for (test = start_test; test <= end_test ; ++test) {
 		int sig_actual=0, count, pass_count = 0;
