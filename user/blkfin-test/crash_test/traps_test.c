@@ -562,7 +562,7 @@ void usage(const char *errmsg, char *progname)
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
 		"\t\trunning the test (default is 1)\n"
-		"-e\t\tverify excause is as expected\n"
+		"-e\t\texclude the checking of excause is as expected\n"
 		"-l\t\tList tests, then quit\n"
 		"-q\t\tQuiet (don't print out test info)\n"
 		"-p\t\tRun the test in the parent process, otherwise fork a child process.\n\t\tOnly valid for a single test.\n"
@@ -589,7 +589,7 @@ int main(int argc, char *argv[])
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
 	int c, repeat = 1, pass_tests = 0, del, parent = 0;
-	int quiet = 0, trace = 0, verbose = 0, verify = 0, list = 0;
+	int quiet = 0, trace = 0, verbose = 0, verify = 1, list = 0;
 	struct timespec delay;
 	struct stat last_seqstat;
 	FILE *seqstat_file;
@@ -628,7 +628,7 @@ int main(int argc, char *argv[])
 			delay.tv_nsec = (del - (delay.tv_sec * 1000)) * 1000000;
 			break;
 		case 'e':
-			verify = 1;
+			verify = 0;
 			break;
 		case 'l':
 			list = 1;
