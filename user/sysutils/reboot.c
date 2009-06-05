@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
 	kill(1, SIGTSTP);
 	sync();
 	signal(SIGTERM,SIG_IGN);
+	signal(SIGHUP,SIG_IGN);
 	setpgrp();
 	kill(-1, SIGTERM);
 	kill(-1, SIGHUP);
