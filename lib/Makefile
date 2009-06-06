@@ -38,7 +38,6 @@ endif
 # and build these if someone needs them
 #
 dir_3_$(CONFIG_LIB_FLEX)         += flex
-dir_3_$(CONFIG_LIB_LIBSSL)       += libssl
 dir_3_$(CONFIG_LIB_LIBGMP)       += libgmp
 dir_3_$(CONFIG_LIB_LIBG)         += libg
 dir_3_$(CONFIG_LIB_LIBPAM)       += libpam
@@ -78,13 +77,14 @@ dir_3_$(CONFIG_LIB_NFNETLINK)    += libnfnetlink
 # See Kconfig for the dependencies
 dir_4_$(CONFIG_LIB_LIBLZMA)      += liblzma
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
-dir_4_$(CONFIG_LIB_LIBCURL)      += libcurl
 dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
+dir_4_$(CONFIG_LIB_LIBSSL)       += libssl
 
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
 dir_5_$(CONFIG_LIB_LIBXML2)      += libxml2
+dir_5_$(CONFIG_LIB_LIBCURL)      += libcurl
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
