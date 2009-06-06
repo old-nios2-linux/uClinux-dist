@@ -73,19 +73,18 @@ dir_3_$(CONFIG_LIB_LIBJUDY)      += libjudy
 dir_3_$(CONFIG_LIB_CLASSPATH)    += classpath
 dir_3_$(CONFIG_LIB_LIBFFI)       += libffi
 dir_3_$(CONFIG_LIB_BITVECTOR)    += bitvector
+dir_3_$(CONFIG_LIB_NFNETLINK)    += libnfnetlink
 
 # See Kconfig for the dependencies
 dir_4_$(CONFIG_LIB_LIBLZMA)      += liblzma
 dir_4_$(CONFIG_LIB_LIBPNG)       += libpng
 dir_4_$(CONFIG_LIB_LIBCURL)      += libcurl
-dir_5_$(CONFIG_LIB_LIBXML2)      += libxml2
-
-dir_3_$(CONFIG_LIB_NFNETLINK)    += libnfnetlink
 dir_4_$(CONFIG_LIB_NETFILTER_LOG)+= libnetfilter_log
 dir_4_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
-
 dir_4_$(CONFIG_LIB_PWLIB)        += pwlib
+
 dir_5_$(CONFIG_LIB_LIBOPENH323)  += libopenh323
+dir_5_$(CONFIG_LIB_LIBXML2)      += libxml2
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
