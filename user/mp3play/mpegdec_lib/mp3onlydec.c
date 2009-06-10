@@ -189,7 +189,7 @@ static int MPEGDEC_read_header( MPA_STREAM *mps, BOOL check )
       value |= BSTR_read_byte( bs );
    }
    else { // first sync not valid -> try to use previous byte (#5 tolerance !)
-      int loops = 16384; // #17
+      int loops = 1638400; // #17
       if( check ) return MPEGDEC_ERR_BADFRAME; // Not an MPEG Stream !
       value >>= 8;
       value |= old_first << 24; // use previous byte
