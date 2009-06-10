@@ -143,7 +143,7 @@ nbench: emfloat.o misc.o nbench0.o nbench1.o sysspec.o hardware.o
 ##########################################################################
 
 clean:
-	- /bin/rm -f *.o *~ \#* core a.out hello sysinfo.c sysinfoc.c \
+	- /bin/rm -f *.o *~ nbench nbench.gdb \#* core a.out hello sysinfo.c sysinfoc.c \
 		 bug debugbit.dat
 
 mrproper: clean
