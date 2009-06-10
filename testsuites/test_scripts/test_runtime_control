@@ -26,6 +26,8 @@ else
  script_name=`echo $whole_command_line | awk '{print $12}'`
  if [ "$script_name" == "./qt_source_test.exp" ] ; then
      sleep 7200
+ elif [ "$script_name" == "./gadget_fs_bulk_test.exp" ] || [ "$script_name" == "./gadget_fs_control_test.exp" ] || [ "$script_name" == "./gadget_zero_bulk_test.exp" ] || [ "$script_name" == "./gadget_zero_control_test.exp" ] ; then
+     sleep 86500
  else
      sleep 3600
  fi
