@@ -92,9 +92,26 @@ image.rootfs.initramfs: image.rootfs.initramfs.force
 endif
 endif
 
+.PHONY: image.rootfs.initramfs.bz2 image.rootfs.initramfs.bz2.force
+image.rootfs.initramfs.bz2.force: image.rootfs.initramfs.force
+	bzip2 -c -9 $(IMAGE_ROMFS_BASE).initramfs > $(IMAGE_ROMFS_BASE).initramfs.bz2
+ifeq ($(CONFIG_RD_BZIP2),y)
+image.rootfs.initramfs.bz2: image.rootfs.initramfs.bz2.force
+endif
+
 .PHONY: image.rootfs.initramfs.gz image.rootfs.initramfs.gz.force
 image.rootfs.initramfs.gz.force: image.rootfs.initramfs.force
 	gzip -c -9 $(IMAGE_ROMFS_BASE).initramfs > $(IMAGE_ROMFS_BASE).initramfs.gz
+ifeq ($(CONFIG_RD_GZIP),y)
+image.rootfs.initramfs.gz: image.rootfs.initramfs.gz.force
+endif
+
+.PHONY: image.rootfs.initramfs.lzma image.rootfs.initramfs.lzma.force
+image.rootfs.initramfs.lzma.force: image.rootfs.initramfs.force
+	lzma -c -9 $(IMAGE_ROMFS_BASE).initramfs > $(IMAGE_ROMFS_BASE).initramfs.lzma
+ifeq ($(CONFIG_RD_LZMA),y)
+image.rootfs.initramfs.lzma: image.rootfs.initramfs.lzma.force
+endif
 
 .PHONY: image.rootfs.jffs2 image.rootfs.jffs2.force
 MKFS_JFFS2_FLAGS ?= -l -p
@@ -155,6 +172,9 @@ image.rootfs.all: \
 	image.rootfs.cramfs \
 	image.rootfs.ext2 \
 	image.rootfs.initramfs \
+	image.rootfs.initramfs.bz2 \
+	image.rootfs.initramfs.gz \
+	image.rootfs.initramfs.lzma \
 	image.rootfs.jffs2 \
 	image.rootfs-summary.jffs2 \
 	image.rootfs.romfs \
@@ -251,30 +271,57 @@ image.uimage.ext2: image.uimage.ext2.force
 endif
 
 .PHONY: image.uimage.initramfs
-image.uimage.initramfs:
-# then one set with the rootfs uncompressed (since u-boot images do compression)
-# we want to do this step last since it will leave the kernel dir in a state
-# that properly reflects the default uImage
-	cp $(IMAGE_ROMFS_BASE).initramfs $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio.gz
+image.uimage.initramfs.force:
+	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
 	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXDIR)
-	cp $(LINUXBOOTDIR)/vmImage $(IMAGE_UIMAGE_BASE).initramfs
-	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map.initramfs
-	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs
-	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs
-	ln -sf uImage.initramfs $(IMAGE_UIMAGE_BASE)
+	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXDIR) vmImage$(COMP_KERN)
+	cp $(LINUXBOOTDIR)/vmImage$(COMP_KERN) $(IMAGE_UIMAGE_BASE)$(COMP_KERN).initramfs$(COMP_ROOTFS)
+	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
+	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	ln -sf uImage$(COMP_KERN).initramfs$(COMP_ROOTFS) $(IMAGE_UIMAGE_BASE)
 
-.PHONY: image.uimage.initramfs.gz
-image.uimage.initramfs.gz:
-# first one set with the rootfs compressed (to work with uncompressed kernel)
-	cp $(IMAGE_ROMFS_BASE).initramfs.gz $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio.gz
-	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXDIR)
-	cp $(LINUXBOOTDIR)/vmImage $(IMAGE_UIMAGE_BASE).initramfs.gz
-	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map.initramfs.gz
-	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs.gz
-	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs.gz
-	ln -sf linux.initramfs.gz $(IMAGE_KERNEL_BASE)
+.PHONY: image.uimage.bz2.initramfs image.uimage.bz2.initramfs.force
+image.uimage.bz2.initramfs.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN=.bz2 COMP_ROOTFS=
+ifeq ($(CONFIG_KERNEL_BZIP2),y)
+image.uimage.bz2.initramfs: image.uimage.bz2.initramfs.force
+endif
+
+.PHONY: image.uimage.gz.initramfs image.uimage.gz.initramfs.force
+image.uimage.gz.initramfs.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN=.gz COMP_ROOTFS=
+ifeq ($(CONFIG_KERNEL_GZIP),y)
+image.uimage.gz.initramfs: image.uimage.gz.initramfs.force
+endif
+
+.PHONY: image.uimage.lzma.initramfs image.uimage.lzma.initramfs.force
+image.uimage.lzma.initramfs.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN=.lzma COMP_ROOTFS=
+ifeq ($(CONFIG_KERNEL_LZMA),y)
+image.uimage.lzma.initramfs: image.uimage.lzma.initramfs.force
+endif
+
+.PHONY: image.uimage.initramfs.bz2 image.uimage.initramfs.bz2.force
+image.uimage.initramfs.bz2.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.bz2
+ifeq ($(CONFIG_RD_BZIP2),y)
+image.uimage.initramfs.bz2: image.uimage.initramfs.bz2.force
+endif
+
+.PHONY: image.uimage.initramfs.gz image.uimage.initramfs.gz.force
+image.uimage.initramfs.gz.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.gz
+ifeq ($(CONFIG_RD_GZIP),y)
+image.uimage.initramfs.gz: image.uimage.initramfs.gz.force
+endif
+
+.PHONY: image.uimage.initramfs.lzma image.uimage.initramfs.lzma.force
+image.uimage.initramfs.lzma.force:
+	$(MAKE) image.uimage.initramfs.force COMP_KERN= COMP_ROOTFS=.lzma
+ifeq ($(CONFIG_RD_LZMA),y)
+image.uimage.initramfs.lzma: image.uimage.initramfs.lzma.force
+endif
 
 .PHONY: image.uimage.romfs image.uimage.romfs.force
 image.uimage.romfs.force:
@@ -315,7 +362,10 @@ image.uimage.all:
 else
 ifeq ($(CONFIG_BLK_DEV_INITRD),y)
 image.uimage.all: \
-	image.uimage.initramfs
+	image.uimage.initramfs \
+	image.uimage.bz2.initramfs \
+	image.uimage.gz.initramfs \
+	image.uimage.lzma.initramfs
 endif
 endif
 
