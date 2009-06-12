@@ -23,7 +23,6 @@ static int test_init(void)
 		return -ENOMEM;
 
 	coreb_testarg_file->read_proc = &read_coreb_testarg;
-	coreb_testarg_file->owner = THIS_MODULE;
 
 	printk("Dual core test module inserted: set testarg = [%d]\n @ [%p]\n", *testarg, testarg);
 
