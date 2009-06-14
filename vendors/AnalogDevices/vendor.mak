@@ -82,7 +82,7 @@ endif
 
 .PHONY: image.rootfs.initramfs image.rootfs.initramfs.force
 image.rootfs.initramfs.force:
-	/bin/bash $(ROOTDIR)/$(LINUXDIR)/scripts/gen_initramfs_list.sh -u squash -g squash $(ROMFSDIR) > $(IMAGE_ROMFS_BASE).initramfs.contents
+	/bin/bash $(ROOTDIR)/$(LINUXSRC)/scripts/gen_initramfs_list.sh -u squash -g squash $(ROMFSDIR) > $(IMAGE_ROMFS_BASE).initramfs.contents
 	awk -f $(ROOTDIR)/tools/dev-table-to-cpio.awk $(DEVICE_TABLE) >> $(IMAGE_ROMFS_BASE).initramfs.contents
 	echo "slink /init /sbin/init 0755 0 0" >> $(IMAGE_ROMFS_BASE).initramfs.contents
 	$(ROOTDIR)/$(LINUXDIR)/usr/gen_init_cpio $(IMAGE_ROMFS_BASE).initramfs.contents > $(IMAGE_ROMFS_BASE).initramfs
@@ -274,7 +274,7 @@ endif
 image.uimage.initramfs.force:
 	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
 	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXDIR) vmImage$(COMP_KERN)
+	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) vmImage$(COMP_KERN)
 	cp $(LINUXBOOTDIR)/vmImage$(COMP_KERN) $(IMAGE_UIMAGE_BASE)$(COMP_KERN).initramfs$(COMP_ROOTFS)
 	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
 	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)

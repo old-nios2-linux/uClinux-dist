@@ -29,6 +29,7 @@ endif
 #
 
 LINUXDIR = $(CONFIG_LINUXDIR)
+LINUXSRC?= $(LINUXDIR)
 LIBCDIR  = $(CONFIG_LIBCDIR)
 ROOTDIR  = $(shell pwd)
 PATH	 := $(ROOTDIR)/tools:$(PATH)
@@ -76,6 +77,10 @@ MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) SUBARCH=$(SUBARCH) CROSS_COMPILE=$(KERNEL
 else
 MAKEARCH = $(MAKE) ARCH=$(ARCH)
 MAKEARCH_KERNEL = $(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE)
+endif
+ifneq ($(LINUXSRC),$(LINUXDIR))
+MAKEARCH += O=$(ROOTDIR)/$(LINUXDIR)
+MAKEARCH_KERNEL += O=$(ROOTDIR)/$(LINUXDIR)
 endif
 
 DIRS    = $(VENDOR_TOPDIRS) include lib include user
@@ -156,6 +161,7 @@ vendors/Kconfig:
 
 .PHONY: Kconfig
 Kconfig: vendors/Kconfig
+	@[ -d linux-2.6.x ] || mkdir linux-2.6.x
 	@chmod u+x config/mkconfig
 	config/mkconfig > Kconfig
 
@@ -226,7 +232,7 @@ oldconfig: Kconfig conf
 modules:
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(LINUXDIR)/modules ] || mkdir $(LINUXDIR)/modules; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) modules; \
+		$(MAKEARCH_KERNEL) -C $(LINUXSRC) modules; \
 	fi
 
 .PHONY: modules_install
@@ -236,7 +242,7 @@ modules_install:
 	if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(ROMFSDIR)/lib/modules ] || mkdir -p $(ROMFSDIR)/lib/modules; \
 		rm -f $(ROMFSDIR)/lib/modules/modules.dep; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=true modules_install; \
+		$(MAKEARCH_KERNEL) -C $(LINUXSRC) INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=true modules_install; \
 		rm -f $(ROMFSDIR)/lib/modules/*/build; \
 		rm -f $(ROMFSDIR)/lib/modules/*/source; \
 		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \
@@ -250,7 +256,7 @@ modules_install:
 	fi
 
 linux_%:
-	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) $(patsubst linux_%,%,$@)
+	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXSRC) $(patsubst linux_%,%,$@)
 modules_%:
 	[ ! -d modules ] || KCONFIG_NOTIMESTAMP=1 $(MAKEARCH) -C modules $(patsubst modules_%,%,$@)
 config_%: vendors/Kconfig
@@ -282,7 +288,7 @@ romfs.post:
 	$(MAKEARCH) -C vendors romfs.post
 	-find $(ROMFSDIR)/. -name CVS | xargs -r rm -rf
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
-		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1; \
+		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXSRC) $(LINUXTARGET) || exit 1; \
 	fi
 
 .PHONY: image
@@ -323,18 +329,18 @@ linux linux%_only:
 		exit 1 ; \
 	fi
 	rm -f $(LINUXDIR)/usr/initramfs_data.cpio
-	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXSRC) $(LINUXTARGET) || exit 1
 	if [ -f $(LINUXDIR)/vmlinux ]; then \
 		ln -f $(LINUXDIR)/vmlinux $(LINUXDIR)/linux ; \
 	fi
 
 .PHONY: sparse
 sparse:
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) C=1 $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) -C $(LINUXSRC) C=1 $(LINUXTARGET) || exit 1
 
 .PHONY: sparseall
 sparseall:
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) C=2 $(LINUXTARGET) || exit 1
+	$(MAKEARCH_KERNEL) -C $(LINUXSRC) C=2 $(LINUXTARGET) || exit 1
 
 .PHONY: subdirs
 subdirs: linux modules
@@ -345,7 +351,7 @@ dep:
 		echo "ERROR: you need to do a 'make config' first" ; \
 		exit 1 ; \
 	fi
-	$(MAKEARCH_KERNEL) -C $(LINUXDIR) dep
+	$(MAKEARCH_KERNEL) -C $(LINUXSRC) dep
 
 # This one removes all executables from the tree and forces their relinking
 .PHONY: relink
@@ -363,7 +369,7 @@ clean: modules_clean
 	find ./tools/ -maxdepth 1 -type l | xargs rm -f
 
 real_clean mrproper: clean
-	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXDIR) mrproper || :
+	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXSRC) mrproper || :
 	-$(MAKEARCH) -C config clean
 	[ -d uClibc ] && $(MAKEARCH) -C uClibc distclean || :
 	[ -d "$(RELDIR)" ] && $(MAKEARCH) -C $(RELDIR) clean || :
@@ -373,7 +379,7 @@ real_clean mrproper: clean
 	rm -rf staging
 
 distclean: mrproper
-	-$(MAKEARCH_KERNEL) -C $(LINUXDIR) distclean
+	-$(MAKEARCH_KERNEL) -C $(LINUXSRC) distclean
 	-rm -f user/tinylogin/applet_source_list user/tinylogin/config.h
 	-rm -f lib/uClibc lib/glibc
 	-$(MAKE) -C tools/ucfront clean
