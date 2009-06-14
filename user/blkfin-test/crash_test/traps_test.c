@@ -507,51 +507,13 @@ static long sysnum(pid_t pid)
 
 /* Standard helper functions */
 
-void list_tests(char *progname, int verify)
+void list_tests(char *progname)
 {
 	long test_num;
-	pid_t pid;
-	int _ret = 0;
-	FILE *seqstat_file;
-	unsigned int ex_actual;
-	char tests[10];
 
-	printf("#\texcause\ttest %i %s\n", verify, progname);
-	if (!verify) {
-		for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num)
-			printf("%li\t0x%02x\t%s\n", test_num, bad_funcs[test_num].excause, bad_funcs[test_num].name);
-	} else {
-		/* turn the equivilent to "dmesg -n 3" */
-		klogctl(8, NULL, 3);
-
-		for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num) {
-			printf("%li\t0x%02x", test_num, bad_funcs[test_num].excause);
-
-			/* Now, let's see what it really is */
-			pid = vfork();
-			if (pid == -1) {
-				fprintf(stderr, "vfork() failed");
-				exit(EXIT_FAILURE);
-			} else if (pid == 0) {
-				sprintf(tests, "%li", test_num);
-				_ret = execlp(progname, progname, "-d", "0", "-q", "-p", tests, NULL);
-				fprintf(stderr, "Execution of '%s' failed (%i): %s\n",
-					progname, _ret, strerror(errno));
-				_exit(_ret);
-			}
-			wait(NULL);
-			seqstat_file = fopen(seqstat_path, "r");
-			if (fscanf(seqstat_file, "%x", &ex_actual)) {
-				printf("(0x%02x)", (0x3F & ex_actual));
-				if ((0x3F & ex_actual) != bad_funcs[test_num].excause)
-					printf("!");
-			}
-			fclose(seqstat_file);
-			printf("\t%s\n", bad_funcs[test_num].name);
-		}
-		klogctl(8, NULL, 7);
-	}
-
+	printf("#\texcause\ttest %s\n", progname);
+	for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num)
+		printf("%li\t0x%02x\t%s\n", test_num, bad_funcs[test_num].excause, bad_funcs[test_num].name);
 }
 
 void usage(const char *errmsg, char *progname)
@@ -668,7 +630,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (list) {
-		list_tests(argv[0], verify);
+		list_tests(argv[0]);
 		exit(EXIT_SUCCESS);
 	}
 
