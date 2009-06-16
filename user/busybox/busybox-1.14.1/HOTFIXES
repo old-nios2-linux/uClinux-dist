@@ -2,3 +2,4 @@ busybox-1.14.1-ftpd.patch
 busybox-1.14.1-modprobe.patch
 busybox-1.14.1-httpd.patch
 busybox-1.14.1-telnetd.patch
+busybox-1.14.1-ash.patch
