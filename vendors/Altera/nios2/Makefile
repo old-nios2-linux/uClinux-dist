@@ -22,8 +22,7 @@ WEB_FILES-$(CONFIG_USER_BOA_SRC_BOA) += boa.conf index.html favicon.ico
 
 all::
 
-vendor_hwselect:
-	$(MAKEARCH_KERNEL)  -C $(ROOTDIR)/$(LINUXSRC) hwselect
+romfs.post:: romfs.shared.libs
 
 romfs::
 	mkdir -p $(ROMFSDIR)
