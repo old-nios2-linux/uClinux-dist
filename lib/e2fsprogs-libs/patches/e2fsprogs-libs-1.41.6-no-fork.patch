@@ -1,0 +1,22 @@
+--- e2fsprogs-libs-1.41.6/configure.in
++++ e2fsprogs-libs-1.41.6/configure.in
+@@ -701,7 +754,7 @@
+ 	[#include <sys/types.h>
+ 	 #include <sys/socket.h>])
+ dnl
+-AC_CHECK_FUNCS(chflags getrusage llseek lseek64 open64 fstat64 ftruncate64 getmntinfo strtoull strcasecmp srandom jrand48 fchown mallinfo fdatasync strnlen strptime strdup sysconf pathconf posix_memalign memalign valloc __secure_getenv prctl mmap utime setresuid setresgid usleep nanosleep getdtablesize getrlimit)
++AC_CHECK_FUNCS(chflags getrusage llseek lseek64 open64 fstat64 ftruncate64 getmntinfo strtoull strcasecmp srandom jrand48 fchown mallinfo fdatasync strnlen strptime strdup sysconf pathconf posix_memalign memalign valloc __secure_getenv prctl mmap utime setresuid setresgid usleep nanosleep getdtablesize getrlimit fork)
+ dnl
+ dnl Check to see if -lsocket is required (solaris) to make something
+ dnl that uses socket() to compile; this is needed for the UUID library
+--- e2fsprogs-libs-1.41.6/lib/uuid/gen_uuid.c
++++ e2fsprogs-libs-1.41.6/lib/uuid/gen_uuid.c
+@@ -435,7 +467,7 @@
+  */
+ static int get_uuid_via_daemon(int op, uuid_t out, int *num)
+ {
+-#if defined(USE_UUIDD) && defined(HAVE_SYS_UN_H)
++#if defined(USE_UUIDD) && defined(HAVE_SYS_UN_H) && defined(HAVE_FORK)
+ 	char op_buf[64];
+ 	int op_len;
+ 	int s;
