@@ -17,7 +17,11 @@ typedef struct {
 	} script_t;
 
 /* tag types */
+#ifdef BASHEXTENSIONS
+enum tag_t { HTML, RUN, INCLUDE, EVAL, COMMENT, IF, ELIF, ELSE, ENDIF, CASE, WHEN, OTHERWISE, ENDCASE, WHILE, ENDWHILE, UNTIL, ENDUNTIL, FOR, ENDFOR, UNLESS, ELUN, UNELSE, ENDUNLESS, NOOP };
+#else
 enum tag_t { HTML, RUN, INCLUDE, EVAL, COMMENT, NOOP };
+#endif
 
 
 /* token structure */

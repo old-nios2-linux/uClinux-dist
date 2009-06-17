@@ -4,8 +4,8 @@
  * Copyright (c) 2005-2007 Nathan Angelacos (nangel@users.sourceforge.net)
  *
  * This program is free software; you can redistribute it and/or modify it under
- * the terms of the GNU General Public License, version 2, as published by the Free
- * Software Foundation.
+ * the terms of the GNU General Public License, version 2, as published by the 
+ * Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -186,12 +186,12 @@ argc_argv (char *instr, argv_t ** argv, char *commentstr)
 							ALLOC_CHUNK));
 	    }
 
-	  if (argv_array == (char) NULL)
+	  if (argv_array ==  NULL)
 	    {
 	      return (-1);
 	    }
 	  argv_array[arg_count - 1].string = instr;
-	  argv_array[arg_count].quoted = (char) NULL;
+	  argv_array[arg_count].quoted = 0;
 	  state = WORDSPACE;
 	}
 

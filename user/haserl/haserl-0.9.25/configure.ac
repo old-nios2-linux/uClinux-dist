@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT([haserl],[0.9.22],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
+AC_INIT([haserl],[0.9.25],[Nathan Angelacos <nangel@users.sourceforge.net>],[haserl])
 AM_INIT_AUTOMAKE([haserl],[$PACKAGE_VERSION])
 
 # Checks for programs.
@@ -37,6 +37,9 @@ dnl Checks for lua
 
 luashell=false
 luacshell=false
+ac_report_have_lua=disabled
+ac_report_bash_extensions=disabled
+
 
 AC_ARG_WITH(lua, 
 	AC_HELP_STRING([--with-lua[[=DIR]]], [use lua in DIR]),
@@ -130,21 +133,23 @@ if test x$ac_report_have_lua = xenabled -a x$luashell = xfalse -a x$luacshell = 
 fi
 
 
-# What prefix should we use
-AC_ARG_ENABLE(variable-prefix,
-	[  --enable-variable-prefix=prefix - enable prefix to add to all user-supplied variables
-		  (default is FORM_)])
+# Do we include scott's bash extensions
+AC_ARG_ENABLE(bash-extensions,
+	AC_HELP_STRING([--enable-bash-extensions], [Includes bash extensions to the haserl script language (default is no)]),
+[case "${enableval}" in
+  yes) bashextensions=true 
+	ac_report_bash_extensions=enabled 
+	;;
+  no)  bashextensions=false 
+	ac_report_bash_extensions=disabled
+	;;
+  *)   AC_MSG_ERROR(bad value ${enableval} for --enable-bash-extensions) ;;
+esac], [bashextensions=false])
+AM_CONDITIONAL(BASHEXTENSIONS, test x$bashextensions = xtrue)
+if test x$bashextensions = xtrue; then
+	AC_DEFINE(BASHEXTENSIONS, , [Include bash extensions])
+fi
 
-# Handle "--disable-variable-prefix"
-case $enable_variable_prefix in 
-	no )	enable_variable_prefix=
-		;;
-	"" )	enable_variable_prefix="FORM_"
-		;;
-	esac
-
-AC_DEFINE_UNQUOTED( [HASERL_VAR_PREFIX], "$enable_variable_prefix", 
-	[prefix for user supplied data])
 
 # What subshell should we use
 AC_ARG_ENABLE(subshell,
@@ -166,6 +171,7 @@ CFLAGS="$CFLAGS -Wall"
 AC_CONFIG_FILES([Makefile
 		src/Makefile
 		doc/Makefile
+		tests/Makefile
 		])
 
 
@@ -178,6 +184,7 @@ AC_MSG_RESULT([
 ** Configuration summary for $PACKAGE $VERSION:
 
 	Building haserl with with lua $ac_report_have_lua 
+	Building haserl with with bash-extensions $ac_report_bash_extensions
 	libs: $LIBS
 ])
 

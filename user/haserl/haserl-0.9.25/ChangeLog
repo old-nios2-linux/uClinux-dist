@@ -1,3 +1,42 @@
+2008-12-16
+	0.9.25
+	*	Somehow version control failed, and the -d debug short
+		option reverted to -D again.  fixed.
+	* 	haserl.c - "command-line" handling was broken on OSX and BSD
+		fixed. (Mark Blythe)
+	*	haserl.c - fix bug where CONTENT_LENGTH=0 would hang haserl
+		(bug tracker bug #1959379)
+		text	   data	    bss	    dec	    hex	filename
+ 		18949	    820	    172	  19941	   4de5	haserl
+2008-04-14
+	0.9.24
+	*	haserl.c - myputenv caused a segfault when a variable without 
+		an = (assignment) was passed.  (Scott)
+	*	doc/haserl.1 - Misc typos fixed (Scott)
+	*	scott's bash-extensions are included if configured with 
+		--enable-bash-extensions
+	*	running haserl with no args now tells you if lua or 
+		the bash extensions are enabled.
+	* 	configure.ac - FORM_ now hardcoded
+	*	tests/* - beginnings of unit tests (make check)
+	*	haserl.c - varibles now stored as FORM_ + GET_, POST_, COOKIE_
+		(scott) - WIP - need to clean up the putenv so that only one
+		copy is saved in the host, and the child gets all the 
+		duplicates
+   		text	   data	    bss	    dec	    hex	filename
+  		18519	    824	    172	  19515	   4c3b	src/haserl
+
+2008-03-22
+	0.9.23
+	*	haserl.c - short option for debug id -d (was incorrectly -D)
+	* 	haserl.c - remove use of legacy "index" clib function.
+	*	haserl.c - myputenv makes a newline delimited "array" out
+		of variables that end in [].  (php-style for multi-selects)
+	 	Lua variables will have same behavior - they are not treated
+		as true arrays yet. (WIP - need to handle the env variables 
+		as abstracts until subshell startup for this to work)
+		text	   data	    bss	    dec	    hex	filename
+		18237       820     128   19185    4af1 src/haserl
 2008-01-28
 	0.9.22
 	*	h_bash.c - close the input side of the pipe, so that if the
@@ -9,7 +48,8 @@
 		properly at the end of a request [guess which clients are
 		MiStaken?])  (patch by Diego Santa Cruz)
 	*	Allow "-" to be used in a field identifier (e.g. FORM["-foo"])
-
+   		text	   data	    bss	    dec	    hex	filename
+     		17813	    812	    128	  18753	   4941	src/haserl
 2007-11-22
 	0.9.21
 	*	haserl.c - fixed a stupid test for strlen that caused CGI post

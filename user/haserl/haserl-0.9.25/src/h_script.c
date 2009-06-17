@@ -37,7 +37,13 @@
 #include "h_bash.h"
 #include "haserl.h"
 
-/* HTML, RUN, INCLUDE, EVAL, COMMENT, NOOP }; */
+#ifdef BASHEXTENSIONS
+/* HTML, RUN, INCLUDE, EVAL, COMMENT, IF, ELIF, ELSE, ENDIF, CASE, WHEN,
+   OTHERWISE, ENDCASE, WHILE, ENDWHILE, UNTIL, ENDUNTIL, FOR, ENDFOR,
+   UNLESS, ELUN, UNELSE, ENDUNLESS, NOOP }; */
+#else
+/* HTML, RUN, INCLUDE, EVAL, COMMENT, NOOP */
+#endif
 
 const char *g_tag[] = {
   "",
@@ -45,6 +51,26 @@ const char *g_tag[] = {
   "in",
   "=",
   "#",
+#ifdef BASHEXTENSIONS
+  "if",
+  "elif",
+  "else",
+  "endif",
+  "case",
+  "when",
+  "otherwise",
+  "endcase",
+  "while",
+  "endwhile",
+  "until",
+  "enduntil",
+  "for",
+  "endfor",
+  "unless",
+  "elun",
+  "unelse",
+  "endunless",
+#endif
   ""
 };
 
@@ -340,12 +366,141 @@ preprocess_token_list (token_t * tokenlist)
 	      newscript = load_script (me->buf, me->script);
 	      build_token_list (newscript, me);
 	    }
-	  if (memcmp (cp, g_tag[EVAL], 1) == 0)
+	  else if (memcmp (cp, g_tag[EVAL], 1) == 0)
+
 	    {
 	      me->tag = EVAL;
 	      me->buf = find_whitespace (me->buf);
 	      me->len = strlen (me->buf);
 	    }
+#ifdef BASHEXTENSIONS
+	  else if (memcmp (cp, g_tag[IF], 2) == 0)
+	    {
+	      me->tag = IF;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ELIF], 4) == 0)
+	    {
+	      me->tag = ELIF;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ELSE], 4) == 0)
+	    {
+	      me->tag = ELSE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDIF], 5) == 0)
+	    {
+	      me->tag = ENDIF;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[CASE], 4) == 0)
+	    {
+	      me->tag = CASE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[WHEN], 4) == 0)
+	    {
+	      me->tag = WHEN;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[OTHERWISE], 9) == 0)
+	    {
+	      me->tag = OTHERWISE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDCASE], 7) == 0)
+	    {
+	      me->tag = ENDCASE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[WHILE], 5) == 0)
+	    {
+	      me->tag = WHILE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDWHILE], 8) == 0)
+	    {
+	      me->tag = ENDWHILE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[UNTIL], 5) == 0)
+	    {
+	      me->tag = UNTIL;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDUNTIL], 8) == 0)
+	    {
+	      me->tag = ENDUNTIL;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[FOR], 3) == 0)
+	    {
+	      me->tag = FOR;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDFOR], 6) == 0)
+	    {
+	      me->tag = ENDFOR;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[UNLESS], 6) == 0)
+	    {
+	      me->tag = UNLESS;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ELUN], 4) == 0)
+	    {
+	      me->tag = ELUN;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[UNELSE], 6) == 0)
+	    {
+	      me->tag = UNELSE;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+	  else if (memcmp (cp, g_tag[ENDUNLESS], 9) == 0)
+	    {
+	      me->tag = ENDUNLESS;
+	      me->buf = find_whitespace (me->buf);
+	      me->buf = skip_whitespace (me->buf);
+	      me->len = strlen (me->buf);
+	    }
+#endif /* BASHEXTENSIONS */
 	  if (isspace (*cp))
 	    {
 	      me->tag = RUN;
@@ -390,6 +545,62 @@ process_token_list (buffer_t * buf, token_t * token)
 	case EVAL:
 	  shell_eval (buf, token->buf, token->len);
 	  break;
+#ifdef BASHEXTENSIONS
+	case IF:
+	  shell_if (buf, token->buf, token->len);
+	  break;
+	case ELIF:
+	  shell_elif (buf, token->buf, token->len);
+	  break;
+	case ELSE:
+	  shell_else (buf, token->buf, token->len);
+	  break;
+	case ENDIF:
+	  shell_endif (buf, token->buf, token->len);
+	  break;
+	case CASE:
+	  shell_case (buf, token->buf, token->len);
+	  break;
+	case WHEN:
+	  shell_when (buf, token->buf, token->len);
+	  break;
+	case OTHERWISE:
+	  shell_otherwise (buf, token->buf, token->len);
+	  break;
+	case ENDCASE:
+	  shell_endcase (buf, token->buf, token->len);
+	  break;
+	case WHILE:
+	  shell_while (buf, token->buf, token->len);
+	  break;
+	case ENDWHILE:
+	  shell_endwhile (buf, token->buf, token->len);
+	  break;
+	case UNTIL:
+	  shell_until (buf, token->buf, token->len);
+	  break;
+	case ENDUNTIL:
+	  shell_enduntil (buf, token->buf, token->len);
+	  break;
+	case FOR:
+	  shell_for (buf, token->buf, token->len);
+	  break;
+	case ENDFOR:
+	  shell_endfor (buf, token->buf, token->len);
+	  break;
+	case UNLESS:
+	  shell_unless (buf, token->buf, token->len);
+	  break;
+	case ELUN:
+	  shell_elun (buf, token->buf, token->len);
+	  break;
+	case UNELSE:
+	  shell_unelse (buf, token->buf, token->len);
+	  break;
+	case ENDUNLESS:
+	  shell_endunless (buf, token->buf, token->len);
+	  break;
+#endif
 	default:
 	  break;
 	}

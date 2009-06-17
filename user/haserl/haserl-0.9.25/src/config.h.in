@@ -1,7 +1,7 @@
 /* src/config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* prefix for user supplied data */
-#undef HASERL_VAR_PREFIX
+/* Include bash extensions */
+#undef BASHEXTENSIONS
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H

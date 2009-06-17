@@ -166,6 +166,7 @@ mime_var_putenv (list_t * env, mime_var_t * obj)
       buffer_add (&buf, (char *) obj->value.data,
 		  strlen ((char *) obj->value.data) + 1);
       myputenv (env, (char *) buf.data, global.var_prefix);
+      myputenv (env, (char *) buf.data, global.post_prefix);
       buffer_reset (&buf);
     }
   if (obj->filename)
@@ -174,6 +175,7 @@ mime_var_putenv (list_t * env, mime_var_t * obj)
       buffer_add (&buf, "_name=", 6);
       buffer_add (&buf, obj->filename, strlen (obj->filename) + 1);
       myputenv (env, (char *) buf.data, global.var_prefix);
+      myputenv (env, (char *) buf.data, global.post_prefix);
       buffer_reset (&buf);
     }
   buffer_destroy (&buf);
@@ -189,11 +191,7 @@ mime_exec (mime_var_t * obj, char *fifo)
   char *c;
   int fh;
 
-#ifdef EMBED
-  pid = vfork ();
-#else
   pid = fork ();
-#endif
   if (pid == -1)
     {
       empty_stdin ();
@@ -385,8 +383,9 @@ rfc2388_handler (list_t * env)
   memcpy (boundary + 4, str + i, strlen (str + i) + 1);
   if ((i > 0) && (str[i - 1] == '"'))
     {
-    while ((boundary[i]) && (boundary[i] != '"')) i++;
-    boundary[i] = '\0';
+      while ((boundary[i]) && (boundary[i] != '"'))
+	i++;
+      boundary[i] = '\0';
     }
 
   /* Allow 2MB content, unless they have a global upload set */
@@ -396,9 +395,9 @@ rfc2388_handler (list_t * env)
   /* initialize a 128K sliding buffer */
   s_buffer_init (&sbuf, 1024 * 128);
   sbuf.fh = STDIN;
-  if (getenv("CONTENT_LENGTH"))
+  if (getenv ("CONTENT_LENGTH"))
     {
-      sbuf.maxread = strtoul(getenv("CONTENT_LENGTH"), NULL, 10);
+      sbuf.maxread = strtoul (getenv ("CONTENT_LENGTH"), NULL, 10);
     }
 
   /* initialize the buffer, and make sure it doesn't point to null */
