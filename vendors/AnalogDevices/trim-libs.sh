@@ -7,7 +7,14 @@ has() { [[ " ${*:2} " == *" $1 "* ]] ; }
 v=
 vecho() { [ -z "$v" ] || echo "$*" ; }
 
-[ -n "${ROMFSDIR}" ] || exit 1
+if [ -z "${ROMFSDIR}" ] ; then
+	if [ -d "$1" ] ; then
+		ROMFSDIR=$1
+	else
+		echo "ERROR: no dir specified (arg or \$ROMFSDIR)"
+		exit 1
+	fi
+fi
 
 if ! scanelf -V > /dev/null ; then
 	echo "ERROR: you do not have pax-utils installed"
@@ -16,6 +23,10 @@ fi
 
 cd "${ROMFSDIR}"
 libs=$(scanelf -F'%n#f' -qR bin sbin usr | sed 's:[, ]:\n:g' | sort -u)
+if [ -z "$libs" ] ; then
+	# all FLAT system, so leave libs alone
+	exit 0
+fi
 cd lib
 
 addlibs() {
