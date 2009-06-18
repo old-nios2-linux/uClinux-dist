@@ -268,7 +268,11 @@ image.zimage.initramfs.force:
 	cp $(IMAGE_ROMFS_BASE).initramfs$(COMP_ROOTFS) $(ROOTDIR)/$(LINUXDIR)/usr/initramfs_data.cpio
 	CPPFLAGS="" CFLAGS="" LDFLAGS="" \
 	$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(ROOTDIR)/$(LINUXSRC) zImage
-	cp $(LINUXBOOTDIR)/zImage $(IMAGEDIR)/zImage.initramfs$(COMP_ROOTFS)
+	cp $(LINUXBOOTDIR)/zImage $(IMAGEDIR)/zImage$(COMP_KERN).initramfs$(COMP_ROOTFS)
+	cp $(ROOTDIR)/$(LINUXDIR)/System.map $(IMAGEDIR)/System.map$(COMP_KERN).initramfs$(COMP_ROOTFS)
+	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	$(STRIP) -g $(IMAGE_KERNEL_BASE).initramfs$(COMP_ROOTFS)
+	$(STRIP) -g $(IMAGEDIR)/zImage$(COMP_KERN).initramfs$(COMP_ROOTFS)
 
 .PHONY: image.zimage.initramfs.bz2 image.zimage.initramfs.bz2.force
 image.zimage.initramfs.bz2.force:
