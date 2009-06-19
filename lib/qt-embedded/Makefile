@@ -12,7 +12,7 @@ CONF_SHARED_OPT = -static
 CONF_XPLATFORM  = qws/linux-bfin-flat-g++
 HAVE_SHARED := n
 endif
-CONF_ARCH = bfin
+CONF_ARCH = $(MACHINE)
 
 CONFIG_QT_DEPTH ?= 8,16,24,32
 
