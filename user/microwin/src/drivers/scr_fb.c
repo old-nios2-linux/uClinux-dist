@@ -262,7 +262,7 @@ fb_open(PSD psd)
 		EPRINTF("Don;t know how to mmap %s with accel %d\n", env, fb_fix.accel);
 		goto fail;
         }
-#elif defined(BLACKFIN)
+#elif defined(__bfin__)
 	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_FILE,fb,0);
 #else
 	psd->addr = mmap(NULL, psd->size, PROT_READ|PROT_WRITE,MAP_SHARED,fb,0);
