@@ -1,3 +1,4 @@
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,65 +74,50 @@ int main(int argc, char *argv[])
 	int real_wd_count = 0;
 	int wd_keep_alive = wd_count / 2;
 	struct sched_param sp = { .sched_priority = 1, };
-	struct sigaction sa;
 	int background = 1;
-	int ac = argc;
-	char **av = argv;
+	int opt;
 
-	memset(&sa, 0, sizeof(sa));
+	while ((opt = getopt(argc, argv, "fhk:p:sw:")) != -1) {
+		switch (opt) {
+			case 'f':
+				background = 0;
+				break;
 
-	/* TODO: rewrite this to use getopt() */
-	while (--ac) {
-		++av;
-		if (strcmp(*av, "-w") == 0) {
-			if (--ac) {
-				wd_count = atoi(*++av);
-				printf("-w switch: set watchdog counter to %d sec.\n", wd_count);
-			} else {
-				fprintf(stderr, "-w switch must be followed to seconds of watchdog counter.\n");
-				fflush(stderr);
+			case 'h':
+				usage(argv);
+				return 0;
+
+			case 'k':
+				wd_keep_alive = atoi(optarg);
+				break;
+
+			case 'p':
+				sp.sched_priority = atoi(optarg);
+				break;
+
+			case 's': {
+				struct sigaction sa;
+				memset(&sa, 0, sizeof(sa));
+
+				sa.sa_handler = safe_exit;
+				sigaction(SIGHUP, &sa, NULL);
+				sigaction(SIGINT, &sa, NULL);
+				sigaction(SIGTERM, &sa, NULL);
 				break;
 			}
-		} else if (strcmp(*av, "-k") == 0) {
-			if (--ac) {
-				wd_keep_alive = atoi(*++av);
-				printf("-k switch: set the heartbeat of keepalives in %d sec.\n", wd_keep_alive);
-			} else {
-				fprintf(stderr, "-k switch must be followed to seconds of heartbeat of keepalives.\n");
-				fflush(stderr);
+
+			case 'w':
+				wd_count = atoi(optarg);
 				break;
-			}
-		} else if (strcmp(*av, "-s") == 0) {
-			printf("-s switch: safe exit (CTRL-C and kill).\n");
-			sa.sa_handler = safe_exit;
-			sigaction(SIGHUP, &sa, NULL);
-			sigaction(SIGINT, &sa, NULL);
-			sigaction(SIGTERM, &sa, NULL);
-		} else if (strcmp(*av, "-p") == 0) {
-			if (--ac) {
-				sp.sched_priority = atoi(*++av);
-			} else {
-				fprintf(stderr, "-p switch must be followed by priority value\n");
-				fflush(stderr);
-				break;
-			}
-		} else if (strcmp(*av, "-f") == 0) {
-			background = 0;
-			printf("Start in foreground mode.\n");
-		} else if ((strcmp(*av, "-h") == 0) || (strcmp(*av, "--help") == 0)) {
-			usage(argv);
-			exit(0);
-		} else {
-			fprintf(stderr, "Unrecognized option \"%s\".\n", *av);
-			usage(argv);
-			exit(1);
+
+			default:
+				/* getopt() will output an error msg for us */
+				return 1;
 		}
 	}
 
-	if (background) {
-		printf("Start in daemon mode.\n");
+	if (background)
 		daemon(0, 0);
-	}
 
 	if (sched_setscheduler(0, SCHED_RR, &sp))
 		perror("sched_setscheduler(SCHED_RR) failed");
