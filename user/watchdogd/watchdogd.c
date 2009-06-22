@@ -47,53 +47,6 @@ int get_wd_counter()
 	return count;
 }
 
-#define FOREGROUND_FLAG "-f"
-
-#define _PATH_DEVNULL "/dev/null"
-
-void vfork_daemon_rexec(int nochdir, int noclose, int argc, char **argv, char *foreground_opt)
-{
-	int f;
-	char **vfork_args;
-	int a = 0;
-
-	setsid();
-
-	if (!nochdir)
-		chdir("/");
-
-	if (!noclose && (f = open(_PATH_DEVNULL, O_RDWR, 0)) != -1) {
-		dup2(f, STDIN_FILENO);
-		dup2(f, STDOUT_FILENO);
-		dup2(f, STDERR_FILENO);
-		if (f > 2)
-			close(f);
-	}
-
-	vfork_args = malloc(sizeof(char *) * (argc + 2));
-	while (*argv) {
-		vfork_args[a++] = *argv;
-		argv++;
-	}
-	vfork_args[a++] = foreground_opt;
-	vfork_args[a++] = NULL;
-	switch (vfork()) {
-	case 0:		/* child */
-		/* Make certain we are not a session leader, or else we
-		 * might reacquire a controlling terminal */
-		if (vfork())
-			_exit(0);
-		execvp(vfork_args[0], vfork_args);
-		perror("execv");
-		exit(-1);
-	case -1:		/* error */
-		perror("vfork");
-		exit(-1);
-	default:		/* parent */
-		exit(0);
-	}
-}
-
 static void usage(char *argv[])
 {
 	printf(
@@ -151,7 +104,7 @@ int main(int argc, char *argv[])
 			sigaction(SIGHUP, &sa, NULL);
 			sigaction(SIGINT, &sa, NULL);
 			sigaction(SIGTERM, &sa, NULL);
-		} else if (strcmp(*av, FOREGROUND_FLAG) == 0) {
+		} else if (strcmp(*av, "-f") == 0) {
 			background = 0;
 			printf("Start in foreground mode.\n");
 		} else if ((strcmp(*av, "-h") == 0) || (strcmp(*av, "--help") == 0)) {
@@ -166,7 +119,7 @@ int main(int argc, char *argv[])
 
 	if (background) {
 		printf("Start in daemon mode.\n");
-		vfork_daemon_rexec(1, 0, argc, argv, FOREGROUND_FLAG);
+		daemon(0, 0);
 	}
 
 	fd = open("/dev/watchdog", O_WRONLY);
