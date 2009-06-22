@@ -8,6 +8,7 @@
 #include <linux/watchdog.h>
 #include <signal.h>
 #include <paths.h>
+#include <sched.h>
 
 int fd = -1;
 
@@ -50,13 +51,14 @@ int get_wd_counter()
 static void usage(char *argv[])
 {
 	printf(
-		"%s [-f] [-w <sec>] [-k <sec>] [-s] [-h|--help]\n"
+		"%s [-f] [-w <sec>] [-k <sec>] [-p <prio>] [-s] [-h|--help]\n"
 		"A simple watchdog daemon that send WDIOC_KEEPALIVE ioctl every some\n"
 		"\"heartbeat of keepalives\" seconds.\n"
 		"Options:\n"
 		"\t-f        start in foreground (background is default)\n"
 		"\t-w <sec>  set the watchdog counter to <sec> in seconds\n"
 		"\t-k <sec>  set the \"heartbeat of keepalives\" to <sec> in seconds\n"
+		"\t-p <prio> set the schedule priority\n"
 		"\t-s        safe exit (disable Watchdog) for CTRL-c and kill -SIGTERM signals\n"
 		"\t--help|-h write this help message and exit\n",
 		argv[0]);
@@ -70,6 +72,7 @@ int main(int argc, char *argv[])
 	int wd_count = 20;
 	int real_wd_count = 0;
 	int wd_keep_alive = wd_count / 2;
+	struct sched_param sp = { .sched_priority = 1, };
 	struct sigaction sa;
 	int background = 1;
 	int ac = argc;
@@ -104,6 +107,14 @@ int main(int argc, char *argv[])
 			sigaction(SIGHUP, &sa, NULL);
 			sigaction(SIGINT, &sa, NULL);
 			sigaction(SIGTERM, &sa, NULL);
+		} else if (strcmp(*av, "-p") == 0) {
+			if (--ac) {
+				sp.sched_priority = atoi(*++av);
+			} else {
+				fprintf(stderr, "-p switch must be followed by priority value\n");
+				fflush(stderr);
+				break;
+			}
 		} else if (strcmp(*av, "-f") == 0) {
 			background = 0;
 			printf("Start in foreground mode.\n");
@@ -121,6 +132,9 @@ int main(int argc, char *argv[])
 		printf("Start in daemon mode.\n");
 		daemon(0, 0);
 	}
+
+	if (sched_setscheduler(0, SCHED_RR, &sp))
+		perror("sched_setscheduler(SCHED_RR) failed");
 
 	fd = open("/dev/watchdog", O_WRONLY);
 
