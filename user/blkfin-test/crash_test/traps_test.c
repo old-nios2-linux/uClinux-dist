@@ -624,7 +624,7 @@ int main(int argc, char *argv[])
 		seqstat_file = fopen(seqstat_path, "r");
 		if (seqstat_file == NULL) {
 			printf("couldn't open '%s' for reading\n", seqstat_path);
-			goto bad_exit;
+			return EXIT_FAILURE;
 		}
 		fclose(seqstat_file);
 	}
@@ -694,7 +694,7 @@ int main(int argc, char *argv[])
 		/* should get killed ... */
 		if (repeat == 1 && start_test == end_test && parent ) {
 			(*bad_funcs[test].func)();
-			goto bad_exit;
+			return EXIT_FAILURE;
 		}
 
 		sprintf(test_num, "%li", test);
@@ -709,7 +709,7 @@ int main(int argc, char *argv[])
 			pid = vfork();
 			if (pid == -1) {
 				fprintf(stderr, "vfork() failed");
-				goto bad_exit;
+				return EXIT_FAILURE;
 			} else if (pid == 0) {
 				if (trace && sig_expect != SIGTRAP)
 					xptrace(PTRACE_TRACEME, 0, NULL, NULL);
@@ -818,8 +818,4 @@ int main(int argc, char *argv[])
 	printf("\n%i/%i tests passed\n", pass_tests, (int)(end_test - start_test) + 1);
 
 	exit((pass_tests == (int)(end_test - start_test) + 1) ? EXIT_SUCCESS : EXIT_FAILURE);
-
-bad_exit:
-	/* should never actually make it here ... */
-	return EXIT_FAILURE;
 }
