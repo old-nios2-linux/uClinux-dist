@@ -50,7 +50,7 @@ asm("__bad_return_address: rets = R0; nop; nop; nop; nop; rts;\n");
 void _bad_stack_set(unsigned long rets);
 asm("__bad_stack_set: SP = R0; FP = R0; nop; nop; rts;\n");
 
-#define bad_stack_push(addr)	asm volatile ("R1 = SP ; SP = %0; [SP] = %0; SP = R1" :  : "r"(addr) : "R1" );
+#define bad_stack_push(addr)	asm volatile ("R1 = SP ; SP = %0; [SP] = %0; SP = R1" :  : "r"(addr) : "R1");
 
 /*
  * These tests should test all things possible that can create an
@@ -202,7 +202,7 @@ void data_write_miss(void)
 
 void stack_miss(void)
 {
-        _bad_stack_set(0x87654320);
+	_bad_stack_set(0x87654320);
 }
 
 void stack_push_miss(void)
@@ -226,7 +226,7 @@ void null_pointer_read(void)
 
 void stack_zero(void)
 {
-        _bad_stack_set(0x0);
+	_bad_stack_set(0x0);
 }
 
 void stack_push_zero(void)
@@ -245,7 +245,7 @@ void instruction_fetch_odd_address(void)
 	(*foo)();
 }
 
-/* Instruction fetch CPLB protection violation -       EXCAUSE 0x2B 
+/* Instruction fetch CPLB protection violation -       EXCAUSE 0x2B
  * with mpu on, these return 2B, otherwise
  */
 void bad_return_scratchpad(void)
@@ -335,7 +335,7 @@ void l1_instruction_write(void)
 
 void stack_instruction(void)
 {
-        _bad_stack_set(0xffa10000);
+	_bad_stack_set(0xffa10000);
 }
 
 void l1_dataA_jump(void)
@@ -387,7 +387,7 @@ void l1_non_existant_write_syscall(void)
 
 void stack_l1_non_existant(void)
 {
-        _bad_stack_set(0xFFAFFF00);
+	_bad_stack_set(0xFFAFFF00);
 }
 
 void stack_push_l1_non_existant(void)
@@ -568,8 +568,7 @@ int main(int argc, char *argv[])
 	}
 
 	while ((c = getopt (argc, argv, "1c:d:ehlpqtv")) != -1)
-		switch (c)
-		{
+		switch (c) {
 		case '1':
 			start_test = -1;
 			break;
@@ -666,7 +665,7 @@ int main(int argc, char *argv[])
 		parent = 0;
 	}
 
-	if (parent && repeat > 1 ){
+	if (parent && repeat > 1) {
 		printf("Ignoring '-p' option, since count > 1\n");
 		parent = 0;
 	}
@@ -692,7 +691,7 @@ int main(int argc, char *argv[])
 		nanosleep(&delay, NULL);
 
 		/* should get killed ... */
-		if (repeat == 1 && start_test == end_test && parent ) {
+		if (repeat == 1 && start_test == end_test && parent) {
 			(*bad_funcs[test].func)();
 			return EXIT_FAILURE;
 		}
@@ -812,7 +811,7 @@ int main(int argc, char *argv[])
 				sig_actual, str_actual);
 		else
 			printf("PASS (test failed %i times, as expected by signal %i: %s)\n",
-			pass_count, sig_actual, str_actual);
+				pass_count, sig_actual, str_actual);
 	}
 
 	printf("\n%i/%i tests passed\n", pass_tests, (int)(end_test - start_test) + 1);
