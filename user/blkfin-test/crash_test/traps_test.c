@@ -675,6 +675,10 @@ int main(int argc, char *argv[])
 	if (!verbose && !parent)
 		klogctl(8, NULL, 3);
 
+	/* try and get output asap */
+	setbuf(stdout, NULL);
+	setbuf(stderr, NULL);
+
 	for (test = start_test; test <= end_test ; ++test) {
 		unsigned int ex_actual = 0, sig_actual=0, count, pass_count = 0;
 		char *str_actual;
@@ -683,10 +687,8 @@ int main(int argc, char *argv[])
 		int sig_expect = bad_funcs[test].kill_sig;
 		int ex_expect = bad_funcs[test].excause;
 
-		if (!quiet) {
+		if (!quiet)
 			printf("\nRunning test %li for exception 0x%02x: %s\n... ", test, ex_expect, bad_funcs[test].name);
-			fflush(stdout);
-		}
 		nanosleep(&delay, NULL);
 
 		/* should get killed ... */
