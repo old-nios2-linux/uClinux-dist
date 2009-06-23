@@ -19,6 +19,7 @@
 #define _GNU_SOURCE
 #endif
 #include <errno.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -328,26 +329,26 @@ void supervisor_resource_mmr_write(void)
 	*i = 0;
 }
 
-void supervisor_read_all_sighdl(int sig)
+sigjmp_buf supervisor_brute_buf;
+void supervisor_brute_sighdl(int sig)
 {
 	switch (sig) {
 		case SIGBUS:
 		case SIGILL:
-			_exit(11);
+			siglongjmp(supervisor_brute_buf, 1);
 		default:
 			warn("signal %i is not what we wanted", sig);
 			_exit(10);
 	}
 }
-void supervisor_read_all(int size)
+void supervisor_brute_doit(bool read, int size)
 {
-	void *mmr = (void *)SYSMMR_BASE;
-	volatile uint8_t *mmr8 = mmr;
-	volatile uint16_t *mmr16 = mmr;
-	volatile uint32_t *mmr32 = mmr;
+	int ret;
+	unsigned long mmr = SYSMMR_BASE;
 
-	unsigned long i, max;
-	int status;
+	signal(SIGBUS, supervisor_brute_sighdl);
+	signal(SIGILL, supervisor_brute_sighdl);
+	setbuf(stdout, NULL);
 
 	switch (size) {
 		case 8:	/* bits */
@@ -359,44 +360,46 @@ void supervisor_read_all(int size)
 		default:
 			err("invalid size %i", size);
 	}
-	max = 0x400000 / size;
 
-	signal(SIGBUS, supervisor_read_all_sighdl);
-	signal(SIGILL, supervisor_read_all_sighdl);
-	setbuf(stdout, NULL);
-
-	for (i = 0; i < max; ++i) {
-		if ((i % 0x100) == 0)
-			printf("%li ", i / 0x100);
-
-		if (vfork() == 0) {
-			switch (size) {
-				case 1: status = mmr8[i];  break;
-				case 2: status = mmr16[i]; break;
-				case 4: status = mmr32[i]; break;
-			}
-			_exit(5 + !!status);
-		}
-		wait(&status);
-		if (!WIFEXITED(status))
-			err("child did not exit properly");
-		else if (WEXITSTATUS(status) != 11)
-			err("child exited with %i (wanted 11)", WEXITSTATUS(status));
+ jmp_again:
+	ret = sigsetjmp(supervisor_brute_buf, 1);
+	if (ret) {
+		/* just been restored */
+		mmr += size;
+		goto jmp_again;
 	}
+	if (mmr == 0)
+		return;
+
+	ret = mmr - SYSMMR_BASE;
+	if (ret % 0x1000 == 0)
+		printf("%i ", ret / 0x1000);
+
+	if (read) {
+		switch (size) {
+			case 1: ret = *(volatile uint8_t  *)mmr; break;
+			case 2: ret = *(volatile uint16_t *)mmr; break;
+			case 4: ret = *(volatile uint32_t *)mmr; break;
+		}
+	} else {
+		switch (size) {
+			case 1: *(volatile uint8_t  *)mmr = ret; break;
+			case 2: *(volatile uint16_t *)mmr = ret; break;
+			case 4: *(volatile uint32_t *)mmr = ret; break;
+		}
+	}
+	/* should never be reached ... */
+	err("brute test failed (ret = %i)", ret);
 }
 void supervisor_brute_force(const char *test)
 {
-	bool read;
-
 	switch (*test) {
-		case 'r': read = true;  break;
-		case 'w': read = false; break;
+		case 'r':
+		case 'w': break;
 		default:  err("invalid test '%c' !~ '[rw]'", *test);
 	}
 
-	++test;
-	if (read)
-		supervisor_read_all(atoi(test));
+	supervisor_brute_doit(*test == 'r', atoi(test + 1));
 
 	exit(EXIT_SUCCESS);
 }
