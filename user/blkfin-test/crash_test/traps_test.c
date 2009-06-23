@@ -335,7 +335,8 @@ void supervisor_read_all_sighdl(int sig)
 		case SIGILL:
 			_exit(11);
 		default:
-			err("signal %i is not what we wanted", sig);
+			warn("signal %i is not what we wanted", sig);
+			_exit(10);
 	}
 }
 void supervisor_read_all(int size)
@@ -345,16 +346,28 @@ void supervisor_read_all(int size)
 	volatile uint16_t *mmr16 = mmr;
 	volatile uint32_t *mmr32 = mmr;
 
-	unsigned long i, max = 0x400000 / size;
+	unsigned long i, max;
 	int status;
+
+	switch (size) {
+		case 8:	/* bits */
+		case 16:
+		case 32: size /= 8;
+		case 1:	/* bytes */
+		case 2:
+		case 4: break;
+		default:
+			err("invalid size %i", size);
+	}
+	max = 0x400000 / size;
 
 	signal(SIGBUS, supervisor_read_all_sighdl);
 	signal(SIGILL, supervisor_read_all_sighdl);
 	setbuf(stdout, NULL);
 
 	for (i = 0; i < max; ++i) {
-		if ((i % 0x10000) == 0)
-			printf("%li ", i / 0x10000);
+		if ((i % 0x100) == 0)
+			printf("%li ", i / 0x100);
 
 		if (vfork() == 0) {
 			switch (size) {
@@ -362,12 +375,28 @@ void supervisor_read_all(int size)
 				case 2: status = mmr16[i]; break;
 				case 4: status = mmr32[i]; break;
 			}
-			_exit(1);
+			_exit(5 + !!status);
 		}
 		wait(&status);
-		if (!WIFEXITED(status) || WEXITSTATUS(status) != 11)
+		if (!WIFEXITED(status))
 			err("child did not exit properly");
+		else if (WEXITSTATUS(status) != 11)
+			err("child exited with %i (wanted 11)", WEXITSTATUS(status));
 	}
+}
+void supervisor_brute_force(const char *test)
+{
+	bool read;
+
+	switch (*test) {
+		case 'r': read = true;  break;
+		case 'w': read = false; break;
+		default:  err("invalid test '%c' !~ '[rw]'", *test);
+	}
+
+	++test;
+	if (read)
+		supervisor_read_all(atoi(test));
 
 	exit(EXIT_SUCCESS);
 }
@@ -580,8 +609,9 @@ __attribute__((noreturn))
 void usage(const char *errmsg)
 {
 	printf(
-		"Usage: %s [-c count] [-d milliseconds] [-e] [-q] [-l] [-p] [-t] [-v] [starting test number] [ending test number]\n"
+		"Usage: %s [-c count] [-d milliseconds] [-e] [-q] [-l] [-p] [-t] [-v] [-b <test>] [starting test number] [ending test number]\n"
 		"\n"
+		"-b test\t\tRun brute force test: <r|w><1|2|4> (read/write 1/2/4 bytes)\n"
 		"-c count\tRepeat the test(s) count times before stopping\n"
 		"-d seconds\tThe number of milliseconds to delay between flushing stdout, and\n"
 		"\t\trunning the test (default is 1)\n"
@@ -629,10 +659,13 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	while ((c = getopt (argc, argv, "1c:d:ehlpqtv")) != -1)
+	while ((c = getopt (argc, argv, "1b:c:d:ehlpqtv")) != -1)
 		switch (c) {
 		case '1':
 			start_test = -1;
+			break;
+		case 'b':
+			supervisor_brute_force(optarg);
 			break;
 		case 'c':
 			repeat = strtol(optarg, &endptr, 10);
