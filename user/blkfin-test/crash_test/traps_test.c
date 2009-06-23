@@ -33,6 +33,15 @@
 #include <asm/ptrace.h>
 #include <sys/klog.h>
 
+static const char *progname;
+
+#define _stderr(pfx, fmt, args...)  fprintf(stderr, "%s: " pfx ": " fmt "\n", progname, ## args)
+#define _stderrp(pfx, fmt, args...) _stderr(pfx, fmt ": %s", ## args, strerror(errno))
+#define warn(fmt, args...)          _stderr("warning", fmt, ## args)
+#define warnp(fmt, args...)         _stderrp("warning", fmt, ## args)
+#define err(fmt, args...)           do { _stderr("error", fmt, ## args); exit(EXIT_FAILURE); } while (0)
+#define errp(fmt, args...)          do { _stderrp("error", fmt, ## args); exit(EXIT_FAILURE); } while (0)
+
 const char *seqstat_path = "/sys/kernel/debug/blackfin/Core Registers/SEQSTAT";
 
 #ifdef __FDPIC__
@@ -487,8 +496,8 @@ static long _xptrace(int request, const char *srequest, pid_t pid, void *addr, v
 	errno = 0;
 	ret = ptrace(request, pid, addr, data);
 	if (errno && ret == -1)
-		printf("ptrace(%i (%s), %i, %p, %p) failed: %s\n",
-			request, srequest, pid, addr, data, strerror(errno));
+		warnp("ptrace(%i (%s), %i, %p, %p) failed\n",
+			request, srequest, pid, addr, data);
 	return ret;
 }
 
@@ -508,7 +517,7 @@ static long sysnum(pid_t pid)
 /* Standard helper functions */
 
 __attribute__((noreturn))
-void list_tests(char *progname)
+void list_tests(void)
 {
 	long test_num;
 
@@ -520,7 +529,7 @@ void list_tests(char *progname)
 }
 
 __attribute__((noreturn))
-void usage(const char *errmsg, char *progname)
+void usage(const char *errmsg)
 {
 	printf(
 		"Usage: %s [-c count] [-d milliseconds] [-e] [-q] [-l] [-p] [-t] [-v] [starting test number] [ending test number]\n"
@@ -541,10 +550,9 @@ void usage(const char *errmsg, char *progname)
 		"If you specify -1, then all tests will be run in order.\n\n", progname
 	);
 
-	if (errmsg) {
-		fprintf(stderr, "\nERROR: %s\n", errmsg);
-		exit(EXIT_FAILURE);
-	} else
+	if (errmsg)
+		err("%s", errmsg);
+	else
 		exit(EXIT_SUCCESS);
 }
 
@@ -553,12 +561,14 @@ void usage(const char *errmsg, char *progname)
 int main(int argc, char *argv[])
 {
 	char *endptr;
-	long start_test = 0, end_test = 0, test;
-	int c, repeat = 1, pass_tests = 0, del, parent = 0;
+	long start_test = 0, end_test = 0, test, pass_tests = 0;
+	int c, repeat = 1, del, parent = 0;
 	int quiet = 0, trace = 0, verbose = 0, verify = 1;
 	struct timespec delay;
 	struct stat last_seqstat;
 	FILE *seqstat_file;
+
+	progname = argv[0];
 
 	delay.tv_sec = 1;
 	delay.tv_nsec = 0;
@@ -579,15 +589,15 @@ int main(int argc, char *argv[])
 		case 'c':
 			repeat = strtol(optarg, &endptr, 10);
 			if (optarg == endptr || endptr[0] || repeat <= 0)
-				usage("did not understand count", argv[0]);
+				usage("did not understand count");
 			break;
 		case 'h':
-			usage(NULL, argv[0]);
+			usage(NULL);
 			break;
 		case 'd':
 			del = strtol(optarg, &endptr, 10);
 			if (optarg == endptr || endptr[0])
-				usage("did not understand delay", argv[0]);
+				usage("did not understand delay");
 			/* get seconds & nanoseconds */
 			delay.tv_sec = del / 1000;
 			delay.tv_nsec = (del - (delay.tv_sec * 1000)) * 1000000;
@@ -596,7 +606,7 @@ int main(int argc, char *argv[])
 			verify = 0;
 			break;
 		case 'l':
-			list_tests(argv[0]);
+			list_tests();
 			break;
 		case 'p':
 			parent = 1;
@@ -614,26 +624,24 @@ int main(int argc, char *argv[])
 			break;
 		case '?':
 		default:
-			usage("unknown option", argv[0]);
+			usage("unknown option");
 			break;
 		}
 
 	if (verify && stat(seqstat_path, &last_seqstat)) {
 		verify = 0;
-		printf("Can't verify excause - could not open '%s' file \n", seqstat_path);
+		warnp("can't verify excause - could not open '%s'", seqstat_path);
 	}
 
 	if (verify) {
 		seqstat_file = fopen(seqstat_path, "r");
-		if (seqstat_file == NULL) {
-			printf("couldn't open '%s' for reading\n", seqstat_path);
-			return EXIT_FAILURE;
-		}
+		if (seqstat_file == NULL)
+			errp("couldn't open '%s' for reading", seqstat_path);
 		fclose(seqstat_file);
 	}
 
 	if ((optind == argc || argc - optind >= 3) && start_test != -1)
-		usage(NULL, argv[0]);
+		usage(NULL);
 
 	if (start_test == -1) {
 		start_test = 0;
@@ -641,31 +649,31 @@ int main(int argc, char *argv[])
 	} else {
 		start_test = strtol(argv[optind], &endptr, 10);
 		if (argv[optind] == endptr || endptr[0])
-			usage("Specified start test is not a number", argv[0]);
+			usage("Specified start test is not a number");
 		if (start_test >= ARRAY_SIZE(bad_funcs))
-			usage("Start Test number out of range", argv[0]);
+			usage("Start Test number out of range");
 
 		if (optind + 1 >= argc)
 			end_test = start_test;
 		else {
 			end_test = strtol(argv[optind + 1], &endptr, 10);
 			if (argv[optind + 1] == endptr || endptr[0])
-				usage("Specified end test is not a number", argv[0]);
+				usage("Specified end test is not a number");
 
 			if (start_test >= end_test)
-				usage("Specified end test must be larger than start test", argv[0]);
+				usage("Specified end test must be larger than start test");
 			if (end_test >= ARRAY_SIZE(bad_funcs))
-				usage("End Test number out of range", argv[0]);
+				usage("End Test number out of range");
 		}
 	}
 
 	if (parent && start_test != end_test) {
-		printf("Ignoring '-p' option, since running more than one test\n");
+		warn("ignoring '-p' option, since running more than one test");
 		parent = 0;
 	}
 
 	if (parent && repeat > 1) {
-		printf("Ignoring '-p' option, since count > 1\n");
+		warn("ignoring '-p' option, since count > 1");
 		parent = 0;
 	}
 
@@ -706,15 +714,13 @@ int main(int argc, char *argv[])
 
 			pid = vfork();
 			if (pid == -1) {
-				fprintf(stderr, "vfork() failed");
-				return EXIT_FAILURE;
+				errp("vfork() failed");
 			} else if (pid == 0) {
 				if (trace && sig_expect != SIGTRAP)
 					xptrace(PTRACE_TRACEME, 0, NULL, NULL);
 				_ret = execlp(argv[0], argv[0], "-d", "0", "-q", "-p", test_num, NULL);
 
-				fprintf(stderr, "Execution of '%s' failed (%i): %s\n",
-					argv[0], _ret, strerror(errno));
+				warnp("execution of '%s' failed (%i)", argv[0], _ret);
 				_exit(_ret);
 			}
 
@@ -722,7 +728,7 @@ int main(int argc, char *argv[])
 			errno = 0;
 			_ret = waitid(P_PID, pid, &info, WEXITED | WSTOPPED | WCONTINUED | WNOHANG | WNOWAIT);
 			if (errno || _ret == -1) {
-				fprintf(stderr, "pid (%d) of child process didn't seem to start\n", pid);
+				warn("pid (%d) of child process didn't seem to start", pid);
 				_exit(_ret);
 			}
 
@@ -734,10 +740,8 @@ int main(int argc, char *argv[])
 				long nr = 0;
 
 				while (nr != SYS_execve) {
-					if (waitpid(pid, &status, 0) == -1) {
-						perror("wait() failed");
-						exit(EXIT_FAILURE);
-					}
+					if (waitpid(pid, &status, 0) == -1)
+						errp("wait() failed");
 					if (WIFEXITED(status)) {
 						printf("child exited with %i", WEXITSTATUS(status));
 						if (WIFSIGNALED(status))
@@ -751,10 +755,8 @@ int main(int argc, char *argv[])
 
 				/* Single step the main test code */
 				while (1) {
-					if (waitpid(pid, &status, 0) == -1) {
-						perror("wait() failed");
-						exit(EXIT_FAILURE);
-					}
+					if (waitpid(pid, &status, 0) == -1)
+						errp("wait() failed");
 					if (WIFEXITED(status)) {
 						if (WIFSIGNALED(status))
 							sig_actual = WTERMSIG(status);
@@ -813,7 +815,8 @@ int main(int argc, char *argv[])
 				pass_count, sig_actual, str_actual);
 	}
 
-	printf("\n%i/%i tests passed\n", pass_tests, (int)(end_test - start_test) + 1);
+	test = end_test - start_test + 1;
+	printf("\n%li/%li tests passed\n", pass_tests, test);
 
-	exit((pass_tests == (int)(end_test - start_test) + 1) ? EXIT_SUCCESS : EXIT_FAILURE);
+	exit(pass_tests == test ? EXIT_SUCCESS : EXIT_FAILURE);
 }
