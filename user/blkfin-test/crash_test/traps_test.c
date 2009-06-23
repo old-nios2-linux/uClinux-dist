@@ -507,6 +507,7 @@ static long sysnum(pid_t pid)
 
 /* Standard helper functions */
 
+__attribute__((noreturn))
 void list_tests(char *progname)
 {
 	long test_num;
@@ -514,8 +515,11 @@ void list_tests(char *progname)
 	printf("#\texcause\ttest %s\n", progname);
 	for (test_num = 0; test_num < ARRAY_SIZE(bad_funcs); ++test_num)
 		printf("%li\t0x%02x\t%s\n", test_num, bad_funcs[test_num].excause, bad_funcs[test_num].name);
+
+	exit(EXIT_SUCCESS);
 }
 
+__attribute__((noreturn))
 void usage(const char *errmsg, char *progname)
 {
 	printf(
@@ -551,7 +555,7 @@ int main(int argc, char *argv[])
 	char *endptr;
 	long start_test = 0, end_test = 0, test;
 	int c, repeat = 1, pass_tests = 0, del, parent = 0;
-	int quiet = 0, trace = 0, verbose = 0, verify = 1, list = 0;
+	int quiet = 0, trace = 0, verbose = 0, verify = 1;
 	struct timespec delay;
 	struct stat last_seqstat;
 	FILE *seqstat_file;
@@ -592,7 +596,7 @@ int main(int argc, char *argv[])
 			verify = 0;
 			break;
 		case 'l':
-			list = 1;
+			list_tests(argv[0]);
 			break;
 		case 'p':
 			parent = 1;
@@ -626,11 +630,6 @@ int main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		fclose(seqstat_file);
-	}
-
-	if (list) {
-		list_tests(argv[0]);
-		exit(EXIT_SUCCESS);
 	}
 
 	if ((optind == argc || argc - optind >= 3) && start_test != -1)
