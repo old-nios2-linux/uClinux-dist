@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
@@ -32,6 +33,9 @@
 #include <sys/wait.h>
 #include <asm/ptrace.h>
 #include <sys/klog.h>
+
+#define SYSMMR_BASE 0xFFC00000
+#define COREMMR_BASE 0xFFE00000
 
 static const char *progname;
 
@@ -322,6 +326,50 @@ void supervisor_resource_mmr_write(void)
 {
 	int *i = (void *)0xFFC00014;
 	*i = 0;
+}
+
+void supervisor_read_all_sighdl(int sig)
+{
+	switch (sig) {
+		case SIGBUS:
+		case SIGILL:
+			_exit(11);
+		default:
+			err("signal %i is not what we wanted", sig);
+	}
+}
+void supervisor_read_all(int size)
+{
+	void *mmr = (void *)SYSMMR_BASE;
+	volatile uint8_t *mmr8 = mmr;
+	volatile uint16_t *mmr16 = mmr;
+	volatile uint32_t *mmr32 = mmr;
+
+	unsigned long i, max = 0x400000 / size;
+	int status;
+
+	signal(SIGBUS, supervisor_read_all_sighdl);
+	signal(SIGILL, supervisor_read_all_sighdl);
+	setbuf(stdout, NULL);
+
+	for (i = 0; i < max; ++i) {
+		if ((i % 0x10000) == 0)
+			printf("%li ", i / 0x10000);
+
+		if (vfork() == 0) {
+			switch (size) {
+				case 1: status = mmr8[i];  break;
+				case 2: status = mmr16[i]; break;
+				case 4: status = mmr32[i]; break;
+			}
+			_exit(1);
+		}
+		wait(&status);
+		if (!WIFEXITED(status) || WEXITSTATUS(status) != 11)
+			err("child did not exit properly");
+	}
+
+	exit(EXIT_SUCCESS);
 }
 
 /* Things that cause Hardware errors (IRQ5), not exceptions (IRQ3) */
