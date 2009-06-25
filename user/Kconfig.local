@@ -44,10 +44,6 @@ config YET
 	bool "Still to write"
 config EVENT_TEST
 	bool "Input event device test"
-config AD9960_TEST
-	bool "AD9960 device test"
-config AD5304_TEST
-	bool "AD5304 device test"
 config FILE_OPERATION_TEST
 	bool "file operation test"
 config USER_BLACKFIN_SPORT
