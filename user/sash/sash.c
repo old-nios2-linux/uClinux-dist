@@ -502,7 +502,7 @@ command(cmd)
 	 * BASH-style variable setting
 	 */
 	if (argc == 1) {
-		c = index(argv[0], '=');
+		c = strchr(argv[0], '=');
 		if (c > argv[0]) {
 			*c++ = '\0';
 			setenv(argv[0], c, 1);
