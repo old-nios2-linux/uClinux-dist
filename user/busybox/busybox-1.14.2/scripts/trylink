@@ -98,6 +98,10 @@ else
     echo "-Wl,--gc-sections"
 fi
 )`
+# Don't use ld --gc-sections if not supported.
+if test -n "$GC_SECTIONS"; then
+    GC_SECTIONS=`check_cc "$GC_SECTIONS" ""`
+fi
 
 # Sanitize lib list (dups, extra spaces etc)
 LDLIBS=`echo "$LDLIBS" | xargs -n1 | sort | uniq | xargs`
