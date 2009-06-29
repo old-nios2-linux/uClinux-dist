@@ -1,3 +1,5 @@
+https://sourceforge.net/tracker/?func=detail&aid=2813809&group_id=2406&atid=302406
+
 --- e2fsprogs-1.41.6/MCONFIG.in
 +++ e2fsprogs-1.41.6/MCONFIG.in
 @@ -78,6 +78,7 @@ LIBUUID = $(LIB)/libuuid@LIB_EXT@ @SOCKE
