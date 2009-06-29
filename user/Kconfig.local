@@ -341,9 +341,6 @@ endmenu
 
 menu "Blackfin device drivers (Experimental)"
 
-config USER_BLACKFIN_DRV_PFBUTTONS
-	bool "bf53x_pfbuttons"
-
 config USER_BLACKFIN_DRV_TEA5764
 	bool "tea5764"
 
