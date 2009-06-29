@@ -16,9 +16,12 @@ lib*.so
 /.oldconfig
 /autoconf.h
 /config.arch
+/images
 /Kconfig
 /linux-2.6.x
+/romfs
 /staging
+/vendors/Kconfig
 
 /config/.config
 /config/.config.old
