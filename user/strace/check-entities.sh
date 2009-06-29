@@ -2,6 +2,9 @@
 #
 # Usage: check.sh [strace version] [strace arch] [kernel arch]
 
+# Don't bother making this portable.  People who matter run Linux.
+[ "$(uname)" != "Linux" ] && exit 0
+
 usage()
 {
 	cat <<-EOF
