@@ -48,7 +48,7 @@ void dev_init_func()
 	up_mar = screeninfo.upper_margin;
 	low_mar = screeninfo.lower_margin;
 	screen_ptr = mmap(0, screen_height * screen_width * (bits_per_pixel / 8),
-		PROT_READ | PROT_WRITE, 0, screen_fd, 0);
+		PROT_READ | PROT_WRITE, MAP_PRIVATE, screen_fd, 0);
 
 	if (screen_ptr == MAP_FAILED) {
 		perror("Unable to mmap frame buffer");
