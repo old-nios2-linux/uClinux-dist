@@ -35,8 +35,16 @@
 #include <asm/ptrace.h>
 #include <sys/klog.h>
 
-#define SYSMMR_BASE 0xFFC00000
-#define COREMMR_BASE 0xFFE00000
+#define NULL_PTR		0x00000000
+#define UNPOPULATED_EVEN	0x87654320
+#define UNPOPULATED_ODD		0x87654321
+#define SCRATCHPAD		0xFFB00000
+#define L1_DATA_A		0xFF800000
+#define L1_DATA_B		0xFF900000
+#define L1_INSTRUCTION		0xFFA10000
+#define L1_NON_EXISTANT		0xFFAFFF00
+#define SYSMMR_BASE		0xFFC00000
+#define COREMMR_BASE		0xFFE00000
 
 static const char *progname;
 
@@ -178,24 +186,24 @@ void illegal_instruction(void)
 /* Data access misaligned address violation -          EXCAUSE 0x24 */
 void data_read_odd_address(void)
 {
-	int *i = (void *)0x87654321;
+	int *i = (void *)UNPOPULATED_ODD;
 	printf("%i\n", *i);
 }
 
 void data_write_odd_address(void)
 {
-	int *i = (void *)0x87654321;
+	int *i = (void *)UNPOPULATED_ODD;
 	*i = 0;
 }
 
 void stack_odd_address(void)
 {
-	_bad_stack_set(0x87654321);
+	_bad_stack_set(UNPOPULATED_ODD);
 }
 
 void stack_push_odd_address(void)
 {
-	bad_stack_push(0x87654321);
+	bad_stack_push(UNPOPULATED_ODD);
 }
 
 /* Unrecoverable event -                               EXCAUSE 0x25 */
@@ -204,48 +212,48 @@ void stack_push_odd_address(void)
 /* Data access CPLB miss -                             EXCAUSE 0x26 */
 void data_read_miss(void)
 {
-	int *i = (void *)0x87654320;
+	int *i = (void *)UNPOPULATED_EVEN;
 	printf("%i\n", *i);
 }
 
 void data_write_miss(void)
 {
-	int *i = (void *)0x87654320;
+	int *i = (void *)UNPOPULATED_EVEN;
 	*i = 0;
 }
 
 void stack_miss(void)
 {
-	_bad_stack_set(0x87654320);
+	_bad_stack_set(UNPOPULATED_EVEN);
 }
 
 void stack_push_miss(void)
 {
-	bad_stack_push(0x87654320);
+	bad_stack_push(UNPOPULATED_EVEN);
 }
 
 /* Data access multiple CPLB hits -                    EXCAUSE 0x27 */
 /* We use this to trap null pointers */
 void null_pointer_write(void)
 {
-	int *i = 0;
+	int *i = NULL_PTR;
 	*i = 0;
 }
 
 void null_pointer_read(void)
 {
-	int *i = 0;
+	int *i = NULL_PTR;
 	printf("%i", *i);
 }
 
 void stack_zero(void)
 {
-	_bad_stack_set(0x0);
+	_bad_stack_set(NULL_PTR);
 }
 
 void stack_push_zero(void)
 {
-	bad_stack_push(0);
+	bad_stack_push(NULL_PTR);
 }
 
 /* Exception caused by an emulation watchpoint match - EXCAUSE 0x28 */
@@ -264,36 +272,36 @@ void instruction_fetch_odd_address(void)
  */
 void bad_return_scratchpad(void)
 {
-	_bad_return_address(0xFFB00000);
+	_bad_return_address(SCRATCHPAD);
 }
 
 void bad_return_l1dataA(void)
 {
-	_bad_return_address(0xFF800000);
+	_bad_return_address(L1_DATA_A);
 }
 
 void bad_return_l1dataB(void)
 {
-	_bad_return_address(0xFF900000);
+	_bad_return_address(L1_DATA_B);
 }
 
 /* Instruction fetch CPLB miss -                       EXCAUSE 0x2C */
 void instruction_fetch_miss(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0x87654320);
+	foo = get_func_ptr(UNPOPULATED_EVEN);
 	(*foo)();
 }
 
 void bad_return_bad_location(void)
 {
-	_bad_return_address(0x87654320);
+	_bad_return_address(UNPOPULATED_EVEN);
 }
 
 void mmr_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0xFFC00014);
+	foo = get_func_ptr(SYSMMR_BASE);
 	(*foo)();
 }
 
@@ -318,14 +326,14 @@ void supervisor_instruction(void)
 
 void supervisor_resource_mmr_read(void)
 {
-	int *i = (void *)0xFFC00014;
+	int *i = (void *)SYSMMR_BASE;
 	printf("chip id = %x", *i);
 
 }
 
 void supervisor_resource_mmr_write(void)
 {
-	int *i = (void *)0xFFC00014;
+	int *i = (void *)SYSMMR_BASE;
 	*i = 0;
 }
 
@@ -412,86 +420,86 @@ void supervisor_brute_force(const char *test)
 //__attribute__ ((l1_text))
 void l1_instruction_read(void)
 {
-	int *i = (void *)0xffa10000;
+	int *i = (void *)L1_INSTRUCTION;
 	printf("%i\n", *i);
 }
 
 void l1_instruction_write(void)
 {
-	int *i = (void *)0xffa10000;
+	int *i = (void *)L1_INSTRUCTION;
 	*i = 0;
 }
 
 void stack_instruction(void)
 {
-	_bad_stack_set(0xffa10000);
+	_bad_stack_set(L1_INSTRUCTION);
 }
 
 void l1_dataA_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0xFF800000);
+	foo = get_func_ptr(L1_DATA_A);
 	(*foo)();
 }
 
 void l1_dataB_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0xFF900000);
+	foo = get_func_ptr(L1_DATA_B);
 	(*foo)();
 }
 
 void l1_scratchpad_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0xFFB00000);
+	foo = get_func_ptr(SCRATCHPAD);
 	(*foo)();
 }
 
 void l1_non_existant_jump(void)
 {
 	int (*foo)(void);
-	foo = get_func_ptr(0xFFAFFFFC);
+	foo = get_func_ptr(L1_NON_EXISTANT);
 	(*foo)();
 }
 
 void l1_non_existant_read(void)
 {
-	int *i = (void *)0xFFAFFFFC;
+	int *i = (void *)L1_NON_EXISTANT;
 	printf("%i\n", *i);
 }
 
 void l1_non_existant_write(void)
 {
-	int *i = (void *)0xFFAFFFFC;
+	int *i = (void *)L1_NON_EXISTANT;
 	*i = 0;
 }
 
 void l1_non_existant_write_syscall(void)
 {
-	int *i = (void *)0xFFAFFFFC;
+	int *i = (void *)L1_NON_EXISTANT;
 	*i = 0;
 	sync();
 }
 
 void stack_l1_non_existant(void)
 {
-	_bad_stack_set(0xFFAFFF00);
+	_bad_stack_set(L1_NON_EXISTANT);
 }
 
 void stack_push_l1_non_existant(void)
 {
-	bad_stack_push(0xFFAFFF00);
+	bad_stack_push(L1_NON_EXISTANT);
 }
 
 void bad_return_l1_non_existant(void)
 {
-	_bad_return_address(0xFFAFFFFC);
+	_bad_return_address(L1_NON_EXISTANT);
 }
 
 void bad_return_mmr(void)
 {
-	_bad_return_address(0xFFC00014);
+	_bad_return_address(SYSMMR_BASE);
 }
 
 /* Performance Monitor Overflow                        HWERRCAUSE 0x012*/
