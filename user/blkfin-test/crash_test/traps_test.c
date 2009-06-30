@@ -72,6 +72,11 @@ asm("__bad_return_address: rets = R0; nop; nop; nop; nop; rts;\n");
 void _bad_stack_set(unsigned long rets);
 asm("__bad_stack_set: SP = R0; FP = R0; nop; nop; rts;\n");
 
+#define flush(ptr)    asm volatile ("P0 = %0;    flush[P0];\n" : : "r"(ptr) : "P0");
+#define flushinv(ptr) asm volatile ("P0 = %0; flushinv[P0];\n" : : "r"(ptr) : "P0");
+#define iflush(ptr)   asm volatile ("P0 = %0;   iflush[P0];\n" : : "r"(ptr) : "P0");
+#define prefetch(ptr) asm volatile ("P0 = %0; prefetch[P0];\n" : : "r"(ptr) : "P0");
+
 #define bad_stack_push(addr)	asm volatile ("R1 = SP ; SP = %0; [SP] = %0; SP = R1" :  : "r"(addr) : "R1");
 
 /*
@@ -502,6 +507,208 @@ void bad_return_mmr(void)
 	_bad_return_address(SYSMMR_BASE);
 }
 
+void flush_null(void)
+{
+	flush(NULL_PTR);
+}
+
+void flush_upop(void)
+{
+	flush(UNPOPULATED_EVEN);
+}
+
+void flush_upop_odd(void)
+{
+	flush(UNPOPULATED_ODD);
+}
+
+void flush_scratch(void)
+{
+	flush(SCRATCHPAD);
+}
+
+void flush_l1_dataA(void)
+{
+	flush(L1_DATA_A);
+}
+
+void flush_l1_dataB(void)
+{
+	flush(L1_DATA_B);
+}
+
+void flush_l1_instruction(void)
+{
+	flush(L1_INSTRUCTION);
+	}
+
+void flush_l1_non(void)
+{
+	flush(L1_NON_EXISTANT);
+}
+
+void flush_sysmmr(void)
+{
+	flush(SYSMMR_BASE);
+}
+
+void flush_coremmr(void)
+{
+	flush(COREMMR_BASE);
+}
+/* -------- */
+void prefetch_null(void)
+{
+	prefetch(NULL_PTR);
+}
+
+void prefetch_upop(void)
+{
+	prefetch(UNPOPULATED_EVEN);
+}
+
+void prefetch_upop_odd(void)
+{
+	prefetch(UNPOPULATED_ODD);
+}
+
+void prefetch_scratch(void)
+{
+	prefetch(SCRATCHPAD);
+}
+
+void prefetch_l1_dataA(void)
+{
+	prefetch(L1_DATA_A);
+}
+
+void prefetch_l1_dataB(void)
+{
+	prefetch(L1_DATA_B);
+}
+
+void prefetch_l1_instruction(void)
+{
+	prefetch(L1_INSTRUCTION);
+}
+
+void prefetch_l1_non(void)
+{
+	prefetch(L1_NON_EXISTANT);
+}
+
+void prefetch_sysmmr(void)
+{
+	prefetch(SYSMMR_BASE);
+}
+
+void prefetch_coremmr(void)
+{
+	prefetch(COREMMR_BASE);
+}
+
+/*-------------*/
+void flushinv_null(void)
+{
+	flushinv(NULL_PTR);
+}
+
+void flushinv_upop(void)
+{
+	flushinv(UNPOPULATED_EVEN);
+}
+
+void flushinv_upop_odd(void)
+{
+	flushinv(UNPOPULATED_ODD);
+}
+
+void flushinv_scratch(void)
+{
+	flushinv(SCRATCHPAD);
+}
+
+void flushinv_l1_dataA(void)
+{
+	flushinv(L1_DATA_A);
+}
+
+void flushinv_l1_dataB(void)
+{
+	flushinv(L1_DATA_B);
+}
+
+void flushinv_l1_instruction(void)
+{
+	flushinv(L1_INSTRUCTION);
+}
+
+void flushinv_l1_non(void)
+{
+	flushinv(L1_NON_EXISTANT);
+}
+
+void flushinv_sysmmr(void)
+{
+	flushinv(SYSMMR_BASE);
+}
+
+void flushinv_coremmr(void)
+{
+	flushinv(COREMMR_BASE);
+}
+
+/*--------- */
+void iflush_null(void)
+{
+	iflush(NULL_PTR);
+}
+
+void iflush_upop(void)
+{
+	iflush(UNPOPULATED_EVEN);
+}
+
+void iflush_upop_odd(void)
+{
+	iflush(UNPOPULATED_ODD);
+}
+
+void iflush_scratch(void)
+{
+	iflush(SCRATCHPAD);
+}
+
+void iflush_l1_dataA(void)
+{
+	iflush(L1_DATA_A);
+}
+
+void iflush_l1_dataB(void)
+{
+	iflush(L1_DATA_B);
+}
+
+void iflush_l1_instruction(void)
+{
+	iflush(L1_INSTRUCTION);
+}
+
+void iflush_l1_non(void)
+{
+	iflush(L1_NON_EXISTANT);
+}
+
+void iflush_sysmmr(void)
+{
+	iflush(SYSMMR_BASE);
+}
+
+void iflush_coremmr(void)
+{
+	iflush(COREMMR_BASE);
+}
+
 /* Performance Monitor Overflow                        HWERRCAUSE 0x012*/
 /* Can't do this in userspace */
 
@@ -517,6 +724,38 @@ struct {
 	int kill_sig;
 	const char *name;
 } bad_funcs[] = {
+	{ 0x00, flush_scratch, 0, "flush scratch pad"},
+	{ 0x00, flush_l1_dataA, 0, "l1_dataA"},
+	{ 0x00, flush_l1_dataB, 0, "l1_dataB"},
+	{ 0x00, flush_l1_instruction, 0, "l1_instruction"},
+	{ 0x00, flush_l1_non, 0, "flush_l1_non"},
+	{ 0x00, flush_sysmmr, 0, "flush_sysmmr"},
+	{ 0x00, flush_coremmr, 0, "flush_coremmr"},
+	{ 0x00, iflush_null, 0 , "iflush null pointer"},
+	{ 0x00, iflush_upop, 0, "iflush unpopulated address"},
+	{ 0x00, iflush_upop_odd, 0, "iflush unpopulated odd address"},
+	{ 0x00, iflush_scratch, 0, "iflush scratch pad"},
+	{ 0x00, iflush_l1_dataA, 0, "iflush l1_dataA"},
+	{ 0x00, iflush_l1_dataB, 0, "iflush l1_dataB"},
+	{ 0x00, iflush_l1_instruction, 0, "iflush l1_instruction"},
+	{ 0x00, iflush_l1_non, 0, "iflush_l1_non"},
+	{ 0x00, iflush_sysmmr, 0, "iflush_sysmmr"},
+	{ 0x00, iflush_coremmr, 0, "iflush_coremmr"},
+	{ 0x00, prefetch_scratch,  0, "prefetch scratch pad"},
+	{ 0x00, prefetch_l1_dataA, 0, "prefetch l1_dataA"},
+	{ 0x00, prefetch_l1_dataB, 0, "prefetch l1_dataB"},
+	{ 0x00, prefetch_l1_instruction, SIGILL, "prefetch l1_instruction"},
+	{ 0x00, prefetch_l1_non,   0, "prefetch _l1_non"},
+	{ 0x00, prefetch_sysmmr,   0, "prefetch _sysmmr"},
+	{ 0x00, prefetch_coremmr,  0, "prefetch _coremmr"},
+	{ 0x00, flushinv_scratch, 0, "flushinv scratch pad"},
+	{ 0x00, flushinv_l1_dataA, 0, "flushinv l1_dataA"},
+	{ 0x00, flushinv_l1_dataB, 0, "flushinv l1_dataB"},
+	{ 0x00, flushinv_l1_instruction, 0, "flushinv l1_instruction"},
+	{ 0x00, flushinv_l1_non, 0, "flushinv _l1_non"},
+	{ 0x00, flushinv_sysmmr, 0, "flushinv _sysmmr"},
+	{ 0x00, flushinv_coremmr, 0, "flushinv _coremmr"},
+
 	{ 0x01, expt_1, SIGTRAP, "EXCPT 0x01" },
 	{ 0x02, expt_2, SIGILL, "EXCPT 0x02" },
 	{ 0x03, expt_3, SIGSEGV, "EXCPT 0x03" },
@@ -544,10 +783,19 @@ struct {
 	{ 0x26, data_write_miss, SIGBUS, "Data Write CPLB miss" },
 	{ 0x26, stack_miss, SIGBUS, "Stack CPLB miss" },
 	{ 0x26, stack_push_miss, SIGBUS, "Stack push to miss" },
+	{ 0x26, flush_upop, SIGBUS, "flush unpopulated address"},
+	{ 0x26, flush_upop_odd, SIGBUS, "flush unpopulated odd address"},
+	{ 0x26, prefetch_upop,     SIGBUS, "prefetch unpopulated address"},
+	{ 0x26, prefetch_upop_odd, SIGBUS, "prefetch unpopulated odd address"},
+	{ 0x26, flushinv_upop, SIGBUS, "flushinv unpopulated address"},
+	{ 0x26, flushinv_upop_odd, SIGBUS, "flushinv unpopulated odd address"},
 	{ 0x27, null_pointer_read, SIGSEGV, "Data access multiple CPLB hits/Null Pointer Read" },
 	{ 0x27, null_pointer_write, SIGSEGV, "Data access multiple CPLB hits/Null Pointer Write" },
 	{ 0x27, stack_zero, SIGSEGV, "Stack set to zero" },
 	{ 0x27, stack_push_zero, SIGSEGV, "Stack, push while SP is zero" },
+	{ 0x27, flush_null, SIGSEGV, "flush null pointer"},
+	{ 0x27, prefetch_null,     SIGSEGV, "prefetch null pointer"},
+	{ 0x27, flushinv_null, SIGSEGV, "flushinv null pointer"},
 	{ 0x2a, instruction_fetch_odd_address, SIGBUS, "Instruction fetch misaligned address violation"  },
 	{ 0x2b, l1_dataA_jump,  SIGBUS, "Jump to L1 Data A" },
 	{ 0x2b, bad_return_l1dataA, SIGBUS, "Return to L1 Data A" },
@@ -879,7 +1127,7 @@ int main(int argc, char *argv[])
 			if (verify) {
 				seqstat_file = fopen(seqstat_path, "r");
 				if (fscanf(seqstat_file, "%x", &ex_actual)) {
-					if ((ex_actual & 0x3F) != ex_expect)
+					if (ex_expect && (ex_actual & 0x3F) != ex_expect)
 						printf("FAIL (test failed with wrong EXCAUSE, expected %x, but got %x)\n",
 							ex_expect, (ex_actual & 0x3F));
 				}
@@ -888,23 +1136,39 @@ int main(int argc, char *argv[])
 
 			if (sig_expect == sig_actual) {
 				++pass_count;
+				if (verify && sig_actual) {
+					seqstat_file = fopen(seqstat_path, "r");
+					if (fscanf(seqstat_file, "%x", &ex_actual)) {
+						if ((ex_actual & 0x3F) != ex_expect) {
+							printf("FAIL (test failed with wrong EXCAUSE, expected 0x%x, but got 0x%x)\n",
+								ex_expect, (ex_actual & 0x3F));
+							--pass_count;
+						}
+					}
+					fclose(seqstat_file);
+				}
 			} else {
 				char *str_expect = strsignal(sig_expect);
 				str_actual = strsignal(sig_actual);
-				printf("FAIL (test failed, but not with the right signal)\n"
-					"\t(We expected %i '%s' but instead we got %i '%s')\n",
-					sig_expect, str_expect, sig_actual, str_actual);
-				exit(EXIT_FAILURE);
+				if (sig_actual)
+					printf("FAIL (test failed, but not with the right signal)\n"
+						"\t(We expected %i '%s' but instead we got %i '%s')\n",
+						sig_expect, str_expect, sig_actual, str_actual);
+				else
+					printf("FAIL (test exited sucessfully, and we expected %i %s failure\n",
+						sig_expect, str_expect);
 			}
 		}
 		str_actual = strsignal(sig_actual);
-		++pass_tests;
-		if (repeat == 1)
-			printf("PASS (test failed, as expected by signal %i: %s)\n",
-				sig_actual, str_actual);
-		else
-			printf("PASS (test failed %i times, as expected by signal %i: %s)\n",
-				pass_count, sig_actual, str_actual);
+
+		if (pass_count == repeat) {
+			++pass_tests;
+			printf("PASS (test completed %i/%i times, as expected by signal %i: %s)\n",
+				pass_count, repeat, sig_actual, str_actual);
+		} else {
+			printf("FAIL (test completed properly %i/%i times)\n",
+				pass_count, repeat);
+		}
 	}
 
 	test = end_test - start_test + 1;
