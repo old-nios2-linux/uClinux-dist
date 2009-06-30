@@ -1,4 +1,4 @@
-VER = DirectFB-1.2.7
+VER = DirectFB-1.4.0
 
 export LIBPNG_CONFIG="$(PKG_CONFIG) libpng"
 
