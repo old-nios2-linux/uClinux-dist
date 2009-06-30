@@ -99,9 +99,7 @@ config USER_EDN_BENCH
 config USER_LMBENCH
 	bool "lmbench"
 config USER_BLKFIN_APPS_DEVFBAPP_DEVTEST
-	bool "devtest"
-config USER_BLKFIN_APPS_DEVVOUT_DEVOUT
-	bool "devout"
+	bool "devfbapp"
 config USER_INETUTILS_RSH
 	bool "rsh"
 config USER_INETUTILS_RCP
