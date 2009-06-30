@@ -1,14 +1,9 @@
+CFLAGS += -Wall
 
-EXEC = devtest 
-OBJS = devtest.o
-
-all: $(EXEC)
-
-$(EXEC): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBM) $(LDLIBS) $(LIBGCC)
+all: devtest
 
 romfs:
-	$(ROMFSINST) /bin/$(EXEC)
+	$(ROMFSINST) /bin/devtest
 
 clean:
-	-rm -f $(EXEC) *.elf *.gdb *.o
+	rm -f devtest *.elf *.gdb *.o
