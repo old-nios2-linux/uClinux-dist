@@ -72,10 +72,10 @@ asm("__bad_return_address: rets = R0; nop; nop; nop; nop; rts;\n");
 void _bad_stack_set(unsigned long rets);
 asm("__bad_stack_set: SP = R0; FP = R0; nop; nop; rts;\n");
 
-#define flush(ptr)    asm volatile ("P0 = %0;    flush[P0];\n" : : "r"(ptr) : "P0");
-#define flushinv(ptr) asm volatile ("P0 = %0; flushinv[P0];\n" : : "r"(ptr) : "P0");
-#define iflush(ptr)   asm volatile ("P0 = %0;   iflush[P0];\n" : : "r"(ptr) : "P0");
-#define prefetch(ptr) asm volatile ("P0 = %0; prefetch[P0];\n" : : "r"(ptr) : "P0");
+#define flush(ptr)    asm volatile ("flush[%0];\n"    : : "p"(ptr));
+#define flushinv(ptr) asm volatile ("flushinv[%0];\n" : : "p"(ptr));
+#define iflush(ptr)   asm volatile ("iflush[%0];\n"   : : "p"(ptr));
+#define prefetch(ptr) asm volatile ("prefetch[%0];\n" : : "p"(ptr));
 
 #define bad_stack_push(addr)	asm volatile ("R1 = SP ; SP = %0; [SP] = %0; SP = R1" :  : "r"(addr) : "R1");
 
