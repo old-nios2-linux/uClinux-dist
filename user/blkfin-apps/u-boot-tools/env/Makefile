@@ -9,7 +9,7 @@ clean:
 
 romfs:
 	$(ROMFSINST) -d /bin/fw_env
-	$(ROMFSINST) -d /etc/fw_env.config
+	test -e $(ROMFSDIR)/etc/fw_env.config || $(ROMFSINST) -d /etc/fw_env.config
 	$(ROMFSINST) -s fw_env /bin/fw_printenv
 	$(ROMFSINST) -s fw_env /bin/fw_setenv
 
