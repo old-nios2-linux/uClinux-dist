@@ -394,4 +394,6 @@
 	{ 3,	0,	printargs,		"dup3"		}, /* 363 */
 	{ 2,	0,	printargs,		"pipe2"		}, /* 364 */
 	{ 2,	0,	printargs,		"inotify_init1"	}, /* 365 */
-	{ 7,	0,	printargs,		"syscall"	}, /* 366 */
+	{ 5,	TD,	printargs,		"preadv"	}, /* 366 */
+	{ 5,	TD,	printargs,		"pwritev"	}, /* 367 */
+	{ 7,	0,	printargs,		"syscall"	}, /* 368 */
