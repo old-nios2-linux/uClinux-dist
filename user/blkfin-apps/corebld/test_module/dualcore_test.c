@@ -31,6 +31,7 @@ static int test_init(void)
 
 static void test_exit(void)
 {
+	remove_proc_entry("coreb_testarg", NULL);
 	printk("Dual core test module removed: testarg = [%d]\n", *testarg);
 }
 
