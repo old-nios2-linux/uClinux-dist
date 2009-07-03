@@ -36,9 +36,7 @@ ifeq ($(CONFIG_INSTALL_ELF_SHARED_LIBS),y)
 	for i in $$t/lib/*so*; do \
 		i=`readlink -f "$$i"`; \
 		soname=`bfin-linux-uclibc-readelf -d "$$i" | sed -n '/(SONAME)/s:.*[[]\(.*\)[]].*:\1:p'`; \
-		if [ ! -f "${ROMFSDIR}/lib/$$soname" ] ; then \
-			$(ROMFSINST) -d -p 755 $$i /lib/$$soname; \
-		fi; \
+		$(ROMFSINST) -d -p 755 $$i /lib/$$soname; \
 	done; \
 	if [ "$(CONFIG_INSTALL_ELF_TRIM_LIBS)" = "y" ] ; then \
 		$(ROOTDIR)/vendors/AnalogDevices/trim-libs.sh; \
